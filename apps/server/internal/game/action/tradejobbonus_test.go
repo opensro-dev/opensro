@@ -16,6 +16,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
+	"opensro.online/server/internal/game/tunables"
 )
 
 /*
@@ -38,7 +39,7 @@ func TestTradeJobBonusPercentsAndCaps(t *testing.T) {
 	} {
 		native := commerce.DistributeTradeReward(tc.in)
 		got := native
-		applyTradeJobBonus(&got, tc.in)
+		applyTradeJobBonus(&got, tc.in, tunables.Current())
 		share := native.Actor.Gold - (tc.in.Credit - tc.in.Profit)
 		if tc.traderPercent == 0 {
 			share = 0
@@ -70,7 +71,7 @@ func TestTraderSaleBonusFollowsTheFlag(t *testing.T) {
 	sale := commerce.TradeRewardInput{Credit: 100000, Profit: 40000}
 	paid := func() map[string]int64 {
 		out := map[string]int64{}
-		for _, payout := range rt.tradeRewards(testDivision, trader, roster, sale) {
+		for _, payout := range rt.tradeRewards(testDivision, trader, roster, sale, tunables.Current()) {
 			out[payout.character.Name] = payout.Gold
 		}
 		return out

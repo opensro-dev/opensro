@@ -18,6 +18,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/inventory"
+	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -177,10 +178,11 @@ func (rt *Runtime) merchantStocksItem(npc simulation.NpcDef, ref uint32) bool {
 tradeSaleValue
 
 The native foreign sale multiplies both unit prices as uint32 before their
-signed 64-bit difference. Thief valuation sign-extends the IMUL result.
+signed 64-bit difference. Thief valuation sign-extends the IMUL result. s is
+the sale's one snapshot of the live tunables.
 ================
 */
-func (rt *Runtime) tradeSaleValue(division string, c *enterworld.Character, npc simulation.NpcDef, item inventory.Item) (uint64, int64, int64, bool) {
+func (rt *Runtime) tradeSaleValue(division string, c *enterworld.Character, npc simulation.NpcDef, item inventory.Item, s *tunables.Settings) (uint64, int64, int64, bool) {
 	ref, ok := rt.deps.ItemReferences().ItemRefByCodename(item.Codename)
 	if !ok || ref == nil || ref.RefObjID != item.RefObjID || ref.TypeFlags() != item.TypeFlags {
 		return 0, 0, 0, false
@@ -219,7 +221,7 @@ func (rt *Runtime) tradeSaleValue(division string, c *enterworld.Character, npc 
 		credit = int64(unit * uint32(item.Quantity))
 		profit = credit - int64(uint32(base)*uint32(item.Quantity))
 		// Port-only, not native: Jangan route profit (tradetiers.go).
-		credit, profit = RaiseRouteProfit(credit, profit, rt.routeProfitPercent(npc, item))
+		credit, profit = RaiseRouteProfit(credit, profit, rt.routeProfitPercent(npc, item, s))
 	}
 	taxed, valid := commerce.AdjustPrice(uint64(max(credit, 0)), rt.commerceTax(division, npc, c), false)
 	return taxed, max(profit, 0), int64(uint64(max(credit, 0)) - taxed), valid

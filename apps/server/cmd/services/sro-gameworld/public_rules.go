@@ -49,6 +49,17 @@ var unlistedSettings = map[string]string{
 	"SRO_SHORT_NOTICE_FADE_MS":           "timing of a player's own Experimental Short notices row",
 	"SRO_CHAT_ACK_TIMEOUT_MS":            "the client's wait before warning that a chat line may not have arrived",
 	"SRO_MOST_WANTED_NOTICES_PER_MINUTE": "a cap on the Most Wanted notices, an operator throttle",
+	// The trade group: each number is shown in its own rule's text.
+	"SRO_TRADE_ROUTE_DONWHANG_PERCENT":        "shown in the trade tiers rule",
+	"SRO_TRADE_ROUTE_HOTAN_PERCENT":           "shown in the trade tiers rule",
+	"SRO_TRADE_ROUTE_SAMARKAND_PERCENT":       "shown in the trade tiers rule",
+	"SRO_TRADE_ROUTE_CONSTANTINOPLE_PERCENT":  "shown in the trade tiers rule",
+	"SRO_THIEF_PARTY_PERCENT_EACH":            "shown in the thief party bonus rule",
+	"SRO_THIEF_PARTY_PERCENT_CAP":             "shown in the thief party bonus rule",
+	"SRO_TRADE_JOB_TRADER_PERCENT_PER_HUNTER": "shown in the trade job bonus rule",
+	"SRO_TRADE_JOB_TRADER_PERCENT_CAP":        "shown in the trade job bonus rule",
+	"SRO_TRADE_JOB_HUNTER_PERCENT_PER_TRADER": "shown in the trade job bonus rule",
+	"SRO_TRADE_JOB_HUNTER_PERCENT_CAP":        "shown in the trade job bonus rule",
 }
 
 /*
@@ -228,7 +239,9 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Every trade good is worth 348 gold, a caravan's stars count its goods against the trader's level, and every route pays its listed price.",
 				Now: "Trade goods are worth 21 times as much (7,308 for a 348 good): buying, selling, stolen goods at the Den and the cargo value all scale, so profit, trader job EXP, hunter shares, the weekly trade pool and the fortress trade tax are 21 times larger too. " +
 					"Stars follow the cargo's gold value: 1 star below 10M, 2 from 10M, 3 from 20M, 4 from 35M, 5 from 50M (bandits, the trade-scale menu and the stars in the transport's bag follow them). " +
-					"Selling between Jangan and another town raises the PROFIT (sale minus cost), both ways: Donwhang +50%, Hotan +100%, Samarkand +200%, Constantinople +300%.",
+					fmt.Sprintf("Selling between Jangan and another town raises the PROFIT (sale minus cost), both ways: Donwhang +%d%%, Hotan +%d%%, Samarkand +%d%%, Constantinople +%d%%.",
+						settings.Int(tunables.TradeRouteDonwhangPercent), settings.Int(tunables.TradeRouteHotanPercent),
+						settings.Int(tunables.TradeRouteSamarkandPercent), settings.Int(tunables.TradeRouteConstantinoplePercent)),
 				Why: "Requested for the beta so bigger loads and longer roads pay; the original returns with one setting."},
 			{Flag: action.EnvJobSuitHidesArmor, On: action.JobSuitHidesArmorFromEnv(),
 				Native: "Only a thief suit hides the armour worn under it; trader and hunter suits are drawn over it.",
@@ -287,12 +300,15 @@ func publicRules() publicstats.RulesResponse {
 				Why: "Requested for the beta, so repeated kills between one pair can be seen; the window returns with one setting."},
 			{Flag: action.EnvThiefPartyBonus, On: action.ThiefPartyBonusFromEnv(),
 				Native: "A party's thieves change nothing about its monster rewards.",
-				Now:    "Each party member dressed as a thief adds 10% monster EXP and gold for the party, up to 50%.",
-				Why:    "Requested for the beta, to make thieves welcome in hunting parties; the original returns with one setting."},
+				Now: fmt.Sprintf("Each party member dressed as a thief adds %d%% monster EXP and gold for the party, up to %d%%.",
+					settings.Int(tunables.ThiefPartyPercentEach), settings.Int(tunables.ThiefPartyPercentCap)),
+				Why: "Requested for the beta, to make thieves welcome in hunting parties; the original returns with one setting."},
 			{Flag: action.EnvTradeJobBonus, On: action.TradeJobBonusFromEnv(),
 				Native: "A trade sale's party hunters take their usual share and the trader its usual profit.",
-				Now:    "The trader earns 10% more profit per party hunter nearby (up to 20%), and each hunter 10% more gold per party trader (up to 60%).",
-				Why:    "Requested for the beta, so traders and hunters gain from escorting each other; the original returns with one setting."},
+				Now: fmt.Sprintf("The trader earns %d%% more profit per party hunter nearby (up to %d%%), and each hunter %d%% more gold per party trader (up to %d%%).",
+					settings.Int(tunables.TradeJobTraderPercentPerHunter), settings.Int(tunables.TradeJobTraderPercentCap),
+					settings.Int(tunables.TradeJobHunterPercentPerTrader), settings.Int(tunables.TradeJobHunterPercentCap)),
+				Why: "Requested for the beta, so traders and hunters gain from escorting each other; the original returns with one setting."},
 		},
 		Deviations: []publicstats.Deviation{
 			{Title: "Storage Ctrl+click",

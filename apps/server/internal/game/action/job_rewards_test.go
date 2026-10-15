@@ -20,6 +20,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 )
 
@@ -98,7 +99,7 @@ func TestTraderSaleSharesWithPartyHunters(t *testing.T) {
 	plain := testCharacter()
 	plain.ID, plain.Name = 99, "plain"
 	roster := tradeRoster{members: []*enterworld.Character{trader, hunter, plain}, party: true}
-	payouts := rt.tradeRewards(testDivision, trader, roster, commerce.TradeRewardInput{Credit: 100000, Profit: 40000})
+	payouts := rt.tradeRewards(testDivision, trader, roster, commerce.TradeRewardInput{Credit: 100000, Profit: 40000}, tunables.Current())
 	paid := map[string]commerce.TradeReward{}
 	for _, payout := range payouts {
 		paid[payout.character.Name] = payout.TradeReward

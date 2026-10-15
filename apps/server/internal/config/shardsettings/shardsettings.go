@@ -74,6 +74,13 @@ var Settings = []Setting{
 	{Env: "SRO_MOST_WANTED_BOUNTY_TRANSFER", NomadVar: "most_wanted_bounty_transfer", Default: "on"},
 	// Owner, 2026-10-14: trade stars by cargo gold, Jangan route profit.
 	{Env: "SRO_TRADE_TIERS", NomadVar: "trade_tiers", Default: "on", Catalogue: true},
+	// F10 trade group (game/tunables): the Jangan route profit percents. The
+	// site's trade quotes read them, so the catalogue does too.
+	{Env: "SRO_TRADE_ROUTE_DONWHANG_PERCENT", NomadVar: "trade_route_donwhang_percent", Default: "50", Catalogue: true},
+	{Env: "SRO_TRADE_ROUTE_HOTAN_PERCENT", NomadVar: "trade_route_hotan_percent", Default: "100", Catalogue: true},
+	{Env: "SRO_TRADE_ROUTE_SAMARKAND_PERCENT", NomadVar: "trade_route_samarkand_percent", Default: "200", Catalogue: true},
+	{Env: "SRO_TRADE_ROUTE_CONSTANTINOPLE_PERCENT", NomadVar: "trade_route_constantinople_percent", Default: "300",
+		Catalogue: true},
 	// Owner, 2026-10-14: trader and hunter suits hide worn armour.
 	{Env: "SRO_JOB_SUIT_HIDES_ARMOR", NomadVar: "job_suit_hides_armor", Default: "on"},
 	// Owner, 2026-10-15: level-20 thief suits wear the Moonlit Ash look.
@@ -104,8 +111,16 @@ var Settings = []Setting{
 	{Env: "SRO_ANNOUNCE_MOST_WANTED", NomadVar: "announce_most_wanted", Default: "on"},
 	// Owner, 2026-10-14: +10% party EXP and gold per thief (cap 50%).
 	{Env: "SRO_THIEF_PARTY_BONUS", NomadVar: "thief_party_bonus", Default: "on"},
+	// F10 trade group (game/tunables): the per-thief percent and its cap.
+	{Env: "SRO_THIEF_PARTY_PERCENT_EACH", NomadVar: "thief_party_percent_each", Default: "10"},
+	{Env: "SRO_THIEF_PARTY_PERCENT_CAP", NomadVar: "thief_party_percent_cap", Default: "50"},
 	// Owner, 2026-10-14: trader +10%/hunter (cap 20%), hunter +10%/trader (cap 60%).
 	{Env: "SRO_TRADE_JOB_BONUS", NomadVar: "trade_job_bonus", Default: "on"},
+	// F10 trade group (game/tunables): the four trader and hunter percents.
+	{Env: "SRO_TRADE_JOB_TRADER_PERCENT_PER_HUNTER", NomadVar: "trade_job_trader_percent_per_hunter", Default: "10"},
+	{Env: "SRO_TRADE_JOB_TRADER_PERCENT_CAP", NomadVar: "trade_job_trader_percent_cap", Default: "20"},
+	{Env: "SRO_TRADE_JOB_HUNTER_PERCENT_PER_TRADER", NomadVar: "trade_job_hunter_percent_per_trader", Default: "10"},
+	{Env: "SRO_TRADE_JOB_HUNTER_PERCENT_CAP", NomadVar: "trade_job_hunter_percent_cap", Default: "60"},
 	{Env: "SRO_REVERSE_RETURN_MAP", NomadVar: "reverse_return_map", Default: ""},
 	{Env: "SRO_GM_SETSPEED", NomadVar: "gm_setspeed", Default: "on"},
 	{Env: "SRO_ALCHEMY_RATES", NomadVar: "alchemy_rates", Default: "on", Catalogue: true},

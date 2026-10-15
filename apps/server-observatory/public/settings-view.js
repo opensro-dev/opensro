@@ -28,7 +28,7 @@ export function groupedNumber( value ) {
 ================
 showValue
 
-One number in a rule's unit: count, gold, minutes, ms or factor.
+One number in a rule's unit: count, gold, minutes, ms, percent or factor.
 ================
 */
 export function showValue( row, value ) {
@@ -39,6 +39,8 @@ export function showValue( row, value ) {
 			return value + (value === 1 ? " minute" : " minutes");
 		case "ms":
 			return groupedNumber( value ) + " ms";
+		case "percent":
+			return groupedNumber( value ) + "%";
 		case "factor":
 			return "×" + Number( value ).toFixed( 2 );
 		default:

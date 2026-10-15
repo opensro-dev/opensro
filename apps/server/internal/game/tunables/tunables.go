@@ -69,6 +69,18 @@ const (
 	ShortNoticeShowMs          = "short_notice_show_ms"
 	ShortNoticeFadeMs          = "short_notice_fade_ms"
 	ChatAckTimeoutMs           = "chat_ack_timeout_ms"
+	// The trade group (SRO_TRADE_JOB_BONUS, SRO_THIEF_PARTY_BONUS and
+	// SRO_TRADE_TIERS' Jangan routes; game/action).
+	TradeJobTraderPercentPerHunter  = "trade_job_trader_percent_per_hunter"
+	TradeJobTraderPercentCap        = "trade_job_trader_percent_cap"
+	TradeJobHunterPercentPerTrader  = "trade_job_hunter_percent_per_trader"
+	TradeJobHunterPercentCap        = "trade_job_hunter_percent_cap"
+	ThiefPartyPercentEach           = "thief_party_percent_each"
+	ThiefPartyPercentCap            = "thief_party_percent_cap"
+	TradeRouteDonwhangPercent       = "trade_route_donwhang_percent"
+	TradeRouteHotanPercent          = "trade_route_hotan_percent"
+	TradeRouteSamarkandPercent      = "trade_route_samarkand_percent"
+	TradeRouteConstantinoplePercent = "trade_route_constantinople_percent"
 )
 
 /*
@@ -131,6 +143,40 @@ var Registry = []Setting{
 	{Key: ChatAckTimeoutMs, Env: "SRO_CHAT_ACK_TIMEOUT_MS", Kind: Int, Default: 10000, Min: 5000, Max: 30000,
 		Step: 1000, Class: Entry, Group: "Client", Label: "Chat confirmation wait", Unit: "ms",
 		Help: "How long the client waits for the server to confirm a chat line before saying it may not have arrived (the original has no such wait)."},
+	// The trade group: the port-only party bonuses and route profit, read
+	// once per sale or per reward (game/action). Each default is the value
+	// the rule shipped with, so a shard that sets nothing pays as before.
+	{Key: TradeJobTraderPercentPerHunter, Env: "SRO_TRADE_JOB_TRADER_PERCENT_PER_HUNTER", Kind: Int, Default: 10,
+		Min: 0, Max: 50, Step: 5, Class: Live, Group: "Trade", Label: "Trader bonus per hunter", Unit: "percent",
+		Help: "Extra profit a trader earns per party hunter nearby under SRO_TRADE_JOB_BONUS."},
+	{Key: TradeJobTraderPercentCap, Env: "SRO_TRADE_JOB_TRADER_PERCENT_CAP", Kind: Int, Default: 20, Min: 0, Max: 100,
+		Step: 5, Class: Live, Group: "Trade", Label: "Trader bonus cap", Unit: "percent",
+		Help: "The most a trader's profit rises under SRO_TRADE_JOB_BONUS."},
+	{Key: TradeJobHunterPercentPerTrader, Env: "SRO_TRADE_JOB_HUNTER_PERCENT_PER_TRADER", Kind: Int, Default: 10,
+		Min: 0, Max: 50, Step: 5, Class: Live, Group: "Trade", Label: "Hunter bonus per trader", Unit: "percent",
+		Help: "Extra gold each hunter earns per party trader under SRO_TRADE_JOB_BONUS."},
+	{Key: TradeJobHunterPercentCap, Env: "SRO_TRADE_JOB_HUNTER_PERCENT_CAP", Kind: Int, Default: 60, Min: 0, Max: 200,
+		Step: 5, Class: Live, Group: "Trade", Label: "Hunter bonus cap", Unit: "percent",
+		Help: "The most a hunter's gold share rises under SRO_TRADE_JOB_BONUS."},
+	{Key: ThiefPartyPercentEach, Env: "SRO_THIEF_PARTY_PERCENT_EACH", Kind: Int, Default: 10, Min: 0, Max: 50,
+		Step: 5, Class: Live, Group: "Trade", Label: "Thief party bonus per thief", Unit: "percent",
+		Help: "Extra monster EXP and gold a party earns per member dressed as a thief under SRO_THIEF_PARTY_BONUS."},
+	{Key: ThiefPartyPercentCap, Env: "SRO_THIEF_PARTY_PERCENT_CAP", Kind: Int, Default: 50, Min: 0, Max: 200,
+		Step: 5, Class: Live, Group: "Trade", Label: "Thief party bonus cap", Unit: "percent",
+		Help: "The most a party's monster EXP and gold rise under SRO_THIEF_PARTY_BONUS."},
+	{Key: TradeRouteDonwhangPercent, Env: "SRO_TRADE_ROUTE_DONWHANG_PERCENT", Kind: Int, Default: 50, Min: 0,
+		Max: 500, Step: 10, Class: Live, Group: "Trade", Label: "Jangan-Donwhang profit bonus", Unit: "percent",
+		Help: "Extra profit on goods sold between Jangan and Donwhang, both ways, under SRO_TRADE_TIERS."},
+	{Key: TradeRouteHotanPercent, Env: "SRO_TRADE_ROUTE_HOTAN_PERCENT", Kind: Int, Default: 100, Min: 0, Max: 500,
+		Step: 10, Class: Live, Group: "Trade", Label: "Jangan-Hotan profit bonus", Unit: "percent",
+		Help: "Extra profit on goods sold between Jangan and Hotan, both ways, under SRO_TRADE_TIERS."},
+	{Key: TradeRouteSamarkandPercent, Env: "SRO_TRADE_ROUTE_SAMARKAND_PERCENT", Kind: Int, Default: 200, Min: 0,
+		Max: 500, Step: 10, Class: Live, Group: "Trade", Label: "Jangan-Samarkand profit bonus", Unit: "percent",
+		Help: "Extra profit on goods sold between Jangan and Samarkand, both ways, under SRO_TRADE_TIERS."},
+	{Key: TradeRouteConstantinoplePercent, Env: "SRO_TRADE_ROUTE_CONSTANTINOPLE_PERCENT", Kind: Int, Default: 300,
+		Min: 0, Max: 500, Step: 10, Class: Live, Group: "Trade", Label: "Jangan-Constantinople profit bonus",
+		Unit: "percent",
+		Help: "Extra profit on goods sold between Jangan and Constantinople, both ways, under SRO_TRADE_TIERS."},
 }
 
 /*
