@@ -195,7 +195,7 @@ func newGameWorldApplication(
 	log.AddHook(journal)
 	// Port-only: the staff console's read of every tunable and SRO_ flag.
 	settingsHandler, err := settingsapi.Handler(filepath.Join(store.DirForShardFromEnv(ownedShard.ID), "operator-token"),
-		settingsapi.Environ)
+		settingsapi.Getenv)
 	if err != nil {
 		return nil, fmt.Errorf("settings: %w", err)
 	}

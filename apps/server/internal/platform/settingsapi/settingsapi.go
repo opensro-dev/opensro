@@ -6,9 +6,10 @@ settingsapi.go - the staff console's read of the shard's settings
 Port-only, not native. GET /internal/operations/settings/v1 answers the
 staff console on the same host (operatorauth, the shard's operator-token)
 with every tunable (game/tunables: value, default, bounds, class,
-source) and every SRO_ variable the GameWorld runs with, read-only. The
-variables that are identity, paths, addresses or secrets are left out:
-the list is for reading rules, not for learning the host.
+source) and every shard setting (config/shardsettings, the table a
+deployment chooses from), read-only. The flags are an allow-list: a
+variable outside that table (a webhook, a URL, identity, a path) is never
+listed, so a new secret cannot leak by being added to the environment.
 
 Writes (proposals, two-person approval, the audit) come later on the same
 prefix; until then this handler answers GET only.
@@ -34,10 +35,6 @@ const Path = "/internal/operations/settings/v1"
 
 // schemaVersion is the response's shape; the console checks it.
 const schemaVersion = 1
-
-// hiddenWords mark a variable that names a secret, a path or an address,
-// whatever its table says; its value is never listed.
-var hiddenWords = []string{"TOKEN", "SECRET", "PASSWORD", "KEY", "PATH", "DIR", "ROOT", "ADDR", "TLS", "DIGEST"}
 
 /*
 ================
@@ -99,7 +96,7 @@ The GET handler under the guard of tokenPath. No token file: the endpoint
 answers nobody, as the other operator readers do.
 ================
 */
-func Handler(tokenPath string, environ func() []string) (http.Handler, error) {
+func Handler(tokenPath string, getenv func(string) string) (http.Handler, error) {
 	guard, found, err := operatorauth.Load(tokenPath, "settings")
 	if err != nil {
 		return nil, err
@@ -118,7 +115,7 @@ func Handler(tokenPath string, environ func() []string) (http.Handler, error) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
-		_ = json.NewEncoder(w).Encode(Build(tunables.Current(), environ()))
+		_ = json.NewEncoder(w).Encode(Build(tunables.Current(), getenv))
 	}), nil
 }
 
@@ -126,10 +123,10 @@ func Handler(tokenPath string, environ func() []string) (http.Handler, error) {
 ================
 Build
 
-The response for one snapshot and one environment (os.Environ form).
+The response for one snapshot and one environment.
 ================
 */
-func Build(s *tunables.Settings, environ []string) Response {
+func Build(s *tunables.Settings, getenv func(string) string) Response {
 	out := Response{SchemaVersion: schemaVersion, Settings: []SettingRow{}, Flags: []FlagRow{}}
 	tunableEnv := map[string]bool{}
 	for _, setting := range tunables.Registry {
@@ -145,34 +142,15 @@ func Build(s *tunables.Settings, environ []string) Response {
 		}
 		out.Settings = append(out.Settings, row)
 	}
-	for _, entry := range environ {
-		name, value, _ := strings.Cut(entry, "=")
-		if !strings.HasPrefix(name, "SRO_") || tunableEnv[name] || hidden(name) {
+	for _, setting := range shardsettings.Settings {
+		if tunableEnv[setting.Env] {
 			continue
 		}
-		out.Flags = append(out.Flags, FlagRow{Env: name, Value: value, On: switchValue(value)})
+		value := getenv(setting.Env)
+		out.Flags = append(out.Flags, FlagRow{Env: setting.Env, Value: value, On: switchValue(value)})
 	}
 	sort.Slice(out.Flags, func(i, j int) bool { return out.Flags[i].Env < out.Flags[j].Env })
 	return out
-}
-
-/*
-================
-hidden
-
-Whether a variable is identity, a path, an address or a secret.
-================
-*/
-func hidden(name string) bool {
-	if _, derived := shardsettings.NotSettings[name]; derived {
-		return true
-	}
-	for _, word := range hiddenWords {
-		if strings.Contains(name, word) {
-			return true
-		}
-	}
-	return false
 }
 
 /*
@@ -217,5 +195,5 @@ func className(class tunables.Class) string {
 	return "restart"
 }
 
-// Environ is the process environment, for the GameWorld's wiring.
-var Environ = os.Environ
+// Getenv is the process environment, for the GameWorld's wiring.
+var Getenv = os.Getenv

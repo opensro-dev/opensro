@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"opensro.online/server/internal/config/shardsettings"
 	"opensro.online/server/internal/game/tunables"
 )
 
@@ -41,25 +42,28 @@ func request(method string, auth bool) *http.Request {
 
 /*
 ================
-TestBuildListsTunablesAndReadableFlags
+TestBuildListsTunablesAndOnlyShardSettings
 
-Every registry row appears with its value, bounds and class; a switch
-reads as on or off; identity, paths, addresses and secrets never appear;
-a tunable's own variable is not repeated in the flags.
+Every registry row appears with its value, bounds and class. The flags
+are exactly the shard settings table minus the tunables' own variables,
+with their raw values and on/off: a webhook, a URL, the GM list or any
+other variable outside the table never appears, whatever the environment
+holds.
 ================
 */
-func TestBuildListsTunablesAndReadableFlags(t *testing.T) {
-	s, err := tunables.Parse(func(name string) string {
-		return map[string]string{"SRO_MALL_RIDE_SPEED": "on", "SRO_JOB_KILL_NOTICES_PER_MINUTE": "9"}[name]
-	})
+func TestBuildListsTunablesAndOnlyShardSettings(t *testing.T) {
+	environment := map[string]string{
+		"SRO_MALL_RIDE_SPEED": "on", "SRO_JOB_KILL_NOTICES_PER_MINUTE": "9", "SRO_BETA_SILK": "50",
+		"SRO_PET_PACING": "off", "SRO_BETA_STARTER_KIT": "on",
+		"SRO_X_WEBHOOK": "https://discord.example/api/webhooks/1/secret", "SRO_BUG_REPORT_DISCORD_WEBHOOK": "secret",
+		"SRO_GM_CHARACTERS": "Admin", "SRO_AGENT_URL": "http://10.0.0.1:1", "SRO_AUTHORITY_STATE_DIR": "/srv/state",
+	}
+	getenv := func(name string) string { return environment[name] }
+	s, err := tunables.Parse(getenv)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := Build(s, []string{
-		"SRO_MOST_WANTED=on", "SRO_BETA_SILK=50", "SRO_PET_PACING=off", "SRO_MALL_RIDE_SPEED=on",
-		"SRO_AUTHORITY_STATE_DIR=/srv/state", "SRO_PUBLIC_API_ADDR=127.0.0.1:9", "SRO_SOME_TOKEN=x",
-		"SRO_GM_CHARACTERS=Admin", "PATH=/usr/bin",
-	})
+	got := Build(s, getenv)
 	if got.SchemaVersion != 1 || len(got.Settings) != len(tunables.Registry) {
 		t.Fatalf("response %+v", got)
 	}
@@ -78,9 +82,33 @@ func TestBuildListsTunablesAndReadableFlags(t *testing.T) {
 	for _, flag := range got.Flags {
 		flags[flag.Env] = flag
 	}
-	if len(flags) != 3 || flags["SRO_MOST_WANTED"].On == nil || !*flags["SRO_MOST_WANTED"].On ||
-		flags["SRO_PET_PACING"].On == nil || *flags["SRO_PET_PACING"].On || flags["SRO_BETA_SILK"].On != nil ||
-		flags["SRO_BETA_SILK"].Value != "50" {
+	allowed := map[string]bool{}
+	tunableEnv := map[string]bool{}
+	for _, row := range tunables.Registry {
+		tunableEnv[row.Env] = true
+	}
+	for _, setting := range shardsettings.Settings {
+		if !tunableEnv[setting.Env] {
+			allowed[setting.Env] = true
+		}
+	}
+	if len(flags) != len(allowed) {
+		t.Fatalf("%d flags, want the %d shard settings", len(flags), len(allowed))
+	}
+	for name := range flags {
+		if !allowed[name] {
+			t.Fatalf("%s is listed but is not a shard setting", name)
+		}
+	}
+	for _, secret := range []string{"SRO_X_WEBHOOK", "SRO_BUG_REPORT_DISCORD_WEBHOOK", "SRO_GM_CHARACTERS", "SRO_AGENT_URL",
+		"SRO_AUTHORITY_STATE_DIR", "SRO_MALL_RIDE_SPEED"} {
+		if _, listed := flags[secret]; listed {
+			t.Fatalf("%s is listed", secret)
+		}
+	}
+	pet, silk := flags["SRO_PET_PACING"], flags["SRO_BETA_SILK"]
+	if pet.On == nil || *pet.On || silk.On != nil || silk.Value != "50" ||
+		flags["SRO_BETA_STARTER_KIT"].On == nil || !*flags["SRO_BETA_STARTER_KIT"].On {
 		t.Fatalf("flags %+v", got.Flags)
 	}
 }
@@ -92,7 +120,7 @@ TestHandlerAnswersOnlyTheGuardedConsole
 */
 func TestHandlerAnswersOnlyTheGuardedConsole(t *testing.T) {
 	dir := t.TempDir()
-	missing, err := Handler(filepath.Join(dir, "absent"), os.Environ)
+	missing, err := Handler(filepath.Join(dir, "absent"), os.Getenv)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +133,7 @@ func TestHandlerAnswersOnlyTheGuardedConsole(t *testing.T) {
 	if err := os.WriteFile(tokenPath, []byte(testToken+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	handler, err := Handler(tokenPath, func() []string { return []string{"SRO_MOST_WANTED=on"} })
+	handler, err := Handler(tokenPath, func(name string) string { return map[string]string{"SRO_MOST_WANTED": "on"}[name] })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +161,7 @@ func TestHandlerAnswersOnlyTheGuardedConsole(t *testing.T) {
 		}
 		var body Response
 		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil || body.SchemaVersion != 1 ||
-			len(body.Flags) != 1 || !strings.HasPrefix(w.Header().Get("Content-Type"), "application/json") {
+			len(body.Flags) == 0 || !strings.HasPrefix(w.Header().Get("Content-Type"), "application/json") {
 			t.Fatalf("console body %q (%v)", w.Body.String(), err)
 		}
 	}
