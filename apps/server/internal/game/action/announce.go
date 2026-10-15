@@ -10,6 +10,8 @@ GameWorld's Nomad job turns them on:
 	SRO_ANNOUNCE_SOX_DROP  "<player> has dropped <item> (<seal>) from <monster>"
 	SRO_ANNOUNCE_PLUS      "<player> advanced <item> to +N" (N 8..11)
 	SRO_ANNOUNCE_JOB_KILL  "[<killer alias>] killed [<victim alias>]" (job aliases, never character names)
+	SRO_ANNOUNCE_MOST_WANTED  "[<alias>] is MOST WANTED LV <N>" on a new wanted level, and
+	                          "[<killer alias>] claimed bounty of [<victim alias>] MOST WANTED LV <N>"
 
 A notice is the native notification packet the operator notices use
 (wire.NotificationFrame), sent to every session of the division and kept
@@ -50,6 +52,9 @@ const (
 	EnvAnnounceJobKill = "SRO_ANNOUNCE_JOB_KILL"
 	// EnvJobKillNoticeRepeat announces every kill of a pair (no window).
 	EnvJobKillNoticeRepeat = "SRO_JOB_KILL_NOTICE_REPEAT"
+	// EnvAnnounceMostWanted announces wanted levels and claimed bounties
+	// (owner decision 2026-10-15, for the balance advisor).
+	EnvAnnounceMostWanted = "SRO_ANNOUNCE_MOST_WANTED"
 )
 
 const (
@@ -85,6 +90,9 @@ const (
 	announceSoxDrop announceKind = iota
 	announcePlus
 	announceJobKill
+	// announceMostWanted has its own per-minute bucket, so a run of wanted
+	// notices never starves the kill notices; it shares their channel.
+	announceMostWanted
 	announceKinds
 )
 
@@ -99,6 +107,7 @@ JobKillRepeat drops the pair window (EnvJobKillNoticeRepeat).
 type Announcements struct {
 	SoxDrop, Plus, JobKill bool
 	JobKillRepeat          bool
+	MostWanted             bool
 }
 
 /*
@@ -115,7 +124,7 @@ func AnnouncementsFromEnv() Announcements {
 		return false
 	}
 	return Announcements{SoxDrop: on(EnvAnnounceSoxDrop), Plus: on(EnvAnnouncePlus), JobKill: on(EnvAnnounceJobKill),
-		JobKillRepeat: on(EnvJobKillNoticeRepeat)}
+		JobKillRepeat: on(EnvJobKillNoticeRepeat), MostWanted: on(EnvAnnounceMostWanted)}
 }
 
 /*
@@ -174,7 +183,7 @@ func (rt *Runtime) announce(division string, kind announceKind, text string, lin
 	// Port-only: each kind has its own channel, so a player can hide it
 	// (wire.JobKillNoticeChannel, wire.DropPlusNoticeChannel).
 	frame := wire.DropPlusNotificationFrame(text, link)
-	if kind == announceJobKill {
+	if kind == announceJobKill || kind == announceMostWanted {
 		frame = wire.JobKillNotificationFrame(text)
 	}
 	a.queued = append(a.queued, simulation.DivisionFrames{DivisionID: division,
@@ -368,6 +377,73 @@ func (rt *Runtime) postJobKillNotice(n jobKillNotice) {
 		return
 	}
 	rt.announce(n.division, announceJobKill, "["+n.killerAlias+"] killed ["+n.victimAlias+"]", wire.NoticeLink{}, n.nowMs)
+}
+
+/*
+================
+mostWantedNotice
+
+A Most Wanted notice read inside the kill's door, while the suits are
+worn, and posted by postMostWantedNotice once the kill commits.
+================
+*/
+type mostWantedNotice struct {
+	division, text string
+	nowMs          int64
+}
+
+/*
+================
+Runtime.mostWantedLevelNotice
+
+A killer's new wanted level, by job alias. Only a dressed job kill raises
+the level, so the killer always has one.
+================
+*/
+func (rt *Runtime) mostWantedLevelNotice(division string, killer *enterworld.Character, level, nowMs int64) []mostWantedNotice {
+	job := enterworld.DressedJob(killer)
+	if !rt.Announce.MostWanted || jobNames[job] == "" {
+		return nil
+	}
+	return []mostWantedNotice{{division, fmt.Sprintf("[%s] is MOST WANTED LV %d", jobKillAlias(killer, job), level), nowMs}}
+}
+
+/*
+================
+Runtime.mostWantedBountyNotice
+
+A claimed bounty, by job alias. A bounty pays on any stranger PvP kill, so
+the killer may wear no suit and have no alias: then the claim names the
+victim alone (owner decision 2026-10-15), never a character. A victim
+without a suit cannot be wanted, and is never announced.
+================
+*/
+func (rt *Runtime) mostWantedBountyNotice(division string, killer, victim *enterworld.Character, level, nowMs int64) []mostWantedNotice {
+	killerJob, victimJob := enterworld.DressedJob(killer), enterworld.DressedJob(victim)
+	if !rt.Announce.MostWanted || jobNames[victimJob] == "" {
+		return nil
+	}
+	victimAlias := jobKillAlias(victim, victimJob)
+	text := fmt.Sprintf("Bounty of [%s] MOST WANTED LV %d was claimed", victimAlias, level)
+	if jobNames[killerJob] != "" {
+		text = fmt.Sprintf("[%s] claimed bounty of [%s] MOST WANTED LV %d", jobKillAlias(killer, killerJob), victimAlias, level)
+	}
+	return []mostWantedNotice{{division, text, nowMs}}
+}
+
+/*
+================
+Runtime.postMostWantedNotice
+
+Queues a committed Most Wanted notice on the job-kill channel, under its
+own per-minute cap.
+================
+*/
+func (rt *Runtime) postMostWantedNotice(n mostWantedNotice) {
+	if !rt.Announce.MostWanted {
+		return
+	}
+	rt.announce(n.division, announceMostWanted, n.text, wire.NoticeLink{}, n.nowMs)
 }
 
 // noticeMaxUnits is wire.NotificationFrame's UTF-16 budget (753A6F).

@@ -188,9 +188,10 @@ func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterwor
 		}
 	}
 	// Port-only, not native: the streak's count and the bounty (mostwanted.go).
-	wantedActor, wantedPublic, owed := rt.mostWantedKillInDoor(division, killer, victim, kill, now)
+	wantedActor, wantedPublic, owed, wanted := rt.mostWantedKillInDoor(division, killer, victim, kill, now)
 	actor, public = append(actor, wantedActor...), append(public, wantedPublic...)
 	after.bounties = append(after.bounties, owed...)
+	after.wanted = append(after.wanted, wanted...)
 	return actor, public, after
 }
 
@@ -199,14 +200,15 @@ func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterwor
 jobKillPayout
 
 What a committed kill still owes after its door: the party's job shares,
-the port-only job-kill notice (announce.go) and, with the transfer on, the
-port-only bounty taken from the victim (mostwanted.go). Nothing here runs
-when the kill's commit rolls back.
+the port-only job-kill and Most Wanted notices (announce.go) and, with the
+transfer on, the port-only bounty taken from the victim (mostwanted.go).
+Nothing here runs when the kill's commit rolls back.
 ================
 */
 type jobKillPayout struct {
 	shares   []jobKillShare
 	notices  []jobKillNotice
+	wanted   []mostWantedNotice
 	bounties []mostWantedBounty
 }
 
@@ -220,6 +222,7 @@ Gathers several kills' payouts (an area strike can kill several players).
 func (p *jobKillPayout) add(other jobKillPayout) {
 	p.shares = append(p.shares, other.shares...)
 	p.notices = append(p.notices, other.notices...)
+	p.wanted = append(p.wanted, other.wanted...)
 	p.bounties = append(p.bounties, other.bounties...)
 }
 
@@ -228,13 +231,16 @@ func (p *jobKillPayout) add(other jobKillPayout) {
 payJobKillShares
 
 5BD7F0's party members other than the killer, each in its own door, then
-the kill's notice, then each bounty owed from a victim (port-only, its
+the kill's notice and its Most Wanted notices, then each bounty owed from a victim (port-only, its
 own door over both characters).
 ================
 */
 func (rt *Runtime) payJobKillShares(after jobKillPayout) []RecipientFrames {
 	for _, notice := range after.notices {
 		rt.postJobKillNotice(notice)
+	}
+	for _, notice := range after.wanted {
+		rt.postMostWantedNotice(notice)
 	}
 	var out []RecipientFrames
 	for _, share := range after.shares {

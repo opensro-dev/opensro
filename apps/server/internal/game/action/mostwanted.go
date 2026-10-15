@@ -318,12 +318,16 @@ A job kill's streak count and every PvP kill's bounty, in the killer's
 door after the victim's death settled. victimLevel is the wanted level the
 victim held before its death cleared it. actor goes to the killer. With
 the bounty transfer on, the bounty is not paid here but returned, owed
-once the door commits.
+once the door commits. notices are the claimed bounty and a new wanted
+level (announce.go), posted once the door commits.
 ================
 */
-func (rt *Runtime) mostWantedKillInDoor(division string, killer, victim *enterworld.Character, kill playerKill, now int64) (actor, public []wire.Frame, owed []mostWantedBounty) {
+func (rt *Runtime) mostWantedKillInDoor(division string, killer, victim *enterworld.Character, kill playerKill, now int64) (actor, public []wire.Frame, owed []mostWantedBounty, notices []mostWantedNotice) {
 	if !rt.MostWanted || killer == nil || victim == nil {
-		return nil, nil, nil
+		return nil, nil, nil, nil
+	}
+	if kill.victimWanted > 0 && kill.mostWantedStrangers {
+		notices = rt.mostWantedBountyNotice(division, killer, victim, kill.victimWanted, now)
 	}
 	if kill.victimWanted > 0 && kill.mostWantedStrangers && rt.MostWantedBountyTransfer {
 		owed = append(owed, mostWantedBounty{division: division, killer: killer, victim: victim, wanted: kill.victimWanted,
@@ -337,7 +341,7 @@ func (rt *Runtime) mostWantedKillInDoor(division string, killer, victim *enterwo
 	}
 	if kill.kind != pk.DeathJob || !kill.mostWantedStrangers || !enterworld.CharacterAlive(killer) ||
 		!rt.countMostWantedPair(division, killer.Name, victim.Name, now) {
-		return actor, nil, owed
+		return actor, nil, owed, notices
 	}
 	before := mostWantedLevel(killer)
 	if killer.MostWanted == nil {
@@ -346,11 +350,12 @@ func (rt *Runtime) mostWantedKillInDoor(division string, killer, victim *enterwo
 	killer.MostWanted.Streak += rt.mostWantedStreakStep()
 	log.WithFields(log.Fields{"division": division, "killer": killer.Name, "victim": victim.Name,
 		"streak": killer.MostWanted.Streak}).Info("most wanted: kill counted")
-	if mostWantedLevel(killer) != before {
+	if level := mostWantedLevel(killer); level != before {
 		stats, speed := rt.mostWantedRefresh(division, killer, now)
 		actor, public = append(actor, stats...), speed
+		notices = append(notices, rt.mostWantedLevelNotice(division, killer, level, now)...)
 	}
-	return actor, public, owed
+	return actor, public, owed, notices
 }
 
 /*

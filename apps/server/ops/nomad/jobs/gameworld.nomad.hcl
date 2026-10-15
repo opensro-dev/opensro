@@ -313,6 +313,14 @@ variable "job_kill_notice_repeat" {
   default = "on"
 }
 
+# announce_most_wanted announces a new Most Wanted level and a claimed
+# bounty by job alias on the job-kill channel (port-only, not native; owner
+# decision 2026-10-15). "off" is native: no notice.
+variable "announce_most_wanted" {
+  type    = string
+  default = "on"
+}
+
 # thief_party_bonus gives a party +10% monster EXP and gold per member
 # dressed as a thief, up to +50% (port-only, not native; owner decision
 # 2026-10-14). "off" is native.
@@ -727,6 +735,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_ANNOUNCE_PLUS                  = var.announce_plus
         SRO_ANNOUNCE_JOB_KILL              = var.announce_job_kill
         SRO_JOB_KILL_NOTICE_REPEAT         = var.job_kill_notice_repeat
+        SRO_ANNOUNCE_MOST_WANTED           = var.announce_most_wanted
         SRO_THIEF_PARTY_BONUS              = var.thief_party_bonus
         SRO_TRADE_JOB_BONUS                = var.trade_job_bonus
         SRO_REVERSE_RETURN_MAP             = var.reverse_return_map

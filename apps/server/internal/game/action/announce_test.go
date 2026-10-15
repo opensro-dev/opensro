@@ -15,11 +15,13 @@ import (
 	"testing"
 	"unicode/utf16"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/pk"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
@@ -470,5 +472,98 @@ func TestJobKillNoticeRepeatLiftsThePairWindow(t *testing.T) {
 	t.Setenv(EnvJobKillNoticeRepeat, "")
 	if AnnouncementsFromEnv().JobKillRepeat {
 		t.Fatal("the repeat flag reads on when unset")
+	}
+}
+
+/*
+================
+TestMostWantedNoticesFollowTheFlag
+
+SRO_ANNOUNCE_MOST_WANTED, after the kill commits, on the job-kill channel
+by job alias: a dressed thief (streak 9) killing a level-2 wanted trader
+claims the bounty and reaches level 1. An undressed killer's claim names
+the victim alone; a kill that raises no level announces no level. Off,
+nothing is announced.
+================
+*/
+func TestMostWantedNoticesFollowTheFlag(t *testing.T) {
+	type kill struct {
+		dressed bool
+		streak  int64
+		want    []string
+	}
+	for _, on := range []bool{false, true} {
+		for _, tc := range []kill{
+			{true, 9, []string{"[leChiffre] claimed bounty of [ES_Tip] MOST WANTED LV 2", "[leChiffre] is MOST WANTED LV 1"}},
+			{true, 10, []string{"[leChiffre] claimed bounty of [ES_Tip] MOST WANTED LV 2"}},
+			{false, 0, []string{"Bounty of [ES_Tip] MOST WANTED LV 2 was claimed"}},
+		} {
+			rt, _, killer, victim := newPvpPair(t)
+			rt.MostWanted, rt.Announce.MostWanted = true, on
+			dressForJob(rt, victim, 9303, "ITEM_CH_M_TRADE_TRADER_04", 1)
+			victim.Job.Alias = "ES_Tip"
+			victim.MostWanted = &domain.MostWanted{Streak: 25}
+			kind := pk.DeathPlayer
+			if tc.dressed {
+				dressForJob(rt, killer, 9302, "ITEM_CH_M_TRADE_THIEF_04", 2)
+				killer.Job.Alias = "leChiffre"
+				killer.MostWanted = &domain.MostWanted{Streak: tc.streak}
+				kind = pk.DeathJob
+			}
+			k := playerKill{kind: kind, mostWantedStrangers: true}.withVictim(killer, victim)
+			_, _, after := rt.payPlayerKillInDoor(testDivision, killer, victim, k, 0)
+			if got := drainedNotices(t, rt); len(got) != 0 {
+				t.Fatalf("the kill's door posted before its commit: %q", got)
+			}
+			rt.payJobKillShares(after)
+			got := drainedNoticeLines(t, rt)
+			if !on {
+				if len(got) != 0 {
+					t.Fatalf("flag off announced %+v", got)
+				}
+				continue
+			}
+			if len(got) != len(tc.want) {
+				t.Fatalf("dressed=%v streak=%d: notices %+v, want %q", tc.dressed, tc.streak, got, tc.want)
+			}
+			for i, line := range got {
+				if line.text != tc.want[i] || line.channel != wire.JobKillNoticeChannel {
+					t.Fatalf("notice %d: %+v, want %q on the job-kill channel", i, line, tc.want[i])
+				}
+				for _, name := range []string{killer.Name, victim.Name} {
+					if strings.Contains(line.text, name) {
+						t.Fatalf("notice %q names the character %q", line.text, name)
+					}
+				}
+			}
+		}
+	}
+	t.Setenv(EnvAnnounceMostWanted, "on")
+	if !AnnouncementsFromEnv().MostWanted {
+		t.Fatal("the flag does not read on")
+	}
+	t.Setenv(EnvAnnounceMostWanted, "")
+	if AnnouncementsFromEnv().MostWanted {
+		t.Fatal("the flag reads on when unset")
+	}
+}
+
+/*
+================
+TestMostWantedNoticesHaveTheirOwnCap
+
+Most Wanted notices take their own per-minute bucket: a full minute of
+them leaves the job-kill notices room.
+================
+*/
+func TestMostWantedNoticesHaveTheirOwnCap(t *testing.T) {
+	rt, _ := newTestRuntime(testCharacter(), testItems())
+	rt.Announce.MostWanted, rt.Announce.JobKill = true, true
+	for i := 0; i < announcementsPerMinute+2; i++ {
+		rt.postMostWantedNotice(mostWantedNotice{testDivision, "wanted", 0})
+	}
+	rt.postJobKillNotice(jobKillNotice{testDivision, "a", "b", "A", "B", 0})
+	if got := drainedNotices(t, rt); len(got) != announcementsPerMinute+1 {
+		t.Fatalf("%d notices, want %d wanted and one kill", len(got), announcementsPerMinute)
 	}
 }

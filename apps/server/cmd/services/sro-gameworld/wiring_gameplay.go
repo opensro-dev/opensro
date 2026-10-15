@@ -603,8 +603,8 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	// Port-only, not native: shard notices for seal drops, high plus and job
 	// kills (announce.go).
 	game.items.Announce = action.AnnouncementsFromEnv()
-	if a := game.items.Announce; a.SoxDrop || a.Plus || a.JobKill {
-		log.Infof("announce: seal drops %v, plus %v, job kills %v", a.SoxDrop, a.Plus, a.JobKill)
+	if a := game.items.Announce; a.SoxDrop || a.Plus || a.JobKill || a.MostWanted {
+		log.Infof("announce: seal drops %v, plus %v, job kills %v, most wanted %v", a.SoxDrop, a.Plus, a.JobKill, a.MostWanted)
 	}
 	// Port-only, not native: a party's thieves raise its EXP and gold.
 	game.items.ThiefPartyBonus = action.ThiefPartyBonusFromEnv()
