@@ -82,16 +82,18 @@ tooltipBubble
 
 6791C0 places the bubble 8 pixels right of its anchor when it fits,
 otherwise 8 pixels left of it, and keeps it 15 pixels above the bottom.
-Port-only fit: on a screen narrower than the original's, the left side can
-run off the screen too, so x is clamped inside the viewport, border
-included. Where either native side fits, the clamp changes nothing.
+Port-only, not native (Experimental "Fit window labels", fit): on a screen
+narrower than the original's, the left side can run off the screen too, so
+x is clamped inside the viewport, border included. Where either native side
+fits, the clamp changes nothing; without fit the placement is 6791C0's.
 ================
 */
 export function tooltipBubble(
 	rows: readonly TooltipRow[],
 	anchor: UiRect,
 	viewport: UiRect,
-	measure: ( s: string, strong?: boolean ) => number
+	measure: ( s: string, strong?: boolean ) => number,
+	fit = false
 ) {
 	const gutter = Math.ceil( 12 / Math.max( 1, measure( " " ) ) ) + 1;
 	const expanded = rows.flatMap( row =>
@@ -105,10 +107,9 @@ export function tooltipBubble(
 	const side = anchor[0] + anchor[2] + width + 20 <= viewport[2] ?
 		anchor[0] + anchor[2] + BUBBLE_BORDER :
 		anchor[0] - width - BUBBLE_BORDER;
-	const x = Math.max(
-		viewport[0] + BUBBLE_BORDER,
-		Math.min( side, viewport[0] + viewport[2] - width - BUBBLE_BORDER )
-	);
+	const x = fit ?
+		Math.max( viewport[0] + BUBBLE_BORDER, Math.min( side, viewport[0] + viewport[2] - width - BUBBLE_BORDER ) ) :
+		side;
 	const y = Math.min( anchor[1] + 8, viewport[3] - height - 15 ), r: UiRect = [ x, y, width, height ];
 	const corner = BUBBLE_ROOT + "com_tooltip_corner.png", edge = BUBBLE_ROOT + "com_tooltip_edge.png";
 	const quads: UiQuad[] = [ {

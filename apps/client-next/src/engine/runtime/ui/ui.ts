@@ -23313,7 +23313,8 @@ export function createUi(
 						tooltip,
 						control.rect,
 						full,
-						( s, strong ) => text.run( s, strong ? 2 : 0 ).width
+						( s, strong ) => text.run( s, strong ? 2 : 0 ).width,
+						experimental.state().saved.fitWindowLabels
 					);
 					paths.push( ...bubble.paths );
 					if ( bubble.paths.every( resources.has ) ) {

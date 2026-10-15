@@ -156,18 +156,30 @@ test("every Experimental description fits its line", () => {
 	}
 });
 
-test("a tooltip stays inside a narrow screen", () => {
+test("a tooltip stays inside a narrow screen with Fit window labels", () => {
 	const measure = value => value.length * 7;
 	const rows = [ { value: "A long item name that fills the bubble", color: 0xffffffff } ];
 	// A phone portrait: the anchor near the left, too far right for the right side.
-	const phone = tooltipBubble( rows, [ 100, 300, 260, 32 ], [ 0, 0, 390, 844 ], measure );
+	const phone = tooltipBubble( rows, [ 100, 300, 260, 32 ], [ 0, 0, 390, 844 ], measure, true );
 	const fill = phone.quads[0].rect;
 	assert.ok( fill[0] - 8 >= 0, `left border at ${fill[0] - 8}` );
 	assert.ok( fill[0] + fill[2] + 8 <= 390, `right border at ${fill[0] + fill[2] + 8}` );
 	assert.ok( phone.lines.every( line => line.rect[0] === fill[0] ), "the text moves with the bubble" );
 	// Where a native side fits, the bubble keeps 6791C0's placement.
-	const right = tooltipBubble( rows, [ 100, 300, 32, 32 ], [ 0, 0, 1200, 900 ], measure );
-	assert.equal( right.quads[0].rect[0], 140 );
-	const left = tooltipBubble( rows, [ 1100, 300, 32, 32 ], [ 0, 0, 1200, 900 ], measure );
-	assert.equal( left.quads[0].rect[0], 1100 - left.quads[0].rect[2] - 8 );
+	for ( const fit of [ true, false ] ) {
+		const right = tooltipBubble( rows, [ 100, 300, 32, 32 ], [ 0, 0, 1200, 900 ], measure, fit );
+		assert.equal( right.quads[0].rect[0], 140 );
+		const left = tooltipBubble( rows, [ 1100, 300, 32, 32 ], [ 0, 0, 1200, 900 ], measure, fit );
+		assert.equal( left.quads[0].rect[0], 1100 - left.quads[0].rect[2] - 8 );
+	}
+});
+
+test("without Fit window labels a tooltip keeps 6791C0's placement exactly", () => {
+	const measure = value => value.length * 7;
+	const rows = [ { value: "A long item name that fills the bubble", color: 0xffffffff } ];
+	const phone = tooltipBubble( rows, [ 100, 300, 260, 32 ], [ 0, 0, 390, 844 ], measure );
+	const width = phone.quads[0].rect[2];
+	// The right side does not fit (100 + 260 + width + 20 > 390): left side -8.
+	assert.equal( phone.quads[0].rect[0], 100 - width - 8 );
+	assert.ok( phone.quads[0].rect[0] < 0, "natively the bubble leaves a narrow screen" );
 });
