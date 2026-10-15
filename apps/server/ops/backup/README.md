@@ -97,7 +97,10 @@ Or from the PC copy: `restic -r <path to the copy> restore latest --target <dir>
 
 The restored tree has three parts:
 - `state/`: the game state root. It holds `shards/*/authority/state.db`,
-  `cluster/*` (accounts, keys) and `cluster/agent/*`.
+  the staff settings store `shards/*/authority/settings.db` (approved
+  tunable overrides, pending proposals and their audit; no player data),
+  `cluster/*` (accounts, keys) and `cluster/agent/*`. Both databases are
+  snapshotted online and integrity-checked like every `*.db` under it.
 - `host/`: `/etc/caddy`, `/etc/nomad.d`, systemd units, `/etc/opensro-web`,
   and Caddy's certificates.
 - `postgres/`: `pg_dump -Fc` files, restored with

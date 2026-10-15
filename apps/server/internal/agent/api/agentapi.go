@@ -360,6 +360,7 @@ func (api *API) Handler() http.Handler {
 	}
 	if api.settings != nil {
 		mux.Handle(api.settingsPath, api.settings)
+		mux.Handle(api.settingsPath+"/", api.settings)
 	}
 	if api.operator != nil {
 		mux.Handle("/internal/operations/player", api.requireRunning(api.operator))

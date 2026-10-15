@@ -120,7 +120,7 @@ TestHandlerAnswersOnlyTheGuardedConsole
 */
 func TestHandlerAnswersOnlyTheGuardedConsole(t *testing.T) {
 	dir := t.TempDir()
-	missing, err := Handler(filepath.Join(dir, "absent"), os.Getenv)
+	missing, err := Handler(filepath.Join(dir, "absent"), os.Getenv, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestHandlerAnswersOnlyTheGuardedConsole(t *testing.T) {
 	if err := os.WriteFile(tokenPath, []byte(testToken+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	handler, err := Handler(tokenPath, func(name string) string { return map[string]string{"SRO_MOST_WANTED": "on"}[name] })
+	handler, err := Handler(tokenPath, func(name string) string { return map[string]string{"SRO_MOST_WANTED": "on"}[name] }, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

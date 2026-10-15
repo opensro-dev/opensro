@@ -269,16 +269,23 @@ func (s *Settings) Factor(key string) (float64, bool) {
 ================
 FromEnv
 
-One tunable read from the process environment now. Restart-class values
-are applied at boot through it (the reference rows they scale exist
-only then); everything read per action uses Current() instead.
+One tunable read from the process environment now, or the stored override
+the boot installed (InstallBoot). Restart-class values are applied at boot
+through it (the reference rows they scale exist only then); everything
+read per action uses Current() instead.
 ================
 */
 func FromEnv(key string) (Value, error) {
 	for _, s := range Registry {
-		if s.Key == key {
-			return parseOne(s, strings.TrimSpace(os.Getenv(s.Env)))
+		if s.Key != key {
+			continue
 		}
+		if raw, stored := bootOverride(key); stored {
+			v, err := parseOne(s, strings.TrimSpace(raw))
+			v.Source = "store"
+			return v, err
+		}
+		return parseOne(s, strings.TrimSpace(os.Getenv(s.Env)))
 	}
 	panic("tunables: no setting " + key)
 }
@@ -338,11 +345,19 @@ func Current() *Settings {
 Swap
 
 Installs s and returns a function that restores the previous snapshot.
-The live store and tests use it; nothing else replaces the snapshot.
+The boot's stored overrides and tests use it; live changes go through
+Apply. Both swap and restore hold the writers' lock (overrides.go), so a
+restore can never interleave with another writer.
 ================
 */
 func Swap(s *Settings) (restore func()) {
 	Current()
+	writeMu.Lock()
 	previous := current.Swap(s)
-	return func() { current.Store(previous) }
+	writeMu.Unlock()
+	return func() {
+		writeMu.Lock()
+		current.Store(previous)
+		writeMu.Unlock()
+	}
 }

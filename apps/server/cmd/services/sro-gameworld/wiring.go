@@ -68,6 +68,7 @@ type gameWorldApplication struct {
 	history *history.Journal
 	// economy is the staff economy view's aggregates (port-only); nil off.
 	economy         *economy.Service
+	settings        *settingsapi.SQLiteStore
 	skillCache      io.Closer
 	itemCache       io.Closer
 	populationCache io.Closer
@@ -110,6 +111,23 @@ func newGameWorldApplication(
 	// stops the boot here, before anything reads it.
 	if err := tunables.Load(); err != nil {
 		return nil, fmt.Errorf("tunables: %w", err)
+	}
+	// Port-only: the staff console's approved overrides (settings.db, next
+	// to the shard's other operator stores) lie over the environment.
+	settingsStore, err := settingsapi.OpenSQLiteStore(filepath.Join(store.DirForShardFromEnv(ownedShard.ID), settingsapi.FileName))
+	if err != nil {
+		return nil, fmt.Errorf("settings store: %w", err)
+	}
+	application.settings = settingsStore
+	overrides, err := settingsStore.Overrides()
+	if err != nil {
+		return nil, fmt.Errorf("settings store: %w", err)
+	}
+	if err := tunables.InstallBoot(overrides); err != nil {
+		return nil, fmt.Errorf("tunables: %w", err)
+	}
+	if len(overrides) > 0 {
+		log.Infof("tunables: %d stored override(s) from %s", len(overrides), settingsapi.FileName)
 	}
 	dataPaths, err := gamedata.Resolve()
 	if err != nil {
@@ -195,7 +213,8 @@ func newGameWorldApplication(
 	log.AddHook(journal)
 	// Port-only: the staff console's read of every tunable and SRO_ flag.
 	settingsHandler, err := settingsapi.Handler(filepath.Join(store.DirForShardFromEnv(ownedShard.ID), "operator-token"),
-		settingsapi.Getenv)
+		settingsapi.Getenv, &settingsapi.Service{Store: application.settings, Now: func() int64 { return time.Now().UnixMilli() },
+			NewID: func() string { id, _ := history.NewID(); return id }})
 	if err != nil {
 		return nil, fmt.Errorf("settings: %w", err)
 	}
@@ -516,6 +535,9 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 	if application.economy != nil {
 		drainErr = errors.Join(drainErr, application.economy.Close())
 	}
+	if application.settings != nil {
+		drainErr = errors.Join(drainErr, application.settings.Close())
+	}
 
 	return errors.Join(runErr, drainErr)
 }
@@ -635,6 +657,9 @@ func (application *gameWorldApplication) rollback() {
 	}
 	if application.economy != nil {
 		_ = application.economy.Close()
+	}
+	if application.settings != nil {
+		_ = application.settings.Close()
 	}
 }
 

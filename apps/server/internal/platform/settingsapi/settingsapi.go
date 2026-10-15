@@ -11,15 +11,14 @@ deployment chooses from), read-only. The flags are an allow-list: a
 variable outside that table (a webhook, a URL, identity, a path) is never
 listed, so a new secret cannot leak by being added to the environment.
 
-Writes (proposals, two-person approval, the audit) come later on the same
-prefix; until then this handler answers GET only.
+Under the same prefix the console proposes, approves, rejects and
+withdraws changes and reads the audit (routes.go, approval.go).
 
 ===========================================================================
 */
 package settingsapi
 
 import (
-	"encoding/json"
 	"net/http"
 	"os"
 	"sort"
@@ -44,23 +43,25 @@ One tunable as the console shows it.
 ================
 */
 type SettingRow struct {
-	Key     string    `json:"key"`
-	Env     string    `json:"env"`
-	Group   string    `json:"group"`
-	Label   string    `json:"label"`
-	Help    string    `json:"help"`
-	Kind    string    `json:"kind"`
-	Unit    string    `json:"unit"`
-	Value   float64   `json:"value"`
-	Enabled bool      `json:"enabled"`
-	Default float64   `json:"default"`
-	Native  *string   `json:"native"`
-	Min     float64   `json:"min"`
-	Max     float64   `json:"max"`
-	Allowed []float64 `json:"allowed"`
-	Step    float64   `json:"step"`
-	Class   string    `json:"class"`
-	Source  string    `json:"source"`
+	Pending       *Proposal `json:"pending"`
+	RestartQueued *string   `json:"restartQueued"`
+	Key           string    `json:"key"`
+	Env           string    `json:"env"`
+	Group         string    `json:"group"`
+	Label         string    `json:"label"`
+	Help          string    `json:"help"`
+	Kind          string    `json:"kind"`
+	Unit          string    `json:"unit"`
+	Value         float64   `json:"value"`
+	Enabled       bool      `json:"enabled"`
+	Default       float64   `json:"default"`
+	Native        *string   `json:"native"`
+	Min           float64   `json:"min"`
+	Max           float64   `json:"max"`
+	Allowed       []float64 `json:"allowed"`
+	Step          float64   `json:"step"`
+	Class         string    `json:"class"`
+	Source        string    `json:"source"`
 }
 
 /*
@@ -92,11 +93,12 @@ type Response struct {
 ================
 Handler
 
-The GET handler under the guard of tokenPath. No token file: the endpoint
-answers nobody, as the other operator readers do.
+The settings routes under the guard of tokenPath. No token file: the
+endpoint answers nobody, as the other operator readers do. service nil:
+the read works and every write is refused.
 ================
 */
-func Handler(tokenPath string, getenv func(string) string) (http.Handler, error) {
+func Handler(tokenPath string, getenv func(string) string, service *Service) (http.Handler, error) {
 	guard, found, err := operatorauth.Load(tokenPath, "settings")
 	if err != nil {
 		return nil, err
@@ -109,13 +111,18 @@ func Handler(tokenPath string, getenv func(string) string) (http.Handler, error)
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
-		if r.Method != http.MethodGet {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
-		_ = json.NewEncoder(w).Encode(Build(tunables.Current(), getenv))
+		route := strings.Trim(strings.TrimPrefix(r.URL.Path, Path), "/")
+		switch {
+		case route == "" && r.Method == http.MethodGet:
+			writeJSON(w, withProposals(Build(tunables.Current(), getenv), service))
+		case route == "audit" && r.Method == http.MethodGet:
+			serveAudit(w, r, service)
+		case strings.HasPrefix(route, "proposals") && r.Method == http.MethodPost:
+			serveWrite(w, r, service, route)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
 	}), nil
 }
 
@@ -197,3 +204,36 @@ func className(class tunables.Class) string {
 
 // Getenv is the process environment, for the GameWorld's wiring.
 var Getenv = os.Getenv
+
+/*
+================
+withProposals
+
+Fills each row's pending proposal and, for a restart-class setting whose
+stored value is not the running one, the value queued for the next boot.
+================
+*/
+func withProposals(out Response, service *Service) Response {
+	if service == nil {
+		return out
+	}
+	pending, _ := service.Store.Pending()
+	overrides, _ := service.Store.Overrides()
+	for i := range out.Settings {
+		row := &out.Settings[i]
+		for j := range pending {
+			if pending[j].Key == row.Key {
+				p := pending[j]
+				row.Pending = &p
+			}
+		}
+		if row.Class != "restart" {
+			continue
+		}
+		if raw, stored := overrides[row.Key]; stored && raw != currentRaw(row.Key) {
+			queued := raw
+			row.RestartQueued = &queued
+		}
+	}
+	return out
+}
