@@ -137,7 +137,7 @@ func TestSealDropNoticeFollowsTheFlag(t *testing.T) {
 		rt.Announce.SoxDrop = on
 		rt.announceSealDrops(testDivision, "Tiger Girl", drops, 0)
 		got := drainedNotices(t, rt)
-		if !on && len(got) != 0 || on && (len(got) != 1 || !strings.HasPrefix(got[0], "Looter dropped ") ||
+		if !on && len(got) != 0 || on && (len(got) != 1 || !strings.HasPrefix(got[0], "Looter has dropped ") ||
 			!strings.HasSuffix(got[0], " from Tiger Girl")) {
 			t.Fatalf("on=%v: %q", on, got)
 		}
@@ -167,7 +167,7 @@ func TestSealDropNoticeNamesTheSeal(t *testing.T) {
 		rt, _ := newTestRuntime(testCharacter(), items)
 		rt.Announce.SoxDrop = true
 		rt.announceSealDrops(testDivision, "Tiger Girl", []grounditem.Item{{Codename: codename, DroppedBy: "Looter"}}, 0)
-		want := "Looter dropped " + ref.Name + " (" + seal + ") from Tiger Girl"
+		want := "Looter has dropped " + ref.Name + " (" + seal + ") from Tiger Girl"
 		if got := drainedNotices(t, rt); len(got) != 1 || got[0] != want {
 			t.Fatalf("%s: %q, want %q", codename, got, want)
 		}

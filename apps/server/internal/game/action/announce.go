@@ -7,7 +7,7 @@ Port-only, not native (owner decision 2026-10-14, for the balance advisor).
 Each kind has its own flag, off by default here (native: no notice); the
 GameWorld's Nomad job turns them on:
 
-	SRO_ANNOUNCE_SOX_DROP  "<player> dropped <item> (<seal>) from <monster>"
+	SRO_ANNOUNCE_SOX_DROP  "<player> has dropped <item> (<seal>) from <monster>"
 	SRO_ANNOUNCE_PLUS      "<player> advanced <item> to +N" (N 8..11)
 	SRO_ANNOUNCE_JOB_KILL  "[<killer alias>] killed [<victim alias>]" (job aliases, never character names)
 
@@ -246,7 +246,7 @@ func (rt *Runtime) announceSealDrops(division, monsterName string, drops []groun
 				}
 			}
 		}
-		rt.announce(division, announceSoxDrop, drop.DroppedBy+" dropped "+name+" from "+monsterName, nowMs)
+		rt.announce(division, announceSoxDrop, drop.DroppedBy+" has dropped "+name+" from "+monsterName, nowMs)
 	}
 }
 
