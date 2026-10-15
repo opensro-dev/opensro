@@ -1,29 +1,136 @@
-import type {SystemNotice} from '@/engine/foundation/gameplay/system-notices';
-import {noticeText} from '@/engine/foundation/ui/notice-text';
-export const uniqueBannerPaths=['corner','edge','edge2'].map(part=>`/assets/images/Media_extracted/interface/ifcommon/com_warning_${part}.png`);
-// 67d030 targets warning id 35, not the red notice sibling. 6b3180 arms
-// 7000 ms; 6b30f0 fades for its final 2000 ms. The latest notice replaces it.
-export const notificationBannerPaths=['corner','edge','edge2'].map(part=>`/assets/images/Media_extracted/interface/ifcommon/com_notice_${part}.png`);
-export function createNoticeBanner(kind:'banner'|'notificationBanner'='banner'){
- let sequence=0,current:SystemNotice|null=null,started:number|null=null,alpha=0;
- return {
-  reset(){sequence=0;current=null;started=null;alpha=0;},
-  step(notices:readonly SystemNotice[],now:number,ready:boolean,copy?:(key:string)=>string){
-   let changed=false;
-   for(const notice of notices)if(notice[kind]&&notice.sequence!==undefined&&notice.sequence>sequence){
-    // 67D034 returns on empty text without replacing the active warning.
-    // Wait for localization admission before deciding whether text is empty.
-    if(copy&&!ready)continue;
-    sequence=notice.sequence;if(copy&&!noticeText(copy,notice,'banner'))continue;
-    current=notice;started=null;changed=true;
-   }
-   if(current&&ready&&started===null){started=now;changed=true;}
-   const next=current&&started!==null?Math.floor(Math.max(0,Math.min(255,(7000-(now-started))*255/2000)))/255:0;
-   if(next!==alpha){alpha=next;changed=true;}
-   return changed;
-  },
-  value:(copy:(key:string)=>string)=>current?noticeText(copy,current,'banner'):'',
-  alpha:()=>alpha,
- };
+/*
+===========================================================================
+
+unique-banner.ts - the warning and notice banners' one current line
+
+Each banner shows one line at a time. The latest notice replaces the
+current one at once and restarts its timer (CIFNoticeWindow_LayoutAndShow
+6B3180 arms 7000 ms; 6B30F0 fades over the final 2000 ms). The port-only
+Experimental "Short notices" row shortens the notice banner to 5000 ms with
+a 1000 ms fade.
+
+===========================================================================
+*/
+import type { SystemNotice } from "@/engine/foundation/gameplay/system-notices";
+import { noticeText } from "@/engine/foundation/ui/notice-text";
+
+export const uniqueBannerPaths = [ "corner", "edge", "edge2" ].map( part =>
+	`/assets/images/Media_extracted/interface/ifcommon/com_warning_${part}.png`
+);
+// 67d030 targets warning id 35, not the red notice sibling.
+export const notificationBannerPaths = [ "corner", "edge", "edge2" ].map( part =>
+	`/assets/images/Media_extracted/interface/ifcommon/com_notice_${part}.png`
+);
+
+/*
+================
+NoticeTiming
+
+How long a banner line shows and how much of that time is its fade.
+================
+*/
+export interface NoticeTiming {
+	readonly showMs: number;
+	readonly fadeMs: number;
 }
-export const createUniqueBanner=createNoticeBanner;
+
+// 6B3180's 0x1B58 and 6B30F0's final fade.
+export const NATIVE_NOTICE_TIMING: NoticeTiming = { showMs: 7000, fadeMs: 2000 };
+// Port-only, not native: the Experimental "Short notices" row (the balance
+// advisor's ask, owner-approved 2026-10-15).
+export const SHORT_NOTICE_TIMING: NoticeTiming = { showMs: 5000, fadeMs: 1000 };
+
+// The banner's alpha steps (the native quad alpha byte).
+const ALPHA_STEPS = 255;
+
+/*
+================
+noticeTiming
+
+The notice banner's timing for the Experimental "Short notices" setting.
+================
+*/
+export function noticeTiming( short: boolean ): NoticeTiming {
+	return short ? SHORT_NOTICE_TIMING : NATIVE_NOTICE_TIMING;
+}
+
+/*
+================
+createNoticeBanner
+================
+*/
+export function createNoticeBanner( kind: "banner" | "notificationBanner" = "banner" ) {
+	let sequence = 0, current: SystemNotice | null = null, started: number | null = null, alpha = 0;
+	return {
+		/*
+		================
+		reset
+		================
+		*/
+		reset() {
+			sequence = 0;
+			current = null;
+			started = null;
+			alpha = 0;
+		},
+		/*
+		================
+		step
+
+		Takes the newest notice of this banner's kind and advances its fade;
+		true when what the banner shows changed.
+		================
+		*/
+		step(
+			notices: readonly SystemNotice[],
+			now: number,
+			ready: boolean,
+			copy?: ( key: string ) => string,
+			timing: NoticeTiming = NATIVE_NOTICE_TIMING
+		) {
+			let changed = false;
+			for ( const notice of notices ) {
+				if ( !notice[kind] || notice.sequence === undefined || notice.sequence <= sequence ) continue;
+				// 67D034 returns on empty text without replacing the active warning.
+				// Wait for localization admission before deciding whether text is empty.
+				if ( copy && !ready ) continue;
+				sequence = notice.sequence;
+				if ( copy && !noticeText( copy, notice, "banner" ) ) continue;
+				current = notice;
+				started = null;
+				changed = true;
+			}
+			if ( current && ready && started === null ) {
+				started = now;
+				changed = true;
+			}
+			const next = current && started !== null ?
+				Math.floor(
+					Math.max(
+						0,
+						Math.min( ALPHA_STEPS, (timing.showMs - (now - started)) * ALPHA_STEPS / timing.fadeMs )
+					)
+				) / ALPHA_STEPS :
+				0;
+			if ( next !== alpha ) {
+				alpha = next;
+				changed = true;
+			}
+			return changed;
+		},
+		/*
+		================
+		value
+		================
+		*/
+		value: ( copy: ( key: string ) => string ) => current ? noticeText( copy, current, "banner" ) : "",
+		/*
+		================
+		alpha
+		================
+		*/
+		alpha: () => alpha
+	};
+}
+
+export const createUniqueBanner = createNoticeBanner;

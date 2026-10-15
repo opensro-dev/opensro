@@ -4788,7 +4788,8 @@ test("native popup menu, selected tab weight, localized EU mastery and empty-par
 		assert.equal( f.state.gameplay.academy.member, false );
 		f.ui.event( { kind: "key", code: "KeyI" } );
 		settle();
-		const glyph = fontAtlas.fonts["0"].styles["2"].glyphs["69"],
+		// The selected first bag tab reads "1" (port-only page numbers, owner 2026-10-15).
+		const glyph = fontAtlas.fonts["0"].styles["2"].glyphs["49"],
 			uv = [
 				glyph.x / fontAtlas.atlasWidth,
 				glyph.y / fontAtlas.atlasHeight,
@@ -4797,7 +4798,7 @@ test("native popup menu, selected tab weight, localized EU mastery and empty-par
 			];
 		assert.ok(
 			f.scenes.at( -1 ).quads.some( q => q.texture === fontAtlas.image && q.uv.every( ( v, i ) => v === uv[i] ) ),
-			"selected Equipment uses the published style-2 E glyph"
+			'the selected first bag tab uses the published style-2 "1" glyph'
 		);
 		f.ui.event( { kind: "key", code: "KeyS" } );
 		settle();

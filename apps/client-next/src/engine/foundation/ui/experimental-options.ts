@@ -34,7 +34,8 @@ export interface ExperimentalOptions {
 	// Gameplay: a skill press's run-up walks before the server's answer.
 	readonly predictedRunUp: boolean;
 	// Camera: ease the follow target's height and the collision release
-	// (camera-smoothing.ts); native 68F830 snaps both.
+	// (camera-smoothing.ts); native 68F830 snaps both. On by default (owner
+	// 2026-10-15); an explicit false is the native snap.
 	readonly smoothCamera: boolean;
 	// Port-only, not native: the unused enchant sparks on +8 and higher
 	// weapons and shields (equipmentEnchantSparks).
@@ -88,6 +89,11 @@ export interface ExperimentalOptions {
 	// (foundation/gameplay/notice-links.ts). On unless turned off (the
 	// owner's choice, 2026-10-15); off is plain text.
 	readonly noticeLinks: boolean;
+	// Port-only, not native: the notice banner shows for 5000 ms with a
+	// 1000 ms fade instead of the native 7000 ms and 2000 ms (6B3180, 6B30F0;
+	// runtime/ui/hud/unique-banner.ts). On unless turned off (the balance
+	// advisor's ask, owner-approved 2026-10-15); off is the original timing.
+	readonly shortNotices: boolean;
 }
 
 /*
@@ -124,10 +130,10 @@ export function renderScales(): readonly RenderScale[] {
 ================
 experimentalOptions
 
-Only an explicit true enables a toggle, except compressedTextures,
-sharedActorRoom, greyDisabledTabs, jobKillNotices, dropPlusNotices,
-fitWindowLabels, dropOnBagTab and noticeLinks, which only an explicit false
-turns off.
+Only an explicit true enables a toggle, except smoothCamera,
+compressedTextures, sharedActorRoom, greyDisabledTabs, jobKillNotices, dropPlusNotices,
+fitWindowLabels, dropOnBagTab, noticeLinks and shortNotices, which only an
+explicit false turns off.
 Missing or invalid render scales restore full resolution; legacy Video
 settings cannot enable scaling. Keys of retired rows (terrainRelief and texturedHorizon, removed at the owner's
 request on 2026-10-11) are never read, so a saved preference holding them
@@ -152,7 +158,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		sunShadow: enabled( "sunShadow" ),
 		perPixelLighting: enabled( "perPixelLighting" ),
 		predictedRunUp: enabled( "predictedRunUp" ),
-		smoothCamera: enabled( "smoothCamera" ),
+		smoothCamera: record.smoothCamera !== false,
 		enchantSparks: enabled( "enchantSparks" ),
 		compressedTextures: record.compressedTextures !== false,
 		sharedActorRoom: record.sharedActorRoom !== false,
@@ -162,7 +168,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		vHidesCompanions: enabled( "vHidesCompanions" ),
 		fitWindowLabels: record.fitWindowLabels !== false,
 		dropOnBagTab: record.dropOnBagTab !== false,
-		noticeLinks: record.noticeLinks !== false
+		noticeLinks: record.noticeLinks !== false,
+		shortNotices: record.shortNotices !== false
 	};
 }
 

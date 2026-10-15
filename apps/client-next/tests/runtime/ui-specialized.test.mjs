@@ -157,6 +157,13 @@ test("native inventory tabs keep equipment and disable bag cells beyond capacity
 				controls.filter( control => control.id.startsWith( "inventory-page:" ) ).map( control => control.id ),
 				capacity === FIRST_PAGE_CAPACITY ? [ "inventory-page:0" ] : [ "inventory-page:0", "inventory-page:1" ]
 			);
+			// Port-only, owner-approved 2026-10-15, always on: the tabs read their page number.
+			assert.deepEqual(
+				controls.filter( control => control.id.startsWith( "inventory-page:" ) ).map( control =>
+					control.label
+				),
+				capacity === FIRST_PAGE_CAPACITY ? [ "1" ] : [ "1", "2" ]
+			);
 			assert.deepEqual(
 				slotIds( controls ),
 				Array.from( { length: FIRST_PAGE_CAPACITY }, ( _, slot ) => slot )

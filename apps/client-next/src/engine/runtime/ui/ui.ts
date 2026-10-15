@@ -173,6 +173,7 @@ import {
 	createUniqueBanner,
 	uniqueBannerPaths,
 	createNoticeBanner,
+	noticeTiming,
 	notificationBannerPaths
 } from "./hud/unique-banner";
 import { createQuestBanner, questBannerPaths } from "./hud/quest-banner";
@@ -7624,7 +7625,8 @@ export function createUi(
 						next.gameplay?.notices ?? [],
 						now,
 						notificationBannerPaths.every( p => !!resources.size( p ) ) && !!hud.data(),
-						hudCopy
+						hudCopy,
+						noticeTiming( experimental.state().saved.shortNotices )
 					)
 				) dirty = true;
 				if (
@@ -12636,9 +12638,13 @@ export function createUi(
 					);
 					inventoryPage = slots.page;
 					for ( let page = 0; page < slots.pages; page++ ) {
+						// Port-only, not native: owner-approved deviation 2026-10-15,
+						// always on. The tabs read their page number ("1", "2", ...);
+						// the native UIIT_CTL_BELOINGING / UIIT_STT_INVENTORY_EXTENSION_TEB
+						// labels run past the 60-pixel tab.
 						nativeTab(
 							"inventory-page:" + page,
-							hudCopy( page ? "UIIT_STT_INVENTORY_EXTENSION_TEB" : "UIIT_CTL_BELOINGING" ),
+							String( page + 1 ),
 							[ bx + 4 + 62 * page, by - 23, 60, 24 ],
 							page === inventoryPage,
 							{ family: "com_tab" }

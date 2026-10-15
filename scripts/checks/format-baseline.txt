@@ -205,7 +205,6 @@ apps/client-next/src/engine/runtime/ui/hud/quest-banner.ts
 apps/client-next/src/engine/runtime/ui/hud/quest-timers.ts
 apps/client-next/src/engine/runtime/ui/hud/region-banner.ts
 apps/client-next/src/engine/runtime/ui/hud/skill-training.ts
-apps/client-next/src/engine/runtime/ui/hud/unique-banner.ts
 apps/client-next/src/engine/runtime/world/camera/camera.ts
 apps/client-next/tests/architecture/frame-barriers.test.mjs
 apps/client-next/tests/architecture/ownership-fixtures.test.mjs

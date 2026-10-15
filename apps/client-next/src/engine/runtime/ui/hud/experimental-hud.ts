@@ -186,6 +186,11 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-notice-links",
 			label: "Links in notices",
 			description: "Hover a notice's item for its details; click a name to whisper."
+		}, {
+			key: "shortNotices",
+			id: "experimental-short-notices",
+			label: "Short notices",
+			description: "Show a notice for 5 seconds instead of 7."
 		} ]
 	},
 	{

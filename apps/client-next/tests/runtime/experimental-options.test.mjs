@@ -34,7 +34,8 @@ const OFF = Object.freeze( {
 	sunShadow: false,
 	perPixelLighting: false,
 	predictedRunUp: false,
-	smoothCamera: false,
+	// On by default (owner 2026-10-15): the camera eases its height and release.
+	smoothCamera: true,
 	enchantSparks: false,
 	// On by default (owner 2026-10-14); it changes only devices without BC.
 	compressedTextures: true,
@@ -53,7 +54,9 @@ const OFF = Object.freeze( {
 	// On by default (owner 2026-10-15): a drop on a bag tab moves the item there.
 	dropOnBagTab: true,
 	// On by default (owner 2026-10-15): a notice's player and item are links.
-	noticeLinks: true
+	noticeLinks: true,
+	// On by default (owner 2026-10-15): the notice banner shows for 5 s.
+	shortNotices: true
 } );
 
 test("only an explicit boolean enables chat timestamps", () => {
@@ -131,7 +134,8 @@ test("every video stage defaults off and only an explicit true enables it", () =
 		hdrToneMap: false,
 		sunShadow: false,
 		perPixelLighting: false,
-		smoothCamera: false,
+		// Smooth camera is on by default (owner 2026-10-15).
+		smoothCamera: true,
 		enchantSparks: false,
 		// The shared actor room is on by default (owner 2026-10-14).
 		sharedActorRoom: true,
@@ -147,7 +151,6 @@ test("every video stage defaults off and only an explicit true enables it", () =
 			"hdrToneMap",
 			"sunShadow",
 			"perPixelLighting",
-			"smoothCamera",
 			"enchantSparks"
 		]
 	) {
@@ -420,4 +423,13 @@ test("drop on bag tabs is on unless explicitly false and stays out of the worker
 	assert.equal( experimentalOptions( { dropOnBagTab: false } ).dropOnBagTab, false );
 	assert.equal( "dropOnBagTab" in experimentalVideo( experimentalOptions( {} ) ), false );
 	assert.equal( "dropOnBagTab" in experimentalGameplay( experimentalOptions( {} ) ), false );
+});
+
+test("smooth camera is on unless explicitly false and reaches the renderer's slice", () => {
+	for ( const value of [ undefined, null, {}, { smoothCamera: 1 }, { smoothCamera: "false" } ] ) {
+		assert.equal( experimentalOptions( value ).smoothCamera, true );
+	}
+	const off = experimentalOptions( { smoothCamera: false } );
+	assert.equal( off.smoothCamera, false );
+	assert.equal( experimentalVideo( off ).smoothCamera, false );
 });
