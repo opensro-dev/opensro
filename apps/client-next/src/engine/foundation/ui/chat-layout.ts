@@ -16,6 +16,7 @@ import type { AuthoredLayout } from "./authored-layout";
 import { chatScrollbar } from "./chat-scrollbar";
 import { textLines } from "./text-lines";
 import { STALL_CHAT_CHANNEL } from "@/engine/foundation/gameplay/stall";
+import { noticeRowLinks } from "@/engine/foundation/gameplay/notice-links";
 // 6aeaa0 seeds two 56px rows; 6acd30 cycles 0..6. The bottom anchor is 52px.
 /*
 ================
@@ -37,6 +38,9 @@ export interface ChatLayoutInput {
 	input: string;
 	lines: readonly ChatLine[];
 	chatTimestamps?: boolean;
+	// Port-only: link a drop/plus notice's player and item (Experimental
+	// "Links in notices"); omitted or false keeps every line plain.
+	noticeLinks?: boolean;
 	welcome: string;
 	copy: ( key: string ) => string;
 	size: ( path: string ) => readonly [number, number] | undefined;
@@ -182,7 +186,9 @@ button
 					value,
 					color: gold,
 					recipient: undefined as string | undefined,
-					sentAt: undefined as number | undefined
+					sentAt: undefined as number | undefined,
+					notice: undefined as ChatLine["notice"],
+					sequence: undefined as number | undefined
 				}) ) :
 				[]),
 			// Stall lines belong to the stall window's own chat box.
@@ -191,7 +197,9 @@ button
 					value,
 					color: chatLineColor( l.channel ),
 					recipient: l.channel !== 7 ? l.name : undefined,
-					sentAt: l.sentAt
+					sentAt: l.sentAt,
+					notice: state.noticeLinks ? l.notice : undefined,
+					sequence: l.sequence
 				}) )
 			)
 		];
@@ -236,6 +244,35 @@ button
 				} );
 			}
 			quads.push( ...text( line.value, r, clip, line.color ) );
+			// Port-only notice links (notice-links.ts): the player's name whispers,
+			// the item's name shows its tooltip; each underlines while hovered.
+			if ( line.notice && line.sequence !== undefined ) {
+				for ( const link of noticeRowLinks( line.value, line.notice ) ) {
+					const linkId = "notice-" + link.kind + ":" + line.sequence,
+						rect: UiRect = [
+							r[0] + measure( line.value.slice( 0, link.at ) ),
+							r[1],
+							measure( link.value ),
+							14
+						];
+					controls.push( {
+						id: linkId,
+						label: link.value,
+						kind: link.kind === "name" ? "button" : "region",
+						rect,
+						whisperTarget: link.kind === "name" ? link.value : undefined
+					} );
+					if ( hover === linkId ) {
+						quads.push( {
+							texture: "",
+							rect: [ rect[0], rect[1] + 13, rect[2], 1 ],
+							clip,
+							uv: [ 0, 0, 1, 1 ],
+							color: line.color
+						} );
+					}
+				}
+			}
 		}
 		blocks.push( [ 18, y + 21, backgroundWidth, rows * 56 + 20 ] );
 	}

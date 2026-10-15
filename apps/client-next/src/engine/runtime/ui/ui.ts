@@ -3780,7 +3780,8 @@ export function createUi(
 		else if ( id === "chat-whispers" ) whispersOpen = !whispersOpen;
 		else if ( id.startsWith( "whisper-name:" ) ) {
 			beginWhisper( id.slice( 13 ) );
-		} else if ( id.startsWith( "chat-line:" ) ) {
+		} else if ( id.startsWith( "chat-line:" ) || id.startsWith( "notice-name:" ) ) {
+			// A named line, or a notice's linked player (port-only, notice-links.ts).
 			const recipient = controls.find( control => control.id === id && !control.disabled )?.whisperTarget;
 			if ( recipient ) beginWhisper( recipient );
 		} else if ( id === "status-filter" ) statusFilterOpen = !statusFilterOpen;
@@ -10147,12 +10148,16 @@ export function createUi(
 							selection[1] ?? 0,
 							composing
 						];
-					for ( const line of lines ) key.push( line.channel, line.name, line.gid, line.text, line.outgoing );
+					key.push( experimental.state().saved.noticeLinks );
+					for ( const line of lines ) {
+						key.push( line.channel, line.name, line.gid, line.text, line.outgoing, line.notice?.name, line.notice?.item );
+					}
 					const output = chatLayoutCache.read(
 						key,
 						() =>
 							chatLayout( {
 								chatTimestamps: experimental.state().saved.chatTimestamps,
+								noticeLinks: experimental.state().saved.noticeLinks,
 								compact: compact ?
 									{
 										bottom: compact.bottom,
@@ -11513,7 +11518,9 @@ export function createUi(
 					const layout = hudData.windows.ifoption!, slot = hudData.windows.ifgameoptionslot!;
 					windowBox( "Experimental", px, py, width, height );
 					closeButton( px + width - 26, py + 10, panelCloseId( "Experimental" ) );
-					const tabWidth = 78, tabStart = (width - (EXPERIMENTAL_TABS.length * tabWidth - 2)) / 2;
+					// The native tab is 78 pixels; more tabs than the window holds share its width.
+					const tabWidth = Math.min( 78, Math.floor( (width - 10) / EXPERIMENTAL_TABS.length ) ),
+						tabStart = (width - (EXPERIMENTAL_TABS.length * tabWidth - 2)) / 2;
 					for ( let i = 0; i < EXPERIMENTAL_TABS.length; i++ ) {
 						nativeTab(
 							"experimental-tab:" + i,

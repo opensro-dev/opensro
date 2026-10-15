@@ -51,7 +51,9 @@ const OFF = Object.freeze( {
 	// On by default (owner 2026-10-15): labels and lists stay inside their window.
 	fitWindowLabels: true,
 	// On by default (owner 2026-10-15): a drop on a bag tab moves the item there.
-	dropOnBagTab: true
+	dropOnBagTab: true,
+	// On by default (owner 2026-10-15): a notice's player and item are links.
+	noticeLinks: true
 } );
 
 test("only an explicit boolean enables chat timestamps", () => {
@@ -209,7 +211,7 @@ Tabs
 test("the window's tabs cover every preference once and Open returns to Image", () => {
 	assert.deepEqual(
 		EXPERIMENTAL_TABS.map( tab => tab.title ),
-		[ "Image", "World", "Lighting", "Game", "Other" ]
+		[ "Image", "World", "Lighting", "Game", "Notices", "Other" ]
 	);
 	// Lighting keeps the direct-light stages; render scale joins Image without
 	// changing the indices used to reopen the existing tabs.

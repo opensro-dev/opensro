@@ -169,8 +169,8 @@ export const EXPERIMENTAL_TABS: readonly {
 		} ]
 	},
 	{
-		title: "Other",
-		section: "Notices and diagnostics",
+		title: "Notices",
+		section: "Shard notices",
 		rows: [ {
 			key: "jobKillNotices",
 			id: "experimental-job-kill-notices",
@@ -182,6 +182,16 @@ export const EXPERIMENTAL_TABS: readonly {
 			label: "Drop & plus notices",
 			description: "Show the shard's seal drop and +8 to +11 announcements."
 		}, {
+			key: "noticeLinks",
+			id: "experimental-notice-links",
+			label: "Links in notices",
+			description: "Hover a notice's item for its details; click a name to whisper."
+		} ]
+	},
+	{
+		title: "Other",
+		section: "Windows and diagnostics",
+		rows: [ {
 			key: "developerDiagnostics",
 			id: "experimental-developer-diagnostics",
 			label: "Developer diagnostics",

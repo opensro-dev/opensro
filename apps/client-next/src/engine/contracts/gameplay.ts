@@ -184,6 +184,9 @@ export interface ChatLine {
 	// A line from the server's replayed transcript (OpChatHistory): already
 	// said before this session, so never speech over a head.
 	readonly history?: boolean;
+	// Port-only: the player and item a drop/plus notice names
+	// (foundation/gameplay/notice-links.ts), linked in the chat log.
+	readonly notice?: { readonly name?: string; readonly item?: InventoryItem; };
 }
 /*
 ================

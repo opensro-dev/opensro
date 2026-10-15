@@ -96,8 +96,13 @@ export function serverNotification( opcode: number, p: Uint8Array ): SystemNotic
 	if ( opcode !== 0x3667 || !isServerNoticeChannel( p[0] ) ) return null;
 	if ( p.length < 3 ) throw Error( "Truncated server notification" );
 	const n = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint16( 1, true );
-	if ( n > 100 || p.length !== 3 + 2 * n ) throw Error( "Invalid server notification length" );
-	const text = new TextDecoder( "utf-16le", { fatal: true } ).decode( p.subarray( 3 ) );
+	// Port-only: a drop/plus notice may carry its links after the text
+	// (notice-links.ts); the banner shows the text alone.
+	const links = p[0] === DROP_PLUS_NOTICE_CHANNEL && p.length > 3 + 2 * n;
+	if ( n > 100 || !links && p.length !== 3 + 2 * n || p.length < 3 + 2 * n ) {
+		throw Error( "Invalid server notification length" );
+	}
+	const text = new TextDecoder( "utf-16le", { fatal: true } ).decode( p.subarray( 3, 3 + 2 * n ) );
 	const notice: SystemNotice = { key: "", text, value: 0, notificationBanner: true, bannerOnly: true };
 	if ( p[0] === JOB_KILL_NOTICE_CHANNEL ) return { ...notice, jobKill: true };
 	if ( p[0] === DROP_PLUS_NOTICE_CHANNEL ) return { ...notice, dropPlus: true };

@@ -12,10 +12,11 @@ channel; its later native receipt only releases the outstanding request.
 import { chatBlocks, chatIsBlocked } from "@/engine/foundation/gameplay/chat-blocks";
 import { blockedWhisperers, whisperBlockRequest, whisperBlockResult } from "@/engine/foundation/gameplay/whisper-block";
 import { chatRejectionKey, type ChatFeedback } from "@/engine/foundation/gameplay/chat-feedback";
-import type { ChatLine } from "@/engine/contracts/gameplay";
+import type { ChatLine, InventoryItem } from "@/engine/contracts/gameplay";
 import type { WireFrame } from "@/engine/contracts/network";
 import { STALL_CHAT_CHANNEL } from "@/engine/foundation/gameplay/stall";
-import { isServerNoticeChannel } from "@/engine/foundation/gameplay/system-notices";
+import { DROP_PLUS_NOTICE_CHANNEL, isServerNoticeChannel } from "@/engine/foundation/gameplay/system-notices";
+import { decodeNoticeLinks, type NoticeLinks } from "@/engine/foundation/gameplay/notice-links";
 import { CHAT_HISTORY_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
 const CHAT_LINE_LIMIT = 128;
 const CHAT_FEEDBACK_LIMIT = 100;
@@ -53,12 +54,13 @@ decodeChatBroadcast
 One 0x3667 line (sub_753760): channels 1 and 3 carry the speaker's gid,
 2, 4, 5, 6, 11 and the stall's a sized sender name, 7 neither. The
 port-only job-kill and drop/plus channels (isServerNoticeChannel) are laid
-out and shown as channel 7. Null for a channel this owner does not present.
+out and shown as channel 7; a drop/plus line may carry its links after the
+text (notice-links.ts). Null for a channel this owner does not present.
 ================
 */
 function decodeChatBroadcast(
 	p: Uint8Array
-): { channel: number; sender: string; gid: number | undefined; text: string; } | null {
+): { channel: number; sender: string; gid: number | undefined; text: string; links?: NoticeLinks; } | null {
 	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
 	let o = 0;
 	/*
@@ -86,6 +88,11 @@ function decodeChatBroadcast(
 	if ( n > CHAT_TEXT_LIMIT ) throw new Error( "Chat text budget" );
 	const at = take( n * 2 ),
 		text = new TextDecoder( "utf-16le", { fatal: true } ).decode( p.subarray( at, at + n * 2 ) );
+	if ( wireChannel === DROP_PLUS_NOTICE_CHANNEL && o < p.length ) {
+		// Port-only links, decoded leniently: a malformed section is dropped.
+		const links = decodeNoticeLinks( p, o );
+		return { channel, sender, gid, text, ...(links ? { links } : {}) };
+	}
 	if ( o !== p.length ) throw new Error( "Chat trailing bytes" );
 	return { channel, sender, gid, text };
 }
@@ -128,7 +135,10 @@ export function decodeChatHistory(
 createChat
 ================
 */
-export function createChat( send: ( frame: WireFrame ) => void ) {
+export function createChat(
+	send: ( frame: WireFrame ) => void,
+	noticeItem: ( body: Uint8Array ) => InventoryItem | undefined = () => undefined
+) {
 	let lines: readonly ChatLine[] = [],
 		pending: PendingChat | null = null,
 		error: string | null = null,
@@ -317,7 +327,7 @@ receive
 			if ( frame.opcode !== 0x3667 ) return false;
 			const line = decodeChatBroadcast( p );
 			if ( !line ) return false;
-			const { channel, sender, gid, text } = line;
+			const { channel, sender, gid, text, links } = line;
 			if ( channel === CHAT_GLOBAL_CHANNEL && sender === name ) {
 				// Native receipts retain the request's channel. The beta server
 				// sends this authoritative echo first, so the receipt must not
@@ -334,7 +344,14 @@ receive
 			if (
 				!chatIsBlocked( localBlocks, channel, sender || senderName ) && (channel !== 2 || whispers) &&
 				gid !== localGid && (!sender || sender !== name)
-			) append( { channel, name: sender || senderName, gid, text, outgoing: false } );
+			) {
+				// Port-only: a drop/plus notice's player and item (notice-links.ts).
+				const item = links?.body ? noticeItem( links.body ) : undefined,
+					notice = links && (links.name || item) ?
+						{ notice: { ...(links.name ? { name: links.name } : {}), ...(item ? { item } : {}) } } :
+						{};
+				append( { channel, name: sender || senderName, gid, text, outgoing: false, ...notice } );
+			}
 			return true;
 		},
 		/*

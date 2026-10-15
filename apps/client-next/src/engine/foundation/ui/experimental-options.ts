@@ -83,6 +83,11 @@ export interface ExperimentalOptions {
 	// turned off (the owner's choice, 2026-10-15); off is the original,
 	// where a drop on a tab does nothing.
 	readonly dropOnBagTab: boolean;
+	// Port-only, not native: in the chat log, a drop or plus notice's player
+	// name links to a whisper and its item name shows the item's tooltip
+	// (foundation/gameplay/notice-links.ts). On unless turned off (the
+	// owner's choice, 2026-10-15); off is plain text.
+	readonly noticeLinks: boolean;
 }
 
 /*
@@ -121,7 +126,8 @@ experimentalOptions
 
 Only an explicit true enables a toggle, except compressedTextures,
 sharedActorRoom, greyDisabledTabs, jobKillNotices, dropPlusNotices,
-fitWindowLabels and dropOnBagTab, which only an explicit false turns off.
+fitWindowLabels, dropOnBagTab and noticeLinks, which only an explicit false
+turns off.
 Missing or invalid render scales restore full resolution; legacy Video
 settings cannot enable scaling. Keys of retired rows (terrainRelief and texturedHorizon, removed at the owner's
 request on 2026-10-11) are never read, so a saved preference holding them
@@ -155,7 +161,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		dropPlusNotices: record.dropPlusNotices !== false,
 		vHidesCompanions: enabled( "vHidesCompanions" ),
 		fitWindowLabels: record.fitWindowLabels !== false,
-		dropOnBagTab: record.dropOnBagTab !== false
+		dropOnBagTab: record.dropOnBagTab !== false,
+		noticeLinks: record.noticeLinks !== false
 	};
 }
 

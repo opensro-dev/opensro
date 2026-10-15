@@ -432,6 +432,24 @@ transfer
 	return {
 		/*
 ================
+noticeItem
+
+Port-only: the item a drop/plus notice names (notice-links.ts), decoded
+from its body with the bag's own references and presented like a bag row.
+Undefined for anything this client cannot decode; a notice is player-adjacent
+data and never fails the session.
+================
+		*/
+		noticeItem( body: Uint8Array ): InventoryItem | undefined {
+			try {
+				const decoded = decodeInventoryItem( body, 0, refs, objRefs );
+				return decoded.item && decoded.next === body.length ? present( decoded.item ) : undefined;
+			} catch {
+				return undefined;
+			}
+		},
+		/*
+================
 bindCompanion
 
 830EC0 -> 59C2E0 binds the private COS record to its summoner inventory

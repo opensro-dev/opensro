@@ -788,7 +788,7 @@ fails; retry persistence without restoring stale slot occupancy.
 	const countJobs = createCountJobs();
 	let abnormalRecords: readonly AbnormalRecord[] = [];
 	let abnormalMask = 0;
-	const chat = createChat( send ),
+	const chat = createChat( send, body => inventory.noticeItem( body ) ),
 		quests = createQuests( send ),
 		friends = createFriends( send ),
 		letters = createLetters( send );
