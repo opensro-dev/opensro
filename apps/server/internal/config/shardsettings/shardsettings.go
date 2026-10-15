@@ -66,7 +66,7 @@ var Settings = []Setting{
 	// Owner, 2026-10-14: the job-kill streak, its bonuses and bounty.
 	{Env: "SRO_MOST_WANTED", NomadVar: "most_wanted", Default: "on"},
 	// Owner, 2026-10-15: temporary Most Wanted test pacing.
-	{Env: "SRO_MOST_WANTED_TEST", NomadVar: "most_wanted_test", Default: "on"},
+	{Env: "SRO_MOST_WANTED_TEST", NomadVar: "most_wanted_test", Default: "off"},
 	// Owner and the balance advisor, 2026-10-15: the bounty is the victim's gold.
 	{Env: "SRO_MOST_WANTED_BOUNTY_TRANSFER", NomadVar: "most_wanted_bounty_transfer", Default: "on"},
 	// Owner, 2026-10-14: trade stars by cargo gold, Jangan route profit.
