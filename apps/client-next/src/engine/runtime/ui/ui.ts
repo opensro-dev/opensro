@@ -17657,8 +17657,11 @@ export function createUi(
 							return;
 						}
 						if ( guildTab === 3 ) {
-							// The Friends page reflowed: the same rows, marks and actions.
-							const rows = game?.friends?.rows ?? [];
+							// The Friends page reflowed: the same rows, in the same order
+							// (friendNameOrder), marks and actions.
+							const rows = [ ...game?.friends?.rows ?? [] ].sort( ( a, b ) =>
+								friendNameOrder( a.name, b.name )
+							);
 							if ( friendSelected && !rows.some( row => row.jid === friendSelected ) ) friendSelected = 0;
 							const selected = rows.find( row => row.jid === friendSelected ),
 								listTop = top + LINE_HEIGHT + 4,

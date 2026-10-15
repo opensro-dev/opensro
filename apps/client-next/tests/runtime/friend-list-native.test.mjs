@@ -87,6 +87,14 @@ test("Whisper and Delete stay enabled, as the original never disables them", t =
 	assert.equal( out.controls.find( c => c.id === "chat-text" )?.value, "$Cale " );
 });
 
+test("the compact page lists friends in the same order", t => {
+	const { f, step } = friendWindow( t );
+	f.state.width = 390;
+	f.state.height = 844;
+	const order = out => out.controls.filter( c => c.id.startsWith( "friend-row:" ) ).map( c => c.label );
+	assert.deepEqual( order( step() ), [ "Berk", "Cale", "Dora" ] );
+});
+
 test("the header always sorts by name ascending (604FD0)", t => {
 	const { f, step } = friendWindow( t );
 	const order = out => out.controls.filter( c => c.id.startsWith( "friend-row:" ) ).map( c => c.label );
