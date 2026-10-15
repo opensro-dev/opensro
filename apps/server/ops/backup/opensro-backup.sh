@@ -166,7 +166,7 @@ collect() {
 	# skipping the databases already copied and their WAL side files.
 	rsync -a --exclude='*.db' --exclude='*.db-wal' --exclude='*.db-shm' \
 		--exclude='*.sqlite' --exclude='*.sqlite-wal' --exclude='*.sqlite-shm' \
-		--exclude='*.sqlite3' --exclude='*.sqlite3-wal' --exclude='*.sqlite3-shm' --exclude='releases/' \
+		--exclude='*.sqlite3' --exclude='*.sqlite3-wal' --exclude='*.sqlite3-shm' --exclude='*-journal' --exclude='releases/' \
 		"$STATE_ROOT/" "$STAGING/state/"
 
 	# Host configuration (Caddy, Nomad, systemd units, website env).

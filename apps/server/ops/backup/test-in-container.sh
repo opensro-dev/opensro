@@ -48,10 +48,19 @@ sqlite3 "$DB" "PRAGMA journal_mode=WAL; CREATE TABLE items (id INTEGER PRIMARY K
 echo '{"secret": true}' >"$STATE/cluster/agent-session-keys.json"
 ( while true; do sqlite3 "$DB" ".timeout 5000" "INSERT INTO items (name) VALUES (hex(randomblob(16)));"; done ) &
 WRITER=$!
-# The operator history journal is a .sqlite file in WAL mode, written live.
+# The operator history journal is a .sqlite file in WAL mode, written live
+# through one connection the journal holds open, as the shard does. A
+# connection that closes checkpoints and deletes the WAL, which would make a
+# raw file copy look consistent; with checkpoints off and the connection
+# open, committed rows live only in the WAL, so a raw copy is caught.
 HISTORY="$STATE/shards/global-official/authority/history.sqlite"
 sqlite3 "$HISTORY" "PRAGMA journal_mode=WAL; CREATE TABLE events (seq INTEGER PRIMARY KEY, data TEXT);"
-( while true; do sqlite3 "$HISTORY" ".timeout 5000" "INSERT INTO events (data) VALUES (hex(randomblob(64)));"; done ) &
+mkfifo /tmp/history.in
+sqlite3 "$HISTORY" </tmp/history.in &
+HISTORY_DB=$!
+exec 3>/tmp/history.in
+echo "PRAGMA wal_autocheckpoint=0;" >&3
+( while true; do echo "INSERT INTO events (data) VALUES (hex(randomblob(64)));"; sleep 0.01; done ) >&3 &
 HISTORY_WRITER=$!
 
 install -d -m 0700 /etc/opensro-backup
@@ -68,21 +77,30 @@ grep -qx "GET /ping" /tmp/hook.log || fail "no heartbeat ping after success"
 
 echo "== second run, weekly path"
 sqlite3 "$DB" ".timeout 5000" "INSERT INTO items (name) VALUES ('marker');"
-sqlite3 "$HISTORY" ".timeout 5000" "INSERT INTO events (data) VALUES ('history-marker');"
+echo "INSERT INTO events (data) VALUES ('history-marker');" >&3
+for _ in $(seq 100); do
+	[[ "$(sqlite3 "$HISTORY" "SELECT count(*) FROM events WHERE data='history-marker'")" == 1 ]] && break
+	sleep 0.1
+done
+[[ -s "$HISTORY-wal" ]] || fail "the history writer is not holding a WAL open"
 OPENSRO_BACKUP_WEEKLY_DAY="$(date +%u)" opensro-backup run
 grep -q "Weekly backup check passed" /tmp/hook.log || fail "no weekly summary posted"
 [[ "$(opensro-backup status | grep -c nightly)" -ge 2 ]] || fail "expected two snapshots"
 
 echo "== restore"
 kill "$WRITER" "$HISTORY_WRITER"; wait "$WRITER" "$HISTORY_WRITER" 2>/dev/null || true
+exec 3>&-
+wait "$HISTORY_DB" 2>/dev/null || true
 opensro-backup restore latest /tmp/restored
 RESTORED=/tmp/restored/var/backups/opensro/staging
+RESTORED_HISTORY="$RESTORED/state/shards/global-official/authority/history.sqlite"
+# Before anything opens the restored journal: opening and closing it would
+# checkpoint a raw WAL away.
+[[ ! -e "$RESTORED_HISTORY-wal" && ! -e "$RESTORED_HISTORY-shm" ]] || fail "a raw WAL side file was backed up"
 [[ "$(sqlite3 "$RESTORED/state/shards/global-official/authority/state.db" "SELECT count(*) FROM items WHERE name='marker'")" == 1 ]] || fail "marker row missing"
 grep -q secret "$RESTORED/state/cluster/agent-session-keys.json" || fail "secret file missing"
-RESTORED_HISTORY="$RESTORED/state/shards/global-official/authority/history.sqlite"
 [[ "$(sqlite3 "$RESTORED_HISTORY" "SELECT count(*) FROM events WHERE data='history-marker'")" == 1 ]] || fail "history marker row missing"
 [[ "$(sqlite3 "$RESTORED_HISTORY" "PRAGMA integrity_check;")" == "ok" ]] || fail "restored history journal is corrupt"
-[[ ! -e "$RESTORED_HISTORY-wal" && ! -e "$RESTORED_HISTORY-shm" ]] || fail "a raw WAL side file was backed up"
 opensro-backup restore latest /tmp/restored 2>/dev/null && fail "restored into a non-empty directory"
 
 echo "== failure alert"
