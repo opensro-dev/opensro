@@ -2,8 +2,10 @@ package action
 
 import (
 	"fmt"
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
+	"opensro.online/server/internal/game/item/loot"
 	"opensro.online/server/internal/game/item/wire"
 	"reflect"
 	"sort"
@@ -11,6 +13,9 @@ import (
 
 // PlanQuestInventory runs under the caller's character transaction. It never
 // mutates the character: all removals and grants must fit before rewards commit.
+// maxGrantPlus bounds the plus of granted equipment (opensro-infra patch).
+const maxGrantPlus = 12
+
 func (rt *Runtime) PlanQuestInventory(c *enterworld.Character, consume, grant []inventory.ItemAmount) ([]enterworld.InventoryRow, []wire.Frame, error) {
 	if c == nil || c.DeletePending {
 		return nil, nil, fmt.Errorf("quest inventory: unavailable character")
@@ -81,6 +86,22 @@ func (rt *Runtime) planInventoryGrant(
 			item.Durability = 100
 			if ref.VarianceIntMin1c0 != nil {
 				item.Durability = uint32(clampInt64(*ref.VarianceIntMin1c0, 1, 0xffffffff))
+			}
+			// Operator grants may carry a plus; the GM console limit is +12.
+			item.Plus = min(request.Plus, maxGrantPlus)
+			if request.PerfectStats {
+				// Every white stat field of this item type at 31 (100%), with
+				// the matching durability, as monster drops build them.
+				item.VarianceBits = 0
+				for field := 0; field < equipmentVarianceFieldCount(ref); field++ {
+					item.VarianceBits |= uint64(31) << (field * 5)
+				}
+				item.Durability = combat.DurabilityFromVariance(ref, 31)
+			}
+			if request.PerfectMagic {
+				// The strongest catalog-valid blues for the item's type and
+				// degree, as monster drops source them.
+				item.MagicOptions = append([]uint64(nil), loot.BestEquipmentMagic(ref.Codename)...)
 			}
 		}
 		for item.Quantity > 0 {

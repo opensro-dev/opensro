@@ -683,6 +683,26 @@ variable "qinshi_tomb" {
   default = "off"
 }
 
+# Port-only, not native (issue #520): a level increase upgrades every worn
+# piece to the best seal-tier variant the level and the equip gate allow and
+# fills an empty armour or accessory socket. "off" (the default) is native.
+# auto_maxgear_seal names the tier (sun, moon or star) and auto_maxgear_plus
+# the plus of a seated grant (0..12).
+variable "auto_maxgear" {
+  type    = string
+  default = "off"
+}
+
+variable "auto_maxgear_seal" {
+  type    = string
+  default = "sun"
+}
+
+variable "auto_maxgear_plus" {
+  type    = string
+  default = "12"
+}
+
 # The community site's public read API listener (internal/agent/publicstats):
 # a loopback address, or "off". sro-nomad gives the first shard the default
 # and every other shard "off".
@@ -909,6 +929,9 @@ job "sro-gameworld-__SHARD_ID__" {
         TRANSPORT_PPROF                         = var.transport_pprof
         TRANSPORT_PPROF_ADDR                    = var.pprof_addr
         SRO_RELEASE_ID                          = var.release_id
+        SRO_AUTO_MAXGEAR                   = var.auto_maxgear
+        SRO_AUTO_MAXGEAR_SEAL              = var.auto_maxgear_seal
+        SRO_AUTO_MAXGEAR_PLUS              = var.auto_maxgear_plus
       }
 
       template {

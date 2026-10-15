@@ -164,6 +164,12 @@ var Settings = []Setting{
 	// and walk-in portals (port-only, not native: v1.150 shipped Tomb visual
 	// assets before the Legend IV server tables). "off" is native.
 	{Env: "SRO_QINSHI_TOMB", NomadVar: "qinshi_tomb", Default: "off"},
+	// Port-only, not native (issue #520): automatic best-gear on level-up.
+	// Off by default; a shard turns it on with its own value. The seal names
+	// the tier and the plus bounds the seated grant.
+	{Env: "SRO_AUTO_MAXGEAR", NomadVar: "auto_maxgear", Default: "off"},
+	{Env: "SRO_AUTO_MAXGEAR_SEAL", NomadVar: "auto_maxgear_seal", Default: "sun"},
+	{Env: "SRO_AUTO_MAXGEAR_PLUS", NomadVar: "auto_maxgear_plus", Default: "12"},
 }
 
 // NotSettings are the job's other SRO_ variables: what a deployment
