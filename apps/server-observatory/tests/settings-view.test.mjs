@@ -97,6 +97,7 @@ test("a rule is changed when it runs other than its default", () => {
 	assert.deepEqual( marks( KILLS ).map( m => m.text ), [ "Restart", "Default 5" ] );
 	assert.deepEqual( marks( BOUNTY ).map( m => m.text ), [ "Live" ] );
 	assert.deepEqual( marks( { ...BOUNTY, source: "store" } ).map( m => m.text ), [ "Live", "Set here" ] );
+	assert.deepEqual( marks( { ...BOUNTY, class: "entry" } ).map( m => m.text ), [ "Next world entry" ] );
 });
 
 test("filters keep matching rules in their groups, in first-seen order", () => {

@@ -256,6 +256,11 @@ its name, for a phone.
 	background: #f6e4bd;
 }
 
+.rules-chip.entry {
+	color: var(--teal);
+	background: var(--teal-pale);
+}
+
 .rules-chip.store {
 	color: var(--sky);
 	background: #dbe6f2;

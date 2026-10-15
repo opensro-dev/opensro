@@ -105,12 +105,14 @@ test("only the contract's fields pass, each of its type", () => {
 			{ ...ROW, value: "6" },
 			{ ...ROW, kind: "string" },
 			{ ...ROW, class: "now" },
-			{ ...ROW, allowed: [ 1, "2", 5, null ], source: "elsewhere" }
+			{ ...ROW, allowed: [ 1, "2", 5, null ], source: "elsewhere" },
+			{ ...ROW, class: "entry" }
 		],
 		flags: [ { env: "SRO_X", value: 7, on: "yes" }, { env: "HOME", value: "/root", on: null } ]
 	} );
 	assert.equal( body.extra, undefined );
-	assert.equal( body.settings.length, 2, "rows with a wrong required field are dropped" );
+	assert.equal( body.settings.length, 3, "rows with a wrong required field are dropped" );
+	assert.equal( body.settings[2].class, "entry", "an entry-class row passes" );
 	assert.equal( body.settings[0].label, "<img src=x onerror=alert(1)>", "text stays text; the page never parses it" );
 	assert.equal( body.settings[0].script, undefined );
 	assert.equal( body.settings[0].help.length, 512 );

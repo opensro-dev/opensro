@@ -85,6 +85,13 @@ export function changed( row ) {
 	return row.value !== row.default;
 }
 
+// What each class promises: when an approved change takes effect.
+const CLASS_MARKS = Object.freeze( {
+	live: { tone: "live", text: "Live", title: "A change applies on the next action" },
+	entry: { tone: "entry", text: "Next world entry", title: "A change applies at each player's next world entry" },
+	restart: { tone: "restart", text: "Restart", title: "A change applies at the next restart" }
+} );
+
 /*
 ================
 marks
@@ -93,13 +100,7 @@ The chips beside a rule, in reading order, each with its words.
 ================
 */
 export function marks( row ) {
-	const out = [ {
-		tone: row.class,
-		text: row.class === "live" ? "Live" : "Restart",
-		title: row.class === "live" ?
-			"A change applies on the next action" :
-			"A change applies at the next restart"
-	} ];
+	const out = [ CLASS_MARKS[row.class] ?? CLASS_MARKS.restart ];
 	if ( changed( row ) ) out.push( { tone: "changed", text: "Default " + showValue( row, row.default ) } );
 	if ( row.source === "store" ) out.push( { tone: "store", text: "Set here" } );
 	return out;

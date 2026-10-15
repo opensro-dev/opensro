@@ -46,11 +46,12 @@ paintSummary
 ================
 */
 function paintSummary() {
-	const changes = state.rows.filter( changed ).length, live = state.rows.filter( row => row.class === "live" ).length;
+	const changes = state.rows.filter( changed ).length,
+		live = state.rows.filter( row => row.class !== "restart" ).length;
 	const tiles = [
 		[ state.rows.length, "tunable rules", "" ],
 		[ changes, "changed from default", changes ? "amber" : "" ],
-		[ live, "change on the next action", "" ],
+		[ live, "change without a restart", "" ],
 		[ state.flags.length, "shard settings", "" ]
 	];
 	byID( "rules-summary" ).replaceChildren(

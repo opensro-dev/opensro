@@ -25,7 +25,9 @@ const REQUEST_TIMEOUT_MS = 10000;
 const MAX_ROWS = 512;
 const MAX_TEXT = 512;
 const KINDS = new Set( [ "int", "factor" ] );
-const CLASSES = new Set( [ "live", "restart" ] );
+// live: the next action; entry: each player's next world entry; restart:
+// the next restart (game/tunables Class).
+const CLASSES = new Set( [ "live", "entry", "restart" ] );
 const SOURCES = new Set( [ "default", "env", "store" ] );
 const ENV = /^SRO_[A-Z0-9_]{1,64}$/;
 const KEY = /^[a-z0-9_]{1,64}$/;
