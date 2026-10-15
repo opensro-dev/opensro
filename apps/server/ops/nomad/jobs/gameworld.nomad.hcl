@@ -224,6 +224,14 @@ variable "most_wanted_test" {
   default = "off"
 }
 
+# instant_char_delete archives a deleted character at once, with no restore
+# (port-only, not native; owner, F10). "off" keeps the native seven-day
+# reservation.
+variable "instant_char_delete" {
+  type    = string
+  default = "off"
+}
+
 # most_wanted_test_kills and most_wanted_test_bounty are the test pacing's
 # kills per wanted level (1, 2, 5 or 10) and gold per level (0..100000000);
 # they act only with most_wanted_test on (port-only, game/tunables).
@@ -756,6 +764,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_CLOSED_OBJECT_RESCUE           = var.closed_object_rescue
         SRO_MOST_WANTED                    = var.most_wanted
         SRO_MOST_WANTED_TEST               = var.most_wanted_test
+        SRO_INSTANT_CHAR_DELETE            = var.instant_char_delete
         SRO_MOST_WANTED_TEST_KILLS         = var.most_wanted_test_kills
         SRO_MOST_WANTED_TEST_BOUNTY        = var.most_wanted_test_bounty
         SRO_MOST_WANTED_BOUNTY_TRANSFER    = var.most_wanted_bounty_transfer

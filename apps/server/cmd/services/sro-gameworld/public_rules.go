@@ -16,6 +16,7 @@ package main
 
 import (
 	"fmt"
+	agentapi "opensro.online/server/internal/agent/api"
 	"strconv"
 
 	"opensro.online/server/internal/agent/publicstats"
@@ -241,6 +242,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "A character that logs in inside a tree trunk or a rock stays there and cannot walk out.",
 				Now:    "Logging in inside one moves the character to the nearest open ground.",
 				Why:    "A player was stuck inside a tree with every move refused; the original returns with one setting."},
+			{Flag: agentapi.EnvInstantCharacterDelete, On: agentapi.InstantCharacterDeleteFromEnv(),
+				Native: "A deleted character waits seven days, and can be restored until then.",
+				Now:    "A deleted character is gone at once: its name and slot are free immediately, and it cannot be restored.",
+				Why:    "Requested for the beta so players can remake a character without waiting a week; the original returns with one setting."},
 			{Flag: action.EnvDenNoTransportSummon, On: action.DenNoTransportSummonFromEnv(),
 				Native: "A transport can be summoned while the Bandit Den Return Scroll counts down.",
 				Now:    "No transport can be summoned during that countdown.",

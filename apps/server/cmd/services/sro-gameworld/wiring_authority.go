@@ -243,6 +243,8 @@ func openAuthorityPlane(
 		}
 		return lease.Release, true
 	}
+	// Port-only, not native: delete archives at once (instantdelete.go).
+	config.InstantCharacterDelete = agentapi.InstantCharacterDeleteFromEnv()
 	api, err := agentapi.New(config)
 	if err != nil {
 		authorityStore.Close()

@@ -351,6 +351,18 @@ func (api *API) handleDeleteAction(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	// Port-only, not native (SRO_INSTANT_CHAR_DELETE): the reservation is
+	// committed and no session plays the character, so it is archived now
+	// through the reaper's own fail-closed path. "removed" tells the client
+	// to drop the row (an older client keeps showing a pending row until
+	// its next roster read). A refused archive (a write failure, or the
+	// group backstop) leaves the native reservation in place.
+	if request.Action == 3 && api.instantCharacterDelete && api.store.ArchiveReservedCharacterNow(character) {
+		writeCharacterRosterResponse(w, map[string]interface{}{
+			"action": request.Action, "nativeResult": 1, "character": characterJSON, "removed": true,
+		})
+		return
+	}
 	writeCharacterRosterResponse(w, map[string]interface{}{
 		"action": request.Action, "nativeResult": 1, "character": characterJSON,
 	})

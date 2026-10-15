@@ -50,24 +50,75 @@ func (s *Store) ReapMaturedDeletions() []string {
 			if reservedAt.After(cutoff) {
 				continue
 			}
-			if s.characterHasGroupMembershipLocked(divisionID, c.ID) {
-				log.Errorf("store: character %s/%s has a matured deletion reservation but still belongs to a guild or training camp; NOT reaping it", divisionID, c.Name)
-				continue
+			if victim, ok := s.reapVictimLocked(divisionID, c); ok {
+				victims = append(victims, victim)
 			}
-			raw, err := json.Marshal(c)
-			if err != nil {
-				log.Errorf("store: archiving %s/%s failed to marshal (%v); NOT reaping it", divisionID, c.Name, err)
-				continue
-			}
-			victims = append(victims, reapVictim{divisionID: divisionID, c: c, raw: raw})
 		}
 	}
+	return s.archiveVictimsLocked(victims)
+}
+
+/*
+================
+ArchiveReservedCharacterNow
+
+Port-only, not native (SRO_INSTANT_CHAR_DELETE, agent/api): archives one
+character whose deletion was just reserved without waiting the window,
+through the same fail-closed transaction and group backstop the reaper
+uses. Reports whether the record left the live rows.
+================
+*/
+func (s *Store) ArchiveReservedCharacterNow(c *domain.Character) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	divisionID, live := s.charDivision[c]
+	if !live || !c.DeletePending {
+		return false
+	}
+	victim, ok := s.reapVictimLocked(divisionID, c)
+	if !ok {
+		return false
+	}
+	return len(s.archiveVictimsLocked([]reapVictim{victim})) == 1
+}
+
+/*
+================
+reapVictimLocked
+
+One reserved character ready for the archive: refused while it still
+belongs to a guild or training camp, or when its record cannot be
+marshalled.
+================
+*/
+func (s *Store) reapVictimLocked(divisionID string, c *domain.Character) (reapVictim, bool) {
+	if s.characterHasGroupMembershipLocked(divisionID, c.ID) {
+		log.Errorf("store: character %s/%s has a deletion reservation due but still belongs to a guild or training camp; NOT reaping it", divisionID, c.Name)
+		return reapVictim{}, false
+	}
+	raw, err := json.Marshal(c)
+	if err != nil {
+		log.Errorf("store: archiving %s/%s failed to marshal (%v); NOT reaping it", divisionID, c.Name, err)
+		return reapVictim{}, false
+	}
+	return reapVictim{divisionID: divisionID, c: c, raw: raw}, true
+}
+
+/*
+================
+archiveVictimsLocked
+
+The archive transaction for victims, then the in-memory move. Returns the
+archived "division/name"s; nothing on any failure (fail-closed).
+================
+*/
+func (s *Store) archiveVictimsLocked(victims []reapVictim) []string {
 	if len(victims) == 0 {
 		return nil
 	}
 	friendUpdates, err := s.friendUpdatesForReapLocked(victims)
 	if err != nil {
-		log.Errorf("store: delete-reap could not build atomic friend cleanup (%v); %d matured reservation(s) stay LIVE and pending", err, len(victims))
+		log.Errorf("store: delete-reap could not build atomic friend cleanup (%v); %d reservation(s) stay LIVE and pending", err, len(victims))
 		return nil
 	}
 
@@ -81,7 +132,7 @@ func (s *Store) ReapMaturedDeletions() []string {
 		s.health.FailedWrites++
 		s.health.LastError = fmt.Sprintf("delete-reap: %v", err)
 		s.publishHealthLocked()
-		log.Errorf("store: delete-reap failed (%v); %d matured reservation(s) stay LIVE and pending (fail-closed) - the next trigger retries", err, len(victims))
+		log.Errorf("store: delete-reap failed (%v); %d reservation(s) stay LIVE and pending (fail-closed) - the next trigger retries", err, len(victims))
 		return nil
 	}
 
@@ -119,7 +170,7 @@ func (s *Store) ReapMaturedDeletions() []string {
 		delete(s.changes.characters, update.c)
 	}
 	s.recordWriteSuccessLocked()
-	log.Infof("store: REAPED %d matured deletion reservation(s): %s", len(names), strings.Join(names, ", "))
+	log.Infof("store: REAPED %d deletion reservation(s): %s", len(names), strings.Join(names, ", "))
 	return names
 }
 

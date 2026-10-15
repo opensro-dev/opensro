@@ -67,6 +67,9 @@ var Settings = []Setting{
 	{Env: "SRO_MOST_WANTED", NomadVar: "most_wanted", Default: "on"},
 	// Owner, 2026-10-15: temporary Most Wanted test pacing.
 	{Env: "SRO_MOST_WANTED_TEST", NomadVar: "most_wanted_test", Default: "off"},
+	// Owner, F10: a deleted character is archived at once (agent/api
+	// instantdelete.go); "off" keeps the native seven-day reservation.
+	{Env: "SRO_INSTANT_CHAR_DELETE", NomadVar: "instant_char_delete", Default: "off"},
 	// Owner, 2026-10-15 (F10): the test pacing's numbers (game/tunables).
 	{Env: "SRO_MOST_WANTED_TEST_KILLS", NomadVar: "most_wanted_test_kills", Default: "5"},
 	{Env: "SRO_MOST_WANTED_TEST_BOUNTY", NomadVar: "most_wanted_test_bounty", Default: "1000000"},

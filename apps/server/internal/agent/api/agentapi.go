@@ -164,6 +164,10 @@ type Config struct {
 	// view (tests). A retail client cannot compose a delete for a
 	// character it is playing, so the guard refuses instead of kicking.
 	CharacterInPlay func(divisionID, characterName string) bool
+	// InstantCharacterDelete archives a character as soon as its deletion
+	// is reserved (port-only, not native: SRO_INSTANT_CHAR_DELETE; false is
+	// the native seven-day reservation).
+	InstantCharacterDelete bool
 	// AcquireCharacterControl serializes an authenticated host-side mutation
 	// against gameplay binding. Production wires a generation-checked Hub
 	// lease; nil falls back to CharacterInPlay for isolated API tests.
@@ -213,6 +217,7 @@ type API struct {
 	skillGroup              SkillGroupResolver
 	levelCap                int64
 	characterInPlay         func(divisionID, characterName string) bool
+	instantCharacterDelete  bool
 	acquireCharacterControl func(divisionID, characterName string) (release func(), acquired bool)
 	enterWorldAuthSecret    []byte
 	workerShardID           string
@@ -274,6 +279,7 @@ func New(config Config) (*API, error) {
 		skillGroup:              config.SkillGroup,
 		levelCap:                config.LevelCap,
 		characterInPlay:         config.CharacterInPlay,
+		instantCharacterDelete:  config.InstantCharacterDelete,
 		acquireCharacterControl: config.AcquireCharacterControl,
 		enterWorldAuthSecret:    append([]byte(nil), config.EnterWorldAuthSecret...),
 		workerShardID:           config.ShardID,
