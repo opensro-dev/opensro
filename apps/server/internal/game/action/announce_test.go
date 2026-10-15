@@ -109,14 +109,14 @@ rather than panicking the encoder.
 func TestAnnouncementsAreCappedAndClamped(t *testing.T) {
 	rt, _ := newTestRuntime(testCharacter(), testItems())
 	for i := 0; i < announcementsPerMinute+2; i++ {
-		rt.announce(testDivision, announcePlus, "line", 1000)
+		rt.announce(testDivision, announcePlus, "line", wire.NoticeLink{}, 1000)
 	}
-	rt.announce(testDivision, announceJobKill, strings.Repeat("x", 300), 1000)
+	rt.announce(testDivision, announceJobKill, strings.Repeat("x", 300), wire.NoticeLink{}, 1000)
 	got := drainedNotices(t, rt)
 	if len(got) != announcementsPerMinute+1 || len(got[len(got)-1]) != noticeMaxUnits {
 		t.Fatalf("%d notices, last %d long", len(got), len(got[len(got)-1]))
 	}
-	rt.announce(testDivision, announcePlus, "line", 1000+announceWindowMs)
+	rt.announce(testDivision, announcePlus, "line", wire.NoticeLink{}, 1000+announceWindowMs)
 	if got := drainedNotices(t, rt); len(got) != 1 {
 		t.Fatalf("the window did not reopen: %v", got)
 	}
@@ -353,7 +353,7 @@ func TestEachNoticeKindTravelsOnItsChannel(t *testing.T) {
 		announceJobKill: wire.JobKillNoticeChannel,
 	} {
 		rt, clock := newTestRuntime(testCharacter(), testItems())
-		rt.announce(testDivision, kind, "notice", clock.NowMs())
+		rt.announce(testDivision, kind, "notice", wire.NoticeLink{}, clock.NowMs())
 		if got := drainedNoticeLines(t, rt); len(got) != 1 || got[0].channel != want {
 			t.Fatalf("kind %d: %+v, want one on channel %#x", kind, got, want)
 		}
@@ -370,7 +370,7 @@ division on the next tick, once.
 */
 func TestTickSendsQueuedNotices(t *testing.T) {
 	rt, clock := newTestRuntime(testCharacter(), testItems())
-	rt.announce(testDivision, announcePlus, "Looter advanced Blade to +8", clock.NowMs())
+	rt.announce(testDivision, announcePlus, "Looter advanced Blade to +8", wire.NoticeLink{}, clock.NowMs())
 	count := func(out []simulation.DivisionFrames) int {
 		n := 0
 		for _, routed := range out {
@@ -388,42 +388,6 @@ func TestTickSendsQueuedNotices(t *testing.T) {
 	}
 	if n := count(rt.TickHook()(clock.NowMs())); n != 0 {
 		t.Fatalf("second tick resent %d notices", n)
-	}
-}
-
-/*
-================
-TestJobKillNoticeRepeatLiftsThePairWindow
-
-SRO_JOB_KILL_NOTICE_REPEAT: off, a pair killing eight times in a minute
-is announced once; on, every kill is, up to the per-minute shard cap.
-================
-*/
-func TestJobKillNoticeRepeatLiftsThePairWindow(t *testing.T) {
-	for _, tc := range []struct {
-		repeat bool
-		want   int
-	}{{false, 1}, {true, announcementsPerMinute}} {
-		rt, _, thief, trader := newPvpPair(t)
-		dressForJob(rt, thief, 9302, "ITEM_CH_M_TRADE_THIEF_04", 2)
-		dressForJob(rt, trader, 9303, "ITEM_CH_M_TRADE_TRADER_04", 1)
-		rt.Announce.JobKill, rt.Announce.JobKillRepeat = true, tc.repeat
-		for i := int64(0); i < announcementsPerMinute+2; i++ {
-			k := playerKill{kind: rt.playerKillKind(testDivision, trader, thief)}.withVictim(thief, trader)
-			_, _, after := rt.payPlayerKillInDoor(testDivision, thief, trader, k, i*1000)
-			rt.payJobKillShares(after)
-		}
-		if got := drainedNotices(t, rt); len(got) != tc.want {
-			t.Fatalf("repeat=%v: %d notices %q, want %d", tc.repeat, len(got), got, tc.want)
-		}
-	}
-	t.Setenv(EnvJobKillNoticeRepeat, "on")
-	if !AnnouncementsFromEnv().JobKillRepeat {
-		t.Fatal("the repeat flag does not read on")
-	}
-	t.Setenv(EnvJobKillNoticeRepeat, "")
-	if AnnouncementsFromEnv().JobKillRepeat {
-		t.Fatal("the repeat flag reads on when unset")
 	}
 }
 
@@ -470,5 +434,41 @@ func TestDropAndPlusNoticesLinkThePlayerAndItem(t *testing.T) {
 	want = append(wire.NewWriter(0).Str("Smith").U16(uint16(len(body))).Payload(), body...)
 	if got := noticeLinkTail(t, rt); !bytes.Equal(got, want) || body[4] != 9 {
 		t.Fatalf("plus link % X, want % X", got, want)
+	}
+}
+
+/*
+================
+TestJobKillNoticeRepeatLiftsThePairWindow
+
+SRO_JOB_KILL_NOTICE_REPEAT: off, a pair killing eight times in a minute
+is announced once; on, every kill is, up to the per-minute shard cap.
+================
+*/
+func TestJobKillNoticeRepeatLiftsThePairWindow(t *testing.T) {
+	for _, tc := range []struct {
+		repeat bool
+		want   int
+	}{{false, 1}, {true, announcementsPerMinute}} {
+		rt, _, thief, trader := newPvpPair(t)
+		dressForJob(rt, thief, 9302, "ITEM_CH_M_TRADE_THIEF_04", 2)
+		dressForJob(rt, trader, 9303, "ITEM_CH_M_TRADE_TRADER_04", 1)
+		rt.Announce.JobKill, rt.Announce.JobKillRepeat = true, tc.repeat
+		for i := int64(0); i < announcementsPerMinute+2; i++ {
+			k := playerKill{kind: rt.playerKillKind(testDivision, trader, thief)}.withVictim(thief, trader)
+			_, _, after := rt.payPlayerKillInDoor(testDivision, thief, trader, k, i*1000)
+			rt.payJobKillShares(after)
+		}
+		if got := drainedNotices(t, rt); len(got) != tc.want {
+			t.Fatalf("repeat=%v: %d notices %q, want %d", tc.repeat, len(got), got, tc.want)
+		}
+	}
+	t.Setenv(EnvJobKillNoticeRepeat, "on")
+	if !AnnouncementsFromEnv().JobKillRepeat {
+		t.Fatal("the repeat flag does not read on")
+	}
+	t.Setenv(EnvJobKillNoticeRepeat, "")
+	if AnnouncementsFromEnv().JobKillRepeat {
+		t.Fatal("the repeat flag reads on when unset")
 	}
 }
