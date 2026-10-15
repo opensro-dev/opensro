@@ -87,6 +87,8 @@ New here? Start with **[CONTRIBUTING.md](CONTRIBUTING.md)**: setup, the native-f
 
 **OpenSRO is open-source software and will always stay open source, so anyone can learn from it and build on it.** If the code is useful to you, you can support its development on **[Ko-fi](https://ko-fi.com/opensro)**.
 
+No one makes money from OpenSRO. It's built by volunteers who put in their own time and money because they love the game, and every donation goes back into development.
+
 - 💸 **Where it goes:** development of this repository: dev tools, CI and documentation.
 - 🎁 **A thank-you, nothing more:** a donation buys no access, items, perks or advantages of any kind.
 - 🙅 **Never required:** the code is the same for everyone, under the [AGPL](LICENSE).
