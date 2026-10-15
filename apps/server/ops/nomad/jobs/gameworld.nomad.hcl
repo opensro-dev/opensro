@@ -215,6 +215,9 @@ variable "most_wanted" {
 # most_wanted_test is Most Wanted's temporary test pacing: 5 kills a level,
 # no anti-farm window, a 1,000,000 gold bounty a level (port-only, not
 # native; owner decision 2026-10-15). "off" is the ordinary rule.
+# DO NOT switch this off without clearing every Most Wanted streak in the
+# same window (issue #1061): a test-earned level is worth 100,000,000 gold
+# a level under the ordinary rule.
 variable "most_wanted_test" {
   type    = string
   default = "on"
