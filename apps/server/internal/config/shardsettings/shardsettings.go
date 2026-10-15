@@ -79,6 +79,8 @@ var Settings = []Setting{
 	{Env: "SRO_TRADER_CARGO_DROP", NomadVar: "trader_cargo_drop", Default: "on"},
 	// Owner, 2026-10-14: Item Mall transports move 1.5 times as fast.
 	{Env: "SRO_MALL_TRANSPORT_SPEED", NomadVar: "mall_transport_speed", Default: "on"},
+	// Owner, 2026-10-15: Item Mall vehicles and pets move 30% faster.
+	{Env: "SRO_MALL_RIDE_SPEED", NomadVar: "mall_ride_speed", Default: "on"},
 	// Owner, 2026-10-14: shard notices for seal drops, +8..+11 and job kills.
 	{Env: "SRO_ANNOUNCE_SOX_DROP", NomadVar: "announce_sox_drop", Default: "on"},
 	{Env: "SRO_ANNOUNCE_PLUS", NomadVar: "announce_plus", Default: "on"},

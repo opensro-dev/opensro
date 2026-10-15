@@ -268,6 +268,14 @@ variable "mall_transport_speed" {
   default = "on"
 }
 
+# mall_ride_speed makes the Item Mall's riding vehicles and pets walk and
+# run 1.3 times as fast (port-only, not native; owner decision 2026-10-15).
+# "off" is native.
+variable "mall_ride_speed" {
+  type    = string
+  default = "on"
+}
+
 # announce_sox_drop, announce_plus and announce_job_kill send shard notices
 # for a seal drop, an item advanced to +8..+11 and a job kill (port-only,
 # not native; owner decision 2026-10-14). "off" is native: no notice.
@@ -694,6 +702,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_DEN_NO_TRANSPORT_SUMMON        = var.den_no_transport_summon
         SRO_TRADER_CARGO_DROP              = var.trader_cargo_drop
         SRO_MALL_TRANSPORT_SPEED           = var.mall_transport_speed
+        SRO_MALL_RIDE_SPEED                = var.mall_ride_speed
         SRO_ANNOUNCE_SOX_DROP              = var.announce_sox_drop
         SRO_ANNOUNCE_PLUS                  = var.announce_plus
         SRO_ANNOUNCE_JOB_KILL              = var.announce_job_kill
