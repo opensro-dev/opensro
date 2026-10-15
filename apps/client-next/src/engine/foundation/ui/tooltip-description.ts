@@ -24,6 +24,8 @@ export function tooltipDescription( source: string ): TooltipRow[] {
 	let current: TooltipRow | undefined;
 	for ( const token of guideTokens( source ) ) {
 		if ( token.kind === "image" ) throw Error( "Unsupported image in item tooltip description" );
+		// Tooltip rows are left-aligned; an alignment scope changes nothing here.
+		if ( token.kind === "align" ) continue;
 		if ( token.kind === "paragraph" ) {
 			if ( current ) rows.push( current );
 			current = undefined;

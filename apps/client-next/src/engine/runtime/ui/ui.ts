@@ -14,6 +14,9 @@ Visibility gates new requests, never collection of outstanding work.
 // CGInterface_ExecuteActionCommand 695420 case 1006: trade with the
 // selected player.
 const ACTION_EXCHANGE = 1006;
+// CIFJobAlias_OpenSubmitConfirm (646470): changing an alias costs the
+// character's level (player +0x820) times this much gold.
+const JOB_ALIAS_MODIFY_GOLD_PER_LEVEL = 50000;
 // A label closer than this to its window's left edge has left its window
 // (the frame's border is about this wide; the Experimental "Fit window labels").
 const WINDOW_LABEL_MARGIN = 6;
@@ -600,6 +603,7 @@ import {
 	partyProposalAssets,
 	partyProposalLayout,
 	guildProposalLayout,
+	guildQuestionLayout,
 	reverseReturnLayout,
 	proposalLayout,
 	MESSAGE_FRAME,
@@ -630,7 +634,7 @@ import {
 import { messageBoxLines, textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
 import { systemMenu, SYSTEM_MENU_HEIGHT, EXPERIMENTAL_MENU_ID } from "@/engine/foundation/ui/system-menu";
 import { inventorySlots, inventoryLattice } from "@/engine/foundation/ui/inventory-layout";
-import { guideTokens } from "@/engine/foundation/ui/guide-content";
+import { groupedNumber, guideTokens, hasSml2Markup } from "@/engine/foundation/ui/guide-content";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { SessionCommand, ServerRecord, CharacterRecord } from "@/engine/contracts/session";
 import type { UiView, UiEvent, UiRect, UiQuad, UiControl, UiSemantics, UiScene } from "@/engine/contracts/ui";
@@ -8658,6 +8662,20 @@ export function createUi(
 				clipToControl: boolean | "clip" = false
 			) {
 				const box = authoredClientRect( node, ox, oy );
+				// SML2 markup (843100) renders through the text board's layout, never
+				// as plain characters: the Item Mall subtitles and alchemy texts.
+				if ( hasSml2Markup( value ) ) {
+					const out = text.guide(
+						guideTokens( value ),
+						box,
+						clipToControl ? box : full,
+						node.color,
+						resources.size
+					);
+					quads.push( ...out.quads );
+					paths.push( ...out.paths );
+					return;
+				}
 				// Port-only (Experimental "Fit window labels", off is the original):
 				// an English label that would run past its window's left edge (the
 				// trade window's "Purchase amount", right-aligned in 63 pixels, with
@@ -20461,7 +20479,36 @@ export function createUi(
 			const jobAsk = jobHud.confirm(), aliasWindow = jobHud.alias();
 			if ( worldVisible && (jobAsk || aliasWindow) ) {
 				// 5D26F0's question boxes (types 4 and 5) and CIFJobAlias.
-				const layout = guildProposalLayout( w, h );
+				// CIFSimpleMessageBox_SetTextAndResize (52DB20): SML2 text renders as
+				// markup (centred lines, breaks), never as raw tags. The alias texts
+				// take CIFJobAlias_OpenSubmitConfirm's (646470) arguments: create
+				// (name, alias); modify (alias, new alias, level x 50,000 gold).
+				const message = hudCopy(
+						jobAsk ?
+							(jobAsk.kind === "join" ?
+								"UIIT_STT_JOBGUILD_JOIN_WINDOW" :
+								"UIIT_STT_JOBGUILD_WITHD_WINDOW") :
+							aliasWindow?.modify ?
+							"UIIT_STT_ALIAS_MODIFY_WINDOW" :
+							"UIIT_STT_ALIAS_CREATE_WINDOW"
+					),
+					args = jobAsk || !aliasWindow ? [] : aliasWindow.modify ?
+						[
+							view?.gameplay?.job?.alias ?? "",
+							aliasWindow.text,
+							groupedNumber( (view?.gameplay?.progression?.level ?? 0) * JOB_ALIAS_MODIFY_GOLD_PER_LEVEL )
+						] :
+						[ view?.session?.character ?? "", aliasWindow.text ];
+				const filled = args.reduce( ( value, arg ) => value.replace( "%s", arg ), message );
+				const markup = hasSml2Markup( filled ) ? guideTokens( filled ) : null;
+				const layout = guildQuestionLayout(
+					w,
+					h,
+					markup ?
+						text.guide( markup, [ 0, 0, 300, 1000 ], [ 0, 0, 300, 1000 ], white, resources.size ).height :
+						12,
+					!!aliasWindow && !jobAsk
+				);
 				controls = [];
 				blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
@@ -20485,23 +20532,13 @@ export function createUi(
 						full,
 						white,
 						{ hAlign: 1, vAlign: 0 }
-					),
-					...text.quads(
-						hudCopy(
-							jobAsk ?
-								(jobAsk.kind === "join" ?
-									"UIIT_STT_JOBGUILD_JOIN_WINDOW" :
-									"UIIT_STT_JOBGUILD_WITHD_WINDOW") :
-								aliasWindow?.modify ?
-								"UIIT_STT_ALIAS_MODIFY_WINDOW" :
-								"UIIT_STT_ALIAS_CREATE_WINDOW"
-						),
-						layout.name,
-						full,
-						white,
-						{ hAlign: 1, vAlign: 0 }
 					)
 				);
+				if ( markup ) {
+					const out = text.guide( markup, layout.name, full, white, resources.size );
+					quads.push( ...out.quads );
+					paths.push( ...out.paths );
+				} else quads.push( ...text.quads( filled, layout.name, full, white, { hAlign: 1, vAlign: 0 } ) );
 				if ( jobAsk ) {
 					button(
 						"job-confirm-yes",

@@ -90,6 +90,39 @@ export function guildProposalLayout(
 	};
 }
 
+// The message's room in guildProposalLayout: from its top (52) to the
+// buttons (99) with a 4-pixel gap, or to the alias field (70) above it.
+const QUESTION_MESSAGE_ROOM = 43;
+const QUESTION_MESSAGE_ROOM_ABOVE_FIELD = 18;
+// The message's left inset within the 308-pixel box.
+const QUESTION_MESSAGE_INSET = 4;
+
+/*
+================
+guildQuestionLayout
+
+guildProposalLayout grown to fit a message measureHeight tall, as
+CIFSimpleMessageBox_ResizeToText (52BCF0) grows the native box to its text:
+the box gains the overflow, and the field and buttons below move down by
+it. A message that fits leaves the native 308 x 148 box unchanged.
+================
+*/
+export function guildQuestionLayout( width: number, height: number, messageHeight: number, field: boolean ) {
+	const room = field ? QUESTION_MESSAGE_ROOM_ABOVE_FIELD : QUESTION_MESSAGE_ROOM;
+	const extra = Math.max( 0, Math.ceil( messageHeight ) - room );
+	const box = messageBox( width, height, 308, 148 + extra ), [x, y] = box.frame;
+	const at = ( dx: number, dy: number, w: number, h: number ): UiRect => [ x + dx, y + dy, w, h ];
+	return {
+		...box,
+		// Inset like the native message control (52E720 places it inside the frame).
+		name: at( QUESTION_MESSAGE_INSET, 52, 300, Math.max( 12, Math.ceil( messageHeight ) ) ),
+		question: at( 6, 70 + extra, 300, 12 ),
+		options: [],
+		accept: at( 72, 99 + extra, 76, 24 ),
+		refuse: at( 152, 99 + extra, 76, 24 )
+	};
+}
+
 // REVERSE_RETURN_ROW is the reverse return box's row pitch (26 px).
 const REVERSE_RETURN_ROW = 26;
 
