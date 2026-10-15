@@ -60,7 +60,9 @@ function receive( payload ) {
 	} );
 	chat.bootstrap( { character: { name: "Local" } } );
 	assert.equal( chat.receive( { opcode: 0x3667, payload }, 1 ), true );
-	return { line: chat.state().lines.at( -1 ), bodies };
+	const line = chat.state().lines.at( -1 );
+	assert.ok( line );
+	return { line, bodies };
 }
 
 test("the notice tail decodes the server's pinned vectors", () => {
@@ -75,6 +77,7 @@ test("the notice tail decodes the server's pinned vectors", () => {
 	// The banner shows the text alone.
 	for ( const payload of [ BARE, LINKED ] ) {
 		const notice = serverNotification( 0x3667, payload );
+		assert.ok( notice );
 		assert.equal( notice.text, "A" );
 		assert.equal( notice.dropPlus, true );
 	}
@@ -111,7 +114,7 @@ test("an undecodable item still links the player", () => {
 	const chat = createChat( () => {}, () => undefined );
 	chat.bootstrap( { character: { name: "Local" } } );
 	chat.receive( { opcode: 0x3667, payload: LINKED }, 1 );
-	assert.deepEqual( chat.state().lines.at( -1 ).notice, { name: "Looter" } );
+	assert.deepEqual( chat.state().lines.at( -1 )?.notice, { name: "Looter" } );
 });
 
 const layout = decodeAuthoredLayout(
@@ -170,7 +173,7 @@ test("a notice row links the player and the item only with the row on", () => {
 	const hovered = layoutWith( { noticeLinks: true, hover: "notice-item:5" } );
 	const underline = hovered.quads.filter( q => q.texture === "" );
 	assert.equal( underline.length, plainInk + 1 );
-	assert.deepEqual( underline.at( -1 ).rect, [ item.rect[0], item.rect[1] + 13, item.rect[2], 1 ] );
+	assert.deepEqual( underline.at( -1 )?.rect, [ item.rect[0], item.rect[1] + 13, item.rect[2], 1 ] );
 });
 
 test("the linked spans follow the player first, then the item", () => {
@@ -188,7 +191,8 @@ test("the linked spans follow the player first, then the item", () => {
 });
 
 test("a linked item shows the bag's own tooltip", () => {
-	const game = { inventory: [], chat: { lines: [ NOTICE_LINE ] } };
+	// Only the two fields tooltipItems reads for a notice.
+	const game = /** @type {any} */ ({ inventory: [], chat: { lines: [ NOTICE_LINE ] } });
 	assert.deepEqual( tooltipItems( "notice-item:5", game, 0 ), [ POTION ] );
 	assert.deepEqual( tooltipItems( "notice-item:6", game, 0 ), [] );
 });

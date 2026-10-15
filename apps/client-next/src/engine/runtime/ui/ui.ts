@@ -10150,7 +10150,15 @@ export function createUi(
 						];
 					key.push( experimental.state().saved.noticeLinks );
 					for ( const line of lines ) {
-						key.push( line.channel, line.name, line.gid, line.text, line.outgoing, line.notice?.name, line.notice?.item );
+						key.push(
+							line.channel,
+							line.name,
+							line.gid,
+							line.text,
+							line.outgoing,
+							line.notice?.name,
+							line.notice?.item
+						);
 					}
 					const output = chatLayoutCache.read(
 						key,

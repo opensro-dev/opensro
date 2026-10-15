@@ -1184,6 +1184,13 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/chat/chat.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"functions": [
+				"callback:createChat:1"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/characters/orbs/orbs.ts",
 			"provider": "src/engine/runtime/characters/characters.ts",
 			"functions": [
