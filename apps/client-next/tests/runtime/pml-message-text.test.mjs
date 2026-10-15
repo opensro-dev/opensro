@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
-const { guideTokens, guideContent, hasSml2Markup, groupedNumber, markupArg } = await import(
+const { guideTokens, guideContent, hasSml2Markup, groupedNumber, markupArg, fillMarkup } = await import(
 	"../../src/engine/foundation/ui/guide-content.ts"
 );
 const { tooltipDescription } = await import( "../../src/engine/foundation/ui/tooltip-description.ts" );
@@ -181,4 +181,16 @@ test("an alias typed with angle brackets still draws the box", async () => {
 	} finally {
 		f.dispose();
 	}
+});
+
+test("a player's text fills literally: $ patterns never re-insert the template", () => {
+	const template = table["UIIT_STT_ALIAS_CREATE_WINDOW"];
+	for ( const alias of [ "$`", "$'", "$&", "$$", "a<b" ] ) {
+		const value = fillMarkup( template, [ "Player", alias ] );
+		assert.equal( value.split( "<sml2>" ).length, 2, `${alias}: one opening tag` );
+		assert.ok( value.includes( "[" + markupArg( alias ) + "]" ), `${alias}: filled literally` );
+		assert.doesNotThrow( () => guideTokens( value ), alias );
+	}
+	// The unguarded String.replace re-inserts the template's head ("$`").
+	assert.equal( template.replace( "%s", "Player" ).replace( "%s", "$`" ).split( "<sml2>" ).length, 3 );
 });

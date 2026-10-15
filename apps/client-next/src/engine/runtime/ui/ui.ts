@@ -634,7 +634,7 @@ import {
 import { messageBoxLines, textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
 import { systemMenu, SYSTEM_MENU_HEIGHT, EXPERIMENTAL_MENU_ID } from "@/engine/foundation/ui/system-menu";
 import { inventorySlots, inventoryLattice } from "@/engine/foundation/ui/inventory-layout";
-import { groupedNumber, guideTokens, hasSml2Markup, markupArg } from "@/engine/foundation/ui/guide-content";
+import { fillMarkup, groupedNumber, guideTokens, hasSml2Markup } from "@/engine/foundation/ui/guide-content";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { SessionCommand, ServerRecord, CharacterRecord } from "@/engine/contracts/session";
 import type { UiView, UiEvent, UiRect, UiQuad, UiControl, UiSemantics, UiScene } from "@/engine/contracts/ui";
@@ -20502,8 +20502,16 @@ export function createUi(
 							groupedNumber( (view?.gameplay?.progression?.level ?? 0) * JOB_ALIAS_MODIFY_GOLD_PER_LEVEL )
 						] :
 						[ view?.session?.character ?? "", aliasWindow.text ];
-				const filled = args.reduce( ( value, arg ) => value.replace( "%s", markupArg( arg ) ), message );
-				const markup = hasSml2Markup( filled ) ? guideTokens( filled ) : null;
+				const filled = fillMarkup( message, args );
+				// Markup the guide layout cannot read falls back to plain text.
+				let markup: ReturnType<typeof guideTokens> | null = null;
+				if ( hasSml2Markup( filled ) ) {
+					try {
+						markup = guideTokens( filled );
+					} catch {
+						markup = null;
+					}
+				}
 				const layout = guildQuestionLayout(
 					w,
 					h,

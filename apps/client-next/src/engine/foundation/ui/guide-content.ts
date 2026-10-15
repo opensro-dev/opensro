@@ -59,6 +59,19 @@ export function markupArg( value: string ): string {
 
 /*
 ================
+fillMarkup
+
+SML2 text with each %s replaced, in order, by its argument with angle
+brackets removed (markupArg). A replacer function, so "$" patterns in a
+player's text are literal and never re-insert the template.
+================
+*/
+export function fillMarkup( template: string, args: readonly string[] ): string {
+	return args.reduce( ( value, arg ) => value.replace( "%s", () => markupArg( arg ) ), template );
+}
+
+/*
+================
 groupedNumber
 
 A count with comma thousands separators, as the native std_wstring_format
