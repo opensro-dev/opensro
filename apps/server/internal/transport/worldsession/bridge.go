@@ -313,7 +313,12 @@ func (b *Bridge) deliver(s *transport.Session, frames []simulation.Frame, revisi
 	var changes []transport.ObjectScopeChange
 	ordered := false
 	for _, f := range frames {
-		ordered = ordered || f.Current != nil || !transport.IsLossTolerantOpcode(f.Opcode)
+		// A loss-tolerant movement frame stays on the coalesced lane even when
+		// it carries a Current predicate: the lane coalesces it per entity and
+		// the writer drops a superseded frame. Routing it reliable made every
+		// peer movement a must-deliver frame, so a nearby observer's client
+		// journal overflowed (issue #155).
+		ordered = ordered || !transport.IsLossTolerantOpcode(f.Opcode)
 		changes = append(changes, transport.ScopeChanges(f.Scope)...)
 		if f.ScopeGID != 0 {
 			changes = append(changes, transport.ObjectScopeChange{GID: f.ScopeGID, Visible: f.ScopeVisible})
@@ -335,8 +340,10 @@ func (b *Bridge) deliver(s *transport.Session, frames []simulation.Frame, revisi
 		return
 	}
 	for _, f := range frames {
-		// Movement-only batches retain the loss-tolerant coalesced lane.
-		_ = s.SendSceneUnreliableKeyed(revision, f.Opcode, moverGid(f), f.Payload)
+		// Movement-only batches retain the loss-tolerant coalesced lane. The
+		// Current predicate rides along, so the writer drops a superseded
+		// frame at drain (issue #155).
+		_ = s.SendSceneUnreliableKeyed(revision, f.Opcode, moverGid(f), f.Payload, f.Current)
 	}
 }
 
