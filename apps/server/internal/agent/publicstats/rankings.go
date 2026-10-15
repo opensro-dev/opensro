@@ -11,6 +11,11 @@ sort. Hidden characters are left out entirely, as on the leaderboard.
 
 Port-only, not native: the original has no public read API.
 
+The gear score is site-only too (not native, not in game): it leaves the
+shield socket out, so a one-handed weapon with a shield and a two-handed
+weapon score the same at equal enhancement and every weapon counts once
+(owner decision 2026-10-15, Option 2 of the balance advisor's choice).
+
 ===========================================================================
 */
 package publicstats
@@ -249,19 +254,25 @@ func gearPoints(degree, tier int, sealed bool, plus int) int {
 	return gearPointsPerDegree*max(degree, 0) + bonus + plus
 }
 
+// gearShieldSocket is the worn shield socket (inventory.SocketShield, 7),
+// which the gear score leaves out; arrows and bolts worn there are
+// ammunition, not gear, either way.
+const gearShieldSocket = 7
+
 /*
 ================
 Service.gearScore
 
-Every worn piece (equipment sockets 0..12): the plus sum and highest, and
-the gear points the ranking orders by, with the strongest piece's points
-as its first tie-break.
+Every worn piece (equipment sockets 0..12) but the shield: the plus sum
+and highest, and the gear points the ranking orders by, with the
+strongest piece's points as its first tie-break. Leaving the shield out
+scores a one-handed build the same as a two-handed one.
 ================
 */
 func (s *Service) gearScore(c *domain.Character) Gear {
 	var g Gear
 	for _, row := range c.MissionInventory {
-		if row.Slot < 0 || row.Slot >= equipmentSlots || row.RefObjID == 0 {
+		if row.Slot < 0 || row.Slot >= equipmentSlots || row.Slot == gearShieldSocket || row.RefObjID == 0 {
 			continue
 		}
 		plus := int(row.Plus)

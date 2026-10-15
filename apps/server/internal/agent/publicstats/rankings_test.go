@@ -171,3 +171,38 @@ func TestGearPointsRankDegreeSealAndPlus(t *testing.T) {
 		t.Fatalf("SunHolder gear %+v, want 123 points and plus 3", out.Rows[0].Gear)
 	}
 }
+
+/*
+================
+TestGearScoreLeavesTheShieldOut
+
+Site-only (not native): a two-handed weapon and a one-handed weapon with
+a shield, all 10th-degree +7, score the same; the shield counts in
+neither the points nor the plus sum or best.
+================
+*/
+func TestGearScoreLeavesTheShieldOut(t *testing.T) {
+	const weapon, shield = 6, gearShieldSocket
+	f := newFixture()
+	lvl := func(n int64) *int64 { return &n }
+	piece := func(slot int64, ref uint32, plus int64) domain.InventoryRow {
+		return domain.InventoryRow{Slot: slot, RefObjID: ref, Plus: plus}
+	}
+	f.chars = []*domain.Character{
+		{ID: 20, Name: "TwoHander", ModelCodename: "CHAR_CH_MAN_ADVENTURER", Level: lvl(90),
+			MissionInventory: []domain.InventoryRow{piece(weapon, 1, 7)}},
+		{ID: 21, Name: "Shielded", ModelCodename: "CHAR_CH_MAN_ADVENTURER", Level: lvl(90),
+			MissionInventory: []domain.InventoryRow{piece(weapon, 2, 7), piece(shield, 3, 9)}},
+	}
+	s := f.service()
+	s.src.ItemGrade = func(uint32) (int, int, bool) { return 10, 0, false }
+	out := rankingNames(t, s, "/public/v1/rankings?by=gear")
+	gear := map[string]Gear{}
+	for _, row := range out.Rows {
+		gear[row.Name] = row.Gear
+	}
+	two, one := gear["TwoHander"], gear["Shielded"]
+	if two.Points != 107 || one.Points != two.Points || one.PlusTotal != 7 || one.BestPlus != 7 {
+		t.Fatalf("two-handed %+v, one-handed with shield %+v; want both 107 points, plus 7, best 7", two, one)
+	}
+}
