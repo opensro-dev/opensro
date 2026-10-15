@@ -727,6 +727,9 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	let jobRanks: JobRanks = { lists: [], opened: null };
 	// The week's outcome the guild NPC told this session (job-guild.ts).
 	let jobOutcome: JobOutcome | null = null;
+	// The last alias the server called free (job-guild.ts aliasChecked). Its
+	// count never resets, so the UI's high-water mark survives a relog.
+	let jobAliasChecked: { readonly alias: string; readonly sequence: number; } | null = null, jobAliasChecks = 0;
 	/*
 	================
 	localPlayerModels
@@ -1077,6 +1080,7 @@ selected entities, cooldowns or world-entry state.
 		job = noJob();
 		jobRanks = { lists: [], opened: null };
 		jobOutcome = null;
+		jobAliasChecked = null;
 		cosRecords.clear();
 		petAssists = new Map();
 		cosSelection.reset();
@@ -3850,6 +3854,9 @@ Packet handling must not depend on which HUD panel is currently open.
 				const answer = jobGuildAnswer( frame, job );
 				if ( answer ) {
 					job = answer.job;
+					if ( answer.aliasChecked !== undefined ) {
+						jobAliasChecked = { alias: answer.aliasChecked, sequence: ++jobAliasChecks };
+					}
 					if ( answer.notice ) {
 						notices = [ ...notices.slice( -99 ), { ...answer.notice, sequence: ++noticeSequence } ];
 					}
@@ -4272,6 +4279,7 @@ The published plane when something changed since the last take, else null.
 				job,
 				jobRanks,
 				jobOutcome,
+				jobAliasChecked,
 				cosWindows: cosWindows.filter( row => cosItemRefs2.has( row.itemRefObjId ) ).map( row => ({
 					...row,
 					reference: cosItemRefs2.get( row.itemRefObjId )!

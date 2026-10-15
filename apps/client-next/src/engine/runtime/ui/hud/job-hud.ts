@@ -6,8 +6,11 @@ the alias window
 
 CIFNpcTalk_OnSimpleMsgBoxResult (5D26F0) sends the join (box type 4,
 field tri_job_type) and the withdrawal (type 5) after their questions;
-the job menu's alias rows open CIFJobAlias (6461C0 checks a name, 646470
-confirms and submits it). The rank rows open CIFJobRank or
+the job menu's alias rows open CIFJobAlias (CIFJobAlias_OpenForMode
+645E90). A name is checked first (6461C0); the server's "free" answer marks
+it checked (646110), which enables OK; any edit away from the checked name
+clears it (646340). OK raises the create or modify confirm (646470), whose
+Yes sends the checked name and closes the window (645BA0). The rank rows open CIFJobRank or
 CIFJobContributionRank on the worker's answer (JobRanks.opened), and the
 outcome row turns the talk into the outcome page (5D7870) until it is
 collected. The UI draws from this owner every frame.
@@ -15,8 +18,7 @@ collected. The UI draws from this owner every frame.
 ===========================================================================
 */
 
-// The alias field's limit: the character name's 12 characters.
-const JOB_ALIAS_MAX_LENGTH = 12;
+import { JOB_ALIAS_MAX_LENGTH } from "@/engine/foundation/gameplay/job-guild";
 
 /*
 ================
@@ -38,6 +40,10 @@ interface JobAliasWindow {
 	readonly npc: number;
 	readonly modify: boolean;
 	readonly text: string;
+	// The name the server called free (+0x7BC); empty until then.
+	readonly checked: string;
+	// The create or modify confirm is up (+0x7E0).
+	readonly confirming: boolean;
 }
 
 /*
@@ -61,7 +67,7 @@ createJobHud
 */
 export function createJobHud() {
 	let confirm: JobConfirm | null = null, alias: JobAliasWindow | null = null;
-	let rank: JobRankWindow | null = null, rankSeen = 0;
+	let rank: JobRankWindow | null = null, rankSeen = 0, checkSeen = 0;
 	// The outcome page: the answer sequence shown, and the collections seen.
 	let outcome: { readonly npc: number; readonly sequence: number; } | null = null, outcomeSeen = 0, collectedSeen = 0;
 	return {
@@ -177,7 +183,49 @@ export function createJobHud() {
 		*/
 		openAlias( npc: number, modify: boolean ) {
 			confirm = null;
-			alias = { npc, modify, text: "" };
+			alias = { npc, modify, text: "", checked: "", confirming: false };
+		},
+		/*
+		================
+		observeChecked
+
+		Marks each new "name is free" answer on the open window (646110 takes
+		the answer's name as it is). An answer while no window is open is
+		spent.
+		================
+		*/
+		observeChecked( answer: { readonly alias: string; readonly sequence: number; } | null | undefined ) {
+			if ( !answer || answer.sequence <= checkSeen ) return;
+			checkSeen = answer.sequence;
+			if ( alias ) alias = { ...alias, checked: answer.alias };
+		},
+		/*
+		================
+		openAliasConfirm
+
+		OK is enabled only with a checked name (646110 / 646340).
+		================
+		*/
+		openAliasConfirm() {
+			if ( alias?.checked ) alias = { ...alias, confirming: true };
+		},
+		/*
+		================
+		answerAliasConfirm
+
+		645BA0: Yes with a checked name returns what to send and closes the
+		window; the box always closes.
+		================
+		*/
+		answerAliasConfirm( yes: boolean ): { readonly npc: number; readonly alias: string; } | null {
+			if ( !alias ) return null;
+			if ( yes && alias.checked ) {
+				const sent = { npc: alias.npc, alias: alias.checked };
+				alias = null;
+				return sent;
+			}
+			alias = { ...alias, confirming: false };
+			return null;
 		},
 		/*
 		================
@@ -191,12 +239,14 @@ export function createJobHud() {
 		================
 		typeAlias
 
-		The field keeps the name shape: letters, digits and underscores.
+		The field keeps the name shape: letters, digits and underscores. A
+		text other than the checked name clears the check (646340).
 		================
 		*/
 		typeAlias( value: string ) {
 			if ( alias ) {
-				alias = { ...alias, text: value.replace( /[^A-Za-z0-9_]/g, "" ).slice( 0, JOB_ALIAS_MAX_LENGTH ) };
+				const text = value.replace( /[^A-Za-z0-9_]/g, "" ).slice( 0, JOB_ALIAS_MAX_LENGTH );
+				alias = { ...alias, text, checked: alias.checked && text !== alias.checked ? "" : alias.checked };
 			}
 		},
 		/*

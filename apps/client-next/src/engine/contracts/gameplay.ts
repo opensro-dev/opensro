@@ -622,6 +622,9 @@ export interface GameplayState {
 	readonly jobRanks?: import("@/engine/foundation/gameplay/job-guild").JobRanks;
 	// The week's outcome the guild NPC last told (0xB7BE).
 	readonly jobOutcome?: import("@/engine/foundation/gameplay/job-guild").JobOutcome | null;
+	// The last alias the server called free (0xB620 [1][0]), numbered so the
+	// alias window marks each answer once (CIFJobAlias_MarkNameChecked 646110).
+	readonly jobAliasChecked?: { readonly alias: string; readonly sequence: number; } | null;
 	readonly cosWindows?: readonly (import("@/engine/foundation/gameplay/cos-timer").CosItemWindow & {
 		readonly reference: import("@/engine/foundation/gameplay/cos-timer").CosItemWindowReference;
 	})[];

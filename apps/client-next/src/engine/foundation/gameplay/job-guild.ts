@@ -27,6 +27,7 @@ and the item move is answered when the bar ends.
 ===========================================================================
 */
 import type { WireFrame } from "@/engine/contracts/network";
+import { checkedNameError, type NameRules } from "@/engine/foundation/ui/character-create";
 import { constantNativeNotice } from "./native-notice";
 import type { SystemNotice } from "./system-notices";
 
@@ -55,6 +56,11 @@ export const JOB_RANK_CONTRIBUTION = 1;
 // CPSMission_OnJobTypeLevelUpdate0x35EE (75F0C0): [u8 job][u8 grade][u32 exp].
 export const OP_JOB_EXP_UPDATE = 0x35ee;
 const JOB_NOTICE_CATEGORY = 0x18;
+// 6461C0's length bounds, and the notice its name filter refusal raises
+// (CGInterface_ShowSystemNotification 0x18, 0x23).
+export const JOB_ALIAS_MIN_LENGTH = 2;
+export const JOB_ALIAS_MAX_LENGTH = 12;
+const JOB_ALIAS_REFUSED_NAME = 0x23;
 // 0x3434's lead bytes for the job dress (kind 2, step 2).
 const JOB_DRESS_KIND = 2;
 export const JOB_ALIAS_CHECK = 0;
@@ -177,6 +183,31 @@ export function jobWithdrawRequest( npc: number ): WireFrame {
 	const payload = new Uint8Array( 4 );
 	new DataView( payload.buffer ).setUint32( 0, npc, true );
 	return { opcode: OP_JOB_WITHDRAW, payload };
+}
+
+/*
+================
+jobAliasCheck
+
+What the alias window's Check does with the typed text
+(CIFNameEntry_ValidateAndSubmitName 6461C0): nothing for the name already
+checked or a length outside 2..12 (silently), the 0x18:0x23 notice for a
+name the filter refuses (CStringCheck_IsAllowedName), else send it.
+================
+*/
+export function jobAliasCheck(
+	text: string,
+	checked: string,
+	rules: NameRules
+): { readonly send: boolean; readonly notice: SystemNotice | null; } {
+	if ( checked && text === checked ) return { send: false, notice: null };
+	if ( text.length < JOB_ALIAS_MIN_LENGTH || text.length > JOB_ALIAS_MAX_LENGTH ) {
+		return { send: false, notice: null };
+	}
+	if ( checkedNameError( text, rules ) ) {
+		return { send: false, notice: constantNativeNotice( JOB_NOTICE_CATEGORY, JOB_ALIAS_REFUSED_NAME ) };
+	}
+	return { send: true, notice: null };
 }
 
 /*
@@ -387,13 +418,15 @@ jobGuildAnswer
 
 The job after a guild answer and the notice it raises, or null for any
 other frame. 75C520, 75F5B0 and 75F7A0 announce success in chat; a refusal
-is the category 0x18 notice.
+is the category 0x18 notice. An alias check's answer ([1][0][alias]) tells
+the open alias window the name is free: 75F6D0 hands it to
+CIFJobAlias_MarkNameChecked (646110), returned here as aliasChecked.
 ================
 */
 export function jobGuildAnswer(
 	frame: WireFrame,
 	job: LocalJob
-): { readonly job: LocalJob; readonly notice: SystemNotice | null; } | null {
+): { readonly job: LocalJob; readonly notice: SystemNotice | null; readonly aliasChecked?: string; } | null {
 	const p = frame.payload;
 	if ( frame.opcode === OP_JOB_JOIN_RESPONSE || frame.opcode === OP_JOB_WITHDRAW_RESPONSE ) {
 		if ( p[0] === 2 ) {
@@ -419,6 +452,7 @@ export function jobGuildAnswer(
 	if ( p[0] !== 1 || p.length < 2 ) throw Error( "Invalid job alias answer" );
 	const alias = readAscii( p, 2 );
 	if ( alias.next !== p.length ) throw Error( "Invalid job alias answer" );
+	if ( p[1] === JOB_ALIAS_CHECK ) return { job, notice: null, aliasChecked: alias.text };
 	if ( p[1] !== JOB_ALIAS_CREATE ) return { job, notice: null };
 	return {
 		job: { ...job, alias: alias.text },

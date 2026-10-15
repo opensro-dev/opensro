@@ -323,6 +323,8 @@ import { noticeText } from "@/engine/foundation/ui/notice-text";
 import {
 	JOB_ALIAS_CHECK,
 	JOB_ALIAS_CREATE,
+	JOB_ALIAS_MAX_LENGTH,
+	jobAliasCheck,
 	JOB_OUTCOME_COLLECT,
 	JOB_OUTCOME_QUERY,
 	JOB_RANK_ACTIVITY,
@@ -727,6 +729,19 @@ const JOB_RANK_PANEL = "Job ranking";
 // 0xBB8 guild points.
 const FORTRESS_STAFF_FEE_GOLD = 30000;
 const FORTRESS_STAFF_FEE_GP = 3000;
+const JOB_ALIAS_PANEL = "Job alias";
+// CIFJobAlias_OpenForMode (645E90): modify grows the window to 297 x 180
+// and its background tile (id 5) to 265 x 124 for the AliasModify cost row
+// (ids 40-43); create keeps the authored 297 x 165 and 265 x 109.
+const JOB_ALIAS_MODIFY_HEIGHT = 180;
+const JOB_ALIAS_MODIFY_BG_HEIGHT = 124;
+const JOB_ALIAS_BG = 5;
+const JOB_ALIAS_EDIT = 13;
+const JOB_ALIAS_CHECK_BUTTON = 20;
+const JOB_ALIAS_OK_BUTTON = 30;
+const JOB_ALIAS_CANCEL_BUTTON = 31;
+const JOB_ALIAS_COST = 43;
+const JOB_ALIAS_MODIFY_ROW = [ 40, 41, 42, JOB_ALIAS_COST ];
 // The smith's avatar magic option window (CIFGrantMagicAttributeWnd).
 const GRANT_PANEL = "Magic option";
 // The panels that show the bag in the main popup beside their own window, and
@@ -5331,10 +5346,26 @@ export function createUi(
 				}
 			}
 			const aliasWindow = jobHud.alias();
-			if ( aliasWindow !== null ) {
+			if ( aliasWindow !== null && aliasWindow.confirming ) {
+				// 645BA0: Yes sends the checked name (mode 1) and closes the window;
+				// either answer closes the box.
+				const yes = event.kind === "activate" && event.id === "job-alias-yes";
+				if (
+					yes || event.kind === "activate" && event.id === "job-alias-no" ||
+					event.kind === "key" && event.code === "Escape"
+				) {
+					const sent = jobHud.answerAliasConfirm( yes );
+					if ( sent && view?.session?.phase === "world" ) {
+						sendGameplay( { kind: "job-alias", gid: sent.npc, mode: JOB_ALIAS_CREATE, alias: sent.alias } );
+					}
+					dirty = true;
+					return;
+				}
+				if ( event.kind === "activate" ) return;
+			} else if ( aliasWindow !== null ) {
 				if (
 					event.kind === "key" && event.code === "Escape" ||
-					event.kind === "activate" && event.id === "job-alias-cancel"
+					event.kind === "activate" && (event.id === "job-alias-cancel" || event.id === "job-alias-close")
 				) {
 					jobHud.closeAlias();
 					dirty = true;
@@ -5345,20 +5376,31 @@ export function createUi(
 					dirty = true;
 					return;
 				}
-				if ( event.kind === "activate" && (event.id === "job-alias-check" || event.id === "job-alias-ok") ) {
-					// 6461C0 asks whether the name is free (mode 0); 646470 takes it (mode 1).
-					if ( aliasWindow.text && view?.session?.phase === "world" ) {
+				if ( event.kind === "activate" && event.id === "job-alias-check" ) {
+					// 6461C0 asks whether the name is free (mode 0).
+					const rules = hud.data()?.nameRules;
+					if ( !rules ) return;
+					const check = jobAliasCheck( aliasWindow.text, aliasWindow.checked, rules );
+					if ( check.notice ) hudMessages.append( hudCopy( check.notice.key ) );
+					if ( check.send && view?.session?.phase === "world" ) {
 						sendGameplay( {
 							kind: "job-alias",
 							gid: aliasWindow.npc,
-							mode: event.id === "job-alias-ok" ? JOB_ALIAS_CREATE : JOB_ALIAS_CHECK,
+							mode: JOB_ALIAS_CHECK,
 							alias: aliasWindow.text
 						} );
-						if ( event.id === "job-alias-ok" ) jobHud.closeAlias();
 					}
 					dirty = true;
 					return;
 				}
+				if ( event.kind === "activate" && event.id === "job-alias-ok" ) {
+					// 646810 -> 646470: the create or modify confirm, for a checked name.
+					jobHud.openAliasConfirm();
+					dirty = true;
+					return;
+				}
+				// Inferred: the window opens from the NPC talk, which holds input until
+				// the talk ends, so other controls wait as they did behind the old box.
 				if ( event.kind === "activate" ) return;
 			}
 			if ( repairHud.confirmCost() !== null ) {
@@ -7463,6 +7505,7 @@ export function createUi(
 					undefined
 			);
 			// A collected outcome closes the talk (75D5C0); a rank answer opens its window.
+			jobHud.observeChecked( next.gameplay?.jobAliasChecked );
 			if ( jobHud.observe( next.gameplay?.jobRanks?.opened, next.gameplay?.jobOutcome ) ) {
 				sendGameplay( { kind: "npc-close" } );
 				dirty = true;
@@ -20496,13 +20539,102 @@ export function createUi(
 					no: staffAsk ? "fortress-staff-no" : "fortress-war-no"
 				} );
 			}
-			const jobAsk = jobHud.confirm(), aliasWindow = jobHud.alias();
-			if ( worldVisible && (jobAsk || aliasWindow) ) {
-				// 5D26F0's question boxes (types 4 and 5) and CIFJobAlias.
-				// CIFSimpleMessageBox_SetTextAndResize (52DB20): SML2 text renders as
-				// markup (centred lines, breaks), never as raw tags. The alias texts
-				// take CIFJobAlias_OpenSubmitConfirm's (646470) arguments: create
-				// (name, alias); modify (alias, new alias, level x 50,000 gold).
+			const jobAsk = jobHud.confirm(), aliasWindow = jobHud.alias(), aliasData = hud.data();
+			if ( worldVisible && aliasWindow && aliasData?.windows.ifjobalias && aliasData.root.GDR_JOB_ALIAS ) {
+				// CIFJobAlias (ginterface GDR_JOB_ALIAS, resinfo ifjobalias.txt) as
+				// CIFJobAlias_OpenForMode (645E90) dresses it: the create or modify
+				// title and size, the AliasModify cost row (level x 50,000 gold) only
+				// to modify, Check until the name is checked and OK only after
+				// (646110 / 646340).
+				const admission = beginWindow(),
+					root = aliasData.root.GDR_JOB_ALIAS,
+					height = aliasWindow.modify ? JOB_ALIAS_MODIFY_HEIGHT : root.rect[3],
+					page: AuthoredLayout = Object.fromEntries(
+						Object.entries( aliasData.windows.ifjobalias ).filter( ( [, node] ) =>
+							aliasWindow.modify || !JOB_ALIAS_MODIFY_ROW.includes( node.id )
+						).map( ( [key, node] ) => [
+							key,
+							{
+								...node,
+								// 645E90 creates the AliasModify section after the window's
+								// own, so its frame, tile and label paint over the grown
+								// background tile; the hud copy carries no section order.
+								creationSection: JOB_ALIAS_MODIFY_ROW.includes( node.id ) ? 1 : 0,
+								...(node.id === JOB_ALIAS_BG && aliasWindow.modify ?
+									{
+										rect: [
+											node.rect[0],
+											node.rect[1],
+											node.rect[2],
+											JOB_ALIAS_MODIFY_BG_HEIGHT
+										] as UiRect
+									} :
+									{})
+							}
+						] )
+					),
+					nodes = Object.values( page ),
+					byId = ( id: number ) => nodes.find( n => n.id === id ),
+					[px, py] = windowOrigin( JOB_ALIAS_PANEL, [
+						Math.max( 0, (w - root.rect[2]) / 2 ),
+						Math.max( 0, (h - height) / 2 ),
+						root.rect[2],
+						height
+					] );
+				nativeFrame(
+					{ ...root, rect: [ root.rect[0], root.rect[1], root.rect[2], height ] as UiRect },
+					px,
+					py,
+					hudCopy( aliasWindow.modify ? "UIIT_PAG_ALIAS_MODIFY" : "UIIT_PAG_ALIAS_CREATE" ),
+					"job-alias-close"
+				);
+				nativePage( page, px, py, [
+					JOB_ALIAS_EDIT,
+					JOB_ALIAS_CHECK_BUTTON,
+					JOB_ALIAS_OK_BUTTON,
+					JOB_ALIAS_CANCEL_BUTTON,
+					JOB_ALIAS_COST
+				] );
+				const edit = byId( JOB_ALIAS_EDIT ), cost = byId( JOB_ALIAS_COST );
+				if ( edit ) partyEdit( edit, px, py, "job-alias-text", aliasWindow.text, JOB_ALIAS_MAX_LENGTH );
+				if ( cost ) {
+					authoredText(
+						cost,
+						px,
+						py,
+						groupedNumber( (view?.gameplay?.progression?.level ?? 0) * JOB_ALIAS_MODIFY_GOLD_PER_LEVEL )
+					);
+				}
+				for (
+					const [id, control, disabled] of [
+						[ JOB_ALIAS_CHECK_BUTTON, "job-alias-check", !!aliasWindow.checked ],
+						[ JOB_ALIAS_OK_BUTTON, "job-alias-ok", !aliasWindow.checked ],
+						[ JOB_ALIAS_CANCEL_BUTTON, "job-alias-cancel", false ]
+					] as const
+				) {
+					const node = byId( id );
+					if ( !node ) continue;
+					// Port-only, not native (Experimental "Fit window labels"): the
+					// English "Check for duplicate entries" keeps the leading words
+					// that fit the 76-pixel plate, as the letter popups' captions do.
+					const value = hudCopy( node.text ), room = authoredRect( node, px, py )[2] - 2 * CAPTION_MARGIN;
+					const caption = experimental.state().saved.fitWindowLabels ?
+						captionWords( value, room, line => text.run( line, 0, node.fontIndex ).width ) :
+						value;
+					authoredLabeledButton( node, px, py, control, caption, disabled );
+				}
+				// Inferred: the talk holds input while the window is open (see the
+				// event handler), so the world behind it takes no click.
+				blocks.push( full );
+				endWindow( admission, "service:" + JOB_ALIAS_PANEL );
+			}
+			if ( worldVisible && (jobAsk || aliasWindow?.confirming) ) {
+				// 5D26F0's question boxes (types 4 and 5) and the alias window's
+				// confirm (646470). CIFSimpleMessageBox_SetTextAndResize (52DB20):
+				// SML2 text renders as markup (centred lines, breaks), never as raw
+				// tags. The alias texts take 646470's arguments with the checked
+				// name: create (name, alias); modify (alias, new alias, level x
+				// 50,000 gold).
 				const message = hudCopy(
 						jobAsk ?
 							(jobAsk.kind === "join" ?
@@ -20515,10 +20647,10 @@ export function createUi(
 					args = jobAsk || !aliasWindow ? [] : aliasWindow.modify ?
 						[
 							view?.gameplay?.job?.alias ?? "",
-							aliasWindow.text,
+							aliasWindow.checked,
 							groupedNumber( (view?.gameplay?.progression?.level ?? 0) * JOB_ALIAS_MODIFY_GOLD_PER_LEVEL )
 						] :
-						[ view?.session?.character ?? "", aliasWindow.text ];
+						[ view?.session?.character ?? "", aliasWindow.checked ];
 				const filled = fillMarkup( message, args );
 				// Markup the guide layout cannot read falls back to plain text.
 				let markup: ReturnType<typeof guideTokens> | null = null;
@@ -20535,7 +20667,7 @@ export function createUi(
 					markup ?
 						text.guide( markup, [ 0, 0, 300, 1000 ], [ 0, 0, 300, 1000 ], white, resources.size ).height :
 						12,
-					!!aliasWindow && !jobAsk
+					false
 				);
 				controls = [];
 				blocks = [ full ];
@@ -20548,69 +20680,21 @@ export function createUi(
 						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
 						full
 					),
-					...text.quads(
-						hudCopy(
-							jobAsk ?
-								"UIIT_STT_CONFIRM_BOX" :
-								aliasWindow?.modify ?
-								"UIIT_PAG_ALIAS_MODIFY" :
-								"UIIT_PAG_ALIAS_CREATE"
-						),
-						layout.title,
-						full,
-						white,
-						{ hAlign: 1, vAlign: 0 }
-					)
+					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} )
 				);
 				if ( markup ) {
 					const out = text.guide( markup, layout.name, full, white, resources.size );
 					quads.push( ...out.quads );
 					paths.push( ...out.paths );
 				} else quads.push( ...text.quads( filled, layout.name, full, white, { hAlign: 1, vAlign: 0 } ) );
-				if ( jobAsk ) {
-					button(
-						"job-confirm-yes",
-						hudCopy( "UIIT_CTL_YES" ),
-						...layout.accept.slice( 0, 3 ) as [number, number, number]
-					);
-					button(
-						"job-confirm-no",
-						hudCopy( "UIIT_CTL_NO" ),
-						...layout.refuse.slice( 0, 3 ) as [number, number, number]
-					);
-				} else if ( aliasWindow ) {
-					const field: UiRect = [ layout.question[0], layout.question[1], layout.question[2], 16 ];
-					controls.push( {
-						id: "job-alias-text",
-						label: hudCopy( "UIIT_STT_ALIAS_CREATE_WINDOW" ),
-						kind: "text",
-						value: aliasWindow.text,
-						rect: field,
-						maxLength: 12
-					} );
-					rect( field, [ 0, 0, 0, .6 ], "", [ 0, 0, 1, 1 ], full );
-					quads.push(
-						...text.quads( aliasWindow.text, field, field, white, {
-							hAlign: 1,
-							vAlign: 1,
-							overflow: "clip"
-						} )
-					);
-					if ( focus === "job-alias-text" && caretVisible ) {
-						const width = text.run( aliasWindow.text ).width;
-						rect(
-							[ field[0] + (field[2] + width) / 2, field[1] + 1, 2, 14 ],
-							white,
-							"",
-							[ 0, 0, 1, 1 ],
-							field
-						);
-					}
-					const [ax, ay, aw] = layout.accept, [rx, ry, rw] = layout.refuse;
-					button( "job-alias-check", hudCopy( "UIIT_CTL_CHECK" ), ax!, ay!, aw! );
-					button( "job-alias-ok", hudCopy( "UIIT_CTL_OK" ), rx!, ry!, rw! );
-					button( "job-alias-cancel", hudCopy( "UIIT_CTL_CANCEL" ), rx! + rw! + 8, ry!, rw! );
-				}
+				const [yes, no] = jobAsk ?
+					[ "job-confirm-yes", "job-confirm-no" ] :
+					[ "job-alias-yes", "job-alias-no" ];
+				button( yes, hudCopy( "UIIT_CTL_YES" ), ...layout.accept.slice( 0, 3 ) as [number, number, number] );
+				button( no, hudCopy( "UIIT_CTL_NO" ), ...layout.refuse.slice( 0, 3 ) as [number, number, number] );
 			}
 			if ( !game?.npcConversation || game.npcConversation.phase !== "menu" ) guildManagerHud.reset();
 			else if ( game.social?.compensation !== undefined && !guildManagerHud.question() ) {

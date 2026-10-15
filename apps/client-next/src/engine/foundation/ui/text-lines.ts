@@ -55,21 +55,29 @@ export function textLines(
 	return lines;
 }
 
+// Words a cut caption never ends on: they only lead into what was cut.
+// Space-delimited, so a lookup is " " + word + " ".
+const CAPTION_TRAILING_WORDS = " a an the for of to in on with and or ";
+
 /*
 ================
 captionWords
 
 Port-only, not native (Experimental "Fit window labels"): the leading
-words of a one-line caption that fit width. The whole caption comes back
-when it fits, or when not even its first word does.
+words of a one-line caption that fit width, without a dangling function
+word at the cut ("Check for duplicate entries" reads "Check", not "Check
+for"). The whole caption comes back when it fits, or when not even its
+first word does.
 ================
 */
 export function captionWords( value: string, width: number, measure: ( value: string ) => number ): string {
 	if ( measure( value ) <= width ) return value;
 	const words = value.split( " " );
 	for ( let count = words.length - 1; count > 0; count-- ) {
-		const head = words.slice( 0, count ).join( " " );
-		if ( measure( head ) <= width ) return head;
+		if ( measure( words.slice( 0, count ).join( " " ) ) > width ) continue;
+		let keep = count;
+		while ( keep > 1 && CAPTION_TRAILING_WORDS.includes( " " + words[keep - 1]!.toLowerCase() + " " ) ) keep--;
+		return words.slice( 0, keep ).join( " " );
 	}
 	return value;
 }

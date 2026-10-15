@@ -165,7 +165,7 @@ test("the job league's confirm box draws its words, not its tags", async () => {
 	}
 });
 
-test("an alias typed with angle brackets still draws the box", async () => {
+test("a checked alias with angle brackets still draws the confirm", async () => {
 	const { uiFixture } = await import( "../helpers/ui-fixture.mjs" );
 	const f = uiFixture();
 	try {
@@ -174,9 +174,15 @@ test("an alias typed with angle brackets still draws the box", async () => {
 		f.ui.step( f.state, 1050 );
 		f.ui.event( { kind: "activate", id: "npc-job-alias:3" } );
 		f.ui.step( f.state, 1100 );
-		f.ui.event( { kind: "edit", id: "job-alias-text", value: "a<b", start: 3, end: 3, composing: false } );
-		for ( let i = 0; i < 30; i++ ) f.ui.step( f.state, 1150 + i * 50 );
-		assert.ok( f.hasText( "Create [" ), "the question still draws" );
+		// The field keeps only [A-Za-z0-9_]; the confirm fills the name the
+		// server answered as free (646110 takes it as it is), so a stray
+		// bracket there must still render as text.
+		f.ui.event( { kind: "edit", id: "job-alias-text", value: "ab", start: 2, end: 2, composing: false } );
+		f.state.gameplay = { ...f.state.gameplay, jobAliasChecked: { alias: "a<b", sequence: 1 } };
+		for ( let i = 0; i < 10; i++ ) f.ui.step( f.state, 1150 + i * 50 );
+		f.ui.event( { kind: "activate", id: "job-alias-ok" } );
+		for ( let i = 0; i < 30; i++ ) f.ui.step( f.state, 1700 + i * 50 );
+		assert.ok( f.hasText( "Create [" ), "the confirm still draws" );
 		assert.ok( !f.hasText( "<sml2>" ), "no raw tag reaches the screen" );
 	} finally {
 		f.dispose();

@@ -141,7 +141,9 @@ test("captionWords keeps the leading words that fit", () => {
 	const measure = value => value.length * 7;
 	assert.equal( captionWords( "Close", 68, measure ), "Close", "a caption that fits is unchanged" );
 	assert.equal( captionWords( "Delete message", 68, measure ), "Delete" );
-	assert.equal( captionWords( "Send a new message", 68, measure ), "Send a" );
+	assert.equal( captionWords( "Send a new message", 68, measure ), "Send", "a dangling article is dropped" );
+	assert.equal( captionWords( "Check for duplicate entries", 68, measure ), "Check", "and a dangling preposition" );
+	assert.equal( captionWords( "For the record", 20, measure ), "For the record", "a lone first word is never cut" );
 	assert.equal( captionWords( "Unbreakable", 20, measure ), "Unbreakable", "a single word is never cut" );
 });
 
