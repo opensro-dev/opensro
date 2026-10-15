@@ -128,7 +128,7 @@ func (rt *Runtime) returnScrollAdmission(division string, c *enterworld.Characte
 	if !rt.returnCastAdmission(division, c, result) {
 		return false
 	}
-	if rt.hasSummonedTransportCOS(c) {
+	if rt.townTravelTransportRefused(c) {
 		*result = itemUseFailure(0x5e)
 		return false
 	}

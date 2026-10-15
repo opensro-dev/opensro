@@ -189,6 +189,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "A trade transport you step off stays where it stands, and you cannot walk more than 100 m away from it.",
 				Now:    "A trade transport you step off follows you on foot, like a pet.",
 				Why:    "Requested for the beta so a trader or a thief can fight or loot beside the cargo; the original returns with one setting."},
+			{Flag: action.EnvJobGoodsTeleport, On: action.JobGoodsTeleportFromEnv(),
+				Native: "With a trade transport out you cannot use a town gate, a return scroll or the reverse return (ferries are allowed).",
+				Now:    "You can use town gates, return scrolls and the reverse return with a trade transport out; the transport travels with you.",
+				Why:    "Requested for the beta, for testing trade runs; the original returns with one setting."},
 			{Flag: action.EnvMostWanted, On: action.MostWantedFromEnv(),
 				Native: "Job kills earn job EXP only.",
 				Now: "Each job kill while suited adds to a streak; every 10 is a wanted level (up to 10), worth +1 STR, +1 INT and +1% move speed each, " +

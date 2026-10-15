@@ -414,7 +414,8 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 		collected = int64(fee) - link.fee
 		link.fee = int64(fee)
 		transport := rt.hasSummonedTransportCOS(c)
-		traveller := portalTraveller{questMask: mask, transportCOS: transport, transportFar: transport && rt.transportBeyond(division, c, gateTransportRange)}
+		traveller := portalTraveller{questMask: mask, transportCOS: transport, transportFar: transport && rt.transportBeyond(division, c, gateTransportRange),
+			transportAdmitted: rt.JobGoodsTeleport}
 		if failure := portalAdmission(c, source, link, traveller); failure != 0 {
 			return 0, portalFailure(failure), false
 		}
@@ -596,6 +597,9 @@ type portalTraveller struct {
 	questMask    uint32
 	transportCOS bool
 	transportFar bool
+	// transportAdmitted is the port-only SRO_JOB_GOODS_TELEPORT rule: a
+	// town gate's Restrict kind 2 lets the transport through.
+	transportAdmitted bool
 }
 
 // 4F2D05: the quest bit blocks buildings and the special GATE_TD route;
@@ -631,7 +635,7 @@ func portalAdmission(c *enterworld.Character, source portalDestination, link por
 				return 0x15
 			}
 		case portalConditionTransport:
-			if traveller.transportCOS {
+			if traveller.transportCOS && !traveller.transportAdmitted {
 				return 0x10
 			}
 		}

@@ -647,6 +647,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.TransportFollow {
 		log.Infof("cos: a dismounted trade transport follows its trader (%s)", action.EnvTransportFollow)
 	}
+	// Port-only, not native: town teleports admit a trader's transport.
+	game.items.JobGoodsTeleport = action.JobGoodsTeleportFromEnv()
+	if game.items.JobGoodsTeleport {
+		log.Infof("job: town gates and return scrolls admit a trader's transport (%s)", action.EnvJobGoodsTeleport)
+	}
 	if game.deps.StorageAutoStack {
 		log.Infof("storage: quick moves auto-stack ON (%s)", action.EnvStorageAutoStack)
 	}

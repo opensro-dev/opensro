@@ -443,6 +443,14 @@ variable "transport_follow" {
   default = "on"
 }
 
+# job_goods_teleport lets a trader with a transport out use town gates,
+# return scrolls and the reverse return, the transport travelling along
+# (port-only, not native; owner decision 2026-10-15). "off" is native.
+variable "job_goods_teleport" {
+  type    = string
+  default = "on"
+}
+
 # beta_shop_only_degree9 keeps degree-9 Lucky Powder, magic stones and
 # attribute stones out of every monster drop (port-only, not native, beta
 # balance; owner 2026-10-13): players buy them from the Jangan shops. "off"
@@ -713,6 +721,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_CARAVAN_STAR_AMBUSH            = var.caravan_star_ambush
         SRO_JOB_MONSTER_SPEED              = var.job_monster_speed
         SRO_TRANSPORT_FOLLOW               = var.transport_follow
+        SRO_JOB_GOODS_TELEPORT             = var.job_goods_teleport
         SRO_ELIXIR_DROPS_OFF               = var.elixir_drops_off
         SRO_ALCHEMY_MATERIAL_DROPS_OFF     = var.alchemy_material_drops_off
         SRO_BETA_SHOP_ONLY_DEGREE9         = var.beta_shop_only_degree9

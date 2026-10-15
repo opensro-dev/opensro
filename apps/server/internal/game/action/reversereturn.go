@@ -315,7 +315,7 @@ func (rt *Runtime) guideReverseReturn(division string, c *enterworld.Character, 
 	if rt.QuestTravelBlocks != nil && rt.QuestTravelBlocks(c)&operationMaskQuestTravel != 0 {
 		return portalFailure(errCodeGuideQuestBlock)
 	}
-	if rt.hasSummonedTransportCOS(c) {
+	if rt.townTravelTransportRefused(c) {
 		return portalFailure(errCodeGuideTransport)
 	}
 	if c.MaxLevel != nil && *c.MaxLevel > guideReturnMaxLevel {
