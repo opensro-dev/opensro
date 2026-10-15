@@ -129,10 +129,11 @@ func newGameWorldApplication(
 	}
 	for key, cause := range rejected {
 		// A stored value this build no longer accepts: the key boots on the
-		// environment or its default, and the audit says why.
+		// environment or its default, the row is dropped and the audit says
+		// why, once (the next boot no longer finds it).
 		log.WithError(cause).WithField("key", key).Warn("tunables: stored override refused at boot; using the environment")
-		if err := settingsStore.Refuse(settingsapi.AuditEntry{At: time.Now().UnixMilli(), Who: "gameworld", Name: "boot",
-			Action: settingsapi.ActionBoot, Key: key, To: overrides[key], Result: settingsapi.ResultRefused,
+		if err := settingsStore.DropOverride(key, settingsapi.AuditEntry{At: time.Now().UnixMilli(), Who: "gameworld",
+			Name: "boot", Action: settingsapi.ActionBoot, Key: key, To: overrides[key], Result: settingsapi.ResultRefused,
 			Error: cause.Error()}); err != nil {
 			return nil, fmt.Errorf("settings store: %w", err)
 		}

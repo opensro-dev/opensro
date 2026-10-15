@@ -51,6 +51,7 @@ const (
 	ActionBoot      = "boot"
 	ResultApplied   = "applied"
 	ResultWithdrawn = "withdrawn"
+	ResultStale     = "stale"
 	ResultQueued    = "queued"
 	ResultRejected  = "rejected"
 	ResultPending   = "pending"
@@ -63,7 +64,7 @@ var (
 	ErrConflict = errors.New("a proposal is already pending for this setting")
 	// ErrStale: the setting's running value is no longer the one the
 	// proposal was made against, so its approver would decide blind.
-	ErrStale = errors.New("the setting changed since this proposal; propose again")
+	ErrStale = errors.New("the setting changed since this proposal, which is now closed; propose again")
 )
 
 /*
@@ -138,6 +139,9 @@ type Store interface {
 	Decide(id string, check func(Proposal) (entry AuditEntry, override bool, err error)) (Proposal, error)
 	// Refuse records an audit entry for a write that changed nothing.
 	Refuse(entry AuditEntry) error
+	// DropOverride removes key's stored override and records entry, in one
+	// commit: a boot drops a value its build no longer accepts.
+	DropOverride(key string, entry AuditEntry) error
 	Audit(limit int, before int64) ([]AuditEntry, error)
 }
 
@@ -212,7 +216,11 @@ func (s *Service) Approve(who Staff, id string) (string, error) {
 			return false, errSelfApproval
 		}
 		if currentRaw(p.Key) != p.From {
-			return false, ErrStale
+			// The proposal is closed (removed and audited as stale), so a
+			// fresh one for the key can be made at once.
+			result = ResultStale
+			entry.Result, entry.Error = ResultStale, ErrStale.Error()
+			return false, nil
 		}
 		setting, ok := tunables.Lookup(p.Key)
 		if !ok {
@@ -230,6 +238,9 @@ func (s *Service) Approve(who Staff, id string) (string, error) {
 	})
 	if err != nil {
 		return "", err
+	}
+	if result == ResultStale {
+		return "", ErrStale
 	}
 	if s.afterCommit != nil {
 		s.afterCommit()

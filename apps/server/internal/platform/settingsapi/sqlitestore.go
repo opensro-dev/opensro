@@ -249,6 +249,26 @@ func (s *SQLiteStore) Refuse(entry AuditEntry) error {
 
 /*
 ================
+SQLiteStore.DropOverride
+================
+*/
+func (s *SQLiteStore) DropOverride(key string, entry AuditEntry) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(`DELETE FROM overrides WHERE key = ?`, key); err != nil {
+		return err
+	}
+	if err := insertAudit(tx, entry); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+/*
+================
 SQLiteStore.Audit
 
 Newest first; before (a seq) pages back, 0 starts at the newest.

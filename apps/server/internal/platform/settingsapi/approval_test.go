@@ -76,6 +76,12 @@ func (m *memStore) Decide(id string, check func(Proposal) (AuditEntry, bool, err
 
 func (m *memStore) Refuse(entry AuditEntry) error { m.append(entry); return nil }
 
+func (m *memStore) DropOverride(key string, entry AuditEntry) error {
+	delete(m.overrides, key)
+	m.append(entry)
+	return nil
+}
+
 func (m *memStore) Audit(limit int, before int64) ([]AuditEntry, error) { return m.audit, nil }
 
 func (m *memStore) append(entry AuditEntry) {
@@ -347,7 +353,13 @@ func TestApprovingAStaleProposalIsRefused(t *testing.T) {
 	if _, err := service.Approve(bob, p.ID); !errors.Is(err, ErrStale) {
 		t.Fatalf("stale approval: %v", err)
 	}
-	if _, stored := store.overrides[tunables.JobKillRepeatMinutes]; stored || len(store.pending) != 1 {
-		t.Fatal("a stale approval changed something")
+	if _, stored := store.overrides[tunables.JobKillRepeatMinutes]; stored || len(store.pending) != 0 {
+		t.Fatal("a stale approval stored a value, or left its proposal blocking the key")
+	}
+	if last := store.audit[len(store.audit)-1]; last.Result != ResultStale {
+		t.Fatalf("stale approval audited as %+v", last)
+	}
+	if _, err := service.Propose(alice, tunables.JobKillRepeatMinutes, "30", "again"); err != nil {
+		t.Fatalf("a fresh proposal after a stale one: %v", err)
 	}
 }

@@ -82,6 +82,30 @@ func TestSQLiteStoreKeepsTheContract(t *testing.T) {
 
 /*
 ================
+TestSQLiteStoreDropOverrideAuditsOnce
+================
+*/
+func TestSQLiteStoreDropOverrideAuditsOnce(t *testing.T) {
+	s, _ := openTestStore(t)
+	p := Proposal{ID: "p1", Key: "gone", To: "1", By: "discord:1", At: 1, Reason: "r"}
+	if err := s.Propose(p, AuditEntry{At: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Decide("p1", func(Proposal) (AuditEntry, bool, error) { return AuditEntry{At: 2}, true, nil }); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DropOverride("gone", AuditEntry{At: 3, Action: ActionBoot, Result: ResultRefused}); err != nil {
+		t.Fatal(err)
+	}
+	overrides, _ := s.Overrides()
+	entries, _ := s.Audit(10, 0)
+	if len(overrides) != 0 || entries[0].Action != ActionBoot {
+		t.Fatalf("overrides %v audit %+v", overrides, entries)
+	}
+}
+
+/*
+================
 TestSQLiteStoreAuditIsAppendOnly
 ================
 */
