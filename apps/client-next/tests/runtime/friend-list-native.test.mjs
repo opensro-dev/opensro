@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 import { uiFixture } from "../helpers/ui-fixture.mjs";
 import { defined } from "../helpers/defined.mjs";
 
-const { friendAddPrefill } = await import( "../../src/engine/foundation/gameplay/friends.ts" );
+const { friendAddPrefill, friendNameOrder } = await import( "../../src/engine/foundation/gameplay/friends.ts" );
 const { emptySocial } = await import( "../../src/engine/foundation/gameplay/social.ts" );
 
 const LOCAL = 1;
@@ -93,6 +93,16 @@ test("the header always sorts by name ascending (604FD0)", t => {
 	assert.deepEqual( order( step() ), [ "Berk", "Cale", "Dora" ] );
 	f.ui.event( { kind: "activate", id: "friend-sort" } );
 	assert.deepEqual( order( step() ), [ "Berk", "Cale", "Dora" ], "a press re-sorts, it never reverses" );
+});
+
+test("names order by 78EC00's intended rule: a-z folded, code units, shorter first", () => {
+	const sorted = names => [ ...names ].sort( friendNameOrder );
+	assert.deepEqual( sorted( [ "berk", "Cale", "Abe" ] ), [ "Abe", "berk", "Cale" ], "case folds" );
+	// '_' (0x5F) sorts after A-Z (0x41-0x5A) once a-z folds to them; digits
+	// (0x30-0x39) sort before letters. localeCompare would order these otherwise.
+	assert.deepEqual( sorted( [ "a_b", "aZ", "a1" ] ), [ "a1", "aZ", "a_b" ] );
+	assert.deepEqual( sorted( [ "Berkeley", "Berk" ] ), [ "Berk", "Berkeley" ], "a prefix comes first" );
+	assert.equal( friendNameOrder( "BERK", "berk" ), 0 );
 });
 
 test("Add opens with the selected player's name", t => {

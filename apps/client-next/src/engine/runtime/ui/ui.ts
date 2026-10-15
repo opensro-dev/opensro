@@ -57,7 +57,12 @@ const STALL_CHAT_TEXT = "stall-chat-text";
 const STALL_CHAT_ROW = 15;
 const EDIT_CARET_WIDTH = 1;
 import { ACTION_FORTRESS_RETURN } from "@/engine/foundation/gameplay/fortress-return";
-import { FRIEND_LIST_LIMIT, FRIEND_NAME_LIMIT, friendAddPrefill } from "@/engine/foundation/gameplay/friends";
+import {
+	FRIEND_LIST_LIMIT,
+	FRIEND_NAME_LIMIT,
+	friendAddPrefill,
+	friendNameOrder
+} from "@/engine/foundation/gameplay/friends";
 import {
 	LETTER_BODY_LIMIT,
 	LETTER_MAILBOX_LIMIT,
@@ -16610,7 +16615,7 @@ export function createUi(
 				function friendPage( page: AuthoredLayout, slot: AuthoredLayout, gx: number, gy: number ) {
 					const state = game?.friends,
 						// 604FD0 fills the list from a name-ordered tree: always ascending.
-						rows = [ ...state?.rows ?? [] ].sort( ( a, b ) => a.name.localeCompare( b.name ) ),
+						rows = [ ...state?.rows ?? [] ].sort( ( a, b ) => friendNameOrder( a.name, b.name ) ),
 						at = ( id: number ) => Object.values( page ).find( n => n.id === id )!,
 						slotAt = ( id: number ) => Object.values( slot ).find( n => n.id === id )!;
 					if ( friendSelected && !rows.some( row => row.jid === friendSelected ) ) friendSelected = 0;
