@@ -16,6 +16,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 
 	"opensro.online/server/internal/agent/publicstats"
 	"opensro.online/server/internal/game/action"
@@ -27,6 +28,7 @@ import (
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/social/party"
+	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
@@ -59,6 +61,9 @@ func publicRules() publicstats.RulesResponse {
 	betaMastery, _ := progression.BetaMasteryFromEnv()
 	shopGoods, _ := commerce.ExtraGoodsFromEnv()
 	mallGoods, _ := commerce.MallExtraGoodsFromEnv()
+	rideFactor, rideOn, _ := enterworld.MallRideSpeedFromEnv()
+	settings := tunables.Current()
+	testKills := settings.Int(tunables.MostWantedTestKills)
 	return publicstats.RulesResponse{
 		Rules: []publicstats.Rule{
 			{Flag: progression.EnvBetaGrowth, On: progression.BetaGrowthFromEnv().Enabled,
@@ -201,8 +206,9 @@ func publicRules() publicstats.RulesResponse {
 				Why: "Requested for the beta, to reward job-war streaks and put a price on them; the original returns with one setting."},
 			{Flag: action.EnvMostWantedTest, On: action.MostWantedFromEnv() && action.MostWantedTestFromEnv(),
 				Native: "There is no Most Wanted rule.",
-				Now:    "Most Wanted is in test pacing: 5 job kills a wanted level (level 10 at 50), the same player counts every time, and the bounty is 1,000,000 gold per level.",
-				Why:    "Temporary, for testing the rule quickly without moving real gold; the ordinary rule returns with one setting."},
+				Now: fmt.Sprintf("Most Wanted is in test pacing: %d job kills a wanted level (level 10 at %d), the same player counts every time, and the bounty is %s gold per level.",
+					testKills, 10*testKills, groupedGold(settings.Int(tunables.MostWantedTestBounty))),
+				Why: "Temporary, for testing the rule quickly without moving real gold; the ordinary rule returns with one setting."},
 			{Flag: action.EnvMostWantedBountyTransfer, On: action.MostWantedFromEnv() && action.MostWantedBountyTransferFromEnv(),
 				Native: "There is no bounty; a kill moves no gold.",
 				Now:    "A wanted player's bounty comes out of their own gold: the killer takes up to 100,000,000 per wanted level, never more than the wanted player carries. No new gold enters the game.",
@@ -242,9 +248,9 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Item Mall transports (buffalo, rhinoceros, white elephant) move at their listed speed.",
 				Now:    "They move 50% faster.",
 				Why:    "Requested for the beta; the original speed returns with one setting."},
-			{Flag: enterworld.EnvMallRideSpeed, On: enterworld.MallRideSpeedFromEnv(),
+			{Flag: enterworld.EnvMallRideSpeed, On: rideOn,
 				Native: "Item Mall riding vehicles (ostrich, scarab, tiger) and pets move at their listed speed.",
-				Now:    "They move 30% faster.",
+				Now:    fmt.Sprintf("They move %.0f%% faster.", (rideFactor-1)*100),
 				Why:    "Requested for the beta; the original speed returns with one setting."},
 			{Flag: action.EnvAnnounceSoxDrop, On: action.AnnouncementsFromEnv().SoxDrop,
 				Native: "A Seal of Star, Moon or Sun drop is not announced.",
@@ -263,9 +269,11 @@ func publicRules() publicstats.RulesResponse {
 				Now:    "Everyone sees a player's new Most Wanted level and each claimed bounty, by job alias, no names.",
 				Why:    "Requested for the beta; the original returns with one setting."},
 			{Flag: action.EnvJobKillNoticeRepeat, On: action.AnnouncementsFromEnv().JobKillRepeat,
-				Native: "The same two players' job kills are announced at most once every 10 minutes.",
-				Now:    "Every job kill between the same two players is announced, up to 6 notices a minute.",
-				Why:    "Requested for the beta, so repeated kills between one pair can be seen; the window returns with one setting."},
+				Native: fmt.Sprintf("The same two players' job kills are announced at most once every %d minutes.",
+					settings.Int(tunables.JobKillRepeatMinutes)),
+				Now: fmt.Sprintf("Every job kill between the same two players is announced, up to %d notices a minute.",
+					settings.Int(tunables.JobKillNoticesPerMinute)),
+				Why: "Requested for the beta, so repeated kills between one pair can be seen; the window returns with one setting."},
 			{Flag: action.EnvThiefPartyBonus, On: action.ThiefPartyBonusFromEnv(),
 				Native: "A party's thieves change nothing about its monster rewards.",
 				Now:    "Each party member dressed as a thief adds 10% monster EXP and gold for the party, up to 50%.",
@@ -293,4 +301,23 @@ func publicRules() publicstats.RulesResponse {
 				Now:    "It says which stat the stone changed, from the old value to the new."},
 		},
 	}
+}
+
+/*
+================
+groupedGold
+
+A gold amount with comma thousands separators, as the rules page writes it.
+================
+*/
+func groupedGold(gold int64) string {
+	digits := strconv.FormatInt(gold, 10)
+	var out []byte
+	for i := range digits {
+		if i > 0 && (len(digits)-i)%3 == 0 {
+			out = append(out, ',')
+		}
+		out = append(out, digits[i])
+	}
+	return string(out)
 }

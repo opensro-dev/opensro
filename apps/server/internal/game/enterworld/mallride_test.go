@@ -14,6 +14,9 @@ import (
 	"opensro.online/server/internal/testsupport/licensed"
 )
 
+// mallRideTestFactor is the registry's default factor, the value "on" means.
+const mallRideTestFactor = 1.3
+
 /*
 ================
 TestMallRidesMoveThirtyPercentFaster
@@ -30,7 +33,7 @@ func TestMallRidesMoveThirtyPercentFaster(t *testing.T) {
 	native := NewTextdataItems(gamedatatest.TextdataDir(t))
 	native.once.Do(native.load)
 	fast := NewTextdataItems(gamedatatest.TextdataDir(t))
-	scaled, err := fast.ApplyMallRideSpeed()
+	scaled, err := fast.ApplyMallRideSpeed(mallRideTestFactor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +42,7 @@ func TestMallRidesMoveThirtyPercentFaster(t *testing.T) {
 		base := native.charactersByCodename[codename]
 		wantWalk, wantRun := base.WalkSpeed, base.RunSpeed
 		if isMallRide(ref) {
-			wantWalk, wantRun = base.WalkSpeed*mallRideSpeedup, base.RunSpeed*mallRideSpeedup
+			wantWalk, wantRun = base.WalkSpeed*mallRideTestFactor, base.RunSpeed*mallRideTestFactor
 			for _, family := range mallRideFamilies {
 				if mallRideFamilyRow(codename, family) {
 					families[family]++
@@ -64,7 +67,7 @@ func TestMallRidesMoveThirtyPercentFaster(t *testing.T) {
 	}
 	for _, ref := range fast.SummonableCharacterRefs() {
 		base := native.charactersByCodename[ref.Codename]
-		if isMallRide(&ref) && ref.RunSpeed != base.RunSpeed*mallRideSpeedup {
+		if isMallRide(&ref) && ref.RunSpeed != base.RunSpeed*mallRideTestFactor {
 			t.Fatalf("summonable %s kept its native speed", ref.Codename)
 		}
 	}
@@ -76,10 +79,17 @@ TestMallRideSpeedFromEnv
 ================
 */
 func TestMallRideSpeedFromEnv(t *testing.T) {
-	for env, want := range map[string]bool{"": false, "off": false, "on": true, "1": true} {
+	for env, want := range map[string]struct {
+		factor float64
+		on     bool
+	}{"": {1, false}, "off": {1, false}, "on": {1.3, true}, "1": {1.3, true}, "1.5": {1.5, true}} {
 		t.Setenv(EnvMallRideSpeed, env)
-		if got := MallRideSpeedFromEnv(); got != want {
-			t.Errorf("%q: %v", env, got)
+		if factor, on, err := MallRideSpeedFromEnv(); err != nil || factor != want.factor || on != want.on {
+			t.Errorf("%q: %v %v %v, want %v %v", env, factor, on, err, want.factor, want.on)
 		}
+	}
+	t.Setenv(EnvMallRideSpeed, "9")
+	if _, _, err := MallRideSpeedFromEnv(); err == nil {
+		t.Fatal("a factor past 3 was accepted")
 	}
 }

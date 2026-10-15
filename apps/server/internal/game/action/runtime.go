@@ -363,8 +363,11 @@ type Runtime struct {
 	MostWanted bool
 	// MostWantedTest is the rule's temporary test pacing (port-only,
 	// SRO_MOST_WANTED_TEST; false is the ordinary rule, mostwantedtest.go).
-	MostWantedTest  bool
-	mostWantedPairs mostWantedPairs
+	MostWantedTest bool
+	// MostWantedTestStreakStep is what a counted kill adds under the test
+	// pacing (MostWantedTestStreakStepFromEnv); set with MostWantedTest.
+	MostWantedTestStreakStep int64
+	mostWantedPairs          mostWantedPairs
 	// MostWantedBountyTransfer pays the bounty from the victim's gold, not
 	// new gold (mostwanted.go; port-only, not native). False mints it.
 	MostWantedBountyTransfer bool

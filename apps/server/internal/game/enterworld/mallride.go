@@ -5,7 +5,8 @@ mallride.go - Item Mall vehicles and pets move 30% faster
 
 Port-only, not native (owner decision 2026-10-15, at the balance advisor's
 request). With SRO_MALL_RIDE_SPEED on, the riding vehicles and the pets
-the Item Mall sells walk and run 1.3 times their characterdata speeds.
+the Item Mall sells walk and run 1.3 times their characterdata speeds, or
+the factor the variable names (game/tunables: off, on or 1..3).
 Only move speed changes. As with the mall transports (malltransport.go),
 the scale lands on the loaded reference rows before any owner reads them,
 so the summon, the entry spawn, riding, the pet AI and the speeds
@@ -23,15 +24,13 @@ package enterworld
 
 import (
 	"fmt"
-	"os"
 	"strings"
+
+	"opensro.online/server/internal/game/tunables"
 )
 
-// EnvMallRideSpeed turns the faster mall vehicles and pets on ("on", "1", "true").
+// EnvMallRideSpeed sets the faster mall vehicles and pets (tunables.MallRideSpeed).
 const EnvMallRideSpeed = "SRO_MALL_RIDE_SPEED"
-
-// mallRideSpeedup multiplies a mall vehicle's or pet's walk and run speeds.
-const mallRideSpeedup = 1.3
 
 // mallRideFamilies are the COS codename families the mall's vehicle and pet
 // tabs sell; a family matches its bare codename and its _<digits> level
@@ -49,14 +48,17 @@ var mallRideFamilies = []string{
 /*
 ================
 MallRideSpeedFromEnv
+
+The speed factor and whether the rule is on. A value the registry refuses
+is an error, so the GameWorld's boot stops on it.
 ================
 */
-func MallRideSpeedFromEnv() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvMallRideSpeed))) {
-	case "on", "1", "true":
-		return true
+func MallRideSpeedFromEnv() (float64, bool, error) {
+	v, err := tunables.FromEnv(tunables.MallRideSpeed)
+	if err != nil {
+		return 1, false, err
 	}
-	return false
+	return v.Number, v.Enabled, nil
 }
 
 /*
@@ -105,28 +107,29 @@ func mallRideFamilyRow(codename, family string) bool {
 ================
 ApplyMallRideSpeed
 
-Scales every mall vehicle and pet reference's walk and run speeds, before
-any owner reads them; the count is the rows changed.
+Scales every mall vehicle and pet reference's walk and run speeds by
+factor, before any owner reads them; the count is the rows changed.
 ================
 */
-func (t *TextdataItems) ApplyMallRideSpeed() (int, error) {
+func (t *TextdataItems) ApplyMallRideSpeed(factor float64) (int, error) {
 	t.once.Do(t.load)
 	if t.archive != nil {
 		return 0, fmt.Errorf("%s: references are already archived", EnvMallRideSpeed)
 	}
-	scaled := 0
+	// The speeds are float32 rows; the old constant scaled them as float32 too.
+	scale, scaled := float32(factor), 0
 	for _, ref := range t.charactersByCodename {
 		if isMallRide(ref) {
-			ref.WalkSpeed *= mallRideSpeedup
-			ref.RunSpeed *= mallRideSpeedup
+			ref.WalkSpeed *= scale
+			ref.RunSpeed *= scale
 			scaled++
 		}
 	}
 	// The summonable list holds copies of the same rows.
 	for i := range t.summonableCharacters {
 		if ref := &t.summonableCharacters[i]; isMallRide(ref) {
-			ref.WalkSpeed *= mallRideSpeedup
-			ref.RunSpeed *= mallRideSpeedup
+			ref.WalkSpeed *= scale
+			ref.RunSpeed *= scale
 		}
 	}
 	return scaled, nil

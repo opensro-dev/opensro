@@ -22,6 +22,7 @@ import (
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/pk"
+	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
@@ -265,7 +266,7 @@ A dressed thief killing a dressed trader reads "[leChiffre] killed
 [ES_Tip]" (their job aliases, never their names), but only once the kill's
 door has committed: payPlayerKillInDoor carries the
 notice and payJobKillShares, run after the commit, posts it. The same pair
-stays quiet for jobKillRepeatMs; an undressed victim is never announced.
+stays quiet for jobKillRepeatMs(tunables.Current()); an undressed victim is never announced.
 ================
 */
 func TestJobKillNoticeFollowsTheFlag(t *testing.T) {
@@ -288,7 +289,7 @@ func TestJobKillNoticeFollowsTheFlag(t *testing.T) {
 	}
 	rt.Announce.JobKill = true
 	rt.payJobKillShares(kill(trader, 0))
-	rt.payJobKillShares(kill(trader, jobKillRepeatMs-1))
+	rt.payJobKillShares(kill(trader, jobKillRepeatMs(tunables.Current())-1))
 	if got := drainedNoticeLines(t, rt); len(got) != 1 || got[0].text != "[leChiffre] killed [ES_Tip]" ||
 		got[0].channel != wire.JobKillNoticeChannel {
 		t.Fatalf("notices %+v, want one on the job-kill channel", got)
@@ -298,20 +299,20 @@ func TestJobKillNoticeFollowsTheFlag(t *testing.T) {
 			t.Fatalf("the notice names the character %q", got)
 		}
 	}
-	rt.payJobKillShares(kill(trader, jobKillRepeatMs))
+	rt.payJobKillShares(kill(trader, jobKillRepeatMs(tunables.Current())))
 	if got := drainedNotices(t, rt); len(got) != 1 {
 		t.Fatalf("the pair did not reopen: %q", got)
 	}
 	// A wearer without a job alias shows the job's name, still never the
 	// character's.
 	trader.Job.Alias = ""
-	rt.payJobKillShares(kill(trader, 3*jobKillRepeatMs))
+	rt.payJobKillShares(kill(trader, 3*jobKillRepeatMs(tunables.Current())))
 	if got := drainedNotices(t, rt); len(got) != 1 || got[0] != "[leChiffre] killed [Trader]" {
 		t.Fatalf("no-alias notice %q", got)
 	}
 	plain := *trader
 	plain.MissionInventory = nil
-	if after := kill(&plain, 2*jobKillRepeatMs); len(after.notices) != 0 {
+	if after := kill(&plain, 2*jobKillRepeatMs(tunables.Current())); len(after.notices) != 0 {
 		t.Fatalf("an undressed victim carried a notice: %+v", after.notices)
 	}
 }

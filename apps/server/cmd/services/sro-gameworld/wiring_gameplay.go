@@ -40,6 +40,7 @@ import (
 	"opensro.online/server/internal/game/social/mentor"
 	"opensro.online/server/internal/game/social/party"
 	"opensro.online/server/internal/game/social/union"
+	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/worldarea"
@@ -564,8 +565,14 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	}
 	// Port-only, not native, temporary: Most Wanted's test pacing.
 	game.items.MostWantedTest = action.MostWantedTestFromEnv()
+	step, err := action.MostWantedTestStreakStepFromEnv()
+	if err != nil {
+		return err
+	}
+	game.items.MostWantedTestStreakStep = step
 	if game.items.MostWantedTest {
-		log.Infof("job: most wanted test pacing ON: 5 kills a level, no anti-farm window, 1M bounty a level (%s)", action.EnvMostWantedTest)
+		log.Infof("job: most wanted test pacing ON: %d kills a level, no anti-farm window, %d gold bounty a level (%s)",
+			10/step, tunables.Current().Int(tunables.MostWantedTestBounty), action.EnvMostWantedTest)
 	}
 	// Port-only, not native: the bounty comes out of the victim's gold.
 	game.items.MostWantedBountyTransfer = action.MostWantedBountyTransferFromEnv()

@@ -148,13 +148,19 @@ func openAuthorityPlane(
 		}
 		log.Infof("cos: %s scaled %d mall transport(s) (port-only, not native)", enterworld.EnvMallTransportSpeed, scaled)
 	}
-	// Port-only, not native: the Item Mall vehicles and pets move 1.3 times as fast.
-	if enterworld.MallRideSpeedFromEnv() {
-		scaled, err := textdata.Items.ApplyMallRideSpeed()
+	// Port-only, not native: the Item Mall vehicles and pets move faster
+	// (1.3 times by default, game/tunables).
+	rideFactor, rideOn, err := enterworld.MallRideSpeedFromEnv()
+	if err != nil {
+		return authorityPlane{}, err
+	}
+	if rideOn {
+		scaled, err := textdata.Items.ApplyMallRideSpeed(rideFactor)
 		if err != nil {
 			return authorityPlane{}, err
 		}
-		log.Infof("cos: %s scaled %d mall vehicle and pet row(s) (port-only, not native)", enterworld.EnvMallRideSpeed, scaled)
+		log.Infof("cos: %s=%v scaled %d mall vehicle and pet row(s) (port-only, not native)",
+			enterworld.EnvMallRideSpeed, rideFactor, scaled)
 	}
 	options := store.OptionsFromEnv()
 	options.DefaultSkills = enterworld.DefaultSkillSeeder(textdata.Skills)

@@ -26,18 +26,33 @@ package action
 import (
 	"os"
 	"strings"
+
+	"opensro.online/server/internal/game/tunables"
 )
 
 // EnvMostWantedTest turns the test pacing on ("on", "1", "true").
 const EnvMostWantedTest = "SRO_MOST_WANTED_TEST"
 
-const (
-	// mostWantedTestStreakStep is what one counted kill adds under the test
-	// pacing: two, so streak / 10 reaches a level every 5 kills.
-	mostWantedTestStreakStep = 2
-	// mostWantedTestBountyPerLevel is the test bounty a wanted level is worth.
-	mostWantedTestBountyPerLevel = 1_000_000
-)
+// The test pacing's kills per level and bounty per level are tunable
+// (game/tunables: SRO_MOST_WANTED_TEST_KILLS, 5 by default and a divisor
+// of 10; SRO_MOST_WANTED_TEST_BOUNTY, 1,000,000 by default).
+
+/*
+================
+MostWantedTestStreakStepFromEnv
+
+What one counted kill adds under the test pacing: 10 / kills per level,
+so the level stays streak / 10 everywhere it is read. Read once at boot
+(restart class): a saved streak keeps the count it earned.
+================
+*/
+func MostWantedTestStreakStepFromEnv() (int64, error) {
+	v, err := tunables.FromEnv(tunables.MostWantedTestKills)
+	if err != nil {
+		return 0, err
+	}
+	return mostWantedKillsPerLevel / int64(v.Number), nil
+}
 
 /*
 ================
@@ -60,10 +75,15 @@ What one counted kill adds to a streak.
 ================
 */
 func (rt *Runtime) mostWantedStreakStep() int64 {
-	if rt.MostWantedTest {
-		return mostWantedTestStreakStep
+	if !rt.MostWantedTest {
+		return 1
 	}
-	return 1
+	if rt.MostWantedTestStreakStep > 0 {
+		return rt.MostWantedTestStreakStep
+	}
+	// A Runtime built without the boot wiring (tools, tests) takes the
+	// registry's kills per level.
+	return mostWantedKillsPerLevel / tunables.Current().Int(tunables.MostWantedTestKills)
 }
 
 /*
@@ -75,7 +95,7 @@ The bounty a victim of the given wanted level is worth.
 */
 func (rt *Runtime) mostWantedBountyGold(level int64) uint64 {
 	if rt.MostWantedTest {
-		return uint64(level) * mostWantedTestBountyPerLevel
+		return uint64(level) * uint64(tunables.Current().Int(tunables.MostWantedTestBounty))
 	}
 	return uint64(level) * mostWantedBountyPerLevel
 }

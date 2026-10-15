@@ -42,6 +42,7 @@ import (
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/social/chatfeed"
+	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -58,11 +59,11 @@ const (
 )
 
 const (
-	// announcementsPerMinute caps one kind of notice per division.
+	// announcementsPerMinute caps the seal-drop and plus notices per
+	// division; the job-kill and Most Wanted caps are tunable
+	// (announceCap, game/tunables) and default to the same six.
 	announcementsPerMinute = 6
 	announceWindowMs       = 60_000
-	// jobKillRepeatMs is how long one killer/victim pair stays quiet.
-	jobKillRepeatMs = 10 * 60_000
 	// jobKillPairPrune is the pair count past which stale pairs are dropped.
 	jobKillPairPrune = 1024
 	// announcePlusMin and announcePlusMax bound the announced plus.
@@ -161,6 +162,7 @@ links nothing, so its aliases never lead to a character.
 ================
 */
 func (rt *Runtime) announce(division string, kind announceKind, text string, link wire.NoticeLink, nowMs int64) {
+	limit := announceCap(tunables.Current(), kind)
 	a := &rt.announcer
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -174,7 +176,7 @@ func (rt *Runtime) announce(division string, kind announceKind, text string, lin
 			recent = append(recent, at)
 		}
 	}
-	if len(recent) >= announcementsPerMinute {
+	if int64(len(recent)) >= limit {
 		a.windows[key] = recent
 		return
 	}
@@ -214,12 +216,41 @@ func (rt *Runtime) drainAnnouncements(int64) []simulation.DivisionFrames {
 
 /*
 ================
+announceCap
+
+A kind's notices per division a minute, from the action's snapshot.
+================
+*/
+func announceCap(s *tunables.Settings, kind announceKind) int64 {
+	switch kind {
+	case announceJobKill:
+		return s.Int(tunables.JobKillNoticesPerMinute)
+	case announceMostWanted:
+		return s.Int(tunables.MostWantedNoticesPerMinute)
+	}
+	return announcementsPerMinute
+}
+
+/*
+================
+jobKillRepeatMs
+
+How long one killer/victim pair stays quiet, from the action's snapshot.
+================
+*/
+func jobKillRepeatMs(s *tunables.Settings) int64 {
+	return s.Int(tunables.JobKillRepeatMinutes) * 60_000
+}
+
+/*
+================
 Runtime.jobKillPairQuiet
 
 Whether a killer/victim pair may be announced again, recording it when so.
 ================
 */
 func (rt *Runtime) jobKillPairQuiet(killer, victim string, nowMs int64) bool {
+	repeatMs := jobKillRepeatMs(tunables.Current())
 	a := &rt.announcer
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -227,12 +258,12 @@ func (rt *Runtime) jobKillPairQuiet(killer, victim string, nowMs int64) bool {
 		a.pairs = map[string]int64{}
 	}
 	key := strings.ToLower(killer) + "\x00" + strings.ToLower(victim)
-	if at, seen := a.pairs[key]; seen && nowMs-at < jobKillRepeatMs {
+	if at, seen := a.pairs[key]; seen && nowMs-at < repeatMs {
 		return false
 	}
 	if len(a.pairs) >= jobKillPairPrune {
 		for pair, at := range a.pairs {
-			if nowMs-at >= jobKillRepeatMs {
+			if nowMs-at >= repeatMs {
 				delete(a.pairs, pair)
 			}
 		}

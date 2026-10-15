@@ -27,12 +27,14 @@ import (
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/worldarea"
 	"opensro.online/server/internal/gamedata"
 	"opensro.online/server/internal/platform/economy"
 	"opensro.online/server/internal/platform/history"
 	"opensro.online/server/internal/platform/readiness"
+	"opensro.online/server/internal/platform/settingsapi"
 	"opensro.online/server/internal/security/auth"
 	"opensro.online/server/internal/transport"
 )
@@ -104,6 +106,11 @@ func newGameWorldApplication(
 		}
 	}()
 
+	// Port-only tunables (game/tunables): a value the registry refuses
+	// stops the boot here, before anything reads it.
+	if err := tunables.Load(); err != nil {
+		return nil, fmt.Errorf("tunables: %w", err)
+	}
 	dataPaths, err := gamedata.Resolve()
 	if err != nil {
 		return nil, fmt.Errorf("game data: %w", err)
@@ -186,11 +193,18 @@ func newGameWorldApplication(
 	application.history = journal
 	ts.Hub.History = historyObserver{journal}
 	log.AddHook(journal)
+	// Port-only: the staff console's read of every tunable and SRO_ flag.
+	settingsHandler, err := settingsapi.Handler(filepath.Join(store.DirForShardFromEnv(ownedShard.ID), "operator-token"),
+		settingsapi.Environ)
+	if err != nil {
+		return nil, fmt.Errorf("settings: %w", err)
+	}
 	historyHandler, err := history.OperatorHandler(journal, filepath.Join(store.DirForShardFromEnv(ownedShard.ID), "operator-token"))
 	if err != nil {
 		return nil, err
 	}
 	authority.agentAPI.InstallHistory(historyHandler)
+	authority.agentAPI.InstallSettings(settingsapi.Path, settingsHandler)
 	if err := installEconomy(application, &authority, ownedShard.ID); err != nil {
 		return nil, err
 	}
