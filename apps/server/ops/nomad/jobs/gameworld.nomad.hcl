@@ -434,8 +434,8 @@ variable "job_monster_speed" {
   default = "on"
 }
 
-# transport_follow has a trade transport the trader stepped off walk after
-# the trader instead of holding the trader within 100 m of it (port-only,
+# transport_follow has a trade transport its trader or thief stepped off
+# walk after them instead of holding them within 100 m of it (port-only,
 # not native; owner decision 2026-10-15). "off" is the original parked
 # transport and its tether.
 variable "transport_follow" {

@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"opensro.online/server/internal/domain"
+
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -107,6 +109,41 @@ func TestDismountedTransportFollowsItsTrader(t *testing.T) {
 	at := rt.cosLiveSpawn(testDivision, c, clock.NowMs())
 	if before, after := simulation.WorldDistance2D(parked, trader), simulation.WorldDistance2D(at, trader); after > before/2 {
 		t.Fatalf("the transport stands %.0f from its trader after 10 s, was %.0f", after, before)
+	}
+}
+
+/*
+================
+TestDismountedTransportFollowsAThief
+
+The rule keys on the transport (CGObj_IsVehicleCOS, TID4 2), never on the
+owner's job: a thief's dismounted transport follows the thief exactly as a
+trader's follows the trader, and holds no tether.
+================
+*/
+func TestDismountedTransportFollowsAThief(t *testing.T) {
+	rt, clock, c := caravanFixture(t)
+	c.Job.Type = domain.JobThief
+	rt.TransportFollow = true
+	parked, thief := dismountedTransportApart(rt, c)
+	advanceTransportTicks(rt, clock, 20)
+	if _, held := rt.Worlds.TetherOf(simulation.WorldKey(testDivision, c.Name)); held {
+		t.Fatal("a thief's following transport tethered its owner")
+	}
+	at := rt.cosLiveSpawn(testDivision, c, clock.NowMs())
+	if before, after := simulation.WorldDistance2D(parked, thief), simulation.WorldDistance2D(at, thief); after > before/2 {
+		t.Fatalf("the thief's transport stands %.0f from its owner after 10 s, was %.0f", after, before)
+	}
+	// Off, the thief's transport parks and tethers, as natively.
+	rt2, clock2, c2 := caravanFixture(t)
+	c2.Job.Type = domain.JobThief
+	parked2, _ := dismountedTransportApart(rt2, c2)
+	advanceTransportTicks(rt2, clock2, 10)
+	if _, held := rt2.Worlds.TetherOf(simulation.WorldKey(testDivision, c2.Name)); !held {
+		t.Fatal("with the rule off a thief's parked transport did not tether its owner")
+	}
+	if at := rt2.cosLiveSpawn(testDivision, c2, clock2.NowMs()); simulation.WorldDistance2D(at, parked2) > 0.01 {
+		t.Fatalf("with the rule off the thief's transport moved to %+v", at)
 	}
 }
 

@@ -188,7 +188,7 @@ func publicRules() publicstats.RulesResponse {
 			{Flag: action.EnvTransportFollow, On: action.TransportFollowFromEnv(),
 				Native: "A trade transport you step off stays where it stands, and you cannot walk more than 100 m away from it.",
 				Now:    "A trade transport you step off follows you on foot, like a pet.",
-				Why:    "Requested for the beta so a trader can fight or loot beside the cargo; the original returns with one setting."},
+				Why:    "Requested for the beta so a trader or a thief can fight or loot beside the cargo; the original returns with one setting."},
 			{Flag: action.EnvMostWanted, On: action.MostWantedFromEnv(),
 				Native: "Job kills earn job EXP only.",
 				Now: "Each job kill while suited adds to a streak; every 10 is a wanted level (up to 10), worth +1 STR, +1 INT and +1% move speed each, " +
