@@ -123,6 +123,55 @@ type objectNavMesh struct {
 
 	minX, minY, minZ float64
 	maxX, maxY, maxZ float64
+	// cellBoxes holds each cell's XZ box (minX, maxX, minZ, maxZ), padded by
+	// cellBoxPad; nil until buildCellBoxes (dungeon surfaces build it).
+	cellBoxes []float64
+}
+
+// cellBoxPad widens a cell box: objectCellPlaneYAt admits a point up to a
+// barycentric 1e-4 outside its cell, so the pad grows with the cell, and a
+// whole unit keeps it clear of float32 rounding.
+const cellBoxPad = 1.0
+
+/*
+================
+objectNavMesh.buildCellBoxes
+
+Each cell's padded XZ box, once. A point or chord outside a cell's box can
+neither stand in the cell nor cross one of its edges.
+================
+*/
+func (m *objectNavMesh) buildCellBoxes() {
+	if m.cellBoxes != nil {
+		return
+	}
+	boxes := make([]float64, 0, m.cellCount()*4)
+	for cell := 0; cell < m.cellCount(); cell++ {
+		minX, maxX, minZ, maxZ := math.Inf(1), math.Inf(-1), math.Inf(1), math.Inf(-1)
+		for _, v := range [3]uint16{m.cellA[cell], m.cellB[cell], m.cellC[cell]} {
+			x, z := float64(m.vertices[v*3]), float64(m.vertices[v*3+2])
+			minX, maxX, minZ, maxZ = math.Min(minX, x), math.Max(maxX, x), math.Min(minZ, z), math.Max(maxZ, z)
+		}
+		pad := cellBoxPad + 1e-3*math.Max(maxX-minX, maxZ-minZ)
+		boxes = append(boxes, minX-pad, maxX+pad, minZ-pad, maxZ+pad)
+	}
+	m.cellBoxes = boxes
+}
+
+/*
+================
+objectNavMesh.cellMissedBy
+
+Whether the box minX..maxX, minZ..maxZ (object frame) lies wholly outside
+the cell's padded box. False while the boxes are not built.
+================
+*/
+func (m *objectNavMesh) cellMissedBy(cell int, minX, maxX, minZ, maxZ float64) bool {
+	if m.cellBoxes == nil {
+		return false
+	}
+	b := m.cellBoxes[cell*4 : cell*4+4]
+	return maxX < b[0] || minX > b[1] || maxZ < b[2] || minZ > b[3]
 }
 
 /*

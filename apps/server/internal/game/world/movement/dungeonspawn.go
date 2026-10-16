@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+dungeonspawn.go - the dungeon resident surfaces and their floor heights
+
+Loads each dungeon's DOF blocks and packaged nav meshes into a surface
+(newDungeonSpawnSurface fixes each block's rotation, reach and cell boxes
+once) and answers heightAt for spawns, steps and clips.
+
+===========================================================================
+*/
 package movement
 
 import (
@@ -19,6 +30,9 @@ type dungeonSpawnSurface struct {
 	messageGrid dungeonMessageGrid
 	blocks      []dungeonSpawnBlock
 	objects     []resolvedObjectNav
+	// ordinalIndex maps a block ordinal to its index in objects, built once
+	// for the passage resolve every chord runs.
+	ordinalIndex map[int]int
 }
 
 type dungeonObstacle struct{ x, y, z, radiusSquared float64 }
@@ -30,6 +44,38 @@ type dungeonSpawnBlock struct {
 	x, y, z   float64
 	yaw       float64
 	meshes    []*objectNavMesh
+	// cosYaw, sinYaw and reach are fixed at construction
+	// (newDungeonSpawnSurface): the rotation every height query uses, and
+	// the box outside which no mesh of the block can hold a point.
+	cosYaw, sinYaw float64
+	reach          objectReach
+}
+
+/*
+================
+newDungeonSpawnSurface
+
+A resident host's surface from its blocks: each block's rotation and reach
+fixed once, and the object-nav set with its links resolved. Every surface
+is built here, so heightAt and the chord scans never see a block without
+them.
+================
+*/
+func newDungeonSpawnSurface(grid dungeonMessageGrid, blocks []dungeonSpawnBlock) *dungeonSpawnSurface {
+	surface := &dungeonSpawnSurface{messageGrid: grid, blocks: blocks}
+	surface.objects = resolveDungeonLinks(blocks)
+	surface.ordinalIndex = make(map[int]int, len(surface.objects))
+	for i := range surface.objects {
+		surface.ordinalIndex[surface.objects[i].placement.ordinal] = i
+	}
+	for i := range blocks {
+		for _, mesh := range blocks[i].meshes {
+			mesh.buildCellBoxes()
+		}
+		blocks[i].cosYaw, blocks[i].sinYaw = surface.objects[i].cosYaw, surface.objects[i].sinYaw
+		blocks[i].reach = surface.objects[i].reach
+	}
+	return surface
 }
 
 type dungeonResourceManifestJSON struct {
@@ -128,7 +174,7 @@ func (v *WaterValidator) loadDungeonSpawnSurfaces() map[uint16]*dungeonSpawnSurf
 			log.Warnf("movement: dungeon DOF 0x%04X message grid is invalid: %v", entry.SectorID, err)
 			continue
 		}
-		surface := &dungeonSpawnSurface{messageGrid: grid}
+		var resident []dungeonSpawnBlock
 		for ordinal, block := range blocks {
 			var meshes []*objectNavMesh
 			for _, meshPath := range meshPathsByBsr[normalizeDungeonResourcePath(block.path)] {
@@ -138,14 +184,13 @@ func (v *WaterValidator) loadDungeonSpawnSurfaces() map[uint16]*dungeonSpawnSurf
 				log.Warnf("movement: dungeon DOF resident %s has no packaged nav mesh", block.path)
 				continue
 			}
-			surface.blocks = append(surface.blocks, dungeonSpawnBlock{
+			resident = append(resident, dungeonSpawnBlock{
 				obstacles: block.obstacles, ordinal: ordinal, connected: block.connected, x: block.x, y: block.y, z: block.z,
 				yaw: block.yawRadians, meshes: meshes,
 			})
 		}
-		surface.objects = resolveDungeonLinks(surface.blocks)
-		if len(surface.blocks) > 0 {
-			surfaces[entry.SectorID] = surface
+		if len(resident) > 0 {
+			surfaces[entry.SectorID] = newDungeonSpawnSurface(grid, resident)
 		}
 	}
 	return surfaces
@@ -154,9 +199,15 @@ func (v *WaterValidator) loadDungeonSpawnSurfaces() map[uint16]*dungeonSpawnSurf
 func (surface *dungeonSpawnSurface) heightAt(x, authoredY, z float64) (float64, bool) {
 	bestY := 0.0
 	bestDelta := math.Inf(1)
-	for _, block := range surface.blocks {
+	for i := range surface.blocks {
+		block := &surface.blocks[i]
+		// Outside the block's reach no mesh's local bounds can hold the
+		// point, so the per-mesh tests below would all reject it.
+		if block.reach.missedBy(x, z, x, z) {
+			continue
+		}
 		dx, dz := x-block.x, z-block.z
-		cosYaw, sinYaw := math.Cos(block.yaw), math.Sin(block.yaw)
+		cosYaw, sinYaw := block.cosYaw, block.sinYaw
 		localX := cosYaw*dx + sinYaw*dz
 		localZ := -sinYaw*dx + cosYaw*dz
 		localHintY := authoredY - block.y
@@ -169,6 +220,9 @@ func (surface *dungeonSpawnSurface) heightAt(x, authoredY, z float64) (float64, 
 				continue
 			}
 			for cell := 0; cell < mesh.cellCount(); cell++ {
+				if mesh.cellMissedBy(cell, localX, localX, localZ, localZ) {
+					continue
+				}
 				localY, inside := objectCellPlaneYAt(mesh, cell, localX, localZ)
 				if !inside {
 					continue

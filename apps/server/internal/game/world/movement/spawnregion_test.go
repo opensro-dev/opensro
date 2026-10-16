@@ -49,7 +49,7 @@ func TestCompanionSpawnDistinguishesBlockedDungeonContactFromClipping(t *testing
 		{ordinal: 0, meshes: []*objectNavMesh{topologyMesh(false)}},
 		{ordinal: 1, x: 100, meshes: []*objectNavMesh{topologyMesh(true)}},
 	}
-	surface := &dungeonSpawnSurface{blocks: blocks, objects: resolveDungeonLinks(blocks)}
+	surface := newDungeonSpawnSurface(dungeonMessageGrid{}, blocks)
 	v := &WaterValidator{dungeonSpawnSurfaces: map[uint16]*dungeonSpawnSurface{0x8001: surface}}
 	v.dungeonSpawnOnce.Do(func() {})
 	origin := simulation.Spawn{RegionID: 0x8001, X: 50, Y: 10, Z: 50}
