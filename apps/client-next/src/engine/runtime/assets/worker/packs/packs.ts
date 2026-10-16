@@ -44,13 +44,13 @@ export class AssetAbsentError extends Error {
 ================
 untilCancelled
 
-A shared wait (the manifest, a whole small pack, the device's texture
-variant) seen from one request: it rejects as soon as the request is
-cancelled, while the shared work goes on for its other callers. The loader
-acknowledges a cancellation only when the request settles (loader.ts
-"released"), so a request parked on a slow shared download held its
-cancellation for the whole download: "did not acknowledge cancelling
-/assets/effects/programs.json within 30 s".
+A shared wait (the manifest, a whole small pack, a large pack's header or
+range block, the device's texture variant) seen from one request: it
+rejects as soon as the request is cancelled, while the shared work goes on
+for its other callers. The loader acknowledges a cancellation only when the
+request settles (loader.ts "released"), so a request parked on a slow
+shared download held its cancellation for the whole download: "did not
+acknowledge cancelling /assets/effects/programs.json within 30 s".
 ================
 */
 function untilCancelled<T>( work: Promise<T>, signal: AbortSignal ): Promise<T> {
@@ -135,9 +135,11 @@ export function createPacks(
 				headers.delete( descriptor.path );
 			} );
 		}
-		const start = await header;
+		const start = await untilCancelled( header, signal );
 		if ( disposed || signal.aborted ) throw Error( "Asset request cancelled" );
-		return decoded( entry, await blocks.read( base, descriptor, start, entry ) );
+		const stored = await untilCancelled( blocks.read( base, descriptor, start, entry ), signal );
+		if ( disposed || signal.aborted ) throw Error( "Asset request cancelled" );
+		return decoded( entry, stored );
 	}
 	/*
 	================
