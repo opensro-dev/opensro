@@ -89,13 +89,13 @@ func TestClientIncidentCarriesItsFrameJournal(t *testing.T) {
 
 	body := `{"kind":"packet","message":"Packet application failed: Error: Unmatched COS transfer result",` +
 		`"opcode":45165,"payload":"011a270040020013","payloadSize":8,"phase":"world",` +
-		`"journal":[-2048,2,0,12,-1520,1,28781,7,-1448,0,45165,8,0,0,45165,8]}`
+		`"journal":[-57567,0,7,3130971,-2048,2,0,12,-1520,1,28781,7,-1448,0,45165,8,0,0,45165,8]}`
 	response := performJSON(t, fixture.handler, http.MethodPost, clientIncidentPath, body, token)
 	if response.Code != http.StatusOK {
 		t.Fatalf("incident = %d %s", response.Code, response.Body.String())
 	}
 	entry := hook.LastEntry()
-	want := "-2048:g:0000:12 -1520:o:706D:7 -1448:i:B06D:8 0:i:B06D:8"
+	want := "-57567:i:0007:3130971 -2048:g:0000:12 -1520:o:706D:7 -1448:i:B06D:8 0:i:B06D:8"
 	if entry == nil || entry.Data["journal"] != want {
 		t.Fatalf("journal = %v, want %q", entry, want)
 	}
@@ -113,12 +113,13 @@ client field must not discard the evidence it exists to collect).
 */
 func TestClientIncidentKeepsItsReportWhenTheJournalIsMalformed(t *testing.T) {
 	for journal, reason := range map[string]string{
-		`[-1,0,1]`:        "partial row",
-		`[5,0,1,1]`:       "row 0: age 5",
-		`[-1,3,1,1]`:      "row 0: direction 3",
-		`[-1,0,65536,1]`:  "row 0: opcode 65536",
-		`[-1.5,0,1,1]`:    "row 0: age -1.5",
-		`[-600001,0,1,1]`: "row 0: age -600001",
+		`[-1,0,1]`:          "partial row",
+		`[5,0,1,1]`:         "row 0: age 5",
+		`[-1,3,1,1]`:        "row 0: direction 3",
+		`[-1,0,65536,1]`:    "row 0: opcode 65536",
+		`[-1.5,0,1,1]`:      "row 0: age -1.5",
+		`[-600001,0,1,1]`:   "row 0: age -600001",
+		`[-1,0,7,16777217]`: "row 0: size 1.6777217e+07",
 	} {
 		fixture, token := incidentSession(t)
 		hook := logtest.NewGlobal()

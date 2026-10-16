@@ -28,6 +28,7 @@ import (
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/platform/history"
 	"opensro.online/server/internal/security/auth"
+	"opensro.online/server/internal/transport"
 	"regexp"
 	"strings"
 
@@ -52,8 +53,10 @@ const (
 	maxIncidentJournalRows = 200
 	incidentJournalFields  = 4
 	maxIncidentJournalAge  = 10 * 60 * 1000
-	// A gap row's size is the count of frames the journal dropped.
-	maxIncidentJournalBytes = 1 << 20
+	// A frame row's size is bounded by transport.MaxFrameBytes (16 MiB) so
+	// multi-megabyte OpEnterWorldResult (0x0007) bootstrap frames do not
+	// invalidate the journal; a gap row's size is the dropped frame count.
+	maxIncidentJournalBytes = transport.MaxFrameBytes
 )
 
 // incidentJournalDirections are the journal's row kinds, in the client's
@@ -142,7 +145,7 @@ func (incident clientIncident) problem() string {
 	if _, err := hex.DecodeString(incident.Payload); err != nil {
 		return "payload dump not hex"
 	}
-	if incident.PayloadSize < 0 || incident.PayloadSize > 1<<20 || incident.Region < 0 || incident.Region > 0xFFFF {
+	if incident.PayloadSize < 0 || incident.PayloadSize > maxIncidentJournalBytes || incident.Region < 0 || incident.Region > 0xFFFF {
 		return "payload size or region out of range"
 	}
 	for _, text := range []string{incident.Phase, incident.Character, incident.Build} {
