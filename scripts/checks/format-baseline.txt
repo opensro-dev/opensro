@@ -155,8 +155,6 @@ apps/client-next/src/engine/foundation/ui/matching-slots.ts
 apps/client-next/src/engine/foundation/ui/message-box.ts
 apps/client-next/src/engine/foundation/ui/message-tips.ts
 apps/client-next/src/engine/foundation/ui/minimap-catalog.ts
-apps/client-next/src/engine/foundation/ui/minimap-floor.ts
-apps/client-next/src/engine/foundation/ui/minimap-markers.ts
 apps/client-next/src/engine/foundation/ui/minimap-zoom.ts
 apps/client-next/src/engine/foundation/ui/money-presentation.ts
 apps/client-next/src/engine/foundation/ui/normal-tile.ts

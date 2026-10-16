@@ -7772,7 +7772,7 @@ export function createUi(
 					const p = minimapResources.positions()?.get( id );
 					return p ? [ p ] : [];
 				} );
-			const minimapQueries = minimapFloorQueries( next.gameplay ?? null, questPositions ),
+			const minimapQueries = minimapFloorQueries( next.gameplay ?? null, questPositions, next.entities ),
 				queryKey = minimapQueries.map( minimapPoseKey ).join( "|" );
 			if ( next.session?.phase === "world" && queryKey !== minimapQueryKey ) {
 				minimapQueryKey = queryKey;
