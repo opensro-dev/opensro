@@ -377,6 +377,11 @@ func predictionErrorCode(reason string) string {
 		return reason
 	case "ground movement cannot cross disconnected navigation spaces",
 		"ground destination sits on a disconnected navigation surface":
+		// The second phrasing in these paired cases (and the three
+		// "movement ..." sentences below) is the diagnostics spec's
+		// wording, kept defensively: no producer in this tree emits it
+		// today, but a peer converging on the spec must not fall
+		// through to movementRefused.
 		return "disconnectedNavigation"
 	case "ground movement cannot cross the outdoor/dungeon authority boundary",
 		"dungeon movement does not cross regions":
@@ -399,6 +404,8 @@ func predictionErrorCode(reason string) string {
 		return "pathTruncated"
 	case strings.HasPrefix(reason, "malformedMovementRequest"),
 		strings.HasPrefix(reason, "malformedHeadingRequest"),
+		// invalidHeadingRequest is the spec's spelling; this tree's
+		// producer (simulation/moverequest.go) says malformedHeadingRequest.
 		strings.HasPrefix(reason, "invalidHeadingRequest"),
 		strings.HasPrefix(reason, "unsupportedNativeMoveOpcode"):
 		return "malformedMovementRequest"
