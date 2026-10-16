@@ -39,10 +39,15 @@ import (
 var unlistedSettings = map[string]string{
 	action.EnvGMSetSpeed: "a GM command, not a rule players meet",
 	// The tunables a rule's own text shows (game/tunables).
-	"SRO_MOST_WANTED_TEST_KILLS":         "shown in the Most Wanted test pacing rule",
-	"SRO_MOST_WANTED_TEST_BOUNTY":        "shown in the Most Wanted test pacing rule",
-	"SRO_JOB_KILL_NOTICES_PER_MINUTE":    "shown in the job-kill repeat rule",
-	"SRO_JOB_KILL_REPEAT_MINUTES":        "shown in the job-kill repeat rule",
+	"SRO_MOST_WANTED_TEST_KILLS":      "shown in the Most Wanted test pacing rule",
+	"SRO_MOST_WANTED_TEST_BOUNTY":     "shown in the Most Wanted test pacing rule",
+	"SRO_JOB_KILL_NOTICES_PER_MINUTE": "shown in the job-kill repeat rule",
+	"SRO_JOB_KILL_REPEAT_MINUTES":     "shown in the job-kill repeat rule",
+	// Client presentation values (uiTuning): the Short notices row is a
+	// player's own Experimental choice, and the chat wait is the port's.
+	"SRO_SHORT_NOTICE_SHOW_MS":           "timing of a player's own Experimental Short notices row",
+	"SRO_SHORT_NOTICE_FADE_MS":           "timing of a player's own Experimental Short notices row",
+	"SRO_CHAT_ACK_TIMEOUT_MS":            "the client's wait before warning that a chat line may not have arrived",
 	"SRO_MOST_WANTED_NOTICES_PER_MINUTE": "a cap on the Most Wanted notices, an operator throttle",
 }
 

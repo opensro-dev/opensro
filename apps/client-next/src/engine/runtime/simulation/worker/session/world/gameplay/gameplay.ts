@@ -12,6 +12,7 @@ commands and cannot bypass actor eligibility.
 // CGInterface_ExecuteActionCommand 695420: 1000 + 6 asks the selected
 // player to trade.
 const ACTION_EXCHANGE = 1006;
+import { defaultUiTuning, type UiTuning, uiTuningFrom } from "@/engine/foundation/ui/ui-tuning";
 import { guildBanRefused, guildSoldierRefusal } from "@/engine/foundation/gameplay/guild-manager";
 import { advanceGuildWarClock } from "@/engine/foundation/gameplay/guild-war";
 import {
@@ -374,6 +375,8 @@ export function createGameplay(
 	let gmItems = gmItemReferences( {} );
 	// The server's port-only storage auto-stack rule (storageAutoStack).
 	let storageAutoStack = false;
+	// The shard's client tuning from the world-entry bootstrap (ui-tuning.ts).
+	let uiTuning: UiTuning = defaultUiTuning();
 	// The server's port-only Bandit Den countdown rule (fastDenReturn).
 	let fastDenReturn = false;
 	// The server's port-only trade-scale rule (tradeTiers).
@@ -1184,6 +1187,7 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 			inventory.takeBindingMoves();
 			gmItems = gmItemReferences( value );
 			storageAutoStack = (value as { storageAutoStack?: unknown; } | null)?.storageAutoStack === true;
+			uiTuning = uiTuningFrom( value );
 			fastDenReturn = (value as { fastDenReturn?: unknown; } | null)?.fastDenReturn === true;
 			tradeTiers = (value as { tradeTiers?: unknown; } | null)?.tradeTiers === true;
 			jobSuitHidesArmor = (value as { jobSuitHidesArmor?: unknown; } | null)?.jobSuitHidesArmor === true;
@@ -4287,6 +4291,7 @@ The published plane when something changed since the last take, else null.
 				countJobs: countJobs.state(),
 				reverseReturnChoice: countJobs.choosing() !== null,
 				...(storageAutoStack ? { storageAutoStack } : {}),
+				uiTuning,
 				...(tradeTiers ? { tradeTiers } : {}),
 				...(jobSuitHidesArmor ? { jobSuitHidesArmor } : {}),
 				...(moonlitThiefSuit ? { moonlitThiefSuit } : {}),

@@ -66,6 +66,9 @@ const (
 	JobKillNoticesPerMinute    = "job_kill_notices_per_minute"
 	MostWantedNoticesPerMinute = "most_wanted_notices_per_minute"
 	JobKillRepeatMinutes       = "job_kill_repeat_minutes"
+	ShortNoticeShowMs          = "short_notice_show_ms"
+	ShortNoticeFadeMs          = "short_notice_fade_ms"
+	ChatAckTimeoutMs           = "chat_ack_timeout_ms"
 )
 
 /*
@@ -116,6 +119,18 @@ var Registry = []Setting{
 	{Key: JobKillRepeatMinutes, Env: "SRO_JOB_KILL_REPEAT_MINUTES", Kind: Int, Default: 10, Min: 1, Max: 60,
 		Step: 1, Class: Live, Group: "Notices", Label: "Job-kill pair quiet time", Unit: "minutes",
 		Help: "How long one killer/victim pair's job-kill notice stays quiet (off with SRO_JOB_KILL_NOTICE_REPEAT)."},
+	// The client tuning the world-entry bootstrap carries (enterworld
+	// UiTuning; the client's ui-tuning.ts holds the same bounds). A fade is
+	// at most 2000 and a banner at least 3000, so a fade never outlasts it.
+	{Key: ShortNoticeShowMs, Env: "SRO_SHORT_NOTICE_SHOW_MS", Kind: Int, Default: 5000, Min: 3000, Max: 7000,
+		Step: 500, Class: Entry, Group: "Client", Label: "Short notices: time shown", Unit: "ms",
+		Help: "How long a notice banner shows with the Experimental \"Short notices\" row on (its default). A player who turns the row off sees the original 7 seconds."},
+	{Key: ShortNoticeFadeMs, Env: "SRO_SHORT_NOTICE_FADE_MS", Kind: Int, Default: 1000, Min: 500, Max: 2000,
+		Step: 100, Class: Entry, Group: "Client", Label: "Short notices: fade", Unit: "ms",
+		Help: "How much of a short notice's time is its fade-out."},
+	{Key: ChatAckTimeoutMs, Env: "SRO_CHAT_ACK_TIMEOUT_MS", Kind: Int, Default: 10000, Min: 5000, Max: 30000,
+		Step: 1000, Class: Entry, Group: "Client", Label: "Chat confirmation wait", Unit: "ms",
+		Help: "How long the client waits for the server to confirm a chat line before saying it may not have arrived (the original has no such wait)."},
 }
 
 /*
