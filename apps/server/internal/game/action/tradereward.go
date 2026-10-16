@@ -14,6 +14,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
+	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -68,7 +69,7 @@ tradeRewards
 within 1000 planar units. The seller remains the first transaction owner.
 ================
 */
-func (rt *Runtime) tradeRewards(division string, c *enterworld.Character, roster tradeRoster, value commerce.TradeRewardInput) []tradePayout {
+func (rt *Runtime) tradeRewards(division string, c *enterworld.Character, roster tradeRoster, value commerce.TradeRewardInput, s *tunables.Settings) []tradePayout {
 	now := rt.Now().UnixMilli()
 	origin := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now)
 	eligible := make([]*enterworld.Character, 0, len(roster.members))
@@ -101,7 +102,7 @@ func (rt *Runtime) tradeRewards(division string, c *enterworld.Character, roster
 	distribution := commerce.DistributeTradeReward(value)
 	if rt.TradeJobBonus {
 		// Port-only, not native (tradejobbonus.go).
-		applyTradeJobBonus(&distribution, value)
+		applyTradeJobBonus(&distribution, value, s)
 	}
 	out := []tradePayout{{c, distribution.Actor}}
 	if !roster.party || value.Profit <= 0 {

@@ -7,7 +7,9 @@ Port-only, not native (owner decision 2026-10-14, for the balance advisor).
 With SRO_THIEF_PARTY_BONUS on, every member of a party earns +10% monster
 EXP and the party's monster gold drops are +10% larger for each member
 dressed as a thief, capped at +50% (five thieves; the cap is an assumption
-the advisor has not ruled on). Skill EXP is unchanged. Off, the default
+the advisor has not ruled on). Skill EXP is unchanged. Both percents are
+live tunables (game/tunables, the trade group); 10 and 50 are their
+defaults. Off, the default
 here, is native; the GameWorld's Nomad job turns it on.
 
 ===========================================================================
@@ -22,17 +24,11 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
+	"opensro.online/server/internal/game/tunables"
 )
 
 // EnvThiefPartyBonus turns the bonus on ("on", "1", "true").
 const EnvThiefPartyBonus = "SRO_THIEF_PARTY_BONUS"
-
-const (
-	// thiefPartyPercentEach is the bonus per dressed thief in the party.
-	thiefPartyPercentEach = 10
-	// thiefPartyPercentCap bounds the bonus (assumption: five thieves).
-	thiefPartyPercentCap = 50
-)
 
 /*
 ================
@@ -51,11 +47,11 @@ func ThiefPartyBonusFromEnv() bool {
 ================
 thiefPartyPercent
 
-The bonus a party earns: 10 for each member dressed as a thief, capped.
-Zero with the flag off or without a party.
+The bonus a party earns: the per-thief percent for each member dressed as
+a thief, capped. Zero with the flag off or without a party.
 ================
 */
-func (rt *Runtime) thiefPartyPercent(division string, party *RewardParty) int {
+func (rt *Runtime) thiefPartyPercent(division string, party *RewardParty, s *tunables.Settings) int {
 	if !rt.ThiefPartyBonus || party == nil {
 		return 0
 	}
@@ -65,7 +61,7 @@ func (rt *Runtime) thiefPartyPercent(division string, party *RewardParty) int {
 			thieves++
 		}
 	}
-	return min(thieves*thiefPartyPercentEach, thiefPartyPercentCap)
+	return min(thieves*int(s.Int(tunables.ThiefPartyPercentEach)), int(s.Int(tunables.ThiefPartyPercentCap)))
 }
 
 /*
@@ -89,11 +85,11 @@ applyThiefPartyGold
 The owner's party's thief bonus on its planned gold drops.
 ================
 */
-func (rt *Runtime) applyThiefPartyGold(division string, owner *enterworld.Character, planned []grounditem.Item) {
+func (rt *Runtime) applyThiefPartyGold(division string, owner *enterworld.Character, planned []grounditem.Item, s *tunables.Settings) {
 	if owner == nil {
 		return
 	}
-	percent := rt.thiefPartyPercent(division, rt.rewardPartyOf(division, enterworld.ObjectIDForCharacter(owner)))
+	percent := rt.thiefPartyPercent(division, rt.rewardPartyOf(division, enterworld.ObjectIDForCharacter(owner)), s)
 	if percent <= 0 {
 		return
 	}

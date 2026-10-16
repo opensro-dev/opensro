@@ -20,6 +20,7 @@ import (
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
 	"reflect"
 	"strconv"
@@ -409,11 +410,14 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 				part := item
 				part.Quantity = q.Quantity
 				var profit int64
-				credit, profit, collected, priced = rt.tradeSaleValue(division, c, npc, part)
+				// One snapshot of the live tunables prices the sale and splits it.
+				settings := tunables.Current()
+				credit, profit, collected, priced = rt.tradeSaleValue(division, c, npc, part, settings)
 				if !priced {
 					return false
 				}
-				payouts = rt.tradeRewards(division, c, roster, commerce.TradeRewardInput{Credit: int64(credit), Profit: profit})
+				payouts = rt.tradeRewards(division, c, roster, commerce.TradeRewardInput{Credit: int64(credit), Profit: profit},
+					settings)
 				for _, payout := range payouts {
 					if payout.Gold < 0 || uint64(payout.Gold) > math.MaxInt64-goldOf(payout.character) {
 						return false

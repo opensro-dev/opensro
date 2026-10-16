@@ -145,13 +145,25 @@ resolveSurfacePassages
 ================
 */
 func resolveSurfacePassages(set []resolvedObjectNav, from, to [3]float64, owned bool) objectPassages {
+	return resolveSurfacePassagesIndexed(set, nil, from, to, owned)
+}
+
+/*
+================
+resolveSurfacePassagesIndexed
+
+resolveSurfacePassages with the set's ordinal -> index map supplied by a
+caller that owns an immutable set (a dungeon surface builds it once); nil
+builds it at the first link, as before.
+================
+*/
+func resolveSurfacePassagesIndexed(set []resolvedObjectNav, indices map[int]int, from, to [3]float64, owned bool) objectPassages {
 	x0, y0, z0 := from[0], from[1], from[2]
 	x1, y1, z1 := to[0], to[1], to[2]
 	dx, dz := x1-x0, z1-z0
 	var passages objectPassages
-	// Built at the first link: most placements have none, and building it
-	// for every monster step allocated about 60 MB a minute.
-	var indices map[int]int
+	// Built at the first link when not supplied: most placements have none,
+	// and building it for every monster step allocated about 60 MB a minute.
 	crossing := func(obj *resolvedObjectNav, edge int, leaving bool) (float64, bool) {
 		if len(obj.meshes) != 1 {
 			return 0, false
@@ -160,20 +172,26 @@ func resolveSurfacePassages(set []resolvedObjectNav, from, to [3]float64, owned 
 		if edge < 0 || edge >= len(m.outline.flags) {
 			return 0, false
 		}
-		a, b := portalEndpoint(obj.placement, m, edge, 0), portalEndpoint(obj.placement, m, edge, 1)
+		p := obj.placement
+		c, s := obj.cosYaw, obj.sinYaw
+		if c == 0 && s == 0 {
+			c, s = math.Cos(p.yaw), math.Sin(p.yaw)
+		}
+		va, vb := int(m.outline.vertA[edge])*3, int(m.outline.vertB[edge])*3
+		ax, ay, az := float64(m.vertices[va]), float64(m.vertices[va+1]), float64(m.vertices[va+2])
+		bx, by, bz := float64(m.vertices[vb]), float64(m.vertices[vb+1]), float64(m.vertices[vb+2])
+		a := [3]float64{float64(float32(c*ax - s*az + p.x)), float64(float32(ay + p.y)), float64(float32(s*ax + c*az + p.z))}
+		b := [3]float64{float64(float32(c*bx - s*bz + p.x)), float64(float32(by + p.y)), float64(float32(s*bx + c*bz + p.z))}
 		startX, startZ, deltaX, deltaZ := x0, z0, dx, dz
 		cx, cz := objectCellCentroid2D(m, int(m.outline.srcCell[edge]))
-		p := obj.placement
-		c, s := math.Cos(p.yaw), math.Sin(p.yaw)
 		if owned {
 			// The mesh walker intersects in object space. The rounded world
 			// endpoints belong to link matching, not to this cell's exit.
 			x, z := x0-p.x, z0-p.z
 			startX, startZ = c*x+s*z, -s*x+c*z
 			deltaX, deltaZ = c*dx+s*dz, -s*dx+c*dz
-			va, vb := int(m.outline.vertA[edge])*3, int(m.outline.vertB[edge])*3
-			a = [3]float64{float64(m.vertices[va]), float64(m.vertices[va+1]), float64(m.vertices[va+2])}
-			b = [3]float64{float64(m.vertices[vb]), float64(m.vertices[vb+1]), float64(m.vertices[vb+2])}
+			a = [3]float64{ax, ay, az}
+			b = [3]float64{bx, by, bz}
 		} else {
 			cx, cz = c*cx-s*cz+p.x, s*cx+c*cz+p.z
 		}
@@ -198,7 +216,10 @@ func resolveSurfacePassages(set []resolvedObjectNav, from, to [3]float64, owned 
 			return false
 		}
 		p := obj.placement
-		c, s := math.Cos(p.yaw), math.Sin(p.yaw)
+		c, s := obj.cosYaw, obj.sinYaw
+		if c == 0 && s == 0 {
+			c, s = math.Cos(p.yaw), math.Sin(p.yaw)
+		}
 		x, z := x0+dx*t-p.x, z0+dz*t-p.z
 		h, ok := objectCellPlaneYAt(m, int(m.outline.srcCell[edge]), c*x+s*z, -s*x+c*z)
 		return ok && (owned || math.Abs(h+p.y-(y0+(y1-y0)*t)) <= 2)

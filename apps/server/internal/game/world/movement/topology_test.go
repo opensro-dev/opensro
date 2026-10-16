@@ -19,7 +19,7 @@ func topologyMesh(west bool) *objectNavMesh {
 }
 func TestDungeonTopologyClipsAndTraverses(t *testing.T) {
 	blocks := []dungeonSpawnBlock{{ordinal: 0, connected: []int{1}, meshes: []*objectNavMesh{topologyMesh(false)}}, {ordinal: 1, connected: []int{0}, x: 100, meshes: []*objectNavMesh{topologyMesh(true)}}}
-	surface := &dungeonSpawnSurface{blocks: blocks, objects: resolveDungeonLinks(blocks)}
+	surface := newDungeonSpawnSurface(dungeonMessageGrid{}, blocks)
 	if len(surface.objects[0].placement.links) != 1 {
 		t.Fatal("Missing portal")
 	}
@@ -128,7 +128,7 @@ func TestLinkedLaneRescueAndDungeonObjects(t *testing.T) {
 		t.Fatal("Reachable linked exit classified sealed")
 	}
 	block := dungeonSpawnBlock{meshes: []*objectNavMesh{a}, obstacles: []dungeonObstacle{{x: 60, y: 10, z: 50, radiusSquared: 625}}}
-	surface := &dungeonSpawnSurface{blocks: []dungeonSpawnBlock{block}, objects: resolveDungeonLinks([]dungeonSpawnBlock{block})}
+	surface := newDungeonSpawnSurface(dungeonMessageGrid{}, []dungeonSpawnBlock{block})
 	v := &WaterValidator{dungeonSpawnSurfaces: map[uint16]*dungeonSpawnSurface{0x8001: surface}}
 	v.dungeonSpawnOnce.Do(func() {})
 	from := simulation.Spawn{RegionID: 0x8001, X: 10, Y: 10, Z: 50}

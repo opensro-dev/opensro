@@ -24,7 +24,7 @@ import { createTooltipSkillDecoder } from "@/engine/foundation/ui/skill-tooltip-
 import type { TooltipSkillCatalog } from "@/engine/foundation/ui/skill-tooltip-data";
 import { decodeActionSlots, type ActionSlot } from "@/engine/foundation/ui/action-layout";
 import { decodeMapLabels, decodeMapIcons, type MapLabel, type MapIcon } from "@/engine/foundation/ui/world-map";
-import { creationNameRules, type NameRules } from "@/engine/foundation/ui/character-create";
+import { creationNameRules, NAME_FILTER_GUILD, type NameRules } from "@/engine/foundation/ui/character-create";
 import { decodeSkillUi, type SkillUi } from "@/engine/foundation/ui/skill-layout";
 import { equipmentSocket } from "@/engine/foundation/ui/inventory-layout";
 import { decodeMessageTips, type MessageTip } from "@/engine/foundation/ui/message-tips";
@@ -75,6 +75,8 @@ interface HudData {
 	readonly actions: readonly ActionSlot[];
 	readonly mapLabels: readonly MapLabel[];
 	readonly nameRules: NameRules;
+	// The same filter's guild-name column (790A30).
+	readonly guildNameRules: NameRules;
 	readonly skillUi: SkillUi;
 	readonly popupArt: {
 		readonly tab: string;
@@ -382,8 +384,12 @@ export function createHudResources(
 								continue;
 							} else if ( i === layouts.length + 7 ) value = decodeActionSlots( raw );
 							else if ( i === layouts.length + 5 ) value = raw;
-							else if ( i === layouts.length + 4 ) value = creationNameRules( r.buffer );
-							else if ( i === layouts.length + 2 ) value = decodeMessageTips( raw );
+							else if ( i === layouts.length + 4 ) {
+								value = [
+									creationNameRules( r.buffer ),
+									creationNameRules( r.buffer, NAME_FILTER_GUILD )
+								];
+							} else if ( i === layouts.length + 2 ) value = decodeMessageTips( raw );
 							else if ( i === layouts.length + 3 ) value = decodeSkillUi( raw );
 							else {
 								if (
@@ -430,7 +436,8 @@ export function createHudResources(
 						values[layouts.length + 5],
 						values[layouts.length + 6] as Record<string, string>
 					),
-					nameRules: values[layouts.length + 4] as NameRules,
+					nameRules: (values[layouts.length + 4] as readonly NameRules[])[0]!,
+					guildNameRules: (values[layouts.length + 4] as readonly NameRules[])[1]!,
 					skillUi: values[layouts.length + 3] as SkillUi,
 					popupArt: {
 						tab: "/assets/images/Media_extracted/interface/ifcommon/com_tab_on.png",

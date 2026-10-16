@@ -1,10 +1,22 @@
+/*
+===========================================================================
+
+dungeon_clip.go - a mover's step through a dungeon resident host
+
+clipDungeonPath clips one chord against the dungeon's blocks: object
+contacts, edge cuts sampled for floor, and obstacle circles. Blocks the
+chord's box misses are skipped (objectnav_reach.go), and cells whose
+padded box it misses too; both skips leave the report unchanged.
+
+===========================================================================
+*/
 package movement
 
 import (
 	"math"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
-	"sort"
+	"slices"
 )
 
 // Dungeon movement never uses outdoor sector arithmetic. Missing coverage and
@@ -29,11 +41,20 @@ func (v *WaterValidator) clipDungeonPath(from, to simulation.Spawn) ClipReport {
 	best := math.Inf(1)
 	result := uint32(monster.NavResultBlocked)
 	var rest objectContactPoint
-	cuts := []float64{0, 1}
-	passages := resolveObjectPassages(surface.objects, from.X, from.Y, from.Z, to.X, to.Y, to.Z)
-	for i, obj := range surface.objects {
+	var cutsBuf [32]float64
+	cuts := cutsBuf[:2]
+	cuts[0], cuts[1] = 0, 1
+	passages := resolveSurfacePassagesIndexed(surface.objects, surface.ordinalIndex, [3]float64{from.X, from.Y, from.Z},
+		[3]float64{to.X, to.Y, to.Z}, false)
+	for i := range surface.objects {
+		obj := &surface.objects[i]
+		// A block the chord's box misses can neither be contacted nor cut
+		// (objectnav_reach.go): every edge and contact lies in its reach.
+		if obj.reach.missedBy(from.X, from.Z, to.X, to.Z) {
+			continue
+		}
 		p := obj.placement
-		c, s := math.Cos(p.yaw), math.Sin(p.yaw)
+		c, s := obj.cosYaw, obj.sinYaw
 		x0, z0 := c*(from.X-p.x)+s*(from.Z-p.z), -s*(from.X-p.x)+c*(from.Z-p.z)
 		x1, z1 := c*(to.X-p.x)+s*(to.Z-p.z), -s*(to.X-p.x)+c*(to.Z-p.z)
 		for _, m := range obj.meshes {
@@ -52,6 +73,10 @@ func (v *WaterValidator) clipDungeonPath(from, to simulation.Spawn) ClipReport {
 				best = t
 			}
 			for cell := 0; cell < m.cellCount(); cell++ {
+				// A cell whose box the chord's misses has no edge it crosses.
+				if m.cellMissedBy(cell, min(x0, x1), max(x0, x1), min(z0, z1), max(z0, z1)) {
+					continue
+				}
 				vertices := [3]uint16{m.cellA[cell], m.cellB[cell], m.cellC[cell]}
 				for k, a := range vertices {
 					b := vertices[(k+1)%3]
@@ -73,7 +98,8 @@ func (v *WaterValidator) clipDungeonPath(from, to simulation.Spawn) ClipReport {
 			}
 		}
 	}
-	for _, block := range surface.blocks {
+	for i := range surface.blocks {
+		block := &surface.blocks[i]
 		for _, o := range block.obstacles {
 			a := dx*dx + dz*dz
 			if a == 0 {
@@ -99,7 +125,7 @@ func (v *WaterValidator) clipDungeonPath(from, to simulation.Spawn) ClipReport {
 			}
 			px, pz := from.X+dx*t, from.Z+dz*t
 			hint := from.Y + (to.Y-from.Y)*t
-			single := dungeonSpawnSurface{blocks: []dungeonSpawnBlock{block}}
+			single := dungeonSpawnSurface{blocks: surface.blocks[i : i+1]}
 			h, inside := single.heightAt(px, hint, pz)
 			if inside && math.Abs(h-hint) <= 2 {
 				if t < best {
@@ -113,7 +139,7 @@ func (v *WaterValidator) clipDungeonPath(from, to simulation.Spawn) ClipReport {
 			}
 		}
 	}
-	sort.Float64s(cuts)
+	slices.Sort(cuts)
 	for i := 1; i < len(cuts); i++ {
 		if cuts[i]-cuts[i-1] < 1e-8 {
 			continue

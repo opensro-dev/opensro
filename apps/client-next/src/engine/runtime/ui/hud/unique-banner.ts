@@ -13,6 +13,7 @@ a 1000 ms fade.
 */
 import type { SystemNotice } from "@/engine/foundation/gameplay/system-notices";
 import { noticeText } from "@/engine/foundation/ui/notice-text";
+import type { UiTuning } from "@/engine/foundation/ui/ui-tuning";
 
 export const uniqueBannerPaths = [ "corner", "edge", "edge2" ].map( part =>
 	`/assets/images/Media_extracted/interface/ifcommon/com_warning_${part}.png`
@@ -47,11 +48,15 @@ const ALPHA_STEPS = 255;
 ================
 noticeTiming
 
-The notice banner's timing for the Experimental "Short notices" setting.
+The notice banner's timing for the Experimental "Short notices" setting,
+with the shard's tuning of the short timing when it sends one.
 ================
 */
-export function noticeTiming( short: boolean ): NoticeTiming {
-	return short ? SHORT_NOTICE_TIMING : NATIVE_NOTICE_TIMING;
+export function noticeTiming( short: boolean, tuning?: UiTuning ): NoticeTiming {
+	if ( !short ) return NATIVE_NOTICE_TIMING;
+	// Port-only: the shard may tune the short timing (ui-tuning.ts); the
+	// native timing above is never tuned.
+	return tuning ? { showMs: tuning.shortNoticeShowMs, fadeMs: tuning.shortNoticeFadeMs } : SHORT_NOTICE_TIMING;
 }
 
 /*

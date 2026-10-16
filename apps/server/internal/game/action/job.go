@@ -21,10 +21,12 @@ also echoes mode and alias). The rules are v1.188's CGObjPC_HandleJobJoin70E1
     (job state 4); a thief or hunter starts the seven-day wait;
   - alias: the NPC keeps the player's guild, no job suit is worn, and the
     name passes the naming rule; mode 0 only asks whether it is free and
-    mode 1 takes it.
+    mode 1 takes it. Changing an alias the player already has costs
+    level x 50,000 gold (512540 tests it before its database job: 0x4807
+    short), the cost the client's modify window shows (645E90).
 
-INFERENCE: v1.188 tests the join fee but the deduction happens inside its
-database job; the port charges it with the join. The alias follows the
+INFERENCE: v1.188 tests the join and alias-change fees but the deduction
+happens inside its database jobs; the port charges each with its commit. The alias follows the
 character name shape (sub_4184a0 is the shared name filter) and is unique
 among the division's aliases.
 
@@ -69,6 +71,9 @@ const (
 	// for each level above it.
 	jobMinLevel    = 20
 	jobFeePerLevel = 5000
+	// jobAliasChangePerLevel is 512540's 0xC350: changing an existing alias
+	// costs the level times 50,000 gold (the client's 645E90 shows it).
+	jobAliasChangePerLevel = 50000
 	// jobRejoinWaitMs is 5122B0's 0x93A80-second timed job: seven days.
 	jobRejoinWaitMs = 604800 * 1000
 	// jobStartGrade is the grade a new member starts at (CICUser_ResetSpawn).
@@ -255,6 +260,10 @@ func (rt *Runtime) HandleJobAlias(division string, c *enterworld.Character, payl
 		!rt.nameAllowed(alias) {
 		return jobAliasRefusal(jobErrAliasRule, mode, alias)
 	}
+	// 512540 tests a change's fee before its database job checks the name.
+	if mode == jobAliasModeCreate && uint64(jobAliasChangeFee(c)) > goldOf(c) {
+		return jobAliasRefusal(jobErrNoGold, mode, alias)
+	}
 	if rt.jobAliasTaken(division, c, alias) {
 		return jobAliasRefusal(jobErrAliasTaken, mode, alias)
 	}
@@ -263,14 +272,45 @@ func (rt *Runtime) HandleJobAlias(division string, c *enterworld.Character, payl
 	if mode == jobAliasModeCheck {
 		return result
 	}
+	refusal := jobErrInvalidJob
 	if !rt.deps.Update(c, "job-alias", func() bool {
 		if c.DeletePending {
 			return false
 		}
+		// Re-read under the door: the balance may have moved since the test.
+		fee := jobAliasChangeFee(c)
+		if uint64(fee) > goldOf(c) {
+			refusal = jobErrNoGold
+			return false
+		}
+		if fee > 0 {
+			gold := int64(goldOf(c)) - fee
+			c.Gold = &gold
+			result.Frames = append(result.Frames, goldFrame(c))
+		}
 		c.Job.Alias = alias
 		return true
 	}) {
-		return jobAliasRefusal(jobErrInvalidJob, mode, alias)
+		return jobAliasRefusal(refusal, mode, alias)
 	}
 	return result
+}
+
+/*
+================
+jobAliasChangeFee
+
+The gold changing an alias costs: nothing for a first alias, else the
+level times 50,000 (512540: a non-empty current alias is a change).
+================
+*/
+func jobAliasChangeFee(c *enterworld.Character) int64 {
+	if c.Job.Alias == "" {
+		return 0
+	}
+	level := int64(1)
+	if c.Level != nil {
+		level = *c.Level
+	}
+	return level * jobAliasChangePerLevel
 }

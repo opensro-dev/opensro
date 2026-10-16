@@ -256,6 +256,25 @@ variable "job_kill_repeat_minutes" {
   default = "10"
 }
 
+# short_notice_show_ms (3000..7000) and short_notice_fade_ms (500..2000) time
+# the Experimental "Short notices" banner; chat_ack_timeout_ms (5000..30000)
+# is the client's wait for a chat confirmation. Each player takes them at
+# the next world entry (port-only, game/tunables class Entry).
+variable "short_notice_show_ms" {
+  type    = string
+  default = "5000"
+}
+
+variable "short_notice_fade_ms" {
+  type    = string
+  default = "1000"
+}
+
+variable "chat_ack_timeout_ms" {
+  type    = string
+  default = "10000"
+}
+
 # most_wanted_bounty_transfer pays a wanted player's bounty out of that
 # player's own gold, at most what they carry, instead of minting it
 # (port-only, not native; owner decision 2026-10-15). "off" mints it.
@@ -271,6 +290,29 @@ variable "most_wanted_bounty_transfer" {
 variable "trade_tiers" {
   type    = string
   default = "on"
+}
+
+# trade_route_*_percent are the Jangan route profit bonuses under
+# trade_tiers (0..500 each; port-only, game/tunables, live: a staff
+# approval changes them without a restart).
+variable "trade_route_donwhang_percent" {
+  type    = string
+  default = "50"
+}
+
+variable "trade_route_hotan_percent" {
+  type    = string
+  default = "100"
+}
+
+variable "trade_route_samarkand_percent" {
+  type    = string
+  default = "200"
+}
+
+variable "trade_route_constantinople_percent" {
+  type    = string
+  default = "300"
 }
 
 # job_suit_hides_armor makes trader and hunter suits hide the armour worn
@@ -362,12 +404,48 @@ variable "thief_party_bonus" {
   default = "on"
 }
 
+# thief_party_percent_each and thief_party_percent_cap are thief_party_bonus'
+# per-thief percent (0..50) and its cap (0..200) (port-only, game/tunables,
+# live).
+variable "thief_party_percent_each" {
+  type    = string
+  default = "10"
+}
+
+variable "thief_party_percent_cap" {
+  type    = string
+  default = "50"
+}
+
 # trade_job_bonus pays a trader +10% profit per party hunter (up to 20%)
 # and each hunter +10% gold per party trader (up to 60%) on a trade sale
 # (port-only, not native; owner decision 2026-10-14). "off" is native.
 variable "trade_job_bonus" {
   type    = string
   default = "on"
+}
+
+# trade_job_*_percent_* are trade_job_bonus' percents: the trader's per
+# hunter (0..50) and cap (0..100), each hunter's per trader (0..50) and cap
+# (0..200) (port-only, game/tunables, live).
+variable "trade_job_trader_percent_per_hunter" {
+  type    = string
+  default = "10"
+}
+
+variable "trade_job_trader_percent_cap" {
+  type    = string
+  default = "20"
+}
+
+variable "trade_job_hunter_percent_per_trader" {
+  type    = string
+  default = "10"
+}
+
+variable "trade_job_hunter_percent_cap" {
+  type    = string
+  default = "60"
 }
 
 # reverse_return_map adds map destinations to the reverse return scroll
@@ -728,93 +806,106 @@ job "sro-gameworld-__SHARD_ID__" {
         # player's world already keeps live (about 100MB of monsters, nav and
         # references): the collector then ran almost without pause and took
         # 82% of 3.6 cores with one player online.
-        GOMEMLIMIT = "${floor(var.memory_mb * 3 / 4)}MiB"
-        SRO_SHARD_CATALOG_PATH             = var.catalog_path
-        SRO_SHARD_ID                       = var.shard_id
-        SRO_AGENT_URL_REQUIRE              = "1"
-        SRO_AGENT_IDENTITY_FILE            = "${NOMAD_SECRETS_DIR}/nomad_sro_agent.jwt"
-        SRO_AGENT_SESSION_PUBLIC_KEYS_PATH = "${NOMAD_SECRETS_DIR}/agent-session-public-keys.json"
-        SRO_AUTHORITY_STATE_DIR            = var.authority_dir
-        SRO_AUTHORITY_REQUIRE              = "1"
-        SRO_GM_CHARACTERS                  = var.gm_characters
-        SRO_SERVER_GAME_DATA_ROOT          = var.server_game_data_root
-        SRO_SERVER_GAME_DATA_MANIFEST_DIGEST = var.server_game_data_manifest_digest
-        SRO_GAMEWORLD_CONTROL_ADDR         = "${NOMAD_IP_control}:${NOMAD_PORT_control}"
-        SRO_GAMEWORLD_PRIVATE_NETWORK      = var.private_network
-        SRO_BENCHMARK_FIXTURE_CONTROL       = var.host_network == "loopback" && var.nomad_namespace == "default" ? "1" : "0"
-        SRO_MOVE_PATH_GUARD                = var.move_path_guard
-        SRO_MOVE_CLIENT_CLIP               = var.move_client_clip
-        SRO_BETA_STARTER_KIT               = var.beta_starter_kit
-        SRO_BETA_PLAYER_MAP                = var.beta_player_map
-        SRO_BETA_MASTERY                   = var.beta_mastery
-        SRO_BETA_SILK                      = var.beta_silk
-        SRO_MAINTENANCE_GATE_PATH          = var.maintenance_gate_path
-        SRO_PARTY_MASTERIES                = var.party_masteries
-        SRO_PET_PACING                     = var.pet_pacing
-        SRO_STORAGE_AUTO_STACK             = var.storage_auto_stack
-        SRO_FAST_DEN_RETURN                = var.fast_den_return
-        SRO_CLOSED_OBJECT_RESCUE           = var.closed_object_rescue
-        SRO_MOST_WANTED                    = var.most_wanted
-        SRO_MOST_WANTED_TEST               = var.most_wanted_test
-        SRO_MOST_WANTED_TEST_KILLS         = var.most_wanted_test_kills
-        SRO_MOST_WANTED_TEST_BOUNTY        = var.most_wanted_test_bounty
-        SRO_MOST_WANTED_BOUNTY_TRANSFER    = var.most_wanted_bounty_transfer
-        SRO_TRADE_TIERS                    = var.trade_tiers
-        SRO_JOB_SUIT_HIDES_ARMOR           = var.job_suit_hides_armor
-        SRO_MOONLIT_THIEF_SUIT             = var.moonlit_thief_suit
-        SRO_DEN_NO_TRANSPORT_SUMMON        = var.den_no_transport_summon
-        SRO_TRADER_CARGO_DROP              = var.trader_cargo_drop
-        SRO_MALL_TRANSPORT_SPEED           = var.mall_transport_speed
-        SRO_MALL_RIDE_SPEED                = var.mall_ride_speed
-        SRO_ANNOUNCE_SOX_DROP              = var.announce_sox_drop
-        SRO_ANNOUNCE_PLUS                  = var.announce_plus
-        SRO_ANNOUNCE_JOB_KILL              = var.announce_job_kill
-        SRO_JOB_KILL_NOTICE_REPEAT         = var.job_kill_notice_repeat
-        SRO_JOB_KILL_NOTICES_PER_MINUTE    = var.job_kill_notices_per_minute
-        SRO_MOST_WANTED_NOTICES_PER_MINUTE = var.most_wanted_notices_per_minute
-        SRO_JOB_KILL_REPEAT_MINUTES        = var.job_kill_repeat_minutes
-        SRO_ANNOUNCE_MOST_WANTED           = var.announce_most_wanted
-        SRO_THIEF_PARTY_BONUS              = var.thief_party_bonus
-        SRO_TRADE_JOB_BONUS                = var.trade_job_bonus
-        SRO_REVERSE_RETURN_MAP             = var.reverse_return_map
-        SRO_GM_SETSPEED                    = var.gm_setspeed
-        SRO_ALCHEMY_RATES                  = var.alchemy_rates
-        SRO_ALCHEMY_MAX_PLUS               = var.alchemy_max_plus
-        SRO_TEAM_DEATH_REVIVE              = var.team_death_revive
-        SRO_BETA_GROWTH                    = var.beta_growth
-        SRO_BETA_SKILL_EXP_RATE            = var.beta_skill_exp_rate
-        SRO_BETA_DROP_RATE                 = var.beta_drop_rate
-        SRO_BETA_GOLD_RATE                 = var.beta_gold_rate
-        SRO_INSTANT_INVENTORY_EXPANSION    = var.instant_inventory_expansion
-        SRO_BETA_RARE_RATE                 = var.beta_rare_rate
-        SRO_BETA_SEAL_RATES                = var.beta_seal_rates
-        SRO_SUN_EVENT_ONLY                 = var.sun_event_only
-        SRO_BETA_DROP_CAP                  = var.beta_drop_cap
-        SRO_BETA_DROP_MIX                  = var.beta_drop_mix
-        SRO_SHOP_EXTRA_GOODS               = var.shop_extra_goods
-        SRO_MALL_EXTRA_GOODS               = var.mall_extra_goods
-        SRO_ALCHEMY_NO_ASSIMILATION        = var.alchemy_no_assimilation
-        SRO_CARAVAN_BANDIT_CAP             = var.caravan_bandit_cap
-        SRO_CARAVAN_STAR_AMBUSH            = var.caravan_star_ambush
-        SRO_JOB_MONSTER_SPEED              = var.job_monster_speed
-        SRO_TRANSPORT_FOLLOW               = var.transport_follow
-        SRO_JOB_GOODS_TELEPORT             = var.job_goods_teleport
-        SRO_ELIXIR_DROPS_OFF               = var.elixir_drops_off
-        SRO_ALCHEMY_MATERIAL_DROPS_OFF     = var.alchemy_material_drops_off
-        SRO_BETA_SHOP_ONLY_DEGREE9         = var.beta_shop_only_degree9
-        SRO_STACK_SIZES                    = var.stack_sizes
-        SRO_PUBLIC_API_ADDR                = var.public_api_addr
-        SRO_PUBLIC_API_TOKEN_PATH          = "${NOMAD_SECRETS_DIR}/public-api-token"
-        TRANSPORT_WT_ADDR                  = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
-        TRANSPORT_WS_ADDR                  = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
-        TRANSPORT_CERT_DIR                 = var.cert_dir
-        TRANSPORT_CERT_FILE                = var.transport_cert_file
-        TRANSPORT_KEY_FILE                 = var.transport_key_file
-        TRANSPORT_ALLOWED_ORIGINS          = var.allowed_origins
-        SRO_TRANSPORT_TLS_ID               = var.transport_tls_id
-        TRANSPORT_PPROF                    = var.transport_pprof
-        TRANSPORT_PPROF_ADDR               = var.pprof_addr
-        SRO_RELEASE_ID                     = var.release_id
+        GOMEMLIMIT                              = "${floor(var.memory_mb * 3 / 4)}MiB"
+        SRO_SHARD_CATALOG_PATH                  = var.catalog_path
+        SRO_SHARD_ID                            = var.shard_id
+        SRO_AGENT_URL_REQUIRE                   = "1"
+        SRO_AGENT_IDENTITY_FILE                 = "${NOMAD_SECRETS_DIR}/nomad_sro_agent.jwt"
+        SRO_AGENT_SESSION_PUBLIC_KEYS_PATH      = "${NOMAD_SECRETS_DIR}/agent-session-public-keys.json"
+        SRO_AUTHORITY_STATE_DIR                 = var.authority_dir
+        SRO_AUTHORITY_REQUIRE                   = "1"
+        SRO_GM_CHARACTERS                       = var.gm_characters
+        SRO_SERVER_GAME_DATA_ROOT               = var.server_game_data_root
+        SRO_SERVER_GAME_DATA_MANIFEST_DIGEST    = var.server_game_data_manifest_digest
+        SRO_GAMEWORLD_CONTROL_ADDR              = "${NOMAD_IP_control}:${NOMAD_PORT_control}"
+        SRO_GAMEWORLD_PRIVATE_NETWORK           = var.private_network
+        SRO_BENCHMARK_FIXTURE_CONTROL           = var.host_network == "loopback" && var.nomad_namespace == "default" ? "1" : "0"
+        SRO_MOVE_PATH_GUARD                     = var.move_path_guard
+        SRO_MOVE_CLIENT_CLIP                    = var.move_client_clip
+        SRO_BETA_STARTER_KIT                    = var.beta_starter_kit
+        SRO_BETA_PLAYER_MAP                     = var.beta_player_map
+        SRO_BETA_MASTERY                        = var.beta_mastery
+        SRO_BETA_SILK                           = var.beta_silk
+        SRO_MAINTENANCE_GATE_PATH               = var.maintenance_gate_path
+        SRO_PARTY_MASTERIES                     = var.party_masteries
+        SRO_PET_PACING                          = var.pet_pacing
+        SRO_STORAGE_AUTO_STACK                  = var.storage_auto_stack
+        SRO_FAST_DEN_RETURN                     = var.fast_den_return
+        SRO_CLOSED_OBJECT_RESCUE                = var.closed_object_rescue
+        SRO_MOST_WANTED                         = var.most_wanted
+        SRO_MOST_WANTED_TEST                    = var.most_wanted_test
+        SRO_MOST_WANTED_TEST_KILLS              = var.most_wanted_test_kills
+        SRO_MOST_WANTED_TEST_BOUNTY             = var.most_wanted_test_bounty
+        SRO_MOST_WANTED_BOUNTY_TRANSFER         = var.most_wanted_bounty_transfer
+        SRO_TRADE_TIERS                         = var.trade_tiers
+        SRO_TRADE_ROUTE_DONWHANG_PERCENT        = var.trade_route_donwhang_percent
+        SRO_TRADE_ROUTE_HOTAN_PERCENT           = var.trade_route_hotan_percent
+        SRO_TRADE_ROUTE_SAMARKAND_PERCENT       = var.trade_route_samarkand_percent
+        SRO_TRADE_ROUTE_CONSTANTINOPLE_PERCENT  = var.trade_route_constantinople_percent
+        SRO_JOB_SUIT_HIDES_ARMOR                = var.job_suit_hides_armor
+        SRO_MOONLIT_THIEF_SUIT                  = var.moonlit_thief_suit
+        SRO_DEN_NO_TRANSPORT_SUMMON             = var.den_no_transport_summon
+        SRO_TRADER_CARGO_DROP                   = var.trader_cargo_drop
+        SRO_MALL_TRANSPORT_SPEED                = var.mall_transport_speed
+        SRO_MALL_RIDE_SPEED                     = var.mall_ride_speed
+        SRO_ANNOUNCE_SOX_DROP                   = var.announce_sox_drop
+        SRO_ANNOUNCE_PLUS                       = var.announce_plus
+        SRO_ANNOUNCE_JOB_KILL                   = var.announce_job_kill
+        SRO_JOB_KILL_NOTICE_REPEAT              = var.job_kill_notice_repeat
+        SRO_JOB_KILL_NOTICES_PER_MINUTE         = var.job_kill_notices_per_minute
+        SRO_MOST_WANTED_NOTICES_PER_MINUTE      = var.most_wanted_notices_per_minute
+        SRO_JOB_KILL_REPEAT_MINUTES             = var.job_kill_repeat_minutes
+        SRO_SHORT_NOTICE_SHOW_MS                = var.short_notice_show_ms
+        SRO_SHORT_NOTICE_FADE_MS                = var.short_notice_fade_ms
+        SRO_CHAT_ACK_TIMEOUT_MS                 = var.chat_ack_timeout_ms
+        SRO_ANNOUNCE_MOST_WANTED                = var.announce_most_wanted
+        SRO_THIEF_PARTY_BONUS                   = var.thief_party_bonus
+        SRO_THIEF_PARTY_PERCENT_EACH            = var.thief_party_percent_each
+        SRO_THIEF_PARTY_PERCENT_CAP             = var.thief_party_percent_cap
+        SRO_TRADE_JOB_BONUS                     = var.trade_job_bonus
+        SRO_TRADE_JOB_TRADER_PERCENT_PER_HUNTER = var.trade_job_trader_percent_per_hunter
+        SRO_TRADE_JOB_TRADER_PERCENT_CAP        = var.trade_job_trader_percent_cap
+        SRO_TRADE_JOB_HUNTER_PERCENT_PER_TRADER = var.trade_job_hunter_percent_per_trader
+        SRO_TRADE_JOB_HUNTER_PERCENT_CAP        = var.trade_job_hunter_percent_cap
+        SRO_REVERSE_RETURN_MAP                  = var.reverse_return_map
+        SRO_GM_SETSPEED                         = var.gm_setspeed
+        SRO_ALCHEMY_RATES                       = var.alchemy_rates
+        SRO_ALCHEMY_MAX_PLUS                    = var.alchemy_max_plus
+        SRO_TEAM_DEATH_REVIVE                   = var.team_death_revive
+        SRO_BETA_GROWTH                         = var.beta_growth
+        SRO_BETA_SKILL_EXP_RATE                 = var.beta_skill_exp_rate
+        SRO_BETA_DROP_RATE                      = var.beta_drop_rate
+        SRO_BETA_GOLD_RATE                      = var.beta_gold_rate
+        SRO_INSTANT_INVENTORY_EXPANSION         = var.instant_inventory_expansion
+        SRO_BETA_RARE_RATE                      = var.beta_rare_rate
+        SRO_BETA_SEAL_RATES                     = var.beta_seal_rates
+        SRO_SUN_EVENT_ONLY                      = var.sun_event_only
+        SRO_BETA_DROP_CAP                       = var.beta_drop_cap
+        SRO_BETA_DROP_MIX                       = var.beta_drop_mix
+        SRO_SHOP_EXTRA_GOODS                    = var.shop_extra_goods
+        SRO_MALL_EXTRA_GOODS                    = var.mall_extra_goods
+        SRO_ALCHEMY_NO_ASSIMILATION             = var.alchemy_no_assimilation
+        SRO_CARAVAN_BANDIT_CAP                  = var.caravan_bandit_cap
+        SRO_CARAVAN_STAR_AMBUSH                 = var.caravan_star_ambush
+        SRO_JOB_MONSTER_SPEED                   = var.job_monster_speed
+        SRO_TRANSPORT_FOLLOW                    = var.transport_follow
+        SRO_JOB_GOODS_TELEPORT                  = var.job_goods_teleport
+        SRO_ELIXIR_DROPS_OFF                    = var.elixir_drops_off
+        SRO_ALCHEMY_MATERIAL_DROPS_OFF          = var.alchemy_material_drops_off
+        SRO_BETA_SHOP_ONLY_DEGREE9              = var.beta_shop_only_degree9
+        SRO_STACK_SIZES                         = var.stack_sizes
+        SRO_PUBLIC_API_ADDR                     = var.public_api_addr
+        SRO_PUBLIC_API_TOKEN_PATH               = "${NOMAD_SECRETS_DIR}/public-api-token"
+        TRANSPORT_WT_ADDR                       = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
+        TRANSPORT_WS_ADDR                       = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
+        TRANSPORT_CERT_DIR                      = var.cert_dir
+        TRANSPORT_CERT_FILE                     = var.transport_cert_file
+        TRANSPORT_KEY_FILE                      = var.transport_key_file
+        TRANSPORT_ALLOWED_ORIGINS               = var.allowed_origins
+        SRO_TRANSPORT_TLS_ID                    = var.transport_tls_id
+        TRANSPORT_PPROF                         = var.transport_pprof
+        TRANSPORT_PPROF_ADDR                    = var.pprof_addr
+        SRO_RELEASE_ID                          = var.release_id
       }
 
       template {

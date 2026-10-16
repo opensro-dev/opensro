@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+dungeon_links.go - portal links between a dungeon's blocks
+
+Resolves which outline edges of connected blocks meet (453940, 453020,
+45D180) and builds the object-nav set the chord scans walk, each
+placement with its rotation and reach.
+
+===========================================================================
+*/
 package movement
 
 import "math"
@@ -28,7 +39,11 @@ func resolveDungeonLinks(blocks []dungeonSpawnBlock) []resolvedObjectNav {
 	set := make([]resolvedObjectNav, len(blocks))
 	indices := map[int]int{}
 	for i, b := range blocks {
-		set[i] = resolvedObjectNav{placement: objectNavPlacement{x: b.x, y: b.y, z: b.z, yaw: b.yaw, ordinal: b.ordinal}, meshes: b.meshes}
+		set[i] = resolvedObjectNav{placement: objectNavPlacement{x: b.x, y: b.y, z: b.z, yaw: b.yaw, ordinal: b.ordinal}, meshes: b.meshes,
+			cosYaw: math.Cos(b.yaw), sinYaw: math.Sin(b.yaw)}
+		// The reach lets every chord scan skip a block it cannot touch
+		// (objectnav_reach.go): dungeon blocks register no terrain cells.
+		set[i].reach = newObjectReach(&set[i])
 		indices[b.ordinal] = i
 	}
 	for i, b := range blocks {

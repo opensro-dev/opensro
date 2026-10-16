@@ -18,6 +18,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/inventory"
+	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
 )
@@ -78,7 +79,7 @@ func TestRoutePercentBothWays(t *testing.T) {
 		{"NPC_EU_SPECIAL", 1, 300}, {"NPC_CH_SPECIAL", 5, 300},
 		{"NPC_CH_SPECIAL", 1, 0}, {"NPC_WC_SPECIAL", 5, 0}, {"NPC_CH_SPECIAL2", 1, 0}, {"NPC_CH_SPECIAL", 99, 0},
 	} {
-		if got := routePercent(origins, tc.npc, tc.item); got != tc.want {
+		if got := routePercent(origins, tc.npc, tc.item, tunables.Current()); got != tc.want {
 			t.Fatalf("%s item %d: %d%%, want %d%%", tc.npc, tc.item, got, tc.want)
 		}
 	}
@@ -129,7 +130,7 @@ func TestJanganRouteRaisesTheSaleProfit(t *testing.T) {
 		npc.Codename = "NPC_CH_SPECIAL"
 		row := c.MissionInventory[1]
 		taxed, profit, collected, ok := rt.tradeSaleValue(testDivision, c, npc, inventory.Item{RefObjID: row.RefObjID,
-			Codename: row.Codename, TypeFlags: row.TypeFlags, Quantity: 2})
+			Codename: row.Codename, TypeFlags: row.TypeFlags, Quantity: 2}, tunables.Current())
 		if !ok {
 			t.Fatal("sale refused")
 		}

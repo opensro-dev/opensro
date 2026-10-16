@@ -21,7 +21,7 @@ const guild = { name: "Bandits", members: [ { id: 7, name: "Alt$1" } ] };
 test("Withdraw asks to ban the selected member, by name", () => {
 	assert.deepEqual( socialQuestion( "guild-kick", guild, 7 ), {
 		title: "UIIT_STT_GUILD_EXPULSION",
-		lines: [ { key: "UIIT_MSG_GUILD_QUESTION_EXPULSION_ANYONE", arg: "Alt$1" } ]
+		lines: [ { key: "UIIT_MSG_GUILD_QUESTION_EXPULSION_ANYONE", args: [ "Alt$1" ] } ]
 	} );
 	// Without a selected member there is nothing to ask.
 	assert.equal( socialQuestion( "guild-kick", guild, 9 ), null );
@@ -29,7 +29,7 @@ test("Withdraw asks to ban the selected member, by name", () => {
 
 test("secede, disband and the party ban ask their native questions", () => {
 	assert.deepEqual( socialQuestion( "guild-leave", guild, 0 ).lines, [
-		{ key: "UIIT_MSG_GUILD_QUESTION_EXIT1", arg: "Bandits" },
+		{ key: "UIIT_MSG_GUILD_QUESTION_EXIT1", args: [ "Bandits" ] },
 		{ key: "UIIT_MSG_GUILD_QUESTION_EXIT2" }
 	] );
 	assert.deepEqual( socialQuestion( "guild-dissolve", guild, 0 ).lines, [ { key: "UIIT_MSG_GUILD_BREAK_CONFIRM" } ] );

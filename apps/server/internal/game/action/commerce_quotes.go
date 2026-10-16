@@ -17,6 +17,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/inventory"
+	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -46,6 +47,8 @@ shopSaleQuotes
 func (rt *Runtime) shopSaleQuotes(division string, c *enterworld.Character, npc simulation.NpcDef) []shopSaleQuote {
 	quotes := []shopSaleQuote{}
 	roster := rt.commerceRoster(division, c)
+	// One snapshot of the live tunables quotes every row (tradesale.go).
+	settings := tunables.Current()
 	rt.deps.Read(division, func() {
 		for i := 1; i < len(roster.members); i++ {
 			roster.members[i] = roster.members[i].Snapshot()
@@ -80,12 +83,13 @@ func (rt *Runtime) shopSaleQuotes(division string, c *enterworld.Character, npc 
 				for amount := uint16(1); amount <= item.Quantity; amount++ {
 					part := item
 					part.Quantity = amount
-					credit, profit, _, ok := rt.tradeSaleValue(division, c, npc, part)
+					credit, profit, _, ok := rt.tradeSaleValue(division, c, npc, part, settings)
 					if !ok {
 						valid = false
 						break
 					}
-					shares := rt.tradeRewards(division, c, roster, commerce.TradeRewardInput{Credit: int64(credit), Profit: profit})
+					shares := rt.tradeRewards(division, c, roster,
+						commerce.TradeRewardInput{Credit: int64(credit), Profit: profit}, settings)
 					if shares[0].Gold < 0 {
 						valid = false
 						break

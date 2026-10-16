@@ -73,6 +73,7 @@ var economyDoorReasons = map[string]economyDoorReason{
 	"storage-transfer": {gain: "storage_withdraw", loss: "storage_deposit"},
 	"guild-storage":    {gain: "guild_storage", loss: "guild_storage"},
 	"job-join":         {loss: "job_fee"},
+	"job-alias":        {loss: "job_fee"},
 	"job-outcome":      {gain: "weekly_reward_paid"},
 	// A kill pays gold only as a most-wanted bounty (port-only).
 	"player-abnormal-kill": {gain: "most_wanted_bounty"},

@@ -132,3 +132,94 @@ test("a failure before login is reported to the listing Agent without a bearer",
 	assert.equal( report.body.code, "title_fault" );
 	assert.equal( report.body.kind, "runtime" );
 });
+
+test("world incidents carry the admitted region and a 401 transport-token refusal stops reconnect retries", async t => {
+	/** @type {any} */
+	let socket;
+	let clock = 0, transportUnauthorized = false, transportMints = 0;
+	const reports = [];
+	class Socket {
+		static OPEN = 1;
+		readyState = 1;
+		bufferedAmount = 0;
+		/** @type {(( event: { data: ArrayBuffer; } ) => void) | undefined} */
+		onmessage;
+		constructor() {
+			socket = this;
+		}
+		send() {}
+		close() {}
+		receive( op, payload ) {
+			const bytes = new Uint8Array( payload.length + 2 );
+			new DataView( bytes.buffer ).setUint16( 0, op, true );
+			bytes.set( payload, 2 );
+			this.onmessage?.( { data: bytes.buffer } );
+		}
+	}
+	const descriptor = Object.getOwnPropertyDescriptor( globalThis, "WebSocket" );
+	Object.defineProperty( globalThis, "WebSocket", { value: Socket, configurable: true } );
+	t.after( () => {
+		if ( descriptor ) Object.defineProperty( globalThis, "WebSocket", descriptor );
+		else Reflect.deleteProperty( globalThis, "WebSocket" );
+	} );
+	t.mock.method( performance, "now", () => clock );
+	t.mock.method( globalThis, "fetch", async ( url, options ) => {
+		if ( url.endsWith( "/client/incident" ) ) {
+			const body = JSON.parse( options.body );
+			reports.push( body );
+			return Response.json( { ok: true, id: body.id } );
+		}
+		if ( url.endsWith( "/auth/transport-token" ) ) {
+			transportMints++;
+			if ( transportUnauthorized ) {
+				return Response.json( { ok: false, code: "UNAUTHORIZED" }, { status: 401 } );
+			}
+		}
+		return Response.json( url.endsWith( "/title/login" ) ? response : { ok: true, token: "fixture-ticket" } );
+	} );
+	const session = createSession();
+	t.after( () => session.dispose() );
+	session.command( command );
+	session.step( 0 );
+	await settle();
+	session.step( 1 );
+	session.command( { kind: "enter-world", character: "fixture" } );
+	await settle();
+	session.step( 2 );
+	defined( socket ).onopen();
+	const welcome = new Uint8Array( 27 );
+	welcome[0] = 2;
+	welcome[10] = 16;
+	welcome.fill( 7, 11 );
+	defined( socket ).receive( 2, welcome );
+	session.step( 3 );
+	await settle();
+	session.step( 4 );
+	const bootstrap = {
+		protocolVersion: 2,
+		nativeResult: 1,
+		refObjSnapshot: [],
+		localPlayerEntry: { modelRef: 1933, startProfile: { regionId: 22387, x: 1, y: 2, z: 3, angle: 0 } }
+	};
+	const blob = Buffer.from( JSON.stringify( { v: 1, bootstrap } ) ), payload = Buffer.alloc( 9 + blob.length );
+	payload[0] = 1;
+	payload.writeUInt32LE( blob.length, 5 );
+	blob.copy( payload, 9 );
+	defined( socket ).receive( 7, payload );
+	session.step( 5 );
+	transportUnauthorized = true;
+	defined( socket ).onerror?.();
+	session.step( 100 );
+	await settle();
+	assert.equal( reports.length, 1 );
+	assert.equal( reports[0].region, 22387 );
+	assert.equal( transportMints, 1 );
+	for ( const stepAt of [ 350, 1000, 2000, 5000, 15000 ] ) {
+		clock = stepAt;
+		session.step( stepAt );
+		await settle();
+	}
+	assert.equal( transportMints, 2 );
+	const finalState = session.step( 16000 );
+	assert.equal( finalState === null || finalState.phase === "disconnected", true );
+});

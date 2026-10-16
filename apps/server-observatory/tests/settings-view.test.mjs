@@ -80,6 +80,8 @@ test("values read in their unit", () => {
 	assert.equal( currentValue( KILLS ), "2" );
 	assert.equal( currentValue( REPEAT ), "1 minute" );
 	assert.equal( currentValue( { ...REPEAT, value: 10 } ), "10 minutes" );
+	assert.equal( currentValue( { ...BOUNTY, unit: "ms", value: 10000 } ), "10,000 ms" );
+	assert.equal( currentValue( { ...KILLS, unit: "percent", value: 300 } ), "300%" );
 	assert.equal( currentValue( { ...RIDE, enabled: true, value: 1.3 } ), "×1.30" );
 	assert.equal( currentValue( RIDE ), "Off (native)", "a switched-off factor runs native whatever its number" );
 });

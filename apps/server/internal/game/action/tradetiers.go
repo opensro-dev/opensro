@@ -42,6 +42,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/inventory"
+	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -76,12 +77,14 @@ var tradeTownShops = [...]struct {
 	{townConstantinople, "STORE_EU_SPECIAL_TAB1", "NPC_EU_SPECIAL"},
 }
 
-// janganRoutePercent is the profit bonus between Jangan and each town.
-var janganRoutePercent = map[tradeTown]int64{
-	townDonwhang:       50,
-	townHotan:          100,
-	townSamarkand:      200,
-	townConstantinople: 300,
+// janganRoutePercent names the live tunable holding the profit bonus
+// between Jangan and each town (game/tunables, the trade group; defaults
+// 50, 100, 200 and 300).
+var janganRoutePercent = map[tradeTown]string{
+	townDonwhang:       tunables.TradeRouteDonwhangPercent,
+	townHotan:          tunables.TradeRouteHotanPercent,
+	townSamarkand:      tunables.TradeRouteSamarkandPercent,
+	townConstantinople: tunables.TradeRouteConstantinoplePercent,
 }
 
 /*
@@ -147,11 +150,11 @@ routeProfitPercent
 The profit bonus for a good sold at npc: Jangan to or from another town.
 ================
 */
-func (rt *Runtime) routeProfitPercent(npc simulation.NpcDef, item inventory.Item) int64 {
+func (rt *Runtime) routeProfitPercent(npc simulation.NpcDef, item inventory.Item, s *tunables.Settings) int64 {
 	if !rt.TradeTiers {
 		return 0
 	}
-	return routePercent(rt.tradeOrigins, npc.Codename, item.RefObjID)
+	return routePercent(rt.tradeOrigins, npc.Codename, item.RefObjID, s)
 }
 
 /*
@@ -159,15 +162,19 @@ func (rt *Runtime) routeProfitPercent(npc simulation.NpcDef, item inventory.Item
 routePercent
 ================
 */
-func routePercent(origins map[uint32]tradeTown, npcCodename string, itemID uint32) int64 {
+func routePercent(origins map[uint32]tradeTown, npcCodename string, itemID uint32, s *tunables.Settings) int64 {
 	from, to := origins[itemID], tradeTownOf(npcCodename)
+	key := ""
 	switch {
 	case from == townJangan:
-		return janganRoutePercent[to]
+		key = janganRoutePercent[to]
 	case to == townJangan:
-		return janganRoutePercent[from]
+		key = janganRoutePercent[from]
 	}
-	return 0
+	if key == "" {
+		return 0
+	}
+	return s.Int(key)
 }
 
 /*
@@ -176,12 +183,14 @@ TradeRouteProfit
 
 The rule's route bonus for the website's trade quotes: the profit percent
 a trader (by codename) adds to a good, from the same shops the GameWorld
-reads.
+reads, at the percents running when it is asked.
 ================
 */
 func TradeRouteProfit(c *commerce.Catalog) func(npcCodename string, itemID uint32) int64 {
 	origins := tradeOriginTowns(c)
-	return func(npcCodename string, itemID uint32) int64 { return routePercent(origins, npcCodename, itemID) }
+	return func(npcCodename string, itemID uint32) int64 {
+		return routePercent(origins, npcCodename, itemID, tunables.Current())
+	}
 }
 
 /*

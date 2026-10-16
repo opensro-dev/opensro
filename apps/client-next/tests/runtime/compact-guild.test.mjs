@@ -398,8 +398,16 @@ for ( const [width, height] of [ [ 1600, 900 ], [ 375, 667 ] ] ) {
 			assert.equal( rows[0].label, "Berk" );
 			const whisper = defined( output.controls.find( control => control.id === "friend-whisper" ) );
 			const remove = defined( output.controls.find( control => control.id === "friend-remove" ) );
-			assert.equal( whisper.disabled, true, "nothing selected" );
-			assert.equal( remove.disabled, true );
+			// The original never disables them (friends.md): without a selection
+			// each does nothing.
+			assert.equal( whisper.disabled, false, "nothing selected, still enabled" );
+			assert.equal( remove.disabled, false );
+			fixture.ui.event( { kind: "activate", id: "friend-remove" } );
+			output = draw();
+			assert.ok(
+				!output.controls.some( control => control.id === "friend-ok" ),
+				"no question without a selection"
+			);
 			fixture.ui.event( { kind: "activate", id: "friend-down" } );
 			output = draw();
 			assert.notEqual(

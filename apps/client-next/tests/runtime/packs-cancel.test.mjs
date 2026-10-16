@@ -42,10 +42,12 @@ function sha( bytes ) {
 ================
 fixture
 
-One small pack holding a.bin and b.json, and its manifest.
+One pack holding a.bin and b.json, and its manifest. When `large` is set,
+the manifest advertises a size past SMALL_PACK_BYTES (4 MiB) so reads take
+the range-fetched `member()` path instead of whole-pack `pack()`.
 ================
 */
-function fixture() {
+function fixture( large = false ) {
 	const a = Uint8Array.of( 1, 2, 3 ), b = new TextEncoder().encode( '{"fixture":true}' );
 	const entries = [
 		{ path: "/assets/a.bin", offset: 0, length: a.length, mime: "application/octet-stream", sha256: sha( a ) },
@@ -58,7 +60,12 @@ function fixture() {
 	bytes.set( header, 12 );
 	bytes.set( a, 12 + header.length );
 	bytes.set( b, 12 + header.length + a.length );
-	const pack = { path: "/assets/packs/fixture.bin", bytes: bytes.length, sha256: sha( bytes ), assetCount: 2 };
+	const pack = {
+		path: "/assets/packs/fixture.bin",
+		bytes: large ? (4 << 20) + bytes.length : bytes.length,
+		sha256: sha( bytes ),
+		assetCount: 2
+	};
 	const manifest = {
 		version: 2,
 		groups: [ { name: "test", assetCount: 2, packs: [ pack ] } ],
@@ -90,6 +97,34 @@ test("a cancelled read waiting on a shared pack download settles at once; the do
 		new Promise( resolve => setTimeout( () => resolve( "still waiting" ), 200 ) )
 	] );
 	assert.match( settled, /cancelled/, "the loader can acknowledge the cancellation now" );
+	open();
+	assert.deepEqual( JSON.parse( new TextDecoder().decode( await other ) ), { fixture: true } );
+	packs.dispose();
+});
+
+test("a cancelled large-pack member read waiting on a shared range block settles at once; the block goes on for others", async () => {
+	const f = fixture( true );
+	/** @type {( value?: unknown ) => void} */
+	let open = () => {};
+	const gate = new Promise( resolve => {
+		open = resolve;
+	} );
+	const packs = createPacks( async ( url, _limit, _signal, range ) => {
+		if ( url.endsWith( "manifest.json" ) ) return new TextEncoder().encode( JSON.stringify( f.manifest ) );
+		if ( range && range.start >= 12 ) await gate;
+		return range ? f.bytes.slice( range.start, range.end + 1 ) : f.bytes;
+	} );
+	const cancelled = new AbortController(), kept = new AbortController();
+	const doomed = packs.read( new URL( "http://localhost/assets/a.bin" ), 100, cancelled.signal );
+	const other = packs.read( new URL( "http://localhost/assets/b.json" ), 100, kept.signal );
+	// Let both reach the shared, still unfinished range block download.
+	await new Promise( resolve => setTimeout( resolve, 20 ) );
+	cancelled.abort();
+	const settled = await Promise.race( [
+		doomed.then( () => "resolved", error => String( error ) ),
+		new Promise( resolve => setTimeout( () => resolve( "still waiting" ), 200 ) )
+	] );
+	assert.match( settled, /cancelled/, "the loader can acknowledge the large-pack member cancellation now" );
 	open();
 	assert.deepEqual( JSON.parse( new TextDecoder().decode( await other ) ), { fixture: true } );
 	packs.dispose();

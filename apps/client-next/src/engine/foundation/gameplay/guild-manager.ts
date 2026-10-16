@@ -41,6 +41,20 @@ export function guildTransferRefusal( fortress: FortressState | undefined, guild
 		null;
 }
 
+/*
+================
+guildBanRefused
+
+The guild window's Withdraw (5E4C30 slot 2) refuses the master and the
+local player itself with notice 0x10/0x1F (UIIT_MSG_GUILD_EXPULSION_NOTEXP)
+before 703DD0 would send the ban.
+================
+*/
+export function guildBanRefused( guild: Pick<Guild, "members"> | null, localName: string, name: string ): boolean {
+	const member = guild?.members.find( row => row.name === name );
+	return !!member && (member.grade === 0 || member.name === localName);
+}
+
 export type GuildManagerRow =
 	| "create"
 	| "level-up"

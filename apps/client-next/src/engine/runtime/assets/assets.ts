@@ -9,11 +9,12 @@ per-request deadlines and byte budgets, and fails every handle when the
 worker dies. install() starts the worker's background install without
 using a slot.
 
-A cancelled request keeps its slot until the worker releases it, and the
-release can lag: a member read waits for its whole shared pack fetch
-(packs.ts pack()). A slow release is abandoned, not fatal: its slot stays
-reserved and the fault is reported as a degraded incident. Only a worker
-holding every slot in unacknowledged cancellations is treated as dead.
+A cancelled request keeps its slot until the worker acknowledges it, and the
+release can lag when the worker is inside a native decode that AbortSignal
+cannot interrupt (loader.ts createImageBitmap / DecompressionStream). A slow
+release is abandoned, not fatal: its slot stays reserved and the fault is
+reported as a degraded incident. Only a worker holding every slot in
+unacknowledged cancellations is treated as dead.
 
 ===========================================================================
 */

@@ -16,6 +16,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -66,14 +67,14 @@ func TestThiefPartyBonusFollowsTheFlag(t *testing.T) {
 				dressThief(member)
 			}
 		}
-		if got := rt.thiefPartyPercent(testDivision, party); got != tc.percent {
+		if got := rt.thiefPartyPercent(testDivision, party, tunables.Current()); got != tc.percent {
 			t.Fatalf("on=%v thieves=%d: percent %d, want %d", tc.on, tc.thieves, got, tc.percent)
 		}
 		if got, want := thiefPartyExp(1000, tc.percent), int64(1000+10*tc.percent); got != want {
 			t.Fatalf("on=%v thieves=%d: exp %d, want %d", tc.on, tc.thieves, got, want)
 		}
 		drops := []grounditem.Item{{GoldAmount: 1000}, {StackCount: 3}}
-		rt.applyThiefPartyGold(testDivision, actor, drops)
+		rt.applyThiefPartyGold(testDivision, actor, drops, tunables.Current())
 		if want := uint32(1000 + 10*tc.percent); drops[0].GoldAmount != want || drops[1].GoldAmount != 0 || drops[1].StackCount != 3 {
 			t.Fatalf("on=%v thieves=%d: drops %+v, want gold %d", tc.on, tc.thieves, drops, want)
 		}
@@ -81,11 +82,11 @@ func TestThiefPartyBonusFollowsTheFlag(t *testing.T) {
 
 	// A thief outside the party, and a player without one, earn nothing.
 	rt.ThiefPartyBonus = true
-	if got := rt.thiefPartyPercent(testDivision, nil); got != 0 {
+	if got := rt.thiefPartyPercent(testDivision, nil, tunables.Current()); got != 0 {
 		t.Fatalf("no party: percent %d", got)
 	}
 	solo := []grounditem.Item{{GoldAmount: 1000}}
-	rt.applyThiefPartyGold(testDivision, &outsider, solo)
+	rt.applyThiefPartyGold(testDivision, &outsider, solo, tunables.Current())
 	if solo[0].GoldAmount != 1000 {
 		t.Fatalf("a thief without a party raised its own gold: %+v", solo)
 	}

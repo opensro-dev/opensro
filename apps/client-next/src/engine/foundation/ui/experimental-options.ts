@@ -94,6 +94,11 @@ export interface ExperimentalOptions {
 	// runtime/ui/hud/unique-banner.ts). On unless turned off (the balance
 	// advisor's ask, owner-approved 2026-10-15); off is the original timing.
 	readonly shortNotices: boolean;
+	// Port-only, not native: the guild window's Withdraw asks "Ban [name]?"
+	// (UIIT_MSG_GUILD_QUESTION_EXPULSION_ANYONE) before it bans; 5E4C30 sends
+	// the ban on the click. On unless turned off (the owner's choice,
+	// 2026-10-15); off is the original.
+	readonly confirmGuildBan: boolean;
 }
 
 /*
@@ -132,7 +137,7 @@ experimentalOptions
 
 Only an explicit true enables a toggle, except smoothCamera,
 compressedTextures, sharedActorRoom, greyDisabledTabs, jobKillNotices, dropPlusNotices,
-fitWindowLabels, dropOnBagTab, noticeLinks and shortNotices, which only an
+fitWindowLabels, dropOnBagTab, noticeLinks, shortNotices and confirmGuildBan, which only an
 explicit false turns off.
 Missing or invalid render scales restore full resolution; legacy Video
 settings cannot enable scaling. Keys of retired rows (terrainRelief and texturedHorizon, removed at the owner's
@@ -169,7 +174,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		fitWindowLabels: record.fitWindowLabels !== false,
 		dropOnBagTab: record.dropOnBagTab !== false,
 		noticeLinks: record.noticeLinks !== false,
-		shortNotices: record.shortNotices !== false
+		shortNotices: record.shortNotices !== false,
+		confirmGuildBan: record.confirmGuildBan !== false
 	};
 }
 

@@ -97,6 +97,47 @@ func TestJobGuildJoinAliasAndWithdraw(t *testing.T) {
 
 /*
 ================
+TestJobAliasChangeCostsLevelTimesFiftyThousand
+
+512540: a first alias is free; changing one costs level x 50,000 gold
+(0xC350), tested before the name and answered 0x4807 short; the check mode
+never charges, and a paid change sends the new balance.
+================
+*/
+func TestJobAliasChangeCostsLevelTimesFiftyThousand(t *testing.T) {
+	rt, _, c := jobFixture(t)
+	level, gold := int64(40), int64(0)
+	c.Level, c.Gold = &level, &gold
+	c.Job = domain.CharacterJob{Type: domain.JobTrader, Grade: 1}
+	alias := func(mode uint8, name string) OpResult {
+		return rt.HandleJobAlias(testDivision, c, wire.NewWriter(5+len(name)).U32(jobTestNpc).U8(mode).Str(name).Payload())
+	}
+	if out := alias(jobAliasModeCreate, "Merchant"); out.Frames[0].Payload[0] != 1 || c.Job.Alias != "Merchant" ||
+		len(out.Frames) != 1 || *c.Gold != 0 {
+		t.Fatalf("the first alias was not free: %x frames=%d gold=%d", out.Frames[0].Payload, len(out.Frames), *c.Gold)
+	}
+	const fee = 40 * 50000
+	gold = fee - 1
+	if out := alias(jobAliasModeCreate, "Peddler"); !bytes.Equal(out.Frames[0].Payload[:2], []byte{2, jobErrNoGold}) ||
+		c.Job.Alias != "Merchant" || *c.Gold != fee-1 {
+		t.Fatalf("a change short of the fee: %x alias %q gold %d", out.Frames[0].Payload, c.Job.Alias, *c.Gold)
+	}
+	if out := alias(jobAliasModeCheck, "Peddler"); out.Frames[0].Payload[0] != 1 || *c.Gold != fee-1 {
+		t.Fatalf("the check mode charged or refused: %x gold %d", out.Frames[0].Payload, *c.Gold)
+	}
+	gold = fee + 5
+	out := alias(jobAliasModeCreate, "Peddler")
+	if out.Frames[0].Payload[0] != 1 || c.Job.Alias != "Peddler" || *c.Gold != 5 {
+		t.Fatalf("the paid change: %x alias %q gold %d", out.Frames[0].Payload, c.Job.Alias, *c.Gold)
+	}
+	if len(out.Frames) != 2 || out.Frames[1].Opcode != wire.OpPointsUpdate ||
+		!bytes.Equal(out.Frames[1].Payload, wire.GoldRefresh{Balance: 5}.Encode()) {
+		t.Fatalf("no gold refresh after the fee: %+v", out.Frames)
+	}
+}
+
+/*
+================
 TestJobSuitDressesAfterTenSeconds
 
 524950: the suit move answers nothing but the dress bar; ten seconds later

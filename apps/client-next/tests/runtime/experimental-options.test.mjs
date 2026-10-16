@@ -56,7 +56,9 @@ const OFF = Object.freeze( {
 	// On by default (owner 2026-10-15): a notice's player and item are links.
 	noticeLinks: true,
 	// On by default (owner 2026-10-15): the notice banner shows for 5 s.
-	shortNotices: true
+	shortNotices: true,
+	// On by default (owner 2026-10-15): Withdraw asks before a guild ban.
+	confirmGuildBan: true
 } );
 
 test("only an explicit boolean enables chat timestamps", () => {

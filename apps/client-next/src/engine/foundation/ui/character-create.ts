@@ -262,15 +262,24 @@ export interface NameRules {
 	wholeWords: readonly string[];
 }
 
+// abusefilter.txt's four flag columns after each word, one per list the
+// filter keeps (CStringCheck_LoadAbuseFilter 791660): character names
+// (790900), chat (790C70), guild names (790A30) and free text (790B60).
+export const NAME_FILTER_CHARACTER = 1;
+export const NAME_FILTER_CHAT = 2;
+export const NAME_FILTER_GUILD = 3;
+export const NAME_FILTER_TEXT = 4;
+
 /*
 ================
 creationNameRules
 
 Parses the native name filter: #ALLOW_ID_TABLE code point ranges, then
-substring (type 2) and whole-word (type 1) forbidden entries.
+substring (type 2) and whole-word (type 1) forbidden entries of one flag
+column (NAME_FILTER_*; the character-name column by default).
 ================
 */
-export function creationNameRules( bytes: ArrayBuffer ): NameRules {
+export function creationNameRules( bytes: ArrayBuffer, column = NAME_FILTER_CHARACTER ): NameRules {
 	const raw = new Uint8Array( bytes ),
 		encoding = raw[0] === 255 && raw[1] === 254 || raw[1] === 0 ? "utf-16le" : "utf-8",
 		allowed = new Set<number>(),
@@ -283,9 +292,9 @@ export function creationNameRules( bytes: ArrayBuffer ): NameRules {
 			if ( a >= 0 && b <= 65535 ) { for ( let n = a; n <= b; n++ ) allowed.add( n ); }
 		} else if (
 			!fields[0]?.startsWith( "#" ) && fields[0] && fields[0] !== "\\n" &&
-			[ 1, 2 ].includes( Number( fields[1] ) )
+			[ 1, 2 ].includes( Number( fields[column] ) )
 		) {
-			(Number( fields[1] ) === 1 ? wholeWords : forbidden).push(
+			(Number( fields[column] ) === 1 ? wholeWords : forbidden).push(
 				fields[0].replace( /[A-Z]/g, c => c.toLowerCase() )
 			);
 		}
