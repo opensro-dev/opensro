@@ -145,3 +145,60 @@ func TestOperatorGrantItemsRefusesStall(t *testing.T) {
 		t.Fatal("refused grant changed character")
 	}
 }
+
+/*
+================
+TestOperatorSlotGrantReplacesAndPurgesTheOldItem
+
+A socket grant over an occupied socket swaps the previous occupant into the
+staging bag slot. That piece is operator-replaced gear and must not stay in
+the bag: the grant removes it (0xB06D op 15) and persists only the new piece.
+================
+*/
+func TestOperatorSlotGrantReplacesAndPurgesTheOldItem(t *testing.T) {
+	seed := testCharacter()
+	seed.MissionInventory = []enterworld.InventoryRow{
+		{Slot: 6, RefObjID: 11459, Codename: "ITEM_CH_SWORD_01_A_RARE", TypeFlags: wire.PackTypeFlags(3, 1, 6, 2), StackCount: 1},
+		{Slot: 20, RefObjID: 11459, Codename: "ITEM_CH_SWORD_01_A_RARE", TypeFlags: wire.PackTypeFlags(3, 1, 6, 2), StackCount: 1},
+	}
+	d := openDoorRuntime(t, t.TempDir(), seed)
+	deps := d.rt.deps.(*enterworld.Deps)
+	deps.UpdateCharacter = d.authority.UpdateCharacter
+	deps.ReadCharacter = func(_ string, read func()) { d.authority.ReadState(read) }
+	var sent []wire.Frame
+	d.rt.PushCharacterFrames = func(division, name string, frames []wire.Frame) {
+		sent = append(sent, frames...)
+	}
+	slot := uint8(6)
+	grants := []inventory.ItemAmount{{
+		Codename: "ITEM_CH_SWORD_01_A_RARE", Count: 1, Plus: 12, PerfectStats: true, Slot: &slot,
+	}}
+	if err := d.rt.OperatorGrantItems(testDivision, d.character.Name, grants); err != nil {
+		t.Fatal(err)
+	}
+	rows := d.character.Snapshot().MissionInventory
+	// Only the new piece in socket 6 and the untouched spare in slot 20: the
+	// swapped-out old socket piece was purged, not left in a bag slot.
+	if len(rows) != 2 {
+		t.Fatalf("rows = %d, want 2 (new socket + spare): %+v", len(rows), rows)
+	}
+	var equipped *enterworld.InventoryRow
+	for i := range rows {
+		if rows[i].Slot == 6 {
+			equipped = &rows[i]
+		}
+	}
+	if equipped == nil || equipped.Plus != 12 {
+		t.Fatalf("socket 6 does not hold the new +12 piece: %+v", equipped)
+	}
+	purged := false
+	for _, frame := range sent {
+		if frame.Opcode == wire.OpItemMoveResponse && len(frame.Payload) == 4 &&
+			frame.Payload[0] == 1 && frame.Payload[1] == 15 {
+			purged = true
+		}
+	}
+	if !purged {
+		t.Fatalf("no bag-slot removal frame for the swapped-out piece: %+v", sent)
+	}
+}

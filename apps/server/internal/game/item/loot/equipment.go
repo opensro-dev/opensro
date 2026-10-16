@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 )
 
 // Generated catalog: scripts/build/generate_loot_catalog.py. The backup's
@@ -99,6 +100,32 @@ const (
 
 var equipment = mustEquipmentCatalog()
 
+// equipmentItems is every catalog entry, kept flat for the level-up gear
+// rule (the buckets index the same rows for the drop path).
+var equipmentItems []equipmentRef
+
+// SealRef is one "_<tier>_RARE" catalog entry, exposed so the level-up gear
+// rule can pick the best-for-level variant of a worn piece. The tier is the
+// seal letter: "C" is the Seal of Sun, "B" the Seal of Moon, "A" the Seal of
+// Star.
+type SealRef struct {
+	Codename string
+	Level    uint8
+}
+
+// SealRefs returns every "_<tier>_RARE" entry (codename + level) for the seal
+// tier "A", "B" or "C".
+func SealRefs(tier string) []SealRef {
+	suffix := "_" + tier + "_RARE"
+	out := make([]SealRef, 0, len(equipmentItems)/4)
+	for _, r := range equipmentItems {
+		if strings.HasSuffix(r.Codename, suffix) {
+			out = append(out, SealRef{Codename: r.Codename, Level: r.Level})
+		}
+	}
+	return out
+}
+
 /*
 ================
 equipmentSource
@@ -124,6 +151,7 @@ func mustEquipmentCatalog() equipmentCatalog {
 	if err := json.Unmarshal(equipmentJSON, &source); err != nil {
 		panic(err)
 	}
+	equipmentItems = source.Items
 	c, err := compileEquipment(source)
 	if err != nil {
 		panic(err)
