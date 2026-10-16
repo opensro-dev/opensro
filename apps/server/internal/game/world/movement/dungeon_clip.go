@@ -19,6 +19,10 @@ import (
 	"slices"
 )
 
+// maxDungeonFloorSampleSpacing is the widest XZ gap between floor samples
+// along a dungeon chord (see the floor walk in clipDungeonPath).
+const maxDungeonFloorSampleSpacing = 2.0
+
 // Dungeon movement never uses outdoor sector arithmetic. Missing coverage and
 // cross-dungeon requests retain the start; teleportation owns region changes.
 func (v *WaterValidator) clipDungeonPath(from, to simulation.Spawn) ClipReport {
@@ -34,7 +38,8 @@ func (v *WaterValidator) clipDungeonPath(from, to simulation.Spawn) ClipReport {
 	if surface == nil {
 		return report
 	}
-	if _, ok := surface.heightAt(from.X, from.Y, from.Z); !ok {
+	startY, ok := surface.heightAt(from.X, from.Y, from.Z)
+	if !ok {
 		return report
 	}
 	dx, dz := to.X-from.X, to.Z-from.Z
@@ -124,7 +129,7 @@ func (v *WaterValidator) clipDungeonPath(from, to simulation.Spawn) ClipReport {
 				}
 			}
 			px, pz := from.X+dx*t, from.Z+dz*t
-			hint := from.Y + (to.Y-from.Y)*t
+			hint := startY + (to.Y-from.Y)*t
 			single := dungeonSpawnSurface{blocks: surface.blocks[i : i+1]}
 			h, inside := single.heightAt(px, hint, pz)
 			if inside && math.Abs(h-hint) <= 2 {
@@ -140,20 +145,39 @@ func (v *WaterValidator) clipDungeonPath(from, to simulation.Spawn) ClipReport {
 		}
 	}
 	slices.Sort(cuts)
+	// Follow the floor cell by cell from the start height, not the straight
+	// chord from from.Y to to.Y: a ground step carries to.Y == from.Y and a
+	// click carries to.Y 0, so the chord leaves a steep ramp (Donwhang Cave
+	// drops 7.7 m over 30 m) by more than the 2 m step limit even though
+	// every cell-to-cell drop is legal. curY is also the heightAt hint, so
+	// stacked floors resolve to the floor being walked, not an upper one.
+	curY := startY
+	chordLength := math.Hypot(dx, dz)
+floorWalk:
 	for i := 1; i < len(cuts); i++ {
 		if cuts[i]-cuts[i-1] < 1e-8 {
 			continue
 		}
-		t := (cuts[i] + cuts[i-1]) / 2
-		y := from.Y + (to.Y-from.Y)*t
-		h, ok := surface.heightAt(from.X+dx*t, y, from.Z+dz*t)
-		if (!ok || math.Abs(h-y) > 2) && !passages.covers(t) {
-			if cuts[i-1] < best {
-				best = cuts[i-1]
-				result = monster.NavResultBlocked
-				rest = objectContactPoint{}
+		// One sample per cut interval is not enough: a ramp can be a single
+		// cell tens of metres long, and its midpoint already stands more
+		// than the 2 m step limit below its top. Sample at most
+		// maxDungeonFloorSampleSpacing apart, as a walker stepping the
+		// chord would meet the floor.
+		samples := max(1, int(math.Ceil((cuts[i]-cuts[i-1])*chordLength/maxDungeonFloorSampleSpacing)))
+		for s := 0; s < samples; s++ {
+			t := cuts[i-1] + (cuts[i]-cuts[i-1])*(float64(s)+0.5)/float64(samples)
+			h, ok := surface.heightAt(from.X+dx*t, curY, from.Z+dz*t)
+			if (!ok || math.Abs(h-curY) > 2) && !passages.covers(t) {
+				if cuts[i-1] < best {
+					best = cuts[i-1]
+					result = monster.NavResultBlocked
+					rest = objectContactPoint{}
+				}
+				break floorWalk
 			}
-			break
+			if ok {
+				curY = h
+			}
 		}
 	}
 	if best <= 1 {
@@ -169,11 +193,21 @@ func (v *WaterValidator) clipDungeonPath(from, to simulation.Spawn) ClipReport {
 		report.Rest = from
 		report.Rest.X += dx * t
 		report.Rest.Z += dz * t
-		report.Rest.Y += (to.Y - from.Y) * t
+		report.Rest.Y = curY
+		if h, ok := surface.heightAt(report.Rest.X, curY, report.Rest.Z); ok && math.Abs(h-curY) <= 2 {
+			report.Rest.Y = h
+		}
 		return report
 	}
-	h, ok := surface.heightAt(to.X, to.Y, to.Z)
+	h, ok := surface.heightAt(to.X, curY, to.Z)
 	if !ok {
+		return report
+	}
+	// The floor walk's last sample stops short of the endpoint: a step
+	// that ends past it onto a floor-1 gap covered only by an upper floor
+	// must block here, not arrive on that floor (curY is the walked
+	// height, so a far h is a different floor, not a step).
+	if math.Abs(h-curY) > 2 && !passages.covers(1) {
 		return report
 	}
 	to.Y = h
