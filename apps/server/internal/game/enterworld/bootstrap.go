@@ -16,6 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -304,6 +305,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		TradeTiers:           deps.TradeTiers,
 		JobSuitHidesArmor:    deps.JobSuitHidesArmor,
 		MoonlitThiefSuit:     deps.MoonlitThiefSuit,
+		UiTuning:             UiTuningFrom(tunables.Current()),
 	}
 }
 

@@ -641,6 +641,8 @@ export interface GameplayState {
 	// The server's port-only SRO_STORAGE_AUTO_STACK rule, published at world
 	// entry: storage quick moves prefer a matching stack (storage-panel.ts).
 	readonly storageAutoStack?: boolean;
+	// The shard's client tuning from the world-entry bootstrap (port-only, ui-tuning.ts).
+	readonly uiTuning?: import("@/engine/foundation/ui/ui-tuning").UiTuning;
 	// The server's port-only SRO_TRADE_TIERS rule, published at world entry:
 	// the trade-scale combo rates a purchase by gold (specialty-deal.ts).
 	readonly tradeTiers?: boolean;

@@ -190,7 +190,7 @@ export const EXPERIMENTAL_TABS: readonly {
 			key: "shortNotices",
 			id: "experimental-short-notices",
 			label: "Short notices",
-			description: "Show a notice for 5 seconds instead of 7."
+			description: "Show notices for up to the original 7 seconds."
 		} ]
 	},
 	{

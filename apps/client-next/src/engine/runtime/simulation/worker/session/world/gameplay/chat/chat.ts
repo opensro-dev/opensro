@@ -18,11 +18,11 @@ import { STALL_CHAT_CHANNEL } from "@/engine/foundation/gameplay/stall";
 import { DROP_PLUS_NOTICE_CHANNEL, isServerNoticeChannel } from "@/engine/foundation/gameplay/system-notices";
 import { decodeNoticeLinks, type NoticeLinks } from "@/engine/foundation/gameplay/notice-links";
 import { CHAT_HISTORY_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
+import { CHAT_ACK_TIMEOUT_MS, uiTuningFrom } from "@/engine/foundation/ui/ui-tuning";
 const CHAT_LINE_LIMIT = 128;
 const CHAT_FEEDBACK_LIMIT = 100;
 const CHAT_TEXT_LIMIT = 100;
 const CHAT_NAME_LIMIT = 128;
-const CHAT_ACK_TIMEOUT_MS = 10000;
 const CHAT_RECEIPT_KEY = 255;
 const CHAT_GLOBAL_CHANNEL = 6;
 // The server's public transcript frame layout version and line bound
@@ -139,6 +139,8 @@ export function createChat(
 	send: ( frame: WireFrame ) => void,
 	noticeItem: ( body: Uint8Array ) => InventoryItem | undefined = () => undefined
 ) {
+	// The port's own deadline for a chat or block acknowledgement (ui-tuning.ts).
+	let ackTimeoutMs = CHAT_ACK_TIMEOUT_MS;
 	let lines: readonly ChatLine[] = [],
 		pending: PendingChat | null = null,
 		error: string | null = null,
@@ -187,6 +189,8 @@ bootstrap
 ================
 		*/
 		bootstrap( value: unknown ) {
+			// Port-only: the shard may tune the acknowledgement deadline (ui-tuning.ts).
+			ackTimeoutMs = uiTuningFrom( value ).chatAckTimeoutMs;
 			blocked = blockedWhisperers( value );
 			blockPending = false;
 			blockError = null;
@@ -210,7 +214,7 @@ block
 			const frame = whisperBlockRequest( name, enabled );
 			send( frame );
 			blockPending = true;
-			blockDeadline = now + CHAT_ACK_TIMEOUT_MS;
+			blockDeadline = now + ackTimeoutMs;
 			blockError = null;
 		},
 		/*
@@ -247,7 +251,7 @@ request
 			o += 2;
 			for ( let i = 0; i < text.length; i++ ) v.setUint16( o + i * 2, text.charCodeAt( i ), true );
 			send( { opcode: 0x7367, payload: p } );
-			pending = { channel, text, target, deadline: now + CHAT_ACK_TIMEOUT_MS, echoed: false };
+			pending = { channel, text, target, deadline: now + ackTimeoutMs, echoed: false };
 			error = null;
 		},
 		/*

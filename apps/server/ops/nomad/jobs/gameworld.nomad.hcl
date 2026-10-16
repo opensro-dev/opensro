@@ -256,6 +256,25 @@ variable "job_kill_repeat_minutes" {
   default = "10"
 }
 
+# short_notice_show_ms (3000..7000) and short_notice_fade_ms (500..2000) time
+# the Experimental "Short notices" banner; chat_ack_timeout_ms (5000..30000)
+# is the client's wait for a chat confirmation. Each player takes them at
+# the next world entry (port-only, game/tunables class Entry).
+variable "short_notice_show_ms" {
+  type    = string
+  default = "5000"
+}
+
+variable "short_notice_fade_ms" {
+  type    = string
+  default = "1000"
+}
+
+variable "chat_ack_timeout_ms" {
+  type    = string
+  default = "10000"
+}
+
 # most_wanted_bounty_transfer pays a wanted player's bounty out of that
 # player's own gold, at most what they carry, instead of minting it
 # (port-only, not native; owner decision 2026-10-15). "off" mints it.
@@ -773,6 +792,9 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_JOB_KILL_NOTICES_PER_MINUTE    = var.job_kill_notices_per_minute
         SRO_MOST_WANTED_NOTICES_PER_MINUTE = var.most_wanted_notices_per_minute
         SRO_JOB_KILL_REPEAT_MINUTES        = var.job_kill_repeat_minutes
+        SRO_SHORT_NOTICE_SHOW_MS           = var.short_notice_show_ms
+        SRO_SHORT_NOTICE_FADE_MS           = var.short_notice_fade_ms
+        SRO_CHAT_ACK_TIMEOUT_MS            = var.chat_ack_timeout_ms
         SRO_ANNOUNCE_MOST_WANTED           = var.announce_most_wanted
         SRO_THIEF_PARTY_BONUS              = var.thief_party_bonus
         SRO_TRADE_JOB_BONUS                = var.trade_job_bonus

@@ -7791,7 +7791,7 @@ export function createUi(
 						now,
 						notificationBannerPaths.every( p => !!resources.size( p ) ) && !!hud.data(),
 						hudCopy,
-						noticeTiming( experimental.state().saved.shortNotices )
+						noticeTiming( experimental.state().saved.shortNotices, next.gameplay?.uiTuning )
 					)
 				) dirty = true;
 				if (

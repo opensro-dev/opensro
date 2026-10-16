@@ -96,6 +96,10 @@ var Settings = []Setting{
 	{Env: "SRO_JOB_KILL_NOTICES_PER_MINUTE", NomadVar: "job_kill_notices_per_minute", Default: "6"},
 	{Env: "SRO_MOST_WANTED_NOTICES_PER_MINUTE", NomadVar: "most_wanted_notices_per_minute", Default: "6"},
 	{Env: "SRO_JOB_KILL_REPEAT_MINUTES", NomadVar: "job_kill_repeat_minutes", Default: "10"},
+	// F10 uiTuning: the client values sent at world entry (game/tunables).
+	{Env: "SRO_SHORT_NOTICE_SHOW_MS", NomadVar: "short_notice_show_ms", Default: "5000"},
+	{Env: "SRO_SHORT_NOTICE_FADE_MS", NomadVar: "short_notice_fade_ms", Default: "1000"},
+	{Env: "SRO_CHAT_ACK_TIMEOUT_MS", NomadVar: "chat_ack_timeout_ms", Default: "10000"},
 	// Owner, 2026-10-15: Most Wanted levels and claimed bounties are announced.
 	{Env: "SRO_ANNOUNCE_MOST_WANTED", NomadVar: "announce_most_wanted", Default: "on"},
 	// Owner, 2026-10-14: +10% party EXP and gold per thief (cap 50%).
