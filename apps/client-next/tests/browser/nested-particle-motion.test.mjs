@@ -72,8 +72,8 @@ test( "nested particle raster equals an independently positioned quad, including
 					flags: 0,
 					byte1: 0,
 					start: 0,
-					end: 1,
-					step: 0,
+					spacing: 1,
+					end: 0,
 					parameter: { value: [ 5, 0, 0 ] }
 				} ],
 				children: [ { ...leaf, emitterProgram: [ emit( 2 ) ] } ]

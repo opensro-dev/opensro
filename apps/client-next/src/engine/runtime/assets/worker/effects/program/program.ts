@@ -32,8 +32,8 @@ type Operation = {
 	flags?: number;
 	byte1?: number;
 	start?: number;
+	spacing?: number;
 	end?: number;
-	step?: number;
 	parameter?: {
 		kind: string;
 		value: unknown;
@@ -337,7 +337,7 @@ export function createEffectPrograms() {
 				if ( rotations.length ) {
 					if ( nodes.length >= 127 ) throw new Error( "Effect node budget exceeded" );
 					for ( const op of rotations ) {
-						if ( op.start === 0 && op.step === 0 && op.end === 0 ) {
+						if ( op.start === 0 && op.spacing === 0 && op.end === 0 ) {
 							// Native sub_b0c290 returns count=0 (period < 1e-6); sub_b143c0 skips scheduling.
 							continue;
 						}
@@ -346,9 +346,9 @@ export function createEffectPrograms() {
 						// matrix (AFD030). Keep this static transform above animated
 						// scale channels; a matrix on their node would suppress them.
 						const validSchedule = op.start === 0 && (
-							((op.flags === 0 || op.flags === 1) && op.step === 0 && op.end === 1) ||
-							(op.flags === 2 && op.step === 0 && op.end === 1) ||
-							(op.flags === 3 && (op.step === 0 || op.step === 1) && op.end === 1)
+							((op.flags === 0 || op.flags === 1) && op.end === 0 && op.spacing === 1) ||
+							(op.flags === 2 && op.end === 0 && op.spacing === 1) ||
+							(op.flags === 3 && (op.end === 0 || op.end === 1) && op.spacing === 1)
 						);
 						if (
 							!validSchedule || !Array.isArray( matrix ) || matrix.length !== 16 || matrix.some( v =>

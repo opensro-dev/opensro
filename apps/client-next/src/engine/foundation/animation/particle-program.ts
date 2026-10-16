@@ -99,8 +99,8 @@ export function particleProgram(
 		flags?: number;
 		byte1?: number;
 		start?: number;
+		spacing?: number;
 		end?: number;
-		step?: number;
 		parameter?: { kind: string; value?: unknown; left?: unknown; right?: unknown; };
 	}[],
 	parameters: readonly { kind: string; value: unknown; }[] = [],
@@ -203,7 +203,7 @@ export function particleProgram(
 			result.spin = particleRotation( op.parameter );
 			if ( totalFrames !== undefined ) result.spinFrames = particleCommandFrames( op, totalFrames );
 		} else if ( op.name === "SetGraphRandomScale" ) {
-			result.scaleFrames = op.step === 1 ? [ 0, 1 ] : [ 0 ];
+			result.scaleFrames = op.end === 1 ? [ 0, 1 ] : [ 0 ];
 			const graphs = parameters.filter( p => p.kind === "BlendScaleGraph" );
 			if ( graphs.length !== 1 ) throw Error( "Ambiguous random scale graph" );
 			const graph = graphs[0]!.value as { points?: { time: number; value: unknown; }[]; };

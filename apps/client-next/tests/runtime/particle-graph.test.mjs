@@ -170,8 +170,8 @@ test("vector commands are decoded with the native first/period/end schedule", ()
 			flags: 0,
 			byte1: 0,
 			start: 1,
-			end: 2,
-			step: 5,
+			spacing: 2,
+			end: 5,
 			parameter: { kind: "Vector", value: [ 0, -1, 0 ] }
 		} ],
 		[],

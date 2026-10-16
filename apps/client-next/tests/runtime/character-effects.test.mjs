@@ -231,8 +231,8 @@ test("Phase 6 native blend pairs, leaf anchor, lifetime budget, and inert rotati
 		name: "SetRotation",
 		flags: 2,
 		start: 0,
+		spacing: 0,
 		end: 0,
-		step: 0,
 		parameter: { right: [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] }
 	} );
 	const inertDecoded = createEffectPrograms().decode( encode( inertVal ), "hit.efp" );

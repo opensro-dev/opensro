@@ -125,8 +125,8 @@ test("SetShapeRot decodes 16-element orientation and initializes particle rotati
 		name: "SetShapeRot",
 		flags: 0,
 		start: 0,
+		spacing: 1,
 		end: 1,
-		step: 1,
 		parameter: {
 			kind: "AxisVector4",
 			left: [ 1, 0, 0, 15 ],
@@ -148,8 +148,8 @@ test("SetRVelocity assigns angular velocity matrix and continuously rotates part
 		name: "SetRVelocity",
 		flags: 0,
 		start: 0,
-		end: 1,
-		step: 0,
+		spacing: 1,
+		end: 0,
 		parameter: { kind: "RotVector", left: [ 0, 90, 0 ], right: rotY90 }
 	} ] );
 	assert.deepEqual( program.rVelocity, rotY90 );
@@ -173,8 +173,8 @@ test("ConeForce adds cone force aperture velocity at particle initialization", (
 		name: "ConeForce",
 		flags: 0,
 		start: 0,
+		spacing: 1,
 		end: 1,
-		step: 1,
 		parameter: { kind: "AngleVector1", left: [ 2, 2, 360 ], right: [ 2, 2, Math.PI * 2 ] }
 	} ] );
 	const { state } = initializeParticle( program, new Float32Array( [ 0, 0, .25, 0 ] ), 0 );
@@ -189,8 +189,8 @@ test("Attraction accelerates velocity toward origin during advanceParticle", () 
 			flags: 0,
 			byte1: 0,
 			start: 0,
-			end: 1,
-			step: 0,
+			spacing: 1,
+			end: 0,
 			parameter: { kind: "float", value: 1 }
 		} ],
 		[],
@@ -205,7 +205,7 @@ test("Attraction accelerates velocity toward origin during advanceParticle", () 
 	// Velocity should become [-1, 0, 0]
 	assert.ok( Math.abs( state.velocity[0] + 1 ) < 1e-6 );
 	assert.ok( state.position[0] < 10 );
-	// Advance frame 1 -> 2: single-kick op (step:0) does not fire on frame 1
+	// Advance frame 1 -> 2: single-kick op (end:0) does not fire on frame 1
 	const velX = state.velocity[0];
 	advanceParticle( state, program, 2 );
 	assert.strictEqual( state.velocity[0], velX );
@@ -216,8 +216,8 @@ test("SetConePos samples conical spawn displacement and offsets initial position
 		name: "SetConePos",
 		flags: 7,
 		start: 0,
-		end: 1,
-		step: 0,
+		spacing: 1,
+		end: 0,
 		parameter: { kind: "AngleVector1", left: [ 5, 5, 360 ], right: [ 5, 5, Math.PI * 2 ] }
 	} ] );
 	const { state } = initializeParticle( program, new Float32Array( [ 0, 0, .25, 0 ] ), 0 );

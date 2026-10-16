@@ -39,7 +39,6 @@ apps/client-next/src/engine/foundation/animation/native-clip.ts
 apps/client-next/src/engine/foundation/animation/one-shot-layers.ts
 apps/client-next/src/engine/foundation/animation/orb-mover.ts
 apps/client-next/src/engine/foundation/animation/palette-bindings.ts
-apps/client-next/src/engine/foundation/animation/particle-command-frames.ts
 apps/client-next/src/engine/foundation/animation/particle-emission.ts
 apps/client-next/src/engine/foundation/animation/particle-rotation.ts
 apps/client-next/src/engine/foundation/animation/pose-lod.ts
@@ -388,7 +387,6 @@ scripts/build/data/buildQuestDataAsset.mjs
 scripts/build/data/buildSiegeFortressDataAsset.mjs
 scripts/build/data/buildSkillMasteryDataAsset.mjs
 scripts/build/data/buildTeleportDataAsset.mjs
-scripts/build/effects/parseJmxVisualEffect.mjs
 scripts/build/server/serverGameDataArchive.mjs
 scripts/build/world/assets/buildDungeonResources.mjs
 scripts/build/world/assets/buildDungeonWorlds.mjs

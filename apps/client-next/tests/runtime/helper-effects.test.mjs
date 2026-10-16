@@ -147,7 +147,7 @@ test("static rotation coexists with animated scale and unsupported timing stays 
 		expected = [ 0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ];
 	for ( let i = 0; i < 16; i++ ) assert.ok( Math.abs( matrix[i] - expected[i] ) < 1e-6, `rotation component ${i}` );
 	assert.ok( model.clips[0].channels.every( c => !model.nodes[c.node].matrix ) );
-	root.renderProgram[0].step = 1;
+	root.renderProgram[0].end = 1;
 	assert.throws(
 		() => createEffectPrograms().decode( encode( catalog ), "system/system_helpermark.efp" ),
 		/rotation assignment/
