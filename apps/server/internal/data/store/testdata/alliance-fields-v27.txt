@@ -1,0 +1,9 @@
+# Never edit after it ships: a new persisted field takes schema 23, its upgrade
+# Never edit after it ships: a new persisted field takes schema 25, its upgrade
+# alliance record fields owned by store schema 22 (persisted_shape_test.go).
+# alliance record fields owned by store schema 24 (persisted_shape_test.go).
+# step and alliance-fields-v23.txt.
+# step and alliance-fields-v25.txt.
+allianceId
+crest
+guilds

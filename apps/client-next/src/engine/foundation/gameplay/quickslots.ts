@@ -13,6 +13,8 @@ import { itemActivation } from "./item-activation";
 export const TRACE_ACTION_ID = 1003;
 // actionwnddata 1011 "Helper status" (UIIT_STT_HELPER, icon_cha_helper).
 export const HELPER_ACTION_ID = 1011;
+// Port-only pet actions reuse persisted action bindings, outside native action IDs.
+export const PET_SKILL_SHORTCUT_BASE = 0xf00000;
 const HOTBAR_PAGE_COUNT = 4;
 const HOTBAR_PAGE_SLOTS = 10;
 const EQUIPMENT_SLOT_COUNT = 13;
@@ -120,6 +122,16 @@ export function quickSlotCommand(
 	}
 	if ( row.kind === 0x4a ) {
 		const id = row.payload & 0xffffff;
+		if ( id > PET_SKILL_SHORTCUT_BASE && id <= PET_SKILL_SHORTCUT_BASE + 255 ) {
+			const skillId = id - PET_SKILL_SHORTCUT_BASE, pet = state.petTraining;
+			const skill = pet?.skills.find( entry =>
+				entry.id === skillId && entry.action && entry.live && entry.level > 0
+			);
+			return pet && skill &&
+					state.cosRecords?.some( record => record.gid === pet.gid && record.band === 3 && record.hp > 0 ) ?
+				{ kind: "cos-training", gid: pet.gid, operation: 2, arg: skill.id, target: state.target ?? 0 } :
+				null;
+		}
 		if ( id === 1000 && !mountedOn || id === 1001 || actionEmote( id ) !== null ) {
 			return { kind: "action-command", id };
 		}
@@ -220,6 +232,14 @@ export function quickSlotDrag(
 	if ( source.startsWith( "skill:" ) ) {
 		const id = Number( source.slice( 6 ) );
 		return state.skills?.includes( id ) ? quickSlot( { slot, kind: 0x49, payload: id } ) : null;
+	}
+	if ( source.startsWith( "pet-skill:" ) ) {
+		const id = Number( source.slice( 10 ) );
+		return state.petTraining?.skills.some( skill =>
+				skill.id === id && skill.action && skill.live && skill.level > 0
+			) ?
+			quickSlot( { slot, kind: 0x4a, payload: PET_SKILL_SHORTCUT_BASE + id } ) :
+			null;
 	}
 	if ( source.startsWith( "action:" ) ) {
 		const id = Number( source.slice( 7 ) );

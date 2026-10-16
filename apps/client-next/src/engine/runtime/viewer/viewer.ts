@@ -38,6 +38,7 @@ import {
 	type ViewerStage
 } from "@/engine/foundation/ui/viewer-request";
 import {
+	dollBounds,
 	nextFraming,
 	viewerCamera,
 	type ViewerFitting,
@@ -563,10 +564,8 @@ export function createViewer( host: ViewerHost ) {
 				const rider = host.renderer.characterBounds?.( entity.gid ),
 					mount = ride === undefined ? null : host.renderer.characterBounds?.( ride ) ?? null;
 				const bounds = rider && (ride === undefined ? rider : mount && mountedBounds( rider, mount ));
-				// The doll turns the model by pi about y (portrait.ts previewYaw of
-				// yaw 0), so model x and z change sign in the doll's space.
 				if ( bounds ) {
-					box = { min: [ -bounds[3], bounds[1], -bounds[5] ], max: [ -bounds[0], bounds[4], -bounds[2] ] };
+					box = dollBounds( bounds );
 					camera = viewerCamera( box, MODEL_FRONT, viewport.width / viewport.height );
 				}
 			}

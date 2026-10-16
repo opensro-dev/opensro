@@ -30,6 +30,9 @@ import { uiImagePreloadReason } from "../shared/uiImageEligibility.mjs";
 import { buildSkillStageModelAssets } from "../char/buildSkillStageModelAssets.mjs";
 import { publishEntityBsrModifiers } from "../char/publishEntityBsrModifiers.mjs";
 import { buildQuestDataAsset } from "../data/buildQuestDataAsset.mjs";
+import { buildDropModelAssets } from "../char/buildDropModelAssets.mjs";
+import { buildMissionPresentationAsset } from "../data/buildMissionPresentationAsset.mjs";
+import { buildPetItemIcons } from "../shared/petItemIcons.mjs";
 import { buildSkillDataAsset } from "../data/buildSkillDataAsset.mjs";
 import { parseWeatherEvents } from "../char/weatherEvents.mjs";
 import { buildEffectProgramsAsset } from "../effects/buildEffectPrograms.mjs";
@@ -408,6 +411,37 @@ async function produceOverlays() {
 
 /** @type {Record<string, LooseFamily>} */
 export const LOOSE_FAMILIES = {
+	// Port-only pet gear gets one owned prop; retail loot keeps its own models.
+	"pet-loot": {
+		kind: "refresh",
+		label: "pet loot models and item bindings",
+		packFolder: "pet-loot",
+		defaultGroup: file =>
+			file.endsWith( ".glb" ) ? "game-models" : file.endsWith( ".png" ) ? imagePackGroup( file ) : "game-data",
+		async produce() {
+			await buildDropModelAssets( { skipTextures: true } );
+			const icons = await buildPetItemIcons();
+			buildMissionPresentationAsset();
+			const manifest = "/assets/itemdrop/manifest.json", presentation = "/assets/data/missionPresentation.json";
+			await refreshPrecompressedSidecars( [ publicFile( manifest ), publicFile( presentation ) ] );
+			const drops = await readPublicJson( manifest );
+			return {
+				files: [
+					...icons,
+					manifest,
+					manifest + ".gz",
+					presentation,
+					presentation + ".gz",
+					...Object.values( drops.models ).map( row => row.glb )
+				]
+			};
+		},
+		packFiles( output, index ) {
+			return output.files.flatMap( file =>
+				file.endsWith( ".glb" ) || file.endsWith( ".png" ) ? [ file ] : packedRepresentations( index, [ file ] )
+			);
+		}
+	},
 	// The characterInfo plane and the skill catalogue are published by one build
 	// step as three files; files new to the index join game-data, the startup
 	// group the full build puts them in.

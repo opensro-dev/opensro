@@ -1,0 +1,8 @@
+# Never edit after it ships: a new persisted field takes schema 23, its upgrade
+# Never edit after it ships: a new persisted field takes schema 25, its upgrade
+# step and trade-reward-pool-fields-v23.txt.
+# step and trade-reward-pool-fields-v25.txt.
+# trade-reward-pool record fields owned by store schema 22 (persisted_shape_test.go).
+# trade-reward-pool record fields owned by store schema 24 (persisted_shape_test.go).
+hunters
+thieves

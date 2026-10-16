@@ -12,6 +12,7 @@ infinity sign instead, drawn in the same pixel style as the digits.
 */
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 import type { UiQuad, UiRect } from "@/engine/contracts/ui";
+import { isPetGearRef } from "@/engine/foundation/gameplay/inventory-item";
 
 const ROOT = "/assets/images/Media_extracted/interface/item_number/item_number_";
 // Each digit sprite is a 4x7 white glyph on a 5x8 black backing.
@@ -31,7 +32,9 @@ countable
 remaining unit is drawn too. A timed COS extension (param bit 2) does not.
 ================
 */
-function countable( item: Partial<Pick<InventoryItem, "quantity" | "typeFlags" | "tooltip">> ): boolean {
+function countable( item: Partial<Pick<InventoryItem, "refObjId" | "quantity" | "typeFlags" | "tooltip">> ): boolean {
+	// Port-only pet equipment uses an ETC record but is never a stack.
+	if ( item.refObjId !== undefined && isPetGearRef( item.refObjId ) ) return false;
 	if ( !Number.isInteger( item.quantity ) || item.quantity! < 1 || item.quantity! > 65535 ) return false;
 	const type = item.typeFlags;
 	if ( type !== undefined && ((type & 2) !== 0 || (type & 0x1c) !== 0xc || (type & 0x60) !== 0x60) ) return false;
@@ -89,7 +92,7 @@ D3D9's -0.5 vertex correction is implicit in WebGPU pixel coordinates.
 ================
 */
 export function itemCountQuads(
-	item: Partial<Pick<InventoryItem, "quantity" | "typeFlags" | "tooltip">> | undefined,
+	item: Partial<Pick<InventoryItem, "refObjId" | "quantity" | "typeFlags" | "tooltip">> | undefined,
 	r: UiRect,
 	clip: UiRect,
 	unlimited = false

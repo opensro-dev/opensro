@@ -1,0 +1,170 @@
+<!doctype html>
+<!--
+===========================================================================
+attack-pet-system.html - standalone player guide for the optional pet expansion.
+Content is a dated implementation snapshot; operator settings live in ../ATTACK-PET-SYSTEM.md.
+===========================================================================
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Learn OpenSRO's attack-pet system: four companions, skill books, manual abilities, monster-dropped equipment and blue options.">
+<title>Attack Pet System · OpenSRO</title>
+<link rel="stylesheet" href="attack-pet-system.css">
+</head>
+<body class="pet-guide">
+<a class="skip" href="#overview">Skip to the guide</a>
+<div class="shell">
+<header class="masthead">
+<img src="https://opensro.online/art/jangan-banner.webp" alt="" loading="eager">
+<a class="brand" href="https://opensro.online/">OPENSRO<small>Legend III · Companion field guide</small></a>
+</header>
+<div class="layout">
+<aside class="rail" aria-label="Guide navigation">
+<nav class="rail-group" aria-label="OpenSRO">
+<p class="rail-label">The Silk Road</p>
+<a class="primary" href="https://opensro.online/play">Play in browser</a>
+<a href="https://opensro.online/">News</a>
+<a href="https://opensro.online/guide">Beta guide</a>
+<a href="#overview" aria-current="page">Attack Pet System</a>
+</nav>
+<nav class="rail-group" aria-label="On this page">
+<p class="rail-label">In this guide</p>
+<a href="#getting-started">Getting started</a>
+<a href="#companions">Choose a companion</a>
+<a href="#skill-books">Skills &amp; progression</a>
+<a href="#cooldowns">Commands &amp; cooldowns</a>
+<a href="#equipment">Equipment &amp; drops</a>
+<a href="#degrees">Degrees &amp; blues</a>
+<a href="#care">Care &amp; persistence</a>
+<a href="#questions">Common questions</a>
+</nav>
+<p class="rail-note">An optional OpenSRO expansion.<br>Availability and balance depend on your server.</p>
+</aside>
+<main id="guide-content">
+<section class="panel" id="overview">
+<h1>Attack Pet System</h1>
+<div class="body">
+<p class="eyebrow">Four companions. One shared equipment system.</p>
+<p class="lead">Build a partner for your journey: a stalwart bear, a relentless wolf, a frost-wielding penguin or a supporting crow.</p>
+<p>Command active abilities yourself, develop passive skills and find pet equipment on the monsters you defeat. Each companion has its own role and five skill families to develop.</p>
+<div class="facts" aria-label="System overview">
+<div class="fact"><strong>4</strong><span>Pet roles</span></div>
+<div class="fact"><strong>2 + 3</strong><span>Active / passive rows</span></div>
+<div class="fact"><strong>3</strong><span>Equipment slots</span></div>
+<div class="fact"><strong>1–9D</strong><span>Equipment degrees</span></div>
+</div>
+<p class="notice">This guide describes the optional attack-pet expansion, not the unchanged original pet system. It must be enabled by the server. Numbers below reflect the current design, reviewed 16 October 2026.</p>
+</div></section>
+<section class="panel" id="getting-started"><h2>Getting started</h2><div class="body">
+<ol>
+<li><strong>Summon an attack pet</strong> from its summon item. The expansion supports Bear, Wolf, Penguin and Three Footed Crow; it does not turn pickup pets into attack pets.</li>
+<li><strong>Open pet information</strong> with <kbd>Insert</kbd> or the Information button beside the pet portrait.</li>
+<li><strong>Check the tabs.</strong> Basic Info shows the pet's combat stats; Inventory holds its equipment; Skills shows its training tree.</li>
+<li><strong>Learn a skill</strong> when your pet meets the level, previous-book and skill-point requirements. Unmet requirements appear red in the tooltip.</li>
+<li><strong>Drag a learned active skill</strong> to a normal numbered quickslot. Press that slot's key to command the currently summoned pet.</li>
+</ol>
+<p class="notice">Missing Inventory or Skills? Check <strong>Experimental → Game → Attack-pet training</strong> in the client. Both the client option and the server expansion must be enabled.</p>
+</div></section>
+<section class="panel" id="companions"><h2>Choose your companion</h2><div class="body">
+<p>Equipment is shared across species, but their underlying combat profiles differ. These are roles, not a promise of identical stats at the same level.</p>
+<div class="pet-grid">
+<article class="pet-card"><p class="role">Bear · Defense</p><h3>Hold the line</h3><p>High health and strong defenses, with lower attack. Draw enemies away from your character and withstand their attacks.</p>
+<details open><summary>Bear skill families</summary><ul class="skill-list">
+<li><strong>Active · Challenging Roar</strong><span>Taunts nearby monsters without dealing damage. Book I starts with three normal monsters in an 8 m base radius; II admits party monsters and starts at 12 m; III raises the limit to six and starts at 16 m. Proficiency increases radius. Uniques are excluded.</span></li>
+<li><strong>Active · Iron Hide</strong><span>Command an immediate, short damage-reduction buff. No selected monster or basic attack is needed.</span></li>
+<li><strong>Passive · Thick Hide</strong><span>Increases physical and magical defense.</span></li>
+<li><strong>Passive · Last Stand</strong><span>Raises defense while health is low; higher books improve its protection.</span></li>
+<li><strong>Passive · Crushing Paw</strong><span>Counts attacks toward a periodic stunning strike. Higher proficiency improves the effect.</span></li>
+</ul></details></article>
+<article class="pet-card"><p class="role">Wolf · Physical attack</p><h3>Hunt down your prey</h3><p>A physical damage specialist. Bleeding, wounded targets and finishing blows reward sustained pressure.</p>
+<details open><summary>Wolf skill families</summary><ul class="skill-list">
+<li><strong>Active · Terrifying Howl</strong><span>Terrifies a limited number of nearby monsters, preventing them from attacking the wolf for a short time. It is not a boss-wide fear.</span></li>
+<li><strong>Active · Rending Bite</strong><span>A commanded damaging strike that applies bleeding. Select a valid enemy first.</span></li>
+<li><strong>Passive · Execute</strong><span>A damaging hit can finish a non-unique monster below its remaining-health threshold. Blocked hits do not execute.</span></li>
+<li><strong>Passive · Scent of Blood</strong><span>Improves critical chance against bleeding or wounded enemies.</span></li>
+<li><strong>Passive · Thick Fur</strong><span>Increases physical and magical defense.</span></li>
+</ul></details></article>
+<article class="pet-card"><p class="role">Penguin · Magic</p><h3>Control the battlefield</h3><p>Strong magical offense with less health and physical defense. Magical attack improves its damage; defensive gear helps it survive.</p>
+<details open><summary>Penguin skill families</summary><ul class="skill-list">
+<li><strong>Active · Frost Nova</strong><span>A commanded area strike that attempts frostbite on nearby targets. Native resistance rules determine status success.</span></li>
+<li><strong>Active · Deep Freeze</strong><span>A targeted commanded strike that attempts freeze. Duration and resistance depend on the pet and target; bosses have no guaranteed slow fallback.</span></li>
+<li><strong>Passive · Cold Mastery</strong><span>Increases magical attack.</span></li>
+<li><strong>Passive · Static Feathers</strong><span>Chance to spread an attack to additional enemies with reduced damage and an electric-shock attempt. It does not cast a separate chain-lightning spell.</span></li>
+<li><strong>Passive · Frost Armor</strong><span>Increases physical and magical defense. It does not automatically chill attackers.</span></li>
+</ul></details></article>
+<article class="pet-card"><p class="role">Crow · Support</p><h3>Keep your journey going</h3><p>Supports its owner with healing and enemy debuffs. Its current speed passive improves the crow's attacks, not party movement.</p>
+<details open><summary>Crow skill families</summary><ul class="skill-list">
+<li><strong>Active · Mend</strong><span>Command an immediate heal based on the owner's maximum health.</span></li>
+<li><strong>Active · Mark Prey</strong><span>A commanded strike attempts to reduce the target's physical and magical defense. Recharge counts attacks rather than seconds.</span></li>
+<li><strong>Passive · Carrion Feast</strong><span>Heals the owner when the crow lands the killing blow.</span></li>
+<li><strong>Passive · Swift Wings</strong><span>Increases the crow's attack speed. Owner and party movement speed are unchanged.</span></li>
+<li><strong>Passive · Murder of Crows</strong><span>Periodic damaging attacks strike nearby enemies. Uses the crow's existing attack animation.</span></li>
+</ul></details></article>
+</div>
+<p class="muted" style="margin-top:14px">Hover a skill in game for its current and next-rank values. Some higher-book bonuses change behavior as well as numbers; the in-game description is the reference for your pet's proficiency.</p>
+</div></section>
+<section class="panel" id="skill-books"><h2>Three books in every row</h2><div class="body">
+<p>Each pet has <strong>two active rows and three passive rows</strong>. The three icons in a row are successive books of the same skill family, not three unrelated abilities.</p>
+<div class="table-wrap"><table><caption class="muted">Sequential pet skill progression</caption><thead><tr><th scope="col">Book</th><th scope="col">Starts at pet level</th><th scope="col">Requirement</th><th scope="col">Final rank level</th></tr></thead><tbody>
+<tr><td>I</td><td>10</td><td>A free point</td><td>40</td></tr>
+<tr><td>II</td><td>40</td><td>Book I at rank 10</td><td>90</td></tr>
+<tr><td>III</td><td>90</td><td>Book II at rank 10</td><td>120</td></tr>
+</tbody></table></div>
+<p style="margin-top:14px">Each book has ten learnable ranks. Its next rank may need a higher pet level even when that book is already unlocked. The tooltip shows the exact requirement.</p>
+<p>A pet starts with one training point and earns another every two pet levels. Points are shared across all five rows: you must choose where to invest. Special test pets may have extra points; those are not normal progression.</p>
+<p>Only one book contributes from each passive row at a time. Learning a higher passive book selects it automatically; earlier books do not add a second copy of the same bonus.</p>
+</div></section>
+<section class="panel" id="cooldowns"><h2>Commands, quickslots &amp; cooldowns</h2><div class="body">
+<ul>
+<li><strong>You control active skills.</strong> Bind them while ready, then use a numbered quickslot just like a character skill. The summoned pet must know the bound skill.</li>
+<li><strong>Offensive skills need a valid target.</strong> Self-buffs, healing and area commands have their own admission rules; a roar needs eligible monsters in range.</li>
+<li><strong>All books in one active row share recharge.</strong> Casting Book III also puts Books I and II in that row on cooldown. The other active row remains independent.</li>
+<li><strong>Timed recharge</strong> shows a sweep and countdown in the skill tree and quickslot. The skill becomes available when its timer expires.</li>
+<li><strong>Event recharge</strong> counts actions such as attacks or hits taken. Waiting does not clear an attack counter. Read the tooltip to distinguish a counter from seconds.</li>
+</ul>
+<h3 style="margin-top:20px">Cooldown reduction has a ceiling</h3>
+<p>Equipment blues and applicable passives add together, then the total is capped at <strong>80%</strong>. The effective total is shown in the pet Inventory tab.</p>
+<div class="formula">Remaining timed cooldown = base cooldown × (1 − effective reduction)</div>
+<div class="table-wrap"><table><thead><tr><th scope="col">Total bonuses</th><th scope="col">Effective reduction</th><th scope="col">30-second skill</th></tr></thead><tbody>
+<tr><td>One 50% item</td><td>50%</td><td>15 seconds</td></tr>
+<tr><td>Two 50% items</td><td>80% cap</td><td>6 seconds</td></tr>
+<tr><td>Any 150% total</td><td>80% cap</td><td>6 seconds</td></tr>
+</tbody></table></div>
+<p class="muted" style="margin-top:10px">The 150% row explains the cap, not a promise that any three items can roll cooldown reduction. Currently that blue is eligible on harnesses and charms. Event-based recharge uses rounded counters with a minimum of one event.</p>
+</div></section>
+<section class="panel" id="equipment"><h2>Equipment found on the road</h2><div class="body">
+<p>Attack pets share three equipment slots. A piece can be used by any supported species that meets its pet-level requirement.</p>
+<div class="table-wrap"><table><thead><tr><th scope="col">Mounting part</th><th scope="col">Base stats</th><th scope="col">Useful for</th></tr></thead><tbody>
+<tr><td>Collar</td><td>Physical attack, magical attack, hit ratio</td><td>Offense and accuracy</td></tr>
+<tr><td>Harness</td><td>Physical defense, magical defense, parry ratio</td><td>Surviving attacks</td></tr>
+<tr><td>Charm</td><td>Smaller bonuses to all six stats</td><td>Rounding out your build</td></tr>
+</tbody></table></div>
+<p style="margin-top:14px"><strong>White tooltip lines are base equipment stats.</strong> <span class="blue">Blue lines are rolled modifiers</span>, such as percentage damage or defense, cooldown reduction, elemental additions or extra skill levels. A plain item does not secretly grant those percentage bonuses.</p>
+<p><strong>Find pet gear from monsters, not NPC shops.</strong> When a monster produces an eligible normal character-equipment drop, the server may add a pet item of the same degree. The original character item remains. Gold and potions do not trigger this extra roll.</p>
+<p>The default factor is <strong>10%</strong> per eligible equipment drop: about ten additional pet items per hundred such drops over time, not a 10% chance on every kill. Server operators can change this rate.</p>
+<p>Pick up the item, check its requirement, then drag it from your inventory to the matching pet slot. Right-click a worn piece to remove it when permitted. Recall the pet and leave combat before changing gear or training if the server refuses the action.</p>
+</div></section>
+<section class="panel" id="degrees"><h2>Nine degrees, stronger possibilities</h2><div class="body">
+<p>Degrees follow character equipment bands through 9D. A monster can roll a lower-degree normal item, so its pet drop can also be below that monster's highest eligible degree.</p>
+<div class="table-wrap"><table><thead><tr><th scope="col">Degree</th><th scope="col">Required pet level</th><th scope="col">Maximum blues</th></tr></thead><tbody>
+<tr><td>1D</td><td>1</td><td>1</td></tr><tr><td>2D</td><td>8</td><td>2</td></tr><tr><td>3D</td><td>16</td><td>2</td></tr><tr><td>4D</td><td>24</td><td>3</td></tr><tr><td>5D</td><td>32</td><td>3</td></tr><tr><td>6D</td><td>42</td><td>4</td></tr><tr><td>7D</td><td>52</td><td>4</td></tr><tr><td>8D</td><td>64</td><td>5</td></tr><tr><td>9D</td><td>76</td><td>6</td></tr>
+</tbody></table></div>
+<p style="margin-top:14px">A maximum is not a guarantee. Plain items can have zero blues. Higher degrees improve roll floors and unlock stronger eligible tiers, but a 9D item can still roll a lower tier or fewer than six options.</p>
+<p>Each modifier group can appear only once on an item. A blue must also match the slot and degree. Higher percentages are deliberately rarer; the server controls each tier's limits and roll bias. Saved item rolls do not change when future drop settings change.</p>
+</div></section>
+<section class="panel" id="care"><h2>Care for your companion</h2><div class="body">
+<ul><li>Watch <strong>HP and HGP</strong>. Low satiety can lower combat performance, so feed the pet before comparing equipment or skill damage.</li><li>A pet above its owner's level cannot be summoned normally. Keep the owner eligible while training.</li><li>Gear, learned ranks and passive selections are saved with the pet's summon item. Relogging does not grant a fresh build.</li><li>Recharge state is saved too. Timers can expire as time passes; event counters still need their specified actions.</li><li>Use weak enemies when trying a new build. A skill icon working does not make an underfed or poorly equipped pet safe against high-level monsters.</li></ul>
+</div></section>
+<section class="panel" id="questions"><h2>Common questions</h2><div class="body faq">
+<details><summary>Why can I not learn the next skill?</summary><p>Check pet level, free points, previous-book rank and combat state. Book II needs Book I maxed; Book III needs Book II maxed. Unmet tooltip requirements are red, even on unlearned skills.</p></details>
+<details><summary>Why does another skill icon go dark when I cast?</summary><p>All three books in that row share a cooldown. It prevents cycling through the same family to avoid recharge.</p></details>
+<details><summary>Why is Mark Prey not recharging while I wait?</summary><p>Its recharge is attack-based. Make the required pet attacks; it is not a timed countdown.</p></details>
+<details><summary>Do stronger blues change the white numbers on the item?</summary><p>No. The item's white lines describe its fixed base stats. Rolled percentage effects remain blue; the pet's Basic Info reflects applicable equipment and passive combat modifiers.</p></details>
+<details><summary>Does 9D guarantee six blues or a 50% cooldown roll?</summary><p>No. Six is its blue cap. Each roll still chooses an eligible group and tier, then a biased value within the allowed range. The top cooldown tier is currently D9 harness/charm gear; its configured maximum is not a guaranteed value.</p></details>
+<details><summary>Does this work on the public server already?</summary><p>This is a guide for the optional expansion build. Seeing this page does not mean every server has enabled it. Check that server's announcements and the pet tabs in game.</p></details>
+</div></section>
+</main></div>
+<footer>OpenSRO · Optional Attack Pet System · Guide reviewed 16 October 2026<br><a href="#overview">Back to top</a> · <a href="https://opensro.online/guide">Beta guide</a></footer>
+</div></body></html>

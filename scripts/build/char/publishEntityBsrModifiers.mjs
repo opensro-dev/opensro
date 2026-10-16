@@ -18,6 +18,7 @@ import { publicRoot } from "../world/paths.mjs";
 import { readPublishedAssetBytesSync } from "../../lib/publishedAsset.mjs";
 import { writeJsonIfChangedSync } from "../shared/jsonOut.mjs";
 import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
+import { PORT_PET_DROP_MODEL } from "../shared/portItemRows.mjs";
 
 // Metadata-only rebuild: retain byte-identical meshes and the VAT owner's
 // enrichment. Full model builders publish the same original BSR payload.
@@ -40,6 +41,8 @@ export async function publishEntityBsrModifiers() {
 			) => [ bsr, resource, bsr ] ) :
 			Object.entries( manifest.models ).map( ( [key, row] ) => [ key, row, row.bsr ?? `res/${key}` ] );
 		for ( const [, row, bsr] of rows ) {
+			// Owned GLB, not a retail BSR: its builder owns the borrowed chest glow.
+			if ( domain === "itemdrop" && bsr === `res/${PORT_PET_DROP_MODEL}` ) continue;
 			if ( !cache.has( bsr ) ) {
 				cache.set( bsr, parseCharacterBsr( fs.readFileSync( dataAssetPath( bsr ) ), bsr ) );
 			}

@@ -199,6 +199,11 @@ func (rt *Runtime) monsterStrikeCOS(in monsterStrikeInput, owner *enterworld.Cha
 	if err != nil {
 		return out
 	}
+	// Companion attackers also reuse this function. Only a population
+	// monster may encounter the pilot's defensive gear bonus.
+	if _, populationMonster := rt.Monsters.Get(divisionID, instance.Gid); populationMonster {
+		defender = rt.petTrainingDefense(owner, pet, ref.MaxHP, defender)
+	}
 	var displacement *playerDisplacement
 	displaceAt := -1
 	remainingHP := pet.CurrentHP
@@ -233,12 +238,30 @@ func (rt *Runtime) monsterStrikeCOS(in monsterStrikeInput, owner *enterworld.Cha
 		}
 		records = append(records, rolled...)
 	}
+	// Port-only pet defenses apply to monster hits, never player PvP.
+	for i := range formulas {
+		formulas[i].Damage = rt.petTrainedDamageTaken(divisionID, owner, pet, formulas[i].Damage, nowMs)
+	}
 	hit := cosHit{owner: owner, pet: pet, ref: ref, pose: pose, block: ownerBlock, formulas: formulas, records: records,
 		displacement: displacement, displaceAt: displaceAt,
 		context: abnormal.HitContext{Attack: skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector}}
 	hit.block.sources = rt.captureAbnormalSources(divisionID, hit.block.block, records)
 	if !rt.deps.UpdateDeferred(owner, "monster-cos-hit", func() bool {
-		return rt.applyCOSHitInDoor(divisionID, &hit, nowMs)
+		if !rt.applyCOSHitInDoor(divisionID, &hit, nowMs) {
+			return false
+		}
+		live := owner.CompanionByGID(pet.GID)
+		previousRows := live.Training.Rows
+		for _, formula := range formulas {
+			if !formula.Blocked && formula.Damage > 0 {
+				rt.petTrainedHitTaken(owner, live)
+				break
+			}
+		}
+		if live.Training.Rows != previousRows {
+			hit.strike.private = append(hit.strike.private, rt.petTrainingStateFrames(live, nowMs)...)
+		}
+		return true
 	}) {
 		return out
 	}

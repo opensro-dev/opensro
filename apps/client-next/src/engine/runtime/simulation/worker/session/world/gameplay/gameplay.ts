@@ -243,6 +243,7 @@ import { createCombat } from "./combat/combat";
 import { createTargeting } from "./targeting/targeting";
 import { createMoveReservation } from "./reservation/reservation";
 import { createBetaPlayerMap } from "./beta-map/beta-map";
+import { createPetTraining } from "./pet-training/pet-training";
 import type { GameplayCommand, GameplayState } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
 import { nearestPickable } from "@/engine/foundation/gameplay/pickup-nearest";
@@ -420,7 +421,9 @@ export function createGameplay(
 		combat = createCombat( readEntity, publishFeedback, () => skillPress.oneWayMs() ),
 		targeting = createTargeting( send ),
 		moveReservation = createMoveReservation(),
-		betaMap = createBetaPlayerMap();
+		betaMap = createBetaPlayerMap(),
+		// The wolf tree's worn gear resolves through the bag's references.
+		petTraining = createPetTraining( ( ref, slot, magic ) => inventory.referenceItem( ref, slot, magic ) );
 	/*
 ================
 sendFrame
@@ -1025,6 +1028,7 @@ selected entities, cooldowns or world-entry state.
 		journalBag = new Map();
 		moveReservation.clear();
 		betaMap.clear();
+		petTraining.clear();
 		partyMatching = emptyPartyMatching();
 		entryVitals = {};
 		warnings = [ false, false ];
@@ -2047,6 +2051,25 @@ state here before a command can claim a native wire conversation.
 				new DataView( payload.buffer ).setUint32( 1, record.gid, true );
 				return sendFrame( { opcode: 0x74b5, payload } );
 			}
+			if ( command.kind === "cos-training" ) {
+				// Port-only, not native: the seven-byte F0 command (op, arg). The
+				// server owns points, levels, ownership, gear and combat admission.
+				const record = cosRecords.get( command.gid );
+				if (
+					!record || record.band !== 3 || record.dead || record.hp === 0 ||
+					!Number.isInteger( command.operation ) || command.operation < 0 || command.operation > 6 ||
+					!Number.isInteger( command.arg ) || command.arg < 0 || command.arg > 255
+				) {
+					throw Error( "No living attack pet or invalid training operation" );
+				}
+				const payload = new Uint8Array( command.operation === 2 ? 11 : 7 );
+				new DataView( payload.buffer ).setUint32( 0, record.gid, true );
+				payload[4] = 0xf0;
+				payload[5] = command.operation;
+				payload[6] = command.arg;
+				if ( command.operation === 2 ) new DataView( payload.buffer ).setUint32( 7, command.target ?? 0, true );
+				return sendFrame( { opcode: 0x769e, payload } );
+			}
 			if ( command.kind === "cos-follow" || command.kind === "cos-cancel" ) {
 				const record = cosRecords.get( command.gid );
 				if (
@@ -2802,6 +2825,10 @@ Packet handling must not depend on which HUD panel is currently open.
 					);
 				}
 				if ( betaMap.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
+				if ( petTraining.receive( frame, now ) ) {
 					dirty = true;
 					return true;
 				}
@@ -4324,6 +4351,7 @@ The published plane when something changed since the last take, else null.
 				...targeting.state(),
 				...skillPress.state(),
 				betaPlayers: betaMap.players(),
+				petTraining: petTraining.state(),
 				unlimitedItems,
 				error: m.error ?? i.error ?? c.error ?? targeting.error() ?? progression.error ??
 					training.state().trainingError ?? social.error ?? cosError ?? moveReservation.error() ?? null

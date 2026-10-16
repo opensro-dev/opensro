@@ -18,7 +18,8 @@ import type { PresentationRandom } from "@/engine/contracts/presentation-random"
 import { readPickAlpha } from "./readback/readback";
 import { pickRay, pickRayProjector } from "@/engine/foundation/rendering/picking";
 import { viewProjection } from "@/engine/foundation/rendering/world-math";
-import { prepareUi, createUiPreparation } from "@/engine/foundation/ui/ui";
+import { prepareUi, createUiPreparation, DOLL2_TEXTURE } from "@/engine/foundation/ui/ui";
+import { dollBounds, DOLL_FRONT, viewerCamera } from "@/engine/foundation/rendering/viewer-camera";
 import { createCharacters } from "./characters/characters";
 import { createWorldRenderer } from "./world/world";
 import { copyGeometry } from "@/engine/foundation/rendering/geometry";
@@ -73,6 +74,23 @@ export function createRenderer(
 	const doll = createPortrait( createCharacters() );
 	let dollWidth = 0, dollHeight = 0;
 	let dollDepth: import("./internal/gpu-contract").DepthTarget | null = null;
+	// The second doll (the pet window's wolf beside the bag's player).
+	const doll2 = createPortrait( createCharacters() );
+	let doll2Width = 0, doll2Height = 0;
+	let doll2Depth: import("./internal/gpu-contract").DepthTarget | null = null;
+	/*
+	================
+	dollCamera
+
+	A doll's camera: its own, or framed from the actor's bind bounds when it
+	asks to fit (undefined until the model is loaded, then the fixed camera).
+	================
+	*/
+	function dollCamera( input: NonNullable<import("@/engine/contracts/ui").UiQuad["doll"]>, aspect: number ) {
+		if ( input.camera || !input.fit ) return input.camera;
+		const bounds = characters.bindBounds( input.gid );
+		return bounds ? viewerCamera( dollBounds( bounds ), DOLL_FRONT, aspect ) : undefined;
+	}
 	const uiPreparation = createUiPreparation();
 	let uiProduct: ReturnType<typeof prepareUi> | null = null;
 	const uiTextures = new Map<string, UiTexture>(), dirtyUi = new Set<string>();
@@ -525,6 +543,9 @@ export function createRenderer(
 					dollDepth?.dispose();
 					dollDepth = null;
 					doll.invalidate();
+					doll2Depth?.dispose();
+					doll2Depth = null;
+					doll2.invalidate();
 					surface?.dispose();
 					surface = null;
 					frame = null;
@@ -706,7 +727,8 @@ export function createRenderer(
 				if ( !dollInput && portraitGid !== undefined ) {
 					doll.warm( characters.portraitSource( portraitGid ), device.geometry()!, device.images()! );
 				}
-				const dollRect = uiProduct?.scene.quads.find( quad => quad.doll )?.rect;
+				const dollRect = uiProduct?.scene.quads.find( quad => quad.doll && quad.texture !== DOLL2_TEXTURE )
+					?.rect;
 				const width = Math.max( 1, Math.ceil( dollRect?.[2] ?? INVENTORY_DOLL_WIDTH ) );
 				const height = Math.max( 1, Math.ceil( dollRect?.[3] ?? INVENTORY_DOLL_HEIGHT ) );
 				const dollDraws = dollInput ?
@@ -714,10 +736,44 @@ export function createRenderer(
 						characters.portraitSource( dollInput.gid, dollInput.mount === true ),
 						device.geometry()!,
 						device.images()!,
-						{ yaw: dollInput.yaw, seconds: timeSeconds, aspect: width / height, camera: dollInput.camera }
+						{
+							yaw: dollInput.yaw,
+							seconds: timeSeconds,
+							aspect: width / height,
+							camera: dollCamera( dollInput, width / height )
+						}
 					) :
 					[];
 				const dollTarget = dollInput ? device.portraitTarget( "__doll", width, height ) : undefined;
+				const doll2Input = uiProduct?.doll2;
+				if ( doll2Input ) {
+					const r = uiProduct!.scene.quads.find( quad => quad.texture === DOLL2_TEXTURE )!.rect,
+						w2 = Math.max( 1, Math.ceil( r[2] ) ),
+						h2 = Math.max( 1, Math.ceil( r[3] ) );
+					const draws = doll2.prepare(
+						characters.portraitSource( doll2Input.gid ),
+						device.geometry()!,
+						device.images()!,
+						{
+							yaw: doll2Input.yaw,
+							seconds: timeSeconds,
+							aspect: w2 / h2,
+							camera: dollCamera( doll2Input, w2 / h2 )
+						}
+					);
+					if ( !doll2Depth || doll2Width !== w2 || doll2Height !== h2 ) {
+						doll2Depth?.dispose();
+						doll2Depth = device.surfaceCommands()!.createDepth( w2, h2 );
+						doll2Width = w2;
+						doll2Height = h2;
+					}
+					// The device draws every portrait pass alike; the wolf rides that list.
+					partyDraws.push( {
+						target: device.portraitTarget( DOLL2_TEXTURE, w2, h2 ),
+						depth: doll2Depth.view,
+						draws: staleDraws.live( "doll2", draws )
+					} );
+				}
 				if ( dollTarget && (!dollDepth || dollWidth !== width || dollHeight !== height) ) {
 					dollDepth?.dispose();
 					dollDepth = device.surfaceCommands()!.createDepth( width, height );
@@ -903,6 +959,9 @@ export function createRenderer(
 			dollDepth?.dispose();
 			dollDepth = null;
 			doll.invalidate();
+			doll2Depth?.dispose();
+			doll2Depth = null;
+			doll2.invalidate();
 			surface?.dispose();
 			surface = null;
 			frame = null;
@@ -919,6 +978,7 @@ export function createRenderer(
 			portrait.dispose( device.geometry(), device.images() );
 			for ( const child of partyPortraits ) child.dispose( device.geometry(), device.images() );
 			doll.dispose( device.geometry(), device.images() );
+			doll2.dispose( device.geometry(), device.images() );
 			characters.dispose( device.geometry(), device.images() );
 			world.dispose( device.geometry(), device.images() );
 			device.dispose();

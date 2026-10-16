@@ -48,6 +48,8 @@ import {
 	resourceGlbOutput
 } from "./resourceGlbOutput.mjs";
 import { gameRoot, publicAssetsRoot, retailTextdataRoot } from "../world/paths.mjs";
+import { PORT_PET_DROP_MODEL } from "../shared/portItemRows.mjs";
+import { createPetLootCollar, petLootDropModifiers } from "./petLootCollar.mjs";
 
 const textdataDir = retailTextdataRoot;
 const publicAssets = publicAssetsRoot;
@@ -77,6 +79,7 @@ function collectDropModels() {
 	// native CIItem_LoadModel fallback path (StaticInit_DropMoneyModelPath 0xBBCB60) -
 	// referenced by address, not by any itemdata column.
 	models.add( "item/etc/drop_ch_money_ing.bsr" );
+	models.add( PORT_PET_DROP_MODEL );
 	return [ ...models ].sort();
 }
 
@@ -105,6 +108,20 @@ export async function buildDropModelAssets( { skipTextures = false } = {} ) {
 			publicAssetsRoot: publicAssets
 		} );
 		claimResourceOutput( outputOwners, bsrPath, output.publicPath );
+		if ( gamePath === PORT_PET_DROP_MODEL ) {
+			const glb = createPetLootCollar();
+			writeIntoPublicTreeSync( output.diskPath, glb );
+			models[gamePath] = {
+				bsr: bsrPath,
+				glb: output.publicPath,
+				bytes: glb.length,
+				clips: [],
+				clipLoop: false,
+				...petLootDropModifiers( models["item/etc/drop_ch_equip.bsr"] )
+			};
+			built += 1;
+			continue;
+		}
 		if ( !fs.existsSync( dataAssetPath( bsrPath ) ) ) {
 			absent += 1;
 			console.warn( `[itemdrop] SKIP ${gamePath} (not in Data_extracted)` );

@@ -2,6 +2,16 @@
 	"version": 1,
 	"capabilities": [
 		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/pet-training/pet-training.ts",
+			"functions": ["createPetTraining", "clear", "receive", "state"]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/pet-training/pet-training.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"functions": ["callback:createPetTraining:0"]
+		},
+		{
 			"consumer": "src/engine/runtime/viewer/viewer.ts",
 			"provider": "src/engine/runtime/runtime.ts",
 			"functions": [

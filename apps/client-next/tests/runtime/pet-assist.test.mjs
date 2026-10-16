@@ -95,6 +95,18 @@ function orders( sent ) {
 
 const ATTACK_ORDER = [ PET, 0, 0, 0, 2, MONSTER, 0, 0, 0 ];
 
+test("wolf training uses its exact port command and rejects missing pets or invalid operations", () => {
+	const { gameplay, sent } = withPet( 1 );
+	gameplay.command( { kind: "cos-training", gid: PET, operation: 1, arg: 2 }, 0, undefined );
+	gameplay.command( { kind: "cos-training", gid: PET, operation: 3, arg: 40 }, 0, undefined );
+	assert.deepEqual( orders( sent ), [ [ PET, 0, 0, 0, 0xf0, 1, 2 ], [ PET, 0, 0, 0, 0xf0, 3, 40 ] ] );
+	assert.throws( () => gameplay.command( { kind: "cos-training", gid: PEER, operation: 1, arg: 1 }, 0, undefined ) );
+	assert.throws( () => gameplay.command( { kind: "cos-training", gid: PET, operation: 7, arg: 1 }, 0, undefined ) );
+	assert.throws( () => gameplay.command( { kind: "cos-training", gid: PET, operation: 1, arg: 256 }, 0, undefined ) );
+	assert.throws( () => gameplay.command( { kind: "cos-training", gid: PET, operation: 1.5, arg: 1 }, 0, undefined ) );
+	assert.equal( orders( sent ).length, 2 );
+});
+
 test("the owner's attack sends an aggressive attack pet onto the target once", () => {
 	const { gameplay, sent } = withPet( 1 );
 	gameplay.receive( cast( ATTACK_SKILL, LOCAL.gid, MONSTER, 100 ), 1 );

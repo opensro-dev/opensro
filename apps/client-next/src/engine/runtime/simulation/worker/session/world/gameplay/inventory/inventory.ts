@@ -570,6 +570,29 @@ A reference's name and icon by id, for rows that are no item (the forge).
 		},
 		/*
 ================
+referenceItem
+
+A fresh item of a known reference in a slot that is no bag slot (a pet's
+worn gear and its blue options, pet-training.ts), with the bag's name, icon
+and tooltip; null for a reference this client was never told about.
+================
+		*/
+		referenceItem( refObjId: number, slot: number, magic: readonly string[] = [] ): InventoryItem | null {
+			const typeFlags = refs.get( refObjId );
+			if ( typeFlags === undefined ) return null;
+			return present( {
+				slot,
+				refObjId,
+				typeFlags,
+				quantity: 1,
+				plus: 0,
+				durability: 0,
+				variance: "0",
+				magic: [ ...magic ]
+			} );
+		},
+		/*
+================
 presented
 
 Rows another owner holds (the storage room) with the bag's names, icons and

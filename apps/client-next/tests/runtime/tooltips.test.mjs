@@ -26,6 +26,7 @@ import {
 } from "../../../../scripts/build/shared/itemTextCompletions.mjs";
 import { completeEnglishTextProjection } from "../../../../scripts/build/shared/englishCompletions.mjs";
 import { assertItemNameCoverage } from "../../../../scripts/build/shared/itemNameCoverage.mjs";
+import { PORT_ITEM_TEXT } from "../../../../scripts/build/shared/portItemRows.mjs";
 import nameCompletions from "../../../../scripts/build/shared/itemNameCompletions.json" with { type: "json" };
 import { readPublishedAssetJsonSync, readPackedAssetBytesSync } from "../../../../scripts/lib/publishedAsset.mjs";
 import { defined } from "../helpers/defined.mjs";
@@ -488,7 +489,8 @@ test("item localization is shared by published descriptions and server inventory
 	assertSameBytes( again, projected, "rebuilding must be idempotent" );
 	const before = source.toString( "utf16le" ).split( /\r\n?/ ),
 		after = projected.toString( "utf16le" ).split( /\r\n?/ );
-	assert.equal( after.length - before.length, 17, "only the absent name records are appended" );
+	// 17 retail-absent names plus the 27 pet gear names and tooltips (portItemRows.mjs).
+	assert.equal( after.length - before.length, 71, "only the absent name records are appended" );
 	let changed = 0;
 	for ( let i = 0; i < before.length - 1; i++ ) {
 		if ( before[i] !== after[i] ) {
@@ -524,7 +526,8 @@ test("item localization is shared by published descriptions and server inventory
 	}
 	assert.deepEqual( assertItemNameCoverage( retailTextdataRoot, published ), {
 		activeItems: 8439,
-		itemTitles: 7394
+		// 7394 retail titles plus the 27 pet gear names (portItemRows.mjs).
+		itemTitles: 7421
 	} );
 	const broken = { ...published, SN_ITEM_ETC_DETECT_01: "-" };
 	assert.throws( () => assertItemNameCoverage( retailTextdataRoot, broken ), /SN_ITEM_ETC_DETECT_01/ );
@@ -565,7 +568,10 @@ test("item completions replace only catalogued blank or dash cells and preserve 
 	assert.equal( added[symbol], undefined );
 	assert.deepEqual(
 		Object.keys( added ).sort(),
-		Object.entries( nameCompletions ).filter( ( [, r] ) => r.absent ).map( ( [s] ) => s ).sort()
+		[
+			...Object.entries( nameCompletions ).filter( ( [, r] ) => r.absent ).map( ( [s] ) => s ),
+			...Object.keys( PORT_ITEM_TEXT )
+		].sort()
 	);
 	const row = value =>
 		[ "1", symbol, "Korean\ncontinued", "", "", "Chinese", "", "Japanese", value, "Other" ].join( "\t" );

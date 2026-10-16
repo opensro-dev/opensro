@@ -2,6 +2,7 @@
 
 | Document | For |
 | --- | --- |
+| [Attack Pet System](pet-expansion/ATTACK-PET-SYSTEM.md) | Player guide page, website integration, pet drop rates, blue roll policy and operator configuration |
 | [GETTING_STARTED.md](GETTING_STARTED.md) | Running the server and client locally, from nothing |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | How the server, client and asset pipeline fit together |
 | [ASSET_PIPELINE.md](ASSET_PIPELINE.md) | Building and packaging game data |

@@ -67,6 +67,9 @@ type petSession struct {
 	pickupDeadline int64
 	pickupCommand  bool
 	public         []wire.Frame
+	// trained is the attack-pet expansion's unsaved combat memory
+	// (pettrained.go): attack counter and running self buffs.
+	trained petTrainedRuntime
 	// combat is the attack pet's BATTLE state (petcombat.go); nil follows.
 	combat *petCombatIntent
 	// others holds kill-settlement frames for other characters (a party's

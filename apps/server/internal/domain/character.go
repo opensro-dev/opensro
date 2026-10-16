@@ -623,6 +623,8 @@ Owned companion state; its inventory commits with the owning character.
 ================
 */
 type CharacterCOS struct {
+	// Port-only, not native. Lives on the summoner item, including cooldowns.
+	Training PetTraining `json:"training,omitzero"`
 	// Runtime source-zero movement multiplier installed by 548A30.
 	FollowRunFactor float32 `json:"-"`
 	FollowRunSet    bool    `json:"-"`
@@ -650,6 +652,57 @@ type CharacterCOS struct {
 	StateFlags uint32 `json:"stateFlags,omitempty"`
 	Summoned   bool   `json:"summoned"`
 	Mounted    bool   `json:"mounted"`
+}
+
+/*
+================
+PetTraining
+
+The optional attack-pet skill tree and gear (port-only;
+companion/training.go and gear.go own the rules). Levels is indexed by a
+skill's slot in its pet's tree (row x 3 + option - 1); Slotted names the
+active passive option (1..3, 0 none) of each passive row. Queued is the
+action the owner asked for on the pet's next attack (not saved). Rows are the two active rows' shared cooldowns.
+Every field is a value or a fixed array, so a snapshot copy never
+aliases the live pet. BonusPoints are operator-provisioned.
+================
+*/
+type PetTraining struct {
+	TreeVersion      uint8             `json:"treeVersion,omitempty"`
+	Levels           [15]uint8         `json:"levels,omitzero"`
+	Slotted          [3]uint8          `json:"slotted,omitzero"`
+	Queued           uint8             `json:"-"`
+	Rows             [2]PetRowCooldown `json:"rows,omitzero"`
+	PassiveReadyAtMs [3]int64          `json:"passiveReadyAtMs,omitzero"`
+	BonusPoints      uint8             `json:"bonusPoints,omitempty"`
+	Gear             [3]PetGear        `json:"gear,omitzero"`
+}
+
+/*
+================
+PetRowCooldown
+
+An active row's cooldown: a timer (ReadyAtMs) or a counter of Left events
+of Kind ("Attacks", "Hits taken", "Kills", "Spells").
+================
+*/
+type PetRowCooldown struct {
+	ReadyAtMs int64  `json:"readyAtMs,omitempty"`
+	Kind      string `json:"kind,omitempty"`
+	Left      uint16 `json:"left,omitempty"`
+}
+
+/*
+================
+PetGear
+
+One worn pet gear item: its reference and blue options (the native
+magic-option encoding, companion.EncodeAffix), 0 for an empty slot.
+================
+*/
+type PetGear struct {
+	RefObjID uint32    `json:"refObjId,omitempty"`
+	Options  [6]uint64 `json:"options,omitzero"`
 }
 
 /*

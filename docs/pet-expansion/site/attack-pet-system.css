@@ -1,0 +1,73 @@
+/*
+===========================================================================
+attack-pet-system.css - public guide, matching OpenSRO's parchment site chrome.
+Scoped below .pet-guide so it can be embedded without restyling the host page.
+===========================================================================
+*/
+.pet-guide{--ink:#302919;--muted:#6c5c3a;--gold:#d4b66a;--border:#7b6b3c;--paper:#eee8c5;color:var(--ink);font-family:Georgia,"Times New Roman",serif;line-height:1.65;background:#161615;background-image:radial-gradient(ellipse at top,#36372c66,transparent 70%),repeating-linear-gradient(35deg,#ffffff03 0 1px,transparent 1px 6px);margin:0;min-height:100vh;padding:12px 20px 32px}
+.pet-guide *{box-sizing:border-box}
+.pet-guide a{color:#705014;text-underline-offset:3px}
+.pet-guide a:hover{color:#963b21}
+.pet-guide a:focus-visible,.pet-guide summary:focus-visible{outline:3px solid #a04b22;outline-offset:4px}
+.pet-guide .shell{max-width:1120px;margin:auto}
+.pet-guide .masthead{position:relative;border:1px solid #534c32;min-height:245px;display:flex;align-items:end;padding:30px 38px;margin-bottom:14px;background:linear-gradient(0deg,#090a07e6,transparent),linear-gradient(105deg,#283a27,#172424);overflow:hidden}
+.pet-guide .masthead img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.7}
+.pet-guide .brand{position:relative;color:#e7d58d;font-size:clamp(2.3rem,6vw,3.9rem);font-weight:bold;letter-spacing:.13em;text-decoration:none;text-shadow:0 2px 5px #000}
+.pet-guide .brand small{display:block;font-size:.72rem;letter-spacing:.28em;color:#e3d8b5;font-weight:normal}
+.pet-guide .layout{display:grid;grid-template-columns:220px minmax(0,1fr);gap:14px;align-items:start}
+.pet-guide .rail{position:sticky;top:14px;color:#e4d9b7}
+.pet-guide .rail-group{padding:10px;border:1px solid #5c5134;background:#0c0d0ce8;margin-bottom:12px}
+.pet-guide .rail-label{font-size:.72rem;letter-spacing:.13em;text-transform:uppercase;color:#b5a77d;margin:2px 4px 8px}
+.pet-guide .rail a{display:block;text-decoration:none;padding:6px 10px;margin:4px 0;background:linear-gradient(#203344,#101c27);border:1px solid #756b47;color:#e5dfc4;font-size:.85rem;font-variant:small-caps;line-height:1.35;box-shadow:inset 0 0 0 2px #0007}
+.pet-guide .rail a:before{content:'◆';color:#c0a657;font-size:.65rem;margin-right:9px}
+.pet-guide .rail a:hover,.pet-guide .rail a[aria-current=page]{background:linear-gradient(#d9c47e,#9d813c);color:#211c10}
+.pet-guide .rail .primary{text-align:center;background:linear-gradient(#ead798,#a58136);color:#2b2110;font-weight:bold;padding:10px}
+.pet-guide .rail .primary:before{content:none}
+.pet-guide .rail-note{color:#b5a77d;font-size:.78rem;padding:0 8px}
+.pet-guide main{min-width:0}
+.pet-guide .panel{border:1px solid var(--border);margin:0 0 15px;background:var(--paper);background-image:radial-gradient(ellipse at 20% 20%,#fff9ddbb,transparent 60%),repeating-linear-gradient(87deg,#8e7b4010 0 1px,transparent 1px 5px);box-shadow:0 3px 8px #0008,inset 0 0 20px #8b793b30;scroll-margin-top:14px}
+.pet-guide .panel>h1,.pet-guide .panel>h2{background:linear-gradient(#8a8059,#514b31);color:#f0e6c1;font-size:.83rem;font-weight:normal;font-variant:small-caps;letter-spacing:.06em;padding:6px 12px;margin:0;border-bottom:1px solid #403c29;text-shadow:0 1px 1px #000;line-height:1.5}
+.pet-guide .panel>h1:before,.pet-guide .panel>h2:before{content:'◆';color:#dac47e;font-size:.62rem;margin-right:8px}
+.pet-guide .body{padding:22px 25px}
+.pet-guide h3{font-size:1.05rem;line-height:1.4;margin:0 0 8px;color:#4d3b1b}
+.pet-guide h4{font-size:.9rem;margin:14px 0 5px}
+.pet-guide p{margin:0 0 12px}
+.pet-guide p:last-child{margin-bottom:0}
+.pet-guide .lead{font-size:1.14rem;line-height:1.6}
+.pet-guide .eyebrow{font-size:.7rem;text-transform:uppercase;letter-spacing:.13em;color:#806635;margin-bottom:8px}
+.pet-guide .notice{border-left:3px solid #a86c29;background:#e1d09c55;padding:9px 12px;font-size:.88rem;margin:15px 0}
+.pet-guide .facts{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:20px 0 5px}
+.pet-guide .fact{text-align:center;background:#fff9df77;border:1px solid #c9bc8d;padding:11px 5px}
+.pet-guide .fact strong{display:block;font-size:1.6rem;line-height:1.25}
+.pet-guide .fact span{font-size:.68rem;letter-spacing:.07em;text-transform:uppercase}
+.pet-guide ol,.pet-guide ul{padding-left:22px;margin:8px 0 0}
+.pet-guide li{padding:3px 0}
+.pet-guide kbd{display:inline-block;font-family:inherit;background:#fff8df;border:1px solid #b8a46a;border-bottom-width:2px;border-radius:2px;padding:0 5px;font-size:.84em;color:#44361b}
+.pet-guide .pet-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.pet-guide .pet-card{border:1px solid #c5b57d;background:#fff9df55;padding:16px}
+.pet-guide .pet-card .role{font-size:.7rem;letter-spacing:.09em;text-transform:uppercase;color:#8a5c24;margin-bottom:5px}
+.pet-guide .pet-card p,.pet-guide .pet-card li{font-size:.88rem}
+.pet-guide .pet-card details{margin-top:12px;border-top:1px solid #c9b984;padding-top:9px}
+.pet-guide summary{cursor:pointer;font-size:.88rem;font-weight:bold;color:#604918;padding:4px 0}
+.pet-guide .skill-list{list-style:none;padding:0;margin:8px 0}
+.pet-guide .skill-list li{border-bottom:1px solid #cbbd9255;padding:9px 0}
+.pet-guide .skill-list strong{display:block;font-size:.9rem}
+.pet-guide .skill-list span{display:block;font-size:.84rem;line-height:1.5;color:#5e5034}
+.pet-guide .table-wrap{overflow-x:auto}
+.pet-guide table{width:100%;border-collapse:collapse;font-size:.88rem}
+.pet-guide th{background:#c9b78366;text-align:left;font-weight:bold;color:#51401f}
+.pet-guide th,.pet-guide td{padding:9px 10px;border-bottom:1px solid #c8b98c;vertical-align:top}
+.pet-guide tbody tr:nth-child(even){background:#fff9df44}
+.pet-guide .blue{color:#295ca3}
+.pet-guide .muted{color:var(--muted);font-size:.85rem}
+.pet-guide .formula{display:block;text-align:center;padding:13px;background:#fff9df77;border:1px solid #c9bc8d;font-size:1.02rem;margin:12px 0}
+.pet-guide .faq details{border-bottom:1px solid #c8b98c;padding:8px 0}
+.pet-guide .faq details:last-child{border:0}
+.pet-guide .faq details p{font-size:.9rem;padding:6px 0}
+.pet-guide footer{font-size:.76rem;color:#c0b38b;text-align:center;padding:18px 0}
+.pet-guide footer a{color:#e0ca83}
+.pet-guide .skip{position:absolute;top:-100px;padding:10px;background:#fff9df;z-index:2}
+.pet-guide .skip:focus{top:8px}
+@media(max-width:760px){.pet-guide{padding:8px}.pet-guide .masthead{min-height:170px;padding:20px}.pet-guide .layout{grid-template-columns:1fr}.pet-guide .rail{position:static}.pet-guide .rail-group{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}.pet-guide .rail-label{width:100%}.pet-guide .rail a{margin:0;font-size:.8rem}.pet-guide .rail-note{display:none}.pet-guide .body{padding:17px}.pet-guide .pet-grid{grid-template-columns:1fr}.pet-guide .facts{grid-template-columns:repeat(2,1fr)}}
+@media(prefers-reduced-motion:no-preference){.pet-guide{scroll-behavior:smooth}}
+@media print{.pet-guide{background:white;padding:0}.pet-guide .rail,.pet-guide .masthead,.pet-guide .skip{display:none}.pet-guide .layout{display:block}.pet-guide .panel{box-shadow:none;break-inside:avoid}.pet-guide .pet-grid{display:block}.pet-guide .pet-card{margin-bottom:10px}.pet-guide details:not([open])>*:not(summary){display:block}.pet-guide footer{color:#333}}

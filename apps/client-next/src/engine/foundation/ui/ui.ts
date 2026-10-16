@@ -14,6 +14,9 @@ of it. Text runs are validated once per run object and kept by reference.
 import { sameUiQuad } from "./ui-equality";
 import type { UiScene, UiQuad, UiRect, UiTextRun } from "@/engine/contracts/ui";
 import { uiRecordCount, validTextRun, UI_RECORD_LIMIT } from "@/engine/foundation/rendering/text-run";
+
+// The second doll target: a scene draws the player and the pet window's wolf.
+export const DOLL2_TEXTURE = "__doll2";
 /*
 ================
 copyUi
@@ -138,7 +141,8 @@ function copyUiProduct( scene: UiScene, previous: UiScene | undefined, validated
 						gid: quad.doll.gid,
 						yaw: quad.doll.yaw,
 						...(quad.doll.camera ? { camera: quad.doll.camera } : {}),
-						...(quad.doll.mount ? { mount: true } : {})
+						...(quad.doll.mount ? { mount: true } : {}),
+						...(quad.doll.fit ? { fit: true } : {})
 					}
 				} :
 				{}),
@@ -180,11 +184,13 @@ prepareCopiedUi
 */
 function prepareCopiedUi( copied: UiScene ) {
 	const anchors = new Set<number>(), portraits: number[] = [];
-	let worldAnchors = false, portraitGid: number | undefined, doll: UiQuad["doll"];
+	let worldAnchors = false, portraitGid: number | undefined, doll: UiQuad["doll"], doll2: UiQuad["doll"];
 	for ( const quad of copied.quads ) {
 		if ( quad.characterAnchor !== undefined ) anchors.add( quad.characterAnchor );
 		if ( quad.worldAnchor ) worldAnchors = true;
-		if ( !doll && quad.doll ) doll = quad.doll;
+		// The second doll ("__doll2", the pet window's wolf) has its own target.
+		if ( quad.doll && quad.texture === DOLL2_TEXTURE ) doll2 ??= quad.doll;
+		else if ( !doll && quad.doll ) doll = quad.doll;
 		if ( quad.portraitGid !== undefined && !portraits.includes( quad.portraitGid ) ) {
 			portraits.push( quad.portraitGid );
 		}
@@ -204,7 +210,15 @@ function prepareCopiedUi( copied: UiScene ) {
 				}
 		)
 	};
-	return { scene: projected, portraits, anchors: anchors as ReadonlySet<number>, worldAnchors, portraitGid, doll };
+	return {
+		scene: projected,
+		portraits,
+		anchors: anchors as ReadonlySet<number>,
+		worldAnchors,
+		portraitGid,
+		doll,
+		doll2
+	};
 }
 
 /*

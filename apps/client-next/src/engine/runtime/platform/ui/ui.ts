@@ -658,19 +658,19 @@ export function createUiBridge(
 	function syncHover() {
 		if ( !pointerAt || drag ) return;
 		const slot = current( document.elementFromPoint( pointerAt[0], pointerAt[1] ) );
-		const id = slot && !slot.value.disabled ? slot.value.id : null;
+		const id = slot && (!slot.value.disabled || slot.value.helpText) ? slot.value.id : null;
 		if ( id !== reportedHover ) reportHover( id );
 	}
 	root.addEventListener( "pointerover", event => {
 		const slot = current( event.target );
 		if ( slot !== current( event.relatedTarget ) ) {
-			reportHover( slot && !slot.value.disabled ? slot.value.id : null );
+			reportHover( slot && (!slot.value.disabled || slot.value.helpText) ? slot.value.id : null );
 		}
 	}, { signal: lifetime.signal } );
 	root.addEventListener( "pointerout", event => {
 		const next = current( event.relatedTarget );
 		if ( current( event.target ) !== next ) {
-			reportHover( next && !next.value.disabled ? next.value.id : null );
+			reportHover( next && (!next.value.disabled || next.value.helpText) ? next.value.id : null );
 			emit( { kind: "press", id: null } );
 		}
 	}, { signal: lifetime.signal } );

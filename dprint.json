@@ -50,7 +50,10 @@
 		"apps/client-next/tools/types",
 		"apps/client-next/src/engine/foundation/audio/item-sound-catalog.ts",
 		"apps/client-next/src/engine/foundation/gameplay/native-notice-data.ts",
-		"apps/client-next/src/engine/foundation/gameplay/windows1252.ts"
+		"apps/client-next/src/engine/foundation/gameplay/windows1252.ts",
+		"apps/client-next/src/engine/foundation/ui/pet-design-data.ts",
+		"apps/server/internal/game/companion/petdesign.json",
+		"scripts/build/shared/pet-design.json"
 	],
 	"plugins": [
 		"./node_modules/@dprint/typescript/plugin.wasm"

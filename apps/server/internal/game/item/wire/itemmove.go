@@ -81,7 +81,7 @@ func (b ItemBody) EncodedSize() int {
 		if EtcCarriesPlusByte(b.TypeFlags) {
 			size++
 		}
-		if UsesIndexedMagicParams(b.TypeFlags) {
+		if UsesIndexedMagicParams(b.TypeFlags) || IsPetGearRef(b.RefObjID) {
 			size += 1 + 8*options
 		}
 		return size
@@ -126,7 +126,8 @@ func (b ItemBody) Encode() []byte {
 		if EtcCarriesPlusByte(b.TypeFlags) {
 			w.U8(b.Plus)
 		}
-		if UsesIndexedMagicParams(b.TypeFlags) {
+		// Port-only: pet gear (pettraining.go) carries its blue options here too.
+		if UsesIndexedMagicParams(b.TypeFlags) || IsPetGearRef(b.RefObjID) {
 			w.U8(uint8(len(options)))
 			for _, encoded := range options {
 				w.U64(encoded)
@@ -188,7 +189,7 @@ func readItemBody(r *Reader, typeFlags uint16) (ItemBody, error) {
 				return out, err
 			}
 		}
-		if UsesIndexedMagicParams(typeFlags) {
+		if UsesIndexedMagicParams(typeFlags) || IsPetGearRef(refObjID) {
 			magicOptionCount, err := r.U8()
 			if err != nil {
 				return out, err

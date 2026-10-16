@@ -197,6 +197,20 @@ import { fitUiGroup } from "@/engine/foundation/ui/layout";
 import { createExperimentalHud, EXPERIMENTAL_TABS } from "./hud/experimental-hud";
 import { renderScales, type ExperimentalOptions } from "@/engine/foundation/ui/experimental-options";
 import {
+	PET_GEAR_SLOTS,
+	PET_ROW_NAMES,
+	PET_TRAINING_OP,
+	petRowCooldown,
+	petCooldownQuads,
+	petRows,
+	petSkillHelp,
+	petSkillDesign,
+	petReference,
+	petAbilities,
+	petSkillTooltip
+} from "@/engine/foundation/ui/pet-training";
+import { DOLL2_TEXTURE } from "@/engine/foundation/ui/ui";
+import {
 	rememberedWindows,
 	type RememberedWindow,
 	type WindowPositions
@@ -587,7 +601,8 @@ import {
 	quickSlotDrag,
 	quickSlotDrop,
 	HELPER_ACTION_ID,
-	TRACE_ACTION_ID
+	TRACE_ACTION_ID,
+	PET_SKILL_SHORTCUT_BASE
 } from "@/engine/foundation/gameplay/quickslots";
 import { itemActivation } from "@/engine/foundation/gameplay/item-activation";
 import { createIconPaths } from "@/engine/foundation/ui/icon";
@@ -1348,6 +1363,8 @@ export function createUi(
 	let shopPosition: readonly [number, number] | null = null;
 	let cosTab = 1,
 		cosDraft = 0,
+		// The wolf whose training state this window last asked for (port-only).
+		petTrainingAskedRef = 0,
 		guildDialog = "",
 		guildTab = 0,
 		guildSort = 121,
@@ -1808,6 +1825,7 @@ export function createUi(
 			beginnerDraft = !!((view?.entities.find( e => e.gid === view?.gameplay?.localGid )?.visualFlags ?? 0) & 1);
 		}
 		if ( next === "COS inventory" ) {
+			petTrainingAskedRef = 0;
 			cosSlot = -1;
 			cosPage = 0;
 			cosPlayerPage = 0;
@@ -2677,6 +2695,33 @@ export function createUi(
 		}
 		if ( id.startsWith( "cos-command:" ) ) {
 			executeCosCommand( Number( id.slice( 12 ) ) );
+			return;
+		}
+		// Port-only wolf skill tree (pet-training.ts): learn a level or reset.
+		if ( id.startsWith( "pet-skill-up:" ) && experimental.state().saved.attackPetTraining ) {
+			sendGameplay( {
+				kind: "cos-training",
+				gid: cosGid,
+				operation: PET_TRAINING_OP.learn,
+				arg: Number( id.slice( 13 ) )
+			} );
+			return;
+		}
+		if ( id.startsWith( "pet-skill:" ) && experimental.state().saved.attackPetTraining ) {
+			const skill = view?.gameplay?.petTraining?.skills.find( entry => entry.id === Number( id.slice( 10 ) ) );
+			if ( skill && skill.level > 0 && (skill.action || !skill.slotted) ) {
+				sendGameplay( {
+					kind: "cos-training",
+					gid: cosGid,
+					operation: skill.action ? PET_TRAINING_OP.use : PET_TRAINING_OP.slot,
+					arg: skill.id,
+					target: view?.gameplay?.target ?? 0
+				} );
+			}
+			return;
+		}
+		if ( id === "pet-skill-reset" && experimental.state().saved.attackPetTraining ) {
+			sendGameplay( { kind: "cos-training", gid: cosGid, operation: PET_TRAINING_OP.refund, arg: 0 } );
 			return;
 		}
 		if ( id.startsWith( "item-mall-" ) && itemMall.compactAction( id ) ) {
@@ -3959,6 +4004,15 @@ export function createUi(
 					return;
 				}
 				if ( binding?.kind === 0x4a ) {
+					if (
+						binding.payload > PET_SKILL_SHORTCUT_BASE && binding.payload <= PET_SKILL_SHORTCUT_BASE + 255
+					) {
+						if ( experimental.state().saved.attackPetTraining ) {
+							const command = quickSlotCommand( binding, game! );
+							if ( command ) sendGameplay( command );
+						}
+						return;
+					}
 					executeAction( binding.payload & 0xffffff );
 					return;
 				}
@@ -4559,6 +4613,8 @@ export function createUi(
 			}
 		} else if ( id.startsWith( "cos-tab:" ) ) {
 			cosTab = Number( id.slice( 8 ) );
+			// A training page refreshes the wolf's state (cooldowns, new levels).
+			petTrainingAskedRef = 0;
 			cosDraft = view.gameplay?.cosRecords?.find( r => r.gid === cosGid )?.commandMode ?? 0;
 		} else if ( id.startsWith( "cos-setting:" ) ) cosDraft ^= Number( id.slice( 12 ) );
 		else if ( id.startsWith( "cos-radio:" ) ) {
@@ -6098,7 +6154,8 @@ export function createUi(
 			}
 			if (
 				event.kind === "drag" &&
-				(event.id.startsWith( "skill:" ) || event.id.startsWith( "hotbar:" ) ||
+				(event.id.startsWith( "skill:" ) || event.id.startsWith( "pet-skill:" ) ||
+					event.id.startsWith( "hotbar:" ) ||
 					event.id.startsWith( "action:" ))
 			) {
 				// A carried shortcut keeps following the pointer after its own slot
@@ -6175,6 +6232,23 @@ export function createUi(
 				) {
 					carriedItem = null;
 					dirty = true;
+				}
+				// Port-only: a worn wolf gear piece dragged onto a bag slot comes off.
+				if ( event.id.startsWith( "pet-gear:" ) && view?.gameplay && !view.gameplay.inventoryPending ) {
+					const target = topmostControlAt( controls, event.x, event.y );
+					if (
+						target?.id.startsWith( "slot:" ) &&
+						Number( target.id.slice( 5 ) ) >= (view.gameplay.equipmentSlotCount ?? 13)
+					) {
+						sendGameplay( {
+							kind: "cos-training",
+							gid: cosGid,
+							operation: PET_TRAINING_OP.unequip,
+							arg: Number( event.id.slice( 9 ) )
+						} );
+					}
+					dirty = true;
+					return;
 				}
 				// 645180: a bag item released on the card slot registers it, whether it came from this
 				// window's bag or the main one (the source only has to be a bag slot); the slot's own item
@@ -6335,6 +6409,17 @@ export function createUi(
 						item && target && !target.disabled && panel === "Alchemy" && target.id.startsWith( "alchemy-" )
 					) {
 						activate( "alchemy-slot:" + item.slot );
+						return;
+					}
+					// Port-only: a bag item dropped on a wolf gear slot is worn; the
+					// server refuses anything a wolf cannot wear.
+					if ( item && target && !target.disabled && target.id.startsWith( "pet-gear:" ) ) {
+						sendGameplay( {
+							kind: "cos-training",
+							gid: cosGid,
+							operation: PET_TRAINING_OP.equip,
+							arg: item.slot
+						} );
 						return;
 					}
 					// 6EB570: an inventory item dropped on the grant window's slot.
@@ -7061,6 +7146,17 @@ export function createUi(
 					dirty = true;
 					return;
 				}
+				// Port-only pet gear: right-click takes a worn piece off (pet-training.ts).
+				if ( event.id.startsWith( "pet-gear:" ) ) {
+					sendGameplay( {
+						kind: "cos-training",
+						gid: cosGid,
+						operation: PET_TRAINING_OP.unequip,
+						arg: Number( event.id.slice( 9 ) )
+					} );
+					dirty = true;
+					return;
+				}
 				// CIFCOSStatus_OnRightButtonRelease (6A9E40) selects the companion
 				// and makes it the player's target.
 				if ( event.id.startsWith( "cos-status:" ) ) {
@@ -7608,6 +7704,9 @@ export function createUi(
 				Math.floor( (next.simulationTimeMs ?? 0) / 100 ) :
 				-1;
 			const slotTick = (next.gameplay?.skillCooldowns?.length || next.gameplay?.itemCooldowns?.length ||
+					next.gameplay?.petTraining?.rows.some( row =>
+						row.timerMs > 0 && quickslotTime < next.gameplay!.petTraining!.receivedAtMs + row.timerMs + 500
+					) ||
 					next.gameplay?.returnScroll || next.gameplay?.questGathering ||
 					skillPressFeedbackActive( next.gameplay, quickslotTime )) ?
 				Math.floor( quickslotTime / 16 ) :
@@ -8520,7 +8619,12 @@ export function createUi(
 				let statusBottom = targetBottom;
 				shown.forEach( ( record, i ) => {
 					const cls = cosClass( record.band )!, chrome = cosStatusChrome( cls );
-					const reference = data.cosReferences.get( record.refObjId );
+					const reference = petReference(
+						data.cosReferences.get( record.refObjId ),
+						experimental.state().saved.attackPetTraining && game?.petTraining?.gid === record.gid ?
+							game.petTraining :
+							undefined
+					);
 					const nativeRect = cosStatusRect( w, i, cls );
 					const r: UiRect = compact ?
 						[
@@ -10434,7 +10538,11 @@ export function createUi(
 						game?.cosRecords?.find( r => r.gid === target.gid ) :
 						undefined;
 					const maxHp = target.maxHp ??
-						(target.kind === "cos" ? hudData.cosReferences.get( target.refObjId )?.maxHp : undefined);
+						(target.kind === "cos" ?
+							(experimental.state().saved.attackPetTraining && game?.petTraining?.gid === target.gid ?
+								game.petTraining.stats?.maxHp :
+								undefined) ?? hudData.cosReferences.get( target.refObjId )?.maxHp :
+							undefined);
 					// The local character, selected from its portrait, wears the
 					// player layout (5814D0 handles the local CICUser too).
 					const shown = target.kind === "local-player" ? { ...target, kind: "player" as const } : target;
@@ -10725,9 +10833,26 @@ export function createUi(
 					slot: number,
 					r: UiRect,
 					label: string,
-					options: { locked?: boolean; } = {}
+					options: { locked?: boolean; iconAlpha?: number; } = {}
 				) {
-					const { locked = false } = options;
+					// Different attack pets reuse the same band GID; refresh by reference identity.
+					const attackPet = game?.cosRecords?.find( record =>
+						record.band === 3 && !record.dead && record.hp > 0
+					);
+					if ( !attackPet ) petTrainingAskedRef = 0;
+					if (
+						experimental.state().saved.attackPetTraining && attackPet &&
+						petTrainingAskedRef !== attackPet.refObjId
+					) {
+						petTrainingAskedRef = attackPet.refObjId;
+						sendGameplay( {
+							kind: "cos-training",
+							gid: attackPet.gid,
+							operation: PET_TRAINING_OP.state,
+							arg: 2
+						} );
+					}
+					const { locked = false, iconAlpha = 1 } = options;
 					const binding = game?.quickSlots?.find( row => row.slot === slot ),
 						skill = binding?.kind === 0x49 ? training.skill( binding.payload ) : undefined;
 					const item = binding ?
@@ -10736,10 +10861,18 @@ export function createUi(
 					const action = binding?.kind === 0x4a ?
 						hudData?.actions.find( a => a.id === (binding.payload & 0xffffff) ) :
 						undefined;
+					const petDesign = binding?.kind === 0x4a && binding.payload > PET_SKILL_SHORTCUT_BASE ?
+						petSkillDesign( binding.payload - PET_SKILL_SHORTCUT_BASE ) :
+						undefined;
+					const petAvailable =
+						!!(petDesign && binding && game && experimental.state().saved.attackPetTraining &&
+							quickSlotCommand( binding, game ));
 					const name = skill ?
 						localization.text( skill.nameSymbol, skill.name ) :
 						item ?
 						(item.name ?? String( item.refObjId )) + " x" + item.quantity :
+						petDesign ?
+						petDesign.name :
 						action ?
 						hudCopy( action.name ) :
 						binding?.kind === 0x4e ?
@@ -10756,17 +10889,25 @@ export function createUi(
 						draggable: !!binding && !locked
 					} );
 					blocks.push( r );
-					const icon = iconPath( skill?.icon ?? item?.icon ?? action?.icon );
+					const icon = iconPath( skill?.icon ?? petDesign?.icon ?? item?.icon ?? action?.icon );
 					// A held press outlines the slot; a denied one shakes and tints it.
 					const feedback = skill ? skillPressFeedback( game, skill.id, r, full, quickslotTime ) : undefined;
 					if ( icon ) {
 						paths.push( icon );
 						const ir: UiRect = feedback?.offsetX ? [ r[0] + feedback.offsetX, r[1], r[2], r[3] ] : r;
-						if ( resources.has( icon ) ) rect( ir, [ 1, 1, 1, 1 ], icon );
+						if ( resources.has( icon ) ) {
+							rect( ir, [ 1, 1, 1, petDesign && !petAvailable ? iconAlpha * 0.35 : iconAlpha ], icon );
+						}
 					}
 					const cooldown = skill ?
+						// Character and pet timers use the same presentation below.
 						skillCooldown( game?.skillCooldowns ?? [], skill.id, skill.cooldownGroup ?? 0, quickslotTime ) :
 						null;
+					if ( petDesign && petAvailable && game?.petTraining ) {
+						const timer = petCooldownQuads( game.petTraining, petDesign.row, quickslotTime, r, full );
+						for ( const q of timer ) if ( q.texture ) paths.push( q.texture );
+						quads.push( ...timer );
+					}
 					if ( skill ) {
 						paths.push( ...quickslotTimerPaths() );
 						const timer = quickslotCooldownQuads(
@@ -15516,7 +15657,13 @@ export function createUi(
 						cosDraft = records[0]?.commandMode ?? 0;
 					}
 					const record = records.find( r => r.gid === cosGid ), busy = !!game?.inventoryPending;
-					if ( cosTab === 1 && !record?.inventory || cosTab === 2 && record?.band !== 4 ) cosTab = 0;
+					const training = record?.band === 3 && experimental.state().saved.attackPetTraining;
+					if (
+						cosTab === 1 && !record?.inventory && !training ||
+						cosTab === 2 && record?.band !== 4 && !training
+					) {
+						cosTab = 0;
+					}
 					// Beside a shop (trade goods loading into a transport) the bag keeps
 					// its own close identity; closing it ends the trade, as the shop's does.
 					nativeFrame( root, px, py, record?.name ?? "", panelCloseId( "COS inventory" ) );
@@ -15528,7 +15675,7 @@ export function createUi(
 					].forEach( ( key, i ) =>
 						nativeTab(
 							"cos-tab:" + i,
-							hudCopy( key ),
+							training && i === 2 ? "Skills" : hudCopy( key ),
 							[ px + 18 + i * 78, py + 44, 72, 24 ],
 							cosTab === i,
 							// 6A1404: companion tabs have an asymmetric left inset.
@@ -15538,14 +15685,20 @@ export function createUi(
 								// Unavailable, not busy: an open shop window, or a tab the
 								// record's class lacks (6A1920), holds the lock.
 								disabled: panel === "Shop" ||
-									(i === 1 ? !record?.inventory : i === 2 ? record?.band !== 4 : false)
+									(i === 1 ?
+										!record?.inventory && !training :
+										i === 2 ?
+										record?.band !== 4 && !training :
+										false)
 							}
 						)
 					);
 					const ox = px + 12,
 						oy = py + 66,
 						page = hudData
-							.windows[cosTab === 1 ? "ifcosinventory" : cosTab === 2 ? "ifcossetup" : "ifcosinfo"]!;
+							.windows[
+								cosTab === 1 && !training ? "ifcosinventory" : cosTab !== 0 ? "ifcossetup" : "ifcosinfo"
+							]!;
 					// CIFCOSInfo_SetCompanion (6A69F0) shows each block by record
 					// class; the gauges (35..37) fill from the record below.
 					const sections = cosInfoSections( cosClass( record?.band ?? 0 ) ?? -1 );
@@ -15561,6 +15714,30 @@ export function createUi(
 							[ 100 ] :
 							[ 31, 32, 42, 43, 44, 45, 60, 61, 62, 63, 65, 66, 67, 68, 71, 72, 73, 76, 77, 78 ])
 					];
+					// The training page keeps only the setup page's backdrop (the inner
+					// box 3 and background tile 7) under its own controls.
+					const setupControls = [
+						9,
+						10,
+						11,
+						12,
+						13,
+						14,
+						15,
+						16,
+						17,
+						18,
+						20,
+						22,
+						25,
+						26,
+						27,
+						30,
+						31,
+						32,
+						40,
+						41
+					];
 					// 6A9420 creates TradeInfo for a transport only; its stars and the
 					// sell-all button are drawn below with their state.
 					const transport = cosClass( record?.band ?? 0 ) === COS_CLASS_TRANSPORT,
@@ -15569,15 +15746,15 @@ export function createUi(
 						page,
 						ox,
 						oy,
-						cosTab === 0 ?
-							hiddenInfo :
+						cosTab === 0 ? hiddenInfo : training ?
+							setupControls :
 							cosTab === 1 ?
 							(transport ?
 								[ COS_TRADE_STAR_FIRST, 27, 28, 29, COS_TRADE_STAR_LAST, COS_TRADE_SELL_ALL ] :
 								tradeInfo) :
 							[]
 					);
-					if ( cosTab === 1 ) {
+					if ( cosTab === 1 && !training ) {
 						const pages = Math.max( 1, Math.ceil( (record?.status ?? 0) / 28 ) );
 						cosPage = Math.min( cosPage, pages - 1 );
 						for ( let i = 0; i < 28; i++ ) {
@@ -15636,7 +15813,11 @@ export function createUi(
 							}
 						}
 					} else if ( cosTab === 0 && record ) {
-						const reference = hudData.cosReferences.get( record.refObjId );
+						const trainingState =
+							experimental.state().saved.attackPetTraining && game?.petTraining?.gid === record.gid ?
+								game.petTraining :
+								undefined;
+						const reference = petReference( hudData.cosReferences.get( record.refObjId ), trainingState );
 						const node = ( id: number ) => Object.values( page ).find( n => n.id === id );
 						const texts: [number, string][] = [
 							// CIFCosInfo_RefreshName (6A5320): an unnamed companion reads "No name".
@@ -15702,13 +15883,16 @@ export function createUi(
 							if ( record.level !== undefined ) texts.push( [ 65, String( record.level ) ] );
 							if ( reference ) {
 								// 6A4600 greys the ability values at low satiety (0xFF999999).
-								const ability = cosAbilities(
-									record,
-									reference,
-									reference.skills.map( skill => {
-										const attack = hudData.tooltipSkills.get( skill )?.attack;
-										return attack?.present ? attack : undefined;
-									} )
+								const ability = petAbilities(
+									cosAbilities(
+										record,
+										reference,
+										reference.skills.map( skill => {
+											const attack = hudData.tooltipSkills.get( skill )?.attack;
+											return attack?.present ? attack : undefined;
+										} )
+									),
+									trainingState
 								);
 								const values: [number, string][] = [
 									[ 66, String( ability.hit ) ],
@@ -15721,6 +15905,16 @@ export function createUi(
 								for ( const [id, value] of values ) {
 									const at = node( id );
 									if ( at ) {
+										if ( trainingState && (id === 67 || id === 77) ) {
+											const label = id === 67 ? "Physical attack" : "Magical attack";
+											controls.push( {
+												id: "pet-stat:" + id,
+												kind: "region",
+												label,
+												helpText: label + ": " + value,
+												rect: authoredClientRect( at, ox, oy )
+											} );
+										}
 										authoredText(
 											ability.low ? { ...at, color: COS_LOW_SATIETY } : at,
 											ox,
@@ -15734,6 +15928,205 @@ export function createUi(
 						for ( const [id, value] of texts ) {
 							const at = node( id );
 							if ( at ) authoredText( at, ox, oy, value );
+						}
+					} else if ( training && cosTab !== 0 ) {
+						// Port-only wolf skill tree and gear (pet-training.ts). Every rule is
+						// the server's 0x3FB1 state; this page draws it and sends F0 commands.
+						const state = game?.petTraining?.gid === cosGid ? game.petTraining : undefined,
+							petLevel = record?.level ?? 0;
+						if ( record && petTrainingAskedRef !== record.refObjId ) {
+							petTrainingAskedRef = record.refObjId;
+							sendGameplay( {
+								kind: "cos-training",
+								gid: cosGid,
+								operation: PET_TRAINING_OP.state,
+								arg: 2
+							} );
+						}
+						if ( cosTab === 1 ) {
+							// The character inventory's equipment side: the model between its
+							// sockets (the wolf framed from its own bounds).
+							quads.push( {
+								doll: { gid: cosGid, yaw: 0, fit: true },
+								texture: DOLL2_TEXTURE,
+								rect: [ ox + 74, oy + 18, 182, 200 ],
+								uv: [ 0, 0, 1, 1 ],
+								color: white,
+								clip: full
+							} );
+							const at: readonly (readonly [number, number])[] = [
+								[ ox + 32, oy + 46 ],
+								[ ox + 32, oy + 120 ],
+								[ ox + 266, oy + 46 ]
+							];
+							PET_GEAR_SLOTS.forEach( ( gear, i ) => {
+								const r: UiRect = [ at[i]![0], at[i]![1], 32, 32 ],
+									socket = hudData.popupArt.sockets[gear.socket]!,
+									item = state?.gear[i] ?? undefined,
+									icon = iconPath( item?.icon );
+								paths.push( socket );
+								if ( resources.has( socket ) ) rect( [ r[0] - 4, r[1] - 4, 40, 40 ], white, socket );
+								if ( icon && item ) {
+									image( r, icon );
+									equipmentOverlay( item, r );
+								}
+								quads.push(
+									...text.quads( gear.name, [ r[0] - 12, r[1] + 38, 56, 12 ], full, white, {
+										hAlign: 1
+									} )
+								);
+								controls.push( {
+									id: "pet-gear:" + i,
+									label: item?.name ?? gear.name,
+									...(item ? {} : { helpText: gear.name + ": drag pet gear here from the bag." }),
+									rect: r,
+									kind: "button",
+									disabled: busy,
+									rightActivate: !!item,
+									draggable: !!item && !busy
+								} );
+							} );
+							[
+								`Pet level ${petLevel}    Equipment ${
+									state?.gear.filter( item => item !== null ).length ?? 0
+								}/3`,
+								`Skill cooldown reduction: ${state?.stats?.cooldownPercent ?? 0}%`
+							].forEach( ( value, i ) =>
+								quads.push(
+									...text.quads(
+										value,
+										[ ox + 20, oy + 232 + i * 20, 290, 16 ],
+										full,
+										i === 0 ? gold : [ .45, .75, 1, 1 ],
+										{
+											hAlign: 1
+										}
+									)
+								)
+							);
+						} else {
+							// The character skill window's rows (native mastery bar, icons in
+							// its cells, level badge, add/up/max buttons): two action rows that
+							// share a cooldown each, then three passive rows of which one
+							// skill is slotted.
+							quads.push(
+								...text.quads(
+									`Skill points ${state?.points ?? 0}    Pet level ${petLevel}`,
+									[ ox + 16, oy + 12, 220, 14 ],
+									full,
+									white
+								)
+							);
+							button( "pet-skill-reset", "Reset", ox + 250, oy + 8, 66, busy );
+							const levelUp = hudData.windows.ifskill_slot!.GDR_STMS_BTN_LEVELUP!,
+								bar = ROOT + "interface/skill/skl_mastery_bar.png",
+								badge = ROOT + "interface/skill/skl_level_tab.png",
+								rows = state ? petRows( state ) : [];
+							paths.push( bar, badge );
+							rows.forEach( ( row, i ) => {
+								const gx = ox + 1, gy = oy + 30 + i * 55, action = i < 2;
+								if ( resources.has( bar ) ) rect( [ gx, gy, 328, 60 ], white, bar );
+								const groupIcon = iconPath( row[0]?.design.icon );
+								if ( groupIcon ) image( [ gx + 7, gy + 8, 20, 20 ], groupIcon );
+								const slotted = row.find( entry => entry.skill.slotted ),
+									queued = row.find( entry => entry.skill.queued );
+								const status = action ?
+									queued ?
+										"next attack: " + queued.design.name :
+										petRowCooldown( state!, i, quickslotTime ) || "ready" :
+									slotted ?
+									"slotted: " + slotted.design.name :
+									"no passive slotted";
+								quads.push(
+									...text.quads(
+										`${PET_ROW_NAMES[i]} - ${row[0]?.design.theme ?? ""}`,
+										[ gx + 148, gy + 6, 176, 12 ],
+										full,
+										white
+									)
+								);
+								quads.push(
+									...text.quads( status, [ gx + 148, gy + 24, 176, 12 ], full, white )
+								);
+								row.forEach( ( { design, skill }, col ) => {
+									const icon = iconPath( design.icon ),
+										r: UiRect = [ gx + 37 + 36 * col, gy + 3, 32, 32 ],
+										alpha = !skill.live ?
+											0.25 :
+											skill.level === 0 ?
+											0.4 :
+											!action && !skill.slotted ?
+											0.65 :
+											1;
+									if ( icon ) {
+										paths.push( icon );
+										if ( resources.has( icon ) ) {
+											rect( r, alpha < 1 ? [ 1, 1, 1, alpha ] : white, icon );
+										}
+									}
+									if ( skill.learnable ) {
+										authoredButton(
+											{
+												...levelUp,
+												texture: ROOT + "interface/skill/" +
+													(skill.level ? "skl_button_up" : "skl_button_add") +
+													".png"
+											},
+											r[0],
+											r[1],
+											"pet-skill-up:" + design.id,
+											design.name,
+											busy
+										);
+									} else if ( skill.level >= design.maxLevel ) {
+										authoredImage(
+											{ ...levelUp, texture: ROOT + "interface/skill/skl_level_max.png" },
+											r[0],
+											r[1]
+										);
+									}
+									controls.push( {
+										id: "pet-skill:" + design.id,
+										label: design.name,
+										helpText: petSkillHelp( design, skill, petLevel, state!.points ),
+										rect: r,
+										kind: "button",
+										disabled: busy || !skill.live || skill.level === 0 ||
+											(action && !skill.queued && !!petRowCooldown( state!, i, quickslotTime )),
+										selected: skill.queued || skill.slotted,
+										draggable: skill.action && skill.live && skill.level > 0
+									} );
+									if ( action && skill.level > 0 ) {
+										const timer = petCooldownQuads( state!, i, quickslotTime, r, full );
+										for ( const q of timer ) if ( q.texture ) paths.push( q.texture );
+										quads.push( ...timer );
+									}
+									const shown = skill.effectiveLevel;
+									if ( shown > 0 ) {
+										if ( resources.has( badge ) ) {
+											rect( [ r[0] + 19, r[1] + 17, 16, 16 ], white, badge );
+										}
+										for ( const [n, d] of String( shown ).split( "" ).entries() ) {
+											const digit = ROOT + "interface/skill/skl_lv_number_" + d + ".png";
+											paths.push( digit );
+											if ( resources.has( digit ) ) {
+												rect(
+													[ r[0] + (shown < 10 ? 26 : 24 + n * 5), r[1] + 24, 8, 8 ],
+													white,
+													digit
+												);
+											}
+										}
+									}
+									if ( skill.queued ) {
+										quads.push(
+											...text.quads( "next", [ r[0], r[1] - 1, 32, 10 ], full, white, {
+												hAlign: 1
+											} )
+										);
+									}
+								} );
+							} );
 						}
 					} else if ( cosTab !== 0 ) {
 						for ( const node of Object.values( page ).filter( n => n.type === "CIFCheckBox" ) ) {
@@ -23246,7 +23639,13 @@ export function createUi(
 						hud.data()?.actions.find( r => r.id === (binding.payload & 0xffffff) ) :
 						undefined,
 					item = binding ? game.inventory.find( r => r.slot === quickSlotItemSlot( binding ) ) : undefined,
-					icon = iconPath( skill?.icon ?? action?.icon ?? item?.icon );
+					icon = iconPath(
+						skill?.icon ??
+							(binding?.kind === 0x4a ?
+								petSkillDesign( binding.payload - PET_SKILL_SHORTCUT_BASE )?.icon :
+								undefined) ??
+							action?.icon ?? item?.icon
+					);
 				if ( icon ) {
 					paths.push( icon );
 					if ( resources.has( icon ) ) {
@@ -23269,6 +23668,31 @@ export function createUi(
 							key && hudCopy( key ));
 				const hudData = hud.data();
 				let tooltip: readonly TooltipRow[] = value ? [ { value, color: 0xffffffff } ] : [];
+				const petBinding = control?.id.startsWith( "hotbar:" ) ?
+					game?.quickSlots?.find( entry =>
+						entry.slot === Number( control.id.slice( 7 ) ) && entry.kind === 0x4a &&
+						entry.payload > PET_SKILL_SHORTCUT_BASE
+					) :
+					undefined;
+				if ( (control?.id.startsWith( "pet-skill:" ) || petBinding) && game?.petTraining ) {
+					const skillId = petBinding ?
+							petBinding.payload - PET_SKILL_SHORTCUT_BASE :
+							Number( control!.id.slice( 10 ) ),
+						skill = game.petTraining.skills.find( entry => entry.id === skillId ),
+						design = petSkillDesign( skillId ),
+						level = game.cosRecords?.find( record => record.gid === game.petTraining!.gid )?.level ?? 0;
+					if ( skill && design ) {
+						tooltip = petSkillTooltip(
+							design,
+							skill,
+							level,
+							game.petTraining.points,
+							design.option === 1 ||
+								(game.petTraining.skills.find( entry => entry.id === skill.id - 1 )?.level ?? 0) >=
+									design.maxLevel
+						);
+					}
+				}
 				// A press on the hovered control itself (a click, a Ctrl+click quick
 				// sell) keeps its tooltip, so it does not blink on every click
 				// (BUG-072). Native tooltips follow hover alone: A115C0 hit-tests the

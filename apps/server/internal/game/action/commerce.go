@@ -153,6 +153,9 @@ func (rt *Runtime) eachShopOffer(npc simulation.NpcDef, visit func(uint8, commer
 				return
 			}
 			for _, offer := range rt.Commerce.Tabs[tab.TabID] {
+				if petGearShopOffer(offer) {
+					continue
+				}
 				visit(uint8(index), offer)
 			}
 			index++

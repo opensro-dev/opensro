@@ -14,6 +14,7 @@ import type { InventoryItem } from "@/engine/contracts/gameplay";
 import type { TooltipRow } from "./tooltip-rows";
 import { avatarMagicOptionText } from "@/engine/foundation/gameplay/avatar-magic-option";
 import type { ItemMagicReference } from "@/engine/foundation/gameplay/item-tooltip-reference";
+import { petAffixLine } from "./pet-training";
 
 /*
 ================
@@ -60,6 +61,12 @@ export function itemTooltipMagic( item: InventoryItem, text: ( symbol: string ) 
 			Number( BigInt( a ) & 65535n ) - Number( BigInt( b ) & 65535n )
 		)
 	) {
+		// Port-only pet gear blues (pet-training.ts) use the native blue colour.
+		const pet = petAffixLine( encoded );
+		if ( pet ) {
+			rows.push( { value: pet, color: 0xff00eaff, strong: true } );
+			continue;
+		}
 		const bits = BigInt( encoded ), ref = references.find( r => r.paramId === Number( bits & 65535n ) );
 		if ( !ref ) continue;
 		const source = ref.degree === degree ?

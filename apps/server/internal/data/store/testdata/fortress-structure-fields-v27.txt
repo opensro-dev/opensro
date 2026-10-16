@@ -1,0 +1,12 @@
+# Never edit after it ships: a new persisted field takes schema 23, its upgrade
+# Never edit after it ships: a new persisted field takes schema 25, its upgrade
+# fortress-structure record fields owned by store schema 22 (persisted_shape_test.go).
+# fortress-structure record fields owned by store schema 24 (persisted_shape_test.go).
+# step and fortress-structure-fields-v23.txt.
+# step and fortress-structure-fields-v25.txt.
+eventStructId
+fortressId
+hp
+ownerGuildId
+refObjId
+state

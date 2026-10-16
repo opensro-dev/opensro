@@ -18,6 +18,7 @@ import path from "node:path";
 import { isMainScript } from "../shared/fsUtils.mjs";
 import { writeJsonIfChangedSync } from "../shared/jsonOut.mjs";
 import { listTextDataShardNamesSync, readTextDataRowsSync } from "../shared/textDataIo.mjs";
+import { PORT_ITEM_TEMPLATE, portItemColumns } from "../shared/portItemRows.mjs";
 import { publicRoot, retailTextdataRoot } from "../world/paths.mjs";
 
 const npcManifestPath = path.join( publicRoot, "assets", "npc", "manifest.json" );
@@ -113,7 +114,12 @@ export function buildMissionPresentationAsset( options = {} ) {
 		left.localeCompare( right )
 	);
 	for ( const shardName of shardNames ) {
-		for ( const columns of readTextDataRowsSync( path.join( textdataRoot, shardName ) ) ) {
+		// The port-only rows (portItemRows.mjs) follow their template, as the
+		// server bundle projects them.
+		const rows = readTextDataRowsSync( path.join( textdataRoot, shardName ) ).flatMap( columns =>
+			columns[2]?.trim() === PORT_ITEM_TEMPLATE ? [ columns, ...portItemColumns( columns ) ] : [ columns ]
+		);
+		for ( const columns of rows ) {
 			const refObjId = Number.parseInt( columns[1]?.trim() ?? "", 10 );
 			const codename = columns[2]?.trim() ?? "";
 			if ( !Number.isSafeInteger( refObjId ) || refObjId <= 0 || !codename.startsWith( "ITEM_" ) ) {

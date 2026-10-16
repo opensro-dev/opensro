@@ -39,7 +39,8 @@ func TestEveryProjectedItemHasDisplayName(t *testing.T) {
 	licensed.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	items := NewTextdataItems(dir)
-	if items.Len() != 8439 {
+	// 8439 retail rows plus the 27 port-only pet gear rows (portItemRows.mjs).
+	if items.Len() != 8466 {
 		t.Fatalf("item corpus changed: %d", items.Len())
 	}
 	for _, ref := range items.byCodename {

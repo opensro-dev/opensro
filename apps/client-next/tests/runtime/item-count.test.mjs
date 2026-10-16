@@ -50,6 +50,18 @@ test("timed-service quantity suppression consumes the reference flag only for it
 const scroll = { quantity: 1, typeFlags: 0x6c };
 const slot = [ 100, 200, 32, 32 ];
 
+test("pet equipment never draws a stack count while normal consumables still do", () => {
+	for ( const base of [ 30100, 30200, 30300 ] ) {
+		for ( let degree = 1; degree <= 9; degree++ ) {
+			assert.deepEqual(
+				itemCountQuads( { refObjId: base + degree, typeFlags: 0x4ec, quantity: 1 }, slot, slot ),
+				[]
+			);
+		}
+	}
+	assert.equal( itemCountQuads( { refObjId: 5882, typeFlags: 0x4ec, quantity: 1 }, slot, slot ).length, 1 );
+});
+
 test("a single expendable unit draws its digit sprite", () => {
 	const quads = itemCountQuads( scroll, slot, slot );
 	assert.deepEqual( quads.map( q => q.texture ), [

@@ -1,4 +1,19 @@
-import nameCatalog from "./itemNameCompletions.json" with { type: "json" };
+import retailCatalog from "./itemNameCompletions.json" with { type: "json" };
+import { appendPortItemRecords, PORT_ITEM_TEXT } from "./portItemRows.mjs";
+
+// The retail completions plus the port-only rows' text (portItemRows.mjs),
+// which no retail text file has: they are appended as absent symbols.
+const nameCatalog = {
+	...retailCatalog,
+	...Object.fromEntries(
+		Object.entries( PORT_ITEM_TEXT ).map( ( [symbol, english] ) => [ symbol, {
+			english,
+			basis: "port-only-item",
+			source: "-",
+			absent: true
+		} ] )
+	)
+};
 
 // Product English, not recovered native fallback behavior. The catalog records
 // the source and basis for every title, including explicitly labelled unreleased
@@ -49,10 +64,11 @@ export function completeItemTextProjection( bytes ) {
 
 // Retail currency rows share the invalid key "xxx". Repair only their name
 // reference in the generated projection; prices, IDs and mechanics are intact.
+// The port-only rows (portItemRows.mjs) are appended after their template.
 export function completeItemReferenceProjection( bytes ) {
 	const encoding = bytes[0] === 0xff && bytes[1] === 0xfe ? "utf16le" : "utf8";
 	return Buffer.from(
-		bytes.toString( encoding ).replace( /[^\r]+/g, record => {
+		appendPortItemRecords( bytes.toString( encoding ) ).replace( /[^\r]+/g, record => {
 			if ( record.trimStart().startsWith( "//" ) ) return record;
 			const fields = record.split( "\t" );
 			if ( fields[0].trim() === "1" && /^ITEM_ETC_GOLD_0[1-3]$/.test( fields[2] ) && fields[5] === "xxx" ) {

@@ -157,15 +157,15 @@ export const EXPERIMENTAL_TABS: readonly {
 			label: "Smooth camera",
 			description: "Ease small camera jumps and the return from a wall."
 		}, {
-			key: "greyDisabledTabs",
-			id: "experimental-grey-disabled-tabs",
-			label: "Grey disabled tabs",
-			description: "Dim a window tab you cannot use."
-		}, {
 			key: "vHidesCompanions",
 			id: "experimental-v-hides-companions",
 			label: "V hides pets and transports",
 			description: "Holding V also hides other players' pets and transports."
+		}, {
+			key: "attackPetTraining",
+			id: "experimental-attack-pet-training",
+			label: "Attack-pet training",
+			description: "Pet skills and gear; requires server opt-in."
 		} ]
 	},
 	{
@@ -201,6 +201,11 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-developer-diagnostics",
 			label: "Developer diagnostics",
 			description: "Show a diagnostics icon beside FPS."
+		}, {
+			key: "greyDisabledTabs",
+			id: "experimental-grey-disabled-tabs",
+			label: "Grey disabled tabs",
+			description: "Dim a window tab you cannot use."
 		}, {
 			key: "fitWindowLabels",
 			id: "experimental-fit-window-labels",

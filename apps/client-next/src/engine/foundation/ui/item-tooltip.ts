@@ -11,6 +11,8 @@ its heading by requested presentation policy (referencesox.png); v1.150's
 */
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 import type { Progression } from "../gameplay/progression";
+import { isPetGearRef } from "../gameplay/inventory-item";
+import { PET_DESIGN } from "./pet-design-data";
 import { itemTooltipMagic } from "./item-tooltip-magic";
 import { tooltipDescription } from "./tooltip-description";
 import { itemTooltipStats } from "./item-tooltip-stats";
@@ -36,11 +38,17 @@ export function itemTooltip(
 		equipment = (item.typeFlags & 0x7e) === 0x2c;
 	const repaired = item.magicReferences?.some( r => r.optionName === "MATTR_REPAIR" ), rare = f?.rarity === 2;
 	const nameColor = rare ? (repaired ? 0xff6ce675 : 0xffffd953) : item.magic.length ? 0xff72bfff : 0xffffffff;
+	const petGear = item.refObjId !== undefined && isPetGearRef( item.refObjId );
+	const petDegree = petGear ?
+		PET_DESIGN.gear.find( degree => degree.items.some( gear => gear.id === item.refObjId ) ) :
+		undefined;
+	const petItem = petDegree?.items.find( gear => gear.id === item.refObjId );
 	const rows: TooltipRow[] = item.name ?
 		[ {
-			value: item.name + (item.plus && !((item.typeFlags & 0x7e) === 0x6c && t === 11 && (k === 1 || k === 2)) ?
-				` (+${item.plus})` :
-				""),
+			value: (petItem?.name ?? item.name) +
+				(item.plus && !((item.typeFlags & 0x7e) === 0x6c && t === 11 && (k === 1 || k === 2)) ?
+					` (+${item.plus})` :
+					""),
 			color: nameColor,
 			heading: true,
 			strong: true,
@@ -71,7 +79,26 @@ export function itemTooltip(
 		} );
 	}
 
-	const description = tooltipDescription( text( item.tooltip?.descriptionSymbol ?? "" ) );
+	if ( petItem && petDegree ) {
+		add( `${text( "UIIT_STT_ARMOR_POSITION" ) || "Mounting part"}: ${petItem.slot}` );
+		add( `Degree: ${petDegree.degree} degrees` );
+		space();
+		for (
+			const [key, value] of [
+				[ "PARAM_PA", petItem.baseStats.physicalAttack ],
+				[ "PARAM_MA", petItem.baseStats.magicalAttack ],
+				[ "PARAM_PD", petItem.baseStats.physicalDefense ],
+				[ "PARAM_MD", petItem.baseStats.magicalDefense ],
+				[ "PARAM_HR", petItem.baseStats.hitRatio ],
+				[ "PARAM_ER", petItem.baseStats.parryRatio ]
+			] as const
+		) {
+			if ( value ) add( `${text( key )} ${value}`, 0xffffffff );
+		}
+	}
+	const descriptionText = text( item.tooltip?.descriptionSymbol ?? "" );
+	// Pet equipment has structured stats and requirements, not the old carry-item help.
+	const description = petGear ? [] : tooltipDescription( descriptionText );
 	if ( description.length && (!equipment || t === 7 || t === 13) ) {
 		rows.push( ...description );
 		space();
@@ -211,13 +238,18 @@ export function itemTooltip(
 	// 55A7B0: the published inventory/shop/COS item slots show stack capacity
 	// and the actual instance quantity. Timed COS extension uses quantity as
 	// minutes and is deliberately excluded from the ordinary amount row.
-	if ( (item.typeFlags & 0x7e) === 0x6c ) {
+	if ( !petGear && (item.typeFlags & 0x7e) === 0x6c ) {
 		if ( f.maxStack !== undefined && f.maxStack !== -1 && f.maxStack !== 0xffffffff ) {
 			add( `${text( "PARAM_MAX_CONTAIN" )} ${f.maxStack}`, 0xffffffff );
 		}
 		if ( !(t === 13 && k === 15 && ((f.itemParam6_2b0 ?? 0) & 2)) ) {
 			add( `${text( "UIIT_STT_AMOUNT" )} ${item.quantity}`, 0xffffffff );
 		}
+	}
+	if ( petDegree ) {
+		space();
+		add( `Level: Pet level ${petDegree.minPetLevel} required`, 0xffffffff );
+		add( "Pet", 0xffffffff );
 	}
 	return rows;
 }

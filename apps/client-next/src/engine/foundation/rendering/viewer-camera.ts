@@ -269,3 +269,19 @@ export function nextFraming(
 	}
 	return null;
 }
+
+/*
+================
+dollBounds
+
+An actor's bind-pose bounds ([minX, minY, minZ, maxX, maxY, maxZ], the
+renderer's characterBounds) in the doll's space: the doll turns the model
+by pi about y (portrait.ts previewYaw of yaw 0), so x and z change sign.
+================
+*/
+export function dollBounds( bounds: readonly number[] ): ViewerBounds {
+	return { min: [ -bounds[3]!, bounds[1]!, -bounds[5]! ], max: [ -bounds[0]!, bounds[4]!, -bounds[2]! ] };
+}
+
+// Models face -z.
+export const DOLL_FRONT: readonly [number, number] = [ 0, -1 ];

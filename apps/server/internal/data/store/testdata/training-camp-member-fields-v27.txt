@@ -1,0 +1,8 @@
+# Never edit after it ships: a new persisted field takes schema 23, its upgrade
+# Never edit after it ships: a new persisted field takes schema 25, its upgrade
+# step and training-camp-member-fields-v23.txt.
+# step and training-camp-member-fields-v25.txt.
+# training-camp-member record fields owned by store schema 22 (persisted_shape_test.go).
+# training-camp-member record fields owned by store schema 24 (persisted_shape_test.go).
+charId
+kind

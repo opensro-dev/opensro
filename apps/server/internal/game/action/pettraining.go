@@ -1,0 +1,357 @@
+/*
+===========================================================================
+
+pettraining.go - attack-pet skill and gear commands and the state push
+
+Port-only, not native. COS tag F0 is [gid:u32, tag:u8, op:u8, arg:u8]: op
+0 asks for state (arg2 upgrades sequential books), 1 learns the next rank,
+2 queues the legacy skill or casts with an appended target u32, 3 wears the item in bag slot arg, 4 returns gear slot arg
+to the bag, 5 refunds every skill, 6 slots passive arg. The server checks
+ownership, serializes changes with normal pet orders and answers with the
+0x3FB1 state push (item/wire/pettraining.go). Gear moves between the
+owner's bag and the pet with its blue options, in the transaction of the
+pet's state (planBagChange). A refusal is a short private whisper.
+
+===========================================================================
+*/
+package action
+
+import (
+	"encoding/binary"
+	"fmt"
+	"strings"
+	"unicode/utf16"
+
+	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/companion"
+	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/inventory"
+	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/social/chat"
+)
+
+const (
+	petTrainingTag uint8 = 0xf0
+	// petTrainingLength is the whole command: gid, tag, op, arg.
+	petTrainingLength = 7
+	// maxReceiptLine is the longest chat text the client accepts (UTF-16 units).
+	maxReceiptLine = 100
+)
+
+// Training operations (the command's op byte).
+const (
+	petTrainingState uint8 = iota
+	petTrainingLearn
+	petTrainingUse
+	petTrainingEquip
+	petTrainingUnequip
+	petTrainingRefund
+	petTrainingSlot
+)
+
+/*
+================
+petTrainingReceipt
+
+One whisper per line of at most maxReceiptLine UTF-16 units, wrapped at
+spaces: the client refuses a longer chat text (its CHAT_TEXT_LIMIT, the
+native input limit) and ends the session over it.
+================
+*/
+func petTrainingReceipt(message string) OpResult {
+	var frames []wire.Frame
+	line := ""
+	flush := func() {
+		if line != "" {
+			frames = append(frames, wire.Frame{Opcode: chat.OpChatBroadcast,
+				Payload: chat.EncodeChatBroadcastNamed(chat.ChatTypeWhisper, "Pet trainer", line)})
+		}
+		line = ""
+	}
+	for _, word := range strings.Fields(message) {
+		// shortcut: a single word over the limit is cut; receipts have none.
+		for len(utf16.Encode([]rune(word))) > maxReceiptLine {
+			flush()
+			units := utf16.Encode([]rune(word))
+			line, word = string(utf16.Decode(units[:maxReceiptLine])), string(utf16.Decode(units[maxReceiptLine:]))
+		}
+		next := word
+		if line != "" {
+			next = line + " " + word
+		}
+		if len(utf16.Encode([]rune(next))) > maxReceiptLine {
+			flush()
+			next = word
+		}
+		line = next
+	}
+	flush()
+	return OpResult{Frames: frames}
+}
+
+/*
+================
+handlePetTraining
+
+Called with the division lock. Persist before acknowledging; malformed or
+foreign GIDs never modify any pet. The state request is allowed in combat.
+================
+*/
+func (rt *Runtime) handlePetTraining(division string, c *enterworld.Character, payload []byte) OpResult {
+	if (len(payload) != petTrainingLength && len(payload) != petTrainingLength+4) || payload[4] != petTrainingTag || payload[5] > petTrainingSlot ||
+		len(payload) == petTrainingLength+4 && payload[5] != petTrainingUse {
+		return OpResult{}
+	}
+	if !rt.AttackPetExpansion {
+		return petTrainingReceipt("Attack-pet training is disabled on this server.")
+	}
+	r := wire.NewReader(payload)
+	gid, err := r.U32()
+	if err != nil {
+		return OpResult{}
+	}
+	snapshot, ref := rt.commandCOSSnapshot(division, c, gid)
+	if snapshot == nil || ref.TidWord>>11 != attackPetBand || companion.PetKind(ref.Codename) == "" {
+		return OpResult{}
+	}
+	operation, arg := payload[5], payload[6]
+	if operation == petTrainingState && arg == 2 && snapshot.CompanionByGID(gid).Training.TreeVersion < 2 {
+		if !rt.deps.Update(c, "pet-tree-upgrade", func() bool {
+			live := c.CompanionByGID(gid)
+			if live == nil {
+				return false
+			}
+			companion.UpgradeTree(live)
+			return true
+		}) {
+			return petTrainingReceipt("The skill tree could not be upgraded.")
+		}
+		snapshot = rt.characterSnapshot(division, c)
+	}
+	nowMs := rt.Now().UnixMilli()
+	if operation == petTrainingState {
+		return OpResult{Frames: rt.petTrainingStateFrames(snapshot.CompanionByGID(gid), nowMs)}
+	}
+	state := rt.petSessionFor(division, c.Name, gid)
+	if operation == petTrainingUse && len(payload) == petTrainingLength+4 {
+		return rt.manualPetSkill(division, c, snapshot, gid, arg, binary.LittleEndian.Uint32(payload[7:]), nowMs)
+	}
+	if operation != petTrainingUse && operation != petTrainingSlot &&
+		(snapshot.BattleUntilMs > nowMs || state != nil && state.combat != nil) {
+		return petTrainingReceipt("Recall the pet and leave combat before changing its skills or gear.")
+	}
+	gear := operation == petTrainingEquip || operation == petTrainingUnequip
+	if gear && (rt.Stalls.Keeping(division, c.Name) || rt.Exchanges.Trading(division, c.Name)) {
+		return petTrainingReceipt("Close the stall or exchange before moving pet gear.")
+	}
+	refusal := "Training could not be saved."
+	var frames []wire.Frame
+	if !rt.deps.Update(c, "pet-training", func() bool {
+		pet := c.CompanionByGID(gid)
+		if pet == nil || !pet.Summoned || pet.CurrentHP == 0 {
+			return false
+		}
+		switch operation {
+		case petTrainingLearn:
+			refusal = companion.Learn(pet, arg)
+		case petTrainingUse:
+			refusal = companion.Queue(pet, arg, nowMs)
+		case petTrainingSlot:
+			refusal = companion.Slot(pet, arg)
+		case petTrainingEquip:
+			refusal, frames = rt.wearPetGear(c, gid, uint8(arg))
+		case petTrainingUnequip:
+			refusal, frames = rt.removePetGear(c, gid, int(arg))
+		default:
+			companion.Refund(pet)
+			refusal = ""
+		}
+		return refusal == ""
+	}) {
+		result := petTrainingReceipt(refusal)
+		result.Frames = append(result.Frames, rt.petTrainingStateFrames(c.CompanionByGID(gid), nowMs)...)
+		return result
+	}
+	return OpResult{Frames: append(frames, rt.petTrainingStateFrames(c.CompanionByGID(gid), nowMs)...)}
+}
+
+/*
+================
+petTrainingStateFrames
+
+The worn gear's item references, then the 0x3FB1 state push.
+================
+*/
+func (rt *Runtime) petTrainingStateFrames(pet *domain.CharacterCOS, nowMs int64) []wire.Frame {
+	if pet == nil {
+		return nil
+	}
+	t := &pet.Training
+	m := companion.ModifiersFor(pet)
+	p := companion.Profile(pet.Codename)
+	physical, magical := companion.AttackScales(pet.Codename, m)
+	state := wire.PetTrainingState{
+		PetGID:              pet.GID,
+		FreePoints:          uint8(min(companion.TrainingPoints(pet), 255)),
+		AttackPercent:       uint16(100 * physical),
+		DefensePercent:      uint16(p.DefensePercent * (100 + m.DefensePct) / 100),
+		MagicPercent:        uint16(100 * magical),
+		MagicDefensePercent: uint16(p.MagicDefensePercent * (100 + m.DefensePct) / 100),
+		MagicPrimary:        p.MagicPrimary,
+		Slotted:             t.Slotted,
+		GearStats:           [6]uint32{uint32(m.GearStats.PhysicalAttack), uint32(m.GearStats.MagicalAttack), uint32(m.GearStats.PhysicalDefense), uint32(m.GearStats.MagicalDefense), uint32(m.GearStats.HitRatio), uint32(m.GearStats.ParryRatio)},
+		CooldownPercent:     uint16(m.CooldownPct),
+	}
+	if ref, ok := rt.cosReference(pet); ok {
+		state.MaxHP = ref.MaxHP
+	}
+	for row := range t.Rows {
+		r := t.Rows[row]
+		state.Rows[row] = wire.PetRowState{TimerMs: uint32(max(0, r.ReadyAtMs-nowMs)), Left: r.Left, Kind: r.Kind}
+	}
+	for _, s := range companion.SkillsForPet(pet) {
+		lvl := companion.Level(pet, s)
+		eff := companion.EffectiveLevel(pet, s, m)
+		row := wire.PetSkillRow{ID: s.ID, Level: lvl, EffectiveLevel: eff,
+			NextPetLevel: companion.NextLevelRequirement(s, lvl),
+			Value:        uint16(max(0, s.ValueAt(max(eff, 1))*10)),
+			NextValue:    uint16(max(0, s.ValueAt(min(lvl+1, s.MaxLevel))*10))}
+		if s.Active {
+			row.Flags |= wire.PetSkillAction
+			if t.Queued == s.ID {
+				row.Flags |= wire.PetSkillQueued
+			}
+		} else if lvl > 0 && t.Slotted[s.Row-companion.ActiveRowCount] == uint8(s.Option) {
+			row.Flags |= wire.PetSkillSlotted
+		}
+		if s.Live() {
+			row.Flags |= wire.PetSkillLive
+		}
+		if companion.LearnRefusal(pet, s.ID) == "" {
+			row.Flags |= wire.PetSkillLearnable
+		}
+		state.Skills = append(state.Skills, row)
+	}
+	var refs []uint32
+	for _, g := range t.Gear {
+		var options []uint64
+		for _, o := range g.Options {
+			if o != 0 {
+				options = append(options, o)
+			}
+		}
+		state.Gear = append(state.Gear, wire.PetGearState{RefObjID: g.RefObjID, Options: options})
+		refs = append(refs, g.RefObjID)
+	}
+	frames := rt.itemReferencesByID(refs)
+	return append(frames, wire.Frame{Opcode: wire.OpPetTrainingState, Payload: wire.EncodePetTrainingState(state)})
+}
+
+/*
+================
+petGearItem
+
+A worn piece as a bag item with its blue options; false for an empty slot.
+================
+*/
+func (rt *Runtime) petGearItem(g domain.PetGear) (inventory.Item, bool) {
+	if g.RefObjID == 0 {
+		return inventory.Item{}, false
+	}
+	ref, found := rt.deps.ItemReferences().ItemRefByID(g.RefObjID)
+	if !found || ref == nil {
+		return inventory.Item{}, false
+	}
+	item := inventory.Item{RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags(), Quantity: 1}
+	for _, o := range g.Options {
+		if o != 0 {
+			item.MagicOptions = append(item.MagicOptions, o)
+		}
+	}
+	return item, true
+}
+
+/*
+================
+wearPetGear
+
+Inside the character transaction: wear the gear item in a bag slot,
+returning a piece already in its gear slot to the bag. The bag plan
+commits whole or not at all.
+================
+*/
+func (rt *Runtime) wearPetGear(c *enterworld.Character, gid uint32, bagSlot uint8) (string, []wire.Frame) {
+	var taken inventory.Item
+	pet := c.CompanionByGID(gid)
+	slot := -1
+	var degree companion.GearDegree
+	rows, frames, err := rt.planBagChange(c, func(inv *inventory.Inventory) error {
+		if bagSlot < inventory.EquipmentSlotEnd {
+			return fmt.Errorf("not a bag slot")
+		}
+		item, fault := inv.DropQuantity(bagSlot, 1)
+		if fault != nil {
+			return fmt.Errorf("empty bag slot")
+		}
+		d, s, ok := companion.GearByID(item.RefObjID)
+		if !ok {
+			return fmt.Errorf("not pet gear")
+		}
+		taken, slot, degree = item, s, d
+		if previous, worn := rt.petGearItem(pet.Training.Gear[s]); worn {
+			if grant, fault := inv.GrantStack(previous, 1); fault != nil || grant.GroundRemainder != 0 {
+				return fmt.Errorf("bag full")
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return "The pet cannot wear that item.", nil
+	}
+	if pet.Level < degree.MinPetLevel {
+		return fmt.Sprintf("Degree %d gear needs pet level %d.", degree.Degree, degree.MinPetLevel), nil
+	}
+	c.MissionInventory = rows
+	// The bag rows were rebuilt; address the pet through its owner again.
+	pet = c.CompanionByGID(gid)
+	if pet == nil {
+		return "Training could not be saved.", nil
+	}
+	worn := domain.PetGear{RefObjID: taken.RefObjID}
+	copy(worn.Options[:], taken.MagicOptions)
+	pet.Training.Gear[slot] = worn
+	return "", frames
+}
+
+/*
+================
+removePetGear
+================
+*/
+func (rt *Runtime) removePetGear(c *enterworld.Character, gid uint32, slot int) (string, []wire.Frame) {
+	pet := c.CompanionByGID(gid)
+	if slot >= len(pet.Training.Gear) {
+		return "Unknown pet gear slot.", nil
+	}
+	item, worn := rt.petGearItem(pet.Training.Gear[slot])
+	if !worn {
+		return "Nothing is worn there.", nil
+	}
+	rows, frames, err := rt.planBagChange(c, func(inv *inventory.Inventory) error {
+		grant, fault := inv.GrantStack(item, 1)
+		if fault != nil || grant.GroundRemainder != 0 {
+			return fmt.Errorf("bag full")
+		}
+		return nil
+	})
+	if err != nil {
+		return "Make room in the bag to remove this gear.", nil
+	}
+	c.MissionInventory = rows
+	pet = c.CompanionByGID(gid)
+	if pet == nil {
+		return "Training could not be saved.", nil
+	}
+	pet.Training.Gear[slot] = domain.PetGear{}
+	return "", frames
+}

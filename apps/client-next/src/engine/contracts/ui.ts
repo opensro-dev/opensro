@@ -79,6 +79,9 @@ export interface UiQuad {
 		// Port-only: draw the actor's linked ride with it (the viewer's
 		// riding uniques). The inventory and party portraits never show one.
 		readonly mount?: boolean;
+		// Port-only: frame the actor from its bind bounds (viewer-camera.ts)
+		// instead of the inventory's fixed camera (the pet window's wolf).
+		readonly fit?: boolean;
 	};
 	readonly worldAnchor?: Omit<import("./gameplay").Pose, "angle">;
 	readonly portraitGid?: number;

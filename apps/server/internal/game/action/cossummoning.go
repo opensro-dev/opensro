@@ -167,6 +167,9 @@ func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResu
 		return false
 	}
 	pet.SummonGeneration++
+	if rt.AttackPetExpansion && ref.TidWord>>11 == attackPetBand {
+		pet.CurrentHP = min(pet.CurrentHP, ref.MaxHP)
+	}
 	pet.GID, pet.InventorySlot = gid, use.request.Slot
 	pet.Summoned, pet.Mounted = true, false
 	pet.StateFlags |= cosStateSummoned

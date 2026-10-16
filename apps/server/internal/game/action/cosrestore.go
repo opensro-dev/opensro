@@ -71,6 +71,10 @@ func (rt *Runtime) restoreCharacterCOS(division, name string) {
 				continue
 			}
 			pet.InventorySlot = uint8(row.Slot)
+			if rt.AttackPetExpansion && ref.TidWord>>11 == attackPetBand && pet.CurrentHP > ref.MaxHP {
+				pet.CurrentHP = ref.MaxHP
+				changed = true
+			}
 			// 4FA430 restores only records whose alive and summoned bits are set.
 			// A retained corpse remains on the item for revival, not in the world.
 			if pet.CurrentHP == 0 || pet.StateFlags&1 == 0 || (ref.TidWord>>11 == 4 && pet.RentalExpiresAtUnix <= now) {

@@ -10,6 +10,20 @@ cannot shift the following item. Unknown states and families fail atomically.
 */
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 
+// The port-only pet gear rows (scripts/build/shared/portItemRows.mjs); the
+// server's item/wire PetGearRefFirst..PetGearRefLast.
+export const PET_GEAR_REF_FIRST = 30100;
+export const PET_GEAR_REF_LAST = 30399;
+
+/*
+================
+isPetGearRef
+================
+*/
+export function isPetGearRef( refObjId: number ): boolean {
+	return refObjId >= PET_GEAR_REF_FIRST && refObjId <= PET_GEAR_REF_LAST;
+}
+
 /*
 ================
 etcCarriesPlusByte
@@ -91,7 +105,8 @@ options
 				label = new TextDecoder( "utf-8", { fatal: true } ).decode( p.subarray( at, at + n ) );
 			} else {
 				if ( etcCarriesPlusByte( typeFlags ) ) plus = u8();
-				if ( group === 0x700 && sub === 0x1000 ) options();
+				// Port-only pet gear (server item/wire IsPetGearRef) carries blues too.
+				if ( group === 0x700 && sub === 0x1000 || isPetGearRef( refObjId ) ) options();
 			}
 		}
 	} else if ( band === 0x40 ) {

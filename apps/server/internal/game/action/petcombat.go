@@ -178,6 +178,8 @@ type petCombatStep struct {
 	constraint func(simulation.Spawn, simulation.Spawn) (simulation.Spawn, *simulation.MoveError)
 	nowMs      int64
 	percent    uint64
+	// trained is this strike's attack-pet plan (pettrained.go); nil native.
+	trained *petTrainedStrike
 }
 
 /*
@@ -283,6 +285,7 @@ func (rt *Runtime) advancePetCombat(step petCombatStep) (frames []simulation.Fra
 			return frames, true
 		}
 	}
+	skill, step.trained = rt.petTrainedDecide(step, skill, target)
 	strike, ok := rt.strikePetTargets(step, target, skill)
 	if !ok {
 		rt.petDiagnostic(step.key.division, step.snapshot.Name, step.pet.GID, "fight ended: the strike was refused", log.Fields{"target": intent.target, "skill": skill.ID})
@@ -352,6 +355,8 @@ func (rt *Runtime) petAttackSkill(step petCombatStep, intent *petCombatIntent, t
 	}
 	intent.skillID = choice.ID
 	intent.intervalMs = monster.NextAttackInterval(intent.intervalMs, uint32(cooldown), jitter%crtRandRange)
+	// Port-only attack speed (pettrained.go); 1 for every native companion.
+	intent.intervalMs = uint32(float64(intent.intervalMs) / rt.petAttackSpeed(step))
 	return choice, true
 }
 
@@ -389,6 +394,9 @@ func (rt *Runtime) petStrike(step petCombatStep, target monster.Instance, skill 
 	if err != nil {
 		return petStrikeResult{}, false
 	}
+	if step.trained != nil {
+		attacker, defender = petTrainedStats(step.trained, target, attacker, defender)
+	}
 	actor := criticalActor{division: division, monster: step.pet.GID}
 	formulas := make([]combat.Result, 0, skill.Attack.ImpactCount)
 	for range creatureImpactCount(skill) {
@@ -400,6 +408,9 @@ func (rt *Runtime) petStrike(step petCombatStep, target monster.Instance, skill 
 	}
 	if len(formulas) == 0 {
 		return petStrikeResult{}, false
+	}
+	if step.trained != nil {
+		rt.petTrainedDamage(step.trained, target, formulas)
 	}
 	ownerGID := enterworld.ObjectIDForCharacter(step.snapshot)
 	level := step.pet.Level
@@ -415,11 +426,23 @@ func (rt *Runtime) petStrike(step petCombatStep, target monster.Instance, skill 
 	roster := rt.monsterRewardRoster(division, owner, step.nowMs)
 	var committed []simulation.MonsterDamageResult
 	var settlement monsterSettlement
+	var trainedFrames []wire.Frame
 	if !rt.deps.UpdateManyDeferred(roster.characters, "pet-attack", func() bool {
+		// The live summoner owns the trained rows and counters (pettrained.go):
+		// a row spent meanwhile refuses the hit, a refused commit spends nothing.
+		livePet := owner.CompanionByGID(step.pet.GID)
+		if _, ok := rt.petTrainedCommit(step, owner, livePet, step.trained, 0, false, true); !ok {
+			return false
+		}
 		committed = rt.Monsters.ApplyDamageSequence(division, target.Gid, target.CurrentHP, plans)
 		if len(committed) == 0 {
 			return false
 		}
+		dealt := uint32(0)
+		for _, applied := range committed {
+			dealt += applied.Damage
+		}
+		trainedFrames, _ = rt.petTrainedCommit(step, owner, livePet, step.trained, dealt, committed[len(committed)-1].Fatal, false)
 		if committed[len(committed)-1].Fatal {
 			settlement = rt.settleMonsterInsideDoor(division, owner, roster, committed[len(committed)-1], monsterPose, step.nowMs)
 		}
@@ -435,7 +458,12 @@ func (rt *Runtime) petStrike(step petCombatStep, target monster.Instance, skill 
 	}
 	fatal := committed[len(committed)-1].Fatal
 	public := rt.monsterImpactAbnormalFrames(division, target.Gid, committed)
-	var actorFrames []wire.Frame
+	// Trained heals: every viewer sees the pet's HP, the owner its own.
+	public = append(public, trainedFrames...)
+	actorFrames := append([]wire.Frame(nil), trainedFrames...)
+	if step.trained != nil {
+		actorFrames = append(actorFrames, step.trained.ownerState...)
+	}
 	if fatal {
 		rt.queueMonsterDefeat(division, target.Gid, step.nowMs+monsterDeathPresentationRetention.Milliseconds())
 		// Port-only shard notice for a seal drop (announce.go).

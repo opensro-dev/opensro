@@ -624,6 +624,14 @@ func (rt *Runtime) planMonsterKillLoot(
 		planned = rt.scatterMonsterDrop(planned, at, monster.Rarity())
 		admitted = append(admitted, planned)
 	}
+	// Port-only: derive pet loot from actual admitted equipment, preserving
+	// native monster tables, degrees, ranks, beta rates, capacity and level gaps.
+	for _, parent := range admitted {
+		if gear, ok := rt.preparePetGearDrop(snapshot, parent, at, now); ok {
+			gear.OwnerJID = ownerJID
+			admitted = append(admitted, rt.scatterMonsterDrop(gear, at, monster.Rarity()))
+		}
+	}
 	return admitted
 }
 

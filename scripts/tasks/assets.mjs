@@ -47,6 +47,7 @@ export const REFRESH_FAMILIES = [
 	"native-audio",
 	"native-window",
 	"overlay",
+	"pet-loot",
 	"quick-status",
 	"quickslot",
 	"restriction-text",

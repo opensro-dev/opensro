@@ -40,6 +40,8 @@ export interface ExperimentalOptions {
 	// Port-only, not native: the unused enchant sparks on +8 and higher
 	// weapons and shields (equipmentEnchantSparks).
 	readonly enchantSparks: boolean;
+	// Port-only wolf skill tree controls; requires the server's matching opt-in.
+	readonly attackPetTraining: boolean;
 	// Port-only, not native: a device without BC is served re-encoded
 	// textures (texture-variants.ts) instead of decoding them to RGBA.
 	// Read when the asset worker starts, so it applies from the next load.
@@ -169,7 +171,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		fitWindowLabels: record.fitWindowLabels !== false,
 		dropOnBagTab: record.dropOnBagTab !== false,
 		noticeLinks: record.noticeLinks !== false,
-		shortNotices: record.shortNotices !== false
+		shortNotices: record.shortNotices !== false,
+		attackPetTraining: enabled( "attackPetTraining" )
 	};
 }
 

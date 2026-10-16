@@ -14,6 +14,9 @@ export default {
 	description: "Asset build, packing, cache, and authored-resource contracts",
 	runner: "node",
 	files: [
+		"scripts/test/assets/petItemIcons.test.mjs",
+		"scripts/test/assets/petLootCollar.test.mjs",
+		"scripts/test/assets/portItemRows.test.mjs",
 		"scripts/test/assets/meshCloth.test.mjs",
 		"scripts/test/assets/bsrParticleModifiers.test.mjs",
 		"scripts/test/assets/skillEffectBinding.test.mjs",
