@@ -29,6 +29,9 @@
 		"tests/helpers/**/*.mjs",
 		"tests/browser/**/*.mjs",
 		"tests/browser/types/*.d.ts",
+		"tools/ui-qa/settings.mjs",
+		"tools/ui-qa/catalog-client.mjs",
+		"tools/ui-qa/probe-support.mjs",
 		"tools/types/**/*.d.ts"
 	]
 }

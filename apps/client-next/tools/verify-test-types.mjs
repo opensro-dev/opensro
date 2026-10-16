@@ -9,8 +9,9 @@ files that had errors when the gate was introduced. The ledger only
 shrinks: a listed file that is now clean (or gone) must be removed, which
 `--update` does. It never adds a file.
 
-Only errors inside tests/ count. The test program loads Node's types, which
-changes a few browser types in src/; src/ is checked by `pnpm typecheck`.
+Errors inside tests/ and the shared UI QA JavaScript helpers count. The test
+program loads Node's types, which changes a few browser types in src/; src/
+and the UI QA TypeScript entries are checked by `pnpm typecheck`.
 
 ===========================================================================
 */
@@ -46,7 +47,10 @@ function filesWithErrors() {
 	}
 	const counts = new Map();
 	for ( const line of result.stdout.split( /\r?\n/ ) ) {
-		const match = /^(tests\/[^(]+)\(\d+,\d+\): error TS\d+/.exec( line );
+		const match =
+			/^(tests\/[^(]+|tools\/ui-qa\/(?:settings|catalog-client|probe-support)\.mjs)\(\d+,\d+\): error TS\d+/.exec(
+				line
+			);
 		if ( match ) {
 			counts.set( match[1], (counts.get( match[1] ) ?? 0) + 1 );
 		} else if ( /^error TS\d+/.test( line ) ) {

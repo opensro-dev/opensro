@@ -21,6 +21,8 @@
   },
   "include": [
     "src/**/*.ts",
+    "tools/ui-qa/*.ts",
+    "tools/ui-qa/*.d.mts",
     "tools/types/**/*.d.ts"
   ]
 }

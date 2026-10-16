@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OpenSRO · UI review</title><link rel="stylesheet" href="./workbench.css"></head>
+<body>
+<header><div><span class="eyebrow">OPENSRO / DEVELOPER TOOLS</span><h1>UI review workbench</h1></div><div><span class="tag">Local fixtures · no game connection</span><p id="identity">Reading source and asset identity…</p></div></header>
+<div class="layout">
+<aside><div id="inventory-search"><label for="search">Find a window or resource</label><input id="search" type="search" placeholder="Guild, stall, ifunderbar…"></div><div class="tabs"><button id="journeys-tab" aria-pressed="true">Journeys</button><button id="inventory-tab" aria-pressed="false">Inventory</button><button id="coverage-tab" aria-pressed="false">Coverage</button></div><section id="category-context" hidden><button id="all-categories">All categories</button><h3 id="category-name"></h3><p id="category-progress" role="status"></p><label for="category-search">Filter this recipe list</label><input id="category-search" type="search" placeholder="Find a recipe"><button id="category-overview">Category details</button></section><p id="counts"></p><nav id="navigation" aria-label="Review inventory"></nav></aside>
+<main>
+<section id="review-flow" hidden aria-label="Category review navigation"><div><strong id="flow-category"></strong><p id="flow-position"></p></div><div class="flow-buttons"><button id="previous-recipe">Previous</button><button id="next-recipe">Next</button></div><p class="muted">Previous / Next keep drafts. Only Save records a review. Blocked recipes stay in the list.</p><p id="flow-message" role="status"></p></section>
+<section class="intro"><span id="family" class="eyebrow"></span><h2 id="title">Loading…</h2><p id="description"></p><p id="limits" class="muted"></p></section>
+<section id="resource" hidden></section>
+<section id="runner">
+<div class="toolbar"><button id="reset" class="primary">Reset journey</button><label>Viewport <select id="viewport"><option value="1000x700">1000 × 700</option><option value="1600x900">1600 × 900</option><option value="800x600">800 × 600</option><option value="375x667">375 × 667</option></select></label><label>Backdrop <select id="backdrop"><option value="dark">Dark</option><option value="light">Light</option><option value="contrast">Contrast grid</option></select></label><button id="advance">Advance 1 second</button><span id="runtime-status" role="status">Starting renderer…</span></div>
+<div class="viewport-scroll"><iframe id="viewport-frame" title="Production game UI fixture" width="1000" height="700" allow="clipboard-write"></iframe></div>
+<div class="journey-controls"><h3>Checkpoints</h3><p id="instructions"></p><div id="actions"></div><p id="activity" role="status"></p></div>
+<details><summary>State provenance and captured activity</summary><p>Seeded snapshots are synthetic. Stall requests use production reducers; other outgoing commands are captured as unsupported integration. The clock advances only when requested. Assets load asynchronously.</p><pre id="trace"></pre></details>
+</section>
+<section class="review"><div><h3>Your review</h3><p id="review-status">Unreviewed</p></div><div class="axes"><label>Visual <select id="visual"></select></label><label>Interaction <select id="interaction"></select></label><label>Integration <select id="integration"></select></label></div><label for="notes">Observations and native reference</label><textarea id="notes" rows="3" placeholder="What did you inspect? Describe discrepancies, uncertainties, and any versioned native capture used."></textarea><div class="toolbar"><button id="save-review" class="primary">Save review locally</button><button id="save-next" class="primary" hidden>Save &amp; Next</button><button id="export">Export review ledger</button><span id="save-status" role="status"></span></div><p class="muted">An acceptable browser fixture is not a claim of native correctness. Nothing is uploaded and no issues are created.</p></section>
+</main></div><script type="module" src="./workbench.ts"></script>
+</body></html>
