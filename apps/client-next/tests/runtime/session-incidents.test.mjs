@@ -142,6 +142,8 @@ test("world incidents carry the admitted region and a 401 transport-token refusa
 		static OPEN = 1;
 		readyState = 1;
 		bufferedAmount = 0;
+		/** @type {(( event: { data: ArrayBuffer; } ) => void) | undefined} */
+		onmessage;
 		constructor() {
 			socket = this;
 		}
