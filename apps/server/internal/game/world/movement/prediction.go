@@ -13,6 +13,7 @@ package movement
 import (
 	"encoding/binary"
 	"encoding/json"
+	"strings"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
@@ -59,7 +60,9 @@ const predictionStaleReason = "staleCommand"
 ================
 predictionLedger
 
-Each session's id high-water mark, and the drop counts by reason.
+Each session's id high-water mark, and the not-executed counts by
+reason: the drops (malformed, zero-id, unbound, stale) and the
+post-admission refusals under their normalized codes.
 ================
 */
 type predictionLedger struct {
@@ -93,32 +96,119 @@ func (ledger *predictionLedger) forget(session uint64) {
 predictionLedger.admit
 
 Advances the session's high-water mark; false for an id at or below it.
+The second return is the mark after the check: the admitted id, or the
+mark that refused this one.
 ================
 */
-func (ledger *predictionLedger) admit(session uint64, id uint32) bool {
+func (ledger *predictionLedger) admit(session uint64, id uint32) (bool, uint32) {
 	ledger.mu.Lock()
 	defer ledger.mu.Unlock()
 	if id <= ledger.last[session] {
-		return false
+		return false, ledger.last[session]
 	}
 	ledger.last[session] = id
-	return true
+	return true, id
+}
+
+/*
+================
+predictionLedger.highWater
+
+The session's current high-water mark (0 before its first admitted
+command), for logging a drop admission never saw.
+================
+*/
+func (ledger *predictionLedger) highWater(session uint64) uint32 {
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	return ledger.last[session]
+}
+
+/*
+================
+predictionLedger.countRefusal
+
+Counts one post-admission refusal under its normalized code (see
+predictionErrorCode), in the same table as the drops: how many commands
+of this session the authority turned away, by why.
+================
+*/
+func (ledger *predictionLedger) countRefusal(code string) uint64 {
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	ledger.drops[code]++
+	return ledger.drops[code]
+}
+
+/*
+================
+predictionFrameInfo
+
+What a drop or refusal log line says about the frame it answers, beyond
+the ledger's own numbers: whose command it was and what shape it took.
+Mode is the native move mode byte (-1 when the frame carries none);
+cosGid is the COS envelope's owner (0 for a player command).
+================
+*/
+type predictionFrameInfo struct {
+	gid      uint32
+	envelope int
+	cosGid   uint32
+	mode     int
+}
+
+/*
+================
+predictionFrameInfoOf
+
+Reads the log context out of one inbound frame. Length-guarded
+throughout: malformed frames are exactly the ones worth logging, so
+nothing here may trust the payload's shape. A COS envelope is decoded
+best-effort for its owner and inner mode; a failed decode logs zeroes.
+================
+*/
+func predictionFrameInfoOf(character *enterworld.Character, p []byte) predictionFrameInfo {
+	info := predictionFrameInfo{envelope: -1, mode: -1}
+	if character != nil {
+		info.gid = enterworld.ObjectIDForCharacter(character)
+	}
+	if len(p) < 1 {
+		return info
+	}
+	info.envelope = int(p[0])
+	switch {
+	case p[0] == 2 && len(p) > 5:
+		if command, err := wire.DecodeCosCommand(p[5:]); err == nil {
+			info.cosGid = command.CosGid
+			if len(command.Movement) >= 1 {
+				info.mode = int(command.Movement[0])
+			}
+		}
+	case len(p) >= 6:
+		info.mode = int(p[5])
+	}
+	return info
 }
 
 /*
 ================
 predictionLedger.drop
 
-Counts and logs one drop.
+Counts and logs one drop. The high-water mark rides along so a stale
+line names the mark that refused the command; without it the log could
+not be told apart from the client's own id sequence (BR-261015-0700-482F
+was diagnosed by byte-length algebra for want of these fields).
 ================
 */
-func (ledger *predictionLedger) drop(reason string, session uint64, id uint32) {
+func (ledger *predictionLedger) drop(reason string, session uint64, id uint32, last uint32, info predictionFrameInfo) {
 	ledger.mu.Lock()
 	ledger.drops[reason]++
 	count := ledger.drops[reason]
 	ledger.mu.Unlock()
-	log.WithFields(log.Fields{"reason": reason, "session": session, "id": id, "count": count}).
-		Info("movement: predicted move not executed")
+	log.WithFields(log.Fields{
+		"reason": reason, "session": session, "gid": info.gid, "id": id, "last": last,
+		"envelope": info.envelope, "cosGid": info.cosGid, "mode": info.mode, "count": count,
+	}).Info("movement: predicted move not executed")
 }
 
 /*
@@ -136,21 +226,23 @@ character cannot be answered; they are counted and logged.
 ================
 */
 func (rt *Runtime) predictedMove(ledger *predictionLedger, session uint64, division string, character *enterworld.Character, p []byte, send func(uint16, []byte) error) {
+	info := predictionFrameInfoOf(character, p)
 	if len(p) < 5 || (p[0] != 1 && p[0] != 2) {
-		ledger.drop(predictionDropMalformed, session, 0)
+		ledger.drop(predictionDropMalformed, session, 0, ledger.highWater(session), info)
 		return
 	}
 	id := binary.LittleEndian.Uint32(p[1:5])
 	if id == 0 {
-		ledger.drop(predictionDropZeroID, session, id)
+		ledger.drop(predictionDropZeroID, session, id, ledger.highWater(session), info)
 		return
 	}
 	if character == nil {
-		ledger.drop(predictionDropUnbound, session, id)
+		ledger.drop(predictionDropUnbound, session, id, ledger.highWater(session), info)
 		return
 	}
-	if !ledger.admit(session, id) {
-		ledger.drop(predictionDropStale, session, id)
+	admitted, last := ledger.admit(session, id)
+	if !admitted {
+		ledger.drop(predictionDropStale, session, id, last, info)
 		unlock := rt.lockCharacter(division, character.Name)
 		defer unlock()
 		result := MoveOutcome{Refusal: &simulation.MoveError{Reason: predictionStaleReason}}
@@ -189,6 +281,18 @@ func (rt *Runtime) predictedMove(ledger *predictionLedger, session uint64, divis
 		if result.Refusal == nil && result.Result != nil && rt.RetireMoveEffects != nil {
 			retireEffects = true
 		}
+	}
+	// An admitted command the authority still refused is the drop log's
+	// blind spot (it used to be visible nowhere server-side). Count it
+	// under its normalized code and log it with the raw reason kept for
+	// diagnosis; only the code crosses the wire (see predictionErrorCode).
+	if result.Refusal != nil {
+		code := predictionError(result)
+		log.WithFields(log.Fields{
+			"reason": code, "rawReason": result.Refusal.Reason, "session": session, "gid": info.gid,
+			"id": id, "last": id, "envelope": info.envelope, "cosGid": info.cosGid, "mode": info.mode,
+			"count": ledger.countRefusal(code),
+		}).Info("movement: predicted move refused")
 	}
 	for _, frame := range predictionFeedback(result) {
 		if send(frame.Opcode, frame.Payload) != nil {
@@ -245,7 +349,61 @@ predictionError
 */
 func predictionError(outcome MoveOutcome) string {
 	if outcome.Refusal != nil {
-		return outcome.Refusal.Reason
+		return predictionErrorCode(outcome.Refusal.Reason)
 	}
 	return ""
+}
+
+/*
+================
+predictionErrorCode
+
+The closed refusal vocabulary of the ID-bearing receipt. Refusal
+reasons inside the authority are prose, formats with coordinates and
+other free text (water.go's deep-water format names the region and the
+destination); none of that may cross 0x000A, where the client archives
+the code in bug reports and whitelists exactly this set. An unrecognized
+non-empty reason degrades to movementRefused, never to the raw string.
+================
+*/
+func predictionErrorCode(reason string) string {
+	switch reason {
+	case "":
+		return ""
+	case predictionStaleReason, "attackLocked", "abnormalState", "characterDead", "knockedDown",
+		"teleportCasting", "deletePending", "invalidCosOwner", "areaAccessDenied", "thiefCargoInTown",
+		"characterNotFound", "characterLifeChanged":
+		// Already closed tokens (the admission and commit gates).
+		return reason
+	case "ground movement cannot cross disconnected navigation spaces",
+		"ground destination sits on a disconnected navigation surface":
+		return "disconnectedNavigation"
+	case "ground movement cannot cross the outdoor/dungeon authority boundary",
+		"dungeon movement does not cross regions":
+		return "dungeonBoundary"
+	case "movement destination is blocked by world collision":
+		return "endpointBlocked"
+	case "movement region has no server navigation coverage":
+		return "noCoverage"
+	case "movement path crosses blocked world collision":
+		return "pathTruncated"
+	}
+	switch {
+	case strings.HasPrefix(reason, "deepWaterDestination"):
+		return "deepWaterDestination"
+	case strings.HasPrefix(reason, "pathguard endpointBlocked"):
+		return "endpointBlocked"
+	case strings.HasPrefix(reason, "pathguard noCoverage"):
+		return "noCoverage"
+	case strings.HasPrefix(reason, "pathguard truncated"):
+		return "pathTruncated"
+	case strings.HasPrefix(reason, "malformedMovementRequest"),
+		strings.HasPrefix(reason, "malformedHeadingRequest"),
+		strings.HasPrefix(reason, "invalidHeadingRequest"),
+		strings.HasPrefix(reason, "unsupportedNativeMoveOpcode"):
+		return "malformedMovementRequest"
+	case strings.HasPrefix(reason, "unsupportedMovementMode"):
+		return "unsupportedMovementMode"
+	}
+	return "movementRefused"
 }
