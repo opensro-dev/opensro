@@ -106,6 +106,7 @@ codes: one bad item cannot flood the Agent.
 					{}),
 				phase,
 				character,
+				region: core.region(),
 				journal: network.recentJournal()
 			} );
 		}
@@ -152,6 +153,7 @@ onNetworkFailure
 				{}),
 			phase,
 			character,
+			region: core.region(),
 			journal: network.recentJournal()
 		} );
 	}
@@ -223,9 +225,15 @@ request
 			if ( !disposed && epoch === current ) {
 				completion = { epoch: current, kind, token };
 			}
-		}, () => {
+		}, error => {
 			if ( !disposed && epoch === current ) {
-				completion = { epoch: current, kind, error: "Admission request failed" };
+				completion = {
+					epoch: current,
+					kind,
+					error: error instanceof Error && error.message === "Authentication required" ?
+						error.message :
+						"Admission request failed"
+				};
 			}
 		} );
 	}

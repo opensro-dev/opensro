@@ -180,6 +180,7 @@ items). Only PvP capes own a team value; keep strict validation for them.
 	}
 	let loadingMode: import("@/engine/contracts/world").WorldTravel["mode"] = 0;
 	let travelRevision = 0;
+	let bootstrapRegion: number | undefined;
 	let pendingTravel: import("@/engine/contracts/world").WorldTravel | null = null;
 	let awaitingTravelBootstrap = false;
 	let publishedShop: import("@/engine/contracts/gameplay").GameplayState["shop"];
@@ -358,6 +359,13 @@ the entry continues it like the one after a world transfer.
 				}).refItemSnapshot ?? []
 			) admitCape( row.refObjId, row.typeFlags, row.nativeFields?.itemParam2_2a0 );
 			if ( !pendingTravel ) loadingMode = 0;
+			const entryRegion = (value as {
+				localPlayerEntry?: { startProfile?: { regionId?: unknown; }; };
+			})?.localPlayerEntry?.startProfile?.regionId;
+			bootstrapRegion = typeof entryRegion === "number" && Number.isInteger( entryRegion ) && entryRegion >= 1 &&
+					entryRegion <= 65535 ?
+				entryRegion :
+				undefined;
 			invalidateProjection();
 			const travel = awaitingTravelBootstrap;
 			entities.bootstrap( value, travel );
@@ -514,11 +522,23 @@ clear
 			awaitingTravelBootstrap = false;
 			nameTimer = undefined;
 			capeTeams.clear();
+			bootstrapRegion = undefined;
 			pendingTravel = null;
 			loadingMode = 0;
 			invalidateProjection();
 			gameplay.reset();
 			entities.clear();
+		},
+		/*
+================
+region
+================
+		*/
+		region() {
+			if ( pendingTravel ) return pendingTravel.region;
+			const local = entities.read( gameplay.localIdentity() );
+			const mover = local?.mountedOn ? entities.read( local.mountedOn ) : local;
+			return mover?.regionId ?? local?.regionId ?? bootstrapRegion;
 		},
 		/*
 ================

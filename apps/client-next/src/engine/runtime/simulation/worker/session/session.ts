@@ -86,6 +86,7 @@ mintWorldToken
 		if ( !identity ) throw new Error( "Authentication required" );
 		return http.mint( identity.apiBase, identity.token, kind, character, identity.divisionId, signal ).then(
 			result => {
+				if ( result.status === 401 ) throw new Error( "Authentication required" );
 				const value = result.body as { ok?: boolean; token?: string; };
 				if (
 					!result.httpOk || value?.ok !== true || typeof value.token !== "string" || !value.token ||
