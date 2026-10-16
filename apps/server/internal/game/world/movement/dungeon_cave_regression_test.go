@@ -115,15 +115,21 @@ func TestDonwhangCaveUpperFloorDoesNotAdmitCorridorLeg(t *testing.T) {
 
 /*
 ================
-TestDonwhangCaveUpperFloorDoesNotAdmitEndpointStep
+TestDonwhangCaveFloorEndStepStaysOnWalkedFloor
 
 West of the corridor end the floor-1 strip along z ~ -307 stops and
 only the upper floor (140 m) covers the ground past it: a step that
 ends past the floor end must stop on its own floor, never arrive on
-the upper floor.
+the upper floor. This pins the outcome, not one branch: the cave's
+floor ends are also sealed by wall-object contact (disabling the
+endpoint guard in clipDungeonPath changes no result here - no
+branch-isolating geometry was found in the cave's scanned area), and
+the guard remains as the endpoint check for a floor end a wall does
+not seal (pinned synthetically in
+TestDungeonClipEndpointGuardRefusesUpperFloor below).
 ================
 */
-func TestDonwhangCaveUpperFloorDoesNotAdmitEndpointStep(t *testing.T) {
+func TestDonwhangCaveFloorEndStepStaysOnWalkedFloor(t *testing.T) {
 	v := realAuthorityValidator(t)
 	got := v.clipDungeonPath(donwhangCaveSpawn(986.5, 0, -308.9), donwhangCaveSpawn(986.5, 0, -307.0))
 	if got.Outcome != ClipBlocked {
@@ -131,5 +137,48 @@ func TestDonwhangCaveUpperFloorDoesNotAdmitEndpointStep(t *testing.T) {
 	}
 	if math.Abs(got.Rest.Y) > 0.5 {
 		t.Fatalf("endpoint step rests at %+v, want the walked floor near Y 0, not the upper floor", got.Rest)
+	}
+}
+
+/*
+================
+TestDungeonClipEndpointGuardRefusesUpperFloor
+
+Synthetic two-floor surface (no resolved objects, so no cuts or
+contacts): the lower floor ends at z 0.5 and only the 140 m upper
+floor covers the ground past it. The step (50,0,-6) -> (50,0,1) puts
+every floor-walk sample on the lower floor - the last one at z 0.125 -
+so the walk arrives at the endpoint check with curY 0, and only that
+check keeps the step from arriving on the upper floor. Disabling the
+endpoint guard in clipDungeonPath turns this into a ClipArrived at
+Y 140; the real cave has no branch-isolating geometry for it (see
+TestDonwhangCaveFloorEndStepStaysOnWalkedFloor above).
+================
+*/
+func TestDungeonClipEndpointGuardRefusesUpperFloor(t *testing.T) {
+	lower := &objectNavMesh{
+		vertices: []float32{0, 0, -100, 100, 0, -100, 100, 0, 0.5, 0, 0, 0.5},
+		cellA:    []uint16{0, 0}, cellB: []uint16{1, 2}, cellC: []uint16{2, 3},
+		minX: 0, maxX: 100, minY: 0, maxY: 0, minZ: -100, maxZ: 0.5,
+	}
+	upper := &objectNavMesh{
+		vertices: []float32{0, 140, 0.5, 100, 140, 0.5, 100, 140, 100, 0, 140, 100},
+		cellA:    []uint16{0, 0}, cellB: []uint16{1, 2}, cellC: []uint16{2, 3},
+		minX: 0, maxX: 100, minY: 140, maxY: 140, minZ: 0.5, maxZ: 100,
+	}
+	lower.buildCellBoxes()
+	upper.buildCellBoxes()
+	surface := &dungeonSpawnSurface{blocks: []dungeonSpawnBlock{
+		{meshes: []*objectNavMesh{lower}, cosYaw: 1},
+		{meshes: []*objectNavMesh{upper}, cosYaw: 1},
+	}}
+	v := &WaterValidator{dungeonSpawnSurfaces: map[uint16]*dungeonSpawnSurface{donwhangCaveRegion: surface}}
+	v.dungeonSpawnOnce.Do(func() {})
+	got := v.clipDungeonPath(donwhangCaveSpawn(50, 0, -6), donwhangCaveSpawn(50, 0, 1))
+	if got.Outcome != ClipBlocked {
+		t.Fatalf("endpoint guard: %s at %+v, want blocked at the floor end", got.Outcome, got.Rest)
+	}
+	if math.Abs(got.Rest.Y) > 0.5 || math.Abs(got.Rest.Z-(-6)) > 0.01 {
+		t.Fatalf("endpoint guard rests at %+v, want the walked start (50, 0, -6)", got.Rest)
 	}
 }
