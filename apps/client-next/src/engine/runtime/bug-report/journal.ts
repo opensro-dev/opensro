@@ -25,6 +25,9 @@ recorded at all: they are messages and passwords, not game input.
 ===========================================================================
 */
 
+import { movementErrorCodes } from "@/engine/contracts/movement-diagnostic";
+
+export const MOVEMENT_ERROR_CODES = movementErrorCodes();
 export const JOURNAL_WINDOW_MS = 120000;
 const MAX_EVENTS = 6000;
 const MAX_SCRIPTS = 3;
@@ -80,7 +83,11 @@ export const REFUSAL_REASONS: readonly (readonly [string, string])[] = [
 	[ "Select a merchant first", "merchant-unselected" ],
 	[ "COS shop unavailable", "pet-shop-unavailable" ],
 	[ "Unknown shop offer", "shop-offer-unknown" ],
-	[ "Local player is not initialized", "player-not-ready" ]
+	[ "Local player is not initialized", "player-not-ready" ],
+	...MOVEMENT_ERROR_CODES.map( ( code ): readonly [string, string] => [
+		code,
+		code === "Movement rejected" ? "movement-rejected" : code
+	] )
 ];
 export const REFUSAL_OTHER = "other";
 

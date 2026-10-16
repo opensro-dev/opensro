@@ -15,7 +15,7 @@ media; saving a new report drops the oldest ones first.
 */
 import type { BugReportField } from "@/engine/contracts/bug-report";
 import { zipStore, type ZipFile } from "@/engine/foundation/archive/zip";
-import { REFUSAL_OTHER, REFUSAL_REASONS, UI_CONTROL_PREFIX } from "./journal";
+import { MOVEMENT_ERROR_CODES, REFUSAL_OTHER, REFUSAL_REASONS, UI_CONTROL_PREFIX } from "./journal";
 import { GPU_TOKEN_PATTERN, reportedGpuFeatures } from "@/engine/foundation/rendering/gpu-facts";
 
 const DATABASE = "sro-bug-reports";
@@ -238,6 +238,9 @@ const TECHNICAL_FIELDS = new Set( [
 	"visibility",
 	"transition",
 	"acknowledged",
+	"cos",
+	"error",
+	"gameplayError",
 	"worldSequence",
 	"walkSpeed",
 	"runSpeed",
@@ -260,6 +263,8 @@ const TECHNICAL_STRINGS: Readonly<Record<string, readonly string[]>> = {
 		"npc"
 	],
 	event: [ "request", "receipt", "correction", "clock", "frame-spike", "world-reset" ],
+	error: MOVEMENT_ERROR_CODES,
+	gameplayError: MOVEMENT_ERROR_CODES,
 	visibility: [ "visible", "hidden" ],
 	reason: [ "spawn", "input", "correction", "receipt", "native", "cast", "displacement", "death", "clear" ],
 	source: [ "native", "receipt", "server", "prediction", "cast", "pickup", "native-stop", "native-source" ],

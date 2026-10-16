@@ -11,6 +11,65 @@ the replacement transport envelope, never to the native 0x7738 body.
 */
 import type { Pose } from "./gameplay";
 
+export type MovementErrorCode =
+	| "staleCommand"
+	| "attackLocked"
+	| "abnormalState"
+	| "characterDead"
+	| "knockedDown"
+	| "teleportCasting"
+	| "deletePending"
+	| "invalidCosOwner"
+	| "areaAccessDenied"
+	| "thiefCargoInTown"
+	| "characterNotFound"
+	| "characterLifeChanged"
+	| "disconnectedNavigation"
+	| "dungeonBoundary"
+	| "deepWaterDestination"
+	| "endpointBlocked"
+	| "noCoverage"
+	| "pathTruncated"
+	| "malformedMovementRequest"
+	| "unsupportedMovementMode"
+	| "movementRefused"
+	| "Movement rejected";
+
+/*
+================
+movementErrorCodes
+
+Closed server movement refusal codes (apps/server/internal/game/movement/service.go)
+plus the client fallback when an unaccepted receipt arrives without a reason.
+================
+*/
+export function movementErrorCodes(): readonly MovementErrorCode[] {
+	return [
+		"staleCommand",
+		"attackLocked",
+		"abnormalState",
+		"characterDead",
+		"knockedDown",
+		"teleportCasting",
+		"deletePending",
+		"invalidCosOwner",
+		"areaAccessDenied",
+		"thiefCargoInTown",
+		"characterNotFound",
+		"characterLifeChanged",
+		"disconnectedNavigation",
+		"dungeonBoundary",
+		"deepWaterDestination",
+		"endpointBlocked",
+		"noCoverage",
+		"pathTruncated",
+		"malformedMovementRequest",
+		"unsupportedMovementMode",
+		"movementRefused",
+		"Movement rejected"
+	];
+}
+
 /*
 ================
 MovementDiagnostic
@@ -21,6 +80,10 @@ export interface MovementDiagnostic {
 	readonly event: "request" | "receipt" | "correction";
 	readonly simulationAtMs: number;
 	readonly requestId?: number;
+	readonly mode?: 0 | 1;
+	readonly cos?: boolean;
+	readonly acknowledged?: number;
+	readonly error?: string;
 	readonly serverTimeMs?: number;
 	/** Receipt age on the simulation clock; not measured network-only RTT. */
 	readonly simulationRoundTripMs?: number;

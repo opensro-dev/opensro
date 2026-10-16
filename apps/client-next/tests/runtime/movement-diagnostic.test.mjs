@@ -42,12 +42,22 @@ test("recording preserves movement and correlates accepted and duplicate receipt
 	}
 	assert.deepEqual( recorded.state(), plain.state() );
 	assert.deepEqual( events.filter( event => event.event !== "correction" ), [
-		{ kind: "movement-diagnostic", event: "request", simulationAtMs: 0, requestId: 1, target: TO },
+		{
+			kind: "movement-diagnostic",
+			event: "request",
+			simulationAtMs: 0,
+			requestId: 1,
+			mode: 1,
+			cos: false,
+			acknowledged: 0,
+			target: TO
+		},
 		{
 			kind: "movement-diagnostic",
 			event: "receipt",
 			simulationAtMs: 16,
 			requestId: 1,
+			acknowledged: 0,
 			serverTimeMs: 100016,
 			accepted: true,
 			stale: false,
@@ -62,6 +72,7 @@ test("recording preserves movement and correlates accepted and duplicate receipt
 			event: "receipt",
 			simulationAtMs: 32,
 			requestId: 1,
+			acknowledged: 1,
 			serverTimeMs: 100016,
 			accepted: true,
 			stale: true
@@ -69,13 +80,13 @@ test("recording preserves movement and correlates accepted and duplicate receipt
 	] );
 });
 
-test("a rejected request records its correction and independent clock domains", () => {
+test("a rejected request records its refusal error, correction and independent clock domains", () => {
 	const events = [], movement = createMovement( () => {}, event => events.push( event ) );
 	const navigation = product();
 	navigation.objects = [];
 	movement.seed( FROM );
 	movement.navigation( 257, navigation );
-	movement.request( TO, 100 );
+	movement.request( TO, 100, 42 );
 	movement.step( 200 );
 	const predicted = { ...movement.state().pose };
 	movement.receive(
@@ -84,16 +95,22 @@ test("a rejected request records its correction and independent clock domains", 
 			id: 1,
 			gid: 7,
 			accepted: false,
-			error: "blocked",
+			error: "staleCommand",
 			serverTimeMs: 900000,
 			world: { spawn: FROM }
 		} ) ),
 		200,
 		7
 	);
+	const request = events.find( event => event.event === "request" );
+	assert.equal( request.mode, 1 );
+	assert.equal( request.cos, true );
+	assert.equal( request.acknowledged, 0 );
 	const receipt = events.find( event => event.event === "receipt" );
 	assert.equal( receipt.simulationRoundTripMs, 100 );
 	assert.equal( receipt.serverTimeMs, 900000 );
+	assert.equal( receipt.acknowledged, 0 );
+	assert.equal( receipt.error, "staleCommand" );
 	const correction = events.find( event => event.event === "correction" );
 	assert.ok( correction );
 	assert.equal( correction.requestId, 1 );
@@ -102,4 +119,11 @@ test("a rejected request records its correction and independent clock domains", 
 	assert.equal( correction.after.x, FROM.x );
 	assert.ok( correction.distance > 0 );
 	assert.equal( correction.source, "receipt server: rejected" );
+	movement.direct( 16384, 250 );
+	const directRequest = events.filter( event => event.event === "request" )[1];
+	assert.equal( directRequest.requestId, 2 );
+	assert.equal( directRequest.mode, 0 );
+	assert.equal( directRequest.cos, false );
+	assert.equal( directRequest.acknowledged, 1 );
+	assert.equal( directRequest.heading, 16384 );
 });

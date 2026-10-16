@@ -298,3 +298,91 @@ test("the shared network.json keeps only time, direction, opcode and size", asyn
 	assert.deepEqual( documents["network.json"].events, [ [ 1.25, "in", "0xB070", 40 ] ] );
 	assert.doesNotMatch( JSON.stringify( documents ), /PRIVATE_CHAT|EXTRA/ );
 });
+
+test("every closed movement refusal code survives receipt error, sample gameplayError and refusal sanitization", async () => {
+	const { movementErrorCodes } = await import( "../../src/engine/contracts/movement-diagnostic.ts" );
+	const { MOVEMENT_ERROR_CODES, refusalReason } = await import( "../../src/engine/runtime/bug-report/journal.ts" );
+	assert.deepEqual( MOVEMENT_ERROR_CODES, movementErrorCodes() );
+	assert.equal( MOVEMENT_ERROR_CODES.length, 22 );
+	const input = fixture();
+	input["movement.json"] = JSON.stringify( {
+		localGid: 7,
+		events: [
+			{
+				kind: "movement",
+				event: "request",
+				atMs: 90,
+				requestId: 1,
+				mode: 1,
+				cos: true,
+				acknowledged: 0
+			},
+			...MOVEMENT_ERROR_CODES.map( ( code, index ) => ({
+				kind: "movement",
+				event: "receipt",
+				atMs: 100 + index,
+				requestId: index + 1,
+				acknowledged: index,
+				accepted: false,
+				stale: false,
+				error: code
+			}) ),
+			{
+				kind: "movement",
+				event: "receipt",
+				atMs: 999,
+				requestId: 999,
+				acknowledged: 998,
+				accepted: false,
+				stale: false,
+				error: "PRIVATE_ERROR_COORDINATES"
+			}
+		]
+	} );
+	input["timeline.json"] = JSON.stringify( {
+		events: [
+			...MOVEMENT_ERROR_CODES.map( ( code, index ) => ({
+				kind: "sample",
+				t: index,
+				gameplayError: code
+			}) ),
+			{
+				kind: "sample",
+				t: 999,
+				gameplayError: "PRIVATE_GAMEPLAY_ERROR"
+			},
+			...MOVEMENT_ERROR_CODES.map( ( code, index ) => ({
+				kind: "refusal",
+				t: index,
+				refusal: refusalReason( code )
+			}) )
+		]
+	} );
+	const { documents } = await readZip( await createDiagnosticUpload( input, OPTIONS ) );
+	assert.doesNotMatch( JSON.stringify( documents ), /PRIVATE_/ );
+	const movementEvents = documents["movement.json"].events;
+	assert.deepEqual( movementEvents[0], {
+		kind: "movement",
+		event: "request",
+		atMs: 90,
+		requestId: 1,
+		mode: 1,
+		cos: true,
+		acknowledged: 0
+	} );
+	assert.deepEqual(
+		movementEvents.slice( 1, 1 + MOVEMENT_ERROR_CODES.length ).map( event => event.error ),
+		[ ...MOVEMENT_ERROR_CODES ]
+	);
+	assert.equal( movementEvents.at( -1 ).error, undefined );
+	const timelineEvents = documents["timeline.json"].events;
+	assert.deepEqual(
+		timelineEvents.slice( 0, MOVEMENT_ERROR_CODES.length ).map( event => event.gameplayError ),
+		[ ...MOVEMENT_ERROR_CODES ]
+	);
+	assert.equal( timelineEvents[MOVEMENT_ERROR_CODES.length].gameplayError, undefined );
+	assert.deepEqual(
+		timelineEvents.slice( MOVEMENT_ERROR_CODES.length + 1 ).map( event => event.refusal ),
+		MOVEMENT_ERROR_CODES.map( code => code === "Movement rejected" ? "movement-rejected" : code )
+	);
+});

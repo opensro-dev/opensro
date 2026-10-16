@@ -1360,7 +1360,16 @@ request
 			const clipped = navigation.available( pose ) ? to : null;
 			const frame = { opcode: OP_PREDICTED_MOVE, payload };
 			send( frame );
-			record( { kind: "movement-diagnostic", event: "request", simulationAtMs: now, requestId: id, target: to } );
+			record( {
+				kind: "movement-diagnostic",
+				event: "request",
+				simulationAtMs: now,
+				requestId: id,
+				mode: 1,
+				cos: cosGid !== undefined,
+				acknowledged,
+				target: to
+			} );
 			nextId = id;
 			beginTransition( "input" );
 			pending.set( id, { to, from: pose, previous: lastGoal, sent: now } );
@@ -1489,7 +1498,16 @@ over complete navigation coverage; otherwise the receipt starts the walk.
 			payload.set( body, 5 + offset );
 			const frame = { opcode: OP_PREDICTED_MOVE, payload };
 			send( frame );
-			record( { kind: "movement-diagnostic", event: "request", simulationAtMs: now, requestId: id, heading } );
+			record( {
+				kind: "movement-diagnostic",
+				event: "request",
+				simulationAtMs: now,
+				requestId: id,
+				mode: 0,
+				cos: cosGid !== undefined,
+				acknowledged,
+				heading
+			} );
 			nextId = id;
 			beginTransition( "input" );
 			const leg = directionSegment( pose, heading, now, "client", 1, true );
@@ -1518,9 +1536,11 @@ receive
 				event: "receipt",
 				simulationAtMs: now,
 				requestId: r.id,
+				acknowledged,
 				serverTimeMs: r.serverTimeMs,
 				accepted: r.accepted,
 				stale: r.id <= acknowledged,
+				...(!r.accepted && r.error ? { error: r.error } : {}),
 				...(sent === undefined ? {} : { simulationRoundTripMs: Math.max( 0, now - sent ) })
 			};
 			if ( r.id <= acknowledged ) {
