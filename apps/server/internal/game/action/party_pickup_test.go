@@ -566,8 +566,8 @@ func TestPetPickupSharedPeerFullPlayerBagSpillsToPeerPetAndNotifiesBothWhenFull(
 		TypeFlags: wire.PackTypeFlags(3, 1, 6, 2), VarianceBits: "0", StackCount: 1,
 	}
 	potion := grounditem.Item{
-		RefObjID: picker.MissionInventory[0].RefObjID, Codename: picker.MissionInventory[0].Codename,
-		TypeFlags: picker.MissionInventory[0].TypeFlags, StackCount: 1,
+		RefObjID: 3630, Codename: "ITEM_ETC_HP_POTION_01",
+		TypeFlags: wire.PackTypeFlags(3, 3, 1, 1), StackCount: 1,
 	}
 	peer.MissionInventory = []domain.InventoryRow{{
 		Slot: 13, RefObjID: potion.RefObjID, Codename: potion.Codename,
