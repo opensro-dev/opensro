@@ -106,3 +106,57 @@ func TestShieldUnseatsTwoHandedWeapon(t *testing.T) {
 		t.Fatalf("%v %v", moves, fault)
 	}
 }
+
+/*
+================
+TestBowEquipClearsDisplacedShieldVisual
+
+Equipping a bow over a sword and shield: the pair-swap seats the bag's
+arrows in socket 7 and the shield in the arrows' bag slot. The visuals
+must draw the bow (0x3314) and clear socket 7 (0x377C) - ammunition has
+no worn visual (native CGItem_HasEquipmentVisual 490390), so a 0x3314
+carrying the arrows was ignored by the client and the shield stayed
+drawn (CGObjPC_CollectMoveContributionSlots 4E9C40's unequip arm).
+================
+*/
+func TestBowEquipClearsDisplacedShieldVisual(t *testing.T) {
+	c := testCharacter()
+	items := testItems()
+	items["BOW"] = &enterworld.ItemRef{RefObjID: 998, Codename: "BOW", Country: 3, RequiredSex: 2, ReqQuadTypes: [4]int64{-1, -1, -1, -1}, TypeIDs: [4]int64{3, 1, 6, 6}, NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 1})}
+	items["ITEM_CH_SHIELD_01"] = &enterworld.ItemRef{RefObjID: 997, Codename: "ITEM_CH_SHIELD_01", Country: 3, RequiredSex: 2, ReqQuadTypes: [4]int64{-1, -1, -1, -1}, TypeIDs: [4]int64{3, 1, 4, 1}, NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 1})}
+	items["ARROW"] = &enterworld.ItemRef{RefObjID: 999, Codename: "ARROW", Country: 3, RequiredSex: 2, ReqQuadTypes: [4]int64{-1, -1, -1, -1}, TypeIDs: [4]int64{3, 3, 4, 1}, NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 250})}
+	c.MissionInventory = []enterworld.InventoryRow{
+		{Slot: 6, RefObjID: 11459, Codename: "ITEM_CH_SWORD_01_A_RARE", TypeFlags: wire.PackTypeFlags(3, 1, 6, 2), StackCount: 1},
+		{Slot: 7, RefObjID: 997, Codename: "ITEM_CH_SHIELD_01", TypeFlags: wire.PackTypeFlags(3, 1, 4, 1), StackCount: 1},
+		{Slot: 20, RefObjID: 998, Codename: "BOW", TypeFlags: wire.PackTypeFlags(3, 1, 6, 6), StackCount: 1},
+		{Slot: 21, RefObjID: 999, Codename: "ARROW", TypeFlags: wire.PackTypeFlags(3, 3, 4, 1), StackCount: 50},
+	}
+	rt, _ := newTestRuntime(c, items)
+	result := rt.HandleItemMove(testDivision, c, encodeMove(t, wire.ItemMoveRequest{MovementType: wire.MoveTypeInventory, SourceSlot: 20, DestSlot: 6, Quantity: 1}))
+	if len(result.Frames) == 0 || result.Frames[0].Opcode != wire.OpItemMoveResponse || result.Frames[0].Payload[0] != 1 {
+		t.Fatalf("bow equip refused: %+v", result)
+	}
+	var equipRefs []uint32
+	var unequipSlots []uint8
+	for _, frame := range result.Frames {
+		switch frame.Opcode {
+		case wire.OpEquipVisual:
+			equipRefs = append(equipRefs, uint32(frame.Payload[5])|uint32(frame.Payload[6])<<8|uint32(frame.Payload[7])<<16|uint32(frame.Payload[8])<<24)
+		case wire.OpUnequipVisual:
+			unequipSlots = append(unequipSlots, frame.Payload[4])
+		}
+	}
+	if len(equipRefs) != 1 || equipRefs[0] != 998 {
+		t.Fatalf("equip visuals %v, want only the bow (998)", equipRefs)
+	}
+	if len(unequipSlots) != 1 || unequipSlots[0] != 7 {
+		t.Fatalf("unequip visuals %v, want one clear of socket 7", unequipSlots)
+	}
+	slots := map[int64]uint32{}
+	for _, row := range c.MissionInventory {
+		slots[row.Slot] = uint32(row.RefObjID)
+	}
+	if slots[6] != 998 || slots[7] != 999 || slots[20] != 11459 || slots[21] != 997 {
+		t.Fatalf("post-swap rows %v, want bow 6, arrows 7, sword 20, shield 21", slots)
+	}
+}
