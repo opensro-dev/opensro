@@ -1,0 +1,5 @@
+charId
+honorPoints
+joinLevel
+joinedAtMs
+kind

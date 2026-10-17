@@ -41,13 +41,19 @@ import (
 	"opensro.online/server/internal/transport"
 )
 
-// MatchJoinPrecheck answers a request-time refusal reason ("" = ok) for
-// a proposed mentor-match join, mirroring the 0x76B1 invite gates
-// (handleInvite): the master must be recognizable (level >= 0x3c - the
-// sub_81e9f0 kind-0 gate - and the kind-0 master of a camp opened at the
-// NPC, with student headroom), the joiner campless, not delete-pending and
-// inside the student band. Everything re-validates at commit time under
-// the store doors.
+/*
+================
+MatchJoinPrecheck
+
+MatchJoinPrecheck answers a request-time refusal reason ("" = ok) for
+a proposed mentor-match join, mirroring the 0x76B1 invite gates
+(handleInvite): the master must be recognizable (level >= 0x3c - the
+sub_81e9f0 kind-0 gate - and the kind-0 master of a camp opened at the
+NPC, with student headroom), the joiner campless, not delete-pending and
+inside the student band. Everything re-validates at commit time under
+the store doors.
+================
+*/
 func (r *InviteRuntime) MatchJoinPrecheck(divisionID, masterName, joinerName string) string {
 	if r.deps.TrainingCampAuthority() == nil {
 		return "no training-camp store wired"
@@ -89,12 +95,18 @@ func (r *InviteRuntime) MatchJoinPrecheck(divisionID, masterName, joinerName str
 	return ""
 }
 
-// CommitMatchJoin commits one ACCEPTED mentor-match join: the joiner's
-// kind-2 student row installs through the atomic admission door into the
-// master's opened camp, then the 0x3AC5 fan-out runs exactly like the
-// invite consent's: the joiner gets their status-10 sub-1 seed on
-// joinerSession and every sitting online member the status-2 join row.
-// Returns the refusal reason ("" = committed).
+/*
+================
+CommitMatchJoin
+
+CommitMatchJoin commits one ACCEPTED mentor-match join: the joiner's
+kind-2 student row installs through the atomic admission door into the
+master's opened camp, then the 0x3AC5 fan-out runs exactly like the
+invite consent's: the joiner gets their status-10 sub-1 seed on
+joinerSession and every sitting online member the status-2 join row.
+Returns the refusal reason ("" = committed).
+================
+*/
 func (r *InviteRuntime) CommitMatchJoin(joinerSession *transport.Session, divisionID, masterName, joinerName string) string {
 	if refusal := r.MatchJoinPrecheck(divisionID, masterName, joinerName); refusal != "" {
 		return refusal
@@ -107,7 +119,7 @@ func (r *InviteRuntime) CommitMatchJoin(joinerSession *transport.Session, divisi
 	if !r.presence.OnlineByName(divisionID, master.Name) {
 		return "master logged off"
 	}
-	joinerRow := enterworld.TrainingCampMemberRecord{CharID: joiner.ID, Kind: MemberKindStudent}
+	joinerRow := enterworld.TrainingCampMemberRecord{CharID: joiner.ID, Kind: MemberKindStudent, JoinLevel: characterLevel(joiner)}
 	campID, joined := r.deps.TrainingCampAuthority().CampOfCharacter(divisionID, master.ID)
 	if !joined {
 		return "master has no camp opened"
@@ -121,6 +133,7 @@ func (r *InviteRuntime) CommitMatchJoin(joinerSession *transport.Session, divisi
 			MasterMinLevel:  MasterMinLevel,
 			StudentMaxLevel: StudentMaxLevel,
 			StudentLimit:    CampStudentCap,
+			NowMs:           r.Now().UnixMilli(),
 		},
 	)
 	if !ok {
@@ -130,7 +143,7 @@ func (r *InviteRuntime) CommitMatchJoin(joinerSession *transport.Session, divisi
 	campMembers := admission.Members
 	rows := r.campWireRows(divisionID, campMembers)
 	joinerWireRow := r.memberWireRow(divisionID, joinerRow)
-	_ = joinerSession.Send(OpTCStatus, EncodeCampSeed3AC5(joinerWireRow.MemberID, admission.Camp.Subject, admission.Camp.Contents, rows))
+	_ = joinerSession.Send(OpTCStatus, EncodeCampSeed3AC5WithEvaluation(joinerWireRow.MemberID, admission.Camp.EvaluationRank, admission.Camp.Subject, admission.Camp.Contents, rows))
 	joinPush := EncodeCampJoinRow3AC5(joinerWireRow)
 	for _, member := range campMembers {
 		if member.CharID == joiner.ID {

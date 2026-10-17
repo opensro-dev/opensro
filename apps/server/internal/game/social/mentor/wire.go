@@ -146,8 +146,14 @@ const StudentMaxLevel = 0x28
 // a DECISION by string semantics.
 const NoticeInviteRejection uint8 = 0x11
 
-// DecodeInviteRequest strict-decodes the 0x76B1 body {u32 targetRef}
-// (the sub_702c90 composer shape) with no trailing bytes.
+/*
+================
+DecodeInviteRequest
+
+DecodeInviteRequest strict-decodes the 0x76B1 body {u32 targetRef}
+(the sub_702c90 composer shape) with no trailing bytes.
+================
+*/
 func DecodeInviteRequest(payload []byte) (uint32, error) {
 	reader := wire.NewReader(payload)
 	targetRef, err := reader.U32()
@@ -160,11 +166,17 @@ func DecodeInviteRequest(payload []byte) (uint32, error) {
 	return targetRef, nil
 }
 
-// writeCampString appends the sized-ANSI layout {u16 byte length, the
-// bytes} - the sub_4b1710 wire shape every TC string read takes (the
-// prompt's requester name @0x0076466d, the seed's knowledge pair
-// @0x0082aaa1/@0x0082aaad, the member rows' name/location strings
-// @0x008291db/@0x0082933b).
+/*
+================
+writeCampString
+
+writeCampString appends the sized-ANSI layout {u16 byte length, the
+bytes} - the sub_4b1710 wire shape every TC string read takes (the
+prompt's requester name @0x0076466d, the seed's knowledge pair
+@0x0082aaa1/@0x0082aaad, the member rows' name/location strings
+@0x008291db/@0x0082933b).
+================
+*/
 func writeCampString(writer *wire.Writer, value string) {
 	encoded := wire.EncodeWindows1252(value)
 	writer.U16(uint16(len(encoded)))
@@ -173,12 +185,18 @@ func writeCampString(writer *wire.Writer, value string) {
 	}
 }
 
-// EncodeInvitePrompt3393 renders the S->C mentor/TC prompt body the
-// sub_7644e0 IDCLOSE arm reads (@0x00764625): {u8 9, u32 inviterGid,
-// u16-len ANSI inviterName}. Unlike the party/guild arms the display
-// name arrives ON THE WIRE (the arm never resolves the entityRef to a
-// name - sub_4b1710 @0x0076466d feeds the UIIT_STT_TC_JOIN_REQUEST
-// "%s" body format directly).
+/*
+================
+EncodeInvitePrompt3393
+
+EncodeInvitePrompt3393 renders the S->C mentor/TC prompt body the
+sub_7644e0 IDCLOSE arm reads (@0x00764625): {u8 9, u32 inviterGid,
+u16-len ANSI inviterName}. Unlike the party/guild arms the display
+name arrives ON THE WIRE (the arm never resolves the entityRef to a
+name - sub_4b1710 @0x0076466d feeds the UIIT_STT_TC_JOIN_REQUEST
+"%s" body format directly).
+================
+*/
 func EncodeInvitePrompt3393(inviterGid uint32, inviterName string) []byte {
 	writer := wire.NewWriter(7 + len(inviterName))
 	writer.U8(InvitationTypeTC)
@@ -187,12 +205,15 @@ func EncodeInvitePrompt3393(inviterGid uint32, inviterName string) []byte {
 	return writer.Payload()
 }
 
-// MemberWireRow is one 0x3AC5 member row as the client's REAL member
-// add (sub_827890) stores it - field names carry the client record
-// offsets. Every UNPINNED-semantics field encodes zero/empty (a
-// DECISION: the client stores them verbatim and the Academy pane reads
-// only name/kind/level/face/location of them - zeros are the honest
-// floor, never invented values).
+/*
+================
+MemberWireRow
+
+MemberWireRow is one 0x3AC5 member row as the client's REAL member
+add (sub_827890) stores it - field names carry the client record
+offsets.
+================
+*/
 type MemberWireRow struct {
 	// MemberID lands at record +0x00/+0x04 (the wire's FIRST u32 is
 	// read and DISCARDED - both call sites pass the SECOND for both id
@@ -205,21 +226,30 @@ type MemberWireRow struct {
 	Kind uint8
 	// Level lands at +0x59 (the grade-band classifier's input and the
 	// pane's "%d(%d)" second half); LevelByte58 at +0x58 (the pair's
-	// first half - semantics unpinned, encoded as the same level).
+	// first half - the student's level at camp entry).
 	LevelByte58 uint8
 	Level       uint8
+	// HonorPoints lands at +0x5c (AccumulatedBuffPoint / usable honor
+	// point balance on the master row, updated live by status 5 flag 3).
+	HonorPoints uint32
 	// Location lands at +0x28 (the pane's location column; empty until
 	// a status-13 coord row updates it).
 	Location string
 }
 
-// writeMemberRow appends one member row in the pinned sub_773c60
-// case-1 / sub_8290e0 field order: {u32 discarded}{u32 memberId}
-// {u32 f08}{str name}{u8 kind44}{u8 b46}{16-byte blob48}{u8 b58}
-// {u8 level59}{u32 f5c}{u8 b74}{u32 f78}{u16 x4 coords}{str location}
-// (reads @0x00773d45..0x00773ee2 / @0x008291b1..0x0082933b; the
-// argument-to-offset mapping is the sub_827890 store block
-// @0x008278ed..0x008279be).
+/*
+================
+writeMemberRow
+
+writeMemberRow appends one member row in the pinned sub_773c60
+case-1 / sub_8290e0 field order: {u32 discarded}{u32 memberId}
+{u32 f08}{str name}{u8 kind44}{u8 b46}{16-byte blob48}{u8 b58}
+{u8 level59}{u32 f5c}{u8 b74}{u32 f78}{u16 x4 coords}{str location}
+(reads @0x00773d45..0x00773ee2 / @0x008291b1..0x0082933b; the
+argument-to-offset mapping is the sub_827890 store block
+@0x008278ed..0x008279be).
+================
+*/
 func writeMemberRow(writer *wire.Writer, row MemberWireRow) {
 	writer.U32(row.MemberID)
 	writer.U32(row.MemberID)
@@ -232,7 +262,7 @@ func writeMemberRow(writer *wire.Writer, row MemberWireRow) {
 	}
 	writer.U8(row.LevelByte58)
 	writer.U8(row.Level)
-	writer.U32(0)
+	writer.U32(row.HonorPoints)
 	writer.U8(0)
 	writer.U32(0)
 	writer.U16(0)
@@ -242,10 +272,16 @@ func writeMemberRow(writer *wire.Writer, row MemberWireRow) {
 	writeCampString(writer, row.Location)
 }
 
-// EncodeCampJoinRow3AC5 renders the status-2 joining-member push the
-// SITTING members receive: {u8 2} + one member row (sub_773c60 case 1
-// @0x00773cd0 -> REAL sub_827890 add + the UIIT_MSG_TC_MACHING_
-// JOINING_MEMBER notice formatted with the row's name).
+/*
+================
+EncodeCampJoinRow3AC5
+
+EncodeCampJoinRow3AC5 renders the status-2 joining-member push the
+SITTING members receive: {u8 2} + one member row (sub_773c60 case 1
+@0x00773cd0 -> REAL sub_827890 add + the UIIT_MSG_TC_MACHING_
+JOINING_MEMBER notice formatted with the row's name).
+================
+*/
 func EncodeCampJoinRow3AC5(row MemberWireRow) []byte {
 	writer := wire.NewWriter(64 + len(row.Name) + len(row.Location))
 	writer.U8(2)
@@ -253,33 +289,65 @@ func EncodeCampJoinRow3AC5(row MemberWireRow) []byte {
 	return writer.Payload()
 }
 
-// EncodeCampSeed3AC5 renders the status-10 sub-1 join confirmation - the
-// receiver's OWN camp seed: {u8 10}{u8 1}{u32 localMemberId}
-// {16-byte blob}{u8 statusByte}{str subject}{str contents}
-// {u8 rosterCount}{member rows} (sub_773c60 case 9 sub 1 @0x00774cdb:
-// REAL sub_823050 reset, then sub_82aa10 reads id/blob/status/texts
-// @0x0082aa79..0x0082aaad and sub_8290e0 the counted roster
-// @0x0082916f - the count soft-asserts above 8). The receiver derives
-// masterhood from the roster's kind-0 row (sub_81e9f0 publishes
-// mgr+0x25c from it), so the roster ALWAYS carries the master.
+/*
+================
+EncodeCampSeed3AC5
+
+EncodeCampSeed3AC5 renders the status-10 sub-1 join confirmation - the
+receiver's OWN camp seed: {u8 10}{u8 1}{u32 localMemberId}
+{16-byte blob}{u8 statusByte}{str subject}{str contents}
+{u8 rosterCount}{member rows} (sub_773c60 case 9 sub 1 @0x00774cdb).
+================
+*/
 func EncodeCampSeed3AC5(localMemberID uint32, subject, contents string, rows []MemberWireRow) []byte {
+	return EncodeCampSeed3AC5WithEvaluation(localMemberID, 0, subject, contents, rows)
+}
+
+/*
+================
+EncodeCampSeed3AC5WithEvaluation
+
+EncodeCampSeed3AC5WithEvaluation renders the status-10 sub-1 camp seed
+carrying the camp's EvaluationRank (0 none, 1 crown, 2 gold, 3 silver,
+4 bronze) at the statusByte position read by 82AA10 (@0x0082aa95).
+================
+*/
+func EncodeCampSeed3AC5WithEvaluation(localMemberID uint32, evaluationRank uint8, subject, contents string, rows []MemberWireRow) []byte {
 	writer := wire.NewWriter(128)
 	writer.U8(10)
 	writer.U8(1)
-	writeCampRecord(writer, localMemberID, subject, contents, rows)
+	writeCampRecordWithEvaluation(writer, localMemberID, evaluationRank, subject, contents, rows)
 	return writer.Payload()
 }
 
-// writeCampRecord appends the camp record 82AA10 reads, shared by the
-// status-10 seed and the 0xB2EC opening answer: {u32 localMemberId}
-// {16-byte blob}{u8 statusByte}{str subject}{str contents}{u8 rosterCount}
-// {member rows}.
+/*
+================
+writeCampRecord
+
+writeCampRecord appends the camp record 82AA10 reads, shared by the
+status-10 seed and the 0xB2EC opening answer: {u32 localMemberId}
+{16-byte blob}{u8 statusByte}{str subject}{str contents}{u8 rosterCount}
+{member rows}.
+================
+*/
 func writeCampRecord(writer *wire.Writer, localMemberID uint32, subject, contents string, rows []MemberWireRow) {
+	writeCampRecordWithEvaluation(writer, localMemberID, 0, subject, contents, rows)
+}
+
+/*
+================
+writeCampRecordWithEvaluation
+
+writeCampRecordWithEvaluation writes the camp header and roster rows with
+an explicit EvaluationRank byte.
+================
+*/
+func writeCampRecordWithEvaluation(writer *wire.Writer, localMemberID uint32, evaluationRank uint8, subject, contents string, rows []MemberWireRow) {
 	writer.U32(localMemberID)
 	for i := 0; i < 16; i++ {
 		writer.U8(0)
 	}
-	writer.U8(0)
+	writer.U8(evaluationRank)
 	writeCampString(writer, subject)
 	writeCampString(writer, contents)
 	writer.U8(uint8(len(rows)))
@@ -288,9 +356,95 @@ func writeCampRecord(writer *wire.Writer, localMemberID uint32, subject, content
 	}
 }
 
-// EncodeCampNotice3AC5 renders the status-10 sub-2 notice: {u8 10}
-// {u8 2}{u8 code} - the pinned category-0x1D carrier (sub_773c60 case 9
-// sub 2 @0x00774d66 reads ONE byte into sub_689420(gi, 0x1d, code)).
+/*
+================
+EncodeCampNotice3AC5
+
+EncodeCampNotice3AC5 renders the status-10 sub-2 notice: {u8 10}
+{u8 2}{u8 code} - the pinned category-0x1D carrier (sub_773c60 case 9
+sub 2 @0x00774d66 reads ONE byte into sub_689420(gi, 0x1d, code)).
+================
+*/
 func EncodeCampNotice3AC5(code uint8) []byte {
 	return wire.NewWriter(3).U8(10).U8(2).U8(code).Payload()
+}
+
+/*
+================
+EncodeCampDisband3AC5
+
+EncodeCampDisband3AC5 renders the status-1 camp dissolution push
+(CTrainingCampManager_OnCampDisband_5dd770 @0x005dd770; client sub_773c60
+case 0 @0x00773cac): {u8 1}.
+================
+*/
+func EncodeCampDisband3AC5() []byte {
+	return []byte{1}
+}
+
+/*
+================
+EncodeCampMemberLeave3AC5
+
+EncodeCampMemberLeave3AC5 renders the status-3 member removal push
+(CTrainingCampManager_OnMemberLeave_5ddeb0 @0x005ddeb0; client sub_773c60
+case 2 @0x00774010): {u8 3}{u32 memberID}{u8 flag}, where flag=1 is a
+voluntary leave and flag=2 is an expulsion/ban.
+================
+*/
+func EncodeCampMemberLeave3AC5(memberID uint32, flag uint8) []byte {
+	return wire.NewWriter(6).U8(3).U32(memberID).U8(flag).Payload()
+}
+
+/*
+================
+EncodeCampMemberGraduate3AC5
+
+EncodeCampMemberGraduate3AC5 renders the status-4 graduation push
+(CTrainingCampManager_OnMemberGraduate_5ddc40 @0x005ddc40; client sub_773c60
+case 3 @0x007741a2): {u8 4}{u32 memberID}{u8 flag}, where flag=0 is a
+voluntary graduation and flag=1 is a compulsory graduation by the master.
+================
+*/
+func EncodeCampMemberGraduate3AC5(memberID uint32, flag uint8) []byte {
+	return wire.NewWriter(6).U8(4).U32(memberID).U8(flag).Payload()
+}
+
+/*
+================
+EncodeCampMemberLevelUpdate3AC5
+
+EncodeCampMemberLevelUpdate3AC5 renders the status-5 flag-2 level update
+push (CTrainingCampManager_OnMemberLevelUpdate_5de190 @0x005de190; client
+sub_773c60 case 4 flag 2 @0x00774427): {u8 5}{u32 memberID}{u8 2}{u8 level}.
+================
+*/
+func EncodeCampMemberLevelUpdate3AC5(memberID uint32, level uint8) []byte {
+	return wire.NewWriter(7).U8(5).U32(memberID).U8(2).U8(level).Payload()
+}
+
+/*
+================
+EncodeCampMemberHonorUpdate3AC5
+
+EncodeCampMemberHonorUpdate3AC5 renders the status-5 flag-3 honor point
+balance push (CTrainingCampManager_OnHonorPointUpdate_5ded00 @0x005ded00;
+client sub_773c60 case 4 flag 3 @0x00774568):
+{u8 5}{u32 memberID}{u8 3}{u32 honorPoints}.
+================
+*/
+func EncodeCampMemberHonorUpdate3AC5(memberID uint32, honorPoints uint32) []byte {
+	return wire.NewWriter(10).U8(5).U32(memberID).U8(3).U32(honorPoints).Payload()
+}
+
+/*
+================
+EncodeCampEvaluationUpdate3AC5
+
+EncodeCampEvaluationUpdate3AC5 renders the status-12 camp evaluation rank
+update push (client sub_773c60 case 11 @0x00774dc2): {u8 12}{u8 evaluationRank}.
+================
+*/
+func EncodeCampEvaluationUpdate3AC5(evaluationRank uint8) []byte {
+	return []byte{12, evaluationRank}
 }

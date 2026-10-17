@@ -91,6 +91,17 @@ type InviteRuntime struct {
 	// lanes (a func field, not an import).
 	PeerPending func(divisionID, name string) bool
 
+	// LevelData supplies level 40's Exp_C curve row to CalcGraduateBonusExp.
+	LevelData enterworld.LevelDataSource
+
+	// GrantGraduateExperience applies the graduate bonus EXP to the
+	// graduating student and publishes the resulting 0x30D2 / level-up frames.
+	GrantGraduateExperience func(divisionID string, charID int64, expDelta int64)
+
+	// SyncMasterHonorBuffs reconciles a camp master's active Honor Rank
+	// skill buffs (20160..20163) against their camp's EvaluationRank.
+	SyncMasterHonorBuffs func(divisionID string, charID int64, evaluationRank uint8)
+
 	// Now is the clock the 30 s answer window runs on.
 	Now func() time.Time
 }
@@ -117,13 +128,25 @@ func NewInviteRuntime(deps Dependencies, presence Presence) *InviteRuntime {
 // 46C6C0 stores 30 s); 46F1E0 expires a proposal after it, not at it.
 const inviteAnswerWindowMs = 30 * 1000
 
-// expired reports an invitation past its answer window. The caller holds mu.
+/*
+================
+expired
+
+expired reports an invitation past its answer window. The caller holds mu.
+================
+*/
 func (r *InviteRuntime) expired(invite PendingInvite) bool {
 	return r.Now().UnixMilli() > invite.expiresAtMs
 }
 
-// inviteKey is the pending table's target identity: divisionID + ":" +
-// lowercase(name) - the hub bind-key convention every lane keys by.
+/*
+================
+inviteKey
+
+inviteKey is the pending table's target identity: divisionID + ":" +
+lowercase(name) - the hub bind-key convention every lane keys by.
+================
+*/
 func inviteKey(divisionID, name string) string {
 	return divisionID + ":" + strings.ToLower(name)
 }
@@ -142,18 +165,36 @@ func (r *InviteRuntime) Register(hub *transport.Hub) {
 	hub.Handle(OpTCInviteRequest, r.handleInvite)
 	hub.Handle(OpTCNoticeEditRequest, r.handleNoticeEdit)
 	hub.Handle(OpTCOpenRequest, r.handleOpen)
+	hub.Handle(OpTCDisbandRequest, r.handleDisband)
+	hub.Handle(OpTCLeaveRequest, r.handleLeave)
+	hub.Handle(OpTCKickRequest, r.handleKick)
+	hub.Handle(OpTCGraduateRequest, r.handleGraduate)
+	hub.Handle(OpTCCompulsoryGraduateRequest, r.handleCompulsoryGraduate)
+	hub.Handle(OpTCHonorRankRequest, r.handleHonorRank)
 }
 
-// PendingInviteCount reports the number of outstanding invitations (the
-// reboot-empty and leak assertions).
+/*
+================
+PendingInviteCount
+
+PendingInviteCount reports the number of outstanding invitations (the
+reboot-empty and leak assertions).
+================
+*/
 func (r *InviteRuntime) PendingInviteCount() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return len(r.pendingByTarget)
 }
 
-// setPending records the outstanding invitation for a target and starts
-// its answer window. handleInvite never calls it over a live proposal.
+/*
+================
+setPending
+
+setPending records the outstanding invitation for a target and starts
+its answer window. handleInvite never calls it over a live proposal.
+================
+*/
 func (r *InviteRuntime) setPending(divisionID, targetName string, invite PendingInvite) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -234,8 +275,14 @@ func findCampCharacterByGid(deps Dependencies, divisionID string, gid uint32) *e
 	return nil
 }
 
-// findCampCharacterByName resolves a division character record by name,
-// case-insensitively (the guild lane's twin).
+/*
+================
+findCampCharacterByName
+
+findCampCharacterByName resolves a division character record by name,
+case-insensitively (the guild lane's twin).
+================
+*/
 func findCampCharacterByName(deps Dependencies, divisionID, name string) *enterworld.Character {
 	for _, candidate := range deps.CharactersForDivision(divisionID) {
 		if candidate != nil && strings.EqualFold(candidate.Name, name) {
@@ -269,8 +316,14 @@ func characterSnapshot(
 	return snapshot
 }
 
-// characterLevel reads the persisted level with the store's >=1 floor
-// and the wire's u8 ceiling.
+/*
+================
+characterLevel
+
+characterLevel reads the persisted level with the store's >=1 floor
+and the wire's u8 ceiling.
+================
+*/
 func characterLevel(c *enterworld.Character) uint8 {
 	if c == nil || c.Level == nil || *c.Level < 1 {
 		return 1
@@ -293,7 +346,7 @@ A member whose record vanished mid-flight degrades to the bare row.
 ==================
 */
 func (r *InviteRuntime) memberWireRow(divisionID string, member enterworld.TrainingCampMemberRecord) MemberWireRow {
-	row := MemberWireRow{Kind: member.Kind, LevelByte58: 1, Level: 1}
+	row := MemberWireRow{Kind: member.Kind, LevelByte58: 1, Level: 1, HonorPoints: member.HonorPoints}
 	character := r.findDivisionCharacterByID(divisionID, member.CharID)
 	if character == nil {
 		return row
@@ -302,11 +355,20 @@ func (r *InviteRuntime) memberWireRow(divisionID string, member enterworld.Train
 	row.Name = character.Name
 	level := characterLevel(character)
 	row.LevelByte58 = level
+	if member.JoinLevel > 0 {
+		row.LevelByte58 = member.JoinLevel
+	}
 	row.Level = level
 	return row
 }
 
-// findDivisionCharacterByID resolves a division character record by id.
+/*
+================
+findDivisionCharacterByID
+
+findDivisionCharacterByID resolves a division character record by id.
+================
+*/
 func (r *InviteRuntime) findDivisionCharacterByID(divisionID string, characterID int64) *enterworld.Character {
 	for _, candidate := range r.deps.CharactersForDivision(divisionID) {
 		if candidate != nil && candidate.ID == characterID {
@@ -316,8 +378,14 @@ func (r *InviteRuntime) findDivisionCharacterByID(divisionID string, characterID
 	return nil
 }
 
-// campWireRows projects a camp's whole member set in store order (the
-// wire order the seed roster emits).
+/*
+================
+campWireRows
+
+campWireRows projects a camp's whole member set in store order (the
+wire order the seed roster emits).
+================
+*/
 func (r *InviteRuntime) campWireRows(divisionID string, members []enterworld.TrainingCampMemberRecord) []MemberWireRow {
 	rows := make([]MemberWireRow, 0, len(members))
 	for _, member := range members {
@@ -326,7 +394,13 @@ func (r *InviteRuntime) campWireRows(divisionID string, members []enterworld.Tra
 	return rows
 }
 
-// countCampKind tallies one member kind across a camp's member set.
+/*
+================
+countCampKind
+
+countCampKind tallies one member kind across a camp's member set.
+================
+*/
 func countCampKind(members []enterworld.TrainingCampMemberRecord, kind uint8) int {
 	count := 0
 	for _, member := range members {
@@ -511,7 +585,7 @@ func (r *InviteRuntime) ApplyConsent(s *transport.Session, divisionID string, ac
 		log.Debugf("mentor: 0x3393 accept from %s dropped: level %d over the student band", actor.Name, characterLevel(actor))
 		return
 	}
-	joinerRow := enterworld.TrainingCampMemberRecord{CharID: actor.ID, Kind: MemberKindStudent}
+	joinerRow := enterworld.TrainingCampMemberRecord{CharID: actor.ID, Kind: MemberKindStudent, JoinLevel: characterLevel(actor)}
 	admission, ok := r.deps.TrainingCampAuthority().AdmitStudent(
 		divisionID,
 		enterworld.TrainingCampAdmission{
@@ -521,6 +595,7 @@ func (r *InviteRuntime) ApplyConsent(s *transport.Session, divisionID string, ac
 			MasterMinLevel:  MasterMinLevel,
 			StudentMaxLevel: StudentMaxLevel,
 			StudentLimit:    CampStudentCap,
+			NowMs:           r.Now().UnixMilli(),
 		},
 	)
 	if !ok {
@@ -531,7 +606,7 @@ func (r *InviteRuntime) ApplyConsent(s *transport.Session, divisionID string, ac
 	joined := admission.Members
 	rows := r.campWireRows(divisionID, joined)
 	joinerWireRow := r.memberWireRow(divisionID, joinerRow)
-	_ = s.Send(OpTCStatus, EncodeCampSeed3AC5(joinerWireRow.MemberID, admission.Camp.Subject, admission.Camp.Contents, rows))
+	_ = s.Send(OpTCStatus, EncodeCampSeed3AC5WithEvaluation(joinerWireRow.MemberID, admission.Camp.EvaluationRank, admission.Camp.Subject, admission.Camp.Contents, rows))
 	joinPush := EncodeCampJoinRow3AC5(joinerWireRow)
 	for _, member := range joined {
 		if member.CharID == actor.ID {
@@ -575,6 +650,9 @@ func (r *InviteRuntime) WorldBound(s *transport.Session, divisionID string, char
 	}
 	campID, joined := r.deps.TrainingCampAuthority().CampOfCharacter(divisionID, character.ID)
 	if !joined {
+		if r.SyncMasterHonorBuffs != nil {
+			r.SyncMasterHonorBuffs(divisionID, character.ID, 0)
+		}
 		return
 	}
 	camp, members, ok := r.deps.TrainingCampAuthority().Camp(divisionID, campID)
@@ -582,7 +660,14 @@ func (r *InviteRuntime) WorldBound(s *transport.Session, divisionID string, char
 		return
 	}
 	rows := r.campWireRows(divisionID, members)
-	_ = s.Send(OpTCStatus, EncodeCampSeed3AC5(enterworld.ObjectIDForCharacter(character), camp.Subject, camp.Contents, rows))
+	_ = s.Send(OpTCStatus, EncodeCampSeed3AC5WithEvaluation(enterworld.ObjectIDForCharacter(character), camp.EvaluationRank, camp.Subject, camp.Contents, rows))
+	if r.SyncMasterHonorBuffs != nil {
+		evalRank := uint8(0)
+		if camp.MasterCharID == character.ID {
+			evalRank = camp.EvaluationRank
+		}
+		r.SyncMasterHonorBuffs(divisionID, character.ID, evalRank)
+	}
 }
 
 /*

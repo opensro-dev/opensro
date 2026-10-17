@@ -906,6 +906,23 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.unions.Register(hub)
 	game.guildWars.Register(hub)
 	game.guildInvites.Register(hub)
+	game.mentorInvites.LevelData = game.deps.Levels
+	game.mentorInvites.GrantGraduateExperience = func(divisionID string, charID int64, expDelta int64) {
+		character := game.deps.CharacterByID(divisionID, charID)
+		if character == nil {
+			return
+		}
+		result := stats.GrantUnscaledExperience(character, expDelta)
+		if len(result.Frames) > 0 {
+			game.items.PushCharacterFrames(divisionID, character.Name, result.Frames)
+		}
+		if len(result.Broadcast) > 0 {
+			game.items.PushDivisionPeerFrames(divisionID, character.Name, result.Broadcast)
+		}
+	}
+	game.mentorInvites.SyncMasterHonorBuffs = game.items.SyncTrainingCampHonorBuffs
+	game.items.HonorPoints = game.mentorInvites.HonorPoints
+	game.items.SpendHonorPoints = game.mentorInvites.SpendHonorPoints
 	game.mentorInvites.Register(hub)
 	return nil
 }

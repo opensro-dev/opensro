@@ -567,6 +567,23 @@ type Runtime struct {
 	// banned character's lines. Nil keeps both in-game only.
 	PublicChat *chatfeed.Feed
 
+	// HonorPoints returns the character's usable Training Camp honor points
+	// (CTrainingCampMember+0x5C, read by CShopApp_CheckPurchasePayment
+	// @0x00617360). Nil reports 0.
+	HonorPoints func(divisionID string, c *enterworld.Character) uint32
+
+	// SpendHonorPoints deducts cost from the character's Training Camp honor
+	// points and broadcasts 0x3AC5 status 5 flag 5 to online camp members
+	// (CGObjPC_ConsumeShopPayment_5ded00 @0x005ded00). Nil refuses honor
+	// deductions.
+	SpendHonorPoints func(divisionID string, c *enterworld.Character, cost uint32) bool
+
+	// honorMu serializes shop purchases against HonorPoints + SettleTrade +
+	// SpendHonorPoints so concurrent 0x7034 requests cannot double-spend a
+	// mentor's honor balance across the store door boundary. Always acquired
+	// outside store.mu.
+	honorMu sync.Mutex
+
 	// PushMonsterCast publishes prepared-cast results before the division
 	// transaction ends. It must only enqueue (never perform network I/O).
 	// Detached runtimes leave it nil and inspect returned frames instead.

@@ -208,6 +208,12 @@ func (s *Store) commitOnceLocked() error {
 		}
 	}
 
+	for key := range s.changes.dissolvedCamp {
+		if err := deleteCampTx(tx, key.division, key.campID); err != nil {
+			return err
+		}
+	}
+
 	if groundSnapshot != nil {
 		if err := replaceGroundTx(tx, groundSnapshot.Divisions); err != nil {
 			return err

@@ -1,0 +1,5 @@
+lists
+lists[][][].alias
+lists[][][].grade
+lists[][][].value
+week

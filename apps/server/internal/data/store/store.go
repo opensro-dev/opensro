@@ -126,6 +126,7 @@ type changeSet struct {
 	guilds         map[guildKey]bool
 	camps          map[campKey]bool
 	dissolvedGuild map[guildKey]bool
+	dissolvedCamp  map[campKey]bool
 }
 
 func newChangeSet() changeSet {
@@ -137,6 +138,7 @@ func newChangeSet() changeSet {
 		guilds:         map[guildKey]bool{},
 		camps:          map[campKey]bool{},
 		dissolvedGuild: map[guildKey]bool{},
+		dissolvedCamp:  map[campKey]bool{},
 	}
 }
 
@@ -148,7 +150,8 @@ func (changes changeSet) empty() bool {
 		len(changes.mailboxes) == 0 &&
 		len(changes.guilds) == 0 &&
 		len(changes.camps) == 0 &&
-		len(changes.dissolvedGuild) == 0
+		len(changes.dissolvedGuild) == 0 &&
+		len(changes.dissolvedCamp) == 0
 }
 
 // groundState owns the boundary between the live gameplay registry and its

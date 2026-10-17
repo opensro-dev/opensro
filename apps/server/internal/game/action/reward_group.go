@@ -59,6 +59,7 @@ rewardRoster
 ================
 */
 type rewardRoster struct {
+	division   string
 	actors     map[uint32]rewardActor
 	characters []*enterworld.Character
 }
@@ -72,7 +73,7 @@ authoritative character pointers, then enter a single UpdateMany transaction.
 ================
 */
 func (rt *Runtime) monsterRewardRoster(division string, actor *enterworld.Character, now int64) rewardRoster {
-	r := rewardRoster{actors: make(map[uint32]rewardActor)}
+	r := rewardRoster{division: division, actors: make(map[uint32]rewardActor)}
 	parties := []RewardParty(nil)
 	if rt.RewardParties != nil {
 		parties = rt.RewardParties(division)

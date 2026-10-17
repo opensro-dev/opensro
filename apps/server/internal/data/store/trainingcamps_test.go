@@ -278,7 +278,13 @@ func TestTrainingCampOpenChecksThenBurnsTheFee(t *testing.T) {
 		t.Fatalf("open: %+v refusal %d gold %d", opened, refusal, *master.Gold)
 	}
 	if opened.Camp.ID != master.ID || opened.Camp.MasterCharID != master.ID ||
-		!reflect.DeepEqual(opened.Members, []domain.TrainingCampMemberRecord{{CharID: master.ID, Kind: 0}}) {
+		opened.Camp.CreatedAtMs != clock.Now().UnixMilli() ||
+		!reflect.DeepEqual(opened.Members, []domain.TrainingCampMemberRecord{{
+			CharID:     master.ID,
+			Kind:       0,
+			JoinedAtMs: clock.Now().UnixMilli(),
+			JoinLevel:  floor,
+		}}) {
 		t.Fatalf("opened camp %+v", opened)
 	}
 	rows := ledgerRows(t, s)
@@ -300,5 +306,164 @@ func TestTrainingCampOpenChecksThenBurnsTheFee(t *testing.T) {
 	camp, members, ok := reopened.TrainingCamps().Camp(testDivision, opened.Camp.ID)
 	if !ok || camp != opened.Camp || !reflect.DeepEqual(members, opened.Members) {
 		t.Fatalf("reopened camp %+v %+v %v", camp, members, ok)
+	}
+}
+
+/*
+================
+TestTrainingCampHonorLifecycleAndPersistence
+
+Verifies DisbandCamp (24h wait, SQLite removal, 7d reopen wait), LeaveCamp,
+KickMember (including level-40 graduation-floor refusal), Graduate and
+CompulsoryGraduate (24h join wait, mentor honor points, camp evaluation
+points, Top-50 tier rankings, and SpendHonorPoints).
+================
+*/
+func TestTrainingCampHonorLifecycleAndPersistence(t *testing.T) {
+	t.Parallel()
+	dir, clock := t.TempDir(), newTestClock()
+	s := openTest(t, dir, clock)
+
+	master := guildTestCharacter("honormaster")
+	student1 := guildTestCharacter("honorstud1")
+	student2 := guildTestCharacter("honorstud2")
+	student3 := guildTestCharacter("honorstud3")
+	for _, c := range []*domain.Character{master, student1, student2, student3} {
+		if err := s.CreateCharacter(testDivision, "test-account", c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setLevel := func(c *domain.Character, lvl int64) {
+		s.MutateCharacter(c, "test-level", func() {
+			c.Level = &lvl
+		})
+	}
+	setLevel(master, 60)
+	setLevel(student1, 10)
+	setLevel(student2, 20)
+	setLevel(student3, 30)
+
+	now0 := clock.Now().UnixMilli()
+	opened, refusal := s.TrainingCamps().OpenCamp(testDivision, domain.TrainingCampOpening{
+		MasterCharID: master.ID,
+		MinLevel:     60,
+		Fee:          0,
+		NowMs:        now0,
+	})
+	if refusal != domain.TrainingCampOpenAccepted {
+		t.Fatalf("open camp refused: %d", refusal)
+	}
+
+	// Disband before 24h refuses with TrainingCampDisbandWait and remaining seconds.
+	disbandEarly := s.TrainingCamps().DisbandCamp(testDivision, master.ID, now0+3600_000)
+	if disbandEarly.Refusal != domain.TrainingCampDisbandWait || disbandEarly.RemainingSeconds != 86400-3600 {
+		t.Fatalf("early disband = %+v", disbandEarly)
+	}
+
+	// Admit three students at levels 10, 20, 30.
+	for _, st := range []*domain.Character{student1, student2, student3} {
+		if _, ok := s.TrainingCamps().AdmitStudent(testDivision, domain.TrainingCampAdmission{
+			MasterCharID:    master.ID,
+			StudentCharID:   st.ID,
+			ExpectedCampID:  opened.Camp.ID,
+			MasterMinLevel:  60,
+			StudentMaxLevel: 39,
+			StudentLimit:    5,
+			NowMs:           now0,
+		}); !ok {
+			t.Fatalf("admit %s failed", st.Name)
+		}
+	}
+
+	// Student 3 leaves voluntarily; master cannot leave via LeaveCamp.
+	if res := s.TrainingCamps().LeaveCamp(testDivision, master.ID, now0); res.Refusal != domain.TrainingCampLeaveIsMaster {
+		t.Fatalf("master leave = %+v", res)
+	}
+	leaveRes := s.TrainingCamps().LeaveCamp(testDivision, student3.ID, now0)
+	if leaveRes.Refusal != domain.TrainingCampLeaveAccepted || leaveRes.RemovedMember.CharID != student3.ID {
+		t.Fatalf("student3 leave = %+v", leaveRes)
+	}
+
+	// Re-admit student 3, then level student 1 and student 2 to 40.
+	if _, ok := s.TrainingCamps().AdmitStudent(testDivision, domain.TrainingCampAdmission{
+		MasterCharID:    master.ID,
+		StudentCharID:   student3.ID,
+		ExpectedCampID:  opened.Camp.ID,
+		MasterMinLevel:  60,
+		StudentMaxLevel: 39,
+		StudentLimit:    5,
+		NowMs:           now0,
+	}); !ok {
+		t.Fatal("re-admit student3 failed")
+	}
+	setLevel(student1, 40)
+	setLevel(student2, 40)
+
+	// Kicking a level-40 student refuses with TrainingCampKickTargetGraduatedLevel (0x6824);
+	// kicking level-30 student3 succeeds.
+	if kick40 := s.TrainingCamps().KickMember(testDivision, master.ID, student1.Name, now0); kick40.Refusal != domain.TrainingCampKickTargetGraduatedLevel {
+		t.Fatalf("kick level-40 student = %+v", kick40)
+	}
+	kick30 := s.TrainingCamps().KickMember(testDivision, master.ID, student3.Name, now0)
+	if kick30.Refusal != domain.TrainingCampKickAccepted || kick30.RemovedMember.CharID != student3.ID {
+		t.Fatalf("kick level-30 student = %+v", kick30)
+	}
+
+	// Student 1 (joinLevel=10) graduates voluntarily with satisfaction 4 (Very Satisfied):
+	// Master honor = ceil((40-10)*1.0) = 30, camp evaluation = +12, GraduateCount = 1, Rank = 4 (1 camp total).
+	grad1 := s.TrainingCamps().Graduate(testDivision, student1.ID, 4, now0+10_000)
+	if grad1.Refusal != domain.TrainingCampGraduateAccepted || !grad1.AwardedExp ||
+		grad1.Camp.GraduateCount != 1 || grad1.Camp.EvaluationPoints != 12 || grad1.Camp.EvaluationRank != 4 ||
+		len(grad1.HonorDeltas) != 1 || grad1.HonorDeltas[0].HonorPoints != 30 {
+		t.Fatalf("grad1 = %+v", grad1)
+	}
+
+	// Compulsory graduation of student 2 before 24h refuses with TrainingCampGraduateWait24h;
+	// after 24h it succeeds with satisfaction 2 (+3 evaluation points, +20 honor points).
+	if compEarly := s.TrainingCamps().CompulsoryGraduate(testDivision, master.ID, student2.Name, now0+1000); compEarly.Refusal != domain.TrainingCampGraduateWait24h {
+		t.Fatalf("early compulsory grad = %+v", compEarly)
+	}
+	now24h := now0 + campCompulsoryWaitMs
+	grad2 := s.TrainingCamps().CompulsoryGraduate(testDivision, master.ID, student2.Name, now24h)
+	if grad2.Refusal != domain.TrainingCampGraduateAccepted || grad2.AwardedExp ||
+		grad2.Camp.GraduateCount != 2 || grad2.Camp.EvaluationPoints != 15 ||
+		len(grad2.HonorDeltas) != 1 || grad2.HonorDeltas[0].HonorPoints != 50 {
+		t.Fatalf("grad2 = %+v", grad2)
+	}
+
+	// Spend 18 honor points -> 32 remaining.
+	remHonor, _, ok := s.TrainingCamps().SpendHonorPoints(testDivision, master.ID, 18)
+	if !ok || remHonor != 32 || s.TrainingCamps().HonorPoints(testDivision, master.ID) != 32 {
+		t.Fatalf("spend honor = %d ok=%v", remHonor, ok)
+	}
+
+	rankings := s.TrainingCamps().HonorRankings(testDivision)
+	if len(rankings) != 1 || rankings[0].Ranking != 1 || rankings[0].Rank != 4 ||
+		rankings[0].MasterName != master.Name || rankings[0].GraduateCount != 2 {
+		t.Fatalf("rankings = %+v", rankings)
+	}
+
+	// Disband after 24h removes the camp from memory and SQLite, and arms the 7-day reopen cooldown.
+	disband := s.TrainingCamps().DisbandCamp(testDivision, master.ID, now24h)
+	if disband.Refusal != domain.TrainingCampDisbandAccepted {
+		t.Fatalf("disband = %+v", disband)
+	}
+	if _, ok := s.TrainingCamps().CampOfCharacter(testDivision, master.ID); ok {
+		t.Fatal("master still in camp after disband")
+	}
+	reopenWait, refWait := s.TrainingCamps().OpenCamp(testDivision, domain.TrainingCampOpening{
+		MasterCharID: master.ID,
+		MinLevel:     60,
+		Fee:          0,
+		NowMs:        now24h + 1000_000,
+	})
+	if refWait != domain.TrainingCampOpenReopenWait || reopenWait.RemainingSeconds != 604800-1000 {
+		t.Fatalf("reopen wait = %+v ref=%d", reopenWait, refWait)
+	}
+
+	s.Close()
+	reopened := openTest(t, dir, clock)
+	if _, _, ok := reopened.TrainingCamps().Camp(testDivision, opened.Camp.ID); ok {
+		t.Fatal("disbanded camp survived reopen")
 	}
 }

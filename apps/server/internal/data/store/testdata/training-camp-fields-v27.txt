@@ -1,0 +1,9 @@
+contents
+createdAtMs
+evaluationPoints
+evaluationRank
+graduateCount
+id
+latestEvaluationAtMs
+masterCharId
+subject

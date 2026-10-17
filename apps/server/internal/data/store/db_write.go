@@ -197,6 +197,24 @@ func replaceCampTx(tx *sql.Tx, division string, campID int64, camp domain.Traini
 	return nil
 }
 
+// deleteCampTx removes ONE training camp's rows - the camp row plus its
+// whole member set - inside a transaction (replaceCampTx's DELETE half with
+// no re-insert: the DisbandCamp door's persistence action).
+/*
+================
+deleteCampTx
+================
+*/
+func deleteCampTx(tx *sql.Tx, division string, campID int64) error {
+	if _, err := tx.Exec("DELETE FROM training_camps WHERE division = ? AND camp_id = ?", division, campID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM training_camp_members WHERE division = ? AND camp_id = ?", division, campID); err != nil {
+		return err
+	}
+	return nil
+}
+
 // seedAuthorityDBTx populates a freshly created current-schema database.
 // Transaction ownership stays with the caller so publishing cannot expose a
 // partial seed.

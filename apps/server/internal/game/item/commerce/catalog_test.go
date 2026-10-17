@@ -61,4 +61,17 @@ func TestShippedCatalog(t *testing.T) {
 			t.Fatalf("Samarkand tab %d has no admitted goods", id)
 		}
 	}
+	// STORE_CH_HONOR_TAB1 (tab 2292) sells Seal of Star (Honor) weapons for Gold + Honor points.
+	honorSword := false
+	for _, o := range c.Tabs[2292] {
+		if o.Ref.Codename == "ITEM_CH_SWORD_08_A_RARE_HONOR" {
+			if o.Price != 2700000 || o.HonorPrice != 1000 {
+				t.Fatalf("ITEM_CH_SWORD_08_A_RARE_HONOR price = (%d, %d), want (2700000, 1000)", o.Price, o.HonorPrice)
+			}
+			honorSword = true
+		}
+	}
+	if !honorSword {
+		t.Fatal("STORE_CH_HONOR_TAB1 lacks ITEM_CH_SWORD_08_A_RARE_HONOR")
+	}
 }

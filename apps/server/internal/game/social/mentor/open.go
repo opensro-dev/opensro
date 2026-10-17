@@ -46,10 +46,11 @@ const CampOpenFee = 100000
 // The category-0x1D codes an opening answers with (the 689420 table at
 // 68C070/68C004, base 3): v1.188's 0x68xx returns keep their low byte.
 const (
-	OpenErrDead   uint8 = 0x07 // UIIT_MSG_TC_ERROR_DIE_PASSING
-	OpenErrLevel  uint8 = 0x09 // UIIT_MSG_TC_ERROR_OPEN_LEVEL
-	OpenErrGold   uint8 = 0x0A // UIIT_MSG_TC_ERROR_OPEN_GOLD
-	OpenErrInCamp uint8 = 0x12 // UIIT_MSG_TC_ERROR_OTHER_TRAININGCAMP_ENTRY
+	OpenErrDead       uint8 = 0x07 // UIIT_MSG_TC_ERROR_DIE_PASSING
+	OpenErrLevel      uint8 = 0x09 // UIIT_MSG_TC_ERROR_OPEN_LEVEL
+	OpenErrGold       uint8 = 0x0A // UIIT_MSG_TC_ERROR_OPEN_GOLD
+	OpenErrInCamp     uint8 = 0x12 // UIIT_MSG_TC_ERROR_OTHER_TRAININGCAMP_ENTRY
+	OpenErrReopenWait uint8 = 0x1C // UIIT_MSG_TC_ERROR_NOT_OPEN_7D
 )
 
 // openRefusalCodes maps the store's refusals onto the wire codes. A refusal
@@ -80,12 +81,22 @@ func EncodeOpenAckB2EC(localMemberID uint32, subject, contents string, rows []Me
 ================
 EncodeOpenErrorB2EC
 
-The refusal answer: {u8 2}{u8 code}. 76FBA0 reads a further u32 only for
-code 0x1C (the reopen wait), which nothing here sends yet.
+The refusal answer: {u8 2}{u8 code}.
 ================
 */
 func EncodeOpenErrorB2EC(code uint8) []byte {
 	return wire.NewWriter(2).U8(2).U8(code).Payload()
+}
+
+/*
+================
+EncodeOpenReopenWaitB2EC
+
+The 7-day reopen cooldown refusal (76FBA0 @0x0076fc4a): {u8 2}{u8 0x1C}{u32 remainingSeconds}.
+================
+*/
+func EncodeOpenReopenWaitB2EC(remainingSeconds uint32) []byte {
+	return wire.NewWriter(6).U8(2).U8(OpenErrReopenWait).U32(remainingSeconds).Payload()
 }
 
 /*
@@ -118,9 +129,14 @@ func (r *InviteRuntime) handleOpen(s *transport.Session, opcode uint16, payload 
 		MasterCharID: actor.ID,
 		MinLevel:     MasterMinLevel,
 		Fee:          CampOpenFee,
+		NowMs:        r.Now().UnixMilli(),
 	})
 	if refusal != domain.TrainingCampOpenAccepted {
 		log.Debugf("mentor: 0x72EC (open) refused for %s: refusal %d", actor.Name, refusal)
+		if refusal == domain.TrainingCampOpenReopenWait {
+			_ = s.Send(OpTCOpenAnswer, EncodeOpenReopenWaitB2EC(opened.RemainingSeconds))
+			return
+		}
 		if code, answered := openRefusalCodes[refusal]; answered {
 			_ = s.Send(OpTCOpenAnswer, EncodeOpenErrorB2EC(code))
 		}

@@ -325,6 +325,10 @@ type Character struct {
 	// timed job (2, 5) of 600 s CGObjPC_HandleSiegeReturn705D (51A5B0)
 	// creates; zero when none runs.
 	FortressReturnUntilMs int64 `json:"fortressReturnUntilMs,omitempty"`
+	// CampDisbandedAtMs is when the character last dissolved a training camp
+	// (SR_GameServer 0x005dd3f0: 7-day / 604,800 s reopen cooldown, error
+	// 0x681C -> client 0x1C UIIT_MSG_TC_ERROR_NOT_OPEN_7D).
+	CampDisbandedAtMs int64 `json:"campDisbandedAtMs,omitempty"`
 
 	// InventorySize is the inventory capacity byte the client was given at
 	// its last world entry (13 equipment sockets plus the bag); zero is the

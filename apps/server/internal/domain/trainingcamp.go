@@ -34,9 +34,14 @@ type TrainingCampRecord struct {
 	// MasterCharID is the founding master's character id (the kind-0
 	// member row's CharID; kept on the row too so the camp resolves
 	// masterless-ness without scanning members).
-	MasterCharID int64  `json:"masterCharId"`
-	Subject      string `json:"subject,omitempty"`
-	Contents     string `json:"contents,omitempty"`
+	MasterCharID         int64  `json:"masterCharId"`
+	Subject              string `json:"subject,omitempty"`
+	Contents             string `json:"contents,omitempty"`
+	CreatedAtMs          int64  `json:"createdAtMs,omitempty"`
+	GraduateCount        uint32 `json:"graduateCount,omitempty"`
+	EvaluationPoints     int32  `json:"evaluationPoints,omitempty"`
+	EvaluationRank       uint8  `json:"evaluationRank,omitempty"`
+	LatestEvaluationAtMs int64  `json:"latestEvaluationAtMs,omitempty"`
 }
 
 // TrainingCampMemberRecord is one persisted camp member. The wire member
@@ -48,7 +53,10 @@ type TrainingCampMemberRecord struct {
 	// Kind is the client record's +0x44 byte: 0 master, 1 sub-mentor
 	// (assistant guardian), 2 student/apprentice - the sub_81e9f0 grade
 	// classifier's input (@0x0081ea08..0x0081ea71).
-	Kind uint8 `json:"kind"`
+	Kind        uint8  `json:"kind"`
+	JoinedAtMs  int64  `json:"joinedAtMs,omitempty"`
+	JoinLevel   uint8  `json:"joinLevel,omitempty"`
+	HonorPoints uint32 `json:"honorPoints,omitempty"`
 }
 
 // TrainingCampAdmission is the complete policy input for admitting one
@@ -66,6 +74,7 @@ type TrainingCampAdmission struct {
 	MasterMinLevel  int64
 	StudentMaxLevel int64
 	StudentLimit    int
+	NowMs           int64
 }
 
 // TrainingCampAdmissionResult is the committed aggregate snapshot returned
@@ -83,6 +92,7 @@ type TrainingCampOpening struct {
 	MasterCharID int64
 	MinLevel     int64
 	Fee          int64
+	NowMs        int64
 }
 
 // TrainingCampOpenRefusal is why OpenCamp refused. The gameplay package maps
@@ -102,14 +112,133 @@ const (
 	TrainingCampOpenGold
 	// TrainingCampOpenInCamp: already a member of a camp (0x6812).
 	TrainingCampOpenInCamp
+	// TrainingCampOpenReopenWait: within the 7-day disband cooldown (0x681C).
+	TrainingCampOpenReopenWait
 )
 
 // TrainingCampOpenResult is the committed opening: the new camp, its one
 // master row, and the master's gold after the fee.
 type TrainingCampOpenResult struct {
-	Camp    TrainingCampRecord
-	Members []TrainingCampMemberRecord
-	Gold    int64
+	Camp             TrainingCampRecord
+	Members          []TrainingCampMemberRecord
+	Gold             int64
+	RemainingSeconds uint32
+}
+
+// TrainingCampRankChange reports a camp whose EvaluationRank (0 unranked,
+// 1..4 ranked) changed when division honor rankings were recomputed.
+type TrainingCampRankChange struct {
+	CampID       int64
+	MasterCharID int64
+	Evaluation   uint8
+	Members      []TrainingCampMemberRecord
+}
+
+// TrainingCampDisbandRefusal is why DisbandCamp refused (v1.188 5DE420).
+type TrainingCampDisbandRefusal uint8
+
+const (
+	TrainingCampDisbandAccepted TrainingCampDisbandRefusal = iota
+	TrainingCampDisbandUnavailable
+	TrainingCampDisbandDead
+	TrainingCampDisbandNotMaster
+	TrainingCampDisbandWait
+)
+
+// TrainingCampDisbandResult is the outcome of DisbandCamp.
+type TrainingCampDisbandResult struct {
+	Refusal          TrainingCampDisbandRefusal
+	RemainingSeconds uint32
+	Camp             TrainingCampRecord
+	MembersBefore    []TrainingCampMemberRecord
+	RankChanges      []TrainingCampRankChange
+}
+
+// TrainingCampLeaveRefusal is why LeaveCamp refused (v1.188 5E1070).
+type TrainingCampLeaveRefusal uint8
+
+const (
+	TrainingCampLeaveAccepted TrainingCampLeaveRefusal = iota
+	TrainingCampLeaveUnavailable
+	TrainingCampLeaveDead
+	TrainingCampLeaveNotInCamp
+	TrainingCampLeaveIsMaster
+)
+
+// TrainingCampLeaveResult is the outcome of LeaveCamp.
+type TrainingCampLeaveResult struct {
+	Refusal       TrainingCampLeaveRefusal
+	Camp          TrainingCampRecord
+	RemovedMember TrainingCampMemberRecord
+	MembersBefore []TrainingCampMemberRecord
+}
+
+// TrainingCampKickRefusal is why KickMember refused (v1.188 5E0DA0).
+type TrainingCampKickRefusal uint8
+
+const (
+	TrainingCampKickAccepted TrainingCampKickRefusal = iota
+	TrainingCampKickUnavailable
+	TrainingCampKickDead
+	TrainingCampKickNotMaster
+	TrainingCampKickTargetNotFound
+	TrainingCampKickTargetGraduatedLevel
+)
+
+// TrainingCampKickResult is the outcome of KickMember.
+type TrainingCampKickResult struct {
+	Refusal       TrainingCampKickRefusal
+	Camp          TrainingCampRecord
+	RemovedMember TrainingCampMemberRecord
+	MembersBefore []TrainingCampMemberRecord
+}
+
+// TrainingCampGraduateRefusal is why Graduate or CompulsoryGraduate refused
+// (v1.188 5E00B0 / 5E07C0).
+type TrainingCampGraduateRefusal uint8
+
+const (
+	TrainingCampGraduateAccepted TrainingCampGraduateRefusal = iota
+	TrainingCampGraduateUnavailable
+	TrainingCampGraduateDead
+	TrainingCampGraduateNotInCamp
+	TrainingCampGraduateNotMaster
+	TrainingCampGraduateTargetNotFound
+	TrainingCampGraduateNotApprentice
+	TrainingCampGraduateLevelLow
+	TrainingCampGraduateWait24h
+)
+
+// TrainingCampHonorDelta reports a mentor's updated HonorPoints after a
+// graduation or honor-shop purchase.
+type TrainingCampHonorDelta struct {
+	CharID      int64
+	HonorPoints uint32
+}
+
+// TrainingCampGraduateResult is the outcome of Graduate or CompulsoryGraduate.
+type TrainingCampGraduateResult struct {
+	Refusal       TrainingCampGraduateRefusal
+	Camp          TrainingCampRecord
+	Graduate      TrainingCampMemberRecord
+	MembersBefore []TrainingCampMemberRecord
+	MembersAfter  []TrainingCampMemberRecord
+	HonorDeltas   []TrainingCampHonorDelta
+	RankChanges   []TrainingCampRankChange
+	AwardedExp    bool
+}
+
+// TrainingCampHonorRanking is one row of the Top-50 division Honor Ranking
+// table (0xB2D0, v1.188 5DD1C0 / 5DEEB0).
+type TrainingCampHonorRanking struct {
+	Ranking       uint32
+	Rank          uint8
+	MasterCharID  int64
+	MasterName    string
+	Level         uint8
+	MaxLevel      uint8
+	GraduateCount uint32
+	GuildName     string
 }
 
 // TrainingCampStore is the authority store's training-camp door (the
@@ -138,4 +267,25 @@ type TrainingCampStore interface {
 	// UpdateNotice rechecks the expected camp and kind-0 author under the
 	// authority lock, persists the notice, and returns a detached snapshot.
 	UpdateNotice(divisionID string, authorID, expectedCampID int64, subject, contents string) (TrainingCampRecord, []TrainingCampMemberRecord, bool)
+	// DisbandCamp dissolves the master's camp after the 24h creation cooldown,
+	// stamps CampDisbandedAtMs on the master, and recomputes division honor ranks.
+	DisbandCamp(divisionID string, masterCharID int64, nowMs int64) TrainingCampDisbandResult
+	// LeaveCamp removes a non-master member from their camp.
+	LeaveCamp(divisionID string, memberCharID int64, nowMs int64) TrainingCampLeaveResult
+	// KickMember removes a named non-master member from the master's camp.
+	KickMember(divisionID string, masterCharID int64, targetName string, nowMs int64) TrainingCampKickResult
+	// Graduate completes a level-40+ student's voluntary graduation, awards
+	// evaluation and honor points from satisfaction (0..4), and recomputes
+	// division honor ranks.
+	Graduate(divisionID string, memberCharID int64, satisfaction uint8, nowMs int64) TrainingCampGraduateResult
+	// CompulsoryGraduate completes a master-initiated graduation of a level-40+
+	// student after 24h in the camp, awarding Compulsory satisfaction (2).
+	CompulsoryGraduate(divisionID string, masterCharID int64, targetName string, nowMs int64) TrainingCampGraduateResult
+	// HonorRankings returns the division's Top-50 ranked camps in ranking order.
+	HonorRankings(divisionID string) []TrainingCampHonorRanking
+	// HonorPoints returns the character's current camp HonorPoints (0 if not in a camp).
+	HonorPoints(divisionID string, charID int64) uint32
+	// SpendHonorPoints deducts cost from the character's camp HonorPoints in one
+	// transaction and returns the new balance and the camp's member list.
+	SpendHonorPoints(divisionID string, charID int64, cost uint32) (uint32, []TrainingCampMemberRecord, bool)
 }

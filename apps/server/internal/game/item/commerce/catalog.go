@@ -41,11 +41,14 @@ Offer
 type Offer struct {
 	Slot uint8
 	Ref  *enterworld.ItemRef
-	// Price is in Currency: PaymentGold or PaymentHonor.
-	Price    uint64
-	Currency uint8
-	Stack    uint16
-	Contents []Content
+	// Price is in Currency: PaymentGold or PaymentHonor. When a package is
+	// priced in both gold and honor (GROUP_STORE_*_HONOR), Price is the gold
+	// row, Currency is PaymentGold, and HonorPrice holds the honor row.
+	Price      uint64
+	Currency   uint8
+	HonorPrice uint64
+	Stack      uint16
+	Contents   []Content
 }
 
 // refpricepolicyofitem payment types. 2/4/8/16 are the Item Mall's silk
@@ -131,18 +134,31 @@ func Load(dir string, refs enterworld.ItemRefSource) (*Catalog, error) {
 			}
 		}
 	}
-	prices, currencies := map[string]uint64{}, map[string]uint8{}
+	goldPrices, honorPrices := map[string]uint64{}, map[string]uint64{}
 	for _, r := range tables["refpricepolicyofitem"] {
 		if len(r) < 5 || r[0] != "1" {
 			continue
 		}
 		n, e := strconv.ParseUint(r[4], 10, 32)
 		currency, ce := strconv.ParseUint(r[3], 10, 8)
-		// One price per package, in a currency an NPC shop takes.
-		if e != nil || ce != nil || uint8(currency) != PaymentGold && uint8(currency) != PaymentHonor || n == 0 || prices[r[2]] != 0 {
+		if e != nil || ce != nil || n == 0 {
+			blocked[r[2]] = true
+			continue
+		}
+		switch uint8(currency) {
+		case PaymentGold:
+			if goldPrices[r[2]] != 0 {
+				blocked[r[2]] = true
+			}
+			goldPrices[r[2]] = n
+		case PaymentHonor:
+			if honorPrices[r[2]] != 0 {
+				blocked[r[2]] = true
+			}
+			honorPrices[r[2]] = n
+		default:
 			blocked[r[2]] = true
 		}
-		prices[r[2]], currencies[r[2]] = n, uint8(currency)
 	}
 	scraps := map[string][][]string{}
 	for _, r := range tables["refscrapofpackageitem"] {
@@ -170,7 +186,8 @@ func Load(dir string, refs enterworld.ItemRefSource) (*Catalog, error) {
 		}
 		seen[key] = true
 		rows := scraps[r[3]]
-		if blocked[r[3]] || len(rows) == 0 || prices[r[3]] == 0 || refs == nil {
+		goldPrice, honorPrice := goldPrices[r[3]], honorPrices[r[3]]
+		if blocked[r[3]] || len(rows) == 0 || (goldPrice == 0 && honorPrice == 0) || refs == nil {
 			continue
 		}
 		contents, err := packageContents(rows, refs)
@@ -188,7 +205,19 @@ func Load(dir string, refs enterworld.ItemRefSource) (*Catalog, error) {
 			continue
 		}
 		first := contents[0]
-		c.Tabs[tab] = append(c.Tabs[tab], Offer{Slot: uint8(slot), Ref: first.Ref, Price: prices[r[3]], Currency: currencies[r[3]], Stack: first.Stack, Contents: contents})
+		price, currency := goldPrice, PaymentGold
+		if goldPrice == 0 {
+			price, currency = honorPrice, PaymentHonor
+		}
+		c.Tabs[tab] = append(c.Tabs[tab], Offer{
+			Slot:       uint8(slot),
+			Ref:        first.Ref,
+			Price:      price,
+			Currency:   currency,
+			HonorPrice: honorPrice,
+			Stack:      first.Stack,
+			Contents:   contents,
+		})
 
 	}
 	if err := c.loadTradeCatalog(dir); err != nil {

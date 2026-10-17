@@ -82,7 +82,11 @@ func isVersionMismatch(err error) bool {
 // Version 26 adds the optional guild founding time (foundedAtMs, native
 // _Guild.FoundationDate), stamped at creation. Guilds founded earlier keep
 // none and show as unknown; the upgrade rewrites no record.
-const CurrentVersion = 26
+// Version 27 adds the optional training-camp honor, evaluation, graduation
+// and join fields plus character campDisbandedAtMs (native _TrainingCamp /
+// _TrainingCampMember / _TrainingCampSubMentorHonorPoint). The upgrade
+// rewrites no record.
+const CurrentVersion = 27
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.
