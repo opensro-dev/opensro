@@ -136,10 +136,28 @@ func traceObjectCellsFrom(stand *objectDeckStand, x0, z0, x1, z1, tStart float64
 	}
 	sort.Float64s(cuts)
 	owner := stand.cellIndex
+	// Span midpoints sit between consecutive triangle-edge cuts. When a chord
+	// passes ~0.002u from a shared vertex across a narrow fan of internal and
+	// outline edges (region 23661 localUid 3073), objectCellPlaneYAt's -1e-4
+	// endpoint tolerance can still claim the previous cell on the next span's
+	// midpoint (barycentric ~-9e-5) and skip the adjacent cell's blocking
+	// outline edge. Match client navHeight's -1e-6 barycentric tolerance here.
 	containsSpan := func(cell int, lo, hi float64) bool {
+		const eps = -1e-6
 		t := (lo + hi) / 2
-		_, inside := objectCellPlaneYAt(m, cell, x0+dx*t, z0+dz*t)
-		return inside
+		lx, lz := x0+dx*t, z0+dz*t
+		a, b, cc := m.cellA[cell], m.cellB[cell], m.cellC[cell]
+		ax, az := float64(m.vertices[a*3]), float64(m.vertices[a*3+2])
+		bx, bz := float64(m.vertices[b*3]), float64(m.vertices[b*3+2])
+		cx, cz := float64(m.vertices[cc*3]), float64(m.vertices[cc*3+2])
+		den := (bz-cz)*(ax-cx) + (cx-bx)*(az-cz)
+		if math.Abs(den) < 1e-9 {
+			return false
+		}
+		l0 := ((bz-cz)*(lx-cx) + (cx-bx)*(lz-cz)) / den
+		l1 := ((cz-az)*(lx-cx) + (ax-cx)*(lz-cz)) / den
+		l2 := 1 - l0 - l1
+		return l0 >= eps && l1 >= eps && l2 >= eps
 	}
 	for i := 1; i < len(cuts); i++ {
 		lo, hi := cuts[i-1], cuts[i]

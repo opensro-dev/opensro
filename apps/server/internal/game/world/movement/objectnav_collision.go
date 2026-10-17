@@ -278,11 +278,27 @@ func objectEdgeGroupChordContactDetail(
 			// orient the crossing. Fail open.
 			continue
 		}
-		if outline && flags&8 != 0 && linked != nil && linked(i, originSide*srcSide > 0, t) {
+		fromSrcSide := originSide*srcSide > 0
+		if !owned && opts.walk != nil && outline {
+			// Native CRTNavMeshObj_Move (428F40 / 9B5A80) dispatches an unowned
+			// terrain walker to CRTNavMeshObj_EnterFromOutside (428300 / 9B4D30),
+			// never to the owned-cell stepper. When a prior blocked outline hit
+			// nudged the terrain walker 0.01u inward via an inward-authored
+			// vertexDirection (outsideEdgeStart), its next step starts on the
+			// srcCell side of that outline while still owned by terrain: an
+			// outward chord away from the obstacle must not re-block and nudge
+			// deeper inward, and any unowned outline hit must stay on the
+			// outsideEdgeStart branch rather than running nativeCellEntry and
+			// capturing object ownership.
+			if fromSrcSide {
+				continue
+			}
+		}
+		if outline && flags&8 != 0 && linked != nil && linked(i, fromSrcSide, t) {
 			continue
 		}
-		reflection := opts.exits && outline && originSide*srcSide > 0 && flags&0x1a == 0
-		if !reflection && !objectNavEdgeBlocks(flags, outline, originSide*srcSide > 0) {
+		reflection := (owned || opts.walk == nil) && opts.exits && outline && fromSrcSide && flags&0x1a == 0
+		if !reflection && !objectNavEdgeBlocks(flags, outline, fromSrcSide) {
 			continue
 		}
 		bestT = t
@@ -293,7 +309,8 @@ func objectEdgeGroupChordContactDetail(
 				at := opts.walkerAt(t)
 				ox, oz = x0+(x1-x0)*at, z0+(z1-z0)*at
 			}
-			*response = nativeObjectContact(mesh, edges, i, originSide*srcSide > 0, ox, oz, y0, x1, z1, reflection)
+			sourceSide := fromSrcSide && (owned || opts.walk == nil || !outline)
+			*response = nativeObjectContact(mesh, edges, i, sourceSide, ox, oz, y0, x1, z1, reflection)
 			response.outline = outline
 		}
 	}

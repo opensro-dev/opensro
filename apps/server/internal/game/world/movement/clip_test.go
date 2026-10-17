@@ -343,6 +343,69 @@ func TestClipMovementPathRealJanganVerandaRail(t *testing.T) {
 
 /*
 ================
+TestClipMovementPathRealRockInwardVertexDirection
+
+TestClipMovementPathRealRockInwardVertexDirection pins the two native
+object-nav invariants exposed by region 0x5C6D (23661) localUid 3073
+(asset 1160, rock_m_smalltree05_m_01.bms at x=985.87, y=3362.29, z=10.20):
+ 1. Several outline vertexDirections on asset 1160 point INWARD into srcCell.
+    When CRTNavMeshObj_EnterFromOutside (428300 / 9B4D30) stops a terrain
+    walker at a 0x3 outline edge and nudges it 0.01u inward via
+    outsideEdgeStart, the walker remains owned by terrain: subsequent steps
+    must neither flip into nativeCellEntry (0.2u centroid pull + object
+    ownership capture at y~3362.33) nor block an outward departure back to
+    open terrain.
+ 2. When an object-owned chord passes ~0.002u from shared vertex v[2] across
+    internal edges in[0] and in[1] to blocking outline out[3],
+    traceObjectCellsFrom must advance across cell 1 into cell 2 and clip at
+    out[3] rather than letting cell 1's -1e-4 endpoint tolerance swallow the
+    span midpoint and leak the chord through the corner.
+
+================
+*/
+func TestClipMovementPathRealRockInwardVertexDirection(t *testing.T) {
+	validator := realAuthorityValidator(t)
+
+	// 1. Terrain walker hits out[4] from outside (terrain y~3364.78 above the
+	// rock cell plane y~3362.33), gets nudged ~0.005u across the outline by
+	// the inward vertexDirection, takes a second step into the rock, and then
+	// walks back out to open terrain.
+	terrainOwner := simulation.NavOwner{Kind: simulation.NavOwnerTerrain}
+	start := simulation.Spawn{RegionID: 0x5C6D, X: 985.5, Y: 3364.8, Z: 7.0}
+	step1 := validator.ClipMovementPathFrom(start, terrainOwner, simulation.Spawn{RegionID: 0x5C6D, X: 984.0, Y: 3364.8, Z: 10.0})
+	if step1.Outcome != ClipBlocked || step1.Class != ClipClassObject {
+		t.Fatalf("step1 outcome = %s/%s (%+v), want blocked/object", step1.Outcome, step1.Class, step1)
+	}
+	if step1.RestOwner.Kind != simulation.NavOwnerTerrain || step1.Rest.Y < 3364.0 {
+		t.Fatalf("step1 captured terrain walker into object: rest=%+v owner=%+v", step1.Rest, step1.RestOwner)
+	}
+
+	step2 := validator.ClipMovementPathFrom(step1.Rest, step1.RestOwner, simulation.Spawn{RegionID: 0x5C6D, X: 983.0, Y: 3364.8, Z: 10.5})
+	if step2.RestOwner.Kind != simulation.NavOwnerTerrain || step2.Rest.Y < 3364.0 {
+		t.Fatalf("step2 captured terrain walker into object: rest=%+v owner=%+v", step2.Rest, step2.RestOwner)
+	}
+
+	escape := validator.ClipMovementPathFrom(step2.Rest, step2.RestOwner, simulation.Spawn{RegionID: 0x5C6D, X: 988.0, Y: 3364.8, Z: 4.0})
+	if escape.Outcome != ClipArrived || escape.RestOwner.Kind != simulation.NavOwnerTerrain {
+		t.Fatalf("escape from inward outline nudge failed: outcome=%s rest=%+v owner=%+v", escape.Outcome, escape.Rest, escape.RestOwner)
+	}
+
+	// 2. Near-vertex v[2] chord from inside cell 0 (localUid 3073) across
+	// in[0] -> in[1] -> out[3] must clip at out[3].
+	inRock := simulation.Spawn{RegionID: 0x5C6D, X: 982.6474609375, Y: 3362.327880859375, Z: 9.650390625}
+	rockOwner, _, ok := validator.ResolveNavOwner(inRock, simulation.NavOwner{})
+	if !ok || rockOwner.Kind != simulation.NavOwnerObject {
+		t.Fatalf("ResolveNavOwner at rock interior = %+v (ok=%v), want NavOwnerObject", rockOwner, ok)
+	}
+	corner := validator.ClipMovementPathFrom(inRock, rockOwner, simulation.Spawn{RegionID: 0x5C6D, X: 936.0, Y: 3361.0, Z: 37.0})
+	if corner.Outcome != ClipBlocked || corner.Class != ClipClassObject || corner.RestOwner.Kind != simulation.NavOwnerObject {
+		t.Fatalf("near-vertex chord leaked across out[3]: outcome=%s/%s rest=%+v owner=%+v",
+			corner.Outcome, corner.Class, corner.Rest, corner.RestOwner)
+	}
+}
+
+/*
+================
 BenchmarkClipMovementPathWarm
 
 BenchmarkClipMovementPathWarm pins the warm per-move cost of the clip
