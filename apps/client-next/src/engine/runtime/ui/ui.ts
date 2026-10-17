@@ -1393,6 +1393,8 @@ export function createUi(
 	let shopPosition: readonly [number, number] | null = null;
 	let cosTab = 1,
 		cosDraft = 0,
+		cosBoundGid = 0,
+		cosBoundMode: number | undefined,
 		guildDialog = "",
 		guildTab = 0,
 		guildSort = 121,
@@ -1857,7 +1859,7 @@ export function createUi(
 			cosSlot = -1;
 			cosPage = 0;
 			cosPlayerPage = 0;
-			cosDraft = view?.gameplay?.cosRecords?.find( r => r.gid === cosGid )?.commandMode ?? 0;
+			bindCosDraft( view?.gameplay?.cosRecords?.find( r => r.gid === cosGid ) );
 		}
 		if ( next === "Auto Potion" ) {
 			potionDraft = autoPotionDraft( view?.gameplay?.autoPotion ?? defaultAutoPotion() );
@@ -2610,7 +2612,21 @@ export function createUi(
 		cosGid = gid;
 		cosSlot = -1;
 		cosPage = 0;
-		cosDraft = record.commandMode ?? 0;
+		bindCosDraft( record );
+	}
+	/*
+	================
+	bindCosDraft
+
+	CIFCOSSetup::BindCompanion (6A95E0): records the bound companion GID
+	(+0x36C, 6A962C) and its authoritative commandMode (+0x370, 6A96ED) as the
+	working draft.
+	================
+	*/
+	function bindCosDraft( record: { readonly gid: number; readonly commandMode?: number; } | undefined ) {
+		cosDraft = record?.commandMode ?? 0;
+		cosBoundGid = record?.gid ?? 0;
+		cosBoundMode = record?.commandMode;
 	}
 	/*
 	================
@@ -4292,10 +4308,12 @@ export function createUi(
 		else if ( id.startsWith( "toggle-window:" ) ) setPanel( panelNamed( id.slice( 14 ) ), "toggle" );
 		else if ( id === "cos-bag" ) setPanel( "COS inventory" );
 		else if ( id === "cos-cycle" ) {
-			const records = view.gameplay?.cosRecords?.filter( r => cosHasInventory( r ) && !r.dead && r.hp > 0 ) ?? [];
-			cosGid = records[(records.findIndex( r => r.gid === cosGid ) + 1) % records.length]?.gid ?? 0;
+			const records = view.gameplay?.cosRecords?.filter( r => cosHasInventory( r ) && !r.dead && r.hp > 0 ) ?? [],
+				next = records[(records.findIndex( r => r.gid === cosGid ) + 1) % records.length];
+			cosGid = next?.gid ?? 0;
 			cosSlot = -1;
 			cosPage = 0;
+			bindCosDraft( next );
 		} else if ( id.startsWith( "cos-slot:" ) ) cosSlot = Number( id.slice( 9 ) );
 		else if ( id.startsWith( "cos-player:" ) ) inventorySlot = Number( id.slice( 11 ) );
 		else if ( (id === "cos-drop" || id === "cos-pickup") && view.gameplay ) {
@@ -4677,7 +4695,7 @@ export function createUi(
 				record = view.gameplay?.cosRecords?.find( r => r.gid === cosGid );
 			if ( tab === 0 || tab === 1 && cosHasInventory( record ) || tab === 2 && record?.band === 4 ) {
 				cosTab = tab;
-				cosDraft = record?.commandMode ?? 0;
+				bindCosDraft( record );
 			}
 		} else if ( id.startsWith( "cos-setting:" ) ) cosDraft ^= Number( id.slice( 12 ) );
 		else if ( id.startsWith( "cos-radio:" ) ) {
@@ -4691,7 +4709,7 @@ export function createUi(
 				sendGameplay( { kind: "cos-behavior", gid: cosGid, mode: cosDraft } );
 			}
 		} else if ( id === "cos-reset" ) {
-			cosDraft = view.gameplay?.cosRecords?.find( r => r.gid === cosGid )?.commandMode ?? 0;
+			bindCosDraft( view.gameplay?.cosRecords?.find( r => r.gid === cosGid ) );
 		} else if ( id.startsWith( "guild-tab:" ) ) {
 			const tab = Number( id.slice( 10 ) );
 			if ( tab === 4 ) setPanel( "Blocking" );
@@ -8369,6 +8387,7 @@ export function createUi(
 					cosPage = 0;
 					cosPlayerPage = 0;
 					cosGid = 0;
+					bindCosDraft( undefined );
 				}
 			}
 			if ( resizedWorld && (phase === "world" || retainedWorld) ) {
@@ -15809,11 +15828,18 @@ export function createUi(
 						cosGid = records[0]?.gid ?? 0;
 						cosSlot = -1;
 						cosPage = 0;
-						cosDraft = records[0]?.commandMode ?? 0;
+						bindCosDraft( records[0] );
 					}
 					const record = records.find( r => r.gid === cosGid ),
 						hasInventory = cosHasInventory( record ),
 						busy = !!game?.inventoryPending;
+					// 7785D9..77864C: 0xB05B selector 2 re-binds CIFCOSSetup (6A95E0) when
+					// the bound companion's commandMode changes while its window is open.
+					if (
+						panel !== "Shop" && (cosBoundGid !== (record?.gid ?? 0) || cosBoundMode !== record?.commandMode)
+					) {
+						bindCosDraft( record );
+					}
 					if ( cosTab === 1 && !hasInventory || cosTab === 2 && record?.band !== 4 ) cosTab = 0;
 					// Beside a shop (trade goods loading into a transport) the bag keeps
 					// its own close identity; closing it ends the trade, as the shop's does.
@@ -16083,7 +16109,16 @@ export function createUi(
 						}
 						for ( const node of Object.values( page ).filter( n => n.type === "CIFButton" ) ) {
 							const id = node.id === 40 ? "cos-save" : "cos-reset";
-							authoredLabeledButton( node, ox, oy, id, hudCopy( node.text ), busy );
+							// 6A96E5..6A96FA / 6A97C3..6A97FE / 6A98CD..6A9906: button 0x28
+							// (cos-save) is enabled only while draftMode != record.commandMode.
+							authoredLabeledButton(
+								node,
+								ox,
+								oy,
+								id,
+								hudCopy( node.text ),
+								busy || (node.id === 40 && cosDraft === (record?.commandMode ?? 0))
+							);
 						}
 					}
 					endWindow( admission, "service:COS inventory" );

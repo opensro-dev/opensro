@@ -289,6 +289,57 @@ test("pet window rejects empty and dead rosters and closes when its last pet dis
 	}
 });
 
+test("pet setting tab disables save when unchanged and re-binds on 0xB05B and cycle (6A95E0 / 778530)", () => {
+	const f = createFixture();
+	const petA = {
+		gid: 7,
+		refObjId: 100,
+		band: 4,
+		hp: 100,
+		mp: 0,
+		status: 28,
+		dead: false,
+		commandMode: 0x87,
+		inventory: []
+	};
+	const petB = {
+		gid: 8,
+		refObjId: 100,
+		band: 4,
+		hp: 100,
+		mp: 0,
+		status: 28,
+		dead: false,
+		commandMode: 0x03,
+		inventory: []
+	};
+	const control = id => f.step()?.controls.find( c => c.id === id );
+	try {
+		f.setGame( { cosRecords: [ petA, petB ], selectedCosGid: 7 } );
+		f.ui.event( { kind: "key", code: "Insert" } );
+		f.step();
+		f.ui.event( { kind: "activate", id: "cos-tab:2" } );
+		assert.equal( control( "cos-save" )?.disabled, true );
+		assert.equal( control( "cos-radio:128:0" )?.selected, true );
+		assert.equal( control( "cos-setting:1" )?.selected, true );
+		f.ui.event( { kind: "activate", id: "cos-setting:1" } );
+		assert.equal( control( "cos-save" )?.disabled, false );
+		assert.equal( control( "cos-setting:1" )?.selected, false );
+		// 778530 -> 6A95E0: an authoritative 0xB05B update re-binds the open draft
+		// and disables save again.
+		f.setGame( { cosRecords: [ { ...petA, commandMode: 0x07 }, petB ], selectedCosGid: 7 } );
+		assert.equal( control( "cos-radio:128:1" )?.selected, true );
+		assert.equal( control( "cos-setting:1" )?.selected, true );
+		assert.equal( control( "cos-save" )?.disabled, true );
+		// Cycling to the next companion re-binds the draft to its commandMode.
+		f.ui.event( { kind: "activate", id: "cos-cycle" } );
+		assert.equal( control( "cos-setting:4" )?.selected, false );
+		assert.equal( control( "cos-save" )?.disabled, true );
+	} finally {
+		f.ui.dispose();
+	}
+});
+
 test("a pet's disabled setting tab is dimmed with the Experimental row and looks native without it", () => {
 	for ( const grey of [ true, false ] ) {
 		const f = createFixture();

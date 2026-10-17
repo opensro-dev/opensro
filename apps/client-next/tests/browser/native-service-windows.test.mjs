@@ -267,9 +267,11 @@ test( "native service windows admit assets and preserve typed transactions", { t
 		} );
 		await page.waitForFunction( () => {
 			serviceFixture.draw();
-			// A held-over window publishes its controls disabled; wait for the admitted one.
+			// A held-over window publishes its controls disabled; once admitted,
+			// 6A96E5..6A96FA keeps cos-save disabled until the draft differs.
 			return !serviceFixture.stats().windowMissing.length &&
-				serviceFixture.semantics.controls.some( c => c.id === "cos-save" && !c.disabled );
+				serviceFixture.semantics.controls.some( c => c.id === "cos-reset" && !c.disabled ) &&
+				serviceFixture.semantics.controls.some( c => c.id === "cos-save" && c.disabled );
 		} );
 		await page.screenshot( { path: "temp/artifacts/native-service-windows/COS-settings.png" } );
 		await page.evaluate( () => {

@@ -20,6 +20,18 @@ const { createGameplay } = await import(
 function fixture() {
 	const owner = createGameplay( () => {} );
 	owner.bootstrap( { refObjSnapshot: [ { kind: "cos", refObjId: 102, tidWord: 0x21c6 } ] } );
+	owner.worldReady();
+	owner.seed( {
+		gid: 1,
+		refObjId: 1,
+		kind: "local-player",
+		regionId: 1,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0,
+		name: "Owner"
+	} );
 	owner.take();
 	// Band 4: gid, ref, hp, mp, command mode, empty name, status, dead, summon slot.
 	owner.receive( {
@@ -61,6 +73,16 @@ function fixture() {
 const changed = Uint8Array.of( 1, 7, 0, 0, 0, 2, 0xc7, 0, 0, 0 );
 test("native behavior acknowledgement updates the owning pet bitmask", () => {
 	const owner = fixture();
+	// 6A9910 / 6A1B10 / 6A2350 case 6 check CCosDataManager_FindCharData (830140)
+	// only, never the visible entity table.
+	assert.deepEqual(
+		owner.command( { kind: "cos-behavior", gid: 7, mode: 0xc7 }, 0, undefined, undefined ),
+		{ opcode: 0x705b, payload: Uint8Array.of( 7, 0, 0, 0, 2, 0xc7, 0, 0, 0 ) }
+	);
+	assert.throws(
+		() => owner.command( { kind: "cos-behavior", gid: 99, mode: 0xc7 }, 0, undefined, undefined ),
+		/No owned COS behavior authority/
+	);
 	owner.receive( { opcode: 0xb05b, payload: changed }, 0 );
 	assert.equal( owner.take().cosRecords[0].commandMode, 0xc7 );
 	owner.receive( { opcode: 0xb05b, payload: Uint8Array.of( 2, 3 ) }, 0 );

@@ -76,7 +76,7 @@ import {
 	type InteractionApproachState
 } from "@/engine/foundation/gameplay/interaction-approach";
 import { targetNotice } from "@/engine/foundation/gameplay/target-notices";
-import { constantNativeNotice } from "@/engine/foundation/gameplay/native-notice";
+import { constantNativeNotice, resolveNativeNotice } from "@/engine/foundation/gameplay/native-notice";
 import {
 	STALL_ALCHEMY_CATEGORY,
 	STALL_ALCHEMY_CODE,
@@ -2194,11 +2194,10 @@ state here before a command can claim a native wire conversation.
 				return sendFrame( { opcode: 0x7618, payload } );
 			}
 			if ( command.kind === "cos-behavior" ) {
+				// 6A9910 / 6A1B10 / 6A2350 case 6 look up only CCosDataManager_FindCharData
+				// (830140, cosRecords), never the visible actor registry.
 				const record = cosRecords.get( command.gid );
-				if (
-					!record || entity?.gid !== record.gid || entity.kind !== "cos" || entity.ownerGid !== localGid ||
-					entity.refObjId !== record.refObjId
-				) throw Error( "No owned COS behavior authority" );
+				if ( !record ) throw Error( "No owned COS behavior authority" );
 				return sendFrame( cosBehaviorRequest( record, command.mode ) );
 			}
 			if (
@@ -3637,6 +3636,27 @@ Packet handling must not depend on which HUD panel is currently open.
 						const record = cosRecords.get( cosResult.gid );
 						if ( record && !record.dead && record.hp && record.commandMode !== undefined ) {
 							sendWhenLive( cosBehaviorRequest( record, record.commandMode & ~0x80 ), true );
+						}
+					}
+					// 74FD56..74FE15: selector 2 failures dispatch category 4
+					// (74FDEB) and clear the assist target (+0xAB2C, 74FE0B);
+					// pickup (74FDCC) and every other selector (74FD6C) dispatch
+					// category 0x0C (12, e.g. 0xB4/0xB5 full-bag notices).
+					if ( p[0] === 2 ) {
+						const resolution = p[1] === 2 ?
+							resolveNativeNotice( 4, p[2]!, {
+								country: localCountry,
+								war: fortressActive( fortress ),
+								pkProhibited: false
+							} ) :
+							resolveNativeNotice( 12, p[2]! );
+						if ( resolution.kind === "notice" ) {
+							notices = [ ...notices.slice( -99 ), { ...resolution.notice, sequence: ++noticeSequence } ];
+						}
+						if ( p[1] === 2 && petAssists.has( cosResult.gid ) ) {
+							const next = new Map( petAssists );
+							next.delete( cosResult.gid );
+							petAssists = next;
 						}
 					}
 					dirty = true;

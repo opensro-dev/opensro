@@ -54,7 +54,11 @@ test("gameplay frame loop sends automatic pickup and consumes native completion"
 	assert.deepEqual( sent[2], cosPickupRequest( 2, 11 ) );
 	gameplay.receive( { opcode: 0xb69e, payload: Uint8Array.of( 2, 8, 0xb4, 2, 0, 0, 0, 11, 0, 0, 0 ) }, 3 );
 	assert.deepEqual( sent[3], { opcode: 0x705b, payload: Uint8Array.of( 2, 0, 0, 0, 2, 0x47, 0, 0, 0 ) } );
-	assert.equal( gameplay.take()?.cosRecords?.[0]?.commandMode, 0xc7 );
+	const fullBag = gameplay.take();
+	assert.equal( fullBag?.cosRecords?.[0]?.commandMode, 0xc7 );
+	assert.equal( fullBag?.notices?.at( -1 )?.key, "UIIT_MSG_COSPETERR_CANT_PICKITEM1" );
+	gameplay.receive( { opcode: 0xb69e, payload: Uint8Array.of( 2, 8, 0xb5, 2, 0, 0, 0, 11, 0, 0, 0 ) }, 3 );
+	assert.equal( gameplay.take()?.notices?.at( -1 )?.key, "UIIT_MSG_COSPETERR_CANT_PICKITEM2" );
 	gameplay.receive( { opcode: 0xb05b, payload: Uint8Array.of( 1, 2, 0, 0, 0, 2, 0x47, 0, 0, 0 ) }, 3 );
 	assert.equal( gameplay.take()?.cosRecords?.[0]?.commandMode, 0x47 );
 	const follow = gameplay.command( { kind: "cos-follow", gid: 2 }, 4, f.pet, f.frame.local );
@@ -67,7 +71,7 @@ test("gameplay frame loop sends automatic pickup and consumes native completion"
 	);
 	gameplay.resetWorld();
 	gameplay.step( 6, f.frame.local );
-	assert.equal( sent.length, 5 );
+	assert.equal( sent.length, 6 );
 });
 
 /*
