@@ -56,7 +56,12 @@ type adminOwner struct {
 	banned   []string
 }
 
-func (o *adminOwner) PlayerBannedGM(_, name string) { o.banned = append(o.banned, name) }
+func (o *adminOwner) PlayerBannedGM(_, name, jobAlias string) {
+	o.banned = append(o.banned, name)
+	if jobAlias != "" {
+		o.banned = append(o.banned, jobAlias)
+	}
+}
 
 func (*adminOwner) ToggleGMBodyStatus(string, string, uint8) bool { return false }
 

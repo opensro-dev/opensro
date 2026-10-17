@@ -17,6 +17,7 @@ success, which spends one item. The shard sends it to every player.
 package action
 
 import (
+	"strings"
 	"unicode/utf16"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -77,6 +78,10 @@ useGlobalChatting
 49B9F0 case 4. The author's line follows its own 0xB5BD success; the
 shard's copies go out once the use has committed. Natively the shard
 manager relays the line asynchronously, so it never precedes the answer.
+The line and the website transcript carry the author's display name
+(enterworld.PartyMemberName: the job alias while suited, as on every
+chat line), so what the site replays is what the shard saw; the peer
+push still excludes the author by character name, the presence identity.
 ================
 */
 func (rt *Runtime) useGlobalChatting(use globalChatUse, tail []byte, result *OpResult, after *func()) bool {
@@ -90,8 +95,9 @@ func (rt *Runtime) useGlobalChatting(use globalChatUse, tail []byte, result *OpR
 		return false
 	}
 	remaining := rt.consumeItemUseRow(c, use.row)
+	display := enterworld.PartyMemberName(c)
 	line := wire.Frame{Opcode: chat.OpChatBroadcast,
-		Payload: chat.EncodeChatBroadcastNamed(chat.ChatTypeGlobal, c.Name, message)}
+		Payload: chat.EncodeChatBroadcastNamed(chat.ChatTypeGlobal, display, message)}
 	*result = OpResult{Frames: []wire.Frame{{Opcode: wire.OpItemUseResponse,
 		Payload: wire.EncodeItemUseSuccess(use.request.Slot, remaining, use.request.TypeWord)}, line}}
 	result.Frames = append(result.Frames, rt.updateQuestInventory(c)...)
@@ -100,7 +106,7 @@ func (rt *Runtime) useGlobalChatting(use globalChatUse, tail []byte, result *OpR
 		if rt.PushShardPeerFrames != nil {
 			rt.PushShardPeerFrames(division, name, []wire.Frame{line})
 		}
-		rt.PublicChat.Record(division, chatfeed.KindGlobal, name, message)
+		rt.PublicChat.Record(division, chatfeed.KindGlobal, display, message)
 	}
 	return true
 }
@@ -110,9 +116,14 @@ func (rt *Runtime) useGlobalChatting(use globalChatUse, tail []byte, result *OpR
 PlayerBannedGM
 
 /BAN's consequence for the website (gmcommand handleBan): the banned
-character's lines leave the public chat feed. Port-only, not native.
+character's lines leave the public chat feed under either name they were
+recorded with - the character name, and the job alias a suited line
+carries. Port-only, not native.
 ================
 */
-func (rt *Runtime) PlayerBannedGM(division, name string) {
+func (rt *Runtime) PlayerBannedGM(division, name, jobAlias string) {
 	rt.PublicChat.Purge(division, name)
+	if jobAlias != "" && !strings.EqualFold(jobAlias, name) {
+		rt.PublicChat.Purge(division, jobAlias)
+	}
 }
