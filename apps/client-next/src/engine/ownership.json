@@ -22,6 +22,7 @@
     "src/engine/runtime/ui/hud/global-chat-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/specialty-deal-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/job-hud.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/academy-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/fortress-war-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/fortress-tax-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/fortress-production-hud.ts": "src/engine/runtime/ui/ui.ts",

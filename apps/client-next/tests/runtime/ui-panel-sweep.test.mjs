@@ -77,6 +77,20 @@ const OPENERS = {
 		f.state.gameplay.academy = { member: false, rows: [], request: null, page: 0 };
 		f.ui.event( { kind: "activate", id: "open-window:Academy Matching" } );
 	},
+	"Academy honor"( f ) {
+		f.state.gameplay.academy = {
+			member: false,
+			rows: [],
+			request: null,
+			page: 0,
+			pages: 0,
+			result: null,
+			honorRanks: {
+				rows: [ { ranking: 1, rank: 1, name: "Mentor", level: 60, maxLevel: 80, graduates: 3, guild: "" } ],
+				sequence: 1
+			}
+		};
+	},
 	"Stall network"( f ) {
 		f.state.gameplay.stall = stallRequest( emptyStall(), { kind: "stall-network-open", open: true } ).state;
 		f.ui.event( { kind: "activate", id: "open-window:Stall network" } );

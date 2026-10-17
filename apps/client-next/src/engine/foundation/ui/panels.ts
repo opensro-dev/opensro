@@ -23,6 +23,7 @@ uiPanels
 export function uiPanels() {
 	return [
 		"Academy",
+		"Academy honor",
 		"Academy Matching",
 		"Actions",
 		"Alchemy",

@@ -53,6 +53,8 @@ export function nativeWindowSections( name: string ): readonly string[] | undefi
 			];
 		case "ifapprenticeship":
 			return [ "Create", "NotifySubBox", "NotifyContents" ]; // 5C5B60.
+		case "ifapprenticeshiphonorranking":
+			return [ "Create", "RankingListBtn", "RankingSlotList" ]; // 6E8C10.
 		case "ifskill":
 			return [ "Create", "MainSkillWnd" ];
 		case "ifguildwarrequest":

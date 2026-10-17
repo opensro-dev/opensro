@@ -169,12 +169,18 @@ import {
 import {
 	ACADEMY_OPEN_FEE,
 	academyBootstrap,
+	academyCompulsoryGraduateRequest,
+	academyDisbandRequest,
+	academyGraduateRequest,
+	academyHonorRankRequest,
+	academyKickRequest,
+	academyLeaveRequest,
 	academyRequest,
 	academyPacket,
 	academyNoticeRequest,
 	academyOpenRequest
 } from "@/engine/foundation/gameplay/academy";
-import { academyAcknowledgment } from "@/engine/foundation/gameplay/academy-notices";
+import { academyAcknowledgment, academyStatusNotice } from "@/engine/foundation/gameplay/academy-notices";
 import { pkStatusBootstrap, pkStatusPacket } from "@/engine/foundation/gameplay/pk-status";
 import {
 	guideBootstrap,
@@ -1902,6 +1908,33 @@ state here before a command can claim a native wire conversation.
 				academy = next.state;
 				return next.frame;
 			}
+			if ( command.kind === "academy-honor-rank" ) {
+				// 5D9CF0 row 0x2E sends 0x72D0 with the selected storage NPC's GID.
+				if ( !academy || !localGid || targeting.state().target !== command.gid ) {
+					throw Error( "Select a storage NPC" );
+				}
+				return sendFrame( academyHonorRankRequest( command.gid ) );
+			}
+			if ( command.kind === "academy-disband" ) {
+				if ( !academy || !localGid ) throw Error( "Academy session is not initialized" );
+				return sendFrame( academyDisbandRequest() );
+			}
+			if ( command.kind === "academy-leave" ) {
+				if ( !academy || !localGid ) throw Error( "Academy session is not initialized" );
+				return sendFrame( academyLeaveRequest() );
+			}
+			if ( command.kind === "academy-graduate" ) {
+				if ( !academy || !localGid ) throw Error( "Academy session is not initialized" );
+				return sendFrame( academyGraduateRequest( command.satisfaction ) );
+			}
+			if ( command.kind === "academy-kick" ) {
+				if ( !academy || !localGid ) throw Error( "Academy session is not initialized" );
+				return sendFrame( academyKickRequest( command.name ) );
+			}
+			if ( command.kind === "academy-compulsory-graduate" ) {
+				if ( !academy || !localGid ) throw Error( "Academy session is not initialized" );
+				return sendFrame( academyCompulsoryGraduateRequest( command.name ) );
+			}
 			// 6A5570: an unnamed pet's one name (pet-name.ts); the client's own
 			// checks ran in the name box.
 			if ( command.kind === "cos-name" ) {
@@ -2990,18 +3023,15 @@ Packet handling must not depend on which HUD panel is currently open.
 				if ( academy ) {
 					const next = academyPacket( academy, frame );
 					if ( next ) {
-						// 774C64/69: an authoritative notice update also shows child 23.
-						if ( frame.opcode === 0x3ac5 && frame.payload[0] === 7 ) {
-							notices = [ ...notices.slice( -99 ), {
-								key: "UIIT_MSG_TC_COMMON_KNOW_REMIND_UPDATE",
-								value: 0,
-								notificationBanner: true,
-								bannerOnly: true,
-								sequence: ++noticeSequence
-							} ];
+						const statusNotice = academyStatusNotice( academy, next, frame );
+						if ( statusNotice ) {
+							notices = [ ...notices.slice( -99 ), { ...statusNotice, sequence: ++noticeSequence } ];
 						}
-						// 769C6B / 769DA3: matching failures use academy category 1D.
-						if ( (frame.opcode === 0xb701 || frame.opcode === 0xb592) && frame.payload[0] === 2 ) {
+						// 769C6B / 769DA3 / 771750: matching and honor-ranking failures use academy category 1D.
+						if (
+							(frame.opcode === 0xb701 || frame.opcode === 0xb592 || frame.opcode === 0xb2d0) &&
+							frame.payload[0] === 2
+						) {
 							const notice = constantNativeNotice( 0x1d, frame.payload[1]! );
 							if ( notice ) {
 								notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
@@ -3013,13 +3043,6 @@ Packet handling must not depend on which HUD panel is currently open.
 							const notice = frame.payload[0] === 1 ?
 								{ key: "UIIT_MSG_TC_OPEN_SUCCESS", value: 0 } :
 								constantNativeNotice( 0x1d, frame.payload[1]! );
-							if ( notice ) {
-								notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
-							}
-						}
-						// 774D6E: membership-seed refusal uses the same academy dispatcher.
-						if ( frame.opcode === 0x3ac5 && frame.payload[0] === 10 && frame.payload[1] === 2 ) {
-							const notice = constantNativeNotice( 0x1d, frame.payload[2]! );
 							if ( notice ) {
 								notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 							}

@@ -199,9 +199,12 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 						[ { id: "storage-open", label: copy( "UIIT_STT_UNITY_SERVER_USE_STORAGEROOM" ) } ] :
 						[]),
 					// 5D9100 appends 0x2D right after the storage row (both under
-					// capability 4).
+					// capability 4), then 0x2E unconditionally under capability 4.
 					...(input.canAcademyOpen ?
 						[ { id: "npc-academy-open", label: copy( "UIIT_STT_TC_OPEN" ) } ] :
+						[]),
+					...(input.canStorage ?
+						[ { id: "npc-academy-honor", label: copy( "UIIT_STT_TC_HONOR_RANKING" ) } ] :
 						[]),
 					// 5D9100 lists row 0x2F after the storage rows.
 					...(input.canMagicOption ?

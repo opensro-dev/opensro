@@ -334,6 +334,16 @@ import {
 } from "@/engine/foundation/gameplay/guild-manager";
 import { noticeText } from "@/engine/foundation/ui/notice-text";
 import {
+	ACADEMY_HONOR_PANEL,
+	ACADEMY_JUDGE_OPTIONS,
+	academyHonorBadge,
+	academyHonorPage,
+	academyHonorPages,
+	academyIsLeader,
+	academySlotAction,
+	createAcademyHud
+} from "./hud/academy-hud";
+import {
 	JOB_ALIAS_CHECK,
 	JOB_ALIAS_CREATE,
 	JOB_ALIAS_MAX_LENGTH,
@@ -1134,6 +1144,7 @@ export function createUi(
 	// The last AcademyState.opened seen: an accepted opening (0xB2EC [1])
 	// opens the Academy tab (76FBA0 -> CGInterface_OpenAcademyTab 69C810).
 	let academyOpenedSeen = 0;
+	const academyHud = createAcademyHud();
 	const hud = createHudResources( assets, base ),
 		guideResources = createGuideResources( assets, base ),
 		minimapResources = createMinimapResources( assets, base ),
@@ -1771,6 +1782,7 @@ export function createUi(
 		if ( next !== FORTRESS_TAX_PANEL ) fortressTaxHud.close();
 		if ( next !== FORTRESS_PRODUCTION_PANEL ) fortressProductionHud.close();
 		if ( next !== JOB_RANK_PANEL ) jobHud.closeRank();
+		if ( next !== ACADEMY_HONOR_PANEL ) academyHud.closeHonor();
 		// Leave hooks run only after admission. Never restore drafts or close a
 		// server workflow for a rejected switch or a repeated open/select action.
 		blockDialog = null;
@@ -2952,6 +2964,14 @@ export function createUi(
 			const conversation = view.gameplay?.npcConversation;
 			if ( !conversation || conversation.phase !== "menu" ) return;
 			jobHud.ask( "academy-open", conversation.gid, 0 );
+			dirty = true;
+			return;
+		}
+		if ( id === "npc-academy-honor" ) {
+			// 5D9CF0 case 0x2E: sends 0x72D0 with the storage NPC's GID.
+			const conversation = view.gameplay?.npcConversation;
+			if ( !conversation || conversation.phase !== "menu" ) return;
+			sendGameplay( { kind: "academy-honor-rank", gid: conversation.gid } );
 			dirty = true;
 			return;
 		}
@@ -4423,6 +4443,11 @@ export function createUi(
 			setPanel( "" );
 		} else if ( id === "job-rank-close" ) {
 			setPanel( "" );
+		} else if ( id === "academy-honor-close" || id === "academy-honor-confirm" ) {
+			setPanel( "" );
+		} else if ( id === "academy-honor-prev" || id === "academy-honor-next" ) {
+			const rows = view.gameplay?.academy?.honorRanks?.rows ?? [];
+			academyHud.turnHonorPage( id === "academy-honor-prev" ? -1 : 1, academyHonorPages( rows.length ) );
 		} else if ( id === "job-rank-prev" || id === "job-rank-next" ) {
 			const open = jobHud.rank(),
 				list = open && view.gameplay?.jobRanks?.lists.find( l => l.job === open.job && l.kind === open.kind );
@@ -4669,11 +4694,22 @@ export function createUi(
 		} // 5C50B0 / 81AFB0: only the local academy master opens mode 2.
 		else if ( id === "academy-notice" ) {
 			const camp = view.gameplay?.academy;
-			if ( camp?.member && camp.members?.some( m => m.kind === 0 && m.id === camp.localMemberId ) ) {
+			if ( academyIsLeader( camp ) ) {
 				guildDialog = "academy-notice";
 				socialSubject = "";
 				socialContents = "";
 			}
+		} else if ( id === "academy-dismiss" ) {
+			// 5C51A0 -> 5C53C0 case 1: leader confirms dissolution before 0x77C5.
+			if ( academyIsLeader( view.gameplay?.academy ) ) {
+				academyHud.askDisband();
+			}
+		} else if ( id.startsWith( "academy-slot-action:" ) ) {
+			const camp = view.gameplay?.academy;
+			const memberId = Number( id.slice( 20 ) );
+			const member = camp?.members?.find( m => m.id === memberId );
+			const action = member ? academySlotAction( camp, member ) : null;
+			if ( action ) academyHud.activateSlotAction( action );
 		} else if ( id === "guild-notice-read" ) {
 			if ( view.gameplay?.social?.guild?.contents ) {
 				grantPowerHud.close();
@@ -5390,6 +5426,52 @@ export function createUi(
 								{ kind: "academy-open" }
 						);
 					}
+					return;
+				}
+				if ( event.kind !== "hover" ) return;
+			}
+			if ( academyHud.currentConfirm() !== null ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "academy-confirm-no"
+				) {
+					academyHud.cancelConfirm();
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "academy-confirm-yes"
+				) {
+					const command = academyHud.takeConfirm();
+					dirty = true;
+					if ( command && view?.session?.phase === "world" ) sendGameplay( command );
+					return;
+				}
+				if ( event.kind !== "hover" ) return;
+			}
+			if ( academyHud.judge() !== null ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" &&
+						(event.id === "academy-judge-cancel" || event.id === "academy-judge-close")
+				) {
+					academyHud.closeJudge();
+					dirty = true;
+					return;
+				}
+				if ( event.kind === "activate" && event.id.startsWith( "academy-judge-select:" ) ) {
+					academyHud.selectJudge( Number( event.id.slice( 21 ) ) );
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "academy-judge-confirm"
+				) {
+					const command = academyHud.takeJudge();
+					dirty = true;
+					if ( command && view?.session?.phase === "world" ) sendGameplay( command );
 					return;
 				}
 				if ( event.kind !== "hover" ) return;
@@ -7622,6 +7704,12 @@ export function createUi(
 				academyOpenedSeen = academyOpened;
 				if ( academyOpened > 0 && setPanel( "Academy", "open" ) ) dirty = true;
 			}
+			academyHud.syncCamp( next.gameplay?.academy );
+			academyHud.observeHonor( next.gameplay?.academy?.honorRanks );
+			if ( academyHud.honor() && panel !== ACADEMY_HONOR_PANEL && canLeavePanel() ) {
+				setPanel( ACADEMY_HONOR_PANEL );
+				dirty = true;
+			}
 			// A collected outcome closes the talk (75D5C0); a rank answer opens its window.
 			jobHud.observeChecked( next.gameplay?.jobAliasChecked );
 			if ( jobHud.observe( next.gameplay?.jobRanks?.opened, next.gameplay?.jobOutcome ) ) {
@@ -8200,6 +8288,7 @@ export function createUi(
 					focusRequest = undefined;
 					speech.reset();
 					academyWasVisible = false;
+					academyHud.reset();
 					rememberedMainPopup = "Character";
 					chatScroll.reset();
 					statusScroll.reset();
@@ -12485,13 +12574,33 @@ export function createUi(
 						if ( node.id === 140 || !leader && [ 14, 15, 41, 42, 43, 44, 45, 46 ].includes( node.id ) ) {
 							continue;
 						}
+						if ( node.id === 15 ) {
+							const badge = leader ? academyHonorBadge( camp?.evaluation ) : "";
+							if ( badge ) authoredImage( node, ox, oy, ROOT + badge );
+							continue;
+						}
 						if ( node.type === "CIFApprenticeShipSlot" ) {
 							authoredImage( node, ox, oy );
 							const member = node.id < 32 ? assistants[node.id - 30] : students[node.id - 32];
 							if ( member ) {
 								const sx = ox + node.rect[0], sy = oy + node.rect[1], rank = academyRank( member );
 								for ( const child of authoredPaintOrder( hudData.windows.ifapprenticeshipslot! ) ) {
-									if ( child.type === "CIFButton" ) continue;
+									if ( child.type === "CIFButton" ) {
+										const slotAction = academySlotAction( camp, member );
+										if ( slotAction ) {
+											const label = hudCopy( slotAction.labelKey );
+											authoredButton(
+												child,
+												sx,
+												sy,
+												"academy-slot-action:" + member.id,
+												label,
+												false
+											);
+											if ( label ) authoredText( child, sx, sy, label );
+										}
+										continue;
+									}
 									authoredChrome( child, sx, sy );
 									if ( child.id === 11 ) authoredText( child, sx, sy, member.name );
 									if ( child.id === 13 ) {
@@ -12538,8 +12647,8 @@ export function createUi(
 									"academy-notice",
 								copy = node.id === 48 ? hudCopy( "UIIT_STT_PARTY_DISSOLVE" ) : hudCopy( node.text ),
 								disabled = node.id !== 22 &&
-									(id !== "academy-notice" || !camp?.member ||
-										!camp.members?.some( m => m.kind === 0 && m.id === camp.localMemberId ));
+									((id !== "academy-notice" && id !== "academy-dismiss") ||
+										!academyIsLeader( camp ));
 							authoredButton( node, ox, oy, id, copy, disabled );
 							if ( copy ) {
 								authoredText(
@@ -15269,6 +15378,65 @@ export function createUi(
 						}
 						endWindow( admission, "service:" + JOB_RANK_PANEL );
 					}
+				}
+				const academyHonor = panel === ACADEMY_HONOR_PANEL ? academyHud.honor() : null;
+				if (
+					academyHonor && hudData?.windows.ifapprenticeshiphonorranking &&
+					hudData.windows.ifapprenticeshiphonorslot && hudData.root.GDR_APPRENTICESHIP_HONOR_RANK
+				) {
+					// CIFApprenticeShipHonorRanking (6E8C10) and CIFApprenticeShipHonorSlot
+					// (6E91D0): 10 rows per page (slots 30..39, 0x1E..0x27), Confirm (3) and spin control (4).
+					const admission = beginWindow(),
+						root = hudData.root.GDR_APPRENTICESHIP_HONOR_RANK,
+						layout = hudData.windows.ifapprenticeshiphonorranking,
+						slotLayout = hudData.windows.ifapprenticeshiphonorslot,
+						nodes = Object.values( layout ),
+						slotNodes = Object.values( slotLayout ),
+						byId = ( id: number ) => nodes.find( n => n.id === id ),
+						rows = game?.academy?.honorRanks?.rows ?? [],
+						totalPages = academyHonorPages( rows.length ),
+						slots = academyHonorPage( rows, academyHonor.page, hudData.strings ),
+						[px, py] = windowOrigin( ACADEMY_HONOR_PANEL, [
+							Math.max( 0, (w - root.rect[2]) / 2 ),
+							Math.max( 0, (h - root.rect[3]) / 2 ),
+							root.rect[2],
+							root.rect[3]
+						] );
+					nativeFrame( root, px, py, hudCopy( root.text ), "academy-honor-close" );
+					nativePage( layout, px, py, [ 3, 4, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 ] );
+					const confirm = byId( 3 );
+					if ( confirm ) {
+						authoredLabeledButton( confirm, px, py, "academy-honor-confirm", hudCopy( confirm.text ) );
+					}
+					for ( const [index, slot] of slots.entries() ) {
+						const holder = byId( 30 + index );
+						if ( !holder ) continue;
+						const [sx, sy] = authoredRect( holder, px, py );
+						nativePage( slotLayout, sx, sy, [ 1, 2, 3, 4, 5, 6 ] );
+						if ( !slot ) continue;
+						for ( const node of slotNodes ) {
+							if ( node.id === 1 ) authoredText( node, sx, sy, slot.rankingText );
+							else if ( node.id === 2 && slot.badgePath ) {
+								authoredImage( node, sx, sy, ROOT + slot.badgePath );
+							} else if ( node.id === 3 ) authoredText( node, sx, sy, slot.nameText );
+							else if ( node.id === 4 ) authoredText( node, sx, sy, slot.levelText );
+							else if ( node.id === 5 ) authoredText( node, sx, sy, slot.graduatesText );
+							else if ( node.id === 6 ) authoredText( node, sx, sy, slot.guildText );
+						}
+					}
+					const spin = byId( 4 );
+					if ( spin ) {
+						nativeSpin(
+							spin,
+							px,
+							py,
+							"academy-honor-prev",
+							"academy-honor-next",
+							academyHonor.page,
+							totalPages
+						);
+					}
+					endWindow( admission, "service:" + ACADEMY_HONOR_PANEL );
 				}
 				const grant = game?.magicOption;
 				if ( panel === GRANT_PANEL && grant && hudData?.windows.ifgrantmagicattributewnd ) {
@@ -20756,15 +20924,78 @@ export function createUi(
 				blocks.push( full );
 				endWindow( admission, "service:" + JOB_ALIAS_PANEL );
 			}
-			if ( worldVisible && (jobAsk || aliasWindow?.confirming) ) {
-				// 5D26F0's question boxes (types 4, 5 and 6) and the alias window's
-				// confirm (646470). CIFSimpleMessageBox_SetTextAndResize (52DB20):
-				// SML2 text renders as markup (centred lines, breaks), never as raw
-				// tags. The alias texts take 646470's arguments with the checked
-				// name: create (name, alias); modify (alias, new alias, level x
-				// 50,000 gold).
+			const judgeSatisfaction = academyHud.judge();
+			if (
+				worldVisible && judgeSatisfaction !== null && aliasData?.windows.ifapprenticeshipjudge &&
+				aliasData.root.GDR_APPRENTICESHIP_JUDGE
+			) {
+				// CIFApprenticeShipJudge (6E97A0): five horizontal radio buttons at
+				// 70 px spacing (param1 "5,70", wire 4..0), Confirm (30) and Cancel (31).
+				const admission = beginWindow(),
+					root = aliasData.root.GDR_APPRENTICESHIP_JUDGE,
+					page = aliasData.windows.ifapprenticeshipjudge,
+					nodes = Object.values( page ),
+					byId = ( id: number ) => nodes.find( n => n.id === id ),
+					jx = Math.max( 0, (w - root.rect[2]) / 2 ),
+					jy = Math.max( 0, (h - root.rect[3]) / 2 );
+				controls = [];
+				blocks = [ full ];
+				nativeFrame( root, jx, jy, hudCopy( root.text ), "academy-judge-close" );
+				nativePage( page, jx, jy, [ 20, 30, 31 ] );
+				const radio = byId( 20 );
+				if ( radio ) {
+					for ( const option of ACADEMY_JUDGE_OPTIONS ) {
+						const r: UiRect = [
+								jx + radio.rect[0] + option.index * 70,
+								jy + radio.rect[1],
+								16,
+								16
+							],
+							selected = judgeSatisfaction === option.satisfaction,
+							path = ROOT + "interface/ifcommon/com_radiobutton_" + (selected ? "on" : "off") + ".png",
+							label = hudCopy( option.labelKey );
+						image( r, path );
+						quads.push( ...text.quads( label, [ r[0] + 20, r[1] + 2, 50, 12 ], full, white ) );
+						controls.push( {
+							id: "academy-judge-select:" + option.satisfaction,
+							label,
+							rect: [ r[0], r[1], 68, 16 ],
+							kind: "button",
+							selected
+						} );
+					}
+				}
+				const confirmBtn = byId( 30 ), cancelBtn = byId( 31 );
+				if ( confirmBtn ) {
+					authoredLabeledButton(
+						confirmBtn,
+						jx,
+						jy,
+						"academy-judge-confirm",
+						hudCopy( confirmBtn.text )
+					);
+				}
+				if ( cancelBtn ) {
+					authoredLabeledButton(
+						cancelBtn,
+						jx,
+						jy,
+						"academy-judge-cancel",
+						hudCopy( cancelBtn.text )
+					);
+				}
+				endWindow( [ admission[0], 0, 0, admission[3] ], "modal:academy-judge" );
+			}
+			const academyAsk = academyHud.currentConfirm();
+			if ( worldVisible && (jobAsk || aliasWindow?.confirming || academyAsk) ) {
+				// 5D26F0's question boxes (types 4, 5 and 6), the alias window's
+				// confirm (646470) and the academy camp confirms (5C51A0 / 5C7550).
+				// CIFSimpleMessageBox_SetTextAndResize (52DB20): SML2 text renders as
+				// markup (centred lines, breaks), never as raw tags.
 				const message = hudCopy(
-						jobAsk ?
+						academyAsk ?
+							academyAsk.key :
+							jobAsk ?
 							(jobAsk.kind === "join" ?
 								"UIIT_STT_JOBGUILD_JOIN_WINDOW" :
 								jobAsk.kind === "withdraw" ?
@@ -20774,7 +21005,11 @@ export function createUi(
 							"UIIT_STT_ALIAS_MODIFY_WINDOW" :
 							"UIIT_STT_ALIAS_CREATE_WINDOW"
 					),
-					args = jobAsk || !aliasWindow ? [] : aliasWindow.modify ?
+					args = academyAsk ?
+						academyAsk.args :
+						jobAsk || !aliasWindow ?
+						[] :
+						aliasWindow.modify ?
 						[
 							view?.gameplay?.job?.alias ?? "",
 							aliasWindow.checked,
@@ -20820,7 +21055,9 @@ export function createUi(
 					quads.push( ...out.quads );
 					paths.push( ...out.paths );
 				} else quads.push( ...text.quads( filled, layout.name, full, white, { hAlign: 1, vAlign: 0 } ) );
-				const [yes, no] = jobAsk ?
+				const [yes, no] = academyAsk ?
+					[ "academy-confirm-yes", "academy-confirm-no" ] :
+					jobAsk ?
 					[ "job-confirm-yes", "job-confirm-no" ] :
 					[ "job-alias-yes", "job-alias-no" ];
 				button( yes, hudCopy( "UIIT_CTL_YES" ), ...layout.accept.slice( 0, 3 ) as [number, number, number] );

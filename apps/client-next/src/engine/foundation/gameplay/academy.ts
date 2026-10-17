@@ -48,9 +48,19 @@ export interface AcademyMember {
 	readonly y?: number;
 	readonly z?: number;
 }
+export interface AcademyHonorRow {
+	readonly ranking: number;
+	readonly rank: number;
+	readonly name: string;
+	readonly level: number;
+	readonly maxLevel: number;
+	readonly graduates: number;
+	readonly guild: string;
+}
 export interface AcademyState {
 	readonly members?: readonly AcademyMember[];
 	readonly localMemberId?: number;
+	readonly evaluation?: number;
 	readonly subject?: string;
 	readonly contents?: string;
 	readonly member: boolean;
@@ -62,6 +72,12 @@ export interface AcademyState {
 	// Count of accepted openings (0xB2EC [1]); 76FBA0 then opens the
 	// Academy tab (CGInterface_OpenAcademyTab), which the UI does on a change.
 	readonly opened?: number;
+	// 771750 -> 69EEE0: each accepted 0xB2D0 replaces the Honor Ranking list
+	// and opens CIFApprenticeShipHonorRanking at page 0.
+	readonly honorRanks?: {
+		readonly rows: readonly AcademyHonorRow[];
+		readonly sequence: number;
+	};
 }
 export type AcademyCommand =
 	| { readonly kind: "academy-page"; readonly page: number; }
@@ -72,7 +88,13 @@ export type AcademyCommand =
 	| { readonly kind: "academy-notice"; readonly subject: string; readonly contents: string; }
 	| {
 		readonly kind: "academy-open";
-	};
+	}
+	| { readonly kind: "academy-honor-rank"; readonly gid: number; }
+	| { readonly kind: "academy-disband"; }
+	| { readonly kind: "academy-leave"; }
+	| { readonly kind: "academy-graduate"; readonly satisfaction: number; }
+	| { readonly kind: "academy-kick"; readonly name: string; }
+	| { readonly kind: "academy-compulsory-graduate"; readonly name: string; };
 /*
 ================
 academyBootstrap
@@ -102,7 +124,7 @@ academyRequest
 */
 export function academyRequest(
 	state: AcademyState,
-	command: Exclude<AcademyCommand, { kind: "academy-notice"; } | { kind: "academy-open"; }>,
+	command: Extract<AcademyCommand, { kind: "academy-page" | "academy-join"; }>,
 	level?: number
 ): { state: AcademyState; frame: WireFrame; } {
 	if ( state.request ) throw Error( "Academy request in progress" );
@@ -194,6 +216,7 @@ export function academyPacket( state: AcademyState, frame: WireFrame ): AcademyS
 			member: false,
 			members: [],
 			localMemberId: undefined,
+			...(state.evaluation !== undefined ? { evaluation: undefined } : {}),
 			subject: undefined,
 			contents: undefined
 		};
@@ -204,9 +227,22 @@ export function academyPacket( state: AcademyState, frame: WireFrame ): AcademyS
 		if ( status === 3 ? ![ 1, 2, 3 ].includes( flag ) : ![ 0, 1 ].includes( flag ) ) return state;
 		if ( !(state.members ?? []).some( m => m.id === id ) ) throw Error( "Unknown academy member removal" );
 		if ( id === state.localMemberId && !(status === 3 && flag === 3) ) {
-			return { ...state, member: false, members: [], localMemberId: undefined };
+			return {
+				...state,
+				member: false,
+				members: [],
+				localMemberId: undefined,
+				...(state.evaluation !== undefined ? { evaluation: undefined } : {})
+			};
 		}
 		return { ...state, members: state.members?.filter( m => m.id !== id ) };
+	}
+	// 774D78 (case 0xB => wire subtype 12) updates the camp evaluation tier (+0x34).
+	if ( frame.opcode === 0x3ac5 && p[0] === 12 ) {
+		u( 1 );
+		const evaluation = u( 1 );
+		if ( at !== p.length ) throw Error( "Trailing academy evaluation bytes" );
+		return { ...state, evaluation };
 	}
 	if ( frame.opcode === 0x3ac5 && p[0] === 13 ) {
 		u( 1 );
@@ -245,11 +281,12 @@ export function academyPacket( state: AcademyState, frame: WireFrame ): AcademyS
 		return state;
 	}
 	// 82AA10 / 8290E0: the camp record the status-10 seed and the 0xB2EC
-	// opening share - the local member id, a 17-byte block, the notice and
-	// the counted roster.
+	// opening share - the local member id, a 16-byte block plus the +0x34
+	// evaluation byte, the notice and the counted roster.
 	const campRecord = (): AcademyState => {
 		const localMemberId = u( 4 );
-		for ( let i = 0; i < 17; i++ ) u( 1 );
+		for ( let i = 0; i < 16; i++ ) u( 1 );
+		const evaluation = u( 1 );
 		const subject = str( false ), contents = str( false ), count = u( 1 );
 		if ( count > 8 ) throw Error( "Academy roster exceeds native capacity" );
 		const members: AcademyMember[] = [];
@@ -263,6 +300,7 @@ export function academyPacket( state: AcademyState, frame: WireFrame ): AcademyS
 			...state,
 			member: members.some( m => m.id === localMemberId ),
 			localMemberId,
+			...(evaluation || state.evaluation !== undefined ? { evaluation: evaluation || undefined } : {}),
 			subject,
 			contents,
 			members
@@ -333,6 +371,34 @@ export function academyPacket( state: AcademyState, frame: WireFrame ): AcademyS
 		if ( (flag !== 1 && flag !== 2) || at !== p.length ) throw Error( "Invalid academy join result" );
 		return { ...state, request: state.request?.kind === "join" ? null : state.request, result };
 	}
+	// 771750: [1] and up to 50 honor-rank rows; [2] and one category-0x1D error byte.
+	if ( frame.opcode === 0xb2d0 ) {
+		const result = u( 1 );
+		if ( result === 2 ) {
+			u( 1 );
+			if ( at !== p.length ) throw Error( "Trailing academy honor ranking bytes" );
+			return state;
+		}
+		if ( result !== 1 ) throw Error( "Invalid academy honor ranking answer" );
+		const count = u( 1 );
+		if ( count > 50 ) throw Error( "Academy honor ranking exceeds native capacity" );
+		const rows: AcademyHonorRow[] = [];
+		for ( let i = 0; i < count; i++ ) {
+			const ranking = u( 4 ),
+				rank = u( 1 ),
+				name = str( false ),
+				level = u( 1 ),
+				maxLevel = u( 1 ),
+				graduates = u( 4 ),
+				guild = str( false );
+			rows.push( { ranking, rank, name, level, maxLevel, graduates, guild } );
+		}
+		if ( at !== p.length ) throw Error( "Trailing academy honor ranking bytes" );
+		return {
+			...state,
+			honorRanks: { rows, sequence: (state.honorRanks?.sequence ?? 0) + 1 }
+		};
+	}
 	return null;
 }
 
@@ -396,4 +462,93 @@ sends zero.
 */
 export function academyOpenRequest(): WireFrame {
 	return { opcode: 0x72ec, payload: new Uint8Array( 4 ) };
+}
+
+/*
+================
+academyHonorRankRequest
+
+703070's 0x72D0: [u32 gid] from 5D9CF0 row 0x2E on the storage NPC.
+================
+*/
+export function academyHonorRankRequest( gid: number ): WireFrame {
+	const payload = new Uint8Array( 4 );
+	new DataView( payload.buffer ).setUint32( 0, gid >>> 0, true );
+	return { opcode: 0x72d0, payload };
+}
+
+/*
+================
+academyDisbandRequest
+
+702E70's 0x77C5: empty payload from 5C53C0 confirm case 1 (dissolve).
+================
+*/
+export function academyDisbandRequest(): WireFrame {
+	return { opcode: 0x77c5, payload: new Uint8Array( 0 ) };
+}
+
+/*
+================
+academyLeaveRequest
+
+702FD0's 0x7785: empty payload from 5C76C0 confirm case 4 (leave).
+================
+*/
+export function academyLeaveRequest(): WireFrame {
+	return { opcode: 0x7785, payload: new Uint8Array( 0 ) };
+}
+
+/*
+================
+academyGraduateRequest
+
+702F10's 0x710A: [u8 satisfaction] (4..0 from 6E9AC0, or 0 from 5C76C0 case 5).
+================
+*/
+export function academyGraduateRequest( satisfaction: number ): WireFrame {
+	if ( !Number.isInteger( satisfaction ) || satisfaction < 0 || satisfaction > 4 ) {
+		throw Error( "Invalid academy graduate satisfaction" );
+	}
+	return { opcode: 0x710a, payload: Uint8Array.of( satisfaction ) };
+}
+
+/*
+================
+encodeAcademyMemberName
+
+704BB0 / 704D30 write [u16 len][Windows-1252 bytes] for the target member's name.
+================
+*/
+function encodeAcademyMemberName( name: string ): Uint8Array {
+	const clean = name.split( "\0", 1 )[0]!;
+	if ( !clean.length ) throw Error( "Empty academy member name" );
+	const bytes = encodeWindows1252( clean );
+	if ( bytes.length > 65535 ) throw Error( "Academy member name exceeds wire string length" );
+	const payload = new Uint8Array( 2 + bytes.length );
+	new DataView( payload.buffer ).setUint16( 0, bytes.length, true );
+	payload.set( bytes, 2 );
+	return payload;
+}
+
+/*
+================
+academyKickRequest
+
+704BB0's 0x74D4: [u16 len][Windows-1252 name] from 5C76C0 confirm case 2 (ban).
+================
+*/
+export function academyKickRequest( name: string ): WireFrame {
+	return { opcode: 0x74d4, payload: encodeAcademyMemberName( name ) };
+}
+
+/*
+================
+academyCompulsoryGraduateRequest
+
+704D30's 0x736D: [u16 len][Windows-1252 name] from 5C76C0 confirm case 1.
+================
+*/
+export function academyCompulsoryGraduateRequest( name: string ): WireFrame {
+	return { opcode: 0x736d, payload: encodeAcademyMemberName( name ) };
 }
