@@ -795,6 +795,9 @@ fails; retry persistence without restoring stale slot occupancy.
 	let jobKillNotices = true;
 	// The Experimental "Drop & plus notices" row, on the same terms.
 	let dropPlusNotices = true;
+	// The Experimental "Homing projectiles" row: off by default so projectiles
+	// fly to their launch-captured endpoint as natively.
+	let homingProjectiles = false;
 	let approach: InteractionApproachState = { phase: "idle" };
 	let returnScroll: ReturnScrollCast | undefined, teleportMode = 0;
 	const cosSelection = createCosSelection();
@@ -1163,6 +1166,7 @@ The Experimental window's gameplay rows (experimentalGameplay).
 			predictedRunUp = value.predictedRunUp === true;
 			jobKillNotices = value.jobKillNotices !== false;
 			dropPlusNotices = value.dropPlusNotices !== false;
+			homingProjectiles = value.homingProjectiles === true;
 		},
 		/*
 ================
@@ -4347,6 +4351,7 @@ The published plane when something changed since the last take, else null.
 				...(tradeTiers ? { tradeTiers } : {}),
 				...(jobSuitHidesArmor ? { jobSuitHidesArmor } : {}),
 				...(moonlitThiefSuit ? { moonlitThiefSuit } : {}),
+				...(homingProjectiles ? { homingProjectiles } : {}),
 				...(reverseMapPoints.length ? { reverseMapPoints } : {}),
 				storage: presentedStorage(),
 				playerModels: localPlayerModels(),

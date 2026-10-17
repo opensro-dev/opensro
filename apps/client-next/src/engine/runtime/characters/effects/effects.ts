@@ -78,7 +78,7 @@ does not require copying unrelated inventory windows, guild or quest state.
 */
 type EffectGameplay = Pick<
 	GameplayState,
-	"localGid" | "pose" | "casts" | "vitals" | "questMarkers" | "inventory" | "attachedEffects"
+	"localGid" | "pose" | "casts" | "vitals" | "questMarkers" | "inventory" | "attachedEffects" | "homingProjectiles"
 >;
 // TID4 6 in the COS type word: the captured quest monster.
 const CAPTURED_MONSTER_TYPE = 6 << 11;
@@ -1698,13 +1698,14 @@ export function createCharacterEffects(
 												speed: launch!,
 												delay: curved ? 0 : motion.delayMs / 1000,
 												arrivalResource: stage.arrivalResource ?? null,
-												// A straight shot at one other actor follows it
-												// (stepHomingProjectile); arcs, curves, chains and
-												// radial volleys keep their captured paths, and so does
-												// a shot at the local player, whose live pose is the
-												// predicted one, not its entity row.
-												homing: !curved && !arc && !radial && !chain && !targetLocal &&
-														targetGid !== gameplay?.localGid &&
+												// Port-only, not native: when the Experimental homing
+												// projectiles option is on, a straight shot at one other
+												// actor follows it (stepHomingProjectile); natively
+												// CProjectileTrace_Process (8D8580) keeps its captured
+												// launch start (+0x58) and end (+0x64) vectors.
+												homing: gameplay?.homingProjectiles === true && !curved && !arc &&
+														!radial && !chain &&
+														!targetLocal && targetGid !== gameplay?.localGid &&
 														stage.action === "AT_MOV_1TAR" ?
 													{
 														state: {

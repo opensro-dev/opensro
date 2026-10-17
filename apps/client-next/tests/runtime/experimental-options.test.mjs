@@ -58,7 +58,9 @@ const OFF = Object.freeze( {
 	// On by default (owner 2026-10-15): the notice banner shows for 5 s.
 	shortNotices: true,
 	// On by default (owner 2026-10-15): Withdraw asks before a guild ban.
-	confirmGuildBan: true
+	confirmGuildBan: true,
+	// Off by default: straight projectiles keep their launch-captured endpoint (8D8580).
+	homingProjectiles: false
 } );
 
 test("only an explicit boolean enables chat timestamps", () => {
@@ -332,7 +334,8 @@ test("the predicted run-up defaults off and reaches only the worker's slice", ()
 	assert.deepEqual( experimentalGameplay( experimentalOptions() ), {
 		predictedRunUp: false,
 		jobKillNotices: true,
-		dropPlusNotices: true
+		dropPlusNotices: true,
+		homingProjectiles: false
 	} );
 	for ( const value of [ 1, "true", null, {} ] ) {
 		assert.equal( experimentalOptions( { predictedRunUp: value } ).predictedRunUp, false );
@@ -341,7 +344,8 @@ test("the predicted run-up defaults off and reaches only the worker's slice", ()
 	assert.deepEqual( experimentalGameplay( on ), {
 		predictedRunUp: true,
 		jobKillNotices: true,
-		dropPlusNotices: true
+		dropPlusNotices: true,
+		homingProjectiles: false
 	} );
 	assert.equal( "predictedRunUp" in experimentalVideo( on ), false );
 });
@@ -434,4 +438,17 @@ test("smooth camera is on unless explicitly false and reaches the renderer's sli
 	const off = experimentalOptions( { smoothCamera: false } );
 	assert.equal( off.smoothCamera, false );
 	assert.equal( experimentalVideo( off ).smoothCamera, false );
+});
+
+test("homing projectiles default off (native captured endpoint) and reach the worker's gameplay slice when enabled", () => {
+	for ( const value of [ undefined, null, {}, { homingProjectiles: 1 }, { homingProjectiles: "true" } ] ) {
+		const options = experimentalOptions( value );
+		assert.equal( options.homingProjectiles, false );
+		assert.equal( experimentalGameplay( options ).homingProjectiles, false );
+		assert.equal( "homingProjectiles" in experimentalVideo( options ), false );
+	}
+	const on = experimentalOptions( { homingProjectiles: true } );
+	assert.equal( on.homingProjectiles, true );
+	assert.equal( experimentalGameplay( on ).homingProjectiles, true );
+	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "homingProjectiles" ) ) );
 });

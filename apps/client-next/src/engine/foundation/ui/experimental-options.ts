@@ -99,6 +99,12 @@ export interface ExperimentalOptions {
 	// the ban on the click. On unless turned off (the owner's choice,
 	// 2026-10-15); off is the original.
 	readonly confirmGuildBan: boolean;
+	// Port-only, not native: straight AT_MOV_1TAR projectiles re-aim at the
+	// target's live socket each frame (stepHomingProjectile). The original
+	// interpolates between the launch-captured start (+0x58) and end (+0x64)
+	// vectors without re-reading the target (CProjectileTrace_Process 8D8580,
+	// CProjectile_Bezier_Process 879650). Off unless turned on.
+	readonly homingProjectiles: boolean;
 }
 
 /*
@@ -175,7 +181,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		dropOnBagTab: record.dropOnBagTab !== false,
 		noticeLinks: record.noticeLinks !== false,
 		shortNotices: record.shortNotices !== false,
-		confirmGuildBan: record.confirmGuildBan !== false
+		confirmGuildBan: record.confirmGuildBan !== false,
+		homingProjectiles: enabled( "homingProjectiles" )
 	};
 }
 
@@ -261,6 +268,7 @@ export interface ExperimentalGameplay {
 	readonly predictedRunUp: boolean;
 	readonly jobKillNotices: boolean;
 	readonly dropPlusNotices: boolean;
+	readonly homingProjectiles?: boolean;
 }
 
 /*
@@ -272,6 +280,7 @@ export function experimentalGameplay( options: ExperimentalOptions ): Experiment
 	return {
 		predictedRunUp: options.predictedRunUp,
 		jobKillNotices: options.jobKillNotices,
-		dropPlusNotices: options.dropPlusNotices
+		dropPlusNotices: options.dropPlusNotices,
+		homingProjectiles: options.homingProjectiles
 	};
 }

@@ -657,8 +657,11 @@ export interface GameplayState {
 	// The server's port-only SRO_MOONLIT_THIEF_SUIT rule, published at world
 	// entry: level-20 thief suits draw the Moonlit Ash model (equipment-appearance.ts).
 	readonly moonlitThiefSuit?: boolean;
-	// The reverse return scroll's map table: empty unless the server's
-	// port-only SRO_REVERSE_RETURN_MAP option is on (reverse-return-map.ts).
+	// The Experimental "Homing projectiles" row (port-only, default off):
+	// target-bone projectiles re-read the victim's socket in flight instead of
+	// flying to the launch-captured endpoint (effects.ts).
+	readonly homingProjectiles?: boolean;
+	// The server's port-only SRO_REVERSE_RETURN_MAP option is on (reverse-return-map.ts).
 	readonly reverseMapPoints?: readonly import("@/engine/foundation/gameplay/reverse-return-map").ReverseMapPoint[];
 	readonly abnormalRecords?: readonly import("@/engine/foundation/gameplay/abnormal-snapshot").AbnormalRecord[];
 	readonly selectionDecal?: SelectionDecal | null;

@@ -1027,37 +1027,39 @@ test("target-bone projectiles follow the evaluated endpoint to their arrival", (
 	};
 	let id = 0;
 	const jobs = new Map(), catalog = { "1": { clips: [ "attack1" ], stages: [ row ] } };
-	const owner = createCharacterEffects(
-		{
-			available: () => 4,
-			request( url, limit, decode ) {
-				jobs.set(
-					++id,
-					decode === "effects" ?
-						{ kind: "effects", catalog } :
-						{
-							kind: "bytes",
-							buffer: encode( {
-								format: "sro-skill-stage-models",
-								models: {
-									"bolt.bsr": { glb: "/assets/bolt.glb", clips: [ "stand" ], clipLoop: true }
-								}
-							} ).buffer
-						}
-				);
-				return id;
+	const makeOwner = () =>
+		createCharacterEffects(
+			{
+				available: () => 4,
+				request( url, limit, decode ) {
+					jobs.set(
+						++id,
+						decode === "effects" ?
+							{ kind: "effects", catalog } :
+							{
+								kind: "bytes",
+								buffer: encode( {
+									format: "sro-skill-stage-models",
+									models: {
+										"bolt.bsr": { glb: "/assets/bolt.glb", clips: [ "stand" ], clipLoop: true }
+									}
+								} ).buffer
+							}
+					);
+					return id;
+				},
+				take( id ) {
+					const value = jobs.get( id );
+					jobs.delete( id );
+					return value;
+				},
+				cancel() {}
 			},
-			take( id ) {
-				const value = jobs.get( id );
-				jobs.delete( id );
-				return value;
-			},
-			cancel() {}
-		},
-		"http://localhost",
-		() => {},
-		createPresentationRandom( 1 )
-	);
+			"http://localhost",
+			() => {},
+			createPresentationRandom( 1 )
+		);
+	const owner = makeOwner();
 	const entities = [ { gid: 1, regionId: 257, x: 0, y: 0, z: 0, heading: 0 }, {
 			gid: 2,
 			regionId: 257,
@@ -1085,12 +1087,33 @@ test("target-bone projectiles follow the evaluated endpoint to their arrival", (
 	assert.equal( step( 1, [ { cast, phase: "SHOT", event: 0, at: 1 } ] ).length, 1 );
 	entities[1].x = 999;
 	assert.equal( step( 2 )[0].pose.x, 100 );
-	// A shot at another actor homes (stepHomingProjectile): its socket is
-	// evaluated again on every frame, not captured once at launch.
-	assert.ok( calls > 1, "the socket was read once: " + calls );
+	// Native default (CProjectileTrace_Process 8D8580): the target socket is
+	// captured once at launch and never re-read in flight.
+	assert.equal( calls, 1, "native projectile captures the target socket once at launch" );
 	assert.deepEqual( step( 3 ), [] );
 	assert.equal( owner.error(), null );
 	owner.dispose();
+
+	// With the port-only Experimental homingProjectiles toggle enabled, the
+	// shot re-evaluates the target socket on every frame (stepHomingProjectile).
+	calls = 0;
+	entities[1].x = 50;
+	gameplay.casts = [];
+	gameplay.homingProjectiles = true;
+	const homingOwner = makeOwner();
+	const stepHoming = ( at, triggers = [] ) =>
+		homingOwner.step( entities, gameplay, at, () => true, () => 10, triggers, socket );
+	stepHoming( 0 );
+	stepHoming( .1 );
+	stepHoming( .2 );
+	gameplay.casts = [ cast ];
+	assert.equal( stepHoming( 1, [ { cast, phase: "SHOT", event: 0, at: 1 } ] ).length, 1 );
+	entities[1].x = 999;
+	assert.equal( stepHoming( 2 )[0].pose.x, 100 );
+	assert.ok( calls > 1, "with homingProjectiles enabled, the socket is re-read in flight: " + calls );
+	assert.deepEqual( stepHoming( 3 ), [] );
+	assert.equal( homingOwner.error(), null );
+	homingOwner.dispose();
 });
 
 test("later update/trailing operations reject the whole effect instead of silently disappearing", () => {

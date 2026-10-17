@@ -111,6 +111,12 @@ export const EXPERIMENTAL_TABS: readonly {
 				id: "experimental-shared-actor-room",
 				label: "Effects in crowds",
 				description: "In a crowd, near skill effects draw before far characters."
+			},
+			{
+				key: "homingProjectiles",
+				id: "experimental-homing-projectiles",
+				label: "Homing projectiles",
+				description: "Steer straight projectiles toward a moving target."
 			}
 		]
 	},

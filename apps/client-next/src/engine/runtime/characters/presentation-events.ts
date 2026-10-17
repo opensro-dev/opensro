@@ -39,7 +39,14 @@ interface PresentationEventEffects {
 		gameplay:
 			| Pick<
 				GameplayState,
-				"localGid" | "pose" | "casts" | "vitals" | "questMarkers" | "inventory" | "attachedEffects"
+				| "localGid"
+				| "pose"
+				| "casts"
+				| "vitals"
+				| "questMarkers"
+				| "inventory"
+				| "attachedEffects"
+				| "homingProjectiles"
 			>
 			| null,
 		now: number,
@@ -268,7 +275,8 @@ export function createPresentationEvents() {
 					vitals: gameplay.vitals,
 					questMarkers: gameplay.questMarkers,
 					inventory: gameplay.inventory,
-					attachedEffects: gameplay.attachedEffects
+					attachedEffects: gameplay.attachedEffects,
+					...(gameplay.homingProjectiles ? { homingProjectiles: gameplay.homingProjectiles } : {})
 				} :
 				gameplay;
 			const effectActors = effects.step(
