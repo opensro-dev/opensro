@@ -183,15 +183,41 @@ pickup after reach succeeds; it does not require the client to replay the
 original target packet. Each due entry is revalidated under the same
 per-division operation lock as request-time pickup, then the actor and peer
 packet halves are routed without duplicating the public frames to the actor.
+
+Approach deadlines (armApproach) and GroundWalk stepping (EnableGroundWalk)
+both run against wall-clock rt.Now(), whereas simulation.Ticker.run passes the
+buffered <-ticker.C timestamp as nowMs. When a tick overruns 100ms, nowMs lags
+behind rt.Now() and would strand a walk that has already arrived until the
+next scheduled tick. Clamp now forward to rt.Now() so maturity and liveSpawn
+share the same clock as armApproach and GroundWalk.
 ==================
 */
 func (rt *Runtime) advancePendingPickups(nowMs int64) []simulation.DivisionFrames {
 	var recipients []simulation.DivisionFrames
-	now := time.UnixMilli(nowMs)
+	now := rt.pendingPickupNow(nowMs)
 	for _, pending := range rt.Pending.Due(now) {
 		recipients = append(recipients, rt.publishPendingPickup(pending, now)...)
 	}
 	return recipients
+}
+
+/*
+================
+pendingPickupNow
+
+Return the maturity clock for pending ground pickups: at least the scheduled
+tick timestamp nowMs, and at least rt.Now() when wall-clock time has advanced
+ahead of a buffered ticker tick.
+================
+*/
+func (rt *Runtime) pendingPickupNow(nowMs int64) time.Time {
+	now := time.UnixMilli(nowMs)
+	if rt.Now != nil {
+		if wall := rt.Now(); wall.After(now) {
+			return wall
+		}
+	}
+	return now
 }
 
 /*
@@ -286,6 +312,11 @@ Revalidate ownership and live approach range before committing inventory.
 ================
 */
 func (rt *Runtime) completePendingPickup(pending grounditem.Pending, now time.Time) (OpResult, *enterworld.Character) {
+	if rt.Now != nil {
+		if wall := rt.Now(); wall.After(now) {
+			now = wall
+		}
+	}
 	character := rt.findCharacter(pending.DivisionID, pending.CharacterName)
 	if character == nil {
 		rt.Pending.Clear(pending.Key)

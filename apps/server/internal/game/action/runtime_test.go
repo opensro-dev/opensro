@@ -897,3 +897,72 @@ func TestPickupApproachMaturesAtTheWalksOwnSpeed(t *testing.T) {
 		t.Fatalf("pending = %+v, want the 1s walk at 100 units/s", armed.Pending)
 	}
 }
+
+/*
+=========================================================
+TestPickupApproachMaturesAgainstWallClockWhenTickerOverruns
+
+armApproach and EnableGroundWalk stamp and advance the approach walk against
+rt.Now(), whereas simulation.Ticker.run passes the buffered <-ticker.C value
+into TickHook(nowMs). When a tick overruns 100ms (report BR-261016-1354-D7E3:
+walk armed with ArrivesAt = t0+1301ms, wall clock at t0+2039ms when the tick
+runs, but buffered <-ticker.C timestamp at t0+1023ms), advancePendingPickups
+must evaluate maturity and liveSpawn against rt.Now() so the arrived pickup
+completes immediately instead of stranding the character for an extra tick.
+=========================================================
+*/
+func TestPickupApproachMaturesAgainstWallClockWhenTickerOverruns(t *testing.T) {
+	character := testCharacter()
+	rt, clock := newTestRuntime(character, testItems())
+	var private, peers []wire.Frame
+	rt.PushCharacterFrames = func(divisionID, characterName string, frames []wire.Frame) {
+		if divisionID != testDivision || characterName != character.Name {
+			t.Fatalf("private route = %q/%q", divisionID, characterName)
+		}
+		private = append(private, frames...)
+	}
+	rt.PushDivisionPeerFrames = func(divisionID, exceptCharacterName string, frames []wire.Frame) {
+		if divisionID != testDivision || exceptCharacterName != character.Name {
+			t.Fatalf("peer route = %q except %q", divisionID, exceptCharacterName)
+		}
+		peers = append(peers, frames...)
+	}
+
+	start := simulation.SeedWorldState(character).Spawn
+	// 65.05u east from start -> 1.301s walk at 50u/s (matching BR-261016-1354-D7E3).
+	heap := rt.Ground.Add(testDivision, PlanGoldDrop(
+		GoldHeapRef{RefObjID: 62, Codename: "ITEM_ETC_GOLD_02", Tid1: 3, Tid2: 3, Tid3: 5, Tid4: 2},
+		1000,
+		simulation.Spawn{RegionID: start.RegionID, X: start.X + 65.05, Y: start.Y, Z: start.Z},
+		"someone", clock.Now()))
+
+	t0Ms := clock.NowMs()
+	armed := rt.HandleTargetInteract(
+		testDivision,
+		character,
+		wire.TargetInteract{Gid: heap.Gid}.Encode(),
+	)
+	assertOpcodes(t, armed.Frames, wire.OpActionState, simulation.OpMovementAck)
+	if armed.Pending == nil || armed.Pending.Eta != 1301*time.Millisecond {
+		t.Fatalf("pending = %+v, want a 1301ms server-owned approach", armed.Pending)
+	}
+
+	// Wall clock (rt.Now) has reached t0+2039ms (past the 1301ms walk), while
+	// the overrun ticker channel delivers a buffered tick timestamp t0+1023ms
+	// (still before ArrivesAt = t0+1301ms).
+	clock.Advance(2039 * time.Millisecond)
+	staleTickerNowMs := t0Ms + 1023
+	if routed := rt.TickHook()(staleTickerNowMs); len(routed) != 0 {
+		t.Fatalf("pickup completion escaped through division-wide tick route: %+v", routed)
+	}
+	assertOpcodes(t, private,
+		wire.OpPickupAnim, wire.OpItemMoveResponse,
+		wire.OpPointsUpdate, wire.OpObjectDespawn, wire.OpActionState)
+	assertOpcodes(t, peers, wire.OpPickupAnim, wire.OpObjectDespawn)
+	if character.Gold == nil || *character.Gold != 6000 {
+		t.Fatalf("gold = %v, want 5000+1000 on the first tick after wall-clock arrival", character.Gold)
+	}
+	if _, ok := rt.Ground.Get(testDivision, heap.Gid); ok {
+		t.Fatal("pickup left the heap in ground authority despite wall-clock arrival")
+	}
+}
