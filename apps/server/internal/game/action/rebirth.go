@@ -238,12 +238,24 @@ Definition.Siege is slot 31's answer, the same pair worldPlayerEnemy
 consults.
 ================
 */
+/*
+================
+inSiegeWorld
+
+CGameWorldMgr_CallGameWorldSlot31's answer for the character's world:
+a fortress siege world.
+================
+*/
+func inSiegeWorld(c *enterworld.Character) bool {
+	world, found := instance.Lookup(instance.ID(domain.CharacterWorldInstance(c)).Definition())
+	return found && world.Siege()
+}
+
 func (rt *Runtime) siegeRebirthRefused(divisionID string, c *enterworld.Character) bool {
 	if c == nil || c.SiegeDeathAtMs == 0 || rt.Fortresses == nil || !rt.Fortresses.WarActive(divisionID) {
 		return false
 	}
-	world, found := instance.Lookup(instance.ID(domain.CharacterWorldInstance(c)).Definition())
-	if !found || !world.Siege() {
+	if !inSiegeWorld(c) {
 		return false
 	}
 	return rt.Now().UnixMilli()-c.SiegeDeathAtMs < siegeRebirthRefusalMs
@@ -275,6 +287,27 @@ func (rt *Runtime) HandleLocalRebirth(
 
 	unlock := rt.lockDivision(divisionID)
 	defer unlock()
+	return rt.handleRebirthInDoor(divisionID, character, choice, false)
+}
+
+/*
+=================
+handleRebirthInDoor
+
+The settled corpse's revival, with the caller holding the division
+door. forceTown is the corpse clock's expiry (advanceSiegeCorpses):
+CGObjPC_OnTick sends the run-out corpse to town directly
+(CGObjPC_TeleportToTown 4DF290), so a death that would revive where
+it fell still goes to town and the choice must already name the town
+point. Every other caller takes the player's own choice.
+=================
+*/
+func (rt *Runtime) handleRebirthInDoor(
+	divisionID string,
+	character *enterworld.Character,
+	choice byte,
+	forceTown bool,
+) OpResult {
 
 	// Prepare the complete destination projection while still dead. No durable
 	// revival may depend on a later fallible packet build or correction fallback.
@@ -298,7 +331,7 @@ func (rt *Runtime) HandleLocalRebirth(
 	// is a beginner's (level 10 or below, 51017F). The shard may set the town
 	// rule for team deaths too (teamdeath.go).
 	inPlace := rt.revivesInPlace(before.DeathKind)
-	if inPlace {
+	if inPlace && !forceTown {
 		choice = wire.RebirthAtPresentPoint
 	}
 	if choice == wire.RebirthAtPresentPoint && !inPlace && before.Level != nil && *before.Level > 10 {

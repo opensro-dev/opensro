@@ -93,6 +93,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		step("advanceReturnScrolls", func() { rt.advanceReturnScrolls(nowMs) })
 		step("advanceJobDresses", func() { rt.advanceJobDresses(nowMs) })
 		step("advanceFortressPhases", func() { rt.advanceFortressPhases(nowMs) })
+		frames("advanceSiegeCorpses", rt.advanceSiegeCorpses)
 		frames("drainStructureDeaths", rt.drainStructureDeaths)
 		step("advanceFortressStructures", func() { rt.advanceFortressStructures(nowMs) })
 		step("advanceFortressForges", func() { rt.Fortresses.AdvanceItemForges(nowMs) })
