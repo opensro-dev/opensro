@@ -3,11 +3,12 @@
 
 enchant-sparks.test.mjs - the Experimental enchant sparks on +8 and higher
 
-Port-only, not native (owner, 2026-10-13). v1.150 ships the
-system_enchant*_a_01.efp programs but never names them, so the original
-draws none. With the Experimental row on, a weapon or shield at +8 or
-higher wears its class's sparks on the bones and scales its rare twin
-authors; with it off (the default), or below +8, nothing changes.
+Port-only, not native (owner, 2026-10-13; default on, 2026-10-17). v1.150
+ships the system_enchant*_a_01.efp programs but never names them, so the
+original draws none. With the Experimental row on (the default), a weapon
+or shield at +8 or higher wears its class's sparks on the bones and scales
+its rare twin authors; with it off (the native-look opt-out), or below +8,
+nothing changes.
 
 ===========================================================================
 */
@@ -148,7 +149,7 @@ test("sparks show only with the row on and only at +8 or higher, on real private
 	assert.deepEqual( sparksOf( dress, 7, true ), [] );
 	assert.deepEqual( sparksOf( dress, 9, true, RARE_SWORD ), on );
 	assert.deepEqual( sparksOf( dress, 7, true, RARE_SWORD ), [] );
-	// The default, and the native client: the row off draws nothing extra.
+	// The native-look opt-out (and an unset renderer flag): the row off draws nothing extra.
 	assert.deepEqual( sparksOf( dress, 10, false ), [] );
 	assert.deepEqual( sparksOf( dress, 10, undefined ), [] );
 	assert.deepEqual( sparksOf( dress, 9, false, RARE_SWORD ), [] );
