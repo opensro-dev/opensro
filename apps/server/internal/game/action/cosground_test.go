@@ -122,3 +122,102 @@ func cosGroundRoundTrip(t *testing.T, paced bool) {
 		t.Fatal("gold pickup required an empty slot or corrupted bag", r)
 	}
 }
+
+/*
+================
+TestCOSGroundQuestItemGrantsToOwnerPlayerBagAndUpdatesQuestProgress
+
+CCOS_SelectPickupRecipient (4D554B..4D5585, 4D5755..4D5782): when a grab pet
+picks up a non-alchemy quest item (ItemTID_IsQuestItem 42FDC0: TypeID1=3,
+TypeID2=3, TypeID3=9), the grant goes to the owner's player bag
+(CPlayer_GrantGroundPickup 4D5143) and updates quest progress rather than
+entering the pet container (0x11). Alchemy-prefix quest items still enter
+the pet container when solo.
+================
+*/
+func TestCOSGroundQuestItemGrantsToOwnerPlayerBagAndUpdatesQuestProgress(t *testing.T) {
+	c := testCharacter()
+	items := testItems()
+	const questRefID uint32 = 45165
+	const alchemyRefID uint32 = 45166
+	questFlags := wire.PackTypeFlags(3, 3, 9, 0)
+	items["ITEM_QNO_EU_CON_19_01"] = &enterworld.ItemRef{
+		RefObjID: questRefID, Codename: "ITEM_QNO_EU_CON_19_01", TypeIDs: [4]int64{3, 3, 9, 0},
+		NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 50}),
+	}
+	items["ITEM_QNO_RM_ARCHEMY_01"] = &enterworld.ItemRef{
+		RefObjID: alchemyRefID, Codename: "ITEM_QNO_RM_ARCHEMY_01", TypeIDs: [4]int64{3, 3, 9, 0},
+		NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 50}),
+	}
+	refs := testCosSource(items)
+	refs.characters["PET"] = &enterworld.CharacterRef{Codename: "PET", RefObjID: 9, TidWord: 0x21c6, RunSpeed: 100}
+	rt, _ := newTestRuntime(c, refs)
+	rt.Now = func() time.Time { return time.UnixMilli(1000) }
+	questUpdates := 0
+	questFrame := wire.Frame{Opcode: 0x31ED, Payload: []byte{0x02, 0x01}}
+	rt.UpdateQuestInventory = func(ch *enterworld.Character) ([]wire.Frame, bool) {
+		if ch == c {
+			questUpdates++
+		}
+		return []wire.Frame{questFrame}, true
+	}
+	gid, _ := enterworld.CosObjectIDForCharacter(c)
+	c.ActiveCOS = &enterworld.CharacterCOS{GID: gid, RefObjID: 9, Codename: "PET", CurrentHP: 100, Summoned: true,
+		Container: &domain.COSContainer{Capacity: 8}}
+	rt.BindPetSession(testDivision, c, 1)
+	rt.TickHook()(1000)
+	pose := rt.PetPresentation(testDivision, c.Name).World.Spawn
+	playerBefore := len(c.MissionInventory)
+
+	drop := rt.Ground.Add(testDivision, grounditem.Item{
+		RefObjID: questRefID, Codename: "ITEM_QNO_EU_CON_19_01", TypeFlags: questFlags, StackCount: 1,
+		Position: grounditem.Point{RegionID: pose.RegionID, X: float32(pose.X), Z: float32(pose.Z)}, Y: float32(pose.Y),
+	})
+	payload, err := wire.ItemMoveRequest{MovementType: wire.MoveTypeCosPickup, CosGID: gid, GroundGID: drop.Gid}.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := rt.HandleItemMove(testDivision, c, payload)
+	if len(c.ActiveCOS.Container.Rows) != 0 {
+		t.Fatalf("quest item entered pet container: %+v", c.ActiveCOS.Container.Rows)
+	}
+	if len(c.MissionInventory) != playerBefore+1 || c.MissionInventory[len(c.MissionInventory)-1].RefObjID != questRefID {
+		t.Fatalf("quest item did not land in player bag: %+v", c.MissionInventory)
+	}
+	if questUpdates != 1 {
+		t.Fatalf("quest inventory updates = %d, want 1", questUpdates)
+	}
+	sawPlayerGrant := false
+	sawQuestFrame := false
+	for _, f := range res.Frames {
+		if f.Opcode == wire.OpItemMoveResponse {
+			if len(f.Payload) < 2 || f.Payload[0] != 1 || f.Payload[1] != wire.MoveTypePickup {
+				t.Fatalf("unexpected 0xB06D payload for pet-picked quest item: %x", f.Payload)
+			}
+			sawPlayerGrant = true
+		}
+		if f.Opcode == 0x31ED && reflect.DeepEqual(f.Payload, questFrame.Payload) {
+			sawQuestFrame = true
+		}
+	}
+	if !sawPlayerGrant || !sawQuestFrame {
+		t.Fatalf("missing player grant (%v) or quest progress frame (%v) in %+v", sawPlayerGrant, sawQuestFrame, res.Frames)
+	}
+
+	// Alchemy-prefix quest items remain eligible for normal pet bag storage when solo.
+	alchemyDrop := rt.Ground.Add(testDivision, grounditem.Item{
+		RefObjID: alchemyRefID, Codename: "ITEM_QNO_RM_ARCHEMY_01", TypeFlags: questFlags, StackCount: 1,
+		Position: grounditem.Point{RegionID: pose.RegionID, X: float32(pose.X), Z: float32(pose.Z)}, Y: float32(pose.Y),
+	})
+	payload, err = wire.ItemMoveRequest{MovementType: wire.MoveTypeCosPickup, CosGID: gid, GroundGID: alchemyDrop.Gid}.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	res = rt.HandleItemMove(testDivision, c, payload)
+	if len(c.ActiveCOS.Container.Rows) != 1 || c.ActiveCOS.Container.Rows[0].RefObjID != alchemyRefID {
+		t.Fatalf("alchemy quest item did not enter pet container: %+v", c.ActiveCOS.Container.Rows)
+	}
+	if res.Frames[0].Opcode != wire.OpItemMoveResponse || res.Frames[0].Payload[1] != wire.MoveTypeCosPickup {
+		t.Fatalf("unexpected alchemy pickup response: %+v", res.Frames)
+	}
+}

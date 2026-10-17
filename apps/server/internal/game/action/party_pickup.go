@@ -35,6 +35,20 @@ const questAlchemyPrefix = "ITEM_QNO_RM_ARCHEMY"
 
 /*
 ================
+isPersonalQuestPickupItem
+
+ItemTID_IsQuestItem (42FDC0: TypeID1=3, TypeID2=3, TypeID3=9)
+without the ITEM_QNO_RM_ARCHEMY prefix (525DE9, 4D5560, 4D5755).
+================
+*/
+func isPersonalQuestPickupItem(item grounditem.Item) bool {
+	flags := item.TypeFlags
+	quest := flags&questNonItemMask == 0 && flags&questClassMask == questClass && flags&questCategoryMask == questCategory && flags&questGroupMask == questItemBand
+	return quest && !strings.HasPrefix(item.Codename, questAlchemyPrefix)
+}
+
+/*
+================
 partyPickupRecipient
 
 Server 525F5F..52606F: item-share bit, rotating member alive (life byte 1,
@@ -46,9 +60,7 @@ func (rt *Runtime) partyPickupRecipient(division string, picker *enterworld.Char
 	if rt.NextPartyLootMember == nil {
 		return picker
 	}
-	flags := item.TypeFlags
-	quest := flags&questNonItemMask == 0 && flags&questClassMask == questClass && flags&questCategoryMask == questCategory && flags&questGroupMask == questItemBand
-	if quest && !strings.HasPrefix(item.Codename, questAlchemyPrefix) {
+	if isPersonalQuestPickupItem(item) {
 		return picker
 	}
 	roster := rt.monsterRewardRoster(division, picker, nowMs)

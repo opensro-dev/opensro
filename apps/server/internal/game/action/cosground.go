@@ -216,7 +216,11 @@ sharePetPickup
 A pet's pickup runs the party's item share as the owner's own pickup does:
 CPlayer_ExecuteGroundPickup (526090) serves move type 0x11 as it serves 6,
 and CPlayer_SelectPartyLootRecipient (525DC0) picks the recipient by the
-party's rotation. When the rotation names another member, or the heap is
+party's rotation. Non-alchemy quest items (ItemTID_IsQuestItem 42FDC0 in
+CCOS_SelectPickupRecipient 4D554B..4D5585 and 4D5755..4D5782) also route to
+the owner's player bag (0x1C -> CPlayer_GrantGroundPickup 4D5143) and update
+quest inventory rather than entering the pet container. When the rotation
+names another member, the drop is a personal quest item, or the heap is
 gold the party splits, the grant is the player pickup's (the recipient's
 inventory, the gold shares), played by the pet. Otherwise the pet keeps
 its own pickup into its bag, which the v1.150 client defines: its pickup
@@ -254,7 +258,7 @@ func (rt *Runtime) sharePetPickup(division string, c *enterworld.Character, q wi
 	}
 	recipient := rt.partyPickupRecipient(division, c, item, now.UnixMilli())
 	split := item.IsGold() && rt.partyGoldShares(division, recipient, item.GoldAmount, now.UnixMilli()) != nil
-	if recipient == c && !split {
+	if recipient == c && !split && !isPersonalQuestPickupItem(item) {
 		return OpResult{}, false
 	}
 	actor := wire.PickupAnim{Gid: q.CosGID, Heading: wire.HeadingByteFromAngle(at.Angle)}
