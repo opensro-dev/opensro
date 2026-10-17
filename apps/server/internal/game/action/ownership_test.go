@@ -1,6 +1,7 @@
 package action
 
 import (
+	"bytes"
 	"encoding/binary"
 	"testing"
 	"time"
@@ -29,6 +30,11 @@ func TestOwnedPickupAllowsSelfAndItemSharingPartyOnly(t *testing.T) {
 		drop := ownedGoldAtPlayer(t, rt, clock, character, 100099)
 		result := rt.HandleTargetInteract(testDivision, character, wire.TargetInteract{Gid: drop.Gid}.Encode())
 		assertOpcodes(t, result.Frames, wire.OpItemMoveResponse, wire.OpActionState)
+		// 4A9050's owner gate: "locked by another" (0x12), not the generic
+		// "cannot be picked" (0x39) the pickable virtual alone may raise.
+		if want := wire.EncodeItemMoveError(wire.ErrCodeLockedByOther); !bytes.Equal(result.Frames[0].Payload, want) {
+			t.Fatalf("foreign refusal = % X, want % X", result.Frames[0].Payload, want)
+		}
 		if rt.Ground.Count(testDivision) != 1 || character.Gold == nil || *character.Gold != 5000 {
 			t.Fatalf("foreign pickup mutated state: ground=%d gold=%v", rt.Ground.Count(testDivision), character.Gold)
 		}

@@ -242,7 +242,8 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 		groundItem.OwnerJID != enterworld.ObjectIDForCharacter(snapshot) &&
 		(rt.CanPickupOwnedDrop == nil || !rt.CanPickupOwnedDrop(divisionID, snapshot.Name, groundItem.OwnerJID)) {
 		rt.Pending.Clear(pendingKey)
-		return pickupRefusal(wire.ErrCodeCannotBePicked)
+		// 4A9050's owner gate (0x1812): the drop is another's for now.
+		return pickupRefusal(wire.ErrCodeLockedByOther)
 	}
 
 	now := rt.Now()
@@ -274,7 +275,9 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 
 	if !grounditem.SameWorld(from, groundItem.Position) {
 		rt.Pending.Clear(pendingKey)
-		return pickupRefusal(wire.ErrCodeCannotBePicked)
+		// Another plane: the presser's world holds no such object, the
+		// same answer 4A9050 seeds (3) before its lookup resolves nothing.
+		return pickupRefusal(wire.ErrCodeTargetGone)
 	}
 
 	// A valid pickup replaces pursuit. Its own approach is now the sole

@@ -338,14 +338,17 @@ func (rt *Runtime) completePendingPickup(pending grounditem.Pending, now time.Ti
 		groundItem.OwnerJID != enterworld.ObjectIDForCharacter(snapshot) &&
 		(rt.CanPickupOwnedDrop == nil ||
 			!rt.CanPickupOwnedDrop(pending.DivisionID, snapshot.Name, groundItem.OwnerJID)) {
-		return pickupRefusal(wire.ErrCodeCannotBePicked), character
+		// 4A9050's owner gate (0x1812): the drop is another's for now.
+		return pickupRefusal(wire.ErrCodeLockedByOther), character
 	}
 
 	worldKey := simulation.WorldKey(pending.DivisionID, character.Name)
 	live := rt.liveSpawn(worldKey, snapshot, now.UnixMilli())
 	from := grounditem.Point{RegionID: live.RegionID, X: float32(live.X), Z: float32(live.Z)}
 	if !grounditem.SameWorld(from, groundItem.Position) {
-		return pickupRefusal(wire.ErrCodeCannotBePicked), character
+		// Another plane: the presser's world holds no such object, the
+		// same answer 4A9050 seeds (3) before its lookup resolves nothing.
+		return pickupRefusal(wire.ErrCodeTargetGone), character
 	}
 	worldSnapshot := rt.Worlds.Snapshot(worldKey, func() simulation.WorldState {
 		return simulation.SeedWorldState(snapshot)

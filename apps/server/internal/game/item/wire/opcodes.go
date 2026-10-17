@@ -226,9 +226,17 @@ const (
 	// nothing, so a pickup that lost the race to another grant reads this.
 	ErrCodeTargetGone uint8 = 0x03
 	// ErrCodeCannotBePicked is UIIT_MSG_STRGERR_CANNOT_BE_PICKED (01:39):
-	// the drop exists but this character may not take it (v1.188 4A9050
-	// returns 0x1839 when the object's pickable check fails).
+	// v1.188 4A9050 writes 0x1839 for one cause only - the drop object's
+	// own pickable virtual (+0xD4) refusing. Another character's protected
+	// drop is a different native byte (ErrCodeLockedByOther); the two were
+	// once conflated here, which cost the specific message.
 	ErrCodeCannotBePicked uint8 = 0x39
+	// ErrCodeLockedByOther is UIIT_MSG_STRGERR_LOCKED_BY_OTHER_ONE
+	// (01:12, banner + guide type 5): the drop is inside its ownership
+	// window and this character is neither its owner nor entitled by the
+	// party's distribution option. v1.188 4A9050's tail gate writes
+	// 0x1812 for exactly this (same party with the option bit may pass).
+	ErrCodeLockedByOther uint8 = 0x12
 	// ErrCodeCannotDropEquipped is the equipment-source ground-drop refusal
 	// (01:6d). PINNED in v1.150: the drop-confirm dialog sub_68d430
 	// @0x0068d430 opens ONLY for an inventory-bag source (kind 0x46,
