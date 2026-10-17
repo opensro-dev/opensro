@@ -109,6 +109,11 @@ func (rt *Runtime) settleDeathCostInDoor(division string, c *enterworld.Characte
 	// killer, and the byte keeps the zero every revival wrote; the port's
 	// deathKind answers DeathNone for no killer, the same zero.
 	c.DeathKind = uint8(kind)
+	if kind == pk.DeathSpecialWorld {
+		// ProcessSiegeDeath (52CFBA) starts the corpse clock (+0x1CD4)
+		// with the death record.
+		c.SiegeDeathAtMs = now
+	}
 	var penalty uint32
 	if c.PK != nil {
 		penalty = c.PK.Penalty

@@ -217,6 +217,37 @@ func (rt *Runtime) HandleRebirthPointAppointment(
 	}}}
 }
 
+// siegeRebirthRefusalMs is the +0x1CD4 > 0xA5 window: the 180 ticks
+// ProcessSiegeDeath stamps, read down to 165 - the first 15 ticks of
+// the siege corpse clock, at one second a tick (domain.SiegeDeathAtMs).
+const siegeRebirthRefusalMs = 15 * 1000
+
+/*
+================
+siegeRebirthRefused
+
+50FEE0 before the death-kind check (510086..5100D6): while a siege war
+is active (MainProcess_IsSiegeWarActive 62EB50), the corpse lies in a
+siege world (CGameWorldMgr_CallGameWorldSlot31 answers nonzero), and
+its siege-death clock (+0x1CD4, stamped 180 at the siege death) still
+reads above 165, the handler returns without reviving - whatever the
+death kind or the player's choice. The port's clock is the elapsed
+time since SiegeDeathAtMs; Fortresses.WarActive is the war mirror and
+Definition.Siege is slot 31's answer, the same pair worldPlayerEnemy
+consults.
+================
+*/
+func (rt *Runtime) siegeRebirthRefused(divisionID string, c *enterworld.Character) bool {
+	if c == nil || c.SiegeDeathAtMs == 0 || rt.Fortresses == nil || !rt.Fortresses.WarActive(divisionID) {
+		return false
+	}
+	world, found := instance.Lookup(instance.ID(domain.CharacterWorldInstance(c)).Definition())
+	if !found || !world.Siege() {
+		return false
+	}
+	return rt.Now().UnixMilli()-c.SiegeDeathAtMs < siegeRebirthRefusalMs
+}
+
 /*
 ==================
 HandleLocalRebirth
@@ -255,6 +286,11 @@ func (rt *Runtime) HandleLocalRebirth(
 	})
 	if before.DeletePending || enterworld.CharacterAlive(before) || corpse.MoveSegment != nil {
 		return OpResult{DiagnosticRefusal: "rebirth-requires-settled-corpse"}
+	}
+	// 50FEE0 ahead of the kind check (510075..5100D6): a fresh siege
+	// corpse in an active siege world is refused outright (below).
+	if rt.siegeRebirthRefused(divisionID, before) {
+		return OpResult{}
 	}
 	// 50FEE0 (5100D6): a team death (free-battle capes, arena) revives where
 	// it fell at any level, whatever the choice; otherwise the present point

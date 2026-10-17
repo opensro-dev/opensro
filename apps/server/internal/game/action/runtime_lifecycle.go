@@ -563,8 +563,8 @@ func (rt *Runtime) forgetCharacterLocked(divisionID, characterName string) {
 			// CGObjPC_ResetRuntimeState (4DE9ED, 4DEA23) zeroes the death
 			// kind (+0x1CB4) and the last EXP loss (+0x1CE0) with the actor: a
 			// relogged corpse takes the town rule and no earlier loss's refund.
-			changed = c.DeathKind != 0 || c.LastExpLoss != 0 || changed
-			c.DeathKind, c.LastExpLoss = 0, 0
+			changed = c.DeathKind != 0 || c.LastExpLoss != 0 || c.SiegeDeathAtMs != 0 || changed
+			c.DeathKind, c.LastExpLoss, c.SiegeDeathAtMs = 0, 0, 0
 			changed = len(c.Aggressions) != 0 || changed
 			c.Aggressions = nil
 			changed = c.TransitionBodyStatus(domain.BodyStatusTransition{}) || changed
