@@ -241,6 +241,21 @@ func (v *WaterValidator) ClipMovementPathFrom(from simulation.Spawn, fromOwner s
 
 /*
 ================
+ClipMovementSegmentFrom
+
+ClipMovementSegmentFrom is one leg of ClipMovementPathFrom: a single
+chord whose report says where the walk reached and whether it continues
+(a linked transfer or an outline exit the next leg resumes from).
+CRegionManagerBody_CheckLineOfSight (98D880) drives exactly this seam
+leg by leg; callers that want the whole walk use ClipMovementPathFrom.
+================
+*/
+func (v *WaterValidator) ClipMovementSegmentFrom(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) ClipReport {
+	return v.clipMovementSegment(from, fromOwner, to)
+}
+
+/*
+================
 continuedReport
 
 QueryMovement (98B300) ends a continuation run once the leg's start is

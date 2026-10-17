@@ -647,3 +647,17 @@ ownerClipValidator
 type ownerClipValidator interface {
 	ClipMovementPathFrom(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) ClipReport
 }
+
+/*
+================
+segmentClipValidator
+
+segmentClipValidator is the per-leg clip LineOfSight drives (98D880):
+one chord per call, the report's continuation marking a leg the test
+resumes from its rest point. Validators without the seam keep the
+single-query answer.
+================
+*/
+type segmentClipValidator interface {
+	ClipMovementSegmentFrom(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) ClipReport
+}
