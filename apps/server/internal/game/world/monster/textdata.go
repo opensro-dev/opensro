@@ -271,6 +271,27 @@ fault (the TextdataItems loader posture).
 ==================
 */
 func LoadMonsterRefs(textdataDir string) map[uint32]MonsterRef {
+	matches, err := filepath.Glob(filepath.Join(textdataDir, "characterdata*.txt"))
+	if err != nil {
+		return make(map[uint32]MonsterRef)
+	}
+	sort.Strings(matches)
+	tables := make([][][]string, 0, len(matches))
+	for _, path := range matches {
+		tables = append(tables, readTabbedFile(path))
+	}
+	return parseMonsterRefTables(textdataDir, tables)
+}
+
+/*
+================
+parseMonsterRefTables
+
+Parses characterdata row tables into MonsterRef records, resolving localized
+display names and ride metadata from textdataDir when present.
+================
+*/
+func parseMonsterRefTables(textdataDir string, tables [][][]string) map[uint32]MonsterRef {
 	refs := make(map[uint32]MonsterRef)
 	rides := loadMonsterRideMetadata(textdataDir)
 	// Every characterdata codename, served or not: the characterInfo default
@@ -291,13 +312,8 @@ func LoadMonsterRefs(textdataDir string) map[uint32]MonsterRef {
 			names[symbol] = english
 		}
 	}
-	matches, err := filepath.Glob(filepath.Join(textdataDir, "characterdata*.txt"))
-	if err != nil {
-		return refs
-	}
-	sort.Strings(matches)
-	for _, path := range matches {
-		for _, cols := range readTabbedFile(path) {
+	for _, table := range tables {
+		for _, cols := range table {
 			if len(cols) > colCodename {
 				known[strings.TrimSpace(cols[colCodename])] = true
 			}
@@ -678,12 +694,21 @@ func readTabbedFile(path string) [][]string {
 		return nil
 	}
 	text := decodeTextdata(buffer)
+	return splitTabbedText(text)
+}
+
+/*
+================
+splitTabbedText
+================
+*/
+func splitTabbedText(text string) [][]string {
 	cells := make(texttable.Cells)
 	text = strings.TrimPrefix(text, "\ufeff")
 	var rows [][]string
 	for _, rawLine := range strings.Split(text, "\n") {
 		line := strings.TrimRight(rawLine, "\r\t ")
-		if line == "" || strings.HasPrefix(line, "//") {
+		if line == "" || strings.HasPrefix(line, "//") || strings.HasPrefix(line, "#") {
 			continue
 		}
 		rows = append(rows, cells.Split(line))

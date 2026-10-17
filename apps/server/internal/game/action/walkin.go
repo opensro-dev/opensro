@@ -44,6 +44,7 @@ tick, though a path that only clips a corner may.
 package action
 
 import (
+	_ "embed"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -53,8 +54,12 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/instance"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
+
+//go:embed data/qinshi_tomb_eventzone.tsv
+var qinshiTombEventZoneTSV string
 
 const (
 	// eventZoneTypeColumn and eventZoneTeleportColumn of eventzonedata:
@@ -84,7 +89,13 @@ func loadWalkIns(dir string, catalog *portalCatalog) (map[string]portalLink, err
 		byCode[destination.code] = id
 	}
 	walkIns := map[string]portalLink{}
-	for _, row := range enterworld.ReadTextdataFile(filepath.Join(dir, "eventzonedata.txt")) {
+	rows := enterworld.ReadTextdataFile(filepath.Join(dir, "eventzonedata.txt"))
+	if monster.QinShiTombFromEnv() {
+		// Port-only, not native: append the 64 Qin-Shi Emperor Tomb TELEPORT
+		// event zones (IDs 3..83 with an active outgoing _RefTeleLink).
+		rows = append(rows, monster.SplitTabbedText(qinshiTombEventZoneTSV)...)
+	}
+	for _, row := range rows {
 		if len(row) <= eventZoneTeleportColumn || row[0] != "1" || strings.TrimSpace(row[eventZoneTypeColumn]) != eventZoneTypeTeleport {
 			continue
 		}

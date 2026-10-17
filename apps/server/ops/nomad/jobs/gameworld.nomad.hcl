@@ -680,6 +680,14 @@ variable "stack_sizes" {
   default = "arrow=2500,bolt=2500,luckypowder=500"
 }
 
+# qinshi_tomb opens Qin-Shi Emperor Tomb Floor 1-4 (79 monster species, 230
+# skills, 1,033 spawn nests, 68 teleport links and 64 walk-in event zones)
+# (port-only, not native; owner decision 2026-10-17). "off" is native.
+variable "qinshi_tomb" {
+  type    = string
+  default = "off"
+}
+
 # The community site's public read API listener (internal/agent/publicstats):
 # a loopback address, or "off". sro-nomad gives the first shard the default
 # and every other shard "off".
@@ -894,6 +902,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_ALCHEMY_MATERIAL_DROPS_OFF          = var.alchemy_material_drops_off
         SRO_BETA_SHOP_ONLY_DEGREE9              = var.beta_shop_only_degree9
         SRO_STACK_SIZES                         = var.stack_sizes
+        SRO_QINSHI_TOMB                         = var.qinshi_tomb
         SRO_PUBLIC_API_ADDR                     = var.public_api_addr
         SRO_PUBLIC_API_TOKEN_PATH               = "${NOMAD_SECRETS_DIR}/public-api-token"
         TRANSPORT_WT_ADDR                       = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"

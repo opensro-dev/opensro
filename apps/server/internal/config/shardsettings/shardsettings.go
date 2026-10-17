@@ -158,6 +158,10 @@ var Settings = []Setting{
 	// Owner, 2026-10-13 (F7): Lucky Powder stacks to 500; 2026-10-14:
 	// arrows and bolts stack to 2500. "off" is native.
 	{Env: "SRO_STACK_SIZES", NomadVar: "stack_sizes", Default: "arrow=2500,bolt=2500,luckypowder=500", Source: Built},
+	// Owner, 2026-10-17: Qin-Shi Emperor Tomb Floor 1-4 monsters, skills
+	// and walk-in portals (port-only, not native: v1.150 shipped Tomb visual
+	// assets before the Legend IV server tables). "off" is native.
+	{Env: "SRO_QINSHI_TOMB", NomadVar: "qinshi_tomb", Default: "off"},
 }
 
 // NotSettings are the job's other SRO_ variables: what a deployment

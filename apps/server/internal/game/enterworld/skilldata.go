@@ -9,6 +9,7 @@ skilldata.go - the skill table: loading and projecting skilldata rows
 package enterworld
 
 import (
+	_ "embed"
 	"fmt"
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/item/statuseffect"
@@ -19,6 +20,9 @@ import (
 
 	log "github.com/sirupsen/logrus"
 )
+
+//go:embed data/qinshi_tomb_skilldata.tsv
+var qinshiTombSkillDataTSV string
 
 // The skill-learn authority table.
 //
@@ -618,6 +622,9 @@ func (t *TextdataSkills) load() {
 		paths = append(paths, filepath.Join(t.dir, shard))
 	}
 	t.sharedKey = textdataFingerprint(paths...)
+	if monster.QinShiTombFromEnv() {
+		t.sharedKey += "+qinshi_tomb"
+	}
 	parsed := sharedSkillParses.get(t.sharedKey, func() *TextdataSkills {
 		p := &TextdataSkills{dir: t.dir}
 		p.parse(shards)
@@ -660,8 +667,8 @@ func (t *TextdataSkills) parse(shards []string) {
 	assistSets := skillAniSetAssists(t.dir)
 	recordSources := map[uint32]skillRecordSource{}
 
-	for _, shard := range shards {
-		for _, fields := range readTextdataFile(filepath.Join(t.dir, shard)) {
+	parseRows := func(table [][]string) {
+		for _, fields := range table {
 			if len(fields) < skilldataMinColumns {
 				continue
 			}
@@ -873,10 +880,18 @@ func (t *TextdataSkills) parse(shards []string) {
 			t.rows.set(row.ID, row)
 		}
 	}
+	for _, shard := range shards {
+		parseRows(readTextdataFile(filepath.Join(t.dir, shard)))
+	}
 	if t.rows.len() == 0 {
 		t.loadErr = fmt.Errorf("skilldata not found under verified projection %s", t.dir)
 		log.Warnf("bootstrap: %v; skill learning will refuse every request", t.loadErr)
 		return
+	}
+	if monster.QinShiTombFromEnv() {
+		// Port-only, not native: append the 230 Qin-Shi Emperor Tomb monster
+		// skills mapped into the v1.150 skill ID gaps (monster/qinshi_tomb.go).
+		parseRows(monster.SplitTabbedText(qinshiTombSkillDataTSV))
 	}
 	// Chain sub-rows are the TARGETS of other rows' links. Marking them
 	// needs the whole table, so it runs after every shard loaded.

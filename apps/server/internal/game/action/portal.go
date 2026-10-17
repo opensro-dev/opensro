@@ -8,6 +8,7 @@ portal.go - authoritative travel and scene re-entry
 package action
 
 import (
+	_ "embed"
 	"fmt"
 	"math"
 	"opensro.online/server/internal/domain"
@@ -20,8 +21,12 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/fortress"
 	"opensro.online/server/internal/game/world/instance"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
+
+//go:embed data/qinshi_tomb_teleportlink.tsv
+var qinshiTombTeleportLinkTSV string
 
 /*
 ================
@@ -202,6 +207,11 @@ func loadPortalCatalog(dir string) (*portalCatalog, error) {
 	rows = enterworld.ReadTextdataFile(filepath.Join(dir, "teleportlink.txt"))
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("teleportlink is absent or empty")
+	}
+	if monster.QinShiTombFromEnv() {
+		// Port-only, not native: append the 68 Qin-Shi Emperor Tomb teleport
+		// links (64 walk-in links + 4 Floor 6 exit building links).
+		rows = append(rows, monster.SplitTabbedText(qinshiTombTeleportLinkTSV)...)
 	}
 	for i, r := range rows {
 		if r[0] != "1" {
@@ -391,7 +401,7 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 	}
 	arrival := rt.portals.destinations[target]
 	destination := arrival.spawn
-	if destination.RegionID == 0 || destination.RegionID&0x8000 != 0 {
+	if destination.RegionID == 0 || (destination.RegionID&0x8000 != 0 && !source.building) {
 		return portalFailure(2)
 	}
 	destinationWorld, refusal := rt.portalWorldAdmission(division, c, arrival)
@@ -525,6 +535,11 @@ func (rt *Runtime) commitGateTravel(travel gateTravel, admit func() (int64, OpRe
 		return portalFailure(2)
 	}
 	rt.bindResidentRegion(key, rt.Now().UnixMilli())
+	if rt.WalkInZoneAt != nil {
+		rt.walkInZones.Store(key, rt.WalkInZoneAt(destination))
+	} else {
+		rt.walkInZones.Delete(key)
+	}
 	rt.Selected.Clear(division, c.Name)
 	rt.closeStorageSession(division, c.Name)
 	rt.NpcDialogs.Clear(division, c.Name)
