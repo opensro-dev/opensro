@@ -1,15 +1,43 @@
+/*
+===========================================================================
+
+topology_test.go - dungeon room-portal matching and traversal tests
+
+Verifies dungeon block-link resolution, portal edge matching against the
+native oracle, linked-lane escape checks, and traversal across all published
+dungeon portals.
+
+===========================================================================
+*/
 package movement
 
 import (
 	"encoding/json"
 	"math"
+	"os"
+	"testing"
+
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/licensed"
-	"os"
-	"testing"
 )
 
+// publishedDungeonPortalCensus is the total count of resolved room-to-room
+// portal links across all published dungeon nav surfaces in
+// .generated/client-public/assets/world/dungeon-nav/manifest.json:
+//   - 0x8001 (Dunhwang_Cv.dof, Donwhang Stone Cave): 308 links
+//   - 0x8002..0x8007 (jinsi_floor06..01.dof, Qin-Shi Tomb, published in #1142): 2,490 links
+//   - 0x8009 (event.dof): 0 links
+//
+// Update this constant deliberately when dungeonInfo.mjs publishes additional
+// dungeon floors.
+const publishedDungeonPortalCensus = 2798
+
+/*
+================
+topologyMesh
+================
+*/
 func topologyMesh(west bool) *objectNavMesh {
 	a, b, cell := uint16(1), uint16(2), uint16(0)
 	if west {
@@ -17,6 +45,12 @@ func topologyMesh(west bool) *objectNavMesh {
 	}
 	return &objectNavMesh{vertices: []float32{0, 10, 0, 100, 10, 0, 100, 10, 100, 0, 10, 100}, cellA: []uint16{0, 0}, cellB: []uint16{1, 2}, cellC: []uint16{2, 3}, minX: 0, maxX: 100, minY: 10, maxY: 10, minZ: 0, maxZ: 100, outline: objectNavEdges{vertA: []uint16{a}, vertB: []uint16{b}, srcCell: []uint16{cell}, dstCell: []uint16{65535}, flags: []byte{8}}}
 }
+
+/*
+================
+TestDungeonTopologyClipsAndTraverses
+================
+*/
 func TestDungeonTopologyClipsAndTraverses(t *testing.T) {
 	blocks := []dungeonSpawnBlock{{ordinal: 0, connected: []int{1}, meshes: []*objectNavMesh{topologyMesh(false)}}, {ordinal: 1, connected: []int{0}, x: 100, meshes: []*objectNavMesh{topologyMesh(true)}}}
 	surface := newDungeonSpawnSurface(dungeonMessageGrid{}, blocks)
@@ -59,6 +93,12 @@ func TestDungeonTopologyClipsAndTraverses(t *testing.T) {
 		t.Fatalf("Missing coverage %+v", r)
 	}
 }
+
+/*
+================
+TestPortalToleranceAndOriginalObjectOrdinals
+================
+*/
 func TestPortalToleranceAndOriginalObjectOrdinals(t *testing.T) {
 	a, b := topologyMesh(false), topologyMesh(true)
 	p, q := objectNavPlacement{}, objectNavPlacement{x: 100}
@@ -87,6 +127,11 @@ func TestPortalToleranceAndOriginalObjectOrdinals(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPortalNativeReference
+================
+*/
 func TestPortalNativeReference(t *testing.T) {
 	raw, err := os.ReadFile("testdata/native-portal-reference.json")
 	if err != nil {
@@ -112,6 +157,11 @@ func TestPortalNativeReference(t *testing.T) {
 	}
 }
 
+/*
+================
+TestLinkedLaneRescueAndDungeonObjects
+================
+*/
 func TestLinkedLaneRescueAndDungeonObjects(t *testing.T) {
 	a, b := topologyMesh(false), topologyMesh(true)
 	blocks := []dungeonSpawnBlock{{ordinal: 0, connected: []int{1}, meshes: []*objectNavMesh{a}}, {ordinal: 1, connected: []int{0}, x: 100, meshes: []*objectNavMesh{b}}}
@@ -150,6 +200,14 @@ func TestLinkedLaneRescueAndDungeonObjects(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPublishedDungeonPortalTraversal
+
+Verifies that every resolved room-to-room portal link across all published
+dungeon nav surfaces traverses cleanly with ClipArrived.
+================
+*/
 func TestPublishedDungeonPortalTraversal(t *testing.T) {
 	licensed.RequireGameData(t)
 	root, err := licensed.ClientPublicRoot()
@@ -190,7 +248,7 @@ func TestPublishedDungeonPortalTraversal(t *testing.T) {
 			}
 		}
 	}
-	if total != 308 {
-		t.Fatalf("Portal census %d", total)
+	if total != publishedDungeonPortalCensus {
+		t.Fatalf("Portal census %d, want %d", total, publishedDungeonPortalCensus)
 	}
 }
