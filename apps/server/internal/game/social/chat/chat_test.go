@@ -559,6 +559,67 @@ func TestHandleChatGuildAndUnionGates(t *testing.T) {
 
 /*
 ================
+TestHandleChatSuitedSenderSpeaksUnderJobAlias
+
+While the author is dressed in a job suit, every composed chat line
+carries the job alias instead of the character name (native
+CGObjPC_GetNickName 4DDC50). Deliveries still route by character name,
+and an author who owns an alias but is not wearing the suit speaks
+under the character name.
+================
+*/
+func TestHandleChatSuitedSenderSpeaksUnderJobAlias(t *testing.T) {
+	// 0x3ac | 1<<11: the trader suit's TypeIDs (3,1,7,1) packed.
+	suited := &enterworld.Character{ID: 7, Name: "Alfa",
+		Job:              domain.CharacterJob{Type: domain.JobTrader, Grade: 1, Alias: "Merchant"},
+		MissionInventory: []domain.InventoryRow{{Slot: enterworld.JobSuitSlot, TypeFlags: 0x3ac | 1<<11}}}
+	target := &enterworld.Character{ID: 8, Name: "Berk"}
+	deps := testDeps(suited, target)
+	deps.Guilds = stubGuilds{guildID: 3, members: []enterworld.GuildMemberRecord{
+		{CharID: 7, Name: "Alfa"},
+		{CharID: 8, Name: "Berk"},
+	}}
+	views := Views{
+		Presence: stubPresence{"berk": true},
+		Parties:  stubParties{"alfa": {Members: []party.Member{{Name: "Alfa"}, {Name: "Berk"}}}},
+		Unions:   stubUnions{names: []string{"Cale"}},
+	}
+	aliasLine := func(chatType uint8) []byte {
+		return append([]byte{chatType, 8, 0, 'M', 'e', 'r', 'c', 'h', 'a', 'n', 't'}, utf16LE("hi")...)
+	}
+
+	outcome := HandleChat(deps, views, testDivision, suited, chatFrame(ChatTypeAll, 0xFF, "", "hi"))
+	if !bytes.Equal(outcome.Broadcast, aliasLine(ChatTypeGlobal)) {
+		t.Fatalf("all 0x3667 = % X, want alias line % X", outcome.Broadcast, aliasLine(ChatTypeGlobal))
+	}
+	outcome = HandleChat(deps, views, testDivision, suited, chatFrame(ChatTypeWhisper, 0xFF, "Berk", "hi"))
+	if len(outcome.Deliveries) != 1 || outcome.Deliveries[0].TargetName != "Berk" || !bytes.Equal(outcome.Deliveries[0].Payload, aliasLine(ChatTypeWhisper)) {
+		t.Fatalf("whisper outcome %+v, want one alias line to Berk", outcome)
+	}
+	outcome = HandleChat(deps, views, testDivision, suited, chatFrame(ChatTypeParty, 0xFF, "", "hi"))
+	if len(outcome.Deliveries) != 1 || outcome.Deliveries[0].TargetName != "Berk" || !bytes.Equal(outcome.Deliveries[0].Payload, aliasLine(ChatTypeParty)) {
+		t.Fatalf("party outcome %+v, want one alias line to Berk", outcome)
+	}
+	outcome = HandleChat(deps, views, testDivision, suited, chatFrame(ChatTypeGuild, 0xFF, "", "hi"))
+	if len(outcome.Deliveries) != 1 || outcome.Deliveries[0].TargetName != "Berk" || !bytes.Equal(outcome.Deliveries[0].Payload, aliasLine(ChatTypeGuild)) {
+		t.Fatalf("guild outcome %+v, want one alias line to Berk", outcome)
+	}
+	outcome = HandleChat(deps, views, testDivision, suited, chatFrame(ChatTypeUnion, 0xFF, "", "hi"))
+	if len(outcome.Deliveries) != 1 || outcome.Deliveries[0].TargetName != "Cale" || !bytes.Equal(outcome.Deliveries[0].Payload, aliasLine(ChatTypeUnion)) {
+		t.Fatalf("union outcome %+v, want one alias line to Cale", outcome)
+	}
+
+	// Same alias, suit off: the character name speaks.
+	suited.MissionInventory = nil
+	outcome = HandleChat(deps, views, testDivision, suited, chatFrame(ChatTypeParty, 0xFF, "", "hi"))
+	want := append([]byte{ChatTypeParty, 4, 0, 'A', 'l', 'f', 'a'}, utf16LE("hi")...)
+	if len(outcome.Deliveries) != 1 || !bytes.Equal(outcome.Deliveries[0].Payload, want) {
+		t.Fatalf("undressed party outcome %+v, want character-name line % X", outcome, want)
+	}
+}
+
+/*
+================
 stubUnions
 ================
 */

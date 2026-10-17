@@ -101,6 +101,22 @@ func refusedChat(reason string) Outcome {
 	return Outcome{Refusal: reason}
 }
 
+/*
+================
+senderDisplayName
+
+The name a composed chat line carries for its author: the job alias
+while the author is dressed in a job suit, the character name otherwise
+(native CGObjPC_GetNickName 4DDC50 - the same identity the party roster
+writes via enterworld.PartyMemberName). Presence, party, stall and
+guild routing keep keying on the character name; only the payload's
+author field changes.
+================
+*/
+func senderDisplayName(sender *enterworld.Character) string {
+	return enterworld.PartyMemberName(sender)
+}
+
 // HandleChat routes one decoded 0x7367 request. Transport-free: the
 // register glue owns every Send/Broadcast.
 //
@@ -181,7 +197,7 @@ handleAllChat
 */
 func handleAllChat(request Request, sender *enterworld.Character, global bool) Outcome {
 	if global {
-		return Outcome{Ack: EncodeChatAckSuccess(request.ChatType, request.Second), Broadcast: EncodeChatBroadcastNamed(ChatTypeGlobal, sender.Name, request.Message)}
+		return Outcome{Ack: EncodeChatAckSuccess(request.ChatType, request.Second), Broadcast: EncodeChatBroadcastNamed(ChatTypeGlobal, senderDisplayName(sender), request.Message)}
 	}
 
 	broadcastType := ChatTypeAll
@@ -253,7 +269,7 @@ func handleWhisper(deps Dependencies, presence PresenceView, divisionID string, 
 		Ack: EncodeChatAckSuccess(request.ChatType, request.Second),
 		Deliveries: []Delivery{{
 			TargetName: target.Name,
-			Payload:    EncodeChatBroadcastNamed(ChatTypeWhisper, sender.Name, request.Message),
+			Payload:    EncodeChatBroadcastNamed(ChatTypeWhisper, senderDisplayName(sender), request.Message),
 		}},
 	}
 }
@@ -278,7 +294,7 @@ func handlePartyChat(parties PartyView, divisionID string, sender *enterworld.Ch
 			Ack:     EncodeChatAckError(ChatErrNotPartyMember, request.ChatType, request.Second),
 		}
 	}
-	payload := EncodeChatBroadcastNamed(ChatTypeParty, sender.Name, request.Message)
+	payload := EncodeChatBroadcastNamed(ChatTypeParty, senderDisplayName(sender), request.Message)
 	outcome := Outcome{Ack: EncodeChatAckSuccess(request.ChatType, request.Second)}
 	for _, member := range snapshot.Members {
 		if strings.EqualFold(member.Name, sender.Name) {
@@ -312,7 +328,7 @@ func handleStallChat(stalls StallView, divisionID string, sender *enterworld.Cha
 			Ack:     EncodeChatAckError(ChatErrNoStall, request.ChatType, request.Second),
 		}
 	}
-	payload := EncodeChatBroadcastNamed(ChatTypeStall, sender.Name, request.Message)
+	payload := EncodeChatBroadcastNamed(ChatTypeStall, senderDisplayName(sender), request.Message)
 	outcome := Outcome{Ack: EncodeChatAckSuccess(request.ChatType, request.Second)}
 	for _, name := range names {
 		if strings.EqualFold(name, sender.Name) {
@@ -351,7 +367,7 @@ func handleGuildChat(deps Dependencies, divisionID string, sender *enterworld.Ch
 			Ack:     EncodeChatAckError(ChatErrNoGuild, request.ChatType, request.Second),
 		}
 	}
-	payload := EncodeChatBroadcastNamed(ChatTypeGuild, sender.Name, request.Message)
+	payload := EncodeChatBroadcastNamed(ChatTypeGuild, senderDisplayName(sender), request.Message)
 	outcome := Outcome{Ack: EncodeChatAckSuccess(request.ChatType, request.Second)}
 	for _, member := range members {
 		if member.CharID == sender.ID {
@@ -392,7 +408,7 @@ func handleUnionChat(deps Dependencies, unions UnionView, divisionID string, sen
 			Ack:     EncodeChatAckError(code, request.ChatType, request.Second),
 		}
 	}
-	payload := EncodeChatBroadcastNamed(ChatTypeUnion, sender.Name, request.Message)
+	payload := EncodeChatBroadcastNamed(ChatTypeUnion, senderDisplayName(sender), request.Message)
 	outcome := Outcome{Ack: EncodeChatAckSuccess(request.ChatType, request.Second)}
 	for _, name := range names {
 		outcome.Deliveries = append(outcome.Deliveries, Delivery{TargetName: name, Payload: payload})
