@@ -1326,6 +1326,7 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 			cosWindows = [];
 			paramJobs.reset();
 			countJobs.reset();
+			storage.reset();
 			for (
 				const row of (value as {
 					refItemSnapshot?: ({ refObjId: number; } & Parameters<typeof cosTimerReference>[0])[];
