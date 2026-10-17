@@ -22,6 +22,7 @@ import (
 	"opensro.online/server/internal/game/pk"
 	"opensro.online/server/internal/game/world/fortress"
 	"opensro.online/server/internal/game/world/instance"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 /*
@@ -137,5 +138,109 @@ func TestSiegeCorpseClockNeedsTheSiegeWorldAndWar(t *testing.T) {
 	c2.World.PackedInstance = nil
 	if result := rt2.HandleLocalRebirth(testDivision, c2, []byte{wire.RebirthAtPresentPoint}); !enterworld.CharacterAlive(c2) || len(result.Frames) < 2 {
 		t.Fatalf("overworld corpse: team death did not revive: %q %+v", result.DiagnosticRefusal, opcodesOf(result.Frames))
+	}
+}
+
+/*
+================
+admitSiegeCorpse
+
+The sweep walks resident admissions; a test corpse checks in.
+================
+*/
+func admitSiegeCorpse(rt *Runtime, c *enterworld.Character) {
+	rt.characterAdmissions.Store(simulation.WorldKey(testDivision, c.Name),
+		populationAdmission{division: testDivision, name: c.Name})
+}
+
+/*
+================
+TestSiegeCorpseExpiresToTown
+
+At 180 ticks the run-out corpse is teleported to town unasked - a team
+death included, which the forced town keeps out of the in-place
+revival - and the tick never touches it again.
+================
+*/
+func TestSiegeCorpseExpiresToTown(t *testing.T) {
+	rt, c, clock := fortressFixtureWithClock(t, testFieldFortGate)
+	enterFortress(t, rt, c)
+	if rt.Fortresses == nil {
+		rt.Fortresses = fortress.New([]fortress.Catalog{{ID: 1}})
+	}
+	rt.Fortresses.SetPeriod(testDivision, fortress.PeriodWar, true)
+	zero := int64(0)
+	c.CurrentHP = &zero
+	rt.settlePlayerDeathInDoor(testDivision, c, deathKiller{}, clock.NowMs())
+	// The corpse is a team death's: the native expiry still goes to town.
+	c.DeathKind = uint8(pk.DeathTeam)
+
+	// Inside the count - even past the 15-tick refusal window - the
+	// corpse waits where it fell.
+	clock.Advance(60 * time.Second)
+	if out := rt.advanceSiegeCorpses(clock.NowMs()); len(out) != 0 || enterworld.CharacterAlive(c) {
+		t.Fatalf("at 60 ticks the corpse moved: %+v", out)
+	}
+
+	// At 181 the count has run out.
+	clock.Advance(121 * time.Second)
+	out := rt.advanceSiegeCorpses(clock.NowMs())
+	if !enterworld.CharacterAlive(c) {
+		t.Fatal("at 181 ticks the corpse is still dead")
+	}
+	if c.DeathKind != 0 {
+		t.Fatalf("expiry kept death kind %d", c.DeathKind)
+	}
+	inField(t, rt, c, "the corpse expiry")
+	private, observed := 0, 0
+	for _, row := range out {
+		reset := false
+		for _, frame := range row.Frames {
+			if frame.Opcode == enterworld.OpcodeResetClient {
+				reset = true
+			}
+		}
+		switch {
+		case reset && row.OnlyCharacterID == c.ID:
+			private++
+		case row.SourceGID == enterworld.ObjectIDForCharacter(c) && row.ExceptCharacterID == c.ID:
+			observed++
+		}
+	}
+	if private != 1 || observed != 1 {
+		t.Fatalf("expiry rows = %d private, %d observed; want one of each", private, observed)
+	}
+
+	// Nothing repeats: the tick leaves a living player alone.
+	if out := rt.advanceSiegeCorpses(clock.NowMs()); len(out) != 0 {
+		t.Fatalf("a living player was swept again: %+v", out)
+	}
+}
+
+/*
+================
+TestSiegeCorpseExpiryNeedsTheWarAndWorld
+
+The OnTick conjunction: no active war, or a corpse outside a siege
+world, and even a run-out corpse keeps waiting.
+================
+*/
+func TestSiegeCorpseExpiryNeedsTheWarAndWorld(t *testing.T) {
+	// War over: a run-out corpse still waits.
+	rt, clock, c := siegeCorpse(t)
+	admitSiegeCorpse(rt, c)
+	rt.Fortresses = fortress.New([]fortress.Catalog{{ID: 1}})
+	clock.Advance(200 * time.Second)
+	if out := rt.advanceSiegeCorpses(clock.NowMs()); len(out) != 0 || enterworld.CharacterAlive(c) {
+		t.Fatalf("no war: the corpse expired: %+v", out)
+	}
+
+	// War active but the corpse lies in the overworld.
+	rt2, clock2, c2 := siegeCorpse(t)
+	admitSiegeCorpse(rt2, c2)
+	c2.World.PackedInstance = nil
+	clock2.Advance(200 * time.Second)
+	if out := rt2.advanceSiegeCorpses(clock2.NowMs()); len(out) != 0 || enterworld.CharacterAlive(c2) {
+		t.Fatalf("overworld corpse expired: %+v", out)
 	}
 }
