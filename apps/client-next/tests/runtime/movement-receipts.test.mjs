@@ -173,3 +173,141 @@ test("a receipt keeps the predicted walk after it crossed a region seam the serv
 	}
 	movement.clear();
 });
+test("a receipt whose server start escaped a sealed obstacle rebases a wedged client onto terrain", async () => {
+	const { createMovement } = await load( "runtime/simulation/worker/session/world/gameplay/movement/movement.ts" );
+	const region = product( 23661 );
+	const heights = new Float32Array( 97 * 97 ).fill( 3364 );
+	region.navmesh.regions[0].heightMap = Buffer.from( heights.buffer ).toString( "base64" );
+	region.objects = [ {
+		x: 985.8694458007812,
+		y: 3362.28564453125,
+		z: 10.19677734375,
+		yaw: -7.853983402252197,
+		terrainCells: [ [ 960, 0, 1280, 320 ] ],
+		mesh: {
+			vertices: Float32Array.from( [
+				-6.714275360107422,
+				0.04216267541050911,
+				4.177054405212402,
+				-6.522409439086914,
+				0.04221678525209427,
+				-2.489809989929199,
+				-0.12255165725946426,
+				0.04227064177393913,
+				-4.367509365081787,
+				3.6409153938293457,
+				0.042249832302331924,
+				1.1388740539550781,
+				-0.4329914152622223,
+				0.042183488607406616,
+				6.41970682144165
+			] ),
+			vertexDirections: Uint8Array.from( [ 88, 101, 50, 254, 11 ] ),
+			cells: Uint16Array.from( [ 4, 3, 2, 0, 4, 2, 0, 2, 1 ] ),
+			edges: Uint32Array.from( [
+				2,
+				3,
+				0,
+				65535,
+				3,
+				0,
+				3,
+				4,
+				0,
+				65535,
+				3,
+				0,
+				0,
+				4,
+				1,
+				65535,
+				3,
+				0,
+				1,
+				2,
+				2,
+				65535,
+				3,
+				0,
+				0,
+				1,
+				2,
+				65535,
+				3,
+				0,
+				2,
+				4,
+				0,
+				1,
+				4,
+				1,
+				0,
+				2,
+				1,
+				2,
+				4,
+				1
+			] ),
+			bounds: [
+				-6.714275360107422,
+				0.04216267541050911,
+				-4.367509365081787,
+				3.6409153938293457,
+				0.04227064177393913,
+				6.41970682144165
+			],
+			passThrough: false
+		}
+	} ];
+	const movement = createMovement( () => {} );
+	const wedgedInsideRock = {
+		regionId: 23661,
+		x: 981.6279296875,
+		y: 3362.3279132062466,
+		z: 10.478119850158691,
+		angle: 27236
+	};
+	const target = { regionId: 23661, x: 932, y: 3361, z: 40, angle: 27106 };
+	const serverFrom = {
+		regionId: 23661,
+		x: 970.7426147460938,
+		y: 3363.9713375543097,
+		z: 16.629905700683594,
+		angle: 27236
+	};
+	movement.seed( wedgedInsideRock, { walkSpeed: 40, runSpeed: 100 } );
+	movement.navigation( region.regionId, region );
+	movement.request( target, 0 );
+	for ( let now = 0; now <= 144; now += 16 ) movement.step( now );
+	assert.ok( movement.state().pose.x > 981, "client prediction is trapped inside Object 4 before the receipt" );
+	movement.receive(
+		new TextEncoder().encode(
+			JSON.stringify( {
+				v: 1,
+				id: 1,
+				gid: 100122,
+				accepted: true,
+				serverTimeMs: 1000,
+				world: {
+					spawn: target,
+					moveSegment: { from: serverFrom, startedAtMs: 1000, arrivesAtMs: 1453 }
+				}
+			} )
+		),
+		160,
+		100122
+	);
+	movement.step( 176 );
+	const afterReceipt = movement.state().pose;
+	assert.ok(
+		afterReceipt.x < 970 && afterReceipt.z > 16.8 && afterReceipt.y === 3364,
+		`receipt left client wedged inside Object 4: ${JSON.stringify( afterReceipt )}`
+	);
+	for ( let now = 192; now <= 640; now += 16 ) movement.step( now );
+	const arrived = movement.state().pose;
+	assert.ok(
+		Math.hypot( arrived.x - target.x, arrived.z - target.z ) < 1e-2,
+		`rebased walk did not reach terrain target: ${JSON.stringify( arrived )}`
+	);
+	movement.clear();
+});
