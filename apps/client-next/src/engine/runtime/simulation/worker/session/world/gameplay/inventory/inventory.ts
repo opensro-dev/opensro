@@ -482,21 +482,31 @@ data and never fails the session.
 bindCompanion
 
 830EC0 -> 59C2E0 binds the private COS record to its summoner inventory
-slot. The separate 3645 receipt owns the native active/dead state byte.
+slot, and 59DAA0 (CIFInventory_FindSummonerByCompanionGID) locates that
+CSOItem by its bound companion GID (auxParam2) after a bag slot move.
+The separate 3645 receipt owns the native active/dead state byte.
 ================
  */
 		bindCompanion( record: import("@/engine/contracts/gameplay").CosRecord ) {
-			if ( record.inventorySlot === undefined ) return;
-			const previous = slots.get( record.inventorySlot );
+			let slot = record.inventorySlot;
+			for ( const [candidateSlot, candidate] of slots ) {
+				if ( candidate.summon?.gid === record.gid ) {
+					slot = candidateSlot;
+					break;
+				}
+			}
+			if ( slot === undefined ) return;
+			const previous = slots.get( slot );
 			// Native 59C2E0 ignores an absent slot; it does not create an item.
 			if ( !previous ) return;
 			if ( (previous.typeFlags & 0x7fe) !== 0xcc ) {
 				throw Error( "Companion record has no summoner item" );
 			}
-			slots.set( record.inventorySlot, {
+			slots.set( slot, {
 				...previous,
 				summon: {
 					...previous.summon,
+					gid: record.gid,
 					state: record.dead ? 4 : 2,
 					refObjId: record.refObjId,
 					name: record.name,

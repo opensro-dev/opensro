@@ -387,6 +387,7 @@ import {
 	cosCommandLabel,
 	cosCommandLayout,
 	type CosCommandContext,
+	cosHasInventory,
 	cosHpText,
 	cosInfoSections,
 	cosExperienceText,
@@ -2652,7 +2653,7 @@ export function createUi(
 				// transport's or pickup pet's container page.
 				cosGid = record.gid;
 				if ( setPanel( "COS inventory" ) ) {
-					cosTab = (cls === COS_CLASS_TRANSPORT || cls === COS_CLASS_PICKUP) && record.inventory ? 1 : 0;
+					cosTab = cosHasInventory( record ) ? 1 : 0;
 				}
 				return;
 			case COS_COMMAND_RIDE:
@@ -4291,7 +4292,7 @@ export function createUi(
 		else if ( id.startsWith( "toggle-window:" ) ) setPanel( panelNamed( id.slice( 14 ) ), "toggle" );
 		else if ( id === "cos-bag" ) setPanel( "COS inventory" );
 		else if ( id === "cos-cycle" ) {
-			const records = view.gameplay?.cosRecords?.filter( r => r.inventory && !r.dead && r.hp > 0 ) ?? [];
+			const records = view.gameplay?.cosRecords?.filter( r => cosHasInventory( r ) && !r.dead && r.hp > 0 ) ?? [];
 			cosGid = records[(records.findIndex( r => r.gid === cosGid ) + 1) % records.length]?.gid ?? 0;
 			cosSlot = -1;
 			cosPage = 0;
@@ -4326,7 +4327,8 @@ export function createUi(
 				record = game.cosRecords?.find( r => r.gid === cosGid ),
 				toCos = id === "to-cos";
 			if (
-				record?.inventory && !record.dead && record.hp > 0 && !game.inventoryPending &&
+				cosHasInventory( record ) && record?.inventory && !record.dead && record.hp > 0 &&
+				!game.inventoryPending &&
 				game.inventorySlotCount !== undefined && game.equipmentSlotCount !== undefined
 			) {
 				const start = toCos ? 0 : game.equipmentSlotCount,
@@ -4671,8 +4673,12 @@ export function createUi(
 				sellAllRun = null;
 			}
 		} else if ( id.startsWith( "cos-tab:" ) ) {
-			cosTab = Number( id.slice( 8 ) );
-			cosDraft = view.gameplay?.cosRecords?.find( r => r.gid === cosGid )?.commandMode ?? 0;
+			const tab = Number( id.slice( 8 ) ),
+				record = view.gameplay?.cosRecords?.find( r => r.gid === cosGid );
+			if ( tab === 0 || tab === 1 && cosHasInventory( record ) || tab === 2 && record?.band === 4 ) {
+				cosTab = tab;
+				cosDraft = record?.commandMode ?? 0;
+			}
 		} else if ( id.startsWith( "cos-setting:" ) ) cosDraft ^= Number( id.slice( 12 ) );
 		else if ( id.startsWith( "cos-radio:" ) ) {
 			const [, mask, index] = id.split( ":" ),
@@ -7261,6 +7267,12 @@ export function createUi(
 					dirty = true;
 					return;
 				}
+				// 564030 case 1 (control message 0x25, set at 6A3B75) -> 6F2520 -> 6A2350:
+				// CIFSlotWithHelp_OnRightReleaseUse (5650A0) dispatches the COS command row.
+				if ( event.id.startsWith( "cos-command:" ) ) {
+					executeCosCommand( Number( event.id.slice( 12 ) ) );
+					return;
+				}
 				if ( event.id.startsWith( "action:" ) ) {
 					executeAction( Number( event.id.slice( 7 ) ) );
 					return;
@@ -8799,6 +8811,7 @@ export function createUi(
 							helpText: help,
 							rect: row.slot,
 							kind: "button",
+							rightActivate: true,
 							disabled: !cosCommandEnabled( command, context )
 						} );
 					} );
@@ -15798,8 +15811,10 @@ export function createUi(
 						cosPage = 0;
 						cosDraft = records[0]?.commandMode ?? 0;
 					}
-					const record = records.find( r => r.gid === cosGid ), busy = !!game?.inventoryPending;
-					if ( cosTab === 1 && !record?.inventory || cosTab === 2 && record?.band !== 4 ) cosTab = 0;
+					const record = records.find( r => r.gid === cosGid ),
+						hasInventory = cosHasInventory( record ),
+						busy = !!game?.inventoryPending;
+					if ( cosTab === 1 && !hasInventory || cosTab === 2 && record?.band !== 4 ) cosTab = 0;
 					// Beside a shop (trade goods loading into a transport) the bag keeps
 					// its own close identity; closing it ends the trade, as the shop's does.
 					nativeFrame( root, px, py, record?.name ?? "", panelCloseId( "COS inventory" ) );
@@ -15821,7 +15836,7 @@ export function createUi(
 								// Unavailable, not busy: an open shop window, or a tab the
 								// record's class lacks (6A1920), holds the lock.
 								disabled: panel === "Shop" ||
-									(i === 1 ? !record?.inventory : i === 2 ? record?.band !== 4 : false)
+									(i === 1 ? !hasInventory : i === 2 ? record?.band !== 4 : false)
 							}
 						)
 					);
@@ -15937,8 +15952,10 @@ export function createUi(
 							if ( gauge ) authoredGauge( "cos-info-hp", record.gid, gauge, ox, oy, ratio );
 						}
 						if ( sections.rentTime ) {
-							// 6A4FD0 reads the rent left on the companion's summoner item.
-							const summoner = game?.inventory?.find( item => item.slot === record.inventorySlot );
+							// 6A4FD0 -> 59DAA0 finds the summoner item by companion GID
+							// (CSOItem auxParam2), falling back to the initial inventorySlot.
+							const summoner = game?.inventory?.find( item => item.summon?.gid === record.gid ) ??
+								game?.inventory?.find( item => item.slot === record.inventorySlot );
 							const remaining = (summoner?.summon?.remainingSeconds ?? 0) * 1000;
 							texts.push( [
 								52,

@@ -51,6 +51,58 @@ test("native companion creation, cancellation, death and revival preserve the su
 	game.dispose();
 });
 
+test("moving a summoned scroll in the bag preserves its companion GID for 0x3508 rename and evolution updates (59DAA0)", () => {
+	const game = createGameplay( () => {} );
+	game.bootstrap( {
+		inventorySlotCount: 45,
+		equipmentSlotCount: 13,
+		refObjSnapshot: [
+			{ kind: "cos", refObjId: 950, tidWord: 0x19c6 },
+			{ kind: "cos", refObjId: 951, tidWord: 0x19c6 }
+		],
+		refItemSnapshot: [ { refObjId: 900, typeFlags: 0x8cc } ],
+		equipItems: [ { refObjId: 900, slot: 23, body: [ 132, 3, 0, 0, 1 ] } ]
+	} );
+	const payload = new Uint8Array( 43 ), view = new DataView( payload.buffer );
+	view.setUint32( 0, 9001, true );
+	view.setUint32( 4, 950, true );
+	view.setUint32( 8, 42, true );
+	payload[24] = 1;
+	view.setUint16( 25, 7654, true );
+	view.setUint16( 31, 4, true );
+	payload.set( new TextEncoder().encode( "Wolf" ), 33 );
+	payload[42] = 23;
+	game.receive( { opcode: 0x3158, payload }, 0 );
+	assert.equal( game.take()?.inventory?.find( row => row.slot === 23 )?.summon?.gid, 9001 );
+
+	// Move the summoned scroll from slot 23 to slot 24 (0xB06D type 0).
+	game.receive( { opcode: 0xb06d, payload: Uint8Array.of( 1, 0, 23, 24, 1, 0, 0 ) }, 2 );
+	let moved = game.take()?.inventory?.find( row => row.slot === 24 );
+	assert.equal( moved?.summon?.gid, 9001 );
+	assert.equal( moved?.summon?.name, "Wolf" );
+	assert.equal( moved?.summon?.refObjId, 950 );
+
+	// 0x3508 case 5 (rename, 77AADB -> 59DAA0) updates the moved scroll at slot 24.
+	const rename = new Uint8Array( 11 ), rv = new DataView( rename.buffer );
+	rv.setUint32( 0, 9001, true );
+	rename[4] = 5;
+	rv.setUint16( 5, 4, true );
+	rename.set( new TextEncoder().encode( "Fang" ), 7 );
+	game.receive( { opcode: 0x3508, payload: rename }, 3 );
+	moved = game.take()?.inventory?.find( row => row.slot === 24 );
+	assert.equal( moved?.summon?.name, "Fang" );
+
+	// 0x3508 case 7 (evolution, 77AC91 -> 59DAA0) updates refObjId on the moved scroll at slot 24.
+	const evolve = new Uint8Array( 9 ), ev = new DataView( evolve.buffer );
+	ev.setUint32( 0, 9001, true );
+	evolve[4] = 7;
+	ev.setUint32( 5, 951, true );
+	game.receive( { opcode: 0x3508, payload: evolve }, 4 );
+	moved = game.take()?.inventory?.find( row => row.slot === 24 );
+	assert.equal( moved?.summon?.refObjId, 951 );
+	game.dispose();
+});
+
 test("unknown summoner states and incompatible character families cannot shift the next item", () => {
 	const refs = new Map( [ [ 900, 0x8cc ] ] );
 	for ( const state of [ 0, 5, 255 ] ) {

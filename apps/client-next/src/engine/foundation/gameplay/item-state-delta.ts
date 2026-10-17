@@ -65,7 +65,16 @@ take
 			item = {
 				...item,
 				slotState: value,
-				...(summoner ? { summon: { ...item.summon, state: value, rentals: item.summon?.rentals ?? [] } } : {})
+				...(summoner ?
+					{
+						summon: {
+							...item.summon,
+							state: value,
+							...(value === 2 ? {} : { gid: undefined }),
+							rentals: item.summon?.rentals ?? []
+						}
+					} :
+					{})
 			};
 		}
 	}

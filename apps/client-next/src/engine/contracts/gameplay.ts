@@ -440,6 +440,7 @@ export interface InventoryItem {
 	readonly label?: string;
 	readonly summon?: {
 		readonly state: number;
+		readonly gid?: number;
 		readonly refObjId?: number;
 		readonly name?: string;
 		readonly remainingSeconds?: number;

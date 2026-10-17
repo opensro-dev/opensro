@@ -111,6 +111,21 @@ export function cosClass( band: number ): number | null {
 
 /*
 ================
+cosHasInventory
+
+CIFCosInventory_BindCompanion (6A1920 @0x6A19AC..0x6A1A3A) enables the
+Inventory tab (+0x7C8) only for record classes 1 (transport) and 2 (pickup
+pet); riding mounts (0), attack pets (3) and guild soldiers (4) disable it.
+================
+*/
+export function cosHasInventory( record: Pick<CosRecord, "band" | "inventory"> | undefined ): boolean {
+	if ( !record?.inventory ) return false;
+	const cls = cosClass( record.band );
+	return cls === COS_CLASS_TRANSPORT || cls === COS_CLASS_PICKUP;
+}
+
+/*
+================
 cosCommandButtons
 
 CIFCOSCommand_BindCompanion (6A3DF0): the command of each row in order.

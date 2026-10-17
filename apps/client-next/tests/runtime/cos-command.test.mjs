@@ -54,6 +54,15 @@ test("830EC0 maps bands to record classes; quest companions retain default class
 	assert.deepEqual( [ 1, 2, 3, 4, 5, 6 ].map( cos.cosClass ), [ 0, 1, 3, 2, 4, 0 ] );
 });
 
+test("6A1920 enables the inventory tab only for transport (class 1) and pickup (class 2) companions", () => {
+	assert.deepEqual(
+		[ 1, 2, 3, 4, 5, 6 ].map( band => cos.cosHasInventory( { band, inventory: [] } ) ),
+		[ false, true, false, true, false, false ]
+	);
+	assert.equal( cos.cosHasInventory( { band: 4, inventory: undefined } ), false );
+	assert.equal( cos.cosHasInventory( undefined ), false );
+});
+
 test("6A3DF0 builds each class's command row in native order", () => {
 	assert.deepEqual( cos.cosCommandButtons( 0 ), [ 0, 1, 5 ] );
 	assert.deepEqual( cos.cosCommandButtons( 1 ), [ 0, 1, 5 ] );

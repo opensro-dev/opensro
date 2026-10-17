@@ -2551,6 +2551,7 @@ test("GPU COS bag leaves a quick transfer's slot to the worker in either directi
 			cosRecords: [ {
 				gid: 7,
 				refObjId: 102,
+				band: 4,
 				name: "Pet",
 				hp: 100,
 				dead: false,
@@ -2589,6 +2590,7 @@ test("Ctrl+click moves an item across the open pet bag in either direction", () 
 			cosRecords: [ {
 				gid: 7,
 				refObjId: 102,
+				band: 4,
 				name: "Pet",
 				hp: 100,
 				dead: false,
@@ -4035,11 +4037,45 @@ test("the pet portrait selects and targets on right release only, as CIFCOSStatu
 test("the pet keys act on the active companion and a switch re-binds the window, as 6A2350 and 6F21F0 do", () => {
 	const sent = [], f = uiFixture( c => sent.push( c.command ) );
 	try {
-		// A pickup rabbit with a bag and an attack wolf without one: the bag
-		// tab is enabled only while the window shows the rabbit.
+		// A pickup rabbit with a bag and an attack wolf without one (even though
+		// decodeCosRecord populates inventory: [] on every record): the bag tab
+		// is enabled only while the window shows the rabbit (6A1920).
 		f.state.gameplay.cosRecords = [
-			{ gid: 7, refObjId: 100, band: 4, hp: 100, mp: 0, status: 0, dead: false, name: "Bunny", inventory: [] },
-			{ gid: 8, refObjId: 100, band: 3, hp: 100, mp: 0, status: 0, dead: false, name: "Fang", satiety: 10000 }
+			{
+				gid: 7,
+				refObjId: 100,
+				band: 4,
+				hp: 100,
+				mp: 0,
+				status: 0,
+				dead: false,
+				name: "Bunny",
+				inventorySlot: 13,
+				inventory: []
+			},
+			{
+				gid: 8,
+				refObjId: 100,
+				band: 3,
+				hp: 100,
+				mp: 0,
+				status: 0,
+				dead: false,
+				name: "Fang",
+				satiety: 10000,
+				inventory: []
+			}
+		];
+		// The rabbit's summoner scroll was moved from slot 13 to slot 20; 6A4FD0
+		// -> 59DAA0 locates it by summon.gid to display its remaining rent time.
+		f.state.gameplay.inventory = [
+			{
+				slot: 20,
+				refObjId: 900,
+				typeFlags: 0x8cc,
+				quantity: 1,
+				summon: { state: 2, gid: 7, refObjId: 100, name: "Bunny", remainingSeconds: 3660, rentals: [] }
+			}
 		];
 		f.state.gameplay.selectedCosGid = 7;
 		let now = 1000;
@@ -4113,6 +4149,19 @@ test("the pet keys act on the active companion and a switch re-binds the window,
 		// showed the old pet.
 		press( "Insert" );
 		assert.equal( bagTab()?.disabled, false, "Insert opens the pet W selected" );
+		f.ui.event( { kind: "activate", id: "cos-tab:0" } );
+		settle();
+		assert.ok( f.hasText( "1Hour 1Minute" ), "6A4FD0 reads rent time from the moved summoner scroll by GID" );
+		// 564030 case 1 (0x25) -> 6F2520 -> 6A2350: right-clicking a COS command
+		// slot dispatches its action (and exposes rightActivate for platform UI).
+		const cancelControl = initial?.controls.find( c => c.id === "cos-command:4" );
+		assert.equal( cancelControl?.rightActivate, true, "COS command slot advertises rightActivate (5650A0)" );
+		f.ui.event( { kind: "right-activate", id: "cos-command:4" } );
+		assert.deepEqual(
+			sent.at( -1 ),
+			{ kind: "cos-cancel", gid: 7 },
+			"right-clicking unsummon dispatches cos-cancel"
+		);
 	} finally {
 		f.dispose();
 	}

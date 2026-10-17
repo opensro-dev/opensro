@@ -3182,11 +3182,15 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( !gid || !refObjId ) throw Error( "Invalid COS reference" );
 					const record = cosRecords.get( gid );
 					if ( record ) {
-						cosRecords.set( gid, {
+						const next = {
 							...record,
 							refObjId,
 							...(record.band === 3 ? { satiety: 10000 } : {})
-						} );
+						};
+						cosRecords.set( gid, next );
+						// 77A570 case 7 @0x77AC91: 59DAA0 finds the summoner item by GID
+						// and updates its companion reference (CSOItem_SetAuxParam1).
+						inventory.bindCompanion( next );
 						dirty = true;
 					}
 					return false;
@@ -3203,7 +3207,11 @@ Packet handling must not depend on which HUD panel is currently open.
 				if ( named ) {
 					const record = cosRecords.get( named.gid );
 					if ( record ) {
-						cosRecords.set( named.gid, { ...record, name: named.name } );
+						const next = { ...record, name: named.name };
+						cosRecords.set( named.gid, next );
+						// 77A570 case 5 @0x77AADB: 59DAA0 finds the summoner item by GID
+						// and updates its companion name (CSOItem_SetCompanionName).
+						inventory.bindCompanion( next );
 						dirty = true;
 					}
 					return false;
