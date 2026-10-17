@@ -59,6 +59,12 @@ func (inv *Inventory) TransferWholeTo(destination *Inventory, sourceSlot, destin
 			target.Slot = sourceSlot
 			source = cloneInventoryRow(source)
 			target = cloneInventoryRow(target)
+			if source.Summon != nil {
+				source.Summon.InventorySlot = destinationSlot
+			}
+			if target.Summon != nil {
+				target.Summon.InventorySlot = sourceSlot
+			}
 			inv.items[i] = target
 			destination.items[j] = source
 		}
@@ -67,7 +73,51 @@ func (inv *Inventory) TransferWholeTo(destination *Inventory, sourceSlot, destin
 	row := inv.items[i]
 	row.Slot = destinationSlot
 	row = cloneInventoryRow(row)
+	if row.Summon != nil {
+		row.Summon.InventorySlot = destinationSlot
+	}
 	destination.items = append(destination.items, row)
 	inv.items = append(inv.items[:i], inv.items[i+1:]...)
+	return nil
+}
+
+/*
+================
+summonerItemFault
+
+Validates the structural invariants of a summoner item row (type flags,
+unit stack count, and COS record validity). Intra-bag moves and swaps
+(CGObjPC_DispatchInventorySlotMove 523860 -> CGStorage_MoveOrMergeStack
+4B2450) check only these invariants; an active companion's scroll may
+move or swap freely inside the owner's bag.
+================
+*/
+func summonerItemFault(item Item) *Fault {
+	if !wire.IsCosSummoner(item.TypeFlags) && item.Summon == nil {
+		return nil
+	}
+	if !wire.IsCosSummoner(item.TypeFlags) || item.Quantity != 1 || wire.ValidateCOSItem(item.TypeFlags, item.Summon) != nil {
+		return newFault(wire.ErrCodeInvalidRequest, "summonerOwnershipConflict")
+	}
+	return nil
+}
+
+/*
+================
+summonerTransferFault
+
+CGObjPC_TransferItemBetweenStorages (523F70 at 523FB8..523FEA) and ground
+drop/grant gates refuse a summoner item whose companion is currently
+summoned (CCOSData+0x38 & 2), so an active actor cannot cross an item
+container boundary.
+================
+*/
+func summonerTransferFault(item Item) *Fault {
+	if fault := summonerItemFault(item); fault != nil {
+		return fault
+	}
+	if item.Summon != nil && item.Summon.Summoned {
+		return newFault(wire.ErrCodeInvalidRequest, "summonerOwnershipConflict")
+	}
 	return nil
 }

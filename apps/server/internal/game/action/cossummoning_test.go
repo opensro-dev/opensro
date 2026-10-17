@@ -508,3 +508,64 @@ func TestPetsRefuseSummonInBattle(t *testing.T) {
 	c.BattleUntilMs = 0
 	useSummonerFixture(t, rt, c, 24, refs.staticItemSource["SUMMON_PICKUP"])
 }
+
+/*
+================
+TestSummonedPetScrollMovesWithinBagAndUpdatesStateSlot
+
+CGObjPC_DispatchInventorySlotMove (523860 -> 4B2450) allows a summoned pet
+scroll to move or swap within the owner's bag, and subsequent state updates
+(493960 / 493440) resolve its current bag slot.
+================
+*/
+func TestSummonedPetScrollMovesWithinBagAndUpdatesStateSlot(t *testing.T) {
+	c, refs := persistentSummonFixture()
+	rt, _ := newTestRuntime(c, refs)
+	attack := refs.staticItemSource["SUMMON_ATTACK"]
+	pickup := refs.staticItemSource["SUMMON_PICKUP"]
+	useSummonerFixture(t, rt, c, 23, attack)
+	useSummonerFixture(t, rt, c, 24, pickup)
+
+	movePayload, err := (wire.ItemMoveRequest{
+		MovementType: wire.MoveTypeInventory,
+		SourceSlot:   23,
+		DestSlot:     30,
+		Quantity:     1,
+	}).Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	moved := rt.HandleItemMove(testDivision, c, movePayload)
+	if len(moved.Frames) == 0 || moved.Frames[0].Opcode != wire.OpItemMoveResponse || moved.Frames[0].Payload[0] != 1 {
+		t.Fatalf("moving summoned pet scroll to empty bag slot failed: %+v", moved.Frames)
+	}
+	if row30, ok := inventoryRowAt(c, 30); !ok || row30.Summon == nil || !row30.Summon.Summoned || row30.Summon.InventorySlot != 30 {
+		t.Fatalf("moved scroll at slot 30 missing updated Summon state: %+v", row30)
+	}
+
+	swapPayload, err := (wire.ItemMoveRequest{
+		MovementType: wire.MoveTypeInventory,
+		SourceSlot:   30,
+		DestSlot:     24,
+		Quantity:     1,
+	}).Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	swapped := rt.HandleItemMove(testDivision, c, swapPayload)
+	if len(swapped.Frames) == 0 || swapped.Frames[0].Opcode != wire.OpItemMoveResponse || swapped.Frames[0].Payload[0] != 1 {
+		t.Fatalf("swapping two summoned pet scrolls failed: %+v", swapped.Frames)
+	}
+	row24, ok24 := inventoryRowAt(c, 24)
+	row30, ok30 := inventoryRowAt(c, 30)
+	if !ok24 || row24.Codename != attack.Codename || row24.Summon == nil || row24.Summon.InventorySlot != 24 ||
+		!ok30 || row30.Codename != pickup.Codename || row30.Summon == nil || row30.Summon.InventorySlot != 30 {
+		t.Fatalf("swapped scrolls mismatch: 24=%+v 30=%+v", row24, row30)
+	}
+
+	// Dismissing the attack pet at its new slot 24 must publish 0x329C for slot 24.
+	useSummonerFixture(t, rt, c, 24, attack)
+	if row24, _ = inventoryRowAt(c, 24); row24.Summon == nil || row24.Summon.Summoned {
+		t.Fatalf("attack pet at slot 24 was not dismissed: %+v", row24)
+	}
+}

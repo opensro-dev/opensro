@@ -105,6 +105,10 @@ func rowsFromInvItems(items []inventory.Item) []enterworld.InventoryRow {
 	out := make([]enterworld.InventoryRow, 0, len(items))
 
 	for _, item := range items {
+		summon := domain.CloneCOS(item.Summon)
+		if summon != nil {
+			summon.InventorySlot = item.Slot
+		}
 		out = append(out, enterworld.InventoryRow{
 			RecordID:          item.RecordID,
 			TradeOwner:        item.TradeOwner,
@@ -117,7 +121,7 @@ func rowsFromInvItems(items []inventory.Item) []enterworld.InventoryRow {
 			Durability:        int64(item.Durability),
 			StackCount:        int64(item.Quantity),
 			MagicOptions:      append([]uint64(nil), item.MagicOptions...),
-			TransformRefObjID: item.TransformRefObjID, Summon: domain.CloneCOS(item.Summon),
+			TransformRefObjID: item.TransformRefObjID, Summon: summon,
 		})
 	}
 

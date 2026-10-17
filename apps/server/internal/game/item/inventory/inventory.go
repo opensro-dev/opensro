@@ -466,18 +466,26 @@ func (inv *Inventory) Transfer(sourceSlot, destSlot uint8, quantity uint16, stac
 		}
 	}
 
-	if fault := summonerTransferFault(inv.items[sourceIndex]); fault != nil {
+	bothInBag := inv.bagSlot(sourceSlot) && inv.bagSlot(destSlot)
+	// CGObjPC_DispatchInventorySlotMove (523860 -> 4B2450) moves or swaps a
+	// summoner item inside the owner's bag even while its companion is
+	// summoned; only cross-container transfers (523F70 at 523FB8..523FEA)
+	// and equipment sockets reject an active summon.
+	summonerGate := summonerTransferFault
+	if bothInBag && inv.bagStart > 0 {
+		summonerGate = summonerItemFault
+	}
+	if fault := summonerGate(inv.items[sourceIndex]); fault != nil {
 		return out, fault
 	}
 	if destIndex >= 0 {
-		if fault := summonerTransferFault(inv.items[destIndex]); fault != nil {
+		if fault := summonerGate(inv.items[destIndex]); fault != nil {
 			return out, fault
 		}
 	}
 	if wire.IsCosSummoner(inv.items[sourceIndex].TypeFlags) || (destIndex >= 0 && wire.IsCosSummoner(inv.items[destIndex].TypeFlags)) {
 		stackCap = 1
 	}
-	bothInBag := inv.bagSlot(sourceSlot) && inv.bagSlot(destSlot)
 	cap := stackCap
 	if !bothInBag || cap < 1 {
 		cap = 1
@@ -561,9 +569,15 @@ func (inv *Inventory) Transfer(sourceSlot, destSlot uint8, quantity uint16, stac
 	// with the empty destination record.
 	default:
 		inv.items[sourceIndex].Slot = destSlot
+		if inv.items[sourceIndex].Summon != nil {
+			inv.items[sourceIndex].Summon.InventorySlot = destSlot
+		}
 		out.DestQuantity = sourceCount
 		if destIndex >= 0 {
 			inv.items[destIndex].Slot = sourceSlot
+			if inv.items[destIndex].Summon != nil {
+				inv.items[destIndex].Summon.InventorySlot = sourceSlot
+			}
 			swappedCount := inv.items[destIndex].Quantity
 			if swappedCount == 0 {
 				swappedCount = 1
@@ -957,23 +971,4 @@ func (inv *Inventory) GrantStack(item Item, stackCap uint16) (PickupGrant, *Faul
 	out.PostMergeCount = granted
 	out.GroundRemainder = groundStack - granted
 	return out, nil
-}
-
-/*
-================
-summonerTransferFault
-
-Inference from single-record ownership: an active actor cannot cross an item
-container boundary, and a persistent record cannot split or merge. This gate
-belongs to the shared inventory owner so warehouse, sale and drop agree.
-================
-*/
-func summonerTransferFault(item Item) *Fault {
-	if !wire.IsCosSummoner(item.TypeFlags) && item.Summon == nil {
-		return nil
-	}
-	if !wire.IsCosSummoner(item.TypeFlags) || item.Quantity != 1 || (item.Summon != nil && item.Summon.Summoned) || wire.ValidateCOSItem(item.TypeFlags, item.Summon) != nil {
-		return newFault(wire.ErrCodeInvalidRequest, "summonerOwnershipConflict")
-	}
-	return nil
 }
