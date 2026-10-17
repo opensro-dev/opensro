@@ -582,11 +582,11 @@ variable "job_monster_speed" {
 
 # transport_follow has a trade transport its trader or thief stepped off
 # walk after them instead of holding them within 100 m of it (port-only,
-# not native; owner decision 2026-10-15). "off" is the original parked
-# transport and its tether.
+# not native; owner decision 2026-10-18 reversed 2026-10-15). "off" is the
+# original parked transport and its tether (0x4FD1D0).
 variable "transport_follow" {
   type    = string
-  default = "on"
+  default = "off"
 }
 
 # job_goods_teleport lets a trader with a transport out use town gates,

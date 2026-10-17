@@ -139,8 +139,9 @@ var Settings = []Setting{
 	{Env: "SRO_CARAVAN_STAR_AMBUSH", NomadVar: "caravan_star_ambush", Default: "on"},
 	// Owner, 2026-10-15: thief and hunter monsters move 20% faster.
 	{Env: "SRO_JOB_MONSTER_SPEED", NomadVar: "job_monster_speed", Default: "on"},
-	// Owner, 2026-10-15: a dismounted trade transport follows its trader.
-	{Env: "SRO_TRANSPORT_FOLLOW", NomadVar: "transport_follow", Default: "on"},
+	// Owner, 2026-10-18: reversed the 2026-10-15 follow setting; the
+	// deployment default stays native ("off", 0x4FD1D0).
+	{Env: "SRO_TRANSPORT_FOLLOW", NomadVar: "transport_follow", Default: "off"},
 	// Owner, 2026-10-15: town teleport with a trade transport out (testing).
 	{Env: "SRO_JOB_GOODS_TELEPORT", NomadVar: "job_goods_teleport", Default: "on"},
 	{Env: "SRO_ELIXIR_DROPS_OFF", NomadVar: "elixir_drops_off", Default: "on", Catalogue: true},
