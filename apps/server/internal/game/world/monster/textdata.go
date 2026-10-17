@@ -708,7 +708,7 @@ func splitTabbedText(text string) [][]string {
 	var rows [][]string
 	for _, rawLine := range strings.Split(text, "\n") {
 		line := strings.TrimRight(rawLine, "\r\t ")
-		if line == "" || strings.HasPrefix(line, "//") || strings.HasPrefix(line, "#") {
+		if line == "" || strings.HasPrefix(line, "//") {
 			continue
 		}
 		rows = append(rows, cells.Split(line))

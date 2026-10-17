@@ -21,10 +21,28 @@ import (
 
 /*
 ================
+TestQinShiTombEmbeddedTeleportLinks
+================
+*/
+func TestQinShiTombEmbeddedTeleportLinks(t *testing.T) {
+	rows := monster.SplitTabbedText(qinshiTombTeleportLinkTSV)
+	if got, want := len(rows), 68; got != want {
+		t.Fatalf("embedded tomb teleportlink rows = %d, want %d", got, want)
+	}
+	for i, row := range rows {
+		if len(row) != 21 {
+			t.Fatalf("row %d column count = %d, want 21", i+1, len(row))
+		}
+	}
+}
+
+/*
+================
 TestQinShiTombPortalsAndWalkIns
 ================
 */
 func TestQinShiTombPortalsAndWalkIns(t *testing.T) {
+	licensed.RequireGameData(t)
 	dir := licensed.RetailTextdataDir(t)
 
 	t.Setenv(monster.EnvQinShiTomb, "off")

@@ -22,10 +22,23 @@ import (
 
 /*
 ================
+TestQinShiTombEmbeddedSkills
+================
+*/
+func TestQinShiTombEmbeddedSkills(t *testing.T) {
+	rows := monster.SplitTabbedText(qinshiTombSkillDataTSV)
+	if got, want := len(rows), 230; got != want {
+		t.Fatalf("embedded tomb skill rows = %d, want %d", got, want)
+	}
+}
+
+/*
+================
 TestQinShiTombSkillsAndMonsterDefaultSkills
 ================
 */
 func TestQinShiTombSkillsAndMonsterDefaultSkills(t *testing.T) {
+	licensed.RequireGameData(t)
 	dir := licensed.RetailTextdataDir(t)
 
 	t.Setenv(monster.EnvQinShiTomb, "off")

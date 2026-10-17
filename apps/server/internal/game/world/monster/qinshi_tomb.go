@@ -66,26 +66,36 @@ lines.
 ================
 */
 func SplitTabbedText(text string) [][]string {
-	return splitTabbedText(text)
+	rows := splitTabbedText(text)
+	filtered := rows[:0]
+	for _, row := range rows {
+		if len(row) > 0 && strings.HasPrefix(strings.TrimSpace(row[0]), "#") {
+			continue
+		}
+		filtered = append(filtered, row)
+	}
+	return filtered
 }
 
 /*
 ================
 loadQinShiTombRefs
 
-Parses the 79 embedded Qin-Shi Emperor Tomb characterdata rows, joining
-localized display names and ride metadata from textdataDir when available.
+Parses the 79 embedded Qin-Shi Emperor Tomb characterdata rows (78 monster
+refs passing monsterTidGate plus 1 COS mount row MOB_TQ_HORSE01 registered
+for ride resolution), joining localized display names and ride metadata from
+textdataDir when available.
 ================
 */
 func loadQinShiTombRefs(textdataDir string) map[uint32]MonsterRef {
-	return parseMonsterRefTables(textdataDir, [][][]string{splitTabbedText(qinshiTombCharacterDataTSV)})
+	return parseMonsterRefTables(textdataDir, [][][]string{SplitTabbedText(qinshiTombCharacterDataTSV)})
 }
 
 /*
 ================
 WithQinShiTomb
 
-Returns a copy of the Template with the 79 Qin-Shi Emperor Tomb monster
+Returns a copy of the Template with the 78 Qin-Shi Emperor Tomb monster
 references and 1,033 Floor 1-4 nests appended (port-only, not native).
 ================
 */
