@@ -30,6 +30,7 @@ function fixture() {
 		clips: [ "ready", "wait", "shot" ],
 		animationStates: { ready: definition, wait: definition, shot: definition }
 	};
+	let activeResource = body;
 	const entity = {
 		gid: 1,
 		name: "Caster",
@@ -52,12 +53,34 @@ function fixture() {
 		skillSounds: new Map()
 	};
 	return {
+		body,
+		/*
+		================
+		setResource
+		================
+		*/
+		setResource( resource ) {
+			activeResource = resource;
+		},
 		/*
 		================
 		step
 		================
 		*/
-		step( seconds, shotAtMs, extraCasts = [] ) {
+		step( seconds, shotAtMs, extraCasts = [], primaryOverrides = {} ) {
+			const casts = primaryOverrides === null ?
+				extraCasts :
+				[ {
+					token: 1,
+					caster: 1,
+					skill: 1,
+					target: 0,
+					damage: 0,
+					fatal: false,
+					receivedAtMs: 0,
+					shotAtMs,
+					...primaryOverrides
+				}, ...extraCasts ];
 			const frame = {
 				entities: [ entity ],
 				entitiesByGid: new Map( [ [ 1, entity ] ] ),
@@ -75,24 +98,15 @@ function fixture() {
 					inventoryPending: false,
 					vitals: [],
 					error: null,
-					casts: [ {
-						token: 1,
-						caster: 1,
-						skill: 1,
-						target: 0,
-						damage: 0,
-						fatal: false,
-						receivedAtMs: 0,
-						shotAtMs
-					}, ...extraCasts ]
+					casts
 				},
 				seconds,
 				simulationMs: seconds * 1000,
-				castTokens: new Set( [ 1, ...extraCasts.map( cast => cast.token ) ] ),
+				castTokens: new Set( casts.map( cast => cast.token ) ),
 				vitalsByGid: new Map(),
 				groundClocks: new Map(),
 				combatStanceEnds: new Map(),
-				resourceFor: () => body,
+				resourceFor: () => activeResource,
 				appearanceRef: () => 1,
 				logicalPose: () => ({ regionId: 1, x: 0, y: 0, z: 0, angle: 0 }),
 				wornEquipment: () => [],
@@ -153,4 +167,28 @@ test("a replaced WAIT cannot suppress idle after the replacement cast completes"
 	const complete = f.step( 5, undefined, [ next ] );
 	assert.equal( complete.actionLayersByActor.get( 1 )?.length, 0 );
 	assert.equal( complete.waitingActors.has( 1 ), false, "superseded WAIT must not own the base action" );
+});
+
+test("swapping the caster model deletes its action clock so restoring the model cannot resurrect pre-swap motion", () => {
+	const f = fixture();
+	const corpse = {
+		refObjId: 1,
+		codename: "CASTER_CORPSE",
+		glb: "/caster-corpse.glb",
+		clips: [ "death" ],
+		animationStates: {}
+	};
+	assert.equal( f.step( 0, undefined ).waitingActors.has( 1 ), true );
+	f.setResource( corpse );
+	const swapped = f.step( 0.5, undefined, [], { resultOnly: true } );
+	assert.equal( swapped.actionLayersByActor.get( 1 ), undefined );
+	assert.equal( swapped.waitingActors.has( 1 ), false );
+	f.setResource( f.body );
+	const restored = f.step( 0.6, undefined, [], { resultOnly: true } );
+	assert.equal(
+		restored.actionLayersByActor.get( 1 ),
+		undefined,
+		"deleted clock must not resume after model restore"
+	);
+	assert.equal( restored.waitingActors.has( 1 ), false );
 });

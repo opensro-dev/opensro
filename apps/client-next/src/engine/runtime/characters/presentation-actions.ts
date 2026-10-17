@@ -218,11 +218,15 @@ export function createPresentationActions() {
 			const predictionToken = gameplay?.castPrediction?.token;
 			const adopting = new Set( (gameplay?.casts ?? []).map( cast => cast.predictedToken ) );
 			for ( const [token, clock] of actionClocks ) {
-				if ( castTokens.has( token ) || token === predictionToken || adopting.has( token ) ) continue;
 				const entity = clock.caster === undefined ? undefined : entitiesByGid.get( clock.caster ),
 					body = entity ? resourceFor( entity ) : undefined;
+				if ( clock.glb && (!body || clock.glb !== body.glb) ) {
+					actionClocks.delete( token );
+					continue;
+				}
+				if ( castTokens.has( token ) || token === predictionToken || adopting.has( token ) ) continue;
 				if (
-					entity && body && (!clock.glb || clock.glb === body.glb) &&
+					entity && body &&
 					entity.appearanceState?.[0] !== 2 && !health?.dead( entity.gid )
 				) {
 					// Model-owned installations outlive the skill decoration. Stop
@@ -313,10 +317,6 @@ export function createPresentationActions() {
 						adopted = predictedEvents.get( cast.predictedToken ) ?? [];
 						predictedEvents.delete( cast.predictedToken );
 					}
-				}
-				if ( clock && clock.glb && clock.glb !== resource.glb ) {
-					actionClocks.delete( cast.token );
-					clock = undefined;
 				}
 				if ( !clock ) {
 					const tables = effects.phases( cast.skill );
@@ -432,8 +432,6 @@ export function createPresentationActions() {
 			reconcileActionInstallations( actionClocks.values() );
 			for ( const clock of actionClocks.values() ) {
 				if ( clock.caster === undefined ) continue;
-				const caster = entitiesByGid.get( clock.caster );
-				if ( clock.glb && caster && resourceFor( caster )?.glb !== clock.glb ) continue;
 				// 8E60C0 leaves action state 2 at the last motion callback and
 				// rejects callbacks from a replaced installation. A retained skill
 				// decoration does not own that state after its motion ends. Check
