@@ -624,7 +624,7 @@ test("an enemy skill pressed with nothing selected never animates, cools down or
 	game.seed( local );
 	assert.equal( game.command( { kind: "skill", skillId: TARGETED }, 1000, undefined, local ), null );
 	const state = game.take();
-	assert.deepEqual( state?.notices.map( n => n.key ), [ "UIIT_SKILL_USE_FAIL_NONESELECTETARGET" ] );
+	assert.deepEqual( state?.notices?.map( n => n.key ), [ "UIIT_SKILL_USE_FAIL_NONESELECTETARGET" ] );
 	assert.equal( cooldowns.skillCooldown( state?.skillCooldowns ?? [], TARGETED, 0, 1010 ), null );
 	assert.ok( !state?.castPrediction, "a targetless press predicted a cast" );
 	assert.equal( sent.filter( f => f.opcode === 0x72cd ).length, 0 );

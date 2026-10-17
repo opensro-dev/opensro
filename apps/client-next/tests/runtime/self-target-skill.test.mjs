@@ -109,7 +109,7 @@ test("a self-admitting skill with nothing selected is sent at the local characte
 test("a target-required skill without the self mark is still refused with nothing selected", () => {
 	const { g, sent } = seededGameplay();
 	assert.equal( g.command( { kind: "skill", skillId: ENEMY_SKILL }, 100, undefined ), null );
-	assert.deepEqual( g.take()?.notices.map( n => n.key ), [ "UIIT_SKILL_USE_FAIL_NONESELECTETARGET" ] );
+	assert.deepEqual( g.take()?.notices?.map( n => n.key ), [ "UIIT_SKILL_USE_FAIL_NONESELECTETARGET" ] );
 	assert.equal( sent.length, 0 );
 	g.dispose();
 });
