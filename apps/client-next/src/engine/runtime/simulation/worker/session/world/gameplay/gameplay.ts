@@ -322,8 +322,10 @@ const ACTION_STATE_ARM = 1;
 const QUEUED_COMMANDS = 2;
 const ITEM_NOTICE_CATEGORY = 1;
 const ITEM_INTERACTION_REFUSAL = 0x35;
-// 6FCD50's skill-use notices: category 4, code 0x21 refuses a rider.
+// 6FCD50's skill-use notices: category 4, code 0x11 refuses a targetless press
+// of a target-required skill, code 0x21 refuses a rider.
 const SKILL_NOTICE_CATEGORY = 4;
+const SKILL_NO_TARGET_REFUSAL = 0x11;
 const SKILL_RIDING_REFUSAL = 0x21;
 // The guild notices' category; 0x1F refuses a ban of the master or oneself.
 const GUILD_NOTICE_CATEGORY = 0x10;
@@ -2676,8 +2678,15 @@ state here before a command can claim a native wire conversation.
 				if ( metadata && !metadata.targetRequired ) command = { kind: "skill", skillId: command.skillId };
 				else if ( metadata?.targetRequired && !command.gid ) {
 					// A row that admits its caster (targetSelf) aims at the caster when
-					// nothing is selected, as the server resolves the same row.
-					if ( !metadata.targetSelf || !localGid ) throw Error( "This skill requires a target" );
+					// nothing is selected, as the server resolves the same row; 6FCFF2..6FD025
+					// refuses any other target-required press with notice 4/0x11
+					// (UIIT_SKILL_USE_FAIL_NONESELECTETARGET).
+					if ( !metadata.targetSelf || !localGid ) {
+						const notice = constantNativeNotice( SKILL_NOTICE_CATEGORY, SKILL_NO_TARGET_REFUSAL );
+						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+						dirty = true;
+						return null;
+					}
 					const frame = combat.skill( skillId, localGid );
 					if ( pressAdmitted( metadata, local ) ) movement.holdForCast( now );
 					predictCast( metadata, undefined, local, now );
