@@ -59,17 +59,34 @@ func (rt *Runtime) commerceReferences(items, before []inventory.Item) wire.Frame
 	for _, row := range rows {
 		if !seen[row.RefObjID] {
 			seen[row.RefObjID] = true
-			name := row.Codename
+			codename := row.Codename
+			name := codename
 			icon := ""
 			descriptionSymbol := ""
 			var nativeFields enterworld.NativeFields
-			if reference, ok := rt.deps.ItemReferences().ItemRefByCodename(row.Codename); ok && reference != nil {
+			var reference *enterworld.ItemRef
+			if source := rt.deps.ItemReferences(); source != nil {
+				if row.RefObjID != 0 {
+					if byID, ok := source.ItemRefByID(row.RefObjID); ok && byID != nil && byID.RefObjID == row.RefObjID {
+						reference = byID
+					}
+				}
+				if reference == nil && codename != "" {
+					if byCodename, ok := source.ItemRefByCodename(codename); ok && byCodename != nil {
+						reference = byCodename
+					}
+				}
+			}
+			if reference != nil {
+				if reference.Codename != "" {
+					codename = reference.Codename
+				}
 				name = reference.Name
 				icon = reference.Icon
 				descriptionSymbol = reference.DescriptionSymbol
 				nativeFields = enterworld.ItemUseNativeFields(reference, rt.deps.SkillData())
 			}
-			refs = append(refs, ref{descriptionSymbol, row.RefObjID, row.TypeFlags, name, rt.maxStackFor(row.TypeFlags, row.Codename), icon, nativeFields})
+			refs = append(refs, ref{descriptionSymbol, row.RefObjID, row.TypeFlags, name, rt.maxStackFor(row.TypeFlags, codename), icon, nativeFields})
 		}
 	}
 	b, _ := json.Marshal(struct {
