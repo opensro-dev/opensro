@@ -196,6 +196,39 @@ type objectContactOptions struct {
 }
 
 /*
+================
+withinOutlineNudgeMargin
+
+withinOutlineNudgeMargin reports whether (x, z) lies within nudgeEscapeMargin
+of any blocking outline segment of mesh (the 0.01u inward sliver an
+inward-authored vertexDirection in outsideEdgeStart can place a terrain walker
+into).
+================
+*/
+func withinOutlineNudgeMargin(mesh *objectNavMesh, x, z float64) bool {
+	const marginSq = (0.009999999776482582 * 2) * (0.009999999776482582 * 2)
+	edges := &mesh.outline
+	for i := range edges.flags {
+		if edges.flags[i]&1 == 0 {
+			continue
+		}
+		va, vb := int(edges.vertA[i])*3, int(edges.vertB[i])*3
+		ax, az := float64(mesh.vertices[va]), float64(mesh.vertices[va+2])
+		sx, sz := float64(mesh.vertices[vb])-ax, float64(mesh.vertices[vb+2])-az
+		lenSq := sx*sx + sz*sz
+		u := 0.0
+		if lenSq > 0 {
+			u = math.Max(0, math.Min(1, ((x-ax)*sx+(z-az)*sz)/lenSq))
+		}
+		dx, dz := x-(ax+sx*u), z-(az+sz*u)
+		if dx*dx+dz*dz <= marginSq {
+			return true
+		}
+	}
+	return false
+}
+
+/*
 ==================
 objectEdgeGroupChordContactDetail
 
@@ -279,20 +312,22 @@ func objectEdgeGroupChordContactDetail(
 			continue
 		}
 		fromSrcSide := originSide*srcSide > 0
-		if !owned && opts.walk != nil && outline {
+		inNudgeMargin := false
+		if !owned && opts.walk != nil && outline && fromSrcSide {
 			// Native CRTNavMeshObj_Move (428F40 / 9B5A80) dispatches an unowned
 			// terrain walker to CRTNavMeshObj_EnterFromOutside (428300 / 9B4D30),
 			// never to the owned-cell stepper. When a prior blocked outline hit
 			// nudged the terrain walker 0.01u inward via an inward-authored
-			// vertexDirection (outsideEdgeStart), its next step starts on the
-			// srcCell side of that outline while still owned by terrain: an
-			// outward chord away from the obstacle must not re-block and nudge
-			// deeper inward, and any unowned outline hit must stay on the
-			// outsideEdgeStart branch rather than running nativeCellEntry and
-			// capturing object ownership.
-			if fromSrcSide {
+			// vertexDirection (outsideEdgeStart, 4287A8..4288A6), its next step
+			// starts on the srcCell side within vertexStep of that outline while
+			// still owned by terrain: an outward chord escaping that nudge sliver
+			// must not re-block, and an inward chord hitting a far outline edge
+			// must block via outsideEdgeStart without capturing object ownership.
+			const nudgeEscapeMargin = 0.009999999776482582 * 2
+			if originSide*originSide <= nudgeEscapeMargin*nudgeEscapeMargin*(sX*sX+sZ*sZ) {
 				continue
 			}
+			inNudgeMargin = withinOutlineNudgeMargin(mesh, x0, z0)
 		}
 		if outline && flags&8 != 0 && linked != nil && linked(i, fromSrcSide, t) {
 			continue
@@ -309,7 +344,7 @@ func objectEdgeGroupChordContactDetail(
 				at := opts.walkerAt(t)
 				ox, oz = x0+(x1-x0)*at, z0+(z1-z0)*at
 			}
-			sourceSide := fromSrcSide && (owned || opts.walk == nil || !outline)
+			sourceSide := fromSrcSide && !inNudgeMargin
 			*response = nativeObjectContact(mesh, edges, i, sourceSide, ox, oz, y0, x1, z1, reflection)
 			response.outline = outline
 		}

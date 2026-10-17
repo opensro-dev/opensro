@@ -366,13 +366,15 @@ object-nav invariants exposed by region 0x5C6D (23661) localUid 3073
 func TestClipMovementPathRealRockInwardVertexDirection(t *testing.T) {
 	validator := realAuthorityValidator(t)
 
-	// 1. Terrain walker hits out[4] from outside (terrain y~3364.78 above the
-	// rock cell plane y~3362.33), gets nudged ~0.005u across the outline by
-	// the inward vertexDirection, takes a second step into the rock, and then
-	// walks back out to open terrain.
+	// 1. Terrain walker starts ~0.002u outside out[2] (v[0]->v[4], srcCell=1),
+	// whose endpoints both carry inward vertexDirections. Hitting out[2] from
+	// outside nudges step1.Rest ~0.006u across out[2] into cell 1 while keeping
+	// NavOwnerTerrain; a second inward click (step2) must stay on terrain
+	// outside the rock rather than capturing NavOwnerObject, and an outward
+	// click (escape) from step1.Rest must cross out[2] back to open terrain.
 	terrainOwner := simulation.NavOwner{Kind: simulation.NavOwnerTerrain}
-	start := simulation.Spawn{RegionID: 0x5C6D, X: 985.5, Y: 3364.8, Z: 7.0}
-	step1 := validator.ClipMovementPathFrom(start, terrainOwner, simulation.Spawn{RegionID: 0x5C6D, X: 984.0, Y: 3364.8, Z: 10.0})
+	start := simulation.Spawn{RegionID: 0x5C6D, X: 991.1697, Y: 3364.8, Z: 13.7711}
+	step1 := validator.ClipMovementPathFrom(start, terrainOwner, simulation.Spawn{RegionID: 0x5C6D, X: 985.0, Y: 3364.8, Z: 13.0})
 	if step1.Outcome != ClipBlocked || step1.Class != ClipClassObject {
 		t.Fatalf("step1 outcome = %s/%s (%+v), want blocked/object", step1.Outcome, step1.Class, step1)
 	}
@@ -380,12 +382,12 @@ func TestClipMovementPathRealRockInwardVertexDirection(t *testing.T) {
 		t.Fatalf("step1 captured terrain walker into object: rest=%+v owner=%+v", step1.Rest, step1.RestOwner)
 	}
 
-	step2 := validator.ClipMovementPathFrom(step1.Rest, step1.RestOwner, simulation.Spawn{RegionID: 0x5C6D, X: 983.0, Y: 3364.8, Z: 10.5})
-	if step2.RestOwner.Kind != simulation.NavOwnerTerrain || step2.Rest.Y < 3364.0 {
-		t.Fatalf("step2 captured terrain walker into object: rest=%+v owner=%+v", step2.Rest, step2.RestOwner)
+	step2 := validator.ClipMovementPathFrom(step1.Rest, step1.RestOwner, simulation.Spawn{RegionID: 0x5C6D, X: 980.0, Y: 3364.8, Z: 13.0})
+	if step2.Outcome != ClipBlocked || step2.RestOwner.Kind != simulation.NavOwnerTerrain || step2.Rest.Y < 3364.0 {
+		t.Fatalf("step2 leaked or captured terrain walker into object: outcome=%s rest=%+v owner=%+v", step2.Outcome, step2.Rest, step2.RestOwner)
 	}
 
-	escape := validator.ClipMovementPathFrom(step2.Rest, step2.RestOwner, simulation.Spawn{RegionID: 0x5C6D, X: 988.0, Y: 3364.8, Z: 4.0})
+	escape := validator.ClipMovementPathFrom(step1.Rest, step1.RestOwner, simulation.Spawn{RegionID: 0x5C6D, X: 995.0, Y: 3364.8, Z: 15.0})
 	if escape.Outcome != ClipArrived || escape.RestOwner.Kind != simulation.NavOwnerTerrain {
 		t.Fatalf("escape from inward outline nudge failed: outcome=%s rest=%+v owner=%+v", escape.Outcome, escape.Rest, escape.RestOwner)
 	}
