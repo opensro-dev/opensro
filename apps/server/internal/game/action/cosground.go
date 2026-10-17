@@ -90,6 +90,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 		return shared
 	}
 	result := failureResult(wire.ErrCodeInvalidRequest)
+	var picked grounditem.Item
 	rt.deps.Update(c, "cos-ground-item", func() bool {
 		bag, inv, valid := rt.ownedCOSContainer(c, q.CosGID)
 		if !valid || c.CompanionByGID(q.CosGID).Mounted || enterworld.CurrentHP(c) == 0 {
@@ -178,6 +179,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 				return false
 			}
 			bag.Rows = candidate.Container.Rows
+			picked = item
 		}
 		public := wire.PickupBroadcastFrames(anim, item.Gid, remainder)
 		frames := []wire.Frame{{Opcode: wire.OpItemMoveResponse, Payload: receipt}}
@@ -187,6 +189,9 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 		result = OpResult{Frames: append(frames, public...), Broadcast: public}
 		return true
 	})
+	if q.MovementType == wire.MoveTypeCosPickup && len(result.Broadcast) > 0 && !picked.IsGold() {
+		result.Recipients = append(result.Recipients, rt.partyLootNotice(division, c, c, picked, now.UnixMilli())...)
+	}
 	return result
 }
 

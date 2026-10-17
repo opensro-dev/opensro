@@ -422,3 +422,65 @@ func TestPetPickupShareKeepsThePetAdmissions(t *testing.T) {
 		t.Fatalf("a mounted pet shared a pickup: %d left on the ground", len(rt.Ground.All(testDivision)))
 	}
 }
+
+/*
+================
+partyLootNoticesFor
+
+The 0x317D party loot notice payloads delivered to one party member.
+================
+*/
+func partyLootNoticesFor(result OpResult, id int64) [][]byte {
+	var out [][]byte
+	for _, r := range result.Recipients {
+		if r.CharacterID != id {
+			continue
+		}
+		for _, frame := range r.Frames {
+			if frame.Opcode == wire.OpPartyLootNotice {
+				out = append(out, frame.Payload)
+			}
+		}
+	}
+	return out
+}
+
+/*
+================
+TestPetPickupEmitsPartyLootNoticeOnOwnerAndPeerTurns
+
+CCOS_ExecuteGroundPickup (4D515E..4D517A) and CPlayer_ExecuteGroundPickup
+(5263C8..5263DF) call CParty_BroadcastLootNotice (5BDC80) after every
+granted non-gold pickup in an item-share party, including when the rotation
+selects the pet owner and the item lands in the pet bag (move type 0x11).
+================
+*/
+func TestPetPickupEmitsPartyLootNoticeOnOwnerAndPeerTurns(t *testing.T) {
+	rt, picker, peer, gid, heap := sharedPetFixture(t)
+	pick := func(item grounditem.Item) OpResult {
+		payload, err := wire.ItemMoveRequest{MovementType: wire.MoveTypeCosPickup, CosGID: gid, GroundGID: item.Gid}.Encode()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rt.HandleItemMove(testDivision, picker, payload)
+	}
+	potion := grounditem.Item{RefObjID: picker.MissionInventory[0].RefObjID, Codename: picker.MissionInventory[0].Codename,
+		TypeFlags: picker.MissionInventory[0].TypeFlags, StackCount: 1}
+	wantPicker := wire.EncodePartyLootNotice(enterworld.ObjectIDForCharacter(picker), potion.RefObjID, potion.TypeFlags, 1)
+	wantPeer := wire.EncodePartyLootNotice(enterworld.ObjectIDForCharacter(peer), potion.RefObjID, potion.TypeFlags, 1)
+
+	first := pick(heap(potion))
+	second := pick(heap(potion))
+	for _, memberID := range []int64{picker.ID, peer.ID} {
+		n1 := partyLootNoticesFor(first, memberID)
+		n2 := partyLootNoticesFor(second, memberID)
+		if len(n1) != 1 || len(n2) != 1 {
+			t.Fatalf("member %d notices = %d then %d, want 1 on both owner and peer turns", memberID, len(n1), len(n2))
+		}
+		gotPicker := string(n1[0]) == string(wantPicker) || string(n2[0]) == string(wantPicker)
+		gotPeer := string(n1[0]) == string(wantPeer) || string(n2[0]) == string(wantPeer)
+		if !gotPicker || !gotPeer {
+			t.Fatalf("member %d did not receive both owner and peer 0x317D notices: %x / %x", memberID, n1[0], n2[0])
+		}
+	}
+}

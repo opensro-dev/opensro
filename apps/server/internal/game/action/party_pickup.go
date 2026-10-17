@@ -39,7 +39,7 @@ partyPickupRecipient
 
 Server 525F5F..52606F: item-share bit, rotating member alive (life byte 1,
 525FAE), same packed world, 3D distance <= 1000; fallback is the picker. Quest items stay personal,
-except the native alchemy prefix. Rotation advances even on a later refusal.
+except the native alchemy prefix.
 ================
 */
 func (rt *Runtime) partyPickupRecipient(division string, picker *enterworld.Character, item grounditem.Item, nowMs int64) *enterworld.Character {
