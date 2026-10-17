@@ -107,18 +107,19 @@ ships system_enchant*_a_01.efp in Particles.pk2/system, but neither
 SRO_Client.exe nor any resinfo or textdata table names them, so the
 original never drew them. Each item wears its class's program on the
 bones and at the scales itemrare.txt authors for its rare twin (the same
-model): code_RARE, or for a beginner _DEF item its _01_A sibling's twin
-when the model matches. An item without a twin gets none.
+model): its own itemrare row, code_RARE, or for a beginner _DEF item its
+_01_A sibling's twin when the model matches. An item without a twin gets
+none.
 ================
 */
 export function equipmentEnchantSparks( records = loadEquipmentRecords( retailTextdataRoot ) ) {
 	const byCode = new Map( [ ...records.values() ].map( r => [ r.code, r ] ) ), rare = itemRareRows( byCode );
 	const out = {};
 	for ( const record of records.values() ) {
-		if ( record.specialState === 2 || record.slot === null ) continue;
+		if ( record.slot === null ) continue;
 		const effectPath = enchantSparkEffect( record );
 		if ( !effectPath ) continue;
-		let twin = rare.get( record.code + RARE_SUFFIX );
+		let twin = rare.get( record.code ) ?? rare.get( record.code + RARE_SUFFIX );
 		if ( !twin && record.code.endsWith( BEGINNER_SUFFIX ) ) {
 			const base = byCode.get( record.code.slice( 0, -BEGINNER_SUFFIX.length ) );
 			if ( base && base.resolvedModel === record.resolvedModel ) twin = rare.get( base.code + RARE_SUFFIX );

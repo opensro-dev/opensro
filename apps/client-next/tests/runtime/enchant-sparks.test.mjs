@@ -64,6 +64,11 @@ function armamentDress() {
 	return {
 		equipment: {
 			[SWORD]: record( WEAPON_SLOT, "res/item/china/weapon/sword_01.bsr", "/assets/char/equipment/sword.glb" ),
+			[RARE_SWORD]: record(
+				WEAPON_SLOT,
+				"res/item/china/weapon/sword_01.bsr",
+				"/assets/char/equipment/sword.glb"
+			),
 			[SHIELD]: record( SHIELD_SLOT, "res/item/china/shield/shield_01.bsr", "/assets/char/equipment/shield.glb" )
 		}
 	};
@@ -76,12 +81,12 @@ sparksOf
 The spark particles of one assembly, as [effect, bone] pairs.
 ================
 */
-function sparksOf( dress, plus, enchantSparks ) {
+function sparksOf( dress, plus, enchantSparks, weapon = SWORD ) {
 	const assembly = assembleEquipmentAppearance( {
 		resource: { codename: "CHAR_CH_MAN_ADVENTURER" },
 		dress,
 		equipment: [
-			{ slot: WEAPON_SLOT, refObjId: SWORD, plus },
+			{ slot: WEAPON_SLOT, refObjId: weapon, plus },
 			{ slot: SHIELD_SLOT, refObjId: SHIELD, plus }
 		],
 		avatars: [],
@@ -114,8 +119,8 @@ test("each weapon class wears its own spark program on its rare twin's bones and
 	assert.equal( sparks[HARP][0].effectPath, SPARK + "harp_a_01.efp" );
 	// A beginner item borrows its sibling's twin; it shares the model.
 	assert.deepEqual( sparks[BEGINNER_SWORD], sparks[SWORD] );
-	// The rare twin keeps its own glow, and a siege hammer is never enchanted.
-	assert.equal( sparks[RARE_SWORD], undefined );
+	// A Seal (_RARE) item gets the same spark row alongside its own rare glow, and a siege hammer is never enchanted.
+	assert.deepEqual( sparks[RARE_SWORD], sparks[SWORD] );
 	assert.ok( glows[RARE_SWORD] );
 	assert.equal( sparks[HAMMER], undefined );
 	for ( const rows of Object.values( sparks ) ) {
@@ -141,7 +146,10 @@ test("sparks show only with the row on and only at +8 or higher, on real private
 	assert.deepEqual( sparksOf( dress, 8, true ), on );
 	assert.deepEqual( sparksOf( dress, 12, true ), on );
 	assert.deepEqual( sparksOf( dress, 7, true ), [] );
+	assert.deepEqual( sparksOf( dress, 9, true, RARE_SWORD ), on );
+	assert.deepEqual( sparksOf( dress, 7, true, RARE_SWORD ), [] );
 	// The default, and the native client: the row off draws nothing extra.
 	assert.deepEqual( sparksOf( dress, 10, false ), [] );
 	assert.deepEqual( sparksOf( dress, 10, undefined ), [] );
+	assert.deepEqual( sparksOf( dress, 9, false, RARE_SWORD ), [] );
 });
