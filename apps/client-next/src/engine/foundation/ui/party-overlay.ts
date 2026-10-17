@@ -30,16 +30,22 @@ const PARTY_DUNGEON_REGION = 0x8000;
 // Only the position matters to the distance shade; entities carry no heading.
 type PartyShadePosition = Pick<Pose, "regionId" | "x" | "y" | "z">;
 // 5BCBB0: exclude self by name, preserve roster order, wrap before placing
-// each row. The 230px bottom reserve is independent of the buff preference.
-// Each slot's CIFBuffViewer (5BAD30 / 5BA840) is owned by the UI runtime,
-// which keeps its one-second diff state across frames.
+// each row. In job mode 8675F0 (8679C4..867A03) overwrites g_pLocalPlayer+0x108
+// with the job alias (+0x1898), so a suited player's roster entry carries
+// their alias and must be excluded too. The 230px bottom reserve is
+// independent of the buff preference. Each slot's CIFBuffViewer (5BAD30 /
+// 5BA840) is owned by the UI runtime, which keeps its one-second diff state
+// across frames.
 /*
 ================
 partyMembers
 ================
 */
 export function partyMembers( game: GameplayState ) {
-	return (game.social?.members ?? []).filter( m => m.name !== game.social?.localName );
+	const social = game.social, alias = game.job?.alias;
+	return (social?.members ?? []).filter(
+		m => m.name !== social?.localName && (!alias || m.name !== alias) && (!social?.self || m.id !== social.self)
+	);
 }
 /*
 ================

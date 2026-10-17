@@ -16609,7 +16609,7 @@ export function createUi(
 							label: offer?.item.name ?? "Stall slot " + slot,
 							rect: r,
 							kind: "button",
-							disabled: owner ? state.open : !state.open || !offer,
+							disabled: !offer && !(owner && !state.open),
 							draggable: owner && !state.open && !!offer
 						} );
 						if ( offer ) {

@@ -240,6 +240,7 @@ export function createUiBridge(
 	const layoutKeys = createLayoutKeys();
 	root.addEventListener( "keydown", event => {
 		event.stopPropagation();
+		if ( !event.code ) return;
 		if ( event.isComposing || composing || event.keyCode === 229 ) {
 			if ( event.key === "Enter" && !event.repeat && event.target instanceof HTMLInputElement ) {
 				imeEnter = event.target;
@@ -287,6 +288,7 @@ export function createUiBridge(
 	}, { signal: lifetime.signal } );
 	root.addEventListener( "keyup", event => {
 		event.stopPropagation();
+		if ( !event.code ) return;
 		heldKey( layoutKeys.up( event.code, event.key ), false );
 		if (
 			event.key === "Enter" && imeEnter !== null && event.target === imeEnter && !event.isComposing &&

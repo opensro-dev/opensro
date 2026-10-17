@@ -30,7 +30,7 @@ The upper-case Latin letter `text` is (one character, A-Z either case),
 or "".
 ================
 */
-function upperLatin( text: string ): string {
+function upperLatin( text = "" ): string {
 	if ( text.length !== 1 ) return "";
 	const upper = text.toUpperCase();
 	return upper >= "A" && upper <= "Z" ? upper : "";
@@ -43,7 +43,7 @@ layoutCode
 The code the key's layout letter has (KeyA for the key marked A).
 ================
 */
-export function layoutCode( code: string, key: string ): string {
+export function layoutCode( code = "", key = "" ): string {
 	const letter = upperLatin( key );
 	if ( code.length !== 4 || !code.startsWith( "Key" ) || !upperLatin( code[3]! ) || !letter ) return code;
 	return "Key" + letter;
@@ -60,12 +60,12 @@ what went down (or resolves afresh for a key that went down elsewhere).
 export function createLayoutKeys() {
 	const held = new Map<string, string>();
 	return {
-		down( code: string, key: string ): string {
+		down( code = "", key = "" ): string {
 			const resolved = layoutCode( code, key );
 			held.set( code, resolved );
 			return resolved;
 		},
-		up( code: string, key: string ): string {
+		up( code = "", key = "" ): string {
 			const resolved = held.get( code ) ?? layoutCode( code, key );
 			held.delete( code );
 			return resolved;

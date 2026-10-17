@@ -110,7 +110,18 @@ for ( const owner of [ true, false ] ) {
 					bagSlot: 13,
 					quantity: 2,
 					price: 12345,
-					item: { slot: 13, refObjId: 1, quantity: 2, name: "Potion", icon: "item/etc/hp_potion_01.ddj" }
+					item: {
+						slot: 13,
+						refObjId: 1,
+						typeFlags: 0x6c,
+						quantity: 2,
+						plus: 0,
+						durability: 0,
+						variance: "0",
+						magic: [],
+						name: "Potion",
+						icon: "item/etc/hp_potion_01.ddj"
+					}
 				} ]
 			};
 			Object.assign( f.state.gameplay, {
@@ -125,8 +136,13 @@ for ( const owner of [ true, false ] ) {
 			assert.equal( frame.controls.filter( row => row.id === "main-popup-drag" ).length, 1 );
 			assert.equal( control( "stall-modify:0" )?.disabled, !owner || open );
 			assert.equal( control( "stall-modify:1" ), undefined, "empty offers have no price button" );
-			assert.equal( control( "stall-slot:0" )?.disabled, owner ? open : !open );
+			assert.equal( control( "stall-slot:0" )?.disabled, false, "5A2140 never disables an occupied stall slot" );
 			assert.equal( control( "stall-slot:1" )?.disabled, owner ? open : true );
+			f.ui.event( { kind: "hover", id: "stall-slot:0", x: 100, y: 100 } );
+			f.ui.step( f.state, now += 20 );
+			assert.ok( f.hasText( "Potion" ), "occupied stall slot shows item tooltip in every owner/open state" );
+			f.ui.event( { kind: "hover", id: null, x: 0, y: 0 } );
+			f.ui.step( f.state, now += 20 );
 			assert.equal( !!control( "stall-trading" ), owner );
 			assert.equal( control( "stall-change-title" )?.disabled, owner ? open : undefined );
 			const quads = f.scenes.at( -1 )?.quads ?? [];

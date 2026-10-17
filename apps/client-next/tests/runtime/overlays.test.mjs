@@ -105,6 +105,19 @@ test("party slot viewer: bbuf and phase-1 effects, one row per list, abnormal bi
 	assert.equal( row.entity, peer );
 	assert.equal( partyOverlay( game, [ local ], 900, 4, 137, true )[0].entity, undefined );
 	assert.deepEqual( [ row.hp, row.mp ], [ .5, .8 ] );
+	// 8675F0 / 5BCBB0: a suited player's roster entry carries their job alias, which is still self.
+	const suited = {
+		...game,
+		job: { type: 1, level: 2, exp: 0, alias: "RedHawk", suited: true },
+		social: {
+			...game.social,
+			members: [ { id: 11, name: "RedHawk", status: 0xaa }, { id: 12, name: "Peer", status: 0x85 } ]
+		}
+	};
+	assert.deepEqual(
+		partyOverlay( suited, [ local, peer ], 900, 4, 137, true ).map( r => r.member.name ),
+		[ "Peer" ]
+	);
 });
 test("party wraps with the native bottom reserve and option-specific row pitch", () => {
 	const state = {

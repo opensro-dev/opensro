@@ -18,7 +18,9 @@ import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 
 const { createChat } = await import( "../../src/engine/runtime/simulation/worker/session/world/gameplay/chat/chat.ts" );
 const { serverNotification } = await import( "../../src/engine/foundation/gameplay/system-notices.ts" );
-const { decodeNoticeLinks, noticeRowLinks } = await import( "../../src/engine/foundation/gameplay/notice-links.ts" );
+const { decodeNoticeLinks, noticeRowLinks, noticeWrappedLinks } = await import(
+	"../../src/engine/foundation/gameplay/notice-links.ts"
+);
 const { decodeInventoryItem } = await import( "../../src/engine/foundation/gameplay/inventory-item.ts" );
 const { chatLayout } = await import( "../../src/engine/foundation/ui/chat-layout.ts" );
 const { tooltipItems } = await import( "../../src/engine/foundation/ui/tooltip-target.ts" );
@@ -194,7 +196,44 @@ test("a linked item shows the bag's own tooltip", () => {
 	// Only the two fields tooltipItems reads for a notice.
 	const game = /** @type {any} */ ({ inventory: [], chat: { lines: [ NOTICE_LINE ] } });
 	assert.deepEqual( tooltipItems( "notice-item:5", game, 0 ), [ POTION ] );
+	assert.deepEqual( tooltipItems( "notice-item:5:1", game, 0 ), [ POTION ] );
 	assert.deepEqual( tooltipItems( "notice-item:6", game, 0 ), [] );
+});
+
+test("a multi-word item wrapped across two rows links and underlines both rows", () => {
+	const spear = { ...POTION, name: "Heaven's Cloud Spear" };
+	const wrappedLine = {
+		channel: 7,
+		name: "",
+		text: "Star has dropped Heaven's Cloud Spear (Seal Of Star) from Tiger Girl",
+		outgoing: false,
+		sequence: 9,
+		notice: { name: "Star", item: spear }
+	};
+	const on = layoutWith( { noticeLinks: true, lines: [ wrappedLine ] } );
+	const names = on.controls.filter( c => c.id.startsWith( "notice-name:9" ) );
+	const items = on.controls.filter( c => c.id.startsWith( "notice-item:9" ) );
+	assert.equal( names.length, 1, "player name 'Star' is not matched again inside '(Seal Of Star)' on row 2" );
+	assert.deepEqual( items.map( c => [ c.id, c.label ] ), [
+		[ "notice-item:9", "Heaven's Cloud" ],
+		[ "notice-item:9:1", "Spear" ]
+	] );
+	const plainInk = on.quads.filter( q => q.texture === "" ).length;
+	for ( const hover of [ "notice-item:9", "notice-item:9:1" ] ) {
+		const hovered = layoutWith( { noticeLinks: true, lines: [ wrappedLine ], hover } );
+		assert.equal( hovered.quads.filter( q => q.texture === "" ).length, plainInk + 2 );
+	}
+	assert.deepEqual(
+		noticeWrappedLinks(
+			"(N):Star has dropped Heaven's Cloud Spear (Seal Of Star)",
+			[ "(N):Star has dropped Heaven's", "Cloud Spear (Seal Of Star)" ],
+			{ name: "Star", item: spear }
+		),
+		[
+			[ { kind: "name", at: 4, value: "Star" }, { kind: "item", at: 21, value: "Heaven's" } ],
+			[ { kind: "item", at: 0, value: "Cloud Spear", part: 1 } ]
+		]
+	);
 });
 
 test("links in notices are on unless explicitly false", () => {

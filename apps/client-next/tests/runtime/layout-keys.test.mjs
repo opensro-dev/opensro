@@ -49,4 +49,8 @@ test("a key goes up as the letter it went down with", () => {
 	keys.down( "KeyW", "z" );
 	keys.clear();
 	assert.equal( keys.up( "KeyW", "w" ), "KeyW" );
+	// Synthetic Chromium autofill keydown/keyup events carry undefined code and key.
+	assert.equal( layoutCode( undefined, undefined ), "" );
+	assert.equal( keys.down( undefined, undefined ), "" );
+	assert.equal( keys.up( undefined, undefined ), "" );
 });

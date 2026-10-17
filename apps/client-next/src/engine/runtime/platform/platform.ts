@@ -578,7 +578,7 @@ export function createPlatform(
 		) event.preventDefault();
 	}, { signal: lifetime.signal, capture: true } );
 	window.addEventListener( "keydown", event => {
-		if ( event.isComposing || event.keyCode === 229 ) return;
+		if ( !event.code || event.isComposing || event.keyCode === 229 ) return;
 		// The update prompt holds focus; Enter reaches its Refresh button.
 		if ( updateRequired ) return;
 		// A letter is the one the layout prints on the key, as native VKs are.
@@ -596,8 +596,10 @@ export function createPlatform(
 	}, { signal: lifetime.signal } );
 	window.addEventListener(
 		"keyup",
-		event =>
-			onInput( { kind: "key", code: layoutKeys.up( event.code, event.key ), down: false, timeMs: timeMs() } ),
+		event => {
+			if ( !event.code ) return;
+			onInput( { kind: "key", code: layoutKeys.up( event.code, event.key ), down: false, timeMs: timeMs() } );
+		},
 		{ signal: lifetime.signal }
 	);
 	window.addEventListener( "blur", () => {

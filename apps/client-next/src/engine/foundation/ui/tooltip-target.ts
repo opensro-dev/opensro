@@ -74,7 +74,7 @@ export function tooltipItems(
 		item = game.stall?.network.rows[Number( id.slice( "stall-net-row:".length ) )]?.item;
 	} else if ( id.startsWith( "notice-item:" ) ) {
 		// Port-only: the item a chat-log notice names (notice-links.ts).
-		const sequence = Number( id.slice( "notice-item:".length ) );
+		const sequence = parseInt( id.slice( "notice-item:".length ), 10 );
 		item = game.chat?.lines.find( line => line.sequence === sequence )?.notice?.item;
 	} else if ( id.startsWith( "hotbar:" ) ) {
 		const binding = game.quickSlots?.find( row => row.slot === Number( id.slice( 7 ) ) );
