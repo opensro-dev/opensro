@@ -126,19 +126,28 @@ test("status chrome and gauges follow 6AA290 and 6A9C50", () => {
 	assert.deepEqual( cos.cosStatusRatios( HORSE, undefined ), { hp: null, hgp: null } );
 });
 
-test("the status row's reach covers every class's selected outline", () => {
-	// The port-only tool row sits below this edge whether or not companions are
-	// out, so summoning a pet or mounting never moves it.
+test("the status row's reach covers every class's selected outline and sits below the desktop tool strip", () => {
 	const bottom = cos.cosStatusRowBottom();
+	const desktopTop = cos.cosStatusDesktopTop();
+	const toolsBottom = cos.HUD_TOOLS_TOP + cos.HUD_TOOLS_HEIGHT;
+	assert.equal( desktopTop, 41 );
 	for ( const cls of [ 0, 1, 2, 3, 4 ] ) {
 		for ( const index of [ 0, 1, 2 ] ) {
 			const [, y] = cos.cosStatusRect( 1920, index, cls );
 			const outlineBottom = y - cos.COS_STATUS_OUTLINE_MARGIN + cos.cosStatusChrome( cls ).outlineSize[1];
 			assert.ok( outlineBottom <= bottom, `class ${cls} slot ${index}: ${outlineBottom} > ${bottom}` );
+			const [, dy] = cos.cosStatusRect( 1920, index, cls, desktopTop );
+			const desktopOutlineTop = dy - cos.COS_STATUS_OUTLINE_MARGIN;
+			assert.equal(
+				desktopOutlineTop,
+				toolsBottom + cos.HUD_TOOLS_GAP,
+				`class ${cls} slot ${index} outline starts below the top tool strip`
+			);
 		}
 	}
 	// The attack pet's tall outline is the reach: 2 - 11 + 86.
 	assert.equal( bottom, 77 );
+	assert.equal( cos.cosStatusRowBottom( desktopTop ), 116 );
 });
 
 test("the command row lays out leftward from the under bar", () => {

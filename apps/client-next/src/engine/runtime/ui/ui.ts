@@ -394,10 +394,11 @@ import {
 	cosSatietyText,
 	cosStanceToggle,
 	cosStatusChrome,
+	cosStatusDesktopTop,
 	cosStatusRatios,
 	cosStatusRect,
-	cosStatusRowBottom,
-	COS_STATUS_OUTLINE_MARGIN
+	COS_STATUS_OUTLINE_MARGIN,
+	HUD_TOOLS_HEIGHT
 } from "@/engine/foundation/ui/cos-command";
 import { questObjectivePresentation } from "@/engine/foundation/ui/quest-presentation";
 import { uniqueBannerQuads } from "@/engine/foundation/ui/unique-banner";
@@ -711,9 +712,6 @@ const PARTY_MATCH_RANGE_SEPARATOR_ID = 43;
 const BUG_COMMAND = /^\/bug(?:\s+|$)/i;
 const BUG_REPORTS_DISABLED = "Bug reports are disabled on this server.";
 const BUG_REPORTS_UNAVAILABLE = "Connecting to the bug reporter; the report window opens as soon as it answers.";
-// Port-only report/diagnostic tools: paired with --hud-tools-height in loading.css.
-const HUD_TOOLS_HEIGHT = 18;
-const HUD_TOOLS_GAP = 8;
 // The skin change scroll's window (CIFChangePlayerModel).
 const SKIN_PANEL = "Skin change";
 // CIFWholeChat, the Global Chatting item's window, and its line's edit box.
@@ -8724,7 +8722,7 @@ export function createUi(
 				shown.forEach( ( record, i ) => {
 					const cls = cosClass( record.band )!, chrome = cosStatusChrome( cls );
 					const reference = data.cosReferences.get( record.refObjId );
-					const nativeRect = cosStatusRect( w, i, cls );
+					const nativeRect = cosStatusRect( w, i, cls, cosStatusDesktopTop() );
 					const r: UiRect = compact ?
 						[
 							compactMargin + i % compactColumns * compactPitch,
@@ -23855,9 +23853,9 @@ export function createUi(
 				hudCorner: compact ?
 					[ w, itemMall.read().visible ? 52 : compactTelemetryTop, 0, 0 ] as UiRect :
 					hudCorner,
-				// A fixed row below the companion icons' reach: following the icons
-				// moved the tools whenever a pet or mount came or went.
-				hudToolsTop: compact ? undefined : Math.max( cosStatusRowBottom() + HUD_TOOLS_GAP, targetBottom ),
+				// The DOM tools stay at the top right beside the minimap on desktop;
+				// companion status icons hang below them (cosStatusDesktopTop, BUG-087).
+				hudToolsTop: undefined,
 				focusRequest: worldVisible && phase === "world" ? focusRequest : undefined,
 				loadingProgress: loading?.progress,
 				loadingStatus: loading?.status,

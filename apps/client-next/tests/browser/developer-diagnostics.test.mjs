@@ -372,6 +372,14 @@ async function checkHudTools( { page, report, viewport, label, evidence, directo
 	);
 	evidence.push( { label, boxes, obstacles } );
 	await page.screenshot( { path: `${directory}/${label}.png` } );
+	const desktopCosBoxes = viewport.width >= 800 && viewport.height >= 600 ?
+		report.controls.filter( row => row.id.startsWith( "cos-status:" ) ).map( row => ({
+			x: row.rect[0] * scale,
+			y: row.rect[1] * scale,
+			width: row.rect[2] * scale,
+			height: row.rect[3] * scale
+		}) ) :
+		[];
 	for ( const box of boxes ) {
 		assert.ok(
 			!obstacles.some( obstacle => overlaps( box, obstacle ) ),
@@ -382,6 +390,12 @@ async function checkHudTools( { page, report, viewport, label, evidence, directo
 				box.y + box.height <= viewport.height,
 			`${label}: ${box.id} remains in the viewport`
 		);
+		if ( viewport.width >= 800 && viewport.height >= 600 ) {
+			assert.ok( box.y <= 8 * scale, `${label}: ${box.id} stays at the top of the screen` );
+			for ( const cosBox of desktopCosBoxes ) {
+				assert.ok( box.y + box.height < cosBox.y, `${label}: ${box.id} stays above companion status icons` );
+			}
+		}
 	}
 	assert.deepEqual( report.failed, [] );
 }

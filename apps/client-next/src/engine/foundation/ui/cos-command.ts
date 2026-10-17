@@ -34,6 +34,12 @@ const STATUS_STEP = 48;
 const STATUS_TOP = 2;
 // The selected icon's outline image hangs this far above and left of it.
 export const COS_STATUS_OUTLINE_MARGIN = 11;
+// Port-only report/diagnostic tool strip at the top right beside the minimap
+// (loading.css --hud-tools-height); desktop companion icons hang below it so
+// the tool strip always stays at the top of the screen (BUG-087).
+export const HUD_TOOLS_TOP = 4;
+export const HUD_TOOLS_HEIGHT = 18;
+export const HUD_TOOLS_GAP = 8;
 // CIFCOSCommand row geometry (CIFCOSCommand_LayoutRows 6A34F0), relative to
 // the under bar's origin.
 const COMMAND_ORIGIN_X = 653;
@@ -280,12 +286,27 @@ export function cosStatusChrome( cls: number ) {
 cosStatusRect
 
 6F1880: the i-th status icon hangs from the top right corner, sized by
-its class's frame.
+its class's frame. Pass top to offset the row below the port-only HUD
+tool strip on desktop.
 ================
 */
-export function cosStatusRect( screenWidth: number, index: number, cls: number ): UiRect {
+export function cosStatusRect( screenWidth: number, index: number, cls: number, top = STATUS_TOP ): UiRect {
 	const [width, height] = cosStatusChrome( cls ).size;
-	return [ screenWidth - STATUS_RIGHT_MARGIN - STATUS_STEP * index, STATUS_TOP, width, height ];
+	return [ screenWidth - STATUS_RIGHT_MARGIN - STATUS_STEP * index, top, width, height ];
+}
+
+/*
+================
+cosStatusDesktopTop
+
+Desktop Y of the companion status row below the port-only HUD tool strip
+(BUG-087): the tool strip stays at the top of the screen (HUD_TOOLS_TOP,
+HUD_TOOLS_HEIGHT) and the companion row's selected outline
+(COS_STATUS_OUTLINE_MARGIN above the icon) starts HUD_TOOLS_GAP below it.
+================
+*/
+export function cosStatusDesktopTop(): number {
+	return HUD_TOOLS_TOP + HUD_TOOLS_HEIGHT + HUD_TOOLS_GAP + COS_STATUS_OUTLINE_MARGIN;
 }
 
 /*
@@ -293,18 +314,16 @@ export function cosStatusRect( screenWidth: number, index: number, cls: number )
 cosStatusRowBottom
 
 The lowest edge the status row can reach: any class's selection outline,
-which hangs COS_STATUS_OUTLINE_MARGIN above and left of its icon. It does
-not depend on which companions are out, so chrome placed below it (the
-port-only tool row) stays put while pets and mounts come and go.
+which hangs COS_STATUS_OUTLINE_MARGIN above and left of its icon.
 ================
 */
-export function cosStatusRowBottom(): number {
+export function cosStatusRowBottom( top = STATUS_TOP ): number {
 	const tallest = Math.max(
 		...[ COS_CLASS_RIDING, COS_CLASS_TRANSPORT, COS_CLASS_PICKUP, COS_CLASS_ATTACK, COS_CLASS_GUILD ].map( cls =>
 			cosStatusChrome( cls ).outlineSize[1]
 		)
 	);
-	return STATUS_TOP - COS_STATUS_OUTLINE_MARGIN + tallest;
+	return top - COS_STATUS_OUTLINE_MARGIN + tallest;
 }
 
 /*

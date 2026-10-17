@@ -4084,7 +4084,13 @@ test("the pet keys act on the active companion and a switch re-binds the window,
 			const chosen = sent.slice( before ).find( c => c.kind === "cos-select" );
 			if ( chosen ) select( chosen.gid );
 		};
-		settle();
+		const initial = settle();
+		assert.equal( initial?.hudToolsTop, undefined, "desktop HUD tool row stays at the top of the screen" );
+		assert.equal(
+			initial?.controls.find( c => c.id === "cos-status:7" )?.rect[1],
+			41,
+			"desktop companion portrait sits below the top HUD tool strip"
+		);
 		// Game_OnKeyDown 680CE9 -> 6F2520 -> 6A2350: Insert opens the active rabbit.
 		press( "Insert" );
 		assert.equal( bagTab()?.disabled, false, "Insert opens the active rabbit's window" );
