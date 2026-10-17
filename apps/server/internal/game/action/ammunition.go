@@ -102,8 +102,10 @@ func (rt *Runtime) planEquippedAmmunition(character *enterworld.Character, weapo
 ================
 ammunitionResult
 
-What a shot leaves in equipment socket 7: the absolute stack count opcode
-0x3752 carries, and the bag stack AutoReloadMagazine moved in, if any.
+What a shot leaves in equipment socket 7: the stack count the socket holds
+afterwards, and the bag stack AutoReloadMagazine moved in, if any. With a
+reload the move frame carries the count; the 0x3752 frame carries the 0
+that emptied the socket first (see ammunitionFrames).
 ================
 */
 type ammunitionResult struct {
@@ -184,18 +186,26 @@ func reloadMagazine(character *enterworld.Character, typeFlags uint16) *ammuniti
 ================
 ammunitionFrames
 
-The actor's frames for a shot's ammunition: the reload's inventory move
-first, then 0x3752 with the socket's new absolute count. A zero count clears
-the socket on the client (596510), so it must follow the move, not precede it.
+The actor's frames for a shot's ammunition, in the native order.
+SkillAction_Projectile publishes the socket's new absolute count (packet
+class 0x3201, port 0x3752) and sends it BEFORE CGObjPC_ConsumeAmmo runs -
+at both debit sites (publish 585B6A, send 585BA0, call 585BA3; publish
+58600A, send 58603A, call 586041). ConsumeAmmo's AutoReloadMagazine
+(4EC340) then moves the bag stack into the emptied socket, so the move
+reaches a client whose socket 7 the zero count already cleared (client
+596510 clears the socket on a zero count). The move carries the new
+stack's quantity itself; natively no second count frame follows it.
 ================
 */
 func ammunitionFrames(result ammunitionResult) []wire.Frame {
-	frames := make([]wire.Frame, 0, 2)
-	if result.reload != nil {
-		frames = append(frames, wire.Frame{
+	if result.reload == nil {
+		return []wire.Frame{wire.AvatarInventorySlot7StackCountFrame(result.count)}
+	}
+	return []wire.Frame{
+		wire.AvatarInventorySlot7StackCountFrame(0),
+		{
 			Opcode:  wire.OpItemMoveResponse,
 			Payload: wire.EncodeInventoryMoveResult(result.reload.from, uint8(inventory.SocketShield), result.reload.quantity, nil),
-		})
+		},
 	}
-	return append(frames, wire.AvatarInventorySlot7StackCountFrame(result.count))
 }

@@ -66,8 +66,8 @@ func TestRaisedArrowQuiverFiresAndDecrements(t *testing.T) {
 ================
 TestRaisedArrowStackReloadsWhole
 
-The last arrow reloads a whole 2500 bag stack: the move and the new count
-both carry 2500.
+The last arrow reloads a whole 2500 bag stack: the socket's zero count
+goes out first, then the move carries the whole 2500 into socket 7.
 ================
 */
 func TestRaisedArrowStackReloadsWhole(t *testing.T) {
@@ -80,7 +80,9 @@ func TestRaisedArrowStackReloadsWhole(t *testing.T) {
 		t.Fatalf("reload = %+v count %d, want the whole %d stack", result.reload, result.count, raisedAmmoStack)
 	}
 	frames := ammunitionFrames(result)
-	if len(frames) != 2 || !bytes.Equal(frames[1].Payload, binary.LittleEndian.AppendUint16(nil, raisedAmmoStack)) {
-		t.Fatalf("frames = %+v, want the move then 3752 count=%d", frames, raisedAmmoStack)
+	if len(frames) != 2 || frames[0].Opcode != wire.OpAvatarInventorySlot7StackCount ||
+		!bytes.Equal(frames[0].Payload, binary.LittleEndian.AppendUint16(nil, 0)) ||
+		frames[1].Opcode != wire.OpItemMoveResponse {
+		t.Fatalf("frames = %+v, want 3752 count=0 then the move of %d", frames, raisedAmmoStack)
 	}
 }

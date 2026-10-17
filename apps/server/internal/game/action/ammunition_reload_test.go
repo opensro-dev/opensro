@@ -3,14 +3,16 @@
 
 ammunition_reload_test.go - spending the last arrow reloads from the bag
 
-CGObjPC_AutoReloadMagazine (4EC340) moves the lowest same-type bag stack into
-socket 7; the client must see that move before the new absolute count.
+SkillAction_Projectile sends the socket's new count (0 when the stack ran
+out) before CGObjPC_ConsumeAmmo, whose AutoReloadMagazine (4EC340) then
+moves the lowest same-type bag stack into the emptied socket 7.
 
 ===========================================================================
 */
 package action
 
 import (
+	"bytes"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -49,8 +51,10 @@ func TestLastArrowReloadsLowestSameTypeBagStack(t *testing.T) {
 		t.Fatalf("inventory = %+v, want the spent row gone and one socket-7 stack", character.MissionInventory)
 	}
 	frames := ammunitionFrames(result)
-	if len(frames) != 2 || frames[0].Opcode != wire.OpItemMoveResponse || frames[1].Opcode != wire.AvatarInventorySlot7StackCountFrame(0).Opcode {
-		t.Fatalf("frames = %+v, want the move response before the 0x3752 count", frames)
+	zero := wire.AvatarInventorySlot7StackCountFrame(0)
+	if len(frames) != 2 || frames[0].Opcode != zero.Opcode || !bytes.Equal(frames[0].Payload, zero.Payload) ||
+		frames[1].Opcode != wire.OpItemMoveResponse {
+		t.Fatalf("frames = %+v, want the 0x3752 zero count before the move response", frames)
 	}
 }
 
