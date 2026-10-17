@@ -24,9 +24,16 @@ const (
 	// Generic invalid/lifecycle refusals use that client-defined class; the
 	// later server's broader error namespace is not copied onto the 1.150 wire.
 	cosPickupUnavailable uint8 = 2
-	// 77DD10 disables automatic pickup for B4/B5. The original Korean B4
-	// text names the pet bag; its English translation swaps the two bags.
-	cosPickupBagFull uint8 = 0xB4
+	// 4D535C / 4D541E: 0x189C (low byte 0x9C) arms 77DD10's 3 s pet retry
+	// backoff without disabling auto-pickup when a shared-loot party member
+	// (or the owner in an item-share party on a personal quest drop) cannot
+	// accept the item.
+	cosPickupRetryBackoff uint8 = 0x9C
+	// 77DD10 disables automatic pickup for B4/B5. 4D52AC emits 0x18B4 when a
+	// COS container is full; 4D5442 emits 0x18B5 when the owner's player bag
+	// is full on a personal quest drop outside an item-share party.
+	cosPickupBagFull      uint8 = 0xB4
+	cosPickupOwnerBagFull uint8 = 0xB5
 )
 
 /*
@@ -60,11 +67,18 @@ func finishCosPickupCommand(result OpResult, command wire.CosCommand) OpResult {
 		return result
 	}
 	code := cosPickupUnavailable
+	if len(result.Broadcast) > 0 {
+		code = cosPickupSucceeded
+	}
 	frames := make([]wire.Frame, 0, len(result.Frames)+1)
 	for _, frame := range result.Frames {
-		if frame.Opcode == wire.OpItemMoveResponse && len(frame.Payload) == 2 &&
-			frame.Payload[0] == 2 && frame.Payload[1] == wire.ErrCodeStorageFull {
-			code = cosPickupBagFull
+		if frame.Opcode == wire.OpItemMoveResponse && len(frame.Payload) == 2 && frame.Payload[0] == 2 {
+			switch frame.Payload[1] {
+			case wire.ErrCodeStorageFull:
+				code = cosPickupBagFull
+			case cosPickupOwnerBagFull, cosPickupRetryBackoff:
+				code = frame.Payload[1]
+			}
 		}
 		if frame.Opcode == wire.OpItemMoveResponse && len(frame.Payload) > 0 && frame.Payload[0] == 1 {
 			code = cosPickupSucceeded

@@ -64,6 +64,22 @@ func TestCancelActiveEffectUsesExactSkillThenRetiresOnTick(t *testing.T) {
 	}
 }
 
+func TestDrainStoppedCharacterEffectSkipsAbsentActorFallback(t *testing.T) {
+	rt, character := newActiveEffectTestRuntime(t, staticSkillSource{
+		100: {ID: 100, Group: 9},
+	})
+	if !rt.ApplyCharacterEffect(testDivision, character.Name, 100, 0x55667788, statuseffect.StateActive, false) {
+		t.Fatal("active effect prerequisite did not apply")
+	}
+	rt.HandleTargetInteract(testDivision, character,
+		(wire.CancelActiveEffectRequest{EffectID: 100}).Encode())
+	deps := rt.deps.(*enterworld.Deps)
+	deps.Characters = enterworld.StaticCharacterSource{testDivision: nil}
+	if routed := rt.TickHook()(1_000_000); len(routed) != 0 {
+		t.Fatalf("absent actor fallback emitted frames: %+v", routed)
+	}
+}
+
 func TestCancelActiveEffectOptionalTokenAndOwnerAreBoundaries(t *testing.T) {
 	rt, character := newActiveEffectTestRuntime(t, staticSkillSource{
 		100: {ID: 100, Group: 9},

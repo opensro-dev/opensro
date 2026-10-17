@@ -142,6 +142,68 @@ func TestCosPickupFullBagUsesNativeDisableClassWithoutConsumingDrop(t *testing.T
 
 /*
 ================
+TestCosPickupPersonalQuestFullPlayerBagUsesB5SoloAnd9CInSharedParty
+
+CCOS_ExecuteGroundPickup (4D5418..4D5447): when a personal quest drop routes
+to the owner's player bag (4D5755) and that bag is full (0x1807), solo or
+non-item-share parties emit 0xB5 (owner bag full, disabling auto-pickup) while
+an item-share party emits 0x9C (3 s retry backoff).
+================
+*/
+func TestCosPickupPersonalQuestFullPlayerBagUsesB5SoloAnd9CInSharedParty(t *testing.T) {
+	items := testItems()
+	const questRefID uint32 = 45165
+	questFlags := wire.PackTypeFlags(3, 3, 9, 0)
+	items["ITEM_QNO_EU_CON_19_01"] = &enterworld.ItemRef{
+		RefObjID: questRefID, Codename: "ITEM_QNO_EU_CON_19_01", TypeIDs: [4]int64{3, 3, 9, 0},
+		NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 50}),
+	}
+	refs := testCosSource(items)
+	refs.characters["PET"] = &enterworld.CharacterRef{Codename: "PET", RefObjID: 9, TidWord: 0x21c6, RunSpeed: 100}
+	rt, _, picker, _, registry := sharedPickupFixtureWith(t, testCharacter(), refs)
+	rt.Now = func() time.Time { return time.UnixMilli(1000) }
+	picker.MissionInventory = nil
+	for slot := int64(13); slot < 45; slot++ {
+		picker.MissionInventory = append(picker.MissionInventory, domain.InventoryRow{
+			Slot: slot, RefObjID: 11459, Codename: "ITEM_CH_SWORD_01_A_RARE",
+			TypeFlags: wire.PackTypeFlags(3, 1, 6, 2), VarianceBits: "0", StackCount: 1,
+		})
+	}
+
+	gid, _ := enterworld.CosObjectIDForCharacter(picker)
+	picker.ActiveCOS = &enterworld.CharacterCOS{GID: gid, RefObjID: 9, Codename: "PET", CurrentHP: 100, Summoned: true,
+		Container: &domain.COSContainer{Capacity: 8}}
+	rt.BindPetSession(testDivision, picker, 1)
+	rt.TickHook()(1000)
+	pose := rt.PetPresentation(testDivision, picker.Name).World.Spawn
+	drop := rt.Ground.Add(testDivision, grounditem.Item{
+		RefObjID: questRefID, Codename: "ITEM_QNO_EU_CON_19_01", TypeFlags: questFlags, StackCount: 1,
+		Position: grounditem.Point{RegionID: pose.RegionID, X: float32(pose.X), Z: float32(pose.Z)}, Y: float32(pose.Y),
+	})
+	cmd := wire.NewWriter(9).U32(gid).U8(wire.CosCommandPickupTag).U32(drop.Gid).Payload()
+
+	// In an item-share party, a full owner player bag answers 0x9C (retry backoff).
+	sharedRes := rt.HandleCosCommand(testDivision, picker, cmd)
+	assertCosPickupAck(t, sharedRes.Frames, gid, drop.Gid, false)
+	if len(sharedRes.Frames) != 1 || sharedRes.Frames[0].Payload[2] != cosPickupRetryBackoff ||
+		len(rt.Ground.All(testDivision)) != 1 || len(picker.ActiveCOS.Container.Rows) != 0 {
+		t.Fatalf("shared-party full player bag on quest drop = %+v, want 0x9C without pet grant", sharedRes)
+	}
+
+	// Solo (after leaving the party), the same full player bag answers 0xB5 (owner bag full).
+	if _, refusal := registry.Leave(testDivision, picker.Name); refusal != "" {
+		t.Fatal(refusal)
+	}
+	soloRes := rt.HandleCosCommand(testDivision, picker, cmd)
+	assertCosPickupAck(t, soloRes.Frames, gid, drop.Gid, false)
+	if len(soloRes.Frames) != 1 || soloRes.Frames[0].Payload[2] != cosPickupOwnerBagFull ||
+		len(rt.Ground.All(testDivision)) != 1 || len(picker.ActiveCOS.Container.Rows) != 0 {
+		t.Fatalf("solo full player bag on quest drop = %+v, want 0xB5 without pet grant", soloRes)
+	}
+}
+
+/*
+================
 TestCosPickupCommandRetiresOnLifecycleFailure
 ================
 */

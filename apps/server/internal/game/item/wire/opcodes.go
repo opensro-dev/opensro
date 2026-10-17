@@ -122,6 +122,11 @@ const (
 	// ErrCodeStorageFull is UIIT_MSG_STRGERR_INVENTORY_FULL (01:07): the bag
 	// genuinely has no free slot.
 	ErrCodeStorageFull uint8 = 0x07
+	// ErrCodePartyInventoryFull is UIIT_MSG_STRGERR_PARTY_INVENTORY_FULL
+	// (01:DA, 689420 index 0xDA): CPlayer_ExecuteGroundPickup (5263A8) returns
+	// 0x18DA to the picker after sending 0x1807 (ErrCodeStorageFull) to the
+	// rotated party recipient whose bag is full (526397).
+	ErrCodePartyInventoryFull uint8 = 0xDA
 	// ErrCodeCantEquip is UIIT_MSG_STRGERR_EQUIPITEM (01:0e, "Cannot equipt
 	// the selected item"): the item cannot sit in the requested socket
 	// (non-equipable item, wrong socket class). INFERRED from the client

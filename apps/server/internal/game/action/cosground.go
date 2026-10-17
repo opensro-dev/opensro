@@ -256,12 +256,179 @@ func (rt *Runtime) sharePetPickup(division string, c *enterworld.Character, q wi
 	if !grounditem.SameWorld(from, item.Position) || math.IsNaN(distance) || distance > grounditem.ExecuteRange {
 		return OpResult{}, false
 	}
-	recipient := rt.partyPickupRecipient(division, c, item, now.UnixMilli())
+	recipient := c
+	if !item.IsGold() {
+		recipient = rt.partyPickupRecipient(division, c, item, now.UnixMilli())
+	}
 	split := item.IsGold() && rt.partyGoldShares(division, recipient, item.GoldAmount, now.UnixMilli()) != nil
 	if recipient == c && !split && !isPersonalQuestPickupItem(item) {
 		return OpResult{}, false
 	}
 	actor := wire.PickupAnim{Gid: q.CosGID, Heading: wire.HeadingByteFromAngle(at.Angle)}
-	return rt.grantPickupTo(pickupGrant{division: division, worldKey: simulation.WorldKey(division, c.Name), picker: c,
-		recipient: recipient, snapshot: rt.characterSnapshot(division, c), item: item, actor: &actor}), true
+	result := rt.grantPickupTo(pickupGrant{division: division, worldKey: simulation.WorldKey(division, c.Name), picker: c,
+		recipient: recipient, snapshot: rt.characterSnapshot(division, c), item: item, actor: &actor})
+	result.Frames = withoutActionState(result.Frames)
+	if isPickupFault(result, wire.ErrCodeStorageFull) {
+		if recipient != c {
+			// 4D570C pre-checks CGStorage_FindFirstEmptySlot(0x0D) before
+			// 4B29A0; running grantPickupTo first preserves partial-stack
+			// merging (4B2890, port-only, not native) before falling back to
+			// CCOSManager_FindPickupPetActor (4FC320) at 4D571B.
+			return rt.grantPeerCosPickup(division, c, recipient, item, actor, now), true
+		}
+		// 4D5418..4D5447: when the owner's player bag is full on a personal
+		// quest drop (4D5755), an item-share party emits 0x189C (3 s retry
+		// backoff); solo or non-item-share emits 0x18B5 (owner bag full).
+		if rt.inSharedLootParty(division, c, now.UnixMilli()) {
+			return failureResult(cosPickupRetryBackoff), true
+		}
+		return failureResult(cosPickupOwnerBagFull), true
+	}
+	return result, true
+}
+
+/*
+================
+withoutActionState
+
+A pet pickup executes on the companion actor (4D4F60), never the player's
+CGCharAutoCommandActor (4AD390), so it never releases the player's 0xB2CD latch.
+================
+*/
+func withoutActionState(frames []wire.Frame) []wire.Frame {
+	out := make([]wire.Frame, 0, len(frames))
+	for _, frame := range frames {
+		if frame.Opcode != wire.OpActionState {
+			out = append(out, frame)
+		}
+	}
+	return out
+}
+
+/*
+================
+findPickupPetGID
+
+CCOSManager_FindPickupPetActor (4FC320): returns the GID of the character's
+live, unmounted summoned pickup pet (band 4, vtable +0x43C == 1), or 0.
+Must run inside the character authority door.
+================
+*/
+func (rt *Runtime) findPickupPetGID(c *enterworld.Character) uint32 {
+	if c == nil || c.DeletePending || enterworld.CurrentHP(c) == 0 {
+		return 0
+	}
+	for _, pet := range c.Companions() {
+		if pet == nil || !pet.Summoned || pet.Mounted || pet.CurrentHP == 0 || pet.GID == 0 {
+			continue
+		}
+		ref, valid := rt.cosReference(pet)
+		if !valid || ref.TidWord>>11 != 4 {
+			continue
+		}
+		if _, _, ok := rt.ownedCOSContainer(c, pet.GID); ok {
+			return pet.GID
+		}
+	}
+	return 0
+}
+
+/*
+================
+grantPeerCosPickup
+
+CCOS_SelectPickupRecipient (4D5715..4D5744) and CCOS_ExecuteGroundPickup
+(4D5143, 4D52B6..4D54C6): when the rotated party member's player bag is full,
+redirect the pickup to that member's summoned pickup pet (4FC320). If the
+member has no pickup pet, answer the picker's owner with 0x9C; if the member's
+pickup pet bag is also full (0x1807 -> 0x18B4), send 0xB4 for the member's pet
+to the member and 0x9C for the picker pet to the picker's owner.
+================
+*/
+func (rt *Runtime) grantPeerCosPickup(division string, picker, recipient *enterworld.Character, item grounditem.Item, anim wire.PickupAnim, now time.Time) OpResult {
+	result := failureResult(cosPickupRetryBackoff)
+	var picked grounditem.Item
+	var peerPetGID uint32
+	var peerBagFull bool
+	rt.deps.Update(recipient, "cos-ground-item", func() bool {
+		peerPetGID = rt.findPickupPetGID(recipient)
+		if peerPetGID == 0 {
+			return false
+		}
+		bag, inv, valid := rt.ownedCOSContainer(recipient, peerPetGID)
+		if !valid {
+			return false
+		}
+		current, found := rt.characterGround(division, picker, item.Gid)
+		if !found {
+			result = failureResult(wire.ErrCodeTargetGone)
+			return false
+		}
+		current.Summon.RefreshRentalTimes(now.Unix())
+		count := current.StackCount
+		if count == 0 {
+			count = 1
+		}
+		grant, fault := inv.GrantStack(inventory.Item{
+			TradeOwner: current.TradeOwner, RecordID: current.RecordID, RefObjID: current.RefObjID,
+			Codename: current.Codename, TypeFlags: current.TypeFlags, Quantity: count, Plus: current.Plus,
+			VarianceBits: current.VarianceBits, Durability: current.Durability, MagicOptions: current.MagicOptions,
+			TransformRefObjID: current.TransformRefObjID, Summon: domain.CloneCOS(current.Summon),
+		}, rt.maxStackFor(current.TypeFlags, current.Codename))
+		if fault != nil {
+			peerBagFull = fault.Code == wire.ErrCodeStorageFull
+			return false
+		}
+		candidate := *recipient.CompanionByGID(peerPetGID)
+		candidate.Container = &domain.COSContainer{Capacity: bag.Capacity, Rows: rowsFromInvItems(inv.Items())}
+		refs := rt.deps.ItemReferences().(enterworld.CharacterRefSource)
+		ref, ok := refs.CharacterRefByCodename(candidate.Codename)
+		if !ok {
+			return false
+		}
+		if _, err := enterworld.BuildCOSRecord(&candidate, ref, rt.deps.ItemReferences()); err != nil {
+			return false
+		}
+		granted, ok := inv.At(grant.DestSlot)
+		if !ok {
+			return false
+		}
+		body := wire.ItemBody{
+			TradeOwner: granted.TradeOwner, TypeFlags: granted.TypeFlags, RefObjID: granted.RefObjID,
+			Quantity: granted.Quantity, Plus: granted.Plus, VarianceBits: granted.VarianceBits,
+			Durability: granted.Durability, MagicOptions: granted.MagicOptions,
+			TransformRefObjID: granted.TransformRefObjID, Summon: domain.CloneCOS(granted.Summon),
+		}
+		plain := wire.EncodePickupItemResult(grant.DestSlot, body)
+		receipt := wire.NewWriter(len(plain) + 4).U8(1).U8(wire.MoveTypeCosPickup).U32(peerPetGID).Bytes(plain[2:]).Payload()
+		remainder := grant.GroundRemainder
+		if remainder > 0 {
+			rt.Ground.SetStackCount(division, current.Gid, remainder)
+		} else if _, ok := rt.Ground.Remove(division, current.Gid); !ok {
+			return false
+		}
+		bag.Rows = candidate.Container.Rows
+		picked = current
+		public := wire.PickupBroadcastFrames(anim, current.Gid, remainder)
+		result = OpResult{
+			Frames:    public,
+			Broadcast: public,
+			Recipients: []RecipientFrames{{
+				CharacterID: recipient.ID,
+				Frames:      []wire.Frame{{Opcode: wire.OpItemMoveResponse, Payload: receipt}},
+			}},
+		}
+		return true
+	})
+	if len(result.Broadcast) > 0 {
+		result.Recipients = append(result.Recipients, rt.partyLootNotice(division, picker, recipient, picked, now.UnixMilli())...)
+		return result
+	}
+	if peerBagFull && peerPetGID != 0 {
+		result.Recipients = append(result.Recipients, RecipientFrames{
+			CharacterID: recipient.ID,
+			Frames:      []wire.Frame{cosPickupAcknowledgement(wire.CosCommand{CosGid: peerPetGID, TargetGid: item.Gid}, cosPickupBagFull)},
+		})
+	}
+	return result
 }

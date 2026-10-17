@@ -509,6 +509,11 @@ func (rt *Runtime) drainStoppedCharacterEffects() []simulation.DivisionFrames {
 			rt.publishBodyStatus(batch.DivisionID, batch.CharacterName, statusFrames)
 			continue
 		}
+		if sourceGID == 0 {
+			// CGObj_SendPacketToNearbySessions (484D90) publishes from the actor
+			// object; a character absent from the division has no origin to route.
+			continue
+		}
 		var frames []simulation.Frame
 		for _, frame := range statusFrames {
 			frames = append(frames, simulation.Frame{Opcode: frame.Opcode, Payload: frame.Payload, Current: frame.Current, Scope: frame.Scope})
