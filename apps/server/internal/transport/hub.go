@@ -868,6 +868,9 @@ shutdown
 ================
 */
 func (h *Hub) shutdown(ctx context.Context) {
+	if journal := h.metrics.spikes; journal != nil {
+		journal.Close()
+	}
 	h.mu.Lock()
 	h.closed = true
 	sessions := make([]*Session, 0, len(h.sessions))

@@ -55,6 +55,10 @@ type hubMetrics struct {
 	handshakes durationStats
 	ticks      tickStats
 	timing     timingStats // timing.go
+
+	// spikes is the tick-overrun spike journal (tick_spikes.go); nil
+	// until Hub.EnableTickSpikeJournal installs one.
+	spikes *tickSpikeJournal
 }
 
 // Metrics is a point-in-time snapshot of the hub's transport counters.
@@ -133,6 +137,12 @@ type Metrics struct {
 	TickOverruns uint64  `json:"tick_overruns"`
 	// TickHistogram is the whole-tick distribution (tick_histogram.go).
 	TickHistogram TickHistogram `json:"tick_ms_histogram"`
+	// TickSpikes mirrors the spike journal's last bursts, oldest first
+	// (tick_spikes.go); absent while the journal is disabled, with the
+	// drop and write-error counters beside it.
+	TickSpikes           []TickSpike `json:"tick_spikes,omitempty"`
+	TickSpikeDropped     uint64      `json:"tick_spike_dropped"`
+	TickSpikeWriteErrors uint64      `json:"tick_spike_write_errors"`
 	// Request handler and tick phase histograms (timing.go).
 	HandlerMs   map[string]Histogram     `json:"handler_ms"`
 	TickPhaseMs map[string]Histogram     `json:"tick_phase_ms"`
@@ -285,6 +295,9 @@ func (h *Hub) Metrics() Metrics {
 	h.metrics.handshakes.snapshotHandshakeInto(&metrics)
 	h.metrics.ticks.snapshotInto(&metrics)
 	h.metrics.timing.snapshotInto(&metrics)
+	if journal := h.metrics.spikes; journal != nil {
+		metrics.TickSpikes, metrics.TickSpikeDropped, metrics.TickSpikeWriteErrors = journal.snapshot()
+	}
 	if read := h.navigationMetrics.Load(); read != nil && *read != nil {
 		metrics.MonsterNavigation = (*read)()
 	}
@@ -444,6 +457,9 @@ func (h *Hub) RecordTickDuration(elapsed, interval time.Duration) {
 	}
 	t.buckets[tickBucket(elapsed)]++
 	t.mu.Unlock()
+	if journal := h.metrics.spikes; journal != nil {
+		journal.observeTick(elapsed, interval)
+	}
 }
 
 // snapshotInto copies the tick aggregates into a Metrics snapshot.

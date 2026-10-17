@@ -335,9 +335,12 @@ func (h *Hub) RecordSlowStep(name string, elapsed time.Duration) {
 	t := &h.metrics.timing
 	at, tick := time.Now(), h.tickCount()
 	t.mu.Lock()
-	defer t.mu.Unlock()
 	t.ensureSlow()
 	countSlow(t.slow, []SlowHook{{Name: name, Elapsed: elapsed}}, at, tick)
+	t.mu.Unlock()
+	if journal := h.metrics.spikes; journal != nil {
+		journal.observeStep(name, elapsed)
+	}
 }
 
 /*

@@ -141,6 +141,17 @@ func newGameWorldApplication(
 	if len(overrides) > 0 {
 		log.Infof("tunables: %d stored override(s) from %s", len(overrides), settingsapi.FileName)
 	}
+	// Diagnostics only: the tick-overrun spike journal (transport
+	// tick_spikes.go) appends one JSON line per burst next to the shard's
+	// other operator stores. A failure here never stops the boot.
+	if transport.TickSpikeJournalEnabled() {
+		spikePath := filepath.Join(store.DirForShardFromEnv(ownedShard.ID), transport.TickSpikeFileName)
+		if err := ts.Hub.EnableTickSpikeJournal(spikePath); err != nil {
+			log.WithError(err).WithField("path", spikePath).Warn("tick spike journal: running without it")
+		} else {
+			log.WithField("path", spikePath).Info("tick spike journal: appending burst records")
+		}
+	}
 	dataPaths, err := gamedata.Resolve()
 	if err != nil {
 		return nil, fmt.Errorf("game data: %w", err)
