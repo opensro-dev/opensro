@@ -297,10 +297,15 @@ func objectEdgeGroupChordContactDetail(
 		if !owned && opts.terrainEntry == nil && math.Abs(chordY-edgeY) > objectEdgeContactWindowUnits {
 			continue
 		}
+		ox, oz := x0, z0
+		if !owned && opts.walkerAt != nil {
+			at := opts.walkerAt(t)
+			ox, oz = x0+(x1-x0)*at, z0+(z1-z0)*at
+		}
 		// Approach side: a straight chord crosses the edge LINE once, so
-		// the chord start's side is the approach side (start exactly on
+		// the walker's start side is the approach side (start exactly on
 		// the line falls back to the far end's opposite side).
-		originSide := sX*(z0-az) - sZ*(x0-ax)
+		originSide := sX*(oz-az) - sZ*(ox-ax)
 		if originSide == 0 {
 			originSide = -(sX*(z1-az) - sZ*(x1-ax))
 		}
@@ -327,7 +332,7 @@ func objectEdgeGroupChordContactDetail(
 			if originSide*originSide <= nudgeEscapeMargin*nudgeEscapeMargin*(sX*sX+sZ*sZ) {
 				continue
 			}
-			inNudgeMargin = withinOutlineNudgeMargin(mesh, x0, z0)
+			inNudgeMargin = withinOutlineNudgeMargin(mesh, ox, oz)
 		}
 		if outline && flags&8 != 0 && linked != nil && linked(i, fromSrcSide, t) {
 			continue
@@ -339,11 +344,6 @@ func objectEdgeGroupChordContactDetail(
 		bestT = t
 		found = true
 		if response != nil {
-			ox, oz := x0, z0
-			if !owned && opts.walkerAt != nil {
-				at := opts.walkerAt(t)
-				ox, oz = x0+(x1-x0)*at, z0+(z1-z0)*at
-			}
 			sourceSide := fromSrcSide && !inNudgeMargin
 			*response = nativeObjectContact(mesh, edges, i, sourceSide, ox, oz, y0, x1, z1, reflection)
 			response.outline = outline

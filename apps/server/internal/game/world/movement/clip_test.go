@@ -367,29 +367,64 @@ func TestClipMovementPathRealRockInwardVertexDirection(t *testing.T) {
 	validator := realAuthorityValidator(t)
 
 	// 1. Terrain walker starts ~0.002u outside out[2] (v[0]->v[4], srcCell=1),
-	// whose endpoints both carry inward vertexDirections. Hitting out[2] from
-	// outside nudges step1.Rest ~0.006u across out[2] into cell 1 while keeping
-	// NavOwnerTerrain; a second inward click (step2) must stay on terrain
-	// outside the rock rather than capturing NavOwnerObject, and an outward
-	// click (escape) from step1.Rest must cross out[2] back to open terrain.
+	// whose endpoints both carry inward vertexDirections. Repeated clicks into
+	// the rock interior (985, 13) or across the rock to the far side (980, 13)
+	// must stay ClipBlocked on terrain outside out[2] without drifting across
+	// out[2] into the rock or capturing NavOwnerObject, and an outward click
+	// (escape) must arrive on open terrain.
 	terrainOwner := simulation.NavOwner{Kind: simulation.NavOwnerTerrain}
 	start := simulation.Spawn{RegionID: 0x5C6D, X: 991.1697, Y: 3364.8, Z: 13.7711}
-	step1 := validator.ClipMovementPathFrom(start, terrainOwner, simulation.Spawn{RegionID: 0x5C6D, X: 985.0, Y: 3364.8, Z: 13.0})
+	interiorGoal := simulation.Spawn{RegionID: 0x5C6D, X: 985.0, Y: 3364.8, Z: 13.0}
+	step1 := validator.ClipMovementPathFrom(start, terrainOwner, interiorGoal)
 	if step1.Outcome != ClipBlocked || step1.Class != ClipClassObject {
 		t.Fatalf("step1 outcome = %s/%s (%+v), want blocked/object", step1.Outcome, step1.Class, step1)
 	}
 	if step1.RestOwner.Kind != simulation.NavOwnerTerrain || step1.Rest.Y < 3364.0 {
 		t.Fatalf("step1 captured terrain walker into object: rest=%+v owner=%+v", step1.Rest, step1.RestOwner)
 	}
-
-	step2 := validator.ClipMovementPathFrom(step1.Rest, step1.RestOwner, simulation.Spawn{RegionID: 0x5C6D, X: 980.0, Y: 3364.8, Z: 13.0})
-	if step2.Outcome != ClipBlocked || step2.RestOwner.Kind != simulation.NavOwnerTerrain || step2.Rest.Y < 3364.0 {
-		t.Fatalf("step2 leaked or captured terrain walker into object: outcome=%s rest=%+v owner=%+v", step2.Outcome, step2.Rest, step2.RestOwner)
+	cur, curOwner := step1.Rest, step1.RestOwner
+	for i := 2; i <= 5; i++ {
+		rep := validator.ClipMovementPathFrom(cur, curOwner, interiorGoal)
+		if rep.Outcome != ClipBlocked || rep.Class != ClipClassObject || rep.RestOwner.Kind != simulation.NavOwnerTerrain || rep.Rest.Y < 3364.0 {
+			t.Fatalf("interior repeat %d leaked or captured terrain walker into object: outcome=%s/%s rest=%+v owner=%+v",
+				i, rep.Outcome, rep.Class, rep.Rest, rep.RestOwner)
+		}
+		cur, curOwner = rep.Rest, rep.RestOwner
 	}
 
-	escape := validator.ClipMovementPathFrom(step1.Rest, step1.RestOwner, simulation.Spawn{RegionID: 0x5C6D, X: 995.0, Y: 3364.8, Z: 15.0})
+	farGoal := simulation.Spawn{RegionID: 0x5C6D, X: 980.0, Y: 3364.8, Z: 13.0}
+	cur, curOwner = step1.Rest, step1.RestOwner
+	for i := 2; i <= 6; i++ {
+		step := validator.ClipMovementPathFrom(cur, curOwner, farGoal)
+		if step.Outcome != ClipBlocked || step.Class != ClipClassObject || step.RestOwner.Kind != simulation.NavOwnerTerrain || step.Rest.Y < 3364.0 {
+			t.Fatalf("far repeat %d leaked or captured terrain walker into object: outcome=%s/%s rest=%+v owner=%+v",
+				i, step.Outcome, step.Class, step.Rest, step.RestOwner)
+		}
+		cur, curOwner = step.Rest, step.RestOwner
+	}
+
+	escape := validator.ClipMovementPathFrom(cur, curOwner, simulation.Spawn{RegionID: 0x5C6D, X: 995.0, Y: 3364.8, Z: 15.0})
 	if escape.Outcome != ClipArrived || escape.RestOwner.Kind != simulation.NavOwnerTerrain {
 		t.Fatalf("escape from inward outline nudge failed: outcome=%s rest=%+v owner=%+v", escape.Outcome, escape.Rest, escape.RestOwner)
+	}
+
+	// Also verify the withinOutlineNudgeMargin safety net when a terrain walker
+	// starts 0.004u inside out[2]: 5 repeated clicks across the rock to farGoal
+	// must not drift out of the margin or capture NavOwnerObject, and an outward
+	// click must escape across out[2] to open terrain.
+	sliverCur := simulation.Spawn{RegionID: 0x5C6D, X: 991.1604, Y: 3364.8037, Z: 13.7711}
+	sliverOwner := terrainOwner
+	for i := 1; i <= 5; i++ {
+		step := validator.ClipMovementPathFrom(sliverCur, sliverOwner, farGoal)
+		if step.Outcome != ClipBlocked || step.Class != ClipClassObject || step.RestOwner.Kind != simulation.NavOwnerTerrain || step.Rest.Y < 3364.0 {
+			t.Fatalf("sliver repeat %d leaked or captured terrain walker into object: outcome=%s/%s rest=%+v owner=%+v",
+				i, step.Outcome, step.Class, step.Rest, step.RestOwner)
+		}
+		sliverCur, sliverOwner = step.Rest, step.RestOwner
+	}
+	sliverEscape := validator.ClipMovementPathFrom(sliverCur, sliverOwner, simulation.Spawn{RegionID: 0x5C6D, X: 995.0, Y: 3364.8, Z: 15.0})
+	if sliverEscape.Outcome != ClipArrived || sliverEscape.RestOwner.Kind != simulation.NavOwnerTerrain {
+		t.Fatalf("sliver escape failed: outcome=%s rest=%+v owner=%+v", sliverEscape.Outcome, sliverEscape.Rest, sliverEscape.RestOwner)
 	}
 
 	// 2. Near-vertex v[2] chord from inside cell 0 (localUid 3073) across
