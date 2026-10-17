@@ -31,6 +31,7 @@ ActionSchedule
 */
 export interface ActionSchedule {
 	caster?: number;
+	glb?: string;
 	wait?: ActionInstallation;
 	initialized?: boolean;
 	readonly phases: readonly (ActionPhase | null)[];

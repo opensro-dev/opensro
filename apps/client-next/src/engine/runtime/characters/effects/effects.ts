@@ -2063,7 +2063,9 @@ export function createCharacterEffects(
 							} );
 						}
 						child.actors = child.actors.filter( v => now - v.at < v.life );
-						for ( const visual of child.actors ) result.push( { ...visual.actor, time: now - visual.at } );
+						for ( const visual of child.actors ) {
+							result.push( { ...visual.actor, time: Math.max( 0, now - visual.at ) } );
+						}
 					}
 					row.children = row.children.filter( c => c.stages.size < stages.length || c.actors.length );
 					if ( row.clock.phase === "draining" && !row.children.length ) {
@@ -2075,7 +2077,7 @@ export function createCharacterEffects(
 							gid: row.hostGid,
 							model: host.glb,
 							clip: host.clips[0] ?? "",
-							time: now - row.clock.started,
+							time: Math.max( 0, now - row.clock.started ),
 							loop: host.clipLoop,
 							pose: base,
 							pickable: false,
@@ -2120,7 +2122,7 @@ export function createCharacterEffects(
 					for ( const visual of event.actors ) if ( !ready( visual.actor.model ) ) admitted = false;
 					if ( !admitted ) continue;
 					event.started ??= now;
-					const age = now - event.started;
+					const age = Math.max( 0, now - event.started );
 					const remaining = event.actors.filter( v =>
 						age < (v.life > 0 ? v.life : duration( v.actor.model, v.actor.clip ))
 					);
@@ -2433,7 +2435,7 @@ export function createCharacterEffects(
 								result.push( {
 									...visual.actor,
 									pose: owner.pose,
-									time: now - visual.started - cycle,
+									time: Math.max( 0, now - visual.started - cycle ),
 									loop: visual.released === undefined && visual.actor.loop,
 									emissionEnd: visual.released === undefined || !visual.actor.loop ?
 										undefined :
@@ -2475,7 +2477,7 @@ export function createCharacterEffects(
 						active.delete( gid );
 						continue;
 					}
-					let elapsed = now - visual.actor.time;
+					let elapsed = Math.max( 0, now - visual.actor.time );
 					let flightPose: import("@/engine/contracts/character").CharacterActor["pose"] | undefined;
 					const command = visual.command;
 					if ( command ) {
@@ -2826,7 +2828,7 @@ export function createCharacterEffects(
 					// travel/result timing remains on the action callback clock.
 					if ( !visual.flight ) {
 						if ( !visualStarts.has( gid ) ) visualStarts.set( gid, now );
-						elapsed = now - visualStarts.get( gid )!;
+						elapsed = Math.max( 0, now - visualStarts.get( gid )! );
 					}
 					const life = visual.life || duration( visual.actor.model, visual.actor.clip );
 					// 8D8580: a mover that cannot arrive (speed 0 short of its end) keeps
@@ -2858,7 +2860,7 @@ export function createCharacterEffects(
 							yaw: visual.attachment.facing ?? nativeHeadingYaw( anchor.angle )
 						};
 					}
-					if ( visual.visualStarted !== undefined ) elapsed = now - visual.visualStarted;
+					if ( visual.visualStarted !== undefined ) elapsed = Math.max( 0, now - visual.visualStarted );
 					const period = duration( visual.actor.model, visual.actor.clip ),
 						cycle = !visual.actor.model.includes( "/effects/programs.json#" ) &&
 								command?.released !== undefined && command.loop && period ?
@@ -2870,7 +2872,7 @@ export function createCharacterEffects(
 					result.push( {
 						...visual.actor,
 						pose,
-						time: elapsed - cycle,
+						time: Math.max( 0, elapsed - cycle ),
 						loop: command?.released !== undefined ? false : visual.actor.loop,
 						opacity,
 						emissionEnd: command?.released !== undefined && command.loop ?
@@ -2891,7 +2893,7 @@ export function createCharacterEffects(
 								0;
 						result.push( {
 							...auxiliary.actor,
-							time: now - auxiliary.started - cycle,
+							time: Math.max( 0, now - auxiliary.started - cycle ),
 							loop: end === undefined,
 							emissionEnd: end !== undefined ? Math.max( 0, end - auxiliary.started - cycle ) : undefined,
 							opacity: auxiliary.opacity
@@ -2906,7 +2908,7 @@ export function createCharacterEffects(
 					for ( const actor of row.actors ) if ( !ready( actor.model ) ) admitted = false;
 					if ( !admitted ) continue;
 					for ( const actor of row.actors ) {
-						result.push( { ...actor, pose: owner.pose, time: now - row.started } );
+						result.push( { ...actor, pose: owner.pose, time: Math.max( 0, now - row.started ) } );
 					}
 				}
 				hiddenWeapons.clear();

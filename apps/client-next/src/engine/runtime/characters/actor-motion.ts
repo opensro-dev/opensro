@@ -126,6 +126,20 @@ export function createActorMotion( owner: ActorOwner ) {
 			if ( !state ) {
 				state = { modifierId: allocateActor(), clip: "", started: seconds };
 				states.set( entity.gid, state );
+			} else if ( state.modifierResource && state.modifierResource.glb !== resource.glb ) {
+				// 8E64F0 (death model) and 85C060 (transform skin) reload the
+				// visual mesh from a new BSR (LoadVisualMeshFromBSR), replacing
+				// its CCObjAnimation and discarding prior mesh installations.
+				state.locomotion = undefined;
+				state.postureClip = undefined;
+				state.postureStarted = undefined;
+				state.pickupStarted = undefined;
+				state.combatIdle = undefined;
+				state.stallMotion = undefined;
+				state.dispatch?.reset();
+				state.activations?.clear();
+				const idle = presentationState.idleStates.get( entity.gid )?.idle;
+				if ( idle?.clip && !resource.clips.includes( idle.clip ) ) idle.clip = undefined;
 			}
 			const previousOverride = avatarOverrides.get( entity.gid );
 			const selectedOverride = overrideCommit === undefined ?
@@ -603,7 +617,7 @@ export function createActorMotion( owner: ActorOwner ) {
 				state.postureClip && resource.clips.includes( state.postureClip ) &&
 				state.postureStarted !== undefined
 			) {
-				const elapsed = seconds - state.postureStarted,
+				const elapsed = Math.max( 0, seconds - state.postureStarted ),
 					duration = resources.duration( resource.glb, state.postureClip );
 				if ( elapsed < duration + .2 ) {
 					layers.splice(
@@ -668,7 +682,8 @@ export function createActorMotion( owner: ActorOwner ) {
 				!dead && reaction && resource.clips.includes( reaction ) && state.hitStarted !== undefined &&
 				seconds - state.hitStarted < resources.duration( resource.glb, reaction ) + .2
 			) {
-				const age = seconds - state.hitStarted, duration = resources.duration( resource.glb, reaction );
+				const age = Math.max( 0, seconds - state.hitStarted ),
+					duration = resources.duration( resource.glb, reaction );
 				layers.unshift( {
 					clip: reaction,
 					time: Math.min( age, duration ),
@@ -683,14 +698,16 @@ export function createActorMotion( owner: ActorOwner ) {
 				state.pickupStarted = seconds;
 			}
 			const idle = presentationState.idleStates.get( entity.gid )?.idle;
-			if ( !stall && idle?.clip ) {
-				const idleClip = idle.clip, age = seconds - idle.started;
+			if ( !stall && idle?.clip && resource.clips.includes( idle.clip ) ) {
+				const idleClip = idle.clip, age = Math.max( 0, seconds - idle.started );
 				const idleLayers = bindLayers(
 					oneShotLayers( idleClip, clip, age, resources.duration( resource.glb, idleClip ), .2 ),
 					"idle",
 					idle.started
 				).map( layer =>
-					layer.lane === "event" ? { ...layer, weight: Math.min( layer.weight, age / .4 ) } : layer
+					layer.lane === "event" ?
+						{ ...layer, weight: Math.max( 0, Math.min( layer.weight, age / .4 ) ) } :
+						layer
 				);
 				layers.splice( 0, layers.length, ...idleLayers );
 			}
@@ -701,7 +718,7 @@ export function createActorMotion( owner: ActorOwner ) {
 			) {
 				layers.splice( 0, layers.length - 1, {
 					clip: "pick",
-					time: seconds - state.pickupStarted,
+					time: Math.max( 0, seconds - state.pickupStarted ),
 					loop: false,
 					weight: 1,
 					lane: "event",
@@ -864,7 +881,7 @@ export function createActorMotion( owner: ActorOwner ) {
 					undefined,
 				time: layers.length === 1 && layers[0]!.clip === clip ?
 					layers[0]!.time :
-					seconds - state.started,
+					Math.max( 0, seconds - state.started ),
 				loop: looping,
 				scale: Math.fround( baseScale * appearance.scale )
 			} );
