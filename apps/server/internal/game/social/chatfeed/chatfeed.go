@@ -11,6 +11,13 @@ no path here. A character a GM bans loses every retained line at once
 (Purge), and a line whose author is muted when read is left out
 (Lines' hidden test), so moderation reaches the site without a delay.
 
+Each line carries two names: the display name the game shows (the job
+alias while the author is suited) and, apart from it, the author's
+character name. Moderation only ever matches the character name: a job
+suit must not hide its wearer from a mute or a ban. The character name
+never reaches the public API either; resolving a suited author's line to
+their character would defeat the suit's anonymity.
+
 One Feed per GameWorld, written by the chat owner, the item owner and the
 notice bridge, read by the public API. It is memory only: a restart
 starts it empty, as the in-game history does.
@@ -42,13 +49,18 @@ const (
 ================
 Line
 
-One retained public line. Character is empty for a notice.
+One retained public line. Character is the display name the line carries
+in game (the job alias while the author is suited) and is empty for a
+notice. Author is the author's stable character name, the identity
+moderation keys on; it is empty for a notice and is never serialized to
+the public API.
 ================
 */
 type Line struct {
 	At        time.Time
 	Kind      string
 	Character string
+	Author    string
 	Text      string
 }
 
@@ -97,12 +109,13 @@ func printable(text string) string {
 ================
 Record
 
-Appends a line, dropping the oldest past MaxLines. Text is made printable
-first; nothing left is not a line. A nil feed records nothing, so wiring
-may leave it out.
+Appends a line, dropping the oldest past MaxLines. author is the author's
+character name (empty for a notice), character the display name the line
+shows. Text is made printable first; nothing left is not a line. A nil
+feed records nothing, so wiring may leave it out.
 ================
 */
-func (f *Feed) Record(division, kind, character, text string) {
+func (f *Feed) Record(division, kind, author, character, text string) {
 	if f == nil {
 		return
 	}
@@ -117,14 +130,15 @@ func (f *Feed) Record(division, kind, character, text string) {
 		copy(rows, rows[1:])
 		rows = rows[:MaxLines-1]
 	}
-	f.lines[division] = append(rows, Line{At: f.now(), Kind: kind, Character: character, Text: text})
+	f.lines[division] = append(rows, Line{At: f.now(), Kind: kind, Character: character, Author: author, Text: text})
 }
 
 /*
 ================
 Purge
 
-Removes every retained line the character wrote (a GM ban). Names compare
+Removes every retained line the character wrote (a GM ban), under
+whatever display name it was recorded with. Names compare
 case-insensitively, as the shard's character names do.
 ================
 */
@@ -136,7 +150,7 @@ func (f *Feed) Purge(division, character string) {
 	defer f.mu.Unlock()
 	rows := f.lines[division][:0]
 	for _, line := range f.lines[division] {
-		if !strings.EqualFold(line.Character, character) {
+		if !strings.EqualFold(line.Author, character) {
 			rows = append(rows, line)
 		}
 	}
@@ -149,10 +163,11 @@ func (f *Feed) Purge(division, character string) {
 Lines
 
 A detached copy, oldest first, without the lines whose author hidden
-reports (a muted character). hidden may be nil.
+reports (a muted character). hidden receives the author's character
+name, never the display name. hidden may be nil.
 ================
 */
-func (f *Feed) Lines(division string, hidden func(character string) bool) []Line {
+func (f *Feed) Lines(division string, hidden func(author string) bool) []Line {
 	if f == nil {
 		return nil
 	}
@@ -164,7 +179,7 @@ func (f *Feed) Lines(division string, hidden func(character string) bool) []Line
 	}
 	out := rows[:0]
 	for _, line := range rows {
-		if line.Character != "" && hidden(line.Character) {
+		if line.Author != "" && hidden(line.Author) {
 			continue
 		}
 		out = append(out, line)

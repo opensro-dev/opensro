@@ -117,9 +117,12 @@ publish
 Only the server's named global broadcast is eligible. Send the authoritative
 line to its author too: the native acknowledgement echoes the requested
 channel and therefore cannot describe a beta remap from All to Global.
+author is the sender's character name, threaded from the handler: the
+payload carries only the display name, and the feed's identity must never
+be decoded back out of it.
 ================
 */
-func (rt *Runtime) publish(division string, payload []byte) {
+func (rt *Runtime) publish(division, author string, payload []byte) {
 	if len(payload) == 0 || payload[0] != ChatTypeGlobal {
 		return
 	}
@@ -133,7 +136,7 @@ func (rt *Runtime) publish(division string, payload []byte) {
 	rows = append(rows, publicLine{payload: append([]byte(nil), payload...), sentAtMs: rt.now().UnixMilli()})
 	rt.history[division] = rows
 	if _, name, text, ok := DecodeChatBroadcastNamed(payload); ok {
-		rt.Feed.Record(division, chatfeed.KindChat, name, text)
+		rt.Feed.Record(division, chatfeed.KindChat, author, name, text)
 	}
 	for _, member := range rt.members {
 		if member.division == division && member.session.WorldReady() && !member.session.Evicted() {

@@ -19,18 +19,25 @@ import (
 TestPublishRecordsPublicLinesOnly
 
 Only the named Global broadcast enters the in-game history, and only it
-reaches the website feed; a private payload never does.
+reaches the website feed; a private payload never does. The feed records
+the sender's character name as the author beside the display name the
+payload carries (the job alias while suited).
 ================
 */
 func TestPublishRecordsPublicLinesOnly(t *testing.T) {
 	rt := &Runtime{history: map[string][]publicLine{}, members: map[uint64]publicMember{}, now: time.Now}
 	rt.Feed = chatfeed.New()
-	rt.publish("shard", EncodeChatBroadcastNamed(ChatTypeGlobal, "Kekw", "hello ☆ world"))
-	rt.publish("shard", EncodeChatBroadcastNamed(ChatTypeParty, "Kekw", "party secret"))
-	rt.publish("shard", EncodeChatBroadcastNamed(ChatTypeWhisper, "Kekw", "whisper secret"))
+	rt.publish("shard", "Kekw", EncodeChatBroadcastNamed(ChatTypeGlobal, "Kekw", "hello ☆ world"))
+	rt.publish("shard", "Kekw", EncodeChatBroadcastNamed(ChatTypeParty, "Kekw", "party secret"))
+	rt.publish("shard", "Kekw", EncodeChatBroadcastNamed(ChatTypeWhisper, "Kekw", "whisper secret"))
+	rt.publish("shard", "Kekw", EncodeChatBroadcastNamed(ChatTypeGlobal, "JobFox", "suited hello"))
 	lines := rt.Feed.Lines("shard", nil)
-	if len(lines) != 1 || lines[0].Kind != chatfeed.KindChat || lines[0].Character != "Kekw" || lines[0].Text != "hello ☆ world" {
+	if len(lines) != 2 || lines[0].Kind != chatfeed.KindChat || lines[0].Character != "Kekw" ||
+		lines[0].Author != "Kekw" || lines[0].Text != "hello ☆ world" {
 		t.Fatalf("feed %+v", lines)
+	}
+	if lines[1].Character != "JobFox" || lines[1].Author != "Kekw" || lines[1].Text != "suited hello" {
+		t.Fatalf("suited feed %+v", lines)
 	}
 }
 

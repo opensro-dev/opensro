@@ -17,7 +17,6 @@ success, which spends one item. The shard sends it to every player.
 package action
 
 import (
-	"strings"
 	"unicode/utf16"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -106,7 +105,7 @@ func (rt *Runtime) useGlobalChatting(use globalChatUse, tail []byte, result *OpR
 		if rt.PushShardPeerFrames != nil {
 			rt.PushShardPeerFrames(division, name, []wire.Frame{line})
 		}
-		rt.PublicChat.Record(division, chatfeed.KindGlobal, display, message)
+		rt.PublicChat.Record(division, chatfeed.KindGlobal, name, display, message)
 	}
 	return true
 }
@@ -116,14 +115,12 @@ func (rt *Runtime) useGlobalChatting(use globalChatUse, tail []byte, result *OpR
 PlayerBannedGM
 
 /BAN's consequence for the website (gmcommand handleBan): the banned
-character's lines leave the public chat feed under either name they were
-recorded with - the character name, and the job alias a suited line
-carries. Port-only, not native.
+character's lines leave the public chat feed. The feed matches the
+character identity recorded on every line, so lines left under a job
+alias go too, whatever alias the character has worn since. Port-only,
+not native.
 ================
 */
-func (rt *Runtime) PlayerBannedGM(division, name, jobAlias string) {
+func (rt *Runtime) PlayerBannedGM(division, name string) {
 	rt.PublicChat.Purge(division, name)
-	if jobAlias != "" && !strings.EqualFold(jobAlias, name) {
-		rt.PublicChat.Purge(division, jobAlias)
-	}
 }

@@ -217,7 +217,7 @@ func (rt *Runtime) drainAnnouncements(int64) []simulation.DivisionFrames {
 	a.mu.Unlock()
 	if rt.PublicChat != nil {
 		for _, line := range feed {
-			rt.PublicChat.Record(line.division, chatfeed.KindNotice, "", line.text)
+			rt.PublicChat.Record(line.division, chatfeed.KindNotice, "", "", line.text)
 		}
 	}
 	return out

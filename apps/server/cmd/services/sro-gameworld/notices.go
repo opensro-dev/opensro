@@ -30,6 +30,6 @@ func installOperatorNotices(api *agentapi.API, hub *transport.Hub, shardID strin
 		frame := wire.NotificationFrame(message)
 		bridge.PushToDivision(shardID, []simulation.Frame{{Opcode: frame.Opcode, Payload: frame.Payload}}, "")
 		// The website's chat feed shows the announcement too (port-only).
-		feed.Record(shardID, chatfeed.KindNotice, "", message)
+		feed.Record(shardID, chatfeed.KindNotice, "", "", message)
 	})
 }

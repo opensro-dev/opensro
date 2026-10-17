@@ -448,8 +448,8 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 		// session's record is read directly: restriction.Report would also
 		// send the muted player its notice on every poll.
 		Chat: func() []chatfeed.Line {
-			return gameplay.chatFeed.Lines(shard, func(name string) bool {
-				for _, session := range hub.CharacterSessions(shard, name) {
+			return gameplay.chatFeed.Lines(shard, func(author string) bool {
+				for _, session := range hub.CharacterSessions(shard, author) {
 					if _, muted := session.CommandRestriction(transport.CommandRestrictionChat); muted {
 						return true
 					}

@@ -68,7 +68,7 @@ func (rt *Runtime) chatHubHandler(hub *transport.Hub, deps Dependencies, presenc
 		if outcome.Refusal == "" && outcome.Broadcast != nil && ClosedBetaGlobalChat {
 			// The author's echo precedes the keyed receipt on the same reliable
 			// stream, so presentation uses the server's channel exactly once.
-			rt.publish(divisionID, outcome.Broadcast)
+			rt.publish(divisionID, character.Name, outcome.Broadcast)
 		}
 		if outcome.Ack != nil {
 			_ = s.Send(OpChatAck, outcome.Ack)

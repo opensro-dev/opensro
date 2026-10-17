@@ -87,10 +87,10 @@ func TestGlobalChattingSendsTheLineToTheWholeShard(t *testing.T) {
 	}
 	// The website feed carries the paid line as its own kind (port-only).
 	if lines := rt.PublicChat.Lines(testDivision, nil); len(lines) != 1 || lines[0].Kind != chatfeed.KindGlobal ||
-		lines[0].Character != c.Name || lines[0].Text != "Hello, Silk Road" {
+		lines[0].Character != c.Name || lines[0].Author != c.Name || lines[0].Text != "Hello, Silk Road" {
 		t.Fatalf("feed %+v", lines)
 	}
-	rt.PlayerBannedGM(testDivision, c.Name, "")
+	rt.PlayerBannedGM(testDivision, c.Name)
 	if lines := rt.PublicChat.Lines(testDivision, nil); len(lines) != 0 {
 		t.Fatalf("feed after ban %+v", lines)
 	}
@@ -103,7 +103,7 @@ TestGlobalChattingSuitedSenderUsesJobAlias
 A suited author's Global line, its shard copies and the website
 transcript all carry the job alias, as on every chat line; the shard
 push still excludes the author by character name, and a /BAN purges the
-retained line under that alias.
+retained line by that same character identity.
 ================
 */
 func TestGlobalChattingSuitedSenderUsesJobAlias(t *testing.T) {
@@ -125,10 +125,11 @@ func TestGlobalChattingSuitedSenderUsesJobAlias(t *testing.T) {
 	if except != c.Name || len(shard) != 1 || !bytes.Equal(shard[0].Payload, want) {
 		t.Fatalf("shard push to all but %q: %+v", except, shard)
 	}
-	if lines := rt.PublicChat.Lines(testDivision, nil); len(lines) != 1 || lines[0].Character != "Merchant" {
+	if lines := rt.PublicChat.Lines(testDivision, nil); len(lines) != 1 || lines[0].Character != "Merchant" ||
+		lines[0].Author != c.Name {
 		t.Fatalf("feed %+v", lines)
 	}
-	rt.PlayerBannedGM(testDivision, c.Name, "Merchant")
+	rt.PlayerBannedGM(testDivision, c.Name)
 	if lines := rt.PublicChat.Lines(testDivision, nil); len(lines) != 0 {
 		t.Fatalf("feed after ban %+v", lines)
 	}

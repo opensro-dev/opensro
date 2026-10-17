@@ -239,8 +239,14 @@ func (s *Service) chat(*http.Request) (any, error) {
 		if line.Character != "" {
 			name := line.Character
 			row.Character = &name
-			c := r.byName[strings.ToLower(name)]
-			row.Profile = c != nil && !c.PublicHidden
+			// A profile links only when the display name is the
+			// character's own name. While the author is suited the
+			// line shows the job alias, and resolving the author to
+			// a profile here would defeat the suit's anonymity.
+			if line.Author != "" && strings.EqualFold(line.Author, name) {
+				c := r.byName[strings.ToLower(line.Author)]
+				row.Profile = c != nil && !c.PublicHidden
+			}
 		}
 		out.Lines = append(out.Lines, row)
 	}

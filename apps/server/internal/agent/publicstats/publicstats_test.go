@@ -367,7 +367,7 @@ func TestSchemaDescribesEveryEncodedAnswer(t *testing.T) {
 	s := privacyService(newFixture(), testWriteToken)
 	// A named line and a notice, so both forms of character meet the schema.
 	s.src.Chat = func() []chatfeed.Line {
-		return []chatfeed.Line{{At: time.UnixMilli(1000), Kind: chatfeed.KindChat, Character: "Kekw", Text: "hi"},
+		return []chatfeed.Line{{At: time.UnixMilli(1000), Kind: chatfeed.KindChat, Character: "Kekw", Author: "Kekw", Text: "hi"},
 			{At: time.UnixMilli(2000), Kind: chatfeed.KindNotice, Text: "Maintenance"}}
 	}
 	// A guild with a union partner and a fortress, so every optional field meets the schema.

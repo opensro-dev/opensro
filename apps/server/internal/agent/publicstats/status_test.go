@@ -139,7 +139,9 @@ func TestScheduleFormatsTheServerEvents(t *testing.T) {
 TestChatNamesLinksAndNotices
 
 P10: lines come oldest first; a hidden character is named but not
-linked, an unknown one is not linked, and a notice has no character.
+linked, an unknown one is not linked, and a notice has no character. A
+suited author's line is named by the job alias and never linked: the
+author's profile would unmask the character behind the suit.
 ================
 */
 func TestChatNamesLinksAndNotices(t *testing.T) {
@@ -148,10 +150,11 @@ func TestChatNamesLinksAndNotices(t *testing.T) {
 	at := time.Date(2026, 10, 13, 10, 0, 0, 0, time.FixedZone("UTC+8", 8*3600))
 	s.src.Chat = func() []chatfeed.Line {
 		return []chatfeed.Line{
-			{At: at, Kind: chatfeed.KindChat, Character: "kekw", Text: "hi"},
-			{At: at.Add(time.Second), Kind: chatfeed.KindGlobal, Character: "Shy", Text: "wts"},
+			{At: at, Kind: chatfeed.KindChat, Character: "kekw", Author: "kekw", Text: "hi"},
+			{At: at.Add(time.Second), Kind: chatfeed.KindGlobal, Character: "Shy", Author: "Shy", Text: "wts"},
 			{At: at.Add(2 * time.Second), Kind: chatfeed.KindNotice, Text: "Maintenance"},
-			{At: at.Add(3 * time.Second), Kind: chatfeed.KindChat, Character: "Gone", Text: "bye"},
+			{At: at.Add(3 * time.Second), Kind: chatfeed.KindChat, Character: "Gone", Author: "Gone", Text: "bye"},
+			{At: at.Add(4 * time.Second), Kind: chatfeed.KindChat, Character: "JobFox", Author: "kekw", Text: "suited"},
 		}
 	}
 	var chat ChatResponse
@@ -159,10 +162,11 @@ func TestChatNamesLinksAndNotices(t *testing.T) {
 		t.Fatalf("chat answered %d", code)
 	}
 	l := chat.Lines
-	if len(l) != 4 || l[0].At != "2026-10-13T02:00:00Z" || *l[0].Character != "kekw" || !l[0].Profile ||
+	if len(l) != 5 || l[0].At != "2026-10-13T02:00:00Z" || *l[0].Character != "kekw" || !l[0].Profile ||
 		*l[1].Character != "Shy" || l[1].Profile || l[1].Kind != "global" ||
 		l[2].Character != nil || l[2].Profile || l[2].Kind != "notice" ||
-		l[3].Profile || l[3].Text != "bye" {
+		l[3].Profile || l[3].Text != "bye" ||
+		*l[4].Character != "JobFox" || l[4].Profile || l[4].Text != "suited" {
 		t.Fatalf("lines %+v", l)
 	}
 }

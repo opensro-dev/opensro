@@ -75,12 +75,13 @@ type SessionEnder interface {
 BanObserver
 
 The owner told about a completed /BAN (the action runtime, which purges
-the website chat feed). The target's job alias goes along: a suited
-player's retained lines are recorded under it. Port-only, not native.
+the website chat feed). The feed matches the character identity recorded
+on every line, so lines a suited player left under a job alias go too.
+Port-only, not native.
 ================
 */
 type BanObserver interface {
-	PlayerBannedGM(divisionID, characterName, jobAlias string)
+	PlayerBannedGM(divisionID, characterName string)
 }
 
 /*
@@ -135,7 +136,7 @@ func handleBan(deps Dependencies, presence PresenceView, divisionID string, send
 	// stay on the site until newer lines pushed them out.
 	if len(status) > 0 {
 		if owner, ok := status[0].(BanObserver); ok {
-			owner.PlayerBannedGM(divisionID, target.Name, target.Job.Alias)
+			owner.PlayerBannedGM(divisionID, target.Name)
 		}
 	}
 	if !directory.EndSessionByName(divisionID, target.Name) {
