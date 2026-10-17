@@ -107,6 +107,47 @@ func TestTickSpikeBurstsCoalesceAndClose(t *testing.T) {
 
 /*
 ================
+TestTickSpikeBurstClosedByNextSpike
+
+Nit #1122: when the gap passes with no quiet tick, the next spiked tick
+itself seals the stale burst - at its last spike, not at the new tick -
+and opens a fresh burst. This is the one observeTick close branch the
+quiet-tick close does not share.
+================
+*/
+func TestTickSpikeBurstClosedByNextSpike(t *testing.T) {
+	journal, clock := newSpikeJournalForTest(t)
+	journal.observeTick(300*time.Millisecond, 100*time.Millisecond)
+	*clock = clock.Add(6 * time.Second)
+	journal.observeTick(500*time.Millisecond, 100*time.Millisecond)
+
+	mirror, _, _ := journal.snapshot()
+	if len(mirror) != 1 {
+		t.Fatalf("mirror after second spike = %+v", mirror)
+	}
+	first := mirror[0]
+	wantFirst := time.Date(2026, 10, 17, 8, 40, 0, 0, time.UTC)
+	if first.Ticks != 1 || first.MaxMs != 300 ||
+		!first.StartTime.Equal(wantFirst) || !first.EndTime.Equal(wantFirst) {
+		t.Fatalf("first burst = %+v", first)
+	}
+
+	*clock = clock.Add(6 * time.Second)
+	journal.observeTick(50*time.Millisecond, 100*time.Millisecond)
+	mirror, _, _ = journal.snapshot()
+	if len(mirror) != 2 {
+		t.Fatalf("mirror after quiet tick = %+v", mirror)
+	}
+	second := mirror[1]
+	wantSecond := time.Date(2026, 10, 17, 8, 40, 6, 0, time.UTC)
+	if second.Ticks != 1 || second.MaxMs != 500 ||
+		!second.StartTime.Equal(wantSecond) || !second.EndTime.Equal(wantSecond) {
+		t.Fatalf("second burst = %+v", second)
+	}
+}
+
+/*
+================
 TestTickSpikeBelowThresholdIgnored
 
 Ticks under the threshold open nothing, and a slow step outside a burst
