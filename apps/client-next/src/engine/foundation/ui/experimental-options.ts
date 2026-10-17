@@ -38,7 +38,8 @@ export interface ExperimentalOptions {
 	// 2026-10-15); an explicit false is the native snap.
 	readonly smoothCamera: boolean;
 	// Port-only, not native: the unused enchant sparks on +8 and higher
-	// weapons and shields (equipmentEnchantSparks).
+	// weapons and shields (equipmentEnchantSparks). On by default (owner
+	// 2026-10-17); an explicit false restores the native v1.150 look.
 	readonly enchantSparks: boolean;
 	// Port-only, not native: a device without BC is served re-encoded
 	// textures (texture-variants.ts) instead of decoding them to RGBA.
@@ -141,7 +142,7 @@ export function renderScales(): readonly RenderScale[] {
 ================
 experimentalOptions
 
-Only an explicit true enables a toggle, except smoothCamera,
+Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, greyDisabledTabs, jobKillNotices, dropPlusNotices,
 fitWindowLabels, dropOnBagTab, noticeLinks, shortNotices and confirmGuildBan, which only an
 explicit false turns off.
@@ -170,7 +171,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		perPixelLighting: enabled( "perPixelLighting" ),
 		predictedRunUp: enabled( "predictedRunUp" ),
 		smoothCamera: record.smoothCamera !== false,
-		enchantSparks: enabled( "enchantSparks" ),
+		enchantSparks: record.enchantSparks !== false,
 		compressedTextures: record.compressedTextures !== false,
 		sharedActorRoom: record.sharedActorRoom !== false,
 		greyDisabledTabs: record.greyDisabledTabs !== false,

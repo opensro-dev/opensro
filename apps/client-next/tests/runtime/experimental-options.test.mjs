@@ -36,7 +36,8 @@ const OFF = Object.freeze( {
 	predictedRunUp: false,
 	// On by default (owner 2026-10-15): the camera eases its height and release.
 	smoothCamera: true,
-	enchantSparks: false,
+	// On by default (owner 2026-10-17): +8 and higher weapons and shields wear enchant sparks.
+	enchantSparks: true,
 	// On by default (owner 2026-10-14); it changes only devices without BC.
 	compressedTextures: true,
 	// On by default (owner 2026-10-14): near effects outrank far characters.
@@ -140,7 +141,8 @@ test("every video stage defaults off and only an explicit true enables it", () =
 		perPixelLighting: false,
 		// Smooth camera is on by default (owner 2026-10-15).
 		smoothCamera: true,
-		enchantSparks: false,
+		// Enchant sparks are on by default (owner 2026-10-17).
+		enchantSparks: true,
 		// The shared actor room is on by default (owner 2026-10-14).
 		sharedActorRoom: true,
 		vHidesCompanions: false
@@ -154,8 +156,7 @@ test("every video stage defaults off and only an explicit true enables it", () =
 			"floatBloom",
 			"hdrToneMap",
 			"sunShadow",
-			"perPixelLighting",
-			"enchantSparks"
+			"perPixelLighting"
 		]
 	) {
 		assert.equal( experimentalOptions( { [key]: 1 } )[key], false );
@@ -438,6 +439,17 @@ test("smooth camera is on unless explicitly false and reaches the renderer's sli
 	const off = experimentalOptions( { smoothCamera: false } );
 	assert.equal( off.smoothCamera, false );
 	assert.equal( experimentalVideo( off ).smoothCamera, false );
+});
+
+test("enchant sparks are on unless explicitly false and reach the renderer's slice", () => {
+	for ( const value of [ undefined, null, {}, { enchantSparks: 1 }, { enchantSparks: "false" } ] ) {
+		const options = experimentalOptions( value );
+		assert.equal( options.enchantSparks, true );
+		assert.equal( experimentalVideo( options ).enchantSparks, true );
+	}
+	const off = experimentalOptions( { enchantSparks: false } );
+	assert.equal( off.enchantSparks, false );
+	assert.equal( experimentalVideo( off ).enchantSparks, false );
 });
 
 test("homing projectiles default off (native captured endpoint) and reach the worker's gameplay slice when enabled", () => {
