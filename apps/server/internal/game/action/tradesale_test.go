@@ -88,6 +88,48 @@ func TestTraderQuoteAndPartialSaleUseNativeProfitAndTax(t *testing.T) {
 
 /*
 ================
+TestTraderSellsUnquotedForeignGoodAtBaseSellPrice
+
+Native CGObjNPC_QuoteTradeGoods (4C8D10) sells a foreign good that has no
+quotation entry at the item's base sell price instead of refusing it (the
+"CANNOT FIND QUOT DATA" fall-through at 4C8E54..4C8E77), with zero trade
+profit. Constantinople's TRADE_EU goods have no _ItemQuotation rows, so a
+trader sells them in Jangan at that price and earns no route profit, job
+experience or pool contribution from the sale.
+================
+*/
+func TestTraderSellsUnquotedForeignGoodAtBaseSellPrice(t *testing.T) {
+	rt, c := traderFixture(t, false)
+	pool := domain.TradeRewardPool{}
+	rt.deps.(*enterworld.Deps).UpdateTrade = func(_ []*enterworld.Character, _ string, update func(*domain.TradeRewardPool) bool) bool {
+		return update(&pool)
+	}
+	// Re-dress the fixture's cargo as an unquoted Constantinople good and
+	// drop every quotation row: the sale must price from sellPrice alone.
+	source := rt.deps.ItemReferences().(cosTestItemSource)
+	source.staticItemSource["ITEM_ETC_TRADE_EU_01"] = &enterworld.ItemRef{RefObjID: 10388, Codename: "ITEM_ETC_TRADE_EU_01", TypeIDs: [4]int64{3, 3, 8, 1}, NativeFields: enterworld.NewNativeFields(map[string]float64{"price": 101, "sellPrice": 50, "maxStack": 40, "canSell": 1})}
+	c.MissionInventory[1].RefObjID = 10388
+	c.MissionInventory[1].Codename = "ITEM_ETC_TRADE_EU_01"
+	rt.Commerce.TradeQuotations = map[[2]uint32]commerce.TradeQuotation{}
+	bindMerchantTax(t, rt, 2010, 20, 0)
+	var quote shopProjection
+	if err := json.Unmarshal(rt.shopCatalog(testDivision, c, 17).Payload, &quote); err != nil {
+		t.Fatal(err)
+	}
+	if len(quote.SaleQuotes) != 1 || !reflect.DeepEqual(quote.SaleQuotes[0].Totals, []string{"40", "80", "120"}) {
+		t.Fatalf("quote %+v", quote.SaleQuotes)
+	}
+	out := trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeShopSell, NpcGID: 17, SourceSlot: 13, Quantity: 2})
+	if goldOf(c) != 5080 || c.Job.Exp != 0 || c.Job.WeeklyReward != 0 || c.MissionInventory[1].StackCount != 1 || len(c.Buyback) != 0 {
+		t.Fatalf("sale %+v character %+v", out, c)
+	}
+	if pool != (domain.TradeRewardPool{}) {
+		t.Fatalf("global pool %+v", pool)
+	}
+}
+
+/*
+================
 TestThiefQuoteRoundsTheWholeStolenQuantity
 ================
 */
@@ -148,7 +190,11 @@ func TestTraderRefusalsLeaveEveryAuthorityUnchanged(t *testing.T) {
 			case "quantity":
 				q.Quantity = 4
 			case "quote":
-				rt.Commerce.TradeQuotations = nil
+				// A missing row is no longer a refusal (native sells at
+				// the base sell price; see
+				// TestTraderSellsUnquotedForeignGoodAtBaseSellPrice). A
+				// variable-rate row remains invalid authority.
+				rt.Commerce.TradeQuotations[[2]uint32{2010, 2151}] = commerce.TradeQuotation{Base: 1.1, Lower: 1.0, Upper: 1.2, BaseStock: 50000, Step: 250, Stock: 50000}
 			}
 			before := c.Snapshot()
 			result := trade(t, rt, c, q)

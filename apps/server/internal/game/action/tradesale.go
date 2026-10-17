@@ -211,7 +211,23 @@ func (rt *Runtime) tradeSaleValue(division string, c *enterworld.Character, npc 
 		// client has no 34D5 instruction operand or safety UI symbols.
 		// This port therefore has no later-version safety state to reset.
 		quote, found := rt.Commerce.TradeQuotations[[2]uint32{npc.RefObjID, item.RefObjID}]
-		if !found || quote.Lower != quote.Upper {
+		if !found {
+			// Native (SR_GameServer CGObjNPC_QuoteTradeGoods 4C8D10,
+			// ASM-verified): a foreign good with no quotation entry is
+			// not refused. The native logs "CANNOT FIND QUOT DATA"
+			// (4C8E54) and sells at the item's base sell price
+			// (4C8E77: [RefObjData+0xB0] * quantity), taxed below like
+			// every path, with the profit output left at zero.
+			// Constantinople's TRADE_EU goods have no _ItemQuotation
+			// rows at all, so this is their only foreign sale price.
+			unit, valid := commerce.SaleUnitPrice(ref, item.MagicOptions, rt.Commerce.Magic)
+			if !valid {
+				return 0, 0, 0, false
+			}
+			credit = int64(uint32(unit) * uint32(item.Quantity))
+			break
+		}
+		if quote.Lower != quote.Upper {
 			return 0, 0, 0, false
 		}
 		unit, err := commerce.TradeQuotationPrice(uint32(base), quote)
