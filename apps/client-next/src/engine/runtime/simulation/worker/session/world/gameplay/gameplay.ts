@@ -671,7 +671,8 @@ the bootstrap or the references change.
 			forgePresented = rows.map( row => ({
 				...row,
 				...inventory.reference( row.refObjId ),
-				maxStack: cosItemCaps.get( row.refObjId )
+				maxStack: cosItemCaps.get( row.refObjId ),
+				item: inventory.referenceItem( row.refObjId, 1 )
 			}) );
 		}
 		return forgePresented;

@@ -91,6 +91,9 @@ export interface GachaPrizeRow {
 	readonly quantity: number;
 	readonly nameSymbol: string;
 	readonly icon?: string;
+	// The plain presented instance the prize slot's hover help shows, once
+	// the item reference has arrived (BUG-084).
+	readonly item?: InventoryItem;
 }
 
 export interface GachaState {

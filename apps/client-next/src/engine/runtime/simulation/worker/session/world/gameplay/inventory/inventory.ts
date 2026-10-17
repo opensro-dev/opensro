@@ -56,6 +56,7 @@ import { createMagicOptionGrant } from "./magic-option/magic-option";
 import { itemStateDelta } from "@/engine/foundation/gameplay/item-state-delta";
 import { itemSlotFlashKinds } from "@/engine/foundation/ui/item-slot-effects";
 import { itemMagicDefinitions } from "@/engine/foundation/ui/item-tooltip-magic";
+import { itemMaxDurability } from "@/engine/foundation/ui/item-tooltip-stats";
 import type { GachaPrizeRow, ItemProcessCommand } from "@/engine/contracts/item-process";
 import {
 	saleResult,
@@ -211,7 +212,7 @@ presentShop
 	const icons = new Map<number, string>();
 	const tooltipRefs = new Map<number, ItemTooltipReference>();
 	// The Magic Pang window's twelve prizes with the reference icons, rebuilt when icons arrive.
-	let gachaRows: { iconCount: number; rows: readonly GachaPrizeRow[]; } | null = null;
+	let gachaRows: { iconCount: number; refCount: number; rows: readonly GachaPrizeRow[]; } | null = null;
 	// The chat line a voucher update raises, taken by the gameplay owner after each packet.
 	let exchangeNotice: SystemNotice | null = null;
 	let magicRefs = itemMagicReferences( undefined );
@@ -237,6 +238,33 @@ present
 	}
 	/*
 	================
+	referenceItem
+
+	A plain instance of a reference (no plus, no options, full durability),
+	presented like a bag row: the item a catalogue slot shows before any
+	instance exists (Magic Pang prizes, fortress forge rows). Native binds
+	the same plain record into those slots (CIFSlot_SetBoundItem 56D190),
+	so the hover help is the fresh item's. Undefined while the reference
+	itself has not arrived.
+	================
+	*/
+	function referenceItem( refObjId: number, quantity: number ): InventoryItem | undefined {
+		const typeFlags = refs.get( refObjId );
+		if ( typeFlags === undefined ) return undefined;
+		const item = present( {
+			slot: 0,
+			refObjId,
+			typeFlags,
+			quantity,
+			plus: 0,
+			durability: 0,
+			variance: "0",
+			magic: []
+		} );
+		return { ...item, durability: itemMaxDurability( item ) };
+	}
+	/*
+	================
 	gachaPrizeRows
 
 	The Magic Pang prizes with reference icons. Icons arrive after the first frame, so
@@ -244,15 +272,16 @@ present
 	================
 	*/
 	function gachaPrizeRows(): readonly GachaPrizeRow[] {
-		if ( gachaRows?.iconCount === icons.size ) return gachaRows.rows;
+		if ( gachaRows?.iconCount === icons.size && gachaRows.refCount === refs.size ) return gachaRows.rows;
 		const rows = gachaPrizes().map( prize => ({
 			entry: prize.entry,
 			refObjId: prize.refObjId,
 			quantity: prize.quantity,
 			nameSymbol: prize.nameSymbol,
-			icon: icons.get( prize.refObjId )
+			icon: icons.get( prize.refObjId ),
+			item: referenceItem( prize.refObjId, prize.quantity )
 		}) );
-		gachaRows = { iconCount: icons.size, rows };
+		gachaRows = { iconCount: icons.size, refCount: refs.size, rows };
 		return rows;
 	}
 	/*
@@ -567,6 +596,17 @@ A reference's name and icon by id, for rows that are no item (the forge).
 		*/
 		reference( refObjId: number ) {
 			return { name: names.get( refObjId ), icon: icons.get( refObjId ) };
+		},
+		/*
+================
+referenceItem
+
+The plain presented instance of a reference (referenceItem above), for
+rows another owner lists without an instance (the fortress forge).
+================
+		*/
+		referenceItem( refObjId: number, quantity: number ) {
+			return referenceItem( refObjId, quantity );
 		},
 		/*
 ================

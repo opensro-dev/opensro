@@ -14868,7 +14868,6 @@ export function createUi(
 								controls.push( {
 									id: "fortress-production-item:" + item.refObjId,
 									label: name,
-									helpText: name,
 									kind: "region",
 									rect: r
 								} );
@@ -23417,7 +23416,15 @@ export function createUi(
 							!symbol || symbol === "xxx" ?
 								"" :
 								localization.text( symbol, "" ) || hudData.strings[symbol] || "";
-					const items = tooltipItems( id, game, cosGid ), item = items[0];
+					const items = tooltipItems(
+							id,
+							game,
+							cosGid,
+							id === "gacha-card" ?
+								game.inventory.find( row => row.slot === gachaHud.frame( gachaInput() ).cardSlot ) :
+								undefined
+						),
+						item = items[0];
 					if ( id.startsWith( "item-mall-offer:" ) ) {
 						const offer = game.itemMall?.offers.find( row =>
 							row.packageId === Number( id.slice( "item-mall-offer:".length ) )

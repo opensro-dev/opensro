@@ -54,6 +54,9 @@ export interface FortressForgeItem {
 	readonly name?: string;
 	readonly icon?: string;
 	readonly maxStack?: number;
+	// The plain presented instance the row's hover help shows, once the
+	// item reference has arrived (BUG-084).
+	readonly item?: import("@/engine/contracts/gameplay").InventoryItem;
 }
 
 /*

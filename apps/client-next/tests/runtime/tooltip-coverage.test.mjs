@@ -93,13 +93,23 @@ test("every admitted item-container route resolves its instance, including dupli
 		offer = { refObjId: 1, plus: 7 },
 		sold = { refObjId: 1, plus: 9 },
 		stallOffer = { refObjId: 1, plus: 11 },
-		networkOffer = { refObjId: 1, plus: 13 };
+		networkOffer = { refObjId: 1, plus: 13 },
+		exchangeMine = { refObjId: 1, plus: 15 },
+		exchangeTheirs = { refObjId: 1, plus: 17 },
+		gachaPrize = { refObjId: 1, plus: 19 },
+		forgeItem = { refObjId: 1, plus: 21 };
 	const game = {
 		inventory: [ bag, equipment ],
 		avatarInventory: [ avatar ],
 		cosRecords: [ { gid: 42, inventory: [ pet ] } ],
 		shop: { offers: [ { items: [ offer ] } ], buyback: [ { item: sold } ] },
 		stall: { offers: [ { slot: 3, item: stallOffer } ], network: { rows: [ { item: networkOffer } ] } },
+		exchange: {
+			own: [ { slot: 3, item: exchangeMine } ],
+			theirs: [ { slot: 5, item: exchangeTheirs } ]
+		},
+		gacha: { prizes: [ { entry: 7, item: gachaPrize } ] },
+		fortressForge: [ { refObjId: 400, item: forgeItem } ],
 		quickSlots: [ { slot: 0, kind: 0x46, payload: 0 }, { slot: 1, kind: 0x47, payload: 6 } ]
 	};
 	for (
@@ -115,16 +125,46 @@ test("every admitted item-container route resolves its instance, including dupli
 			[ "shop-buyback:0", sold ],
 			[ "stall-slot:3", stallOffer ],
 			[ "stall-net-row:0", networkOffer ],
+			[ "exchange-my:3", exchangeMine ],
+			[ "exchange-their:5", exchangeTheirs ],
+			[ "gacha-bag:13", bag ],
+			[ "gacha-prize:7", gachaPrize ],
+			[ "fortress-production-item:400", forgeItem ],
 			[ "hotbar:0", bag ],
 			[ "hotbar:1", equipment ]
 		]
 	) assert.equal( tooltipItems( id, game, 42 )[0], item, id );
+	// The placed Magic Pang card is the one item the UI itself tracks.
+	assert.equal( tooltipItems( "gacha-card", game, 42, bag )[0], bag );
+	assert.deepEqual( tooltipItems( "gacha-card", game, 42 ), [] );
 	assert.deepEqual( tooltipItems( "cos-slot:13", game, 43 ), [] );
 	assert.deepEqual( tooltipItems( "shop-buyback:1", game, 42 ), [] );
 	assert.deepEqual( tooltipItems( "stall-slot:0", game, 42 ), [] );
 	assert.deepEqual( tooltipItems( "stall-net-row:1", game, 42 ), [] );
+	// BUG-084: the bound-item windows above resolved to nothing before.
+	assert.deepEqual( tooltipItems( "exchange-my:0", game, 42 ), [] );
+	assert.deepEqual( tooltipItems( "exchange-their:3", game, 42 ), [] );
+	assert.deepEqual( tooltipItems( "gacha-prize:8", game, 42 ), [] );
+	assert.deepEqual( tooltipItems( "fortress-production-item:401", game, 42 ), [] );
 	game.shop.buyback[0] = { item: { ...sold, plus: 12 } };
 	assert.equal( tooltipItems( "shop-buyback:0", game, 42 )[0].plus, 12 );
+});
+test("a resolved exchange item produces its tooltip heading (BUG-084)", () => {
+	const item = {
+		name: "HP recovery potion (X-large)",
+		typeFlags: 748,
+		plus: 0,
+		magic: [],
+		variance: "0",
+		durability: 1,
+		quantity: 1,
+		tooltip: { fields: { maxStack: 50 } }
+	};
+	const game = { inventory: [], exchange: { own: [], theirs: [ { slot: 5, item } ] } };
+	const resolved = tooltipItems( "exchange-their:5", game, 0 )[0];
+	const rows = itemTooltip( resolved, { masteries: [] }, key => key );
+	assert.equal( rows[0]?.value, item.name );
+	assert.equal( rows[0]?.heading, true );
 });
 test("native actions replace sit/run help together with movement mode and preserve packed hotbar payload", () => {
 	const game = { quickSlots: [ { slot: 41, kind: 0x4a, payload: 0x010003e8 } ] },

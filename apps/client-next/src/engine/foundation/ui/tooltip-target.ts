@@ -5,6 +5,9 @@ tooltip-target.ts - resolve item and action help through its owning container
 
 Mall inventory borrows the ordinary inventory rows. A reference ID alone never
 identifies an instance; slot and container ownership determine the tooltip.
+The exchange table, the Magic Pang bag/card/prizes and the fortress forge
+list bind item slots the same way (CIFSlot_SetBoundItem 56D190), so their
+hovers resolve through the same owners (BUG-084).
 
 ===========================================================================
 */
@@ -14,12 +17,19 @@ import { quickSlotItemSlot } from "../gameplay/quickslots";
 
 // Resolve the owning container, not an arbitrary item with the same reference.
 // Shop instances are supplied by the authoritative offer/buyback projection.
+// gachaCard is the one slot whose item the UI (not the worker) tracks: the
+// card a player has placed on the Magic Pang card slot but not yet played.
 /*
 ================
 tooltipItems
 ================
 */
-export function tooltipItems( id: string, game: GameplayState, cosGid: number ): readonly InventoryItem[] {
+export function tooltipItems(
+	id: string,
+	game: GameplayState,
+	cosGid: number,
+	gachaCard?: InventoryItem
+): readonly InventoryItem[] {
 	let item: InventoryItem | undefined;
 	if ( id.startsWith( "slot:" ) ) item = game.inventory.find( row => row.slot === Number( id.slice( 5 ) ) );
 	else if ( id.startsWith( "item-mall-slot:" ) ) {
@@ -38,6 +48,24 @@ export function tooltipItems( id: string, game: GameplayState, cosGid: number ):
 		item = game.cosRecords?.find( row => row.gid === cosGid )?.inventory?.find( row =>
 			row.slot === Number( id.slice( 9 ) )
 		);
+	} else if ( id.startsWith( "exchange-my:" ) ) {
+		// The exchange table's two sides are bound-item slots natively
+		// (CIFExchange, 6B20A0/6B2DA0), as the bag's are.
+		item = game.exchange?.own.find( row => row.slot === Number( id.slice( 12 ) ) )?.item;
+	} else if ( id.startsWith( "exchange-their:" ) ) {
+		item = game.exchange?.theirs.find( row => row.slot === Number( id.slice( 15 ) ) )?.item;
+	} else if ( id.startsWith( "gacha-bag:" ) ) {
+		// The Magic Pang window's own bag grid (CIFGhaCha_BindInventorySlotEntry):
+		// ordinary bag rows under another window's slot ids.
+		item = game.inventory.find( row => row.slot === Number( id.slice( 10 ) ) );
+	} else if ( id === "gacha-card" ) {
+		item = gachaCard;
+	} else if ( id.startsWith( "gacha-prize:" ) ) {
+		// CIFGhaCha_LoadNpcPrizeEntries binds each prize record to its slot.
+		item = game.gacha?.prizes?.find( row => row.entry === Number( id.slice( 12 ) ) )?.item;
+	} else if ( id.startsWith( "fortress-production-item:" ) ) {
+		// CIFFortressMakeItemWndSlot_SetItem binds the forge row's record.
+		item = game.fortressForge?.find( row => row.refObjId === Number( id.slice( 25 ) ) )?.item;
 	} else if ( id.startsWith( "shop-offer:" ) ) return game.shop?.offers[Number( id.slice( 11 ) )]?.items ?? [];
 	else if ( id.startsWith( "shop-buyback:" ) ) item = game.shop?.buyback?.[Number( id.slice( 13 ) )]?.item;
 	else if ( id.startsWith( "stall-slot:" ) ) {
