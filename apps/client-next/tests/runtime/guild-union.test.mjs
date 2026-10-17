@@ -96,6 +96,15 @@ test("the union tab arms its commands as 5F6880", () => {
 	assert.equal( alliance.allianceLeader( follower )?.name, "Bravo" );
 });
 
+test("guild and union counts format current/limit as 5E2C00, 5F6FA0 and 5F72B0", () => {
+	assert.deepEqual( [ 1, 2, 3, 4, 5 ].map( level => alliance.guildMemberLimit( level ) ), [ 15, 20, 25, 35, 50 ] );
+	assert.equal( alliance.guildMemberCountText( 3, 3 ), "3 / 25" );
+	assert.equal( alliance.guildMemberCountText( 15, 1 ), "15 / 15" );
+	assert.equal( alliance.allianceGuildCountText( 2 ), "2/8" );
+	assert.equal( alliance.allianceMemberCountText( 4, 3 ), "4/25" );
+	assert.equal( alliance.allianceMemberCountText( 18, 5 ), "18/50" );
+});
+
 test("the union tab keeps one question and its sort order", () => {
 	const hud = createUnionHud();
 	hud.ask( { kind: "exit", guild: 0, name: "" } );

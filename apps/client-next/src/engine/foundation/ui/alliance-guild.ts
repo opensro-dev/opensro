@@ -45,6 +45,72 @@ export function allianceButtons( social: SocialState | null | undefined ): Allia
 		{ invite: false, exit: true, expel: false };
 }
 
+// Maximum guilds in a union (CIFAllianceGuild_RebuildSlots 5F6FA0 @ 5F719F pushes 8).
+export const ALLIANCE_MAX_GUILDS = 8;
+
+/*
+================
+guildMemberLimit
+
+Native lookup in 0x00BE4490 (CIFGuildMember) / 0x00BE5F80 (CIFAllianceGuild)
+by guild level 1..5.
+================
+*/
+export function guildMemberLimit( level: number ): number {
+	switch ( level ) {
+		case 1:
+			return 15;
+		case 2:
+			return 20;
+		case 3:
+			return 25;
+		case 4:
+			return 35;
+		case 5:
+			return 50;
+		default:
+			return 0;
+	}
+}
+
+/*
+================
+guildMemberCountText
+
+CIFGuildMember_RefreshFromGuildData (5E2C00 @ 5E2D72) and
+CIFGuildMember_ReadGuildMetadataUpdate (5E4710 @ 5E47AA) format
+GDR_GUILD_INFO_GUILD_MEMBER_NUM (ID 42) with u"%d / %d" (0x00BDC618).
+================
+*/
+export function guildMemberCountText( count: number, level: number ): string {
+	return `${count} / ${guildMemberLimit( level )}`;
+}
+
+/*
+================
+allianceGuildCountText
+
+CIFAllianceGuild_RebuildSlots (5F6FA0 @ 5F7195) formats
+GDR_ALLIANCE_INFO_NUM (ID 29) with u"%d/%d" (0x00BDB810) and cap 8.
+================
+*/
+export function allianceGuildCountText( count: number ): string {
+	return `${count}/${ALLIANCE_MAX_GUILDS}`;
+}
+
+/*
+================
+allianceMemberCountText
+
+CIFAllianceGuild_SelectAlly (5F72B0 @ 5F754E) formats
+GDR_GUILD_DETAIL_MEMBER_NUM (ID 51) with u"%d/%d" (0x00BDB810) and
+0x00BE5F80[selected.level].
+================
+*/
+export function allianceMemberCountText( count: number, level: number ): string {
+	return `${count}/${guildMemberLimit( level )}`;
+}
+
 /*
 ================
 allianceLeader

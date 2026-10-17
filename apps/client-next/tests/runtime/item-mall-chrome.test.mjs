@@ -69,3 +69,18 @@ test("a shop page keeps all six slot backgrounds when it has no offers", () => {
 		f.dispose();
 	}
 });
+
+test("the desktop Item Mall blocks only its own window so world camera drag outside it passes through (9FEC50 -> 67CCA0)", () => {
+	const f = uiFixture();
+	try {
+		f.ui.step( f.state, 1000 );
+		f.ui.event( { kind: "key", code: "F10" } );
+		settle( f, 1100 );
+		// Centered inside the 1280x720 desktop viewport: inside CIFItemMall blocks.
+		assert.equal( f.ui.blocks( 640, 360 ), true, "inside CIFItemMall blocks UI pointer" );
+		// Upper-left world sky outside CIFItemMall and outside HUD bars does not block.
+		assert.equal( f.ui.blocks( 40, 200 ), false, "outside CIFItemMall passes through to world camera" );
+	} finally {
+		f.dispose();
+	}
+});

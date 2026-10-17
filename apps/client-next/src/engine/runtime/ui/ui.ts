@@ -296,7 +296,13 @@ import { STALL_CHAT_CHANNEL, STALL_SLOTS, type StallListing } from "@/engine/fou
 import { textAllowed } from "@/engine/foundation/ui/character-create";
 import { createGrantPowerHud, GRANT_RIGHTS } from "./hud/grant-power-hud";
 import { compositeItemCaption, compositeItemLayout, createCompositeItemHud } from "./hud/composite-item-hud";
-import { allianceButtons, allianceLeader } from "@/engine/foundation/ui/alliance-guild";
+import {
+	allianceButtons,
+	allianceGuildCountText,
+	allianceLeader,
+	allianceMemberCountText,
+	guildMemberCountText
+} from "@/engine/foundation/ui/alliance-guild";
 import {
 	fortressWarDates,
 	fortressWarFormat,
@@ -17355,7 +17361,7 @@ export function createUi(
 						);
 						authoredText( at( 26 ), gx, gy, leader.name );
 						authoredText( at( 28 ), gx, gy, leader.master );
-						authoredText( at( 29 ), gx, gy, String( alliances.length ) );
+						authoredText( at( 29 ), gx, gy, allianceGuildCountText( alliances.length ) );
 					}
 					if ( !selected ) authoredText( at( 52 ), gx, gy, hudCopy( "UIIT_STT_NOT_EXIST_GUILD" ) );
 					else {
@@ -17372,7 +17378,12 @@ export function createUi(
 						authoredText( at( 47 ), gx, gy, selected.name );
 						authoredText( { ...at( 48 ), color: gold }, gx, gy, String( selected.level ) );
 						authoredText( at( 50 ), gx, gy, selected.master );
-						authoredText( at( 51 ), gx, gy, String( selected.flags ) );
+						authoredText(
+							at( 51 ),
+							gx,
+							gy,
+							allianceMemberCountText( selected.flags, selected.level )
+						);
 					}
 					authoredLabeledButton( at( 63 ), gx, gy, "union-sort:name", hudCopy( at( 63 ).text ) );
 					authoredLabeledButton( at( 64 ), gx, gy, "union-sort:level", hudCopy( at( 64 ).text ) );
@@ -17694,7 +17705,7 @@ export function createUi(
 							if ( !guild ) return;
 							field( page, 33, String( guild.level ), [ left + half, top, half, LINE_HEIGHT ] );
 							field( page, 34, leader?.name ?? "", [ left, top + LINE_HEIGHT, inner, LINE_HEIGHT ] );
-							field( page, 35, String( guild.members.length ), [
+							field( page, 35, guildMemberCountText( guild.members.length, guild.level ), [
 								left,
 								top + LINE_HEIGHT * 2,
 								half,
@@ -18107,11 +18118,11 @@ export function createUi(
 							[
 								[ 22, leader?.name ?? "" ],
 								[ 23, leader?.master ?? "" ],
-								[ 24, String( rows.length ) ],
+								[ 24, allianceGuildCountText( rows.length ) ],
 								[ 43, selected?.name ?? "" ],
 								[ 64, selected ? String( selected.level ) : "" ],
 								[ 44, selected?.master ?? "" ],
-								[ 45, selected ? String( selected.flags ) : "" ]
+								[ 45, selected ? allianceMemberCountText( selected.flags, selected.level ) : "" ]
 							].forEach( ( [id, value], i ) =>
 								field( alliance, Number( id ), String( value ), [
 									left,
@@ -18448,7 +18459,7 @@ export function createUi(
 										[ 38, guild.name ],
 										[ 39, String( guild.level ) ],
 										[ 41, leader?.name ?? "" ],
-										[ 42, String( guild.members.length ) ],
+										[ 42, guildMemberCountText( guild.members.length, guild.level ) ],
 										[ 44, String( guild.gp ) ]
 									] as const
 								) authoredText( { ...at( id ), ...(id === 39 ? { color: gold } : {}) }, gx, gy, value );
@@ -22451,13 +22462,14 @@ export function createUi(
 				const frame = data.root.GDR_ITEM_MALL!;
 				const ox = Math.floor( (w - frame.rect[2]) / 2 );
 				const oy = Math.floor( (h - frame.rect[3]) / 2 );
-				// Native mall is a modal owner; underlying windows retain state but
-				// cannot receive input through its scene or child controls.
+				// Underlying windows retain state while the mall is open; CGWndBase
+				// input dispatch (9FEC50 -> CGInterface_OnWorldMessage 67CCA0) still
+				// forwards world pointer events outside CIFItemMall's bounds.
 				controls = [];
-				blocks = [ full ];
 				const mallAdmission = beginWindow();
 				paths.push( ...mallMenuArtwork() );
 				if ( compact ) {
+					blocks = [ full ];
 					// Port-only, owner-approved reflow. Never scale the Mall's text or
 					// combine its background with a purchase dialog's fitting bounds.
 					const margin = 8, touch = 40, gap = 4, cardHeight = 112, tabPitch = 28;
@@ -23208,6 +23220,7 @@ export function createUi(
 						const dialogWidth = 327, height = currencyLayout.height;
 						const mx = Math.floor( (w - dialogWidth) / 2 ), my = Math.floor( (h - height) / 2 );
 						controls = [];
+						blocks.push( [ mx, my, dialogWidth, height ] );
 						const prefix = ROOT + "interface/messagebox/msgbox2_window_";
 						paths.push( ...PARTS.map( part => prefix + part + ".png" ) );
 						quads.push(
@@ -23312,6 +23325,7 @@ export function createUi(
 						);
 						const template = mallControl( data.windows.ifitemmallconfirmbuy!, 5 );
 						controls = [];
+						blocks.push( [ mx, my, layout.width, layout.height ] );
 						paths.push( ...partyProposalAssets() );
 						quads.push(
 							...normalTile(
@@ -23447,6 +23461,7 @@ export function createUi(
 						const pointWidth = 233, pointHeight = 177;
 						const px = Math.floor( (w - pointWidth) / 2 ), py = Math.floor( (h - pointHeight) / 2 );
 						controls = [];
+						blocks.push( [ px, py, pointWidth, pointHeight ] );
 						quads.push(
 							...frameRing(
 								[ px, py, pointWidth, pointHeight ],
