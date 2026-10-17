@@ -158,10 +158,15 @@ Runtime.announce
 
 Queues one notice when its kind is under the per-minute cap. link is what
 a drop or plus notice links (wire.DropPlusNotificationFrame); a job kill
-links nothing, so its aliases never lead to a character.
+links nothing, so its aliases never lead to a character. refObjID is the
+linked item's reference (0 when the notice links no item): its reference
+rows ride ahead of the notice in the same division frames, because a
+viewer who was never sent that reference cannot render the link
+(BUG-084 - the bootstrap preloads only Degree-1 references, so a Degree
+2-9 seal or advanced item is unknown on most viewers).
 ================
 */
-func (rt *Runtime) announce(division string, kind announceKind, text string, link wire.NoticeLink, nowMs int64) {
+func (rt *Runtime) announce(division string, kind announceKind, text string, link wire.NoticeLink, refObjID uint32, nowMs int64) {
 	limit := announceCap(tunables.Current(), kind)
 	a := &rt.announcer
 	a.mu.Lock()
@@ -188,8 +193,12 @@ func (rt *Runtime) announce(division string, kind announceKind, text string, lin
 	if kind == announceJobKill || kind == announceMostWanted {
 		frame = wire.JobKillNotificationFrame(text)
 	}
-	a.queued = append(a.queued, simulation.DivisionFrames{DivisionID: division,
-		Frames: []simulation.Frame{{Opcode: frame.Opcode, Payload: frame.Payload}}})
+	frames := make([]simulation.Frame, 0, 2)
+	for _, ref := range rt.itemReferencesByID([]uint32{refObjID}) {
+		frames = append(frames, simulation.Frame{Opcode: ref.Opcode, Payload: ref.Payload})
+	}
+	frames = append(frames, simulation.Frame{Opcode: frame.Opcode, Payload: frame.Payload})
+	a.queued = append(a.queued, simulation.DivisionFrames{DivisionID: division, Frames: frames})
 	a.feed = append(a.feed, announcedLine{division, text})
 }
 
@@ -299,7 +308,7 @@ func (rt *Runtime) announceSealDrops(division, monsterName string, drops []groun
 			}
 		}
 		link := wire.NoticeLink{Player: drop.DroppedBy, Body: groundInventoryItem(drop, groundStack(drop)).Body().Encode()}
-		rt.announce(division, announceSoxDrop, drop.DroppedBy+" has dropped "+name+" from "+monsterName, link, nowMs)
+		rt.announce(division, announceSoxDrop, drop.DroppedBy+" has dropped "+name+" from "+monsterName, link, drop.RefObjID, nowMs)
 	}
 }
 
@@ -334,7 +343,7 @@ func (rt *Runtime) announcePlus(division, player string, outcome alchemy.Outcome
 		if len(utf16.Encode([]rune(text))) > noticeMaxUnits {
 			text = fmt.Sprintf("%s advanced %s to +%d", player, name, item.Plus)
 		}
-		rt.announce(division, announcePlus, text, wire.NoticeLink{Player: player, Body: item.Body().Encode()}, nowMs)
+		rt.announce(division, announcePlus, text, wire.NoticeLink{Player: player, Body: item.Body().Encode()}, item.RefObjID, nowMs)
 		return
 	}
 }
@@ -407,7 +416,7 @@ func (rt *Runtime) postJobKillNotice(n jobKillNotice) {
 	if !rt.Announce.JobKillRepeat && !rt.jobKillPairQuiet(n.killer, n.victim, n.nowMs) {
 		return
 	}
-	rt.announce(n.division, announceJobKill, "["+n.killerAlias+"] killed ["+n.victimAlias+"]", wire.NoticeLink{}, n.nowMs)
+	rt.announce(n.division, announceJobKill, "["+n.killerAlias+"] killed ["+n.victimAlias+"]", wire.NoticeLink{}, 0, n.nowMs)
 }
 
 /*
@@ -474,7 +483,7 @@ func (rt *Runtime) postMostWantedNotice(n mostWantedNotice) {
 	if !rt.Announce.MostWanted {
 		return
 	}
-	rt.announce(n.division, announceMostWanted, n.text, wire.NoticeLink{}, n.nowMs)
+	rt.announce(n.division, announceMostWanted, n.text, wire.NoticeLink{}, 0, n.nowMs)
 }
 
 // noticeMaxUnits is wire.NotificationFrame's UTF-16 budget (753A6F).

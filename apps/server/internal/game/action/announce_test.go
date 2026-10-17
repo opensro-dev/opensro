@@ -71,6 +71,11 @@ func drainedNoticeLines(t *testing.T, rt *Runtime) []noticeLine {
 			t.Fatalf("a notice is not a division broadcast: %+v", routed)
 		}
 		for _, frame := range routed.Frames {
+			if frame.Opcode == opCommerceItemReferences {
+				// The item references a linked notice pushes ahead of
+				// itself (TestDropAndPlusNoticesPushItemReferencesFirst).
+				continue
+			}
 			p := frame.Payload
 			if frame.Opcode != 0x3667 || len(p) < 3 || (p[0] != wire.DropPlusNoticeChannel && p[0] != wire.JobKillNoticeChannel) {
 				t.Fatalf("not a notification frame: %#x % x", frame.Opcode, p)
@@ -112,14 +117,14 @@ rather than panicking the encoder.
 func TestAnnouncementsAreCappedAndClamped(t *testing.T) {
 	rt, _ := newTestRuntime(testCharacter(), testItems())
 	for i := 0; i < announcementsPerMinute+2; i++ {
-		rt.announce(testDivision, announcePlus, "line", wire.NoticeLink{}, 1000)
+		rt.announce(testDivision, announcePlus, "line", wire.NoticeLink{}, 0, 1000)
 	}
-	rt.announce(testDivision, announceJobKill, strings.Repeat("x", 300), wire.NoticeLink{}, 1000)
+	rt.announce(testDivision, announceJobKill, strings.Repeat("x", 300), wire.NoticeLink{}, 0, 1000)
 	got := drainedNotices(t, rt)
 	if len(got) != announcementsPerMinute+1 || len(got[len(got)-1]) != noticeMaxUnits {
 		t.Fatalf("%d notices, last %d long", len(got), len(got[len(got)-1]))
 	}
-	rt.announce(testDivision, announcePlus, "line", wire.NoticeLink{}, 1000+announceWindowMs)
+	rt.announce(testDivision, announcePlus, "line", wire.NoticeLink{}, 0, 1000+announceWindowMs)
 	if got := drainedNotices(t, rt); len(got) != 1 {
 		t.Fatalf("the window did not reopen: %v", got)
 	}
@@ -356,7 +361,7 @@ func TestEachNoticeKindTravelsOnItsChannel(t *testing.T) {
 		announceJobKill: wire.JobKillNoticeChannel,
 	} {
 		rt, clock := newTestRuntime(testCharacter(), testItems())
-		rt.announce(testDivision, kind, "notice", wire.NoticeLink{}, clock.NowMs())
+		rt.announce(testDivision, kind, "notice", wire.NoticeLink{}, 0, clock.NowMs())
 		if got := drainedNoticeLines(t, rt); len(got) != 1 || got[0].channel != want {
 			t.Fatalf("kind %d: %+v, want one on channel %#x", kind, got, want)
 		}
@@ -373,7 +378,7 @@ division on the next tick, once.
 */
 func TestTickSendsQueuedNotices(t *testing.T) {
 	rt, clock := newTestRuntime(testCharacter(), testItems())
-	rt.announce(testDivision, announcePlus, "Looter advanced Blade to +8", wire.NoticeLink{}, clock.NowMs())
+	rt.announce(testDivision, announcePlus, "Looter advanced Blade to +8", wire.NoticeLink{}, 0, clock.NowMs())
 	count := func(out []simulation.DivisionFrames) int {
 		n := 0
 		for _, routed := range out {
@@ -404,11 +409,18 @@ The bytes a drop or plus notice carries after its text.
 func noticeLinkTail(t *testing.T, rt *Runtime) []byte {
 	t.Helper()
 	routed := rt.drainAnnouncements(0)
-	if len(routed) != 1 || len(routed[0].Frames) != 1 {
+	if len(routed) != 1 {
 		t.Fatalf("notices %+v, want one", routed)
 	}
-	p := routed[0].Frames[0].Payload
-	return p[3+2*(int(p[1])|int(p[2])<<8):]
+	for _, frame := range routed[0].Frames {
+		if frame.Opcode != 0x3667 {
+			continue
+		}
+		p := frame.Payload
+		return p[3+2*(int(p[1])|int(p[2])<<8):]
+	}
+	t.Fatalf("notices %+v, want a notification frame", routed)
+	return nil
 }
 
 /*
@@ -437,6 +449,43 @@ func TestDropAndPlusNoticesLinkThePlayerAndItem(t *testing.T) {
 	want = append(wire.NewWriter(0).Str("Smith").U16(uint16(len(body))).Payload(), body...)
 	if got := noticeLinkTail(t, rt); !bytes.Equal(got, want) || body[4] != 9 {
 		t.Fatalf("plus link % X, want % X", got, want)
+	}
+}
+
+/*
+================
+TestDropAndPlusNoticesPushItemReferencesFirst
+
+BUG-084: a notice that links an item first pushes the item's reference
+rows (opCommerceItemReferences) in the same division frames, so a viewer
+whose bootstrap never carried that Degree 2-9 reference can render the
+link instead of throwing it away as unknown. A notice that links nothing
+(a job kill) sends no references.
+================
+*/
+func TestDropAndPlusNoticesPushItemReferencesFirst(t *testing.T) {
+	rt, _ := newTestRuntime(testCharacter(), testItems())
+	rt.Announce.SoxDrop, rt.Announce.Plus = true, true
+	drop := grounditem.Item{Codename: "ITEM_CH_SWORD_01_A_RARE", DroppedBy: "Looter", RefObjID: 11459,
+		TypeFlags: wire.PackTypeFlags(3, 1, 6, 2), Plus: 3, Durability: 40}
+	rt.announceSealDrops(testDivision, "Tiger Girl", []grounditem.Item{drop}, 0)
+	routed := rt.drainAnnouncements(0)
+	if len(routed) != 1 || len(routed[0].Frames) != 2 ||
+		routed[0].Frames[0].Opcode != opCommerceItemReferences || routed[0].Frames[1].Opcode != 0x3667 {
+		t.Fatalf("drop notice frames %+v, want references then the notice", routed)
+	}
+	advanced := inventory.Item{Slot: 13, RefObjID: 11459, Codename: "ITEM_CH_SWORD_01_A_RARE",
+		TypeFlags: wire.PackTypeFlags(3, 1, 6, 2), Plus: 9, Durability: 40}
+	rt.announcePlus(testDivision, "Smith", alchemy.Outcome{Success: true, Target: 13, Items: []inventory.Item{advanced}}, 0)
+	routed = rt.drainAnnouncements(0)
+	if len(routed) != 1 || len(routed[0].Frames) != 2 ||
+		routed[0].Frames[0].Opcode != opCommerceItemReferences || routed[0].Frames[1].Opcode != 0x3667 {
+		t.Fatalf("plus notice frames %+v, want references then the notice", routed)
+	}
+	rt.announce(testDivision, announceJobKill, "kill", wire.NoticeLink{}, 0, 0)
+	routed = rt.drainAnnouncements(0)
+	if len(routed) != 1 || len(routed[0].Frames) != 1 || routed[0].Frames[0].Opcode != 0x3667 {
+		t.Fatalf("job-kill notice frames %+v, want the notice alone", routed)
 	}
 }
 
