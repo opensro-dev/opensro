@@ -39,7 +39,7 @@ import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
 import { writeJsonIfChangedSync } from "../shared/jsonOut.mjs";
 import { dataAssetPath } from "../shared/jmxAssetIO.mjs";
 import { parseCharacterBsr } from "../char/formats.mjs";
-import { parseJmxBmsStaticMesh } from "../world/objects/formats.mjs";
+import { parseJmxBmsStaticMesh, parseJmxResourceBsr } from "../world/objects/formats.mjs";
 import {
 	extractedRoot,
 	gameRoot,
@@ -206,6 +206,7 @@ export function collectEffectReferences() {
 	const nativeExecutableReferences = collectNativeExecutableEffectReferences();
 	const modelParticleReferences = collectModelParticleReferences( { ...table, ...namedTable } );
 	const sceneryParticleReferences = collectSceneryParticleReferences();
+	const dungeonParticleReferences = collectDungeonParticleReferences();
 	const entityParticleReferences = collectEntityParticleReferences();
 	const structureEffectReferences = collectStructureEffectReferences();
 	return {
@@ -214,6 +215,7 @@ export function collectEffectReferences() {
 				...recordReferences,
 				...modelParticleReferences.map( row => row.effectPath ),
 				...sceneryParticleReferences.map( row => row.effectPath ),
+				...dungeonParticleReferences.map( row => row.effectPath ),
 				...entityParticleReferences.map( row => row.effectPath ),
 				...structureEffectReferences.map( row => row.effectPath ),
 				...nativeExecutableReferences
@@ -223,6 +225,7 @@ export function collectEffectReferences() {
 		nativeExecutableReferences,
 		modelParticleReferences,
 		sceneryParticleReferences,
+		dungeonParticleReferences,
 		entityParticleReferences,
 		structureEffectReferences,
 		effectRecordCount: Object.keys( table ).length
@@ -349,6 +352,39 @@ export function collectSceneryParticleReferences(
 				for ( const entry of modifier.entries ) {
 					const effectPath = normalizeAssetPath( entry.effectPath );
 					if ( !effectPath.endsWith( ".efp" ) ) throw Error( "Invalid scenery effect reference" );
+					references.set( branch.sourcePath + "\0" + effectPath, {
+						modelPath: branch.sourcePath,
+						effectPath
+					} );
+				}
+			}
+		}
+	}
+	return [ ...references.values() ].sort( ( a, b ) =>
+		a.modelPath.localeCompare( b.modelPath ) || a.effectPath.localeCompare( b.effectPath )
+	);
+}
+
+/*
+================
+collectDungeonParticleReferences
+
+Particle references of dungeon room BSRs listed in dungeon-resources.json.
+================
+*/
+export function collectDungeonParticleReferences(
+	index = JSON.parse( readPublishedAssetBytesSync( "/assets/world/dungeon/dungeon-resources.json", publicRoot ) )
+) {
+	const references = new Map();
+	for ( const root of index.navResources?.bsr ?? index.bsr ?? [] ) {
+		for ( const branch of root.branches ?? [ root ] ) {
+			const modifiers = branch.modifiers ??
+				parseJmxResourceBsr( fs.readFileSync( dataAssetPath( branch.sourcePath ) ), branch.sourcePath )
+					.modifiers;
+			for ( const modifier of modifiers?.particleModifiers ?? [] ) {
+				for ( const entry of modifier.entries ?? [] ) {
+					const effectPath = normalizeAssetPath( entry.effectPath );
+					if ( !effectPath.endsWith( ".efp" ) ) throw Error( "Invalid dungeon effect reference" );
 					references.set( branch.sourcePath + "\0" + effectPath, {
 						modelPath: branch.sourcePath,
 						effectPath
@@ -583,6 +619,7 @@ export async function buildEffectProgramsAsset() {
 			effectRecordReferences: reachability.recordReferences.length,
 			modelParticleReferences: reachability.modelParticleReferences,
 			sceneryParticleReferences: reachability.sceneryParticleReferences,
+			dungeonParticleReferences: reachability.dungeonParticleReferences,
 			entityParticleReferences: reachability.entityParticleReferences,
 			nativeExecutableReferences: reachability.nativeExecutableReferences
 		},

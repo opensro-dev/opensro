@@ -114,7 +114,6 @@ apps/client-next/src/engine/foundation/rendering/material-timeline.ts
 apps/client-next/src/engine/foundation/rendering/modifier-delta.ts
 apps/client-next/src/engine/foundation/rendering/pick-destination.ts
 apps/client-next/src/engine/foundation/rendering/pick-volume.ts
-apps/client-next/src/engine/foundation/rendering/scenery-particles.ts
 apps/client-next/src/engine/foundation/rendering/screen-point.ts
 apps/client-next/src/engine/foundation/rendering/sky-geometry.ts
 apps/client-next/src/engine/foundation/rendering/star-construction.ts
@@ -388,8 +387,6 @@ scripts/build/data/buildSkillMasteryDataAsset.mjs
 scripts/build/data/buildTeleportDataAsset.mjs
 scripts/build/server/serverGameDataArchive.mjs
 scripts/build/world/assets/buildDungeonResources.mjs
-scripts/build/world/assets/buildDungeonWorlds.mjs
-scripts/build/world/assets/dungeonInfo.mjs
 scripts/build/world/assets/dungeonWater.mjs
 scripts/build/world/assets/environment/environmentTracks.mjs
 scripts/build/world/assets/environment/readEnvironmentIfo.mjs

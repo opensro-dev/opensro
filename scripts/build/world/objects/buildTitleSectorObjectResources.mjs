@@ -190,7 +190,8 @@ export async function buildTitleSectorObjectResources( options ) {
 		area,
 		missing,
 		blockFormats,
-		sourceExtractedRoot
+		sourceExtractedRoot,
+		options.publishTextures !== false
 	);
 
 	return {
@@ -226,7 +227,14 @@ rest as converted PNG copies. The PNG of a block source is NOT published -
 the .texture is the only shipped artifact for it.
 ================
 */
-async function copyObjectMaterialTextures( texturePaths, area, missing, blockFormats, sourceExtractedRoot ) {
+async function copyObjectMaterialTextures(
+	texturePaths,
+	area,
+	missing,
+	blockFormats,
+	sourceExtractedRoot,
+	publishTextures = true
+) {
 	const copied = [];
 	const published = [];
 
@@ -236,7 +244,9 @@ async function copyObjectMaterialTextures( texturePaths, area, missing, blockFor
 			const publicPath = objectTexturePublicPath( area, textureSourcePath, ".texture" );
 			const source = dataAssetPath( sourceExtractedRoot, textureSourcePath );
 			const target = path.join( publicRoot, publicPath.replace( /^\/+/, "" ) );
-			published.push( publishBlockTextureFile( source, target ) );
+			if ( publishTextures ) {
+				published.push( publishBlockTextureFile( source, target ) );
+			}
 			copied.push( {
 				sourcePath: textureSourcePath,
 				imageSourcePath: toGameRelative( source ),
@@ -255,7 +265,9 @@ async function copyObjectMaterialTextures( texturePaths, area, missing, blockFor
 			continue;
 		}
 
-		await copyIntoPublicTree( pngSource, target );
+		if ( publishTextures ) {
+			await copyIntoPublicTree( pngSource, target );
+		}
 
 		copied.push( {
 			sourcePath: textureSourcePath,

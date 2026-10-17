@@ -162,3 +162,255 @@ test("flare publication retains native mip resources and the shared original sun
 	}
 	assert.equal( sky.sunTexturePublicPath, sky.flareTexturePublicPaths[1].replace( /\.texture$/, ".png" ) );
 });
+
+import { tmpdir } from "node:os";
+import { extractedRoot, imageSourceRoot, normalizeAssetPath } from "../../../../scripts/build/world/paths.mjs";
+import { buildDungeonResourceManifest } from "../../../../scripts/build/world/assets/buildDungeonResources.mjs";
+import { buildDungeonWorlds } from "../../../../scripts/build/world/assets/buildDungeonWorlds.mjs";
+import { collectDungeonParticleReferences } from "../../../../scripts/build/effects/buildEffectPrograms.mjs";
+import {
+	parseJmxVisualEffect,
+	collectJmxEffectTexturePaths
+} from "../../../../scripts/build/effects/parseJmxVisualEffect.mjs";
+
+const { createWorldDecoder } = await import(
+	sourceFileUrl( "src/engine/runtime/assets/worker/world/world.ts" ).href
+);
+const { createWorldStream } = await import(
+	sourceFileUrl( "src/engine/runtime/world/world.ts" ).href
+);
+const { createNavigation } = await import(
+	sourceFileUrl(
+		"src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts"
+	).href
+);
+const { createNavigationResources } = await import(
+	sourceFileUrl( "src/engine/runtime/assets/worker/navigation/navigation.ts" ).href
+);
+const { createNavigationStream } = await import(
+	sourceFileUrl( "src/engine/runtime/navigation/navigation.ts" ).href
+);
+const { WORLD_SCENE_BYTES, worldSceneBytes } = await import(
+	sourceFileUrl( "src/engine/foundation/rendering/world-scene.ts" ).href
+);
+const { createEffectPrograms } = await import(
+	sourceFileUrl( "src/engine/runtime/assets/worker/effects/program/program.ts" ).href
+);
+
+/*
+================
+portalInterior
+================
+*/
+function portalInterior( p, e, regionId ) {
+	const m = p.mesh,
+		v = m.vertices,
+		at = m.edges[e * 6] * 3,
+		bt = m.edges[e * 6 + 1] * 3,
+		cell = m.edges[e * 6 + 2] * 3;
+	let x = (v[at] + v[bt]) / 2, y = (v[at + 1] + v[bt + 1]) / 2, z = (v[at + 2] + v[bt + 2]) / 2, cx = 0, cz = 0;
+	for ( let k = 0; k < 3; k++ ) {
+		cx += v[m.cells[cell + k] * 3] / 3;
+		cz += v[m.cells[cell + k] * 3 + 2] / 3;
+	}
+	const d = Math.hypot( cx - x, cz - z );
+	x += (cx - x) / d * .5;
+	z += (cz - z) / d * .5;
+	return {
+		regionId,
+		x: Math.cos( p.yaw ) * x - Math.sin( p.yaw ) * z + p.x,
+		y: y + p.y,
+		z: Math.sin( p.yaw ) * x + Math.cos( p.yaw ) * z + p.z,
+		angle: 0
+	};
+}
+
+test(
+	"0x8000-bit dungeon regions 32769..32775 stream, decode mesh/collision/water and compile every room EFP end to end",
+	{ timeout: 60000 },
+	async ( t ) => {
+		const tempRoot = fs.mkdtempSync( join( tmpdir(), "sro-dungeon-e2e-" ) );
+		t.after( () => fs.rmSync( tempRoot, { recursive: true, force: true } ) );
+		const manifestPath = join( tempRoot, "dungeon-resources.json" );
+		await buildDungeonResourceManifest( { extractedRoot, targetPath: manifestPath } );
+		const manifestBytes = new Uint8Array( fs.readFileSync( manifestPath ) );
+		const manifest = JSON.parse( Buffer.from( manifestBytes ).toString( "utf8" ) );
+		const { bundles } = await buildDungeonWorlds( manifest, { publishFiles: false } );
+
+		const expectedRegions = [ 32769, 32770, 32771, 32772, 32773, 32774, 32775 ];
+		for ( const regionId of expectedRegions ) {
+			assert.ok( bundles.has( regionId ), `missing dungeon world bundle for ${regionId}` );
+		}
+
+		// Verify 0x8000-bit world streaming requests only the single dungeon bundle per floor
+		// (never a 3x3 outdoor neighborhood) and admits each floor cleanly.
+		const worldDecoder = createWorldDecoder();
+		const navResources = createNavigationResources();
+		const nav = createNavigation();
+		let totalPortals = 0;
+
+		for ( const regionId of [ ...expectedRegions, 32777 ] ) {
+			const bundle = bundles.get( regionId );
+			const raw = new TextEncoder().encode( JSON.stringify( bundle ) );
+			const decoded = worldDecoder.decode( raw, false, { origin: regionId, part: "all" } );
+			assert.equal( decoded.originRegion, regionId );
+			assert.equal( decoded.id, `region:${regionId}:${regionId}:all` );
+			assert.ok(
+				worldSceneBytes( decoded ) <= WORLD_SCENE_BYTES,
+				`region ${regionId} exceeds WORLD_SCENE_BYTES`
+			);
+			assert.ok( decoded.groups.length > 0, `region ${regionId} has no scene groups` );
+			assert.ok( (decoded.dungeonVisibility?.length ?? 0) > 0, `region ${regionId} has no dungeonVisibility` );
+
+			const worldRequests = [];
+			const worldReady = new Map();
+			let nextWorldId = 0;
+			const worldStream = createWorldStream(
+				{
+					available: () => 4,
+					request( url, maxByteLength, decode ) {
+						const id = ++nextWorldId;
+						worldRequests.push( { url, maxByteLength, decode } );
+						return id;
+					},
+					take: id => worldReady.get( id ) ?? null,
+					cancel: () => {}
+				},
+				{
+					cancelWorldUpdate: () => {},
+					setWorld: () => {},
+					adoptWorld: () => {},
+					setWorldTexture: () => {},
+					neededWorldTextures: () => [],
+					worldStats: () => ({ pendingTextures: 0, visibleGroups: 1 }),
+					setWorldCamera: () => {}
+				},
+				"https://assets.test"
+			);
+			worldStream.step( { regionId, x: 0, y: 0, z: 0, angle: 0 } );
+			assert.equal( worldRequests.length, 1 );
+			assert.equal(
+				worldRequests[0].url,
+				`https://assets.test/assets/world/dungeon/regions/0x${regionId.toString( 16 ).padStart( 4, "0" )}.json`
+			);
+			assert.equal( worldRequests[0].decode, "world" );
+
+			// Verify 0x8000-bit navigation streaming and room portal seam crossing.
+			const navProduct = await navResources.resolve( manifestBytes, regionId, async () => manifestBytes );
+			assert.equal( navProduct.regionId, regionId );
+			assert.ok( navProduct.objects.length > 0 );
+			nav.install( regionId, navProduct );
+
+			const navRequests = [];
+			const navPending = new Map();
+			const navSent = [];
+			let nextNavId = 0;
+			const navStream = createNavigationStream(
+				{
+					available: () => 4,
+					request( url, maxByteLength, decode ) {
+						const id = ++nextNavId;
+						navRequests.push( { url, maxByteLength, decode } );
+						navPending.set( id, { kind: "navigation", product: navProduct } );
+						return id;
+					},
+					take: id => {
+						const r = navPending.get( id );
+						navPending.delete( id );
+						return r ?? null;
+					},
+					cancel: () => {}
+				},
+				c => navSent.push( c ),
+				"https://assets.test"
+			);
+			navStream.step( { regionId, x: 0, y: 0, z: 0, angle: 0 } );
+			assert.equal( navRequests.length, 1 );
+			assert.equal(
+				navRequests[0].url,
+				`https://assets.test/assets/world/dungeon/dungeon-resources.json#${regionId}`
+			);
+			assert.equal( navRequests[0].decode, "navigation" );
+			navStream.step( { regionId, x: 0, y: 0, z: 0, angle: 0 } );
+			assert.equal( navSent.length, 1 );
+			assert.equal( navSent[0].regionId, regionId );
+			assert.equal( navSent[0].bundle.regionId, regionId );
+
+			for ( let i = 0; i < navProduct.objects.length; i++ ) {
+				for ( const link of navProduct.objects[i].links ?? [] ) {
+					const a = portalInterior( navProduct.objects[i], link.edge, regionId ),
+						b = portalInterior( navProduct.objects[link.target], link.targetEdge, regionId ),
+						q = nav.clip( a, b );
+					totalPortals++;
+					assert.ok(
+						q && Math.hypot( q.x - b.x, q.z - b.z ) <= .1,
+						`portal seam failed in region 0x${regionId.toString( 16 )} room ${i} edge ${link.edge}`
+					);
+				}
+			}
+		}
+		assert.equal( totalPortals, 2798 );
+
+		// Verify every dungeon room BSR particle reference resolves and compiles in program.ts.
+		const dungeonRefs = collectDungeonParticleReferences( manifest );
+		const uniqueEfps = [ ...new Set( dungeonRefs.map( r => r.effectPath ) ) ].sort();
+		assert.equal( uniqueEfps.length, 48 );
+		assert.ok( uniqueEfps.includes( "system/system_dungeonpotal_02.efp" ) );
+
+		const particlesRoot = join( extractedRoot, "Particles_extracted" );
+		const particleImageRoot = join( imageSourceRoot, "Particles_extracted" );
+		const effects = {};
+		const meshes = {};
+		const textures = {};
+		for ( const effectPath of uniqueEfps ) {
+			const abs = join( particlesRoot, ...effectPath.split( "/" ) );
+			const parsed = parseJmxVisualEffect( fs.readFileSync( abs ), effectPath );
+			effects[effectPath] = parsed;
+			const visitResource = r => {
+				for ( const m of r?.meshes ?? [] ) {
+					const mp = normalizeAssetPath( m.path ?? "" );
+					if ( mp.endsWith( ".bms" ) && !meshes[mp] ) {
+						const bmsAbs = join( particlesRoot, ...mp.split( "/" ) );
+						const decoded = parseJmxBmsStaticMesh( fs.readFileSync( bmsAbs ), bmsAbs );
+						meshes[mp] = {
+							sourcePath: mp,
+							positions: decoded.positions,
+							normals: decoded.normals,
+							uvs: decoded.uvs,
+							indices: decoded.indices,
+							bounds: decoded.bounds
+						};
+					}
+				}
+			};
+			const visit = obj => {
+				visitResource( obj.resource );
+				for ( const c of obj.controllers ?? [] ) visitResource( c.resource );
+				for ( const ch of obj.children ?? [] ) visit( ch );
+			};
+			visit( parsed.root );
+			for ( const tex of collectJmxEffectTexturePaths( parsed ) ) {
+				const png = normalizeAssetPath( tex ).replace( /\.ddj$/i, ".png" );
+				textures[png] = `/assets/images/Particles_extracted/${png}`;
+				assert.ok( fs.existsSync( join( particleImageRoot, ...png.split( "/" ) ) ), png );
+			}
+		}
+		const catalogBytes = new TextEncoder().encode(
+			JSON.stringify( {
+				format: "sro-jmx-easyfx-programs",
+				version: 3,
+				framesPerSecond: 20,
+				effects,
+				ambiguousEffectAliases: {},
+				missingEffects: [],
+				meshes,
+				textures
+			} )
+		);
+		const effectDecoder = createEffectPrograms();
+		for ( const effectPath of uniqueEfps ) {
+			const res = effectDecoder.decode( catalogBytes, effectPath );
+			assert.ok( res.model.primitives.length > 0, effectPath );
+		}
+	}
+);

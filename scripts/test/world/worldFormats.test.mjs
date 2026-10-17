@@ -252,20 +252,37 @@ test("dungeon resource manifest preserves dungeoninfo rows and exact JMXVDOF pay
 	} );
 	const manifest = JSON.parse( await readFile( targetPath, "utf8" ) );
 
-	assert.equal( summary.dungeonCount, 2 );
-	assert.equal( summary.resourceCount, 2 );
+	assert.equal( summary.dungeonCount, 8 );
+	assert.equal( summary.resourceCount, 8 );
 	assert.equal( manifest.format, "sro-dungeon-resources" );
 	assert.equal( manifest.version, 3 );
 	assert.deepEqual(
 		manifest.entries.map( ( entry ) => [ entry.regionId, entry.sectorId, entry.dofName ] ),
 		[
 			[ 1, 0x8001, "Dungeon\\wchina\\Dunhwang_Cv.dof" ],
-			[ 9, 0x8009, "Dungeon\\wchina\\event.dof" ]
+			[ 9, 0x8009, "Dungeon\\wchina\\event.dof" ],
+			[ 7, 0x8007, "Dungeon\\china\\jinsi_floor01.dof" ],
+			[ 6, 0x8006, "Dungeon\\china\\jinsi_floor02.dof" ],
+			[ 5, 0x8005, "Dungeon\\china\\jinsi_floor03.dof" ],
+			[ 4, 0x8004, "Dungeon\\china\\jinsi_floor04.dof" ],
+			[ 3, 0x8003, "Dungeon\\china\\jinsi_floor05.dof" ],
+			[ 2, 0x8002, "Dungeon\\china\\jinsi_floor06.dof" ]
 		]
 	);
 
 	const payloadsByName = new Map( manifest.resources.map( ( resource ) => [ resource.normalizedName, resource ] ) );
-	for ( const expectedName of [ "dungeon/wchina/dunhwang_cv.dof", "dungeon/wchina/event.dof" ] ) {
+	for (
+		const expectedName of [
+			"dungeon/wchina/dunhwang_cv.dof",
+			"dungeon/wchina/event.dof",
+			"dungeon/china/jinsi_floor01.dof",
+			"dungeon/china/jinsi_floor02.dof",
+			"dungeon/china/jinsi_floor03.dof",
+			"dungeon/china/jinsi_floor04.dof",
+			"dungeon/china/jinsi_floor05.dof",
+			"dungeon/china/jinsi_floor06.dof"
+		]
+	) {
 		const payload = payloadsByName.get( expectedName );
 		assert.ok( payload, `manifest should carry ${expectedName}` );
 		const bytes = Buffer.from( payload.rawBase64, "base64" );
@@ -273,11 +290,11 @@ test("dungeon resource manifest preserves dungeoninfo rows and exact JMXVDOF pay
 		assert.equal( bytes.toString( "ascii", 0, 12 ), "JMXVDOF 0101" );
 		assert.match( payload.sha256, /^[0-9a-f]{64}$/ );
 	}
-	assert.equal( summary.residentBsrCount, 75 );
-	assert.equal( summary.residentNavMeshCount, 75 );
+	assert.equal( summary.residentBsrCount, 173 );
+	assert.equal( summary.residentNavMeshCount, 173 );
 	assert.equal( manifest.navResources.format, "sro-world-nav-object-resources" );
-	assert.equal( manifest.navResources.bsr.length, 75 );
-	assert.equal( manifest.navResources.meshes.length, 75 );
+	assert.equal( manifest.navResources.bsr.length, 173 );
+	assert.equal( manifest.navResources.meshes.length, 173 );
 	assert.ok(
 		manifest.navResources.bsr.some(
 			( resource ) => resource.sourcePath === "res/dun/wchina/donhwang_cv/floor_1/passage01_01.bsr"
