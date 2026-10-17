@@ -163,10 +163,16 @@ func (rt *Runtime) PlayerMovementBlocked(division, name string) bool {
 ================
 PlayerAttackLocked
 
-CGObjChar_IsAttackLocked (4AAB40): true while the casting instance at
-char+C08 is set (4AAB40, a skill action has not yet released its
-positive-time step) or a standing wall occupies char+C0C (4AAB49, filled by
-SkillCombat_EngageSkill at 59369F and cleared on wall retirement at 582DC0).
+CGObjChar_IsAttackLocked (4AAB40..4AAB5A): true while the casting instance
+at char+C08 is set (4AAB40..4AAB4E, [skillComp+1D8], a skill action has not
+yet released its positive-time step) or the standing-instance pointer at
+char+C44 is set (4AAB4F..4AAB5A, [skillComp+214]: the stns +448 slot written
+at 594F4D and cleared at 582C3B). The predicate does not read char+C0C, the
+protective-wall slot ([skillComp+1DC]) that SkillCombat_EngageSkill fills
+at 59369F and wall retirement clears at 582DCE / 585351..58536A; natively
+the standing wall roots through motion state 11 (593690..5936A5). This
+port folds its wallStanding (char+C0C) in beside chainStageBlocked
+(char+C08) so the same root holds on the lanes below.
 CGObjPC_IsMotionChangeLocked (4EF880, vt+0x5A0) feeds it to
 CGObjChar_HandleMoveCommand (4B0EA0 at 4B0F8E), which drops both direct
 ground moves and CGCharAutoNavigator_TickPursuit's internal 0x7021 moves

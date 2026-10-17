@@ -104,9 +104,12 @@ func (rt *Runtime) acceptWall(division string, c, snapshot *enterworld.Character
 	// 5841D9) that clears char+C08 (5841F4) and engages the wall in char+C0C
 	// (584337 -> 59369F). Mode-1 B505 releases the client's stage-0 WAIT
 	// (8E2C90 -> 8DF180) so the caster finishes ANI_SKILL_4 and extinguishes
-	// the READY hand effects instead of freezing in ANI_WAIT04; char+C0C
-	// (wallStanding) keeps CGObjChar_IsAttackLocked (4AAB40..4AAB49) true
-	// until the wall retires (B6A0).
+	// the READY hand effects instead of freezing in ANI_WAIT04. Natively
+	// the standing wall roots through motion state 11 (593690..5936A5)
+	// until the wall retires (B6A0); CGObjChar_IsAttackLocked
+	// (4AAB40..4AAB5A) reads char+C08 and char+C44, not char+C0C, so the
+	// port's wallStanding fold in PlayerAttackLocked carries the root on
+	// the server lanes.
 	rt.queuePersistentRelease(division, c, token, skill, now)
 
 	rt.wallMu.Lock()
