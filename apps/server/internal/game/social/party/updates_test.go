@@ -81,8 +81,11 @@ func TestMemberUpdatesFollowLivePositionOutsideInterest(t *testing.T) {
 			t.Fatal("wrong delta envelope")
 		}
 		body := batch.Frames[0].Payload
-		if len(body) != 20 || body[0] != 6 || binary.LittleEndian.Uint32(body[1:5]) != simulation.PlayerObjectID(2) {
+		if len(body) != 28 || body[0] != 6 || binary.LittleEndian.Uint32(body[1:5]) != simulation.PlayerObjectID(2) {
 			t.Fatalf("wrong member delta: %x", body)
+		}
+		if got := binary.LittleEndian.Uint32(body[20:24]) | binary.LittleEndian.Uint32(body[24:28]); got != 0 {
+			t.Fatalf("untrained mastery pair = %x", body[20:])
 		}
 		if got := int16(binary.LittleEndian.Uint16(body[10:12])); got != 700 {
 			t.Fatalf("map x=%d, want live 700, not goal 800", got)

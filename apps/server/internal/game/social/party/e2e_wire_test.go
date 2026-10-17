@@ -437,10 +437,13 @@ func chinaMaleRow(gid uint32, name string) party.MemberRow {
 		Level:         5,
 		StatusNibbles: 0xAA,
 		War:           domain.DefaultWorldInstance,
-		Region:        0x62A8,
-		PosX:          960,
-		PosY:          20,
-		PosZ:          458,
+		// Live rows always carry the mastery pair (0x5A1890); these seed
+		// characters train none, so the pair is (0, 0).
+		Masteries: true,
+		Region:    0x62A8,
+		PosX:      960,
+		PosY:      20,
+		PosZ:      458,
 	}
 }
 

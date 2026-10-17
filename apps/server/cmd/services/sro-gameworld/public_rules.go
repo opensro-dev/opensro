@@ -27,7 +27,6 @@ import (
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/quest"
-	"opensro.online/server/internal/game/social/party"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/movement"
@@ -172,10 +171,6 @@ func publicRules() publicstats.RulesResponse {
 				Native: "The Item Mall lists the v1.150 goods.",
 				Now:    "It also lists avatar outfits the client ships but its mall never listed.",
 				Why:    "Beta balance: the outfits were already in the game data."},
-			{Flag: party.EnvPartyMasteries, On: party.MasteriesFromEnv(),
-				Native: "The party board shows the basic member row.",
-				Now:    "The party board also shows each member's two main masteries.",
-				Why:    "Lets a party see its builds at a glance."},
 			{Flag: simulation.EnvBetaPlayerMap, On: simulation.BetaPlayerMapEnabled(),
 				Native: "The world map shows only your own position.",
 				Now:    "The world map also shows other players.",

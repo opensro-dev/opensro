@@ -166,13 +166,6 @@ variable "maintenance_gate_path" {
   default = ""
 }
 
-# party_masteries puts each member's two main mastery trees on the quick party
-# board. Set off for the native roster rows.
-variable "party_masteries" {
-  type    = string
-  default = "on"
-}
-
 # pet_pacing moves grab and growth pets at four fifths of their run speed
 # (port-only, not native). "off" is native.
 variable "pet_pacing" {
@@ -827,7 +820,6 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_MASTERY                        = var.beta_mastery
         SRO_BETA_SILK                           = var.beta_silk
         SRO_MAINTENANCE_GATE_PATH               = var.maintenance_gate_path
-        SRO_PARTY_MASTERIES                     = var.party_masteries
         SRO_PET_PACING                          = var.pet_pacing
         SRO_STORAGE_AUTO_STACK                  = var.storage_auto_stack
         SRO_FAST_DEN_RETURN                     = var.fast_den_return

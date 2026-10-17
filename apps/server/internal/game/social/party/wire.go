@@ -171,9 +171,10 @@ const (
 // + region/position. Bits 0x40 (secondary/guild name) and 0x80 (+0x41 byte)
 // stay unset - no guild/war state exists to fill them, and the client's
 // ctor defaults are the honest empty. Bit 0x08 (+0x50/+0x54 pair) is the
-// member's primary and secondary mastery, inferred from the read order
-// 75DB30 shares with the 75BF join notify; it rides only while
-// SRO_PARTY_MASTERIES is on (see masteries.go).
+// member's primary and secondary mastery, computed natively for every
+// snapshot (0x5A1890) and written at mask 0xFF on roster, match and
+// coordinator rows and masked on type-6 updates (0x5BC730/0x5BDBD0);
+// it rides whenever the row is built from a live character record.
 const (
 	MemberMaskID       uint8 = 0x10
 	MemberMaskName     uint8 = 0x01

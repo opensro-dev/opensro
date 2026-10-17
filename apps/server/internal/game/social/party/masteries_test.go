@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-masteries_test.go - the mastery pair on roster rows and its operator switch
+masteries_test.go - the mastery pair on roster rows and member updates
 
 ===========================================================================
 */
@@ -18,10 +18,10 @@ import (
 
 /*
 ================
-TestMemberRowCarriesMasteryPairOnlyWhenAsked
+TestMemberRowEncoderCarriesMasteryPair
 ================
 */
-func TestMemberRowCarriesMasteryPairOnlyWhenAsked(t *testing.T) {
+func TestMemberRowEncoderCarriesMasteryPair(t *testing.T) {
 	row := MemberRow{
 		MemberID: 100001, Name: "alfa", ModelRefID: 1907, Level: 5,
 		StatusNibbles: 0xAA, Region: 0x62A8, PosX: 960, PosY: 20, PosZ: 458,
@@ -68,7 +68,6 @@ func TestMemberUpdatesRepublishWhenAMasteryChanges(t *testing.T) {
 	first := &domain.Character{ID: 1, Name: "MastFirst", Masteries: []domain.CharacterMastery{{ID: 257, Level: 2}}}
 	second := &domain.Character{ID: 2, Name: "MastSecond"}
 	runtime := NewRuntime(updateDeps{characters: []*domain.Character{first, second}}, nil)
-	runtime.UseMasteries(true)
 	_, refusal := runtime.Registry().Form(testDivision,
 		Member{MemberID: simulation.PlayerObjectID(1), Name: first.Name},
 		Member{MemberID: simulation.PlayerObjectID(2), Name: second.Name}, PartyOptionExpShare)
@@ -99,34 +98,20 @@ func TestMemberUpdatesRepublishWhenAMasteryChanges(t *testing.T) {
 
 /*
 ================
-TestMasteriesSwitch
-================
-*/
-func TestMasteriesSwitch(t *testing.T) {
-	for raw, want := range map[string]bool{
-		"on": true, " ON\n": true, "1": true, "true": true,
-		"": false, "typo": false, "off": false, "0": false, "false": false,
-	} {
-		if got := masteriesEnabled(raw); got != want {
-			t.Errorf("%q: got %v want %v", raw, got, want)
-		}
-	}
-}
+TestMemberRowsAlwaysCarryMasteryPair
 
-/*
-================
-TestMemberRowsOmitMasteriesWhenSwitchedOff
+Every live row carries the pair; a row degraded to a bare name lookup (the
+character record is gone) has nothing to compute and stays bare.
 ================
 */
-func TestMemberRowsOmitMasteriesWhenSwitchedOff(t *testing.T) {
+func TestMemberRowsAlwaysCarryMasteryPair(t *testing.T) {
 	character := &domain.Character{ID: 1, Name: "Mast", Masteries: []domain.CharacterMastery{{ID: 257, Level: 2}}}
 	runtime := NewRuntime(updateDeps{characters: []*domain.Character{character}}, nil)
-	if row := runtime.memberRowFor(testDivision, character); row.Masteries {
-		t.Fatal("pair rode a row with the switch off")
-	}
-	runtime.UseMasteries(true)
 	row := runtime.memberRowFor(testDivision, character)
 	if !row.Masteries || row.PrimaryMastery != 257 || row.SecondaryMastery != 0 {
 		t.Fatalf("row = %+v", row)
+	}
+	if degraded := runtime.memberRowFor(testDivision, nil); degraded.Masteries {
+		t.Fatalf("degraded row = %+v", degraded)
 	}
 }

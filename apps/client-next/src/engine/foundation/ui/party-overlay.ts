@@ -19,8 +19,9 @@ const PARTY_SHADE_SQUARED_3 = 640000; // 800
 const PARTY_SHADE_SQUARED_4 = 810000; // 900
 const PARTY_SHADE_SQUARED_5 = 1000000; // 1000
 // The two main mastery icons sit left of the buff row (GDR_QPS_PARTY_BUFF is
-// at x 32, pitch 15), on the same 12px cells. A port addition, sent by the
-// server only while SRO_PARTY_MASTERIES is on.
+// at x 32, pitch 15), on the same 12px cells. The pair itself is native wire
+// data (member-row mask bit 0x08, +0x50/+0x54); drawing it here is the
+// browser board's own presentation of that data.
 const PARTY_MASTERY_X = 2;
 const PARTY_MASTERY_PITCH = 15;
 const PARTY_MASTERY_Y = 39;

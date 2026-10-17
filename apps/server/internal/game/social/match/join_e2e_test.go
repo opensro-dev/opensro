@@ -235,6 +235,9 @@ func chinaRow(gid uint32, name string, level uint8) party.MemberRow {
 		PosY:          20,
 		PosZ:          458,
 		War:           domain.DefaultWorldInstance,
+		// Live rows always carry the mastery pair (0x5A1890); the e2e
+		// seeds train none, so the pair is (0, 0).
+		Masteries: true,
 	}
 }
 
@@ -323,7 +326,10 @@ func TestMatchJoinHandshakeEndToEndOverWire(t *testing.T) {
 
 	// ---- Jack joins: Mira gets the 0x75BF notify byte-exact ----
 	sendFrame(t, jack, match.OpPartyJoinRequest, u32le(1))
-	jackRow := party.EncodeMaskedMemberRow(chinaRow(gidJack, e2eJackName, 20))
+	jackMember := chinaRow(gidJack, e2eJackName, 20)
+	// The seed trains 273/12, 257/20, 258/12: top two by level (0x5A1890).
+	jackMember.PrimaryMastery, jackMember.SecondaryMastery = 257, 258
+	jackRow := party.EncodeMaskedMemberRow(jackMember)
 	expectExactFrame(t, mira, match.OpPartyJoinRequest,
 		match.EncodePartyJoinNotify75BF(1, 1, match.PartyApplicant{Primary: 257, Secondary: 258, JobClass: 4}, jackRow),
 		"owner notify for jack (request 1)")
@@ -379,7 +385,7 @@ func TestMatchJoinHandshakeEndToEndOverWire(t *testing.T) {
 	sendFrame(t, mira, match.OpPartyJoinAnswer, joinAnswer(5, 1, 1))
 	formedRows := []party.MemberRow{
 		chinaRow(gidMira, e2eMiraName, 60),
-		chinaRow(gidJack, e2eJackName, 20),
+		jackMember,
 	}
 	expectJoinSeed(t, mira, gidMira, gidMira, 5, formedRows, "mira (leader) formed seed")
 	expectJoinSeed(t, jack, gidJack, gidMira, 5, formedRows, "jack (joiner) formed seed")

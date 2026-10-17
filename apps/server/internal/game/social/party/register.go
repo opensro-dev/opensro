@@ -102,7 +102,6 @@ type Runtime struct {
 	memberVitals MemberVitals
 	livePose     LivePose
 	updates      memberUpdateState
-	masteries    bool
 }
 
 // NewRuntime builds the lane over a fresh in-memory registry. Construct
@@ -339,10 +338,12 @@ func (r *Runtime) memberRowFor(divisionID string, character *enterworld.Characte
 	// A suited member shows as its job alias (5BAE80); the registry still
 	// keys members by their own names.
 	row.Name = enterworld.PartyMemberName(character)
-	if r.masteries {
-		row.Masteries = true
-		row.PrimaryMastery, row.SecondaryMastery = domain.TopMasteries(character.Masteries)
-	}
+	// CSkillManager_CalculateBuffMasteryBonus (0x5A1890) computes the two
+	// best trained masteries for every native member row; the pair rides
+	// mask bit 8 on roster, match and update rows alike. A row built from a
+	// vanished character record has nothing to compute and stays bare.
+	row.Masteries = true
+	row.PrimaryMastery, row.SecondaryMastery = domain.TopMasteries(character.Masteries)
 	row.ModelRefID = r.deps.CharacterModelRef(character)
 	if character.Level != nil && *character.Level >= 1 {
 		level := *character.Level
