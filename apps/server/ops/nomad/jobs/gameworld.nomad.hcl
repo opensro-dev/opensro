@@ -465,11 +465,12 @@ variable "alchemy_rates" {
 }
 
 # alchemy_max_plus caps reinforcement (port-only, not native; owner decision
-# 2026-10-13): "on" is +11, a number is that plus, "off" is the original
-# game's own ceiling. A malformed value stops GameWorld at boot.
+# 2026-10-18 reversed 2026-10-13): "on" is +11, a number is that plus, "off"
+# is the original game's own ceiling. A malformed value stops GameWorld at
+# boot.
 variable "alchemy_max_plus" {
   type    = string
-  default = "on"
+  default = "off"
 }
 
 # team_death_revive: "on" (native, the default; owner decision 2026-10-13)
@@ -584,10 +585,11 @@ variable "transport_follow" {
 
 # job_goods_teleport lets a trader with a transport out use town gates,
 # return scrolls and the reverse return, the transport travelling along
-# (port-only, not native; owner decision 2026-10-15). "off" is native.
+# (port-only, not native; owner decision 2026-10-18 reversed 2026-10-15).
+# "off" is native.
 variable "job_goods_teleport" {
   type    = string
-  default = "on"
+  default = "off"
 }
 
 # beta_shop_only_degree9 keeps degree-9 Lucky Powder, magic stones and

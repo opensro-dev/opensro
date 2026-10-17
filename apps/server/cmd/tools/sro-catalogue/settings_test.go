@@ -23,8 +23,9 @@ import (
 TestUnsetSettingsTakeTheDeploymentDefaults
 
 With every setting the catalogue reads left unset, the readers see what
-sro-nomad deploys: the +11 cap, beta growth, the seal rates and the
-elixir rule. An operator's explicit "off" still publishes the native rule.
+sro-nomad deploys: native reinforcement ceiling (no +11 cap), beta growth,
+the seal rates and the elixir rule. An operator's explicit value still
+overrides the deployment default.
 ================
 */
 func TestUnsetSettingsTakeTheDeploymentDefaults(t *testing.T) {
@@ -33,12 +34,11 @@ func TestUnsetSettingsTakeTheDeploymentDefaults(t *testing.T) {
 			t.Setenv(s.Env, "")
 		}
 	}
-	t.Setenv(alchemy.EnvReinforceMaxPlus, "off")
 	if err := resolveShardSettings(); err != nil {
 		t.Fatal(err)
 	}
 	if cap, _ := alchemy.ReinforceMaxPlusFromEnv(); cap != 0 {
-		t.Fatalf("an explicit off became cap %d", cap)
+		t.Fatalf("unset %s became cap %d, want 0 (native ceiling)", alchemy.EnvReinforceMaxPlus, cap)
 	}
 	if !progression.BetaGrowthFromEnv().Enabled || !progression.BetaSealRatesFromEnv().Enabled() ||
 		!progression.ElixirDropsFromEnv().Off() || !progression.BetaShopOnlyDegree9FromEnv().Enabled() {

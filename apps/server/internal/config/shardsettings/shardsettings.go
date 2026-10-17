@@ -123,7 +123,9 @@ var Settings = []Setting{
 	{Env: "SRO_REVERSE_RETURN_MAP", NomadVar: "reverse_return_map", Default: ""},
 	{Env: "SRO_GM_SETSPEED", NomadVar: "gm_setspeed", Default: "on"},
 	{Env: "SRO_ALCHEMY_RATES", NomadVar: "alchemy_rates", Default: "on", Catalogue: true},
-	{Env: "SRO_ALCHEMY_MAX_PLUS", NomadVar: "alchemy_max_plus", Default: "on", Catalogue: true},
+	// Owner, 2026-10-18: reversed the 2026-10-13 +11 cap; the deployment
+	// default stays native ("off", ceiling 250).
+	{Env: "SRO_ALCHEMY_MAX_PLUS", NomadVar: "alchemy_max_plus", Default: "off", Catalogue: true},
 	{Env: "SRO_TEAM_DEATH_REVIVE", NomadVar: "team_death_revive", Default: "on"},
 	{Env: "SRO_BETA_GROWTH", NomadVar: "beta_growth", Default: "on", Catalogue: true},
 	{Env: "SRO_BETA_SKILL_EXP_RATE", NomadVar: "beta_skill_exp_rate", Default: "100", Catalogue: true},
@@ -141,8 +143,9 @@ var Settings = []Setting{
 	// Owner, 2026-10-18: reversed the 2026-10-15 follow setting; the
 	// deployment default stays native ("off", 0x4FD1D0).
 	{Env: "SRO_TRANSPORT_FOLLOW", NomadVar: "transport_follow", Default: "off"},
-	// Owner, 2026-10-15: town teleport with a trade transport out (testing).
-	{Env: "SRO_JOB_GOODS_TELEPORT", NomadVar: "job_goods_teleport", Default: "on"},
+	// Owner, 2026-10-18: reversed the 2026-10-15 testing switch; the
+	// deployment default stays native ("off", town gates refuse a transport).
+	{Env: "SRO_JOB_GOODS_TELEPORT", NomadVar: "job_goods_teleport", Default: "off"},
 	{Env: "SRO_ELIXIR_DROPS_OFF", NomadVar: "elixir_drops_off", Default: "on", Catalogue: true},
 	// Owner, 2026-10-14: alchemy materials no longer drop; "off" is native.
 	{Env: "SRO_ALCHEMY_MATERIAL_DROPS_OFF", NomadVar: "alchemy_material_drops_off", Default: "on", Catalogue: true},

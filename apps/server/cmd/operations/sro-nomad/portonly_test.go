@@ -23,7 +23,7 @@ func TestPortOnlyJobVariables(t *testing.T) {
 		stack, reverse, rates, speed, cap, mall                         string
 		wantStack, wantReverse, wantRates, wantSpeed, wantCap, wantMall string
 	}{
-		{"", "", "", "", "", "", "on", "", "on", "on", "on", "on"},
+		{"", "", "", "", "", "", "on", "", "on", "on", "off", "on"},
 		{"off", "on", "off", "off", "off", "off", "off", "on", "off", "off", "off", "off"},
 		{"on", "off", "100,50", "on", "9", "MALL_AVATAR_HAT:PACKAGE_ITEM_MALL_AVATAR_M_FUR_HAT", "on", "off", "100,50", "on", "9",
 			"MALL_AVATAR_HAT:PACKAGE_ITEM_MALL_AVATAR_M_FUR_HAT"},
@@ -138,6 +138,24 @@ func TestAlchemyMaterialDropsOffJobVariable(t *testing.T) {
 		variables := (&deployment{PortOnly: portOnlySettingsFromEnv()}).gameVariables(shardDeployment{})
 		if variables["alchemy_material_drops_off"] != want {
 			t.Fatalf("env %q: alchemy_material_drops_off %v, want %s", env, variables["alchemy_material_drops_off"], want)
+		}
+	}
+}
+
+/*
+================
+TestJobGoodsTeleportJobVariable
+
+job_goods_teleport defaults to off, native (owner, 2026-10-18 reversed
+2026-10-15); "on" and "off" pass through as written.
+================
+*/
+func TestJobGoodsTeleportJobVariable(t *testing.T) {
+	for env, want := range map[string]string{"": "off", "on": "on", "off": "off"} {
+		t.Setenv("SRO_JOB_GOODS_TELEPORT", env)
+		variables := (&deployment{PortOnly: portOnlySettingsFromEnv()}).gameVariables(shardDeployment{})
+		if variables["job_goods_teleport"] != want {
+			t.Fatalf("env %q: job_goods_teleport %v, want %s", env, variables["job_goods_teleport"], want)
 		}
 	}
 }
