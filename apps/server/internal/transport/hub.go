@@ -71,6 +71,14 @@ type Hub struct {
 	divisions  map[string]map[uint64]*Session
 	sessionDiv map[uint64]string
 
+	// Character command restrictions by character (the bind-key spelling,
+	// division:lower(name)), recorded from the session restriction choke
+	// point so a restriction outlives its session: by-character readers
+	// (the site chat feed) must not see a mute end at logoff. Guarded by
+	// its own lock, held only for a map read or write.
+	restrictionMu sync.RWMutex
+	restrictions  map[string]*characterRestrictions
+
 	nextID        atomic.Uint64
 	nextControlID atomic.Uint64
 
@@ -156,6 +164,7 @@ func newHub(cfg Config) *Hub {
 		sessionAccount:  make(map[uint64]string),
 		divisions:       make(map[string]map[uint64]*Session),
 		sessionDiv:      make(map[uint64]string),
+		restrictions:    make(map[string]*characterRestrictions),
 		handlers:        newHandlerRegistry(),
 		handshakeSlots:  make(chan struct{}, cfg.MaxPendingHandshakes),
 	}

@@ -8,6 +8,7 @@ public_api_test.go - the privacy write against a real authority store
 package main
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -20,8 +21,11 @@ import (
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/wait"
+	"opensro.online/server/internal/transport"
 )
 
 /*
@@ -206,5 +210,63 @@ func TestUniqueNamesAreTheRetailNames(t *testing.T) {
 	}
 	if got := uniqueNameSource(nil)(1954); got != "" {
 		t.Fatalf("no monster state answered %q", got)
+	}
+}
+
+/*
+================
+TestPublicChatHidesMutedAuthorAfterLogoff
+
+The site chat feed leaves a muted author's lines out while the mute
+holds. That used to end at logoff: the hide test scanned the author's
+live sessions, so the retained lines came back once they left. The mute
+is recorded against the character now, so the lines stay hidden with
+nobody online; an unmuted author's lines are untouched. The record
+semantics are pinned in internal/transport
+(TestCharacterRestrictionOutlivesItsSession).
+================
+*/
+func TestPublicChatHidesMutedAuthorAfterLogoff(t *testing.T) {
+	// A short resume grace, so the muted author's session retires inside
+	// the test's wait instead of a minute later.
+	server, err := transport.NewServer(transport.Config{
+		CertDir: t.TempDir(), GracePeriod: 100 * time.Millisecond,
+		KeepaliveInterval: time.Hour, IdleTimeout: time.Hour,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.Hub.SetHelloAuth(func(token []byte) (transport.AdmissionIdentity, error) {
+		return transport.AdmissionIdentity{AccountID: string(token), ShardID: wiringPublicationDivision}, nil
+	})
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), wiringPublicationTimeout)
+		defer cancel()
+		if err := server.Shutdown(ctx); err != nil {
+			t.Error(err)
+		}
+	})
+	session, conn := wiringPublicationSession(t, server, "alpha")
+
+	feed := chatfeed.New()
+	feed.Record(wiringPublicationDivision, chatfeed.KindChat, "Alice", "Alice", "spoken before the mute")
+	feed.Record(wiringPublicationDivision, chatfeed.KindChat, "Bob", "Bob", "never muted")
+	game := &gameplayPlane{chatFeed: feed, deps: &enterworld.Deps{}}
+	sources := publicSources(game, server.Hub, nil, wiringPublicationDivision)
+	if lines := sources.Chat(); len(lines) != 2 {
+		t.Fatalf("unmuted chat = %d lines, want 2", len(lines))
+	}
+
+	if !session.SetCommandRestriction(transport.CommandRestrictionChat, [8]uint16{2027, 1, 0, 1, 0, 0, 0, 0}) {
+		t.Fatal("mute refused")
+	}
+	_ = conn.Close("muted author logs off")
+	wait.Eventually(t, wiringPublicationTimeout, "the muted author's session to end", func() bool {
+		return len(server.Hub.CharacterSessions(wiringPublicationDivision, "Alice")) == 0
+	})
+
+	lines := sources.Chat()
+	if len(lines) != 1 || lines[0].Author != "Bob" {
+		t.Fatalf("chat after the muted author left = %+v, want only Bob's line", lines)
 	}
 }
