@@ -126,7 +126,7 @@ func TestAcademyHonorLifecycleGraduationRankKickLeaveDisband(t *testing.T) {
 	campExpectFrame(t, wsS, mentor.OpTCStatus, "S sees I join")
 	campExpectFrame(t, wsO, mentor.OpTCStatus, "O sees I join")
 
-	// 3. Student S reaches level 40 and graduates via 0x710A (satisfaction=4, Very Satisfied: +12 eval pts, +39 honor pts).
+	// 3. Student S reaches level 40 and graduates via 0x710A (satisfaction=4, Very Satisfied: +5 eval pts, +39 honor pts).
 	env.authority.MutateCharacter(charS, "test-level-40", func() {
 		lvl := int64(40)
 		charS.Level = &lvl
@@ -139,20 +139,20 @@ func TestAcademyHonorLifecycleGraduationRankKickLeaveDisband(t *testing.T) {
 	if got := campExpectFrame(t, wsS, mentor.OpTCStatus, "S graduate status-4"); !bytes.Equal(got, mentor.EncodeCampMemberGraduate3AC5(gidS, 0)) {
 		t.Fatalf("S 0x3AC5 graduate = % X", got)
 	}
-	if gradCharID != charS.ID || gradExp != 1473482/2 {
-		t.Fatalf("graduate exp grant = (char %d, exp %d), want (%d, %d)", gradCharID, gradExp, charS.ID, 1473482/2)
+	if gradCharID != charS.ID || gradExp != mentor.GraduateBonusExp {
+		t.Fatalf("graduate exp grant = (char %d, exp %d), want (%d, %d)", gradCharID, gradExp, charS.ID, mentor.GraduateBonusExp)
 	}
-	// Master receives status-4 graduate, status-5 flag-3 honor points update (39 pts for joinLevel 1), and status-12 eval rank 4.
+	// Master receives status-4 graduate, status-5 flag-3 honor points update (39 pts for joinLevel 1), and status-12 eval rank 1 (ranking 1 <= 5).
 	if got := campExpectFrame(t, wsM, mentor.OpTCStatus, "M sees S graduate"); !bytes.Equal(got, mentor.EncodeCampMemberGraduate3AC5(gidS, 0)) {
 		t.Fatalf("M 0x3AC5 graduate = % X", got)
 	}
 	if got := campExpectFrame(t, wsM, mentor.OpTCStatus, "M sees honor update"); !bytes.Equal(got, mentor.EncodeCampMemberHonorUpdate3AC5(gidM, 39)) {
 		t.Fatalf("M 0x3AC5 honor update = % X", got)
 	}
-	if got := campExpectFrame(t, wsM, mentor.OpTCStatus, "M sees eval rank 4"); !bytes.Equal(got, mentor.EncodeCampEvaluationUpdate3AC5(4)) {
+	if got := campExpectFrame(t, wsM, mentor.OpTCStatus, "M sees eval rank 1"); !bytes.Equal(got, mentor.EncodeCampEvaluationUpdate3AC5(1)) {
 		t.Fatalf("M 0x3AC5 eval rank = % X", got)
 	}
-	// O and I receive status-4 graduate, status-5 flag-3 honor update, and status-12 eval rank 4.
+	// O and I receive status-4 graduate, status-5 flag-3 honor update, and status-12 eval rank 1.
 	for _, peer := range []*websocket.Conn{wsO, wsI} {
 		if got := campExpectFrame(t, peer, mentor.OpTCStatus, "peer sees S graduate"); !bytes.Equal(got, mentor.EncodeCampMemberGraduate3AC5(gidS, 0)) {
 			t.Fatalf("peer 0x3AC5 graduate = % X", got)
@@ -160,7 +160,7 @@ func TestAcademyHonorLifecycleGraduationRankKickLeaveDisband(t *testing.T) {
 		if got := campExpectFrame(t, peer, mentor.OpTCStatus, "peer sees honor update"); !bytes.Equal(got, mentor.EncodeCampMemberHonorUpdate3AC5(gidM, 39)) {
 			t.Fatalf("peer 0x3AC5 honor update = % X", got)
 		}
-		if got := campExpectFrame(t, peer, mentor.OpTCStatus, "peer sees eval rank 4"); !bytes.Equal(got, mentor.EncodeCampEvaluationUpdate3AC5(4)) {
+		if got := campExpectFrame(t, peer, mentor.OpTCStatus, "peer sees eval rank 1"); !bytes.Equal(got, mentor.EncodeCampEvaluationUpdate3AC5(1)) {
 			t.Fatalf("peer 0x3AC5 eval rank = % X", got)
 		}
 	}

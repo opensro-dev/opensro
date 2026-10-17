@@ -26,8 +26,11 @@ import (
 ================
 Graduate
 
-CTrainingCampManager_OnGraduateRequest_5e00b0 (0x005e00b0):
-Voluntary apprentice graduation at level >= 40 with satisfaction 0..4.
+CGObjPC_HandleAcademyGraduate7475 (0x00519600) ->
+TrainingCamp_ApplyMemberCommand (0x005DEF20) ->
+TrainingCampManager_SubmitPersistentOperation (0x005DF5C0, case 4):
+Voluntary apprentice graduation at level >= 40 with satisfaction 0..4
+(0x0051972E: cmp dl, 0x5; jae 0x519667).
 ================
 */
 func (door storeCampDoor) Graduate(divisionID string, memberCharID int64, satisfaction uint8, nowMs int64) domain.TrainingCampGraduateResult {
@@ -76,9 +79,11 @@ func (door storeCampDoor) Graduate(divisionID string, memberCharID int64, satisf
 ================
 CompulsoryGraduate
 
-CTrainingCampManager_OnCompulsoryGraduateRequest_5e07c0 (0x005e07c0):
+CGObjPC_HandleAcademyCompulsoryGraduate7476 (0x00519770):
 Master-initiated compulsory graduation of a level-40+ apprentice after 24h
-in the camp, using satisfaction 2 (Compulsory: +3 evaluation points).
+in the camp (CTrainingCamp_HasJoinCooldownElapsed 0x005DD3F0), passing
+arg3 = +1 (@Evaluation delta +1, matching 0x00ADE9A4[2] = satisfaction 2)
+and arg2 = 0 (compulsory) at 0x005198A4..0x005198AB.
 ================
 */
 func (door storeCampDoor) CompulsoryGraduate(divisionID string, masterCharID int64, targetName string, nowMs int64) domain.TrainingCampGraduateResult {
@@ -135,11 +140,23 @@ func (door storeCampDoor) CompulsoryGraduate(divisionID string, masterCharID int
 ================
 completeGraduationLocked
 
-CTrainingCamp_GetGuardianHonorReward_5dc8b0 (0x005dc8b0) and
-CTrainingCamp_OnApprenticeGraduate_5df9f0 (0x005df9f0):
-Awards mentor honor points and camp evaluation points, increments
-GraduateCount, removes the graduating apprentice, and recomputes division
-honor rankings under s.mu.
+CTrainingCamp_OnMemberGraduatedUpdatePoints (0x005DDD50),
+CTrainingCamp_AwardGraduationHonorAndEvalPoints (0x005E3730),
+TrainingCampMember_AddHonorPointsClamped (0x005E3760), and retail stored
+procedure _TRAINING_CAMP_MEMBER_GRADUATE (SRO_VT_SHARD.bak @ 0x53E8B30):
+  - Always increments camp.GraduateCount by 1 (0x005DDE56; SQL 0x53E9376/0x53E94B0).
+  - When joinLevel <= 30 (0x1E at 0x005DDE8E / 0x005E3741; SQL IF @JoinLvl <= 30 at 0x53E9104):
+  - mentorPoint = 40 - joinLevel (0x005E3748: mov eax, 0x28; sub eax, ecx)
+  - subMentorPoint = (40 - joinLevel) / 10 (0x005DDEB0..0x005DDED0: x87 trunc(* 0.1); SQL @MentorPoint / 10)
+  - Master (Kind 0) gains mentorPoint; Sub-Mentors (Kind 1) gain subMentorPoint
+    (clamped against signed int32 overflow 0x7FFFFFFF per 0x005E3760, and
+    emitting HonorDeltas only when reward > 0 per 0x005DDF96: test edx, edx; je 0x5de022).
+  - Evaluation delta from 0x00ADE9A4 indexed at 0x0051973A: [-3, -1, +1, +3, +5]
+    for satisfaction 0..4 (compulsory graduation passes satisfaction 2 = +1 per 0x005198A4).
+  - When joinLevel > 30, neither Honor points nor Evaluation points change.
+  - Voluntary apprentice graduation sets AwardedExp = true (CTrainingCampMgr_OnGraduateDBSuccess
+    0x005DFC30 @ 0x005DFC4F..0x005DFC72).
+
 ================
 */
 func (door storeCampDoor) completeGraduationLocked(
@@ -165,11 +182,10 @@ func (door storeCampDoor) completeGraduationLocked(
 		joinLevel = 1
 	}
 
-	subMentors := 0
-	for _, member := range members {
-		if member.Kind == 1 {
-			subMentors++
-		}
+	var mentorReward, subMentorReward uint32
+	if joinLevel <= campHonorAwardMaxJoinLevel {
+		mentorReward = uint32(campGraduationLevel - joinLevel)
+		subMentorReward = mentorReward / 10
 	}
 
 	next := make([]domain.TrainingCampMemberRecord, 0, len(members)-1)
@@ -178,51 +194,33 @@ func (door storeCampDoor) completeGraduationLocked(
 		if i == memberIdx {
 			continue
 		}
-		if (member.Kind == 0 || member.Kind == 1) && satisfaction >= 1 && satisfaction <= 4 && joinLevel < campGraduationLevel {
-			gainedLevels := float64(campGraduationLevel - joinLevel)
-			var share float64
-			if member.Kind == 0 {
-				if subMentors == 0 {
-					share = 1.0
-				} else {
-					share = 0.6
-				}
-			} else if subMentors == 1 {
-				share = 0.4
-			} else if subMentors == 2 {
-				share = 0.2
-			}
-			reward := uint32(math.Ceil(gainedLevels * share))
-			if member.HonorPoints < campMaxHonorPoints && reward > 0 {
-				if campMaxHonorPoints-member.HonorPoints < reward {
-					reward = campMaxHonorPoints - member.HonorPoints
-				}
+		var reward uint32
+		switch member.Kind {
+		case 0:
+			reward = mentorReward
+		case 1:
+			reward = subMentorReward
+		}
+		if reward > 0 {
+			if uint64(member.HonorPoints)+uint64(reward) > math.MaxInt32 {
+				member.HonorPoints = math.MaxInt32
+			} else {
 				member.HonorPoints += reward
-				honorDeltas = append(honorDeltas, domain.TrainingCampHonorDelta{
-					CharID:      member.CharID,
-					HonorPoints: member.HonorPoints,
-				})
 			}
+			honorDeltas = append(honorDeltas, domain.TrainingCampHonorDelta{
+				CharID:      member.CharID,
+				HonorPoints: member.HonorPoints,
+			})
 		}
 		next = append(next, member)
 	}
 
-	if joinLevel < campGraduationLevel {
-		switch satisfaction {
-		case 0:
-			camp.EvaluationPoints -= 15
-		case 1:
-			camp.EvaluationPoints -= 10
-		case 2:
-			camp.EvaluationPoints += 3
-		case 3:
-			camp.EvaluationPoints += 10
-		case 4:
-			camp.EvaluationPoints += 12
-		}
+	if joinLevel <= campHonorAwardMaxJoinLevel {
+		evalDeltas := [5]int32{-3, -1, 1, 3, 5}
+		camp.EvaluationPoints += evalDeltas[satisfaction]
+		camp.LatestEvaluationAtMs = nowMs
 	}
 	camp.GraduateCount++
-	camp.LatestEvaluationAtMs = nowMs
 
 	s.camps[divisionID][campID] = camp
 	s.campMembers[divisionID][campID] = next
@@ -240,7 +238,7 @@ func (door storeCampDoor) completeGraduationLocked(
 		MembersAfter:  append([]domain.TrainingCampMemberRecord(nil), next...),
 		HonorDeltas:   honorDeltas,
 		RankChanges:   rankChanges,
-		AwardedExp:    voluntary && joinLevel < campGraduationLevel,
+		AwardedExp:    voluntary && graduate.Kind == 2,
 	}
 }
 
@@ -248,9 +246,10 @@ func (door storeCampDoor) completeGraduationLocked(
 ================
 qualifiedHonorCampsLocked
 
-CTrainingCamp_HasHonorRankingQualification_5dc7f0 (0x005dc7f0) and
-std_less_TrainingCampHonorRank_5df6c0 (0x005df6c0):
-Collects camps with GraduateCount >= 1 and EvaluationPoints > 0, sorted by
+Retail stored procedure _TRAINING_CAMP_UPDATEHONORRANK (SRO_VT_SHARD.bak
+@ 0x53FAE8C: SELECT TOP 50 [ID] FROM _TrainingCamp WITH (NOLOCK) WHERE
+EvaluationPoint >= 1 ORDER BY EvaluationPoint DESC, LatestEvaluationDate ASC):
+Collects camps with GraduateCount >= 1 and EvaluationPoints >= 1, sorted by
 EvaluationPoints descending, then LatestEvaluationAtMs ascending, capped
 at Top 50.
 ================
@@ -259,7 +258,7 @@ func (door storeCampDoor) qualifiedHonorCampsLocked(divisionID string) []domain.
 	s := door.s
 	var qualified []domain.TrainingCampRecord
 	for _, camp := range s.camps[divisionID] {
-		if camp.GraduateCount < 1 || camp.EvaluationPoints <= 0 {
+		if camp.GraduateCount < 1 || camp.EvaluationPoints < 1 {
 			continue
 		}
 		master := s.characterByIDLocked(divisionID, camp.MasterCharID)
@@ -287,32 +286,36 @@ func (door storeCampDoor) qualifiedHonorCampsLocked(divisionID string) []domain.
 ================
 honorTierRankForIndex
 
-CTrainingCampManager_AssignHonorBuffTiers_5ddb30 (0x005ddb30):
-Top 10% = 1 (Gold), next 20% = 2 (Silver), next 30% = 3 (Copper),
-remainder = 4 (Iron/Bronze).
+Retail stored procedure _TRAINING_CAMP_UPDATEHONORRANK (SRO_VT_SHARD.bak
+@ 0x53FB099) and CTrainingCamp_EngageHonorBuffSkills (0x005DD9B0):
+  - Rankings 1..5   (index 0..4)   = Rank 1 (King: Crown + Gold + Silver + Copper buffs)
+  - Rankings 6..15  (index 5..14)  = Rank 2 (Gold: Gold + Silver + Copper buffs)
+  - Rankings 16..30 (index 15..29) = Rank 3 (Silver: Silver + Copper buffs)
+  - Rankings 31..50 (index 30..49) = Rank 4 (Bronze: Copper buff)
+
 ================
 */
-func honorTierRankForIndex(index, total int) uint8 {
-	goldCount := int(float64(total) * 0.1)
-	silverCount := int(float64(total) * 0.2)
-	copperCount := int(float64(total) * 0.3)
-	if index < goldCount {
+func honorTierRankForIndex(index int) uint8 {
+	ranking := index + 1
+	switch {
+	case ranking <= 5:
 		return 1
-	}
-	if index < goldCount+silverCount {
+	case ranking <= 15:
 		return 2
-	}
-	if index < goldCount+silverCount+copperCount {
+	case ranking <= 30:
 		return 3
+	default:
+		return 4
 	}
-	return 4
 }
 
 /*
 ================
 recomputeEvaluationRanksLocked
 
-Recomputes EvaluationRank (0 unranked, 1..4 ranked) across all camps in the
+Recomputes EvaluationRank (0 unranked, 1..4 ranked; native DB sentinel 5 in
+CTrainingCampMgr_ApplyReloadedHonorRanks 0x005E1410 ->
+CTrainingCamp_SetHonorRankAndBroadcast 0x005DD830) across all camps in the
 division and returns every camp whose EvaluationRank changed.
 ================
 */
@@ -321,7 +324,7 @@ func (door storeCampDoor) recomputeEvaluationRanksLocked(divisionID string) []do
 	qualified := door.qualifiedHonorCampsLocked(divisionID)
 	desiredRank := make(map[int64]uint8, len(qualified))
 	for i, camp := range qualified {
-		desiredRank[camp.ID] = honorTierRankForIndex(i, len(qualified))
+		desiredRank[camp.ID] = honorTierRankForIndex(i)
 	}
 
 	campIDs := make([]int64, 0, len(s.camps[divisionID]))
@@ -354,8 +357,10 @@ func (door storeCampDoor) recomputeEvaluationRanksLocked(divisionID string) []do
 ================
 HonorRankings
 
-CTrainingCampManager_OnHonorRankRequest_5dd1c0 (0x005dd1c0) and
-CTrainingCamp_WriteHonorRankEntry_5deeb0 (0x005deeb0):
+CGObjPC_HandleAcademyHonorRank7478 (0x00519AD0) ->
+CTrainingCampMgr_SendHonorRankList_B478 (0x005DF010),
+CTrainingCampMgr_RebuildHonorRankPacketBuffer (0x005E16A0), and
+CTrainingCamp_WriteHonorRankEntry_5DD1C0 (0x005DD1C0):
 Returns the division's Top-50 honor-ranked camps in ranking order.
 ================
 */
@@ -383,7 +388,7 @@ func (door storeCampDoor) HonorRankings(divisionID string) []domain.TrainingCamp
 		}
 		rank := camp.EvaluationRank
 		if rank < 1 || rank > 4 {
-			rank = honorTierRankForIndex(i, len(qualified))
+			rank = honorTierRankForIndex(i)
 		}
 		rows = append(rows, domain.TrainingCampHonorRanking{
 			Ranking:       uint32(i + 1),

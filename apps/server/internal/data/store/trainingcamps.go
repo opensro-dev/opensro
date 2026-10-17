@@ -22,22 +22,29 @@ import (
 
 const (
 	// campDisbandCooldownSec is the 24-hour creation wait before a master can
-	// dissolve a newly opened camp (v1.188 5DE420 @ 0x005de4b5: cmp eax, 0x15180).
+	// dissolve a newly opened camp (v1.188 CTrainingCamp_HasJoinCooldownElapsed
+	// 0x005DD3F0 @ 0x005DD40E: mov ecx, 0x15180).
 	campDisbandCooldownSec = 86_400
 	// campReopenCooldownSec is the 7-day wait after dissolving a camp before
-	// the master can open another (v1.188 5DD3F0 @ 0x005dd469: cmp eax, 0x93a80).
+	// the master can open another (v1.188 TrainingCamp_DisbandWaitSeconds
+	// 0x005DD350 @ 0x005DD36A: mov ecx, 0x93A80).
 	campReopenCooldownSec = 604_800
 	// campCompulsoryWaitMs is the 24-hour join wait before a master can
-	// compulsorily graduate a level-40+ student (v1.188 5E07C0 @ 0x005e0a00).
+	// compulsorily graduate or kick a member (v1.188 CTrainingCamp_HasJoinCooldownElapsed
+	// 0x005DD3F0 @ 0x005DD40E: mov ecx, 0x15180).
 	campCompulsoryWaitMs = 86_400_000
 	// campGraduationLevel is the apprentice graduation level floor (40 = 0x28,
-	// v1.188 5E00B0 @ 0x005e0257 / 5E07C0 @ 0x005e09af / 5E0DA0 @ 0x005e0ee8).
+	// v1.188 CGObjPC_HandleAcademyGraduate7475 0x00519600 @ 0x005196CD: cmp al, 0x28;
+	// CGObjPC_HandleAcademyCompulsoryGraduate7476 0x00519770 @ 0x00519883: cmp dl, 0x28).
 	campGraduationLevel = 40
-	// campMaxHonorPoints caps a mentor's accumulated honor points at 1,000,000
-	// (v1.188 5DC8B0 @ 0x005dc9ca: 0x000F4240).
-	campMaxHonorPoints = 1_000_000
+	// campHonorAwardMaxJoinLevel is the maximum apprentice join level that
+	// awards Honor and Evaluation points on graduation (30 = 0x1E, v1.188
+	// CTrainingCamp_OnMemberGraduatedUpdatePoints 0x005DDD50 @ 0x005DDE8E: cmp bl, 0x1E;
+	// CTrainingCamp_AwardGraduationHonorAndEvalPoints 0x005E3730 @ 0x005E3741: cmp al, 0x1E;
+	// retail SP _TRAINING_CAMP_MEMBER_GRADUATE @ 0x53E9104: IF @JoinLvl <= 30).
+	campHonorAwardMaxJoinLevel = 30
 	// campHonorRankingLimit caps the division Honor Ranking table at 50 entries
-	// (v1.188 5DD1C0 @ 0x005dd1c0 / 5DEEB0 @ 0x005deeb0: 0x32).
+	// (retail SP _TRAINING_CAMP_UPDATEHONORRANK @ 0x53FAE8C: SELECT TOP 50).
 	campHonorRankingLimit = 50
 )
 

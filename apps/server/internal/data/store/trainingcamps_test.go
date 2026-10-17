@@ -410,23 +410,23 @@ func TestTrainingCampHonorLifecycleAndPersistence(t *testing.T) {
 	}
 
 	// Student 1 (joinLevel=10) graduates voluntarily with satisfaction 4 (Very Satisfied):
-	// Master honor = ceil((40-10)*1.0) = 30, camp evaluation = +12, GraduateCount = 1, Rank = 4 (1 camp total).
+	// Master honor = 40-10 = 30, camp evaluation = +5 (0x00ADE9A4[4]), GraduateCount = 1, Rank = 1 (ranking 1 <= 5).
 	grad1 := s.TrainingCamps().Graduate(testDivision, student1.ID, 4, now0+10_000)
 	if grad1.Refusal != domain.TrainingCampGraduateAccepted || !grad1.AwardedExp ||
-		grad1.Camp.GraduateCount != 1 || grad1.Camp.EvaluationPoints != 12 || grad1.Camp.EvaluationRank != 4 ||
+		grad1.Camp.GraduateCount != 1 || grad1.Camp.EvaluationPoints != 5 || grad1.Camp.EvaluationRank != 1 ||
 		len(grad1.HonorDeltas) != 1 || grad1.HonorDeltas[0].HonorPoints != 30 {
 		t.Fatalf("grad1 = %+v", grad1)
 	}
 
 	// Compulsory graduation of student 2 before 24h refuses with TrainingCampGraduateWait24h;
-	// after 24h it succeeds with satisfaction 2 (+3 evaluation points, +20 honor points).
+	// after 24h it succeeds with satisfaction 2 (+1 evaluation point per 0x005198A4, +20 honor points).
 	if compEarly := s.TrainingCamps().CompulsoryGraduate(testDivision, master.ID, student2.Name, now0+1000); compEarly.Refusal != domain.TrainingCampGraduateWait24h {
 		t.Fatalf("early compulsory grad = %+v", compEarly)
 	}
 	now24h := now0 + campCompulsoryWaitMs
 	grad2 := s.TrainingCamps().CompulsoryGraduate(testDivision, master.ID, student2.Name, now24h)
 	if grad2.Refusal != domain.TrainingCampGraduateAccepted || grad2.AwardedExp ||
-		grad2.Camp.GraduateCount != 2 || grad2.Camp.EvaluationPoints != 15 ||
+		grad2.Camp.GraduateCount != 2 || grad2.Camp.EvaluationPoints != 6 ||
 		len(grad2.HonorDeltas) != 1 || grad2.HonorDeltas[0].HonorPoints != 50 {
 		t.Fatalf("grad2 = %+v", grad2)
 	}
@@ -438,7 +438,7 @@ func TestTrainingCampHonorLifecycleAndPersistence(t *testing.T) {
 	}
 
 	rankings := s.TrainingCamps().HonorRankings(testDivision)
-	if len(rankings) != 1 || rankings[0].Ranking != 1 || rankings[0].Rank != 4 ||
+	if len(rankings) != 1 || rankings[0].Ranking != 1 || rankings[0].Rank != 1 ||
 		rankings[0].MasterName != master.Name || rankings[0].GraduateCount != 2 {
 		t.Fatalf("rankings = %+v", rankings)
 	}
@@ -465,5 +465,107 @@ func TestTrainingCampHonorLifecycleAndPersistence(t *testing.T) {
 	reopened := openTest(t, dir, clock)
 	if _, _, ok := reopened.TrainingCamps().Camp(testDivision, opened.Camp.ID); ok {
 		t.Fatal("disbanded camp survived reopen")
+	}
+}
+
+/*
+================
+TestTrainingCampGraduationHonorFormulasAndTierBoundaries
+
+Verifies the native SR_GameServer.exe (0x00519600, 0x005DDD50, 0x005E3730) and
+_TRAINING_CAMP_MEMBER_GRADUATE / _TRAINING_CAMP_UPDATEHONORRANK rules:
+  - joinLevel <= 30 grants Master (40 - joinLevel) and Sub-Mentor (40 - joinLevel)/10
+    even when satisfaction == 0 (-3 evaluation delta).
+  - joinLevel > 30 increments GraduateCount by 1 and awards 0 Honor and 0 Evaluation.
+  - Honor Rank tier cutoffs: rankings 1..5 -> 1, 6..15 -> 2, 16..30 -> 3, 31..50 -> 4.
+
+================
+*/
+func TestTrainingCampGraduationHonorFormulasAndTierBoundaries(t *testing.T) {
+	t.Parallel()
+	dir, clock := t.TempDir(), newTestClock()
+	s := openTest(t, dir, clock)
+
+	master := guildTestCharacter("formmaster")
+	subMentor := guildTestCharacter("formsub")
+	app15 := guildTestCharacter("formapp15")
+	app31 := guildTestCharacter("formapp31")
+	for _, c := range []*domain.Character{master, subMentor, app15, app31} {
+		if err := s.CreateCharacter(testDivision, "test-account", c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setLevel := func(c *domain.Character, lvl int64) {
+		s.MutateCharacter(c, "test-level", func() {
+			c.Level = &lvl
+		})
+	}
+	setLevel(master, 60)
+	setLevel(subMentor, 45)
+	setLevel(app15, 15)
+	setLevel(app31, 31)
+
+	now0 := clock.Now().UnixMilli()
+	opened, refusal := s.TrainingCamps().OpenCamp(testDivision, domain.TrainingCampOpening{
+		MasterCharID: master.ID,
+		MinLevel:     60,
+		Fee:          0,
+		NowMs:        now0,
+	})
+	if refusal != domain.TrainingCampOpenAccepted {
+		t.Fatalf("open camp refused: %d", refusal)
+	}
+
+	// Admit sub-mentor (level 45 -> Kind 1) and two apprentices (levels 15 and 31 -> Kind 2).
+	for _, st := range []*domain.Character{subMentor, app15, app31} {
+		if _, ok := s.TrainingCamps().AdmitStudent(testDivision, domain.TrainingCampAdmission{
+			MasterCharID:    master.ID,
+			StudentCharID:   st.ID,
+			ExpectedCampID:  opened.Camp.ID,
+			MasterMinLevel:  60,
+			StudentMaxLevel: 59,
+			StudentLimit:    5,
+			NowMs:           now0,
+		}); !ok {
+			t.Fatalf("admit %s failed", st.Name)
+		}
+	}
+
+	// Stage subMentor as Kind 1 (Sub-Mentor, v1.188 0x005DF704..0x005DF713: level > 0x27 -> Kind 1).
+	s.campMembers[testDivision][opened.Camp.ID][1].Kind = 1
+
+	setLevel(app15, 40)
+	setLevel(app31, 40)
+
+	// Apprentice joined at level 15 graduates with satisfaction 0 (Very Dissatisfied -> -3 eval):
+	// Master gets 40-15 = 25 honor, Sub-Mentor gets 25/10 = 2 honor, EvaluationPoints = -3.
+	grad15 := s.TrainingCamps().Graduate(testDivision, app15.ID, 0, now0+1000)
+	if grad15.Refusal != domain.TrainingCampGraduateAccepted || !grad15.AwardedExp ||
+		grad15.Camp.GraduateCount != 1 || grad15.Camp.EvaluationPoints != -3 ||
+		len(grad15.HonorDeltas) != 2 ||
+		grad15.HonorDeltas[0].CharID != master.ID || grad15.HonorDeltas[0].HonorPoints != 25 ||
+		grad15.HonorDeltas[1].CharID != subMentor.ID || grad15.HonorDeltas[1].HonorPoints != 2 {
+		t.Fatalf("grad15 = %+v", grad15)
+	}
+
+	// Apprentice joined at level 31 (> 30) graduates with satisfaction 4:
+	// GraduateCount increments to 2, but 0 honor and 0 evaluation points are awarded.
+	grad31 := s.TrainingCamps().Graduate(testDivision, app31.ID, 4, now0+2000)
+	if grad31.Refusal != domain.TrainingCampGraduateAccepted || !grad31.AwardedExp ||
+		grad31.Camp.GraduateCount != 2 || grad31.Camp.EvaluationPoints != -3 ||
+		len(grad31.HonorDeltas) != 0 {
+		t.Fatalf("grad31 = %+v", grad31)
+	}
+
+	// Verify honorTierRankForIndex boundaries (0-based index -> 1-based ranking):
+	for idx, want := range map[int]uint8{
+		0: 1, 4: 1,
+		5: 2, 14: 2,
+		15: 3, 29: 3,
+		30: 4, 49: 4,
+	} {
+		if got := honorTierRankForIndex(idx); got != want {
+			t.Fatalf("honorTierRankForIndex(%d) = %d, want %d", idx, got, want)
+		}
 	}
 }

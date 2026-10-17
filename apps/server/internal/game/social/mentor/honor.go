@@ -4,20 +4,18 @@
 honor.go - academy dissolution, leave, kick, graduation, and honor rankings
 
 Implements the v1.150 Academy and Honor Camp lifecycle handlers:
-  - 0x77C5 -> 0xB7C5: camp dissolution (CTrainingCampManager_OnDisbandRequest_5de420)
-  - 0x7785 -> 0xB785: voluntary leave (CTrainingCampManager_OnLeaveRequest_5e1070, flag 1)
-  - 0x74D4 -> 0xB4D4: member expulsion (CTrainingCampManager_OnBanRequest_5e0da0, flag 2)
-  - 0x710A -> 0xB10A: voluntary graduation + evaluation (CTrainingCampManager_OnGraduateRequest_5e00b0, flag 0)
-  - 0x736D -> 0xB36D: compulsory graduation by master (CTrainingCampManager_OnCompulsoryGraduateRequest_5e07c0, flag 1)
-  - 0x72D0 -> 0xB2D0: honor rankings board (client 771750, server 5DD1C0 / 5DEEB0)
+  - 0x77C5 -> 0xB7C5: camp dissolution (CGObjPC_HandleAcademyDisband7471 0x00519120)
+  - 0x7785 -> 0xB785: voluntary leave (CGObjPC_HandleAcademyLeave7474 0x00519510, flag 1)
+  - 0x74D4 -> 0xB4D4: member expulsion (CGObjPC_HandleAcademyKick7473 0x005193A0, flag 2)
+  - 0x710A -> 0xB10A: voluntary graduation + evaluation (CGObjPC_HandleAcademyGraduate7475 0x00519600, flag 0)
+  - 0x736D -> 0xB36D: compulsory graduation by master (CGObjPC_HandleAcademyCompulsoryGraduate7476 0x00519770, flag 1)
+  - 0x72D0 -> 0xB2D0: honor rankings board (client 771750, server 0x00519AD0 / 0x005DF010 / 0x005DD1C0)
 
 ===========================================================================
 */
 package mentor
 
 import (
-	"math"
-
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
@@ -54,32 +52,26 @@ const (
 	ErrTCCantBanMember  uint8 = 0x24 // UIIT_MSG_TC_ERROR_CANT_BAN_MEMBER
 )
 
+// GraduateBonusExp is the flat 2,000,000 EXP reward granted to an apprentice
+// upon voluntary graduation (v1.188 CTrainingCampMgr_OnGraduateDBSuccess
+// 0x005DFC30 @ 0x005DFC69: push 0x1E8480 -> vtable+0x170 CGObjPC_ApplyExpDelta
+// 0x004E5250 when +0x38 == 1 && +0x40 == 1).
+const GraduateBonusExp int64 = 2_000_000
+
 /*
 ================
 BonusGraduateExp
 
-BonusGraduateExp ports the apprentice graduation EXP bonus
-(expAt40 * 0.5 * (0.95 ^ (joinLevel - 1)) for joinLevel in 1..39).
-Returns 0 when the join level is out of band or level 40 is absent.
+BonusGraduateExp returns the native voluntary apprentice graduation experience
+reward (2,000,000 EXP = 0x1E8480, v1.188 CTrainingCampMgr_OnGraduateDBSuccess
+0x005DFC30 @ 0x005DFC69).
 ================
 */
-func BonusGraduateExp(joinLevel uint8, levels enterworld.LevelDataSource) int64 {
-	if joinLevel < 1 || joinLevel >= StudentMaxLevel || levels == nil {
+func BonusGraduateExp(joinLevel uint8, _ enterworld.LevelDataSource) int64 {
+	if joinLevel < 1 || joinLevel >= StudentMaxLevel {
 		return 0
 	}
-	expAt40, ok := levels.ExpRequired(StudentMaxLevel)
-	if !ok || expAt40 <= 0 {
-		return 0
-	}
-	mult := 0.5
-	if joinLevel > 1 {
-		mult = math.Pow(0.95, float64(int(joinLevel)-1)) * 0.5
-	}
-	bonus := int64(float64(expAt40) * mult)
-	if bonus < 0 {
-		return 0
-	}
-	return bonus
+	return GraduateBonusExp
 }
 
 /*
@@ -346,9 +338,11 @@ func (r *InviteRuntime) handleGraduate(s *transport.Session, opcode uint16, payl
 ================
 handleCompulsoryGraduate
 
-Handles 0x736D (client 704D30, {str name}). The master compulsory-graduates
-a level-40+ student after 24 hours in the camp, awarding satisfaction=2
-(Compulsory: +3 eval points) and mentor honor points.
+Handles 0x736D (client 704D30, {str name}; v1.188
+CGObjPC_HandleAcademyCompulsoryGraduate7476 0x00519770). The master
+compulsory-graduates a level-40+ student after 24 hours in the camp,
+awarding satisfaction=2 (Compulsory: +1 eval point per 0x005198A4: push 0x1)
+and mentor honor points (no bonus EXP per 0x005DFC30).
 ================
 */
 func (r *InviteRuntime) handleCompulsoryGraduate(s *transport.Session, opcode uint16, payload []byte) {
