@@ -127,9 +127,11 @@ export function createActorMotion( owner: ActorOwner ) {
 				state = { modifierId: allocateActor(), clip: "", started: seconds };
 				states.set( entity.gid, state );
 			} else if ( state.modifierResource && state.modifierResource.glb !== resource.glb ) {
-				// 8E64F0 (death model) and 85C060 (transform skin) reload the
-				// visual mesh from a new BSR (LoadVisualMeshFromBSR), replacing
-				// its CCObjAnimation and discarding prior mesh installations.
+				// 8E64F0 (death model) reloads the visual mesh from the corpse BSR
+				// (LoadVisualMeshFromBSR), replacing its CCObjAnimation; in the port,
+				// any base-mesh GLB change on the same GID (death model or 85C060
+				// transform skin) swaps the clip catalog and must discard prior
+				// mesh installations.
 				state.locomotion = undefined;
 				state.postureClip = undefined;
 				state.postureStarted = undefined;
