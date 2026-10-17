@@ -211,8 +211,8 @@ func (s *Session) SendSceneReceiptBatch(revision uint64, frames []Frame) error {
 SendSceneUnreliableKeyed
 ================
 */
-func (s *Session) SendSceneUnreliableKeyed(revision uint64, opcode uint16, key uint64, payload []byte) error {
-	return s.sendSceneUnreliableKeyed(opcode, key, payload, &revision)
+func (s *Session) SendSceneUnreliableKeyed(revision uint64, opcode uint16, key uint64, payload []byte, current func() bool) error {
+	return s.sendSceneUnreliableKeyed(opcode, key, payload, &revision, current)
 }
 
 // Initial admission still owns WorldBound hooks; scene-ready only releases

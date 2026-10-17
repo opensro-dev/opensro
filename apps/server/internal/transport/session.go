@@ -460,7 +460,7 @@ SendUnreliableKeyed
 ================
 */
 func (s *Session) SendUnreliableKeyed(opcode uint16, key uint64, payload []byte) error {
-	return s.sendSceneUnreliableKeyed(opcode, key, payload, nil)
+	return s.sendSceneUnreliableKeyed(opcode, key, payload, nil, nil)
 }
 
 /*
@@ -468,12 +468,16 @@ func (s *Session) SendUnreliableKeyed(opcode uint16, key uint64, payload []byte)
 sendSceneUnreliableKeyed
 ================
 */
-func (s *Session) sendSceneUnreliableKeyed(opcode uint16, key uint64, payload []byte, revision *uint64) error {
+func (s *Session) sendSceneUnreliableKeyed(opcode uint16, key uint64, payload []byte, revision *uint64, current func() bool) error {
 	if opcode > maxReservedOpcode && s.evicted.Load() {
 		return ErrSessionEvicted // lame duck: no ticks on any lane
 	}
 	if !IsLossTolerantOpcode(opcode) {
-		return s.sendSceneBatch([]Frame{{Opcode: opcode, Payload: payload}}, revision, false)
+		return s.sendSceneBatch([]Frame{{Opcode: opcode, Payload: payload, Current: current}}, revision, false)
+	}
+	if current != nil && !current() {
+		// Superseded before it left: the coalesced lane would drop it anyway.
+		return nil
 	}
 	s.mu.Lock()
 	if revision != nil && (s.sceneLoading || s.sceneRevision != *revision) {
@@ -487,7 +491,7 @@ func (s *Session) sendSceneUnreliableKeyed(opcode uint16, key uint64, payload []
 	conn := s.conn
 	s.mu.Unlock()
 	if conn != nil && conn.SupportsUnreliable() {
-		if err := conn.WriteUnreliable(Frame{Opcode: opcode, Payload: payload}); err == nil {
+		if err := conn.WriteUnreliable(Frame{Opcode: opcode, Payload: payload, Current: current}); err == nil {
 			s.hub.metrics.datagramsOut.Add(1)
 			s.hub.metrics.datagramBytesOut.Add(uint64(2 + len(payload)))
 			return nil
@@ -528,7 +532,7 @@ func (s *Session) sendSceneUnreliableKeyed(opcode uint16, key uint64, payload []
 	if !pending {
 		s.lossyKeys = append(s.lossyKeys, slot)
 	}
-	s.lossy[slot] = Frame{Opcode: opcode, Payload: owned}
+	s.lossy[slot] = Frame{Opcode: opcode, Payload: owned, Current: current}
 	s.lossyBytes += frameBytes - previousBytes
 	s.hub.observeQueueDepth(len(s.queue)+len(s.lossyKeys), s.queueBytes+s.lossyBytes)
 	s.cond.Broadcast()

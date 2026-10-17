@@ -10,7 +10,7 @@ func TestSceneResetRetiresQueuedMotionAndRejectsStaleVisibility(t *testing.T) {
 	}
 	defer hub.closeSession(s, nil)
 	old, _ := s.SceneRevision()
-	if err := s.SendSceneUnreliableKeyed(old, OpObjectSourceCorrection, 7, make([]byte, 20)); err != nil {
+	if err := s.SendSceneUnreliableKeyed(old, OpObjectSourceCorrection, 7, make([]byte, 20), nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SendSceneReset([]Frame{{Opcode: 0x3369, Payload: []byte{1, 2}}, {Opcode: 0x330a}}); err != nil {
@@ -21,7 +21,7 @@ func TestSceneResetRetiresQueuedMotionAndRejectsStaleVisibility(t *testing.T) {
 		t.Fatal("reset did not open new admission")
 	}
 	_ = s.SendSceneBatch(old, []Frame{{Opcode: 0x30d7}})
-	_ = s.SendSceneUnreliableKeyed(old, OpObjectSourceCorrection, 7, make([]byte, 20))
+	_ = s.SendSceneUnreliableKeyed(old, OpObjectSourceCorrection, 7, make([]byte, 20), nil)
 	_ = s.SendSceneBatch(current, []Frame{{Opcode: 0x30d7}})
 	s.mu.Lock()
 	count, lossy := len(s.queue), len(s.lossyKeys)
