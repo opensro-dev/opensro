@@ -88,25 +88,44 @@ export function projectCharacterLabels(
 	live: readonly UiQuad[] = []
 ): UiScene {
 	const quads: UiQuad[] = [];
+	const characterQuads: { depth: number; order: number; quad: UiQuad; }[] = [];
+	let order = 0;
+	const flushCharacters = () => {
+		if ( !characterQuads.length ) return;
+		characterQuads.sort( ( a, b ) => b.depth - a.depth || a.order - b.order );
+		for ( const row of characterQuads ) quads.push( row.quad );
+		characterQuads.length = 0;
+	};
 	for ( const q of scene.quads ) {
+		if ( q.characterAnchor !== undefined ) {
+			const anchor = anchors.get( q.characterAnchor );
+			if ( !anchor ) continue;
+			const { characterAnchor, ...quad } = q;
+			characterQuads.push( {
+				depth: anchor[2],
+				order: order++,
+				quad: {
+					...quad,
+					depth: anchor[2],
+					rect: [
+						Math.trunc( anchor[0] ) + q.rect[0],
+						Math.trunc( anchor[1] ) + q.rect[1],
+						q.rect[2],
+						q.rect[3]
+					]
+				}
+			} );
+			continue;
+		}
+		flushCharacters();
 		if ( q.worldAnchor ) {
 			const placed = world ? projectWorldAnchor( q, scene, world ) : null;
 			if ( placed ) quads.push( placed );
 			continue;
 		}
-		if ( q.characterAnchor === undefined ) {
-			quads.push( q );
-			continue;
-		}
-		const anchor = anchors.get( q.characterAnchor );
-		if ( !anchor ) continue;
-		const { characterAnchor, ...quad } = q;
-		quads.push( {
-			...quad,
-			depth: anchor[2],
-			rect: [ Math.trunc( anchor[0] ) + q.rect[0], Math.trunc( anchor[1] ) + q.rect[1], q.rect[2], q.rect[3] ]
-		} );
+		quads.push( q );
 	}
+	flushCharacters();
 	for ( const q of live ) {
 		const placed = world && q.worldAnchor ? projectWorldAnchor( q, scene, world ) : null;
 		if ( placed ) quads.push( placed );

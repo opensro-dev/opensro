@@ -9,7 +9,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import "../helpers/native-source-loader.mjs";
 
-const { characterLabelHeight } = await import( "../../src/engine/foundation/ui/character-labels.ts" );
+const { characterLabelHeight, projectCharacterLabels } = await import(
+	"../../src/engine/foundation/ui/character-labels.ts"
+);
 
 /*
 ================
@@ -40,4 +42,47 @@ no published height
 */
 test("an actor without a published height falls back to its bind top", () => {
 	assert.equal( characterLabelHeight( { scale: 2 }, 8, false ), 18 );
+});
+
+/*
+================
+back-to-front label projection
+================
+*/
+test("projectCharacterLabels sorts character boards back-to-front while keeping each character's quad order", () => {
+	const baseQuad = {
+		rect: /** @type {const} */ ([ 0, 0, 20, 10 ]),
+		uv: /** @type {const} */ ([ 0, 0, 1, 1 ]),
+		color: /** @type {const} */ ([ 1, 1, 1, 1 ]),
+		clip: /** @type {const} */ ([ 0, 0, 800, 600 ])
+	};
+	const scene = {
+		revision: 1,
+		width: 800,
+		height: 600,
+		quads: [
+			{ ...baseQuad, texture: "near-plate", characterAnchor: 1 },
+			{ ...baseQuad, texture: "near-name", characterAnchor: 1 },
+			{ ...baseQuad, texture: "far-plate", characterAnchor: 2 },
+			{ ...baseQuad, texture: "far-name", characterAnchor: 2 },
+			{ ...baseQuad, texture: "hud-window" }
+		]
+	};
+	const projected = projectCharacterLabels(
+		scene,
+		new Map( [
+			[ 1, [ 100, 100, 0.35 ] ],
+			[ 2, [ 100, 100, 0.75 ] ]
+		] )
+	);
+	assert.deepEqual(
+		projected.quads.map( q => [ q.texture, q.depth ] ),
+		[
+			[ "far-plate", 0.75 ],
+			[ "far-name", 0.75 ],
+			[ "near-plate", 0.35 ],
+			[ "near-name", 0.35 ],
+			[ "hud-window", undefined ]
+		]
+	);
 });

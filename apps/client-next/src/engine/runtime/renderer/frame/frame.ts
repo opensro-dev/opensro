@@ -269,7 +269,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 							view: depth,
 							depthClearValue: 1,
 							depthLoadOp: "clear" as const,
-							depthStoreOp: flares || deferred || ((hdrScene || sceneScale) && worldUiBundle) ?
+							depthStoreOp: flares || deferred || ((bloom || hdrScene || sceneScale) && !!worldUiBundle) ?
 								"store" as const :
 								"discard" as const
 						}
@@ -362,7 +362,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 								depthStencilAttachment: {
 									view: depth,
 									depthLoadOp: "load" as const,
-									depthStoreOp: flares || ((hdrScene || sceneScale) && worldUiBundle) ?
+									depthStoreOp: flares || ((bloom || hdrScene || sceneScale) && !!worldUiBundle) ?
 										"store" as const :
 										"discard" as const
 								}
@@ -457,7 +457,9 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 								depthStencilAttachment: {
 									view: uiDepth,
 									depthClearValue: 1,
-									depthLoadOp: "clear" as const,
+									depthLoadOp: bloom && !hdrScene && !sceneScale && worldUiBundle ?
+										"load" as const :
+										"clear" as const,
 									depthStoreOp: "discard" as const
 								}
 							} :

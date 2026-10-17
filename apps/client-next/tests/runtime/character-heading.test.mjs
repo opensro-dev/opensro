@@ -127,3 +127,83 @@ test("a rider whose vehicle has no drawn row stands on its own placement", () =>
 	assert.equal( defined( uploaded ).instances[12], 1930, "drawn at its own x, not hidden" );
 	characters.dispose( gpu, null );
 });
+
+test("fading characters draw back-to-front by view-space depth", () => {
+	const characters = createCharacters();
+	for ( const name of [ "near", "far" ] ) {
+		characters.model( name, {
+			nodes: [ {
+				name: "root",
+				parent: -1,
+				translation: [ 0, 0, 0 ],
+				rotation: [ 0, 0, 0, 1 ],
+				scale: [ 1, 1, 1 ]
+			} ],
+			clips: [],
+			images: [],
+			primitives: [ {
+				name: "mesh",
+				node: 0,
+				joints: [ 0 ],
+				inverseBind: identity(),
+				image: -1,
+				geometry: {
+					positions: new Float32Array( 9 ),
+					indices: new Uint32Array( [ 0, 1, 2 ] ),
+					transform: identity()
+				}
+			} ]
+		}, [] );
+	}
+	const gpu = {
+		upload( data ) {
+			return { z: data.instances[14] };
+		},
+		updateInstances( draw, instances ) {
+			draw.z = instances[14];
+			return draw;
+		},
+		updateBones() {},
+		release() {}
+	};
+	characters.actors( [
+		{
+			gid: 1,
+			model: "near",
+			pose: { regionId: 1, x: 0, y: 0, z: 20, yaw: 0 },
+			clip: "",
+			time: 0,
+			loop: true,
+			scale: 1,
+			opacity: 0.5
+		},
+		{
+			gid: 2,
+			model: "far",
+			pose: { regionId: 1, x: 0, y: 0, z: 80, yaw: 0 },
+			clip: "",
+			time: 0,
+			loop: true,
+			scale: 1,
+			opacity: 0.5
+		}
+	] );
+	// View-projection matrix where clip = (x, y, 0, z), keeping both actors in frustum with w = z.
+	const vp = new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0 ] );
+	const prepared = characters.prepare(
+		gpu,
+		{
+			upload() {
+				return {};
+			},
+			release() {}
+		},
+		1,
+		vp
+	);
+	assert.deepEqual(
+		prepared.map( d => d.z ),
+		[ 80, 20 ]
+	);
+	characters.dispose( gpu, null );
+});

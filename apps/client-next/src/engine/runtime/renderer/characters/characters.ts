@@ -3294,7 +3294,41 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 			countPlan( frame, visible, needed, particles.needed );
 			evaluateNeededPoses( frameActors, needed );
 			releaseUngrouped( frame, grouped );
-			for ( const [id, rows] of grouped ) {
+			const orderedGroups = [ ...grouped.entries() ];
+			if ( frame.view && !frame.preview && orderedGroups.length > 1 ) {
+				const m = frame.view;
+				const actorDepth = ( actor: CharacterActor ) => {
+					const root = frame.chains.get( actor.gid )?.[0] ?? actor;
+					const x = root.pose.x + ((root.pose.regionId & 255) - (frame.origin & 255)) * 1920,
+						y = root.pose.y,
+						z = root.pose.z + ((root.pose.regionId >>> 8) - (frame.origin >>> 8)) * 1920;
+					return m[3]! * x + m[7]! * y + m[11]! * z + m[15]!;
+				};
+				const groupOrder = new Map<string, { tier: number; depth: number; index: number; }>();
+				orderedGroups.forEach( ( [id, rows], index ) => {
+					const sample = rows[0]!;
+					const fading = frame.opacity( sample ) < 1;
+					const effect = sample.model.includes( EFFECT_PROGRAMS );
+					const blended = fading || effect ||
+						models.get( sample.model )!.model.primitives.some( p => !!p.geometry.material?.blend );
+					let depth = -Infinity;
+					if ( blended ) {
+						for ( const row of rows ) depth = Math.max( depth, actorDepth( row ) );
+					}
+					groupOrder.set( id, {
+						tier: !blended ? 0 : fading && !effect ? 1 : 2,
+						depth,
+						index
+					} );
+				} );
+				orderedGroups.sort( ( [a], [b] ) => {
+					const left = groupOrder.get( a )!, right = groupOrder.get( b )!;
+					if ( left.tier !== right.tier ) return left.tier - right.tier;
+					if ( left.tier === 0 ) return left.index - right.index;
+					return right.depth - left.depth || left.index - right.index;
+				} );
+			}
+			for ( const [id, rows] of orderedGroups ) {
 				if ( !continuation ) submitted.add( id );
 				// The first pass already submitted ordinary geometry. Keep its
 				// admission/budget accounting, but do not rebuild or upload it

@@ -292,6 +292,26 @@ test("native-off frame and preview keep their original pass and UI order", async
 	assert.equal( f.visible.includes( "label" ), false );
 });
 
+test("bloom without HDR or scene scaling retains scene depth for world labels", async () => {
+	for ( const mode of [ "none", "synchronous", "asynchronous" ] ) {
+		const f = fixture( false );
+		const deferred = mode === "none" ? undefined : {
+			asynchronous: mode === "asynchronous",
+			prepare: () => mode === "asynchronous" ? Promise.resolve( [] ) : []
+		};
+		await f.draw( { bloom: true, deferred } );
+		assert.equal(
+			f.visible.includes( "label" ),
+			false,
+			"occluded labels behind 3D geometry stay hidden under bloom"
+		);
+		assert.deepEqual( f.visible, [ "world", "background", "foreground" ] );
+		const labelPass = f.passes.find( p => p.draws.includes( "label" ) );
+		assert.equal( labelPass.descriptor.label, "hud-after-flares" );
+		assert.equal( labelPass.descriptor.depthStencilAttachment.depthLoadOp, "load" );
+	}
+});
+
 test("HDR weather and flares finish before depth-tested labels and foreground UI", async () => {
 	for ( const asynchronous of [ false, true ] ) {
 		const f = fixture( true );
