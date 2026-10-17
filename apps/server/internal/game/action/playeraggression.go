@@ -133,9 +133,11 @@ func (rt *Runtime) advancePlayerAggressions(now int64) []simulation.DivisionFram
 		}
 		job := value.(playerAggressionClock)
 		unlock := rt.lockDivision(job.division)
+		var sourceGID uint32
 		var frames []wire.Frame
 		c := rt.findCharacter(job.division, job.name)
 		if c != nil {
+			sourceGID = enterworld.ObjectIDForCharacter(c)
 			party := rt.auraParty(job.division, c)
 			rt.deps.UpdateDeferred(c, "player-aggression-tick", func() bool {
 				before := c.PVPState()
@@ -165,7 +167,7 @@ func (rt *Runtime) advancePlayerAggressions(now int64) []simulation.DivisionFram
 		}
 		unlock()
 		if len(frames) > 0 {
-			batch := simulation.DivisionFrames{DivisionID: job.division}
+			batch := simulation.DivisionFrames{DivisionID: job.division, SourceGID: sourceGID}
 			for _, frame := range frames {
 				batch.Frames = append(batch.Frames, simulation.Frame{Opcode: frame.Opcode, Payload: frame.Payload})
 			}

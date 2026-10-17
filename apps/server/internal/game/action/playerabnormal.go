@@ -696,9 +696,11 @@ credited player sources.
 ==================
 */
 type playerAbnormalFrames struct {
-	public  []wire.Frame
-	actor   []wire.Frame
-	sources []privateFrames
+	sourceGID   uint32
+	exceptActor bool
+	public      []wire.Frame
+	actor       []wire.Frame
+	sources     []privateFrames
 }
 
 /*
@@ -719,6 +721,7 @@ func (rt *Runtime) playerAbnormalPublication(division string, c *enterworld.Char
 	out.public = append(out.public, o.endedPublic...)
 	out.actor = append(out.actor, o.endedActor...)
 	gid := enterworld.ObjectIDForCharacter(c)
+	out.sourceGID = gid
 	if o.cancel {
 		rt.ClearCombatIntent(division, c.Name)
 		finals := rt.cancelPreparingProjectile(division, c.Name)
@@ -944,7 +947,16 @@ func playerAbnormalDivisionFrames(division string, actorID int64, frames playerA
 		return fs
 	}
 	if len(frames.public) > 0 {
-		out = append(out, simulation.DivisionFrames{DivisionID: division, Frames: convert(frames.public)})
+		var except int64
+		if frames.exceptActor {
+			except = actorID
+		}
+		out = append(out, simulation.DivisionFrames{
+			DivisionID:        division,
+			SourceGID:         frames.sourceGID,
+			ExceptCharacterID: except,
+			Frames:            convert(frames.public),
+		})
 	}
 	if len(frames.actor) > 0 {
 		out = append(out, simulation.DivisionFrames{DivisionID: division, OnlyCharacterID: actorID, Frames: convert(frames.actor)})

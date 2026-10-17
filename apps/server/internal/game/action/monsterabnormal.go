@@ -420,7 +420,7 @@ func (rt *Runtime) advanceMonsterAbnormal(division string, gid uint32, nowMs int
 	}
 	var out []simulation.DivisionFrames
 	if len(public) > 0 {
-		batch := simulation.DivisionFrames{DivisionID: division}
+		batch := simulation.DivisionFrames{DivisionID: division, SourceGID: gid}
 		for _, f := range public {
 			batch.Frames = append(batch.Frames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope})
 		}

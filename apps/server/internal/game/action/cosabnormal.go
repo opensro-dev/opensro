@@ -583,7 +583,12 @@ func (rt *Runtime) advanceOneCosAbnormal(entry cosAbnormalEntry, now int64) []si
 		return nil
 	}
 	frames := rt.cosAbnormalPublication(entry.gid, owner)
-	publication := playerAbnormalFrames{actor: append(append([]wire.Frame(nil), frames...), owner.private...), public: frames}
+	publication := playerAbnormalFrames{
+		sourceGID:   entry.gid,
+		exceptActor: true,
+		actor:       append(append([]wire.Frame(nil), frames...), owner.private...),
+		public:      frames,
+	}
 	// 52A1E0 delegates COS hits to the NPC/character hit owner. A player
 	// source receives its private echo; the pet's rider is not the victim PC.
 	for _, hit := range owner.hits {

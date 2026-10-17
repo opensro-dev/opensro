@@ -103,8 +103,10 @@ func (rt *Runtime) advanceBerserk(now int64) []simulation.DivisionFrames {
 		job := value.(berserkExpiry)
 		unlock := rt.lockDivision(job.division)
 		c := rt.findCharacter(job.division, job.name)
+		var sourceGID uint32
 		var frames []wire.Frame
 		if c != nil {
+			sourceGID = enterworld.ObjectIDForCharacter(c)
 			rt.deps.UpdateDeferred(c, "berserk-expire", func() bool {
 				if c.BerserkUntilMs != job.until || now < c.BerserkUntilMs {
 					return false
@@ -113,7 +115,7 @@ func (rt *Runtime) advanceBerserk(now int64) []simulation.DivisionFrames {
 				// AJStateChanger kind4 preserves current invisible body4.
 				if c.NativeBodyStatus != 4 {
 					if c.TransitionBodyStatus(domain.BodyStatusTransition{}) {
-						frames = append(frames, bodyStatusFrame(enterworld.ObjectIDForCharacter(c), 0))
+						frames = append(frames, bodyStatusFrame(sourceGID, 0))
 					}
 					frames = append(frames, rt.refreshMovementEffects(job.division, c, now)...)
 				}
@@ -127,7 +129,7 @@ func (rt *Runtime) advanceBerserk(now int64) []simulation.DivisionFrames {
 		}
 		unlock()
 		if len(frames) > 0 {
-			batch := simulation.DivisionFrames{DivisionID: job.division}
+			batch := simulation.DivisionFrames{DivisionID: job.division, SourceGID: sourceGID}
 			for _, f := range frames {
 				batch.Frames = append(batch.Frames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload})
 			}

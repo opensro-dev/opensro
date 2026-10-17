@@ -450,7 +450,9 @@ func (rt *Runtime) drainStoppedCharacterEffects() []simulation.DivisionFrames {
 	var out []simulation.DivisionFrames
 	for _, batch := range rt.effects.DrainStopRequested() {
 		var statusFrames []wire.Frame
+		var sourceGID uint32
 		if c := rt.findCharacter(batch.DivisionID, batch.CharacterName); c != nil {
+			sourceGID = enterworld.ObjectIDForCharacter(c)
 			rt.deps.UpdateDeferred(c, "retire-character-effect", func() bool {
 				var changed bool
 				statusFrames, changed = rt.finishCharacterEffectRetirement(batch.DivisionID, c, batch.Effects, rt.Now().UnixMilli())
@@ -514,6 +516,7 @@ func (rt *Runtime) drainStoppedCharacterEffects() []simulation.DivisionFrames {
 		frames = append(frames, simulation.Frame{Opcode: wire.OpEndedEffectInstances, Payload: payload})
 		out = append(out, simulation.DivisionFrames{
 			DivisionID: batch.DivisionID,
+			SourceGID:  sourceGID,
 			Frames:     frames,
 		})
 	}

@@ -259,3 +259,113 @@ func hasLifeDead(frames []simulation.Frame, gid uint32) bool {
 	}
 	return false
 }
+
+/*
+================
+TestTickPublicBatchesScopeSourceGID
+
+Public tick publications must name their source GID so routeHookFrames scopes
+delivery to observers of that monster, player, or COS rather than broadcasting
+to out-of-sight sessions across the division.
+================
+*/
+func TestTickPublicBatchesScopeSourceGID(t *testing.T) {
+	t.Run("monster-player-cos-abnormals", func(t *testing.T) {
+		rt, clock, c, instance := newCombatTestRuntime(t, 1000)
+		now := clock.NowMs()
+		playerGID := enterworld.ObjectIDForCharacter(c)
+
+		mobBurn := abnormal.Record{Status: abnormal.Burn, Level: 4, DurationMs: 30000, Rate24: 10, Scale20: 1, SourceGID: playerGID}
+		rt.Monsters.ApplyDamageSequence(testDivision, instance.Gid, instance.CurrentHP, []simulation.MonsterDamagePlan{{
+			GID:             instance.Gid,
+			CreditGID:       playerGID,
+			Abnormal:        []abnormal.Record{mobBurn},
+			AbnormalSources: rt.Monsters.PrepareAbnormalSources(testDivision, []abnormal.Record{mobBurn}),
+		}})
+		mobBatches := rt.advanceMonsterAbnormals(now)
+		assertPublicBatchesSourceGID(t, "monster abnormal", mobBatches, instance.Gid, 0)
+
+		pcBurn := abnormal.Record{Status: abnormal.Burn, Level: 4, DurationMs: 30000, Rate24: 10, Scale20: 1, SourceGID: instance.Gid}
+		if rt.applyPlayerAbnormalInDoor(testDivision, c, false, []abnormal.Record{pcBurn}, now) == nil {
+			t.Fatal("player burn did not admit")
+		}
+		pcBatches := rt.advancePlayerAbnormals(now)
+		assertPublicBatchesSourceGID(t, "player abnormal", pcBatches, playerGID, 0)
+
+		equipCombatTestPet(t, rt, c, 3)
+		c.ActiveCOS.CurrentHP = 500
+		cosOwner := rt.newCosAbnormalOwner(testDivision, c, now)
+		cosOwner.sources = rt.captureAbnormalSources(testDivision, cosOwner.block, []abnormal.Record{pcBurn})
+		if !cosOwner.block.Apply(cosOwner, pcBurn, now) {
+			t.Fatal("cos burn did not admit")
+		}
+		cosOwner.commit()
+		cosBatches := rt.advanceCosAbnormals(now)
+		assertPublicBatchesSourceGID(t, "cos abnormal", cosBatches, c.ActiveCOS.GID, c.ID)
+	})
+
+	t.Run("party-aura-retire", func(t *testing.T) {
+		rt, clock, c, _ := marchFixture(t, hitMarchFirstID)
+		mate := nearbyCharacter(rt, c, 12, "aura-gid-mate", hitMarchRadius-1)
+		rt.RewardParties = func(string) []RewardParty {
+			return []RewardParty{{Members: []uint32{enterworld.ObjectIDForCharacter(c), enterworld.ObjectIDForCharacter(mate)}}}
+		}
+		if result := castSelf(rt, c, hitMarchFirstID); result.DiagnosticRefusal != "" {
+			t.Fatalf("aura cast refused: %+v", result)
+		}
+		rt.advancePartyAuras(clock.NowMs())
+		key := simulation.WorldKey(testDivision, mate.Name)
+		rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(mate) }, func(w *simulation.WorldState) {
+			w.Spawn.X += hitMarchRadius + 500
+		})
+		auraBatches := rt.advancePartyAuras(clock.NowMs())
+		assertPublicBatchesSourceGID(t, "party aura retire", auraBatches, enterworld.ObjectIDForCharacter(mate), 0)
+		token := rt.effects.Snapshot(testDivision, c.Name)[0].InstanceToken
+		rt.HandleTargetInteract(testDivision, c, wire.CancelActiveEffectRequest{EffectID: hitMarchFirstID, InstanceToken: token}.Encode())
+		retiredBatches := rt.drainStoppedCharacterEffects()
+		assertPublicBatchesSourceGID(t, "stopped character effects", retiredBatches, enterworld.ObjectIDForCharacter(c), 0)
+	})
+
+	t.Run("berserk-battle-aggression-fallbacks", func(t *testing.T) {
+		rt, clock, c, _ := newCombatTestRuntime(t, 1000)
+		now := clock.NowMs()
+		playerGID := enterworld.ObjectIDForCharacter(c)
+
+		c.BerserkPoints = 5
+		rt.HandleBerserk(testDivision, c, []byte{1})
+		berserkBatches := rt.advanceBerserk(now + 60000)
+		assertPublicBatchesSourceGID(t, "berserk expire", berserkBatches, playerGID, 0)
+
+		rt.enterBattleState(testDivision, c, now)
+		battleBatches := rt.advanceBattleStates(now + battleStateMs)
+		assertPublicBatchesSourceGID(t, "battle state expire", battleBatches, playerGID, 0)
+
+		peer := &enterworld.Character{ID: c.ID + 1, Name: "aggression-peer", CurrentHP: testInt64(100), Level: testInt64(1)}
+		rt.registerPlayerAttack(testDivision, c, peer, now)
+		aggressionBatches := rt.advancePlayerAggressions(now + 19000)
+		assertPublicBatchesSourceGID(t, "player aggression tick", aggressionBatches, playerGID, 0)
+	})
+}
+
+/*
+================
+assertPublicBatchesSourceGID
+================
+*/
+func assertPublicBatchesSourceGID(t *testing.T, label string, batches []simulation.DivisionFrames, wantGID uint32, wantExcept int64) {
+	t.Helper()
+	sawPublic := false
+	for _, batch := range batches {
+		if batch.OnlyCharacterID != 0 {
+			continue
+		}
+		sawPublic = true
+		if batch.SourceGID != wantGID || batch.ExceptCharacterID != wantExcept {
+			t.Fatalf("%s public batch SourceGID=%#x ExceptCharacterID=%d, want SourceGID=%#x ExceptCharacterID=%d",
+				label, batch.SourceGID, batch.ExceptCharacterID, wantGID, wantExcept)
+		}
+	}
+	if !sawPublic {
+		t.Fatalf("%s produced no public DivisionFrames: %+v", label, batches)
+	}
+}

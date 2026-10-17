@@ -481,7 +481,7 @@ func (rt *Runtime) endAuraInstance(u *auraUpdate, aura partyAura, name string, t
 		return len(ended) != 0
 	})
 	if len(public) != 0 {
-		u.frames = append(u.frames, simulation.DivisionFrames{DivisionID: aura.division, Frames: simFrames(public)})
+		u.frames = append(u.frames, simulation.DivisionFrames{DivisionID: aura.division, SourceGID: enterworld.ObjectIDForCharacter(owner), Frames: simFrames(public)})
 	}
 	var private []wire.Frame
 	for _, frame := range actor {
