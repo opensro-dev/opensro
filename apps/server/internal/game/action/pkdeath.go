@@ -109,11 +109,12 @@ func (rt *Runtime) settleDeathCostInDoor(division string, c *enterworld.Characte
 	// killer, and the byte keeps the zero every revival wrote; the port's
 	// deathKind answers DeathNone for no killer, the same zero.
 	c.DeathKind = uint8(kind)
-	if kind == pk.DeathSpecialWorld {
-		// ProcessSiegeDeath (52CFBA) starts the corpse clock (+0x1CD4)
-		// with the death record.
-		c.SiegeDeathAtMs = now
-	}
+	// CGObjPC::OnDeath (52CDB0, misnamed CGObjPC_ProcessSiegeDeath in
+	// Binary Ninja) stamps the corpse clock (+0x1CD4 = 180) at 52CFBA
+	// on EVERY death, right after the kind is stored. Only the rebirth
+	// refusal (5100D0) reads the stamp, and only inside an active siege
+	// war in a siege world, so an ordinary death's stamp refuses nothing.
+	c.SiegeDeathAtMs = now
 	var penalty uint32
 	if c.PK != nil {
 		penalty = c.PK.Penalty

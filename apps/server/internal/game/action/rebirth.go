@@ -218,8 +218,9 @@ func (rt *Runtime) HandleRebirthPointAppointment(
 }
 
 // siegeRebirthRefusalMs is the +0x1CD4 > 0xA5 window: the 180 ticks
-// ProcessSiegeDeath stamps, read down to 165 - the first 15 ticks of
-// the siege corpse clock, at one second a tick (domain.SiegeDeathAtMs).
+// CGObjPC::OnDeath stamps at 52CFBA, read down to 165 - the first 15
+// ticks of the siege corpse clock, at one second a tick
+// (domain.SiegeDeathAtMs).
 const siegeRebirthRefusalMs = 15 * 1000
 
 /*
@@ -229,7 +230,7 @@ siegeRebirthRefused
 50FEE0 before the death-kind check (510086..5100D6): while a siege war
 is active (MainProcess_IsSiegeWarActive 62EB50), the corpse lies in a
 siege world (CGameWorldMgr_CallGameWorldSlot31 answers nonzero), and
-its siege-death clock (+0x1CD4, stamped 180 at the siege death) still
+its corpse clock (+0x1CD4, stamped 180 at the death) still
 reads above 165, the handler returns without reviving - whatever the
 death kind or the player's choice. The port's clock is the elapsed
 time since SiegeDeathAtMs; Fortresses.WarActive is the war mirror and

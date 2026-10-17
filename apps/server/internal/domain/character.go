@@ -219,14 +219,15 @@ type Character struct {
 	// (CGObjPC_TeleportToTown 4DF2EE). Runtime-only, as natively.
 	DeathKind uint8 `json:"-"`
 	// SiegeDeathAtMs is CGObjPC+0x1CD4 kept as the death instant:
-	// ProcessSiegeDeath (52CFBA) sets the counter to 180 ticks, OnTick
+	// CGObjPC::OnDeath (52CDB0, misnamed CGObjPC_ProcessSiegeDeath)
+	// sets the counter to 180 ticks at 52CFBA on every death, OnTick
 	// (52D9EB) decays it one a tick while a siege war runs and the corpse
 	// waits, and the rebirth (5100D0) refuses outright while it still
 	// reads above 165. The port measures elapsed ticks from the stamp
 	// instead of ticking every corpse. One tick is one second, inferred
 	// from the native constants: a 180-tick corpse clock and a 15-tick
 	// refusal window are round, meaningful spans in seconds and noise
-	// at any finer rate. Zero: no siege death is on the clock.
+	// at any finer rate. Zero: no death is on the clock.
 	SiegeDeathAtMs   int64  `json:"-"`
 	NativeBodyStatus uint8  `json:"-"`
 	BodyStatusOwner  uint64 `json:"-"`
