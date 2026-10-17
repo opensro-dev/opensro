@@ -75,7 +75,9 @@ export function createWindowPlacement() {
 			previous = windows[key] ?? previous;
 			windows[key] = previous;
 		}
-		saved = { width, height, windows };
+		// The native record stores the video mode's integer extents (6A01B0);
+		// the UI viewport may be fractional, so round at this boundary.
+		saved = { width: Math.round( width ), height: Math.round( height ), windows };
 		initialSave = false;
 		rejectedRecord = false;
 		return saved;
@@ -224,8 +226,11 @@ export function createWindowPlacement() {
 		enter( width: number, height: number ): PlacedWindows | null {
 			if ( session ) return null;
 			consumedOrigins.clear();
-			initialSave = rejectedRecord || saved !== null && (saved.width !== width || saved.height !== height);
-			const eligible = positionsForViewport( saved, width, height );
+			// Gate against the same rounded integer extents snapshot() saves.
+			const gateWidth = Math.round( width ), gateHeight = Math.round( height );
+			initialSave = rejectedRecord ||
+				saved !== null && (saved.width !== gateWidth || saved.height !== gateHeight);
+			const eligible = positionsForViewport( saved, gateWidth, gateHeight );
 			session = { width, height, windows: eligible };
 			const windows = positionsAfterLayout( eligible );
 			for ( const [key, id] of PLACED_WINDOWS ) {

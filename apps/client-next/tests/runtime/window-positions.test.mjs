@@ -290,3 +290,16 @@ test("remembered Alchemy clips against its native root while retaining the rende
 		"drag still uses the complete footprint"
 	);
 });
+
+test("a fractional viewport saves integer extents and round-trips the restore gate", () => {
+	const placement = createWindowPlacement();
+	placement.enter( 1707.5, 960 );
+	const saved = placement.leave( 1707.5, 960, { store: [ 10, 20 ] } );
+	assert.ok( saved );
+	assert.equal( saved.width, 1708 );
+	assert.equal( saved.height, 960 );
+	assert.doesNotThrow( () => positions.windowPositions( saved ) );
+	const restored = createWindowPlacement();
+	restored.load( positions.windowPositions( saved ) );
+	assert.deepEqual( restored.enter( 1707.5, 960 )?.alchemyBox, [ 10, 20 ] );
+});

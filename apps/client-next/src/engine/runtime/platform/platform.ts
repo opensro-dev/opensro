@@ -650,8 +650,14 @@ export function createPlatform(
 		================
 		*/
 		saveWindowPositions( value: WindowPositions ) {
-			const saved = windowPositions( value );
 			try {
+				// 6A01B0 stores the video mode's integer extents; a fractional
+				// UI viewport rounds to them, and a bad record only reports.
+				const saved = windowPositions( {
+					...value,
+					width: Math.round( value.width ),
+					height: Math.round( value.height )
+				} );
 				localStorage.setItem( windowPositionsKey, JSON.stringify( saved ) );
 			} catch ( error ) {
 				status.value = "Window positions could not be saved: " + String( error );
