@@ -265,15 +265,25 @@ func (rt *Runtime) sharePetPickup(division string, c *enterworld.Character, q wi
 		return OpResult{}, false
 	}
 	actor := wire.PickupAnim{Gid: q.CosGID, Heading: wire.HeadingByteFromAngle(at.Angle)}
+	if recipient != c {
+		hasFreeSlot := false
+		rt.deps.Read(division, func() {
+			_, hasFreeSlot = bagOf(recipient).FirstFreeBagSlot()
+		})
+		if !hasFreeSlot {
+			// 4D570C..4D5718: CCOS_SelectPickupRecipient probes
+			// CGStorage_FindFirstEmptySlot(0x0D) on the rotated party recipient
+			// and spills to CCOSManager_FindPickupPetActor (4FC320) at 4D571B
+			// whenever no empty slot exists (al == 0xFF), without attempting a
+			// partial-stack merge in the recipient's player bag.
+			return rt.grantPeerCosPickup(division, c, recipient, item, actor, now), true
+		}
+	}
 	result := rt.grantPickupTo(pickupGrant{division: division, worldKey: simulation.WorldKey(division, c.Name), picker: c,
 		recipient: recipient, snapshot: rt.characterSnapshot(division, c), item: item, actor: &actor})
 	result.Frames = withoutActionState(result.Frames)
 	if isPickupFault(result, wire.ErrCodeStorageFull) {
 		if recipient != c {
-			// 4D570C pre-checks CGStorage_FindFirstEmptySlot(0x0D) before
-			// 4B29A0; running grantPickupTo first preserves partial-stack
-			// merging (4B2890, port-only, not native) before falling back to
-			// CCOSManager_FindPickupPetActor (4FC320) at 4D571B.
 			return rt.grantPeerCosPickup(division, c, recipient, item, actor, now), true
 		}
 		// 4D5418..4D5447: when the owner's player bag is full on a personal

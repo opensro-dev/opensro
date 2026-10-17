@@ -469,18 +469,30 @@ func TestPetPickupEmitsPartyLootNoticeOnOwnerAndPeerTurns(t *testing.T) {
 	wantPicker := wire.EncodePartyLootNotice(enterworld.ObjectIDForCharacter(picker), potion.RefObjID, potion.TypeFlags, 1)
 	wantPeer := wire.EncodePartyLootNotice(enterworld.ObjectIDForCharacter(peer), potion.RefObjID, potion.TypeFlags, 1)
 
+	// 4D5545: pet gold pickup must not advance the party item-share cursor, and
+	// shared pet pickup frames must never include the player 0xB2CD latch.
+	goldRes := pick(heap(grounditem.Item{GoldAmount: 40}))
+	for _, f := range goldRes.Frames {
+		if f.Opcode == wire.OpActionState {
+			t.Fatalf("pet shared gold pickup emitted player OpActionState: %+v", goldRes.Frames)
+		}
+	}
+
 	first := pick(heap(potion))
 	second := pick(heap(potion))
+	for _, f := range second.Frames {
+		if f.Opcode == wire.OpActionState {
+			t.Fatalf("pet shared item pickup emitted player OpActionState: %+v", second.Frames)
+		}
+	}
 	for _, memberID := range []int64{picker.ID, peer.ID} {
 		n1 := partyLootNoticesFor(first, memberID)
 		n2 := partyLootNoticesFor(second, memberID)
 		if len(n1) != 1 || len(n2) != 1 {
 			t.Fatalf("member %d notices = %d then %d, want 1 on both owner and peer turns", memberID, len(n1), len(n2))
 		}
-		gotPicker := string(n1[0]) == string(wantPicker) || string(n2[0]) == string(wantPicker)
-		gotPeer := string(n1[0]) == string(wantPeer) || string(n2[0]) == string(wantPeer)
-		if !gotPicker || !gotPeer {
-			t.Fatalf("member %d did not receive both owner and peer 0x317D notices: %x / %x", memberID, n1[0], n2[0])
+		if string(n1[0]) != string(wantPicker) || string(n2[0]) != string(wantPeer) {
+			t.Fatalf("member %d notice order = %x then %x, want picker (%x) then peer (%x)", memberID, n1[0], n2[0], wantPicker, wantPeer)
 		}
 	}
 }
@@ -553,29 +565,35 @@ func TestPetPickupSharedPeerFullPlayerBagSpillsToPeerPetAndNotifiesBothWhenFull(
 		Slot: 13, RefObjID: 11459, Codename: "ITEM_CH_SWORD_01_A_RARE",
 		TypeFlags: wire.PackTypeFlags(3, 1, 6, 2), VarianceBits: "0", StackCount: 1,
 	}
-	peer.MissionInventory = nil
-	for slot := int64(13); slot < 45; slot++ {
-		row := occupied
-		row.Slot = slot
-		peer.MissionInventory = append(peer.MissionInventory, row)
-	}
-
 	potion := grounditem.Item{
 		RefObjID: picker.MissionInventory[0].RefObjID, Codename: picker.MissionInventory[0].Codename,
 		TypeFlags: picker.MissionInventory[0].TypeFlags, StackCount: 1,
 	}
+	peer.MissionInventory = []domain.InventoryRow{{
+		Slot: 13, RefObjID: potion.RefObjID, Codename: potion.Codename,
+		TypeFlags: potion.TypeFlags, StackCount: 3,
+	}}
+	for slot := int64(14); slot < 45; slot++ {
+		row := occupied
+		row.Slot = slot
+		peer.MissionInventory = append(peer.MissionInventory, row)
+	}
 	drop1 := heap(potion)
 	cmd1 := wire.NewWriter(9).U32(pickerPetGID).U8(wire.CosCommandPickupTag).U32(drop1.Gid).Payload()
 
-	// 1. Peer has no pickup pet: rotation selects peer (first turn is picker or peer; advance until peer).
+	// 1. Peer has no free bag slot (even with a below-cap potion stack at slot 13) and no pickup pet:
+	// 4D570C probes CGStorage_FindFirstEmptySlot(0x0D) == 0xFF and refuses with 0x9C without merging.
 	rt.NextPartyLootMember(testDivision, picker.Name)
 	noPetRes := rt.HandleCosCommand(testDivision, picker, cmd1)
 	assertCosPickupAck(t, noPetRes.Frames, pickerPetGID, drop1.Gid, false)
 	if noPetRes.Frames[0].Payload[2] != cosPickupRetryBackoff || len(noPetRes.Recipients) != 0 || len(rt.Ground.All(testDivision)) != 1 {
 		t.Fatalf("peer without pet full-bag result = %+v, want 0x9C to picker and no peer frame", noPetRes)
 	}
+	if peer.MissionInventory[0].StackCount != 3 {
+		t.Fatalf("peer slot 13 stack = %d, want 3 (no merge when no empty slot exists at 4D570C)", peer.MissionInventory[0].StackCount)
+	}
 
-	// 2. Summon a 1-slot pickup pet for peer and rotate back to peer.
+	// 2. Summon a 1-slot pickup pet for peer and rotate back to peer: drop1 spills to peer's pet without merging into slot 13.
 	peerPetGID, _ := enterworld.CosObjectIDForCharacter(peer)
 	peer.ActiveCOS = &enterworld.CharacterCOS{GID: peerPetGID, RefObjID: 9, Codename: "PET", CurrentHP: 100, Summoned: true,
 		Container: &domain.COSContainer{Capacity: 1}}
@@ -583,8 +601,8 @@ func TestPetPickupSharedPeerFullPlayerBagSpillsToPeerPetAndNotifiesBothWhenFull(
 	rt.NextPartyLootMember(testDivision, picker.Name) // advance past picker back to peer
 	spillRes := rt.HandleCosCommand(testDivision, picker, cmd1)
 	assertCosPickupAck(t, spillRes.Frames, pickerPetGID, drop1.Gid, true)
-	if len(rt.Ground.All(testDivision)) != 0 || len(peer.ActiveCOS.Container.Rows) != 1 {
-		t.Fatalf("spillover into peer pet failed: ground=%d peerPetRows=%+v", len(rt.Ground.All(testDivision)), peer.ActiveCOS.Container.Rows)
+	if len(rt.Ground.All(testDivision)) != 0 || len(peer.ActiveCOS.Container.Rows) != 1 || peer.MissionInventory[0].StackCount != 3 {
+		t.Fatalf("spillover into peer pet failed: ground=%d peerPetRows=%+v peerSlot13=%d", len(rt.Ground.All(testDivision)), peer.ActiveCOS.Container.Rows, peer.MissionInventory[0].StackCount)
 	}
 	sawPeerPetReceipt := false
 	for _, r := range spillRes.Recipients {
