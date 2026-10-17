@@ -15,7 +15,9 @@ dresses 130 silk and the hats 30, the European wedding set's tier, and the
 Halloween attachment 15). Each entry becomes the goods row its tab would
 carry, at the tab's next free slot, before the catalogue is built, so every
 check the shipped mall passes (one package per code, a price, scraps, no
-unsupported policy, unique slots) also holds for it. A malformed entry, an
+unsupported policy, unique slots) also holds for it. The word "cap110" adds
+the outfits imported from a cap-110 client (scripts/import_cap110_avatars.py),
+so a v1.150-only install stays untouched. A malformed entry, an
 unknown tab, a package without data or one the mall already lists stops the
 boot naming the setting.
 
@@ -31,7 +33,8 @@ import (
 	"strings"
 )
 
-// EnvMallExtraGoods names the setting: "on", "off" or "tab:package,...".
+// EnvMallExtraGoods names the setting: "on", "off", "cap110" or
+// "tab:package,..."; "on,cap110" and entries combine.
 const EnvMallExtraGoods = "SRO_MALL_EXTRA_GOODS"
 
 // mallExtraGoodsDefault is what "on" means (owner, 2026-10-13): every v1.150
@@ -64,6 +67,24 @@ var mallExtraGoodsDefault = strings.Join([]string{
 	"MALL_AVATAR_HAT:PACKAGE_ITEM_MALL_AVATAR_W_HALLOWEEN_ATTACH",
 }, ",")
 
+// mallCap110Goods is what "cap110" means: the Cursed Soul (pirate crew) set
+// imported from a cap-110 client, male and female, each with its recolour.
+// The attachment goes on the hat tab, as Halloween's does: v1.150 has no
+// attachment tab. The packages exist only after the import ran; a missing
+// one stops the boot naming this setting.
+var mallCap110Goods = strings.Join([]string{
+	"MALL_AVATAR_DRESS:PACKAGE_ITEM_MALL_AVATAR_M_PIRATECREW",
+	"MALL_AVATAR_DRESS:PACKAGE_ITEM_MALL_AVATAR_W_PIRATECREW",
+	"MALL_AVATAR_DRESS:PACKAGE_ITEM_MALL_AVATAR_M_PIRATECREW_2",
+	"MALL_AVATAR_DRESS:PACKAGE_ITEM_MALL_AVATAR_W_PIRATECREW_2",
+	"MALL_AVATAR_HAT:PACKAGE_ITEM_MALL_AVATAR_M_PIRATECREW_HAT",
+	"MALL_AVATAR_HAT:PACKAGE_ITEM_MALL_AVATAR_W_PIRATECREW_HAT",
+	"MALL_AVATAR_HAT:PACKAGE_ITEM_MALL_AVATAR_M_PIRATECREW_HAT_2",
+	"MALL_AVATAR_HAT:PACKAGE_ITEM_MALL_AVATAR_W_PIRATECREW_HAT_2",
+	"MALL_AVATAR_HAT:PACKAGE_ITEM_MALL_AVATAR_M_PIRATECREW_ATTACH",
+	"MALL_AVATAR_HAT:PACKAGE_ITEM_MALL_AVATAR_W_PIRATECREW_ATTACH",
+}, ",")
+
 /*
 ================
 MallExtraGood
@@ -80,8 +101,9 @@ type MallExtraGood struct {
 ================
 ParseMallExtraGoods
 
-"" and "off" are the shipped mall (nil); "on" is mallExtraGoodsDefault;
-otherwise comma-separated tab:package entries.
+"" and "off" are the shipped mall (nil). Otherwise a comma-separated list
+whose fields are "on" (mallExtraGoodsDefault), "cap110" (mallCap110Goods) or
+a tab:package entry.
 ================
 */
 func ParseMallExtraGoods(text string) ([]MallExtraGood, error) {
@@ -89,16 +111,22 @@ func ParseMallExtraGoods(text string) ([]MallExtraGood, error) {
 	switch strings.ToLower(text) {
 	case "", "off", "0", "false":
 		return nil, nil
-	case "on", "1", "true":
-		text = mallExtraGoodsDefault
 	}
 	var goods []MallExtraGood
 	for _, field := range strings.Split(text, ",") {
-		parts := strings.Split(strings.TrimSpace(field), ":")
-		if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
-			return nil, fmt.Errorf("%s: %q is not tab:package", EnvMallExtraGoods, field)
+		switch strings.ToLower(strings.TrimSpace(field)) {
+		case "on", "1", "true":
+			field = mallExtraGoodsDefault
+		case "cap110":
+			field = mallCap110Goods
 		}
-		goods = append(goods, MallExtraGood{Tab: strings.TrimSpace(parts[0]), Package: strings.TrimSpace(parts[1])})
+		for _, entry := range strings.Split(field, ",") {
+			parts := strings.Split(strings.TrimSpace(entry), ":")
+			if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+				return nil, fmt.Errorf("%s: %q is not tab:package", EnvMallExtraGoods, entry)
+			}
+			goods = append(goods, MallExtraGood{Tab: strings.TrimSpace(parts[0]), Package: strings.TrimSpace(parts[1])})
+		}
 	}
 	return goods, nil
 }
@@ -154,7 +182,7 @@ func addMallExtraRows(tables map[string][][]string, goods []MallExtraGood) error
 		case !mallTab[good.Tab]:
 			return fmt.Errorf("%s: unknown mall tab %s", EnvMallExtraGoods, good.Tab)
 		case !authored[good.Package]:
-			return fmt.Errorf("%s: %s has no package data", EnvMallExtraGoods, good.Package)
+			return fmt.Errorf("%s: %s has no package data (cap-110 packages come from scripts/import_cap110_avatars.py)", EnvMallExtraGoods, good.Package)
 		case listed[good.Package]:
 			return fmt.Errorf("%s: %s is already in the mall", EnvMallExtraGoods, good.Package)
 		case next[good.Tab] > math.MaxUint8:

@@ -16,6 +16,7 @@ generatedRoot.mjs and paths.mjs.
 """
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -91,7 +92,33 @@ def _resolve_game_root() -> Path:
 
 
 GAME_ROOT = _resolve_game_root()
-EXTRACTED_ROOT = GAME_ROOT / "extracted"
+
+
+# ================
+# _resolve_extracted_root
+#
+# extracted/ is the v1.150 retail tree and is never edited.
+# SRO_EXTRACTION_OVERLAYS (comma-separated overlay names) points the tools at
+# extracted-merged/ instead, built by scripts/merge_extraction_overlays.py.
+# Keep the rule identical to resolveExtractedRoot in paths.mjs.
+# ================
+def _resolve_extracted_root() -> Path:
+	names = [name.strip() for name in os.environ.get("SRO_EXTRACTION_OVERLAYS", "").split(",") if name.strip()]
+	if not names:
+		return GAME_ROOT / "extracted"
+	merged = GAME_ROOT / "extracted-merged"
+	try:
+		manifest = json.loads((merged / "overlay-manifest.json").read_text(encoding="utf-8"))
+	except (OSError, ValueError):
+		raise SystemExit(f"SRO_EXTRACTION_OVERLAYS={','.join(names)} needs {merged}; "
+			f"run scripts/merge_extraction_overlays.py {' '.join(names)}")
+	if manifest.get("overlays") != names:
+		raise SystemExit(f"{merged} was merged for {manifest.get('overlays')}, not {names}; "
+			"rerun scripts/merge_extraction_overlays.py")
+	return merged
+
+
+EXTRACTED_ROOT = _resolve_extracted_root()
 def _resolve_generated_root() -> Path:
 	"""SRO_GENERATED_ROOT when set (absolute only), else the main checkout's."""
 	override = os.environ.get("SRO_GENERATED_ROOT")

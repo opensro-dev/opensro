@@ -118,3 +118,113 @@ func TestMallExtraGoodsRefuseBadEntries(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestMallExtraGoodsCap110IsItsOwnWord
+
+"cap110" adds the imported Cursed Soul set to whatever else is listed, and
+"on" alone keeps the v1.150 outfits only.
+================
+*/
+func TestMallExtraGoodsCap110IsItsOwnWord(t *testing.T) {
+	only, err := ParseMallExtraGoods("cap110")
+	if err != nil || len(only) != 10 {
+		t.Fatalf("cap110 = %d goods, %v", len(only), err)
+	}
+	both, err := ParseMallExtraGoods("on, cap110")
+	if err != nil || len(both) != 22+10 {
+		t.Fatalf("on, cap110 = %d goods, %v", len(both), err)
+	}
+	plain, err := ParseMallExtraGoods("on")
+	if err != nil || len(plain) != 22 {
+		t.Fatalf("on = %d goods, %v", len(plain), err)
+	}
+	for _, good := range only {
+		if !strings.Contains(good.Package, "PIRATECREW") {
+			t.Errorf("cap110 lists %s", good.Package)
+		}
+		wantTab := "MALL_AVATAR_HAT"
+		if !strings.HasSuffix(good.Package, "_HAT") && !strings.HasSuffix(good.Package, "_HAT_2") &&
+			!strings.HasSuffix(good.Package, "_ATTACH") {
+			wantTab = "MALL_AVATAR_DRESS"
+		}
+		if good.Tab != wantTab {
+			t.Errorf("%s is on %s, want %s", good.Package, good.Tab, wantTab)
+		}
+	}
+}
+
+/*
+================
+TestMallExtraGoodsCap110NeedsTheImport
+
+Without the imported package rows the boot stops naming the setting, so a
+v1.150-only install never serves a half-listed set.
+================
+*/
+func TestMallExtraGoodsCap110NeedsTheImport(t *testing.T) {
+	tables := map[string][][]string{
+		"refshoptab":     {{"1", "11", "0", "MALL_AVATAR_DRESS"}, {"1", "11", "1", "MALL_AVATAR_HAT"}},
+		"refshopgoods":   {},
+		"refpackageitem": {},
+	}
+	goods, err := ParseMallExtraGoods("cap110")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = addMallExtraRows(tables, goods)
+	if err == nil || !strings.Contains(err.Error(), EnvMallExtraGoods) || !strings.Contains(err.Error(), "import_cap110_avatars") {
+		t.Fatalf("err = %v, want a refusal naming %s and the import", err, EnvMallExtraGoods)
+	}
+}
+
+/*
+================
+TestMallExtraGoodsCap110ListsTheImportedSet
+
+Runs only where scripts/import_cap110_avatars.py was applied to the extraction:
+each outfit is a priced mall offer with scraps and an icon, in its own tab.
+================
+*/
+func TestMallExtraGoodsCap110ListsTheImportedSet(t *testing.T) {
+	dir := gamedatatest.TextdataDir(t)
+	goods, err := ParseMallExtraGoods("cap110")
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog, err := LoadMall(dir, goods)
+	if err != nil && strings.Contains(err.Error(), "has no package data") {
+		t.Skip("the cap-110 avatars are not imported into this extraction")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := catalog.Hydrate(enterworld.NewTextdataItems(dir)); err != nil {
+		t.Fatal(err)
+	}
+	if len(catalog.Offers) != 81+len(goods) {
+		t.Fatalf("mall has %d offers, want %d", len(catalog.Offers), 81+len(goods))
+	}
+	byCode := map[string]MallPackage{}
+	for _, offer := range catalog.Offers {
+		byCode[offer.Code] = offer
+	}
+	for _, good := range goods {
+		offer, ok := byCode[good.Package]
+		if !ok {
+			t.Fatalf("%s not listed", good.Package)
+		}
+		want := uint32(130)
+		switch {
+		case strings.HasSuffix(good.Package, "_ATTACH"):
+			want = 15
+		case strings.Contains(good.Package, "_HAT"):
+			want = 30
+		}
+		if offer.Silk != want || offer.PackageID == 0 || len(offer.Scraps) == 0 || offer.Icon == "" {
+			t.Errorf("%s = silk %d (want %d), package %d, %d scraps, icon %q", good.Package, offer.Silk, want,
+				offer.PackageID, len(offer.Scraps), offer.Icon)
+		}
+	}
+}

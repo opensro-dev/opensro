@@ -15,6 +15,7 @@ linked git worktree names in its .git file.
 ===========================================================================
 */
 import { GENERATED_ROOT, MAIN_CHECKOUT_ROOT } from "../../lib/generatedRoot.mjs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -45,7 +46,43 @@ export const mainCheckoutRoot = MAIN_CHECKOUT_ROOT;
 export const gameRoot = resolveGameRoot();
 // Where gameRoot came from, for reports: the variable or the checkout layout.
 export const gameRootSource = process.env.SRO_GAME_ROOT?.trim() ? "SRO_GAME_ROOT" : "beside the main checkout";
-export const extractedRoot = path.join( gameRoot, "extracted" );
+
+/*
+================
+resolveExtractedRoot
+
+extracted/ is the v1.150 retail tree and is never edited. SRO_EXTRACTION_OVERLAYS
+(comma-separated overlay names, for example cap110) points every builder at
+extracted-merged/ instead: the retail files plus those overlays, built by
+scripts/merge_extraction_overlays.py, whose overlay-manifest.json records
+what was merged. Unset, the build is retail exactly. A merged tree that is
+missing or was built for other overlays stops the build rather than reading
+the wrong data. scripts/sro_paths.py keeps the same rule.
+================
+*/
+function resolveExtractedRoot() {
+	const names = (process.env.SRO_EXTRACTION_OVERLAYS ?? "").split( "," ).map( name => name.trim() ).filter( Boolean );
+	if ( names.length === 0 ) return path.join( gameRoot, "extracted" );
+	const merged = path.join( gameRoot, "extracted-merged" );
+	let manifest;
+	try {
+		manifest = JSON.parse( readFileSync( path.join( merged, "overlay-manifest.json" ), "utf8" ) );
+	} catch {
+		throw new Error(
+			`SRO_EXTRACTION_OVERLAYS=${
+				names.join( "," )
+			} needs ${merged}; run py -3 scripts/merge_extraction_overlays.py ${names.join( " " )}`
+		);
+	}
+	if ( JSON.stringify( manifest.overlays ) !== JSON.stringify( names ) ) {
+		throw new Error(
+			`${merged} was merged for ${manifest.overlays}, not ${names}; rerun scripts/merge_extraction_overlays.py`
+		);
+	}
+	return merged;
+}
+
+export const extractedRoot = resolveExtractedRoot();
 export const dataExtractedRoot = path.join( extractedRoot, "Data_extracted" );
 export const mapExtractedRoot = path.join( extractedRoot, "Map_extracted" );
 export const mediaExtractedRoot = path.join( extractedRoot, "Media_extracted" );

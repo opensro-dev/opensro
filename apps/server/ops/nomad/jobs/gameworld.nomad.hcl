@@ -531,8 +531,10 @@ variable "shop_extra_goods" {
 # mall_extra_goods lists authored Item Mall packages the v1.150 mall does not
 # sell (port-only, not native; owner decision 2026-10-13). "on" adds the fur,
 # Halloween, pirate, holy knight and wing outfits at their authored prices
-# (commerce/mallextra.go); "tab:package,..." is an operator list; "off" is
-# the shipped mall. A malformed value stops GameWorld at boot.
+# (commerce/mallextra.go); "cap110" adds the outfits imported from a cap-110
+# client (docs/CAP110_AVATARS.md; "on,cap110" lists both); "tab:package,..."
+# is an operator list; "off" is the shipped mall. A malformed value stops
+# GameWorld at boot.
 variable "mall_extra_goods" {
   type    = string
   default = "on"
