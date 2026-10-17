@@ -150,6 +150,77 @@ func TestGroundCollisionStatusStopsAtUnchangedEndpoint(t *testing.T) {
 
 /*
 ================
+TestGroundStepRestsAtObjectContactDespiteEndpointVerdict
+
+Case B2: a target-click step clipped to an object contact must rest at
+the contact. The endpoint verdict classifies the rest tile (the
+obstacle's own edge tile), so refusing discards the native rest and
+freezes the walker short of the target on every step. The same verdict
+still refuses a goal the clip never constrained, and a coverage refusal
+still refuses a clipped goal.
+================
+*/
+func TestGroundStepRestsAtObjectContactDespiteEndpointVerdict(t *testing.T) {
+	from := spawnAt(0x6B4F, 30, 110)
+	goal := spawnAt(0x6B4F, 60, 110)
+	rest := spawnAt(0x6B4F, 45, 110)
+	clippedClip := &ClientClip{Mode: ClipApply, Validator: &fakeClipValidator{report: ClipReport{Outcome: ClipBlocked, Class: ClipClassObject, Rest: rest, NativeResult: 1}}}
+	endpointGuard := &PathGuard{Mode: PathGuardEnforce, Validator: fakePathValidator{PathReport{Verdict: PathEndpointBlocked}}}
+
+	rt := &Runtime{ClientClip: clippedClip, PathGuard: endpointGuard}
+	accepted, _, blocked := rt.groundStep(from, simulation.NavOwner{}, goal)
+	if accepted != rest || !blocked {
+		t.Fatalf("clipped step did not rest at the contact: %+v blocked=%v", accepted, blocked)
+	}
+
+	arrivedClip := &ClientClip{Mode: ClipApply, Validator: &fakeClipValidator{report: ClipReport{Outcome: ClipArrived, Rest: goal}}}
+	rt = &Runtime{ClientClip: arrivedClip, PathGuard: endpointGuard}
+	accepted, _, blocked = rt.groundStep(from, simulation.NavOwner{}, goal)
+	if accepted != from || !blocked {
+		t.Fatalf("unconstrained endpoint-blocked step not refused: %+v blocked=%v", accepted, blocked)
+	}
+
+	coverageGuard := &PathGuard{Mode: PathGuardEnforce, Validator: fakePathValidator{PathReport{Verdict: PathNoCoverage}}}
+	rt = &Runtime{ClientClip: clippedClip, PathGuard: coverageGuard}
+	accepted, _, blocked = rt.groundStep(from, simulation.NavOwner{}, goal)
+	if accepted != from || !blocked {
+		t.Fatalf("coverage refusal of a clipped step not honoured: %+v blocked=%v", accepted, blocked)
+	}
+}
+
+/*
+================
+TestConstrainMovementRestsAtObjectContactDespiteEndpointVerdict
+
+Case B2 at the shared seam (skill approaches and pickup approaches ask
+here): a clip-constrained goal commits at its rest point even when the
+endpoint verdict fires on the rest tile; an unconstrained goal keeps
+the refusal.
+================
+*/
+func TestConstrainMovementRestsAtObjectContactDespiteEndpointVerdict(t *testing.T) {
+	from := spawnAt(0x6B4F, 30, 110)
+	goal := spawnAt(0x6B4F, 60, 110)
+	rest := spawnAt(0x6B4F, 45, 110)
+	endpointGuard := &PathGuard{Mode: PathGuardEnforce, Validator: fakePathValidator{PathReport{Verdict: PathEndpointBlocked}}}
+
+	clippedClip := &ClientClip{Mode: ClipApply, Validator: &fakeClipValidator{report: ClipReport{Outcome: ClipBlocked, Class: ClipClassObject, Rest: rest, NativeResult: 1}}}
+	rt := &Runtime{ClientClip: clippedClip, PathGuard: endpointGuard}
+	accepted, refusal := rt.ConstrainMovement("Walker", from, goal)
+	if refusal != nil || accepted != rest {
+		t.Fatalf("constrained goal did not commit at rest: %+v refusal=%v", accepted, refusal)
+	}
+
+	arrivedClip := &ClientClip{Mode: ClipApply, Validator: &fakeClipValidator{report: ClipReport{Outcome: ClipArrived, Rest: goal}}}
+	rt = &Runtime{ClientClip: arrivedClip, PathGuard: endpointGuard}
+	accepted, refusal = rt.ConstrainMovement("Walker", from, goal)
+	if refusal == nil || accepted != from {
+		t.Fatalf("unconstrained endpoint-blocked goal not refused: %+v refusal=%v", accepted, refusal)
+	}
+}
+
+/*
+================
 TestGroundAdmissionRejectsDisconnectedDungeonSpaces
 ================
 */

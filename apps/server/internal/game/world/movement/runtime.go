@@ -621,6 +621,20 @@ func (rt *Runtime) ConstrainMovement(characterName string, from, to simulation.S
 }
 
 /*
+================
+clipConstrained
+
+clipConstrained reports whether the client clip changed the goal a move
+asked for: an applied blocking contact, or a reached rest point other
+than the requested endpoint. A Y-only change is the floor lift every
+arrival gets, not a constraint.
+================
+*/
+func clipConstrained(requested, clipped simulation.Spawn, blocked bool) bool {
+	return blocked || clipped.RegionID != requested.RegionID || clipped.X != requested.X || clipped.Z != requested.Z
+}
+
+/*
 ==================
 LineOfSight
 
@@ -675,11 +689,20 @@ func (rt *Runtime) ConstrainMovementFrom(characterName string, from simulation.S
 	// Client CRTNavMeshTerrain_Move (404970..40499C) keeps the reached
 	// contact point on a blocked step. Validate that clipped approach,
 	// not the unreachable requested endpoint, just as direction legs do.
+	requested := to
+	clipBlocked := false
 	if rt.ClientClip != nil {
-		to = rt.ClientClip.ProcessMoveFrom(characterName, from, fromOwner, to)
+		to, clipBlocked = rt.ClientClip.ProcessStepFrom(characterName, from, fromOwner, to)
 	}
 	if rt.PathGuard != nil {
-		if refusal := rt.PathGuard.InspectMoveFrom(characterName, from, fromOwner, to); refusal != nil {
+		// A goal the clip already constrained is native-legal by
+		// construction: the stock client composes target clicks past an
+		// object edge and rests at the same contact. The endpoint
+		// verdict exists for goals no stock client can compose, so it
+		// must not discard the rest (Case B2); coverage refusals still
+		// refuse, constrained or not.
+		report, refusal := rt.PathGuard.InspectMoveFromReport(characterName, from, fromOwner, to)
+		if refusal != nil && !(clipConstrained(requested, to, clipBlocked) && endpointBlockedOnly(report)) {
 			return from, simulation.NavWalk{}, refusal
 		}
 	}

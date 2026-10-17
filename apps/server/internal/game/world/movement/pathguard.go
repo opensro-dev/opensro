@@ -567,8 +567,24 @@ func (g *PathGuard) InspectMove(characterName string, from, to simulation.Spawn)
 // InspectMoveFrom classifies the chord walked from the mover's retained
 // source owner (navowner.go).
 func (g *PathGuard) InspectMoveFrom(characterName string, from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) *simulation.MoveError {
+	_, refusal := g.InspectMoveFromReport(characterName, from, fromOwner, to)
+	return refusal
+}
+
+/*
+================
+InspectMoveFromReport
+
+InspectMoveFromReport is InspectMoveFrom with the classification kept:
+a caller that already clipped the goal to the native rest point needs
+the verdict beside the refusal to tell an endpoint verdict (the rest
+tile is the obstacle's own edge tile) from a coverage refusal (the
+authority data is incomplete), which must refuse even a clipped goal.
+================
+*/
+func (g *PathGuard) InspectMoveFromReport(characterName string, from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) (PathReport, *simulation.MoveError) {
 	if g == nil || g.Validator == nil || g.Mode == PathGuardOff {
-		return nil
+		return PathReport{}, nil
 	}
 
 	var report PathReport
@@ -642,12 +658,29 @@ func (g *PathGuard) InspectMoveFrom(characterName string, from simulation.Spawn,
 		} else if report.Truncated {
 			reason = "pathguard truncated: movement chord exceeds the bounded authority scan"
 		}
-		return &simulation.MoveError{
+		return report, &simulation.MoveError{
 			NativeErrorCode: simulation.NativeErrorInvalidRequest,
 			Reason:          reason,
 		}
 	}
-	return nil
+	return report, nil
+}
+
+/*
+================
+endpointBlockedOnly
+
+endpointBlockedOnly reports whether a refusal rests on the endpoint
+verdict alone: the destination tile itself is unwalkable, over full
+coverage and a completed scan. A goal the client clip already
+constrained to its rest point is native-legal by construction (the
+stock client rests at the same contact), so this verdict must not
+discard the rest; coverage and truncation refusals still must, clipped
+goal or not.
+================
+*/
+func endpointBlockedOnly(report PathReport) bool {
+	return report.Verdict == PathEndpointBlocked && !report.Truncated && report.TilesUncovered == 0
 }
 
 // Stats snapshots the counters (test + telemetry surface).

@@ -81,7 +81,6 @@ func TestClippedGroundClickStillRequiresAuthorityCoverage(t *testing.T) {
 		{Verdict: PathNoCoverage},
 		{Verdict: PathLegal, TilesUncovered: 1},
 		{Verdict: PathLegal, Truncated: true},
-		{Verdict: PathEndpointBlocked},
 	} {
 		character := clipTestCharacter()
 		rt := testRuntime(character)
@@ -93,6 +92,21 @@ func TestClippedGroundClickStillRequiresAuthorityCoverage(t *testing.T) {
 		if outcome.Refusal == nil || len(outcome.Frames) != 0 || outcome.Authority.Spawn.X != 30 {
 			t.Fatalf("invalid clipped route %+v was accepted: %+v", report, outcome)
 		}
+	}
+
+	// Case B2: the endpoint verdict alone does not refuse a clipped
+	// route. The verdict classifies the rest tile, which is the
+	// obstacle's own edge tile; the native client rests at that contact,
+	// so the approach commits there instead of cancelling outright.
+	character := clipTestCharacter()
+	rt := testRuntime(character)
+	rt.PathGuard = &PathGuard{Mode: PathGuardEnforce, Validator: fakePathValidator{report: PathReport{Verdict: PathEndpointBlocked}}}
+	rt.ClientClip = &ClientClip{Mode: ClipApply, Validator: &fakeClipValidator{
+		report: ClipReport{Outcome: ClipBlocked, Rest: spawnAt(0x6B4F, 60, 110)},
+	}}
+	outcome := rt.HandleMove("0", character, encodeMoveBody(1, 0x6B4F, 110, 0, 110))
+	if outcome.Refusal != nil || len(outcome.Frames) != 1 || outcome.Authority.Spawn.X != 60 {
+		t.Fatalf("clipped route refused on the endpoint verdict alone: %+v", outcome)
 	}
 }
 

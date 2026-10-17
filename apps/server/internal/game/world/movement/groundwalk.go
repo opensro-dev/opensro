@@ -68,8 +68,16 @@ func (rt *Runtime) groundStep(from simulation.Spawn, owner simulation.NavOwner, 
 	if rt.ClientClip != nil {
 		to, acceptedOwner, blocked = rt.ClientClip.processOwnedStep("ground-step", from, owner, to)
 	}
-	if rt.PathGuard != nil && rt.PathGuard.InspectMoveFrom("ground-step", from, owner, to) != nil {
-		return from, owner, true
+	if rt.PathGuard != nil {
+		// A step the clip already constrained rests at the native
+		// contact (CRTNavMeshTerrain_Move 404970..40499C); an endpoint
+		// verdict on that rest classifies the obstacle's own edge tile
+		// and must not discard the step (Case B2). Coverage refusals
+		// still refuse, constrained or not.
+		report, refusal := rt.PathGuard.InspectMoveFromReport("ground-step", from, owner, to)
+		if refusal != nil && !(clipConstrained(requested, to, blocked) && endpointBlockedOnly(report)) {
+			return from, owner, true
+		}
 	}
 	if acceptedOwner.Resolved() {
 		return to, acceptedOwner, blocked
