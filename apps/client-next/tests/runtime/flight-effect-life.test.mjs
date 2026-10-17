@@ -32,7 +32,7 @@ velocity units a second along x, and returns what is drawn at each step:
 effect names, the shot's x and the monster's x.
 ================
 */
-function castAt( distance, velocity = 0 ) {
+function castAt( distance, velocity = 0, homingProjectiles = false ) {
 	const catalog = createEffectDecoder().decode(
 		new TextEncoder().encode( JSON.stringify( { [COLD_WAVE_ARREST]: raw[COLD_WAVE_ARREST] } ) )
 	);
@@ -83,7 +83,12 @@ function castAt( distance, velocity = 0 ) {
 		results: [ { target: 2, impacts: [ { damage: 10 } ] } ]
 	};
 	/** @type {any} Only the fields the presenter reads. */
-	const game = { localGid: 1, inventory: [], casts: [ cast ] };
+	const game = {
+		localGid: 1,
+		inventory: [],
+		casts: [ cast ],
+		...(homingProjectiles ? { homingProjectiles: true } : {})
+	};
 	const step = ( now, events = [] ) =>
 		owner.step(
 			entities,
@@ -129,9 +134,19 @@ test("the projectile is drawn, looping, until the impact replaces it", () => {
 	}
 });
 
-test("a shot at a monster that walks away follows it and lands on it", () => {
-	// 100 units away, retreating at 60 a second against the shot's 200.
-	const frames = castAt( 100, 60 );
+test("a shot at a monster that walks away lands at the captured endpoint natively and follows when homingProjectiles is on", () => {
+	// Native default (CProjectileTrace_Process 8D8580, homingProjectiles off):
+	// 100 units away, retreating at 60 a second against the shot's 200 — the
+	// shot flies to the launch-captured endpoint (100) while the monster walks to 130.
+	const nativeFrames = castAt( 100, 60, false );
+	const nativeImpact = nativeFrames.findIndex( frame => frame.hitX !== undefined );
+	assert.ok( nativeImpact > 0, "no native impact effect" );
+	assert.equal( nativeFrames[nativeImpact].hitX, 100 );
+	assert.equal( nativeFrames[nativeImpact].monster, 130 );
+
+	// Port-only Experimental homingProjectiles on: the shot follows the moving
+	// monster and lands on it beyond 130.
+	const frames = castAt( 100, 60, true );
 	const impact = frames.findIndex( frame => frame.hitX !== undefined );
 	assert.ok( impact > 0, "no impact effect" );
 	for ( const frame of frames.slice( 0, impact ) ) {
