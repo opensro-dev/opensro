@@ -312,11 +312,7 @@ Revalidate ownership and live approach range before committing inventory.
 ================
 */
 func (rt *Runtime) completePendingPickup(pending grounditem.Pending, now time.Time) (OpResult, *enterworld.Character) {
-	if rt.Now != nil {
-		if wall := rt.Now(); wall.After(now) {
-			now = wall
-		}
-	}
+	now = rt.pendingPickupNow(now.UnixMilli())
 	character := rt.findCharacter(pending.DivisionID, pending.CharacterName)
 	if character == nil {
 		rt.Pending.Clear(pending.Key)

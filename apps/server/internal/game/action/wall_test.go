@@ -14,8 +14,10 @@ import (
 	"time"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 const (
@@ -218,27 +220,93 @@ func TestWallBreaksRetiresAndBlocksASecondWall(t *testing.T) {
 ================
 TestWallRootsItsCasterUntilItRetires
 
-The wall path of CastLifecycle_ProcessPersistent (584337) never releases
-the cast (no mode-1 B505), and the caster's moves are dropped while the
-wall stands (4EF880 -> 4AAB40, char+C08). Once the wall breaks the caster
-walks again.
+CastLifecycle_ProcessPersistent (5830B0) releases the wall's stage-0 WAIT
+at ActionCastingTimeMs with a single mode-1 B505 (584088..58408A ->
+59AE10(1, 0, castToken, 0)), so the client completes ANI_SKILL_4 to idle
+and extinguishes the READY hand effects (8E2C90 -> 8DF180 -> 8DF480). No
+mode-2 B505 is sent while the wall stands, and char+C0C (4AAB49) keeps
+PlayerAttackLocked true for the wall's lifetime: both ground clicks and
+auto-navigator pursuit/pickup walks (4B0490 -> 4B0EA0 -> 4B0F8E) are dropped
+until the wall retires.
 ================
 */
 func TestWallRootsItsCasterUntilItRetires(t *testing.T) {
-	rt, clock, c, mob := wallFixture(t, crystalWallA1, 5)
+	rt, clock, c, mob := newCombatTestRuntime(t, 100000)
+	c.BattleUntilMs = 0
+	learnWall(t, rt, c, crystalWallA1)
+	mob.Ref.DefaultSkillIDs[0] = 2
+	skills := rt.deps.SkillData().(staticSkillSource)
+	attack := skills[2]
+	attack.Attack.Min, attack.Attack.Max, attack.Attack.Percent, attack.Attack.Flags = 60, 60, 100, 5
+	skills[2] = attack
+
+	if r := castSelf(rt, c, crystalWallA1); r.DiagnosticRefusal != "" || !hasSkillEffect(rt, c.Name, crystalWallA1) {
+		t.Fatalf("wall cast: %+v", r)
+	}
+	wall, ok := rt.standingWallOf(testDivision, c.Name)
+	if !ok {
+		t.Fatal("no wall in the slot")
+	}
+	mode1Releases := 0
 	for i := 0; i < 50; i++ {
 		clock.Advance(100 * time.Millisecond)
 		for _, burst := range rt.TickHook()(clock.NowMs()) {
 			for _, f := range burst.Frames {
-				if f.Opcode == wire.OpSkillEffectControl && len(f.Payload) > 0 && f.Payload[0] == 1 {
-					t.Fatal("the wall's cast was released (mode 1)")
+				if f.Opcode != wire.OpSkillEffectControl || len(f.Payload) < 6 {
+					continue
+				}
+				switch f.Payload[0] {
+				case 1:
+					if len(f.Payload) >= 5 && binary.LittleEndian.Uint32(f.Payload[1:]) == wall.token {
+						mode1Releases++
+					}
+				case 2:
+					if len(f.Payload) >= 6 && binary.LittleEndian.Uint32(f.Payload[2:]) == wall.token {
+						t.Fatal("the standing wall's cast was closed with mode-2 B505")
+					}
 				}
 			}
 		}
 	}
+	if mode1Releases != 1 {
+		t.Fatalf("wall mode-1 B505 releases = %d, want 1 (58408A)", mode1Releases)
+	}
 	if !rt.PlayerAttackLocked(testDivision, c.Name) {
 		t.Fatal("the caster may walk out of a standing wall")
 	}
+
+	// Out-of-range combat pursuit and out-of-range ground-item pickup must
+	// not walk the caster out of the standing wall (4B0490 -> 4B0EA0 -> 4B0F8E).
+	worldKey := simulation.WorldKey(testDivision, c.Name)
+	start := rt.liveSpawn(worldKey, c.Snapshot(), clock.NowMs())
+	farDrop := rt.Ground.Add(testDivision, grounditem.Item{
+		RefObjID:   62,
+		Codename:   "ITEM_ETC_GOLD_02",
+		TypeFlags:  wire.PackTypeFlags(3, 3, 5, 2),
+		GoldAmount: 5,
+		Position:   grounditem.Point{RegionID: start.RegionID, X: float32(start.X + 80), Z: float32(start.Z)},
+	})
+	pickupRes := rt.HandleTargetInteract(testDivision, c, wire.TargetInteract{Gid: farDrop.Gid}.Encode())
+	if len(pickupRes.Broadcast) != 0 || len(pickupRes.Frames) != 0 {
+		t.Fatalf("out-of-range pickup moved the caster out of a standing wall: %+v", pickupRes)
+	}
+	if after := rt.liveSpawn(worldKey, c.Snapshot(), clock.NowMs()); after.X != start.X || after.Z != start.Z {
+		t.Fatalf("pickup moved caster from (%v,%v) to (%v,%v)", start.X, start.Z, after.X, after.Z)
+	}
+	pursuitRes := rt.commitIntentMovement(c, c.Snapshot(), intentMovement{
+		intent: basicAttackIntent{DivisionID: testDivision, CharacterName: c.Name, TargetGid: mob.Gid},
+		from:   start,
+		target: start,
+		goal:   simulation.Spawn{RegionID: start.RegionID, X: start.X + 80, Y: start.Y, Z: start.Z},
+		nowMs:  clock.NowMs(),
+	})
+	if len(pursuitRes.Broadcast) != 0 || len(pursuitRes.Frames) != 0 {
+		t.Fatalf("combat pursuit moved the caster out of a standing wall: %+v", pursuitRes)
+	}
+	if after := rt.liveSpawn(worldKey, c.Snapshot(), clock.NowMs()); after.X != start.X || after.Z != start.Z {
+		t.Fatalf("combat pursuit moved caster from (%v,%v) to (%v,%v)", start.X, start.Z, after.X, after.Z)
+	}
+
 	rt.wallMu.Lock()
 	rt.walls[wallKey(testDivision, c.Name)].pool = 1
 	rt.wallMu.Unlock()

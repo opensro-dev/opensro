@@ -31,6 +31,15 @@ the movement ack toward the item.
 ==================
 */
 func (rt *Runtime) armApproach(divisionID, worldKey, pendingKey string, character *enterworld.Character, groundItem grounditem.Item, approach grounditem.Approach, now time.Time) OpResult {
+	// CGCharAutoCommandActor_Handler_UseItem (4AE0C0 at 4AE267) walks to an
+	// out-of-range drop via CGCharAutoNavigator_TickPursuit (4B0490 -> 4B0EA0),
+	// which drops the internal 0x7021 move at 4B0F8E when vt+0x5A0
+	// (CGObjPC_IsMotionChangeLocked 4EF880 -> CGObjChar_IsAttackLocked 4AAB40)
+	// reports a standing wall (char+C0C) or an open cast (char+C08).
+	if rt.PlayerAttackLocked(divisionID, character.Name) {
+		rt.Pending.Clear(pendingKey)
+		return OpResult{}
+	}
 	// The approach is a real move: live plane + record goal write commit as
 	// one unit (ADR-1 S5; WorldStore.mu nests under store.mu per the lock
 	// table).

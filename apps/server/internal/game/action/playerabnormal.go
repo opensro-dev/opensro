@@ -164,16 +164,14 @@ func (rt *Runtime) PlayerMovementBlocked(division, name string) bool {
 PlayerAttackLocked
 
 CGObjChar_IsAttackLocked (4AAB40): true while the casting instance at
-char+C08 is set, i.e. a skill action has not yet released its positive-time
-step. CGObjPC_IsMotionChangeLocked (4EF880) feeds it to
-CGObjChar_HandleMoveCommand (4B0EA0), which drops a ground command in that
-state instead of queueing it: a player cannot walk out of a cast.
-
-A standing wall keeps its cast there: the wall path of 5830B0 never releases
-or closes it until the wall retires, and CGObjChar_OnTick (4A8976) stops any
-walk of a caster whose C08 cast is an ordinary one (activity 2). Its caster
-is rooted for the wall's life (the client agrees: its WAIT holds action
-state 2, CanPerformLocomotion 877240).
+char+C08 is set (4AAB40, a skill action has not yet released its
+positive-time step) or a standing wall occupies char+C0C (4AAB49, filled by
+SkillCombat_EngageSkill at 59369F and cleared on wall retirement at 582DC0).
+CGObjPC_IsMotionChangeLocked (4EF880, vt+0x5A0) feeds it to
+CGObjChar_HandleMoveCommand (4B0EA0 at 4B0F8E), which drops both direct
+ground moves and CGCharAutoNavigator_TickPursuit's internal 0x7021 moves
+(4B0490 at 4B0813 / 4B0A89), and to CGCharAutoCommandActor_Handler_NormalAttack
+(4AD8E0 at 4AD91F): a player cannot walk out of a cast or a standing wall.
 ================
 */
 func (rt *Runtime) PlayerAttackLocked(division, name string) bool {

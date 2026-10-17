@@ -97,13 +97,17 @@ func (rt *Runtime) acceptWall(division string, c, snapshot *enterworld.Character
 		}
 		return OpResult{DiagnosticRefusal: "wall-commit-refused"}
 	}
-	// No mode-1 release: the wall path of CastLifecycle_ProcessPersistent
-	// (phase 1 straight to SkillCombat_EngageSkill, 584337) sends none, so
-	// the caster's client stays in the cast's WAIT and action state 2 for
-	// as long as the wall stands: rooted, in the casting pose
-	// (CICharactor_CanPerformLocomotion 877240). The wall's retirement
-	// (B6A0) cancels that cast; wallStanding keeps the server's move gate
-	// (PlayerAttackLocked) closed meanwhile.
+	// CastLifecycle_ProcessPersistent (5830B0) enters sub-state 0 (583530) and,
+	// on its TargetRequired == 0 self-persistent branch (583609 -> 583C33 ->
+	// 583DDC -> 583FFB), calls SkillPacket_SendCancelAction(1, 0, castToken, 0)
+	// at 584088..58408A before queueing the sub-state 1 child command (584096..
+	// 5841D9) that clears char+C08 (5841F4) and engages the wall in char+C0C
+	// (584337 -> 59369F). Mode-1 B505 releases the client's stage-0 WAIT
+	// (8E2C90 -> 8DF180) so the caster finishes ANI_SKILL_4 and extinguishes
+	// the READY hand effects instead of freezing in ANI_WAIT04; char+C0C
+	// (wallStanding) keeps CGObjChar_IsAttackLocked (4AAB40..4AAB49) true
+	// until the wall retires (B6A0).
+	rt.queuePersistentRelease(division, c, token, skill, now)
 
 	rt.wallMu.Lock()
 	if rt.walls == nil {
@@ -267,14 +271,15 @@ func (rt *Runtime) wallStanding(division, name string) bool {
 queuePersistentRelease
 
 CastLifecycle_ProcessPersistent (5830B0) sends the mode-1 release (B071 in
-v1.188, B505 here) on the branch that selects a party aura's recipients
-(+0x28C, SkillPacket_SendCancelAction 59AE10 at 5836F5) or creates a world
-object (+0x294). The port installs the aura at the press, so the release
-lands at the end of the authored casting time, where the native lifecycle
-reaches it: the client's WAIT ends, the shot motion plays and the caster
-goes back to idle while the aura stands. A wall takes neither branch and
-gets no release (acceptWall). No mode-2 close follows: the aura's own
-retirement (B6A0) ends the cast.
+v1.188, B505 here) across all four sub-state 0 branches via
+SkillPacket_SendCancelAction (59AE10): TargetRequired != 0 party aura
+(+0x28C at 5836F5), world-object spawn (+0x294 at 583CF0), TargetRequired == 0
+party aura (+0x28C at 583E4F), and TargetRequired == 0 self-persistent / pw
+wall (583FFB..58408A). The port installs the aura or wall at the press, so
+the release lands at the end of the authored casting time, where the native
+lifecycle reaches it: the client's WAIT ends, the shot motion plays and the
+caster goes back to idle while the aura or wall stands. No mode-2 close
+follows: the effect's own retirement (B6A0) ends the cast.
 ==================
 */
 func (rt *Runtime) queuePersistentRelease(division string, c *enterworld.Character, token uint32, skill enterworld.SkillRow, now int64) {

@@ -543,7 +543,12 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 	}
 	intent.HasApproach = false
 	rt.setCombatIntent(intent)
-	if nowMs < intent.NextActionMs || rt.actionAdmissionBlocked(intent.DivisionID, intent.CharacterName, intent.ComboRootID != 0) {
+	// CGCharAutoCommandActor_Handler_NormalAttack (4AD8E0) checks vt+0x5A0
+	// (CGObjPC_IsMotionChangeLocked 4EF880 -> CGObjChar_IsAttackLocked 4AAB40)
+	// in state 0 (4AD91A..4AD929), holding basic attacks while a wall stands
+	// or a skill cast is open; SkillCast (4AE590) allows an in-range non-ao/pw
+	// skill to fire in place.
+	if nowMs < intent.NextActionMs || rt.actionAdmissionBlocked(intent.DivisionID, intent.CharacterName, intent.ComboRootID != 0) || (!intent.SingleCast && rt.PlayerAttackLocked(intent.DivisionID, intent.CharacterName)) {
 		return combatTransition
 	}
 	result, decision := rt.acceptSkillStageAt(intent.DivisionID, character, snapshot, wire.SkillAction{
@@ -656,6 +661,13 @@ commitIntentMovement
 ================
 */
 func (rt *Runtime) commitIntentMovement(character, snapshot *enterworld.Character, move intentMovement) OpResult {
+	// CGCharAutoNavigator_TickPursuit (4B0490 at 4B0813 / 4B0A89) dispatches
+	// its pursuit walk through CGObjChar_HandleMoveCommand (4B0EA0), which
+	// drops the move at 4B0F8E when vt+0x5A0 (CGObjPC_IsMotionChangeLocked
+	// 4EF880 -> CGObjChar_IsAttackLocked 4AAB40) is true.
+	if rt.PlayerAttackLocked(move.intent.DivisionID, character.Name) {
+		return OpResult{}
+	}
 	if mountedOnCOS(snapshot) {
 		return rt.commitRiddenIntentMovement(character, snapshot, move)
 	}
