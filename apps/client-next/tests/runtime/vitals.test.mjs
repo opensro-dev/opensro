@@ -95,3 +95,27 @@ test("reseeding and world travel preserve current vitals; a new login replaces t
 	assert.equal( g.take().vitals[0].hp, 90 );
 	g.dispose();
 });
+test("33A6 ignores unknown foreign GIDs while accepting spawned entities and owned companions", () => {
+	const entities = new Map( [ [ 2, { gid: 2, kind: "monster", regionId: 1, x: 0, y: 0, z: 0, heading: 0 } ] ] );
+	const g = createGameplay( () => {}, () => {}, () => {}, gid => entities.get( gid ) );
+	const local = { gid: 1, regionId: 1, x: 0, y: 0, z: 0, heading: 0 };
+	g.bootstrap( { character: { hp: 100, mp: 100, maxHp: 200, maxMp: 200 } } );
+	g.seed( local );
+	const vitalFor = ( gid, hp ) => {
+		const p = new Uint8Array( 11 ), v = new DataView( p.buffer );
+		v.setUint32( 0, gid, true );
+		v.setUint16( 4, 0x400, true );
+		p[6] = 1;
+		v.setUint32( 7, hp, true );
+		return p;
+	};
+	assert.equal( g.receive( { opcode: 0x33a6, payload: vitalFor( 999, 50 ) }, 0 ), false );
+	assert.deepEqual( g.take().vitals.map( row => row.gid ), [ 1 ] );
+	assert.equal( g.receive( { opcode: 0x33a6, payload: vitalFor( 2, 75 ) }, 0 ), true );
+	assert.deepEqual( g.take().vitals.map( row => [ row.gid, row.hp ] ), [ [ 1, 100 ], [ 2, 75 ] ] );
+	entities.delete( 2 );
+	g.entityLifecycle( { kind: "despawn", gid: 2 } );
+	assert.equal( g.receive( { opcode: 0x33a6, payload: vitalFor( 2, 40 ) }, 0 ), false );
+	assert.deepEqual( g.take().vitals.map( row => row.gid ), [ 1 ] );
+	g.dispose();
+});

@@ -240,6 +240,7 @@ import {
 import { skillBindings, quickSlotPacket } from "@/engine/foundation/gameplay/quickslots";
 import { decodeCosRecord } from "@/engine/foundation/gameplay/cos-record";
 import { decodeWorldClock } from "@/engine/foundation/gameplay/world-clock";
+import { vitalsUpdate } from "@/engine/foundation/gameplay/vitals";
 import { createQuests } from "./quests/quests";
 import { createNpcConversation } from "./npc/npc";
 import { createChat } from "./chat/chat";
@@ -3665,6 +3666,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( cosRecords.has( gid ) ) {
 						cosSelection.remove( gid, cosRecords );
 						cosRecords.delete( gid );
+						if ( !readEntity( gid ) ) combat.remove( gid );
 						if ( activeCos?.gid === gid ) {
 							activeCos = undefined;
 							cosResult = undefined;
@@ -3821,6 +3823,19 @@ Packet handling must not depend on which HUD panel is currently open.
 						storage.apply( next );
 						dirty = true;
 						return true;
+					}
+				}
+				if ( frame.opcode === 0x33a6 ) {
+					const { gid } = vitalsUpdate( frame.payload );
+					// CPSMission_OnVitalsUpdate0x33A6 (0x0077a080): resolves gid via
+					// GidObjectRegistry_FindEntityByGid (0x0077a0d7) or the local
+					// player's CCosDataManager_FindCharData (0x0077a0f7); if neither
+					// exists (0x0077a100: je 0x77a199), consumes the packet and returns.
+					if (
+						gid !== localGid && !readEntity( gid ) && !cosRecords.has( gid ) &&
+						!combat.state().vitals.some( row => row.gid === gid )
+					) {
+						return false;
 					}
 				}
 				const item = inventory.receive( frame.opcode, frame.payload, now, {
