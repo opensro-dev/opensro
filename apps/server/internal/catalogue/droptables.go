@@ -85,8 +85,9 @@ type BetaRates struct {
 	// Seals multiply each rare seal's chance on top of rareChance
 	// (progression.SealRates); absent, every seal runs at rareChance.
 	// Rare replaces a table's native rare attempt where the beta seal band
-	// changes it (levels 86-94 also roll degree-9 Star and Moon).
-	Rare  map[string][]DropChance `json:"rare,omitempty" doc:"Port-only beta balance: monster table to its rare attempt where the beta seal band changes it (levels 86-94 roll degree-9 Star and Moon at level 85's share); a table not named keeps its rare list."`
+	// changes it (levels 81-89 also roll degree-9 Star and levels 86-94 also
+	// roll degree-9 Moon).
+	Rare  map[string][]DropChance `json:"rare,omitempty" doc:"Port-only beta balance: monster table to its rare attempt where the beta seal band changes it (levels 81-89 roll degree-9 Star at level 80's share and levels 86-94 roll degree-9 Moon at level 85's share); a table not named keeps its rare list."`
 	Seals [][]int                 `json:"seals,omitempty" doc:"Port-only beta balance: nine rows (degree 1 first) of three multipliers (Seal of Star, Moon, Sun). A rare item's chance is its rareChance share times its degree and seal's multiplier; the seal is (ItemClass - 1) % 3 and the degree (ItemClass + 2) / 3."`
 	// Mix gives the named families their own rate in place of dropRate
 	// (progression.DropMix); absent, every family runs at dropRate.

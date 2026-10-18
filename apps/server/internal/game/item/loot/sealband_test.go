@@ -36,58 +36,83 @@ func rareShares(chances []Chance) map[string]float64 {
 
 /*
 ================
-TestSealBandGivesLevels86To94Level85StarAndMoon
+TestSealBandGivesLevels81To94EndgameStarAndMoon
 ================
 */
-func TestSealBandGivesLevels86To94Level85StarAndMoon(t *testing.T) {
+func TestSealBandGivesLevels81To94EndgameStarAndMoon(t *testing.T) {
 	if sealBandRows == nil {
 		t.Fatal("the catalogue's rare rows lost the band's prefix shape")
 	}
-	edge := rareShares(EquipmentAttemptChances(sealBandEdge, 0, true))
-	if edge["09A"] == 0 || edge["09B"] == 0 {
-		t.Fatalf("level %d rolls no degree-9 Star or Moon: %v", sealBandEdge, edge)
+	starEdge := rareShares(EquipmentAttemptChances(sealStarEdge, 0, true))
+	if starEdge["09A"] == 0 {
+		t.Fatalf("level %d rolls no degree-9 Star: %v", sealStarEdge, starEdge)
 	}
-	// Level 85's rare row begins with the G25 prefix (threshold 320) that
-	// buildSealBandRows appends onto levels 86-94. Measure that prefix entry's
-	// own degree-9 Star and Moon shares at level 85 directly so G27's position
-	// shift between levels 85 and 86 does not add its modulo bias.
-	prefixAcc := chanceAccumulator{}
-	for group, classMass := range classChances(equipment.classes[1][sealBandEdge-1][:1]) {
-		equipment.selectionChances(0, group, true, sealBandEdge, classMass, prefixAcc.add)
+	moonEdge := rareShares(EquipmentAttemptChances(sealMoonEdge, 0, true))
+	if moonEdge["09A"] == 0 || moonEdge["09B"] == 0 {
+		t.Fatalf("level %d rolls no degree-9 Star or Moon: %v", sealMoonEdge, moonEdge)
 	}
-	prefix := rareShares(prefixAcc.sorted())
-	if prefix["09A"] <= 0 || prefix["09B"] <= 0 {
-		t.Fatalf("level %d prefix carries no Star or Moon mass: %v", sealBandEdge, prefix)
+	// Measure level 80's G24 prefix (threshold 3554) and level 85's G25 prefix
+	// (threshold 320) directly so the position shift of appended entries does
+	// not conflate with existing G27/G28 entries.
+	starPrefixAcc := chanceAccumulator{}
+	for group, classMass := range classChances(equipment.classes[1][sealStarEdge-1][:1]) {
+		equipment.selectionChances(0, group, true, sealStarEdge, classMass, starPrefixAcc.add)
+	}
+	starPrefix := rareShares(starPrefixAcc.sorted())
+	if starPrefix["09A"] <= 0 {
+		t.Fatalf("level %d prefix carries no Star mass: %v", sealStarEdge, starPrefix)
+	}
+	moonPrefixAcc := chanceAccumulator{}
+	for group, classMass := range classChances(equipment.classes[1][sealMoonEdge-1][:1]) {
+		equipment.selectionChances(0, group, true, sealMoonEdge, classMass, moonPrefixAcc.add)
+	}
+	moonPrefix := rareShares(moonPrefixAcc.sorted())
+	if moonPrefix["09A"] <= 0 || moonPrefix["09B"] <= 0 {
+		t.Fatalf("level %d prefix carries no Star or Moon mass: %v", sealMoonEdge, moonPrefix)
 	}
 	near := func(a, b float64) bool { return math.Abs(a-b) <= 1e-12 }
 	close := func(a, b float64) bool { return math.Abs(a-b) <= 0.005*b }
-	for level := uint8(sealBandEdge + 1); level <= sealBandEnd; level++ {
+	for level := uint8(sealStarEdge + 1); level <= sealBandEnd; level++ {
 		native := rareShares(EquipmentAttemptChances(level, 0, true))
 		band := rareShares(SealBandRareChances(level, 0))
-		// With native step=3 (726f19 / 724120), G27 (D10 Star) at levels 86-94
-		// steps 27-3=24 into D9 Star natively, and G28 (D10 Moon) at levels
-		// 86-89 steps 28-3=25 into D9 Moon natively; levels 90-94 have no
-		// native D9 Moon without the band.
 		if native["09A"] == 0 {
 			t.Fatalf("level %d lost native G27->G24 Star fallback: %v", level, native)
 		}
 		if level <= 89 && native["09B"] == 0 {
-			t.Fatalf("level %d lost native G28->G25 Moon fallback: %v", level, native)
+			t.Fatalf("level %d lost native G25/G28 Moon: %v", level, native)
 		}
 		if level >= 90 && native["09B"] != 0 {
 			t.Fatalf("level %d already rolls Moon natively: %v", level, native)
 		}
-		// The appended G25 prefix sits after each row's last threshold, so its
-		// added Star/Moon mass matches level 85's prefix up to the combined
-		// roll's modulo bias (< 0.5%).
-		if !close(band["09A"]-native["09A"], prefix["09A"]) || !close(band["09B"]-native["09B"], prefix["09B"]) {
-			t.Fatalf("level %d: added Star %g Moon %g, want prefix %g %g", level, band["09A"]-native["09A"], band["09B"]-native["09B"], prefix["09A"], prefix["09B"])
+		// Levels 81-84 append level 80's G24 Star prefix (3554); at levels
+		// 81-83 some high-ReqLevel G24 picks step 24-3=21 into degree-8 Star
+		// (08A), so the combined 09A+08A gain equals the prefix's 09A mass.
+		// Levels 85 leaves Moon native and appends the G24 Star prefix (all
+		// G24 items fit at level 85). Levels 86-89 append both the G24 Star
+		// prefix and level 85's G25 Moon prefix. Levels 90-94 keep their
+		// native G27 Star and append level 85's G25 Moon prefix.
+		addedStar := (band["09A"] - native["09A"]) + (band["08A"] - native["08A"])
+		addedMoon := band["09B"] - native["09B"]
+		switch {
+		case level <= sealMoonEdge:
+			if !close(addedStar, starPrefix["09A"]) || !near(addedMoon, 0) {
+				t.Fatalf("level %d: added Star %g Moon %g, want Star %g Moon 0", level, addedStar, addedMoon, starPrefix["09A"])
+			}
+		case level <= sealStarEnd:
+			wantStar := starPrefix["09A"] + moonPrefix["09A"]
+			if !close(addedStar, wantStar) || !close(addedMoon, moonPrefix["09B"]) {
+				t.Fatalf("level %d: added Star %g Moon %g, want %g %g", level, addedStar, addedMoon, wantStar, moonPrefix["09B"])
+			}
+		default:
+			if !close(addedStar, moonPrefix["09A"]) || !close(addedMoon, moonPrefix["09B"]) {
+				t.Fatalf("level %d: added Star %g Moon %g, want %g %g", level, addedStar, addedMoon, moonPrefix["09A"], moonPrefix["09B"])
+			}
 		}
 		if !near(band["09C"], native["09C"]) {
 			t.Fatalf("level %d: Sun %g, want its own %g", level, band["09C"], native["09C"])
 		}
 	}
-	for _, level := range []uint8{1, 50, 76, sealBandEdge, sealBandEnd + 1, 100} {
+	for _, level := range []uint8{1, 50, 76, sealStarEdge, sealBandEnd + 1, 100} {
 		native := EquipmentAttemptChances(level, 0, true)
 		band := SealBandRareChances(level, 0)
 		if len(native) != len(band) {
