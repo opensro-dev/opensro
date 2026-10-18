@@ -281,3 +281,29 @@ export function petPlayerAttack( target: EntityState, c: NameColorContext, alt: 
 	if ( !canAttackPlayer( target, c, alt ) ) return { kind: "none" };
 	return (c.local.level ?? 0) < PLAYER_ATTACK_MIN_LEVEL ? { kind: "low-level" } : { kind: "attack" };
 }
+
+/*
+================
+petCosAttack
+
+CICCos_ExecuteActionCommand (6A2350) case 2 for a pet target
+(0x6A25B3..0x6A25F4): a pet whose owner is in the party or an ally is
+left alone (Entity_IsPartyOrAllyMember 854540), as is one of the local
+player's own pets; then CICCos_CanAttack (vtable +0xA4, 854860) with
+the Alt state (GetKeyState(VK_MENU)) must admit it, and only an owner
+of level 20 or above may send the pet (0x6A25ED, else notice 4:0x16).
+Unlike the 6935F0 double click there is no PvP-cape exemption.
+================
+*/
+export function petCosAttack(
+	target: EntityState,
+	c: NameColorContext,
+	alt: boolean,
+	r: CosRelations
+): PlayerInteraction {
+	if ( target.kind !== "cos" || target.ownerGid === c.local.gid ) return { kind: "none" };
+	const owner = target.ownerGid === undefined ? undefined : r.entity( target.ownerGid );
+	if ( owner?.kind === "player" && partyName( c.social, owner.name ) ) return { kind: "none" };
+	if ( !canAttackCos( target, c, alt, r ) ) return { kind: "none" };
+	return (c.local.level ?? 0) < PLAYER_ATTACK_MIN_LEVEL ? { kind: "low-level" } : { kind: "attack" };
+}

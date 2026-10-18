@@ -316,7 +316,7 @@ export type GameplayCommand =
 	| { readonly kind: "cos-follow"; readonly gid: number; }
 	| { readonly kind: "cos-cancel"; readonly gid: number; }
 	| { readonly kind: "cos-clean"; readonly gid: number; }
-	| { readonly kind: "cos-pet-attack"; readonly gid: number; readonly pet: number; }
+	| { readonly kind: "cos-pet-attack"; readonly gid: number; readonly pet: number; readonly alt?: boolean; }
 	| { readonly kind: "cos-ride"; readonly gid: number; readonly mounted: boolean; }
 	| { readonly kind: "shop-buyback"; readonly id: number; }
 	// 0x746F at the open shop's smith: mode 1 repairs one slot, 2 everything.

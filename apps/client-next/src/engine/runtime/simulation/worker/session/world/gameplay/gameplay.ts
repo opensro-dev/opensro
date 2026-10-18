@@ -2173,13 +2173,14 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "cos-pet-attack" ) {
 				// 6A2350 case 2: an attack pet (class 3) attacks the player's target
 				// with 0x769E [u32 pet][u8 2][u32 target] and remembers it at
-				// +0xAB2C. A monster is always a target; a player arrives only
-				// admitted by the core (player-attack.ts petPlayerAttack).
+				// +0xAB2C. A monster is always a target; a player or a pet arrives
+				// only admitted by the core (player-attack.ts petPlayerAttack /
+				// petCosAttack).
 				// command.gid names the target; the record set holds only owned pets.
 				const record = cosRecords.get( command.pet );
 				if (
 					!record || record.band !== 3 || record.dead || record.hp === 0 ||
-					(entity?.kind !== "monster" && entity?.kind !== "player")
+					(entity?.kind !== "monster" && entity?.kind !== "player" && entity?.kind !== "cos")
 				) {
 					throw Error( "No attack pet or attackable target" );
 				}

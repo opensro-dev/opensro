@@ -2695,7 +2695,8 @@ export function createUi(
 				sendGameplay( { kind: "cos-ride", gid: record.gid, mounted: !context.mounted } );
 				return;
 			case COS_COMMAND_ATTACK:
-				// The selected target is the pet's; the client attacks monsters only.
+				// The selected target is the pet's; the worker admits a monster, a
+				// player or another pet (6A2350 case 2, player-attack.ts).
 				if ( view?.gameplay?.target ) {
 					sendGameplay( { kind: "cos-pet-attack", gid: view.gameplay.target, pet: record.gid } );
 				}

@@ -15,6 +15,7 @@ const {
 	canAttackPlayer,
 	cosInteraction,
 	hoverAttack,
+	petCosAttack,
 	petPlayerAttack,
 	playerInteraction,
 	skillTargetAdmission
@@ -115,6 +116,42 @@ const lookup = rows => ({
 	rider: gid => rows.find( row => row.mountedOn === gid )
 });
 const none = lookup( [] );
+
+test("6A2350 case 2: a pet is sent at another pet only past the party, ownership, CanAttack and level checks", () => {
+	const owner = player();
+	assert.deepEqual(
+		petCosAttack( pet( { ownerGid: 1 } ), context(), true, lookup( [ player( { gid: 1 } ) ] ) ),
+		{ kind: "none" },
+		"one of the local player's own pets"
+	);
+	const social = { leader: 1, members: [ { name: "other" } ] };
+	assert.deepEqual(
+		petCosAttack( pet(), context( { social } ), true, lookup( [ owner ] ) ),
+		{ kind: "none" },
+		"a party member's pet"
+	);
+	assert.deepEqual(
+		petCosAttack( pet(), context(), false, lookup( [ owner ] ) ),
+		{ kind: "none" },
+		"a neutral owner's pet without Alt"
+	);
+	assert.deepEqual( petCosAttack( pet(), context(), true, lookup( [ owner ] ) ), { kind: "attack" } );
+	assert.deepEqual(
+		petCosAttack( pet(), context(), false, lookup( [ player( { pvpState: 1 } ) ] ) ),
+		{ kind: "attack" },
+		"an aggressor's pet needs no Alt"
+	);
+	assert.deepEqual(
+		petCosAttack( pet( { tidWord: cosWord( 4 ) } ), context(), true, lookup( [ owner ] ) ),
+		{ kind: "none" },
+		"a pickup pet is never attacked"
+	);
+	const low = context();
+	assert.deepEqual(
+		petCosAttack( pet(), { ...low, local: { ...low.local, level: 19 } }, true, lookup( [ owner ] ) ),
+		{ kind: "low-level" }
+	);
+});
 
 test("6FCD50: an offensive skill at a neutral player needs Alt", () => {
 	assert.deepEqual( skillTargetAdmission( player(), context(), false, true, none ), { kind: "none" } );

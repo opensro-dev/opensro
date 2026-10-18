@@ -23,6 +23,7 @@ import { commerceReferences } from "@/engine/foundation/gameplay/commerce";
 import {
 	cosInteraction,
 	hoverAttack,
+	petCosAttack,
 	petPlayerAttack,
 	playerInteraction,
 	skillTargetAdmission
@@ -114,13 +115,15 @@ when the local player is mounted, as a monster attack is), or nothing.
 ================
 petAttackAdmitted
 
-6A2350 case 2 for a player target; a refusal publishes its notice.
+6A2350 case 2 for a player or pet target; a refusal publishes its notice.
 ================
 	*/
-	function petAttackAdmitted( gid: number ): boolean {
+	function petAttackAdmitted( gid: number, alt: boolean ): boolean {
 		const target = entities.read( gid ), context = nameContext();
 		if ( !target || !context ) return false;
-		const decision = petPlayerAttack( target, context, false );
+		const decision = target.kind === "cos" ?
+			petCosAttack( target, context, alt, { entity: entities.read, rider: entities.rider } ) :
+			petPlayerAttack( target, context, alt );
 		if ( decision.kind === "low-level" ) {
 			const notice = resolveNativeNotice( 4, PLAYER_ATTACK_LEVEL_NOTICE, { pkProhibited: false } );
 			if ( notice.kind === "notice" ) gameplay.notice( notice.notice );
@@ -410,11 +413,12 @@ UI and quickslot commands. A skill aims at the newest selection intent
 				if ( !attack ) return;
 				command = attack;
 			}
-			// 6A2350 case 2: a pet sent at a player needs the owner's own
-			// admission (player-attack.ts); a monster needs none.
+			// 6A2350 case 2: a pet sent at a player or a pet needs the owner's
+			// own admission (player-attack.ts); a monster needs none.
 			if (
-				command.kind === "cos-pet-attack" && entities.read( command.gid )?.kind === "player" &&
-				!petAttackAdmitted( command.gid )
+				command.kind === "cos-pet-attack" &&
+				(entities.read( command.gid )?.kind === "player" || entities.read( command.gid )?.kind === "cos") &&
+				!petAttackAdmitted( command.gid, command.alt ?? false )
 			) {
 				return;
 			}

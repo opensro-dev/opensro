@@ -164,8 +164,11 @@ export function startRuntime(
 				const query = renderer.pickGround( worldPointer[0], worldPointer[1] );
 				if ( query ) command = { ...command, command: { ...command.command, query } };
 			}
-			// 6FCD50 reads the Alt state when the press executes.
-			if ( command.kind === "gameplay" && command.command.kind === "skill" && input.altHeld() ) {
+			// 6FCD50 and 6A2350 case 2 read the Alt state when the press executes.
+			if (
+				command.kind === "gameplay" &&
+				(command.command.kind === "skill" || command.command.kind === "cos-pet-attack") && input.altHeld()
+			) {
 				command = { ...command, command: { ...command.command, alt: true } };
 			}
 			simulation.session( command );
