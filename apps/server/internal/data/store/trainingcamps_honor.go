@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strings"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/domain/charactervitals"
@@ -79,11 +80,12 @@ func (door storeCampDoor) Graduate(divisionID string, memberCharID int64, satisf
 ================
 CompulsoryGraduate
 
-CGObjPC_HandleAcademyCompulsoryGraduate7476 (0x00519770):
-Master-initiated compulsory graduation of a level-40+ apprentice after 24h
-in the camp (CTrainingCamp_HasJoinCooldownElapsed 0x005DD3F0), passing
-arg3 = +1 (@Evaluation delta +1, matching 0x00ADE9A4[2] = satisfaction 2)
-and arg2 = 0 (compulsory) at 0x005198A4..0x005198AB.
+CGObjPC_HandleAcademyCompulsoryGraduate7476 (0x00519770) ->
+TrainingCamp_ApplyMemberCommand (0x005DEF20 @ 0x005198AB):
+Master-initiated compulsory graduation of a level-41+ apprentice
+(TrainingCampMember_IsState2 0x005E36E0 @ 0x0051987A; 0x00519883: cmp dl, 0x28;
+jbe 0x519898 -> push 0x6822), passing arg3 = +1 (@Evaluation delta +1, matching
+0x00ADE9A4[2] = satisfaction 2) and arg2 = 0 (compulsory) at 0x005198A4..0x005198AB.
 ================
 */
 func (door storeCampDoor) CompulsoryGraduate(divisionID string, masterCharID int64, targetName string, nowMs int64) domain.TrainingCampGraduateResult {
@@ -100,7 +102,10 @@ func (door storeCampDoor) CompulsoryGraduate(divisionID string, masterCharID int
 	}
 	campID, joined := door.campOfCharacterLocked(divisionID, masterCharID)
 	camp, exists := s.camps[divisionID][campID]
-	if !joined || !exists || camp.MasterCharID != masterCharID {
+	if !joined || !exists {
+		return domain.TrainingCampGraduateResult{Refusal: domain.TrainingCampGraduateNotInCamp}
+	}
+	if camp.MasterCharID != masterCharID {
 		return domain.TrainingCampGraduateResult{Refusal: domain.TrainingCampGraduateNotMaster}
 	}
 
@@ -109,7 +114,7 @@ func (door storeCampDoor) CompulsoryGraduate(divisionID string, masterCharID int
 	var targetChar *domain.Character
 	for i, member := range members {
 		candidate := s.characterByIDLocked(divisionID, member.CharID)
-		if candidate != nil && !candidate.DeletePending && candidate.Name == targetName {
+		if candidate != nil && !candidate.DeletePending && strings.EqualFold(candidate.Name, targetName) {
 			targetIdx = i
 			targetChar = candidate
 			break
@@ -122,15 +127,8 @@ func (door storeCampDoor) CompulsoryGraduate(divisionID string, masterCharID int
 	if targetMember.Kind != 2 {
 		return domain.TrainingCampGraduateResult{Refusal: domain.TrainingCampGraduateNotApprentice}
 	}
-	if resolvedCharacterLevel(targetChar) < campGraduationLevel {
-		return domain.TrainingCampGraduateResult{Refusal: domain.TrainingCampGraduateLevelLow}
-	}
-
-	if nowMs <= 0 {
-		nowMs = s.now().UnixMilli()
-	}
-	if targetMember.JoinedAtMs > 0 && (nowMs-targetMember.JoinedAtMs) < campCompulsoryWaitMs {
-		return domain.TrainingCampGraduateResult{Refusal: domain.TrainingCampGraduateWait24h}
+	if resolvedCharacterLevel(targetChar) < campCompulsoryGraduationLevel {
+		return domain.TrainingCampGraduateResult{Refusal: domain.TrainingCampGraduateCompulsoryLevelLow}
 	}
 
 	return door.completeGraduationLocked(divisionID, campID, targetIdx, 2, false, nowMs)

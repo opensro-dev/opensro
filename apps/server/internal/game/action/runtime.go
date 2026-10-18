@@ -572,14 +572,12 @@ type Runtime struct {
 	PublicChat *chatfeed.Feed
 
 	// HonorPoints returns the character's usable Training Camp honor points
-	// (CTrainingCampMember+0x5C, read by CShopApp_CheckPurchasePayment
-	// @0x00617360). Nil reports 0.
+	// (0x00617360 @ 0x00617629 -> 0x004EA600 -> 0x005E4260, [member+0x34]+0x54). Nil reports 0.
 	HonorPoints func(divisionID string, c *enterworld.Character) uint32
 
-	// SpendHonorPoints deducts cost from the character's Training Camp honor
-	// points and broadcasts 0x3AC5 status 5 flag 5 to online camp members
-	// (CGObjPC_ConsumeShopPayment_5ded00 @0x005ded00). Nil refuses honor
-	// deductions.
+	// SpendHonorPoints deducts cost from Training Camp honor points and broadcasts
+	// 0x3AC5 status 5 flag 3 (0x004E9AE0 @ 0x004E9C1A..0x004E9C37 -> 0x005E3760 -> 0x005DE6C0).
+	// Nil refuses honor deductions.
 	SpendHonorPoints func(divisionID string, c *enterworld.Character, cost uint32) bool
 
 	// honorMu serializes shop purchases against HonorPoints + SettleTrade +

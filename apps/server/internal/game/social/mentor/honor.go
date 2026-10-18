@@ -39,17 +39,19 @@ const (
 	OpTCHonorRankAnswer           uint16 = 0xB2D0
 )
 
-// Category-0x1D error codes (client sub_689420 jump table at 0x0068afd6).
+// Category-0x1D error codes (v1.188 SR_GameServer.exe 0x004E4780 /
+// 0x00519120..0x005198F2 low bytes; client sub_689420 category 0x1D switch at
+// 0x0068AFD0..0x0068B0DF).
 const (
-	ErrTCDead           uint8 = 0x07 // UIIT_MSG_TC_ERROR_DEAD
-	ErrTCNotInCamp      uint8 = 0x14 // UIIT_MSG_TC_ERROR_NOT_BELONG_TC
-	ErrTCOnlyBossCanUse uint8 = 0x15 // UIIT_MSG_TC_ERROR_ONLY_BOSS_CAN_USE
-	ErrTCNotCancel      uint8 = 0x16 // UIIT_MSG_TC_ERROR_NOT_CANCEL
-	ErrTCTargetNotInTC  uint8 = 0x17 // UIIT_MSG_TC_ERROR_TARGET_NOT_IN_TC
-	ErrTCDisbandWait24h uint8 = 0x1D // UIIT_MSG_TC_ERROR_NOT_CANCEL_24H
-	ErrTCGraduateLevel  uint8 = 0x1F // UIIT_MSG_TC_ERROR_GRADUATE_LEVEL
-	ErrTCCompulsory24h  uint8 = 0x20 // UIIT_MSG_TC_ERROR_COMPULSORY_GRADUATION_24H
-	ErrTCCantBanMember  uint8 = 0x24 // UIIT_MSG_TC_ERROR_CANT_BAN_MEMBER
+	ErrTCDead          uint8 = 0x07 // 0x6807 -> UIIT_MSG_TC_ERROR_DIE_PASSING
+	ErrTCNotInCamp     uint8 = 0x0B // 0x680B -> UIIT_MSG_TC_ERROR_TRAININGCAMP_NOTHING
+	ErrTCNoMember      uint8 = 0x15 // 0x6815 -> UIIT_MSG_TC_ERROR_ORDER_WORK
+	ErrTCNotCancel     uint8 = 0x16 // 0x6816 -> UIIT_MSG_TC_ERROR_ORDER_WORK
+	ErrTCGraduateLevel uint8 = 0x1A // 0x681A -> UIIT_MSG_TC_ERROR_GRADUATION_LEVER
+	ErrTCDisbandWait7d uint8 = 0x1D // 0x681D -> UIIT_MSG_TC_ERROR_NOT_DISORGANIZATION_7D
+	ErrTCNotBan24h     uint8 = 0x20 // 0x6820 -> UIIT_MSG_TC_ERROR_NOT_BAN_24T
+	ErrTCNotOut24h     uint8 = 0x21 // 0x6821 -> UIIT_MSG_TC_ERROR_NOT_OUT_24T
+	ErrTCPossible41L   uint8 = 0x22 // 0x6822 -> UIIT_MSG_TC_ERROR_POSIBLE_41L
 )
 
 // GraduateBonusExp is the flat 2,000,000 EXP reward granted to an apprentice
@@ -96,12 +98,13 @@ func encodeResultError(code uint8) []byte {
 ================
 encodeDisbandWaitError
 
-76FE00 reads [u8 2][u8 0x1D][u32 remainingSeconds] when DisbandCamp refuses
-within the 24-hour creation window.
+CPSMission_OnTrainingCampResponse0xB7C5 (0x0076FC90 @ 0x0076FCD0..0x0076FCDF)
+reads [u8 2][u8 0x1D][u32 remainingSeconds] when DisbandCamp refuses within the
+7-day creation window (0x004E4780 -> 0x005DD350).
 ================
 */
 func encodeDisbandWaitError(remainingSeconds uint32) []byte {
-	return wire.NewWriter(6).U8(2).U8(ErrTCDisbandWait24h).U32(remainingSeconds).Payload()
+	return wire.NewWriter(6).U8(2).U8(ErrTCDisbandWait7d).U32(remainingSeconds).Payload()
 }
 
 /*
@@ -149,8 +152,9 @@ func (r *InviteRuntime) publishRankChanges(divisionID string, changes []domain.T
 ================
 handleDisband
 
-Handles 0x77C5 (client 702E70, 0 bytes). The master dissolves the camp at
-least 24 hours after opening, receives 0xB7C5 [1], all online members
+Handles 0x77C5 (client 702E70, 0 bytes; v1.188 CGObjPC_HandleAcademyDisband7471
+0x00519120 -> TrainingCamp_ValidateDisband 0x004E4780). The master dissolves the
+camp at least 7 days after opening, receives 0xB7C5 [1], all online members
 receive 0x3AC5 [1], and any changed Honor Rank buffs are synchronized.
 ================
 */
@@ -182,8 +186,10 @@ func (r *InviteRuntime) handleDisband(s *transport.Session, opcode uint16, paylo
 		_ = s.Send(OpTCDisbandAnswer, encodeDisbandWaitError(res.RemainingSeconds))
 	case domain.TrainingCampDisbandDead:
 		_ = s.Send(OpTCDisbandAnswer, encodeResultError(ErrTCDead))
+	case domain.TrainingCampDisbandNotInCamp:
+		_ = s.Send(OpTCDisbandAnswer, encodeResultError(ErrTCNotInCamp))
 	case domain.TrainingCampDisbandNotMaster:
-		_ = s.Send(OpTCDisbandAnswer, encodeResultError(ErrTCOnlyBossCanUse))
+		_ = s.Send(OpTCDisbandAnswer, encodeResultError(ErrTCNotCancel))
 	default:
 		_ = s.Send(OpTCDisbandAnswer, encodeResultError(ErrTCNotInCamp))
 	}
@@ -193,9 +199,10 @@ func (r *InviteRuntime) handleDisband(s *transport.Session, opcode uint16, paylo
 ================
 handleLeave
 
-Handles 0x7785 (client 702FD0, 0 bytes). A non-master member leaves their
-camp voluntarily, receives 0xB785 [1], and all online camp members (including
-the leaver) receive 0x3AC5 [3][u32 gid][1].
+Handles 0x7785 (client 702FD0, 0 bytes; v1.188 CGObjPC_HandleAcademyLeave7474
+0x00519510). A non-master member leaves their camp voluntarily after 24 hours
+in the camp, receives 0xB785 [1], and all online camp members (including the
+leaver) receive 0x3AC5 [3][u32 gid][1].
 ================
 */
 func (r *InviteRuntime) handleLeave(s *transport.Session, opcode uint16, payload []byte) {
@@ -219,6 +226,8 @@ func (r *InviteRuntime) handleLeave(s *transport.Session, opcode uint16, payload
 		_ = s.Send(OpTCLeaveAnswer, encodeResultError(ErrTCDead))
 	case domain.TrainingCampLeaveIsMaster:
 		_ = s.Send(OpTCLeaveAnswer, encodeResultError(ErrTCNotCancel))
+	case domain.TrainingCampLeaveWait24h:
+		_ = s.Send(OpTCLeaveAnswer, encodeResultError(ErrTCNotOut24h))
 	default:
 		_ = s.Send(OpTCLeaveAnswer, encodeResultError(ErrTCNotInCamp))
 	}
@@ -248,9 +257,10 @@ func decodeCampTargetName(payload []byte) (string, bool) {
 ================
 handleKick
 
-Handles 0x74D4 (client 704BB0, {str name}). The master expels a sub-mentor
-or an under-40 student, receives 0xB4D4 [1], and all online camp members
-(including the kicked target) receive 0x3AC5 [3][u32 targetGid][2].
+Handles 0x74D4 (client 704BB0, {str name}; v1.188 CGObjPC_HandleAcademyKick7473
+0x005193A0). The master expels a non-master camp member after 24 hours in the
+camp, receives 0xB4D4 [1], and all online camp members (including the kicked
+target) receive 0x3AC5 [3][u32 targetGid][2].
 ================
 */
 func (r *InviteRuntime) handleKick(s *transport.Session, opcode uint16, payload []byte) {
@@ -280,12 +290,12 @@ func (r *InviteRuntime) handleKick(s *transport.Session, opcode uint16, payload 
 		log.Debugf("mentor: %s kicked %s from academy (camp %d)", actor.Name, targetName, res.Camp.ID)
 	case domain.TrainingCampKickDead:
 		_ = s.Send(OpTCKickAnswer, encodeResultError(ErrTCDead))
-	case domain.TrainingCampKickTargetGraduatedLevel:
-		_ = s.Send(OpTCKickAnswer, encodeResultError(ErrTCCantBanMember))
+	case domain.TrainingCampKickWait24h:
+		_ = s.Send(OpTCKickAnswer, encodeResultError(ErrTCNotBan24h))
 	case domain.TrainingCampKickTargetNotFound:
-		_ = s.Send(OpTCKickAnswer, encodeResultError(ErrTCTargetNotInTC))
+		_ = s.Send(OpTCKickAnswer, encodeResultError(ErrTCNoMember))
 	case domain.TrainingCampKickNotMaster:
-		_ = s.Send(OpTCKickAnswer, encodeResultError(ErrTCOnlyBossCanUse))
+		_ = s.Send(OpTCKickAnswer, encodeResultError(ErrTCNotCancel))
 	default:
 		_ = s.Send(OpTCKickAnswer, encodeResultError(ErrTCNotInCamp))
 	}
@@ -295,9 +305,10 @@ func (r *InviteRuntime) handleKick(s *transport.Session, opcode uint16, payload 
 ================
 handleGraduate
 
-Handles 0x710A (client 702F10, {u8 satisfaction}). A level-40+ student
-graduates, awards the camp's evaluation points and mentor honor points,
-receives bonus graduate EXP, and broadcasts 0x3AC5 [4][gid][0], [5][mentorGid][3][honor],
+Handles 0x710A (client 702F10, {u8 satisfaction}; v1.188
+CGObjPC_HandleAcademyGraduate7475 0x00519600). A level-40+ student graduates,
+awards the camp's evaluation points and mentor honor points, receives bonus
+graduate EXP, and broadcasts 0x3AC5 [4][gid][0], [5][mentorGid][3][honor],
 and (when any camp's EvaluationRank changes) [12][evaluationRank].
 ================
 */
@@ -327,6 +338,8 @@ func (r *InviteRuntime) handleGraduate(s *transport.Session, opcode uint16, payl
 		log.Debugf("mentor: %s graduated from academy (camp %d, joinLevel %d)", actor.Name, res.Camp.ID, res.Graduate.JoinLevel)
 	case domain.TrainingCampGraduateDead:
 		_ = s.Send(OpTCGraduateAnswer, encodeResultError(ErrTCDead))
+	case domain.TrainingCampGraduateNotApprentice:
+		_ = s.Send(OpTCGraduateAnswer, encodeResultError(ErrTCNotCancel))
 	case domain.TrainingCampGraduateLevelLow:
 		_ = s.Send(OpTCGraduateAnswer, encodeResultError(ErrTCGraduateLevel))
 	default:
@@ -340,9 +353,9 @@ handleCompulsoryGraduate
 
 Handles 0x736D (client 704D30, {str name}; v1.188
 CGObjPC_HandleAcademyCompulsoryGraduate7476 0x00519770). The master
-compulsory-graduates a level-40+ student after 24 hours in the camp,
-awarding satisfaction=2 (Compulsory: +1 eval point per 0x005198A4: push 0x1)
-and mentor honor points (no bonus EXP per 0x005DFC30).
+compulsory-graduates a level-41+ student, awarding satisfaction=2
+(Compulsory: +1 eval point per 0x005198A4: push 0x1) and mentor honor points
+(no bonus EXP per 0x005DFC30).
 ================
 */
 func (r *InviteRuntime) handleCompulsoryGraduate(s *transport.Session, opcode uint16, payload []byte) {
@@ -378,14 +391,12 @@ func (r *InviteRuntime) handleCompulsoryGraduate(s *transport.Session, opcode ui
 		log.Debugf("mentor: %s compulsory-graduated %s from academy (camp %d)", actor.Name, targetName, res.Camp.ID)
 	case domain.TrainingCampGraduateDead:
 		_ = s.Send(OpTCCompulsoryGraduateAnswer, encodeResultError(ErrTCDead))
-	case domain.TrainingCampGraduateWait24h:
-		_ = s.Send(OpTCCompulsoryGraduateAnswer, encodeResultError(ErrTCCompulsory24h))
-	case domain.TrainingCampGraduateLevelLow:
-		_ = s.Send(OpTCCompulsoryGraduateAnswer, encodeResultError(ErrTCGraduateLevel))
-	case domain.TrainingCampGraduateTargetNotFound, domain.TrainingCampGraduateNotApprentice:
-		_ = s.Send(OpTCCompulsoryGraduateAnswer, encodeResultError(ErrTCTargetNotInTC))
-	case domain.TrainingCampGraduateNotMaster:
-		_ = s.Send(OpTCCompulsoryGraduateAnswer, encodeResultError(ErrTCOnlyBossCanUse))
+	case domain.TrainingCampGraduateCompulsoryLevelLow:
+		_ = s.Send(OpTCCompulsoryGraduateAnswer, encodeResultError(ErrTCPossible41L))
+	case domain.TrainingCampGraduateTargetNotFound:
+		_ = s.Send(OpTCCompulsoryGraduateAnswer, encodeResultError(ErrTCNoMember))
+	case domain.TrainingCampGraduateNotMaster, domain.TrainingCampGraduateNotApprentice:
+		_ = s.Send(OpTCCompulsoryGraduateAnswer, encodeResultError(ErrTCNotCancel))
 	default:
 		_ = s.Send(OpTCCompulsoryGraduateAnswer, encodeResultError(ErrTCNotInCamp))
 	}
@@ -503,11 +514,17 @@ func (r *InviteRuntime) SpendHonorPoints(divisionID string, character *enterworl
 NotifyMemberLevel
 
 NotifyMemberLevel broadcasts a 0x3AC5 status 5 flag 2 level update to all
-online members of character's camp when character levels up.
+online members of character's camp when character's level changes
+(v1.188 CGObjPC_ApplyLevelTransitionAndRecoverVitals 0x004E4D90 @ 0x004E4E21 /
+0x004E4E50 -> CTrainingCampMgr_SendMemberStatusUpdateToSM 0x005DE6C0).
 ================
 */
 func (r *InviteRuntime) NotifyMemberLevel(divisionID string, character *enterworld.Character) {
 	if r == nil || character == nil || r.deps == nil || r.deps.TrainingCampAuthority() == nil {
+		return
+	}
+	character = characterSnapshot(r.deps, divisionID, character)
+	if character == nil || character.DeletePending {
 		return
 	}
 	campID, joined := r.deps.TrainingCampAuthority().CampOfCharacter(divisionID, character.ID)

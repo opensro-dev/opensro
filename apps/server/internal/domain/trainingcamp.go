@@ -51,8 +51,9 @@ type TrainingCampRecord struct {
 type TrainingCampMemberRecord struct {
 	CharID int64 `json:"charId"`
 	// Kind is the client record's +0x44 byte: 0 master, 1 sub-mentor
-	// (assistant guardian), 2 student/apprentice - the sub_81e9f0 grade
-	// classifier's input (@0x0081ea08..0x0081ea71).
+	// (assistant guardian), 2 student/apprentice - the
+	// TrainingCampMember_ClassifyGrade (0x0081E9F0) grade classifier's
+	// input (@0x0081ea08..0x0081ea71).
 	Kind        uint8  `json:"kind"`
 	JoinedAtMs  int64  `json:"joinedAtMs,omitempty"`
 	JoinLevel   uint8  `json:"joinLevel,omitempty"`
@@ -134,13 +135,20 @@ type TrainingCampRankChange struct {
 	Members      []TrainingCampMemberRecord
 }
 
-// TrainingCampDisbandRefusal is why DisbandCamp refused (v1.188 5DE420).
+// TrainingCampDisbandRefusal is why DisbandCamp refused
+// (v1.188 CGObjPC_HandleAcademyDisband7471 0x00519120 ->
+// TrainingCamp_ValidateDisband 0x004E4780 ->
+// TrainingCamp_SubmitDisband 0x005DF140 @ 0x005191F3 ->
+// CTrainingCampManager_SetCampDeletedAndDisband 0x005DE920 ->
+// CTrainingCamp_OnDisbandCancelBuffs 0x005DDAF0 ->
+// CGObjPC_SetTrainingCampLeaveTimestamp 0x004E4950 @ 0x005DDBAC).
 type TrainingCampDisbandRefusal uint8
 
 const (
 	TrainingCampDisbandAccepted TrainingCampDisbandRefusal = iota
 	TrainingCampDisbandUnavailable
 	TrainingCampDisbandDead
+	TrainingCampDisbandNotInCamp
 	TrainingCampDisbandNotMaster
 	TrainingCampDisbandWait
 )
@@ -154,7 +162,9 @@ type TrainingCampDisbandResult struct {
 	RankChanges      []TrainingCampRankChange
 }
 
-// TrainingCampLeaveRefusal is why LeaveCamp refused (v1.188 5E1070).
+// TrainingCampLeaveRefusal is why LeaveCamp refused
+// (v1.188 CGObjPC_HandleAcademyLeave7474 0x00519510 ->
+// TrainingCamp_SubmitLeaveOrBanCommand_5DEEB0 0x005DEEB0).
 type TrainingCampLeaveRefusal uint8
 
 const (
@@ -163,6 +173,7 @@ const (
 	TrainingCampLeaveDead
 	TrainingCampLeaveNotInCamp
 	TrainingCampLeaveIsMaster
+	TrainingCampLeaveWait24h
 )
 
 // TrainingCampLeaveResult is the outcome of LeaveCamp.
@@ -173,16 +184,19 @@ type TrainingCampLeaveResult struct {
 	MembersBefore []TrainingCampMemberRecord
 }
 
-// TrainingCampKickRefusal is why KickMember refused (v1.188 5E0DA0).
+// TrainingCampKickRefusal is why KickMember refused
+// (v1.188 CGObjPC_HandleAcademyKick7473 0x005193A0 ->
+// TrainingCamp_SubmitLeaveOrBanCommand_5DEEB0 0x005DEEB0).
 type TrainingCampKickRefusal uint8
 
 const (
 	TrainingCampKickAccepted TrainingCampKickRefusal = iota
 	TrainingCampKickUnavailable
 	TrainingCampKickDead
+	TrainingCampKickNotInCamp
 	TrainingCampKickNotMaster
 	TrainingCampKickTargetNotFound
-	TrainingCampKickTargetGraduatedLevel
+	TrainingCampKickWait24h
 )
 
 // TrainingCampKickResult is the outcome of KickMember.
@@ -194,7 +208,8 @@ type TrainingCampKickResult struct {
 }
 
 // TrainingCampGraduateRefusal is why Graduate or CompulsoryGraduate refused
-// (v1.188 5E00B0 / 5E07C0).
+// (v1.188 CGObjPC_HandleAcademyGraduate7475 0x00519600 /
+// CGObjPC_HandleAcademyCompulsoryGraduate7476 0x00519770).
 type TrainingCampGraduateRefusal uint8
 
 const (
@@ -206,7 +221,7 @@ const (
 	TrainingCampGraduateTargetNotFound
 	TrainingCampGraduateNotApprentice
 	TrainingCampGraduateLevelLow
-	TrainingCampGraduateWait24h
+	TrainingCampGraduateCompulsoryLevelLow
 )
 
 // TrainingCampHonorDelta reports a mentor's updated HonorPoints after a
@@ -229,7 +244,8 @@ type TrainingCampGraduateResult struct {
 }
 
 // TrainingCampHonorRanking is one row of the Top-50 division Honor Ranking
-// table (0xB2D0, v1.188 5DD1C0 / 5DEEB0).
+// table (0xB2D0, v1.188 CTrainingCamp_WriteHonorRankEntry_5DD1C0 0x005DD1C0 /
+// CTrainingCampMgr_SendHonorRankList_B478 0x005DF010).
 type TrainingCampHonorRanking struct {
 	Ranking       uint32
 	Rank          uint8
@@ -267,19 +283,19 @@ type TrainingCampStore interface {
 	// UpdateNotice rechecks the expected camp and kind-0 author under the
 	// authority lock, persists the notice, and returns a detached snapshot.
 	UpdateNotice(divisionID string, authorID, expectedCampID int64, subject, contents string) (TrainingCampRecord, []TrainingCampMemberRecord, bool)
-	// DisbandCamp dissolves the master's camp after the 24h creation cooldown,
+	// DisbandCamp dissolves the master's camp after the 7-day creation cooldown,
 	// stamps CampDisbandedAtMs on the master, and recomputes division honor ranks.
 	DisbandCamp(divisionID string, masterCharID int64, nowMs int64) TrainingCampDisbandResult
-	// LeaveCamp removes a non-master member from their camp.
+	// LeaveCamp removes a non-master member from their camp after the 24h join cooldown.
 	LeaveCamp(divisionID string, memberCharID int64, nowMs int64) TrainingCampLeaveResult
-	// KickMember removes a named non-master member from the master's camp.
+	// KickMember removes a named non-master member from the master's camp after the 24h join cooldown.
 	KickMember(divisionID string, masterCharID int64, targetName string, nowMs int64) TrainingCampKickResult
 	// Graduate completes a level-40+ student's voluntary graduation, awards
 	// evaluation and honor points from satisfaction (0..4), and recomputes
 	// division honor ranks.
 	Graduate(divisionID string, memberCharID int64, satisfaction uint8, nowMs int64) TrainingCampGraduateResult
-	// CompulsoryGraduate completes a master-initiated graduation of a level-40+
-	// student after 24h in the camp, awarding Compulsory satisfaction (2).
+	// CompulsoryGraduate completes a master-initiated graduation of a level-41+
+	// student, awarding Compulsory satisfaction (2).
 	CompulsoryGraduate(divisionID string, masterCharID int64, targetName string, nowMs int64) TrainingCampGraduateResult
 	// HonorRankings returns the division's Top-50 ranked camps in ranking order.
 	HonorRankings(divisionID string) []TrainingCampHonorRanking

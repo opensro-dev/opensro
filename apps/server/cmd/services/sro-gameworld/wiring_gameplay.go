@@ -373,6 +373,9 @@ func newGameplayPlane(
 	guildInvites := guild.NewInviteRuntime(deps, presence)
 	guildInvites.Unions = unions
 	mentorInvites := mentor.NewInviteRuntime(deps, presence)
+	deps.OnCharacterLevelChanged = func(character *enterworld.Character) {
+		mentorInvites.NotifyMemberLevel(ownedShard.ID, character)
+	}
 	connectInvitationLanes(parties, guildInvites, unions, mentorInvites, items)
 	connectWarInvitations(warInvitationLanes{parties: parties, guilds: guildInvites, unions: unions, mentors: mentorInvites, items: items, wars: guildWars})
 

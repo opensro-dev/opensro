@@ -209,9 +209,9 @@ func (rt *Runtime) GrantExperience(character *enterworld.Character, expDelta, sk
 GrantUnscaledExperience
 
 GrantUnscaledExperience applies an unscaled experience grant (such as the
-fixed Academy graduation reward at CGObjPC_RequestGraduateTrainingCamp
-0x004ec4c1..0x004ec558, which calls CGObjPC_AddExpAndSkillExp 0x004e5980
-directly on the level-40 NextExp/2 value without server rate scaling)
+fixed Academy graduation reward at CTrainingCampMgr_OnGraduateDBSuccess
+0x005DFC30 @ 0x005DFC69: push 0x1E8480, which invokes vtable+0x170
+CGObjPC_ApplyExpDelta 0x004E5250 directly without server rate scaling)
 inside one commit-door closure.
 ==================
 */

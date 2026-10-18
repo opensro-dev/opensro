@@ -374,7 +374,8 @@ func EncodeCampNotice3AC5(code uint8) []byte {
 EncodeCampDisband3AC5
 
 EncodeCampDisband3AC5 renders the status-1 camp dissolution push
-(CTrainingCampManager_OnCampDisband_5dd770 @0x005dd770; client sub_773c60
+(CTrainingCamp_OnDisbandCancelBuffs 0x005DDAF0 @ 0x005DDB14,
+CTrainingCampMgr_OnSMDisbandCamp 0x005E04F0 @ 0x005E05A5; client sub_773c60
 case 0 @0x00773cac): {u8 1}.
 ================
 */
@@ -387,7 +388,7 @@ func EncodeCampDisband3AC5() []byte {
 EncodeCampMemberLeave3AC5
 
 EncodeCampMemberLeave3AC5 renders the status-3 member removal push
-(CTrainingCampManager_OnMemberLeave_5ddeb0 @0x005ddeb0; client sub_773c60
+(Calls_CreateOwnerTimedJob_2_var 0x005DDBE0 @ 0x005DDC5F; client sub_773c60
 case 2 @0x00774010): {u8 3}{u32 memberID}{u8 flag}, where flag=1 is a
 voluntary leave and flag=2 is an expulsion/ban.
 ================
@@ -401,8 +402,8 @@ func EncodeCampMemberLeave3AC5(memberID uint32, flag uint8) []byte {
 EncodeCampMemberGraduate3AC5
 
 EncodeCampMemberGraduate3AC5 renders the status-4 graduation push
-(CTrainingCampManager_OnMemberGraduate_5ddc40 @0x005ddc40; client sub_773c60
-case 3 @0x007741a2): {u8 4}{u32 memberID}{u8 flag}, where flag=0 is a
+(CTrainingCamp_OnMemberGraduatedUpdatePoints 0x005DDD50 @ 0x005DDDBE; client
+sub_773c60 case 3 @0x007741a2): {u8 4}{u32 memberID}{u8 flag}, where flag=0 is a
 voluntary graduation and flag=1 is a compulsory graduation by the master.
 ================
 */
@@ -415,8 +416,9 @@ func EncodeCampMemberGraduate3AC5(memberID uint32, flag uint8) []byte {
 EncodeCampMemberLevelUpdate3AC5
 
 EncodeCampMemberLevelUpdate3AC5 renders the status-5 flag-2 level update
-push (CTrainingCampManager_OnMemberLevelUpdate_5de190 @0x005de190; client
-sub_773c60 case 4 flag 2 @0x00774427): {u8 5}{u32 memberID}{u8 2}{u8 level}.
+push (CTrainingCampMgr_SendMemberStatusUpdateToSM 0x005DE6C0 ->
+CTrainingCamp_UpdateMemberStatusFromSM 0x005DD4F0 @ 0x005DD53C / 0x005DD5BD;
+client sub_773c60 case 4 flag 2 @0x00774427): {u8 5}{u32 memberID}{u8 2}{u8 level}.
 ================
 */
 func EncodeCampMemberLevelUpdate3AC5(memberID uint32, level uint8) []byte {
@@ -428,8 +430,10 @@ func EncodeCampMemberLevelUpdate3AC5(memberID uint32, level uint8) []byte {
 EncodeCampMemberHonorUpdate3AC5
 
 EncodeCampMemberHonorUpdate3AC5 renders the status-5 flag-3 honor point
-balance push (CTrainingCampManager_OnHonorPointUpdate_5ded00 @0x005ded00;
-client sub_773c60 case 4 flag 3 @0x00774568):
+balance push (CTrainingCampMgr_SendMemberStatusUpdateToSM 0x005DE6C0 ->
+CTrainingCamp_UpdateMemberStatusFromSM 0x005DD4F0 @ 0x005DD53C / 0x005DD5E6
+and CTrainingCamp_OnMemberGraduatedUpdatePoints 0x005DDD50 @
+0x005DDFBC..0x005DE019; client sub_773c60 case 4 flag 3 @0x00774568):
 {u8 5}{u32 memberID}{u8 3}{u32 honorPoints}.
 ================
 */

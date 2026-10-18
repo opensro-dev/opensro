@@ -15,28 +15,35 @@ package store
 
 import (
 	"fmt"
+	"strings"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/domain/charactervitals"
 )
 
 const (
-	// campDisbandCooldownSec is the 24-hour creation wait before a master can
-	// dissolve a newly opened camp (v1.188 CTrainingCamp_HasJoinCooldownElapsed
-	// 0x005DD3F0 @ 0x005DD40E: mov ecx, 0x15180).
-	campDisbandCooldownSec = 86_400
+	// campDisbandCooldownSec is the 7-day creation wait before a master can
+	// dissolve a newly opened camp (v1.188 TrainingCamp_ValidateDisband
+	// 0x004E4780 @ 0x004E47DF -> TrainingCamp_DisbandWaitSeconds
+	// 0x005DD350 @ 0x005DD36A: mov ecx, 0x93A80; client UIIT_MSG_TC_ERROR_NOT_DISORGANIZATION_7D).
+	campDisbandCooldownSec = 604_800
 	// campReopenCooldownSec is the 7-day wait after dissolving a camp before
-	// the master can open another (v1.188 TrainingCamp_DisbandWaitSeconds
-	// 0x005DD350 @ 0x005DD36A: mov ecx, 0x93A80).
+	// the master can open another (v1.188 TrainingCamp_ValidateCreate
+	// 0x004E4680 @ 0x004E4709..0x004E4761: TimedJob type 2 subType 7, 604,800 s).
 	campReopenCooldownSec = 604_800
-	// campCompulsoryWaitMs is the 24-hour join wait before a master can
-	// compulsorily graduate or kick a member (v1.188 CTrainingCamp_HasJoinCooldownElapsed
-	// 0x005DD3F0 @ 0x005DD40E: mov ecx, 0x15180).
+	// campCompulsoryWaitMs is the 24-hour join wait before a member can leave
+	// or be kicked (v1.188 CTrainingCamp_HasJoinCooldownElapsed 0x005DD3F0 @
+	// 0x005DD40E: mov ecx, 0x15180).
 	campCompulsoryWaitMs = 86_400_000
-	// campGraduationLevel is the apprentice graduation level floor (40 = 0x28,
-	// v1.188 CGObjPC_HandleAcademyGraduate7475 0x00519600 @ 0x005196CD: cmp al, 0x28;
-	// CGObjPC_HandleAcademyCompulsoryGraduate7476 0x00519770 @ 0x00519883: cmp dl, 0x28).
+	// campGraduationLevel is the voluntary apprentice graduation level floor
+	// (40 = 0x28, v1.188 CGObjPC_HandleAcademyGraduate7475 0x00519600 @ 0x005196CD:
+	// cmp al, 0x28; jae 0x5196FF -> push 0x681A).
 	campGraduationLevel = 40
+	// campCompulsoryGraduationLevel is the master-initiated compulsory
+	// graduation level floor (41 = > 0x28, v1.188
+	// CGObjPC_HandleAcademyCompulsoryGraduate7476 0x00519770 @ 0x00519883:
+	// cmp dl, 0x28; jbe 0x519898 -> push 0x6822; client UIIT_MSG_TC_ERROR_POSIBLE_41L).
+	campCompulsoryGraduationLevel = 41
 	// campHonorAwardMaxJoinLevel is the maximum apprentice join level that
 	// awards Honor and Evaluation points on graduation (30 = 0x1E, v1.188
 	// CTrainingCamp_OnMemberGraduatedUpdatePoints 0x005DDD50 @ 0x005DDE8E: cmp bl, 0x1E;
@@ -195,9 +202,9 @@ func (door storeCampDoor) AdmitStudent(
 ================
 OpenCamp
 
-The NPC's camp opening (v1.150 0x72EC; v1.188 4E4680 checks, then 5DFCC0
-burns the fee through 4E4650 and answers). 4E4680's order: alive (0x6807),
-level (0x6809), gold (0x680A), already in a camp (0x6812), and 5DD3F0's
+The NPC's camp opening (v1.150 0x72EC; v1.188 0x004E4680 checks, then 0x005DFCC0
+burns the fee through 0x004E4650 and answers). 0x004E4680's order: alive (0x6807),
+level (0x6809), gold (0x680A), already in a camp (0x6812), and TimedJob (2, 7)'s
 7-day reopen wait after a disband (0x681C).
 ================
 */
@@ -297,9 +304,10 @@ func resolvedCharacterLevel(character *domain.Character) int64 {
 ================
 UpdateNotice
 
-Native 5E43B0 -> 5E36A0 authorizes the kind-0 camp member. Keep the
-permission and expected aggregate checks in the same critical section as
-the update so a stale gameplay precheck cannot edit another camp.
+Native 0x00519900 -> 0x005DF070 -> 0x005DF5C0 (case 6) authorizes the kind-0
+camp master. Keep the permission and expected aggregate checks in the same
+critical section as the update so a stale gameplay precheck cannot edit
+another camp.
 ================
 */
 func (door storeCampDoor) UpdateNotice(divisionID string, authorID, expectedCampID int64, subject, contents string) (domain.TrainingCampRecord, []domain.TrainingCampMemberRecord, bool) {
@@ -333,13 +341,19 @@ func (door storeCampDoor) UpdateNotice(divisionID string, authorID, expectedCamp
 ================
 DisbandCamp
 
-CTrainingCampManager_OnDisbandRequest_5de420 (0x005de420):
- 1. Master must be alive (0x6807 -> 0x07).
- 2. Requester must own the camp as master (0x6815 -> 0x15).
- 3. At least 24 hours (86,400 s) must have elapsed since CreatedAtMs
-    (0x681D -> 0x1D with remainingSeconds u32).
+CGObjPC_HandleAcademyDisband7471 (0x00519120) ->
+TrainingCamp_ValidateDisband (0x004E4780) ->
+CTrainingCamp_GetDisbandRemainingSeconds (0x005DD350 @ 0x004E47DF) ->
+TrainingCamp_SubmitDisband (0x005DF140 @ 0x005191F3) ->
+CTrainingCampManager_SetCampDeletedAndDisband (0x005DE920) ->
+CTrainingCamp_OnDisbandCancelBuffs (0x005DDAF0):
+ 1. Master must belong to a camp (0x680B -> 0x0B) and be alive (0x6807 -> 0x07).
+ 2. Requester must own the camp as founding master (0x6816 -> 0x16).
+ 3. At least 7 days (604,800 s = 0x93A80 at 0x005DD36A) must have elapsed
+    since CreatedAtMs (0x681D -> 0x1D with remainingSeconds u32).
  4. Deletes the camp and its members, stamps CampDisbandedAtMs on the master
-    for the 7-day reopen cooldown, and recomputes division honor rankings.
+    for the 7-day reopen cooldown (CGObjPC_SetTrainingCampLeaveTimestamp
+    0x004E4950 @ 0x005DDBAC), and recomputes division honor rankings.
 
 ================
 */
@@ -357,7 +371,10 @@ func (door storeCampDoor) DisbandCamp(divisionID string, masterCharID int64, now
 	}
 	campID, joined := door.campOfCharacterLocked(divisionID, masterCharID)
 	camp, exists := s.camps[divisionID][campID]
-	if !joined || !exists || camp.MasterCharID != masterCharID {
+	if !joined || !exists {
+		return domain.TrainingCampDisbandResult{Refusal: domain.TrainingCampDisbandNotInCamp}
+	}
+	if camp.MasterCharID != masterCharID {
 		return domain.TrainingCampDisbandResult{Refusal: domain.TrainingCampDisbandNotMaster}
 	}
 
@@ -410,13 +427,18 @@ func (door storeCampDoor) DisbandCamp(divisionID string, masterCharID int64, now
 ================
 LeaveCamp
 
-CTrainingCampManager_OnLeaveRequest_5e1070 (0x005e1070):
-1. Member must be alive (0x6807 -> 0x07).
-2. Member must belong to a camp (0x6814 -> 0x14).
-3. Founding master cannot leave via 0x7785 (0x6816 -> 0x16).
+CGObjPC_HandleAcademyLeave7474 (0x00519510) ->
+TrainingCamp_SubmitLeaveOrBanCommand_5DEEB0 (0x005DEEB0 @ 0x005195DB):
+ 1. Member must belong to a camp (0x0051952C: 0x680B -> 0x0B) and be alive
+    (0x00519560: 0x6807 -> 0x07).
+ 2. Founding master cannot leave via 0x7785 (0x00519597: 0x6816 -> 0x16).
+ 3. At least 24 hours (86,400 s = 0x15180 in j_CTrainingCamp_HasJoinCooldownElapsed
+    0x005DD490 -> CTrainingCamp_HasJoinCooldownElapsed 0x005DD3F0 @ 0x005195B3)
+    must have elapsed since JoinedAtMs (0x005195BC: 0x6821 -> 0x21).
+
 ================
 */
-func (door storeCampDoor) LeaveCamp(divisionID string, memberCharID int64, _ int64) domain.TrainingCampLeaveResult {
+func (door storeCampDoor) LeaveCamp(divisionID string, memberCharID int64, nowMs int64) domain.TrainingCampLeaveResult {
 	s := door.s
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -450,6 +472,13 @@ func (door storeCampDoor) LeaveCamp(divisionID string, memberCharID int64, _ int
 		return domain.TrainingCampLeaveResult{Refusal: domain.TrainingCampLeaveIsMaster}
 	}
 
+	if nowMs <= 0 {
+		nowMs = s.now().UnixMilli()
+	}
+	if removed.JoinedAtMs > 0 && (nowMs < removed.JoinedAtMs || nowMs-removed.JoinedAtMs < campCompulsoryWaitMs) {
+		return domain.TrainingCampLeaveResult{Refusal: domain.TrainingCampLeaveWait24h}
+	}
+
 	membersBefore := append([]domain.TrainingCampMemberRecord(nil), members...)
 	next := make([]domain.TrainingCampMemberRecord, 0, len(members)-1)
 	next = append(next, members[:memberIdx]...)
@@ -470,16 +499,21 @@ func (door storeCampDoor) LeaveCamp(divisionID string, memberCharID int64, _ int
 ================
 KickMember
 
-CTrainingCampManager_OnBanRequest_5e0da0 (0x005e0da0):
- 1. Master must be alive (0x6807 -> 0x07).
- 2. Requester must be the camp's master (0x6815 -> 0x15).
- 3. Target must be a non-master member of the same camp (0x6817 -> 0x17).
- 4. An apprentice at level >= 40 cannot be kicked (0x6824 -> 0x24; master
-    must use compulsory graduation instead).
+CGObjPC_HandleAcademyKick7473 (0x005193A0) ->
+TrainingCamp_SubmitLeaveOrBanCommand_5DEEB0 (0x005DEEB0 @ 0x005194C0):
+ 1. Master must belong to a camp (0x005193F0: 0x680B -> 0x0B) and be alive
+    (0x00519424: 0x6807 -> 0x07).
+ 2. Requester must be the camp's master (0x0051945B: 0x6816 -> 0x16).
+ 3. Target must exist in the same camp by case-insensitive name
+    (TrainingCamp_FindMemberByName 0x005E42C0 @ 0x00519473 -> 0x0051948C:
+    0x6815 -> 0x15) and not be the master (0x0051949E: 0x6816 -> 0x16).
+ 4. At least 24 hours (86,400 s = 0x15180 in CTrainingCamp_HasJoinCooldownElapsed
+    0x005DD3F0 @ 0x005194A4) must have elapsed since JoinedAtMs (0x005194B0:
+    0x6820 -> 0x20).
 
 ================
 */
-func (door storeCampDoor) KickMember(divisionID string, masterCharID int64, targetName string, _ int64) domain.TrainingCampKickResult {
+func (door storeCampDoor) KickMember(divisionID string, masterCharID int64, targetName string, nowMs int64) domain.TrainingCampKickResult {
 	s := door.s
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -493,30 +527,35 @@ func (door storeCampDoor) KickMember(divisionID string, masterCharID int64, targ
 	}
 	campID, joined := door.campOfCharacterLocked(divisionID, masterCharID)
 	camp, exists := s.camps[divisionID][campID]
-	if !joined || !exists || camp.MasterCharID != masterCharID {
+	if !joined || !exists {
+		return domain.TrainingCampKickResult{Refusal: domain.TrainingCampKickNotInCamp}
+	}
+	if camp.MasterCharID != masterCharID {
 		return domain.TrainingCampKickResult{Refusal: domain.TrainingCampKickNotMaster}
 	}
 
 	members := s.campMembers[divisionID][campID]
 	targetIdx := -1
-	var targetChar *domain.Character
 	for i, member := range members {
-		if member.CharID == masterCharID || member.Kind == 0 {
-			continue
-		}
 		candidate := s.characterByIDLocked(divisionID, member.CharID)
-		if candidate != nil && !candidate.DeletePending && candidate.Name == targetName {
+		if candidate != nil && !candidate.DeletePending && strings.EqualFold(candidate.Name, targetName) {
 			targetIdx = i
-			targetChar = candidate
 			break
 		}
 	}
-	if targetIdx < 0 || targetChar == nil {
+	if targetIdx < 0 {
 		return domain.TrainingCampKickResult{Refusal: domain.TrainingCampKickTargetNotFound}
 	}
 	removed := members[targetIdx]
-	if removed.Kind == 2 && resolvedCharacterLevel(targetChar) >= campGraduationLevel {
-		return domain.TrainingCampKickResult{Refusal: domain.TrainingCampKickTargetGraduatedLevel}
+	if removed.CharID == masterCharID || removed.Kind == 0 {
+		return domain.TrainingCampKickResult{Refusal: domain.TrainingCampKickNotMaster}
+	}
+
+	if nowMs <= 0 {
+		nowMs = s.now().UnixMilli()
+	}
+	if removed.JoinedAtMs > 0 && (nowMs < removed.JoinedAtMs || nowMs-removed.JoinedAtMs < campCompulsoryWaitMs) {
+		return domain.TrainingCampKickResult{Refusal: domain.TrainingCampKickWait24h}
 	}
 
 	membersBefore := append([]domain.TrainingCampMemberRecord(nil), members...)

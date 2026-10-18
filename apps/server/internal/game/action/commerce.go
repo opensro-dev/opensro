@@ -564,7 +564,10 @@ func offerUnitPrice(o commerce.Offer, tax commerce.Tax) (uint64, bool) {
 honorPoints
 
 Returns the character's usable Training Camp honor points via the runtime's
-HonorPoints hook (CGObjPC_ConsumeShopPayment_5ded00), or 0 when unconfigured.
+HonorPoints hook (CShopApp_CheckPurchasePayment 0x00617360 @ 0x00617629 ->
+CGObjPC_GetTrainingCampHonorPoints 0x004EA600 ->
+CTrainingCamp_FindMemberByCharID 0x005E4260, member [member+0x34]+0x54),
+or 0 when unconfigured.
 ================
 */
 func (rt *Runtime) honorPoints(division string, c *enterworld.Character) uint64 {

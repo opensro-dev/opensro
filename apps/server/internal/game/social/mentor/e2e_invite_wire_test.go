@@ -113,6 +113,7 @@ func campSkillSeeder(raceKey string, learned []uint32) ([]uint32, error) {
 type campE2EServer struct {
 	srv       *transport.Server
 	authority *store.Store
+	deps      *enterworld.Deps
 	partyRt   *party.Runtime
 	guildInv  *guild.InviteRuntime
 	mentorInv *mentor.InviteRuntime
@@ -195,6 +196,9 @@ func startCampServer(t *testing.T, dir string, seeds []*enterworld.Character) ca
 	})
 	guildInv := guild.NewInviteRuntime(deps, directory)
 	mentorInv := mentor.NewInviteRuntime(deps, directory)
+	deps.OnCharacterLevelChanged = func(character *enterworld.Character) {
+		mentorInv.NotifyMemberLevel(campE2EDivision, character)
+	}
 	partyRt.AddConsentArm(guildInv)
 	partyRt.AddConsentArm(mentorInv)
 	guildInv.PeerPending = func(divisionID, name string) bool {
@@ -225,7 +229,7 @@ func startCampServer(t *testing.T, dir string, seeds []*enterworld.Character) ca
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { campShutdownServer(t, srv) })
-	return campE2EServer{srv: srv, authority: authority, partyRt: partyRt, guildInv: guildInv, mentorInv: mentorInv}
+	return campE2EServer{srv: srv, authority: authority, deps: deps, partyRt: partyRt, guildInv: guildInv, mentorInv: mentorInv}
 }
 
 func campShutdownServer(t *testing.T, srv *transport.Server) {

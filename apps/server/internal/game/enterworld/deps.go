@@ -147,6 +147,12 @@ type Deps struct {
 	MutateCharactersDeferred func(characters []*Character, label string, mutate func())
 	UpdateCharacterDeferred  func(character *Character, label string, update func() bool) bool
 	UpdateCharactersDeferred func(characters []*Character, label string, update func() bool) bool
+	// OnCharacterLevelChanged runs after a character update door releases its
+	// authority lock when a character's Level changed during the transaction
+	// (v1.188 CGObjPC_ApplyLevelTransitionAndRecoverVitals 0x004E4D90 @
+	// 0x004E4E21 / 0x004E4E50 -> CTrainingCampMgr_SendMemberStatusUpdateToSM
+	// 0x005DE6C0).
+	OnCharacterLevelChanged func(character *Character)
 	// CloseJobWeek and JobRankings own the job guilds' weekly close and its
 	// ranking snapshot (store jobweek.go).
 	CloseJobWeek func(divisionID string, week int64, label string) bool
@@ -242,22 +248,28 @@ bool
 ================
 */
 func (d *Deps) Update(character *Character, label string, update func() bool) bool {
-	update = refusalAudited(label, []*Character{character}, update)
+	characters := []*Character{character}
 	if d.UpdateCharacter != nil {
-		return d.UpdateCharacter(character, label, update)
+		return d.runCharacterUpdate(characters, label, update, func(fn func() bool) bool {
+			return d.UpdateCharacter(character, label, fn)
+		})
 	}
 	if update == nil {
 		return false
 	}
 	// A detached composition may provide only the unconditional commit seam.
 	if d.MutateCharacter != nil {
-		changed := false
-		d.MutateCharacter(character, label, func() {
-			changed = update()
+		return d.runCharacterUpdate(characters, label, update, func(fn func() bool) bool {
+			changed := false
+			d.MutateCharacter(character, label, func() {
+				changed = fn()
+			})
+			return changed
 		})
-		return changed
 	}
-	return update()
+	return d.runCharacterUpdate(characters, label, update, func(fn func() bool) bool {
+		return fn()
+	})
 }
 
 // MutateMany routes a multi-character invariant through one atomic door.
@@ -282,21 +294,26 @@ bool
 ================
 */
 func (d *Deps) UpdateMany(characters []*Character, label string, update func() bool) bool {
-	update = refusalAudited(label, characters, update)
 	if d.UpdateCharacters != nil {
-		return d.UpdateCharacters(characters, label, update)
+		return d.runCharacterUpdate(characters, label, update, func(fn func() bool) bool {
+			return d.UpdateCharacters(characters, label, fn)
+		})
 	}
 	if update == nil {
 		return false
 	}
 	if d.MutateCharacters != nil {
-		changed := false
-		d.MutateCharacters(characters, label, func() {
-			changed = update()
+		return d.runCharacterUpdate(characters, label, update, func(fn func() bool) bool {
+			changed := false
+			d.MutateCharacters(characters, label, func() {
+				changed = fn()
+			})
+			return changed
 		})
-		return changed
 	}
-	return update()
+	return d.runCharacterUpdate(characters, label, update, func(fn func() bool) bool {
+		return fn()
+	})
 }
 
 /*
@@ -325,7 +342,9 @@ Update for a path only the simulation tick reaches (see MutateDeferred).
 */
 func (d *Deps) UpdateDeferred(character *Character, label string, update func() bool) bool {
 	if d.UpdateCharacterDeferred != nil {
-		return d.UpdateCharacterDeferred(character, label, refusalAudited(label, []*Character{character}, update))
+		return d.runCharacterUpdate([]*Character{character}, label, update, func(fn func() bool) bool {
+			return d.UpdateCharacterDeferred(character, label, fn)
+		})
 	}
 	return d.Update(character, label, update)
 }
@@ -354,9 +373,70 @@ UpdateMany for a path only the simulation tick reaches (see MutateDeferred).
 */
 func (d *Deps) UpdateManyDeferred(characters []*Character, label string, update func() bool) bool {
 	if d.UpdateCharactersDeferred != nil {
-		return d.UpdateCharactersDeferred(characters, label, refusalAudited(label, characters, update))
+		return d.runCharacterUpdate(characters, label, update, func(fn func() bool) bool {
+			return d.UpdateCharactersDeferred(characters, label, fn)
+		})
 	}
 	return d.UpdateMany(characters, label, update)
+}
+
+/*
+================
+trackedCharacterLevel
+================
+*/
+func trackedCharacterLevel(c *Character) int64 {
+	if c == nil || c.Level == nil || *c.Level < 1 {
+		return 1
+	}
+	return *c.Level
+}
+
+/*
+================
+runCharacterUpdate
+
+Runs a single- or multi-character conditional update through door and
+notifies OnCharacterLevelChanged after the door releases the authority lock
+for every character whose Level changed during the committed update.
+================
+*/
+func (d *Deps) runCharacterUpdate(
+	characters []*Character,
+	label string,
+	update func() bool,
+	door func(func() bool) bool,
+) bool {
+	var changed []*Character
+	wrapped := refusalAudited(label, characters, func() bool {
+		var before []int64
+		if d != nil && d.OnCharacterLevelChanged != nil {
+			before = make([]int64, len(characters))
+			for i, c := range characters {
+				before[i] = trackedCharacterLevel(c)
+			}
+		}
+		if !update() {
+			return false
+		}
+		if before != nil {
+			for i, c := range characters {
+				if c != nil && trackedCharacterLevel(c) != before[i] {
+					changed = append(changed, c)
+				}
+			}
+		}
+		return true
+	})
+	if !door(wrapped) {
+		return false
+	}
+	if d != nil && d.OnCharacterLevelChanged != nil {
+		for _, c := range changed {
+			d.OnCharacterLevelChanged(c)
+		}
+	}
+	return true
 }
 
 /*
