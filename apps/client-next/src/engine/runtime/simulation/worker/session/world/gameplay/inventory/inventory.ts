@@ -211,8 +211,14 @@ presentShop
 	const refs = new Map<number, number>(), names = new Map<number, string>();
 	const icons = new Map<number, string>();
 	const tooltipRefs = new Map<number, ItemTooltipReference>();
-	// The Magic Pang window's twelve prizes with the reference icons, rebuilt when icons arrive.
-	let gachaRows: { iconCount: number; refCount: number; rows: readonly GachaPrizeRow[]; } | null = null;
+	// The Magic Pang window's twelve prizes with the reference icons, rebuilt when references change.
+	let gachaRows: {
+		iconCount: number;
+		refCount: number;
+		nameCount: number;
+		tooltipCount: number;
+		rows: readonly GachaPrizeRow[];
+	} | null = null;
 	// The chat line a voucher update raises, taken by the gameplay owner after each packet.
 	let exchangeNotice: SystemNotice | null = null;
 	let magicRefs = itemMagicReferences( undefined );
@@ -272,7 +278,12 @@ present
 	================
 	*/
 	function gachaPrizeRows(): readonly GachaPrizeRow[] {
-		if ( gachaRows?.iconCount === icons.size && gachaRows.refCount === refs.size ) return gachaRows.rows;
+		if (
+			gachaRows?.iconCount === icons.size &&
+			gachaRows.refCount === refs.size &&
+			gachaRows.nameCount === names.size &&
+			gachaRows.tooltipCount === tooltipRefs.size
+		) return gachaRows.rows;
 		const rows = gachaPrizes().map( prize => ({
 			entry: prize.entry,
 			refObjId: prize.refObjId,
@@ -281,7 +292,13 @@ present
 			icon: icons.get( prize.refObjId ),
 			item: referenceItem( prize.refObjId, prize.quantity )
 		}) );
-		gachaRows = { iconCount: icons.size, refCount: refs.size, rows };
+		gachaRows = {
+			iconCount: icons.size,
+			refCount: refs.size,
+			nameCount: names.size,
+			tooltipCount: tooltipRefs.size,
+			rows
+		};
 		return rows;
 	}
 	/*
@@ -386,6 +403,7 @@ applyShopItems
 		names.clear();
 		for ( const [id, name] of nextNames ) names.set( id, name );
 		published = null;
+		gachaRows = null;
 	}
 	/*
 ================
@@ -650,6 +668,7 @@ references
 			}
 			published = null;
 			presentations = new WeakMap();
+			gachaRows = null;
 			shopSource = undefined;
 		},
 		/*
@@ -661,6 +680,7 @@ bootstrap
 			bindingMoves = [];
 			itemCooldowns = [];
 			presentations = new WeakMap();
+			gachaRows = null;
 			alchemy.reset();
 			companionRentals.reset();
 			gacha.reset();
@@ -1594,6 +1614,7 @@ receive
 				names.clear();
 				for ( const [id, name] of nextNames ) names.set( id, name );
 				published = null;
+				gachaRows = null;
 				mallDelivery = null;
 				return true;
 			}
@@ -2209,6 +2230,7 @@ clear
 			itemCooldowns = [];
 			shopCompletionRevision = 0;
 			presentations = new WeakMap();
+			gachaRows = null;
 			tooltipRefs.clear();
 			magicRefs = itemMagicReferences( undefined );
 			alchemy.reset();

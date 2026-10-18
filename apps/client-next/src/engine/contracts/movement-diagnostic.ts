@@ -39,8 +39,9 @@ export type MovementErrorCode =
 ================
 movementErrorCodes
 
-Closed server movement refusal codes (apps/server/internal/game/movement/service.go)
-plus the client fallback when an unaccepted receipt arrives without a reason.
+Closed server movement refusal codes (apps/server/internal/game/movement/service.go
+and apps/server/internal/game/movement/wire/command.go) plus the client fallback
+when an unaccepted receipt arrives without a reason.
 ================
 */
 export function movementErrorCodes(): readonly MovementErrorCode[] {

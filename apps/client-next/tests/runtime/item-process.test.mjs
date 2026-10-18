@@ -435,3 +435,50 @@ test("Gori's exchange request carries the operator's gid, and a voucher update w
 	} );
 	assert.equal( owner.takeExchangeNotice(), null, "the line is raised once" );
 });
+
+test("Magic Pang prize rows rebuild when references or bootstrap update tooltips, names, or icons", () => {
+	const owner = createInventory( () => {}, () => {} );
+	const firstPrizeRef = owner.state().gacha.prizes[0].refObjId;
+	assert.equal( owner.state().gacha.prizes[0].item, undefined );
+
+	const tooltipV1 = {
+		kind: 4,
+		degree: 1,
+		fields: { maxStack: 50, varianceIntMin1c0: 0, varianceIntMax1c4: 0, descKey: "UIIT_DESC_PRIZE_V1" }
+	};
+	const tooltipV2 = {
+		kind: 4,
+		degree: 1,
+		fields: { maxStack: 50, varianceIntMin1c0: 0, varianceIntMax1c4: 0, descKey: "UIIT_DESC_PRIZE_V2" }
+	};
+
+	owner.references( [
+		{
+			refObjId: firstPrizeRef,
+			typeFlags: 0xf6c,
+			name: "First Prize Name",
+			icon: "icon\\item\\etc\\prize_v1.ddj",
+			tooltip: tooltipV1
+		}
+	] );
+	const afterFirstReferences = owner.state().gacha.prizes[0];
+	assert.equal( afterFirstReferences.icon, "icon\\item\\etc\\prize_v1.ddj" );
+	assert.equal( afterFirstReferences.item?.name, "First Prize Name" );
+	assert.deepEqual( afterFirstReferences.item?.tooltip, tooltipV1 );
+
+	// Updating the same ref entry keeps map sizes equal (1 icon, 1 ref, 1 name, 1 tooltip)
+	// and must still invalidate the cached gacha prize rows.
+	owner.references( [
+		{
+			refObjId: firstPrizeRef,
+			typeFlags: 0xf6c,
+			name: "Updated Prize Name",
+			icon: "icon\\item\\etc\\prize_v2.ddj",
+			tooltip: tooltipV2
+		}
+	] );
+	const afterSecondReferences = owner.state().gacha.prizes[0];
+	assert.equal( afterSecondReferences.icon, "icon\\item\\etc\\prize_v2.ddj" );
+	assert.equal( afterSecondReferences.item?.name, "Updated Prize Name" );
+	assert.deepEqual( afterSecondReferences.item?.tooltip, tooltipV2 );
+});
