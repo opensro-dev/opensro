@@ -3,11 +3,12 @@
 
 guild-rank.test.mjs - the guild grade column shows rank, never the grant
 
-Native CIFGuildMemberSlot_PopulateFromMember (0x5F2E70) renders control 13
+Native CIFGuildMemberSlot_PopulateFromMember (0x5F2ED0) renders control 13
 from the member's grade byte: 0 -> UIIT_STT_LEADER, 5 -> UIIT_STT_GUILD_STAFF,
 10 -> UIIT_STT_GUILDSMAN, anything else gets no text. The grant name belongs
 only to the name column's grant mode. The same function colours the whole
-row: gold for the master (bright online, dark offline), grey otherwise.
+row: gold for the master (bright online, dark offline), white online and
+grey offline for every other grade.
 
 ===========================================================================
 */
@@ -42,13 +43,16 @@ test("grade bytes map to the native rank symbols, other grades to no text", () =
 	}
 });
 
-test("row colours follow the native master gold and member grey", () => {
-	// 0xFFFFB541 online, 0xFFA17233 offline, 0xFF808080 for every other grade.
+test("row colours follow the native master gold and member white/grey", () => {
+	// Master: 0xFFFFB541 online, 0xFFA17233 offline. Other grades:
+	// 0xFFFFFFFF online (mode 5, render state 0), 0xFF808080 offline
+	// (mode 3 slot, render state 3).
 	assert.deepEqual( guildMemberTextColor( 0, 0 ), [ 1, 0xb5 / 255, 0x41 / 255, 1 ] );
 	assert.deepEqual( guildMemberTextColor( 0, 1 ), [ 0xa1 / 255, 0x72 / 255, 0x33 / 255, 1 ] );
-	assert.deepEqual( guildMemberTextColor( 5, 0 ), [ 0x80 / 255, 0x80 / 255, 0x80 / 255, 1 ] );
+	assert.deepEqual( guildMemberTextColor( 5, 0 ), [ 1, 1, 1, 1 ] );
+	assert.deepEqual( guildMemberTextColor( 1, 0 ), [ 1, 1, 1, 1 ] );
 	assert.deepEqual( guildMemberTextColor( 10, 1 ), [ 0x80 / 255, 0x80 / 255, 0x80 / 255, 1 ] );
-	assert.deepEqual( guildMemberTextColor( 1, 0 ), [ 0x80 / 255, 0x80 / 255, 0x80 / 255, 1 ] );
+	assert.deepEqual( guildMemberTextColor( 5, 1 ), [ 0x80 / 255, 0x80 / 255, 0x80 / 255, 1 ] );
 });
 
 /*
@@ -230,10 +234,19 @@ for ( const [width, height] of [ [ 1600, 900 ], [ 375, 667 ] ] ) {
 			for ( const color of master ) {
 				assert.deepEqual( color, [ 1, 0xb5 / 255, 0x41 / 255, 1 ], "master row is native gold" );
 			}
+			const vice = glyphColors( fixture, "Vice master", rowOf( 2 ) );
+			assert.ok( vice.length > 0, "vice master rank glyphs painted" );
+			for ( const color of vice ) {
+				assert.deepEqual( color, [ 1, 1, 1, 1 ], "online vice master row is native white" );
+			}
 			const member = glyphColors( fixture, "Member", rowOf( 3 ) );
 			assert.ok( member.length > 0, "member rank glyphs painted" );
 			for ( const color of member ) {
-				assert.deepEqual( color, [ 0x80 / 255, 0x80 / 255, 0x80 / 255, 1 ], "member row is native grey" );
+				assert.deepEqual(
+					color,
+					[ 0x80 / 255, 0x80 / 255, 0x80 / 255, 1 ],
+					"offline member row is native grey"
+				);
 			}
 		} finally {
 			fixture.dispose();

@@ -17695,7 +17695,7 @@ export function createUi(
 										hudCopy( "UIIT_STT_FORT_GUILD_" + role ) :
 										"";
 								// Column 3 is the grade column: the rank of the grade byte,
-								// never the grant name (0x5F2E70), in the row's native colour.
+								// never the grant name (0x5F2ED0), in the row's native colour.
 								const rankSymbol = guildRankSymbol( row.grade ),
 									rowColor = guildMemberTextColor( row.grade, row.offline );
 								[
@@ -18363,7 +18363,7 @@ export function createUi(
 											hudCopy( "UIIT_STT_FORT_GUILD_" + roleSymbol ) :
 											"";
 										// Control 13 is the grade column: the rank of the grade
-										// byte, never the grant name (0x5F2E70). All four texts
+										// byte, never the grant name (0x5F2ED0). All four texts
 										// take the row's native colour for its grade/state.
 										const rankSymbol = guildRankSymbol( row.grade ),
 											rowColor = guildMemberTextColor( row.grade, row.offline );
