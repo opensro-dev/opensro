@@ -5,20 +5,19 @@ minimap-floor.ts - dungeon floor admission for minimap and world-map markers
 
 Implements CObj_IsVisibleInSector (0x863330) for dungeon sectors (regionId
 with bit 0x8000 set) and collects the poses whose DOF floor indices the
-simulation worker resolves into GameplayState.minimapFloors.
+simulation worker resolves into GameplayState.minimapFloors. Native calls
+0x863330 only from CIFMinimap_vf30's name-resolved pin paths (quest
+targets, party and academy members); its registry dot loop does not. The
+port gates entity dots with it too, because its server streams a whole
+dungeon region as one interest block, so every floor's entities reach the
+client and would otherwise all draw.
 
 ===========================================================================
 */
 import type { GameplayState, Pose } from "@/engine/contracts/gameplay";
+import { minimapPoseKey } from "@/engine/foundation/gameplay/minimap-floor-key";
 
-/*
-================
-minimapPoseKey
-================
-*/
-export function minimapPoseKey( p: Pick<Pose, "regionId" | "x" | "y" | "z"> ): string {
-	return [ p.regionId, p.x, p.y, p.z ].join( ":" );
-}
+export { minimapPoseKey };
 
 /*
 ================

@@ -41,6 +41,7 @@ import {
 	movementDuration
 } from "@/engine/foundation/gameplay/native-movement";
 import { createNavigation } from "./navigation/navigation";
+import { minimapPoseKey } from "@/engine/foundation/gameplay/minimap-floor-key";
 import { admitPose, decodeMovementReceipt, receiptWorld } from "@/engine/foundation/gameplay/movement-wire";
 import type { Pose } from "@/engine/contracts/gameplay";
 import { displacementSegment } from "@/engine/foundation/gameplay/cast-displacement";
@@ -1809,7 +1810,7 @@ state
 				movementDiagnostics: { total: reanchorReports, recent: recentReanchors.slice() },
 				navigationFloor: navigation.floor( pose, owner ),
 				minimapFloors: Object.fromEntries(
-					minimapQueries.map( p => [ [ p.regionId, p.x, p.y, p.z ].join( ":" ), navigation.floor( p ) ] )
+					minimapQueries.map( p => [ minimapPoseKey( p ), navigation.floor( p ) ] )
 				),
 				navigationRegion,
 				navigationBlock: navigation.block( pose, owner ),

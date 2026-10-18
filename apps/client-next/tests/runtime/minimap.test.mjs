@@ -281,6 +281,45 @@ test("dungeon navigation owns floor identity, invalidates admission and clears q
 	assert.equal( m.state().navigationFloor, undefined );
 	assert.deepEqual( m.state().minimapFloors, {} );
 });
+test("a walking dungeon entity keeps its floor answer across the query round trip", () => {
+	const mesh = y => ({
+		vertices: Float32Array.from( [ 0, y, 0, 100, y, 0, 100, y, 100, 0, y, 100 ] ),
+		cells: Uint16Array.from( [ 0, 1, 2, 0, 2, 3 ] ),
+		edges: Uint32Array.from( [ 1, 2, 0, 65535, 3, 0, 0, 2, 0, 1, 4, 1 ] ),
+		bounds: [ 0, y, 0, 100, y, 100 ],
+		passThrough: false
+	});
+	const m = createMovement( () => {} ),
+		p = { regionId: 32769, x: 10, y: 10, z: 50, angle: 0 };
+	m.seed( p );
+	m.navigation( 32769, {
+		regionId: 32769,
+		complete: true,
+		objects: [ { x: 0, y: 0, z: 0, yaw: 0, mesh: mesh( 10 ), block: 0, floor: 0 }, {
+			x: 0,
+			y: 0,
+			z: 0,
+			yaw: 0,
+			mesh: mesh( 100 ),
+			block: 1,
+			floor: 1
+		} ]
+	} );
+	// The UI queries the mob where it stands; by the time the published
+	// answer is looked up, the mob has walked on inside the same room.
+	const mob = entity( 20, { regionId: 32769, x: 12, y: 10, z: 50 } );
+	m.minimapFloors( minimapFloorQueries( { pose: p }, [], [ mob ] ) );
+	const state = m.state(), walked = { ...mob, x: mob.x + 3, z: mob.z + 2 };
+	assert.equal( minimapSameFloor( p, walked, state ), true );
+	assert.equal(
+		minimapMarkers( p, { ...state, localGid: 1, pose: p }, [ walked ], 1920, 55 ).length,
+		1
+	);
+	// A mob on the next floor up still gates out, walked or not.
+	const upper = entity( 21, { regionId: 32769, x: 12, y: 100, z: 50 } );
+	m.minimapFloors( minimapFloorQueries( { pose: p }, [], [ upper ] ) );
+	assert.equal( minimapSameFloor( p, { ...upper, x: upper.x + 3 }, m.state() ), false );
+});
 test("dungeon tiles use floor-specific art and negative logical coordinate sectors; absent art stays absent", () => {
 	const floor = {
 		floorIndex: 1,

@@ -151,12 +151,13 @@ export function rosterPositions(
 ================
 minimapMarkers
 
-54CE5C walks the complete registry. Because the server streams a dungeon
-region as a single interest block (apps/server/internal/game/world/interest.go),
+The native registry walk draws every streamed entity; 0x863330 gates only
+CIFMinimap_vf30's name-resolved pins, never the dot loop. Because the server
+streams a dungeon region as a single interest block (apps/server/internal/game/world/interest.go),
 multi-floor dungeons sharing one regionId (such as Donwhang Stone Cave 0x8001
 F1..F4) keep all floors' entities in the client registry; gating dungeon
-entities on minimapSameFloor (0x863330) restricts dots to the local player's
-DOF floor.
+entities on minimapSameFloor (0x863330's rule) restricts dots to the local
+player's DOF floor.
 ================
 */
 export function minimapMarkers(
