@@ -4338,7 +4338,27 @@ export function createUi(
 		else if ( id.startsWith( "open-window:" ) ) setPanel( panelNamed( id.slice( 12 ) ) );
 		else if ( id.startsWith( "toggle-window:" ) ) setPanel( panelNamed( id.slice( 14 ) ), "toggle" );
 		else if ( id === "cos-bag" ) setPanel( "COS inventory" );
-		else if ( id === "cos-cycle" ) {
+		else if ( id === "pet-mini-open" && experimental.state().saved.petClickOpensWindow ) {
+			const pet = petMiniInfo( view.gameplay?.cosRecords, hud.data()?.cosReferences ),
+				record = pet ? view.gameplay?.cosRecords?.find( r => r.gid === pet.gid ) : undefined;
+			if ( record && !record.dead && record.hp > 0 ) {
+				cosHud.select( record.gid );
+				sendGameplay( { kind: "cos-select", gid: record.gid } );
+				if ( panel === "COS inventory" && cosGid === record.gid ) {
+					setPanel( "" );
+				} else {
+					cosGid = record.gid;
+					if ( panel === "COS inventory" ) {
+						cosSlot = -1;
+						cosPage = 0;
+						cosTab = cosHasInventory( record ) ? 1 : 0;
+						bindCosDraft( record );
+					} else if ( setPanel( "COS inventory" ) ) {
+						cosTab = cosHasInventory( record ) ? 1 : 0;
+					}
+				}
+			}
+		} else if ( id === "cos-cycle" ) {
 			const records = view.gameplay?.cosRecords?.filter( r => cosHasInventory( r ) && !r.dead && r.hp > 0 ) ?? [],
 				next = records[(records.findIndex( r => r.gid === cosGid ) + 1) % records.length];
 			cosGid = next?.gid ?? 0;
@@ -10384,6 +10404,15 @@ export function createUi(
 						const player = hudData.root.GDR_PLAYER_MINI_INFO!.rect;
 						const petBounds = authoredRect( petPanel, player[0], player[1] );
 						targetBottom = Math.max( targetBottom, petBounds[1] + petBounds[3] + 4 );
+					}
+					if ( experimental.state().saved.petClickOpensWindow ) {
+						const player = hudData.root.GDR_PLAYER_MINI_INFO!.rect;
+						controls.push( {
+							id: "pet-mini-open",
+							label: pet.name?.length ? pet.name : hudCopy( "UIIT_STT_COSNEWUI_TITLE" ),
+							kind: "button",
+							rect: authoredRect( petPanel, player[0], player[1] )
+						} );
 					}
 					const [px, py] = hudData.root.GDR_PLAYER_MINI_INFO!.rect,
 						hpPath = ROOT + "interface/playerminiinfo/pmi_pet_hp.png",

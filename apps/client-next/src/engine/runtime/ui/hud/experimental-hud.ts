@@ -222,6 +222,11 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-confirm-guild-ban",
 			label: "Confirm guild ban",
 			description: "Ask before Withdraw bans a guild member."
+		}, {
+			key: "petClickOpensWindow",
+			id: "experimental-pet-click-opens-window",
+			label: "Pet panel opens window",
+			description: "Click the attack pet panel to open its window."
 		} ]
 	}
 ];
