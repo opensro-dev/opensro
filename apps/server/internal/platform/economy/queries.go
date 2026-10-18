@@ -43,12 +43,13 @@ One bucket's rows of one reason and direction.
 ================
 */
 type group struct {
-	t        int64
-	reason   string
-	gain     bool
-	sum      int64
-	min, max int64
-	count    int64
+	t          int64
+	reason     string
+	gain       bool
+	commission bool
+	sum        int64
+	min, max   int64
+	count      int64
 }
 
 /*
@@ -162,9 +163,77 @@ FROM economy_ledger WHERE at_ms >= ? AND at_ms < ?`
 		if err := rows.Scan(&g.t, &g.reason, &g.gain, &g.sum, &g.min, &g.max, &g.count); err != nil {
 			return nil, err
 		}
+		if !g.gain {
+			g.sum = -g.sum
+			g.min, g.max = -g.max, -g.min
+		}
 		out = append(out, g)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return settleTwoSidedTransfers(out), nil
+}
+
+/*
+================
+twoSidedTransfer
+
+Whether one transaction of reason writes both a payer loss row and a
+recipient gain row into economy_ledger (unlike storage_deposit,
+storage_withdraw and guild_storage, where only one character changes gold).
+================
+*/
+func twoSidedTransfer(reason string) bool {
+	switch reason {
+	case "exchange", "stall_sale", "most_wanted_transfer":
+		return true
+	}
+	return false
+}
+
+/*
+================
+settleTwoSidedTransfers
+
+For a two-sided peer transfer in a bucket where both the payer loss and
+recipient gain rows exist, keep the recipient gain group as the transfer
+volume so the two legs neither cancel nor double-count. When a stall_sale
+bucket's buyer loss exceeds its seller gain, the difference is the 1%
+stall-network commission burned from the shard's gold supply.
+================
+*/
+func settleTwoSidedTransfers(groups []group) []group {
+	type key struct {
+		t      int64
+		reason string
+	}
+	gains := map[key]group{}
+	for _, g := range groups {
+		if g.gain && twoSidedTransfer(g.reason) {
+			gains[key{g.t, g.reason}] = g
+		}
+	}
+	out := make([]group, 0, len(groups))
+	for _, g := range groups {
+		if !g.gain && twoSidedTransfer(g.reason) {
+			gain, both := gains[key{g.t, g.reason}]
+			if !both {
+				out = append(out, g)
+				continue
+			}
+			if g.reason == "stall_sale" && g.sum > gain.sum {
+				fee := g.sum - gain.sum
+				out = append(out, group{
+					t: g.t, reason: g.reason, gain: false, commission: true,
+					sum: fee, min: fee, max: fee, count: g.count,
+				})
+			}
+			continue
+		}
+		out = append(out, g)
+	}
+	return out
 }
 
 /*
@@ -172,23 +241,28 @@ FROM economy_ledger WHERE at_ms >= ? AND at_ms < ?`
 metricPicks
 
 Whether a group counts toward the metric, and with which sign: +1 adds
-its sum, -1 adds its magnitude (a burn).
+its magnitude, -1 subtracts a burn from gold_net.
 ================
 */
 func metricPicks(metric string, g group) (sign int64, counted bool) {
 	if reason, isReason := strings.CutPrefix(metric, "reason:"); isReason {
-		return 1, g.reason == reason
+		return 1, g.reason == reason && !g.commission
 	}
 	kind := domain.EconomyReasonKind(g.reason)
 	minted := kind == domain.EconomyKindMint && g.gain
-	burned := kind == domain.EconomyKindBurn && !g.gain
+	burned := (kind == domain.EconomyKindBurn && !g.gain) || g.commission
 	switch metric {
 	case "gold_minted":
 		return 1, minted
 	case "gold_burned":
-		return -1, burned
+		return 1, burned
 	case "gold_net":
-		return 1, minted || burned
+		if minted {
+			return 1, true
+		}
+		if burned {
+			return -1, true
+		}
 	}
 	return 0, false
 }
@@ -276,6 +350,9 @@ func foldFlows(w window, groups []group) (buckets []int64, reasons map[string][]
 	}
 	sums := map[string][]int64{}
 	for _, g := range groups {
+		if g.commission {
+			continue
+		}
 		i, inside := index[g.t]
 		if !inside {
 			continue

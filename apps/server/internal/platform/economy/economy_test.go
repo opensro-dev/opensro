@@ -188,11 +188,18 @@ func TestSeriesFoldMintBurnNetAndReason(t *testing.T) {
 	source := writeSnapshotSource(t, []ledgerFixture{
 		{gold: 100, reason: "npc_sale", atS: dayStart + 10},
 		{gold: -30, reason: "shop_buy", atS: dayStart + 20},
+		{gold: -50, reason: "exchange", atS: dayStart + 30},
 		{gold: 50, reason: "exchange", atS: dayStart + 30},
+		{gold: -25, reason: "storage_deposit", atS: dayStart + 35},
+		{gold: -200, reason: "guild_storage", atS: dayStart + 36},
+		{gold: 150, reason: "guild_storage", atS: dayStart + 37},
 		{gold: 7, reason: "unattributed", atS: dayStart + 40},
 		{gold: 20, reason: "monster_gold", atS: dayStart + 3600 + 5},
+		{gold: -1000, reason: "stall_sale", atS: dayStart + 3600 + 10},
+		{gold: 990, reason: "stall_sale", atS: dayStart + 3600 + 10},
+		{gold: -50, reason: "repair", atS: dayStart + 2*3600 + 5},
 	}, nil, nil)
-	service, handler := newTestService(t, source, time.Unix(dayStart+7200, 0))
+	service, handler := newTestService(t, source, time.Unix(dayStart+3*3600, 0))
 	if err := service.Snapshot(); err != nil {
 		t.Fatal(err)
 	}
@@ -201,12 +208,17 @@ func TestSeriesFoldMintBurnNetAndReason(t *testing.T) {
 		sums   []string
 	}{
 		{"gold_minted", []string{"100", "20"}},
-		{"gold_burned", []string{"30"}},
-		{"gold_net", []string{"70", "20"}},
+		{"gold_burned", []string{"30", "10", "50"}},
+		{"gold_net", []string{"70", "10", "-50"}},
+		{"reason:shop_buy", []string{"30"}},
+		{"reason:repair", []string{"50"}},
 		{"reason:exchange", []string{"50"}},
+		{"reason:stall_sale", []string{"990"}},
+		{"reason:storage_deposit", []string{"25"}},
+		{"reason:guild_storage", []string{"350"}},
 	}
 	for _, tc := range cases {
-		target := fmt.Sprintf("/economy/v1/series?metric=%s&bucket=1h&from=%d&to=%d", tc.metric, dayStart, dayStart+7200)
+		target := fmt.Sprintf("/economy/v1/series?metric=%s&bucket=1h&from=%d&to=%d", tc.metric, dayStart, dayStart+3*3600)
 		status, body := get(t, handler, target, true)
 		points, _ := body["points"].([]any)
 		if status != http.StatusOK || len(points) != len(tc.sums) {
@@ -224,13 +236,20 @@ func TestSeriesFoldMintBurnNetAndReason(t *testing.T) {
 ================
 TestFlowsAlignEveryBucket
 
-Every reason's array has one entry per bucket of the window, "0" where it
-moved nothing.
+Every reason's array has one entry per bucket of the window, as a positive
+magnitude, and "0" where it moved nothing.
 ================
 */
 func TestFlowsAlignEveryBucket(t *testing.T) {
 	source := writeSnapshotSource(t, []ledgerFixture{
 		{gold: 100, reason: "npc_sale", atS: dayStart + 10},
+		{gold: -50, reason: "exchange", atS: dayStart + 20},
+		{gold: 50, reason: "exchange", atS: dayStart + 20},
+		{gold: -25, reason: "storage_deposit", atS: dayStart + 3600 + 10},
+		{gold: -1000, reason: "stall_sale", atS: dayStart + 3600 + 20},
+		{gold: 990, reason: "stall_sale", atS: dayStart + 3600 + 20},
+		{gold: -200, reason: "guild_storage", atS: dayStart + 2*3600},
+		{gold: 150, reason: "guild_storage", atS: dayStart + 2*3600},
 		{gold: -40, reason: "repair", atS: dayStart + 2*3600},
 	}, nil, nil)
 	service, handler := newTestService(t, source, time.Unix(dayStart+3*3600, 0))
@@ -246,7 +265,19 @@ func TestFlowsAlignEveryBucket(t *testing.T) {
 	if got := fmt.Sprint(reasons["npc_sale"]); got != "[100 0 0]" {
 		t.Fatalf("npc_sale %s", got)
 	}
-	if got := fmt.Sprint(reasons["repair"]); got != "[0 0 -40]" {
+	if got := fmt.Sprint(reasons["exchange"]); got != "[50 0 0]" {
+		t.Fatalf("exchange %s", got)
+	}
+	if got := fmt.Sprint(reasons["storage_deposit"]); got != "[0 25 0]" {
+		t.Fatalf("storage_deposit %s", got)
+	}
+	if got := fmt.Sprint(reasons["stall_sale"]); got != "[0 990 0]" {
+		t.Fatalf("stall_sale %s", got)
+	}
+	if got := fmt.Sprint(reasons["guild_storage"]); got != "[0 0 350]" {
+		t.Fatalf("guild_storage %s", got)
+	}
+	if got := fmt.Sprint(reasons["repair"]); got != "[0 0 40]" {
 		t.Fatalf("repair %s", got)
 	}
 }
