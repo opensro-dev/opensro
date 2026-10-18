@@ -96,6 +96,7 @@ test("a packed /assets load notes byte progress from the packs plumbing", async 
 		} ]
 	};
 	t.mock.method( performance, "getEntriesByName", () => [] );
+	/** @type {ReadableStreamDefaultController<Uint8Array> | undefined} */
 	let stream;
 	t.mock.method( globalThis, "fetch", async url => {
 		if ( url.endsWith( "/manifest.json" ) ) return Response.json( manifest );
