@@ -566,7 +566,13 @@ func (ops *MonsterMoverOps) planReturnLeg(instance monster.Instance, mover monst
 			if path == nil {
 				if ops.PlanRoute != nil {
 					mover.SetNavigationMotion(speed, channel)
-					return ops.waitForNavigation(instance.Gid, mover, live, dest, nowMs)
+					return ops.waitForNavigation(instance.Gid, mover, live, dest, speed, nil, nowMs)
+				}
+				if speed > 0 && planarDistance(live, dest) >= 0.01 {
+					mover.NoteMoveIssued(live, mover.InFlight(nowMs))
+					if mover.ArriveMs <= mover.DepartMs {
+						mover.NoteMoveStopped(live)
+					}
 				}
 				return ops.holdNavigation(instance.Gid, mover, live, nowMs)
 			}
@@ -650,7 +656,8 @@ func (ops *MonsterMoverOps) planDirectSegment(instance monster.Instance, mover m
 	// state 9 for every B738 destination, and the cyclic mixer reset clears its
 	// authored cursor. The browser presentation adapter separately retains the
 	// visible walk/run phase while that locomotion lane remains continuously live.
-	if settledFrames, stuck := settleMaturedSegment(instance.Gid, &mover, nowMs); stuck {
+	settledFrames, stuck := settleMaturedSegment(instance.Gid, &mover, nowMs)
+	if stuck {
 		return mover, settledFrames
 	}
 	wasInFlight := mover.InFlight(nowMs)
@@ -660,11 +667,18 @@ func (ops *MonsterMoverOps) planDirectSegment(instance monster.Instance, mover m
 	// into every later scope-enter read (BUG-8 second injection path).
 	from := mover.LivePoseAt(nowMs, ops.TerrainHeight)
 	goal := dest
+	moveIssued := planarDistance(from, goal) >= 0.01 && speed > 0
+	if moveIssued {
+		mover.NoteMoveIssued(from, wasInFlight)
+	}
 	var navigation *monster.NavigationPath
 	if ops.hasPlanner() {
 		// Walk from the cell under the monster (native source pNavCell).
 		navigation = ops.planPath(callerForMode(mover.Mode()), from, mover.LiveNavOwner(nowMs), goal)
 		if navigation == nil {
+			if moveIssued && mover.ArriveMs <= mover.DepartMs {
+				mover.NoteMoveStopped(from)
+			}
 			return ops.holdNavigation(instance.Gid, mover, from, nowMs)
 		}
 		dest = navigation.Rest()
@@ -674,7 +688,7 @@ func (ops *MonsterMoverOps) planDirectSegment(instance monster.Instance, mover m
 		mover.Pose = from
 		mover.From, mover.To = monster.Pose{}, monster.Pose{}
 		mover.DepartMs, mover.ArriveMs = 0, 0
-		if wasInFlight {
+		if wasInFlight || moveIssued {
 			mover.NoteMoveStopped(from)
 		}
 		if !mover.Stuck() {
@@ -686,10 +700,8 @@ func (ops *MonsterMoverOps) planDirectSegment(instance monster.Instance, mover m
 		if wasInFlight {
 			return mover, []Frame{correctionFrame(instance.Gid, from)}
 		}
-		return mover, nil
+		return mover, settledFrames
 	}
-
-	mover.NoteMoveIssued(from, wasInFlight)
 	sourceRequired := monsterMovementSourceRequired(mover, from, dest, wasInFlight)
 	headingWord := headingWordToward(from, dest)
 	dest.Heading = headingWord

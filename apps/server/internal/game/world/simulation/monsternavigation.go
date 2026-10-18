@@ -18,8 +18,8 @@ func (ops *MonsterMoverOps) planSegment(instance monster.Instance, mover monster
 	if ops.PlanRoute == nil || !routedBehavior(mover) {
 		return ops.planDirectSegment(instance, mover, goal, speed, channel, now)
 	}
-	hadSegment := mover.ArriveMs > mover.DepartMs
-	if settledFrames, stuck := settleMaturedSegment(instance.Gid, &mover, now); stuck {
+	settledFrames, stuck := settleMaturedSegment(instance.Gid, &mover, now)
+	if stuck {
 		mover.CancelNavigation()
 		return mover, settledFrames
 	}
@@ -29,8 +29,8 @@ func (ops *MonsterMoverOps) planSegment(instance monster.Instance, mover monster
 	if planarDistance(live, goal) < .01 {
 		mover.CancelNavigation()
 		next, frames := ops.planDirectSegment(instance, mover, goal, speed, channel, now)
-		if hadSegment && len(frames) == 0 {
-			frames = []Frame{correctionFrame(instance.Gid, live)}
+		if len(frames) == 0 && len(settledFrames) > 0 {
+			frames = settledFrames
 		}
 		return next, frames
 	}
@@ -40,7 +40,7 @@ func (ops *MonsterMoverOps) planSegment(instance monster.Instance, mover monster
 	// A moving target must not defeat the failed-search work budget. Target
 	// replacement/retaliation cancels intent through the state machine first.
 	if active && mover.NavigationWaiting(now) {
-		return mover, nil
+		return mover, settledFrames
 	}
 	changed := previous.RegionID != goal.RegionID || previous.X != goal.X || previous.Z != goal.Z || previous.Y != goal.Y
 	// Small live-target updates may reuse a detour corridor. Direct pursuit
@@ -62,7 +62,7 @@ func (ops *MonsterMoverOps) planSegment(instance monster.Instance, mover monster
 		route := ops.PlanRoute(live, goal)
 		ops.Navigation.plan(callerForMode(mover.Mode()), route)
 		if route == nil || route.Status() != monster.NavigationRouteReady || route.Len() == 0 {
-			return ops.waitForNavigation(instance.Gid, mover, live, goal, now)
+			return ops.waitForNavigation(instance.Gid, mover, live, goal, speed, settledFrames, now)
 		}
 		mover.BeginNavigation(route)
 		point, _ = mover.NavigationWaypoint()
@@ -72,15 +72,18 @@ func (ops *MonsterMoverOps) planSegment(instance monster.Instance, mover monster
 		// Geometry changed, a corridor failed, or movement made no progress.
 		// Retain the behavior goal and invalidate the route. A clipped corner
 		// must never masquerade as arrival at the target/leader/home.
-		return ops.waitForNavigation(instance.Gid, mover, live, goal, now)
+		return ops.waitForNavigation(instance.Gid, mover, live, goal, speed, settledFrames, now)
 	}
 	return next, frames
 }
 
-func (ops *MonsterMoverOps) waitForNavigation(gid uint32, mover monster.MoverState, live, goal monster.Pose, now int64) (monster.MoverState, []Frame) {
+func (ops *MonsterMoverOps) waitForNavigation(gid uint32, mover monster.MoverState, live, goal monster.Pose, speed float64, settledFrames []Frame, now int64) (monster.MoverState, []Frame) {
 	// Correct an old segment once; subsequent retry ticks are silent.
 	hadSegment := mover.ArriveMs > mover.DepartMs
-	if hadSegment {
+	if speed > 0 && planarDistance(live, goal) >= .01 {
+		mover.NoteMoveIssued(live, hadSegment)
+		mover.NoteMoveStopped(live)
+	} else if hadSegment {
 		mover.NoteMoveStopped(live)
 	}
 	mover.Pose = live
@@ -91,7 +94,7 @@ func (ops *MonsterMoverOps) waitForNavigation(gid uint32, mover monster.MoverSta
 	if hadSegment {
 		return mover, []Frame{correctionFrame(gid, live)}
 	}
-	return mover, nil
+	return mover, settledFrames
 }
 
 func navigationNeedsContinuation(mover monster.MoverState, now int64) bool {

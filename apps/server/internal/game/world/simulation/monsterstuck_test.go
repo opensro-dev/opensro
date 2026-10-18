@@ -302,3 +302,149 @@ func TestMonsterStuckWarpToControllerAndIdleForCOS(t *testing.T) {
 		t.Fatalf("COS stuck progress not reset: failures=%d stuck=%v", after.Progress().Failures(), after.Stuck())
 	}
 }
+
+/*
+================
+TestMonsterStuckProductionPlanRouteAndZeroDistanceClip
+
+Verifies [P0]:
+  - When production ops.PlanRoute is wired and returns a blocked route (or
+    when PlanRoute yields a corner that ops.PlanPath clips short), each
+    waitForNavigation refusal counts NoteMoveIssued + NoteMoveStopped and
+    fires resolveStuck after 10 failures across retry intervals.
+  - When ops.PlanPath clips a non-in-flight direct segment to distance < 0.01
+    at the departure point, NoteMoveIssued (pre-clip) + NoteMoveStopped still
+    increment Failures() and fire resolveStuck on the 10th failure.
+
+================
+*/
+func TestMonsterStuckProductionPlanRouteAndZeroDistanceClip(t *testing.T) {
+	t.Run("routed_blocked", func(t *testing.T) {
+		ops, instance, mover, target := pursuitControlsFixture(t)
+		instance.Nest.Controls.TraceBoundary = 2
+		ops.Monsters.mu.Lock()
+		ops.Monsters.division(monsterTestDivision).instances.set(instance.Gid, instance)
+		ops.Monsters.mu.Unlock()
+
+		target.Pose.X = mover.Pose.X + 80
+		target.Pose.Z = mover.Pose.Z + 40
+		ops.PlanPath = testShortNavPath
+		ops.PlanRoute = func(_, to monster.Pose) *monster.NavigationRoute {
+			return monster.UnresolvedNavigationRoute(to, monster.NavigationRouteBlocked)
+		}
+
+		nowMs := int64(10_000)
+		var lastFrames []Frame
+		for step := 1; step <= testStuckFailureLimit; step++ {
+			current, _ := ops.Monsters.Get(monsterTestDivision, instance.Gid)
+			lastFrames, _ = ops.advanceInstance(monsterTestDivision, current, []playerPose{target}, nowMs)
+			m, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+			if step < testStuckFailureLimit && m.Progress().Failures() != uint8(step) {
+				t.Fatalf("step %d: failures = %d, want %d", step, m.Progress().Failures(), step)
+			}
+			nowMs += monsterNavigationRetryMs
+		}
+		warped, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+		if warped.Pose.X != target.Pose.X || warped.Pose.Z != target.Pose.Z {
+			t.Fatalf("routed_blocked did not relocate onto target: pose=%+v want (%v,%v)",
+				warped.Pose, target.Pose.X, target.Pose.Z)
+		}
+		if len(lastFrames) == 0 || lastFrames[len(lastFrames)-1].Opcode != wire.OpObjectSourceCorrection {
+			t.Fatalf("expected relocation OpObjectSourceCorrection frame, got %+v", lastFrames)
+		}
+	})
+
+	t.Run("routed_clipped_corner", func(t *testing.T) {
+		ops, instance, mover, target := pursuitControlsFixture(t)
+		instance.Nest.Controls.TraceBoundary = 2
+		ops.Monsters.mu.Lock()
+		ops.Monsters.division(monsterTestDivision).instances.set(instance.Gid, instance)
+		ops.Monsters.mu.Unlock()
+
+		target.Pose.X = mover.Pose.X + 80
+		target.Pose.Z = mover.Pose.Z + 40
+		ops.PlanRoute = func(from, to monster.Pose) *monster.NavigationRoute {
+			corner := from
+			corner.X += 30
+			return monster.NewNavigationRoute(to, []monster.Pose{corner, to})
+		}
+		// Clip the corner short so planSegment falls back to waitForNavigation.
+		ops.PlanPath = func(from, _ monster.Pose) *monster.NavigationPath {
+			clipped := from
+			clipped.X += 1
+			return testShortNavPath(from, clipped)
+		}
+
+		nowMs := int64(10_000)
+		for step := 1; step <= testStuckFailureLimit; step++ {
+			current, _ := ops.Monsters.Get(monsterTestDivision, instance.Gid)
+			ops.advanceInstance(monsterTestDivision, current, []playerPose{target}, nowMs)
+			m, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+			if step < testStuckFailureLimit && m.Progress().Failures() != uint8(step) {
+				t.Fatalf("step %d: failures = %d, want %d", step, m.Progress().Failures(), step)
+			}
+			nowMs += monsterNavigationRetryMs
+		}
+		warped, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+		if warped.Pose.X != target.Pose.X || warped.Pose.Z != target.Pose.Z {
+			t.Fatalf("routed_clipped_corner did not relocate onto target: pose=%+v want (%v,%v)",
+				warped.Pose, target.Pose.X, target.Pose.Z)
+		}
+	})
+
+	t.Run("direct_zero_clip_not_in_flight", func(t *testing.T) {
+		ops, instance, mover, _ := pursuitControlsFixture(t)
+		ops.PlanPath = func(from, _ monster.Pose) *monster.NavigationPath {
+			return testShortNavPath(from, from)
+		}
+		goal := mover.Pose
+		goal.X += 40
+		nowMs := int64(10_000)
+		for step := 1; step <= testStuckFailureLimit; step++ {
+			mover, _ = ops.planDirectSegment(instance, mover, goal, 20, wire.MoveStateRun, nowMs)
+			if step < testStuckFailureLimit && mover.Progress().Failures() != uint8(step) {
+				t.Fatalf("step %d: failures = %d, want %d", step, mover.Progress().Failures(), step)
+			}
+			nowMs += 100
+		}
+		if !mover.Stuck() {
+			t.Fatalf("expected Stuck() = true after %d zero-clip direct attempts, failures=%d",
+				testStuckFailureLimit, mover.Progress().Failures())
+		}
+	})
+}
+
+/*
+================
+TestMonsterStuckPreservesMaturedSettleFrameWhenNotYetStuck
+
+Verifies [P1]: when a previous segment matures at nowMs with stuck == false
+and the successor planSegment / planDirectSegment waits on navigation or clips
+to distance < 0.01, the 0xB2F5 settle frame for the completed leg is still
+emitted.
+================
+*/
+func TestMonsterStuckPreservesMaturedSettleFrameWhenNotYetStuck(t *testing.T) {
+	ops, instance, mover := routedFixture(t, monster.MoverChasing)
+	from := mover.Pose
+	to := from
+	to.X += 5
+	mover.NoteMoveIssued(from, false)
+	mover.From = from
+	mover.To = to
+	mover.DepartMs = 10_000
+	mover.ArriveMs = 10_500
+
+	ops.PlanRoute = func(_, goal monster.Pose) *monster.NavigationRoute {
+		return monster.UnresolvedNavigationRoute(goal, monster.NavigationRouteBlocked)
+	}
+	goal := to
+	goal.X += 50
+	next, frames := ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, 10_500)
+	if len(frames) != 1 || frames[0].Opcode != wire.OpObjectSourceCorrection {
+		t.Fatalf("expected 1 OpObjectSourceCorrection settle frame on blocked successor after matured leg, got %+v", frames)
+	}
+	if next.Pose != to {
+		t.Fatalf("settled pose = %+v, want %+v", next.Pose, to)
+	}
+}
