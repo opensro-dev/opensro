@@ -124,8 +124,8 @@ interface PresentationEventFrame {
 	readonly triggers: readonly EffectTrigger[];
 	readonly samples: Pick<ReadonlyMap<number, unknown>, "has">;
 	// The pose actor-motion holds (or is about to hold on a cast-burst
-	// frame) for a character, so effects anchor to the drawn body.
-	readonly heldPose: ( gid: number ) => Pose | undefined;
+	// frame) for each character, so effects anchor to the drawn body.
+	readonly heldPoses: ReadonlyMap<number, Pose>;
 	readonly localMover: ( gid: number ) => boolean;
 	readonly logicalPose: ( entity: EntityState ) => Pose;
 	readonly appearanceRef: ( entity: EntityState ) => number;
@@ -210,7 +210,7 @@ export function createPresentationEvents() {
 				combatStanceEnds,
 				triggers,
 				samples,
-				heldPose,
+				heldPoses,
 				localMover,
 				logicalPose,
 				appearanceRef,
@@ -265,7 +265,7 @@ export function createPresentationEvents() {
 				// frame actor-motion holds later this step) anchors its
 				// effects: bone-less ground stages draw at the stage anchor,
 				// which must be the held pose, not the corrected one.
-				const held = heldPose( entity.gid );
+				const held = heldPoses.get( entity.gid );
 				if ( held ) {
 					if ( local ) {
 						drawnLocal = { ...gameplay!.pose!, regionId: held.regionId, x: held.x, y: held.y, z: held.z };
@@ -319,7 +319,7 @@ export function createPresentationEvents() {
 							native = entity ? logicalPose( entity ) : undefined;
 						// A held body launches bone projectiles from its held
 						// pose, not the corrected pose posePresentation spent.
-						const held = heldPose( actor.gid );
+						const held = heldPoses.get( actor.gid );
 						const sampled = !held && native ?
 							posePresentation.pose( actor.gid, native, seconds ) :
 							undefined;
