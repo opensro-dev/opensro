@@ -660,3 +660,20 @@ func TestWalkableSpawnHeightAtRealDonwhangDungeon(t *testing.T) {
 		t.Fatalf("Donwhang resident height = %.3f, want the authored -9.98 plane", height)
 	}
 }
+
+/*
+================
+standHasUnresolvedLink
+================
+*/
+func standHasUnresolvedLink(s *objectDeckStand) bool {
+	if s == nil {
+		return false
+	}
+	for _, link := range s.placement.links {
+		if link.target == 65535 {
+			return true
+		}
+	}
+	return s.placement.linkEdgeCount > len(s.placement.links)
+}

@@ -470,13 +470,8 @@ func (v *WaterValidator) ownerWalk(from simulation.Spawn, fromOwner simulation.N
 				endSectorX := int(math.Floor((a.X + (b.X-a.X)*endT) / simulation.NativeRegionSize))
 				endSectorZ := int(math.Floor((a.Z + (b.Z-a.Z)*endT) / simulation.NativeRegionSize))
 				if rebound := v.rebindStandToSector(stand, endSectorX, endSectorZ); rebound != nil && rebound != stand {
-					reboundPath := *path
-					reboundPath.stand = rebound
-					if next, leave, enter = reboundPath.linkedContinuation(t); next != nil {
-						path.stand = rebound
-					} else if standHasUnresolvedLink(stand) && !standHasUnresolvedLink(rebound) {
-						path.stand = rebound
-					}
+					path.stand = rebound
+					next, leave, enter = path.linkedContinuation(t)
 				}
 			}
 			if next != nil {
@@ -617,23 +612,6 @@ func (v *WaterValidator) terrainOutlineEntry(ax, az, bx, bz, tMin float64) (*obj
 		return nil, 0, 0
 	}
 	return best, bestT, bestKey
-}
-
-/*
-================
-standHasUnresolvedLink
-================
-*/
-func standHasUnresolvedLink(s *objectDeckStand) bool {
-	if s == nil {
-		return false
-	}
-	for _, link := range s.placement.links {
-		if link.target == 65535 {
-			return true
-		}
-	}
-	return s.placement.linkEdgeCount > len(s.placement.links)
 }
 
 // NavAuthority is the surface-ownership seam the movement runtime consumes.
