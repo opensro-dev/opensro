@@ -209,7 +209,7 @@ func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
 		// viewer who saw the owner but not the pet got each cast open and
 		// never its close (#804). The owner has these in its private batch.
 		if len(public) > 0 {
-			out = append(out, simulation.DivisionFrames{DivisionID: key.division, SourceGID: key.gid, ExceptCharacterID: characterID, Frames: simFrames(public)})
+			out = append(out, routePetPublicFrames(key.division, key.gid, characterID, public)...)
 		}
 		if len(frames) != 0 && characterID != 0 {
 			out = append(out, simulation.DivisionFrames{DivisionID: key.division, OnlyCharacterID: characterID, Frames: frames})
@@ -217,6 +217,39 @@ func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
 	}
 	if rt.Worlds != nil {
 		rt.Worlds.ReplaceTethers(tethers)
+	}
+	return out
+}
+
+/*
+================
+routePetPublicFrames
+
+Splits a pet's public batch by per-frame SourceGID so 0x35C7 pickup animations
+go to viewers of the pet while 0x36AB ground-item despawns go to every viewer
+that published the drop, matching SweepExpired.
+================
+*/
+func routePetPublicFrames(divisionID string, petGID uint32, ownerCharacterID int64, public []wire.Frame) []simulation.DivisionFrames {
+	var out []simulation.DivisionFrames
+	start := 0
+	currentSource := frameSourceGID(petGID, public[0])
+	for i := 1; i <= len(public); i++ {
+		var nextSource uint32
+		if i < len(public) {
+			nextSource = frameSourceGID(petGID, public[i])
+			if nextSource == currentSource {
+				continue
+			}
+		}
+		out = append(out, simulation.DivisionFrames{
+			DivisionID:        divisionID,
+			SourceGID:         currentSource,
+			ExceptCharacterID: ownerCharacterID,
+			Frames:            simFrames(public[start:i]),
+		})
+		start = i
+		currentSource = nextSource
 	}
 	return out
 }

@@ -827,7 +827,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 				return
 			}
 			if sourceGID, ok := sources[0].CharacterObjectID(); ok {
-				action.BroadcastObservedFrames(hub, divisionID, 0, sourceGID, frames)
+				action.BroadcastObservedFrames(hub, divisionID, sources[0].ID, sourceGID, frames)
 			}
 			return
 		}

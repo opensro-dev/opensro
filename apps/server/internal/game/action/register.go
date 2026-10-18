@@ -12,6 +12,7 @@ package action
 
 import (
 	log "github.com/sirupsen/logrus"
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/transport"
@@ -200,15 +201,51 @@ func (rt *Runtime) hubHandler(hub *transport.Hub, op opFunc) transport.HandlerFu
 
 /*
 ================
+frameSourceGID
+
+A ground-item despawn (0x36AB) must reach every session that published the
+drop (including via the 0x3417 bootstrap before any movement tick), even if
+that viewer has not published the picking character or grab pet.
+================
+*/
+func frameSourceGID(defaultSourceGID uint32, f wire.Frame) uint32 {
+	if f.Opcode == wire.OpObjectDespawn && len(f.Scope) == 1 && !f.Scope[0].Visible {
+		gid := f.Scope[0].GID
+		if gid > domain.GroundItemGIDBase && gid <= domain.GroundItemGIDLimit {
+			return gid
+		}
+	}
+	return defaultSourceGID
+}
+
+/*
+================
 BroadcastObservedFrames
 ================
 */
 func BroadcastObservedFrames(hub *transport.Hub, division string, exceptSession uint64, sourceGID uint32, frames []wire.Frame) {
-	batch := make([]transport.Frame, len(frames))
-	for i, f := range frames {
-		batch[i] = transport.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: transport.ScopeChanges(f.Scope)}
+	if len(frames) == 0 {
+		return
 	}
-	hub.BroadcastObserved(division, exceptSession, sourceGID, batch)
+	start := 0
+	currentSource := frameSourceGID(sourceGID, frames[0])
+	for i := 1; i <= len(frames); i++ {
+		var nextSource uint32
+		if i < len(frames) {
+			nextSource = frameSourceGID(sourceGID, frames[i])
+			if nextSource == currentSource {
+				continue
+			}
+		}
+		run := frames[start:i]
+		batch := make([]transport.Frame, len(run))
+		for j, f := range run {
+			batch[j] = transport.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: transport.ScopeChanges(f.Scope)}
+		}
+		hub.BroadcastObserved(division, exceptSession, currentSource, batch)
+		start = i
+		currentSource = nextSource
+	}
 }
 
 // SendFrames publishes a complete action result, including scene replacement,

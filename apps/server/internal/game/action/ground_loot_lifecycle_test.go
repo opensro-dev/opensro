@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
@@ -199,4 +200,173 @@ func TestMonsterLootPublicationSurvivesOwnershipAndExpiry(t *testing.T) {
 			}
 		})
 	}
+}
+
+/*
+================
+wireBootstrapGroundObjects
+
+Publishes ground drops into a viewer session through enterworld.GroundObjectListRows
+(0x3417 OpcodeObjectListChunk), matching the EnterWorld bootstrap path before any
+movement tick or peer/COS observation.
+================
+*/
+func wireBootstrapGroundObjects(t *testing.T, srv *transport.Server, viewer *wireClient, items []grounditem.Item) {
+	t.Helper()
+	session, _ := srv.Hub.Session(viewer.sessionID)
+	rows := enterworld.GroundObjectListRows(items)
+	batch := make([]transport.Frame, len(rows))
+	payloads := make([][]byte, len(rows))
+	for i, row := range rows {
+		payload := make([]byte, len(row.Payload))
+		for j, b := range row.Payload {
+			payload[j] = byte(b)
+		}
+		payloads[i] = payload
+		batch[i] = transport.Frame{
+			Opcode:  row.NativeOpcode,
+			Payload: payload,
+			Scope:   transport.ScopeChanges(row.Scope),
+		}
+	}
+	if err := session.SendBatch(batch); err != nil {
+		t.Fatal(err)
+	}
+	for _, payload := range payloads {
+		viewer.expectFrame(t, enterworld.OpcodeObjectListChunk, payload)
+	}
+}
+
+/*
+================
+TestGroundPickupDespawnReachesBootstrapViewerWithoutObservedPicker
+
+A viewer that published a ground item via 0x3417 bootstrap without observing
+the picking character or grab pet must still receive 0x36AB OpObjectDespawn
+when the drop is picked up, matching SweepExpired.
+================
+*/
+func TestGroundPickupDespawnReachesBootstrapViewerWithoutObservedPicker(t *testing.T) {
+	t.Run("player-pickup", func(t *testing.T) {
+		c := wireCharacter()
+		rt, _ := newTestRuntime(c, testItems())
+		server := wireStartServer(t, rt)
+
+		drop := rt.Ground.Add(testDivision, grounditem.Item{
+			RefObjID:   62,
+			Codename:   "ITEM_ETC_GOLD_02",
+			TypeFlags:  wire.PackTypeFlags(3, 3, 5, 2),
+			GoldAmount: 50,
+			Position:   grounditem.Point{RegionID: wireRegionID, X: wireX, Z: wireZ},
+			Y:          wireY,
+		})
+
+		picker := wireConnect(t, server, testDivision, c.Name)
+		viewer := wireConnect(t, server, testDivision, "bootstrap-viewer")
+		wireBootstrapGroundObjects(t, server, viewer, rt.Ground.All(testDivision))
+
+		viewerSession, _ := server.Hub.Session(viewer.sessionID)
+		revision, _ := viewerSession.SceneRevision()
+		observed, current := viewerSession.PublishedObjects(revision)
+		if !current || !slices.Contains(observed, drop.Gid) {
+			t.Fatalf("bootstrap viewer did not record drop %d in published scope: %v", drop.Gid, observed)
+		}
+		if slices.Contains(observed, enterworld.ObjectIDForCharacter(c)) {
+			t.Fatalf("bootstrap viewer unexpectedly observed picker %d", enterworld.ObjectIDForCharacter(c))
+		}
+
+		picker.send(t, wire.OpTargetInteract, wire.TargetInteract{Gid: drop.Gid}.Encode())
+
+		viewer.expectFrame(t, wire.OpObjectDespawn, wire.ObjectDespawn{Gid: drop.Gid}.Encode())
+		if err := viewer.silence(50 * time.Millisecond); err != nil {
+			t.Fatalf("bootstrap viewer received unexpected frame after despawn: %v", err)
+		}
+
+		observed, _ = viewerSession.PublishedObjects(revision)
+		if slices.Contains(observed, drop.Gid) {
+			t.Fatalf("bootstrap viewer retained picked drop %d in published scope: %v", drop.Gid, observed)
+		}
+	})
+
+	t.Run("pet-arrival-pickup", func(t *testing.T) {
+		c := wireCharacter()
+		refs := testCosSource(testItems())
+		refs.characters["PET"] = &enterworld.CharacterRef{Codename: "PET", RefObjID: 9, TidWord: 0x21c6, RunSpeed: 100}
+		rt, _ := newTestRuntime(c, refs)
+		nowMs := int64(1000)
+		rt.Now = func() time.Time { return time.UnixMilli(nowMs) }
+		rt.ConstrainMovement = func(_ string, from, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) { return to, nil }
+
+		petGID, _ := enterworld.CosObjectIDForCharacter(c)
+		c.ActiveCOS = &enterworld.CharacterCOS{
+			GID: petGID, RefObjID: 9, Codename: "PET", CurrentHP: 100, Summoned: true,
+			Container: &domain.COSContainer{Capacity: 8},
+		}
+		rt.BindPetSession(testDivision, c, 1)
+		rt.TickHook()(nowMs)
+		pose := rt.PetPresentation(testDivision, c.Name).World.Spawn
+
+		drop := rt.Ground.Add(testDivision, grounditem.Item{
+			RefObjID:   3630,
+			Codename:   "ITEM_ETC_HP_POTION_01",
+			TypeFlags:  wire.PackTypeFlags(3, 3, 1, 1),
+			StackCount: 1,
+			Position:   grounditem.Point{RegionID: pose.RegionID, X: float32(pose.X + 100), Z: float32(pose.Z)},
+			Y:          float32(pose.Y),
+		})
+
+		server := wireStartServer(t, rt)
+		viewer := wireConnect(t, server, testDivision, "bootstrap-viewer")
+		wireBootstrapGroundObjects(t, server, viewer, rt.Ground.All(testDivision))
+
+		viewerSession, _ := server.Hub.Session(viewer.sessionID)
+		revision, _ := viewerSession.SceneRevision()
+		observed, current := viewerSession.PublishedObjects(revision)
+		if !current || !slices.Contains(observed, drop.Gid) {
+			t.Fatalf("bootstrap viewer did not record drop %d in published scope: %v", drop.Gid, observed)
+		}
+		if slices.Contains(observed, petGID) || slices.Contains(observed, enterworld.ObjectIDForCharacter(c)) {
+			t.Fatalf("bootstrap viewer unexpectedly observed pet or owner: %v", observed)
+		}
+
+		payload, err := wire.ItemMoveRequest{MovementType: wire.MoveTypeCosPickup, CosGID: petGID, GroundGID: drop.Gid}.Encode()
+		if err != nil {
+			t.Fatal(err)
+		}
+		res := rt.HandleItemMove(testDivision, c, payload)
+		if _, stillOnGround := rt.Ground.Get(testDivision, drop.Gid); !stillOnGround {
+			t.Fatalf("distant drop was picked up synchronously before pet arrival: %+v", res.Frames)
+		}
+
+		source := tickSessionSource{
+			sessions: []simulation.SessionSnapshot{{
+				SessionID:        worldsession.SessionSceneID(viewerSession),
+				DivisionID:       testDivision,
+				CharacterID:      999,
+				PublishedObjects: observed,
+			}},
+		}
+		ticker := simulation.NewTicker(source, worldsession.New(server.Hub))
+		ticker.Hooks = []simulation.TickHook{rt.advancePets}
+		nowMs = 1100
+		ticker.RunTick(nowMs)
+		if _, stillOnGround := rt.Ground.Get(testDivision, drop.Gid); !stillOnGround {
+			t.Fatal("pet departure tick consumed drop before arrival")
+		}
+		nowMs = 2200
+		ticker.RunTick(nowMs)
+
+		if _, stillOnGround := rt.Ground.Get(testDivision, drop.Gid); stillOnGround {
+			t.Fatal("pet arrival tick did not consume ground drop")
+		}
+		viewer.expectFrame(t, wire.OpObjectDespawn, wire.ObjectDespawn{Gid: drop.Gid}.Encode())
+		if err := viewer.silence(50 * time.Millisecond); err != nil {
+			t.Fatalf("bootstrap viewer received unexpected frame after pet despawn: %v", err)
+		}
+
+		observed, _ = viewerSession.PublishedObjects(revision)
+		if slices.Contains(observed, drop.Gid) {
+			t.Fatalf("bootstrap viewer retained pet-picked drop %d in published scope: %v", drop.Gid, observed)
+		}
+	})
 }
