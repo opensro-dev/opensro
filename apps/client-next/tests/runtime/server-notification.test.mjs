@@ -73,7 +73,12 @@ test("a job-kill notice (port-only channel 0x80) shows like channel 7 unless the
 	assert.equal( chatLineText( line, () => "Notify" ), "(Notify):" + text );
 	// Off: neither the banner nor the chat log sees it; a plain notice still shows.
 	const hidden = createGameplay( () => {} );
-	hidden.experimental( { predictedRunUp: false, jobKillNotices: false, dropPlusNotices: true } );
+	hidden.experimental( {
+		predictedRunUp: false,
+		jobKillNotices: false,
+		dropPlusNotices: true,
+		plusSevenNotices: true
+	} );
 	hidden.receive( { opcode: 0x3667, payload }, 100 );
 	const quiet = hidden.take();
 	assert.equal( quiet?.notices?.some( n => n.text === text ) ?? false, false );
@@ -99,7 +104,12 @@ test("a drop or plus notice (port-only channel 0x81) shows like channel 7 unless
 	assert.equal( chatLineText( line, () => "Notify" ), "(Notify):" + text );
 	// Off: neither the banner nor the chat log sees it; a job-kill notice still shows.
 	const hidden = createGameplay( () => {} );
-	hidden.experimental( { predictedRunUp: false, jobKillNotices: true, dropPlusNotices: false } );
+	hidden.experimental( {
+		predictedRunUp: false,
+		jobKillNotices: true,
+		dropPlusNotices: false,
+		plusSevenNotices: true
+	} );
 	hidden.receive( { opcode: 0x3667, payload }, 100 );
 	const quiet = hidden.take();
 	assert.equal( quiet?.notices?.some( n => n.text === text ) ?? false, false );
@@ -107,4 +117,60 @@ test("a drop or plus notice (port-only channel 0x81) shows like channel 7 unless
 	const kill = Buffer.concat( [ Buffer.from( [ 0x80, 5, 0 ] ), Buffer.from( "Hello", "utf16le" ) ] );
 	hidden.receive( { opcode: 0x3667, payload: kill }, 200 );
 	assert.equal( defined( defined( hidden.take() ).notices ).at( -1 )?.text, "Hello" );
+});
+
+test("a plus-seven notice (port-only channel 0x82) shows like channel 7 unless its own row is off", () => {
+	const text = "Looter advanced Blade to +7",
+		// The drop/plus frame's optional link section rides after the text.
+		links = Buffer.concat( [ Buffer.from( [ 2, 0 ] ), Buffer.from( "Ab", "ascii" ), Buffer.from( [ 0, 0 ] ) ] ),
+		payload = Buffer.concat( [
+			Buffer.from( [ 0x82, text.length, 0 ] ),
+			Buffer.from( text, "utf16le" ),
+			links
+		] );
+	const notice = defined( serverNotification( 0x3667, payload ) );
+	assert.equal( notice.plusSeven, true );
+	assert.equal( notice.dropPlus, undefined );
+	assert.equal( notice.text, text );
+	// On by default: the banner notice and a (Notify): chat line, colored as channel 7.
+	const shown = createGameplay( () => {} );
+	shown.receive( { opcode: 0x3667, payload }, 100 );
+	const state = defined( shown.take() ),
+		line = defined( defined( state.chat ).lines.at( -1 ) );
+	assert.equal( defined( defined( state.notices ).at( -1 ) ).text, text );
+	assert.equal( line.channel, 7 );
+	assert.equal( chatLineText( line, () => "Notify" ), "(Notify):" + text );
+	// Its own row off: neither the banner nor the chat log sees it; the
+	// drop/plus row's state never widens or narrows this one.
+	const hidden = createGameplay( () => {} );
+	hidden.experimental( {
+		predictedRunUp: false,
+		jobKillNotices: true,
+		dropPlusNotices: true,
+		plusSevenNotices: false
+	} );
+	hidden.receive( { opcode: 0x3667, payload }, 100 );
+	const quiet = hidden.take();
+	assert.equal( quiet?.notices?.some( n => n.text === text ) ?? false, false );
+	assert.equal( quiet?.chat?.lines.some( l => l.text === text ) ?? false, false );
+	const stillShown = createGameplay( () => {} );
+	stillShown.experimental( {
+		predictedRunUp: false,
+		jobKillNotices: true,
+		dropPlusNotices: false,
+		plusSevenNotices: true
+	} );
+	stillShown.receive( { opcode: 0x3667, payload }, 100 );
+	assert.equal( defined( defined( stillShown.take() ).notices ).at( -1 )?.text, text );
+});
+
+test("a plus notice above +11 (channel 0x81) renders its text verbatim; the client caps no plus", () => {
+	const text = "Looter advanced Blade to +13",
+		payload = Buffer.concat( [ Buffer.from( [ 0x81, text.length, 0 ] ), Buffer.from( text, "utf16le" ) ] );
+	assert.equal( defined( serverNotification( 0x3667, payload ) ).text, text );
+	const shown = createGameplay( () => {} );
+	shown.receive( { opcode: 0x3667, payload }, 100 );
+	const state = defined( shown.take() );
+	assert.equal( defined( defined( state.notices ).at( -1 ) ).text, text );
+	assert.equal( defined( defined( state.chat ).lines.at( -1 ) ).text, text );
 });

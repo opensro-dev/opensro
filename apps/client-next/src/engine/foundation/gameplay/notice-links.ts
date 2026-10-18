@@ -3,9 +3,10 @@
 
 notice-links.ts - the player and item a drop or plus notice names
 
-Port-only, not native. The shard's seal-drop and +8..+11 notices (0x3667
-channel 0x81, server wire.DropPlusNotificationFrame) carry, after their
-text, the player the line names and the item's encoded body:
+Port-only, not native. The shard's seal-drop and +8-and-above notices
+(0x3667 channel 0x81, server wire.DropPlusNotificationFrame) and its +7
+notices (channel 0x82, the same frame) carry, after their text, the
+player the line names and the item's encoded body:
 
 	[u16 nameLen][ascii name][u16 bodyLen][item body (decodeInventoryItem)]
 

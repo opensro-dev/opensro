@@ -15,7 +15,11 @@ import { chatRejectionKey, type ChatFeedback } from "@/engine/foundation/gamepla
 import type { ChatLine, InventoryItem } from "@/engine/contracts/gameplay";
 import type { WireFrame } from "@/engine/contracts/network";
 import { STALL_CHAT_CHANNEL } from "@/engine/foundation/gameplay/stall";
-import { DROP_PLUS_NOTICE_CHANNEL, isServerNoticeChannel } from "@/engine/foundation/gameplay/system-notices";
+import {
+	DROP_PLUS_NOTICE_CHANNEL,
+	isServerNoticeChannel,
+	PLUS_SEVEN_NOTICE_CHANNEL
+} from "@/engine/foundation/gameplay/system-notices";
 import { decodeNoticeLinks, type NoticeLinks } from "@/engine/foundation/gameplay/notice-links";
 import { CHAT_HISTORY_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
 import { CHAT_ACK_TIMEOUT_MS, uiTuningFrom } from "@/engine/foundation/ui/ui-tuning";
@@ -88,7 +92,7 @@ function decodeChatBroadcast(
 	if ( n > CHAT_TEXT_LIMIT ) throw new Error( "Chat text budget" );
 	const at = take( n * 2 ),
 		text = new TextDecoder( "utf-16le", { fatal: true } ).decode( p.subarray( at, at + n * 2 ) );
-	if ( wireChannel === DROP_PLUS_NOTICE_CHANNEL && o < p.length ) {
+	if ( (wireChannel === DROP_PLUS_NOTICE_CHANNEL || wireChannel === PLUS_SEVEN_NOTICE_CHANNEL) && o < p.length ) {
 		// Port-only links, decoded leniently: a malformed section is dropped.
 		const links = decodeNoticeLinks( p, o );
 		return { channel, sender, gid, text, ...(links ? { links } : {}) };

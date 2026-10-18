@@ -48,6 +48,8 @@ const OFF = Object.freeze( {
 	jobKillNotices: true,
 	// On by default (owner 2026-10-15): the shard's drop and plus notices show.
 	dropPlusNotices: true,
+	// On by default (owner 2026-10-19): the shard's +7 notices show.
+	plusSevenNotices: true,
 	// Off by default: V hides only monsters and players, as the original does.
 	vHidesCompanions: false,
 	// On by default (owner 2026-10-15): labels and lists stay inside their window.
@@ -339,6 +341,7 @@ test("the predicted run-up defaults off and reaches only the worker's slice", ()
 		predictedRunUp: false,
 		jobKillNotices: true,
 		dropPlusNotices: true,
+		plusSevenNotices: true,
 		homingProjectiles: false
 	} );
 	for ( const value of [ 1, "true", null, {} ] ) {
@@ -349,6 +352,7 @@ test("the predicted run-up defaults off and reaches only the worker's slice", ()
 		predictedRunUp: true,
 		jobKillNotices: true,
 		dropPlusNotices: true,
+		plusSevenNotices: true,
 		homingProjectiles: false
 	} );
 	assert.equal( "predictedRunUp" in experimentalVideo( on ), false );
@@ -405,6 +409,18 @@ test("drop and plus notices are on unless explicitly false and reach the worker'
 	assert.equal( off.jobKillNotices, true );
 	assert.equal( experimentalGameplay( off ).dropPlusNotices, false );
 	assert.equal( "dropPlusNotices" in experimentalVideo( experimentalOptions( {} ) ), false );
+});
+
+test("plus seven notices are on unless explicitly false, stay out of the video slice, and never widen the drop/plus row", () => {
+	for ( const value of [ undefined, null, {}, { plusSevenNotices: 1 }, { plusSevenNotices: "false" } ] ) {
+		assert.equal( experimentalOptions( value ).plusSevenNotices, true );
+	}
+	const off = experimentalOptions( { plusSevenNotices: false } );
+	assert.equal( off.plusSevenNotices, false );
+	assert.equal( off.dropPlusNotices, true );
+	assert.equal( experimentalGameplay( off ).plusSevenNotices, false );
+	assert.equal( experimentalGameplay( experimentalOptions( { dropPlusNotices: false } ) ).plusSevenNotices, true );
+	assert.equal( "plusSevenNotices" in experimentalVideo( experimentalOptions( {} ) ), false );
 });
 
 test("V hides pets and transports only when explicitly on, and reaches the renderer's slice", () => {

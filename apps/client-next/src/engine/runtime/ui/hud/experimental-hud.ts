@@ -186,7 +186,12 @@ export const EXPERIMENTAL_TABS: readonly {
 			key: "dropPlusNotices",
 			id: "experimental-drop-plus-notices",
 			label: "Drop & plus notices",
-			description: "Show the shard's seal drop and +8 to +11 notices."
+			description: "Show the shard's seal drop and +8-or-higher notices."
+		}, {
+			key: "plusSevenNotices",
+			id: "experimental-plus-seven-notices",
+			label: "Plus +7 notices",
+			description: "Show the shard's +7 alchemy announcements."
 		}, {
 			key: "noticeLinks",
 			id: "experimental-notice-links",
