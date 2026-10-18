@@ -71,26 +71,36 @@ type persistedRevocationState struct {
 newAccountRevoker
 ================
 */
-func newAccountRevoker(path string) (accountRevoker, error) {
-	revoker := accountRevoker{
-		path:           path,
+func newAccountRevoker() accountRevoker {
+	return accountRevoker{
 		minEpoch:       make(map[string]uint64),
 		revokedGen:     make(map[string]uint64),
 		issuedTickets:  make(map[string]map[[sha256.Size]byte]int64),
 		revokedTickets: make(map[[sha256.Size]byte]int64),
 		seenNotices:    make(map[string]int64),
 	}
-	if path != "" {
-		if matches, err := filepath.Glob(filepath.Join(filepath.Dir(path), filepath.Base(path)+".tmp-*")); err == nil {
-			for _, stray := range matches {
-				_ = os.Remove(stray)
-			}
-		}
-		if err := revoker.load(); err != nil {
-			return accountRevoker{}, err
+}
+
+/*
+================
+bindPath
+
+Configures the file path for persisted revocation floors, cleans up any
+leftover store.WriteFileAtomic temp files, and loads an existing
+account-revocations.json if present.
+================
+*/
+func (revoker *accountRevoker) bindPath(path string) error {
+	if path == "" {
+		return nil
+	}
+	revoker.path = path
+	if matches, err := filepath.Glob(filepath.Join(filepath.Dir(path), filepath.Base(path)+".tmp-*")); err == nil {
+		for _, stray := range matches {
+			_ = os.Remove(stray)
 		}
 	}
-	return revoker, nil
+	return revoker.load()
 }
 
 /*

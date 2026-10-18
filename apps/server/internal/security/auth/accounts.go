@@ -351,6 +351,9 @@ func (accounts *Accounts) RevokedEpochs() map[string]uint64 {
 			epochs[id] = uint64(epoch)
 		}
 	}
+	if err := rows.Err(); err != nil {
+		return nil
+	}
 	return epochs
 }
 
