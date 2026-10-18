@@ -25,6 +25,7 @@ const { buffTooltip } = await load( "foundation/ui/buff-tooltip.ts", "tooltip" )
 const { buffBoard } = await load( "foundation/ui/buff-board.ts", "board" );
 const {
 	targetBuffViewer,
+	petBuffViewer,
 	collectActiveBuffs,
 	rebuildBuffViewer,
 	tickBuffViewer,
@@ -215,4 +216,22 @@ test("a token-0 heal landing on the target lists no viewer slot", () => {
 		skill
 	);
 	assert.deepEqual( rows.map( row => [ row.skill, row.effect.token ] ), [ [ 11, 4 ], [ 20, 0 ] ] );
+});
+
+test("6B3A00 petBuffViewer caps primary and secondary rows at 7x1 (pitch 17, cell 14)", () => {
+	const layout = petBuffViewer();
+	assert.deepEqual( layout, { columns: 7, pitch: 17, cell: 14, primaryRows: 1, secondaryRows: 1 } );
+	const state = rebuildBuffViewer(
+		layout,
+		collectActiveBuffs( Array.from( { length: 9 }, ( _, i ) => effect( 10, i + 1 ) ), 7, skill ),
+		0x3ff,
+		skill
+	);
+	assert.equal( state.primary.length, 7 );
+	assert.equal( state.secondary.length, 7 );
+	const icons = buffViewerIcons( layout, state, 7, skill );
+	assert.deepEqual( [ icons[0].x, icons[0].y, icons[0].size ], [ 0, 0, 14 ] );
+	assert.deepEqual( [ icons[6].x, icons[6].y ], [ 102, 0 ] );
+	assert.deepEqual( [ icons[7].x, icons[7].y ], [ 0, 19 ] );
+	assert.equal( icons[7].helpSource.unlevelled, undefined );
 });

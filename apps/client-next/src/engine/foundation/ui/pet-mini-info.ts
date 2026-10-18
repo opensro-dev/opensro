@@ -7,7 +7,8 @@ CIFPetMiniInfo is the player mini window's child 100 (GDR_PMI_PET_MINI_INFO).
 CIFCOSManager_AddCompanion shows it, bound to the companion, when the new
 companion is an attack pet (CIFQuickState_SetPetInfoVisible); removing the
 companion hides it. CIFPetMiniInfo_SetCos (6B3AD0) writes the portrait, the
-name (the pet's own, else UIIT_STT_COSNEWUI_TITLE) and the level, and
+name (the pet's own, else UIIT_STT_COSNEWUI_TITLE) and the level, rebuilds
+GDR_PET_MINI_BUFF (6B3A00) and starts the 1000ms buff timer (6B3920), and
 CIFPetMiniInfo_OnUpdate (6B34C0) drives the two gauges and the HP caution.
 
 ===========================================================================

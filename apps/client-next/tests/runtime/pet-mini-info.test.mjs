@@ -12,6 +12,7 @@ HGP from satiety / 10000, and blinks the caution while 0 < HP <= 30%.
 import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { uiFixture } from "../helpers/ui-fixture.mjs";
 const { petMiniInfo } = await import( "../../src/engine/foundation/ui/pet-mini-info.ts" );
 
 /** @type {ReadonlyMap<number, import("../../src/engine/foundation/ui/cos-command.ts").CosReference>} */
@@ -50,4 +51,47 @@ test("the HP caution blinks while 0 < HP <= 30%", () => {
 	assert.equal( caution( 301 ), false );
 	assert.equal( caution( 1 ), true );
 	assert.equal( caution( 0 ), false, "a dead pet does not blink" );
+});
+
+test("6B3A00 / 6B3920 GDR_PET_MINI_BUFF renders attack pet buffs and graded abnormals while the pet entity is present", () => {
+	const fixture = uiFixture();
+	try {
+		/** @type {any} */
+		const state = fixture.state;
+		state.gameplay = {
+			...state.gameplay,
+			cosRecords: [ { ...pet, gid: 77, name: "Wolf" } ],
+			skillCatalog: [ { id: 10, name: "Fire Shield", icon: "skill/china/fire_shield_a.ddj" } ],
+			attachedEffects: [ { gid: 77, skill: 10, token: 1, phase: 2 } ],
+			vitals: [ { gid: 77, hp: 500, mp: 0, abnormal: 0x800, abnormalLevels: [ { bit: 0x800, level: 3 } ] } ]
+		};
+		state.entities = [
+			...state.entities,
+			{ gid: 77, kind: "cos", name: "Wolf", regionId: 257, x: 0, y: 0, z: 0, heading: 0, mountedOn: 0 }
+		];
+		let frame = null;
+		for ( let i = 0; i < 6; i++ ) {
+			frame = fixture.ui.step( state, (i + 1) * 100 ) ?? frame;
+		}
+		assert.ok( frame );
+		const buffControl = frame.controls.find( c => c.id === "pet-buff:0:buff:10" );
+		const abnormalControl = frame.controls.find( c => c.id === "pet-buff:1:abnormal:11" );
+		assert.ok( buffControl, "expected primary buff cell in GDR_PET_MINI_BUFF" );
+		assert.ok( abnormalControl, "expected secondary abnormal cell in GDR_PET_MINI_BUFF" );
+		assert.deepEqual( buffControl.rect, [ 89, 101, 14, 14 ] );
+		assert.deepEqual( abnormalControl.rect, [ 89, 120, 14, 14 ] );
+		assert.deepEqual( abnormalControl.helpSource, {
+			kind: "abnormal",
+			gid: 77,
+			bit: 11,
+			viewer: true
+		} );
+
+		// 6B3920 clears the viewer when GidObjectRegistry_FindEntityByGid returns 0.
+		state.entities = state.entities.filter( ( /** @type {any} */ e ) => e.gid !== 77 );
+		frame = fixture.ui.step( state, 2000 ) ?? frame;
+		assert.equal( frame.controls.some( c => c.id.startsWith( "pet-buff:" ) ), false );
+	} finally {
+		fixture.dispose();
+	}
 });

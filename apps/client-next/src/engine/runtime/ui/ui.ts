@@ -473,6 +473,7 @@ import {
 	createBuffViewer,
 	emptyBuffViewer,
 	partyBuffViewer,
+	petBuffViewer,
 	skillLookup,
 	targetBuffViewer,
 	type BuffViewerIcon,
@@ -982,10 +983,13 @@ export function createUi(
 	let cautionVisible = false, cautionFrame = -1;
 	let targetGradeIcon = "";
 	// CIFBuffViewer owners keep their one-second diff state: the target window
-	// (581330), each quick-party slot (5BA840) and the local board's suppression
-	// refresh (6E12D0 timer 0xA -> 6E64A0).
+	// (581330), each quick-party slot (5BA840), the attack pet mini window
+	// (6B3920) and the local board's suppression refresh (6E12D0 timer 0xA ->
+	// 6E64A0).
 	const targetBuffs = createBuffViewer( targetBuffViewer() );
 	let targetBuffState: BuffViewerState = emptyBuffViewer();
+	const petBuffs = createBuffViewer( petBuffViewer() );
+	let petBuffState: BuffViewerState = emptyBuffViewer();
 	let skillIndex: { catalog: readonly SkillMetadata[] | undefined; lookup: SkillLookup; } = {
 		catalog: undefined,
 		lookup: skillLookup( undefined )
@@ -1027,6 +1031,15 @@ export function createUi(
 		const targetState = targetBuffs.step( subject, now, effects, mask( subject ), skill );
 		if ( targetState !== targetBuffState ) {
 			targetBuffState = targetState;
+			changed = true;
+		}
+		// 6B3AD0 / 6B3920: CIFPetMiniInfo resolves the bound attack pet through
+		// GidObjectRegistry_FindEntityByGid and clears GDR_PET_MINI_BUFF when absent.
+		const petGid = petMiniInfo( game?.cosRecords, undefined )?.gid ?? 0,
+			petSubject = petGid && next.entities.some( e => e.gid === petGid ) ? petGid : 0,
+			nextPetState = petBuffs.step( petSubject, now, effects, mask( petSubject ), skill );
+		if ( nextPetState !== petBuffState ) {
+			petBuffState = nextPetState;
 			changed = true;
 		}
 		// 5BCBB0 rebuilds every slot whenever the roster is rearranged.
@@ -10376,7 +10389,8 @@ export function createUi(
 						icon = iconPath( pet.icon ),
 						hpGauge = gauges.read( "pet-mini-hp", pet.gid, pet.hp ?? 0, "empty" ),
 						hgpGauge = gauges.read( "pet-mini-hgp", pet.gid, pet.hgp, "empty" ),
-						cautionFrame = pet.caution ? Math.floor( now / 100 ) % 8 : -1;
+						cautionFrame = pet.caution ? Math.floor( now / 100 ) % 8 : -1,
+						petControlStart = controls.length;
 					retainedHud( petLayoutCache, [
 						hudData,
 						layoutResourcesRevision,
@@ -10388,7 +10402,9 @@ export function createUi(
 						hpGauge.target,
 						hgpGauge.current,
 						hgpGauge.target,
-						cautionFrame
+						cautionFrame,
+						petBuffState,
+						game?.skillCatalog
 					], () => {
 						authoredImage( petPanel, px, py );
 						const [qx, qy] = authoredRect( petPanel, px, py );
@@ -10442,7 +10458,27 @@ export function createUi(
 								.5
 							] );
 						}
+						// 6B3A00 / 6B3920: GDR_PET_MINI_BUFF (child 30, 7x17, 14x14, 1+1 rows).
+						if ( petLayout.GDR_PET_MINI_BUFF ) {
+							const buff = authoredRect( petLayout.GDR_PET_MINI_BUFF, qx, qy );
+							buffViewer(
+								"pet-buff:",
+								buffViewerIcons(
+									petBuffViewer(),
+									petBuffState,
+									pet.gid,
+									skillsOf( game?.skillCatalog )
+								),
+								buff[0],
+								buff[1]
+							);
+						}
 					} );
+					if ( compact ) {
+						for ( let i = petControlStart; i < controls.length; i++ ) {
+							targetBottom = Math.max( targetBottom, controls[i]!.rect[1] + controls[i]!.rect[3] + 4 );
+						}
+					}
 				}
 				if ( hudData && game && hudData.root.GDR_MAGICSTATEBOARD ) {
 					const origin = authoredRect( hudData.root.GDR_MAGICSTATEBOARD, 0, 0 );
@@ -23808,7 +23844,8 @@ export function createUi(
 					value = control?.helpText ??
 						(control &&
 								(control.id.startsWith( "buff:" ) || control.id.startsWith( "abnormal:" ) ||
-									control.id.startsWith( "party-buff:" ) || control.id.startsWith( "target-buff:" )) ?
+									control.id.startsWith( "party-buff:" ) || control.id.startsWith( "target-buff:" ) ||
+									control.id.startsWith( "pet-buff:" )) ?
 							control.label :
 							key && hudCopy( key ));
 				const hudData = hud.data();

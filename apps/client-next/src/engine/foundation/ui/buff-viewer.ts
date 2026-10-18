@@ -51,6 +51,14 @@ partyBuffViewer
 export function partyBuffViewer(): BuffViewerLayout {
 	return { columns: 6, pitch: 15, cell: 12, primaryRows: 1, secondaryRows: 1 };
 } // 5BAD30
+/*
+================
+petBuffViewer
+================
+*/
+export function petBuffViewer(): BuffViewerLayout {
+	return { columns: 7, pitch: 17, cell: 14, primaryRows: 1, secondaryRows: 1 };
+} // 6B3A00
 
 // One 8608A0 record: every skill decoration in state 2 (0xB419 / spawn, via
 // 8DF220) or state 3 (0xB5ED detection, 8DF1C0, which also stores the name).
