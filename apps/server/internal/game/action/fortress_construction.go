@@ -26,13 +26,19 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/siege"
+	"opensro.online/server/internal/game/world/fortress"
 )
 
 const (
-	// Low bytes of 6341B0's refusals.
+	// Low bytes of 6341B0's and 634350's refusals.
 	fortressErrConstructNoReference uint8 = 0x1e // 0x281E
 	fortressErrConstructKind        uint8 = 0x1f // 0x281F
 	fortressErrConstructFortress    uint8 = 0x20 // 0x2820
+	fortressErrUpgradeNoReference   uint8 = 0x21 // 0x2821
+	fortressErrUpgradeKind          uint8 = 0x22 // 0x2822
+	fortressErrUpgradeFortress      uint8 = 0x23 // 0x2823
+	fortressErrUpgradeIndex         uint8 = 0x24 // 0x2824
+	fortressErrUpgradeDamaged       uint8 = 0x39 // 0x2839 (UIIT_MSG_FORT_BATTLEAIDE_UPGRADE_FAIL4)
 	// structureKindBarricade is TypeID4 6 of a structure (TypeID3 5).
 	structureKindBarricade uint8 = 6
 )
@@ -85,6 +91,18 @@ func (rt *Runtime) fortressConstruct(division string, c *enterworld.Character, r
 	if !ok || !npc.Services.Has(siege.InteractionService(request.Action)) || !rt.npcWithinHitRange(division, c, npc) {
 		return fortressRefusal(request.Action, fortressErrInvalid)
 	}
+	return rt.fortressConstructOnZone(division, c, request)
+}
+
+/*
+================
+fortressConstructOnZone
+
+CSiegeFortressMgr_HandleStructureConstruction (6341B0): shared by the 0x71E1
+aide completion and the GM /SIEGE STRUCT_BUILD command (51A4F0 case 0x0A).
+================
+*/
+func (rt *Runtime) fortressConstructOnZone(division string, c *enterworld.Character, request siege.Interaction) OpResult {
 	if rt.Fortresses == nil || rt.Monsters == nil {
 		return fortressRefusal(request.Action, fortressErrUnknown)
 	}
@@ -119,4 +137,171 @@ func (rt *Runtime) fortressConstruct(division string, c *enterworld.Character, r
 		return OpResult{Frames: []wire.Frame{{Opcode: opFortressInteractionResult, Payload: reply.Payload()}}}
 	}
 	return fortressRefusal(request.Action, fortressErrInvalid)
+}
+
+/*
+================
+fortressStructureUpgrade
+
+CSiegeFortressMgr_HandleStructureUpgrade (634350): checks the zone in native
+refusal order: missing zone (3), no base structure reference (0x2821),
+barricade structure (0x2822), war active on a non-headquarters structure
+(0x2818), upgrade index > 3 (0x2824), wrong fortress (0x2823), no live
+standing structure on the zone (3), standing structure not at full HP
+(0x2839, UIIT_MSG_FORT_BATTLEAIDE_UPGRADE_FAIL4), and _RefSiegeStructUpgrade
+target codename "xxx" (3; every v1.150 structure has Upgradable == 0).
+================
+*/
+func (rt *Runtime) fortressStructureUpgrade(division string, fortressID, eventStructID uint32, param uint8) OpResult {
+	for foundFortress, world := range rt.fortressWorlds() {
+		ref, occupied, found := rt.Monsters.StructureZone(division, world, eventStructID)
+		if !found {
+			continue
+		}
+		switch {
+		case ref.RefObjID == 0:
+			return fortressRefusal(siege.ActionUpgrade, fortressErrUpgradeNoReference)
+		case ref.TypeID4 == structureKindBarricade:
+			return fortressRefusal(siege.ActionUpgrade, fortressErrUpgradeKind)
+		case ref.TypeID4 != structureKindHeadquarters && rt.Fortresses.WarActive(division):
+			return fortressRefusal(siege.ActionUpgrade, fortressErrWarActive)
+		case param > 3:
+			return fortressRefusal(siege.ActionUpgrade, fortressErrUpgradeIndex)
+		case foundFortress != fortressID:
+			return fortressRefusal(siege.ActionUpgrade, fortressErrUpgradeFortress)
+		case !occupied:
+			return fortressRefusal(siege.ActionUpgrade, fortressErrInvalid)
+		}
+		row, ok := rt.structureOnZone(division, world, eventStructID)
+		if !ok || row.Gid == 0 || row.CurrentHP == 0 || row.StructureState&structureDestroyedMask != 0 {
+			return fortressRefusal(siege.ActionUpgrade, fortressErrInvalid)
+		}
+		if row.CurrentHP != row.Ref.MaxHP {
+			return fortressRefusal(siege.ActionUpgrade, fortressErrUpgradeDamaged)
+		}
+		return fortressRefusal(siege.ActionUpgrade, fortressErrInvalid)
+	}
+	return fortressRefusal(siege.ActionUpgrade, fortressErrInvalid)
+}
+
+/*
+================
+SiegeStructureGM
+
+/SIEGE STRUCT_BUILD|STRUCT_UPGRADE|STRUCT_REPAIR|GATE (sub 0x20, 51DE90
+0x0051FBDC..0x0051FC44 -> CGObjPC_OnCommandSiegeStructure 0x0051A4F0):
+dispatches to 6341B0 (build), 634350 (upgrade), 634950 (repair), or 634E30
+(gate).
+================
+*/
+func (rt *Runtime) SiegeStructureGM(division, name string, action uint8, fortressID, eventStructID uint32, param uint8) bool {
+	if rt == nil || rt.deps == nil || rt.Fortresses == nil || rt.Monsters == nil {
+		return false
+	}
+	unlock := rt.lockDivision(division)
+	defer unlock()
+	gm := rt.findCharacter(division, name)
+	if gm == nil || !gm.GMPrivilege {
+		return false
+	}
+	pushGM := func(frames []wire.Frame) {
+		if rt.PushCharacterFrames != nil && len(frames) > 0 {
+			rt.PushCharacterFrames(division, gm.Name, frames)
+		}
+	}
+	switch action {
+	case siege.ActionConstruct:
+		res := rt.fortressConstructOnZone(division, gm, siege.Interaction{
+			Action:    siege.ActionConstruct,
+			Fortress:  fortressID,
+			Reference: eventStructID,
+		})
+		pushGM(res.Frames)
+		return len(res.Frames) == 1 && len(res.Frames[0].Payload) >= 2 && res.Frames[0].Payload[1] == 1
+	case siege.ActionUpgrade:
+		pushGM(rt.fortressStructureUpgrade(division, fortressID, eventStructID, param).Frames)
+		return false
+	case siege.ActionRepair:
+		res := rt.fortressStructureRepair(division, gm, siege.Interaction{
+			Action:    siege.ActionRepair,
+			Fortress:  fortressID,
+			Reference: eventStructID,
+		})
+		pushGM(res.Frames)
+		return len(res.Frames) == 2 && len(res.Frames[1].Payload) >= 2 && res.Frames[1].Payload[1] == 1
+	case siege.ActionGate:
+		// 634E30 (CSiegeFortressMgr_HandleGmGateCommand): resolves the gate by
+		// eventStructID directly; returns false without a 0xB1E1 refusal packet
+		// when missing, wrong fortress, destroyed, or unchanged.
+		foundFortress, world, gate, found := rt.structureByZone(division, eventStructID)
+		if !found || foundFortress != fortressID {
+			return false
+		}
+		gate, changed := rt.Monsters.SetGateState(division, gate.Gid, uint16(param))
+		if gate.Gid == 0 || !changed {
+			return false
+		}
+		rt.pushFortressWorld(division, world, siege.EncodeStructureState3887(siege.StructureState{
+			FortressID: fortressID, GID: gate.Gid, EventStructID: eventStructID, State: gate.StructureState,
+		}))
+		reply := wire.NewWriter(12).U8(siege.ActionGate).U8(1).U32(fortressID).U32(eventStructID).U16(gate.StructureState)
+		pushGM([]wire.Frame{{Opcode: opFortressInteractionResult, Payload: reply.Payload()}})
+		return true
+	default:
+		return false
+	}
+}
+
+/*
+================
+SiegePeriodGM
+
+/SIEGE STARTWAR|ENDWAR|STARTTAX|ENDTAX|STARTREQ|ENDREQ (sub 0x21, 51DE90 case
+0x1A -> 520028..5200FA -> CSiegeFortressMgr_OnShardMessage 62EE90): toggles the
+fortress period bit and broadcasts the corresponding 0x3887 edge to the
+division.
+================
+*/
+func (rt *Runtime) SiegePeriodGM(division string, periodAction uint8) bool {
+	if rt == nil || rt.Fortresses == nil {
+		return false
+	}
+	var (
+		period  fortress.Period
+		active  bool
+		subtype uint8
+	)
+	switch periodAction {
+	case 1:
+		period, active, subtype = fortress.PeriodWar, true, siege.SubtypeWarBegin
+	case 2:
+		period, active, subtype = fortress.PeriodWar, false, siege.SubtypeWarEnd
+	case 3:
+		period, active, subtype = fortress.PeriodTax, true, siege.SubtypeTaxPeriodBegin
+	case 4:
+		period, active, subtype = fortress.PeriodTax, false, siege.SubtypeTaxPeriodEnd
+	case 5:
+		period, active, subtype = fortress.PeriodRequest, true, siege.SubtypeRequestPeriodOpen
+	case 6:
+		period, active, subtype = fortress.PeriodRequest, false, siege.SubtypeRequestPeriodEnd
+	default:
+		return false
+	}
+	changed := rt.Fortresses.SetPeriod(division, period, active)
+	frames := []wire.Frame{{Opcode: opFortressWarState, Payload: siege.EncodeEdge3887(subtype)}}
+	if period == fortress.PeriodWar && changed {
+		for _, batch := range rt.FortressWarChanged(division, rt.Now().UnixMilli(), active) {
+			for _, f := range batch.Frames {
+				frames = append(frames, wire.Frame{Opcode: f.Opcode, Payload: f.Payload})
+			}
+		}
+	}
+	if rt.PushCharacterFrames != nil && rt.deps != nil {
+		for _, c := range rt.deps.CharactersForDivision(division) {
+			if c != nil {
+				rt.PushCharacterFrames(division, c.Name, frames)
+			}
+		}
+	}
+	return true
 }

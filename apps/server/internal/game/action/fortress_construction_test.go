@@ -194,3 +194,113 @@ func TestFortressConstructionIsNotAnOrdinaryRequest(t *testing.T) {
 		t.Fatal("the construction completion was not recognised")
 	}
 }
+
+/*
+================
+TestGMSiegeStructureAndPeriodCommands
+
+51A4F0 (/SIEGE STRUCT_BUILD|STRUCT_UPGRADE|STRUCT_REPAIR|GATE) and 62EE90
+(/SIEGE STARTWAR..ENDREQ) execute without a selected fortress aide and push
+their 0xB1E1 / 0x3887 replies.
+================
+*/
+func TestGMSiegeStructureAndPeriodCommands(t *testing.T) {
+	rt, c, _, jangan := constructionFixture(t)
+	c.GMPrivilege = true
+	rt.Selected.Clear(testDivision, c.Name)
+	var pushed []wire.Frame
+	rt.PushCharacterFrames = func(_, _ string, frames []wire.Frame) {
+		pushed = append(pushed, frames...)
+	}
+
+	// STRUCT_BUILD (0x0A) builds the vacant barricade without a selected aide.
+	if !rt.SiegeStructureGM(testDivision, c.Name, siege.ActionConstruct, jangan, testBarricadeZone, 0) {
+		t.Fatal("GM STRUCT_BUILD failed on vacant barricade zone")
+	}
+	wantBuild := wire.NewWriter(10).U8(siege.ActionConstruct).U8(1).U32(jangan).U32(testBarricadeZone).Payload()
+	if len(pushed) != 1 || !bytes.Equal(pushed[0].Payload, wantBuild) {
+		t.Fatalf("GM STRUCT_BUILD frames = %+v, want % x", pushed, wantBuild)
+	}
+
+	// STRUCT_UPGRADE (0x0B) checks 634350 refusal codes in order:
+	// - unknown zone -> 3 (fortressErrInvalid)
+	// - zone without structure reference -> 0x21 (fortressErrUpgradeNoReference)
+	// - barricade zone -> 0x22 (fortressErrUpgradeKind)
+	// - war active on non-headquarters structure -> 0x18 (fortressErrWarActive)
+	// - upgrade index > 3 -> 0x24 (fortressErrUpgradeIndex)
+	// - wrong fortress -> 0x23 (fortressErrUpgradeFortress)
+	// - full-HP non-barricade structure with "xxx" upgrade target -> 3 (fortressErrInvalid)
+	// - damaged structure (CurrentHP != MaxHP) -> 0x39 (fortressErrUpgradeDamaged)
+	// - destroyed structure (CurrentHP == 0) -> 3 (fortressErrInvalid)
+	upgrade := func(fortress, zone uint32, param uint8) []byte {
+		pushed = nil
+		if rt.SiegeStructureGM(testDivision, c.Name, siege.ActionUpgrade, fortress, zone, param) {
+			t.Fatalf("GM STRUCT_UPGRADE succeeded on fortress=%d zone=%d param=%d", fortress, zone, param)
+		}
+		if len(pushed) != 1 {
+			t.Fatalf("GM STRUCT_UPGRADE frames = %+v", pushed)
+		}
+		return pushed[0].Payload
+	}
+	refusedUpgrade := func(code uint8) []byte { return []byte{siege.ActionUpgrade, 2, code} }
+	if got := upgrade(jangan, 999, 0); !bytes.Equal(got, refusedUpgrade(fortressErrInvalid)) {
+		t.Fatalf("unknown zone upgrade = % x, want % x", got, refusedUpgrade(fortressErrInvalid))
+	}
+	if got := upgrade(jangan, testUnknownZone, 0); !bytes.Equal(got, refusedUpgrade(fortressErrUpgradeNoReference)) {
+		t.Fatalf("no-reference zone upgrade = % x, want % x", got, refusedUpgrade(fortressErrUpgradeNoReference))
+	}
+	if got := upgrade(jangan, testBarricadeZone, 0); !bytes.Equal(got, refusedUpgrade(fortressErrUpgradeKind)) {
+		t.Fatalf("barricade zone upgrade = % x, want % x", got, refusedUpgrade(fortressErrUpgradeKind))
+	}
+	if !rt.SiegePeriodGM(testDivision, 1) || !rt.Fortresses.WarActive(testDivision) {
+		t.Fatal("GM STARTWAR did not activate war period")
+	}
+	if got := upgrade(jangan, 85, 0); !bytes.Equal(got, refusedUpgrade(fortressErrWarActive)) {
+		t.Fatalf("war-active upgrade = % x, want % x", got, refusedUpgrade(fortressErrWarActive))
+	}
+	if !rt.SiegePeriodGM(testDivision, 2) || rt.Fortresses.WarActive(testDivision) {
+		t.Fatal("GM ENDWAR did not clear war period")
+	}
+	if got := upgrade(jangan, 85, 4); !bytes.Equal(got, refusedUpgrade(fortressErrUpgradeIndex)) {
+		t.Fatalf("param>3 upgrade = % x, want % x", got, refusedUpgrade(fortressErrUpgradeIndex))
+	}
+	if got := upgrade(jangan+1, 85, 0); !bytes.Equal(got, refusedUpgrade(fortressErrUpgradeFortress)) {
+		t.Fatalf("wrong-fortress upgrade = % x, want % x", got, refusedUpgrade(fortressErrUpgradeFortress))
+	}
+	if got := upgrade(jangan, 85, 3); !bytes.Equal(got, refusedUpgrade(fortressErrInvalid)) {
+		t.Fatalf("full-HP non-upgradable upgrade = % x, want % x", got, refusedUpgrade(fortressErrInvalid))
+	}
+	tower := structureByRef(t, rt, 19536)
+	rt.Monsters.RestoreStructure(testDivision, tower.Gid, 200, 0)
+	if got := upgrade(jangan, 85, 0); !bytes.Equal(got, refusedUpgrade(fortressErrUpgradeDamaged)) {
+		t.Fatalf("damaged-structure upgrade = % x, want % x", got, refusedUpgrade(fortressErrUpgradeDamaged))
+	}
+	rt.Monsters.RestoreStructure(testDivision, tower.Gid, 0, 1)
+	if got := upgrade(jangan, 85, 0); !bytes.Equal(got, refusedUpgrade(fortressErrInvalid)) {
+		t.Fatalf("destroyed-structure upgrade = % x, want % x", got, refusedUpgrade(fortressErrInvalid))
+	}
+
+	// GATE (0x15) toggles gate state on gateFixture (zone 88) and pushes 0xB1E1.
+	gateRT, gateFortress, _ := gateFixture(t)
+	gateChars := gateRT.deps.(*enterworld.Deps).Characters.(enterworld.StaticCharacterSource)[testDivision]
+	gateChars[0].GMPrivilege = true
+	pushed = nil
+	gateRT.PushCharacterFrames = func(_, _ string, frames []wire.Frame) {
+		pushed = append(pushed, frames...)
+	}
+	if !gateRT.SiegeStructureGM(testDivision, gateChars[0].Name, siege.ActionGate, gateFortress, 88, 2) {
+		t.Fatal("GM GATE open failed")
+	}
+	wantGate := wire.NewWriter(12).U8(siege.ActionGate).U8(1).U32(gateFortress).U32(88).U16(2).Payload()
+	if len(pushed) != 2 || pushed[0].Opcode != opFortressWarState || !bytes.Equal(pushed[1].Payload, wantGate) {
+		t.Fatalf("GM GATE frames = %+v, want % x", pushed, wantGate)
+	}
+
+	// STARTWAR (1) and ENDWAR (2) toggle WarActive.
+	if !rt.SiegePeriodGM(testDivision, 1) || !rt.Fortresses.WarActive(testDivision) {
+		t.Fatal("GM STARTWAR did not activate war period")
+	}
+	if !rt.SiegePeriodGM(testDivision, 2) || rt.Fortresses.WarActive(testDivision) {
+		t.Fatal("GM ENDWAR did not clear war period")
+	}
+}

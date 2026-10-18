@@ -393,3 +393,110 @@ func TestZoeWireAndDispatch(t *testing.T) {
 		t.Fatal("a non-GM reached the zoe owner")
 	}
 }
+
+type lowSpecOwner struct {
+	monsterOwner
+	npcCalls      int
+	npcCode       string
+	npcOK         bool
+	instanceCalls int
+	worldID       uint16
+	layerID       uint16
+	instanceOK    bool
+	structCalls   int
+	structAction  uint8
+	fortressID    uint32
+	eventStructID uint32
+	structParam   uint8
+	structOK      bool
+	periodCalls   int
+	periodAction  uint8
+	periodOK      bool
+}
+
+func (o *lowSpecOwner) MoveToNpcGM(_, _, code string) bool {
+	o.npcCalls++
+	o.npcCode = code
+	return o.npcOK
+}
+
+func (o *lowSpecOwner) InstanceGM(_ string, worldID, layerID uint16) bool {
+	o.instanceCalls++
+	o.worldID, o.layerID = worldID, layerID
+	return o.instanceOK
+}
+
+func (o *lowSpecOwner) SiegeStructureGM(_, _ string, action uint8, fortressID, eventStructID uint32, param uint8) bool {
+	o.structCalls++
+	o.structAction, o.fortressID, o.eventStructID, o.structParam = action, fortressID, eventStructID, param
+	return o.structOK
+}
+
+func (o *lowSpecOwner) SiegePeriodGM(_ string, periodAction uint8) bool {
+	o.periodCalls++
+	o.periodAction = periodAction
+	return o.periodOK
+}
+
+/*
+================
+TestLowSpecGmCommandsWireAndDispatch
+
+Verifies wire decoding and HandleGmCommand dispatch for /INSTANCE (0x13),
+/movetonpc (0x1F), /SIEGE structure (0x20), /SIEGE period (0x21), and
+/flagworld (0x30).
+================
+*/
+func TestLowSpecGmCommandsWireAndDispatch(t *testing.T) {
+	gm := gmChar("Gm", true, 0x655e)
+
+	// /flagworld (0x30): 2-byte frame [0x30, u8(arg)], stubbed ack [1, 0x30].
+	flagFrame := []byte{SubFlagWorld, 0x05}
+	if req, err := DecodeGmCommand(flagFrame); err != nil || req.Subcmd != SubFlagWorld || req.Amount != 5 {
+		t.Fatalf("flagworld decode = %+v, %v", req, err)
+	}
+	if out := HandleGmCommand(testDeps(gm), &stubPresence{}, testDivision, gm, flagFrame); !bytes.Equal(out.Ack, []byte{AckResultOK, SubFlagWorld}) {
+		t.Fatalf("flagworld ack = %x", out.Ack)
+	}
+
+	// /INSTANCE (0x13): 5-byte frame [0x13, u16(worldID), u16(layerID)].
+	instFrame := []byte{SubOpenWorld, 0x02, 0x00, 0x01, 0x00}
+	if req, err := DecodeGmCommand(instFrame); err != nil || req.WorldID != 2 || req.LayerID != 1 {
+		t.Fatalf("instance decode = %+v, %v", req, err)
+	}
+	owner := &lowSpecOwner{instanceOK: true, npcOK: true, structOK: true, periodOK: true}
+	if out := HandleGmCommand(testDeps(gm), &stubPresence{}, testDivision, gm, instFrame, owner); !bytes.Equal(out.Ack, []byte{AckResultOK, SubOpenWorld}) || owner.instanceCalls != 1 || owner.worldID != 2 || owner.layerID != 1 {
+		t.Fatalf("instance dispatch = %x, %+v", out.Ack, owner)
+	}
+
+	// /movetonpc (0x1F): sized codename frame.
+	npcFrame := append([]byte{SubMoveToNPC, 11, 0}, "NPC_CH_SMITH"[:11]...)
+	if req, err := DecodeGmCommand(npcFrame); err != nil || req.Name != "NPC_CH_SMIT" {
+		t.Fatalf("movetonpc decode = %+v, %v", req, err)
+	}
+	if out := HandleGmCommand(testDeps(gm), &stubPresence{}, testDivision, gm, npcFrame, owner); !bytes.Equal(out.Ack, []byte{AckResultOK, SubMoveToNPC}) || owner.npcCalls != 1 || owner.npcCode != "NPC_CH_SMIT" {
+		t.Fatalf("movetonpc dispatch = %x, %+v", out.Ack, owner)
+	}
+
+	// /SIEGE STRUCT_BUILD (0x20, action 0x0A, 10 bytes) and GATE (action 0x15, 11 bytes).
+	buildFrame := []byte{SubSiegeStructure, SiegeActionBuild, 1, 0, 0, 0, 109, 0, 0, 0}
+	if req, err := DecodeGmCommand(buildFrame); err != nil || req.SiegeAction != SiegeActionBuild || req.FortressID != 1 || req.EventStructID != 109 {
+		t.Fatalf("siege build decode = %+v, %v", req, err)
+	}
+	gateFrame := []byte{SubSiegeStructure, SiegeActionGate, 1, 0, 0, 0, 84, 0, 0, 0, 2}
+	if req, err := DecodeGmCommand(gateFrame); err != nil || req.SiegeAction != SiegeActionGate || req.FortressID != 1 || req.EventStructID != 84 || req.SiegeParam != 2 {
+		t.Fatalf("siege gate decode = %+v, %v", req, err)
+	}
+	if out := HandleGmCommand(testDeps(gm), &stubPresence{}, testDivision, gm, gateFrame, owner); !bytes.Equal(out.Ack, []byte{AckResultOK, SubSiegeStructure}) || owner.structCalls != 1 || owner.structParam != 2 {
+		t.Fatalf("siege gate dispatch = %x, %+v", out.Ack, owner)
+	}
+
+	// /SIEGE STARTWAR (0x21, 2 bytes).
+	periodFrame := []byte{SubSiegePeriod, SiegePeriodStartWar}
+	if req, err := DecodeGmCommand(periodFrame); err != nil || req.SiegeAction != SiegePeriodStartWar {
+		t.Fatalf("siege period decode = %+v, %v", req, err)
+	}
+	if out := HandleGmCommand(testDeps(gm), &stubPresence{}, testDivision, gm, periodFrame, owner); !bytes.Equal(out.Ack, []byte{AckResultOK, SubSiegePeriod}) || owner.periodCalls != 1 || owner.periodAction != SiegePeriodStartWar {
+		t.Fatalf("siege period dispatch = %x, %+v", out.Ack, owner)
+	}
+}

@@ -18,6 +18,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/gmcommand"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -245,5 +246,83 @@ func TestGMPlayerTeleportNeedsPrivilege(t *testing.T) {
 		if len(f.sent) != 0 || spawnOf(f.gm) != gmAt || spawnOf(f.target) != targetAt {
 			t.Fatalf("0x%02X moved someone", subcmd)
 		}
+	}
+}
+
+/*
+================
+TestGMMoveToNpcMovesToRosterOrMonsterNest
+
+520350 (_GetNPCPosByCodename) resolves the NPC or monster nest by codename
+and teleports the GM to its coordinates when both live in the default
+world.
+================
+*/
+func TestGMMoveToNpcMovesToRosterOrMonsterNest(t *testing.T) {
+	f := newGMTeleportFixture(t)
+	npcSpawn := simulation.Spawn{RegionID: 0x655e, X: 310, Y: 20, Z: 420}
+	f.rt.NpcRoster = []simulation.NpcDef{{
+		ObjectID: 9001,
+		Codename: "NPC_CH_SMITH",
+		Spawn:    npcSpawn,
+	}}
+	targetAt := spawnOf(f.target)
+	if out := f.command(gmcommand.SubMoveToNPC, "npc_ch_smith"); !bytes.Equal(out.Ack, []byte{1, gmcommand.SubMoveToNPC}) {
+		t.Fatalf("ack % X (%s)", out.Ack, out.Refusal)
+	}
+	f.movedOnly(t, f.gm, f.target, targetAt, npcSpawn)
+
+	// Unknown codename refuses with [2, 0x1F] and moves nobody.
+	f.sent = map[string][]wire.Frame{}
+	gmAt := spawnOf(f.gm)
+	if out := f.command(gmcommand.SubMoveToNPC, "NPC_DOES_NOT_EXIST"); !bytes.Equal(out.Ack, []byte{2, gmcommand.SubMoveToNPC}) {
+		t.Fatalf("unknown npc ack % X", out.Ack)
+	}
+	if len(f.sent) != 0 || spawnOf(f.gm) != gmAt {
+		t.Fatal("unknown npc moved someone")
+	}
+}
+
+/*
+================
+TestGMInstanceOpensAndClosesTimedLayers
+
+0x0051FA99..0x0051FBDC -> 0x005F7440 / 0x005F7520: layer == 0 opens the first
+free layer on a timed instance world (and refuses permanent world 1);
+layer > 0 evacuates players inside that layer to their return point and closes
+the population.
+================
+*/
+func TestGMInstanceOpensAndClosesTimedLayers(t *testing.T) {
+	f := newGMTeleportFixture(t)
+	// Permanent world 1 cannot open a dynamic layer (5EC530 checks NativeType != 0).
+	openWorld1 := []byte{gmcommand.SubOpenWorld, 1, 0, 0, 0}
+	if out := gmcommand.HandleGmCommand(f.deps, nil, testDivision, f.gm, openWorld1, f.rt); !bytes.Equal(out.Ack, []byte{2, gmcommand.SubOpenWorld}) {
+		t.Fatalf("world 1 open ack = % X", out.Ack)
+	}
+	// Timed dungeon world 10 (INS_QNO_RM_OLDWOMAN_6) opens layer 1 when layer == 0.
+	openDungeon := []byte{gmcommand.SubOpenWorld, 10, 0, 0, 0}
+	if out := gmcommand.HandleGmCommand(f.deps, nil, testDivision, f.gm, openDungeon, f.rt); !bytes.Equal(out.Ack, []byte{1, gmcommand.SubOpenWorld}) {
+		t.Fatalf("world 10 open ack = % X (%s)", out.Ack, out.Refusal)
+	}
+	lease := instance.Pack(10, 1)
+	// Move Target into the opened instance layer and close it with layer == 1.
+	saved := *f.target.World.SavedReturn
+	wantReturn := simulation.Spawn{RegionID: saved.RegionID, X: float64(saved.X), Y: float64(saved.Y), Z: float64(saved.Z)}
+	if !f.rt.relocateCharacter(testDivision, f.target, "test-enter-dungeon", func() (travelPoint, bool) {
+		return travelPoint{spawn: spawnOf(f.target), world: lease}, true
+	}) {
+		t.Fatal("failed to relocate target into instance layer")
+	}
+	closeDungeon := []byte{gmcommand.SubOpenWorld, 10, 0, 1, 0}
+	if out := gmcommand.HandleGmCommand(f.deps, nil, testDivision, f.gm, closeDungeon, f.rt); !bytes.Equal(out.Ack, []byte{1, gmcommand.SubOpenWorld}) {
+		t.Fatalf("world 10 close ack = % X (%s)", out.Ack, out.Refusal)
+	}
+	if f.target.World.PackedInstance != nil || spawnOf(f.target) != wantReturn {
+		t.Fatalf("target not evacuated to saved return: packed=%v spawn=%+v want=%+v", f.target.World.PackedInstance, spawnOf(f.target), wantReturn)
+	}
+	// Closing an already closed layer refuses with [2, 0x13].
+	if out := gmcommand.HandleGmCommand(f.deps, nil, testDivision, f.gm, closeDungeon, f.rt); !bytes.Equal(out.Ack, []byte{2, gmcommand.SubOpenWorld}) {
+		t.Fatalf("second close ack = % X", out.Ack)
 	}
 }

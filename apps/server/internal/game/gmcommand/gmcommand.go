@@ -142,6 +142,48 @@ func HandleGmCommand(deps Dependencies, presence PresenceView, divisionID string
 		return Outcome{Ack: EncodeRequestFailure(request), Refusal: "gotown-refused"}
 	case SubToTown, SubMoveToUser, SubRecallUser:
 		return handlePlayerTeleport(divisionID, sender, request, status)
+	case SubMoveToNPC:
+		if len(status) > 0 && request.HasName && request.Name != "" {
+			if owner, ok := status[0].(interface {
+				MoveToNpcGM(string, string, string) bool
+			}); ok && owner.MoveToNpcGM(divisionID, sender.Name, request.Name) {
+				return Outcome{Ack: []byte{AckResultOK, SubMoveToNPC}}
+			}
+		}
+		return Outcome{Ack: EncodeRequestFailure(request), Refusal: "movetonpc-refused"}
+	case SubOpenWorld:
+		if len(status) > 0 {
+			if owner, ok := status[0].(interface {
+				InstanceGM(string, uint16, uint16) bool
+			}); ok && owner.InstanceGM(divisionID, request.WorldID, request.LayerID) {
+				return Outcome{Ack: []byte{AckResultOK, SubOpenWorld}}
+			}
+		}
+		return Outcome{Ack: EncodeRequestFailure(request), Refusal: "instance-refused"}
+	case SubSiegeStructure:
+		if len(status) > 0 {
+			if owner, ok := status[0].(interface {
+				SiegeStructureGM(string, string, uint8, uint32, uint32, uint8) bool
+			}); ok && owner.SiegeStructureGM(divisionID, sender.Name, request.SiegeAction, request.FortressID, request.EventStructID, request.SiegeParam) {
+				return Outcome{Ack: []byte{AckResultOK, SubSiegeStructure}}
+			}
+		}
+		return Outcome{Ack: EncodeRequestFailure(request), Refusal: "siege-structure-refused"}
+	case SubSiegePeriod:
+		if len(status) > 0 {
+			if owner, ok := status[0].(interface {
+				SiegePeriodGM(string, uint8) bool
+			}); ok && owner.SiegePeriodGM(divisionID, request.SiegeAction) {
+				return Outcome{Ack: []byte{AckResultOK, SubSiegePeriod}}
+			}
+		}
+		return Outcome{Ack: EncodeRequestFailure(request), Refusal: "siege-period-refused"}
+	case SubFlagWorld:
+		// 0x0051FCF3..0x0051FD7D (subcmd 0x30): reads u8 flagCmd, sends
+		// 0x74B0 [u8(3), u32(flagCmd)] to ShardManager (CFlagWorldMgr Capture
+		// the Flag, a v1.188 battle-arena feature outside v1.150), and
+		// unconditionally replies [1, 0x30].
+		return Outcome{Ack: []byte{AckResultOK, SubFlagWorld}}
 	case SubSetTime:
 		return handleSetTime(request, status)
 	case SubWorldStatus:

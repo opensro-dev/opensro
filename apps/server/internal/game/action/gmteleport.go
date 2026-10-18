@@ -18,6 +18,8 @@ state; every rule about who may move lives here.
 package action
 
 import (
+	"strings"
+
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/instance"
@@ -182,4 +184,163 @@ func gmTeleportMovable(c *enterworld.Character) bool {
 		return false
 	}
 	return c.ActiveCOS == nil || !c.ActiveCOS.Summoned
+}
+
+/*
+================
+MoveToNpcGM
+
+/movetonpc codename (sub 0x1F, 51DE90 case 0x18 -> CGObjPC_OnCommandMoveToNpc
+520350): resolves the NPC or structure by codename (41B330 live scan, then
+_GetNPCPosByCodename nest fallback), refuses if the target's world is not a
+permanent world (NativeType != 0, 520411 / 520581), and teleports the GM to
+its anchor in layer 1.
+================
+*/
+func (rt *Runtime) MoveToNpcGM(division, name, codename string) bool {
+	if rt == nil || rt.deps == nil || codename == "" {
+		return false
+	}
+	unlock := rt.lockDivision(division)
+	defer unlock()
+	gm := rt.findCharacter(division, name)
+	if gm == nil {
+		return false
+	}
+	target, ok := rt.npcTeleportPoint(division, codename)
+	if !ok {
+		return false
+	}
+	return rt.relocateCharacter(division, gm, "gm-movetonpc", func() (travelPoint, bool) {
+		if !gm.GMPrivilege || !gmTeleportMovable(gm) {
+			return travelPoint{}, false
+		}
+		return target, true
+	})
+}
+
+/*
+================
+npcTeleportPoint
+
+520350's two lookup branches: first live field NPCs and standing fortress
+structures, then the static nest catalog (_GetNPCPosByCodename), gated on a
+permanent world (RefGameWorld +0x20 == 0).
+================
+*/
+func (rt *Runtime) npcTeleportPoint(division, codename string) (travelPoint, bool) {
+	for _, npc := range rt.NpcRoster {
+		if strings.EqualFold(npc.Codename, codename) && npc.Spawn.RegionID != 0 {
+			return travelPoint{spawn: npc.Spawn, world: instance.ID(domain.DefaultWorldInstance)}, true
+		}
+	}
+	if rt.Monsters != nil && rt.Fortresses != nil {
+		for _, definition := range instance.Shipped() {
+			if definition.NativeType != 0 {
+				continue
+			}
+			if _, ok := rt.Fortresses.ForWorld(definition); !ok {
+				continue
+			}
+			world := instance.Pack(definition.ID, portalWorldLayer)
+			for _, row := range rt.Monsters.WorldStructures(division, world) {
+				if strings.EqualFold(row.Ref.Codename, codename) && row.Spawn.RegionID != 0 {
+					spawn := simulation.Spawn{RegionID: row.Spawn.RegionID, X: row.Spawn.X, Y: row.Spawn.Y, Z: row.Spawn.Z}
+					return travelPoint{spawn: spawn, world: world}, true
+				}
+			}
+		}
+	}
+	if rt.Monsters != nil {
+		worldCode, spawn, ok := rt.Monsters.FirstNestSpawnByCodename(codename)
+		if !ok || spawn.RegionID == 0 {
+			return travelPoint{}, false
+		}
+		definition, found := instance.Lookup(1)
+		if worldCode != "" {
+			found = false
+			for _, row := range instance.Shipped() {
+				if row.CodeName == worldCode {
+					definition, found = row, true
+					break
+				}
+			}
+		}
+		if !found || definition.NativeType != 0 {
+			return travelPoint{}, false
+		}
+		return travelPoint{spawn: spawn, world: instance.Pack(definition.ID, portalWorldLayer)}, true
+	}
+	return travelPoint{}, false
+}
+
+/*
+================
+InstanceGM
+
+/INSTANCE worldId layerId (sub 0x13, 0x0051DE90 inline at 0x0051FA99..0x0051FBDC):
+layerId == 0 opens the first free layer slot on an instance world
+(CGameWorldMgr_OpenWorldLayer 0x005F7440); layerId != 0 closes that layer
+(CGameWorldMgr_CloseWorldLayer 0x005F7520), evacuating any residents back to
+their saved return or appointed rebirth before releasing its population.
+Permanent worlds (NativeType == 0) refuse both.
+================
+*/
+func (rt *Runtime) InstanceGM(division string, worldID, layerID uint16) bool {
+	if rt == nil || rt.Monsters == nil {
+		return false
+	}
+	unlock := rt.lockDivision(division)
+	defer unlock()
+	defID := instance.DefinitionID(worldID)
+	definition, ok := instance.Lookup(defID)
+	if !ok || definition.NativeType == 0 {
+		return false
+	}
+	if layerID == 0 {
+		_, opened := rt.Monsters.OpenInstanceLayer(division, defID)
+		return opened
+	}
+	target := instance.Pack(defID, layerID)
+	lease, active := rt.Monsters.PopulationLease(division, target)
+	if !active {
+		return false
+	}
+	rt.Monsters.BeginPopulationRetirement(division, lease)
+	for _, resident := range rt.fortressResidents(division, target) {
+		rt.relocateCharacter(division, resident, "gm-instance-close", func() (travelPoint, bool) {
+			return rt.instanceEvacuationPoint(division, resident), true
+		})
+	}
+	return rt.Monsters.ReleasePopulation(division, lease)
+}
+
+/*
+================
+instanceEvacuationPoint
+
+Where a resident returns when an instance layer closes: its saved permanent-world
+return pose when recorded, or else its appointed rebirth point.
+================
+*/
+func (rt *Runtime) instanceEvacuationPoint(division string, c *enterworld.Character) travelPoint {
+	if c != nil && c.World != nil && c.World.SavedReturn != nil && c.World.SavedReturn.RegionID != 0 {
+		saved := c.World.SavedReturn
+		defID := instance.DefinitionID(saved.Definition)
+		if defID == 0 {
+			defID = 1
+		}
+		if definition, ok := instance.Lookup(defID); ok && definition.NativeType == 0 {
+			return travelPoint{
+				world: instance.Pack(defID, portalWorldLayer),
+				spawn: simulation.Spawn{
+					RegionID: saved.RegionID,
+					X:        float64(saved.X),
+					Y:        float64(saved.Y),
+					Z:        float64(saved.Z),
+				},
+			}
+		}
+	}
+	return rt.appointedRebirth(division, c)
 }

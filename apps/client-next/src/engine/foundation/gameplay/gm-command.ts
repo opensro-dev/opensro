@@ -37,8 +37,38 @@ const GM_INIT_Q = 0x1b;
 const GM_RESET_Q = 0x1c;
 const GM_COMP_Q = 0x1d;
 const GM_REMOVE_Q = 0x1e;
+const GM_MOVE_TO_NPC = 0x1f;
+const GM_SIEGE_STRUCTURE = 0x20;
+const GM_SIEGE_PERIOD = 0x21;
 const MAX_OBJECT_ID = 0xffffffff;
 const GM_COUNT_MASK = 0xff;
+
+/*
+================
+siegePeriodAction
+
+Maps the six /SIEGE period tokens (50C1B6..50C38A, matched with CRT_wcsicmp
+at 0x009C5F6F) to their 0x21 action byte.
+================
+*/
+function siegePeriodAction( token: string ): number {
+	switch ( token.toUpperCase() ) {
+		case "STARTWAR":
+			return 1;
+		case "ENDWAR":
+			return 2;
+		case "STARTTAX":
+			return 3;
+		case "ENDTAX":
+			return 4;
+		case "STARTREQ":
+			return 5;
+		case "ENDREQ":
+			return 6;
+		default:
+			return 0;
+	}
+}
 
 /*
 ================
@@ -480,9 +510,15 @@ export function gmRequest(
 		view.setUint32( 3 + bytes.length, amount, true );
 		return { opcode: OP_GM_COMMAND, payload };
 	}
-	// 50CA69..50CBE6 /INITQ, /COMPQ, /REMOVEQ name: the discriminator byte,
-	// then 4FD5B0's u16 length and ANSI codename. /RESETQ is the lone token.
-	const questTool = ({ "/INITQ": GM_INIT_Q, "/COMPQ": GM_COMP_Q, "/REMOVEQ": GM_REMOVE_Q } as Record<string, number>)[
+	// 50C982..50CBE6 /movetonpc, /INITQ, /COMPQ, /REMOVEQ name: the
+	// discriminator byte, then 4FD5B0's u16 length and ANSI codename.
+	// /RESETQ is the lone token.
+	const questTool = ({
+		"/INITQ": GM_INIT_Q,
+		"/COMPQ": GM_COMP_Q,
+		"/REMOVEQ": GM_REMOVE_Q,
+		"/MOVETONPC": GM_MOVE_TO_NPC
+	} as Record<string, number>)[
 		name?.toUpperCase() ?? ""
 	];
 	if ( questTool !== undefined ) return tokens.length === 2 ? sizedNameFrame( questTool, arg ) : null;
@@ -512,15 +548,47 @@ export function gmRequest(
 		const hour = Number.parseInt( arg, 10 ) || 0;
 		return { opcode: OP_GM_COMMAND, payload: Uint8Array.of( 10, hour < 0 || hour >= 24 ? 0 : hour ) };
 	}
-	if ( name === "/flagworld" && tokens.length === 2 ) {
+	if ( name?.toUpperCase() === "/FLAGWORLD" && tokens.length === 2 ) {
 		return { opcode: OP_GM_COMMAND, payload: Uint8Array.of( 0x30, Number.parseInt( arg, 10 ) || 0 ) };
 	}
-	if ( name === "/INSTANCE" && tokens.length === 3 ) {
+	if ( name?.toUpperCase() === "/INSTANCE" && tokens.length === 3 ) {
 		const payload = new Uint8Array( 5 ), view = new DataView( payload.buffer );
 		payload[0] = 19;
 		view.setUint16( 1, Number.parseInt( arg, 10 ) || 0, true );
 		view.setUint16( 3, Number.parseInt( tokens[2]!, 10 ) || 0, true );
 		return { opcode: OP_GM_COMMAND, payload };
+	}
+	// 50C1B6..50C66B: /SIEGE period transitions (0x21) and structure actions (0x20),
+	// matched case-insensitively with CRT_wcsicmp (0x009C5F6F).
+	if ( name?.toUpperCase() === "/SIEGE" && tokens.length >= 2 ) {
+		const periodAction = siegePeriodAction( arg );
+		if ( periodAction !== 0 ) {
+			return tokens.length === 2 ?
+				{ opcode: OP_GM_COMMAND, payload: Uint8Array.of( GM_SIEGE_PERIOD, periodAction ) } :
+				null;
+		}
+		const siegeSub = arg.toUpperCase();
+		if ( (siegeSub === "STRUCT_BUILD" || siegeSub === "STRUCT_REPAIR") && tokens.length === 3 ) {
+			const payload = new Uint8Array( 10 ), view = new DataView( payload.buffer );
+			payload[0] = GM_SIEGE_STRUCTURE;
+			payload[1] = siegeSub === "STRUCT_BUILD" ? 0x0a : 0x0c;
+			view.setUint32( 2, 1, true );
+			view.setUint32( 6, Number.parseInt( tokens[2]!, 10 ) || 0, true );
+			return { opcode: OP_GM_COMMAND, payload };
+		}
+		if ( (siegeSub === "STRUCT_UPGRADE" || siegeSub === "GATE") && tokens.length === 4 ) {
+			const action = siegeSub === "STRUCT_UPGRADE" ? 0x0b : 0x15;
+			let param = (Number.parseInt( tokens[3]!, 10 ) || 0) & GM_COUNT_MASK;
+			if ( action === 0x15 && param !== 0 ) param = 2;
+			const payload = new Uint8Array( 11 ), view = new DataView( payload.buffer );
+			payload[0] = GM_SIEGE_STRUCTURE;
+			payload[1] = action;
+			view.setUint32( 2, 1, true );
+			view.setUint32( 6, Number.parseInt( tokens[2]!, 10 ) || 0, true );
+			payload[10] = param;
+			return { opcode: OP_GM_COMMAND, payload };
+		}
+		return null;
 	}
 	return null;
 }

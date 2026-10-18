@@ -11,6 +11,7 @@ package simulation
 
 import (
 	"sort"
+	"strings"
 
 	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/instance"
@@ -67,6 +68,70 @@ func (s *MonsterState) AllocatePopulation(division string, id instance.ID) (inst
 	}
 	s.worldPopulations[populationKey{division, lease}] = s.createPopulation(lease, definition.CodeName)
 	return lease, status
+}
+
+/*
+================
+OpenInstanceLayer
+
+5F7440 (CGameWorldMgr_OpenWorldLayer) -> 5EC530 (CGameWorld_HasAvailableLayerSlot)
+-> 5EB830 (CGameWorld_AllocateLayer): opens the first unallocated layer slot in
+1..LayerLimit on an instance world (NativeType != 0). Permanent worlds
+(NativeType == 0) and full worlds refuse.
+================
+*/
+func (s *MonsterState) OpenInstanceLayer(division string, defID instance.DefinitionID) (instance.Lease, bool) {
+	definition, ok := instance.Lookup(defID)
+	if !ok || definition.NativeType == permanentWorldType {
+		return instance.Lease{}, false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.division(division)
+	allocator := s.worldAllocators[division]
+	for layer := uint16(firstResidentLayer); layer <= definition.LayerLimit; layer++ {
+		id := instance.Pack(defID, layer)
+		if _, active := allocator.Lookup(id); active {
+			continue
+		}
+		lease, status := allocator.Allocate(id)
+		if status != instance.Success {
+			return instance.Lease{}, false
+		}
+		if s.worldPopulations == nil {
+			s.worldPopulations = make(map[populationKey]*divisionMonsterState)
+		}
+		s.worldPopulations[populationKey{division, lease}] = s.createPopulation(lease, definition.CodeName)
+		return lease, true
+	}
+	return instance.Lease{}, false
+}
+
+/*
+================
+FirstNestSpawnByCodename
+
+520350's _GetNPCPosByCodename fallback: the first authored nest anchor for a
+reference codename and the world code its hive names.
+================
+*/
+func (s *MonsterState) FirstNestSpawnByCodename(codename string) (string, Spawn, bool) {
+	if codename == "" {
+		return "", Spawn{}, false
+	}
+	for _, nest := range s.template.Nests {
+		ref, ok := s.template.Refs[nest.RefObjID]
+		if !ok || !strings.EqualFold(ref.Codename, codename) {
+			continue
+		}
+		return nest.WorldCode, Spawn{
+			RegionID: nest.RegionID,
+			X:        nest.X,
+			Y:        nest.Y,
+			Z:        nest.Z,
+		}, true
+	}
+	return "", Spawn{}, false
 }
 
 // ReleasePopulation invalidates the lease and all of its timers, live GIDs,
