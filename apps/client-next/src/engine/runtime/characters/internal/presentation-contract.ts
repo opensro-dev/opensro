@@ -232,6 +232,12 @@ export interface CharacterPresentationState {
 		pose: import("@/engine/contracts/gameplay").Pose;
 		mode: number | undefined;
 	};
+	// The pose actually drawn on the previous frame. A server burst that
+	// stops the walk and starts the cast together (0xB2F5 with 0xB245) has
+	// already spent its correction inside posePresentation by the time
+	// actor-motion sees the cast, so the WAIT hold takes this pose, not
+	// the corrected one the same frame's pose() returned.
+	lastDrawnPose?: import("@/engine/contracts/gameplay").Pose;
 	actionRevision?: number;
 	actionMode?: number;
 	actionMask?: number;

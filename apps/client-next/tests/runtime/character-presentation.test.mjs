@@ -1000,6 +1000,76 @@ for ( const local of [ false, true ] ) {
 	}
 }
 
+test("cast WAIT holds the drawn pose when the stop and the cast arrive in one burst", () => {
+	// BR-261015-0827-9B2B: the server answers an out-of-range press with
+	// 0xB2F5 (movement snap) and 0xB245 (skill cast) in the same packet
+	// burst, so the first frame that presents the cast already reports
+	// moving=false at the settled destination. actor-motion only held the
+	// drawn pose when that frame still reported the walk (requestedMoving),
+	// so no hold was taken and posePresentation then glided the body across
+	// the whole correction while the cast animation played.
+	const f = fixture(
+		{ 7: { clips: [ "stand" ], phaseClips: [ [], [ "stand" ], [] ], stages: [] } },
+		2,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		undefined,
+		{ states: { stand: { durationMs: 1000, loop: true, trackEvents: [] } }, rules: [] }
+	);
+	f.warm();
+	f.presentation.simulationOrigin( 0 );
+	const from = { regionId: 1, x: 10, y: 20, z: 30, angle: 16384 };
+	const cast = { token: 1, caster: 1, target: 0, skill: 7, damage: 0, fatal: false };
+	const frame = ( x, seconds, casting, moving, movementRevision ) => {
+		const path = { from, to: { ...from, x: 110 }, durationMs: 2000 };
+		const player = entity( 1, {
+			kind: "local-player",
+			x,
+			moving,
+			movementMode: 3,
+			movementRevision,
+			movementPath: moving ? path : undefined,
+			poseAtMs: seconds * 1000
+		} );
+		f.step( [ player ], seconds, {
+			localGid: 1,
+			pose: { ...from, x },
+			moving,
+			movementRevision,
+			movementPath: moving ? path : undefined,
+			poseAtMs: seconds * 1000,
+			inventory: [],
+			vitals: [],
+			casts: casting ? [ cast ] : []
+		} );
+		assert.equal( f.presentation.error(), null );
+		return { ...f.actors.find( actor => actor.gid === 1 ).pose };
+	};
+	frame( 10, 1, false, true, 1 );
+	const walking = frame( 20, 1.02, false, true, 1 );
+	const burst = frame( 110, 1.04, true, false, 2 );
+	assert.ok(
+		Math.abs( burst.x - walking.x ) < 2,
+		`the burst frame still draws the walked pose (${burst.x} vs ${walking.x})`
+	);
+	for ( let step = 1; step <= 10; step++ ) {
+		const shown = frame( 110, 1.04 + step * 0.02, true, false, 2 );
+		assert.equal( shown.x, burst.x, `the casting body does not glide toward the snap (frame ${step})` );
+	}
+	assert.equal(
+		frame( 110, 1.3, false, false, 2 ).x,
+		burst.x,
+		"the hold stands after the cast until the next walk"
+	);
+	f.dispose();
+});
+
 test("a WAIT hold released by the next walk recovers continuously instead of jumping", () => {
 	// actor-motion holds the drawn pose when a cast's WAIT leaves the walk
 	// state (native stops the walk there); the logical walk can still move
