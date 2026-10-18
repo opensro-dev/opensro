@@ -10,6 +10,7 @@ package simulation
 import (
 	"testing"
 
+	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/world/monster"
 )
 
@@ -78,6 +79,40 @@ func TestJobMonsterAreaSparesItsOwnSide(t *testing.T) {
 	} {
 		if got := MonsterAreaStrikes(actor, c.candidate); got != c.want {
 			t.Errorf("hunter monster area on %+v: %v, want %v", c.candidate, got, c.want)
+		}
+	}
+}
+
+/*
+================
+TestMonsterAreaStrikesIgnoresFirstAttackGuard
+
+5A1AD0 -> 5A1ADE calls vtable +0x58C (4A98A0) with checkFirstAttack=0, so
+5298C0 returns 1 at 529909 before the first-attack protection (Noise)
+check at 52994A..5299B4, while still enforcing 5299E0 (Fear source, grab
+pet, fellow band, body status).
+================
+*/
+func TestMonsterAreaStrikesIgnoresFirstAttackGuard(t *testing.T) {
+	actor := monster.Instance{Abnormal: &abnormal.Block{Mask: abnormal.Fear.Bit()}}
+	actor.Ref.TidWord, actor.Ref.TypeID4, actor.Ref.Level = 0x00c6, 1, 10
+	actor.Abnormal.Slots[abnormal.Fear].Active = true
+	actor.Abnormal.Slots[abnormal.Fear].SourceGID = 99
+	guard := monster.FirstAttackGuard{Mask: 1, Level: 100}
+	for _, c := range []struct {
+		name      string
+		candidate MonsterAreaCandidate
+		want      bool
+	}{
+		{"noise-protected player", MonsterAreaCandidate{Gid: 7, Guard: guard}, true},
+		{"noise-protected companion", MonsterAreaCandidate{Gid: 70, OwnerGid: 7, Band: 3, Guard: guard}, true},
+		{"fear source excluded", MonsterAreaCandidate{Gid: 99, Guard: guard}, false},
+		{"grab pet excluded", MonsterAreaCandidate{Gid: 71, OwnerGid: 7, Band: 4, Guard: guard}, false},
+		{"fellow band excluded", MonsterAreaCandidate{Gid: 72, OwnerGid: 7, Band: fellowCOSBand, Guard: guard}, false},
+		{"untargetable status excluded", MonsterAreaCandidate{Gid: 8, NativeBodyStatus: 3, Guard: guard}, false},
+	} {
+		if got := MonsterAreaStrikes(actor, c.candidate); got != c.want {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
 		}
 	}
 }

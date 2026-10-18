@@ -243,3 +243,47 @@ func TestNoiseLastsFifteenMinutes(t *testing.T) {
 		t.Fatal("the monster never acquired the Bard once Noise ended")
 	}
 }
+
+/*
+================
+TestNoiseDoesNotBlockMonsterAreaSplash
+
+5A1AD0 -> 5A1ADE calls vtable +0x58C (4A98A0) with checkFirstAttack=0:
+when a regular monster executes an area attack on an unprotected primary
+target, a nearby Bard under Noise and its summoned companion both take
+collateral splash damage.
+================
+*/
+func TestNoiseDoesNotBlockMonsterAreaSplash(t *testing.T) {
+	f := newNoiseField(t)
+	f.castNoise(t)
+	skills := f.rt.deps.SkillData().(staticSkillSource)
+	attack := skills[temptationAttackSkill]
+	attack.Attack.Min, attack.Attack.Max, attack.Attack.Percent, attack.Attack.ImpactCount = 30, 30, 100, 1
+	attack.ActionArea = enterworld.SkillOffensiveArea{Shape: 1, Radius: 40, MaxTargets: 5, Select: 24}
+	skills[temptationAttackSkill] = attack
+
+	deps := f.rt.deps.(*enterworld.Deps)
+	items := deps.Items.(staticItemSource)
+	ref := equipCombatTestPet(t, f.rt, f.c, 3)
+	deps.Items = cosTestItemSource{staticItemSource: items, characters: map[string]*enterworld.CharacterRef{ref.Codename: ref}}
+	f.rt.BindPetSession(testDivision, f.c, 101)
+	f.rt.advancePets(f.clock.NowMs())
+
+	primary := areaPeer(f.c, f.c.ID+1, "AreaPrimary", *f.c.World.Spawn.X+4)
+	characters := fixtureCharacters(deps.Characters)
+	characters[testDivision] = append(characters[testDivision], primary)
+
+	bardBefore := enterworld.CurrentHP(f.c)
+	petBefore := f.c.ActiveCOS.CurrentHP
+	result := f.rt.MonsterBasicAttack(testDivision, f.mob, enterworld.ObjectIDForCharacter(primary), temptationAttackSkill, f.clock.NowMs())
+	if !result.Accepted {
+		t.Fatalf("monster area attack refused: %+v", result)
+	}
+	if enterworld.CurrentHP(f.c) >= bardBefore {
+		t.Fatalf("Noise-protected Bard HP %d, want below %d", enterworld.CurrentHP(f.c), bardBefore)
+	}
+	if f.c.ActiveCOS.CurrentHP >= petBefore {
+		t.Fatalf("Noise-protected companion HP %d, want below %d", f.c.ActiveCOS.CurrentHP, petBefore)
+	}
+}

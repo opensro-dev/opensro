@@ -29,8 +29,8 @@ monsterAreaVictim
 
 One candidate a monster area may strike. A companion names its owner; a
 rider's hit goes to the vehicle (ride), as the primary's does
-(monsterAttackStage), while the rider's own status and protection decide
-whether it is struck.
+(monsterAttackStage), while the rider's own status decides whether it is
+struck (5A1AD0 passes checkFirstAttack=0 at 5A1ADE).
 ================
 */
 type monsterAreaVictim struct {
