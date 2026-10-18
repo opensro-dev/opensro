@@ -190,7 +190,7 @@ loadCharacterDataRows' codename -> columns map.
 export function enabledCosReferences( rows ) {
 	const crowd = new Set( TITLE_CROWD_ROSTER );
 	const shipped = cols => {
-		const value = cols?.find( value => /\.bsr$/i.test( value ) );
+		const value = cols?.find( value => /\.(?:bsr|cpd)$/i.test( value ) );
 		return !!value &&
 			fs.existsSync( path.join( dataExtractedRoot, "res", value.replaceAll( "\\", "/" ).toLowerCase() ) );
 	};

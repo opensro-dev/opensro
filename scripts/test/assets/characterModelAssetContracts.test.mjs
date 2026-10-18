@@ -32,10 +32,12 @@ import {
 	loadModelledMobRoster,
 	loadSpawnableNpcRoster
 } from "../../build/char/npcModelRoster.mjs";
-import { dressedBodyPath, loadCharacterDataRows } from "../../build/char/resolveCharRoster.mjs";
+import { loadCharacterDataRows } from "../../build/char/resolveCharRoster.mjs";
 import { loadBoothModelRoster } from "../../build/char/boothModelRoster.mjs";
+import { buildEffectRecordTable } from "../../build/char/parseSkillEffect.mjs";
 import { parseCharacterBsr, parseSkinnedBms } from "../../build/char/formats.mjs";
 import { loadDataAsset } from "../../build/shared/jmxAssetIO.mjs";
+import { loadQinShiTombSkillRows } from "../../build/shared/qinshiTomb.mjs";
 import { sha256Hex } from "../../build/shared/hash.mjs";
 import { readPublishedAssetBytesSync, readPublishedAssetJsonSync } from "../../lib/publishedAsset.mjs";
 import { gameRoot, publicAssetsRoot, publicRoot, retailTextdataRoot } from "../../build/world/paths.mjs";
@@ -441,12 +443,6 @@ test("mission NPC, monster and COS manifest exactly covers its rosters", () => {
 	const mobRoster = loadModelledMobRoster();
 	const cosRoster = enabledCosReferences( rows );
 	const roster = [ ...npcRoster, ...mobRoster, ...cosRoster ];
-	// Dressed-body references (the Qin-Shi overlay's .cpd thieves and flame
-	// master) draw through the spawn dress path: the bake publishes no
-	// manifest entry for them, and no other roster reference may lack one.
-	const dressed = new Set(
-		roster.filter( ( ref ) => dressedBodyPath( ref.codename, rows ) ).map( ( ref ) => ref.codename )
-	);
 	const deathRows = Object.values( manifest.models ).filter( ( entry ) => entry.kind === "death" );
 
 	assert.equal( manifest.format, "sro-mission-npc-models" );
@@ -465,20 +461,16 @@ test("mission NPC, monster and COS manifest exactly covers its rosters", () => {
 	);
 	assert.equal(
 		manifest.count,
-		roster.length - dressed.size + structureRows.length + boothRows.length + 4 + deathRows.length,
-		"the rosters (less dressed-body references), structures and booths plus four packetless CICRide resources and the characterInfo death models"
+		roster.length + structureRows.length + boothRows.length + 4 + deathRows.length,
+		"the rosters, structures and booths plus four packetless CICRide resources and the characterInfo death models"
 	);
 	assert.equal(
 		Object.values( manifest.models ).filter( ( entry ) => entry.kind === "cos" ).length,
-		cosRoster.filter( ( ref ) => !dressed.has( ref.codename ) ).length,
+		cosRoster.length,
 		"every enabled COS reference, and only those, is published as kind cos"
 	);
 	for ( const ref of roster ) {
 		const entry = manifest.models[ref.codename];
-		if ( dressed.has( ref.codename ) ) {
-			assert.ok( !entry, `${ref.codename} is dressed-body but published` );
-			continue;
-		}
 		assert.ok( entry, `${ref.codename} is absent from the model manifest` );
 		assert.equal( entry.refObjId, ref.refObjId, `${ref.codename} RefObj identity drift` );
 	}
@@ -593,5 +585,74 @@ test("item-drop and skill-stage BSR outputs share the collision-free path contra
 				.filter( ( name ) => name.toLowerCase().endsWith( ".glb" ) ).length,
 			0
 		);
+	}
+});
+
+test("Qin-Shi Emperor Tomb .cpd compound models and skillaniset2 overlay bake cleanly when SRO_QINSHI_TOMB=1", async () => {
+	const previousTomb = process.env.SRO_QINSHI_TOMB;
+	const scratchRoot = fs.mkdtempSync( path.join( os.tmpdir(), "sro-tomb-cpd-contract-" ) );
+	const skillEffectPath = path.join( textdataDir, "skilleffect.txt" );
+	try {
+		delete process.env.SRO_QINSHI_TOMB;
+		const offEffectTable = buildEffectRecordTable( textdataDir, skillEffectPath );
+		const tombSkillRows = loadQinShiTombSkillRows().rows;
+		for ( const cols of tombSkillRows ) {
+			assert.equal(
+				offEffectTable.table[Number( cols[1] )],
+				undefined,
+				`SRO_QINSHI_TOMB off leaked Tomb skill ${cols[1]} (${cols[3]})`
+			);
+		}
+
+		process.env.SRO_QINSHI_TOMB = "1";
+		const onEffectTable = buildEffectRecordTable( textdataDir, skillEffectPath );
+		for ( const cols of tombSkillRows ) {
+			assert.ok(
+				onEffectTable.table[Number( cols[1] )] !== undefined,
+				`SRO_QINSHI_TOMB=1 missing effect record for ${cols[1]} (${cols[3]})`
+			);
+		}
+
+		const thiefOut = resourceGlbOutput( "res/mob/qinshi/thief_01.cpd", {
+			namespace: "npc",
+			publicAssetsRoot: scratchRoot
+		} );
+		const thiefBaked = await bakeCharacterResource( "res/mob/qinshi/thief_01.cpd", thiefOut, true );
+		assert.equal( thiefBaked.glb, "/assets/npc/mob/qinshi/thief_01.glb" );
+		assert.ok( fs.existsSync( thiefOut.diskPath ) );
+		for ( const role of [ "stand", "walk", "run", "attack1", "death", "native:sword:33", "native:sword:102" ] ) {
+			assert.ok( thiefBaked.allowedClips.includes( role ), `thief_01.cpd missing ${role}` );
+		}
+
+		const shinmuOut = resourceGlbOutput( "res/char/china/shinmu.cpd", {
+			namespace: "npc",
+			publicAssetsRoot: scratchRoot
+		} );
+		const shinmuBaked = await bakeCharacterResource( "res/char/china/shinmu.cpd", shinmuOut, true );
+		assert.equal( shinmuBaked.glb, "/assets/npc/char/china/shinmu.glb" );
+		assert.ok( fs.existsSync( shinmuOut.diskPath ) );
+		for (
+			const role of [
+				"stand",
+				"walk",
+				"run",
+				"attack1",
+				"death",
+				"native:default:31",
+				"native:spear:35",
+				"native:spear:69",
+				"native:spear:73",
+				"native:spear:75"
+			]
+		) {
+			assert.ok( shinmuBaked.allowedClips.includes( role ), `shinmu.cpd missing ${role}` );
+		}
+	} finally {
+		if ( previousTomb === undefined ) {
+			delete process.env.SRO_QINSHI_TOMB;
+		} else {
+			process.env.SRO_QINSHI_TOMB = previousTomb;
+		}
+		fs.rmSync( scratchRoot, { recursive: true, force: true } );
 	}
 });

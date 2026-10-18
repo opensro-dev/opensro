@@ -62,6 +62,7 @@ import {
 	readTextDataLinesSync,
 	splitTextDataRow as tabCols
 } from "../shared/textDataIo.mjs";
+import { isQinShiTombSkillEffectName, loadQinShiTombSkillRows, qinshiTombEnabled } from "../shared/qinshiTomb.mjs";
 
 const SKILLDATA_COL_ID = 1;
 const SKILLDATA_COL_LEVEL_NAME = 3;
@@ -262,11 +263,16 @@ export function parseSkillAniSet( skillEffectPath ) {
 		if ( !sectionName || !line || line.startsWith( "//" ) ) continue;
 		const authored = tabCols( line );
 		const serviceColumnCount = sectionName === "skillaniset2" ? 1 : 0;
-		if ( serviceColumnCount && Number( authored[0] ?? 0 ) === 0 ) {
-			continue;
-		}
 		const c = authored.slice( serviceColumnCount );
 		const baseName = c[1];
+		if ( serviceColumnCount && Number( authored[0] ?? 0 ) === 0 ) {
+			// Port-only, not native: retail v1.150 ships the Qin-Shi Emperor Tomb
+			// skillaniset2 rows with Service == 0 while their skilleffectset rows
+			// are already present. Admit them only when SRO_QINSHI_TOMB is on.
+			if ( !qinshiTombEnabled() || !isQinShiTombSkillEffectName( baseName ) ) {
+				continue;
+			}
+		}
 		// Native sub_9169d0 resolves the authored name; it is not restricted to
 		// the player SKILL_ namespace. MSKILL_ and PSKILL_ rows share this table.
 		if ( !baseName ) continue;
@@ -533,20 +539,29 @@ Retain both authored names: player ranks and monster skills join differently.
 export function loadSkillDataRows( textdataDir ) {
 	const files = listTextDataShardNamesSync( textdataDir, /^skilldata_\d+\.txt$/i );
 	const rows = [];
+	const pushCols = ( c ) => {
+		const name = c[SKILLDATA_COL_LEVEL_NAME];
+		if ( !name ) return;
+		const id = Number( c[SKILLDATA_COL_ID] );
+		if ( !Number.isInteger( id ) || id <= 0 ) return;
+		const original = Number( c[SKILLDATA_COL_ORIGINAL] );
+		rows.push( {
+			id,
+			levelName: name,
+			animBaseName: c[SKILLDATA_COL_ANIMSET_BASE] ?? "",
+			originalId: Number.isInteger( original ) && original > 0 ? original : 0
+		} );
+	};
 	for ( const file of files ) {
 		for ( const line of readTextDataLinesSync( path.join( textdataDir, file ) ) ) {
-			const c = tabCols( line );
-			const name = c[SKILLDATA_COL_LEVEL_NAME];
-			if ( !name ) continue;
-			const id = Number( c[SKILLDATA_COL_ID] );
-			if ( !Number.isInteger( id ) || id <= 0 ) continue;
-			const original = Number( c[SKILLDATA_COL_ORIGINAL] );
-			rows.push( {
-				id,
-				levelName: name,
-				animBaseName: c[SKILLDATA_COL_ANIMSET_BASE] ?? "",
-				originalId: Number.isInteger( original ) && original > 0 ? original : 0
-			} );
+			pushCols( tabCols( line ) );
+		}
+	}
+	// Port-only, not native: append the Qin-Shi Emperor Tomb skilldata overlay
+	// when SRO_QINSHI_TOMB is on, matching monster.WithQinShiTomb on the server.
+	if ( qinshiTombEnabled() ) {
+		for ( const c of loadQinShiTombSkillRows().rows ) {
+			pushCols( c );
 		}
 	}
 	return rows;

@@ -19,10 +19,11 @@ clip.
 import path from "node:path";
 import { parseSkillAniSet } from "./parseSkillEffect.mjs";
 import { SKILL_EFFECT_ANIMATION_ID_BY_NAME } from "./native/skillEffectAnimationRegistry.ts";
+import { qinshiTombEnabled } from "../shared/qinshiTomb.mjs";
 import { retailTextdataRoot } from "../world/paths.mjs";
 import { findAnimationSet, pickAnimationSetSoundEvents, pickAnimationStateTableMetadata } from "./animationUtils.mjs";
 
-let required;
+const requiredByTomb = new Map();
 
 /*
 ================
@@ -51,12 +52,18 @@ default set's.
 ================
 */
 export function pickAttachedMotionClips( bsr, requests ) {
-	if ( !requests ) {
-		required ??= attachedMotionRequests(
-			parseSkillAniSet( path.join( retailTextdataRoot, "skilleffect.txt" ) ).values()
-		);
+	let effectiveRequests = requests;
+	if ( !effectiveRequests ) {
+		const tombKey = qinshiTombEnabled();
+		effectiveRequests = requiredByTomb.get( tombKey );
+		if ( !effectiveRequests ) {
+			effectiveRequests = attachedMotionRequests(
+				parseSkillAniSet( path.join( retailTextdataRoot, "skilleffect.txt" ) ).values()
+			);
+			requiredByTomb.set( tombKey, effectiveRequests );
+		}
 	}
-	return (requests ?? required).flatMap( ( request ) => {
+	return effectiveRequests.flatMap( ( request ) => {
 		const find = ( set ) =>
 			findAnimationSet( bsr, set )?.states.find( ( s ) => s.stateId === request.id && s.animationPath );
 		const state = find( request.set ) ?? find( "default" );

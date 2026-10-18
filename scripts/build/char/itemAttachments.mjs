@@ -19,11 +19,15 @@ roster imports the equipment catalog, which imports this module.
 import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
 import fs from "node:fs";
 import path from "node:path";
-import { assembleAvatar } from "./buildAvatar.mjs";
+import { assembleAvatar, primSlot } from "./buildAvatar.mjs";
 import { avatarToGlb } from "./exportGlb.mjs";
+import { parseCompound } from "../world/objects/compound.mjs";
 import { parseJmxResourceBsr } from "../world/objects/formats.mjs";
 import { parseAttachPartLink, parseBsk, parseCharacterBsr } from "./formats.mjs";
+import { characterMaterialVariants } from "./materialVariants.mjs";
 import { loadDataAsset } from "../shared/jmxAssetIO.mjs";
+import { loadOptionalDataAsset } from "../shared/optionalDataAsset.mjs";
+import { qinshiTombEnabled } from "../shared/qinshiTomb.mjs";
 import { AMBIENT_MODIFIER_KIND } from "./equipmentParticles.mjs";
 import { publicAssetsRoot } from "../world/paths.mjs";
 
@@ -328,4 +332,161 @@ export async function buildAuxiliaryAvatarSets( overrides ) {
 		);
 	}
 	return entries;
+}
+
+/*
+================
+resolveCompoundBranchBsr
+
+0x00a9b280 (CCompoundObj_vf12C) opens each branch BSR through
+CResourceMgr_LoadSimpleResourceFromArchive (0x00a58370). When any branch
+returns 0 (0x00a9b3aa), 0x00a9b280 aborts and destroys the compound.
+Port-only, not native: shinmu.cpd (MOB_TQ_FLAMEMASTER / MOB_QT_TQ_FLAMEMASTER)
+names degree-10 armor/weapon BSRs (heavy_10_*.bsr, spear_10.bsr) that v1.150
+Data.pk2 does not ship because v1.150 caps at degree 9. When SRO_QINSHI_TOMB
+is on and a _10 branch is absent, substitute the matching _09 BSR from the
+same directory so the Floor 5 unique boss can assemble.
+================
+*/
+async function resolveCompoundBranchBsr( branchPath ) {
+	const direct = await loadOptionalDataAsset( branchPath );
+	if ( direct !== null ) {
+		return { bsrPath: branchPath, buffer: direct };
+	}
+	if ( qinshiTombEnabled() && /_10(?=(?:_[a-z]+)?\.bsr$)/i.test( branchPath ) ) {
+		const fallbackPath = branchPath.replace( /_10(?=(?:_[a-z]+)?\.bsr$)/i, "_09" );
+		const fallback = await loadOptionalDataAsset( fallbackPath );
+		if ( fallback !== null ) {
+			return { bsrPath: fallbackPath, buffer: fallback };
+		}
+	}
+	throw new Error( `Compound branch BSR absent from archive: ${branchPath}` );
+}
+
+/*
+================
+assembleCompoundCharacter
+
+0x00a577b0 (CResourceMgr_LoadCompoundObjectFromArchive) -> 0x00a9b280
+(CCompoundObj_vf12C) -> 0x00a89ed0 (CCompChar_AttachItemAndApplyCovers):
+branch 0 is the kind-0 character body BSR (skeleton, aggregateBox, animation
+sets); branches 1..N are kind-5 item/hair/weapon BSRs attached through
+CCompound_AttachResourceWithMaterialSet (0x00a9e310) whose c == 1 cover keys
+hide matching body prims via CCompChar_ApplyItemCovers (0x00a89bd0).
+================
+*/
+export async function assembleCompoundCharacter( cpdPath, source ) {
+	const cpdBuffer = source ?? (await loadDataAsset( cpdPath ));
+	const cpd = parseCompound( cpdBuffer, cpdPath );
+	if ( cpd.branches.length === 0 ) {
+		throw new Error( `${cpdPath}: compound has no branches` );
+	}
+	const baseBranch = await resolveCompoundBranchBsr( cpd.branches[0] );
+	const baseBsrPath = baseBranch.bsrPath;
+	const baseBuf = baseBranch.buffer;
+	const baseBsr = parseCharacterBsr( baseBuf, baseBsrPath );
+	const donorSkel = parseBsk( await loadDataAsset( baseBsr.skeletonPath ), baseBsr.skeletonPath );
+	const coveredPrimIndices = new Set();
+	const itemMeshes = [];
+	const itemMaterials = [];
+	const environmentByMesh = new Map();
+	const itemSkelByMesh = new Map();
+	const attachByMesh = new Map();
+	const slotByMesh = new Map();
+
+	for ( let branchIndex = 1; branchIndex < cpd.branches.length; branchIndex++ ) {
+		const resolved = await resolveCompoundBranchBsr( cpd.branches[branchIndex] );
+		const itemBsrPath = resolved.bsrPath;
+		const itemBuf = resolved.buffer;
+		const itemBsr = parseJmxResourceBsr( itemBuf, itemBsrPath );
+		const link = parseAttachPartLink( itemBuf );
+		if ( link && link.c === 1 ) {
+			const coveredKeys = new Set( link.pairs.map( ( pair ) => pair.key ) );
+			for ( const bodyPair of baseBsr.partLink?.pairs ?? [] ) {
+				if ( coveredKeys.has( bodyPair.key ) ) {
+					coveredPrimIndices.add( bodyPair.value );
+				}
+			}
+		}
+		let itemSkelInfo = null;
+		let attachBone = "";
+		try {
+			const itemChar = parseCharacterBsr( itemBuf, itemBsrPath );
+			attachBone = itemChar.skeletonAttachBone ?? "";
+			if ( itemChar.skeletonPath ) {
+				const itemSkel = parseBsk( await loadDataAsset( itemChar.skeletonPath ), itemChar.skeletonPath );
+				itemSkelInfo = {
+					parents: new Map( itemSkel.bones.map( ( b ) => [ b.name, b.parent ] ) ),
+					byName: new Map( itemSkel.bones.map( ( b ) => [ b.name, b ] ) )
+				};
+			}
+		} catch {
+			itemSkelInfo = null;
+		}
+		for ( const [meshIndex, meshPath] of itemBsr.meshPaths.entries() ) {
+			itemMeshes.push( meshPath );
+			slotByMesh.set( meshPath, `cpd:${branchIndex}:${meshIndex}` );
+			environmentByMesh.set( meshPath, itemBsr.modifiers?.environmentModifiers ?? [] );
+			if ( itemSkelInfo ) itemSkelByMesh.set( meshPath, itemSkelInfo );
+			if ( attachBone ) attachByMesh.set( meshPath, attachBone );
+		}
+		for ( const mtl of itemBsr.materialPaths ) {
+			if ( !itemMaterials.includes( mtl ) ) itemMaterials.push( mtl );
+		}
+	}
+
+	const meshPaths = [];
+	for ( const [primIndex, meshPath] of baseBsr.meshPaths.entries() ) {
+		if ( coveredPrimIndices.has( primIndex ) ) continue;
+		meshPaths.push( meshPath );
+		slotByMesh.set( meshPath, primSlot( primIndex ) );
+		environmentByMesh.set( meshPath, baseBsr.environmentModifiers ?? [] );
+	}
+	meshPaths.push( ...itemMeshes );
+
+	const baseMaterialSets = characterMaterialVariants( baseBuf, baseBsrPath );
+	const baseMaterials = baseMaterialSets.has( 0 ) ? [ baseMaterialSets.get( 0 ) ] : baseBsr.materialPaths;
+	const materialSetPaths = [ ...baseMaterials ];
+	for ( const mtl of itemMaterials ) {
+		if ( !materialSetPaths.includes( mtl ) ) materialSetPaths.push( mtl );
+	}
+
+	const avatar = await assembleAvatar( baseBsrPath, {
+		name: path.basename( cpdPath, ".cpd" ),
+		meshPaths,
+		materialSetPaths,
+		environmentModifiersForMesh: ( meshPath ) => environmentByMesh.get( meshPath ) ?? [],
+		noClips: true,
+		rigidUnboundMeshes: true,
+		acceptBone: ( bone, meshPath ) => {
+			const info = itemSkelByMesh.get( meshPath );
+			const itemBone = info?.byName.get( bone );
+			if ( !itemBone ) return true;
+			const donorBone = donorSkel.bones[donorSkel.byName.get( bone )];
+			return bindWorldsMatch( itemBone, donorBone );
+		},
+		resolveUnboundBone: ( bone, meshPath ) => {
+			const info = itemSkelByMesh.get( meshPath );
+			let cur = bone;
+			const seen = new Set();
+			while ( info?.parents.has( cur ) && !seen.has( cur ) ) {
+				seen.add( cur );
+				cur = info.parents.get( cur );
+				if ( !cur ) break;
+				const di = donorSkel.byName.get( cur );
+				if ( di !== undefined && bindWorldsMatch( info.byName.get( cur ), donorSkel.bones[di] ) ) return cur;
+			}
+			const attach = attachByMesh.get( meshPath );
+			const ai = attach ? donorSkel.byName.get( attach ) : undefined;
+			if ( ai !== undefined ) {
+				const ab = donorSkel.bones[ai];
+				return { bone: attach, bake: { q: [ 0, 0, 0, 1 ], t: ab.world.t } };
+			}
+			return donorSkel.bones[0].name;
+		},
+		slotForMesh: ( meshPath, index ) => slotByMesh.get( meshPath ) ?? primSlot( index )
+	} );
+	// A compound's item branches carry their own materials; baseBsr's material
+	// variants apply only to the body branch, so compounds publish a single set.
+	return { bsr: baseBsr, materialSets: new Map(), avatar };
 }

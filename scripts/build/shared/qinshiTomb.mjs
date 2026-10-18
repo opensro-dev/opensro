@@ -104,3 +104,20 @@ gate links 125 and 131..134).
 export function loadQinShiTombTeleportLinkRows() {
 	return loadQinShiTombRows( "internal/game/action/data/qinshi_tomb_teleportlink.tsv" );
 }
+
+/*
+================
+isQinShiTombSkillEffectName
+
+Port-only, not native: retail v1.150 skilleffect.txt ships the Qin-Shi
+Emperor Tomb skillaniset2 rows (MSKILL_TQ_*, MSKILL_QT_TQ_*, the Tomb
+thief quest skills MSKILL_QT_MOB_THIEF_ZOHAB_1 / SALSU_1, and the Tomb
+EFFECT_AM_* ambient rows) with Service == 0 while their matching
+#section skilleffectset rows are already present. Match that exact family
+so parseSkillAniSet admits them only when SRO_QINSHI_TOMB is on.
+================
+*/
+export function isQinShiTombSkillEffectName( codename ) {
+	return /^(?:MSKILL_(?:QT_)?TQ_|MSKILL_QT_MOB_THIEF_(?:ZOHAB|SALSU)_|EFFECT_AM_(?:MOB_(?:QT_)?TQ_|NPC_CH_QT_FLAMEMASTER))/i
+		.test( String( codename ?? "" ).trim() );
+}

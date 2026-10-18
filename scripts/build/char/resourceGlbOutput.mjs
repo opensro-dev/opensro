@@ -1,3 +1,15 @@
+/*
+===========================================================================
+
+resourceGlbOutput.mjs - generated GLB path ownership and manifest cleanup
+
+Maps native res/.../*.bsr and res/.../*.cpd character model paths to
+per-namespace generated GLB outputs, rejects output collisions, and retires
+only superseded outputs on manifest publish.
+
+===========================================================================
+*/
+
 import fs from "node:fs";
 import path from "node:path";
 import { normalizeAssetPath } from "../shared/assetPaths.mjs";
@@ -5,11 +17,18 @@ import { readJsonOrNullSync, writeJsonIfChangedSync } from "../shared/jsonOut.mj
 import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
 import { npcManifestModels } from "../shared/npcManifest.mjs";
 
-/** Canonicalize one native BSR resource identity before it reaches an output map. */
+/*
+================
+normalizeBsrResourcePath
+
+Canonicalize one native BSR or CPD resource identity before it reaches an
+output map (0x0088a800 CMap_LoadModelResource dispatches .bsr and .cpd).
+================
+*/
 export function normalizeBsrResourcePath( value ) {
 	const normalized = normalizeAssetPath( value );
-	if ( !normalized.startsWith( "res/" ) || !normalized.endsWith( ".bsr" ) ) {
-		throw new Error( `Expected a res/.../*.bsr resource path, got "${value}"` );
+	if ( !normalized.startsWith( "res/" ) || !/\.(?:bsr|cpd)$/i.test( normalized ) ) {
+		throw new Error( `Expected a res/.../*.bsr or *.cpd resource path, got "${value}"` );
 	}
 	if (
 		normalized !== path.posix.normalize( normalized ) ||
@@ -20,17 +39,21 @@ export function normalizeBsrResourcePath( value ) {
 	return normalized;
 }
 
-/**
- * Preserve the complete native path below res/ inside a caller-owned public
- * namespace. Basenames are not resource identities: res/mob/europe/wolf.bsr
- * and res/mob/asiam/wolf.bsr must never address the same generated file.
- */
+/*
+================
+resourceGlbOutput
+
+Preserve the complete native path below res/ inside a caller-owned public
+namespace. Basenames are not resource identities: res/mob/europe/wolf.bsr
+and res/mob/asiam/wolf.bsr must never address the same generated file.
+================
+*/
 export function resourceGlbOutput( resourcePath, { namespace, publicAssetsRoot } ) {
 	if ( !/^[a-z0-9][a-z0-9_-]*$/i.test( namespace ) ) {
 		throw new Error( `Unsafe generated-asset namespace "${namespace}"` );
 	}
 	const sourcePath = normalizeBsrResourcePath( resourcePath );
-	const relativePath = sourcePath.slice( "res/".length ).replace( /\.bsr$/i, ".glb" );
+	const relativePath = sourcePath.slice( "res/".length ).replace( /\.(?:bsr|cpd)$/i, ".glb" );
 	const namespaceRoot = path.resolve( publicAssetsRoot, namespace );
 	const diskPath = path.resolve( namespaceRoot, ...relativePath.split( "/" ) );
 	if ( !diskPath.startsWith( `${namespaceRoot}${path.sep}` ) ) {
@@ -44,7 +67,13 @@ export function resourceGlbOutput( resourcePath, { namespace, publicAssetsRoot }
 	};
 }
 
-/** Fail before writing when two distinct native resources claim one output. */
+/*
+================
+claimResourceOutput
+
+Fail before writing when two distinct native resources claim one output.
+================
+*/
 export function claimResourceOutput( ownersByOutput, sourcePath, publicPath ) {
 	const owner = normalizeBsrResourcePath( sourcePath );
 	const outputKey = String( publicPath ).replaceAll( "\\", "/" ).toLowerCase();
@@ -57,7 +86,13 @@ export function claimResourceOutput( ownersByOutput, sourcePath, publicPath ) {
 	ownersByOutput.set( outputKey, owner );
 }
 
-/** Read only the generated GLB identities needed for a safe manifest diff. */
+/*
+================
+readPreviousResourceGlbPaths
+
+Read only the generated GLB identities needed for a safe manifest diff.
+================
+*/
 export function readPreviousResourceGlbPaths( manifestPath ) {
 	const previousManifest = readJsonOrNullSync( manifestPath );
 	// A normalized manifest (npc v9) keeps the GLB on its resources; the join
@@ -67,11 +102,15 @@ export function readPreviousResourceGlbPaths( manifestPath ) {
 		.filter( Boolean );
 }
 
-/**
- * Remove only files named by the previous manifest and no longer named by
- * the replacement. The namespace containment check prevents a corrupt old
- * manifest from widening deletion scope.
- */
+/*
+================
+removeSupersededResourceOutputs
+
+Remove only files named by the previous manifest and no longer named by
+the replacement. The namespace containment check prevents a corrupt old
+manifest from widening deletion scope.
+================
+*/
 export function removeSupersededResourceOutputs( {
 	previousPublicPaths,
 	currentPublicPaths,
@@ -106,10 +145,14 @@ export function removeSupersededResourceOutputs( {
 	return removed;
 }
 
-/**
- * Publish one resource-model manifest, refresh its transport sidecars, then
- * remove only outputs explicitly retired by the manifest diff.
- */
+/*
+================
+finalizeResourceGlbManifest
+
+Publish one resource-model manifest, refresh its transport sidecars, then
+remove only outputs explicitly retired by the manifest diff.
+================
+*/
 export async function finalizeResourceGlbManifest( {
 	manifestPath,
 	manifest,

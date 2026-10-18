@@ -52,15 +52,20 @@ import { characterMaterialVariants } from "./materialVariants.mjs";
 import { parseWeatherEvents } from "./weatherEvents.mjs";
 import path from "node:path";
 import {
+	findAnimationSet,
 	findDefaultAnimationSet,
 	findDefaultAnimationState,
+	pickAnimationSetSoundEvents,
+	pickAnimationStateTableMetadata,
 	pickDefaultSetSoundEvents,
 	pickDefaultSetStateTableMetadata
 } from "./animationUtils.mjs";
 import { assembleAvatar, primSlot, NATIVE_IDLE_STATE_CLIPS, NATIVE_EMOTE_STATE_CLIPS } from "./buildAvatar.mjs";
 import { assembleStaticBsrModel } from "./compileBsrVisual.mjs";
 import { avatarToGlb } from "./exportGlb.mjs";
-import { dressedBodyPath, loadCharacterDataRows } from "./resolveCharRoster.mjs";
+import { assembleCompoundCharacter } from "./itemAttachments.mjs";
+import { parseSkillAniSet } from "./parseSkillEffect.mjs";
+import { loadCharacterDataRows } from "./resolveCharRoster.mjs";
 import {
 	enabledCosReferences,
 	loadFortressStructureRoster,
@@ -77,7 +82,7 @@ import { convertTextureTrees } from "../shared/convertImagesRunner.mjs";
 import { sha256Hex } from "../shared/hash.mjs";
 import { readJsonOrNullSync, writeJsonIfChangedSync } from "../shared/jsonOut.mjs";
 import { loadOptionalDataAsset } from "../shared/optionalDataAsset.mjs";
-import { splitTextDataRow } from "../shared/textDataIo.mjs";
+import { qinshiTombEnabled } from "../shared/qinshiTomb.mjs";
 import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
 import {
 	claimResourceOutput,
@@ -227,105 +232,13 @@ export function preserveFreshNpcVatReferences( models, previousManifest, options
 	};
 }
 
-/**
- * Native sub_920020 #section characterInfo. This is one record, not separate
- * sound and mount catalogs: sub_856480 binds it at CICharactor+0x710;
- * ResourceTypeName feeds the sound callbacks, Ride Type lands at +0x18, and
- * the optional second BSR lands at +0x24 for sub_861b00's CICRide branch.
- */
-/*
-================
-expandCharacterInfoCodenames
-
-Mirror SkillEffectCharacterInfo_ParseRow (sub_91b830): a characterInfo key
-whose final seven characters are NNN~NNN denotes an inclusive family.  The
-native loader registers one action-effect context for every expanded RefObj
-name.  Keep this expansion at the data boundary; consumers must never need to
-know whether a record was authored directly or through the compact form.
-================
-*/
-export { expandCharacterInfoCodenames } from "../shared/characterInfo.mjs";
-import { expandCharacterInfoCodenames } from "../shared/characterInfo.mjs";
-
-/*
-================
-characterInfoResolver
-
-CharacterInfo_FindByRefThenOriginalThenDefault (9171B0): a character's own
-characterInfo row, else its original reference's, else the default, which is
-the first row whose codename names a known reference
-(CharacterInfo_RegisterExistingRefAndSeedDefault, 91B7E0). Every character
-resolves, so none is left without a sound and effect profile. Native reads the
-original reference from the character data (+0x5C); the clone base link in
-characterdata column 4, the chain resolveNpcModel follows for the model, is
-taken to be that reference. `records` keeps file order (a Map).
-================
-*/
-function characterInfoResolver( records, rows ) {
-	const BASE_COLUMN = 4;
-	const defaultCodename = [ ...records.keys() ].find( codename => rows.has( codename ) );
-	const fallback = defaultCodename === undefined ? undefined : records.get( defaultCodename );
-	return codename => records.get( codename ) ?? records.get( rows.get( codename )?.[BASE_COLUMN] ?? "" ) ?? fallback;
-}
-
-/*
-================
-loadCharacterInfo
-================
-*/
-function loadCharacterInfo() {
-	const records = new Map();
-	const sourceLines = new Map();
-	const text = fs
-		.readFileSync( path.join( textdataDir, "skilleffect.txt" ), "utf16le" )
-		.replace( /^\uFEFF/, "" );
-	let inCharacterInfo = false;
-	for ( const [lineIndex, line] of text.split( /\r?\n/ ).entries() ) {
-		if ( line.startsWith( "#section" ) ) {
-			inCharacterInfo = /^#section\s+characterInfo\b/i.test( line );
-			continue;
-		}
-		if ( !inCharacterInfo || !line || line.startsWith( "//" ) ) continue;
-		const cols = splitTextDataRow( line );
-		const codename = cols[0];
-		const soundProfileName = cols[1];
-		if ( !codename ) continue;
-		const rideTypeName = String( cols[3] ?? "none" ).trim().toUpperCase();
-		const rideModelPath = normalizeBsrPath( cols[4] );
-		// 91B830 stores column 5 at record +0x28: the mesh 8E64F0 loads on death.
-		const deathModelPath = normalizeBsrPath( cols[5] );
-		const riderTransformMode = rideTypeName === "RT_FIXED" ? 1 : rideTypeName === "RT_DUMMY" ? 2 : 0;
-		const record = {
-			soundProfileName: soundProfileName && soundProfileName.toLowerCase() !== "none" ? soundProfileName : null,
-			rideModelPath,
-			deathModelPath,
-			riderTransformMode
-		};
-		for ( const expandedCodename of expandCharacterInfoCodenames( codename ) ) {
-			const priorLine = sourceLines.get( expandedCodename );
-			if ( priorLine !== undefined ) {
-				throw new Error(
-					`Duplicate skilleffect characterInfo codename ${expandedCodename}: ` +
-						`lines ${priorLine + 1} and ${lineIndex + 1}`
-				);
-			}
-			records.set( expandedCodename, record );
-			sourceLines.set( expandedCodename, lineIndex );
-		}
-	}
-	return records;
-}
-
-/*
-================
-normalizeBsrPath
-================
-*/
-function normalizeBsrPath( value ) {
-	const normalized = normalizeAssetPath( value );
-	if ( !normalized || normalized === "none" ) return null;
-	return normalized.startsWith( "res/" ) ? normalized : `res/${normalized}`;
-}
+import {
+	characterInfoResolver,
+	expandCharacterInfoCodenames,
+	loadCharacterInfo,
+	normalizeCharacterInfoBsrPath
+} from "../shared/characterInfo.mjs";
+export { expandCharacterInfoCodenames };
 
 /*
 ================
@@ -340,16 +253,20 @@ unique exported GLB clip instead of becoming duplicate AnimationGroups.
 export function buildRetailAnimationCatalog( bsr, clips ) {
 	const defaultSet = bsr.animationSets
 		?.find( ( set ) => set.name.toLowerCase() === "default" );
-	const states = defaultSet?.states ?? [];
+	const defaultStates = defaultSet?.states ?? [];
 	const normalizePath = normalizeAssetPath;
 
 	return clips.map( ( { role, path: clipPath, clip } ) => {
 		const normalizedClipPath = normalizePath( clipPath );
+		const setMatch = /^native:([^:]+):\d+$/.exec( role );
+		const setStates = setMatch ?
+			(findAnimationSet( bsr, setMatch[1] )?.states ?? defaultStates) :
+			defaultStates;
 		return {
 			role,
 			durationMs: clip.durationMs,
 			looping: clip.field2 === 1,
-			stateIds: states
+			stateIds: setStates
 				.filter( ( state ) => normalizePath( state.animationPath ) === normalizedClipPath )
 				.map( ( state ) => state.stateId )
 		};
@@ -367,7 +284,7 @@ function resolveNpcModel( codename, rows ) {
 	let bsrCols = cols;
 	let baseCodename = null;
 	const visited = new Set( [ codename ] );
-	while ( bsrCols.findIndex( ( value ) => /\.bsr$/i.test( value ) ) < 0 ) {
+	while ( bsrCols.findIndex( ( value ) => /\.(?:bsr|cpd)$/i.test( value ) ) < 0 ) {
 		// _CLON rows carry a base codename at col[4]. Follow the identity chain
 		// defensively: current retail data is one hop, but cycles and missing
 		// links must fail rather than turn into order-dependent unresolved pegs.
@@ -385,7 +302,7 @@ function resolveNpcModel( codename, rows ) {
 		bsrCols = baseRow;
 		baseCodename = link;
 	}
-	const bsrIndex = bsrCols.findIndex( ( v ) => /\.bsr$/i.test( v ) );
+	const bsrIndex = bsrCols.findIndex( ( v ) => /\.(?:bsr|cpd)$/i.test( v ) );
 	if ( bsrIndex < 0 ) return null;
 	const scalePercent = Number( cols[48] );
 	return {
@@ -401,6 +318,45 @@ function resolveNpcModel( codename, rows ) {
 // The default-set motions bakeCharacterResource requires of a monster resource.
 const BODY_REQUIRED_STATES = [ 0 ];
 const DEATH_REQUIRED_STATES = [ 4, 36 ];
+const nonDefaultSkillStatesByTomb = new Map();
+
+/*
+================
+nonDefaultMonsterSkillStates
+
+0x008e83f0 (CCObjCharacter_ResolveWeaponAnimationPrefix) keeps a monster or
+COS compound's active weapon prefix at "default" (equipped item count +0x74 is
+0), while CSkillEffectMgr / 8E7150 (skill-motion-resolve.ts) dispatches
+skillaniset2's AniGroup (SWORD or SPEAR on Tomb .cpd skills) by (set, stateId).
+Collect the exact (set -> Set<stateId>) pairs referenced by MSKILL_* rows so a
+.cpd compound bakes only its reachable weapon-skill states rather than all 12
+player weapon sets (~580 clips).
+================
+*/
+function nonDefaultMonsterSkillStates() {
+	const tombKey = qinshiTombEnabled();
+	let cached = nonDefaultSkillStatesByTomb.get( tombKey );
+	if ( cached ) return cached;
+	cached = new Map();
+	const aniMap = parseSkillAniSet( path.join( textdataDir, "skilleffect.txt" ) );
+	for ( const [name, row] of aniMap ) {
+		if ( !/^MSKILL_/i.test( name ) ) continue;
+		const set = String( row.aniGroup ?? "default" ).toLowerCase();
+		if ( set === "default" ) continue;
+		for ( const animName of [ ...row.readyAnims, ...row.waitAnims, ...row.shotAnims, ...row.actionWaitAnims ] ) {
+			const id = SKILL_EFFECT_ANIMATION_ID_BY_NAME.get( animName );
+			if ( id === undefined ) continue;
+			let ids = cached.get( set );
+			if ( !ids ) {
+				ids = new Set();
+				cached.set( set, ids );
+			}
+			ids.add( id );
+		}
+	}
+	nonDefaultSkillStatesByTomb.set( tombKey, cached );
+	return cached;
+}
 
 /*
 ================
@@ -416,17 +372,43 @@ body, death and deathLoop (4, 36) for a characterInfo death model, which
 */
 export async function bakeCharacterResource( bsrPath, output, isMob, requiredStates = BODY_REQUIRED_STATES ) {
 	const { publicPath, diskPath } = output;
+	const isCpd = /\.cpd$/i.test( bsrPath );
 	const source = await loadDataAsset( bsrPath );
-	const bsr = parseCharacterBsr( source, bsrPath );
-	const materialSets = characterMaterialVariants( source, bsrPath );
-	const avatar = bsr.skeletonPath ?
-		await assembleAvatar( bsrPath, {
-			noClips: true,
-			materialSetPaths: materialSets.has( 0 ) ? [ materialSets.get( 0 ) ] : [],
-			rigidUnboundMeshes: true,
-			slotForMesh: ( _mp, i ) => primSlot( i )
-		} ) :
-		await assembleStaticBsrModel( bsrPath );
+	let bsr;
+	let materialSets;
+	let avatar;
+	if ( isCpd ) {
+		const assembled = await assembleCompoundCharacter( bsrPath, source );
+		const skillStatesBySet = nonDefaultMonsterSkillStates();
+		const scopedSets = [];
+		for ( const set of assembled.bsr.animationSets ?? [] ) {
+			const setKey = set.name.toLowerCase();
+			if ( setKey === "default" ) {
+				scopedSets.push( set );
+				continue;
+			}
+			const wantedIds = skillStatesBySet.get( setKey );
+			if ( !wantedIds ) continue;
+			const states = set.states.filter( ( state ) => wantedIds.has( state.stateId ) );
+			if ( states.length > 0 ) {
+				scopedSets.push( { ...set, states } );
+			}
+		}
+		bsr = { ...assembled.bsr, animationSets: scopedSets };
+		materialSets = assembled.materialSets;
+		avatar = assembled.avatar;
+	} else {
+		bsr = parseCharacterBsr( source, bsrPath );
+		materialSets = characterMaterialVariants( source, bsrPath );
+		avatar = bsr.skeletonPath ?
+			await assembleAvatar( bsrPath, {
+				noClips: true,
+				materialSetPaths: materialSets.has( 0 ) ? [ materialSets.get( 0 ) ] : [],
+				rigidUnboundMeshes: true,
+				slotForMesh: ( _mp, i ) => primSlot( i )
+			} ) :
+			await assembleStaticBsrModel( bsrPath );
+	}
 	const clips = [];
 	const movementRules = isMob ?
 		[
@@ -535,10 +517,31 @@ export async function bakeCharacterResource( bsrPath, output, isMob, requiredSta
 				...pickDefaultSetStateTableMetadata( bsr, state.stateId )
 			};
 		}
+		for ( const set of bsr.animationSets ?? [] ) {
+			const setKey = set.name.toLowerCase();
+			if ( setKey === "default" ) continue;
+			const wantedIds = nonDefaultMonsterSkillStates().get( setKey );
+			if ( !wantedIds ) continue;
+			for ( const state of set.states ) {
+				if ( !state.animationPath || !wantedIds.has( state.stateId ) ) continue;
+				const role = `native:${setKey}:${state.stateId}`;
+				if ( animationStates[role] ) continue;
+				const shared = clips.find( ( clip ) => clip.path === state.animationPath );
+				const clip = shared?.clip ??
+					parseBan( await loadDataAsset( state.animationPath ), state.animationPath );
+				clips.push( { role, path: state.animationPath, clip } );
+				animationStates[role] = {
+					stateId: state.stateId,
+					durationMs: clip.durationMs,
+					soundEvents: pickAnimationSetSoundEvents( bsr, setKey, state.stateId ),
+					...pickAnimationStateTableMetadata( state )
+				};
+			}
+		}
 	}
 	const allowedClips = Object.keys( animationStates );
 
-	if ( isMob ) {
+	if ( isMob && !isCpd ) {
 		// Ship the authored family once. Runtime selection remains constrained to
 		// the state-id-derived allowedClips above; filenames never confer behavior.
 		const usedPaths = new Set( clips.map( ( clip ) => clip.path ) );
@@ -654,7 +657,7 @@ export async function buildNpcModelAssets( options = {} ) {
 	// complete RefObjChar identity table so native NPC-band structure rows and
 	// clone base links remain resolvable without a second classifier.
 	const rows = loadCharacterDataRows( textdataDir, { codenamePattern: /./, qinshiTombOverlay: true } );
-	const characterInfo = loadCharacterInfo();
+	const characterInfo = loadCharacterInfo( textdataDir );
 	const resolveCharacterInfo = characterInfoResolver( characterInfo, rows );
 	const npcRoster = loadSpawnableNpcRoster();
 	const mobRoster = loadModelledMobRoster();
@@ -701,14 +704,6 @@ export async function buildNpcModelAssets( options = {} ) {
 	const deathResources = new Map();
 	for ( const rosterRef of roster ) {
 		const { codename } = rosterRef;
-		// A dressed-body reference (Qin-Shi overlay) has no BSR to bake: it
-		// draws through the spawn dress path, so it stays out of the manifest
-		// like a structure whose BSR the data does not hold.
-		const dressedBody = dressedBodyPath( codename, rows );
-		if ( dressedBody ) {
-			console.log( `[npc] SKIP ${codename}: dressed-body model ${dressedBody}` );
-			continue;
-		}
 		const model = resolveNpcModel( codename, rows );
 		if ( !model ) {
 			console.warn( `[npc] ${codename}: no characterdata row / bsr path` );
@@ -742,7 +737,7 @@ export async function buildNpcModelAssets( options = {} ) {
 			);
 		}
 		const mediaRideModelPath = info?.rideModelPath ?? null;
-		const serverRideModelPath = normalizeBsrPath( rosterRef?.rideModelPath ) ?? null;
+		const serverRideModelPath = normalizeCharacterInfoBsrPath( rosterRef?.rideModelPath ) ?? null;
 		const mediaTransformMode = Number( info?.riderTransformMode ?? 0 );
 		const serverTransformMode = Number( rosterRef?.riderTransformMode ?? 0 );
 		if (
