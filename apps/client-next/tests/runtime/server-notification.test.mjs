@@ -119,15 +119,26 @@ test("a drop or plus notice (port-only channel 0x81) shows like channel 7 unless
 	assert.equal( defined( defined( hidden.take() ).notices ).at( -1 )?.text, "Hello" );
 });
 
-test("a plus-seven notice (port-only channel 0x82) shows like channel 7 unless its own row is off", () => {
+test("a plus notice for a +7 item (channel 0x81, the body's plus byte) answers to its own row only", () => {
+	// The announced item's body as ItemBody.Encode writes it: RefObjID,
+	// the plus byte, then the rest of the fixed 18-byte header.
+	const body = ( plus, bytes = 18 ) => {
+			const b = Buffer.alloc( bytes );
+			b.writeUInt32LE( 1234, 0 );
+			if ( bytes > 4 ) b[4] = plus;
+			return b;
+		},
+		linked = ( text, bodyBytes ) =>
+			Buffer.concat( [
+				Buffer.from( [ 0x81, text.length, 0 ] ),
+				Buffer.from( text, "utf16le" ),
+				Buffer.from( [ 2, 0 ] ),
+				Buffer.from( "Ab", "ascii" ),
+				Buffer.from( [ bodyBytes.length, 0 ] ),
+				bodyBytes
+			] );
 	const text = "Looter advanced Blade to +7",
-		// The drop/plus frame's optional link section rides after the text.
-		links = Buffer.concat( [ Buffer.from( [ 2, 0 ] ), Buffer.from( "Ab", "ascii" ), Buffer.from( [ 0, 0 ] ) ] ),
-		payload = Buffer.concat( [
-			Buffer.from( [ 0x82, text.length, 0 ] ),
-			Buffer.from( text, "utf16le" ),
-			links
-		] );
+		payload = linked( text, body( 7 ) );
 	const notice = defined( serverNotification( 0x3667, payload ) );
 	assert.equal( notice.plusSeven, true );
 	assert.equal( notice.dropPlus, undefined );
@@ -140,8 +151,7 @@ test("a plus-seven notice (port-only channel 0x82) shows like channel 7 unless i
 	assert.equal( defined( defined( state.notices ).at( -1 ) ).text, text );
 	assert.equal( line.channel, 7 );
 	assert.equal( chatLineText( line, () => "Notify" ), "(Notify):" + text );
-	// Its own row off: neither the banner nor the chat log sees it; the
-	// drop/plus row's state never widens or narrows this one.
+	// Its own row off: neither the banner nor the chat log sees it.
 	const hidden = createGameplay( () => {} );
 	hidden.experimental( {
 		predictedRunUp: false,
@@ -153,6 +163,7 @@ test("a plus-seven notice (port-only channel 0x82) shows like channel 7 unless i
 	const quiet = hidden.take();
 	assert.equal( quiet?.notices?.some( n => n.text === text ) ?? false, false );
 	assert.equal( quiet?.chat?.lines.some( l => l.text === text ) ?? false, false );
+	// The drop/plus row off never widens or narrows this one.
 	const stillShown = createGameplay( () => {} );
 	stillShown.experimental( {
 		predictedRunUp: false,
@@ -162,6 +173,22 @@ test("a plus-seven notice (port-only channel 0x82) shows like channel 7 unless i
 	} );
 	stillShown.receive( { opcode: 0x3667, payload }, 100 );
 	assert.equal( defined( defined( stillShown.take() ).notices ).at( -1 )?.text, text );
+	// +8 and above stay with drop/plus, and a body too short to name a
+	// plus does too.
+	const nine = defined( serverNotification( 0x3667, linked( "Looter advanced Blade to +9", body( 9 ) ) ) );
+	assert.equal( nine.dropPlus, true );
+	assert.equal( nine.plusSeven, undefined );
+	const short = defined( serverNotification( 0x3667, linked( text, body( 7, 10 ) ) ) );
+	assert.equal( short.dropPlus, true );
+	assert.equal( short.plusSeven, undefined );
+	// No new channel was introduced: an 0x82 frame is not a notice.
+	assert.equal(
+		serverNotification(
+			0x3667,
+			Buffer.concat( [ Buffer.from( [ 0x82, 5, 0 ] ), Buffer.from( "Hello", "utf16le" ) ] )
+		),
+		null
+	);
 });
 
 test("a plus notice above +11 (channel 0x81) renders its text verbatim; the client caps no plus", () => {
