@@ -222,7 +222,10 @@ BootstrapResult is the /mission/bootstrap response.
 type BootstrapResult struct {
 	// inventoryOwner stays private to entry preparation: its live capacity
 	// adopts Character's presented size only after browser encoding succeeds.
+	// liveOwner holds the live character record so HandleEnterWorld stamps
+	// LastLoginAtMs on every login.
 	inventoryOwner      *Character
+	liveOwner           *Character
 	DiagnosticSessionID string
 	NativeResult        int
 	NativeErrorCode     int

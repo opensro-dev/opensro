@@ -156,10 +156,13 @@ func Build(deps *Deps, request BootstrapRequest) *BootstrapResult {
 	// an expansion quest paid become usable here (inventory_capacity.go).
 	presented := character.PresentInventoryExpansion()
 	result := buildCharacterProjection(deps, divisionID, character)
-	if presented && result.NativeResult == nativeResultSuccess {
-		// Browser admission still has to encode this projection. Retain the
-		// authority handle so only a successfully encoded entry adopts it.
-		result.inventoryOwner = liveCharacter
+	if result.NativeResult == nativeResultSuccess {
+		result.liveOwner = liveCharacter
+		if presented {
+			// Browser admission still has to encode this projection. Retain the
+			// authority handle so only a successfully encoded entry adopts it.
+			result.inventoryOwner = liveCharacter
+		}
 	}
 	return result
 }

@@ -184,3 +184,42 @@ func TestPrepareReentryPresentsWithoutAdopting(t *testing.T) {
 		t.Fatalf("commit = %d (+%d), want 57 (+0)", character.InventorySize, character.InventoryExpansion)
 	}
 }
+
+/*
+================
+TestHandleEnterWorldStampsLastLoginWithoutInventoryExpansion
+
+Every world entry stamps LastLoginAtMs on the live character even when no
+inventory expansion is pending, while teleport and resurrection re-entry
+packets leave LastLoginAtMs untouched.
+================
+*/
+func TestHandleEnterWorldStampsLastLoginWithoutInventoryExpansion(t *testing.T) {
+	character := chinaSpearman()
+	character.InventoryExpansion = 0
+	character.LastLoginAtMs = 0
+	deps := testDeps(character)
+	payload := transport.EncodeEnterWorld(entryauth.NewAuthenticatedEntryFixture(t, DefaultDivisionID, character.Name))
+
+	outcome := HandleEnterWorld(deps, payload)
+	if !outcome.OK {
+		t.Fatalf("entry refused: %+v", outcome.Result)
+	}
+	if character.LastLoginAtMs <= 0 {
+		t.Fatalf("LastLoginAtMs = %d after login without inventory expansion, want > 0", character.LastLoginAtMs)
+	}
+	if character.InventoryCapacity() != 45 {
+		t.Fatalf("InventoryCapacity = %d, want unchanged 45", character.InventoryCapacity())
+	}
+
+	character.LastLoginAtMs = 12345
+	if _, ok := deps.ReentryPackets(DefaultDivisionID, character.Name); !ok {
+		t.Fatal("ReentryPackets failed")
+	}
+	if _, ok := deps.PrepareReentry(DefaultDivisionID, character); !ok {
+		t.Fatal("PrepareReentry failed")
+	}
+	if character.LastLoginAtMs != 12345 {
+		t.Fatalf("LastLoginAtMs = %d after re-entry, want unchanged 12345", character.LastLoginAtMs)
+	}
+}
