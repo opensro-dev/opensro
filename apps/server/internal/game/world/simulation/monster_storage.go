@@ -61,6 +61,7 @@ type monsterStorage struct {
 	abnormal      map[uint32]*abnormal.Block // immutable non-nil blocks
 	cold          map[uint32]archivedMonster
 	archive       *monsterArchive
+	maxBodyRadius float64
 }
 
 /*
@@ -130,10 +131,37 @@ func (s *monsterStorage) set(gid uint32, row monster.Instance) {
 	if !exists || nest.Value() != row.Nest {
 		nest = unique.Make(row.Nest)
 	}
+	if radius := float64(row.Ref.BodyRadius); radius > s.maxBodyRadius {
+		s.maxBodyRadius = radius
+	}
 	s.hot[gid] = residentMonster{row.ConditionalUsed, ref, nest, row.Help, row.Motion, row.Spawn,
 		row.NestDetached, row.SpawnHeading, row.TradeVariant, row.StructureState, row.CurrentHP, row.DamageSinceSummon, row.LastSummonCommandMs,
 		row.Opponents, row.SummonActionUntilMs, row.SummonerGID,
 		row.SummonSightRange, row.SummonerFollowRange}
+}
+
+/*
+================
+maxRadiusBound
+================
+*/
+func (s *monsterStorage) maxRadiusBound() float64 {
+	if s == nil {
+		return 0
+	}
+	if s.maxBodyRadius <= 0 && (len(s.hot) > 0 || len(s.cold) > 0) {
+		for _, r := range s.hot {
+			if radius := float64(r.ref.Value().BodyRadius); radius > s.maxBodyRadius {
+				s.maxBodyRadius = radius
+			}
+		}
+		for _, r := range s.cold {
+			if radius := float64(r.ref.Value().BodyRadius); radius > s.maxBodyRadius {
+				s.maxBodyRadius = radius
+			}
+		}
+	}
+	return s.maxBodyRadius
 }
 
 /*

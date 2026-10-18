@@ -216,3 +216,103 @@ func (s *moverStorage) candidates(viewer worldgeom.RegionXZ) iter.Seq[uint32] {
 		}
 	}
 }
+
+const maxOutdoorReachSectorBuckets = 64
+
+/*
+================
+outdoorReachSectorWindow
+================
+*/
+func outdoorReachSectorWindow(center Spawn, reach float64) (lowX, highX, lowZ, highZ int, ok bool) {
+	if worldgeom.IsDungeonRegion(center.RegionID) || reach < 0 || math.IsNaN(reach) || math.IsInf(reach, 0) {
+		return 0, 0, 0, 0, false
+	}
+	grid := worldgeom.ExpandGrid(worldgeom.RegionXZ{RegionID: center.RegionID, X: center.X, Z: center.Z})
+	if math.IsNaN(grid.X) || math.IsInf(grid.X, 0) || math.IsNaN(grid.Z) || math.IsInf(grid.Z, 0) {
+		return 0, 0, 0, 0, false
+	}
+	pad := reach + 1.0
+	lowX = int(math.Floor((grid.X - pad) / worldgeom.OutdoorRegionSize))
+	highX = int(math.Floor((grid.X + pad) / worldgeom.OutdoorRegionSize))
+	lowZ = int(math.Floor((grid.Z - pad) / worldgeom.OutdoorRegionSize))
+	highZ = int(math.Floor((grid.Z + pad) / worldgeom.OutdoorRegionSize))
+	spanX := highX - lowX + 1
+	spanZ := highZ - lowZ + 1
+	if spanX <= 0 || spanZ <= 0 || spanX > maxOutdoorReachSectorBuckets || spanZ > maxOutdoorReachSectorBuckets || spanX*spanZ > maxOutdoorReachSectorBuckets {
+		return 0, 0, 0, 0, false
+	}
+	return lowX, highX, lowZ, highZ, true
+}
+
+/*
+================
+livePosesWithinOutdoorReach
+
+Visits movers whose live pose at nowMs can lie within reach of an outdoor
+center, falling back to the full table when center is in a dungeon or the
+sector window exceeds maxOutdoorReachSectorBuckets. Only movers flagged as
+spanning multiple regions in a multi-sector window consult deduplication.
+================
+*/
+func (s *moverStorage) livePosesWithinOutdoorReach(center Spawn, reach float64, nowMs int64, ground monster.GroundResolver) iter.Seq2[uint32, monster.Pose] {
+	return func(yield func(uint32, monster.Pose) bool) {
+		if s == nil {
+			return
+		}
+		lowX, highX, lowZ, highZ, ok := outdoorReachSectorWindow(center, reach)
+		if !ok {
+			for gid, record := range s.rows {
+				if !yield(gid, record.livePoseAt(nowMs, ground)) {
+					return
+				}
+			}
+			return
+		}
+		multiSector := lowX != highX || lowZ != highZ
+		var seenStack [16]uint32
+		seenCount := 0
+		var seenMap map[uint32]struct{}
+		for x := lowX; x <= highX; x++ {
+			for z := lowZ; z <= highZ; z++ {
+				bucket := s.spatial[moverInterestRegion{x: x, z: z}]
+				for gid, spans := range bucket {
+					if gid == 0 {
+						continue
+					}
+					if multiSector && spans {
+						duplicate := false
+						for i := 0; i < seenCount; i++ {
+							if seenStack[i] == gid {
+								duplicate = true
+								break
+							}
+						}
+						if !duplicate && seenMap != nil {
+							_, duplicate = seenMap[gid]
+						}
+						if duplicate {
+							continue
+						}
+						if seenCount < len(seenStack) {
+							seenStack[seenCount] = gid
+							seenCount++
+						} else {
+							if seenMap == nil {
+								seenMap = make(map[uint32]struct{})
+							}
+							seenMap[gid] = struct{}{}
+						}
+					}
+					entry, exists := s.rows[gid]
+					if !exists {
+						continue
+					}
+					if !yield(gid, entry.livePoseAt(nowMs, ground)) {
+						return
+					}
+				}
+			}
+		}
+	}
+}

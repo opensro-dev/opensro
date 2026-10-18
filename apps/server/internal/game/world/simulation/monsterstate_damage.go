@@ -82,19 +82,31 @@ func (s *MonsterState) CombatCandidatesInPopulation(divisionID string, lease ins
 	}
 	var out []monster.Instance
 	var distances map[uint32]float64
-	if nearest {
-		distances = make(map[uint32]float64)
+	maxLimit := reach
+	if !nearest {
+		maxLimit += state.instances.maxRadiusBound() * float64(monster.GradeScale(4))
 	}
-	// Only where each mover stands: expanding every row was most of an area
-	// skill's cost (2026-10-13 prod profile, residentPendingMover.value).
-	for gid, pose := range state.movers.livePoses(nowMs, nil) {
+	centerDungeon := IsDungeonRegion(center.RegionID)
+	// Query only the outdoor sector window that can intersect maxLimit;
+	// dungeons and unbounded queries fall back to the full mover table.
+	for gid, pose := range state.movers.livePosesWithinOutdoorReach(center, maxLimit, nowMs, nil) {
 		// Region arithmetic masks the dungeon bit. Do not let matching low
 		// bits alias indoor and outdoor coordinates into a valid area target.
-		if IsDungeonRegion(center.RegionID) != IsDungeonRegion(pose.RegionID) {
+		if centerDungeon != IsDungeonRegion(pose.RegionID) {
+			continue
+		}
+		dy := pose.Y - center.Y
+		if math.Abs(dy) > maxLimit {
 			continue
 		}
 		distance := WorldDistance2D(center, Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z})
-		distance = math.Hypot(distance, pose.Y-center.Y)
+		if distance > maxLimit {
+			continue
+		}
+		distance = math.Hypot(distance, dy)
+		if distance > maxLimit {
+			continue
+		}
 		limit := reach
 		if !nearest {
 			// The reference radius bounds the graded one (at most x3,
@@ -115,16 +127,21 @@ func (s *MonsterState) CombatCandidatesInPopulation(divisionID string, lease ins
 			}
 			out = append(out, instance)
 			if nearest {
+				if distances == nil {
+					distances = make(map[uint32]float64)
+				}
 				distances[gid] = distance
 			}
 		}
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if nearest && distances[out[i].Gid] != distances[out[j].Gid] {
-			return distances[out[i].Gid] < distances[out[j].Gid]
-		}
-		return out[i].Gid < out[j].Gid
-	})
+	if len(out) > 1 {
+		sort.Slice(out, func(i, j int) bool {
+			if nearest && distances[out[i].Gid] != distances[out[j].Gid] {
+				return distances[out[i].Gid] < distances[out[j].Gid]
+			}
+			return out[i].Gid < out[j].Gid
+		})
+	}
 	return out
 }
 

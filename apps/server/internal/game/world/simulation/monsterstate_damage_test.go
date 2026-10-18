@@ -1,14 +1,34 @@
+/*
+===========================================================================
+
+monsterstate_damage_test.go - damage door, area candidate and spatial tests
+
+Verifies HP mutation serialization, structure exclusion, and exact equivalence
+and performance of CombatCandidatesInPopulation against the full-population
+linear scan.
+
+===========================================================================
+*/
+
 package simulation
 
 import (
+	"math/rand"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 )
 
+/*
+================
+damageTestState
+================
+*/
 func damageTestState() *MonsterState {
 	template := monster.TemplateFromParts(
 		map[uint32]monster.MonsterRef{
@@ -21,6 +41,11 @@ func damageTestState() *MonsterState {
 	return NewMonsterState(template)
 }
 
+/*
+================
+firstDamageTestMonster
+================
+*/
 func firstDamageTestMonster(t *testing.T, state *MonsterState, divisionID string) monster.Instance {
 	t.Helper()
 	state.StartDivision(divisionID)
@@ -32,6 +57,11 @@ func firstDamageTestMonster(t *testing.T, state *MonsterState, divisionID string
 	return instances[0]
 }
 
+/*
+================
+TestApplyDamageOwnsCurrentHPAndLeavesRemovalExplicit
+================
+*/
 func TestApplyDamageOwnsCurrentHPAndLeavesRemovalExplicit(t *testing.T) {
 	registry := damageTestState()
 	instance := firstDamageTestMonster(t, registry, "damage")
@@ -82,6 +112,11 @@ func TestApplyDamageOwnsCurrentHPAndLeavesRemovalExplicit(t *testing.T) {
 	}
 }
 
+/*
+================
+TestApplyDamageSerializesConcurrentHits
+================
+*/
 func TestApplyDamageSerializesConcurrentHits(t *testing.T) {
 	registry := damageTestState()
 	instance := firstDamageTestMonster(t, registry, "concurrent-damage")
@@ -121,6 +156,11 @@ func TestApplyDamageSerializesConcurrentHits(t *testing.T) {
 	}
 }
 
+/*
+================
+TestApplyDamageMissingIdentityDoesNotInventState
+================
+*/
 func TestApplyDamageMissingIdentityDoesNotInventState(t *testing.T) {
 	registry := damageTestState()
 	if result, ok := registry.ApplyDamage("missing", monster.GidBase+999, 1); ok {
@@ -131,6 +171,11 @@ func TestApplyDamageMissingIdentityDoesNotInventState(t *testing.T) {
 	}
 }
 
+/*
+================
+TestNativeSignedDamageDoesNotTurnNegativeIntoFatalHit
+================
+*/
 func TestNativeSignedDamageDoesNotTurnNegativeIntoFatalHit(t *testing.T) {
 	for _, damage := range []uint32{0, 0x80000000, 0xffffffff} {
 		s := damageTestState()
@@ -178,5 +223,222 @@ func TestAreaCandidatesSkipStructures(t *testing.T) {
 	got := s.CombatCandidatesInSphere("area", center, 20, s.CurrentTimeMillis())
 	if len(got) != 1 || got[0].Ref.Structure {
 		t.Fatalf("area candidates %+v, want only the monster", got)
+	}
+}
+
+/*
+================
+combatCandidateBenchmarkState
+
+Builds a realistic continent population of count monsters spread across 20x20
+outdoor sectors around 0x62AA plus a dungeon sector, mixing compact pending
+movers and in-flight live movers.
+================
+*/
+func combatCandidateBenchmarkState(seed int64, count int) (*MonsterState, instance.Lease) {
+	r := rand.New(rand.NewSource(seed))
+	s := NewMonsterState(monster.Template{})
+	lease := instance.Lease{ID: instance.Pack(1, 1), Generation: 1}
+	div := &divisionMonsterState{
+		lease:     lease,
+		instances: newMonsterStorage(nil),
+		movers:    newMoverStorage(nil),
+		byRegion:  make(map[uint16][]uint32),
+	}
+	div.instances.archive = s.archive
+	for i := 1; i <= count; i++ {
+		gid := monster.GidBase + uint32(i)
+		var region uint16
+		if i%25 == 0 {
+			region = 0x8001 + uint16(r.Intn(2))
+		} else {
+			sx := 0xA0 + (i % 20)
+			sz := 0x58 + ((i / 20) % 20)
+			region = uint16((sz << 8) | sx)
+		}
+		pose := monster.Pose{
+			RegionID: region,
+			X:        r.Float64() * 1920,
+			Y:        r.Float64() * 40,
+			Z:        r.Float64() * 1920,
+		}
+		radius := float64(2 + (i % 15))
+		hp := uint32(100)
+		if i%31 == 0 {
+			hp = 0
+		}
+		inst := monster.Instance{
+			Gid:       gid,
+			CurrentHP: hp,
+			Ref: monster.MonsterRef{
+				RefObjID:    uint32(1900 + (i % 20)),
+				BodyRadius:  radius,
+				MaxHP:       100,
+				Structure:   i%47 == 0,
+				MonsterType: uint8(i % 5),
+			},
+			Spawn: monster.SpawnPoint{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z},
+		}
+		if i%7 == 0 {
+			div.instances.set(gid, inst)
+			div.instances.freeze(gid)
+		} else {
+			div.instances.set(gid, inst)
+		}
+		row := monster.MoverState{Pose: pose}
+		if i%4 == 0 {
+			to := pose
+			to.X += (r.Float64() - 0.5) * 600
+			to.Z += (r.Float64() - 0.5) * 600
+			row.From, row.To = pose, to
+			row.DepartMs = 1000
+			row.ArriveMs = 1000 + int64(500+r.Intn(4000))
+		}
+		div.movers.set(gid, row)
+	}
+	s.divs["bench"] = div
+	s.worldPopulations = map[populationKey]*divisionMonsterState{
+		{division: "bench", lease: lease}: div,
+	}
+	return s, lease
+}
+
+/*
+================
+referenceCombatCandidatesInPopulation
+
+The full-population linear scan before Slice 2: visits every mover via
+livePoses(nowMs, nil) without spatial sector filtering.
+================
+*/
+func (s *MonsterState) referenceCombatCandidatesInPopulation(divisionID string, lease instance.Lease, center Spawn, reach float64, nowMs int64, nearest bool) []monster.Instance {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state := s.populationForLease(divisionID, lease)
+	if state == nil {
+		return nil
+	}
+	var out []monster.Instance
+	var distances map[uint32]float64
+	if nearest {
+		distances = make(map[uint32]float64)
+	}
+	for gid, pose := range state.movers.livePoses(nowMs, nil) {
+		if IsDungeonRegion(center.RegionID) != IsDungeonRegion(pose.RegionID) {
+			continue
+		}
+		distance := WorldDistance2D(center, Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z})
+		distance = float64(distance)
+		dy := pose.Y - center.Y
+		distance = hypot2(distance, dy)
+		limit := reach
+		if !nearest {
+			_, radius := state.instances.metadata(gid)
+			limit += radius * float64(monster.GradeScale(4))
+		}
+		if distance <= limit {
+			inst, exists := state.instances.lookup(gid)
+			if !exists || inst.CurrentHP == 0 || inst.Ref.Structure {
+				continue
+			}
+			if !nearest && distance > reach+inst.BodyRadius() {
+				continue
+			}
+			out = append(out, inst)
+			if nearest {
+				distances[gid] = distance
+			}
+		}
+	}
+	slices.SortFunc(out, func(a, b monster.Instance) int {
+		if nearest && distances[a.Gid] != distances[b.Gid] {
+			if distances[a.Gid] < distances[b.Gid] {
+				return -1
+			}
+			return 1
+		}
+		if a.Gid < b.Gid {
+			return -1
+		}
+		if a.Gid > b.Gid {
+			return 1
+		}
+		return 0
+	})
+	return out
+}
+
+/*
+================
+hypot2
+================
+*/
+func hypot2(a, b float64) float64 {
+	return WorldDistance2D(Spawn{X: 0, Z: 0}, Spawn{X: a, Z: b})
+}
+
+/*
+================
+TestCombatCandidatesInPopulationMatchesReferenceScan
+================
+*/
+func TestCombatCandidatesInPopulationMatchesReferenceScan(t *testing.T) {
+	r := rand.New(rand.NewSource(99))
+	s, lease := combatCandidateBenchmarkState(77, 1024)
+	for i := 0; i < 400; i++ {
+		var region uint16
+		if i%10 == 0 {
+			region = 0x8001 + uint16(r.Intn(2))
+		} else {
+			sx := 0xA0 + r.Intn(20)
+			sz := 0x58 + r.Intn(20)
+			region = uint16((sz << 8) | sx)
+		}
+		center := Spawn{
+			RegionID: region,
+			X:        r.Float64() * 1920,
+			Y:        r.Float64() * 40,
+			Z:        r.Float64() * 1920,
+		}
+		reach := float64(10 + r.Intn(500))
+		if i%25 == 0 {
+			reach = float64(2000 + r.Intn(6000))
+		}
+		nowMs := int64(500 + r.Intn(5000))
+		for _, nearest := range []bool{false, true} {
+			got := s.CombatCandidatesInPopulation("bench", lease, center, reach, nowMs, nearest)
+			want := s.referenceCombatCandidatesInPopulation("bench", lease, center, reach, nowMs, nearest)
+			if len(got) != len(want) {
+				t.Fatalf("iter %d nearest=%v center=%+v reach=%v: got %d want %d", i, nearest, center, reach, len(got), len(want))
+			}
+			for j := range got {
+				if got[j].Gid != want[j].Gid {
+					t.Fatalf("iter %d nearest=%v idx %d: got gid %d want %d", i, nearest, j, got[j].Gid, want[j].Gid)
+				}
+			}
+		}
+	}
+}
+
+/*
+================
+BenchmarkCombatCandidatesInPopulation
+================
+*/
+func BenchmarkCombatCandidatesInPopulation(b *testing.B) {
+	s, lease := combatCandidateBenchmarkState(42, 4096)
+	centers := [4]Spawn{
+		{RegionID: 0x62AA, X: 960, Y: 20, Z: 960},
+		{RegionID: 0x63AB, X: 100, Y: 20, Z: 1850},
+		{RegionID: 0x61A9, X: 1880, Y: 20, Z: 40},
+		{RegionID: 0x64AC, X: 500, Y: 20, Z: 500},
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		c := centers[i&3]
+		got := s.CombatCandidatesInPopulation("bench", lease, c, 120, 2500, i&1 == 1)
+		if len(got) == 0 {
+			b.Fatal("unreachable")
+		}
 	}
 }
