@@ -198,10 +198,9 @@ func (s *Service) Snapshot() error {
 	}
 	divisions := make([]string, 0, len(blocks))
 	for division, block := range blocks {
-		if division == "" {
-			continue
+		if division != "" {
+			divisions = append(divisions, division)
 		}
-		divisions = append(divisions, division)
 		if _, err := s.history.Exec("INSERT OR REPLACE INTO gold_totals (at_s, division, total, characters) VALUES (?, ?, ?, ?)",
 			at.Unix(), division, block.goldTotal, block.Gold.Characters); err != nil {
 			return fmt.Errorf("economy history: %w", err)

@@ -195,18 +195,12 @@ func (s *Service) serveSeries(w http.ResponseWriter, db *sql.DB, metric string, 
 Service.goldTotals
 
 The gold held at each snapshot, the newest of each bucket; one division,
-or the sum of all.
+or the whole-shard row (division "", which includes account warehouses).
 ================
 */
 func (s *Service) goldTotals(win window) ([]Point, error) {
-	query := `SELECT (at_s / ?) * ? AS t, at_s, SUM(total) FROM gold_totals WHERE at_s >= ? AND at_s <= ?`
-	args := []any{win.size, win.size, win.from, win.to}
-	if win.division != "" {
-		query += " AND division = ?"
-		args = append(args, win.division)
-	}
-	query += " GROUP BY at_s ORDER BY at_s"
-	rows, err := s.history.Query(query, args...)
+	query := `SELECT (at_s / ?) * ? AS t, at_s, total FROM gold_totals WHERE at_s >= ? AND at_s <= ? AND division = ? ORDER BY at_s`
+	rows, err := s.history.Query(query, win.size, win.size, win.from, win.to, win.division)
 	if err != nil {
 		return nil, err
 	}

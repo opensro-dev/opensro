@@ -295,6 +295,14 @@ func TestDistributionCountsGoldGearAndActivity(t *testing.T) {
 	if gold, _ := body["gold"].(map[string]any); status != http.StatusOK || gold["total"] != "100" {
 		t.Fatalf("division block %d %v", status, body)
 	}
+	status, body = get(t, handler, fmt.Sprintf("/economy/v1/series?metric=gold_total&bucket=1h&from=%d&to=%d", dayStart, dayStart), true)
+	if points, _ := body["points"].([]any); status != http.StatusOK || len(points) != 1 || points[0].(map[string]any)["sum"] != "1000" {
+		t.Fatalf("whole-shard gold_total %d %v, want [1000]", status, body)
+	}
+	status, body = get(t, handler, fmt.Sprintf("/economy/v1/series?metric=gold_total&division=d1&bucket=1h&from=%d&to=%d", dayStart, dayStart), true)
+	if points, _ := body["points"].([]any); status != http.StatusOK || len(points) != 1 || points[0].(map[string]any)["sum"] != "100" {
+		t.Fatalf("division gold_total %d %v, want [100]", status, body)
+	}
 }
 
 /*
