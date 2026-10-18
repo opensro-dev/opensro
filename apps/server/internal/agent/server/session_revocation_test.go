@@ -264,6 +264,22 @@ func TestLogoutRevokesSessionTokenAndNotifiesShard(t *testing.T) {
 	if code := performJSON(t, fixture.handler, http.MethodPost, "/character/list", `{}`, newToken).Code; code != http.StatusOK {
 		t.Fatalf("after relogin list = %d, want 200", code)
 	}
+
+	// Re-submitting the already-revoked cookie or bearer token to /title/logout
+	// must not advance session_epoch, push another shard revocation, or revoke newToken.
+	revocationsBefore := len(revocations)
+	if code := performBrowserJSON(t, fixture.handler, "/title/logout", `{}`, cookies).Code; code != http.StatusOK {
+		t.Fatalf("stale cookie logout = %d, want 200", code)
+	}
+	if code := performJSON(t, fixture.handler, http.MethodPost, "/title/logout", `{}`, token).Code; code != http.StatusOK {
+		t.Fatalf("stale bearer logout = %d, want 200", code)
+	}
+	if len(revocations) != revocationsBefore {
+		t.Fatalf("stale logout pushed %d extra shard revocations", len(revocations)-revocationsBefore)
+	}
+	if code := performJSON(t, fixture.handler, http.MethodPost, "/character/list", `{}`, newToken).Code; code != http.StatusOK {
+		t.Fatalf("after stale logout replay list = %d, want 200", code)
+	}
 }
 
 /*
@@ -326,5 +342,18 @@ func TestPasswordChangeRevokesSessionAndNotifiesShard(t *testing.T) {
 	}
 	if code := performJSON(t, fixture.handler, http.MethodPost, "/character/list", `{}`, newToken).Code; code != http.StatusOK {
 		t.Fatalf("/character/list with new password token = %d, want 200", code)
+	}
+
+	// Presenting the pre-SetPassword token to /title/logout after relogin must
+	// not advance session_epoch or revoke newToken.
+	revocationsBefore := len(revocations)
+	if code := performJSON(t, fixture.handler, http.MethodPost, "/title/logout", `{}`, oldToken).Code; code != http.StatusOK {
+		t.Fatalf("pre-SetPassword bearer logout = %d, want 200", code)
+	}
+	if len(revocations) != revocationsBefore {
+		t.Fatalf("pre-SetPassword logout pushed %d extra revocations", len(revocations)-revocationsBefore)
+	}
+	if code := performJSON(t, fixture.handler, http.MethodPost, "/character/list", `{}`, newToken).Code; code != http.StatusOK {
+		t.Fatalf("new password token after stale logout = %d, want 200", code)
 	}
 }

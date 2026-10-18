@@ -83,15 +83,17 @@ to this revocation, and evicts any live transport sessions owned by accountID.
 ================
 */
 func (api *API) RevokeAccount(accountID string, epoch uint64) {
-	if epoch < 1 {
+	if epoch < 2 {
 		epoch = 2
 	}
 	nowUnix := api.now().Unix()
 
 	api.revocations.mu.Lock()
-	if epoch > api.revocations.minEpoch[accountID] {
-		api.revocations.minEpoch[accountID] = epoch
+	if epoch <= api.revocations.minEpoch[accountID] {
+		api.revocations.mu.Unlock()
+		return
 	}
+	api.revocations.minEpoch[accountID] = epoch
 	api.revocations.revokedGen[accountID]++
 	for digest, exp := range api.revocations.revokedTickets {
 		if exp <= nowUnix {
@@ -271,8 +273,17 @@ func (api *API) deliverRevocation(
 		return true
 	}
 	if len(api.revocations.seenNotices) >= revokeReplayLimit {
-		api.revocations.mu.Unlock()
-		return false
+		var oldestKey string
+		var oldestDeadline int64
+		for key, deadline := range api.revocations.seenNotices {
+			if oldestKey == "" || deadline < oldestDeadline {
+				oldestKey = key
+				oldestDeadline = deadline
+			}
+		}
+		if oldestKey != "" {
+			delete(api.revocations.seenNotices, oldestKey)
+		}
 	}
 	api.revocations.seenNotices[noticeKey] = expires
 	api.revocations.mu.Unlock()

@@ -141,10 +141,11 @@ func TestEvictAccountClosesSessionsClearsBindingAndRefusesResume(t *testing.T) {
 	if bob.Evicted() {
 		t.Fatal("bob session was evicted by alice revocation")
 	}
-	if _, bound := hub.BoundSession("global-official:hero"); bound {
-		t.Fatal("evicted account still holds exclusive character binding")
-	}
 	if resumed := hub.lookupByToken(aliceToken); resumed != nil {
 		t.Fatal("evicted session's resume token still resolves")
 	}
+	waitUntil(t, "evicted character binding retired", func() bool {
+		_, bound := hub.BoundSession("global-official:hero")
+		return !bound
+	})
 }

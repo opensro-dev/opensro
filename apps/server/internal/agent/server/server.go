@@ -483,6 +483,9 @@ func (server *Server) sessionActive(claims auth.AgentSessionClaims) bool {
 		if !active {
 			return false
 		}
+		if minEpoch > currentEpoch {
+			currentEpoch = minEpoch
+		}
 		if claims.Epoch == 0 {
 			return currentEpoch == 1
 		}
@@ -520,14 +523,15 @@ pushes a signed revocation notice to each enabled GameWorld shard.
 ================
 */
 func (server *Server) RevokeAccount(accountID string, epoch uint64) {
-	if epoch < 1 {
+	if epoch < 2 {
 		epoch = 2
 	}
 	server.revokedMu.Lock()
-	if epoch <= server.accountMinEpoch[accountID] {
-		epoch = server.accountMinEpoch[accountID] + 1
+	if epoch > server.accountMinEpoch[accountID] {
+		server.accountMinEpoch[accountID] = epoch
+	} else {
+		epoch = server.accountMinEpoch[accountID]
 	}
-	server.accountMinEpoch[accountID] = epoch
 	server.revokedMu.Unlock()
 
 	now := server.now()

@@ -846,8 +846,9 @@ func (h *Hub) admitAccountSession(account string, s *Session) {
 EvictAccount
 
 Marks every live session owned by account as evicted, removes its resume
-token and exclusive character binding immediately so it cannot reattach or
-block a fresh login, and closes it with ByeReasonUnauthorized.
+token immediately so it cannot reattach, and closes it with
+ByeReasonUnauthorized. Exclusive character bindings remain registered until
+BindExclusive replaces them or retireSession finishes teardown.
 ================
 */
 func (h *Hub) EvictAccount(account string) int {
@@ -858,12 +859,6 @@ func (h *Hub) EvictAccount(account string) int {
 	h.mu.Lock()
 	for _, candidate := range h.accountSessions[account] {
 		delete(h.byToken, candidate.resumeToken)
-		if key, ok := h.bindingKeys[candidate.ID]; ok {
-			delete(h.bindingKeys, candidate.ID)
-			if h.bindings[key] == candidate {
-				delete(h.bindings, key)
-			}
-		}
 		if candidate.evicted.Load() {
 			continue
 		}

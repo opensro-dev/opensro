@@ -245,7 +245,7 @@ func (server *Server) revokeRequestSessions(r *http.Request) {
 	now := server.now()
 	for _, token := range tokens {
 		claims, err := server.sessionSigner.Verify(token, now)
-		if err != nil {
+		if err != nil || !server.sessionActive(claims) {
 			continue
 		}
 		server.revokeTokenNonce(claims.Nonce, claims.ExpiresAt)

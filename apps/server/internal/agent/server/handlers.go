@@ -264,13 +264,12 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		if current, active := epochAuth.SessionEpoch(accountID); active {
 			epoch = current
 		}
-	} else {
-		server.revokedMu.Lock()
-		if minEpoch := server.accountMinEpoch[accountID]; minEpoch > epoch {
-			epoch = minEpoch
-		}
-		server.revokedMu.Unlock()
 	}
+	server.revokedMu.Lock()
+	if minEpoch := server.accountMinEpoch[accountID]; minEpoch > epoch {
+		epoch = minEpoch
+	}
+	server.revokedMu.Unlock()
 	token, err := server.sessionSigner.MintWithEpoch(
 		accountID,
 		definition.ID,

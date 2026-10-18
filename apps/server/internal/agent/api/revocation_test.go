@@ -170,12 +170,29 @@ func TestAccountRevocationInvalidatesSessionTicketsAndEvictsAccount(t *testing.T
 	if code != http.StatusOK || newSTA == "" {
 		t.Fatalf("new transport-token = %d, %q", code, newSTA)
 	}
-	if _, err := staVerify(newSTA); err != nil {
-		t.Fatalf("fresh STA1 ticket after relogin rejected: %v", err)
-	}
 	code, newSEA := mintTicket(newSession, "/auth/enterworld-token", `{"characterName":"RevokeHero"}`)
 	if code != http.StatusOK || newSEA == "" {
 		t.Fatalf("new enterworld-token = %d, %q", code, newSEA)
+	}
+
+	// A duplicate or delayed revocation notice at the same epoch (epoch = 2)
+	// must be a no-op and must not revoke the newly minted epoch-2 tickets or
+	// re-evict the relogged session.
+	staleNotice, err := signer.MintAccountRevocation(testDivision, testAccount, 2, api.now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, AccountRevokePath, strings.NewReader(staleNotice))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("duplicate-epoch revoke status = %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(evicted) != 1 {
+		t.Fatalf("duplicate-epoch notice triggered extra eviction: %v", evicted)
+	}
+	if _, err := staVerify(newSTA); err != nil {
+		t.Fatalf("fresh STA1 ticket after relogin rejected: %v", err)
 	}
 	if err := seaVerify(newSEA, testDivision, "RevokeHero"); err != nil {
 		t.Fatalf("fresh SEA3 ticket after relogin rejected: %v", err)
