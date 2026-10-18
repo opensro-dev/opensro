@@ -42,7 +42,8 @@ const EnvShopExtraGoods = "SRO_SHOP_EXTRA_GOODS"
 // shopExtraGoodsDefault is what "on" means (owner, 2026-10-11): elixirs at
 // 1M in the Jangan smith's third tab after its arrows. Owner, 2026-10-13:
 // the smith's Luck, Steady, Astral, Athanasia and Repair stones are degree 9
-// only, at 5M (degrees 1-3 removed, agreed with the reporter); the other
+// only (degrees 1-3 removed, agreed with the reporter); 2026-10-18: Astral is
+// 50M, Athanasia (Immortal) 25M and Luck, Steady and Repair 5M; the other
 // degree 9 stones at Jangan's grocer for 2M; the vigor potions at every
 // herbalist.
 const shopExtraGoodsDefault = "" +
@@ -56,8 +57,8 @@ const shopExtraGoodsDefault = "" +
 	"STORE_CH_SMITH_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_B:1000000," +
 	"STORE_CH_SMITH_TAB3:ITEM_ETC_ARCHEMY_MAGICSTONE_LUCK_09:5000000," +
 	"STORE_CH_SMITH_TAB3:ITEM_ETC_ARCHEMY_MAGICSTONE_SOLID_09:5000000," +
-	"STORE_CH_SMITH_TAB3:ITEM_ETC_ARCHEMY_MAGICSTONE_ASTRAL_09:5000000," +
-	"STORE_CH_SMITH_TAB3:ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_09:5000000," +
+	"STORE_CH_SMITH_TAB3:ITEM_ETC_ARCHEMY_MAGICSTONE_ASTRAL_09:50000000," +
+	"STORE_CH_SMITH_TAB3:ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_09:25000000," +
 	"STORE_CH_SMITH_TAB3:ITEM_ETC_ARCHEMY_MAGICSTONE_REPAIR_09:5000000," +
 	// Beta balance (owner, 2026-10-13): the degree 9 stat magic stones and
 	// every degree 9 attribute stone at Jangan's grocer (ZhenZhen,

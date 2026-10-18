@@ -361,8 +361,9 @@ variable "mall_ride_speed" {
 }
 
 # announce_sox_drop, announce_plus and announce_job_kill send shard notices
-# for a seal drop, an item advanced to +8..+11 and a job kill (port-only,
-# not native; owner decision 2026-10-14). "off" is native: no notice.
+# for a seal drop, an item advanced to +7 or above and a job kill (port-only,
+# not native; owner decision 2026-10-14, lowered to +7 and uncapped
+# 2026-10-18). "off" is native: no notice.
 variable "announce_sox_drop" {
   type    = string
   default = "on"
@@ -659,10 +660,19 @@ variable "beta_seal_rates" {
   default = "on"
 }
 
-# sun_event_only keeps degree-9 Seal of Sun gear out of every monster drop
-# and NPC shop; it returns only as an event reward, and gear players own
-# is kept (port-only, not native; owner decision 2026-10-14). "off" is native.
+# sun_event_only keeps degree-9 Seal of Sun gear out of non-unique monster
+# drops and NPC shops; unique monsters may still drop it, and gear players own
+# is kept (port-only, not native; owner decision 2026-10-14, narrowed to
+# non-unique kills 2026-10-18). "off" is native.
 variable "sun_event_only" {
+  type    = string
+  default = "on"
+}
+
+# beta_unique_respawn draws respawning unique monster nests over 45-90 minutes
+# instead of the operator backup's 20-36 minute rows (port-only, not native;
+# owner decision 2026-10-18). "off" keeps the authored row.
+variable "beta_unique_respawn" {
   type    = string
   default = "on"
 }
@@ -889,6 +899,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_RARE_RATE                      = var.beta_rare_rate
         SRO_BETA_SEAL_RATES                     = var.beta_seal_rates
         SRO_SUN_EVENT_ONLY                      = var.sun_event_only
+        SRO_BETA_UNIQUE_RESPAWN                 = var.beta_unique_respawn
         SRO_BETA_DROP_CAP                       = var.beta_drop_cap
         SRO_BETA_DROP_MIX                       = var.beta_drop_mix
         SRO_SHOP_EXTRA_GOODS                    = var.shop_extra_goods

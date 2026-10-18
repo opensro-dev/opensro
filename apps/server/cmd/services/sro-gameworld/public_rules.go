@@ -36,7 +36,8 @@ import (
 // unlistedSettings are the shard settings the rules page leaves out, each
 // with the reason; every other setting is a rule (public_rules_test.go).
 var unlistedSettings = map[string]string{
-	action.EnvGMSetSpeed: "a GM command, not a rule players meet",
+	action.EnvGMSetSpeed:            "a GM command, not a rule players meet",
+	simulation.EnvBetaUniqueRespawn: "unique monster spawn timing is not published",
 	// The tunables a rule's own text shows (game/tunables).
 	"SRO_MOST_WANTED_TEST_KILLS":      "shown in the Most Wanted test pacing rule",
 	"SRO_MOST_WANTED_TEST_BOUNTY":     "shown in the Most Wanted test pacing rule",
@@ -126,7 +127,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Beta balance, so testers can try seal gear."},
 			{Flag: progression.EnvSunEventOnly, On: progression.SunEventOnlyFromEnv().Enabled(),
 				Native: "Degree-9 Seal of Sun gear drops from monsters, and the honor shop lists it.",
-				Now:    "Degree-9 Seal of Sun gear neither drops nor is sold; it comes back only as an event reward. Sun gear you already own is kept, and every other drop keeps its chance.",
+				Now:    "Degree-9 Seal of Sun gear drops only from unique monsters and is not sold; Sun gear you already own is kept, and every other drop keeps its chance.",
 				Why:    "Requested for the beta, to keep the top seal rare; the original returns with one setting."},
 			{Flag: progression.EnvBetaShopOnlyDegree9, On: progression.BetaShopOnlyDegree9FromEnv().Enabled(),
 				Native: "Monsters drop magic stones and attribute stones of every degree; Lucky Powder never drops.",
@@ -279,7 +280,7 @@ func publicRules() publicstats.RulesResponse {
 				Why: "Requested for the beta; the original quiet drop returns with one setting."},
 			{Flag: action.EnvAnnouncePlus, On: action.AnnouncementsFromEnv().Plus,
 				Native: "Reinforcement results are private.",
-				Now:    "Everyone sees \"<player> advanced <item> (<seal>) to +N\" for +8 to +11.",
+				Now:    "Everyone sees \"<player> advanced <item> (<seal>) to +N\" for +7 and above.",
 				Why:    "Requested for the beta; the original returns with one setting."},
 			{Flag: action.EnvAnnounceJobKill, On: action.AnnouncementsFromEnv().JobKill,
 				Native: "Job kills are not announced.",

@@ -25,12 +25,13 @@ DropItem
 ================
 */
 type DropItem struct {
-	Codename  string
-	Count     uint16
-	Plus      uint8
-	Special   bool
-	NonRepair bool
-	Assigned  bool
+	Codename   string
+	Count      uint16
+	Plus       uint8
+	Special    bool
+	NonRepair  bool
+	Assigned   bool
+	FromUnique bool
 }
 
 /*

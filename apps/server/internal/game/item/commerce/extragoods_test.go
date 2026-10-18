@@ -154,12 +154,20 @@ func TestDefaultExtraGoodsBetaBalance(t *testing.T) {
 	if authored != 7 || len(stones) != 28 {
 		t.Fatalf("grocer tab: %d authored, %d stones; want 7 and 28", authored, len(stones))
 	}
+	smithPrices := map[string]uint64{
+		"ITEM_ETC_ARCHEMY_MAGICSTONE_LUCK_09":      5000000,
+		"ITEM_ETC_ARCHEMY_MAGICSTONE_SOLID_09":     5000000,
+		"ITEM_ETC_ARCHEMY_MAGICSTONE_ASTRAL_09":    50000000,
+		"ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_09": 25000000,
+		"ITEM_ETC_ARCHEMY_MAGICSTONE_REPAIR_09":    5000000,
+	}
 	smith := map[string]bool{}
 	for _, offer := range c.Tabs[c.tabIDs["STORE_CH_SMITH_TAB3"]] {
 		code := offer.Ref.Codename
 		if strings.Contains(code, "_MAGICSTONE_") {
-			if !strings.HasSuffix(code, "_09") || offer.Price != 5000000 {
-				t.Fatalf("smith sells %s at %d; want degree 9 at 5,000,000", code, offer.Price)
+			want, ok := smithPrices[code]
+			if !ok || offer.Price != want {
+				t.Fatalf("smith sells %s at %d; want %d", code, offer.Price, want)
 			}
 			smith[code] = true
 		}

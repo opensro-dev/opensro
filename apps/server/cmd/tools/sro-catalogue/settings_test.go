@@ -72,16 +72,27 @@ func TestUnsetShopSettingPublishesTheShardsGoods(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	elixir, ok := items.ItemRefByCodename("ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A")
-	if !ok {
-		t.Fatal("no elixir reference")
+	wantPrices := map[uint32]uint64{}
+	for codename, price := range map[string]uint64{
+		"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A": 1000000,
+		"ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_09":   25000000,
+		"ITEM_ETC_ARCHEMY_MAGICSTONE_ASTRAL_09":      50000000,
+	} {
+		ref, ok := items.ItemRefByCodename(codename)
+		if !ok {
+			t.Fatalf("no %s reference", codename)
+		}
+		wantPrices[ref.RefObjID] = price
 	}
+	found := map[uint32]bool{}
 	for _, offers := range shops.Tabs {
 		for _, offer := range offers {
-			if offer.Ref != nil && offer.Ref.RefObjID == elixir.RefObjID && offer.Price == 1000000 {
-				return
+			if offer.Ref != nil && wantPrices[offer.Ref.RefObjID] == offer.Price {
+				found[offer.Ref.RefObjID] = true
 			}
 		}
 	}
-	t.Fatal("an unset SRO_SHOP_EXTRA_GOODS published the v1.150 stock only")
+	if len(found) != len(wantPrices) {
+		t.Fatalf("an unset SRO_SHOP_EXTRA_GOODS matched %d/%d default extra shop prices", len(found), len(wantPrices))
+	}
 }

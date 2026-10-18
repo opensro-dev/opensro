@@ -88,7 +88,7 @@ func (rt *Runtime) prepareUniqueEquipment(ctx uniqueDropContext, nonRepair bool)
 		plus = min(plus, uint8(value))
 	}
 	item, ok := rt.prepareSelectedDrop(loot.DropItem{
-		Codename: chosen.Codename, Count: 1, Plus: plus, Special: true, NonRepair: nonRepair,
+		Codename: chosen.Codename, Count: 1, Plus: plus, Special: true, NonRepair: nonRepair, FromUnique: true,
 	}, ctx.at, ctx.owner, ctx.now)
 	return item, ok, false
 }

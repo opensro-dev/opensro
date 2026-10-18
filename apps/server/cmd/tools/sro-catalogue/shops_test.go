@@ -58,6 +58,8 @@ func TestPublishedShopsAreTheShardsShops(t *testing.T) {
 	priced := map[string]uint64{
 		"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A": 1000000,
 		"ITEM_ETC_ARCHEMY_MAGICSTONE_STR_09":         2000000,
+		"ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_09":   25000000,
+		"ITEM_ETC_ARCHEMY_MAGICSTONE_ASTRAL_09":      50000000,
 	}
 	for _, setting := range []string{"off", "on"} {
 		t.Setenv(commerce.EnvShopExtraGoods, setting)

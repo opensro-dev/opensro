@@ -507,7 +507,12 @@ func (rt *Runtime) prepareEquipmentDropKind(monster monster.Instance, at simulat
 	if !ok {
 		return grounditem.Item{}, false
 	}
-	return rt.prepareSelectedDrop(loot.DropItem{Codename: chosen.Codename, Count: 1, Plus: plus}, at, droppedBy, now)
+	return rt.prepareSelectedDrop(loot.DropItem{
+		Codename:   chosen.Codename,
+		Count:      1,
+		Plus:       plus,
+		FromUnique: RollsUniqueDrops(monster.Rarity()),
+	}, at, droppedBy, now)
 }
 
 // consumableMixNames are the drop mix's names for the planner's seven
@@ -565,6 +570,7 @@ func (rt *Runtime) planMonsterKillLoot(
 	uniqueRound := len(prepared)
 	for round := 0; round < familyRate("assigned") && len(prepared) < capacity; round++ {
 		for _, chosen := range loot.AssignedDrops(monster.Ref.Codename, capacity-len(prepared), rt.DropRoll) {
+			chosen.FromUnique = RollsUniqueDrops(monster.Rarity())
 			if item, ok := rt.prepareSelectedDrop(chosen, at, snapshot.Name, now); ok {
 				prepared = append(prepared, item)
 			}

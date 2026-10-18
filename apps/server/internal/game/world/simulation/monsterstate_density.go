@@ -1,31 +1,57 @@
+/*
+===========================================================================
+
+monsterstate_density.go - hive player-density sampling and spawn-speed scaling
+
+===========================================================================
+*/
 package simulation
 
 import (
 	"math"
 	"sort"
-
-	"opensro.online/server/internal/game/world/monster"
 )
 
-// PopulationPlayer is a present PC in one native world instance. Dead PCs
-// remain message-cell members; reward eligibility's alive test is separate.
+/*
+================
+PopulationPlayer
+
+A present PC in one native world instance. Dead PCs remain message-cell
+members; reward eligibility's alive test is separate.
+================
+*/
 type PopulationPlayer struct {
 	GID   uint32
 	World uint32
 	Spawn Spawn
 }
 
+/*
+================
+MonsterState.SetPopulationPlayers
+================
+*/
 func (s *MonsterState) SetPopulationPlayers(source func(string, int64) []PopulationPlayer) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.players = source
 }
 
+/*
+================
+densityCell
+================
+*/
 type densityCell struct {
 	region uint16
 	x, z   int
 }
 
+/*
+================
+populationCell
+================
+*/
 func populationCell(p Spawn) (densityCell, bool) {
 	// 53AD30: six 320-unit message cells per outdoor region axis.
 	// A dungeon's region lookup uses a different owner, never this grid.
@@ -39,6 +65,11 @@ func populationCell(p Spawn) (densityCell, bool) {
 	return densityCell{p.RegionID, x, z}, true
 }
 
+/*
+================
+MonsterState.sampleHiveDensity
+================
+*/
 func (s *MonsterState) sampleHiveDensity(state *divisionMonsterState, players []PopulationPlayer, now int64) {
 	state.lastDensityMs = now
 	cells := make(map[densityCell]uint16)
@@ -82,7 +113,7 @@ func (s *MonsterState) sampleHiveDensity(state *divisionMonsterState, players []
 		for _, index := range members {
 			n, nest := state.nests[index], s.template.Nests[index]
 			n.ratePct = rate
-			n.intervalMs, n.reduceMs = monster.NestDelay(nest.RespawnDelayMinSec, nest.RespawnDelayMaxSec, rate, s.randomWord)
+			n.intervalMs, n.reduceMs = s.nestDelay(nest, rate)
 		}
 		s.scheduleHive(state, key)
 	}

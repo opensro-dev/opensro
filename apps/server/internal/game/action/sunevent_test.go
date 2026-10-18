@@ -38,16 +38,18 @@ func TestSunPickDropsNothingWithTheFlag(t *testing.T) {
 		rt.deps.(*enterworld.Deps).Items = shippedItems(t)
 		rt.SunEventOnly = progression.SunEventOnlyFromEnv()
 		rt.DropRoll = func() (uint32, error) { return 0, nil }
-		for codename, excluded := range map[string]bool{
-			"ITEM_CH_BLADE_09_C_RARE":  true,
-			"ITEM_EU_TSWORD_09_C_RARE": true,
-			"ITEM_CH_BLADE_09_B_RARE":  false,
-			"ITEM_CH_BLADE_08_C_RARE":  false,
-			"ITEM_CH_BLADE_09_C":       false,
-		} {
-			_, dropped := rt.prepareSelectedDrop(loot.DropItem{Codename: codename, Count: 1}, simulation.Spawn{RegionID: 0x5F76}, "owner", time.UnixMilli(0))
-			if want := !(on && excluded); dropped != want {
-				t.Fatalf("on=%v %s: dropped=%v, want %v", on, codename, dropped, want)
+		for _, fromUnique := range []bool{false, true} {
+			for codename, excluded := range map[string]bool{
+				"ITEM_CH_BLADE_09_C_RARE":  true,
+				"ITEM_EU_TSWORD_09_C_RARE": true,
+				"ITEM_CH_BLADE_09_B_RARE":  false,
+				"ITEM_CH_BLADE_08_C_RARE":  false,
+				"ITEM_CH_BLADE_09_C":       false,
+			} {
+				_, dropped := rt.prepareSelectedDrop(loot.DropItem{Codename: codename, Count: 1, FromUnique: fromUnique}, simulation.Spawn{RegionID: 0x5F76}, "owner", time.UnixMilli(0))
+				if want := !(on && excluded && !fromUnique); dropped != want {
+					t.Fatalf("on=%v fromUnique=%v %s: dropped=%v, want %v", on, fromUnique, codename, dropped, want)
+				}
 			}
 		}
 	}

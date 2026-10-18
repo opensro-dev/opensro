@@ -72,10 +72,11 @@ func (rt *Runtime) prepareSelectedDrop(chosen loot.DropItem, at simulation.Spawn
 	if itemClass, _ := ref.NativeFields.Lookup("itemClass"); rt.ShopOnly.Excludes(ref.TypeIDs, int(itemClass)) {
 		return grounditem.Item{}, false
 	}
-	// Port-only, not native (owner 2026-10-14): degree-9 Seal of Sun gear
-	// comes only from events, so its pick drops nothing and is never
+	// Port-only, not native (owner 2026-10-14; narrowed 2026-10-18 to
+	// non-unique kills): degree-9 Seal of Sun gear drops only from unique
+	// monsters, so an ordinary monster's Sun pick drops nothing and is never
 	// re-rolled; every other chance stays native (action/sunevent.go).
-	if SunExcludes(rt.SunEventOnly, ref) {
+	if !chosen.FromUnique && SunExcludes(rt.SunEventOnly, ref) {
 		return grounditem.Item{}, false
 	}
 	row := inventory.Item{RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags(), Quantity: chosen.Count, Plus: chosen.Plus}

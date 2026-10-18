@@ -9,11 +9,37 @@ package simulation
 
 import (
 	"math"
+	"os"
+	"strings"
 	"time"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/world/monster"
 )
+
+// EnvBetaUniqueRespawn turns the beta unique respawn window on ("on", "1", "true").
+// Port-only, not native (owner decision 2026-10-18): the operator backup
+// authored 20-36 minute respawn delays on the world uniques; when on, a
+// respawning unique nest draws over 45-90 minutes instead. Off or unset keeps
+// the authored row.
+const (
+	EnvBetaUniqueRespawn    = "SRO_BETA_UNIQUE_RESPAWN"
+	betaUniqueRespawnMinSec = 45 * 60
+	betaUniqueRespawnMaxSec = 90 * 60
+)
+
+/*
+================
+BetaUniqueRespawnEnabled
+================
+*/
+func BetaUniqueRespawnEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvBetaUniqueRespawn))) {
+	case "on", "1", "true":
+		return true
+	}
+	return false
+}
 
 // Native nest population lifecycle. Each world's CAIHive owns one timer entry
 // per nest; CNest owns the party-monster flag.
@@ -253,13 +279,33 @@ func (state *divisionMonsterState) schedule(group spawnGroup, scheduled *int64, 
 
 /*
 ================
+MonsterState.nestDelay
+
+Port-only, not native (owner decision 2026-10-18): with
+SRO_BETA_UNIQUE_RESPAWN on, a respawning unique nest draws its respawn
+delay over 45-90 minutes instead of the operator backup's 20-36 minute
+rows. Off or unset keeps the authored row.
+================
+*/
+func (s *MonsterState) nestDelay(nest monster.NestRow, ratePct float32) (uint32, uint32) {
+	minSec, maxSec := nest.RespawnDelayMinSec, nest.RespawnDelayMaxSec
+	if BetaUniqueRespawnEnabled() && nest.Respawn {
+		if ref, ok := s.template.Refs[nest.RefObjID]; ok && nestIsUnique(nest, ref) {
+			minSec, maxSec = betaUniqueRespawnMinSec, betaUniqueRespawnMaxSec
+		}
+	}
+	return monster.NestDelay(minSec, maxSec, ratePct, s.randomWord)
+}
+
+/*
+================
 newNestRuntime
 ================
 */
 func (s *MonsterState) newNestRuntime(index int) *nestRuntime {
 	nest := s.template.Nests[index]
 	n := &nestRuntime{enabled: true, respawn: nest.Respawn, remaining: nest.InstanceLimit(), vacant: nest.StartVacant}
-	n.intervalMs, n.reduceMs = monster.NestDelay(nest.RespawnDelayMinSec, nest.RespawnDelayMaxSec, n.ratePct, s.randomWord)
+	n.intervalMs, n.reduceMs = s.nestDelay(nest, n.ratePct)
 	return n
 }
 
@@ -578,7 +624,7 @@ func (s *MonsterState) attemptNestSpawn(state *divisionMonsterState, index int, 
 	// 560C91..560CB3.
 	n.live++
 	n.lastMs = nowMs
-	n.intervalMs, n.reduceMs = monster.NestDelay(nest.RespawnDelayMinSec, nest.RespawnDelayMaxSec, n.ratePct, s.randomWord)
+	n.intervalMs, n.reduceMs = s.nestDelay(nest, n.ratePct)
 	if roll.Grade()&0xf0 == 0x10 {
 		n.partyArmed = false
 	}
@@ -738,10 +784,10 @@ func (s *MonsterState) overwriteHiveDeath(state *divisionMonsterState, key strin
 			if i == selected && limit == 1 {
 				h.selected = index
 				// 55EF7A: rolled into the selected nest, then re-rolled by 560E50.
-				n.intervalMs, n.reduceMs = monster.NestDelay(nest.RespawnDelayMinSec, nest.RespawnDelayMaxSec, n.ratePct, s.randomWord)
+				n.intervalMs, n.reduceMs = s.nestDelay(nest, n.ratePct)
 			}
 			n.lastMs = nowMs
-			n.intervalMs, n.reduceMs = monster.NestDelay(nest.RespawnDelayMinSec, nest.RespawnDelayMaxSec, n.ratePct, s.randomWord)
+			n.intervalMs, n.reduceMs = s.nestDelay(nest, n.ratePct)
 		}
 	}
 	if h.live > 0 {

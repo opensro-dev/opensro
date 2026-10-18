@@ -8,7 +8,7 @@ Each kind has its own flag, off by default here (native: no notice); the
 GameWorld's Nomad job turns them on:
 
 	SRO_ANNOUNCE_SOX_DROP  "<player> has dropped <item> (<seal>) from <monster>"
-	SRO_ANNOUNCE_PLUS      "<player> advanced <item> to +N" (N 8..11)
+	SRO_ANNOUNCE_PLUS      "<player> advanced <item> to +N" (N >= 7)
 	SRO_ANNOUNCE_JOB_KILL  "[<killer alias>] killed [<victim alias>]" (job aliases, never character names)
 	SRO_ANNOUNCE_MOST_WANTED  "[<alias>] is MOST WANTED LV <N>" on a new wanted level, and
 	                          "[<killer alias>] claimed bounty of [<victim alias>] MOST WANTED LV <N>"
@@ -66,9 +66,9 @@ const (
 	announceWindowMs       = 60_000
 	// jobKillPairPrune is the pair count past which stale pairs are dropped.
 	jobKillPairPrune = 1024
-	// announcePlusMin and announcePlusMax bound the announced plus.
-	announcePlusMin = 8
-	announcePlusMax = 11
+	// announcePlusMin is the lowest plus a reinforcement notice announces
+	// (owner decision 2026-10-18: +7 and above, with no upper ceiling).
+	announcePlusMin = 7
 )
 
 // sealCodenameSuffix marks a v1.150 rare (Seal of Star/Moon/Sun) item.
@@ -322,7 +322,7 @@ func (rt *Runtime) announceSealDrops(division, monsterName string, drops []groun
 ================
 Runtime.announcePlus
 
-Item 2: a reinforcement that succeeded into +8..+11, after its commit,
+Item 2: a reinforcement that succeeded into +7 or above, after its commit,
 naming a sealed item's seal as the drop notice does.
 ================
 */
@@ -331,7 +331,7 @@ func (rt *Runtime) announcePlus(division, player string, outcome alchemy.Outcome
 		return
 	}
 	for _, item := range outcome.Items {
-		if item.Slot != outcome.Target || item.Plus < announcePlusMin || item.Plus > announcePlusMax {
+		if item.Slot != outcome.Target || item.Plus < announcePlusMin {
 			continue
 		}
 		name, seal := item.Codename, ""

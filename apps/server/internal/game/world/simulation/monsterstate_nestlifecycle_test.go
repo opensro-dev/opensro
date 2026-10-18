@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+monsterstate_nestlifecycle_test.go - native hive and nest lifecycle tests
+
+===========================================================================
+*/
 package simulation
 
 import (
@@ -11,10 +18,20 @@ const lifecycleRegion = uint16(25258)
 
 var lifecycleBase = time.UnixMilli(1_784_000_000_000)
 
+/*
+================
+lifecycleRef
+================
+*/
 func lifecycleRef(typeID4 uint8) monster.MonsterRef {
 	return monster.MonsterRef{RefObjID: 1, TidWord: 0x00C6, TypeID4: typeID4, MaxHP: 100, ScaleDenom: 100}
 }
 
+/*
+================
+lifecycleNest
+================
+*/
 func lifecycleNest(x float64) monster.NestRow {
 	return monster.NestRow{
 		SpawnPoint:         monster.SpawnPoint{RefObjID: 1, RegionID: lifecycleRegion, X: x, Y: 10, Z: 100},
@@ -26,17 +43,33 @@ func lifecycleNest(x float64) monster.NestRow {
 	}
 }
 
-// constantWord pins every population draw to one rand() result.
+/*
+================
+constantWord
+
+Pins every population draw to one rand() result.
+================
+*/
 func constantWord(word uint32) func() float64 {
 	return func() float64 { return (float64(word) + 0.5) / 32768 }
 }
 
+/*
+================
+lifecycleWorld
+================
+*/
 type lifecycleWorld struct {
 	t   *testing.T
 	s   *MonsterState
 	now time.Time
 }
 
+/*
+================
+newLifecycleWorld
+================
+*/
 func newLifecycleWorld(t *testing.T, ref monster.MonsterRef, nests ...monster.NestRow) *lifecycleWorld {
 	t.Helper()
 	w := &lifecycleWorld{t: t, now: lifecycleBase}
@@ -46,6 +79,11 @@ func newLifecycleWorld(t *testing.T, ref monster.MonsterRef, nests ...monster.Ne
 	return w
 }
 
+/*
+================
+lifecycleWorld.at
+================
+*/
 func (w *lifecycleWorld) at(offsetMs int64) []monster.Instance {
 	target := lifecycleBase.Add(time.Duration(offsetMs) * time.Millisecond)
 	for next := w.now.Add(time.Second); !next.After(target); next = next.Add(time.Second) {
@@ -58,6 +96,11 @@ func (w *lifecycleWorld) at(offsetMs int64) []monster.Instance {
 	return w.s.InstancesInRegions("division", []uint16{lifecycleRegion})
 }
 
+/*
+================
+lifecycleWorld.expectLive
+================
+*/
 func (w *lifecycleWorld) expectLive(offsetMs int64, want int) []monster.Instance {
 	w.t.Helper()
 	live := w.at(offsetMs)
@@ -67,6 +110,11 @@ func (w *lifecycleWorld) expectLive(offsetMs int64, want int) []monster.Instance
 	return live
 }
 
+/*
+================
+lifecycleWorld.kill
+================
+*/
 func (w *lifecycleWorld) kill(offsetMs int64, gid uint32) {
 	w.t.Helper()
 	if !w.s.Defeat("division", gid, lifecycleBase.Add(time.Duration(offsetMs)*time.Millisecond)) {
@@ -74,10 +122,20 @@ func (w *lifecycleWorld) kill(offsetMs int64, gid uint32) {
 	}
 }
 
+/*
+================
+lifecycleWorld.nest
+================
+*/
 func (w *lifecycleWorld) nest(index int) *nestRuntime {
 	return w.s.divs["division"].nests[index]
 }
 
+/*
+================
+TestPopulationAdvancesWithoutViewersAndObservationDoesNotFillNests
+================
+*/
 func TestPopulationAdvancesWithoutViewersAndObservationDoesNotFillNests(t *testing.T) {
 	a, b := lifecycleNest(100), lifecycleNest(200)
 	a.MaxCount, b.MaxCount = 3, 3
@@ -103,8 +161,14 @@ func TestPopulationAdvancesWithoutViewersAndObservationDoesNotFillNests(t *testi
 	}
 }
 
-// 55EA90 refills a nest one monster per interval: after a wipe the timer
-// restarts at the first death from full, and each spawn re-rolls it.
+/*
+================
+TestNestRefillsOneMonsterPerInterval
+
+55EA90 refills a nest one monster per interval: after a wipe the timer
+restarts at the first death from full, and each spawn re-rolls it.
+================
+*/
 func TestNestRefillsOneMonsterPerInterval(t *testing.T) {
 	nest := lifecycleNest(100)
 	nest.MaxCount = 3
@@ -122,7 +186,13 @@ func TestNestRefillsOneMonsterPerInterval(t *testing.T) {
 	w.expectLive(31000, 3)
 }
 
-// 560D8B restarts the timer only for a nest dying from full.
+/*
+================
+TestNestDeathBelowCapacityKeepsTheRunningTimer
+
+560D8B restarts the timer only for a nest dying from full.
+================
+*/
 func TestNestDeathBelowCapacityKeepsTheRunningTimer(t *testing.T) {
 	nest := lifecycleNest(100)
 	nest.MaxCount = 2
@@ -135,8 +205,14 @@ func TestNestDeathBelowCapacityKeepsTheRunningTimer(t *testing.T) {
 	w.expectLive(10000, 1)
 }
 
-// 5F6EB0: a blocked ordinary candidate fails without touching the timer
-// and retries on the next hive callback.
+/*
+================
+TestBlockedOrdinaryCandidateRetriesNextCallback
+
+5F6EB0: a blocked ordinary candidate fails without touching the timer and
+retries on the next hive callback.
+================
+*/
 func TestBlockedOrdinaryCandidateRetriesNextCallback(t *testing.T) {
 	nest := lifecycleNest(100)
 	nest.GenerateRadius = 30
@@ -168,7 +244,13 @@ func TestBlockedOrdinaryCandidateRetriesNextCallback(t *testing.T) {
 	}
 }
 
-// 5F7078: a blocked candidate keeps a promoted grade at the nest centre.
+/*
+================
+TestBlockedPromotedCandidateSpawnsAtTheCentre
+
+5F7078: a blocked candidate keeps a promoted grade at the nest centre.
+================
+*/
 func TestBlockedPromotedCandidateSpawnsAtTheCentre(t *testing.T) {
 	nest := lifecycleNest(100)
 	nest.GenerateRadius = 30
@@ -184,8 +266,14 @@ func TestBlockedPromotedCandidateSpawnsAtTheCentre(t *testing.T) {
 	}
 }
 
-// 560E10: a clipped candidate halves the interval (floor 1 s) and restarts
-// the timer.
+/*
+================
+TestClippedCandidateHalvesTheNestInterval
+
+560E10: a clipped candidate halves the interval (floor 1 s) and restarts the
+timer.
+================
+*/
 func TestClippedCandidateHalvesTheNestInterval(t *testing.T) {
 	nest := lifecycleNest(100)
 	nest.GenerateRadius = 30
@@ -209,8 +297,14 @@ func TestClippedCandidateHalvesTheNestInterval(t *testing.T) {
 	w.expectLive(15000, 1)
 }
 
-// 5608CF / 560CAD: an armed nest rolls a party monster and disarms; monster
-// TID4 4 draws the roll but is never promoted to a party monster.
+/*
+================
+TestArmedNestSpawnsOnePartyMonster
+
+5608CF / 560CAD: an armed nest rolls a party monster and disarms; monster
+TID4 4 draws the roll but is never promoted to a party monster.
+================
+*/
 func TestArmedNestSpawnsOnePartyMonster(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
@@ -237,6 +331,11 @@ func TestArmedNestSpawnsOnePartyMonster(t *testing.T) {
 	}
 }
 
+/*
+================
+overwriteHiveNests
+================
+*/
 func overwriteHiveNests(limit int, orders ...int) []monster.NestRow {
 	nests := make([]monster.NestRow, len(orders))
 	for i, order := range orders {
@@ -249,8 +348,14 @@ func overwriteHiveNests(limit int, orders ...int) []monster.NestRow {
 	return nests
 }
 
-// 55EC10 fills an overwrite hive one monster per member per callback, in
-// native hive order, until the shared limit.
+/*
+================
+TestOverwriteHiveFillsInHiveOrder
+
+55EC10 fills an overwrite hive one monster per member per callback, in
+native hive order, until the shared limit.
+================
+*/
 func TestOverwriteHiveFillsInHiveOrder(t *testing.T) {
 	w := newLifecycleWorld(t, lifecycleRef(1), overwriteHiveNests(2, 2, 0, 1)...)
 	live := w.expectLive(0, 2)
@@ -264,9 +369,15 @@ func TestOverwriteHiveFillsInHiveOrder(t *testing.T) {
 	}
 }
 
-// 55EEC0: a single-occupant hive dying from full draws its next location
-// (rand()%(n+1), the extra bucket folding onto the last member) and every
-// member restarts its timer.
+/*
+================
+TestSingleOccupantHiveMovesToTheDrawnMember
+
+55EEC0: a single-occupant hive dying from full draws its next location
+(rand()%(n+1), the extra bucket folding onto the last member) and every
+member restarts its timer.
+================
+*/
 func TestSingleOccupantHiveMovesToTheDrawnMember(t *testing.T) {
 	w := newLifecycleWorld(t, lifecycleRef(1), overwriteHiveNests(1, 1, 2, 0)...)
 	live := w.expectLive(0, 1)
@@ -282,8 +393,14 @@ func TestSingleOccupantHiveMovesToTheDrawnMember(t *testing.T) {
 	}
 }
 
-// 5609EE: an ordinary monster is created facing the drawn heading, and the
-// mover publishes it.
+/*
+================
+TestSpawnHeadingReachesTheMoverPose
+
+5609EE: an ordinary monster is created facing the drawn heading, and the
+mover publishes it.
+================
+*/
 func TestSpawnHeadingReachesTheMoverPose(t *testing.T) {
 	w := newLifecycleWorld(t, lifecycleRef(1), lifecycleNest(100))
 	live := w.expectLive(0, 1)
@@ -292,5 +409,41 @@ func TestSpawnHeadingReachesTheMoverPose(t *testing.T) {
 	mover := w.s.divs["division"].movers.get(live[0].Gid)
 	if live[0].SpawnHeading != want || mover.Pose.Heading != want {
 		t.Fatalf("heading instance=%d mover=%d, want %d", live[0].SpawnHeading, mover.Pose.Heading, want)
+	}
+}
+
+/*
+================
+TestBetaUniqueRespawnWindow
+
+With SRO_BETA_UNIQUE_RESPAWN on, a respawning unique nest draws its respawn
+interval over 45-90 minutes instead of the row's authored seconds, while an
+ordinary nest and the off setting keep the authored seconds.
+================
+*/
+func TestBetaUniqueRespawnWindow(t *testing.T) {
+	uniqueRef := lifecycleRef(1)
+	uniqueRef.MonsterType = 3
+	ordinaryRef := lifecycleRef(1)
+	for _, tc := range []struct {
+		name string
+		env  string
+		ref  monster.MonsterRef
+		min  uint32
+		max  uint32
+	}{
+		{"unique off", "off", uniqueRef, 10_000, 10_000},
+		{"unique on", "on", uniqueRef, 45 * 60 * 1000, 90 * 60 * 1000},
+		{"ordinary on", "on", ordinaryRef, 10_000, 10_000},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(EnvBetaUniqueRespawn, tc.env)
+			w := newLifecycleWorld(t, tc.ref, lifecycleNest(100))
+			w.expectLive(0, 1)
+			got := w.nest(0).intervalMs
+			if got < tc.min || got > tc.max {
+				t.Fatalf("intervalMs = %d, want in [%d, %d]", got, tc.min, tc.max)
+			}
+		})
 	}
 }

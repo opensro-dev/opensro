@@ -1,12 +1,13 @@
 /*
 ===========================================================================
 
-sunevent.go - degree-9 Seal of Sun gear leaves drops and shops
+sunevent.go - degree-9 Seal of Sun gear leaves ordinary drops and shops
 
 Port-only, not native (progression/sunevent.go, SRO_SUN_EVENT_ONLY). The
 runtime's two Sun sources each ask SunExcludes: prepareSelectedDrop,
-where every monster drop ends (a Sun pick drops nothing), and
-ConfigureCommerce, which withholds every Sun offer from the NPC shops.
+where every monster drop ends (a non-unique monster's Sun pick drops
+nothing, while a unique kill keeps its Sun pick), and ConfigureCommerce,
+which withholds every Sun offer from the NPC shops.
 
 ===========================================================================
 */
