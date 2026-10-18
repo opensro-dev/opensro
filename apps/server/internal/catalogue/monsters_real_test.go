@@ -48,6 +48,9 @@ func TestEveryListedMonsterHasASpawnSource(t *testing.T) {
 		if produced[m.ID] == "" || m.Status == StatusMissing {
 			t.Errorf("%s (%d) is listed without a spawn source", m.Codename, m.ID)
 		}
+		if m.Model == "" || m.Model == "xxx" {
+			t.Errorf("%s (%d) is listed with unresolved model %q", m.Codename, m.ID, m.Model)
+		}
 	}
 	for _, codename := range realUniques {
 		m, ok := listed[codename]

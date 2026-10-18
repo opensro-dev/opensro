@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+monsterchase_test.go - monster pursuit guidance, refresh pacing and squad approach
+
+===========================================================================
+*/
 package simulation
 
 import (
@@ -7,6 +14,11 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 )
 
+/*
+================
+monsterMovementAckFrames
+================
+*/
 func monsterMovementAckFrames(push *fakePusher) []Frame {
 	var movement []Frame
 	for _, frame := range monsterFrames(push) {
@@ -17,6 +29,11 @@ func monsterMovementAckFrames(push *fakePusher) []Frame {
 	return movement
 }
 
+/*
+================
+TestMonsterChaseOwnsGuidanceSeparatelyFromStandOffGoal
+================
+*/
 func TestMonsterChaseOwnsGuidanceSeparatelyFromStandOffGoal(t *testing.T) {
 	const t0 = int64(1_784_000_000_000)
 	ops, instance := monsterLegFixture(t, aggressiveTactics())
@@ -51,6 +68,11 @@ func TestMonsterChaseOwnsGuidanceSeparatelyFromStandOffGoal(t *testing.T) {
 	}
 }
 
+/*
+================
+TestMonsterChaseApproachesLiveTargetNotOppositeCommandDestination
+================
+*/
 func TestMonsterChaseApproachesLiveTargetNotOppositeCommandDestination(t *testing.T) {
 	const t0 = int64(1_784_000_000_000)
 	ops, _ := monsterLegFixture(t, aggressiveTactics())
@@ -76,6 +98,11 @@ func TestMonsterChaseApproachesLiveTargetNotOppositeCommandDestination(t *testin
 	}
 }
 
+/*
+================
+TestMonsterChaseRefreshesMovingTargetBeforeTheCurrentGoalExpires
+================
+*/
 func TestMonsterChaseRefreshesMovingTargetBeforeTheCurrentGoalExpires(t *testing.T) {
 	const t0 = int64(1_784_000_000_000)
 	ops, instance := monsterLegFixture(t, aggressiveTactics())
@@ -143,6 +170,11 @@ func TestMonsterChaseRefreshesMovingTargetBeforeTheCurrentGoalExpires(t *testing
 	}
 }
 
+/*
+================
+TestMonsterChasePublishesContinuousStraightGuidanceAtProductionCadence
+================
+*/
 func TestMonsterChasePublishesContinuousStraightGuidanceAtProductionCadence(t *testing.T) {
 	const t0 = int64(1_784_000_000_000)
 	ops, _ := monsterLegFixture(t, aggressiveTactics())
@@ -175,6 +207,11 @@ func TestMonsterChasePublishesContinuousStraightGuidanceAtProductionCadence(t *t
 	}
 }
 
+/*
+================
+TestMonsterChaseRefreshesWhenTargetMovementSettles
+================
+*/
 func TestMonsterChaseRefreshesWhenTargetMovementSettles(t *testing.T) {
 	const t0 = int64(1_784_000_000_000)
 	ops, instance := monsterLegFixture(t, aggressiveTactics())
@@ -204,6 +241,11 @@ func TestMonsterChaseRefreshesWhenTargetMovementSettles(t *testing.T) {
 	}
 }
 
+/*
+================
+TestMonsterMovementSourceTurnThresholdIsStrictlyGreaterThan45Degrees
+================
+*/
 func TestMonsterMovementSourceTurnThresholdIsStrictlyGreaterThan45Degrees(t *testing.T) {
 	from := monster.Pose{RegionID: monsterTestRegion, X: 1000, Y: 20, Z: 1000}
 	mover := monster.MoverState{Pose: from} // wire heading 0 faces +X
@@ -224,5 +266,127 @@ func TestMonsterMovementSourceTurnThresholdIsStrictlyGreaterThan45Degrees(t *tes
 	}
 	if !monsterMovementSourceRequired(mover, from, destinationAt(math.Pi/4+1e-6), false) {
 		t.Fatal("a turn above 45 degrees must carry a source")
+	}
+}
+
+/*
+================
+TestOrdinarySquadApproachAdmitsCaravanBanditsAndSummonedMonsters
+
+0x0053FC00 installs CAITactics_PursueTargetWithDirectionGate (0x00548BE0)
+unconditionally in slot +0x114; Flags bits 0x04 and 0x80 replace only slot
++0x100 (target check). Both caravan bandits (Flags 0x21E/0x29A) and summoned
+monsters (SummonerGID != 0 without a full TacticsControls block) run the
++0x114 squad approach and moving-target center-distance extension.
+================
+*/
+func TestOrdinarySquadApproachAdmitsCaravanBanditsAndSummonedMonsters(t *testing.T) {
+	thiefBandit := monster.Instance{
+		Nest: monster.NestRow{
+			HasControls: true,
+			Controls:    monster.TacticsControls{Flags: 0x21E, FleeType: 0, BattleStyle: 0},
+		},
+	}
+	hunterBandit := monster.Instance{
+		Nest: monster.NestRow{
+			HasControls: true,
+			Controls:    monster.TacticsControls{Flags: 0x29A, FleeType: 0, BattleStyle: 0},
+		},
+	}
+	summoned := monster.Instance{
+		SummonerGID: 999,
+		Nest:        monster.NestRow{HasControls: false},
+	}
+	fleeing := monster.Instance{
+		Nest: monster.NestRow{
+			HasControls: true,
+			Controls:    monster.TacticsControls{FleeType: 1},
+		},
+	}
+	rangedStyle := monster.Instance{
+		Nest: monster.NestRow{
+			HasControls: true,
+			Controls:    monster.TacticsControls{BattleStyle: 1},
+		},
+	}
+
+	for name, actor := range map[string]monster.Instance{
+		"thief bandit (Flags 0x21E)":  thiefBandit,
+		"hunter bandit (Flags 0x29A)": hunterBandit,
+		"summoned monster":            summoned,
+	} {
+		if !ordinarySquadApproach(actor) {
+			t.Fatalf("%s excluded from ordinarySquadApproach (+0x114 0x00548BE0)", name)
+		}
+	}
+	for name, actor := range map[string]monster.Instance{
+		"fleeing tactics":      fleeing,
+		"battle-style tactics": rangedStyle,
+	} {
+		if ordinarySquadApproach(actor) {
+			t.Fatalf("%s unexpectedly admitted to ordinarySquadApproach", name)
+		}
+	}
+
+	const t0 = int64(1_784_000_000_000)
+	for _, tc := range []struct {
+		name      string
+		configure func(*monster.Instance)
+	}{
+		{
+			name: "caravan bandit",
+			configure: func(inst *monster.Instance) {
+				inst.NestDetached = true
+				inst.Nest.HasControls = true
+				inst.Nest.Controls = monster.TacticsControls{
+					Flags:         0x21E,
+					TraceType:     0,
+					TraceBoundary: 1,
+					TraceData:     500,
+					SightRange:    80,
+					AggressType:   1,
+					AggressData:   100,
+				}
+			},
+		},
+		{
+			name: "summoned monster",
+			configure: func(inst *monster.Instance) {
+				inst.Nest.HasControls = false
+				inst.SummonerGID = 999
+				inst.SummonSightRange = 80
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ops, instance := monsterLegFixture(t, aggressiveTactics())
+			ops.Monsters.mu.Lock()
+			pop := ops.Monsters.populationForObject(monsterTestDivision, instance.Gid)
+			actor := pop.instances.get(instance.Gid)
+			tc.configure(&actor)
+			pop.instances.set(instance.Gid, actor)
+			ops.Monsters.mu.Unlock()
+
+			push := &fakePusher{}
+			target := playerSessionAt(1, 1150, 1000)
+			target.World.MoveSegment = &MoveSegment{
+				From:        Spawn{RegionID: monsterTestRegion, X: 1050, Y: 20, Z: 1000},
+				StartedAtMs: t0,
+				ArrivesAtMs: t0 + 5000,
+			}
+
+			ops.RunMonsterLeg(t0, []SessionSnapshot{target}, push)
+			frames := monsterMovementAckFrames(push)
+			if len(frames) != 1 {
+				t.Fatalf("chase frames = %+v, want one B738 guidance leg", frames)
+			}
+			_, _, x, _, z, _ := decodeGoalPayload(t, frames[0].Payload)
+			// Outdoor 0x00548BE0 assigns approach slot 6 and extends moving-target
+			// pursuit to actor-to-target center distance (1049, 990) rather than
+			// stopping one reach short on the center line (1036, 1000).
+			if x != 1049 || z != 990 {
+				t.Fatalf("moving-target pursuit goal = (%d, %d), want 0x00548BE0 slot-6 center-distance extension (1049, 990)", x, z)
+			}
+		})
 	}
 }

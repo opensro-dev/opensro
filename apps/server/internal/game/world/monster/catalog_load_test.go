@@ -129,6 +129,41 @@ func TestLoadMonsterRefsJoinsCharacterInfoRideContract(t *testing.T) {
 
 /*
 ================
+TestLoadMonsterRefsResolvesCloneModelPathFromOriginalCodename
+
+Clone rows (_CLON) store "xxx" in column 52 (FileName128) and inherit their
+model path from column 4 (OrgObjCodeName128).
+================
+*/
+func TestLoadMonsterRefsResolvesCloneModelPathFromOriginalCodename(t *testing.T) {
+	dir := t.TempDir()
+	baseLine := row(1, 1951, "MOB_CH_WHITETIGER", 1, 2, 1, 1, "11", "40", "100")
+	baseCols := strings.Split(strings.TrimSuffix(baseLine, "\n"), "\t")
+	baseCols[4] = "xxx"
+	baseCols[52] = `mob\china\whitetiger.bsr`
+
+	cloneLine := row(1, 2100, "MOB_CH_WHITETIGER_CLON", 1, 2, 1, 1, "11", "40", "100")
+	cloneCols := strings.Split(strings.TrimSuffix(cloneLine, "\n"), "\t")
+	cloneCols[4] = "MOB_CH_WHITETIGER"
+	cloneCols[52] = "xxx"
+
+	content := strings.Join(baseCols, "\t") + "\n" + strings.Join(cloneCols, "\t") + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "characterdata_test.txt"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	refs := LoadMonsterRefs(dir)
+	clone, ok := refs[2100]
+	if !ok {
+		t.Fatal("clone ref missing")
+	}
+	if clone.ModelPath != `mob\china\whitetiger.bsr` {
+		t.Fatalf("clone ModelPath = %q, want %q", clone.ModelPath, `mob\china\whitetiger.bsr`)
+	}
+}
+
+/*
+================
 TestLoadSpawnPointsParsesDungeonRegions
 ================
 */

@@ -437,12 +437,48 @@ func parseMonsterRefTables(textdataDir string, tables [][][]string) map[uint32]M
 			}
 		}
 	}
+	byCodename := make(map[string]MonsterRef, len(refs))
+	for _, ref := range refs {
+		if ref.Codename != "" {
+			byCodename[ref.Codename] = ref
+		}
+	}
 	for id, ref := range refs {
+		ref.ModelPath = resolveMonsterModelPath(ref, byCodename)
 		ride := rides.resolve(ref.Codename, ref.OriginalCodename, known)
 		ref.RideModelPath, ref.RiderTransformMode = ride.modelPath, ride.transformMode
 		refs[id] = ref
 	}
 	return refs
+}
+
+/*
+================
+resolveMonsterModelPath
+
+Clone and variant rows (_CLON, _L2/_L3, regional aliases) store "xxx" in
+column 52 (FileName128) and inherit their model path from column 4
+(OrgObjCodeName128), matching the client asset bake's resolveNpcModel chain.
+================
+*/
+func resolveMonsterModelPath(ref MonsterRef, byCodename map[string]MonsterRef) string {
+	if ref.ModelPath != "" && !strings.EqualFold(ref.ModelPath, "xxx") {
+		return ref.ModelPath
+	}
+	visited := map[string]bool{ref.Codename: true}
+	current := ref.OriginalCodename
+	for current != "" && !strings.EqualFold(current, "xxx") && !visited[current] {
+		visited[current] = true
+		parent, ok := byCodename[current]
+		if !ok {
+			break
+		}
+		if parent.ModelPath != "" && !strings.EqualFold(parent.ModelPath, "xxx") {
+			return parent.ModelPath
+		}
+		current = parent.OriginalCodename
+	}
+	return ref.ModelPath
 }
 
 /*

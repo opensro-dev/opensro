@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+monsterapproach.go - native +0x114 squad approach slots and pursuit goals
+
+Manages the per-target 8-slot approach circle (AIApproachSlots_ReassignTactics
+at 0x00545620) and endpoint construction for CAITactics_PursueTargetWithDirectionGate
+(0x00548BE0) and CAITactics_PursueTargetWithRegionRoute (0x00549460).
+
+===========================================================================
+*/
 package simulation
 
 import (
@@ -7,11 +18,21 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 )
 
+/*
+================
+approachMember
+================
+*/
 type approachMember struct {
 	order uint64
 	slot  int // -2: enrolled but not allocated; -1: navigation released direction
 }
 
+/*
+================
+monsterApproachSquad
+================
+*/
 type monsterApproachSquad struct {
 	revision uint64
 	serial   uint64
@@ -19,7 +40,13 @@ type monsterApproachSquad struct {
 	members  map[uint32]approachMember
 }
 
-// Groups belong to a population lifetime, not a process-global player GID.
+/*
+================
+releaseApproachActor
+
+Groups belong to a population lifetime, not a process-global player GID.
+================
+*/
 func (state *divisionMonsterState) releaseApproachActor(gid uint32) {
 	target := state.approachActors[gid]
 	if target == 0 {
@@ -36,14 +63,33 @@ func (state *divisionMonsterState) releaseApproachActor(gid uint32) {
 	}
 }
 
+/*
+================
+ordinarySquadApproach
+
+Whether the actor runs the native +0x114 pursuit callback
+(CAITactics_PursueTargetWithDirectionGate at 0x00548BE0 outdoors,
+CAITactics_PursueTargetWithRegionRoute at 0x00549460 in dungeons).
+0x0053FC00 installs 0x00548BE0 unconditionally in slot +0x114; Flags bits
+0x04 and 0x80 replace only slot +0x100 (target check), not +0x114. Summoned
+monsters whose summon-tactics row omits a full TacticsControls block still
+carry SummonerGID != 0 and use the same +0x114 pursuit.
+================
+*/
 func ordinarySquadApproach(actor monster.Instance) bool {
-	// Only the ordinary 548BE0 lane is transcribed. Specialized and unmatched
-	// tactics retain their existing movement policy.
-	return actor.Nest.HasControls && actor.Nest.Controls.Flags&0x84 == 0 &&
-		actor.Nest.Controls.FleeType == 0 && actor.Nest.Controls.BattleStyle == 0
+	if actor.Nest.HasControls {
+		return actor.Nest.Controls.FleeType == 0 && actor.Nest.Controls.BattleStyle == 0
+	}
+	return actor.SummonerGID != 0
 }
 
-// Caller holds MonsterState.mu; only admitted state edges change membership.
+/*
+================
+syncApproachActor
+
+Caller holds MonsterState.mu; only admitted state edges change membership.
+================
+*/
 func (state *divisionMonsterState) syncApproachActor(gid uint32, mover monster.MoverState) {
 	target := mover.TargetGID()
 	if !ordinarySquadApproach(state.instances.get(gid)) ||
@@ -74,6 +120,11 @@ func (state *divisionMonsterState) syncApproachActor(gid uint32, mover monster.M
 	state.approachActors[gid] = target
 }
 
+/*
+================
+approachNavigation
+================
+*/
 type approachNavigation struct {
 	target   uint32
 	existed  bool
@@ -83,9 +134,15 @@ type approachNavigation struct {
 	slot     int
 }
 
-// Snapshot acquisition alone holds the population lock. Allocation and surface
-// sampling run on immutable copies outside it: failed or stale navigation must
-// not steal a peer's reservation. commitNavigation checks the entire read set.
+/*
+================
+prepareApproachNavigation
+
+Snapshot acquisition alone holds the population lock. Allocation and surface
+sampling run on immutable copies outside it: failed or stale navigation must
+not steal a peer's reservation. commitNavigation checks the entire read set.
+================
+*/
 func (s *MonsterState) prepareApproachNavigation(division string, actor monster.Instance, next monster.MoverState, target playerPose, now int64) navigationAdmission {
 	s.mu.Lock()
 	state := s.populationForObject(division, actor.Gid)
@@ -155,6 +212,11 @@ func (s *MonsterState) prepareApproachNavigation(division string, actor monster.
 	return before
 }
 
+/*
+================
+approachInputsMatch
+================
+*/
 func (state *divisionMonsterState) approachInputsMatch(p *approachNavigation) bool {
 	if p == nil {
 		return true
@@ -171,6 +233,11 @@ func (state *divisionMonsterState) approachInputsMatch(p *approachNavigation) bo
 	return true
 }
 
+/*
+================
+commitApproach
+================
+*/
 func (state *divisionMonsterState) commitApproach(p *approachNavigation, gid uint32, next monster.MoverState) {
 	if p == nil || state.approachActors[gid] != p.target {
 		return
@@ -189,8 +256,14 @@ func (state *divisionMonsterState) commitApproach(p *approachNavigation, gid uin
 	state.approachTargets[p.target] = &p.group
 }
 
-// Direction/end-point geometry only. planSegment remains the sole routing,
-// surface, quantization, speed, time and packet owner; no second integrator.
+/*
+================
+squadApproachGoal
+
+Direction/end-point geometry only. planSegment remains the sole routing,
+surface, quantization, speed, time and packet owner; no second integrator.
+================
+*/
 func squadApproachGoal(live monster.Pose, target playerPose, spacing CombatSpacing, slot int) Spawn {
 	if slot < 0 {
 		return NormalizeSpawnFrame(target.Pose)
