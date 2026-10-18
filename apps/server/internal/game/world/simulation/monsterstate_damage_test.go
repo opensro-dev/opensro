@@ -235,6 +235,13 @@ outdoor sectors around 0x62AA plus a dungeon sector, mixing compact pending
 movers and in-flight live movers.
 ================
 */
+var benchmarkCombatCandidateCenters = [4]Spawn{
+	{RegionID: 0x62AA, X: 960, Y: 20, Z: 960},
+	{RegionID: 0x63AB, X: 100, Y: 20, Z: 1850},
+	{RegionID: 0x61A9, X: 1880, Y: 20, Z: 40},
+	{RegionID: 0x64AC, X: 500, Y: 20, Z: 500},
+}
+
 func combatCandidateBenchmarkState(seed int64, count int) (*MonsterState, instance.Lease) {
 	r := rand.New(rand.NewSource(seed))
 	s := NewMonsterState(monster.Template{})
@@ -262,9 +269,13 @@ func combatCandidateBenchmarkState(seed int64, count int) (*MonsterState, instan
 			Y:        r.Float64() * 40,
 			Z:        r.Float64() * 1920,
 		}
+		if i <= len(benchmarkCombatCandidateCenters) {
+			c := benchmarkCombatCandidateCenters[i-1]
+			pose = monster.Pose{RegionID: c.RegionID, X: c.X, Y: c.Y, Z: c.Z}
+		}
 		radius := float64(2 + (i % 15))
 		hp := uint32(100)
-		if i%31 == 0 {
+		if i > len(benchmarkCombatCandidateCenters) && i%31 == 0 {
 			hp = 0
 		}
 		inst := monster.Instance{
@@ -274,19 +285,19 @@ func combatCandidateBenchmarkState(seed int64, count int) (*MonsterState, instan
 				RefObjID:    uint32(1900 + (i % 20)),
 				BodyRadius:  radius,
 				MaxHP:       100,
-				Structure:   i%47 == 0,
+				Structure:   i > len(benchmarkCombatCandidateCenters) && i%47 == 0,
 				MonsterType: uint8(i % 5),
 			},
 			Spawn: monster.SpawnPoint{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z},
 		}
-		if i%7 == 0 {
+		if i > len(benchmarkCombatCandidateCenters) && i%7 == 0 {
 			div.instances.set(gid, inst)
 			div.instances.freeze(gid)
 		} else {
 			div.instances.set(gid, inst)
 		}
 		row := monster.MoverState{Pose: pose}
-		if i%4 == 0 {
+		if i > len(benchmarkCombatCandidateCenters) && i%4 == 0 {
 			to := pose
 			to.X += (r.Float64() - 0.5) * 600
 			to.Z += (r.Float64() - 0.5) * 600
@@ -401,7 +412,9 @@ func TestCombatCandidatesInPopulationMatchesReferenceScan(t *testing.T) {
 			Z:        r.Float64() * 1920,
 		}
 		reach := float64(10 + r.Intn(500))
-		if i%25 == 0 {
+		if i == 0 {
+			reach = 1e30
+		} else if i%25 == 0 {
 			reach = float64(2000 + r.Intn(6000))
 		}
 		nowMs := int64(500 + r.Intn(5000))
@@ -427,16 +440,27 @@ BenchmarkCombatCandidatesInPopulation
 */
 func BenchmarkCombatCandidatesInPopulation(b *testing.B) {
 	s, lease := combatCandidateBenchmarkState(42, 4096)
-	centers := [4]Spawn{
-		{RegionID: 0x62AA, X: 960, Y: 20, Z: 960},
-		{RegionID: 0x63AB, X: 100, Y: 20, Z: 1850},
-		{RegionID: 0x61A9, X: 1880, Y: 20, Z: 40},
-		{RegionID: 0x64AC, X: 500, Y: 20, Z: 500},
-	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		c := centers[i&3]
+		c := benchmarkCombatCandidateCenters[i&3]
 		got := s.CombatCandidatesInPopulation("bench", lease, c, 120, 2500, i&1 == 1)
+		if len(got) == 0 {
+			b.Fatal("unreachable")
+		}
+	}
+}
+
+/*
+================
+BenchmarkReferenceCombatCandidatesInPopulation
+================
+*/
+func BenchmarkReferenceCombatCandidatesInPopulation(b *testing.B) {
+	s, lease := combatCandidateBenchmarkState(42, 4096)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		c := benchmarkCombatCandidateCenters[i&3]
+		got := s.referenceCombatCandidatesInPopulation("bench", lease, c, 120, 2500, i&1 == 1)
 		if len(got) == 0 {
 			b.Fatal("unreachable")
 		}

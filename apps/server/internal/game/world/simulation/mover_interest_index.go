@@ -233,6 +233,9 @@ func outdoorReachSectorWindow(center Spawn, reach float64) (lowX, highX, lowZ, h
 		return 0, 0, 0, 0, false
 	}
 	pad := reach + 1.0
+	if pad > float64(maxOutdoorReachSectorBuckets)*worldgeom.OutdoorRegionSize {
+		return 0, 0, 0, 0, false
+	}
 	lowX = int(math.Floor((grid.X - pad) / worldgeom.OutdoorRegionSize))
 	highX = int(math.Floor((grid.X + pad) / worldgeom.OutdoorRegionSize))
 	lowZ = int(math.Floor((grid.Z - pad) / worldgeom.OutdoorRegionSize))
