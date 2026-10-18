@@ -269,7 +269,9 @@ export function createActorMotion( owner: ActorOwner ) {
 				state.navigationHold = undefined;
 			}
 			if ( state.navigationHold ) {
-				renderPose = state.navigationHold.pose;
+				// The hold freezes XYZ; the yaw keeps tracking the cast
+				// target (8DC440 castFacing), as renderPose already does.
+				renderPose = { ...state.navigationHold.pose, angle: renderPose.angle };
 				moving = false;
 			}
 			const activePosture = presentationState.idleStates.get( entity.gid )?.posture;
@@ -343,9 +345,14 @@ export function createActorMotion( owner: ActorOwner ) {
 			// requestedMoving missed every real cast and the body then
 			// glided across the correction under its cast animation
 			// (BR-261015-0827-9B2B). The hold pose is the last drawn one:
-			// this frame's pose() has already spent the correction.
+			// this frame's pose() has already spent the correction. A cast
+			// record alone is not enough: gameplay.casts retains completed
+			// (phase 3, projectile still flying) and cancelled casts, and
+			// latching a hold for those would freeze an ordinary walk stop.
+			const activeCast = !!cast && cast.cancelledAtMs === undefined &&
+				(actionLayersByActor.get( entity.gid )?.length ?? 0) > 0;
 			if (
-				(requestedMoving || waiting || !!cast) &&
+				(requestedMoving || waiting || activeCast) &&
 				refresh.effects.some( e => e.kind === "leave" && e.state === 9 ) &&
 				!refresh.navigation
 			) {
@@ -354,7 +361,9 @@ export function createActorMotion( owner: ActorOwner ) {
 					pose: requestedMoving ? renderPose : state.lastDrawnPose ?? renderPose,
 					mode: entity.movementMode
 				};
-				if ( state.navigationHold ) renderPose = state.navigationHold.pose;
+				if ( state.navigationHold ) {
+					renderPose = { ...state.navigationHold.pose, angle: renderPose.angle };
+				}
 				moving = false;
 			}
 			// 8EADF0 tries the selected item override before the ordinary

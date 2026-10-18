@@ -527,6 +527,22 @@ export function createCharacterPresentation(
 		);
 		gameplay = actionFrame.gameplay;
 		const { actionLayersByActor, waitingActors, triggers, soundContext } = actionFrame;
+		// Effects run before actor-motion takes this frame's navigation
+		// hold, so they read the hold from the same per-actor state: the
+		// standing hold, or on the burst frame (walk stop and cast in one
+		// server burst) the last drawn pose actor-motion is about to hold.
+		const heldPose = ( gid: number ) => {
+			const state = states.get( gid );
+			if ( state?.navigationHold ) return state.navigationHold.pose;
+			const cast = castByActor.get( gid ), entity = entitiesByGid.get( gid );
+			if ( !state?.lastDrawnPose || !cast || !entity || cast.cancelledAtMs !== undefined ) return undefined;
+			const moving = localMover( gid ) ? gameplay?.moving : entity.moving;
+			const displaced = (localMover( gid ) ? gameplay?.movementPath : entity.movementPath)?.displacement === true;
+			if ( moving || displaced || !state.actionInput?.requestedMoving ) return undefined;
+			return waitingActors.has( gid ) || (actionLayersByActor.get( gid )?.length ?? 0) > 0 ?
+				state.lastDrawnPose :
+				undefined;
+		};
 		const { hitByActor, effectActors, pendingDeaths } = presentationEvents.step(
 			{
 				entities,
@@ -538,6 +554,7 @@ export function createCharacterPresentation(
 				combatStanceEnds: presentationState.combatStanceEnds,
 				triggers,
 				samples,
+				heldPose,
 				localMover,
 				logicalPose,
 				appearanceRef,

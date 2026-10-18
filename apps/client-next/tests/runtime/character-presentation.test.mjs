@@ -1008,8 +1008,22 @@ test("cast WAIT holds the drawn pose when the stop and the cast arrive in one bu
 	// drawn pose when that frame still reported the walk (requestedMoving),
 	// so no hold was taken and posePresentation then glided the body across
 	// the whole correction while the cast animation played.
+	const ground = {
+		resource: "ground.efp",
+		damageEvent: false,
+		startEvent: 0,
+		phase: "READY",
+		action: "AT_STOP",
+		move: "MOV_NONE",
+		bone: null,
+		offset: [ 0, 0, 0 ],
+		life: 10,
+		sound: null,
+		count: 1,
+		scripts: []
+	};
 	const f = fixture(
-		{ 7: { clips: [ "stand" ], phaseClips: [ [], [ "stand" ], [] ], stages: [] } },
+		{ 7: { clips: [ "stand" ], phaseClips: [ [], [ "stand" ], [] ], stages: [ ground ] } },
 		2,
 		false,
 		false,
@@ -1058,10 +1072,19 @@ test("cast WAIT holds the drawn pose when the stop and the cast arrive in one bu
 		Math.abs( burst.x - walking.x ) < 2,
 		`the burst frame still draws the walked pose (${burst.x} vs ${walking.x})`
 	);
+	let groundSeen = false;
 	for ( let step = 1; step <= 10; step++ ) {
 		const shown = frame( 110, 1.04 + step * 0.02, true, false, 2 );
 		assert.equal( shown.x, burst.x, `the casting body does not glide toward the snap (frame ${step})` );
+		// The bone-less AT_STOP ground stage has no renderer attachment: it
+		// draws at its stage anchor, which must be the held pose too.
+		const effect = f.actors.find( actor => actor.gid < 0 );
+		if ( effect ) {
+			groundSeen = true;
+			assert.equal( effect.pose.x, burst.x, `the ground effect anchors to the held body (frame ${step})` );
+		}
 	}
+	assert.ok( groundSeen, "the AT_STOP ground effect is presented during the cast" );
 	assert.equal(
 		frame( 110, 1.3, false, false, 2 ).x,
 		burst.x,

@@ -123,6 +123,9 @@ interface PresentationEventFrame {
 	readonly combatStanceEnds: Map<number, number>;
 	readonly triggers: readonly EffectTrigger[];
 	readonly samples: Pick<ReadonlyMap<number, unknown>, "has">;
+	// The pose actor-motion holds (or is about to hold on a cast-burst
+	// frame) for a character, so effects anchor to the drawn body.
+	readonly heldPose: ( gid: number ) => Pose | undefined;
 	readonly localMover: ( gid: number ) => boolean;
 	readonly logicalPose: ( entity: EntityState ) => Pose;
 	readonly appearanceRef: ( entity: EntityState ) => number;
@@ -207,6 +210,7 @@ export function createPresentationEvents() {
 				combatStanceEnds,
 				triggers,
 				samples,
+				heldPose,
 				localMover,
 				logicalPose,
 				appearanceRef,
@@ -257,6 +261,24 @@ export function createPresentationEvents() {
 			let drawnLocal: import("@/engine/contracts/gameplay").Pose | null = null;
 			const effectEntities = entities.map( entity => {
 				const local = entity.gid === gameplay?.localGid && !!gameplay.pose;
+				// A held body (a cast's navigation hold, including the burst
+				// frame actor-motion holds later this step) anchors its
+				// effects: bone-less ground stages draw at the stage anchor,
+				// which must be the held pose, not the corrected one.
+				const held = heldPose( entity.gid );
+				if ( held ) {
+					if ( local ) {
+						drawnLocal = { ...gameplay!.pose!, regionId: held.regionId, x: held.x, y: held.y, z: held.z };
+					}
+					return {
+						...entity,
+						regionId: held.regionId,
+						x: held.x,
+						y: held.y,
+						z: held.z,
+						heading: held.angle
+					};
+				}
 				if ( !samples.has( entity.gid ) || !localMover( entity.gid ) && !entity.moving ) return entity;
 				const drawn = posePresentation.pose( entity.gid, logicalPose( entity ), seconds );
 				if ( local ) {
@@ -295,8 +317,21 @@ export function createPresentationEvents() {
 					const rows = [ ...output.displayed.values() ].map( actor => {
 						const entity = entitiesByGid.get( actor.gid ),
 							native = entity ? logicalPose( entity ) : undefined;
-						const sampled = native ? posePresentation.pose( actor.gid, native, seconds ) : undefined;
-						const currentPose = sampled ?
+						// A held body launches bone projectiles from its held
+						// pose, not the corrected pose posePresentation spent.
+						const held = heldPose( actor.gid );
+						const sampled = !held && native ?
+							posePresentation.pose( actor.gid, native, seconds ) :
+							undefined;
+						const currentPose = held ?
+							{
+								regionId: held.regionId,
+								x: held.x,
+								y: held.y,
+								z: held.z,
+								yaw: characterHeadingYaw( held.angle )
+							} :
+							sampled ?
 							{
 								regionId: sampled.regionId,
 								x: sampled.x,
