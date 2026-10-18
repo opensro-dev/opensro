@@ -81,7 +81,7 @@ func TestPetAttackOrderTargetsEnemyCompanion(t *testing.T) {
 			}
 			rt.HandleCosCommand(testDivision, owner, petAttackOrder(owner.ActiveCOS.GID, target))
 			state := rt.petSessionFor(testDivision, owner.Name, owner.ActiveCOS.GID)
-			if name != "live" {
+			if name != "live" && name != "mounted" {
 				if state.combat != nil {
 					t.Fatalf("invalid companion order admitted: %+v", state.combat)
 				}

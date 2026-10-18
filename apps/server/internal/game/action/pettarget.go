@@ -57,11 +57,6 @@ func (rt *Runtime) resolvePetCombatTarget(step petCombatStep, gid uint32) (petCo
 		return petCombatTarget{}, false
 	}
 	if target.cos != nil {
-		// A pet never targets a ridden COS: its rider is struck and the ride
-		// takes the hit (ridingCOS below).
-		if target.cos.Mounted {
-			return petCombatTarget{}, false
-		}
 		// 529304..529324 checks the COS owner's body as well as the victim's.
 		// Recheck here so protection acquired during preparation cancels the cast.
 		if !petAttackBodyAllowed(step.pet, combatTarget{snapshot: target.snapshot}) {
