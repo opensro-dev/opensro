@@ -121,7 +121,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Testers can try every mastery tree on one character."},
 			{Flag: progression.EnvBetaSealRates, On: progression.BetaSealRatesFromEnv().Enabled(),
 				Native: "Each Seal of Star, Moon and Sun drops at the rare rate, and degree-9 Star and Moon only from monsters of level 76 to 85.",
-				Now:    "Seals of degrees 1 to 8 drop three times as often; at degree 9 Star drops three times and Moon five times as often, Sun as before, and Star and Moon also from monsters of level 86 to 94.",
+				Now:    "Seals of degrees 1 to 8 drop three times as often; at degree 9 Star drops three times and Moon twice as often, Sun as before, and Star and Moon also from monsters of level 86 to 94.",
 				Why:    "Beta balance, so testers can try seal gear."},
 			{Flag: progression.EnvSunEventOnly, On: progression.SunEventOnlyFromEnv().Enabled(),
 				Native: "Degree-9 Seal of Sun gear drops from monsters, and the honor shop lists it.",

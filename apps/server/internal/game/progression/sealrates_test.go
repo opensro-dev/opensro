@@ -36,14 +36,14 @@ func TestBetaSealRatesFromEnv(t *testing.T) {
 	}
 	t.Setenv(EnvBetaSealRates, "on")
 	rates := BetaSealRatesFromEnv()
-	if !rates.Enabled() || rates.Widening() != 5 {
+	if !rates.Enabled() || rates.Widening() != 3 {
 		t.Fatalf("on: %+v", rates)
 	}
-	want := [][]int{{3, 3, 3}, {3, 3, 3}, {3, 3, 3}, {3, 3, 3}, {3, 3, 3}, {3, 3, 3}, {3, 3, 3}, {3, 3, 3}, {3, 5, 1}}
+	want := [][]int{{3, 3, 3}, {3, 3, 3}, {3, 3, 3}, {3, 3, 3}, {3, 3, 3}, {3, 3, 3}, {3, 3, 3}, {3, 3, 3}, {3, 2, 1}}
 	if !reflect.DeepEqual(rates.Table(), want) {
 		t.Fatalf("table %v", rates.Table())
 	}
-	for class, m := range map[int]int{1: 3, 3: 3, 24: 3, 25: 3, 26: 5, 27: 1, 0: 1, 28: 1} {
+	for class, m := range map[int]int{1: 3, 3: 3, 24: 3, 25: 3, 26: 2, 27: 1, 0: 1, 28: 1} {
 		if rates.Multiplier(class) != m {
 			t.Fatalf("class %d multiplier %d, want %d", class, rates.Multiplier(class), m)
 		}

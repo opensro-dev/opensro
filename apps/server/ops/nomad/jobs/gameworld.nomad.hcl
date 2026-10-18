@@ -624,11 +624,12 @@ variable "beta_drop_cap" {
   default = "16"
 }
 
-# 250 keeps gold per kill near its level before #463 stopped multiplying the
-# heap count by beta_drop_rate (owner, 2026-10-10).
+# 100 keeps gold per kill near its level before #463 stopped multiplying the
+# heap count by beta_drop_rate (owner, 2026-10-10; rate lowered 250 to 100,
+# owner 2026-10-19).
 variable "beta_gold_rate" {
   type    = string
-  default = "250"
+  default = "100"
 }
 
 # instant_inventory_expansion makes quest bag slots usable at the turn-in
@@ -647,7 +648,7 @@ variable "beta_rare_rate" {
 # beta_seal_rates multiplies each rare seal's chance on top of beta_rare_rate
 # (port-only, not native, beta balance; owner 2026-10-13): degrees 1-8 make
 # Star, Moon and Sun three times as likely, degree 9 Star three times and
-# Moon five times, Sun as it is. "off" keeps every seal at beta_rare_rate.
+# Moon twice, Sun as it is. "off" keeps every seal at beta_rare_rate.
 variable "beta_seal_rates" {
   type    = string
   default = "on"

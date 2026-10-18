@@ -93,8 +93,9 @@ const betaDropCapDefault = 16
 // maxBetaDropCap bounds an operator override.
 const maxBetaDropCap = 1000
 
-// betaGoldRateDefault makes each gold heap fifty times its native amount.
-const betaGoldRateDefault = 50
+// betaGoldRateDefault makes each gold heap one hundred times its native
+// amount (the deployment default, shardsettings' SRO_BETA_GOLD_RATE).
+const betaGoldRateDefault = 100
 
 // maxBetaGoldRate bounds an operator override; heaps also clamp to a dword.
 const maxBetaGoldRate = 10_000

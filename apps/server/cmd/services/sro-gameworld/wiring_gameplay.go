@@ -702,7 +702,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	// rates on top of RareRate. Off is today's rates.
 	game.items.SealRates = progression.BetaSealRatesFromEnv()
 	if game.items.SealRates.Enabled() {
-		log.Infof("progression: beta seal rates ON (%s): degrees 1-8 Star/Moon/Sun x3, degree 9 Star x3 Moon x5 Sun x1, on top of rare (SoX) x%d", progression.EnvBetaSealRates, max(game.items.RareRate, 1))
+		log.Infof("progression: beta seal rates ON (%s): degrees 1-8 Star/Moon/Sun x3, degree 9 Star x3 Moon x2 Sun x1, on top of rare (SoX) x%d", progression.EnvBetaSealRates, max(game.items.RareRate, 1))
 	}
 	stats.Withdrawal = game.items.WithdrawalHooks()
 	stats.BaseStats = game.deps.PlayerBaseStats

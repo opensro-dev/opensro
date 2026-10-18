@@ -64,7 +64,7 @@ type SealRates struct {
 BetaSealRatesFromEnv
 
 The owner's beta rates: degrees 1-8 triple every seal; degree 9 triples
-Star, quintuples Moon and leaves Sun as it is.
+Star, doubles Moon and leaves Sun as it is.
 ================
 */
 func BetaSealRatesFromEnv() SealRates {
@@ -77,7 +77,7 @@ func BetaSealRatesFromEnv() SealRates {
 	for degree := 1; degree < maxSealDegree; degree++ {
 		rates.table[degree-1] = [sealClassesPerDegree]int{SealStar: 3, SealMoon: 3, SealSun: 3}
 	}
-	rates.table[maxSealDegree-1] = [sealClassesPerDegree]int{SealStar: 3, SealMoon: 5, SealSun: 1}
+	rates.table[maxSealDegree-1] = [sealClassesPerDegree]int{SealStar: 3, SealMoon: 2, SealSun: 1}
 	return rates
 }
 

@@ -22,9 +22,9 @@ import (
 TestSealRatesKeepEachSealAtItsMultiplier
 
 Over every keep draw DropRoll can return below the rejection limit, a
-chosen rare of each degree and seal stays rare exactly multiplier / 5 of the
-time, read through the shipped item's ItemClass: degrees 1-8 three of five,
-degree 9 Star three, Moon five (always), Sun one. With the rare window five
+chosen rare of each degree and seal stays rare exactly multiplier / 3 of the
+time, read through the shipped item's ItemClass: degrees 1-8 three of three,
+degree 9 Star three, Moon two, Sun one. With the rare window three
 times as wide, each seal's chance is its multiplier times the old one.
 ================
 */
@@ -34,16 +34,16 @@ func TestSealRatesKeepEachSealAtItsMultiplier(t *testing.T) {
 	rt, _, _, _ := newCombatTestRuntime(t, 1)
 	rt.deps.(*enterworld.Deps).Items = shippedItems(t)
 	rt.SealRates = progression.BetaSealRatesFromEnv()
-	if rt.SealRates.Widening() != 5 {
-		t.Fatalf("widening %d, want 5", rt.SealRates.Widening())
+	if rt.SealRates.Widening() != 3 {
+		t.Fatalf("widening %d, want 3", rt.SealRates.Widening())
 	}
 	want := func(degree int, seal string) int {
 		if degree < 9 {
 			return 3
 		}
-		return map[string]int{"A": 3, "B": 5, "C": 1}[seal]
+		return map[string]int{"A": 3, "B": 2, "C": 1}[seal]
 	}
-	limit := uint32(dropRollDomain / 5 * 5)
+	limit := uint32(dropRollDomain / 3 * 3)
 	for degree := 1; degree <= 9; degree++ {
 		for _, seal := range []string{"A", "B", "C"} {
 			codename := fmt.Sprintf("ITEM_CH_BLADE_%02d_%s_RARE", degree, seal)
@@ -59,10 +59,10 @@ func TestSealRatesKeepEachSealAtItsMultiplier(t *testing.T) {
 				}
 			}
 			m := want(degree, seal)
-			if kept*5 != int(limit)*m {
-				t.Fatalf("%s kept %d of %d, want %d/5", codename, kept, limit, m)
+			if kept*3 != int(limit)*m {
+				t.Fatalf("%s kept %d of %d, want %d/3", codename, kept, limit, m)
 			}
-			if m == 5 && draws != 0 {
+			if m == 3 && draws != 0 {
 				t.Fatalf("%s: the largest multiplier keeps without a draw, drew %d", codename, draws)
 			}
 		}
@@ -75,7 +75,7 @@ TestSealRatesOffLeaveTheRareRollAsItWas
 
 Off, the rare window is RareRate itself and a chosen rare is kept without
 drawing, so the roll sequence is the one before the setting. On, the window
-widens five times from at least the native one residue.
+widens three times from at least the native one residue.
 ================
 */
 func TestSealRatesOffLeaveTheRareRollAsItWas(t *testing.T) {
@@ -93,7 +93,7 @@ func TestSealRatesOffLeaveTheRareRollAsItWas(t *testing.T) {
 	}
 	t.Setenv(progression.EnvBetaSealRates, "on")
 	rt.SealRates = progression.BetaSealRatesFromEnv()
-	for rate, want := range map[int]int{0: 5, 1: 5, 5: 25} {
+	for rate, want := range map[int]int{0: 3, 1: 3, 5: 15} {
 		rt.RareRate = rate
 		if got := rt.rareWindow(); got != want {
 			t.Fatalf("on: window %d at rare rate %d, want %d", got, rate, want)
