@@ -36,8 +36,8 @@ enterWorldBlob
 ================
 */
 type enterWorldBlob struct {
-	V         int             `json:"v"`
-	Bootstrap json.RawMessage `json:"bootstrap"`
+	V         int `json:"v"`
+	Bootstrap any `json:"bootstrap"`
 }
 
 // EnterWorldBlob renders the versioned blob for one bootstrap result.
@@ -47,41 +47,10 @@ EnterWorldBlob
 ================
 */
 func EnterWorldBlob(result *BootstrapResult) ([]byte, error) {
-	envelope, err := json.Marshal(result)
-	if err != nil {
-		return nil, err
-	}
-	// Strip the packets array: the blob is "bootstrap DTO minus packets"
-	// (frozen contract, internal/transport/envelope.go OpEnterWorldResult comment).
-	var asMap map[string]json.RawMessage
-	if err := json.Unmarshal(envelope, &asMap); err != nil {
-		return nil, err
-	}
-	delete(asMap, "packets")
-	// Explicit browser vitals use the same clamped values as native entry.
-	// Persisted Character uses currentHp/currentMp; forwarding it verbatim left
-	// the browser's hp/mp fields absent until a later game-ready refresh.
-	if result.Character != nil {
-		var character map[string]json.RawMessage
-		if err := json.Unmarshal(asMap["character"], &character); err != nil {
-			return nil, err
-		}
-		for key, value := range map[string]int64{"hp": CurrentHP(result.Character), "mp": CurrentMP(result.Character), "maxHp": DerivedMaxHP(result.Character), "maxMp": DerivedMaxMP(result.Character)} {
-			character[key], err = json.Marshal(value)
-			if err != nil {
-				return nil, err
-			}
-		}
-		asMap["character"], err = json.Marshal(character)
-		if err != nil {
-			return nil, err
-		}
-	}
-	stripped, err := json.Marshal(asMap)
-	if err != nil {
-		return nil, err
-	}
-	return json.Marshal(enterWorldBlob{V: EnterWorldBlobVersion, Bootstrap: stripped})
+	return json.Marshal(enterWorldBlob{
+		V:         EnterWorldBlobVersion,
+		Bootstrap: result.blobView(),
+	})
 }
 
 // browserEntryPayload is shared by first entry and resident-world replacement.

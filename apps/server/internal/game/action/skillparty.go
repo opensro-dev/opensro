@@ -723,11 +723,21 @@ remaining children of an ended caster instance.
 ==================
 */
 func (rt *Runtime) endPartyAurasForLoading(division string, c *enterworld.Character) {
-	if rt.effects == nil {
+	if rt.effects == nil || c == nil {
 		return
 	}
 	skills := rt.deps.SkillData()
 	if skills == nil {
+		return
+	}
+	hasAura := false
+	for _, effect := range rt.effects.Snapshot(division, c.Name) {
+		if row, ok := skills.SkillByID(effect.SkillID); ok && row.Aura.Present {
+			hasAura = true
+			break
+		}
+	}
+	if !hasAura {
 		return
 	}
 	rt.deps.Update(c, "aura-loading-end", func() bool {

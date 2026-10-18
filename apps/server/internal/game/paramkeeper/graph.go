@@ -1,9 +1,19 @@
+/*
+===========================================================================
+
+graph.go - dependency propagation over parameter elements (4B3060 / 4B3130)
+
+Detached, bounded parameter projection with synchronous propagation in native
+source-identity order.
+
+===========================================================================
+*/
+
 package paramkeeper
 
-import (
-	"fmt"
-	"sort"
-)
+import "fmt"
+
+const maxGraphNodeID = 512
 
 // NodeDefinition gives each parameter a distinct source identity for dependency
 // propagation. In native this identity is the CParam pointer, not its numeric
@@ -14,10 +24,22 @@ type NodeDefinition struct {
 	Definition
 }
 
+type dependentEdge struct {
+	target  uint16
+	channel Channel
+	key     uint32
+}
+
+type graphTopology struct {
+	indexByID  [maxGraphNodeID]int16
+	keys       map[uint32]uint16
+	dependents [][]dependentEdge
+}
+
 type node struct {
-	key        uint32
-	element    *Element
-	dependents map[uint16]Channel
+	id      uint16
+	key     uint32
+	element Element
 }
 
 // Graph is a detached, bounded parameter projection. It has no effect timers,
@@ -25,8 +47,10 @@ type node struct {
 // Successful operations propagate synchronously as in 4B3130; invalid inputs
 // and arithmetic errors leave the entire projection unchanged.
 type Graph struct {
-	nodes map[uint16]*node
-	keys  map[uint32]uint16
+	topology *graphTopology
+	nodes    []node
+	pristine *Graph
+	dirty    bool
 }
 
 // Write is a source contribution to a single parameter/channel.
@@ -37,13 +61,33 @@ type Write struct {
 	Value     float32
 }
 
-// ApplyBatch commits a complete projection update atomically. It clones once
-// for the whole batch, rather than once per parameter in a character snapshot.
+/*
+================
+Graph.ApplyBatch
+
+ApplyBatch commits a complete projection update atomically. It clones once
+for the whole batch, rather than once per parameter in a character snapshot.
+When g is a pristine clone that has not yet been mutated, it applies in-place
+and only restores from pristine on error.
+================
+*/
 func (g *Graph) ApplyBatch(writes []Write) error {
 	for _, w := range writes {
 		if err := g.checkExternalSource(w.Parameter, w.Source); err != nil {
 			return err
 		}
+	}
+	if !g.dirty && g.pristine != nil {
+		g.dirty = true
+		for _, w := range writes {
+			if _, err := g.apply(w.Parameter, w.Channel, w.Source, w.Value); err != nil {
+				restored := g.pristine.clone()
+				g.nodes = restored.nodes
+				g.dirty = false
+				return err
+			}
+		}
+		return nil
 	}
 	next := g.clone()
 	for _, w := range writes {
@@ -52,46 +96,76 @@ func (g *Graph) ApplyBatch(writes []Write) error {
 		}
 	}
 	g.nodes = next.nodes
+	g.dirty = true
 	return nil
 }
 
+/*
+================
+NewGraph
+================
+*/
 func NewGraph(definitions []NodeDefinition) (*Graph, error) {
-	g := &Graph{nodes: make(map[uint16]*node), keys: make(map[uint32]uint16)}
-	for _, d := range definitions {
-		if d.ID >= 512 || d.SourceKey == 0 {
+	topo := &graphTopology{
+		keys:       make(map[uint32]uint16, len(definitions)),
+		dependents: make([][]dependentEdge, len(definitions)),
+	}
+	for i := range topo.indexByID {
+		topo.indexByID[i] = -1
+	}
+	nodes := make([]node, len(definitions))
+	for i, d := range definitions {
+		if d.ID >= maxGraphNodeID || d.SourceKey == 0 {
 			return nil, fmt.Errorf("paramkeeper: invalid node %d identity %d", d.ID, d.SourceKey)
 		}
-		if _, exists := g.nodes[d.ID]; exists {
+		if topo.indexByID[d.ID] >= 0 {
 			return nil, fmt.Errorf("paramkeeper: duplicate node %d", d.ID)
 		}
-		if _, exists := g.keys[d.SourceKey]; exists {
+		if _, exists := topo.keys[d.SourceKey]; exists {
 			return nil, fmt.Errorf("paramkeeper: duplicate node identity %d", d.SourceKey)
 		}
-		e, err := New(d.Definition)
-		if err != nil {
-			return nil, fmt.Errorf("paramkeeper: node %d: %w", d.ID, err)
+		if !validDefinition(d.Definition) {
+			return nil, fmt.Errorf("paramkeeper: node %d: invalid definition", d.ID)
 		}
-		g.nodes[d.ID] = &node{key: d.SourceKey, element: e, dependents: make(map[uint16]Channel)}
-		g.keys[d.SourceKey] = d.ID
+		topo.indexByID[d.ID] = int16(i)
+		topo.keys[d.SourceKey] = d.ID
+		nodes[i] = node{
+			id:      d.ID,
+			key:     d.SourceKey,
+			element: Element{definition: d.Definition},
+		}
 	}
-	return g, nil
+	return &Graph{topology: topo, nodes: nodes}, nil
 }
 
-// Link registers a target without publishing a value. 4B3060 keys its map by
-// the target CParam pointer and preserves the first registration, including
-// its channel. 4B3130 subsequently writes the source's value under its pointer
-// identity into that target/channel. Invalid cyclic graphs are rejected here.
+/*
+================
+Graph.Link
+
+Link registers a target without publishing a value. 4B3060 keys its map by
+the target CParam pointer and preserves the first registration, including
+its channel. 4B3130 subsequently writes the source's value under its pointer
+identity into that target/channel. Invalid cyclic graphs are rejected here.
+================
+*/
 func (g *Graph) Link(source, target uint16, channel Channel) error {
-	s, sourceOK := g.nodes[source]
-	_, targetOK := g.nodes[target]
-	if !sourceOK || !targetOK || channel >= channelCount {
+	if source >= maxGraphNodeID || target >= maxGraphNodeID || channel >= channelCount {
 		return fmt.Errorf("paramkeeper: invalid dependency %d -> %d channel %d", source, target, channel)
 	}
-	if _, exists := s.dependents[target]; exists {
-		return nil
+	sIdx := g.topology.indexByID[source]
+	tIdx := g.topology.indexByID[target]
+	if sIdx < 0 || tIdx < 0 {
+		return fmt.Errorf("paramkeeper: invalid dependency %d -> %d channel %d", source, target, channel)
 	}
-	seen := make(map[uint16]bool)
-	pending := []uint16{target}
+	deps := g.topology.dependents[sIdx]
+	for _, dep := range deps {
+		if dep.target == target {
+			return nil
+		}
+	}
+	var seen [maxGraphNodeID]bool
+	var pendingBuf [64]uint16
+	pending := append(pendingBuf[:0], target)
 	for len(pending) != 0 {
 		id := pending[len(pending)-1]
 		pending = pending[:len(pending)-1]
@@ -100,33 +174,70 @@ func (g *Graph) Link(source, target uint16, channel Channel) error {
 		}
 		if !seen[id] {
 			seen[id] = true
-			for next := range g.nodes[id].dependents {
-				pending = append(pending, next)
+			idx := g.topology.indexByID[id]
+			for _, next := range g.topology.dependents[idx] {
+				pending = append(pending, next.target)
 			}
 		}
 	}
-	s.dependents[target] = channel
+	targetKey := g.nodes[tIdx].key
+	edge := dependentEdge{target: target, channel: channel, key: targetKey}
+	inserted := false
+	for i := range deps {
+		if deps[i].key > targetKey {
+			deps = append(deps, dependentEdge{})
+			copy(deps[i+1:], deps[i:])
+			deps[i] = edge
+			inserted = true
+			break
+		}
+	}
+	if !inserted {
+		deps = append(deps, edge)
+	}
+	g.topology.dependents[sIdx] = deps
 	return nil
 }
 
-// Linked reports whether any parameter feeds id through a Link.
+/*
+================
+Graph.Linked
+
+Linked reports whether any parameter feeds id through a Link.
+================
+*/
 func (g *Graph) Linked(id uint16) bool {
-	for _, n := range g.nodes {
-		if _, ok := n.dependents[id]; ok {
-			return true
+	for _, deps := range g.topology.dependents {
+		for _, dep := range deps {
+			if dep.target == id {
+				return true
+			}
 		}
 	}
 	return false
 }
 
+/*
+================
+Graph.Value
+================
+*/
 func (g *Graph) Value(id uint16) (float32, error) {
-	n, ok := g.nodes[id]
-	if !ok {
+	if id >= maxGraphNodeID {
 		return 0, fmt.Errorf("paramkeeper: undefined parameter %d", id)
 	}
-	return n.element.Value()
+	idx := g.topology.indexByID[id]
+	if idx < 0 {
+		return 0, fmt.Errorf("paramkeeper: undefined parameter %d", id)
+	}
+	return g.nodes[idx].element.Value()
 }
 
+/*
+================
+Graph.Apply
+================
+*/
 func (g *Graph) Apply(id uint16, channel Channel, source uint32, value float32) (bool, error) {
 	if err := g.checkExternalSource(id, source); err != nil {
 		return false, err
@@ -135,16 +246,23 @@ func (g *Graph) Apply(id uint16, channel Channel, source uint32, value float32) 
 	changed, err := next.apply(id, channel, source, value)
 	if err == nil && changed {
 		g.nodes = next.nodes
+		g.dirty = true
 	}
 	return changed && err == nil, err
 }
 
+/*
+================
+Graph.Remove
+================
+*/
 func (g *Graph) Remove(id uint16, source uint32) (uint8, error) {
 	if err := g.checkExternalSource(id, source); err != nil {
 		return 0, err
 	}
 	next := g.clone()
-	removed := next.nodes[id].element.Remove(source)
+	idx := next.topology.indexByID[id]
+	removed := next.nodes[idx].element.Remove(source)
 	if removed == 0 {
 		return 0, nil
 	}
@@ -152,59 +270,90 @@ func (g *Graph) Remove(id uint16, source uint32) (uint8, error) {
 		return 0, err
 	}
 	g.nodes = next.nodes
+	g.dirty = true
 	return removed, nil
 }
 
+/*
+================
+Graph.Clone
+
+Clone returns an independent value copy sharing the immutable node and link
+topology.
+================
+*/
+func (g *Graph) Clone() *Graph {
+	cloned := g.clone()
+	if !g.dirty {
+		cloned.pristine = g
+	}
+	return cloned
+}
+
+/*
+================
+Graph.checkExternalSource
+================
+*/
 func (g *Graph) checkExternalSource(id uint16, source uint32) error {
-	if _, ok := g.nodes[id]; !ok {
+	if id >= maxGraphNodeID || g.topology.indexByID[id] < 0 {
 		return fmt.Errorf("paramkeeper: undefined parameter %d", id)
 	}
-	if _, reserved := g.keys[source]; reserved {
+	if _, reserved := g.topology.keys[source]; reserved {
 		return fmt.Errorf("paramkeeper: external source %d collides with parameter identity", source)
 	}
 	return nil
 }
 
+/*
+================
+Graph.apply
+================
+*/
 func (g *Graph) apply(id uint16, channel Channel, source uint32, value float32) (bool, error) {
-	changed, err := g.nodes[id].element.Apply(channel, source, value)
+	idx := g.topology.indexByID[id]
+	changed, err := g.nodes[idx].element.Apply(channel, source, value)
 	if err == nil && changed {
 		err = g.propagate(id)
 	}
 	return changed, err
 }
 
+/*
+================
+Graph.propagate
+================
+*/
 func (g *Graph) propagate(id uint16) error {
-	n := g.nodes[id]
+	idx := g.topology.indexByID[id]
+	n := &g.nodes[idx]
 	v, err := n.element.Value()
 	if err != nil {
 		return fmt.Errorf("paramkeeper: evaluating node %d: %w", id, err)
 	}
-	order := make([]uint16, 0, len(n.dependents))
-	for target := range n.dependents {
-		order = append(order, target)
-	}
-	sort.Slice(order, func(i, j int) bool { return g.nodes[order[i]].key < g.nodes[order[j]].key })
-	for _, target := range order {
-		if _, err = g.apply(target, n.dependents[target], n.key, v); err != nil {
+	for _, dep := range g.topology.dependents[idx] {
+		if _, err = g.apply(dep.target, dep.channel, n.key, v); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
+/*
+================
+Graph.clone
+================
+*/
 func (g *Graph) clone() *Graph {
-	copy := &Graph{nodes: make(map[uint16]*node, len(g.nodes)), keys: g.keys}
-	for id, n := range g.nodes {
-		e := &Element{definition: n.element.definition}
-		for channel, bucket := range n.element.buckets {
-			if bucket != nil {
-				e.buckets[channel] = make(map[uint32]float32, len(bucket))
-				for source, v := range bucket {
-					e.buckets[channel][source] = v
-				}
-			}
-		}
-		copy.nodes[id] = &node{key: n.key, element: e, dependents: n.dependents}
+	nodes := make([]node, len(g.nodes))
+	for i := range g.nodes {
+		nodes[i].id = g.nodes[i].id
+		nodes[i].key = g.nodes[i].key
+		g.nodes[i].element.cloneInto(&nodes[i].element)
 	}
-	return copy
+	return &Graph{
+		topology: g.topology,
+		nodes:    nodes,
+		dirty:    g.dirty,
+	}
 }

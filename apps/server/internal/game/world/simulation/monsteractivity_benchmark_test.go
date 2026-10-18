@@ -103,3 +103,72 @@ func TestBehaviorDispatchReadsCurrentActorAndSkipsRetiredIdentity(t *testing.T) 
 		t.Fatal("survivors were not rescheduled")
 	}
 }
+
+/*
+================
+BenchmarkMoverStorageSetSameRegion
+
+Measures moverStorage.set and commitActivity across same-region pending
+updates without expanding the old pending record for interest-bounds checks
+or reconstructing monster.Instance twice per commitActivity.
+================
+*/
+func BenchmarkMoverStorageSetSameRegion(b *testing.B) {
+	for _, legacy := range []bool{true, false} {
+		name := "compact"
+		if legacy {
+			name = "legacy"
+		}
+		b.Run(name, func(b *testing.B) {
+			s, d := queueBenchmarkState(1000)
+			base := monster.MoverState{
+				Pose: monster.Pose{
+					RegionID: 0x62a8,
+					X:        500,
+					Z:        500,
+				},
+				Channel:  2,
+				Activity: monster.ActivityCadence{Interval: 1000, LastCheck: 1},
+			}
+			mustMoverTransition(&base, monster.MoverEventSpawnHoldElapsed, 0)
+			mustMoverTransition(&base, monster.MoverEventStartWander, 0)
+			mustMoverTransition(&base, monster.MoverEventActivityLost, 0)
+			d.movers.set(1, base)
+			before := base
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				after := before
+				after.Activity.Due(uint32(1001 + i*1000))
+				if legacy {
+					s.mu.Lock()
+					state := s.populationForObject("benchmark", 1)
+					current, exists := state.movers.lookup(1)
+					if !exists || current != before || state.instances.get(1).Gid == 0 || state.instances.get(1).CurrentHP == 0 {
+						s.mu.Unlock()
+						b.Fatal("legacy commitActivity rejected")
+					}
+					if err := after.Validate(); err != nil {
+						s.mu.Unlock()
+						b.Fatal(err)
+					}
+					old := state.movers.rows[1]
+					oldBounds := moverInterestBoundsFor(old.value())
+					state.movers.spatial.remove(1, oldBounds)
+					row, _ := after.PendingSnapshot()
+					old.pending.set(row)
+					state.movers.rows[1] = old
+					state.movers.spatial.add(1, moverInterestBoundsFor(after))
+					state.syncApproachActor(1, after)
+					s.scheduleBehavior(state, 1, int64(1000+i))
+					s.mu.Unlock()
+				} else {
+					if !s.commitActivity("benchmark", 1, before, after, int64(1000+i)) {
+						b.Fatal("commitActivity rejected")
+					}
+				}
+				before = after
+			}
+		})
+	}
+}

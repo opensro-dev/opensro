@@ -128,7 +128,7 @@ func (s *MonsterState) commitActivity(division string, gid uint32, before, after
 	defer s.mu.Unlock()
 	state := s.populationForObject(division, gid)
 	current, exists := state.movers.lookup(gid)
-	if !exists || current != before || state.instances.get(gid).Ref.MaxHP > 0 && state.instances.get(gid).CurrentHP == 0 {
+	if !exists || current != before || state.instances.isDead(gid) {
 		return false
 	}
 	if err := after.Validate(); err != nil {

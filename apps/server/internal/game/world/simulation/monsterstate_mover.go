@@ -77,14 +77,13 @@ func (s *MonsterState) commitMoverLocked(state *divisionMonsterState, gid uint32
 	}
 	// Packet-side damage can arm retaliation between a tick's snapshot read
 	// and commit. Reject only a plan from an older retaliation revision.
-	if current, ok := state.movers.lookup(gid); ok &&
-		current.RetaliationRevision() > mover.RetaliationRevision() {
+	previous, hadPrevious := state.movers.lookup(gid)
+	if hadPrevious && previous.RetaliationRevision() > mover.RetaliationRevision() {
 		return false
 	}
 	// Entry effects belong to the accepted transition, never its planner.
 	// A stale FOLLOW plan must not reset a timer while retaliation owns BATTLE.
-	if previous, exists := state.movers.lookup(gid); mover.Mode() == monster.MoverFollowing &&
-		(!exists || previous.Mode() != monster.MoverFollowing) {
+	if mover.Mode() == monster.MoverFollowing && (!hadPrevious || previous.Mode() != monster.MoverFollowing) {
 		s.beginFollowCadenceLocked(state, gid)
 	}
 	state.movers.set(gid, mover)

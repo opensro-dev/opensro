@@ -223,7 +223,7 @@ type BootstrapResult struct {
 	// inventoryOwner stays private to entry preparation: its live capacity
 	// adopts Character's presented size only after browser encoding succeeds.
 	// liveOwner holds the live character record so HandleEnterWorld stamps
-	// LastLoginAtMs on every login.
+	// LastLoginAtMs after browser encoding succeeds.
 	inventoryOwner      *Character
 	liveOwner           *Character
 	DiagnosticSessionID string
@@ -343,6 +343,246 @@ type characterSnapshotView struct {
 	*Character
 	MaxHP int64 `json:"maxHp"`
 	MaxMP int64 `json:"maxMp"`
+}
+
+/*
+================
+browserCharacterView
+
+browserCharacterView carries the clamped hp/mp and derived maxHp/maxMp fields
+the browser expects on OpEnterWorldResult without a map round-trip.
+================
+*/
+type browserCharacterView struct {
+	*Character
+	HP    int64 `json:"hp"`
+	MP    int64 `json:"mp"`
+	MaxHP int64 `json:"maxHp"`
+	MaxMP int64 `json:"maxMp"`
+}
+
+/*
+================
+bootstrapBlobFailureView
+================
+*/
+type bootstrapBlobFailureView struct {
+	NativeResult    int               `json:"nativeResult"`
+	NativeErrorCode int               `json:"nativeErrorCode"`
+	NativeError     *NativeAgentError `json:"nativeError"`
+	Reason          string            `json:"reason,omitempty"`
+}
+
+/*
+================
+bootstrapBlobSuccessView
+================
+*/
+type bootstrapBlobSuccessView struct {
+	DiagnosticSessionID       string                   `json:"diagnosticSessionId,omitempty"`
+	InventorySlotCount        uint8                    `json:"inventorySlotCount"`
+	EquipmentSlotCount        uint8                    `json:"equipmentSlotCount"`
+	SimulationProtocolVersion int                      `json:"simulationProtocolVersion"`
+	NativeResult              int                      `json:"nativeResult"`
+	ProtocolVersion           int                      `json:"protocolVersion"`
+	DivisionID                string                   `json:"divisionId"`
+	Character                 *browserCharacterView    `json:"character"`
+	BootstrapMode             string                   `json:"bootstrapMode"`
+	AcademyMember             bool                     `json:"academyMember"`
+	EventGuideStateMask       uint32                   `json:"eventGuideStateMask"`
+	RefObjSnapshot            []RefObjRow              `json:"refObjSnapshot"`
+	RefSkillSnapshot          []SpawnSkillRow          `json:"refSkillSnapshot"`
+	SkillCooldowns            []EntrySkillCooldown     `json:"skillCooldowns"`
+	RefItemSnapshot           []RefItemRow             `json:"refItemSnapshot"`
+	MagicOptionSnapshot       []MagicOptionRow         `json:"magicOptionSnapshot,omitempty"`
+	AvatarMagicOptions        []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
+	SiegeItemForgeGroups      []SiegeItemForgeGroupRow `json:"siegeItemForgeGroups"`
+	SiegeFortressData         []SiegeFortressDataRow   `json:"siegeFortressData"`
+	GameWorldData             []GameWorldDataRow       `json:"gameWorldData"`
+	AvatarItems               []EquipItemRow           `json:"avatarItems"`
+	EquipItems                []EquipItemRow           `json:"equipItems"`
+	LocalPlayerEntry          *LocalPlayerEntry        `json:"localPlayerEntry"`
+	ChatPermissions           ChatPermissions          `json:"chatPermissions"`
+	ChatMessages              []string                 `json:"chatMessages"`
+	SystemMessages            interface{}              `json:"systemMessages"`
+	UnlimitedItems            []uint32                 `json:"unlimitedItems,omitempty"`
+	MasteryTotalOverride      int64                    `json:"masteryTotalOverride,omitempty"`
+	StorageAutoStack          bool                     `json:"storageAutoStack,omitempty"`
+	FastDenReturn             bool                     `json:"fastDenReturn,omitempty"`
+	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
+	JobSuitHidesArmor         bool                     `json:"jobSuitHidesArmor,omitempty"`
+	MoonlitThiefSuit          bool                     `json:"moonlitThiefSuit,omitempty"`
+	UiTuning                  *UiTuning                `json:"uiTuning,omitempty"`
+}
+
+/*
+================
+bootstrapReferenceBlobSuccessView
+================
+*/
+type bootstrapReferenceBlobSuccessView struct {
+	DiagnosticSessionID       string                   `json:"diagnosticSessionId,omitempty"`
+	InventorySlotCount        uint8                    `json:"inventorySlotCount"`
+	EquipmentSlotCount        uint8                    `json:"equipmentSlotCount"`
+	SimulationProtocolVersion int                      `json:"simulationProtocolVersion"`
+	NativeResult              int                      `json:"nativeResult"`
+	ProtocolVersion           int                      `json:"protocolVersion"`
+	DivisionID                string                   `json:"divisionId"`
+	Character                 *browserCharacterView    `json:"character"`
+	BootstrapMode             string                   `json:"bootstrapMode"`
+	AcademyMember             bool                     `json:"academyMember"`
+	EventGuideStateMask       uint32                   `json:"eventGuideStateMask"`
+	RefObjSnapshot            []RefObjRow              `json:"refObjSnapshot"`
+	SkillCooldowns            []EntrySkillCooldown     `json:"skillCooldowns"`
+	RefItemSnapshot           []RefItemRow             `json:"refItemSnapshot"`
+	MagicOptionSnapshot       []MagicOptionRow         `json:"magicOptionSnapshot,omitempty"`
+	AvatarMagicOptions        []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
+	SiegeItemForgeGroups      []SiegeItemForgeGroupRow `json:"siegeItemForgeGroups"`
+	SiegeFortressData         []SiegeFortressDataRow   `json:"siegeFortressData"`
+	GameWorldData             []GameWorldDataRow       `json:"gameWorldData"`
+	AvatarItems               []EquipItemRow           `json:"avatarItems"`
+	EquipItems                []EquipItemRow           `json:"equipItems"`
+	LocalPlayerEntry          *LocalPlayerEntry        `json:"localPlayerEntry"`
+	ChatPermissions           ChatPermissions          `json:"chatPermissions"`
+	ChatMessages              []string                 `json:"chatMessages"`
+	SystemMessages            interface{}              `json:"systemMessages"`
+	UnlimitedItems            []uint32                 `json:"unlimitedItems,omitempty"`
+	MasteryTotalOverride      int64                    `json:"masteryTotalOverride,omitempty"`
+	StorageAutoStack          bool                     `json:"storageAutoStack,omitempty"`
+	FastDenReturn             bool                     `json:"fastDenReturn,omitempty"`
+	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
+	JobSuitHidesArmor         bool                     `json:"jobSuitHidesArmor,omitempty"`
+	MoonlitThiefSuit          bool                     `json:"moonlitThiefSuit,omitempty"`
+	UiTuning                  *UiTuning                `json:"uiTuning,omitempty"`
+}
+
+/*
+================
+BootstrapResult.browserCharacter
+================
+*/
+func (r *BootstrapResult) browserCharacter() *browserCharacterView {
+	if r.Character == nil {
+		return nil
+	}
+	return &browserCharacterView{
+		Character: r.Character,
+		HP:        CurrentHP(r.Character),
+		MP:        CurrentMP(r.Character),
+		MaxHP:     DerivedMaxHP(r.Character),
+		MaxMP:     DerivedMaxMP(r.Character),
+	}
+}
+
+/*
+================
+BootstrapResult.blobView
+================
+*/
+func (r *BootstrapResult) blobView() any {
+	if r.NativeResult == nativeResultFailure {
+		return bootstrapBlobFailureView{
+			NativeResult:    r.NativeResult,
+			NativeErrorCode: r.NativeErrorCode,
+			NativeError:     r.NativeError,
+			Reason:          r.Reason,
+		}
+	}
+	cooldowns := r.SkillCooldowns
+	if cooldowns == nil {
+		cooldowns = []EntrySkillCooldown{}
+	}
+	return bootstrapBlobSuccessView{
+		DiagnosticSessionID:       r.DiagnosticSessionID,
+		InventorySlotCount:        inventory.BagEnd(r.Character),
+		EquipmentSlotCount:        inventory.EquipmentSlotEnd,
+		SimulationProtocolVersion: 1,
+		NativeResult:              r.NativeResult,
+		ProtocolVersion:           BootstrapProtocolVersion,
+		DivisionID:                r.DivisionID,
+		Character:                 r.browserCharacter(),
+		BootstrapMode:             BootstrapMode,
+		AcademyMember:             r.AcademyMember,
+		EventGuideStateMask:       r.EventGuideStateMask,
+		RefObjSnapshot:            r.RefObjSnapshot,
+		RefSkillSnapshot:          r.RefSkillSnapshot,
+		SkillCooldowns:            cooldowns,
+		RefItemSnapshot:           r.RefItemSnapshot,
+		MagicOptionSnapshot:       r.MagicOptionSnapshot,
+		AvatarMagicOptions:        r.AvatarMagicOptions,
+		SiegeItemForgeGroups:      r.SiegeItemForgeGroups,
+		SiegeFortressData:         r.SiegeFortressData,
+		GameWorldData:             r.GameWorldData,
+		AvatarItems:               r.AvatarItems,
+		EquipItems:                r.EquipItems,
+		LocalPlayerEntry:          r.LocalPlayerEntry,
+		ChatPermissions:           r.ChatPermissions,
+		ChatMessages:              r.ChatMessages,
+		SystemMessages:            r.SystemMessages,
+		UnlimitedItems:            r.UnlimitedItems,
+		MasteryTotalOverride:      r.MasteryTotalOverride,
+		StorageAutoStack:          r.StorageAutoStack,
+		FastDenReturn:             r.FastDenReturn,
+		TradeTiers:                r.TradeTiers,
+		JobSuitHidesArmor:         r.JobSuitHidesArmor,
+		MoonlitThiefSuit:          r.MoonlitThiefSuit,
+		UiTuning:                  r.UiTuning,
+	}
+}
+
+/*
+================
+BootstrapResult.referenceBlobView
+================
+*/
+func (r *BootstrapResult) referenceBlobView() any {
+	if r.NativeResult == nativeResultFailure {
+		return bootstrapBlobFailureView{
+			NativeResult:    r.NativeResult,
+			NativeErrorCode: r.NativeErrorCode,
+			NativeError:     r.NativeError,
+			Reason:          r.Reason,
+		}
+	}
+	cooldowns := r.SkillCooldowns
+	if cooldowns == nil {
+		cooldowns = []EntrySkillCooldown{}
+	}
+	return bootstrapReferenceBlobSuccessView{
+		DiagnosticSessionID:       r.DiagnosticSessionID,
+		InventorySlotCount:        inventory.BagEnd(r.Character),
+		EquipmentSlotCount:        inventory.EquipmentSlotEnd,
+		SimulationProtocolVersion: 1,
+		NativeResult:              r.NativeResult,
+		ProtocolVersion:           BootstrapProtocolVersion,
+		DivisionID:                r.DivisionID,
+		Character:                 r.browserCharacter(),
+		BootstrapMode:             BootstrapMode,
+		AcademyMember:             r.AcademyMember,
+		EventGuideStateMask:       r.EventGuideStateMask,
+		RefObjSnapshot:            r.RefObjSnapshot,
+		SkillCooldowns:            cooldowns,
+		RefItemSnapshot:           r.RefItemSnapshot,
+		MagicOptionSnapshot:       r.MagicOptionSnapshot,
+		AvatarMagicOptions:        r.AvatarMagicOptions,
+		SiegeItemForgeGroups:      r.SiegeItemForgeGroups,
+		SiegeFortressData:         r.SiegeFortressData,
+		GameWorldData:             r.GameWorldData,
+		AvatarItems:               r.AvatarItems,
+		EquipItems:                r.EquipItems,
+		LocalPlayerEntry:          r.LocalPlayerEntry,
+		ChatPermissions:           r.ChatPermissions,
+		ChatMessages:              r.ChatMessages,
+		SystemMessages:            r.SystemMessages,
+		UnlimitedItems:            r.UnlimitedItems,
+		MasteryTotalOverride:      r.MasteryTotalOverride,
+		StorageAutoStack:          r.StorageAutoStack,
+		FastDenReturn:             r.FastDenReturn,
+		TradeTiers:                r.TradeTiers,
+		JobSuitHidesArmor:         r.JobSuitHidesArmor,
+		MoonlitThiefSuit:          r.MoonlitThiefSuit,
+		UiTuning:                  r.UiTuning,
+	}
 }
 
 /*

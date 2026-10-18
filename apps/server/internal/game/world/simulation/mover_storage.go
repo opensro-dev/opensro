@@ -11,6 +11,7 @@ package simulation
 import (
 	"iter"
 	"math"
+	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/monster"
 	"unique"
 )
@@ -113,11 +114,11 @@ func (s *moverStorage) set(gid uint32, row monster.MoverState) {
 		s.rows = make(map[uint32]moverRecord)
 	}
 	old, exists := s.rows[gid]
-	before, after := moverInterestBoundsFor(old.value()), moverInterestBoundsFor(row)
-	if !exists || before != after {
-		if exists {
-			s.spatial.remove(gid, before)
-		}
+	after := moverInterestBoundsFor(row)
+	if !exists {
+		s.spatial.add(gid, after)
+	} else if before := old.interestBounds(); before != after {
+		s.spatial.remove(gid, before)
 		s.spatial.add(gid, after)
 	}
 	if p, ok := row.PendingSnapshot(); ok {
@@ -137,6 +138,30 @@ func (s *moverStorage) set(gid uint32, row monster.MoverState) {
 	live := new(monster.MoverState)
 	*live = row
 	s.rows[gid] = moverRecord{live: live}
+}
+
+/*
+================
+moverRecord.interestBounds
+
+moverInterestBoundsFor(r.value()) without expanding a pending row:
+PendingSnapshot admits only DepartMs == ArriveMs == 0, so a pending row is
+never in flight and its bounds are its pose region alone.
+================
+*/
+func (r moverRecord) interestBounds() moverInterestBounds {
+	if r.live != nil {
+		return moverInterestBoundsFor(*r.live)
+	}
+	if r.pending != nil {
+		pose := moverInterestRegionAt(worldgeom.RegionXZ{
+			RegionID: r.pending.pose.RegionID,
+			X:        r.pending.pose.X,
+			Z:        r.pending.pose.Z,
+		})
+		return moverInterestBounds{pose: pose, low: pose, high: pose}
+	}
+	return moverInterestBoundsFor(monster.MoverState{})
 }
 
 /*
@@ -364,7 +389,7 @@ func (s *moverStorage) remove(gid uint32) {
 		return
 	}
 	if row, exists := s.rows[gid]; exists {
-		s.spatial.remove(gid, moverInterestBoundsFor(row.value()))
+		s.spatial.remove(gid, row.interestBounds())
 		delete(s.rows, gid)
 	}
 }

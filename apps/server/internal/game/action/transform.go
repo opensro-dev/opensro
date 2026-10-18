@@ -236,6 +236,19 @@ func (rt *Runtime) endTransform(division string, c *enterworld.Character, now in
 // endTransformForLoading runs endTransform in its own door before a
 // re-entry builds the character's packets.
 func (rt *Runtime) endTransformForLoading(division string, c *enterworld.Character) {
+	if rt.effects == nil || c == nil {
+		return
+	}
+	hasTransform := false
+	for _, e := range rt.effects.Snapshot(division, c.Name) {
+		if e.TransformRefObjID != 0 {
+			hasTransform = true
+			break
+		}
+	}
+	if !hasTransform {
+		return
+	}
 	rt.deps.Update(c, "transform-loading-end", func() bool {
 		return rt.endTransform(division, c, rt.Now().UnixMilli())
 	})

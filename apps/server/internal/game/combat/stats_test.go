@@ -172,3 +172,78 @@ func TestPlayerStatsFailsClosedOnUnpinnedEquipmentPlanes(t *testing.T) {
 		t.Fatal("incomplete item combat row was silently treated as zero")
 	}
 }
+
+/*
+================
+BenchmarkPlayerStatsWithModifiers
+================
+*/
+func BenchmarkPlayerStatsWithModifiers(b *testing.B) {
+	sword := &enterworld.ItemRef{
+		RefObjID: 71,
+		Codename: "ITEM_CH_SWORD_01_A",
+		TypeIDs:  [4]int64{3, 1, 6, 2},
+		Combat: &enterworld.ItemCombatRef{
+			ActionRange: 6,
+			PhysicalAttack: enterworld.ItemAttackRange{
+				Minimum: enterworld.ItemStatRange{Min: 15, Max: 16, PerPlus: 2.4000001},
+				Maximum: enterworld.ItemStatRange{Min: 16, Max: 18, PerPlus: 2.4000001},
+			},
+			MagicalAttack: enterworld.ItemAttackRange{
+				Minimum: enterworld.ItemStatRange{Min: 25, Max: 26, PerPlus: 4.0999999},
+				Maximum: enterworld.ItemStatRange{Min: 28, Max: 31, PerPlus: 4.0999999},
+			},
+			HitRate:      enterworld.ItemStatRange{Min: 24, Max: 30},
+			CriticalRate: enterworld.ItemStatRange{Min: 3, Max: 15},
+		},
+	}
+	armor := &enterworld.ItemRef{
+		RefObjID: 101,
+		Codename: "ITEM_CH_M_HEAVY_01_BA_A",
+		TypeIDs:  [4]int64{3, 1, 1, 1},
+		Combat: &enterworld.ItemCombatRef{
+			PhysicalDefense: enterworld.ItemStatRange{Min: 12, Max: 15, PerPlus: 1.5},
+			MagicalDefense:  enterworld.ItemStatRange{Min: 8, Max: 10, PerPlus: 1.2},
+			EvasionRate:     enterworld.ItemStatRange{Min: 5, Max: 8},
+		},
+	}
+	character := &domain.Character{
+		Level:     pointer(60),
+		MaxLevel:  pointer(60),
+		Strength:  pointer(140),
+		Intellect: pointer(140),
+		MissionInventory: []domain.InventoryRow{
+			{
+				Slot:         1,
+				RefObjID:     armor.RefObjID,
+				Codename:     armor.Codename,
+				TypeFlags:    armor.TypeFlags(),
+				VarianceBits: "0",
+				Durability:   80,
+				Plus:         5,
+				StackCount:   1,
+			},
+			{
+				Slot:         6,
+				RefObjID:     sword.RefObjID,
+				Codename:     sword.Codename,
+				TypeFlags:    sword.TypeFlags(),
+				VarianceBits: "0",
+				Durability:   76,
+				Plus:         7,
+				StackCount:   1,
+			},
+		},
+	}
+	catalogs := Catalogs{Items: itemRefs{
+		sword.Codename: sword,
+		armor.Codename: armor,
+	}}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, _, err := PlayerStatsWithModifiers(character, catalogs, nil, nil); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

@@ -1,13 +1,21 @@
-// Package paramkeeper evaluates the shared native parameter modifier algebra.
-// Elements are local to a stat projection; they are not a second live effect or
-// character authority. Effect admission, lifetime and persistence stay with
-// their existing owners.
+/*
+===========================================================================
+
+element.go - single parameter modifier evaluation (CParam 4B2F40 / 4B3210)
+
+Package paramkeeper evaluates the shared native parameter modifier algebra.
+Elements are local to a stat projection; they are not a second live effect or
+character authority. Effect admission, lifetime and persistence stay with
+their existing owners.
+
+===========================================================================
+*/
+
 package paramkeeper
 
 import (
 	"fmt"
 	"math"
-	"sort"
 )
 
 // Channel is the bucket index used by 4B3000 and 4B2E60. In particular,
@@ -24,36 +32,78 @@ const (
 	channelCount
 )
 
+const inlineEntryCap = 2
+
 // Definition corresponds to CParam's +20/+24/+28/+2C initialization in 4B2F40.
 // Ignore is an insertion no-op sentinel, not a request to erase an older value.
 type Definition struct {
 	Minimum, Maximum, Base, Ignore float32
 }
 
-// Element must not be copied after use. Source keys are opaque uint32 identities
-// supplied by the projection owner, ordered unsigned as in 4B39D2..4B39D7.
-// Native uses source pointers: assigning port identities and reconstructing
-// native source order are responsibilities of the eventual stat graph owner.
-type Element struct {
-	definition Definition
-	buckets    [channelCount]map[uint32]float32
+type bucketEntry struct {
+	source uint32
+	value  float32
 }
 
+// Element must not be copied by assignment after use; use cloneInto. Source
+// keys are opaque uint32 identities supplied by the projection owner, ordered
+// unsigned as in 4B39D2..4B39D7. Native uses source pointers: assigning port
+// identities and reconstructing native source order are responsibilities of
+// the stat graph owner.
+type Element struct {
+	definition Definition
+	entries    []bucketEntry
+	inline     [inlineEntryCap]bucketEntry
+	counts     [channelCount]uint8
+	allocated  uint8
+}
+
+/*
+================
+New
+================
+*/
 func New(definition Definition) (*Element, error) {
-	for _, v := range []float32{definition.Minimum, definition.Maximum, definition.Base, definition.Ignore} {
-		if !finite(v) {
-			return nil, fmt.Errorf("paramkeeper: non-finite definition")
-		}
-	}
-	if definition.Minimum > definition.Maximum {
-		return nil, fmt.Errorf("paramkeeper: minimum exceeds maximum")
+	if !validDefinition(definition) {
+		return nil, fmt.Errorf("paramkeeper: invalid definition")
 	}
 	return &Element{definition: definition}, nil
 }
 
-// Apply inserts or replaces one source, not the entire channel (4B2D60).
-// The result reports whether a write occurred, even if the value is unchanged;
-// native also dirties and propagates unchanged non-sentinel writes.
+/*
+================
+validDefinition
+================
+*/
+func validDefinition(definition Definition) bool {
+	if !finite(definition.Minimum) || !finite(definition.Maximum) || !finite(definition.Base) || !finite(definition.Ignore) {
+		return false
+	}
+	return definition.Minimum <= definition.Maximum
+}
+
+/*
+================
+Element.channelRange
+================
+*/
+func (p *Element) channelRange(channel Channel) (int, int) {
+	start := 0
+	for ch := Channel(0); ch < channel; ch++ {
+		start += int(p.counts[ch])
+	}
+	return start, start + int(p.counts[channel])
+}
+
+/*
+================
+Element.Apply
+
+Apply inserts or replaces one source, not the entire channel (4B2D60).
+The result reports whether a write occurred, even if the value is unchanged;
+native also dirties and propagates unchanged non-sentinel writes.
+================
+*/
 func (p *Element) Apply(channel Channel, source uint32, value float32) (bool, error) {
 	if channel >= channelCount || !finite(value) {
 		return false, fmt.Errorf("paramkeeper: invalid channel %d or non-finite modifier", channel)
@@ -61,45 +111,91 @@ func (p *Element) Apply(channel Channel, source uint32, value float32) (bool, er
 	if value == p.definition.Ignore { // 4B3019: ordered equality only
 		return false, nil
 	}
-	if p.buckets[channel] == nil {
-		p.buckets[channel] = make(map[uint32]float32)
+	p.allocated |= 1 << channel
+	if p.entries == nil {
+		p.entries = p.inline[:0]
 	}
-	p.buckets[channel][source] = value
+	start, end := p.channelRange(channel)
+	insertAt := end
+	for i := start; i < end; i++ {
+		if p.entries[i].source == source {
+			p.entries[i].value = value
+			return true, nil
+		}
+		if p.entries[i].source > source {
+			insertAt = i
+			break
+		}
+	}
+	p.entries = append(p.entries, bucketEntry{})
+	copy(p.entries[insertAt+1:], p.entries[insertAt:])
+	p.entries[insertAt] = bucketEntry{source: source, value: value}
+	p.counts[channel]++
 	return true, nil
 }
 
-// Remove returns the native OR of channel+1 for every bucket that contained
-// the source (4B2E00/4B31A0), not a channel bitset. A zero return means no change.
-// Empty buckets remain allocated: deleting the last Flat entry leaves a zero
-// sum and does not restore Definition.Base.
+/*
+================
+Element.Remove
+
+Remove returns the native OR of channel+1 for every bucket that contained
+the source (4B2E00/4B31A0), not a channel bitset. A zero return means no change.
+Empty buckets remain allocated: deleting the last Flat entry leaves a zero
+sum and does not restore Definition.Base.
+================
+*/
 func (p *Element) Remove(source uint32) uint8 {
 	var removed uint8
-	for channel, bucket := range p.buckets {
-		if _, ok := bucket[source]; ok {
-			delete(bucket, source)
+	pos := 0
+	for channel := Channel(0); channel < channelCount; channel++ {
+		count := int(p.counts[channel])
+		end := pos + count
+		found := -1
+		for i := pos; i < end; i++ {
+			if p.entries[i].source == source {
+				found = i
+				break
+			}
+			if p.entries[i].source > source {
+				break
+			}
+		}
+		if found >= 0 {
+			p.entries = append(p.entries[:found], p.entries[found+1:]...)
+			p.counts[channel]--
+			end--
 			removed |= uint8(channel + 1)
 		}
+		pos = end
 	}
 	return removed
 }
 
-// Value follows the store boundaries in 4B3210. Wider intermediates precede
-// explicit float32 stores; this portable implementation is not an x87 bit-
-// equivalence certificate. Invalid/overflowing projections fail explicitly.
+/*
+================
+Element.Value
+
+Value follows the store boundaries in 4B3210. Wider intermediates precede
+explicit float32 stores; this portable implementation is not an x87 bit-
+equivalence certificate. Invalid/overflowing projections fail explicitly.
+================
+*/
 func (p *Element) Value() (float32, error) {
+	if p.allocated == 0 { // 4B3277..4B3287: fallback bypasses the clamp
+		return p.definition.Base, nil
+	}
 	values := [channelCount]float32{p.definition.Base, 0, 0, 100}
-	allocated := false
-	for channel, bucket := range p.buckets {
-		if bucket != nil {
-			allocated = true
-			values[channel] = reduce(Channel(channel), bucket)
+	pos := 0
+	for channel := Channel(0); channel < channelCount; channel++ {
+		count := int(p.counts[channel])
+		end := pos + count
+		if p.allocated&(1<<channel) != 0 {
+			values[channel] = reduce(channel, p.entries[pos:end])
 			if !finite(values[channel]) {
 				return 0, fmt.Errorf("paramkeeper: channel %d overflow", channel)
 			}
 		}
-	}
-	if !allocated { // 4B3277..4B3287: fallback bypasses the clamp
-		return p.definition.Base, nil
+		pos = end
 	}
 	value := float32((float64(values[PercentSum]) + 100) * float64(values[Flat]) / 100)
 	if values[PercentProduct] != 0 {
@@ -121,18 +217,45 @@ func (p *Element) Value() (float32, error) {
 	return value, nil
 }
 
-func reduce(channel Channel, bucket map[uint32]float32) float32 {
-	keys := make([]uint32, 0, len(bucket))
-	for key := range bucket {
-		keys = append(keys, key)
+/*
+================
+Element.cloneInto
+================
+*/
+func (p *Element) cloneInto(dst *Element) {
+	dst.definition = p.definition
+	dst.counts = p.counts
+	dst.allocated = p.allocated
+	if len(p.entries) == 0 {
+		if p.allocated != 0 {
+			dst.entries = dst.inline[:0]
+		} else {
+			dst.entries = nil
+		}
+		return
 	}
-	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+	if len(p.entries) <= inlineEntryCap {
+		copy(dst.inline[:], p.entries)
+		dst.entries = dst.inline[:len(p.entries)]
+	} else {
+		dup := make([]bucketEntry, len(p.entries))
+		copy(dup, p.entries)
+		dst.entries = dup
+	}
+}
+
+/*
+================
+reduce
+================
+*/
+func reduce(channel Channel, entries []bucketEntry) float32 {
 	var result float32
 	if channel == FactorProduct {
 		result = 100
 	}
-	for _, key := range keys {
-		value := float64(bucket[key])
+	for _, entry := range entries {
+		value := float64(entry.value)
 		switch channel {
 		case Flat, PercentSum:
 			result = float32(float64(result) + value)
@@ -149,6 +272,11 @@ func reduce(channel Channel, bucket map[uint32]float32) float32 {
 	return result
 }
 
+/*
+================
+finite
+================
+*/
 func finite(value float32) bool {
 	return !math.IsInf(float64(value), 0) && !math.IsNaN(float64(value))
 }

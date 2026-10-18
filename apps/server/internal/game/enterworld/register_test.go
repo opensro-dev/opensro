@@ -219,3 +219,189 @@ func TestEnterWorldOverInjectedSource(t *testing.T) {
 		t.Fatalf("worn blade not rendered from injected source: %+v", loadout.Items)
 	}
 }
+
+/*
+================
+legacyEnterWorldBlobForTest
+================
+*/
+func legacyEnterWorldBlobForTest(result *BootstrapResult) ([]byte, error) {
+	envelope, err := json.Marshal(result)
+	if err != nil {
+		return nil, err
+	}
+	var asMap map[string]json.RawMessage
+	if err := json.Unmarshal(envelope, &asMap); err != nil {
+		return nil, err
+	}
+	delete(asMap, "packets")
+	if result.Character != nil {
+		var character map[string]json.RawMessage
+		if err := json.Unmarshal(asMap["character"], &character); err != nil {
+			return nil, err
+		}
+		for key, value := range map[string]int64{
+			"hp":    CurrentHP(result.Character),
+			"mp":    CurrentMP(result.Character),
+			"maxHp": DerivedMaxHP(result.Character),
+			"maxMp": DerivedMaxMP(result.Character),
+		} {
+			character[key], err = json.Marshal(value)
+			if err != nil {
+				return nil, err
+			}
+		}
+		asMap["character"], err = json.Marshal(character)
+		if err != nil {
+			return nil, err
+		}
+	}
+	stripped, err := json.Marshal(asMap)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(struct {
+		V         int             `json:"v"`
+		Bootstrap json.RawMessage `json:"bootstrap"`
+	}{V: EnterWorldBlobVersion, Bootstrap: stripped})
+}
+
+/*
+================
+legacyReferenceEnterWorldBlobForTest
+================
+*/
+func legacyReferenceEnterWorldBlobForTest(result *BootstrapResult, refs *BrowserReferences) ([]byte, error) {
+	copy := *result
+	copy.RefSkillSnapshot = nil
+	copy.Packets = nil
+	blob, err := legacyEnterWorldBlobForTest(&copy)
+	if err != nil {
+		return nil, err
+	}
+	var wrapper struct {
+		Bootstrap map[string]json.RawMessage `json:"bootstrap"`
+	}
+	if err = json.Unmarshal(blob, &wrapper); err != nil {
+		return nil, err
+	}
+	delete(wrapper.Bootstrap, "refSkillSnapshot")
+	return json.Marshal(struct {
+		V          int                        `json:"v"`
+		Bootstrap  map[string]json.RawMessage `json:"bootstrap"`
+		References *BrowserReferences         `json:"references"`
+	}{2, wrapper.Bootstrap, refs})
+}
+
+/*
+================
+TestEnterWorldBlobSinglePassEquivalence
+================
+*/
+func TestEnterWorldBlobSinglePassEquivalence(t *testing.T) {
+	character := chinaSpearman()
+	character.ID = 7
+	deps := testDeps(character)
+	deps.ResolveDivisionID = DevResolveDivisionIDFromCatalog(deps.Characters)
+	outcome := HandleEnterWorld(deps, transport.EncodeEnterWorld(entryauth.NewAuthenticatedEntryFixture(t, "0", "asd2")))
+	if !outcome.OK {
+		t.Fatalf("HandleEnterWorld failed: %+v", outcome.Result)
+	}
+
+	gotV1, err := EnterWorldBlob(outcome.Result)
+	if err != nil {
+		t.Fatalf("EnterWorldBlob: %v", err)
+	}
+	wantV1, err := legacyEnterWorldBlobForTest(outcome.Result)
+	if err != nil {
+		t.Fatalf("legacyEnterWorldBlobForTest: %v", err)
+	}
+	var gotV1Any, wantV1Any any
+	if err := json.Unmarshal(gotV1, &gotV1Any); err != nil {
+		t.Fatalf("unmarshal gotV1: %v", err)
+	}
+	if err := json.Unmarshal(wantV1, &wantV1Any); err != nil {
+		t.Fatalf("unmarshal wantV1: %v", err)
+	}
+	if !reflect.DeepEqual(gotV1Any, wantV1Any) {
+		t.Fatalf("v1 EnterWorldBlob mismatch:\ngot:  %s\nwant: %s", gotV1, wantV1)
+	}
+
+	refs := &BrowserReferences{
+		Path:   "/transport/references/test.json",
+		SHA256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		Bytes:  1024,
+	}
+	gotV2, err := referenceEnterWorldBlob(outcome.Result, refs)
+	if err != nil {
+		t.Fatalf("referenceEnterWorldBlob: %v", err)
+	}
+	wantV2, err := legacyReferenceEnterWorldBlobForTest(outcome.Result, refs)
+	if err != nil {
+		t.Fatalf("legacyReferenceEnterWorldBlobForTest: %v", err)
+	}
+	var gotV2Any, wantV2Any any
+	if err := json.Unmarshal(gotV2, &gotV2Any); err != nil {
+		t.Fatalf("unmarshal gotV2: %v", err)
+	}
+	if err := json.Unmarshal(wantV2, &wantV2Any); err != nil {
+		t.Fatalf("unmarshal wantV2: %v", err)
+	}
+	if !reflect.DeepEqual(gotV2Any, wantV2Any) {
+		t.Fatalf("v2 referenceEnterWorldBlob mismatch:\ngot:  %s\nwant: %s", gotV2, wantV2)
+	}
+}
+
+/*
+================
+BenchmarkEnterWorldBlob
+================
+*/
+func BenchmarkEnterWorldBlob(b *testing.B) {
+	character := chinaSpearman()
+	character.ID = 7
+	deps := testDeps(character)
+	deps.ResolveDivisionID = DevResolveDivisionIDFromCatalog(deps.Characters)
+	outcome := HandleEnterWorld(deps, transport.EncodeEnterWorld(entryauth.NewAuthenticatedEntryFixture(b, "0", "asd2")))
+	if !outcome.OK {
+		b.Fatalf("HandleEnterWorld failed: %+v", outcome.Result)
+	}
+	refs := &BrowserReferences{
+		Path:   "/transport/references/test.json",
+		SHA256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		Bytes:  1024,
+	}
+
+	b.Run("V1SinglePass", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			if _, err := EnterWorldBlob(outcome.Result); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+	b.Run("V1LegacyRoundTrip", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			if _, err := legacyEnterWorldBlobForTest(outcome.Result); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+	b.Run("V2SinglePass", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			if _, err := referenceEnterWorldBlob(outcome.Result, refs); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+	b.Run("V2LegacyRoundTrip", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			if _, err := legacyReferenceEnterWorldBlobForTest(outcome.Result, refs); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}

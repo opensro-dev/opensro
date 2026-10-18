@@ -151,6 +151,21 @@ item-state frames and the despawn the old neighbourhood must receive.
 ================
 */
 func (rt *Runtime) retireCompanionCorpses(division string, c *enterworld.Character) (owner, public []wire.Frame) {
+	if c == nil {
+		return nil, nil
+	}
+	hasCorpse := false
+	rt.deps.Read("cos-reentry-corpses", func() {
+		for _, pet := range c.Companions() {
+			if pet.Summoned && pet.CurrentHP == 0 {
+				hasCorpse = true
+				break
+			}
+		}
+	})
+	if !hasCorpse {
+		return nil, nil
+	}
 	var corpses []*enterworld.CharacterCOS
 	rt.deps.Update(c, "cos-reentry-corpses", func() bool {
 		corpses = corpses[:0]

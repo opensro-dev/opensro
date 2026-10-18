@@ -190,7 +190,7 @@ func PlayerStatsWithModifiers(
 		return Stats{}, Loadout{}, fmt.Errorf("combat: item reference source is unavailable")
 	}
 	var passiveWeaponKind uint8
-	seenSlots := make(map[int64]bool)
+	var seenSlots [inventory.EquipmentSlotEnd]bool
 	for _, row := range character.MissionInventory {
 		if row.Slot < 0 || row.Slot >= int64(inventory.EquipmentSlotEnd) {
 			continue
@@ -328,13 +328,14 @@ func PlayerStatsWithModifiers(
 	writes = append(writes, passives...)
 	// Source identity belongs to an application, not a parameter number. A
 	// modifier must not alias even a different parameter of a static owner.
-	staticSources := make(map[uint32]struct{}, len(writes))
-	for _, w := range writes {
-		staticSources[w.Source] = struct{}{}
-	}
-	for _, w := range modifiers {
-		if _, collision := staticSources[w.Source]; collision || w.Source == 0 {
-			return Stats{}, Loadout{}, fmt.Errorf("combat: effect source %d aliases a base/equipment/passive owner", w.Source)
+	for _, m := range modifiers {
+		if m.Source == 0 {
+			return Stats{}, Loadout{}, fmt.Errorf("combat: effect source %d aliases a base/equipment/passive owner", m.Source)
+		}
+		for _, w := range writes {
+			if m.Source == w.Source {
+				return Stats{}, Loadout{}, fmt.Errorf("combat: effect source %d aliases a base/equipment/passive owner", m.Source)
+			}
 		}
 	}
 	writes = append(writes, modifiers...)

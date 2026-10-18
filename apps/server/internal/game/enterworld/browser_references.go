@@ -218,23 +218,9 @@ func (r *BrowserReferences) ServeHTTP(w http.ResponseWriter, q *http.Request) {
 // The wire envelope carries only the immutable identity. The existing full
 // BootstrapResult remains available for detached fixtures/legacy consumers.
 func referenceEnterWorldBlob(result *BootstrapResult, refs *BrowserReferences) ([]byte, error) {
-	copy := *result
-	copy.RefSkillSnapshot = nil
-	copy.Packets = nil
-	blob, err := EnterWorldBlob(&copy)
-	if err != nil {
-		return nil, err
-	}
-	var wrapper struct {
-		Bootstrap map[string]json.RawMessage `json:"bootstrap"`
-	}
-	if err = json.Unmarshal(blob, &wrapper); err != nil {
-		return nil, err
-	}
-	delete(wrapper.Bootstrap, "refSkillSnapshot")
 	return json.Marshal(struct {
-		V          int                        `json:"v"`
-		Bootstrap  map[string]json.RawMessage `json:"bootstrap"`
-		References *BrowserReferences         `json:"references"`
-	}{2, wrapper.Bootstrap, refs})
+		V          int                `json:"v"`
+		Bootstrap  any                `json:"bootstrap"`
+		References *BrowserReferences `json:"references"`
+	}{2, result.referenceBlobView(), refs})
 }

@@ -141,9 +141,11 @@ func Build(deps *Deps, request BootstrapRequest) *BootstrapResult {
 	if deps.RestoreEntryEffects != nil {
 		deps.RestoreEntryEffects(divisionID, character.Name)
 	}
-	// Admission can retire an expired item-owned summon. Serialize the committed
-	// inventory and companion state, not the snapshot taken before restoration.
-	character = readCharacterSnapshot(deps, divisionID, liveCharacter)
+	if deps.PrepareEntry != nil || deps.RestoreEntryEffects != nil {
+		// Admission can retire an expired item-owned summon. Serialize the committed
+		// inventory and companion state, not the snapshot taken before restoration.
+		character = readCharacterSnapshot(deps, divisionID, liveCharacter)
+	}
 	if deps.NormalizeEntryQuests != nil {
 		if err := deps.NormalizeEntryQuests(character); err != nil {
 			return Failure(nativeErrorInvalidRequest, "invalidQuestState: "+err.Error())

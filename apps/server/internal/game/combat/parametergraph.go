@@ -14,6 +14,7 @@ package combat
 
 import (
 	"fmt"
+	"sync"
 
 	"opensro.online/server/internal/game/paramkeeper"
 )
@@ -79,6 +80,23 @@ func playerParameterDefinitions() ([]paramkeeper.NodeDefinition, error) {
 	return definitions, nil
 }
 
+var cachedPlayerTemplateGraph = sync.OnceValues(func() (*paramkeeper.Graph, error) {
+	definitions, err := playerParameterDefinitions()
+	if err != nil {
+		return nil, err
+	}
+	g, err := paramkeeper.NewGraph(definitions)
+	if err != nil {
+		return nil, err
+	}
+	for _, link := range playerParameterLinks() {
+		if err = g.Link(link[0], link[1], paramkeeper.Channel(link[2])); err != nil {
+			return nil, err
+		}
+	}
+	return g, nil
+})
+
 /*
 ==================
 playerParameterGraph
@@ -89,20 +107,11 @@ dependent and EBX the input.
 ==================
 */
 func playerParameterGraph(level uint8) (*paramkeeper.Graph, []paramkeeper.Write, error) {
-	definitions, err := playerParameterDefinitions()
+	tmpl, err := cachedPlayerTemplateGraph()
 	if err != nil {
 		return nil, nil, err
 	}
-	g, err := paramkeeper.NewGraph(definitions)
-	if err != nil {
-		return nil, nil, err
-	}
-	for _, link := range playerParameterLinks() {
-		if err = g.Link(link[0], link[1], paramkeeper.Channel(link[2])); err != nil {
-			return nil, nil, err
-		}
-	}
-	return g, playerBaseWrites(level), nil
+	return tmpl.Clone(), playerBaseWrites(level), nil
 }
 
 /*
@@ -146,10 +155,13 @@ The closure's built-in writes for one level, in 4E3200's order.
 */
 func playerBaseWrites(level uint8) []paramkeeper.Write {
 	// 4E32CA..4E32F0: STR/INT feed the gauges at 1000% (x10).
-	writes := []paramkeeper.Write{
-		{Parameter: 52, Channel: paramkeeper.FactorProduct, Value: 1000},
-		{Parameter: 53, Channel: paramkeeper.FactorProduct, Value: 1000},
-		{Parameter: 58}, {Parameter: 59}}
+	writes := make([]paramkeeper.Write, 0, 64)
+	writes = append(writes,
+		paramkeeper.Write{Parameter: 52, Channel: paramkeeper.FactorProduct, Value: 1000},
+		paramkeeper.Write{Parameter: 53, Channel: paramkeeper.FactorProduct, Value: 1000},
+		paramkeeper.Write{Parameter: 58},
+		paramkeeper.Write{Parameter: 59},
+	)
 	for i, pair := range playerCoefficients {
 		for axis := 0; axis < 2; axis++ {
 			writes = append(writes, paramkeeper.Write{Parameter: uint16(38 + i + axis*6), Value: float32(float64(pair[axis]) * 100)})
@@ -204,7 +216,7 @@ Translate the contiguous native combat subset without allocating empty sources.
 ================
 */
 func statWrites(stats Stats, source uint32) []paramkeeper.Write {
-	values := []float64{stats.PhysicalDefense, stats.MagicalDefense, stats.ParryRate, stats.MagicalParry,
+	values := [12]float64{stats.PhysicalDefense, stats.MagicalDefense, stats.ParryRate, stats.MagicalParry,
 		stats.EvasionRate, stats.BlockRate, stats.HitRate, stats.CriticalRate,
 		stats.PhysicalAttackMin, stats.PhysicalAttackMax, stats.MagicalAttackMin, stats.MagicalAttackMax}
 	var writes []paramkeeper.Write
@@ -225,7 +237,7 @@ consumers. An evaluation error invalidates the snapshot.
 ================
 */
 func readParameterStats(g *paramkeeper.Graph, stats *Stats) error {
-	fields := []*float64{&stats.PhysicalDefense, &stats.MagicalDefense, &stats.ParryRate, &stats.MagicalParry,
+	fields := [12]*float64{&stats.PhysicalDefense, &stats.MagicalDefense, &stats.ParryRate, &stats.MagicalParry,
 		&stats.EvasionRate, &stats.BlockRate, &stats.HitRate, &stats.CriticalRate,
 		&stats.PhysicalAttackMin, &stats.PhysicalAttackMax, &stats.MagicalAttackMin, &stats.MagicalAttackMax}
 	for i, dst := range fields {
@@ -244,21 +256,21 @@ func readParameterStats(g *paramkeeper.Graph, stats *Stats) error {
 		return err
 	}
 	stats.Strength, stats.Intellect = float64(str), float64(intel)
-	for i, dst := range []*float64{&stats.PhysicalBasicRate, &stats.PhysicalSkillRate, &stats.MagicalBasicRate, &stats.MagicalSkillRate} {
+	for i, dst := range [4]*float64{&stats.PhysicalBasicRate, &stats.PhysicalSkillRate, &stats.MagicalBasicRate, &stats.MagicalSkillRate} {
 		v, err := g.Value(uint16(0x80 + i))
 		if err != nil {
 			return err
 		}
 		*dst = float64(v)
 	}
-	for i, dst := range []*float32{&stats.PhysicalBasicTaken, &stats.PhysicalSkillTaken, &stats.MagicalBasicTaken, &stats.MagicalSkillTaken} {
+	for i, dst := range [4]*float32{&stats.PhysicalBasicTaken, &stats.PhysicalSkillTaken, &stats.MagicalBasicTaken, &stats.MagicalSkillTaken} {
 		v, err := g.Value(uint16(0xae + i))
 		if err != nil {
 			return err
 		}
 		*dst = v
 	}
-	for i, dst := range []*float32{&stats.PhysicalOutgoing, &stats.MagicalOutgoing, &stats.PhysicalIncoming, &stats.MagicalIncoming} {
+	for i, dst := range [4]*float32{&stats.PhysicalOutgoing, &stats.MagicalOutgoing, &stats.PhysicalIncoming, &stats.MagicalIncoming} {
 		v, err := g.Value(uint16(0xb2 + i))
 		if err != nil {
 			return err

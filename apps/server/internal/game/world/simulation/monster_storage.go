@@ -276,6 +276,24 @@ func (s *monsterStorage) contains(gid uint32) bool {
 
 /*
 ================
+isDead
+
+get(gid).Ref.MaxHP > 0 && get(gid).CurrentHP == 0 without reconstructing the
+full Instance snapshot.
+================
+*/
+func (s *monsterStorage) isDead(gid uint32) bool {
+	if r, ok := s.hot[gid]; ok {
+		return r.currentHP == 0 && r.ref.Value().MaxHP > 0
+	}
+	if r, ok := s.cold[gid]; ok {
+		return r.hp == 0 && r.maxHP > 0
+	}
+	return false
+}
+
+/*
+================
 removeCold
 
 Forget a sleeping monster's cold row.
