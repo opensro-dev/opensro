@@ -58,6 +58,7 @@ test("resource fingerprint reports every ownership root independently", async ()
 			"server-go-sum",
 			"server-roster-exporter",
 			"server-roster-policy",
+			"server-enterworld",
 			"rebuild-assets",
 			"build-scripts",
 			"build-entry",

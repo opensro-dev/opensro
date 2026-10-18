@@ -60,7 +60,7 @@ import {
 import { assembleAvatar, primSlot, NATIVE_IDLE_STATE_CLIPS, NATIVE_EMOTE_STATE_CLIPS } from "./buildAvatar.mjs";
 import { assembleStaticBsrModel } from "./compileBsrVisual.mjs";
 import { avatarToGlb } from "./exportGlb.mjs";
-import { loadCharacterDataRows } from "./resolveCharRoster.mjs";
+import { dressedBodyPath, loadCharacterDataRows } from "./resolveCharRoster.mjs";
 import {
 	enabledCosReferences,
 	loadFortressStructureRoster,
@@ -653,7 +653,7 @@ export async function buildNpcModelAssets( options = {} ) {
 	// Runtime rosters, not codename prefixes, decide what is built. Load the
 	// complete RefObjChar identity table so native NPC-band structure rows and
 	// clone base links remain resolvable without a second classifier.
-	const rows = loadCharacterDataRows( textdataDir, { codenamePattern: /./ } );
+	const rows = loadCharacterDataRows( textdataDir, { codenamePattern: /./, qinshiTombOverlay: true } );
 	const characterInfo = loadCharacterInfo();
 	const resolveCharacterInfo = characterInfoResolver( characterInfo, rows );
 	const npcRoster = loadSpawnableNpcRoster();
@@ -701,6 +701,14 @@ export async function buildNpcModelAssets( options = {} ) {
 	const deathResources = new Map();
 	for ( const rosterRef of roster ) {
 		const { codename } = rosterRef;
+		// A dressed-body reference (Qin-Shi overlay) has no BSR to bake: it
+		// draws through the spawn dress path, so it stays out of the manifest
+		// like a structure whose BSR the data does not hold.
+		const dressedBody = dressedBodyPath( codename, rows );
+		if ( dressedBody ) {
+			console.log( `[npc] SKIP ${codename}: dressed-body model ${dressedBody}` );
+			continue;
+		}
 		const model = resolveNpcModel( codename, rows );
 		if ( !model ) {
 			console.warn( `[npc] ${codename}: no characterdata row / bsr path` );

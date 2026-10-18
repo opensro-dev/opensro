@@ -43,6 +43,7 @@ export default {
 		"scripts/test/assets/skillSpineAim.test.mjs",
 		"scripts/test/assets/effectRemapGuard.test.mjs",
 		"scripts/test/assets/characterModelAssetContracts.test.mjs",
+		"scripts/test/assets/qinshiTombOverlay.test.mjs",
 		"scripts/test/assets/actorLocomotionRootMotion.test.mjs",
 		"scripts/test/assets/banTimeline.test.mjs",
 		"scripts/test/assets/npcAnimationContactMarkers.test.mjs",

@@ -40,13 +40,17 @@ const serverSourceRoot = path.resolve(
 );
 const statePath = path.join( rebuildRoot, ".state", "resource-build-fingerprint.json" );
 
+// v8: the Qin-Shi tomb overlay knob and the enterworld roots joined.
 // v7: the code closure and the pack-layout baseline joined the roots.
-const FINGERPRINT_VERSION = 7;
+const FINGERPRINT_VERSION = 8;
 const DIRECTORY_CONCURRENCY = 32;
 
 /** Env vars that alter the build's outputs; a change must invalidate the skip. */
 export const ENV_KNOBS = [
 	"SRO_SERVER_SOURCE_ROOT",
+	// Port-only, not native: the server's Qin-Shi tomb overlays join the
+	// client bake (shared/qinshiTomb.mjs).
+	"SRO_QINSHI_TOMB",
 	"SRO_ALLOW_DEV_OUTDOOR_ROUTING",
 	"SRO_SKIP_TEXTURE_CONVERT",
 	"SRO_ASSET_PACKS_NO_CACHE",
@@ -77,6 +81,11 @@ const FINGERPRINT_ROOTS = [
 	{
 		label: "server-roster-policy",
 		absolutePath: path.join( serverSourceRoot, "internal", "game", "world" )
+	},
+	{
+		// The skill overlay TSV the skill bake reads with SRO_QINSHI_TOMB on.
+		label: "server-enterworld",
+		absolutePath: path.join( serverSourceRoot, "internal", "game", "enterworld" )
 	},
 	{ label: "rebuild-assets", absolutePath: path.join( generatedRoot, "intermediate" ) },
 	{ label: "build-scripts", absolutePath: path.join( rebuildRoot, "scripts", "build" ) },

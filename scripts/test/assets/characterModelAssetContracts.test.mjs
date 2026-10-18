@@ -32,7 +32,7 @@ import {
 	loadModelledMobRoster,
 	loadSpawnableNpcRoster
 } from "../../build/char/npcModelRoster.mjs";
-import { loadCharacterDataRows } from "../../build/char/resolveCharRoster.mjs";
+import { dressedBodyPath, loadCharacterDataRows } from "../../build/char/resolveCharRoster.mjs";
 import { loadBoothModelRoster } from "../../build/char/boothModelRoster.mjs";
 import { parseCharacterBsr, parseSkinnedBms } from "../../build/char/formats.mjs";
 import { loadDataAsset } from "../../build/shared/jmxAssetIO.mjs";
@@ -421,17 +421,33 @@ test("every characterInfo death model is published with native motions 4 and 36"
 			assert.equal( manifest.models[codename]?.deathModel, death.codename, `${codename} -> ${death.codename}` );
 		}
 	}
-	assert.equal( deaths.length, 10, "the ten v1.150 characterInfo death BSRs" );
+	// The ten v1.150 characterInfo death BSRs, plus any death model only
+	// the Qin-Shi overlay requires (the whitesnake's, port-only) when the
+	// tomb bake is on.
+	const tombDeaths = deaths.filter( ( entry ) => {
+		const requiredBy = entry.requiredBy ?? [];
+		return requiredBy.length > 0 &&
+			requiredBy.every( ( codename ) => codename.startsWith( "MOB_TQ_" ) || codename.startsWith( "MOB_QT_" ) );
+	} );
+	assert.equal( deaths.length, 10 + tombDeaths.length, "the v1.150 characterInfo death BSRs" );
 	assert.equal( manifest.models.MOB_KK_PENON_F.deathModel, "res/mob/common/penon_f_die.bsr" );
 	assert.equal( manifest.models.MOB_KK_PENON_W.deathModel, "res/mob/common/penon_w_die.bsr" );
 });
 
 test("mission NPC, monster and COS manifest exactly covers its rosters", () => {
 	const manifest = joinedNpcManifest( readJson( path.join( publicAssets, "npc", "manifest.json" ) ) );
+	const rows = loadCharacterDataRows( textdataDir, { codenamePattern: /./, qinshiTombOverlay: true } );
 	const npcRoster = loadSpawnableNpcRoster();
 	const mobRoster = loadModelledMobRoster();
-	const cosRoster = enabledCosReferences( loadCharacterDataRows( textdataDir, { codenamePattern: /./ } ) );
+	const cosRoster = enabledCosReferences( rows );
 	const roster = [ ...npcRoster, ...mobRoster, ...cosRoster ];
+	// Dressed-body references (the Qin-Shi overlay's .cpd thieves and flame
+	// master) draw through the spawn dress path: the bake publishes no
+	// manifest entry for them, and no other roster reference may lack one.
+	const dressed = new Set(
+		roster.filter( ( ref ) => dressedBodyPath( ref.codename, rows ) ).map( ( ref ) => ref.codename )
+	);
+	const deathRows = Object.values( manifest.models ).filter( ( entry ) => entry.kind === "death" );
 
 	assert.equal( manifest.format, "sro-mission-npc-models" );
 	assert.equal( manifest.version, NPC_MANIFEST_VERSION );
@@ -449,16 +465,20 @@ test("mission NPC, monster and COS manifest exactly covers its rosters", () => {
 	);
 	assert.equal(
 		manifest.count,
-		roster.length + structureRows.length + boothRows.length + 4 + 10,
-		"the rosters, structures and booths plus four packetless CICRide resources and ten characterInfo death models"
+		roster.length - dressed.size + structureRows.length + boothRows.length + 4 + deathRows.length,
+		"the rosters (less dressed-body references), structures and booths plus four packetless CICRide resources and the characterInfo death models"
 	);
 	assert.equal(
 		Object.values( manifest.models ).filter( ( entry ) => entry.kind === "cos" ).length,
-		cosRoster.length,
+		cosRoster.filter( ( ref ) => !dressed.has( ref.codename ) ).length,
 		"every enabled COS reference, and only those, is published as kind cos"
 	);
 	for ( const ref of roster ) {
 		const entry = manifest.models[ref.codename];
+		if ( dressed.has( ref.codename ) ) {
+			assert.ok( !entry, `${ref.codename} is dressed-body but published` );
+			continue;
+		}
 		assert.ok( entry, `${ref.codename} is absent from the model manifest` );
 		assert.equal( entry.refObjId, ref.refObjId, `${ref.codename} RefObj identity drift` );
 	}

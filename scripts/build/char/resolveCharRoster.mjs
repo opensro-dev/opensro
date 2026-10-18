@@ -24,6 +24,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { isMainScript } from "../shared/fsUtils.mjs";
 import { listTextDataShardNamesSync, readTextDataLinesSync, splitTextDataRow } from "../shared/textDataIo.mjs";
+import { loadQinShiTombCharacterRows, qinshiTombEnabled } from "../shared/qinshiTomb.mjs";
 
 const CODENAME_COL = 2;
 
@@ -105,31 +106,71 @@ enumeration order through Map's otherwise-silent last-write-wins behavior.
 */
 export function loadCharacterDataRows(
 	textdataDir,
-	{ codenamePattern = /^(CHAR_|COS_T_)/ } = {}
+	{ codenamePattern = /^(CHAR_|COS_T_)/, qinshiTombOverlay = false } = {}
 ) {
 	const files = listTextDataShardNamesSync( textdataDir, /^characterdata.*\.txt$/i );
 	const rows = new Map();
 	const sources = new Map();
+	const admit = ( cols, source ) => {
+		const codename = cols[CODENAME_COL];
+		codenamePattern.lastIndex = 0;
+		if ( !codename || !codenamePattern.test( codename ) ) return;
+		const priorSource = sources.get( codename );
+		if ( priorSource ) {
+			throw new Error(
+				`Duplicate characterdata codename ${codename}: ${priorSource} and ${source}`
+			);
+		}
+		rows.set( codename, cols );
+		sources.set( codename, source );
+	};
 	for ( const file of files ) {
 		const lines = readTextDataLinesSync( path.join( textdataDir, file ) );
 		for ( const [lineIndex, line] of lines.entries() ) {
-			const cols = splitTextDataRow( line );
-			const codename = cols[CODENAME_COL];
-			codenamePattern.lastIndex = 0;
-			if ( codename && codenamePattern.test( codename ) ) {
-				const source = `${file}:${lineIndex + 1}`;
-				const priorSource = sources.get( codename );
-				if ( priorSource ) {
-					throw new Error(
-						`Duplicate characterdata codename ${codename}: ${priorSource} and ${source}`
-					);
-				}
-				rows.set( codename, cols );
-				sources.set( codename, source );
-			}
+			admit( splitTextDataRow( line ), `${file}:${lineIndex + 1}` );
+		}
+	}
+	// Port-only, not native: with SRO_QINSHI_TOMB on, the server's overlay
+	// rows (shared/qinshiTomb.mjs) join the retail table so the bake
+	// resolves the Tomb references the flag-on server can spawn. Callers
+	// that feed the server's own game-data projection stay out: the server
+	// appends the overlay itself and would meet its rows twice.
+	if ( qinshiTombOverlay && qinshiTombEnabled() ) {
+		const { sourcePath, rows: overlayRows } = loadQinShiTombCharacterRows();
+		for ( const [index, cols] of overlayRows.entries() ) {
+			admit( cols, `${path.basename( sourcePath )}:${index + 1}` );
 		}
 	}
 	return rows;
+}
+
+/*
+================
+dressedBodyPath
+
+The model a reference's base chain names when it is a dressed-body
+compound (.cpd: a character body plus fixed equipment BSRs, e.g.
+Char\China\shinmu.cpd) instead of a bakeable .bsr, else null. Only the
+Qin-Shi overlay rows name one today; the trade-appearance thieves and
+hunters are already filtered out of the modelled roster server-side.
+Dressed-body monsters draw through the spawn dress path, not the model
+bake: for the bake and its contracts, a dressed-body reference is
+exactly a roster reference with no manifest entry.
+================
+*/
+export function dressedBodyPath( codename, rows ) {
+	let cols = rows.get( codename );
+	const visited = new Set( [ codename ] );
+	while ( cols ) {
+		if ( cols.some( ( value ) => /\.bsr$/i.test( value ) ) ) return null;
+		const compound = cols.find( ( value ) => /\.cpd$/i.test( value ) );
+		if ( compound ) return compound.replaceAll( "\\", "/" ).toLowerCase();
+		const link = cols[4];
+		if ( !link || visited.has( link ) ) return null;
+		visited.add( link );
+		cols = rows.get( link );
+	}
+	return null;
 }
 
 /*

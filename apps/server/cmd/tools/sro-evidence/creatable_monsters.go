@@ -60,7 +60,17 @@ func runCreatableMonsters(args []string) error {
 	if err != nil {
 		return fmt.Errorf("textdata: %w", err)
 	}
-	refs := monster.LoadTemplate(dir).CreatableRefs()
+	template := monster.LoadTemplate(dir)
+	// Port-only, not native: a flag-on bake must cover the Tomb references
+	// the flag-on server can spawn (monster.WithQinShiTomb).
+	if monster.QinShiTombFromEnv() {
+		withTomb, err := template.WithQinShiTomb(dir)
+		if err != nil {
+			return fmt.Errorf("qinshi tomb: %w", err)
+		}
+		template = withTomb
+	}
+	refs := template.CreatableRefs()
 	output := monsterRosterOutput{
 		Format:      "sro-creatable-monster-roster",
 		Source:      "monster.LoadTemplate(...).CreatableRefs: every characterdata row behind the binary CICMonster TypeID gate ((W & 0x7FE) == 0x0C6)",

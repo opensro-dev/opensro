@@ -96,6 +96,7 @@ import { exportDataAsset } from "../shared/dataAssetExport.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
 import { readTextDataLinesSync, readTextDataRowsSync, splitTextDataRow } from "../shared/textDataIo.mjs";
 import { readSkillEffectSourceText } from "../char/parseSkillEffect.mjs";
+import { loadQinShiTombSkillRows, qinshiTombEnabled } from "../shared/qinshiTomb.mjs";
 
 import { gameRoot, publicRoot, retailTextdataRoot } from "../world/paths.mjs";
 import { tooltipAppearanceReferences } from "../../../apps/client-next/src/engine/foundation/ui/skill-tooltip-catalog.ts";
@@ -221,7 +222,9 @@ loadEffectAppearanceStores
 */
 export function loadEffectAppearanceStores( root = textdataRoot ) {
 	const byId = new Map(
-		[ ...loadCharacterDataRows( root, { codenamePattern: /.*/ } ).values() ].map( row => [ Number( row[1] ), row ] )
+		[ ...loadCharacterDataRows( root, { codenamePattern: /.*/, qinshiTombOverlay: true } ).values() ].map(
+			row => [ Number( row[1] ), row ]
+		)
 	);
 	const stores = [ [], [] ];
 	for ( const line of readTextDataLinesSync( path.join( root, "usableresobjiddata.txt" ) ) ) {
@@ -260,6 +263,20 @@ export async function buildSkillDataAsset() {
 			sourceRows.push( cols );
 		}
 	}
+	// Port-only, not native: with SRO_QINSHI_TOMB on, the server's skill
+	// overlay joins the canonical table (shared/qinshiTomb.mjs) under the
+	// same Service==1 / width admission as the retail shards.
+	let tombSkillSourcePath;
+	if ( qinshiTombEnabled() ) {
+		const overlay = loadQinShiTombSkillRows();
+		tombSkillSourcePath = overlay.sourcePath;
+		for ( const cols of overlay.rows ) {
+			if ( cols.length < MIN_COLUMN_COUNT || cols[0].trim() !== "1" ) {
+				continue;
+			}
+			sourceRows.push( cols );
+		}
+	}
 
 	// Every folded skill-driven sound profile resolves the active CIDecoSkill
 	// id through CSkillData. sub_7f9310 writes source columns 1/3/5/6 to the
@@ -281,7 +298,7 @@ export async function buildSkillDataAsset() {
 	const skillAudioRows = [ ...audioRowsBySkillId.values() ];
 	const characterActionEffectRows = resolveCharacterInfoRows(
 		loadCharacterActionEffectRows(),
-		loadCharacterDataRows( textdataRoot, { codenamePattern: /.*/ } )
+		loadCharacterDataRows( textdataRoot, { codenamePattern: /.*/, qinshiTombOverlay: true } )
 	);
 
 	// Native owns one complete data_cec870+0x16c table. Keep every service row
@@ -289,9 +306,12 @@ export async function buildSkillDataAsset() {
 	// in SkillPane_BuildSlotTable, not at the data lifecycle boundary.
 	const rows = sourceRows.map( ( cols ) => PROJECTED_COLUMNS.map( ( index ) => cols[index] ).join( "\t" ) );
 
-	const sourcePaths = [ manifestPath, ...shardPaths, skillEffectPath ].map( ( sourcePath ) =>
-		path.relative( gameRoot, sourcePath ).replaceAll( "\\", "/" )
-	);
+	const sourcePaths = [
+		manifestPath,
+		...shardPaths,
+		skillEffectPath,
+		...(tombSkillSourcePath ? [ tombSkillSourcePath ] : [])
+	].map( ( sourcePath ) => path.relative( gameRoot, sourcePath ).replaceAll( "\\", "/" ) );
 	const catalog = {
 		sourcePaths,
 		format: "sro-skilldata",
@@ -319,7 +339,9 @@ export async function buildSkillDataAsset() {
 		version: 1,
 		characterActionEffectRows,
 		// CRefObjCommon_ParseTextRow 808AD0: field +110 is column 50.
-		characterShadowSizes: [ ...loadCharacterDataRows( textdataRoot, { codenamePattern: /.*/ } ).values() ].filter(
+		characterShadowSizes: [
+			...loadCharacterDataRows( textdataRoot, { codenamePattern: /.*/, qinshiTombOverlay: true } ).values()
+		].filter(
 			row => Number( row[0] ) === 1
 		).map( row => [ Number( row[1] ), Number( row[50] ) ] ),
 		effectAppearanceStores: loadEffectAppearanceStores(),
