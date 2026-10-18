@@ -155,6 +155,67 @@ func TestSealDropNoticeFollowsTheFlag(t *testing.T) {
 
 /*
 ================
+TestSealDropNoticeFollowsTheMinDegreeTunable
+
+By default (SRO_SOX_NOTICE_MIN_DEGREE=6), degree 1-5 seal drops are silent
+and degree 6+ seal drops are announced; lowering the tunable to 1 announces
+degree 1-5 drops again, and raising it to 9 silences degree 8.
+================
+*/
+func TestSealDropNoticeFollowsTheMinDegreeTunable(t *testing.T) {
+	items := staticItemSource{
+		"ITEM_CH_BLADE_05_C_RARE": {
+			RefObjID: 5005, Codename: "ITEM_CH_BLADE_05_C_RARE", Name: "D5 Sun Blade",
+			TypeIDs:      [4]int64{3, 1, 6, 3},
+			NativeFields: enterworld.NewNativeFields(map[string]float64{"itemClass": 15, "rarity": 2}),
+		},
+		"ITEM_CH_BLADE_06_A_RARE": {
+			RefObjID: 6001, Codename: "ITEM_CH_BLADE_06_A_RARE", Name: "D6 Star Blade",
+			TypeIDs:      [4]int64{3, 1, 6, 3},
+			NativeFields: enterworld.NewNativeFields(map[string]float64{"itemClass": 16, "rarity": 2}),
+		},
+		"ITEM_CH_BLADE_08_B_RARE": {
+			RefObjID: 8002, Codename: "ITEM_CH_BLADE_08_B_RARE", Name: "D8 Moon Blade",
+			TypeIDs:      [4]int64{3, 1, 6, 3},
+			NativeFields: enterworld.NewNativeFields(map[string]float64{"itemClass": 23, "rarity": 2}),
+		},
+	}
+	drops := []grounditem.Item{
+		{Codename: "ITEM_CH_BLADE_05_C_RARE", DroppedBy: "Looter"},
+		{Codename: "ITEM_CH_BLADE_06_A_RARE", DroppedBy: "Looter"},
+		{Codename: "ITEM_CH_BLADE_08_B_RARE", DroppedBy: "Looter"},
+	}
+
+	// Default (6): D5 is silent, D6 and D8 are announced.
+	rt, _ := newTestRuntime(testCharacter(), items)
+	rt.Announce.SoxDrop = true
+	rt.announceSealDrops(testDivision, "Tiger Girl", drops, 0)
+	if got := drainedNotices(t, rt); len(got) != 2 ||
+		!strings.Contains(got[0], "D6 Star Blade") || !strings.Contains(got[1], "D8 Moon Blade") {
+		t.Fatalf("default min degree 6 posted %q, want D6 and D8 only", got)
+	}
+
+	// Tunable set to 1: all three degrees (D5, D6, D8) are announced.
+	swapTunables(t, map[string]string{"SRO_SOX_NOTICE_MIN_DEGREE": "1"})
+	rt, _ = newTestRuntime(testCharacter(), items)
+	rt.Announce.SoxDrop = true
+	rt.announceSealDrops(testDivision, "Tiger Girl", drops, 0)
+	if got := drainedNotices(t, rt); len(got) != 3 {
+		t.Fatalf("min degree 1 posted %q, want all 3 drops", got)
+	}
+
+	// Tunable set to 9: D5, D6, and D8 are all silent.
+	swapTunables(t, map[string]string{"SRO_SOX_NOTICE_MIN_DEGREE": "9"})
+	rt, _ = newTestRuntime(testCharacter(), items)
+	rt.Announce.SoxDrop = true
+	rt.announceSealDrops(testDivision, "Tiger Girl", drops, 0)
+	if got := drainedNotices(t, rt); len(got) != 0 {
+		t.Fatalf("min degree 9 posted %q, want none", got)
+	}
+}
+
+/*
+================
 TestSealDropNoticeNamesTheSeal
 
 With the shipped items, a drop notice names the item's seal with the

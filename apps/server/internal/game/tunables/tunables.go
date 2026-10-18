@@ -66,6 +66,7 @@ const (
 	JobKillNoticesPerMinute    = "job_kill_notices_per_minute"
 	MostWantedNoticesPerMinute = "most_wanted_notices_per_minute"
 	JobKillRepeatMinutes       = "job_kill_repeat_minutes"
+	SoxNoticeMinDegree         = "sox_notice_min_degree"
 	ShortNoticeShowMs          = "short_notice_show_ms"
 	ShortNoticeFadeMs          = "short_notice_fade_ms"
 	ChatAckTimeoutMs           = "chat_ack_timeout_ms"
@@ -131,6 +132,9 @@ var Registry = []Setting{
 	{Key: JobKillRepeatMinutes, Env: "SRO_JOB_KILL_REPEAT_MINUTES", Kind: Int, Default: 10, Min: 1, Max: 60,
 		Step: 1, Class: Live, Group: "Notices", Label: "Job-kill pair quiet time", Unit: "minutes",
 		Help: "How long one killer/victim pair's job-kill notice stays quiet (off with SRO_JOB_KILL_NOTICE_REPEAT)."},
+	{Key: SoxNoticeMinDegree, Env: "SRO_SOX_NOTICE_MIN_DEGREE", Kind: Int, Default: 6, Min: 1, Max: 12,
+		Step: 1, Class: Live, Group: "Notices", Label: "Seal-drop notice minimum degree", Unit: "degree",
+		Help: "Lowest equipment degree a seal drop announces (1 announces every degree)."},
 	// The client tuning the world-entry bootstrap carries (enterworld
 	// UiTuning; the client's ui-tuning.ts holds the same bounds). A fade is
 	// at most 2000 and a banner at least 3000, so a fade never outlasts it.

@@ -39,7 +39,7 @@ func TestUnsetEnvironmentKeepsTodaysValues(t *testing.T) {
 	}
 	for key, want := range map[string]int64{
 		MostWantedTestKills: 5, MostWantedTestBounty: 1_000_000, JobKillNoticesPerMinute: 6,
-		MostWantedNoticesPerMinute: 6, JobKillRepeatMinutes: 10,
+		MostWantedNoticesPerMinute: 6, JobKillRepeatMinutes: 10, SoxNoticeMinDegree: 6,
 	} {
 		if got := s.Int(key); got != want || s.Value(key).Source != "default" {
 			t.Fatalf("%s = %d (%s), want %d (default)", key, got, s.Value(key).Source, want)

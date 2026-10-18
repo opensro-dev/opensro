@@ -293,6 +293,7 @@ func (rt *Runtime) announceSealDrops(division, monsterName string, drops []groun
 	if !rt.Announce.SoxDrop {
 		return
 	}
+	minDegree := int(tunables.Current().Int(tunables.SoxNoticeMinDegree))
 	items := rt.deps.ItemReferences()
 	for _, drop := range drops {
 		if drop.DroppedBy == "" || !strings.HasSuffix(drop.Codename, sealCodenameSuffix) {
@@ -300,10 +301,15 @@ func (rt *Runtime) announceSealDrops(division, monsterName string, drops []groun
 		}
 		name := drop.Codename
 		if items != nil {
-			if ref, found := items.ItemRefByCodename(drop.Codename); found && ref.Name != "" {
-				name = ref.Name
-				if tier, sealed := enterworld.EquipmentSeal(ref); sealed {
-					name += " (" + sealNoticeNames[tier] + ")"
+			if ref, found := items.ItemRefByCodename(drop.Codename); found {
+				if degree := enterworld.EquipmentDegree(ref); degree > 0 && degree < minDegree {
+					continue
+				}
+				if ref.Name != "" {
+					name = ref.Name
+					if tier, sealed := enterworld.EquipmentSeal(ref); sealed {
+						name += " (" + sealNoticeNames[tier] + ")"
+					}
 				}
 			}
 		}

@@ -42,6 +42,7 @@ var unlistedSettings = map[string]string{
 	"SRO_MOST_WANTED_TEST_BOUNTY":     "shown in the Most Wanted test pacing rule",
 	"SRO_JOB_KILL_NOTICES_PER_MINUTE": "shown in the job-kill repeat rule",
 	"SRO_JOB_KILL_REPEAT_MINUTES":     "shown in the job-kill repeat rule",
+	"SRO_SOX_NOTICE_MIN_DEGREE":       "shown in the seal-drop notice rule",
 	// Client presentation values (uiTuning): the Short notices row is a
 	// player's own Experimental choice, and the chat wait is the port's.
 	"SRO_SHORT_NOTICE_SHOW_MS":           "timing of a player's own Experimental Short notices row",
@@ -273,8 +274,9 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Requested for the beta; the original speed returns with one setting."},
 			{Flag: action.EnvAnnounceSoxDrop, On: action.AnnouncementsFromEnv().SoxDrop,
 				Native: "A Seal of Star, Moon or Sun drop is not announced.",
-				Now:    "Everyone sees \"<player> has dropped <item> (<seal>) from <monster>\".",
-				Why:    "Requested for the beta; the original quiet drop returns with one setting."},
+				Now: fmt.Sprintf("Everyone sees \"<player> has dropped <item> (<seal>) from <monster>\" for degree %d and above.",
+					settings.Int(tunables.SoxNoticeMinDegree)),
+				Why: "Requested for the beta; the original quiet drop returns with one setting."},
 			{Flag: action.EnvAnnouncePlus, On: action.AnnouncementsFromEnv().Plus,
 				Native: "Reinforcement results are private.",
 				Now:    "Everyone sees \"<player> advanced <item> (<seal>) to +N\" for +8 to +11.",

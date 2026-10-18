@@ -249,6 +249,11 @@ variable "job_kill_repeat_minutes" {
   default = "10"
 }
 
+variable "sox_notice_min_degree" {
+  type    = string
+  default = "6"
+}
+
 # short_notice_show_ms (3000..7000) and short_notice_fade_ms (500..2000) time
 # the Experimental "Short notices" banner; chat_ack_timeout_ms (5000..30000)
 # is the client's wait for a chat confirmation. Each player takes them at
@@ -858,6 +863,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_JOB_KILL_NOTICES_PER_MINUTE         = var.job_kill_notices_per_minute
         SRO_MOST_WANTED_NOTICES_PER_MINUTE      = var.most_wanted_notices_per_minute
         SRO_JOB_KILL_REPEAT_MINUTES             = var.job_kill_repeat_minutes
+        SRO_SOX_NOTICE_MIN_DEGREE               = var.sox_notice_min_degree
         SRO_SHORT_NOTICE_SHOW_MS                = var.short_notice_show_ms
         SRO_SHORT_NOTICE_FADE_MS                = var.short_notice_fade_ms
         SRO_CHAT_ACK_TIMEOUT_MS                 = var.chat_ack_timeout_ms
