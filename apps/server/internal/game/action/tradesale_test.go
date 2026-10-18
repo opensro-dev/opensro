@@ -93,9 +93,9 @@ TestTraderSellsUnquotedForeignGoodAtBaseSellPrice
 Native CGObjNPC_QuoteTradeGoods (4C8D10) sells a foreign good that has no
 quotation entry at the item's base sell price instead of refusing it (the
 "CANNOT FIND QUOT DATA" fall-through at 4C8E54..4C8E77), with zero trade
-profit. Constantinople's TRADE_EU goods have no _ItemQuotation rows, so a
-trader sells them in Jangan at that price and earns no route profit, job
-experience or pool contribution from the sale.
+profit. Unquoted goods (such as Asia Minor's TRADE_AM_01..03) have no
+_ItemQuotation rows, so a trader sells them at that fallback price and earns
+no route profit, job experience or pool contribution from the sale.
 ================
 */
 func TestTraderSellsUnquotedForeignGoodAtBaseSellPrice(t *testing.T) {
@@ -104,12 +104,12 @@ func TestTraderSellsUnquotedForeignGoodAtBaseSellPrice(t *testing.T) {
 	rt.deps.(*enterworld.Deps).UpdateTrade = func(_ []*enterworld.Character, _ string, update func(*domain.TradeRewardPool) bool) bool {
 		return update(&pool)
 	}
-	// Re-dress the fixture's cargo as an unquoted Constantinople good and
+	// Re-dress the fixture's cargo as an unquoted Asia Minor good and
 	// drop every quotation row: the sale must price from sellPrice alone.
 	source := rt.deps.ItemReferences().(cosTestItemSource)
-	source.staticItemSource["ITEM_ETC_TRADE_EU_01"] = &enterworld.ItemRef{RefObjID: 10388, Codename: "ITEM_ETC_TRADE_EU_01", TypeIDs: [4]int64{3, 3, 8, 1}, NativeFields: enterworld.NewNativeFields(map[string]float64{"price": 101, "sellPrice": 50, "maxStack": 40, "canSell": 1})}
-	c.MissionInventory[1].RefObjID = 10388
-	c.MissionInventory[1].Codename = "ITEM_ETC_TRADE_EU_01"
+	source.staticItemSource["ITEM_ETC_TRADE_AM_01"] = &enterworld.ItemRef{RefObjID: 7582, Codename: "ITEM_ETC_TRADE_AM_01", TypeIDs: [4]int64{3, 3, 8, 1}, NativeFields: enterworld.NewNativeFields(map[string]float64{"price": 101, "sellPrice": 50, "maxStack": 40, "canSell": 1})}
+	c.MissionInventory[1].RefObjID = 7582
+	c.MissionInventory[1].Codename = "ITEM_ETC_TRADE_AM_01"
 	rt.Commerce.TradeQuotations = map[[2]uint32]commerce.TradeQuotation{}
 	bindMerchantTax(t, rt, 2010, 20, 0)
 	var quote shopProjection

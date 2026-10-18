@@ -218,8 +218,9 @@ func (rt *Runtime) tradeSaleValue(division string, c *enterworld.Character, npc 
 			// (4C8E54) and sells at the item's base sell price
 			// (4C8E77: [RefObjData+0xB0] * quantity), taxed below like
 			// every path, with the profit output left at zero.
-			// Constantinople's TRADE_EU goods have no _ItemQuotation
-			// rows at all, so this is their only foreign sale price.
+			// Unquoted trade goods (such as Asia Minor's TRADE_AM_01..03)
+			// have no _ItemQuotation rows, so this is their foreign sale
+			// fallback.
 			unit, valid := commerce.SaleUnitPrice(ref, item.MagicOptions, rt.Commerce.Magic)
 			if !valid {
 				return 0, 0, 0, false

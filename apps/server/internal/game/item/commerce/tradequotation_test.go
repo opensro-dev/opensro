@@ -117,14 +117,45 @@ func TestImportedQuotationRowsRemainDistinctAndPriceable(t *testing.T) {
 		t.Fatalf("active quotation rows: got %d, want 418", len(catalog.Rows))
 	}
 	seen := map[[2]int32]bool{}
+	itemRows := map[int32]int{}
 	for _, row := range catalog.Rows {
 		key := [2]int32{row.NPC, row.Item}
 		if row.ID <= 0 || row.Service == 0 || row.NPC <= 0 || row.Item <= 0 || seen[key] {
 			t.Fatalf("invalid or duplicate merchant/item row: %+v", row)
 		}
 		seen[key] = true
+		itemRows[row.Item]++
 		if _, err := TradeQuotationPrice(100, row.TradeQuotation); err != nil {
 			t.Fatalf("row %d: %v", row.ID, err)
+		}
+	}
+	// Every v1.150 stocked specialty trade good (CH_01..07, WC_01..07,
+	// KT_01..04, TK_01..03, RM_01..03, EU_01..04 10388..10391 and
+	// CA_01..04 10392..10395) must resolve to quotation rows, and origin
+	// merchants must not quote their own town's goods.
+	for _, itemID := range []int32{
+		2147, 2148, 2149, 2150,
+		2151, 2152, 2153, 2154,
+		2155, 2156, 2157, 2158,
+		7570, 7571, 7572,
+		7573, 7574, 7575,
+		7576, 7577, 7578,
+		7579, 7580, 7581,
+		10388, 10389, 10390, 10391,
+		10392, 10393, 10394, 10395,
+	} {
+		if itemRows[itemID] == 0 {
+			t.Fatalf("v1.150 specialty trade item %d resolved to zero quotation rows", itemID)
+		}
+	}
+	for _, itemID := range []int32{10388, 10389, 10390, 10391} {
+		if !seen[[2]int32{2010, itemID}] || seen[[2]int32{7500, itemID}] {
+			t.Fatalf("Constantinople trade item %d misrouted in quotations", itemID)
+		}
+	}
+	for _, itemID := range []int32{10392, 10393, 10394, 10395} {
+		if !seen[[2]int32{2010, itemID}] || !seen[[2]int32{7500, itemID}] || seen[[2]int32{7535, itemID}] {
+			t.Fatalf("Samarkand trade item %d misrouted in quotations", itemID)
 		}
 	}
 }

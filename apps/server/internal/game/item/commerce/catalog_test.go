@@ -11,6 +11,8 @@ package commerce
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -100,5 +102,39 @@ func TestShippedCatalog(t *testing.T) {
 	}
 	if !guildRecall || !guildCrest {
 		t.Fatalf("STORE_KT_GUILD missing guild items: recall=%v crest=%v", guildRecall, guildCrest)
+	}
+	// Every active PACKAGE_ITEM_ETC_TRADE_* row in refshopgoods.txt must
+	// resolve to a stocked item with active TradeQuotations rows.
+	quotedByItem := map[uint32]int{}
+	for key := range c.TradeQuotations {
+		quotedByItem[key[1]]++
+	}
+	tradePackages := 0
+	for _, row := range enterworld.ReadTextdataFile(filepath.Join(dir, "refshopgoods.txt")) {
+		if len(row) < 4 || row[0] != "1" || !strings.HasPrefix(row[3], "PACKAGE_ITEM_ETC_TRADE_") {
+			continue
+		}
+		tradePackages++
+		tabID, ok := c.tabIDs[row[2]]
+		if !ok {
+			t.Fatalf("missing shop tab %s for %s", row[2], row[3])
+		}
+		itemCode := strings.TrimPrefix(row[3], "PACKAGE_")
+		var refID uint32
+		for _, offer := range c.Tabs[tabID] {
+			if offer.Ref != nil && offer.Ref.Codename == itemCode {
+				refID = offer.Ref.RefObjID
+				break
+			}
+		}
+		if refID == 0 {
+			t.Fatalf("%s (%s) not admitted in tab %s", row[3], itemCode, row[2])
+		}
+		if quotedByItem[refID] == 0 {
+			t.Fatalf("%s (%s, id %d) resolved to zero quotation rows", row[3], itemCode, refID)
+		}
+	}
+	if tradePackages == 0 {
+		t.Fatal("no PACKAGE_ITEM_ETC_TRADE_* rows found in refshopgoods.txt")
 	}
 }

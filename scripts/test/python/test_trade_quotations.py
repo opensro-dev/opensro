@@ -25,16 +25,29 @@ class QuotationBackup:
 	# ================
 	# __init__
 	# ================
-	def __init__(self, rows, fixed_end=44, columns=10, nulls=0):
+	def __init__(self, rows, fixed_end=44, columns=10, nulls=0, common=None):
 		self.rows = rows
 		self.fixed_end = fixed_end
 		self.columns = columns
 		self.nulls = nulls
+		self.common = common or {}
 
 	# ================
 	# named_rows
 	# ================
 	def named_rows(self, name):
+		if name == "_RefObjCommon":
+			for identity, codename in self.common.items():
+				page = bytearray(8192)
+				at = 96
+				encoded = codename.encode("ascii")
+				struct.pack_into("<H", page, at + 2, 12)
+				struct.pack_into("<II", page, at + 4, identity, 1)
+				struct.pack_into("<HH", page, at + 12, 9, 0)
+				struct.pack_into("<HH", page, at + 16, 1, 20 + len(encoded))
+				page[at + 20:at + 20 + len(encoded)] = encoded
+				yield 0, at, bytes(page)
+			return
 		assert name == "_ItemQuotation"
 		for row in self.rows:
 			page = bytearray(8192)
@@ -91,6 +104,27 @@ class TradeQuotationTests(unittest.TestCase):
 				read_quotations(QuotationBackup([row]))
 		with self.assertRaisesRegex(ValueError, "Empty"):
 			read_quotations(QuotationBackup([]))
+
+	# ================
+	# test_translates_v188_ref_ids_to_v150_media_ids_by_codename
+	# ================
+	def test_translates_v188_ref_ids_to_v150_media_ids_by_codename(self):
+		shifted = list(VALID_ROW)
+		shifted[3] = 10394
+		backup = QuotationBackup(
+			[shifted],
+			common={2010: "NPC_CH_SPECIAL", 10394: "ITEM_ETC_TRADE_EU_01"},
+		)
+		media_ids = {"NPC_CH_SPECIAL": 2010, "ITEM_ETC_TRADE_EU_01": 10388, "ITEM_ETC_TRADE_CA_03": 10394}
+		rows = read_quotations(backup, media_ids=media_ids)
+		self.assertEqual(len(rows), 1)
+		self.assertEqual((rows[0]["npc"], rows[0]["item"]), (2010, 10388))
+		collision = QuotationBackup(
+			[shifted],
+			common={2010: "NPC_CH_SPECIAL", 10394: "ITEM_ETC_TRADE_SD_01"},
+		)
+		with self.assertRaisesRegex(ValueError, "collides"):
+			read_quotations(collision, media_ids=media_ids)
 
 
 if __name__ == "__main__":
