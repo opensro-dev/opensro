@@ -289,10 +289,12 @@ receive
 ================
 	*/
 	function receive( frame: WireFrame ) {
-		noteProgress();
 		// Keep native brackets in the network owner's bounded FIFO until the
 		// matching reference resource has passed integrity and schema ingress.
+		// A queued head frame is re-presented on every step, so it must not
+		// note progress: reference bytes alone prove the link during a load.
 		if ( references.kind !== "idle" ) return false;
+		noteProgress();
 		if ( frame.opcode === 2 ) {
 			// Network owner has already checked the exact v2 WELCOME layout.
 			const resumed = frame.payload[1] === 1;

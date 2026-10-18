@@ -2045,17 +2045,21 @@ test("reference byte progress extends the thirty-second window past a slow body"
 	blob.copy( p, 9 );
 	socket.receive( 7, p );
 	world.step( 4 );
-	// The first chunk lands; the rest is still on the wire at 29 s and
-	// arrives whole at 35 s from the request. A fixed thirty-second
-	// deadline fails the second step, the stall window admits both.
+	// The first chunk lands at 20 s; the rest is still on the wire at
+	// 35 s. A fixed thirty-second deadline fails the second step; the
+	// stall window slides on the chunk and admits it. Stepping to 35 s
+	// while the body is still loading pins the byte-progress plumbing
+	// itself, not the re-arm that follows a completed load.
+	world.step( 20004 );
 	feed.enqueue( bytes.subarray( 0, 20 ) );
 	await settle();
-	world.step( 29004 );
+	world.step( 35004 );
+	assert.equal( world.status().phase, "entering-world" );
 	assert.equal( world.status().error, undefined );
 	feed.enqueue( bytes.subarray( 20 ) );
 	feed.close();
 	await referenceCompletion;
-	world.step( 35004 );
+	world.step( 35005 );
 	assert.equal( world.status().error, undefined );
 	for ( const row of rows ) socket.receive( row.opcode, row.payload );
 	for ( let tick = 35005; tick < 35060 && world.status().phase !== "world"; tick++ ) {
@@ -2114,6 +2118,11 @@ test("a stalled reference body times out after thirty seconds of silence", async
 	p.writeUInt32LE( blob.length, 5 );
 	blob.copy( p, 9 );
 	socket.receive( 7, p );
+	// As on a real entry, the native bracket follows immediately and
+	// queues behind the reference load. Its head frame is re-presented
+	// on every step; it must not slide the deadline, or a stalled body
+	// would never time out.
+	for ( const row of rows ) socket.receive( row.opcode, row.payload );
 	world.step( 4 );
 	await settle();
 	world.step( 30005 );
