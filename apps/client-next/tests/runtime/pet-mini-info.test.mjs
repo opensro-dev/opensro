@@ -53,7 +53,7 @@ test("the HP caution blinks while 0 < HP <= 30%", () => {
 	assert.equal( caution( 0 ), false, "a dead pet does not blink" );
 });
 
-test("6B3A00 / 6B3920 GDR_PET_MINI_BUFF renders attack pet buffs and graded abnormals while the pet entity is present", () => {
+test("6B3A00 / 6B3920 GDR_PET_MINI_BUFF renders attack pet buffs and unlevelled abnormals while the pet entity is present", () => {
 	const fixture = uiFixture();
 	try {
 		/** @type {any} */
@@ -84,7 +84,8 @@ test("6B3A00 / 6B3920 GDR_PET_MINI_BUFF renders attack pet buffs and graded abno
 			kind: "abnormal",
 			gid: 77,
 			bit: 11,
-			viewer: true
+			viewer: true,
+			unlevelled: true
 		} );
 
 		// 6B3920 clears the viewer when GidObjectRegistry_FindEntityByGid returns 0.

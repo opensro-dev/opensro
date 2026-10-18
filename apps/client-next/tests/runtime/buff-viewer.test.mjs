@@ -229,9 +229,9 @@ test("6B3A00 petBuffViewer caps primary and secondary rows at 7x1 (pitch 17, cel
 	);
 	assert.equal( state.primary.length, 7 );
 	assert.equal( state.secondary.length, 7 );
-	const icons = buffViewerIcons( layout, state, 7, skill );
+	const icons = buffViewerIcons( layout, state, 7, skill, { unlevelled: true } );
 	assert.deepEqual( [ icons[0].x, icons[0].y, icons[0].size ], [ 0, 0, 14 ] );
 	assert.deepEqual( [ icons[6].x, icons[6].y ], [ 102, 0 ] );
 	assert.deepEqual( [ icons[7].x, icons[7].y ], [ 0, 19 ] );
-	assert.equal( icons[7].helpSource.unlevelled, undefined );
+	assert.equal( icons[7].helpSource.unlevelled, true );
 });

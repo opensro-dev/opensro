@@ -10459,6 +10459,8 @@ export function createUi(
 							] );
 						}
 						// 6B3A00 / 6B3920: GDR_PET_MINI_BUFF (child 30, 7x17, 14x14, 1+1 rows).
+						// Both pass NULL (0) as the CICharactor* to AddAbnormal / OnTickAndRender,
+						// so abnormal cells carry no grade.
 						if ( petLayout.GDR_PET_MINI_BUFF ) {
 							const buff = authoredRect( petLayout.GDR_PET_MINI_BUFF, qx, qy );
 							buffViewer(
@@ -10467,7 +10469,8 @@ export function createUi(
 									petBuffViewer(),
 									petBuffState,
 									pet.gid,
-									skillsOf( game?.skillCatalog )
+									skillsOf( game?.skillCatalog ),
+									{ unlevelled: true }
 								),
 								buff[0],
 								buff[1]

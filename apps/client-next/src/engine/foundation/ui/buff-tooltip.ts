@@ -4,8 +4,9 @@
 buff-tooltip.ts - native status and attached-effect help for every buff owner
 
 The local board receives private abnormal power, grade and duration records.
-Target and pet viewers receive only their own public grades; party viewers
-have no character record. Keep those sources separate when formatting help.
+The target viewer receives only its own public grades; party and pet viewers
+pass no character record to AddAbnormal/OnTickAndRender. Keep those sources
+separate when formatting help.
 
 ===========================================================================
 */
