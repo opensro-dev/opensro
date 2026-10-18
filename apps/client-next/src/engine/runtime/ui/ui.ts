@@ -268,7 +268,7 @@ import { alchemyEffectCell, alchemyEffectTexture, alchemyResultLines } from "@/e
 import { createUnionHud } from "./hud/union-hud";
 import { createGuildWarHud } from "./hud/guild-war-hud";
 import { guildWarRequest, warScoreLimits, WAR_UNLIMITED } from "@/engine/foundation/gameplay/guild-war";
-import { guildSelf } from "@/engine/foundation/gameplay/social-roster";
+import { guildMemberTextColor, guildRankSymbol, guildSelf } from "@/engine/foundation/gameplay/social-roster";
 import { targetPlayer } from "@/engine/foundation/gameplay/target-player";
 import { createExchangeHud } from "./hud/exchange-hud";
 import {
@@ -17448,7 +17448,11 @@ export function createUi(
 						Clip/ellipsize within the new cell before glyph quads are generated.
 						================
 						*/
-						function put( value: string, r: UiRect ) {
+						function put(
+							value: string,
+							r: UiRect,
+							color: readonly [number, number, number, number] = white
+						) {
 							const cell: UiRect = [
 								Math.floor( r[0] ),
 								Math.floor( r[1] ),
@@ -17456,7 +17460,7 @@ export function createUi(
 								Math.floor( r[3] )
 							];
 							quads.push(
-								...text.quads( value, cell, cell, white, { overflow: "ellipsis", vAlign: 1 } )
+								...text.quads( value, cell, cell, color, { overflow: "ellipsis", vAlign: 1 } )
 							);
 						}
 						/*
@@ -17690,15 +17694,25 @@ export function createUi(
 										role ?
 										hudCopy( "UIIT_STT_FORT_GUILD_" + role ) :
 										"";
-								[ caption, String( row.level ), row.grant, String( row.donated ) ].forEach( (
-									value,
-									column
-								) => put( value, [
-									left + cellLeft[column]! + (column === 0 ? 31 : 3),
-									ry,
-									cellWidths[column]! - (column === 0 ? 34 : 6),
-									ROW_HEIGHT
-								] ) );
+								// Column 3 is the grade column: the rank of the grade byte,
+								// never the grant name (0x5F2E70), in the row's native colour.
+								const rankSymbol = guildRankSymbol( row.grade ),
+									rowColor = guildMemberTextColor( row.grade, row.offline );
+								[
+									caption,
+									String( row.level ),
+									rankSymbol ? hudCopy( rankSymbol ) : "",
+									String( row.donated )
+								]
+									.forEach( (
+										value,
+										column
+									) => put( value, [
+										left + cellLeft[column]! + (column === 0 ? 31 : 3),
+										ry,
+										cellWidths[column]! - (column === 0 ? 34 : 6),
+										ROW_HEIGHT
+									], rowColor ) );
 								const slot = hudData!.windows.ifguildmemberslot!;
 								[ 9, 10 ].forEach( ( id, icon ) => {
 									const node = at( slot, id );
@@ -18348,14 +18362,19 @@ export function createUi(
 											roleSymbol ?
 											hudCopy( "UIIT_STT_FORT_GUILD_" + roleSymbol ) :
 											"";
+										// Control 13 is the grade column: the rank of the grade
+										// byte, never the grant name (0x5F2E70). All four texts
+										// take the row's native colour for its grade/state.
+										const rankSymbol = guildRankSymbol( row.grade ),
+											rowColor = guildMemberTextColor( row.grade, row.offline );
 										for (
 											const [id, value] of [ [ 11, memberCaption ], [ 12, String( row.level ) ], [
 												13,
-												row.grant
+												rankSymbol ? hudCopy( rankSymbol ) : ""
 											], [ 14, String( row.donated ) ] ] as const
 										) {
 											authoredText(
-												Object.values( slot ).find( n => n.id === id )!,
+												{ ...Object.values( slot ).find( n => n.id === id )!, color: rowColor },
 												ox,
 												oy,
 												value

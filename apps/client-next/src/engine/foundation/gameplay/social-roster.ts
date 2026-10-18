@@ -54,6 +54,53 @@ export interface GuildMember {
 	readonly role: number;
 	readonly offline: number;
 }
+
+/*
+================
+guildRankSymbol
+
+The text symbol the member slot's grade column (native control 13,
+GDR_GMS_GRADE) shows for a grade byte. CIFGuildMemberSlot_PopulateFromMember
+(0x5F2E70) switches on the grade at member+0x25: 0 is the master, 5 a vice
+master, 10 an ordinary member, and no other grade is ever given text (the
+native switch has no default case, so the column stays empty). The grant
+name is not this column: it renders only in the name column's grant mode.
+================
+*/
+export function guildRankSymbol( grade: number ): string | null {
+	switch ( grade ) {
+		case 0:
+			return "UIIT_STT_LEADER";
+		case 5:
+			return "UIIT_STT_GUILD_STAFF";
+		case 10:
+			return "UIIT_STT_GUILDSMAN";
+		default:
+			return null;
+	}
+}
+
+/*
+================
+guildMemberTextColor
+
+The colour of every text column in one member row. PopulateFromMember
+(0x5F2E70) writes the font colour slots (0x7817B0: mode 5 writes all four
+states, mode 3 writes only the offline state): a master row (grade 0) is
+gold 0xFFFFB541, darkening to 0xFFA17233 in the offline state; every other
+grade is grey 0xFF808080 in all states. Returned as float RGBA for the
+text board.
+================
+*/
+export function guildMemberTextColor(
+	grade: number,
+	offline: number
+): readonly [number, number, number, number] {
+	if ( grade === 0 ) {
+		return offline ? [ 0xa1 / 255, 0x72 / 255, 0x33 / 255, 1 ] : [ 1, 0xb5 / 255, 0x41 / 255, 1 ];
+	}
+	return [ 0x80 / 255, 0x80 / 255, 0x80 / 255, 1 ];
+}
 // One open guild vote (826610's vote tail, 0x3A6C type 1): the master
 // release vote is kind 0. remainingMs is as of its arrival. candidates
 // arrive once the vote row asks for them (0x7332 -> 0xB332, 82CEE0).
