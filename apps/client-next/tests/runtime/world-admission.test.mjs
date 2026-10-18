@@ -345,6 +345,8 @@ export const createPacks=()=>({worldAnimationManifests:async()=>[],textureVarian
 	const answer = new Promise( resolve => answered = resolve );
 	const loader = createLoader( result => {
 		if ( result.kind === "world" ) throw Error( "fixture transfer failed" );
+		// Liveness notes (progress, job bytes, the decoding mark) are not answers.
+		if ( [ "progress", "job-progress", "job-decoding" ].includes( result.kind ) ) return;
 		results.push( result );
 		answered();
 	} );

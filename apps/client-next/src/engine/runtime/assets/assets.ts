@@ -26,7 +26,18 @@ import type { Degradation } from "@/engine/contracts/network";
 import { storedExperimentalOptions } from "@/engine/foundation/ui/experimental-options";
 import { chooseTextureVariant } from "@/engine/foundation/assets/texture-variants";
 const REQUEST_CAPACITY = 4;
-const REQUEST_DEADLINE_MS = 120000;
+// A load's watchdog is a stall window, not a total budget: the worker notes
+// the bytes it reads per job (job-progress), and a job that keeps moving
+// bytes may run past any fixed total on a slow link (a trickling route to
+// the host measured 40 KB/s in production, where the old flat 120 s cap
+// executed healthy loads). Silence is what dies: this long with no byte
+// progress while downloading, the shorter decode window once the worker
+// marks the primary bytes in (job-decoding; what remains is CPU-bound, and
+// a slow phone's decode is measured in seconds), and an absolute ceiling
+// that even an endless trickle cannot cross.
+const REQUEST_STALL_MS = 120000;
+const REQUEST_DECODE_STALL_MS = 60000;
+const REQUEST_ABSOLUTE_MS = 600000;
 // A cancellation's own acknowledgement window, from the cancel: a request
 // cancelled late in its deadline still gets this long to be released.
 const CANCEL_ACK_MS = 30000;
@@ -51,7 +62,14 @@ export function createAssets(): AssetOwner {
 		limit: number;
 		decode?: Extract<AssetRequest, { kind: "load"; }>["decode"];
 		result: AssetResult | null;
+		// Cumulative worker bytes noted for this job, and whether the worker
+		// marked its primary bytes in (the decode stall window then applies).
+		bytes: number;
+		decoding: boolean;
 		cancelled?: boolean;
+		// The watchdog expired it: its error result is deliverable, and the
+		// worker's late result or release is expected, not a protocol fault.
+		expired?: boolean;
 		// Its release is overdue: the slot stays reserved, nothing waits on it.
 		abandoned?: boolean;
 	}>();
@@ -114,33 +132,50 @@ export function createAssets(): AssetOwner {
 	================
 	checkDeadline
 
-	Enforce the deadline of active loads and of cancellation acknowledgements.
+	Enforce the stall windows of active loads and of cancellation
+	acknowledgements. A load dies only of silence (no worker bytes inside its
+	window, the shorter one once decoding) or of the absolute ceiling; byte
+	progress slides the window (noteJobProgress), so a slow link is slow,
+	never fatal. Expiry is per job: the job takes the same transient error
+	the old whole-runtime failure carried, the worker is asked to cancel it,
+	and every other job continues; the slot frees when the consumer collects
+	the error, or when the worker's late result or release arrives.
 	An overdue acknowledgement abandons its job: the slot stays reserved (the
 	worker may still be running it) and a degraded fault is recorded. Only when
 	every slot is abandoned has the worker stopped answering.
 	A stalled network read never reaches it: the loader abandons a download
 	after its no-progress window and retries (about 91 s for headers that
 	arrive late and a body that then stalls), then answers with a transient
-	error. What remains for this watchdog is a worker that
-	stopped answering, and a request whose bytes keep arriving for more than
-	the whole deadline, which the worker cannot tell apart from a hung decode.
+	error. What remains for this watchdog is a worker that stopped answering,
+	and a decode that hung without moving another byte.
 	================
 	*/
 	function checkDeadline() {
 		if ( disposed || failure ) return;
 		const now = performance.now();
-		for ( const job of jobs.values() ) {
-			if ( job.result || job.abandoned || now < job.deadline ) continue;
+		for ( const [id, job] of jobs ) {
+			if ( job.abandoned ) continue;
 			const path = new URL( job.url ).pathname;
-			if ( !job.cancelled ) {
-				fail( "Asset worker timed out while loading " + path );
-				return;
+			if ( job.cancelled || job.expired ) {
+				if ( now < job.deadline ) continue;
+				job.abandoned = true;
+				degradations.push( {
+					code: CANCEL_UNACKNOWLEDGED,
+					message: `Asset worker did not acknowledge cancelling ${path} within ${CANCEL_ACK_MS / 1000} s`
+				} );
+				continue;
 			}
-			job.abandoned = true;
-			degradations.push( {
-				code: CANCEL_UNACKNOWLEDGED,
-				message: `Asset worker did not acknowledge cancelling ${path} within ${CANCEL_ACK_MS / 1000} s`
-			} );
+			if ( job.result ) continue;
+			if ( now < job.deadline && now - job.startedAt < REQUEST_ABSOLUTE_MS ) continue;
+			job.result = {
+				kind: "error",
+				id,
+				error: "Asset worker timed out while loading " + path,
+				transient: true
+			};
+			job.expired = true;
+			job.deadline = now + CANCEL_ACK_MS;
+			send( { kind: "cancel", id } );
 		}
 		const abandoned = [ ...jobs.values() ].filter( job => job.abandoned );
 		if ( abandoned.length >= REQUEST_CAPACITY ) {
@@ -150,15 +185,59 @@ export function createAssets(): AssetOwner {
 			);
 		}
 	}
+
+	/*
+	================
+	noteJobProgress
+
+	The worker read more of a job's stream: slide its stall window. The
+	window that slides is the phase the job is in; the absolute ceiling in
+	checkDeadline never slides. Notes for finished, cancelled or unknown
+	jobs are inert (a load's last bytes can race its own completion).
+	================
+	*/
+	function noteJobProgress( id: number, bytes: number ) {
+		const job = jobs.get( id );
+		if ( !job || job.result || job.cancelled || bytes <= job.bytes ) return;
+		job.bytes = bytes;
+		job.deadline = performance.now() + (job.decoding ? REQUEST_DECODE_STALL_MS : REQUEST_STALL_MS);
+	}
+
+	/*
+	================
+	noteJobDecoding
+
+	The worker holds a job's primary bytes; what remains is decode. The
+	job's window becomes the decode window from this mark, because CPU work
+	notes no bytes: silence after it is a hung decode, not a slow link.
+	================
+	*/
+	function noteJobDecoding( id: number ) {
+		const job = jobs.get( id );
+		if ( !job || job.result || job.cancelled || job.decoding ) return;
+		job.decoding = true;
+		job.deadline = performance.now() + REQUEST_DECODE_STALL_MS;
+	}
 	worker.onmessage = ( event: MessageEvent<AssetWorkerMessage> ) => {
 		if ( event.data.kind === "progress" ) {
 			if ( !disposed && !failure ) progress = event.data.progress;
 			return;
 		}
+		if ( event.data.kind === "job-progress" ) {
+			if ( !disposed && !failure ) noteJobProgress( event.data.id, event.data.bytes );
+			return;
+		}
+		if ( event.data.kind === "job-decoding" ) {
+			if ( !disposed && !failure ) noteJobDecoding( event.data.id );
+			return;
+		}
 		if ( event.data.kind === "released" ) {
 			const job = jobs.get( event.data.id );
 			if ( job?.cancelled ) jobs.delete( event.data.id );
-			else if ( !disposed && !failure ) fail( "Unexpected asset capacity release" );
+			// An expired job keeps its slot until the consumer collects its
+			// error; its release (and a release after that collection) is the
+			// expected late acknowledgement, not a fault.
+			else if ( job && !job.expired && !disposed && !failure ) fail( "Unexpected asset capacity release" );
 			return;
 		}
 		if ( disposed || failure ) {
@@ -170,6 +249,12 @@ export function createAssets(): AssetOwner {
 		if ( job?.cancelled ) {
 			close( result );
 			jobs.delete( result.id );
+			return;
+		}
+		// An expired job's late completion changes nothing: its transient
+		// error stays deliverable until the consumer collects it.
+		if ( job?.expired ) {
+			close( result );
 			return;
 		}
 		if ( !job ) {
@@ -293,7 +378,16 @@ export function createAssets(): AssetOwner {
 			}
 			const id = ++nextId;
 			const startedAt = performance.now();
-			jobs.set( id, { startedAt, deadline: startedAt + REQUEST_DEADLINE_MS, url, limit, decode, result: null } );
+			jobs.set( id, {
+				startedAt,
+				deadline: startedAt + REQUEST_STALL_MS,
+				url,
+				limit,
+				decode,
+				result: null,
+				bytes: 0,
+				decoding: false
+			} );
 
 			try {
 				send( {

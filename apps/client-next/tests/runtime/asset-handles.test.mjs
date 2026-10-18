@@ -193,7 +193,7 @@ test("progress messages do not complete handles or release download capacity", t
 	assert.equal( assets.available(), 4 );
 });
 
-test("a stalled load fails the shared owner visibly", t => {
+test("a stalled load fails its own handle visibly and the shared owner lives", t => {
 	let now = 0;
 	t.mock.method( performance, "now", () => now );
 	const { assets } = fixture( t );
@@ -201,13 +201,19 @@ test("a stalled load fails the shared owner visibly", t => {
 		second = assets.request( "https://assets.test/other" );
 	now = 119999;
 	assert.equal( assets.health().phase, "running" );
+	assert.equal( assets.take( first ), null );
 	now = 120000;
-	assert.equal( assets.health().phase, "failed" );
-	assert.match( assets.health().error, /loading \/stalled/ );
-	assert.equal( assets.available(), 0 );
-	assert.match( assets.take( second ).error, /timed out/ );
-	assert.equal( assets.take( first ).kind, "error" );
-	assert.throws( () => assets.request( "https://assets.test/retry" ), /timed out/ );
+	// Both loads went silent for the whole stall window: each expires as a
+	// transient error on its own handle, the owner never fails, and a retry
+	// is a fresh request, not a thrown terminal error.
+	assert.equal( assets.health().phase, "running" );
+	assert.match( assets.take( first ).error, /timed out while loading \/stalled/ );
+	assert.equal( assets.take( first ), null );
+	const secondResult = assets.take( second );
+	assert.match( secondResult.error, /timed out/ );
+	assert.equal( secondResult.transient, true );
+	assert.equal( assets.available(), 4 );
+	assert.doesNotThrow( () => assets.request( "https://assets.test/retry" ) );
 });
 test("an unacknowledged cancellation is abandoned, keeps its slot and reports once", t => {
 	let now = 0;

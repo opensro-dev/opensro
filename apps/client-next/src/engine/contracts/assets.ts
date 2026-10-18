@@ -39,6 +39,12 @@ Worker replies transfer decoded resources or acknowledge released capacity.
 */
 export type AssetWorkerMessage =
 	| { kind: "progress"; progress: AssetProgress; }
+	// Per-job liveness for the main-thread watchdog: cumulative stream bytes
+	// the worker has read for one load, and the mark that its primary bytes
+	// are in and decoding (not downloading) is what remains. Neither carries
+	// a slot or a result; the watchdog in assets.ts owns their meaning.
+	| { kind: "job-progress"; id: number; bytes: number; }
+	| { kind: "job-decoding"; id: number; }
 	| Exclude<AssetResult, { kind: "world"; }>
 	| {
 		kind: "world";

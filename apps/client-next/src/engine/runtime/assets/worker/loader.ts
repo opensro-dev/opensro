@@ -94,6 +94,10 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	let disposed = false, effectCatalogParsed = false;
 	const files = new Map<string, number>(), readyFiles = new Set<string>();
 	let bytesRead = 0;
+	// Cumulative stream bytes per foreground load, keyed by its cancellation
+	// signal (the one identity every read of a job shares, decoder-internal
+	// pack reads included). The watchdog's stall window slides on these.
+	const jobBytes = new Map<AbortSignal, { id: number; bytes: number; sent: number; }>();
 	let received = 0, lastReceived = 0, lastProgress = performance.now(), speed = 0;
 	let progressTimer: ReturnType<typeof setTimeout> | null = null;
 	/*
@@ -140,6 +144,13 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 					currentFile: [ ...files.keys() ].at( -1 ) ?? ""
 				}
 			}, [] );
+			// The watchdog's per-job notes ride the same coalesced beat, one
+			// per load whose stream moved since the last publication.
+			for ( const job of jobBytes.values() ) {
+				if ( job.bytes === job.sent ) continue;
+				job.sent = job.bytes;
+				send( { kind: "job-progress", id: job.id, bytes: job.bytes }, [] );
+			}
 		}
 	}
 	/*
@@ -172,10 +183,14 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		signal: AbortSignal,
 		range?: import("./packs/packs").PackRange
 	) {
+		// The foreground load this read belongs to, when it belongs to one:
+		// every chunk it moves slides that job's watchdog window. Background
+		// installation reads carry no job and are never attributed.
+		const job = jobBytes.get( signal );
 		for ( let attempt = 0;; attempt++ ) {
 			signal.throwIfAborted();
 			try {
-				return await downloadAttempt( url, limit, signal, range );
+				return await downloadAttempt( url, limit, signal, range, job );
 			} catch ( error ) {
 				const transient = error instanceof TypeError || error instanceof NoProgressError ||
 					(error instanceof Error && "status" in error &&
@@ -227,7 +242,8 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		url: string,
 		limit: number,
 		signal: AbortSignal,
-		range?: import("./packs/packs").PackRange
+		range?: import("./packs/packs").PackRange,
+		job?: { id: number; bytes: number; sent: number; }
 	) {
 		// The attempt aborts on the caller's cancellation or on its own stall
 		// timer; only the stall becomes NoProgressError (transient). Every
@@ -241,7 +257,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			timer = setTimeout( () => attempt.abort( stalled ), DOWNLOAD_NO_PROGRESS_MS );
 		};
 		try {
-			return await downloadBytes( { url, limit, signal: attempt.signal, range }, progressed );
+			return await downloadBytes( { url, limit, signal: attempt.signal, range }, progressed, job );
 		} catch ( error ) {
 			// The caller's cancellation wins whatever else ended the attempt: a
 			// cancel racing the stall must surface its own reason, not the stall.
@@ -260,7 +276,11 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	and on every body chunk.
 	================
 	*/
-	async function downloadBytes( read: DownloadRead, progressed: () => void ) {
+	async function downloadBytes(
+		read: DownloadRead,
+		progressed: () => void,
+		job?: { id: number; bytes: number; sent: number; }
+	) {
 		const { url, limit, signal, range } = read;
 		const started = performance.now();
 		// Cache Storage owns verified members. Keep partial HTTP responses out
@@ -297,6 +317,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 				// An empty chunk is not progress.
 				if ( size > 0 ) progressed();
 				bytesRead += size;
+				if ( job ) job.bytes += size;
 				if ( range ) received += size;
 				progress();
 			},
@@ -370,6 +391,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		}>,
 		controller: AbortController
 	) {
+		jobBytes.set( controller.signal, { id: request.id, bytes: 0, sent: 0 } );
 		try {
 			const url = new URL( request.url );
 			if ( ![ "http:", "https:" ].includes( url.protocol ) || url.username || url.password ) {
@@ -381,6 +403,9 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 				await packs.read( url, request.limit, controller.signal ) :
 				await download( url.href, request.limit, controller.signal );
 			if ( !disposed && pending.get( request.id ) === controller ) {
+				// The primary bytes are in; what remains is decode (its own
+				// reads still count as byte progress, CPU work does not).
+				send( { kind: "job-decoding", id: request.id }, [] );
 				if ( request.decode === "navigation" ) {
 					let size = bytes.byteLength;
 					const product = await navigation.resolve( bytes, Number( url.hash.slice( 1 ) ), async path => {
@@ -703,6 +728,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 				}, [] );
 			}
 		} finally {
+			jobBytes.delete( controller.signal );
 			active.delete( controller );
 			if ( active.size === 0 ) wakeIdleWaiters();
 			if ( !disposed && controller.signal.aborted ) send( { kind: "released", id: request.id }, [] );

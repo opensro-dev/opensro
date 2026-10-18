@@ -61,4 +61,12 @@ test("unfinished compressed or cached responses report stream activity separatel
 		4,
 		5
 	] );
+	// The watchdog's notes rode along: cumulative per-job bytes as the stream
+	// moved, then the fetch-complete mark before the result.
+	assert.deepEqual( messages.filter( message => message.kind === "job-progress" ), [
+		{ kind: "job-progress", id: 1, bytes: 3 },
+		{ kind: "job-progress", id: 1, bytes: 5 }
+	] );
+	const decoding = messages.findIndex( message => message.kind === "job-decoding" );
+	assert.ok( decoding > -1 && decoding < messages.findIndex( message => message.kind === "bytes" ) );
 });

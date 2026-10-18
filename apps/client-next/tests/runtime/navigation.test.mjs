@@ -443,7 +443,7 @@ test("asset worker admits and publishes the navigation lane within its request b
 		async () => new Response( bytes( "/assets/world/dungeon/dungeon-resources.json" ) )
 	);
 	const loader = createLoader( r => {
-		if ( r.kind !== "progress" ) results.push( r );
+		if ( ![ "progress", "job-progress", "job-decoding" ].includes( r.kind ) ) results.push( r );
 	} );
 	t.after( () => loader.dispose() );
 	loader.receive( {

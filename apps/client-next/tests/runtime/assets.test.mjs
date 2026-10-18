@@ -58,7 +58,7 @@ test("asset worker transfers exact bytes without retaining the output buffer", a
 	const loader = createLoader( ( result, transfer ) => {
 		// Progress is time-based telemetry (sent after 150 ms), so a loaded
 		// machine can emit one mid-test; only deliveries are under test.
-		if ( result.kind === "progress" ) return;
+		if ( [ "progress", "job-progress", "job-decoding" ].includes( result.kind ) ) return;
 		transferred = result.buffer;
 		results.push( structuredClone( result, { transfer } ) );
 	} );
@@ -77,7 +77,7 @@ test("asset cancellation rejects late completion even if fetch ignores abort", a
 	} );
 	const results = [],
 		loader = createLoader( result => {
-			if ( result.kind !== "progress" ) results.push( result );
+			if ( ![ "progress", "job-progress", "job-decoding" ].includes( result.kind ) ) results.push( result );
 		} );
 	loader.receive( { kind: "load", id: 1, url: "http://localhost/asset", limit: 3 } );
 	loader.receive( { kind: "cancel", id: 1 } );
@@ -95,7 +95,7 @@ test("asset loader bounds concurrency and aborts every pending request on dispos
 	} );
 	const results = [],
 		loader = createLoader( result => {
-			if ( result.kind !== "progress" ) results.push( result );
+			if ( ![ "progress", "job-progress", "job-decoding" ].includes( result.kind ) ) results.push( result );
 		} );
 	for ( let id = 1; id <= 5; id++ ) loader.receive( { kind: "load", id, url: "http://localhost/" + id, limit: 3 } );
 	assert.equal( signals.length, 4 );
@@ -139,7 +139,7 @@ close
 	};
 	const results = [],
 		loader = createLoader( result => {
-			if ( result.kind !== "progress" ) results.push( result );
+			if ( ![ "progress", "job-progress", "job-decoding" ].includes( result.kind ) ) results.push( result );
 		} );
 	t.after( () => loader.dispose() );
 	const request = id =>
@@ -177,7 +177,7 @@ test("cancelled downloads retain capacity even when fetch ignores abort, then re
 	t.mock.method( globalThis, "fetch", () => new Promise( resolve => downloads.push( resolve ) ) );
 	const results = [],
 		loader = createLoader( result => {
-			if ( result.kind !== "progress" ) results.push( result );
+			if ( ![ "progress", "job-progress", "job-decoding" ].includes( result.kind ) ) results.push( result );
 		} );
 	t.after( () => loader.dispose() );
 	const request = id => loader.receive( { kind: "load", id, url: "http://localhost/data", limit: 1 } );

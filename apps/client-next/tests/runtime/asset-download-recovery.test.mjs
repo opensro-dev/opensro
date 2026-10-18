@@ -35,7 +35,7 @@ function fixture( t, fetch ) {
 	t.mock.method( globalThis, "fetch", fetch );
 	const messages = [];
 	const loader = createLoader( message => {
-		if ( message.kind !== "progress" ) messages.push( message );
+		if ( ![ "progress", "job-progress", "job-decoding" ].includes( message.kind ) ) messages.push( message );
 	} );
 	t.after( () => loader.dispose() );
 	loader.receive( { kind: "load", id: 1, url: "https://example.test/asset", limit: 3 } );
@@ -295,7 +295,7 @@ for ( const dispose of [ false, true ] ) {
 			return asset.serve( url, options );
 		} );
 		const loader = createLoader( message => {
-			if ( message.kind !== "progress" ) messages.push( message );
+			if ( ![ "progress", "job-progress", "job-decoding" ].includes( message.kind ) ) messages.push( message );
 			if ( message.kind === "bytes" || message.kind === "error" ) deliver();
 		} );
 		t.after( () => loader.dispose() );
@@ -339,7 +339,7 @@ test("invalid range stays permanent even when response cleanup rejects", async t
 		return new Response( failedBody(), { status: 206, headers: { "Content-Range": "bytes 0-9/10" } } );
 	} );
 	const loader = createLoader( message => {
-		if ( message.kind !== "progress" ) messages.push( message );
+		if ( ![ "progress", "job-progress", "job-decoding" ].includes( message.kind ) ) messages.push( message );
 	} );
 	t.after( () => loader.dispose() );
 	loader.receive( { kind: "load", id: 1, url: `https://example.test${asset.path}`, limit: asset.bytes.length } );
@@ -631,7 +631,7 @@ test(
 			return Promise.resolve( asset.serve( url, options ) );
 		} );
 		const loader = createLoader( message => {
-			if ( message.kind !== "progress" ) messages.push( message );
+			if ( ![ "progress", "job-progress", "job-decoding" ].includes( message.kind ) ) messages.push( message );
 			if ( message.kind === "bytes" || message.kind === "error" ) deliver();
 		} );
 		t.after( () => loader.dispose() );
