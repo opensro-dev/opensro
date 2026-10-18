@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+alchemybatch.go - multi-step alchemy compound clock and batch execution
+
+===========================================================================
+*/
+
 package action
 
 import (
@@ -23,12 +31,23 @@ type compoundJob struct {
 	counter        uint8
 }
 
+/*
+================
+compoundJob
+================
+*/
 func (rt *Runtime) compoundJob(key compoundKey) (compoundJob, bool) {
 	rt.compoundMu.Lock()
 	defer rt.compoundMu.Unlock()
 	j, ok := rt.compoundJobs[key]
 	return j, ok
 }
+
+/*
+================
+storeCompoundJob
+================
+*/
 func (rt *Runtime) storeCompoundJob(key compoundKey, job compoundJob) {
 	rt.compoundMu.Lock()
 	defer rt.compoundMu.Unlock()
@@ -37,16 +56,28 @@ func (rt *Runtime) storeCompoundJob(key compoundKey, job compoundJob) {
 	}
 	rt.compoundJobs[key] = job
 }
+
+/*
+================
+clearCompoundJob
+================
+*/
 func (rt *Runtime) clearCompoundJob(key compoundKey) {
 	rt.compoundMu.Lock()
 	defer rt.compoundMu.Unlock()
 	delete(rt.compoundJobs, key)
 }
 
-// Native 52ADB1 checks the counter before incrementing it. Execution resets
-// it to zero in 50A565, then the same update increments it to one. Never run a
-// more than one callback per host update. 4AB690 retains elapsed debt after
-// subtracting the one-second period; it does not discard overdue time.
+/*
+================
+compoundClock
+
+Native 52ADB1 checks the counter before incrementing it. Execution resets
+it to zero in 50A565, then the same update increments it to one. Never run
+more than one callback per host update. 4AB690 retains elapsed debt after
+subtracting the one-second period; it does not discard overdue time.
+================
+*/
 func compoundClock(job compoundJob, nowMs int64) (compoundJob, bool) {
 	if nowMs <= job.lastMs {
 		return job, false
@@ -65,6 +96,11 @@ func compoundClock(job compoundJob, nowMs int64) (compoundJob, bool) {
 	return job, false
 }
 
+/*
+================
+advanceCompoundJobs
+================
+*/
 func (rt *Runtime) advanceCompoundJobs(nowMs int64) {
 	rt.compoundMu.Lock()
 	keys := make([]compoundKey, 0, len(rt.compoundJobs))
@@ -79,51 +115,63 @@ func (rt *Runtime) advanceCompoundJobs(nowMs int64) {
 		return keys[i].name < keys[j].name
 	})
 	for _, key := range keys {
-		unlock := rt.lockDivision(key.division)
-		job, ok := rt.compoundJob(key)
-		if !ok {
-			unlock()
-			continue
-		}
-		var frames []wire.Frame
-		character := rt.findCharacter(key.division, key.name)
-		if character == nil || character != job.character {
-			rt.clearCompoundJob(key)
-			unlock()
-			continue
-		}
-		snapshot := character.Snapshot()
-		if snapshot.DeletePending || enterworld.CurrentHP(snapshot) <= 0 {
-			rt.clearCompoundJob(key)
-			frames = []wire.Frame{{Opcode: 0x3359, Payload: []byte{2, 6}}}
-		} else {
-			var due bool
-			job, due = compoundClock(job, nowMs)
-			if due {
-				step := job.steps[0]
-				frames, ok = rt.commitAlchemyProcess(character, alchemy.OpCompoundResult, step, job.expected)
-				if !ok {
-					frames[len(frames)-1].Opcode = 0x3359
-				}
-				if ok {
-					job.steps = job.steps[1:]
-				}
-				if !ok || len(job.steps) == 0 {
-					rt.clearCompoundJob(key)
-				} else {
-					rt.storeCompoundJob(key, job)
-				}
-			} else {
-				rt.storeCompoundJob(key, job)
-			}
-		}
-		unlock()
+		frames := rt.advanceCompoundJob(key, nowMs)
 		if len(frames) > 0 && rt.PushCharacterFrames != nil {
 			rt.PushCharacterFrames(key.division, key.name, frames)
 		}
 	}
 }
 
+/*
+================
+advanceCompoundJob
+================
+*/
+func (rt *Runtime) advanceCompoundJob(key compoundKey, nowMs int64) []wire.Frame {
+	unlock := rt.lockDivision(key.division)
+	defer unlock()
+	job, ok := rt.compoundJob(key)
+	if !ok {
+		return nil
+	}
+	var frames []wire.Frame
+	character := rt.findCharacter(key.division, key.name)
+	if character == nil || character != job.character {
+		rt.clearCompoundJob(key)
+		return nil
+	}
+	snapshot := character.Snapshot()
+	if snapshot.DeletePending || enterworld.CurrentHP(snapshot) <= 0 {
+		rt.clearCompoundJob(key)
+		return []wire.Frame{{Opcode: 0x3359, Payload: []byte{2, 6}}}
+	}
+	var due bool
+	job, due = compoundClock(job, nowMs)
+	if due {
+		step := job.steps[0]
+		frames, ok = rt.commitAlchemyProcess(character, alchemy.OpCompoundResult, step, job.expected)
+		if !ok {
+			frames[len(frames)-1].Opcode = 0x3359
+		}
+		if ok {
+			job.steps = job.steps[1:]
+		}
+		if !ok || len(job.steps) == 0 {
+			rt.clearCompoundJob(key)
+		} else {
+			rt.storeCompoundJob(key, job)
+		}
+	} else {
+		rt.storeCompoundJob(key, job)
+	}
+	return frames
+}
+
+/*
+================
+compoundExpected
+================
+*/
 func compoundExpected(items []inventory.Item, steps []alchemy.ProcessRequest) map[uint8]inventory.Item {
 	needed := map[uint8]bool{}
 	for _, step := range steps {
@@ -141,6 +189,11 @@ func compoundExpected(items []inventory.Item, steps []alchemy.ProcessRequest) ma
 	return out
 }
 
+/*
+================
+compoundInputsUnchanged
+================
+*/
 func compoundInputsUnchanged(items []inventory.Item, slots []uint8, expected map[uint8]inventory.Item) bool {
 	if expected == nil {
 		return true

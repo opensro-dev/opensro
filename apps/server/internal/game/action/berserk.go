@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+berserk.go - berserk activation, expiry and kill point awards
+
+===========================================================================
+*/
+
 package action
 
 import (
@@ -16,12 +24,23 @@ type berserkExpiry struct {
 	until          int64
 }
 
+/*
+================
+berserkPointsFrame
+================
+*/
 func berserkPointsFrame(c *enterworld.Character, source uint32) wire.Frame {
 	return wire.Frame{Opcode: 0x30b3, Payload: wire.NewWriter(6).U8(4).U8(c.BerserkPoints).U32(source).Payload()}
 }
 
-// The retail request is7341 [1]; research515B30 uses70A7. Success is
-// authoritative points/body/speed publication; B341 carries refusals only.
+/*
+================
+HandleBerserk
+
+The retail request is 7341 [1]; research 515B30 uses 70A7. Success is
+authoritative points/body/speed publication; B341 carries refusals only.
+================
+*/
 func (rt *Runtime) HandleBerserk(division string, c *enterworld.Character, payload []byte) OpResult {
 	if c == nil || len(payload) != 1 || payload[0] != 1 {
 		return OpResult{}
@@ -83,8 +102,14 @@ func (rt *Runtime) HandleBerserk(division string, c *enterworld.Character, paylo
 	return OpResult{Frames: append(frames, public...), Broadcast: public}
 }
 
-// Character store owns the two-state lifecycle. The map is only its tick index.
-// No goroutines/timers retain an actor after session teardown.
+/*
+================
+advanceBerserk
+
+Character store owns the two-state lifecycle. The map is only its tick index.
+No goroutines/timers retain an actor after session teardown.
+================
+*/
 func (rt *Runtime) advanceBerserk(now int64) []simulation.DivisionFrames {
 	var keys []string
 	rt.berserkActors.Range(func(k, v any) bool {
@@ -101,33 +126,7 @@ func (rt *Runtime) advanceBerserk(now int64) []simulation.DivisionFrames {
 			continue
 		}
 		job := value.(berserkExpiry)
-		unlock := rt.lockDivision(job.division)
-		c := rt.findCharacter(job.division, job.name)
-		var sourceGID uint32
-		var frames []wire.Frame
-		if c != nil {
-			sourceGID = enterworld.ObjectIDForCharacter(c)
-			rt.deps.UpdateDeferred(c, "berserk-expire", func() bool {
-				if c.BerserkUntilMs != job.until || now < c.BerserkUntilMs {
-					return false
-				}
-				c.BerserkUntilMs = 0
-				// AJStateChanger kind4 preserves current invisible body4.
-				if c.NativeBodyStatus != 4 {
-					if c.TransitionBodyStatus(domain.BodyStatusTransition{}) {
-						frames = append(frames, bodyStatusFrame(sourceGID, 0))
-					}
-					frames = append(frames, rt.refreshMovementEffects(job.division, c, now)...)
-				}
-				return true
-			})
-		}
-		rt.berserkActors.CompareAndDelete(key, job)
-		if len(frames) > 0 && rt.PushCharacterFrames != nil && rt.PushDivisionPeerFrames != nil {
-			rt.publishBodyStatus(job.division, job.name, frames)
-			frames = nil
-		}
-		unlock()
+		sourceGID, frames := rt.expireBerserkInDivision(key, job, now)
 		if len(frames) > 0 {
 			batch := simulation.DivisionFrames{DivisionID: job.division, SourceGID: sourceGID}
 			for _, f := range frames {
@@ -139,8 +138,50 @@ func (rt *Runtime) advanceBerserk(now int64) []simulation.DivisionFrames {
 	return out
 }
 
-// 410880, consumed as unsigned16 by593800. Preserve native CRT modulo
-// sampling: threshold800 is not an exact uniform8-percent probability.
+/*
+================
+expireBerserkInDivision
+================
+*/
+func (rt *Runtime) expireBerserkInDivision(key string, job berserkExpiry, now int64) (uint32, []wire.Frame) {
+	unlock := rt.lockDivision(job.division)
+	defer unlock()
+	c := rt.findCharacter(job.division, job.name)
+	var sourceGID uint32
+	var frames []wire.Frame
+	if c != nil {
+		sourceGID = enterworld.ObjectIDForCharacter(c)
+		rt.deps.UpdateDeferred(c, "berserk-expire", func() bool {
+			if c.BerserkUntilMs != job.until || now < c.BerserkUntilMs {
+				return false
+			}
+			c.BerserkUntilMs = 0
+			// AJStateChanger kind4 preserves current invisible body4.
+			if c.NativeBodyStatus != 4 {
+				if c.TransitionBodyStatus(domain.BodyStatusTransition{}) {
+					frames = append(frames, bodyStatusFrame(sourceGID, 0))
+				}
+				frames = append(frames, rt.refreshMovementEffects(job.division, c, now)...)
+			}
+			return true
+		})
+	}
+	rt.berserkActors.CompareAndDelete(key, job)
+	if len(frames) > 0 && rt.PushCharacterFrames != nil && rt.PushDivisionPeerFrames != nil {
+		rt.publishBodyStatus(job.division, job.name, frames)
+		frames = nil
+	}
+	return sourceGID, frames
+}
+
+/*
+================
+berserkKillAward
+
+410880, consumed as unsigned16 by 593800. Preserve native CRT modulo
+sampling: threshold 800 is not an exact uniform 8-percent probability.
+================
+*/
 func berserkKillAward(playerLevel, monsterLevel int64, rarity uint8, roll uint32) int {
 	return berserkKillAwardWithGainRate(playerLevel, monsterLevel, rarity, 100, roll)
 }
@@ -178,7 +219,13 @@ func berserkKillAwardWithGainRate(playerLevel, monsterLevel int64, rarity uint8,
 	return 0
 }
 
-// Called once by the committed fatal-hit owner, not by the EXP winner.
+/*
+================
+grantBerserkForKill
+
+Called once by the committed fatal-hit owner, not by the EXP winner.
+================
+*/
 func (rt *Runtime) grantBerserkForKill(actor *enterworld.Character, roster rewardRoster, impact simulation.MonsterDamageResult) []RecipientFrames {
 	if actor == nil || actor.NativeBodyStatus == 1 {
 		return nil

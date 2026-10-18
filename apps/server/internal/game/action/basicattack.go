@@ -820,16 +820,10 @@ func (rt *Runtime) advanceBasicAttackIntents(nowMs int64, openActionOwners map[s
 		if ownsOpenAction && (casting || intent.ComboRootID == 0 || intent.ResumeBasic) {
 			continue
 		}
-		unlock := rt.lockDivision(intent.DivisionID)
-		// A request can cancel/replace an intent after the tick snapshots it but
-		// before this division lock is acquired. Never resurrect that stale cast.
-		if !rt.combatIntentIsCurrent(intent) {
-			unlock()
+		character, result, ok := rt.advanceBasicAttackIntentInDivision(intent, nowMs)
+		if !ok {
 			continue
 		}
-		character := rt.findCharacter(intent.DivisionID, intent.CharacterName)
-		result := rt.advanceBasicAttackIntent(character, intent, nowMs)
-		unlock()
 		if result.DiagnosticRefusal != "" {
 			log.Debugf(
 				"action: 0x72CD continuation refused for %s: %s",
@@ -875,4 +869,21 @@ func (rt *Runtime) advanceBasicAttackIntents(nowMs int64, openActionOwners map[s
 		}
 	}
 	return out
+}
+
+/*
+================
+advanceBasicAttackIntentInDivision
+================
+*/
+func (rt *Runtime) advanceBasicAttackIntentInDivision(intent basicAttackIntent, nowMs int64) (*enterworld.Character, OpResult, bool) {
+	unlock := rt.lockDivision(intent.DivisionID)
+	defer unlock()
+	// A request can cancel/replace an intent after the tick snapshots it but
+	// before this division lock is acquired. Never resurrect that stale cast.
+	if !rt.combatIntentIsCurrent(intent) {
+		return nil, OpResult{}, false
+	}
+	character := rt.findCharacter(intent.DivisionID, intent.CharacterName)
+	return character, rt.advanceBasicAttackIntent(character, intent, nowMs), true
 }

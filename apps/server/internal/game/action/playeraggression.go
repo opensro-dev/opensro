@@ -132,40 +132,7 @@ func (rt *Runtime) advancePlayerAggressions(now int64) []simulation.DivisionFram
 			continue
 		}
 		job := value.(playerAggressionClock)
-		unlock := rt.lockDivision(job.division)
-		var sourceGID uint32
-		var frames []wire.Frame
-		c := rt.findCharacter(job.division, job.name)
-		if c != nil {
-			sourceGID = enterworld.ObjectIDForCharacter(c)
-			party := rt.auraParty(job.division, c)
-			rt.deps.UpdateDeferred(c, "player-aggression-tick", func() bool {
-				before := c.PVPState()
-				ticks := uint64((now-job.next)/playerAggressionTickMs + 1)
-				for gid, remaining := range c.Aggressions {
-					if uint64(remaining) <= ticks || party[gid] {
-						delete(c.Aggressions, gid)
-					} else {
-						c.Aggressions[gid] = remaining - uint32(ticks)
-					}
-				}
-				if before != c.PVPState() {
-					frames = append(frames, playerPVPStateFrame(c))
-				}
-				return true
-			})
-		}
-		if c == nil || len(c.Aggressions) == 0 {
-			rt.aggressionActors.Delete(key)
-		} else {
-			job.next += ((now-job.next)/playerAggressionTickMs + 1) * playerAggressionTickMs
-			rt.aggressionActors.Store(key, job)
-		}
-		if len(frames) > 0 && rt.PushCharacterFrames != nil && rt.PushDivisionPeerFrames != nil {
-			rt.publishBodyStatus(job.division, job.name, frames)
-			frames = nil
-		}
-		unlock()
+		sourceGID, frames := rt.advancePlayerAggressionInDivision(key, job, now)
 		if len(frames) > 0 {
 			batch := simulation.DivisionFrames{DivisionID: job.division, SourceGID: sourceGID}
 			for _, frame := range frames {
@@ -175,4 +142,47 @@ func (rt *Runtime) advancePlayerAggressions(now int64) []simulation.DivisionFram
 		}
 	}
 	return out
+}
+
+/*
+================
+advancePlayerAggressionInDivision
+================
+*/
+func (rt *Runtime) advancePlayerAggressionInDivision(key string, job playerAggressionClock, now int64) (uint32, []wire.Frame) {
+	unlock := rt.lockDivision(job.division)
+	defer unlock()
+	var sourceGID uint32
+	var frames []wire.Frame
+	c := rt.findCharacter(job.division, job.name)
+	if c != nil {
+		sourceGID = enterworld.ObjectIDForCharacter(c)
+		party := rt.auraParty(job.division, c)
+		rt.deps.UpdateDeferred(c, "player-aggression-tick", func() bool {
+			before := c.PVPState()
+			ticks := uint64((now-job.next)/playerAggressionTickMs + 1)
+			for gid, remaining := range c.Aggressions {
+				if uint64(remaining) <= ticks || party[gid] {
+					delete(c.Aggressions, gid)
+				} else {
+					c.Aggressions[gid] = remaining - uint32(ticks)
+				}
+			}
+			if before != c.PVPState() {
+				frames = append(frames, playerPVPStateFrame(c))
+			}
+			return true
+		})
+	}
+	if c == nil || len(c.Aggressions) == 0 {
+		rt.aggressionActors.Delete(key)
+	} else {
+		job.next += ((now-job.next)/playerAggressionTickMs + 1) * playerAggressionTickMs
+		rt.aggressionActors.Store(key, job)
+	}
+	if len(frames) > 0 && rt.PushCharacterFrames != nil && rt.PushDivisionPeerFrames != nil {
+		rt.publishBodyStatus(job.division, job.name, frames)
+		frames = nil
+	}
+	return sourceGID, frames
 }

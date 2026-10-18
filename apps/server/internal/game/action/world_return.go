@@ -1,3 +1,15 @@
+/*
+===========================================================================
+
+world_return.go - live region tracking for saved return locations
+
+Updates each admitted player's bound region on periodic ticks and movement
+segment transitions, saving outdoor layer-1 return locations under the
+character store door.
+
+===========================================================================
+*/
+
 package action
 
 import (
@@ -8,10 +20,16 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// advanceResidentRegions is the population owner's live-region update, not
-// an AOI query. Sample the interpolated position under the character store
-// door. Neither a future goal nor a presentation snapshot can save a
-// return location. Native 4858E0 -> 4E6FE0 runs after assigning the live pose.
+/*
+================
+advanceResidentRegions
+
+advanceResidentRegions is the population owner's live-region update, not
+an AOI query. Sample the interpolated position under the character store
+door. Neither a future goal nor a presentation snapshot can save a
+return location. Native 4858E0 -> 4E6FE0 runs after assigning the live pose.
+================
+*/
 func (rt *Runtime) advanceResidentRegions(nowMs int64) {
 	var keys []string
 	rt.characterAdmissions.Range(func(key, _ any) bool {
@@ -25,23 +43,44 @@ func (rt *Runtime) advanceResidentRegions(nowMs int64) {
 			continue
 		}
 		owner := value.(populationAdmission)
-		unlock := rt.lockDivision(owner.division)
-		rt.bindResidentRegion(key, nowMs)
-		unlock()
+		rt.bindResidentRegionInDivision(owner.division, key, nowMs)
 	}
 }
 
-// AdvanceResidentRegion settles the old segment's region before a movement
-// command replaces that segment. A crossing and resteer between two periodic
-// updates must not erase the region-admission event.
+/*
+================
+bindResidentRegionInDivision
+================
+*/
+func (rt *Runtime) bindResidentRegionInDivision(division, key string, nowMs int64) {
+	unlock := rt.lockDivision(division)
+	defer unlock()
+	rt.bindResidentRegion(key, nowMs)
+}
+
+/*
+================
+AdvanceResidentRegion
+
+AdvanceResidentRegion settles the old segment's region before a movement
+command replaces that segment. A crossing and resteer between two periodic
+updates must not erase the region-admission event.
+================
+*/
 func (rt *Runtime) AdvanceResidentRegion(division, name string, nowMs int64) {
 	unlock := rt.lockDivision(division)
 	defer unlock()
 	rt.bindResidentRegion(simulation.WorldKey(division, name), nowMs)
 }
 
-// Caller holds the division operation door. Revalidation prevents a departed
-// actor from updating a recycled layer's return state.
+/*
+================
+bindResidentRegion
+
+Caller holds the division operation door. Revalidation prevents a departed
+actor from updating a recycled layer's return state.
+================
+*/
 func (rt *Runtime) bindResidentRegion(key string, nowMs int64) {
 	value, exists := rt.characterAdmissions.Load(key)
 	if !exists {

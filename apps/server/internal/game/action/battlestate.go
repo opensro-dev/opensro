@@ -118,26 +118,7 @@ func (rt *Runtime) advanceBattleStates(nowMs int64) []simulation.DivisionFrames 
 			continue
 		}
 		job := value.(battleExpiry)
-		unlock := rt.lockDivision(job.division)
-		var sourceGID uint32
-		var frames []wire.Frame
-		if c := rt.findCharacter(job.division, job.name); c != nil {
-			sourceGID = enterworld.ObjectIDForCharacter(c)
-			rt.deps.UpdateDeferred(c, "battle-state-expire", func() bool {
-				if c.BattleUntilMs != job.until || nowMs < c.BattleUntilMs {
-					return false
-				}
-				c.BattleUntilMs = 0
-				frames = append(frames, battleStateFrame(sourceGID, false))
-				return true
-			})
-		}
-		rt.battleActors.CompareAndDelete(key, job)
-		if len(frames) > 0 && rt.PushCharacterFrames != nil && rt.PushDivisionPeerFrames != nil {
-			rt.publishBodyStatus(job.division, job.name, frames)
-			frames = nil
-		}
-		unlock()
+		sourceGID, frames := rt.expireBattleStateInDivision(key, job, nowMs)
 		if len(frames) > 0 {
 			batch := simulation.DivisionFrames{DivisionID: job.division, SourceGID: sourceGID}
 			for _, f := range frames {
@@ -147,4 +128,33 @@ func (rt *Runtime) advanceBattleStates(nowMs int64) []simulation.DivisionFrames 
 		}
 	}
 	return out
+}
+
+/*
+================
+expireBattleStateInDivision
+================
+*/
+func (rt *Runtime) expireBattleStateInDivision(key string, job battleExpiry, nowMs int64) (uint32, []wire.Frame) {
+	unlock := rt.lockDivision(job.division)
+	defer unlock()
+	var sourceGID uint32
+	var frames []wire.Frame
+	if c := rt.findCharacter(job.division, job.name); c != nil {
+		sourceGID = enterworld.ObjectIDForCharacter(c)
+		rt.deps.UpdateDeferred(c, "battle-state-expire", func() bool {
+			if c.BattleUntilMs != job.until || nowMs < c.BattleUntilMs {
+				return false
+			}
+			c.BattleUntilMs = 0
+			frames = append(frames, battleStateFrame(sourceGID, false))
+			return true
+		})
+	}
+	rt.battleActors.CompareAndDelete(key, job)
+	if len(frames) > 0 && rt.PushCharacterFrames != nil && rt.PushDivisionPeerFrames != nil {
+		rt.publishBodyStatus(job.division, job.name, frames)
+		frames = nil
+	}
+	return sourceGID, frames
 }

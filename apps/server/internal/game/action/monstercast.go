@@ -102,67 +102,75 @@ func (rt *Runtime) advanceMonsterCasts(now int64) []simulation.DivisionFrames {
 	rt.pendingSkillFinalizesMu.Unlock()
 	var out []simulation.DivisionFrames
 	for _, p := range pending {
-		unlock := rt.lockDivision(p.division)
-		attacker, exists := rt.Monsters.Get(p.division, p.instance.Gid)
-		target := rt.findCharacter(p.division, p.characterName)
-		var snapshot *enterworld.Character
-		if target != nil && target.ID == p.characterID {
-			snapshot = rt.characterSnapshot(p.division, target)
+		out = append(out, rt.advanceMonsterCastInDivision(p, now)...)
+	}
+	return out
+}
+
+/*
+================
+advanceMonsterCastInDivision
+================
+*/
+func (rt *Runtime) advanceMonsterCastInDivision(p pendingMonsterCast, now int64) []simulation.DivisionFrames {
+	unlock := rt.lockDivision(p.division)
+	defer unlock()
+	attacker, exists := rt.Monsters.Get(p.division, p.instance.Gid)
+	target := rt.findCharacter(p.division, p.characterName)
+	var snapshot *enterworld.Character
+	if target != nil && target.ID == p.characterID {
+		snapshot = rt.characterSnapshot(p.division, target)
+	}
+	valid := !p.cancelled && exists && attacker.CurrentHP > 0 && attacker.Motion.StateAt(now) == 0 && snapshot != nil && !snapshot.DeletePending && enterworld.CharacterAlive(snapshot)
+	if p.cosTarget && valid {
+		pet := snapshot.CompanionByGID(p.target)
+		valid = pet != nil && pet.Summoned && pet.GID == p.target && pet.CurrentHP > 0 &&
+			pet.RefObjID == p.cosRefID && pet.InventorySlot == p.cosSlot && pet.SummonGeneration == p.cosGeneration
+	}
+	if p.selfEffect {
+		valid = exists && attacker.CurrentHP > 0 && attacker.Motion.StateAt(now) == 0
+	}
+	if valid && !p.selfEffect {
+		_, valid = rt.characterMonster(p.division, snapshot, attacker.Gid)
+	}
+	if valid && now < p.releaseAtMs {
+		return nil
+	}
+	// Teardown can win between the queue snapshot and the operation lock.
+	owned := false
+	rt.pendingSkillFinalizesMu.Lock()
+	for i, row := range rt.pendingMonsterCasts {
+		if row.token == p.token {
+			// Retirement may have won after the queue snapshot but before
+			// this division lock. Revalidate the canonical cancellation bit.
+			valid = valid && !row.cancelled
+			rt.pendingMonsterCasts = append(rt.pendingMonsterCasts[:i], rt.pendingMonsterCasts[i+1:]...)
+			owned = true
+			break
 		}
-		valid := !p.cancelled && exists && attacker.CurrentHP > 0 && attacker.Motion.StateAt(now) == 0 && snapshot != nil && !snapshot.DeletePending && enterworld.CharacterAlive(snapshot)
-		if p.cosTarget && valid {
-			pet := snapshot.CompanionByGID(p.target)
-			valid = pet != nil && pet.Summoned && pet.GID == p.target && pet.CurrentHP > 0 &&
-				pet.RefObjID == p.cosRefID && pet.InventorySlot == p.cosSlot && pet.SummonGeneration == p.cosGeneration
-		}
-		if p.selfEffect {
-			valid = exists && attacker.CurrentHP > 0 && attacker.Motion.StateAt(now) == 0
-		}
-		if valid && !p.selfEffect {
-			_, valid = rt.characterMonster(p.division, snapshot, attacker.Gid)
-		}
-		if valid && now < p.releaseAtMs {
-			unlock()
-			continue
-		}
-		// Teardown can win between the queue snapshot and the operation lock.
-		owned := false
-		rt.pendingSkillFinalizesMu.Lock()
-		for i, row := range rt.pendingMonsterCasts {
-			if row.token == p.token {
-				// Retirement may have won after the queue snapshot but before
-				// this division lock. Revalidate the canonical cancellation bit.
-				valid = valid && !row.cancelled
-				rt.pendingMonsterCasts = append(rt.pendingMonsterCasts[:i], rt.pendingMonsterCasts[i+1:]...)
-				owned = true
-				break
-			}
-		}
-		rt.pendingSkillFinalizesMu.Unlock()
-		if !owned {
-			unlock()
-			continue
-		}
-		result := simulation.MonsterAttackResult{}
-		if valid {
-			result = rt.monsterAttackStage(p.division, p.instance, p.target, p.skill, now, &p)
-		}
-		if !result.Accepted {
-			frame := wire.SkillCastFinalizeFrame(p.token)
-			result.Frames = []simulation.Frame{{Opcode: frame.Opcode, Payload: frame.Payload, Current: frame.Current, Scope: frame.Scope}}
-		}
-		if rt.PushMonsterCast != nil {
-			rt.PushMonsterCast(p.division, p.instance.Gid, result)
-			unlock()
-			continue
-		}
-		if len(result.Frames) > 0 {
-			out = append(out, simulation.DivisionFrames{DivisionID: p.division, SourceGID: p.instance.Gid, Frames: result.Frames})
-		}
-		for _, private := range result.Private {
-			out = append(out, simulation.DivisionFrames{DivisionID: p.division, OnlyCharacterID: private.CharacterID, Frames: private.Frames})
-		}
-		unlock()
+	}
+	rt.pendingSkillFinalizesMu.Unlock()
+	if !owned {
+		return nil
+	}
+	result := simulation.MonsterAttackResult{}
+	if valid {
+		result = rt.monsterAttackStage(p.division, p.instance, p.target, p.skill, now, &p)
+	}
+	if !result.Accepted {
+		frame := wire.SkillCastFinalizeFrame(p.token)
+		result.Frames = []simulation.Frame{{Opcode: frame.Opcode, Payload: frame.Payload, Current: frame.Current, Scope: frame.Scope}}
+	}
+	if rt.PushMonsterCast != nil {
+		rt.PushMonsterCast(p.division, p.instance.Gid, result)
+		return nil
+	}
+	var out []simulation.DivisionFrames
+	if len(result.Frames) > 0 {
+		out = append(out, simulation.DivisionFrames{DivisionID: p.division, SourceGID: p.instance.Gid, Frames: result.Frames})
+	}
+	for _, private := range result.Private {
+		out = append(out, simulation.DivisionFrames{DivisionID: p.division, OnlyCharacterID: private.CharacterID, Frames: private.Frames})
 	}
 	return out
 }

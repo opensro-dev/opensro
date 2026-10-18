@@ -363,15 +363,24 @@ Natural and forced termination publish through the same sorted private lane.
 func (rt *Runtime) retireActionSessions() []simulation.DivisionFrames {
 	var out []simulation.DivisionFrames
 	for _, session := range rt.actionSessionSnapshot() {
-		unlock := rt.lockDivision(session.division)
-		frame := rt.retireActionSession(session)
-		unlock()
+		frame := rt.retireActionSessionInDivision(session)
 		if frame != nil {
 			out = append(out, simulation.DivisionFrames{DivisionID: session.division, OnlyCharacterID: session.characterID,
 				Frames: []simulation.Frame{{Opcode: frame.Opcode, Payload: frame.Payload}}})
 		}
 	}
 	return out
+}
+
+/*
+================
+retireActionSessionInDivision
+================
+*/
+func (rt *Runtime) retireActionSessionInDivision(session actionSessionPublication) *wire.Frame {
+	unlock := rt.lockDivision(session.division)
+	defer unlock()
+	return rt.retireActionSession(session)
 }
 
 /*
@@ -481,40 +490,47 @@ release so a movement cancellation refused by the skill can cancel the basic.
 func (rt *Runtime) advanceQueuedActionSessions(nowMs int64) []simulation.DivisionFrames {
 	var out []simulation.DivisionFrames
 	for _, session := range rt.actionSessionSnapshot() {
-		key := simulation.WorldKey(session.division, session.name)
-		unlock := rt.lockDivision(session.division)
-		latest, exists := rt.actionSessions.Load(key)
-		if !exists {
-			unlock()
-			continue
+		if frame, ok := rt.advanceQueuedActionSession(session, nowMs); ok {
+			out = append(out, frame)
 		}
-		session = latest.(actionSessionPublication)
-		if rt.hasOpenSkillCast(session.division, session.name) || nowMs < session.readyAtMs {
-			unlock()
-			continue
-		}
-		if !session.queued {
-			intent, retained := rt.combatIntentFor(session.division, session.name)
-			if !retained || !intent.ResumeBasic || intent.ResumeNotified || nowMs <= intent.NextActionMs {
-				unlock()
-				continue
-			}
-			intent.ResumeNotified = true
-			session.pending = &intent
-		}
-		if session.pending == nil {
-			unlock()
-			continue
-		}
-		rt.setCombatIntent(*session.pending)
-		session.queued, session.pending, session.readyAtMs = false, nil, 0
-		rt.actionSessions.Store(key, session)
-		state := wire.ReleaseActionState()
-		state.State = singleActionCount
-		out = append(out, simulation.DivisionFrames{DivisionID: session.division, OnlyCharacterID: session.characterID, Frames: []simulation.Frame{{Opcode: wire.OpActionState, Payload: state.Encode()}}})
-		unlock()
 	}
 	return out
+}
+
+/*
+================
+advanceQueuedActionSession
+================
+*/
+func (rt *Runtime) advanceQueuedActionSession(session actionSessionPublication, nowMs int64) (simulation.DivisionFrames, bool) {
+	key := simulation.WorldKey(session.division, session.name)
+	unlock := rt.lockDivision(session.division)
+	defer unlock()
+	latest, exists := rt.actionSessions.Load(key)
+	if !exists {
+		return simulation.DivisionFrames{}, false
+	}
+	session = latest.(actionSessionPublication)
+	if rt.hasOpenSkillCast(session.division, session.name) || nowMs < session.readyAtMs {
+		return simulation.DivisionFrames{}, false
+	}
+	if !session.queued {
+		intent, retained := rt.combatIntentFor(session.division, session.name)
+		if !retained || !intent.ResumeBasic || intent.ResumeNotified || nowMs <= intent.NextActionMs {
+			return simulation.DivisionFrames{}, false
+		}
+		intent.ResumeNotified = true
+		session.pending = &intent
+	}
+	if session.pending == nil {
+		return simulation.DivisionFrames{}, false
+	}
+	rt.setCombatIntent(*session.pending)
+	session.queued, session.pending, session.readyAtMs = false, nil, 0
+	rt.actionSessions.Store(key, session)
+	state := wire.ReleaseActionState()
+	state.State = singleActionCount
+	return simulation.DivisionFrames{DivisionID: session.division, OnlyCharacterID: session.characterID, Frames: []simulation.Frame{{Opcode: wire.OpActionState, Payload: state.Encode()}}}, true
 }
 
 /*

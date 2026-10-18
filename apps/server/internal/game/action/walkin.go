@@ -206,9 +206,7 @@ func (rt *Runtime) advanceWalkIns(nowMs int64) {
 			continue
 		}
 		owner := value.(populationAdmission)
-		unlock := rt.lockDivision(owner.division)
-		out := rt.stepWalkIn(key, owner, nowMs)
-		unlock()
+		out := rt.stepWalkInInDivision(key, owner, nowMs)
 		if len(out.Frames) > 0 && rt.PushCharacterFrames != nil {
 			rt.PushCharacterFrames(owner.division, owner.name, out.Frames)
 		}
@@ -216,6 +214,17 @@ func (rt *Runtime) advanceWalkIns(nowMs int64) {
 			rt.PushDivisionPeerFrames(owner.division, owner.name, out.Broadcast)
 		}
 	}
+}
+
+/*
+================
+stepWalkInInDivision
+================
+*/
+func (rt *Runtime) stepWalkInInDivision(key string, owner populationAdmission, nowMs int64) OpResult {
+	unlock := rt.lockDivision(owner.division)
+	defer unlock()
+	return rt.stepWalkIn(key, owner, nowMs)
 }
 
 /*

@@ -379,14 +379,10 @@ func (s *MonsterState) AdvancePopulation(nowMs int64) {
 	// by world, so each division is queried once however many layers it has.
 	snapshots := make(map[string][]PopulationPlayer)
 	for _, key := range keys {
-		s.mu.Lock()
-		state := s.populationForLease(key.division, key.lease)
-		if state == nil {
-			s.mu.Unlock()
+		due, ok := s.populationDensityDue(key, nowMs)
+		if !ok {
 			continue
 		}
-		due := nowMs-state.lastDensityMs >= 30000
-		s.mu.Unlock()
 		var snapshot []PopulationPlayer
 		if due && players != nil {
 			cached, queried := snapshots[key.division]
@@ -396,19 +392,42 @@ func (s *MonsterState) AdvancePopulation(nowMs int64) {
 			}
 			snapshot = cached
 		}
-		s.mu.Lock()
-		state = s.populationForLease(key.division, key.lease)
-		if state == nil {
-			s.mu.Unlock()
-			continue
-		}
-		if due && players != nil && nowMs-state.lastDensityMs >= 30000 {
-			s.sampleHiveDensity(state, snapshot, nowMs)
-		}
-		s.runDueHiveTicks(state, nowMs)
-		state.populationTicked = true
-		s.mu.Unlock()
+		s.advancePopulationLease(key, due && players != nil, snapshot, nowMs)
 	}
+}
+
+/*
+================
+MonsterState.populationDensityDue
+================
+*/
+func (s *MonsterState) populationDensityDue(key populationKey, nowMs int64) (bool, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state := s.populationForLease(key.division, key.lease)
+	if state == nil {
+		return false, false
+	}
+	return nowMs-state.lastDensityMs >= 30000, true
+}
+
+/*
+================
+MonsterState.advancePopulationLease
+================
+*/
+func (s *MonsterState) advancePopulationLease(key populationKey, sampleDensity bool, snapshot []PopulationPlayer, nowMs int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state := s.populationForLease(key.division, key.lease)
+	if state == nil {
+		return
+	}
+	if sampleDensity && nowMs-state.lastDensityMs >= 30000 {
+		s.sampleHiveDensity(state, snapshot, nowMs)
+	}
+	s.runDueHiveTicks(state, nowMs)
+	state.populationTicked = true
 }
 
 /*

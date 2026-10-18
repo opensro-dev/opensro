@@ -146,20 +146,29 @@ still holds it, and publish the change to the character and its peers.
 */
 func (rt *Runtime) advanceBodyRestores(nowMs int64) {
 	for _, restore := range rt.bodyRestores.due(nowMs) {
-		unlock := rt.lockDivision(restore.division)
-		character := rt.findCharacter(restore.division, restore.name)
-		var frames []wire.Frame
-		if character != nil {
-			rt.deps.UpdateDeferred(character, "body-mode-restore", func() bool {
-				if !character.TransitionBodyStatus(domain.BodyStatusTransition{RetireOwner: restore.owner}) {
-					return false
-				}
-				frames = append(frames, bodyStatusFrame(enterworld.ObjectIDForCharacter(character), 0))
-				frames = append(frames, rt.refreshMovementEffects(restore.division, character, nowMs)...)
-				return true
-			})
-		}
-		rt.publishBodyStatus(restore.division, restore.name, frames)
-		unlock()
+		rt.advanceBodyRestoreInDivision(restore, nowMs)
 	}
+}
+
+/*
+================
+advanceBodyRestoreInDivision
+================
+*/
+func (rt *Runtime) advanceBodyRestoreInDivision(restore bodyRestore, nowMs int64) {
+	unlock := rt.lockDivision(restore.division)
+	defer unlock()
+	character := rt.findCharacter(restore.division, restore.name)
+	var frames []wire.Frame
+	if character != nil {
+		rt.deps.UpdateDeferred(character, "body-mode-restore", func() bool {
+			if !character.TransitionBodyStatus(domain.BodyStatusTransition{RetireOwner: restore.owner}) {
+				return false
+			}
+			frames = append(frames, bodyStatusFrame(enterworld.ObjectIDForCharacter(character), 0))
+			frames = append(frames, rt.refreshMovementEffects(restore.division, character, nowMs)...)
+			return true
+		})
+	}
+	rt.publishBodyStatus(restore.division, restore.name, frames)
 }

@@ -77,23 +77,35 @@ func (rt *Runtime) advanceSiegeCorpses(nowMs int64) []simulation.DivisionFrames 
 		if !warActive {
 			continue
 		}
-		unlock := rt.lockDivision(key.division)
-		c := rt.findCharacter(key.division, key.name)
-		if siegeCorpseDue(c, nowMs) {
-			result := rt.handleRebirthInDoor(key.division, c, wire.RebirthAtSpecifiedPoint, true)
-			if len(result.Frames) > 0 {
-				out = append(out, simulation.DivisionFrames{
-					DivisionID: key.division, OnlyCharacterID: c.ID, Frames: simFrames(result.Frames),
-				})
-			}
-			if len(result.Broadcast) > 0 {
-				out = append(out, simulation.DivisionFrames{
-					DivisionID: key.division, SourceGID: enterworld.ObjectIDForCharacter(c),
-					ExceptCharacterID: c.ID, Frames: simFrames(result.Broadcast),
-				})
-			}
-		}
-		unlock()
+		out = append(out, rt.expireSiegeCorpseInDivision(key.division, key.name, nowMs)...)
+	}
+	return out
+}
+
+/*
+================
+expireSiegeCorpseInDivision
+================
+*/
+func (rt *Runtime) expireSiegeCorpseInDivision(division, name string, nowMs int64) []simulation.DivisionFrames {
+	unlock := rt.lockDivision(division)
+	defer unlock()
+	c := rt.findCharacter(division, name)
+	if !siegeCorpseDue(c, nowMs) {
+		return nil
+	}
+	result := rt.handleRebirthInDoor(division, c, wire.RebirthAtSpecifiedPoint, true)
+	var out []simulation.DivisionFrames
+	if len(result.Frames) > 0 {
+		out = append(out, simulation.DivisionFrames{
+			DivisionID: division, OnlyCharacterID: c.ID, Frames: simFrames(result.Frames),
+		})
+	}
+	if len(result.Broadcast) > 0 {
+		out = append(out, simulation.DivisionFrames{
+			DivisionID: division, SourceGID: enterworld.ObjectIDForCharacter(c),
+			ExceptCharacterID: c.ID, Frames: simFrames(result.Broadcast),
+		})
 	}
 	return out
 }

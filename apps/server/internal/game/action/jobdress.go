@@ -458,38 +458,7 @@ func (rt *Runtime) advanceJobDresses(now int64) {
 		if c == nil || rt.findCharacter(dress.division, c.Name) != c {
 			continue
 		}
-		unlock := rt.lockDivision(dress.division)
-		// A suit move does not outlive its owner's death.
-		code := jobWearErrPending
-		switch {
-		case !enterworld.CharacterAlive(c):
-		case dress.request.DestSlot == jobSuitSlot:
-			code = rt.jobWearRefusal(dress.division, c, dress.request.SourceSlot)
-		default:
-			code = rt.jobStripRefusal(dress.division, c, dress.request.DestSlot, now)
-		}
-		result := failureResult(code)
-		if code == 0 {
-			dressed := rt.jobDressed(c)
-			result = rt.applyInventoryMove(dress.division, c, dress.request)
-			if dress.request.DestSlot == jobSuitSlot && rt.jobDressed(c) {
-				rt.startJobActivation(dress.division, c, now)
-			}
-			if rt.jobDressed(c) != dressed {
-				rt.reloadJobDress(dress.division, c, now, &result)
-			}
-			// Port-only, not native: taking the suit off clears the streak.
-			if dressed && !rt.jobDressed(c) && c.MostWanted != nil {
-				var private, public []wire.Frame
-				rt.deps.Update(c, "most-wanted-undress", func() bool {
-					private, public = rt.clearMostWantedInDoor(dress.division, c, "suit removed", now)
-					return true
-				})
-				result.Frames = append(result.Frames, private...)
-				result.Broadcast = append(result.Broadcast, public...)
-			}
-		}
-		unlock()
+		result := rt.completeJobDressInDivision(dress, c, now)
 		if rt.PushCharacterFrames != nil {
 			rt.PushCharacterFrames(dress.division, c.Name, result.Frames)
 		}
@@ -497,4 +466,45 @@ func (rt *Runtime) advanceJobDresses(now int64) {
 			rt.PushDivisionPeerFrames(dress.division, c.Name, result.Broadcast)
 		}
 	}
+}
+
+/*
+================
+completeJobDressInDivision
+================
+*/
+func (rt *Runtime) completeJobDressInDivision(dress jobDress, c *enterworld.Character, now int64) OpResult {
+	unlock := rt.lockDivision(dress.division)
+	defer unlock()
+	// A suit move does not outlive its owner's death.
+	code := jobWearErrPending
+	switch {
+	case !enterworld.CharacterAlive(c):
+	case dress.request.DestSlot == jobSuitSlot:
+		code = rt.jobWearRefusal(dress.division, c, dress.request.SourceSlot)
+	default:
+		code = rt.jobStripRefusal(dress.division, c, dress.request.DestSlot, now)
+	}
+	result := failureResult(code)
+	if code == 0 {
+		dressed := rt.jobDressed(c)
+		result = rt.applyInventoryMove(dress.division, c, dress.request)
+		if dress.request.DestSlot == jobSuitSlot && rt.jobDressed(c) {
+			rt.startJobActivation(dress.division, c, now)
+		}
+		if rt.jobDressed(c) != dressed {
+			rt.reloadJobDress(dress.division, c, now, &result)
+		}
+		// Port-only, not native: taking the suit off clears the streak.
+		if dressed && !rt.jobDressed(c) && c.MostWanted != nil {
+			var private, public []wire.Frame
+			rt.deps.Update(c, "most-wanted-undress", func() bool {
+				private, public = rt.clearMostWantedInDoor(dress.division, c, "suit removed", now)
+				return true
+			})
+			result.Frames = append(result.Frames, private...)
+			result.Broadcast = append(result.Broadcast, public...)
+		}
+	}
+	return result
 }

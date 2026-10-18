@@ -375,9 +375,7 @@ func (rt *Runtime) advanceReturnScrolls(now int64) {
 		return true
 	})
 	for _, job := range jobs {
-		unlock := rt.lockDivision(job.division)
-		frames, peers := rt.completeReturnScroll(job, now)
-		unlock()
+		frames, peers := rt.completeReturnScrollInDivision(job, now)
 		if len(frames) > 0 && rt.PushCharacterFrames != nil {
 			rt.PushCharacterFrames(job.division, job.name, frames)
 		}
@@ -385,6 +383,17 @@ func (rt *Runtime) advanceReturnScrolls(now int64) {
 			rt.PushDivisionPeerFrames(job.division, job.name, peers)
 		}
 	}
+}
+
+/*
+================
+completeReturnScrollInDivision
+================
+*/
+func (rt *Runtime) completeReturnScrollInDivision(job pendingReturn, now int64) ([]wire.Frame, []wire.Frame) {
+	unlock := rt.lockDivision(job.division)
+	defer unlock()
+	return rt.completeReturnScroll(job, now)
 }
 
 /*

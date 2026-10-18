@@ -196,43 +196,52 @@ last permitted pulse, as 5830B0 does.
 func (rt *Runtime) advancePeriodicEffects(now int64) []simulation.DivisionFrames {
 	var out []simulation.DivisionFrames
 	for _, step := range rt.periodicEffects.Frame(now) {
-		effect := step.Effect
-		unlock := rt.lockDivision(effect.Division)
-		c := rt.findCharacter(effect.Division, effect.SourceName)
-		var snapshot *enterworld.Character
-		if c != nil {
-			snapshot = rt.characterSnapshot(effect.Division, c)
-		}
-		live := snapshot != nil && enterworld.CharacterAlive(snapshot) && !snapshot.DeletePending &&
-			rt.periodicEffects.Active(effect.Division, effect.SourceToken)
-		if effect.StructureRepair {
-			live = live && rt.structureRepairSourceActive(effect)
-		}
-		if effect.SourceSession != 0 {
-			owner, ok := rt.characterAdmissions.Load(simulation.WorldKey(effect.Division, effect.SourceName))
-			live = live && ok && owner.(populationAdmission).session == effect.SourceSession
-		}
-		target, exists := rt.resolveCombatTarget(effect.Division, snapshot, effect.TargetGID, now)
-		// A periodic row is never installed on a COS (cosStrikeUnsupported).
-		live = live && exists && target.cos == nil
-		var result OpResult
-		if live && step.Pulse {
-			if target.monster != nil {
-				result = rt.applyPeriodicPulse(effect, c, snapshot, *target.monster, now)
-			} else {
-				result = rt.applyPeriodicPlayerPulse(effect, c, snapshot, target, now)
-			}
-			if _, ok := rt.resolveCombatTarget(effect.Division, snapshot, effect.TargetGID, now); !ok {
-				live = false
-			}
-		}
-		if !live || step.Expire {
-			result.Broadcast = append(result.Broadcast, rt.periodicRetirement(effect)...)
-		}
-		out = append(out, periodicDivisionFrames(effect, c, result)...)
-		unlock()
+		out = append(out, rt.advancePeriodicEffectInDivision(step, now)...)
 	}
 	return out
+}
+
+/*
+================
+advancePeriodicEffectInDivision
+================
+*/
+func (rt *Runtime) advancePeriodicEffectInDivision(step linkedpulse.Step, now int64) []simulation.DivisionFrames {
+	effect := step.Effect
+	unlock := rt.lockDivision(effect.Division)
+	defer unlock()
+	c := rt.findCharacter(effect.Division, effect.SourceName)
+	var snapshot *enterworld.Character
+	if c != nil {
+		snapshot = rt.characterSnapshot(effect.Division, c)
+	}
+	live := snapshot != nil && enterworld.CharacterAlive(snapshot) && !snapshot.DeletePending &&
+		rt.periodicEffects.Active(effect.Division, effect.SourceToken)
+	if effect.StructureRepair {
+		live = live && rt.structureRepairSourceActive(effect)
+	}
+	if effect.SourceSession != 0 {
+		owner, ok := rt.characterAdmissions.Load(simulation.WorldKey(effect.Division, effect.SourceName))
+		live = live && ok && owner.(populationAdmission).session == effect.SourceSession
+	}
+	target, exists := rt.resolveCombatTarget(effect.Division, snapshot, effect.TargetGID, now)
+	// A periodic row is never installed on a COS (cosStrikeUnsupported).
+	live = live && exists && target.cos == nil
+	var result OpResult
+	if live && step.Pulse {
+		if target.monster != nil {
+			result = rt.applyPeriodicPulse(effect, c, snapshot, *target.monster, now)
+		} else {
+			result = rt.applyPeriodicPlayerPulse(effect, c, snapshot, target, now)
+		}
+		if _, ok := rt.resolveCombatTarget(effect.Division, snapshot, effect.TargetGID, now); !ok {
+			live = false
+		}
+	}
+	if !live || step.Expire {
+		result.Broadcast = append(result.Broadcast, rt.periodicRetirement(effect)...)
+	}
+	return periodicDivisionFrames(effect, c, result)
 }
 
 /*

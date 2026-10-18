@@ -172,12 +172,21 @@ func (rt *Runtime) refreshCosAbnormalSpeed(owner *cosAbnormalOwner) []wire.Frame
 			func() simulation.WorldState { return simulation.SeedWorldState(owner.c) },
 			func(world *simulation.WorldState) { world.UpdateMovementSpeeds(walk, run, owner.now) })
 	}
-	rt.petMu.Lock()
-	state := rt.petSessions[petOwnerKey{division: owner.division, name: strings.ToLower(owner.c.Name), gid: pet.GID}]
-	if state != nil && state.follower != nil && state.follower.GID() == pet.GID {
-		state.follower.SetMovementSpeeds(walk, run, owner.now)
-	}
-	rt.petMu.Unlock()
+	rt.setPetFollowerMovementSpeeds(owner.division, owner.c.Name, pet.GID, walk, run, owner.now)
 	return []wire.Frame{{Opcode: movementSpeedOpcode,
 		Payload: wire.NewWriter(movementSpeedBytes).U32(pet.GID).F32(walk).F32(run).Payload()}}
+}
+
+/*
+================
+setPetFollowerMovementSpeeds
+================
+*/
+func (rt *Runtime) setPetFollowerMovementSpeeds(division, ownerName string, petGID uint32, walk, run float32, now int64) {
+	rt.petMu.Lock()
+	defer rt.petMu.Unlock()
+	state := rt.petSessions[petOwnerKey{division: division, name: strings.ToLower(ownerName), gid: petGID}]
+	if state != nil && state.follower != nil && state.follower.GID() == petGID {
+		state.follower.SetMovementSpeeds(walk, run, now)
+	}
 }

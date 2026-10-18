@@ -91,14 +91,7 @@ locks) and drop those that no longer validate.
 ================
 */
 func (rt *Runtime) advanceCaravans(nowMs int64) {
-	rt.caravanMu.Lock()
-	delta := int64(0)
-	if rt.caravanTickMs != 0 && nowMs > rt.caravanTickMs {
-		delta = nowMs - rt.caravanTickMs
-	}
-	rt.caravanTickMs = nowMs
-	due, err := rt.caravans.Due(delta, rt.caravanRoll())
-	rt.caravanMu.Unlock()
+	due, err := rt.dueCaravans(nowMs)
 	if err != nil {
 		log.Warnf("caravan: timer draw: %v", err)
 	}
@@ -110,6 +103,22 @@ func (rt *Runtime) advanceCaravans(nowMs int64) {
 		rt.caravans.Remove(entry.Division, entry.Character)
 		rt.caravanMu.Unlock()
 	}
+}
+
+/*
+================
+dueCaravans
+================
+*/
+func (rt *Runtime) dueCaravans(nowMs int64) ([]caravan.Entry, error) {
+	rt.caravanMu.Lock()
+	defer rt.caravanMu.Unlock()
+	delta := int64(0)
+	if rt.caravanTickMs != 0 && nowMs > rt.caravanTickMs {
+		delta = nowMs - rt.caravanTickMs
+	}
+	rt.caravanTickMs = nowMs
+	return rt.caravans.Due(delta, rt.caravanRoll())
 }
 
 /*

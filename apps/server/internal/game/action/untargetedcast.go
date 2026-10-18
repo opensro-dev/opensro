@@ -93,14 +93,23 @@ selects the release owner (a planted trap or a caster-centred status area).
 */
 func (rt *Runtime) prepareUntargetedCast(division string, c *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow, now int64, mark func(*pendingProjectileCast)) OpResult {
 	out := rt.prepareSelfCast(division, c, cast, skill, now, false)
+	rt.markPreparingUntargetedCast(division, c.Name, skill.ID, mark)
+	return out
+}
+
+/*
+================
+markPreparingUntargetedCast
+================
+*/
+func (rt *Runtime) markPreparingUntargetedCast(division, characterName string, skillID uint32, mark func(*pendingProjectileCast)) {
 	rt.pendingSkillFinalizesMu.Lock()
+	defer rt.pendingSkillFinalizesMu.Unlock()
 	for i := range rt.pendingProjectileCasts {
 		p := &rt.pendingProjectileCasts[i]
-		if p.characterName == c.Name && p.divisionID == division && p.supportCast && p.cast.ActionId == skill.ID {
+		if p.characterName == characterName && p.divisionID == division && p.supportCast && p.cast.ActionId == skillID {
 			p.supportCast = false
 			mark(p)
 		}
 	}
-	rt.pendingSkillFinalizesMu.Unlock()
-	return out
 }

@@ -115,42 +115,53 @@ func (rt *Runtime) GroundTickHook() simulation.TickHook {
 			if character == nil {
 				continue
 			}
-			unlock := rt.lockCharacter(division, character.Name)
-			var state simulation.WorldState
-			committed := rt.deps.UpdateDeferred(character, "ground-step", func() bool {
-				if character.DeletePending {
-					return false
-				}
-				state = rt.Worlds.Snapshot(update.Key, func() simulation.WorldState { return simulation.SeedWorldState(character) })
-				if state.GroundRevision() != update.Revision {
-					return false
-				}
-				writeBackWorld(character, state)
-				return true
-			})
-			walk, directional := rt.directions.get(update.Key)
-			continuing := directional && !walk.blocked && walk.current(state)
-			if committed && update.Tether != 0 {
-				// 4F1230 answers the refused step before it stops the player.
-				frames = append(frames, simulation.DivisionFrames{DivisionID: division, OnlyCharacterID: character.ID,
-					Frames: []simulation.Frame{{Opcode: wire.OpCosDistanceError, Payload: []byte{update.Tether}}}})
-			}
-			if committed && (update.Stopped || update.Arrived && !continuing) {
-				if update.Stopped {
-					rt.directions.clear(update.Key)
-				}
-				frame := directionCorrectionFrame(enterworld.ObjectIDForCharacter(character), state.PersistedSpawn())
-				key, revision := update.Key, update.Revision
-				frames = append(frames, simulation.DivisionFrames{DivisionID: division, SourceGID: enterworld.ObjectIDForCharacter(character),
-					Frames: []simulation.Frame{{Opcode: frame.Opcode, Payload: frame.Payload,
-						Current: func() bool { return rt.Worlds.GroundRevisionCurrent(key, revision) }}},
-				})
-			}
-			if committed && update.Stopped && rt.GroundBlocked != nil {
-				rt.GroundBlocked(division, character.Name, update.Revision)
-			}
-			unlock()
+			frames = append(frames, rt.advanceGroundUpdateForCharacter(division, character, update)...)
 		}
 		return frames
 	}
+}
+
+/*
+================
+advanceGroundUpdateForCharacter
+================
+*/
+func (rt *Runtime) advanceGroundUpdateForCharacter(division string, character *enterworld.Character, update simulation.GroundUpdate) []simulation.DivisionFrames {
+	unlock := rt.lockCharacter(division, character.Name)
+	defer unlock()
+	var state simulation.WorldState
+	committed := rt.deps.UpdateDeferred(character, "ground-step", func() bool {
+		if character.DeletePending {
+			return false
+		}
+		state = rt.Worlds.Snapshot(update.Key, func() simulation.WorldState { return simulation.SeedWorldState(character) })
+		if state.GroundRevision() != update.Revision {
+			return false
+		}
+		writeBackWorld(character, state)
+		return true
+	})
+	walk, directional := rt.directions.get(update.Key)
+	continuing := directional && !walk.blocked && walk.current(state)
+	var frames []simulation.DivisionFrames
+	if committed && update.Tether != 0 {
+		// 4F1230 answers the refused step before it stops the player.
+		frames = append(frames, simulation.DivisionFrames{DivisionID: division, OnlyCharacterID: character.ID,
+			Frames: []simulation.Frame{{Opcode: wire.OpCosDistanceError, Payload: []byte{update.Tether}}}})
+	}
+	if committed && (update.Stopped || update.Arrived && !continuing) {
+		if update.Stopped {
+			rt.directions.clear(update.Key)
+		}
+		frame := directionCorrectionFrame(enterworld.ObjectIDForCharacter(character), state.PersistedSpawn())
+		key, revision := update.Key, update.Revision
+		frames = append(frames, simulation.DivisionFrames{DivisionID: division, SourceGID: enterworld.ObjectIDForCharacter(character),
+			Frames: []simulation.Frame{{Opcode: frame.Opcode, Payload: frame.Payload,
+				Current: func() bool { return rt.Worlds.GroundRevisionCurrent(key, revision) }}},
+		})
+	}
+	if committed && update.Stopped && rt.GroundBlocked != nil {
+		rt.GroundBlocked(division, character.Name, update.Revision)
+	}
+	return frames
 }

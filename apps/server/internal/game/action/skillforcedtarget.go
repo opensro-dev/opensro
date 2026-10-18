@@ -181,11 +181,20 @@ recipient follows ordinary effect retirement; a dead source still exists.
 */
 func (rt *Runtime) advanceForcedTargets() {
 	for _, effect := range rt.effects.ForcedTargets() {
-		unlock := rt.lockDivision(effect.DivisionID)
-		source := rt.findCharacterByGid(effect.DivisionID, effect.ForcedTargetGID)
-		if source == nil || source.DeletePending || rt.RewardActorPresent != nil && !rt.RewardActorPresent(effect.DivisionID, source.Name) {
-			rt.effects.StopForcedTarget(effect)
-		}
-		unlock()
+		rt.advanceForcedTargetInDivision(effect)
+	}
+}
+
+/*
+================
+advanceForcedTargetInDivision
+================
+*/
+func (rt *Runtime) advanceForcedTargetInDivision(effect statuseffect.Effect) {
+	unlock := rt.lockDivision(effect.DivisionID)
+	defer unlock()
+	source := rt.findCharacterByGid(effect.DivisionID, effect.ForcedTargetGID)
+	if source == nil || source.DeletePending || rt.RewardActorPresent != nil && !rt.RewardActorPresent(effect.DivisionID, source.Name) {
+		rt.effects.StopForcedTarget(effect)
 	}
 }

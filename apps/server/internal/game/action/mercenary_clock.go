@@ -44,42 +44,47 @@ func (rt *Runtime) advanceMercenaryCooldowns(now int64) {
 	}
 	rt.petMu.Unlock()
 	for _, key := range keys {
-		unlock := rt.lockDivision(key.division)
-		rt.petMu.Lock()
-		state := rt.petSessions[key]
-		rt.petMu.Unlock()
-		if state == nil {
-			unlock()
-			continue
-		}
-		var deadline int64
-		rt.deps.Read(key.division, func() { deadline = state.character.MercenarySummonUntilMs })
-		clock := &state.mercenaryPenalty
-		if deadline == 0 {
-			*clock = mercenaryPenaltyClock{lastMs: now}
-			unlock()
-			continue
-		}
-		if now <= clock.lastMs {
-			unlock()
-			continue
-		}
-		clock.elapsed = float32(float64(clock.elapsed) + float64(float32(float64(now-clock.lastMs)/1000)))
-		clock.lastMs = now
-		if clock.elapsed < mercenaryPenaltyPollSeconds {
-			unlock()
-			continue
-		}
-		clock.elapsed -= mercenaryPenaltyPollSeconds
-		if deadline <= now {
-			rt.deps.UpdateDeferred(state.character, "mercenary-cooldown-expire", func() bool {
-				if state.character.MercenarySummonUntilMs != deadline {
-					return false
-				}
-				state.character.MercenarySummonUntilMs = 0
-				return true
-			})
-		}
-		unlock()
+		rt.advanceMercenaryCooldownInDivision(key, now)
+	}
+}
+
+/*
+================
+advanceMercenaryCooldownInDivision
+================
+*/
+func (rt *Runtime) advanceMercenaryCooldownInDivision(key petOwnerKey, now int64) {
+	unlock := rt.lockDivision(key.division)
+	defer unlock()
+	rt.petMu.Lock()
+	state := rt.petSessions[key]
+	rt.petMu.Unlock()
+	if state == nil {
+		return
+	}
+	var deadline int64
+	rt.deps.Read(key.division, func() { deadline = state.character.MercenarySummonUntilMs })
+	clock := &state.mercenaryPenalty
+	if deadline == 0 {
+		*clock = mercenaryPenaltyClock{lastMs: now}
+		return
+	}
+	if now <= clock.lastMs {
+		return
+	}
+	clock.elapsed = float32(float64(clock.elapsed) + float64(float32(float64(now-clock.lastMs)/1000)))
+	clock.lastMs = now
+	if clock.elapsed < mercenaryPenaltyPollSeconds {
+		return
+	}
+	clock.elapsed -= mercenaryPenaltyPollSeconds
+	if deadline <= now {
+		rt.deps.UpdateDeferred(state.character, "mercenary-cooldown-expire", func() bool {
+			if state.character.MercenarySummonUntilMs != deadline {
+				return false
+			}
+			state.character.MercenarySummonUntilMs = 0
+			return true
+		})
 	}
 }

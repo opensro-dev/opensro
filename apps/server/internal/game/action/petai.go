@@ -177,29 +177,13 @@ func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
 	var out []simulation.DivisionFrames
 	var tethers map[string]simulation.Tether
 	for _, key := range keys {
-		unlock := rt.lockDivision(key.division)
-		frames := rt.advancePetSatiety(key, nowMs)
-		frames = append(frames, rt.advancePet(key, nowMs)...)
-		rt.petMu.Lock()
-		state := rt.petSessions[key]
-		rt.petMu.Unlock()
-		characterID := int64(0)
-		if state != nil {
-			characterID = state.character.ID
-		}
-		if state != nil && state.tether != nil {
+		characterID, frames, public, others, tetherKey, tether := rt.advancePetInDivision(key, nowMs)
+		if tether != nil {
 			if tethers == nil {
 				tethers = make(map[string]simulation.Tether)
 			}
-			tethers[simulation.WorldKey(key.division, state.character.Name)] = *state.tether
+			tethers[tetherKey] = *tether
 		}
-		var public []wire.Frame
-		var others []RecipientFrames
-		if state != nil {
-			public, others = state.public, state.others
-			state.public, state.others = nil, nil
-		}
-		unlock()
 		for _, other := range others {
 			out = append(out, simulation.DivisionFrames{DivisionID: key.division, OnlyCharacterID: other.CharacterID, Frames: simFrames(other.Frames)})
 		}
@@ -219,6 +203,35 @@ func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
 		rt.Worlds.ReplaceTethers(tethers)
 	}
 	return out
+}
+
+/*
+================
+advancePetInDivision
+================
+*/
+func (rt *Runtime) advancePetInDivision(key petOwnerKey, nowMs int64) (int64, []simulation.Frame, []wire.Frame, []RecipientFrames, string, *simulation.Tether) {
+	unlock := rt.lockDivision(key.division)
+	defer unlock()
+	frames := rt.advancePetSatiety(key, nowMs)
+	frames = append(frames, rt.advancePet(key, nowMs)...)
+	rt.petMu.Lock()
+	state := rt.petSessions[key]
+	rt.petMu.Unlock()
+	if state == nil {
+		return 0, frames, nil, nil, "", nil
+	}
+	characterID := state.character.ID
+	var tetherKey string
+	var tether *simulation.Tether
+	if state.tether != nil {
+		tetherKey = simulation.WorldKey(key.division, state.character.Name)
+		copied := *state.tether
+		tether = &copied
+	}
+	public, others := state.public, state.others
+	state.public, state.others = nil, nil
+	return characterID, frames, public, others, tetherKey, tether
 }
 
 /*

@@ -71,31 +71,14 @@ func (rt *Runtime) registerDeparture(hub *transport.Hub) {
 			_ = s.Send(opDepartureResponse, []byte{departureResultError, 1})
 			return
 		}
-		unlock := rt.lockDivision(division)
-		if s.Evicted() {
-			unlock()
+		code, evicted := rt.armDepartureInDivision(division, s, c)
+		if evicted {
 			return
 		}
-		if !s.WorldReady() {
-			unlock()
-			_ = s.Send(opDepartureResponse, []byte{departureResultError, 2})
-			return
-		}
-		if code := rt.departureRefusal(division, c); code != 0 {
-			unlock()
+		if code != 0 {
 			_ = s.Send(opDepartureResponse, []byte{departureResultError, code})
 			return
 		}
-		// 50EF70 first cancels the actor's current action through vtable +6A8.
-		rt.ClearCombatIntent(division, c.Name)
-		rt.Pending.Clear(grounditem.PendingKey(division, c.Name))
-		rt.departureMu.Lock()
-		if rt.departures == nil {
-			rt.departures = make(map[uint64]pendingDeparture)
-		}
-		rt.departures[s.ID] = pendingDeparture{session: s, division: division, character: c.Name, due: rt.Now().UnixMilli() + departureSeconds*1000}
-		rt.departureMu.Unlock()
-		unlock()
 		// A queue refusal can synchronously invoke both close hooks below and
 		// gameplay cleanup. Neither departure nor division locks may be held.
 		_ = s.Send(opDepartureResponse, []byte{departureResultOK, departureSeconds, p[0]})
@@ -105,6 +88,35 @@ func (rt *Runtime) registerDeparture(hub *transport.Hub) {
 		delete(rt.departures, s.ID)
 		rt.departureMu.Unlock()
 	})
+}
+
+/*
+================
+armDepartureInDivision
+================
+*/
+func (rt *Runtime) armDepartureInDivision(division string, s *transport.Session, c *enterworld.Character) (uint8, bool) {
+	unlock := rt.lockDivision(division)
+	defer unlock()
+	if s.Evicted() {
+		return 0, true
+	}
+	if !s.WorldReady() {
+		return 2, false
+	}
+	if code := rt.departureRefusal(division, c); code != 0 {
+		return code, false
+	}
+	// 50EF70 first cancels the actor's current action through vtable +6A8.
+	rt.ClearCombatIntent(division, c.Name)
+	rt.Pending.Clear(grounditem.PendingKey(division, c.Name))
+	rt.departureMu.Lock()
+	if rt.departures == nil {
+		rt.departures = make(map[uint64]pendingDeparture)
+	}
+	rt.departures[s.ID] = pendingDeparture{session: s, division: division, character: c.Name, due: rt.Now().UnixMilli() + departureSeconds*1000}
+	rt.departureMu.Unlock()
+	return 0, false
 }
 
 /*
@@ -158,18 +170,28 @@ func (rt *Runtime) cancelDeparture(s *transport.Session, _ uint16, p []byte) {
 	}
 	pending := false
 	if len(p) == 0 {
-		unlock := rt.lockDivision(division)
-		rt.departureMu.Lock()
-		_, pending = rt.departures[s.ID]
-		delete(rt.departures, s.ID)
-		rt.departureMu.Unlock()
-		unlock()
+		pending = rt.clearPendingDepartureInDivision(division, s.ID)
 	}
 	if !pending {
 		_ = s.Send(opDepartureCancelResponse, []byte{departureResultError, departureCancelNotPending})
 		return
 	}
 	_ = s.Send(opDepartureCancelResponse, []byte{departureResultOK})
+}
+
+/*
+================
+clearPendingDepartureInDivision
+================
+*/
+func (rt *Runtime) clearPendingDepartureInDivision(division string, sessionID uint64) bool {
+	unlock := rt.lockDivision(division)
+	defer unlock()
+	rt.departureMu.Lock()
+	defer rt.departureMu.Unlock()
+	_, pending := rt.departures[sessionID]
+	delete(rt.departures, sessionID)
+	return pending
 }
 
 /*
@@ -197,28 +219,36 @@ func (rt *Runtime) advanceDepartures(now int64) {
 	}
 	rt.departureMu.Unlock()
 	for _, job := range due {
-		unlock := rt.lockDivision(job.division)
-		rt.departureMu.Lock()
-		current, pending := rt.departures[job.session.ID]
-		if !pending || current.due > now {
-			rt.departureMu.Unlock()
-			unlock()
-			continue
-		}
-		delete(rt.departures, job.session.ID)
-		rt.departureMu.Unlock()
-		closeSession := false
-		division, name, bound := job.session.CharacterBinding()
-		if bound && !job.session.Evicted() && division == job.division && name == job.character {
-			// Queue completion before orderly transport closure. The normal close hook
-			// owns presence, companions, effects and character-world retirement.
-			closeSession = true
-		}
-		unlock()
+		closeSession := rt.completeDepartureInDivision(job, now)
 		// Detached closure AND send-overflow invoke teardown synchronously.
 		// Publish outside the transaction; Send still rejects an evicted owner.
 		if closeSession && job.session.Send(0x315a, nil) == nil {
 			job.session.CloseWhenDrained(transport.ByeReasonNormal)
 		}
 	}
+}
+
+/*
+================
+completeDepartureInDivision
+================
+*/
+func (rt *Runtime) completeDepartureInDivision(job pendingDeparture, now int64) bool {
+	unlock := rt.lockDivision(job.division)
+	defer unlock()
+	rt.departureMu.Lock()
+	current, pending := rt.departures[job.session.ID]
+	if !pending || current.due > now {
+		rt.departureMu.Unlock()
+		return false
+	}
+	delete(rt.departures, job.session.ID)
+	rt.departureMu.Unlock()
+	division, name, bound := job.session.CharacterBinding()
+	if bound && !job.session.Evicted() && division == job.division && name == job.character {
+		// Queue completion before orderly transport closure. The normal close hook
+		// owns presence, companions, effects and character-world retirement.
+		return true
+	}
+	return false
 }

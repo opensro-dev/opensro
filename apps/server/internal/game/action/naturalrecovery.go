@@ -148,14 +148,25 @@ func (rt *Runtime) advanceNaturalRecovery(nowMs int64) []simulation.DivisionFram
 	})
 	var out []simulation.DivisionFrames
 	for _, key := range keys {
-		unlock := rt.lockDivision(key.division)
-		out = append(out, rt.recoverPotionResident(key, nowMs)...)
-		out = append(out, rt.advanceResidentQuestItem(key, nowMs)...)
-		out = append(out, rt.advanceResidentQuestMinute(key, nowMs)...)
-		frames := rt.recoverResident(key, nowMs)
-		out = append(out, frames...)
-		unlock()
+		out = append(out, rt.advanceNaturalRecoveryInDivision(key, nowMs)...)
 	}
+	return out
+}
+
+/*
+================
+advanceNaturalRecoveryInDivision
+================
+*/
+func (rt *Runtime) advanceNaturalRecoveryInDivision(key recoveryKey, nowMs int64) []simulation.DivisionFrames {
+	unlock := rt.lockDivision(key.division)
+	defer unlock()
+	var out []simulation.DivisionFrames
+	out = append(out, rt.recoverPotionResident(key, nowMs)...)
+	out = append(out, rt.advanceResidentQuestItem(key, nowMs)...)
+	out = append(out, rt.advanceResidentQuestMinute(key, nowMs)...)
+	frames := rt.recoverResident(key, nowMs)
+	out = append(out, frames...)
 	return out
 }
 
