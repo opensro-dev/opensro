@@ -9096,7 +9096,9 @@ export function createUi(
 				// Port-only (Experimental "Fit window labels", off is the original):
 				// an English label that would run past its window's left edge (the
 				// trade window's "Purchase amount", right-aligned in 63 pixels, with
-				// a wider text face) wraps onto two lines inside its box instead.
+				// a wider text face, or the consignment window's "Large category",
+				// right-aligned at x = 74 in a 43-pixel box) wraps onto two lines
+				// inside the room to the window's left margin instead.
 				if ( !clipToControl && experimental.state().saved.fitWindowLabels && value.includes( " " ) ) {
 					const measure = ( line: string ) => text.run( line, 0, node.fontIndex ).width;
 					const width = measure( value ),
@@ -9104,9 +9106,12 @@ export function createUi(
 							box[0] + box[2] - width :
 							node.hAlign === 1 ?
 							box[0] + (box[2] - width) / 2 :
-							box[0];
-					const lines = left < ox + WINDOW_LABEL_MARGIN ? textLines( value, box[2], measure ) : [];
-					if ( lines.length === 2 && lines.every( line => measure( line ) <= box[2] ) ) {
+							box[0],
+						room = node.hAlign === 2 ?
+							Math.max( box[2], box[0] + box[2] - (ox + WINDOW_LABEL_MARGIN) ) :
+							box[2];
+					const lines = left < ox + WINDOW_LABEL_MARGIN ? textLines( value, room, measure ) : [];
+					if ( lines.length === 2 && lines.every( line => measure( line ) <= room ) ) {
 						const lineHeight = text.extentHeight( node.fontIndex ?? 0 ),
 							top = box[1] + (box[3] - 2 * lineHeight) / 2;
 						lines.forEach( ( line, index ) =>
@@ -9286,8 +9291,19 @@ export function createUi(
 				caption: string,
 				disabled = false
 			) {
-				authoredButton( node, ox, oy, id, caption, disabled );
-				authoredText( node, ox, oy, caption );
+				// Port-only, not native (Experimental "Fit window labels", off is
+				// the original): a button caption wider than its plate keeps the
+				// leading words that fit ("Delete message" -> "Delete", "Check
+				// for duplicate entries" -> "Check").
+				const shown = experimental.state().saved.fitWindowLabels ?
+					captionWords(
+						caption,
+						authoredRect( node, ox, oy )[2] - 2 * CAPTION_MARGIN,
+						line => text.run( line, 0, node.fontIndex ).width
+					) :
+					caption;
+				authoredButton( node, ox, oy, id, shown, disabled );
+				authoredText( node, ox, oy, shown );
 			}
 			// Resource sections are reverse-insertion lists (9BD240), so native child
 			// paint order is the reverse of controlsByName, not numeric control ID.
@@ -17403,21 +17419,6 @@ export function createUi(
 					blocks.push( area );
 					// The popup covers what lies beneath: its controls alone answer the pointer.
 					controls.push( { id: "letter-child", label: "", rect: area, kind: "region" } );
-					/*
-					================
-					caption
-
-					Port-only, not native (Experimental "Fit window labels"): a
-					caption wider than its plate ("Delete message", "Send message"
-					on the 76-pixel com_button) keeps the leading words that fit.
-					================
-					*/
-					const caption = ( id: number ) => {
-						const node = at( id ), value = hudCopy( node.text );
-						if ( !experimental.state().saved.fitWindowLabels ) return value;
-						const room = authoredRect( node, ox, oy )[2] - 2 * CAPTION_MARGIN;
-						return captionWords( value, room, line => text.run( line, 0, node.fontIndex ).width );
-					};
 					if ( reading ) {
 						nativePage( layout, ox, oy, [ 11, 12, 13, 20, 21 ] );
 						authoredText( at( 20 ), ox, oy, reading.sender );
@@ -17443,17 +17444,17 @@ export function createUi(
 								)
 							);
 						} );
-						authoredLabeledButton( at( 11 ), ox, oy, "letter-read-reply", caption( 11 ) );
-						authoredLabeledButton( at( 12 ), ox, oy, "letter-read-delete", caption( 12 ) );
-						authoredLabeledButton( at( 13 ), ox, oy, "letter-read-close", caption( 13 ) );
+						authoredLabeledButton( at( 11 ), ox, oy, "letter-read-reply", hudCopy( at( 11 ).text ) );
+						authoredLabeledButton( at( 12 ), ox, oy, "letter-read-delete", hudCopy( at( 12 ).text ) );
+						authoredLabeledButton( at( 13 ), ox, oy, "letter-read-close", hudCopy( at( 13 ).text ) );
 						return;
 					}
 					if ( !letterDraft ) return;
 					nativePage( layout, ox, oy, [ 11, 12, 20, 21 ] );
 					partyEdit( at( 20 ), ox, oy, "letter-receiver", letterDraft.receiver, LETTER_RECEIVER_LIMIT );
 					partyEdit( at( 21 ), ox, oy, LETTER_BODY_EDIT, letterDraft.body, LETTER_BODY_LIMIT );
-					authoredLabeledButton( at( 11 ), ox, oy, "letter-write-send", caption( 11 ) );
-					authoredLabeledButton( at( 12 ), ox, oy, "letter-write-cancel", caption( 12 ) );
+					authoredLabeledButton( at( 11 ), ox, oy, "letter-write-send", hudCopy( at( 11 ).text ) );
+					authoredLabeledButton( at( 12 ), ox, oy, "letter-write-cancel", hudCopy( at( 12 ).text ) );
 				}
 				/*
 				================
@@ -21088,14 +21089,7 @@ export function createUi(
 				) {
 					const node = byId( id );
 					if ( !node ) continue;
-					// Port-only, not native (Experimental "Fit window labels"): the
-					// English "Check for duplicate entries" keeps the leading words
-					// that fit the 76-pixel plate, as the letter popups' captions do.
-					const value = hudCopy( node.text ), room = authoredRect( node, px, py )[2] - 2 * CAPTION_MARGIN;
-					const caption = experimental.state().saved.fitWindowLabels ?
-						captionWords( value, room, line => text.run( line, 0, node.fontIndex ).width ) :
-						value;
-					authoredLabeledButton( node, px, py, control, caption, disabled );
+					authoredLabeledButton( node, px, py, control, hudCopy( node.text ), disabled );
 				}
 				// Inferred: the talk holds input while the window is open (see the
 				// event handler), so the world behind it takes no click.

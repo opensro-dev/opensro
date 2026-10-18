@@ -113,10 +113,11 @@ for ( const write of [ false, true ] ) {
 }
 
 for ( const fit of [ true, false ] ) {
-	test(`the letter popups' long captions ${fit ? "fit their plates" : "stay native with the row off"}`, () => {
+	test(`the letter popups' and page's long captions ${fit ? "fit their plates" : "stay native with the row off"}`, () => {
 		for (
 			const { write, id, full } of [
 				{ write: false, id: "letter-read-delete", full: "Delete message" },
+				{ write: false, id: "letter-delete", full: "Delete message" },
 				{ write: true, id: "letter-write-send", full: "Send message" }
 			]
 		) {
@@ -133,6 +134,40 @@ for ( const fit of [ true, false ] ) {
 			} finally {
 				fixture.dispose();
 			}
+		}
+	});
+
+	test(`Stall Network's right-aligned 'Large category' label ${fit ? "wraps inside the window" : "overflows left natively"}`, () => {
+		const fixture = uiFixture();
+		try {
+			let time = 0, published;
+			const draw = () => {
+				for ( let i = 0; i < 4; i++ ) published = fixture.ui.step( fixture.state, ++time * 100 ) ?? published;
+				assert.equal( fixture.ui.stats().error, null );
+				return defined( published );
+			};
+			fixture.ui.event(
+				/** @type {any} */ ({ kind: "experimental-preferences", value: { fitWindowLabels: fit } })
+			);
+			fixture.state.gameplay.stall = /** @type {any} */ ({
+				network: { open: true, rows: [], page: 0, pages: 1 }
+			});
+			const output = draw();
+			const combo = defined( output.controls.find( c => c.id === "stall-net-combo:41" ) );
+			// ifstallnetwork.txt: combo id 41 is at [82, 74, 150, 24]; id 44 is at [31, 79, 43, 15].
+			const px = combo.rect[0] - 82, py = combo.rect[1] - 74;
+			const scene = defined( fixture.scenes.at( -1 ) );
+			const glyphs = scene.quads.filter( q =>
+				q.texture === fontAtlas.image &&
+				q.rect[0] >= px - 20 && q.rect[0] <= px + 80 &&
+				q.rect[1] >= py + 65 && q.rect[1] <= py + 105
+			);
+			assert.ok( glyphs.length > 0, "GDR_STALL_SEARCH_LEV_1_STA glyphs" );
+			const minX = Math.min( ...glyphs.map( q => q.rect[0] ) );
+			if ( fit ) assert.ok( minX >= px + 6, `wrapped inside window border: minX ${minX} >= ${px + 6}` );
+			else assert.ok( minX < px, `native single-line overflow left of window: minX ${minX} < ${px}` );
+		} finally {
+			fixture.dispose();
 		}
 	});
 }
