@@ -299,6 +299,7 @@ func newGameWorldApplication(
 		ts.Hub,
 		ownedShard.ID,
 		enterWorldSecret,
+		authority.agentAPI,
 	); err != nil {
 		return nil, err
 	}
@@ -306,9 +307,13 @@ func newGameWorldApplication(
 		ts.Hub,
 		ownedShard.ID,
 		enterWorldSecret,
+		authority.agentAPI,
 	); err != nil {
 		return nil, err
 	}
+	authority.agentAPI.InstallAccountRevoker(func(accountID string) {
+		ts.Hub.EvictAccount(accountID)
+	})
 
 	controlAddr, err := controlListenAddress(ownedShard.ControlURL)
 	if err != nil {

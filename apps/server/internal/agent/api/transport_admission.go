@@ -33,6 +33,7 @@ func (api *API) handleTransportAdmissionToken(w http.ResponseWriter, r *http.Req
 		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "code": "INTERNAL"})
 		return
 	}
+	api.recordIssuedTicket(identity.accountID, token, expiresAt)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":            true,
 		"token":         token,

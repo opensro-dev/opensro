@@ -224,6 +224,7 @@ type API struct {
 
 	allowedOrigins map[string]struct{}
 	listener       httpLifecycle
+	revocations    accountRevoker
 }
 
 // New builds the API. A configured accounts file that fails to load is a
@@ -283,6 +284,7 @@ func New(config Config) (*API, error) {
 		now:                     now,
 		maintenanceGatePath:     config.MaintenanceGatePath,
 		allowedOrigins:          allowedOrigins,
+		revocations:             newAccountRevoker(),
 	}
 	log.Infof(
 		"agentapi: GameWorld control surface for shard %q; title login is owned by Agent",
@@ -368,6 +370,7 @@ func (api *API) Handler() http.Handler {
 	if api.notices != nil {
 		mux.Handle(NoticePath, api.requireRunning(http.HandlerFunc(api.handleNotice)))
 	}
+	mux.HandleFunc(AccountRevokePath, api.handleAccountRevoke)
 	if api.observatory != nil {
 		mux.Handle(ObservatoryPath, api.requireRunning(http.HandlerFunc(api.handleObservatory)))
 	}
@@ -591,7 +594,8 @@ func (api *API) requireSession(next http.Handler) http.Handler {
 		claims, err := api.agentSessionVerifier.Verify(token, api.now())
 		if !strings.HasPrefix(authorization, prefix) ||
 			err != nil ||
-			claims.ShardID != api.workerShardID {
+			claims.ShardID != api.workerShardID ||
+			!api.sessionAllowed(claims) {
 			w.Header().Set("WWW-Authenticate", "Bearer")
 			writeJSON(w, http.StatusUnauthorized, map[string]interface{}{
 				"ok": false, "code": "UNAUTHORIZED",

@@ -101,17 +101,34 @@ func (signer *AgentSessionSigner) Mint(
 	shardID string,
 	expiresAt time.Time,
 ) (string, error) {
+	return signer.MintWithEpoch(accountID, shardID, expiresAt, 0)
+}
+
+/*
+================
+MintWithEpoch
+
+Signs a SAS2 bearer token carrying the account's current session epoch.
+================
+*/
+func (signer *AgentSessionSigner) MintWithEpoch(
+	accountID string,
+	shardID string,
+	expiresAt time.Time,
+	epoch uint64,
+) (string, error) {
 	ring, err := signer.source.current(false)
 	if err != nil {
 		return "", err
 	}
 	privateKey := ring.privateKeys[ring.activeKeyID]
-	return MintAgentSession(
+	return MintAgentSessionWithEpoch(
 		ring.activeKeyID,
 		privateKey,
 		accountID,
 		shardID,
 		expiresAt,
+		epoch,
 	)
 }
 

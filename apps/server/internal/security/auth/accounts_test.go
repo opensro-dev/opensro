@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -309,5 +310,114 @@ func TestAccountsUpgradePasswordHashIsACompareAndSwap(t *testing.T) {
 	}
 	if ok, _ := accounts.Verify(ctx, "erin", "password2"); !ok {
 		t.Fatal("the reset password was overwritten")
+	}
+}
+
+/*
+================
+TestAccountsSessionEpochAndRevocationNotice
+================
+*/
+func TestAccountsSessionEpochAndRevocationNotice(t *testing.T) {
+	ctx := context.Background()
+	accounts, path := openTestAccounts(t)
+	if _, err := accounts.Create(ctx, "hero", "password1"); err != nil {
+		t.Fatal(err)
+	}
+	if epoch, ok := accounts.SessionEpoch("hero"); !ok || epoch != 1 {
+		t.Fatalf("initial SessionEpoch = (%d, %v), want (1, true)", epoch, ok)
+	}
+
+	var observed []uint64
+	accounts.SetRevokeObserver(func(accountID string, epoch uint64) {
+		if accountID == "hero" {
+			observed = append(observed, epoch)
+		}
+	})
+
+	if err := accounts.SetPassword(ctx, "hero", "password2"); err != nil {
+		t.Fatal(err)
+	}
+	if epoch, ok := accounts.SessionEpoch("hero"); !ok || epoch != 2 {
+		t.Fatalf("after SetPassword SessionEpoch = (%d, %v), want (2, true)", epoch, ok)
+	}
+
+	if err := accounts.SetDisabled(ctx, "hero", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := accounts.SessionEpoch("hero"); ok {
+		t.Fatal("disabled account reported active SessionEpoch")
+	}
+	if err := accounts.SetDisabled(ctx, "hero", false); err != nil {
+		t.Fatal(err)
+	}
+	if epoch, ok := accounts.SessionEpoch("hero"); !ok || epoch != 4 {
+		t.Fatalf("after re-enable SessionEpoch = (%d, %v), want (4, true)", epoch, ok)
+	}
+
+	revokedEpoch, err := accounts.RevokeSessions(ctx, "hero")
+	if err != nil || revokedEpoch != 5 {
+		t.Fatalf("RevokeSessions = (%d, %v), want (5, nil)", revokedEpoch, err)
+	}
+	if len(observed) != 4 || observed[0] != 2 || observed[1] != 3 || observed[2] != 4 || observed[3] != 5 {
+		t.Fatalf("observed epochs = %v, want [2 3 4 5]", observed)
+	}
+
+	if err := accounts.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := OpenAccounts(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	if epoch, ok := reopened.SessionEpoch("hero"); !ok || epoch != 5 {
+		t.Fatalf("reopened SessionEpoch = (%d, %v), want (5, true)", epoch, ok)
+	}
+
+	now := time.Unix(1_785_000_000, 0)
+	privatePayload, err := GenerateAgentSessionKeyRing(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicPayload, err := PublicAgentSessionKeyRing(privatePayload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	privPath := filepath.Join(dir, "priv.json")
+	pubPath := filepath.Join(dir, "pub.json")
+	if err := os.WriteFile(privPath, privatePayload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(pubPath, publicPayload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	signer, err := NewAgentSessionSigner(privPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifier, err := NewAgentSessionVerifier(pubPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessionToken, err := signer.MintWithEpoch("hero", "global-official", now.Add(time.Hour), 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessionClaims, err := verifier.Verify(sessionToken, now)
+	if err != nil || sessionClaims.Epoch != 5 || sessionClaims.Nonce == "" {
+		t.Fatalf("VerifyWithEpoch = (%+v, %v)", sessionClaims, err)
+	}
+	revocationToken, err := signer.MintAccountRevocation("global-official", "hero", 5, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revClaims, err := verifier.VerifyAccountRevocation(revocationToken, now)
+	if err != nil || revClaims.AccountID != "hero" || revClaims.ShardID != "global-official" || revClaims.Epoch != 5 {
+		t.Fatalf("VerifyAccountRevocation = (%+v, %v)", revClaims, err)
+	}
+	if _, err := verifier.VerifyAccountRevocation(revocationToken, now.Add(2*AccountRevocationLifetime)); err == nil {
+		t.Fatal("expired account revocation verified")
 	}
 }

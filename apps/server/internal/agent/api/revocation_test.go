@@ -1,0 +1,183 @@
+/*
+===========================================================================
+
+revocation_test.go - GameWorld account session and ticket revocation tests
+
+Verifies that a signed account revocation notice from the Agent advances the
+minimum accepted SAS2 session epoch on the shard, invalidates unconsumed
+STA1 and SEA3 tickets minted before the revocation, and invokes the live
+transport account evictor.
+
+===========================================================================
+*/
+package agentapi
+
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"opensro.online/server/internal/security/auth"
+)
+
+/*
+================
+TestAccountRevocationInvalidatesSessionTicketsAndEvictsAccount
+================
+*/
+func TestAccountRevocationInvalidatesSessionTicketsAndEvictsAccount(t *testing.T) {
+	api, _ := newTestAPI(t)
+	private, err := auth.GenerateAgentSessionKeyRing(api.now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	public, err := auth.PublicAgentSessionKeyRing(private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	privatePath := filepath.Join(dir, "private.json")
+	publicPath := filepath.Join(dir, "public.json")
+	if err := os.WriteFile(privatePath, private, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(publicPath, public, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	signer, err := auth.NewAgentSessionSigner(privatePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	api.agentSessionVerifier, err = auth.NewAgentSessionVerifier(publicPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var evicted []string
+	api.InstallAccountRevoker(func(accountID string) {
+		evicted = append(evicted, accountID)
+	})
+
+	handler := api.Handler()
+	oldSession, err := signer.MintWithEpoch(testAccount, testDivision, api.now().Add(time.Hour), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	callAPI := func(sessionToken, method, path, body string) (int, []byte) {
+		req := httptest.NewRequest(method, "http://127.0.0.1:8791"+path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+sessionToken)
+		declareBrowser(req)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec.Code, rec.Body.Bytes()
+	}
+
+	created := postJSON(t, bearerHandler(handler, oldSession), "/character/create", createBody("RevokeHero"))
+	if created["nativeResult"] != float64(1) {
+		t.Fatalf("create = %v", created)
+	}
+
+	mintTicket := func(sessionToken, path, body string) (int, string) {
+		code, raw := callAPI(sessionToken, http.MethodPost, path, body)
+		var resp struct {
+			OK    bool   `json:"ok"`
+			Token string `json:"token"`
+		}
+		_ = json.Unmarshal(raw, &resp)
+		return code, resp.Token
+	}
+
+	code, staToken := mintTicket(oldSession, "/auth/transport-token", `{}`)
+	if code != http.StatusOK || staToken == "" {
+		t.Fatalf("transport-token = %d, %q", code, staToken)
+	}
+	code, seaToken := mintTicket(oldSession, "/auth/enterworld-token", `{"characterName":"RevokeHero"}`)
+	if code != http.StatusOK || seaToken == "" {
+		t.Fatalf("enterworld-token = %d, %q", code, seaToken)
+	}
+
+	revokeNotice, err := signer.MintAccountRevocation(testDivision, testAccount, 2, api.now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrongShardNotice, err := signer.MintAccountRevocation("other-shard", testAccount, 2, api.now())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		name   string
+		method string
+		origin string
+		body   string
+		status int
+	}{
+		{"browser forbidden", http.MethodPost, "https://invalid.example", revokeNotice, http.StatusForbidden},
+		{"method not allowed", http.MethodGet, "", revokeNotice, http.StatusMethodNotAllowed},
+		{"wrong shard", http.MethodPost, "", wrongShardNotice, http.StatusUnauthorized},
+		{"forged", http.MethodPost, "", "invalid-token", http.StatusUnauthorized},
+		{"accepted", http.MethodPost, "", revokeNotice, http.StatusOK},
+		{"idempotent retry", http.MethodPost, "", revokeNotice, http.StatusOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, "http://127.0.0.1:8791"+AccountRevokePath, strings.NewReader(tc.body))
+			if tc.origin != "" {
+				req.Header.Set("Origin", tc.origin)
+			}
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != tc.status {
+				t.Fatalf("status = %d, want %d: %s", rec.Code, tc.status, rec.Body.String())
+			}
+		})
+	}
+
+	if len(evicted) != 1 || evicted[0] != testAccount {
+		t.Fatalf("evicted = %v, want [%s]", evicted, testAccount)
+	}
+
+	// Prior epoch session token must now be refused on every route.
+	if code, _ := callAPI(oldSession, http.MethodGet, "/character/list", ""); code != http.StatusUnauthorized {
+		t.Fatalf("/character/list with old epoch session = %d, want 401", code)
+	}
+	if code, _ := mintTicket(oldSession, "/auth/transport-token", `{}`); code != http.StatusUnauthorized {
+		t.Fatalf("/auth/transport-token with old epoch session = %d, want 401", code)
+	}
+
+	// Unconsumed STA1 and SEA3 tickets minted before the revocation must be refused.
+	staVerify := api.WrapTransportAdmissionVerifier(auth.TransportAdmissionVerifier(api.enterWorldAuthSecret, api.now))
+	if _, err := staVerify(staToken); err == nil {
+		t.Fatal("revoked STA1 transport-admission ticket was accepted")
+	}
+	seaVerify := api.WrapEnterWorldVerifier(auth.Verifier(api.enterWorldAuthSecret, api.now))
+	if err := seaVerify(seaToken, testDivision, "RevokeHero"); err == nil {
+		t.Fatal("revoked SEA3 EnterWorld ticket was accepted")
+	}
+
+	// A session minted at the new epoch succeeds and mints fresh tickets.
+	newSession, err := signer.MintWithEpoch(testAccount, testDivision, api.now().Add(time.Hour), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, newSTA := mintTicket(newSession, "/auth/transport-token", `{}`)
+	if code != http.StatusOK || newSTA == "" {
+		t.Fatalf("new transport-token = %d, %q", code, newSTA)
+	}
+	if _, err := staVerify(newSTA); err != nil {
+		t.Fatalf("fresh STA1 ticket after relogin rejected: %v", err)
+	}
+	code, newSEA := mintTicket(newSession, "/auth/enterworld-token", `{"characterName":"RevokeHero"}`)
+	if code != http.StatusOK || newSEA == "" {
+		t.Fatalf("new enterworld-token = %d, %q", code, newSEA)
+	}
+	if err := seaVerify(newSEA, testDivision, "RevokeHero"); err != nil {
+		t.Fatalf("fresh SEA3 ticket after relogin rejected: %v", err)
+	}
+}

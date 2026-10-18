@@ -463,6 +463,7 @@ func (api *API) handleEnterWorldToken(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": false, "code": "INTERNAL"})
 		return
 	}
+	api.recordIssuedTicket(requestAccountID(r), token, expiresAt)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"ok":            true,
 		"token":         token,

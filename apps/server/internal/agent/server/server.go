@@ -26,6 +26,7 @@ import (
 	"opensro.online/server/internal/releaseprotocol"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -60,6 +61,20 @@ type AccountAuthority interface {
 	PasswordHash(accountID string) ([]byte, bool)
 	IDs() []string
 	Len() int
+}
+
+/*
+================
+sessionEpochAuthority
+
+Optional capability implemented by auth.Accounts for persistent session
+epoch tracking and revocation notifications.
+================
+*/
+type sessionEpochAuthority interface {
+	SessionEpoch(accountID string) (uint64, bool)
+	RevokeSessions(ctx context.Context, accountID string) (uint64, error)
+	SetRevokeObserver(fn func(accountID string, epoch uint64))
 }
 
 /*
@@ -124,7 +139,10 @@ type Server struct {
 	readiness        *readiness.Gate
 	bugReports       *bugreport.Service
 	// startedAt is when this Agent was built, for /title/build's uptime.
-	startedAt time.Time
+	startedAt       time.Time
+	revokedMu       sync.Mutex
+	revokedNonces   map[string]time.Time
+	accountMinEpoch map[string]uint64
 }
 
 /*
@@ -181,7 +199,7 @@ func New(config Config) (*Server, error) {
 	if _, err := rand.Read(clientKey); err != nil {
 		return nil, fmt.Errorf("agent server: client tag key: %w", err)
 	}
-	return &Server{
+	srv := &Server{
 		history:                 config.History,
 		historyHandler:          config.HistoryHandler,
 		accounts:                config.Accounts,
@@ -204,7 +222,13 @@ func New(config Config) (*Server, error) {
 		readiness:               config.Readiness,
 		bugReports:              config.BugReports,
 		startedAt:               now(),
-	}, nil
+		revokedNonces:           make(map[string]time.Time),
+		accountMinEpoch:         make(map[string]uint64),
+	}
+	if epochAuth, ok := config.Accounts.(sessionEpochAuthority); ok {
+		epochAuth.SetRevokeObserver(srv.RevokeAccount)
+	}
+	return srv, nil
 }
 
 /*
@@ -419,12 +443,119 @@ func (server *Server) bearerClaims(r *http.Request) (auth.AgentSessionClaims, bo
 		return auth.AgentSessionClaims{}, false
 	}
 	// A signed session stays valid until it expires; the account behind it
-	// is re-read on every use, so a disabled or removed account is refused
-	// at once (liveSession does the same for the browser cookie).
-	if _, active := server.accounts.PasswordHash(claims.AccountID); !active {
+	// and its session epoch are re-read on every use, so a logged-out,
+	// password-rotated, disabled, or removed account is refused at once.
+	if !server.sessionActive(claims) {
 		return auth.AgentSessionClaims{}, false
 	}
 	return claims, true
+}
+
+/*
+================
+sessionActive
+
+Checks that the account is enabled, the token's nonce has not been revoked,
+and the token's session epoch matches the account's current epoch.
+================
+*/
+func (server *Server) sessionActive(claims auth.AgentSessionClaims) bool {
+	now := server.now()
+	server.revokedMu.Lock()
+	if exp, revoked := server.revokedNonces[claims.Nonce]; revoked {
+		if now.Before(exp) {
+			server.revokedMu.Unlock()
+			return false
+		}
+		delete(server.revokedNonces, claims.Nonce)
+	}
+	minEpoch := server.accountMinEpoch[claims.AccountID]
+	server.revokedMu.Unlock()
+
+	if minEpoch > 0 && claims.Epoch < minEpoch {
+		return false
+	}
+	if _, active := server.accounts.PasswordHash(claims.AccountID); !active {
+		return false
+	}
+	if epochAuth, ok := server.accounts.(sessionEpochAuthority); ok {
+		currentEpoch, active := epochAuth.SessionEpoch(claims.AccountID)
+		if !active {
+			return false
+		}
+		if claims.Epoch == 0 {
+			return currentEpoch == 1
+		}
+		return claims.Epoch == currentEpoch
+	}
+	return true
+}
+
+/*
+================
+revokeTokenNonce
+================
+*/
+func (server *Server) revokeTokenNonce(nonce string, expiresAt time.Time) {
+	if nonce == "" {
+		return
+	}
+	now := server.now()
+	server.revokedMu.Lock()
+	for priorNonce, exp := range server.revokedNonces {
+		if !now.Before(exp) {
+			delete(server.revokedNonces, priorNonce)
+		}
+	}
+	server.revokedNonces[nonce] = expiresAt
+	server.revokedMu.Unlock()
+}
+
+/*
+================
+RevokeAccount
+
+Advances the minimum accepted session epoch for accountID on this Agent and
+pushes a signed revocation notice to each enabled GameWorld shard.
+================
+*/
+func (server *Server) RevokeAccount(accountID string, epoch uint64) {
+	if epoch < 1 {
+		epoch = 2
+	}
+	server.revokedMu.Lock()
+	if epoch <= server.accountMinEpoch[accountID] {
+		epoch = server.accountMinEpoch[accountID] + 1
+	}
+	server.accountMinEpoch[accountID] = epoch
+	server.revokedMu.Unlock()
+
+	now := server.now()
+	for _, definition := range server.catalog.Definitions() {
+		if !definition.Enabled || strings.TrimSpace(definition.ControlURL) == "" {
+			continue
+		}
+		token, err := server.sessionSigner.MintAccountRevocation(
+			definition.ID,
+			accountID,
+			epoch,
+			now,
+		)
+		if err != nil {
+			continue
+		}
+		target := strings.TrimSuffix(definition.ControlURL, "/") + agentapi.AccountRevokePath
+		req, err := http.NewRequest(http.MethodPost, target, strings.NewReader(token))
+		if err != nil {
+			continue
+		}
+		resp, err := server.client.Do(req)
+		if err != nil {
+			continue
+		}
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		_ = resp.Body.Close()
+	}
 }
 
 /*

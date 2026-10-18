@@ -638,7 +638,7 @@ func (h *Hub) lookupByToken(token [ResumeTokenLen]byte) *Session {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	sess, ok := h.byToken[token]
-	if !ok {
+	if !ok || sess.evicted.Load() {
 		return nil
 	}
 	if subtle.ConstantTimeCompare(sess.resumeToken[:], token[:]) != 1 {
@@ -839,6 +839,42 @@ func (h *Hub) admitAccountSession(account string, s *Session) {
 			Warn("transport: account session limit reached, evicting its oldest session")
 		victim.CloseWhenDrained(ByeReasonReplaced)
 	}
+}
+
+/*
+================
+EvictAccount
+
+Marks every live session owned by account as evicted, removes its resume
+token and exclusive character binding immediately so it cannot reattach or
+block a fresh login, and closes it with ByeReasonUnauthorized.
+================
+*/
+func (h *Hub) EvictAccount(account string) int {
+	if account == "" {
+		return 0
+	}
+	var evict []*Session
+	h.mu.Lock()
+	for _, candidate := range h.accountSessions[account] {
+		delete(h.byToken, candidate.resumeToken)
+		if key, ok := h.bindingKeys[candidate.ID]; ok {
+			delete(h.bindingKeys, candidate.ID)
+			if h.bindings[key] == candidate {
+				delete(h.bindings, key)
+			}
+		}
+		if candidate.evicted.Load() {
+			continue
+		}
+		candidate.markEvicted()
+		evict = append(evict, candidate)
+	}
+	h.mu.Unlock()
+	for _, victim := range evict {
+		victim.CloseWhenDrained(ByeReasonUnauthorized)
+	}
+	return len(evict)
 }
 
 /*

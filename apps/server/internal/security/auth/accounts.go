@@ -87,6 +87,9 @@ type Accounts struct {
 	// starve logins of CPU.
 	hashing chan struct{}
 
+	revokeMu sync.RWMutex
+	onRevoke func(accountID string, epoch uint64)
+
 	closeOnce sync.Once
 }
 
@@ -95,7 +98,8 @@ CREATE TABLE IF NOT EXISTS accounts (
 	id            TEXT    NOT NULL PRIMARY KEY,
 	password_hash BLOB    NOT NULL,
 	created_at_ms INTEGER NOT NULL,
-	disabled      INTEGER NOT NULL DEFAULT 0 CHECK (disabled IN (0, 1))
+	disabled      INTEGER NOT NULL DEFAULT 0 CHECK (disabled IN (0, 1)),
+	session_epoch INTEGER NOT NULL DEFAULT 1
 ) STRICT;
 CREATE UNIQUE INDEX IF NOT EXISTS accounts_folded_id ON accounts (lower(id));
 `
@@ -156,6 +160,10 @@ func OpenAccounts(path string) (*Accounts, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("account schema: %w", err)
 	}
+	if err := ensureAccountSessionEpoch(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	if _, err := db.Exec(fmt.Sprintf("PRAGMA user_version=%d", accountsSchemaVersion)); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -181,6 +189,60 @@ func (accounts *Accounts) Close() error {
 		err = accounts.db.Close()
 	})
 	return err
+}
+
+/*
+================
+ensureAccountSessionEpoch
+
+Upgrades an existing accounts.db written before session_epoch was added so
+every account starts at epoch 1 without requiring a manual migration.
+================
+*/
+func ensureAccountSessionEpoch(db *sql.DB) error {
+	var count int
+	if err := db.QueryRow(
+		`SELECT count(*) FROM pragma_table_info('accounts') WHERE name = 'session_epoch'`,
+	).Scan(&count); err != nil {
+		return fmt.Errorf("account schema inspect: %w", err)
+	}
+	if count > 0 {
+		return nil
+	}
+	if _, err := db.Exec(
+		`ALTER TABLE accounts ADD COLUMN session_epoch INTEGER NOT NULL DEFAULT 1`,
+	); err != nil {
+		return fmt.Errorf("account schema session_epoch: %w", err)
+	}
+	return nil
+}
+
+/*
+================
+SetRevokeObserver
+
+Installs an observer called whenever an account's session epoch advances
+(SetPassword, SetDisabled, RevokeSessions).
+================
+*/
+func (accounts *Accounts) SetRevokeObserver(fn func(accountID string, epoch uint64)) {
+	accounts.revokeMu.Lock()
+	accounts.onRevoke = fn
+	accounts.revokeMu.Unlock()
+}
+
+/*
+================
+notifyRevoke
+================
+*/
+func (accounts *Accounts) notifyRevoke(accountID string, epoch uint64) {
+	accounts.revokeMu.RLock()
+	fn := accounts.onRevoke
+	accounts.revokeMu.RUnlock()
+	if fn != nil {
+		fn(accountID, epoch)
+	}
 }
 
 /*
@@ -242,6 +304,46 @@ func (accounts *Accounts) PasswordHash(accountID string) ([]byte, bool) {
 		return nil, false
 	}
 	return hash, true
+}
+
+/*
+================
+SessionEpoch
+
+The current session epoch for an enabled account. A missing or disabled
+account, or a database error, reports false: the authority fails closed.
+================
+*/
+func (accounts *Accounts) SessionEpoch(accountID string) (uint64, bool) {
+	var epoch int64
+	err := accounts.db.QueryRow(
+		`SELECT session_epoch FROM accounts WHERE id = ? AND disabled = 0`,
+		accountID,
+	).Scan(&epoch)
+	if err != nil || epoch < 1 {
+		return 0, false
+	}
+	return uint64(epoch), true
+}
+
+/*
+================
+readEpoch
+================
+*/
+func (accounts *Accounts) readEpoch(ctx context.Context, accountID string) (uint64, error) {
+	var epoch int64
+	if err := accounts.db.QueryRowContext(
+		ctx,
+		`SELECT session_epoch FROM accounts WHERE id = ?`,
+		accountID,
+	).Scan(&epoch); err != nil {
+		return 0, err
+	}
+	if epoch < 1 {
+		return 1, nil
+	}
+	return uint64(epoch), nil
 }
 
 /*
@@ -409,7 +511,7 @@ func (accounts *Accounts) SetPassword(ctx context.Context, accountID, password s
 	}
 	result, err := accounts.db.ExecContext(
 		ctx,
-		`UPDATE accounts SET password_hash = ? WHERE id = ?`,
+		`UPDATE accounts SET password_hash = ?, session_epoch = session_epoch + 1 WHERE id = ?`,
 		hash, accountID,
 	)
 	if err != nil {
@@ -417,6 +519,9 @@ func (accounts *Accounts) SetPassword(ctx context.Context, accountID, password s
 	}
 	if rows, _ := result.RowsAffected(); rows != 1 {
 		return ErrAccountNotFound
+	}
+	if epoch, err := accounts.readEpoch(ctx, accountID); err == nil {
+		accounts.notifyRevoke(accountID, epoch)
 	}
 	return nil
 }
@@ -459,7 +564,7 @@ func (accounts *Accounts) SetDisabled(ctx context.Context, accountID string, dis
 	}
 	result, err := accounts.db.ExecContext(
 		ctx,
-		`UPDATE accounts SET disabled = ? WHERE id = ?`,
+		`UPDATE accounts SET disabled = ?, session_epoch = session_epoch + 1 WHERE id = ?`,
 		flag, accountID,
 	)
 	if err != nil {
@@ -468,7 +573,41 @@ func (accounts *Accounts) SetDisabled(ctx context.Context, accountID string, dis
 	if rows, _ := result.RowsAffected(); rows != 1 {
 		return ErrAccountNotFound
 	}
+	if epoch, err := accounts.readEpoch(ctx, accountID); err == nil {
+		accounts.notifyRevoke(accountID, epoch)
+	}
 	return nil
+}
+
+/*
+================
+RevokeSessions
+
+Advances the account's session epoch, invalidating all previously minted
+sessions and notifying the revocation observer.
+================
+*/
+func (accounts *Accounts) RevokeSessions(ctx context.Context, accountID string) (uint64, error) {
+	if !domain.AccountIDValid(accountID) || accountID == domain.ReservedAccountID {
+		return 0, ErrAccountIDInvalid
+	}
+	result, err := accounts.db.ExecContext(
+		ctx,
+		`UPDATE accounts SET session_epoch = session_epoch + 1 WHERE id = ?`,
+		accountID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	if rows, _ := result.RowsAffected(); rows != 1 {
+		return 0, ErrAccountNotFound
+	}
+	epoch, err := accounts.readEpoch(ctx, accountID)
+	if err != nil {
+		return 0, err
+	}
+	accounts.notifyRevoke(accountID, epoch)
+	return epoch, nil
 }
 
 //============================================================================

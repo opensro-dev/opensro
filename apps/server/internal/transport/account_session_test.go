@@ -123,3 +123,28 @@ func TestAccountSessionIndexClearsOnTeardown(t *testing.T) {
 		t.Fatalf("account index kept %d accounts, %d sessions", len(hub.accountSessions), len(hub.sessionAccount))
 	}
 }
+
+func TestEvictAccountClosesSessionsClearsBindingAndRefusesResume(t *testing.T) {
+	hub := accountHub(t, 4)
+	bob := admit(t, hub, "bob-1")
+	alice1 := admit(t, hub, "alice-1")
+	alice2 := admit(t, hub, "alice-2")
+	hub.BindExclusive("global-official:hero", alice1)
+	aliceToken := alice1.resumeToken
+
+	if evicted := hub.EvictAccount("alice"); evicted != 2 {
+		t.Fatalf("EvictAccount(alice) = %d, want 2", evicted)
+	}
+	if !alice1.Evicted() || !alice2.Evicted() {
+		t.Fatal("alice sessions were not marked evicted")
+	}
+	if bob.Evicted() {
+		t.Fatal("bob session was evicted by alice revocation")
+	}
+	if _, bound := hub.BoundSession("global-official:hero"); bound {
+		t.Fatal("evicted account still holds exclusive character binding")
+	}
+	if resumed := hub.lookupByToken(aliceToken); resumed != nil {
+		t.Fatal("evicted session's resume token still resolves")
+	}
+}

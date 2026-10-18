@@ -90,7 +90,7 @@ func (server *Server) rememberBrowserCharacter(w http.ResponseWriter, r *http.Re
 		return
 	}
 	claims, err := server.sessionSigner.Verify(cookie.Value, server.now())
-	if err != nil {
+	if err != nil || !server.sessionActive(claims) {
 		return
 	}
 	var input struct {
@@ -214,11 +214,56 @@ func (server *Server) handleBrowserLogout(w http.ResponseWriter, r *http.Request
 		http.Error(w, "JSON required", http.StatusUnsupportedMediaType)
 		return
 	}
+	identity, _, ok := server.resolveBrowserIdentity(r)
+	server.revokeRequestSessions(r)
 	server.setBrowserSession(w, r, "", true)
-	if identity, _, ok := server.resolveBrowserIdentity(r); ok {
+	if ok {
 		server.history.Record(history.Event{Kind: "logout", Category: "expected", Code: "browser_logout", Account: identity.accountID, Character: identity.character, Shard: identity.definition.ID})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+/*
+================
+revokeRequestSessions
+
+Invalidates any SAS2 session presented by cookie or Authorization header on
+logout and propagates the account revocation to enabled shards.
+================
+*/
+func (server *Server) revokeRequestSessions(r *http.Request) {
+	var tokens []string
+	if name, _ := browserCookieName(r); name != "" {
+		if cookie, err := r.Cookie(name); err == nil && strings.TrimSpace(cookie.Value) != "" {
+			tokens = append(tokens, strings.TrimSpace(cookie.Value))
+		}
+	}
+	if scheme, bearer, found := strings.Cut(strings.TrimSpace(r.Header.Get("Authorization")), " "); found && strings.EqualFold(scheme, "Bearer") && strings.TrimSpace(bearer) != "" {
+		tokens = append(tokens, strings.TrimSpace(bearer))
+	}
+	seenAccounts := make(map[string]bool, len(tokens))
+	now := server.now()
+	for _, token := range tokens {
+		claims, err := server.sessionSigner.Verify(token, now)
+		if err != nil {
+			continue
+		}
+		server.revokeTokenNonce(claims.Nonce, claims.ExpiresAt)
+		if seenAccounts[claims.AccountID] {
+			continue
+		}
+		seenAccounts[claims.AccountID] = true
+		if epochAuth, ok := server.accounts.(sessionEpochAuthority); ok {
+			if _, err := epochAuth.RevokeSessions(r.Context(), claims.AccountID); err == nil {
+				continue
+			}
+		}
+		nextEpoch := claims.Epoch + 1
+		if nextEpoch < 2 {
+			nextEpoch = 2
+		}
+		server.RevokeAccount(claims.AccountID, nextEpoch)
+	}
 }
 
 /*
@@ -252,7 +297,7 @@ a session's identity checks both, not the signature alone.
 ================
 */
 func (server *Server) liveSession(claims auth.AgentSessionClaims) (shard.Definition, bool) {
-	if _, exists := server.accounts.PasswordHash(claims.AccountID); !exists {
+	if !server.sessionActive(claims) {
 		return shard.Definition{}, false
 	}
 	definition, known := server.catalog.Resolve(claims.ShardID)
