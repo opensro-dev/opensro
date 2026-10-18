@@ -106,7 +106,8 @@ walkSelection
 ================
 */
 func (c equipmentCatalog) walkSelection(country uint8, group int, rare bool, level uint8, typeKey string, mass float64, add func(equipmentRef, float64)) {
-	for ; group >= 0; group-- {
+	step := equipmentClassStep(rare)
+	for ; group >= 0; group -= step {
 		b := c.buckets[equipmentKey{country, group, rare}]
 		if b == nil {
 			continue
@@ -144,7 +145,7 @@ its type; one at or below it is admitted by the absolute roll.
 */
 func (c equipmentCatalog) settleSelection(country uint8, group int, rare bool, level uint8, ref equipmentRef, mass float64, add func(equipmentRef, float64)) {
 	if ref.Level > level {
-		c.walkSelection(country, group-1, rare, level, ref.Type, mass, add)
+		c.walkSelection(country, group-equipmentClassStep(rare), rare, level, ref.Type, mass, add)
 		return
 	}
 	admitted := moduloAcceptanceMass(randomRange, 100, uint64(ref.Absolute))

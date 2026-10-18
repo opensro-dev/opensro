@@ -237,14 +237,34 @@ func compileEquipment(source equipmentSource) (equipmentCatalog, error) {
 
 /*
 ================
+equipmentClassStep
+
+Native SR_GameServer 0x00726E60 sets the drop table's class-fallback stride
+(+0x30) to 1 for ordinary equipment (0x00726EE3) and 3 for rare equipment
+(0x00726F19), because rare classes are interleaved [Star, Moon, Sun] per
+degree (G = 3*(D-1) + tier). 0x00724120 subtracts that stride both when a
+class bucket holds no items (0x007241BF) and when a picked item's required
+level exceeds the monster's level (0x007242A4).
+================
+*/
+func equipmentClassStep(rare bool) int {
+	if rare {
+		return 3
+	}
+	return 1
+}
+
+/*
+================
 anyAtOrBelow
 
-Whether either country holds an item of the class or of a lower class: the
-classes selectEquipment can reach from it.
+Whether either country holds an item of the class or of a lower class in the
+same tier stride: the classes selectEquipment can reach from it.
 ================
 */
 func (c equipmentCatalog) anyAtOrBelow(group int, rare bool) bool {
-	for ; group >= 0; group-- {
+	step := equipmentClassStep(rare)
+	for ; group >= 0; group -= step {
 		if c.buckets[equipmentKey{0, group, rare}] != nil || c.buckets[equipmentKey{1, group, rare}] != nil {
 			return true
 		}
@@ -324,7 +344,8 @@ func (c equipmentCatalog) selectEquipment(country uint8, group int, rare bool, l
 		return equipmentRef{}, false
 	}
 	typeKey := ""
-	for ; group >= 0; group-- {
+	step := equipmentClassStep(rare)
+	for ; group >= 0; group -= step {
 		b := c.buckets[equipmentKey{country, group, rare}]
 		if b == nil {
 			continue
