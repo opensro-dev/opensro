@@ -160,7 +160,8 @@ division's players and ground, disjoint from these.
 async function loadWorldReferences(
 	value: unknown,
 	base: string,
-	signal: AbortSignal
+	signal: AbortSignal,
+	progress?: () => void
 ): Promise<{
 	refSkillSnapshot: unknown[];
 	refItemSnapshot: unknown[];
@@ -183,7 +184,8 @@ async function loadWorldReferences(
 	const response = await fetch( url, { signal, cache: "force-cache", credentials: "omit", redirect: "error" } );
 	if ( !response.ok || !response.body ) throw Error( `World references unavailable (${response.status})` );
 	// Bound the decoded stream too: Content-Length describes compressed bytes.
-	const bytes = await readBytes( response.body, ref.bytes );
+	// Each chunk is progress for the caller's stall deadline (#1010).
+	const bytes = await readBytes( response.body, ref.bytes, { received: () => progress?.() } );
 	if ( bytes.length !== ref.bytes ) throw Error( "World references size mismatch" );
 	const digest = Array.from(
 		new Uint8Array( await crypto.subtle.digest( "SHA-256", bytes ) ),

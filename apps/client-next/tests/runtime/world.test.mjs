@@ -1947,6 +1947,179 @@ test("incomplete native entry still times out while presentation is pending", as
 	assert.equal( world.status().error, "World connection timed out" );
 });
 
+/*
+================
+a delivering link is never timed out (#1010)
+
+The admission windows are stall windows: an entry frame inside each ten
+seconds keeps the attempt admitted far past ten seconds overall, and a
+full window of silence still fails it.
+================
+*/
+test("admission survives socket progress past ten seconds and times out after silence", async t => {
+	const sockets = socketHarness( t );
+	const world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	socket.receive( 7, entered() );
+	let time = 3;
+	for ( const row of rows.slice( 0, -1 ) ) {
+		socket.receive( row.opcode, row.payload );
+		time += 9000;
+		world.step( time );
+		assert.equal( world.status().phase, "entering-world" );
+		assert.equal( world.status().error, undefined );
+	}
+	world.step( time + 10001 );
+	assert.equal( world.status().error, "World connection timed out" );
+});
+
+/*
+================
+reference bytes slide their stall window (#1010)
+
+The cold-cache multi-megabyte reference body of a slow link takes longer
+than thirty seconds end to end; only thirty seconds without a chunk fail.
+================
+*/
+test("reference byte progress extends the thirty-second window past a slow body", async t => {
+	const sockets = socketHarness( t );
+	const data = JSON.stringify( {
+			referencesVersion: 3,
+			skillLifecycleVersion: 1,
+			refSkillSnapshot: [],
+			refItemSnapshot: [],
+			refObjSnapshot: []
+		} ),
+		bytes = new TextEncoder().encode( data ),
+		digest = Buffer.from( await crypto.subtle.digest( "SHA-256", bytes ) ).toString( "hex" );
+	let feed;
+	t.mock.method( globalThis, "fetch", async ( url, options ) => {
+		assert.equal( options.cache, "force-cache" );
+		assert.equal( new URL( url ).pathname, `/transport/references/${digest}.json` );
+		return {
+			ok: true,
+			status: 200,
+			body: new ReadableStream( {
+				start( controller ) {
+					feed = controller;
+				}
+			} )
+		};
+	} );
+	const http = createSessionHttp();
+	let referenceCompletion = Promise.resolve();
+	const world = createWorldSession( async () => "ticket", ( ...args ) => {
+		const request = http.references( ...args );
+		referenceCompletion = request.then( () => {}, () => {} );
+		return request;
+	}, ignoreIncident );
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const socket = sockets.at( -1 );
+	socket.onopen();
+	socket.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	const blob = Buffer.from(
+			JSON.stringify( {
+				v: 2,
+				bootstrap,
+				references: { path: `/transport/references/${digest}.json`, sha256: digest, bytes: bytes.length }
+			} )
+		),
+		p = Buffer.alloc( 9 + blob.length );
+	p[0] = 1;
+	p.writeUInt32LE( blob.length, 5 );
+	blob.copy( p, 9 );
+	socket.receive( 7, p );
+	world.step( 4 );
+	// The first chunk lands; the rest is still on the wire at 29 s and
+	// arrives whole at 35 s from the request. A fixed thirty-second
+	// deadline fails the second step, the stall window admits both.
+	feed.enqueue( bytes.subarray( 0, 20 ) );
+	await settle();
+	world.step( 29004 );
+	assert.equal( world.status().error, undefined );
+	feed.enqueue( bytes.subarray( 20 ) );
+	feed.close();
+	await referenceCompletion;
+	world.step( 35004 );
+	assert.equal( world.status().error, undefined );
+	for ( const row of rows ) socket.receive( row.opcode, row.payload );
+	for ( let tick = 35005; tick < 35060 && world.status().phase !== "world"; tick++ ) {
+		await settle();
+		world.step( tick );
+		flush( world );
+	}
+	assert.equal( world.status().phase, "world" );
+	world.ready();
+	assert.equal( world.status().ready, true );
+});
+
+test("a stalled reference body times out after thirty seconds of silence", async t => {
+	const sockets = socketHarness( t );
+	const data = JSON.stringify( {
+			referencesVersion: 3,
+			skillLifecycleVersion: 1,
+			refSkillSnapshot: [],
+			refItemSnapshot: [],
+			refObjSnapshot: []
+		} ),
+		bytes = new TextEncoder().encode( data ),
+		digest = Buffer.from( await crypto.subtle.digest( "SHA-256", bytes ) ).toString( "hex" );
+	t.mock.method( globalThis, "fetch", async ( url, options ) => {
+		assert.equal( new URL( url ).pathname, `/transport/references/${digest}.json` );
+		return {
+			ok: true,
+			status: 200,
+			body: new ReadableStream( {
+				start( controller ) {
+					controller.enqueue( bytes.subarray( 0, 20 ) );
+				}
+			} )
+		};
+	} );
+	const world = createWorldSession( async () => "ticket", createSessionHttp().references, ignoreIncident );
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const socket = sockets.at( -1 );
+	socket.onopen();
+	socket.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	const blob = Buffer.from(
+			JSON.stringify( {
+				v: 2,
+				bootstrap,
+				references: { path: `/transport/references/${digest}.json`, sha256: digest, bytes: bytes.length }
+			} )
+		),
+		p = Buffer.alloc( 9 + blob.length );
+	p[0] = 1;
+	p.writeUInt32LE( blob.length, 5 );
+	blob.copy( p, 9 );
+	socket.receive( 7, p );
+	world.step( 4 );
+	await settle();
+	world.step( 30005 );
+	assert.equal( world.status().error, "World connection timed out" );
+});
+
 test("travel waits for presentation but a later incomplete travel gets a fresh network deadline", async t => {
 	const { world, socket, sockets } = await admitWaitingWorld( t );
 	flush( world );

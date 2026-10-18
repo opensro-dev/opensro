@@ -4,6 +4,9 @@
 world.ts - transport admission, reconnect and departure for one world session
 
 The network deadline covers tickets, references and native synchronization.
+It is a stall deadline (#1010): arriving frames and reference bytes extend
+it by its window, and only a full window of silence fails the attempt, so a
+slow link that keeps delivering enters however long that takes.
 The presentation acknowledgement is a separate barrier: it gates commands,
 never retries a successfully received world.
 
@@ -61,7 +64,8 @@ export function createWorldSession(
 	loadWorldReferences: (
 		value: unknown,
 		base: string,
-		signal: AbortSignal
+		signal: AbortSignal,
+		progress?: () => void
 	) => Promise<{ refSkillSnapshot: unknown[]; refItemSnapshot: unknown[]; refObjSnapshot: unknown[]; }>,
 	reportIncident: ( incident: ClientIncident ) => void
 ) {
@@ -182,6 +186,7 @@ onNetworkFailure
 	let lastError: string | undefined;
 	let now = 0,
 		deadline = 0,
+		deadlineWindow = 0,
 		retryAt = 0,
 		attempt = 0,
 		reconnectSince = 0,
@@ -196,6 +201,30 @@ transition
 	function transition( next: typeof phase ) {
 		phase = next;
 		revision++;
+	}
+	/*
+================
+armDeadline
+
+Arm the admission deadline as a stall window of windowMs: noteProgress
+extends it, and only a full window without progress fails the attempt.
+================
+	*/
+	function armDeadline( windowMs: number ) {
+		deadlineWindow = windowMs;
+		deadline = now + windowMs;
+	}
+	/*
+================
+noteProgress
+
+A frame on the socket or a chunk of the reference body proves the link is
+still delivering; push the armed deadline out by its window. A cleared
+deadline stays cleared (the presentation barrier owns that wait).
+================
+	*/
+	function noteProgress() {
+		if ( deadline ) deadline = now + deadlineWindow;
 	}
 	// Cancelling transport work does not revoke the admitted world snapshot.
 	// Only logout/fresh admission may clear equipment, identity and HUD data.
@@ -220,7 +249,7 @@ request
 	function request( kind: "transport" | "enterworld" ) {
 		const current = epoch;
 		controller = new AbortController();
-		deadline = now + ADMISSION_TIMEOUT_MS;
+		armDeadline( ADMISSION_TIMEOUT_MS );
 		mint( kind, character, controller.signal ).then( token => {
 			if ( !disposed && epoch === current ) {
 				completion = { epoch: current, kind, token };
@@ -260,6 +289,7 @@ receive
 ================
 	*/
 	function receive( frame: WireFrame ) {
+		noteProgress();
 		// Keep native brackets in the network owner's bounded FIFO until the
 		// matching reference resource has passed integrity and schema ingress.
 		if ( references.kind !== "idle" ) return false;
@@ -315,8 +345,8 @@ receive
 				const bootstrap = wrapper.bootstrap, current = epoch, receivedAtMs = now;
 				controller = new AbortController();
 				references = { kind: "loading" };
-				deadline = now + REFERENCE_TIMEOUT_MS;
-				loadWorldReferences( wrapper.references, transport, controller.signal ).then( refs => {
+				armDeadline( REFERENCE_TIMEOUT_MS );
+				loadWorldReferences( wrapper.references, transport, controller.signal, noteProgress ).then( refs => {
 					if ( !disposed && epoch === current ) {
 						// The published item and object rows and the login's own rows are
 						// disjoint (the server skips published ids); the catalogs reject a repeat.
@@ -344,7 +374,7 @@ receive
 			boundThisTransport = true;
 			hasWorld = true;
 			ready = false;
-			deadline = now + ADMISSION_TIMEOUT_MS;
+			armDeadline( ADMISSION_TIMEOUT_MS );
 			return;
 		}
 		if ( frame.opcode === 10 ) {
@@ -397,7 +427,7 @@ receive
 			if ( frame.opcode === 0x3369 ) network.send( { opcode: 0x36dd, payload: new Uint8Array() } );
 			ready = false;
 			transition( "entering-world" );
-			deadline = now + ADMISSION_TIMEOUT_MS;
+			armDeadline( ADMISSION_TIMEOUT_MS );
 		}
 	}
 	return {
@@ -552,7 +582,7 @@ step
 							} else {
 								network.enterWorld( division, character, result.token! );
 							}
-							deadline = now + ADMISSION_TIMEOUT_MS;
+							armDeadline( ADMISSION_TIMEOUT_MS );
 						} catch ( error ) {
 							failure = String( error );
 						}
@@ -568,7 +598,7 @@ step
 					boundThisTransport = true;
 					hasWorld = true;
 					ready = false;
-					deadline = now + ADMISSION_TIMEOUT_MS;
+					armDeadline( ADMISSION_TIMEOUT_MS );
 				} catch ( error ) {
 					onNetworkFailure( String( error ), undefined, {
 						category: "software",

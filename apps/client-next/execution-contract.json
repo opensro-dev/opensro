@@ -551,6 +551,14 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/simulation/worker/session/http/http.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/world.ts",
+			"functions": [
+				"noteProgress"
+			],
+			"reason": "#1010: each reference body chunk reports delivery progress to the world session's stall deadline."
+		},
+		{
 			"consumer": "src/engine/runtime/world/world.ts",
 			"provider": "src/engine/runtime/assets/assets.ts",
 			"functions": [
