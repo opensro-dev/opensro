@@ -13,20 +13,31 @@ publishes a signed account revocation notice.
 package agentapi
 
 import (
+	"bytes"
 	"crypto/sha256"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	log "github.com/sirupsen/logrus"
+	"opensro.online/server/internal/data/store"
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/security/auth"
 )
 
 const (
-	AccountRevokePath = "/internal/control/account-revoke"
-	revokeBodyLimit   = 2048
-	revokeReplayLimit = 1024
+	AccountRevokePath       = "/internal/control/account-revoke"
+	revocationFloorFileName = "account-revocations.json"
+	maxRevocationFloorBytes = 1 << 20
+	revokeBodyLimit         = 2048
+	revokeReplayLimit       = 1024
 )
 
 /*
@@ -36,6 +47,7 @@ accountRevoker
 */
 type accountRevoker struct {
 	mu             sync.RWMutex
+	path           string
 	minEpoch       map[string]uint64
 	revokedGen     map[string]uint64
 	issuedTickets  map[string]map[[sha256.Size]byte]int64
@@ -46,17 +58,108 @@ type accountRevoker struct {
 
 /*
 ================
+persistedRevocationState
+================
+*/
+type persistedRevocationState struct {
+	Version int               `json:"version"`
+	Epochs  map[string]uint64 `json:"epochs"`
+}
+
+/*
+================
 newAccountRevoker
 ================
 */
-func newAccountRevoker() accountRevoker {
-	return accountRevoker{
+func newAccountRevoker(path string) (accountRevoker, error) {
+	revoker := accountRevoker{
+		path:           path,
 		minEpoch:       make(map[string]uint64),
 		revokedGen:     make(map[string]uint64),
 		issuedTickets:  make(map[string]map[[sha256.Size]byte]int64),
 		revokedTickets: make(map[[sha256.Size]byte]int64),
 		seenNotices:    make(map[string]int64),
 	}
+	if path != "" {
+		if matches, err := filepath.Glob(filepath.Join(filepath.Dir(path), filepath.Base(path)+".tmp-*")); err == nil {
+			for _, stray := range matches {
+				_ = os.Remove(stray)
+			}
+		}
+		if err := revoker.load(); err != nil {
+			return accountRevoker{}, err
+		}
+	}
+	return revoker, nil
+}
+
+/*
+================
+load
+================
+*/
+func (revoker *accountRevoker) load() error {
+	info, err := os.Lstat(revoker.path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("inspect account revocation state: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("account revocation state is not a regular file")
+	}
+	if info.Size() > maxRevocationFloorBytes {
+		return fmt.Errorf(
+			"account revocation state is %d bytes, limit is %d",
+			info.Size(),
+			maxRevocationFloorBytes,
+		)
+	}
+	payload, err := os.ReadFile(revoker.path)
+	if err != nil {
+		return fmt.Errorf("read account revocation state: %w", err)
+	}
+	var document persistedRevocationState
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&document); err != nil {
+		return fmt.Errorf("decode account revocation state: %w", err)
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return fmt.Errorf("decode account revocation trailing data")
+	}
+	if document.Version != 1 {
+		return fmt.Errorf("account revocation state version %d, want 1", document.Version)
+	}
+	for accountID, epoch := range document.Epochs {
+		if !domain.AccountIDValid(accountID) || epoch < 2 {
+			return fmt.Errorf("account revocation state has invalid row for %q (epoch %d)", accountID, epoch)
+		}
+		revoker.minEpoch[accountID] = epoch
+		revoker.revokedGen[accountID] = 1
+	}
+	return nil
+}
+
+/*
+================
+persistRevocationState
+================
+*/
+func persistRevocationState(path string, minEpoch map[string]uint64) error {
+	payload, err := json.MarshalIndent(persistedRevocationState{
+		Version: 1,
+		Epochs:  minEpoch,
+	}, "", "  ")
+	if err != nil {
+		return err
+	}
+	if int64(len(payload)) > maxRevocationFloorBytes {
+		return fmt.Errorf("encoded account revocation state exceeds %d bytes", maxRevocationFloorBytes)
+	}
+	return store.WriteFileAtomic(path, payload)
 }
 
 /*
@@ -106,6 +209,11 @@ func (api *API) RevokeAccount(accountID string, epoch uint64) {
 		}
 	}
 	delete(api.revocations.issuedTickets, accountID)
+	if api.revocations.path != "" {
+		if err := persistRevocationState(api.revocations.path, api.revocations.minEpoch); err != nil {
+			log.Warnf("agentapi: persisting account revocation floor: %v", err)
+		}
+	}
 	evict := api.revocations.evictAccount
 	api.revocations.mu.Unlock()
 

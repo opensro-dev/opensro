@@ -22,6 +22,9 @@ import (
 	"testing"
 	"time"
 
+	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/platform/readiness"
 	"opensro.online/server/internal/security/auth"
 )
 
@@ -196,5 +199,123 @@ func TestAccountRevocationInvalidatesSessionTicketsAndEvictsAccount(t *testing.T
 	}
 	if err := seaVerify(newSEA, testDivision, "RevokeHero"); err != nil {
 		t.Fatalf("fresh SEA3 ticket after relogin rejected: %v", err)
+	}
+}
+
+/*
+================
+TestAccountRevocationFloorSurvivesRestart
+================
+*/
+func TestAccountRevocationFloorSurvivesRestart(t *testing.T) {
+	api, authority := newTestAPI(t)
+	private, err := auth.GenerateAgentSessionKeyRing(api.now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	public, err := auth.PublicAgentSessionKeyRing(private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyDir := t.TempDir()
+	privatePath := filepath.Join(keyDir, "private.json")
+	publicPath := filepath.Join(keyDir, "public.json")
+	if err := os.WriteFile(privatePath, private, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(publicPath, public, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	signer, err := auth.NewAgentSessionSigner(privatePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifier, err := auth.NewAgentSessionVerifier(publicPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	api.agentSessionVerifier = verifier
+
+	epoch1Session, err := signer.MintWithEpoch(testAccount, testDivision, api.now().Add(time.Hour), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacySession, err := signer.MintWithEpoch(testAccount, testDivision, api.now().Add(time.Hour), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	epoch2Session, err := signer.MintWithEpoch(testAccount, testDivision, api.now().Add(time.Hour), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	notice, err := signer.MintAccountRevocation(testDivision, testAccount, 2, api.now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, AccountRevokePath, strings.NewReader(notice))
+	rec := httptest.NewRecorder()
+	api.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("revoke status = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Simulate a GameWorld restart by constructing a new API over the same
+	// authority store directory without delivering any new revocation notice.
+	ready := readiness.NewGate()
+	ready.Open()
+	restarted, err := New(Config{
+		Store:                 authority,
+		CharacterPresentation: testCharacterPresentation,
+		CharacterCreationValid: func(character *domain.Character) bool {
+			return enterworld.CharacterCreationValid(character, testCharacterRoster())
+		},
+		ShardID:              testDivision,
+		AgentSessionVerifier: verifier,
+		EnterWorldAuthSecret: []byte(testEnterWorldSecret),
+		Readiness:            ready,
+		Now:                  api.now,
+	})
+	if err != nil {
+		t.Fatalf("restarted New: %v", err)
+	}
+	restartedHandler := restarted.Handler()
+
+	callRestarted := func(sessionToken string) int {
+		r := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8791/character/list", nil)
+		r.Header.Set("Authorization", "Bearer "+sessionToken)
+		declareBrowser(r)
+		w := httptest.NewRecorder()
+		restartedHandler.ServeHTTP(w, r)
+		return w.Code
+	}
+
+	if code := callRestarted(epoch1Session); code != http.StatusUnauthorized {
+		t.Fatalf("epoch-1 session after GameWorld restart = %d, want 401", code)
+	}
+	if code := callRestarted(legacySession); code != http.StatusUnauthorized {
+		t.Fatalf("epoch-0 session after GameWorld restart = %d, want 401", code)
+	}
+	if code := callRestarted(epoch2Session); code != http.StatusOK {
+		t.Fatalf("epoch-2 session after GameWorld restart = %d, want 200", code)
+	}
+
+	// Corrupting the persisted revocation file must fail closed on startup.
+	if err := os.WriteFile(filepath.Join(authority.Dir(), revocationFloorFileName), []byte(`{"version":1,"epochs":{"bad":1}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := New(Config{
+		Store:                 authority,
+		CharacterPresentation: testCharacterPresentation,
+		CharacterCreationValid: func(character *domain.Character) bool {
+			return enterworld.CharacterCreationValid(character, testCharacterRoster())
+		},
+		ShardID:              testDivision,
+		AgentSessionVerifier: verifier,
+		EnterWorldAuthSecret: []byte(testEnterWorldSecret),
+		Readiness:            ready,
+		Now:                  api.now,
+	}); err == nil {
+		t.Fatal("New succeeded over corrupted account-revocations.json")
 	}
 }

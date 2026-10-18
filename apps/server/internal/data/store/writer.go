@@ -79,6 +79,20 @@ func writeFileAtomic(path string, payload []byte) error {
 
 /*
 ==================
+Dir
+
+Returns the authority directory path owned by this store.
+==================
+*/
+func (s *Store) Dir() string {
+	if s == nil {
+		return ""
+	}
+	return s.dir
+}
+
+/*
+==================
 WriteFileAtomic
 
 WriteFileAtomic exposes the durable file writer to sibling maintenance
@@ -142,8 +156,14 @@ func WriteNewFileAtomic(path string, payload []byte) error {
 	return syncDir(dir)
 }
 
-// cleanStrayTemps removes temp files a reaped writer stranded beside the
-// target. Returns what it removed so the caller can log it.
+/*
+==================
+cleanStrayTemps
+
+Removes temp files a reaped writer stranded beside the target. Returns what
+it removed so the caller can log it.
+==================
+*/
 func cleanStrayTemps(path string) []string {
 	matches, err := filepath.Glob(filepath.Join(filepath.Dir(path), tmpPattern(filepath.Base(path))))
 	if err != nil {
@@ -161,8 +181,14 @@ func cleanStrayTemps(path string) []string {
 // corruptSuffix marks quarantined files: <base>.corrupt-<unix ms>.
 const corruptSuffix = ".corrupt-"
 
-// quarantine renames a bad file aside, preserving its bytes for
-// forensics, and prunes old quarantines beyond keepQuarantines.
+/*
+==================
+quarantine
+
+Renames a bad file aside, preserving its bytes for forensics, and prunes
+old quarantines beyond keepQuarantines.
+==================
+*/
 func quarantine(path string, now time.Time) (string, error) {
 	dest := fmt.Sprintf("%s%s%d", path, corruptSuffix, now.UnixMilli())
 	if err := os.Rename(path, dest); err != nil {

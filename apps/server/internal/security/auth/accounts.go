@@ -328,6 +328,34 @@ func (accounts *Accounts) SessionEpoch(accountID string) (uint64, bool) {
 
 /*
 ================
+RevokedEpochs
+
+Returns every account whose session epoch has advanced past the initial
+epoch (1), including disabled accounts whose sessions were revoked when
+they were disabled.
+================
+*/
+func (accounts *Accounts) RevokedEpochs() map[string]uint64 {
+	rows, err := accounts.db.Query(
+		`SELECT id, session_epoch FROM accounts WHERE session_epoch >= 2`,
+	)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	epochs := make(map[string]uint64)
+	for rows.Next() {
+		var id string
+		var epoch int64
+		if err := rows.Scan(&id, &epoch); err == nil && epoch >= 2 {
+			epochs[id] = uint64(epoch)
+		}
+	}
+	return epochs
+}
+
+/*
+================
 readEpoch
 ================
 */

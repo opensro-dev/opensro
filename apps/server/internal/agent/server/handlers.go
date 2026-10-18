@@ -325,6 +325,7 @@ func (server *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	server.syncShardRevocations(heartbeat)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 

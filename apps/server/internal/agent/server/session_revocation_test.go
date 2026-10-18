@@ -357,3 +357,121 @@ func TestPasswordChangeRevokesSessionAndNotifiesShard(t *testing.T) {
 		t.Fatalf("new password token after stale logout = %d, want 200", code)
 	}
 }
+
+/*
+================
+TestHeartbeatRePushesRevocationsOnMissedPushAndShardRestart
+================
+*/
+func TestHeartbeatRePushesRevocationsOnMissedPushAndShardRestart(t *testing.T) {
+	var (
+		failRevoke  = true
+		revocations []string
+	)
+	shardWorker := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == agentapi.AccountRevokePath {
+			if failRevoke {
+				http.Error(w, "temporarily unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			body, _ := io.ReadAll(r.Body)
+			revocations = append(revocations, strings.TrimSpace(string(body)))
+			_, _ = w.Write([]byte(`{"ok":true}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{}`))
+	})
+	fixture := newAgentFixture(t, shardWorker, http.NotFoundHandler())
+	publishFixtureLease(t, fixture, "alpha", "worker-a", 1, 0)
+
+	loginRec := performBrowserJSON(t, fixture.handler, "/title/login", `{"id":"tester","password":"123123","serverId":"alpha"}`, nil)
+	cookies := loginRec.Result().Cookies()
+
+	// Logout while the shard's revocation endpoint is returning 503.
+	logoutRec := performBrowserJSON(t, fixture.handler, "/title/logout", `{}`, cookies)
+	if logoutRec.Code != http.StatusOK {
+		t.Fatalf("logout = %d: %s", logoutRec.Code, logoutRec.Body.String())
+	}
+	if len(revocations) != 0 {
+		t.Fatalf("revocations while shard unavailable = %d, want 0", len(revocations))
+	}
+
+	// Shard recovers and sends its next admitting heartbeat: Agent must re-push
+	// the missed revocation notice.
+	failRevoke = false
+	hb := performControlJSON(
+		t,
+		fixture.handler,
+		http.MethodPost,
+		"/internal/cluster/shards/heartbeat",
+		`{"shardId":"alpha","instanceId":"worker-a","sequence":2,"onlinePlayers":0,"phase":"admitting"}`,
+		"alpha",
+	)
+	if hb.Code != http.StatusOK {
+		t.Fatalf("heartbeat 2 = %d: %s", hb.Code, hb.Body.String())
+	}
+	if len(revocations) != 1 {
+		t.Fatalf("revocations after recovery heartbeat = %d, want 1", len(revocations))
+	}
+
+	// Subsequent heartbeat from the same instance must not re-push an already
+	// acknowledged revocation epoch.
+	hb = performControlJSON(
+		t,
+		fixture.handler,
+		http.MethodPost,
+		"/internal/cluster/shards/heartbeat",
+		`{"shardId":"alpha","instanceId":"worker-a","sequence":3,"onlinePlayers":0,"phase":"admitting"}`,
+		"alpha",
+	)
+	if hb.Code != http.StatusOK {
+		t.Fatalf("heartbeat 3 = %d: %s", hb.Code, hb.Body.String())
+	}
+	if len(revocations) != 1 {
+		t.Fatalf("duplicate heartbeat re-pushed revocation: got %d, want 1", len(revocations))
+	}
+
+	// Simulate a shard restart (new InstanceID after lease release): a
+	// "starting" heartbeat does not push while the control listener is not yet
+	// ready, and the first "admitting" heartbeat re-pushes the revocation floor
+	// to the new instance.
+	rel := performControlJSON(
+		t,
+		fixture.handler,
+		http.MethodPost,
+		"/internal/cluster/shards/release",
+		`{"shardId":"alpha","instanceId":"worker-a"}`,
+		"alpha",
+	)
+	if rel.Code != http.StatusOK {
+		t.Fatalf("release = %d: %s", rel.Code, rel.Body.String())
+	}
+	hb = performControlJSON(
+		t,
+		fixture.handler,
+		http.MethodPost,
+		"/internal/cluster/shards/heartbeat",
+		`{"shardId":"alpha","instanceId":"worker-b","sequence":1,"onlinePlayers":0,"phase":"starting"}`,
+		"alpha",
+	)
+	if hb.Code != http.StatusOK {
+		t.Fatalf("worker-b starting heartbeat = %d: %s", hb.Code, hb.Body.String())
+	}
+	if len(revocations) != 1 {
+		t.Fatalf("starting heartbeat pushed revocation prematurely: got %d, want 1", len(revocations))
+	}
+	hb = performControlJSON(
+		t,
+		fixture.handler,
+		http.MethodPost,
+		"/internal/cluster/shards/heartbeat",
+		`{"shardId":"alpha","instanceId":"worker-b","sequence":2,"onlinePlayers":0,"phase":"admitting"}`,
+		"alpha",
+	)
+	if hb.Code != http.StatusOK {
+		t.Fatalf("worker-b admitting heartbeat = %d: %s", hb.Code, hb.Body.String())
+	}
+	if len(revocations) != 2 {
+		t.Fatalf("worker-b admitting heartbeat did not re-push revocation: got %d, want 2", len(revocations))
+	}
+}
