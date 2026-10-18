@@ -367,7 +367,15 @@ import {
 import { isSkinChangeScroll, skinDraftRange, type SkinDraftKey } from "@/engine/foundation/gameplay/skin-change";
 import { repairAllCost } from "@/engine/foundation/gameplay/repair";
 import { createSlotEffectClock } from "./hud/slot-effects";
-import { itemIsRare, itemSlotOverlays, itemSlotWash, slotSeed } from "@/engine/foundation/ui/item-slot-effects";
+import {
+	avatarAttachmentBlocked,
+	equipmentSlotMirror,
+	itemIsRare,
+	itemSlotBlockedOverlay,
+	itemSlotOverlays,
+	itemSlotWash,
+	slotSeed
+} from "@/engine/foundation/ui/item-slot-effects";
 import {
 	COS_CLASS_ATTACK,
 	COS_CLASS_GUILD,
@@ -13260,12 +13268,24 @@ export function createUi(
 					================
 					*/
 					function itemSlot( slot: number, r: UiRect, enabled: boolean, empty?: string ) {
-						const item = game?.inventory.find( i => i.slot === slot ),
-							path = enabled ? (item ? iconPath( item.icon ) : empty) : hudData!.popupArt.blocked;
+						const item = game?.inventory.find( i => i.slot === slot );
+						// 596190: while slot 6's weapon grips two-handed and slot 7 is
+						// empty, slot 7 mirrors the weapon's icon under int_effect and
+						// takes no input. No item binds to it, so no effects or count.
+						const mirrored = slot === 7 ?
+							equipmentSlotMirror( game?.inventory.find( i => i.slot === 6 ), item ) :
+							undefined;
+						const path = enabled ?
+							(item ? iconPath( item.icon ) : mirrored ? iconPath( mirrored.icon ) : empty) :
+							hudData!.popupArt.blocked;
 						if ( path ) {
 							image( r, path );
 							equipmentOverlay( item, r );
 							if ( enabled && item ) itemEffects( "slot:" + slot, item, r );
+							if ( mirrored ) {
+								const overlay = itemSlotBlockedOverlay( r );
+								image( overlay.rect, overlay.path, white, overlay.uv );
+							}
 						}
 						controls.push( {
 							id: "slot:" + slot,
@@ -13275,7 +13295,8 @@ export function createUi(
 							kind: "button",
 							// 699359: a move while one is pending is dropped (highlights reset);
 							// native slots stay enabled, so hover and tooltips keep working.
-							disabled: !enabled,
+							// The 596190 mirror is the exception: its control is disabled.
+							disabled: !enabled || !!mirrored,
 							selected: inventorySlot === slot,
 							rightActivate: !!item || repairHud.armed(),
 							draggable: !!item && !repairHud.armed() && cosHud.itemTargetCursor() === null,
@@ -13370,13 +13391,23 @@ export function createUi(
 								equipmentOverlay( item, r );
 								if ( item ) itemEffects( "avatar:" + type, item, r );
 							}
+							// 5965E0: a one-piece dress (data byte +0x51d == 0) disables
+							// the empty attachment slot under the int_effect overlay.
+							const attachmentBlocked = type === 3 && avatarAttachmentBlocked(
+								game?.avatarInventory?.find( i => i.typeFlags >>> 11 === 2 ),
+								item
+							);
+							if ( attachmentBlocked ) {
+								const overlay = itemSlotBlockedOverlay( r );
+								image( overlay.rect, overlay.path, white, overlay.uv );
+							}
 							controls.push( {
 								id: "avatar:" + type,
 								label: item?.name ?? "Avatar slot " + type,
 								rect: r,
 								kind: "button",
 								// 699359 drops moves while one is pending; avatar slots stay enabled.
-								disabled: false,
+								disabled: attachmentBlocked,
 								rightActivate: !!item || repairHud.armed(),
 								draggable: !!item && !repairHud.armed() && cosHud.itemTargetCursor() === null,
 								carry: !repairHud.armed() && cosHud.itemTargetCursor() === null && !!item

@@ -16,6 +16,9 @@ four sprite-sheet animations over an item icon:
 and a dead companion's summoner item is washed with 0x80004B7E
 (CIFWnd_DrawColorOverlay 53F590). The looping counters start at a random
 phase when an item is bound; a stable per-slot seed stands in for rand().
+A slot can also be blocked (+0x614): 565850 then lays the grey
+int_effect.ddj over it - slot 7 under a two-hand-grip weapon (596190),
+the avatar attachment slot under a one-piece dress (5965E0).
 
 ===========================================================================
 */
@@ -56,6 +59,15 @@ function summonerSlotState( item: SummonerSlotItem | undefined ): number | undef
 	}
 	return summon?.state;
 }
+
+// CIFSlotWithHelp's blocked flag (+0x614, written by 54FDB0): while it
+// stands, 565850 lays int_effect.ddj over the slot and the control takes
+// no input. CIFEquipment_SetEquipSlotItem (596190) raises it on slot 7
+// under a two-hand-grip weapon; CIFEquipment_SetAvatarSlotItem (5965E0)
+// raises it on the avatar attachment slot under a one-piece dress.
+const BLOCKED_SHEET = "/assets/images/Media_extracted/effect/icon/int_effect.png";
+// The avatar dress TypeID4 (5965E0/56A1E0 test (word & 0xf800) == 0x1000).
+const AVATAR_DRESS_TID4 = 2;
 
 const RARE_FRAMES = 32, RARE_COLUMNS = 8, RARE_ROWS = 4, RARE_STEP_MS = 40;
 const GLOW_FRAMES = 9, GLOW_STEP_MS = 50;
@@ -216,6 +228,84 @@ export function itemSlotOverlays(
 		}
 	}
 	return out;
+}
+
+/*
+================
+itemSlotBlockedOverlay
+
+The grey int_effect quad 565850 draws over a blocked slot (+0x614).
+================
+*/
+export function itemSlotBlockedOverlay( rect: UiRect ): ItemSlotOverlay {
+	return { path: BLOCKED_SHEET, uv: [ 0, 0, 1, 1 ], rect };
+}
+
+/*
+================
+equipmentSlotMirror
+
+596190's tail: while slot 6 holds a two-hand-grip weapon and slot 7 is
+empty, slot 7's control mirrors the weapon's icon under the blocked
+overlay and takes no input. The mirror clears when the weapon leaves,
+turns one-handed (the cleanup branch tests the incoming weapon's
+TypeID4 too), or slot 7 takes a real item. Returns the weapon whose
+icon slot 7 shows, or undefined when slot 7 renders normally.
+================
+*/
+export function equipmentSlotMirror<T extends { readonly typeFlags: number; }>(
+	weapon: T | undefined,
+	offhand: unknown
+): T | undefined {
+	if ( !weapon || offhand ) return undefined;
+	return offhandBlockingGrip( weapon.typeFlags >>> 11 & 31 ) ? weapon : undefined;
+}
+
+/*
+================
+offhandBlockingGrip
+
+596190 tests the slot-6 weapon's TypeID4 ((word >> 0xb) - 4 in
+{0, 1, 4, 5, 7, 9, 0xa, 0xc}): the grips that cover slot 7.
+================
+*/
+function offhandBlockingGrip( tid4: number ): boolean {
+	switch ( tid4 ) {
+		case 4:
+		case 5:
+		case 8:
+		case 9:
+		case 11:
+		case 13:
+		case 14:
+		case 16:
+			return true;
+		default:
+			return false;
+	}
+}
+
+/*
+================
+avatarAttachmentBlocked
+
+5965E0: an avatar dress whose data byte +0x51d is 0 is a one-piece suit
+(its tooltip reads UIIT_STT_AVATAR_NOT_WEAR, 56A1E0), and the empty
+attachment slot is disabled under the same blocked overlay, with no
+icon of its own. The byte ships as the avatarAttachment51d tooltip
+field (itemdata column 159, enterworld itemrefs); a dress without the
+field never blocks.
+================
+*/
+export function avatarAttachmentBlocked(
+	dress: {
+		readonly typeFlags: number;
+		readonly tooltip?: { readonly fields: Readonly<Record<string, number>>; };
+	} | undefined,
+	attachment: unknown
+): boolean {
+	return !attachment && !!dress && (dress.typeFlags >>> 11 & 31) === AVATAR_DRESS_TID4 &&
+		dress.tooltip?.fields.avatarAttachment51d === 0;
 }
 
 /*

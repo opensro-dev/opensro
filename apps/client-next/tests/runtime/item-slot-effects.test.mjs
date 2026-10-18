@@ -6,7 +6,9 @@ item-slot-effects.test.mjs - native item-slot overlays and their timing
 Pins the CIFSlotWithHelp sheets: the rare shine's 8x4 frames at 40 ms
 (54FA60/555110/565850), the summoned glow's 9 frames at 50 ms, the one-shot
 revival (8 x 80 ms) and item-changed (4x4 x 50 ms, 48 px) flashes, the dead
-companion wash, and which 0x3645 updates raise a flash.
+companion wash, and which 0x3645 updates raise a flash. Also the blocked
+slot (+0x614): slot 7's mirror under a two-hand-grip weapon (596190) and
+the avatar attachment block under a one-piece dress (5965E0).
 
 ===========================================================================
 */
@@ -58,6 +60,62 @@ test("0x3645 raises the changed flash for a new type and the revival flash for 4
 	assert.deepEqual( fx.itemSlotFlashKinds( 0x40, 2, 3 ), [] );
 	assert.deepEqual( fx.itemSlotFlashKinds( 0x41, 4, 3 ), [ "changed", "life" ] );
 	assert.deepEqual( fx.itemSlotFlashKinds( 0x08, 4, 3 ), [] );
+});
+
+const typeFlags = ( tid4, tid3 = 6 ) => (3 << 2) | (1 << 5) | (tid3 << 7) | (tid4 << 11);
+
+test("the blocked overlay is the int_effect sheet over the slot", () => {
+	const overlay = fx.itemSlotBlockedOverlay( RECT );
+	assert.ok( overlay.path.endsWith( "effect/icon/int_effect.png" ) );
+	assert.deepEqual( overlay.uv, [ 0, 0, 1, 1 ] );
+	assert.deepEqual( overlay.rect, RECT );
+});
+
+test("slot 7 mirrors exactly the two-hand-grip TypeID4 grips, and only while empty", () => {
+	for ( const tid4 of [ 4, 5, 8, 9, 11, 13, 14, 16 ] ) {
+		const weapon = { typeFlags: typeFlags( tid4 ) };
+		assert.equal( fx.equipmentSlotMirror( weapon, undefined ), weapon, "TypeID4 " + tid4 + " mirrors" );
+	}
+	for ( const tid4 of [ 0, 1, 2, 3, 6, 7, 10, 12, 15, 17, 31 ] ) {
+		assert.equal(
+			fx.equipmentSlotMirror( { typeFlags: typeFlags( tid4 ) }, undefined ),
+			undefined,
+			"TypeID4 " + tid4 + " does not mirror"
+		);
+	}
+	assert.equal( fx.equipmentSlotMirror( undefined, undefined ), undefined );
+});
+
+test("the slot-7 mirror follows equip, swap and unequip transitions", () => {
+	const twoHand = { typeFlags: typeFlags( 4 ) },
+		oneHand = { typeFlags: typeFlags( 2 ) },
+		shield = { typeFlags: typeFlags( 1, 8 ) },
+		mirror = ( weapon, offhand ) => fx.equipmentSlotMirror( weapon, offhand );
+	assert.equal( mirror( undefined, undefined ), undefined );
+	assert.equal( mirror( twoHand, undefined ), twoHand, "equipping a two-hand grip raises the mirror" );
+	assert.equal( mirror( oneHand, undefined ), undefined, "swapping to a one-hand weapon clears it" );
+	assert.equal( mirror( twoHand, undefined ), twoHand, "swapping back raises it again" );
+	assert.equal( mirror( twoHand, shield ), undefined, "a real slot-7 item replaces the mirror" );
+	assert.equal( mirror( twoHand, undefined ), twoHand, "removing it restores the mirror" );
+	assert.equal( mirror( undefined, undefined ), undefined, "unequipping the weapon clears it" );
+});
+
+test("a one-piece avatar dress blocks the empty attachment slot", () => {
+	const dress = child => {
+		/** @type {Record<string, number>} */
+		const fields = {};
+		if ( child !== undefined ) fields.avatarAttachment51d = child;
+		return { typeFlags: typeFlags( 2, 13 ), tooltip: { fields } };
+	};
+	assert.equal( fx.avatarAttachmentBlocked( dress( 0 ), undefined ), true, "ChildItemCount 0 is one-piece" );
+	assert.equal( fx.avatarAttachmentBlocked( dress( 1 ), undefined ), false, "separates leave the slot free" );
+	assert.equal( fx.avatarAttachmentBlocked( dress( undefined ), undefined ), false, "no field, no block" );
+	assert.equal(
+		fx.avatarAttachmentBlocked( dress( 0 ), { typeFlags: typeFlags( 3, 13 ) } ),
+		false,
+		"a worn attachment renders normally"
+	);
+	assert.equal( fx.avatarAttachmentBlocked( undefined, undefined ), false, "no dress, no block" );
 });
 
 test("a repair flash runs 20 frames of the 8x4 sheet over 72 px, before the changed flash", () => {

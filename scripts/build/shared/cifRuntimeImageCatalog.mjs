@@ -255,7 +255,9 @@ slotEffectRuntimeImageReferences
 CIFSlotWithHelp item-slot effect sheets (CIFSlotWithHelp_LoadOverlayTextures
 5548C0, drawn by CIFControl_RenderIconOverlays 565850): the rare (SOX)
 shine, the summoned-companion glow, the revival flash, the item-changed
-flash and the repair flash. Code-selected; no resinfo file names them.
+flash and the repair flash, plus the blocked-slot grey (54FDB0's +0x614
+flag: slot 7 under a two-hand grip, 596190; the avatar attachment slot
+under a one-piece dress, 5965E0). Code-selected; no resinfo names them.
 ================
 */
 export const slotEffectRuntimeImageReferences = [
@@ -263,7 +265,8 @@ export const slotEffectRuntimeImageReferences = [
 	"interface/pet/pt_edge_effect.ddj",
 	"interface/pet/pt_life_effect.ddj",
 	"icon/icon_mall_transgender.ddj",
-	"icon/icon_mall_repair.ddj"
+	"icon/icon_mall_repair.ddj",
+	"effect/icon/int_effect.ddj"
 ];
 
 /*
