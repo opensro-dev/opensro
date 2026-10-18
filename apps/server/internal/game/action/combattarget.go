@@ -89,9 +89,11 @@ func (rt *Runtime) resolveCombatTarget(division string, attacker *enterworld.Cha
 resolveCOSTarget
 
 A living, summoned COS of another character in the attacker's world
-instance, with its owner. 5291D0 refuses a dead COS and a pickup pet
-(+0x43C) whoever attacks it; a ridden COS stays a target (the mounted
-trader's transport). The owner need not be alive: 5293A0 judges the owner's
+instance, with its owner. 5291D0 refuses a dead COS, a hidden COS (body
+modes 6..7) and a pickup pet (+0x43C) whoever attacks it; a protected COS
+(body modes 2..4) still resolves here so cosTargetRefusal can answer
+5291D0's 0x3020, and a ridden COS stays a target (the mounted trader's
+transport). The owner need not be alive: 5293A0 judges the owner's
 relations, not its life.
 ================
 */
@@ -103,7 +105,8 @@ func (rt *Runtime) resolveCOSTarget(division string, attacker *enterworld.Charac
 		return combatTarget{}, false
 	}
 	pet := snapshot.CompanionByGID(gid)
-	if pet == nil || !pet.Summoned || pet.CurrentHP == 0 || !mercenaryBodyVisible(pet.NativeBodyStatus) {
+	if pet == nil || !pet.Summoned || pet.CurrentHP == 0 ||
+		pet.NativeBodyStatus >= mercenaryBodyHiddenFirst && pet.NativeBodyStatus <= mercenaryBodyHiddenLast {
 		return combatTarget{}, false
 	}
 	ref, found := rt.cosReference(pet)

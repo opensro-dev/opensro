@@ -8,6 +8,8 @@ playerstrike_cos_test.go - a player's hits on a COS, judged through its owner
 package action
 
 import (
+	"bytes"
+	"fmt"
 	"testing"
 
 	"opensro.online/server/internal/domain"
@@ -15,6 +17,22 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 )
+
+/*
+================
+assertRefusalCode
+================
+*/
+func assertRefusalCode(t *testing.T, frames []wire.Frame, code uint16) {
+	t.Helper()
+	want := offensiveRefusal(code).Frames[0]
+	for _, frame := range frames {
+		if frame.Opcode == want.Opcode && bytes.Equal(frame.Payload, want.Payload) {
+			return
+		}
+	}
+	t.Fatalf("frames %v did not include refusal %#x", frames, code)
+}
 
 /*
 ================
@@ -65,27 +83,96 @@ func TestPlayerBasicAttackStrikesAnotherPlayersCOS(t *testing.T) {
 ================
 TestCOSTargetIsJudgedThroughItsOwner
 
-5291D0 then 5293A0 on the owner: a protected owner refuses (0x3020) and the
-COS keeps its HP; a player's own COS is never a target.
+5291D0 then 5293A0 on the owner: an attacker in body mode 2, a target COS in
+body mode 2..4, or an owner in body mode 2..4 refuses with 0x3020 and the
+COS keeps its HP; hidden modes 6..7 do not resolve as a target; a player's
+own COS is never a target.
 ================
 */
 func TestCOSTargetIsJudgedThroughItsOwner(t *testing.T) {
-	t.Run("protected owner", func(t *testing.T) {
-		rt, _, attacker, owner := newPvpPair(t)
-		ref := equipStrikeTestCOS(t, rt, owner)
-		owner.NativeBodyStatus = untouchableBodyStatus
-		rt.HandleTargetInteract(testDivision, attacker, wire.BasicAttackEngage{TargetGid: owner.ActiveCOS.GID}.Encode())
-		if owner.ActiveCOS.CurrentHP != ref.MaxHP {
-			t.Fatalf("protected owner's COS HP %d, want untouched %d", owner.ActiveCOS.CurrentHP, ref.MaxHP)
-		}
-		target, ok := rt.resolveCombatTarget(testDivision, attacker, owner.ActiveCOS.GID, 0)
-		if !ok || target.cos == nil {
-			t.Fatal("the COS must resolve as a COS target")
-		}
-		if code := rt.cosTargetRefusal(testDivision, attacker, target, 0); code != 0x3020 {
-			t.Fatalf("protected owner = %#x, want 0x3020", code)
-		}
-	})
+	for _, body := range []uint8{0, 1, 2, 3, 4, 5, 6, 7} {
+		t.Run(fmt.Sprintf("cos body=%d", body), func(t *testing.T) {
+			rt, _, attacker, owner := newPvpPair(t)
+			ref := equipStrikeTestCOS(t, rt, owner)
+			owner.ActiveCOS.NativeBodyStatus = body
+			target, ok := rt.resolveCombatTarget(testDivision, attacker, owner.ActiveCOS.GID, 0)
+			if body >= mercenaryBodyHiddenFirst && body <= mercenaryBodyHiddenLast {
+				if ok {
+					t.Fatalf("hidden COS body=%d resolved as a target", body)
+				}
+				return
+			}
+			if !ok || target.cos == nil {
+				t.Fatalf("COS body=%d must resolve as a COS target", body)
+			}
+			wantCode := uint16(0)
+			if body >= mercenaryBodyProtectedFirst && body <= mercenaryBodyProtectedLast {
+				wantCode = 0x3020
+			}
+			if code := rt.cosTargetRefusal(testDivision, attacker, target, 0); code != wantCode {
+				t.Fatalf("cosTargetRefusal(cos body=%d) = %#x, want %#x", body, code, wantCode)
+			}
+			out := rt.HandleTargetInteract(testDivision, attacker, wire.BasicAttackEngage{TargetGid: owner.ActiveCOS.GID}.Encode())
+			if wantCode != 0 {
+				if owner.ActiveCOS.CurrentHP != ref.MaxHP {
+					t.Fatalf("protected COS body=%d HP %d, want untouched %d", body, owner.ActiveCOS.CurrentHP, ref.MaxHP)
+				}
+				assertRefusalCode(t, out.Frames, wantCode)
+			} else if owner.ActiveCOS.CurrentHP >= ref.MaxHP {
+				t.Fatalf("unprotected COS body=%d HP %d, want below %d", body, owner.ActiveCOS.CurrentHP, ref.MaxHP)
+			}
+		})
+	}
+	for _, body := range []uint8{0, 1, 2, 3, 4, 5} {
+		t.Run(fmt.Sprintf("owner body=%d", body), func(t *testing.T) {
+			rt, _, attacker, owner := newPvpPair(t)
+			ref := equipStrikeTestCOS(t, rt, owner)
+			owner.NativeBodyStatus = body
+			target, ok := rt.resolveCombatTarget(testDivision, attacker, owner.ActiveCOS.GID, 0)
+			if !ok || target.cos == nil {
+				t.Fatalf("owner body=%d: the COS must resolve as a COS target", body)
+			}
+			wantCode := uint16(0)
+			if body >= mercenaryBodyProtectedFirst && body <= mercenaryBodyProtectedLast {
+				wantCode = 0x3020
+			}
+			if code := rt.cosTargetRefusal(testDivision, attacker, target, 0); code != wantCode {
+				t.Fatalf("cosTargetRefusal(owner body=%d) = %#x, want %#x", body, code, wantCode)
+			}
+			out := rt.HandleTargetInteract(testDivision, attacker, wire.BasicAttackEngage{TargetGid: owner.ActiveCOS.GID}.Encode())
+			if wantCode != 0 {
+				if owner.ActiveCOS.CurrentHP != ref.MaxHP {
+					t.Fatalf("protected owner body=%d COS HP %d, want untouched %d", body, owner.ActiveCOS.CurrentHP, ref.MaxHP)
+				}
+				assertRefusalCode(t, out.Frames, wantCode)
+			}
+		})
+	}
+	for _, body := range []uint8{0, 1, 2, 3, 4, 5} {
+		t.Run(fmt.Sprintf("attacker body=%d", body), func(t *testing.T) {
+			rt, _, attacker, owner := newPvpPair(t)
+			ref := equipStrikeTestCOS(t, rt, owner)
+			attacker.NativeBodyStatus = body
+			target, ok := rt.resolveCombatTarget(testDivision, attacker, owner.ActiveCOS.GID, 0)
+			if !ok || target.cos == nil {
+				t.Fatalf("attacker body=%d: the COS must resolve as a COS target", body)
+			}
+			wantCode := uint16(0)
+			if body == untouchableBodyStatus {
+				wantCode = 0x3020
+			}
+			if code := rt.cosTargetRefusal(testDivision, attacker, target, 0); code != wantCode {
+				t.Fatalf("cosTargetRefusal(attacker body=%d) = %#x, want %#x", body, code, wantCode)
+			}
+			out := rt.HandleTargetInteract(testDivision, attacker, wire.BasicAttackEngage{TargetGid: owner.ActiveCOS.GID}.Encode())
+			if wantCode != 0 {
+				if owner.ActiveCOS.CurrentHP != ref.MaxHP {
+					t.Fatalf("untouchable attacker COS HP %d, want untouched %d", owner.ActiveCOS.CurrentHP, ref.MaxHP)
+				}
+				assertRefusalCode(t, out.Frames, wantCode)
+			}
+		})
+	}
 	t.Run("own COS", func(t *testing.T) {
 		rt, _, attacker, _ := newPvpPair(t)
 		equipStrikeTestCOS(t, rt, attacker)

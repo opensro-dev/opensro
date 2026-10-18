@@ -43,18 +43,27 @@ import (
 ================
 cosTargetRefusal
 
-5293A0 for a COS target. 5291D0 on the COS: a dead or untouchable COS and a
-pickup pet refuse (0x3006); an owner whose body is protected (status 2..4)
-refuses with 0x3020, as does the free-battle team through the owner. Then
-the target becomes the owner and the whole PvP chain runs on it: self,
-party, aggression weight, capes, the 1-star caravan protection, guild war,
-jobs, the PK levels. Zero admits.
+5293A0 for a COS target, in 5291D0's order:
+ 1. a dead, hidden (modes 6..7) or pickup-pet (+0x43C) COS refuses with 0x3006;
+ 2. an attacker in body mode 2 (529234..529242) refuses with 0x3020;
+ 3. a target COS in body mode 2..4 (529248..52927E) refuses with 0x3020;
+ 4. an owner in body mode 2..4 (52930E..529324) or on the caster's
+    free-battle team refuses with 0x3020, then the target becomes the owner
+    and the whole PvP chain runs on it (playerAttackRefusal). Zero admits.
+
 ================
 */
 func (rt *Runtime) cosTargetRefusal(division string, caster *enterworld.Character, target combatTarget, now int64) uint16 {
-	if target.cos == nil || target.cosRef == nil || target.snapshot == nil || target.cos.CurrentHP == 0 ||
-		target.cos.NativeBodyStatus == untouchableBodyStatus || target.cosRef.TidWord>>11 == domain.PickupPetBand {
+	if caster == nil || target.cos == nil || target.cosRef == nil || target.snapshot == nil || target.cos.CurrentHP == 0 ||
+		target.cos.NativeBodyStatus >= mercenaryBodyHiddenFirst && target.cos.NativeBodyStatus <= mercenaryBodyHiddenLast ||
+		target.cosRef.TidWord>>11 == domain.PickupPetBand {
 		return 0x3006
+	}
+	if caster.NativeBodyStatus == untouchableBodyStatus {
+		return 0x3020
+	}
+	if target.cos.NativeBodyStatus >= mercenaryBodyProtectedFirst && target.cos.NativeBodyStatus <= mercenaryBodyProtectedLast {
+		return 0x3020
 	}
 	owner := target.snapshot
 	if owner.NativeBodyStatus >= mercenaryBodyProtectedFirst && owner.NativeBodyStatus <= mercenaryBodyProtectedLast {

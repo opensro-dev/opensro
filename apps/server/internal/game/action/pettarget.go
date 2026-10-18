@@ -30,13 +30,19 @@ type petCombatTarget struct {
 ================
 petAttackBodyAllowed
 
-528F5D..528FA5 rejects a companion in body mode 2 and player victims in
-modes 2 through 4 before consulting the owner's attack permission. Read
-the companion's own mode: owner transitions do not always propagate to it.
+528F5D..528FA5 rejects a companion in body mode 2 and player or companion
+victims in modes 2 through 4 before consulting the owner's attack
+permission, and 529304..529324 also rejects a companion victim whose owner
+is in modes 2 through 4. Read the companion's own mode: owner transitions
+do not always propagate to it.
 ================
 */
 func petAttackBodyAllowed(pet *enterworld.CharacterCOS, target combatTarget) bool {
 	if pet.NativeBodyStatus == untouchableBodyStatus {
+		return false
+	}
+	if target.cos != nil && target.cos.NativeBodyStatus >= mercenaryBodyProtectedFirst &&
+		target.cos.NativeBodyStatus <= mercenaryBodyProtectedLast {
 		return false
 	}
 	return target.snapshot == nil || target.snapshot.NativeBodyStatus < mercenaryBodyProtectedFirst ||
@@ -56,21 +62,16 @@ func (rt *Runtime) resolvePetCombatTarget(step petCombatStep, gid uint32) (petCo
 	if !found {
 		return petCombatTarget{}, false
 	}
+	if !petAttackBodyAllowed(step.pet, target) {
+		return petCombatTarget{}, false
+	}
 	if target.cos != nil {
-		// 529304..529324 checks the COS owner's body as well as the victim's.
-		// Recheck here so protection acquired during preparation cancels the cast.
-		if !petAttackBodyAllowed(step.pet, combatTarget{snapshot: target.snapshot}) {
-			return petCombatTarget{}, false
-		}
 		if step.ref.TidWord>>11 == domain.MercenaryBand && !rt.worldPlayerEnemy(step.key.division, step.snapshot, target.snapshot) {
 			return petCombatTarget{}, false
 		}
 		cos, ref := target.cos, target.cosRef
 		target.cos, target.cosRef = nil, nil
 		return petCombatTarget{combatTarget: target, cos: cos, cosRef: ref}, true
-	}
-	if !petAttackBodyAllowed(step.pet, target) {
-		return petCombatTarget{}, false
 	}
 	if target.snapshot != nil {
 		if step.ref.TidWord>>11 == domain.MercenaryBand &&
@@ -80,7 +81,7 @@ func (rt *Runtime) resolvePetCombatTarget(step petCombatStep, gid uint32) (petCo
 		if ride := ridingCOS(target.snapshot); ride != 0 {
 			pet := target.snapshot.CompanionByGID(ride)
 			ref, valid := rt.cosReference(pet)
-			if !valid {
+			if !valid || !mercenaryBodyVisible(pet.NativeBodyStatus) {
 				return petCombatTarget{}, false
 			}
 			target.gid = ride
