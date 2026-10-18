@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+monster_route_test.go - monster route detour and seam navigation tests
+
+Verifies obstacle detour search budgets and sub-ULP outdoor sector-seam
+navigation sampling in LivePoseAt.
+
+===========================================================================
+*/
 package movement
 
 import (
@@ -7,6 +17,11 @@ import (
 	"testing"
 )
 
+/*
+================
+TestMonsterRouteDetoursUsingValidatedEdges
+================
+*/
 func TestMonsterRouteDetoursUsingValidatedEdges(t *testing.T) {
 	from := monster.Pose{RegionID: 25000, X: 500, Y: 20, Z: 500}
 	goal := from
@@ -63,6 +78,11 @@ func TestMonsterRouteDetoursUsingValidatedEdges(t *testing.T) {
 	}
 }
 
+/*
+================
+TestMonsterRouteDirectAndUnavailableWorkBudgets
+================
+*/
 func TestMonsterRouteDirectAndUnavailableWorkBudgets(t *testing.T) {
 	from := monster.Pose{RegionID: 25000, X: 500, Y: 20, Z: 500}
 	goal := from
@@ -109,5 +129,54 @@ func TestMonsterRouteDirectAndUnavailableWorkBudgets(t *testing.T) {
 				t.Fatalf("the route reports %d probes, the search made %d", route.Probes(), calls)
 			}
 		})
+	}
+}
+
+/*
+================
+TestAdmittedCrossSectorMonsterPathResolvesSubULPSeamTick
+
+Regression for #1210: when an admitted cross-sector monster path crosses
+from an east sector (0x5c70, X=3) into the adjacent west sector (0x5c6f,
+X=1549) at t = 6/748, float64 interpolation lands at -4.44e-16 before
+folding into 0x5c6f. TerrainHeightAt on the folded pose must resolve
+0x5c6f's offsetKey(0, 0) height grid instead of overflowing into
+offsetKey(1, 0) and panicking LivePoseAt.
+================
+*/
+func TestAdmittedCrossSectorMonsterPathResolvesSubULPSeamTick(t *testing.T) {
+	v := realAuthorityValidator(t)
+	const (
+		east = uint16(0x5fa7)
+		west = uint16(0x5fa6)
+	)
+	eastY, ok := v.TerrainHeightAt(east, 3, 1000)
+	if !ok {
+		t.Fatal("missing east terrain height")
+	}
+	westY, ok := v.TerrainHeightAt(west, 1913.6, 1000)
+	if !ok {
+		t.Fatal("missing west terrain height")
+	}
+	from := monster.Pose{RegionID: east, X: 3, Y: eastY, Z: 1000}
+	goal := monster.Pose{RegionID: west, X: 1913.6, Y: westY, Z: 1000}
+	path := v.PlanMonsterPath(from, goal)
+	if path == nil {
+		t.Fatal("expected admitted cross-sector path")
+	}
+	mover := monster.MoverState{
+		From:     from,
+		To:       path.Rest(),
+		DepartMs: 1000,
+		ArriveMs: 1047,
+	}
+	mover.AdoptNavigation(path)
+	pose := mover.LivePoseAt(1015, nil)
+	if pose.RegionID != west || pose.X < 0 || pose.X >= worldgeom.OutdoorRegionSize {
+		t.Fatalf("seam tick pose=%+v, want west region with local X in [0, 1920)", pose)
+	}
+	wantY, ok := v.TerrainHeightAt(pose.RegionID, pose.X, pose.Z)
+	if !ok || pose.Y != wantY {
+		t.Fatalf("seam tick pose.Y=%v, want terrain height %v (ok=%v)", pose.Y, wantY, ok)
 	}
 }

@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+mover_test.go - MoverState.LivePoseAt interpolation and surface fallback tests
+
+Verifies mid-flight terrain height resolution, chord fallback on missing
+ground or mid-chord navigation gaps, and adjacent outdoor sector seams.
+
+===========================================================================
+*/
 package monster
 
 import (
@@ -5,12 +15,18 @@ import (
 	"testing"
 )
 
-// The BUG-8 second-injection-path contract (board seq735/seq779): a straight
-// Y-lerp between terrain-resolved endpoints describes a CHORD - below ground
-// over a rise, above it over a dip. Mid-flight poses must resolve the
-// interpolated XZ through the injected ground source; the settled and idle
-// branches stay untouched (their Y values are already terrain truth - the
-// BUG-12 commitSegment quantise block and the bootstrap nest lift).
+/*
+================
+inFlightMover
+
+The BUG-8 second-injection-path contract (board seq735/seq779): a straight
+Y-lerp between terrain-resolved endpoints describes a CHORD - below ground
+over a rise, above it over a dip. Mid-flight poses must resolve the
+interpolated XZ through the injected ground source; the settled and idle
+branches stay untouched (their Y values are already terrain truth - the
+BUG-12 commitSegment quantise block and the bootstrap nest lift).
+================
+*/
 func inFlightMover() MoverState {
 	return MoverState{
 		mode: MoverWandering,
@@ -23,6 +39,11 @@ func inFlightMover() MoverState {
 	}
 }
 
+/*
+================
+TestLivePoseAtResolvesInterpolatedXZOntoTerrain
+================
+*/
 func TestLivePoseAtResolvesInterpolatedXZOntoTerrain(t *testing.T) {
 	mover := inFlightMover()
 
@@ -46,6 +67,11 @@ func TestLivePoseAtResolvesInterpolatedXZOntoTerrain(t *testing.T) {
 	}
 }
 
+/*
+================
+TestLivePoseAtKeepsChordYOnNilOrMissingGround
+================
+*/
 func TestLivePoseAtKeepsChordYOnNilOrMissingGround(t *testing.T) {
 	mover := inFlightMover()
 
@@ -61,6 +87,26 @@ func TestLivePoseAtKeepsChordYOnNilOrMissingGround(t *testing.T) {
 	}
 }
 
+/*
+================
+TestLivePoseAtKeepsChordYWhenAdoptedNavigationSampleMissesMidChord
+================
+*/
+func TestLivePoseAtKeepsChordYWhenAdoptedNavigationSampleMissesMidChord(t *testing.T) {
+	mover := inFlightMover()
+	mover.AdoptNavigation(NewNavigationPath(mover.From, mover.To, mover.To, 0, func(float64, Pose) (float64, bool) {
+		return 0, false
+	}))
+	if pose := mover.LivePoseAt(5000, nil); pose.Y != 20 {
+		t.Fatalf("navigation-miss mid-chord Y = %v, want the lerped 20", pose.Y)
+	}
+}
+
+/*
+================
+TestLivePoseAtNeverResolvesSettledOrIdleBranches
+================
+*/
 func TestLivePoseAtNeverResolvesSettledOrIdleBranches(t *testing.T) {
 	poison := func(uint16, float64, float64) (float64, bool) {
 		return math.Inf(1), true
@@ -82,6 +128,11 @@ func TestLivePoseAtNeverResolvesSettledOrIdleBranches(t *testing.T) {
 	}
 }
 
+/*
+================
+TestLivePoseAtInterpolatesAcrossAdjacentRegionSeam
+================
+*/
 func TestLivePoseAtInterpolatesAcrossAdjacentRegionSeam(t *testing.T) {
 	const west = uint16(0x3230)
 	const east = uint16(0x3231)

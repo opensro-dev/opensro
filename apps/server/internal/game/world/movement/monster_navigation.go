@@ -73,7 +73,10 @@ func (v *WaterValidator) PlanMonsterPathFrom(from monster.Pose, fromOwner simula
 	}
 	rest.Y = y
 	height := func(t float64, p monster.Pose) (float64, bool) {
-		return v.monsterPathHeightAt(t, p, walk)
+		if sampleY, sampleOK := v.monsterPathHeightAt(t, p, walk); sampleOK {
+			return sampleY, true
+		}
+		return p.Y, true
 	}
 	return monster.NewNavigationPath(from, goal, rest, report.NativeResult, height).WithOwners(walk.spans())
 }

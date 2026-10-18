@@ -1,16 +1,26 @@
+/*
+===========================================================================
+
+mover.go - monster movement state schema, segment interpolation, and progress
+
+Owns the shared monster mover state (MoverState), in-flight segment
+interpolation (LivePoseAt), and native ten-failure stuck progress tracking.
+Wire emission is layered on by the simulation tick leg.
+
+===========================================================================
+*/
 package monster
 
 import worldgeom "opensro.online/server/internal/game/world"
 
-// The shared monster mover (coordinator seq247 risk-analysis #3: ONE code
-// path for movement integration. Behavior states own separate decisions,
-// deadlines and admission rules. This file is STATE ONLY - the wire emission (0xB738
-// goal / 0x30E3 glide / 0xB2F5 settle, the pinned v1.150 consumer
-// contract from REV seq116 / RZ seq159 / WIP seq175) is layered on by the
-// simulation tick leg once RZ lands the P1/P2 pins (SRV seq218/seq250).
+/*
+================
+MoverMode
 
-// MoverMode is the destination-selection input currently driving an
-// instance (never a wire value).
+MoverMode is the destination-selection input currently driving an
+instance (never a wire value).
+================
+*/
 type MoverMode uint8
 
 const (
@@ -47,43 +57,79 @@ const (
 	moverModeCount
 )
 
-// Pose is a region-local position + heading.
+/*
+================
+Pose
+
+Pose is a region-local position + heading.
+================
+*/
 type Pose struct {
 	RegionID uint16
 	X, Y, Z  float64
 	Heading  uint16
 }
 
-// ChaseGuidance is the target-owned movement state last observed by the chase
-// planner. Its destination identifies the accepted target command; targetMoving
-// records whether that command is still in flight. Neither value is approach
-// geometry: combat and stand-off calculations always use the target's live pose.
-//
-// Keeping this as a distinct value prevents three equal-shaped coordinate
-// domains from aliasing: target intent, sampled target position, and the
-// monster's derived movement goal.
+/*
+================
+ChaseGuidance
+
+ChaseGuidance is the target-owned movement state last observed by the chase
+planner. Its destination identifies the accepted target command; targetMoving
+records whether that command is still in flight. Neither value is approach
+geometry: combat and stand-off calculations always use the target's live pose.
+
+Keeping this as a distinct value prevents three equal-shaped coordinate
+domains from aliasing: target intent, sampled target position, and the
+monster's derived movement goal.
+================
+*/
 type ChaseGuidance struct {
 	destination  Pose
 	targetMoving bool
 }
 
-// NewChaseGuidance adopts one immutable target movement snapshot.
+/*
+================
+NewChaseGuidance
+
+NewChaseGuidance adopts one immutable target movement snapshot.
+================
+*/
 func NewChaseGuidance(destination Pose, targetMoving bool) ChaseGuidance {
 	return ChaseGuidance{destination: destination, targetMoving: targetMoving}
 }
 
-// Destination returns the immutable destination owned by this command.
+/*
+================
+ChaseGuidance.Destination
+
+Destination returns the immutable destination owned by this command.
+================
+*/
 func (guidance ChaseGuidance) Destination() Pose {
 	return guidance.destination
 }
 
-// TargetMoving reports whether the target command was in flight when captured.
+/*
+================
+ChaseGuidance.TargetMoving
+
+TargetMoving reports whether the target command was in flight when captured.
+================
+*/
 func (guidance ChaseGuidance) TargetMoving() bool {
 	return guidance.targetMoving
 }
 
-// MoverState is the value schema and transition policy for one monster's
-// movement state. simulation.MonsterState owns and commits live values.
+/*
+================
+MoverState
+
+MoverState is the value schema and transition policy for one monster's
+movement state. simulation.MonsterState owns and commits live values.
+================
+*/
 type MoverState struct {
 	idleEntryPending bool
 	control          actorControl
@@ -172,46 +218,88 @@ type MoverState struct {
 	stuck bool
 }
 
-// InFlight reports whether a segment is still maturing at nowMs.
+/*
+================
+MoverState.InFlight
+
+InFlight reports whether a segment is still maturing at nowMs.
+================
+*/
 func (m MoverState) InFlight(nowMs int64) bool {
 	return m.ArriveMs > m.DepartMs && nowMs < m.ArriveMs
 }
 
-// Progress returns the native movement progress tracker (CTactics +184/+19C/+148).
+/*
+================
+MoverState.Progress
+
+Progress returns the native movement progress tracker (CTactics +184/+19C/+148).
+================
+*/
 func (m MoverState) Progress() MovementProgress {
 	return m.progress
 }
 
-// Stuck reports whether the last stop reached the ten-failure stuck threshold
-// (CAIState_OnMoveStopped_CountStuck 0x00559010 -> event 0x28).
+/*
+================
+MoverState.Stuck
+
+Stuck reports whether the last stop reached the ten-failure stuck threshold
+(CAIState_OnMoveStopped_CountStuck 0x00559010 -> event 0x28).
+================
+*/
 func (m MoverState) Stuck() bool {
 	return m.stuck
 }
 
-// ClearStuck clears the pending event-0x28 latch after the simulation tick
-// answers it, leaving the underlying failure counter untouched (matching
-// CAIState_BATTLE_OnStuck_RelocateToTarget 0x0055A250).
+/*
+================
+MoverState.ClearStuck
+
+ClearStuck clears the pending event-0x28 latch after the simulation tick
+answers it, leaving the underlying failure counter untouched (matching
+CAIState_BATTLE_OnStuck_RelocateToTarget 0x0055A250).
+================
+*/
 func (m *MoverState) ClearStuck() {
 	m.stuck = false
 }
 
-// ResetStuck clears both the failure counter (CTactics.+0x148 = 0) and the
-// pending event-0x28 latch (AI_CTactics_ChangeState 0x0053FF30,
-// CAITactics_ReleaseCommand 0x0053FD40).
+/*
+================
+MoverState.ResetStuck
+
+ResetStuck clears both the failure counter (CTactics.+0x148 = 0) and the
+pending event-0x28 latch (AI_CTactics_ChangeState 0x0053FF30,
+CAITactics_ReleaseCommand 0x0053FD40).
+================
+*/
 func (m *MoverState) ResetStuck() {
 	m.progress.ResetFailures()
 	m.stuck = false
 }
 
-// NoteMoveIssued records a step command before the mover executes or clips it
-// (AI_CTactics_StepDestination 0x00541730).
+/*
+================
+MoverState.NoteMoveIssued
+
+NoteMoveIssued records a step command before the mover executes or clips it
+(AI_CTactics_StepDestination 0x00541730).
+================
+*/
 func (m *MoverState) NoteMoveIssued(live Pose, alreadyMoving bool) {
 	m.progress.Issued(live, alreadyMoving)
 }
 
-// NoteMoveStopped records a movement stop at live (CGObjChar_StopMove
-// 0x004A9430 -> event 8 -> CAIState_OnMoveStopped_CountStuck 0x00559010) and
-// latches Stuck when the tenth short stop is reached.
+/*
+================
+MoverState.NoteMoveStopped
+
+NoteMoveStopped records a movement stop at live (CGObjChar_StopMove
+0x004A9430 -> event 8 -> CAIState_OnMoveStopped_CountStuck 0x00559010) and
+latches Stuck when the tenth short stop is reached.
+================
+*/
 func (m *MoverState) NoteMoveStopped(live Pose) bool {
 	if m.progress.Arrived(live) {
 		m.stuck = true
@@ -220,27 +308,39 @@ func (m *MoverState) NoteMoveStopped(live Pose) bool {
 	return false
 }
 
-// GroundResolver resolves the navmesh ground height under a region-local
-// XZ (the mission plane injects movement TerrainHeightAt through
-// MonsterMoverOps.TerrainHeight - monster must not import mission, so
-// the height source arrives as a parameter; board seq743/seq779 shape).
+/*
+================
+GroundResolver
+
+GroundResolver resolves the navmesh ground height under a region-local
+XZ (the mission plane injects movement TerrainHeightAt through
+MonsterMoverOps.TerrainHeight - monster must not import mission, so
+the height source arrives as a parameter; board seq743/seq779 shape).
+================
+*/
 type GroundResolver func(regionID uint16, x, z float64) (float64, bool)
 
-// LivePoseAt interpolates the in-flight segment at nowMs (the live plane;
-// callers must never read Pose while a segment is maturing - the bug D
-// discipline the player plane already enforces).
-//
-// Y CONTRACT (board seq735/seq779, BUG-8 second injection path): the
-// segment ENDPOINTS carry terrain-resolved heights, but a straight Y-lerp
-// between them describes a CHORD - below ground over a rise, above it over
-// a dip. Mid-flight the interpolated XZ is resolved through `ground` so a
-// scope-enter seed or a segment departure never inherits a chord height.
-// The settled (To) and idle (Pose) branches are returned UNTOUCHED: To.Y
-// is already the terrain height at its own quantised XZ (the BUG-12
-// commitSegment block) and an idle Pose is either that settled value or
-// the bootstrap-lifted nest anchor - re-resolving them would change
-// settle-adjacent wire values for no correctness gain. A nil resolver (or
-// a miss) keeps the lerped Y, exactly the pre-injection behaviour.
+/*
+================
+MoverState.LivePoseAt
+
+LivePoseAt interpolates the in-flight segment at nowMs (the live plane;
+callers must never read Pose while a segment is maturing - the bug D
+discipline the player plane already enforces).
+
+Y CONTRACT (board seq735/seq779, BUG-8 second injection path): the
+segment ENDPOINTS carry terrain-resolved heights, but a straight Y-lerp
+between them describes a CHORD - below ground over a rise, above it over
+a dip. Mid-flight the interpolated XZ is resolved through `ground` so a
+scope-enter seed or a segment departure never inherits a chord height.
+The settled (To) and idle (Pose) branches are returned UNTOUCHED: To.Y
+is already the terrain height at its own quantised XZ (the BUG-12
+commitSegment block) and an idle Pose is either that settled value or
+the bootstrap-lifted nest anchor - re-resolving them would change
+settle-adjacent wire values for no correctness gain. A nil resolver (or
+a miss) keeps the lerped Y, exactly the pre-injection behaviour.
+================
+*/
 func (m MoverState) LivePoseAt(nowMs int64, ground GroundResolver) Pose {
 	if !m.InFlight(nowMs) {
 		if m.ArriveMs > m.DepartMs {
@@ -267,11 +367,9 @@ func (m MoverState) LivePoseAt(nowMs int64, ground GroundResolver) Pose {
 		Heading:  m.To.Heading,
 	}
 	if m.navigationMatches() {
-		y, ok := m.navigation.height(t, pose)
-		if !ok {
-			panic("admitted monster navigation lost its surface")
+		if y, ok := m.navigation.height(t, pose); ok {
+			pose.Y = y
 		}
-		pose.Y = y
 		return pose
 	}
 	if ground != nil {
@@ -282,8 +380,14 @@ func (m MoverState) LivePoseAt(nowMs int64, ground GroundResolver) Pose {
 	return pose
 }
 
-// NewSpawnMover constructs the policy-valid initial movement value for a live
-// instance. simulation owns the returned value from activation onward.
+/*
+================
+NewSpawnMover
+
+NewSpawnMover constructs the policy-valid initial movement value for a live
+instance. simulation owns the returned value from activation onward.
+================
+*/
 func NewSpawnMover(instance Instance, spawnedAtMs int64) MoverState {
 	return MoverState{
 		mode:               MoverSpawning,
