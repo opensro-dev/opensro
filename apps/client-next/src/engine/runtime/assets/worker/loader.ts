@@ -94,10 +94,22 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	let disposed = false, effectCatalogParsed = false;
 	const files = new Map<string, number>(), readyFiles = new Set<string>();
 	let bytesRead = 0;
-	// Cumulative stream bytes per foreground load, keyed by its cancellation
-	// signal (the one identity every read of a job shares, decoder-internal
-	// pack reads included). The watchdog's stall window slides on these.
-	const jobBytes = new Map<AbortSignal, { id: number; bytes: number; sent: number; }>();
+	// The watchdog's per-job notes. Bytes cannot be attributed to one load:
+	// packed reads deduplicate shared downloads across co-waiting loads
+	// (packs.ts serves manifest, member and block reads from its own
+	// lifetime), so movement on the shared pipe is every active load's
+	// progress, and every load is credited. The absolute ceiling bounds a
+	// load that merely rides its siblings' traffic.
+	const jobProgress = new Map<number, {
+		id: number;
+		bytes: number;
+		sent: number;
+		primaryDone: boolean;
+		decoding: boolean;
+	}>();
+	// Foreground downloads in flight. The decoding mark waits for the pipe
+	// to drain: while a download can still deliver, a load is fetching.
+	let activeDownloads = 0;
 	let received = 0, lastReceived = 0, lastProgress = performance.now(), speed = 0;
 	let progressTimer: ReturnType<typeof setTimeout> | null = null;
 	/*
@@ -146,11 +158,42 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			}, [] );
 			// The watchdog's per-job notes ride the same coalesced beat, one
 			// per load whose stream moved since the last publication.
-			for ( const job of jobBytes.values() ) {
+			for ( const job of jobProgress.values() ) {
 				if ( job.bytes === job.sent ) continue;
 				job.sent = job.bytes;
 				send( { kind: "job-progress", id: job.id, bytes: job.bytes }, [] );
 			}
+		}
+	}
+	/*
+	================
+	markDecoding
+
+	The pipe has drained under every load whose primary bytes are in: what
+	remains for them is decode. Sent once per drain; a later download flips
+	the load back with markFetching, and the next drain marks it again.
+	================
+	*/
+	function markDecoding() {
+		for ( const job of jobProgress.values() ) {
+			if ( !job.primaryDone || job.decoding ) continue;
+			job.decoding = true;
+			if ( !disposed ) send( { kind: "job-decoding", id: job.id }, [] );
+		}
+	}
+	/*
+	================
+	markFetching
+
+	A download started, so marked loads are fetching again, not decoding:
+	the watchdog restores their download stall window.
+	================
+	*/
+	function markFetching() {
+		for ( const job of jobProgress.values() ) {
+			if ( !job.decoding ) continue;
+			job.decoding = false;
+			if ( !disposed ) send( { kind: "job-fetching", id: job.id }, [] );
 		}
 	}
 	/*
@@ -183,23 +226,30 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		signal: AbortSignal,
 		range?: import("./packs/packs").PackRange
 	) {
-		// The foreground load this read belongs to, when it belongs to one:
-		// every chunk it moves slides that job's watchdog window. Background
-		// installation reads carry no job and are never attributed.
-		const job = jobBytes.get( signal );
-		for ( let attempt = 0;; attempt++ ) {
-			signal.throwIfAborted();
-			try {
-				return await downloadAttempt( url, limit, signal, range, job );
-			} catch ( error ) {
-				const transient = error instanceof TypeError || error instanceof NoProgressError ||
-					(error instanceof Error && "status" in error &&
-						TRANSIENT_HTTP_STATUS.has( Number( error.status ) ));
-				const delay = DOWNLOAD_RETRY_DELAYS_MS[attempt];
-				if ( signal.aborted || !transient ) throw error;
-				if ( delay === undefined ) throw assetFailure( String( error ), true );
-				await retryDownloadAfter( delay, signal );
+		// Every load in flight shares this pipe (packs.ts deduplicates its
+		// reads), so the download counts toward all of them: it flips any
+		// decoding-marked load back to fetching, and its chunks credit every
+		// load's byte note in downloadBytes.
+		activeDownloads++;
+		markFetching();
+		try {
+			for ( let attempt = 0;; attempt++ ) {
+				signal.throwIfAborted();
+				try {
+					return await downloadAttempt( url, limit, signal, range );
+				} catch ( error ) {
+					const transient = error instanceof TypeError || error instanceof NoProgressError ||
+						(error instanceof Error && "status" in error &&
+							TRANSIENT_HTTP_STATUS.has( Number( error.status ) ));
+					const delay = DOWNLOAD_RETRY_DELAYS_MS[attempt];
+					if ( signal.aborted || !transient ) throw error;
+					if ( delay === undefined ) throw assetFailure( String( error ), true );
+					await retryDownloadAfter( delay, signal );
+				}
 			}
+		} finally {
+			activeDownloads--;
+			if ( activeDownloads === 0 ) markDecoding();
 		}
 	}
 	/*
@@ -242,8 +292,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		url: string,
 		limit: number,
 		signal: AbortSignal,
-		range?: import("./packs/packs").PackRange,
-		job?: { id: number; bytes: number; sent: number; }
+		range?: import("./packs/packs").PackRange
 	) {
 		// The attempt aborts on the caller's cancellation or on its own stall
 		// timer; only the stall becomes NoProgressError (transient). Every
@@ -257,7 +306,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			timer = setTimeout( () => attempt.abort( stalled ), DOWNLOAD_NO_PROGRESS_MS );
 		};
 		try {
-			return await downloadBytes( { url, limit, signal: attempt.signal, range }, progressed, job );
+			return await downloadBytes( { url, limit, signal: attempt.signal, range }, progressed );
 		} catch ( error ) {
 			// The caller's cancellation wins whatever else ended the attempt: a
 			// cancel racing the stall must surface its own reason, not the stall.
@@ -276,11 +325,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	and on every body chunk.
 	================
 	*/
-	async function downloadBytes(
-		read: DownloadRead,
-		progressed: () => void,
-		job?: { id: number; bytes: number; sent: number; }
-	) {
+	async function downloadBytes( read: DownloadRead, progressed: () => void ) {
 		const { url, limit, signal, range } = read;
 		const started = performance.now();
 		// Cache Storage owns verified members. Keep partial HTTP responses out
@@ -317,7 +362,9 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 				// An empty chunk is not progress.
 				if ( size > 0 ) progressed();
 				bytesRead += size;
-				if ( job ) job.bytes += size;
+				// The pipe is shared: its movement is every active load's
+				// progress (packs.ts deduplicates reads across loads).
+				for ( const job of jobProgress.values() ) job.bytes += size;
 				if ( range ) received += size;
 				progress();
 			},
@@ -391,7 +438,8 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		}>,
 		controller: AbortController
 	) {
-		jobBytes.set( controller.signal, { id: request.id, bytes: 0, sent: 0 } );
+		const job = { id: request.id, bytes: 0, sent: 0, primaryDone: false, decoding: false };
+		jobProgress.set( request.id, job );
 		try {
 			const url = new URL( request.url );
 			if ( ![ "http:", "https:" ].includes( url.protocol ) || url.username || url.password ) {
@@ -402,10 +450,13 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 				url.pathname.startsWith( "/assets/" ) ?
 				await packs.read( url, request.limit, controller.signal ) :
 				await download( url.href, request.limit, controller.signal );
+			job.primaryDone = true;
+			// The primary bytes are in. The decoding mark still waits for
+			// the pipe to drain (decode-phase reads flip the job back to
+			// fetching and re-mark it when they settle): only silence with
+			// no download in flight is decode, not a slow link.
+			if ( activeDownloads === 0 ) markDecoding();
 			if ( !disposed && pending.get( request.id ) === controller ) {
-				// The primary bytes are in; what remains is decode (its own
-				// reads still count as byte progress, CPU work does not).
-				send( { kind: "job-decoding", id: request.id }, [] );
 				if ( request.decode === "navigation" ) {
 					let size = bytes.byteLength;
 					const product = await navigation.resolve( bytes, Number( url.hash.slice( 1 ) ), async path => {
@@ -728,7 +779,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 				}, [] );
 			}
 		} finally {
-			jobBytes.delete( controller.signal );
+			jobProgress.delete( request.id );
 			active.delete( controller );
 			if ( active.size === 0 ) wakeIdleWaiters();
 			if ( !disposed && controller.signal.aborted ) send( { kind: "released", id: request.id }, [] );

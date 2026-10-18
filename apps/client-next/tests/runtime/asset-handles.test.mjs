@@ -196,7 +196,7 @@ test("progress messages do not complete handles or release download capacity", t
 test("a stalled load fails its own handle visibly and the shared owner lives", t => {
 	let now = 0;
 	t.mock.method( performance, "now", () => now );
-	const { assets } = fixture( t );
+	const { assets, worker } = fixture( t );
 	const first = assets.request( "https://assets.test/stalled" ),
 		second = assets.request( "https://assets.test/other" );
 	now = 119999;
@@ -212,6 +212,11 @@ test("a stalled load fails its own handle visibly and the shared owner lives", t
 	const secondResult = assets.take( second );
 	assert.match( secondResult.error, /timed out/ );
 	assert.equal( secondResult.transient, true );
+	// Expired jobs keep their slots until the worker acknowledges each
+	// cancel; only then is the capacity really free again.
+	assert.equal( assets.available(), 2 );
+	defined( worker ).onmessage( { data: { kind: "released", id: first } } );
+	defined( worker ).onmessage( { data: { kind: "released", id: second } } );
 	assert.equal( assets.available(), 4 );
 	assert.doesNotThrow( () => assets.request( "https://assets.test/retry" ) );
 });

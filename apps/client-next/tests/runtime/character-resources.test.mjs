@@ -222,7 +222,9 @@ test("standalone and embedded PNGs reject oversized dimensions before bitmap all
 		bytes = decode === "png" ? png( 8192, 1 ) : glb( [ png( 8192, 1 ) ] );
 		const results = [],
 			loader = createLoader( result => {
-				if ( ![ "progress", "job-progress", "job-decoding" ].includes( result.kind ) ) results.push( result );
+				if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( result.kind ) ) {
+					results.push( result );
+				}
 			} );
 		loader.receive( { kind: "load", id: 1, url: "http://localhost/model", limit: 1 << 20, decode } );
 		await settle();
@@ -236,7 +238,9 @@ test("embedded image budgets apply to the entire model before its first bitmap",
 	t.mock.method( globalThis, "fetch", async () => new Response( glb( [ png( 4096, 4096 ), png( 4096, 4096 ) ] ) ) );
 	const results = [],
 		loader = createLoader( result => {
-			if ( ![ "progress", "job-progress", "job-decoding" ].includes( result.kind ) ) results.push( result );
+			if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( result.kind ) ) {
+				results.push( result );
+			}
 		} );
 	loader.receive( { kind: "load", id: 1, url: "http://localhost/model", limit: 1 << 20, decode: "character" } );
 	await settle();
@@ -258,7 +262,7 @@ test("a delivered character carries image sizes, never its encoded PNG bytes", a
 	t.mock.method( globalThis, "fetch", async () => new Response( glb( [ png( 32, 16 ), png( 32, 16 ) ] ) ) );
 	const results = [],
 		loader = createLoader( ( result, transfer ) => {
-			if ( ![ "progress", "job-progress", "job-decoding" ].includes( result.kind ) ) {
+			if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( result.kind ) ) {
 				results.push( { result, transfer } );
 			}
 		} );
@@ -301,7 +305,9 @@ test("failed bitmap transactions close already decoded images", async t => {
 	t.mock.method( globalThis, "fetch", async () => new Response( glb( [ png( 32, 32 ), png( 32, 32 ) ] ) ) );
 	const results = [],
 		loader = createLoader( result => {
-			if ( ![ "progress", "job-progress", "job-decoding" ].includes( result.kind ) ) results.push( result );
+			if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( result.kind ) ) {
+				results.push( result );
+			}
 		} );
 	loader.receive( { kind: "load", id: 1, url: "http://localhost/model", limit: 1 << 20, decode: "character" } );
 	await settle();

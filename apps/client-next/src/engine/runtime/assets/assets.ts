@@ -69,7 +69,15 @@ export function createAssets(): AssetOwner {
 		cancelled?: boolean;
 		// The watchdog expired it: its error result is deliverable, and the
 		// worker's late result or release is expected, not a protocol fault.
+		// The slot stays the job's until the worker acknowledges (settled),
+		// exactly like a cancellation: the worker still counts it against
+		// its own capacity, so freeing it early would over-admit.
 		expired?: boolean;
+		// The worker's execution is finished (late result or release seen):
+		// only the consumer's take (or dispose) still collects the job.
+		settled?: boolean;
+		// The consumer already collected the result through take().
+		delivered?: boolean;
 		// Its release is overdue: the slot stays reserved, nothing waits on it.
 		abandoned?: boolean;
 	}>();
@@ -138,8 +146,9 @@ export function createAssets(): AssetOwner {
 	progress slides the window (noteJobProgress), so a slow link is slow,
 	never fatal. Expiry is per job: the job takes the same transient error
 	the old whole-runtime failure carried, the worker is asked to cancel it,
-	and every other job continues; the slot frees when the consumer collects
-	the error, or when the worker's late result or release arrives.
+	and every other job continues. The expired job keeps its slot until the
+	worker acknowledges (its late result or release), like a cancellation:
+	the worker still counts the job against its own capacity.
 	An overdue acknowledgement abandons its job: the slot stays reserved (the
 	worker may still be running it) and a degraded fault is recorded. Only when
 	every slot is abandoned has the worker stopped answering.
@@ -154,7 +163,7 @@ export function createAssets(): AssetOwner {
 		if ( disposed || failure ) return;
 		const now = performance.now();
 		for ( const [id, job] of jobs ) {
-			if ( job.abandoned ) continue;
+			if ( job.abandoned || job.settled ) continue;
 			const path = new URL( job.url ).pathname;
 			if ( job.cancelled || job.expired ) {
 				if ( now < job.deadline ) continue;
@@ -207,9 +216,10 @@ export function createAssets(): AssetOwner {
 	================
 	noteJobDecoding
 
-	The worker holds a job's primary bytes; what remains is decode. The
-	job's window becomes the decode window from this mark, because CPU work
-	notes no bytes: silence after it is a hung decode, not a slow link.
+	The worker's downloads have drained under a job whose primary bytes are
+	in; what remains is decode. The job's window becomes the decode window
+	from this mark, because CPU work notes no bytes: silence after it is a
+	hung decode, not a slow link.
 	================
 	*/
 	function noteJobDecoding( id: number ) {
@@ -217,6 +227,22 @@ export function createAssets(): AssetOwner {
 		if ( !job || job.result || job.cancelled || job.decoding ) return;
 		job.decoding = true;
 		job.deadline = performance.now() + REQUEST_DECODE_STALL_MS;
+	}
+
+	/*
+	================
+	noteJobFetching
+
+	A decode-phase read started downloading again (the worker flips the job
+	back): the download stall window applies once more. The next drain
+	re-marks the job decoding.
+	================
+	*/
+	function noteJobFetching( id: number ) {
+		const job = jobs.get( id );
+		if ( !job || job.result || job.cancelled || !job.decoding ) return;
+		job.decoding = false;
+		job.deadline = performance.now() + REQUEST_STALL_MS;
 	}
 	worker.onmessage = ( event: MessageEvent<AssetWorkerMessage> ) => {
 		if ( event.data.kind === "progress" ) {
@@ -231,13 +257,20 @@ export function createAssets(): AssetOwner {
 			if ( !disposed && !failure ) noteJobDecoding( event.data.id );
 			return;
 		}
+		if ( event.data.kind === "job-fetching" ) {
+			if ( !disposed && !failure ) noteJobFetching( event.data.id );
+			return;
+		}
 		if ( event.data.kind === "released" ) {
 			const job = jobs.get( event.data.id );
 			if ( job?.cancelled ) jobs.delete( event.data.id );
-			// An expired job keeps its slot until the consumer collects its
-			// error; its release (and a release after that collection) is the
-			// expected late acknowledgement, not a fault.
-			else if ( job && !job.expired && !disposed && !failure ) fail( "Unexpected asset capacity release" );
+			// An expired job's release is its cancellation acknowledgement:
+			// the slot frees only if the consumer already collected the
+			// error, else the job settles and the error stays deliverable.
+			else if ( job?.expired ) {
+				if ( job.delivered ) jobs.delete( event.data.id );
+				else job.settled = true;
+			} else if ( job && !disposed && !failure ) fail( "Unexpected asset capacity release" );
 			return;
 		}
 		if ( disposed || failure ) {
@@ -251,10 +284,13 @@ export function createAssets(): AssetOwner {
 			jobs.delete( result.id );
 			return;
 		}
-		// An expired job's late completion changes nothing: its transient
+		// An expired job's late completion changes nothing it delivers: the
+		// execution is settled (its release follows), and the transient
 		// error stays deliverable until the consumer collects it.
 		if ( job?.expired ) {
 			close( result );
+			if ( job.delivered ) jobs.delete( result.id );
+			else job.settled = true;
 			return;
 		}
 		if ( !job ) {
@@ -414,10 +450,14 @@ export function createAssets(): AssetOwner {
 		*/
 		take( id ) {
 			const job = jobs.get( id );
-			if ( job?.cancelled || !job?.result ) {
+			if ( !job?.result || job.cancelled || job.delivered ) {
 				return null;
 			}
-			jobs.delete( id );
+			job.delivered = true;
+			// An expired job the worker has not acknowledged keeps its slot
+			// (the worker still counts it against its own capacity);
+			// deleting here would over-admit a retry the worker must refuse.
+			if ( !job.expired || job.settled ) jobs.delete( id );
 			return job.result;
 		},
 
@@ -431,6 +471,15 @@ export function createAssets(): AssetOwner {
 		cancel( id ) {
 			const job = jobs.get( id );
 			if ( !job || job.cancelled ) {
+				return;
+			}
+			if ( job.expired && !job.settled ) {
+				// Expiry already asked the worker to cancel; the consumer
+				// dropping the handle makes it an ordinary cancellation
+				// awaiting the same acknowledgement, slot still reserved.
+				job.cancelled = true;
+				job.deadline = performance.now() + CANCEL_ACK_MS;
+				send( { kind: "cancel", id } );
 				return;
 			}
 			close( job.result );

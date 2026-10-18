@@ -114,6 +114,10 @@ test("silence expires one job with the transient timeout error and the runtime l
 	assert.deepEqual( assets.take( slow ), { kind: "error", id: slow, error: TIMEOUT_ERROR, transient: true } );
 	// The other job's completion is untouched by the slow job's expiry.
 	assert.equal( assets.take( other )?.kind, "bytes" );
+	// The expired job keeps its slot until the worker acknowledges the
+	// cancel: the worker still counts it against its own capacity.
+	assert.equal( assets.available(), 3 );
+	worker.onmessage( { data: { kind: "released", id: slow } } );
 	assert.equal( assets.available(), 4 );
 });
 
@@ -176,6 +180,52 @@ test("an expired job's late completion and release are inert", t => {
 	worker.onmessage( { data: { kind: "released", id } } );
 	assert.equal( assets.health().phase, "running" );
 	assert.equal( assets.available(), 4 );
+});
+
+test("an expired job holds its slot until the worker acknowledges, then frees it", t => {
+	const { assets, worker, clock } = fixture( t );
+	const id = assets.request( REGION );
+	clock.now += 121000;
+	assets.health();
+	assert.deepEqual( assets.take( id ), { kind: "error", id, error: TIMEOUT_ERROR, transient: true } );
+	// The error is delivered once, and the slot is still the job's: a retry
+	// must wait for the acknowledgement, never over-admit into the worker.
+	assert.equal( assets.take( id ), null );
+	assert.equal( assets.available(), 3 );
+	worker.onmessage( { data: { kind: "released", id } } );
+	assert.equal( assets.available(), 4 );
+	assert.equal( assets.health().phase, "running" );
+});
+
+test("a wedged expired job is abandoned and reported, like a wedged cancellation", t => {
+	const { assets, worker, clock } = fixture( t );
+	const id = assets.request( REGION );
+	clock.now += 121000;
+	assets.health();
+	assets.take( id );
+	// The worker never acknowledges (an uninterruptible decode outlives the
+	// acknowledgement window): the slot stays reserved and the fault is
+	// reported once, but the runtime lives.
+	clock.now += 31000;
+	assert.equal( assets.health().phase, "running" );
+	assert.equal( assets.available(), 3 );
+	assert.deepEqual( assets.takeDegradations().map( d => d.code ), [ "asset-cancel-unacknowledged" ] );
+});
+
+test("a decode-phase download flips the job back to the download window", t => {
+	const { assets, worker, clock } = fixture( t );
+	const id = assets.request( REGION );
+	clock.now += 10000;
+	worker.onmessage( { data: { kind: "job-decoding", id } } );
+	clock.now += 10000;
+	worker.onmessage( { data: { kind: "job-fetching", id } } );
+	// 100 s of silence in the restored download window: alive (the 60 s
+	// decode window would have killed it). At 121 s it expires.
+	clock.now += 100000;
+	assert.equal( assets.take( id ), null );
+	clock.now += 21000;
+	assert.equal( assets.health().phase, "running" );
+	assert.deepEqual( assets.take( id ), { kind: "error", id, error: TIMEOUT_ERROR, transient: true } );
 });
 
 test("a healthy fast load behaves exactly as before", t => {
