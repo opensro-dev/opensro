@@ -142,6 +142,17 @@ const (
 	// ErrCodeNotEnoughGold is UIIT_MSG_STRGERR_NOT_ENOUGH_GOLD (01:0f,
 	// banner + guide): the request exceeds the carried balance.
 	ErrCodeNotEnoughGold uint8 = 0x0F
+	// ErrCodeGuildShopNotMaster is UIIT_MSG_GUILD_STORE_BUY_LIMIT (01:C4,
+	// CGInterface_ShowSystemNotification 689BBA; CShopApp_CheckPurchasePayment
+	// 6178D2 returns 0x18C4): a guild-point-priced package bought by a player
+	// who is not a guild master (not in a guild or CGuild_IsMemberMaster
+	// 5D0F50 returns 0).
+	ErrCodeGuildShopNotMaster uint8 = 0xC4
+	// ErrCodeNotEnoughGuildPoints is UIIT_MSG_GUILD_LACK_GP (01:C5,
+	// CGInterface_ShowSystemNotification 689CA4; CShopApp_CheckPurchasePayment
+	// 6178C4 returns 0x18C5): a guild-point-priced package the buyer's guild
+	// points cannot pay.
+	ErrCodeNotEnoughGuildPoints uint8 = 0xC5
 	// ErrCodeNotEnoughHonor is UIIT_MSG_TC_LACK_HONOR_POINT (01:D4,
 	// CGInterface_ShowSystemNotification 689CDE: table index 0xD1 + 3): an
 	// honor-priced package the character's honor points cannot pay.

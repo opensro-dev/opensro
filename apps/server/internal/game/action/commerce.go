@@ -228,10 +228,13 @@ func (rt *Runtime) shopCatalog(division string, c *enterworld.Character, gid uin
 				purchaseLimit = templates[0].Stack
 			}
 			var prices []shopPriceRow
-			if o.Currency == commerce.PaymentGold && o.HonorPrice > 0 {
-				prices = []shopPriceRow{
-					{Currency: commerce.PaymentGold, Amount: strconv.FormatUint(price, 10)},
-					{Currency: commerce.PaymentHonor, Amount: strconv.FormatUint(o.HonorPrice, 10)},
+			if o.Currency == commerce.PaymentGold && (o.GuildPointPrice > 0 || o.HonorPrice > 0) {
+				prices = append(prices, shopPriceRow{Currency: commerce.PaymentGold, Amount: strconv.FormatUint(price, 10)})
+				if o.GuildPointPrice > 0 {
+					prices = append(prices, shopPriceRow{Currency: commerce.PaymentGuildPoint, Amount: strconv.FormatUint(o.GuildPointPrice, 10)})
+				}
+				if o.HonorPrice > 0 {
+					prices = append(prices, shopPriceRow{Currency: commerce.PaymentHonor, Amount: strconv.FormatUint(o.HonorPrice, 10)})
 				}
 			}
 			p.Offers = append(p.Offers, shopOffer{PurchaseLimit: purchaseLimit, Previews: previews, Contents: contents, Tab: tab, Slot: o.Slot, Ref: o.Ref.RefObjID, Name: o.Ref.Name, Price: strconv.FormatUint(price, 10), Currency: o.Currency, Prices: prices, Stack: o.Stack})
@@ -302,7 +305,9 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 	}
 	roster := rt.commerceRoster(division, c)
 	availableHonor := rt.honorPoints(division, snapshot)
+	isGuildMaster, availableGuildPoints := rt.guildShopAdmission(division, snapshot)
 	var collected int64
+	var guildPointCost uint64
 	var honorCost uint64
 	committed := rt.deps.SettleTrade(roster.members, commerceDoorLabel(snapshot, q, isCOS), func(pool *domain.TradeRewardPool) bool {
 		if c.DeletePending {
@@ -329,6 +334,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 		// goods sale. An ordinary item sale collects nothing; no sale path
 		// in the original calls 486330.
 		collected = 0
+		guildPointCost = 0
 		honorCost = 0
 		settledPool := *pool
 		buyback, nextID := c.Buyback, c.BuybackNext
@@ -349,10 +355,11 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 				return false
 			}
 			cost := unit * uint64(q.Quantity)
-			if offer.Currency != commerce.PaymentHonor {
+			if offer.Currency == 0 || offer.Currency == commerce.PaymentGold {
 				collected = int64(cost) - int64(offer.Price*uint64(q.Quantity))
 			}
-			if offer.Currency == commerce.PaymentHonor {
+			switch offer.Currency {
+			case commerce.PaymentHonor:
 				if cost > math.MaxUint32 || cost > availableHonor {
 					refusal = wire.ErrCodeNotEnoughHonor
 					return false
@@ -360,7 +367,18 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 				honorCost = cost
 				// Paid in honor: the gold balance is untouched.
 				cost = 0
-			} else {
+			case commerce.PaymentGuildPoint:
+				if !isGuildMaster {
+					refusal = wire.ErrCodeGuildShopNotMaster
+					return false
+				}
+				if cost > math.MaxUint32 || cost > availableGuildPoints {
+					refusal = wire.ErrCodeNotEnoughGuildPoints
+					return false
+				}
+				guildPointCost = cost
+				cost = 0
+			default:
 				if cost > balance {
 					refusal = wire.ErrCodeNotEnoughGold
 					return false
@@ -372,6 +390,20 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 					honorCost = offer.HonorPrice * uint64(q.Quantity)
 					if honorCost > availableHonor {
 						refusal = wire.ErrCodeNotEnoughHonor
+						return false
+					}
+				}
+				if offer.GuildPointPrice > 0 {
+					if !isGuildMaster {
+						refusal = wire.ErrCodeGuildShopNotMaster
+						return false
+					}
+					if offer.GuildPointPrice > math.MaxUint32/uint64(q.Quantity) {
+						return false
+					}
+					guildPointCost = offer.GuildPointPrice * uint64(q.Quantity)
+					if guildPointCost > availableGuildPoints {
+						refusal = wire.ErrCodeNotEnoughGuildPoints
 						return false
 					}
 				}
@@ -541,6 +573,9 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 	if honorCost > 0 {
 		rt.spendHonorPoints(division, snapshot, uint32(honorCost))
 	}
+	if guildPointCost > 0 {
+		result = rt.spendGuildPoints(division, snapshot, uint32(guildPointCost), result)
+	}
 	rt.collectFortressTax(division, npc, collected)
 	return result
 }
@@ -549,11 +584,12 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 ================
 offerUnitPrice
 
-Gold prices carry the town tax; honor prices are the authored points.
+Gold prices carry the town tax; guild-point and honor prices are the
+authored points.
 ================
 */
 func offerUnitPrice(o commerce.Offer, tax commerce.Tax) (uint64, bool) {
-	if o.Currency == commerce.PaymentHonor {
+	if o.Currency == commerce.PaymentHonor || o.Currency == commerce.PaymentGuildPoint {
 		return o.Price, o.Price > 0
 	}
 	return commerce.AdjustPrice(o.Price, tax, true)
