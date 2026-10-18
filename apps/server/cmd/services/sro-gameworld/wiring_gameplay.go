@@ -796,23 +796,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		},
 	}
 	game.items.GMQuests = gmQuestHooks(quests)
-	// Wrap the experience update so a level INCREASE also fires the port-only,
-	// not-native auto max-gear rule, inside the same character transaction
-	// (the caller owns the door). With SRO_AUTO_MAXGEAR unset the wrapper
-	// adds nothing and the path is native.
-	//
-	// INFERENCE, not verified against the native binaries: the v1.150 level
-	// transition writes experience, stats and the level-up effect, and shows
-	// no equipment write.
-	updateExperience := stats.ExperienceUpdater()
-	game.items.UpdateExperience = func(character *enterworld.Character, expDelta, skillExpDelta int64, sourceGid uint32) ([]wire.Frame, bool) {
-		before := characterLevelOf(character)
-		frames, ok := updateExperience(character, expDelta, skillExpDelta, sourceGid)
-		if ok && characterLevelOf(character) > before {
-			frames = append(frames, game.applyAutoMaxGear(character)...)
-		}
-		return frames, ok
-	}
+	game.items.UpdateExperience = game.experienceWithAutoMaxGear(stats.ExperienceUpdater())
 	game.items.RefundExperience = stats.ExperienceRefundUpdater()
 	game.items.RecallStatPoints = stats.StatRecallUpdater()
 	game.items.ApplyDeathPenalty = stats.DeathPenaltyUpdater()

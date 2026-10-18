@@ -35,7 +35,8 @@ OperatorGrantItems
 Use the reward planner so stack merging, capacity and reference publication
 have one implementation. No partial grant survives a refused batch. Grants
 with a Slot bypass the bag planner and replace the occupant of that equipment
-socket instead (opensro-infra patch).
+socket instead. A replace DESTROYS the previous occupant: it is removed from
+the authoritative inventory, with no bag copy and no ground drop.
 ================
 */
 func (rt *Runtime) OperatorGrantItems(division, name string, grants []inventory.ItemAmount) error {

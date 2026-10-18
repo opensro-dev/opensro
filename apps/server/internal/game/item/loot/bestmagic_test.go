@@ -50,3 +50,42 @@ func TestBestEquipmentMagicIsCatalogValid(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestBestEquipmentMagicSkipsAlchemyAids
+
+A perfect combat option set must not spend reinforcement aids. Any option
+whose tag is Lucky, Immortal, Steady or Astral is skipped even when the pool
+offers it.
+================
+*/
+func TestBestEquipmentMagicSkipsAlchemyAids(t *testing.T) {
+	checked := 0
+	for code, pool := range properties.pools {
+		if len(pool) == 0 || properties.Items[code].MaxMagic <= 0 {
+			continue
+		}
+		aids := 0
+		for _, option := range pool {
+			if alchemyAidTags[option.Tag] {
+				aids++
+			}
+		}
+		if aids == 0 {
+			continue
+		}
+		checked++
+		for _, encoded := range BestEquipmentMagic(code) {
+			id := uint16(encoded)
+			for _, option := range pool {
+				if option.ID == id && alchemyAidTags[option.Tag] {
+					t.Fatalf("%s: perfect set carries alchemy aid %s", code, option.Name)
+				}
+			}
+		}
+	}
+	if checked == 0 {
+		t.Skip("the catalog pools carry no alchemy aid to check")
+	}
+}

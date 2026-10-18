@@ -202,3 +202,96 @@ func TestOperatorSlotGrantReplacesAndPurgesTheOldItem(t *testing.T) {
 		t.Fatalf("no bag-slot removal frame for the swapped-out piece: %+v", sent)
 	}
 }
+
+/*
+================
+TestQuestGrantWithoutNewFieldsIsUnchanged
+
+The new ItemAmount fields are inert when they carry their zero values. A
+quest or operator bag grant with Plus=0, no perfect flags and Slot=nil makes
+the reward planner produce exactly the row it produced before the fields
+existed: the reference defaults, no variance bits, no blues.
+================
+*/
+func TestQuestGrantWithoutNewFieldsIsUnchanged(t *testing.T) {
+	c := testCharacter()
+	rt, _ := newTestRuntime(c, testItems())
+	rows, frames, err := rt.PlanQuestInventory(c, nil, []inventory.ItemAmount{{
+		Codename: "ITEM_CH_SWORD_01_A_RARE", Count: 1,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(frames) != 2 {
+		t.Fatalf("frames = %d, want the reference row and the grant receipt", len(frames))
+	}
+	var granted *enterworld.InventoryRow
+	for i := range rows {
+		if rows[i].Codename == "ITEM_CH_SWORD_01_A_RARE" {
+			granted = &rows[i]
+		}
+	}
+	if granted == nil {
+		t.Fatal("no granted sword")
+	}
+	if granted.Plus != 0 {
+		t.Fatalf("plus = %d, want 0", granted.Plus)
+	}
+	if granted.VarianceBits != "0" {
+		// Equipment rows carry the zero bits word; PerfectStats must not
+		// have set any field of it.
+		t.Fatalf("variance bits = %q, want 0 (no white stats)", granted.VarianceBits)
+	}
+	if len(granted.MagicOptions) != 0 {
+		t.Fatalf("blues = %v, want none", granted.MagicOptions)
+	}
+}
+
+/*
+================
+TestOperatorBagGrantWithoutNewFieldsIsUnchanged
+
+A bag grant through the operator path keeps the same ordinary receipts: the
+Slot==nil branch rides the reward planner and adds no equipment frames.
+================
+*/
+func TestOperatorBagGrantWithoutNewFieldsIsUnchanged(t *testing.T) {
+	d := openDoorRuntime(t, t.TempDir(), testCharacter())
+	deps := d.rt.deps.(*enterworld.Deps)
+	deps.UpdateCharacter = d.authority.UpdateCharacter
+	deps.ReadCharacter = func(_ string, read func()) { d.authority.ReadState(read) }
+	var sent []wire.Frame
+	d.rt.PushCharacterFrames = func(_, _ string, frames []wire.Frame) {
+		sent = append(sent, frames...)
+	}
+	var peer []wire.Frame
+	d.rt.PushDivisionPeerFrames = func(_, _ string, frames []wire.Frame) {
+		peer = append(peer, frames...)
+	}
+	if err := d.rt.OperatorGrantItems(testDivision, d.character.Name, []inventory.ItemAmount{
+		{Codename: "ITEM_CH_SWORD_01_A_RARE", Count: 1},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(peer) != 0 {
+		t.Fatalf("a bag grant published %d peer frames, want none", len(peer))
+	}
+	for _, frame := range sent[1:] {
+		if frame.Opcode != wire.OpItemMoveResponse || frame.Payload[0] != 1 || frame.Payload[1] != 14 {
+			t.Fatalf("not an ordinary inventory grant: %+v", frame)
+		}
+	}
+	var granted *enterworld.InventoryRow
+	rows := d.character.Snapshot().MissionInventory
+	for i := range rows {
+		if rows[i].Codename == "ITEM_CH_SWORD_01_A_RARE" && rows[i].Slot >= 13 {
+			granted = &rows[i]
+		}
+	}
+	if granted == nil {
+		t.Fatal("no granted sword")
+	}
+	if granted.Plus != 0 || granted.VarianceBits != "0" || len(granted.MagicOptions) != 0 {
+		t.Fatalf("flag-off grant carried the new fields: %+v", granted)
+	}
+}

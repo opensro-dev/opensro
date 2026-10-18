@@ -126,6 +126,19 @@ func SealRefs(tier string) []SealRef {
 	return out
 }
 
+// CatalogLevel is an equipment codename's authored level requirement, or
+// 0/false when the catalogue has no such row. A degree spans several levels
+// (for example a D2 sword at 8, 10 and 13), so a same-degree comparison must
+// use this value, not the degree token alone.
+func CatalogLevel(codename string) (int, bool) {
+	for _, r := range equipmentItems {
+		if r.Codename == codename {
+			return int(r.Level), true
+		}
+	}
+	return 0, false
+}
+
 /*
 ================
 equipmentSource

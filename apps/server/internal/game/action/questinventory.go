@@ -13,7 +13,7 @@ import (
 
 // PlanQuestInventory runs under the caller's character transaction. It never
 // mutates the character: all removals and grants must fit before rewards commit.
-// maxGrantPlus bounds the plus of granted equipment (opensro-infra patch).
+// maxGrantPlus bounds the plus of granted equipment.
 const maxGrantPlus = 12
 
 func (rt *Runtime) PlanQuestInventory(c *enterworld.Character, consume, grant []inventory.ItemAmount) ([]enterworld.InventoryRow, []wire.Frame, error) {

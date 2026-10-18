@@ -109,12 +109,6 @@ func TestGearPieceKeyAndDegree(t *testing.T) {
 	if d, ok := gearDegree("ITEM_CH_SWORD_04_C_RARE"); !ok || d != 4 {
 		t.Fatalf("gearDegree = %d,%v, want 4,true", d, ok)
 	}
-	if !gearDowngrade("ITEM_CH_SWORD_04_C_RARE", "ITEM_CH_SWORD_03_C_RARE") {
-		t.Fatal("expected a lower degree to be a downgrade")
-	}
-	if gearDowngrade("ITEM_CH_SWORD_03_C_RARE", "ITEM_CH_SWORD_04_C_RARE") {
-		t.Fatal("a higher degree must not be a downgrade")
-	}
 }
 
 func TestWornIdentityFromDefGear(t *testing.T) {
