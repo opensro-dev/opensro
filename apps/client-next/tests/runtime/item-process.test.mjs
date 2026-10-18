@@ -368,6 +368,54 @@ test("a stone whose roll failed records a failure outcome; a stone refusal recor
 	owner.receive( 0xb651, Uint8Array.of( 2, 0x21 ) );
 	assert.equal( owner.state().alchemy.outcome, undefined );
 });
+/*
+================
+protection stone precheck (620DD0)
+
+A Fuse click on a protection stone whose option already has six charges
+sends nothing and raises that stone's already-max notice, once.
+================
+*/
+function protectionSetup( charges ) {
+	const frames = [], owner = createInventory( f => frames.push( f ), () => {} );
+	const body = Buffer.alloc( 26 );
+	body.writeUInt32LE( 1 );
+	body.writeUInt32LE( 10, 13 );
+	body[17] = 1;
+	body.writeBigUInt64LE( BigInt( 102 ) | (BigInt( charges ) << 32n), 18 );
+	owner.bootstrap( {
+		magicOptionSnapshot: [
+			{ paramId: 102, optionName: "MATTR_LUCK", paramName: "MATTR_LUCK+", degree: 1 }
+		],
+		refItemSnapshot: [
+			{ refObjId: 1, typeFlags: 0x2c },
+			{ refObjId: 4, typeFlags: 0x0dec, codename: "ITEM_ETC_ARCHEMY_MAGICSTONE_LUCK" }
+		],
+		equipItems: [
+			{ slot: 13, refObjId: 1, body: [ ...body ] },
+			{ slot: 14, refObjId: 4, body: [ 4, 0, 0, 0, 1, 0, 0 ] }
+		]
+	} );
+	owner.process( { kind: "alchemy-open" }, 0 );
+	return { owner, frames };
+}
+test("a maxed protection option refuses the fuse locally and sends nothing", () => {
+	const { owner, frames } = protectionSetup( 6 );
+	const sent = owner.process( { kind: "alchemy-start", mode: "magic", slots: [ 13, 14 ] }, 0 );
+	assert.equal( sent, null );
+	assert.deepEqual( frames, [] );
+	assert.equal( owner.state().alchemy.pending, false );
+	assert.equal( owner.takeAlchemyRefusal()?.key, "UIIT_MSG_STRGERR_MAGICSTONE_LUCK_MAX" );
+	assert.equal( owner.takeAlchemyRefusal(), null );
+});
+test("five charges still send the fuse request", () => {
+	const { owner, frames } = protectionSetup( 5 );
+	owner.process( { kind: "alchemy-start", mode: "magic", slots: [ 13, 14 ] }, 0 );
+	assert.equal( frames.length, 1 );
+	assert.equal( frames[0].opcode, 0x7651 );
+	assert.deepEqual( [ ...frames[0].payload ], [ 3, 2, 13, 14 ] );
+	assert.equal( owner.takeAlchemyRefusal(), null );
+});
 const result = await import( "../../src/engine/foundation/ui/alchemy-result.ts" );
 test("62B0B0 words the outcome and plays its effect once", () => {
 	const copy = key =>

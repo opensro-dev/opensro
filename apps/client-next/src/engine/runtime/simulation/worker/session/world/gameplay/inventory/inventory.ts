@@ -53,6 +53,7 @@ import { gachaPrizes } from "@/engine/foundation/gameplay/gacha-catalog";
 import { isGachaVoucher } from "@/engine/foundation/ui/gacha-window";
 import type { SystemNotice } from "@/engine/foundation/gameplay/system-notices";
 import { createMagicOptionGrant } from "./magic-option/magic-option";
+import { alchemyProtectionStoneRefusal } from "@/engine/foundation/gameplay/alchemy-notices";
 import { itemStateDelta } from "@/engine/foundation/gameplay/item-state-delta";
 import { itemSlotFlashKinds } from "@/engine/foundation/ui/item-slot-effects";
 import { itemMagicDefinitions } from "@/engine/foundation/ui/item-tooltip-magic";
@@ -209,6 +210,9 @@ presentShop
 	const objRefs = new Map<number, number>();
 	const useCooldowns = new Map<number, number>();
 	const refs = new Map<number, number>(), names = new Map<number, string>();
+	// Item codenames ride every refItemSnapshot row; the Fuse-click refusal
+	// (620DD0) names the slotted protection stone by codename.
+	const codenames = new Map<number, string>();
 	const icons = new Map<number, string>();
 	const tooltipRefs = new Map<number, ItemTooltipReference>();
 	// The Magic Pang window's twelve prizes with the reference icons, rebuilt when references change.
@@ -221,6 +225,8 @@ presentShop
 	} | null = null;
 	// The chat line a voucher update raises, taken by the gameplay owner after each packet.
 	let exchangeNotice: SystemNotice | null = null;
+	// The Fuse click the protection-stone precheck refused locally (620DD0).
+	let alchemyRefusal: SystemNotice | null = null;
 	let magicRefs = itemMagicReferences( undefined );
 	let presentations = new WeakMap<InventoryItem, InventoryItem>();
 	/*
@@ -617,6 +623,18 @@ The exchange line the last 0x3645 raised, once.
 		},
 		/*
 ================
+takeAlchemyRefusal
+
+The Fuse click the protection-stone precheck refused locally, once.
+================
+		*/
+		takeAlchemyRefusal(): SystemNotice | null {
+			const notice = alchemyRefusal;
+			alchemyRefusal = null;
+			return notice;
+		},
+		/*
+================
 reference
 
 A reference's name and icon by id, for rows that are no item (the forge).
@@ -697,6 +715,7 @@ bootstrap
 				equipmentSlotCount?: number;
 				refItemSnapshot?: {
 					icon?: string;
+					codename?: string;
 					name?: string;
 					nativeFields?: { useCooldownDuration528?: number; };
 					descriptionSymbol?: string;
@@ -719,6 +738,7 @@ bootstrap
 			inventorySlotCount = b.inventorySlotCount;
 			equipmentSlotCount = b.equipmentSlotCount;
 			names.clear();
+			codenames.clear();
 			icons.clear();
 			objRefs.clear();
 			for (
@@ -748,6 +768,9 @@ bootstrap
 				useCooldowns.set( r.refObjId, cooldown );
 				refs.set( r.refObjId, r.typeFlags );
 				if ( typeof r.name === "string" ) names.set( r.refObjId, r.name );
+				if ( typeof r.codename === "string" && r.codename.length <= 256 ) {
+					codenames.set( r.refObjId, r.codename );
+				}
 			}
 			const next = new Map<number, InventoryItem>(), seenSlots = new Set<number>();
 			for ( const row of b.equipItems ?? [] ) {
@@ -915,9 +938,24 @@ exchangeCommand
 				send( exchange );
 				return exchange;
 			}
-			const frame = command.kind === "gacha-open" ?
-				gacha.open( command.gid ) :
-				alchemy.start( command.mode, command.slots, slots, now, command.quantity );
+			if ( command.kind === "alchemy-start" ) {
+				// 620DD0 on the Fuse click: a protection stone whose option
+				// is already at six charges is refused locally, no request.
+				if ( command.mode === "magic" && command.slots.length === 2 ) {
+					const target = slots.get( command.slots[0]! ), stone = slots.get( command.slots[1]! );
+					const refusal = target && stone ?
+						alchemyProtectionStoneRefusal( codenames.get( stone.refObjId ), target.magic, magicRefs ) :
+						null;
+					if ( refusal ) {
+						alchemyRefusal = refusal;
+						return null;
+					}
+				}
+				const frame = alchemy.start( command.mode, command.slots, slots, now, command.quantity );
+				send( frame );
+				return frame;
+			}
+			const frame = gacha.open( command.gid );
 			send( frame );
 			return frame;
 		},

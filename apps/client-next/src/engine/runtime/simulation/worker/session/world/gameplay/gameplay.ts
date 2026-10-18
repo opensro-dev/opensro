@@ -2046,10 +2046,20 @@ state here before a command can claim a native wire conversation.
 					}
 					return null;
 				}
-				return inventory.process(
+				const processed = inventory.process(
 					command as import("@/engine/contracts/item-process").ItemProcessCommand,
 					now
 				);
+				// A locally refused Fuse click (620DD0) sent nothing; show
+				// the stone's already-max notice instead.
+				if ( command.kind === "alchemy-start" ) {
+					const refusal = inventory.takeAlchemyRefusal();
+					if ( refusal ) {
+						notices = [ ...notices.slice( -99 ), { ...refusal, sequence: ++noticeSequence } ];
+						dirty = true;
+					}
+				}
+				return processed;
 			}
 			if (
 				[
