@@ -1,0 +1,11 @@
+[Unit]
+Description=Observe OpenSRO tick stall dumps every thirty seconds
+
+[Timer]
+OnBootSec=30
+OnUnitInactiveSec=30
+AccuracySec=1
+Unit=opensro-stalldump.service
+
+[Install]
+WantedBy=timers.target

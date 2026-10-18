@@ -29,10 +29,10 @@ ROOT = Path("/var/lib/opensro-release")
 CONFIG = Path("/etc/opensro-release/config.json")
 MODULES = ("release_state.py", "plan.py", "bundle.py", "client_bundle.py", "retention.py",
 	"client_deploy.py", "client_data.py", "server_data.py", "coordinated.py", "deploy.py", "rollback.py", "monitor.py",
-	"receiver.py")
+	"stalldump_watch.py", "receiver.py")
 CONTROL_FILES = (*MODULES, "install.py", "compatibility.json", "overview.html", "routes.caddy",
-	"opensro-monitor.service", "opensro-monitor.timer", "opensro-release-deadman.service",
-	"opensro-release-deadman.timer")
+	"opensro-monitor.service", "opensro-monitor.timer", "opensro-stalldump.service", "opensro-stalldump.timer",
+	"opensro-release-deadman.service", "opensro-release-deadman.timer")
 
 
 # ================
@@ -175,6 +175,10 @@ def monitor(version, config):
 		subprocess.run(["useradd", "--system", "--no-create-home", "--shell", "/usr/sbin/nologin", name], check=True)
 	health = ROOT / "public/health"
 	shutil.chown(health, user=name, group=name)
+	stalldump = ROOT / "stalldump"
+	stalldump.mkdir(exist_ok=True)
+	stalldump.chmod(0o755)
+	shutil.chown(stalldump, user=name, group=name)
 	webhook = Path("/etc/opensro-release/monitor-webhook")
 	install_file(webhook, Path(config["public_webhook"]).read_bytes(), 0o640)
 	shutil.chown(webhook, user="root", group=name)
@@ -183,11 +187,17 @@ def monitor(version, config):
 		"label": "game server", "state": str(health / "fleet.json"), "webhook": str(webhook),
 		"production_state": config["production_state"]}
 	install_file("/etc/opensro-release/monitor.json", (json.dumps(settings, indent=2) + "\n").encode())
-	for name in ("opensro-monitor.service", "opensro-monitor.timer"):
+	if "stall_dumps" in config:
+		stalldump_settings = {"dir": config["stall_dumps"], "state": str(stalldump / "watch.json"),
+			"webhook": str(webhook), "label": config["shard"]}
+		install_file("/etc/opensro-release/stalldump.json", (json.dumps(stalldump_settings, indent=2) + "\n").encode())
+	for name in ("opensro-monitor.service", "opensro-monitor.timer", "opensro-stalldump.service", "opensro-stalldump.timer"):
 		body = (version / name).read_text().replace("@RELEASE_MODULES@", str(version))
 		install_file(Path("/etc/systemd/system") / name, body.encode())
 	subprocess.run(["systemctl", "daemon-reload"], check=True)
 	subprocess.run(["systemctl", "enable", "--now", "opensro-monitor.timer"], check=True)
+	if "stall_dumps" in config:
+		subprocess.run(["systemctl", "enable", "--now", "opensro-stalldump.timer"], check=True)
 
 
 # ================

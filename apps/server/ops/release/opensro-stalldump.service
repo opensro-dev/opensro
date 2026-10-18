@@ -1,0 +1,25 @@
+# ===========================================================================
+# opensro-stalldump.service - page the first tick-stall dump, exactly once.
+# Bound by the installer like opensro-monitor.service. Reads the shard
+# authority's stall-dumps directory; its only write is its own state file.
+# ===========================================================================
+[Unit]
+Description=Check for new OpenSRO tick stall dumps
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=opensro-monitor
+Group=opensro-monitor
+ExecStart=/usr/bin/python3 @RELEASE_MODULES@/stalldump_watch.py /etc/opensro-release/stalldump.json
+TimeoutStartSec=45
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/opensro-release/stalldump
+UMask=0022
+
+[Install]
+WantedBy=multi-user.target
