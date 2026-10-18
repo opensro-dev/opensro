@@ -42,11 +42,14 @@ const (
 	MoverEventEntryRefused
 	MoverEventAttackApproachRequired
 	MoverEventSkillCommandRejected
+	MoverEventStuckIdled
 	moverEventCount
 )
 
 func (event MoverEvent) String() string {
 	switch event {
+	case MoverEventStuckIdled:
+		return "stuck-idled"
 	case MoverEventAttackApproachRequired:
 		return "attack-approach-required"
 	case MoverEventSkillCommandRejected:
@@ -146,6 +149,7 @@ func (mode MoverMode) String() string {
 // retain their behavior state while recording a new causal event.
 var moverTransitionTable = map[MoverMode]map[MoverEvent]MoverMode{
 	MoverPending: {
+		MoverEventStuckIdled:       MoverIdle,
 		MoverEventControlBound:     MoverIdle,
 		MoverEventControlReleased:  MoverIdle,
 		MoverEventActivityResumed:  MoverWandering,
@@ -163,6 +167,7 @@ var moverTransitionTable = map[MoverMode]map[MoverEvent]MoverMode{
 		MoverEventRetaliationArmed: MoverChasing,
 	},
 	MoverIdle: {
+		MoverEventStuckIdled:       MoverIdle,
 		MoverEventControlBound:     MoverIdle,
 		MoverEventControlReleased:  MoverIdle,
 		MoverEventEntryRefused:     MoverIdle,
@@ -177,6 +182,7 @@ var moverTransitionTable = map[MoverMode]map[MoverEvent]MoverMode{
 		MoverEventRetaliationArmed: MoverChasing,
 	},
 	MoverWandering: {
+		MoverEventStuckIdled:       MoverIdle,
 		MoverEventControlBound:     MoverIdle,
 		MoverEventControlReleased:  MoverIdle,
 		MoverEventFollowStarted:    MoverFollowing,
@@ -192,6 +198,7 @@ var moverTransitionTable = map[MoverMode]map[MoverEvent]MoverMode{
 		MoverEventSegmentArrived:   MoverIdle,
 	},
 	MoverChasing: {
+		MoverEventStuckIdled:        MoverIdle,
 		MoverEventControlBound:      MoverIdle,
 		MoverEventControlReleased:   MoverIdle,
 		MoverEventHelpAccepted:      MoverBattleReentry,
@@ -206,6 +213,7 @@ var moverTransitionTable = map[MoverMode]map[MoverEvent]MoverMode{
 		MoverEventAttackUnavailable: MoverReturning,
 	},
 	MoverAttacking: {
+		MoverEventStuckIdled:             MoverIdle,
 		MoverEventAttackApproachRequired: MoverChasing,
 		MoverEventSkillCommandRejected:   MoverAttacking,
 		MoverEventControlBound:           MoverIdle,
@@ -223,6 +231,7 @@ var moverTransitionTable = map[MoverMode]map[MoverEvent]MoverMode{
 		MoverEventTargetDefeated:         MoverRecovering,
 	},
 	MoverRecovering: {
+		MoverEventStuckIdled:       MoverIdle,
 		MoverEventControlBound:     MoverIdle,
 		MoverEventControlReleased:  MoverIdle,
 		MoverEventHelpAccepted:     MoverBattleReentry,
@@ -231,6 +240,7 @@ var moverTransitionTable = map[MoverMode]map[MoverEvent]MoverMode{
 		MoverEventRecoveryElapsed:  MoverReturning,
 	},
 	MoverReturning: {
+		MoverEventStuckIdled:       MoverIdle,
 		MoverEventControlBound:     MoverIdle,
 		MoverEventControlReleased:  MoverIdle,
 		MoverEventHelpAccepted:     MoverChasing,
@@ -241,6 +251,7 @@ var moverTransitionTable = map[MoverMode]map[MoverEvent]MoverMode{
 		MoverEventSegmentArrived:   MoverIdle,
 	},
 	MoverFollowing: {
+		MoverEventStuckIdled:       MoverIdle,
 		MoverEventControlBound:     MoverIdle,
 		MoverEventControlReleased:  MoverIdle,
 		MoverEventHelpAccepted:     MoverChasing,
@@ -252,6 +263,7 @@ var moverTransitionTable = map[MoverMode]map[MoverEvent]MoverMode{
 		MoverEventRetaliationArmed: MoverChasing,
 	},
 	MoverBattleReentry: {
+		MoverEventStuckIdled:       MoverIdle,
 		MoverEventControlBound:     MoverIdle,
 		MoverEventControlReleased:  MoverIdle,
 		MoverEventHelpAccepted:     MoverBattleReentry,
@@ -515,7 +527,7 @@ func (m *MoverState) Transition(event MoverEvent, targetGID uint32) error {
 		candidate.BehaviorDeadlineMs = 0
 		candidate.clearChaseGuidance()
 	case MoverEventHomingRequired, MoverEventTraceAbandoned, MoverEventTargetLost, MoverEventLeashBroken,
-		MoverEventAttackUnavailable, MoverEventAttackRefused:
+		MoverEventAttackUnavailable, MoverEventAttackRefused, MoverEventStuckIdled:
 		if targetGID != 0 {
 			return m.transitionArgumentError(event, targetGID, "target-release event requires target 0")
 		}
@@ -574,6 +586,9 @@ func (m *MoverState) Transition(event MoverEvent, targetGID uint32) error {
 	if next != MoverFollowing {
 		candidate.followLeaderGID = 0
 	}
+	if resetsStuckOnTransition(*m, event) {
+		candidate.ResetStuck()
+	}
 	candidate.previousEvent = candidate.lastEvent
 	candidate.lastEvent = event
 	candidate.transitionSerial++
@@ -585,6 +600,52 @@ func (m *MoverState) Transition(event MoverEvent, targetGID uint32) error {
 	}
 	*m = candidate
 	return nil
+}
+
+/*
+================
+resetsStuckOnTransition
+
+AI_CTactics_ChangeState (0x0053FF30) zeroes CTactics.+0x148 on every native
+CAIState entry, including self-transitions that re-enter the same state ID.
+Sub-mode transitions inside CAIState_BATTLE or multi-leg continuations inside
+CAIState_HOMING / CAIState_FOLLOW do not call 0x0053FF30 and keep the counter.
+================
+*/
+func resetsStuckOnTransition(from MoverState, event MoverEvent) bool {
+	switch event {
+	case MoverEventSpawnHoldElapsed,
+		MoverEventIdleRepeated,
+		MoverEventStartWander,
+		MoverEventAggroAcquired,
+		MoverEventRetaliationArmed,
+		MoverEventTargetLost,
+		MoverEventLeashBroken,
+		MoverEventAttackUnavailable,
+		MoverEventAttackRefused,
+		MoverEventRecoveryElapsed,
+		MoverEventLeaderLost,
+		MoverEventTraceAbandoned,
+		MoverEventHomingExpired,
+		MoverEventHelpAccepted,
+		MoverEventWanderExpired,
+		MoverEventActivityLost,
+		MoverEventActivityResumed,
+		MoverEventControlBound,
+		MoverEventControlReleased,
+		MoverEventFollowSatisfied,
+		MoverEventEntryRefused,
+		MoverEventStuckIdled:
+		return true
+	case MoverEventFollowStarted:
+		return from.mode != MoverFollowing
+	case MoverEventHomingRequired:
+		return from.lastEvent != MoverEventSegmentArrived
+	case MoverEventSegmentArrived, MoverEventDisplaced:
+		return from.mode == MoverWandering && !from.stuck
+	default:
+		return false
+	}
 }
 
 func (m MoverState) transitionArgumentError(event MoverEvent, targetGID uint32, reason string) error {

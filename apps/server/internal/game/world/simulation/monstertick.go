@@ -11,7 +11,6 @@ package simulation
 import (
 	"math"
 	"opensro.online/server/internal/domain"
-	"time"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/item/wire"
@@ -422,38 +421,6 @@ func (ops *MonsterMoverOps) advanceAndPublish(divisionID string, instance monste
 }
 
 /*
-================
-vanishInSafeZone
-
-CGObjMob_SetRegionLeavingSafeZone (CGObjMob vtable +0x3AC, 4C1270): a
-monster whose region changes to one that is not a battlefield (a town,
-_RefRegion.IsBattleField 0) is set to life state 3 through vtable +0x1F0
-(CGObjChar_SetLifeStateAndNotify 4A9C80). From alive that state skips the
-death broadcast: the monster vanishes without a kill or a reward, and its
-nest respawns it (560D00). This is why monsters never walk into a town.
-================
-*/
-func (ops *MonsterMoverOps) vanishInSafeZone(divisionID string, gid uint32, nowMs int64) {
-	mover, ok := ops.Monsters.Mover(divisionID, gid)
-	if ok && SafeZoneRegion(mover.LivePoseAt(nowMs, nil).RegionID) {
-		ops.Monsters.Defeat(divisionID, gid, time.UnixMilli(nowMs))
-	}
-}
-
-/*
-================
-SafeZoneRegion
-
-A region _RefRegion marks as no battlefield. A region the table does not
-know is not one, as 52943E refuses unknown regions separately.
-================
-*/
-func SafeZoneRegion(region uint16) bool {
-	allowed, known := worldgeom.RegionPlayerCombat(region)
-	return known && !allowed
-}
-
-/*
 ==================
 monsterInFlightSnapshotFrames
 
@@ -683,6 +650,9 @@ func (ops *MonsterMoverOps) planDirectSegment(instance monster.Instance, mover m
 	// state 9 for every B738 destination, and the cyclic mixer reset clears its
 	// authored cursor. The browser presentation adapter separately retains the
 	// visible walk/run phase while that locomotion lane remains continuously live.
+	if settledFrames, stuck := settleMaturedSegment(instance.Gid, &mover, nowMs); stuck {
+		return mover, settledFrames
+	}
 	wasInFlight := mover.InFlight(nowMs)
 
 	// Segment departure: `from` becomes mover.From - the interpolation BASE
@@ -704,9 +674,14 @@ func (ops *MonsterMoverOps) planDirectSegment(instance monster.Instance, mover m
 		mover.Pose = from
 		mover.From, mover.To = monster.Pose{}, monster.Pose{}
 		mover.DepartMs, mover.ArriveMs = 0, 0
-		mustMoverTransition(&mover, monster.MoverEventSegmentArrived, 0)
-		if mover.IdleEntryPending() {
-			mover.BehaviorDeadlineMs = nowMs + ops.idleDelayMs()
+		if wasInFlight {
+			mover.NoteMoveStopped(from)
+		}
+		if !mover.Stuck() {
+			mustMoverTransition(&mover, monster.MoverEventSegmentArrived, 0)
+			if mover.IdleEntryPending() {
+				mover.BehaviorDeadlineMs = nowMs + ops.idleDelayMs()
+			}
 		}
 		if wasInFlight {
 			return mover, []Frame{correctionFrame(instance.Gid, from)}
@@ -714,6 +689,7 @@ func (ops *MonsterMoverOps) planDirectSegment(instance monster.Instance, mover m
 		return mover, nil
 	}
 
+	mover.NoteMoveIssued(from, wasInFlight)
 	sourceRequired := monsterMovementSourceRequired(mover, from, dest, wasInFlight)
 	headingWord := headingWordToward(from, dest)
 	dest.Heading = headingWord
@@ -759,13 +735,18 @@ holdNavigation
 ================
 */
 func (ops *MonsterMoverOps) holdNavigation(gid uint32, mover monster.MoverState, live monster.Pose, now int64) (monster.MoverState, []Frame) {
+	if mover.ArriveMs > mover.DepartMs {
+		mover.NoteMoveStopped(live)
+	}
 	mover.Pose = live
 	mover.From, mover.To = monster.Pose{}, monster.Pose{}
 	mover.DepartMs, mover.ArriveMs = 0, 0
 	mover.AdoptNavigation(nil)
-	mustMoverTransition(&mover, monster.MoverEventSegmentArrived, 0)
-	if mover.IdleEntryPending() {
-		mover.BehaviorDeadlineMs = now + ops.idleDelayMs()
+	if !mover.Stuck() {
+		mustMoverTransition(&mover, monster.MoverEventSegmentArrived, 0)
+		if mover.IdleEntryPending() {
+			mover.BehaviorDeadlineMs = now + ops.idleDelayMs()
+		}
 	}
 	return mover, []Frame{correctionFrame(gid, live)}
 }

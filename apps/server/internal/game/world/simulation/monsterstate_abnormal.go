@@ -381,6 +381,7 @@ func (o *monsterAbnormalOwner) StopMove() {
 		return
 	}
 	mover.Pose = groundedLivePose(mover, o.now, o.ground)
+	mover.NoteMoveStopped(mover.Pose)
 	if err := mover.Transition(monster.MoverEventDisplaced, mover.TargetGID()); err != nil {
 		panic(err)
 	}

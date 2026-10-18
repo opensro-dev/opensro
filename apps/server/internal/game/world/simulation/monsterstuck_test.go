@@ -1,0 +1,304 @@
+/*
+===========================================================================
+
+monsterstuck_test.go - verification of native monster stuck counting and
+event-0x28 dispatch (0x00559010 / 0x005599C0 / 0x0055A250 / 0x00541110)
+
+===========================================================================
+*/
+
+package simulation
+
+import (
+	"testing"
+
+	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/monster"
+)
+
+const testStuckFailureLimit = 10
+
+func testShortNavPath(from, goal monster.Pose) *monster.NavigationPath {
+	return monster.NewNavigationPath(from, goal, goal, 0, func(f float64, _ monster.Pose) (float64, bool) {
+		return from.Y + (goal.Y-from.Y)*f, true
+	})
+}
+
+/*
+================
+TestMonsterStuckDetachAndIdleOnBlockedHoming
+
+Verifies that a non-COS monster in HOMING (MoverReturning) whose return legs
+repeatedly stop within 20 units of its sequence origin accumulates 10 stuck
+counts (0x00559010), detaches its nest command (0x0053FD40 -> 0x00560D00)
+while preserving ControllerGID (+0x14C), enters MoverIdle (0x0053FF30), and
+stays idle at its detached pose rather than re-entering homing.
+================
+*/
+func TestMonsterStuckDetachAndIdleOnBlockedHoming(t *testing.T) {
+	ops, instance, mover, _ := pursuitControlsFixture(t)
+	// Place the monster far outside its nest's InitRadius so needsHoming is true
+	// while the nest remains attached.
+	away := monster.Pose{
+		RegionID: instance.Nest.RegionID,
+		X:        instance.Nest.X + 250,
+		Y:        instance.Nest.Y,
+		Z:        instance.Nest.Z,
+	}
+	// Each return step clips to 1 unit (< 20 from sequence origin) so each
+	// admitted leg matures within 20 units and increments the stuck counter.
+	ops.PlanPath = func(from, goal monster.Pose) *monster.NavigationPath {
+		if from == anchorPose(instance) {
+			return testShortNavPath(from, goal)
+		}
+		short := from
+		short.X += 1
+		return testShortNavPath(from, short)
+	}
+
+	mustMoverTransition(&mover, monster.MoverEventTargetLost, 0)
+	if err := mover.BindController(monster.ControlSummoned, 9001); err != nil {
+		t.Fatalf("bind controller: %v", err)
+	}
+	mover.Pose = away
+	ops.Monsters.CommitMover(monsterTestDivision, instance.Gid, mover)
+	nowMs := int64(10_000)
+	ops.commitIdleEntry(monsterTestDivision, instance, mover, nil, nowMs)
+
+	for step := 1; step <= testStuckFailureLimit; step++ {
+		m, ok := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+		if !ok {
+			t.Fatalf("step %d: mover missing", step)
+		}
+		if m.ArriveMs <= nowMs {
+			t.Fatalf("step %d: expected active return segment, got mode=%v arrive=%d now=%d",
+				step, m.Mode(), m.ArriveMs, nowMs)
+		}
+		nowMs = m.ArriveMs
+		current, ok := ops.Monsters.Get(monsterTestDivision, instance.Gid)
+		if !ok {
+			t.Fatalf("step %d: instance missing", step)
+		}
+		ops.advanceInstance(monsterTestDivision, current, nil, nowMs)
+	}
+
+	detachedInst, ok := ops.Monsters.Get(monsterTestDivision, instance.Gid)
+	if !ok {
+		t.Fatal("instance missing after 10 short homing stops")
+	}
+	if !detachedInst.NestDetached {
+		t.Fatal("expected NestDetached = true after 10 short homing stops")
+	}
+	settled, ok := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+	if !ok {
+		t.Fatal("mover missing after stuck detach")
+	}
+	if settled.Mode() != monster.MoverIdle {
+		t.Fatalf("mover mode = %v, want MoverIdle", settled.Mode())
+	}
+	if settled.ControllerGID() != 9001 {
+		t.Fatalf("controller GID = %d, want 9001 (CAITactics_ReleaseCommand preserves +0x14C)", settled.ControllerGID())
+	}
+	if settled.Progress().Failures() != 0 || settled.Stuck() {
+		t.Fatalf("stuck progress not reset on idle transition: failures=%d stuck=%v", settled.Progress().Failures(), settled.Stuck())
+	}
+
+	// Advancing again after the idle entry deadline must NOT re-enter homing
+	// because the nest command was released (0x00545630 returns 1 when +0x20 == 0).
+	ops.Rand = func() float64 { return 0.10 } // stay idle on wander roll
+	ops.advanceInstance(monsterTestDivision, detachedInst, nil, settled.BehaviorDeadlineMs+100)
+	afterIdle, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+	if afterIdle.Mode() != monster.MoverIdle {
+		t.Fatalf("detached monster re-entered %v from idle, want MoverIdle", afterIdle.Mode())
+	}
+}
+
+/*
+================
+TestMonsterStuckWarpToBattleTargetAndDungeonGuard
+
+Verifies CAIState_BATTLE_OnStuck_RelocateToTarget (0x0055A250):
+  - When TraceBoundary == 2, 10 short pursuit stops relocate the monster onto
+    its live combat target via 0xB2F5 (OpObjectSourceCorrection) while keeping
+    MoverChasing and the combat target.
+  - When the monster is outdoors and the combat target is in a dungeon region,
+    CAITactics_RequestPositionRelocation (0x00541110) refuses the relocation.
+
+================
+*/
+func TestMonsterStuckWarpToBattleTargetAndDungeonGuard(t *testing.T) {
+	ops, instance, mover, target := pursuitControlsFixture(t)
+	instance.Nest.Controls.TraceBoundary = 2
+	ops.Monsters.mu.Lock()
+	ops.Monsters.division(monsterTestDivision).instances.set(instance.Gid, instance)
+	ops.Monsters.mu.Unlock()
+
+	target.Pose.X = mover.Pose.X + 80
+	target.Pose.Z = mover.Pose.Z + 40
+	target.Pose.Y = 33
+	ops.TerrainHeight = func(regionID uint16, x, z float64) (float64, bool) {
+		return 37.5, true
+	}
+	// Every pursuit leg clips to 1 unit (< 20), so arrival after each short
+	// leg increments the stuck counter.
+	ops.PlanPath = func(from, goal monster.Pose) *monster.NavigationPath {
+		short := from
+		short.X += 1
+		return testShortNavPath(from, short)
+	}
+
+	nowMs := int64(20_000)
+	current, _ := ops.Monsters.Get(monsterTestDivision, instance.Gid)
+	ops.advanceInstance(monsterTestDivision, current, []playerPose{target}, nowMs)
+	var lastFrames []Frame
+	for step := 1; step <= testStuckFailureLimit; step++ {
+		m, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+		if m.ArriveMs <= nowMs {
+			t.Fatalf("step %d: expected active chase segment, got mode=%v arrive=%d now=%d",
+				step, m.Mode(), m.ArriveMs, nowMs)
+		}
+		nowMs = m.ArriveMs
+		current, _ = ops.Monsters.Get(monsterTestDivision, instance.Gid)
+		lastFrames, _ = ops.advanceInstance(monsterTestDivision, current, []playerPose{target}, nowMs)
+	}
+
+	warped, ok := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+	if !ok {
+		t.Fatal("mover missing after battle stuck relocation")
+	}
+	if warped.Mode() != monster.MoverChasing || warped.TargetGID() != target.Gid {
+		t.Fatalf("expected MoverChasing on target %d after battle warp, got mode=%v target=%d",
+			target.Gid, warped.Mode(), warped.TargetGID())
+	}
+	if warped.Pose.X != target.Pose.X || warped.Pose.Z != target.Pose.Z || warped.Pose.Y != 37.5 {
+		t.Fatalf("warped pose = %+v, want target XZ (%v,%v) and terrain Y 37.5",
+			warped.Pose, target.Pose.X, target.Pose.Z)
+	}
+	foundCorrection := false
+	for _, f := range lastFrames {
+		if f.Opcode == wire.OpObjectSourceCorrection {
+			foundCorrection = true
+		}
+	}
+	if !foundCorrection {
+		t.Fatal("expected OpObjectSourceCorrection frame on battle stuck relocation")
+	}
+
+	// Outdoor -> dungeon relocation guard (0x00541110):
+	outdoorPose := monster.Pose{RegionID: 25000, X: 100, Y: 10, Z: 100}
+	warped.Pose = outdoorPose
+	warped.From, warped.To = monster.Pose{}, monster.Pose{}
+	warped.DepartMs, warped.ArriveMs = 0, 0
+	warped.ResetStuck()
+	for i := 0; i < testStuckFailureLimit; i++ {
+		warped.NoteMoveIssued(outdoorPose, false)
+		warped.NoteMoveStopped(outdoorPose)
+	}
+	ops.Monsters.CommitMover(monsterTestDivision, instance.Gid, warped)
+	dungeonTarget := target
+	dungeonTarget.Pose.RegionID = 0x8001
+	dungeonTarget.Pose.X = 500
+	dungeonTarget.Pose.Z = 500
+	frames := ops.resolveStuck(monsterTestDivision, instance.Gid, []playerPose{dungeonTarget}, nowMs, nil)
+	if len(frames) != 0 {
+		t.Fatalf("expected no relocation frame for outdoor -> dungeon target, got %d", len(frames))
+	}
+	afterGuard, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+	if afterGuard.Pose.RegionID != outdoorPose.RegionID || afterGuard.Pose.X != outdoorPose.X {
+		t.Fatalf("outdoor monster warped into dungeon: pose=%+v", afterGuard.Pose)
+	}
+}
+
+/*
+================
+TestMonsterStuckRetainBattleWhenTraceBoundaryNotTwo
+
+Verifies that CAIState_BATTLE_OnStuck_RelocateToTarget (0x0055A250) is a no-op
+when TraceBoundary != 2: the monster neither relocates nor detaches its nest.
+================
+*/
+func TestMonsterStuckRetainBattleWhenTraceBoundaryNotTwo(t *testing.T) {
+	ops, instance, mover, target := pursuitControlsFixture(t)
+	instance.Nest.Controls.TraceBoundary = 1
+	ops.Monsters.mu.Lock()
+	ops.Monsters.division(monsterTestDivision).instances.set(instance.Gid, instance)
+	ops.Monsters.mu.Unlock()
+
+	origin := mover.Pose
+	for i := 0; i < testStuckFailureLimit; i++ {
+		mover.NoteMoveIssued(origin, false)
+		mover.NoteMoveStopped(origin)
+	}
+	ops.Monsters.CommitMover(monsterTestDivision, instance.Gid, mover)
+
+	frames := ops.resolveStuck(monsterTestDivision, instance.Gid, []playerPose{target}, 30_000, nil)
+	if len(frames) != 0 {
+		t.Fatalf("expected no frames when TraceBoundary != 2, got %d", len(frames))
+	}
+	after, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+	if after.Mode() != monster.MoverChasing || after.Pose != origin {
+		t.Fatalf("expected mover to remain in MoverChasing at origin, got mode=%v pose=%+v", after.Mode(), after.Pose)
+	}
+	instAfter, _ := ops.Monsters.Get(monsterTestDivision, instance.Gid)
+	if instAfter.NestDetached {
+		t.Fatal("battle stuck with TraceBoundary != 2 must not detach nest")
+	}
+}
+
+/*
+================
+TestMonsterStuckWarpToControllerAndIdleForCOS
+
+Verifies CAIState_OnStuck_RelocateToOwner (0x005599C0): a COS actor (TID
+matching 0x1C6 with kind 3..5) outside BATTLE relocates onto its live controller
+via 0x00541110 and transitions to MoverIdle (0x0053FF30).
+================
+*/
+func TestMonsterStuckWarpToControllerAndIdleForCOS(t *testing.T) {
+	ops, instance, mover, controllerPlayer := pursuitControlsFixture(t)
+	// COS TID word: tid&0x7fe == 0x1c6 and kind = 3 (tid >> 11 == 3).
+	cosTidWord := uint16(0x1c6) | (3 << 11)
+	if monster.NativeStuckResponse(false, 0, cosTidWord) != monster.StuckWarpToControllerAndIdle {
+		t.Fatalf("expected tidWord %#x to map to StuckWarpToControllerAndIdle", cosTidWord)
+	}
+
+	instance.Ref.TidWord = cosTidWord
+	ops.Monsters.mu.Lock()
+	ops.Monsters.division(monsterTestDivision).instances.set(instance.Gid, instance)
+	ops.Monsters.mu.Unlock()
+
+	controllerPlayer.Pose.X = 420
+	controllerPlayer.Pose.Y = 18
+	controllerPlayer.Pose.Z = 310
+
+	cosOrigin := monster.Pose{RegionID: instance.Spawn.RegionID, X: 100, Y: 10, Z: 100}
+	mustMoverTransition(&mover, monster.MoverEventTargetLost, 0)
+	if err := mover.BindController(monster.ControlSummoned, controllerPlayer.Gid); err != nil {
+		t.Fatalf("bind controller: %v", err)
+	}
+	mover.Pose = cosOrigin
+	mustMoverTransition(&mover, monster.MoverEventFollowStarted, controllerPlayer.Gid)
+	for i := 0; i < testStuckFailureLimit; i++ {
+		mover.NoteMoveIssued(cosOrigin, false)
+		mover.NoteMoveStopped(cosOrigin)
+	}
+	ops.Monsters.CommitMover(monsterTestDivision, instance.Gid, mover)
+
+	frames := ops.resolveStuck(monsterTestDivision, instance.Gid, []playerPose{controllerPlayer}, 40_000, nil)
+	if len(frames) != 1 || frames[0].Opcode != wire.OpObjectSourceCorrection {
+		t.Fatalf("expected 1 OpObjectSourceCorrection frame for COS controller warp, got %d", len(frames))
+	}
+	after, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+	if after.Mode() != monster.MoverIdle {
+		t.Fatalf("COS mode after stuck = %v, want MoverIdle", after.Mode())
+	}
+	if after.Pose.X != controllerPlayer.Pose.X || after.Pose.Z != controllerPlayer.Pose.Z {
+		t.Fatalf("COS pose after stuck = %+v, want controller XZ (%v,%v)", after.Pose, controllerPlayer.Pose.X, controllerPlayer.Pose.Z)
+	}
+	if after.ControllerGID() != controllerPlayer.Gid {
+		t.Fatalf("COS controllerGID = %d, want %d", after.ControllerGID(), controllerPlayer.Gid)
+	}
+	if after.Progress().Failures() != 0 || after.Stuck() {
+		t.Fatalf("COS stuck progress not reset: failures=%d stuck=%v", after.Progress().Failures(), after.Stuck())
+	}
+}

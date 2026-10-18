@@ -113,7 +113,9 @@ func (ops *MonsterMoverOps) runActivityGate(division string, actor monster.Insta
 		m.Pose = m.To
 		m.From, m.To = monster.Pose{}, monster.Pose{}
 		m.DepartMs, m.ArriveMs = 0, 0
-		mustMoverTransition(&m, monster.MoverEventSegmentArrived, 0)
+		if !m.NoteMoveStopped(m.Pose) {
+			mustMoverTransition(&m, monster.MoverEventSegmentArrived, 0)
+		}
 		return ops.Monsters.CommitMoverFrames(division, actor.Gid, m, []Frame{correctionFrame(actor.Gid, m.Pose)}), true
 	}
 	return nil, true

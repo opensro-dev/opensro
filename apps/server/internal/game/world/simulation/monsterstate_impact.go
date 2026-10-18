@@ -119,6 +119,7 @@ func (s *MonsterState) applyDamageLocked(division string, state *divisionMonster
 			mover = monster.NewSpawnMover(instance, s.nowMillis())
 		}
 		live := mover.LivePoseAt(nowMs, nil)
+		hadSegment := mover.ArriveMs > mover.DepartMs
 		if err := mover.Transition(monster.MoverEventDisplaced, mover.TargetGID()); err != nil {
 			panic(err)
 		}
@@ -134,6 +135,9 @@ func (s *MonsterState) applyDamageLocked(division string, state *divisionMonster
 			}
 		}
 		displacement = s.clipDisplacementLocked(live, displacement)
+		if hadSegment {
+			mover.NoteMoveStopped(displacement.Pose)
+		}
 		mover.Pose = displacement.Pose
 		mover.From, mover.To = displacement.Pose, displacement.Pose
 		if state.movers == nil {

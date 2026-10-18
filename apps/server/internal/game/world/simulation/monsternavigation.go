@@ -18,11 +18,15 @@ func (ops *MonsterMoverOps) planSegment(instance monster.Instance, mover monster
 	if ops.PlanRoute == nil || !routedBehavior(mover) {
 		return ops.planDirectSegment(instance, mover, goal, speed, channel, now)
 	}
+	hadSegment := mover.ArriveMs > mover.DepartMs
+	if settledFrames, stuck := settleMaturedSegment(instance.Gid, &mover, now); stuck {
+		mover.CancelNavigation()
+		return mover, settledFrames
+	}
 	goal.X, goal.Z = math.Round(goal.X), math.Round(goal.Z)
 	goal = normalizeMonsterPose(goal)
 	live := mover.LivePoseAt(now, ops.TerrainHeight)
 	if planarDistance(live, goal) < .01 {
-		hadSegment := mover.ArriveMs > mover.DepartMs
 		mover.CancelNavigation()
 		next, frames := ops.planDirectSegment(instance, mover, goal, speed, channel, now)
 		if hadSegment && len(frames) == 0 {
@@ -76,6 +80,9 @@ func (ops *MonsterMoverOps) planSegment(instance monster.Instance, mover monster
 func (ops *MonsterMoverOps) waitForNavigation(gid uint32, mover monster.MoverState, live, goal monster.Pose, now int64) (monster.MoverState, []Frame) {
 	// Correct an old segment once; subsequent retry ticks are silent.
 	hadSegment := mover.ArriveMs > mover.DepartMs
+	if hadSegment {
+		mover.NoteMoveStopped(live)
+	}
 	mover.Pose = live
 	mover.From, mover.To = monster.Pose{}, monster.Pose{}
 	mover.DepartMs, mover.ArriveMs = 0, 0

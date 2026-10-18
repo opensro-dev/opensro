@@ -163,11 +163,61 @@ type MoverState struct {
 	LastBattleActivityMs uint32
 	HomingStartedMs      uint32
 	HomingAcquireAfterMs uint32
+	// progress is the native stuck count (CTactics +184/+19C/+148): each
+	// stop that leaves the actor within 20 of where its move sequence began
+	// counts, and from the tenth the stuck event is raised (559010 -> 5597B0).
+	progress MovementProgress
+	// stuck is latched when NoteMoveStopped crosses nativeStuckFailureLimit so
+	// the simulation tick can answer event 0x28 on the current state.
+	stuck bool
 }
 
 // InFlight reports whether a segment is still maturing at nowMs.
 func (m MoverState) InFlight(nowMs int64) bool {
 	return m.ArriveMs > m.DepartMs && nowMs < m.ArriveMs
+}
+
+// Progress returns the native movement progress tracker (CTactics +184/+19C/+148).
+func (m MoverState) Progress() MovementProgress {
+	return m.progress
+}
+
+// Stuck reports whether the last stop reached the ten-failure stuck threshold
+// (CAIState_OnMoveStopped_CountStuck 0x00559010 -> event 0x28).
+func (m MoverState) Stuck() bool {
+	return m.stuck
+}
+
+// ClearStuck clears the pending event-0x28 latch after the simulation tick
+// answers it, leaving the underlying failure counter untouched (matching
+// CAIState_BATTLE_OnStuck_RelocateToTarget 0x0055A250).
+func (m *MoverState) ClearStuck() {
+	m.stuck = false
+}
+
+// ResetStuck clears both the failure counter (CTactics.+0x148 = 0) and the
+// pending event-0x28 latch (AI_CTactics_ChangeState 0x0053FF30,
+// CAITactics_ReleaseCommand 0x0053FD40).
+func (m *MoverState) ResetStuck() {
+	m.progress.ResetFailures()
+	m.stuck = false
+}
+
+// NoteMoveIssued records a step command before the mover executes or clips it
+// (AI_CTactics_StepDestination 0x00541730).
+func (m *MoverState) NoteMoveIssued(live Pose, alreadyMoving bool) {
+	m.progress.Issued(live, alreadyMoving)
+}
+
+// NoteMoveStopped records a movement stop at live (CGObjChar_StopMove
+// 0x004A9430 -> event 8 -> CAIState_OnMoveStopped_CountStuck 0x00559010) and
+// latches Stuck when the tenth short stop is reached.
+func (m *MoverState) NoteMoveStopped(live Pose) bool {
+	if m.progress.Arrived(live) {
+		m.stuck = true
+		return true
+	}
+	return false
 }
 
 // GroundResolver resolves the navmesh ground height under a region-local

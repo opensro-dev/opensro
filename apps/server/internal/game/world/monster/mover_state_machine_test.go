@@ -253,3 +253,56 @@ func TestSummonActionHasNoMeleeRangeButRetainsActionOwnership(t *testing.T) {
 		t.Fatal("summon without cooldown admitted")
 	}
 }
+
+/*
+================
+TestMoverStuckProgressAndStateResets
+================
+*/
+func TestMoverStuckProgressAndStateResets(t *testing.T) {
+	origin := Pose{RegionID: 25000, X: 100, Z: 100}
+	m := MoverState{mode: MoverIdle, Pose: origin}
+	if err := m.BindController(ControlSummoned, 777); err != nil {
+		t.Fatalf("bind controller: %v", err)
+	}
+	if err := m.Transition(MoverEventAggroAcquired, 42); err != nil {
+		t.Fatalf("acquire target: %v", err)
+	}
+	for i := uint8(1); i < 10; i++ {
+		m.NoteMoveIssued(origin, false)
+		if m.NoteMoveStopped(Pose{RegionID: 25000, X: 105, Z: 100}) {
+			t.Fatalf("stop %d reported stuck before limit", i)
+		}
+	}
+	// Intra-BATTLE transitions (attack <-> chase) stay inside native state 3
+	// and therefore preserve the stuck failure counter.
+	m.AttackSkillID = 160
+	m.AttackReach = 10
+	m.AttackCooldownMs = 3000
+	if err := m.Transition(MoverEventAttackStarted, 42); err != nil {
+		t.Fatalf("attack start: %v", err)
+	}
+	if err := m.Transition(MoverEventChaseStarted, 42); err != nil {
+		t.Fatalf("chase restart: %v", err)
+	}
+	if m.Progress().Failures() != 9 {
+		t.Fatalf("failures = %d after intra-battle transition, want 9", m.Progress().Failures())
+	}
+	// The 10th short stop marks the mover stuck.
+	m.NoteMoveIssued(origin, false)
+	if !m.NoteMoveStopped(Pose{RegionID: 25000, X: 110, Z: 100}) || !m.Stuck() {
+		t.Fatal("10th short stop did not mark mover stuck")
+	}
+	// MoverEventStuckIdled transitions to MoverIdle, clears combat target,
+	// preserves controllerGID (+0x14C), and resets stuck progress (0x0053FF30).
+	if err := m.Transition(MoverEventStuckIdled, 0); err != nil {
+		t.Fatalf("stuck idled: %v", err)
+	}
+	if m.Mode() != MoverIdle || m.TargetGID() != 0 || m.ControllerGID() != 777 || !m.IdleEntryPending() {
+		t.Fatalf("unexpected state after stuck idled: mode=%v target=%d controller=%d idleEntry=%v",
+			m.Mode(), m.TargetGID(), m.ControllerGID(), m.IdleEntryPending())
+	}
+	if m.Progress().Failures() != 0 || m.Stuck() {
+		t.Fatalf("stuck state not cleared by MoverEventStuckIdled: failures=%d stuck=%v", m.Progress().Failures(), m.Stuck())
+	}
+}

@@ -20,6 +20,12 @@ out (the CloneWorldState discipline).
 ==================
 */
 func (ops *MonsterMoverOps) advanceInstance(divisionID string, instance monster.Instance, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
+	frames, targeted := ops.advanceInstanceStep(divisionID, instance, divisionPlayers, nowMs)
+	frames = ops.resolveStuck(divisionID, instance.Gid, divisionPlayers, nowMs, frames)
+	return frames, targeted
+}
+
+func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance monster.Instance, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
 	// A fatal B245 keeps the registry row alive briefly so the client can play
 	// death, stage reward particles, and then receive the ordinary despawn
 	// dissolve. That corpse is presentation-retained, not behavior-live: it
@@ -193,6 +199,10 @@ func (ops *MonsterMoverOps) advanceInstance(divisionID string, instance monster.
 		mover.Pose = mover.To
 		mover.From, mover.To = monster.Pose{}, monster.Pose{}
 		mover.DepartMs, mover.ArriveMs = 0, 0
+		if mover.NoteMoveStopped(mover.Pose) {
+			return ops.Monsters.CommitMoverFrames(divisionID, instance.Gid, mover,
+				[]Frame{correctionFrame(instance.Gid, mover.Pose)}), nil
+		}
 		mustMoverTransition(&mover, monster.MoverEventSegmentArrived, 0)
 		if !wasIdle {
 			mover.BehaviorDeadlineMs = nowMs + ops.idleDelayMs()

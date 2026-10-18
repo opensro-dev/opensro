@@ -238,6 +238,10 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 	mover.Pose = facing
 	mover.From, mover.To = monster.Pose{}, monster.Pose{}
 	mover.DepartMs, mover.ArriveMs = 0, 0
+	if hadSegment {
+		mover.NoteMoveStopped(facing)
+		mover.ClearStuck()
+	}
 	mustMoverTransition(&mover, monster.MoverEventAttackStarted, target.Gid)
 	if nowMs < mover.NextAttackMs || ops.BasicAttack == nil {
 		return ops.Monsters.CommitMoverFrames(divisionID, instance.Gid, mover, frames), nil, true

@@ -138,8 +138,12 @@ func (ops *MonsterMoverOps) stopOrAdvanceFollow(divisionID string, instance mons
 		mover.Pose = mover.To
 		mover.From, mover.To = monster.Pose{}, monster.Pose{}
 		mover.DepartMs, mover.ArriveMs = 0, 0
-		mustMoverTransition(&mover, monster.MoverEventSegmentArrived, 0)
 		frames = append(frames, correctionFrame(instance.Gid, mover.Pose))
+		if mover.NoteMoveStopped(mover.Pose) {
+			frames, _ = ops.Monsters.commitFollow(plan, mover, frames)
+			return frames, true
+		}
+		mustMoverTransition(&mover, monster.MoverEventSegmentArrived, 0)
 	}
 	if !plan.timers.CheckTimer(0, uint32(nowMs)) || !plan.leaderExists || plan.leaderHP == 0 {
 		// The controller gate suspends the steering callback, not the accepted
