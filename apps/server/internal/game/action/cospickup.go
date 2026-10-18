@@ -114,10 +114,7 @@ func (rt *Runtime) handleCosPickupCommand(division string, c *enterworld.Charact
 		return refused
 	}
 	request := wire.ItemMoveRequest{MovementType: wire.MoveTypeCosPickup, CosGID: command.CosGid, GroundGID: command.TargetGid}
-	result := rt.applyCosGround(division, c, request)
-	if session.pickup != nil {
-		session.pickupCommand = true
-	}
+	result := rt.applyCosGroundAt(division, c, request, cosGroundAttempt{now: rt.Now(), allowApproach: true, command: true})
 	return finishCosPickupCommand(result, command)
 }
 

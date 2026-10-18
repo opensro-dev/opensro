@@ -36,6 +36,7 @@ cosGroundAttempt
 type cosGroundAttempt struct {
 	now           time.Time
 	allowApproach bool
+	command       bool
 }
 
 /*
@@ -86,7 +87,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 	if item, ok := rt.characterGround(division, c, q.GroundGID); ok && item.OwnerJID != 0 && rt.CanPickupOwnedDrop != nil && rt.CanPickupOwnedDrop(division, c.Name, item.OwnerJID) {
 		sharedOwner = item.OwnerJID
 	}
-	if shared, handled := rt.sharePetPickup(division, c, q, petPickupAt{at: at, sharedOwner: sharedOwner, now: now}); handled {
+	if shared, handled := rt.sharePetPickup(division, c, q, petPickupAt{at: at, sharedOwner: sharedOwner, now: now, command: attempt.command}); handled {
 		return shared
 	}
 	result := failureResult(wire.ErrCodeInvalidRequest)
@@ -124,6 +125,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 			if allowApproach {
 				copy := q
 				session.pickup = &copy
+				session.pickupCommand = attempt.command
 				// Entering PICKITEM is a state change (53FF30).
 				resetPetStuck(session)
 				session.pickupDeadline = now.UnixMilli() + cosPickupApproachTimeoutMs
@@ -189,7 +191,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 		result = OpResult{Frames: append(frames, public...), Broadcast: public}
 		return true
 	})
-	if q.MovementType == wire.MoveTypeCosPickup && len(result.Broadcast) > 0 && !picked.IsGold() {
+	if q.MovementType == wire.MoveTypeCosPickup && len(result.Broadcast) > 0 && picked.RefObjID != 0 && !picked.IsGold() {
 		result.Recipients = append(result.Recipients, rt.partyLootNotice(division, c, c, picked, now.UnixMilli())...)
 	}
 	return result
@@ -207,6 +209,7 @@ type petPickupAt struct {
 	at          simulation.Spawn
 	sharedOwner uint32
 	now         time.Time
+	command     bool
 }
 
 /*
@@ -265,7 +268,7 @@ func (rt *Runtime) sharePetPickup(division string, c *enterworld.Character, q wi
 		return OpResult{}, false
 	}
 	actor := wire.PickupAnim{Gid: q.CosGID, Heading: wire.HeadingByteFromAngle(at.Angle)}
-	if recipient != c {
+	if p.command && recipient != c {
 		hasFreeSlot := false
 		rt.deps.Read(division, func() {
 			_, hasFreeSlot = bagOf(recipient).FirstFreeBagSlot()
@@ -276,15 +279,27 @@ func (rt *Runtime) sharePetPickup(division string, c *enterworld.Character, q wi
 			// and spills to CCOSManager_FindPickupPetActor (4FC320) at 4D571B
 			// whenever no empty slot exists (al == 0xFF), without attempting a
 			// partial-stack merge in the recipient's player bag.
-			return rt.grantPeerCosPickup(division, c, recipient, item, actor, now), true
+			return rt.grantPeerCosPickup(division, c, recipient, item, actor, p), true
 		}
 	}
 	result := rt.grantPickupTo(pickupGrant{division: division, worldKey: simulation.WorldKey(division, c.Name), picker: c,
 		recipient: recipient, snapshot: rt.characterSnapshot(division, c), item: item, actor: &actor})
 	result.Frames = withoutActionState(result.Frames)
 	if isPickupFault(result, wire.ErrCodeStorageFull) {
+		if !p.command {
+			if recipient != c {
+				// 526343..5263B2: CPlayer_ExecuteGroundPickup on 0x706D routes
+				// 0xB06D [2, 0x07] to the full recipient and 0xB06D [2, 0xDA] to
+				// the picker (without player OpActionState on move type 0x11).
+				return OpResult{
+					Frames:     []wire.Frame{{Opcode: wire.OpItemMoveResponse, Payload: []byte{2, wire.ErrCodePartyInventoryFull}}},
+					Recipients: []RecipientFrames{{CharacterID: recipient.ID, Frames: result.Frames}},
+				}, true
+			}
+			return result, true
+		}
 		if recipient != c {
-			return rt.grantPeerCosPickup(division, c, recipient, item, actor, now), true
+			return rt.grantPeerCosPickup(division, c, recipient, item, actor, p), true
 		}
 		// 4D5418..4D5447: when the owner's player bag is full on a personal
 		// quest drop (4D5755), an item-share party emits 0x189C (3 s retry
@@ -355,7 +370,8 @@ pickup pet bag is also full (0x1807 -> 0x18B4), send 0xB4 for the member's pet
 to the member and 0x9C for the picker pet to the picker's owner.
 ================
 */
-func (rt *Runtime) grantPeerCosPickup(division string, picker, recipient *enterworld.Character, item grounditem.Item, anim wire.PickupAnim, now time.Time) OpResult {
+func (rt *Runtime) grantPeerCosPickup(division string, picker, recipient *enterworld.Character, item grounditem.Item, anim wire.PickupAnim, p petPickupAt) OpResult {
+	now := p.now
 	result := failureResult(cosPickupRetryBackoff)
 	var picked grounditem.Item
 	var peerPetGID uint32
@@ -372,6 +388,9 @@ func (rt *Runtime) grantPeerCosPickup(division string, picker, recipient *enterw
 		current, found := rt.characterGround(division, picker, item.Gid)
 		if !found {
 			result = failureResult(wire.ErrCodeTargetGone)
+			return false
+		}
+		if current.TradeOwner != "" || current.OwnerJID != 0 && current.OwnerJID != enterworld.ObjectIDForCharacter(picker) && current.OwnerJID != p.sharedOwner {
 			return false
 		}
 		current.Summon.RefreshRentalTimes(now.Unix())

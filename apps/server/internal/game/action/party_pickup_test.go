@@ -638,3 +638,100 @@ func TestPetPickupSharedPeerFullPlayerBagSpillsToPeerPetAndNotifiesBothWhenFull(
 		t.Fatalf("peer pet ack code = 0x%02X, want 0xB4", bothFullRes.Recipients[0].Frames[0].Payload[2])
 	}
 }
+
+/*
+================
+TestManualCosItemMoveKeepsB06DErrorCodesOnFullBags
+
+CGObjPC_OnItemMoveRequest (50F87A) dispatches 0x706D move type 0x11 to
+CPlayer_ExecuteGroundPickup (526090), which uses 0xB06D error codes (0x07 /
+0xDA) rather than the 0x769E command codes (0x9C / 0xB4 / 0xB5) or peer-pet
+spillover from CCOS_SelectPickupRecipient (4D5510).
+================
+*/
+func TestManualCosItemMoveKeepsB06DErrorCodesOnFullBags(t *testing.T) {
+	rt, picker, peer, pickerPetGID, heap := sharedPetFixture(t)
+	occupied := domain.InventoryRow{
+		Slot: 13, RefObjID: 11459, Codename: "ITEM_CH_SWORD_01_A_RARE",
+		TypeFlags: wire.PackTypeFlags(3, 1, 6, 2), VarianceBits: "0", StackCount: 1,
+	}
+	peer.MissionInventory = nil
+	picker.MissionInventory = nil
+	for slot := int64(13); slot < 45; slot++ {
+		row := occupied
+		row.Slot = slot
+		peer.MissionInventory = append(peer.MissionInventory, row)
+		picker.MissionInventory = append(picker.MissionInventory, row)
+	}
+	peerPetGID, _ := enterworld.CosObjectIDForCharacter(peer)
+	peer.ActiveCOS = &enterworld.CharacterCOS{GID: peerPetGID, RefObjID: 9, Codename: "PET", CurrentHP: 100, Summoned: true,
+		Container: &domain.COSContainer{Capacity: 4}}
+	rt.BindPetSession(testDivision, peer, 1)
+
+	// 1. Manual 0x706D move type 0x11 when the rotated peer's player bag is full:
+	// routes 0xB06D [2, 0x07] to peer and [2, 0xDA] to picker without spilling to peer's pet.
+	swordDrop := heap(grounditem.Item{
+		RefObjID: occupied.RefObjID, Codename: occupied.Codename, TypeFlags: occupied.TypeFlags, StackCount: 1,
+	})
+	rt.NextPartyLootMember(testDivision, picker.Name)
+	req, err := wire.ItemMoveRequest{MovementType: wire.MoveTypeCosPickup, CosGID: pickerPetGID, GroundGID: swordDrop.Gid}.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := rt.HandleItemMove(testDivision, picker, req)
+	if len(res.Frames) != 1 || res.Frames[0].Opcode != wire.OpItemMoveResponse ||
+		len(res.Frames[0].Payload) != 2 || res.Frames[0].Payload[0] != 2 || res.Frames[0].Payload[1] != wire.ErrCodePartyInventoryFull {
+		t.Fatalf("picker manual 0x706D frames = %+v, want 0xB06D [02 DA]", res.Frames)
+	}
+	if len(res.Recipients) != 1 || res.Recipients[0].CharacterID != peer.ID || len(res.Recipients[0].Frames) != 1 ||
+		res.Recipients[0].Frames[0].Opcode != wire.OpItemMoveResponse || len(res.Recipients[0].Frames[0].Payload) != 2 ||
+		res.Recipients[0].Frames[0].Payload[0] != 2 || res.Recipients[0].Frames[0].Payload[1] != wire.ErrCodeStorageFull {
+		t.Fatalf("peer manual 0x706D recipients = %+v, want 0xB06D [02 07]", res.Recipients)
+	}
+	if len(peer.ActiveCOS.Container.Rows) != 0 {
+		t.Fatalf("manual 0x706D spilled into peer pet container: %+v", peer.ActiveCOS.Container.Rows)
+	}
+
+	// 2. Manual 0x706D move type 0x11 on a personal quest drop when owner's player bag is full:
+	// returns 0xB06D [2, 0x07] rather than 0x9C/0xB5.
+	questDrop := heap(grounditem.Item{
+		RefObjID: 45165, Codename: "ITEM_QNO_EU_CON_19_01", TypeFlags: wire.PackTypeFlags(3, 3, 9, 0), StackCount: 1,
+	})
+	questReq, err := wire.ItemMoveRequest{MovementType: wire.MoveTypeCosPickup, CosGID: pickerPetGID, GroundGID: questDrop.Gid}.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	questRes := rt.HandleItemMove(testDivision, picker, questReq)
+	if len(questRes.Frames) != 1 || questRes.Frames[0].Opcode != wire.OpItemMoveResponse ||
+		len(questRes.Frames[0].Payload) != 2 || questRes.Frames[0].Payload[0] != 2 || questRes.Frames[0].Payload[1] != wire.ErrCodeStorageFull {
+		t.Fatalf("picker manual 0x706D quest full-bag frames = %+v, want 0xB06D [02 07]", questRes.Frames)
+	}
+}
+
+/*
+================
+TestGrantPeerCosPickupRechecksReservationUnderRecipientUpdate
+
+grantPeerCosPickup re-reads the ground item under the recipient update door
+and must re-verify OwnerJID and TradeOwner before mutating the peer's pet bag.
+================
+*/
+func TestGrantPeerCosPickupRechecksReservationUnderRecipientUpdate(t *testing.T) {
+	rt, picker, peer, _, heap := sharedPetFixture(t)
+	peerPetGID, _ := enterworld.CosObjectIDForCharacter(peer)
+	peer.ActiveCOS = &enterworld.CharacterCOS{GID: peerPetGID, RefObjID: 9, Codename: "PET", CurrentHP: 100, Summoned: true,
+		Container: &domain.COSContainer{Capacity: 4}}
+	rt.BindPetSession(testDivision, peer, 1)
+
+	drop := heap(grounditem.Item{
+		RefObjID: picker.MissionInventory[0].RefObjID, Codename: picker.MissionInventory[0].Codename,
+		TypeFlags: picker.MissionInventory[0].TypeFlags, StackCount: 1,
+		OwnerJID: 0x7777777, DroppedAt: rt.Now(),
+	})
+	res := rt.grantPeerCosPickup(testDivision, picker, peer, drop, wire.PickupAnim{Gid: peerPetGID}, petPickupAt{
+		now: rt.Now(), command: true,
+	})
+	if len(res.Broadcast) != 0 || len(peer.ActiveCOS.Container.Rows) != 0 || len(rt.Ground.All(testDivision)) != 1 {
+		t.Fatalf("grantPeerCosPickup bypassed OwnerJID recheck: res=%+v rows=%+v", res, peer.ActiveCOS.Container.Rows)
+	}
+}
