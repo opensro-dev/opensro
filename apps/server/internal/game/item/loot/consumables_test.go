@@ -263,3 +263,61 @@ func TestMonstersDropTheirOwnMaterials(t *testing.T) {
 		t.Fatalf("missed rolls dropped %v", drops)
 	}
 }
+
+/*
+================
+TestQinShiTombMonsterAndWhiteSnakeDrops
+
+Qin-Shi Emperor Tomb monsters (#1023) drop their own 9th-10th degree alchemy
+materials from characterdata columns 99..108, roll ISRO-R random group 107
+(9th-degree Seal of Star armor/accessories), and BeakYung (MOB_TQ_WHITESNAKE)
+drops her fixed rewards plus her five WHITESNAKE1..5 materials.
+================
+*/
+func TestQinShiTombMonsterAndWhiteSnakeDrops(t *testing.T) {
+	whiteSnake := AssignedDrops("MOB_TQ_WHITESNAKE", 60, zeroRoll)
+	if len(whiteSnake) != 19 {
+		t.Fatalf("MOB_TQ_WHITESNAKE assigned drops = %d (%+v), want 19 (14 fixed mall rewards + 5 materials)", len(whiteSnake), whiteSnake)
+	}
+	seenWhiteSnake := map[string]int{}
+	for _, drop := range whiteSnake {
+		seenWhiteSnake[drop.Codename]++
+	}
+	for code, want := range map[string]int{
+		"ITEM_MALL_GACHA_CARD":                     6,
+		"ITEM_MALL_REVERSE_RETURN_SCROLL":          4,
+		"ITEM_MALL_GLOBAL_CHATTING":                4,
+		"ITEM_ETC_ARCHEMY_MATERIAL_TQ_WHITESNAKE1": 1,
+		"ITEM_ETC_ARCHEMY_MATERIAL_TQ_WHITESNAKE2": 1,
+		"ITEM_ETC_ARCHEMY_MATERIAL_TQ_WHITESNAKE3": 1,
+		"ITEM_ETC_ARCHEMY_MATERIAL_TQ_WHITESNAKE4": 1,
+		"ITEM_ETC_ARCHEMY_MATERIAL_TQ_WHITESNAKE5": 1,
+	} {
+		if seenWhiteSnake[code] != want {
+			t.Fatalf("MOB_TQ_WHITESNAKE %s count = %d, want %d", code, seenWhiteSnake[code], want)
+		}
+	}
+
+	flameMaster := AssignedDrops("MOB_TQ_FLAMEMASTER", 60, zeroRoll)
+	if len(flameMaster) != 5 {
+		t.Fatalf("MOB_TQ_FLAMEMASTER assigned drops = %d (%+v), want 5 materials", len(flameMaster), flameMaster)
+	}
+
+	soldier := AssignedDrops("MOB_TQ_TOMBSOLDIER", 8, zeroRoll)
+	if len(soldier) != 5 {
+		t.Fatalf("MOB_TQ_TOMBSOLDIER assigned drops = %d (%+v), want 5 (2 group 107/111 rares + 3 materials)", len(soldier), soldier)
+	}
+	wantSoldier := map[string]bool{
+		"ITEM_CH_EARRING_09_A_RARE":                 true,
+		"ITEM_CH_BLADE_09_A_RARE":                   true,
+		"ITEM_ETC_ARCHEMY_MATERIAL_TQ_TOMBSOLDIER1": true,
+		"ITEM_ETC_ARCHEMY_MATERIAL_TQ_TOMBSOLDIER2": true,
+		"ITEM_ETC_ARCHEMY_MATERIAL_TQ_TOMBSOLDIER3": true,
+	}
+	for _, d := range soldier {
+		delete(wantSoldier, d.Codename)
+	}
+	if len(wantSoldier) != 0 {
+		t.Fatalf("MOB_TQ_TOMBSOLDIER missing expected drops: %v (got %+v)", wantSoldier, soldier)
+	}
+}

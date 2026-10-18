@@ -32,6 +32,26 @@ MATERIAL_DROP_COLUMN = 99
 MATERIAL_DROP_PAIRS = 5
 # itemdata TypeID1..4 of an alchemy tablet.
 TABLET_TYPE = [3, 3, 11, 3]
+# Committed 120-column Qin-Shi Emperor Tomb monster overlay (#1023).
+TOMB_CHARACTER_DATA = (
+	Path(__file__).resolve().parents[2]
+	/ "apps/server/internal/game/world/monster/data/qinshi_tomb_characterdata.tsv"
+)
+
+
+# ================
+# add_monster_row
+# ================
+def add_monster_row(cells, monsters, material_pairs):
+	code = cells[2]
+	if not code.startswith("MOB_"):
+		return
+	monsters.add(code)
+	for pair in range(MATERIAL_DROP_PAIRS):
+		at = MATERIAL_DROP_COLUMN + pair * 2
+		item, probability = int(cells[at]), float(cells[at + 1])
+		if item:
+			material_pairs.append((code, item, probability))
 
 
 # ================
@@ -51,12 +71,7 @@ def read_media(directory):
 				continue
 			code = cells[2]
 			if code.startswith("MOB_"):
-				monsters.add(code)
-				for pair in range(MATERIAL_DROP_PAIRS):
-					at = MATERIAL_DROP_COLUMN + pair * 2
-					item, probability = int(cells[at]), float(cells[at + 1])
-					if item:
-						material_pairs.append((code, item, probability))
+				add_monster_row(cells, monsters, material_pairs)
 			elif path.name.startswith("itemdata"):
 				items[code] = {
 					"id": int(cells[1]), "codename": code, "type": list(map(int, cells[9:13])),
@@ -68,6 +83,13 @@ def read_media(directory):
 				if items[code]["type"] == TABLET_TYPE:
 					# Desc5: the stone or potion a tablet manufactures.
 					items[code]["product"] = cells[127]
+	if TOMB_CHARACTER_DATA.exists():
+		for line in TOMB_CHARACTER_DATA.read_text(encoding="utf-8").splitlines():
+			if not line or line.startswith(("#", "//")):
+				continue
+			cells = line.split("\t")
+			if len(cells) >= 120 and cells[0] == "1":
+				add_monster_row(cells, monsters, material_pairs)
 	magic = []
 	assign = []
 	for name in ("magicoption.txt", "magicoptionassign.txt"):

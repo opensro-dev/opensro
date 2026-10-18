@@ -1,19 +1,47 @@
+/*
+===========================================================================
+
+summon.go - unique monster summon policy and health-band selection
+
+Implements the SR_GameServer 0x0053f780 unique-encounter summon dispatch
+(561F20 health-band selection and 562120 random-set selection) and 596E50
+nine-tuple ssou entry layout.
+
+===========================================================================
+*/
+
 package monster
 
-// SummonEntry is one of the nine ssou tuples consumed by GameServer
-// 596E50: reference, low-nibble grade, inclusive minimum/maximum count.
+/*
+================
+SummonEntry
+
+One of the nine ssou tuples consumed by GameServer 596E50: reference,
+low-nibble grade, inclusive minimum/maximum count.
+================
+*/
 type SummonEntry struct {
 	RefObjID         uint32
 	Grade            uint8
 	Minimum, Maximum uint32
 }
 
+/*
+================
+SummonSkill
+================
+*/
 type SummonSkill struct {
 	Present   bool
 	HPPercent uint16
 	Entries   [9]SummonEntry
 }
 
+/*
+================
+SummonPolicy
+================
+*/
 type SummonPolicy uint8
 
 const (
@@ -22,15 +50,25 @@ const (
 	SummonByRandomSet
 )
 
-// These are natural-key bindings of the 53F780 tactics dispatch, not
-// version-dependent numeric monster IDs. L2/L3 rows retain the same authored
-// skill family in v1.150. The later server's Haroeris/Seth policy is absent
-// from this client roster and is deliberately not assigned to other monsters.
+/*
+================
+UniqueSummonPolicy
+
+Natural-key bindings of the 53F780 tactics dispatch, not version-dependent
+numeric monster IDs. L2/L3 rows retain the same authored skill family in
+v1.150. Tactics 32900..33300 and 33500 dispatch the Qin-Shi Emperor Tomb
+Floor 5 Guardians and Floor 6 BlackSnake/WhiteSnake (BeakYung) to 561F20
+(SummonByHealthBand).
+================
+*/
 func UniqueSummonPolicy(codename string) SummonPolicy {
 	switch codename {
 	case "MOB_CH_TIGERWOMAN", "MOB_CH_TIGERWOMAN_L2", "MOB_CH_TIGERWOMAN_L3",
 		"MOB_OA_URUCHI", "MOB_OA_URUCHI_L2", "MOB_OA_URUCHI_L3",
-		"MOB_EU_KERBEROS", "MOB_EU_KERBEROS_L3", "MOB_AM_IVY", "MOB_AM_IVY_L3":
+		"MOB_EU_KERBEROS", "MOB_EU_KERBEROS_L3", "MOB_AM_IVY", "MOB_AM_IVY_L3",
+		"MOB_TQ_NORTHGUARDIAN", "MOB_TQ_SOUTHGUARDIAN",
+		"MOB_TQ_WESTGUARDIAN", "MOB_TQ_EASTGUARDIAN",
+		"MOB_TQ_BLACKSNAKE", "MOB_TQ_WHITESNAKE":
 		return SummonByHealthBand
 	case "MOB_KK_ISYUTARU", "MOB_KK_ISYUTARU_L2", "MOB_KK_ISYUTARU_L3",
 		"MOB_TK_BONELORD", "MOB_TK_BONELORD_L2", "MOB_TK_BONELORD_L3",
@@ -40,8 +78,14 @@ func UniqueSummonPolicy(codename string) SummonPolicy {
 	return NoSummonPolicy
 }
 
-// Native stores the ratio as float before comparing to double literals.
-// Preserve the boundary behavior (including rounded 20/40/60/80 percent).
+/*
+================
+summonHealthBand
+
+Native stores the ratio as float before comparing to double literals.
+Preserve the boundary behavior (including rounded 20/40/60/80 percent).
+================
+*/
 func summonHealthBand(hp, maximum uint32) int {
 	ratio := float64(float32(float64(hp) / float64(maximum)))
 	switch {
@@ -58,6 +102,11 @@ func summonHealthBand(hp, maximum uint32) int {
 	}
 }
 
+/*
+================
+SummonDue
+================
+*/
 func SummonDue(instance Instance) bool {
 	maximum := instance.EffectiveMaxHP()
 	return instance.CurrentHP != 0 && maximum != 0 && instance.SummonActionUntilMs == 0 &&
@@ -65,10 +114,16 @@ func SummonDue(instance Instance) bool {
 		float32(float64(instance.DamageSinceSummon)/float64(maximum)*100) >= 10
 }
 
-// SelectSummon returns an index into the ssou-only list in default-skill
-// order. A keeps the first row in each authored band; B uses the native
-// seven-slot ordering and its rand()%1000 < 500 alternative. Missing A bands fall back
-// to ordinary combat, never to an invented wave.
+/*
+================
+SelectSummon
+
+Returns an index into the ssou-only list in default-skill order. A keeps the
+first row in each authored band; B uses the native seven-slot ordering and
+its rand()%1000 < 500 alternative. Missing A bands fall back to ordinary
+combat, never to an invented wave.
+================
+*/
 func SelectSummon(instance Instance, skills []SummonSkill, sample float64) (int, bool) {
 	if !SummonDue(instance) {
 		return 0, false
@@ -98,8 +153,14 @@ func SelectSummon(instance Instance, skills []SummonSkill, sample float64) (int,
 	return 0, false
 }
 
-// SummonRandomWord projects the injected entropy source into the VC CRT rand
-// domain. Preserve modulo bias: uniform count buckets are not the native rule.
+/*
+================
+SummonRandomWord
+
+Projects the injected entropy source into the VC CRT rand domain. Preserve
+modulo bias: uniform count buckets are not the native rule.
+================
+*/
 func SummonRandomWord(sample float64) uint32 {
 	if !(sample > 0) {
 		return 0

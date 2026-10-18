@@ -1,15 +1,23 @@
 /*
 ===========================================================================
 
-qinshi_tomb.go - Qin-Shi Emperor Tomb Floor 1-4 monster refs and spawns
+qinshi_tomb.go - Qin-Shi Emperor Tomb Floor 1-6 monster refs and spawns
 
 The v1.150 client ships the Qin-Shi Emperor Tomb world geometry, BSR/BMS
 character assets and strings, while its textdata and server spawn tables omit
-the 79 monster species and 1,033 Floor 1-4 nests introduced with the Legend IV
+the 79 monster species and 1,042 Floor 1-6 nests introduced with the Legend IV
 server tables. When SRO_QINSHI_TOMB is enabled (port-only, not native; off by
 default), WithQinShiTomb appends the embedded characterdata rows (remapped into
-the v1.150 ID gaps 14791..14851 and 22638..22655) and Floor 1-4 nest/hive/tactics
+the v1.150 ID gaps 14791..14851 and 22638..22655) and Floor 1-6 nest/hive/tactics
 rows onto the monster Template.
+
+On Floors 5-6 (regions 0x8003 and 0x8002), the v1.188 Tab_RefNest_Back rows
+23716..23721, 23723 and 23724 zeroed dwMaxTotalCount when CGameWorld_Chins_Floor5::InitTriggers
+(0x005ef090) and CGameWorld_Chins_Floor6::InitTriggers (0x005ef9b0) took over
+spawning 1 live instance ("Count" = "1") of each guardian/boss via MobShower.
+In the persistent INS_DEFAULT world, those 8 unique nests restore maxCount=1
+and the Floor 1-3 Tomb unique respawn window (1800..3600s from nests 23055..23061,
+23077).
 
 ===========================================================================
 */

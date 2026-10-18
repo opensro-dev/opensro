@@ -46,6 +46,7 @@ package action
 import (
 	_ "embed"
 	"fmt"
+	"math"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -91,15 +92,18 @@ func loadWalkIns(dir string, catalog *portalCatalog) (map[string]portalLink, err
 	walkIns := map[string]portalLink{}
 	rows := enterworld.ReadTextdataFile(filepath.Join(dir, "eventzonedata.txt"))
 	if monster.QinShiTombFromEnv() {
-		// Port-only, not native: append the 64 Qin-Shi Emperor Tomb TELEPORT
-		// event zones (IDs 3..83 with an active outgoing _RefTeleLink).
+		// Port-only, not native: append the 72 Qin-Shi Emperor Tomb TELEPORT
+		// event zones (IDs 3..82 plus the 8 Floor 5-6 walk-in zones 83..90).
 		rows = append(rows, monster.SplitTabbedText(qinshiTombEventZoneTSV)...)
 	}
 	for _, row := range rows {
 		if len(row) <= eventZoneTeleportColumn || row[0] != "1" || strings.TrimSpace(row[eventZoneTypeColumn]) != eventZoneTypeTeleport {
 			continue
 		}
-		zone, teleport := strings.TrimSpace(row[eventZoneCodenameColumn]), strings.TrimSpace(row[eventZoneTeleportColumn])
+		// WaterValidator.WalkInZoneAt folds .bms event names to uppercase
+		// (e.g. GATE_JINSI_01X01_12); normalize the key so mixed-case
+		// eventzonedata codenames (GATE_JINSI_01x01_12) resolve.
+		zone, teleport := strings.ToUpper(strings.TrimSpace(row[eventZoneCodenameColumn])), strings.TrimSpace(row[eventZoneTeleportColumn])
 		source, ok := byCode[teleport]
 		if !ok {
 			return nil, fmt.Errorf("event zone %s names missing teleport %s", zone, teleport)
@@ -119,6 +123,44 @@ func loadWalkIns(dir string, catalog *portalCatalog) (map[string]portalLink, err
 		walkIns[zone] = link
 	}
 	return walkIns, nil
+}
+
+// Floor 6 center -> North wing (BeakYung) portal trigger (SR_GameServer
+// CGameWorld_Chins_Floor6::InitTriggers 0x005ef9b0 -> CAction_OperatePortal
+// 0x005f0d40 / 0x005f0ed9): jinsi_floor6_c01_05.bms carries GATE_JINSI_06x01_06
+// in its event-name table with cell navFlags == 0, and CAction_OperatePortal
+// tests an 8m (80 game-unit) radius around (-131, 1890, 2535) in region 0x8002.
+const (
+	tombFloor6RegionID      uint16  = 0x8002
+	tombFloor6NorthPortalX  float64 = -131.0
+	tombFloor6NorthPortalY  float64 = 1890.0
+	tombFloor6NorthPortalZ  float64 = 2535.0
+	tombOperatePortalRadius float64 = 80.0
+	tombFloor6NorthZoneName         = "GATE_JINSI_06X01_06"
+)
+
+/*
+================
+walkInZoneAt
+
+The walk-in event zone at pose (uppercase), falling back to the Floor 6
+North-wing trigger portal radius when SRO_QINSHI_TOMB is enabled.
+================
+*/
+func (rt *Runtime) walkInZoneAt(pose simulation.Spawn) string {
+	if rt.WalkInZoneAt != nil {
+		if zone := rt.WalkInZoneAt(pose); zone != "" {
+			return zone
+		}
+	}
+	if monster.QinShiTombFromEnv() && pose.RegionID == tombFloor6RegionID {
+		dx := pose.X - tombFloor6NorthPortalX
+		dz := pose.Z - tombFloor6NorthPortalZ
+		if math.Hypot(dx, dz) <= tombOperatePortalRadius && math.Abs(pose.Y-tombFloor6NorthPortalY) <= tombOperatePortalRadius {
+			return tombFloor6NorthZoneName
+		}
+	}
+	return ""
 }
 
 /*
@@ -205,7 +247,7 @@ func (rt *Runtime) stepWalkIn(key string, owner populationAdmission, nowMs int64
 	if !inWorld {
 		return OpResult{}
 	}
-	zone := rt.WalkInZoneAt(pose)
+	zone := rt.walkInZoneAt(pose)
 	previous, sampled := rt.walkInZones.Load(key)
 	rt.walkInZones.Store(key, zone)
 	// The first sample after admission only seeds the zone. Inference: a PC
@@ -222,7 +264,7 @@ func (rt *Runtime) stepWalkIn(key string, owner populationAdmission, nowMs int64
 	out, arrived := rt.enterWalkIn(owner.division, c, link, moving)
 	if arrived {
 		// The arrival point may itself lie in a zone; it was not entered.
-		rt.walkInZones.Store(key, rt.WalkInZoneAt(rt.portals.destinations[link.target].spawn))
+		rt.walkInZones.Store(key, rt.walkInZoneAt(rt.portals.destinations[link.target].spawn))
 	}
 	return out
 }

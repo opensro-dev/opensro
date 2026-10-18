@@ -25,6 +25,9 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+//go:embed data/qinshi_tomb_teleportdata.tsv
+var qinshiTombTeleportDataTSV string
+
 //go:embed data/qinshi_tomb_teleportlink.tsv
 var qinshiTombTeleportLinkTSV string
 
@@ -153,6 +156,11 @@ func loadPortalCatalog(dir string) (*portalCatalog, error) {
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("teleportdata is absent or empty")
 	}
+	if monster.QinShiTombFromEnv() {
+		// Port-only, not native: append the 13 Qin-Shi Emperor Tomb Floor 5-6
+		// walk-in teleport source/destination rows (IDs 136..148).
+		rows = append(rows, monster.SplitTabbedText(qinshiTombTeleportDataTSV)...)
+	}
 	for i, r := range rows {
 		if r[0] != "1" {
 			continue
@@ -209,8 +217,8 @@ func loadPortalCatalog(dir string) (*portalCatalog, error) {
 		return nil, fmt.Errorf("teleportlink is absent or empty")
 	}
 	if monster.QinShiTombFromEnv() {
-		// Port-only, not native: append the 68 Qin-Shi Emperor Tomb teleport
-		// links (64 walk-in links + 4 Floor 6 exit building links).
+		// Port-only, not native: append the 77 Qin-Shi Emperor Tomb teleport
+		// links (72 walk-in links + 5 building links 125 and 131..134).
 		rows = append(rows, monster.SplitTabbedText(qinshiTombTeleportLinkTSV)...)
 	}
 	for i, r := range rows {
@@ -536,7 +544,7 @@ func (rt *Runtime) commitGateTravel(travel gateTravel, admit func() (int64, OpRe
 	}
 	rt.bindResidentRegion(key, rt.Now().UnixMilli())
 	if rt.WalkInZoneAt != nil {
-		rt.walkInZones.Store(key, rt.WalkInZoneAt(destination))
+		rt.walkInZones.Store(key, rt.walkInZoneAt(destination))
 	} else {
 		rt.walkInZones.Delete(key)
 	}

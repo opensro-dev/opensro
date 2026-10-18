@@ -83,7 +83,7 @@ TestEveryPublishedGroupMemberIsSelectable
 ================
 */
 func TestEveryPublishedGroupMemberIsSelectable(t *testing.T) {
-	if len(consumables.random) != 21 || len(consumables.groups) != 2 {
+	if len(consumables.random) != 44 || len(consumables.groups) != 2 {
 		t.Fatal("compatible ISRO group join changed")
 	}
 	for id, pool := range consumables.groups {

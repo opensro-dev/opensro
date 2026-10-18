@@ -87,6 +87,11 @@ const FINGERPRINT_ROOTS = [
 		label: "server-enterworld",
 		absolutePath: path.join( serverSourceRoot, "internal", "game", "enterworld" )
 	},
+	{
+		// The teleportlink overlay TSV the teleport bake reads with SRO_QINSHI_TOMB on.
+		label: "server-action-data",
+		absolutePath: path.join( serverSourceRoot, "internal", "game", "action", "data" )
+	},
 	{ label: "rebuild-assets", absolutePath: path.join( generatedRoot, "intermediate" ) },
 	{ label: "build-scripts", absolutePath: path.join( rebuildRoot, "scripts", "build" ) },
 	{ label: "build-entry", absolutePath: path.join( rebuildRoot, "scripts", "build_sro_resources.mjs" ) },

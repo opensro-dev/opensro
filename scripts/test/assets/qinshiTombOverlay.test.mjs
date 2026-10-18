@@ -22,6 +22,7 @@ import { computeResourceBuildFingerprint } from "../../build/shared/resourceBuil
 import {
 	loadQinShiTombCharacterRows,
 	loadQinShiTombSkillRows,
+	loadQinShiTombTeleportLinkRows,
 	qinshiTombEnabled
 } from "../../build/shared/qinshiTomb.mjs";
 
@@ -113,6 +114,9 @@ test("tomb overlay rows are collision-free", () => {
 	const characterIds = characters.map( ( cols ) => Number( cols[1] ) );
 	assert.equal( new Set( characterIds ).size, characterIds.length, "duplicate overlay RefObjID" );
 	assert.ok( characterIds.every( ( id ) => Number.isSafeInteger( id ) && id > 0 ) );
+	for ( const cols of characters ) {
+		assert.equal( cols.length, 120, `${cols[2]} column count` );
+	}
 
 	const skills = loadQinShiTombSkillRows().rows;
 	assert.ok( skills.length > 0, "the committed skilldata overlay is empty" );
@@ -123,5 +127,11 @@ test("tomb overlay rows are collision-free", () => {
 	// admission, or the bake would silently drop a Tomb skill.
 	for ( const cols of skills ) {
 		assert.ok( cols.length >= 118 && cols[0].trim() === "1", cols[3] );
+	}
+
+	const teleportLinks = loadQinShiTombTeleportLinkRows().rows;
+	assert.equal( teleportLinks.length, 77, "expected 77 Tomb teleport link rows" );
+	for ( const cols of teleportLinks ) {
+		assert.equal( cols.length, 21 );
 	}
 });

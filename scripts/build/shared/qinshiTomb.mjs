@@ -62,7 +62,8 @@ function loadQinShiTombRows( relativePath ) {
 	for ( const line of text.split( /\r?\n/ ) ) {
 		if ( !line.trim() ) continue;
 		const cols = splitTextDataRow( line );
-		if ( String( cols[0] ?? "" ).trim().startsWith( "#" ) ) continue;
+		const first = String( cols[0] ?? "" ).trim();
+		if ( first.startsWith( "#" ) || first.startsWith( "//" ) ) continue;
 		rows.push( cols );
 	}
 	return { sourcePath, rows };
@@ -90,4 +91,16 @@ v1.150 gap IDs).
 */
 export function loadQinShiTombSkillRows() {
 	return loadQinShiTombRows( "internal/game/enterworld/data/qinshi_tomb_skilldata.tsv" );
+}
+
+/*
+================
+loadQinShiTombTeleportLinkRows
+
+The 77 Qin-Shi teleportlink rows (72 walk-in links + 5 clickable building
+gate links 125 and 131..134).
+================
+*/
+export function loadQinShiTombTeleportLinkRows() {
+	return loadQinShiTombRows( "internal/game/action/data/qinshi_tomb_teleportlink.tsv" );
 }

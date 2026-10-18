@@ -1,13 +1,13 @@
 /*
 ===========================================================================
 
-qinshi_tomb_test.go - verification of Qin-Shi Emperor Tomb Floor 1-4 monster tables
+qinshi_tomb_test.go - verification of Qin-Shi Emperor Tomb Floor 1-6 monster tables
 
 Tests both SRO_QINSHI_TOMB off (native default) and on: 79 characterdata rows
-(78 monster species passing monsterTidGate plus 1 COS mount row MOB_TQ_HORSE01,
+(78 monster species passing monsterTidGate plus 1 COS mount row MOB_QT_TQ_THIEF_01_COS,
 spanning 61 MOB_TQ_* in 14791..14851 and 18 MOB_QT_TQ_* in 22638..22655),
-1,033 Floor 1-4 nests across regions 0x8004..0x8007, hive caps and tactics
-controls.
+1,042 Floor 1-6 nests across regions 0x8002..0x8007, hive caps, tactics
+controls, remapped DefaultSkillIDs, and uncontaminated retail unique stats.
 
 ===========================================================================
 */
@@ -57,30 +57,75 @@ func TestQinShiTombEmbeddedOverlay(t *testing.T) {
 	if got, want := len(withTomb.Refs)-len(seed.Refs), 78; got != want {
 		t.Fatalf("added monster refs = %d, want %d", got, want)
 	}
-	if got, want := len(withTomb.Nests), 1033; got != want {
+	if got, want := len(withTomb.Nests), 1042; got != want {
 		t.Fatalf("added tomb nests = %d, want %d", got, want)
 	}
 	regionCounts := map[uint16]int{}
 	for _, nest := range withTomb.Nests {
-		if nest.RegionID < 0x8004 || nest.RegionID > 0x8007 {
+		if nest.RegionID < 0x8002 || nest.RegionID > 0x8007 {
 			t.Fatalf("unexpected tomb nest region 0x%x for ref %d", nest.RegionID, nest.RefObjID)
 		}
 		if !nest.RetailEvidence || !nest.PolicyPinned || !nest.HasControls || len(nest.HiveKey) != 64 {
 			t.Fatalf("tomb nest %+v missing evidence/controls/hive", nest)
 		}
+		if nest.InstanceLimit() <= 0 {
+			t.Fatalf("tomb nest %+v has non-positive instance limit %d", nest, nest.InstanceLimit())
+		}
 		regionCounts[nest.RegionID]++
 	}
-	if len(regionCounts) != 4 {
-		t.Fatalf("expected nests across all 4 tomb floors (0x8004..0x8007), got %v", regionCounts)
+	if len(regionCounts) != 6 {
+		t.Fatalf("expected nests across all 6 tomb floors (0x8002..0x8007), got %v", regionCounts)
+	}
+	if regionCounts[0x8003] != 5 || regionCounts[0x8002] != 4 {
+		t.Fatalf("expected 5 Floor 5 nests and 4 Floor 6 nests, got F5=%d F6=%d", regionCounts[0x8003], regionCounts[0x8002])
+	}
+
+	// Verify 120-column characterdata parsing: rewardActionPinned, ExpToGive, and remapped DefaultSkillIDs.
+	for id, ref := range withTomb.Refs {
+		if id == 1933 {
+			continue
+		}
+		if !ref.RewardActionPinned {
+			t.Fatalf("tomb ref %d (%s) RewardActionPinned=false (column shift)", id, ref.Codename)
+		}
+		if id < 20000 && ref.ExpToGive <= 0 {
+			t.Fatalf("tomb ref %d (%s) ExpToGive=%d, want > 0", id, ref.Codename, ref.ExpToGive)
+		}
+		for _, skillID := range ref.DefaultSkillIDs {
+			if skillID >= 12131 && skillID <= 12300 {
+				t.Fatalf("tomb ref %d (%s) retains unremapped v1.188 skill ID %d", id, ref.Codename, skillID)
+			}
+		}
+	}
+
+	for _, code := range []string{
+		"MOB_TQ_NORTHGUARDIAN",
+		"MOB_TQ_SOUTHGUARDIAN",
+		"MOB_TQ_WESTGUARDIAN",
+		"MOB_TQ_EASTGUARDIAN",
+		"MOB_TQ_BLACKSNAKE",
+		"MOB_TQ_WHITESNAKE",
+	} {
+		if got := UniqueSummonPolicy(code); got != SummonByHealthBand {
+			t.Fatalf("UniqueSummonPolicy(%q) = %v, want SummonByHealthBand", code, got)
+		}
+	}
+
+	whitesnake, ok := withTomb.Refs[14839]
+	if !ok || whitesnake.Codename != "MOB_TQ_WHITESNAKE" {
+		t.Fatalf("ref 14839 = %+v, ok=%v; want MOB_TQ_WHITESNAKE", whitesnake, ok)
+	}
+	if whitesnake.Level != 100 || whitesnake.MaxHP != 250008449 || whitesnake.ExpToGive != 81063918 {
+		t.Fatalf("MOB_TQ_WHITESNAKE stats = Lvl %d HP %d Exp %d, want Lvl 100 HP 250008449 Exp 81063918", whitesnake.Level, whitesnake.MaxHP, whitesnake.ExpToGive)
 	}
 }
 
 /*
 ================
-TestWithQinShiTombAppendsRefsAndFloor1To4Nests
+TestWithQinShiTombAppendsRefsAndFloor1To6Nests
 ================
 */
-func TestWithQinShiTombAppendsRefsAndFloor1To4Nests(t *testing.T) {
+func TestWithQinShiTombAppendsRefsAndFloor1To6Nests(t *testing.T) {
 	licensed.RequireGameData(t)
 	dir := licensed.RetailTextdataDir(t)
 	base := LoadTemplate(dir)
@@ -98,11 +143,11 @@ func TestWithQinShiTombAppendsRefsAndFloor1To4Nests(t *testing.T) {
 	if got, want := len(withTomb.Refs)-len(base.Refs), 78; got != want {
 		t.Fatalf("added monster refs = %d, want %d", got, want)
 	}
-	if got, want := len(withTomb.Nests)-len(base.Nests), 1033; got != want {
+	if got, want := len(withTomb.Nests)-len(base.Nests), 1042; got != want {
 		t.Fatalf("added tomb nests = %d, want %d", got, want)
 	}
 
-	// Verify representative Floor 1-4 monsters and quest variants.
+	// Verify representative Floor 1-6 monsters and quest variants.
 	first, ok := withTomb.Refs[14791]
 	if !ok || first.Codename != "MOB_TQ_TOMBSOLDIER_CLON2" {
 		t.Fatalf("ref 14791 = %+v, ok=%v; want MOB_TQ_TOMBSOLDIER_CLON2", first, ok)
