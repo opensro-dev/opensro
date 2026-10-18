@@ -254,8 +254,20 @@ func (st *WorldStore) bindGroundWalk(key string, w *WorldState, previous *MoveSe
 		return
 	}
 	w.Spawn.X, w.Spawn.Y, w.Spawn.Z = float64(float32(w.Spawn.X)), float64(float32(w.Spawn.Y)), float64(float32(w.Spawn.Z))
+	// advanceGroundWalk at the top of Update already stepped Pose to
+	// groundConfig.Now(). When a tick-driven caller (such as pursuit resteer
+	// in advanceBasicAttackIntents) builds MoveSegment with the tick-entry
+	// timestamp StartedAtMs < groundConfig.Now(), seeding At from StartedAtMs
+	// rewinds the step clock behind Pose and double-steps [StartedAtMs, Now]
+	// on the next Snapshot/Update.
+	at := w.MoveSegment.StartedAtMs
+	if st.groundConfig.Now != nil {
+		if now := st.groundConfig.Now(); now > at {
+			at = now
+		}
+	}
 	w.Ground = &GroundWalkState{origin: w.MoveSegment.From, goal: w.Spawn, started: w.MoveSegment.StartedAtMs,
-		At: w.MoveSegment.StartedAtMs, Pose: w.MoveSegment.From, owner: owner}
+		At: at, Pose: w.MoveSegment.From, owner: owner}
 	w.Ground.commandOrigin = w.MoveSegment.From
 	if continuation {
 		w.Ground.commandOrigin = commandOrigin

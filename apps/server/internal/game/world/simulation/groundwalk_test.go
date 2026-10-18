@@ -195,3 +195,50 @@ func TestGroundNativeArrivalBranches(t *testing.T) {
 		})
 	}
 }
+
+/*
+================
+TestGroundWalkResteerWithEarlierTickTimestampDoesNotDoubleStep
+
+Tick-driven movement (such as basic-attack pursuit resteers in
+advanceBasicAttackIntents) passes the tick-start timestamp nowMs to ApplyMove,
+while WorldStore.Update advances Ground.Pose using groundConfig.Now() (live
+wall clock, which is tens of milliseconds ahead of nowMs by the time later
+tick hooks run). Binding the new GroundWalkState must not rewind Ground.At
+back to MoveSegment.StartedAtMs and double-step [nowMs, groundConfig.Now()]
+on every resteer.
+================
+*/
+func TestGroundWalkResteerWithEarlierTickTimestampDoesNotDoubleStep(t *testing.T) {
+	st, wallNow, seed, key := groundFixture(t, func(from Spawn, owner NavOwner, to Spawn) (Spawn, NavOwner, bool) {
+		return to, owner, false
+	})
+
+	// Simulate 30 pursuit-resteer ticks spaced 100ms apart where the combat
+	// hook runs 70ms into each tick (wallNow = tickStart + 70ms). At 50 u/s,
+	// 3000ms of wall time from initial.At=1000 to wallNow=4000 must advance
+	// exactly 150 units (from X=10 to X=160), not ~255 units from double-stepping
+	// the 70ms intra-tick offset on every resteer.
+	for tick := 1; tick <= 30; tick++ {
+		tickStartMs := int64(1000 + tick*100)
+		*wallNow = tickStartMs + 70
+		st.Update(key, seed, func(w *WorldState) {
+			req := MovementRequest{
+				Mode:     MovementAckDestinationMode,
+				RegionID: w.Spawn.RegionID,
+				X:        1000,
+				Y:        0,
+				Z:        w.Spawn.Z,
+			}
+			ApplyMove(w, 100240, req, RunMode, tickStartMs)
+		})
+	}
+
+	got := st.Snapshot(key, seed).PersistedSpawn()
+	// Elapsed wall-clock time since fixture start (t=1000) is (4070 - 1000) = 3070ms.
+	// At speed 50 u/s, X must be 10 + 3.070 * 50 = 163.5.
+	const wantX = 163.5
+	if diff := got.X - wantX; diff < -0.05 || diff > 0.05 {
+		t.Fatalf("PersistedSpawn().X after 30 lagged tick resteers = %.3f, want %.3f (double-stepped intra-tick lag)", got.X, wantX)
+	}
+}
