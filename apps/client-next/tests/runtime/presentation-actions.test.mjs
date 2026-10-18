@@ -169,7 +169,7 @@ test("a replaced WAIT cannot suppress idle after the replacement cast completes"
 	assert.equal( complete.waitingActors.has( 1 ), false, "superseded WAIT must not own the base action" );
 });
 
-test("swapping the caster model deletes its action clock so restoring the model cannot resurrect pre-swap motion", () => {
+test("swapping the caster model retires its cast motion for good: no corpse timeline, no restart on any later body", () => {
 	const f = fixture();
 	const corpse = {
 		refObjId: 1,
@@ -178,13 +178,31 @@ test("swapping the caster model deletes its action clock so restoring the model 
 		clips: [ "death" ],
 		animationStates: {}
 	};
+	const otherBody = {
+		refObjId: 1,
+		codename: "CASTER_OTHER",
+		glb: "/caster-other.glb",
+		clips: [ "ready", "wait", "shot" ],
+		animationStates: f.body.animationStates
+	};
 	assert.equal( f.step( 0, undefined ).waitingActors.has( 1 ), true );
 	f.setResource( corpse );
-	const swapped = f.step( 0.5, undefined, [], { resultOnly: true } );
+	// The animated cast stays published across the swap. The fixture asserts
+	// output.failure stays null, so resolving the skill's phases against the
+	// corpse mesh fails this step.
+	const swapped = f.step( 0.5, undefined );
 	assert.equal( swapped.actionLayersByActor.get( 1 ), undefined );
 	assert.equal( swapped.waitingActors.has( 1 ), false );
+	f.setResource( otherBody );
+	const transformed = f.step( 1, undefined );
+	assert.equal(
+		transformed.actionLayersByActor.get( 1 ),
+		undefined,
+		"retained cast must not restart from READY on the swapped-in body"
+	);
+	assert.equal( transformed.waitingActors.has( 1 ), false );
 	f.setResource( f.body );
-	const restored = f.step( 0.6, undefined, [], { resultOnly: true } );
+	const restored = f.step( 1.5, undefined );
 	assert.equal(
 		restored.actionLayersByActor.get( 1 ),
 		undefined,
