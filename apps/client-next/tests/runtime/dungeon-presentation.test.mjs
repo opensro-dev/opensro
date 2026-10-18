@@ -225,33 +225,60 @@ function portalInterior( p, e, regionId ) {
 	};
 }
 
-test(
-	"0x8000-bit dungeon regions 32769..32775 stream, decode mesh/collision/water and compile every room EFP end to end",
-	{ timeout: 60000 },
-	async ( t ) => {
-		const tempRoot = fs.mkdtempSync( join( tmpdir(), "sro-dungeon-e2e-" ) );
-		t.after( () => fs.rmSync( tempRoot, { recursive: true, force: true } ) );
+/*
+================
+loadDungeonFixture
+
+Builds the dungeon resource manifest and every dungeon world bundle once
+for the region and effects tests below. The build takes seconds solo and
+far longer under parallel gate load, so it runs at module load, outside
+every test's clock: each test then carries only its own region's
+decode/stream/clip work against the unchanged 60 s cap, instead of the
+shared build riding the first test until it times out (the parallel-run
+flake this split removes). The temp manifest is deleted as soon as its
+bytes are in memory; nothing below reads it back.
+================
+*/
+async function loadDungeonFixture() {
+	const tempRoot = fs.mkdtempSync( join( tmpdir(), "sro-dungeon-e2e-" ) );
+	try {
 		const manifestPath = join( tempRoot, "dungeon-resources.json" );
 		await buildDungeonResourceManifest( { extractedRoot, targetPath: manifestPath } );
 		const manifestBytes = new Uint8Array( fs.readFileSync( manifestPath ) );
 		const manifest = JSON.parse( Buffer.from( manifestBytes ).toString( "utf8" ) );
 		const { bundles } = await buildDungeonWorlds( manifest, { publishFiles: false } );
+		return { manifestBytes, manifest, bundles };
+	} finally {
+		fs.rmSync( tempRoot, { recursive: true, force: true } );
+	}
+}
 
-		const expectedRegions = [ 32769, 32770, 32771, 32772, 32773, 32774, 32775 ];
-		for ( const regionId of expectedRegions ) {
-			assert.ok( bundles.has( regionId ), `missing dungeon world bundle for ${regionId}` );
-		}
+const dungeonFixture = await loadDungeonFixture();
 
-		// Verify 0x8000-bit world streaming requests only the single dungeon bundle per floor
-		// (never a 3x3 outdoor neighborhood) and admits each floor cleanly.
-		const worldDecoder = createWorldDecoder();
-		const navResources = createNavigationResources();
-		const nav = createNavigation();
-		let totalPortals = 0;
+// Portal seams crossed per region; the eight counts sum to the 2798 the
+// single combined test asserted before the split.
+const dungeonRegionPortals = {
+	32769: 300,
+	32770: 0,
+	32771: 264,
+	32772: 1128,
+	32773: 1098,
+	32774: 0,
+	32775: 0,
+	32777: 8
+};
 
-		for ( const regionId of [ ...expectedRegions, 32777 ] ) {
+for ( const regionId of [ 32769, 32770, 32771, 32772, 32773, 32774, 32775, 32777 ] ) {
+	test(
+		`0x8000-bit dungeon region ${regionId} streams, decodes mesh/collision/water and crosses every room portal seam`,
+		{ timeout: 60000 },
+		async () => {
+			const { manifestBytes, bundles } = dungeonFixture;
 			const bundle = bundles.get( regionId );
+			assert.ok( bundle, `missing dungeon world bundle for ${regionId}` );
+
 			const raw = new TextEncoder().encode( JSON.stringify( bundle ) );
+			const worldDecoder = createWorldDecoder();
 			const decoded = worldDecoder.decode( raw, false, { origin: regionId, part: "all" } );
 			assert.equal( decoded.originRegion, regionId );
 			assert.equal( decoded.id, `region:${regionId}:${regionId}:all` );
@@ -262,6 +289,8 @@ test(
 			assert.ok( decoded.groups.length > 0, `region ${regionId} has no scene groups` );
 			assert.ok( (decoded.dungeonVisibility?.length ?? 0) > 0, `region ${regionId} has no dungeonVisibility` );
 
+			// Verify 0x8000-bit world streaming requests only the single dungeon bundle per floor
+			// (never a 3x3 outdoor neighborhood) and admits each floor cleanly.
 			const worldRequests = [];
 			const worldReady = new Map();
 			let nextWorldId = 0;
@@ -296,6 +325,8 @@ test(
 			assert.equal( worldRequests[0].decode, "world" );
 
 			// Verify 0x8000-bit navigation streaming and room portal seam crossing.
+			const navResources = createNavigationResources();
+			const nav = createNavigation();
 			const navProduct = await navResources.resolve( manifestBytes, regionId, async () => manifestBytes );
 			assert.equal( navProduct.regionId, regionId );
 			assert.ok( navProduct.objects.length > 0 );
@@ -336,20 +367,29 @@ test(
 			assert.equal( navSent[0].regionId, regionId );
 			assert.equal( navSent[0].bundle.regionId, regionId );
 
+			let portals = 0;
 			for ( let i = 0; i < navProduct.objects.length; i++ ) {
 				for ( const link of navProduct.objects[i].links ?? [] ) {
 					const a = portalInterior( navProduct.objects[i], link.edge, regionId ),
 						b = portalInterior( navProduct.objects[link.target], link.targetEdge, regionId ),
 						q = nav.clip( a, b );
-					totalPortals++;
+					portals++;
 					assert.ok(
 						q && Math.hypot( q.x - b.x, q.z - b.z ) <= .1,
 						`portal seam failed in region 0x${regionId.toString( 16 )} room ${i} edge ${link.edge}`
 					);
 				}
 			}
+			assert.equal( portals, dungeonRegionPortals[regionId] );
 		}
-		assert.equal( totalPortals, 2798 );
+	);
+}
+
+test(
+	"dungeon room particle references resolve and compile every room EFP end to end",
+	{ timeout: 60000 },
+	async () => {
+		const { manifest } = dungeonFixture;
 
 		// Verify every dungeon room BSR particle reference resolves and compiles in program.ts.
 		const dungeonRefs = collectDungeonParticleReferences( manifest );
