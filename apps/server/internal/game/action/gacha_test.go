@@ -1,19 +1,40 @@
+/*
+===========================================================================
+
+gacha_test.go - Magic Pop roll and Gori voucher exchange behavior tests
+
+Covers machine opening (0x7338), ticket rolls (0x7053), voucher exchange
+(0x71BE), and the 725720 equipment property roll (+1..+5 OptLevel, 5-bit
+white-stat variance + durability, and blue magic options).
+
+===========================================================================
+*/
+
 package action
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"testing"
 
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/gacha"
 	"opensro.online/server/internal/game/item/grounditem"
+	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+/*
+================
+gachaFixture
+================
+*/
 func gachaFixture(t *testing.T) (*Runtime, *enterworld.Character, []byte) {
 	t.Helper()
 	c := testCharacter()
@@ -43,6 +64,11 @@ func gachaFixture(t *testing.T) (*Runtime, *enterworld.Character, []byte) {
 	return rt, c, wire.NewWriter(9).U32(17).U32(1).U8(13).Payload()
 }
 
+/*
+================
+TestGachaCommitResultOrderAndReplay
+================
+*/
 func TestGachaCommitResultOrderAndReplay(t *testing.T) {
 	for _, roll := range []uint32{0, 4999, 5000, 9999} {
 		t.Run(string(rune('A'+roll%26)), func(t *testing.T) {
@@ -85,6 +111,11 @@ func TestGachaCommitResultOrderAndReplay(t *testing.T) {
 	}
 }
 
+/*
+================
+TestGachaAdmissionFailuresPreserveTicket
+================
+*/
 func TestGachaAdmissionFailuresPreserveTicket(t *testing.T) {
 	for _, kind := range []string{"catalog", "random missing", "random failure", "random range", "selection", "outside scope", "disabled NPC", "entry", "slot", "ticket", "delete pending", "truncated", "trailing"} {
 		t.Run(kind, func(t *testing.T) {
@@ -132,6 +163,11 @@ func TestGachaAdmissionFailuresPreserveTicket(t *testing.T) {
 	}
 }
 
+/*
+================
+TestGachaOpeningUsesWorldAdmission
+================
+*/
 func TestGachaOpeningUsesWorldAdmission(t *testing.T) {
 	rt, c, _ := gachaFixture(t)
 	p := wire.NewWriter(8).U32(17).U32(0x10000).Payload()
@@ -146,6 +182,11 @@ func TestGachaOpeningUsesWorldAdmission(t *testing.T) {
 	}
 }
 
+/*
+================
+TestGachaRewardsAreAdmittedToWorldReferences
+================
+*/
 func TestGachaRewardsAreAdmittedToWorldReferences(t *testing.T) {
 	rt, _, _ := gachaFixture(t)
 	counts := map[string]int{}
@@ -159,6 +200,11 @@ func TestGachaRewardsAreAdmittedToWorldReferences(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPublishedRewardsSendNoGroundReferenceDelta
+================
+*/
 func TestPublishedRewardsSendNoGroundReferenceDelta(t *testing.T) {
 	rt, _, _ := gachaFixture(t)
 	rewards := rt.GachaCatalog.RewardCodenames()
@@ -175,6 +221,11 @@ func TestPublishedRewardsSendNoGroundReferenceDelta(t *testing.T) {
 	}
 }
 
+/*
+================
+TestGachaFailedWasteDrawPreservesTicket
+================
+*/
 func TestGachaFailedWasteDrawPreservesTicket(t *testing.T) {
 	for _, bad := range []bool{false, true} {
 		rt, c, p := gachaFixture(t)
@@ -198,6 +249,11 @@ func TestGachaFailedWasteDrawPreservesTicket(t *testing.T) {
 }
 
 // operatorFixture is the roll fixture with Gori beside the machine and a voucher in the bag.
+/*
+================
+operatorFixture
+================
+*/
 func operatorFixture(t *testing.T, roll uint32) (*Runtime, *enterworld.Character, []byte) {
 	t.Helper()
 	rt, c, p := gachaFixture(t)
@@ -213,6 +269,11 @@ func operatorFixture(t *testing.T, roll uint32) (*Runtime, *enterworld.Character
 	return rt, c, wire.NewWriter(4).U32(18).Payload()
 }
 
+/*
+================
+TestGachaExchangeSwapsTheVoucherForItsRecordedReward
+================
+*/
 func TestGachaExchangeSwapsTheVoucherForItsRecordedReward(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -261,6 +322,173 @@ func TestGachaExchangeSwapsTheVoucherForItsRecordedReward(t *testing.T) {
 	}
 }
 
+/*
+================
+TestGachaExchangeEquipmentRollsNativeSpecialProperties
+================
+*/
+func TestGachaExchangeEquipmentRollsNativeSpecialProperties(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		plusDraw [2]uint32
+		wantPlus int64
+		varDraw  uint32
+		wantTier uint8
+	}{
+		{"min_of_4_and_2", [2]uint32{3, 1}, 2, 16384, 15},
+		{"max_plus_5", [2]uint32{4, 4}, 5, 32767, 31},
+		{"min_plus_1", [2]uint32{0, 4}, 1, 8192, 7},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rt, c, p := operatorFixture(t, 0)
+			durMin := int64(55)
+			sword := rt.deps.ItemReferences().(gmItemSource).staticItemSource["ITEM_CH_SWORD_01_A_RARE"]
+			sword.VarianceIntMin1c0 = &durMin
+			sword.MaxDurability = 69
+
+			// 2 plus draws, then 21 weapon variance draws (7 fields * 3 draws),
+			// then magic option count (4 draws of 0 -> 1 slot) and pool/million/value draws.
+			seq := []uint32{tc.plusDraw[0], tc.plusDraw[1]}
+			for i := 0; i < 21; i++ {
+				seq = append(seq, tc.varDraw)
+			}
+			idx := 0
+			rt.DropRoll = func() (uint32, error) {
+				if idx < len(seq) {
+					v := seq[idx]
+					idx++
+					return v, nil
+				}
+				return 0, nil
+			}
+
+			frames, reason := rt.HandleGachaExchange(testDivision, c, p)
+			if reason != "" {
+				t.Fatal(reason)
+			}
+			var granted *enterworld.InventoryRow
+			for i := range c.MissionInventory {
+				if c.MissionInventory[i].RefObjID == 11459 {
+					granted = &c.MissionInventory[i]
+					break
+				}
+			}
+			if granted == nil {
+				t.Fatalf("missing granted equipment row: %+v", c.MissionInventory)
+			}
+			if granted.Plus != tc.wantPlus {
+				t.Fatalf("Plus = %d, want %d", granted.Plus, tc.wantPlus)
+			}
+			var wantBits uint64
+			for field := 0; field < 7; field++ {
+				wantBits |= uint64(tc.wantTier) << (field * 5)
+			}
+			gotBits, err := strconv.ParseUint(granted.VarianceBits, 10, 64)
+			if err != nil || gotBits != wantBits {
+				t.Fatalf("VarianceBits = %q (%d), want %d (err=%v)", granted.VarianceBits, gotBits, wantBits, err)
+			}
+			wantDur := int64(combat.DurabilityFromVariance(sword, tc.wantTier))
+			if granted.Durability != wantDur {
+				t.Fatalf("Durability = %d, want %d", granted.Durability, wantDur)
+			}
+			if len(granted.MagicOptions) == 0 {
+				t.Fatalf("Rarity == 2 equipment granted without magic options: %+v", *granted)
+			}
+
+			wantBody := (&inventory.Item{
+				Slot:         uint8(granted.Slot),
+				RefObjID:     granted.RefObjID,
+				Codename:     granted.Codename,
+				TypeFlags:    granted.TypeFlags,
+				Quantity:     uint16(granted.StackCount),
+				Plus:         uint8(granted.Plus),
+				VarianceBits: gotBits,
+				Durability:   uint32(granted.Durability),
+				MagicOptions: granted.MagicOptions,
+			}).Body().Encode()
+			wantGrantPayload := append([]byte{1, 14, uint8(granted.Slot), 0}, wantBody...)
+			foundGrantFrame := false
+			for _, frame := range frames {
+				if frame.Opcode == wire.OpItemMoveResponse && bytes.Equal(frame.Payload, wantGrantPayload) {
+					foundGrantFrame = true
+					break
+				}
+			}
+			if !foundGrantFrame {
+				t.Fatalf("OpItemMoveResponse grant frame did not encode rolled equipment body: %+v", frames)
+			}
+		})
+	}
+}
+
+/*
+================
+TestGachaExchangeNonEquipmentSkipsSpecialPropertyRolls
+================
+*/
+func TestGachaExchangeNonEquipmentSkipsSpecialPropertyRolls(t *testing.T) {
+	c := testCharacter()
+	items := testItems()
+	for i, name := range []string{gacha.CardCodename, gacha.WinCardCodename, gacha.LoseCardCodename} {
+		variant := int64(2)
+		if i == 0 {
+			variant = 1
+		}
+		items[name] = &enterworld.ItemRef{RefObjID: uint32(900 + i), Codename: name, TypeIDs: [4]int64{3, 3, 14, variant}}
+	}
+	items[gacha.CardCodename].ParamDescriptions = [20]string{gacha.LoseCardCodename, gacha.WinCardCodename}
+	rt, _ := newTestRuntime(c, gmItemSource{items})
+	dir := t.TempDir()
+	for name, value := range map[string]string{
+		"gachaitemset.txt": "1 1 11459 5000 1 1\n1 2 3630 10000 3 2\n",
+		"gachanpcmap.txt":  "1 9251 1 2\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(value), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := rt.ConfigureGacha(dir); err != nil {
+		t.Fatal(err)
+	}
+	rt.NpcSpawn.Enabled = true
+	spawn := simulation.SeedWorldState(c).Spawn
+	rt.NpcRoster = []simulation.NpcDef{
+		{ObjectID: 17, RefObjID: 9251, AuthoredSpawn: true, Spawn: spawn},
+		{ObjectID: 18, RefObjID: 9252, Codename: gachaOperatorCodename, AuthoredSpawn: true, Spawn: spawn},
+	}
+	c.MissionInventory = []enterworld.InventoryRow{{
+		Slot:         13,
+		RefObjID:     rt.GachaCatalog.LoseCard.RefObjID,
+		Codename:     rt.GachaCatalog.LoseCard.Codename,
+		TypeFlags:    rt.GachaCatalog.LoseCard.TypeFlags,
+		StackCount:   1,
+		MagicOptions: []uint64{3630, 3},
+	}}
+	rt.Selected.Set(testDivision, c.Name, 18)
+	// Non-equipment rewards must not touch DropRoll at all.
+	rt.DropRoll = nil
+
+	frames, reason := rt.HandleGachaExchange(testDivision, c, wire.NewWriter(4).U32(18).Payload())
+	if reason != "" || len(frames) == 0 {
+		t.Fatalf("non-equipment exchange failed: %q %+v", reason, frames)
+	}
+	var granted *enterworld.InventoryRow
+	for i := range c.MissionInventory {
+		if c.MissionInventory[i].RefObjID == 3630 {
+			granted = &c.MissionInventory[i]
+			break
+		}
+	}
+	if granted == nil || granted.StackCount != 3 || granted.Plus != 0 || granted.Durability != 0 || len(granted.MagicOptions) != 0 {
+		t.Fatalf("unexpected non-equipment grant row: %+v", granted)
+	}
+}
+
+/*
+================
+TestGachaExchangeTakesTheLowestSlotVoucherFirst
+================
+*/
 func TestGachaExchangeTakesTheLowestSlotVoucherFirst(t *testing.T) {
 	rt, c, p := operatorFixture(t, 0)
 	extra := c.MissionInventory[0]
@@ -279,6 +507,11 @@ func TestGachaExchangeTakesTheLowestSlotVoucherFirst(t *testing.T) {
 	t.Fatalf("slot 13's win reward was not granted first: %+v", c.MissionInventory)
 }
 
+/*
+================
+TestGachaExchangeConsumesTheVoucherItRead
+================
+*/
 func TestGachaExchangeConsumesTheVoucherItRead(t *testing.T) {
 	rt, c, p := operatorFixture(t, 0)
 	// The paid voucher sits at slot 20; a same-codename card without a pair
@@ -313,8 +546,13 @@ func TestGachaExchangeConsumesTheVoucherItRead(t *testing.T) {
 	}
 }
 
+/*
+================
+TestGachaExchangeRefusalsPreserveTheVoucher
+================
+*/
 func TestGachaExchangeRefusalsPreserveTheVoucher(t *testing.T) {
-	for _, kind := range []string{"selection", "machine", "outside scope", "no voucher", "bad pair", "unlisted pair", "stacked", "delete pending", "truncated", "trailing", "catalog"} {
+	for _, kind := range []string{"selection", "machine", "outside scope", "no voucher", "bad pair", "unlisted pair", "stacked", "delete pending", "truncated", "trailing", "catalog", "drop random missing", "drop random failure"} {
 		t.Run(kind, func(t *testing.T) {
 			rt, c, p := operatorFixture(t, 0)
 			switch kind {
@@ -342,6 +580,10 @@ func TestGachaExchangeRefusalsPreserveTheVoucher(t *testing.T) {
 				p = append(p, 0)
 			case "catalog":
 				rt.GachaCatalog = nil
+			case "drop random missing":
+				rt.DropRoll = nil
+			case "drop random failure":
+				rt.DropRoll = func() (uint32, error) { return 0, errors.New("drop entropy unavailable") }
 			}
 			before := c.Snapshot()
 			frames, reason := rt.HandleGachaExchange(testDivision, c, p)
@@ -352,6 +594,11 @@ func TestGachaExchangeRefusalsPreserveTheVoucher(t *testing.T) {
 	}
 }
 
+/*
+================
+TestGachaExchangeReplayFindsNoVoucher
+================
+*/
 func TestGachaExchangeReplayFindsNoVoucher(t *testing.T) {
 	rt, c, p := operatorFixture(t, 0)
 	if _, reason := rt.HandleGachaExchange(testDivision, c, p); reason != "" {

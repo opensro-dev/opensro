@@ -1,7 +1,12 @@
 /*
 ===========================================================================
 
-gacha.go - Package action.
+gacha.go - Magic Pop machine interaction, ticket rolls, and Gori prize exchange
+
+Owns 0x7338 machine opening, 0x7053 ticket roll to win/loss vouchers, and
+0x71BE voucher redemption through Gori (NPC_CH_GACHA_OPERATOR), including the
+native 725720 equipment property roll (+1..+5 OptLevel, 5-bit white variance
++ durability, and blue magic options).
 
 ===========================================================================
 */
@@ -17,6 +22,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/gacha"
 	"opensro.online/server/internal/game/item/inventory"
+	"opensro.online/server/internal/game/item/loot"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/transport"
@@ -299,14 +305,65 @@ func (rt *Runtime) gachaNpcForGID(
 
 /*
 ================
+prepareGachaRewardItem
+
+4ED910 mutates the voucher to the prize item and calls 725720
+(Loot_InitializeSpecialEquipmentProperties) with a zeroed override spec
+(all 26 v1.150 gachaitemset.txt rows carry param1..4 == 0). Non-equipment
+returns immediately without drawing from DropRoll; equipment (TID 3.1.*.*)
+rolls a low-biased +1..+5 enhancement level (minimum of two 1..5 draws),
+5-bit white-stat variance + tier-0 durability (727590), and blue magic
+options (7276A0: 100% entry for Rarity == 2 Seal of Star, 31/101 for
+normal gear).
+================
+*/
+func (rt *Runtime) prepareGachaRewardItem(reward *enterworld.ItemRef, quantity uint64) (inventory.Item, error) {
+	if wire.IsGoldBand(reward.TypeFlags()) {
+		return inventory.Item{}, fmt.Errorf("ground-only item %s cannot enter an inventory", reward.Codename)
+	}
+	item := inventory.Item{
+		RefObjID:  reward.RefObjID,
+		Codename:  reward.Codename,
+		TypeFlags: reward.TypeFlags(),
+		Quantity:  uint16(quantity),
+	}
+	if reward.TypeIDs[0] == 3 && reward.TypeIDs[1] == 1 {
+		plus := uint8(5)
+		for i := 0; i < 2; i++ {
+			value, ok := rt.rollUniqueCount(1, 5)
+			if !ok {
+				return inventory.Item{}, fmt.Errorf("gacha equipment plus roll failed for %s", reward.Codename)
+			}
+			plus = min(plus, uint8(value))
+		}
+		variance, durability, ok := rt.rollDroppedEquipmentVariance(reward)
+		if !ok {
+			return inventory.Item{}, fmt.Errorf("gacha equipment variance roll failed for %s", reward.Codename)
+		}
+		magic, _, err := loot.EquipmentMagic(reward.Codename, rt.DropRoll)
+		if err != nil {
+			return inventory.Item{}, fmt.Errorf("gacha equipment magic roll failed for %s: %w", reward.Codename, err)
+		}
+		item.Plus = plus
+		item.VarianceBits = variance
+		item.Durability = durability
+		item.MagicOptions = magic
+	}
+	return item, nil
+}
+
+/*
+================
 HandleGachaExchange
 
 HandleGachaExchange answers 0x71BE [operatorGid] from the talk row 5DB67B
-sends once 642270 found a voucher in the bag. INFERENCE (no server binary): the
-lowest-slot win or loss voucher is consumed and its recorded pair, reference id
-then quantity, becomes bag items by the same plan the quest rewards use. The
-voucher leaves by a 0x3645 quantity of zero rather than a row delete, because
-that is the update 7654B0 turns into UIIT_MSG_GACHA_EXCHANGE.
+sends once 642270 found a voucher in the bag. Per 4C8130 -> 4ED910 -> 725720,
+the lowest-slot win or loss voucher is consumed and its recorded pair,
+reference id then quantity, becomes bag items with 725720 rolling +1..+5
+OptLevel, 5-bit white variance + durability, and blue magic options on
+equipment rewards. The voucher leaves by a 0x3645 quantity of zero rather
+than a row delete, because that is the update 7654B0 turns into
+UIIT_MSG_GACHA_EXCHANGE.
 
 The removal is pinned to the slot whose pair was read, never to the codename:
 a same-codename card without a pair in a lower slot would otherwise be eaten
@@ -386,11 +443,16 @@ func (rt *Runtime) HandleGachaExchange(
 			failure = fmt.Sprintf("voucher at slot %d: %v", slot, fault)
 			return false
 		}
-		rows, planned, err := rt.planInventoryGrant(
+		rewardItem, err := rt.prepareGachaRewardItem(reward, quantity)
+		if err != nil {
+			failure = err.Error()
+			return false
+		}
+		rows, planned, err := rt.planInventoryItemsGrant(
 			character,
 			before,
 			inv,
-			[]inventory.ItemAmount{{Codename: reward.Codename, Count: uint32(quantity)}},
+			[]inventory.Item{rewardItem},
 			map[uint8]bool{slot: true},
 		)
 		if err != nil {

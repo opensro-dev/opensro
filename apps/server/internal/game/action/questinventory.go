@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+questinventory.go - atomic quest and voucher inventory consumption and grants
+
+PlanQuestInventory and planInventoryItemsGrant apply removals and stack grants
+against a detached bag copy before any character row or wire frame commits.
+
+===========================================================================
+*/
+
 package action
 
 import (
@@ -9,8 +20,14 @@ import (
 	"sort"
 )
 
-// PlanQuestInventory runs under the caller's character transaction. It never
-// mutates the character: all removals and grants must fit before rewards commit.
+/*
+================
+PlanQuestInventory
+
+PlanQuestInventory runs under the caller's character transaction. It never
+mutates the character: all removals and grants must fit before rewards commit.
+================
+*/
 func (rt *Runtime) PlanQuestInventory(c *enterworld.Character, consume, grant []inventory.ItemAmount) ([]enterworld.InventoryRow, []wire.Frame, error) {
 	if c == nil || c.DeletePending {
 		return nil, nil, fmt.Errorf("quest inventory: unavailable character")
@@ -50,10 +67,14 @@ func (rt *Runtime) PlanQuestInventory(c *enterworld.Character, consume, grant []
 	return rt.planInventoryGrant(c, before, inv, grant, nil)
 }
 
-// planInventoryGrant adds grant to inv, already holding the caller's removals
-// from before, and plans the rows and frames for the whole change. A slot in
-// silent gets no delete frame: its caller announces the removal itself, as
-// the Gacha exchange does with a 0x3645 quantity of zero.
+/*
+================
+planInventoryGrant
+
+planInventoryGrant resolves codename/count pairs into default inventory items
+and delegates the stack placement and frame planning to planInventoryItemsGrant.
+================
+*/
 func (rt *Runtime) planInventoryGrant(
 	c *enterworld.Character,
 	before []inventory.Item,
@@ -61,6 +82,7 @@ func (rt *Runtime) planInventoryGrant(
 	grant []inventory.ItemAmount,
 	silent map[uint8]bool,
 ) ([]enterworld.InventoryRow, []wire.Frame, error) {
+	items := make([]inventory.Item, 0, len(grant))
 	for _, request := range grant {
 		if request.Count == 0 || request.Count > 65535 || rt.deps.ItemReferences() == nil {
 			return nil, nil, fmt.Errorf("invalid quest grant %s", request.Codename)
@@ -82,6 +104,35 @@ func (rt *Runtime) planInventoryGrant(
 			if ref.VarianceIntMin1c0 != nil {
 				item.Durability = uint32(clampInt64(*ref.VarianceIntMin1c0, 1, 0xffffffff))
 			}
+		}
+		items = append(items, item)
+	}
+	return rt.planInventoryItemsGrant(c, before, inv, items, silent)
+}
+
+/*
+================
+planInventoryItemsGrant
+
+planInventoryItemsGrant adds prepared items to inv, already holding the
+caller's removals from before, and plans the rows and frames for the whole
+change. A slot in silent gets no delete frame: its caller announces the
+removal itself, as the Gacha exchange does with a 0x3645 quantity of zero.
+================
+*/
+func (rt *Runtime) planInventoryItemsGrant(
+	c *enterworld.Character,
+	before []inventory.Item,
+	inv *inventory.Inventory,
+	grant []inventory.Item,
+	silent map[uint8]bool,
+) ([]enterworld.InventoryRow, []wire.Frame, error) {
+	for _, item := range grant {
+		if item.Quantity == 0 || rt.deps.ItemReferences() == nil {
+			return nil, nil, fmt.Errorf("invalid quest grant %s", item.Codename)
+		}
+		if wire.IsGoldBand(item.TypeFlags) {
+			return nil, nil, fmt.Errorf("ground-only item %s cannot enter an inventory", item.Codename)
 		}
 		for item.Quantity > 0 {
 			result, fault := inv.GrantStack(item, rt.maxStackFor(item.TypeFlags, item.Codename))
