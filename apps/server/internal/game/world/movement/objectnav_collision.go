@@ -562,7 +562,7 @@ func (v *WaterValidator) spawnObjectDeckVerdict(surface *groundSurface, baseX, b
 	if stand == nil {
 		return objectDeckNone
 	}
-	if objectLinkedLaneSealed(stand.set, stand.objectIndex, stand.mesh, stand.cellIndex) {
+	if v.objectDeckStandSealed(stand) {
 		return objectDeckSealed
 	}
 	return objectDeckOpen

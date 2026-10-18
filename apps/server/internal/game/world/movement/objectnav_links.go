@@ -7,7 +7,11 @@ objectnav_links.go - authored placement links and collision passage queries
 */
 package movement
 
-import "math"
+import (
+	"math"
+
+	"opensro.online/server/internal/game/world/simulation"
+)
 
 // A reachable link is not itself an exit: rescue must traverse its destination
 // cell and prove a terrain exit there. The visited set terminates linked cycles.
@@ -74,6 +78,117 @@ func objectLinkedLaneSealed(set []resolvedObjectNav, source int, mesh *objectNav
 					queue = append(queue, node{target, other, int(other.outline.srcCell[link.targetEdge])})
 				}
 				break
+			}
+		}
+	}
+	return true
+}
+
+/*
+================
+objectDeckStandSealed
+
+Traverses the object-nav cell lane from stand, rebinding across sector
+boundaries when an outline link edge (flags&8 != 0) lies in an adjacent sector
+whose NVM carries the resolved target placement (native 0x009A0485 + 0x009A04AE).
+================
+*/
+func (v *WaterValidator) objectDeckStandSealed(stand *objectDeckStand) bool {
+	if stand == nil {
+		return false
+	}
+	if v == nil || stand.surface == nil {
+		return objectLinkedLaneSealed(stand.set, stand.objectIndex, stand.mesh, stand.cellIndex)
+	}
+	type visitKey struct {
+		seedRegionID uint16
+		setDX, setDZ int
+		object, cell int
+	}
+	queue := []*objectDeckStand{stand}
+	seen := map[visitKey]bool{}
+	enqueueLink := func(cur *objectDeckStand, edge int) bool {
+		if cur == nil || cur.objectIndex < 0 || cur.objectIndex >= len(cur.set) || len(cur.set[cur.objectIndex].meshes) != 1 {
+			return false
+		}
+		for _, link := range cur.placement.links {
+			if link.edge != edge || link.target == 65535 {
+				continue
+			}
+			for targetIdx, entry := range cur.set {
+				if entry.placement.ordinal != link.target || len(entry.meshes) != 1 {
+					continue
+				}
+				other := entry.meshes[0]
+				if link.targetEdge < 0 || link.targetEdge >= len(other.outline.srcCell) {
+					return false
+				}
+				next := *cur
+				next.objectIndex = targetIdx
+				next.meshIndex = 0
+				next.mesh = other
+				next.placement = entry.placement
+				next.cellIndex = int(other.outline.srcCell[link.targetEdge])
+				queue = append(queue, &next)
+				return true
+			}
+			return false
+		}
+		return false
+	}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		key := visitKey{
+			seedRegionID: cur.surface.seedRegionID,
+			setDX:        cur.setDX,
+			setDZ:        cur.setDZ,
+			object:       cur.objectIndex,
+			cell:         cur.cellIndex,
+		}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		if len(seen) > 65536 {
+			return false
+		}
+		m := cur.mesh
+		if cur.cellIndex < 0 || cur.cellIndex >= m.cellCount() {
+			return false
+		}
+		for i, flags := range m.internal.flags {
+			src, dst := int(m.internal.srcCell[i]), int(m.internal.dstCell[i])
+			if src == cur.cellIndex && flags&2 == 0 {
+				queue = append(queue, cur.withCell(dst))
+			}
+			if dst == cur.cellIndex && flags&1 == 0 {
+				queue = append(queue, cur.withCell(src))
+			}
+		}
+		for edge, flags := range m.outline.flags {
+			if int(m.outline.srcCell[edge]) != cur.cellIndex {
+				continue
+			}
+			if flags == 0 {
+				return false
+			}
+			if flags&8 == 0 {
+				continue
+			}
+			if enqueueLink(cur, edge) {
+				continue
+			}
+			va, vb := int(m.outline.vertA[edge])*3, int(m.outline.vertB[edge])*3
+			mx := 0.5 * (float64(m.vertices[va]) + float64(m.vertices[vb]))
+			mz := 0.5 * (float64(m.vertices[va+2]) + float64(m.vertices[vb+2]))
+			c, s := math.Cos(cur.placement.yaw), math.Sin(cur.placement.yaw)
+			edgeWX := c*mx - s*mz + cur.anchorX + cur.placement.x
+			edgeWZ := s*mx + c*mz + cur.anchorZ + cur.placement.z
+			edgeSectorX := int(math.Floor(edgeWX / simulation.NativeRegionSize))
+			edgeSectorZ := int(math.Floor(edgeWZ / simulation.NativeRegionSize))
+			if rebound := v.rebindStandToSector(cur, edgeSectorX, edgeSectorZ); rebound != nil && rebound != cur {
+				enqueueLink(rebound, edge)
 			}
 		}
 	}

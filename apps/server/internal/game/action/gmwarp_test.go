@@ -69,6 +69,40 @@ func TestGMWarpAuthorityAndReentry(t *testing.T) {
 	}
 }
 
+/*
+================
+TestGMWarpSurfaceStandOverridesStrandedOracle
+
+When SpawnSurfaceHeight (WalkableSpawnHeightAt / native CheckPointValid) proves
+a valid stand (such as an elevated object deck), the login-only
+RelocateStrandedSpawn oracle must not veto a GM /warp; when SpawnSurfaceHeight
+rejects the point, the warp is refused.
+================
+*/
+func TestGMWarpSurfaceStandOverridesStrandedOracle(t *testing.T) {
+	c := rebirthTestCharacter(20, 100)
+	c.GMPrivilege = true
+	rt, _ := newTestRuntime(c, testItems())
+	deps := rt.deps.(*enterworld.Deps)
+	deps.CanEnterWorldRegion = func(*enterworld.Character, uint16) bool { return true }
+	deps.SpawnTerrainHeight = func(uint16, float64, float64) (float64, bool) { return -45.6, true }
+	deps.SpawnSurfaceHeight = func(_ uint16, _, y, _ float64) (float64, bool) {
+		return 265.21, y >= 200
+	}
+	deps.RelocateStrandedSpawn = func(p simulation.Spawn) (simulation.Spawn, bool, bool) {
+		return simulation.Spawn{RegionID: p.RegionID, X: p.X, Y: -45.6, Z: p.Z}, true, true
+	}
+	deckTarget := simulation.Spawn{RegionID: 24199, X: 1145, Y: 272, Z: 576}
+	resolved, ok := deps.ResolveGMWarpDestination(c, deckTarget)
+	if !ok || resolved != deckTarget {
+		t.Fatalf("elevated deck GM warp refused: got (%+v, %v), want (%+v, true)", resolved, ok, deckTarget)
+	}
+	blockedTarget := simulation.Spawn{RegionID: 24199, X: 1145, Y: -45.6, Z: 576}
+	if _, ok := deps.ResolveGMWarpDestination(c, blockedTarget); ok {
+		t.Fatal("blocked surface target accepted")
+	}
+}
+
 func TestGMWarpRefusals(t *testing.T) {
 	for _, kind := range []string{"denied-region", "missing-terrain", "stranded", "pet", "dead", "malformed", "nonfinite", "out-of-region"} {
 		t.Run(kind, func(t *testing.T) {

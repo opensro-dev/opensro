@@ -415,6 +415,96 @@ func TestRelocateStrandedSpawnRealHarborBridgeDeck(t *testing.T) {
 	}
 }
 
+/*
+================
+TestRelocateStrandedSpawnRealHotanPalaceDeck
+
+The Hotan palace deck (oas_hot_c3_castle, asset 680) spans sectors 0x5E87 and
+0x5D87. Its bridge link edge (outline 120 -> oas_hot_b2_bridge asset 682 ->
+oas_hot_c1_castle asset 681 -> open terrain exits) lies in 0x5D87, while
+0x5E87's NVM stores target=65535 for that link. Spawning or warping to
+(0x5E87, 1145, 272, 576) must resolve the cross-sector link as an open deck and
+walk south across the sector border onto the palace bridge.
+================
+*/
+func TestRelocateStrandedSpawnRealHotanPalaceDeck(t *testing.T) {
+	validator := realAuthorityValidator(t)
+
+	palaceSpawn := simulation.Spawn{RegionID: 0x5E87, X: 1145, Y: 272, Z: 576}
+	surfaceY, ok := validator.WalkableSpawnHeightAt(palaceSpawn.RegionID, palaceSpawn.X, palaceSpawn.Y, palaceSpawn.Z)
+	if !ok || math.Abs(surfaceY-265.213) > 0.05 {
+		t.Fatalf("WalkableSpawnHeightAt(%+v) = (%v, %v), want (~265.213, true)", palaceSpawn, surfaceY, ok)
+	}
+	if _, stranded, _ := validator.RelocateStrandedSpawn(palaceSpawn); stranded {
+		t.Fatal("Hotan palace deck with cross-sector bridge exit must not report stranded")
+	}
+
+	// Verify that the 0x5E87 stand has an unresolved placeholder link in 0x5E87
+	// and that rebinding to 0x5D87 (135, 93) recovers the resolved bridge link
+	// (outline 120 -> asset 682 bridge) and admits walking onto the bridge even
+	// when starting from a 0x5E87-anchored NavOwner hint.
+	owner0x5E87, _, ok := validator.ResolveNavOwner(palaceSpawn, simulation.NavOwner{})
+	if !ok || owner0x5E87.Kind != simulation.NavOwnerObject {
+		t.Fatalf("ResolveNavOwner(%+v) = %+v, %v; want object owner", palaceSpawn, owner0x5E87, ok)
+	}
+	stand0x5E87 := validator.standForOwner(owner0x5E87)
+	if stand0x5E87 == nil || !standHasUnresolvedLink(stand0x5E87) {
+		t.Fatalf("expected 0x5E87 palace stand to carry unresolved cross-sector link: %+v", stand0x5E87)
+	}
+	stand0x5D87 := validator.rebindStandToSector(stand0x5E87, 135, 93)
+	if stand0x5D87 == nil || standHasUnresolvedLink(stand0x5D87) {
+		t.Fatalf("expected 0x5D87 rebound palace stand to resolve bridge link: %+v", stand0x5D87)
+	}
+
+	link := stand0x5D87.placement.links[0]
+	srcCell := int(stand0x5D87.mesh.outline.srcCell[link.edge])
+	srcLX, srcLZ := objectCellCentroid2D(stand0x5D87.mesh, srcCell)
+	srcLY, _ := objectCellPlaneYAt(stand0x5D87.mesh, srcCell, srcLX, srcLZ)
+	c0, s0 := math.Cos(stand0x5D87.placement.yaw), math.Sin(stand0x5D87.placement.yaw)
+	fromBridgeDoor := simulation.Spawn{
+		RegionID: 0x5D87,
+		X:        c0*srcLX - s0*srcLZ + stand0x5D87.placement.x,
+		Y:        srcLY + stand0x5D87.placement.y,
+		Z:        s0*srcLX + c0*srcLZ + stand0x5D87.placement.z,
+	}
+
+	var bridgeEntry *resolvedObjectNav
+	for i := range stand0x5D87.set {
+		if stand0x5D87.set[i].placement.ordinal == link.target {
+			bridgeEntry = &stand0x5D87.set[i]
+			break
+		}
+	}
+	if bridgeEntry == nil || len(bridgeEntry.meshes) != 1 {
+		t.Fatalf("bridge target ordinal %d not found in 0x5D87 set", link.target)
+	}
+	bridgeMesh := bridgeEntry.meshes[0]
+	dstCell := int(bridgeMesh.outline.srcCell[link.targetEdge])
+	dstLX, dstLZ := objectCellCentroid2D(bridgeMesh, dstCell)
+	dstLY, _ := objectCellPlaneYAt(bridgeMesh, dstCell, dstLX, dstLZ)
+	c1, s1 := math.Cos(bridgeEntry.placement.yaw), math.Sin(bridgeEntry.placement.yaw)
+	toBridgeCell := simulation.Spawn{
+		RegionID: 0x5D87,
+		X:        c1*dstLX - s1*dstLZ + bridgeEntry.placement.x,
+		Y:        dstLY + bridgeEntry.placement.y,
+		Z:        s1*dstLX + c1*dstLZ + bridgeEntry.placement.z,
+	}
+
+	hintFrom0x5E87 := stand0x5E87.navOwner(srcCell)
+	reboundOwner, _, ok := validator.ResolveNavOwner(fromBridgeDoor, hintFrom0x5E87)
+	if !ok || reboundOwner != stand0x5D87.navOwner(srcCell) {
+		t.Fatalf("ResolveNavOwner did not rebind 0x5E87 hint to 0x5D87: got %+v, want %+v", reboundOwner, stand0x5D87.navOwner(srcCell))
+	}
+	clip := validator.ClipMovementPathFrom(fromBridgeDoor, hintFrom0x5E87, toBridgeCell)
+	if clip.Outcome != ClipArrived {
+		t.Fatalf("palace->bridge walk with 0x5E87-anchored owner hint clipped: %+v", clip)
+	}
+	walk := validator.WalkOwners(fromBridgeDoor, hintFrom0x5E87, toBridgeCell)
+	if walk.Rest.Kind != simulation.NavOwnerObject || walk.Rest.Object.Cell != int32(dstCell) {
+		t.Fatalf("bridge rest owner = %+v, want bridge cell %d", walk.Rest, dstCell)
+	}
+}
+
 // ---- edge blocking semantics (objectNavEdgeBlocks) ----
 
 // TestObjectNavEdgeBlocks pins the directional blocking rule against the

@@ -110,3 +110,62 @@ func (v *WaterValidator) spawnObjectDeckStand(surface *groundSurface, baseX, bas
 	}
 	return best
 }
+
+/*
+================
+rebindStandToSector
+
+Native 0x009A0485 (SNavMeshPos::NormalizeSector, 0x0099FFB0) + 0x009A04AE
+(CRTNavMeshTerrain::FindObjectInstByUID, 0x0099FBB0): a multi-sector object is
+duplicated into each overlapping sector's NVM with the same world transform and
+assetID, while each sector's NVM resolves only the LinkEdges whose target object
+is also present in that sector. Rebinding the stand to (sectorX, sectorZ)
+recovers that sector's placement copy and link table.
+================
+*/
+func (v *WaterValidator) rebindStandToSector(stand *objectDeckStand, sectorX, sectorZ int) *objectDeckStand {
+	if v == nil || stand == nil || stand.surface == nil || sectorX < 0 || sectorZ < 0 || sectorX > 0xff || sectorZ > 0xff {
+		return nil
+	}
+	anchorX := float64(sectorX) * simulation.NativeRegionSize
+	anchorZ := float64(sectorZ) * simulation.NativeRegionSize
+	if anchorX == stand.anchorX && anchorZ == stand.anchorZ {
+		return stand
+	}
+	wx := stand.anchorX + stand.placement.x
+	wy := stand.placement.y
+	wz := stand.anchorZ + stand.placement.z
+	trySurface := func(surface *groundSurface) *objectDeckStand {
+		if surface == nil {
+			return nil
+		}
+		dx := sectorX - simulation.SectorX(surface.seedRegionID)
+		dz := sectorZ - simulation.SectorY(surface.seedRegionID)
+		set := v.objectNavSetForOffset(surface, dx, dz)
+		for i := range set {
+			p := set[i].placement
+			if p.assetID != stand.placement.assetID || stand.meshIndex >= len(set[i].meshes) {
+				continue
+			}
+			if math.Abs((anchorX+p.x)-wx) > 1e-2 || math.Abs(p.y-wy) > 1e-2 || math.Abs((anchorZ+p.z)-wz) > 1e-2 || math.Abs(p.yaw-stand.placement.yaw) > 1e-4 {
+				continue
+			}
+			next := *stand
+			next.set = set
+			next.objectIndex = i
+			next.mesh = set[i].meshes[stand.meshIndex]
+			next.placement = p
+			next.anchorX = anchorX
+			next.anchorZ = anchorZ
+			next.surface = surface
+			next.setDX = dx
+			next.setDZ = dz
+			return &next
+		}
+		return nil
+	}
+	if next := trySurface(stand.surface); next != nil {
+		return next
+	}
+	return trySurface(v.surfaceForRegion(simulation.RegionIDForSectors(sectorX, sectorZ)))
+}
