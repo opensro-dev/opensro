@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+water.go - outdoor water-submersion gate and terrain/spawn height authority
+
+WaterValidator owns the exported outdoor region catalog, water blocks, terrain
+height grids, blocked-tile grids, and object-nav caches for movement and spawn
+authority.
+
+===========================================================================
+*/
 package movement
 
 import (
@@ -8,6 +19,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/world/simulation"
@@ -20,22 +32,27 @@ const (
 	maxMovementAssetBytes int64 = 128 << 20
 )
 
-// WaterValidator is the deep-water movement gate
-// (validateMissionMovementForWorld): the ONE server-authority rule that
-// applies to an accepted native move. The v1.150 CLIENT nav data leaves sea
-// cells open, so the client gate accepts seabed destinations; in retail the
-// AGENT SERVER rejects them, and this validator is that server stand-in.
-//
-// The surface source is the MAPM 320-unit water block table (6x6 per
-// region) inside the exported region bundles - the same data the retail
-// server derives its water table from. The navmesh HEIGHT MAP is parsed
-// alongside it (TerrainHeightAt - the enter-world underground-spawn lift);
-// blockers and tiles stay unparsed (the reference deliberately does NOT
-// re-run client nav checks server-side).
-//
-// Failure policy mirrors the reference exactly: any unreadable catalog,
-// index or bundle degrades to ACCEPT (`.catch(() => null)`), never to a
-// refusal or a fault.
+/*
+================
+WaterValidator
+
+WaterValidator is the deep-water movement gate (validateMissionMovementForWorld):
+the ONE server-authority rule that applies to an accepted native move. The
+v1.150 CLIENT nav data leaves sea cells open, so the client gate accepts seabed
+destinations; in retail the AGENT SERVER rejects them, and this validator is
+that server stand-in.
+
+The surface source is the MAPM 320-unit water block table (6x6 per region)
+inside the exported region bundles - the same data the retail server derives
+its water table from. The navmesh HEIGHT MAP is parsed alongside it
+(TerrainHeightAt - the enter-world underground-spawn lift); blockers and tiles
+stay unparsed (the reference deliberately does NOT re-run client nav checks
+server-side).
+
+Failure policy mirrors the reference exactly: any unreadable catalog, index or
+bundle degrades to ACCEPT (.catch(() => null)), never to a refusal or a fault.
+================
+*/
 type WaterValidator struct {
 	// closedObjectRescue: RelocateStrandedSpawn also frees a spawn inside a
 	// closed object (placementguard.go, SRO_CLOSED_OBJECT_RESCUE).
@@ -72,6 +89,10 @@ type WaterValidator struct {
 	// load-once and never invalidated, so the resolution is deterministic
 	// for the validator's lifetime. nil values are cached misses.
 	surfaceByRegion map[uint16]*groundSurface
+	// regionSurfaces is the lock-free hot-path mirror of surfaceByRegion,
+	// indexed directly by uint16 regionID (emptyRegionSurface marks a
+	// cached nil miss). Allocated on first region resolution.
+	regionSurfaces atomic.Pointer[[65536]atomic.Pointer[groundSurface]]
 	// objectIndexes caches the object-resource index files the sealed-deck
 	// rescue resolves placements through (objectnav.go); nil = negative.
 	objectIndexes map[string]*objectResourceIndex
@@ -88,6 +109,10 @@ type WaterValidator struct {
 	// (objectnav_reach.go), filled with the set: a chord that misses it
 	// can skip the whole set.
 	objectNavReaches map[objectNavSetKey]objectReach
+	// sectorNeighborhoods caches, per outdoor sector regionID, the
+	// deduplicated non-empty 3x3 anchor probe list for terrainOutlineEntry
+	// and objectChordFirstContact. Allocated on first neighborhood query.
+	sectorNeighborhoods atomic.Pointer[[65536]atomic.Pointer[sectorObjectNavNeighborhood]]
 	// walkInSets holds, per cached set, the indices of the placements
 	// whose meshes carry event-zone cells (walkin_zone.go).
 	walkInSets map[objectNavSetKey][]int
@@ -98,8 +123,13 @@ type WaterValidator struct {
 	dungeonSpawnSurfaces map[uint16]*dungeonSpawnSurface
 }
 
-// NewWaterValidator builds the validator over an explicit client public
-// asset root.
+/*
+================
+NewWaterValidator
+
+NewWaterValidator builds the validator over an explicit client public asset root.
+================
+*/
 func NewWaterValidator(clientPublicRoot string) *WaterValidator {
 	return newWaterValidator(
 		clientPublicRoot,
@@ -108,9 +138,15 @@ func NewWaterValidator(clientPublicRoot string) *WaterValidator {
 	)
 }
 
-// NewAuthorityValidator builds movement authority over the generated server
-// projection. This is the production constructor; it has no knowledge of the
-// browser client's publish layout.
+/*
+================
+NewAuthorityValidator
+
+NewAuthorityValidator builds movement authority over the generated server
+projection. This is the production constructor; it has no knowledge of the
+browser client's publish layout.
+================
+*/
 func NewAuthorityValidator(worldAuthorityDir string) *WaterValidator {
 	return newWaterValidator(
 		filepath.Join(worldAuthorityDir, "movement"),
@@ -119,6 +155,11 @@ func NewAuthorityValidator(worldAuthorityDir string) *WaterValidator {
 	)
 }
 
+/*
+================
+newWaterValidator
+================
+*/
 func newWaterValidator(root, catalogPath, dungeonResourcesPath string) *WaterValidator {
 	v := &WaterValidator{
 		root:                 root,
@@ -140,12 +181,17 @@ func newWaterValidator(root, catalogPath, dungeonResourcesPath string) *WaterVal
 	return v
 }
 
-// boundedMovementAssetReader is the production file boundary for movement
-// authority. Paths are checked lexically against the root and opened through
-// an os.Root, which refuses any path - symlinked or not - that resolves
-// outside it. Regular files are required, and a size check happens before
-// allocation and again through a limited reader to cover replacement/growth
-// races.
+/*
+================
+boundedMovementAssetReader
+
+boundedMovementAssetReader is the production file boundary for movement
+authority. Paths are checked lexically against the root and opened through an
+os.Root, which refuses any path - symlinked or not - that resolves outside it.
+Regular files are required, and a size check happens before allocation and
+again through a limited reader to cover replacement/growth races.
+================
+*/
 func boundedMovementAssetReader(root string) func(string) ([]byte, error) {
 	rootAbs, rootErr := filepath.Abs(root)
 
@@ -196,11 +242,17 @@ func boundedMovementAssetReader(root string) func(string) ([]byte, error) {
 	}
 }
 
-// ValidateSecurityAssets eagerly proves that the movement authority can
-// resolve both shipped starting worlds. Runtime path checks fail closed on
-// uncovered outdoor tiles; this boot check turns a wholly missing or broken
-// asset tree into a clear configuration error instead of a server where
-// every first move is rejected.
+/*
+================
+ValidateSecurityAssets
+
+ValidateSecurityAssets eagerly proves that the movement authority can resolve
+both shipped starting worlds. Runtime path checks fail closed on uncovered
+outdoor tiles; this boot check turns a wholly missing or broken asset tree into
+a clear configuration error instead of a server where every first move is
+rejected.
+================
+*/
 func (v *WaterValidator) ValidateSecurityAssets() error {
 	if v == nil || v.loadCatalog() == nil {
 		return fmt.Errorf("movement: world-region catalog is required for movement authority")
@@ -215,11 +267,17 @@ func (v *WaterValidator) ValidateSecurityAssets() error {
 
 var _ simulation.MovementValidator = (*WaterValidator)(nil)
 
-// ValidateMovement refuses a mode-1 destination whose submersion (water
-// surface minus destination y) exceeds simulation.MaxWadeDepth. The submersion
-// is of the DESTINATION POINT, not the terrain water column: bridge decks
-// above the river carry a destination y above the surface and stay legal,
-// while seabed clicks keep rejecting.
+/*
+================
+ValidateMovement
+
+ValidateMovement refuses a mode-1 destination whose submersion (water surface
+minus destination y) exceeds simulation.MaxWadeDepth. The submersion is of the
+DESTINATION POINT, not the terrain water column: bridge decks above the river
+carry a destination y above the surface and stay legal, while seabed clicks
+keep rejecting.
+================
+*/
 func (v *WaterValidator) ValidateMovement(m simulation.MovementRequest) *simulation.MoveError {
 	if m.Mode != simulation.MovementAckDestinationMode {
 		return nil
@@ -245,11 +303,17 @@ func (v *WaterValidator) ValidateMovement(m simulation.MovementRequest) *simulat
 	return nil
 }
 
-// TerrainHeightAt samples the exported navmesh height map at a region-local
-// point (native units). ok=false means "no height authority for that point"
-// (missing catalog/bundle/height map) and callers must treat it as absent,
-// never as height zero. Same load/cache path as the water gate; same
-// degrade-to-absent failure policy.
+/*
+================
+TerrainHeightAt
+
+TerrainHeightAt samples the exported navmesh height map at a region-local point
+(native units). ok=false means "no height authority for that point" (missing
+catalog/bundle/height map) and callers must treat it as absent, never as height
+zero. Same load/cache path as the water gate; same degrade-to-absent failure
+policy.
+================
+*/
 func (v *WaterValidator) TerrainHeightAt(regionID uint16, x, z float64) (float64, bool) {
 	surface := v.surfaceForRegion(regionID)
 	if surface == nil {
@@ -260,9 +324,15 @@ func (v *WaterValidator) TerrainHeightAt(regionID uint16, x, z float64) (float64
 	return surface.terrainHeightAt(baseX, baseZ)
 }
 
-// WalkableTerrainHeightAt is the monster-population spawn boundary. Unlike
-// TerrainHeightAt, a height sample alone is insufficient: generated monsters
-// may only materialize on a tile the exported navmesh marks walkable.
+/*
+================
+WalkableTerrainHeightAt
+
+WalkableTerrainHeightAt is the monster-population spawn boundary. Unlike
+TerrainHeightAt, a height sample alone is insufficient: generated monsters may
+only materialize on a tile the exported navmesh marks walkable.
+================
+*/
 func (v *WaterValidator) WalkableTerrainHeightAt(regionID uint16, x, z float64) (float64, bool) {
 	tilesPerAxis, tileSize, ok := v.gridParamsForRegion(regionID)
 	if !ok || x < 0 || z < 0 ||
@@ -280,16 +350,21 @@ func (v *WaterValidator) WalkableTerrainHeightAt(regionID uint16, x, z float64) 
 	return v.TerrainHeightAt(regionID, x, z)
 }
 
-// WalkableSpawnHeightAt resolves a radius-generated monster position
-// against the native surface nearest the nest's authored Y. Terrain is
-// only eligible when its nav tile is walkable; a containing object-nav
-// cell may win the same nearest-Y arbitration used by sub_403d20 even
-// when the terrain below it is blocked (bridges, platforms, and elevated
-// quest arenas).
-//
-// Dungeon sectors deliberately remain outside this outdoor surface
-// owner. Their generated positions require the resident dungeon-nav host,
-// not outdoor sector math.
+/*
+================
+WalkableSpawnHeightAt
+
+WalkableSpawnHeightAt resolves a radius-generated monster position against the
+native surface nearest the nest's authored Y. Terrain is only eligible when its
+nav tile is walkable; a containing object-nav cell may win the same nearest-Y
+arbitration used by sub_403d20 even when the terrain below it is blocked
+(bridges, platforms, and elevated quest arenas).
+
+Dungeon sectors deliberately remain outside this outdoor surface owner. Their
+generated positions require the resident dungeon-nav host, not outdoor sector
+math.
+================
+*/
 func (v *WaterValidator) WalkableSpawnHeightAt(
 	regionID uint16,
 	x, authoredY, z float64,

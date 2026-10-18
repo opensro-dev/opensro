@@ -10,6 +10,7 @@ package movement
 import (
 	"math"
 	"slices"
+	"sync/atomic"
 
 	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/simulation"
@@ -498,6 +499,118 @@ func (v *WaterValidator) ownerWalk(from simulation.Spawn, fromOwner simulation.N
 	return walk
 }
 
+/*
+================
+sectorObjectNavProbe
+
+One non-empty (surface, offset) placement set in a sector's 3x3 anchor
+neighborhood, pre-resolved in native probe order.
+================
+*/
+type sectorObjectNavProbe struct {
+	key              objectNavSetKey
+	surface          *groundSurface
+	anchorX, anchorZ int
+	baseX, baseZ     float64
+	dx, dz           int
+	set              []resolvedObjectNav
+	reach            objectReach
+}
+
+/*
+================
+sectorObjectNavNeighborhood
+================
+*/
+type sectorObjectNavNeighborhood struct {
+	probes []sectorObjectNavProbe
+}
+
+/*
+================
+sectorNeighborhoodTable
+================
+*/
+func (v *WaterValidator) sectorNeighborhoodTable() *[65536]atomic.Pointer[sectorObjectNavNeighborhood] {
+	if table := v.sectorNeighborhoods.Load(); table != nil {
+		return table
+	}
+	allocated := new([65536]atomic.Pointer[sectorObjectNavNeighborhood])
+	if v.sectorNeighborhoods.CompareAndSwap(nil, allocated) {
+		return allocated
+	}
+	return v.sectorNeighborhoods.Load()
+}
+
+/*
+================
+sectorObjectNavProbes
+
+Returns the deduplicated non-empty 3x3 placement sets around outdoor sector
+(sectorX, sectorZ) in exact dz, dx (-1..1) chordSurface-then-neighborSurface
+order. Built outside v.mu and published once per sector.
+================
+*/
+func (v *WaterValidator) sectorObjectNavProbes(sectorX, sectorZ int) []sectorObjectNavProbe {
+	regionID := simulation.RegionIDForSectors(sectorX, sectorZ)
+	if table := v.sectorNeighborhoods.Load(); table != nil {
+		if cached := table[regionID].Load(); cached != nil {
+			return cached.probes
+		}
+	}
+
+	var checkedBuf [18]objectNavSetKey
+	checked := checkedBuf[:0]
+	var probes []sectorObjectNavProbe
+	add := func(surface *groundSurface, anchorX, anchorZ int) {
+		if surface == nil {
+			return
+		}
+		dx := anchorX - simulation.SectorX(surface.seedRegionID)
+		dz := anchorZ - simulation.SectorY(surface.seedRegionID)
+		key := objectNavSetKey{surface: surface, offset: offsetKey(dx, dz)}
+		if slices.Contains(checked, key) {
+			return
+		}
+		checked = append(checked, key)
+		set, setReach := v.objectNavSetReach(surface, dx, dz)
+		if len(set) == 0 {
+			return
+		}
+		probes = append(probes, sectorObjectNavProbe{
+			key:     key,
+			surface: surface,
+			anchorX: anchorX,
+			anchorZ: anchorZ,
+			baseX:   float64(anchorX) * simulation.NativeRegionSize,
+			baseZ:   float64(anchorZ) * simulation.NativeRegionSize,
+			dx:      dx,
+			dz:      dz,
+			set:     set,
+			reach:   setReach,
+		})
+	}
+
+	chordSurface := v.surfaceForRegion(regionID)
+	for dz := -objectAnchorSearchRadiusSectors; dz <= objectAnchorSearchRadiusSectors; dz++ {
+		for dx := -objectAnchorSearchRadiusSectors; dx <= objectAnchorSearchRadiusSectors; dx++ {
+			anchorX, anchorZ := sectorX+dx, sectorZ+dz
+			if anchorX < 0 || anchorZ < 0 || anchorX > 0xff || anchorZ > 0xff {
+				continue
+			}
+			add(chordSurface, anchorX, anchorZ)
+			add(v.surfaceForRegion(simulation.RegionIDForSectors(anchorX, anchorZ)), anchorX, anchorZ)
+		}
+	}
+
+	built := &sectorObjectNavNeighborhood{probes: probes}
+	table := v.sectorNeighborhoodTable()
+	if table[regionID].CompareAndSwap(nil, built) {
+		return probes
+	}
+	return table[regionID].Load().probes
+}
+
 // terrainOutlineEntry finds the first object the terrain walker enters on
 // the chord after tMin: an OUTLINE edge crossed from outside whose flags
 // carry neither side-block bit 0x01 nor 0x10 (the same admission client-next
@@ -512,99 +625,93 @@ func (v *WaterValidator) terrainOutlineEntry(ax, az, bx, bz, tMin float64) (*obj
 	const eps = 1e-9
 	var sectorBuf [8]globalTile
 	sectors := v.chordSectors(sectorBuf[:], ax, az, bx, bz)
+	multiSector := len(sectors) > 1
 	// A few sets per crossed sector: a scan of a stack array, not a map
 	// that allocated its buckets on every chord.
 	var checkedBuf [32]objectNavSetKey
 	checked := checkedBuf[:0]
 	var best *objectDeckStand
 	bestT, bestKey := math.Inf(1), math.Inf(1)
-	probe := func(surface *groundSurface, anchorX, anchorZ int) {
-		if surface == nil {
-			return
-		}
-		dx := anchorX - simulation.SectorX(surface.seedRegionID)
-		dz := anchorZ - simulation.SectorY(surface.seedRegionID)
-		key := objectNavSetKey{surface: surface, offset: offsetKey(dx, dz)}
-		if slices.Contains(checked, key) {
-			return
-		}
-		checked = append(checked, key)
-		set, setReach := v.objectNavSetReach(surface, dx, dz)
-		baseX, baseZ := float64(anchorX)*simulation.NativeRegionSize, float64(anchorZ)*simulation.NativeRegionSize
-		if setReach.missedBy(ax-baseX, az-baseZ, bx-baseX, bz-baseZ) {
-			return
-		}
-		for i := range set {
-			// A chord that misses everything this placement holds can neither
-			// visit nor cross it (objectnav_reach.go).
-			if set[i].reach.missedBy(ax-baseX, az-baseZ, bx-baseX, bz-baseZ) {
-				continue
-			}
-			// Native visit order (404510): the placement is stepped once the
-			// walker stands in one of its registered terrain cells.
-			visit := math.Max(tMin, terrainVisitKey(set[i].placement.terrainCells, ax-baseX, az-baseZ, bx-baseX, bz-baseZ))
-			if math.IsInf(visit, 1) || visit > bestKey {
-				continue
-			}
-			for meshIndex, mesh := range set[i].meshes {
-				candidate := &objectDeckStand{set: set, objectIndex: i, mesh: mesh, placement: set[i].placement,
-					anchorX: float64(anchorX) * simulation.NativeRegionSize, anchorZ: float64(anchorZ) * simulation.NativeRegionSize,
-					surface: surface, setDX: dx, setDZ: dz, meshIndex: meshIndex}
-				x0, z0 := candidate.local(ax, az)
-				x1, z1 := candidate.local(bx, bz)
-				if math.Max(x0, x1) < mesh.minX || math.Min(x0, x1) > mesh.maxX ||
-					math.Max(z0, z1) < mesh.minZ || math.Min(z0, z1) > mesh.maxZ {
-					continue
-				}
-				rx, rz := x1-x0, z1-z0
-				edges := &mesh.outline
-				for e := range edges.flags {
-					if edges.flags[e]&0x11 != 0 {
-						continue
-					}
-					va, vb := edges.vertA[e], edges.vertB[e]
-					exX, exZ := float64(mesh.vertices[va*3]), float64(mesh.vertices[va*3+2])
-					sx, sz := float64(mesh.vertices[vb*3])-exX, float64(mesh.vertices[vb*3+2])-exZ
-					den := rx*sz - rz*sx
-					if math.Abs(den) < 1e-12 {
-						continue
-					}
-					t := ((exX-x0)*sz - (exZ-z0)*sx) / den
-					u := ((exX-x0)*rz - (exZ-z0)*rx) / den
-					if t <= tMin+eps || t < visit-eps || t >= 1 || u < 0 || u > 1 {
-						continue
-					}
-					if visit == bestKey && t >= bestT {
-						continue
-					}
-					src := int(edges.srcCell[e])
-					if src >= mesh.cellCount() {
-						continue
-					}
-					cx, cz := objectCellCentroid2D(mesh, src)
-					inside := sx*(cz-exZ) - sz*(cx-exX)
-					origin := sx*(z0-exZ) - sz*(x0-exX)
-					if origin*inside > 0 {
-						continue // chord starts on the cell side: an exit, not an entry
-					}
-					best, bestT, bestKey = candidate.withCell(src), t, visit
-				}
-			}
-		}
-	}
 	for _, sector := range sectors {
 		if sector.x < 0 || sector.z < 0 || sector.x > 0xff || sector.z > 0xff {
 			continue
 		}
-		chordSurface := v.surfaceForRegion(simulation.RegionIDForSectors(sector.x, sector.z))
-		for dz := -objectAnchorSearchRadiusSectors; dz <= objectAnchorSearchRadiusSectors; dz++ {
-			for dx := -objectAnchorSearchRadiusSectors; dx <= objectAnchorSearchRadiusSectors; dx++ {
-				anchorX, anchorZ := sector.x+dx, sector.z+dz
-				if anchorX < 0 || anchorZ < 0 || anchorX > 0xff || anchorZ > 0xff {
+		probes := v.sectorObjectNavProbes(sector.x, sector.z)
+		for pIdx := range probes {
+			p := &probes[pIdx]
+			if multiSector {
+				if slices.Contains(checked, p.key) {
 					continue
 				}
-				probe(chordSurface, anchorX, anchorZ)
-				probe(v.surfaceForRegion(simulation.RegionIDForSectors(anchorX, anchorZ)), anchorX, anchorZ)
+				checked = append(checked, p.key)
+			}
+			set, setReach := p.set, p.reach
+			baseX, baseZ := p.baseX, p.baseZ
+			if setReach.missedBy(ax-baseX, az-baseZ, bx-baseX, bz-baseZ) {
+				continue
+			}
+			for i := range set {
+				// A chord that misses everything this placement holds can neither
+				// visit nor cross it (objectnav_reach.go).
+				if set[i].reach.missedBy(ax-baseX, az-baseZ, bx-baseX, bz-baseZ) {
+					continue
+				}
+				// Native visit order (404510): the placement is stepped once the
+				// walker stands in one of its registered terrain cells.
+				visit := math.Max(tMin, terrainVisitKey(set[i].placement.terrainCells, ax-baseX, az-baseZ, bx-baseX, bz-baseZ))
+				if math.IsInf(visit, 1) || visit > bestKey {
+					continue
+				}
+				pl := set[i].placement
+				c, sn := set[i].cosYaw, set[i].sinYaw
+				dx0, dz0 := ax-(baseX+pl.x), az-(baseZ+pl.z)
+				dx1, dz1 := bx-(baseX+pl.x), bz-(baseZ+pl.z)
+				x0, z0 := c*dx0+sn*dz0, -sn*dx0+c*dz0
+				x1, z1 := c*dx1+sn*dz1, -sn*dx1+c*dz1
+				rx, rz := x1-x0, z1-z0
+				for meshIndex, mesh := range set[i].meshes {
+					if math.Max(x0, x1) < mesh.minX || math.Min(x0, x1) > mesh.maxX ||
+						math.Max(z0, z1) < mesh.minZ || math.Min(z0, z1) > mesh.maxZ {
+						continue
+					}
+					edges := &mesh.outline
+					for e := range edges.flags {
+						if edges.flags[e]&0x11 != 0 {
+							continue
+						}
+						va, vb := edges.vertA[e], edges.vertB[e]
+						exX, exZ := float64(mesh.vertices[va*3]), float64(mesh.vertices[va*3+2])
+						sx, sz := float64(mesh.vertices[vb*3])-exX, float64(mesh.vertices[vb*3+2])-exZ
+						den := rx*sz - rz*sx
+						if math.Abs(den) < 1e-12 {
+							continue
+						}
+						t := ((exX-x0)*sz - (exZ-z0)*sx) / den
+						u := ((exX-x0)*rz - (exZ-z0)*rx) / den
+						if t <= tMin+eps || t < visit-eps || t >= 1 || u < 0 || u > 1 {
+							continue
+						}
+						if visit == bestKey && t >= bestT {
+							continue
+						}
+						src := int(edges.srcCell[e])
+						if src >= mesh.cellCount() {
+							continue
+						}
+						cx, cz := objectCellCentroid2D(mesh, src)
+						inside := sx*(cz-exZ) - sz*(cx-exX)
+						origin := sx*(z0-exZ) - sz*(x0-exX)
+						if origin*inside > 0 {
+							continue // chord starts on the cell side: an exit, not an entry
+						}
+						best = &objectDeckStand{
+							set: set, objectIndex: i, mesh: mesh, cellIndex: src,
+							placement: pl, anchorX: baseX, anchorZ: baseZ,
+							surface: p.surface, setDX: p.dx, setDZ: p.dz, meshIndex: meshIndex,
+						}
+						bestT, bestKey = t, visit
+					}
+				}
 			}
 		}
 	}

@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+water_assets.go - outdoor region catalog, bundle decoding, and surface cache
+
+Resolves region IDs to decoded groundSurface bundles (water blocks, height
+grids, blocked-tile grids, and object placement tables) with lock-free hot-path
+region lookup and load-outside-lock cold resolution.
+
+===========================================================================
+*/
 package movement
 
 import (
@@ -7,6 +18,7 @@ import (
 	"math"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/world/simulation"
@@ -23,36 +35,94 @@ const (
 	flatWaterType   = 1
 )
 
-// surfaceForRegion resolves the ground surface for a destination region;
-// nil means "no surface" and the caller accepts (reference `.catch`).
-// Cache check under the lock; the cold-path resolution (which does disk
-// I/O) runs unlocked and republishes double-checked.
+// emptyRegionSurface is the sentinel stored in WaterValidator.regionSurfaces
+// for a region that resolved to nil (a cached negative miss).
+var emptyRegionSurface groundSurface
+
+/*
+================
+regionSurfaceTable
+================
+*/
+func (v *WaterValidator) regionSurfaceTable() *[65536]atomic.Pointer[groundSurface] {
+	if table := v.regionSurfaces.Load(); table != nil {
+		return table
+	}
+	allocated := new([65536]atomic.Pointer[groundSurface])
+	if v.regionSurfaces.CompareAndSwap(nil, allocated) {
+		return allocated
+	}
+	return v.regionSurfaces.Load()
+}
+
+/*
+================
+storeRegionSurface
+================
+*/
+func storeRegionSurface(table *[65536]atomic.Pointer[groundSurface], regionID uint16, surface *groundSurface) {
+	if surface == nil {
+		table[regionID].Store(&emptyRegionSurface)
+		return
+	}
+	table[regionID].Store(surface)
+}
+
+/*
+================
+surfaceForRegion
+
+surfaceForRegion resolves the ground surface for a destination region; nil
+means "no surface" and the caller accepts (reference .catch). Warm hits read
+the lock-free regionSurfaces table; cold resolution runs outside v.mu and
+publishes double-checked.
+================
+*/
 func (v *WaterValidator) surfaceForRegion(regionID uint16) *groundSurface {
+	if table := v.regionSurfaces.Load(); table != nil {
+		if cached := table[regionID].Load(); cached != nil {
+			if cached == &emptyRegionSurface {
+				return nil
+			}
+			return cached
+		}
+	}
+
 	v.mu.Lock()
 	surface, cached := v.surfaceByRegion[regionID]
 	v.mu.Unlock()
 	if cached {
+		storeRegionSurface(v.regionSurfaceTable(), regionID, surface)
 		return surface
 	}
 
 	resolved := v.resolveSurfaceForRegion(regionID)
 
 	v.mu.Lock()
-	defer v.mu.Unlock()
-	if surface, cached := v.surfaceByRegion[regionID]; cached {
+	if existing, ok := v.surfaceByRegion[regionID]; ok {
 		// Another goroutine resolved this region meanwhile; its published
 		// result wins (the underlying caches are load-once, so both
 		// resolutions are equivalent - adopt theirs and drop ours).
-		return surface
+		resolved = existing
+	} else {
+		v.surfaceByRegion[regionID] = resolved
 	}
-	v.surfaceByRegion[regionID] = resolved
+	v.mu.Unlock()
+
+	storeRegionSurface(v.regionSurfaceTable(), regionID, resolved)
 	return resolved
 }
 
-// resolveSurfaceForRegion is the uncached catalog + index resolution
-// (surfaceForRegion memoizes the result). Callers must NOT hold v.mu: each
-// loader below takes and releases it around its own cache, keeping the
-// disk reads outside.
+/*
+================
+resolveSurfaceForRegion
+
+resolveSurfaceForRegion is the uncached catalog + index resolution
+(surfaceForRegion memoizes the result). Callers must NOT hold v.mu: each loader
+below takes and releases it around its own cache, keeping the disk reads
+outside.
+================
+*/
 func (v *WaterValidator) resolveSurfaceForRegion(regionID uint16) *groundSurface {
 	requestedHex := formatRegionID(regionID)
 
@@ -93,10 +163,16 @@ func (v *WaterValidator) resolveSurfaceForRegion(regionID uint16) *groundSurface
 	return v.surfaceForBundle(bundlePublicPath, index)
 }
 
-// surfaceForBundle loads (or answers from cache) one region bundle's
-// surface. The build - a disk read plus JSON decode of the largest asset
-// in this type - runs with v.mu released; nil (a failed build) is cached
-// too, so a known-unloadable bundle never re-reads the disk.
+/*
+================
+surfaceForBundle
+
+surfaceForBundle loads (or answers from cache) one region bundle's surface.
+The build - a disk read plus JSON decode of the largest asset in this type -
+runs with v.mu released; nil (a failed build) is cached too, so a
+known-unloadable bundle never re-reads the disk.
+================
+*/
 func (v *WaterValidator) surfaceForBundle(bundlePublicPath string, index *regionIndexFile) *groundSurface {
 	v.mu.Lock()
 	surface, cached := v.surfaces[bundlePublicPath]
@@ -116,8 +192,14 @@ func (v *WaterValidator) surfaceForBundle(bundlePublicPath string, index *region
 	return built
 }
 
-// selectCatalogEntry ports selectMissionWorldCatalogEntry's preference
-// order: seedRegionId match, then id match, then the first entry.
+/*
+================
+selectCatalogEntry
+
+selectCatalogEntry ports selectMissionWorldCatalogEntry's preference order:
+seedRegionId match, then id match, then the first entry.
+================
+*/
 func selectCatalogEntry(entries []catalogEntry, requestedHex string) catalogEntry {
 	for _, entry := range entries {
 		if normalizeRegionID(entry.SeedRegionID) == requestedHex {
@@ -132,10 +214,16 @@ func selectCatalogEntry(entries []catalogEntry, requestedHex string) catalogEntr
 	return entries[0]
 }
 
-// loadCatalog is the one-shot world-region catalog load. A failed load is
-// cached as a nil negative (catalogLoaded still flips), so a deployment
-// without the asset degrades to accept-all once instead of re-reading the
-// disk on every cold region. The read itself runs with v.mu released.
+/*
+================
+loadCatalog
+
+loadCatalog is the one-shot world-region catalog load. A failed load is cached
+as a nil negative (catalogLoaded still flips), so a deployment without the
+asset degrades to accept-all once instead of re-reading the disk on every cold
+region. The read itself runs with v.mu released.
+================
+*/
 func (v *WaterValidator) loadCatalog() *regionCatalog {
 	v.mu.Lock()
 	if v.catalogLoaded {
@@ -160,9 +248,14 @@ func (v *WaterValidator) loadCatalog() *regionCatalog {
 	return catalog
 }
 
-// loadIndex loads (or answers from cache) one region index file; a failed
-// load caches nil, the existing negative semantic. The read runs with v.mu
-// released.
+/*
+================
+loadIndex
+
+loadIndex loads (or answers from cache) one region index file; a failed load
+caches nil, the existing negative semantic. The read runs with v.mu released.
+================
+*/
 func (v *WaterValidator) loadIndex(publicPath string) *regionIndexFile {
 	v.mu.Lock()
 	index, cached := v.indexes[publicPath]
@@ -185,8 +278,14 @@ func (v *WaterValidator) loadIndex(publicPath string) *regionIndexFile {
 	return loaded
 }
 
-// buildSurface ports the water-table half of createMissionGroundSurface.
-// Callers must NOT hold v.mu (surfaceForBundle owns caching the result).
+/*
+================
+buildSurface
+
+buildSurface ports the water-table half of createMissionGroundSurface. Callers
+must NOT hold v.mu (surfaceForBundle owns caching the result).
+================
+*/
 func (v *WaterValidator) buildSurface(bundlePublicPath string, index *regionIndexFile) *groundSurface {
 	bundle := &regionBundle{}
 	if !v.readJSON(bundlePublicPath, bundle) {
@@ -280,9 +379,15 @@ func (v *WaterValidator) buildSurface(bundlePublicPath string, index *regionInde
 	}
 }
 
-// buildObjectPlacements decodes each navmesh region entry's nav object
-// placement list for the sealed-deck rescue (objectnav.go). A malformed
-// list degrades to no placements for that entry only.
+/*
+================
+buildObjectPlacements
+
+buildObjectPlacements decodes each navmesh region entry's nav object placement
+list for the sealed-deck rescue (objectnav.go). A malformed list degrades to no
+placements for that entry only.
+================
+*/
 func buildObjectPlacements(bundle *regionBundle) (map[int64][]objectNavPlacement, error) {
 	placements := make(map[int64][]objectNavPlacement)
 	for _, region := range bundle.Navmesh.Regions {
@@ -300,9 +405,15 @@ func buildObjectPlacements(bundle *regionBundle) (map[int64][]objectNavPlacement
 	return placements, nil
 }
 
-// buildBlockedGrids decodes each navmesh region's byte-per-tile walkability
-// plane. A malformed or absent plane degrades to "no coverage" for that
-// region only.
+/*
+================
+buildBlockedGrids
+
+buildBlockedGrids decodes each navmesh region's byte-per-tile walkability
+plane. A malformed or absent plane degrades to "no coverage" for that region
+only.
+================
+*/
 func buildBlockedGrids(bundle *regionBundle) map[int64]*blockedGrid {
 	grids := make(map[int64]*blockedGrid)
 	tilesPerAxis, okTiles := jsonInt(bundle.Navmesh.TilesPerAxis)
@@ -344,9 +455,15 @@ func buildBlockedGrids(bundle *regionBundle) map[int64]*blockedGrid {
 	return grids
 }
 
-// buildHeightGrids decodes each navmesh region's base64 little-endian
-// float32 height map. A malformed or absent map degrades to "no coverage"
-// for that region only (the standard accept/absent failure policy).
+/*
+================
+buildHeightGrids
+
+buildHeightGrids decodes each navmesh region's base64 little-endian float32
+height map. A malformed or absent map degrades to "no coverage" for that region
+only (the standard accept/absent failure policy).
+================
+*/
 func buildHeightGrids(bundle *regionBundle) map[int64]*heightGrid {
 	grids := make(map[int64]*heightGrid)
 	axisVertices, okAxis := jsonInt(bundle.Navmesh.HeightMapAxisVertices)
@@ -396,8 +513,14 @@ func buildHeightGrids(bundle *regionBundle) map[int64]*heightGrid {
 	return grids
 }
 
-// readJSON loads one public asset; false degrades to accept, loudly at
-// debug level only (missing dungeon bundles are normal).
+/*
+================
+readJSON
+
+readJSON loads one public asset; false degrades to accept, loudly at debug
+level only (missing dungeon bundles are normal).
+================
+*/
 func (v *WaterValidator) readJSON(publicPath string, out any) bool {
 	assetPath := v.assetPath(publicPath)
 	if assetPath == "" {
@@ -415,8 +538,14 @@ func (v *WaterValidator) readJSON(publicPath string, out any) bool {
 	return true
 }
 
-// assetPath ports publicAssetPath's containment rule: the resolved path
-// must stay under the public root.
+/*
+================
+assetPath
+
+assetPath ports publicAssetPath's containment rule: the resolved path must stay
+under the public root.
+================
+*/
 func (v *WaterValidator) assetPath(publicPath string) string {
 	if publicPath == "" {
 		return ""
