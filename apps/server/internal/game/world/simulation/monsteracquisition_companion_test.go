@@ -10,6 +10,7 @@ package simulation
 import (
 	"testing"
 
+	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/world/monster"
 )
 
@@ -111,5 +112,137 @@ func TestAggressiveMonsterChasesTheNearerPet(t *testing.T) {
 	}
 	if struck != petGID {
 		t.Fatalf("struck %d, want the pet", struck)
+	}
+}
+
+/*
+================
+TestDungeonAcquisitionRunsSelector2
+
+5405B0 -> 531180 -> 538B30 -> 540790 -> 5464E0: dungeon regions use the
+same selector dispatch as outdoor regions, weighing companions with their
+owner, enforcing Fear's source exclusion (5299E0) and first-attack
+protection, and ranking by 3D distance (53D7A0).
+================
+*/
+func TestDungeonAcquisitionRunsSelector2(t *testing.T) {
+	const dungeonRegion = uint16(0x8001)
+	from := monster.Pose{RegionID: dungeonRegion, X: 100, Y: 10, Z: 100}
+	at := func(dx, dy float64) Spawn {
+		return Spawn{RegionID: dungeonRegion, X: from.X + dx, Y: from.Y + dy, Z: from.Z}
+	}
+	regular := monster.Instance{Ref: monster.MonsterRef{TidWord: 0x00C6, TypeID4: 1, Level: 20, MonsterType: 0}}
+	owner := playerPose{Gid: 100001, Pose: at(50, 0)}
+	pet := playerPose{Gid: 7, Pose: at(20, 0), OwnerGid: owner.Gid, Band: 3}
+
+	if got, ok := nearestEligiblePlayer(regular, from, []playerPose{owner, pet}, 100); !ok || got.Gid != pet.Gid {
+		t.Fatalf("dungeon nearer companion: got=%+v ok=%v, want pet %d", got, ok, pet.Gid)
+	}
+
+	fearedOfOwner := regular
+	fearedOfOwner.Abnormal = &abnormal.Block{Mask: abnormal.Fear.Bit()}
+	fearedOfOwner.Abnormal.Slots[abnormal.Fear].Active = true
+	fearedOfOwner.Abnormal.Slots[abnormal.Fear].SourceGID = owner.Gid
+	other := playerPose{Gid: 100002, Pose: at(70, 0)}
+	if got, ok := nearestEligiblePlayer(fearedOfOwner, from, []playerPose{owner, pet, other}, 100); !ok || got.Gid != other.Gid {
+		t.Fatalf("dungeon Fear of owner: got=%+v ok=%v, want other %d", got, ok, other.Gid)
+	}
+
+	fearedOfPet := regular
+	fearedOfPet.Abnormal = &abnormal.Block{Mask: abnormal.Fear.Bit()}
+	fearedOfPet.Abnormal.Slots[abnormal.Fear].Active = true
+	fearedOfPet.Abnormal.Slots[abnormal.Fear].SourceGID = pet.Gid
+	if got, ok := nearestEligiblePlayer(fearedOfPet, from, []playerPose{owner, pet}, 100); !ok || got.Gid != owner.Gid {
+		t.Fatalf("dungeon Fear of pet: got=%+v ok=%v, want owner %d", got, ok, owner.Gid)
+	}
+
+	guardedOwner := owner
+	guardedOwner.Guard = monster.FirstAttackGuard{Mask: 0x7, Level: 25}
+	guardedPet := pet
+	guardedPet.Guard = guardedOwner.Guard
+	if got, ok := nearestEligiblePlayer(regular, from, []playerPose{guardedOwner, guardedPet}, 100); ok {
+		t.Fatalf("dungeon Noise-guarded owner and companion should be skipped, got=%+v", got)
+	}
+
+	highPlayer := playerPose{Gid: 100003, Pose: at(10, 200)}
+	if got, ok := nearestEligiblePlayer(regular, from, []playerPose{highPlayer}, 100); ok {
+		t.Fatalf("dungeon 3D distance out of sight should be rejected, got=%+v", got)
+	}
+}
+
+/*
+================
+TestMountedOwnerRedirectsCompanionTargetToOwner
+
+5478F0 (547A2C..547A57), 547AD0 (547BD5..547C00) and 547C70
+(547EAA..547F02): when the selector or parent-opponent fallback chooses a
+COS whose owner answers CGObjPC_IsMountedOnCOS (4DDCA0) == 1, the combat
+target is swapped to the owner.
+================
+*/
+func TestMountedOwnerRedirectsCompanionTargetToOwner(t *testing.T) {
+	from := monster.Pose{RegionID: 25000, X: 1000, Y: 20, Z: 1000}
+	at := func(dx float64) Spawn { return Spawn{RegionID: from.RegionID, X: from.X + dx, Y: from.Y, Z: from.Z} }
+	owner := playerPose{Gid: 100001, Pose: at(60), Mounted: true, JobState: jobStateTrader}
+	pet := playerPose{Gid: 7, Pose: at(20), OwnerGid: owner.Gid, Band: 3}
+
+	if got, ok := nearestEligiblePlayer(monster.Instance{}, from, []playerPose{owner, pet}, 100); !ok || got.Gid != owner.Gid {
+		t.Fatalf("Selector 2 mounted redirect: got=%+v ok=%v, want owner %d", got, ok, owner.Gid)
+	}
+
+	thiefHunter := monster.Instance{}
+	thiefHunter.Nest.NativeTacticsFlags = 0x4
+	if got, ok := nearestEligiblePlayer(thiefHunter, from, []playerPose{owner, pet}, 100); !ok || got.Gid != owner.Gid {
+		t.Fatalf("Selector 3 mounted redirect: got=%+v ok=%v, want owner %d", got, ok, owner.Gid)
+	}
+
+	s, parent, wave, ranges, now := summonFixture(t)
+	children, ok := s.CommitSummon("summon", parent, wave, *now, *now, ranges)
+	if !ok {
+		t.Fatal("wave refused")
+	}
+	child := children[0]
+	ops := &MonsterMoverOps{Monsters: s, Rand: func() float64 { return 0 }, TacticsFor: fixedTactics(passiveTactics())}
+	if !s.ArmRetaliation("summon", parent.Gid, pet.Gid) {
+		t.Fatal("leader target refused")
+	}
+	mover, _ := s.Mover("summon", child.Gid)
+	players := []playerPose{
+		{Gid: owner.Gid, Pose: Spawn{RegionID: parent.Spawn.RegionID, X: 1000, Z: 100}, Mounted: true},
+		{Gid: pet.Gid, Pose: Spawn{RegionID: parent.Spawn.RegionID, X: 950, Z: 100}, OwnerGid: owner.Gid, Band: 3},
+	}
+	if got, ok := ops.summonedCandidate("summon", child, mover, players, *now); !ok || got.Gid != owner.Gid {
+		t.Fatalf("summonedCandidate parent-opponent mounted redirect: got=%+v ok=%v, want owner %d", got, ok, owner.Gid)
+	}
+}
+
+/*
+================
+TestAggressiveMonsterSwapsNearerPetToMountedOwner
+
+When a session has a mounted COS (4DDCA0), an aggressive monster whose
+selector picks the session's nearer companion swaps its combat target to
+the mounted owner before SetCombatTarget (5478F0 / 547AD0).
+================
+*/
+func TestAggressiveMonsterSwapsNearerPetToMountedOwner(t *testing.T) {
+	const t0 = int64(1_784_000_000_000)
+	const petGID = 0x02000007
+	ops, instance := monsterLegFixture(t, aggressiveTactics())
+	player := playerSessionAt(1, 1060, 1000)
+	player.CombatEligible = true
+	player.COS = &PeerCOS{Mounted: true}
+	ops.Companions = func(_ string, owner uint32, _ int64) []CompanionTarget {
+		if owner != PlayerObjectID(1) {
+			return nil
+		}
+		return []CompanionTarget{{Gid: petGID, Band: 3, BodyRadius: 5,
+			Pose: Spawn{RegionID: player.World.Spawn.RegionID, X: 1020, Y: player.World.Spawn.Y, Z: 1000}}}
+	}
+	push := &fakePusher{}
+	ops.RunMonsterLeg(t0, []SessionSnapshot{player}, push)
+	mover, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+	if mover.TargetGID() != PlayerObjectID(1) {
+		t.Fatalf("target %d, want mounted owner %d", mover.TargetGID(), PlayerObjectID(1))
 	}
 }

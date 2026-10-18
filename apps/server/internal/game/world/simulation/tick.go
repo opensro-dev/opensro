@@ -125,6 +125,26 @@ func (s *SessionSnapshot) ownsCompanion(gid uint32) bool {
 
 /*
 ==================
+SessionSnapshot.mountedOnCOS
+
+CGObjPC_IsMountedOnCOS (4DDCA0): the player is mounted on a rideable COS
+(483940 CGObj_IsRideableCOS, 4DA7D0 CGObjCOS_GetRider == this).
+==================
+*/
+func (s *SessionSnapshot) mountedOnCOS() bool {
+	if s.COS != nil && s.COS.Mounted {
+		return true
+	}
+	for _, pet := range s.Companions {
+		if pet != nil && pet.Mounted {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+==================
 SessionView
 
 The part of a SessionSnapshot that tick hooks read: identity, population,

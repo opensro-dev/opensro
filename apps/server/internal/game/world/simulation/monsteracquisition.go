@@ -18,10 +18,11 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 )
 
-// ordinaryPlayerAcquisition is the outdoor, player-only projection of selector
-// 2 (5464E0) in the v1.188 research server. Special tactics selectors and dungeon
-// cell enumeration remain outside this projection. The independent observer
-// and hostility checks precede ranking; companion selection remains open.
+// ordinaryPlayerAcquisition is the player and companion projection of selector
+// 2 (5464E0) in the v1.188 research server across outdoor and dungeon regions
+// (5405B0 -> 531180 -> 538B30/53AE20). When the winning target is a COS whose
+// owner is mounted on a COS (4DDCA0), 5478F0/547AD0/547C70 swap the combat
+// target to the owner before SetCombatTarget.
 /*
 ================
 ordinaryPlayerAcquisition
@@ -78,7 +79,36 @@ func ordinaryPlayerAcquisition(actor monster.Instance, from monster.Pose, player
 			best, bestDistance = target, uint32(distance)
 		}
 	}
-	return best, best.Gid != 0
+	if best.Gid == 0 {
+		return playerPose{}, false
+	}
+	return mountedOwnerRedirect(best, players), true
+}
+
+/*
+================
+mountedOwnerRedirect
+
+5478F0 (547A2C..547A57), 547AD0 (547BD5..547C00) and 547C70
+(547EAA..547F02): when the chosen target is a COS (vtable +0x2C
+CGObj_IsCOS == 1) and its owner (+0x1CD8) answers
+CGObjPC_IsMountedOnCOS (vtable +0x540, 4DDCA0) == 1, the combat target
+becomes the owner.
+================
+*/
+func mountedOwnerRedirect(target playerPose, players []playerPose) playerPose {
+	if target.OwnerGid == 0 {
+		return target
+	}
+	for _, p := range players {
+		if p.OwnerGid == 0 && p.Gid == target.OwnerGid {
+			if p.Mounted {
+				return p
+			}
+			return target
+		}
+	}
+	return target
 }
 
 /*
@@ -261,20 +291,20 @@ nearestEligiblePlayer
 */
 func nearestEligiblePlayer(actor monster.Instance, from monster.Pose, divisionPlayers []playerPose, sightRange float64) (playerPose, bool) {
 	flags := actor.Nest.NativeTacticsFlags
-	if !IsDungeonRegion(from.RegionID) {
-		// 5478F0 picks the selector by flags: 4 first, then 0x80, then 0x100.
-		switch {
-		case flags&0x4 != 0:
-			return jobQueryAcquisition(actor, from, divisionPlayers, sightRange, jobQuery{})
-		case flags&0x80 != 0:
-			return jobQueryAcquisition(actor, from, divisionPlayers, sightRange, jobQuery{thieves: true})
-		case flags&0x100 == 0:
-			return ordinaryPlayerAcquisition(actor, from, divisionPlayers, sightRange)
-		}
+	// 5478F0/547AD0/547C70 pick the selector by flags in both outdoor and
+	// dungeon regions (5405B0 -> 531180 -> 538B30/53AE20): 4 first, then
+	// 0x80, then 0x100.
+	switch {
+	case flags&0x4 != 0:
+		return jobQueryAcquisition(actor, from, divisionPlayers, sightRange, jobQuery{})
+	case flags&0x80 != 0:
+		return jobQueryAcquisition(actor, from, divisionPlayers, sightRange, jobQuery{thieves: true})
+	case flags&0x100 == 0:
+		return ordinaryPlayerAcquisition(actor, from, divisionPlayers, sightRange)
 	}
 	// Selector 5 (flag 0x100, 547070) queries fortress gates, towers and
-	// camps beside players, and dungeon cells are queried apart; both keep
-	// this projection until the fortress war and dungeon queries land.
+	// camps beside players; keep this player projection until the fortress
+	// war structure query lands.
 	best := playerPose{}
 	bestDistance := sightRange
 	found := false
@@ -282,8 +312,7 @@ func nearestEligiblePlayer(actor monster.Instance, from monster.Pose, divisionPl
 		if player.OwnerGid != 0 || !monster.AllowsTargetStatus(actor.Ref.TidWord, actor.Nest.NativeTacticsFlags, player.NativeBodyStatus) {
 			continue
 		}
-		// The first-attack protection holds for every acquisition scan.
-		if monster.FirstAttackProtected(actor.Observer(), player.Guard.Protect(monster.HostilityTarget{GID: player.Gid, Player: true})) {
+		if !ordinaryPlayerHostility(actor, player) {
 			continue
 		}
 		d := planarDistanceSpawn(player.Pose, poseToSpawn(from))

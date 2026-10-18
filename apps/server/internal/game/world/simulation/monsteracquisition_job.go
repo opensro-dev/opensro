@@ -145,5 +145,8 @@ func jobQueryAcquisition(actor monster.Instance, from monster.Pose, players []pl
 			best, bestDistance, held = c, uint32(distance), true
 		}
 	}
-	return best.player, held
+	if !held {
+		return playerPose{}, false
+	}
+	return mountedOwnerRedirect(best.player, players), true
 }

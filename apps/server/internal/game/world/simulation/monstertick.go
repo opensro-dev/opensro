@@ -269,6 +269,9 @@ type playerPose struct {
 	// JobState is a player's job state (CGObjPC_GetJobState 4DDC80, +0x30
 	// +0xF): the dressed job, 4 outside job mode (4E1120).
 	JobState uint8
+	// Mounted is CGObjPC_IsMountedOnCOS (4DDCA0): whether the player is
+	// mounted on a COS when acquisition chooses a companion (547A46/547BEF/547EEF).
+	Mounted bool
 }
 
 /*
@@ -977,7 +980,7 @@ is the native one (CGObjPC_GetJobState 4DDC80): the worn suit's job, else
 func sessionPlayerPose(session SessionSnapshot, nowMs int64) playerPose {
 	player := playerPose{Gid: PlayerObjectID(session.CharacterID), Pose: session.World.LiveSpawnAt(nowMs),
 		MovementIntent: capturePlayerMovementIntent(session.World, nowMs), BodyRadius: session.BodyRadius,
-		NativeBodyStatus: session.NativeBodyStatus, JobState: jobStateSpecial}
+		NativeBodyStatus: session.NativeBodyStatus, JobState: jobStateSpecial, Mounted: session.mountedOnCOS()}
 	if session.Appearance != nil && session.Appearance.JobType != 0 {
 		player.JobState = session.Appearance.JobType
 	}

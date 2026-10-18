@@ -71,7 +71,10 @@ func (ops *MonsterMoverOps) summonedCandidate(divisionID string, instance monste
 	if distances[1] < distances[0] {
 		index = 1
 	}
-	return candidates[index], eligible[index]
+	if !eligible[index] {
+		return playerPose{}, false
+	}
+	return mountedOwnerRedirect(candidates[index], players), true
 }
 
 /*
