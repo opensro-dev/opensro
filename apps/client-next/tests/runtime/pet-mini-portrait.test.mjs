@@ -19,6 +19,15 @@ const WOLF = 6106;
 test("a summoned wolf's mini window draws its icon over the face disc", () => {
 	const f = uiFixture();
 	try {
+		// The portrait assertion runs with the deviation explicitly off
+		// (BUG-086 defaults it on): natively CIFPetMiniInfo has no
+		// click-to-open button.
+		f.ui.event(
+			/** @type {any} */ ({
+				kind: "experimental-preferences",
+				value: { petClickOpensWindow: false }
+			})
+		);
 		f.state.gameplay.cosRecords = [ {
 			gid: 7,
 			refObjId: WOLF,

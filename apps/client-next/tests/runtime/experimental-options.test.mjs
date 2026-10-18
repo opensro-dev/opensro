@@ -62,8 +62,9 @@ const OFF = Object.freeze( {
 	confirmGuildBan: true,
 	// Off by default: straight projectiles keep their launch-captured endpoint (8D8580).
 	homingProjectiles: false,
-	// Off by default: CIFPetMiniInfo (6B3760) has no click handler to open CIFCos.
-	petClickOpensWindow: false
+	// On by default (owner 2026-10-18, BUG-086): clicking CIFPetMiniInfo opens CIFCos;
+	// off restores the native no-op click (6B3760).
+	petClickOpensWindow: true
 } );
 
 test("only an explicit boolean enables chat timestamps", () => {
@@ -467,14 +468,14 @@ test("homing projectiles default off (native captured endpoint) and reach the wo
 	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "homingProjectiles" ) ) );
 });
 
-test("pet panel click-to-open defaults off (native CIFPetMiniInfo) and stays out of the worker's slices", () => {
+test("pet panel click-to-open defaults on (BUG-086) and stays out of the worker's slices", () => {
 	for ( const value of [ undefined, null, {}, { petClickOpensWindow: 1 }, { petClickOpensWindow: "true" } ] ) {
 		const options = experimentalOptions( value );
-		assert.equal( options.petClickOpensWindow, false );
+		assert.equal( options.petClickOpensWindow, true );
 		assert.equal( "petClickOpensWindow" in experimentalGameplay( options ), false );
 		assert.equal( "petClickOpensWindow" in experimentalVideo( options ), false );
 	}
-	const on = experimentalOptions( { petClickOpensWindow: true } );
-	assert.equal( on.petClickOpensWindow, true );
+	const off = experimentalOptions( { petClickOpensWindow: false } );
+	assert.equal( off.petClickOpensWindow, false );
 	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "petClickOpensWindow" ) ) );
 });
