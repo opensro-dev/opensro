@@ -203,6 +203,32 @@ fields (shop, skill catalog, social).
 	}
 	/*
 ================
+sameSkillCatalog
+
+A bootstrap rebuilds the skill catalogue from the same reference
+snapshot: new objects, the same rows. Content equality is what
+"unchanged" means for the projection, so a portal entry does not
+resend the catalogue beside the destination's spawn burst (F11-DC1).
+The catalogue is plain data; the walk short-circuits on the first
+row that differs.
+================
+	*/
+	function sameSkillCatalog( a: unknown, b: unknown ): boolean {
+		if ( a === b ) return true;
+		if ( Array.isArray( a ) && Array.isArray( b ) ) {
+			return a.length === b.length && a.every( ( row, i ) => sameSkillCatalog( row, b[i] ) );
+		}
+		if ( a && b && typeof a === "object" && typeof b === "object" ) {
+			const aKeys = Object.keys( a ), bKeys = Object.keys( b );
+			return aKeys.length === bKeys.length &&
+				aKeys.every( key =>
+					sameSkillCatalog( (a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key] )
+				);
+		}
+		return false;
+	}
+	/*
+================
 receive
 One server frame: travel resets, gameplay, then entities, then the
 cross-owner follow-ups (name colours, displacements, cancellations).
@@ -369,8 +395,16 @@ the entry continues it like the one after a world transfer.
 					entryRegion <= 65535 ?
 				entryRegion :
 				undefined;
-			invalidateProjection();
 			const travel = awaitingTravelBootstrap;
+			if ( travel || resumed ) {
+				// A continued entry rebuilds the same catalogue: keep the
+				// published one so step() does not resend it beside the
+				// destination's spawn burst (F11-DC1). A genuinely changed
+				// catalogue still publishes - step() compares content.
+				const catalog = publishedCatalog;
+				invalidateProjection();
+				publishedCatalog = catalog;
+			} else invalidateProjection();
 			entities.bootstrap( value, travel );
 			awaitingTravelBootstrap = false;
 			gameplay.bootstrap( value, travel || resumed, receivedAtMs );
@@ -487,17 +521,19 @@ Advances entities and gameplay, then publishes the changed gameplay state.
 			const state = gameplay.take();
 			if ( state ) {
 				const { skillCatalog, social, shop, ...dynamic } = state;
+				const catalogChanged = skillCatalog !== publishedCatalog &&
+					!sameSkillCatalog( skillCatalog, publishedCatalog );
 				entities.publish( {
 					kind: "gameplay",
 					state: {
 						...dynamic,
 						...(shop !== publishedShop ? { shop } : {}),
-						...(skillCatalog !== publishedCatalog ? { skillCatalog } : {}),
+						...(catalogChanged ? { skillCatalog } : {}),
 						...(social !== publishedSocial ? { social } : {})
 					}
 				} );
 				publishedShop = shop;
-				publishedCatalog = skillCatalog;
+				if ( catalogChanged ) publishedCatalog = skillCatalog;
 				publishedSocial = social;
 			}
 		},

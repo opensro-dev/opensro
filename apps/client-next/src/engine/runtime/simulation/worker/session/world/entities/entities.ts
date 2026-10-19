@@ -112,10 +112,11 @@ export function createEntities(
 	const pendingPoses = new Map<number, { index: number; size: number; }>();
 	// The queued gameplay snapshot a newer one merges into (supersedeGameplay).
 	let pendingGameplay: { index: number; size: number; } | undefined;
-	// Arrays the queued batch has already counted (journal-cost.ts): the batch
+	// Values the queued batch has already counted (journal-cost.ts): the batch
 	// is one structured clone, so a walking path shared by many state events
 	// travels once. Replaceable events (poses, the gameplay snapshot) are
-	// costed in full instead, so replacing one never uncounts a shared array.
+	// costed against their own graph instead, so replacing one never uncounts
+	// a shared value.
 	let sharedArrays = new WeakSet<object>();
 	let stagedMode = 1, removalTail = new Uint8Array( 0 );
 	let synchronized = false, localName = "", localActiveJob = 4;
@@ -132,9 +133,26 @@ export function createEntities(
 	}
 	/*
 	================
+	snapshotCost
+
+	One gameplay snapshot is one structured-clone graph of its own: the
+	references it shares with itself (the catalogue rows its skill and
+	quick-slot fields point back at) travel once, so the snapshot is
+	costed with a fresh shared set. It is not costed against the batch's
+	set - a superseded snapshot leaves the batch, and its values must not
+	stay counted for the events that follow it (the cost() invariant
+	above). Without the set the snapshot charged 33 MB and the first
+	spawn burst behind it broke the budget (F11-DC1).
+	================
+	*/
+	function snapshotCost( event: WorldEvent ) {
+		return journalCost( event, new WeakSet<object>() );
+	}
+	/*
+	================
 	batchCost
 
-	A reliable event's cost within the queued batch: arrays an earlier event
+	A reliable event's cost within the queued batch: values an earlier event
 	of the batch carries count once (sharedArrays).
 	================
 	*/
@@ -197,13 +215,13 @@ export function createEntities(
 	function supersedeGameplay( event: Extract<WorldEvent, { kind: "gameplay"; }> ) {
 		const queued = pendingGameplay && events[pendingGameplay.index];
 		if ( !pendingGameplay || queued?.kind !== "gameplay" ) {
-			const size = cost( event );
+			const size = snapshotCost( event );
 			append( event, size );
 			pendingGameplay = { index: events.length - 1, size };
 			return;
 		}
 		const state = mergeGameplaySnapshots( queued.state, event.state );
-		const merged: WorldEvent = { kind: "gameplay", state }, size = cost( merged );
+		const merged: WorldEvent = { kind: "gameplay", state }, size = snapshotCost( merged );
 		const nextBytes = bytes - pendingGameplay.size + size;
 		if ( nextBytes + stagedBytes > journalByteLimit ) {
 			throw Error( "Reliable world journal gameplay byte capacity exceeded" );

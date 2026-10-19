@@ -14,13 +14,16 @@ nothing.
 The figure is a budget, not a wire size: strings are not scanned for
 escapes and a non-integer number counts as its widest JSON form.
 
-One batch is one postMessage, and structured clone sends an array that
+One batch is one postMessage, and structured clone sends a value that
 several events share once. An entity's walking path is such an array: every
 state event spread from the entity carries the same reference, and a burst
 of HP or LIFE changes on walking monsters charged the full path to each one
 (a 62 KB state each, 33 MB with 616 queued; the backlog failure of
-2026-10-14). Given the batch's `shared` set, an array already counted costs
-only a reference.
+2026-10-14). Given the batch's `shared` set, a value already counted costs
+only a reference. Shared plain objects count the same way: a gameplay
+snapshot's catalogue rows are pointed at by its skill and quick-slot
+fields, and charging the rows per reference charged 33 MB for one snapshot
+(the cave-entry failure of 2026-10-19, F11-DC1).
 
 ===========================================================================
 */
@@ -36,8 +39,9 @@ const MAX_DEPTH = 64;
 journalCost
 
 UTF-16 bytes of the JSON a value would serialise to, as estimated above.
-With `shared`, an array already in it costs a reference, and every array
-counted is added to it.
+With `shared`, an array or object already in it costs a reference, and
+every array or object counted is added to it. Without a set, every
+occurrence counts in full.
 ================
 */
 export function journalCost( value: unknown, shared?: WeakSet<object> ): number {
@@ -71,11 +75,11 @@ function jsonChars( value: unknown, depth: number, shared?: WeakSet<object> ): n
 		const length = (value as unknown as ArrayLike<number>).length ?? value.byteLength;
 		return 2 + length * (WIDEST_NUMBER_CHARS + 8);
 	}
+	if ( shared ) {
+		if ( shared.has( value as object ) ) return SHARED_REFERENCE_CHARS;
+		shared.add( value as object );
+	}
 	if ( Array.isArray( value ) ) {
-		if ( shared ) {
-			if ( shared.has( value ) ) return SHARED_REFERENCE_CHARS;
-			shared.add( value );
-		}
 		let chars = 2 + Math.max( 0, value.length - 1 );
 		for ( let i = 0; i < value.length; i++ ) {
 			const item = value[i];
