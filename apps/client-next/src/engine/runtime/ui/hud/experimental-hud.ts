@@ -231,7 +231,7 @@ export const EXPERIMENTAL_TABS: readonly {
 			key: "petClickOpensWindow",
 			id: "experimental-pet-click-opens-window",
 			label: "Pet panel opens window",
-			description: "Click the attack pet panel to open its window."
+			description: "Click a pet panel to open its window."
 		} ]
 	}
 ];

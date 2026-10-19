@@ -112,11 +112,13 @@ export interface ExperimentalOptions {
 	// CProjectile_Bezier_Process 879650). Off unless turned on.
 	readonly homingProjectiles: boolean;
 	// Port-only, not native: left-clicking the attack pet's mini panel
-	// (CIFPetMiniInfo 6B3460 / 6B3760) selects the pet and toggles its companion
-	// window (CIFCos 69D920). Natively CIFPetMiniInfo::vftable (BFBDAC) inherits
+	// (CIFPetMiniInfo 6B3460 / 6B3760) or a companion's status portrait
+	// (CIFCOSStatus 6A9BC0) selects the companion and toggles its window
+	// (CIFCos 69D920). Natively CIFPetMiniInfo::vftable (BFBDAC) inherits
 	// CIFWnd_GetMessageMap (53CC30 -> BD2CB8, initialized by BB20D0) and leaves
-	// vtable slot 29 at CIFWnd_DefaultLeftButtonDown (4B0740, no-op). On unless
-	// turned off (the owner's choice, 2026-10-18, BUG-086); off is native.
+	// vtable slot 29 at CIFWnd_DefaultLeftButtonDown (4B0740, no-op), and
+	// CIFCOSStatus maps no left-click message (6A9BC0). On unless turned off
+	// (the owner's choice, 2026-10-18, BUG-086); off is native.
 	readonly petClickOpensWindow: boolean;
 }
 

@@ -2778,9 +2778,9 @@ export function createUi(
 			return;
 		}
 		// CIFCOSStatus maps no left-click message (6A9BC0: only 0x8074 and
-		// 0xD7), so the portrait's own 0x27 does nothing; selection is the
-		// right-button release (6A9E40), a touch hold on touch screens.
-		if ( id.startsWith( "cos-status:" ) ) return;
+		// 0xD7), so the portrait's own 0x27 does nothing natively; selection is
+		// the right-button release (6A9E40), a touch hold on touch screens.
+		if ( id.startsWith( "cos-status:" ) && !experimental.state().saved.petClickOpensWindow ) return;
 		if ( id === "cos-command-toggle" ) {
 			cosHud.toggle();
 			dirty = true;
@@ -4360,10 +4360,15 @@ export function createUi(
 		else if ( id.startsWith( "open-window:" ) ) setPanel( panelNamed( id.slice( 12 ) ) );
 		else if ( id.startsWith( "toggle-window:" ) ) setPanel( panelNamed( id.slice( 14 ) ), "toggle" );
 		else if ( id === "cos-bag" ) setPanel( "COS inventory" );
-		else if ( id === "pet-mini-open" && experimental.state().saved.petClickOpensWindow ) {
-			const pet = petMiniInfo( view.gameplay?.cosRecords, hud.data()?.cosReferences ),
-				record = pet ? view.gameplay?.cosRecords?.find( r => r.gid === pet.gid ) : undefined;
-			if ( record && !record.dead && record.hp > 0 ) {
+		else if (
+			(id === "pet-mini-open" || id.startsWith( "cos-status:" )) &&
+			experimental.state().saved.petClickOpensWindow
+		) {
+			const gid = id === "pet-mini-open" ?
+					petMiniInfo( view.gameplay?.cosRecords, hud.data()?.cosReferences )?.gid :
+					Number( id.slice( 11 ) ),
+				record = gid ? view.gameplay?.cosRecords?.find( r => r.gid === gid ) : undefined;
+			if ( record && !record.dead && record.hp > 0 && cosClass( record.band ) !== COS_CLASS_GUILD ) {
 				cosHud.select( record.gid );
 				sendGameplay( { kind: "cos-select", gid: record.gid } );
 				if ( panel === "COS inventory" && cosGid === record.gid ) {

@@ -58,32 +58,40 @@ test("a summoned wolf's mini window draws its icon over the face disc", () => {
 	}
 });
 
-test("enabling Pet panel opens window lets CIFPetMiniInfo toggle the companion window", () => {
+test("Pet panel opens window defaults on so CIFPetMiniInfo and CIFCOSStatus toggle the companion window", () => {
 	const commands = [];
 	const f = uiFixture( c => commands.push( c ) );
 	try {
-		f.state.gameplay.cosRecords = [ {
-			gid: 7,
-			refObjId: WOLF,
-			band: 3,
-			hp: 300,
-			mp: 0,
-			status: 0,
-			dead: false,
-			level: 1,
-			satiety: 10000,
-			name: "Fang"
-		} ];
-		f.ui.event(
-			/** @type {any} */ ({
-				kind: "experimental-preferences",
-				value: { petClickOpensWindow: true }
-			})
-		);
+		f.state.gameplay.cosRecords = [
+			{
+				gid: 7,
+				refObjId: WOLF,
+				band: 3,
+				hp: 300,
+				mp: 0,
+				status: 0,
+				dead: false,
+				level: 1,
+				satiety: 10000,
+				name: "Fang"
+			},
+			{
+				gid: 8,
+				refObjId: 100,
+				band: 4,
+				hp: 100,
+				mp: 0,
+				status: 0,
+				dead: false,
+				name: "Bunny",
+				inventorySlot: 13,
+				inventory: []
+			}
+		];
 		let before = null;
 		for ( let i = 0; i < 60; i++ ) before = f.ui.step( f.state, 1000 + i * 50 ) ?? before;
 		const button = before?.controls.find( c => c.id === "pet-mini-open" );
-		assert.ok( button, "the opt-in button covers CIFPetMiniInfo" );
+		assert.ok( button, "the default-on button covers CIFPetMiniInfo on a fresh profile" );
 		assert.equal( button.label, "Fang" );
 
 		f.ui.event( { kind: "activate", id: "pet-mini-open" } );
@@ -105,6 +113,28 @@ test("enabling Pet panel opens window lets CIFPetMiniInfo toggle the companion w
 			closed?.controls.some( c => c.id === "cos-tab:0" ),
 			false,
 			"clicking again closes CIFCos"
+		);
+
+		commands.length = 0;
+		f.ui.event( { kind: "activate", id: "cos-status:8" } );
+		let pickupOpened = null;
+		for ( let i = 0; i < 60; i++ ) pickupOpened = f.ui.step( f.state, 8000 + i * 50 ) ?? pickupOpened;
+		assert.ok(
+			commands.some( c => c.kind === "gameplay" && c.command.kind === "cos-select" && c.command.gid === 8 ),
+			"clicking a pickup pet's CIFCOSStatus portrait selects the companion"
+		);
+		assert.ok(
+			pickupOpened?.controls.some( c => c.id === "cos-tab:1" && c.selected ),
+			"clicking a pickup pet's CIFCOSStatus portrait opens CIFCos on its bag tab"
+		);
+
+		f.ui.event( { kind: "activate", id: "cos-status:8" } );
+		let pickupClosed = null;
+		for ( let i = 0; i < 10; i++ ) pickupClosed = f.ui.step( f.state, 11500 + i * 50 ) ?? pickupClosed;
+		assert.equal(
+			pickupClosed?.controls.some( c => c.id === "cos-tab:0" ),
+			false,
+			"clicking the active companion portrait again closes CIFCos"
 		);
 	} finally {
 		f.dispose();
