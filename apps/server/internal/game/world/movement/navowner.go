@@ -132,6 +132,54 @@ func (v *WaterValidator) standForOwner(owner simulation.NavOwner) *objectDeckSta
 	}
 }
 
+/*
+================
+rebindObjectHint
+
+The same placement in the current region's bundle, addressed as an owner.
+Placement identity is the authored assetID, world anchor and yaw, plus
+the retained mesh and cell index; the per-file ordinal is never used, it
+differs between sector files. False when the current bundle carries no
+such placement (the retained owner then stands, unchanged).
+================
+*/
+func (v *WaterValidator) rebindObjectHint(hint simulation.NavOwner, surface *groundSurface) (simulation.NavOwner, bool) {
+	retained := v.standForOwner(hint)
+	if retained == nil || surface == nil || retained.surface == surface {
+		return simulation.NavOwner{}, false
+	}
+	want := retained.placement
+	wantX, wantZ := retained.anchorX+want.x, retained.anchorZ+want.z
+	cell := int(hint.Object.Cell)
+	meshIndex := int(hint.Object.Mesh)
+	for dz := -1; dz <= 1; dz++ {
+		for dx := -1; dx <= 1; dx++ {
+			set := v.objectNavSetForOffset(surface, dx, dz)
+			anchorX := float64(simulation.SectorX(surface.seedRegionID)+dx) * simulation.NativeRegionSize
+			anchorZ := float64(simulation.SectorY(surface.seedRegionID)+dz) * simulation.NativeRegionSize
+			for i := range set {
+				candidate := set[i].placement
+				if candidate.assetID != want.assetID || candidate.yaw != want.yaw || candidate.y != want.y ||
+					anchorX+candidate.x != wantX || anchorZ+candidate.z != wantZ {
+					continue
+				}
+				if meshIndex < 0 || meshIndex >= len(set[i].meshes) ||
+					set[i].meshes[meshIndex].cellCount() != retained.mesh.cellCount() ||
+					cell < 0 || cell >= retained.mesh.cellCount() {
+					continue
+				}
+				stand := &objectDeckStand{
+					set: set, objectIndex: i, mesh: set[i].meshes[meshIndex], cellIndex: cell,
+					placement: candidate, anchorX: anchorX, anchorZ: anchorZ,
+					surface: surface, setDX: dx, setDZ: dz, meshIndex: meshIndex,
+				}
+				return stand.navOwner(cell), true
+			}
+		}
+	}
+	return simulation.NavOwner{}, false
+}
+
 // objectCellNeighbors lists the cells sharing an internal edge with cell.
 /*
 ================
@@ -188,6 +236,16 @@ func (v *WaterValidator) ResolveNavOwner(p simulation.Spawn, hint simulation.Nav
 	bx, bz := seedFrame(surface, p)
 	terrainY, terrainOK := surface.terrainHeightAt(bx, bz)
 	grid := worldgeom.ExpandGrid(worldgeom.RegionXZ{RegionID: p.RegionID, X: p.X, Z: p.Z})
+
+	// 9A0710 -> 9A05A0 solves a portal crossing on the active terrain: a
+	// retained object owner from another region is rebound to the same
+	// placement in this region's set before it is retained, because the
+	// two sector files can carry different link tables for it.
+	if hint.Kind == simulation.NavOwnerObject && hint.Object.Surface != p.RegionID {
+		if rebound, ok := v.rebindObjectHint(hint, surface); ok {
+			hint = rebound
+		}
+	}
 
 	switch hint.Kind {
 	case simulation.NavOwnerObject:
