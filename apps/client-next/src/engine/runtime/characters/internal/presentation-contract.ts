@@ -230,6 +230,7 @@ export interface CharacterPresentationState {
 	navigationHold?: {
 		revision: number;
 		pose: import("@/engine/contracts/gameplay").Pose;
+		logical: import("@/engine/contracts/gameplay").Pose;
 		mode: number | undefined;
 	};
 	// The pose actually drawn on the previous frame. A server burst that

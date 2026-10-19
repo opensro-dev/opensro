@@ -244,29 +244,43 @@ export function createActorMotion( owner: ActorOwner ) {
 			const displaced =
 				(localMover( entity.gid ) ? gameplay!.movementPath : entity.movementPath)?.displacement ===
 					true;
+			const waiting = !dead && waitingActors.has( entity.gid );
+			const activeCast = !!cast && cast.cancelledAtMs === undefined &&
+				(actionLayersByActor.get( entity.gid )?.length ?? 0) > 0;
 			// 8DD550 drives skill travel through 8797C0 and 86D5C0 even
 			// after state 9 exits. Its position owner is not the walk hold.
-			if (
-				state.navigationHold &&
-				(state.navigationHold.revision !== movementRevision || displaced || dead || entity.mountedOn)
-			) {
-				// Native stops the walk at WAIT and has one pose; the port's logical
-				// walk may have moved on under the hold. A new walk releases it from
-				// the held pose at walking speed (posePresentation.carry): jumping
-				// there in one frame read as the camera height snapping on a slope.
-				// Skill travel, death and a ride own the position themselves.
-				if ( !displaced && !dead && !entity.mountedOn ) {
-					posePresentation.carry( entity.gid, state.navigationHold.pose );
-					renderPose = posePresentation.pose(
-						entity.gid,
-						state.castFacing ?
-							{ ...nativePose, angle: Math.round( state.castFacing.angle ) % 65536 } :
-							nativePose,
-						seconds,
-						false
-					);
+			if ( state.navigationHold ) {
+				const hold = state.navigationHold.logical;
+				const samePoint = hold.regionId === nativePose.regionId && hold.x === nativePose.x &&
+					hold.y === nativePose.y && hold.z === nativePose.z;
+				if ( displaced || dead || entity.mountedOn ) {
+					state.navigationHold = undefined;
+				} else if ( state.navigationHold.revision !== movementRevision ) {
+					// A stationary heading correction (0xB2F5 before the next cast in
+					// a chain) bumps movementRevision without moving the settled
+					// server position. Rebind the hold so the body does not decay to
+					// the server pose and leave ground cast VFX behind at the hold.
+					if ( !requestedMoving && (waiting || activeCast || samePoint) ) {
+						state.navigationHold.revision = movementRevision;
+						state.navigationHold.logical = { ...nativePose };
+					} else {
+						// Native stops the walk at WAIT and has one pose; the port's logical
+						// walk may have moved on under the hold. A new walk releases it from
+						// the held pose at walking speed (posePresentation.carry): jumping
+						// there in one frame read as the camera height snapping on a slope.
+						// Skill travel, death and a ride own the position themselves.
+						posePresentation.carry( entity.gid, state.navigationHold.pose );
+						renderPose = posePresentation.pose(
+							entity.gid,
+							state.castFacing ?
+								{ ...nativePose, angle: Math.round( state.castFacing.angle ) % 65536 } :
+								nativePose,
+							seconds,
+							false
+						);
+						state.navigationHold = undefined;
+					}
 				}
-				state.navigationHold = undefined;
 			}
 			if ( state.navigationHold ) {
 				// The hold freezes XYZ; the yaw keeps tracking the cast
@@ -275,7 +289,6 @@ export function createActorMotion( owner: ActorOwner ) {
 				moving = false;
 			}
 			const activePosture = presentationState.idleStates.get( entity.gid )?.posture;
-			const waiting = !dead && waitingActors.has( entity.gid );
 			const derivedMask = dead ?
 				2 :
 				stall ?
@@ -349,8 +362,6 @@ export function createActorMotion( owner: ActorOwner ) {
 			// record alone is not enough: gameplay.casts retains completed
 			// (phase 3, projectile still flying) and cancelled casts, and
 			// latching a hold for those would freeze an ordinary walk stop.
-			const activeCast = !!cast && cast.cancelledAtMs === undefined &&
-				(actionLayersByActor.get( entity.gid )?.length ?? 0) > 0;
 			if (
 				(requestedMoving || waiting || activeCast) &&
 				refresh.effects.some( e => e.kind === "leave" && e.state === 9 ) &&
@@ -359,6 +370,7 @@ export function createActorMotion( owner: ActorOwner ) {
 				state.navigationHold = displaced ? undefined : {
 					revision: movementRevision,
 					pose: requestedMoving ? renderPose : state.lastDrawnPose ?? renderPose,
+					logical: { ...nativePose },
 					mode: entity.movementMode
 				};
 				if ( state.navigationHold ) {

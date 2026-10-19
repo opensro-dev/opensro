@@ -541,18 +541,26 @@ export function createCharacterPresentation(
 				entity.appearanceState[0] === 2 :
 				vitalsByGid.get( gid )?.hp === 0) ||
 				!!health?.dead( gid );
+			const cast = castByActor.get( gid );
+			const activeCast = !!cast && cast.cancelledAtMs === undefined &&
+				(actionLayersByActor.get( gid )?.length ?? 0) > 0;
+			const waiting = !dead && waitingActors.has( gid );
+			const moving = local ? gameplay?.moving : entity?.moving;
 			if ( state?.navigationHold ) {
-				return state.navigationHold.revision === movementRevision && !displaced && !dead &&
-						!entity?.mountedOn ?
+				if ( displaced || dead || entity?.mountedOn ) return undefined;
+				if ( state.navigationHold.revision === movementRevision ) return state.navigationHold.pose;
+				const pose = entity ? logicalPose( entity ) : undefined, hold = state.navigationHold.logical;
+				return !moving &&
+						(waiting || activeCast ||
+							(!!pose && hold.regionId === pose.regionId && hold.x === pose.x && hold.y === pose.y &&
+								hold.z === pose.z)) ?
 					state.navigationHold.pose :
 					undefined;
 			}
-			const cast = castByActor.get( gid );
 			if ( !state?.lastDrawnPose || !cast || !entity || cast.cancelledAtMs !== undefined ) return undefined;
 			if ( dead || entity.mountedOn || ((state.actionMask ?? 0) & 0x200) === 0 ) return undefined;
-			const moving = local ? gameplay?.moving : entity.moving;
 			if ( moving || displaced || !state.actionInput?.requestedMoving ) return undefined;
-			return waitingActors.has( gid ) || (actionLayersByActor.get( gid )?.length ?? 0) > 0 ?
+			return waiting || activeCast ?
 				state.lastDrawnPose :
 				undefined;
 		};

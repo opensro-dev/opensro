@@ -1040,11 +1040,12 @@ test("cast WAIT holds the drawn pose when the stop and the cast arrive in one bu
 	f.presentation.simulationOrigin( 0 );
 	const from = { regionId: 1, x: 10, y: 20, z: 30, angle: 16384 };
 	const cast = { token: 1, caster: 1, target: 0, skill: 7, damage: 0, fatal: false };
-	const frame = ( x, seconds, casting, moving, movementRevision ) => {
+	const frame = ( x, seconds, casting, moving, movementRevision, angle = from.angle ) => {
 		const path = { from, to: { ...from, x: 110 }, durationMs: 2000 };
 		const player = entity( 1, {
 			kind: "local-player",
 			x,
+			angle,
 			moving,
 			movementMode: 3,
 			movementRevision,
@@ -1053,28 +1054,28 @@ test("cast WAIT holds the drawn pose when the stop and the cast arrive in one bu
 		} );
 		f.step( [ player ], seconds, {
 			localGid: 1,
-			pose: { ...from, x },
+			pose: { ...from, x, angle },
 			moving,
 			movementRevision,
 			movementPath: moving ? path : undefined,
 			poseAtMs: seconds * 1000,
 			inventory: [],
 			vitals: [],
-			casts: casting ? [ cast ] : []
+			casts: casting ? [ { ...cast, token: typeof casting === "number" ? casting : 1 } ] : []
 		} );
 		assert.equal( f.presentation.error(), null );
 		return { ...f.actors.find( actor => actor.gid === 1 ).pose };
 	};
 	frame( 10, 1, false, true, 1 );
 	const walking = frame( 20, 1.02, false, true, 1 );
-	const burst = frame( 110, 1.04, true, false, 2 );
+	const burst = frame( 110, 1.04, 1, false, 2 );
 	assert.ok(
 		Math.abs( burst.x - walking.x ) < 2,
 		`the burst frame still draws the walked pose (${burst.x} vs ${walking.x})`
 	);
 	let groundSeen = false;
 	for ( let step = 1; step <= 10; step++ ) {
-		const shown = frame( 110, 1.04 + step * 0.02, true, false, 2 );
+		const shown = frame( 110, 1.04 + step * 0.02, 1, false, 2 );
 		assert.equal( shown.x, burst.x, `the casting body does not glide toward the snap (frame ${step})` );
 		// The bone-less AT_STOP ground stage has no renderer attachment: it
 		// draws at its stage anchor, which must be the held pose too.
@@ -1090,6 +1091,27 @@ test("cast WAIT holds the drawn pose when the stop and the cast arrive in one bu
 		burst.x,
 		"the hold stands after the cast until the next walk"
 	);
+	// BR-261010-2006-9E09 / BR-261019-0641-28EC: chaining a second cast while
+	// standing emits a heading-only 0xB2F5 at the same settled server XYZ. That
+	// stationary revision bump must not release the hold and slide the body away
+	// from the second cast's ground circle.
+	assert.equal(
+		frame( 110, 1.32, false, false, 3, 20000 ).x,
+		burst.x,
+		"a heading-only revision at the settled point keeps the hold"
+	);
+	let chainedGroundSeen = false;
+	for ( let step = 1; step <= 10; step++ ) {
+		const rev = step >= 6 ? 4 : 3, angle = step >= 6 ? 24000 : 20000;
+		const shown = frame( 110, 1.34 + step * 0.02, 2, false, rev, angle );
+		assert.equal( shown.x, burst.x, `chained cast body stays at the held pose (frame ${step})` );
+		const effect = f.actors.find( actor => actor.gid < 0 );
+		if ( effect ) {
+			chainedGroundSeen = true;
+			assert.equal( effect.pose.x, burst.x, `chained cast ground effect stays with the body (frame ${step})` );
+		}
+	}
+	assert.ok( chainedGroundSeen, "the chained cast's ground effect is presented at the held pose" );
 	f.dispose();
 });
 
