@@ -378,11 +378,14 @@ export function createActorMotion( owner: ActorOwner ) {
 				}
 				moving = false;
 			}
-			// 8EADF0 tries the selected item override before the ordinary
-			// body track, only when unmounted. Without one the character plays
-			// its weapon's animation set (CCObjCharacter_ResolveWeaponAnimationPrefix
-			// 8E83F0 stores it at +0x114): a spear runs two-handed. A set that
-			// lacks the state keeps the default selection, as native falls back.
+			// 8EADF0 tries the selected item override (+0x118, 8E7210 direct
+			// without DEFAULT fallback) before the weapon animation set
+			// (CCObjCharacter_ResolveWeaponAnimationPrefix 8E83F0 stores it at
+			// +0x114; 8E7150 tries the weapon set then DEFAULT), per state and
+			// only when unmounted. A partial override set such as avatar_wing
+			// (which defines only state 7 run) therefore plays its run clip while
+			// stand (0), walk (1), combat stance (6) and stall (80, 8EA820) fall
+			// through to the weapon set before DEFAULT.
 			const motionDisguise = referenceAppearances.get( entity.gid ),
 				weapon = wornEquipment( entity, gameplay ).find( item => item.slot === 6 ),
 				weaponSet = motionDisguise ?
@@ -390,14 +393,20 @@ export function createActorMotion( owner: ActorOwner ) {
 					weapon ?
 					weaponAnimationSet( weapon.typeFlags ) :
 					undefined,
-				motionSet = override?.animation || weaponSet?.replaceAll( "-", "_" );
+				overrideSet = override?.animation,
+				weaponMotionSet = weaponSet?.replaceAll( "-", "_" ),
+				motionSet = overrideSet || weaponMotionSet,
+				motionSetKey = overrideSet && weaponMotionSet ?
+					`${overrideSet}:${weaponMotionSet}` :
+					motionSet || "default";
 			let combatIdle: ReturnType<typeof skillMotionResolveAnimation>;
 			if ( (presentationState.combatStanceEnds.get( entity.gid ) ?? -Infinity) > seconds ) {
 				const metadata = published.animationStates.get( resource.codename ),
-					stanceSet = !entity.mountedOn && motionSet || "default";
+					stanceSet = !entity.mountedOn && motionSet || "default",
+					stanceKey = !entity.mountedOn ? motionSetKey : "default";
 				if (
 					state.combatIdle?.body !== resource || state.combatIdle.metadata !== metadata ||
-					state.combatIdle.set !== stanceSet
+					state.combatIdle.set !== stanceKey
 				) {
 					// CICharactor_UpdateCombatStanceAnimation (8E5ADE) plays state 6
 					// through the model's slot +0C. On a character model that is
@@ -408,9 +417,10 @@ export function createActorMotion( owner: ActorOwner ) {
 					state.combatIdle = {
 						body: resource,
 						metadata,
-						set: stanceSet,
+						set: stanceKey,
 						motion: skillMotionResolveAnimation( {
 							role: `native:${stanceSet}:6`,
+							fallbackSet: !entity.mountedOn && overrideSet ? weaponMotionSet : undefined,
 							clips: resource.clips,
 							bodyStates: resource.animationStates,
 							catalogStates: metadata,
@@ -425,19 +435,21 @@ export function createActorMotion( owner: ActorOwner ) {
 				) combatIdle = motion;
 			}
 			// 8E6B50 installs motion 80 with a 200 ms blend and full actor height.
-			// The character virtual dispatch retains its weapon/override lookup.
+			// The character virtual dispatch (8EA820) retains its 3-tier
+			// override -> weapon -> DEFAULT lookup.
 			if ( stall ) {
 				const metadata = published.animationStates.get( resource.codename ), set = motionSet || "default";
 				if (
 					state.stallMotion?.body !== resource || state.stallMotion.metadata !== metadata ||
-					state.stallMotion.set !== set
+					state.stallMotion.set !== motionSetKey
 				) {
 					state.stallMotion = {
 						body: resource,
 						metadata,
-						set,
+						set: motionSetKey,
 						motion: skillMotionResolveAnimation( {
 							role: `native:${set}:${STALL_MOTION}`,
+							fallbackSet: overrideSet ? weaponMotionSet : undefined,
 							clips: resource.clips,
 							bodyStates: resource.animationStates,
 							catalogStates: metadata,
@@ -468,17 +480,25 @@ export function createActorMotion( owner: ActorOwner ) {
 				"stand" :
 				resource.clips[0] ?? "";
 			if (
-				motionSet && !entity.mountedOn && !dead && !sitting && !stall &&
+				!dead && !sitting && !stall && !entity.mountedOn &&
 				(baseRole === "run" || baseRole === "walk" || baseRole === "stand")
 			) {
-				const role = `native:${motionSet}:${baseRole === "run" ? 7 : baseRole === "walk" ? 1 : 0}`;
-				const definition = published.animationStates.get( resource.codename )?.[role] ??
-						resource.animationStates?.[role],
-					url = published.nativeMotionUrls.get( resource.codename )?.get( role );
-				if (
-					definition &&
-					(resource.clips.includes( role ) || url && resources.animation( resource.glb, role, url ))
-				) clip = role;
+				const stateId = baseRole === "run" ? 7 : baseRole === "walk" ? 1 : 0;
+				for ( const set of [ overrideSet, weaponMotionSet ] ) {
+					if ( !set ) continue;
+					const candidate = `native:${set}:${stateId}`,
+						definition = published.animationStates.get( resource.codename )?.[candidate] ??
+							resource.animationStates?.[candidate],
+						url = published.nativeMotionUrls.get( resource.codename )?.get( candidate );
+					if (
+						definition &&
+						(resource.clips.includes( candidate ) ||
+							url && resources.animation( resource.glb, candidate, url ))
+					) {
+						clip = candidate;
+						break;
+					}
+				}
 			}
 			if ( state.clip !== clip ) {
 				state.clip = clip;
@@ -570,20 +590,25 @@ export function createActorMotion( owner: ActorOwner ) {
 								"stand";
 							const definition = committed ? override : previousDefinition;
 							if (
-								definition && !entity.mountedOn &&
-								(role === "stand" || role === "run" || role === "walk")
+								!entity.mountedOn &&
+								(role === "run" || role === "walk" || role === "stand")
 							) {
-								const candidate = `native:${definition.animation}:${
-									role === "run" ? 7 : role === "walk" ? 1 : 0
-								}`;
-								const metadata = published.animationStates.get( resource.codename )?.[candidate] ??
-										resource.animationStates?.[candidate],
-									url = published.nativeMotionUrls.get( resource.codename )?.get( candidate );
-								if (
-									metadata &&
-									(resource.clips.includes( candidate ) ||
-										url && resources.animation( resource.glb, candidate, url ))
-								) selected = candidate;
+								const stateId = role === "run" ? 7 : role === "walk" ? 1 : 0;
+								for ( const set of [ definition?.animation, weaponMotionSet ] ) {
+									if ( !set ) continue;
+									const candidate = `native:${set}:${stateId}`,
+										stateDef = published.animationStates.get( resource.codename )?.[candidate] ??
+											resource.animationStates?.[candidate],
+										url = published.nativeMotionUrls.get( resource.codename )?.get( candidate );
+									if (
+										stateDef &&
+										(resource.clips.includes( candidate ) ||
+											url && resources.animation( resource.glb, candidate, url ))
+									) {
+										selected = candidate;
+										break;
+									}
+								}
 							}
 							state.locomotion = changeLocomotion(
 								state.locomotion,

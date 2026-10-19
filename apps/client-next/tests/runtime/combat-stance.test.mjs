@@ -101,7 +101,14 @@ fixture
 ================
 */
 function fixture(
-	{ wait = false, effectOnly = false, missingMotion = false, nativeBan = false, crossbow = false } = {}
+	{
+		wait = false,
+		effectOnly = false,
+		missingMotion = false,
+		nativeBan = false,
+		crossbow = false,
+		wingOverride = false
+	} = {}
 ) {
 	let next = 0, actors = [];
 	const pending = new Map(), requests = [], installed = [];
@@ -225,7 +232,31 @@ function fixture(
 			if ( job.url.endsWith( "/audio/effectsound.json" ) ) return json( { rules: [] } );
 			return json( {
 				// The crossbow needs only a catalog entry; no visual socket.
-				...(crossbow ? { dress: { equipment: { 9000: { slot: null, bodies: {} } } } } : {}),
+				...(crossbow || wingOverride ?
+					{
+						dress: {
+							equipment: {
+								9000: { slot: null, bodies: {} },
+								...(wingOverride ?
+									{
+										23298: {
+											slot: null,
+											avatarSlot: 1,
+											bodies: { "": { glb: "/assets/1.glb", parts: [] } }
+										}
+									} :
+									{})
+							},
+							...(wingOverride ?
+								{
+									avatarVisualOverrides: {
+										23298: { animation: "avatar_wing", priority: 50, additionalBsr: "" }
+									}
+								} :
+								{})
+						}
+					} :
+					{}),
 				models: [ 1, 2, 3 ].map( refObjId => ({
 					refObjId,
 					codename: "CHAR_" + refObjId,
@@ -238,6 +269,14 @@ function fixture(
 	};
 	const renderer = {
 		setCharacterModel() {},
+		/*
+		================
+		setCharacterAssembly
+		================
+		*/
+		setCharacterAssembly( key ) {
+			return key;
+		},
 		/*
 		================
 		setCharacterAnimation
@@ -268,7 +307,11 @@ function fixture(
 		() => {},
 		createPresentationRandom( 1 )
 	);
-	const entities = [ entity( 1 ), entity( 2 ), entity( 3, { kind: "monster", tidWord: 0x46 } ) ];
+	const entities = [
+		entity( 1, wingOverride ? { avatars: [ { refObjId: 23298 } ] } : {} ),
+		entity( 2 ),
+		entity( 3, { kind: "monster", tidWord: 0x46 } )
+	];
 	/*
 	================
 	step
@@ -481,6 +524,18 @@ test("combat stance plays the weapon set's state 6: a crossbow holds its ready s
 	// 8E5ADE -> CCObjCharacter_PlayAnimation (8EADF0) resolves state 6 in the
 	// active weapon prefix before DEFAULT; DEFAULT is the bare-hand stance.
 	const f = fixture( { nativeBan: true, crossbow: true } );
+	try {
+		for ( let i = 0; i < 15; i++ ) f.step( 1 + i / 100, [ cast() ] );
+		assert.ok( f.requests.some( url => url.endsWith( "/anim/bow-ready.ban" ) ) );
+		assert.equal( f.actor().clip, "native:bow:6" );
+	} finally {
+		f.dispose();
+	}
+});
+test("combat stance falls through a partial avatar override (avatar_wing) to the weapon set's state 6 before DEFAULT", () => {
+	// 8EADF0 tries *(this+0x118) ("AVATAR_WING") via 8E7210 (no DEFAULT fallback)
+	// and on miss falls through to 8E89D0 -> 8E7150 (weapon set -> DEFAULT).
+	const f = fixture( { nativeBan: true, crossbow: true, wingOverride: true } );
 	try {
 		for ( let i = 0; i < 15; i++ ) f.step( 1 + i / 100, [ cast() ] );
 		assert.ok( f.requests.some( url => url.endsWith( "/anim/bow-ready.ban" ) ) );

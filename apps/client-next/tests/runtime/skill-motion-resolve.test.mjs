@@ -59,3 +59,40 @@ test("authored set miss without DEFAULT state remains an admission failure", () 
 		undefined
 	);
 });
+test("8EADF0 3-tier lookup tries override set, then weapon fallbackSet, then DEFAULT", () => {
+	const spear6 = { durationMs: 1200, soundEvents: [], trackEvents: [], timeWarpCurve: { scale: 0, records: [] } };
+	const default6 = { durationMs: 1000, soundEvents: [], trackEvents: [], timeWarpCurve: { scale: 0, records: [] } };
+	const default80 = { durationMs: 1500, soundEvents: [], trackEvents: [], timeWarpCurve: { scale: 0, records: [] } };
+	const catalogStates = {
+		"native:spear:6": spear6,
+		"native:default:6": default6,
+		"native:default:80": default80
+	};
+	const motionUrls = new Map( [
+		[ "native:spear:6", "/assets/anim/CHAR/spear_stand.ban" ],
+		[ "native:default:6", "/assets/anim/CHAR/default_standbattle.ban" ],
+		[ "native:default:80", "/assets/anim/CHAR/default_stall.ban" ]
+	] );
+	// State 6: avatar_wing lacks state 6, so 8EADF0 falls through to spear before DEFAULT.
+	assert.deepEqual(
+		skillMotionResolveAnimation( {
+			role: "native:avatar_wing:6",
+			fallbackSet: "spear",
+			clips: [ "stand" ],
+			catalogStates,
+			motionUrls
+		} ),
+		{ clip: "native:spear:6", definition: spear6, banUrl: "/assets/anim/CHAR/spear_stand.ban" }
+	);
+	// State 80: both avatar_wing and spear lack state 80, so 8EA820 falls through to DEFAULT.
+	assert.deepEqual(
+		skillMotionResolveAnimation( {
+			role: "native:avatar_wing:80",
+			fallbackSet: "spear",
+			clips: [ "stand" ],
+			catalogStates,
+			motionUrls
+		} ),
+		{ clip: "native:default:80", definition: default80, banUrl: "/assets/anim/CHAR/default_stall.ban" }
+	);
+});
