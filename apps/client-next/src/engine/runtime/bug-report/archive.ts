@@ -16,7 +16,11 @@ media; saving a new report drops the oldest ones first.
 import type { BugReportField } from "@/engine/contracts/bug-report";
 import { zipStore, type ZipFile } from "@/engine/foundation/archive/zip";
 import { MOVEMENT_ERROR_CODES, REFUSAL_OTHER, REFUSAL_REASONS, UI_CONTROL_PREFIX } from "./journal";
-import { GPU_TOKEN_PATTERN, reportedGpuFeatures } from "@/engine/foundation/rendering/gpu-facts";
+import {
+	GPU_TOKEN_PATTERN,
+	reportedDegradedPipelines,
+	reportedGpuFeatures
+} from "@/engine/foundation/rendering/gpu-facts";
 
 const DATABASE = "sro-bug-reports";
 const STORE = "reports";
@@ -96,6 +100,7 @@ const TECHNICAL_FIELDS = new Set( [
 	"maxTextureDimension2D",
 	"vendor",
 	"architecture",
+	"degradedPipelines",
 	"control",
 	"index",
 	"refusal",
@@ -307,8 +312,9 @@ const TECHNICAL_STRINGS: Readonly<Record<string, readonly string[]>> = {
 	],
 	// The refusal reasons journal.ts refusalReason names.
 	refusal: [ ...new Set( [ ...REFUSAL_REASONS.map( ( [, reason] ) => reason ), REFUSAL_OTHER ] ) ],
-	// The adapter features gpu-facts.ts names.
-	features: reportedGpuFeatures()
+	// The adapter features and degraded compute pipelines gpu-facts.ts names.
+	features: reportedGpuFeatures(),
+	degradedPipelines: reportedDegradedPipelines()
 };
 // Strings a field may carry by shape rather than by list: a UI control's
 // scheme prefix (journal.ts uiControl), never free text.

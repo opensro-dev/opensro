@@ -52,19 +52,39 @@ installGpu
 A browser whose device reports the given loss once the test resolves it.
 ================
 */
-function installGpu() {
+function installGpu( options = {} ) {
 	let lose;
 	const lost = new Promise( resolve => lose = resolve );
+	const listeners = new Map();
 	const device = new Proxy( anything(), {
 		get( target, key ) {
 			if ( key === "lost" ) return lost;
 			if ( key === "features" ) return new Set();
 			if ( key === "limits" ) return { maxTextureDimension2D: 8192, maxBufferSize: 1 << 30 };
-			if ( key === "addEventListener" ) return () => {};
+			if ( key === "addEventListener" ) {
+				return ( type, handler ) => {
+					listeners.set( type, handler );
+				};
+			}
+			if ( key === "createComputePipelineAsync" && options.rejectCompute ) {
+				return async descriptor => {
+					if ( options.rejectCompute( descriptor?.label ) ) {
+						throw new Error(
+							`GPUPipelineError: CreateComputePipelines failed with VK_ERROR_UNKNOWN - While initializing [ComputePipeline ${descriptor?.label}]`
+						);
+					}
+					return anything();
+				};
+			}
 			return target[key];
 		}
 	} );
-	const adapter = { features: new Set(), requestDevice: async () => device };
+	const adapter = {
+		features: new Set(),
+		info: options.info,
+		limits: { maxBufferSize: 268435456, maxStorageBufferBindingSize: 134217728, maxTextureDimension2D: 8192 },
+		requestDevice: async () => device
+	};
 	// The WebGPU flag namespaces the owner reads while building resources.
 	for ( const name of [ "GPUBufferUsage", "GPUTextureUsage", "GPUShaderStage", "GPUMapMode", "GPUColorWrite" ] ) {
 		globalThis[name] ??= new Proxy( {}, { get: () => 1 } );
@@ -74,7 +94,10 @@ function installGpu() {
 		configurable: true,
 		value: { requestAdapter: async () => adapter, getPreferredCanvasFormat: () => "bgra8unorm" }
 	} );
-	return { lose: info => lose( info ) };
+	return {
+		lose: info => lose( info ),
+		uncaptured: message => listeners.get( "uncapturederror" )?.( { error: { message } } )
+	};
 }
 
 const settle = () => new Promise( resolve => setTimeout( resolve, 0 ) );
@@ -100,4 +123,37 @@ test("the owner's own dispose is not a failure", async () => {
 	gpu.lose( { reason: "destroyed", message: "Device was destroyed." } );
 	await settle();
 	assert.equal( device.phase(), "disposed" );
+});
+
+test("optional compute pipeline failures degrade without killing the device and report in adapterFacts", async () => {
+	const gpu = installGpu( {
+		info: { vendor: "qualcomm", architecture: "adreno-7xx" },
+		rejectCompute: label => label === "particle-presentation" || label === "flare-visibility"
+	} );
+	const device = createDevice();
+	for ( let i = 0; i < 20 && device.phase() !== "running"; i++ ) await settle();
+	assert.equal( device.phase(), "running", device.error() ?? undefined );
+	assert.equal( device.error(), null );
+	// Even if a driver also emits an uncapturederror naming an optional compute pipeline,
+	// the device stays running and records the degraded pipeline label.
+	gpu.uncaptured(
+		"GPUPipelineError: CreateComputePipelines failed with VK_ERROR_UNKNOWN - While initializing [ComputePipeline skeletal-animation]"
+	);
+	assert.equal( device.phase(), "running" );
+	assert.deepEqual( device.adapterFacts(), {
+		features: [],
+		limits: {
+			maxBufferSize: 268435456,
+			maxStorageBufferBindingSize: 134217728,
+			maxTextureDimension2D: 8192
+		},
+		vendor: "qualcomm",
+		architecture: "adreno-7xx",
+		degradedPipelines: [ "skeletal-animation", "particle-presentation", "flare-visibility" ]
+	} );
+	assert.equal(
+		device.flares( { uniforms: new Float32Array( 28 ), textures: new Array( 8 ).fill( {} ) }, {} ),
+		undefined
+	);
+	device.dispose();
 });

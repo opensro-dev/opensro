@@ -16,7 +16,36 @@ frame has submitted. Geometry and the device own that lifecycle.
 
 ===========================================================================
 */
-import { PARTICLE_ACTOR, PARTICLE_RECORD } from "@/engine/foundation/animation/particle-records";
+import { followMatrix } from "@/engine/foundation/animation/particle-holder-link";
+import { ROTATION_WORK, turnByStep } from "@/engine/foundation/animation/particle-presentation";
+import {
+	ACTOR_FOLLOW,
+	ACTOR_FRACTION,
+	ACTOR_OPACITY,
+	ACTOR_PALETTE,
+	ACTOR_TIME,
+	PARTICLE_ACTOR,
+	PARTICLE_RECORD,
+	PARTICLE_VIEW_NONE,
+	PARTICLE_VIEW_V,
+	RECORD_BIRTH,
+	RECORD_FLAGS,
+	RECORD_LIVE,
+	RECORD_MATRIX,
+	RECORD_MATRIX_STEP,
+	RECORD_MOTION,
+	RECORD_POSITION,
+	RECORD_POSITION_MOTION,
+	RECORD_PRESENTED,
+	RECORD_ROTATION,
+	RECORD_ROTATION_STEP,
+	RECORD_SCALE,
+	RECORD_SCALE_MOTION,
+	RECORD_TICK,
+	RECORD_VELOCITY
+} from "@/engine/foundation/animation/particle-records";
+import { multiply } from "@/engine/foundation/math/pose-math";
+import { faceEffectMesh } from "@/engine/foundation/rendering/effect-billboard";
 import type { GeometryDraw, GpuTimingFrame, ParticlePresentation } from "../internal/gpu-contract";
 import { particleShader } from "./particle-shader";
 import { destroyNow, type Retire } from "./retirement";
@@ -25,9 +54,17 @@ const PARAMS_FLOATS = 24;
 const WORKGROUP = 64;
 const INSTANCE_BYTES = 160;
 const PALETTE_BYTES = 64;
+const INSTANCE_FLOATS = INSTANCE_BYTES / 4;
+const PALETTE_FLOATS = PALETTE_BYTES / 4;
+const TICKS_PER_SECOND = 20;
 const INITIAL_BYTES = 16384;
 const DEFAULT_STORAGE_BYTES = 128 * 1024 * 1024;
 const DEFAULT_WORKGROUP_LIMIT = 65535;
+const cpuWork = new Float64Array( ROTATION_WORK );
+const cpuMatrix = new Float32Array( 16 );
+const cpuRotation = new Float32Array( 16 );
+const cpuPalette = new Float32Array( 16 );
+const cpuView = new Float32Array( 16 );
 
 /*
 ================
@@ -110,7 +147,12 @@ createParticlePresentation
 ================
 */
 export function createParticlePresentation( device: GPUDevice, retire: Retire = destroyNow ) {
-	let pipeline: GPUComputePipeline | undefined, disposed = false, dispatches = 0, slots = 0, pageIndex = 0;
+	let pipeline: GPUComputePipeline | undefined,
+		failure: string | null = null,
+		disposed = false,
+		dispatches = 0,
+		slots = 0,
+		pageIndex = 0;
 	const streams = new Map<GeometryDraw, Stream>(), pending = new Set<Arena>(), pages: Page[] = [];
 	const arenas: Arena[] = [], oldOutputs: Output[] = [], batch: Stream[] = [];
 	const storageLimit = Math.min(
@@ -119,16 +161,23 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 	);
 	const slotLimit = Math.floor( storageLimit / (PARTICLE_RECORD * 4) );
 	const groupLimit = device.limits.maxComputeWorkgroupsPerDimension ?? DEFAULT_WORKGROUP_LIMIT;
-	const ready = device.createComputePipelineAsync( {
-		label: "particle-presentation",
-		layout: "auto",
-		compute: {
-			module: device.createShaderModule( { label: "particle-presentation", code: particleShader } ),
-			entryPoint: "main"
-		}
-	} ).then( value => {
-		if ( !disposed ) pipeline = value;
-	} );
+	const ready = Promise.resolve()
+		.then( () =>
+			device.createComputePipelineAsync( {
+				label: "particle-presentation",
+				layout: "auto",
+				compute: {
+					module: device.createShaderModule( { label: "particle-presentation", code: particleShader } ),
+					entryPoint: "main"
+				}
+			} )
+		)
+		.then( value => {
+			if ( !disposed ) pipeline = value;
+		} )
+		.catch( error => {
+			if ( !disposed ) failure = String( error );
+		} );
 
 	/*
 	================
@@ -431,8 +480,134 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 		slots += count;
 	}
 
+	/*
+	================
+	encodeCpuStream
+
+	Degraded fallback when the device driver rejects the particle-presentation
+	compute pipeline: evaluate the stream's slots on the CPU and upload its
+	instance and palette buffers directly.
+	================
+	*/
+	function encodeCpuStream( stream: Stream ) {
+		const size = stream.rows * stream.slots;
+		const instances = new Float32Array( size * INSTANCE_FLOATS );
+		const bones = new Float32Array( size * PALETTE_FLOATS );
+		const data = stream.records, frame = stream.frame, words = stream.words;
+		const graph = words[2] === 1, view = words[3]!, lifetime = frame[4]!, loop = frame[5]! > 0.5;
+		const fps = frame[6]!, frameCount = frame[7]!, stepSampling = words[8] === 1;
+		for ( let k = 0; k < 3; k++ ) {
+			cpuView[k * 4] = frame[12 + k]!;
+			cpuView[k * 4 + 1] = frame[16 + k]!;
+			cpuView[k * 4 + 3] = frame[20 + k]!;
+		}
+		for ( let slot = 0; slot < size; slot++ ) {
+			const at = slot * PARTICLE_RECORD;
+			const row = PARAMS_FLOATS + Math.floor( slot / stream.slots ) * PARTICLE_ACTOR;
+			let age = frame[row + ACTOR_TIME]! - data[at + RECORD_BIRTH]!;
+			if ( loop && age >= 0 && lifetime > 0 ) age %= lifetime;
+			const flags = data[at + RECORD_FLAGS]!;
+			if ( !(flags & RECORD_LIVE) || age < 0 || age >= lifetime ) continue;
+			const rawFraction = graph ?
+				frame[row + ACTOR_FRACTION]! :
+				age * TICKS_PER_SECOND - data[at + RECORD_TICK]!;
+			const fraction = Math.max( 0, Math.min( 1, rawFraction ) );
+			const step = at + RECORD_MATRIX_STEP;
+			turnByStep(
+				data.subarray( at + RECORD_MATRIX, at + RECORD_MATRIX + 16 ),
+				data[step]!,
+				data[step + 1]!,
+				data[step + 2]!,
+				data[step + 3]!,
+				fraction,
+				cpuMatrix,
+				0,
+				cpuWork
+			);
+			for ( let axis = 0; axis < 3; axis++ ) {
+				cpuMatrix[12 + axis] = data[at + RECORD_MATRIX + 12 + axis]! +
+					data[at + RECORD_MOTION + axis]! * fraction;
+			}
+			followMatrix( flags, frame, row + ACTOR_FOLLOW, cpuMatrix, 0 );
+			const presented = (flags & RECORD_PRESENTED) !== 0;
+			for ( let i = 0; i < 16; i++ ) cpuPalette[i] = frame[row + ACTOR_PALETTE + i]!;
+			if ( presented ) {
+				for ( let axis = 0; axis < 3; axis++ ) {
+					const scale = data[at + RECORD_SCALE + axis]! + data[at + RECORD_SCALE_MOTION + axis]! * fraction;
+					for ( let k = 0; k < 3; k++ ) cpuPalette[axis * 4 + k]! *= scale;
+					if ( !graph ) {
+						cpuPalette[12 + axis]! += data[at + RECORD_POSITION + axis]! +
+							data[at + RECORD_POSITION_MOTION + axis]! * fraction;
+					}
+				}
+			}
+			if ( view !== PARTICLE_VIEW_NONE ) {
+				const velocity = presented ?
+					[
+						data[at + RECORD_VELOCITY]!,
+						data[at + RECORD_VELOCITY + 1]!,
+						data[at + RECORD_VELOCITY + 2]!
+					] as const :
+					undefined;
+				faceEffectMesh(
+					cpuPalette,
+					0,
+					cpuMatrix,
+					cpuView,
+					view === PARTICLE_VIEW_V ? "v" : "camera",
+					velocity
+				);
+			}
+			if ( presented ) {
+				const rotStep = at + RECORD_ROTATION_STEP;
+				turnByStep(
+					data.subarray( at + RECORD_ROTATION, at + RECORD_ROTATION + 16 ),
+					data[rotStep]!,
+					data[rotStep + 1]!,
+					data[rotStep + 2]!,
+					data[rotStep + 3]!,
+					fraction,
+					cpuRotation,
+					0,
+					cpuWork
+				);
+				multiply( cpuPalette.slice(), cpuRotation, cpuPalette );
+			}
+			const outAt = slot * INSTANCE_FLOATS;
+			instances.set( cpuMatrix, outAt );
+			instances[outAt + 16] = frame[row + ACTOR_OPACITY]!;
+			if ( frameCount > 0 && stream.frames ) {
+				const colors = stream.frames.colors, windows = stream.frames.windows;
+				const position = Math.max( 0, Math.min( frameCount - 1, age * fps ) );
+				const index = Math.floor( position );
+				const next = Math.min( frameCount - 1, index + 1 );
+				const blend = stepSampling ? 0 : position - index;
+				for ( let c = 0; c < 4; c++ ) {
+					instances[outAt + 20 + c] = colors[index * 4 + c]! * (1 - blend) + colors[next * 4 + c]! * blend;
+					instances[outAt + 24 + c] = windows[index * 4 + c]!;
+				}
+			} else {
+				instances[outAt + 20] = 1;
+				instances[outAt + 21] = 1;
+				instances[outAt + 22] = 1;
+				instances[outAt + 23] = 1;
+				instances[outAt + 24] = 1;
+				instances[outAt + 25] = 1;
+			}
+			bones.set( cpuPalette, slot * PALETTE_FLOATS );
+		}
+		device.queue.writeBuffer( stream.instances, 0, instances.buffer, 0, instances.byteLength );
+		device.queue.writeBuffer( stream.bones, 0, bones.buffer, 0, bones.byteLength );
+		stream.dirtyStart = size;
+		stream.dirtyEnd = 0;
+		stream.initialized = true;
+		dispatches++;
+		slots += size;
+	}
+
 	return {
 		ready,
+		failed: () => failure !== null,
 		/*
 		================
 		beginFrame
@@ -459,7 +634,7 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 		================
 		*/
 		present( draw: GeometryDraw, instances: GPUBuffer, bones: GPUBuffer, particles: ParticlePresentation ) {
-			if ( disposed || !pipeline ) throw Error( "Particle presentation is not ready" );
+			if ( disposed || (!pipeline && !failure) ) throw Error( "Particle presentation is not ready" );
 			const count = particles.rows * particles.slots;
 			if (
 				!Number.isSafeInteger( particles.rows ) || particles.rows <= 0 ||
@@ -554,6 +729,14 @@ export function createParticlePresentation( device: GPUDevice, retire: Retire = 
 		================
 		*/
 		encode( encoder: GPUCommandEncoder, timing?: GpuTimingFrame ) {
+			if ( !pipeline ) {
+				for ( const arena of pending ) {
+					for ( const stream of arena.pending ) encodeCpuStream( stream );
+					arena.pending.clear();
+				}
+				pending.clear();
+				return;
+			}
 			for ( const arena of pending ) {
 				const target = ensureOutput( encoder, arena );
 				let groups = 0, frameBytes = 0, materialBytes = 0;

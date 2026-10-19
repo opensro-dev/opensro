@@ -36,7 +36,25 @@ const { createParticlePresentation } = await load( "src/engine/runtime/renderer/
 const { createGeometryResources } = await load( "src/engine/runtime/renderer/device/geometry.ts" );
 const { createStaleDrawGuard } = await load( "src/engine/runtime/renderer/frame/stale-draws.ts" );
 const { createRenderer } = await load( "src/engine/runtime/renderer/renderer.ts" );
-const { PARTICLE_ACTOR, PARTICLE_RECORD } = await load( "src/engine/foundation/animation/particle-records.ts" );
+const {
+	ACTOR_FRACTION,
+	ACTOR_OPACITY,
+	ACTOR_PALETTE,
+	ACTOR_TIME,
+	PARTICLE_ACTOR,
+	PARTICLE_RECORD,
+	PARTICLE_VIEW_CAMERA,
+	RECORD_BIRTH,
+	RECORD_FLAGS,
+	RECORD_LIVE,
+	RECORD_MATRIX,
+	RECORD_MOTION,
+	RECORD_POSITION,
+	RECORD_PRESENTED,
+	RECORD_ROTATION,
+	RECORD_SCALE
+} = await load( "src/engine/foundation/animation/particle-records.ts" );
+const { presentSlot } = await load( "tests/helpers/particle-reference.mjs" );
 
 const identity = () => Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 );
 
@@ -591,4 +609,80 @@ test("an image its owner keeps survives every draw that bound it", () => {
 	images.commands.release( image );
 	assert.equal( texture.destroyed, true );
 	images.commands.release( image );
+});
+
+test("particle presentation falls back to CPU uploads when compute pipeline creation rejects", async () => {
+	const gpu = createStrictGpu();
+	const writes = new Map();
+	gpu.device.createComputePipelineAsync = async () => {
+		throw new Error(
+			"GPUPipelineError: CreateComputePipelines failed with VK_ERROR_UNKNOWN - While initializing [ComputePipeline particle-presentation]"
+		);
+	};
+	gpu.device.queue.writeBuffer = ( buffer, offset, data, dataOffset = 0, size = data.byteLength ) => {
+		writes.set( buffer, new Float32Array( data.slice( dataOffset, dataOffset + size ) ) );
+	};
+	const particles = createParticlePresentation( gpu.device );
+	await particles.ready;
+	assert.equal( particles.failed(), true );
+	const draw = {},
+		instances = gpu.device.createBuffer( { label: "instances", size: 2 * 160 } ),
+		bones = gpu.device.createBuffer( { label: "bones", size: 2 * 64 } );
+	const records = new Float32Array( 2 * PARTICLE_RECORD );
+	records.set( identity(), RECORD_MATRIX );
+	records[RECORD_MATRIX + 12] = 3;
+	records[RECORD_MOTION + 1] = 2;
+	records[RECORD_FLAGS] = RECORD_LIVE | RECORD_PRESENTED;
+	records[RECORD_BIRTH] = 0.1;
+	records.set( [ 1, 2, 3 ], RECORD_POSITION );
+	records.set( [ 1.5, 1.5, 1.5, 1 ], RECORD_SCALE );
+	records.set( identity(), RECORD_ROTATION );
+	const actors = new Float32Array( PARTICLE_ACTOR );
+	actors[ACTOR_TIME] = 0.125;
+	actors[ACTOR_OPACITY] = 0.75;
+	actors[ACTOR_FRACTION] = 0.5;
+	actors.set( identity(), ACTOR_PALETTE );
+	const axes = Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0 );
+	const input = {
+		rows: 1,
+		slots: 2,
+		live: 1,
+		graph: false,
+		view: PARTICLE_VIEW_CAMERA,
+		lifetime: 1,
+		loop: false,
+		records,
+		actors,
+		axes,
+		dirtyStart: 0,
+		dirtyEnd: 2,
+		frames: {
+			fps: 10,
+			sampling: "linear",
+			colors: Float32Array.of( 0.2, 0.4, 0.6, 0.8, 1, 0.8, 0.6, 0.4 ),
+			windows: Float32Array.of( 0.5, 0.5, 0, 0, 0.5, 0.5, 0.5, 0 )
+		}
+	};
+	particles.present( draw, instances, bones, input );
+	const encoder = gpu.device.createCommandEncoder( { label: "degraded-particles" } );
+	particles.encode( encoder );
+	const expected = presentSlot( input, records, 0 );
+	const writtenInstances = writes.get( instances );
+	const writtenBones = writes.get( bones );
+	assert.ok( writtenInstances && writtenBones, "degraded encode writes instance and bone buffers directly" );
+	assert.deepEqual( [ ...writtenInstances.subarray( 0, 16 ) ], [ ...expected.matrix ] );
+	assert.equal( writtenInstances[16], expected.opacity );
+	for ( let c = 0; c < 4; c++ ) {
+		assert.ok( Math.abs( writtenInstances[20 + c] - expected.color[c] ) < 1e-6 );
+		assert.ok( Math.abs( writtenInstances[24 + c] - expected.window[c] ) < 1e-6 );
+	}
+	assert.deepEqual(
+		[ ...writtenInstances.subarray( 40, 56 ) ],
+		new Array( 16 ).fill( 0 ),
+		"inactive slot collapses"
+	);
+	assert.deepEqual( [ ...writtenBones.subarray( 0, 16 ) ], [ ...expected.palette ] );
+	particles.dispose();
+	instances.destroy();
+	bones.destroy();
 });

@@ -26,21 +26,6 @@ keeps one instance per slot and the slot's vertices collapse.
 ===========================================================================
 */
 export const particleShader = `
-struct Record {
-	matrix: mat4x4f,
-	matrixStep: vec4f,
-	motion: vec3f,
-	flags: f32,
-	position: vec3f,
-	tick: f32,
-	positionMotion: vec3f,
-	birth: f32,
-	scale: vec4f,
-	scaleMotion: vec4f,
-	rotation: mat4x4f,
-	rotationStep: vec4f,
-	velocity: vec4f,
-}
 struct Actor {
 	clock: vec4f,		// time, opacity, graph tick fraction
 	palette: mat4x4f,
@@ -60,9 +45,11 @@ struct Instance {
 	opacity: vec4f,
 	color: vec4f,
 	window: vec4f,
-	light: array<vec4f, 3>,
+	pointPosition: vec4f,
+	pointAmbient: vec4f,
+	pointDiffuse: vec4f,
 }
-@group(0) @binding(0) var<storage, read> records: array<Record>;
+@group(0) @binding(0) var<storage, read> records: array<vec4f>;
 // One descriptor per workgroup, followed by each stream's Params and Actors.
 @group(0) @binding(1) var<storage, read> frame: array<vec4u>;
 @group(0) @binding(2) var<storage, read> frames: array<vec4f>;
@@ -75,6 +62,8 @@ const RECORD_PRESENTED = 2u;
 const LINK_TRANSLATE = 4u;
 const LINK_TURN = 8u;
 const LINK_MATRIX = 16u;
+// vec4s in one slot's record (particle-records.ts PARTICLE_RECORD / 4).
+const RECORD_ROW = 16u;
 // vec4s in one actor row (particle-records.ts PARTICLE_ACTOR / 4).
 const ACTOR_ROW = 10u;
 const VIEW_NONE = 0u;
@@ -102,28 +91,21 @@ fn turn( m: mat4x4f, step: vec4f, fraction: f32 ) -> mat4x4f {
 	return mat4x4f( vec4f( r * p0, m[0].w ), vec4f( r * p1, m[1].w ), vec4f( r * p2, m[2].w ), m[3] );
 }
 
-// velocityBasis (effect-billboard.ts): ViewVBillboard's basis from the
-// velocity, or false when the element keeps its own rotation.
-fn velocityBasis( velocity: vec3f, axes: ptr<function, mat3x3f> ) -> bool {
-	let speed = length( velocity );
-	if ( !( speed > 0.0 ) ) {
-		return false;
+fn faceColumn(
+	r0: vec3f,
+	r1: vec3f,
+	r2: vec3f,
+	det: f32,
+	axis: vec3f,
+	columnScale: f32,
+	fallback: vec4f
+) -> vec4f {
+	let size = length( axis );
+	if ( !( size >= MIN_DETERMINANT ) ) {
+		return fallback;
 	}
-	let v = velocity / speed;
-	if ( v.x == 0.0 && v.y == 1.0 && v.z == 0.0 ) {
-		return false;
-	}
-	let across = cross( v, vec3f( 0.0, 1.0, 0.0 ) );
-	if ( !( length( across ) > 0.0 ) ) {
-		return false;
-	}
-	let side = normalize( across );
-	let ahead = cross( v, side );
-	if ( !( length( ahead ) > 0.0 ) ) {
-		return false;
-	}
-	*axes = mat3x3f( normalize( ahead ), v, side );
-	return true;
+	let turned = vec3f( dot( r0, axis ), dot( r1, axis ), dot( r2, axis ) ) / det / size * columnScale;
+	return vec4f( turned, fallback.w );
 }
 
 // faceEffectMesh (effect-billboard.ts): the palette's rotation replaced by
@@ -143,27 +125,46 @@ fn face( palette: mat4x4f, instance: mat4x4f, mode: u32, velocity: vec3f, params
 	let p0 = palette[0].xyz;
 	let p1 = palette[1].xyz;
 	let p2 = palette[2].xyz;
-	var axes = mat3x3f( params.axis0.xyz, params.axis1.xyz, params.axis2.xyz );
+	var axis0 = params.axis0.xyz;
+	var axis1 = params.axis1.xyz;
+	var axis2 = params.axis2.xyz;
 	var kept = false;
-	if ( mode == VIEW_V && !velocityBasis( velocity, &axes ) ) {
-		kept = true;
-		axes = mat3x3f( p0, p1, p2 );
+	if ( mode == VIEW_V ) {
+		var valid = false;
+		let speed = length( velocity );
+		if ( speed > 0.0 ) {
+			let v = velocity / speed;
+			if ( !( v.x == 0.0 && v.y == 1.0 && v.z == 0.0 ) ) {
+				let across = cross( v, vec3f( 0.0, 1.0, 0.0 ) );
+				if ( length( across ) > 0.0 ) {
+					let side = normalize( across );
+					let ahead = cross( v, side );
+					if ( length( ahead ) > 0.0 ) {
+						axis0 = normalize( ahead );
+						axis1 = v;
+						axis2 = side;
+						valid = true;
+					}
+				}
+			}
+		}
+		if ( !valid ) {
+			kept = true;
+			axis0 = p0;
+			axis1 = p1;
+			axis2 = p2;
+		}
 	}
 	let s0 = select( length( p0 ), p0.x, !kept && p0.y == 0.0 && p0.z == 0.0 );
 	let s1 = select( length( p1 ), p1.y, !kept && p1.x == 0.0 && p1.z == 0.0 );
 	let s2 = select( length( p2 ), p2.z, !kept && p2.x == 0.0 && p2.y == 0.0 );
 	let scale = vec3f( length( a ) * s0, length( b ) * s1, length( c ) * s2 );
-	var out = palette;
-	for ( var column = 0u; column < 3u; column++ ) {
-		let axis = axes[column];
-		let size = length( axis );
-		if ( !( size >= MIN_DETERMINANT ) ) {
-			continue;
-		}
-		let turned = vec3f( dot( r0, axis ), dot( r1, axis ), dot( r2, axis ) ) / det / size * scale[column];
-		out[column] = vec4f( turned, palette[column].w );
-	}
-	return out;
+	return mat4x4f(
+		faceColumn( r0, r1, r2, det, axis0, scale.x, palette[0] ),
+		faceColumn( r0, r1, r2, det, axis1, scale.y, palette[1] ),
+		faceColumn( r0, r1, r2, det, axis2, scale.z, palette[2] ),
+		palette[3]
+	);
 }
 
 @compute @workgroup_size(64) fn main( @builtin(workgroup_id) group: vec3u, @builtin(local_invocation_index) local: u32 ) {
@@ -176,7 +177,10 @@ fn face( palette: mat4x4f, instance: mat4x4f, mode: u32, velocity: vec3f, params
 		return;
 	}
 	let output = descriptor.z + slot;
-	let record = records[descriptor.y + slot];
+	let base = ( descriptor.y + slot ) * RECORD_ROW;
+	let motionFlags = records[base + 5u];
+	let positionTick = records[base + 6u];
+	let positionMotionBirth = records[base + 7u];
 	let row = at + 6u + ( slot / params.shape.x ) * ACTOR_ROW;
 	let actor = Actor( bitcast<vec4f>( frame[row] ), mat4x4f(
 		bitcast<vec4f>( frame[row + 1u] ), bitcast<vec4f>( frame[row + 2u] ),
@@ -184,11 +188,11 @@ fn face( palette: mat4x4f, instance: mat4x4f, mode: u32, velocity: vec3f, params
 		bitcast<vec4f>( frame[row + 5u] ), bitcast<vec4f>( frame[row + 6u] ),
 		bitcast<vec4f>( frame[row + 7u] ), bitcast<vec4f>( frame[row + 8u] ) ), bitcast<vec4f>( frame[row + 9u] ) );
 	let lifetime = params.timing.x;
-	var age = actor.clock.x - record.birth;
-	if ( params.timing.y > 0.5 && age >= 0.0 ) {
-		age = age % lifetime;
+	var age = actor.clock.x - positionMotionBirth.w;
+	if ( params.timing.y > 0.5 && age >= 0.0 && lifetime > 0.0 ) {
+		age = age - floor( age / lifetime ) * lifetime;
 	}
-	let flags = u32( record.flags );
+	let flags = u32( motionFlags.w );
 	if ( ( flags & RECORD_LIVE ) == 0u || age < 0.0 || age >= lifetime ) {
 		instances[output].matrix = mat4x4f();
 		return;
@@ -197,10 +201,11 @@ fn face( palette: mat4x4f, instance: mat4x4f, mode: u32, velocity: vec3f, params
 	// particle is timed by its own age from the tick it was advanced to.
 	var fraction = clamp( actor.clock.z, 0.0, 1.0 );
 	if ( params.shape.z == 0u ) {
-		fraction = clamp( age * TICKS_PER_SECOND - record.tick, 0.0, 1.0 );
+		fraction = clamp( age * TICKS_PER_SECOND - positionTick.w, 0.0, 1.0 );
 	}
-	var instance = turn( record.matrix, record.matrixStep, fraction );
-	instance[3] = vec4f( record.matrix[3].xyz + record.motion * fraction, record.matrix[3].w );
+	let recordMatrix = mat4x4f( records[base], records[base + 1u], records[base + 2u], records[base + 3u] );
+	var instance = turn( recordMatrix, records[base + 4u], fraction );
+	instance[3] = vec4f( recordMatrix[3].xyz + motionFlags.xyz * fraction, recordMatrix[3].w );
 	// followMatrix: turn about the holder's tick position, move, turn the frame.
 	let turn3 = mat3x3f( actor.follow[0].xyz, actor.follow[1].xyz, actor.follow[2].xyz );
 	if ( ( flags & LINK_TURN ) != 0u ) {
@@ -217,20 +222,27 @@ fn face( palette: mat4x4f, instance: mat4x4f, mode: u32, velocity: vec3f, params
 	let presented = ( flags & RECORD_PRESENTED ) != 0u;
 	var palette = actor.palette;
 	if ( presented ) {
-		let scale = record.scale.xyz + record.scaleMotion.xyz * fraction;
+		let scale = records[base + 8u].xyz + records[base + 9u].xyz * fraction;
 		palette[0] = vec4f( palette[0].xyz * scale.x, palette[0].w );
 		palette[1] = vec4f( palette[1].xyz * scale.y, palette[1].w );
 		palette[2] = vec4f( palette[2].xyz * scale.z, palette[2].w );
 		if ( params.shape.z == 0u ) {
-			let position = record.position + record.positionMotion * fraction;
+			let position = positionTick.xyz + positionMotionBirth.xyz * fraction;
 			palette[3] = vec4f( palette[3].xyz + position, palette[3].w );
 		}
 	}
 	if ( params.shape.w != VIEW_NONE ) {
-		palette = face( palette, instance, params.shape.w, select( vec3f( 0.0 ), record.velocity.xyz, presented ), params );
+		let velocity = select( vec3f( 0.0 ), records[base + 15u].xyz, presented );
+		palette = face( palette, instance, params.shape.w, velocity, params );
 	}
 	if ( presented ) {
-		palette = palette * turn( record.rotation, record.rotationStep, fraction );
+		let recordRotation = mat4x4f(
+			records[base + 10u],
+			records[base + 11u],
+			records[base + 12u],
+			records[base + 13u]
+		);
+		palette = palette * turn( recordRotation, records[base + 14u], fraction );
 	}
 	var color = vec4f( 1.0 );
 	var window = vec4f( 1.0, 1.0, 0.0, 0.0 );
@@ -244,6 +256,14 @@ fn face( palette: mat4x4f, instance: mat4x4f, mode: u32, velocity: vec3f, params
 		color = frames[start + index] * ( 1.0 - blend ) + frames[start + next] * blend;
 		window = frames[start + count + index];
 	}
-	instances[output] = Instance( instance, vec4f( actor.clock.y, 0.0, 0.0, 0.0 ), color, window, array<vec4f, 3>() );
+	instances[output] = Instance(
+		instance,
+		vec4f( actor.clock.y, 0.0, 0.0, 0.0 ),
+		color,
+		window,
+		vec4f( 0.0 ),
+		vec4f( 0.0 ),
+		vec4f( 0.0 )
+	);
 	bones[output] = palette;
 }`;

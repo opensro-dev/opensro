@@ -107,18 +107,23 @@ export function createGpuAnimationResources( device: GPUDevice, retire: Retire =
 	// entry records a clip set or skeleton the GPU must not run.
 	const clipPlans = new WeakMap<readonly CharacterClip[], GpuClipPlan | null>(),
 		skeletonPlans = new WeakMap<CharacterModel, GpuSkeletonPlan | null>();
-	const ready = device.createComputePipelineAsync( {
-		label: "skeletal-animation",
-		layout: "auto",
-		compute: {
-			module: device.createShaderModule( { label: "skeletal-animation", code: animationShader } ),
-			entryPoint: "main"
-		}
-	} ).then( value => {
-		if ( !disposed ) pipeline = value;
-	} ).catch( error => {
-		if ( !disposed ) failure = String( error );
-	} );
+	const ready = Promise.resolve()
+		.then( () =>
+			device.createComputePipelineAsync( {
+				label: "skeletal-animation",
+				layout: "auto",
+				compute: {
+					module: device.createShaderModule( { label: "skeletal-animation", code: animationShader } ),
+					entryPoint: "main"
+				}
+			} )
+		)
+		.then( value => {
+			if ( !disposed ) pipeline = value;
+		} )
+		.catch( error => {
+			if ( !disposed ) failure = String( error );
+		} );
 
 	/*
 	================

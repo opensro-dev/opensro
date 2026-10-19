@@ -177,7 +177,8 @@ test("a report names the adapter's compression features and limits, never free t
 			features: [ "texture-compression-etc2", "texture-compression-astc", "PRIVATE_FEATURE" ],
 			limits: { maxBufferSize: 268435456, maxStorageBufferBindingSize: 134217728, maxTextureDimension2D: 8192 },
 			vendor: "apple",
-			architecture: "PRIVATE Architecture"
+			architecture: "PRIVATE Architecture",
+			degradedPipelines: [ "particle-presentation", "PRIVATE_PIPELINE" ]
 		}
 	} );
 	const { documents } = await readZip( await createDiagnosticUpload( input, OPTIONS ) );
@@ -185,7 +186,8 @@ test("a report names the adapter's compression features and limits, never free t
 	assert.deepEqual( documents["environment.json"].gpu, {
 		features: [ "texture-compression-etc2", "texture-compression-astc" ],
 		limits: { maxBufferSize: 268435456, maxStorageBufferBindingSize: 134217728, maxTextureDimension2D: 8192 },
-		vendor: "apple"
+		vendor: "apple",
+		degradedPipelines: [ "particle-presentation" ]
 	} );
 });
 

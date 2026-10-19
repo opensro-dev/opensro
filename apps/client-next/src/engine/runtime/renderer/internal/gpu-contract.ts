@@ -180,7 +180,7 @@ export interface DeviceOwner extends Disposable {
 	): void;
 	sky(): ImageDraw | null;
 	thunder( color: readonly number[] ): ImageDraw;
-	flares( input: FlareInput, depth: GPUTextureView ): FlareDraw;
+	flares( input: FlareInput, depth: GPUTextureView ): FlareDraw | undefined;
 	geometry(): GeometryCommands | null;
 	images(): ImageCommands | null;
 	recoverable(): boolean;

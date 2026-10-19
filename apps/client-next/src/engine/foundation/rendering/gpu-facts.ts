@@ -42,6 +42,22 @@ export function reportedGpuFeatures(): readonly string[] {
 
 /*
 ================
+reportedDegradedPipelines
+
+Optional compute pipelines that degrade to CPU or no-op paths when a driver
+fails to compile them.
+================
+*/
+export function reportedDegradedPipelines(): readonly string[] {
+	return [
+		"skeletal-animation",
+		"particle-presentation",
+		"flare-visibility"
+	];
+}
+
+/*
+================
 isGpuToken
 
 Whether value has the shape of an adapter's vendor or architecture token
@@ -67,4 +83,5 @@ export interface GpuFacts {
 	};
 	readonly vendor?: string;
 	readonly architecture?: string;
+	readonly degradedPipelines?: readonly string[];
 }

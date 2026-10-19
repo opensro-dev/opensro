@@ -5,7 +5,12 @@ device.ts - WebGPU generation and resource lifecycle
 
 ===========================================================================
 */
-import { type GpuFacts, isGpuToken, reportedGpuFeatures } from "@/engine/foundation/rendering/gpu-facts";
+import {
+	type GpuFacts,
+	isGpuToken,
+	reportedDegradedPipelines,
+	reportedGpuFeatures
+} from "@/engine/foundation/rendering/gpu-facts";
 import { createBloom } from "./bloom";
 import { createFinish } from "./finish";
 import { createHdr } from "./hdr";
@@ -29,6 +34,8 @@ const DEFAULT_TEXTURE_DETAIL = 2;
 // native 336 bytes, the sun-direction vec4, then the two experimental
 // stages vec4s and the sun shadow cascade matrix.
 const FULLSCREEN_VERTEX_COUNT = 6;
+const OPTIONAL_PIPELINE_ERROR =
+	/\[(ComputePipeline|ShaderModule|RenderPipeline) (particle-presentation|skeletal-animation|flare-visibility|flare-over|flare-add|flare-chain)\]/;
 
 /*
 ================
@@ -40,8 +47,10 @@ Diagnostics never fail a device: an adapter missing a field reports 0 or
 nothing for it.
 ================
 */
-function gpuFacts( adapter: GPUAdapter ): GpuFacts {
-	const info = (adapter as GPUAdapter & { info?: { vendor?: string; architecture?: string; }; }).info;
+function gpuFacts( adapter: GPUAdapter, device?: GPUDevice | null ): GpuFacts {
+	const info = (adapter as GPUAdapter & { info?: { vendor?: string; architecture?: string; }; }).info ??
+		(device as (GPUDevice & { adapterInfo?: { vendor?: string; architecture?: string; }; }) | null | undefined)
+			?.adapterInfo;
 	const token = ( value: string | undefined ) => value && isGpuToken( value ) ? value : undefined;
 	const vendor = token( info?.vendor ), architecture = token( info?.architecture );
 	const limits = adapter.limits as Partial<GPUSupportedLimits> | undefined;
@@ -80,6 +89,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 			| (( sceneFloat: boolean ) => import("@/engine/runtime/renderer/internal/gpu-contract").ImageDraw)
 			| null = null;
 	let geometry: ReturnType<typeof createGeometryResources> | null = null,
+		animation: ReturnType<typeof createGpuAnimationResources> | undefined,
+		particles: ReturnType<typeof createParticlePresentation> | null = null,
 		images: ReturnType<typeof createImages> | null = null;
 	let ui: ReturnType<typeof createUiResources> | null = null;
 	let thunder: ReturnType<typeof createThunder> | null = null;
@@ -88,6 +99,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 	let hdr: ReturnType<typeof createHdr> | null = null;
 	let finish: ReturnType<typeof createFinish> | null = null;
 	let particleQuery: ReturnType<typeof createParticleQuery> | null = null;
+	const degradedPipelines = new Set<string>();
 	const depthTextures = new Set<GPUTexture>();
 	// Every owner below hands its released buffers and textures to this queue;
 	// beginFrame/endFrame bracket the span in which a frame may still name them.
@@ -172,7 +184,16 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 					fail( `Device lost (${info.reason}): ${info.message}`, true );
 				}
 			} );
-			created.addEventListener( "uncapturederror", event => fail( event.error.message ) );
+			created.addEventListener( "uncapturederror", event => {
+				const message = event.error?.message || "Uncaptured WebGPU error";
+				const match = OPTIONAL_PIPELINE_ERROR.exec( message );
+				if ( match ) {
+					const label = match[2]!;
+					degradedPipelines.add( label.startsWith( "flare-" ) ? "flare-visibility" : label );
+					return;
+				}
+				fail( message );
+			} );
 
 			/*
 			================
@@ -400,6 +421,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 				size: ENVIRONMENT_UNIFORM_BYTES,
 				usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
 			} );
+			animation = gpuAnimationEnabled ? createGpuAnimationResources( created, retirement.retire ) : undefined;
+			particles = createParticlePresentation( created, retirement.retire );
 			geometry = createGeometryResources(
 				created,
 				current,
@@ -410,9 +433,9 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 				pipelines.lightmapSampler,
 				environmentBuffer,
 				pipelines.worldSampling,
-				gpuAnimationEnabled ? createGpuAnimationResources( created, retirement.retire ) : undefined,
+				animation,
 				navigator.gpu.getPreferredCanvasFormat(),
-				createParticlePresentation( created, retirement.retire ),
+				particles,
 				retirement.retire,
 				pipelines.lightmapSampling
 			);
@@ -766,7 +789,18 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 		adapterFacts
 		================
 		*/
-		adapterFacts: () => facts,
+		adapterFacts: () => {
+			if ( !facts ) return null;
+			const degraded = reportedDegradedPipelines().filter(
+				name =>
+					degradedPipelines.has( name ) ||
+					(name === "skeletal-animation" && animation?.stats().failure !== null &&
+						animation?.stats().failure !== undefined) ||
+					(name === "particle-presentation" && particles?.failed() === true) ||
+					(name === "flare-visibility" && flares?.failed() === true)
+			);
+			return degraded.length ? { ...facts, degradedPipelines: degraded } : facts;
+		},
 		/*
 		================
 		commands
