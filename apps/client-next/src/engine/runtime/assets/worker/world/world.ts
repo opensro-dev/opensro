@@ -42,7 +42,7 @@ import {
 	worldSceneBytes
 } from "@/engine/foundation/rendering/world-scene";
 import type { WorldScene, WorldGroup, WorldMaterial, TerrainRange } from "@/engine/contracts/scene";
-import { identity, mapPlacement } from "@/engine/foundation/rendering/world-math";
+import { dungeonObjectMatrix, identity, mapPlacement } from "@/engine/foundation/rendering/world-math";
 import type { Bundle, Material, Mesh, ObjectBranch } from "./internal/resource-contract";
 import { sceneryMaterial } from "@/engine/foundation/rendering/scenery-modifiers";
 import { sceneryParticles } from "@/engine/foundation/rendering/scenery-particles";
@@ -345,14 +345,16 @@ noteMaterial
 				};
 				for ( const [branchIndex, ref] of branches.entries() ) {
 					const refEntry = refMaterial( ref ),
-						matrix = mapPlacement(
-							home,
-							origin,
-							p.position.x,
-							p.position.y,
-							p.position.z,
-							radians( p.yaw )
-						);
+						matrix = p.rotation && p.scaleXyz ?
+							dungeonObjectMatrix( p.position.x, p.position.y, p.position.z, p.rotation, p.scaleXyz ) :
+							mapPlacement(
+								home,
+								origin,
+								p.position.x,
+								p.position.y,
+								p.position.z,
+								radians( p.yaw )
+							);
 					const animation = animatedByPath.get( ref.sourcePath === undefined ? "" : lower( ref.sourcePath ) );
 					const emitters = sceneryParticles(
 						ref.modifiers?.particleModifiers,

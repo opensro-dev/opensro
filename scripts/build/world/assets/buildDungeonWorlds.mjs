@@ -17,6 +17,7 @@ import { publishBytesAtomically } from "../../shared/atomicPublish.mjs";
 import { buildTitleSectorObjectResources } from "../objects/buildTitleSectorObjectResources.mjs";
 import { extractedRoot, gameRoot, normalizeAssetPath, publicRoot } from "../paths.mjs";
 import { copyReferencedWaterImages, resolveWaterTextures } from "./copyWaterImages.mjs";
+import { blockObjectDefinitions, blockObjectPlacements } from "./dungeonBlockObjects.mjs";
 
 /*
 ================
@@ -58,7 +59,7 @@ export async function buildDungeonWorlds( manifest, options = {} ) {
 				objectId: block.index,
 				flags: 0,
 				sourcePath: block.path
-			}) );
+			}) ).concat( blockObjectDefinitions( blocks ).definitions );
 			objects = await buildTitleSectorObjectResources( {
 				extractedRoot,
 				gameRoot,
@@ -100,7 +101,7 @@ export async function buildDungeonWorlds( manifest, options = {} ) {
 						z: block.position[2]
 					},
 					yaw: block.yaw
-				}) )
+				}) ).concat( blockObjectPlacements( blocks, blockObjectDefinitions( blocks ).idByPath, region ) )
 			}
 		};
 		bundles.set( region, bundle );

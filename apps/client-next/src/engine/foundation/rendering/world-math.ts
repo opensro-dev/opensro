@@ -123,6 +123,61 @@ export function mapPlacement( region: number, origin: number, x: number, y: numb
 }
 /*
 ================
+dungeonObjectMatrix
+
+The world matrix of a DOF block object, as the native client builds it
+(CRTDunBlock object creator 0xAD4DC0). The record's rotation vector goes
+through 0xAD05F0, its scale becomes a diagonal matrix, and 0x926EA4 (an
+import thunk for a matrix multiply, out = A x B) joins them as scale x
+rotation. The translation is the record's position, in the dungeon's own
+space. 0xAD05F0 is Rx(rx) x Ry(-ry) x Rz(rz) with the usual column-vector
+axis matrices, laid out row by row; the tests pin it against the
+instruction-level emulation of that function.
+================
+*/
+export function dungeonObjectMatrix(
+	x: number,
+	y: number,
+	z: number,
+	rotation: readonly [number, number, number],
+	scale: readonly [number, number, number]
+) {
+	const cx = Math.cos( rotation[0] ), sx = Math.sin( rotation[0] );
+	const cy = Math.cos( rotation[1] ), sy = Math.sin( rotation[1] );
+	const cz = Math.cos( rotation[2] ), sz = Math.sin( rotation[2] );
+	// Rx x Ry( -ry ) x Rz, with Ry( -ry ) = [ cy 0 -sy ; 0 1 0 ; sy 0 cy ].
+	const r = [
+		cy * cz,
+		-cy * sz,
+		-sy,
+		cx * sz - sx * sy * cz,
+		cx * cz + sx * sy * sz,
+		-sx * cy,
+		sx * sz + cx * sy * cz,
+		sx * cz - cx * sy * sz,
+		cx * cy
+	];
+	return new Float32Array( [
+		r[0]! * scale[0],
+		r[1]! * scale[0],
+		r[2]! * scale[0],
+		0,
+		r[3]! * scale[1],
+		r[4]! * scale[1],
+		r[5]! * scale[1],
+		0,
+		r[6]! * scale[2],
+		r[7]! * scale[2],
+		r[8]! * scale[2],
+		0,
+		x,
+		y,
+		z,
+		1
+	] );
+}
+/*
+================
 terrainLod
 
 Terrain LOD by squared distance in cells from the eye cell.

@@ -132,6 +132,20 @@ test( "all twelve well-formed retail DOFs retain exact water ownership, transfor
 					ambientColor: block.unk1,
 					fog: block.fog,
 					waterObjects: expected,
+					// Every other object the block places (torches, cobwebs, doors, boulders).
+					blockObjects: block.objects.flatMap( ( o, i ) =>
+						o.flag & 4 ?
+							[] :
+							[ {
+								index: i,
+								name: o.name,
+								path: o.path,
+								position: o.position,
+								rotation: o.rotation,
+								scale: o.scale,
+								flags: o.flag
+							} ]
+					),
 					connectedBlocks: block.connectedBlocks,
 					visibleBlocks: block.visibleBlocks
 				} );
@@ -269,6 +283,29 @@ const dungeonRegionPortals = {
 	32775: 0,
 	32777: 8
 };
+
+test("Donwhang's torches, doors and boulders decode as drawable, block-culled groups", () => {
+	const bundle = dungeonFixture.bundles.get( 32769 );
+	const decoded = createWorldDecoder().decode(
+		new TextEncoder().encode( JSON.stringify( bundle ) ),
+		false,
+		{ origin: 32769, part: "all" }
+	);
+	assert.deepEqual( decoded.warnings.filter( w => /Object resource absent|Mesh absent/.test( w ) ), [] );
+	const instancesOf = name => {
+		const groups = decoded.groups.filter( g => g.id.toLowerCase().includes( name ) );
+		return { groups, count: groups.reduce( ( n, g ) => n + (g.geometry.instances?.length ?? 0) / 16, 0 ) };
+	};
+	// The cave file places 4 sealed doors, 10 boulder piles and 364 wall torches.
+	assert.equal( instancesOf( "out_obj_door" ).count, 4 );
+	assert.equal( instancesOf( "out_obj_stone" ).count, 10 );
+	assert.ok( instancesOf( "flame_a" ).count >= 364 );
+	for ( const name of [ "out_obj_door", "out_obj_stone", "flame_a", "cobweb" ] ) {
+		const { groups } = instancesOf( name );
+		assert.ok( groups.length > 0, `${name}: no groups` );
+		assert.ok( groups.every( g => g.dungeonBlock !== undefined ), `${name}: groups follow the room culling` );
+	}
+});
 
 for ( const regionId of [ 32769, 32770, 32771, 32772, 32773, 32774, 32775, 32777 ] ) {
 	test(

@@ -262,7 +262,7 @@ export function readDofPresentation( bytes, sourcePath ) {
 		if ( ![ fog.nearPlane, fog.farPlane, fog.intensity ].every( Number.isFinite ) ) {
 			throw Error( `${sourcePath}: non-finite fog` );
 		}
-		const waterObjects = [];
+		const waterObjects = [], blockObjects = [];
 		if ( cursor.u8( `block ${blockIndex} height-fog flag` ) !== 0 ) {
 			const values = Array.from( { length: 4 }, () => cursor.f32( "height fog" ) );
 			if ( !values.every( Number.isFinite ) ) throw Error( `${sourcePath}: non-finite height fog` );
@@ -307,6 +307,18 @@ export function readDofPresentation( bytes, sourcePath ) {
 					flags,
 					color
 				} );
+			} else {
+				// 0xAD1B70 draws every non-water object a room block places
+				// (torches, cobwebs, sealed doors, cave-in boulders).
+				blockObjects.push( {
+					index: objectIndex,
+					name: objectName,
+					path: objectPath,
+					position: objectPosition,
+					rotation,
+					scale,
+					flags
+				} );
 			}
 		}
 
@@ -319,6 +331,7 @@ export function readDofPresentation( bytes, sourcePath ) {
 			ambientColor,
 			fog,
 			waterObjects,
+			blockObjects,
 			connectedBlocks,
 			visibleBlocks
 		} );
