@@ -189,8 +189,10 @@ items). Only PvP capes own a team value; keep strict validation for them.
 	let publishedShop: import("@/engine/contracts/gameplay").GameplayState["shop"];
 	let publishedCatalog: import("@/engine/contracts/gameplay").GameplayState["skillCatalog"],
 		retainedCatalog: import("@/engine/contracts/gameplay").GameplayState["skillCatalog"],
+		seenCatalog: import("@/engine/contracts/gameplay").GameplayState["skillCatalog"],
 		publishedGmCatalog: import("@/engine/contracts/gameplay").GameplayState["gmCatalog"],
 		retainedGmCatalog: import("@/engine/contracts/gameplay").GameplayState["gmCatalog"],
+		seenGmCatalog: import("@/engine/contracts/gameplay").GameplayState["gmCatalog"],
 		publishedSocial: import("@/engine/contracts/gameplay").GameplayState["social"];
 	/*
 ================
@@ -402,7 +404,9 @@ the entry continues it like the one after a world transfer.
 			const travel = awaitingTravelBootstrap;
 			if ( !travel && !resumed ) {
 				retainedCatalog = undefined;
+				seenCatalog = undefined;
 				retainedGmCatalog = undefined;
+				seenGmCatalog = undefined;
 			}
 			invalidateProjection();
 			entities.bootstrap( value, travel );
@@ -521,14 +525,22 @@ Advances entities and gameplay, then publishes the changed gameplay state.
 			const state = gameplay.take();
 			if ( state ) {
 				const { skillCatalog, gmCatalog, social, shop, ...dynamic } = state;
-				const catalog = retainedCatalog && sameSkillCatalog( skillCatalog, retainedCatalog ) ?
+				const catalog = skillCatalog === seenCatalog ?
+					retainedCatalog ?? skillCatalog :
+					retainedCatalog && sameSkillCatalog( skillCatalog, retainedCatalog ) ?
 					retainedCatalog :
 					skillCatalog;
+				seenCatalog = skillCatalog;
 				retainedCatalog = catalog;
 				const catalogChanged = catalog !== publishedCatalog;
-				const gm = gmCatalog && retainedGmCatalog && sameSkillCatalog( gmCatalog, retainedGmCatalog ) ?
+				const gm = !gmCatalog ?
+					undefined :
+					gmCatalog === seenGmCatalog ?
+					retainedGmCatalog ?? gmCatalog :
+					retainedGmCatalog && sameSkillCatalog( gmCatalog, retainedGmCatalog ) ?
 					retainedGmCatalog :
 					gmCatalog;
+				if ( gmCatalog ) seenGmCatalog = gmCatalog;
 				if ( gm ) retainedGmCatalog = gm;
 				const gmChanged = Boolean( gm ) && gm !== publishedGmCatalog;
 				entities.publish( {
@@ -576,7 +588,9 @@ clear
 			pendingTravel = null;
 			loadingMode = 0;
 			retainedCatalog = undefined;
+			seenCatalog = undefined;
 			retainedGmCatalog = undefined;
+			seenGmCatalog = undefined;
 			invalidateProjection();
 			gameplay.reset();
 			entities.clear();

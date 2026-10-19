@@ -403,7 +403,35 @@ test("createWorldCore -> createPresentation retains skillCatalog and skillIndex 
 		assert.equal( afterLogin?.skillCatalog?.length, 2 );
 		assert.equal( afterLogin?.skillIndex?.get( 1 )?.name, "Strike Smash" );
 		const initialCatalogRef = afterLogin?.skillCatalog;
+		const initialGmCatalogRef = afterLogin?.gmCatalog;
 		const initialIndexRef = afterLogin?.skillIndex;
+		assert.ok( initialCatalogRef );
+		if ( gm ) assert.ok( initialGmCatalogRef );
+
+		// Instrument the retained references so any deep-compare walk in
+		// sameSkillCatalog(next, retained) increments the counter.
+		let skillCompares = 0;
+		const firstSkillName = initialCatalogRef[0].name;
+		Object.defineProperty( initialCatalogRef[0], "name", {
+			enumerable: true,
+			configurable: true,
+			get() {
+				skillCompares++;
+				return firstSkillName;
+			}
+		} );
+		let gmCompares = 0;
+		if ( gm && initialGmCatalogRef ) {
+			const firstMonsterCode = initialGmCatalogRef.monsters[0].codename;
+			Object.defineProperty( initialGmCatalogRef.monsters[0], "codename", {
+				enumerable: true,
+				configurable: true,
+				get() {
+					gmCompares++;
+					return firstMonsterCode;
+				}
+			} );
+		}
 
 		// 2. Intra-session portal travel (0x3369) into dense region 32769.
 		core.receive( { opcode: 0x3369, payload: new Uint8Array( [ 0x01, 0x80 ] ) }, 10 );
@@ -422,6 +450,32 @@ test("createWorldCore -> createPresentation retains skillCatalog and skillIndex 
 		assert.equal( afterPortal?.skillIndex?.get( 2 )?.name, "Strike Smash II" );
 		assert.equal( afterPortal?.skillCatalog, initialCatalogRef, "unchanged catalog array identity is reused" );
 		assert.equal( afterPortal?.skillIndex, initialIndexRef, "presentation skillIndex Map is reused" );
+		if ( gm ) assert.equal( afterPortal?.gmCatalog, initialGmCatalogRef, "unchanged gmCatalog identity is reused" );
+		assert.equal( skillCompares, 1, "0x3369 bootstrap compares skillCatalog exactly once" );
+		if ( gm ) assert.equal( gmCompares, 1, "0x3369 bootstrap compares gmCatalog exactly once" );
+
+		// Subsequent dirty gameplay steps after portal travel (while walking/acting)
+		// must short-circuit on seenCatalog / seenGmCatalog without re-comparing or resending.
+		for ( let tick = 1; tick <= 5; tick++ ) {
+			core.notice( `post-portal-step-${tick}` );
+			core.step( 20 + tick, true );
+			const stepBatch = core.take();
+			assert.ok( stepBatch );
+			for ( const event of stepBatch.events ) {
+				if ( event.kind === "gameplay" ) {
+					assert.equal(
+						"skillCatalog" in event.state,
+						false,
+						"post-portal step must not resend skillCatalog"
+					);
+					assert.equal( "gmCatalog" in event.state, false, "post-portal step must not resend gmCatalog" );
+				}
+			}
+			presentation.apply( stepBatch );
+			core.ack( stepBatch.sequence );
+		}
+		assert.equal( skillCompares, 1, "repeated post-portal takes must not re-compare skillCatalog" );
+		if ( gm ) assert.equal( gmCompares, 1, "repeated post-portal takes must not re-compare gmCatalog" );
 
 		// 3. Second portal travel (0x366a).
 		core.receive( { opcode: 0x366a, payload: new Uint8Array( [ 0x01, 0x80 ] ) }, 30 );
@@ -433,6 +487,19 @@ test("createWorldCore -> createPresentation retains skillCatalog and skillIndex 
 		core.ack( batch3.sequence );
 		assert.equal( presentation.gameplay()?.skillCatalog, initialCatalogRef );
 		assert.equal( presentation.gameplay()?.skillIndex, initialIndexRef );
+		if ( gm ) assert.equal( presentation.gameplay()?.gmCatalog, initialGmCatalogRef );
+		assert.equal( skillCompares, 2, "0x366a bootstrap compares skillCatalog once" );
+		if ( gm ) assert.equal( gmCompares, 2, "0x366a bootstrap compares gmCatalog once" );
+		for ( let tick = 1; tick <= 3; tick++ ) {
+			core.notice( `post-366a-step-${tick}` );
+			core.step( 40 + tick, true );
+			const stepBatch = core.take();
+			assert.ok( stepBatch );
+			presentation.apply( stepBatch );
+			core.ack( stepBatch.sequence );
+		}
+		assert.equal( skillCompares, 2, "repeated post-366a takes must not re-compare skillCatalog" );
+		if ( gm ) assert.equal( gmCompares, 2, "repeated post-366a takes must not re-compare gmCatalog" );
 
 		// 4. Transport resume (resumed = true).
 		core.bootstrap( worldBootstrapFixture( { gm, regionId: 32769 } ), true, 50 );
@@ -444,5 +511,18 @@ test("createWorldCore -> createPresentation retains skillCatalog and skillIndex 
 		const afterResume = presentation.gameplay();
 		assert.equal( afterResume?.skillCatalog, initialCatalogRef, "skillCatalog survives resumed=true reset" );
 		assert.equal( afterResume?.skillIndex, initialIndexRef, "skillIndex survives resumed=true reset" );
+		if ( gm ) assert.equal( afterResume?.gmCatalog, initialGmCatalogRef, "gmCatalog survives resumed=true reset" );
+		assert.equal( skillCompares, 3, "resumed=true bootstrap compares skillCatalog once" );
+		if ( gm ) assert.equal( gmCompares, 3, "resumed=true bootstrap compares gmCatalog once" );
+		for ( let tick = 1; tick <= 3; tick++ ) {
+			core.notice( `post-resume-step-${tick}` );
+			core.step( 50 + tick, true );
+			const stepBatch = core.take();
+			assert.ok( stepBatch );
+			presentation.apply( stepBatch );
+			core.ack( stepBatch.sequence );
+		}
+		assert.equal( skillCompares, 3, "repeated post-resume takes must not re-compare skillCatalog" );
+		if ( gm ) assert.equal( gmCompares, 3, "repeated post-resume takes must not re-compare gmCatalog" );
 	}
 });
