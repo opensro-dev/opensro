@@ -1590,10 +1590,21 @@ export function createCharacterEffects(
 											ax += joint.x - entity.x;
 											ay += joint.y - entity.y;
 											az += joint.z - entity.z;
-										}
-										if ( entity.mountedOn !== undefined ) {
-											unsupported.add( `mounted-hit-anchor:${entity.refObjId}` );
-											continue;
+											const actor = presentation.get( entity.gid );
+											if ( entity.mountedOn !== undefined && actor?.mountedOn === undefined ) {
+												const mount = byGid.get( entity.mountedOn ) ?? entity;
+												const saddle = socket?.(
+													entity.mountedOn,
+													"saddle",
+													[ 0, 0, 0 ],
+													trigger
+												);
+												if ( saddle ) {
+													ax += saddle.x - mount.x;
+													ay += saddle.y - mount.y;
+													az += saddle.z - mount.z;
+												}
+											}
 										}
 										if ( !projectileSpace( entity.regionId, caster.regionId ) ) {
 											unsupported.add( "hit-anchor:region-space" );

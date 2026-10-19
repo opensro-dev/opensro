@@ -128,6 +128,50 @@ test("real sword stage waits for native anchor metadata, renders at the target a
 	assert.equal( owner.error(), null );
 	assert.equal( step( .4, [ trigger ] ).length, 1, "a repeated snapshot cannot duplicate a stage" );
 	assert.equal( step( 2 ).length, 0 );
+
+	entities[1].refObjId = 1919;
+	entities[1].mountedOn = 99;
+	entities.push( { gid: 99, refObjId: 2167, regionId: 257, x: 10, y: 0, z: 0, heading: 0 } );
+	bodies[0].effectAnchor = { bone: null, offset: [ 0, 13, -2 ] };
+	const mountedCast = { token: 6, caster: 1, target: 2, skill: 2 };
+	game.casts = [ mountedCast ];
+	const mountedTrigger = { cast: mountedCast, phase: "SHOT", event: 1, at: 2.2, attackKind: 2 };
+	const mountedNullBone = step( 2.2, [ mountedTrigger ] );
+	assert.equal( mountedNullBone.length, 1 );
+	assert.equal( mountedNullBone[0].pose.x, 8 );
+	assert.equal( mountedNullBone[0].pose.y, 13 );
+	assert.equal( owner.error(), null );
+	assert.equal( step( 4 ).length, 0 );
+
+	bodies[0].effectAnchor = { bone: "Bip01 Spine", offset: [ 0, 10, -6 ] };
+	const mountedBoneCast = { token: 7, caster: 1, target: 2, skill: 2 };
+	game.casts = [ mountedBoneCast ];
+	const mountedBoneTrigger = { cast: mountedBoneCast, phase: "SHOT", event: 1, at: 4.2, attackKind: 2 };
+	const socketCalls = [];
+	const mountedWithBone = owner.step(
+		entities,
+		game,
+		4.2,
+		() => true,
+		() => 1,
+		[ mountedBoneTrigger ],
+		( gid, bone ) => {
+			socketCalls.push( `${gid}:${bone}` );
+			if ( gid === 2 && bone === "Bip01 Spine" ) {
+				return { regionId: 257, x: 10, y: 5, z: -2, yaw: 0 };
+			}
+			if ( gid === 99 && bone === "saddle" ) {
+				return { regionId: 257, x: 10, y: 12, z: -1, yaw: 0 };
+			}
+			return null;
+		},
+		bodies
+	);
+	assert.equal( mountedWithBone.length, 1 );
+	assert.deepEqual( socketCalls, [ "2:Bip01 Spine", "99:saddle" ] );
+	assert.equal( mountedWithBone[0].pose.x, 1 );
+	assert.equal( mountedWithBone[0].pose.y, 27 );
+	assert.equal( owner.error(), null );
 	owner.dispose();
 });
 
