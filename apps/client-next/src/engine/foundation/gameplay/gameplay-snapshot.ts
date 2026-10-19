@@ -26,9 +26,11 @@ export function mergeGameplaySnapshots(
 	previous: GameplayState | null | undefined,
 	next: GameplayState
 ): GameplayState {
+	const gmCatalog = next.gmCatalog ?? previous?.gmCatalog;
 	return {
 		...next,
 		skillCatalog: next.skillCatalog ?? previous?.skillCatalog,
+		...(gmCatalog ? { gmCatalog } : {}),
 		social: next.social ?? previous?.social,
 		...(!("shop" in next) && previous && "shop" in previous ? { shop: previous.shop } : {})
 	};

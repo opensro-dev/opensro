@@ -188,17 +188,21 @@ items). Only PvP capes own a team value; keep strict validation for them.
 	let awaitingTravelBootstrap = false;
 	let publishedShop: import("@/engine/contracts/gameplay").GameplayState["shop"];
 	let publishedCatalog: import("@/engine/contracts/gameplay").GameplayState["skillCatalog"],
+		retainedCatalog: import("@/engine/contracts/gameplay").GameplayState["skillCatalog"],
+		publishedGmCatalog: import("@/engine/contracts/gameplay").GameplayState["gmCatalog"],
+		retainedGmCatalog: import("@/engine/contracts/gameplay").GameplayState["gmCatalog"],
 		publishedSocial: import("@/engine/contracts/gameplay").GameplayState["social"];
 	/*
 ================
 invalidateProjection
 Forces the next gameplay publish to resend the large, rarely changing
-fields (shop, skill catalog, social).
+fields (shop, skill catalog, GM catalog, social).
 ================
 	*/
 	function invalidateProjection() {
 		publishedShop = undefined;
 		publishedCatalog = undefined;
+		publishedGmCatalog = undefined;
 		publishedSocial = undefined;
 	}
 	/*
@@ -396,15 +400,11 @@ the entry continues it like the one after a world transfer.
 				entryRegion :
 				undefined;
 			const travel = awaitingTravelBootstrap;
-			if ( travel || resumed ) {
-				// A continued entry rebuilds the same catalogue: keep the
-				// published one so step() does not resend it beside the
-				// destination's spawn burst (F11-DC1). A genuinely changed
-				// catalogue still publishes - step() compares content.
-				const catalog = publishedCatalog;
-				invalidateProjection();
-				publishedCatalog = catalog;
-			} else invalidateProjection();
+			if ( !travel && !resumed ) {
+				retainedCatalog = undefined;
+				retainedGmCatalog = undefined;
+			}
+			invalidateProjection();
 			entities.bootstrap( value, travel );
 			awaitingTravelBootstrap = false;
 			gameplay.bootstrap( value, travel || resumed, receivedAtMs );
@@ -520,20 +520,30 @@ Advances entities and gameplay, then publishes the changed gameplay state.
 			}
 			const state = gameplay.take();
 			if ( state ) {
-				const { skillCatalog, social, shop, ...dynamic } = state;
-				const catalogChanged = skillCatalog !== publishedCatalog &&
-					!sameSkillCatalog( skillCatalog, publishedCatalog );
+				const { skillCatalog, gmCatalog, social, shop, ...dynamic } = state;
+				const catalog = retainedCatalog && sameSkillCatalog( skillCatalog, retainedCatalog ) ?
+					retainedCatalog :
+					skillCatalog;
+				retainedCatalog = catalog;
+				const catalogChanged = catalog !== publishedCatalog;
+				const gm = gmCatalog && retainedGmCatalog && sameSkillCatalog( gmCatalog, retainedGmCatalog ) ?
+					retainedGmCatalog :
+					gmCatalog;
+				if ( gm ) retainedGmCatalog = gm;
+				const gmChanged = Boolean( gm ) && gm !== publishedGmCatalog;
 				entities.publish( {
 					kind: "gameplay",
 					state: {
 						...dynamic,
 						...(shop !== publishedShop ? { shop } : {}),
-						...(catalogChanged ? { skillCatalog } : {}),
+						...(catalogChanged ? { skillCatalog: catalog } : {}),
+						...(gmChanged && gm ? { gmCatalog: gm } : {}),
 						...(social !== publishedSocial ? { social } : {})
 					}
 				} );
 				publishedShop = shop;
-				if ( catalogChanged ) publishedCatalog = skillCatalog;
+				if ( catalogChanged ) publishedCatalog = catalog;
+				if ( gmChanged ) publishedGmCatalog = gm;
 				publishedSocial = social;
 			}
 		},
@@ -565,6 +575,8 @@ clear
 			bootstrapRegion = undefined;
 			pendingTravel = null;
 			loadingMode = 0;
+			retainedCatalog = undefined;
+			retainedGmCatalog = undefined;
 			invalidateProjection();
 			gameplay.reset();
 			entities.clear();

@@ -135,18 +135,19 @@ export function createEntities(
 	================
 	snapshotCost
 
-	One gameplay snapshot is one structured-clone graph of its own: the
-	references it shares with itself (the catalogue rows its skill and
-	quick-slot fields point back at) travel once, so the snapshot is
-	costed with a fresh shared set. It is not costed against the batch's
-	set - a superseded snapshot leaves the batch, and its values must not
-	stay counted for the events that follow it (the cost() invariant
-	above). Without the set the snapshot charged 33 MB and the first
-	spawn burst behind it broke the budget (F11-DC1).
+	One gameplay snapshot is one coalesced slot in the batch: its own
+	internal graph is costed with a fresh shared set, and the static
+	bootstrap reference tables (skillCatalog, gmCatalog) that ride once on
+	that coalesced slot are not charged against the dynamic world-event
+	backlog. Without this, the 27,835-row skill catalogue (~27.1 MB in
+	UTF-16) plus GM catalogue (~5.8 MB) consumed 33 MB of the 32 MiB
+	journal budget on entry and the first cave spawn burst behind it broke
+	the limit (F11-DC1).
 	================
 	*/
-	function snapshotCost( event: WorldEvent ) {
-		return journalCost( event, new WeakSet<object>() );
+	function snapshotCost( event: Extract<WorldEvent, { kind: "gameplay"; }> ) {
+		const { skillCatalog: _skills, gmCatalog: _gm, ...dynamic } = event.state;
+		return journalCost( { kind: "gameplay", state: dynamic }, new WeakSet<object>() );
 	}
 	/*
 	================

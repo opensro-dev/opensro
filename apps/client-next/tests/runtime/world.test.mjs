@@ -42,7 +42,11 @@ const { createSimulationInput } = await load( "src/engine/runtime/simulation/wor
 
 test("journal admits the expanded startup catalogue but still rejects excessive queued bytes atomically", () => {
 	const owner = createEntities();
-	const state = { localGid: 1, skillCatalog: [ { id: 1, name: "x".repeat( 10 << 20 ) } ] };
+	const state = {
+		localGid: 1,
+		skillCatalog: [ { id: 1, name: "x".repeat( 10 << 20 ) } ],
+		error: "z".repeat( 10 << 20 )
+	};
 	owner.publish( { kind: "gameplay", state } );
 	assert.throws(
 		() =>
