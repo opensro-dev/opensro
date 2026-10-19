@@ -341,6 +341,10 @@ const GUILD_BAN_REFUSED = 0x1f;
 const DEATH_NOTICE = 0x37ce;
 // 75B8D0: the transport bag's trade level [u8].
 const OP_TRADE_STAR_COUNT = 0x352d;
+// 6FD0AA / 6FD6CE -> 877230 sets *(pDeadreckon + 0x48) = 0x1F4 (500 ms) right
+// after sending a ground-targeted 0x72CD; 878410 ticks it down and 8782D0 /
+// 877D80 / 877540 / 8777B0 refuse to send any movement packet until it expires.
+const GROUND_SKILL_MOVE_SUPPRESS_MS = 500;
 
 /*
 ================
@@ -435,6 +439,9 @@ export function createGameplay(
 		journalBag: ReadonlyMap<number, string> = new Map(),
 		journalClock = 0;
 	let soundClock = 0;
+	// 877230: *(pDeadreckon + 0x48) deadline suppressing ground/angle movement
+	// packets for 500 ms after a ground-targeted skill press sends 0x72CD.
+	let groundSkillMoveSuppressUntil = 0;
 	const feedback = createFeedback();
 	const pickup = createPickup();
 	const actionSession = createActionSession();
@@ -1057,6 +1064,7 @@ selected entities, cooldowns or world-entry state.
 		inventoryJournal = [];
 		journalRows = null;
 		journalBag = new Map();
+		groundSkillMoveSuppressUntil = 0;
 		moveReservation.clear();
 		betaMap.clear();
 		partyMatching = emptyPartyMatching();
@@ -1646,6 +1654,10 @@ state here before a command can claim a native wire conversation.
 			if (
 				combat.guidedActive( localGid, now ) &&
 				[ "move", "ground-move", "attack", "skill", "pickup" ].includes( command.kind )
+			) return null;
+			if (
+				now < groundSkillMoveSuppressUntil &&
+				(command.kind === "move" || command.kind === "ground-move")
 			) return null;
 			if (
 				teleportMode === 1 && [ "move", "ground-move", "attack", "skill", "pickup" ].includes( command.kind )
@@ -2692,6 +2704,9 @@ state here before a command can claim a native wire conversation.
 					const to = movement.groundSkillGoal( command.query, now );
 					if ( !to ) return null;
 					const frame = positionSkillRequest( skillId, to );
+					// 6FD0AA / 6FD6CE -> 877230 sets *(pDeadreckon + 0x48) = 500 ms so
+					// 8782D0 / 877D80 send no ground or angle move during the RTT or dash.
+					groundSkillMoveSuppressUntil = now + GROUND_SKILL_MOVE_SUPPRESS_MS;
 					// 6FD536 -> 8786E0 -> 878100 sends the ground skill request
 					// without stopping the current walk. Travel begins on B245;
 					// the ordinary cast's press hold would freeze this entire RTT.
@@ -3956,7 +3971,10 @@ Packet handling must not depend on which HUD panel is currently open.
 
 				// B245 [2, code]: the server refused the targeted command at the
 				// press, before touching movement (an empty MP pool is 0x3004).
-				if ( frame.opcode === 0xb245 && frame.payload[0] === 2 ) movement.castRefused( now );
+				if ( frame.opcode === 0xb245 && frame.payload[0] === 2 ) {
+					groundSkillMoveSuppressUntil = 0;
+					movement.castRefused( now );
+				}
 				if ( item && cast ) returnScroll = cast;
 				if ( returnScroll?.skillId && (fight || item && cast) ) {
 					const effect = combat.state().attachedEffects.find( row =>
@@ -4316,6 +4334,7 @@ die
 		die( gid: number, now: number ) {
 			combat.cancelGuided( gid, now );
 			if ( gid === localGid ) {
+				groundSkillMoveSuppressUntil = 0;
 				movement.life( 2, now );
 				potionFacts = { ...potionFacts, alive: false };
 				selectionDecal = null;
@@ -4507,6 +4526,7 @@ World transfer retires spatial work while retaining character/session data.
 			actionSession.clear();
 			pickup.clear();
 			cosPickup.clear();
+			groundSkillMoveSuppressUntil = 0;
 			moveReservation.clear();
 			quests.clearGathering();
 			approach = interactionApproachTransition( approach, { kind: "cancel" } );

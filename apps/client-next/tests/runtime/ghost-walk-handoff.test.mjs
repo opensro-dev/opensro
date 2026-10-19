@@ -210,3 +210,65 @@ for ( const kind of /** @type {const} */ ([ 2, 8 ]) ) {
 		});
 	}
 }
+
+test("ground-targeted skill press suppresses move and ground-move for 500 ms (877230) unless B245 refuses", () => {
+	const sent = [], game = createGameplay( frame => sent.push( frame ) );
+	const skillId = 19639;
+	game.bootstrap( {
+		simulationProtocolVersion: 1,
+		character: { skills: [ skillId ] },
+		refSkillSnapshot: [ reference( skillId, false ) ]
+	} );
+	game.seed( LOCAL );
+	game.command( { kind: "navigation", regionId: 257, bundle: navigation() }, 0, undefined );
+	game.command( { kind: "move", destination: WALK_END }, 0, undefined );
+	assert.equal( sent.filter( f => f.opcode === 0x0009 ).length, 1 );
+
+	// At 100 ms, press Ghost Walk while holding LMB (hold-to-move cadence at +0, +68, +124 ms).
+	game.step( 100 );
+	game.command( { kind: "skill", skillId, query: QUERY }, 100, undefined );
+	assert.equal( sent.at( -1 )?.opcode, 0x72cd );
+	for ( const now of [ 100, 168, 224 ] ) {
+		assert.equal( game.command( { kind: "ground-move", query: QUERY }, now, undefined ), null );
+		assert.equal( game.command( { kind: "move", destination: WALK_END }, now, undefined ), null );
+	}
+	assert.equal(
+		sent.filter( f => f.opcode === 0x0009 ).length,
+		1,
+		"no pre-echo 0x0009 goes out during the RTT before B245 arrives"
+	);
+
+	// B245 arrives at 200 ms (pose.x = 110) and displaces to x = 260 (duration 300 ms, ends at 500 ms).
+	const packet = Buffer.alloc( 27 );
+	packet[0] = 1;
+	packet.writeUInt32LE( skillId, 2 );
+	packet.writeUInt32LE( 1, 6 );
+	packet.writeUInt32LE( 9, 10 );
+	packet[18] = 8;
+	packet.writeUInt16LE( 257, 19 );
+	packet.writeInt16LE( 260, 21 );
+	packet.writeInt16LE( 100, 25 );
+	game.receive( { opcode: 0xb245, payload: packet }, 200 );
+	const travel = game.takeDisplacements()[0];
+	assert.ok( travel );
+	const arrival = game.displace( travel, 200 );
+	assert.equal( arrival, 500 );
+	game.guidedArrival( travel.token, arrival );
+
+	// At 500 ms the dash has arrived at x = 260, and the 500 ms (877230) window holds until 600 ms.
+	game.step( 500 );
+	assert.equal( game.take()?.pose?.x, 260 );
+	assert.equal( game.command( { kind: "move", destination: WALK_END }, 550, undefined ), null );
+	assert.equal( game.command( { kind: "ground-move", query: QUERY }, 599, undefined ), null );
+	const resumed = game.command( { kind: "move", destination: WALK_END }, 600, undefined );
+	assert.equal( resumed?.opcode, 0x0009 );
+
+	// A refused ground skill press (B245 [2, code]) clears the 500 ms suppression immediately.
+	game.step( 6000 );
+	game.command( { kind: "skill", skillId, query: QUERY }, 6000, undefined );
+	assert.equal( game.command( { kind: "move", destination: WALK_END }, 6050, undefined ), null );
+	game.receive( { opcode: 0xb245, payload: Uint8Array.of( 2, 4 ) }, 6100 );
+	const afterRefusal = game.command( { kind: "move", destination: WALK_END }, 6150, undefined );
+	assert.equal( afterRefusal?.opcode, 0x0009 );
+	game.dispose();
+});
