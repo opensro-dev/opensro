@@ -60,6 +60,7 @@ test( "repair hammer consumes pickup, modifier clicks and right-button equipment
 				gameplay: {
 					localGid: 1,
 					target: 42,
+					targetCapabilities: 9,
 					shop: { npc: 42, name: "Smith", offers: [], buyback: [] },
 					quickSlots: [ { slot: 41, kind: 0x4a, payload: 4000 }, { slot: 42, kind: 0x4a, payload: 4001 } ],
 					inventorySlotCount: 45,

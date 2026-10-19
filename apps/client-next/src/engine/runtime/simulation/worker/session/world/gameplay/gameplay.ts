@@ -2534,6 +2534,7 @@ state here before a command can claim a native wire conversation.
 				if ( inventory.state().shop?.npc !== targeting.state().target ) {
 					throw Error( "Merchant selection changed" );
 				}
+				if ( !((targeting.state().targetCapabilities ?? 0) & 8) ) return null;
 				if ( command.mode === REPAIR_ONE_SLOT ) {
 					// 567290 judges the clicked item before anything is sent.
 					const slot = command.slot,

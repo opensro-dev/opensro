@@ -7794,7 +7794,8 @@ export function createUi(
 			if (
 				(repairHud.armed() || repairHud.confirmCost() !== null) &&
 				(next.session?.phase !== "world" || next.travel || !next.gameplay?.shop ||
-					next.gameplay.shop.npc !== next.gameplay.target || next.gameplay.shop.error)
+					next.gameplay.shop.npc !== next.gameplay.target || next.gameplay.shop.error ||
+					!((next.gameplay.targetCapabilities ?? 0) & 8))
 			) {
 				repairHud.reset();
 				dirty = true;
@@ -14910,17 +14911,21 @@ export function createUi(
 						}
 					}
 					nativeSpin( page.GDR_STORE_SPIN_PAGE!, px, py, "shop-prev", "shop-next", shopPage, pages );
-					// Repair remains a typed gameplay operation; never route its button to buy/sell.
-					for ( const node of [ page.GDR_STORE_BTN_REPAIR!, page.GDR_STORE_BTN_REPAIRALL! ] ) {
-						authoredLabeledButton(
-							node,
-							px,
-							py,
-							// The control name, not its numeric resource id, names the button.
-							"shop-repair:" + node.name,
-							hudCopy( node.text ),
-							!valid || busy
-						);
+					// 764FFC..76502A -> 5B4750: only a store whose NPC offers repair
+					// (talkFlags & 8) shows GDR_STORE_BTN_REPAIR (11) and GDR_STORE_BTN_REPAIRALL (12).
+					if ( (game?.targetCapabilities ?? 0) & 8 ) {
+						// Repair remains a typed gameplay operation; never route its button to buy/sell.
+						for ( const node of [ page.GDR_STORE_BTN_REPAIR!, page.GDR_STORE_BTN_REPAIRALL! ] ) {
+							authoredLabeledButton(
+								node,
+								px,
+								py,
+								// The control name, not its numeric resource id, names the button.
+								"shop-repair:" + node.name,
+								hudCopy( node.text ),
+								!valid || busy
+							);
+						}
 					}
 					endWindow( admission, "service:Shop" );
 				}

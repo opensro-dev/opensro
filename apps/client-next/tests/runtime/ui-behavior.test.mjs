@@ -5911,3 +5911,42 @@ test("right-clicking a rental clock arms the yellow cursor and confirms the clic
 		f.dispose();
 	}
 });
+
+test("store window shows Repair and Repair All buttons only when targetCapabilities & 8 is set (5B4750)", () => {
+	const f = uiFixture();
+	try {
+		const game = {
+			...f.state.gameplay,
+			target: 17,
+			targetCapabilities: 3,
+			shop: { npc: 17, name: "Manina", offers: [], buyback: [] },
+			shopCompletionRevision: 1
+		};
+		f.state.gameplay = game;
+		let now = 0, scene;
+		f.ui.step( f.state, now );
+		f.ui.event( { kind: "activate", id: "open-window:Shop" } );
+		for ( let i = 0; i < 15; i++ ) scene = f.ui.step( f.state, now += 100 ) ?? scene;
+		assert.ok( defined( scene ).controls.some( c => c.id === "shop-prev" ) );
+		assert.equal(
+			defined( scene ).controls.some( c => c.id.startsWith( "shop-repair:" ) ),
+			false,
+			"non-repair merchants (talkFlags = 3) hide GDR_STORE_BTN_REPAIR and GDR_STORE_BTN_REPAIRALL"
+		);
+
+		game.targetCapabilities = 9;
+		for ( let i = 0; i < 5; i++ ) scene = f.ui.step( f.state, now += 100 ) ?? scene;
+		assert.deepEqual(
+			defined( scene ).controls.filter( c => c.id.startsWith( "shop-repair:" ) ).map( c => c.id ),
+			[ "shop-repair:GDR_STORE_BTN_REPAIR", "shop-repair:GDR_STORE_BTN_REPAIRALL" ]
+		);
+		f.ui.event( { kind: "activate", id: "shop-repair:GDR_STORE_BTN_REPAIR" } );
+		assert.equal( f.ui.cursor(), 0x96 );
+
+		game.targetCapabilities = 3;
+		scene = f.ui.step( f.state, now += 100 ) ?? scene;
+		assert.equal( f.ui.cursor(), null, "switching to a non-repair store disarms the repair cursor" );
+	} finally {
+		f.dispose();
+	}
+});
