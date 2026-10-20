@@ -1118,6 +1118,125 @@ test("cast WAIT holds the drawn pose when the stop and the cast arrive in one bu
 	f.dispose();
 });
 
+test("zero-duration teleport cast while walking snaps body and ground stage instead of latching a WAIT hold", () => {
+	// BR-261020-0232-787B: Wizard Teleport / Ghost Walk (CastDisplacement kind 2)
+	// has duration 0, so movement.displace clears segment = null (leaving
+	// gameplay.movementPath undefined) and records the teleport on
+	// gameplay.movementTransition = { reason: "displacement", eligible: false }.
+	// Neither actor-motion nor heldPose must latch or retain navigationHold at
+	// the pre-teleport walk pose when 0xB2F5 + 0xB245 stop the walk.
+	const ground = {
+		resource: "ground.efp",
+		damageEvent: false,
+		startEvent: 0,
+		phase: "READY",
+		action: "AT_STOP",
+		move: "MOV_NONE",
+		bone: null,
+		offset: [ 0, 0, 0 ],
+		life: 10,
+		sound: null,
+		count: 1,
+		scripts: []
+	};
+	const f = fixture(
+		{ 7: { clips: [ "stand" ], phaseClips: [ [], [ "stand" ], [] ], stages: [ ground ] } },
+		2,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		undefined,
+		{ states: { stand: { durationMs: 1000, loop: true, trackEvents: [] } }, rules: [] }
+	);
+	f.warm();
+	f.presentation.simulationOrigin( 0 );
+	const from = { regionId: 1, x: 10, y: 20, z: 30, angle: 16384 };
+	const cast = { token: 1, caster: 1, target: 0, skill: 7, damage: 0, fatal: false };
+	const frame = ( x, seconds, casting, moving, movementRevision, movementTransition ) => {
+		const path = { from, to: { ...from, x: 110 }, durationMs: 2000 };
+		const player = entity( 1, {
+			kind: "local-player",
+			x,
+			moving,
+			movementMode: 3,
+			movementRevision,
+			movementPath: moving ? path : undefined,
+			movementTransition,
+			poseAtMs: seconds * 1000
+		} );
+		f.step( [ player ], seconds, {
+			localGid: 1,
+			pose: { ...from, x },
+			moving,
+			movementRevision,
+			movementPath: moving ? path : undefined,
+			movementTransition,
+			poseAtMs: seconds * 1000,
+			inventory: [],
+			vitals: [],
+			casts: casting ? [ { ...cast, token: typeof casting === "number" ? casting : 1 } ] : []
+		} );
+		assert.equal( f.presentation.error(), null );
+		return { ...f.actors.find( actor => actor.gid === 1 ).pose };
+	};
+	frame( 10, 1, false, true, 1, { relocation: 1, reason: "input", eligible: true, pathEligible: true } );
+	frame( 20, 1.02, false, true, 1, { relocation: 1, reason: "input", eligible: true, pathEligible: true } );
+	const teleportTransition = {
+		relocation: 2,
+		reason: "displacement",
+		eligible: false,
+		pathEligible: false
+	};
+	const burst = frame( 110, 1.04, 1, false, 2, teleportTransition );
+	assert.equal(
+		burst.x,
+		110,
+		"teleport burst snaps the displayed actor to the destination instead of holding the walk"
+	);
+	let groundSeen = false;
+	for ( let step = 1; step <= 5; step++ ) {
+		const shown = frame( 110, 1.04 + step * 0.02, 1, false, 2, teleportTransition );
+		assert.equal( shown.x, 110, `teleported actor remains at destination during cast (frame ${step})` );
+		const effect = f.actors.find( actor => actor.gid < 0 );
+		if ( effect ) {
+			groundSeen = true;
+			assert.equal( effect.pose.x, 110, `teleport ground stage anchors at destination (frame ${step})` );
+		}
+	}
+	assert.ok( groundSeen, "the teleport cast ground stage is presented at the destination" );
+	assert.equal(
+		frame( 110, 1.3, false, false, 2, teleportTransition ).x,
+		110,
+		"actor stays at the teleported destination after the cast completes"
+	);
+	// Now walk again, latch a normal WAIT hold on a non-displacement cast at ~120,
+	// then cast a zero-duration teleport to 220 and verify the existing hold releases.
+	const walk2 = { relocation: 3, reason: "input", eligible: true, pathEligible: true };
+	frame( 110, 2.0, false, true, 3, walk2 );
+	const walking2 = frame( 120, 2.02, false, true, 3, walk2 );
+	const heldCast = frame( 160, 2.04, 2, false, 4, {
+		relocation: 3,
+		reason: "correction",
+		eligible: true,
+		pathEligible: false
+	} );
+	assert.ok( Math.abs( heldCast.x - walking2.x ) < 2, "ordinary cast while walking latches a WAIT hold" );
+	const teleportFromHold = {
+		relocation: 4,
+		reason: "displacement",
+		eligible: false,
+		pathEligible: false
+	};
+	const snapped = frame( 220, 2.1, 3, false, 5, teleportFromHold );
+	assert.equal( snapped.x, 220, "zero-duration teleport releases an existing WAIT hold immediately" );
+	f.dispose();
+});
+
 test("a WAIT hold released by the next walk recovers continuously instead of jumping", () => {
 	// actor-motion holds the drawn pose when a cast's WAIT leaves the walk
 	// state (native stops the walk there); the logical walk can still move

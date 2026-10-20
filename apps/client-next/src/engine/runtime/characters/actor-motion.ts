@@ -243,7 +243,9 @@ export function createActorMotion( owner: ActorOwner ) {
 				(localMover( entity.gid ) ? gameplay!.movementRevision : entity.movementRevision) ?? 0;
 			const displaced =
 				(localMover( entity.gid ) ? gameplay!.movementPath : entity.movementPath)?.displacement ===
-					true;
+					true ||
+				(localMover( entity.gid ) ? gameplay!.movementTransition : entity.movementTransition)?.reason ===
+					"displacement";
 			const waiting = !dead && waitingActors.has( entity.gid );
 			const activeCast = !!cast && cast.cancelledAtMs === undefined &&
 				(actionLayersByActor.get( entity.gid )?.length ?? 0) > 0;

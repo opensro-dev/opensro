@@ -536,7 +536,8 @@ export function createCharacterPresentation(
 		const heldPose = ( gid: number ) => {
 			const state = states.get( gid ), entity = entitiesByGid.get( gid ), local = localMover( gid );
 			const movementRevision = (local ? gameplay?.movementRevision : entity?.movementRevision) ?? 0;
-			const displaced = (local ? gameplay?.movementPath : entity?.movementPath)?.displacement === true;
+			const displaced = (local ? gameplay?.movementPath : entity?.movementPath)?.displacement === true ||
+				(local ? gameplay?.movementTransition : entity?.movementTransition)?.reason === "displacement";
 			const dead = (entity?.appearanceState?.[0] !== undefined ?
 				entity.appearanceState[0] === 2 :
 				vitalsByGid.get( gid )?.hp === 0) ||
