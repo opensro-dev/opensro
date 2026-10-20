@@ -194,10 +194,8 @@ func shardShops(dir string, items enterworld.ItemRefSource) (*commerce.Catalog, 
 	if err != nil {
 		return nil, err
 	}
-	// The GameWorld withholds the same goods (action.ConfigureCommerce).
-	if sun := progression.SunEventOnlyFromEnv(); sun.Enabled() {
-		shops.WithholdGoods(func(ref *enterworld.ItemRef) bool { return action.SunExcludes(sun, ref) })
-	}
+	// The GameWorld withholds the same goods permanently (action.ConfigureCommerce).
+	shops.WithholdGoods(action.SunShopExcluded)
 	// And prices trade goods the same way (SRO_TRADE_TIERS).
 	if action.TradeTiersFromEnv() {
 		shops.ScaleTradeGoodsPrices(enterworld.TradeGoodsPriceFactor)

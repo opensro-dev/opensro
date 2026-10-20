@@ -1,12 +1,13 @@
 /*
 ===========================================================================
 
-sunevent_test.go - degree-9 Sun leaves drops and shops with the flag
+sunevent_test.go - degree-9 Sun leaves drops with the flag, shops always
 
-Both settings, on the shipped v1.150 data: off, a Sun pick drops and a shop
-may sell it, as native; on, a Sun pick drops nothing and no shop offer
-holds degree-9 Sun, while degree-8 Sun and degree-9 Moon stay on the shelf
-and on the ground.
+Both flag settings, on the shipped v1.150 data. Drops: off, a Sun pick
+drops, as native; on, a Sun pick drops nothing. Shops: no offer holds
+degree-9 Sun at either setting (the withholding is permanent, owner
+2026-10-20), while degree-8 Sun and degree-9 Moon stay on the shelf and
+on the ground.
 
 ===========================================================================
 */
@@ -85,9 +86,10 @@ func shelvedCodenames(c *commerce.Catalog) map[string]int {
 TestSunLeavesTheShopsWithTheFlag
 
 v1.150 shops list no degree-9 Sun (refshopgoods' Sun packages are the
-honor shop's degree 8), so operator extra goods stand in: off, the smith
-sells degree-9 Sun as configured; on, it is withheld, while degree-9 Moon
-and degree-8 Sun stay on the shelf.
+honor shop's degree 8), so operator extra goods stand in. The shelf
+rule is permanent, not part of the drop gate (owner 2026-10-20): at
+either flag setting the smith's degree-9 Sun is withheld, while
+degree-9 Moon and degree-8 Sun stay on the shelf.
 ================
 */
 func TestSunLeavesTheShopsWithTheFlag(t *testing.T) {
@@ -106,8 +108,8 @@ func TestSunLeavesTheShopsWithTheFlag(t *testing.T) {
 			t.Fatal(err)
 		}
 		held := shelvedCodenames(rt.Commerce)
-		if sun, want := held["ITEM_CH_SWORD_09_C_RARE"], map[bool]int{false: 1, true: 0}[on]; sun != want {
-			t.Fatalf("on=%v: degree-9 Sun on %d offers, want %d", on, sun, want)
+		if sun := held["ITEM_CH_SWORD_09_C_RARE"]; sun != 0 {
+			t.Fatalf("on=%v: degree-9 Sun on %d offers, want 0 (withheld at either setting)", on, sun)
 		}
 		if held["ITEM_CH_SWORD_09_B_RARE"] != 1 || held["ITEM_CH_SWORD_08_C_RARE"] != 1 {
 			t.Fatalf("on=%v: degree-9 Moon %d, degree-8 Sun %d", on, held["ITEM_CH_SWORD_09_B_RARE"], held["ITEM_CH_SWORD_08_C_RARE"])

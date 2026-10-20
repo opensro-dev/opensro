@@ -669,12 +669,22 @@ variable "beta_seal_rates" {
 }
 
 # sun_event_only keeps degree-9 Seal of Sun gear out of non-unique monster
-# drops and NPC shops; unique monsters may still drop it, and gear players own
-# is kept (port-only, not native; owner decision 2026-10-14, narrowed to
-# non-unique kills 2026-10-18). "off" is native.
+# drops; unique monsters may still drop it, and gear players own is kept
+# (port-only, not native; owner decision 2026-10-14, narrowed to non-unique
+# kills 2026-10-18, gate default flipped off 2026-10-20 when drops became
+# the Sun source at sun_drop_rate). NPC shops never sell it either way:
+# that withholding is permanent and does not read this.
 variable "sun_event_only" {
   type    = string
-  default = "on"
+  default = "off"
+}
+
+# sun_drop_rate widens the degree-9 Sun class of the rare drop table by
+# 30 times this rate on levels 76-90 (port-only, not native; owner
+# decision 2026-10-20). "0" is native.
+variable "sun_drop_rate" {
+  type    = string
+  default = "2"
 }
 
 # unique_gap_exempt lets a unique's drops ignore the native level-gap
@@ -924,6 +934,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_RARE_RATE                      = var.beta_rare_rate
         SRO_BETA_SEAL_RATES                     = var.beta_seal_rates
         SRO_SUN_EVENT_ONLY                      = var.sun_event_only
+        SRO_SUN_DROP_RATE                       = var.sun_drop_rate
         SRO_UNIQUE_GAP_EXEMPT                   = var.unique_gap_exempt
         SRO_UNIQUE_POP_TICKET                   = var.unique_pop_ticket
         SRO_BETA_UNIQUE_RESPAWN                 = var.beta_unique_respawn

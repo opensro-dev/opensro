@@ -160,9 +160,15 @@ var Settings = []Setting{
 	{Env: "SRO_BETA_RARE_RATE", NomadVar: "beta_rare_rate", Default: "5", Catalogue: true},
 	{Env: "SRO_BETA_SHOP_ONLY_DEGREE9", NomadVar: "beta_shop_only_degree9", Default: "on", Catalogue: true},
 	{Env: "SRO_BETA_SEAL_RATES", NomadVar: "beta_seal_rates", Default: "on", Catalogue: true},
-	// Owner, 2026-10-14 (narrowed 2026-10-18): degree-9 Sun gear drops only
-	// from unique monsters and is withheld from NPC shops.
-	{Env: "SRO_SUN_EVENT_ONLY", NomadVar: "sun_event_only", Default: "on", Catalogue: true},
+	// Owner, 2026-10-14 (narrowed 2026-10-18): degree-9 Sun gear only from
+	// unique monsters; superseded 2026-10-20 for drops (Sun drops at the
+	// rate below; this gate now defaults off and only an operator's explicit
+	// "on" still excludes). The shop half never returned: NPC Sun withholding
+	// is permanent and does not read this setting (action/commerce.go).
+	{Env: "SRO_SUN_EVENT_ONLY", NomadVar: "sun_event_only", Default: "off", Catalogue: true},
+	// Owner, 2026-10-20: the degree-9 Sun drop rate (class mass 30 x rate
+	// on levels 76-90); 2 targets roughly eleven Sun drops a week.
+	{Env: "SRO_SUN_DROP_RATE", NomadVar: "sun_drop_rate", Default: "2", Catalogue: true},
 	// Owner, 2026-10-20: uniques ignore the level-gap drop admission and
 	// always leave exactly one Magic Pop ticket; "off" is native 4C1840.
 	{Env: "SRO_UNIQUE_GAP_EXEMPT", NomadVar: "unique_gap_exempt", Default: "on", Catalogue: true},

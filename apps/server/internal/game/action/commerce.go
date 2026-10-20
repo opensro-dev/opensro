@@ -44,10 +44,13 @@ func (rt *Runtime) ConfigureCommerce(dir string, extra []commerce.ExtraGood) err
 	if e != nil {
 		return e
 	}
-	if rt.SunEventOnly.Enabled() {
-		// Port-only, not native: no NPC sells Sun gear (action/sunevent.go).
-		c.WithholdGoods(func(ref *enterworld.ItemRef) bool { return SunExcludes(rt.SunEventOnly, ref) })
-	}
+	// Port-only, not native, and permanent (owner 2026-10-20): no NPC
+	// sells degree-9 Sun gear, whatever SRO_SUN_EVENT_ONLY says. That
+	// flag governed drops and shops together until the 2026-10-20 flip
+	// made drops the Sun source; the shop half was deliberately kept, so
+	// Sun supply is drop-side only, forever. Do not make this conditional
+	// again - withholding here is the rule, not a leftover of the gate.
+	c.WithholdGoods(func(ref *enterworld.ItemRef) bool { return SunShopExcluded(ref) })
 	if rt.TradeTiers {
 		// Port-only, not native: the shops price trade goods with their
 		// scaled references (SRO_TRADE_TIERS).

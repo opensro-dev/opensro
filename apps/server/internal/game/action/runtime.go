@@ -333,6 +333,10 @@ type Runtime struct {
 	// The zero value is off.
 	SealRates progression.SealRates
 
+	// SunRate widens the degree-9 Sun class of the rare table (port-only,
+	// not native, beta balance; owner 2026-10-20). The zero value is off.
+	SunRate progression.SunRate
+
 	// ElixirDrops keeps every elixir out of monster drops (port-only, not
 	// native, beta balance; owner 2026-10-13). The zero value is native.
 	ElixirDrops progression.ElixirDrops

@@ -96,13 +96,7 @@ func newGameplayPlane(
 	authoredAreas *worldarea.Catalog,
 	textdata *enterworld.TextdataCatalogs,
 ) (*gameplayPlane, error) {
-	deps, err := newBootstrapDependencies(
-		authorityStore,
-		devPaths,
-		characterRoster,
-		ownedShard,
-		textdata,
-	)
+	deps, err := newBootstrapDependencies(authorityStore, devPaths, characterRoster, ownedShard, textdata)
 	if err != nil {
 		return nil, err
 	}
@@ -332,10 +326,7 @@ func newGameplayPlane(
 	unions.GuildWars = warAuthority
 
 	communitySeeds := community.SeedFramesFunc(presence, deps.Letters)
-	deps.CommunitySeedFramesFor = func(
-		divisionID string,
-		character *enterworld.Character,
-	) []enterworld.Packet {
+	deps.CommunitySeedFramesFor = func(divisionID string, character *enterworld.Character) []enterworld.Packet {
 		frames := communitySeeds(divisionID, character)
 		frames = guild.AppendSeedFrame(frames, deps.Guilds, presence, divisionID, character)
 		if frame, ok := unions.SeedFrame(divisionID, character); ok {
@@ -712,16 +703,22 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.SealRates.Enabled() {
 		log.Infof("progression: beta seal rates ON (%s): degrees 1-8 Star/Moon/Sun x3, degree 9 Star x3 Moon x2 Sun x1, on top of rare (SoX) x%d", progression.EnvBetaSealRates, max(game.items.RareRate, 1))
 	}
+	// Port-only, not native, beta balance (owner 2026-10-20): the degree-9
+	// Sun class of the rare table widens by the rate. The event rule still
+	// wins over it - Sun then drops nothing, which must not be silent.
+	game.items.SunRate = progression.SunRateFromEnv()
+	if game.items.SunRate.Active() {
+		log.Infof("loot: degree-9 Seal of Sun drops at class mass x%d on levels 76-90 (%s=%d)", game.items.SunRate.MassMultiplier(), progression.EnvSunDropRate, game.items.SunRate.Rate())
+		if game.items.SunEventOnly.Enabled() {
+			log.Warnf("loot: %s is on while %s=%d: the event rule excludes every degree-9 Sun drop, so the rate widens a class that drops nothing; turn one of them off", progression.EnvSunEventOnly, progression.EnvSunDropRate, game.items.SunRate.Rate())
+		}
+	}
 	stats.Withdrawal = game.items.WithdrawalHooks()
 	stats.BaseStats = game.deps.PlayerBaseStats
 	stats.RecoverLevelVitals = func(character *enterworld.Character) error {
 		return game.items.RecoverLevelVitals(game.divisionID, character)
 	}
-	quests, err := quest.NewRuntime(
-		game.deps,
-		definitions,
-		stats.ExperienceUpdater(),
-	)
+	quests, err := quest.NewRuntime(game.deps, definitions, stats.ExperienceUpdater())
 	if err != nil {
 		return fmt.Errorf("quest runtime: %w", err)
 	}

@@ -101,6 +101,9 @@ type BetaRates struct {
 	// (progression.MaterialDrops).
 	MaterialDropsOff bool `json:"materialDropsOff,omitempty" doc:"Port-only beta balance: no monster drops an alchemy material (type 3/3/11/4, monster parts). Their chances in these tables then drop nothing."`
 	ShopOnlyDegree9  bool `json:"shopOnlyDegree9,omitempty" doc:"Port-only beta balance: degree-9 Lucky Powder (type 3/3/10/2), stat magic stones (3/3/11/1), attribute stones (3/3/11/2) and Luck, Steady, Astral, Athanasia and Repair stones (3/3/11/7), degree being the item's ItemClass, no longer drop; every town's grocer sells the Lucky Powder and Jangan's smith and grocer sell the stones (SRO_SHOP_EXTRA_GOODS). Their chances in these tables then drop nothing."`
+	// SunDropRate is the degree-9 Sun class rate (progression.SunRate);
+	// while it runs, Rare's named tables carry the widened Sun class.
+	SunDropRate int `json:"sunDropRate,omitempty" doc:"Port-only beta balance: the degree-9 Seal of Sun class of the rare table is 30 times this rate as wide on levels 76-90, so each Sun item's chance is that multiple of its native one; every other class is unchanged. Rare's named tables already carry the widened chances."`
 }
 
 /*
@@ -164,22 +167,28 @@ func BuildDropTables(monsters []Monster, itemID func(string) uint32, header Head
 			}
 		}
 	}
-	if beta := progression.BetaGrowthFromEnv(); beta.Enabled {
+	sunRate := progression.SunRateFromEnv()
+	if beta := progression.BetaGrowthFromEnv(); beta.Enabled || sunRate.Active() {
 		file.Beta = &BetaRates{DropRate: beta.DropRate, DropCap: beta.DropCap, GoldRate: beta.GoldRate, SkillExpRate: beta.SkillExpRate,
 			RareChance: action.RareEquipmentChance(beta.RareRate), Seals: progression.BetaSealRatesFromEnv().Table(),
 			ElixirDropsOff: progression.ElixirDropsFromEnv().Off(), ShopOnlyDegree9: progression.BetaShopOnlyDegree9FromEnv().Enabled(),
-			MaterialDropsOff: progression.MaterialDropsFromEnv().Off()}
-		if progression.BetaSealRatesFromEnv().Enabled() {
-			for _, m := range monsters {
-				level := uint8(m.Level)
-				if _, done := file.Beta.Rare[m.Table]; done || !loot.InSealBand(level) {
-					continue
-				}
-				if file.Beta.Rare == nil {
-					file.Beta.Rare = map[string][]DropChance{}
-				}
-				file.Beta.Rare[m.Table] = dropChances(loot.SealBandRareChances(level, m.Country), itemID)
+			MaterialDropsOff: progression.MaterialDropsFromEnv().Off(), SunDropRate: sunRate.Rate()}
+		sealBand := progression.BetaSealRatesFromEnv().Enabled()
+		for _, m := range monsters {
+			level := uint8(m.Level)
+			if _, done := file.Beta.Rare[m.Table]; done {
+				continue
 			}
+			// The published rare attempt is the one the roll composes:
+			// the seal band's row while the band runs, the Sun-widened
+			// class while the rate runs, both together on levels 86-90.
+			if !(sealBand && loot.InSealBand(level)) && !(sunRate.Active() && loot.SunScaleCovers(level)) {
+				continue
+			}
+			if file.Beta.Rare == nil {
+				file.Beta.Rare = map[string][]DropChance{}
+			}
+			file.Beta.Rare[m.Table] = dropChances(loot.ComposedRareChances(level, m.Country, sealBand, sunRate.MassMultiplier()), itemID)
 		}
 		// A malformed mix stops the GameWorld at boot, and sro-catalogue
 		// refuses it before building, so an error here is never published.

@@ -209,10 +209,13 @@ func (rt *Runtime) selectEquipmentGroup(level uint8, rare bool) (int, bool) {
 	if !ok {
 		return 0, false
 	}
-	if rare && rt.SealRates.Enabled() {
-		// Port-only, not native, beta balance (owner 2026-10-13): the
-		// degree-9 Star and Moon band runs to level 94 (loot/sealband.go).
-		return loot.SealBandRareGroup(level, roll)
+	if rare && (rt.SealRates.Enabled() || rt.SunRate.Active()) {
+		// Port-only, not native, beta balance: the degree-9 Star and Moon
+		// band runs to level 94 while the beta seal rates are on
+		// (loot/sealband.go, owner 2026-10-13), and the Sun class is wider
+		// while the Sun rate is (loot/sunscale.go, owner 2026-10-20); the
+		// two compose, band first. Neither, and the roll is the native one.
+		return loot.ComposedRareGroup(level, roll, rt.SealRates.Enabled(), rt.SunRate.MassMultiplier())
 	}
 	return loot.EquipmentGroup(level, rare, roll)
 }
