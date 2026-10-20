@@ -449,6 +449,14 @@ surfaceReference
 spawn
 ================
 		*/
+		owner( gid: number ) {
+			return cursors.get( gid )?.owner;
+		},
+		/*
+================
+spawn
+================
+		*/
 		spawn( entity: EntityState, now: number ) {
 			if ( !entity.spawnDestination ) return;
 			const from = { regionId: entity.regionId, x: entity.x, y: entity.y, z: entity.z, angle: entity.heading },

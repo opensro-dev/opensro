@@ -223,6 +223,11 @@ export interface CharacterActor {
 	/** A linked ride's rider: a pick on the ride answers with this gid
 	 * (World_PickEntityAtScreenPoint 692680 reads the ride's +0x2A4). */
 	readonly pickOwner?: number;
+	/** Port-only, not native: the dungeon navmesh room the actor's holder
+	 * stands in, copied from its entity at frame assembly. Publication
+	 * resolves the live entity first; the stamp is the fallback for actors
+	 * whose holder has left (sinking corpses, detached particle tails). */
+	readonly dungeonBlock?: number;
 	readonly bodyVolume?: { readonly index: number; readonly female: boolean; };
 	readonly opacity?: number;
 	/** A skill/orb effect entity: its owner's model fades do not reach it

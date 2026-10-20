@@ -172,6 +172,7 @@ export function createAnimationEmission( allocate: () => number ) {
 									ownerModel: actor.model,
 									actor: {
 										gid: allocate(),
+										dungeonBlock: actor.dungeonBlock,
 										model,
 										pose: actor.pose,
 										clip: "effect",

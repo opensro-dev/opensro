@@ -141,6 +141,12 @@ export const EXPERIMENTAL_TABS: readonly {
 				id: "experimental-enchant-sparks",
 				label: "Enchant sparks",
 				description: "Sparks on +8 and higher weapons and shields."
+			},
+			{
+				key: "dungeonCharacterPvs",
+				id: "experimental-dungeon-character-pvs",
+				label: "Dungeon character PVS",
+				description: "Hide characters in unseen dungeon rooms."
 			}
 		]
 	},

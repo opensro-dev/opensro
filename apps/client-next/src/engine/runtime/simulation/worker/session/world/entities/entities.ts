@@ -73,7 +73,11 @@ export function createEntities(
 	surface?: import("@/engine/contracts/navigation").SurfaceResolver,
 	lifecycle?: ( event: Extract<WorldEvent, { kind: "spawn" | "despawn"; }> ) => void,
 	nameContext?: ( entity?: EntityState ) => NameColorContext | undefined,
-	clip?: import("./motion/motion").MotionClip
+	clip?: import("./motion/motion").MotionClip,
+	block?: (
+		pose: import("@/engine/contracts/gameplay").Pose,
+		owner?: import("@/engine/foundation/navigation/dungeon-ownership").NavOwner
+	) => number | undefined
 ) {
 	// A 16 MiB admitted server bootstrap can require twice that in UTF-16
 	// accounting. Static catalogues publish once; event count stays bounded.
@@ -237,6 +241,7 @@ export function createEntities(
 	================
 	*/
 	function samplePose( entity: EntityState ) {
+		entity = withBlock( entity );
 		const event: WorldEvent = { kind: "state", entity },
 			pending = pendingPoses.get( entity.gid ),
 			size = cost( event );
@@ -256,6 +261,25 @@ export function createEntities(
 	}
 	/*
 	================
+	withBlock
+
+	Port-only, not native: the entity with the dungeon room its navmesh owner
+	stands in (navigation.block, the same lookup that gives the local player's
+	camera block). The entity itself when the room is unchanged, so an outdoor
+	or settled mover costs no new journal state. Every journal path that can
+	move an entity funnels through here - spawn and state events in apply,
+	and every motion pose in samplePose - so a pose a wire event rewrites
+	(a snap, a displacement, a cancelled cast) never trails its room.
+	================
+	*/
+	function withBlock( entity: EntityState ): EntityState {
+		if ( !block || !(entity.regionId & 0x8000) ) return entity;
+		const pose = { regionId: entity.regionId, x: entity.x, y: entity.y, z: entity.z, angle: entity.heading };
+		const dungeonBlock = block( pose, motion.owner( entity.gid ) );
+		return dungeonBlock === entity.dungeonBlock ? entity : Object.freeze( { ...entity, dungeonBlock } );
+	}
+	/*
+	================
 	groundedSpawn
 	================
 	*/
@@ -266,7 +290,7 @@ export function createEntities(
 		) return entity;
 		const pose = { regionId: entity.regionId, x: entity.x, y: entity.y, z: entity.z, angle: entity.heading };
 		const y = surface( pose, pose ).y;
-		return y === entity.y ? entity : Object.freeze( { ...entity, y } );
+		return withBlock( y === entity.y ? entity : Object.freeze( { ...entity, y } ) );
 	}
 	/*
 	================
@@ -295,6 +319,9 @@ export function createEntities(
 			const refresh = e.kind === "player" || e.kind === "local-player" || isNameColorGuard( e ) ||
 				e.kind === "cos" && e.pvpState !== undefined;
 			if ( c && refresh ) event = { ...event, entity: { ...e, nameColor: refreshNameColor( e, c ) } };
+			// groundedSpawn stamps only the kinds it grounds; stamp the rest
+			// here so every dungeon spawn carries its room.
+			event = { ...event, entity: withBlock( event.entity ) };
 			// CIGIDObject_RegisterGid (852CA0) only debug-asserts a gid it
 			// already holds, then g_sHashGID keeps the newer object: a second
 			// spawn replaces the first and never ends the session. The old
@@ -307,6 +334,7 @@ export function createEntities(
 			entities.set( event.entity.gid, event.entity );
 			motion.spawn( event.entity, receivedAt );
 		} else if ( event.kind === "state" ) {
+			event = { ...event, entity: withBlock( event.entity ) };
 			entities.set( event.entity.gid, event.entity );
 		} else if ( event.kind === "despawn" ) {
 			entities.delete( event.gid );

@@ -92,7 +92,8 @@ export async function captureEnvironment( { bundle, camera, features = false } )
 		smoothCamera: false,
 		enchantSparks: false,
 		sharedActorRoom: false,
-		vHidesCompanions: false
+		vHidesCompanions: false,
+		dungeonCharacterPvs: false
 	};
 	try {
 		const startupDeadline = performance.now() + 15000;

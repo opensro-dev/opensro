@@ -711,12 +711,24 @@ export function startRuntime(
 				);
 				const decal = presentation.gameplay()?.selectionDecal;
 				const followed = decal?.kind === "target" ? presentation.read( decal.gid ) : undefined;
+				// Port-only, not native (Experimental "Dungeon character PVS"): the
+				// ring belongs to the published body, so a target standing in a
+				// room this frame's room does not draw shows no ring either.
+				const followedMount = followed?.mountedOn !== undefined ?
+					presentation.read( followed.mountedOn ) :
+					undefined;
+				const followedRoom = followedMount?.dungeonBlock ?? followed?.dungeonBlock;
+				const followedHidden = followedRoom !== undefined &&
+					renderer.dungeonBlockHides?.(
+							followedRoom,
+							presentation.gameplay()?.navigationBlock
+						) === true;
 				renderer.setSelectionDecal(
 					frontendState.phase !== "world" || !decal ?
 						null :
 						decal.kind === "ground" ?
 						{ pose: decal.pose, slot: 0 } :
-						followed ?
+						followed && !followedHidden ?
 						{
 							pose: {
 								regionId: followed.regionId,

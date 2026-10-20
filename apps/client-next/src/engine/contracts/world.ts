@@ -75,6 +75,9 @@ export interface EntityState {
 	readonly refObjId: number;
 	readonly kind: string;
 	readonly regionId: number;
+	// Port-only, not native: the dungeon room the navmesh puts this entity in (navigation.block),
+	// read by the Experimental dungeon room culling. Absent outdoors or before ownership resolves.
+	readonly dungeonBlock?: number;
 	readonly x: number;
 	readonly y: number;
 	readonly z: number;

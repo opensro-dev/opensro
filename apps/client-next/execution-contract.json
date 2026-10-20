@@ -1397,7 +1397,8 @@
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
 			"functions": [
 				"surface",
-				"clip"
+				"clip",
+				"block"
 			]
 		},
 		{
@@ -1582,6 +1583,7 @@
 			"functions": [
 				"callback:createEntities:0",
 				"callback:createEntities:1",
+				"callback:createEntities:4",
 				"callback:recolor:0",
 				"callback:refreshHoverAttack:0",
 				"nameContext"
@@ -2872,6 +2874,13 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "renderer.dungeonBlockHides",
+			"function": "publishCharacters",
+			"kind": "callback",
+			"reason": "The parent renderer reports whether a dungeon block the active block cannot see holds the actor; it changes nothing."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
 			"expression": "resources.duration",
 			"function": "callback:step:2",
 			"kind": "callback",
@@ -3865,7 +3874,7 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "71515d5cd4cb7bacb9ae24a7f0d7299f760b5704c6113a791b34cf5cbbb57e0c",
+			"sourceSha256": "a42a59ff9044e2be6924ee54dee38072ee596c531c1c2cb017ee14addac69be4",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. A hidden frame renders only while a world entry awaits game-ready, under the same barrier: native keeps updating while inactive (A0F430 OnUpdate; A11650 skips drawing) and finishes loading in CPSMission_OnUpdate (728E10). A visible window that gets no RAF for STARVED_FRAME_MS runs the same delivery-paced maintenance frames. Device disposal cancels pending mapping. Startup also hands the asset owner the device texture features once (port-only texture variants), outside the frame.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

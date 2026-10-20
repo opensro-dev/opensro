@@ -199,6 +199,20 @@ export function createRenderer(
 		},
 		/*
 		================
+		dungeonBlockHides
+
+		Port-only, not native (Experimental "Dungeon character PVS", on by
+		default): a character whose navmesh room the local player's room does
+		not draw is neither drawn nor picked, as that room's scenery is not
+		drawn. `activeBlock` is the same frame's navigation block, so a
+		character and its room switch on the frame the viewer crosses.
+		================
+		*/
+		dungeonBlockHides( block, activeBlock ) {
+			return experimental.dungeonCharacterPvs && world.blockHides( block, activeBlock );
+		},
+		/*
+		================
 		experimentalVideo
 		================
 		*/

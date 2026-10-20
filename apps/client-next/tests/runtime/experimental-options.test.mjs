@@ -52,6 +52,8 @@ const OFF = Object.freeze( {
 	plusSevenNotices: true,
 	// Off by default: V hides only monsters and players, as the original does.
 	vHidesCompanions: false,
+	// On by default (port-only, not native): hides characters in dungeon blocks the active block does not draw.
+	dungeonCharacterPvs: true,
 	// On by default (owner 2026-10-15): labels and lists stay inside their window.
 	fitWindowLabels: true,
 	// On by default (owner 2026-10-15): a drop on a bag tab moves the item there.
@@ -150,7 +152,8 @@ test("every video stage defaults off and only an explicit true enables it", () =
 		enchantSparks: true,
 		// The shared actor room is on by default (owner 2026-10-14).
 		sharedActorRoom: true,
-		vHidesCompanions: false
+		vHidesCompanions: false,
+		dungeonCharacterPvs: true
 	} );
 	for (
 		const key of [
@@ -230,7 +233,7 @@ test("the window's tabs cover every preference once and Open returns to Image", 
 	// changing the indices used to reopen the existing tabs.
 	assert.deepEqual(
 		EXPERIMENTAL_TABS[2].rows.map( row => row.key ),
-		[ "sunShadow", "perPixelLighting", "enchantSparks" ]
+		[ "sunShadow", "perPixelLighting", "enchantSparks", "dungeonCharacterPvs" ]
 	);
 	for ( const tab of EXPERIMENTAL_TABS ) assert.ok( tab.rows.length <= 5, "At most five rows a tab" );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.key ) ).sort();

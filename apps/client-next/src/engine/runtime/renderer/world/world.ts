@@ -1186,6 +1186,23 @@ export function createWorldRenderer(
 		},
 		/*
 		================
+		blockHides
+
+		True when the dungeon room `block` is not among those the room
+		`activeBlock` draws (the same dungeonVisibility list that culls the
+		scenery). The caller names the active room: the character presenter
+		passes the same frame's navigation block, so a character and its
+		room's scenery switch on the frame the viewer crosses. With no
+		active room (outdoors, or navigation not yet admitted) nothing hides.
+		================
+		*/
+		blockHides( block: number, activeBlock?: number ) {
+			if ( !current?.dungeonVisibility || activeBlock === undefined ) return false;
+			const visible = current.dungeonVisibility[activeBlock];
+			return visible !== undefined && !visible.includes( block );
+		},
+		/*
+		================
 		pickGround
 		================
 		*/

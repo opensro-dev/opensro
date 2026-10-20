@@ -794,6 +794,18 @@ export function createCharacterPresentation(
 			{ entities, next, local, gameplay, seconds, cameraPitch, concealmentSkills, entityLod },
 			output
 		);
+		// Port-only, not native (Experimental "Dungeon character PVS"): copy
+		// each live actor's dungeon room from its entity before the fading
+		// and particle phases copy actors around, so a corpse or a detached
+		// particle tail minted below carries the room it plays out in.
+		// Publication resolves the live entity first; the copy is the
+		// fallback once the holder has left the entity map.
+		for ( const actor of next.values() ) {
+			const subject = entitiesByGid.get( actor.attachment?.gid ?? actor.pickOwner ?? actor.gid );
+			if ( subject && subject.dungeonBlock !== actor.dungeonBlock ) {
+				next.set( actor.gid, { ...actor, dungeonBlock: subject.dungeonBlock } );
+			}
+		}
 		presentDisappearing(
 			{ disappearing, seconds, next, animationDeltaMs, resources, animationHolders, particleHolders }
 		);
@@ -810,7 +822,7 @@ export function createCharacterPresentation(
 			}
 		);
 		publishCharacters(
-			{ local, gameplay, next, seconds, blindHeld },
+			{ local, gameplay, next, entitiesByGid, seconds, blindHeld },
 			output,
 			published,
 			{ renderer, resources, mallPreview }

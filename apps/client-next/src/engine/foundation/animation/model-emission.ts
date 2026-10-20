@@ -126,6 +126,7 @@ export function createModelEmission( allocate: () => number ) {
 					if ( row.started[i] === null || seconds < row.started[i]! ) row.started[i] = seconds;
 					out.push( {
 						gid: row.ids[i]!,
+						dungeonBlock: actor.dungeonBlock,
 						deferredParticle: {
 							offset: particle.deferred ?? 0,
 							lodHidden: particle.source !== "equipment" && !!actor.modelAnimation?.selected?.override ||

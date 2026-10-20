@@ -1058,6 +1058,7 @@ groundSkillGoal
 		},
 		pick: navigation.pick,
 		surface: navigation.surface,
+		entityBlock: navigation.block,
 		clipMovement: navigation.clip,
 		/*
 ================
