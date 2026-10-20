@@ -25,6 +25,11 @@ export const OP_PARAM_JOB_END = 0x36d4;
 // TID 3/3/3/10 in the itemdata type word, the bits 0xFFFC keeps:
 // (3 << 2) | (3 << 5) | (3 << 7) | (10 << 11).
 const PARAM_ITEM_TYPE = 0x51ec;
+// TID 3/3/13/4 (Gold/Silver Time tickets) and TID 3/3/13/5 (Skill Time tickets),
+// carried on the 0x3602/0x32AF/0x36D4 ParamJob lane by the server
+// (apps/server/internal/game/action/premiumticket.go, compositeitem.go).
+const GOLD_TIME_ITEM_TYPE = 0x26ec;
+const SKILL_TIME_ITEM_TYPE = 0x2eec;
 const TYPE_MASK = 0xfffc;
 
 /*
@@ -66,7 +71,8 @@ export function paramJobReference( row: {
 	readonly icon?: string;
 	readonly name?: string;
 } ): ParamJobReference | null {
-	if ( (row.typeFlags & TYPE_MASK) !== PARAM_ITEM_TYPE ) return null;
+	const type = row.typeFlags & TYPE_MASK;
+	if ( type !== PARAM_ITEM_TYPE && type !== GOLD_TIME_ITEM_TYPE && type !== SKILL_TIME_ITEM_TYPE ) return null;
 	const duration = row.nativeFields?.itemParam1_29c;
 	if ( duration === undefined ) return null;
 	if ( !Number.isInteger( duration ) || duration <= 0 || duration > 0xffffffff ) {

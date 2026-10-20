@@ -13,6 +13,9 @@ const { createParamJobs, paramJobFraction } = await import( "../../src/engine/fo
 
 // TID 3/3/3/10 with the low class bits set the way itemdata words carry them.
 const PARAM_ITEM = 0x51ec | 1;
+// TID 3/3/13/4 (Gold/Silver Time tickets) and TID 3/3/13/5 (Skill Time tickets).
+const GOLD_TIME_TICKET = 0x26ec | 1;
+const SKILL_TIME_TICKET = 0x2eec | 1;
 
 /*
 ================
@@ -35,6 +38,32 @@ test("a start row joins the board once its internal item is known", () => {
 	const [row] = jobs.state();
 	assert.equal( row.reference.durationSec, 3600 );
 	assert.equal( paramJobFraction( row, row.reference, 1000 + 1800_000 ), 0.5 );
+});
+
+test("Gold Time (TID 3/3/13/4) and Skill Time (TID 3/3/13/5) tickets join the board", () => {
+	const jobs = createParamJobs();
+	jobs.reference( {
+		refObjId: 3884,
+		typeFlags: GOLD_TIME_TICKET,
+		nativeFields: { itemParam1_29c: 2419200 },
+		icon: "item/etc/mall_optlevel_upgrade_scroll_1.ddj",
+		name: "Gold Time Service Ticket (4 weeks)"
+	} );
+	jobs.reference( {
+		refObjId: 23268,
+		typeFlags: SKILL_TIME_TICKET,
+		nativeFields: { itemParam1_29c: 86400 },
+		icon: "item/etc/mall_skill_time.ddj",
+		name: "Skill Time Ticket (1 day)"
+	} );
+	assert.equal( jobs.receive( frame( 0x3602, 9, 2419200, 3884 ), 1000 ), true );
+	assert.equal( jobs.receive( frame( 0x32af, 9, 43200, 23268 ), 1000 ), true );
+	const rows = jobs.state();
+	assert.equal( rows.length, 2 );
+	assert.equal( rows[0].itemRefObjId, 3884 );
+	assert.equal( rows[0].reference.durationSec, 2419200 );
+	assert.equal( rows[1].itemRefObjId, 23268 );
+	assert.equal( paramJobFraction( rows[1], rows[1].reference, 1000 ), 0.5 );
 });
 
 test("resume replaces, end removes, and other items are not param jobs", () => {
