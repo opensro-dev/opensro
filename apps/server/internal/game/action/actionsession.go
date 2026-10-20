@@ -185,9 +185,12 @@ func (rt *Runtime) queuedSkill(snapshot *enterworld.Character, payload []byte) (
 ================
 graceReadyAtMs
 
-When a skill press that is not ready yet will be (skillReadyAtMs), if that
-is within cooldownGraceMs; zero for a ready skill, one further off, an
-instant imbue (it never queues) and anything that is not a skill press.
+When a skill press that is not ready yet will be (skillReadyAtMs), if it
+may queue: within cooldownGraceMs of readiness, or anywhere inside the
+common action-recovery window the previous cast left (the release gate
+then holds the press to the later of the two). Zero for a ready skill,
+one further off, an instant imbue (it never queues) and anything that is
+not a skill press.
 ================
 */
 func (rt *Runtime) graceReadyAtMs(snapshot *enterworld.Character, payload []byte) int64 {
@@ -197,10 +200,23 @@ func (rt *Runtime) graceReadyAtMs(snapshot *enterworld.Character, payload []byte
 	}
 	now := rt.Now().UnixMilli()
 	ready := skillReadyAtMs(snapshot, skill)
-	if ready <= now || ready-now > cooldownGraceMs {
+	if ready <= now {
 		return 0
 	}
-	return ready
+	if ready-now <= cooldownGraceMs {
+		return ready
+	}
+	// The action-recovery tail outlasts the grace window by design (the
+	// cast closes at casting end; the recovery runs on to casting plus
+	// duration). A press inside it queues for the whole window: refusing
+	// here, or releasing at cast close, is the 0x3005 the queued buff
+	// used to die with. A skill whose own cooldown ends past the
+	// recovery keeps the plain grace rule above.
+	if skillActionRecoveryApplies(skill) && now < snapshot.SkillActionRecoveryUntilMs &&
+		ready <= snapshot.SkillActionRecoveryUntilMs {
+		return ready
+	}
+	return 0
 }
 
 /*
@@ -511,7 +527,21 @@ func (rt *Runtime) advanceQueuedActionSession(session actionSessionPublication, 
 		return simulation.DivisionFrames{}, false
 	}
 	session = latest.(actionSessionPublication)
-	if rt.hasOpenSkillCast(session.division, session.name) || nowMs < session.readyAtMs {
+	// Release waits for the later of the queued press's own readiness
+	// and the caster's live action-recovery end: the recovery is read
+	// fresh (a cast that opened after the press was queued may have
+	// extended it), and it gates only a recovery-applicable skill
+	// press, as 64C1A0 gates skills. Releasing at cast close alone
+	// replayed the press into the recovery refusal (0x3005).
+	readyAtMs := session.readyAtMs
+	if session.pending != nil && session.pending.Deferred != nil {
+		if character := rt.findCharacter(session.division, session.name); character != nil {
+			if skill, ok := rt.queuedSkill(character, session.pending.Deferred.payload); ok && skillActionRecoveryApplies(skill) {
+				readyAtMs = max(readyAtMs, character.SkillActionRecoveryUntilMs)
+			}
+		}
+	}
+	if rt.hasOpenSkillCast(session.division, session.name) || nowMs < readyAtMs {
 		return simulation.DivisionFrames{}, false
 	}
 	if !session.queued {
