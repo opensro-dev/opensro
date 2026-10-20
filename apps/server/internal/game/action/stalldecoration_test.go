@@ -22,8 +22,11 @@ import (
 TestStallDecorationIsAppliedAndShown
 
 49B9F0 case 3: using a booth item consumes it and keeps its reference as
-the character's decoration; the next stall opens with it (0x30DF), a
-running premium BFI1 booth wins while it lasts, and none is the default.
+the character's decoration; the next stall opens with it (0x30DF). The
+purchased decoration wins over a running premium BFI1 booth (native
+4F0F00 reads the persistent decoration unless a per-session 0x7160
+override is set); the premium booth shows only when nothing was
+purchased, and its expiry falls back to the default stall.
 ================
 */
 func TestStallDecorationIsAppliedAndShown(t *testing.T) {
@@ -51,12 +54,20 @@ func TestStallDecorationIsAppliedAndShown(t *testing.T) {
 	}
 	now := rt.Now().UnixMilli()
 	owner.CompositeJobs = []domain.CompositeJob{{Kind: domain.CompositeBuffItem, Target: 3850, EndUnixMs: now + 1000}}
+	if got := opened(); got != booth.RefObjID {
+		t.Fatalf("a running premium booth shadows the purchased decoration: %d", got)
+	}
+	owner.StallDecoration = 0
 	if got := opened(); got != 3850 {
-		t.Fatalf("a running premium booth shows %d", got)
+		t.Fatalf("the premium booth shows %d with no purchased decoration", got)
 	}
 	owner.CompositeJobs[0].EndUnixMs = now
-	if got := opened(); got != booth.RefObjID {
+	if got := opened(); got != 0 {
 		t.Fatalf("an ended premium booth still shows: %d", got)
+	}
+	owner.StallDecoration = booth.RefObjID
+	if got := opened(); got != booth.RefObjID {
+		t.Fatalf("the purchased decoration after the premium expiry shows %d", got)
 	}
 	if !bytes.Equal(wire.EncodeStallOpened(7, "A", 3848)[len(wire.EncodeStallOpened(7, "A", 3848))-4:], []byte{0x08, 0x0f, 0, 0}) {
 		t.Fatal("0x30DF does not end with the decoration")
