@@ -14,6 +14,10 @@ import type { EnvironmentTrack, WorldEnvironment, WorldCamera } from "@/engine/c
 // Port-only, not native: Sun direction stage: the sun height (sine of its arc angle) below which
 // the light blends toward the zenith so the night flip stays continuous.
 const SUN_TWILIGHT_HEIGHT = 0.2;
+// CRTDunBlock_Constructor (0x00AD62D0 at 0x00AD64F4): default room ambient
+// D3DCOLOR *(pRoom + 0x6c) = 0xFF1E1E1E before CRTDunBlock_ReadFromArchive
+// (0x00AD8090 at 0x00AD8181) overwrites it from the .dof block record.
+export const DEFAULT_DUNGEON_AMBIENT_COLOR = 0xff1e1e1e;
 
 // Retail sub_4dc920/sub_4dcab0: clamped endpoints, linear interpolation,
 // and a lower-key step for spans below the native epsilon.
@@ -192,7 +196,8 @@ export function worldEnvironment(
 	seconds: number,
 	clock: { timeOfDay: number; lunarDay: number; } | null = null,
 	weather?: import("@/engine/foundation/gameplay/weather").WeatherOptions | null,
-	state?: Float32Array
+	state?: Float32Array,
+	dungeonAmbient?: number
 ): Float32Array {
 	const time = environmentTime( environment, seconds, clock ),
 		values = state ?? environmentTarget( environment, time, weather );
@@ -202,6 +207,28 @@ export function worldEnvironment(
 	const fog = [ ...color( 27 ) ].map( v => Math.fround( Math.max( 0, Math.min( 1, v ) ) ) );
 	const packed = ( v: number ) => Math.trunc( v * 255 ) / 255;
 	const terrainRadius = Math.trunc( (Math.fround( far ) + 1280) / 320 );
+	// SWorld_RenderDungeonPass (0x008B17E0 at 0x008B1857..0x008B1919) overrides
+	// Light0 via CObjRendererVS_ApplyLight0 (0x00A5A710): Diffuse is zeroed
+	// (fldz at 0x008B1857 -> g_vLight0Diffuse 0x00F0FF28) and Ambient unpacks
+	// CRTDunBlock_GetAmbientColor (0x00ACFB90, *(pRoom + 0x6c)) as R/G/B / 255.0
+	// into g_vLight0Ambient (0x00F0FF38). Room block compound objects set flag 4
+	// (CRTDunBlock_LoadResObject 0x00AD6BD7 -> 0x00A8F910), so
+	// CObjRendererVS_RenderObjectBatch (0x00A5EE80 at 0x00A5EFC6) skips
+	// CObjRendererVS_ApplyObjectLight (0x00A59B50) and shades room geometry with
+	// c10 = 0.6 * g_vLight0Ambient and c11 = 0. Per-object Light1 point lights
+	// (CRTDunBlock_FindNearestPointLight 0x00AD3C30 / CDungeonObj+0xd8 via
+	// RenderLight_ApplyLight1 0x00A5A7F0) belong to the separate object-light
+	// channel (NATIVE_CHARACTER_LIGHTING).
+	const diffuse = dungeonAmbient !== undefined ?
+		[ 0, 0, 0 ] :
+		[ ...color( 6 ) ].map( v => v * .6 );
+	const ambient = dungeonAmbient !== undefined ?
+		[
+			Math.fround( ((dungeonAmbient >>> 16) & 255) / 255 ),
+			Math.fround( ((dungeonAmbient >>> 8) & 255) / 255 ),
+			Math.fround( (dungeonAmbient & 255) / 255 )
+		] :
+		[ ...color( 9 ) ];
 	// The lighting direction (Experimental > Video > Sun direction): the same
 	// X-Y arc the sky's sun quad rides (skyTime.x). Below the horizon the
 	// anti-solar point takes over. This artistic night light does not follow
@@ -222,9 +249,9 @@ export function worldEnvironment(
 		values[31]! * 2,
 		...color( 18 ),
 		0,
-		...[ ...color( 6 ) ].map( v => v * .6 ),
+		...diffuse,
 		0,
-		...color( 9 ),
+		...ambient,
 		0,
 		...f,
 		0,

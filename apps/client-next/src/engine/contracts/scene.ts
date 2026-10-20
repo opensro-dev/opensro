@@ -167,6 +167,7 @@ export interface WorldScene {
 	readonly scenery?: readonly import("./scenery").SceneryEmitter[];
 	readonly soundTerrain?: readonly import("@/engine/foundation/audio/terrain-sounds").SoundTerrain[];
 	readonly dungeonVisibility?: readonly (readonly number[])[];
+	readonly dungeonAmbient?: readonly number[];
 	readonly waterBump?: string;
 	readonly flareTextures?: readonly string[];
 	readonly starRandomState?: number;

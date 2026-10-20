@@ -91,6 +91,7 @@ export interface Bundle {
 	dungeonBlocks?: {
 		index: number;
 		visibleBlocks: number[];
+		ambientColor?: number;
 		fog: NonNullable<import("@/engine/contracts/scene").WorldMaterial["fog"]>;
 	}[];
 	dungeonWater?: import("@/engine/foundation/rendering/dungeon-water").DungeonWaterSurface[];

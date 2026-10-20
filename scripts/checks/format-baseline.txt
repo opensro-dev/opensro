@@ -381,7 +381,6 @@ scripts/build/data/buildQuestDataAsset.mjs
 scripts/build/data/buildSiegeFortressDataAsset.mjs
 scripts/build/data/buildSkillMasteryDataAsset.mjs
 scripts/build/server/serverGameDataArchive.mjs
-scripts/build/world/assets/buildDungeonResources.mjs
 scripts/build/world/assets/dungeonWater.mjs
 scripts/build/world/assets/environment/environmentTracks.mjs
 scripts/build/world/assets/environment/readEnvironmentIfo.mjs

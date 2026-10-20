@@ -63,7 +63,10 @@ function bundle() {
 		terrain: { blocks: [] },
 		terrainTextures: { tileCatalog: { referencedTiles: [] } },
 		objects: { placements: [], resources: { bsr: [], meshes: [], materialSets: [] } },
-		dungeonBlocks: [ { index: 0, visibleBlocks: [] }, { index: 1, visibleBlocks: [] } ],
+		dungeonBlocks: [
+			{ index: 0, visibleBlocks: [], ambientColor: 0xff674961 },
+			{ index: 1, visibleBlocks: [], ambientColor: 0xff476fa5 }
+		],
 		water: { normalFramePublicPaths: Array.from( { length: 30 }, ( _, i ) => "/assets/water/" + i ) },
 		dungeonWater: [ {
 			blockIndex: 0,
@@ -178,10 +181,22 @@ test("dungeon water executes through scene admission and block selection, with p
 	for ( let i = 0; i < 29; i++ ) world.texture( "/assets/water/" + i, { width: 1, height: 1, close() {} } );
 	assert.equal( world.prepare( geometry, images, 1, 0 ).draws.length, 0 );
 	world.texture( "/assets/water/29", { width: 1, height: 1, close() {} } );
-	assert.equal( world.prepare( geometry, images, 1, .1 ).draws.length, 1 );
+	const room0 = world.prepare( geometry, images, 1, .1 );
+	assert.equal( room0.draws.length, 1 );
+	assert.deepEqual( [ ...room0.environment.slice( 8, 12 ) ], [ 0, 0, 0, 0 ] );
+	assert.deepEqual(
+		[ ...room0.environment.slice( 12, 16 ) ],
+		[ Math.fround( 0x67 / 255 ), Math.fround( 0x49 / 255 ), Math.fround( 0x61 / 255 ), 0 ]
+	);
 	assert.equal( uploads[0].g.material.fog.nearPlane, 50 );
 	world.camera( { ...camera, dungeonBlock: 1 } );
-	assert.equal( world.prepare( geometry, images, 1, .2 ).draws.length, 0 );
+	const room1 = world.prepare( geometry, images, 1, .2 );
+	assert.equal( room1.draws.length, 0 );
+	assert.deepEqual( [ ...room1.environment.slice( 8, 12 ) ], [ 0, 0, 0, 0 ] );
+	assert.deepEqual(
+		[ ...room1.environment.slice( 12, 16 ) ],
+		[ Math.fround( 0x47 / 255 ), Math.fround( 0x6f / 255 ), Math.fround( 0xa5 / 255 ), 0 ]
+	);
 	world.camera( camera );
 	assert.equal( world.prepare( geometry, images, 1, .3 ).draws.length, 1 );
 	assert.equal( arrays, 1 );

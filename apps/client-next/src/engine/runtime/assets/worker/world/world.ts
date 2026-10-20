@@ -27,6 +27,7 @@ const FLAT_BLOCK_NORMALS = new Float32Array( 17 * 17 * 3 );
 const SPECIAL_WATER_ALPHA = 0xc8 / 255;
 for ( let i = 1; i < FLAT_BLOCK_NORMALS.length; i += 3 ) FLAT_BLOCK_NORMALS[i] = 1;
 import { dungeonWaterGroup } from "@/engine/foundation/rendering/dungeon-water";
+import { DEFAULT_DUNGEON_AMBIENT_COLOR } from "@/engine/foundation/rendering/world-environment";
 import { createCharacterPose } from "@/engine/foundation/animation/animation-pose";
 import { characterRadius } from "@/engine/foundation/animation/character-bounds";
 import { skyGroups } from "@/engine/foundation/rendering/sky-geometry";
@@ -130,7 +131,10 @@ reserve
 				b.dungeonBlocks &&
 				(!(region & 0x8000) || !Array.isArray( b.dungeonBlocks ) || b.dungeonBlocks.length > 4096 ||
 					b.dungeonBlocks.some( ( block, index ) =>
-						block.index !== index || !Array.isArray( block.visibleBlocks )
+						block.index !== index || !Array.isArray( block.visibleBlocks ) ||
+						(block.ambientColor !== undefined &&
+							(!Number.isInteger( block.ambientColor ) || block.ambientColor < 0 ||
+								block.ambientColor > 0xffffffff))
 					))
 			) throw Error( "Invalid dungeon block publication" );
 			const refs = new Map( b.objects.resources.bsr.map( row => [ row.objectId, row ] ) ),
@@ -900,6 +904,9 @@ noteMaterial
 				scenery,
 				soundTerrain: objectPart ? decodeSoundTerrain( b ) : undefined,
 				dungeonVisibility: b.dungeonBlocks?.map( block => [ block.index, ...block.visibleBlocks ] ),
+				dungeonAmbient: b.dungeonBlocks?.map(
+					block => block.ambientColor ?? DEFAULT_DUNGEON_AMBIENT_COLOR
+				),
 				waterBump: b.water?.reflectionBumpPublicPath,
 				flareTextures: region & 0x8000 || !objectPart ? undefined : b.sky?.flareTexturePublicPaths,
 				starRandomState: objectPart ? b.sky?.starPrimitive?.nativeRand?.stateAfterConstruction : undefined,

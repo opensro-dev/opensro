@@ -16,7 +16,13 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { root } from "../../tools/project.mjs";
 
-const { sampleEnvironment, worldEnvironment, environmentTarget, advanceEnvironment } = await import(
+const {
+	DEFAULT_DUNGEON_AMBIENT_COLOR,
+	sampleEnvironment,
+	worldEnvironment,
+	environmentTarget,
+	advanceEnvironment
+} = await import(
 	sourceFileUrl( path.join( root, "src/engine/foundation/rendering/world-environment.ts" ) ).href
 );
 
@@ -154,4 +160,21 @@ test("scenery sight range scales native fog tracks and event weather before smoo
 		assert.equal( rain[33], range );
 		assert.equal( rain[32], Math.fround( Math.fround( -.2 ) * range ) );
 	}
+});
+
+test("dungeon Light0 zeros directional diffuse and unpacks room D3DCOLOR ambient", () => {
+	const camera = { eye: [ 0, 0, 0 ], target: [ 0, 0, 1 ], fov: 1, near: 1, far: 3500 };
+	assert.equal( DEFAULT_DUNGEON_AMBIENT_COLOR, 0xff1e1e1e );
+	const fallback = worldEnvironment( undefined, camera, 1, 0, null, null, undefined, DEFAULT_DUNGEON_AMBIENT_COLOR );
+	assert.deepEqual( [ ...fallback.slice( 8, 12 ) ], [ 0, 0, 0, 0 ] );
+	assert.deepEqual(
+		[ ...fallback.slice( 12, 16 ) ],
+		[ Math.fround( 30 / 255 ), Math.fround( 30 / 255 ), Math.fround( 30 / 255 ), 0 ]
+	);
+	const room = worldEnvironment( undefined, camera, 1, 0, null, null, undefined, 0xff674961 );
+	assert.deepEqual( [ ...room.slice( 8, 12 ) ], [ 0, 0, 0, 0 ] );
+	assert.deepEqual(
+		[ ...room.slice( 12, 16 ) ],
+		[ Math.fround( 0x67 / 255 ), Math.fround( 0x49 / 255 ), Math.fround( 0x61 / 255 ), 0 ]
+	);
 });

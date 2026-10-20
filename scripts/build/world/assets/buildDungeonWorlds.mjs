@@ -80,7 +80,12 @@ export async function buildDungeonWorlds( manifest, options = {} ) {
 			terrain: { blocks: [] },
 			terrainTextures: { tileCatalog: { referencedTiles: [] } },
 			water,
-			dungeonBlocks: blocks.map( ( { index, visibleBlocks, fog } ) => ({ index, visibleBlocks, fog }) ),
+			dungeonBlocks: blocks.map( ( { index, visibleBlocks, ambientColor, fog } ) => ({
+				index,
+				visibleBlocks,
+				ambientColor,
+				fog
+			}) ),
 			dungeonWater: resource.waterSurfaces,
 			objects: {
 				resources: objects,

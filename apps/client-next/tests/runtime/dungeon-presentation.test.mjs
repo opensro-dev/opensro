@@ -128,6 +128,7 @@ test("all twelve well-formed retail DOFs retain exact water ownership, transform
 					name: block.name,
 					position: block.position,
 					yaw: block.yaw,
+					ambientColor: block.unk1,
 					fog: block.fog,
 					waterObjects: expected,
 					connectedBlocks: block.connectedBlocks,
@@ -288,6 +289,10 @@ for ( const regionId of [ 32769, 32770, 32771, 32772, 32773, 32774, 32775, 32777
 			);
 			assert.ok( decoded.groups.length > 0, `region ${regionId} has no scene groups` );
 			assert.ok( (decoded.dungeonVisibility?.length ?? 0) > 0, `region ${regionId} has no dungeonVisibility` );
+			assert.deepEqual(
+				decoded.dungeonAmbient,
+				bundle.dungeonBlocks.map( block => block.ambientColor )
+			);
 
 			// Verify 0x8000-bit world streaming requests only the single dungeon bundle per floor
 			// (never a 3x3 outdoor neighborhood) and admits each floor cleanly.

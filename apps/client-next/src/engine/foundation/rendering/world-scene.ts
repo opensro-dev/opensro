@@ -63,6 +63,11 @@ export function worldSceneBytes( scene: WorldScene | null ): number {
 				row.some( i => !Number.isInteger( i ) || i < 0 || i >= scene.dungeonVisibility!.length )
 			))
 	) throw Error( "Invalid dungeon visibility" );
+	if (
+		scene.dungeonAmbient &&
+		(!scene.dungeonVisibility || scene.dungeonAmbient.length !== scene.dungeonVisibility.length ||
+			scene.dungeonAmbient.some( c => !Number.isInteger( c ) || c < 0 || c > 0xffffffff ))
+	) throw Error( "Invalid dungeon ambient" );
 	if ( scene.scenery ) {
 		if ( !Array.isArray( scene.scenery ) || scene.scenery.length > 8192 ) {
 			throw Error( "Scenery emitter budget exceeded" );
@@ -87,6 +92,7 @@ export function worldSceneBytes( scene: WorldScene | null ): number {
 		0
 	) + (scene.flareTextures ?? []).reduce( ( sum, p ) => sum + p.length * 2, 0 );
 	bytes += (scene.dungeonVisibility ?? []).reduce( ( n, row ) => n + row.length * 8 + 32, 0 );
+	bytes += (scene.dungeonAmbient?.length ?? 0) * 8;
 	if ( Object.keys( scene.models ?? {} ).length > 64 ) throw new Error( "World animated model budget exceeded" );
 	for ( const model of Object.values( scene.models ?? {} ) ) {
 		bytes += characterBytes( model, [] ) + characterPoseBytes( model );
@@ -484,6 +490,7 @@ export function prepareWorldScene( scene: WorldScene ): PreparedWorldScene {
 		scene: {
 			...scene,
 			dungeonVisibility: scene.dungeonVisibility?.map( row => row.slice() ),
+			dungeonAmbient: scene.dungeonAmbient?.slice(),
 			groups: packGroupStreams( groups )
 		},
 		bytes: bytes - dropped,
