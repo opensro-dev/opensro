@@ -131,11 +131,12 @@ geometry; one elapsed candidate enters geometry, never the full destination chor
 		const dz = destination.z - pose.z + ((destination.regionId >>> 8) - (pose.regionId >>> 8)) * REGION_SIZE;
 		const remaining = poseDistance( pose, segment.to );
 		segment.vector ??= remaining ? clientWalkingDirection( [ dx, dz ] ) : [ 0, 0 ];
+		const forward = dx * segment.vector[0] + dz * segment.vector[1];
 		const step = clientWalkingStep(
 			segment.speed ?? 0,
 			elapsed / 1000,
 			segment.vector,
-			segment.direction === undefined ? clientPlanarDistance( [ dx, dz ] ) : Infinity
+			segment.direction === undefined ? (forward <= 0 ? 0 : clientPlanarDistance( [ dx, dz ] )) : Infinity
 		);
 		const next = interpolateMovement( pose, {
 			...pose,
@@ -178,9 +179,15 @@ advance
 			sourceOwner: query.sourceOwner,
 			clip
 		} );
+		const afterDx = segment.to.x - accepted.x +
+			((segment.to.regionId & 255) - (accepted.regionId & 255)) * REGION_SIZE;
+		const afterDz = segment.to.z - accepted.z +
+			((segment.to.regionId >>> 8) - (accepted.regionId >>> 8)) * REGION_SIZE;
+		const reachedPlane = segment.direction === undefined && segment.vector !== undefined &&
+			afterDx * segment.vector[0] + afterDz * segment.vector[1] <= 0;
 		segment.blocked = !!(query.status & 1);
 		segment.previous = accepted;
-		segment.arrived = next.arrived;
+		segment.arrived = next.arrived || reachedPlane;
 		const cursor = cursors.get( gid ) ?? {};
 		cursor.owner = query.owner;
 		cursors.set( gid, cursor );

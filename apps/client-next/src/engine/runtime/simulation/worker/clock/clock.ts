@@ -19,7 +19,11 @@ createClock
 ================
 */
 export function createClock( step: ( skippedMs: number ) => void, fail: ( error: unknown ) => void ): Clock {
-	let timer: ReturnType<typeof setTimeout> | undefined, disposed = false, started = false, next = 0;
+	let timer: ReturnType<typeof setTimeout> | undefined,
+		disposed = false,
+		started = false,
+		next = 0,
+		budgetYielded = false;
 	let sample: ClockSample = { wakes: 0, steps: 0, stepsInWake: 0, wakeMs: 0, maxStepMs: 0, debtMs: 0, originMs: 0 };
 	// Simulation time t steps at deadline origin + t (see ClockSample.originMs).
 	let originMs = 0;
@@ -42,9 +46,22 @@ export function createClock( step: ( skippedMs: number ) => void, fail: ( error:
 			const skippedSteps = Math.max( 0, Math.floor( (now - next) / SIMULATION_STEP_MS ) + 1 - 4 );
 			skippedMs = skippedSteps * SIMULATION_STEP_MS;
 			next += skippedMs;
+		} else if (
+			budgetYielded &&
+			sample.debtMs > 0 &&
+			(now - next > sample.debtMs || sample.debtMs >= 4 * SIMULATION_STEP_MS)
+		) {
+			// When the previous wake exhausted its 4 ms step budget and debt
+			// kept growing (or already spans a full four-step catch-up window),
+			// executing catch-up steps cannot drain the backlog; rebase the
+			// schedule to current wall time so simulation time does not drift
+			// behind server time during live walks.
+			const skippedSteps = Math.max( 0, Math.floor( (now - next) / SIMULATION_STEP_MS ) );
+			skippedMs = skippedSteps * SIMULATION_STEP_MS;
+			next += skippedMs;
 		}
 		try {
-			let count = 0, end = now, maxStepMs = 0;
+			let count = 0, end = now, maxStepMs = 0, yielded = false;
 			while ( now >= next && count < 4 ) {
 				const start = performance.now();
 				step( skippedMs );
@@ -53,8 +70,13 @@ export function createClock( step: ( skippedMs: number ) => void, fail: ( error:
 				maxStepMs = Math.max( maxStepMs, end - start );
 				next += SIMULATION_STEP_MS;
 				count++;
-				if ( disposed || end - now >= 4 ) break;
+				if ( disposed ) break;
+				if ( end - now >= 4 ) {
+					yielded = true;
+					break;
+				}
 			}
+			budgetYielded = yielded;
 			sample = {
 				wakes: sample.wakes + 1,
 				steps: sample.steps + count,
@@ -86,6 +108,23 @@ export function createClock( step: ( skippedMs: number ) => void, fail: ( error:
 			originMs = performance.timeOrigin + next;
 			sample = { ...sample, originMs };
 			timer = setTimeout( wake, SIMULATION_STEP_MS );
+		},
+		/*
+		================
+		reanchor
+		================
+		*/
+		reanchor() {
+			if ( !started || disposed ) {
+				return 0;
+			}
+			const now = performance.now();
+			const skippedSteps = Math.max( 0, Math.floor( (now - next) / SIMULATION_STEP_MS ) );
+			const skippedMs = skippedSteps * SIMULATION_STEP_MS;
+			next += skippedMs;
+			budgetYielded = false;
+			sample = { ...sample, debtMs: Math.max( 0, now - next ) };
+			return skippedMs;
 		},
 		/*
 		================

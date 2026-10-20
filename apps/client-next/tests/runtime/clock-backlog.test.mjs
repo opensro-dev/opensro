@@ -172,3 +172,39 @@ test("the sample's origin maps every step's simulation time to its deadline", t 
 	assert.ok( deadlines.at( -1 ) + origin <= 4000 && deadlines.at( -1 ) + origin > 4000 - 4 * 16 );
 	clock.dispose();
 });
+
+test("reanchor advances overdue ticks at admission barriers and growing budget debt rebases to wall time", t => {
+	let now = 0, callback, steps = 0, simulationMs = 0;
+	t.mock.method( performance, "now", () => now );
+	t.mock.method( globalThis, "setTimeout", fn => {
+		callback = fn;
+		return 1;
+	} );
+	t.mock.method( globalThis, "clearTimeout", () => {} );
+	const clock = createClock( skippedMs => {
+		simulationMs += skippedMs;
+		steps++;
+		simulationMs += 16;
+		now += 5;
+	}, error => {
+		throw error;
+	} );
+	clock.start();
+	const origin = clock.sample().originMs - performance.timeOrigin;
+	// Simulate 263.4 ms of world-entry/navigation admission work before the first live walk.
+	now = 279.4;
+	simulationMs += clock.reanchor?.() ?? 0;
+	assert.equal( clock.sample().debtMs, 279.4 - (16 + 256) );
+	assert.equal( origin + simulationMs, 272 );
+	// Subsequent wakes that exhaust the 4 ms budget while wall time advances faster than 16 ms
+	// rebase the schedule instead of running simulation time in slow motion up to 1000 ms.
+	now = 295;
+	defined( callback )();
+	assert.equal( clock.sample().stepsInWake, 1 );
+	assert.ok( clock.sample().debtMs > 0 );
+	now = 340;
+	defined( callback )();
+	assert.ok( origin + simulationMs >= 336, "growing budget-yielded debt rebases simulation time to wall time" );
+	assert.ok( clock.sample().debtMs < 16 );
+	clock.dispose();
+});

@@ -103,11 +103,24 @@ export function createSimulation( send: ( message: WorkerMessage, transfer: Tran
 					clock.start();
 				}
 			} else if ( message.kind === "session" ) {
+				if ( message.command.kind === "world-ready" ) {
+					timeMs += clock.reanchor?.() ?? 0;
+				}
 				const origin = clock.sample().originMs;
-				session.command(
-					message.command,
-					origin ? Math.max( 0, performance.timeOrigin + performance.now() - origin ) : undefined
-				);
+				const rawAt = origin ? Math.max( 0, performance.timeOrigin + performance.now() - origin ) : undefined;
+				// Between-tick commands belong to the current simulation step
+				// window [timeMs - SIMULATION_STEP_MS, timeMs]. Clamping to
+				// timeMs prevents positive worker clock debt (rawAt > timeMs)
+				// from advancing world.now ahead of the next scheduled step and
+				// freezing world.step(timeMs) until timeMs catches up.
+				const at = rawAt !== undefined ? Math.min( Math.max( timeMs, SIMULATION_STEP_MS ), rawAt ) : undefined;
+				session.command( message.command, at );
+				if (
+					message.command.kind === "world-ready" ||
+					(message.command.kind === "gameplay" && message.command.command.kind === "navigation")
+				) {
+					timeMs += clock.reanchor?.() ?? 0;
+				}
 			} else if ( message.kind === "world-ack" ) {
 				try {
 					session.ackWorld( message.sequence );

@@ -93,3 +93,23 @@ test("an elevated destination clamps the planar step and acquires terrain height
 	assert.equal( movement.state().moving, false );
 	movement.clear();
 });
+
+test("a leg whose current pose has reached or crossed the goal perpendicular plane stops without stepping past it", () => {
+	const movement = createMovement( () => {} ), navigation = product();
+	navigation.objects = [];
+	const from = { regionId: 257, x: 30, y: 0, z: 110, angle: 0 };
+	movement.seed( from );
+	movement.navigation( 257, navigation );
+	movement.request( { ...from, x: 40, z: 110 }, 0 );
+	movement.step( 199 );
+	const nearGoal = defined( movement.state().pose );
+	assert.ok( nearGoal.x < 40 && nearGoal.x > 39.9 );
+	assert.equal( movement.state().moving, true );
+	movement.step( 220 );
+	const settled = defined( movement.state().pose );
+	assert.equal( settled.x, 40 );
+	assert.equal( movement.state().moving, false );
+	movement.step( 300 );
+	assert.equal( defined( movement.state().pose ).x, 40 );
+	movement.clear();
+});

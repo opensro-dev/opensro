@@ -148,3 +148,39 @@ test("worker resumes with current elapsed time without replaying missing simulat
 	assert.equal( new DataView( messages.at( -1 ).buffer ).getUint32( 4, true ), 5 );
 	simulation.receive( { kind: "stop" } );
 });
+
+test("between-tick session commands under worker clock debt do not jump ahead of the next step deadline", t => {
+	const timers = scheduler( t ), messages = [];
+	const simulation = createSimulation( ( message, transfer ) =>
+		messages.push( structuredClone( message, { transfer } ) )
+	);
+	simulation.receive( { kind: "start", version: 3 } );
+	timers.wake( 16 );
+	const firstSnapshot = messages.find( m => m.kind === "snapshot" );
+	assert.ok( firstSnapshot.clock.originMs > 0 );
+	simulation.receive( { kind: "recycle", buffer: firstSnapshot.buffer } );
+	// Advance wall time to create 688 ms of worker clock debt before the next wake runs.
+	simulation.receive( { kind: "session", command: { kind: "world-ready" } } );
+	timers.wake( 16 + 16 + 688 );
+	const afterReady = messages.filter( m => m.kind === "snapshot" ).at( -1 );
+	assert.equal( afterReady.clock.debtMs, 0 );
+	// If worker debt accumulates during a walk (e.g. 688.2 ms ahead of timeMs) and a between-tick
+	// move command arrives, clamping its timestamp to timeMs prevents world.now from jumping ahead
+	// of subsequent fixed ticks and freezing movement for 43 ticks.
+	const scheduledTimeMs = new DataView( afterReady.buffer ).getFloat64( 8, true );
+	simulation.receive( {
+		kind: "session",
+		command: {
+			kind: "gameplay",
+			command: { kind: "move", destination: { regionId: 25000, x: 100, y: 0, z: 100, angle: 0 } }
+		}
+	} );
+	simulation.receive( { kind: "recycle", buffer: afterReady.buffer } );
+	timers.wake( 16 + 16 + 688 + 16 + 688.2 );
+	const afterMoveTick = messages.filter( m => m.kind === "snapshot" ).at( -1 );
+	assert.ok(
+		new DataView( afterMoveTick.buffer ).getFloat64( 8, true ) > scheduledTimeMs,
+		"subsequent fixed tick advances simulation time past the clamped command timestamp"
+	);
+	simulation.receive( { kind: "stop" } );
+});

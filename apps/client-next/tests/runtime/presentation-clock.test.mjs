@@ -408,3 +408,44 @@ test("remote publications carry the active clock through speed changes and a zer
 	assert.equal( stopped.movementPath?.to.x, stopped.x );
 	assert.equal( motion.step( 400 )[0].x, stopped.x );
 });
+
+test("sustaining worker clock debt past the 100 ms lookahead corridor does not freeze and sprint presentation between worker wakes", () => {
+	const p = createPosePresentation();
+	p.origin( 0 );
+	const debtMs = 300;
+	let previousX = START.x, previousAt = debtMs;
+	for ( let tick = 0; tick < 10; tick++ ) {
+		const workerAtMs = tick * 16;
+		const publishWallMs = workerAtMs + debtMs;
+		const from = { ...START, x: START.x + workerAtMs * SPEED / 1000 };
+		const to = { ...START, x: from.x + 100 * SPEED / 1000 };
+		p.samples(
+			new Map( [ [ 1, {
+				atMs: workerAtMs,
+				revision: 1,
+				moving: true,
+				from,
+				to,
+				durationMs: 100
+			} ] ] )
+		);
+		for ( const displayOffset of [ 0, 8 ] ) {
+			const nowMs = publishWallMs + displayOffset;
+			const shown = p.pose( 1, from, nowMs / 1000 );
+			if ( nowMs > previousAt ) {
+				const frameStep = shown.x - previousX;
+				const expectedStep = (nowMs - previousAt) * SPEED / 1000;
+				assert.ok(
+					frameStep > 0.1,
+					`frame at ${nowMs} ms must advance instead of clamping at 100 ms lookahead (${frameStep})`
+				);
+				assert.ok(
+					frameStep <= expectedStep * 1.05 + 1e-6,
+					`frame at ${nowMs} ms must not sprint faster than walking speed (${frameStep} vs ${expectedStep})`
+				);
+			}
+			previousX = shown.x;
+			previousAt = nowMs;
+		}
+	}
+});

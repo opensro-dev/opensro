@@ -421,6 +421,7 @@ The frame owner supplies time through one visible runtime clock.
 export interface Clock extends Disposable {
 	sample(): ClockSample;
 	start(): void;
+	reanchor?(): number;
 }
 
 /*

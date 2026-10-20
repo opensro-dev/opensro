@@ -746,11 +746,13 @@ every high-latency acknowledgement and skill press.
 				// Re-normalizing rounded accepted positions changes the leg on every frame.
 				const rate = segment.walking.speed / 1000;
 				const delta = planarOffset( pose, segment.to );
+				const forward = delta[0] * segment.walking.direction[0] + delta[1] * segment.walking.direction[1];
+				const goalBounded = !(segment.direction && !segment.direction.blocked);
 				const { step, arrived } = clientWalkingStep(
 					segment.walking.speed,
 					elapsed / 1000,
 					segment.walking.direction,
-					segment.direction && !segment.direction.blocked ? Infinity : clientPlanarDistance( delta )
+					goalBounded ? (forward <= 0 ? 0 : clientPlanarDistance( delta )) : Infinity
 				);
 				const desired = interpolate( pose, {
 					...pose,
@@ -800,8 +802,12 @@ every high-latency acknowledgement and skill press.
 					};
 					owner = query.owner;
 					surfaceCursor = {};
+					const afterDelta = planarOffset( pose, segment.to );
+					const reachedPlane = goalBounded &&
+						afterDelta[0] * segment.walking.direction[0] +
+									afterDelta[1] * segment.walking.direction[1] <= 0;
 					const blocked = !!(query.status & NAVIGATION_STOP);
-					if ( blocked || arrived ) {
+					if ( blocked || arrived || reachedPlane ) {
 						segment = null;
 						walk = null;
 					} else {

@@ -179,7 +179,10 @@ export function createNavigation() {
 			}
 		}
 		if ( initialize || dungeon ) {
-			for ( const p of objects ) {
+			const candidates = index ?
+				index.placements( [ x + ox, y, z + oz ] ).map( i => objects[i]! ) :
+				objects;
+			for ( const p of candidates ) {
 				const q = navLocal( p, x + ox, y, z + oz ), local = navHeight( p.mesh, q[0], q[2], q[1] );
 				if ( local !== null && Math.abs( local + p.y - y ) < delta ) {
 					h = local + p.y;
@@ -613,14 +616,16 @@ export function createNavigation() {
 					const start = ownedPlacementStart( placement, retained.cell, [ from.x + ox, from.y, from.z + oz ] );
 					from = { ...from, x: start[0]! - ox, z: start[2]! - oz };
 				}
-				const height = ( x: number, z: number, y: number ) => surfaceHeight( { ...from, x, y, z } );
-				const startHeight = height( from.x, from.z, from.y );
-				if ( dungeon && startHeight === null ) return null;
-				const deck = ( x: number, z: number, y: number ) =>
-					objects.some( p => {
+				if ( dungeon && surfaceHeight( from ) === null ) return null;
+				const deck = ( x: number, z: number, y: number ) => {
+					const candidates = index ?
+						index.placements( [ x + ox, y, z + oz ] ).map( i => objects[i]! ) :
+						objects;
+					return candidates.some( p => {
 						const q = navLocal( p, x + ox, y, z + oz ), h = navHeight( p.mesh, q[0], q[2], q[1] );
 						return h !== null && Math.abs( h - q[1] ) <= 2;
 					} );
+				};
 				// Native 453fa0 delegates to the cell stepper before resolving the
 				// endpoint. An outside destination can still produce a valid wall
 				// contact. The chord coverage pass below rejects unlinked gaps.
