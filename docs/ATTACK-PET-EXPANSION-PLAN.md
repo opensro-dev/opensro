@@ -3,14 +3,14 @@
 Updated 2026-10-14. Owner-approved port-only feature, not original Silkroad rules.
 Server flag `SRO_ATTACK_PET_EXPANSION=on`; deployment default is **off** (native).
 
-## The design lives in one workbook
+## The design lives in one JSON source
 
-[`docs/pet-expansion/pet-design.xlsx`](pet-expansion/pet-design.xlsx) is the source
+[`docs/pet-expansion/pet-design.json`](pet-expansion/pet-design.json) is the source
 of every number: pets, skills, rows, cooldowns, gear degrees, affixes (blues),
 procs. Edit it, then run
 
 ```
-python scripts/tools/pet_design_export.py
+py scripts/tools/pet_design_export.py
 ```
 
 which validates it and writes the server JSON (`companion/petdesign.json`), the
@@ -51,10 +51,10 @@ slot, 4 remove gear slot, 5 reset, 6 slot passive. Retail decoder unchanged.
 
 1. `pnpm task build server-game-data`, then the full asset build (27 gear item
    rows, names and tooltips).
-2. Maintenance release: store schema 24 (training + worn gear are new persisted
-   fields); stop the shard, run `sro-authority-upgrade -commit` (keeps a backup).
+2. Maintenance release: store schema 28 (training + worn gear + affix rules are
+   persisted fields); stop the shard, run `sro-authority-upgrade -commit` (keeps a backup).
 3. Deploy GameWorld and client with `SRO_ATTACK_PET_EXPANSION=on`
-   (Nomad variable `attack_pet_expansion`).
+   (Nomad variable `attack_pet_expansion`; deployment default remains `off`).
 4. Rollback: redeploy with the flag off. Saved training and worn gear persist;
    no new gear drops; gear already in bags stays as a plain item.
 
@@ -107,20 +107,20 @@ speed, hunger, pet EXP, +one skill, thorns, steady (no knockdown), phoenix
   and relog persistence, and drops from real monsters.
 
 **Rollout**
-- Review the branch, then the maintenance release (schema 24 upgrade) and Nomad
-  variable `attack_pet_expansion` as listed under Rollout.
+- Review the branch, then the maintenance release (schema 28 upgrade) and Nomad
+  variable `attack_pet_expansion` (default `off`) as listed under Rollout.
 - The lab-only LabBlader changes (level 40, pets, gear) are not part of the code
   and must not be applied to real shards.
 
 ## Source owners
 
-- Workbook + `scripts/tools/pet_design_export.py`: design and its exports.
+- `docs/pet-expansion/pet-design.json` + `scripts/tools/pet_design_export.py`: design and its exports.
 - `apps/server/internal/game/companion/`: `design.go` (embedded design),
   `training.go` (points, rows, slots), `gear.go` (rolls, affix encoding, modifiers).
 - `apps/server/internal/domain/character.go`: persisted `PetTraining`.
 - `apps/server/internal/game/action/`: `pettraining.go` (commands, gear moves),
-  `pettrained.go` (combat effects), `petgeardrop.go` (drops), `petcombat.go`,
-  `monsterstrike.go`, `monsterloot.go` (existing owners hooked).
+  `pettrained.go`, `petmanual.go`, `petshield.go`, `petspirit.go`, `petbond.go` (combat effects),
+  `petgeardrop.go` (drops), `petcombat.go`, `monsterstrike.go`, `monsterloot.go` (existing owners hooked).
 - `item/wire/pettraining.go`, `itemmove.go`: state frame and gear options on items.
 - `scripts/build/shared/portItemRows.mjs`: gear item rows and text.
 - Client: worker `pet-training.ts`, `foundation/ui/pet-training.ts`, `ui.ts`
@@ -128,9 +128,7 @@ speed, hunger, pet EXP, +one skill, thorns, steady (no knockdown), phoenix
 
 ## Local deployment
 
-Work only in `E:\CodeProjects\opensro-lab`. Build/deploy with
-`AssetImports/tools/sro-nomad-wolf.exe` (module-root `apps/server` of this worktree,
-state-dir `E:\CodeProjects\opensro\apps\server\.state\cluster`, game data root
-`E:\CodeProjects\opensro\apps\server\.generated\game-data\1.150\server`, Go on PATH,
-`SRO_ATTACK_PET_EXPANSION=on`, `deploy -build`). Stop before any offline DB edit.
-Browser game: [local client](http://127.0.0.1:5180/), LabPlayer / labplayer, LabBlader.
+Deploy the local Nomad stack from `apps/server` with `SRO_ATTACK_PET_EXPANSION=on`
+in the local lab environment only (default `off`). Stop the local cluster before any
+offline authority DB edit.
+Browser game: [local client](http://127.0.0.1:5180/).

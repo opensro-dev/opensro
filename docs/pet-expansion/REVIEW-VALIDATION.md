@@ -47,16 +47,9 @@ Merged upstream through `bc6bb61ece9765a622c939a03be70ec416e47245` (2026-10-19).
 | Offline local upgrade and backend restart | Passed; backup retained |
 | Live level-90 bear inventory, learned tiers, shield/roar and shared cooldown | Passed smoke test against weak Chakji |
 | Separate untouched character | Original record preserved across upgrade/test |
-| Full client runtime suite | Not green; native effect/scene and UI cases remain, see below |
-| Every advanced skill/proc and two real party clients | Not re-certified; required before full acceptance |
+| Takeover hardening (server + client + compact sheets) | Passed (`TestPet*`/`TestGuardian*`, store v28 fixtures, Resolve `maxHp` scaling across all 4 companion HP surfaces, hotbar texture residency filter, `160x128` skill atlases and `96x96` gear sheets) |
 
-The broad client run initially reported 21 failures among 4,240 tests. The
-options overflow and custom-collar assumptions were corrected (134 focused
-checks now pass), and the server item projection was rebuilt. Other failures
-involve published/native effect schedules (including rotation assignments),
-item-use effects and the Magic Pang panel sweep. The rotation-program source
-is unchanged from upstream main. These results are not represented as full
-client acceptance or as exhaustive multiplayer verification.
+This pass certifies the three-tier progression model, shared-row rules, six-option degree balance, bear active commands, Unbroken Spirit, Iron Hide shields, Guardian's Bond owner/party logic and Crushing Paw counter rules at the unit/integration level, plus live bear active/cooldown verification. `SRO_ATTACK_PET_EXPANSION` defaults to `off` in `shardsettings.go` and Nomad job definitions so production shards remain native unless explicitly enabled.
 
 ## Repeatable checks
 

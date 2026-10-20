@@ -14,6 +14,7 @@ package action
 import (
 	"strings"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -48,6 +49,9 @@ func (rt *Runtime) manualPetSkill(division string, owner, snapshot *enterworld.C
 			return petTrainingReceipt("Challenging Roar cannot be cast in town.")
 		}
 		empowered := false
+		// updated is captured inside the roar door; the pet is never
+		// re-read unlocked after it closes (checklist item 2).
+		var updated *domain.CharacterCOS
 		if !rt.deps.Update(owner, "pet-manual-roar", func() bool {
 			live := owner.CompanionByGID(gid)
 			if live == nil || !companion.RowReady(&live.Training, skill.Row, now) {
@@ -56,6 +60,8 @@ func (rt *Runtime) manualPetSkill(division string, owner, snapshot *enterworld.C
 			companion.StartRow(&live.Training, skill.Row, skill, level, now, companion.ModifiersFor(live))
 			live.Training.Queued = 0
 			empowered = rt.spendPetSpirit(owner, live)
+			copy := *live
+			updated = &copy
 			return true
 		}) {
 			return petTrainingReceipt("The roar could not be applied.")
@@ -66,13 +72,12 @@ func (rt *Runtime) manualPetSkill(division string, owner, snapshot *enterworld.C
 			public = append(public, wire.Frame{Opcode: frame.Opcode, Payload: frame.Payload})
 		}
 		if empowered {
-			live := owner.CompanionByGID(gid)
-			public = append(public, petSpiritFrame(live, now, now), wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(gid, 0, live.CurrentHP)})
+			public = append(public, petSpiritFrame(updated, now, now), wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(gid, 0, updated.CurrentHP)})
 		}
 		public = append(public, wire.Frame{Opcode: wire.OpActionEmote,
 			Payload: wire.ActionEmotePush{Gid: gid, Action: skill.ID}.Encode()})
 		return OpResult{
-			Frames:    append(append([]wire.Frame{}, public...), rt.petTrainingStateFrames(owner.CompanionByGID(gid), now)...),
+			Frames:    append(append([]wire.Frame{}, public...), rt.petTrainingStateFrames(updated, now)...),
 			Broadcast: public,
 		}
 	case "Iron Hide":

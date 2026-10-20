@@ -189,6 +189,100 @@ func TestGuardianPartyRevivalAndLevelLimit(t *testing.T) {
 
 /*
 ================
+TestGuardianBondCommitClampsToBearCurrentHP
+
+The bear's HP can fall between planning a transfer and committing it:
+the debit, the booked budget spend and the published vitals are the
+clamped amount the bear can actually pay, never the planned share
+(checklist item 5's fatal over-charge at this head).
+================
+*/
+func TestGuardianBondCommitClampsToBearCurrentHP(t *testing.T) {
+	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_BEAR_090", 90)
+	roarField(t, rt, c, clock)
+	c.MissionInventory = nil
+	rt.AttackPetExpansion = true
+	learnPetBook(t, c, 26)
+	plan := rt.planPetBond(testDivision, c, clock.NowMs())
+	if plan == nil {
+		t.Fatal("missing transfer plan")
+	}
+	sharePetBond(plan, 1000000)
+	if plan.moved == 0 {
+		t.Fatal("nothing planned to transfer")
+	}
+	// The bear is mauled down to 30 HP before the commit lands.
+	c.ActiveCOS.CurrentHP = 30
+	if len(rt.commitPetBond(plan)) != 2 {
+		t.Fatal("clamped commit published nothing")
+	}
+	if c.ActiveCOS.CurrentHP != 1 {
+		t.Fatal("commit over-charged the bear", c.ActiveCOS.CurrentHP)
+	}
+	state := rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID)
+	if state.bond.spent != 29 {
+		t.Fatal("booked spend is not the clamped debit", state.bond.spent)
+	}
+	if len(rt.commitPetBond(plan)) != 0 {
+		t.Fatal("duplicate debit after clamp")
+	}
+}
+
+/*
+================
+TestGuardianPartyRevivalRoutingAndOfferDrop
+
+A tier-III party revival sends the private set plus pulse to the revived
+member only, broadcasts peers plus pulse to the owner and observers
+exactly once (never through the owner-excluding public lane), and drops
+any pending resurrection offer for the revived member (checklist item 4).
+================
+*/
+func TestGuardianPartyRevivalRoutingAndOfferDrop(t *testing.T) {
+	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_BEAR_090", 90)
+	roarField(t, rt, c, clock)
+	c.MissionInventory = nil
+	rt.AttackPetExpansion = true
+	learnPetBook(t, c, 27)
+	near := nearbyCharacter(rt, c, 21, "bond-near", 50)
+	near.ActiveCOS = nil
+	rt.BindPetSession(testDivision, near, 2)
+	rt.RewardParties = func(string) []RewardParty {
+		return []RewardParty{{Members: []uint32{enterworld.ObjectIDForCharacter(c), enterworld.ObjectIDForCharacter(near)}}}
+	}
+	near.DeathKind = uint8(pk.DeathMonster)
+	near.CurrentHP = testInt64(0)
+	rt.resurrections.put(testDivision, near.Name, resurrectionOffer{expiresMs: clock.NowMs() + resurrectionAnswerWindowMs})
+	key := petOwnerKey{testDivision, c.Name, c.ActiveCOS.GID}
+	state := rt.petSessionFor(key.division, key.name, key.gid)
+	rt.advancePetBond(key, state, clock.NowMs())
+	if *near.CurrentHP == 0 {
+		t.Fatal("party member not revived")
+	}
+	if rt.resurrections.pending(testDivision, near.Name, clock.NowMs()) {
+		t.Fatal("stale resurrection offer survived the bond revival")
+	}
+	if len(state.routed) != 1 || state.routed[0].ExceptCharacterID != near.ID || len(state.routed[0].Frames) == 0 {
+		t.Fatal("peer broadcast not routed past the revived member", state.routed)
+	}
+	if len(state.public) != 0 {
+		t.Fatal("party revival leaked into the owner-excluding public lane", len(state.public))
+	}
+	found := false
+	for _, other := range state.others {
+		if other.CharacterID == near.ID && len(other.Frames) > 0 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("revived member missed its private frame set")
+	}
+}
+
+/*
+================
 TestGuardianMonsterDamageAndFatalPublication
 ================
 */

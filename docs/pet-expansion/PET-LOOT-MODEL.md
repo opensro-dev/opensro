@@ -36,7 +36,7 @@ textures fixed that. Do not replace them with diffuse-only color factors.
 Set `SRO_GAME_ROOT` to the licensed client root containing `extracted/`, then run:
 
 ```powershell
-$env:SRO_GAME_ROOT = 'E:/CodeProjects/SRO/AssetImports/OpenSRO-v150'
+$env:SRO_GAME_ROOT = '<path-to-licensed-v1.150-client-root>'
 pnpm assets refresh pet-loot
 ```
 

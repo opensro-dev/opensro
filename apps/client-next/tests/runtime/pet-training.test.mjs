@@ -572,4 +572,90 @@ test("unlearned advanced skills retain effects and red individual requirements",
 		assert.equal( rows.find( r => r.value === value )?.color, 0xffff5555 );
 	}
 	assert.ok( rows.every( r => !/^Tier|^Level|^Now:|Proficiency/.test( r.value ) ) );
+	assert.match( petSkillHelp( d, skill, 40, 0, false ), /Unbroken Spirit II 10/ );
+});
+
+test("petSkillTooltip Next section omits unchanged trailing lines when rank2Level inserts a middle line", () => {
+	const executeI = defined( petSkillDesign( 7 ) );
+	const rows = petSkillTooltip(
+		executeI,
+		{
+			id: 7,
+			level: 4,
+			effectiveLevel: 4,
+			nextPetLevel: 20,
+			action: false,
+			queued: false,
+			learnable: true,
+			live: true,
+			slotted: true,
+			value: 58,
+			nextValue: 66
+		},
+		20,
+		1,
+		true
+	);
+	const nextIdx = rows.findIndex( r => r.value === "Next" && r.heading );
+	const reqIdx = rows.findIndex( r => r.value === "Required" && r.heading );
+	assert.ok( nextIdx >= 0 && reqIdx > nextIdx );
+	const nextLines = rows.slice( nextIdx + 1, reqIdx ).map( r => r.value );
+	assert.ok( !nextLines.includes( "Never procs on blocked hits" ) );
+});
+
+test("petReference scales maxHp from active Resolve stacks and reverts on expiry", () => {
+	const baseRef = {
+		icon: "cos/bear.ddj",
+		maxHp: 1000,
+		rideable: false,
+		physicalDefence: 100,
+		magicalDefence: 80,
+		parry: 20,
+		hit: 30,
+		skills: []
+	};
+	// Third-party targeted bear without local PetTraining: Bear hpPercent = 220 -> 2200 base, Tier 3 (3%/stack) * 10 = +30% -> 2860.
+	const thirdParty = petReference( baseRef, undefined, { stacks: 10, tier: 3, untilMs: 5000 }, 1000 );
+	assert.equal( thirdParty?.maxHp, 2860 );
+	assert.equal( petReference( baseRef, undefined, { stacks: 10, tier: 3, untilMs: 5000 }, 5000 )?.maxHp, 1000 );
+
+	// Owned bear with Unbroken Spirit III (value = 4%/stack) and unbuffed training.stats.maxHp = 2200: 10 stacks -> 3080.
+	const training = {
+		gid: 77,
+		points: 0,
+		attackPercent: 80,
+		defensePercent: 120,
+		rows: [],
+		slotted: [ 24 ],
+		skills: [ {
+			id: 24,
+			level: 10,
+			effectiveLevel: 10,
+			nextPetLevel: 0,
+			action: false,
+			queued: false,
+			learnable: false,
+			live: true,
+			slotted: true,
+			value: 4,
+			nextValue: 4
+		} ],
+		gear: [],
+		receivedAtMs: 0,
+		counters: { attacks: 0, bearHits: 0, ownerHits: 0, resolve: 10 },
+		stats: {
+			maxHp: 2200,
+			magicAttackPercent: 80,
+			magicDefensePercent: 110,
+			attackSpeedPercent: 100,
+			criticalBonus: 0,
+			cooldownReduction: 0,
+			gearStats: [ 0, 0, 0, 0, 0, 0 ]
+		}
+	};
+	assert.equal( petReference( baseRef, training, { stacks: 10, tier: 3, untilMs: 5000 }, 1000 )?.maxHp, 3080 );
+	// When 0x3FB1 already carries the Resolve-buffed maxHp (3080), do not double-scale, and revert to 2200 after expiry.
+	const preScaled = { ...training, stats: { ...training.stats, maxHp: 3080 } };
+	assert.equal( petReference( baseRef, preScaled, { stacks: 10, tier: 3, untilMs: 5000 }, 1000 )?.maxHp, 3080 );
+	assert.equal( petReference( baseRef, preScaled, { stacks: 10, tier: 3, untilMs: 5000 }, 6000 )?.maxHp, 2200 );
 });

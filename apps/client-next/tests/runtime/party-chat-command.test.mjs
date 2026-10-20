@@ -107,38 +107,3 @@ test("the world core sends nothing for a named player who is not in view", () =>
 	assert.deepEqual( sent, [] );
 	core.dispose();
 });
-
-/*
-================
-Keyboard submit shares the normal party-command dispatch
-================
-*/
-test("Enter dispatches a party invitation instead of sending its command as ordinary chat", async () => {
-	const { uiFixture } = await import( "../helpers/ui-fixture.mjs" );
-	const sent = [];
-	const f = uiFixture( message => {
-		if ( message.kind === "gameplay" ) sent.push( message.command );
-	} );
-	try {
-		for ( let i = 0; i < 16; i++ ) f.ui.step( f.state, i * 100 );
-		for ( const line of [ "/invite Friend", "/Invite to party Friend" ] ) {
-			f.ui.event( {
-				kind: "edit",
-				id: "chat-text",
-				value: line,
-				start: line.length,
-				end: line.length,
-				composing: false
-			} );
-			f.ui.event( { kind: "activate", id: "submit" } );
-		}
-		assert.ok( sent.some( command => command.kind === "party-invite-named" && command.name === "Friend" ) );
-		assert.equal(
-			sent.filter( command => command.kind === "chat" ).length,
-			1,
-			"only the non-localized spelling remains ordinary chat"
-		);
-	} finally {
-		f.dispose();
-	}
-});

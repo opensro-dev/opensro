@@ -132,9 +132,11 @@ func (rt *Runtime) planPetBond(division string, victim *enterworld.Character, no
 			continue
 		}
 		spent := uint32(0)
+		rt.petMu.Lock()
 		if now-source.state.bond.window < 1000 {
 			spent = source.state.bond.spent
 		}
+		rt.petMu.Unlock()
 		cap := max(uint32(1), ref.MaxHP/5)
 		if spent >= cap {
 			continue
@@ -174,22 +176,30 @@ func (rt *Runtime) commitPetBond(plan *petBondPlan) []wire.Frame {
 	}
 	moved := plan.moved
 	plan.moved = 0 // Publication may be requested more than once.
+	// The bear's HP may have fallen since the plan: debit only what it
+	// can still pay, and never to death - the booked spent and the
+	// published debit are the clamped amount, not the planned share
+	// (checklist item 5's fatal over-charge).
 	var hp uint32
+	paid := uint32(0)
 	if !rt.deps.UpdateDeferred(plan.owner, "pet-bond-transfer", func() bool {
 		pet := plan.owner.CompanionByGID(plan.bear)
-		if pet == nil || !pet.Summoned || pet.CurrentHP <= moved {
+		if pet == nil || !pet.Summoned || pet.CurrentHP <= 1 {
 			return false
 		}
-		pet.CurrentHP -= moved
+		paid = min(moved, pet.CurrentHP-1)
+		pet.CurrentHP -= paid
 		hp = pet.CurrentHP
 		return true
 	}) {
 		return nil
 	}
+	rt.petMu.Lock()
 	if plan.now-plan.state.bond.window >= 1000 {
 		plan.state.bond = petBondRuntime{window: plan.now}
 	}
-	plan.state.bond.spent += moved
+	plan.state.bond.spent += paid
+	rt.petMu.Unlock()
 	return []wire.Frame{{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(plan.bear, 0, hp)}, petBondFrame(plan.recipient, plan.bear, 1)}
 }
 
@@ -248,10 +258,28 @@ func (rt *Runtime) advancePetBond(key petOwnerKey, state *petSession, now int64)
 		}) {
 			return nil
 		}
+		// A bond revival settles the target's death: any pending
+		// resurrection offer for it is stale from here and must not
+		// overwrite the revival's vitals/position (checklist item 4).
+		rt.resurrections.drop(key.division, target.Name)
 		actor, peers := rt.revivalFrames(key.division, target, revived, now)
 		pulse := petBondFrame(gid, pet.GID, 2)
 		actor = append(actor, pulse)
-		state.public = append(state.public, append(peers, pulse)...)
+		if target.ID != state.character.ID {
+			// Party revival: the revived member gets only its private
+			// set plus the pulse; the peer set plus pulse broadcasts to
+			// the bear's owner and every other observer exactly once
+			// (the public lane would exclude the owner and double-send
+			// to the revived member).
+			state.routed = append(state.routed, simulation.DivisionFrames{
+				DivisionID:        key.division,
+				SourceGID:         pet.GID,
+				ExceptCharacterID: target.ID,
+				Frames:            simFrames(append(peers, pulse)),
+			})
+		} else {
+			state.public = append(state.public, append(peers, pulse)...)
+		}
 		state.others = append(state.others, RecipientFrames{CharacterID: target.ID, Frames: actor})
 		return simFrames(rt.petTrainingStateFrames(state.character.CompanionByGID(pet.GID), now))
 	}

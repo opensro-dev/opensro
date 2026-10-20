@@ -73,13 +73,19 @@ type petSession struct {
 	counterView [8]byte
 	counterSent bool
 	trained     petTrainedRuntime
-	bond        petBondRuntime
-	roar        *petRoarCast
+	// bond's spent budget is read by planPetBond and written by
+	// commitPetBond under rt.petMu: concurrent victim hits in one
+	// division share the bear's budget (checklist item 5).
+	bond petBondRuntime
+	roar *petRoarCast
 	// combat is the attack pet's BATTLE state (petcombat.go); nil follows.
 	combat *petCombatIntent
 	// others holds kill-settlement frames for other characters (a party's
 	// shared experience), drained with public by advancePets.
 	others []RecipientFrames
+	// routed holds pre-routed division frames (a bond revival's peer set
+	// broadcast except its revived target), drained with others.
+	routed []simulation.DivisionFrames
 }
 
 // BindPetSession admits a logical authenticated owner, not every character in
@@ -185,7 +191,7 @@ func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
 	var out []simulation.DivisionFrames
 	var tethers map[string]simulation.Tether
 	for _, key := range keys {
-		characterID, frames, public, others, tetherKey, tether := rt.advancePetInDivision(key, nowMs)
+		characterID, frames, public, others, routed, tetherKey, tether := rt.advancePetInDivision(key, nowMs)
 		if tether != nil {
 			if tethers == nil {
 				tethers = make(map[string]simulation.Tether)
@@ -195,6 +201,7 @@ func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
 		for _, other := range others {
 			out = append(out, simulation.DivisionFrames{DivisionID: key.division, OnlyCharacterID: other.CharacterID, Frames: simFrames(other.Frames)})
 		}
+		out = append(out, routed...)
 		// The pet is the source: its own viewers see what it does
 		// (CGObj_SendPacketToNearbySessions 484D90 on the COS object), the
 		// same audience its queued B505 closes reach. Routed by the owner, a
@@ -218,7 +225,7 @@ func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
 advancePetInDivision
 ================
 */
-func (rt *Runtime) advancePetInDivision(key petOwnerKey, nowMs int64) (int64, []simulation.Frame, []wire.Frame, []RecipientFrames, string, *simulation.Tether) {
+func (rt *Runtime) advancePetInDivision(key petOwnerKey, nowMs int64) (int64, []simulation.Frame, []wire.Frame, []RecipientFrames, []simulation.DivisionFrames, string, *simulation.Tether) {
 	unlock := rt.lockDivision(key.division)
 	defer unlock()
 	frames := rt.advancePetSpirit(key, nowMs)
@@ -229,7 +236,7 @@ func (rt *Runtime) advancePetInDivision(key petOwnerKey, nowMs int64) (int64, []
 	state := rt.petSessions[key]
 	rt.petMu.Unlock()
 	if state == nil {
-		return 0, frames, nil, nil, "", nil
+		return 0, frames, nil, nil, nil, "", nil
 	}
 	if rt.AttackPetExpansion {
 		var counter wire.Frame
@@ -251,9 +258,9 @@ func (rt *Runtime) advancePetInDivision(key petOwnerKey, nowMs int64) (int64, []
 		copied := *state.tether
 		tether = &copied
 	}
-	public, others := state.public, state.others
-	state.public, state.others = nil, nil
-	return characterID, frames, public, others, tetherKey, tether
+	public, others, routed := state.public, state.others, state.routed
+	state.public, state.others, state.routed = nil, nil, nil
+	return characterID, frames, public, others, routed, tetherKey, tether
 }
 
 /*

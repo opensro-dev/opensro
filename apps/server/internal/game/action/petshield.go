@@ -85,6 +85,13 @@ func (rt *Runtime) castPetShield(division string, owner, snapshot *enterworld.Ch
 	mods := companion.ModifiersFor(pet)
 	level := companion.EffectiveLevel(pet, skill, mods)
 	empowered := false
+	// updated and shieldMaxHP are captured inside the cast door: the pet
+	// is never re-read unlocked after it closes (checklist item 2). The
+	// shield scales off the UNBUFFED base maximum, so 9 stacks and the
+	// 10-stack empowered cast (which spends the stacks first) progress
+	// monotonically instead of the base jumping when the spend lands.
+	var updated *domain.CharacterCOS
+	var shieldMaxHP uint32
 	if !rt.deps.Update(owner, "pet-shield-cast", func() bool {
 		live := owner.CompanionByGID(pet.GID)
 		if live == nil || !companion.RowReady(&live.Training, skill.Row, now) {
@@ -92,16 +99,22 @@ func (rt *Runtime) castPetShield(division string, owner, snapshot *enterworld.Ch
 		}
 		companion.StartRow(&live.Training, skill.Row, skill, level, now, mods)
 		live.Training.Queued = 0
+		unbuffed := *live
+		unbuffed.ResolveStacks = 0
+		if ref, ok := rt.cosReference(&unbuffed); ok {
+			shieldMaxHP = ref.MaxHP
+		}
 		empowered = rt.spendPetSpirit(owner, live)
+		copy := *live
+		updated = &copy
 		return true
 	}) {
 		return petTrainingReceipt("The shield could not be cast.")
 	}
 	source := petOwnerKey{division: division, name: owner.Name, gid: pet.GID}
 	var shields []petShield
-	if ref, ok := rt.cosReference(owner.CompanionByGID(pet.GID)); ok {
-		maxHP := ref.MaxHP
-		shields = append(shields, petShield{key: petShieldKey{division, pet.GID}, source: source, maxHP: maxHP, burst: skill.Option == 3})
+	if shieldMaxHP > 0 {
+		shields = append(shields, petShield{key: petShieldKey{division, pet.GID}, source: source, maxHP: shieldMaxHP, burst: skill.Option == 3})
 	}
 	from := rt.liveSpawn(simulation.WorldKey(division, snapshot.Name), snapshot, now)
 	members := map[uint32]bool{enterworld.ObjectIDForCharacter(snapshot): true}
@@ -136,8 +149,7 @@ func (rt *Runtime) castPetShield(division string, owner, snapshot *enterworld.Ch
 	shieldPercent := min(100.0, skill.ValueAt(level))
 	if empowered {
 		shieldPercent *= 1.5
-		live := owner.CompanionByGID(pet.GID)
-		public = append(public, petSpiritFrame(live, now, now), wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(pet.GID, 0, live.CurrentHP)})
+		public = append(public, petSpiritFrame(updated, now, now), wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(pet.GID, 0, updated.CurrentHP)})
 	}
 	rt.petShields.Lock()
 	if rt.petShields.rows == nil {
@@ -153,7 +165,7 @@ func (rt *Runtime) castPetShield(division string, owner, snapshot *enterworld.Ch
 		public = append(public, petShieldFrame(s, now, false))
 	}
 	rt.petShields.Unlock()
-	return OpResult{Frames: append(append([]wire.Frame{}, public...), rt.petTrainingStateFrames(owner.CompanionByGID(pet.GID), now)...), Broadcast: public}
+	return OpResult{Frames: append(append([]wire.Frame{}, public...), rt.petTrainingStateFrames(updated, now)...), Broadcast: public}
 }
 
 /*

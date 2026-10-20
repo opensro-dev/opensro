@@ -27,12 +27,42 @@ Port-only stats use the server's catalog and worn/passive modifiers.
 */
 export function petReference(
 	reference: CosReference | undefined,
-	training: PetTraining | undefined
+	training: PetTraining | undefined,
+	resolve?: { readonly stacks: number; readonly tier: number; readonly untilMs: number; } | null,
+	nowMs = 0
 ): CosReference | undefined {
-	if ( !reference || !training?.stats ) return reference;
+	if ( !reference ) return reference;
+	const activeResolve = resolve && resolve.untilMs > nowMs ?
+		Math.min( 10, Math.max( 0, resolve.stacks ) ) :
+		resolve === undefined ?
+		Math.min( 10, Math.max( 0, training?.counters?.resolve ?? 0 ) ) :
+		0;
+	if ( !training?.stats ) {
+		if ( !activeResolve || !resolve?.tier ) return reference;
+		const tierBook = PET_DESIGN.treeSkills.find(
+			s => s.family === "Unbroken Spirit" && s.option === resolve.tier
+		);
+		const perStack = tierBook?.value ?? 0;
+		const bearPct = PET_DESIGN.pets.find( p => p.name === "Bear" )?.hpPercent ?? 100;
+		const baseMaxHp = Math.trunc( reference.maxHp * bearPct / 100 );
+		return perStack > 0 ?
+			{ ...reference, maxHp: Math.trunc( baseMaxHp * (1 + activeResolve * perStack / 100) ) } :
+			reference;
+	}
+	const spirit = training.skills.find(
+		s => s.slotted && s.level > 0 && petSkillDesign( s.id )?.family === "Unbroken Spirit"
+	);
+	const speciesPct = PET_DESIGN.pets.find( p => p.name === petPetName( training ) )?.hpPercent ?? 100;
+	const unbuffedMaxHp = Math.trunc( reference.maxHp * speciesPct / 100 );
+	let maxHp = training.stats.maxHp;
+	if ( spirit && activeResolve > 0 && (maxHp === unbuffedMaxHp || maxHp === reference.maxHp) ) {
+		maxHp = Math.trunc( maxHp * (1 + activeResolve * spirit.value / 100) );
+	} else if ( spirit && resolve && resolve.untilMs <= nowMs && maxHp > unbuffedMaxHp ) {
+		maxHp = unbuffedMaxHp;
+	}
 	return {
 		...reference,
-		maxHp: training.stats.maxHp,
+		maxHp,
 		physicalDefence: Math.trunc(
 			(reference.physicalDefence + (training.stats.gearStats?.[2] ?? 0)) * training.defensePercent / 100
 		),
@@ -305,9 +335,10 @@ export function petSkillHelp(
 	design: PetSkillDesign,
 	skill: PetTrainingSkill,
 	petLevel: number,
-	points: number
+	points: number,
+	prerequisiteMet = true
 ): string {
-	return petSkillTooltip( design, skill, petLevel, points ).map( row => row.value ).join( "\n" );
+	return petSkillTooltip( design, skill, petLevel, points, prerequisiteMet ).map( row => row.value ).join( "\n" );
 }
 
 /*
@@ -353,7 +384,7 @@ export function petSkillTooltip(
 	if ( skill.nextPetLevel > 0 ) {
 		const current = petSkillEffectLines( design, skill.value, Math.max( 1, skill.effectiveLevel ) );
 		const next = petSkillEffectLines( design, skill.nextValue, skill.level ? skill.effectiveLevel + 1 : 1 );
-		const changes = skill.level ? next.filter( ( value, i ) => value !== current[i] ) : [];
+		const changes = skill.level ? next.filter( value => !current.includes( value ) ) : [];
 		if ( changes.length ) {
 			add( "Next", gold, true );
 			for ( const value of changes ) add( value, white );

@@ -39,7 +39,6 @@ The tier artwork and equipment follow-ups are documented below.
   advanced4 then7 while the owner stayed at full13226HP. Native icons,
   row-help and compact tooltips displayed. Current3.2% Resolve preview now
   correctly shows next3.3%; unmet pet94 requirement is red.
-- Screenshot outside Git: E:/CodeProjects/SRO/outputs/pet-design-codex/pet-skill-ui.png.
 
 No schema migration or balance change. No new skill ranks/gear granted.
 Other pets were covered by mapping/logic tests, not new full live combat tests.
@@ -64,11 +63,9 @@ the same book variant. The left row-help icon uses the family symbol instead
 of a question mark; it retains the same accessible name and tooltip.
 
 Verified tier follow-up: twelve training tests and all four client source gates
-pass. Focused publisher rebuilt the UI pack with all three atlases. Original
-III Git blob remains5bd2ecc74cf05753173f7d3917bba61c1f95f2ff. Live LabPetTest/
-LabBear tree shows all three variants and all five row symbols; clicking the
+pass. Focused publisher rebuilt the UI pack with all three `160x128` (`5x4` of `32x32` cells) atlases.
+Live LabPetTest/LabBear tree shows all three variants and all five row symbols; clicking the
 Resolve row symbol still opens its information tooltip. Client remains open.
-Preview outside Git: E:/CodeProjects/SRO/outputs/pet-design-codex/pet-skill-tier-variants.png.
 No backend or balance changes. Other pets were not live-retested.
 
 ## Gear artwork and skill heading follow-up
@@ -76,14 +73,12 @@ No backend or balance changes. Other pets were not live-retested.
 Removed the pet-level label above skill rows; skill points and the actual
 learning requirements remain. Replaced procedural pet gear placeholders with
 27 original painted inventory icons resembling native character equipment.
-Three3x3 source sheets contain distinctD1..D9 collar/harness/charm designs.
+Three3x3 source sheets (`96x96`) contain distinctD1..D9 collar/harness/charm designs.
 The existing exporter/publisher keeps every item path, name, stat and drop
 binding unchanged. No backend restart, migration or balance changes needed.
 The asset test verifies27 unique32px RGBA exports; focused publication passed.
 
 Live verification: LabPetTest/LabBear worn D1 collar/harness and D9 charm,
 plus player-bag D9 collar, D5 harness and D1 charm, render the new artwork.
-The Skills header visibly shows only Skill points15. Screenshots outside Git:
-E:/CodeProjects/SRO/outputs/pet-design-codex/pet-equipment-icons-live.png and
-E:/CodeProjects/SRO/outputs/pet-design-codex/pet-skill-header-no-level.png.
+The Skills header visibly shows only Skill points15.
 All four client source gates pass. The user approved committing and pushing these art/header changes after verification.

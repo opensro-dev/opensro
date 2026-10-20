@@ -2766,6 +2766,10 @@ export function createUi(
 	================
 	*/
 	function activate( id: string ) {
+		// A party chat command (6AD990), parsed once from the line being sent.
+		const partyLine = id === "chat-send" ?
+			partyChatCommand( chatText.slice( chatTabPrefix( chatTab ).length ), hudCopy ) :
+			null;
 		if ( id.startsWith( "gm-helper-row:" ) ) {
 			gmHelper.select( Number( id.slice( "gm-helper-row:".length ) ) );
 			// The row button took DOM focus; Enter must reach the prompt again
@@ -3259,10 +3263,6 @@ export function createUi(
 			if ( view.frontend?.dialog || view.frontend?.creation ) return;
 			id = phase === "world" ? "chat-send" : phase === "character-select" ? "enter" : "login";
 		}
-		// A party chat command (6AD990), parsed once from the line being sent.
-		const partyLine = id === "chat-send" ?
-			partyChatCommand( chatText.slice( chatTabPrefix( chatTab ).length ), hudCopy ) :
-			null;
 		const control = controls.find( c => c.id === id );
 		if ( control?.disabled ) return;
 		// World map town icons are CIFWorldMap hit areas (57F43D button-up), not
@@ -9037,7 +9037,11 @@ export function createUi(
 						data.cosReferences.get( record.refObjId ),
 						experimental.state().saved.attackPetTraining && game?.petTraining?.gid === record.gid ?
 							game.petTraining :
-							undefined
+							undefined,
+						experimental.state().saved.attackPetTraining ?
+							next.entities.find( e => e.gid === record.gid )?.petResolve :
+							undefined,
+						next.simulationTimeMs ?? 0
 					);
 					const nativeRect = cosStatusRect( w, i, cls, cosStatusDesktopTop() );
 					const r: UiRect = compact ?
@@ -10582,7 +10586,18 @@ export function createUi(
 				}
 				// CIFPetMiniInfo (6B3AD0 / 6B34C0): the attack pet's panel, child 100
 				// of the player mini window.
-				const pet = hudData && game ? petMiniInfo( game.cosRecords, hudData.cosReferences ) : null;
+				const attackCosGid = game?.cosRecords?.find( r => cosClass( r.band ) === COS_CLASS_ATTACK )?.gid;
+				const pet = hudData && game ?
+					petMiniInfo(
+						game.cosRecords,
+						hudData.cosReferences,
+						experimental.state().saved.attackPetTraining ? game.petTraining : undefined,
+						experimental.state().saved.attackPetTraining && attackCosGid !== undefined ?
+							next.entities.find( e => e.gid === attackCosGid )?.petResolve :
+							undefined,
+						next.simulationTimeMs ?? 0
+					) :
+					null;
 				const petPanel = hudData?.player.GDR_PMI_PET_MINI_INFO, petLayout = hudData?.windows.ifpetminiinfo;
 				if ( hudData && pet && petPanel && petLayout ) {
 					if ( compact ) {
@@ -11070,9 +11085,14 @@ export function createUi(
 						undefined;
 					const maxHp = target.maxHp ??
 						(target.kind === "cos" ?
-							(experimental.state().saved.attackPetTraining && game?.petTraining?.gid === target.gid ?
-								game.petTraining.stats?.maxHp :
-								undefined) ?? hudData.cosReferences.get( target.refObjId )?.maxHp :
+							petReference(
+								hudData.cosReferences.get( target.refObjId ),
+								experimental.state().saved.attackPetTraining && game?.petTraining?.gid === target.gid ?
+									game.petTraining :
+									undefined,
+								experimental.state().saved.attackPetTraining ? target.petResolve : undefined,
+								next.simulationTimeMs ?? 0
+							)?.maxHp :
 							undefined);
 					// The local character, selected from its portrait, wears the
 					// player layout (5814D0 handles the local CICUser too).
@@ -11521,7 +11541,7 @@ export function createUi(
 					if ( petDesign && petAvailable && game?.petTraining ) {
 						const timer = petCooldownQuads( game.petTraining, petDesign.row, quickslotTime, r, full );
 						for ( const q of timer ) if ( q.texture ) paths.push( q.texture );
-						quads.push( ...timer );
+						quads.push( ...timer.filter( q => !q.texture || resources.has( q.texture ) ) );
 					}
 					if ( petDesign && petAvailable && game?.petTraining ) {
 						const entry = game.petTraining.skills.find( s => s.id === petDesign.id );
@@ -11531,8 +11551,8 @@ export function createUi(
 								r,
 								full
 							);
-							for ( const q of badges ) paths.push( q.texture );
-							quads.push( ...badges );
+							for ( const q of badges ) if ( q.texture ) paths.push( q.texture );
+							quads.push( ...badges.filter( q => !q.texture || resources.has( q.texture ) ) );
 						}
 					}
 					if ( skill ) {
@@ -16553,7 +16573,14 @@ export function createUi(
 							experimental.state().saved.attackPetTraining && game?.petTraining?.gid === record.gid ?
 								game.petTraining :
 								undefined;
-						const reference = petReference( hudData.cosReferences.get( record.refObjId ), trainingState );
+						const reference = petReference(
+							hudData.cosReferences.get( record.refObjId ),
+							trainingState,
+							experimental.state().saved.attackPetTraining ?
+								next.entities.find( e => e.gid === record.gid )?.petResolve :
+								undefined,
+							next.simulationTimeMs ?? 0
+						);
 						const node = ( id: number ) => Object.values( page ).find( n => n.id === id );
 						const texts: [number, string][] = [
 							// CIFCosInfo_RefreshName (6A5320): an unnamed companion reads "No name".
@@ -16852,10 +16879,19 @@ export function createUi(
 											r[1]
 										);
 									}
+									const prerequisiteMet = design.option === 1 ||
+										(state!.skills.find( entry => entry.id === skill.id - 1 )?.level ?? 0) >=
+											design.maxLevel;
 									controls.push( {
 										id: "pet-skill:" + design.id,
 										label: design.name,
-										helpText: petSkillHelp( design, skill, petLevel, state!.points ),
+										helpText: petSkillHelp(
+											design,
+											skill,
+											petLevel,
+											state!.points,
+											prerequisiteMet
+										),
 										rect: r,
 										kind: "button",
 										disabled: busy || !skill.live || skill.level === 0 ||
@@ -16866,7 +16902,7 @@ export function createUi(
 									if ( action && skill.level > 0 ) {
 										const timer = petCooldownQuads( state!, i, quickslotTime, r, full );
 										for ( const q of timer ) if ( q.texture ) paths.push( q.texture );
-										quads.push( ...timer );
+										quads.push( ...timer.filter( q => !q.texture || resources.has( q.texture ) ) );
 									}
 									const shown = skill.effectiveLevel;
 									if ( shown > 0 ) {
@@ -16886,8 +16922,8 @@ export function createUi(
 										}
 									}
 									const stacks = petStackQuads( petSkillStack( state!, design, skill ), r, full );
-									for ( const q of stacks ) paths.push( q.texture );
-									quads.push( ...stacks );
+									for ( const q of stacks ) if ( q.texture ) paths.push( q.texture );
+									quads.push( ...stacks.filter( q => !q.texture || resources.has( q.texture ) ) );
 									if ( skill.queued ) {
 										quads.push(
 											...text.quads( "next", [ r[0], r[1] - 1, 32, 10 ], full, white, {

@@ -197,7 +197,13 @@ func (rt *Runtime) monsterStrikeCOS(in monsterStrikeInput, owner *enterworld.Cha
 	}
 	divisionID, instance, skill, nowMs := in.division, in.instance, in.skill, in.now
 	out := monsterStrikeOutcome{alive: true}
-	_, populationMonster := rt.Monsters.Get(divisionID, instance.Gid)
+	// A companion attacker (a player's pet in PvP) reuses this lane: only
+	// a population monster is a monster source for the pet's trained
+	// defenses, Resolve gains and hit-taken bonuses (checklist item 3).
+	populationMonster := false
+	if rt.Monsters != nil {
+		_, populationMonster = rt.Monsters.Get(divisionID, instance.Gid)
+	}
 	if populationMonster && rt.spiritBraced(owner, pet) {
 		skill.Knockback.Present = false
 	}
@@ -208,7 +214,7 @@ func (rt *Runtime) monsterStrikeCOS(in monsterStrikeInput, owner *enterworld.Cha
 	}
 	// Companion attackers also reuse this function. Only a population
 	// monster may encounter the pilot's defensive gear bonus.
-	if _, populationMonster := rt.Monsters.Get(divisionID, instance.Gid); populationMonster {
+	if populationMonster {
 		defender = rt.petTrainingDefense(owner, pet, ref.MaxHP, defender)
 	}
 	var displacement *playerDisplacement
@@ -245,7 +251,7 @@ func (rt *Runtime) monsterStrikeCOS(in monsterStrikeInput, owner *enterworld.Cha
 		}
 		records = append(records, rolled...)
 	}
-	hit := cosHit{monsterSource: true, resolveHits: populationMonster, owner: owner, pet: pet, ref: ref, pose: pose, block: ownerBlock, formulas: formulas, records: records,
+	hit := cosHit{monsterSource: populationMonster, resolveHits: populationMonster, owner: owner, pet: pet, ref: ref, pose: pose, block: ownerBlock, formulas: formulas, records: records,
 		displacement: displacement, displaceAt: displaceAt,
 		context: abnormal.HitContext{Attack: skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector}}
 	hit.block.sources = rt.captureAbnormalSources(divisionID, hit.block.block, records)
@@ -258,10 +264,12 @@ func (rt *Runtime) monsterStrikeCOS(in monsterStrikeInput, owner *enterworld.Cha
 			return true // Fatal hits can retire a transport before training updates.
 		}
 		previousRows := live.Training.Rows
-		for _, formula := range hit.strike.impacts {
-			if !formula.Blocked && formula.Damage > 0 {
-				rt.petTrainedHitTaken(owner, live)
-				break
+		if hit.monsterSource {
+			for _, formula := range hit.strike.impacts {
+				if !formula.Blocked && formula.Damage > 0 {
+					rt.petTrainedHitTaken(owner, live)
+					break
+				}
 			}
 		}
 		if live.Training.Rows != previousRows {
@@ -327,6 +335,11 @@ func (rt *Runtime) applyCOSHitInDoor(divisionID string, hit *cosHit, nowMs int64
 	if enterworld.CharacterAlive(owner) {
 		hit.battle = rt.enterBattleState(divisionID, owner, nowMs)
 	}
+	// Resolve stack gains collect across the impacts and publish once,
+	// after the loop: a strike that turns fatal mid-loop must not emit
+	// 0x3FB5 stack-gain frames for a bear that died with stacks earned
+	// by its earlier impacts (checklist item 1).
+	var spiritFrames, spiritPrivate []wire.Frame
 	for _, formula := range hit.formulas {
 		hit.context.Magical = hit.context.Magical || formula.MagicalDamage != 0
 		if hit.monsterSource && rt.petShieldRecipientAllowed(owner) {
@@ -337,9 +350,9 @@ func (rt *Runtime) applyCOSHitInDoor(divisionID string, hit *cosHit, nowMs int64
 		live.CurrentHP -= vitals.HitDebit(live.CurrentHP, formula.Damage)
 		if hit.resolveHits && landed && live.CurrentHP > 0 {
 			blockFrames := rt.gainPetSpirit(divisionID, owner, live, nowMs)
-			hit.block.public = append(hit.block.public, blockFrames...)
+			spiritFrames = append(spiritFrames, blockFrames...)
 			if len(blockFrames) > 0 {
-				hit.block.private = append(hit.block.private, rt.petTrainingStateFrames(live, nowMs)...)
+				spiritPrivate = append(spiritPrivate, rt.petTrainingStateFrames(live, nowMs)...)
 			}
 		}
 		strike.fatal = live.CurrentHP == 0
@@ -348,6 +361,10 @@ func (rt *Runtime) applyCOSHitInDoor(divisionID string, hit *cosHit, nowMs int64
 		if strike.fatal {
 			break
 		}
+	}
+	if !strike.fatal && live.CurrentHP > 0 {
+		hit.block.public = append(hit.block.public, spiritFrames...)
+		hit.block.private = append(hit.block.private, spiritPrivate...)
 	}
 	block := hit.block
 	if ref, ok := rt.cosReference(live); ok {

@@ -1,9 +1,6 @@
-# Never edit after it ships: a new persisted field takes schema 23, its upgrade
-# Never edit after it ships: a new persisted field takes schema 25, its upgrade
-# guild-member record fields owned by store schema 22 (persisted_shape_test.go).
-# guild-member record fields owned by store schema 24 (persisted_shape_test.go).
-# step and guild-member-fields-v23.txt.
-# step and guild-member-fields-v25.txt.
+# guild-member record fields owned by store schema 28 (persisted_shape_test.go).
+# Never edit after it ships: a new persisted field takes schema 29, its upgrade
+# step and guild-member-fields-v29.txt.
 charId
 donatedGp
 dword30

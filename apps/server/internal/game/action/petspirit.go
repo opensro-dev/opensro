@@ -57,6 +57,18 @@ func (rt *Runtime) setPetSpirit(pet *domain.CharacterCOS, stacks uint8) {
 	if after.MaxHP > before.MaxHP {
 		pet.CurrentHP += after.MaxHP - before.MaxHP
 	}
+	if after.MaxHP < before.MaxHP && pet.CurrentHP > 0 {
+		// Losing the bonus maximum takes the temporary HP with it: the
+		// bear keeps only the HP it earned against the smaller maximum,
+		// floored at 1 so the drop itself never kills (petspirit.go's
+		// "drops clamp without killing", checklist item 1).
+		removed := before.MaxHP - after.MaxHP
+		if pet.CurrentHP > removed {
+			pet.CurrentHP -= removed
+		} else {
+			pet.CurrentHP = 1
+		}
+	}
 	pet.CurrentHP = min(pet.CurrentHP, after.MaxHP)
 }
 
@@ -126,18 +138,23 @@ func (rt *Runtime) advancePetSpirit(key petOwnerKey, now int64) []simulation.Fra
 		enterworld.CharacterAlive(owner) && !rt.inTown(key.division, owner) && now < state.trained.resolveUntil {
 		return nil
 	}
+	// updated is captured inside the expire door; the companion is never
+	// re-read unlocked after it closes (it may be unsummoned by then -
+	// checklist item 2).
+	var updated *domain.CharacterCOS
 	if !rt.deps.UpdateDeferred(state.character, "pet-spirit-expire", func() bool {
 		live := state.character.CompanionByGID(key.gid)
 		if live == nil {
 			return false
 		}
 		rt.setPetSpirit(live, 0)
+		copy := *live
+		updated = &copy
 		return true
 	}) {
 		return nil
 	}
-	live := state.character.CompanionByGID(key.gid)
-	state.public = append(state.public, petSpiritFrame(live, now, now), wire.Frame{Opcode: simulation.OpVitalsUpdate,
-		Payload: simulation.HPRefreshPayload(live.GID, 0, live.CurrentHP)})
-	return simFrames(append([]wire.Frame{petSpiritFrame(live, now, now), {Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(live.GID, 0, live.CurrentHP)}}, rt.petTrainingStateFrames(live, now)...))
+	state.public = append(state.public, petSpiritFrame(updated, now, now), wire.Frame{Opcode: simulation.OpVitalsUpdate,
+		Payload: simulation.HPRefreshPayload(updated.GID, 0, updated.CurrentHP)})
+	return simFrames(append([]wire.Frame{petSpiritFrame(updated, now, now), {Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(updated.GID, 0, updated.CurrentHP)}}, rt.petTrainingStateFrames(updated, now)...))
 }

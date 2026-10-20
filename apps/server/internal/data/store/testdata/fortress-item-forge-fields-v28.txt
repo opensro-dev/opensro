@@ -1,9 +1,6 @@
-# Never edit after it ships: a new persisted field takes schema 23, its upgrade
-# Never edit after it ships: a new persisted field takes schema 25, its upgrade
-# fortress-item-forge record fields owned by store schema 22 (persisted_shape_test.go).
-# fortress-item-forge record fields owned by store schema 24 (persisted_shape_test.go).
-# step and fortress-item-forge-fields-v23.txt.
-# step and fortress-item-forge-fields-v25.txt.
+# fortress-item-forge record fields owned by store schema 28 (persisted_shape_test.go).
+# Never edit after it ships: a new persisted field takes schema 29, its upgrade
+# step and fortress-item-forge-fields-v29.txt.
 count
 done
 endsAtMs

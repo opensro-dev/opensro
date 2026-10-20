@@ -397,7 +397,7 @@ display 80%, Iron Hide III produced exactly 6000ms and early recast was refused.
 One 50% piece produced 15000ms; Roar's 18s became about 3600ms against weak
 Small-eyed Ghosts. Original gear restored; owner full HP in Hotan. This is not
 blanket acceptance of every passive or affix. See the
-[Claude handoff](CLAUDE-HANDOFF-2026-10-15.md) for remaining gameplay work.
+[REVIEW-VALIDATION.md](REVIEW-VALIDATION.md) for validation coverage.
 
 ### Source map
 

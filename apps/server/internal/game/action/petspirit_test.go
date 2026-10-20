@@ -89,6 +89,48 @@ func TestPetSpiritHitLifetimeAndTiers(t *testing.T) {
 
 /*
 ================
+TestPetSpiritLosingStacksRemovesTheBonusHP
+
+setPetSpirit(pet, 0) is the one sink expiry, the empower spend, town
+entry and the passive swap all run: a damaged bear loses the temporary
+bonus HP with the maximum (floored at 1, never a kill, never a heal).
+================
+*/
+func TestPetSpiritLosingStacksRemovesTheBonusHP(t *testing.T) {
+	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_BEAR_090", 90)
+	rt.AttackPetExpansion = true
+	roarField(t, rt, c, clock)
+	c.MissionInventory = nil
+	learnPetBook(t, c, 24)
+	pet := c.ActiveCOS
+	base, _ := rt.cosReference(pet)
+	pet.CurrentHP = base.MaxHP / 2
+	earned := pet.CurrentHP
+	for range 10 {
+		rt.gainPetSpirit(testDivision, c, pet, clock.NowMs())
+	}
+	buffed, _ := rt.cosReference(pet)
+	if pet.ResolveStacks != 10 || buffed.MaxHP <= base.MaxHP || pet.CurrentHP != earned+(buffed.MaxHP-base.MaxHP) {
+		t.Fatalf("stacks did not raise and fill the maximum: %d/%d", pet.CurrentHP, buffed.MaxHP)
+	}
+	rt.setPetSpirit(pet, 0)
+	if pet.CurrentHP != earned {
+		t.Fatalf("losing stacks kept bonus HP: %d, want exactly the earned %d of %d", pet.CurrentHP, earned, base.MaxHP)
+	}
+	// A bear damaged below the bonus amount floors at 1, never dies.
+	for range 10 {
+		rt.gainPetSpirit(testDivision, c, pet, clock.NowMs())
+	}
+	pet.CurrentHP = 3
+	rt.setPetSpirit(pet, 0)
+	if pet.CurrentHP != 1 {
+		t.Fatalf("bonus removal killed or healed: %d, want floor 1", pet.CurrentHP)
+	}
+}
+
+/*
+================
 TestPetSpiritRoarReachAndCapacity
 ================
 */

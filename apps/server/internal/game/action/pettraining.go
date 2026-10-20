@@ -155,11 +155,18 @@ func (rt *Runtime) handlePetTraining(division string, c *enterworld.Character, p
 	}
 	refusal := "Training could not be saved."
 	var frames []wire.Frame
+	// updated is captured inside the training door; the state frames
+	// below never re-read the companion unlocked (checklist item 2).
+	var updated *domain.CharacterCOS
 	if !rt.deps.Update(c, "pet-training", func() bool {
 		pet := c.CompanionByGID(gid)
 		if pet == nil || !pet.Summoned || pet.CurrentHP == 0 {
 			return false
 		}
+		defer func() {
+			copy := *pet
+			updated = &copy
+		}()
 		switch operation {
 		case petTrainingLearn:
 			refusal = companion.Learn(pet, arg)
@@ -187,10 +194,10 @@ func (rt *Runtime) handlePetTraining(division string, c *enterworld.Character, p
 		return refusal == ""
 	}) {
 		result := petTrainingReceipt(refusal)
-		result.Frames = append(result.Frames, rt.petTrainingStateFrames(c.CompanionByGID(gid), nowMs)...)
+		result.Frames = append(result.Frames, rt.petTrainingStateFrames(updated, nowMs)...)
 		return result
 	}
-	return OpResult{Frames: append(frames, rt.petTrainingStateFrames(c.CompanionByGID(gid), nowMs)...)}
+	return OpResult{Frames: append(frames, rt.petTrainingStateFrames(updated, nowMs)...)}
 }
 
 /*

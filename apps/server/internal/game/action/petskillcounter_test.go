@@ -47,7 +47,7 @@ func TestPetSkillCounterFrame(t *testing.T) {
 		count   int
 	}{{false, 0}, {true, 1}, {true, 0}} {
 		rt.AttackPetExpansion = check.enabled
-		_, frames, _, _, _, _ := rt.advancePetInDivision(key, clock.NowMs())
+		_, frames, _, _, _, _, _ := rt.advancePetInDivision(key, clock.NowMs())
 		count := 0
 		for _, frame := range frames {
 			if frame.Opcode == petSkillCounterOpcode {

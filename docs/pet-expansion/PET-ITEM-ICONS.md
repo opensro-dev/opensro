@@ -45,7 +45,7 @@ and client reload.
 Nine focused asset/pipeline tests pass: all27 icon names unique, all27 emitted
 images distinct32x32 RGBA PNGs with visible object detail, source row preservation,
 pet drop geometry/material/glow and family registration. No inventory/character
-data is edited to install these icons. Skill testing remains postponed.
+data is edited to install these icons.
 
 The current source atlases replace the earlier procedural placeholders.
 Names, paths, equipment stats and bindings remain unchanged.

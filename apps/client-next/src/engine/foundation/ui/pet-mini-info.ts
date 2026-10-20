@@ -13,8 +13,9 @@ CIFPetMiniInfo_OnUpdate (6B34C0) drives the two gauges and the HP caution.
 
 ===========================================================================
 */
-import type { CosRecord } from "@/engine/contracts/gameplay";
+import type { CosRecord, PetTraining } from "@/engine/contracts/gameplay";
 import { COS_CLASS_ATTACK, cosClass, type CosReference } from "./cos-command";
+import { petReference } from "./pet-training";
 
 // 6B34C0 divides the satiety word by 10000.0 for the HGP gauge.
 const SATIETY_FULL = 10000;
@@ -47,11 +48,19 @@ The attack pet the window is bound to, or null when none is summoned.
 */
 export function petMiniInfo(
 	records: readonly CosRecord[] | undefined,
-	references: ReadonlyMap<number, CosReference> | undefined
+	references: ReadonlyMap<number, CosReference> | undefined,
+	training?: PetTraining,
+	resolve?: { readonly stacks: number; readonly tier: number; readonly untilMs: number; } | null,
+	nowMs = 0
 ): PetMiniInfo | null {
 	const record = records?.find( row => cosClass( row.band ) === COS_CLASS_ATTACK );
 	if ( !record ) return null;
-	const reference = references?.get( record.refObjId );
+	const reference = petReference(
+		references?.get( record.refObjId ),
+		training?.gid === record.gid ? training : undefined,
+		resolve,
+		nowMs
+	);
 	// 6B34C0 stores the HP ratio through a float: compare in float32.
 	const hp = reference && reference.maxHp > 0 ? Math.min( 1, Math.fround( record.hp / reference.maxHp ) ) : null;
 	return {

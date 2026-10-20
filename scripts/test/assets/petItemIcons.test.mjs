@@ -28,3 +28,21 @@ test("all27 pet icons are distinct32x32 RGBA images with visible object detail",
 	}
 	assert.equal( hashes.size, 27, "every slot and degree has different artwork" );
 });
+
+test("all source pet skill and gear atlases are compact native-cell sheets", async () => {
+	const { readFile } = await import( "node:fs/promises" );
+	for ( const name of [ "pet-skills.png", "pet-skills-1.png", "pet-skills-2.png" ] ) {
+		const bytes = await readFile( new URL( `../../../docs/pet-expansion/assets/${name}`, import.meta.url ) );
+		const { width, height } = decodePngRgba( bytes );
+		assert.equal( width, 160 );
+		assert.equal( height, 128 );
+		assert.ok( bytes.length < 100_000, `${name} should be a compact 160x128 sheet` );
+	}
+	for ( const name of [ "pet-gear-collar.png", "pet-gear-harness.png", "pet-gear-charm.png" ] ) {
+		const bytes = await readFile( new URL( `../../../docs/pet-expansion/assets/${name}`, import.meta.url ) );
+		const { width, height } = decodePngRgba( bytes );
+		assert.equal( width, 96 );
+		assert.equal( height, 96 );
+		assert.ok( bytes.length < 50_000, `${name} should be a compact 96x96 sheet` );
+	}
+});
