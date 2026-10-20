@@ -8808,13 +8808,16 @@ export function createUi(
 					// Fit within this window before caching/publication; text behind a modal
 					// must not become a neighboring column of that modal.
 					if ( compact ) {
-						fitUiGroup( quads, controls, mark[0], mark[1], full, full, {
+						const windowBounds = owner === "item-mall" || owner === "compact-guild" || compact.top < 200 ?
+							full :
+							compact.bounds;
+						fitUiGroup( quads, controls, mark[0], mark[1], windowBounds, full, {
 							blocks,
 							firstBlock: mark[2],
 							disableDrag: compactWindowDrag
 						} );
 						for ( let i = mark[1]; i < controls.length; i++ ) {
-							controls[i] = compactCloseControl( controls[i]!, full );
+							controls[i] = compactCloseControl( controls[i]!, windowBounds );
 						}
 					}
 					const painted = resolveTextOverlaps( quads.slice( mark[0] ) );
@@ -11069,6 +11072,68 @@ export function createUi(
 						}
 						if ( game?.progression?.skillPoints !== undefined ) {
 							authoredSkillPoints( bar.GDR_STATIC_SP!, barX, barY, game.progression.skillPoints );
+						}
+					} );
+				} else if ( hudData && compact && compact.exp ) {
+					const expW = compact.exp[2];
+					retainedHud( barLayoutCache, [
+						hudData,
+						layoutResourcesRevision,
+						w,
+						h,
+						game?.progression?.experience,
+						game?.progression?.level,
+						game?.progression?.skillExperience,
+						game?.progression?.skillPoints,
+						expW >= 406 ? spGauge.current() : 0,
+						expW >= 406 ? spGauge.target() : 0
+					], () => {
+						const bar = hudData.bar, [expX, expY, , expH] = compact.exp!;
+						rect( [ expX, expY + 2, 200, 16 ], [ 0, 0, 0, 0.55 ] );
+						blocks.push( [ expX, expY, expW, expH ] );
+						const required = levels.get( game?.progression?.level ?? 0 )?.[0];
+						paths.push( EXPERIENCE_BAR );
+						if (
+							required && game?.progression?.experience !== undefined && resources.has( EXPERIENCE_BAR )
+						) {
+							quads.push(
+								...experienceBar( game.progression.experience, required, expX - 18, expY - 27, full )
+							);
+						}
+						if ( game?.progression?.experience !== undefined && game.progression.level !== undefined ) {
+							authoredText(
+								bar.GDR_STATIC_EXP!,
+								expX - 18,
+								expY - 27,
+								experienceReadout( game.progression.experience, game.progression.level, levels )
+							);
+						}
+						if ( expW >= 406 ) {
+							const sp = bar.GDR_GAUGE_SP!, spOx = expX + 208 - 17, spOy = expY + 4 - 9;
+							rect( [ expX + 208, expY + 5, 144, 10 ], [ 0, 0, 0, 0.55 ] );
+							paths.push( sp.texture );
+							if ( resources.has( sp.texture ) ) {
+								quads.push(
+									...gaugeFill(
+										authoredRect( sp, spOx, spOy ),
+										sp.uv,
+										sp.texture,
+										spGauge.current(),
+										spGauge.target(),
+										full
+									)
+								);
+							}
+							if ( game?.progression?.skillPoints !== undefined ) {
+								authoredSkillPoints( bar.GDR_STATIC_SP!, spOx, spOy, game.progression.skillPoints );
+							}
+						} else if ( expW >= 256 && game?.progression?.skillPoints !== undefined ) {
+							authoredSkillPoints(
+								bar.GDR_STATIC_SP!,
+								expX + 208 - 167,
+								expY + 4 - 9,
+								game.progression.skillPoints
+							);
 						}
 					} );
 				}
@@ -18580,7 +18645,7 @@ export function createUi(
 					if ( compact && (w < 477 || h < 393) ) {
 						const admission = beginWindow();
 						appendCompactGuild();
-						endWindow( admission );
+						endWindow( admission, "compact-guild" );
 						if ( friendDialog ) friendDialogBox();
 						if ( letterDeleting >= 0 ) letterDialogBox();
 					} else {

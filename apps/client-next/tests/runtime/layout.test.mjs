@@ -12,7 +12,7 @@ import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 const { fitUiGroup } = await import( "../../src/engine/foundation/ui/layout.ts" );
-const { compactWindowDrag } = await import( "../../src/engine/runtime/ui/hud/compact-hud.ts" );
+const { compactHudLayout, compactWindowDrag } = await import( "../../src/engine/runtime/ui/hud/compact-hud.ts" );
 const { textRunQuad, expandTextRuns } = await import( "../../src/engine/foundation/rendering/text-run.ts" );
 const { resolveTextOverlaps } = await import( "../../src/engine/foundation/rendering/ui-glyphs.ts" );
 
@@ -286,4 +286,31 @@ test("only shrinking nearest bitmap runs uses linear sampling, including replace
 		assert.deepEqual( quads[1].run?.glyphs[0].uv, run.run?.glyphs[0].uv );
 	}
 	assert.equal( run.sampling, "nearest", "the native cached run stays reusable on desktop" );
+});
+
+test("compactHudLayout reserves a progression strip between quickslots and tools while keeping window bounds above slots", () => {
+	assert.equal( compactHudLayout( 800, 600 ), null );
+	for (
+		const [width, height, expectedExpWidth] of [
+			[ 375, 667, 256 ],
+			[ 609, 327, 406 ],
+			[ 667, 375, 406 ],
+			[ 320, 568, 256 ]
+		]
+	) {
+		const layout = compactHudLayout( width, height );
+		assert.ok( layout && layout.exp, `${width}x${height}: compact layout with exp strip` );
+		assert.deepEqual( layout.bounds, [ 0, 0, width, layout.top ] );
+		assert.equal( layout.exp[2], expectedExpWidth );
+		assert.equal( layout.exp[3], 20 );
+		const maxSlotBottom = Math.max( ...layout.slots.map( s => s[1] + s[3] ) );
+		const minSlotTop = Math.min( ...layout.slots.map( s => s[1] ) );
+		const minToolTop = Math.min( ...layout.tools.map( t => t[1] ) );
+		assert.ok( layout.bounds[3] <= minSlotTop, `${width}x${height}: window bounds stay above hotbar` );
+		assert.equal( layout.exp[1], maxSlotBottom, `${width}x${height}: exp strip sits directly below hotbar` );
+		assert.ok( layout.exp[1] + layout.exp[3] <= minToolTop, `${width}x${height}: exp strip stays above tools` );
+	}
+	const tiny = compactHudLayout( 200, 200 );
+	assert.ok( tiny );
+	assert.equal( tiny.exp, null );
 });

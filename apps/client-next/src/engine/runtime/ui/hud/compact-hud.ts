@@ -16,6 +16,7 @@ const DESKTOP_WIDTH = 800;
 const DESKTOP_HEIGHT = 600;
 const SLOT_COUNT = 11;
 const SLOT_PITCH = 44;
+const EXP_HEIGHT = 20;
 const TOOL_HEIGHT = 40;
 const TOOL_COUNT = 11;
 const MARGIN = 4;
@@ -30,7 +31,8 @@ export function compactHudLayout( width: number, height: number ) {
 	if ( width >= DESKTOP_WIDTH && height >= DESKTOP_HEIGHT ) return null;
 	const capacity = Math.max( 1, Math.floor( (width - MARGIN * 2) / SLOT_PITCH ) );
 	const rows = Math.ceil( SLOT_COUNT / capacity ), columns = Math.ceil( SLOT_COUNT / rows );
-	const bottom = rows * SLOT_PITCH + TOOL_HEIGHT + MARGIN * 2;
+	const expHeight = height >= 240 ? EXP_HEIGHT : 0;
+	const bottom = rows * SLOT_PITCH + expHeight + TOOL_HEIGHT + MARGIN * 2;
 	const left = Math.floor( (width - columns * SLOT_PITCH) / 2 ), top = Math.max( 0, height - bottom );
 	const slots: UiRect[] = Array.from( { length: SLOT_COUNT }, ( _, index ) => [
 		left + index % columns * SLOT_PITCH,
@@ -38,6 +40,15 @@ export function compactHudLayout( width: number, height: number ) {
 		SLOT_PITCH,
 		SLOT_PITCH
 	] );
+	const expWidth = width >= 412 ? 406 : width >= 260 ? 256 : 200;
+	const exp: UiRect | null = expHeight > 0 ?
+		[
+			Math.max( 0, Math.floor( (width - expWidth) / 2 ) ),
+			top + MARGIN + rows * SLOT_PITCH,
+			Math.min( width, expWidth ),
+			expHeight
+		] :
+		null;
 	const toolWidth = Math.max( 0, Math.min( 48, Math.floor( (width - MARGIN * 2) / TOOL_COUNT ) ) );
 	const tools: UiRect[] = Array.from( { length: TOOL_COUNT }, ( _, index ) => [
 		Math.floor( (width - toolWidth * TOOL_COUNT) / 2 ) + index * toolWidth,
@@ -45,7 +56,7 @@ export function compactHudLayout( width: number, height: number ) {
 		toolWidth,
 		TOOL_HEIGHT
 	] );
-	return { slots, tools, bottom, top, bounds: [ 0, 0, width, top ] as UiRect };
+	return { slots, exp, tools, bottom, top, bounds: [ 0, 0, width, top ] as UiRect };
 }
 
 /*

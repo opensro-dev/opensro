@@ -449,3 +449,103 @@ for ( const [width, height] of [ [ 1600, 900 ], [ 375, 667 ] ] ) {
 		}
 	});
 }
+
+test("compact HUD draws EXP/SP progression and keeps quickslots 0..10 uncovered and droppable while windows are open", () => {
+	const sent = [], fixture = uiFixture( command => sent.push( command ) );
+	let time = 0, published;
+	/*
+	================
+	draw
+	================
+	*/
+	function draw( steps = 4 ) {
+		for ( let i = 0; i < steps; i++ ) {
+			published = fixture.ui.step( fixture.state, ++time * 100 ) ?? published;
+			assert.equal( fixture.ui.stats().error, null );
+		}
+		return defined( published );
+	}
+	try {
+		Object.assign( fixture.state.gameplay, {
+			skills: [ 3 ],
+			progression: {
+				level: 20,
+				experience: "141000",
+				skillExperience: 200,
+				skillPoints: 42,
+				masteries: [ { id: 257, level: 7 } ]
+			}
+		} );
+		for ( const [width, height] of [ [ 375, 667 ], [ 609, 327 ], [ 667, 375 ] ] ) {
+			fixture.state.width = width;
+			fixture.state.height = height;
+			let output = draw( 24 );
+			const scene = defined( fixture.scenes.at( -1 ) );
+			const expSegments = scene.quads.filter(
+				quad => typeof quad.texture === "string" && quad.texture.endsWith( "/ub_exp_bar.png" )
+			);
+			assert.ok( expSegments.length > 0, `${width}x${height}: compact HUD draws ub_exp_bar segments` );
+			nativeGlyphs( fixture );
+			for (
+				const panel of /** @type {const} */ ([
+					"Skills",
+					"Inventory",
+					"Character",
+					"Actions",
+					"Party",
+					"Quests"
+				])
+			) {
+				fixture.ui.event( { kind: "activate", id: "open-window:" + panel } );
+				output = draw();
+				for ( let slot = 0; slot <= 10; slot++ ) {
+					const hotbar = defined( output.controls.find( c => c.id === "hotbar:" + slot ) );
+					const hit = defined(
+						topmostControlAt(
+							output.controls,
+							hotbar.rect[0] + hotbar.rect[2] / 2,
+							hotbar.rect[1] + hotbar.rect[3] / 2
+						)
+					);
+					assert.equal(
+						hit.id,
+						"hotbar:" + slot,
+						`${width}x${height} ${panel}: hotbar:${slot} stays uncovered at its center`
+					);
+				}
+				if ( panel === "Skills" && width === 609 ) {
+					fixture.ui.event( { kind: "activate", id: "skill-tab:0" } );
+					fixture.ui.event( { kind: "activate", id: "skill-mastery:257" } );
+					output = draw();
+					const skill = defined(
+						output.controls.find( c => c.id.startsWith( "skill:" ) && c.draggable )
+					);
+					const skillId = Number( skill.id.slice( 6 ) );
+					for ( let slot = 4; slot <= 9; slot++ ) {
+						const target = defined( output.controls.find( c => c.id === "hotbar:" + slot ) );
+						const before = sent.length;
+						fixture.ui.event( {
+							kind: "drag-end",
+							id: skill.id,
+							x: target.rect[0] + target.rect[2] / 2,
+							y: target.rect[1] + target.rect[3] / 2
+						} );
+						draw();
+						assert.ok( sent.length > before, `slot ${slot} accepted skill drag` );
+						assert.deepEqual( sent.at( -1 ), {
+							kind: "gameplay",
+							command: {
+								kind: "quickslot-set",
+								binding: { slot, kind: 0x49, payload: skillId }
+							}
+						} );
+					}
+				}
+				fixture.ui.event( { kind: "activate", id: panelCloseId( panel ) } );
+				draw();
+			}
+		}
+	} finally {
+		fixture.dispose();
+	}
+});
