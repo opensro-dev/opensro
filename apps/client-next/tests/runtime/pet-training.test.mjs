@@ -645,12 +645,11 @@ test("petReference scales maxHp from active Resolve stacks and reverts on expiry
 		counters: { attacks: 0, bearHits: 0, ownerHits: 0, resolve: 10 },
 		stats: {
 			maxHp: 2200,
-			magicAttackPercent: 80,
+			magicPercent: 80,
 			magicDefensePercent: 110,
-			attackSpeedPercent: 100,
-			criticalBonus: 0,
-			cooldownReduction: 0,
-			gearStats: [ 0, 0, 0, 0, 0, 0 ]
+			magicPrimary: false,
+			gearStats: [ 0, 0, 0, 0, 0, 0 ],
+			cooldownPercent: 0
 		}
 	};
 	assert.equal( petReference( baseRef, training, { stacks: 10, tier: 3, untilMs: 5000 }, 1000 )?.maxHp, 3080 );
