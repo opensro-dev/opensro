@@ -112,6 +112,25 @@ function covers( source: Detection | null, bit: number, hide: number, distance: 
 
 /*
 ================
+hasConcealmentEffects
+
+85CBD0 (CICharactor_AggregateTertiaryAbnormalStatusEffects): true when a
+character in body status 6 (stealth) or 7 (invisibility) carries an active
+skill decoration with a non-zero hide mask (+0x1F0). 866B90 calls this on the
+local player to keep its own model at 0x50 (seenAlpha) while concealed.
+================
+*/
+export function hasConcealmentEffects(
+	body: number,
+	own: readonly AttachedEffect[],
+	skill: ( id: number ) => SkillMetadata | undefined
+): boolean {
+	if ( body !== 6 && body !== 7 ) return false;
+	return hideLevels( own, skill ) !== null;
+}
+
+/*
+================
 concealmentState
 ================
 */

@@ -16,7 +16,12 @@ import type { DressCatalog, WornItem } from "@/engine/foundation/animation/equip
 import type { SkillLookup } from "@/engine/foundation/ui/buff-viewer";
 import type { Resource, PresentationOutput, PresentationDisappear } from "./internal/presentation-contract";
 import { advanceCharacterFade } from "@/engine/foundation/animation/character-fade";
-import { concealmentState, concealmentAlpha, seenAlpha } from "@/engine/foundation/gameplay/concealment";
+import {
+	concealmentState,
+	concealmentAlpha,
+	hasConcealmentEffects,
+	seenAlpha
+} from "@/engine/foundation/gameplay/concealment";
 import { partyMembers, partyPortraitGid } from "@/engine/foundation/ui/party-overlay";
 import { radians } from "@/engine/foundation/math/angles";
 import { CHARACTER_ACTORS } from "@/engine/foundation/animation/character-budget";
@@ -125,7 +130,18 @@ export function applyCharacterVisibility( frame: VisibilityFrame, output: Camera
 		const actor = next.get( entity.gid );
 		if ( actor?.opacity !== undefined ) next.set( entity.gid, { ...actor, opacity: undefined } );
 	}
-	if ( local?.appearanceState?.[2] === 4 ) {
+	// 866B90 (CICPlayer_OnUpdate): when camera fade is not transitioning,
+	// body 4 (0x866BD1..0x866BF5) or an active hide effect on body 6/7 via
+	// 85CBD0 (0x866C04..0x866C26) keeps the local player at alpha 0x50.
+	const localBody = local?.appearanceState?.[2] ?? 0,
+		localConcealed = local !== undefined && (localBody === 6 || localBody === 7) &&
+			hasConcealmentEffects(
+				localBody,
+				(gameplay?.attachedEffects ?? []).filter( e => e.gid === local.gid ),
+				concealmentSkills( gameplay?.skillCatalog )
+			),
+		localTranslucent = localBody === 4 || localConcealed;
+	if ( local && localTranslucent ) {
 		const actor = next.get( local.gid );
 		if ( actor ) next.set( local.gid, { ...actor, opacity: seenAlpha() } );
 	}
@@ -169,9 +185,9 @@ export function applyCharacterVisibility( frame: VisibilityFrame, output: Camera
 		);
 		output.cameraFade.time = seconds;
 		// 866B90 applies camera interpolation first while it is live;
-		// after it finishes, the body-4 branch restores alpha 0x50.
+		// after it finishes, the body-4 or 85CBD0 concealment branch restores alpha 0x50.
 		const actor = next.get( local.gid );
-		if ( actor && (transition || local.appearanceState?.[2] !== 4) ) {
+		if ( actor && (transition || !localTranslucent) ) {
 			next.set( local.gid, { ...actor, opacity: alpha } );
 		}
 	} else output.cameraFade = null;

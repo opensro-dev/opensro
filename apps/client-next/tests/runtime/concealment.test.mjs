@@ -14,8 +14,11 @@ import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { concealmentState, concealmentAlpha, seenAlpha } = await import(
+const { concealmentState, concealmentAlpha, hasConcealmentEffects, seenAlpha } = await import(
 	sourceFileUrl( "src/engine/foundation/gameplay/concealment.ts" ).href
+);
+const { applyCharacterVisibility } = await import(
+	sourceFileUrl( "src/engine/runtime/characters/presentation-finalize.ts" ).href
 );
 
 // Shipped levels: rogue stealth hide 1/3, wizard invisibility hide 2/3,
@@ -94,4 +97,49 @@ test("alpha follows the state, and party members stay translucent", () => {
 	assert.equal( concealmentAlpha( "hidden", false ), 0 );
 	assert.equal( concealmentAlpha( "hidden", true ), seenAlpha() );
 	assert.equal( seenAlpha(), 0x50 / 255 );
+});
+
+test("866B90 and 85CBD0 keep the local player at seenAlpha (0x50/255) in body 6 or 7 with an active hide effect", () => {
+	assert.equal( hasConcealmentEffects( 0, [ on( HIDDEN, 8703 ) ], skill ), false );
+	assert.equal( hasConcealmentEffects( 7, [], skill ), false );
+	assert.equal( hasConcealmentEffects( 6, [ on( HIDDEN, 7929 ) ], skill ), true );
+	assert.equal( hasConcealmentEffects( 7, [ on( HIDDEN, 8703 ) ], skill ), true );
+
+	const runVisibility = (
+		body,
+		attachedEffects,
+		cameraPitch = 0,
+		output = { cameraTarget: null, cameraFade: null }
+	) => {
+		const local = { gid: HIDDEN, name: "Self", appearanceState: [ 0, 0, body, 0 ] };
+		const next = new Map( [ [ HIDDEN, { gid: HIDDEN, opacity: /** @type {number | undefined} */ (undefined) } ] ] );
+		applyCharacterVisibility(
+			{
+				entities: [ local ],
+				next,
+				local,
+				gameplay: { attachedEffects, skillCatalog: [] },
+				seconds: 1,
+				cameraPitch,
+				concealmentSkills: () => skill,
+				entityLod: { distance: () => 0 }
+			},
+			output
+		);
+		return { opacity: next.get( HIDDEN )?.opacity, output };
+	};
+
+	// Body 7 (Wizard Invisibility) and body 6 (Rogue Stealth) with their hide buff keep 0x50/255 when camera fade is steady.
+	assert.equal( runVisibility( 7, [ on( HIDDEN, 8703 ) ] ).opacity, seenAlpha() );
+	assert.equal( runVisibility( 6, [ on( HIDDEN, 7929 ) ] ).opacity, seenAlpha() );
+	// Body 7 without a hide effect falls through to 0xFF (1.0), matching 85CBD0 returning 0.
+	assert.equal( runVisibility( 7, [] ).opacity, 1 );
+	// Body 0 with a leftover hide effect stays at 1.0.
+	assert.equal( runVisibility( 0, [ on( HIDDEN, 8703 ) ] ).opacity, 1 );
+	// Body 4 (invulnerable/spawn) still keeps 0x50/255 without any hide effect.
+	assert.equal( runVisibility( 4, [] ).opacity, seenAlpha() );
+	// During an active camera-pitch fade transition (cameraPitch < -0.9), camera fade overrides until the transition finishes.
+	const steady = runVisibility( 7, [ on( HIDDEN, 8703 ) ], 0 );
+	const transitioning = runVisibility( 7, [ on( HIDDEN, 8703 ) ], -0.95, steady.output );
+	assert.notEqual( transitioning.opacity, seenAlpha() );
 });
