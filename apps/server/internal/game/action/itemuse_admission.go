@@ -142,8 +142,16 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	if ref.TypeIDs == [4]int64{3, 3, 13, 10} {
 		return itemUseWarehouseTicket
 	}
-	// Type 4 = 13: the stat point recall (progression/statrecall.go).
+	// Type 4 = 13 splits on Param1 (itemdata column 29c): 1 is the Hwan
+	// scroll, which fills the berserk gauge like the type 3/3/1/8 item
+	// above (ITEM_MALL_HWAN 9259); 2 is the stat point recall
+	// (ITEM_MALL_(STR|INT)_RECALL 9253..9258, progression/statrecall.go).
+	// The family read Param1 or it sends a Hwan to the recall, which
+	// spends it resetting a player's stat points.
 	if ref.TypeIDs == [4]int64{3, 3, 13, 13} {
+		if param1, _ := ref.NativeFields.Lookup("itemParam1_29c"); param1 == 1 {
+			return itemUseBerserk
+		}
 		return itemUseStatRecall
 	}
 	// 49F590: the composite scroll (UIU1 param jobs).

@@ -17,6 +17,8 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math/big"
+	"os"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/enterworld"
@@ -29,6 +31,24 @@ import (
 )
 
 const gachaRollDenominator uint32 = 10000
+
+// EnvGachaPoolV2 turns the port-only Magic Pop prize pool on (owner,
+// 2026-10-20; not native). Unset is on; "off" restores the retail
+// gachaitemset.txt pool byte-for-byte.
+const EnvGachaPoolV2 = "SRO_GACHA_POOL_V2"
+
+/*
+================
+GachaPoolV2FromEnv
+================
+*/
+func GachaPoolV2FromEnv() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvGachaPoolV2))) {
+	case "off", "0", "false", "no":
+		return false
+	}
+	return true
+}
 
 // gachaOperatorCodename is the exchange operator Gori (RefObj 9252).
 const gachaOperatorCodename = "NPC_CH_GACHA_OPERATOR"
@@ -46,6 +66,13 @@ func (rt *Runtime) ConfigureGacha(textdataDir string) error {
 	catalog, err := gacha.LoadCatalog(textdataDir, rt.deps.ItemReferences())
 	if err != nil {
 		return err
+	}
+	rt.GachaPoolV2 = GachaPoolV2FromEnv()
+	if rt.GachaPoolV2 {
+		if err := catalog.ApplyPoolV2(rt.deps.ItemReferences()); err != nil {
+			return err
+		}
+		log.Infof("gacha: port-only prize pool v2 active (%s); the shipped gachaitemset.txt is untouched", EnvGachaPoolV2)
 	}
 	rt.GachaCatalog = catalog
 	return nil
@@ -209,6 +236,8 @@ func (rt *Runtime) HandleGachaRoll(
 
 	failure := "ticket row changed before commit"
 	var frames []wire.Frame
+	rolledWin := false
+	var rolledReward, rolledQuantity uint32
 	committed := rt.deps.Update(character, "gacha-roll", func() bool {
 		if character.DeletePending || !inventory.IsBagSlot(request.InventorySlot, inventory.BagEnd(character)) {
 			return false
@@ -254,6 +283,8 @@ func (rt *Runtime) HandleGachaRoll(
 			prize = waste
 		}
 
+		rolledWin = win
+		rolledReward, rolledQuantity = prize.RewardRefObjID, prize.Quantity
 		result := rt.GachaCatalog.LoseCard
 		code := gacha.ResultLose
 		if win {
@@ -280,6 +311,14 @@ func (rt *Runtime) HandleGachaRoll(
 	})
 	if !committed {
 		return nil, failure
+	}
+	if rt.GachaPoolV2 {
+		outcome := "lose"
+		if rolledWin {
+			outcome = "win"
+		}
+		log.Infof("gacha pool v2: %s rolled entry %d at NPC %d: %s, reward %d x%d",
+			character.Name, request.SelectedEntryID, npc.RefObjID, outcome, rolledReward, rolledQuantity)
 	}
 	return frames, ""
 }

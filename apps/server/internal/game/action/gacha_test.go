@@ -37,6 +37,9 @@ gachaFixture
 */
 func gachaFixture(t *testing.T) (*Runtime, *enterworld.Character, []byte) {
 	t.Helper()
+	// The retail-lane fixture: the port-only pool stays off unless a test
+	// opts in (gachaPoolV2Fixture sets it per case).
+	t.Setenv(EnvGachaPoolV2, "off")
 	c := testCharacter()
 	items := testItems()
 	for i, name := range []string{gacha.CardCodename, gacha.WinCardCodename, gacha.LoseCardCodename} {
@@ -427,6 +430,7 @@ TestGachaExchangeNonEquipmentSkipsSpecialPropertyRolls
 ================
 */
 func TestGachaExchangeNonEquipmentSkipsSpecialPropertyRolls(t *testing.T) {
+	t.Setenv(EnvGachaPoolV2, "off")
 	c := testCharacter()
 	items := testItems()
 	for i, name := range []string{gacha.CardCodename, gacha.WinCardCodename, gacha.LoseCardCodename} {
@@ -608,5 +612,108 @@ func TestGachaExchangeReplayFindsNoVoucher(t *testing.T) {
 	if frames, reason := rt.HandleGachaExchange(testDivision, c, p); reason == "" || len(frames) != 0 ||
 		!reflect.DeepEqual(c.Snapshot(), before) {
 		t.Fatal("replay granted a second reward")
+	}
+}
+
+/*
+================
+TestGachaPoolV2FromEnv
+
+Unset and anything but an explicit off leaves the port-only pool on;
+"off" restores the retail pool.
+================
+*/
+func TestGachaPoolV2FromEnv(t *testing.T) {
+	for _, tc := range []struct {
+		env  string
+		want bool
+	}{{"", true}, {"on", true}, {"ON", true}, {"1", true}, {"off", false}, {" Off ", false}, {"0", false}, {"false", false}, {"no", false}} {
+		t.Setenv(EnvGachaPoolV2, tc.env)
+		if got := GachaPoolV2FromEnv(); got != tc.want {
+			t.Fatalf("%s=%q: %v, want %v", EnvGachaPoolV2, tc.env, got, tc.want)
+		}
+	}
+}
+
+// gachaPoolV2Fixture is the roll fixture over the shipped-shaped pool:
+// set-1 entries 1-6 at 9/8 and the 1800-weight grain rows 15/16.
+func gachaPoolV2Fixture(t *testing.T) (*Runtime, *enterworld.Character, []byte) {
+	t.Helper()
+	c := testCharacter()
+	items := testItems()
+	for i, name := range []string{gacha.CardCodename, gacha.WinCardCodename, gacha.LoseCardCodename} {
+		variant := int64(2)
+		if i == 0 {
+			variant = 1
+		}
+		items[name] = &enterworld.ItemRef{RefObjID: uint32(900 + i), Codename: name, TypeIDs: [4]int64{3, 3, 14, variant}}
+	}
+	items[gacha.CardCodename].ParamDescriptions = [20]string{gacha.LoseCardCodename, gacha.WinCardCodename}
+	for name, id := range map[string]uint32{
+		"WEAPON_A": 4140, "WEAPON_B": 4035, "WEAPON_C": 4104,
+		"WEAPON_D": 4071, "WEAPON_E": 4176, "WEAPON_F": 4215,
+		"GRAIN_A": 9, "GRAIN_B": 16, "FILLER": 3823,
+		"ITEM_CH_TBLADE_09_A_RARE": 4146, "ITEM_CH_SWORD_09_A_RARE": 4038,
+		"ITEM_CH_SPEAR_09_A_RARE": 4110, "ITEM_CH_BLADE_09_A_RARE": 4074,
+		"ITEM_CH_BOW_09_A_RARE": 4182, "ITEM_CH_SHIELD_09_A_RARE": 4218,
+		"ITEM_MALL_HWAN": 9259,
+	} {
+		items[name] = &enterworld.ItemRef{RefObjID: id, Codename: name, TypeIDs: [4]int64{3, 1, 6, 2}}
+	}
+	// The shipped Hwan is no weapon: TID 3/3/13/13 with Param1 1 (its
+	// item-use family), as itemdata_10000.txt row 9259 carries it.
+	items["ITEM_MALL_HWAN"].TypeIDs = [4]int64{3, 3, 13, 13}
+	items["ITEM_MALL_HWAN"].NativeFields = enterworld.NewNativeFields(map[string]float64{"itemParam1_29c": 1})
+	rt, _ := newTestRuntime(c, gmItemSource{items})
+	dir := t.TempDir()
+	prizes := "1 1 4140 9 1 1\n1 1 4035 8 1 2\n1 1 4104 9 1 3\n1 1 4071 8 1 4\n" +
+		"1 1 4176 9 1 5\n1 1 4215 8 1 6\n1 2 9 1800 50 15\n1 2 16 1800 50 16\n1 2 3823 6400 1 26\n"
+	for name, value := range map[string]string{"gachaitemset.txt": prizes, "gachanpcmap.txt": "1 9251 1 2\n"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(value), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := rt.ConfigureGacha(dir); err != nil {
+		t.Fatal(err)
+	}
+	rt.NpcSpawn.Enabled = true
+	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 17, RefObjID: 9251, AuthoredSpawn: true, Spawn: simulation.SeedWorldState(c).Spawn}}
+	rt.Selected.Set(testDivision, c.Name, 17)
+	c.MissionInventory = []enterworld.InventoryRow{{Slot: 13, RefObjID: 900, Codename: gacha.CardCodename, TypeFlags: items[gacha.CardCodename].TypeFlags(), StackCount: 1}}
+	return rt, c, wire.NewWriter(9).U32(17).U32(1).U8(13).Payload()
+}
+
+func TestGachaPoolV2RollPaysTheStarWeapon(t *testing.T) {
+	t.Setenv(EnvGachaPoolV2, "on")
+	rt, c, p := gachaPoolV2Fixture(t)
+	if !rt.GachaPoolV2 {
+		t.Fatal("pool v2 not marked active")
+	}
+	// Roll 29 beats the v2 chance of 30 but loses to the retail 9.
+	rt.GachaRoll = func() (uint32, error) { return 29, nil }
+	if _, reason := rt.HandleGachaRoll(testDivision, c, p); reason != "" {
+		t.Fatal(reason)
+	}
+	if !reflect.DeepEqual(c.MissionInventory[0].MagicOptions, []uint64{4146, 1}) {
+		t.Fatalf("v2 win recorded %+v, want the TBLADE Star 4146 x1", c.MissionInventory[0].MagicOptions)
+	}
+}
+
+func TestGachaPoolOffRollKeepsTheRetailPool(t *testing.T) {
+	t.Setenv(EnvGachaPoolV2, "off")
+	rt, c, p := gachaPoolV2Fixture(t)
+	if rt.GachaPoolV2 {
+		t.Fatal("pool v2 marked active while off")
+	}
+	prize, ok := rt.GachaCatalog.PrizeForNpc(9251, 1)
+	if !ok || prize.RewardRefObjID != 4140 || prize.ChancePer10000 != 9 {
+		t.Fatalf("retail entry 1 = %#v ok=%v", prize, ok)
+	}
+	rt.GachaRoll = func() (uint32, error) { return 8, nil }
+	if _, reason := rt.HandleGachaRoll(testDivision, c, p); reason != "" {
+		t.Fatal(reason)
+	}
+	if !reflect.DeepEqual(c.MissionInventory[0].MagicOptions, []uint64{4140, 1}) {
+		t.Fatalf("retail win recorded %+v, want 4140 x1", c.MissionInventory[0].MagicOptions)
 	}
 }

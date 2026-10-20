@@ -321,6 +321,118 @@ func fieldUint(path string, line int, fields []string, column, bits int) (uint64
 	return value, nil
 }
 
+// PoolV2 is the port-only Magic Pop prize pool (owner, 2026-10-20; not
+// native): under SRO_GACHA_POOL_V2 the six set-1 weapon prizes pay their
+// Lv76 Star (A_RARE) step at 30/10000 each, and the waste pool gains one
+// ITEM_MALL_HWAN at 300/10000, paid for by trimming the two 1800-weight
+// grain rows to 1650 so the waste total stays 10000. The shipped
+// gachaitemset.txt is never edited; the swap happens after LoadCatalog.
+var poolV2WinRewards = []struct {
+	entryID  uint32
+	codename string
+}{
+	{1, "ITEM_CH_TBLADE_09_A_RARE"},
+	{2, "ITEM_CH_SWORD_09_A_RARE"},
+	{3, "ITEM_CH_SPEAR_09_A_RARE"},
+	{4, "ITEM_CH_BLADE_09_A_RARE"},
+	{5, "ITEM_CH_BOW_09_A_RARE"},
+	{6, "ITEM_CH_SHIELD_09_A_RARE"},
+}
+
+const (
+	poolV2WinChancePer10000   = 30
+	poolV2HwanCodename        = "ITEM_MALL_HWAN"
+	poolV2HwanEntryID         = 1001
+	poolV2HwanChancePer10000  = 300
+	poolV2GrainEntryA         = 15
+	poolV2GrainEntryB         = 16
+	poolV2GrainChancePer10000 = 1650
+	poolV2GrainChanceBefore   = 1800
+)
+
+/*
+================
+ApplyPoolV2
+
+Rewrites this catalog's prizes to the port-only pool above. The retail
+rows are validated before anything moves: a shipped table that no
+longer matches the authored shape fails construction instead of paying
+the wrong pool. The waste bands are rebuilt through the native
+prepareWastePool, so the float-exact lane sees only new input weights.
+================
+*/
+func (c *Catalog) ApplyPoolV2(items enterworld.ItemRefSource) error {
+	source, ok := items.(interface {
+		ItemRefByID(uint32) (*enterworld.ItemRef, bool)
+	})
+	if !ok {
+		return fmt.Errorf("gacha: pool v2 itemdata source requires ID lookup")
+	}
+	for _, swap := range poolV2WinRewards {
+		prize, found := c.prizesByEntry[swap.entryID]
+		if !found || prize.SetID != 1 {
+			return fmt.Errorf("gacha: pool v2 win entry %d is not a set-1 prize", swap.entryID)
+		}
+		ref, found := items.ItemRefByCodename(swap.codename)
+		if !found || ref == nil || ref.RefObjID == 0 {
+			return fmt.Errorf("gacha: pool v2 reward %s is missing", swap.codename)
+		}
+		prize.RewardRefObjID = ref.RefObjID
+		prize.ChancePer10000 = poolV2WinChancePer10000
+		c.prizesByEntry[swap.entryID] = prize
+	}
+	for _, grain := range []uint32{poolV2GrainEntryA, poolV2GrainEntryB} {
+		prize, found := c.prizesByEntry[grain]
+		if !found || prize.SetID != 2 || prize.ChancePer10000 != poolV2GrainChanceBefore {
+			return fmt.Errorf("gacha: pool v2 grain entry %d is not the authored 1800-weight waste row", grain)
+		}
+		prize.ChancePer10000 = poolV2GrainChancePer10000
+		c.prizesByEntry[grain] = prize
+	}
+	if _, exists := c.prizesByEntry[poolV2HwanEntryID]; exists {
+		return fmt.Errorf("gacha: pool v2 waste entry %d already exists", poolV2HwanEntryID)
+	}
+	hwan, found := items.ItemRefByCodename(poolV2HwanCodename)
+	if !found || hwan == nil || hwan.RefObjID == 0 {
+		return fmt.Errorf("gacha: pool v2 reward %s is missing", poolV2HwanCodename)
+	}
+	c.prizesByEntry[poolV2HwanEntryID] = Prize{
+		SetID:          2,
+		EntryID:        poolV2HwanEntryID,
+		RewardRefObjID: hwan.RefObjID,
+		ChancePer10000: poolV2HwanChancePer10000,
+		Quantity:       1,
+	}
+	names := make(map[string]bool)
+	for _, prize := range c.prizesByEntry {
+		ref, found := source.ItemRefByID(prize.RewardRefObjID)
+		if !found || ref == nil || ref.Codename == "" {
+			return fmt.Errorf("gacha: pool v2 entry %d reward %d is missing", prize.EntryID, prize.RewardRefObjID)
+		}
+		names[ref.Codename] = true
+	}
+	c.rewardCodenames = c.rewardCodenames[:0]
+	for name := range names {
+		c.rewardCodenames = append(c.rewardCodenames, name)
+	}
+	sort.Strings(c.rewardCodenames)
+	for _, set := range c.alternateSetIDByNpc {
+		pool := []Prize{}
+		for _, prize := range c.prizesByEntry {
+			if prize.SetID == set {
+				pool = append(pool, prize)
+			}
+		}
+		sort.Slice(pool, func(i, j int) bool { return pool[i].EntryID < pool[j].EntryID })
+		bands, err := prepareWastePool(pool)
+		if err != nil {
+			return fmt.Errorf("gacha: pool v2 waste set %d: %w", set, err)
+		}
+		c.wastePools[set] = bands
+	}
+	return nil
+}
+
 // RewardCodenames admits the complete reward reference closure to world data.
 // Return detached storage so callers cannot mutate catalog ownership.
 func (c *Catalog) RewardCodenames() []string {

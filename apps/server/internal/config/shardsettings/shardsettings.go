@@ -86,6 +86,9 @@ var Settings = []Setting{
 	{Env: "SRO_MOONLIT_THIEF_SUIT", NomadVar: "moonlit_thief_suit", Default: "on"},
 	// Owner, 2026-10-14: no transport summon during the Bandit Den countdown.
 	{Env: "SRO_DEN_NO_TRANSPORT_SUMMON", NomadVar: "den_no_transport_summon", Default: "on"},
+	// Owner, 2026-10-20: Magic Pop prize pool v2 (port-only); the site
+	// publishes the pool's odds, so the catalogue reads the setting too.
+	{Env: "SRO_GACHA_POOL_V2", NomadVar: "gacha_pool_v2", Default: "on", Catalogue: true},
 	// Owner, 2026-10-14: a trader's goods drop on rider death and field logout.
 	{Env: "SRO_TRADER_CARGO_DROP", NomadVar: "trader_cargo_drop", Default: "on"},
 	// Owner, 2026-10-14: Item Mall transports move 1.5 times as fast.

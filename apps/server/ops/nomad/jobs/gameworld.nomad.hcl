@@ -336,6 +336,14 @@ variable "den_no_transport_summon" {
   default = "on"
 }
 
+# gacha_pool_v2 swaps Magic Pop's six weapon prizes for the Lv76 Star
+# steps and adds a Hwan waste row (port-only, not native; owner decision
+# 2026-10-20). "off" restores the retail gachaitemset.txt pool.
+variable "gacha_pool_v2" {
+  type    = string
+  default = "on"
+}
+
 # trader_cargo_drop keeps a loaded transport's goods in the world when its
 # trader dies riding it or logs out outside a town (port-only, not native;
 # owner decision 2026-10-14). "off" is native.
@@ -879,6 +887,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_JOB_SUIT_HIDES_ARMOR                = var.job_suit_hides_armor
         SRO_MOONLIT_THIEF_SUIT                  = var.moonlit_thief_suit
         SRO_DEN_NO_TRANSPORT_SUMMON             = var.den_no_transport_summon
+        SRO_GACHA_POOL_V2                       = var.gacha_pool_v2
         SRO_TRADER_CARGO_DROP                   = var.trader_cargo_drop
         SRO_MALL_TRANSPORT_SPEED                = var.mall_transport_speed
         SRO_MALL_RIDE_SPEED                     = var.mall_ride_speed

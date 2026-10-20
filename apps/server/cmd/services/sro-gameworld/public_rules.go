@@ -268,6 +268,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "A transport can be summoned while the Bandit Den Return Scroll counts down.",
 				Now:    "No transport can be summoned during that countdown.",
 				Why:    "Thieves left stolen goods on the ground and loaded them just before arriving; the original rule returns with one setting."},
+			{Flag: action.EnvGachaPoolV2, On: action.GachaPoolV2FromEnv(),
+				Native: "Magic Pop's six weapon prizes are the plain Lv76 weapons, and the losing pool carries no Hwan scroll.",
+				Now:    "The six weapons pay their Star (Seal of Star) step at 30 in 10000 each, and a losing ticket can draw a Hwan scroll at 300 in 10000.",
+				Why:    "Owner-approved for the beta so a ticket can pay a Star weapon; the retail pool returns with one setting."},
 			{Flag: action.EnvTraderCargoDrop, On: action.TraderCargoDropFromEnv(),
 				Native: "A trader killed while riding a transport, or logging out with one, takes the goods with it; only the transport's own death drops them.",
 				Now: "A trader killed while riding drops the goods around the transport. Logging out outside a town kills a loaded transport where it stands and drops " +

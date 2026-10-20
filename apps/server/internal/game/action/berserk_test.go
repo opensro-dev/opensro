@@ -124,6 +124,46 @@ func TestBerserkPotionConsumesOnlyAcceptedUse(t *testing.T) {
 	}
 }
 
+/*
+================
+TestMallHwanFillsTheBerserkGauge
+
+The mall Hwan (9259) shares TID 3/3/13/13 with the stat recall scrolls;
+only its Param1 (1, against their 2) sends it to the gauge. Using it
+must not recall a stat point.
+================
+*/
+func TestMallHwanFillsTheBerserkGauge(t *testing.T) {
+	c := testCharacter()
+	items := testItems()
+	// The shipped row (itemdata_10000.txt 9259): TID 3/3/13/13, Param1 1.
+	ref := &enterworld.ItemRef{RefObjID: 9259, Codename: "ITEM_MALL_HWAN", TypeIDs: [4]int64{3, 3, 13, 13},
+		NativeFields: enterworld.NewNativeFields(map[string]float64{"canUse": 1, "itemParam1_29c": 1})}
+	items[ref.Codename] = ref
+	c.MissionInventory = []enterworld.InventoryRow{{Slot: 21, RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags(), StackCount: 1}}
+	rt, _ := newTestRuntime(c, items)
+	recalled := false
+	rt.RecallStatPoints = func(*enterworld.Character) ([]wire.Frame, bool) { recalled = true; return nil, true }
+	p := []byte{21, 0, 0}
+	binary.LittleEndian.PutUint16(p[1:], ref.TypeFlags())
+	r := rt.HandleItemUse(testDivision, c, p)
+	if recalled {
+		t.Fatal("the Hwan recalled stat points instead of filling the gauge")
+	}
+	if c.BerserkPoints != 5 || len(c.MissionInventory) != 0 || r.Frames[0].Payload[0] != 1 {
+		t.Fatalf("hwan use %+v points %d bag %+v", r, c.BerserkPoints, c.MissionInventory)
+	}
+	// The family's other Param1 keeps its own lane.
+	recall := &enterworld.ItemRef{RefObjID: 9253, Codename: "ITEM_MALL_STR_RECALL", TypeIDs: [4]int64{3, 3, 13, 13},
+		NativeFields: enterworld.NewNativeFields(map[string]float64{"canUse": 1, "itemParam1_29c": 2})}
+	if family := admittedItemUseFamily(recall); family != itemUseStatRecall {
+		t.Fatalf("recall family %d", family)
+	}
+	if family := admittedItemUseFamily(ref); family != itemUseBerserk {
+		t.Fatalf("hwan family %d", family)
+	}
+}
+
 func TestBerserkKillOwnerPartyAndSourceIdentity(t *testing.T) {
 	rt, _, actor, mob := newCombatTestRuntime(t, 100)
 	rt.BerserkRoll = func() (uint32, error) { return 0, nil }
