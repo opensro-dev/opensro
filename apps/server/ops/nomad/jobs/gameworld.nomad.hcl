@@ -669,6 +669,22 @@ variable "sun_event_only" {
   default = "on"
 }
 
+# unique_gap_exempt lets a unique's drops ignore the native level-gap
+# admission (4C1840), so a capped hunter still loots low-level uniques
+# (port-only, not native; owner decision 2026-10-20). "off" is native.
+variable "unique_gap_exempt" {
+  type    = string
+  default = "on"
+}
+
+# unique_pop_ticket leaves exactly one Magic Pop ticket per unique kill:
+# the native assigned cards are retired into the one guaranteed card
+# (port-only, not native; owner decision 2026-10-20). "off" is native.
+variable "unique_pop_ticket" {
+  type    = string
+  default = "on"
+}
+
 # beta_unique_respawn draws respawning unique monster nests over 45-90 minutes
 # instead of the operator backup's 20-36 minute rows (port-only, not native;
 # owner decision 2026-10-18). "off" keeps the authored row.
@@ -899,6 +915,8 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_RARE_RATE                      = var.beta_rare_rate
         SRO_BETA_SEAL_RATES                     = var.beta_seal_rates
         SRO_SUN_EVENT_ONLY                      = var.sun_event_only
+        SRO_UNIQUE_GAP_EXEMPT                   = var.unique_gap_exempt
+        SRO_UNIQUE_POP_TICKET                   = var.unique_pop_ticket
         SRO_BETA_UNIQUE_RESPAWN                 = var.beta_unique_respawn
         SRO_BETA_DROP_CAP                       = var.beta_drop_cap
         SRO_BETA_DROP_MIX                       = var.beta_drop_mix

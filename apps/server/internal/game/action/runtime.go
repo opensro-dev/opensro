@@ -390,6 +390,8 @@ type Runtime struct {
 	// SunEventOnly keeps degree-9 Seal of Sun gear out of drops and NPC
 	// shops (port-only, not native; action/sunevent.go).
 	SunEventOnly progression.SunEventOnly
+	// UniqueRules: the unique reward switches (progression/uniquerules.go; port-only, not native). Zero is native.
+	UniqueRules progression.UniqueRules
 
 	// PetExpPace is the closed-beta growth multiplier for an attack pet's
 	// EXP gain, read at the owner's level (progression GrowthRates.ExpPace,

@@ -195,6 +195,14 @@ func newGameplayPlane(
 	if items.SunEventOnly.Enabled() {
 		log.Infof("loot: degree-9 Seal of Sun gear neither drops nor is sold (%s)", progression.EnvSunEventOnly)
 	}
+	// SRO_UNIQUE_GAP_EXEMPT / SRO_UNIQUE_POP_TICKET (port-only, not native):
+	// uniques ignore the level-gap admission; one Magic Pop ticket per kill.
+	items.UniqueRules = progression.UniqueRulesFromEnv()
+	if items.UniqueRules.GapExempt || items.UniqueRules.PopTicket {
+		log.Infof("loot: unique rewards (port-only): gap exemption %t, pop ticket %t (%s, %s)",
+			items.UniqueRules.GapExempt, items.UniqueRules.PopTicket,
+			progression.EnvUniqueGapExempt, progression.EnvUniquePopTicket)
+	}
 	// SRO_TRADE_TIERS (port-only, not native) prices the shops' trade goods
 	// as ConfigureCommerce loads them, so it is set first.
 	items.TradeTiers = action.TradeTiersFromEnv()

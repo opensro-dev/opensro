@@ -14,6 +14,7 @@ import (
 
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/gacha"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/loot"
@@ -152,6 +153,12 @@ A negative threshold admits nothing: rand() % 101 is never below zero.
 func (rt *Runtime) admitMonsterDrop(playerLevel uint8, monster monster.Instance) bool {
 	if rt.DropRoll == nil {
 		return false
+	}
+	// Port-only, not native (owner 2026-10-20): with SRO_UNIQUE_GAP_EXEMPT
+	// a unique's drops ignore the gap threshold, so a capped hunter still
+	// loots Tiger Girl. Off, this branch never runs: byte-native 4C1840.
+	if rt.UniqueRules.GapExempt && RollsUniqueDrops(monster.Rarity()) {
+		return true
 	}
 	threshold := int32(100)
 	gap := int32(playerLevel) - int32(monster.Ref.Level)
@@ -629,6 +636,29 @@ func (rt *Runtime) planMonsterKillLoot(
 		planned.OwnerJID = ownerJID
 		planned = rt.scatterMonsterDrop(planned, at, monster.Rarity())
 		admitted = append(admitted, planned)
+	}
+
+	// Port-only, not native (owner 2026-10-20): with SRO_UNIQUE_POP_TICKET
+	// a unique kill leaves exactly one Magic Pop ticket. The native
+	// assigned rows already carry the card at probability 1.0 (two for
+	// the Bone Lord and the Roc), so every admitted native card is
+	// retired and this one guaranteed card replaces them: never zero,
+	// never two. It is appended after admission and the drop cap, like
+	// the unique prepass, so neither can take it; a plan is one kill
+	// (reward_group.go plans once per kill), so a party kill also leaves
+	// exactly one. Off, the native rows flow as generated.
+	if rt.UniqueRules.PopTicket && RollsUniqueDrops(monster.Rarity()) {
+		if ticket, ok := rt.prepareSelectedDrop(loot.DropItem{Codename: gacha.CardCodename, Count: 1, Assigned: true}, at, snapshot.Name, now); ok {
+			kept := admitted[:0]
+			for _, planned := range admitted {
+				if planned.Codename != gacha.CardCodename {
+					kept = append(kept, planned)
+				}
+			}
+			ticket.OwnerJID = ownerJID
+			ticket = rt.scatterMonsterDrop(ticket, at, monster.Rarity())
+			admitted = append(kept, ticket)
+		}
 	}
 	return admitted
 }

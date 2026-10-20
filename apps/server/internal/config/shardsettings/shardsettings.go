@@ -160,6 +160,10 @@ var Settings = []Setting{
 	// Owner, 2026-10-14 (narrowed 2026-10-18): degree-9 Sun gear drops only
 	// from unique monsters and is withheld from NPC shops.
 	{Env: "SRO_SUN_EVENT_ONLY", NomadVar: "sun_event_only", Default: "on", Catalogue: true},
+	// Owner, 2026-10-20: uniques ignore the level-gap drop admission and
+	// always leave exactly one Magic Pop ticket; "off" is native 4C1840.
+	{Env: "SRO_UNIQUE_GAP_EXEMPT", NomadVar: "unique_gap_exempt", Default: "on", Catalogue: true},
+	{Env: "SRO_UNIQUE_POP_TICKET", NomadVar: "unique_pop_ticket", Default: "on", Catalogue: true},
 	// Owner, 2026-10-18: respawning unique nests draw over 45-90 minutes
 	// instead of the operator backup's 20-36 minute rows. "off" keeps the
 	// authored row.
