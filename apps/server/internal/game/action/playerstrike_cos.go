@@ -20,9 +20,10 @@ owner before CGObjPC_RegisterHostileTarget (4E25C0). Hitting a trader's
 transport therefore marks the attacker against the trader as hitting the
 trader would.
 
-This file owns the single-target strike. An area, periodic, debuff, taunt,
-drain or charge row aimed at a COS is refused here for now
-(cosStrikeUnsupported): those paths only know monster and player victims.
+This file owns the COS target stage: a plain hit, a life-steal or charge
+strike, an area with the COS as primary and a periodic install all land
+on the COS's body. A taunt stays refused (monster-hostility only) and a
+hostile debuff stays refused (no COS timed-word owner yet).
 
 ===========================================================================
 */
@@ -54,6 +55,18 @@ cosTargetRefusal
 ================
 */
 func (rt *Runtime) cosTargetRefusal(division string, caster *enterworld.Character, target combatTarget, now int64) uint16 {
+	return rt.cosTargetRefusalWith(division, caster, target, now, 0)
+}
+
+/*
+================
+cosTargetRefusalWith
+
+cosTargetRefusal with 5293A0's control flags: an area selection passes
+playerAttackArea (mode 3), as 5A1AD0 asks for a player caster.
+================
+*/
+func (rt *Runtime) cosTargetRefusalWith(division string, caster *enterworld.Character, target combatTarget, now int64, flags uint8) uint16 {
 	if caster == nil || target.cos == nil || target.cosRef == nil || target.snapshot == nil || target.cos.CurrentHP == 0 ||
 		target.cos.NativeBodyStatus >= mercenaryBodyHiddenFirst && target.cos.NativeBodyStatus <= mercenaryBodyHiddenLast ||
 		target.cosRef.TidWord>>11 == domain.PickupPetBand {
@@ -72,22 +85,7 @@ func (rt *Runtime) cosTargetRefusal(division string, caster *enterworld.Characte
 	if code := rt.companionTeamRefusal(caster, owner); code != 0 {
 		return code
 	}
-	return rt.playerAttackRefusal(division, caster, owner, now, 0)
-}
-
-/*
-================
-cosStrikeUnsupported
-
-The rows this file does not strike a COS with yet: anything but a plain
-single-target hit. An imbue-eligible attack (att value 5) stays admitted: on
-a COS it strikes the COS alone, without the imbue's chain victims.
-================
-*/
-func cosStrikeUnsupported(skill enterworld.SkillRow) bool {
-	return skill.Threat.Only || skill.HostileDebuff.Pinned || skill.TimedEffect.Periodic.Pinned ||
-		skill.OffensiveArea.Radius != 0 || skill.ActionArea.Shape != 0 || skill.LifeSteal.Present ||
-		skill.PositionEffect.Charge
+	return rt.playerAttackRefusal(division, caster, owner, now, flags)
 }
 
 /*
@@ -110,7 +108,15 @@ func (rt *Runtime) acceptCOSTargetStage(st offensiveStage, target combatTarget) 
 	if code := rt.cosTargetRefusal(division, snapshot, target, now); code != 0 {
 		return offensiveRefusal(code), skillCastRefused
 	}
-	if cosStrikeUnsupported(skill) {
+	if skill.Threat.Only {
+		// A taunt is monster-hostility only, as on a player.
+		return offensiveRefusal(0x3006), skillCastRefused
+	}
+	if skill.HostileDebuff.Pinned {
+		// Still refused: the debuff word (terd/thrd) installs on a monster
+		// as a SelfEffect and on a player as a character effect; a COS has
+		// neither registry, and its abnormal block takes status records
+		// only. Landing it needs a COS timed-word owner (see PR notes).
 		return offensiveRefusal(0x3006), skillCastRefused
 	}
 	if st.advanced {
@@ -134,19 +140,30 @@ func (rt *Runtime) acceptCOSTargetStage(st offensiveStage, target combatTarget) 
 	if skill.ActionCastingTimeMs != 0 && st.release == nil {
 		return rt.prepareOffensiveCast(division, character, snapshot, st.cast, skill, st.advanced, st.rootID, now)
 	}
+	// The player stage's dispatch order (pvpstrike.go), on the COS body:
+	// a periodic installs its linked pair, an area resolves around the
+	// COS as primary, anything else strikes it directly.
+	if skill.TimedEffect.Periodic.Pinned {
+		return rt.installPeriodicCast(periodicCast{division: division, character: character, snapshot: snapshot,
+			skill: skill, cast: st.cast, target: target, attacker: st.attacker, now: now, release: st.release})
+	}
+	if skill.OffensiveArea.Radius != 0 {
+		return rt.acceptSkillAreaAt(division, character, snapshot, skill, skill.OffensiveArea, false, true, target, st.attacker, st.loadout, st.consumeAmmo, now, st.rootID, st.release)
+	}
 	return rt.strikeCOSTarget(st, target, casterAt)
 }
 
 /*
 ================
-planPlayerCOSHit
+planPlayerCOSHitAt
 
-The player's formula against the COS's own defence for every impact, the
-displacement on the first impact that leaves it standing, and the status
-rolls of every unblocked impact (5905FB: a blocked one rolls nothing).
+planPlayerCOSHit at an area's running percent (0 reads as the whole
+result, combat.FinishImpact) with an lfst row's life-steal base: an area
+victim takes the life-steal record at its percent, as a monster does
+(58F4B5).
 ================
 */
-func (rt *Runtime) planPlayerCOSHit(st offensiveStage, target combatTarget, casterAt simulation.Spawn) (cosHit, bool) {
+func (rt *Runtime) planPlayerCOSHitAt(st offensiveStage, target combatTarget, casterAt simulation.Spawn, percent uint64, lifeStealBase int64) (cosHit, bool) {
 	division, snapshot, skill, now := st.division, st.snapshot, st.skill, st.now
 	owner, ref := target.player, target.cosRef
 	// The authoritative companion, never the target's detached copy: its
@@ -167,11 +184,18 @@ func (rt *Runtime) planPlayerCOSHit(st offensiveStage, target combatTarget, cast
 	remainingHP := pet.CurrentHP
 	actor := criticalActor{division: division, character: snapshot.Name}
 	for range skill.Attack.ImpactCount {
-		formula, resolveErr := rt.resolvePlayerImpact(division, snapshot.Name, skill, st.attacker, defender, now, false)
-		if resolveErr != nil {
-			return cosHit{}, false
+		var formula combat.Result
+		if skill.LifeSteal.Present {
+			// 58F4B5: the percent rides into 40F750, after its HP cap.
+			formula = lifeStealResult(lifeStealBase, st.attacker, defender, remainingHP, uint32(percent))
+			formula = combat.FinishImpact(formula, combat.ImpactTail{PercentApplied: true, Attack: skill.Attack.Present})
+		} else {
+			resolved, resolveErr := rt.resolvePlayerImpact(division, snapshot.Name, skill, st.attacker, defender, now, false)
+			if resolveErr != nil {
+				return cosHit{}, false
+			}
+			formula = combat.FinishImpact(resolved, combat.ImpactTail{Percent: percent, Attack: skill.Attack.Present})
 		}
-		formula = combat.FinishImpact(formula, combat.ImpactTail{Attack: skill.Attack.Present})
 		hit.formulas = append(hit.formulas, formula)
 		if formula.Blocked {
 			continue
@@ -213,13 +237,38 @@ the companion's publication.
 */
 func (rt *Runtime) strikeCOSTarget(st offensiveStage, target combatTarget, casterAt simulation.Spawn) (OpResult, skillCastDecision) {
 	division, character, snapshot, skill, now := st.division, st.character, st.snapshot, st.skill, st.now
-	hit, planned := rt.planPlayerCOSHit(st, target, casterAt)
+	stealBase, stealOK := int64(0), true
+	if skill.LifeSteal.Present {
+		stealBase, stealOK = rt.lifeStealBase(division, snapshot, skill.LifeSteal, st.attacker)
+	}
+	if !stealOK {
+		return OpResult{}, skillCastRefused
+	}
+	hit, planned := rt.planPlayerCOSHitAt(st, target, casterAt, 0, stealBase)
 	if !planned {
 		return OpResult{}, skillCastRefused
 	}
+	var travel skillTravelPlan
+	if skill.PositionEffect.Charge {
+		from, navOwner := rt.liveNav(simulation.WorldKey(division, snapshot.Name), snapshot, now)
+		radius, valid := rt.deps.CharacterBodyRadius(snapshot)
+		goal, admitted := chargeSkillGoal(from, target.at, skill.PositionEffect.Range, radius+float64(target.cosRef.Parameters.BodyRadius))
+		if !valid || !admitted {
+			return OpResult{}, skillCastRefused
+		}
+		if travel, planned = rt.planSkillTravel(snapshot.Name, from, navOwner, goal); !planned {
+			return OpResult{DiagnosticRefusal: "charge-navigation-refused"}, skillCastRefused
+		}
+	}
 	owner := target.player
+	// 4E1F60 classifies the kill against the owner before the door, as a
+	// player kill does; withVictim refreshes it inside.
+	kill := rt.classifyPlayerKill(division, character, owner)
 	var ammo ammunitionResult
-	var battle, attacked, attack, killCredit, killPublic []wire.Frame
+	var battle, attacked, attack, killCredit, killPublic, killReward, killRewardPublic []wire.Frame
+	var stolen wire.Frame
+	var killAfter jobKillPayout
+	var killWar domain.GuildWarCombat
 	var refusal uint16
 	if !rt.deps.UpdateMany([]*enterworld.Character{character, owner}, "player-strike-cos", func() bool {
 		var cost skillCharge
@@ -243,6 +292,11 @@ func (rt *Runtime) strikeCOSTarget(st offensiveStage, target combatTarget, caste
 		// aggression map as it found it.
 		attacked = rt.registerPlayerAttacked(division, owner, character, now)
 		if hit.strike.fatal {
+			// 4E27F4 books the kill against the owner (payCOSKillInDoor)
+			// before 4E280B registers the hostile target below and before
+			// the COS's own penalty relief.
+			kill = kill.withVictim(character, owner)
+			killReward, killRewardPublic, killAfter, killWar = rt.payCOSKillInDoor(division, character, owner, kill, hit.pet.Level, now)
 			// 4C42F0 -> 4EB6B0: the killing blow eases the caster's murder
 			// penalty by the gap to the companion's level (cosplayerkill.go).
 			killCredit, killPublic = rt.creditPlayerCOSKill(division, character, hit.pet.Level)
@@ -260,6 +314,12 @@ func (rt *Runtime) strikeCOSTarget(st offensiveStage, target combatTarget, caste
 		} else if st.release == nil {
 			rt.registerPlayerSkillCooldown(division, character, skill, now)
 		}
+		if skill.LifeSteal.Present {
+			stolen = rt.commitLifeSteal(division, character, cosDamageResults(&hit))
+		}
+		if skill.PositionEffect.Charge {
+			rt.commitSkillTravel(simulation.WorldKey(division, character.Name), character, travel)
+		}
 		return true
 	}) {
 		if refusal != 0 {
@@ -267,7 +327,11 @@ func (rt *Runtime) strikeCOSTarget(st offensiveStage, target combatTarget, caste
 		}
 		return OpResult{}, skillCastRefused
 	}
+	if skill.PositionEffect.Charge {
+		rt.bindResidentRegion(simulation.WorldKey(division, character.Name), now)
+	}
 	strike := rt.publishCOSHit(&hit)
+	rt.publishGuildWarCombat(division, killWar, now)
 	caster := enterworld.ObjectIDForCharacter(snapshot)
 	var token uint32
 	if st.release != nil {
@@ -311,6 +375,9 @@ func (rt *Runtime) strikeCOSTarget(st offensiveStage, target combatTarget, caste
 		private = append(private, vitals)
 	}
 	public = append(public, attacked...)
+	actor = append(actor, killReward...)
+	private = append(private, killReward...)
+	public = append(public, killRewardPublic...)
 	actor = append(actor, killCredit...)
 	private = append(private, killCredit...)
 	public = append(public, killPublic...)
@@ -318,10 +385,16 @@ func (rt *Runtime) strikeCOSTarget(st offensiveStage, target combatTarget, caste
 	public = append(public, attack...)
 	actor = append(actor, battle...)
 	public = append(public, battle...)
-	out := OpResult{Frames: actor, Broadcast: public, ActorPrivate: private}
-	if len(strike.private) > 0 {
-		out.Recipients = []RecipientFrames{{CharacterID: owner.ID, Frames: strike.private}}
+	if stolen.Opcode != 0 {
+		actor = append(actor, stolen)
+		public = append(public, stolen)
 	}
+	out := OpResult{Frames: actor, Broadcast: public, ActorPrivate: private}
+	recipients := rt.payJobKillShares(killAfter)
+	if len(strike.private) > 0 {
+		recipients = append([]RecipientFrames{{CharacterID: owner.ID, Frames: strike.private}}, recipients...)
+	}
+	out.Recipients = recipients
 	return out, skillCastAccepted
 }
 

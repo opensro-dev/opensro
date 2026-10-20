@@ -197,6 +197,65 @@ func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterwor
 
 /*
 ================
+payCOSKillInDoor
+
+4E1F60 (reached from 4E27C0 at 4E27F4) for a fatal hit on a COS: the
+relation is classified against the COS's owner (kill, refreshed by
+withVictim inside the door), while the actual victim is the COS. An
+ordinary kill books the murder against the owner (RecordMurder on the
+owner's level); a job kill pays job EXP on the owner's level, shared by
+the killer's party, but not the +0x1c * 3 basis EXP, which 4E20CE gates
+on the actual victim being a player, and not the port-only job-kill or
+Most Wanted notices; a guild-war kill scores from the COS's own level
+(5C71D7). 4E6980 never runs on a COS death, so no PvP EXP is paid. The
+killer's penalty relief for the COS itself (4EB6B0) stays with
+creditPlayerCOSKill, after this. war is published by the caller after
+its door, as a player kill's is.
+================
+*/
+func (rt *Runtime) payCOSKillInDoor(division string, killer, owner *enterworld.Character, kill playerKill, cosLevel uint8, now int64) (actor, public []wire.Frame, after jobKillPayout, war domain.GuildWarCombat) {
+	if killer == nil || owner == nil {
+		return nil, nil, after, war
+	}
+	switch kill.kind {
+	case pk.DeathPlayer:
+		if !enterworld.CharacterAlive(killer) || kill.legalEnemy {
+			break
+		}
+		before := killer.PVPState()
+		changed := pk.RecordMurder(killer, levelByte(killer), levelByte(owner), rt.Now())
+		actor = append(actor, pkRecordFrames(killer, changed)...)
+		rt.notePKRecord(division, killer)
+		if before != killer.PVPState() {
+			public = append(public, playerPVPStateFrame(killer))
+		}
+	case pk.DeathJob:
+		party := rt.rewardPartyOf(division, enterworld.ObjectIDForCharacter(killer))
+		if party == nil {
+			if frames, ok := rt.addJobExperience(killer, jobKillExperience(rt.deps.LevelData(), killer, rewardLevel(owner))); ok {
+				actor = append(actor, frames...)
+			}
+			break
+		}
+		fallen := jobKillVictim{level: rewardLevel(owner), world: domain.CharacterWorldInstance(owner),
+			at: rt.liveSpawn(simulation.WorldKey(division, owner.Name), owner, now)}
+		for _, share := range rt.jobKillShares(division, killer, fallen, party, now) {
+			if share.member != killer {
+				after.shares = append(after.shares, share)
+				continue
+			}
+			if frames, ok := rt.addJobExperience(killer, share.exp); ok {
+				actor = append(actor, frames...)
+			}
+		}
+	case pk.DeathGuildWar:
+		war = rt.prepareCOSGuildWarCombat(division, killer, owner, cosLevel)
+	}
+	return actor, public, after, war
+}
+
+/*
+================
 jobKillPayout
 
 What a committed kill still owes after its door: the party's job shares,

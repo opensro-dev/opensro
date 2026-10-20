@@ -12,7 +12,9 @@ COS owner; this does not register a second monster actor.
 package action
 
 import (
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 )
 
@@ -47,5 +49,33 @@ func (rt *Runtime) petStrikeCOS(step petCombatStep, target petCombatTarget, skil
 	if len(outcome.strike.private) > 0 {
 		step.state.others = append(step.state.others, RecipientFrames{CharacterID: target.player.ID, Frames: outcome.strike.private})
 	}
-	return petStrikeResult{strike: outcome.strike, fatal: outcome.strike.fatal}, true
+	if !outcome.strike.fatal {
+		return petStrikeResult{strike: outcome.strike, fatal: outcome.strike.fatal}, true
+	}
+	// 4E27F4 -> 4E1F60 for a pet's fatal hit: the pet's owner is the
+	// killer, classified against the COS's owner, booked before its own
+	// penalty relief for the COS (4EB6B0). The hit already settled inside
+	// the victim owner's door; the booking takes a door holding both.
+	killer, victimOwner := step.state.character, target.player
+	cosLevel := live.Level
+	if cosLevel == 0 {
+		cosLevel = target.cosRef.Level
+	}
+	kill := rt.classifyPlayerKill(step.key.division, killer, victimOwner)
+	var rewardActor, rewardPublic []wire.Frame
+	var after jobKillPayout
+	var war domain.GuildWarCombat
+	rt.deps.UpdateManyDeferred([]*enterworld.Character{killer, victimOwner}, "pet-cos-kill", func() bool {
+		kill = kill.withVictim(killer, victimOwner)
+		rewardActor, rewardPublic, after, war = rt.payCOSKillInDoor(step.key.division, killer, victimOwner, kill, cosLevel, step.nowMs)
+		creditActor, creditPublic := rt.creditPlayerCOSKill(step.key.division, killer, cosLevel)
+		rewardActor = append(rewardActor, creditActor...)
+		rewardPublic = append(rewardPublic, creditPublic...)
+		return true
+	})
+	rt.publishGuildWarCombat(step.key.division, war, step.nowMs)
+	strike := outcome.strike
+	strike.public = append(strike.public, rewardPublic...)
+	step.state.others = append(step.state.others, rt.payJobKillShares(after)...)
+	return petStrikeResult{strike: strike, actor: rewardActor, fatal: true}, true
 }

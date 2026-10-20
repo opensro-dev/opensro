@@ -129,23 +129,51 @@ func (rt *Runtime) areaPlayerCandidates(q areaQuery) []areaCandidate {
 		if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) {
 			continue
 		}
-		radius, ok := rt.deps.CharacterBodyRadius(snapshot)
-		if !ok {
-			continue
+		// 5A1AD0 excludes a mounted player (5A1B51..5D reads the ride and
+		// skips the rider); the ride itself is a candidate below.
+		if ridingCOS(snapshot) == 0 {
+			radius, ok := rt.deps.CharacterBodyRadius(snapshot)
+			if !ok {
+				continue
+			}
+			limit := q.reach
+			if !q.nearest {
+				limit += radius
+			}
+			if distance <= limit {
+				// 5A1AD0 asks 5293A0 with mode 3 for a player caster.
+				if rt.hostilePlayerRefusalWith(q.division, q.caster, snapshot, q.skill, q.now, playerAttackArea) == 0 {
+					out = append(out, areaCandidate{target: combatTarget{gid: present.GID, player: player, snapshot: snapshot,
+						at: present.Spawn}, distance: distance, radius: radius})
+				}
+			}
 		}
-		limit := q.reach
-		if !q.nearest {
-			limit += radius
+		// The present player's companions are candidates through their
+		// owner (5A1AD0's mode 3 on the COS), a ridden transport included:
+		// enumerated from the owner's record, not companionTargets, whose
+		// mounted filter serves the pet strike lane.
+		for _, pet := range snapshot.Companions() {
+			if pet == nil || !pet.Summoned {
+				continue
+			}
+			target, ok := rt.resolveCOSTarget(q.division, q.caster, pet.GID, q.now)
+			if !ok || simulation.IsDungeonRegion(target.at.RegionID) != simulation.IsDungeonRegion(q.center.RegionID) {
+				continue
+			}
+			cosDistance := areaDistance(q.center, target.at)
+			limit := q.reach
+			if !q.nearest {
+				limit += float64(target.cosRef.Parameters.BodyRadius)
+			}
+			if cosDistance > limit {
+				continue
+			}
+			if rt.cosTargetRefusalWith(q.division, q.caster, target, q.now, playerAttackArea) != 0 {
+				continue
+			}
+			out = append(out, areaCandidate{target: target, distance: cosDistance,
+				radius: float64(target.cosRef.Parameters.BodyRadius)})
 		}
-		if distance > limit {
-			continue
-		}
-		// 5A1AD0 asks 5293A0 with mode 3 for a player caster.
-		if rt.hostilePlayerRefusalWith(q.division, q.caster, snapshot, q.skill, q.now, playerAttackArea) != 0 {
-			continue
-		}
-		out = append(out, areaCandidate{target: combatTarget{gid: present.GID, player: player, snapshot: snapshot,
-			at: present.Spawn}, distance: distance, radius: radius})
 	}
 	return out
 }

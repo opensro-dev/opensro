@@ -15,6 +15,7 @@ package action
 import (
 	"sync/atomic"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -225,11 +226,12 @@ func (rt *Runtime) advancePeriodicEffectInDivision(step linkedpulse.Step, now in
 		live = live && ok && owner.(populationAdmission).session == effect.SourceSession
 	}
 	target, exists := rt.resolveCombatTarget(effect.Division, snapshot, effect.TargetGID, now)
-	// A periodic row is never installed on a COS (cosStrikeUnsupported).
-	live = live && exists && target.cos == nil
+	live = live && exists
 	var result OpResult
 	if live && step.Pulse {
-		if target.monster != nil {
+		if target.cos != nil {
+			result = rt.applyPeriodicCOSPulse(effect, c, snapshot, target, now)
+		} else if target.monster != nil {
 			result = rt.applyPeriodicPulse(effect, c, snapshot, *target.monster, now)
 		} else {
 			result = rt.applyPeriodicPlayerPulse(effect, c, snapshot, target, now)
@@ -346,4 +348,75 @@ func (rt *Runtime) applyPeriodicPlayerPulse(effect linkedpulse.Effect, c, snapsh
 	})
 	result.Broadcast = append([]wire.Frame{pulse}, result.Broadcast...)
 	return result
+}
+
+/*
+================
+applyPeriodicCOSPulse
+
+A pulse on a COS recipient: the periodic attack's record on the COS's own
+body in the owner's door, its kill booked against the owner exactly as a
+struck COS kill (payCOSKillInDoor), published as the player pulse is.
+================
+*/
+func (rt *Runtime) applyPeriodicCOSPulse(effect linkedpulse.Effect, c, snapshot *enterworld.Character, target combatTarget, now int64) OpResult {
+	skill, known := rt.deps.SkillData().SkillByID(effect.SkillID)
+	if !known || !skill.TimedEffect.Periodic.Pinned || c == nil {
+		return OpResult{}
+	}
+	skill.Attack = skill.TimedEffect.Periodic.Attack
+	if skill.Attack.ImpactCount == 0 {
+		skill.Attack.ImpactCount = 1
+	}
+	attacker, _, err := rt.playerCombatStats(effect.Division, snapshot)
+	if err != nil {
+		return OpResult{}
+	}
+	owner := target.player
+	st := offensiveStage{division: effect.Division, character: c, snapshot: snapshot, skill: skill, attacker: attacker, now: now}
+	casterAt := rt.liveSpawn(simulation.WorldKey(effect.Division, snapshot.Name), snapshot, now)
+	hit, planned := rt.planPlayerCOSHitAt(st, target, casterAt, 0, 0)
+	if !planned {
+		return OpResult{}
+	}
+	kill := rt.classifyPlayerKill(effect.Division, c, owner)
+	var actor, public []wire.Frame
+	var after jobKillPayout
+	var war domain.GuildWarCombat
+	landed := false
+	rt.deps.UpdateMany([]*enterworld.Character{c, owner}, "periodic-cos-pulse", func() bool {
+		if !rt.applyCOSHitInDoor(effect.Division, &hit, now) {
+			return false
+		}
+		landed = true
+		public = append(public, rt.registerPlayerAttacked(effect.Division, owner, c, now)...)
+		if hit.strike.fatal {
+			kill = kill.withVictim(c, owner)
+			a, p, aft, w := rt.payCOSKillInDoor(effect.Division, c, owner, kill, hit.pet.Level, now)
+			actor = append(actor, a...)
+			public = append(public, p...)
+			after, war = aft, w
+			credit, creditPublic := rt.creditPlayerCOSKill(effect.Division, c, hit.pet.Level)
+			actor = append(actor, credit...)
+			public = append(public, creditPublic...)
+		}
+		attack := rt.registerPlayerAttack(effect.Division, c, owner, now)
+		actor = append(actor, attack...)
+		public = append(public, attack...)
+		return true
+	})
+	if !landed {
+		return OpResult{}
+	}
+	rt.publishGuildWarCombat(effect.Division, war, now)
+	strike := rt.publishCOSHit(&hit)
+	pulse := wire.SkillPulseFrame(effect.SourceGID, skill.ID, []wire.SkillAreaTarget{
+		{GID: target.gid, Impacts: hit.strike.impacts},
+	})
+	out := OpResult{Broadcast: append([]wire.Frame{pulse}, append(strike.public, public...)...), ActorPrivate: actor}
+	if len(strike.private) > 0 {
+		out.Recipients = append(out.Recipients, RecipientFrames{CharacterID: owner.ID, Frames: strike.private})
+	}
+	out.Recipients = append(out.Recipients, rt.payJobKillShares(after)...)
+	return out
 }

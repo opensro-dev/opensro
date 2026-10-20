@@ -15,6 +15,8 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/pk"
+	"opensro.online/server/internal/game/social/guildwar"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -265,9 +267,10 @@ func TestPlayerKillOfATransportScattersItsCargo(t *testing.T) {
 ================
 TestPlayerKillOfACOSEasesTheKillersPenalty
 
-4C42F0 -> 4EB6B0 for a player's killing blow on a COS: a caster with a
-murder penalty eases it by the gap to the companion's level and hears its
-0x30F2; a blow that does not kill eases nothing.
+4E27F4 -> 4E1F60 books the kill against the owner first (a murder here:
+total +1, penalty +1200, daily +1), then 4C42F0 -> 4EB6B0 eases the
+killer's penalty by the gap to the companion's level, and the killer
+hears its 0x30F2; a blow that does not kill books and eases nothing.
 ================
 */
 func TestPlayerKillOfACOSEasesTheKillersPenalty(t *testing.T) {
@@ -281,12 +284,99 @@ func TestPlayerKillOfACOSEasesTheKillersPenalty(t *testing.T) {
 	if _, ok := findFrame(out.Frames, wire.OpSkillCastResult); !ok {
 		t.Fatalf("no cast result: %+v (%s)", out.Frames, out.DiagnosticRefusal)
 	}
-	if attacker.PK.Penalty != 90 {
-		t.Fatalf("penalty %d after the kill, want 90", attacker.PK.Penalty)
+	if attacker.PK.Penalty != 1290 {
+		t.Fatalf("penalty %d after the kill, want 1290 (100 + 1200 murder booked, then 10 relieved)", attacker.PK.Penalty)
+	}
+	if attacker.PK.TotalCount != 1 || attacker.PK.DailyCount != 1 {
+		t.Fatalf("kill book %+v, want one murder and one daily PK", attacker.PK)
 	}
 	if _, ok := findFrame(out.Frames, wire.OpPKPenalty); !ok {
 		t.Fatal("no 0x30F2 for the killer")
 	}
+}
+
+/*
+================
+TestPlayerKillOfACOSBooksTheKillAgainstItsOwner
+
+4E1F60 with the COS as actual victim: an open-field kill of a neutral
+owner's COS is a murder against the owner (never against the COS), and a
+guild-war kill of a COS scores from the COS's own level (5C71D7) with no
+murder booked.
+================
+*/
+func TestPlayerKillOfACOSBooksTheKillAgainstItsOwner(t *testing.T) {
+	t.Run("murder", func(t *testing.T) {
+		rt, _, attacker, owner := newPvpPair(t)
+		equipStrikeTestCOS(t, rt, owner)
+		transport := owner.ActiveCOS
+		transport.CurrentHP = 1
+		out := rt.HandleTargetInteract(testDivision, attacker, wire.BasicAttackEngage{TargetGid: transport.GID}.Encode())
+		if _, ok := findFrame(out.Frames, wire.OpSkillCastResult); !ok {
+			t.Fatalf("no cast result: %+v (%s)", out.Frames, out.DiagnosticRefusal)
+		}
+		if attacker.PK == nil || attacker.PK.TotalCount != 1 || attacker.PK.DailyCount != 1 {
+			t.Fatalf("killer book %+v, want one murder against the owner", attacker.PK)
+		}
+		if owner.PK != nil && (owner.PK.TotalCount != 0 || owner.PK.Penalty != 0) {
+			t.Fatalf("owner book %+v, want untouched: the COS is not a murder victim", owner.PK)
+		}
+	})
+	t.Run("guild war scores from the COS level", func(t *testing.T) {
+		rt, _, attacker, owner := newPvpPair(t)
+		var err error
+		rt.GuildWars, err = guildwar.New(testDivision, warRelationStore{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		attacker.GuildID, owner.GuildID = testInt64(7), testInt64(8)
+		equipStrikeTestCOS(t, rt, owner)
+		transport := owner.ActiveCOS
+		transport.Level = uint8(rewardLevel(attacker)) + 10
+		transport.CurrentHP = 1
+		var credits []domain.GuildWarCombat
+		rt.GuildWarKill = func(_ string, combat domain.GuildWarCombat, _ int64) { credits = append(credits, combat) }
+		out := rt.HandleTargetInteract(testDivision, attacker, wire.BasicAttackEngage{TargetGid: transport.GID}.Encode())
+		if _, ok := findFrame(out.Frames, wire.OpSkillCastResult); !ok {
+			t.Fatalf("no cast result: %+v (%s)", out.Frames, out.DiagnosticRefusal)
+		}
+		want := domain.GuildWarCombat{WarID: 77, KillerID: attacker.ID, VictimID: owner.ID, Score: 250}
+		if len(credits) != 1 || credits[0] != want {
+			t.Fatalf("war credits %+v, want [%+v] (the COS's level, not the owner's)", credits, want)
+		}
+		if attacker.PK != nil && attacker.PK.TotalCount != 0 {
+			t.Fatalf("war kill became murder %+v", attacker.PK)
+		}
+	})
+	t.Run("job kill pays job EXP on the owner's level only", func(t *testing.T) {
+		rt, _, attacker, owner := newPvpPair(t)
+		var jobPaid, expPaid int64
+		rt.UpdateJobExperience = func(c *enterworld.Character, delta int64) ([]wire.Frame, bool) {
+			if c == attacker {
+				jobPaid += delta
+			}
+			return nil, true
+		}
+		rt.UpdateExperience = func(c *enterworld.Character, exp, _ int64, _ uint32) ([]wire.Frame, bool) {
+			if c == attacker {
+				expPaid += exp
+			}
+			return nil, true
+		}
+		rt.deps.(*enterworld.Deps).Levels = jobKillLevels{LevelDataSource: rt.deps.LevelData(), gold: map[int64]int64{1: 80}}
+		kill := playerKill{kind: pk.DeathJob}
+		_, _, after, _ := rt.payCOSKillInDoor(testDivision, attacker, owner, kill, 5, 0)
+		want := jobKillExperience(rt.deps.LevelData(), attacker, rewardLevel(owner))
+		if want <= 0 || jobPaid != want {
+			t.Fatalf("job EXP %d, want %d from the owner's level", jobPaid, want)
+		}
+		if expPaid != 0 {
+			t.Fatalf("PvP EXP paid %d: 4E6980 never runs on a COS death", expPaid)
+		}
+		if len(after.shares) != 0 || len(after.notices) != 0 {
+			t.Fatalf("payout %+v, want no shares or notices for a solo COS job kill", after)
+		}
+	})
 }
 
 /*
@@ -311,5 +401,252 @@ func TestPlayerAttackOnAMountedPlayerStrikesTheRide(t *testing.T) {
 	}
 	if *owner.CurrentHP != 100 {
 		t.Fatalf("rider HP %d, want the untouched 100", *owner.CurrentHP)
+	}
+}
+
+/*
+================
+TestAreaCandidatesSpareTheRiderAndTakeTheRide
+
+5A1AD0 excludes a mounted player (5A1B51..5D) and admits companions
+through their owner with mode 3: the ride is a candidate, its rider is
+not, and an unmounted companion is a candidate too.
+================
+*/
+func TestAreaCandidatesSpareTheRiderAndTakeTheRide(t *testing.T) {
+	rt, clock, attacker, owner := newPvpPair(t)
+	rt.RewardActorPresent = func(string, string) bool { return true }
+	equipStrikeTestCOS(t, rt, owner)
+	ride := owner.ActiveCOS
+	ride.Mounted = true
+	now := clock.NowMs()
+	skill := enterworld.SkillRow{Attack: enterworld.SkillAttack{Present: true}}
+	q := areaQuery{selects: areaSelectHostile, division: testDivision, caster: attacker, skill: skill,
+		center: rt.liveSpawn(simulation.WorldKey(testDivision, attacker.Name), attacker, now), reach: 50, now: now}
+	var riderFound, rideFound bool
+	for _, candidate := range rt.areaPlayerCandidates(q) {
+		if candidate.target.player == owner && candidate.target.cos == nil {
+			riderFound = true
+		}
+		if candidate.target.gid == ride.GID && candidate.target.cos != nil {
+			rideFound = true
+		}
+	}
+	if riderFound {
+		t.Fatal("the mounted rider is an area candidate: 5A1AD0 excludes it")
+	}
+	if !rideFound {
+		t.Fatal("the ridden transport is not an area candidate")
+	}
+}
+
+/*
+================
+TestAreaStrikeOnACOSBooksTheKillAgainstItsOwner
+
+An area victim that is a COS takes the area's running percent on its own
+body, and a fatal area hit books the kill against the owner exactly as a
+single-target COS kill does (4E1F60 through the owner).
+================
+*/
+func TestAreaStrikeOnACOSBooksTheKillAgainstItsOwner(t *testing.T) {
+	rt, clock, attacker, owner := newPvpPair(t)
+	rt.RewardActorPresent = func(string, string) bool { return true }
+	equipStrikeTestCOS(t, rt, owner)
+	cos := owner.ActiveCOS
+	cos.CurrentHP = 1
+	now := clock.NowMs()
+	skill := shippedOffense(t, "SKILL_CH_LIGHTNING_CHUNDUNG_A_01")
+	rt.deps.SkillData().(staticSkillSource)[skill.ID] = skill
+	attacker.Skills = append(attacker.Skills, skill.ID)
+	attacker.Intellect = testInt64(200)
+	attacker.CurrentMP = testInt64(1000)
+	target, ok := rt.resolveCOSTarget(testDivision, attacker, cos.GID, now)
+	if !ok {
+		t.Fatal("the COS does not resolve as an area victim")
+	}
+	stats, _, err := rt.playerCombatStats(testDivision, attacker)
+	if err != nil {
+		t.Fatalf("attacker stats: %v", err)
+	}
+	plan, planned := rt.planAreaVictims(areaPlanInput{division: testDivision, caster: attacker, snapshot: attacker,
+		skill: skill, attacker: stats, victims: []combatTarget{target}, impacts: 1, now: now})
+	if !planned || len(plan.cosHits) != 1 {
+		t.Fatalf("area plan %+v, want one COS victim", plan)
+	}
+	roster := rt.monsterRewardRoster(testDivision, attacker, now)
+	var commit areaCommit
+	var committed bool
+	if !rt.deps.UpdateMany(roster.characters, "test-area-cos", func() bool {
+		commit, committed = rt.commitAreaInDoor(testDivision, attacker, roster, &plan, now)
+		return committed
+	}) || !committed {
+		t.Fatal("the area commit refused the COS victim")
+	}
+	if cos.CurrentHP != 0 {
+		t.Fatalf("COS HP %d, want 0 after the fatal area hit", cos.CurrentHP)
+	}
+	if attacker.PK == nil || attacker.PK.TotalCount != 1 || attacker.PK.DailyCount != 1 {
+		t.Fatalf("attacker PK %+v, want the murder booked against the COS's owner", attacker.PK)
+	}
+	if len(commit.cosPublic) == 0 {
+		t.Fatal("the COS victim published nothing")
+	}
+}
+
+/*
+================
+TestAreaSkillOnAMountedPlayerStrikesTheRide
+
+59B5F3 swaps a mounted target for its ride at admission, so an area row
+aimed at the rider resolves with the ride as primary: the ride takes the
+hit, the rider keeps every HP (the Bug 3 area arm of the redirect).
+================
+*/
+func TestAreaSkillOnAMountedPlayerStrikesTheRide(t *testing.T) {
+	rt, _, attacker, owner := newPvpPair(t)
+	rt.RewardActorPresent = func(string, string) bool { return true }
+	ref := equipStrikeTestCOS(t, rt, owner)
+	ride := owner.ActiveCOS
+	ride.Mounted = true
+	skill := shippedOffense(t, "SKILL_CH_LIGHTNING_CHUNDUNG_A_01")
+	rt.deps.SkillData().(staticSkillSource)[skill.ID] = skill
+	attacker.Skills = append(attacker.Skills, skill.ID)
+	attacker.Intellect = testInt64(200)
+	attacker.CurrentMP = testInt64(1000)
+	out := rt.HandleTargetInteract(testDivision, attacker, wire.SkillAction{ActionId: skill.ID, HasTarget: true,
+		TargetGid: enterworld.ObjectIDForCharacter(owner)}.Encode())
+	if len(out.Frames) == 0 {
+		t.Fatalf("area cast on the mounted player refused (%s)", out.DiagnosticRefusal)
+	}
+	if ride.CurrentHP >= ref.MaxHP {
+		t.Fatalf("ride HP %d, want below %d: the redirected area must strike the ride", ride.CurrentHP, ref.MaxHP)
+	}
+	if *owner.CurrentHP != 100 {
+		t.Fatalf("rider HP %d, want the untouched 100", *owner.CurrentHP)
+	}
+}
+
+/*
+================
+cosTestSkill
+
+A cloned combat-fixture skill under a test id, shaped by shape.
+================
+*/
+func cosTestSkill(t *testing.T, rt *Runtime, id uint32, shape func(*enterworld.SkillRow)) enterworld.SkillRow {
+	t.Helper()
+	source := rt.deps.SkillData().(staticSkillSource)
+	skill := source[2]
+	skill.ID, skill.Group, skill.Codename = id, 900, "TEST_COS_SKILL"
+	skill.CombatPinned, skill.DirectOffensePinned = false, false
+	skill.ActionCastingTimeMs = 0
+	skill.Consumption = enterworld.SkillConsumption{Pinned: true, MP: 5}
+	shape(&skill)
+	source[skill.ID] = skill
+	return skill
+}
+
+/*
+================
+TestPeriodicSkillPulsesOnACOSAndBooksTheKill
+
+A periodic row installs its linked pair on a COS (never installed before
+this fix) and its pulses strike the COS's own body; a fatal pulse books
+the kill against the owner.
+================
+*/
+func TestPeriodicSkillPulsesOnACOSAndBooksTheKill(t *testing.T) {
+	rt, clock, attacker, owner := newPvpPair(t)
+	rt.RewardActorPresent = func(string, string) bool { return true }
+	equipStrikeTestCOS(t, rt, owner)
+	cos := owner.ActiveCOS
+	cos.CurrentHP = 1
+	skill := cosTestSkill(t, rt, 9105, func(skill *enterworld.SkillRow) {
+		skill.Attack = enterworld.SkillAttack{}
+		skill.ActionDurationMs = 500
+		skill.EffectRider = true
+		skill.TimedEffect.Periodic = enterworld.SkillPeriodicEffect{Pinned: true, DurationMs: 12000, PeriodMs: 2000,
+			Link:   enterworld.SkillEffectLink{Present: true, Group: 9, MaxOutgoing: 2},
+			Attack: enterworld.SkillAttack{Present: true, Flags: 8, Percent: 37, Min: 4, Max: 6, ImpactCount: 1}}
+	})
+	attacker.Skills = append(attacker.Skills, skill.ID)
+	attacker.CurrentMP = testInt64(100)
+	out := rt.HandleTargetInteract(testDivision, attacker, wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: cos.GID}.Encode())
+	if _, ok := findFrame(out.Frames, wire.OpAttachedEffect); !ok {
+		t.Fatalf("no linked recipient on the COS: %+v (%s)", out.Frames, out.DiagnosticRefusal)
+	}
+	rt.advancePeriodicEffects(clock.NowMs() + 2000)
+	if cos.CurrentHP != 0 {
+		t.Fatalf("COS HP %d, want 0 after the fatal pulse", cos.CurrentHP)
+	}
+	if attacker.PK == nil || attacker.PK.TotalCount != 1 {
+		t.Fatalf("attacker PK %+v, want the pulse kill booked against the owner", attacker.PK)
+	}
+}
+
+/*
+================
+TestLifeStealSkillStrikesACOS
+
+An lfst row strikes the COS with the life-steal record (40F750) instead
+of refusing 0x3006, and the caster recovers from the committed damage.
+================
+*/
+func TestLifeStealSkillStrikesACOS(t *testing.T) {
+	rt, _, attacker, owner := newPvpPair(t)
+	rt.RewardActorPresent = func(string, string) bool { return true }
+	ref := equipStrikeTestCOS(t, rt, owner)
+	cos := owner.ActiveCOS
+	source := rt.deps.SkillData().(staticSkillSource)
+	skill := source[2]
+	skill.LifeSteal = enterworld.SkillLifeSteal{Present: true, Amount: 1000}
+	source[skill.ID] = skill
+	attacker.Skills = append(attacker.Skills, skill.ID)
+	attacker.CurrentMP = testInt64(100)
+	attacker.CurrentHP = testInt64(50)
+	out := rt.HandleTargetInteract(testDivision, attacker, wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: cos.GID}.Encode())
+	if _, ok := findFrame(out.Frames, wire.OpSkillCastResult); !ok {
+		t.Fatalf("life-steal cast on the COS refused: %+v (%s)", out.Frames, out.DiagnosticRefusal)
+	}
+	if cos.CurrentHP >= ref.MaxHP {
+		t.Fatalf("COS HP %d, want below %d after the life-steal hit", cos.CurrentHP, ref.MaxHP)
+	}
+	if *attacker.CurrentHP <= 50 {
+		t.Fatalf("caster HP %d, want recovery from the drained COS", *attacker.CurrentHP)
+	}
+}
+
+/*
+================
+TestChargeSkillReachesACOS
+
+A charge row aimed at a COS plans its travel to the COS's body instead
+of refusing 0x3006: the only refusal this fixture may produce is the
+navigation diagnostic, never the unsupported-row code.
+================
+*/
+func TestChargeSkillReachesACOS(t *testing.T) {
+	rt, _, attacker, owner := newPvpPair(t)
+	rt.RewardActorPresent = func(string, string) bool { return true }
+	equipStrikeTestCOS(t, rt, owner)
+	cos := owner.ActiveCOS
+	source := rt.deps.SkillData().(staticSkillSource)
+	skill := source[2]
+	skill.PositionEffect = enterworld.SkillPositionEffect{Charge: true, Range: 10}
+	source[skill.ID] = skill
+	attacker.Skills = append(attacker.Skills, skill.ID)
+	attacker.CurrentMP = testInt64(100)
+	out := rt.HandleTargetInteract(testDivision, attacker, wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: cos.GID}.Encode())
+	if out.DiagnosticRefusal == "charge-navigation-refused" {
+		// The fixture has no nav coverage for the travel plan; reaching
+		// that diagnostic already proves the row left the 0x3006 gate.
+		return
+	}
+	if _, ok := findFrame(out.Frames, wire.OpSkillCastResult); !ok {
+		t.Fatalf("charge cast on the COS refused: %+v (%s)", out.Frames, out.DiagnosticRefusal)
+	}
+	if cos.CurrentHP == 0 {
+		t.Fatal("the COS died to a non-fatal charge fixture hit")
 	}
 }

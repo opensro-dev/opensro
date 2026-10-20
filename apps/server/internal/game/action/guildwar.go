@@ -59,6 +59,26 @@ func (rt *Runtime) prepareGuildWarCombat(division string, victim *enterworld.Cha
 
 /*
 ================
+prepareCOSGuildWarCombat
+
+prepareGuildWarCombat for a COS victim: 5C7000 checks the actual victim
+(5C71D7) and, because it is a COS, scores from the COS's own level against
+the killer's, not from its owner's level.
+================
+*/
+func (rt *Runtime) prepareCOSGuildWarCombat(division string, killer, owner *enterworld.Character, cosLevel uint8) domain.GuildWarCombat {
+	if owner == nil || killer == nil || owner.ID == killer.ID || rt.deathKind(division, owner, deathKiller{player: killer}) != pk.DeathGuildWar {
+		return domain.GuildWarCombat{}
+	}
+	war, ok := rt.GuildWars.Find(division, *killer.GuildID, *owner.GuildID)
+	if !ok {
+		return domain.GuildWarCombat{}
+	}
+	return domain.GuildWarCombat{WarID: war.ID, KillerID: killer.ID, VictimID: owner.ID, Score: guildwar.KillScore(int64(cosLevel), rewardLevel(killer))}
+}
+
+/*
+================
 publishGuildWarCombat
 ================
 */

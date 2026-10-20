@@ -128,6 +128,54 @@ func TestAttackPetKillsOrderedMonsterForItsOwner(t *testing.T) {
 
 /*
 ================
+TestAttackPetKillOfACOSBooksMurderForItsOwner
+
+A pet's fatal hit on another player's COS books the kill for the pet's
+owner against the COS's owner (4E27F4 -> 4E1F60), then eases the owner's
+penalty by the COS gap (4EB6B0): the pet is never booked itself.
+================
+*/
+func TestAttackPetKillOfACOSBooksMurderForItsOwner(t *testing.T) {
+	rt, _, c, _ := newPetCombatRuntime(t, 100, attackPetBand)
+	petGID := c.ActiveCOS.GID
+	victim := *c
+	victim.ID, victim.Name, victim.ActiveCOS = c.ID+1, "victim", nil
+	ref := equipCombatTestPet(t, rt, &victim, cosBandTransport)
+	transport := victim.ActiveCOS
+	transport.Level = uint8(rewardLevel(c)) + 4
+	transport.CurrentHP = 1
+	attackerRef, ok := rt.cosReference(c.ActiveCOS)
+	if !ok {
+		t.Fatal("the attack pet has no reference")
+	}
+	state := rt.petSessionFor(testDivision, c.Name, petGID)
+	if state == nil || state.character != c {
+		t.Fatal("the pet session does not hold its owner")
+	}
+	step := petCombatStep{key: petOwnerKey{division: testDivision, name: c.Name, gid: petGID},
+		state: state, snapshot: c, pet: c.ActiveCOS, ref: attackerRef, percent: fullAreaPercent}
+	target := petCombatTarget{
+		combatTarget: combatTarget{gid: transport.GID, player: &victim, snapshot: &victim},
+		cos:          transport, cosRef: ref,
+	}
+	skill := rt.deps.SkillData().(staticSkillSource)[2]
+	result, committed := rt.petStrikeCOS(step, target, skill)
+	if !committed || !result.fatal {
+		t.Fatalf("the pet's hit on the COS did not commit fatally: %+v", result)
+	}
+	if c.PK == nil || c.PK.TotalCount != 1 || c.PK.DailyCount != 1 {
+		t.Fatalf("owner book %+v, want one murder booked against the COS's owner", c.PK)
+	}
+	if c.PK.Penalty != 1190 {
+		t.Fatalf("owner penalty %d, want 1190 (1200 murder booked, then 10 relieved by the COS gap)", c.PK.Penalty)
+	}
+	if victim.PK != nil && victim.PK.TotalCount != 0 {
+		t.Fatalf("victim book %+v, want untouched", victim.PK)
+	}
+}
+
+/*
+================
 TestFollowOrderLeavesBattle
 ================
 */

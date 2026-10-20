@@ -335,6 +335,22 @@ func (rt *Runtime) applyCOSHitInDoor(divisionID string, hit *cosHit, nowMs int64
 
 /*
 ================
+cosDamageResults
+
+A committed COS hit's records in the drain owners' form (the life-steal
+recovery sums damage, skilllifesteal.go).
+================
+*/
+func cosDamageResults(hit *cosHit) []simulation.MonsterDamageResult {
+	records := make([]simulation.MonsterDamageResult, 0, len(hit.strike.impacts))
+	for _, impact := range hit.strike.impacts {
+		records = append(records, simulation.MonsterDamageResult{Damage: impact.Damage, Fatal: impact.Fatal})
+	}
+	return records
+}
+
+/*
+================
 publishCOSHit
 
 A committed companion hit's frames: the pet's HP, its abnormal changes and

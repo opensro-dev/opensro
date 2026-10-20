@@ -17,6 +17,7 @@ package action
 import (
 	"sync/atomic"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
@@ -40,6 +41,10 @@ type areaVictimPlan struct {
 	pose     monster.Pose
 	sequence int
 	player   int
+	cos      int
+	// kill classifies a COS victim's death against its owner at plan
+	// time, as planPlayerHit classifies a player's (pkreward.go).
+	kill playerKill
 }
 
 /*
@@ -54,6 +59,7 @@ type areaStrikePlan struct {
 	victims   []areaVictimPlan
 	sequences [][]simulation.MonsterDamagePlan
 	players   []playerHit
+	cosHits   []cosHit
 }
 
 /*
@@ -98,8 +104,25 @@ by planPlayerHit. ok is false when a victim cannot be planned.
 func (rt *Runtime) planAreaVictims(in areaPlanInput) (areaStrikePlan, bool) {
 	var out areaStrikePlan
 	percent := uint64(fullAreaPercent)
+	casterAt := rt.liveSpawn(simulation.WorldKey(in.division, in.snapshot.Name), in.snapshot, in.now)
 	for index, victim := range in.victims {
-		plan := areaVictimPlan{target: victim, sequence: -1, player: -1}
+		plan := areaVictimPlan{target: victim, sequence: -1, player: -1, cos: -1}
+		if victim.cos != nil {
+			st := offensiveStage{division: in.division, character: in.caster, snapshot: in.snapshot,
+				skill: in.skill, attacker: in.attacker, now: in.now}
+			hit, ok := rt.planPlayerCOSHitAt(st, victim, casterAt, percent, in.lifeStealBase)
+			if !ok {
+				return areaStrikePlan{}, false
+			}
+			plan.formulas = hit.formulas
+			plan.pose = monster.Pose{RegionID: victim.at.RegionID, X: victim.at.X, Y: victim.at.Y, Z: victim.at.Z}
+			plan.cos = len(out.cosHits)
+			out.cosHits = append(out.cosHits, hit)
+			plan.kill = rt.classifyPlayerKill(in.division, in.caster, victim.player)
+			out.victims = append(out.victims, plan)
+			percent = percent * uint64(100-in.reduction) / fullAreaPercent
+			continue
+		}
 		if victim.player != nil {
 			hit, ok := rt.planPlayerHit(playerHitInput{division: in.division, caster: in.caster, snapshot: in.snapshot,
 				attacker: in.attacker, skill: in.skill, target: victim, impacts: in.impacts, percent: percent,
@@ -176,6 +199,12 @@ type areaCommit struct {
 	playerActor  []wire.Frame
 	playerPublic []wire.Frame
 	kills        jobKillPayout
+	// A COS victim's side: its publication, its owner's private frames,
+	// and the guild wars its fatal hits scored (published after the door).
+	cosActor      []wire.Frame
+	cosPublic     []wire.Frame
+	cosRecipients []RecipientFrames
+	wars          []domain.GuildWarCombat
 }
 
 /*
@@ -203,6 +232,43 @@ func (rt *Runtime) commitAreaInDoor(division string, caster *enterworld.Characte
 		out.kills.add(commit.after)
 		landed = landed || len(plan.players[i].struck.impacts) > 0
 	}
+	// A COS victim commits like the single-target strike (strikeCOSTarget)
+	// inside the same door: the hit, the owner's attacked registration,
+	// a fatal kill's booking against the owner, then the caster's hostile
+	// registration (4E27C0 swaps the COS for COS+0x1CD8).
+	for i := range plan.victims {
+		victim := &plan.victims[i]
+		if victim.cos < 0 {
+			continue
+		}
+		hit := &plan.cosHits[victim.cos]
+		if !rt.applyCOSHitInDoor(division, hit, now) {
+			continue
+		}
+		landed = true
+		strike := rt.publishCOSHit(hit)
+		out.cosPublic = append(out.cosPublic, strike.public...)
+		if len(strike.private) > 0 {
+			out.cosRecipients = append(out.cosRecipients, RecipientFrames{CharacterID: hit.owner.ID, Frames: strike.private})
+		}
+		out.cosPublic = append(out.cosPublic, rt.registerPlayerAttacked(division, hit.owner, caster, now)...)
+		if hit.strike.fatal {
+			kill := victim.kill.withVictim(caster, hit.owner)
+			actor, public, after, war := rt.payCOSKillInDoor(division, caster, hit.owner, kill, hit.pet.Level, now)
+			out.cosActor = append(out.cosActor, actor...)
+			out.cosPublic = append(out.cosPublic, public...)
+			out.kills.add(after)
+			if war.WarID != 0 {
+				out.wars = append(out.wars, war)
+			}
+			credit, creditPublic := rt.creditPlayerCOSKill(division, caster, hit.pet.Level)
+			out.cosActor = append(out.cosActor, credit...)
+			out.cosPublic = append(out.cosPublic, creditPublic...)
+		}
+		attack := rt.registerPlayerAttack(division, caster, hit.owner, now)
+		out.cosActor = append(out.cosActor, attack...)
+		out.cosPublic = append(out.cosPublic, attack...)
+	}
 	if !landed {
 		return areaCommit{}, false
 	}
@@ -222,6 +288,13 @@ func areaDrains(plan areaStrikePlan, commit areaCommit) [][]simulation.MonsterDa
 	out := append([][]simulation.MonsterDamageResult(nil), commit.committed...)
 	for _, hit := range plan.players {
 		out = append(out, struckDamageResults(hit.struck))
+	}
+	for i := range plan.cosHits {
+		hit := &plan.cosHits[i]
+		if len(hit.strike.impacts) == 0 {
+			continue
+		}
+		out = append(out, cosDamageResults(hit))
 	}
 	return out
 }
@@ -291,6 +364,14 @@ func (rt *Runtime) publishArea(division string, caster *enterworld.Character, sk
 	source := enterworld.ObjectIDForCharacter(caster)
 	var deaths []wire.Frame
 	for _, victim := range plan.victims {
+		if victim.cos >= 0 {
+			hit := plan.cosHits[victim.cos]
+			if len(hit.strike.impacts) == 0 {
+				continue
+			}
+			out.targets = append(out.targets, wire.SkillAreaTarget{GID: victim.target.gid, Impacts: padAreaImpacts(hit.strike.impacts, impactCount)})
+			continue
+		}
 		if victim.player >= 0 {
 			hit := plan.players[victim.player]
 			if len(hit.struck.impacts) == 0 {
@@ -349,6 +430,11 @@ func (rt *Runtime) publishArea(division string, caster *enterworld.Character, sk
 	}
 	out.after = append(out.after, deaths...)
 	out.after = append(out.after, commit.playerPublic...)
+	out.after = append(out.after, commit.cosPublic...)
+	out.recipients = append(out.recipients, commit.cosRecipients...)
+	for _, war := range commit.wars {
+		rt.publishGuildWarCombat(division, war, now)
+	}
 	out.recipients = append(out.recipients, rt.payJobKillShares(commit.kills)...)
 	return out
 }
@@ -595,7 +681,9 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 	public = append(public, wear.public...)
 	actor = append(actor, commit.progression...)
 	actor = append(actor, commit.playerActor...)
+	actor = append(actor, commit.cosActor...)
 	private = append(private, wire.ProgressionPrivateFrames(commit.playerActor)...)
+	private = append(private, wire.ProgressionPrivateFrames(commit.cosActor)...)
 	public = append(public, commit.settlements.public...)
 	actor = append(actor, commit.settlements.otherPublic...)
 	// Entering battle (4E27C0) follows the hit's burst.
