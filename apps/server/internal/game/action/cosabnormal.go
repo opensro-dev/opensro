@@ -546,7 +546,16 @@ Tick a detached candidate list so registry and authority locks never nest.
 */
 func (rt *Runtime) advanceCosAbnormals(now int64) []simulation.DivisionFrames {
 	var out []simulation.DivisionFrames
+	seen := map[string]bool{}
 	for _, entry := range rt.cosAbnormalCandidates() {
+		seen[cosAbnormalKey(entry.division, entry.name, entry.gid)] = true
+		out = append(out, rt.advanceOneCosAbnormal(entry, now)...)
+	}
+	// A pet can hold hostile words (cosdebuff.go) without any block.
+	for _, entry := range rt.cosDebuffCandidates() {
+		if seen[cosAbnormalKey(entry.division, entry.name, entry.gid)] {
+			continue
+		}
 		out = append(out, rt.advanceOneCosAbnormal(entry, now)...)
 	}
 	return out
@@ -564,25 +573,47 @@ func (rt *Runtime) advanceOneCosAbnormal(entry cosAbnormalEntry, now int64) []si
 	defer unlock()
 	c := rt.findCharacter(entry.division, entry.name)
 	if c == nil || c.CompanionByGID(entry.gid) == nil {
+		// The pet is gone (dismissed or never summoned under this GID):
+		// its hostile words leave with it, silently - no view holds it.
 		rt.storeCosAbnormal(entry.division, entry.name, entry.gid, nil)
+		rt.clearCosDebuffWords(entry.division, entry.name, entry.gid, now)
 		return nil
 	}
 	owner := rt.newCosAbnormalOwnerForPet(entry.division, c, c.CompanionByGID(entry.gid), now)
 	owner.sources = rt.captureAbnormalSources(entry.division, owner.block, nil)
+	var retired []uint32
 	committed := rt.deps.UpdateDeferred(c, "cos-abnormal", func() bool {
 		if owner.pet.CurrentHP == 0 {
 			owner.changed = owner.block.ClearAll(owner)
 			owner.fatal = true
+			// A dead pet holds no hostile word; the tokens retire on the
+			// wire with the death publication below (cosdebuff.go).
+			retired = rt.clearCosDebuffWords(entry.division, entry.name, entry.gid, now)
 		} else if result := owner.block.Update(owner, now); result.Changed {
 			owner.changed = true
 		}
 		owner.commit()
 		return owner.changed || owner.hpChanged || owner.mpChanged || owner.speedChanged || len(owner.public) != 0
 	})
-	if !committed {
+	if owner.pet.CurrentHP != 0 {
+		if expired := rt.expireCosDebuffWords(entry.division, entry.name, entry.gid, now); len(expired) != 0 {
+			retired = append(retired, expired...)
+			committed = true
+		}
+	}
+	if !committed && len(retired) == 0 {
 		return nil
 	}
 	frames := rt.cosAbnormalPublication(entry.gid, owner)
+	if len(retired) != 0 {
+		// The pet's hostile words ended (expiry or death): retire their
+		// instances on the wire as the monster's ended instances retire.
+		ended, err := (wire.EndedEffectInstances{InstanceTokens: retired}).Encode()
+		if err != nil {
+			panic(err)
+		}
+		frames = append(frames, wire.Frame{Opcode: wire.OpEndedEffectInstances, Payload: ended})
+	}
 	publication := playerAbnormalFrames{
 		sourceGID:   entry.gid,
 		exceptActor: true,

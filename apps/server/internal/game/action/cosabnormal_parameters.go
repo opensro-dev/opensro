@@ -137,9 +137,12 @@ cosCombatStats
 
 Use the common non-player combat projection, including all defense/evasion
 and incoming-damage status modifiers. Catalog validation precedes admission.
+The pet's active hostile words (cosdebuff.go) subtract last, over whichever
+projection the companion band built, as the monster's stat owner subtracts
+them from its own projection.
 ================
 */
-func cosCombatStats(ref *enterworld.CharacterRef, pet *enterworld.CharacterCOS, block *abnormal.Block) (combat.Stats, error) {
+func cosCombatStats(ref *enterworld.CharacterRef, pet *enterworld.CharacterCOS, block *abnormal.Block, words []monster.SelfEffect) (combat.Stats, error) {
 	base := ref.Parameters
 	base.RefObjID, base.Codename, base.Level = ref.RefObjID, ref.Codename, pet.Level
 	stats, err := combat.MonsterInstanceStats(monster.Instance{Ref: base, Abnormal: block})
@@ -152,6 +155,9 @@ func cosCombatStats(ref *enterworld.CharacterRef, pet *enterworld.CharacterCOS, 
 		stats.MagicalSkillRate = float64(cosParameter(ref, pet, block, 0x83))
 	}
 	if err != nil || ref.TidWord>>11 != 3 {
+		if err == nil {
+			applyCosDebuffWords(&stats, words)
+		}
 		return stats, err
 	}
 	for _, entry := range []struct {
@@ -170,5 +176,6 @@ func cosCombatStats(ref *enterworld.CharacterRef, pet *enterworld.CharacterCOS, 
 		}
 		*entry.value = float64(value)
 	}
+	applyCosDebuffWords(&stats, words)
 	return stats, nil
 }

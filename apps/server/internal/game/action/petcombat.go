@@ -381,7 +381,7 @@ GID, so every viewer animates the pet.
 func (rt *Runtime) petStrike(step petCombatStep, target monster.Instance, skill enterworld.SkillRow, targetAt simulation.Spawn) (petStrikeResult, bool) {
 	division, owner := step.key.division, step.state.character
 	block := rt.cosAbnormal(division, step.snapshot.Name, step.pet.GID)
-	attacker, err := cosCombatStats(step.ref, step.pet, block)
+	attacker, err := cosCombatStats(step.ref, step.pet, block, rt.cosDebuffWords(division, step.snapshot.Name, step.pet.GID, step.nowMs))
 	if err != nil {
 		return petStrikeResult{}, false
 	}
@@ -463,7 +463,7 @@ the pet as attacker and killer. Published under the pet's GID.
 func (rt *Runtime) petStrikePlayer(step petCombatStep, target combatTarget, skill enterworld.SkillRow) (petStrikeResult, bool) {
 	division, owner, victim := step.key.division, step.state.character, target.snapshot
 	block := rt.cosAbnormal(division, step.snapshot.Name, step.pet.GID)
-	attacker, err := cosCombatStats(step.ref, step.pet, block)
+	attacker, err := cosCombatStats(step.ref, step.pet, block, rt.cosDebuffWords(division, step.snapshot.Name, step.pet.GID, step.nowMs))
 	if err != nil {
 		return petStrikeResult{}, false
 	}

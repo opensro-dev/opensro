@@ -37,7 +37,7 @@ func TestShippedPetSatietyTickFeedingAndDeath(t *testing.T) {
 	if pet.Satiety != 2999 {
 		t.Fatal("live tick failed", pet.Satiety)
 	}
-	stats, err := cosCombatStats(ref, pet, nil)
+	stats, err := cosCombatStats(ref, pet, nil, nil)
 	if err != nil || stats.PhysicalDefense != ref.Parameters.PhysicalDefense/2 {
 		t.Fatal("hungry defense", stats, err)
 	}
@@ -47,7 +47,7 @@ func TestShippedPetSatietyTickFeedingAndDeath(t *testing.T) {
 	if len(result.Frames) < 2 || result.Frames[0].Opcode != wire.OpItemUseResponse || result.Frames[0].Payload[0] != 1 {
 		t.Fatal("feeding refused", result)
 	}
-	stats, err = cosCombatStats(ref, pet, nil)
+	stats, err = cosCombatStats(ref, pet, nil, nil)
 	if err != nil || stats.PhysicalDefense != ref.Parameters.PhysicalDefense {
 		t.Fatal("feeding failed to restore keeper", stats, err)
 	}

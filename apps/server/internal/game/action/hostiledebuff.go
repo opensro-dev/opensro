@@ -182,3 +182,72 @@ func (rt *Runtime) debuffPlayer(c debuffCast) (OpResult, skillCastDecision) {
 	vitals := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshWithSourcePayload(gid, simulation.VitalsSourceSkillRecovery, rt.publishedVitals(c.division, c.character))}
 	return OpResult{Frames: append(frames, vitals), Broadcast: frames, ActorPrivate: []wire.Frame{vitals}, Recipients: private}, skillCastAccepted
 }
+
+/*
+================
+debuffCOS
+
+The pet recipient (cosdebuff.go): the word installs on the companion,
+judged through its owner at admission (cosTargetRefusal), and no damage
+is dealt, so nothing here can attribute a kill - the owner's attacked
+registration and the caster's hostile registration are the monster and
+player arms' pair (4E1DF0 via 52A1E0, 4E27C0), exactly as the plain hit
+registers them.
+================
+*/
+func (rt *Runtime) debuffCOS(c debuffCast, target combatTarget) (OpResult, skillCastDecision) {
+	owner := target.player
+	if owner == nil {
+		return OpResult{}, skillCastRefused
+	}
+	if out, ok := rt.chargeDebuff(c); !ok {
+		return out, skillCastRefused
+	}
+	open, gid, _ := rt.debuffOpen(c)
+	frames := []wire.Frame{open}
+	debuff := c.skill.HostileDebuff
+	tag, value := debuff.Word()
+	effectToken := atomic.AddUint32(&rt.castTokenCounter, 1)
+	word := monster.SelfEffect{SkillID: c.skill.ID, Token: effectToken, Tag: tag, First: value,
+		StartedAtMs: c.now, UntilMs: c.now + int64(debuff.DurationMs)}
+	var attacked []wire.Frame
+	installed := rt.deps.Update(owner, "hostile-debuff-cos", func() bool {
+		pet := owner.CompanionByGID(target.gid)
+		if owner.DeletePending || pet == nil || pet.CurrentHP == 0 || pet.SummonGeneration != target.cos.SummonGeneration {
+			return false
+		}
+		replaced, ok := rt.installCosDebuffWord(c.division, owner.Name, target.gid, word, c.now)
+		if !ok {
+			return false
+		}
+		if replaced != 0 {
+			ended, err := (wire.EndedEffectInstances{InstanceTokens: []uint32{replaced}}).Encode()
+			if err != nil {
+				panic(err)
+			}
+			frames = append(frames, wire.Frame{Opcode: wire.OpEndedEffectInstances, Payload: ended})
+		}
+		payload, err := (wire.AttachedEffect{GID: target.gid, SkillID: c.skill.ID, InstanceToken: effectToken, Phase: 2}).Encode(
+			wire.AttachedEffectLayout{Status: c.skill.SpawnStatus, Rider: c.skill.EffectRider})
+		if err != nil {
+			panic(err)
+		}
+		frames = append(frames, wire.Frame{Opcode: wire.OpAttachedEffect, Payload: payload})
+		attacked = rt.registerPlayerAttacked(c.division, owner, c.character, c.now)
+		return true
+	})
+	if !installed {
+		return OpResult{}, skillCastRefused
+	}
+	var attack, battle []wire.Frame
+	rt.deps.Update(c.character, "hostile-debuff-cos-hostility", func() bool {
+		attack = rt.registerPlayerAttack(c.division, c.character, owner, c.now)
+		battle = rt.enterBattleState(c.division, c.character, c.now)
+		return true
+	})
+	frames = append(frames, attacked...)
+	frames = append(frames, attack...)
+	frames = append(frames, battle...)
+	vitals := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshWithSourcePayload(gid, simulation.VitalsSourceSkillRecovery, rt.publishedVitals(c.division, c.character))}
+	return OpResult{Frames: append(frames, vitals), Broadcast: frames, ActorPrivate: []wire.Frame{vitals}}, skillCastAccepted
+}

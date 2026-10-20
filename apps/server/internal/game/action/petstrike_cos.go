@@ -25,7 +25,7 @@ petStrikeCOS
 */
 func (rt *Runtime) petStrikeCOS(step petCombatStep, target petCombatTarget, skill enterworld.SkillRow) (petStrikeResult, bool) {
 	block := rt.cosAbnormal(step.key.division, step.snapshot.Name, step.pet.GID)
-	attacker, err := cosCombatStats(step.ref, step.pet, block)
+	attacker, err := cosCombatStats(step.ref, step.pet, block, rt.cosDebuffWords(step.key.division, step.snapshot.Name, step.pet.GID, step.nowMs))
 	if err != nil {
 		return petStrikeResult{}, false
 	}
