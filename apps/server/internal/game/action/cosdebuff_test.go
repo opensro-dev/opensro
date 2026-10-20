@@ -168,6 +168,46 @@ func TestCosDebuffWordsLeaveWithThePetsDeath(t *testing.T) {
 
 /*
 ================
+TestCosDebuffCastAcceptedWhenWordCapReached
+
+The install door failing (here: the word cap) does not refuse a cast
+whose cost is already committed: the cast lands, no effect frame and
+no word are added, exactly as the monster and player arms accept.
+================
+*/
+func TestCosDebuffCastAcceptedWhenWordCapReached(t *testing.T) {
+	rt, clock, attacker, owner := newPvpPair(t)
+	equipStrikeTestCOS(t, rt, owner)
+	skill := teachVitalSpot(t, rt, attacker, "SKILL_CH_WATER_CANCEL_B_01")
+	pet := owner.ActiveCOS
+	now := clock.NowMs()
+	for token := uint32(20); token < 20+cosDebuffWordCap; token++ {
+		word := monster.SelfEffect{SkillID: 3, Token: token, Tag: 1000 + token, First: 1,
+			StartedAtMs: now, UntilMs: now + 60000}
+		if _, ok := rt.installCosDebuffWord(testDivision, owner.Name, pet.GID, word, now); !ok {
+			t.Fatal("cap fill refused")
+		}
+	}
+	out := rt.HandleTargetInteract(testDivision, attacker, wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: pet.GID}.Encode())
+	if _, ok := findFrame(out.Frames, wire.OpSkillCastResult); !ok {
+		t.Fatalf("cap-blocked cast refused: %+v (%s)", out, out.DiagnosticRefusal)
+	}
+	if _, ok := findFrame(out.Frames, wire.OpAttachedEffect); ok {
+		t.Fatal("cap-blocked cast still attached an effect", out.Frames)
+	}
+	held := rt.cosDebuffWords(testDivision, owner.Name, pet.GID, now)
+	if len(held) != cosDebuffWordCap {
+		t.Fatalf("held words changed: %+v", held)
+	}
+	for _, word := range held {
+		if word.SkillID == skill.ID {
+			t.Fatalf("cap-blocked cast installed its word: %+v", held)
+		}
+	}
+}
+
+/*
+================
 TestCosDebuffAdmissionKeepsTheTauntRefusal
 
 Through the real cast door: a taunt row aimed at the companion still

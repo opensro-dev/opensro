@@ -236,18 +236,21 @@ func (rt *Runtime) debuffCOS(c debuffCast, target combatTarget) (OpResult, skill
 		attacked = rt.registerPlayerAttacked(c.division, owner, c.character, c.now)
 		return true
 	})
-	if !installed {
-		return OpResult{}, skillCastRefused
-	}
+	// The sibling arms accept when the install door fails (the word cap,
+	// a pet that died mid-cast): chargeDebuff has already committed the
+	// phase cost and debuffOpen queued the release/close frames, so the
+	// cast lands and only the effect and hostility frames are skipped.
 	var attack, battle []wire.Frame
-	rt.deps.Update(c.character, "hostile-debuff-cos-hostility", func() bool {
-		attack = rt.registerPlayerAttack(c.division, c.character, owner, c.now)
-		battle = rt.enterBattleState(c.division, c.character, c.now)
-		return true
-	})
-	frames = append(frames, attacked...)
-	frames = append(frames, attack...)
-	frames = append(frames, battle...)
+	if installed {
+		rt.deps.Update(c.character, "hostile-debuff-cos-hostility", func() bool {
+			attack = rt.registerPlayerAttack(c.division, c.character, owner, c.now)
+			battle = rt.enterBattleState(c.division, c.character, c.now)
+			return true
+		})
+		frames = append(frames, attacked...)
+		frames = append(frames, attack...)
+		frames = append(frames, battle...)
+	}
 	vitals := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshWithSourcePayload(gid, simulation.VitalsSourceSkillRecovery, rt.publishedVitals(c.division, c.character))}
 	return OpResult{Frames: append(frames, vitals), Broadcast: frames, ActorPrivate: []wire.Frame{vitals}}, skillCastAccepted
 }
