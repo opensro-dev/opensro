@@ -35,6 +35,7 @@ interface PickupFrame {
 	readonly records: Iterable<CosRecord>;
 	readonly sharedOwners: ReadonlySet<number>;
 	readonly read: ( gid: number ) => EntityState | undefined;
+	readonly smartPetPickup?: boolean;
 }
 
 /*
@@ -91,6 +92,7 @@ export function createCosPickup() {
 	const receipts = new Set<number>();
 	const dropRetry = new Map<number, number>();
 	const petRetry = new Map<number, number>();
+	const bagFull = new Set<number>();
 	return {
 		/*
 ================
@@ -107,6 +109,7 @@ track
 			pending.delete( event.gid );
 			receipts.delete( event.gid );
 			petRetry.delete( event.gid );
+			bagFull.delete( event.gid );
 			for ( const [gid, target] of pending ) {
 				if ( target === event.gid ) {
 					pending.delete( gid );
@@ -123,6 +126,7 @@ ordered-map tie break independently of the browser's spawn arrival order.
 ================
 		*/
 		step( frame: PickupFrame ): WireFrame[] {
+			if ( frame.smartPetPickup === false && bagFull.size > 0 ) bagFull.clear();
 			const local = frame.local;
 			if ( !local || local.appearanceState?.[0] === 2 ) return [];
 			const frames: WireFrame[] = [], claimed = new Set( pending.values() );
@@ -136,10 +140,14 @@ ordered-map tie break independently of the browser's spawn arrival order.
 				let target = 0, best = PICKUP_RANGE;
 				for ( const gid of [ ...drops ].sort( ( a, b ) => a - b ) ) {
 					const item = frame.read( gid ), drop = item?.groundItem;
+					const category = drop ? pickupCategory( drop.typeFlags ) : 0;
 					if (
 						!item || !drop || drop.claimantGid || claimed.has( gid ) ||
-						(dropRetry.get( gid ) ?? 0) > frame.now || !(mode & pickupCategory( drop.typeFlags ))
+						(dropRetry.get( gid ) ?? 0) > frame.now || !(mode & category)
 					) continue;
+					if ( frame.smartPetPickup !== false && bagFull.has( record.gid ) && category !== PICKUP_GOLD ) {
+						continue;
+					}
 					const owned = drop.ownerJid === local.gid ||
 						!!drop.ownerJid && frame.sharedOwners.has( drop.ownerJid );
 					if ( drop.ownerJid && !owned || !owned && !(mode & PICKUP_PUBLIC) ) continue;
@@ -178,9 +186,12 @@ result
 
 The return value asks gameplay to submit the native disable-setting request
 for full/disabled inventory feedback; settings change only on server receipt.
+Port-only, not native: when smartPetPickup is enabled, 0xB4/0xB5 keeps bit
+0x80 enabled and pauses non-gold item pickup for that pet until spaceChanged
+fires so gold pickup continues without spamming 0x769E.
 ================
 		*/
-		result( result: PickupResult, now: number ): boolean {
+		result( result: PickupResult, now: number, smartPetPickup = false ): boolean {
 			if ( result.selector !== 8 || !result.itemGid ) return false;
 			const target = pending.get( result.gid );
 			if ( target !== undefined && target !== result.itemGid ) return false;
@@ -191,10 +202,28 @@ for full/disabled inventory feedback; settings change only on server receipt.
 			else if ( code === 0x13 || code === 0x99 ) dropRetry.set( result.itemGid, now + DROP_RETRY_MS );
 			else if ( code === 0x14 || code === 0x9c ) petRetry.set( result.gid, now + PET_RETRY_MS );
 			else if ( code === 0xb4 || code === 0xb5 ) {
+				if ( smartPetPickup ) {
+					bagFull.add( result.gid );
+					dropRetry.set( result.itemGid, now + DROP_RETRY_MS );
+					return false;
+				}
+				bagFull.delete( result.gid );
 				petRetry.set( result.gid, now + DISABLE_RETRY_MS );
 				return true;
 			}
 			return false;
+		},
+		/*
+================
+spaceChanged
+
+Clears the smartPetPickup full-bag pause when pet or player bag space changes.
+================
+		*/
+		spaceChanged( gid?: number ) {
+			if ( gid !== undefined ) bagFull.delete( gid );
+			else bagFull.clear();
+			dropRetry.clear();
 		},
 		/*
 ================
@@ -207,6 +236,7 @@ clear
 			receipts.clear();
 			dropRetry.clear();
 			petRetry.clear();
+			bagFull.clear();
 		}
 	};
 }

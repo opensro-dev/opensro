@@ -129,6 +129,11 @@ export interface ExperimentalOptions {
 	// CIFCOSStatus maps no left-click message (6A9BC0). On unless turned off
 	// (the owner's choice, 2026-10-18, BUG-086); off is native.
 	readonly petClickOpensWindow: boolean;
+	// Port-only, not native (0x0077DD61 clears commandMode bit 0x80 via 0x705B
+	// selector 2 on 0xB69E pickup error 0xB4/0xB5, stopping gold pickup too):
+	// when on, keep bit 0x80 enabled on full-bag errors and pause non-gold item
+	// pickup until bag space changes so the pet keeps picking up gold. Default on.
+	readonly smartPetPickup: boolean;
 }
 
 /*
@@ -168,7 +173,7 @@ experimentalOptions
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, greyDisabledTabs, jobKillNotices, dropPlusNotices,
 plusSevenNotices, fitWindowLabels, dropOnBagTab, noticeLinks, shortNotices, confirmGuildBan,
-petClickOpensWindow and dungeonCharacterPvs, which only an explicit false turns off.
+petClickOpensWindow, smartPetPickup and dungeonCharacterPvs, which only an explicit false turns off.
 Missing or invalid render scales restore full resolution; legacy Video
 settings cannot enable scaling. Keys of retired rows (terrainRelief and texturedHorizon, removed at the owner's
 request on 2026-10-11) are never read, so a saved preference holding them
@@ -209,7 +214,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		shortNotices: record.shortNotices !== false,
 		confirmGuildBan: record.confirmGuildBan !== false,
 		homingProjectiles: enabled( "homingProjectiles" ),
-		petClickOpensWindow: record.petClickOpensWindow !== false
+		petClickOpensWindow: record.petClickOpensWindow !== false,
+		smartPetPickup: record.smartPetPickup !== false
 	};
 }
 
@@ -299,6 +305,7 @@ export interface ExperimentalGameplay {
 	readonly dropPlusNotices: boolean;
 	readonly plusSevenNotices: boolean;
 	readonly homingProjectiles?: boolean;
+	readonly smartPetPickup?: boolean;
 }
 
 /*
@@ -312,6 +319,7 @@ export function experimentalGameplay( options: ExperimentalOptions ): Experiment
 		jobKillNotices: options.jobKillNotices,
 		dropPlusNotices: options.dropPlusNotices,
 		plusSevenNotices: options.plusSevenNotices,
-		homingProjectiles: options.homingProjectiles
+		homingProjectiles: options.homingProjectiles,
+		smartPetPickup: options.smartPetPickup
 	};
 }

@@ -68,7 +68,10 @@ const OFF = Object.freeze( {
 	homingProjectiles: false,
 	// On by default (owner 2026-10-18, BUG-086): clicking CIFPetMiniInfo opens CIFCos;
 	// off restores the native no-op click (6B3760).
-	petClickOpensWindow: true
+	petClickOpensWindow: true,
+	// On by default (owner 2026-10-20): keep bit 0x80 enabled on 0xB4/0xB5 so the
+	// pet keeps picking up gold when full; off restores the native 0x0077DD61 disable.
+	smartPetPickup: true
 } );
 
 test("only an explicit boolean enables chat timestamps", () => {
@@ -235,7 +238,7 @@ test("the window's tabs cover every preference once and Open returns to Image", 
 		EXPERIMENTAL_TABS[2].rows.map( row => row.key ),
 		[ "sunShadow", "perPixelLighting", "enchantSparks", "dungeonCharacterPvs" ]
 	);
-	for ( const tab of EXPERIMENTAL_TABS ) assert.ok( tab.rows.length <= 5, "At most five rows a tab" );
+	for ( const tab of EXPERIMENTAL_TABS ) assert.ok( tab.rows.length <= 6, "At most six rows a tab" );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.key ) ).sort();
 	assert.deepEqual( keys, Object.keys( OFF ).sort() );
 	const ids = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.id ) );
@@ -345,7 +348,8 @@ test("the predicted run-up defaults off and reaches only the worker's slice", ()
 		jobKillNotices: true,
 		dropPlusNotices: true,
 		plusSevenNotices: true,
-		homingProjectiles: false
+		homingProjectiles: false,
+		smartPetPickup: true
 	} );
 	for ( const value of [ 1, "true", null, {} ] ) {
 		assert.equal( experimentalOptions( { predictedRunUp: value } ).predictedRunUp, false );
@@ -356,7 +360,8 @@ test("the predicted run-up defaults off and reaches only the worker's slice", ()
 		jobKillNotices: true,
 		dropPlusNotices: true,
 		plusSevenNotices: true,
-		homingProjectiles: false
+		homingProjectiles: false,
+		smartPetPickup: true
 	} );
 	assert.equal( "predictedRunUp" in experimentalVideo( on ), false );
 });
@@ -497,4 +502,17 @@ test("pet panel click-to-open defaults on (BUG-086) and stays out of the worker'
 	const off = experimentalOptions( { petClickOpensWindow: false } );
 	assert.equal( off.petClickOpensWindow, false );
 	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "petClickOpensWindow" ) ) );
+});
+
+test("smart pet pickup defaults on unless explicitly false and reaches the worker's gameplay slice", () => {
+	for ( const value of [ undefined, null, {}, { smartPetPickup: 1 }, { smartPetPickup: "false" } ] ) {
+		const options = experimentalOptions( value );
+		assert.equal( options.smartPetPickup, true );
+		assert.equal( experimentalGameplay( options ).smartPetPickup, true );
+		assert.equal( "smartPetPickup" in experimentalVideo( options ), false );
+	}
+	const off = experimentalOptions( { smartPetPickup: false } );
+	assert.equal( off.smartPetPickup, false );
+	assert.equal( experimentalGameplay( off ).smartPetPickup, false );
+	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "smartPetPickup" ) ) );
 });

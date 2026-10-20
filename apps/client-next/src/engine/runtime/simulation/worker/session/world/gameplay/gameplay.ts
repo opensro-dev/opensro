@@ -821,6 +821,9 @@ fails; retry persistence without restoring stale slot occupancy.
 	// The Experimental "Homing projectiles" row: off by default so projectiles
 	// fly to their launch-captured endpoint as natively.
 	let homingProjectiles = false;
+	// The Experimental "Keep pet gold pickup when full" row: on unless turned
+	// off (experimentalGameplay); off is the native 0x0077DD61 disable.
+	let smartPetPickup = true;
 	let approach: InteractionApproachState = { phase: "idle" };
 	let returnScroll: ReturnScrollCast | undefined, teleportMode = 0;
 	const cosSelection = createCosSelection();
@@ -1194,6 +1197,8 @@ The Experimental window's gameplay rows (experimentalGameplay).
 			dropPlusNotices = value.dropPlusNotices !== false;
 			plusSevenNotices = value.plusSevenNotices !== false;
 			homingProjectiles = value.homingProjectiles === true;
+			smartPetPickup = value.smartPetPickup !== false;
+			if ( !smartPetPickup ) cosPickup.spaceChanged();
 		},
 		/*
 ================
@@ -3660,6 +3665,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( record ) {
 						const next = applyCosBehavior( record, result );
 						cosRecords.set( result.gid, next );
+						cosPickup.spaceChanged( result.gid );
 						cosError = null;
 						dirty = true;
 					}
@@ -3682,7 +3688,7 @@ Packet handling must not depend on which HUD panel is currently open.
 						gid: v.getUint32( at, true ),
 						itemGid: p[1] === 8 ? v.getUint32( at + 4, true ) : undefined
 					};
-					if ( cosPickup.result( cosResult, now ) ) {
+					if ( cosPickup.result( cosResult, now, smartPetPickup ) ) {
 						const record = cosRecords.get( cosResult.gid );
 						if ( record && !record.dead && record.hp && record.commandMode !== undefined ) {
 							sendWhenLive( cosBehaviorRequest( record, record.commandMode & ~0x80 ), true );
@@ -3753,6 +3759,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( cosRecords.has( gid ) ) {
 						cosSelection.remove( gid, cosRecords );
 						cosRecords.delete( gid );
+						cosPickup.spaceChanged( gid );
 						if ( !readEntity( gid ) ) combat.remove( gid );
 						if ( activeCos?.gid === gid ) {
 							activeCos = undefined;
@@ -3788,6 +3795,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( !record ) throw Error( "Absent COS transfer owner" );
 					const next = inventory.cosTransferred( record, frame.payload, cosItemCaps );
 					cosRecords.set( gid, next );
+					cosPickup.spaceChanged();
 					dirty = true;
 					return true;
 				}
@@ -3804,6 +3812,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( frame.payload[1] !== 0x11 || !cosPickup.receipt( gid ) ) {
 						inventory.cosGrounded( frame.payload );
 					}
+					if ( frame.payload[1] === 0x12 ) cosPickup.spaceChanged( gid );
 					// 74EF50 resolves a pet pickup (0x11) to the pet bag (0x7A) and
 					// 756CF0's pet branch prints the bag's item line for a ground
 					// source (7571C0 / 757145 / 757007); it has no gold line.
@@ -3828,6 +3837,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					const next = cosContainerResult( record, frame.payload, cosItemCaps );
 					inventory.cosMoved( frame.payload );
 					cosRecords.set( gid, next );
+					cosPickup.spaceChanged( gid );
 					dirty = true;
 					return true;
 				}
@@ -3854,6 +3864,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					const next = soldInventory( cos.inventory, sale.slot, sale.quantity );
 					inventory.cosSold( cos.gid, sale.slot, sale.quantity, sale.context );
 					cosRecords.set( cos.gid, { ...cos, inventory: next } );
+					cosPickup.spaceChanged( cos.gid );
 					dirty = true;
 					return true;
 				}
@@ -3908,6 +3919,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					const next = inventory.storageSettle( room, frame.payload, cosItemCaps );
 					if ( next ) {
 						storage.apply( next );
+						cosPickup.spaceChanged();
 						dirty = true;
 						return true;
 					}
@@ -3932,6 +3944,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					} ),
 					target = targeting.receive( frame.opcode, frame.payload ),
 					fight = combat.receive( frame.opcode, frame.payload, now );
+				if ( item ) cosPickup.spaceChanged();
 				if ( fight && frame.opcode === 0xb245 ) {
 					// 776830: the local player's own cast of a skill that assists,
 					// at a target in the world, sends its attack pets in.
@@ -4200,7 +4213,8 @@ before take assembles the presentation snapshot.
 					local,
 					records: cosRecords.values(),
 					sharedOwners,
-					read: readEntity
+					read: readEntity,
+					smartPetPickup
 				} )
 			) {
 				sendFrame( frame );

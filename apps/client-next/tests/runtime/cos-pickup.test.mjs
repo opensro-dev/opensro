@@ -50,6 +50,14 @@ test("gameplay frame loop sends automatic pickup and consumes native completion"
 	// A pet pickup holds no lock: a stray receipt applies and arms nothing.
 	gameplay.receive( receipt, 2 );
 	assert.equal( gameplay.take()?.inventoryPending ?? false, false );
+	gameplay.experimental( {
+		predictedRunUp: false,
+		jobKillNotices: true,
+		dropPlusNotices: true,
+		plusSevenNotices: true,
+		homingProjectiles: false,
+		smartPetPickup: false
+	} );
 	gameplay.step( 2, f.frame.local );
 	assert.deepEqual( sent[2], cosPickupRequest( 2, 11 ) );
 	gameplay.receive( { opcode: 0xb69e, payload: Uint8Array.of( 2, 8, 0xb4, 2, 0, 0, 0, 11, 0, 0, 0 ) }, 3 );
@@ -270,6 +278,51 @@ test("native retry classes expire on simulation time and stale results cannot re
 	assert.deepEqual( f.owner.step( { ...f.frame, now: 8999 } ), [] );
 	assert.equal( f.owner.step( { ...f.frame, now: 9000 } ).length, 1 );
 	assert.equal( f.owner.result( { subtype: 2, selector: 8, result: 0xb4, gid: 2, itemGid: 4 }, 9000 ), true );
+});
+
+test("smartPetPickup keeps 0x80 enabled on 0xB4/0xB5, pauses non-gold items without spam, and resumes when bag space changes", () => {
+	const f = fixture();
+	const sent = [];
+	const gameplay = createGameplay( frame => sent.push( frame ), undefined, undefined, f.frame.read );
+	gameplay.bootstrap( {
+		inventorySlotCount: 45,
+		equipmentSlotCount: 13,
+		refObjSnapshot: [ { kind: "cos", refObjId: 9, tidWord: 0x21c6 } ]
+	} );
+	gameplay.worldReady();
+	gameplay.seed( f.frame.local );
+	const record = new Uint8Array( 29 );
+	const view = new DataView( record.buffer );
+	view.setUint32( 0, 2, true );
+	view.setUint32( 4, 9, true );
+	view.setUint32( 8, 100, true );
+	view.setUint32( 16, 0xc7, true );
+	record[22] = 28;
+	gameplay.receive( { opcode: 0x3158, payload: record }, 0 );
+	// Spawn an equipment drop (20, typeFlags 0x82c), another non-gold drop (21, 0x06c), and a gold drop (22, 0x2ec).
+	gameplay.entityLifecycle( { kind: "spawn", entity: f.drop( 20, 10, 0x82c ) } );
+	gameplay.entityLifecycle( { kind: "spawn", entity: f.drop( 21, 20, 0x06c ) } );
+	gameplay.entityLifecycle( { kind: "spawn", entity: f.drop( 22, 30, 0x2ec ) } );
+	gameplay.step( 0, f.frame.local );
+	assert.deepEqual( sent, [ cosPickupRequest( 2, 20 ) ] );
+	// Server rejects equipment drop 20 with 0xB4 (pet bag full).
+	gameplay.receive( { opcode: 0xb69e, payload: Uint8Array.of( 2, 8, 0xb4, 2, 0, 0, 0, 20, 0, 0, 0 ) }, 1 );
+	// Default smartPetPickup ON: no 0x705B disable sent; bit 0x80 remains set.
+	assert.equal( sent.length, 1 );
+	const afterFull = gameplay.take();
+	assert.equal( afterFull?.cosRecords?.[0]?.commandMode, 0xc7 );
+	assert.equal( afterFull?.notices?.at( -1 )?.key, "UIIT_MSG_COSPETERR_CANT_PICKITEM1" );
+	// Next step skips non-gold drops 20 and 21 (even past the 5000ms retry window) and picks up gold drop 22.
+	gameplay.step( 6000, f.frame.local );
+	assert.deepEqual( sent[1], cosPickupRequest( 2, 22 ) );
+	gameplay.receive( { opcode: 0xb69e, payload: Uint8Array.of( 1, 8, 2, 0, 0, 0, 22, 0, 0, 0 ) }, 6001 );
+	gameplay.step( 12000, f.frame.local );
+	assert.equal( sent.length, 2 );
+	// Freeing space in the pet bag (0xB06D 0x12 drop or 0xB05B behavior receipt) clears the non-gold pause.
+	gameplay.receive( { opcode: 0xb05b, payload: Uint8Array.of( 1, 2, 0, 0, 0, 2, 0xc7, 0, 0, 0 ) }, 12002 );
+	gameplay.step( 12003, f.frame.local );
+	assert.deepEqual( sent[2], cosPickupRequest( 2, 20 ) );
+	gameplay.dispose();
 });
 
 test("dead, moving, disabled and foreign pets do not issue pickup; reset retires all work", () => {
