@@ -19,9 +19,17 @@ import { STALL_CHAT_CHANNEL } from "@/engine/foundation/gameplay/stall";
 import { type NoticeRowLink, noticeWrappedLinks } from "@/engine/foundation/gameplay/notice-links";
 // 6aeaa0 seeds two 56px rows; 6acd30 cycles 0..6. The bottom anchor is 52px.
 
-// Port-only, not native: Seal of Sun drop lines in the chat log draw in bold
-// gold instead of the standard channel-7 pink (0xffaec3).
-export const SUN_DROP_CHAT_COLOR: UiQuad["color"] = [ 1, 215 / 255, 80 / 255, 1 ];
+/*
+================
+sunDropChatColor
+
+Port-only, not native: Seal of Sun drop lines in the chat log draw in bold
+gold instead of the standard channel-7 pink (0xffaec3).
+================
+*/
+export function sunDropChatColor(): UiQuad["color"] {
+	return [ 1, 215 / 255, 80 / 255, 1 ];
+}
 
 /*
 ================
@@ -219,7 +227,7 @@ button
 			...lines.filter( l => l.channel !== STALL_CHAT_CHANNEL && (tab === 0 || l.channel === channel) ).flatMap(
 				l => {
 					const sun = isSunDropChatLine( l ),
-						color = sun ? SUN_DROP_CHAT_COLOR : chatLineColor( l.channel ),
+						color = sun ? sunDropChatColor() : chatLineColor( l.channel ),
 						style: GlyphStyle | undefined = sun ? { fontStyle: 2 } : undefined,
 						full = chatLineText( l, copy ),
 						wrapped = textLines( full, textWidth, value => measure( value, style ), true ),

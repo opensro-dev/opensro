@@ -17,6 +17,9 @@ import { defined } from "../helpers/defined.mjs";
 const { createInventory } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts"
 );
+const { gachaPrizes } = await import(
+	"../../src/engine/foundation/gameplay/gacha-catalog.ts"
+);
 test("Go Alchemy result corpus reaches the production client inventory and native sound branches", () => {
 	const corpus = JSON.parse(
 		readFileSync(
@@ -481,4 +484,46 @@ test("Magic Pang prize rows rebuild when references or bootstrap update tooltips
 	assert.equal( afterSecondReferences.icon, "icon\\item\\etc\\prize_v2.ddj" );
 	assert.equal( afterSecondReferences.item?.name, "Updated Prize Name" );
 	assert.deepEqual( afterSecondReferences.item?.tooltip, tooltipV2 );
+});
+
+test("Magic Pang prize catalogue serves degree-9 Seal of Star under Pool V2 and falls back to retail v1.150 when off", () => {
+	assert.deepEqual( gachaPrizes(), [
+		{ entry: 1, refObjId: 4146, quantity: 1, nameSymbol: "SN_ITEM_CH_TBLADE_09_A_RARE" },
+		{ entry: 2, refObjId: 4038, quantity: 1, nameSymbol: "SN_ITEM_CH_SWORD_09_A_RARE" },
+		{ entry: 3, refObjId: 4110, quantity: 1, nameSymbol: "SN_ITEM_CH_SPEAR_09_A_RARE" },
+		{ entry: 4, refObjId: 4074, quantity: 1, nameSymbol: "SN_ITEM_CH_BLADE_09_A_RARE" },
+		{ entry: 5, refObjId: 4182, quantity: 1, nameSymbol: "SN_ITEM_CH_BOW_09_A_RARE" },
+		{ entry: 6, refObjId: 4218, quantity: 1, nameSymbol: "SN_ITEM_CH_SHIELD_09_A_RARE" },
+		{ entry: 7, refObjId: 6891, quantity: 1, nameSymbol: "SN_ITEM_ETC_ARCHEMY_MAGICSTONE_ASTRAL_09" },
+		{ entry: 8, refObjId: 6855, quantity: 1, nameSymbol: "SN_ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_09" },
+		{ entry: 9, refObjId: 3884, quantity: 1, nameSymbol: "SN_ITEM_MALL_GOLD_TIME_SERVICE_TICKET_4W" },
+		{ entry: 10, refObjId: 5912, quantity: 1000, nameSymbol: "SN_ITEM_MALL_HP_SUPERSET_5_BAG" },
+		{ entry: 11, refObjId: 5913, quantity: 1000, nameSymbol: "SN_ITEM_MALL_MP_SUPERSET_5_BAG" },
+		{ entry: 12, refObjId: 3783, quantity: 11, nameSymbol: "SN_ITEM_MALL_RESURRECTION_100P_SCROLL" }
+	] );
+	assert.deepEqual(
+		gachaPrizes( false ).slice( 0, 6 ),
+		[
+			{ entry: 1, refObjId: 4140, quantity: 1, nameSymbol: "SN_ITEM_CH_TBLADE_07_A_RARE" },
+			{ entry: 2, refObjId: 4035, quantity: 1, nameSymbol: "SN_ITEM_CH_SWORD_08_A_RARE" },
+			{ entry: 3, refObjId: 4104, quantity: 1, nameSymbol: "SN_ITEM_CH_SPEAR_07_A_RARE" },
+			{ entry: 4, refObjId: 4071, quantity: 1, nameSymbol: "SN_ITEM_CH_BLADE_08_A_RARE" },
+			{ entry: 5, refObjId: 4176, quantity: 1, nameSymbol: "SN_ITEM_CH_BOW_07_A_RARE" },
+			{ entry: 6, refObjId: 4215, quantity: 1, nameSymbol: "SN_ITEM_CH_SHIELD_08_A_RARE" }
+		]
+	);
+
+	const v2Owner = createInventory( () => {}, () => {} );
+	v2Owner.references( [
+		{ refObjId: 4146, typeFlags: 0x06ac, name: "Demon Polearm", icon: "item\\china\\weapon\\tblade_09.ddj" }
+	] );
+	assert.equal( v2Owner.state().gacha.prizes[0].refObjId, 4146 );
+	assert.equal( v2Owner.state().gacha.prizes[0].item?.name, "Demon Polearm" );
+
+	const v1Owner = createInventory( () => {}, () => {} );
+	v1Owner.references( [
+		{ refObjId: 4140, typeFlags: 0x06ac, name: "Heavenly Polearm", icon: "item\\china\\weapon\\tblade_07.ddj" }
+	] );
+	assert.equal( v1Owner.state().gacha.prizes[0].refObjId, 4140 );
+	assert.equal( v1Owner.state().gacha.prizes[0].item?.name, "Heavenly Polearm" );
 });

@@ -22,7 +22,7 @@ const { decodeNoticeLinks, noticeRowLinks, noticeWrappedLinks } = await import(
 	"../../src/engine/foundation/gameplay/notice-links.ts"
 );
 const { decodeInventoryItem } = await import( "../../src/engine/foundation/gameplay/inventory-item.ts" );
-const { chatLayout, SUN_DROP_CHAT_COLOR, isSunDropChatLine } = await import(
+const { chatLayout, sunDropChatColor, isSunDropChatLine } = await import(
 	"../../src/engine/foundation/ui/chat-layout.ts"
 );
 const { tooltipItems } = await import( "../../src/engine/foundation/ui/tooltip-target.ts" );
@@ -308,8 +308,8 @@ test("Seal of Sun drop chat lines render in bold gold while Star, Moon and plus 
 			return [];
 		}
 	} );
-	const sunCalls = calls.filter( c => c.value.includes( "(Seal Of Sun)" ) || c.color === SUN_DROP_CHAT_COLOR );
-	const starCalls = calls.filter( c => c.color !== SUN_DROP_CHAT_COLOR );
+	const sunCalls = calls.filter( c => c.value.includes( "(Seal Of Sun)" ) || c.color[1] === sunDropChatColor()[1] );
+	const starCalls = calls.filter( c => c.color[1] !== sunDropChatColor()[1] );
 	assert.ok( sunCalls.length > 0 );
 	for ( const call of sunCalls ) {
 		assert.deepEqual( call.color, [ 1, 215 / 255, 80 / 255, 1 ] );

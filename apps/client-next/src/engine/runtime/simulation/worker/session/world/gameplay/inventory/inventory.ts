@@ -284,7 +284,7 @@ present
 			gachaRows.nameCount === names.size &&
 			gachaRows.tooltipCount === tooltipRefs.size
 		) return gachaRows.rows;
-		const rows = gachaPrizes().map( prize => ({
+		const rows = gachaPrizes( refs ).map( prize => ({
 			entry: prize.entry,
 			refObjId: prize.refObjId,
 			quantity: prize.quantity,
