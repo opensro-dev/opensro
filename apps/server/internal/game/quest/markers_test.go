@@ -143,6 +143,19 @@ func TestMarkerPublicationReplacementRemovalAndReconnect(t *testing.T) {
 	if len(pub.Update(rows)) != 1 {
 		t.Fatal("reconnect lost initial publication")
 	}
+	// World re-entry of the same session (teleport, return scroll): the
+	// reset re-emits the full row set with no removal frames, then diffs
+	// resume - a later removal still crosses as 0x30ea only.
+	pub.Reset()
+	if f = pub.Update(rows); len(f) != 1 || f[0].Opcode != 0x3498 {
+		t.Fatal("re-entry lost the full row set", f)
+	}
+	if len(pub.Update(rows)) != 0 {
+		t.Fatal("re-entry retransmitted unchanged markers")
+	}
+	if f = pub.Update(nil); len(f) != 1 || f[0].Opcode != 0x30ea {
+		t.Fatal("removal after re-entry not diffed", f)
+	}
 }
 
 func TestUnfinishedQuestConversationIsInformational(t *testing.T) {

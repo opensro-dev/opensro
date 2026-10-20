@@ -12,6 +12,14 @@ import (
 // the quest authority read door; transport and world rosters remain root-owned.
 func (game *gameplayPlane) questMarkerTick() simulation.TickHook {
 	publications := make(map[uint64]*quest.MarkerPublication)
+	// entered is each session's last seen scene revision. A world entry
+	// (initial entry, teleport, return scroll) bumps it, and the entry
+	// payload re-establishes full quest state on the client, so the
+	// publication resets and the next tick re-emits the full row set -
+	// exactly what a reconnect gets. Without this, a teleport keeps the
+	// session, the rows are unchanged, and no frame ever refills the
+	// client's wiped marker array.
+	entered := make(map[uint64]uint64)
 	anchors := make(map[string]simulation.NpcDef)
 	for _, npc := range game.items.NpcRoster {
 		if npc.AuthoredSpawn {
@@ -53,6 +61,10 @@ func (game *gameplayPlane) questMarkerTick() simulation.TickHook {
 				publication = &quest.MarkerPublication{}
 				publications[session.ID] = publication
 			}
+			if revision, active := session.SceneRevision(); active && entered[session.ID] != revision {
+				entered[session.ID] = revision
+				publication.Reset()
+			}
 			for _, frame := range publication.Update(rows) {
 				if err := session.Send(frame.Opcode, frame.Payload); err != nil {
 					delete(publications, session.ID)
@@ -64,6 +76,7 @@ func (game *gameplayPlane) questMarkerTick() simulation.TickHook {
 		for id := range publications {
 			if !live[id] {
 				delete(publications, id)
+				delete(entered, id)
 			}
 		}
 		return nil

@@ -292,8 +292,25 @@ type NpcMarker struct {
 
 // MarkerPublication is private to one admitted transport session. Only changed
 // records cross the wire; reconnect creates a new publication, including when
-// the preceding connection never received its final delta.
+// the preceding connection never received its final delta. A world re-entry
+// of the same session Reset()s it instead (see Reset).
 type MarkerPublication struct{ rows map[uint32][18]byte }
+
+/*
+================
+MarkerPublication.Reset
+
+Forget every published row without emitting removals: the next Update
+re-emits the full current row set, exactly as a reconnect's fresh
+publication does. World entry is the moment full quest state is
+re-established (the native client rebuilds its NPC markers locally from
+the entry payload), so the caller resets on each scene admission of an
+existing session; removals after the reset still diff normally.
+================
+*/
+func (p *MarkerPublication) Reset() {
+	p.rows = nil
+}
 
 func (p *MarkerPublication) Update(rows map[uint32][18]byte) []wire.Frame {
 	ids := make([]uint32, 0, len(rows)+len(p.rows))
