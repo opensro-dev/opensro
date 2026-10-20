@@ -36,6 +36,7 @@ export interface SystemNotice {
 	readonly jobKill?: true;
 	readonly dropPlus?: true;
 	readonly plusSeven?: true;
+	readonly sunDrop?: true;
 }
 /*
 ================
@@ -116,9 +117,13 @@ export function serverNotification( opcode: number, p: Uint8Array ): SystemNotic
 	const notice: SystemNotice = { key: "", text, value: 0, notificationBanner: true, bannerOnly: true };
 	if ( p[0] === JOB_KILL_NOTICE_CHANNEL ) return { ...notice, jobKill: true };
 	if ( p[0] === DROP_PLUS_NOTICE_CHANNEL ) {
-		return links && announcedPlusSeven( p, 3 + 2 * n ) ?
-			{ ...notice, plusSeven: true } :
-			{ ...notice, dropPlus: true };
+		if ( links && announcedPlusSeven( p, 3 + 2 * n ) ) return { ...notice, plusSeven: true };
+		// Port-only, not native: Seal of Sun drop announcements highlight in
+		// gold on the top banner and chat log; Star/Moon and plus notices stay unchanged.
+		const sun = text.includes( "(Seal Of Sun)" ) && text.includes( " has dropped " ) ?
+			({ sunDrop: true } as const) :
+			{};
+		return { ...notice, dropPlus: true, ...sun };
 	}
 	return notice;
 }

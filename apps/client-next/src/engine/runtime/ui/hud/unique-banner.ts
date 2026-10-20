@@ -41,6 +41,11 @@ export const NATIVE_NOTICE_TIMING: NoticeTiming = { showMs: 7000, fadeMs: 2000 }
 // advisor's ask, owner-approved 2026-10-15).
 export const SHORT_NOTICE_TIMING: NoticeTiming = { showMs: 5000, fadeMs: 1000 };
 
+// Port-only, not native: Seal of Sun drop announcements tint the top banner
+// plate gold/amber instead of crimson and draw the caption in gold.
+export const SUN_DROP_BANNER_COLOR = [ 180, 120, 16 ] as const;
+export const SUN_DROP_BANNER_TEXT_RGB = [ 1, 215 / 255, 80 / 255 ] as const;
+
 // The banner's alpha steps (the native quad alpha byte).
 const ALPHA_STEPS = 255;
 
@@ -134,7 +139,13 @@ export function createNoticeBanner( kind: "banner" | "notificationBanner" = "ban
 		alpha
 		================
 		*/
-		alpha: () => alpha
+		alpha: () => alpha,
+		/*
+		================
+		sunDrop
+		================
+		*/
+		sunDrop: () => Boolean( current?.sunDrop )
 	};
 }
 

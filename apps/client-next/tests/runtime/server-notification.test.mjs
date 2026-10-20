@@ -18,9 +18,12 @@ const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
 );
 const { serverNotification } = await import( "../../src/engine/foundation/gameplay/system-notices.ts" );
-const { createNoticeBanner, notificationBannerPaths } = await import(
-	"../../src/engine/runtime/ui/hud/unique-banner.ts"
-);
+const {
+	createNoticeBanner,
+	notificationBannerPaths,
+	SUN_DROP_BANNER_COLOR,
+	SUN_DROP_BANNER_TEXT_RGB
+} = await import( "../../src/engine/runtime/ui/hud/unique-banner.ts" );
 const { chatLineText, chatLineColor } = await import( "../../src/engine/foundation/ui/chat-presentation.ts" );
 test("server refusal reaches the independent native red notice and pink chat log", () => {
 	const text = "This skill is not implemented yet.",
@@ -200,4 +203,31 @@ test("a plus notice above +11 (channel 0x81) renders its text verbatim; the clie
 	const state = defined( shown.take() );
 	assert.equal( defined( defined( state.notices ).at( -1 ) ).text, text );
 	assert.equal( defined( defined( state.chat ).lines.at( -1 ) ).text, text );
+});
+
+test("a Seal of Sun drop notice (channel 0x81) flags sunDrop on the banner while Star, Moon and plus stay unchanged", () => {
+	const frame = ( channel, text ) =>
+		Buffer.concat( [ Buffer.from( [ channel, text.length, 0 ] ), Buffer.from( text, "utf16le" ) ] );
+	const sunText = "Looter has dropped Heaven's Cloud Spear (Seal Of Sun) from Tiger Girl",
+		starText = "Looter has dropped Heaven's Cloud Spear (Seal Of Star) from Tiger Girl",
+		moonText = "Looter has dropped Heaven's Cloud Spear (Seal Of Moon) from Tiger Girl",
+		plusText = "Looter advanced Heaven's Cloud Spear (Seal Of Sun) to +8";
+	const sunNotice = defined( serverNotification( 0x3667, frame( 0x81, sunText ) ) );
+	assert.equal( sunNotice.dropPlus, true );
+	assert.equal( sunNotice.sunDrop, true );
+	for ( const other of [ starText, moonText, plusText ] ) {
+		const notice = defined( serverNotification( 0x3667, frame( 0x81, other ) ) );
+		assert.equal( notice.dropPlus, true );
+		assert.equal( notice.sunDrop, undefined, other );
+	}
+	// Channel 7 never sets sunDrop even if its text mentions (Seal Of Sun).
+	assert.equal( defined( serverNotification( 0x3667, frame( 7, sunText ) ) ).sunDrop, undefined );
+	const banner = createNoticeBanner( "notificationBanner" );
+	banner.step( [ { ...sunNotice, sequence: 1 } ], 100, true );
+	assert.equal( banner.sunDrop(), true );
+	assert.deepEqual( SUN_DROP_BANNER_COLOR, [ 180, 120, 16 ] );
+	assert.deepEqual( SUN_DROP_BANNER_TEXT_RGB, [ 1, 215 / 255, 80 / 255 ] );
+	const starNotice = defined( serverNotification( 0x3667, frame( 0x81, starText ) ) );
+	banner.step( [ { ...starNotice, sequence: 2 } ], 200, true );
+	assert.equal( banner.sunDrop(), false );
 });

@@ -22,7 +22,9 @@ const { decodeNoticeLinks, noticeRowLinks, noticeWrappedLinks } = await import(
 	"../../src/engine/foundation/gameplay/notice-links.ts"
 );
 const { decodeInventoryItem } = await import( "../../src/engine/foundation/gameplay/inventory-item.ts" );
-const { chatLayout } = await import( "../../src/engine/foundation/ui/chat-layout.ts" );
+const { chatLayout, SUN_DROP_CHAT_COLOR, isSunDropChatLine } = await import(
+	"../../src/engine/foundation/ui/chat-layout.ts"
+);
 const { tooltipItems } = await import( "../../src/engine/foundation/ui/tooltip-target.ts" );
 const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
 const { decodeAuthoredLayout } = await import( "../../src/engine/foundation/ui/authored-layout.ts" );
@@ -241,4 +243,86 @@ test("links in notices are on unless explicitly false", () => {
 		assert.equal( experimentalOptions( value ).noticeLinks, true );
 	}
 	assert.equal( experimentalOptions( { noticeLinks: false } ).noticeLinks, false );
+});
+
+test("Seal of Sun drop chat lines render in bold gold while Star, Moon and plus lines stay pink and regular", () => {
+	const withRarity = ( rarity, itemClass ) => ({
+		...POTION,
+		tooltip: { descriptionSymbol: "", fields: { rarity, itemClass } }
+	});
+	const sunItem = withRarity( 2, 3 ),
+		starItem = withRarity( 2, 1 ),
+		moonItem = withRarity( 2, 2 );
+	const sunLine = {
+			channel: 7,
+			name: "",
+			text: "Looter has dropped Potion (Seal Of Sun) from Tiger Girl",
+			outgoing: false,
+			sequence: 10,
+			notice: { name: "Looter", item: sunItem }
+		},
+		sunFallbackLine = {
+			channel: 7,
+			name: "",
+			text: "Looter has dropped Potion (Seal Of Sun) from Tiger Girl",
+			outgoing: false,
+			sequence: 11
+		},
+		starLine = {
+			...NOTICE_LINE,
+			sequence: 12,
+			notice: { name: "Looter", item: starItem }
+		},
+		moonLine = {
+			...NOTICE_LINE,
+			text: "Looter has dropped Potion (Seal Of Moon) from Tiger Girl",
+			sequence: 13,
+			notice: { name: "Looter", item: moonItem }
+		},
+		plusLine = {
+			channel: 7,
+			name: "",
+			text: "Looter advanced Potion (Seal Of Sun) to +8",
+			outgoing: false,
+			sequence: 14,
+			notice: { name: "Looter", item: { ...sunItem, plus: 8 } }
+		};
+	assert.equal( isSunDropChatLine( sunLine ), true );
+	assert.equal( isSunDropChatLine( sunFallbackLine ), true );
+	assert.equal( isSunDropChatLine( starLine ), false );
+	assert.equal( isSunDropChatLine( moonLine ), false );
+	assert.equal( isSunDropChatLine( plusLine ), false );
+	assert.equal( isSunDropChatLine( { ...sunFallbackLine, channel: 1 } ), false );
+	const calls = [], measuredStyles = [];
+	const out = layoutWith( {
+		noticeLinks: true,
+		lines: [ sunLine, starLine ],
+		measure: ( value, style ) => {
+			measuredStyles.push( style?.fontStyle ?? 0 );
+			return value.length * (style?.fontStyle === 2 ? 8 : 7);
+		},
+		text: ( value, r, clip, color, style ) => {
+			if ( value.includes( "Looter" ) || value.includes( "Tiger" ) ) {
+				calls.push( { value, color, style } );
+			}
+			return [];
+		}
+	} );
+	const sunCalls = calls.filter( c => c.value.includes( "(Seal Of Sun)" ) || c.color === SUN_DROP_CHAT_COLOR );
+	const starCalls = calls.filter( c => c.color !== SUN_DROP_CHAT_COLOR );
+	assert.ok( sunCalls.length > 0 );
+	for ( const call of sunCalls ) {
+		assert.deepEqual( call.color, [ 1, 215 / 255, 80 / 255, 1 ] );
+		assert.deepEqual( call.style, { fontStyle: 2 } );
+	}
+	assert.ok( starCalls.length > 0 );
+	for ( const call of starCalls ) {
+		assert.deepEqual( call.color, [ 1, 174 / 255, 195 / 255, 1 ] );
+		assert.equal( call.style, undefined );
+	}
+	assert.ok( measuredStyles.includes( 2 ) );
+	const sunItemCtrl = out.controls.find( c => c.id === "notice-item:10" );
+	const starItemCtrl = out.controls.find( c => c.id === "notice-item:12" );
+	assert.equal( sunItemCtrl?.rect[2], 6 * 8 );
+	assert.equal( starItemCtrl?.rect[2], 6 * 7 );
 });

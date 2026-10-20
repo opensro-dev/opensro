@@ -188,7 +188,9 @@ import {
 	uniqueBannerPaths,
 	createNoticeBanner,
 	noticeTiming,
-	notificationBannerPaths
+	notificationBannerPaths,
+	SUN_DROP_BANNER_COLOR,
+	SUN_DROP_BANNER_TEXT_RGB
 } from "./hud/unique-banner";
 import { createQuestBanner, questBannerPaths } from "./hud/quest-banner";
 import { createQuestTimers } from "./hud/quest-timers";
@@ -9235,7 +9237,8 @@ export function createUi(
 						alpha: notificationBanner.alpha(),
 						paths: notificationBannerPaths,
 						y: 100,
-						color: [ 128, 45, 67 ] as const
+						color: notificationBanner.sunDrop() ? SUN_DROP_BANNER_COLOR : ([ 128, 45, 67 ] as const),
+						textRgb: notificationBanner.sunDrop() ? SUN_DROP_BANNER_TEXT_RGB : ([ 1, 1, 1 ] as const)
 					},
 					{
 						value: questBanner.value(),
@@ -9272,12 +9275,13 @@ export function createUi(
 							row.color
 						)
 					);
+					const textRgb = "textRgb" in row && row.textRgb ? row.textRgb : ([ 1, 1, 1 ] as const);
 					lines.forEach( ( value, index ) =>
 						quads.push(
 							...text.quads( value, [ x, y + index * lineHeight, width, lineHeight ], full, [
-								1,
-								1,
-								1,
+								textRgb[0],
+								textRgb[1],
+								textRgb[2],
 								row.alpha
 							], { fontIndex: 0, fontStyle: 2, hAlign: 1, vAlign: 0 } )
 						)
@@ -10790,7 +10794,7 @@ export function createUi(
 								pressed,
 								offset: chatScroll.offset(),
 								hidden: chatHidden,
-								measure: value => text.run( value ).width,
+								measure: ( value, style ) => text.run( value, style?.fontStyle ?? 0 ).width,
 								editState: {
 									caretVisible,
 									caretHeight: text.height() + 2,

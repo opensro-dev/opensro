@@ -18,6 +18,28 @@ import { textLines } from "./text-lines";
 import { STALL_CHAT_CHANNEL } from "@/engine/foundation/gameplay/stall";
 import { type NoticeRowLink, noticeWrappedLinks } from "@/engine/foundation/gameplay/notice-links";
 // 6aeaa0 seeds two 56px rows; 6acd30 cycles 0..6. The bottom anchor is 52px.
+
+// Port-only, not native: Seal of Sun drop lines in the chat log draw in bold
+// gold instead of the standard channel-7 pink (0xffaec3).
+export const SUN_DROP_CHAT_COLOR: UiQuad["color"] = [ 1, 215 / 255, 80 / 255, 1 ];
+
+/*
+================
+isSunDropChatLine
+
+Whether a channel-7 notice line announces a Seal of Sun drop: prefers the
+decoded item link's seal when present and falls back to the notice text.
+================
+*/
+export function isSunDropChatLine( line: Pick<ChatLine, "channel" | "text" | "notice"> ): boolean {
+	if ( line.channel !== 7 || !line.text.includes( " has dropped " ) ) return false;
+	const fields = line.notice?.item?.tooltip?.fields;
+	if ( fields ) {
+		const itemClass = fields.itemClass ?? 0;
+		return fields.rarity === 2 && itemClass > 0 && (itemClass - 1) % 3 === 2;
+	}
+	return line.text.includes( "(Seal Of Sun)" );
+}
 /*
 ================
 ChatLayoutInput
@@ -49,7 +71,7 @@ export interface ChatLayoutInput {
 	pressed: string | null;
 	offset?: number;
 	hidden?: boolean;
-	measure: ( value: string ) => number;
+	measure: ( value: string, style?: GlyphStyle ) => number;
 	editState?: {
 		focused: boolean;
 		start: number;
@@ -185,6 +207,7 @@ button
 				textLines( welcome, textWidth, measure, true ).map( value => ({
 					value,
 					color: gold,
+					style: undefined as GlyphStyle | undefined,
 					recipient: undefined as string | undefined,
 					sentAt: undefined as number | undefined,
 					notice: undefined as ChatLine["notice"],
@@ -195,12 +218,16 @@ button
 			// Stall lines belong to the stall window's own chat box.
 			...lines.filter( l => l.channel !== STALL_CHAT_CHANNEL && (tab === 0 || l.channel === channel) ).flatMap(
 				l => {
-					const full = chatLineText( l, copy );
-					const wrapped = textLines( full, textWidth, measure, true );
-					const links = noticeWrappedLinks( full, wrapped, state.noticeLinks ? l.notice : undefined );
+					const sun = isSunDropChatLine( l ),
+						color = sun ? SUN_DROP_CHAT_COLOR : chatLineColor( l.channel ),
+						style: GlyphStyle | undefined = sun ? { fontStyle: 2 } : undefined,
+						full = chatLineText( l, copy ),
+						wrapped = textLines( full, textWidth, value => measure( value, style ), true ),
+						links = noticeWrappedLinks( full, wrapped, state.noticeLinks ? l.notice : undefined );
 					return wrapped.map( ( value, index ) => ({
 						value,
-						color: chatLineColor( l.channel ),
+						color,
+						style,
 						recipient: l.channel !== 7 ? l.name : undefined,
 						sentAt: l.sentAt,
 						notice: state.noticeLinks ? l.notice : undefined,
@@ -244,13 +271,13 @@ button
 			if ( hover === id ) {
 				quads.push( {
 					texture: "",
-					rect: [ r[0], r[1], measure( line.value ), 15 ],
+					rect: [ r[0], r[1], measure( line.value, line.style ), 15 ],
 					clip,
 					uv: [ 0, 0, 1, 1 ],
 					color: [ 1, 1, 1, 102 / 255 ]
 				} );
 			}
-			quads.push( ...text( line.value, r, clip, line.color ) );
+			quads.push( ...text( line.value, r, clip, line.color, line.style ) );
 			// Port-only notice links (notice-links.ts): the player's name whispers,
 			// the item's name shows its tooltip; each underlines while hovered.
 			if ( line.links.length > 0 && line.sequence !== undefined ) {
@@ -258,9 +285,9 @@ button
 					const baseId = "notice-" + link.kind + ":" + line.sequence,
 						linkId = link.part ? baseId + ":" + link.part : baseId,
 						rect: UiRect = [
-							r[0] + measure( line.value.slice( 0, link.at ) ),
+							r[0] + measure( line.value.slice( 0, link.at ), line.style ),
 							r[1],
-							measure( link.value ),
+							measure( link.value, line.style ),
 							14
 						];
 					controls.push( {
