@@ -23,7 +23,7 @@ server's worldgeom package (internal/game/world/geometry.go) name for name:
 */
 
 import { hypot2 } from "@/engine/foundation/math/hypot";
-import { minimapPoseKey } from "@/engine/foundation/ui/minimap-floor";
+import { minimapPoseKey } from "@/engine/foundation/gameplay/minimap-floor-key";
 
 export const REGION_SIZE = 1920;
 export const DUNGEON_REGION_BIT = 0x8000;
@@ -61,7 +61,7 @@ DungeonFloorContext
 */
 export interface DungeonFloorContext {
 	readonly navigationFloor?: number;
-	readonly minimapFloors?: Readonly<Record<string, number>>;
+	readonly minimapFloors?: Readonly<Record<string, number | undefined>>;
 }
 
 /*
@@ -138,6 +138,13 @@ worldDelta
 Returns the planar displacement [dx, dz] from -> to in world units
 (SWorld_CalculateRegionOffsetVector, 0x00888140): local delta when either
 endpoint is a dungeon region, or sector-offset delta outdoors.
+
+Note: native client 0x00888140 tests both regionIds for bit 0x8000 and returns
+a zero offset vector whenever either endpoint is a dungeon region, whereas Go's
+worldgeom.Delta only takes the local-delta branch when both endpoints share the
+same dungeon regionId. They agree within one dungeon region and on all outdoor
+pairs, and differ on cross-region dungeon or dungeon/outdoor pairs (where
+samePlaneAdjacent is false).
 ================
 */
 export function worldDelta( from: RegionXZ, to: RegionXZ ): [number, number] {
@@ -187,7 +194,7 @@ dungeon, target must share local's regionId and resolved DOF floor index.
 export function sameDungeonFloor(
 	local: { readonly regionId: number; },
 	target: DungeonFloorPoint,
-	game?: DungeonFloorContext
+	game?: DungeonFloorContext | null
 ): boolean {
 	if ( !isDungeonRegion( local.regionId ) && !isDungeonRegion( target.regionId ) ) {
 		return true;

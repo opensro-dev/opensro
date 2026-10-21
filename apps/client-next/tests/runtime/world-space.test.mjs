@@ -17,7 +17,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import "../helpers/native-source-loader.mjs";
 
-const { minimapPoseKey } = await import( "../../src/engine/foundation/ui/minimap-floor.ts" );
+const { minimapPoseKey } = await import( "../../src/engine/foundation/gameplay/minimap-floor-key.ts" );
+const { minimapSameFloor } = await import( "../../src/engine/foundation/ui/minimap-floor.ts" );
 const {
 	DUNGEON_REGION_BIT,
 	isDungeonRegion,
@@ -140,6 +141,14 @@ test("sameDungeonFloor implements native CObj_IsVisibleInSector (0x00863330)", (
 	);
 	assert.equal(
 		sameDungeonFloor( localDungeon, otherFloorTarget, { navigationFloor: 2, minimapFloors: floors } ),
+		false
+	);
+	assert.equal(
+		minimapSameFloor( localDungeon, sameFloorTarget, { navigationFloor: 2, minimapFloors: floors } ),
+		true
+	);
+	assert.equal(
+		minimapSameFloor( localDungeon, otherFloorTarget, { navigationFloor: 2, minimapFloors: floors } ),
 		false
 	);
 });

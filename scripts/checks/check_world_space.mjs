@@ -85,7 +85,8 @@ export function countWorldSpaceLiterals( text, relativePath = "" ) {
 	}
 	const skip8000 = NON_REGION_8000_FILES.has( relativePath );
 	let count = 0;
-	for ( const line of text.split( /\r?\n/ ) ) {
+	const withoutBlockComments = text.replace( /\/\*[\s\S]*?\*\//g, "" );
+	for ( const line of withoutBlockComments.split( /\r?\n/ ) ) {
 		if ( /^\s*(?:\/\/|\/\*|\*|#)/.test( line ) ) {
 			continue;
 		}

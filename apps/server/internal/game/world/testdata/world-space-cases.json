@@ -110,9 +110,10 @@
 			"toSector": null,
 			"samePlane": true,
 			"samePlaneAdjacent": false,
-			"delta": null,
-			"distance": null,
-			"distanceSquared": null
+			"delta": [30, 40],
+			"distance": 50,
+			"distanceSquared": 2500,
+			"serverDelta": [1950, 40]
 		},
 		{
 			"name": "dungeon-outdoor",
@@ -124,9 +125,10 @@
 			"toSector": { "x": 168, "y": 100 },
 			"samePlane": false,
 			"samePlaneAdjacent": false,
-			"delta": null,
-			"distance": null,
-			"distanceSquared": null
+			"delta": [30, 40],
+			"distance": 50,
+			"distanceSquared": 2500,
+			"serverDelta": [320670, 192040]
 		}
 	]
 }

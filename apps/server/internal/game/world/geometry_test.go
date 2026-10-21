@@ -47,6 +47,7 @@ type worldSpaceParityCase struct {
 	SamePlaneAdjacent bool                    `json:"samePlaneAdjacent"`
 	Delta             *[2]float64             `json:"delta"`
 	Distance          *float64                `json:"distance"`
+	ServerDelta       *[2]float64             `json:"serverDelta"`
 }
 
 /*
@@ -54,7 +55,11 @@ type worldSpaceParityCase struct {
 TestWorldSpaceParityCases
 
 Verifies that worldgeom matches the shared client/server world-space parity
-cases in testdata/world-space-cases.json.
+cases in testdata/world-space-cases.json. On cross-region dungeon and
+dungeon/outdoor pairs, client worldDelta follows SWorld_CalculateRegionOffsetVector
+(0x00888140, zero region offset whenever either endpoint has 0x8000 set),
+whereas worldgeom.Delta only short-circuits equal dungeon RegionIDs; those
+cases pin delta for the client and serverDelta for Go.
 ================
 */
 func TestWorldSpaceParityCases(t *testing.T) {
@@ -98,15 +103,19 @@ func TestWorldSpaceParityCases(t *testing.T) {
 		if got := SamePlaneAdjacent(tc.From.RegionID, tc.To.RegionID); got != tc.SamePlaneAdjacent {
 			t.Errorf("%s: SamePlaneAdjacent = %v, want %v", tc.Name, got, tc.SamePlaneAdjacent)
 		}
-		if tc.Delta != nil {
+		wantDelta := tc.Delta
+		if tc.ServerDelta != nil {
+			wantDelta = tc.ServerDelta
+		}
+		if wantDelta != nil {
 			from := RegionXZ{RegionID: tc.From.RegionID, X: tc.From.X, Z: tc.From.Z}
 			to := RegionXZ{RegionID: tc.To.RegionID, X: tc.To.X, Z: tc.To.Z}
 			dx, dz := Delta(from, to)
-			if math.Abs(dx-tc.Delta[0]) > 1e-9 || math.Abs(dz-tc.Delta[1]) > 1e-9 {
-				t.Errorf("%s: Delta = (%v,%v), want (%v,%v)", tc.Name, dx, dz, tc.Delta[0], tc.Delta[1])
+			if math.Abs(dx-wantDelta[0]) > 1e-9 || math.Abs(dz-wantDelta[1]) > 1e-9 {
+				t.Errorf("%s: Delta = (%v,%v), want (%v,%v)", tc.Name, dx, dz, wantDelta[0], wantDelta[1])
 			}
 		}
-		if tc.Distance != nil {
+		if tc.Distance != nil && tc.ServerDelta == nil {
 			from := RegionXZ{RegionID: tc.From.RegionID, X: tc.From.X, Z: tc.From.Z}
 			to := RegionXZ{RegionID: tc.To.RegionID, X: tc.To.X, Z: tc.To.Z}
 			got := Distance(from, to)

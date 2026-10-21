@@ -16,6 +16,7 @@ client and would otherwise all draw.
 */
 import type { GameplayState, Pose } from "@/engine/contracts/gameplay";
 import { minimapPoseKey } from "@/engine/foundation/gameplay/minimap-floor-key";
+import { type DungeonFloorContext, isDungeonRegion, sameDungeonFloor } from "@/engine/foundation/world/world-space";
 
 export { minimapPoseKey };
 
@@ -23,19 +24,16 @@ export { minimapPoseKey };
 ================
 minimapSameFloor
 
-0x863330 (CObj_IsVisibleInSector): outdoor pairs are always visible; if
-either endpoint is a dungeon sector (0x8000), both must sit in the same
-dungeon sector and resolve to the local player's DOF floor index.
+Delegates to sameDungeonFloor (CObj_IsVisibleInSector, 0x00863330) in
+foundation/world/world-space.ts.
 ================
 */
 export function minimapSameFloor(
 	local: Pick<Pose, "regionId" | "x" | "y" | "z">,
 	target: Pick<Pose, "regionId" | "x" | "y" | "z">,
-	game: GameplayState | null
+	game?: DungeonFloorContext | null
 ): boolean {
-	if ( !((local.regionId | target.regionId) & 0x8000) ) return true;
-	if ( local.regionId !== target.regionId || game?.navigationFloor === undefined ) return false;
-	return game.minimapFloors?.[minimapPoseKey( target )] === game.navigationFloor;
+	return sameDungeonFloor( local, target, game );
 }
 
 /*
@@ -52,7 +50,7 @@ export function minimapFloorQueries(
 	targets: readonly Pose[],
 	entities: readonly Pick<Pose, "regionId" | "x" | "y" | "z">[] = []
 ): readonly Pose[] {
-	if ( !game?.pose || (game.pose.regionId & 0x8000) === 0 ) return [];
+	if ( !game?.pose || !isDungeonRegion( game.pose.regionId ) ) return [];
 	const rows: Pose[] = [ ...targets ];
 	for ( const e of entities ) {
 		rows.push( { regionId: e.regionId, x: e.x, y: e.y, z: e.z, angle: 0 } );
