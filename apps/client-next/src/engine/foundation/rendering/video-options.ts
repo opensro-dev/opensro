@@ -91,6 +91,95 @@ The listed mode equal to `size`, 0 (the whole page) when none is.
 export function displaySizeIndex( size: readonly [number, number] | undefined ): number {
 	return size ? Math.max( 0, displaySizes().findIndex( m => m[0] === size[0] && m[1] === size[1] ) ) : 0;
 }
+
+/*
+================
+ViewportGeometrySource
+================
+*/
+export interface ViewportGeometrySource {
+	readonly innerWidth: number;
+	readonly innerHeight: number;
+	readonly devicePixelRatio?: number;
+	readonly visualViewport?: {
+		readonly width: number;
+		readonly height: number;
+		readonly offsetLeft?: number;
+		readonly offsetTop?: number;
+	} | null;
+}
+
+/*
+================
+CanvasViewportBox
+================
+*/
+export interface CanvasViewportBox {
+	readonly left: number;
+	readonly top: number;
+	readonly width: number;
+	readonly height: number;
+	readonly physicalWidth: number;
+	readonly physicalHeight: number;
+	readonly pinned: boolean;
+	readonly letterboxed: boolean;
+}
+
+/*
+================
+fitCanvasViewport
+
+Reads the available viewport from visualViewport when present (width, height,
+offsetLeft, offsetTop), falling back to innerWidth / innerHeight. We keep the
+default non-cover viewport (no viewport-fit=cover), so iOS reserves the
+status-bar and home-indicator safe areas outside visualViewport; during a
+Home Screen (standalone) rotation where innerHeight or scroll offset lags the
+settled visualViewport, pinning the canvas to the visualViewport box prevents
+a stale top band or clipped bottom edge.
+================
+*/
+export function fitCanvasViewport(
+	source: ViewportGeometrySource,
+	displaySize?: readonly [number, number]
+): CanvasViewportBox {
+	const ratio = source.devicePixelRatio && source.devicePixelRatio > 0 ? source.devicePixelRatio : 1;
+	const visual = source.visualViewport && source.visualViewport.width > 0 && source.visualViewport.height > 0 ?
+		source.visualViewport :
+		null;
+	const viewLeft = visual?.offsetLeft ?? 0,
+		viewTop = visual?.offsetTop ?? 0,
+		viewWidth = visual ? visual.width : source.innerWidth,
+		viewHeight = visual ? visual.height : source.innerHeight;
+	if ( !displaySize ) {
+		const width = Math.max( 0, viewWidth ), height = Math.max( 0, viewHeight );
+		return {
+			left: viewLeft,
+			top: viewTop,
+			width,
+			height,
+			physicalWidth: Math.max( 1, Math.round( width * ratio ) ),
+			physicalHeight: Math.max( 1, Math.round( height * ratio ) ),
+			pinned: Math.abs( viewLeft ) >= 1 || Math.abs( viewTop ) >= 1 ||
+				Math.abs( width - source.innerWidth ) >= 1 || Math.abs( height - source.innerHeight ) >= 1,
+			letterboxed: false
+		};
+	}
+	const scale = Math.min( 1, viewWidth * ratio / displaySize[0], viewHeight * ratio / displaySize[1] ),
+		width = Math.round( displaySize[0] * scale ) / ratio,
+		height = Math.round( displaySize[1] * scale ) / ratio,
+		left = viewLeft + Math.floor( (viewWidth - width) * ratio / 2 ) / ratio,
+		top = viewTop + Math.floor( (viewHeight - height) * ratio / 2 ) / ratio;
+	return {
+		left,
+		top,
+		width,
+		height,
+		physicalWidth: Math.max( 1, Math.round( width * ratio ) ),
+		physicalHeight: Math.max( 1, Math.round( height * ratio ) ),
+		pinned: true,
+		letterboxed: true
+	};
+}
 /*
 ================
 VideoOptions

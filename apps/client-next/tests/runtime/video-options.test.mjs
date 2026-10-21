@@ -14,7 +14,14 @@ import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { defaultVideoOptions, changeVideo, videoOptions, backgroundDrawDistance, uiPixelScaleFor } = await import(
+const {
+	defaultVideoOptions,
+	changeVideo,
+	videoOptions,
+	backgroundDrawDistance,
+	uiPixelScaleFor,
+	fitCanvasViewport
+} = await import(
 	sourceFileUrl( "src/engine/foundation/rendering/video-options.ts" ).href
 );
 test("background range and effect quality survive the persisted two-record option format", () => {
@@ -75,4 +82,115 @@ test("a desktop window keeps the desktop HUD and only small windows go compact",
 		assert.equal( uiPixelScaleFor( width, height, ratio ), scale, name );
 		assert.equal( width / scale >= 800 && height / scale >= 600, desktop, name + " layout" );
 	}
+});
+
+/*
+================
+Standalone rotation viewport fit (#1240)
+
+In an iOS Home Screen app, WebKit fires resize before innerHeight and safe
+areas settle, and can leave a status-bar offsetTop after rotating landscape ->
+portrait -> landscape. fitCanvasViewport reads visualViewport when present and
+falls back to innerWidth / innerHeight.
+================
+*/
+test("fitCanvasViewport prefers settled visualViewport over stale innerHeight and status-bar offset", () => {
+	// Stale innerHeight (797) during landscape -> portrait while visualViewport settled at 390x844.
+	assert.deepEqual(
+		fitCanvasViewport( {
+			innerWidth: 390,
+			innerHeight: 797,
+			devicePixelRatio: 3,
+			visualViewport: { width: 390, height: 844, offsetLeft: 0, offsetTop: 0 }
+		} ),
+		{
+			left: 0,
+			top: 0,
+			width: 390,
+			height: 844,
+			physicalWidth: 1170,
+			physicalHeight: 2532,
+			pinned: true,
+			letterboxed: false
+		}
+	);
+	// Transient status-bar scroll offset (offsetTop: 47) pins to the shifted visualViewport box.
+	assert.deepEqual(
+		fitCanvasViewport( {
+			innerWidth: 390,
+			innerHeight: 844,
+			devicePixelRatio: 3,
+			visualViewport: { width: 390, height: 797, offsetLeft: 0, offsetTop: 47 }
+		} ),
+		{
+			left: 0,
+			top: 47,
+			width: 390,
+			height: 797,
+			physicalWidth: 1170,
+			physicalHeight: 2391,
+			pinned: true,
+			letterboxed: false
+		}
+	);
+	// Settled portrait -> landscape where innerWidth/innerHeight and visualViewport agree needs no inline pin.
+	assert.deepEqual(
+		fitCanvasViewport( {
+			innerWidth: 844,
+			innerHeight: 390,
+			devicePixelRatio: 3,
+			visualViewport: { width: 844, height: 390, offsetLeft: 0, offsetTop: 0 }
+		} ),
+		{
+			left: 0,
+			top: 0,
+			width: 844,
+			height: 390,
+			physicalWidth: 2532,
+			physicalHeight: 1170,
+			pinned: false,
+			letterboxed: false
+		}
+	);
+	// Fallback when visualViewport is absent.
+	assert.deepEqual(
+		fitCanvasViewport( {
+			innerWidth: 1280,
+			innerHeight: 720,
+			devicePixelRatio: 2,
+			visualViewport: null
+		} ),
+		{
+			left: 0,
+			top: 0,
+			width: 1280,
+			height: 720,
+			physicalWidth: 2560,
+			physicalHeight: 1440,
+			pinned: false,
+			letterboxed: false
+		}
+	);
+	// Explicit displaySize centres inside the visualViewport box and respects offsetTop.
+	assert.deepEqual(
+		fitCanvasViewport(
+			{
+				innerWidth: 1280,
+				innerHeight: 720,
+				devicePixelRatio: 2,
+				visualViewport: { width: 1280, height: 700, offsetLeft: 0, offsetTop: 20 }
+			},
+			[ 800, 600 ]
+		),
+		{
+			left: 440,
+			top: 220,
+			width: 400,
+			height: 300,
+			physicalWidth: 800,
+			physicalHeight: 600,
+			pinned: true,
+			letterboxed: true
+		}
+	);
 });

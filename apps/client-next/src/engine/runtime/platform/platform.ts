@@ -19,6 +19,7 @@ import {
 import { chatBlocks } from "@/engine/foundation/gameplay/chat-blocks";
 import {
 	defaultVideoOptions,
+	fitCanvasViewport,
 	uiPixelScaleFor,
 	videoOptions,
 	type VideoOptions
@@ -232,12 +233,15 @@ export function createPlatform(
 	A chosen screen size is the game area itself, centred on the full-screen
 	page with black around it, not a stretched low-resolution image: the
 	interface keeps its native pixel size and stays sharp. Without one the
-	canvas fills the page.
+	canvas fills the page (or pins to visualViewport when iOS standalone
+	rotation leaves innerHeight or offsetTop unsettled). We keep the default
+	non-cover viewport so hardware safe areas remain outside visualViewport.
 	================
 	*/
 	function layoutCanvas() {
-		const size = video.displaySize, style = canvas.style;
-		if ( !size ) {
+		if ( typeof window.scrollTo === "function" ) window.scrollTo( 0, 0 );
+		const fit = fitCanvasViewport( window, video.displaySize ), style = canvas.style;
+		if ( !fit.pinned ) {
 			style.position =
 				style.left =
 				style.top =
@@ -245,36 +249,47 @@ export function createPlatform(
 				style.height =
 					"";
 			document.body.style.background = "";
-			refreshCanvasBox();
-			return;
+		} else {
+			style.position = fit.letterboxed ? "absolute" : "fixed";
+			style.left = fit.left + "px";
+			style.top = fit.top + "px";
+			style.width = fit.width + "px";
+			style.height = fit.height + "px";
+			document.body.style.background = fit.letterboxed ? "#000" : "";
 		}
-		const ratio = devicePixelRatio,
-			scale = Math.min( 1, innerWidth * ratio / size[0], innerHeight * ratio / size[1] ),
-			width = Math.round( size[0] * scale ) / ratio,
-			height = Math.round( size[1] * scale ) / ratio;
-		style.position = "absolute";
-		style.left = Math.floor( (innerWidth - width) * ratio / 2 ) / ratio + "px";
-		style.top = Math.floor( (innerHeight - height) * ratio / 2 ) / ratio + "px";
-		style.width = width + "px";
-		style.height = height + "px";
-		document.body.style.background = "#000";
-		// A chosen size takes effect this frame, not after the observer reports.
+		// A chosen size or visualViewport pin takes effect this frame, not after the observer reports.
 		refreshCanvasBox();
 	}
 	layoutCanvas();
+	let pendingRefitFrames = 0, lastRefitAt = -Infinity, refitFrameStepped = false;
 	/*
 	================
 	resizeCanvas
 
 	Browser zoom can leave the physical UI size unchanged. Reposition its DOM
 	controls even when the retained UI therefore has no new publication.
+	iOS standalone rotation fires resize before innerHeight and safe areas
+	settle, so event-driven resizes also refit across the next two frames.
 	================
 	*/
-	function resizeCanvas() {
+	function resizeCanvas( settle?: boolean | Event ) {
+		if ( settle !== false ) {
+			pendingRefitFrames = 2;
+			lastRefitAt = performance.now();
+			refitFrameStepped = true;
+		}
 		layoutCanvas();
 		if ( lastUi ) bridge.present( lastUi );
 	}
 	addEventListener( "resize", resizeCanvas, { signal: lifetime.signal } );
+	addEventListener( "orientationchange", resizeCanvas, { signal: lifetime.signal } );
+	if ( typeof screen !== "undefined" && typeof screen.orientation?.addEventListener === "function" ) {
+		screen.orientation.addEventListener( "change", resizeCanvas, { signal: lifetime.signal } );
+	}
+	if ( typeof visualViewport !== "undefined" && visualViewport ) {
+		visualViewport.addEventListener( "resize", resizeCanvas, { signal: lifetime.signal } );
+		visualViewport.addEventListener( "scroll", resizeCanvas, { signal: lifetime.signal } );
+	}
 	let densityQuery = matchMedia( `(resolution: ${devicePixelRatio}dppx)` );
 	/*
 	================
@@ -627,9 +642,20 @@ export function createPlatform(
 	================
 	*/
 	function readViewport() {
-		const box = canvasSize();
-		viewport.width = Math.max( 1, Math.round( box.width * devicePixelRatio ) );
-		viewport.height = Math.max( 1, Math.round( box.height * devicePixelRatio ) );
+		if ( pendingRefitFrames > 0 ) {
+			const now = performance.now();
+			if ( !refitFrameStepped || now - lastRefitAt >= 4 ) {
+				pendingRefitFrames--;
+				lastRefitAt = now;
+				refitFrameStepped = true;
+				resizeCanvas( false );
+			}
+		}
+		const fit = fitCanvasViewport( window, video.displaySize ), box = canvasSize();
+		const width = fit.pinned || box.width <= 0 ? fit.width : box.width,
+			height = fit.pinned || box.height <= 0 ? fit.height : box.height;
+		viewport.width = Math.max( 1, Math.round( width * devicePixelRatio ) );
+		viewport.height = Math.max( 1, Math.round( height * devicePixelRatio ) );
 		return viewport;
 	}
 	return {
@@ -912,6 +938,7 @@ export function createPlatform(
 		================
 		*/
 		visibilityReturned() {
+			refitFrameStepped = false;
 			const returned = visibleAgain;
 			visibleAgain = false;
 			return returned;
