@@ -20,18 +20,25 @@ each arm traced in 509CF0:
   sends the literal text as a chat line, exactly like /TEXTCHAT.
 - INPUT_CHAT <arg> opens "<client data path>ChatString.txt"
   (@0x50BFC2 reads [0xF0C8E8]+0x134, @0x50BFE3 appends the literal at
-  0xBCC7A0) and broadcasts its lines. The port ships no ChatString.txt
+  0xBCC7A0) and broadcasts its lines. The arm requires exactly two
+  tokens (@0x50BF51 cmp ebx, 0x2). The port ships no ChatString.txt
   asset, so the console answers with the native missing-file line
-  ("ChatString Error. -> %s") and sends nothing.
-- /GMSKILL casts SKILL_OP_HARMONY_A_01: the argument is read with
-  CRT_swscanf "%d" (@0x509DF1); a zero or unparseable argument resolves
-  the codename (GlobalDataManager_FindSkillIdByName 916830) and casts
-  through CGInterface_ExecuteSelectedActionAtTarget (6FCD50 @0x509E1D).
+  ("ChatString Error. -> %s", the %s is the argument: the token-1
+  buffer is pushed at @0x50C04C) and sends nothing.
+- /GMSKILL casts SKILL_OP_HARMONY_A_01: the arm requires exactly two
+  tokens (@0x509DAF cmp ebp, 0x2; a bare line is not handled at all).
+  The argument is read with CRT_swscanf "%d" (@0x509DF1); a zero or
+  unparseable argument resolves the codename
+  (GlobalDataManager_FindSkillIdByName 916830) and casts through
+  CGInterface_ExecuteSelectedActionAtTarget (6FCD50 @0x509E1D).
   A nonzero argument jumps past the cast (@0x509DFF): handled, no-op.
 - /useskill <id> casts the parsed id through the same 6FCD50 door
   (@0x50CC08); a zero parse is handled with no cast.
-- /GACHASTART walks the open gacha control's registered cards and sends
-  one 0x7053 byte per card: CIFControl_GetSlotIndex378 (54FC30) + 0x0D
+- /GACHASTART has no token-count gate (the @0x50C60E match goes
+  straight to the gacha control walk at @0x50C624; extra tokens are
+  ignored). It walks the open gacha control's registered cards and
+  sends one 0x7053 byte per card: CIFControl_GetSlotIndex378 (54FC30)
+  + 0x0D
   (@0x50C6D7; 0x0D is the bag-slot base, the same +0xD the window adds
   to a card index). The port's roll authority is the nine-byte 0x7053
   the window itself sends (item/gacha wire OpRoll), so the console runs
@@ -93,7 +100,7 @@ gacha and waypoints in the worker (gameplay.ts).
 export type GmLocalCommand =
 	| { readonly type: "textchat"; readonly key: string; }
 	| { readonly type: "smsg"; readonly text: string; }
-	| { readonly type: "inputchat"; }
+	| { readonly type: "inputchat"; readonly arg: string; }
 	| { readonly type: "useskill"; readonly skillId: number; }
 	| { readonly type: "gmskill"; }
 	| { readonly type: "consumed"; }
@@ -126,7 +133,7 @@ export function gmLocalCommand( line: string ): GmLocalCommand | null {
 		return { type: "smsg", text: line.trim().slice( tokens[0]!.length ).trim() };
 	}
 	if ( bare === "INPUT_CHAT" ) {
-		return tokens.length <= 2 ? { type: "inputchat" } : null;
+		return tokens.length === 2 ? { type: "inputchat", arg: tokens[1]! } : null;
 	}
 	if ( head === "/USESKILL" ) {
 		if ( tokens.length !== 2 ) return null;
@@ -134,12 +141,12 @@ export function gmLocalCommand( line: string ): GmLocalCommand | null {
 		return Number.isInteger( skillId ) && skillId > 0 ? { type: "useskill", skillId } : { type: "consumed" };
 	}
 	if ( head === "/GMSKILL" ) {
-		if ( tokens.length > 2 ) return null;
-		const parsed = tokens.length === 2 ? Number.parseInt( tokens[1]!, 10 ) : 0;
+		if ( tokens.length !== 2 ) return null;
+		const parsed = Number.parseInt( tokens[1]!, 10 );
 		return parsed === 0 || !Number.isInteger( parsed ) ? { type: "gmskill" } : { type: "consumed" };
 	}
 	if ( head === "/GACHASTART" ) {
-		return tokens.length === 1 ? { type: "gachastart" } : null;
+		return { type: "gachastart" };
 	}
 	if ( bare === "IMPLE_COMMAND_ADD_WP" || bare === "IMPLE_COMMAND_DEL_WP" ) {
 		if ( tokens.length !== 2 || tokens[1]!.length > MAX_WAYPOINT_NAME ) return null;

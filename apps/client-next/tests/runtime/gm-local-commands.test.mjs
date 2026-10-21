@@ -35,16 +35,18 @@ test("the classifier takes each local command in its native shape", () => {
 		text: "server restart in 5 minutes"
 	} );
 	assert.deepEqual( gmLocalCommand( "/SMSG" ), { type: "consumed" } );
-	assert.deepEqual( gmLocalCommand( "INPUT_CHAT" ), { type: "inputchat" } );
+	assert.deepEqual( gmLocalCommand( "INPUT_CHAT notice" ), { type: "inputchat", arg: "notice" } );
 	assert.deepEqual( gmLocalCommand( "/useskill 1234" ), { type: "useskill", skillId: 1234 } );
 	// A zero or unparseable id is matched natively and casts nothing.
 	assert.deepEqual( gmLocalCommand( "/useskill 0" ), { type: "consumed" } );
 	assert.deepEqual( gmLocalCommand( "/useskill abc" ), { type: "consumed" } );
-	assert.deepEqual( gmLocalCommand( "/GMSKILL" ), { type: "gmskill" } );
 	assert.deepEqual( gmLocalCommand( "/GMSKILL 0" ), { type: "gmskill" } );
+	assert.deepEqual( gmLocalCommand( "/GMSKILL abc" ), { type: "gmskill" } );
 	// A nonzero /GMSKILL argument jumps past the cast natively (509DFF).
 	assert.deepEqual( gmLocalCommand( "/GMSKILL 55" ), { type: "consumed" } );
 	assert.deepEqual( gmLocalCommand( "/GACHASTART" ), { type: "gachastart" } );
+	// /GACHASTART has no token-count gate: extra tokens are ignored.
+	assert.deepEqual( gmLocalCommand( "/GACHASTART now" ), { type: "gachastart" } );
 	assert.deepEqual( gmLocalCommand( "IMPLE_COMMAND_ADD_WP JanganGate" ), { type: "addwp", name: "JanganGate" } );
 	assert.deepEqual( gmLocalCommand( "IMPLE_COMMAND_DEL_WP JanganGate" ), { type: "delwp", name: "JanganGate" } );
 	assert.deepEqual( gmLocalCommand( "IMPLE_COMMAND_SHOW_WP" ), { type: "showwp" } );
@@ -62,6 +64,13 @@ test("the classifier leaves the server family and plain lines alone", () => {
 	assert.equal( gmLocalCommand( "/useskill" ), null );
 	assert.equal( gmLocalCommand( "/window" ), null );
 	assert.equal( gmLocalCommand( "/TEXTCHAT" ), null );
+	// The GMSKILL and INPUT_CHAT arms gate on exactly two tokens
+	// (509DAF cmp ebp, 0x2; 50BF51 cmp ebx, 0x2): a bare line is not
+	// handled by them at all.
+	assert.equal( gmLocalCommand( "/GMSKILL" ), null );
+	assert.equal( gmLocalCommand( "/GMSKILL 1 2" ), null );
+	assert.equal( gmLocalCommand( "INPUT_CHAT" ), null );
+	assert.equal( gmLocalCommand( "INPUT_CHAT a b" ), null );
 });
 
 /*
@@ -183,10 +192,14 @@ test("/useskill and /GMSKILL cast through the worker's press door", () => {
 		const used = f.game.command( { kind: "gm-command", line: "/useskill 4242" }, 2, undefined, f.local );
 		assert.equal( used?.opcode, SKILL_REQUEST );
 		assert.deepEqual( [ ...used.payload ], [ 1, 4, 0x92, 0x10, 0, 0, 0 ] );
-		const harmony = f.game.command( { kind: "gm-command", line: "/GMSKILL" }, 3, undefined, f.local );
+		const harmony = f.game.command( { kind: "gm-command", line: "/GMSKILL 0" }, 3, undefined, f.local );
 		assert.equal( harmony?.opcode, SKILL_REQUEST );
 		const view = new DataView( harmony.payload.buffer, harmony.payload.byteOffset, harmony.payload.byteLength );
 		assert.equal( view.getUint32( 2, true ), HARMONY_ID );
+		// A bare /GMSKILL never reaches the cast (509DAF count gate).
+		const bareBefore = f.sent.length;
+		assert.equal( f.game.command( { kind: "gm-command", line: "/GMSKILL" }, 5, undefined, f.local ), null );
+		assert.equal( f.sent.length, bareBefore );
 		// A nonzero /GMSKILL argument is the native no-op.
 		const before = f.sent.length;
 		assert.equal( f.game.command( { kind: "gm-command", line: "/GMSKILL 55" }, 4, undefined, f.local ), null );
@@ -203,7 +216,7 @@ test("a non-GM session reaches none of the local commands", () => {
 		for (
 			const line of [
 				"/useskill 4242",
-				"/GMSKILL",
+				"/GMSKILL 0",
 				"IMPLE_COMMAND_ADD_WP JanganGate",
 				"IMPLE_COMMAND_SHOW_WP",
 				"/warp JanganGate"

@@ -3248,8 +3248,9 @@ export function createUi(
 					sendGameplay( { kind: "chat", channel: 1, text: localCommand.text } );
 				} else if ( localCommand?.type === "inputchat" ) {
 					// No ChatString.txt asset ships with the port: the native
-					// missing-file line, and nothing is sent.
-					appendConsoleLine( "ChatString Error. -> ChatString.txt" );
+					// missing-file line (it formats the argument), and
+					// nothing is sent.
+					appendConsoleLine( `ChatString Error. -> ${localCommand.arg}` );
 				} else if ( localCommand?.type === "window" ) {
 					options = { ...options, windowMode: localCommand.windowed };
 					optionDraft = { ...optionDraft, windowMode: localCommand.windowed };
