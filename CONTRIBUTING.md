@@ -93,6 +93,19 @@ Also:
   data, native capture, or inference (stated in a code comment). A claim
   that contradicts an existing comment or research note says so, and the PR
   corrects the old text.
+- **Say whether an open browser tab still copes.** A release that keeps the
+  browser protocol leaves every open tab running the old client. The release
+  tool refuses such a release while a commit since the live client changes
+  what a tab receives or decodes, unless that commit carries the trailer
+  `Old-tab: safe - <reason>` on its squash commit. It applies to a new
+  encoder call or frame on the server, any change to the session worker or
+  the `foundation/gameplay` decoders, and any other server change under
+  `internal/game`, `internal/transport` or `internal/agent` (a new value in
+  an existing record changes no encoder line, so it is declared too). Write
+  the reason a tab copes, for example "the field is new and old tabs ignore
+  it". When an old tab cannot cope, bump the protocol instead: old tabs then
+  get the 426 and load the new release. Tests, comments and client code
+  outside the decoders need no trailer.
 - **Link the issue or bug report** (for example `BUG-064`) it fixes.
 - **Mark non-native behaviour** and name its flag (section 3).
 - Keep secrets out of commits and pull requests: tokens, passwords, webhook URLs.
