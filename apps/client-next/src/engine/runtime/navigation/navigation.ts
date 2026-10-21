@@ -11,6 +11,7 @@ state belongs to simulation; admission failures never become network retries.
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { Pose, GameplayCommand } from "@/engine/contracts/gameplay";
 import { assetFailure, createAssetRecovery } from "@/engine/foundation/assets/asset-recovery";
+import { isDungeonRegion } from "@/engine/foundation/world/world-space";
 
 const LOAD_TIMEOUT_MS = 60000;
 const ADMISSION_TIMEOUT_MS = 15000;
@@ -116,7 +117,7 @@ export function createNavigationStream(
 					}
 				}
 				if ( state.phase !== "idle" || !assets.available() ) return;
-				const dungeon = !!(pose.regionId & 0x8000), isCatalog = !dungeon && !catalog;
+				const dungeon = isDungeonRegion( pose.regionId ), isCatalog = !dungeon && !catalog;
 				const path = dungeon ?
 					"/assets/world/dungeon/dungeon-resources.json" :
 					isCatalog ?

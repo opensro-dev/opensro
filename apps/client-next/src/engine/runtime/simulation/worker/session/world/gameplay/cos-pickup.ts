@@ -14,6 +14,7 @@ import { isGoldHeapType } from "@/engine/foundation/gameplay/ground-item";
 import type { WireFrame } from "@/engine/contracts/network";
 import type { EntityState, WorldEvent } from "@/engine/contracts/world";
 import { groundItemDistance } from "@/engine/foundation/gameplay/ground-item";
+import { sameCoordinateSpace } from "@/engine/foundation/world/world-space";
 
 const PICKUP_ENABLED = 0x80;
 const PICKUP_PUBLIC = 0x40;
@@ -152,7 +153,7 @@ ordered-map tie break independently of the browser's spawn arrival order.
 					const owned = drop.ownerJid === local.gid ||
 						!!drop.ownerJid && frame.sharedOwners.has( drop.ownerJid );
 					if ( drop.ownerJid && !owned || !owned && !(mode & PICKUP_PUBLIC) ) continue;
-					if ( (item.regionId | pet.regionId) & 0x8000 && item.regionId !== pet.regionId ) continue;
+					if ( !sameCoordinateSpace( item.regionId, pet.regionId ) ) continue;
 					const distance = groundItemDistance( item, pet );
 					if ( distance < best ) {
 						best = distance;

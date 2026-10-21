@@ -7,6 +7,7 @@ characters.ts - admitted character models, world batches and separate portrait s
 */
 import { createClothVertices } from "@/engine/foundation/animation/cloth-vertices";
 import { characterLabelHeight } from "@/engine/foundation/ui/character-labels";
+import { regionOffsetXZ, regionRelativeXZ } from "@/engine/foundation/world/world-space";
 import type { WorldTexture } from "@/engine/contracts/texture";
 import { shadowProjection, SHADOW_LIMIT, SHADOW_DISTANCE } from "@/engine/foundation/rendering/character-shadow";
 import { appendEquipmentSockets } from "@/engine/foundation/animation/equipment-sockets";
@@ -432,9 +433,10 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 					hypot3( value.attachment.offset[0]!, value.attachment.offset[1]!, value.attachment.offset[2]! ) :
 					0);
 		}
-		out[0] = anchor.pose.x + ((anchor.pose.regionId & 255) - (origin & 255)) * 1920;
+		const [ax, az] = regionRelativeXZ( origin, anchor.pose );
+		out[0] = ax;
 		out[1] = anchor.pose.y;
-		out[2] = anchor.pose.z + ((anchor.pose.regionId >>> 8) - (origin >>> 8)) * 1920;
+		out[2] = az;
 		out[3] = radius;
 		return true;
 	}
@@ -1412,10 +1414,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 			const history = particleHistory( frame, actor, model, storage );
 			const transform = transformFor( actor, byGid, origin, frame.transforms );
 			if ( !transform ) continue;
-			const shift = [
-				((history.origin & 255) - (origin & 255)) * 1920,
-				((history.origin >>> 8) - (origin >>> 8)) * 1920
-			] as const;
+			const shift = regionOffsetXZ( origin, history.origin );
 			if ( history.graph && model.particleGraph ) {
 				advanceGraphEmitter( actor, model, history, transform, shift );
 			} else {
@@ -3299,9 +3298,8 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 				const m = frame.view;
 				const actorDepth = ( actor: CharacterActor ) => {
 					const root = frame.chains.get( actor.gid )?.[0] ?? actor;
-					const x = root.pose.x + ((root.pose.regionId & 255) - (frame.origin & 255)) * 1920,
-						y = root.pose.y,
-						z = root.pose.z + ((root.pose.regionId >>> 8) - (frame.origin >>> 8)) * 1920;
+					const [x, z] = regionRelativeXZ( frame.origin, root.pose ),
+						y = root.pose.y;
 					return m[3]! * x + m[7]! * y + m[11]! * z + m[15]!;
 				};
 				const groupOrder = new Map<string, { tier: number; depth: number; index: number; }>();

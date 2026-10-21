@@ -16,6 +16,7 @@ import type { PresentationRandom } from "@/engine/contracts/presentation-random"
 import type { GeometryCommands, GeometryDraw, ImageDraw } from "../internal/gpu-contract";
 import type { WorldCamera } from "@/engine/contracts/scene";
 import { hypot2, hypot3 } from "@/engine/foundation/math/hypot";
+import { regionOffsetXZ } from "@/engine/foundation/world/world-space";
 type Particle = {
 	kind: number;
 	x: number;
@@ -101,7 +102,7 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 			last = seconds;
 			drawDelta = dt;
 			if ( origin !== null && origin !== region ) {
-				const dx = ((origin & 255) - (region & 255)) * 1920, dz = ((origin >>> 8) - (region >>> 8)) * 1920;
+				const [dx, dz] = regionOffsetXZ( region, origin );
 				for ( const p of particles ) {
 					p.x += dx;
 					p.z += dz;

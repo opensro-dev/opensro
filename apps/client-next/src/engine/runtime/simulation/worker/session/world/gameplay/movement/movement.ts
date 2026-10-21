@@ -17,6 +17,7 @@ server's walk every 500 ms (directionDrift).
 import { MOVEMENT_RECEIPT_TIMEOUT } from "@/engine/contracts/network";
 
 import { positionSkillGoal } from "@/engine/foundation/gameplay/position-skill";
+import { sameCoordinateSpace, worldDelta } from "@/engine/foundation/world/world-space";
 import {
 	correctWalkingHistory,
 	extendWalkingHistory,
@@ -145,8 +146,7 @@ and walked between; a dungeon region is its own space.
 ================
 */
 function sameNavigationSpace( a: Pose, b: Pose ): boolean {
-	if ( !((a.regionId | b.regionId) & 0x8000) ) return true;
-	return a.regionId === b.regionId;
+	return sameCoordinateSpace( a.regionId, b.regionId );
 }
 
 /*
@@ -158,10 +158,7 @@ callers check sameNavigationSpace first.
 ================
 */
 function planarOffset( a: Pose, b: Pose ): [number, number] {
-	return [
-		b.x - a.x + ((b.regionId & 255) - (a.regionId & 255)) * REGION_SIZE,
-		b.z - a.z + ((b.regionId >>> 8) - (a.regionId >>> 8)) * REGION_SIZE
-	];
+	return worldDelta( a, b );
 }
 
 /*

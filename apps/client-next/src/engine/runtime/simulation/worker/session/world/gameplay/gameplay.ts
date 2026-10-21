@@ -15,6 +15,7 @@ const ACTION_EXCHANGE = 1006;
 import { defaultUiTuning, type UiTuning, uiTuningFrom } from "@/engine/foundation/ui/ui-tuning";
 import { guildBanRefused, guildSoldierRefusal } from "@/engine/foundation/gameplay/guild-manager";
 import { advanceGuildWarClock } from "@/engine/foundation/gameplay/guild-war";
+import { planarDistance, sameCoordinateSpace } from "@/engine/foundation/world/world-space";
 import {
 	ACTION_FORTRESS_RETURN,
 	FORTRESS_PORTAL_NOTICE_CATEGORY,
@@ -577,10 +578,8 @@ range: unknown, so not within.
 	function withinReach( metadata: SkillMetadata | undefined, target: EntityState ): boolean {
 		const pose = movement.state().pose;
 		if ( !pose || !metadata?.range ) return false;
-		if ( (target.regionId | pose.regionId) & 0x8000 && target.regionId !== pose.regionId ) return false;
-		const dx = target.x - pose.x + ((target.regionId & 255) - (pose.regionId & 255)) * 1920,
-			dz = target.z - pose.z + ((target.regionId >>> 8) - (pose.regionId >>> 8)) * 1920;
-		return Math.hypot( dx, dz ) <= metadata.range;
+		if ( !sameCoordinateSpace( target.regionId, pose.regionId ) ) return false;
+		return planarDistance( pose, target ) <= metadata.range;
 	}
 	/*
 ================
@@ -974,10 +973,8 @@ and a refusal walks it back (movement.predictApproach).
 	function predictPickupRunUp( entity: EntityState, local: EntityState | undefined, now: number ) {
 		const pose = movement.state().pose;
 		if ( !pose || localCastHolds( now ) || local?.mountedOn || local?.appearanceState?.[0] === 2 ) return;
-		const dx = entity.x - pose.x + ((entity.regionId & 255) - (pose.regionId & 255)) * 1920,
-			dz = entity.z - pose.z + ((entity.regionId >>> 8) - (pose.regionId >>> 8)) * 1920;
-		if ( (entity.regionId | pose.regionId) & 0x8000 && entity.regionId !== pose.regionId ) return;
-		if ( Math.hypot( dx, dz ) <= PICKUP_EXECUTE_RANGE ) return;
+		if ( !sameCoordinateSpace( entity.regionId, pose.regionId ) ) return;
+		if ( planarDistance( pose, entity ) <= PICKUP_EXECUTE_RANGE ) return;
 		movement.predictApproach(
 			{ regionId: entity.regionId, x: entity.x, y: entity.y, z: entity.z, angle: pose.angle },
 			now
