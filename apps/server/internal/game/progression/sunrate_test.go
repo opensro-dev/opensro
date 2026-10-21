@@ -33,6 +33,9 @@ func TestSunRateFromEnvParsesOnlyPositiveRates(t *testing.T) {
 		{"1", true, 1, 30},
 		{"2", true, 2, 60},
 		{"7", true, 7, 210},
+		{"1000000", true, 1_000_000, 30_000_000},
+		{"1000001", true, 1_000_000, 30_000_000},
+		{"999999999999999999999999", false, 0, 1},
 	} {
 		t.Setenv(EnvSunDropRate, tc.value)
 		got := SunRateFromEnv()

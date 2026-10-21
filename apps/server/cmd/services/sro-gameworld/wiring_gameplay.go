@@ -41,6 +41,7 @@ import (
 	"opensro.online/server/internal/game/social/party"
 	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/tunables"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/worldarea"
@@ -118,6 +119,13 @@ func newGameplayPlane(
 	}
 	deps.PlayerBaseStats = func(character *enterworld.Character) (wire.BaseStats, error) {
 		return items.PlayerBaseStats(ownedShard.ID, character)
+	}
+	// SRO_QINSHI_TOMB (port-only, not native): the tomb's later-data doors
+	// and spawns join at catalog load; unset is the sealed native tomb.
+	// The catalog loaders read the flag themselves (world/monster); this
+	// line only leaves the operator a boot record.
+	if monster.QinShiTombFromEnv() {
+		log.Infof("portals: Qin-Shi Tomb ON (%s): the door by Jangan admits level 70 and above", monster.EnvQinShiTomb)
 	}
 	if err := items.ConfigurePortals(devPaths.TextdataDir); err != nil {
 		return nil, fmt.Errorf("portal catalogue: %w", err)

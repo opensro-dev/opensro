@@ -35,6 +35,11 @@ const EnvSunDropRate = "SRO_SUN_DROP_RATE"
 // SunMassPerRate is the Sun class mass each unit of the rate buys.
 const SunMassPerRate = 30
 
+// MaxSunDropRate caps the rate. Past it the Sun class would swallow the
+// whole rare table and a typo'd rate (GH #1269) only buys certainty; the
+// cap keeps a mis-typed extra zero from silently becoming that.
+const MaxSunDropRate = 1_000_000
+
 /*
 ================
 SunRate
@@ -55,6 +60,9 @@ func SunRateFromEnv() SunRate {
 	value, err := strconv.Atoi(strings.TrimSpace(os.Getenv(EnvSunDropRate)))
 	if err != nil || value < 1 {
 		return SunRate{}
+	}
+	if value > MaxSunDropRate {
+		value = MaxSunDropRate
 	}
 	return SunRate{rate: value}
 }

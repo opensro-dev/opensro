@@ -730,12 +730,13 @@ variable "stack_sizes" {
   default = "arrow=2500,bolt=2500,luckypowder=500"
 }
 
-# qinshi_tomb opens Qin-Shi Emperor Tomb Floor 1-4 (79 monster species, 230
-# skills, 1,033 spawn nests, 68 teleport links and 64 walk-in event zones)
-# (port-only, not native; owner decision 2026-10-17). "off" is native.
+# qinshi_tomb opens Qin-Shi Emperor Tomb on all six floors (79 monster
+# species, 230 skills, 1,033 spawn nests, 68 teleport links and 64 walk-in
+# event zones) (port-only, not native; owner decision 2026-10-17, opened
+# in the shard defaults 2026-10-21, GH #1013). "off" is native.
 variable "qinshi_tomb" {
   type    = string
-  default = "off"
+  default = "on"
 }
 
 # The community site's public read API listener (internal/agent/publicstats):
