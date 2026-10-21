@@ -135,13 +135,21 @@ test("a lightmapped mesh carries its lightmap texture and second UV set; a broke
 		bounds: { min: [ -10, 0, 0 ], max: [ 10, 10, 0 ] },
 		lightmap: { texturePublicPath: "/assets/world/dungeon/object-textures/room-lightmap.png", uvs: lightmapUvs }
 	});
-	const decode = ( lightmapUvs ) =>
+	// A dungeon is a region with bit 0x8000 set (sectorY 128).
+	const decode = ( lightmapUvs, outdoor = false ) =>
 		createWorldDecoder().decode( {
-			source: { sectorX: 1, sectorY: 1 },
+			source: { sectorX: 1, sectorY: outdoor ? 1 : 128 },
 			terrain: { blocks: [] },
 			terrainTextures: { tileCatalog: { referencedTiles: [] } },
 			objects: {
-				placements: [ { objectId: 1, uid: 0, regionId: "257", position: { x: 0, y: 0, z: 0 }, yaw: 0 } ],
+				placements: [ {
+					objectId: 1,
+					uid: 0,
+					regionId: "257",
+					position: { x: 0, y: 0, z: 0 },
+					yaw: 0,
+					...(outdoor ? {} : { dungeonBlock: 0 })
+				} ],
 				resources: {
 					meshes: [ mesh( lightmapUvs ) ],
 					bsr: [ {
@@ -155,7 +163,8 @@ test("a lightmapped mesh carries its lightmap texture and second UV set; a broke
 						materials: [ { name: "shared", flags: 0, colors: { diffuse: [ 1, 1, 1, 1 ] } } ]
 					} ]
 				}
-			}
+			},
+			...(outdoor ? {} : { dungeonBlocks: [ { index: 0, visibleBlocks: [], ambientColor: 0xff674961 } ] })
 		} );
 	const scene = decode( [ .25, .25, .75, .25, .25, .75 ] );
 	assert.equal( scene.groups.length, 1 );
@@ -164,6 +173,11 @@ test("a lightmapped mesh carries its lightmap texture and second UV set; a broke
 	assert.deepEqual( [ ...group.geometry.maskUVs ], [ .25, .25, .75, .25, .25, .75 ] );
 	assert.deepEqual( [ ...group.geometry.uvs ], [ 0, 0, 1, 0, 0, 1 ] );
 	assert.equal( decode( [ .25, .25 ] ).groups.length, 0 );
+	// Outdoors the lightmap is not drawn: no texture and no second UV set.
+	const field = decode( [ .25, .25, .75, .25, .25, .75 ], true ).groups;
+	assert.equal( field.length, 1 );
+	assert.equal( field[0].material.objectLightmap, undefined );
+	assert.equal( field[0].geometry.maskUVs, undefined );
 });
 
 test("terrain association masks match the reference at each sampled grid resolution", async () => {

@@ -429,7 +429,12 @@ noteMaterial
 								collision: [],
 								material: {
 									...materialFor( ref, found.material, found.index ),
-									...(mesh.lightmap ? { objectLightmap: mesh.lightmap.texturePublicPath } : {}),
+									// Only dungeon rooms draw their lightmap (#1309, A5BF90). Outdoor
+									// lightmaps doubled town buildings' light; until the object-batch
+									// path (A5C930) is ported, outdoor objects keep their lit look.
+									...(mesh.lightmap && p.dungeonBlock !== undefined ?
+										{ objectLightmap: mesh.lightmap.texturePublicPath } :
+										{}),
 									fog: p.dungeonBlock === undefined ?
 										undefined :
 										b.dungeonBlocks?.[p.dungeonBlock]?.fog,
@@ -487,7 +492,7 @@ noteMaterial
 						normals: new Float32Array( g.mesh.normals ),
 						uvs: meshCheck( g.mesh ).uvs.slice(),
 						// The object lightmap's UVs ride the terrain mask slot (location 4).
-						maskUVs: meshCheck( g.mesh ).lightmapUvs?.slice(),
+						maskUVs: g.material.objectLightmap ? meshCheck( g.mesh ).lightmapUvs?.slice() : undefined,
 						indices: new Uint32Array( g.mesh.indices ),
 						instances: new Float32Array( g.matrices ),
 						transform: identity()
