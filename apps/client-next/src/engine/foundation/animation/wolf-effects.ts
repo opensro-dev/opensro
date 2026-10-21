@@ -141,17 +141,25 @@ export function wolfEffectKind( action: number ): "howl" | "victim" | "strike" {
 	return action === WOLF_EXECUTED || action === WOLF_HUNT || action === WOLF_HUNT_BURST ? "victim" : "strike";
 }
 
-// The sound of each signal, when it plays, and whether the camera shakes.
-export const WOLF_EFFECT_SOUND: Readonly<
-	Record<number, { readonly path: string; readonly at: number; readonly gain: number; readonly shake: boolean; }>
-> = {
-	1: { path: PET_HOWL_SOUND, at: .55, gain: .8, shake: false },
-	2: { path: PET_HOWL_SOUND, at: .55, gain: .8, shake: false },
-	3: { path: PET_HOWL_SOUND, at: .55, gain: .8, shake: true },
-	4: { path: PET_REND_SOUND, at: .7, gain: .55, shake: false },
-	5: { path: PET_REND_SOUND, at: .7, gain: .55, shake: false },
-	6: { path: PET_REND_SOUND, at: .7, gain: .6, shake: true },
-	[WOLF_EXECUTED]: { path: PET_EXECUTE_SOUND, at: 0, gain: .55, shake: false },
-	[WOLF_SWEEP]: { path: PET_SWEEP_SOUND, at: 0, gain: .7, shake: true },
-	[WOLF_HUNT]: { path: PET_HUNT_SOUND, at: 0, gain: .6, shake: false }
-};
+/*
+================
+wolfEffectSound
+
+The sound of each signal, when it plays, and whether the camera shakes;
+undefined for a silent signal. A function, not a shared table: the sound
+paths are imported constants, which a module-level table may not hold
+(verify-ownership).
+================
+*/
+export function wolfEffectSound( action: number ):
+	| { readonly path: string; readonly at: number; readonly gain: number; readonly shake: boolean; }
+	| undefined {
+	if ( action >= 1 && action <= 3 ) return { path: PET_HOWL_SOUND, at: .55, gain: .8, shake: action === 3 };
+	if ( action >= 4 && action <= 6 ) {
+		return { path: PET_REND_SOUND, at: .7, gain: action === 6 ? .6 : .55, shake: action === 6 };
+	}
+	if ( action === WOLF_EXECUTED ) return { path: PET_EXECUTE_SOUND, at: 0, gain: .55, shake: false };
+	if ( action === WOLF_SWEEP ) return { path: PET_SWEEP_SOUND, at: 0, gain: .7, shake: true };
+	if ( action === WOLF_HUNT ) return { path: PET_HUNT_SOUND, at: 0, gain: .6, shake: false };
+	return undefined;
+}

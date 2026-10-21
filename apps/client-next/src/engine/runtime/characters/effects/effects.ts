@@ -26,7 +26,7 @@ import { trimToEffectBudget } from "@/engine/foundation/animation/effect-room";
 import {
 	WOLF_EFFECT_MAX_PARTS,
 	WOLF_EFFECT_SECONDS,
-	WOLF_EFFECT_SOUND,
+	wolfEffectSound,
 	wolfEffectKind,
 	wolfEffectParts
 } from "@/engine/foundation/animation/wolf-effects";
@@ -3617,7 +3617,7 @@ export function createCharacterEffects(
 					// Victims keep where they were struck; a dead monster may already be gone.
 					const pose = kind === "victim" ? skill.pose : live;
 					const owner = entity.ownerGid !== undefined ? presentation.get( entity.ownerGid )?.pose : undefined;
-					const cue = WOLF_EFFECT_SOUND[skill.action];
+					const cue = wolfEffectSound( skill.action );
 					if ( !skill.sounded && cue && elapsed >= cue.at ) {
 						skill.sounded = true;
 						if ( elapsed - cue.at < .25 ) {

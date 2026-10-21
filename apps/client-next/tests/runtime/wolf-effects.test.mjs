@@ -57,6 +57,12 @@ test("every wolf signal plays published, compiling, wolf-only effect programs", 
 	for (
 		const action of [ ...wolf.WOLF_HOWL, ...wolf.WOLF_REND, wolf.WOLF_EXECUTED, wolf.WOLF_SWEEP, wolf.WOLF_HUNT ]
 	) {
-		assert.ok( wolf.WOLF_EFFECT_SOUND[action], `signal ${action} is silent` );
+		assert.ok( wolf.wolfEffectSound( action ), `signal ${action} is silent` );
 	}
+	// The third howl and the last rend shake the camera; the last rend is louder.
+	assert.deepEqual(
+		[ 1, 3, 5, 6 ].map( action => [ wolf.wolfEffectSound( action ).shake, wolf.wolfEffectSound( action ).gain ] ),
+		[ [ false, .8 ], [ true, .8 ], [ false, .55 ], [ true, .6 ] ]
+	);
+	assert.equal( wolf.wolfEffectSound( wolf.WOLF_BLOOD_FULL ), undefined );
 });
