@@ -53,6 +53,7 @@ import { collectJmxEffectTexturePaths, parseJmxVisualEffect } from "./parseJmxVi
 import { buildEffectRecordTable } from "../char/parseSkillEffect.mjs";
 import { loadCharacterDataRows } from "../char/resolveCharRoster.mjs";
 import { parseStructureEffects } from "../char/structureEffects.mjs";
+import { PORT_PET_DROP_MODEL } from "../shared/portItemRows.mjs";
 
 const particlesRoot = path.join( extractedRoot, "Particles_extracted" );
 const skillEffectPath = path.join(
@@ -247,13 +248,18 @@ export function collectEntityParticleReferences(
 ) {
 	const references = [];
 	for ( const domain of [ "itemdrop", "npc", "skillfx" ] ) {
-		const models = new Set(
-			Object.entries( readManifest( domain ).models ).map( ( [key, row] ) =>
-				row.bsr ?? (key.startsWith( "res/" ) ? key : `res/${key}`)
-			)
+		const models = new Map(
+			Object.entries( readManifest( domain ).models ).map( ( [key, row] ) => [
+				row.bsr ?? (key.startsWith( "res/" ) ? key : `res/${key}`),
+				row
+			] )
 		);
-		for ( const modelPath of [ ...models ].sort() ) {
-			const modifiers = readModel( modelPath ).particleModifiers;
+		for ( const modelPath of [ ...models.keys() ].sort() ) {
+			// Owned GLB, not a retail BSR: buildDropModelAssets writes the
+			// modifiers it borrows from the armor chest into its row.
+			const modifiers = domain === "itemdrop" && modelPath === `res/${PORT_PET_DROP_MODEL}` ?
+				models.get( modelPath ).particleModifiers :
+				readModel( modelPath ).particleModifiers;
 			for (
 				const effectPath of [
 					...new Set(

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { collectEntityParticleReferences } from "../../../../scripts/build/effects/buildEffectPrograms.mjs";
 import { defined } from "../helpers/defined.mjs";
+import { PORT_PET_DROP_MODEL } from "../../../../scripts/build/shared/portItemRows.mjs";
 
 test("BSR dependency census discovers all selectors even when every manifest discarded the particle payload", () => {
 	const reads = [],
@@ -52,4 +53,28 @@ test("new malformed BSR dependencies fail instead of vanishing from the build", 
 			),
 		/Invalid itemdrop particle reference/
 	);
+});
+
+test("the owned pet drop model's borrowed modifiers come from its row, never a retail BSR", () => {
+	const reads = [];
+	const glow = [ {
+		kind: 2,
+		stateId: -1,
+		animationSetName: "ambient",
+		entries: [ { effectPath: "system\\item_drop_equip.efp" } ]
+	} ];
+	const rows = collectEntityParticleReferences(
+		domain =>
+			domain === "itemdrop" ?
+				{ models: { [PORT_PET_DROP_MODEL]: { bsr: `res/${PORT_PET_DROP_MODEL}`, particleModifiers: glow } } } :
+				{ models: {} },
+		path => {
+			reads.push( path );
+			return { particleModifiers: [] };
+		}
+	);
+	assert.deepEqual( reads, [], "no retail file exists for the owned model" );
+	assert.deepEqual( rows.map( r => [ r.domain, r.modelPath, r.effectPath ] ), [
+		[ "itemdrop", `res/${PORT_PET_DROP_MODEL}`, "system/item_drop_equip.efp" ]
+	] );
 });
