@@ -95,6 +95,26 @@ export const OPENERS = {
 		f.state.gameplay.academy = { member: false, rows: [], request: null, page: 0, pages: 0, result: null };
 		f.ui.event( { kind: "activate", id: "open-window:Academy Matching" } );
 	},
+	"Academy honor"( f ) {
+		// The window opens on a new honorRanks publication, as in the panel sweep.
+		f.state.gameplay.academy = {
+			member: false,
+			rows: [],
+			request: null,
+			page: 0,
+			pages: 0,
+			result: null,
+			honorRanks: {
+				rows: [ { ranking: 1, rank: 1, name: "Mentor", level: 60, maxLevel: 80, graduates: 3, guild: "" } ],
+				sequence: 1
+			}
+		};
+	},
+	"Shop"( f ) {
+		// Repair buttons publish only for a repair-capable target (capability 8).
+		f.state.gameplay.targetCapabilities = 8;
+		f.ui.event( { kind: "activate", id: "open-window:Shop" } );
+	},
 	"Stall network"( f ) {
 		f.state.gameplay.stall = stallRequest( emptyStall(), { kind: "stall-network-open", open: true } ).state;
 		f.ui.event( { kind: "activate", id: "open-window:Stall network" } );

@@ -97,7 +97,13 @@ async function guildManager( context: RecipeContext, row: string ) {
 	else {
 		game.social = { ...game.social, guild: { ...fixtureGuild( context ), level: 2 } };
 		if ( row === "secede" || row === "vote" ) guildMember( context ).grade = 1;
-		if ( row === "vote" ) fixtureGuild( context ).votes = [ { id: 7, kind: 0, remainingMs: 60000 } ];
+		if ( row === "vote" ) {
+			// Candidates are what opens the election window; without them the
+			// UI waits for a vote instead (ui.ts awaitVote path).
+			fixtureGuild( context ).votes = [
+				{ id: 7, kind: 0, remainingMs: 60000, candidates: [ { id: 102, ballots: 1 } ] }
+			];
+		}
 	}
 	await context.step();
 	activate( context, "npc-guild:" + row );

@@ -81,7 +81,9 @@ merchant
 ================
 */
 export async function merchant( context: RecipeContext ) {
-	npc( context, 1, "Merchant" );
+	// 1 | 8: a targeted merchant with the repair service bit, which the shop
+	// repair buttons require (ui.ts gates them on targetCapabilities & 8).
+	npc( context, 9, "Merchant" );
 	const bow = {
 		...herb,
 		slot: 15,

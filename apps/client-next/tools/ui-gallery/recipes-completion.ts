@@ -106,18 +106,18 @@ export const completionRecipes: readonly ExtendedRecipe[] = [
 	},
 	{
 		id: "inspect:magic-pop-card",
-		title: "Magic Pop - populated card inventory",
+		title: "Magic Pang - populated card inventory",
 		family: "Panels",
-		source: "runtime/ui/ui.ts Magic Pop; foundation/gameplay/gacha.ts",
-		controls: [ "gacha-card:13", "gacha-roll" ],
+		source: "runtime/ui/ui.ts Magic Pang; foundation/gameplay/gacha.ts",
+		controls: [ "gacha-card", "gacha-play" ],
 		async open( context ) {
 			context.state.gameplay.inventory = [ {
 				...herb,
 				slot: 13,
 				typeFlags: 0xf6c,
-				name: "Synthetic Magic Pop card"
+				name: "Synthetic Magic Pang card"
 			} ];
-			await openPanel( context, "Magic Pop" );
+			await openPanel( context, "Magic Pang" );
 		}
 	},
 	{

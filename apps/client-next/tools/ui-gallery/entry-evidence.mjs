@@ -11,6 +11,7 @@ stand in for the requested surface. This does not prove visible menu entry.
 /** @type {Record<string, readonly string[]>} */
 export const ENTRY_WITNESSES = {
 	"Academy": [ "academy-invite", "select-window:Academy" ],
+	"Academy honor": [ "academy-honor-close", "academy-honor-confirm" ],
 	"Academy Matching": [ "academy-search", "academy-refresh" ],
 	"Actions": [ "action:1000", "select-window:Actions" ],
 	"Alchemy": [ "alchemy-mode:compound", "alchemy-start" ],
@@ -30,7 +31,7 @@ export const ENTRY_WITNESSES = {
 	"Guild tools": [ "guild-tab:0", "guild-tab:1" ],
 	"Inventory": [ "inventory-page:0", "inventory-gold" ],
 	"Job ranking": [ "job-rank-close", "job-rank-prev" ],
-	"Magic Pop": [ "gacha-prize:1", "gacha-prize:2" ],
+	"Magic Pang": [ "gacha-prize:1", "gacha-prize:2" ],
 	"Magic option": [ "magic-option-close", "magic-option-slot" ],
 	"Map": [ "map-pan", "map-follow" ],
 	"Option": [ "option-tab:0", "option-ok" ],

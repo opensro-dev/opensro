@@ -344,9 +344,11 @@ export function seedJourney( id: string ): FixtureState {
 			error: null,
 			target: id.startsWith( "hud-" ) ? 8 : id === "guild-transfer" ? 99 : 0,
 			targetCapabilities: id === "guild-transfer" ? 0x4000 : 0,
+			// Absent when inactive: a "closed" object is truthy and reads as
+			// an open conversation to the UI guards (ui.ts inventory-gold).
 			npcConversation: id === "guild-transfer" ?
 				{ phase: "menu", gid: npcGid( 99 ), dialogueRevision: 0 } :
-				{ phase: "closed" },
+				undefined,
 			inventorySlotCount: 45,
 			equipmentSlotCount: 13,
 			inventoryPending: false,
