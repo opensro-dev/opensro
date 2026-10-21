@@ -12,7 +12,7 @@ var collectionCatalogFixture = []struct {
 	id, level uint32
 }{
 	{"QNO_WC_ARMOR_1", 20, 38},
-	{"QNO_CH_POTION_3", 53, 6}, {"QNO_CH_SPECIAL_1", 48, 13},
+	{"QNO_CH_POTION_3", 53, 6}, {"QNO_CH_SPECIAL_1", 48, 13}, {"QNO_CH_SPECIAL_2", 61, 18},
 	{"QNO_CH_GENARAL_BO_2", 56, 11}, {"QNO_CH_FERRY2_1", 62, 19},
 }
 
@@ -26,6 +26,7 @@ func TestCollectionCatalogUsesV150CountsAndAtomicTurnIn(t *testing.T) {
 		{"QNO_WC_ARMOR_1", 20, 75000, 13500, 0},
 		{"QNO_CH_POTION_3", 20, 6600, 0, 4000},
 		{"QNO_CH_SPECIAL_1", 10, 15300, 4000, 5000},
+		{"QNO_CH_SPECIAL_2", 100, 42300, 10900, 10000},
 		{"QNO_CH_GENARAL_BO_2", 20, 28200, 8300, 10000},
 		{"QNO_CH_FERRY2_1", 100, 112000, 28500, 25000},
 	} {

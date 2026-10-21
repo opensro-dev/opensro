@@ -299,7 +299,7 @@ type QuestSpec struct {
 // loop the prerequisites serve, every row evidence-graded above. Growing
 // it is appending a spec whose codename resolves in the shipped
 // questdata - LoadDefinitions fails loud on anything else.
-var curatedQuestSpecs = append(append(starterQuestSpecs, banditChainSpecs...), collectionQuestSpecs...)
+var curatedQuestSpecs = append(append(append(starterQuestSpecs, banditChainSpecs...), tigerChainSpecs...), collectionQuestSpecs...)
 
 var starterQuestSpecs = []QuestSpec{
 	{

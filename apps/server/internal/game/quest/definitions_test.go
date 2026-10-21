@@ -59,7 +59,7 @@ func (fakeItems) ItemRefByCodename(codename string) (*enterworld.ItemRef, bool) 
 	if codename == "ITEM_CH_M_LIGHT_01_AA_A" || codename == "ITEM_CH_W_LIGHT_01_AA_A" || codename == "ITEM_CH_RING_01_A" {
 		return tutorialFixtureItems().ItemRefByCodename(codename)
 	}
-	if id, ok := map[string]uint32{"ITEM_QNO_CH_SPECIAL_1_01": 3955, "ITEM_QNO_CH_POTION_3_01": 3958, "ITEM_QNO_CH_GENARAL_BO_2_01": 3961, "ITEM_QNO_CH_FERRY2_1_01": 3966}[codename]; ok {
+	if id, ok := map[string]uint32{"ITEM_QNO_CH_SPECIAL_1_01": 3955, "ITEM_QNO_CH_POTION_3_01": 3958, "ITEM_QNO_CH_GENARAL_BO_2_01": 3961, "ITEM_QNO_CH_FERRY2_1_01": 3966, "ITEM_QNO_CH_SPECIAL_2_01": 3969}[codename]; ok {
 		return &enterworld.ItemRef{RefObjID: id, Codename: codename, TypeIDs: [4]int64{3, 3, 8, 0}, NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 250})}, true
 	}
 	if codename == "ITEM_ETC_MP_POTION_01" {
@@ -70,6 +70,9 @@ func (fakeItems) ItemRefByCodename(codename string) (*enterworld.ItemRef, bool) 
 	}
 	if codename == "ITEM_QNO_CH_SMITH_1" {
 		return &enterworld.ItemRef{RefObjID: 3657, Codename: codename, TypeIDs: [4]int64{3, 3, 8, 0}, NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 1})}, true
+	}
+	if codename == "ITEM_ETC_HP_POTION_02" {
+		return tutorialFixtureItems().ItemRefByCodename(codename)
 	}
 	if codename == "ITEM_ETC_HP_POTION_01" {
 		return &enterworld.ItemRef{RefObjID: 3630, Codename: codename, TypeIDs: [4]int64{3, 3, 1, 1}, NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 50})}, true
@@ -95,6 +98,7 @@ func writeTestCatalog(t *testing.T, withContents bool) *Catalog {
 	t.Helper()
 	dir := t.TempDir()
 	questRows := []string{
+		"1\t57\tQNO_CH_GENARAL_1\t13\tname\tSN_QNO_CH_GENARAL_1\txxx\txxx\txxx\txxx\txxx",
 		"1\t10\tQNO_CH_GENARAL_BO_1\t10\tname\tSN_QNO_CH_GENARAL_BO_1\txxx\txxx\txxx\txxx\txxx",
 		"1\t11\tQNO_CH_GENARAL_SP_1\t13\tname\tSN_QNO_CH_GENARAL_SP_1\txxx\txxx\txxx\txxx\txxx",
 		"1\t6\tQNO_CH_POTION_1\t5\tname\tSN_QNO_CH_POTION_1\txxx\txxx\txxx\txxx\txxx",
@@ -114,6 +118,7 @@ func writeTestCatalog(t *testing.T, withContents bool) *Catalog {
 	}
 	if withContents {
 		contentsRows := []string{
+			"QNO_CH_GENARAL_1\tname\t0\tQNO_CH_GENARAL_2\t1\tSN_CON_QNO_CH_GENARAL_1_01\tSN_CON_QNO_CH_GENARAL_1_02\tSN_CON_QNO_CH_GENARAL_1_03\txxx\txxx\txxx\txxx\txxx",
 			"QNO_CH_GENARAL_BO_1\tname\t0\tQNO_CH_GENARAL_SP_1\t1\tSN_CON_QNO_CH_GENARAL_BO_1\txxx\txxx\txxx\txxx\txxx\txxx\txxx",
 			"QNO_CH_GENARAL_SP_1\tname\t0\txxx\t1\tSN_CON_QNO_CH_GENARAL_SP_1\txxx\txxx\txxx\txxx\txxx\txxx\txxx",
 			"QNO_CH_POTION_1\tname\t0\txxx\t1\tSN_CON_QNO_CH_POTION_1\txxx\txxx\txxx\txxx\txxx\txxx\txxx",

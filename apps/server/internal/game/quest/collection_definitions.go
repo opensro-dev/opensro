@@ -40,6 +40,28 @@ var collectionQuestSpecs = []QuestSpec{
 		OfferPromptSymbol: "SN_TALK_QNO_CH_SPECIAL_1_02", CompletePromptSymbol: "SN_TALK_QNO_CH_SPECIAL_1_06",
 	},
 	{
+		// @SN_QNO_CH_SPECIAL_2.lua (Quest.sct): level 18, NPC_CH_SPECIAL,
+		// depends on SPECIAL_1, achievement limit 2 (the _07 "one more
+		// time" line is its repeat offer). Source precedence follows
+		// scripts/data/quest/README.md: the script supplies structure,
+		// item, monster, drop chance and the limit; the v1.150 text wins
+		// the values it names, so the count is the text's 100 skins and
+		// the advertised reward 42300 EXP, 10000 SP EXP, 10900 gold, no
+		// item (the script's 70 skins and 93060 EXP are the newer
+		// balance and do not ship). SPECIAL_3
+		// already ships in the generated catalog gated on this quest, so
+		// the chain is closed until this spec exists (garcia694 reports).
+		Codename: "QNO_CH_SPECIAL_2", KindByte: 1, Objective: ObjectiveCollect,
+		RequiredQuests: []string{"QNO_CH_SPECIAL_1"}, MaxCompletions: 2,
+		CollectItemCodename: "ITEM_QNO_CH_SPECIAL_2_01", CollectCount: 100,
+		MonsterDrop: &MonsterDropRule{MonsterCodenames: []string{"MOB_CH_WHITETIGER"}, ChancePercent: 50},
+		RewardExp:   42300, RewardGold: 10900, RewardSkillExp: 10000,
+		StartNpcCodename: "NPC_CH_SPECIAL", EndNpcCodename: "NPC_CH_SPECIAL",
+		OfferPromptSymbol: "SN_TALK_QNO_CH_SPECIAL_2_01", CompletePromptSymbol: "SN_TALK_QNO_CH_SPECIAL_2_06",
+		RepeatOfferPromptSymbol: "SN_TALK_QNO_CH_SPECIAL_2_07",
+		AcceptResponseSymbol:    "SN_TALK_QNO_CH_SPECIAL_2_02", DenyResponseSymbol: "SN_TALK_QNO_CH_SPECIAL_2_03", NotAchievedSymbol: "SN_TALK_QNO_CH_SPECIAL_2_04",
+	},
+	{
 		Codename: "QNO_CH_GENARAL_BO_2", KindByte: 1, Objective: ObjectiveCollect,
 		RequiredQuests:      []string{"QNO_CH_GENARAL_BO_1"},
 		CollectItemCodename: "ITEM_QNO_CH_GENARAL_BO_2_01", CollectCount: 20,
