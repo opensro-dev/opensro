@@ -1119,10 +1119,18 @@ export function createWorldRenderer(
 		/*
 		================
 		scenery
+
+		A dungeon room's emitters follow its meshes: retail draws a block's
+		objects only while the active block's visibility list names it
+		(the same dungeonVisibility test as the walk below), so torches in
+		hidden rooms and on other floors neither draw nor take actor slots.
 		================
 		*/
 		scenery() {
 			if ( !current?.scenery?.length ) return null;
+			const visibleBlocks = current.dungeonVisibility && camera.dungeonBlock !== undefined ?
+				current.dungeonVisibility[camera.dungeonBlock] :
+				undefined;
 			const time = environmentTime(
 				current.environment,
 				pickSeconds,
@@ -1130,6 +1138,12 @@ export function createWorldRenderer(
 			);
 			return {
 				emitters: current.scenery.filter( e => {
+					if (
+						current!.dungeonVisibility && e.dungeonBlock !== undefined &&
+						!visibleBlocks?.includes( e.dungeonBlock )
+					) {
+						return false;
+					}
 					const row = fades.find( e.placement );
 					return row === undefined ||
 						fades.visited( row ) === selectedFadeFrame && fades.published( row ) > 0;

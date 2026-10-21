@@ -365,7 +365,11 @@ noteMaterial
 						message => warnings.push( `${ref.sourcePath}: ${message}` )
 					);
 					reserve( emitters.length * 512 );
-					for ( const emitter of emitters ) scenery.push( emitter );
+					for ( const emitter of emitters ) {
+						scenery.push(
+							p.dungeonBlock === undefined ? emitter : { ...emitter, dungeonBlock: p.dungeonBlock }
+						);
+					}
 					if ( animation?.model ) {
 						reserve( 256 );
 						let placements = animatedPlacements.get( animation.glbPublicPath );

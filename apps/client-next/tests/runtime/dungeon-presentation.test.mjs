@@ -305,6 +305,9 @@ test("Donwhang's torches, doors and boulders decode as drawable, block-culled gr
 		assert.ok( groups.length > 0, `${name}: no groups` );
 		assert.ok( groups.every( g => g.dungeonBlock !== undefined ), `${name}: groups follow the room culling` );
 	}
+	// Their particle emitters follow the same rooms.
+	assert.ok( (decoded.scenery?.length ?? 0) > 0 );
+	assert.ok( decoded.scenery.every( e => Number.isInteger( e.dungeonBlock ) ), "every cave emitter names its room" );
 });
 
 for ( const regionId of [ 32769, 32770, 32771, 32772, 32773, 32774, 32775, 32777 ] ) {
@@ -437,8 +440,12 @@ test(
 		// Verify every dungeon room BSR particle reference resolves and compiles in program.ts.
 		const dungeonRefs = collectDungeonParticleReferences( manifest );
 		const uniqueEfps = [ ...new Set( dungeonRefs.map( r => r.effectPath ) ) ].sort();
-		assert.equal( uniqueEfps.length, 48 );
+		assert.equal( uniqueEfps.length, 70 );
 		assert.ok( uniqueEfps.includes( "system/system_dungeonpotal_02.efp" ) );
+		// Objects placed in rooms (blockObjects) carry their own programs: the
+		// Donwhang torches and sunbeams reported missing in game.
+		assert.ok( uniqueEfps.includes( "map/frame5.efp" ) );
+		assert.ok( uniqueEfps.includes( "map/404_sunbeams.efp" ) );
 
 		const particlesRoot = join( extractedRoot, "Particles_extracted" );
 		const particleImageRoot = join( imageSourceRoot, "Particles_extracted" );

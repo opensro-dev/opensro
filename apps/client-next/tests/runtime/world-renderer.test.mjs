@@ -1403,6 +1403,43 @@ test("sixteen material pieces share one fade tick; an outdoor scene switch keeps
 	world.dispose( geometry, textures );
 });
 
+test("dungeon scenery follows its room: a hidden room's emitters neither play nor take slots", () => {
+	const world = createWorldRenderer(),
+		geometry = { upload: () => ({}), release() {}, updateInstances: draw => draw },
+		textures = { upload: () => ({}), release() {} };
+	const value = scene( "dungeon-emitters" );
+	const emitter = ( id, dungeonBlock ) => ({
+		id,
+		placement: id,
+		model: "/assets/effects/programs.json#map/frame5.efp",
+		pose: { regionId: 0x8001, x: 0, y: 0, z: 450, yaw: 0 },
+		basis: [ 1, 0, 0, 0, 1, 0, 0, 0, 1 ],
+		nightOnly: false,
+		renderPriority: 0,
+		dungeonBlock
+	});
+	// Room 0 draws only itself; room 1 draws both.
+	value.dungeonVisibility = [ [ 0 ], [ 1, 0 ] ];
+	value.scenery = [ emitter( "torch-0", 0 ), emitter( "torch-1", 1 ) ];
+	world.scene( value );
+	const ids = block => {
+		world.camera( {
+			eye: [ 0, 0, 0 ],
+			target: [ 0, 0, 1 ],
+			near: 1,
+			far: 1000,
+			fov: Math.PI / 3,
+			...(block === undefined ? {} : { dungeonBlock: block })
+		} );
+		world.prepare( geometry, textures, 1, 0 );
+		return world.scenery().emitters.map( e => e.id );
+	};
+	assert.deepEqual( ids( 0 ), [ "torch-0" ] );
+	assert.deepEqual( ids( 1 ), [ "torch-0", "torch-1" ] );
+	assert.deepEqual( ids( undefined ), [], "no active room draws no room, as the mesh walk" );
+	world.dispose( geometry, textures );
+});
+
 test("scenery follows resident placement admission while retaining offscreen and stationary clocks", () => {
 	const world = createWorldRenderer(),
 		geometry = { upload: () => ({}), release() {}, updateInstances: draw => draw },
