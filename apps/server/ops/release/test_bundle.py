@@ -37,7 +37,7 @@ def uvarint(value):
 # out as the linker writes it (aligned header, uvarint strings, binary
 # sentinels around the module text), stamped for commit.
 # ================
-def go_binary(name, commit, modified="false", version="go1.27.2"):
+def go_binary(name, commit, modified="false", version="go1.27.3"):
 	text = ("path\topensro.online/server/cmd/" + name + "\nbuild\t-trimpath=true\nbuild\tvcs=git\n" +
 		"build\tvcs.revision=" + commit + "\nbuild\tvcs.modified=" + modified + "\n").encode()
 	modules = bytes.fromhex("3077af0c9274080241e1c107e6d618e6") + text + bytes.fromhex("f932433186182072008242104116d8f2")
@@ -120,7 +120,7 @@ class BundleTests(unittest.TestCase):
 	# ================
 	def test_build_settings_are_read_from_the_bytes(self):
 		version, settings = go_build_settings(go_binary("agent", "b" * 40, "true"))
-		self.assertEqual(version, "go1.27.2")
+		self.assertEqual(version, "go1.27.3")
 		self.assertEqual((settings["vcs.revision"], settings["vcs.modified"], settings["-trimpath"]), ("b" * 40, "true", "true"))
 		for data in (b"no build information here", GO_BUILDINFO_MAGIC + bytes([8, 0]) + bytes(64), go_binary("agent", "b" * 40)[:80]):
 			with self.subTest(data=data[:20]), self.assertRaises(ValueError):
