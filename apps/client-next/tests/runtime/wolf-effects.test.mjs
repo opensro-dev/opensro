@@ -61,7 +61,7 @@ test("every wolf signal plays published, compiling, wolf-only effect programs", 
 	}
 	// The third howl and the last rend shake the camera; the last rend is louder.
 	assert.deepEqual(
-		[ 1, 3, 5, 6 ].map( action => [ wolf.wolfEffectSound( action ).shake, wolf.wolfEffectSound( action ).gain ] ),
+		[ 1, 3, 5, 6 ].map( action => [ wolf.wolfEffectSound( action )?.shake, wolf.wolfEffectSound( action )?.gain ] ),
 		[ [ false, .8 ], [ true, .8 ], [ false, .55 ], [ true, .6 ] ]
 	);
 	assert.equal( wolf.wolfEffectSound( wolf.WOLF_BLOOD_FULL ), undefined );
