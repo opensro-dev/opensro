@@ -175,6 +175,7 @@ importedProjectileBasis
 
 A flying BSR's world basis: projectileBasis is the native object basis
 (right, up, back along the flight), carried into the imported mesh's space.
+A zero-length flight has no travel basis; native keeps the spawn yaw.
 ================
 */
 function importedProjectileBasis(
@@ -183,7 +184,15 @@ function importedProjectileBasis(
 	verticalFallback = true
 ): CharacterActor["effectBasis"] {
 	const basis = projectileBasis( start, end, verticalFallback );
-	return basis && importedModelBasis( basis );
+	if ( basis ) return importedModelBasis( basis );
+	// 8D8E30 Initialize: 879250's path length is fcomp'ed against 0.0 at
+	// 8D921D, and a zero-length path returns at 8D922D before the travel
+	// basis write (8D9233), so the mover keeps the caller's fYaw. The
+	// AT_TARGET caller (8DE74C) gives [0xC14E6C] = -pi/2: as a basis that
+	// is facing (sin, 0, -cos) = (-1, 0, 0), back (1, 0, 0) - the rows
+	// projectileBasis builds for that facing, below. Without this a
+	// zero-length .bsr mover (Kerberos ATTACK03) fell back to yaw 0.
+	return importedModelBasis( [ 0, 0, -1, 0, 1, 0, 1, 0, 0 ] );
 }
 /** One decoded stage binding; see stageBinding. */
 type StageBinding = {

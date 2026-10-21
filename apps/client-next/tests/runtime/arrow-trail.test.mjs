@@ -325,6 +325,24 @@ test("native model basis preserves pitch, backward direction and near-vertical f
 		undefined
 	);
 });
+test("zero-length AT_TARGET bsr mover keeps the -pi/2 spawn basis instead of yaw zero", () => {
+	// Stage offset equals targetOffset, so the mover's path length is
+	// zero: 8D922D keeps the Initialize fYaw (-pi/2, 8DE74C) rather than
+	// writing a travel basis. Imported rows for that facing:
+	// right (0,0,1), up (0,1,0), back (-1,0,0).
+	const f = fixture( [ { ...stage, action: "AT_TARGET" } ] );
+	const mover = f.initial.find( a => a.model.endsWith( "arrow.glb" ) );
+	assert.ok( mover, "zero-length mover must still spawn" );
+	assert.ok( mover.effectBasis, "zero-length mover must carry the spawn basis" );
+	const expected = [ 0, 0, 1, 0, 1, 0, -1, 0, 0 ];
+	for ( let i = 0; i < 9; i++ ) {
+		assert.ok(
+			Math.abs( mover.effectBasis[i] - expected[i] ) < 2e-7,
+			JSON.stringify( { actual: mover.effectBasis, expected } )
+		);
+	}
+	f.owner.dispose();
+});
 
 test("late launch callbacks preserve flight without re-hiding equipment after cast cancellation", () => {
 	const f = fixture( [ { ...stage, startEvent: 2, resource: "weapon" } ] );
