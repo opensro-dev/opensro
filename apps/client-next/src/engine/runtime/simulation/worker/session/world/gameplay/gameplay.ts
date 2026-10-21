@@ -113,6 +113,14 @@ import {
 	type GmCatalog,
 	type GmReply
 } from "@/engine/foundation/gameplay/gm-command";
+import {
+	gmLocalCommand,
+	gmWaypointAdd,
+	gmWaypointDelete,
+	gmWaypointShow,
+	gmWaypointWarpFrame,
+	type GmWaypoint
+} from "@/engine/foundation/gameplay/gm-local-commands";
 import { decodeReverseMapPoints, type ReverseMapPoint } from "@/engine/foundation/gameplay/reverse-return-map";
 import {
 	fortressBootstrap,
@@ -732,6 +740,9 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	let uniqueRefs = uniqueReferences( {} );
 	let gmReplies: readonly (GmReply & { sequence: number; })[] = [];
 	let gmSequence = 0;
+	// The client-local GM waypoints (gm-local-commands.ts): the native
+	// list lives on the client for its whole run, so no reset clears it.
+	let gmWaypoints: readonly GmWaypoint[] = [];
 	// CICPlayer +0x4F6: the transport bag's trade level, set only by 0x352D
 	// (75B8D0, cos-trade-info.ts).
 	let tradeStars = 0;
@@ -1865,7 +1876,79 @@ state here before a command can claim a native wire conversation.
 					local?.heading ?? 0,
 					{ monster: worldReferences.monster, targetGid: targeting.selectionIntent() }
 				);
-				return frame ? sendFrame( frame ) : null;
+				if ( frame ) return sendFrame( frame );
+				// The client-local family (gm-local-commands.ts): commands
+				// 509CF0 executes without a 0x75B6 frame. The chat text,
+				// window and gacha arms are the UI's; here run the casts
+				// and the waypoints, whose state this worker owns.
+				const localCommand = gmLocalCommand( command.line );
+				if ( !localCommand ) return null;
+				/*
+				================
+				gmPrint
+
+				A console line the client itself answers (waypoint prints):
+				the same gmReplies lane the 0xB5B6 consumer feeds.
+				================
+				*/
+				const gmPrint = ( text: string ) => {
+					gmReplies = [ ...gmReplies.slice( -99 ), { console: true, text, sequence: ++gmSequence } ];
+					dirty = true;
+				};
+				switch ( localCommand.type ) {
+					case "useskill":
+					case "gmskill": {
+						// 6FCD50: cast through the ordinary press door at the
+						// current selection, with no learned-binding check -
+						// the console names the skill, the server admits it.
+						const skillId = localCommand.type === "useskill" ?
+							localCommand.skillId :
+							catalog.find( row => row.name === "SKILL_OP_HARMONY_A_01" )?.id ?? 0;
+						if ( !skillId ) return null;
+						const metadata = catalog.find( row => row.id === skillId );
+						const targetGid = targeting.selectionIntent();
+						const castFrame = targetGid ? combat.skill( skillId, targetGid ) : combat.skill( skillId );
+						if ( metadata?.haltsWalk && pressAdmitted( metadata, local ) ) movement.holdForCast( now );
+						predictCast( metadata, undefined, local, now );
+						return sendSkillPress(
+							castFrame,
+							skillId,
+							now,
+							pressAdmitted( metadata, local ) ? "cast" : null
+						);
+					}
+					case "addwp": {
+						if ( !local ) return null;
+						const added = gmWaypointAdd( gmWaypoints, {
+							name: localCommand.name,
+							regionId: local.regionId,
+							x: local.x,
+							y: local.y,
+							z: local.z,
+							heading: local.heading
+						} );
+						gmWaypoints = added.waypoints;
+						for ( const print of added.prints ) gmPrint( print );
+						return null;
+					}
+					case "delwp": {
+						const deleted = gmWaypointDelete( gmWaypoints, localCommand.name );
+						gmWaypoints = deleted.waypoints;
+						for ( const print of deleted.prints ) gmPrint( print );
+						return null;
+					}
+					case "showwp": {
+						for ( const print of gmWaypointShow( gmWaypoints ) ) gmPrint( print );
+						return null;
+					}
+					case "warpwp": {
+						const warp = gmWaypointWarpFrame( gmWaypoints, localCommand.name );
+						for ( const print of warp.prints ) gmPrint( print );
+						return warp.frame ? sendFrame( warp.frame ) : null;
+					}
+					default:
+						return null;
+				}
 			}
 			if ( command.kind === "rebirth" ) {
 				if ( local?.gid !== localGid || local?.appearanceState?.[0] !== 2 ) return null;

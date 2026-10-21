@@ -130,6 +130,7 @@ import { jobContributionSelf, jobRankPage, jobRankPages } from "@/engine/foundat
 import { createMapTeleport } from "./hud/map-teleport";
 import { createGmHelper, GM_HELPER_HEIGHT, GM_HELPER_ROWS, GM_HELPER_ROW_HEIGHT } from "./hud/gm-helper";
 import type { GmCatalog } from "@/engine/foundation/gameplay/gm-command";
+import { gmLocalCommand } from "@/engine/foundation/gameplay/gm-local-commands";
 import { SkillSlot_Resolve } from "./hud/skill-slot";
 import { ACADEMY_OPEN_LEVEL, academyRank } from "@/engine/foundation/gameplay/academy";
 import { createWindowPlacement } from "./hud/window-placement";
@@ -3233,8 +3234,35 @@ export function createUi(
 				// are disjoint (the table lookup is case-sensitive), so the table
 				// match decides which owner takes the line.
 				const command = debugCommand( hud.data()?.commandTable ?? new Map(), line );
+				// The client-local GM family (gm-local-commands.ts): the arms
+				// whose effects live on this side of the worker boundary -
+				// chat text (the key resolves here, hudCopy), the window
+				// option, and the gacha window's own play path. The worker
+				// runs the rest (casts, waypoints).
+				const localCommand = command ? null : gmLocalCommand( line );
 				if ( command ) runDebugCommand( command );
-				else sendGameplay( { kind: "gm-command", line } );
+				else if ( localCommand?.type === "textchat" ) {
+					const text = hudCopy( localCommand.key );
+					if ( text ) sendGameplay( { kind: "chat", channel: 1, text } );
+				} else if ( localCommand?.type === "smsg" ) {
+					sendGameplay( { kind: "chat", channel: 1, text: localCommand.text } );
+				} else if ( localCommand?.type === "inputchat" ) {
+					// No ChatString.txt asset ships with the port: the native
+					// missing-file line, and nothing is sent.
+					appendConsoleLine( "ChatString Error. -> ChatString.txt" );
+				} else if ( localCommand?.type === "window" ) {
+					options = { ...options, windowMode: localCommand.windowed };
+					optionDraft = { ...optionDraft, windowMode: localCommand.windowed };
+					saveOptions( options );
+					appendConsoleLine(
+						localCommand.windowed ?
+							"Window Mode(Please Game Restart)" :
+							"FullScreen Mode(Please Game Restart)"
+					);
+				} else if ( localCommand?.type === "gachastart" ) {
+					const roll = gachaHud.play( gachaInput() );
+					if ( roll ) sendGameplay( { kind: "gacha-roll", ...roll } );
+				} else sendGameplay( { kind: "gm-command", line } );
 				consoleText = "";
 				selection = [ 0, 0 ];
 				focusRequest = { id: "gm-input", revision: ++focusRevision, caret: 0 };
