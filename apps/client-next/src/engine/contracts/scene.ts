@@ -203,6 +203,11 @@ export interface WorldCamera {
 		readonly offset?: readonly [number, number];
 	};
 	readonly up?: readonly [number, number, number];
+	// Port-only framing (GH #1246, not native): frontend tracks are authored
+	// for a landscape frame. When set, viewProjection keeps the horizontal
+	// FOV in portrait (aspect < 1) instead of cropping the authored sides.
+	// Gameplay cameras never set it; aspect >= 1 is always unaffected.
+	readonly lockHorizontalFov?: boolean;
 	readonly originRegion?: number;
 	readonly eye: readonly [number, number, number];
 	readonly target: readonly [number, number, number];

@@ -721,3 +721,44 @@ test("entry admission retains the dock through connecting and rejection, and lea
 	assert.equal( frontend.start(), true, "returned dock must support ordinary re-entry" );
 	frontend.dispose();
 });
+const { frontendCameraView } = await load( "src/engine/foundation/rendering/frontend-camera.ts" );
+const { viewProjection } = await load( "src/engine/foundation/rendering/world-math.ts" );
+const { screenPoint } = await load( "src/engine/foundation/rendering/screen-point.ts" );
+const { dockSlot } = await load( "src/engine/foundation/rendering/dock-slots.ts" );
+test("portrait dock framing keeps every roster slot in frame and never changes the landscape projection", () => {
+	const manifest = readPublishedAssetJsonSync(
+		"/assets/character-select/world-manifest.json",
+		CLIENT_PUBLIC_ROOT
+	);
+	const rest = frontendCameraView( manifest.camera[manifest.camera.length - 1] );
+	assert.equal( rest.lockHorizontalFov, true );
+	// Landscape and square viewports project byte-identically to the unlocked camera.
+	for ( const aspect of [ 16 / 9, 4 / 3, 1 ] ) {
+		assert.deepEqual(
+			viewProjection( rest, aspect ),
+			viewProjection( { ...rest, lockHorizontalFov: undefined }, aspect )
+		);
+	}
+	// Portrait: name plates (slot + 20 native units, as the title overlay
+	// anchors them) and slot roots stay inside the viewport at phone sizes.
+	const slots = [ 0, 1, 2, 3 ].map( i => dockSlot( i, 4 ) );
+	for ( const [width, height] of [ [ 420, 800 ], [ 360, 740 ] ] ) {
+		for ( const slot of slots ) {
+			const plate = screenPoint( rest, [ slot.x, slot.y + 20, slot.z ], width, height );
+			assert.ok( plate, "plate behind camera" );
+			assert.ok( plate[0] >= 0 && plate[0] <= width, `plate x ${plate[0]} at ${width}x${height}` );
+			assert.ok( plate[1] >= 0 && plate[1] <= height, `plate y ${plate[1]} at ${width}x${height}` );
+			const root = screenPoint( rest, [ slot.x, slot.y, slot.z ], width, height );
+			assert.ok( root && root[0] >= 0 && root[0] <= width, `slot x at ${width}x${height}` );
+		}
+		// The unlocked projection is the GH #1246 defect: it frames the
+		// outer slots out at both sizes, so the assertions above bind.
+		const cropped = slots.map( slot =>
+			screenPoint( { ...rest, lockHorizontalFov: undefined }, [ slot.x, slot.y + 20, slot.z ], width, height )
+		);
+		assert.ok(
+			cropped.some( plate => !plate || plate[0] < 0 || plate[0] > width ),
+			`unlocked framing must crop a slot at ${width}x${height}`
+		);
+	}
+});

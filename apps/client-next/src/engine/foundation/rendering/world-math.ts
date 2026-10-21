@@ -213,6 +213,22 @@ export function cameraBasis( camera: WorldCamera ) {
 }
 /*
 ================
+projectionFov
+
+Port-only (GH #1246, not native): a camera that locks its horizontal FOV
+keeps the landscape frame's horizontal extent when the viewport is taller
+than wide, widening the vertical FOV instead of cropping the authored
+sides. Aspect >= 1, and every camera without the lock, projects exactly
+the authored fov. The widened FOV stays below PI so extreme viewports
+keep a finite projection.
+================
+*/
+function projectionFov( camera: WorldCamera, aspect: number ): number {
+	if ( !camera.lockHorizontalFov || aspect >= 1 ) return camera.fov;
+	return Math.min( Math.PI - 0.01, 2 * Math.atan( Math.tan( camera.fov / 2 ) / aspect ) );
+}
+/*
+================
 viewProjection
 ================
 */
@@ -245,7 +261,9 @@ export function viewProjection( camera: WorldCamera, aspect: number ) {
 		-zx * ex - zy * ey - zz * ez,
 		1
 	] );
-	const f = 1 / Math.tan( camera.fov / 2 ), a = camera.far / (camera.far - camera.near), b = -camera.near * a;
+	const f = 1 / Math.tan( projectionFov( camera, aspect ) / 2 ),
+		a = camera.far / (camera.far - camera.near),
+		b = -camera.near * a;
 	const projection = new Float32Array( [ f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, a, 1, 0, 0, b, 0 ] ),
 		out = new Float32Array( 16 );
 	for ( let col = 0; col < 4; col++ ) {
