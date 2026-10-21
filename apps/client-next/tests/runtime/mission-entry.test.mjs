@@ -56,7 +56,7 @@ test("entry artwork and loading control group preserve their aspect ratios on re
 	assert.equal( missionLoadingQuads( 1024, 768, 1, 2 )[3].uv[2], 1 );
 });
 
-test("compact loading contains the full illustration and reserves readable progress below it", () => {
+test("compact loading covers the area above the footer and reserves readable progress below it", () => {
 	for ( const [w, h] of [ [ 360, 858 ], [ 375, 667 ], [ 667, 375 ], [ 320, 568 ], [ 200, 200 ] ] ) {
 		for ( const progress of [ -1, 0, .5, 1, 2 ] ) {
 			const quads = loadingScreenQuads( w, h, "scene.png", progress );
@@ -64,9 +64,16 @@ test("compact loading contains the full illustration and reserves readable progr
 			for ( const { rect: [x, y, width, height] } of quads ) {
 				assert.ok( x >= 0 && y >= 0 && x + width <= w + 1e-9 && y + height <= h + 1e-9 );
 			}
-			assert.deepEqual( art.uv, [ 0, 0, 1, 1 ] );
-			assert.ok( Math.abs( art.rect[2] / art.rect[3] - 4 / 3 ) < 1e-10 );
-			assert.equal( art.rect[0] + art.rect[2] / 2, w / 2 );
+			// Cover (GH #1244): the quad fills the whole area above the
+			// footer and samples the centered window of the 1600x1200
+			// texture that matches its shape - never stretched, and one
+			// axis always samples the full texture.
+			assert.deepEqual( art.rect, [ 0, 0, w, Math.max( 0, h - 120 ) ] );
+			assert.ok( Math.abs( art.uv[0] - (1 - art.uv[2]) / 2 ) < 1e-12 );
+			assert.ok( Math.abs( art.uv[1] - (1 - art.uv[3]) / 2 ) < 1e-12 );
+			assert.ok( art.uv[2] > 0 && art.uv[2] <= 1 && art.uv[3] > 0 && art.uv[3] <= 1 );
+			assert.ok( Math.abs( art.uv[2] - 1 ) < 1e-12 || Math.abs( art.uv[3] - 1 ) < 1e-12 );
+			assert.ok( Math.abs( art.uv[2] * 1600 / (art.uv[3] * 1200) - w / Math.max( 1, h - 120 ) ) < 1e-9 );
 			assert.ok( art.rect[1] + art.rect[3] <= frame.rect[1] );
 			assert.ok( frame.rect[1] + frame.rect[3] <= label.rect[1] );
 			assert.deepEqual( label.rect, [ (w - 108) / 2, h - 64, 108, 15 ] );
