@@ -217,6 +217,9 @@ class CombinedRunTests(unittest.TestCase):
 			self.assertEqual((sent, fetched), ([], []))
 			self.assertEqual(list(output.iterdir()), [sentinel])
 			self.assertEqual(sentinel.read_bytes(), b"keep")
+			# No partial state either: the refusal precedes the server data's
+			# own directory beside OUTPUT (#1319).
+			self.assertFalse(data_release.server_data_directory(output, archive).exists())
 
 
 if __name__ == "__main__":

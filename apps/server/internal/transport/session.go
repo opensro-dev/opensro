@@ -634,8 +634,15 @@ func (s *Session) detachGen(gen int, cause error) {
 		s.readCancel()
 		s.readCancel = nil
 	}
+	// A condemned session (CloseWhenDrained) is never resumable, and with no
+	// connection its BYE can never leave: close it now, as CloseWhenDrained
+	// does for a session that is already detached, instead of sitting out
+	// the drain cap. The cap still bounds a live client that reads slowly.
+	condemned := s.drainClose
 	grace := s.hub.cfg.GracePeriod
-	s.expireTimer = time.AfterFunc(grace, func() { s.expireIfDetached() })
+	if !condemned {
+		s.expireTimer = time.AfterFunc(grace, func() { s.expireIfDetached() })
+	}
 	s.recordHistoryLocked("detached", cause)
 	s.cond.Broadcast()
 	s.mu.Unlock()
@@ -648,6 +655,11 @@ func (s *Session) detachGen(gen int, cause error) {
 
 	if conn != nil {
 		conn.Close("detached")
+	}
+	if condemned {
+		// closeSession takes s.mu via closeNow; never call it locked.
+		s.hub.closeSession(s, nil)
+		return
 	}
 	log.WithFields(log.Fields{"session": s.ID, "cause": fmt.Sprint(cause), "grace": grace}).
 		Info("transport: session detached, awaiting resume")

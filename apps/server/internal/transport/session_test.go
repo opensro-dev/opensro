@@ -574,3 +574,27 @@ func TestHandleRejectsSessionInternal(t *testing.T) {
 	hub.Handle(OpEnterWorld, func(*Session, uint16, []byte) {})
 	hub.Handle(0x706D, func(*Session, uint16, []byte) {})
 }
+
+/*
+================
+TestCondemnedSessionClosesWhenItsConnectionDies
+
+A session told to close once drained (CloseWhenDrained) whose connection
+then dies cannot deliver its BYE and must not be resumed, so it closes at
+once instead of sitting out the 2 s drain cap (#1288). The write gate keeps
+the BYE queued, as a peer that stopped reading does.
+================
+*/
+func TestCondemnedSessionClosesWhenItsConnectionDies(t *testing.T) {
+	_, sess, fc := attachedSession(t, true)
+	sess.CloseWhenDrained(ByeReasonShutdown)
+	fc.Close("peer gone")
+	select {
+	case <-sess.Done():
+	case <-time.After(time.Second):
+		t.Fatal("condemned session waited for the drain cap after its connection died")
+	}
+	if len(fc.written()) != 0 {
+		t.Fatalf("frames written to a dead connection: %v", fc.written())
+	}
+}
