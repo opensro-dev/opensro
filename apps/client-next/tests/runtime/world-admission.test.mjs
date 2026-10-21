@@ -324,11 +324,15 @@ test("failed worker world transfer publishes an error instead of stranding the r
 			*/
 			setup( b ) {
 				b.onResolve( { filter: /\.\/packs\/packs$/ }, () => ({ path: "packs", namespace: "fixture" }) );
+				// The stub answers everything the loader asks of the packs owner.
+				// stats() feeds the progress beat, which publishes at once when
+				// 150 ms pass between createLoader and the load: under load that
+				// threw here and became the request's error answer.
 				b.onLoad(
 					{ filter: /.*/, namespace: "fixture" },
 					() => ({
 						contents: `export class AssetAbsentError extends Error {}
-export const createPacks=()=>({worldAnimationManifests:async()=>[],textureVariant(){},dispose(){}});`
+export const createPacks=()=>({worldAnimationManifests:async()=>[],textureVariant(){},stats:()=>({hits:0}),dispose(){}});`
 					})
 				);
 			}

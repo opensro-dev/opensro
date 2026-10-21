@@ -13,6 +13,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 const { createLoader } = await import( "../../src/engine/runtime/assets/worker/loader.ts" );
+// Bounds every wait for a loader message, so a missing one fails the test
+// instead of hanging it.
+const MESSAGE_TIMEOUT_MS = 10000;
+
 /*
 ================
 settle
@@ -20,6 +24,58 @@ settle
 */
 function settle() {
 	return new Promise( resolve => setImmediate( resolve ) );
+}
+
+/*
+================
+createInbox
+
+The loader's messages, and a wait for the first one that matches. The loader
+answers through asynchronous steps (WebCrypto digests, the 150 ms progress
+beat) whose timing depends on machine load, so a test waits for the message
+itself, never for a count of event-loop turns or a fixed delay.
+================
+*/
+function createInbox() {
+	const messages = [], waiters = new Set();
+	return {
+		messages,
+		/*
+		================
+		post
+		================
+		*/
+		post( message ) {
+			messages.push( message );
+			for ( const waiter of waiters ) {
+				if ( waiter.match( message ) ) waiter.resolve( message );
+			}
+		},
+		/*
+		================
+		until
+		================
+		*/
+		until( match, label ) {
+			const found = messages.find( match );
+			if ( found ) return Promise.resolve( found );
+			return new Promise( ( resolve, reject ) => {
+				const waiter = {
+					match,
+					resolve: message => {
+						clearTimeout( timer );
+						waiters.delete( waiter );
+						resolve( message );
+					}
+				};
+				const timer = setTimeout( () => {
+					waiters.delete( waiter );
+					reject( Error( `No ${label} within ${MESSAGE_TIMEOUT_MS} ms` ) );
+				}, MESSAGE_TIMEOUT_MS );
+				waiters.add( waiter );
+			} );
+		}
+	};
 }
 
 test("unfinished compressed or cached responses report stream activity separately from wire bytes", async t => {
@@ -98,6 +154,9 @@ test("a packed /assets load notes byte progress from the packs plumbing", async 
 	t.mock.method( performance, "getEntriesByName", () => [] );
 	/** @type {ReadableStreamDefaultController<Uint8Array> | undefined} */
 	let stream;
+	/** @type {(value?: unknown) => void} */
+	let memberStarted = () => {};
+	const memberRead = new Promise( resolve => memberStarted = resolve );
 	t.mock.method( globalThis, "fetch", async url => {
 		if ( url.endsWith( "/manifest.json" ) ) return Response.json( manifest );
 		if ( url.endsWith( packPath ) ) return new Response( null, { status: 404 } );
@@ -107,24 +166,25 @@ test("a packed /assets load notes byte progress from the packs plumbing", async 
 			new ReadableStream( {
 				start( controller ) {
 					stream = controller;
+					memberStarted();
 				}
 			} )
 		);
 	} );
-	const messages = [], loader = createLoader( message => messages.push( message ) );
+	const inbox = createInbox(), loader = createLoader( message => inbox.post( message ) );
 	t.after( () => loader.dispose() );
 	loader.receive( { kind: "load", id: 1, url: "https://example.test/assets/test.bin", limit: 3 } );
-	await settle();
-	await settle();
-	await settle();
+	await memberRead;
 	assert.ok( stream, "the member read is in flight" );
 	stream.enqueue( bytes );
-	// Notes publish on the coalesced 150 ms beat; wait past one beat.
-	await new Promise( resolve => setTimeout( resolve, 250 ) );
-	const notes = messages.filter( message => message.kind === "job-progress" && message.id === 1 );
-	assert.ok( notes.length > 0, "packed plumbing must note byte progress" );
-	assert.ok( notes.at( -1 ).bytes >= 3 );
+	// Notes publish on the coalesced 150 ms beat, while the load is in flight.
+	const note = await inbox.until(
+		message => message.kind === "job-progress" && message.id === 1 && message.bytes >= 3,
+		"byte-progress note"
+	);
+	assert.ok( note, "packed plumbing must note byte progress" );
+	assert.equal( inbox.messages.some( message => message.kind === "bytes" ), false, "noted before the answer" );
 	stream.close();
-	await settle();
-	assert.equal( messages.find( message => message.kind === "bytes" )?.id, 1 );
+	const answer = await inbox.until( message => message.kind === "bytes", "load answer" );
+	assert.equal( answer.id, 1 );
 });
