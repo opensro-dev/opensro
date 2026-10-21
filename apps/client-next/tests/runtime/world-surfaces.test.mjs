@@ -117,10 +117,15 @@ test("authored animated meshes replace their static submissions and share one pa
 		const sources = entry.skinnedMeshPaths.map( path =>
 			bundle.objects.resources.meshes.find( m => m.sourcePath.toLowerCase() === path.toLowerCase() )
 		).filter( m => m.metadata.materialName === primitive.name );
+		const ref = bundle.objects.resources.bsr.find( r => r.sourcePath === sourcePath ),
+			paths = (ref.renderMeshSection?.paths ?? ref.meshPaths).map( p => p.toLowerCase() );
 		let offset = 0;
 		const expected = [];
 		for ( const mesh of sources ) {
-			if ( mesh.headerOffsets[7] ) expected.push( [ offset, mesh.indices.length ] );
+			const part = paths.indexOf( mesh.sourcePath.toLowerCase() );
+			if ( ref.renderMeshSection?.cameraCollision?.[part] !== false ) {
+				expected.push( [ offset, mesh.indices.length ] );
+			}
 			offset += mesh.indices.length;
 		}
 		assert.equal( group.material.sharedPose, true );

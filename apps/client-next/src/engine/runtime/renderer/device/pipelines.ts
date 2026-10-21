@@ -427,6 +427,9 @@ fn shadeGeometry(input:Out)->vec4f {
  if(material.equipmentColor.w>0.0){equipment=textureSample(sphereMap,textureSampler,input.equipmentUV,0).rgb;}
  // Keep implicit-derivative sampling behind uniform gates, before varying exits.
  if(material.reflection.x>0.5&&env.reflection.w>0.5){reflected=textureSample(sphereMap,textureSampler,input.sphereUV,0).rgb;}
+ // An object lightmap (stagePolicy.z) is stage 1 at the second UV set, clamped.
+ var objectLightmap=vec3f(1);
+ if(material.stagePolicy.z>0.5){objectLightmap=textureSample(sphereMap,waterBumpSampler,input.maskUV,0).rgb;}
  var waterColor=vec3f(0);
  if(material.skin.z>0.5&&waterPass.plane.z>0.5&&waterPass.plane.w<0.5){let projected=input.mirrorPosition.xy/input.mirrorPosition.w;var offset=vec2f(0);
  // 8BA130 cell corners use bump UV (0,1)..(1,0); ordinary water tiles four times.
@@ -505,6 +508,10 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
  let unlitColor=select(color.rgb,tex.rgb*input.color.rgb,material.lighting.y>0.5);
  // A native stage is the whole colour: its op already carries any 2X/4X.
  var lit=select(clamp(select(tex.rgb*input.color.rgb*surfaceLight,unlitColor,material.options.y>0.5)*material.options.w,vec3f(0),vec3f(1)),color.rgb,material.stage.x>0.0);
+ // A5BF90 (RenderCompound_DrawMeshesA): a lightmapped mesh draws NOLIGHT
+ // (oD0 = 1, no material tint), stage 0 MODULATE texture by that diffuse,
+ // stage 1 MODULATE2X by the lightmap (CCompoundObj +0x260 = 5).
+ if(material.stagePolicy.z>0.5){lit=clamp(select(clamp(tex.rgb,vec3f(0),vec3f(1)),color.rgb,material.stage.x>0.0)*objectLightmap*2.0,vec3f(0),vec3f(1));}
  // AEE6D0: stage0 sphere*TFACTOR; stage1 base+base.a*current;
  // stage2 MODULATE2X with saturated vertex diffuse. Opacity gates RGB only.
  if(material.reflection.x>0.5&&env.reflection.w>0.5&&input.opacity==1.0){

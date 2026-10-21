@@ -14,6 +14,7 @@ import { characterHeadingYaw } from "@/engine/foundation/math/angles";
 import { hawkResult } from "@/engine/foundation/gameplay/attached-effects";
 import { damageAnchor } from "@/engine/foundation/animation/damage-anchor";
 import { combatStanceOnHit, COMBAT_STANCE_SECONDS } from "@/engine/foundation/animation/combat-stance";
+import { worldAudioPosition, worldDelta } from "@/engine/foundation/world/world-space";
 import type { ActionSchedule } from "@/engine/foundation/animation/action-schedule";
 import type { createReferenceAppearances } from "@/engine/foundation/animation/reference-appearance";
 import type { CharacterSoundContext } from "@/engine/foundation/animation/sound-selectors";
@@ -391,7 +392,7 @@ export function createPresentationEvents() {
 							resource.codename,
 						[ "SND_ACTIVATE" ],
 						soundContext( entity, event.skill ),
-						[ (pose.regionId & 255) * 1920 + pose.x, pose.y, (pose.regionId >>> 8) * 1920 + pose.z ],
+						worldAudioPosition( pose ),
 						seconds
 					);
 				}
@@ -463,13 +464,8 @@ export function createPresentationEvents() {
 				// contain the spawn position. Admission and text placement must
 				// use the same current victim position.
 				const native = logicalPose( target );
-				const dx = observer ?
-					native.x - observer.x + ((native.regionId & 255) - (observer.regionId & 255)) * 1920 :
-					Infinity;
+				const [dx, dz] = observer ? worldDelta( observer, native ) : [ Infinity, Infinity ];
 				const dy = observer ? native.y - observer.y : Infinity;
-				const dz = observer ?
-					native.z - observer.z + ((native.regionId >>> 8) - (observer.regionId >>> 8)) * 1920 :
-					Infinity;
 				if ( cast.caster === gameplay?.localGid || dx * dx + dy * dy + dz * dz < 40000 ) {
 					if ( state.damageTexts.length >= 2048 ) throw Error( "Damage text capacity exceeded" );
 					const anchor = posePresentation.pose( target.gid, native, seconds );
@@ -487,11 +483,7 @@ export function createPresentationEvents() {
 									resource.codename,
 								[ "SND_BLOCKING" ],
 								soundContext( target, 0, !!(impact.flags & 2) ),
-								[
-									(anchor.regionId & 255) * 1920 + anchor.x,
-									anchor.y,
-									(anchor.regionId >>> 8) * 1920 + anchor.z
-								],
+								worldAudioPosition( anchor ),
 								at
 							);
 						}
@@ -623,9 +615,7 @@ export function createPresentationEvents() {
 			const pendingDeaths = feedback.pendingDeaths( gameplay?.casts ?? [], health?.currentResult );
 			sounds.flush( seconds, gid => {
 				const pose = gid === gameplay?.localGid ? gameplay.pose : entitiesByGid.get( gid );
-				return pose ?
-					[ (pose.regionId & 255) * 1920 + pose.x, pose.y, (pose.regionId >>> 8) * 1920 + pose.z ] :
-					undefined;
+				return pose ? worldAudioPosition( pose ) : undefined;
 			} );
 			return { hitByActor, effectActors, pendingDeaths };
 		},

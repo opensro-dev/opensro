@@ -13,6 +13,7 @@ without creating a second simulation clock. Native dispatch: CCC9F8.
  * Exits clear their bit BEFORE calling nested callbacks (857950/8565D0). */
 import type { Pose } from "@/engine/contracts/gameplay";
 import { poseDistance } from "@/engine/foundation/gameplay/native-movement";
+import { sameCoordinateSpace, worldDelta } from "@/engine/foundation/world/world-space";
 /** 86CE00 initializes +8C from the two path distances; 8E5DD0 caps the
  * animation installation rate at 1.3. This is not the actor's speed buff. */
 /*
@@ -28,8 +29,7 @@ export function movementEntryRate(
 ): number {
 	if (
 		!path ||
-		((rendered.regionId | predicted.regionId | path.from.regionId | path.to.regionId) & 0x8000) &&
-			![ predicted, path.from, path.to ].every( p => p.regionId === rendered.regionId )
+		![ predicted, path.from, path.to ].every( p => sameCoordinateSpace( rendered.regionId, p.regionId ) )
 	) return 1;
 	const f = Math.fround;
 	if ( newPath ) {
@@ -41,14 +41,7 @@ export function movementEntryRate(
 	// direction dot product, with the ten-degree threshold tested in ASM.
 	const distance = poseDistance( rendered, predicted );
 	if ( distance < 5 ) return 1;
-	const vector = ( a: Pose, b: Pose ) => {
-		const outdoor = !(a.regionId & 0x8000);
-		return [
-			b.x - a.x + (outdoor ? ((b.regionId & 255) - (a.regionId & 255)) * 1920 : 0),
-			b.z - a.z + (outdoor ? ((b.regionId >>> 8) - (a.regionId >>> 8)) * 1920 : 0)
-		] as const;
-	};
-	const a = vector( rendered, predicted ), b = vector( path.from, path.to ), length = Math.hypot( ...b );
+	const a = worldDelta( rendered, predicted ), b = worldDelta( path.from, path.to ), length = Math.hypot( ...b );
 	if ( !length ) return 1;
 	const dot = f( (a[0] * b[0] + a[1] * b[1]) / (distance * length) );
 	return dot < 0 ? f( .9 ) : dot > f( Math.cos( .17453292012214661 ) ) ? f( 1.1 ) : 1;

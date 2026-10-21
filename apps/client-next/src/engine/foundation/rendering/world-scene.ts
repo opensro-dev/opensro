@@ -79,7 +79,8 @@ export function worldSceneBytes( scene: WorldScene | null ): number {
 				!e.id || keys.has( e.id ) || !e.placement || !e.model.startsWith( "/assets/effects/programs.json#" ) ||
 				e.basis.length !== 9 || !e.basis.every( Number.isFinite ) ||
 				!Object.values( e.pose ).every( Number.isFinite ) || typeof e.nightOnly !== "boolean" ||
-				!Number.isInteger( e.renderPriority ) || e.renderPriority < 0 || e.renderPriority > 255
+				!Number.isInteger( e.renderPriority ) || e.renderPriority < 0 || e.renderPriority > 255 ||
+				e.dungeonBlock !== undefined && (!Number.isInteger( e.dungeonBlock ) || e.dungeonBlock < 0)
 			) throw Error( "Invalid scenery emitter" );
 			keys.add( e.id );
 		}

@@ -26,6 +26,7 @@ import type { StructureVisuals } from "@/engine/foundation/rendering/structure-s
 import type { EntityState } from "@/engine/contracts/world";
 import type { GameplayState, Pose, CastState } from "@/engine/contracts/gameplay";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
+import { worldAudioPosition } from "@/engine/foundation/world/world-space";
 import type { Resource, PresentationOutput } from "./internal/presentation-contract";
 
 /*
@@ -306,7 +307,7 @@ export function createPresentationActions() {
 					resource.soundProfileName ?? published.soundProfiles.get( resource.codename ) ?? resource.codename,
 					[ event.handle ],
 					soundContext( entity ),
-					[ (pose.regionId & 255) * 1920 + pose.x, pose.y, (pose.regionId >>> 8) * 1920 + pose.z ],
+					worldAudioPosition( pose ),
 					seconds
 				);
 			}

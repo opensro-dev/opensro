@@ -42,6 +42,8 @@ export function copyMaterial( material: WorldMaterial ): WorldMaterial {
 		!Number.isFinite( material.alphaCutoff ) || typeof material.blend !== "boolean" ||
 		typeof material.doubleSided !== "boolean" ||
 		material.texture !== undefined && (typeof material.texture !== "string" || !material.texture) ||
+		material.objectLightmap !== undefined &&
+			(typeof material.objectLightmap !== "string" || !material.objectLightmap) ||
 		material.ambient !== undefined &&
 			(material.ambient.length !== 3 || !material.ambient.every( Number.isFinite )) ||
 		material.objectLight !== undefined &&

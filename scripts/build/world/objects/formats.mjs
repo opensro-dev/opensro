@@ -16,6 +16,8 @@ import { normalizeAssetPath } from "../paths.mjs";
 
 export const BSR_SIGNATURE = "JMXVRES 0109";
 export const BMS_SIGNATURE = "JMXVBMS 0110";
+// BSR header dword +0x2C bit 0: render-mesh entries carry a collision dword.
+const BSR_MESH_COLLISION_FLAGS = 1;
 export const BMT_SIGNATURE = "JMXVBMT 0102";
 export const BMS_STATIC_VERTEX_BYTES = 44;
 export const BMS_STATIC_VERTEX_BYTES_WITH_SECONDARY_UV = 52;
@@ -42,7 +44,15 @@ export function parseJmxResourceBsr( buffer, sourcePath = "<memory>" ) {
 	const primaryMeshPath = readOptionalCountedPath( buffer, headerOffsets[7], sourcePath );
 	const authoredBoxes = readBsrAuthoredBoxes( buffer, headerOffsets[7] );
 	const materials = readBsrMaterialSection( buffer, headerOffsets[0], sourcePath );
-	const renderMeshes = readBsrMeshSection( buffer, headerOffsets[1], sourcePath );
+	// Header dword +0x2C (headerOffsets[8]) bit 0: every render-mesh path is
+	// followed by its camera-collision dword (CResObject_LoadFromArchive A4FF00
+	// -> CPrimMesh_ReadSegmentCollisionFlag A7CAB0).
+	const renderMeshes = readBsrMeshSection(
+		buffer,
+		headerOffsets[1],
+		sourcePath,
+		(headerOffsets[8] & BSR_MESH_COLLISION_FLAGS) !== 0
+	);
 	const meshPaths = uniqueNormalizedPaths( [ primaryMeshPath, ...renderMeshes.paths ].filter( Boolean ) );
 
 	return {
@@ -68,7 +78,7 @@ export function parseJmxResourceBsr( buffer, sourcePath = "<memory>" ) {
 			byteOffset: headerOffsets[1],
 			count: renderMeshes.count,
 			paths: renderMeshes.paths.map( normalizeAssetPath ),
-			entryFlags: renderMeshes.entryFlags,
+			...(renderMeshes.cameraCollision ? { cameraCollision: renderMeshes.cameraCollision } : {}),
 			consumedBytes: renderMeshes.consumedBytes
 		},
 		meshPaths,
@@ -111,6 +121,7 @@ export function parseJmxBmsStaticMesh( buffer, sourcePath = "<memory>" ) {
 		positions: vertices.positions,
 		normals: vertices.normals,
 		uvs: vertices.uvs,
+		...(vertices.lightmap ? { lightmap: vertices.lightmap } : {}),
 		vertexUnknowns: vertices.unknowns,
 		indices: triangles.indices,
 		bounds,
@@ -312,9 +323,16 @@ function readBsrMaterialSection( buffer, offset, sourcePath ) {
 /*
 ================
 readBsrMeshSection
+
+The render-mesh list: a count, then each counted path. When the resource
+header sets BSR_MESH_COLLISION_FLAGS, each path is followed by a dword that
+CPrimMesh_ReadSegmentCollisionFlag (A7CAB0) stores at +0x1E8: zero excludes
+the mesh from camera and segment rays (CPrimGroup_IntersectSegment A40044).
+Without the flag no dword exists and every mesh keeps the constructor's
+default, 1 (CPrimMesh_Constructor A859B0); cameraCollision is then omitted.
 ================
 */
-function readBsrMeshSection( buffer, offset, sourcePath ) {
+function readBsrMeshSection( buffer, offset, sourcePath, collisionFlags ) {
 	ensureAvailable( buffer, offset, 4, sourcePath );
 	const count = buffer.readUInt32LE( offset );
 	offset += 4;
@@ -324,45 +342,25 @@ function readBsrMeshSection( buffer, offset, sourcePath ) {
 	}
 
 	const paths = [];
-	const entryFlags = [];
+	/** @type {boolean[] | undefined} */
+	const cameraCollision = collisionFlags ? [] : undefined;
 	for ( let index = 0; index < count; index += 1 ) {
-		const item = readBsrMeshEntry( buffer, offset, sourcePath );
+		const item = readCountedString( buffer, offset, sourcePath );
+		if ( !isBmsPath( item.value ) ) {
+			throw new Error(
+				`${sourcePath}: BSR mesh entry ${index} at ${offset} is not a BMS path: ${JSON.stringify( item.value )}`
+			);
+		}
 		paths.push( item.value );
-		entryFlags.push( item.entryFlag );
 		offset = item.nextOffset;
+		if ( cameraCollision ) {
+			ensureAvailable( buffer, offset, 4, sourcePath );
+			cameraCollision.push( buffer.readUInt32LE( offset ) !== 0 );
+			offset += 4;
+		}
 	}
 
-	return { count, paths, entryFlags, consumedBytes: offset };
-}
-
-/*
-================
-readBsrMeshEntry
-================
-*/
-function readBsrMeshEntry( buffer, offset, sourcePath ) {
-	const direct = readCountedString( buffer, offset, sourcePath );
-	if ( isBmsPath( direct.value ) ) {
-		return { ...direct, entryFlag: null };
-	}
-
-	// Some China JMXVRES 0109 resources keep a small per-mesh flag/index before
-	// every render-mesh path after entry 0 (for example cj_pub01.bsr). The title
-	// subset did not exercise this, so fall back only when the direct counted
-	// string is not a mesh path.
-	ensureAvailable( buffer, offset, 8, sourcePath );
-	const entryFlag = buffer.readUInt32LE( offset );
-	const flagged = readCountedString( buffer, offset + 4, sourcePath );
-	if ( !isBmsPath( flagged.value ) ) {
-		throw new Error(
-			`${sourcePath}: BSR mesh entry at ${offset} is neither a direct nor flagged BMS path ` +
-				`(direct=${JSON.stringify( direct.value )}, flag=${entryFlag}, flagged=${
-					JSON.stringify( flagged.value )
-				})`
-		);
-	}
-
-	return { ...flagged, entryFlag };
+	return { count, paths, cameraCollision, consumedBytes: offset };
 }
 
 /*
@@ -400,6 +398,8 @@ function readBmsStaticVertices( buffer, vertexOffset, nextOffset, metadata, sour
 	const normals = [];
 	const uvs = [];
 	const unknowns = [];
+	const secondaryUv = layout.byteStride === BMS_STATIC_VERTEX_BYTES_WITH_SECONDARY_UV;
+	const lightmapUvs = [];
 
 	for ( let vertexIndex = 0; vertexIndex < vertexCount; vertexIndex += 1 ) {
 		const offset = verticesOffset + vertexIndex * layout.byteStride;
@@ -414,6 +414,12 @@ function readBmsStaticVertices( buffer, vertexOffset, nextOffset, metadata, sour
 			cleanFloat( buffer.readFloatLE( offset + 20 ) )
 		);
 		uvs.push( cleanFloat( buffer.readFloatLE( offset + 24 ) ), cleanFloat( buffer.readFloatLE( offset + 28 ) ) );
+		if ( secondaryUv ) {
+			lightmapUvs.push(
+				cleanFloat( buffer.readFloatLE( offset + 32 ) ),
+				cleanFloat( buffer.readFloatLE( offset + 36 ) )
+			);
+		}
 		const unknownOffset = offset + layout.unknownOffset;
 		unknowns.push(
 			buffer.readUInt32LE( unknownOffset ),
@@ -429,7 +435,8 @@ function readBmsStaticVertices( buffer, vertexOffset, nextOffset, metadata, sour
 		positions,
 		normals,
 		uvs,
-		unknowns
+		unknowns,
+		lightmap: secondaryUv ? readBmsLightmap( buffer, vertexEnd, nextOffset, lightmapUvs, sourcePath ) : null
 	};
 }
 
@@ -456,6 +463,28 @@ function selectBmsVertexLayout( metadata ) {
 		unknownOffset: 32,
 		attributes: [ "position:f32x3", "normal:f32x3", "uv:f32x2", "unknown:u32x3" ]
 	};
+}
+
+/*
+================
+readBmsLightmap
+
+A 0x400 mesh (52-byte vertex) follows its vertices with a counted lightmap
+path (CPrimMesh_ReadBmsBody A85F80 into body +0x13C). CPrimMesh_LoadLightmapTexture
+(A7DCC0) loads it as a type-4 texture, whose resource prefix is empty, so the
+stored path is used as-is. Retail draws such meshes with the NOLIGHT shader
+and the lightmap on stage 1 (RenderCompound_DrawMeshesA A5BF90): the second
+UV set (vss0.c VS_UV_*_LIGHTMAP, oT1 = v4.zw) addresses it. An empty path
+leaves no lightmap.
+================
+*/
+function readBmsLightmap( buffer, offset, nextOffset, uvs, sourcePath ) {
+	const item = readCountedString( buffer, offset, sourcePath );
+	if ( nextOffset && item.nextOffset > nextOffset ) {
+		throw new Error( `${sourcePath}: BMS lightmap path ends at ${item.nextOffset}, past ${nextOffset}` );
+	}
+	if ( !item.value ) return null;
+	return { sourcePath: normalizeAssetPath( item.value ), uvs };
 }
 
 /*

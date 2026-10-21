@@ -20,16 +20,22 @@ import "../helpers/native-source-loader.mjs";
 const { minimapPoseKey } = await import( "../../src/engine/foundation/gameplay/minimap-floor-key.ts" );
 const { minimapSameFloor } = await import( "../../src/engine/foundation/ui/minimap-floor.ts" );
 const {
+	displaceRegionXZ,
 	DUNGEON_REGION_BIT,
 	isDungeonRegion,
+	normalizeRegionXZ,
 	planarDistance,
 	planarDistanceSquared,
 	REGION_SIZE,
+	regionOffsetXZ,
+	regionRelativeXZ,
+	sameCoordinateSpace,
 	sameDungeonFloor,
 	samePlane,
 	samePlaneAdjacent,
 	sectorX,
 	sectorY,
+	worldAudioPosition,
 	worldDelta
 } = await import( "../../src/engine/foundation/world/world-space.ts" );
 
@@ -150,5 +156,50 @@ test("sameDungeonFloor implements native CObj_IsVisibleInSector (0x00863330)", (
 	assert.equal(
 		minimapSameFloor( localDungeon, otherFloorTarget, { navigationFloor: 2, minimapFloors: floors } ),
 		false
+	);
+});
+
+test("regionOffsetXZ, regionRelativeXZ, normalizeRegionXZ, and worldAudioPosition preserve outdoor and dungeon contracts", () => {
+	assert.deepEqual( regionOffsetXZ( 0x64a8, 0x65a9 ), [ 1920, 1920 ] );
+	assert.deepEqual( regionOffsetXZ( 0x8001, 0x8002 ), [ 0, 0 ] );
+	assert.deepEqual( regionOffsetXZ( 0x64a8, 0x8001 ), [ 0, 0 ] );
+
+	assert.deepEqual(
+		regionRelativeXZ( 0x64a8, { regionId: 0x65a9, x: 50, z: 75 } ),
+		[ 1970, 1995 ]
+	);
+	assert.deepEqual(
+		regionRelativeXZ( 0x8001, { regionId: 0x8001, x: -2400, z: 3100 } ),
+		[ -2400, 3100 ]
+	);
+
+	assert.deepEqual( normalizeRegionXZ( 0x64a8, 1950, -20 ), {
+		regionId: 0x63a9,
+		x: 30,
+		z: 1900
+	} );
+	assert.deepEqual( normalizeRegionXZ( 0x8001, 1950, -20 ), {
+		regionId: 0x8001,
+		x: 1950,
+		z: -20
+	} );
+
+	assert.deepEqual(
+		worldAudioPosition( { regionId: 0x64a8, x: 100, y: 25, z: 200 } ),
+		[ 0xa8 * 1920 + 100, 25, 0x64 * 1920 + 200 ]
+	);
+
+	assert.equal( sameCoordinateSpace( 0x64a8, 0x65a9 ), true );
+	assert.equal( sameCoordinateSpace( 0x8001, 0x8001 ), true );
+	assert.equal( sameCoordinateSpace( 0x8001, 0x8002 ), false );
+	assert.equal( sameCoordinateSpace( 0x64a8, 0x8001 ), false );
+
+	assert.deepEqual(
+		displaceRegionXZ( { regionId: 0x64a8, x: 1900, z: 10 }, 50, -30 ),
+		{ regionId: 0x63a9, x: 30, z: 1900 }
+	);
+	assert.deepEqual(
+		displaceRegionXZ( { regionId: 0x8001, x: 1900, z: 10 }, 50, -30 ),
+		{ regionId: 0x8001, x: 1950, z: -20 }
 	);
 });

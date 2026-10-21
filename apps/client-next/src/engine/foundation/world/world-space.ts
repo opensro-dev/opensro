@@ -112,6 +112,18 @@ export function samePlane( a: number, b: number ): boolean {
 
 /*
 ================
+sameCoordinateSpace
+
+Reports whether two regionIds share a world coordinate frame: any two outdoor
+regions, or the same dungeon region.
+================
+*/
+export function sameCoordinateSpace( a: number, b: number ): boolean {
+	return !(isDungeonRegion( a ) || isDungeonRegion( b )) || a === b;
+}
+
+/*
+================
 samePlaneAdjacent
 
 Mirrors SR_GameServer Pos_AreSamePlaneAndAdjacentSectors (0x00430CE0) and
@@ -133,6 +145,38 @@ export function samePlaneAdjacent( a: number, b: number ): boolean {
 
 /*
 ================
+regionOffsetXZ
+
+Returns the sector displacement [ox, oz] from fromRegion's origin to toRegion's
+origin in world units (SWorld_CalculateRegionOffsetVector, 0x00888140): zero
+when either region is a dungeon region, or 1920-unit sector steps outdoors.
+================
+*/
+export function regionOffsetXZ( fromRegion: number, toRegion: number ): [number, number] {
+	if ( isDungeonRegion( fromRegion ) || isDungeonRegion( toRegion ) ) {
+		return [ 0, 0 ];
+	}
+	return [
+		(sectorX( toRegion ) - sectorX( fromRegion )) * REGION_SIZE,
+		(sectorY( toRegion ) - sectorY( fromRegion )) * REGION_SIZE
+	];
+}
+
+/*
+================
+regionRelativeXZ
+
+Expresses point's XZ coordinates in originRegion's local coordinate frame
+(SWorld_CalculateRegionOffsetVector, 0x00888140).
+================
+*/
+export function regionRelativeXZ( originRegion: number, point: RegionXZ ): [number, number] {
+	const [ox, oz] = regionOffsetXZ( originRegion, point.regionId );
+	return [ point.x + ox, point.z + oz ];
+}
+
+/*
+================
 worldDelta
 
 Returns the planar displacement [dx, dz] from -> to in world units
@@ -148,12 +192,69 @@ samePlaneAdjacent is false).
 ================
 */
 export function worldDelta( from: RegionXZ, to: RegionXZ ): [number, number] {
-	if ( isDungeonRegion( from.regionId ) || isDungeonRegion( to.regionId ) ) {
-		return [ to.x - from.x, to.z - from.z ];
+	const [ox, oz] = regionOffsetXZ( from.regionId, to.regionId );
+	return [ to.x - from.x + ox, to.z - from.z + oz ];
+}
+
+/*
+================
+normalizeRegionXZ
+
+Normalizes local (x, z) coordinates in regionId's frame into their canonical
+outdoor sector [0, 1920), or preserves unbounded local coordinates in a dungeon.
+================
+*/
+export function normalizeRegionXZ( regionId: number, x: number, z: number ): RegionXZ {
+	if ( isDungeonRegion( regionId ) ) {
+		return { regionId, x, z };
 	}
+	const rx = Math.floor( x / REGION_SIZE );
+	const rz = Math.floor( z / REGION_SIZE );
+	return {
+		regionId: (sectorX( regionId ) + rx) | ((sectorY( regionId ) + rz) << 8),
+		x: x - rx * REGION_SIZE,
+		z: z - rz * REGION_SIZE
+	};
+}
+
+/*
+================
+displaceRegionXZ
+
+Displaces point by (dx, dz) in world units and returns the resulting regionId
+and local (x, z) coordinates: unbounded in a dungeon region, or re-anchored to
+the outdoor sector containing the displaced world point.
+================
+*/
+export function displaceRegionXZ( point: RegionXZ, dx: number, dz: number ): RegionXZ {
+	if ( isDungeonRegion( point.regionId ) ) {
+		return { regionId: point.regionId, x: point.x + dx, z: point.z + dz };
+	}
+	const wx = point.x + dx + sectorX( point.regionId ) * REGION_SIZE;
+	const wz = point.z + dz + sectorY( point.regionId ) * REGION_SIZE;
+	const rx = Math.floor( wx / REGION_SIZE );
+	const rz = Math.floor( wz / REGION_SIZE );
+	return {
+		regionId: rx | (rz << 8),
+		x: wx - rx * REGION_SIZE,
+		z: wz - rz * REGION_SIZE
+	};
+}
+
+/*
+================
+worldAudioPosition
+
+Projects a regional pose into the shared 3D audio listener coordinate frame.
+================
+*/
+export function worldAudioPosition(
+	pose: RegionXZ & { readonly y: number; }
+): [number, number, number] {
 	return [
-		(sectorX( to.regionId ) - sectorX( from.regionId )) * REGION_SIZE + to.x - from.x,
-		(sectorY( to.regionId ) - sectorY( from.regionId )) * REGION_SIZE + to.z - from.z
+		sectorX( pose.regionId ) * REGION_SIZE + pose.x,
+		pose.y,
+		(pose.regionId >>> 8) * REGION_SIZE + pose.z
 	];
 }
 

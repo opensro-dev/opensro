@@ -21,6 +21,9 @@ shared published resources stay immutable across neighboring region loads.
 */
 export function admitMesh( mesh: Mesh ) {
 	const uvs = Float32Array.from( mesh.uvs, textureCoordinate );
+	// The lightmap UVs come from the same vertices, so a count mismatch is a
+	// broken resource, not an optional channel.
+	const lightmapUvs = mesh.lightmap ? Float32Array.from( mesh.lightmap.uvs ) : null;
 	let extent = 0;
 	for ( const value of mesh.bounds.min ) extent = Math.max( extent, Math.abs( value ) );
 	for ( const value of mesh.bounds.max ) extent = Math.max( extent, Math.abs( value ) );
@@ -28,9 +31,12 @@ export function admitMesh( mesh: Mesh ) {
 		valid: !(!mesh.positions.length || mesh.positions.length % 3 || mesh.normals.length !== mesh.positions.length ||
 			mesh.uvs.length !== mesh.positions.length / 3 * 2 || !finiteNumbers( mesh.positions ) ||
 			!finiteNumbers( mesh.normals ) || !finiteNumbers( uvs ) || mesh.indices.length % 3 ||
-			!integerIndicesInRange( mesh.indices, mesh.positions.length / 3 )),
+			!integerIndicesInRange( mesh.indices, mesh.positions.length / 3 ) ||
+			lightmapUvs !== null && (lightmapUvs.length !== uvs.length || !finiteNumbers( lightmapUvs ) ||
+					!mesh.lightmap!.texturePublicPath)),
 		radius: extent * Math.sqrt( 3 ),
 		material: mesh.metadata.materialName.toLowerCase(),
-		uvs
+		uvs,
+		lightmapUvs
 	};
 }

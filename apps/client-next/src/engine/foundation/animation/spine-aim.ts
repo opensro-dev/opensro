@@ -17,6 +17,8 @@ feeds it, and the pose applies its rotation.
 ===========================================================================
 */
 
+import { sameCoordinateSpace, worldDelta } from "@/engine/foundation/world/world-space";
+
 export const SPINE_AIM_BONE = "Spine_Base";
 // 8DC440 pushes 1.74532914 rad/s for every aim.
 const SPINE_AIM_RADIANS_PER_SECOND = 1.74532914;
@@ -26,9 +28,6 @@ const SPINE_AIM_MIN_DISTANCE = 15;
 const SPINE_AIM_LIMIT = 0.52359879;
 // A9ADD0's step uses the frame's milliseconds: speed * dt * 0.001.
 const MILLISECONDS = 0.001;
-// World regions are 1920 units; the sector bit marks a dungeon frame.
-const REGION_SIZE = 1920;
-const DUNGEON_REGION_BIT = 0x8000;
 
 /*
 ================
@@ -74,12 +73,8 @@ export function spineAimBearing(
 	target: { readonly regionId: number; readonly x: number; readonly y: number; readonly z: number; },
 	height: number
 ): number {
-	const dungeon = !!((caster.regionId | target.regionId) & DUNGEON_REGION_BIT);
-	if ( dungeon && caster.regionId !== target.regionId ) return 0;
-	const dx = target.x - caster.x +
-		(dungeon ? 0 : ((target.regionId & 255) - (caster.regionId & 255)) * REGION_SIZE);
-	const dz = target.z - caster.z +
-		(dungeon ? 0 : ((target.regionId >>> 8) - (caster.regionId >>> 8)) * REGION_SIZE);
+	if ( !sameCoordinateSpace( caster.regionId, target.regionId ) ) return 0;
+	const [dx, dz] = worldDelta( caster, target );
 	return spineAimAngle( dx, target.y - caster.y, dz, height );
 }
 

@@ -10,6 +10,7 @@ mover is created; the regional 3D distance sets the travel fraction.
 ===========================================================================
 */
 import type { CharacterActor } from "@/engine/contracts/character";
+import { isDungeonRegion, normalizeRegionXZ, worldDelta } from "@/engine/foundation/world/world-space";
 
 type Position = CharacterActor["pose"];
 
@@ -44,7 +45,7 @@ Two regions share one coordinate projection unless a dungeon is involved.
 ================
 */
 export function projectileSpace( start: number, end: number ): boolean {
-	return !(start & 0x8000) && !(end & 0x8000) || start === end;
+	return !isDungeonRegion( start ) && !isDungeonRegion( end ) || start === end;
 }
 
 /*
@@ -74,14 +75,12 @@ export function sampleProjectile(
 	if ( !projectileSpace( start.regionId, end.regionId ) ) {
 		throw new Error( "Projectile requires linked dungeon coordinate projection" );
 	}
-	const dungeon = !!(start.regionId & 0x8000);
 	if ( arc && (!Number.isFinite( arc.amplitudePermille ) || !Number.isFinite( arc.rotationRadians )) ) {
 		throw new Error( "Invalid projectile arc" );
 	}
 	if ( elapsed < delay ) return { phase: "delay" };
 	// SWorld vtable +0x1c -> 888140 returns zero sector displacement in dungeons.
-	const dx = end.x + (dungeon ? 0 : ((end.regionId & 255) - (start.regionId & 255)) * 1920) - start.x;
-	const dz = end.z + (dungeon ? 0 : ((end.regionId >>> 8) - (start.regionId >>> 8)) * 1920) - start.z;
+	const [dx, dz] = worldDelta( start, end );
 	const distance = Math.hypot( dx, end.y - start.y, dz );
 	if ( !distance ) return { phase: "arrived", at: delay, pose: { ...end } };
 	if ( !speed ) return { phase: "travel", pose: start };
@@ -97,19 +96,19 @@ export function sampleProjectile(
 		) :
 		0;
 	const sideways = arc ? Math.fround( -Math.fround( Math.sin( arc.rotationRadians ) ) * height ) : 0;
-	const x = (dungeon ? 0 : (start.regionId & 255) * 1920) + start.x + dx * fraction +
-		Math.fround( Math.cos( start.yaw ) ) * sideways;
-	const z = (dungeon ? 0 : (start.regionId >>> 8) * 1920) + start.z + dz * fraction +
-		Math.fround( Math.sin( start.yaw ) ) * sideways;
-	const rx = dungeon ? 0 : Math.floor( x / 1920 ), rz = dungeon ? 0 : Math.floor( z / 1920 );
+	const next = normalizeRegionXZ(
+		start.regionId,
+		start.x + dx * fraction + Math.fround( Math.cos( start.yaw ) ) * sideways,
+		start.z + dz * fraction + Math.fround( Math.sin( start.yaw ) ) * sideways
+	);
 	const lift = arc ? Math.fround( Math.fround( Math.cos( arc.rotationRadians ) ) * height ) : 0;
 	return {
 		phase: "travel",
 		pose: {
-			regionId: dungeon ? start.regionId : rx | (rz << 8),
-			x: x - rx * 1920,
+			regionId: next.regionId,
+			x: next.x,
 			y: start.y + (end.y - start.y) * fraction + lift,
-			z: z - rz * 1920,
+			z: next.z,
 			yaw: start.yaw
 		}
 	};
@@ -154,11 +153,9 @@ export function stepHomingProjectile(
 	if ( !projectileSpace( start.regionId, end.regionId ) ) {
 		throw new Error( "Projectile requires linked dungeon coordinate projection" );
 	}
-	const dungeon = !!(start.regionId & 0x8000);
 	const dt = Math.max( 0, now - state.previous );
 	state.previous = now;
-	const dx = end.x + (dungeon ? 0 : ((end.regionId & 255) - (start.regionId & 255)) * 1920) - start.x;
-	const dz = end.z + (dungeon ? 0 : ((end.regionId >>> 8) - (start.regionId >>> 8)) * 1920) - start.z;
+	const [dx, dz] = worldDelta( start, end );
 	const dy = end.y - start.y;
 	const distance = Math.hypot( dx, dy, dz ), step = speed * dt;
 	// A step that ends exactly on the target arrives despite float rounding.
@@ -167,14 +164,12 @@ export function stepHomingProjectile(
 		return { phase: "arrived", at: speed ? now - (step - distance) / speed : now, pose: { ...end } };
 	}
 	const k = step / distance;
-	const x = (dungeon ? 0 : (start.regionId & 255) * 1920) + start.x + dx * k;
-	const z = (dungeon ? 0 : (start.regionId >>> 8) * 1920) + start.z + dz * k;
-	const rx = dungeon ? 0 : Math.floor( x / 1920 ), rz = dungeon ? 0 : Math.floor( z / 1920 );
+	const next = normalizeRegionXZ( start.regionId, start.x + dx * k, start.z + dz * k );
 	state.position = {
-		regionId: dungeon ? start.regionId : rx | (rz << 8),
-		x: x - rx * 1920,
+		regionId: next.regionId,
+		x: next.x,
 		y: start.y + dy * k,
-		z: z - rz * 1920,
+		z: next.z,
 		yaw: start.yaw
 	};
 	return { phase: "travel", pose: state.position };

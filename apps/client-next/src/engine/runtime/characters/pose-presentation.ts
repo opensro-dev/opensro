@@ -30,8 +30,9 @@ import type { Pose, MovementTransition } from "@/engine/contracts/gameplay";
 import type { SampleInput } from "@/engine/contracts/pose-presentation";
 export type { SampleInput } from "@/engine/contracts/pose-presentation";
 import { SIMULATION_STEP_MS } from "@/engine/contracts/simulation";
-import { REGION_SIZE, interpolateMovement, poseDistance } from "@/engine/foundation/gameplay/native-movement";
+import { interpolateMovement, poseDistance } from "@/engine/foundation/gameplay/native-movement";
 import { hypot2, hypot3 } from "@/engine/foundation/math/hypot";
+import { displaceRegionXZ, sameCoordinateSpace, worldDelta } from "@/engine/foundation/world/world-space";
 
 const TICK_SECONDS = SIMULATION_STEP_MS / 1000;
 const DISCONTINUITY_DISTANCE = 192;
@@ -330,7 +331,7 @@ discontinuity
 ================
 */
 function discontinuity( a: Pose, b: Pose ) {
-	return !!((a.regionId | b.regionId) & 0x8000) && a.regionId !== b.regionId ||
+	return !sameCoordinateSpace( a.regionId, b.regionId ) ||
 		poseDistance( a, b ) > DISCONTINUITY_DISTANCE;
 }
 
@@ -340,14 +341,11 @@ worldVector
 ================
 */
 function worldVector( a: Pose, b: Pose ): [number, number, number] | null {
-	if ( (a.regionId | b.regionId) & 0x8000 ) {
-		return a.regionId === b.regionId ? [ a.x - b.x, a.y - b.y, a.z - b.z ] : null;
+	if ( !sameCoordinateSpace( a.regionId, b.regionId ) ) {
+		return null;
 	}
-	return [
-		a.x - b.x + ((a.regionId & 255) - (b.regionId & 255)) * REGION_SIZE,
-		a.y - b.y,
-		a.z - b.z + ((a.regionId >>> 8) - (b.regionId >>> 8)) * REGION_SIZE
-	];
+	const [dx, dz] = worldDelta( b, a );
+	return [ dx, a.y - b.y, dz ];
 }
 
 /*
@@ -357,12 +355,8 @@ displace
 */
 function displace( pose: Pose, v: readonly [number, number, number] ): Pose {
 	if ( v[0] === 0 && v[1] === 0 && v[2] === 0 ) return pose;
-	if ( pose.regionId & 0x8000 ) return { ...pose, x: pose.x + v[0], y: pose.y + v[1], z: pose.z + v[2] };
-	const wx = pose.x + v[0] + (pose.regionId & 255) * REGION_SIZE,
-		wz = pose.z + v[2] + (pose.regionId >>> 8) * REGION_SIZE,
-		rx = Math.floor( wx / REGION_SIZE ),
-		rz = Math.floor( wz / REGION_SIZE );
-	return { ...pose, regionId: rx | (rz << 8), x: wx - rx * REGION_SIZE, y: pose.y + v[1], z: wz - rz * REGION_SIZE };
+	const next = displaceRegionXZ( pose, v[0], v[2] );
+	return { ...pose, regionId: next.regionId, x: next.x, y: pose.y + v[1], z: next.z };
 }
 
 /*

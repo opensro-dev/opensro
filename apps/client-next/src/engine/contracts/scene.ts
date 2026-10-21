@@ -58,6 +58,13 @@ export interface WorldMaterial {
 	readonly sharedPose?: boolean;
 	readonly sky?: 1 | 2 | 3 | 4 | 5 | 6;
 	readonly lightmap?: boolean;
+	/**
+	 * A BMS 0x400 mesh's lightmap texture. Retail draws it with the NOLIGHT
+	 * shader (oD0 = 1) and the lightmap on stage 1 at MODULATE2X
+	 * (RenderCompound_DrawMeshesA A5BF90, CCompoundObj_Constructor A9EC10
+	 * +0x260 = 5), addressed by the geometry's second UV set (maskUVs).
+	 */
+	readonly objectLightmap?: string;
 	readonly water?: boolean;
 	readonly blend: boolean;
 	readonly doubleSided: boolean;

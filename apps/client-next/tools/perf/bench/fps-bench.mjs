@@ -104,6 +104,17 @@ const LOCATIONS = [ {
 		startYawRadians: 0
 	},
 	scenarios: [ "combat" ]
+}, {
+	// Donwhang Stone Cave 4F (0x8001, floor y 420): a room block over three
+	// lower floors, where the dungeon room and floor culling decide the frame.
+	name: "cave",
+	fixture: {
+		id: "fps-bench-donwhang-cave-4f",
+		movementMode: 3,
+		start: { regionId: 0x8001, x: 1299.7, y: 420, z: 202.4 },
+		startYawRadians: 0
+	},
+	scenarios: [ "still", "drag", "move" ]
 } ];
 const USAGE = "fps-bench.mjs [--seconds N] [--at a,b] [--only a,b] [--counts] [--spans] [--cpu] [--heap] [--out DIR] " +
 	"[--trace] [--json FILE] [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2] " +

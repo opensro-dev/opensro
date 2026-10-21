@@ -156,6 +156,30 @@ export async function buildTitleSectorObjectResources( options ) {
 		} );
 	}
 
+	/*
+	================
+	meshLightmap
+
+	A 0x400 mesh's stage-1 lightmap (formats.mjs readBmsLightmap) publishes
+	beside the material textures. Retail draws a mesh whose lightmap fails to
+	load without one, so a missing file only drops the lightmap.
+	================
+	*/
+	async function meshLightmap( source ) {
+		if ( !source ) return null;
+		if ( !(await exists( dataAssetPath( sourceExtractedRoot, source.sourcePath ) )) ) {
+			missing.push( { type: "lightmap", sourcePath: source.sourcePath } );
+			return null;
+		}
+		const blockFormat = await blockFormatFor( source.sourcePath );
+		texturePathSet.add( source.sourcePath );
+		return {
+			sourcePath: source.sourcePath,
+			texturePublicPath: objectTexturePublicPath( area, source.sourcePath, blockFormat ? ".texture" : ".png" ),
+			uvs: source.uvs
+		};
+	}
+
 	const meshes = [];
 	for ( const meshPath of [ ...meshPathSet ].sort() ) {
 		const absolutePath = dataAssetPath( sourceExtractedRoot, meshPath );
@@ -165,6 +189,7 @@ export async function buildTitleSectorObjectResources( options ) {
 		}
 
 		const mesh = parseJmxBmsStaticMesh( await readFile( absolutePath ), meshPath );
+		const lightmap = await meshLightmap( mesh.lightmap );
 		meshes.push( {
 			sourcePath: meshPath,
 			sourceGamePath: toGameRelative( absolutePath, sourceGameRoot ),
@@ -181,7 +206,8 @@ export async function buildTitleSectorObjectResources( options ) {
 			uvs: mesh.uvs,
 			indices: mesh.indices,
 			bounds: mesh.bounds,
-			...(mesh.nativePayloads?.length ? { nativePayloads: mesh.nativePayloads } : {})
+			...(mesh.nativePayloads?.length ? { nativePayloads: mesh.nativePayloads } : {}),
+			...(lightmap ? { lightmap } : {})
 		} );
 	}
 

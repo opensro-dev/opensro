@@ -375,27 +375,41 @@ export function collectSceneryParticleReferences(
 ================
 collectDungeonParticleReferences
 
-Particle references of dungeon room BSRs listed in dungeon-resources.json.
+Particle references of the dungeon BSRs listed in dungeon-resources.json:
+each room block's own BSR and the objects placed in it (blockObjects:
+torches, lamps, sunbeams). Retail plays a placed object's ModDataParticle
+like any other scenery (CRTDunBlock_LoadResObject); its programs belong in
+the catalog as much as the room's.
 ================
 */
 export function collectDungeonParticleReferences(
 	index = JSON.parse( readPublishedAssetBytesSync( "/assets/world/dungeon/dungeon-resources.json", publicRoot ) )
 ) {
 	const references = new Map();
-	for ( const root of index.navResources?.bsr ?? index.bsr ?? [] ) {
-		for ( const branch of root.branches ?? [ root ] ) {
-			const modifiers = branch.modifiers ??
-				parseJmxResourceBsr( fs.readFileSync( dataAssetPath( branch.sourcePath ) ), branch.sourcePath )
-					.modifiers;
-			for ( const modifier of modifiers?.particleModifiers ?? [] ) {
-				for ( const entry of modifier.entries ?? [] ) {
-					const effectPath = normalizeAssetPath( entry.effectPath );
-					if ( !effectPath.endsWith( ".efp" ) ) throw Error( "Invalid dungeon effect reference" );
-					references.set( branch.sourcePath + "\0" + effectPath, {
-						modelPath: branch.sourcePath,
-						effectPath
-					} );
-				}
+	const branches = [];
+	for ( const root of index.navResources?.bsr ?? index.bsr ?? [] ) branches.push( ...(root.branches ?? [ root ]) );
+	const placed = new Set();
+	for ( const resource of index.resources ?? [] ) {
+		for ( const block of resource.presentation?.blocks ?? [] ) {
+			for ( const object of block.blockObjects ?? [] ) placed.add( normalizeAssetPath( object.path ) );
+		}
+	}
+	for ( const sourcePath of [ ...placed ].sort() ) {
+		if ( !sourcePath.endsWith( ".bsr" ) ) throw Error( "Invalid dungeon object resource: " + sourcePath );
+		branches.push( { sourcePath } );
+	}
+	for ( const branch of branches ) {
+		const modifiers = branch.modifiers ??
+			parseJmxResourceBsr( fs.readFileSync( dataAssetPath( branch.sourcePath ) ), branch.sourcePath )
+				.modifiers;
+		for ( const modifier of modifiers?.particleModifiers ?? [] ) {
+			for ( const entry of modifier.entries ?? [] ) {
+				const effectPath = normalizeAssetPath( entry.effectPath );
+				if ( !effectPath.endsWith( ".efp" ) ) throw Error( "Invalid dungeon effect reference" );
+				references.set( branch.sourcePath + "\0" + effectPath, {
+					modelPath: branch.sourcePath,
+					effectPath
+				} );
 			}
 		}
 	}

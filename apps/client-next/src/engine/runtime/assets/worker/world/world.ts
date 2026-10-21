@@ -163,7 +163,7 @@ reserve
 				animatedPlacements = new Map<
 					string,
 					{
-						orders: { object: string; branch: number; paths: string[]; }[];
+						orders: { object: string; branch: number; paths: string[]; cameraCollision?: boolean[]; }[];
 						matrices: number[];
 						visibility: NonNullable<WorldGroup["visibility"]>[number][];
 					}
@@ -187,7 +187,13 @@ lower
 			};
 			const meshChecks = new Map<
 				Mesh,
-				{ valid: boolean; radius: number; material: string; uvs: Float32Array; }
+				{
+					valid: boolean;
+					radius: number;
+					material: string;
+					uvs: Float32Array;
+					lightmapUvs: Float32Array | null;
+				}
 			>();
 			/*
 ================
@@ -365,7 +371,11 @@ noteMaterial
 						message => warnings.push( `${ref.sourcePath}: ${message}` )
 					);
 					reserve( emitters.length * 512 );
-					for ( const emitter of emitters ) scenery.push( emitter );
+					for ( const emitter of emitters ) {
+						scenery.push(
+							p.dungeonBlock === undefined ? emitter : { ...emitter, dungeonBlock: p.dungeonBlock }
+						);
+					}
 					if ( animation?.model ) {
 						reserve( 256 );
 						let placements = animatedPlacements.get( animation.glbPublicPath );
@@ -381,7 +391,8 @@ noteMaterial
 						placements.orders.push( {
 							object: key,
 							branch: branchIndex,
-							paths: ref.renderMeshSection?.paths ?? ref.meshPaths
+							paths: ref.renderMeshSection?.paths ?? ref.meshPaths,
+							cameraCollision: ref.renderMeshSection?.cameraCollision
 						} );
 					}
 					for ( const [meshIndex, path] of (ref.renderMeshSection?.paths ?? ref.meshPaths).entries() ) {
@@ -418,6 +429,7 @@ noteMaterial
 								collision: [],
 								material: {
 									...materialFor( ref, found.material, found.index ),
+									...(mesh.lightmap ? { objectLightmap: mesh.lightmap.texturePublicPath } : {}),
 									fog: p.dungeonBlock === undefined ?
 										undefined :
 										b.dungeonBlocks?.[p.dungeonBlock]?.fog,
@@ -441,10 +453,12 @@ noteMaterial
 								) + radius
 							);
 						}
-						// Native A40044 skips parts without the loaded BMS object-nav payload.
-						// Keep their draw instances, but never admit them as camera obstacles.
+						// Native A40044 skips a part whose CPrimMesh +0x1E8 is 0. The
+						// constructor (A859B0) sets it to 1; A4FF00 overwrites it from the
+						// BSR's per-mesh dword (A7CAB0) only when the BSR carries one. Keep
+						// opted-out parts drawn, but never admit them as camera obstacles.
 						reserve( 256 );
-						if ( (mesh.headerOffsets?.[7] ?? 0) !== 0 ) {
+						if ( ref.renderMeshSection?.cameraCollision?.[meshIndex] !== false ) {
 							group.collision.push( {
 								instance: group.matrices.length / 16,
 								object: key,
@@ -472,6 +486,8 @@ noteMaterial
 						cloth: clothData( g.mesh.cloth, g.mesh.positions.length / 3 ),
 						normals: new Float32Array( g.mesh.normals ),
 						uvs: meshCheck( g.mesh ).uvs.slice(),
+						// The object lightmap's UVs ride the terrain mask slot (location 4).
+						maskUVs: meshCheck( g.mesh ).lightmapUvs?.slice(),
 						indices: new Uint32Array( g.mesh.indices ),
 						instances: new Float32Array( g.matrices ),
 						transform: identity()
@@ -527,7 +543,8 @@ noteMaterial
 								path.toLowerCase() === row.path.toLowerCase()
 							);
 							if ( part < 0 ) throw new Error( "Animated collision part is outside its BSR" );
-							if ( (row.mesh!.headerOffsets?.[7] ?? 0) !== 0 ) {
+							// Same per-mesh +0x1E8 gate as static parts (A40044).
+							if ( placement.cameraCollision?.[part] !== false ) {
 								collision.push( {
 									instance,
 									object: placement.object,

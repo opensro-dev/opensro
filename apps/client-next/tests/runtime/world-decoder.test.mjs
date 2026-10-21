@@ -23,11 +23,13 @@ const { createWorldDecoder } = await import(
 	sourceFileUrl( path.join( root, "src/engine/runtime/assets/worker/world/world.ts" ) ).href
 );
 
-test("camera eligibility follows native BMS nav payloads without removing decorative draws", async () => {
+test("camera eligibility follows the BSR per-mesh collision flag without removing decorative draws", async () => {
 	const { cameraCollisionParts, cameraSegmentHit } = await import(
 		sourceFileUrl( path.join( root, "src/engine/foundation/rendering/follow-camera.ts" ) ).href
 	);
-	const meshes = [ 0, 100, 0 ].map( ( nav, i ) => ({
+	// Only the middle part carries an object-nav payload, on the decorative
+	// first part: native A40044 reads CPrimMesh +0x1E8, never the nav offset.
+	const meshes = [ 100, 0, 0 ].map( ( nav, i ) => ({
 		sourcePath: `part${i}.bms`,
 		headerOffsets: [ 0, 0, 0, 0, 0, 0, 0, nav ],
 		metadata: { materialName: "shared" },
@@ -37,10 +39,13 @@ test("camera eligibility follows native BMS nav payloads without removing decora
 		indices: [ 0, 1, 2 ],
 		bounds: { min: [ -10, -10, 30 + i * 30 ], max: [ 10, 10, 30 + i * 30 ] }
 	}) );
+	/** @type {{ paths: string[]; cameraCollision?: boolean[]; }} */
+	const renderMeshSection = { paths: meshes.map( m => m.sourcePath ), cameraCollision: [ false, true, false ] };
 	const branch = {
 		objectId: 1,
 		sourcePath: "tree.bsr",
 		meshPaths: meshes.map( m => m.sourcePath ),
+		renderMeshSection,
 		materialPaths: [ "shared.bmt" ]
 	};
 	const bundle = {
@@ -110,10 +115,55 @@ test("camera eligibility follows native BMS nav payloads without removing decora
 		cameraSegmentHit( cameraCollisionParts( animated ), { start: [ 0, 0, 0 ], delta: [ 0, 0, -100 ] } ),
 		.6
 	);
-	meshes[1].headerOffsets[7] = 0;
+	branch.renderMeshSection.cameraCollision = [ false, false, false ];
 	const foliageOnly = createWorldDecoder().decode( bundle );
 	assert.equal( foliageOnly.groups.length, 1 );
 	assert.equal( cameraCollisionParts( foliageOnly ).length, 0 );
+	// A BSR without per-mesh flags keeps the constructor default (A859B0): every part collides.
+	delete renderMeshSection.cameraCollision;
+	assert.equal( cameraCollisionParts( createWorldDecoder().decode( bundle ) ).length, 6 );
+});
+
+test("a lightmapped mesh carries its lightmap texture and second UV set; a broken UV set drops the mesh", () => {
+	const mesh = ( lightmapUvs ) => ({
+		sourcePath: "room.bms",
+		metadata: { materialName: "shared" },
+		positions: [ -10, 0, 0, 10, 0, 0, 0, 10, 0 ],
+		normals: [ 0, 0, 1, 0, 0, 1, 0, 0, 1 ],
+		uvs: [ 0, 0, 1, 0, 0, 1 ],
+		indices: [ 0, 1, 2 ],
+		bounds: { min: [ -10, 0, 0 ], max: [ 10, 10, 0 ] },
+		lightmap: { texturePublicPath: "/assets/world/dungeon/object-textures/room-lightmap.png", uvs: lightmapUvs }
+	});
+	const decode = ( lightmapUvs ) =>
+		createWorldDecoder().decode( {
+			source: { sectorX: 1, sectorY: 1 },
+			terrain: { blocks: [] },
+			terrainTextures: { tileCatalog: { referencedTiles: [] } },
+			objects: {
+				placements: [ { objectId: 1, uid: 0, regionId: "257", position: { x: 0, y: 0, z: 0 }, yaw: 0 } ],
+				resources: {
+					meshes: [ mesh( lightmapUvs ) ],
+					bsr: [ {
+						objectId: 1,
+						sourcePath: "room.bsr",
+						meshPaths: [ "room.bms" ],
+						materialPaths: [ "shared.bmt" ]
+					} ],
+					materialSets: [ {
+						sourcePath: "shared.bmt",
+						materials: [ { name: "shared", flags: 0, colors: { diffuse: [ 1, 1, 1, 1 ] } } ]
+					} ]
+				}
+			}
+		} );
+	const scene = decode( [ .25, .25, .75, .25, .25, .75 ] );
+	assert.equal( scene.groups.length, 1 );
+	const [group] = scene.groups;
+	assert.equal( group.material.objectLightmap, "/assets/world/dungeon/object-textures/room-lightmap.png" );
+	assert.deepEqual( [ ...group.geometry.maskUVs ], [ .25, .25, .75, .25, .25, .75 ] );
+	assert.deepEqual( [ ...group.geometry.uvs ], [ 0, 0, 1, 0, 0, 1 ] );
+	assert.equal( decode( [ .25, .25 ] ).groups.length, 0 );
 });
 
 test("terrain association masks match the reference at each sampled grid resolution", async () => {

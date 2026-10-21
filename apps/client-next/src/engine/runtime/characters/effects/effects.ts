@@ -75,7 +75,30 @@ import type { EntityState } from "@/engine/contracts/world";
 import { characterHeadingYaw, nativeHeadingYaw, radians, type Radians } from "@/engine/foundation/math/angles";
 import { hawkInitial, hawkEvent, hawkAnimation, stepHawk, type HawkState } from "@/engine/foundation/animation/hawk";
 import { hypot3 } from "@/engine/foundation/math/hypot";
+import {
+	normalizeRegionXZ,
+	regionRelativeXZ,
+	worldAudioPosition,
+	worldDelta
+} from "@/engine/foundation/world/world-space";
 import { SYSTEM_CAPTURE_MARK } from "@/engine/contracts/orb";
+
+/*
+================
+audioPosition
+
+Projects a regional pose into the shared 3D audio listener coordinate frame.
+================
+*/
+function audioPosition( pose: {
+	readonly regionId: number;
+	readonly x: number;
+	readonly y: number;
+	readonly z: number;
+} ): { readonly x: number; readonly y: number; readonly z: number; } {
+	const [x, y, z] = worldAudioPosition( pose );
+	return { x, y, z };
+}
 /*
 ================
 EffectGameplay
@@ -817,9 +840,7 @@ export function createCharacterEffects(
 					id: `attached:${effect.gid}:${effect.token}:${effect.receivedAtMs ?? 0}:${stop}:${result.length}`,
 					path: stage.sound,
 					gain: 1,
-					x: (owner.pose.regionId & 255) * 1920 + owner.pose.x,
-					y: owner.pose.y,
-					z: (owner.pose.regionId >>> 8) * 1920 + owner.pose.z,
+					...audioPosition( owner.pose ),
 					expires: now + .25
 				} );
 			}
@@ -1464,9 +1485,7 @@ export function createCharacterEffects(
 										id: `effect:${key}:${index}:${targetGid}`,
 										path: stage.sound,
 										gain: 1,
-										x: (pose.regionId & 255) * 1920 + pose.x,
-										y: pose.y,
-										z: (pose.regionId >>> 8) * 1920 + pose.z,
+										...audioPosition( pose ),
 										expires: (trigger.adopted ? now : trigger.at) + 0.25
 									} );
 								}
@@ -1678,15 +1697,8 @@ export function createCharacterEffects(
 											unsupported.add( "hit-anchor:region-space" );
 											continue;
 										}
-										const dungeon = !!(entity.regionId & 0x8000),
-											dx = caster.x - entity.x + (dungeon ?
-												0 :
-												((caster.regionId & 255) - (entity.regionId & 255)) * 1920),
+										const [dx, dz] = worldDelta( entity, caster ),
 											dy = caster.y - entity.y,
-											dz = caster.z - entity.z +
-												(dungeon ?
-													0 :
-													((caster.regionId >>> 8) - (entity.regionId >>> 8)) * 1920),
 											length = hypot3( dx, dy, dz ),
 											k = length ? -az / length : 0;
 										source = {
@@ -1721,17 +1733,12 @@ export function createCharacterEffects(
 												) ?? source :
 												source);
 									if ( radial ) source = { ...source, yaw: destination.yaw };
-									const dungeon = !!(source.regionId & 0x8000);
+									const [destX, destZ] = regionRelativeXZ( source.regionId, destination );
 									const curveResult = supportedFlight && curved ?
-										random.curve( [ source.x, source.y, source.z ], [
-											destination.x + (dungeon ?
-												0 :
-												((destination.regionId & 255) - (source.regionId & 255)) * 1920),
-											destination.y,
-											destination.z + (dungeon ?
-												0 :
-												((destination.regionId >>> 8) - (source.regionId >>> 8)) * 1920)
-										] ) :
+										random.curve(
+											[ source.x, source.y, source.z ],
+											[ destX, destination.y, destZ ]
+										) :
 										null;
 									const launch = supportedFlight ?
 										random.range( motion.startSpeed, motion.endSpeed ) :
@@ -2048,9 +2055,7 @@ export function createCharacterEffects(
 								id: `pet-bond:${entity.gid}:${cue.revision}:${cue.atMs}`,
 								path: cue.kind === 2 ? PET_BOND_REVIVE_SOUND : PET_BOND_TRANSFER_SOUND,
 								gain: cue.kind === 2 ? .65 : .2,
-								x: (entity.regionId & 255) * 1920 + entity.x,
-								y: entity.y,
-								z: (entity.regionId >>> 8) * 1920 + entity.z,
+								...audioPosition( entity ),
 								expires: now + .25
 							} );
 						}
@@ -2139,9 +2144,7 @@ export function createCharacterEffects(
 							id: `pet-shield:${entity.gid}:${shield.revision}:${shield.atMs}`,
 							path: PET_SHIELD_SOUND,
 							gain: .65,
-							x: (entity.regionId & 255) * 1920 + entity.x,
-							y: entity.y,
-							z: (entity.regionId >>> 8) * 1920 + entity.z,
+							...audioPosition( entity ),
 							expires: now + .25
 						} );
 					}
@@ -2197,9 +2200,7 @@ export function createCharacterEffects(
 								id: `pet-shield-burst:${entity.gid}:${shield.revision}:${shield.atMs}`,
 								path: PET_SHIELD_BURST_SOUND,
 								gain: .35,
-								x: (pose.regionId & 255) * 1920 + pose.x,
-								y: pose.y,
-								z: (pose.regionId >>> 8) * 1920 + pose.z,
+								...audioPosition( pose ),
 								expires: now + .25
 							} );
 							cameraEvents.push( {
@@ -2401,9 +2402,7 @@ export function createCharacterEffects(
 									id: `item:${id}:${child.serial}:${index}`,
 									path: stage.sound,
 									gain: 1,
-									x: (pose.regionId & 255) * 1920 + pose.x,
-									y: pose.y,
-									z: (pose.regionId >>> 8) * 1920 + pose.z,
+									...audioPosition( pose ),
 									expires: now + .25
 								} );
 							}
@@ -2689,15 +2688,12 @@ export function createCharacterEffects(
 														ay += joint.y - target.y;
 														az += joint.z - target.z;
 													}
-													const dungeon = !!(target.regionId & 0x8000),
-														dx = hawk.state.position.x - target.x + (dungeon ?
-															0 :
-															((hawk.region & 255) - (target.regionId & 255)) * 1920),
+													const [dx, dz] = worldDelta( target, {
+															regionId: hawk.region,
+															x: hawk.state.position.x,
+															z: hawk.state.position.z
+														} ),
 														dy = hawk.state.position.y - target.y,
-														dz = hawk.state.position.z - target.z +
-															(dungeon ?
-																0 :
-																((hawk.region >>> 8) - (target.regionId >>> 8)) * 1920),
 														length = hypot3( dx, dy, dz ),
 														k = length ? -az / length : 0;
 													const blood = presentation.get( target.gid )?.bloodEffects
@@ -2768,11 +2764,10 @@ export function createCharacterEffects(
 										targetActor = target ? placed : undefined;
 									const region = owner.pose.regionId;
 									if ( !projectileSpace( hawk.region, region ) ) continue;
-									const point = ( p: { regionId: number; x: number; y: number; z: number; } ) => ({
-										x: p.x + (region & 0x8000 ? 0 : ((p.regionId & 255) - (region & 255)) * 1920),
-										y: p.y,
-										z: p.z + (region & 0x8000 ? 0 : ((p.regionId >>> 8) - (region >>> 8)) * 1920)
-									});
+									const point = ( p: { regionId: number; x: number; y: number; z: number; } ) => {
+										const [x, z] = regionRelativeXZ( region, p );
+										return { x, y: p.y, z };
+									};
 									hawk.state = {
 										...hawk.state,
 										position: point( { ...hawk.state.position, regionId: hawk.region } )
@@ -2923,17 +2918,14 @@ export function createCharacterEffects(
 							clock.previousMs = ms;
 							const [x, y, z] = clock.state.position,
 								start = visual.actor.pose,
-								dungeon = !!(start.regionId & 0x8000);
-							const rx = dungeon ? 0 : Math.floor( x / 1920 ), rz = dungeon ? 0 : Math.floor( z / 1920 );
+								next = normalizeRegionXZ( start.regionId, x, z );
 							sample = {
 								phase: "travel",
 								pose: {
-									regionId: dungeon ?
-										start.regionId :
-										((start.regionId & 255) + rx) | (((start.regionId >>> 8) + rz) << 8),
-									x: x - rx * 1920,
+									regionId: next.regionId,
+									x: next.x,
 									y,
-									z: z - rz * 1920,
+									z: next.z,
 									yaw: start.yaw
 								}
 							};
@@ -2984,9 +2976,7 @@ export function createCharacterEffects(
 								id: `launch:${gid}`,
 								path: flight.soundBegin,
 								gain: 1,
-								x: (pose.regionId & 255) * 1920 + pose.x,
-								y: pose.y,
-								z: (pose.regionId >>> 8) * 1920 + pose.z,
+								...audioPosition( pose ),
 								expires: visual.actor.time + flight.delay + 0.25
 							} );
 							flight.soundBegin = null;
@@ -3067,9 +3057,7 @@ export function createCharacterEffects(
 												id: `arrival:${gid}`,
 												path: flight.soundEnd,
 												gain: 1,
-												x: (sample.pose.regionId & 255) * 1920 + sample.pose.x,
-												y: sample.pose.y,
-												z: (sample.pose.regionId >>> 8) * 1920 + sample.pose.z,
+												...audioPosition( sample.pose ),
 												expires: at + .25
 											} );
 										}
@@ -3111,9 +3099,7 @@ export function createCharacterEffects(
 										id: `arrival:${gid}`,
 										path: flight.soundEnd,
 										gain: 1,
-										x: (sample.pose.regionId & 255) * 1920 + sample.pose.x,
-										y: sample.pose.y,
-										z: (sample.pose.regionId >>> 8) * 1920 + sample.pose.z,
+										...audioPosition( sample.pose ),
 										expires: at + 0.25
 									} );
 								}
@@ -3165,12 +3151,8 @@ export function createCharacterEffects(
 					if ( visual.flight?.orientation && flightPose ) {
 						const previous = visual.flight.orientation,
 							current = flightPose,
-							dungeon = !!(previous.regionId & 0x8000);
-						const dx = previous.x - current.x +
-								(dungeon ? 0 : ((previous.regionId & 255) - (current.regionId & 255)) * 1920),
-							dy = previous.y - current.y,
-							dz = previous.z - current.z +
-								(dungeon ? 0 : ((previous.regionId >>> 8) - (current.regionId >>> 8)) * 1920);
+							[dx, dz] = worldDelta( current, previous ),
+							dy = previous.y - current.y;
 						if ( dx * dx + dy * dy + dz * dz > 1 ) {
 							visual = {
 								...visual,
@@ -3437,9 +3419,7 @@ export function createCharacterEffects(
 									id: `pet-roar:${gid}:${roar.revision}`,
 									path: PET_ROAR_SOUND,
 									gain: .8,
-									x: (bearPose.regionId & 255) * 1920 + bearPose.x,
-									y: bearPose.y,
-									z: (bearPose.regionId >>> 8) * 1920 + bearPose.z,
+									...audioPosition( bearPose ),
 									expires: now + .25
 								} );
 							}

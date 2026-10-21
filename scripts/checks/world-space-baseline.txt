@@ -2,13 +2,6 @@
 # or raw `0x8000` region-bit tests predating world-space.ts (#1279).
 # Format: `<path> <count>`. This ledger may only shrink; run
 # `node scripts/checks/check_world_space.mjs --update` after migrating a file.
-apps/client-next/src/engine/foundation/animation/action-refresh.ts 4
-apps/client-next/src/engine/foundation/animation/damage-anchor.ts 3
-apps/client-next/src/engine/foundation/animation/effect-room.ts 1
-apps/client-next/src/engine/foundation/animation/entity-lod.ts 3
-apps/client-next/src/engine/foundation/animation/moving-stage.ts 8
-apps/client-next/src/engine/foundation/animation/projectile-time.ts 16
-apps/client-next/src/engine/foundation/animation/spine-aim.ts 1
 apps/client-next/src/engine/foundation/gameplay/character-spawn.ts 1
 apps/client-next/src/engine/foundation/gameplay/direction-movement.ts 2
 apps/client-next/src/engine/foundation/gameplay/ground-item.ts 2
@@ -32,12 +25,6 @@ apps/client-next/src/engine/foundation/ui/party-overlay.ts 1
 apps/client-next/src/engine/foundation/ui/world-map.ts 4
 apps/client-next/src/engine/runtime/assets/worker/navigation/navigation.ts 3
 apps/client-next/src/engine/runtime/assets/worker/world/world.ts 7
-apps/client-next/src/engine/runtime/characters/actor-motion.ts 2
-apps/client-next/src/engine/runtime/characters/effects/effects.ts 39
-apps/client-next/src/engine/runtime/characters/orbs/orbs.ts 2
-apps/client-next/src/engine/runtime/characters/pose-presentation.ts 3
-apps/client-next/src/engine/runtime/characters/presentation-actions.ts 2
-apps/client-next/src/engine/runtime/characters/presentation-events.ts 8
 apps/client-next/src/engine/runtime/navigation/navigation.ts 1
 apps/client-next/src/engine/runtime/renderer/characters/characters.ts 6
 apps/client-next/src/engine/runtime/renderer/renderer.ts 4
