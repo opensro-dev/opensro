@@ -94,6 +94,18 @@ Also:
   that contradicts an existing comment or research note says so, and the PR
   corrects the old text.
 - **Link the issue or bug report** (for example `BUG-064`) it fixes.
+- **Keep already-open tabs working, or bump the protocol.** A release that
+  keeps the browser protocol leaves every open tab running the live client.
+  If your change adds a byte or a new value to an existing packet, removes
+  a field, or changes a client decoder, add a commit-message trailer
+  `Old-tab: safe - <reason>` saying why tabs that are already open stay
+  compatible. The release audit refuses to stage a protocol-keeping
+  release whose commits change an encoder or a client decoder without
+  that trailer (an operator can declare one for a commit already merged).
+  If old tabs cannot stay compatible, the change needs a protocol bump
+  instead of the trailer. A strict decoder broke exactly this way once;
+  the release rules live in the
+  [ops release README](apps/server/ops/release/README.md).
 - **Mark non-native behaviour** and name its flag (section 3).
 - Keep secrets out of commits and pull requests: tokens, passwords, webhook URLs.
 

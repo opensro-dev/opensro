@@ -17,6 +17,18 @@ add "Player-note-retract: #<pr>" too: that note is left out of the next
 patch notes (an already published release's notes never change).
 -->
 
+## Old-tab
+
+<!--
+A release that keeps the browser protocol leaves every open tab on the live
+client. If this change adds a byte or a new value to an existing packet,
+removes a field, or changes a client decoder, put a trailer line in a commit
+message of this branch, "Old-tab: safe - <reason>", saying why tabs that are
+already open stay compatible; the squash merge carries it into the release
+audit. If old tabs cannot stay compatible, say so here instead: the change
+needs a protocol bump. Write "None" when the wire does not change.
+-->
+
 ## Native claims
 
 | Claim | Native evidence | Checked by | Status |
