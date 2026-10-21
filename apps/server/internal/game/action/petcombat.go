@@ -180,6 +180,8 @@ type petCombatStep struct {
 	percent    uint64
 	// trained is this strike's attack-pet plan (pettrained.go); nil native.
 	trained *petTrainedStrike
+	// announced: the strike's cast already went out at its windup.
+	announced bool
 }
 
 /*
@@ -278,13 +280,19 @@ func (rt *Runtime) advancePetCombat(step petCombatStep) (frames []simulation.Fra
 			// 5472A0 arms the strategy timer before submitting the cast.
 			intent.nextAttackMs = step.nowMs + int64(intent.intervalMs)
 			frame := wire.SkillCastUntargetedFrame(wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: step.pet.GID, InstanceToken: intent.castToken, OwnerOrTargetGid: target.gid})
-			step.state.public = append(step.state.public, frame)
-			return append(frames, simFrames([]wire.Frame{frame})...), true
+			cast := []wire.Frame{frame}
+			if id, ok := rt.wolfRendQueued(step); ok {
+				// The rend clip plays from the windup; the release may still refuse it.
+				cast = append(cast, wolfEmoteFrame(step.pet.GID, id))
+			}
+			step.state.public = append(step.state.public, cast...)
+			return append(frames, simFrames(cast)...), true
 		}
 		if step.nowMs < intent.releaseAtMs {
 			return frames, true
 		}
 	}
+	step.announced = intent.castToken != 0
 	skill, step.trained = rt.petTrainedDecide(step, skill, target)
 	strike, ok := rt.strikePetTargets(step, target, skill)
 	if !ok {
@@ -458,6 +466,16 @@ func (rt *Runtime) petStrike(step petCombatStep, target monster.Instance, skill 
 	}
 	fatal := committed[len(committed)-1].Fatal
 	public := rt.monsterImpactAbnormalFrames(division, target.Gid, committed)
+	if step.trained != nil && step.trained.rend && !step.announced {
+		// Port-only: the Savage Rend emote (its skill ID) plays the client's
+		// pet-rend clip; like the trained frames below it reaches viewers and owner.
+		for _, u := range step.trained.uses {
+			trainedFrames = append(trainedFrames, wolfEmoteFrame(step.pet.GID, u.skill.ID))
+		}
+	}
+	if step.trained != nil && step.trained.executed && committed[len(committed)-1].Fatal {
+		trainedFrames = append(trainedFrames, wolfEmoteFrame(target.Gid, wolfEmoteExecuted))
+	}
 	// Trained heals: every viewer sees the pet's HP, the owner its own.
 	public = append(public, trainedFrames...)
 	actorFrames := append([]wire.Frame(nil), trainedFrames...)

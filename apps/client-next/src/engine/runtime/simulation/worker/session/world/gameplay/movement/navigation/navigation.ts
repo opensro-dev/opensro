@@ -38,6 +38,15 @@ import { ownedPlacementStart } from "@/engine/foundation/navigation/owned-start"
 import type { NavMesh, NavPlacement, NavigationProduct } from "@/engine/contracts/navigation";
 import type { Pose } from "@/engine/contracts/gameplay";
 import { base64Bytes } from "@/engine/foundation/assets/base64";
+import {
+	isDungeonRegion,
+	REGION_SIZE,
+	regionOffsetXZ,
+	regionRelativeXZ,
+	sameCoordinateSpace,
+	sectorX,
+	sectorY
+} from "@/engine/foundation/world/world-space";
 // Published region navmesh, same z-major 96*96 tile/cell gate as the server's
 // water_assets_schema.go. No fetch, mesh building or per-entity graph scan.
 /*
@@ -113,13 +122,13 @@ export function createNavigation() {
 	================
 	*/
 	function cell( region: number, x: number, z: number ): "open" | "blocked" | "unknown" {
-		if ( region & 0x8000 ) {
+		if ( isDungeonRegion( region ) ) {
 			return "unknown";
 		}
-		const dx = Math.floor( x / 1920 ),
-			dz = Math.floor( z / 1920 ),
-			rx = (region & 255) + dx,
-			rz = (region >>> 8) + dz;
+		const dx = Math.floor( x / REGION_SIZE ),
+			dz = Math.floor( z / REGION_SIZE ),
+			rx = sectorX( region ) + dx,
+			rz = sectorY( region ) + dz;
 		if ( rx < 0 || rx > 255 || rz < 0 || rz > 127 ) {
 			return "unknown";
 		}
@@ -127,7 +136,7 @@ export function createNavigation() {
 		if ( !grid || grid.objects && !complete ) {
 			return "unknown";
 		}
-		const index = Math.floor( (z - dz * 1920) / 20 ) * 96 + Math.floor( (x - dx * 1920) / 20 );
+		const index = Math.floor( (z - dz * REGION_SIZE) / 20 ) * 96 + Math.floor( (x - dx * REGION_SIZE) / 20 );
 		return grid.blocked[index] || grid.cells.getUint32( index * 4, true ) >= grid.count ? "blocked" : "open";
 	}
 	/*
@@ -142,10 +151,9 @@ export function createNavigation() {
 		preferred?: import("@/engine/foundation/navigation/dungeon-ownership").NavOwner,
 		initialize = true
 	): number | null {
-		const { x, y, z } = pose, from = pose, dungeon = !!(pose.regionId & 0x8000);
+		const { x, y, z } = pose, from = pose, dungeon = isDungeonRegion( pose.regionId );
 		if ( dungeon && (!complete || origin !== pose.regionId) ) return null;
-		const ox = dungeon ? 0 : ((pose.regionId & 255) - (origin & 255)) * 1920,
-			oz = dungeon ? 0 : ((pose.regionId >>> 8) - (origin >>> 8)) * 1920;
+		const [ox, oz] = regionOffsetXZ( origin, pose.regionId );
 		if ( preferred ) {
 			const p = objects[preferred.placement];
 			if ( p ) {
@@ -155,14 +163,14 @@ export function createNavigation() {
 		}
 		let h: number | null = null, delta = Infinity;
 		if ( !dungeon ) {
-			const dx = Math.floor( x / 1920 ),
-				dz = Math.floor( z / 1920 ),
-				rx = (from.regionId & 255) + dx,
-				rz = (from.regionId >>> 8) + dz;
+			const dx = Math.floor( x / REGION_SIZE ),
+				dz = Math.floor( z / REGION_SIZE ),
+				rx = sectorX( from.regionId ) + dx,
+				rz = sectorY( from.regionId ) + dz;
 			const grid = rx >= 0 && rx <= 255 && rz >= 0 && rz <= 127 ? regions.get( rx | (rz << 8) ) : undefined;
 			if ( grid?.heights ) {
-				const fx = (x - dx * 1920) / 20,
-					fz = (z - dz * 1920) / 20,
+				const fx = (x - dx * REGION_SIZE) / 20,
+					fz = (z - dz * REGION_SIZE) / 20,
 					ix = Math.floor( fx ),
 					iz = Math.floor( fz );
 				if ( ix >= 0 && iz >= 0 && ix < 96 && iz < 96 ) {
@@ -203,7 +211,7 @@ export function createNavigation() {
 	================
 	*/
 	function worldX( p: NavPlacement, o: number ) {
-		return o & 0x8000 ? p.x : p.x + (o & 255) * 1920;
+		return isDungeonRegion( o ) ? p.x : p.x + sectorX( o ) * REGION_SIZE;
 	}
 	/*
 	================
@@ -211,7 +219,7 @@ export function createNavigation() {
 	================
 	*/
 	function worldZ( p: NavPlacement, o: number ) {
-		return o & 0x8000 ? p.z : p.z + (o >>> 8) * 1920;
+		return isDungeonRegion( o ) ? p.z : p.z + sectorY( o ) * REGION_SIZE;
 	}
 	/*
 	================
@@ -253,7 +261,7 @@ export function createNavigation() {
 			const p = owner && objects[owner.placement];
 			return owner && p ?
 				{
-					region: origin & 0x8000 ? origin : 0,
+					region: isDungeonRegion( origin ) ? origin : 0,
 					x: worldX( p, origin ),
 					y: p.y,
 					z: worldZ( p, origin ),
@@ -273,7 +281,7 @@ export function createNavigation() {
 				| { region: number; x: number; y: number; z: number; yaw: number; mesh: NavMesh; cell: number; }
 				| undefined
 		): NavOwner | undefined {
-			if ( !anchor || (origin & 0x8000 ? origin : 0) !== anchor.region ) return undefined;
+			if ( !anchor || (isDungeonRegion( origin ) ? origin : 0) !== anchor.region ) return undefined;
 			const same = ( a: number, b: number ) => Math.abs( a - b ) < 1e-3;
 			// Array lengths alone do not identify a cell. A replacement mesh
 			// may have the same counts but different geometry or topology.
@@ -296,7 +304,7 @@ export function createNavigation() {
 		================
 		*/
 		available( pose: Pose ) {
-			return pose.regionId & 0x8000 ?
+			return isDungeonRegion( pose.regionId ) ?
 				complete && origin === pose.regionId :
 				cell( pose.regionId, pose.x, pose.z ) !== "unknown";
 		},
@@ -328,17 +336,14 @@ export function createNavigation() {
 				cursor.owner = undefined;
 				if (
 					complete &&
-					!(((pose.regionId | reference.regionId | origin) & 0x8000) &&
-						(pose.regionId !== origin || reference.regionId !== origin))
+					sameCoordinateSpace( pose.regionId, origin ) &&
+					sameCoordinateSpace( reference.regionId, origin )
 				) {
-					const point = (
-						p: Pose
-					) => [
-						p.x + ((p.regionId & 255) - (origin & 255)) * 1920,
-						p.y,
-						p.z + ((p.regionId >>> 8) - (origin >>> 8)) * 1920
-					];
-					const path = (pose.regionId & 0x8000 ? dungeonOwnerPath : terrainOwnerPath)(
+					const point = ( p: Pose ) => {
+						const [px, pz] = regionRelativeXZ( origin, p );
+						return [ px, p.y, pz ];
+					};
+					const path = (isDungeonRegion( pose.regionId ) ? dungeonOwnerPath : terrainOwnerPath)(
 						objects,
 						point( reference ),
 						point( pose ),
@@ -358,7 +363,7 @@ export function createNavigation() {
 		================
 		*/
 		block( pose: Pose | null, owner?: import("@/engine/foundation/navigation/dungeon-ownership").NavOwner ) {
-			if ( !pose || !(pose.regionId & 0x8000) || pose.regionId !== origin || !complete ) return undefined;
+			if ( !pose || !isDungeonRegion( pose.regionId ) || pose.regionId !== origin || !complete ) return undefined;
 			if ( owner ) return objects[owner.placement]?.block;
 			const key = [ origin, pose.x, pose.y, pose.z ].join( ":" );
 			if ( key === blockKey ) return blockValue;
@@ -372,7 +377,7 @@ export function createNavigation() {
 		================
 		*/
 		floor( pose: Pose | null, owner?: NavOwner ) {
-			if ( !pose || !(pose.regionId & 0x8000) || pose.regionId !== origin || !complete ) return undefined;
+			if ( !pose || !isDungeonRegion( pose.regionId ) || pose.regionId !== origin || !complete ) return undefined;
 			const key = [ revision, pose.regionId, pose.x, pose.y, pose.z, owner?.placement, owner?.cell ].join( ":" );
 			if ( floors.has( key ) ) return floors.get( key );
 			const point = [ pose.x, pose.y, pose.z ],
@@ -422,7 +427,7 @@ export function createNavigation() {
 			const product = value as NavigationProduct;
 			let residencyBytes = 0;
 			if ( product.complete === true ) residencyBytes = admitObjectProduct( product, regionId );
-			if ( regionId & 0x8000 ) {
+			if ( isDungeonRegion( regionId ) ) {
 				if ( !product.complete ) throw new Error( "Dungeon coverage is missing" );
 				// The product arrived by message, so it is already this worker's own copy,
 				// and navigation never writes into it (the oracle runs it deep-frozen).
@@ -437,7 +442,7 @@ export function createNavigation() {
 				return;
 			}
 
-			if ( !Number.isInteger( regionId ) || regionId <= 0 || regionId >= 0x8000 ) {
+			if ( !Number.isInteger( regionId ) || regionId <= 0 || isDungeonRegion( regionId ) ) {
 				throw new Error( "Outdoor navigation region required" );
 			}
 			const b = value as {
@@ -462,7 +467,7 @@ export function createNavigation() {
 			};
 			const nav = b?.navmesh;
 			if (
-				!nav || nav.regionSize !== 1920 || nav.tileSize !== 20 || nav.tilesPerAxis !== 96 ||
+				!nav || nav.regionSize !== REGION_SIZE || nav.tileSize !== 20 || nav.tilesPerAxis !== 96 ||
 				!Array.isArray( nav.regions ) || nav.regions.length > 9
 			) {
 				throw new Error( "Unsupported published navigation schema" );
@@ -477,7 +482,7 @@ export function createNavigation() {
 					throw new Error( "Invalid navigation region" );
 				}
 				const blocked = bytes( row.blockedTiles, 9216 ), ids = bytes( row.tileCellIds, 36864 );
-				const rx = (regionId & 255) + row.dx, rz = (regionId >>> 8) + row.dz;
+				const rx = sectorX( regionId ) + row.dx, rz = sectorY( regionId ) + row.dz;
 				if ( rx < 0 || rx > 255 || rz < 0 || rz > 127 ) {
 					throw new Error( "Invalid navigation sector" );
 				}
@@ -572,13 +577,14 @@ export function createNavigation() {
 			const segment = ( from: Pose, to: Pose ): Pose | null => {
 				status = 0;
 				reachedOwner = undefined;
-				if ( ((from.regionId | to.regionId) & 0x8000) && from.regionId !== to.regionId ) return null;
-				if ( !(from.regionId & 0x8000) ) {
+				if ( !sameCoordinateSpace( from.regionId, to.regionId ) ) return null;
+				if ( !isDungeonRegion( from.regionId ) ) {
+					const [tx, tz] = regionRelativeXZ( from.regionId, to );
 					to = {
 						...to,
 						regionId: from.regionId,
-						x: to.x + ((to.regionId & 255) - (from.regionId & 255)) * 1920,
-						z: to.z + ((to.regionId >>> 8) - (from.regionId >>> 8)) * 1920
+						x: tx,
+						z: tz
 					};
 				}
 				/*
@@ -587,18 +593,17 @@ export function createNavigation() {
 				================
 				*/
 				function canonicalPose( p: Pose ): Pose | null {
-					if ( p.regionId & 0x8000 ) return p;
-					const dx = Math.floor( p.x / 1920 ),
-						dz = Math.floor( p.z / 1920 ),
-						rx = (p.regionId & 255) + dx,
-						rz = (p.regionId >>> 8) + dz;
+					if ( isDungeonRegion( p.regionId ) ) return p;
+					const dx = Math.floor( p.x / REGION_SIZE ),
+						dz = Math.floor( p.z / REGION_SIZE ),
+						rx = sectorX( p.regionId ) + dx,
+						rz = sectorY( p.regionId ) + dz;
 					if ( rx < 0 || rx > 255 || rz < 0 || rz > 127 ) return null;
-					return { ...p, regionId: rx | (rz << 8), x: p.x - dx * 1920, z: p.z - dz * 1920 };
+					return { ...p, regionId: rx | (rz << 8), x: p.x - dx * REGION_SIZE, z: p.z - dz * REGION_SIZE };
 				}
-				const dungeon = !!(from.regionId & 0x8000);
+				const dungeon = isDungeonRegion( from.regionId );
 				if ( dungeon && (!complete || origin !== from.regionId) ) return null;
-				const ox = dungeon ? 0 : ((from.regionId & 255) - (origin & 255)) * 1920,
-					oz = dungeon ? 0 : ((from.regionId >>> 8) - (origin >>> 8)) * 1920;
+				const [ox, oz] = regionOffsetXZ( origin, from.regionId );
 				// An unretained start takes native FindNavCell's surface: the nearest by |deltaY|, terrain winning ties.
 				if ( firstLeg && !sourceOwner ) {
 					const point = [ from.x + ox, from.y, from.z + oz ],

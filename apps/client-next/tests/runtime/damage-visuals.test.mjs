@@ -125,6 +125,51 @@ test("damage primary gate encloses both hit light and secondary with kind-7, pro
 	}
 });
 
+test("hit effects whose model never loads give back their slots instead of filling the pool", () => {
+	let id = 0;
+	const jobs = new Map(),
+		record = { clips: [], stages: [], damageEffect: "primary.efp", attachedAction: { priority: 1 } };
+	const fx = createCharacterEffects(
+		{
+			available: () => 4,
+			request( url, limit, decode ) {
+				jobs.set(
+					++id,
+					decode === "effects" ?
+						{ kind: "effects", catalog: { 7: record } } :
+						{
+							kind: "bytes",
+							buffer: new TextEncoder().encode(
+								JSON.stringify( { format: "sro-skill-stage-models", models: {} } )
+							).buffer
+						}
+				);
+				return id;
+			},
+			take( id ) {
+				const r = jobs.get( id );
+				jobs.delete( id );
+				return r;
+			},
+			cancel() {}
+		},
+		"http://fixture.invalid",
+		() => {},
+		{ range: () => 0 }
+	);
+	const entities = [ 1, 2 ].map( gid => ({ gid, regionId: 257, x: 0, y: 0, z: 0, heading: 0 }) );
+	fx.step( entities, { casts: [] }, 0, () => true, () => 1 );
+	fx.step( entities, { casts: [] }, .1, () => true, () => 1 );
+	const pose = { regionId: 257, x: 0, y: 0, z: 0, yaw: 0 }, basis = [ 1, 0, 0, 0, 1, 0, 0, 0, 1 ];
+	// 2100 hits over 105 s against a model that never becomes resident.
+	for ( let hit = 0; hit < 2100; hit++ ) {
+		const at = 1 + hit * .05;
+		fx.damage( 2, 1, 0, 7, false, true, false, pose, basis, undefined, true, at );
+		assert.deepEqual( fx.step( entities, { casts: [] }, at, () => false, () => 1 ), [] );
+	}
+	fx.dispose();
+});
+
 const { damageAnchor } = await import( "../../src/engine/foundation/animation/damage-anchor.ts" );
 const { createEffectDecoder } = await import( "../../src/engine/runtime/assets/worker/effects/effects.ts" );
 test("published basic melee lights both participants; incoming Mobia and Mangyang hits do not invent a light", () => {

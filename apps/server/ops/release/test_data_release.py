@@ -184,6 +184,40 @@ class CombinedRunTests(unittest.TestCase):
 			self.assertNotEqual(sent[0].parent, output, "the server data is written beside OUTPUT, never inside it")
 			self.assertEqual(sent[1], output / "candidate.tar")
 
+	# ================
+	# test_an_existing_output_stops_before_any_upload
+	#
+	# client_data.bundle refuses an OUTPUT that exists. Refuse it first, so a
+	# run never sends the server data without its client candidate (#812).
+	# ================
+	def test_an_existing_output_stops_before_any_upload(self):
+		with tempfile.TemporaryDirectory() as directory:
+			root = Path(directory)
+			archive = root / "server.srogz"
+			archive.write_bytes(b"server data")
+			output = root / "out"
+			output.mkdir()
+			sentinel = output / "keep.txt"
+			sentinel.write_bytes(b"keep")
+			sent, fetched = [], []
+			for server in (True, False):
+				with self.subTest(server=server):
+					argv = ["data_release.py", str(root / "package"), str(output)]
+					if server:
+						argv += ["--server-data", str(archive)]
+					argv += ["--origin", "https://release.example", "--ssh-target", "stage@host", "--identity", "key"]
+					with (
+						mock.patch.object(data_release, "send", lambda *a: sent.append(a)),
+						mock.patch.object(data_release, "fetch_json", lambda *a: fetched.append(a)),
+						mock.patch("sys.argv", argv),
+						self.assertRaises(SystemExit) as error,
+					):
+						data_release.main()
+					self.assertEqual(error.exception.code, 2)
+			self.assertEqual((sent, fetched), ([], []))
+			self.assertEqual(list(output.iterdir()), [sentinel])
+			self.assertEqual(sentinel.read_bytes(), b"keep")
+
 
 if __name__ == "__main__":
 	unittest.main()

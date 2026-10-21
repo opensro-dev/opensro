@@ -196,11 +196,19 @@ export function createPresentationState() {
 						entry.posture = transitionPosture( entry.posture, { kind: "cancel" } );
 					}
 					if ( entity.emote && entry.emoteRevision !== entity.emote.revision ) {
-						const roar = entity.kind === "cos" &&
-							/^COS_P_BEAR_/.test( resource.codename ) &&
-							entity.emote.action >= 16 && entity.emote.action <= 18 &&
-							resources.duration( resource.glb, "pet-roar" ) > 0;
-						const action = roar ?
+						// Port-only pet skill emotes carry the skill ID: Bear Roar 16..18 and
+						// Wolf Hunting Howl 1..3 play authored clips; Savage Rend 4..6 is
+						// drawn by effects.ts over the wolf's native bite.
+						const wolf = entity.kind === "cos" && /^COS_P_WOLF/.test( resource.codename ) &&
+							entity.emote.action >= 1 && entity.emote.action <= 6;
+						const petClip = entity.kind === "cos" && /^COS_P_BEAR_/.test( resource.codename ) &&
+								entity.emote.action >= 16 && entity.emote.action <= 18 ?
+							"pet-roar" :
+							wolf && entity.emote.action <= 3 ?
+							"pet-howl" :
+							"";
+						const roar = petClip !== "" && resources.duration( resource.glb, petClip ) > 0;
+						const action = roar || wolf ?
 							null :
 							emoteRoute(
 								isPlayer,
@@ -214,7 +222,7 @@ export function createPresentationState() {
 						) {
 							entry.posture = {
 								kind: "emote",
-								clip: "pet-roar",
+								clip: petClip,
 								started: simulationMs === undefined ?
 									seconds :
 									seconds + (entity.emote.atMs - simulationMs) / 1000

@@ -32,6 +32,7 @@ import { createCharacterPose } from "@/engine/foundation/animation/animation-pos
 import { characterRadius } from "@/engine/foundation/animation/character-bounds";
 import { skyGroups } from "@/engine/foundation/rendering/sky-geometry";
 import { radians } from "@/engine/foundation/math/angles";
+import { isDungeonRegion, sameCoordinateSpace } from "@/engine/foundation/world/world-space";
 import { admitMesh } from "./mesh-admission/mesh-admission";
 import { createWorldResources } from "./resources/resources";
 import {
@@ -121,7 +122,7 @@ reserve
 			// A dungeon is its own coordinate space; only outdoor scenes share an anchor.
 			if (
 				!Number.isInteger( origin ) || origin < 0 || origin > 0xffff ||
-				(region & 0x8000 ? origin !== region : (origin & 0x8000) !== 0)
+				!sameCoordinateSpace( region, origin )
 			) throw new Error( "Invalid world decode origin" );
 			if ( part !== "all" && part !== "objects" && part !== "terrain" ) {
 				throw new Error( "Invalid world decode part" );
@@ -129,7 +130,7 @@ reserve
 			const objectPart = part !== "terrain", terrainPart = part !== "objects";
 			if (
 				b.dungeonBlocks &&
-				(!(region & 0x8000) || !Array.isArray( b.dungeonBlocks ) || b.dungeonBlocks.length > 4096 ||
+				(!isDungeonRegion( region ) || !Array.isArray( b.dungeonBlocks ) || b.dungeonBlocks.length > 4096 ||
 					b.dungeonBlocks.some( ( block, index ) =>
 						block.index !== index || !Array.isArray( block.visibleBlocks ) ||
 						(block.ambientColor !== undefined &&
@@ -429,7 +430,12 @@ noteMaterial
 								collision: [],
 								material: {
 									...materialFor( ref, found.material, found.index ),
-									...(mesh.lightmap ? { objectLightmap: mesh.lightmap.texturePublicPath } : {}),
+									// Only dungeon rooms draw their lightmap (#1309, A5BF90). Outdoor
+									// lightmaps doubled town buildings' light; until the object-batch
+									// path (A5C930) is ported, outdoor objects keep their lit look.
+									...(mesh.lightmap && p.dungeonBlock !== undefined ?
+										{ objectLightmap: mesh.lightmap.texturePublicPath } :
+										{}),
 									fog: p.dungeonBlock === undefined ?
 										undefined :
 										b.dungeonBlocks?.[p.dungeonBlock]?.fog,
@@ -487,7 +493,7 @@ noteMaterial
 						normals: new Float32Array( g.mesh.normals ),
 						uvs: meshCheck( g.mesh ).uvs.slice(),
 						// The object lightmap's UVs ride the terrain mask slot (location 4).
-						maskUVs: meshCheck( g.mesh ).lightmapUvs?.slice(),
+						maskUVs: g.material.objectLightmap ? meshCheck( g.mesh ).lightmapUvs?.slice() : undefined,
 						indices: new Uint32Array( g.mesh.indices ),
 						instances: new Float32Array( g.matrices ),
 						transform: identity()
@@ -780,7 +786,7 @@ noteMaterial
 						throw new Error( "Special water texture absent" );
 					}
 					if (
-						!(region & 0x8000) && b.water?.normalFramePublicPaths[0] &&
+						!isDungeonRegion( region ) && b.water?.normalFramePublicPaths[0] &&
 						(block.water?.type === 0 || block.water?.type === 1 && block.water.waveType !== 0)
 					) {
 						const axis = block.water.type === 0 ? 17 : 2,
@@ -913,12 +919,12 @@ noteMaterial
 				} );
 			}
 			if ( objectPart && b.dungeonWater?.length ) {
-				if ( !(region & 0x8000) ) throw Error( "Dungeon water in outdoor bundle" );
+				if ( !isDungeonRegion( region ) ) throw Error( "Dungeon water in outdoor bundle" );
 				for ( const surface of b.dungeonWater ) {
 					merged.push( dungeonWaterGroup( surface, b.water?.normalFramePublicPaths ?? [] ) );
 				}
 			}
-			if ( objectPart && b.sky && !(region & 0x8000) ) merged.unshift( ...skyGroups( b.sky ) );
+			if ( objectPart && b.sky && !isDungeonRegion( region ) ) merged.unshift( ...skyGroups( b.sky ) );
 			const scene: WorldScene = {
 				scenery,
 				soundTerrain: objectPart ? decodeSoundTerrain( b ) : undefined,
@@ -927,7 +933,7 @@ noteMaterial
 					block => block.ambientColor ?? DEFAULT_DUNGEON_AMBIENT_COLOR
 				),
 				waterBump: b.water?.reflectionBumpPublicPath,
-				flareTextures: region & 0x8000 || !objectPart ? undefined : b.sky?.flareTexturePublicPaths,
+				flareTextures: isDungeonRegion( region ) || !objectPart ? undefined : b.sky?.flareTexturePublicPaths,
 				starRandomState: objectPart ? b.sky?.starPrimitive?.nativeRand?.stateAfterConstruction : undefined,
 				residency: frontend ? "frontend" : undefined,
 				models,

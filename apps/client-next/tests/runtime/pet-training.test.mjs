@@ -19,6 +19,7 @@ const { createPetTraining, OP_PET_TRAINING_STATE, OP_PET_SKILL_COUNTERS } = awai
 );
 const {
 	petSkillHelp,
+	petStateAsk,
 	petSkillTooltip,
 	petSkillDesign,
 	petReference,
@@ -160,7 +161,7 @@ test("pet timers reuse character sweep and expire; event counters do not expire 
 	assert.equal( petRowCooldown( state, 1, 100000 ), "3 attacks" );
 	const design = petSkillDesign( 1 );
 	assert.ok( design );
-	assert.equal( petEffect( design, 3.5 ).includes( "3.5" ), false );
+	assert.match( petEffect( design, 3.5 ), /Attack speed \+3.5%/ );
 	const guardian = defined(
 		PET_DESIGN.treeSkills.find( entry => entry.family === "Guardian's Bond" && entry.option === 1 )
 	);
@@ -355,7 +356,7 @@ test("advanced tooltips include inherited proficiency in the current effect", ()
 	assert.ok( mend && mark && howl );
 	assert.match( petEffect( mend, 20, 1 ), /30% of maximum HP immediately/ );
 	assert.match( petEffect( mark, 20, 1 ), /40% for 8 s/ );
-	assert.match( petEffect( howl, 5, 1 ), /9 m for 4 s/ );
+	assert.match( petEffect( howl, 20, 1 ), /Attack speed \+20%.*Wolf and owner/ );
 	const paw = petSkillDesign( 30 ), feathers = petSkillDesign( 42 ), murder = petSkillDesign( 60 );
 	assert.ok( paw && feathers && murder );
 	assert.match( petEffect( paw, 2, 1 ), /Every 10 landed physical or spell hits taken/ );
@@ -657,4 +658,231 @@ test("petReference scales maxHp from active Resolve stacks and reverts on expiry
 	const preScaled = { ...training, stats: { ...training.stats, maxHp: 3080 } };
 	assert.equal( petReference( baseRef, preScaled, { stacks: 10, tier: 3, untilMs: 5000 }, 1000 )?.maxHp, 3080 );
 	assert.equal( petReference( baseRef, preScaled, { stacks: 10, tier: 3, untilMs: 5000 }, 6000 )?.maxHp, 2200 );
+});
+
+/*
+================
+Wolf execution progress
+================
+*/
+test("wolf and owner seven-action progress decodes independently, with bounded extension", async () => {
+	const t = createPetTraining( () => null );
+	t.receive( { opcode: OP_PET_TRAINING_STATE, payload: statePayload( [], [] ) }, 100 );
+	const payload = Uint8Array.from( [ 1, 0, 0, 2, 0, 0, 0, 0, 6, 5 ] );
+	t.receive( { opcode: OP_PET_SKILL_COUNTERS, payload }, 200 );
+	assert.equal( t.state()?.counters?.wolfExecute, 6 );
+	assert.equal( t.state()?.counters?.ownerExecute, 5 );
+	assert.equal( t.state()?.receivedAtMs, 100 );
+	for ( const index of [ 8, 9 ] ) {
+		const bad = payload.slice();
+		bad[index] = 7;
+		assert.throws( () => t.receive( { opcode: OP_PET_SKILL_COUNTERS, payload: bad }, 300 ) );
+	}
+	assert.throws( () => t.receive( { opcode: OP_PET_SKILL_COUNTERS, payload: payload.subarray( 0, 9 ) }, 300 ) );
+	const { petSkillStack, petRowHelp } = await import( "../../src/engine/foundation/ui/pet-skill-icons.ts" );
+	const d = defined( petSkillDesign( 9 ) );
+	const skill = {
+		id: 9,
+		level: 1,
+		effectiveLevel: 1,
+		nextPetLevel: 94,
+		live: true,
+		action: false,
+		queued: false,
+		learnable: false,
+		slotted: true,
+		value: 19,
+		nextValue: 19.7
+	};
+	const state = defined( t.state() );
+	assert.equal( petSkillStack( state, d, skill ), 6 );
+	assert.match( petRowHelp( { ...state, skills: [ skill ] }, 2, 200 ), /Wolf attacks: 6 \/ 7/ );
+	assert.match( petSkillHelp( d, skill, 90, 0 ), /Sweep range 10 m/ );
+});
+
+/*
+================
+Wolf kit progress and descriptions
+================
+*/
+test("wolf kit stacks decode independently and descriptions match each book", async () => {
+	const t = createPetTraining( () => null );
+	t.receive( { opcode: OP_PET_TRAINING_STATE, payload: statePayload( [], [] ) }, 100 );
+	const payload = Uint8Array.from( [ 1, 0, 0, 2, 0, 0, 0, 0, 6, 5, 10, 8 ] );
+	t.receive( { opcode: OP_PET_SKILL_COUNTERS, payload }, 200 );
+	assert.equal( t.state()?.counters?.wolfBlood, 10 );
+	assert.equal( t.state()?.counters?.ownerBlood, 8 );
+	for ( const index of [ 10, 11 ] ) {
+		const bad = payload.slice();
+		bad[index] = 11;
+		assert.throws( () => t.receive( { opcode: OP_PET_SKILL_COUNTERS, payload: bad }, 300 ) );
+	}
+	assert.throws( () => t.receive( { opcode: OP_PET_SKILL_COUNTERS, payload: payload.subarray( 0, 11 ) }, 300 ) );
+	for ( const tier of [ 1, 2, 3 ] ) {
+		const howl = defined( petSkillDesign( tier ) );
+		const rend = defined( petSkillDesign( 3 + tier ) );
+		const blood = defined( petSkillDesign( 9 + tier ) );
+		const hunt = defined( petSkillDesign( 12 + tier ) );
+		assert.equal( howl.family, "Hunting Howl" );
+		assert.match( petEffect( howl, 10 * tier ), /Duration 8 s/ );
+		assert.match( petEffect( rend, 100 + 60 * tier ), /Bleeding duration 6 s/ );
+		assert.doesNotMatch( petEffect( rend, 200 ), /30% HP|execut/ );
+		assert.match( petEffect( blood, 1 ), new RegExp( `Maximum stacks ${[ 5, 8, 10 ][tier - 1]}` ) );
+		assert.match( petEffect( hunt, 100 ), /Savage Rend bonus damage \+100%/ );
+	}
+	const { petSkillStack } = await import( "../../src/engine/foundation/ui/pet-skill-icons.ts" );
+	assert.equal(
+		petSkillStack( defined( t.state() ), defined( petSkillDesign( 12 ) ), {
+			id: 12,
+			live: true,
+			level: 1,
+			slotted: true,
+			action: false,
+			effectiveLevel: 1,
+			nextPetLevel: 94,
+			queued: false,
+			learnable: false,
+			value: 1,
+			nextValue: 1.1
+		} ),
+		10
+	);
+});
+
+/*
+================
+Owner HUD charge readiness
+================
+*/
+test("owner passive HUD tracks independent charges, readiness and active books", async () => {
+	const { petOwnerStacks } = await import( "../../src/engine/foundation/ui/pet-skill-icons.ts" );
+	const { buffBoard } = await import( "../../src/engine/foundation/ui/buff-board.ts" );
+	const t = createPetTraining( () => null );
+	t.receive( { opcode: OP_PET_TRAINING_STATE, payload: statePayload( [], [] ) }, 100 );
+	/** @param {number} id */
+	const learned = id => ({
+		id,
+		live: true,
+		level: 1,
+		effectiveLevel: 1,
+		slotted: true,
+		action: false,
+		queued: false,
+		learnable: false,
+		nextPetLevel: 94,
+		value: 3,
+		nextValue: 3.1
+	});
+	const state = {
+		...defined( t.state() ),
+		skills: [ learned( 9 ), learned( 12 ) ],
+		counters: {
+			attacks: 0,
+			bearHits: 0,
+			ownerHits: 0,
+			resolve: 0,
+			wolfExecute: 2,
+			ownerExecute: 6,
+			wolfBlood: 1,
+			ownerBlood: 10
+		}
+	};
+	const icons = petOwnerStacks( state );
+	assert.deepEqual( icons.map( i => [ i.count, i.ready ] ), [ [ 6, true ], [ 10, true ] ] );
+	assert.match( defined( icons[0] ).helpText, /Next damaging attack/ );
+	const game = /** @type {import('../../src/engine/contracts/gameplay.ts').GameplayState} */ ({ localGid: 1 });
+	const board = buffBoard( game, 0, new Set(), state );
+	assert.equal( board.length, 2 );
+	assert.ok( board.every( i => i.ready && i.uv && i.stack !== undefined ) );
+	assert.equal( defined( board[1] ).x, 23 );
+	const promoted = buffBoard( game, 0, new Set(), { ...state, skills: [ learned( 11 ) ] } );
+	assert.equal( defined( promoted[0] ).fraction, 1, "a book change cannot overflow the charge bar" );
+	assert.equal(
+		buffBoard( { ...game, petTraining: state }, 0 ).length,
+		0,
+		"native/disabled board remains unchanged"
+	);
+	const reset = { ...state, counters: { ...state.counters, ownerExecute: 0, ownerBlood: 0 } };
+	assert.ok( petOwnerStacks( reset ).every( i => i.count === 0 && !i.ready ) );
+	assert.equal(
+		petOwnerStacks( { ...state, skills: state.skills.map( s => ({ ...s, slotted: false }) ) } ).length,
+		0
+	);
+	assert.equal( petOwnerStacks( { ...state, counters: undefined } ).length, 0 );
+	const bear = { ...state, skills: [ learned( 30 ) ], counters: { ...state.counters, ownerHits: 9 } };
+	assert.match( defined( petOwnerStacks( bear )[0] ).helpText, /Next qualifying hit/ );
+});
+/*
+================
+Blood Hunt shared prey snapshot
+================
+*/
+test("Blood Hunt decodes target-bound charges and shows Rend readiness", async () => {
+	const { petOwnerStacks, petSkillStack } = await import( "../../src/engine/foundation/ui/pet-skill-icons.ts" );
+	const t = createPetTraining( () => null );
+	t.receive( { opcode: OP_PET_TRAINING_STATE, payload: statePayload( [], [] ) }, 100 );
+	const payload = Uint8Array.from( [ 1, 0, 0, 2, 0, 0, 0, 0, 6, 5, 10, 8, 4, 99, 0, 0, 0 ] );
+	t.receive( { opcode: OP_PET_SKILL_COUNTERS, payload }, 200 );
+	const state = defined( t.state() );
+	assert.equal( state.counters?.hunt, 4 );
+	assert.equal( state.counters?.huntTarget, 99 );
+	const skill = {
+		id: 15,
+		level: 1,
+		effectiveLevel: 1,
+		nextPetLevel: 94,
+		live: true,
+		action: false,
+		queued: false,
+		learnable: false,
+		slotted: true,
+		value: 100,
+		nextValue: 105.6
+	};
+	const design = defined( petSkillDesign( 15 ) );
+	const marked = { ...state, skills: [ skill ] };
+	assert.equal( petSkillStack( marked, design, skill ), 4 );
+	const hud = defined( petOwnerStacks( marked )[0] );
+	assert.equal( hud.ready, true );
+	assert.match( hud.helpText, /Rend the marked enemy/ );
+	assert.match( petEffect( design, 100 ), /5 other bleeding enemies within 6 m/ );
+	assert.equal(
+		petOwnerStacks( { ...marked, skills: [ { ...skill, id: 13 } ] } ).length,
+		0,
+		"first book is wolf only"
+	);
+	for (
+		const bad of [
+			payload.subarray( 0, 16 ),
+			Uint8Array.from( [ ...payload.slice( 0, 12 ), 5, 99, 0, 0, 0 ] ),
+			Uint8Array.from( [ ...payload.slice( 0, 12 ), 4, 0, 0, 0, 0 ] ),
+			Uint8Array.from( [ ...payload.slice( 0, 12 ), 0, 99, 0, 0, 0 ] )
+		]
+	) {
+		assert.throws( () => t.receive( { opcode: OP_PET_SKILL_COUNTERS, payload: bad }, 300 ) );
+		assert.equal( t.state()?.counters?.huntTarget, 99, "invalid snapshots cannot partly overwrite state" );
+	}
+	payload.fill( 0, 12 );
+	t.receive( { opcode: OP_PET_SKILL_COUNTERS, payload }, 400 );
+	assert.equal( petOwnerStacks( { ...defined( t.state() ), skills: [ skill ] } )[0]?.ready, false );
+});
+
+test("the quickslot bar asks again for a pet state lost to an early ask or a world re-entry", () => {
+	const wolf = { refObjId: 6123, gid: 7 };
+	let { ask, next } = petStateAsk( { ref: 0, asks: 0, atMs: 0 }, wolf, undefined, 1000 );
+	assert.equal( ask, true, "a new pet is asked at once" );
+	assert.equal( petStateAsk( next, wolf, undefined, 2000 ).ask, false, "retries are spaced out" );
+	for ( const at of [ 4000, 7000 ] ) {
+		({ ask, next } = petStateAsk( next, wolf, undefined, at ));
+		assert.equal( ask, true, `retry at ${at}` );
+	}
+	assert.equal( petStateAsk( next, wolf, undefined, 60000 ).ask, false, "a silent server is not asked forever" );
+	({ ask, next } = petStateAsk( next, wolf, 7, 61000 ));
+	assert.equal( ask, false, "a received state is not asked again" );
+	assert.equal( petStateAsk( next, wolf, undefined, 70000 ).ask, true, "a cleared state is asked again" );
+	assert.equal( petStateAsk( next, { refObjId: 6124, gid: 7 }, 7, 70000 ).ask, true, "another pet on the same GID" );
+	assert.deepEqual( petStateAsk( next, undefined, undefined, 70000 ), {
+		ask: false,
+		next: { ref: 0, asks: 0, atMs: 0 }
+	} );
 });

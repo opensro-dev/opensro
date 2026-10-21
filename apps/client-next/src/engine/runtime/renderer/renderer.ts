@@ -32,6 +32,7 @@ import type { Renderer } from "@/engine/contracts/runtime";
 import type { SurfaceOwner, FrameOwner, ImageDraw, GeometryDraw } from "./internal/gpu-contract";
 import { hypot3 } from "@/engine/foundation/math/hypot";
 import type { UiTexture } from "@/engine/contracts/texture";
+import { regionRelativeXZ, worldAudioPosition } from "@/engine/foundation/world/world-space";
 // The Environment uniform's diffuse and ambient vec4s (pipelines.ts struct
 // order: zenith, horizon, diffuse, ambient) and the sun-direction vec4 after
 // the native 336 bytes (environment-block.ts), as worldEnvironment packs them.
@@ -375,6 +376,7 @@ export function createRenderer(
 			for ( const gate of gates ) {
 				const b = gate.teleport;
 				if ( !b ) throw Error( "Missing gate pick bounds" );
+				const [gx, gz] = regionRelativeXZ( pickOrigin, gate );
 				const matrix = new Float32Array( [
 					1,
 					0,
@@ -388,9 +390,9 @@ export function createRenderer(
 					0,
 					1,
 					0,
-					gate.x + ((gate.regionId & 255) - (pickOrigin & 255)) * 1920,
+					gx,
 					gate.y,
-					gate.z + ((gate.regionId >>> 8) - (pickOrigin >>> 8)) * 1920,
+					gz,
 					1
 				] );
 				for ( let r = 0; r < rays.length; r++ ) {
@@ -658,11 +660,12 @@ export function createRenderer(
 				pickHeight = viewport.height;
 				const basis = cameraBasis( scene.camera );
 				soundListener = {
-					position: [
-						scene.camera.eye[0] + (scene.originRegion & 255) * 1920,
-						scene.camera.eye[1],
-						scene.camera.eye[2] + (scene.originRegion >>> 8) * 1920
-					],
+					position: worldAudioPosition( {
+						regionId: scene.originRegion,
+						x: scene.camera.eye[0],
+						y: scene.camera.eye[1],
+						z: scene.camera.eye[2]
+					} ),
 					forward: basis.forward,
 					up: basis.up
 				};

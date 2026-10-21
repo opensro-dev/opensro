@@ -143,6 +143,7 @@ var Settings = []Setting{
 	{Env: "SRO_TRADE_JOB_HUNTER_PERCENT_PER_TRADER", NomadVar: "trade_job_hunter_percent_per_trader", Default: "10"},
 	{Env: "SRO_TRADE_JOB_HUNTER_PERCENT_CAP", NomadVar: "trade_job_hunter_percent_cap", Default: "60"},
 	{Env: "SRO_REVERSE_RETURN_MAP", NomadVar: "reverse_return_map", Default: ""},
+	{Env: "SRO_HUNTING_GUIDE", NomadVar: "hunting_guide", Default: ""},
 	{Env: "SRO_GM_SETSPEED", NomadVar: "gm_setspeed", Default: "on"},
 	{Env: "SRO_ALCHEMY_RATES", NomadVar: "alchemy_rates", Default: "on", Catalogue: true},
 	// Owner, 2026-10-18: reversed the 2026-10-13 +11 cap; the deployment

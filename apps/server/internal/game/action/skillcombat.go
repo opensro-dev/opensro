@@ -500,12 +500,12 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 			CasterGid: enterworld.ObjectIDForCharacter(snapshot), InstanceToken: instanceToken}, target.Gid, impacts, travel.point)
 	}
 	success := wire.SkillCastSingleTargetResultFrame(wireResult)
-	closeAt := nowMs + int64(actionLifecycleMs)
+	closeAt := nowMs + int64(actionLifecycleMs) - int64(skill.ActionDurationMs) + rt.wolfHowlActionMs(divisionID, snapshot, skill.ActionDurationMs)
 	if release == nil {
 		rt.queueSkillFinalize(divisionID, snapshot.Name, enterworld.ObjectIDForCharacter(snapshot), nowMs+int64(skill.ActionCastingTimeMs), wire.SkillCastReleaseFrame(instanceToken, target.Gid))
 	} else {
 		success = wire.SkillCastReleaseResultFrame(wireResult)
-		closeAt = nowMs + int64(skill.ActionDurationMs)
+		closeAt = nowMs + rt.wolfHowlActionMs(divisionID, snapshot, skill.ActionDurationMs)
 	}
 	if skill.ActionHandler == enterworld.SkillActionProjectile {
 		flight := projectileFlightMs(playerPose, targetAt, skill.ProjectileSpeed)
@@ -601,6 +601,14 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	// its burst like the other damage-application state changes.
 	actorFrames = append(actorFrames, battleFrames...)
 	broadcastFrames = append(broadcastFrames, battleFrames...)
+	if rootID == 0 {
+		for _, impact := range committed {
+			if impact.Damage > 0 {
+				rt.wolfExecuteAttack(divisionID, character, 0, 1, []uint32{target.Gid}, nowMs)
+				break
+			}
+		}
+	}
 	return OpResult{
 		Frames:       actorFrames,
 		Broadcast:    broadcastFrames,

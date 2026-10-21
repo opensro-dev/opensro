@@ -73,7 +73,7 @@ still needed.
 | Pet | Role | Active families | Passive families |
 | --- | --- | --- | --- |
 | Bear | High HP/defense; lower attack | Challenging Roar; Iron Hide | Unbroken Spirit; Guardian’s Bond; Crushing Paw |
-| Wolf | Physical offense | Terrifying Howl; Rending Bite | Execute; Scent of Blood; Thick Fur |
+| Wolf | Physical offense | Hunting Howl; Savage Rend | Execute; Bloodscent; Blood Hunt |
 | Penguin | Magic/control; lower HP | Frost Nova; Deep Freeze | Cold Mastery; Static Feathers; Frost Armor |
 | Three Footed Crow | Owner support | Mend; Mark Prey | Carrion Feast; Swift Wings; Murder of Crows |
 

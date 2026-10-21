@@ -144,6 +144,8 @@ UiControl
 ================
 */
 export interface UiControl {
+	// Optional convex hit outline in the same absolute UI coordinates as rect.
+	readonly hitPolygon?: readonly (readonly [number, number])[];
 	readonly multiline?: boolean;
 	readonly valueText?: string;
 	readonly whisperTarget?: string;
@@ -175,6 +177,8 @@ UiSemantics
 */
 export interface UiSemantics {
 	readonly loadingVisible?: boolean;
+	/** The login screen is up: the page shell shows its project credit in the lower letterbox band. */
+	readonly titleCredit?: boolean;
 	readonly hudCorner?: UiRect;
 	/** Top of the port-only tool row, clear of native player, target and companion chrome. */
 	readonly hudToolsTop?: number;

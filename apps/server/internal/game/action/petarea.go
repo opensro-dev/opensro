@@ -52,6 +52,12 @@ func (rt *Runtime) petAreaTargets(step petCombatStep, primary petCombatTarget, s
 		if target.gid == primary.gid || targets[target.gid].gid != 0 {
 			return
 		}
+		if step.trained != nil && step.trained.rend && rt.LineOfSight != nil {
+			world, _ := step.state.follower.Presentation()
+			if !rt.LineOfSight(from, world.LiveOwnerAt(step.nowMs), target.at) {
+				return
+			}
+		}
 		targets[target.gid] = target
 		candidates = append(candidates, monsterAreaVictim{gid: target.gid, pose: target.at, radius: radius})
 	}
@@ -135,6 +141,10 @@ func (rt *Runtime) strikePetTargets(step petCombatStep, primary petCombatTarget,
 		return petStrikeResult{}, false
 	}
 	strikes := []monsterStrike{first.strike}
+	var wolfTargets []uint32
+	if primary.monster != nil && petStrikeDamaged(first.strike) {
+		wolfTargets = append(wolfTargets, primary.gid)
+	}
 	actor := first.actor
 	step.percent = step.percent * uint64(100-skill.ActionArea.ReductionPercent) / fullAreaPercent
 	for _, target := range secondary {
@@ -143,6 +153,9 @@ func (rt *Runtime) strikePetTargets(step petCombatStep, primary petCombatTarget,
 			continue
 		}
 		strikes = append(strikes, hit.strike)
+		if target.monster != nil && petStrikeDamaged(hit.strike) {
+			wolfTargets = append(wolfTargets, target.gid)
+		}
 		actor = append(actor, hit.actor...)
 		step.percent = step.percent * uint64(100-skill.ActionArea.ReductionPercent) / fullAreaPercent
 	}
@@ -177,6 +190,8 @@ func (rt *Runtime) strikePetTargets(step petCombatStep, primary petCombatTarget,
 	for _, hit := range strikes {
 		public = append(public, hit.public...)
 	}
+	rt.wolfHuntRend(step, primary, first.strike)
+	rt.wolfExecuteAttack(step.key.division, step.state.character, step.pet.GID, 0, wolfTargets, step.nowMs)
 	step.state.public = append(step.state.public, public...)
 	return petStrikeResult{frames: simFrames(append(public, actor...)), fatal: first.fatal}, true
 }

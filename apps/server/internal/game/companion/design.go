@@ -268,7 +268,11 @@ func (s SkillDef) ValueAt(level uint8) float64 {
 	if level == 0 {
 		return 0
 	}
-	return s.Value + s.ValuePerLevel*float64(level-1)
+	value := s.Value + s.ValuePerLevel*float64(level-1)
+	if s.Family == "Hunting Howl" {
+		return min(500, value) // +skills equipment must respect the howl's ceiling too.
+	}
+	return value
 }
 
 func (s SkillDef) CooldownAt(level uint8) float64 {

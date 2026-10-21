@@ -13,7 +13,7 @@ import {
 } from "@/engine/foundation/animation/character-budget";
 import { assetRequestBudget } from "@/engine/foundation/assets/asset-budget";
 import { decodeNativeClip } from "@/engine/foundation/animation/native-clip";
-import { withBearRoar } from "@/engine/foundation/animation/bear-roar";
+import { withBearRoar, withWolfHowl, withWolfRend } from "@/engine/foundation/animation/bear-roar";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { CharacterModel } from "@/engine/contracts/character";
 import type { Renderer } from "@/engine/contracts/runtime";
@@ -652,6 +652,8 @@ export function createCharacterResources( assets: AssetOwner, renderer: Renderer
 				if ( completed.model && result.kind === "character" ) {
 					const model = /\/npc\/cos\/p_bear0[12]\.glb$/i.test( completed.path ) ?
 						withBearRoar( result.model ) :
+						/\/npc\/cos\/p_wolf(_white)?_0[12]\.glb$/i.test( completed.path ) ?
+						withWolfRend( withWolfHowl( result.model ) ) :
 						result.model;
 					try {
 						costs.set( completed.path, characterBytes( model, result.images ) );

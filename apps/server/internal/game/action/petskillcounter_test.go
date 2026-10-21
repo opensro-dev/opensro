@@ -38,7 +38,7 @@ func TestPetSkillCounterFrame(t *testing.T) {
 	state.trained.attacks = 79
 	state.trained.counterHits = [2]int{9, 8}
 	f := petSkillCounterFrame(state, pet.GID)
-	if f.Opcode != petSkillCounterOpcode || len(f.Payload) != 8 || f.Payload[4] != 39 || f.Payload[5] != 9 || f.Payload[6] != 8 || f.Payload[7] != 9 {
+	if f.Opcode != petSkillCounterOpcode || len(f.Payload) != 17 || f.Payload[4] != 39 || f.Payload[5] != 9 || f.Payload[6] != 8 || f.Payload[7] != 9 {
 		t.Fatalf("counters: %x", f.Payload)
 	}
 	key := petOwnerKey{division: testDivision, name: c.Name, gid: pet.GID}
@@ -60,7 +60,7 @@ func TestPetSkillCounterFrame(t *testing.T) {
 	}
 	pet.CurrentHP = 0
 	f = petSkillCounterFrame(state, pet.GID)
-	if string(f.Payload[4:]) != string([]byte{0, 0, 0, 0}) {
+	if string(f.Payload[4:]) != string(make([]byte, 13)) {
 		t.Fatalf("dead pet retained counters: %x", f.Payload)
 	}
 	if len(petSkillCounterFrame(state, pet.GID+1).Payload) != 0 || len(petSkillCounterFrame(nil, pet.GID).Payload) != 0 {

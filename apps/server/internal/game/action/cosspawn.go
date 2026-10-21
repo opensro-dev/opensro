@@ -87,7 +87,12 @@ Same-session world re-entry retains the companion's abnormal keeper.
 ================
 */
 func (rt *Runtime) EntryCompanionActionSpeed(division string, character *enterworld.Character, pet *enterworld.CharacterCOS) float32 {
-	return cosParameter(nil, pet, rt.cosAbnormal(division, character.Name, pet.GID), actionSpeedParameter)
+	speed := cosParameter(nil, pet, rt.cosAbnormal(division, character.Name, pet.GID), actionSpeedParameter)
+	if state := rt.petSessionFor(division, character.Name, pet.GID); state != nil {
+		step := petCombatStep{snapshot: character, pet: pet, state: state, nowMs: rt.Now().UnixMilli()}
+		speed /= float32(rt.petAttackSpeed(step))
+	}
+	return speed
 }
 
 /*

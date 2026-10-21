@@ -388,6 +388,19 @@ export function createPresentationActions() {
 					// across READY/WAIT/SHOT, reducing by each authored count.
 					const choice = random.range( 0, 32768 ) & 255;
 					const phases = alternatives.map( table => table.length ? table[choice % table.length]! : null );
+					// Port-only Wolf Savage Rend: its emote (skill IDs 4..6) arrives with
+					// this cast, so the bite plays the authored pet-rend clip on attack1's
+					// timing (foundation/animation/bear-roar.ts withWolfRend).
+					const emote = entity.emote;
+					if (
+						entity.kind === "cos" && emote && emote.action >= 4 && emote.action <= 6 &&
+						/^COS_P_WOLF/.test( resource.codename ) &&
+						Math.abs( emote.atMs - (cast.receivedAtMs ?? emote.atMs) ) <= 250
+					) {
+						for ( const [index, phase] of phases.entries() ) {
+							if ( phase?.clip === "attack1" ) phases[index] = { ...phase, clip: "pet-rend" };
+						}
+					}
 					const age = simulationMs !== undefined && cast.receivedAtMs !== undefined ?
 						Math.max( 0, simulationMs - cast.receivedAtMs ) / 1000 :
 						0;

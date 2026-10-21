@@ -174,6 +174,11 @@ export function characterSoundKeys(
 
 // Port-only pet skills reuse retail audio already owned by the sound publisher.
 export const PET_ROAR_SOUND = "/assets/audio/sfx/prim/snd/cos/cos_bear2_shout1.wav";
+export const PET_HOWL_SOUND = "/assets/audio/sfx/prim/snd/cos/cos_wolf_02_shout.wav";
+export const PET_REND_SOUND = "/assets/audio/sfx/prim/snd/skill2/usk_warlock_blood_point_a.wav";
+export const PET_EXECUTE_SOUND = "/assets/audio/sfx/prim/snd/skill2/usk_warlock_blood_explosion_a.wav";
+export const PET_SWEEP_SOUND = "/assets/audio/sfx/prim/snd/skill2/usk_warrior_bathowl.wav";
+export const PET_HUNT_SOUND = "/assets/audio/sfx/prim/snd/skill2/usk_warlock_blood_lifedrain_a.wav";
 export const PET_BOND_TRANSFER_SOUND = "/assets/audio/sfx/prim/snd/skill2/usk_cleric_heal_target_a.wav";
 export const PET_BOND_REVIVE_SOUND = "/assets/audio/sfx/prim/snd/skill2/usk_cleric_rebirth_target_a.wav";
 export const PET_SHIELD_SOUND = "/assets/audio/sfx/prim/snd/skill2/usk_warrior_guard_phyfence_a.wav";

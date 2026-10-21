@@ -447,6 +447,16 @@ export const LOOSE_FAMILIES = {
 			);
 		}
 	},
+	"hunting-portraits": {
+		kind: "publish",
+		label: "Native monster portrait stills",
+		packFolder: "npc",
+		defaultGroup: file => file.endsWith( ".png" ) ? "game-images" : "game-data",
+		async produce() {
+			const { buildMonsterPortraitAssets } = await import( "../char/buildMonsterPortraitAssets.mjs" );
+			return buildMonsterPortraitAssets();
+		}
+	},
 	// The characterInfo plane and the skill catalogue are published by one build
 	// step as three files; files new to the index join game-data, the startup
 	// group the full build puts them in.

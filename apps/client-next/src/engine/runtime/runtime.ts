@@ -43,6 +43,7 @@ import { createRenderer } from "./renderer/renderer";
 import { createViewer } from "./viewer/viewer";
 import { createSimulationHost } from "./simulation/host";
 import type { RuntimeControl } from "@/engine/contracts/runtime";
+import { worldAudioPosition } from "@/engine/foundation/world/world-space";
 
 // The build's ordered background install list (buildBackgroundInstallAsset.mjs).
 const BACKGROUND_INSTALL_LIST = "/assets/delivery/background-install.json";
@@ -671,23 +672,13 @@ export function startRuntime(
 					const at = (now - Math.max( 0, simulationTimeMs - cue.at )) / 1000;
 					if ( cue.kind === "buff-ended" ) {
 						if ( listener ) {
-							audio.buffEnded( at, [
-								listener.x + (listener.regionId & 255) * 1920,
-								listener.y,
-								listener.z + (listener.regionId >>> 8) * 1920
-							] );
+							audio.buffEnded( at, worldAudioPosition( listener ) );
 						}
 					} else if ( cue.kind === "item-sound" ) audio.nativeItem( cue.cue, at );
 					else {audio.nativeUi(
 							cue.handle,
 							at,
-							listener ?
-								[
-									listener.x + (listener.regionId & 255) * 1920,
-									listener.y,
-									listener.z + (listener.regionId >>> 8) * 1920
-								] :
-								undefined
+							listener ? worldAudioPosition( listener ) : undefined
 						);}
 				}
 				const frontendState = frontend?.step(
@@ -982,11 +973,7 @@ export function startRuntime(
 				audio.step(
 					now / 1000,
 					soundListener?.position ?? (listener ?
-						[
-							listener.x + (listener.regionId & 255) * 1920,
-							listener.y,
-							listener.z + (listener.regionId >>> 8) * 1920
-						] :
+						worldAudioPosition( listener ) :
 						[ 0, 0, 0 ]),
 					soundListener ?? undefined
 				);

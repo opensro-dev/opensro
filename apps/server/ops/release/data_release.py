@@ -197,7 +197,8 @@ def main():
 	parser.add_argument("--ssh-target", required=True)
 	parser.add_argument("--identity", type=Path, required=True)
 	parser.add_argument("--coordinated", action="store_true", help="publish only together with a server candidate")
-	parser.add_argument("--maintenance", action="store_true", help="a coordinated pair for a maintenance window (implies --coordinated)")
+	parser.add_argument("--maintenance", action="store_true",
+		help="a coordinated pair for a maintenance window (implies --coordinated)")
 	parser.add_argument("--max-batch-mib", type=int, default=client_data.MAX_BATCH_BYTES >> 20,
 		help="split the payload into smaller uploads for a slow link")
 	parser.add_argument("--server-data", type=Path, help="also stage this server game-data archive (server.srogz)")
@@ -206,6 +207,10 @@ def main():
 		parser.error("PACKAGE and OUTPUT go together")
 	if arguments.package is None and not arguments.server_data:
 		parser.error("nothing to stage: give PACKAGE OUTPUT and/or --server-data")
+	# The client bundler requires a fresh OUTPUT; refuse before any upload so
+	# a run never stages the server data without its client candidate.
+	if arguments.package is not None and arguments.output.exists():
+		parser.error(f"{arguments.output} exists; the client candidate needs a fresh OUTPUT")
 	if arguments.server_data:
 		upload = server_data_upload(arguments.server_data, server_data_directory(arguments.output, arguments.server_data))
 		print("server data", json.dumps(send(upload, arguments.ssh_target, arguments.identity), sort_keys=True),
@@ -231,7 +236,8 @@ def main():
 	print(f"{len(batches)} payload batches, {total / 1048576:.1f} MiB to send", flush=True)
 	for batch in batches:
 		print(batch.name, send(batch, arguments.ssh_target, arguments.identity), flush=True)
-	print(json.dumps(send(arguments.output / "candidate.tar", arguments.ssh_target, arguments.identity), sort_keys=True))
+	print(json.dumps(send(arguments.output / "candidate.tar", arguments.ssh_target, arguments.identity),
+		sort_keys=True))
 
 
 if __name__ == "__main__":

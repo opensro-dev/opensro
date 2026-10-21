@@ -27,12 +27,10 @@ func TestManualPetStatusAbilitiesAndSharedCooldown(t *testing.T) {
 		id         uint8
 		status     abnormal.Status
 	}{
-		{"howl", "COS_P_WOLF_040", 2, abnormal.Fear},
 		{"bite", "COS_P_WOLF_040", 4, abnormal.Bleeding},
 		{"nova", "COS_P_PENGUIN_040", 31, abnormal.Frostbite},
 		{"freeze", "COS_P_PENGUIN_040", 34, abnormal.Freeze},
 		{"mark", "COS_P_RAVEN_040", 49, abnormal.Decay},
-		{"howl-III", "COS_P_WOLF_040", 3, abnormal.Fear},
 		{"bite-III", "COS_P_WOLF_040", 6, abnormal.Bleeding},
 		{"nova-III", "COS_P_PENGUIN_040", 33, abnormal.Frostbite},
 		{"freeze-III", "COS_P_PENGUIN_040", 36, abnormal.Freeze},
@@ -45,6 +43,9 @@ func TestManualPetStatusAbilitiesAndSharedCooldown(t *testing.T) {
 				level = 90
 			}
 			makeTrainedPet(rt, c, tc.code, level)
+			if tc.code == "COS_P_WOLF_040" {
+				mob = roarField(t, rt, c, clock)
+			}
 			rt.AttackPetExpansion = true
 			skill := learnPetBook(t, c, tc.id)
 			payload := binary.LittleEndian.AppendUint32(trainingCommand(c.ActiveCOS.GID, petTrainingUse, tc.id), mob.Gid)

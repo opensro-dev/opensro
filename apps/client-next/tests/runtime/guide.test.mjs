@@ -38,7 +38,7 @@ const { guideTokens } = await load( "src/engine/foundation/ui/guide-content.ts" 
 const { createGuideResources } = await load( "src/engine/runtime/ui/guide/resources.ts" );
 const { createGameplay } = await load( "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts" );
 const { createEntities } = await load( "src/engine/runtime/simulation/worker/session/world/entities/entities.ts" );
-const { generalGuideArticles } = await load( "src/engine/foundation/ui/guide-catalog.ts" );
+const { generalGuideArticles, CLOSING_ARTICLE } = await load( "src/engine/foundation/ui/guide-catalog.ts" );
 
 test("guide publication discovers inline images and preserves converted retail pixels", async () => {
 	assert.deepEqual(
@@ -408,4 +408,28 @@ test("anchored UI retains native sampling and drops retired character products",
 	assert.equal( projectCharacterLabels( owned, new Map() ).quads.length, 0 );
 	assert.equal( owned.quads[0].characterAnchor, 7 );
 	assert.throws( () => copyUi( { ...source, quads: [ { ...source.quads[0], characterAnchor: -1 } ] } ) );
+});
+test("the controls article alone gains the port's closing image", () => {
+	const rows = [
+		{ enabled: true, id: 3000, depth: 0, parentOrCount: 2, menuKey: "controls" },
+		{
+			enabled: true,
+			id: CLOSING_ARTICLE,
+			depth: 1,
+			parentOrCount: 3000,
+			menuKey: "mouse",
+			englishContent: "click"
+		},
+		{ enabled: true, id: 3002, depth: 1, parentOrCount: 3000, menuKey: "chat", englishContent: "type" }
+	];
+	const text = { controls: "Controls", mouse: "Mouse", chat: "Chat" };
+	const articles = generalGuideArticles( { rows }, text );
+	const closing = articles.find( a => a.id === CLOSING_ARTICLE ).tokens;
+	assert.deepEqual( closing.slice( 0, -3 ), guideTokens( "click" ) );
+	assert.deepEqual( closing.slice( -3, -1 ), [ { kind: "break" }, { kind: "break" } ] );
+	assert.deepEqual( closing.at( -1 ), {
+		kind: "image",
+		path: "/assets/images/Media_extracted/interface/guide/gd_control.png"
+	} );
+	assert.deepEqual( articles.find( a => a.id === 3002 ).tokens, guideTokens( "type" ) );
 });

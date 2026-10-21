@@ -182,12 +182,63 @@ function formatValue( value: number ): string {
 
 /*
 ================
+wolfSkillEffectLines
+
+The four reworked rows share concise full-help and character-style tooltips.
+================
+*/
+function wolfSkillEffectLines( d: PetSkillDesign, value: number ): string[] | null {
+	const v = formatValue( value );
+	switch ( d.family ) {
+		case "Hunting Howl":
+			return [
+				`Attack speed +${v}%`,
+				"Duration 8 s",
+				d.option === 1 ? "Wolf only" : d.option === 2 ? "Wolf and owner" : "Wolf, owner and party within 20 m",
+				"No target required; unavailable in town"
+			];
+		case "Savage Rend":
+			return [
+				`Physical damage ${v}%`,
+				`Bleeding: ${d.option >= 2 ? 4 : 2} x pet level every 2 s`,
+				"Bleeding duration 6 s",
+				...(d.option >= 2 ?
+					[ `Maximum targets ${d.option === 3 ? 5 : 3}`, `Cleave range ${d.option === 3 ? 6 : 4} m` ] :
+					[]),
+				...(d.option === 3 ? [ "Direct damage +25% against bleeding enemies" ] : [])
+			];
+		case "Bloodscent":
+			return [
+				`Damage +${v}% per attack stack`,
+				`Maximum stacks ${d.option === 1 ? 5 : d.option === 2 ? 8 : 10}`,
+				"Duration 6 s; attacks refresh",
+				...(d.option >= 2 ? [ "Separate wolf and owner stacks" ] : [ "Wolf only" ]),
+				...(d.option === 3 ? [ "Critical chance +0.5% per stack" ] : [])
+			];
+		case "Blood Hunt":
+			return [
+				"Four hits mark one enemy",
+				`Savage Rend bonus damage +${v}%`,
+				"Mark duration 8 s; hits refresh",
+				d.option === 1 ? "Wolf hits only" : "Wolf and owner share charges",
+				"Switching prey resets charges",
+				...(d.option === 3 ? [ "Burst: 50% of bonus damage", "Up to 5 other bleeding enemies within 6 m" ] : [])
+			];
+		default:
+			return null;
+	}
+}
+
+/*
+================
 petEffect
 
 A skill's effect text at a value ({v} substituted).
 ================
 */
 export function petEffect( design: PetSkillDesign, value: number, effectiveLevel = 1 ): string {
+	const wolf = wolfSkillEffectLines( design, value );
+	if ( wolf ) return wolf.join( ". " ) + ".";
 	const rank2 = effectiveLevel >= PET_DESIGN.rules.rank2Level || design.option > 1;
 	const rank3 = effectiveLevel >= PET_DESIGN.rules.rank3Level || design.option > 1;
 	if ( design.family === "Mend" ) {
@@ -200,22 +251,13 @@ export function petEffect( design: PetSkillDesign, value: number, effectiveLevel
 			formatValue( value + (rank2 ? 20 : 0) )
 		}% for 8 s.`;
 	}
-	if ( design.family === "Terrifying Howl" ) {
-		return `Commanded strike terrifies up to ${Math.max( 2, Math.floor( value ) )} monsters within ${
-			rank2 ? 9 : 6
-		} m for ${rank3 ? 4 : 3} s; affected monsters cannot attack the wolf.`;
-	}
+
 	if ( design.family === "Frost Nova" ) {
 		return `Commanded strike deals ${formatValue( value )}% magical damage to up to 8 targets within ${
 			rank2 ? 7 : 5
 		} m and attempts frostbite. Status duration follows native resistance rules.`;
 	}
-	if ( design.family === "Rending Bite" ) {
-		return `Commanded strike deals ${formatValue( value )}% damage and applies bleeding: ${
-			rank2 ? 4 : 2
-		} x pet level every 2 s for 6 s.` +
-			(rank3 ? " Bleeding non-unique targets below 30% HP are executed on a damaging hit." : "");
-	}
+
 	if ( design.family === "Unbroken Spirit" ) {
 		return `Landed monster hits grant Resolve for 15 s, up to 10 stacks. Each stack adds ${
 			formatValue( value )
@@ -307,6 +349,34 @@ export function petCooldownQuads(
 		rect,
 		clip
 	);
+}
+
+// A missing training state is asked for again this often, this many times.
+const PET_STATE_RETRY_MS = 3000, PET_STATE_RETRIES = 3;
+
+export type PetStateAsk = { readonly ref: number; readonly asks: number; readonly atMs: number; };
+
+/*
+================
+petStateAsk
+
+Whether the quickslot bar asks for the attack pet's 0x3FB1 state now. A
+new pet is asked at once. While its state is missing (asked too early, or
+cleared by a world re-entry) it is asked again a few times, spaced out; a
+received state restores the retries. Returns the next ask record.
+================
+*/
+export function petStateAsk(
+	last: PetStateAsk,
+	pet: { readonly refObjId: number; readonly gid: number; } | undefined,
+	stateGid: number | undefined,
+	nowMs: number
+): { ask: boolean; next: PetStateAsk; } {
+	if ( !pet ) return { ask: false, next: { ref: 0, asks: 0, atMs: 0 } };
+	if ( pet.refObjId !== last.ref ) return { ask: true, next: { ref: pet.refObjId, asks: 1, atMs: nowMs } };
+	if ( stateGid === pet.gid ) return { ask: false, next: { ...last, asks: 0 } };
+	if ( last.asks >= PET_STATE_RETRIES || nowMs - last.atMs < PET_STATE_RETRY_MS ) return { ask: false, next: last };
+	return { ask: true, next: { ref: last.ref, asks: last.asks + 1, atMs: nowMs } };
 }
 
 /*
@@ -409,35 +479,21 @@ Short native-style effect rows. General controls and combat rules live in row he
 ================
 */
 function petSkillEffectLines( d: PetSkillDesign, value: number, rank: number ): string[] {
+	const wolf = wolfSkillEffectLines( d, value );
+	if ( wolf ) return wolf;
 	const v = formatValue( value ),
 		advanced = d.option > 1 || rank >= PET_DESIGN.rules.rank2Level,
 		mastered = d.option > 1 || rank >= PET_DESIGN.rules.rank3Level;
 	switch ( d.family ) {
-		case "Terrifying Howl":
-			return [
-				`Terrify ${Math.max( 2, Math.floor( value ) )} monsters`,
-				`Range ${advanced ? 9 : 6} m`,
-				`Duration ${mastered ? 4 : 3} s`,
-				"Affected monsters cannot attack the wolf"
-			];
-		case "Rending Bite":
-			return [
-				`Physical damage ${v}%`,
-				`Bleeding: ${advanced ? 4 : 2} x pet level every 2 s`,
-				"Bleeding duration 6 s",
-				...(mastered ?
-					[ "Bleeding enemies below 30% HP: execute", "Unique monsters immune to execution" ] :
-					[])
-			];
 		case "Execute":
 			return [
+				d.option > 1 ? "Wolf and owner" : "Wolf only",
+				...(d.option === 3 ? [ "Every 7 attacks: execution sweep", "Sweep range 10 m around attacker" ] : []),
 				`Execute enemies below ${v}% HP`,
 				...(advanced ? [ "Bleeding targets: threshold +5%" ] : []),
 				"Requires a damaging hit; uniques immune"
 			];
-		case "Scent of Blood":
-			return [ `Critical chance +${v}%`, "Against bleeding targets or enemies below 50% HP" ];
-		case "Thick Fur":
+
 		case "Frost Armor":
 			return [ `Physical defence +${v}%`, `Magical defence +${v}%` ];
 		case "Frost Nova":

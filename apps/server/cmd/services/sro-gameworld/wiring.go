@@ -289,6 +289,7 @@ func newGameWorldApplication(
 		ItemCommands: authority.textdata.Items,
 		StaticItems:  enterworld.StaticRefItemRows(gameplay.deps),
 		Monsters:     enterworld.PublicMonsterRefObjRows(gameplay.deps.MonsterState),
+		HuntingGuide: gameplay.deps.MonsterState,
 		// Empty unless SRO_REVERSE_RETURN_MAP is on (port-only, not native).
 		ReverseMapPoints: gameplay.items.ReverseReturnMapPoints(),
 	})

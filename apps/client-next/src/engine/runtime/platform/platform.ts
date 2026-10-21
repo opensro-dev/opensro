@@ -392,6 +392,9 @@ export function createPlatform(
 	}
 	status.hidden = import.meta.env.MODE === "beta" || !new URLSearchParams( location.search ).has( "diagnostics" );
 	const fpsChip = document.getElementById( "fps-chip" );
+	// The login screen's project credit (index.html #title-credit), hidden
+	// everywhere else.
+	const titleCredit = document.getElementById( "title-credit" );
 	const telemetry = createTelemetry( {
 		enabled: experimental.developerDiagnostics,
 		onChange: enabled => saveExperimentalOptions( { ...experimental, developerDiagnostics: enabled } )
@@ -765,6 +768,7 @@ export function createPlatform(
 		presentUi( state ) {
 			lastUi = state;
 			bridge.present( state );
+			if ( titleCredit && titleCredit.hidden === !!state.titleCredit ) titleCredit.hidden = !state.titleCredit;
 			if ( fpsChip ) {
 				const scale = displayScale(),
 					right = state.hudCorner ? Math.max( 4, canvasSize().width - state.hudCorner[0] * scale + 6 ) : 8,

@@ -80,6 +80,8 @@ func (rt *Runtime) manualPetSkill(division string, owner, snapshot *enterworld.C
 			Frames:    append(append([]wire.Frame{}, public...), rt.petTrainingStateFrames(updated, now)...),
 			Broadcast: public,
 		}
+	case "Hunting Howl":
+		return rt.castWolfHowl(division, owner, gid, skill, now)
 	case "Iron Hide":
 		return rt.castPetShield(division, owner, snapshot, pet, skill, now)
 	case "Frenzy", "Mend", "Retribution":
@@ -106,6 +108,16 @@ func (rt *Runtime) manualPetSkill(division string, owner, snapshot *enterworld.C
 	default:
 		if target == 0 {
 			return petTrainingReceipt("Select an enemy for this pet ability.")
+		}
+		if skill.EffectName() == "Savage Rend" {
+			step, ok := rt.wolfCompanion(division, owner, gid, now)
+			if !ok {
+				return petTrainingReceipt("Savage Rend requires a living nearby wolf outside town.")
+			}
+			victim, ok := rt.resolvePetCombatTarget(step, target)
+			if !ok || victim.monster == nil {
+				return petTrainingReceipt("Select a monster for Savage Rend.")
+			}
 		}
 		order := rt.orderPetAttack(division, owner, snapshot, gid, target, now)
 		if order.DiagnosticRefusal != "" {

@@ -32,11 +32,16 @@ func petSkillCounterFrame(state *petSession, gid uint32) wire.Frame {
 		return wire.Frame{}
 	}
 	attacks, bear, owner, resolve := 0, 0, 0, uint8(0)
+	wolf, ownerExecute, blood, ownerBlood := uint8(0), uint8(0), uint8(0), uint8(0)
+	hunt, target := uint8(0), uint32(0)
 	if pet.Summoned && pet.CurrentHP > 0 && enterworld.CharacterAlive(state.character) {
 		attacks = state.trained.attacks % 40
 		bear, owner = state.trained.counterHits[0], state.trained.counterHits[1]
 		resolve = pet.ResolveStacks
+		wolf, ownerExecute = state.wolfHits[0], state.wolfHits[1]
+		blood, ownerBlood = state.wolf.blood[0], state.wolf.blood[1]
+		hunt, target = state.wolf.huntHits, state.wolf.huntTarget
 	}
-	return wire.Frame{Opcode: petSkillCounterOpcode, Payload: wire.NewWriter(8).U32(pet.GID).
-		U8(uint8(attacks)).U8(uint8(bear)).U8(uint8(owner)).U8(resolve).Payload()}
+	return wire.Frame{Opcode: petSkillCounterOpcode, Payload: wire.NewWriter(17).U32(pet.GID).
+		U8(uint8(attacks)).U8(uint8(bear)).U8(uint8(owner)).U8(resolve).U8(wolf).U8(ownerExecute).U8(blood).U8(ownerBlood).U8(hunt).U32(target).Payload()}
 }

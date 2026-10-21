@@ -8,6 +8,11 @@ publishes their textures. DXT power-of-two DDJ sources ship verbatim as
 NTX1 .texture - the authored GPU blocks with a generated mip suffix -
 everything else keeps the converted PNG path.
 
+A published texture names its image source relative to the tree that
+holds it, never as a location: the build root's own name must not reach
+a published file, or two builds of the same sources into differently
+named roots differ byte for byte.
+
 ===========================================================================
 */
 import { copyIntoPublicTree } from "../../shared/publicWrite.mjs";
@@ -16,7 +21,7 @@ import path from "node:path";
 import { CPD_SIGNATURE, parseCompound } from "./compound.mjs";
 import { probeBlockTextureFile, publishBlockTextureFile } from "../assets/blockTextures.mjs";
 import { exists } from "../io.mjs";
-import { imageSourceRoot, normalizeAssetPath, publicRoot, toGameRelative } from "../paths.mjs";
+import { imageSourceRoot, normalizeAssetPath, publicRoot, toGameRelative, toImageSourceRelative } from "../paths.mjs";
 import {
 	BSR_SIGNATURE,
 	parseJmxBmsStaticMesh,
@@ -211,14 +216,15 @@ export async function buildTitleSectorObjectResources( options ) {
 		} );
 	}
 
-	const textures = await copyObjectMaterialTextures(
-		[ ...texturePathSet ].sort(),
+	const textures = await copyObjectMaterialTextures( {
 		area,
-		missing,
 		blockFormats,
-		sourceExtractedRoot,
-		options.publishTextures !== false
-	);
+		extractedRoot: sourceExtractedRoot,
+		imageRoot: imageSourceRoot,
+		missing,
+		publishTextures: options.publishTextures !== false,
+		texturePaths: [ ...texturePathSet ].sort()
+	} );
 
 	return {
 		format: "sro-title-sector-object-resources",
@@ -245,6 +251,48 @@ export async function buildTitleSectorObjectResources( options ) {
 
 /*
 ================
+objectTextureSource
+
+The file a material texture's image comes from: the licensed block source
+for a DXT texture, the converted PNG for every other texture.
+================
+*/
+export function objectTextureSource( { textureSourcePath, blockFormat, extractedRoot, imageRoot } ) {
+	if ( blockFormat ) {
+		return dataAssetPath( extractedRoot, textureSourcePath );
+	}
+	const imageRelativePath = objectTextureImageRelativePath( textureSourcePath, ".png" );
+	return path.join( imageRoot, "Data_extracted", ...imageRelativePath.split( "/" ) );
+}
+
+/*
+================
+objectTextureRecord
+
+One material texture's published record. The image source is named
+relative to the tree that holds it, never as a location: a published
+asset must not carry the build root's own name, or two builds of the same
+sources into differently named roots differ byte for byte. A block source
+lives in the licensed game tree and keeps its game-relative name; a
+converted PNG lives in the generated tree's intermediate images and is
+named under them.
+================
+*/
+export function objectTextureRecord( options ) {
+	const { area, blockFormat, imageRoot, textureSourcePath } = options;
+	const source = options.source ?? objectTextureSource( options );
+	return {
+		sourcePath: textureSourcePath,
+		imageSourcePath: blockFormat ?
+			toGameRelative( source ) :
+			toImageSourceRelative( source, imageRoot ),
+		imagePublicPath: objectTexturePublicPath( area, textureSourcePath, blockFormat ? ".texture" : ".png" ),
+		...(blockFormat ? { blockFormat } : {})
+	};
+}
+
+/*
+================
 copyObjectMaterialTextures
 
 Publish each material texture: block sources (probeBlockTextureFile
@@ -253,53 +301,45 @@ rest as converted PNG copies. The PNG of a block source is NOT published -
 the .texture is the only shipped artifact for it.
 ================
 */
-async function copyObjectMaterialTextures(
-	texturePaths,
-	area,
-	missing,
-	blockFormats,
-	sourceExtractedRoot,
-	publishTextures = true
-) {
+async function copyObjectMaterialTextures( options ) {
+	const { area, blockFormats, extractedRoot, imageRoot, missing, publishTextures, texturePaths } = options;
 	const copied = [];
 	const published = [];
 
 	for ( const textureSourcePath of texturePaths ) {
 		const blockFormat = blockFormats.get( textureSourcePath ) ?? null;
-		if ( blockFormat ) {
-			const publicPath = objectTexturePublicPath( area, textureSourcePath, ".texture" );
-			const source = dataAssetPath( sourceExtractedRoot, textureSourcePath );
-			const target = path.join( publicRoot, publicPath.replace( /^\/+/, "" ) );
-			if ( publishTextures ) {
-				published.push( publishBlockTextureFile( source, target ) );
-			}
-			copied.push( {
-				sourcePath: textureSourcePath,
-				imageSourcePath: toGameRelative( source ),
-				imagePublicPath: publicPath,
-				blockFormat
-			} );
-			continue;
-		}
-		const imageRelativePath = objectTextureImageRelativePath( textureSourcePath, ".png" );
-		const pngSource = path.join( imageSourceRoot, "Data_extracted", ...imageRelativePath.split( "/" ) );
-		const publicPath = objectTexturePublicPath( area, textureSourcePath, ".png" );
-		const target = path.join( publicRoot, publicPath.replace( /^\/+/, "" ) );
-
-		if ( !(await exists( pngSource )) ) {
-			missing.push( { type: "ddj-image", sourcePath: textureSourcePath, imageSourcePath: pngSource } );
-			continue;
-		}
-
-		if ( publishTextures ) {
-			await copyIntoPublicTree( pngSource, target );
-		}
-
-		copied.push( {
-			sourcePath: textureSourcePath,
-			imageSourcePath: toGameRelative( pngSource ),
-			imagePublicPath: publicPath
+		const source = objectTextureSource( {
+			textureSourcePath,
+			blockFormat,
+			extractedRoot,
+			imageRoot
 		} );
+		const record = objectTextureRecord( {
+			area,
+			textureSourcePath,
+			blockFormat,
+			source,
+			imageRoot
+		} );
+		const target = path.join( publicRoot, record.imagePublicPath.replace( /^\/+/, "" ) );
+
+		if ( !blockFormat ) {
+			if ( !(await exists( source )) ) {
+				missing.push( {
+					type: "ddj-image",
+					sourcePath: textureSourcePath,
+					imageSourcePath: record.imageSourcePath
+				} );
+				continue;
+			}
+			if ( publishTextures ) {
+				await copyIntoPublicTree( source, target );
+			}
+		} else if ( publishTextures ) {
+			published.push( publishBlockTextureFile( source, target ) );
+		}
+
+		copied.push( record );
 	}
 
 	if ( published.length ) {

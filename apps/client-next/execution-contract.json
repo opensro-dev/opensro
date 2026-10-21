@@ -4,12 +4,19 @@
 		{
 			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/pet-training/pet-training.ts",
-			"functions": ["createPetTraining", "clear", "receive", "state"]
+			"functions": [
+				"createPetTraining",
+				"clear",
+				"receive",
+				"state"
+			]
 		},
 		{
 			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/pet-training/pet-training.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
-			"functions": ["callback:createPetTraining:0"]
+			"functions": [
+				"callback:createPetTraining:0"
+			]
 		},
 		{
 			"consumer": "src/engine/runtime/viewer/viewer.ts",
@@ -2348,6 +2355,85 @@
 				"effectDistances"
 			],
 			"reason": "The Experimental shared actor room: the selection reads the previous frame's effect distances, which the auxiliary presentation records in presentStages, through a getter injected at construction."
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/world-map.ts",
+			"provider": "src/engine/runtime/ui/hud/experimental-hud.ts",
+			"functions": [
+				"state",
+				"restore"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/world-map.ts",
+			"provider": "src/engine/runtime/runtime.ts",
+			"functions": [
+				"saveExperimental"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/world-map.ts",
+			"provider": "src/engine/runtime/ui/hud/minimap.ts",
+			"functions": [
+				"positions"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/world-map.ts",
+			"provider": "src/engine/runtime/ui/hud/map-teleport.ts",
+			"functions": [
+				"view"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/world-map.ts",
+			"provider": "src/engine/runtime/ui/text/text.ts",
+			"functions": [
+				"path",
+				"quads",
+				"run",
+				"extentHeight"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/world-map.ts",
+			"provider": "src/engine/runtime/ui/resources/resources.ts",
+			"functions": [
+				"has",
+				"size"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/world-map.ts",
+			"provider": "src/engine/runtime/ui/hud/reverse-return-hud.ts",
+			"functions": [
+				"mapping"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/world-map.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"hudCopy",
+				"beginWindow",
+				"windowBox",
+				"image",
+				"authoredButton",
+				"authoredLabeledButton",
+				"closeButton",
+				"endWindow",
+				"rect"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/hunting-guide.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"available",
+				"cancel",
+				"request",
+				"take"
+			]
 		}
 	],
 	"boundaries": [
@@ -3885,7 +3971,7 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "a42a59ff9044e2be6924ee54dee38072ee596c531c1c2cb017ee14addac69be4",
+			"sourceSha256": "5cf55a4f50e7cc9b3905b8d63759f15f6fa97f08d0d8d5b4a7997ff5c8e137a7",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. A hidden frame renders only while a world entry awaits game-ready, under the same barrier: native keeps updating while inactive (A0F430 OnUpdate; A11650 skips drawing) and finishes loading in CPSMission_OnUpdate (728E10). A visible window that gets no RAF for STARVED_FRAME_MS runs the same delivery-paced maintenance frames. Device disposal cancels pending mapping. Startup also hands the asset owner the device texture features once (port-only texture variants), outside the frame.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

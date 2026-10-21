@@ -45,6 +45,9 @@ export function petSkillStack( state: PetTraining, design: PetSkillDesign, skill
 	const c = state.counters;
 	if ( !c ) return null;
 	if ( design.family === "Unbroken Spirit" ) return c.resolve;
+	if ( design.family === "Bloodscent" ) return c.wolfBlood ?? null;
+	if ( design.family === "Blood Hunt" ) return c.hunt ?? null;
+	if ( design.family === "Execute" && design.option === 3 ) return c.wolfExecute ?? null;
 	if ( design.family === "Crushing Paw" ) return c.bearHits;
 	if ( design.family === "Murder of Crows" ) {
 		return c.attacks % (design.option > 1 || skill.effectiveLevel >= PET_DESIGN.rules.rank2Level ? 8 : 10);
@@ -63,14 +66,69 @@ export function petStackQuads( count: number | null, r: UiRect, clip: UiRect ): 
 	if ( count === null ) return [];
 	const root = "/assets/images/Media_extracted/interface/skill/";
 	const base = { uv: [ 0, 0, 1, 1 ] as UiRect, color: [ 1, 1, 1, 1 ] as const, clip };
+	const scale = r[2] / 32;
 	return [
-		{ ...base, rect: [ r[0] + 18, r[1] - 2, 16, 16 ], texture: root + "skl_level_tab.png" },
+		{
+			...base,
+			rect: [ r[0] + 18 * scale, r[1] - 2 * scale, 16 * scale, 16 * scale ],
+			texture: root + "skl_level_tab.png"
+		},
 		...String( count ).split( "" ).map( ( digit, i ): UiQuad => ({
 			...base,
-			rect: [ r[0] + (count < 10 ? 26 : 23 + i * 5), r[1] + 2, 8, 8 ],
+			rect: [ r[0] + (count < 10 ? 26 : 23 + i * 5) * scale, r[1] + 2 * scale, 8 * scale, 8 * scale ],
 			texture: root + "skl_lv_number_" + digit + ".png"
 		}) )
 	];
+}
+
+/*
+================
+petOwnerStacks
+
+Readiness marks a full damage pool or the hit immediately before a release.
+================
+*/
+export function petOwnerStacks( state: PetTraining | undefined ) {
+	const counters = state?.counters;
+	if ( !state || !counters ) return [];
+	return state.skills.flatMap( skill => {
+		const design = PET_DESIGN.treeSkills.find( d => d.id === skill.id );
+		if ( !design || !skill.live || !skill.slotted || skill.level === 0 || design.option < 2 ) return [];
+		let count: number | undefined, maximum: number, readyText: string;
+		if ( design.family === "Bloodscent" ) {
+			count = counters.ownerBlood;
+			maximum = design.option === 3 ? 10 : 8;
+			readyText = "Maximum damage stacks";
+		} else if ( design.family === "Blood Hunt" ) {
+			count = counters.hunt;
+			maximum = 4;
+			readyText = "Savage Rend on marked prey is ready";
+		} else if ( design.family === "Execute" && design.option === 3 ) {
+			count = counters.ownerExecute;
+			maximum = 7;
+			readyText = "Next damaging attack triggers the execution sweep";
+		} else if ( design.family === "Crushing Paw" ) {
+			count = counters.ownerHits;
+			maximum = 10;
+			readyText = "Next qualifying hit releases the stun";
+		} else return [];
+		if ( count === undefined ) return [];
+		const ready = count >= maximum - ([ "Bloodscent", "Blood Hunt" ].includes( design.family ) ? 0 : 1);
+		const status = ready ? readyText : "Building stacks";
+		return [ {
+			design,
+			count,
+			maximum,
+			ready,
+			label: `Owner ${design.name}: ${count}/${maximum} — ${status}`,
+			helpText: `Owner · ${design.name}\n${count} / ${maximum}\n${status}\n` +
+				(design.family === "Blood Hunt" ?
+					"Shared prey mark. Rend the marked enemy; expires after 8 s. Switching prey resets charges." :
+					design.family === "Bloodscent" ?
+					"Attacks refresh stacks for 6 s." :
+					"Triggers automatically; no button press required.")
+		} ];
+	} );
 }
 
 /*
@@ -116,6 +174,42 @@ export function petRowHelp( state: PetTraining, row: number, now: number ): stri
 			"Blocks and DoTs do not count.",
 			"Expiry/cast removes bonus HP."
 		);
+	}
+	if ( d?.family === "Bloodscent" ) {
+		lines.push(
+			`Wolf stacks: ${state.counters?.wolfBlood ?? 0}`,
+			`Owner stacks: ${state.counters?.ownerBlood ?? 0}`,
+			"Top right: wolf stacks.",
+			"One stack per damaging action.",
+			"Blocks, DoTs and procs add none.",
+			"Both pools expire after 6 s."
+		);
+	}
+	if ( d?.family === "Hunting Howl" ) {
+		lines.push( "Manual buff; no enemy required.", "Strongest howl wins; no stacking." );
+	}
+	if ( d?.family === "Blood Hunt" ) {
+		lines.push(
+			`Prey mark: ${state.counters?.hunt ?? 0} / 4`,
+			"Top right: shared prey charges.",
+			"Switching prey resets charges.",
+			"Rend consumes a ready mark.",
+			"Mark expires after 8 s.",
+			"Blocks, DoTs and procs add none."
+		);
+	}
+	if ( d?.family === "Execute" ) {
+		lines.push( "Unique monsters cannot be executed." );
+		if ( d.option > 1 ) lines.push( "Owner requires a living wolf within 20 m.", "Ordinary-world PvE only." );
+		if ( d.option === 3 ) {
+			lines.push(
+				`Wolf attacks: ${state.counters?.wolfExecute ?? 0} / 7`,
+				`Owner attacks: ${state.counters?.ownerExecute ?? 0} / 7`,
+				"Top right: wolf attack count.",
+				"Each damaging action counts once.",
+				"Sweeps/DoTs/procs do not count."
+			);
+		}
 	}
 	if ( d?.family === "Mark Prey" ) lines.push( "Top right: attacks to recharge." );
 	if ( d?.family === "Murder of Crows" ) lines.push( "Top right: attacks toward burst." );

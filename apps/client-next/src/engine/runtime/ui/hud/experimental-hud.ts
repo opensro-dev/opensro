@@ -17,6 +17,7 @@ import {
 	type ExperimentalOptions,
 	renderScales
 } from "@/engine/foundation/ui/experimental-options";
+import type { SessionState } from "@/engine/contracts/session";
 
 /*
 ================
@@ -86,8 +87,14 @@ export const EXPERIMENTAL_TABS: readonly {
 	},
 	{
 		title: "World",
-		section: "Lighting and terrain",
+		section: "World and map",
 		rows: [
+			{
+				key: "monsterGuide",
+				id: "experimental-monster-guide",
+				label: "Monster hunting guide",
+				description: "Monster portraits and approximate level ranges on M."
+			},
 			{
 				key: "heightFog",
 				id: "experimental-height-fog",
@@ -263,6 +270,19 @@ export const EXPERIMENTAL_TABS: readonly {
 ];
 
 const EXPERIMENTAL_TAB_COUNT = EXPERIMENTAL_TABS.length;
+
+/*
+================
+experimentalTabs
+
+Port-only, not native. The shard's published reference is the capability;
+a saved local preference cannot reveal an option the shard has disabled.
+================
+*/
+export function experimentalTabs( session: SessionState | null | undefined ) {
+	if ( session?.phase === "world" && session.huntingGuide ) return EXPERIMENTAL_TABS;
+	return EXPERIMENTAL_TABS.map( tab => ({ ...tab, rows: tab.rows.filter( row => row.key !== "monsterGuide" ) }) );
+}
 
 /*
 ================

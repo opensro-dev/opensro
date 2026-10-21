@@ -643,6 +643,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 		success = wire.SkillCastAreaReleaseFrame(wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: caster, InstanceToken: token}, primary.gid, published.targets)
 		lifetime = uint64(skill.ActionDurationMs)
 	}
+	lifetime = lifetime - uint64(skill.ActionDurationMs) + uint64(rt.wolfHowlActionMs(division, snapshot, skill.ActionDurationMs))
 	if skill.ActionHandler == enterworld.SkillActionProjectile {
 		// The original target sample determines flight, even when impact
 		// displaces or kills it. Zero-preparation area shots retain it too.
@@ -691,5 +692,20 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 	public = append(public, battleFrames...)
 	out := OpResult{Frames: actor, Broadcast: public, ActorPrivate: private,
 		Recipients: append(commit.settlements.others, published.recipients...)}
+	if rootID == 0 {
+		var targets []uint32
+		for _, victim := range plan.victims {
+			if victim.sequence < 0 {
+				continue
+			}
+			for _, impact := range commit.committed[victim.sequence] {
+				if impact.Damage > 0 {
+					targets = append(targets, victim.target.gid)
+					break
+				}
+			}
+		}
+		rt.wolfExecuteAttack(division, character, 0, 1, targets, nowMs)
+	}
 	return mergeOpResults(out, published.returned), skillCastAccepted
 }

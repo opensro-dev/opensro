@@ -12,7 +12,9 @@ suppressed slots left out.
 import { countJobFraction } from "@/engine/foundation/gameplay/count-job";
 import { buffDepartureFrame } from "@/engine/foundation/gameplay/buff-slots";
 import { abnormalBarFraction } from "@/engine/foundation/gameplay/abnormal-snapshot";
-import type { GameplayState } from "@/engine/contracts/gameplay";
+import type { GameplayState, PetTraining } from "@/engine/contracts/gameplay";
+import type { UiRect } from "@/engine/contracts/ui";
+import { petOwnerStacks, petSkillIcon, petSkillIconUV } from "./pet-skill-icons";
 import { effectRemainingMs } from "@/engine/foundation/gameplay/attached-effects";
 import { cosTimerBars } from "@/engine/foundation/gameplay/cos-timer";
 import { paramJobFraction } from "@/engine/foundation/gameplay/param-job";
@@ -29,7 +31,12 @@ group reserves at least one primary row and adds a two-pixel gap.
 suppressed holds board slot serials flagged by the 1 s refresh (6E64A0).
 ================
 */
-export function buffBoard( game: GameplayState, timeMs: number, suppressed: ReadonlySet<number> = new Set() ) {
+export function buffBoard(
+	game: GameplayState,
+	timeMs: number,
+	suppressed: ReadonlySet<number> = new Set(),
+	ownerPet?: PetTraining
+) {
 	const primary: Entry[] = [], secondary: Entry[] = [];
 	for ( const slot of game.buffSlots ?? [] ) {
 		const effect = slot.effect;
@@ -116,6 +123,18 @@ export function buffBoard( game: GameplayState, timeMs: number, suppressed: Read
 			} );
 		}
 	}
+	for ( const row of petOwnerStacks( ownerPet ) ) {
+		primary.push( {
+			id: "owner-pet-stack:" + row.design.id,
+			path: petSkillIcon( row.design ),
+			uv: petSkillIconUV( row.design ),
+			label: row.label,
+			helpText: row.helpText,
+			stack: row.count,
+			ready: row.ready,
+			fraction: Math.min( 1, row.count / row.maximum )
+		} );
+	}
 	for ( const row of abnormalBuffIcons( game.vitals?.find( v => v.gid === game.localGid )?.abnormal ?? 0 ) ) {
 		const record = game.abnormalRecords?.find( item => item.bit === Number( row.id.slice( 9 ) ) );
 		secondary.push( {
@@ -141,6 +160,9 @@ interface Entry {
 	helpSource?: import("@/engine/contracts/ui").UiHelpSource;
 	id: string;
 	path: string;
+	uv?: UiRect;
+	stack?: number;
+	ready?: boolean;
 	label: string;
 	fraction: number | null;
 	secondary?: number | null;

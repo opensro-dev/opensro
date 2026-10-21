@@ -88,21 +88,6 @@ TestAdvancedWolfConditionAndCrowKillHealing
 ================
 */
 func TestAdvancedWolfConditionAndCrowKillHealing(t *testing.T) {
-	t.Run("scent-requires-wounded-target", func(t *testing.T) {
-		rt, clock, c, mob := newPetCombatRuntime(t, 100000, attackPetBand)
-		makeTrainedPet(rt, c, "COS_P_WOLF_040", 90)
-		rt.AttackPetExpansion = true
-		learnPetBook(t, c, 12)
-		ref, _ := rt.cosReference(c.ActiveCOS)
-		step := petCombatStep{pet: c.ActiveCOS, snapshot: c, ref: ref, state: rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID), nowMs: clock.NowMs()}
-		_, strike := rt.petTrainedDecide(step, enterworld.SkillRow{}, petCombatTarget{monster: &mob})
-		normal, _ := petTrainedStats(strike, mob, combat.Stats{}, combat.Stats{})
-		mob.CurrentHP = mob.Ref.MaxHP / 4
-		wounded, _ := petTrainedStats(strike, mob, combat.Stats{}, combat.Stats{})
-		if normal.CriticalRate != 0 || wounded.CriticalRate <= 0 {
-			t.Fatalf("critical rates normal=%v wounded=%v", normal.CriticalRate, wounded.CriticalRate)
-		}
-	})
 	t.Run("carrion-heals-only-on-kill", func(t *testing.T) {
 		rt, clock, c, mob := newPetCombatRuntime(t, 100000, attackPetBand)
 		makeTrainedPet(rt, c, "COS_P_RAVEN_040", 90)
@@ -205,7 +190,6 @@ func TestAdvancedPetStatPassivesReachCombat(t *testing.T) {
 		code, kind string
 		id         uint8
 	}{
-		{"COS_P_WOLF_040", "defense", 15},
 		{"COS_P_PENGUIN_040", "defense", 45},
 		{"COS_P_PENGUIN_040", "magic", 39},
 		{"COS_P_RAVEN_040", "speed", 57},

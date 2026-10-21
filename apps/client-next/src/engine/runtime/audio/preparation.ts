@@ -18,6 +18,11 @@ import {
 	skillSoundRoots,
 	PET_BOND_TRANSFER_SOUND,
 	PET_BOND_REVIVE_SOUND,
+	PET_EXECUTE_SOUND,
+	PET_HOWL_SOUND,
+	PET_HUNT_SOUND,
+	PET_REND_SOUND,
+	PET_SWEEP_SOUND,
 	PET_ROAR_SOUND,
 	PET_SHIELD_SOUND,
 	PET_SHIELD_BURST_SOUND
@@ -254,6 +259,13 @@ export function createSoundPreparation( assets: AssetOwner, origin: string ) {
 					PET_BOND_REVIVE_SOUND
 				]
 			) wanted.add( path );
+		}
+		if ( gameplay.petTraining && [ ...wantedProfiles ].some( name => name.startsWith( "COS_P_WOLF" ) ) ) {
+			for (
+				const path of [ PET_HOWL_SOUND, PET_REND_SOUND, PET_EXECUTE_SOUND, PET_SWEEP_SOUND, PET_HUNT_SOUND ]
+			) {
+				wanted.add( path );
+			}
 		}
 		for ( const row of rules ) {
 			if ( !row.publicPath ) continue;

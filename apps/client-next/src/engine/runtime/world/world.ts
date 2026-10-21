@@ -23,6 +23,7 @@ import type { PresentationRandom } from "@/engine/contracts/presentation-random"
 import type { CameraScript } from "@/engine/contracts/camera-script";
 import { assetFailure, createAssetRecovery } from "@/engine/foundation/assets/asset-recovery";
 import { initialCameraPitch, initialCameraYaw } from "@/engine/foundation/rendering/camera-options";
+import { isDungeonRegion, sectorX, sectorY } from "@/engine/foundation/world/world-space";
 
 type Transaction =
 	| { phase: "idle"; }
@@ -310,7 +311,7 @@ export function createWorldStream(
 		previous = { ...pose };
 		if (
 			transaction.phase === "ready" && transaction.region === pose.regionId && catalog &&
-			!(pose.regionId & 0x8000)
+			!isDungeonRegion( pose.regionId )
 		) {
 			const dx = prior?.regionId === pose.regionId ? pose.x - prior.x : 0,
 				dz = prior?.regionId === pose.regionId ? pose.z - prior.z : 0;
@@ -319,7 +320,7 @@ export function createWorldStream(
 			else if ( pose.x < 480 && dx < 0 ) sx = -1;
 			if ( pose.z > 1440 && dz > 0 ) sz = 1;
 			else if ( pose.z < 480 && dz < 0 ) sz = -1;
-			const x = (pose.regionId & 255) + sx, z = (pose.regionId >>> 8) + sz, candidate = (z << 8) | x;
+			const x = sectorX( pose.regionId ) + sx, z = sectorY( pose.regionId ) + sz, candidate = (z << 8) | x;
 			const entry = (sx || sz) && x >= 0 && x < 256 && z >= 0 && z < 128 ? missionRegion( candidate ) : null;
 			if ( entry && future?.region !== candidate && failedFuture !== candidate ) {
 				failedFuture = null;
@@ -374,7 +375,7 @@ export function createWorldStream(
 		}
 		if ( future && future.region !== pose.regionId ) clearFuture();
 		if ( assets.available() === 0 ) return;
-		if ( pose.regionId & 0x8000 ) {
+		if ( isDungeonRegion( pose.regionId ) ) {
 			transaction = { phase: "loading", region: pose.regionId };
 			// A dungeon has its own coordinates; outdoor terrain is not kept meanwhile.
 			terrain.clear();
@@ -457,9 +458,9 @@ export function createWorldStream(
 				transaction.phase === "ready" || transaction.phase === "failed"
 			) return undefined;
 			const region = previous.regionId;
-			const adjacent = !(region & 0x8000) && !(displayedRegion & 0x8000) &&
-				Math.abs( (region & 255) - (displayedRegion & 255) ) <= 1 &&
-				Math.abs( (region >>> 8) - (displayedRegion >>> 8) ) <= 1;
+			const adjacent = !isDungeonRegion( region ) && !isDungeonRegion( displayedRegion ) &&
+				Math.abs( sectorX( region ) - sectorX( displayedRegion ) ) <= 1 &&
+				Math.abs( sectorY( region ) - sectorY( displayedRegion ) ) <= 1;
 			return adjacent ? undefined : region;
 		},
 		error: () => transaction.phase === "failed" ? transaction.error : null,

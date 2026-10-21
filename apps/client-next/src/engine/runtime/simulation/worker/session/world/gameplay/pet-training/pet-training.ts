@@ -53,14 +53,40 @@ a protocol error, never a partial one.
 		receive( frame: WireFrame, now: number ): boolean {
 			if ( frame.opcode === OP_PET_SKILL_COUNTERS ) {
 				const p = frame.payload;
-				if ( p.length !== 8 || p[4]! >= 40 || p[5]! >= 10 || p[6]! >= 10 || p[7]! > 10 ) {
+				if (
+					(p.length !== 8 && p.length !== 10 && p.length !== 12 && p.length !== 17) || p[4]! >= 40 ||
+					p[5]! >= 10 ||
+					p[6]! >= 10 || p[7]! > 10 ||
+					(p.length >= 10 && (p[8]! >= 7 || p[9]! >= 7)) ||
+					(p.length >= 12 && (p[10]! > 10 || p[11]! > 10)) ||
+					(p.length === 17 &&
+						(p[12]! > 4 ||
+							(p[12] === 0) !==
+								(new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 13, true ) === 0)))
+				) {
 					throw Error( "Invalid pet skill counters" );
 				}
 				const gid = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 0, true );
 				if ( state?.gid === gid ) {
 					state = {
 						...state,
-						counters: { attacks: p[4]!, bearHits: p[5]!, ownerHits: p[6]!, resolve: p[7]! }
+						counters: {
+							attacks: p[4]!,
+							bearHits: p[5]!,
+							ownerHits: p[6]!,
+							resolve: p[7]!,
+							...(p.length >= 10 ? { wolfExecute: p[8]!, ownerExecute: p[9]! } : {}),
+							...(p.length >= 12 ? { wolfBlood: p[10]!, ownerBlood: p[11]! } : {}),
+							...(p.length === 17 ?
+								{
+									hunt: p[12]!,
+									huntTarget: new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32(
+										13,
+										true
+									)
+								} :
+								{})
+						}
 					};
 				}
 				return true;

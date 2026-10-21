@@ -135,3 +135,16 @@ A path inside the published client tree (client-public).
 export function clientPublicPath( ...parts ) {
 	return path.join( CLIENT_PUBLIC_ROOT, ...parts );
 }
+
+/*
+================
+intermediateImagePath
+
+A path inside the generated tree's converted images. The owner of the
+generated root resolves a published image source path here, so no build
+step has to know where the tree sits.
+================
+*/
+export function intermediateImagePath( ...parts ) {
+	return path.join( INTERMEDIATE_ROOT, "images", ...parts );
+}

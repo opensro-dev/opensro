@@ -23,6 +23,13 @@ import {
 	PET_SHIELD_BURST_SOUND
 } from "@/engine/foundation/animation/sound-selectors";
 import { trimToEffectBudget } from "@/engine/foundation/animation/effect-room";
+import {
+	WOLF_EFFECT_MAX_PARTS,
+	WOLF_EFFECT_SECONDS,
+	WOLF_EFFECT_SOUND,
+	wolfEffectKind,
+	wolfEffectParts
+} from "@/engine/foundation/animation/wolf-effects";
 import { petRoarRadius } from "@/engine/foundation/ui/pet-training";
 import { castResultAt } from "@/engine/foundation/gameplay/cast-results";
 import { questMarkerEffect } from "@/engine/foundation/gameplay/quest";
@@ -129,6 +136,8 @@ const CAPTURED_MONSTER_TYPE = 6 << 11;
 // (trimToEffectBudget); only a cast arriving with every slot taken by
 // other casts skips its visuals.
 const EFFECT_ACTOR_BUDGET = 2048;
+// A one-shot whose model is still not resident this long after its spawn is dropped.
+const UNREADY_ONE_SHOT_SECONDS = 15;
 // 8DE74C loads [0xC14E6C], -pi/2 as a float, as the fYaw of every AT_TARGET
 // mover it hands to CIDecoSkillEffectEntity_Initialize (8D8E30). 8DE6C0 first
 // sets the mover's rotation axis byte +0xD4 to 0 (CIDecoStopObj's default,
@@ -450,6 +459,18 @@ export function createCharacterEffects(
 			shockPrimaryGid: number;
 			shockSecondaryGid: number;
 			shockCoreGid: number;
+		}
+	>();
+	// Wolf Hunting Howl (actions 1..3) and Savage Rend (4..6) on the wolf's GID.
+	const wolfSkills = new Map<
+		number,
+		{
+			revision: number;
+			action: number;
+			startedAt: number;
+			sounded: boolean;
+			pose: CharacterActor["pose"];
+			gids: readonly number[];
 		}
 	>();
 	const shields = new Map<
@@ -3190,6 +3211,12 @@ export function createCharacterEffects(
 						}
 					}
 					if ( !ready( visual.actor.model ) ) {
+						// A one-shot whose model never becomes resident (failed or evicted
+						// asset) would hold its slot forever and fill the damage pool.
+						if (
+							visual.independent && !visual.flight && !command &&
+							elapsed >= UNREADY_ONE_SHOT_SECONDS
+						) active.delete( gid );
 						continue;
 					}
 					// Asset admission starts a one-shot's visual clock. Projectile
@@ -3541,6 +3568,118 @@ export function createCharacterEffects(
 						}
 					}
 				}
+				// Port-only wolf skill signals (server petwolfkit.go / petwolfvisual.go),
+				// each a 0x324B emote on the object the effect belongs to. The wolf's
+				// look is its own: retail beast-howl, wolf-strike, blood and war-cry
+				// effect programs (WOLF_EFFECT_PARTS), never the bear's roar models.
+				// 1..3 Hunting Howl (wolf, with the pet-howl clip), 4..6 Savage Rend
+				// (wolf, sent at the bite's windup with pet-rend), 0xF0 executed
+				// (victim), 0xF1 Execute III sweep (wolf or owner), 0xF2 Blood Hunt
+				// consumed (prey), 0xF3 Blood Hunt III burst (bleeding enemy), 0xF4
+				// Bloodscent full (wolf or owner). The server owns every outcome.
+				for ( const entity of entities ) {
+					const action = entity.emote?.action ?? 0;
+					if (
+						!(entity.kind === "cos" && action >= 1 && action <= 6) && !(action >= 0xf0 && action <= 0xf4)
+					) {
+						continue;
+					}
+					const existing = wolfSkills.get( entity.gid );
+					if ( existing?.revision === entity.emote!.revision ) continue;
+					const pose = presentation.get( entity.gid )?.pose ?? {
+						regionId: entity.regionId,
+						x: entity.x,
+						y: entity.y,
+						z: entity.z,
+						yaw: nativeHeadingYaw( entity.heading )
+					};
+					wolfSkills.set( entity.gid, {
+						revision: entity.emote!.revision,
+						action,
+						startedAt: now,
+						sounded: false,
+						pose: { ...pose },
+						gids: existing?.gids ?? Array.from( { length: WOLF_EFFECT_MAX_PARTS }, () => allocate() )
+					} );
+				}
+				for ( const [gid, skill] of [ ...wolfSkills ] ) {
+					const entity = byGid.get( gid );
+					if ( !entity || entity.emote?.revision !== skill.revision ) {
+						wolfSkills.delete( gid );
+						continue;
+					}
+					const elapsed = Math.max( 0, now - skill.startedAt );
+					const parts = wolfEffectParts( skill.action );
+					const kind = wolfEffectKind( skill.action );
+					// Keep the consumed revision until the entity leaves or a new emote arrives.
+					if ( elapsed >= WOLF_EFFECT_SECONDS ) continue;
+					const live = presentation.get( gid )?.pose ?? skill.pose;
+					// Victims keep where they were struck; a dead monster may already be gone.
+					const pose = kind === "victim" ? skill.pose : live;
+					const owner = entity.ownerGid !== undefined ? presentation.get( entity.ownerGid )?.pose : undefined;
+					const cue = WOLF_EFFECT_SOUND[skill.action];
+					if ( !skill.sounded && cue && elapsed >= cue.at ) {
+						skill.sounded = true;
+						if ( elapsed - cue.at < .25 ) {
+							play( {
+								id: `pet-wolf:${gid}:${skill.revision}`,
+								path: cue.path,
+								gain: cue.gain,
+								...audioPosition( pose ),
+								expires: now + .25
+							} );
+						}
+						if ( cue.shake ) {
+							cameraEvents.push( {
+								atMs: Math.trunc( now * 1000 ),
+								amplitude: 50,
+								durationMs: 500,
+								periodMs: 20
+							} );
+						}
+					}
+					// A short blood-red flare at the strike, a slower one for the howl.
+					const glow = kind === "howl" ?
+						Math.max( 0, Math.sin( Math.PI * Math.min( 1, elapsed / 1.4 ) ) ) :
+						Math.max( 0, 1 - Math.abs( elapsed - (parts[0]?.at ?? 0) ) / .35 );
+					if ( glow > 0 && kind !== "victim" ) {
+						roarAppearances.set( gid, {
+							pointLight: {
+								pose: { regionId: live.regionId, x: live.x, y: live.y + 12, z: live.z },
+								ambient: [ 1.1 * glow, 0.05 * glow, 0.04 * glow ],
+								diffuse: [ 1.9 * glow, 0.08 * glow, 0.06 * glow ],
+								range: 70 + 50 * glow,
+								attenuation: 0.4
+							},
+							materialTint: [ 1.0, 1.0 - 0.28 * glow, 1.0 - 0.28 * glow ]
+						} );
+					}
+					for ( const [index, part] of parts.entries() ) {
+						const age = elapsed - part.at,
+							model = "/assets/effects/programs.json#" + encodeURIComponent( part.path );
+						if ( age < 0 || !ready( model ) ) continue;
+						const life = duration( model, "effect" ) || 2;
+						if ( age >= life ) continue;
+						const at = part.anchor === "owner" ? owner ?? live : part.anchor === "follow" ? live : pose;
+						const reach = part.anchor === "front" ? 12 : 0;
+						result.push( {
+							gid: skill.gids[index]!,
+							model,
+							clip: "effect",
+							time: age,
+							loop: false,
+							scale: part.scale ?? 1,
+							pickable: false,
+							pose: {
+								regionId: at.regionId,
+								x: at.x + Math.sin( at.yaw ) * reach + (part.offset?.[0] ?? 0),
+								y: at.y + (part.lift ?? 0),
+								z: at.z + Math.cos( at.yaw ) * reach + (part.offset?.[1] ?? 0),
+								yaw: at.yaw
+							}
+						} );
+					}
+				}
 				for ( const [gid, visual] of shields ) {
 					if ( roarAppearances.has( gid ) ) continue;
 					const entity = byGid.get( gid );
@@ -3843,6 +3982,7 @@ export function createCharacterEffects(
 			materialOwners.clear();
 			hwan.clear();
 			roars.clear();
+			wolfSkills.clear();
 			roarAppearances.clear();
 			shields.clear();
 			spiritRings.clear();
@@ -3887,6 +4027,7 @@ export function createCharacterEffects(
 			materialOwners.clear();
 			hwan.clear();
 			roars.clear();
+			wolfSkills.clear();
 			roarAppearances.clear();
 			shields.clear();
 			statuses.clear();

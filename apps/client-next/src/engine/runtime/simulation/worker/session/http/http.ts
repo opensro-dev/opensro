@@ -10,6 +10,7 @@ session's release outdated, which the page shows as the update notice.
 
 ===========================================================================
 */
+import { HUNTING_GUIDE_BYTES_LIMIT } from "@/engine/contracts/hunting-guide";
 import { readBytes } from "@/engine/foundation/assets/read-bytes";
 import { decodeReverseMapPoints } from "@/engine/foundation/gameplay/reverse-return-map";
 import {
@@ -167,9 +168,10 @@ async function loadWorldReferences(
 	refItemSnapshot: unknown[];
 	refObjSnapshot: unknown[];
 	itemCommandReferences?: unknown[];
+	huntingGuide?: import("@/engine/contracts/hunting-guide").HuntingGuideSource;
 	reverseMapPoints?: unknown[];
 }> {
-	const ref = value as { path?: unknown; sha256?: unknown; bytes?: unknown; };
+	const ref = value as { path?: unknown; sha256?: unknown; bytes?: unknown; huntingGuide?: unknown; };
 	if (
 		!ref || typeof ref.sha256 !== "string" || !/^[a-f0-9]{64}$/.test( ref.sha256 ) ||
 		ref.path !== `/transport/references/${ref.sha256}.json` || typeof ref.bytes !== "number" ||
@@ -230,8 +232,10 @@ async function loadWorldReferences(
 		parsed.itemCommandReferences !== undefined &&
 		(!Array.isArray( parsed.itemCommandReferences ) || parsed.itemCommandReferences.length > REFERENCE_ROWS_LIMIT)
 	) throw Error( "Invalid item command references" );
+	const guide = huntingGuideSource( ref.huntingGuide, base );
 	const reverseMapPoints = decodeReverseMapPoints( parsed.reverseMapPoints );
 	return {
+		...(guide ? { huntingGuide: guide } : {}),
 		refSkillSnapshot: parsed.refSkillSnapshot,
 		refItemSnapshot: parsed.refItemSnapshot,
 		refObjSnapshot: parsed.refObjSnapshot,
@@ -240,4 +244,30 @@ async function loadWorldReferences(
 			{ itemCommandReferences: parsed.itemCommandReferences as unknown[] }),
 		...(reverseMapPoints.length ? { reverseMapPoints: [ ...reverseMapPoints ] } : {})
 	};
+}
+
+/*
+================
+huntingGuideSource
+
+Optional metadata cannot break native admission. Only a same-transport,
+content-addressed public reference resource may reach the HUD asset owner.
+================
+*/
+export function huntingGuideSource(
+	value: unknown,
+	base: string
+): import("@/engine/contracts/hunting-guide").HuntingGuideSource | undefined {
+	const ref = value as { path?: unknown; sha256?: unknown; bytes?: unknown; };
+	if (
+		!ref || typeof ref.sha256 !== "string" || !/^[a-f0-9]{64}$/.test( ref.sha256 ) ||
+		ref.path !== `/transport/references/${ref.sha256}.json` || typeof ref.bytes !== "number" ||
+		!Number.isInteger( ref.bytes ) || ref.bytes < 1 || ref.bytes > HUNTING_GUIDE_BYTES_LIMIT
+	) return undefined;
+	const url = new URL( base );
+	if ( url.protocol !== "http:" && url.protocol !== "https:" ) return undefined;
+	url.pathname = url.pathname.replace( /\/$/, "" ) + ref.path;
+	url.search = "";
+	url.hash = "";
+	return { url: url.href, bytes: ref.bytes };
 }

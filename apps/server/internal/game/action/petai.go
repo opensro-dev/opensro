@@ -70,8 +70,11 @@ type petSession struct {
 	public         []wire.Frame
 	// trained is the attack-pet expansion's unsaved combat memory
 	// (pettrained.go): attack counter and running self buffs.
-	counterView [8]byte
+	counterView [17]byte
 	counterSent bool
+	wolf        wolfKitState
+	wolfBook    uint8
+	wolfHits    [2]uint8
 	trained     petTrainedRuntime
 	// bond's spent budget is read by planPetBond and written by
 	// commitPetBond under rt.petMu: concurrent victim hits in one
@@ -161,6 +164,13 @@ func (rt *Runtime) forgetPetSession(division, name string) {
 	rt.petMu.Unlock()
 	for key, state := range retired {
 		rt.cancelPetCombat(key, state, rt.Now().UnixMilli())
+		rt.wolfHowls.Lock()
+		howl, found := rt.wolfHowls.rows[key]
+		delete(rt.wolfHowls.rows, key)
+		rt.wolfHowls.Unlock()
+		if found {
+			rt.queueMonsterLegFrames([]simulation.DivisionFrames{{DivisionID: key.division, Frames: simFrames(rt.wolfHowlFrames(key.division, howl))}})
+		}
 	}
 }
 
@@ -228,7 +238,9 @@ advancePetInDivision
 func (rt *Runtime) advancePetInDivision(key petOwnerKey, nowMs int64) (int64, []simulation.Frame, []wire.Frame, []RecipientFrames, []simulation.DivisionFrames, string, *simulation.Tether) {
 	unlock := rt.lockDivision(key.division)
 	defer unlock()
-	frames := rt.advancePetSpirit(key, nowMs)
+	rt.resetWolfExecution(key, nowMs)
+	frames := rt.advanceWolfKit(key, nowMs)
+	frames = append(frames, rt.advancePetSpirit(key, nowMs)...)
 	frames = append(frames, rt.advancePetBond(key, rt.petSessionFor(key.division, key.name, key.gid), nowMs)...)
 	frames = append(frames, rt.advancePetSatiety(key, nowMs)...)
 	frames = append(frames, rt.advancePet(key, nowMs)...)
@@ -242,7 +254,7 @@ func (rt *Runtime) advancePetInDivision(key petOwnerKey, nowMs int64) (int64, []
 		var counter wire.Frame
 		rt.deps.Read(key.division, func() { counter = petSkillCounterFrame(state, key.gid) })
 		if len(counter.Payload) > 0 {
-			var view [8]byte
+			var view [17]byte
 			copy(view[:], counter.Payload)
 			if !state.counterSent || view != state.counterView {
 				frames = append(frames, simFrames([]wire.Frame{counter})...)
@@ -417,7 +429,8 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 			return rt.ConstrainMovement(snapshot.Name, from, to)
 		}
 	}
-	if rt.advancePetRoar(petCombatStep{key: key, state: state, snapshot: snapshot, pet: cos, ref: ref, nowMs: nowMs}) {
+	if rt.advancePetRoar(petCombatStep{key: key, state: state, snapshot: snapshot, pet: cos, ref: ref, nowMs: nowMs}) ||
+		nowMs < state.wolf.howlHoldUntil {
 		return state.follower.Stop(nowMs)
 	}
 	if frames, handled := rt.advancePetCombat(petCombatStep{key: key, state: state, snapshot: snapshot,
@@ -618,7 +631,7 @@ func (rt *Runtime) companionPresentation(division string, state *petSession, cos
 		Fresh: state.summonedAtMs != 0 && now-state.summonedAtMs <= petAppearWindowMs,
 		Row: wire.CosSpawnBand2{Band: uint8(ref.TidWord >> 11), RefObjID: cos.RefObjID, Gid: cos.GID,
 			Walk: walk, Run: run,
-			Scale: cosParameter(ref, cos, block, actionSpeedParameter), Name: name, OwnerName: c.Name, OwnerModelRef: enterworld.CharacterModelRef(c, nil), OwnerGid: enterworld.ObjectIDForCharacter(c)}}
+			Scale: cosParameter(ref, cos, block, actionSpeedParameter) / float32(rt.petAttackSpeed(petCombatStep{snapshot: c, pet: cos, state: state, nowMs: now})), Name: name, OwnerName: c.Name, OwnerModelRef: enterworld.CharacterModelRef(c, nil), OwnerGid: enterworld.ObjectIDForCharacter(c)}}
 	if state.relocatedAtMs != 0 && now-state.relocatedAtMs <= petAppearWindowMs {
 		result.Row.State = 7
 	}
@@ -723,6 +736,13 @@ func (rt *Runtime) relocateReturningPet(division string, c *enterworld.Character
 		state := rt.petSessions[key]
 		rt.petMu.Unlock()
 		rt.cancelPetCombat(key, state, rt.Now().UnixMilli())
+		rt.wolfHowls.Lock()
+		howl, found := rt.wolfHowls.rows[key]
+		delete(rt.wolfHowls.rows, key)
+		rt.wolfHowls.Unlock()
+		if found {
+			rt.queueMonsterLegFrames([]simulation.DivisionFrames{{DivisionID: key.division, Frames: simFrames(rt.wolfHowlFrames(key.division, howl))}})
+		}
 		rt.releasePetFormation(key, state)
 		expireCosPickup(state)
 		state.public = nil

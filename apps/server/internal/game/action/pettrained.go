@@ -91,20 +91,24 @@ type petTrainedStrike struct {
 	mods     companion.Modifiers
 	uses     []petRowUse
 	// ownerState is the owner's 0x3FB1 push after a row was spent.
-	ownerState []wire.Frame
-	reserved   bool
-	procUsed   bool
-	execute    float64 // kill non-bosses below this share of max HP
-	execBleed  float64 // extra execute share against bleeding targets
-	critBonus  float64
-	critWound  float64 // Scent of Blood: crit against bleeding or wounded
-	shatter    float64 // bonus damage share against frozen or frostbitten
-	ownerHeal  float64 // owner heal (percent of max HP) at commit
-	killHeal   float64 // owner heal on a kill
-	petHeal    float64 // pet heal (percent of max HP) at commit
-	passive    int     // passive row whose timer the commit restarts (-1)
-	passiveMs  int64
-	fixed      uint32 // Retribution's release: fixed damage per target
+	ownerState  []wire.Frame
+	reserved    bool
+	procUsed    bool
+	execute     float64 // kill non-bosses below this share of max HP
+	execBleed   float64 // extra execute share against bleeding targets
+	executed    bool    // this strike's Execute raised the last hit to a kill
+	critBonus   float64
+	critWound   float64 // Scent of Blood: crit against bleeding or wounded
+	shatter     float64 // bonus damage share against frozen or frostbitten
+	ownerHeal   float64 // owner heal (percent of max HP) at commit
+	killHeal    float64 // owner heal on a kill
+	petHeal     float64 // pet heal (percent of max HP) at commit
+	passive     int     // passive row whose timer the commit restarts (-1)
+	passiveMs   int64
+	damageBonus float64 // Bloodscent adds once after mitigation.
+	rend        bool
+	rendBleed   bool
+	fixed       uint32 // Retribution's release: fixed damage per target
 }
 
 /*
@@ -211,6 +215,11 @@ func (rt *Runtime) petTrainedDecide(step petCombatStep, skill enterworld.SkillRo
 		}
 	}
 	rt.petApplyPassives(step, &skill, ts, level, hpPercent)
+	if companion.PetKind(pet.Codename) == "Wolf" {
+		damage, crit := wolfDamageBonus(step, 0)
+		ts.damageBonus += damage
+		ts.critBonus += crit
+	}
 	m := ts.mods
 	for _, e := range []struct {
 		add float64
@@ -267,6 +276,21 @@ func (rt *Runtime) petApplyAction(step petCombatStep, skill *enterworld.SkillRow
 	level := uint32(max(1, step.pet.Level))
 	run := &step.state.trained
 	switch s.EffectName() {
+	case "Hunting Howl":
+		return false // Explicit manual buff; never fires on a basic attack.
+	case "Savage Rend":
+		skill.Attack.Percent = skill.Attack.Percent * int64(v) / 100
+		bleed := level * 2
+		if s.Option >= 2 {
+			bleed *= 2
+			setPetArea(skill, petAreaAroundTarget, 4, 3, 0)
+		}
+		if s.Option == 3 {
+			setPetArea(skill, petAreaAroundTarget, 6, 5, 0)
+		}
+		setPetStatus(skill, tagBleed, [6]uint32{petBleedMs, 100, petStatusGrade, bleed})
+		skill.Abnormal.Pulse, skill.Abnormal.PulsePresent = petBleedPulseMs, true
+		ts.rend, ts.rendBleed = true, s.Option == 3
 	case "Terrifying Howl":
 		radius := 6.0
 		if rank2 {
@@ -384,10 +408,8 @@ func (rt *Runtime) petApplyPassives(step petCombatStep, skill *enterworld.SkillR
 		}
 		switch s.EffectName() {
 		case "Execute":
-			ts.execute = v
-			if rank2 {
-				ts.execBleed = max(ts.execBleed, v+5)
-			}
+			ts.execute = companion.ExecutionThreshold(s, lvl, false)
+			ts.execBleed = max(ts.execBleed, companion.ExecutionThreshold(s, lvl, true))
 		case "Bloodlust":
 			if every(10, 8) {
 				skill.Attack.Percent = skill.Attack.Percent * int64(v) / 100
@@ -450,6 +472,9 @@ func (rt *Runtime) petAttackSpeed(step petCombatStep) float64 {
 		return 1
 	}
 	pct := companion.ModifiersFor(step.pet).AttackSpeedPct
+	if step.state.wolf.howlUntil > step.nowMs {
+		pct += step.state.wolf.howlPercent
+	}
 	if run := &step.state.trained; run.frenzyUntil > step.nowMs {
 		pct += run.frenzyPercent
 	}
@@ -514,6 +539,11 @@ func (rt *Runtime) petTrainedDamage(ts *petTrainedStrike, target monster.Instanc
 			continue
 		}
 		lastHit = i
+		bonus := ts.damageBonus
+		if ts.rendBleed && petTargetBleeds(target) {
+			bonus += 25
+		}
+		wolfBonusDamage(f, bonus)
 		if ts.fixed > 0 {
 			f.Damage = max(f.Damage, ts.fixed)
 		}
@@ -542,6 +572,7 @@ func (rt *Runtime) petTrainedDamage(ts *petTrainedStrike, target monster.Instanc
 	left := float64(target.CurrentHP - total)
 	if left*100 < float64(target.Ref.MaxHP)*threshold {
 		formulas[lastHit].Damage += target.CurrentHP - total
+		ts.executed = true
 	}
 }
 

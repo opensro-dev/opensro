@@ -33,6 +33,7 @@ import {
 } from "@/engine/foundation/gameplay/peer-appearance";
 import { createEntityMotion } from "./motion/motion";
 import type { EntityState, WorldBatch, WorldEvent } from "@/engine/contracts/world";
+import { isDungeonRegion } from "@/engine/foundation/world/world-space";
 import { journalCost } from "@/engine/foundation/gameplay/journal-cost";
 import { mergeGameplaySnapshots } from "@/engine/foundation/gameplay/gameplay-snapshot";
 import type { Degradation, WireFrame } from "@/engine/contracts/network";
@@ -273,7 +274,7 @@ export function createEntities(
 	================
 	*/
 	function withBlock( entity: EntityState ): EntityState {
-		if ( !block || !(entity.regionId & 0x8000) ) return entity;
+		if ( !block || !isDungeonRegion( entity.regionId ) ) return entity;
 		const pose = { regionId: entity.regionId, x: entity.x, y: entity.y, z: entity.z, angle: entity.heading };
 		const dungeonBlock = block( pose, motion.owner( entity.gid ) );
 		return dungeonBlock === entity.dungeonBlock ? entity : Object.freeze( { ...entity, dungeonBlock } );
