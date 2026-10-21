@@ -534,7 +534,7 @@ drag delta after clipping it against the four view edges, so the stored
 position never leaves the page; pan is that clamped position.
 ================
 */
-function worldMapFrame(
+export function worldMapFrame(
 	pageId: number,
 	clip: UiRect,
 	pan: readonly [number, number],
