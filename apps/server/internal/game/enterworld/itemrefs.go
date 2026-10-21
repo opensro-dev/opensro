@@ -54,6 +54,12 @@ type TextdataItems struct {
 	// reaches that buildCharacterRef refused: authored data the port cannot
 	// read, which would fail a player's summon (RefusedSummonRows).
 	refusedSummonRows []string
+	// sharedKey names the process-wide parse this loader adopted, and
+	// sharedRows is true while its maps are still that parse's: the first
+	// Apply* call copies them (ownRows), so one loader's shard settings
+	// never reach another loader in the same process.
+	sharedKey  string
+	sharedRows bool
 }
 
 // NewTextdataItems returns a lazy loader over dir (itemdata*.txt +
@@ -180,12 +186,112 @@ func (t *TextdataItems) Len() int {
 	return len(t.byCodename)
 }
 
+// sharedItemParses deduplicates identical item projections per process, as
+// sharedSkillParses does for skills: every package's tests built loaders over
+// the same directory and re-parsed it each time.
+var sharedItemParses sharedParses[TextdataItems]
+
 /*
 ================
 load
+
+load adopts the process-wide parse of the same files. The parse is
+immutable once published; a loader that changes rows copies them first
+(ownRows), and UseBoundedCache releases the shared entry so production
+does not pin the rows it hands to the record cache.
 ================
 */
 func (t *TextdataItems) load() {
+	t.sharedKey = itemTextdataKey(t.dir)
+	parsed := sharedItemParses.get(t.sharedKey, func() *TextdataItems {
+		p := &TextdataItems{dir: t.dir}
+		p.parse()
+		return p
+	})
+	t.byCodename, t.byID, t.charactersByCodename = parsed.byCodename, parsed.byID, parsed.charactersByCodename
+	t.summonableCharacters, t.refusedSummonRows = parsed.summonableCharacters, parsed.refusedSummonRows
+	t.sharedRows = true
+}
+
+/*
+================
+itemTextdataKey
+
+The files parse reads: textdataname.txt and every itemdata and characterdata
+table, fingerprinted by path, size and modification time.
+================
+*/
+func itemTextdataKey(dir string) string {
+	paths := []string{filepath.Join(dir, "textdataname.txt")}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "absent:" + dir
+	}
+	for _, entry := range entries {
+		lower := strings.ToLower(entry.Name())
+		if entry.IsDir() || !strings.HasSuffix(lower, ".txt") {
+			continue
+		}
+		if strings.HasPrefix(lower, "itemdata") || strings.HasPrefix(lower, "characterdata") {
+			paths = append(paths, filepath.Join(dir, entry.Name()))
+		}
+	}
+	return textdataFingerprint(paths...)
+}
+
+/*
+================
+ownRows
+
+Gives this loader private copies of the shared rows before it changes any.
+Rows are flat values (NativeFields is an immutable string), so a struct
+copy is a full copy for every Apply* change.
+================
+*/
+func (t *TextdataItems) ownRows() {
+	if !t.sharedRows {
+		return
+	}
+	t.sharedRows = false
+	clones := make(map[*ItemRef]*ItemRef, len(t.byCodename))
+	clone := func(ref *ItemRef) *ItemRef {
+		if ref == nil {
+			return nil
+		}
+		if c, ok := clones[ref]; ok {
+			return c
+		}
+		c := *ref
+		clones[ref] = &c
+		return &c
+	}
+	byCodename := make(map[string]*ItemRef, len(t.byCodename))
+	for name, ref := range t.byCodename {
+		byCodename[name] = clone(ref)
+	}
+	byID := make(map[uint32]*ItemRef, len(t.byID))
+	for id, ref := range t.byID {
+		byID[id] = clone(ref)
+	}
+	characters := make(map[string]*CharacterRef, len(t.charactersByCodename))
+	for name, ref := range t.charactersByCodename {
+		if ref == nil {
+			characters[name] = nil
+			continue
+		}
+		c := *ref
+		characters[name] = &c
+	}
+	t.byCodename, t.byID, t.charactersByCodename = byCodename, byID, characters
+	t.summonableCharacters = append([]CharacterRef(nil), t.summonableCharacters...)
+}
+
+/*
+================
+parse
+================
+*/
+func (t *TextdataItems) parse() {
 	t.byCodename = map[string]*ItemRef{}
 	t.byID = map[uint32]*ItemRef{}
 	defer func() {

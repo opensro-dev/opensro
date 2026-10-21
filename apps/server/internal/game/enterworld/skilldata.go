@@ -625,14 +625,18 @@ func (t *TextdataSkills) load() {
 	if monster.QinShiTombFromEnv() {
 		t.sharedKey += "+qinshi_tomb"
 	}
+	// The rank index is a pure function of the rows, so it is built once
+	// with the parse and shared read-only: decoding every resident row per
+	// loader cost each test binary tens of seconds.
 	parsed := sharedSkillParses.get(t.sharedKey, func() *TextdataSkills {
 		p := &TextdataSkills{dir: t.dir}
 		p.parse(shards)
+		p.indexLearnedRanks()
 		return p
 	})
 	t.shared = parsed
 	t.rows, t.plans, t.byCodename, t.loadErr = parsed.rows, parsed.plans, parsed.byCodename, parsed.loadErr
-	t.indexLearnedRanks()
+	t.byRank = parsed.byRank
 }
 
 /*

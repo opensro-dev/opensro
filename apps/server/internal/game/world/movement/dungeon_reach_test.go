@@ -20,6 +20,7 @@ import (
 	"math"
 	"math/rand"
 	"sort"
+	"sync"
 	"testing"
 
 	"opensro.online/server/internal/game/world/simulation"
@@ -27,6 +28,9 @@ import (
 
 // dungeonChordsPerRegion is the chord count per dungeon surface.
 const dungeonChordsPerRegion = 4000
+
+// dungeonChordChunks splits each region's chords into parallel subtests.
+const dungeonChordChunks = 8
 
 /*
 ================
@@ -126,29 +130,29 @@ func TestDungeonReachSkipMatchesEveryBlockScanned(t *testing.T) {
 		t.Skip("long: real-data dungeon chords")
 	}
 	v, every, regions := dungeonValidators(t)
-	random := rand.New(rand.NewSource(1018))
+	// Each region's chords run in independently seeded chunks, in parallel:
+	// the same chord count and the same floors below, spread over the cores
+	// instead of one region after another.
+	var mu sync.Mutex
 	outcomes := map[string]int{}
-	for _, region := range regions {
-		surface := v.dungeonSpawnSurfaces[region]
-		reference := every.dungeonSpawnSurfaces[region]
-		for i := 0; i < dungeonChordsPerRegion; i++ {
-			x, y, z := dungeonChordStart(random, surface)
-			angle, length := random.Float64()*2*math.Pi, 1+random.Float64()*119
-			from := simulation.Spawn{RegionID: region, X: x, Y: y, Z: z}
-			to := simulation.Spawn{RegionID: region, X: x + math.Cos(angle)*length, Y: y + (random.Float64()-.5)*20,
-				Z: z + math.Sin(angle)*length}
-			skipped, scanned := v.clipDungeonPath(from, to), every.clipDungeonPath(from, to)
-			if fmt.Sprintf("%+v", skipped) != fmt.Sprintf("%+v", scanned) {
-				t.Fatalf("region %#x chord %+v -> %+v:\n skipped %+v\n every   %+v", region, from, to, skipped, scanned)
-			}
-			outcomes[fmt.Sprintf("%v/%x", skipped.Outcome, skipped.NativeResult)]++
-			hx, hz := x+(random.Float64()-.5)*400, z+(random.Float64()-.5)*400
-			h1, ok1 := surface.heightAt(hx, y, hz)
-			h2, ok2 := reference.heightAt(hx, y, hz)
-			if h1 != h2 || ok1 != ok2 {
-				t.Fatalf("region %#x height at %v,%v,%v: %v %v vs every %v %v", region, hx, y, hz, h1, ok1, h2, ok2)
+	t.Run("chunks", func(t *testing.T) {
+		for _, region := range regions {
+			for chunk := 0; chunk < dungeonChordChunks; chunk++ {
+				region, chunk := region, chunk
+				t.Run(fmt.Sprintf("%#x/%d", region, chunk), func(t *testing.T) {
+					t.Parallel()
+					local := dungeonReachChunk(t, v, every, region, chunk)
+					mu.Lock()
+					for outcome, n := range local {
+						outcomes[outcome] += n
+					}
+					mu.Unlock()
+				})
 			}
 		}
+	})
+	if t.Failed() {
+		return
 	}
 	// Both arrivals and clips must occur, or the equality proves little.
 	arrived, stopped := 0, 0
@@ -163,6 +167,40 @@ func TestDungeonReachSkipMatchesEveryBlockScanned(t *testing.T) {
 		t.Fatalf("only %d arrived and %d stopped chords: %v", arrived, stopped, outcomes)
 	}
 	t.Logf("%d regions, %d chords identical both ways: %v", len(regions), len(regions)*dungeonChordsPerRegion, outcomes)
+}
+
+/*
+================
+dungeonReachChunk
+
+One chunk of a region's chords: the optimized clip and height against the
+every-block reference, seeded by region and chunk.
+================
+*/
+func dungeonReachChunk(t *testing.T, v, every *WaterValidator, region uint16, chunk int) map[string]int {
+	surface := v.dungeonSpawnSurfaces[region]
+	reference := every.dungeonSpawnSurfaces[region]
+	random := rand.New(rand.NewSource(1018 + int64(region)<<8 + int64(chunk)))
+	outcomes := map[string]int{}
+	for i := 0; i < dungeonChordsPerRegion/dungeonChordChunks; i++ {
+		x, y, z := dungeonChordStart(random, surface)
+		angle, length := random.Float64()*2*math.Pi, 1+random.Float64()*119
+		from := simulation.Spawn{RegionID: region, X: x, Y: y, Z: z}
+		to := simulation.Spawn{RegionID: region, X: x + math.Cos(angle)*length, Y: y + (random.Float64()-.5)*20,
+			Z: z + math.Sin(angle)*length}
+		skipped, scanned := v.clipDungeonPath(from, to), every.clipDungeonPath(from, to)
+		if fmt.Sprintf("%+v", skipped) != fmt.Sprintf("%+v", scanned) {
+			t.Fatalf("region %#x chord %+v -> %+v:\n skipped %+v\n every   %+v", region, from, to, skipped, scanned)
+		}
+		outcomes[fmt.Sprintf("%v/%x", skipped.Outcome, skipped.NativeResult)]++
+		hx, hz := x+(random.Float64()-.5)*400, z+(random.Float64()-.5)*400
+		h1, ok1 := surface.heightAt(hx, y, hz)
+		h2, ok2 := reference.heightAt(hx, y, hz)
+		if h1 != h2 || ok1 != ok2 {
+			t.Fatalf("region %#x height at %v,%v,%v: %v %v vs every %v %v", region, hx, y, hz, h1, ok1, h2, ok2)
+		}
+	}
+	return outcomes
 }
 
 /*

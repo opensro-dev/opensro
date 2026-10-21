@@ -116,6 +116,7 @@ func (t *TextdataItems) ApplyMallRideSpeed(factor float64) (int, error) {
 	if t.archive != nil {
 		return 0, fmt.Errorf("%s: references are already archived", EnvMallRideSpeed)
 	}
+	t.ownRows()
 	// The speeds are float32 rows; the old constant scaled them as float32 too.
 	scale, scaled := float32(factor), 0
 	for _, ref := range t.charactersByCodename {

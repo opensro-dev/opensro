@@ -21,6 +21,7 @@ import (
 	"math"
 	"math/rand"
 	"strings"
+	"sync"
 	"testing"
 
 	worldgeom "opensro.online/server/internal/game/world"
@@ -32,6 +33,9 @@ import (
 var reachChordRegions = []uint16{0x61A8, 0x6699, 0x694F, 0x6687, 0x6A2C, 0x6E4A}
 
 const reachChordsPerRegion = 20000
+
+// reachChordChunks splits each region's chords into parallel subtests.
+const reachChordChunks = 8
 
 /*
 ================
@@ -65,35 +69,67 @@ func TestReachSkipMatchesEveryPlacementScanned(t *testing.T) {
 	v := realAuthorityValidator(t)
 	every := realAuthorityValidator(t)
 	every.scanEveryPlacement = true
-	random := rand.New(rand.NewSource(831))
+	// Each region's chords run in independently seeded chunks, in parallel:
+	// the same chord count and the same floors below.
+	var mu sync.Mutex
 	chords, contacts, entries := 0, 0, 0
-	for _, region := range reachChordRegions {
-		for i := 0; i < reachChordsPerRegion; i++ {
-			x, z := random.Float64()*simulation.NativeRegionSize, random.Float64()*simulation.NativeRegionSize
-			y, ok := v.TerrainHeightAt(region, x, z)
-			if !ok {
-				continue
-			}
-			angle, length := random.Float64()*2*math.Pi, 1+random.Float64()*119
-			from := simulation.Spawn{RegionID: region, X: x, Y: y, Z: z}
-			to := simulation.NormalizeSpawnFrame(simulation.Spawn{RegionID: region, X: x + math.Cos(angle)*length, Y: y, Z: z + math.Sin(angle)*length})
-			skipped := reachScans(v, from, to)
-			scanned := reachScans(every, from, to)
-			if skipped != scanned {
-				t.Fatalf("chord %+v -> %+v:\n skipped %s\n every   %s", from, to, skipped, scanned)
-			}
-			chords++
-			if !strings.Contains(scanned, "contact +Inf +Inf false") {
-				contacts++
-			}
-			if !strings.Contains(scanned, "entry none") {
-				entries++
+	t.Run("chunks", func(t *testing.T) {
+		for _, region := range reachChordRegions {
+			for chunk := 0; chunk < reachChordChunks; chunk++ {
+				region, chunk := region, chunk
+				t.Run(fmt.Sprintf("%#x/%d", region, chunk), func(t *testing.T) {
+					t.Parallel()
+					c, k, e := reachChunk(t, v, every, region, chunk)
+					mu.Lock()
+					chords, contacts, entries = chords+c, contacts+k, entries+e
+					mu.Unlock()
+				})
 			}
 		}
+	})
+	if t.Failed() {
+		return
 	}
 	// The sweep must have exercised both scans, or the equality proves little.
 	if contacts < 1000 || entries < 100 {
 		t.Fatalf("only %d contacts and %d entries in %d chords", contacts, entries, chords)
 	}
 	t.Logf("%d chords identical both ways; %d object contacts, %d outline entries", chords, contacts, entries)
+}
+
+/*
+================
+reachChunk
+
+One chunk of a region's chords, the reach skip against every placement
+scanned, seeded by region and chunk. Returns chords, object contacts and
+outline entries.
+================
+*/
+func reachChunk(t *testing.T, v, every *WaterValidator, region uint16, chunk int) (int, int, int) {
+	random := rand.New(rand.NewSource(831 + int64(region)<<8 + int64(chunk)))
+	chords, contacts, entries := 0, 0, 0
+	for i := 0; i < reachChordsPerRegion/reachChordChunks; i++ {
+		x, z := random.Float64()*simulation.NativeRegionSize, random.Float64()*simulation.NativeRegionSize
+		y, ok := v.TerrainHeightAt(region, x, z)
+		if !ok {
+			continue
+		}
+		angle, length := random.Float64()*2*math.Pi, 1+random.Float64()*119
+		from := simulation.Spawn{RegionID: region, X: x, Y: y, Z: z}
+		to := simulation.NormalizeSpawnFrame(simulation.Spawn{RegionID: region, X: x + math.Cos(angle)*length, Y: y, Z: z + math.Sin(angle)*length})
+		skipped := reachScans(v, from, to)
+		scanned := reachScans(every, from, to)
+		if skipped != scanned {
+			t.Fatalf("chord %+v -> %+v: skipped %s every %s", from, to, skipped, scanned)
+		}
+		chords++
+		if !strings.Contains(scanned, "contact +Inf +Inf false") {
+			contacts++
+		}
+		if !strings.Contains(scanned, "entry none") {
+			entries++
+		}
+	}
+	return chords, contacts, entries
 }

@@ -50,6 +50,7 @@ func (t *TextdataItems) ApplyTradeGoodsPriceFactor(factor float64) (int, error) 
 	if t.archive != nil {
 		return 0, fmt.Errorf("trade goods prices: item references are already archived")
 	}
+	t.ownRows()
 	scaled := 0
 	for _, ref := range t.byCodename {
 		if ref == nil || !IsTradeGoods(ref.TypeIDs) {

@@ -81,6 +81,8 @@ func (t *TextdataItems) UseBoundedCache(capacity int) error {
 	t.idKeys = ids
 	t.byCodename = nil
 	t.byID = nil
+	// The record cache now holds the rows; stop pinning the shared parse.
+	sharedItemParses.release(t.sharedKey)
 	return nil
 }
 func (t *TextdataItems) Close() error {

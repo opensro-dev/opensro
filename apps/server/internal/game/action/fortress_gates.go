@@ -50,6 +50,34 @@ out: 634C90 answers its request 0x27 or 0x28, as for a missing record.
 ================
 */
 func loadGatePulleys(dir string) (map[uint32]uint32, error) {
+	files, err := filepath.Glob(filepath.Join(dir, "characterdata_*.txt"))
+	if err != nil {
+		return nil, err
+	}
+	key := enterworld.TextdataFingerprint(append([]string{filepath.Join(dir, "eventzonedata.txt")}, files...)...)
+	parsed := gatePulleyParses.Get(key, func() *gatePulleyParse {
+		pulleys, err := parseGatePulleys(dir, files)
+		return &gatePulleyParse{pulleys: pulleys, err: err}
+	})
+	return parsed.pulleys, parsed.err
+}
+
+// gatePulleyParse is one immutable reading of the gate pulley table; every
+// runtime over the same files shares it (the pulley rows sit in the large
+// characterdata tables, read only for this map).
+type gatePulleyParse struct {
+	pulleys map[uint32]uint32
+	err     error
+}
+
+var gatePulleyParses enterworld.TextdataParses[gatePulleyParse]
+
+/*
+================
+parseGatePulleys
+================
+*/
+func parseGatePulleys(dir string, files []string) (map[uint32]uint32, error) {
 	zones := make(map[string]uint32)
 	for _, row := range enterworld.ReadTextdataFile(filepath.Join(dir, "eventzonedata.txt")) {
 		if len(row) <= eventZoneCodenameColumn || row[0] != "1" {
@@ -58,10 +86,6 @@ func loadGatePulleys(dir string) (map[uint32]uint32, error) {
 		if id, err := strconv.ParseUint(row[eventZoneIDColumn], 10, 32); err == nil {
 			zones[strings.TrimSpace(row[eventZoneCodenameColumn])] = uint32(id)
 		}
-	}
-	files, err := filepath.Glob(filepath.Join(dir, "characterdata_*.txt"))
-	if err != nil {
-		return nil, err
 	}
 	out := make(map[uint32]uint32)
 	for _, file := range files {

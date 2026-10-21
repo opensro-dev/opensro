@@ -87,6 +87,7 @@ func (t *TextdataItems) ApplyMallTransportSpeed() (int, error) {
 	if t.archive != nil {
 		return 0, fmt.Errorf("%s: references are already archived", EnvMallTransportSpeed)
 	}
+	t.ownRows()
 	scaled := 0
 	for _, ref := range t.charactersByCodename {
 		if isMallTransport(ref) {

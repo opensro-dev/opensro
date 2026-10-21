@@ -243,6 +243,7 @@ func (t *TextdataItems) ApplyStackSizes(sizes StackSizes) (int, error) {
 	if t.archive != nil {
 		return 0, fmt.Errorf("%s: item references are already archived", EnvStackSizes)
 	}
+	t.ownRows()
 	if len(sizes) == 0 {
 		return 0, nil
 	}

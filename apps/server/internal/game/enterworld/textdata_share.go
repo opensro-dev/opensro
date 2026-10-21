@@ -75,3 +75,28 @@ func textdataFingerprint(paths ...string) string {
 	}
 	return b.String()
 }
+
+/*
+==================
+TextdataParses
+
+The exported face of sharedParses for sibling lanes that derive their own
+tables from shipped textdata (portals, gate pulleys): one immutable result
+per distinct set of source files and process, so every loader over the
+same files shares one parse. Keep the result small and derived; never put
+raw rows here, which would pin whole tables in the GameWorld.
+==================
+*/
+type TextdataParses[T any] struct {
+	inner sharedParses[T]
+}
+
+// Get returns the parse published for key, running parse once per key.
+func (s *TextdataParses[T]) Get(key string, parse func() *T) *T {
+	return s.inner.get(key, parse)
+}
+
+// TextdataFingerprint identifies the exact bytes a parse of paths reads.
+func TextdataFingerprint(paths ...string) string {
+	return textdataFingerprint(paths...)
+}

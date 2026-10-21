@@ -119,6 +119,34 @@ loadPortalCatalog
 ================
 */
 func loadPortalCatalog(dir string) (*portalCatalog, error) {
+	key := enterworld.TextdataFingerprint(filepath.Join(dir, "teleportbuilding.txt"),
+		filepath.Join(dir, "teleportdata.txt"), filepath.Join(dir, "teleportlink.txt"))
+	if monster.QinShiTombFromEnv() {
+		key += "+qinshi_tomb"
+	}
+	parsed := portalCatalogParses.Get(key, func() *portalCatalogParse {
+		catalog, err := parsePortalCatalog(dir)
+		return &portalCatalogParse{catalog: catalog, err: err}
+	})
+	return parsed.catalog, parsed.err
+}
+
+// portalCatalogParse is one immutable reading of the teleport tables; every
+// runtime over the same files and Qin-Shi setting shares it, and nothing
+// writes to a loaded catalog.
+type portalCatalogParse struct {
+	catalog *portalCatalog
+	err     error
+}
+
+var portalCatalogParses enterworld.TextdataParses[portalCatalogParse]
+
+/*
+================
+parsePortalCatalog
+================
+*/
+func parsePortalCatalog(dir string) (*portalCatalog, error) {
 	c := &portalCatalog{destinations: map[uint32]portalDestination{}, sources: map[uint32]uint32{}, links: map[[2]uint32]portalLink{},
 		buildings: map[string]uint32{}}
 	number := func(s string) (uint32, error) { v, e := strconv.ParseUint(s, 10, 32); return uint32(v), e }
