@@ -204,7 +204,8 @@ export function forEachSample( profile, from, to, maxGap, visit ) {
 			owned = maxGap;
 		}
 		const stack = [];
-		for ( let id = samples[i]; id !== undefined; id = nodes.get( id )?.parent ) stack.push( id );
+		// A truncated capture can name nodes its profile chunks never sent.
+		for ( let id = samples[i]; id !== undefined && nodes.has( id ); id = nodes.get( id ).parent ) stack.push( id );
 		visit( i, owned, stack );
 	}
 	return gaps;

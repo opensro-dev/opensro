@@ -163,7 +163,7 @@ reserve
 				animatedPlacements = new Map<
 					string,
 					{
-						orders: { object: string; branch: number; paths: string[]; }[];
+						orders: { object: string; branch: number; paths: string[]; cameraCollision?: boolean[]; }[];
 						matrices: number[];
 						visibility: NonNullable<WorldGroup["visibility"]>[number][];
 					}
@@ -381,7 +381,8 @@ noteMaterial
 						placements.orders.push( {
 							object: key,
 							branch: branchIndex,
-							paths: ref.renderMeshSection?.paths ?? ref.meshPaths
+							paths: ref.renderMeshSection?.paths ?? ref.meshPaths,
+							cameraCollision: ref.renderMeshSection?.cameraCollision
 						} );
 					}
 					for ( const [meshIndex, path] of (ref.renderMeshSection?.paths ?? ref.meshPaths).entries() ) {
@@ -441,10 +442,12 @@ noteMaterial
 								) + radius
 							);
 						}
-						// Native A40044 skips parts without the loaded BMS object-nav payload.
-						// Keep their draw instances, but never admit them as camera obstacles.
+						// Native A40044 skips a part whose CPrimMesh +0x1E8 is 0. The
+						// constructor (A859B0) sets it to 1; A4FF00 overwrites it from the
+						// BSR's per-mesh dword (A7CAB0) only when the BSR carries one. Keep
+						// opted-out parts drawn, but never admit them as camera obstacles.
 						reserve( 256 );
-						if ( (mesh.headerOffsets?.[7] ?? 0) !== 0 ) {
+						if ( ref.renderMeshSection?.cameraCollision?.[meshIndex] !== false ) {
 							group.collision.push( {
 								instance: group.matrices.length / 16,
 								object: key,
@@ -527,7 +530,8 @@ noteMaterial
 								path.toLowerCase() === row.path.toLowerCase()
 							);
 							if ( part < 0 ) throw new Error( "Animated collision part is outside its BSR" );
-							if ( (row.mesh!.headerOffsets?.[7] ?? 0) !== 0 ) {
+							// Same per-mesh +0x1E8 gate as static parts (A40044).
+							if ( placement.cameraCollision?.[part] !== false ) {
 								collision.push( {
 									instance,
 									object: placement.object,

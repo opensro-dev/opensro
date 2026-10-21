@@ -20,7 +20,9 @@ export interface ObjectBranch {
 	sourcePath?: string;
 	materialPaths: string[];
 	meshPaths: string[];
-	renderMeshSection?: { paths: string[]; };
+	// cameraCollision[i] is mesh i's BSR collision dword (CPrimMesh +0x1E8);
+	// absent when the resource carries none, and then every mesh collides.
+	renderMeshSection?: { paths: string[]; cameraCollision?: boolean[]; };
 }
 /*
 ================
