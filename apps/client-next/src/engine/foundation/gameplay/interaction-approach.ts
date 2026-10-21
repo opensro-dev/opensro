@@ -23,6 +23,7 @@ owns only the approach intent; movement owns its packet and receipt.
 */
 import type { Pose } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
+import { normalizeRegionXZ, sameCoordinateSpace, worldDelta } from "@/engine/foundation/world/world-space";
 
 // 698740: an NPC is selected inside 240 units, else approached to 240.
 const NPC_SELECT_REACH = 240;
@@ -35,8 +36,6 @@ const STALL_VISIT_REACH = 100;
 const STALL_APPROACH_DISTANCE = 80;
 // CICharactor_SetStallState: appearance title mode of a player keeping a stall.
 export const STALL_TITLE_MODE = 4;
-const REGION_SIZE = 1920;
-const DUNGEON_REGION = 0x8000;
 
 /*
 ================
@@ -75,25 +74,18 @@ line from the entity toward the player.
 export function interactionApproach( pose: Pose, entity: EntityState ): Pose | null {
 	const reach = interactionReach( entity );
 	if ( !reach ) return null;
-	if ( (pose.regionId | entity.regionId) & DUNGEON_REGION && pose.regionId !== entity.regionId ) {
+	if ( !sameCoordinateSpace( pose.regionId, entity.regionId ) ) {
 		throw Error( "Interaction target is in another dungeon" );
 	}
-	const dx = pose.x - entity.x + ((pose.regionId & 255) - (entity.regionId & 255)) * REGION_SIZE,
-		dz = pose.z - entity.z + ((pose.regionId >>> 8) - (entity.regionId >>> 8)) * REGION_SIZE,
+	const [dx, dz] = worldDelta( entity, pose ),
 		dy = pose.y - entity.y;
 	if ( Math.hypot( dx, dy, dz ) <= reach.select ) return null;
 	const distance = Math.hypot( dx, dz );
 	if ( !distance ) return { ...pose, y: entity.y };
-	let x = entity.x + dx / distance * reach.approach,
+	const x = entity.x + dx / distance * reach.approach,
 		z = entity.z + dz / distance * reach.approach,
-		regionId = entity.regionId;
-	if ( !(regionId & DUNGEON_REGION) ) {
-		const rx = Math.floor( x / REGION_SIZE ), rz = Math.floor( z / REGION_SIZE );
-		regionId += rx + rz * 256;
-		x -= rx * REGION_SIZE;
-		z -= rz * REGION_SIZE;
-	}
-	return { regionId, x, y: pose.y, z, angle: pose.angle };
+		target = normalizeRegionXZ( entity.regionId, x, z );
+	return { regionId: target.regionId, x: target.x, y: pose.y, z: target.z, angle: pose.angle };
 }
 
 export type InteractionApproachState =

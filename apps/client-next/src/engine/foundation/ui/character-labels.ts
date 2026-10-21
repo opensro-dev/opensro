@@ -11,6 +11,7 @@ A missing model or a retired actor removes its whole anchored product.
 ===========================================================================
 */
 import type { UiQuad, UiScene } from "@/engine/contracts/ui";
+import { regionRelativeXZ } from "@/engine/foundation/world/world-space";
 
 // CICharactor_RenderOverheadNameAndIndicators (85F4A0): the board stands 2
 // above the character's height, or 7 above its ride's.
@@ -59,9 +60,8 @@ function projectWorldAnchor(
 	world: { origin: number; matrix: Float32Array; }
 ): UiQuad | null {
 	const a = q.worldAnchor!, m = world.matrix;
-	const x = a.x + ((a.regionId & 255) - (world.origin & 255)) * 1920,
-		y = a.y,
-		z = a.z + ((a.regionId >>> 8) - (world.origin >>> 8)) * 1920;
+	const [x, z] = regionRelativeXZ( world.origin, a ),
+		y = a.y;
 	const w = m[3]! * x + m[7]! * y + m[11]! * z + m[15]!;
 	if ( w <= 0 ) return null;
 	const px = (1 + (m[0]! * x + m[4]! * y + m[8]! * z + m[12]!) / w) * scene.width / 2,

@@ -20,7 +20,8 @@ and wire helpers; the local and remote movers own the walks.
 import type { Pose } from "@/engine/contracts/gameplay";
 import type { GroundPickQuery } from "@/engine/contracts/navigation";
 import type { WireFrame } from "@/engine/contracts/network";
-import { HEADING_SCALE, REGION_SIZE, movementHeading } from "./native-movement";
+import { displaceRegionXZ, worldDelta } from "@/engine/foundation/world/world-space";
+import { HEADING_SCALE, movementHeading } from "./native-movement";
 
 // One planned leg. INFERENCE (shared with the server): the ground pick's
 // own ray cap (SWorld_PickGroundTerrainAndNavigation 0x88D340), the distance
@@ -86,10 +87,7 @@ it lands in. Dungeon locals are unbounded and stay in their region word.
 ================
 */
 export function foldPose( pose: Pose ): Pose {
-	if ( pose.regionId & 0x8000 ) return pose;
-	const wx = pose.x + (pose.regionId & 255) * REGION_SIZE, wz = pose.z + (pose.regionId >>> 8) * REGION_SIZE;
-	const sx = Math.floor( wx / REGION_SIZE ), sz = Math.floor( wz / REGION_SIZE );
-	return { ...pose, regionId: sx | (sz << 8), x: wx - sx * REGION_SIZE, z: wz - sz * REGION_SIZE };
+	return { ...pose, ...displaceRegionXZ( pose, 0, 0 ) };
 }
 
 /*
@@ -207,8 +205,7 @@ line (the caller does not send the drift heading).
 ================
 */
 export function directionDrift( local: Pose, reference: Pose, heading: number, speed: number ): DirectionDrift {
-	const dx = reference.x - local.x + worldOffset( local, reference, 255, 0 ),
-		dz = reference.z - local.z + worldOffset( local, reference, 0xff00, 8 ),
+	const [dx, dz] = worldDelta( local, reference ),
 		distanceSq = dx * dx + dz * dz;
 	if ( distanceSq < DRIFT_DEADBAND_SQ ) return { heading, factor: 1 };
 	const distance = Math.sqrt( distanceSq ), bearing = directionBearing( heading );
@@ -227,18 +224,6 @@ export function directionDrift( local: Pose, reference: Pose, heading: number, s
 	const along = dx * ux + dz * uz, lateralX = dx - ux * along, lateralZ = dz - uz * along;
 	const aimX = lateralX + ux * lookahead, aimZ = lateralZ + uz * lookahead;
 	return { heading: movementHeading( local, { ...local, x: local.x + aimX, z: local.z + aimZ } ), factor };
-}
-
-/*
-================
-worldOffset
-
-The sector difference between two outdoor poses along one axis, in units.
-================
-*/
-function worldOffset( from: Pose, to: Pose, mask: number, shift: number ): number {
-	if ( (from.regionId | to.regionId) & 0x8000 ) return 0;
-	return (((to.regionId & mask) >>> shift) - ((from.regionId & mask) >>> shift)) * REGION_SIZE;
 }
 
 // ============================================================================

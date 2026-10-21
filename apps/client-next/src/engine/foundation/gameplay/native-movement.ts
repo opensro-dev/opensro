@@ -10,10 +10,18 @@ sample, so predicted and received movement share one set of transitions.
 ===========================================================================
 */
 import type { Pose } from "@/engine/contracts/gameplay";
-import { hypot2 } from "@/engine/foundation/math/hypot";
+import {
+	isDungeonRegion,
+	planarDistance,
+	REGION_SIZE,
+	sameCoordinateSpace,
+	sectorX,
+	sectorY,
+	worldDelta
+} from "@/engine/foundation/world/world-space";
 
 // World units per region side; region-local x/z span [0, REGION_SIZE).
-export const REGION_SIZE = 1920;
+export { REGION_SIZE };
 // Heading words per full turn on the movement wire.
 export const HEADING_SCALE = 65535;
 // CPSMission_OnSkillNavResponse0xB738 (0x776200) divides the source-block
@@ -163,14 +171,10 @@ poseDistance
 ================
 */
 export function poseDistance( a: Pose, b: Pose ) {
-	if ( (a.regionId | b.regionId) & 0x8000 ) {
-		if ( a.regionId !== b.regionId ) throw new Error( "Dungeon transition requires teleport" );
-		return hypot2( b.x - a.x, b.z - a.z );
+	if ( !sameCoordinateSpace( a.regionId, b.regionId ) ) {
+		throw new Error( "Dungeon transition requires teleport" );
 	}
-	return hypot2(
-		b.x - a.x + ((b.regionId & 255) - (a.regionId & 255)) * REGION_SIZE,
-		b.z - a.z + ((b.regionId >>> 8) - (a.regionId >>> 8)) * REGION_SIZE
-	);
+	return planarDistance( a, b );
 }
 
 /*
@@ -281,9 +285,8 @@ interpolateMovement
 ================
 */
 export function interpolateMovement( from: Pose, to: Pose, t: number ): Pose {
-	if ( (from.regionId & 0x8000) !== (to.regionId & 0x8000) ) return from;
-	if ( from.regionId & 0x8000 ) {
-		if ( from.regionId !== to.regionId ) return from;
+	if ( !sameCoordinateSpace( from.regionId, to.regionId ) ) return from;
+	if ( isDungeonRegion( from.regionId ) ) {
 		return {
 			...to,
 			x: from.x + (to.x - from.x) * t,
@@ -291,9 +294,10 @@ export function interpolateMovement( from: Pose, to: Pose, t: number ): Pose {
 			z: from.z + (to.z - from.z) * t
 		};
 	}
-	const wx = from.x + (from.regionId & 255) * REGION_SIZE, wz = from.z + (from.regionId >>> 8) * REGION_SIZE;
-	const x = wx + (to.x + (to.regionId & 255) * REGION_SIZE - wx) * t,
-		z = wz + (to.z + (to.regionId >>> 8) * REGION_SIZE - wz) * t;
+	const wx = from.x + sectorX( from.regionId ) * REGION_SIZE,
+		wz = from.z + sectorY( from.regionId ) * REGION_SIZE;
+	const x = wx + (to.x + sectorX( to.regionId ) * REGION_SIZE - wx) * t,
+		z = wz + (to.z + sectorY( to.regionId ) * REGION_SIZE - wz) * t;
 	return {
 		regionId: Math.floor( x / REGION_SIZE ) | (Math.floor( z / REGION_SIZE ) << 8),
 		x: x % REGION_SIZE,
@@ -357,10 +361,8 @@ conversion shared by predicted and received movement.
 ================
 */
 export function movementHeading( from: Pose, to: Pose ): number {
-	const dungeon = !!((from.regionId | to.regionId) & 0x8000);
-	if ( dungeon && from.regionId !== to.regionId ) return from.angle;
-	const dx = to.x - from.x + (dungeon ? 0 : ((to.regionId & 255) - (from.regionId & 255)) * REGION_SIZE);
-	const dz = to.z - from.z + (dungeon ? 0 : ((to.regionId >>> 8) - (from.regionId >>> 8)) * REGION_SIZE);
+	if ( !sameCoordinateSpace( from.regionId, to.regionId ) ) return from.angle;
+	const [dx, dz] = worldDelta( from, to );
 	if ( dx === 0 && dz === 0 ) return to.angle;
 	// 853550 converts model yaw back to wire bearing by subtracting pi/2.
 	const yaw = (Math.atan2( dz, dx ) + Math.PI * 2) % (Math.PI * 2);

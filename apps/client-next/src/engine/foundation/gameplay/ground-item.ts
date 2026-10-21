@@ -1,4 +1,5 @@
 import type { EntityState } from "@/engine/contracts/world";
+import { worldDelta } from "@/engine/foundation/world/world-space";
 /*
 ================
 isGoldGroupType
@@ -105,8 +106,9 @@ export function groundItemDistance(
 	entity: EntityState,
 	origin: Pick<EntityState, "regionId" | "x" | "y" | "z">
 ): number {
-	const dx = Math.fround( entity.x - origin.x + ((entity.regionId & 255) - (origin.regionId & 255)) * 1920 );
-	const dz = Math.fround( entity.z - origin.z + ((entity.regionId >>> 8) - (origin.regionId >>> 8)) * 1920 ),
+	const [rawDx, rawDz] = worldDelta( origin, entity );
+	const dx = Math.fround( rawDx );
+	const dz = Math.fround( rawDz ),
 		dy = Math.fround( entity.y - origin.y );
 	return Math.fround( Math.sqrt( Math.fround( dx * dx + dy * dy + dz * dz ) ) );
 }

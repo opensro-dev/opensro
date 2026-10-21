@@ -11,6 +11,7 @@ decodes the published offsets and indices for a region.
 
 import type { NavRegion } from "@/engine/contracts/navigation";
 import { base64Bytes } from "@/engine/foundation/assets/base64";
+import { REGION_SIZE } from "@/engine/foundation/world/world-space";
 /*
 ================
 terrainObjectCells
@@ -39,6 +40,7 @@ export function terrainObjectCells( region: NavRegion ) {
 		columns = [ c.minX, c.minZ, c.maxX, c.maxZ ].map( v => column( v, count * 4 ) );
 	const result: Array<Array<readonly [number, number, number, number]>> = Array.from( { length: n }, () => [] );
 	if ( offsets.getUint32( 0, true ) !== 0 ) throw Error( "Invalid terrain object-cell offsets" );
+	const ox = region.dx * REGION_SIZE, oz = region.dz * REGION_SIZE;
 	for ( let i = 0; i < count; i++ ) {
 		const a = offsets.getUint32( i * 4, true ), b = offsets.getUint32( (i + 1) * 4, true );
 		const r = columns.map( v => v.getFloat32( i * 4, true ) );
@@ -46,10 +48,10 @@ export function terrainObjectCells( region: NavRegion ) {
 			throw Error( "Invalid terrain object cell" );
 		}
 		const rect: readonly [number, number, number, number] = [
-			r[0]! + region.dx * 1920,
-			r[1]! + region.dz * 1920,
-			r[2]! + region.dx * 1920,
-			r[3]! + region.dz * 1920
+			r[0]! + ox,
+			r[1]! + oz,
+			r[2]! + ox,
+			r[3]! + oz
 		];
 		for ( let j = a; j < b; j++ ) {
 			const id = ids.getUint16( j * 2, true );

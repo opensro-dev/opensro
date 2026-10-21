@@ -11,6 +11,7 @@ CIFWorldMap's paint order. Pure layout; the UI owns the window state.
 */
 import type { Pose } from "@/engine/contracts/gameplay";
 import type { UiQuad, UiRect } from "@/engine/contracts/ui";
+import { isDungeonRegion, REGION_SIZE, sectorX, sectorY } from "@/engine/foundation/world/world-space";
 import { minimapRotation } from "./hud-readouts";
 const WORLD_MAP_ROOT = "/assets/images/Media_extracted/interface/worldmap/map/";
 // The overview page is tiles of 128 pixels; tile names count four regions per
@@ -246,14 +247,14 @@ The town page whose region box holds the pose, or 0 for the overview.
 ================
 */
 export function worldMapPageAt( p: Pose, layout: WorldMapLayout = nativeLayout() ): number {
-	if ( p.regionId & 0x8000 ) return 0;
-	const rx = p.regionId & 255,
-		rz = p.regionId >>> 8;
+	if ( isDungeonRegion( p.regionId ) ) return 0;
+	const rx = sectorX( p.regionId ),
+		rz = sectorY( p.regionId );
 	for ( const page of worldMapPages( layout ) ) {
 		const [l, t, r, b, lx, ly, rxoff, ry] = page.bounds;
 		if ( rx < l || rx > r || rz < b || rz > t ) continue;
-		const x = (rx - l) * 1920 + p.x,
-			y = (rz - b) * 1920 + p.z;
+		const x = (rx - l) * REGION_SIZE + p.x,
+			y = (rz - b) * REGION_SIZE + p.z;
 		if (
 			x >= lx * 10 &&
 			x < ((r - l) * 192 + rxoff) * 10 &&
@@ -705,10 +706,10 @@ function worldMapMarkerRect(
 	frame: ReturnType<typeof worldMapFrame>,
 	point: { readonly regionId: number; readonly x: number; readonly z: number; }
 ): UiRect | null {
-	if ( point.regionId & 0x8000 ) return null;
+	if ( isDungeonRegion( point.regionId ) ) return null;
 	const { left, right, top, bottom, width, height, ox, oy } = frame;
-	const x = (((point.regionId & 255) * MAP_REGION_UNITS + point.x / 10 - left) / (right - left)) * width;
-	const y = ((top - ((point.regionId >>> 8) * MAP_REGION_UNITS + point.z / 10)) / (top - bottom)) * height;
+	const x = ((sectorX( point.regionId ) * MAP_REGION_UNITS + point.x / 10 - left) / (right - left)) * width;
+	const y = ((top - (sectorY( point.regionId ) * MAP_REGION_UNITS + point.z / 10)) / (top - bottom)) * height;
 	return [ ox + x - MAP_MARKER_SIZE / 2, oy + y - MAP_MARKER_SIZE / 2, MAP_MARKER_SIZE, MAP_MARKER_SIZE ];
 }
 

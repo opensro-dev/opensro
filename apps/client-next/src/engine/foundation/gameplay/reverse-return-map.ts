@@ -14,16 +14,14 @@ The map choice was first written by GrazKe in #336.
 ===========================================================================
 */
 
+import { isDungeonRegion, REGION_SIZE } from "@/engine/foundation/world/world-space";
+
 // REVERSE_RETURN_MAP is v1.188's saved-point choice (4A00C0 case 7).
 export const REVERSE_RETURN_MAP = 7;
 // MAX_REVERSE_MAP_POINTS bounds the published table (server maxReverseMapPoints).
 const MAX_REVERSE_MAP_POINTS = 4096;
 // MAX_REVERSE_MAP_NAME bounds a point name (server maxReverseMapNameBytes).
 const MAX_REVERSE_MAP_NAME = 128;
-// REVERSE_MAP_REGION_SIZE is a region's local extent: x and z lie in [0, 1920).
-const REVERSE_MAP_REGION_SIZE = 1920;
-// A field region id has bit 15 clear.
-const DUNGEON_REGION_BIT = 0x8000;
 
 /*
 ================
@@ -59,9 +57,9 @@ export function decodeReverseMapPoints( value: unknown ): readonly ReverseMapPoi
 		if (
 			!point || typeof point !== "object" || point.id !== index + 1 || typeof point.name !== "string" ||
 			point.name.length > MAX_REVERSE_MAP_NAME || !Number.isInteger( point.regionId ) ||
-			point.regionId! < 1 || (point.regionId! & DUNGEON_REGION_BIT) !== 0 || point.regionId! > 0xffff ||
+			point.regionId! < 1 || isDungeonRegion( point.regionId! ) || point.regionId! > 0xffff ||
 			![ point.x, point.y, point.z ].every( Number.isFinite ) || point.x! < 0 ||
-			point.x! >= REVERSE_MAP_REGION_SIZE || point.z! < 0 || point.z! >= REVERSE_MAP_REGION_SIZE
+			point.x! >= REGION_SIZE || point.z! < 0 || point.z! >= REGION_SIZE
 		) throw Error( "Invalid reverse return map point" );
 		return { id: point.id, name: point.name, regionId: point.regionId!, x: point.x!, y: point.y!, z: point.z! };
 	} );

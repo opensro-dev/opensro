@@ -11,6 +11,7 @@ player (5BD0A0), so a member out of reach reads as faded.
 */
 import type { EntityState } from "@/engine/contracts/world";
 import type { GameplayState, Pose } from "@/engine/contracts/gameplay";
+import { regionOffsetXZ } from "@/engine/foundation/world/world-space";
 
 // 5BD0A0 compares the squared distance against these (0xBDE03C..0xBDE050).
 const PARTY_SHADE_SQUARED_1 = 360000; // 600 units
@@ -26,8 +27,6 @@ const PARTY_MASTERY_X = 2;
 const PARTY_MASTERY_PITCH = 15;
 const PARTY_MASTERY_Y = 39;
 const PARTY_MASTERY_CELL = 12;
-const PARTY_REGION_SIZE = 1920;
-const PARTY_DUNGEON_REGION = 0x8000;
 // Only the position matters to the distance shade; entities carry no heading.
 type PartyShadePosition = Pick<Pose, "regionId" | "x" | "y" | "z">;
 // 5BCBB0: exclude self by name, preserve roster order, wrap before placing
@@ -149,13 +148,11 @@ the plain local coordinates are compared.
 ================
 */
 export function partyDistanceShade( local: PartyShadePosition, member: PartyShadePosition ): number {
-	const f = Math.fround;
-	let dx = f( member.x - local.x ), dz = f( member.z - local.z );
-	const dy = f( member.y - local.y );
-	if ( !((local.regionId | member.regionId) & PARTY_DUNGEON_REGION) ) {
-		dx = f( dx + ((member.regionId & 255) - (local.regionId & 255)) * PARTY_REGION_SIZE );
-		dz = f( dz + ((member.regionId >>> 8) - (local.regionId >>> 8)) * PARTY_REGION_SIZE );
-	}
+	const f = Math.fround,
+		[ox, oz] = regionOffsetXZ( local.regionId, member.regionId ),
+		dx = f( f( member.x - local.x ) + ox ),
+		dz = f( f( member.z - local.z ) + oz ),
+		dy = f( member.y - local.y );
 	const squared = f( dx * dx + dy * dy + dz * dz );
 	if ( squared >= PARTY_SHADE_SQUARED_5 ) return 5;
 	if ( squared >= PARTY_SHADE_SQUARED_4 ) return 4;

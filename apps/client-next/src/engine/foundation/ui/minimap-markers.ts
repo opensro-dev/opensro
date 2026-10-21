@@ -10,6 +10,7 @@ DOF floor.
 ===========================================================================
 */
 import { minimapSameFloor } from "./minimap-floor";
+import { REGION_SIZE, worldDelta } from "@/engine/foundation/world/world-space";
 import type { EntityState } from "@/engine/contracts/world";
 import type { GameplayState, Pose } from "@/engine/contracts/gameplay";
 
@@ -56,14 +57,8 @@ export function minimapOffset(
 	target: Pick<Pose, "regionId" | "x" | "z">,
 	zoom: number
 ): readonly [number, number] | null {
-	const dungeon = !!(local.regionId & 0x8000);
-	if ( dungeon || target.regionId & 0x8000 ) {
-		return [ (target.x - local.x) * zoom / 1920, -(target.z - local.z) * zoom / 1920 ];
-	}
-	return [
-		(target.x - local.x + ((target.regionId & 255) - (local.regionId & 255)) * 1920) * zoom / 1920,
-		-(target.z - local.z + ((target.regionId >>> 8) - (local.regionId >>> 8)) * 1920) * zoom / 1920
-	];
+	const [dx, dz] = worldDelta( local, target );
+	return [ dx * zoom / REGION_SIZE, -dz * zoom / REGION_SIZE ];
 }
 
 /*

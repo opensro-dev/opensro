@@ -9,6 +9,7 @@ speed and transform-skin equipment. It owns no live character state.
 ===========================================================================
 */
 import { animationRate } from "../animation/animation-rate";
+import { sameCoordinateSpace } from "@/engine/foundation/world/world-space";
 import { equipmentHoldType } from "./name-color";
 import { decodeSpawnSkills, type SpawnSkillReference } from "./spawn-skills";
 import type { EntityEquipment, EntityState } from "@/engine/contracts/world";
@@ -146,7 +147,7 @@ export function decodePeerAppearance(
 		u16();
 	}
 	if (
-		spawnDestination && ((regionId | spawnDestination.regionId) & 0x8000) && regionId !== spawnDestination.regionId
+		spawnDestination && !sameCoordinateSpace( regionId, spawnDestination.regionId )
 	) throw new Error( "Dungeon spawn movement requires teleport" );
 	const lifeState = u8(), motionState = u8(), status = u8();
 	const walkSpeed = f32(), runSpeed = f32(), scaleDenom = f32();
