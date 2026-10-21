@@ -460,6 +460,16 @@ export function createWorldRenderer(
 	function texturePaths( group: WorldGroup ): readonly string[] {
 		return group.material.frames ?? (group.material.texture ? [ group.material.texture ] : []);
 	}
+	/*
+	================
+	stageTexture
+
+	The draw's stage-1 image: an object's lightmap, or water's bump map.
+	================
+	*/
+	function stageTexture( group: WorldGroup, scene: WorldScene | null ): string | undefined {
+		return group.material.objectLightmap ?? (group.material.water ? scene?.waterBump : undefined);
+	}
 	// These indexes describe only the owned pending scene. Reads do not walk its
 	// geometry; replacement, cancellation and GPU loss rebuild them atomically.
 	const missingTextures = new Set<string>(), readyGroups = new Set<WorldGroup>();
@@ -492,10 +502,9 @@ export function createWorldRenderer(
 			if ( draws.has( group ) ) continue;
 			pendingGroupCount++;
 			const paths = new Set(
-				[
-					...texturePaths( group ),
-					...(group.material.water && pending?.waterBump ? [ pending.waterBump ] : [])
-				].filter( path => !images.has( path ) )
+				[ ...texturePaths( group ), stageTexture( group, pending ) ].filter( ( path ): path is string =>
+					path !== undefined && !images.has( path )
+				)
 			);
 			if ( !paths.size ) {
 				readyGroups.add( group );
@@ -895,9 +904,11 @@ export function createWorldRenderer(
 			...weather.paths(),
 			...selectionPaths()
 		];
+		const lightmaps = groups.flatMap( group => group.material.objectLightmap ?? [] );
 		const usedDraws = new Set( [
 			...groups.map( group => imageDrawKey( texturePaths( group ) ) ),
-			...flarePaths
+			...flarePaths,
+			...lightmaps
 		] );
 		for ( const [key, draw] of imageDraws ) {
 			if ( !usedDraws.has( key ) ) {
@@ -905,7 +916,11 @@ export function createWorldRenderer(
 				imageDraws.delete( key );
 			}
 		}
-		const used = new Set( [ ...groups.flatMap( group => [ ...texturePaths( group ) ] ), ...flarePaths ] );
+		const used = new Set( [
+			...groups.flatMap( group => [ ...texturePaths( group ) ] ),
+			...flarePaths,
+			...lightmaps
+		] );
 		for ( const [path, image] of images ) {
 			if ( !used.has( path ) ) {
 				imageBytes -= image.source.width * image.source.height * 5;
@@ -1515,12 +1530,13 @@ export function createWorldRenderer(
 						imageDraw = textures.upload( frames[0]!, frames );
 						imageDraws.set( key, imageDraw );
 					}
-					let waterBump: ImageDraw | undefined;
-					if ( group.material.water && pending.waterBump ) {
-						waterBump = imageDraws.get( pending.waterBump );
-						if ( !waterBump ) {
-							waterBump = textures.upload( images.get( pending.waterBump )!.source );
-							imageDraws.set( pending.waterBump, waterBump );
+					const stagePath = stageTexture( group, pending );
+					let stageImage: ImageDraw | undefined;
+					if ( stagePath ) {
+						stageImage = imageDraws.get( stagePath );
+						if ( !stageImage ) {
+							stageImage = textures.upload( images.get( stagePath )!.source );
+							imageDraws.set( stagePath, stageImage );
 						}
 					}
 					// Build immutable pick bounds within the bounded upload work, so the first
@@ -1547,7 +1563,7 @@ export function createWorldRenderer(
 									group.geometry,
 								imageDraw,
 								undefined,
-								waterBump
+								stageImage
 							)
 					);
 					if ( group.instanceRadius !== undefined ) instanceSelection( group );

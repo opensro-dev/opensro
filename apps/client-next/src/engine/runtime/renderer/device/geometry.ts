@@ -1021,6 +1021,9 @@ export function createGeometryResources(
 				if ( mat?.environmentReflection && !environmentImage ) {
 					throw Error( "Reflective material requires its owned environment texture" );
 				}
+				if ( mat?.objectLightmap && (!environmentImage || !data.maskUVs && !data.vertices) ) {
+					throw Error( "Lightmapped material requires its lightmap texture and UVs" );
+				}
 				const materialData = new Float32Array( [
 						...(mat?.color ?? [ 0.75, 0.78, 0.82, 1 ]),
 						mat?.alphaCutoff ?? 0,
@@ -1085,10 +1088,11 @@ export function createGeometryResources(
 						0,
 						...packTextureStage( mat?.textureStage ),
 						// The stage policy: x, DIFFUSE is the BSR shader's oD0; y, the
-						// draw blends nothing, so its surviving pixels are opaque.
+						// draw blends nothing, so its surviving pixels are opaque; z, stage 1
+						// is the object's lightmap (binding 8 at the second UV set).
 						mat?.shaderDiffuse ? 1 : 0,
 						geometryPipelineState( mat ).blend ? 0 : 1,
-						0,
+						mat?.objectLightmap ? 1 : 0,
 						0,
 						// D3DRS_TEXTUREFACTOR, read by a stage's TFACTOR argument.
 						...(mat?.textureFactor ?? [ 1, 1, 1, 1 ])

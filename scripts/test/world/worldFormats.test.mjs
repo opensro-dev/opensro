@@ -241,6 +241,26 @@ test("JMXVBMS 0110 preserves native object-nav tail bytes for harbor bridge mesh
 	assert.equal( Buffer.from( payload.rawBase64, "base64" ).byteLength, payload.byteLength );
 });
 
+test("JMXVBMS 0110 0x400 meshes carry their lightmap path and second UV set", async () => {
+	const sourcePath = "prim/mesh/dun/china/jinsi_cv/floor_01/jinsi_floor1_dragon01.bms";
+	const buffer = await readFile( path.join( extractedRoot, "Data_extracted", ...sourcePath.split( "/" ) ) );
+	const mesh = parseJmxBmsStaticMesh( buffer, sourcePath );
+	assert.ok( mesh.metadata.unknown1 & 0x400 );
+	assert.equal(
+		mesh.lightmap?.sourcePath,
+		"prim/lightmap/dun/china/jinsi_cv/floor_01/jinsi_floor1_dragon01lightingmap.ddj"
+	);
+	assert.equal( mesh.lightmap.uvs.length, mesh.uvs.length );
+	assert.ok( mesh.lightmap.uvs.every( Number.isFinite ) );
+	// CPrimMesh_ReadBmsBody (A85F80): 52-byte vertices, then the counted path,
+	// which ends exactly where the triangle section begins.
+	const pathOffset = mesh.headerOffsets[0] + 4 + mesh.vertexCount * 52;
+	assert.equal( pathOffset + 4 + buffer.readUInt32LE( pathOffset ), mesh.headerOffsets[1] );
+
+	const bridge = parseJmxBmsStaticMesh( await readFile( harborBridgeMeshPath ), harborBridgeMeshSourcePath );
+	assert.equal( bridge.lightmap !== undefined, (bridge.metadata.unknown1 & 0x400) !== 0 );
+});
+
 test("dungeon resource manifest preserves dungeoninfo rows and exact JMXVDOF payload bytes", async ( t ) => {
 	const tempDir = await mkdtemp( path.join( tmpdir(), "sro-dungeon-resources-" ) );
 	t.after( () => rm( tempDir, { recursive: true, force: true } ) );

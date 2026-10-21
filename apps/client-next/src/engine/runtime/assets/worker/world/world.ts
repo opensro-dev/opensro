@@ -187,7 +187,13 @@ lower
 			};
 			const meshChecks = new Map<
 				Mesh,
-				{ valid: boolean; radius: number; material: string; uvs: Float32Array; }
+				{
+					valid: boolean;
+					radius: number;
+					material: string;
+					uvs: Float32Array;
+					lightmapUvs: Float32Array | null;
+				}
 			>();
 			/*
 ================
@@ -418,6 +424,7 @@ noteMaterial
 								collision: [],
 								material: {
 									...materialFor( ref, found.material, found.index ),
+									...(mesh.lightmap ? { objectLightmap: mesh.lightmap.texturePublicPath } : {}),
 									fog: p.dungeonBlock === undefined ?
 										undefined :
 										b.dungeonBlocks?.[p.dungeonBlock]?.fog,
@@ -472,6 +479,8 @@ noteMaterial
 						cloth: clothData( g.mesh.cloth, g.mesh.positions.length / 3 ),
 						normals: new Float32Array( g.mesh.normals ),
 						uvs: meshCheck( g.mesh ).uvs.slice(),
+						// The object lightmap's UVs ride the terrain mask slot (location 4).
+						maskUVs: meshCheck( g.mesh ).lightmapUvs?.slice(),
 						indices: new Uint32Array( g.mesh.indices ),
 						instances: new Float32Array( g.matrices ),
 						transform: identity()

@@ -37,6 +37,8 @@ export interface Mesh {
 	uvs: number[];
 	indices: number[];
 	bounds: { min: number[]; max: number[]; };
+	// A 0x400 mesh's stage-1 lightmap and its second UV set (formats.mjs readBmsLightmap).
+	lightmap?: { texturePublicPath: string; uvs: number[]; };
 }
 /*
 ================

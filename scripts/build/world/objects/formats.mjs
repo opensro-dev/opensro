@@ -111,6 +111,7 @@ export function parseJmxBmsStaticMesh( buffer, sourcePath = "<memory>" ) {
 		positions: vertices.positions,
 		normals: vertices.normals,
 		uvs: vertices.uvs,
+		...(vertices.lightmap ? { lightmap: vertices.lightmap } : {}),
 		vertexUnknowns: vertices.unknowns,
 		indices: triangles.indices,
 		bounds,
@@ -400,6 +401,8 @@ function readBmsStaticVertices( buffer, vertexOffset, nextOffset, metadata, sour
 	const normals = [];
 	const uvs = [];
 	const unknowns = [];
+	const secondaryUv = layout.byteStride === BMS_STATIC_VERTEX_BYTES_WITH_SECONDARY_UV;
+	const lightmapUvs = [];
 
 	for ( let vertexIndex = 0; vertexIndex < vertexCount; vertexIndex += 1 ) {
 		const offset = verticesOffset + vertexIndex * layout.byteStride;
@@ -414,6 +417,12 @@ function readBmsStaticVertices( buffer, vertexOffset, nextOffset, metadata, sour
 			cleanFloat( buffer.readFloatLE( offset + 20 ) )
 		);
 		uvs.push( cleanFloat( buffer.readFloatLE( offset + 24 ) ), cleanFloat( buffer.readFloatLE( offset + 28 ) ) );
+		if ( secondaryUv ) {
+			lightmapUvs.push(
+				cleanFloat( buffer.readFloatLE( offset + 32 ) ),
+				cleanFloat( buffer.readFloatLE( offset + 36 ) )
+			);
+		}
 		const unknownOffset = offset + layout.unknownOffset;
 		unknowns.push(
 			buffer.readUInt32LE( unknownOffset ),
@@ -429,7 +438,8 @@ function readBmsStaticVertices( buffer, vertexOffset, nextOffset, metadata, sour
 		positions,
 		normals,
 		uvs,
-		unknowns
+		unknowns,
+		lightmap: secondaryUv ? readBmsLightmap( buffer, vertexEnd, nextOffset, lightmapUvs, sourcePath ) : null
 	};
 }
 
@@ -456,6 +466,28 @@ function selectBmsVertexLayout( metadata ) {
 		unknownOffset: 32,
 		attributes: [ "position:f32x3", "normal:f32x3", "uv:f32x2", "unknown:u32x3" ]
 	};
+}
+
+/*
+================
+readBmsLightmap
+
+A 0x400 mesh (52-byte vertex) follows its vertices with a counted lightmap
+path (CPrimMesh_ReadBmsBody A85F80 into body +0x13C). CPrimMesh_LoadLightmapTexture
+(A7DCC0) loads it as a type-4 texture, whose resource prefix is empty, so the
+stored path is used as-is. Retail draws such meshes with the NOLIGHT shader
+and the lightmap on stage 1 (RenderCompound_DrawMeshesA A5BF90): the second
+UV set (vss0.c VS_UV_*_LIGHTMAP, oT1 = v4.zw) addresses it. An empty path
+leaves no lightmap.
+================
+*/
+function readBmsLightmap( buffer, offset, nextOffset, uvs, sourcePath ) {
+	const item = readCountedString( buffer, offset, sourcePath );
+	if ( nextOffset && item.nextOffset > nextOffset ) {
+		throw new Error( `${sourcePath}: BMS lightmap path ends at ${item.nextOffset}, past ${nextOffset}` );
+	}
+	if ( !item.value ) return null;
+	return { sourcePath: normalizeAssetPath( item.value ), uvs };
 }
 
 /*
