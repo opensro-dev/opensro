@@ -99,6 +99,10 @@ type Config struct {
 	Readiness               *readiness.Gate
 	// BugReports is nil when the operator has not configured bug reports.
 	BugReports *bugreport.Service
+	// BcryptCost is the cost of the unknown-account refusal and of the hashes
+	// a login raises to; zero is auth.AccountBcryptCost. A store that reports
+	// its own cost must agree. Tests pass bcrypt.MinCost.
+	BcryptCost int
 }
 
 /*
@@ -119,6 +123,7 @@ type Server struct {
 	client                  *http.Client
 	now                     func() time.Time
 	dummyHash               []byte
+	bcryptCost              int
 	passwordSlots           chan struct{}
 	loginAttempts           *loginLimiter
 	// incidentReports paces /client/incident per account; degradedReports
@@ -183,9 +188,16 @@ func New(config Config) (*Server, error) {
 	}
 	// The refusal for an unknown account costs what a real check does, so
 	// the answer's timing does not tell the two apart.
+	bcryptCost := config.BcryptCost
+	if bcryptCost == 0 {
+		bcryptCost = auth.AccountBcryptCost
+	}
+	if store, ok := config.Accounts.(interface{ BcryptCost() int }); ok && store.BcryptCost() != bcryptCost {
+		return nil, fmt.Errorf("agent: account store bcrypt cost %d, configured %d", store.BcryptCost(), bcryptCost)
+	}
 	dummyHash, err := bcrypt.GenerateFromPassword(
 		[]byte("agent-invalid-account"),
-		auth.AccountBcryptCost,
+		bcryptCost,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("agent: preparing login refusal: %w", err)
@@ -216,6 +228,7 @@ func New(config Config) (*Server, error) {
 		client:                  client,
 		now:                     now,
 		dummyHash:               dummyHash,
+		bcryptCost:              bcryptCost,
 		passwordSlots:           make(chan struct{}, 16),
 		loginAttempts:           newLoginLimiter(now),
 		incidentReports:         newLoginLimiter(now),
@@ -705,7 +718,7 @@ type passwordRehasher interface {
 upgradePasswordCost
 
 After a successful login, rewrites a hash made at a lower bcrypt cost at
-auth.AccountBcryptCost, so every stored hash, the seeded and provisioned
+the configured cost, so every stored hash, the seeded and provisioned
 ones included, costs the same as the unknown-account refusal. The swap is
 conditional on the hash this login verified, so a password change or staff
 reset that lands meanwhile is never overwritten by the old password. A
@@ -714,7 +727,7 @@ failure only leaves the old hash; the login has already succeeded.
 */
 func (server *Server) upgradePasswordCost(ctx context.Context, accountID string, hash []byte, password string) {
 	cost, err := bcrypt.Cost(hash)
-	if err != nil || cost >= auth.AccountBcryptCost {
+	if err != nil || cost >= server.bcryptCost {
 		return
 	}
 	rehasher, ok := server.accounts.(passwordRehasher)

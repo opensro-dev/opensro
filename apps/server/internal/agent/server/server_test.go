@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -170,6 +171,9 @@ func newAgentFixture(
 		ControlNamespace:        "sro",
 		Now:                     func() time.Time { return now },
 		Readiness:               ready,
+		// Logins prove routing, not bcrypt's speed; TestUnknownAccountRefusal
+		// CostsWhatALoginDoes keeps one server at the production cost.
+		BcryptCost: bcrypt.MinCost,
 	}
 	for _, apply := range configure {
 		apply(&config)
@@ -190,11 +194,17 @@ func newAgentFixture(
 /*
 ================
 loadTestAccounts
+
+The seed catalog the Agent loads in production, holding "tester". The
+catalog refuses seed hashes below bcrypt.DefaultCost, so its answers carry
+a bcrypt.MinCost hash of the same password instead: logins still resolve
+through the real catalog, without paying a production-strength comparison
+under the race detector.
 ================
 */
-func loadTestAccounts(t *testing.T) *auth.Catalog {
+func loadTestAccounts(t *testing.T) AccountAuthority {
 	t.Helper()
-	hash, err := bcrypt.GenerateFromPassword([]byte("123123"), bcrypt.DefaultCost)
+	hash, err := testSeedHash()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,11 +216,58 @@ func loadTestAccounts(t *testing.T) *auth.Catalog {
 	if err := os.WriteFile(path, []byte(payload), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	accounts, err := auth.Load(path)
+	catalog, err := auth.Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return accounts
+	cheap, err := bcrypt.GenerateFromPassword([]byte("123123"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cheapHashAccounts{Catalog: catalog, hash: cheap}
+}
+
+// testSeedHash is the catalog's "tester" hash, made once per test binary:
+// it only has to pass the catalog's cost check, logins never compare it.
+var testSeedHash = sync.OnceValues(func() ([]byte, error) {
+	return bcrypt.GenerateFromPassword([]byte("123123"), bcrypt.DefaultCost)
+})
+
+/*
+================
+cheapHashAccounts
+
+A catalog whose found accounts answer with hash.
+================
+*/
+type cheapHashAccounts struct {
+	*auth.Catalog
+	hash []byte
+}
+
+/*
+================
+cheapHashAccounts.Credential
+================
+*/
+func (accounts cheapHashAccounts) Credential(typedID string) (string, []byte, bool) {
+	id, _, found := accounts.Catalog.Credential(typedID)
+	if !found {
+		return "", nil, false
+	}
+	return id, accounts.hash, true
+}
+
+/*
+================
+cheapHashAccounts.PasswordHash
+================
+*/
+func (accounts cheapHashAccounts) PasswordHash(accountID string) ([]byte, bool) {
+	if _, found := accounts.Catalog.PasswordHash(accountID); !found {
+		return nil, false
+	}
+	return accounts.hash, true
 }
 
 /*
@@ -482,7 +539,8 @@ func TestLoginRefusesDisabledShardExplicitly(t *testing.T) {
 		Now: func() time.Time {
 			return time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
 		},
-		Readiness: ready,
+		Readiness:  ready,
+		BcryptCost: bcrypt.MinCost,
 	})
 	if err != nil {
 		t.Fatal(err)

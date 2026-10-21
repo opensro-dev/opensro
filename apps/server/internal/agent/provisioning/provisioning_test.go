@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"golang.org/x/crypto/bcrypt"
 	"opensro.online/server/internal/security/auth"
 )
 
@@ -28,7 +29,7 @@ startAPI
 */
 func startAPI(t *testing.T) *httptest.Server {
 	t.Helper()
-	accounts, err := auth.OpenAccounts(filepath.Join(t.TempDir(), "accounts.db"))
+	accounts, err := auth.OpenAccountsWith(filepath.Join(t.TempDir(), "accounts.db"), auth.AccountsOptions{BcryptCost: bcrypt.MinCost})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +95,7 @@ func TestProvisioningRejectsMissingAndWrongTokens(t *testing.T) {
 	if _, err := New(nil, testToken); err == nil {
 		t.Fatal("accepted a nil authority")
 	}
-	accounts, _ := auth.OpenAccounts(filepath.Join(t.TempDir(), "a.db"))
+	accounts, _ := auth.OpenAccountsWith(filepath.Join(t.TempDir(), "a.db"), auth.AccountsOptions{BcryptCost: bcrypt.MinCost})
 	defer accounts.Close()
 	if _, err := New(accounts, "short"); err == nil {
 		t.Fatal("accepted a short token")

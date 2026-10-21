@@ -19,6 +19,46 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// testAccountsOptions hashes at bcrypt's minimum cost: these tests prove
+// the store's rules, not bcrypt's speed, and TestProductionAccountsHashAt
+// AccountBcryptCost keeps one store at the production cost.
+var testAccountsOptions = AccountsOptions{BcryptCost: bcrypt.MinCost}
+
+// productionBcryptCost is the cost production hashes are pinned to.
+const productionBcryptCost = 12
+
+/*
+================
+TestProductionAccountsHashAtAccountBcryptCost
+
+The production store (OpenAccounts) hashes at cost 12, inside the seed
+catalog's range; a cost outside bcrypt's or the catalog's range is refused.
+================
+*/
+func TestProductionAccountsHashAtAccountBcryptCost(t *testing.T) {
+	if AccountBcryptCost != productionBcryptCost {
+		t.Fatalf("AccountBcryptCost = %d, want %d", AccountBcryptCost, productionBcryptCost)
+	}
+	path := filepath.Join(t.TempDir(), "accounts.db")
+	accounts, err := OpenAccounts(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = accounts.Close() })
+	if _, err := accounts.Create(context.Background(), "prod", "password1"); err != nil {
+		t.Fatal(err)
+	}
+	stored, _ := accounts.PasswordHash("prod")
+	if cost, _ := bcrypt.Cost(stored); cost != AccountBcryptCost || accounts.BcryptCost() != AccountBcryptCost {
+		t.Fatalf("production hash cost %d, store %d", cost, accounts.BcryptCost())
+	}
+	for _, cost := range []int{bcrypt.MinCost - 1, MaxBcryptCost + 1} {
+		if _, err := OpenAccountsWith(filepath.Join(t.TempDir(), "x.db"), AccountsOptions{BcryptCost: cost}); err == nil {
+			t.Fatalf("cost %d accepted", cost)
+		}
+	}
+}
+
 /*
 ================
 openTestAccounts
@@ -27,7 +67,7 @@ openTestAccounts
 func openTestAccounts(t *testing.T) (*Accounts, string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "agent", "accounts.db")
-	accounts, err := OpenAccounts(path)
+	accounts, err := OpenAccountsWith(path, testAccountsOptions)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -87,7 +127,7 @@ func TestAccountsCreateVerifyAndSurviveReopen(t *testing.T) {
 	if err := accounts.Close(); err != nil {
 		t.Fatal(err)
 	}
-	reopened, err := OpenAccounts(path)
+	reopened, err := OpenAccountsWith(path, testAccountsOptions)
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
@@ -291,8 +331,8 @@ func TestAccountsUpgradePasswordHashIsACompareAndSwap(t *testing.T) {
 		t.Fatalf("upgrade = %v, %v", upgraded, err)
 	}
 	stored, _ := accounts.PasswordHash("erin")
-	if cost, _ := bcrypt.Cost(stored); cost != AccountBcryptCost {
-		t.Fatalf("upgraded cost %d, want %d", cost, AccountBcryptCost)
+	if cost, _ := bcrypt.Cost(stored); cost != accounts.BcryptCost() {
+		t.Fatalf("upgraded cost %d, want the store's %d", cost, accounts.BcryptCost())
 	}
 	if ok, _ := accounts.Verify(ctx, "erin", "password1"); !ok {
 		t.Fatal("upgraded password refused")
@@ -366,7 +406,7 @@ func TestAccountsSessionEpochAndRevocationNotice(t *testing.T) {
 	if err := accounts.Close(); err != nil {
 		t.Fatal(err)
 	}
-	reopened, err := OpenAccounts(path)
+	reopened, err := OpenAccountsWith(path, testAccountsOptions)
 	if err != nil {
 		t.Fatal(err)
 	}

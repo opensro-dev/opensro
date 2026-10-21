@@ -105,6 +105,8 @@ TestUnknownAccountRefusalCostsWhatALoginDoes
 func TestUnknownAccountRefusalCostsWhatALoginDoes(t *testing.T) {
 	var captured Config
 	newAgentFixture(t, http.NotFoundHandler(), http.NotFoundHandler(), func(config *Config) { captured = *config })
+	// Production configures no cost: the refusal costs auth.AccountBcryptCost.
+	captured.BcryptCost = 0
 	server, err := New(captured)
 	if err != nil {
 		t.Fatal(err)
@@ -159,7 +161,7 @@ func (accounts *rehashingAccounts) UpgradePasswordHash(_ context.Context, accoun
 ================
 TestLoginRaisesALowCostHash
 
-The seed hash is bcrypt's default cost: a correct login swaps it, from the
+The test hash is below the configured cost: a correct login swaps it, from the
 hash it verified, for one at the store's cost; a wrong password and an
 already-current hash do not.
 ================
@@ -169,6 +171,8 @@ func TestLoginRaisesALowCostHash(t *testing.T) {
 	fixture := newAgentFixture(t, http.NotFoundHandler(), http.NotFoundHandler(), func(config *Config) {
 		accounts.AccountAuthority = config.Accounts
 		config.Accounts = accounts
+		// Above the test hash's bcrypt.MinCost, so its login raises it.
+		config.BcryptCost = bcrypt.MinCost + 1
 	})
 	publishFixtureLease(t, fixture, "alpha", "worker-a", 1, 0)
 	login := func(password string) {
@@ -187,7 +191,7 @@ func TestLoginRaisesALowCostHash(t *testing.T) {
 	if _, seed, _ := accounts.AccountAuthority.Credential("tester"); string(accounts.verified[0]) != string(seed) {
 		t.Fatal("the upgrade was not conditioned on the verified hash")
 	}
-	current, err := bcrypt.GenerateFromPassword([]byte("123123"), auth.AccountBcryptCost)
+	current, err := bcrypt.GenerateFromPassword([]byte("123123"), bcrypt.MinCost+1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +293,7 @@ TestPasswordChangeRevokesSessionAndNotifiesShard
 */
 func TestPasswordChangeRevokesSessionAndNotifiesShard(t *testing.T) {
 	ctx := context.Background()
-	accounts, err := auth.OpenAccounts(filepath.Join(t.TempDir(), "accounts.db"))
+	accounts, err := auth.OpenAccountsWith(filepath.Join(t.TempDir(), "accounts.db"), auth.AccountsOptions{BcryptCost: bcrypt.MinCost})
 	if err != nil {
 		t.Fatal(err)
 	}
