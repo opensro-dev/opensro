@@ -193,7 +193,9 @@ contains
 		}
 	}
 	if ( !owner || delta > 2 ) return { spans: [], stop: 0, owner: null };
-	const cuts = [ 0, 1 ], spans: NavOwnerSpan[] = [], passages = linkPassages( objects, from, to, true );
+	const cuts = [ 0, 1 ],
+		spans: NavOwnerSpan[] = [],
+		passages = linkPassages( objects, from, to, true, index?.passageLinks );
 	for ( const placement of index?.placements( from, to ) ?? objects.map( ( _, i ) => i ) ) {
 		navCrossings( objects[placement]!, from, to, cuts, index );
 	}

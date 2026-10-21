@@ -98,7 +98,6 @@ apps/client-next/src/engine/foundation/navigation/ground-pick.ts
 apps/client-next/src/engine/foundation/navigation/navigation-events.ts
 apps/client-next/src/engine/foundation/navigation/owned-start.ts
 apps/client-next/src/engine/foundation/navigation/region-move.ts
-apps/client-next/src/engine/foundation/navigation/spatial-index.ts
 apps/client-next/src/engine/foundation/navigation/vertex-direction.ts
 apps/client-next/src/engine/foundation/rendering/camera-wheel.ts
 apps/client-next/src/engine/foundation/rendering/dock-camera.ts

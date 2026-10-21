@@ -219,6 +219,116 @@ export function validateLinks( objects: readonly NavPlacement[] ) {
 		}
 	}
 }
+// Padding on the chord and edge boxes of the passage broad-phase: an edge whose
+// box misses the chord's by more than this cannot meet it, and the pad keeps
+// float rounding at a touching box on the side of testing the edge.
+const PASSAGE_BOX_PAD = 1e-6;
+
+/*
+================
+LinkEdge
+
+One link edge in world space: its two ends (endpoint's float values), the
+entry cell's centroid as crossing computes it, and the edge's box.
+================
+*/
+interface LinkEdge {
+	readonly a: readonly number[];
+	readonly b: readonly number[];
+	readonly cx: number;
+	readonly cz: number;
+	readonly minX: number;
+	readonly maxX: number;
+	readonly minZ: number;
+	readonly maxZ: number;
+}
+
+/*
+================
+linkEdge
+================
+*/
+function linkEdge( p: NavPlacement, edge: number ): LinkEdge {
+	const a = endpoint( p, edge, 0 ), b = endpoint( p, edge, 1 ), cell = p.mesh.edges[edge * 6 + 2]!;
+	let cx = 0, cz = 0;
+	for ( let k = 0; k < 3; k++ ) {
+		const at = p.mesh.cells[cell * 3 + k]! * 3, x = p.mesh.vertices[at]!, z = p.mesh.vertices[at + 2]!;
+		cx += (Math.cos( p.yaw ) * x - Math.sin( p.yaw ) * z + p.x) / 3;
+		cz += (Math.sin( p.yaw ) * x + Math.cos( p.yaw ) * z + p.z) / 3;
+	}
+	return {
+		a,
+		b,
+		cx,
+		cz,
+		minX: Math.min( a[0]!, b[0]! ),
+		maxX: Math.max( a[0]!, b[0]! ),
+		minZ: Math.min( a[2]!, b[2]! ),
+		maxZ: Math.max( a[2]!, b[2]! )
+	};
+}
+
+/*
+================
+RegionLink
+
+One authored link of a region with both edges and the box around them, so a
+chord can pass over a link whose edges lie nowhere near it in one test.
+================
+*/
+interface RegionLink {
+	readonly source: number;
+	readonly link: NavLink;
+	readonly sourceEdge: LinkEdge;
+	readonly targetEdge: LinkEdge;
+	readonly minX: number;
+	readonly maxX: number;
+	readonly minZ: number;
+	readonly maxZ: number;
+}
+
+/*
+================
+PassageLinks
+
+Every authored link of one placement list in world space. The navigation
+index owns one per installed region (spatial-index.ts), so the edges are
+transformed once per install instead of on every chord: the Donwhang cave
+ran every link of the region per walking entity per step.
+================
+*/
+export interface PassageLinks {
+	readonly objects: readonly NavPlacement[];
+	readonly links: readonly RegionLink[];
+}
+
+/*
+================
+createPassageLinks
+================
+*/
+export function createPassageLinks( objects: readonly NavPlacement[] ): PassageLinks {
+	const links: RegionLink[] = [];
+	for ( let source = 0; source < objects.length; source++ ) {
+		const p = objects[source]!;
+		for ( const link of p.links ?? [] ) {
+			const sourceEdge = linkEdge( p, link.edge ),
+				targetEdge = linkEdge( objects[link.target]!, link.targetEdge );
+			links.push( {
+				source,
+				link,
+				sourceEdge,
+				targetEdge,
+				minX: Math.min( sourceEdge.minX, targetEdge.minX ),
+				maxX: Math.max( sourceEdge.maxX, targetEdge.maxX ),
+				minZ: Math.min( sourceEdge.minZ, targetEdge.minZ ),
+				maxZ: Math.max( sourceEdge.maxZ, targetEdge.maxZ )
+			} );
+		}
+	}
+	return { objects, links };
+}
+
 export interface NavPassage {
 	readonly source: number;
 	readonly target: number;
@@ -239,17 +349,38 @@ export function linkPassages(
 	objects: readonly NavPlacement[],
 	from: readonly number[],
 	to: readonly number[],
-	ownedSurface = false
+	ownedSurface = false,
+	prepared?: PassageLinks
 ): NavPassage[] {
 	const dx = to[0]! - from[0]!, dz = to[2]! - from[2]!, out: NavPassage[] = [];
+	// Links prepared for another placement list (a stale index) are rebuilt.
+	const links = prepared?.objects === objects ? prepared.links : createPassageLinks( objects ).links;
+	const minX = Math.min( from[0]!, to[0]! ) - PASSAGE_BOX_PAD,
+		maxX = Math.max( from[0]!, to[0]! ) + PASSAGE_BOX_PAD,
+		minZ = Math.min( from[2]!, to[2]! ) - PASSAGE_BOX_PAD,
+		maxZ = Math.max( from[2]!, to[2]! ) + PASSAGE_BOX_PAD;
+	/*
+	================
+	misses
+
+	The chord cannot cross an edge whose box lies apart from the chord's:
+	crossing would find t or u outside [0, 1].
+	================
+	*/
+	function misses( e: { minX: number; maxX: number; minZ: number; maxZ: number; } ) {
+		return e.maxX < minX || e.minX > maxX || e.maxZ < minZ || e.minZ > maxZ;
+	}
 	/*
 	================
 	crossing
 	================
 	*/
-	function crossing( p: NavPlacement, edge: number, leaving: boolean ) {
-		const a = endpoint( p, edge, 0 ),
-			b = endpoint( p, edge, 1 ),
+	function crossing( e: LinkEdge, leaving: boolean ) {
+		if ( misses( e ) ) {
+			return null;
+		}
+		const a = e.a,
+			b = e.b,
 			sx = b[0]! - a[0]!,
 			sz = b[2]! - a[2]!,
 			den = dx * sz - dz * sx;
@@ -264,13 +395,7 @@ export function linkPassages(
 		if ( !ownedSurface && Math.abs( from[1]! + (to[1]! - from[1]!) * t - (a[1]! + (b[1]! - a[1]!) * u) ) > 2 ) {
 			return null;
 		}
-		const cell = p.mesh.edges[edge * 6 + 2]!;
-		let cx = 0, cz = 0;
-		for ( let k = 0; k < 3; k++ ) {
-			const at = p.mesh.cells[cell * 3 + k]! * 3, x = p.mesh.vertices[at]!, z = p.mesh.vertices[at + 2]!;
-			cx += (Math.cos( p.yaw ) * x - Math.sin( p.yaw ) * z + p.x) / 3;
-			cz += (Math.sin( p.yaw ) * x + Math.cos( p.yaw ) * z + p.z) / 3;
-		}
+		const cx = e.cx, cz = e.cz;
 		const side = sx * (cz - a[2]!) - sz * (cx - a[0]!),
 			approach = sx * (from[2]! - a[2]!) - sz * (from[0]! - a[0]!);
 		if ( (approach * side > 0) !== leaving ) {
@@ -278,36 +403,37 @@ export function linkPassages(
 		}
 		return t;
 	}
-	for ( let source = 0; source < objects.length; source++ ) {
-		const p = objects[source]!;
-		for ( const link of p.links ?? [] ) {
-			const q = objects[link.target]!;
-			let a = crossing( p, link.edge, true ), b = crossing( q, link.targetEdge, false );
-			const inside = ( r: NavPlacement, edge: number, t: number ) => {
-				const v = navLocal( r, from[0]! + dx * t, from[1]! + (to[1]! - from[1]!) * t, from[2]! + dz * t ),
-					h = navHeight( r.mesh, v[0], v[2], v[1], r.mesh.edges[edge * 6 + 2] );
-				return h !== null && Math.abs( h - v[1] ) <= 2;
-			};
-			if ( a !== null && b === null && inside( q, link.targetEdge, a ) ) {
-				b = a;
-			} else if ( b !== null && a === null && inside( p, link.edge, b ) ) {
-				a = b;
-			}
-			if ( a === null || b === null ) {
-				continue;
-			}
-			if ( Math.abs( a - b ) * Math.hypot( dx, dz, to[1]! - from[1]! ) >= 5 ) {
-				continue;
-			}
-			out.push( {
-				source,
-				target: link.target,
-				edge: link.edge,
-				targetEdge: link.targetEdge,
-				from: Math.max( 0, Math.min( a, b ) - 0.19999998807907104 / Math.max( Math.hypot( dx, dz ), 1e-12 ) ),
-				to: Math.min( 1, Math.max( a, b ) + 0.19999998807907104 / Math.max( Math.hypot( dx, dz ), 1e-12 ) )
-			} );
+	for ( const region of links ) {
+		// Neither edge can be crossed: no passage, and no inside() rescue.
+		if ( misses( region ) ) {
+			continue;
 		}
+		const source = region.source, link = region.link, p = objects[source]!, q = objects[link.target]!;
+		let a = crossing( region.sourceEdge, true ), b = crossing( region.targetEdge, false );
+		const inside = ( r: NavPlacement, edge: number, t: number ) => {
+			const v = navLocal( r, from[0]! + dx * t, from[1]! + (to[1]! - from[1]!) * t, from[2]! + dz * t ),
+				h = navHeight( r.mesh, v[0], v[2], v[1], r.mesh.edges[edge * 6 + 2] );
+			return h !== null && Math.abs( h - v[1] ) <= 2;
+		};
+		if ( a !== null && b === null && inside( q, link.targetEdge, a ) ) {
+			b = a;
+		} else if ( b !== null && a === null && inside( p, link.edge, b ) ) {
+			a = b;
+		}
+		if ( a === null || b === null ) {
+			continue;
+		}
+		if ( Math.abs( a - b ) * Math.hypot( dx, dz, to[1]! - from[1]! ) >= 5 ) {
+			continue;
+		}
+		out.push( {
+			source,
+			target: link.target,
+			edge: link.edge,
+			targetEdge: link.targetEdge,
+			from: Math.max( 0, Math.min( a, b ) - 0.19999998807907104 / Math.max( Math.hypot( dx, dz ), 1e-12 ) ),
+			to: Math.min( 1, Math.max( a, b ) + 0.19999998807907104 / Math.max( Math.hypot( dx, dz ), 1e-12 ) )
+		} );
 	}
 	return out;
 }

@@ -658,7 +658,7 @@ export function createNavigation() {
 					!ownerPath?.spans.some( span => span.from === 0 ) && !deck( from.x, from.z, from.y )
 				) return null;
 				if ( dungeon && !ownerPath ) return null;
-				const passages = linkPassages( objects, fromPoint, toPoint, !!ownerPath );
+				const passages = linkPassages( objects, fromPoint, toPoint, !!ownerPath, index?.passageLinks );
 				let transfer = !dungeon && ownerPath ?
 					linkedEntry( objects, fromPoint, toPoint, ownerPath.spans ) :
 					null;
