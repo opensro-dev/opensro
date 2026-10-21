@@ -2247,6 +2247,48 @@ test("GPU inventory uses one native gold confirmation with numeric clamp and mod
 		f.ui.event( { kind: "key", code: "Enter" } );
 		f.ui.step( state, ++now );
 		assert.deepEqual( sent.pop(), { kind: "gameplay", command: { kind: "gold-drop", amount: 5000 } } );
+		// 6B2070 -> 59A850 / 59C510 / 59AA20: CIFExchange's Gold button (id 15)
+		// opens the shared gold modal (initial "1" selected, capped at carried
+		// gold); CIFInventory's Gold button is gated off while Exchange is open;
+		// confirming 0 closes the modal without sending 0x706D.
+		const exchangeOpen = {
+			...state,
+			gameplay: {
+				...game,
+				exchange: {
+					open: true,
+					partner: 2,
+					own: [],
+					theirs: [],
+					ownGold: 250,
+					theirGold: 400,
+					ownLocked: false,
+					theirLocked: false,
+					approved: false
+				}
+			}
+		};
+		let scene = f.ui.step( exchangeOpen, ++now );
+		assert.equal( defined( scene ).controls.some( c => c.id === "exchange-gold" ), false );
+		f.ui.event( { kind: "activate", id: "inventory-gold" } );
+		scene = f.ui.step( exchangeOpen, ++now ) ?? scene;
+		assert.equal( defined( scene ).controls.some( c => c.id === "gold-amount" ), false );
+		f.ui.event( { kind: "activate", id: "exchange-gold-set" } );
+		scene = f.ui.step( exchangeOpen, ++now ) ?? scene;
+		assert.equal( defined( defined( scene ).controls.find( c => c.id === "gold-amount" ) ).value, "1" );
+		f.ui.event( { kind: "edit", id: "gold-amount", value: "0", start: 1, end: 1, composing: false } );
+		scene = f.ui.step( exchangeOpen, ++now ) ?? scene;
+		f.ui.event( { kind: "activate", id: "drop-gold" } );
+		scene = f.ui.step( exchangeOpen, ++now ) ?? scene;
+		assert.equal( sent.length, 0 );
+		assert.equal( defined( scene ).controls.some( c => c.id === "gold-amount" ), false );
+		f.ui.event( { kind: "activate", id: "exchange-gold-set" } );
+		scene = f.ui.step( exchangeOpen, ++now ) ?? scene;
+		f.ui.event( { kind: "edit", id: "gold-amount", value: "9000", start: 4, end: 4, composing: false } );
+		scene = f.ui.step( exchangeOpen, ++now ) ?? scene;
+		f.ui.event( { kind: "key", code: "Enter" } );
+		scene = f.ui.step( exchangeOpen, ++now ) ?? scene;
+		assert.deepEqual( sent.pop(), { kind: "gameplay", command: { kind: "exchange-gold", amount: 5000 } } );
 	} finally {
 		f.dispose();
 	}

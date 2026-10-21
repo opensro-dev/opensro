@@ -1430,7 +1430,9 @@ export function createUi(
 		partyOptions = 4;
 	// The nickname box 0x17 asks about (5E35E0): the member and the nickname.
 	let grantAsk: { readonly id: number; readonly member: string; readonly name: string; } | null = null;
-	let goldAmount = "", confirmDrop = "", goldDialog: false | "drop" | "deposit" | "withdraw" = false;
+	let goldAmount = "",
+		confirmDrop = "",
+		goldDialog: false | "drop" | "deposit" | "withdraw" | "exchange" = false;
 	let groundDrop: { slot: number; refObjId: number; } | null = null;
 	let splitStack: { slot: number; refObjId: number; quantity: number; } | null = null, splitAmount = "1";
 	let shopOpenRequest: { gid: number; tab: number; revision: number; } | null = null;
@@ -3745,7 +3747,13 @@ export function createUi(
 		} else if ( id === "exchange-confirm" || id === "exchange-cancel" || id === "exchange-close" ) {
 			sendGameplay( { kind: id === "exchange-close" ? "exchange-cancel" : id } );
 		} else if ( id === "exchange-gold-set" ) {
-			sendGameplay( { kind: "exchange-gold", amount: Number( exchangeHud.gold() || 0 ) } );
+			// 6B2070 -> 59A850: clicking CIFExchange's Gold button (id 15) while
+			// unlocked opens the shared gold modal (context 8, initial "1").
+			if ( view.gameplay?.exchange?.open && !view.gameplay.exchange.ownLocked ) {
+				goldDialog = "exchange";
+				goldAmount = "1";
+				focusAndSelect( "gold-amount", 0, 1 );
+			}
 		} else if ( id.startsWith( "exchange-my:" ) ) {
 			const slot = Number( id.slice( 12 ) );
 			if ( view.gameplay?.exchange?.own.some( row => row.slot === slot ) ) {
@@ -4698,19 +4706,48 @@ export function createUi(
 				inventorySlot = -1;
 			}
 		} else if ( id === "inventory-gold" ) {
-			// With the warehouse open the inventory's money button deposits.
-			goldDialog = panel === "Storage" ? "deposit" : "drop";
+			// 59AA20: CIFInventory's Gold button returns early when Exchange
+			// (69AF00), Stall or Shop is active; otherwise it opens Storage
+			// deposit (59A430) when Storage is active or Drop gold (59A260) when
+			// no NPC interaction is active.
+			const g = view.gameplay,
+				stallOpen = g?.stall?.phase === "owner" || g?.stall?.phase === "visitor",
+				shopOpen = panel === "Shop" || !!g?.shop,
+				storageOpen = panel === "Storage" || g?.storage?.phase === "open";
+			if ( g?.exchange?.open || stallOpen || shopOpen || (!storageOpen && g?.talk) ) return;
+			goldDialog = storageOpen ? "deposit" : "drop";
 			goldAmount = "0";
 			focusAndSelect( "gold-amount", 0, 1 );
 		} else if ( id === "gold-cancel" ) {
 			goldDialog = false;
 			focus = null;
-		} else if ( id === "drop-gold" && view.gameplay && goldDialog !== "drop" && goldDialog !== false ) {
+		} else if ( id === "drop-gold" && view.gameplay && goldDialog === "exchange" ) {
+			// 59C510 context 8: confirming <= 0 closes the modal without sending;
+			// > 0 sends 0x706D moveType 0x0D (exchange-gold) capped at carried gold.
+			const amount = Number( goldAmount ), balance = view.gameplay.progression?.gold;
+			if ( !/^\d+$/.test( goldAmount ) || amount === 0 ) {
+				goldDialog = false;
+				focus = null;
+				goldAmount = "";
+			} else if (
+				!view.gameplay.inventoryPending && view.gameplay.exchange?.open &&
+				!view.gameplay.exchange.ownLocked && Number.isSafeInteger( amount ) &&
+				amount > 0 && amount <= 0xffffffff && balance !== undefined && BigInt( amount ) <= BigInt( balance )
+			) {
+				sendGameplay( { kind: "exchange-gold", amount } );
+				goldDialog = false;
+				focus = null;
+				goldAmount = "";
+			}
+		} else if ( id === "drop-gold" && view.gameplay && (goldDialog === "deposit" || goldDialog === "withdraw") ) {
+			// 59A430 caps warehouse deposits at min(carriedGold, 100_000_000);
+			// 59C510 closes the modal without sending when amount <= 0.
 			const amount = Number( goldAmount ),
-				balance = goldDialog === "withdraw" ? view.gameplay.storage?.gold : view.gameplay.progression?.gold;
+				balance = goldDialog === "withdraw" ? view.gameplay.storage?.gold : view.gameplay.progression?.gold,
+				cap = goldDialog === "deposit" ? 100000000 : 0xffffffff;
 			if (
 				!view.gameplay.inventoryPending && /^\d+$/.test( goldAmount ) && Number.isSafeInteger( amount ) &&
-				amount > 0 && amount <= 0xffffffff && balance !== undefined && BigInt( amount ) <= BigInt( balance )
+				amount > 0 && amount <= cap && balance !== undefined && BigInt( amount ) <= BigInt( balance )
 			) {
 				sendGameplay( {
 					kind: "storage-move",
@@ -4730,7 +4767,7 @@ export function createUi(
 			const amount = Number( goldAmount ), balance = view.gameplay.progression?.gold;
 			if (
 				!view.gameplay.inventoryPending && /^\d+$/.test( goldAmount ) && Number.isSafeInteger( amount ) &&
-				amount > 0 && amount <= 100000000 && balance !== undefined && BigInt( amount ) <= BigInt( balance )
+				amount > 0 && amount <= 0xffffffff && balance !== undefined && BigInt( amount ) <= BigInt( balance )
 			) {
 				sendGameplay( { kind: "gold-drop", amount } );
 				goldDialog = false;
@@ -7703,14 +7740,16 @@ export function createUi(
 					splitAmount = raw ? String( Math.min( splitStack.quantity - 1, Number( raw ) ) ) : "";
 				} else if ( event.id === "gold-amount" ) {
 					// A withdrawal draws on the warehouse, so its draft clamps to the
-					// room's gold; the drop and deposit spend the bag's
-					// (BR-261010-1655-2B68: an empty bag zeroed every withdrawal).
+					// room's gold; the drop, exchange and deposit spend the bag's
+					// (BR-261010-1655-2B68: an empty bag zeroed every withdrawal), and
+					// 59A430 caps a warehouse deposit at 100,000,000 (0x5f5e100).
 					const raw = event.value.replace( /[^0-9]/g, "" ).slice( 0, 20 ),
-						limit = BigInt(
-							(goldDialog === "withdraw" ?
-								view?.gameplay?.storage?.gold :
-								view?.gameplay?.progression?.gold) ?? 0
-						);
+						carried = BigInt( view?.gameplay?.progression?.gold ?? 0 ),
+						limit = goldDialog === "withdraw" ?
+							BigInt( view?.gameplay?.storage?.gold ?? 0 ) :
+							goldDialog === "deposit" && carried > 100000000n ?
+							100000000n :
+							carried;
 					goldAmount = raw ? String( BigInt( raw ) > limit ? limit : BigInt( raw ) ) : "";
 					confirmDrop = "";
 				} else if ( event.id === "social-name" ) socialName = event.value;
@@ -17272,7 +17311,15 @@ export function createUi(
 					const state = game?.exchange, root = hudData?.root.GDR_EXCHANGE, page = hudData?.windows.ifexchange;
 					if ( !state?.open || !root || !page ) {
 						exchangeHud.reset();
+						if ( goldDialog === "exchange" ) {
+							goldDialog = false;
+							focus = null;
+						}
 						return;
+					}
+					if ( state.ownLocked && goldDialog === "exchange" ) {
+						goldDialog = false;
+						focus = null;
 					}
 					const admission = beginWindow(),
 						[px, py] = windowOrigin( "Exchange", [
@@ -17315,14 +17362,7 @@ export function createUi(
 						}
 					}
 					authoredText( { ...at( 18 ), rect: [ 71, 152, 100, 16 ] }, px, py, String( state.theirGold ) );
-					partyEdit(
-						{ ...at( 19 ), rect: [ 71, 296, 100, 16 ] },
-						px,
-						py,
-						"exchange-gold",
-						exchangeHud.gold() || String( state.ownGold ),
-						12
-					);
+					authoredText( { ...at( 19 ), rect: [ 71, 296, 100, 16 ] }, px, py, String( state.ownGold ) );
 					authoredButton(
 						at( 15 ),
 						px,
@@ -22789,7 +22829,11 @@ export function createUi(
 			}
 			if (
 				worldVisible &&
-				(warDialog.money !== null || goldDialog && (panel === "Inventory" || panel === "Storage"))
+				(warDialog.money !== null ||
+					goldDialog && (
+							panel === "Inventory" || panel === "Storage" ||
+							goldDialog === "exchange" && !!game?.exchange?.open && !game.exchange.ownLocked
+						))
 			) {
 				const amount = warDialog.money ?? goldAmount,
 					inputId = warDialog.money !== null ? "war-money" : "gold-amount";
