@@ -61,6 +61,11 @@ test("retained selection matches admission after movement, topology, mount and n
 						owner.select( entities, anchor, local, mount ),
 						oracle( entities, anchor, local, mount, 12 )
 					);
+					const admit = e => e.gid % 2 === 1;
+					assert.deepEqual(
+						owner.select( entities, anchor, local, mount, admit ),
+						oracle( entities.filter( admit ), anchor, local, mount, 12 )
+					);
 				}
 				owner.reset();
 				assert.deepEqual( owner.select( [], undefined, undefined, undefined ), [] );

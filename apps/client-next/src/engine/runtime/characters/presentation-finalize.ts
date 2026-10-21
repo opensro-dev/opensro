@@ -351,7 +351,6 @@ interface PortraitFrame {
 	readonly local: EntityState | undefined;
 	readonly gameplay: GameplayState | null;
 	readonly next: Map<number, CharacterActor>;
-	readonly entitiesByGid: ReadonlyMap<number, EntityState>;
 	readonly seconds: number;
 	readonly blindHeld: boolean;
 }
@@ -388,7 +387,7 @@ Borrow only the mall mannequin operations this publication phase consumes.
 interface PortraitBindings {
 	readonly renderer: Pick<
 		Renderer,
-		"setCharacterAssembly" | "setCharacterActors" | "vHidesCompanions" | "dungeonBlockHides"
+		"setCharacterAssembly" | "setCharacterActors" | "vHidesCompanions"
 	>;
 	readonly resources: PortraitResources;
 	readonly mallPreview: {
@@ -422,7 +421,7 @@ export function publishCharacters(
 	published: PortraitCatalog,
 	bindings: PortraitBindings
 ) {
-	const { local, gameplay, next, entitiesByGid, seconds, blindHeld } = frame;
+	const { local, gameplay, next, seconds, blindHeld } = frame;
 	const { catalog, dress, manifest } = published;
 	const { renderer, resources, mallPreview } = bindings;
 	// 5BAF70 -> 5B9DF0 builds a slot-owned preview from the roster model.
@@ -467,27 +466,8 @@ export function publishCharacters(
 	// same order the spread-and-map version produced, without temporaries.
 	const presentedActors: CharacterActor[] = [], wanted: string[] = [];
 	const companionsBlind = blindHeld && renderer.vHidesCompanions?.() === true;
-	// Port-only, not native (Experimental "Dungeon character PVS"): an actor
-	// standing in a dungeon room this frame's room does not draw is neither
-	// drawn nor picked, as its scenery is not drawn. The live entity speaks
-	// first, and a rider is judged by the mover it is mounted on (the mount
-	// carries the movement; the rider's own record trails it), attachments
-	// and linked rides by their holder; an actor whose holder has left
-	// keeps the room copied onto it at assembly, so a sinking corpse and a
-	// detached particle tail are judged by the same table against the same
-	// frame's navigation block. The local player's own body and mount
-	// never hide: the camera stands where they stand.
-	const activeBlock = gameplay?.navigationBlock;
 	for ( const actor of next.values() ) {
-		const subject = entitiesByGid.get( actor.attachment?.gid ?? actor.pickOwner ?? actor.gid );
-		const mover = subject?.mountedOn !== undefined ?
-			entitiesByGid.get( subject.mountedOn ) ?? subject :
-			subject;
-		const localHeld = actor.gid === local?.gid || actor.gid === local?.mountedOn ||
-			mover !== undefined && mover.gid === local?.gid;
-		const room = mover?.dungeonBlock ?? actor.dungeonBlock;
-		const hidden = blindHeld && actor.blindable || companionsBlind && actor.blindableCompanion ||
-			!localHeld && room !== undefined && renderer.dungeonBlockHides?.( room, activeBlock ) === true;
+		const hidden = blindHeld && actor.blindable || companionsBlind && actor.blindableCompanion;
 		presentedActors.push( hidden ? { ...actor, opacity: 0, pickable: false } : actor );
 		wanted.push( actor.model );
 	}

@@ -253,6 +253,9 @@ export interface Renderer extends Disposable {
 	// Port-only, not native: whether holding V also hides other players'
 	// companions (Experimental, off by default).
 	vHidesCompanions?(): boolean;
+	// Port-only, not native (Experimental "Dungeon character PVS", on by
+	// default): whether dungeon character PVS and floor admission are on.
+	dungeonCharacterPvs?(): boolean;
 	// Port-only, not native: whether a character in dungeon room `block` is
 	// hidden because the room the local player stands in (`activeBlock`, the
 	// same frame's navigation block) does not draw it (Experimental

@@ -3,7 +3,6 @@
 # Format: `<path> <count>`. This ledger may only shrink; run
 # `node scripts/checks/check_world_space.mjs --update` after migrating a file.
 apps/client-next/src/engine/foundation/animation/action-refresh.ts 4
-apps/client-next/src/engine/foundation/animation/character-selection.ts 2
 apps/client-next/src/engine/foundation/animation/damage-anchor.ts 3
 apps/client-next/src/engine/foundation/animation/effect-room.ts 1
 apps/client-next/src/engine/foundation/animation/entity-lod.ts 3

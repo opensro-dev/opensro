@@ -34,7 +34,7 @@ import { createSkillObjects, SKILL_OBJECT_MANIFESTS } from "./skill-objects";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import { createOrbs } from "./orbs/orbs";
 import { CHARACTER_ACTORS } from "@/engine/foundation/animation/character-budget";
-import { createCharacterSelection } from "@/engine/foundation/animation/character-selection";
+import { createCharacterSelection, dungeonCharacterAdmission } from "@/engine/foundation/animation/character-selection";
 import { createCharacterEffects } from "./effects/effects";
 import { createCharacterSounds } from "./sounds/sounds";
 import { createCharacterResources } from "./resources/resources";
@@ -436,7 +436,18 @@ export function createCharacterPresentation(
 		const local = entities.find( entity => entity.gid === gameplay?.localGid );
 		const priority = ( entity: EntityState ) =>
 			entity.gid === local?.gid ? 0 : entity.gid === local?.mountedOn ? 1 : 2;
-		const selected = selection.select( entities, anchor ?? undefined, local?.gid, local?.mountedOn );
+		const admit = dungeonCharacterAdmission( {
+			entities,
+			anchor: anchor ?? undefined,
+			gameplay,
+			localGid: local?.gid,
+			mountedOn: local?.mountedOn,
+			dungeonCharacterPvs: renderer.dungeonCharacterPvs ?
+				renderer.dungeonCharacterPvs() :
+				renderer.dungeonBlockHides !== undefined,
+			dungeonBlockHides: renderer.dungeonBlockHides
+		} );
+		const selected = selection.select( entities, anchor ?? undefined, local?.gid, local?.mountedOn, admit );
 		// Resident actor assemblies own their dependencies before transient
 		// effects compete for the frame's resource budget. A cold hit effect
 		// must never evict the fighter or strip its already admitted clothing.
@@ -494,7 +505,7 @@ export function createCharacterPresentation(
 		const { entities, seconds, simulationMs, effectDetail, bloodEnabled } = input;
 		let { gameplay } = input;
 		const { localMover, logicalPose, samples } = begun;
-		const { local } = presented;
+		const { local, selected } = presented;
 		probe?.detailBegin( "presentation-events" );
 		const { castByActor, castTokens, vitalsByGid, entitiesByGid } = stateIndex.update( entities, gameplay );
 		const actionFrame = presentationActions.step(
@@ -578,6 +589,7 @@ export function createCharacterPresentation(
 		const { hitByActor, effectActors, pendingDeaths } = presentationEvents.step(
 			{
 				entities,
+				selectedGids: new Set( selected.map( entity => entity.gid ) ),
 				gameplay,
 				seconds,
 				simulationMs,
@@ -795,18 +807,6 @@ export function createCharacterPresentation(
 			{ entities, next, local, gameplay, seconds, cameraPitch, concealmentSkills, entityLod },
 			output
 		);
-		// Port-only, not native (Experimental "Dungeon character PVS"): copy
-		// each live actor's dungeon room from its entity before the fading
-		// and particle phases copy actors around, so a corpse or a detached
-		// particle tail minted below carries the room it plays out in.
-		// Publication resolves the live entity first; the copy is the
-		// fallback once the holder has left the entity map.
-		for ( const actor of next.values() ) {
-			const subject = entitiesByGid.get( actor.attachment?.gid ?? actor.pickOwner ?? actor.gid );
-			if ( subject && subject.dungeonBlock !== actor.dungeonBlock ) {
-				next.set( actor.gid, { ...actor, dungeonBlock: subject.dungeonBlock } );
-			}
-		}
 		presentDisappearing(
 			{ disappearing, seconds, next, animationDeltaMs, resources, animationHolders, particleHolders }
 		);
@@ -823,7 +823,7 @@ export function createCharacterPresentation(
 			}
 		);
 		publishCharacters(
-			{ local, gameplay, next, entitiesByGid, seconds, blindHeld },
+			{ local, gameplay, next, seconds, blindHeld },
 			output,
 			published,
 			{ renderer, resources, mallPreview }

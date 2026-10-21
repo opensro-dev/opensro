@@ -1917,6 +1917,7 @@
 			"provider": "src/engine/runtime/renderer/renderer.ts",
 			"functions": [
 				"audioListener",
+				"dungeonCharacterPvs",
 				"presentationCamera",
 				"presentationNight"
 			]
@@ -2883,11 +2884,11 @@
 			"reason": "The parent renderer reports whether the Experimental V row also hides companions; it changes nothing."
 		},
 		{
-			"file": "src/engine/runtime/characters/presentation-finalize.ts",
-			"expression": "renderer.dungeonBlockHides",
-			"function": "publishCharacters",
+			"file": "src/engine/foundation/animation/character-selection.ts",
+			"expression": "dungeonBlockHides",
+			"function": "admitCharacter",
 			"kind": "callback",
-			"reason": "The parent renderer reports whether a dungeon block the active block cannot see holds the actor; it changes nothing."
+			"reason": "The Experimental dungeon character PVS hook is an optional callback supplied by the renderer; it changes nothing."
 		},
 		{
 			"file": "src/engine/runtime/characters/presentation-finalize.ts",

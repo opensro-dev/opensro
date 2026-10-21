@@ -217,6 +217,14 @@ export function createRenderer(
 		},
 		/*
 		================
+		dungeonCharacterPvs
+		================
+		*/
+		dungeonCharacterPvs() {
+			return experimental.dungeonCharacterPvs;
+		},
+		/*
+		================
 		dungeonBlockHides
 
 		Port-only, not native (Experimental "Dungeon character PVS", on by
