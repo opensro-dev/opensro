@@ -24,6 +24,17 @@ test("reagents preserve every existing alchemy operation without a synthetic mod
 	const item = ( slot, typeFlags ) => ({ slot, typeFlags });
 	assert.equal( alchemySelection( "reinforce", [], item( 13, 0x8ec ) ), null );
 	assert.deepEqual( alchemySelection( "reinforce", [], item( 13, 0x32c ) ), { mode: "reinforce", slots: [ 13 ] } );
+	// 62B6D0 / 6245A0: job suits (3/1/7/* 0x03ac, 550410), avatar items
+	// (3/1/13/* 0x06ac, 550940) and fortress hammers (3/1/6/16 0x832c, 5504C0)
+	// are rejected from both reinforcement and dissolution slots.
+	for ( const excluded of [ 0x03ac, 0x0bac, 0x06ac, 0x0eac, 0x16ac, 0x1eac, 0x832c ] ) {
+		assert.equal( alchemySelection( "reinforce", [], item( 13, excluded ) ), null );
+		assert.equal( alchemySelection( "compound", [], item( 13, excluded ) ), null );
+	}
+	assert.deepEqual( alchemySelection( "reinforce", [], item( 13, 0x0bac ^ 0x0800 ^ 0x0080 ) ), {
+		mode: "reinforce",
+		slots: [ 13 ]
+	} );
 	// 62B6D0: magic stones are 3/3/11/1 (0xdec) and 3/3/11/7 (0x3dec); attribute
 	// stones are 3/3/11/2 (0x15ec). Swapping them sent every blue stone as an
 	// attribute operation, which the server refuses.

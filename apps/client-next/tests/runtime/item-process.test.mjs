@@ -213,6 +213,17 @@ test("native single-selection compound and dissolution requests retain their dis
 	assert.deepEqual( [ ...a.start( "compound", [ 13 ], items, 0, 2 ).payload ], [ 2, 1, 2, 0, 0, 0, 1, 13 ] );
 	a.compound( true, 2 );
 	assert.deepEqual( [ ...a.start( "dissolve", [ 13 ], items, 2000, 1 ).payload ], [ 1, 13, 12 ] );
+	const b = createAlchemy();
+	b.open();
+	for ( const excluded of [ 0x03ac, 0x06ac, 0x832c ] ) {
+		const bag = new Map( [ [ 13, { quantity: 1, typeFlags: excluded } ], [ 14, {
+			quantity: 1,
+			typeFlags: 0x0d6c
+		} ] ] );
+		for ( const mode of [ "reinforce", "attribute", "magic" ] ) {
+			assert.throws( () => b.start( mode, [ 13, 14 ], bag, 0, 1 ), /equipment/ );
+		}
+	}
 });
 test("Magic Pang timers send exactly once and native result cards gate the win cue", () => {
 	const { owner, sounds, frames } = setup();
