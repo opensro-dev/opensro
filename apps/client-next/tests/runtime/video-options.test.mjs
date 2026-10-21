@@ -90,19 +90,25 @@ Standalone rotation viewport fit (#1240)
 
 In an iOS Home Screen app, WebKit fires resize before innerHeight and safe
 areas settle, and can leave a status-bar offsetTop after rotating landscape ->
-portrait -> landscape. fitCanvasViewport reads visualViewport when present and
-falls back to innerWidth / innerHeight.
+portrait -> landscape. fitCanvasViewport reads visualViewport only while the
+platform arms the rotation-settle pin, and falls back to innerWidth /
+innerHeight at every other time (keyboard, pinch zoom).
 ================
 */
 test("fitCanvasViewport prefers settled visualViewport over stale innerHeight and status-bar offset", () => {
 	// Stale innerHeight (797) during landscape -> portrait while visualViewport settled at 390x844.
+	// The platform arms the pin (third argument) only for the rotation settle.
 	assert.deepEqual(
-		fitCanvasViewport( {
-			innerWidth: 390,
-			innerHeight: 797,
-			devicePixelRatio: 3,
-			visualViewport: { width: 390, height: 844, offsetLeft: 0, offsetTop: 0 }
-		} ),
+		fitCanvasViewport(
+			{
+				innerWidth: 390,
+				innerHeight: 797,
+				devicePixelRatio: 3,
+				visualViewport: { width: 390, height: 844, offsetLeft: 0, offsetTop: 0 }
+			},
+			undefined,
+			true
+		),
 		{
 			left: 0,
 			top: 0,
@@ -116,12 +122,16 @@ test("fitCanvasViewport prefers settled visualViewport over stale innerHeight an
 	);
 	// Transient status-bar scroll offset (offsetTop: 47) pins to the shifted visualViewport box.
 	assert.deepEqual(
-		fitCanvasViewport( {
-			innerWidth: 390,
-			innerHeight: 844,
-			devicePixelRatio: 3,
-			visualViewport: { width: 390, height: 797, offsetLeft: 0, offsetTop: 47 }
-		} ),
+		fitCanvasViewport(
+			{
+				innerWidth: 390,
+				innerHeight: 844,
+				devicePixelRatio: 3,
+				visualViewport: { width: 390, height: 797, offsetLeft: 0, offsetTop: 47 }
+			},
+			undefined,
+			true
+		),
 		{
 			left: 0,
 			top: 47,
@@ -180,7 +190,8 @@ test("fitCanvasViewport prefers settled visualViewport over stale innerHeight an
 				devicePixelRatio: 2,
 				visualViewport: { width: 1280, height: 700, offsetLeft: 0, offsetTop: 20 }
 			},
-			[ 800, 600 ]
+			[ 800, 600 ],
+			true
 		),
 		{
 			left: 440,
@@ -191,6 +202,37 @@ test("fitCanvasViewport prefers settled visualViewport over stale innerHeight an
 			physicalHeight: 600,
 			pinned: true,
 			letterboxed: true
+		}
+	);
+});
+
+/*
+================
+On-screen keyboard (#1323 review)
+
+A keyboard-open portrait phone reports a 390x508 visualViewport over a
+390x844 layout viewport (iOS, and Android Chrome by default). No rotation
+armed the pin, so the canvas keeps the layout viewport: opening the chat
+keyboard must not resize the canvas or refit the UI under the player.
+================
+*/
+test("fitCanvasViewport ignores a keyboard-shrunk visualViewport outside the rotation settle", () => {
+	assert.deepEqual(
+		fitCanvasViewport( {
+			innerWidth: 390,
+			innerHeight: 844,
+			devicePixelRatio: 3,
+			visualViewport: { width: 390, height: 508, offsetLeft: 0, offsetTop: 0 }
+		} ),
+		{
+			left: 0,
+			top: 0,
+			width: 390,
+			height: 844,
+			physicalWidth: 1170,
+			physicalHeight: 2532,
+			pinned: false,
+			letterboxed: false
 		}
 	);
 });

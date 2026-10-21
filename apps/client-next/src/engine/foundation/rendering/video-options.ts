@@ -129,21 +129,26 @@ export interface CanvasViewportBox {
 ================
 fitCanvasViewport
 
-Reads the available viewport from visualViewport when present (width, height,
-offsetLeft, offsetTop), falling back to innerWidth / innerHeight. We keep the
-default non-cover viewport (no viewport-fit=cover), so iOS reserves the
-status-bar and home-indicator safe areas outside visualViewport; during a
-Home Screen (standalone) rotation where innerHeight or scroll offset lags the
-settled visualViewport, pinning the canvas to the visualViewport box prevents
-a stale top band or clipped bottom edge.
+Reads the available viewport from visualViewport only while the platform
+arms the rotation-settle pin (pinVisualViewport): during a Home Screen
+(standalone) rotation innerHeight or scroll offset lags the settled
+visualViewport, and pinning the canvas to the visualViewport box prevents
+a stale top band or clipped bottom edge. At every other time the layout
+viewport (innerWidth / innerHeight) rules: an on-screen keyboard or a
+pinch zoom also shrinks visualViewport, and neither may refit the canvas
+or resize the game under the player's fingers. We keep the default
+non-cover viewport (no viewport-fit=cover), so iOS reserves the status-bar
+and home-indicator safe areas outside visualViewport.
 ================
 */
 export function fitCanvasViewport(
 	source: ViewportGeometrySource,
-	displaySize?: readonly [number, number]
+	displaySize?: readonly [number, number],
+	pinVisualViewport = false
 ): CanvasViewportBox {
 	const ratio = source.devicePixelRatio && source.devicePixelRatio > 0 ? source.devicePixelRatio : 1;
-	const visual = source.visualViewport && source.visualViewport.width > 0 && source.visualViewport.height > 0 ?
+	const visual = pinVisualViewport && source.visualViewport && source.visualViewport.width > 0 &&
+			source.visualViewport.height > 0 ?
 		source.visualViewport :
 		null;
 	const viewLeft = visual?.offsetLeft ?? 0,
