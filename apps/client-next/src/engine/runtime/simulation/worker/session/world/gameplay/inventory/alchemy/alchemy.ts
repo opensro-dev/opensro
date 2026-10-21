@@ -66,7 +66,10 @@ export function createAlchemy() {
 					throw Error( "Alchemy slot unavailable" );
 				}
 			}
-			if ( !process && !isAlchemyEquipment( items.get( selected[0]! )!.typeFlags ) ) {
+			if (
+				(!process && !isAlchemyEquipment( items.get( selected[0]! )!.typeFlags )) ||
+				(mode === "dissolve" && !selected.some( slot => isAlchemyEquipment( items.get( slot )!.typeFlags ) ))
+			) {
 				throw Error( "Alchemy target must be equipment" );
 			}
 			if ( process ) {

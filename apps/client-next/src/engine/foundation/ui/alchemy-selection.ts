@@ -18,7 +18,9 @@ isAlchemyEquipment
 
 SRO_Client.exe 0x0062B6D0 (CIFAlchemyReinforce_BindItemSlot), 0x00621100
 (CIFEquipReinforce_BindItemSlot) and 0x006245A0 (CIFEquipAlchemy_BindItemSlot):
-equipment requires TypeID1=3, TypeID2=1 (0x005503E0: (flags & 0x7e) === 0x2c)
+equipment requires TypeID1=3, TypeID2=1 (0x004FB2D0 CItemData_IsEquipment at
+0x0062B794, 0x0062B82A, 0x00624CFD and inlined in 0x00621100 at
+0x00621195..0x006211B2 / 0x0062135C..0x00621371: (flags & 0x7e) === 0x2c)
 and excludes job suits (0x00550410: TypeID3=7, (flags & 0x780) === 0x380),
 avatar items (0x00550940: TypeID3=13, (flags & 0x780) === 0x680) and fortress
 hammers (0x005504C0: TypeID3=6, TypeID4=16, flags === 0x832c).

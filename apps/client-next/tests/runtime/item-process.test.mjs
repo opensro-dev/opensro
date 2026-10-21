@@ -176,7 +176,8 @@ test("compound advances mixed stacks using per-step counts instead of restarting
 	assert.equal( a.state().pending, false );
 });
 test("advanced pads five native slots; dissolve uses its separate opcode; invalid requests preserve state", () => {
-	const a = createAlchemy(), items = new Map( [ [ 13, { quantity: 5 } ], [ 14, { quantity: 8 } ] ] );
+	const a = createAlchemy(),
+		items = new Map( [ [ 13, { quantity: 5, typeFlags: 0x032c } ], [ 14, { quantity: 8 } ] ] );
 	a.open();
 	const before = a.state();
 	for ( const count of [ 0, NaN, 6 ] ) assert.throws( () => a.start( "advanced", [ 13, 14 ], items, 0, count ) );
@@ -208,7 +209,7 @@ test("advanced pads five native slots; dissolve uses its separate opcode; invali
 	assert.equal( a.state().error, 7 );
 });
 test("native single-selection compound and dissolution requests retain their distinct layouts", () => {
-	const a = createAlchemy(), items = new Map( [ [ 13, { quantity: 5 } ] ] );
+	const a = createAlchemy(), items = new Map( [ [ 13, { quantity: 5, typeFlags: 0x032c } ] ] );
 	a.open();
 	assert.deepEqual( [ ...a.start( "compound", [ 13 ], items, 0, 2 ).payload ], [ 2, 1, 2, 0, 0, 0, 1, 13 ] );
 	a.compound( true, 2 );
@@ -220,7 +221,7 @@ test("native single-selection compound and dissolution requests retain their dis
 			quantity: 1,
 			typeFlags: 0x0d6c
 		} ] ] );
-		for ( const mode of [ "reinforce", "attribute", "magic" ] ) {
+		for ( const mode of [ "reinforce", "attribute", "magic", "dissolve" ] ) {
 			assert.throws( () => b.start( mode, [ 13, 14 ], bag, 0, 1 ), /equipment/ );
 		}
 	}
