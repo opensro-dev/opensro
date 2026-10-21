@@ -116,6 +116,16 @@ export const CHECK_TASKS = [
 		args: [ "scripts/checks/check_generated_root.mjs" ]
 	} ),
 	commandTask( {
+		name: "check:world-space",
+		description: "Refuse open-coded * 1920 sector math and raw 0x8000 region-bit tests outside world-space.ts",
+		kind: "check",
+		ci: true,
+		requires: [],
+		timeoutClass: "short",
+		command: "node",
+		args: [ "scripts/checks/check_world_space.mjs" ]
+	} ),
+	commandTask( {
 		name: "check:source-encoding",
 		description: "Enforce UTF-8 without BOM and LF line endings on maintained source",
 		kind: "check",
@@ -278,6 +288,7 @@ const sourceTasks = [
 	"check:source-size",
 	"check:source-encoding",
 	"check:generated-root",
+	"check:world-space",
 	"check:shared-fixtures",
 	"check:format",
 	"check:scripts",
@@ -320,6 +331,7 @@ export const CHECK_PIPELINES = Object.freeze( {
 		{ id: "source-size", task: "check:source-size", after: [] },
 		{ id: "source-encoding", task: "check:source-encoding", after: [] },
 		{ id: "generated-root", task: "check:generated-root", after: [] },
+		{ id: "world-space", task: "check:world-space", after: [] },
 		{ id: "shared-fixtures", task: "check:shared-fixtures", after: [] },
 		{ id: "format", task: "check:format", after: [] },
 		{ id: "typecheck-scripts", task: "check:scripts", after: [] },

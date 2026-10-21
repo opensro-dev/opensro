@@ -11,9 +11,111 @@ sector-seam normalization invariants.
 package world
 
 import (
+	"encoding/json"
 	"math"
+	"os"
+	"path/filepath"
 	"testing"
 )
+
+type worldSpaceParityFile struct {
+	RegionSize       float64                `json:"regionSize"`
+	DungeonRegionBit uint16                 `json:"dungeonRegionBit"`
+	Cases            []worldSpaceParityCase `json:"cases"`
+}
+
+type worldSpaceParityPoint struct {
+	RegionID uint16  `json:"regionId"`
+	X        float64 `json:"x"`
+	Z        float64 `json:"z"`
+}
+
+type worldSpaceParitySector struct {
+	X int `json:"x"`
+	Y int `json:"y"`
+}
+
+type worldSpaceParityCase struct {
+	Name              string                  `json:"name"`
+	From              worldSpaceParityPoint   `json:"from"`
+	To                worldSpaceParityPoint   `json:"to"`
+	FromDungeon       bool                    `json:"fromDungeon"`
+	ToDungeon         bool                    `json:"toDungeon"`
+	FromSector        *worldSpaceParitySector `json:"fromSector"`
+	ToSector          *worldSpaceParitySector `json:"toSector"`
+	SamePlane         bool                    `json:"samePlane"`
+	SamePlaneAdjacent bool                    `json:"samePlaneAdjacent"`
+	Delta             *[2]float64             `json:"delta"`
+	Distance          *float64                `json:"distance"`
+}
+
+/*
+================
+TestWorldSpaceParityCases
+
+Verifies that worldgeom matches the shared client/server world-space parity
+cases in testdata/world-space-cases.json.
+================
+*/
+func TestWorldSpaceParityCases(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "world-space-cases.json"))
+	if err != nil {
+		t.Fatalf("read world-space-cases.json: %v", err)
+	}
+	var suite worldSpaceParityFile
+	if err := json.Unmarshal(raw, &suite); err != nil {
+		t.Fatalf("unmarshal world-space-cases.json: %v", err)
+	}
+	if suite.RegionSize != OutdoorRegionSize {
+		t.Fatalf("regionSize = %v, want %v", suite.RegionSize, OutdoorRegionSize)
+	}
+	if suite.DungeonRegionBit != DungeonRegionBit {
+		t.Fatalf("dungeonRegionBit = 0x%x, want 0x%x", suite.DungeonRegionBit, DungeonRegionBit)
+	}
+	if len(suite.Cases) == 0 {
+		t.Fatal("world-space-cases.json has no cases")
+	}
+	for _, tc := range suite.Cases {
+		if got := IsDungeonRegion(tc.From.RegionID); got != tc.FromDungeon {
+			t.Errorf("%s: IsDungeonRegion(from=0x%x) = %v, want %v", tc.Name, tc.From.RegionID, got, tc.FromDungeon)
+		}
+		if got := IsDungeonRegion(tc.To.RegionID); got != tc.ToDungeon {
+			t.Errorf("%s: IsDungeonRegion(to=0x%x) = %v, want %v", tc.Name, tc.To.RegionID, got, tc.ToDungeon)
+		}
+		if tc.FromSector != nil {
+			if gotX, gotY := SectorX(tc.From.RegionID), SectorY(tc.From.RegionID); gotX != tc.FromSector.X || gotY != tc.FromSector.Y {
+				t.Errorf("%s: from sector = (%d,%d), want (%d,%d)", tc.Name, gotX, gotY, tc.FromSector.X, tc.FromSector.Y)
+			}
+		}
+		if tc.ToSector != nil {
+			if gotX, gotY := SectorX(tc.To.RegionID), SectorY(tc.To.RegionID); gotX != tc.ToSector.X || gotY != tc.ToSector.Y {
+				t.Errorf("%s: to sector = (%d,%d), want (%d,%d)", tc.Name, gotX, gotY, tc.ToSector.X, tc.ToSector.Y)
+			}
+		}
+		if got := SamePlane(tc.From.RegionID, tc.To.RegionID); got != tc.SamePlane {
+			t.Errorf("%s: SamePlane = %v, want %v", tc.Name, got, tc.SamePlane)
+		}
+		if got := SamePlaneAdjacent(tc.From.RegionID, tc.To.RegionID); got != tc.SamePlaneAdjacent {
+			t.Errorf("%s: SamePlaneAdjacent = %v, want %v", tc.Name, got, tc.SamePlaneAdjacent)
+		}
+		if tc.Delta != nil {
+			from := RegionXZ{RegionID: tc.From.RegionID, X: tc.From.X, Z: tc.From.Z}
+			to := RegionXZ{RegionID: tc.To.RegionID, X: tc.To.X, Z: tc.To.Z}
+			dx, dz := Delta(from, to)
+			if math.Abs(dx-tc.Delta[0]) > 1e-9 || math.Abs(dz-tc.Delta[1]) > 1e-9 {
+				t.Errorf("%s: Delta = (%v,%v), want (%v,%v)", tc.Name, dx, dz, tc.Delta[0], tc.Delta[1])
+			}
+		}
+		if tc.Distance != nil {
+			from := RegionXZ{RegionID: tc.From.RegionID, X: tc.From.X, Z: tc.From.Z}
+			to := RegionXZ{RegionID: tc.To.RegionID, X: tc.To.X, Z: tc.To.Z}
+			got := Distance(from, to)
+			if math.Abs(got-*tc.Distance) > 1e-9 {
+				t.Errorf("%s: Distance = %v, want %v", tc.Name, got, *tc.Distance)
+			}
+		}
+	}
+}
 
 /*
 ================

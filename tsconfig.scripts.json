@@ -54,6 +54,7 @@
 		"scripts/checks/run_if_changed.mjs",
 		"scripts/checks/check_precompressed_freshness.mjs",
 		"scripts/checks/check_source_file_size.mjs",
+		"scripts/checks/check_world_space.mjs",
 		"scripts/checks/lib/methodBlock.mjs",
 		// probes/
 		// debug/
