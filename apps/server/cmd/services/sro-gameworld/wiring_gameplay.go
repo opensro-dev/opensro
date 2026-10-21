@@ -14,6 +14,7 @@ package main
 import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	worldgeom "opensro.online/server/internal/game/world"
 	"time"
 
 	"opensro.online/server/internal/cluster/shard"
@@ -249,6 +250,12 @@ func newGameplayPlane(
 		return nil, err
 	}
 	water.SetClosedObjectRescue(movement.ClosedObjectRescueFromEnv())
+	// Native dungeon interest is the 3x3 message-block neighbourhood of each
+	// dungeon's DOF grid (worldgeom dungeon_grid.go). Installed before the
+	// first session so every interest query sees the same table.
+	dungeonGrids := water.DungeonMessageGrids()
+	worldgeom.InstallDungeonMessageGrids(dungeonGrids)
+	log.Infof("world: dungeon message grids installed for %d dungeon region(s)", len(dungeonGrids))
 	navigationStarted := time.Now()
 	navigationRegions, err := water.PreloadOutdoorNavigation()
 	if err != nil {

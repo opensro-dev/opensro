@@ -8,6 +8,7 @@ spawnregion_test.go - creation uses native collision results and map residency
 package movement
 
 import (
+	worldgeom "opensro.online/server/internal/game/world"
 	"testing"
 
 	"opensro.online/server/internal/game/world/monster"
@@ -49,7 +50,7 @@ func TestCompanionSpawnDistinguishesBlockedDungeonContactFromClipping(t *testing
 		{ordinal: 0, meshes: []*objectNavMesh{topologyMesh(false)}},
 		{ordinal: 1, x: 100, meshes: []*objectNavMesh{topologyMesh(true)}},
 	}
-	surface := newDungeonSpawnSurface(dungeonMessageGrid{}, blocks)
+	surface := newDungeonSpawnSurface(worldgeom.DungeonMessageGrid{}, blocks)
 	v := &WaterValidator{dungeonSpawnSurfaces: map[uint16]*dungeonSpawnSurface{0x8001: surface}}
 	v.dungeonSpawnOnce.Do(func() {})
 	origin := simulation.Spawn{RegionID: 0x8001, X: 50, Y: 10, Z: 50}

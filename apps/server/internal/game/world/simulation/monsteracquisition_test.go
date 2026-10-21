@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"testing"
 
+	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/monster"
 )
 
@@ -199,5 +200,42 @@ func TestProductionRankingAgainstFrozenNativeSlice(t *testing.T) {
 		if got != c.Expected {
 			t.Fatalf("%s: got %+v native %+v", c.Name, got, c.Expected)
 		}
+	}
+}
+
+/*
+================
+TestDungeonAcquisitionRanksOwnBlockThenLinkedNeighbours
+
+CRgnDungeon_Query (538B30): a dungeon monster ranks its own message block,
+then the linked neighbours, and never a player two blocks away, whatever
+its sight.
+================
+*/
+func TestDungeonAcquisitionRanksOwnBlockThenLinkedNeighbours(t *testing.T) {
+	restore := worldgeom.InstallDungeonMessageGrids(map[uint16]worldgeom.DungeonMessageGrid{
+		0x8001: {Min: [3]float64{0, -1000, 0}, Max: [3]float64{3200, 1000, 3200}},
+	})
+	defer restore()
+	from := monster.Pose{RegionID: 0x8001, X: 650, Z: 650} // block (2,2)
+	blocks := acquisitionBlocks(from, 10)
+	if blocks.count != 9 || blocks.blocks[0] != (worldgeom.InterestBlock{Dungeon: 0x8001, X: 2, Z: 2}) {
+		t.Fatalf("own block first, then eight neighbours: %+v", blocks)
+	}
+	if blocks.blocks[1] != (worldgeom.InterestBlock{Dungeon: 0x8001, X: 1, Z: 1}) ||
+		blocks.blocks[8] != (worldgeom.InterestBlock{Dungeon: 0x8001, X: 3, Z: 3}) {
+		t.Fatalf("neighbours ascend by x, then z: %+v", blocks)
+	}
+	near := Spawn{RegionID: 0x8001, X: 1000, Z: 650} // block (3,2): a neighbour
+	far := Spawn{RegionID: 0x8001, X: 1300, Z: 650}  // block (4,2): two away
+	if _, inside := blocks.order(worldgeom.InterestBlockAt(worldgeom.RegionXZ{RegionID: far.RegionID, X: far.X, Z: far.Z})); inside {
+		t.Fatal("a player two blocks away must not reach dungeon ranking")
+	}
+	if _, inside := blocks.order(worldgeom.InterestBlockAt(worldgeom.RegionXZ{RegionID: near.RegionID, X: near.X, Z: near.Z})); !inside {
+		t.Fatal("a player in a neighbouring block must reach dungeon ranking")
+	}
+	outside := worldgeom.InterestBlockAt(worldgeom.RegionXZ{RegionID: 0x8001, X: 9000, Z: 9000})
+	if order, inside := blocks.order(outside); !inside || order != 0 {
+		t.Fatalf("a player outside the grid keeps the whole region: %d %v", order, inside)
 	}
 }

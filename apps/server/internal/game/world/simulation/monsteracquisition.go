@@ -226,7 +226,10 @@ order
 */
 func (s acquisitionBlockSet) order(block worldgeom.InterestBlock) (int, bool) {
 	for i := 0; i < s.count; i++ {
-		if s.blocks[i] == block {
+		// A Whole dungeon block (no grid cell) neighbours its whole region
+		// (worldgeom.InterestBlock.Adjacent), so it ranks with the first
+		// block of that dungeon.
+		if s.blocks[i] == block || block.Whole && s.blocks[i].Dungeon == block.Dungeon {
 			return i, true
 		}
 	}
@@ -239,6 +242,9 @@ acquisitionBlocks
 ================
 */
 func acquisitionBlocks(from monster.Pose, sight uint32) acquisitionBlockSet {
+	if worldgeom.IsDungeonRegion(from.RegionID) {
+		return dungeonAcquisitionBlocks(from)
+	}
 	radius := float32(sight)
 	if radius < 1 {
 		radius = 1
@@ -381,4 +387,44 @@ func appendCompanionTargets(players []playerPose, companions []CompanionTarget) 
 			NativeBodyStatus: c.NativeBodyStatus, Guard: owner.Guard, OwnerGid: owner.Gid, Band: c.Band})
 	}
 	return players
+}
+
+/*
+================
+dungeonAcquisitionBlocks
+
+A dungeon monster ranks the players of its own message block and then of
+that block's linked neighbours (CRgnDungeon_Query 538B30 ->
+CRgnDungeon_AppendNeighborRoomCells 5375D0), not the outdoor 3x3 sight
+sample of 53AE20. The neighbour list is in link order: CRgnObject 538670
+visits blocks by ascending linear index ((dimY*x + y)*dimZ + z) and links
+both ways once (CMsgBlock_LinkNeighbor 537CB0, CMsgBlock_HasNeighbor
+538270), so each block's list ascends by x, then z (inference from that
+loop; one layer, so y never varies). A position the grid cannot place
+keeps its Whole block alone.
+================
+*/
+func dungeonAcquisitionBlocks(from monster.Pose) acquisitionBlockSet {
+	var blocks acquisitionBlockSet
+	own := worldgeom.InterestBlockAt(worldgeom.RegionXZ{
+		RegionID: from.RegionID, X: float64(float32(from.X)), Z: float64(float32(from.Z)),
+	})
+	blocks.blocks[0] = own
+	blocks.count = 1
+	if own.Whole {
+		return blocks
+	}
+	for x := -1; x <= 1; x++ {
+		for z := -1; z <= 1; z++ {
+			if x == 0 && z == 0 {
+				continue
+			}
+			neighbor := own
+			neighbor.X += x
+			neighbor.Z += z
+			blocks.blocks[blocks.count] = neighbor
+			blocks.count++
+		}
+	}
+	return blocks
 }

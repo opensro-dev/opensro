@@ -25,24 +25,49 @@ const (
 	InterestBlocksPerRegion = 6
 )
 
-// InterestBlock is one native message block. Outdoor blocks are addressed in
-// the continuous block grid (sector*6 + local/320), which removes region seams
-// from neighbour arithmetic the way 53AC20 does.
-//
-// Dungeon regions use CRgnObject with per-cell CMsgBlockObject blocks
-// (5374A0 matches an object cell id against the block id); those cell and link
-// rules are not recovered, so a dungeon region remains one interest block.
+/*
+================
+InterestBlock
+
+One native message block. Outdoor blocks are addressed in the continuous
+block grid (sector*6 + local/320), which removes region seams from
+neighbour arithmetic the way 53AC20 does. Dungeon blocks are cells of the
+region's DOF message grid (dungeon_grid.go), the same 320-unit squares
+measured from the grid origin.
+
+A dungeon position the installed grid cannot place (no grid for the region,
+or outside its bounds) is Whole: the whole region, as before the grid was
+recovered, so an object is never hidden by missing data.
+================
+*/
 type InterestBlock struct {
 	// Dungeon is the dungeon region word; zero for outdoor blocks.
 	Dungeon uint16
-	// X and Z are continuous outdoor block-grid coordinates.
+	// Whole marks a dungeon position without a grid cell.
+	Whole bool
+	// X and Z are continuous outdoor block-grid coordinates, or a dungeon
+	// grid cell.
 	X, Z int
 }
 
-// InterestBlockAt returns the message block containing position.
+/*
+================
+InterestBlockAt
+
+The message block containing position.
+================
+*/
 func InterestBlockAt(position RegionXZ) InterestBlock {
 	if IsDungeonRegion(position.RegionID) {
-		return InterestBlock{Dungeon: position.RegionID}
+		grid, ok := dungeonMessageGridFor(position.RegionID)
+		if !ok {
+			return InterestBlock{Dungeon: position.RegionID, Whole: true}
+		}
+		x, z, inside := grid.planarBlock(position.X, position.Z)
+		if !inside {
+			return InterestBlock{Dungeon: position.RegionID, Whole: true}
+		}
+		return InterestBlock{Dungeon: position.RegionID, X: x, Z: z}
 	}
 	grid := ExpandGrid(position)
 	return InterestBlock{
@@ -51,10 +76,21 @@ func InterestBlockAt(position RegionXZ) InterestBlock {
 	}
 }
 
-// Adjacent reports whether other is block or one of its eight neighbours.
+/*
+================
+InterestBlock.Adjacent
+
+Whether other is block or one of its eight neighbours (53AB90 outdoors,
+538670 in a dungeon). Dungeon and outdoor blocks never neighbour; a Whole
+dungeon block neighbours every block of its region.
+================
+*/
 func (block InterestBlock) Adjacent(other InterestBlock) bool {
-	if block.Dungeon != 0 || other.Dungeon != 0 {
-		return block.Dungeon == other.Dungeon
+	if block.Dungeon != other.Dungeon {
+		return false
+	}
+	if block.Whole || other.Whole {
+		return true
 	}
 	return abs(block.X-other.X) <= 1 && abs(block.Z-other.Z) <= 1
 }

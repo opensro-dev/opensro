@@ -2,6 +2,7 @@ package movement
 
 import (
 	"encoding/json"
+	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/simulation"
 	"os"
 	"path/filepath"
@@ -35,14 +36,14 @@ func TestNativeContactResponseReference(t *testing.T) {
 	}
 	mesh := &objectNavMesh{vertices: []float32{0, 0, 0, 0, 0, 100, 100, 0, 0}, cellA: []uint16{0}, cellB: []uint16{1}, cellC: []uint16{2}, minX: 0, maxX: 100, minZ: 0, maxZ: 100, outline: objectNavEdges{vertA: []uint16{0, 1, 2}, vertB: []uint16{1, 2, 0}, srcCell: []uint16{0, 0, 0}, dstCell: []uint16{65535, 65535, 65535}, flags: []byte{2, 2, 2}}}
 	blocks := []dungeonSpawnBlock{{meshes: []*objectNavMesh{mesh}}}
-	v := &WaterValidator{dungeonSpawnSurfaces: map[uint16]*dungeonSpawnSurface{0x8001: newDungeonSpawnSurface(dungeonMessageGrid{}, blocks)}}
+	v := &WaterValidator{dungeonSpawnSurfaces: map[uint16]*dungeonSpawnSurface{0x8001: newDungeonSpawnSurface(worldgeom.DungeonMessageGrid{}, blocks)}}
 	v.dungeonSpawnOnce.Do(func() {})
 	pose := func(p [3]float64) simulation.Spawn {
 		return simulation.Spawn{RegionID: 0x8001, X: p[0], Y: p[1], Z: p[2]}
 	}
 	for _, r := range reference.Slide {
 		blocks[0].x, blocks[0].y, blocks[0].z = r.Placement[0], r.Placement[1], r.Placement[2]
-		v.dungeonSpawnSurfaces[0x8001] = newDungeonSpawnSurface(dungeonMessageGrid{}, blocks)
+		v.dungeonSpawnSurfaces[0x8001] = newDungeonSpawnSurface(worldgeom.DungeonMessageGrid{}, blocks)
 		report := v.ClipMovementPath(pose(r.Start), pose(r.Requested))
 		actual := [3]float64{report.Rest.X, report.Rest.Y, report.Rest.Z}
 		if report.Outcome != ClipBlocked || actual != r.Point {

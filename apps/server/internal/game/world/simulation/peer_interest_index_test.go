@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"opensro.online/server/internal/game/item/wire"
+	worldgeom "opensro.online/server/internal/game/world"
 	"slices"
 	"testing"
 )
@@ -226,5 +227,43 @@ func BenchmarkPeerVisibilitySteady1000(b *testing.B) {
 				b.Fatal("steady visibility emitted redundant packets")
 			}
 		})
+	}
+}
+
+/*
+================
+TestPeerInterestIndexMatchesExhaustiveVisibilityWithDungeonGrid
+
+With a dungeon grid installed the index must still equal the exact
+predicate: gridded 3x3 dungeon neighbourhoods, positions outside the grid
+(Whole blocks that see their whole region) and an ungridded dungeon.
+================
+*/
+func TestPeerInterestIndexMatchesExhaustiveVisibilityWithDungeonGrid(t *testing.T) {
+	restore := worldgeom.InstallDungeonMessageGrids(map[uint16]worldgeom.DungeonMessageGrid{
+		0x8001: {Min: [3]float64{-320, -1000, -320}, Max: [3]float64{1600, 1000, 1600}},
+	})
+	defer restore()
+	random := rand.New(rand.NewSource(4127))
+	sessions := make([]SessionSnapshot, 400)
+	for i := range sessions {
+		s := peerSession(fmt.Sprint(i), fmt.Sprint(i%2), int64(i+1), "peer")
+		s.WorldInstance = uint32(i % 2)
+		// 0x8001 positions span -640..1920, so some fall outside its grid.
+		s.World.Spawn = Spawn{RegionID: []uint16{0x8001, 0x8001, 0x8001, 0x8002, 0x6060}[i%5], X: float64(random.Intn(9)-2) * 320, Z: float64(random.Intn(9)-2) * 320}
+		if i%11 == 0 {
+			s.Appearance = nil
+		}
+		sessions[i] = s
+	}
+	index := buildPeerInterestIndex(sessions, 1000, false)
+	var got, want []int
+	for i := range sessions {
+		viewer := &sessions[i]
+		got = index.candidates(viewer, viewer.World.LiveSpawnAt(1000), got)
+		want = exhaustivePeerCandidates(sessions, viewer, 1000, false, want)
+		if !slices.Equal(got, want) {
+			t.Fatalf("viewer %d at %+v: got %v want %v", i, viewer.World.Spawn, got, want)
+		}
 	}
 }

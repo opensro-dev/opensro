@@ -93,9 +93,20 @@ func (index peerInterestIndex) candidates(viewer *SessionSnapshot, pose Spawn, s
 			scratch = append(scratch, link-1)
 		}
 	}
-	if key.block.Dungeon != 0 {
-		appendCell(key)
-	} else {
+	// The same relation as worldgeom.InterestBlock.Adjacent, cell by cell:
+	// the 3x3 block neighbourhood outdoors and in a gridded dungeon. A Whole
+	// dungeon block (no grid cell) neighbours its whole region both ways, so
+	// a Whole viewer reads every cell of the region and a placed viewer also
+	// reads the region's Whole cell.
+	switch {
+	case key.block.Whole:
+		for other := range index.heads {
+			if other.division == key.division && other.world == key.world &&
+				other.block.Dungeon == key.block.Dungeon {
+				appendCell(other)
+			}
+		}
+	default:
 		for z := -1; z <= 1; z++ {
 			for x := -1; x <= 1; x++ {
 				neighbor := key
@@ -103,6 +114,11 @@ func (index peerInterestIndex) candidates(viewer *SessionSnapshot, pose Spawn, s
 				neighbor.block.Z += z
 				appendCell(neighbor)
 			}
+		}
+		if key.block.Dungeon != 0 {
+			whole := key
+			whole.block = worldgeom.InterestBlock{Dungeon: key.block.Dungeon, Whole: true}
+			appendCell(whole)
 		}
 	}
 	// Preserve the original snapshot order across cell boundaries.

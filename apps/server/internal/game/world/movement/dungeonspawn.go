@@ -16,6 +16,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	worldgeom "opensro.online/server/internal/game/world"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -27,7 +28,7 @@ const dungeonResourcesPublicPath = "assets/world/dungeon/dungeon-resources.json"
 // CRTNavMeshDungeon resident host. DOF blocks own transforms; their BSR
 // paths resolve to the exact packaged BMS object-nav cells.
 type dungeonSpawnSurface struct {
-	messageGrid dungeonMessageGrid
+	messageGrid worldgeom.DungeonMessageGrid
 	blocks      []dungeonSpawnBlock
 	objects     []resolvedObjectNav
 	// ordinalIndex maps a block ordinal to its index in objects, built once
@@ -61,7 +62,7 @@ is built here, so heightAt and the chord scans never see a block without
 them.
 ================
 */
-func newDungeonSpawnSurface(grid dungeonMessageGrid, blocks []dungeonSpawnBlock) *dungeonSpawnSurface {
+func newDungeonSpawnSurface(grid worldgeom.DungeonMessageGrid, blocks []dungeonSpawnBlock) *dungeonSpawnSurface {
 	surface := &dungeonSpawnSurface{messageGrid: grid, blocks: blocks}
 	surface.objects = resolveDungeonLinks(blocks)
 	surface.ordinalIndex = make(map[int]int, len(surface.objects))
@@ -169,7 +170,7 @@ func (v *WaterValidator) loadDungeonSpawnSurfaces() map[uint16]*dungeonSpawnSurf
 			log.Warnf("movement: dungeon DOF 0x%04X is invalid: %v", entry.SectorID, err)
 			continue
 		}
-		grid, err := parseDungeonMessageGrid(raw)
+		grid, err := worldgeom.ParseDungeonMessageGrid(raw)
 		if err != nil {
 			log.Warnf("movement: dungeon DOF 0x%04X message grid is invalid: %v", entry.SectorID, err)
 			continue
