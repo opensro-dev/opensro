@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "tsBuildInfoFile": "../../temp/cache/tsc/ui-gallery.tsbuildinfo"
+  },
+  "include": [
+    "./*.ts",
+    "../../src/**/*.ts",
+    "../types/**/*.d.ts"
+  ]
+}

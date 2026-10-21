@@ -1,0 +1,27 @@
+/*
+===========================================================================
+
+gallery.css - the UI gallery's page around the game frame
+
+===========================================================================
+*/
+:root { color-scheme: dark; font: 14px/1.4 system-ui, sans-serif; }
+body { margin: 0; display: grid; grid-template-columns: 300px 1fr; height: 100vh; background: #10161d; color: #e6e1d6; }
+aside { overflow: auto; padding: 16px; border-right: 1px solid #2a3440; }
+main { overflow: auto; padding: 16px; }
+h1, h2 { font-size: 18px; margin: 0 0 4px; }
+h3 { font-size: 12px; margin: 16px 0 4px; text-transform: uppercase; letter-spacing: .06em; color: #c9a86a; }
+label { display: block; margin: 8px 0 4px; }
+input, select, button { font: inherit; color: inherit; background: #1b2530; border: 1px solid #36424f; border-radius: 4px; padding: 4px 8px; }
+button { cursor: pointer; }
+button:hover { border-color: #c9a86a; }
+nav button { display: block; width: 100%; text-align: left; margin: 2px 0; border-color: transparent; background: none; }
+nav button[aria-current="true"] { background: #243242; border-color: #c9a86a; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.toolbar label { display: inline; margin: 0; }
+#actions { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+#status { color: #9fb3c8; }
+#status[data-state="error"] { color: #ff8a80; }
+#status[data-state="ready"] { color: #9be29b; }
+iframe { display: block; border: 1px solid #36424f; background: #0f1720; }
+.muted { color: #8a96a3; }

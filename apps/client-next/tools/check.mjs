@@ -3,14 +3,15 @@
 
 check.mjs - client verification with explicit source and asset boundaries
 
-`pnpm check` used to run eleven gates one after another. They are
+`pnpm check` used to run its gates one after another. They are
 independent - each reads the sources, the contracts or the generated assets
 and writes nothing another gate reads - so they run together here, with the
 test run (the longest) started first. Each gate's output is captured and
 printed as one block when it finishes, so the report stays readable. The
 check fails if any gate fails, after all of them have finished. Hosted app-only
 builds use --source: types, layout and source tests without retail extraction.
-The default remains the complete eleven-gate check, including asset audits.
+The default remains the complete check, including asset audits. The UI gallery
+(tools/ui-gallery) has its own type program, so it cannot rot unseen.
 
 ===========================================================================
 */
@@ -27,7 +28,7 @@ const clientRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) 
 const node = process.execPath;
 const SOURCE_FLAG = "--source";
 const ASSET_ARCHITECTURE_TESTS = new Set( [ "audio-parity-audit.test.mjs" ] );
-const SOURCE_GATE_NAMES = new Set( [ "verify:test-types", "typecheck", "verify:layout" ] );
+const SOURCE_GATE_NAMES = new Set( [ "verify:test-types", "typecheck", "typecheck:gallery", "verify:layout" ] );
 
 // Longest first, so the critical path starts immediately.
 const GATES = [
@@ -39,6 +40,12 @@ const GATES = [
 		"--noEmit",
 		"-p",
 		"tsconfig.json"
+	] ],
+	[ "typecheck:gallery", [
+		path.join( clientRoot, "node_modules", "typescript", "bin", "tsc" ),
+		"--noEmit",
+		"-p",
+		"tools/ui-gallery/tsconfig.json"
 	] ],
 	[ "verify:execution", [ "tools/generate-execution-map.mjs" ] ],
 	[ "verify:ownership", [ "tools/verify-ownership.mjs" ] ],

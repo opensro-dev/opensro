@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width,initial-scale=1">
+		<title>OpenSRO UI gallery</title>
+		<link rel="stylesheet" href="./gallery.css">
+	</head>
+	<body>
+		<aside>
+			<h1>UI gallery</h1>
+			<p class="muted">Production windows over local fake data. No game connection.</p>
+			<label for="search">Find a window</label>
+			<input id="search" type="search" placeholder="Guild, stall, storage...">
+			<nav id="list" aria-label="Windows"></nav>
+		</aside>
+		<main>
+			<h2 id="title">Loading...</h2>
+			<p id="description"></p>
+			<div class="toolbar">
+				<button id="reset">Reset</button>
+				<label>Viewport
+					<select id="viewport">
+						<option value="1000x700">1000 x 700</option>
+						<option value="1600x900">1600 x 900</option>
+						<option value="800x600">800 x 600</option>
+						<option value="375x667">375 x 667</option>
+					</select>
+				</label>
+				<span id="actions"></span>
+				<span id="status" role="status"></span>
+			</div>
+			<iframe id="frame" title="Game UI" width="1000" height="700"></iframe>
+			<p id="limits" class="muted"></p>
+		</main>
+		<script type="module" src="./gallery.ts"></script>
+	</body>
+</html>
