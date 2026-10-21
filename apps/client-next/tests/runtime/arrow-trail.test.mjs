@@ -343,6 +343,80 @@ test("zero-length AT_TARGET bsr mover keeps the -pi/2 spawn basis instead of yaw
 	}
 	f.owner.dispose();
 });
+test("zero-length homing bsr mover keeps the source object's yaw, not -pi/2", () => {
+	// The other Initialize callers (8DE308 family) pass the source
+	// object's yaw ([obj+0x88]); a target standing exactly on the caster
+	// makes the AT_MOV_1TAR path zero-length, so the mover keeps that
+	// yaw. Heading 0 converts to pi/2 (nativeHeadingYaw), whose imported
+	// rows are the AT_TARGET rows negated: right (0,0,-1), back (1,0,0).
+	let serial = 0;
+	const jobs = new Map(),
+		data = { 1: { clips: [], arrowEffects: [ "trail.efp", "force.efp" ], stages: [ stage ] } },
+		models = {
+			...manifest.models,
+			"arrow.bsr": { glb: "/assets/arrow.glb", clips: [ "stand" ], clipLoop: true }
+		};
+	const owner = createCharacterEffects(
+		{
+			available: () => 4,
+			request( url, limit, type ) {
+				jobs.set(
+					++serial,
+					type === "effects" ?
+						{ kind: "effects", catalog: data } :
+						{
+							kind: "bytes",
+							buffer: new TextEncoder().encode( JSON.stringify( { ...manifest, models } ) ).buffer
+						}
+				);
+				return serial;
+			},
+			take( id ) {
+				const r = jobs.get( id );
+				jobs.delete( id );
+				return r;
+			},
+			cancel( id ) {
+				jobs.delete( id );
+			}
+		},
+		"http://localhost",
+		() => {},
+		createPresentationRandom( 1 )
+	);
+	const entities = [
+		{ gid: 1, kind: "local-player", regionId: 257, x: 0, y: 0, z: 0, heading: 0 },
+		{ gid: 2, kind: "monster", regionId: 257, x: 0, y: 0, z: 0, heading: 0 }
+	];
+	const cast = { token: 1, caster: 1, target: 2, skill: 1, results: [ { target: 2, impacts: [ { damage: 10 } ] } ] },
+		game = { localGid: 1, inventory: [ { slot: 6, refObjId: 143 } ], casts: [ cast ] };
+	const step = ( now, events = [] ) =>
+		owner.step(
+			entities,
+			game,
+			now,
+			() => true,
+			() => 10,
+			events,
+			() => ({ regionId: 257, x: 0, y: 0, z: 0, yaw: 0 }),
+			[],
+			2
+		);
+	step( 0 );
+	step( .1 );
+	const rows = step( .2, [ { cast, phase: "SHOT", event: 1, at: .2 } ] );
+	const mover = rows.find( a => a.model.endsWith( "arrow.glb" ) );
+	assert.ok( mover, "zero-length homing mover must still spawn" );
+	assert.ok( mover.effectBasis, "zero-length homing mover must carry the source-yaw basis" );
+	const expected = [ 0, 0, -1, 0, 1, 0, 1, 0, 0 ];
+	for ( let i = 0; i < 9; i++ ) {
+		assert.ok(
+			Math.abs( mover.effectBasis[i] - expected[i] ) < 2e-7,
+			JSON.stringify( { actual: mover.effectBasis, expected } )
+		);
+	}
+	owner.dispose();
+});
 
 test("late launch callbacks preserve flight without re-hiding equipment after cast cancellation", () => {
 	const f = fixture( [ { ...stage, startEvent: 2, resource: "weapon" } ] );

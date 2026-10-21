@@ -145,6 +145,11 @@ const UNREADY_ONE_SHOT_SECONDS = 15;
 // event 3) turns an .efp compound by that angle about X: a pitch that stands
 // a shard's long axis upright, not a yaw.
 const TARGET_MOVER_PITCH = { axis: "x", angle: Math.fround( -Math.PI / 2 ) } as const;
+// The same -pi/2 float is the spawn fYaw only the AT_TARGET caller
+// (8DE74C) hands to Initialize; the other stage callers pass the source
+// object's yaw ([obj+0x88]). A zero-length mover keeps whichever it was
+// given (8D922D; see importedProjectileBasis).
+const TARGET_MOVER_SPAWN_YAW = Math.fround( -Math.PI / 2 );
 /*
 ================
 targetMoverPoint
@@ -181,18 +186,26 @@ A zero-length flight has no travel basis; native keeps the spawn yaw.
 function importedProjectileBasis(
 	start: Parameters<typeof projectileBasis>[0],
 	end: Parameters<typeof projectileBasis>[1],
-	verticalFallback = true
+	verticalFallback = true,
+	spawnYaw?: number
 ): CharacterActor["effectBasis"] {
 	const basis = projectileBasis( start, end, verticalFallback );
 	if ( basis ) return importedModelBasis( basis );
+	if ( spawnYaw === undefined ) return undefined;
 	// 8D8E30 Initialize: 879250's path length is fcomp'ed against 0.0 at
 	// 8D921D, and a zero-length path returns at 8D922D before the travel
-	// basis write (8D9233), so the mover keeps the caller's fYaw. The
-	// AT_TARGET caller (8DE74C) gives [0xC14E6C] = -pi/2: as a basis that
-	// is facing (sin, 0, -cos) = (-1, 0, 0), back (1, 0, 0) - the rows
-	// projectileBasis builds for that facing, below. Without this a
-	// zero-length .bsr mover (Kerberos ATTACK03) fell back to yaw 0.
-	return importedModelBasis( [ 0, 0, -1, 0, 1, 0, 1, 0, 0 ] );
+	// basis write (8D9233), so the mover keeps its caller's fYaw. Only
+	// the AT_TARGET caller (8DE74C) gives -pi/2; the other stage callers
+	// give the source object's yaw ([obj+0x88]). Build the kept facing's
+	// rows with projectileBasis's convention: back = (-sin, 0, cos).
+	const f = Math.fround,
+		x = f( -Math.sin( spawnYaw ) ),
+		z = f( Math.cos( spawnYaw ) ),
+		length = f( Math.sqrt( f( x * x + z * z ) ) ),
+		inverse = length ? f( 1 / length ) : 0,
+		backX = f( x * inverse ),
+		backZ = f( z * inverse );
+	return importedModelBasis( [ backZ, 0, f( -backX ), 0, 1, 0, backX, 0, backZ ] );
 }
 /** One decoded stage binding; see stageBinding. */
 type StageBinding = {
@@ -1762,6 +1775,10 @@ export function createCharacterEffects(
 													nativeHeadingYaw( target.heading )
 												) ?? source :
 												source);
+									// The fYaw this mover's Initialize caller gave it:
+									// kept verbatim if the path has zero length. Read
+									// before the radial lane re-aims the source pose.
+									const spawnYaw = targetLocal ? TARGET_MOVER_SPAWN_YAW : source.yaw;
 									if ( radial ) source = { ...source, yaw: destination.yaw };
 									const [destX, destZ] = regionRelativeXZ( source.regionId, destination );
 									const curveResult = supportedFlight && curved ?
@@ -1975,7 +1992,7 @@ export function createCharacterEffects(
 										actor: {
 											gid,
 											effectBasis: flight && resource?.endsWith( ".bsr" ) ?
-												importedProjectileBasis( source, destination ) :
+												importedProjectileBasis( source, destination, true, spawnYaw ) :
 												undefined,
 											effectRotation,
 											pickable: false,
