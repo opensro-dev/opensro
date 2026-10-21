@@ -20,6 +20,7 @@ import "../helpers/native-source-loader.mjs";
 const { minimapPoseKey } = await import( "../../src/engine/foundation/gameplay/minimap-floor-key.ts" );
 const { minimapSameFloor } = await import( "../../src/engine/foundation/ui/minimap-floor.ts" );
 const {
+	displaceRegionXZ,
 	DUNGEON_REGION_BIT,
 	isDungeonRegion,
 	normalizeRegionXZ,
@@ -28,6 +29,7 @@ const {
 	REGION_SIZE,
 	regionOffsetXZ,
 	regionRelativeXZ,
+	sameCoordinateSpace,
 	sameDungeonFloor,
 	samePlane,
 	samePlaneAdjacent,
@@ -185,5 +187,19 @@ test("regionOffsetXZ, regionRelativeXZ, normalizeRegionXZ, and worldAudioPositio
 	assert.deepEqual(
 		worldAudioPosition( { regionId: 0x64a8, x: 100, y: 25, z: 200 } ),
 		[ 0xa8 * 1920 + 100, 25, 0x64 * 1920 + 200 ]
+	);
+
+	assert.equal( sameCoordinateSpace( 0x64a8, 0x65a9 ), true );
+	assert.equal( sameCoordinateSpace( 0x8001, 0x8001 ), true );
+	assert.equal( sameCoordinateSpace( 0x8001, 0x8002 ), false );
+	assert.equal( sameCoordinateSpace( 0x64a8, 0x8001 ), false );
+
+	assert.deepEqual(
+		displaceRegionXZ( { regionId: 0x64a8, x: 1900, z: 10 }, 50, -30 ),
+		{ regionId: 0x63a9, x: 30, z: 1900 }
+	);
+	assert.deepEqual(
+		displaceRegionXZ( { regionId: 0x8001, x: 1900, z: 10 }, 50, -30 ),
+		{ regionId: 0x8001, x: 1950, z: -20 }
 	);
 });

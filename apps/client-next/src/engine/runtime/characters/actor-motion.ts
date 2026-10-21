@@ -29,6 +29,7 @@ import type { CharacterLayer } from "@/engine/contracts/character";
 import { MOVEMENT_MODE_SEATED, type EntityState } from "@/engine/contracts/world";
 import type { ActorAppearance, ActorFrame, ActorOwner, ActorPass } from "./internal/presentation-contract";
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
+import { worldAudioPosition } from "@/engine/foundation/world/world-space";
 
 const PROTECTED_ANIMATION_DISTANCE = 300;
 const STALL_ACTION_MASK = 0x8000;
@@ -807,11 +808,7 @@ export function createActorMotion( owner: ActorOwner ) {
 				return {
 					profile: resource.soundProfileName ?? published.soundProfiles.get( resource.codename ) ??
 						resource.codename,
-					position: [
-						(nativePose.regionId & 255) * 1920 + nativePose.x,
-						nativePose.y,
-						(nativePose.regionId >>> 8) * 1920 + nativePose.z
-					] as const,
+					position: worldAudioPosition( nativePose ),
 					surface: context.player ? soundSurface( nativePose ) : undefined,
 					context
 				};

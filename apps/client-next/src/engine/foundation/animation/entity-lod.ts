@@ -12,6 +12,7 @@ actually is, not to a row that may lag it.
 ===========================================================================
 */
 import type { EntityState, WorldEvent } from "@/engine/contracts/world";
+import { worldDelta } from "@/engine/foundation/world/world-space";
 export type LodPoint = Pick<EntityState, "regionId" | "x" | "y" | "z">;
 /*
 ================
@@ -21,9 +22,8 @@ nativeEntityDistance
 ================
 */
 export function nativeEntityDistance( a: LodPoint, b: LodPoint ): number {
-	const f = Math.fround, dungeon = !!(a.regionId & 0x8000);
-	const x = f( a.x - b.x + (dungeon ? 0 : ((a.regionId & 255) - (b.regionId & 255)) * 1920) );
-	const y = f( a.y - b.y ), z = f( a.z - b.z + (dungeon ? 0 : ((a.regionId >>> 8) - (b.regionId >>> 8)) * 1920) );
+	const f = Math.fround, [rawX, rawZ] = worldDelta( b, a );
+	const x = f( rawX ), y = f( a.y - b.y ), z = f( rawZ );
 	return f( Math.sqrt( f( y * y + x * x + z * z ) ) );
 }
 /*

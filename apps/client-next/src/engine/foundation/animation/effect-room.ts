@@ -13,27 +13,23 @@ budgets, not native.
 ===========================================================================
 */
 
-// Outdoor regions lie this many units apart on the ground grid.
-const EFFECT_REGION_SIZE = 1920;
+import { planarDistanceSquared, sameCoordinateSpace } from "@/engine/foundation/world/world-space";
 
 /*
 ================
 effectDistanceSq
 
 The squared ground distance between two poses; outdoor regions are laid
-out EFFECT_REGION_SIZE apart, dungeon regions only compare with themselves.
+out REGION_SIZE apart, dungeon regions only compare with themselves.
 ================
 */
 export function effectDistanceSq(
 	a: { readonly regionId: number; readonly x: number; readonly z: number; },
 	b: { readonly regionId: number; readonly x: number; readonly z: number; }
 ): number {
-	if ( (a.regionId | b.regionId) & 0x8000 ) {
-		return a.regionId === b.regionId ? (a.x - b.x) ** 2 + (a.z - b.z) ** 2 : Number.POSITIVE_INFINITY;
-	}
-	const dx = a.x - b.x + ((a.regionId & 255) - (b.regionId & 255)) * EFFECT_REGION_SIZE;
-	const dz = a.z - b.z + ((a.regionId >>> 8) - (b.regionId >>> 8)) * EFFECT_REGION_SIZE;
-	return dx * dx + dz * dz;
+	return sameCoordinateSpace( a.regionId, b.regionId ) ?
+		planarDistanceSquared( b, a ) :
+		Number.POSITIVE_INFINITY;
 }
 
 /*
