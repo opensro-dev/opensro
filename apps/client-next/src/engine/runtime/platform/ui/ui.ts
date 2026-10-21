@@ -16,6 +16,7 @@ focus from a disabled element and never returns it.
 */
 import type { UiBridge, UiControl, UiEvent, UiSemantics } from "@/engine/contracts/ui";
 import { createLayoutKeys } from "@/engine/foundation/ui/layout-keys";
+import { createDragShield } from "./drag-shield";
 // The title screen's login edits, the only controls a password manager may
 // save or fill. Value is the autocomplete token that identifies the field.
 const LOGIN_AUTOCOMPLETE: Readonly<Record<string, string>> = {
@@ -74,6 +75,7 @@ export function createUiBridge(
 	message.style.cssText = "position:absolute;width:1px;height:1px;clip-path:inset(50%);overflow:hidden";
 	root.append( message );
 	document.body.append( root );
+	const dragShield = createDragShield( lifetime.signal ); // GH #1242 drag-lifetime gesture shield
 	// Each control element and the layout this bridge last wrote to it: the
 	// bridge is the only writer, so it compares numbers instead of reading the
 	// element's style back (a CSSOM read and string per control per present).
@@ -159,8 +161,8 @@ export function createUiBridge(
 		if (
 			press && press.event.pointerId === event.pointerId &&
 			(Math.hypot( event.clientX - press.event.clientX, event.clientY - press.event.clientY ) >
-					TOUCH_HOLD_SLOP_PIXELS ||
-				current( document.elementFromPoint( event.clientX, event.clientY ) )?.element !== press.element)
+					TOUCH_HOLD_SLOP_PIXELS || drag?.pointer !== event.pointerId && // Captured: shield owns geometry.
+					current( document.elementFromPoint( event.clientX, event.clientY ) )?.element !== press.element)
 		) cancelTouchHold();
 	}, { capture: true, signal: lifetime.signal } );
 	for ( const name of [ "pointerup", "pointercancel" ] as const ) {
@@ -194,6 +196,7 @@ export function createUiBridge(
 		if ( drag && event.pointerId !== drag.pointer ) return;
 		const completed = drag;
 		drag = null;
+		dragShield.set( false );
 		if ( completed?.moved ) {
 			suppressClick = completed.id;
 			const [x, y] = uiPoint( event );
@@ -715,6 +718,7 @@ export function createUiBridge(
 			slot.element.setPointerCapture( event.pointerId );
 			const [x, y] = uiPoint( event );
 			drag = { id: slot.value.id, pointer: event.pointerId, x, y };
+			dragShield.set( drag !== null && touchHold.pointers.has( drag.pointer ) );
 		}
 		if ( event.pointerType === "touch" && touchHold.pointers.size === 1 && slot.value.kind === "button" ) {
 			cancelTouchHold();
@@ -727,6 +731,7 @@ export function createUiBridge(
 				// A committed secondary action consumes the gesture, including later
 				// movement before release. It cannot also become an inventory drag.
 				if ( drag?.pointer === press.event.pointerId ) drag = null;
+				dragShield.set( drag !== null && touchHold.pointers.has( drag.pointer ) );
 				// Consume the eventual primary click even on a non-draggable icon.
 				suppressClick = slot.value.id;
 				activateSecondary( press.element, press.event );
@@ -767,6 +772,7 @@ export function createUiBridge(
 		*/
 		present( state: UiSemantics ) {
 			if ( lifetime.signal.aborted ) return;
+			dragShield.set( drag !== null && touchHold.pointers.has( drag.pointer ) );
 			// Identity belongs to the control instance, not its action. Two native
 			// controls may invoke the same close handler but must keep separate hits.
 			// Validate the whole publication before touching the previous semantic tree.
@@ -987,6 +993,7 @@ export function createUiBridge(
 			imeEnter = null;
 			lifetime.abort();
 			root.remove();
+			dragShield.dispose();
 			controls.clear();
 		}
 	};
