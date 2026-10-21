@@ -19,6 +19,7 @@ package combat
 import (
 	"fmt"
 	"math/rand"
+	"opensro.online/server/internal/testsupport/tier"
 	"reflect"
 	"testing"
 
@@ -197,6 +198,7 @@ TestRankRowsMatchTheShippedProjection
 ================
 */
 func TestRankRowsMatchTheShippedProjection(t *testing.T) {
+	tier.Long(t, "rank rows equal the shipped projection over 4000 characters")
 	skills := enterworld.NewTextdataSkills(gamedatatest.TextdataDir(t))
 	var ids []uint32
 	for id := uint32(1); id < equivalenceIDLimit; id++ {

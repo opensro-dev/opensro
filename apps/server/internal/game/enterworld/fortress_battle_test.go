@@ -10,6 +10,7 @@ package enterworld
 import (
 	"opensro.online/server/internal/game/world/fortress"
 	"opensro.online/server/internal/testsupport/gamedatatest"
+	"opensro.online/server/internal/testsupport/tier"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -21,6 +22,7 @@ TestShippedFortressBattleRanksAreCompleteTimedPrograms
 ================
 */
 func TestShippedFortressBattleRanksAreCompleteTimedPrograms(t *testing.T) {
+	tier.Long(t, "every fortress battle rank is a complete timed program")
 	dir := gamedatatest.TextdataDir(t)
 	rows := readTextdataFile(filepath.Join(dir, "siegefortressbattlerank.txt"))
 	skills := NewTextdataSkills(dir)

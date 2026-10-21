@@ -8,6 +8,7 @@ stacksizes_test.go - SRO_STACK_SIZES parsing and the per-row raise rules
 package enterworld
 
 import (
+	"opensro.online/server/internal/testsupport/tier"
 	"testing"
 
 	"opensro.online/server/internal/testsupport/gamedatatest"
@@ -128,6 +129,7 @@ potion refill still tops up to the native 50.
 ================
 */
 func TestShippedStackSizesReachEveryReader(t *testing.T) {
+	tier.Long(t, "stack-size raises reach every reader of the shipped itemdata")
 	licensed.RequireGameData(t)
 	items := NewTextdataItems(gamedatatest.TextdataDir(t))
 	raised, err := items.ApplyStackSizes(StackSizes{"potion": 2000, "elixir": 50, "universalpill": 500})

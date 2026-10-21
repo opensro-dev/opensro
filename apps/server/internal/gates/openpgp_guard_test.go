@@ -41,6 +41,10 @@ func isOpenpgpImport(path string) bool {
 // cannot return a stale cached PASS after an import is added anywhere in
 // the tree.
 func TestNoOpenpgpImportInSource(t *testing.T) {
+	// Long tier (testsupport/tier.Long; this package may import nothing internal).
+	if testing.Short() {
+		t.Skip("long tier (check:server:long, release freeze): no openpgp import in any source file")
+	}
 	root, rootErr := ModuleRoot()
 	if rootErr != nil {
 		t.Fatalf("openpgp guard: locate module root: %v", rootErr)
@@ -98,6 +102,10 @@ func TestNoOpenpgpImportInSource(t *testing.T) {
 // the enumeration, and the source-walk layer above logs exactly those files
 // as skipped - between the two layers nothing disappears silently.
 func TestNoOpenpgpImportInBuildClosure(t *testing.T) {
+	// Long tier (testsupport/tier.Long; this package may import nothing internal).
+	if testing.Short() {
+		t.Skip("long tier (check:server:long, release freeze): no openpgp package in the whole build closure")
+	}
 	goBin, err := exec.LookPath("go")
 	if err != nil {
 		t.Skipf("go tool not on PATH: %v", err)

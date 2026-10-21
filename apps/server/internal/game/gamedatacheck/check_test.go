@@ -10,6 +10,7 @@ data it cannot start on
 package gamedatacheck
 
 import (
+	"opensro.online/server/internal/testsupport/tier"
 	"strings"
 	"testing"
 
@@ -23,6 +24,7 @@ TestCheckAcceptsTheShippedGameData
 ================
 */
 func TestCheckAcceptsTheShippedGameData(t *testing.T) {
+	tier.Long(t, "the whole shipped game-data projection passes its check")
 	licensed.RequireGameData(t)
 	result, err := Check()
 	if err != nil {

@@ -8,6 +8,7 @@ mercenary_test.go - licensed soldier families and their authored level rows
 package enterworld
 
 import (
+	"opensro.online/server/internal/testsupport/tier"
 	"testing"
 
 	"opensro.online/server/internal/testsupport/gamedatatest"
@@ -20,6 +21,7 @@ TestLicensedMercenaryFamilies
 ================
 */
 func TestLicensedMercenaryFamilies(t *testing.T) {
+	tier.Long(t, "every licensed mercenary family resolves")
 	licensed.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	items := NewTextdataItems(dir)

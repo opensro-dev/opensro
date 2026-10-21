@@ -18,6 +18,7 @@ package action
 
 import (
 	"fmt"
+	"opensro.online/server/internal/data/texttable"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -54,7 +55,7 @@ func loadGatePulleys(dir string) (map[uint32]uint32, error) {
 	if err != nil {
 		return nil, err
 	}
-	key := enterworld.TextdataFingerprint(append([]string{filepath.Join(dir, "eventzonedata.txt")}, files...)...)
+	key := texttable.Fingerprint(append([]string{filepath.Join(dir, "eventzonedata.txt")}, files...)...)
 	parsed := gatePulleyParses.Get(key, func() *gatePulleyParse {
 		pulleys, err := parseGatePulleys(dir, files)
 		return &gatePulleyParse{pulleys: pulleys, err: err}
@@ -70,7 +71,7 @@ type gatePulleyParse struct {
 	err     error
 }
 
-var gatePulleyParses enterworld.TextdataParses[gatePulleyParse]
+var gatePulleyParses texttable.SharedParses[gatePulleyParse]
 
 /*
 ================

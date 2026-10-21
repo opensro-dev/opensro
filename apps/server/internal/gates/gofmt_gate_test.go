@@ -28,6 +28,10 @@ import (
 // here also keys Go's test cache to their contents, so this cannot return
 // a stale cached PASS after an unformatted file lands anywhere in the tree.
 func TestGofmtClean(t *testing.T) {
+	// Long tier (testsupport/tier.Long; this package may import nothing internal).
+	if testing.Short() {
+		t.Skip("long tier (check:server:long, release freeze): every .go file is gofmt-clean (the gate's gofmt step checks this everyday)")
+	}
 	root, rootErr := ModuleRoot()
 	if rootErr != nil {
 		t.Fatalf("gofmt gate: locate module root: %v", rootErr)

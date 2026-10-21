@@ -12,6 +12,7 @@ close as a no-op, iterate the same rows, and carry the stack-size raise.
 package enterworld
 
 import (
+	"opensro.online/server/internal/testsupport/tier"
 	"testing"
 
 	"opensro.online/server/internal/testsupport/gamedatatest"
@@ -24,6 +25,7 @@ TestResidentReferencesMatchBoundedIteration
 ================
 */
 func TestResidentReferencesMatchBoundedIteration(t *testing.T) {
+	tier.Long(t, "resident and bounded references agree on every row")
 	licensed.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	resident, bounded := NewTextdataItems(dir), NewTextdataItems(dir)

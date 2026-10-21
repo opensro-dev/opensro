@@ -220,6 +220,17 @@ export const CHECK_TASKS = [
 		]
 	} ),
 	commandTask( {
+		name: "check:server:long",
+		description: "Run the Go long-tier tests (evidence sweeps); every release freeze runs it",
+		kind: "check",
+		ci: false,
+		requires: [ "go" ],
+		timeoutClass: "long",
+		command: "node",
+		// Go's test cache keeps unchanged packages free, so it always runs.
+		args: [ "scripts/checks/check_go_server.mjs", "--long" ]
+	} ),
+	commandTask( {
 		name: "typecheck",
 		description: "Typecheck every non-root workspace package",
 		kind: "check",

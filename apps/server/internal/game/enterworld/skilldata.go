@@ -11,6 +11,7 @@ package enterworld
 import (
 	_ "embed"
 	"fmt"
+	"opensro.online/server/internal/data/texttable"
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/world/monster"
@@ -509,7 +510,7 @@ type TextdataSkills struct {
 }
 
 // sharedSkillParses deduplicates identical skill projections per process.
-var sharedSkillParses sharedParses[TextdataSkills]
+var sharedSkillParses texttable.SharedParses[TextdataSkills]
 
 /*
 ================
@@ -621,14 +622,14 @@ func (t *TextdataSkills) load() {
 	for _, shard := range shards {
 		paths = append(paths, filepath.Join(t.dir, shard))
 	}
-	t.sharedKey = textdataFingerprint(paths...)
+	t.sharedKey = texttable.Fingerprint(paths...)
 	if monster.QinShiTombFromEnv() {
 		t.sharedKey += "+qinshi_tomb"
 	}
 	// The rank index is a pure function of the rows, so it is built once
 	// with the parse and shared read-only: decoding every resident row per
 	// loader cost each test binary tens of seconds.
-	parsed := sharedSkillParses.get(t.sharedKey, func() *TextdataSkills {
+	parsed := sharedSkillParses.Get(t.sharedKey, func() *TextdataSkills {
 		p := &TextdataSkills{dir: t.dir}
 		p.parse(shards)
 		p.indexLearnedRanks()

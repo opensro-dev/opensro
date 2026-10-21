@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"opensro.online/server/internal/testsupport/tier"
 	"os"
 	"path/filepath"
 	"testing"
@@ -739,6 +740,7 @@ func buildEnterCorpus(t *testing.T) enterCorpus {
 // avatar-band value. A table swap that re-points a codename fails HERE, not
 // as a silent content drift inside the pinned packet bytes.
 func TestEnterCorpusContentPins(t *testing.T) {
+	tier.Long(t, "corpus constants match the shipped tables")
 	magicOptions := sharedShippedMagicOptions(t)
 	magicPins := []struct {
 		codename  string

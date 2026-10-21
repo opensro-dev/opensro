@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"opensro.online/server/internal/testsupport/tier"
 	"strings"
 	"sync"
 	"testing"
@@ -63,6 +64,7 @@ TestReachSkipMatchesEveryPlacementScanned
 ================
 */
 func TestReachSkipMatchesEveryPlacementScanned(t *testing.T) {
+	tier.Long(t, "the reach skip equals a full placement scan over 100000 chords")
 	if testing.Short() {
 		t.Skip("long: real-data chords")
 	}
@@ -76,7 +78,6 @@ func TestReachSkipMatchesEveryPlacementScanned(t *testing.T) {
 	t.Run("chunks", func(t *testing.T) {
 		for _, region := range reachChordRegions {
 			for chunk := 0; chunk < reachChordChunks; chunk++ {
-				region, chunk := region, chunk
 				t.Run(fmt.Sprintf("%#x/%d", region, chunk), func(t *testing.T) {
 					t.Parallel()
 					c, k, e := reachChunk(t, v, every, region, chunk)

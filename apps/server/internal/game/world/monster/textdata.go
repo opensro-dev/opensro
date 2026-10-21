@@ -21,6 +21,7 @@ package monster
 import (
 	"encoding/binary"
 	"fmt"
+	"maps"
 	"math"
 	"opensro.online/server/internal/data/texttable"
 	"os"
@@ -276,12 +277,23 @@ func LoadMonsterRefs(textdataDir string) map[uint32]MonsterRef {
 		return make(map[uint32]MonsterRef)
 	}
 	sort.Strings(matches)
-	tables := make([][][]string, 0, len(matches))
-	for _, path := range matches {
-		tables = append(tables, readTabbedFile(path))
-	}
-	return parseMonsterRefTables(textdataDir, tables)
+	sources := append([]string{filepath.Join(textdataDir, "textdataname.txt"),
+		filepath.Join(textdataDir, "skilleffect.txt")}, matches...)
+	parsed := monsterRefParses.Get(texttable.Fingerprint(sources...), func() *map[uint32]MonsterRef {
+		tables := make([][][]string, 0, len(matches))
+		for _, path := range matches {
+			tables = append(tables, readTabbedFile(path))
+		}
+		refs := parseMonsterRefTables(textdataDir, tables)
+		return &refs
+	})
+	// MonsterRef is a flat value, so a copied map is the caller's own.
+	return maps.Clone(*parsed)
 }
+
+// monsterRefParses shares one parse of the same characterdata tables per
+// process (texttable.SharedParses); every caller gets its own map.
+var monsterRefParses texttable.SharedParses[map[uint32]MonsterRef]
 
 /*
 ================

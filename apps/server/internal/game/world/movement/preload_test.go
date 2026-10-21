@@ -12,6 +12,7 @@ package movement
 
 import (
 	"math"
+	"opensro.online/server/internal/testsupport/tier"
 	"os"
 	"runtime"
 	"testing"
@@ -148,6 +149,7 @@ No float32 store or SinCos substitution may change the collision transform.
 ================
 */
 func TestCatalogObjectRotationCacheIsBitExact(t *testing.T) {
+	tier.Long(t, "every outdoor placement rotation is bit-exact")
 	v := NewAuthorityValidator(gamedatatest.WorldAuthorityDir(t))
 	if _, err := v.PreloadOutdoorNavigation(); err != nil {
 		t.Fatal(err)

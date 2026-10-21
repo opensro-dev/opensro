@@ -12,6 +12,7 @@ package alchemy
 
 import (
 	"errors"
+	"opensro.online/server/internal/testsupport/tier"
 	"reflect"
 	"testing"
 
@@ -30,6 +31,7 @@ TestPublishedCatalogStoneStackPlacement
 ================
 */
 func TestPublishedCatalogStoneStackPlacement(t *testing.T) {
+	tier.Long(t, "every published alchemy stone stacks and places")
 	dir := gamedatatest.TextdataDir(t)
 	for _, raised := range []bool{false, true} {
 		name := "native"

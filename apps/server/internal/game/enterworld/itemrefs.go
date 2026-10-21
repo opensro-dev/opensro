@@ -189,7 +189,7 @@ func (t *TextdataItems) Len() int {
 // sharedItemParses deduplicates identical item projections per process, as
 // sharedSkillParses does for skills: every package's tests built loaders over
 // the same directory and re-parsed it each time.
-var sharedItemParses sharedParses[TextdataItems]
+var sharedItemParses texttable.SharedParses[TextdataItems]
 
 /*
 ================
@@ -203,7 +203,7 @@ does not pin the rows it hands to the record cache.
 */
 func (t *TextdataItems) load() {
 	t.sharedKey = itemTextdataKey(t.dir)
-	parsed := sharedItemParses.get(t.sharedKey, func() *TextdataItems {
+	parsed := sharedItemParses.Get(t.sharedKey, func() *TextdataItems {
 		p := &TextdataItems{dir: t.dir}
 		p.parse()
 		return p
@@ -236,7 +236,7 @@ func itemTextdataKey(dir string) string {
 			paths = append(paths, filepath.Join(dir, entry.Name()))
 		}
 	}
-	return textdataFingerprint(paths...)
+	return texttable.Fingerprint(paths...)
 }
 
 /*

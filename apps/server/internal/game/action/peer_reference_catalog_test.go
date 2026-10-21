@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"opensro.online/server/internal/testsupport/tier"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -122,6 +123,7 @@ source. No authored ID may disappear, and the source can close before ticks.
 ================
 */
 func TestPreparedPeerReferencesCoverTheShippedCatalogue(t *testing.T) {
+	tier.Long(t, "peer references cover the whole shipped catalogue")
 	source := enterworld.NewTextdataItems(gamedatatest.TextdataDir(t))
 	if err := source.UseBoundedCache(512); err != nil {
 		t.Fatal(err)

@@ -13,6 +13,7 @@ listed words.
 package namefilter
 
 import (
+	"opensro.online/server/internal/testsupport/tier"
 	"os"
 	"path/filepath"
 	"strings"
@@ -112,6 +113,7 @@ own listed name words (taken from the file, not written here).
 ================
 */
 func TestProjectionFilter(t *testing.T) {
+	tier.Long(t, "the shipped name filter refuses each of its own entries")
 	data, err := os.ReadFile(filepath.Join(gamedatatest.TextdataDir(t), File))
 	if err != nil {
 		t.Fatal(err)

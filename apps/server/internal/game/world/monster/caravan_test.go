@@ -10,6 +10,7 @@ package monster
 
 import (
 	"encoding/json"
+	"opensro.online/server/internal/testsupport/tier"
 	"testing"
 
 	"opensro.online/server/internal/testsupport/gamedatatest"
@@ -131,6 +132,7 @@ across levels 1..140.
 ================
 */
 func TestShippedJobMonstersFillEveryZoneAndLevel(t *testing.T) {
+	tier.Long(t, "job monsters fill every zone and level")
 	licensed.RequireGameData(t)
 	refs := LoadMonsterRefs(gamedatatest.TextdataDir(t))
 	list := make([]MonsterRef, 0, len(refs))

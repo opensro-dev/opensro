@@ -14,6 +14,7 @@ DefaultSkillIDs and summon references.
 package enterworld
 
 import (
+	"opensro.online/server/internal/testsupport/tier"
 	"testing"
 
 	"opensro.online/server/internal/game/world/monster"
@@ -38,6 +39,7 @@ TestQinShiTombSkillsAndMonsterDefaultSkills
 ================
 */
 func TestQinShiTombSkillsAndMonsterDefaultSkills(t *testing.T) {
+	tier.Long(t, "every Qin-Shi tomb skill and monster default skill resolves")
 	licensed.RequireGameData(t)
 	dir := licensed.RetailTextdataDir(t)
 

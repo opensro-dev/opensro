@@ -9,12 +9,14 @@ import (
 	"opensro.online/server/internal/testsupport/entryauth"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/tier"
 	"opensro.online/server/internal/transport"
 	"reflect"
 	"testing"
 )
 
 func TestPublishedReferencesLeaveTheLoginEnvelope(t *testing.T) {
+	tier.Long(t, "every published reference fits the login envelope")
 	licensed.RequireGameData(t)
 	source := NewTextdataSkills(gamedatatest.TextdataDir(t))
 	rows := spawnSkillSnapshot(source)

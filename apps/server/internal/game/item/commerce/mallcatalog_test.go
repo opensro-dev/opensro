@@ -9,6 +9,7 @@ package commerce
 
 import (
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/testsupport/tier"
 	"testing"
 
 	"opensro.online/server/internal/testsupport/gamedatatest"
@@ -20,6 +21,7 @@ TestShippedMallCatalog
 ================
 */
 func TestShippedMallCatalog(t *testing.T) {
+	tier.Long(t, "the whole shipped mall catalogue loads")
 	catalog, err := LoadMall(gamedatatest.TextdataDir(t), nil)
 	if err != nil {
 		t.Fatal(err)

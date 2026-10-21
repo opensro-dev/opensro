@@ -15,6 +15,7 @@ the attacking hawks (summ) were refused before.
 package action
 
 import (
+	"opensro.online/server/internal/testsupport/tier"
 	"sort"
 	"strings"
 	"testing"
@@ -34,6 +35,7 @@ TestEveryBowLineCasts
 ================
 */
 func TestEveryBowLineCasts(t *testing.T) {
+	tier.Long(t, "every bow skill line casts")
 	all := shippedSkills(t)
 	var roots []uint32
 	for _, r := range all.SpawnSkillRows() {

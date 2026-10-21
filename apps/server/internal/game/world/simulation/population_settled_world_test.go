@@ -15,6 +15,7 @@ this one would have.
 package simulation
 
 import (
+	"opensro.online/server/internal/testsupport/tier"
 	"testing"
 	"time"
 
@@ -40,6 +41,7 @@ TestRealWorldBootFillSettlesInsideTheBound
 ================
 */
 func TestRealWorldBootFillSettlesInsideTheBound(t *testing.T) {
+	tier.Long(t, "the real world boot fill settles inside its bound")
 	template := monster.LoadTemplate(gamedatatest.TextdataDir(t))
 	if len(template.Nests) < 1000 {
 		t.Fatalf("loaded %d nests; not the shipped world", len(template.Nests))

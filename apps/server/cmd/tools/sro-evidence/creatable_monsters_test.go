@@ -14,6 +14,7 @@ package main
 import (
 	"encoding/json"
 	"io"
+	"opensro.online/server/internal/testsupport/tier"
 	"os"
 	"strings"
 	"testing"
@@ -30,6 +31,7 @@ TestCreatableRosterHoldsEveryRuntimeMonster
 ================
 */
 func TestCreatableRosterHoldsEveryRuntimeMonster(t *testing.T) {
+	tier.Long(t, "every runtime monster is creatable")
 	licensed.RequireGameData(t)
 	dir, err := gamedata.ResolveTextdataDir()
 	if err != nil {
@@ -75,6 +77,7 @@ bake and a flag-off server agree on what can appear.
 ================
 */
 func TestCreatableMonstersQinShiTombGate(t *testing.T) {
+	tier.Long(t, "every Qin-Shi tomb monster is creatable behind its gate")
 	licensed.RequireGameData(t)
 
 	run := func() monsterRosterOutput {

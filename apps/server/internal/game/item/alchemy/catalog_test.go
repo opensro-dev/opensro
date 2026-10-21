@@ -17,6 +17,7 @@ import (
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/tier"
 	"sort"
 	"testing"
 )
@@ -30,6 +31,7 @@ dissolution profile admits its real reference rows.
 ================
 */
 func TestPublishedCatalog(t *testing.T) {
+	tier.Long(t, "the whole published alchemy catalogue loads")
 	// The shipped tables, as every licensed test reads them: a clean
 	// checkout skips, the full check (SRO_REQUIRE_GAME_DATA=1) fails.
 	licensed.RequireGameData(t)

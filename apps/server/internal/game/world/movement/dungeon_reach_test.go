@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"opensro.online/server/internal/testsupport/tier"
 	"sort"
 	"sync"
 	"testing"
@@ -126,6 +127,7 @@ TestDungeonReachSkipMatchesEveryBlockScanned
 ================
 */
 func TestDungeonReachSkipMatchesEveryBlockScanned(t *testing.T) {
+	tier.Long(t, "the dungeon reach skip equals a full block scan over 32000 chords")
 	if testing.Short() {
 		t.Skip("long: real-data dungeon chords")
 	}
@@ -138,7 +140,6 @@ func TestDungeonReachSkipMatchesEveryBlockScanned(t *testing.T) {
 	t.Run("chunks", func(t *testing.T) {
 		for _, region := range regions {
 			for chunk := 0; chunk < dungeonChordChunks; chunk++ {
-				region, chunk := region, chunk
 				t.Run(fmt.Sprintf("%#x/%d", region, chunk), func(t *testing.T) {
 					t.Parallel()
 					local := dungeonReachChunk(t, v, every, region, chunk)

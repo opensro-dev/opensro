@@ -11,6 +11,7 @@ import (
 	_ "embed"
 	"fmt"
 	"math"
+	"opensro.online/server/internal/data/texttable"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/commerce"
 	"path/filepath"
@@ -119,7 +120,7 @@ loadPortalCatalog
 ================
 */
 func loadPortalCatalog(dir string) (*portalCatalog, error) {
-	key := enterworld.TextdataFingerprint(filepath.Join(dir, "teleportbuilding.txt"),
+	key := texttable.Fingerprint(filepath.Join(dir, "teleportbuilding.txt"),
 		filepath.Join(dir, "teleportdata.txt"), filepath.Join(dir, "teleportlink.txt"))
 	if monster.QinShiTombFromEnv() {
 		key += "+qinshi_tomb"
@@ -139,7 +140,7 @@ type portalCatalogParse struct {
 	err     error
 }
 
-var portalCatalogParses enterworld.TextdataParses[portalCatalogParse]
+var portalCatalogParses texttable.SharedParses[portalCatalogParse]
 
 /*
 ================

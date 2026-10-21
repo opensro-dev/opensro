@@ -1,0 +1,5 @@
+# Packages whose everyday tests may still exceed the server gate's 30-second
+# budget (check_go_server.mjs TEST_BUDGET_SECONDS). The ledger only shrinks:
+# make a package faster or move its evidence sweeps to tier.Long, then delete
+# its line. Import path, then the reason.
+opensro.online/server/internal/game/action # ~30 s at 8 workers; #1289

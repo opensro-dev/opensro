@@ -12,6 +12,7 @@ maximum is clamped to it, never raised; every other row is left alone.
 package main
 
 import (
+	"opensro.online/server/internal/testsupport/tier"
 	"testing"
 
 	"opensro.online/server/internal/domain"
@@ -29,6 +30,7 @@ TestSunRowsBecomeTheirMoon
 ================
 */
 func TestSunRowsBecomeTheirMoon(t *testing.T) {
+	tier.Long(t, "every sun row swaps to its moon row")
 	dir := gamedatatest.TextdataDir(t)
 	w := &swapper{items: enterworld.NewTextdataItems(dir), magic: enterworld.NewTextdataMagicOptions(dir)}
 	for sun, moon := range map[string]string{
