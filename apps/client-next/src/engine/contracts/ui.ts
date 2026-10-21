@@ -175,6 +175,8 @@ UiSemantics
 */
 export interface UiSemantics {
 	readonly loadingVisible?: boolean;
+	/** The login screen is up: the page shell shows its project credit in the lower letterbox band. */
+	readonly titleCredit?: boolean;
 	readonly hudCorner?: UiRect;
 	/** Top of the port-only tool row, clear of native player, target and companion chrome. */
 	readonly hudToolsTop?: number;

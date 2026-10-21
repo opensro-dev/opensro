@@ -24947,6 +24947,7 @@ export function createUi(
 			probe?.detailBegin( "ui-finalize" );
 			const semantics = {
 				loadingVisible: !!loading && !assetFailure,
+				titleCredit: next.frontend?.phase === "login" && !loading,
 				// The DOM tools keep their own row beside the map, below combat chrome.
 				hudCorner: compact ?
 					[ w, itemMall.read().visible ? 52 : compactTelemetryTop, 0, 0 ] as UiRect :

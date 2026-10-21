@@ -403,6 +403,49 @@ overlay so startup frames remain measurable.
 }
 
 /*
+The login screen's project credit (platform.ts presentUi, titleCredit). The
+title keeps its controls between 172/1200 and 1030/1200 of the height
+(title.ts); the credit sits centred in the lower letterbox band, so it is
+placed in percentages of the viewport and follows the band at every size,
+including a phone whose viewport shrinks under the keyboard. It stays
+under every loading layer (1000-1003).
+*/
+
+.sro-title-credit {
+	position: fixed;
+	bottom: calc(85 / 1200 * 100%);
+	left: 50%;
+	z-index: 10;
+	padding: 4px 10px;
+	transform: translate(-50%, 50%);
+	color: #a89a7c;
+	font: 11px/1.4 "Segoe UI", Arial, sans-serif;
+	text-decoration: none;
+	text-shadow: 0 1px 2px #000;
+	white-space: nowrap;
+	opacity: .75;
+}
+
+.sro-title-credit[hidden] {
+	display: none;
+}
+
+.sro-title-credit:hover,
+.sro-title-credit:focus-visible {
+	color: #f0dca8;
+	opacity: 1;
+}
+
+/* Touch: a finger-sized target, and clear of a home indicator. */
+@media (pointer: coarse) {
+	.sro-title-credit {
+		padding: 8px 14px;
+		margin-bottom: calc(env(safe-area-inset-bottom, 0px) / 2);
+		font-size: 12px;
+	}
+}
+
+/*
 The release-skew update prompt (platform.ts presentUpdate): shown once a
 newer client release is live. An outdated page cannot keep playing, so it
 covers the whole game, above every loading layer (1000-1002), and takes the
