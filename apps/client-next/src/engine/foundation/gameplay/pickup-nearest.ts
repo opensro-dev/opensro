@@ -15,10 +15,10 @@ show an item the last press just took.
 */
 
 import type { EntityState } from "@/engine/contracts/world";
+import { planarDistanceSquared, samePlane } from "@/engine/foundation/world/world-space";
 
 // PICKUP_REACH_SQUARED is 77DC5E's 250000.0.
 const PICKUP_REACH_SQUARED = 250000;
-const REGION_SPAN = 1920;
 
 /*
 ================
@@ -39,10 +39,8 @@ export function nearestPickable(
 		if ( entity.kind !== "ground-item" || !item ) continue;
 		if ( item.claimantGid !== undefined && item.claimantGid !== local.gid ) continue;
 		if ( item.ownerJid !== undefined && item.ownerJid !== local.gid && !party.has( item.ownerJid ) ) continue;
-		if ( ((entity.regionId ^ local.regionId) & 0x8000) !== 0 ) continue;
-		const dx = ((entity.regionId & 255) - (local.regionId & 255)) * REGION_SPAN + entity.x - local.x,
-			dz = (((entity.regionId >>> 8) & 127) - ((local.regionId >>> 8) & 127)) * REGION_SPAN + entity.z - local.z,
-			distance = dx * dx + dz * dz;
+		if ( !samePlane( entity.regionId, local.regionId ) ) continue;
+		const distance = planarDistanceSquared( local, entity );
 		if ( distance >= PICKUP_REACH_SQUARED || distance >= bestDistance ) continue;
 		best = entity;
 		bestDistance = distance;

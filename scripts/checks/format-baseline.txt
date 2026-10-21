@@ -90,10 +90,8 @@ apps/client-next/src/engine/foundation/gameplay/whisper-block.ts
 apps/client-next/src/engine/foundation/gameplay/world-clock.ts
 apps/client-next/src/engine/foundation/math/angles.ts
 apps/client-next/src/engine/foundation/navigation/contact-response.ts
-apps/client-next/src/engine/foundation/navigation/ground-pick.ts
 apps/client-next/src/engine/foundation/navigation/navigation-events.ts
 apps/client-next/src/engine/foundation/navigation/owned-start.ts
-apps/client-next/src/engine/foundation/navigation/region-move.ts
 apps/client-next/src/engine/foundation/navigation/vertex-direction.ts
 apps/client-next/src/engine/foundation/rendering/camera-wheel.ts
 apps/client-next/src/engine/foundation/rendering/dock-camera.ts
@@ -105,7 +103,6 @@ apps/client-next/src/engine/foundation/rendering/frontend-camera.ts
 apps/client-next/src/engine/foundation/rendering/geometry-vertices.ts
 apps/client-next/src/engine/foundation/rendering/material-timeline.ts
 apps/client-next/src/engine/foundation/rendering/modifier-delta.ts
-apps/client-next/src/engine/foundation/rendering/pick-destination.ts
 apps/client-next/src/engine/foundation/rendering/pick-volume.ts
 apps/client-next/src/engine/foundation/rendering/screen-point.ts
 apps/client-next/src/engine/foundation/rendering/sky-geometry.ts

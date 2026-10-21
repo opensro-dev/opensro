@@ -13,6 +13,7 @@ exact coefficients the native float path rounds from.
 import type { WorldCamera } from "@/engine/contracts/scene";
 import type { Radians } from "@/engine/foundation/math/angles";
 import { hypot3 } from "@/engine/foundation/math/hypot";
+import { regionRelativeXZ } from "@/engine/foundation/world/world-space";
 /*
 ================
 identity
@@ -32,6 +33,7 @@ units.
 */
 export function placement( region: number, origin: number, x: number, y: number, z: number, yaw: Radians ) {
 	const c = Math.cos( yaw ), s = Math.sin( yaw );
+	const [rx, rz] = regionRelativeXZ( origin, { regionId: region, x, z } );
 	return new Float32Array( [
 		c,
 		0,
@@ -45,9 +47,9 @@ export function placement( region: number, origin: number, x: number, y: number,
 		0,
 		c,
 		0,
-		x + ((region & 255) - (origin & 255)) * 1920,
+		rx,
 		y,
-		z + ((region >>> 8) - (origin >>> 8)) * 1920,
+		rz,
 		1
 	] );
 }

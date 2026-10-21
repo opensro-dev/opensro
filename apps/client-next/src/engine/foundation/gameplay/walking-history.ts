@@ -11,7 +11,8 @@ The caller owns immutable history and reuses it until accepted motion changes.
 */
 import type { Pose } from "@/engine/contracts/gameplay";
 import type { NavOwner } from "@/engine/foundation/navigation/dungeon-ownership";
-import { interpolateMovement, poseDistance, REGION_SIZE } from "./native-movement";
+import { planarDistance, sameCoordinateSpace } from "@/engine/foundation/world/world-space";
+import { interpolateMovement, poseDistance } from "./native-movement";
 
 const MAX_HISTORY_POINTS = 256;
 const SAMPLE_DISTANCE = 2;
@@ -57,19 +58,6 @@ function historyPose( pose: Pose ): Pose {
 
 /*
 ================
-planarDistance
-================
-*/
-function planarDistance( from: Pose, to: Pose ) {
-	const outdoor = !(from.regionId & 0x8000);
-	return Math.hypot(
-		to.x - from.x + (outdoor ? ((to.regionId & 255) - (from.regionId & 255)) * REGION_SIZE : 0),
-		to.z - from.z + (outdoor ? ((to.regionId >>> 8) - (from.regionId >>> 8)) * REGION_SIZE : 0)
-	);
-}
-
-/*
-================
 surfaceDistance
 ================
 */
@@ -83,7 +71,7 @@ sameSpace
 ================
 */
 function sameSpace( from: Pose, to: Pose ) {
-	return !((from.regionId | to.regionId) & 0x8000) || from.regionId === to.regionId;
+	return sameCoordinateSpace( from.regionId, to.regionId );
 }
 
 /*

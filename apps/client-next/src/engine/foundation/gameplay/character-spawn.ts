@@ -10,6 +10,7 @@ class's tail: COS 854FA0 / 8554E0, monster 861B00, fortress structure
 ===========================================================================
 */
 import { animationRate } from "../animation/animation-rate";
+import { sameCoordinateSpace } from "@/engine/foundation/world/world-space";
 import { isNameColorGuard } from "./name-color";
 import { decodeSpawnSkills, type SpawnSkillReference } from "./spawn-skills";
 import type { EntityState } from "@/engine/contracts/world";
@@ -64,7 +65,7 @@ export function decodeCharacterSpawn(
 		u16();
 	}
 	if (
-		spawnDestination && ((regionId | spawnDestination.regionId) & 0x8000) && regionId !== spawnDestination.regionId
+		spawnDestination && !sameCoordinateSpace( regionId, spawnDestination.regionId )
 	) throw new Error( "Dungeon spawn movement requires teleport" );
 	const life = u8(), motion = u8(), status = u8(), walkSpeed = f32(), runSpeed = f32(), scale = f32();
 	if ( walkSpeed < 0 || runSpeed < 0 || scale < 0 || moving && (movementMode === 2 ? walkSpeed : runSpeed) <= 0 ) {

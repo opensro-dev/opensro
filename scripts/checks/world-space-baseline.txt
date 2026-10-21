@@ -3,27 +3,6 @@
 # Format: `<path> <count>`. This ledger may only shrink; run
 # `node scripts/checks/check_world_space.mjs --update` after migrating a file.
 apps/client-next/src/engine/foundation/animation/character-selection.ts 2
-apps/client-next/src/engine/foundation/gameplay/character-spawn.ts 1
-apps/client-next/src/engine/foundation/gameplay/direction-movement.ts 2
-apps/client-next/src/engine/foundation/gameplay/ground-item.ts 2
-apps/client-next/src/engine/foundation/gameplay/interaction-approach.ts 1
-apps/client-next/src/engine/foundation/gameplay/movement-wire.ts 1
-apps/client-next/src/engine/foundation/gameplay/native-movement.ts 5
-apps/client-next/src/engine/foundation/gameplay/peer-appearance.ts 1
-apps/client-next/src/engine/foundation/gameplay/pickup-nearest.ts 1
-apps/client-next/src/engine/foundation/gameplay/reverse-return-map.ts 1
-apps/client-next/src/engine/foundation/gameplay/walking-history.ts 2
-apps/client-next/src/engine/foundation/navigation/ground-pick.ts 5
-apps/client-next/src/engine/foundation/navigation/region-move.ts 2
-apps/client-next/src/engine/foundation/navigation/terrain-object-cells.ts 4
-apps/client-next/src/engine/foundation/rendering/pick-destination.ts 3
-apps/client-next/src/engine/foundation/rendering/world-math.ts 2
-apps/client-next/src/engine/foundation/ui/character-labels.ts 2
-apps/client-next/src/engine/foundation/ui/hud-readouts.ts 1
-apps/client-next/src/engine/foundation/ui/minimap-markers.ts 4
-apps/client-next/src/engine/foundation/ui/minimap-tiles.ts 5
-apps/client-next/src/engine/foundation/ui/party-overlay.ts 1
-apps/client-next/src/engine/foundation/ui/world-map.ts 4
 apps/client-next/src/engine/runtime/assets/worker/navigation/navigation.ts 3
 apps/client-next/src/engine/runtime/assets/worker/world/world.ts 7
 apps/client-next/src/engine/runtime/navigation/navigation.ts 1

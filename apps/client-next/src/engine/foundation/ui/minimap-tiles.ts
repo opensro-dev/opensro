@@ -1,4 +1,5 @@
 import type { Pose } from "@/engine/contracts/gameplay";
+import { isDungeonRegion, REGION_SIZE, sectorX, sectorY } from "@/engine/foundation/world/world-space";
 export interface MinimapFloor {
 	readonly floorIndex: number;
 	readonly floorLabel: string;
@@ -62,15 +63,15 @@ export function minimapArt( value: unknown ): ReadonlyMap<string, string> {
 }
 export function minimapTiles( pose: Pose, zoom: number, floor?: MinimapFloor, art?: ReadonlyMap<string, string> ) {
 	if ( !art ) return [];
-	const dungeon = !!(pose.regionId & 0x8000);
+	const dungeon = isDungeonRegion( pose.regionId );
 	if ( dungeon && !floor ) return [];
-	const gx = dungeon ? Math.floor( pose.x / 1920 ) : 0,
-		gz = dungeon ? Math.floor( pose.z / 1920 ) : 0,
-		rx = dungeon ? gx + 128 : pose.regionId & 255,
-		rz = dungeon ? gz + 128 : pose.regionId >>> 8,
-		x = pose.x - gx * 1920,
-		z = pose.z - gz * 1920,
-		scale = zoom / 1920,
+	const gx = dungeon ? Math.floor( pose.x / REGION_SIZE ) : 0,
+		gz = dungeon ? Math.floor( pose.z / REGION_SIZE ) : 0,
+		rx = dungeon ? gx + 128 : sectorX( pose.regionId ),
+		rz = dungeon ? gz + 128 : sectorY( pose.regionId ),
+		x = pose.x - gx * REGION_SIZE,
+		z = pose.z - gz * REGION_SIZE,
+		scale = zoom / REGION_SIZE,
 		result = [];
 	for ( let dz = -1; dz <= 1; dz++ ) {
 		for ( let dx = -1; dx <= 1; dx++ ) {
@@ -82,7 +83,7 @@ export function minimapTiles( pose: Pose, zoom: number, floor?: MinimapFloor, ar
 					.toLowerCase()
 			);
 			if ( !path ) continue;
-			result.push( { x: (dx * 1920 - x) * scale, y: -((dz + 1) * 1920 - z) * scale, path } );
+			result.push( { x: (dx * REGION_SIZE - x) * scale, y: -((dz + 1) * REGION_SIZE - z) * scale, path } );
 		}
 	}
 	return result;
