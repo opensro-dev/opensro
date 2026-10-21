@@ -14,7 +14,7 @@ linked git worktree names in its .git file.
 
 ===========================================================================
 */
-import { GENERATED_ROOT, MAIN_CHECKOUT_ROOT } from "../../lib/generatedRoot.mjs";
+import { GENERATED_ROOT, MAIN_CHECKOUT_ROOT, intermediateImagePath } from "../../lib/generatedRoot.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -96,7 +96,7 @@ export function resolveServerGameDataRoot( env = process.env, mainCheckout = MAI
 export const serverGameDataRoot = resolveServerGameDataRoot();
 export const publicRoot = path.join( generatedRoot, "client-public" );
 export const publicAssetsRoot = path.join( publicRoot, "assets" );
-export const imageSourceRoot = path.join( generatedRoot, "intermediate", "images" );
+export const imageSourceRoot = intermediateImagePath();
 export const imagePublicRoot = path.join( publicAssetsRoot, "images" );
 
 /*
@@ -124,6 +124,20 @@ toGameRelative
 */
 export function toGameRelative( value, sourceGameRoot = gameRoot ) {
 	return gameRelativePath( value, { checkout: rebuildRoot, mainCheckout: mainCheckoutRoot, game: sourceGameRoot } );
+}
+
+/*
+================
+toImageSourceRelative
+
+A converted image's path relative to the tree that holds it, with forward
+slashes. Published assets carry this, never a location: the build root's
+own name must not reach a published file, or two builds of the same
+sources into differently named roots differ byte for byte.
+================
+*/
+export function toImageSourceRelative( value, root = imageSourceRoot ) {
+	return path.relative( root, value ).replaceAll( "\\", "/" );
 }
 
 /*
