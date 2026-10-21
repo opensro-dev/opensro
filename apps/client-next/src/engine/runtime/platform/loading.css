@@ -586,6 +586,35 @@ occupies its own full-width row below it instead of shrinking beside it.
 	}
 }
 
+/*
+GH #1247: on a short viewport (a landscape phone) the boot column is
+taller than the screen. The centered grid pushes the gauge past the
+bottom edge, where the bottom-anchored credit prints on top of it.
+Shrink the logo to fit the height, drop the inner floor, and put the
+credit in flow below the gauge so every row keeps its own strip.
+Tall portrait phones and the desktop are untouched.
+*/
+@media (height < 600px) {
+	.sro-boot-loading {
+		padding: 16px;
+	}
+
+	.sro-boot-loading__inner {
+		min-height: 0;
+	}
+
+	.sro-boot-loading__logo {
+		width: min(400px, 86vw);
+		margin-bottom: 10px;
+	}
+
+	.sro-boot-loading__credit {
+		position: static;
+		margin-top: 10px;
+		transform: none;
+	}
+}
+
 /* Developer diagnostics are a separate, console-enabled neighbor of FPS. */
 #developer-toggle { width: 24px; }
 .sro-developer-readout {
