@@ -38,6 +38,7 @@ import (
 	"opensro.online/server/internal/platform/history"
 	"opensro.online/server/internal/platform/readiness"
 	"opensro.online/server/internal/security/auth"
+	"opensro.online/server/internal/security/serverkey"
 	"opensro.online/server/internal/security/workload"
 )
 
@@ -103,6 +104,10 @@ type Config struct {
 	// a login raises to; zero is auth.AccountBcryptCost. A store that reports
 	// its own cost must agree. Tests pass bcrypt.MinCost.
 	BcryptCost int
+	// License is the deployment's server key and published source link
+	// (license.go). Its Origins are ignored: AllowedOrigins are what the
+	// license is decided against.
+	License serverkey.Deployment
 }
 
 /*
@@ -146,7 +151,9 @@ type Server struct {
 	readiness        *readiness.Gate
 	bugReports       *bugreport.Service
 	// startedAt is when this Agent was built, for /title/build's uptime.
-	startedAt        time.Time
+	startedAt time.Time
+	// license is decided against the clock on every read (license.go).
+	license          serverkey.Deployment
 	revokedMu        sync.Mutex
 	revokedNonces    map[string]time.Time
 	accountMinEpoch  map[string]uint64
@@ -211,6 +218,10 @@ func New(config Config) (*Server, error) {
 		}
 		origins[origin] = true
 	}
+	license, err := admitLicense(config.License, config.AllowedOrigins, now())
+	if err != nil {
+		return nil, err
+	}
 	clientKey := make([]byte, clientKeyBytes)
 	if _, err := rand.Read(clientKey); err != nil {
 		return nil, fmt.Errorf("agent server: client tag key: %w", err)
@@ -239,6 +250,7 @@ func New(config Config) (*Server, error) {
 		readiness:               config.Readiness,
 		bugReports:              config.BugReports,
 		startedAt:               now(),
+		license:                 license,
 		revokedNonces:           make(map[string]time.Time),
 		accountMinEpoch:         make(map[string]uint64),
 		shardInstance:           make(map[string]string),

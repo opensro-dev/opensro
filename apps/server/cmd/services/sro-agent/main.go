@@ -33,6 +33,7 @@ import (
 	"opensro.online/server/internal/platform/logging"
 	"opensro.online/server/internal/platform/readiness"
 	"opensro.online/server/internal/security/auth"
+	"opensro.online/server/internal/security/serverkey"
 	"opensro.online/server/internal/security/workload"
 )
 
@@ -121,6 +122,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("agent: history reader: %v", err)
 	}
+	// LICENSE limitation 2: agentserver.New refuses public origins without
+	// a server key or published source (license.go).
+	license, err := serverkey.Load(serverkey.InputsFromEnv(os.Getenv), nil, serverkey.LicensorKey)
+	if err != nil {
+		log.Fatalf("agent: license: %v", err)
+	}
 	server, err := agentserver.New(agentserver.Config{
 		History: journal, HistoryHandler: historyHandler,
 		Accounts:                accounts,
@@ -132,6 +139,7 @@ func main() {
 		AllowedOrigins:          splitCSV(os.Getenv(envOrigins)),
 		Readiness:               ready,
 		BugReports:              bugReports,
+		License:                 license,
 	})
 	if err != nil {
 		log.Fatalf("agent: construction: %v", err)

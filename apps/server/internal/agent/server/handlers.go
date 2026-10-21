@@ -326,7 +326,8 @@ func (server *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	server.syncShardRevocations(heartbeat)
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	// The GameWorld keeps its mall open only while this says so (license.go).
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "mall": server.licenseStatus().Licensed()})
 }
 
 /*

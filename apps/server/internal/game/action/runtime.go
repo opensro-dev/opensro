@@ -240,6 +240,8 @@ type Runtime struct {
 	Commerce      *commerce.Catalog
 	mallCatalog   *commerce.MallCatalog
 	mallAuthority domain.MallAuthority
+	// mallOpen is the license gate on purchases (GateMall); nil is open.
+	mallOpen func() bool
 	// storageAuthority owns the account warehouse (storage.go).
 	storageAuthority domain.StorageAuthority
 	petMu            sync.Mutex

@@ -274,6 +274,8 @@ func newGameWorldApplication(
 	if err != nil {
 		return nil, fmt.Errorf("gameplay construction: %w", err)
 	}
+	// LICENSE limitation 3: purchases follow the Agent's license answer.
+	gameplay.items.GateMall(application.reporter.MallOpen)
 	gameplay.installSessionLifecycle(ts.Hub, authority.store)
 	if gameplay.deps.MonsterState != nil {
 		if err := gameplay.deps.MonsterState.EnableDormantStorage(); err != nil {

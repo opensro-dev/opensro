@@ -13,6 +13,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"opensro.online/server/internal/domain"
@@ -47,6 +48,8 @@ type Reporter struct {
 	// kick asks Run for one heartbeat now (MarkAdmitting), so the title
 	// learns of admission without a second, racing publisher.
 	kick chan struct{}
+	// mallClosed is the Agent's last license answer (MallOpen).
+	mallClosed atomic.Bool
 }
 
 func NewReporter(
@@ -153,7 +156,42 @@ func (reporter *Reporter) Publish(ctx context.Context) error {
 		}
 		return responseErr
 	}
+	reporter.recordLicense(body)
 	return nil
+}
+
+/*
+================
+recordLicense
+
+LICENSE ENFORCEMENT (LICENSE limitation 3): the Agent decides the license
+(agentserver license.go) and answers each heartbeat with whether the mall
+may sell. An answer without the field comes from an Agent older than the
+server key and leaves the mall as it was, so a rolling release never closes
+it by accident.
+================
+*/
+func (reporter *Reporter) recordLicense(body []byte) {
+	var answer struct {
+		Mall *bool `json:"mall"`
+	}
+	if json.Unmarshal(body, &answer) != nil || answer.Mall == nil {
+		return
+	}
+	reporter.mallClosed.Store(!*answer.Mall)
+}
+
+/*
+================
+MallOpen
+
+Whether the Item Mall may sell, as of the last heartbeat. Open until the
+Agent says otherwise; Acquire's first heartbeat answers before any player
+is admitted.
+================
+*/
+func (reporter *Reporter) MallOpen() bool {
+	return !reporter.mallClosed.Load()
 }
 
 // Acquire obtains the initial lease, waiting through at most one expired

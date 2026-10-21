@@ -102,6 +102,18 @@ variable "bug_report_max_bytes" {
   default = "10485760"
 }
 
+# LICENSE limitation 2: the signed server key file and the published source
+# link. Empty means none (sro-nomad serverkey.go).
+variable "server_key_path" {
+  type    = string
+  default = ""
+}
+
+variable "public_source_url" {
+  type    = string
+  default = ""
+}
+
 # An absolute directory that keeps every report on this host (the sink for
 # a deployment without a Discord channel). Empty keeps reports off disk.
 variable "bug_report_directory" {
@@ -221,6 +233,8 @@ job "sro-agent" {
         SRO_BUG_REPORT_REPLAY_DEFAULT     = var.bug_report_replay_default
         SRO_BUG_REPORT_MAX_BYTES          = var.bug_report_max_bytes
         SRO_BUG_REPORT_DIRECTORY          = var.bug_report_directory
+        SRO_SERVER_KEY_PATH               = var.server_key_path
+        SRO_PUBLIC_SOURCE_URL             = var.public_source_url
       }
 
       template {

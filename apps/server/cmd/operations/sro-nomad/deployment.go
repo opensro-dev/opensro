@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"opensro.online/server/internal/agent/bugreport"
@@ -33,6 +34,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/gamedata"
 	"opensro.online/server/internal/security/auth"
+	"opensro.online/server/internal/security/serverkey"
 	"opensro.online/server/internal/transport"
 )
 
@@ -108,6 +110,8 @@ type deployment struct {
 	// BugReports comes from the deployer's SRO_BUG_REPORT_* environment;
 	// its webhook travels only as a Nomad variable item.
 	BugReports bugreport.Config
+	// License is the server key and source link (serverkey.go).
+	License licenseSettings
 }
 
 /*
@@ -291,6 +295,10 @@ func resolveDeployment(
 	if err != nil {
 		return nil, err
 	}
+	license, err := configuredLicense(stateDir, allowedOrigins, serverkey.LicensorKey, time.Now())
+	if err != nil {
+		return nil, err
+	}
 	// The operator's value, else the deployment default (shardsettings).
 	stackSizes, err := enterworld.ParseStackSizes(shardsettings.Lookup(enterworld.EnvStackSizes).Value(os.Getenv))
 	if err != nil {
@@ -406,6 +414,7 @@ func resolveDeployment(
 		AllowedOrigins:        allowedOrigins,
 		GMCharacters:          gmCharacters,
 		BetaMastery:           betaMastery,
+		License:               license,
 		StackSizes:            stackSizes.String(),
 		PortOnly:              portOnlySettingsFromEnv(),
 		TransportCert:         transportCert,
@@ -616,6 +625,8 @@ func (deployment *deployment) agentVariables() map[string]any {
 			10,
 		),
 		"bug_report_directory": deployment.BugReports.Directory,
+		"server_key_path":      deployment.License.jobKeyPath(),
+		"public_source_url":    deployment.License.SourceURL,
 	})
 }
 

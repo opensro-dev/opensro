@@ -61,6 +61,21 @@ func (rt *Runtime) ConfigureMall(dir string, authority domain.MallAuthority, ext
 
 /*
 ================
+GateMall
+
+LICENSE ENFORCEMENT (LICENSE limitation 3). open reports whether this
+deployment's license lets the mall sell: the shard reporter's last answer
+from the Agent (agentserver license.go). Removing or bypassing this gate
+violates the license, except in a version published under limitation 2(b).
+The catalogue stays readable; only purchases close.
+================
+*/
+func (rt *Runtime) GateMall(open func() bool) {
+	rt.mallOpen = open
+}
+
+/*
+================
 registerMall
 ================
 */
@@ -124,6 +139,9 @@ func (rt *Runtime) HandleMallPurchase(division string, character *enterworld.Cha
 	defer unlock()
 	snapshot := rt.characterSnapshot(division, character)
 	if snapshot == nil || snapshot.DeletePending {
+		return failureResult(wire.ErrCodeInvalidRequest)
+	}
+	if rt.mallOpen != nil && !rt.mallOpen() {
 		return failureResult(wire.ErrCodeInvalidRequest)
 	}
 	quote, err := rt.mallCatalog.Quote(request)

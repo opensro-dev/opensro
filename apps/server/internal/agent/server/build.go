@@ -91,5 +91,6 @@ func (server *Server) handleBuild(w http.ResponseWriter, r *http.Request) {
 			"subject":       buildSubject(),
 			"uptimeSeconds": int64(uptime.Seconds()),
 		},
+		"license": server.licenseProjection(),
 	})
 }

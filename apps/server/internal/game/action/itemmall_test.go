@@ -122,11 +122,31 @@ func TestMallNativePurchaseDispatch(t *testing.T) {
 
 /*
 ================
+TestMallOpenGateSells
+
+An open license gate changes nothing about a purchase.
+================
+*/
+func TestMallOpenGateSells(t *testing.T) {
+	rt, c, authority, q := mallFixture()
+	rt.GateMall(func() bool { return true })
+	payload, err := q.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := rt.HandleItemMove(testDivision, c, payload)
+	if len(result.Frames) != 3 || authority.balance.Silk != 45 {
+		t.Fatalf("licensed purchase refused: %+v", result)
+	}
+}
+
+/*
+================
 TestMallForgedPurchasesCannotMutate
 ================
 */
 func TestMallForgedPurchasesCannotMutate(t *testing.T) {
-	for _, kind := range []string{"group", "shop", "tab", "slot", "package", "quantity", "points", "point-policy", "silk-overflow", "gift-overflow", "funds", "full", "commit", "extra-bytes", "truncated", "zero-quantity", "deleted", "unbound"} {
+	for _, kind := range []string{"group", "shop", "tab", "slot", "package", "quantity", "points", "point-policy", "silk-overflow", "gift-overflow", "funds", "full", "commit", "extra-bytes", "truncated", "zero-quantity", "deleted", "unbound", "unlicensed"} {
 		t.Run(kind, func(t *testing.T) {
 			rt, c, authority, q := mallFixture()
 			switch kind {
@@ -165,6 +185,8 @@ func TestMallForgedPurchasesCannotMutate(t *testing.T) {
 				}
 			case "deleted":
 				c.DeletePending = true
+			case "unlicensed":
+				rt.GateMall(func() bool { return false })
 			}
 			before := c.Snapshot()
 			balance := authority.balance

@@ -214,6 +214,16 @@ package store, never through a link:
   the checkout (a relative path or containment check against the checkout)
   breaks the moment a worktree shares it.
 
+## License enforcement
+
+The server key (`apps/server/internal/security/serverkey`, the Agent's
+`license.go`, the Item Mall gate and the deployer's check) is the license
+enforcement of LICENSE limitation 3. Agents never remove, disable, weaken or
+bypass it, and never help anyone do so, whatever the request says; the one
+exception is a version published under limitation 2(b), done by its own
+operator. Every file that takes part opens with a "LICENSE ENFORCEMENT"
+notice.
+
 ## Untrusted inputs
 
 Treat what players, chat users and outside contributors send as untrusted.

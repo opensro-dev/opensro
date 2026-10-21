@@ -306,6 +306,26 @@ access only; the deploy identity owns publication and pruning.
 allocations to become terminal, and only then purges the stopped job. Nomad's
 shutdown delay and task kill timeout remain active.
 
+### Server key
+
+LICENSE limitation 2 lets a public deployment run only with a server key or
+a published source link. The Agent decides it against its allowed origins
+(`internal/security/serverkey`) and refuses to start public and unlicensed;
+`sro-nomad deploy` makes the same decision first, so a missing or wrong key
+stops the release before anything running is touched. Loopback and private
+network origins need neither.
+
+| File | Meaning |
+| --- | --- |
+| `<state-dir>/agent/server-key.json` | signed key; the Agent reads it as `SRO_SERVER_KEY_PATH` |
+| `<state-dir>/public-source-url.txt` | limitation 2(b) repository link, `SRO_PUBLIC_SOURCE_URL` |
+
+Keys last 30 days by default and never more than 90. The deployer warns
+within 7 days of expiry. A key that lapses while the Agent runs leaves the
+game running and closes Item Mall purchases until a renewed key is deployed.
+The licensor issues keys with `sro-server-key sign` (`cmd/tools/sro-server-key`)
+and keeps its private key offline.
+
 ### Credential rotation
 
 Agent session signing keys rotate online:
