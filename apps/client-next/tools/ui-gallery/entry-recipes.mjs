@@ -115,6 +115,36 @@ export const OPENERS = {
 		f.state.gameplay.targetCapabilities = 8;
 		f.ui.event( { kind: "activate", id: "open-window:Shop" } );
 	},
+	"Magic Pang"( f ) {
+		// The prize slots publish only from the seeded prize rows (entries 1..12).
+		f.state.gameplay.gacha = {
+			visible: true,
+			phase: "idle",
+			npc: 0,
+			slot: null,
+			entry: 0,
+			started: 0,
+			result: null,
+			error: null,
+			prizes: [
+				{
+					entry: 1,
+					refObjId: 3630,
+					quantity: 1,
+					nameSymbol: "SN_GACHA_PRIZE_1",
+					icon: "item/etc/hp_potion_01.ddj"
+				},
+				{
+					entry: 2,
+					refObjId: 3630,
+					quantity: 2,
+					nameSymbol: "SN_GACHA_PRIZE_2",
+					icon: "item/etc/hp_potion_01.ddj"
+				}
+			]
+		};
+		f.ui.event( { kind: "activate", id: "open-window:Magic Pang" } );
+	},
 	"Stall network"( f ) {
 		f.state.gameplay.stall = stallRequest( emptyStall(), { kind: "stall-network-open", open: true } ).state;
 		f.ui.event( { kind: "activate", id: "open-window:Stall network" } );
