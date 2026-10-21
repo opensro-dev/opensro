@@ -117,6 +117,7 @@ func TestBuildItemRefRequirementColumns(t *testing.T) {
 	fields[120], fields[124], fields[156] = "25", "10", "77"
 	fields[128] = "2"
 	fields[9], fields[10], fields[11], fields[12] = "3", "1", "6", "2"
+	fields[7] = "1"    // CashItem: a mall item
 	fields[14] = "0"   // country: China
 	fields[17] = "1"   // independent of trade/buy permission and shop membership
 	fields[24] = "129" // CanUse is a bitfield; preserve additional authored flags.
@@ -135,6 +136,9 @@ func TestBuildItemRefRequirementColumns(t *testing.T) {
 	ref := buildItemRef(fields, map[string]string{})
 	if ref == nil || ref.NativeFields.Get("canSell") != 1 || ref.NativeFields.Get("canUse") != 129 {
 		t.Fatal("native sale permission column missing")
+	}
+	if ref.NativeFields.Get("cashItem") != 1 || !ref.CashItem {
+		t.Fatal("CashItem (token 7) is not published to the client")
 	}
 	if ref == nil {
 		t.Fatal("buildItemRef returned nil for a well-formed row")

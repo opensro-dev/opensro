@@ -134,3 +134,16 @@ test("a repair flash runs 20 frames of the 8x4 sheet over 72 px, before the chan
 		"icon_mall_transgender.png"
 	] );
 });
+
+test("a mall item is TypeID1 3, not Bionic, and CashItem (550130)", () => {
+	// Port type words keep bits 0..1 clear; CashItem comes from token 7.
+	const potion = 3 << 2 | 3 << 5 | 1 << 7, cash = { fields: { cashItem: 1 } };
+	assert.equal( fx.itemIsMallItem( { typeFlags: potion, tooltip: cash } ), true );
+	assert.equal( fx.itemIsMallItem( { typeFlags: potion, tooltip: { fields: { cashItem: 0 } } } ), false );
+	assert.equal( fx.itemIsMallItem( { typeFlags: potion } ), false );
+	// A native word carrying bit 0 itself still reads as cash.
+	assert.equal( fx.itemIsMallItem( { typeFlags: potion | 1 } ), true );
+	// Bionic or a non-item TypeID1 is never a mall item, cash or not.
+	assert.equal( fx.itemIsMallItem( { typeFlags: potion | 2, tooltip: cash } ), false );
+	assert.equal( fx.itemIsMallItem( { typeFlags: 1 << 2, tooltip: cash } ), false );
+});

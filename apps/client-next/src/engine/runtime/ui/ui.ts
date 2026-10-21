@@ -390,6 +390,7 @@ import { createSlotEffectClock } from "./hud/slot-effects";
 import {
 	avatarAttachmentBlocked,
 	equipmentSlotMirror,
+	itemIsMallItem,
 	itemIsRare,
 	itemSlotBlockedOverlay,
 	itemSlotOverlays,
@@ -7396,7 +7397,7 @@ export function createUi(
 						if ( item ) {
 							// 567290: mall (ItemTid_IsMallItem) and rare (CSOItemData_IsRare)
 							// items refuse a quick sell.
-							if ( (item.typeFlags & 0x1f) === 0xd || itemIsRare( item ) || item.summon?.state === 2 ) {
+							if ( itemIsMallItem( item ) || itemIsRare( item ) || item.summon?.state === 2 ) {
 								message = hud.data()?.strings["UIIT_MSG_STRGERR_CANT_QUICKSELL_CASHITEM"] ?? "";
 								dirty = true;
 								return;

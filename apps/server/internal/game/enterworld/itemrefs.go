@@ -396,6 +396,11 @@ type itemdataRecordColumn struct {
 // extend the 32/33 precedent as reqLevelTypeN/requiredLevelN, keeping
 // the historical unsuffixed "requiredLevel" for slot 1.
 var itemdataRecordColumns = []itemdataRecordColumn{
+	// Token 7 is RefObjCommon CashItem, natively bit 0 of the type word
+	// (808AD0). The port keeps that bit clear (equiproster.go), so the
+	// client reads it here: CIFItemSlot_DispatchActivation 567290 refuses a
+	// quick sell when ItemTid_IsMallItem 550130 holds.
+	{7, "cashItem", "int"},
 	{14, "country", "int"},
 	{15, "rarity", "int"},
 	// Token 16 is RefObjCommon CanTrade, beside CanSell (17) and CanBorrow

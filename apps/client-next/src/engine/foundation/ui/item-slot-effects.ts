@@ -146,6 +146,24 @@ export function itemIsRare( item: { readonly tooltip?: { readonly fields: Readon
 
 /*
 ================
+itemIsMallItem
+
+ItemTid_IsMallItem 550130: Bionic (bit 1) clear, TypeID1 3 (bits 2..4 =
+0xc) and CashItem (bit 0). The port's type word keeps bits 0..1 clear
+(server equiproster.go), so CashItem also comes from the reference's
+published token 7 (cashItem).
+================
+*/
+export function itemIsMallItem(
+	item: { readonly typeFlags: number; readonly tooltip?: { readonly fields: Readonly<Record<string, number>>; }; }
+) {
+	const word = item.typeFlags;
+	return (word & 2) === 0 && (word & 0x1c) === 0xc &&
+		((word & 1) !== 0 || (item.tooltip?.fields.cashItem ?? 0) !== 0);
+}
+
+/*
+================
 itemSlotOverlays
 
 Everything 565850 draws over one slot this frame, in its draw order:
