@@ -68,6 +68,9 @@ func TestLiveJoinJobPairsAndSuitChangesDuringConsent(t *testing.T) {
 	for ownerJob := uint8(1); ownerJob <= 4; ownerJob++ {
 		for joinerJob := uint8(1); joinerJob <= 4; joinerJob++ {
 			t.Run(fmt.Sprintf("%d-%d", ownerJob, joinerJob), func(t *testing.T) {
+				// Every pair owns its store, server and ports, so the sixteen
+				// full-server pairs share the package's 30 s budget in parallel.
+				t.Parallel()
 				seeds := lifecycleSeeds()
 				for _, c := range seeds {
 					c.Level = e2eInt64(30)
