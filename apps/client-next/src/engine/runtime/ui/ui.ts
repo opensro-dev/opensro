@@ -4707,14 +4707,14 @@ export function createUi(
 			}
 		} else if ( id === "inventory-gold" ) {
 			// 59AA20: CIFInventory's Gold button returns early when Exchange
-			// (69AF00), Stall or Shop is active; otherwise it opens Storage
-			// deposit (59A430) when Storage is active or Drop gold (59A260) when
-			// no NPC interaction is active.
+			// (69AF00), Stall (67AF00) or Shop (69B060) is active; otherwise it
+			// opens Storage deposit (59A430) when Storage is active (69B080) or
+			// Drop gold (59A260) when no NPC interaction is active (59A27D).
 			const g = view.gameplay,
 				stallOpen = g?.stall?.phase === "owner" || g?.stall?.phase === "visitor",
 				shopOpen = panel === "Shop" || !!g?.shop,
 				storageOpen = panel === "Storage" || g?.storage?.phase === "open";
-			if ( g?.exchange?.open || stallOpen || shopOpen || (!storageOpen && g?.talk) ) return;
+			if ( g?.exchange?.open || stallOpen || shopOpen || (!storageOpen && !!g?.npcConversation) ) return;
 			goldDialog = storageOpen ? "deposit" : "drop";
 			goldAmount = "0";
 			focusAndSelect( "gold-amount", 0, 1 );
