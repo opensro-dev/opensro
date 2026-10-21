@@ -124,6 +124,33 @@ body,
 	overflow: hidden;
 }
 
+/*
+The project credit (LICENSE section 4: notices stay): a quiet line at the
+foot of the startup screen, linking the source. Native scene loading art
+stays as retail drew it.
+*/
+.sro-boot-loading__credit {
+	position: absolute;
+	bottom: 14px;
+	left: 50%;
+	transform: translateX(-50%);
+	color: #6f7f88;
+	font-size: 11px;
+	text-decoration: none;
+	opacity: .7;
+	white-space: nowrap;
+}
+
+.sro-boot-loading__credit:hover,
+.sro-boot-loading__credit:focus-visible {
+	color: #d8c8a7;
+	opacity: 1;
+}
+
+.sro-boot-loading[data-native="true"] .sro-boot-loading__credit {
+	display: none;
+}
+
 .sro-boot-loading__bar-fill {
 	width: calc(var(--loading-progress, 0) * 100%);
 	height: 100%;

@@ -124,7 +124,6 @@ apps/client-next/src/engine/foundation/ui/damage-text.ts
 apps/client-next/src/engine/foundation/ui/disconnect-dialog.ts
 apps/client-next/src/engine/foundation/ui/extended-quickslot.ts
 apps/client-next/src/engine/foundation/ui/frame-ring.ts
-apps/client-next/src/engine/foundation/ui/guide-catalog.ts
 apps/client-next/src/engine/foundation/ui/guild-crest.ts
 apps/client-next/src/engine/foundation/ui/hit-test.ts
 apps/client-next/src/engine/foundation/ui/input-options.ts

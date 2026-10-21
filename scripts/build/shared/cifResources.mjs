@@ -14,6 +14,7 @@ Split verbatim from resourcePipeline.mjs (2026-07-28).
 import { mkdir, readFile } from "node:fs/promises";
 import { copyIntoPublicTree } from "./publicWrite.mjs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { toPublicImagePath } from "./assetPaths.mjs";
 
 import {
@@ -44,6 +45,10 @@ import { buildPetItemIcons } from "./petItemIcons.mjs";
 
 // Icon copies in flight at once; each is a stat, a compare and rarely a copy.
 const ICON_COPY_CONCURRENCY = 32;
+// Port-only guide art that no retail article references, published beside
+// the native guide images (gd_control: the controls article's closing
+// line, guide-catalog.ts). Sources live in ./art/guide.
+const PORT_GUIDE_IMAGES = [ "gd_control.png" ];
 
 /*
 ================
@@ -163,6 +168,14 @@ export async function buildGuideImageResources( { copiedImages = new Set(), spri
 	for ( const ddjPath of references ) {
 		await copyRequiredImageReference( ddjPath, copiedImages );
 		if ( spriteCatalog ) await registerSpriteResource( spriteCatalog, ddjPath );
+	}
+	for ( const name of PORT_GUIDE_IMAGES ) {
+		const publicPath = `/assets/images/Media_extracted/interface/guide/${name}`;
+		await copyIntoPublicTree(
+			fileURLToPath( new URL( `./art/guide/${name}`, import.meta.url ) ),
+			path.join( publicRoot, publicPath.slice( 1 ) )
+		);
+		copiedImages.add( publicPath );
 	}
 	return { references, copiedImages };
 }
