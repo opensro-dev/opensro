@@ -182,3 +182,32 @@ func TestDungeonClipEndpointGuardRefusesUpperFloor(t *testing.T) {
 		t.Fatalf("endpoint guard rests at %+v, want the walked start (50, 0, -6)", got.Rest)
 	}
 }
+
+/*
+================
+TestDonwhangCaveInBoulderBlocksAsNative
+
+Report BR-261015-0700-482F ("Cannot walk, edge is blocking here"): every
+click east of (1193, -336) is refused. The server is native there. Block
+4 places a cave-in boulder pile, a DOF flags&2 collision object
+(out_obj_stone, radius squared 1962.5, r 44.3, centred at (1237.45,
+-338.12)), and the native dungeon move clips it as a 2D XZ circle
+(CRTNavMeshDungeonBlock_ClipObstacleCircles 998440; obstacle.y is never
+read). The player stood 0.2 outside its rim, so walking into the pile
+stops at once and walking away does not. The wall was invisible only
+because the client did not draw DOF block objects (0xAD1B70); the takeover
+of #1251 draws them.
+================
+*/
+func TestDonwhangCaveInBoulderBlocksAsNative(t *testing.T) {
+	v := realAuthorityValidator(t)
+	from := donwhangCaveSpawn(1193, 0.013342, -336)
+	into := v.ClipMovementPath(from, donwhangCaveSpawn(1236, 0, -341))
+	if into.Outcome != ClipBlocked || math.Abs(into.Rest.X-from.X) > 0.5 {
+		t.Fatalf("into the boulder pile: %v at x %.3f, want blocked at the rim near x %.0f", into.Outcome, into.Rest.X, from.X)
+	}
+	away := v.ClipMovementPath(from, donwhangCaveSpawn(1153, 0, -336))
+	if away.Outcome != ClipArrived {
+		t.Fatalf("away from the boulder pile: %v at %+v, want arrived", away.Outcome, away.Rest)
+	}
+}
