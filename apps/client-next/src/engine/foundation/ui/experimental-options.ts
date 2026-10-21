@@ -138,6 +138,11 @@ export interface ExperimentalOptions {
 	// when on, keep bit 0x80 enabled on full-bag errors and pause non-gold item
 	// pickup until bag space changes so the pet keeps picking up gold. Default on.
 	readonly smartPetPickup: boolean;
+	// Port-only, not native: a touch tap on an item or skill slot also keeps
+	// its tooltip up until the next touch elsewhere or a scroll (#1243); the
+	// tap's own action is unchanged. Touch only. On by default (the owner's
+	// choice, 2026-10-22); off is the brief hover a tap gives today.
+	readonly touchInspect: boolean;
 	// Port-only, not native: when the build publishes extra worldmap_mapinfo
 	// town pages (Alexandria) and a wider overview box, the M window uses them
 	// instead of the five native town pages and 28 x 8 overview (5758D0). Off
@@ -182,7 +187,7 @@ experimentalOptions
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, greyDisabledTabs, jobKillNotices, dropPlusNotices,
 plusSevenNotices, fitWindowLabels, dropOnBagTab, noticeLinks, shortNotices, confirmGuildBan,
-petClickOpensWindow, smartPetPickup and dungeonCharacterPvs, which only an explicit false turns off.
+petClickOpensWindow, smartPetPickup, touchInspect and dungeonCharacterPvs, which only an explicit false turns off.
 Missing or invalid render scales restore full resolution; legacy Video
 settings cannot enable scaling. Keys of retired rows (terrainRelief and texturedHorizon, removed at the owner's
 request on 2026-10-11) are never read, so a saved preference holding them
@@ -227,6 +232,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		homingProjectiles: enabled( "homingProjectiles" ),
 		petClickOpensWindow: record.petClickOpensWindow !== false,
 		smartPetPickup: record.smartPetPickup !== false,
+		touchInspect: record.touchInspect !== false,
 		expandedWorldMap: enabled( "expandedWorldMap" )
 	};
 }

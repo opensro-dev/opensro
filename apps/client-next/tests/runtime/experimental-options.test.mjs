@@ -74,9 +74,20 @@ const OFF = Object.freeze( {
 	// On by default (owner 2026-10-20): keep bit 0x80 enabled on 0xB4/0xB5 so the
 	// pet keeps picking up gold when full; off restores the native 0x0077DD61 disable.
 	smartPetPickup: true,
+	// On by default (owner 2026-10-22, #1243): a touch tap keeps an item or skill tooltip up.
+	touchInspect: true,
 	// Off by default: the M window shows only the five native towns and 28 x 8 overview.
 	expandedWorldMap: false
 } );
+
+test("touch inspection defaults on and only an explicit false turns it off", () => {
+	for (
+		const value of [ undefined, null, {}, { touchInspect: true }, { touchInspect: "false" }, { touchInspect: 0 } ]
+	) {
+		assert.equal( experimentalOptions( value ).touchInspect, true, JSON.stringify( value ) );
+	}
+	assert.equal( experimentalOptions( { touchInspect: false } ).touchInspect, false );
+});
 
 test("only an explicit boolean enables chat timestamps", () => {
 	for ( const value of [ undefined, null, [], {}, true, { chatTimestamps: "true" }, { chatTimestamps: 1 } ] ) {

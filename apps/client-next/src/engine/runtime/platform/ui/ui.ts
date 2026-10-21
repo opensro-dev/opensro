@@ -569,6 +569,13 @@ export function createUiBridge(
 			current( document.elementFromPoint( event.clientX, event.clientY ) )?.element !== press.element
 		) return;
 		activatePrimary( press.element, event, true );
+		// Port-only (#1243): the tap also inspects an item or skill slot. Its
+		// action above is unchanged; only the hover outlives the lifted finger.
+		const tapped = current( press.element );
+		if ( tapped?.value.inspect && !tapped.value.disabled ) {
+			inspected = tapped.value.id;
+			if ( reportedHover !== inspected ) reportHover( inspected );
+		}
 	}, { signal: lifetime.signal } );
 	/*
 	================
@@ -676,6 +683,34 @@ export function createUiBridge(
 		reportedHover = id;
 		emit( { kind: "hover", id } );
 	}
+	// Port-only (#1243): the item or skill slot a touch tap is inspecting. Its
+	// hover is held after the finger lifts, until the next touch, a scroll,
+	// or the control losing its inspect flag. Mouse hover never sets it.
+	let inspected: string | null = null;
+	/*
+	================
+	releaseInspection
+
+	End a touch inspection and report the hover that replaces it.
+	================
+	*/
+	function releaseInspection( next: string | null = null ) {
+		if ( inspected === null ) return;
+		inspected = null;
+		if ( reportedHover !== next ) reportHover( next );
+	}
+	window.addEventListener( "pointerdown", event => {
+		if ( event.pointerType !== "touch" || inspected === null ) return;
+		const slot = current( event.target );
+		releaseInspection( slot && (!slot.value.disabled || slot.value.helpText) ? slot.value.id : null );
+	}, { capture: true, signal: lifetime.signal } );
+	for ( const name of [ "wheel", "scroll" ] as const ) {
+		window.addEventListener( name, () => releaseInspection(), {
+			capture: true,
+			passive: true,
+			signal: lifetime.signal
+		} );
+	}
 	window.addEventListener( "pointermove", event => {
 		pointerAt = [ event.clientX, event.clientY ];
 	}, { signal: lifetime.signal, passive: true } );
@@ -687,12 +722,18 @@ export function createUiBridge(
 	================
 	*/
 	function syncHover() {
+		if ( inspected !== null ) {
+			const held = controls.get( inspected )?.value;
+			if ( held?.inspect && !held.disabled ) return;
+			releaseInspection();
+		}
 		if ( !pointerAt || drag ) return;
 		const slot = current( document.elementFromPoint( pointerAt[0], pointerAt[1] ) );
 		const id = slot && (!slot.value.disabled || slot.value.helpText) ? slot.value.id : null;
 		if ( id !== reportedHover ) reportHover( id );
 	}
 	root.addEventListener( "pointerover", event => {
+		if ( event.pointerType === "touch" && inspected !== null ) return;
 		const slot = current( event.target );
 		if ( slot !== current( event.relatedTarget ) ) {
 			reportHover( slot && (!slot.value.disabled || slot.value.helpText) ? slot.value.id : null );
@@ -701,7 +742,10 @@ export function createUiBridge(
 	root.addEventListener( "pointerout", event => {
 		const next = current( event.relatedTarget );
 		if ( current( event.target ) !== next ) {
-			reportHover( next && (!next.value.disabled || next.value.helpText) ? next.value.id : null );
+			// A lifting finger leaves its slot; an inspection outlives that.
+			if ( !(event.pointerType === "touch" && inspected !== null) ) {
+				reportHover( next && (!next.value.disabled || next.value.helpText) ? next.value.id : null );
+			}
 			emit( { kind: "press", id: null } );
 		}
 	}, { signal: lifetime.signal } );
@@ -750,6 +794,7 @@ export function createUiBridge(
 		if ( !slot ) return;
 		if ( rightPressed?.element === slot.element ) rightPressed = null;
 		if ( touchHold.press?.element === slot.element ) cancelTouchHold();
+		if ( inspected === id ) releaseInspection();
 		if ( carry?.id === id ) cancelCarry();
 		if ( drag?.id === id ) {
 			if ( slot.element.hasPointerCapture( drag.pointer ) ) slot.element.releasePointerCapture( drag.pointer );

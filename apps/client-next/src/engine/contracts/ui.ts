@@ -159,6 +159,10 @@ export interface UiControl {
 	// A click lifts the control's item onto the cursor and the next press
 	// places it, as the retail inventory does; a drag still works too.
 	readonly carry?: boolean;
+	// Port-only (#1243): an item or skill slot whose tooltip a touch tap keeps
+	// up after the tap's own action, until the next touch elsewhere or a
+	// scroll. Set only while the Experimental touchInspect option is on.
+	readonly inspect?: boolean;
 	readonly min?: number;
 	readonly max?: number;
 	readonly maxLength?: number;
