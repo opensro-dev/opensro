@@ -7,6 +7,7 @@ Port-only approximate guidance from static outdoor anchors.
 
 ===========================================================================
 */
+import { DUNGEON_REGION_BIT } from "@/engine/foundation/world/world-space";
 import type { UiControl, UiQuad, UiRect } from "@/engine/contracts/ui";
 import type { worldMapFrame } from "./world-map";
 const MAX_MONSTERS = 4096, MAX_POINTS = 65536, MAX_NAME = 128;
@@ -77,7 +78,7 @@ export function decodeHuntingGuide( value: unknown ): HuntingCatalogue {
 		monsters.push( monster );
 		for ( const p of row.points ) {
 			if (
-				!p || !Number.isInteger( p.regionId ) || p.regionId < 0 || p.regionId >= 0x8000 ||
+				!p || !Number.isInteger( p.regionId ) || p.regionId < 0 || p.regionId >= DUNGEON_REGION_BIT ||
 				!Number.isFinite( p.x ) || !Number.isFinite( p.z ) ||
 				Math.abs( p.x ) > MAX_LOCAL_POSITION || Math.abs( p.z ) > MAX_LOCAL_POSITION
 			) {
