@@ -54,6 +54,9 @@ for ( const key of Object.keys( localStorage ) ) {
 }
 const state = seedJourney( id );
 const assets = createAssets(), renderer = createRenderer( canvas, createPresentationRandom( 1 ) );
+// The asset worker holds native texture reads until the page names the
+// device's texture formats (texture-variants.ts), as runtime.ts does.
+void renderer.textureFeatures().then( features => assets.textureFeatures( features ) );
 const trace: { time: number; kind: string; detail: unknown; }[] = [];
 const queue: SessionCommand[] = [];
 const pending: number[] = [];

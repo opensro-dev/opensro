@@ -107,6 +107,11 @@ window.addEventListener( "message", message => {
 	if ( report.error ) setStatus( "error", report.error );
 	else setStatus( report.ready ? "ready" : "loading", report.ready ? "Ready" : "Loading..." );
 } );
+// A pasted link or Back changes only the hash; follow it to that window.
+window.addEventListener( "hashchange", () => {
+	const row = journeys.find( entry => entry.id === decodeURIComponent( location.hash.slice( 1 ) ) );
+	if ( row && row !== selected ) select( row );
+} );
 search.addEventListener( "input", renderList );
 viewport.addEventListener( "change", resize );
 document.querySelector( "#reset" )!.addEventListener( "click", () => select( selected ) );

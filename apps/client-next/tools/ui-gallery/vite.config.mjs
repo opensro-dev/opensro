@@ -4,8 +4,9 @@
 vite.config.mjs - the UI gallery's local server
 
 A developer tool, not a release: it serves the client source and the
-published assets on loopback, with no game or API proxy. Requests that
-would reach a server are refused, so a window can never talk to a shard.
+published assets on loopback. It has no proxy, so no request can reach a
+game server: /api and /shard answer 403 with a reason, and any other
+server route (a shard's own path) is simply not found.
 
 ===========================================================================
 */
@@ -19,7 +20,7 @@ import { UI_GALLERY_PORT } from "./settings.mjs";
 ================
 galleryServer
 
-Opens the gallery at / and refuses the game's server routes.
+Opens the gallery at / and answers the Agent and shard prefixes with 403.
 ================
 */
 function galleryServer() {
@@ -35,7 +36,7 @@ function galleryServer() {
 					response.writeHead( 302, { Location: "/tools/ui-gallery/index.html" } );
 					return response.end();
 				}
-				if ( request.url?.startsWith( "/api/" ) || request.url?.startsWith( "/shard/" ) ) {
+				if ( /^\/(api|shard)(\/|\?|$)/i.test( request.url ?? "" ) ) {
 					response.writeHead( 403 );
 					return response.end( "The UI gallery has no game connection" );
 				}
