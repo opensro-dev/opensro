@@ -288,11 +288,14 @@ loading. Visibility producers retain the active-scene requirement.
 ================
 */
 type sceneBatchOptions struct {
-	revision     *uint64
-	reset        bool
-	observedGID  uint32
-	changes      []ObjectScopeChange
-	allowLoading bool
+	revision    *uint64
+	reset       bool
+	observedGID uint32
+	// unobservedGID is the converse: send only while the scene does not
+	// show that object yet.
+	unobservedGID uint32
+	changes       []ObjectScopeChange
+	allowLoading  bool
 }
 
 /*
@@ -335,6 +338,12 @@ func (s *Session) sendSceneObjectBatch(frames []Frame, options sceneBatchOptions
 	s.mu.Lock()
 	if options.observedGID != 0 {
 		if _, observed := s.observedObjects[options.observedGID]; !observed || s.sceneLoading {
+			s.mu.Unlock()
+			return nil
+		}
+	}
+	if options.unobservedGID != 0 {
+		if _, observed := s.observedObjects[options.unobservedGID]; observed || s.sceneLoading {
 			s.mu.Unlock()
 			return nil
 		}

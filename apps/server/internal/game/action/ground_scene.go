@@ -3,12 +3,15 @@
 
 ground_scene.go - settle a scene's ground drops and trade level when it goes live
 
-A bootstrap publishes every drop in the character's population. Ground
-removals (TTL sweep, another player's pickup) route only to viewers whose
-published scope holds the drop, and a loading scene publishes none, so a
-removal committed between the bootstrap and game-ready reaches nobody. The
-client keeps that drop until it is picked at, which the server refuses
-(BR alt-tab ghost drops). Game-ready closes the gap from the registry.
+A bootstrap publishes the drops in range of the entry (ground_scope.go).
+Ground changes route only to live scenes: a removal (TTL sweep, another player's
+pickup) reaches viewers whose published scope holds the drop, and a new drop
+reaches sessions that are not loading. A change committed between the
+bootstrap and game-ready therefore reaches nobody. A removed drop stays on
+the client until it is picked at, which the server refuses (BR alt-tab ghost
+drops), and a new one is never shown (#617). Game-ready closes both gaps
+from the registry; the per-tick pass (AdvanceGroundScope) keeps them
+closed as the player moves.
 
 Every loading scene also builds a new local player whose trade level
 (CICPlayer +0x4F6) starts at 0 (CICUser constructor, 86945B), so a scene
@@ -21,9 +24,8 @@ package action
 import (
 	log "github.com/sirupsen/logrus"
 
-	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/transport"
 )
 
@@ -31,11 +33,12 @@ import (
 ================
 ReconcileGroundScope
 
-Despawn every ground drop the live scene still shows that the character's
-population no longer holds. Runs after FinishSceneReentry, so a removal
-committed after the registry read routes through the published scope; one
-committed before it is despawned here. A drop removed in between may be
-despawned twice, which the client ignores for an unknown object.
+Settle a scene that just went live against the ground registry: spawn the
+drops in range it does not show, despawn the ones it shows that are gone or
+out of range (groundScope). Runs after FinishSceneReentry, so a change
+committed after the registry read routes live; one committed before it is
+settled here. publishGroundScope admits each change against the scene's
+current scope, so a change that also arrived live is not repeated.
 ================
 */
 func (rt *Runtime) ReconcileGroundScope(s *transport.Session, divisionID string, c *enterworld.Character) {
@@ -47,27 +50,9 @@ func (rt *Runtime) ReconcileGroundScope(s *transport.Session, divisionID string,
 	if !current {
 		return
 	}
-	live := make(map[uint32]struct{})
-	for _, item := range rt.CharacterGroundItems(divisionID, c) {
-		live[item.Gid] = struct{}{}
-	}
-	var frames []transport.Frame
-	for _, gid := range published {
-		if gid <= domain.GroundItemGIDBase || gid > domain.GroundItemGIDLimit {
-			continue
-		}
-		if _, exists := live[gid]; exists {
-			continue
-		}
-		frames = append(frames, transport.Frame{
-			Opcode:  wire.OpObjectDespawn,
-			Payload: wire.ObjectDespawn{Gid: gid}.Encode(),
-			Scope:   []transport.ObjectScopeChange{{GID: gid}},
-		})
-	}
-	if err := s.PublishSceneObjects(revision, nil, frames); err != nil {
-		log.Debugf("action: ground scene reconcile for session %d failed: %v", s.ID, err)
-	}
+	at := rt.liveSpawn(simulation.WorldKey(divisionID, c.Name), c, rt.Now().UnixMilli())
+	spawn, despawn := groundScope(placeDrops(rt.CharacterGroundItems(divisionID, c)), viewerBlock(at), published)
+	rt.publishGroundScope(s, revision, spawn, despawn)
 }
 
 /*

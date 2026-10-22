@@ -262,24 +262,40 @@ normal churn.
 ==================
 */
 func (b *Bridge) PushToSession(sessionID string, frames []simulation.Frame) {
+	s, revision, ok := b.SceneSession(sessionID)
+	if !ok {
+		return
+	}
+	b.deliver(s, frames, revision)
+}
+
+/*
+==================
+SceneSession
+
+The live session and scene revision a tick session id names (sceneSessionID).
+An unscoped id has revision 0; a closed session or malformed id is absent.
+==================
+*/
+func (b *Bridge) SceneSession(sessionID string) (*transport.Session, uint64, bool) {
 	identity, generation, scoped := strings.Cut(sessionID, ":")
 	revision := uint64(0)
 	if scoped {
 		var err error
 		revision, err = strconv.ParseUint(generation, 10, 64)
 		if err != nil {
-			return
+			return nil, 0, false
 		}
 	}
 	id, err := strconv.ParseUint(identity, 10, 64)
 	if err != nil {
-		return
+		return nil, 0, false
 	}
 	s, ok := b.hub.Session(id)
 	if !ok {
-		return
+		return nil, 0, false
 	}
-	b.deliver(s, frames, revision)
+	return s, revision, true
 }
 
 /*

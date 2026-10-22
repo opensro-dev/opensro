@@ -480,7 +480,7 @@ func appendGroundObjectRows(deps *enterworld.Deps, items *action.Runtime) {
 		if npcRows != nil {
 			rows = npcRows(divisionID, character, entry)
 		}
-		rows = append(rows, enterworld.GroundObjectListRows(items.CharacterGroundItems(divisionID, character))...)
+		rows = append(rows, items.GroundObjectRows(divisionID, character, entry)...)
 		return append(rows, items.SkillObjectRows(divisionID, character, entry)...)
 	}
 }
