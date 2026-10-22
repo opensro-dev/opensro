@@ -1,5 +1,28 @@
-import retailCatalog from "./itemNameCompletions.json" with { type: "json" };
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { sourceDataRoot } from "../world/paths.mjs";
 import { appendPortItemRecords, PORT_ITEM_TEXT } from "./portItemRows.mjs";
+
+// English names for retail item symbols live in the operator's source-data
+// (itemNameCompletions.json), never in the repository; without it only the
+// port-only rows below are completed.
+const retailCatalog = readRetailCatalog();
+// The retail item-name completions as loaded, for coverage tests.
+export const RETAIL_ITEM_NAME_COMPLETIONS = Object.freeze( retailCatalog );
+
+/*
+================
+readRetailCatalog
+================
+*/
+function readRetailCatalog() {
+	try {
+		return JSON.parse( readFileSync( path.join( sourceDataRoot, "itemNameCompletions.json" ), "utf8" ) );
+	} catch ( error ) {
+		if ( error?.code !== "ENOENT" ) throw error;
+		return {};
+	}
+}
 
 // The retail completions plus the port-only rows' text (portItemRows.mjs),
 // which no retail text file has: they are appended as absent symbols.

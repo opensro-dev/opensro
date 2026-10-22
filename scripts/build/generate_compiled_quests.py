@@ -3,7 +3,7 @@
 
 generate_compiled_quests.py - project the compiled quest classes to specs
 
-Reads the committed snapshots in scripts/data/quest and writes the server's
+Reads the snapshots in the operator's source-data (quest/) and writes the server's
 QuestSpec rows for the v1.150 quests whose v1.188 implementation is a C++
 class (apps/server/internal/game/quest/.generated/compiled_quests.json),
 with an audit of every class not yet projected and why.
@@ -29,10 +29,14 @@ missions.
 import argparse
 import json
 import re
+import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import sro_paths  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[2]
-DATA = ROOT / "scripts/data/quest"
+DATA = sro_paths.SOURCE_DATA_ROOT / "quest"
 QUEST_PACKAGE = ROOT / "apps/server/internal/game/quest"
 OUTPUT = QUEST_PACKAGE / ".generated"
 
@@ -815,6 +819,11 @@ def main():
 	parser = argparse.ArgumentParser(description=__doc__.splitlines()[3])
 	parser.add_argument("--check", action="store_true", help="fail when the committed output differs")
 	args = parser.parse_args()
+	# The evidence is the operator's source-data; a checkout without it (CI,
+	# a fresh clone) has nothing to verify against, so --check skips.
+	if args.check and not DATA.is_dir():
+		print("compiled quest catalog not verified: no source-data at " + str(DATA))
+		return
 	specs, audit = build()
 	outputs = {"compiled_quests.json": render(specs), "compiled_quests_audit.json": render(audit)}
 	if args.check:

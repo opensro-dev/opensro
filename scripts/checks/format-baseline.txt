@@ -423,4 +423,3 @@ scripts/test/suites/region.mjs
 scripts/test/suites/world.mjs
 scripts/test/world/authoredWorldRegionResources.test.mjs
 scripts/test/world/worldMapImageReferences.test.mjs
-scripts/tools/localization/englishGaps.mjs

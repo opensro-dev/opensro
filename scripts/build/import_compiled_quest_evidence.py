@@ -7,7 +7,7 @@ Ninety-one v1.150 quests are hand-written C++ classes in SR_GameServer
 (v1.188), not Lua scripts. Each class's initializer (vtable +0xDC) fills
 the CBasicQuest object and allocates its mission objects. This importer
 reads a Binary Ninja HLIL dump of those initializers and writes the
-normalized field writes to scripts/data/quest/compiled-quests-source.json;
+normalized field writes to <source-data>/quest/compiled-quests-source.json;
 generate_compiled_quests.py compiles that snapshot. Neither the build nor
 the server reads the dump or the binary.
 
@@ -30,10 +30,13 @@ import argparse
 import hashlib
 import json
 import re
+import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
-OUTPUT = ROOT / "scripts/data/quest/compiled-quests-source.json"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import sro_paths  # noqa: E402
+
+OUTPUT = sro_paths.SOURCE_DATA_ROOT / "quest" / "compiled-quests-source.json"
 FORMAT = "sro-compiled-quest-evidence-v1"
 
 VALUE = r'(0x[0-9a-f]+|-?\d+(?:\.\d+)?(?:e[-+]?\d+)?f|-?\d+|"[^"]*")'

@@ -49,6 +49,10 @@ export const extractedRoot = path.join( gameRoot, "extracted" );
 export const dataExtractedRoot = path.join( extractedRoot, "Data_extracted" );
 export const mapExtractedRoot = path.join( extractedRoot, "Map_extracted" );
 export const mediaExtractedRoot = path.join( extractedRoot, "Media_extracted" );
+// Inputs the build reads from the operator's own game data but the repository
+// never carries: retail text and its English completions, tables extracted
+// from database backups, and the PK2 directory key. README.txt there lists them.
+export const sourceDataRoot = path.join( gameRoot, "source-data" );
 
 // Native client-owned table root loaded through `%stextdata\\...` format
 // strings. Keep this distinct from `Media_extracted/resinfo`: resinfo may

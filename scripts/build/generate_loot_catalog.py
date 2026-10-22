@@ -3,7 +3,7 @@
 
 generate_loot_catalog.py - compile immutable v1.150 loot and eligibility audit
 
-Only committed normalized evidence is read: the client snapshot, both
+Only normalized evidence from the operator's source-data is read: the client snapshot, both
 backups' drop selection (vsro/isro-drops-source.json) and their reward rules.
 Neither backup is proven retail, so the merge below is an inference (#459):
 ISRO-R is preferred wherever it authors a class row or assigns an item, and
@@ -18,12 +18,16 @@ not represented as recovered rates.
 import argparse
 import copy
 import json
+import sys
 from pathlib import Path
 
 from loot_class_map import class_for
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import sro_paths  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[2]
-SOURCE = ROOT / "scripts/data/loot"
+SOURCE = sro_paths.SOURCE_DATA_ROOT / "loot"
 OUTPUT = ROOT / "apps/server/internal/game/item/loot/.generated"
 INFERRED_RATES = {2: 0.10, 3: 0.02, 4: 0.05, 5: 0.05, 6: 0.01}
 SPECIAL_ITEMS = ["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_" + kind + "_B"
@@ -449,6 +453,11 @@ def main():
 	parser = argparse.ArgumentParser(description=__doc__)
 	parser.add_argument("--check", action="store_true")
 	args = parser.parse_args()
+	# The evidence is the operator's source-data; a checkout without it (CI,
+	# a fresh clone) has nothing to verify against, so --check skips.
+	if args.check and not SOURCE.is_dir():
+		print("Loot catalogs not verified: no source-data at " + str(SOURCE))
+		return
 	for name, value in compile_catalogs().items():
 		data = (json.dumps(value, separators=(",", ":"), ensure_ascii=True) + "\n").encode("utf-8")
 		path = OUTPUT / name

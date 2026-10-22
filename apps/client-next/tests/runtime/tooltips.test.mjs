@@ -27,7 +27,7 @@ import {
 import { completeEnglishTextProjection } from "../../../../scripts/build/shared/englishCompletions.mjs";
 import { assertItemNameCoverage } from "../../../../scripts/build/shared/itemNameCoverage.mjs";
 import { PORT_ITEM_TEXT } from "../../../../scripts/build/shared/portItemRows.mjs";
-import nameCompletions from "../../../../scripts/build/shared/itemNameCompletions.json" with { type: "json" };
+import { RETAIL_ITEM_NAME_COMPLETIONS as nameCompletions } from "../../../../scripts/build/shared/itemTextCompletions.mjs";
 import { readPublishedAssetJsonSync, readPackedAssetBytesSync } from "../../../../scripts/lib/publishedAsset.mjs";
 import { defined } from "../helpers/defined.mjs";
 import { NATIVE_ONLY } from "../helpers/expanded-build.mjs";

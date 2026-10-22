@@ -14,9 +14,13 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "build"))
+sys.path.insert(0, str(ROOT))
 from loot_class_map import class_for
+import sro_paths  # noqa: E402
 
-CLIENT = json.loads((ROOT / "data/loot/client-source.json").read_text(encoding="utf-8"))["items"]
+# The loot snapshots are the operator's source-data, never in the repository.
+LOOT = sro_paths.SOURCE_DATA_ROOT / "loot"
+CLIENT = json.loads((LOOT / "client-source.json").read_text(encoding="utf-8"))["items"] if (LOOT / "client-source.json").is_file() else None
 
 
 # ================
@@ -31,6 +35,7 @@ def row(codename, assigned_class):
 # ================
 # LootClassMapTest
 # ================
+@unittest.skipIf(CLIENT is None, "needs the loot snapshots in source-data")
 class LootClassMapTest(unittest.TestCase):
 	# ================
 	# test_equipment_class_comes_from_the_item
@@ -64,7 +69,7 @@ class LootClassMapTest(unittest.TestCase):
 	# (class 1) at group 0.
 	# ================
 	def test_consumable_index_matches_the_class_table(self):
-		drops = json.loads((ROOT / "data/loot/vsro-drops-source.json").read_text(encoding="utf-8"))
+		drops = json.loads((LOOT / "vsro-drops-source.json").read_text(encoding="utf-8"))
 		level, probabilities = drops["classes"]["Alchemy_MagicStone"]["rows"][0]
 		self.assertEqual((level, [i for i, p in enumerate(probabilities) if p > 0]), (1, [0]))
 		self.assertEqual(class_for("vsro", "Alchemy_MagicStone", row("ITEM_ETC_ARCHEMY_MAGICSTONE_STR_01", 1),

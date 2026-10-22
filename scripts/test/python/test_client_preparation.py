@@ -27,6 +27,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import prepare_client_resources as prepare  # noqa: E402
 import sro_pk2  # noqa: E402
 
+# These archives are built here, so any key reads them back; the retail key
+# stays in the operator's source-data.
+sro_pk2.set_directory_key(b"opensro-test-key")
+
 HEADER_BYTES = 256
 
 

@@ -13,6 +13,10 @@ Names are CP949 bytes. Only ASCII letters are case-folded, the convention of
 every JMX reader here: Python's str.lower() on the raw bytes would also fold
 0xC0-0xDE lead bytes and corrupt Korean names.
 
+The directory key is not in this repository: it is read from the
+operator's own client data, <source-data>/pk2-directory.key (hex), the
+same key their installed client uses to read its archives.
+
 Requires pycryptodome (requirements.txt).
 
 ===========================================================================
@@ -23,8 +27,8 @@ import struct
 from Crypto.Cipher import Blowfish
 
 SIGNATURE = b"JoyMax File Manager!\n"
-# The directory key as the v1.150 client derives it.
-DIRECTORY_KEY = bytes.fromhex("32cedd7cbca8")
+DIRECTORY_KEY_FILE = "pk2-directory.key"
+_directory_key = None
 ROOT_BLOCK = 256
 BLOCK_BYTES = 2560
 ENTRY_BYTES = 128
@@ -42,14 +46,35 @@ def fold_ascii(name):
 	return "".join(chr(ord(c) + 32) if "A" <= c <= "Z" else c for c in name)
 
 
+def set_directory_key(key):
+	"""Use key (bytes) for the directory cipher; tests inject their own."""
+	global _directory_key
+	_directory_key = bytes(key)
+
+
+def directory_key():
+	"""
+	The directory key from the operator's source-data, read once. Raises
+	FileNotFoundError naming the file when it is missing.
+	"""
+	global _directory_key
+	if _directory_key is None:
+		import sro_paths
+		path = sro_paths.SOURCE_DATA_ROOT / DIRECTORY_KEY_FILE
+		if not path.is_file():
+			raise FileNotFoundError(f"PK2 directory key not found: put your client's key (hex) in {path}")
+		_directory_key = bytes.fromhex(path.read_text(encoding="ascii").strip())
+	return _directory_key
+
+
 def directory_cipher():
 	"""
 	The PK2 directory-block cipher. This is the retail archive format, not a
 	security choice: the v1.150 client obfuscates directory blocks with
-	Blowfish in ECB mode under a key every client carries, and reading (or,
+	Blowfish in ECB mode under the key it carries, and reading (or,
 	in tests, writing) the user's own archive must match it byte for byte.
 	"""
-	return Blowfish.new(DIRECTORY_KEY, Blowfish.MODE_ECB)
+	return Blowfish.new(directory_key(), Blowfish.MODE_ECB)
 
 
 def _swap_words(value):

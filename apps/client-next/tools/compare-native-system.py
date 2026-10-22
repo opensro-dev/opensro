@@ -7,8 +7,12 @@ import json
 import sys
 
 root = Path(__file__).resolve().parents[1]
-game = root.parents[2]
-retail = Image.open(root / 'tests/fixtures/native/native-system-retail.png').convert('RGB').crop((19,3,233,215))
+sys.path.insert(0, str(root.parents[1] / 'scripts'))
+import sro_paths  # noqa: E402
+# The retail capture is the operator's source-data, never in the repository.
+reference_png = sro_paths.SOURCE_DATA_ROOT / 'fixtures' / 'native-system-retail.png'
+game = sro_paths.GAME_ROOT
+retail = Image.open(reference_png).convert('RGB').crop((19,3,233,215))
 port = Image.open(sys.argv[1]).convert('RGB').crop((693,344,907,556))
 mask = Image.new('L',(214,212),255)
 for name, x in (('left_up',0),('right_up',174)):
@@ -23,6 +27,6 @@ for y in range(212):
         compared+=1
         p=retail.getpixel((x,y));q=port.getpixel((x,y));error=max(abs(p[i]-q[i]) for i in range(3))
         different+=error!=0;maximum=max(maximum,error)
-result=dict(compared=compared,excludedSourceTransparent=excluded,differingPixels=different,maxChannelError=maximum,referenceSha256=hashlib.sha256((root/'tests/fixtures/native/native-system-retail.png').read_bytes()).hexdigest())
+result=dict(compared=compared,excludedSourceTransparent=excluded,differingPixels=different,maxChannelError=maximum,referenceSha256=hashlib.sha256(reference_png.read_bytes()).hexdigest())
 print(json.dumps(result))
 if excluded!=69 or different:raise SystemExit(1)

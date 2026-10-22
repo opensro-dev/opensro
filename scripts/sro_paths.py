@@ -92,6 +92,10 @@ def _resolve_game_root() -> Path:
 
 GAME_ROOT = _resolve_game_root()
 EXTRACTED_ROOT = GAME_ROOT / "extracted"
+# Inputs read from the operator's own game data that the repository never
+# carries: retail text, tables extracted from database backups and the PK2
+# directory key (scripts/build/world/paths.mjs sourceDataRoot is the same rule).
+SOURCE_DATA_ROOT = GAME_ROOT / "source-data"
 def _resolve_generated_root() -> Path:
 	"""SRO_GENERATED_ROOT when set (absolute only), else the main checkout's."""
 	override = os.environ.get("SRO_GENERATED_ROOT")

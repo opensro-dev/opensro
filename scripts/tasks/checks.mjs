@@ -20,7 +20,7 @@ const CONSOLE_PACKAGES = [ "@sro/server-observatory", "@sro/server-console-auth"
 export const CHECK_TASKS = [
 	commandTask( {
 		name: "check:loot-catalog",
-		description: "Verify generated loot against committed versioned evidence",
+		description: "Verify generated loot against the source-data evidence (skips without it)",
 		kind: "check",
 		ci: true,
 		requires: [],
@@ -30,7 +30,7 @@ export const CHECK_TASKS = [
 	} ),
 	commandTask( {
 		name: "check:compiled-quests",
-		description: "Verify the compiled quest catalog against its committed evidence",
+		description: "Verify the compiled quest catalog against its source-data evidence (skips without it)",
 		kind: "check",
 		ci: true,
 		requires: [],

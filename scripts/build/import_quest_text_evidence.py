@@ -11,8 +11,8 @@ Where the popup advertises no reward, the newer server's reward rows
 (refqusetreward / refquestrewarditems) stand in, as they did for the
 script-backed catalog (QNO_RM_OLDWOMAN_1).
 
-Writes scripts/data/quest/v150-text-source.json and
-scripts/data/quest/sql-rewards-source.json for the quests named by
+Writes <source-data>/quest/v150-text-source.json and
+<source-data>/quest/sql-rewards-source.json for the quests named by
 compiled-quests-source.json. The build never reads the media or the
 server backup.
 
@@ -23,10 +23,13 @@ import argparse
 import hashlib
 import json
 import re
+import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
-DATA = ROOT / "scripts/data/quest"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import sro_paths  # noqa: E402
+
+DATA = sro_paths.SOURCE_DATA_ROOT / "quest"
 TEXT_FORMAT = "sro-quest-v150-text-v1"
 SQL_FORMAT = "sro-quest-sql-rewards-v2"
 

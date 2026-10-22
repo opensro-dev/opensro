@@ -8,7 +8,8 @@ literal "0" English column (8) next to authored Korean (2). The retail client
 shows those cells empty; for example, all 15 Roc Mountain region banners pop
 up blank. This is a documented product localization layer, NOT native parity.
 
-- Data lives in englishCompletions/<textfile>.json as
+- Data lives in <source-data>/english-completions/<textfile>.json (the
+  operator's own data, never in the repository) as
   { key: { english, basis, source } }. `source` is the exact retail Korean
   the English translates. If Joymax's Korean changes, the build fails as
   stale instead of silently showing an outdated translation.
@@ -25,6 +26,7 @@ up blank. This is a documented product localization layer, NOT native parity.
 
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
+import { sourceDataRoot } from "../world/paths.mjs";
 import { correctedEnglish } from "./englishCorrections.mjs";
 
 export const ENGLISH_COMPLETION_FILES = Object.freeze( [
@@ -35,7 +37,7 @@ export const ENGLISH_COMPLETION_FILES = Object.freeze( [
 	"textquest.txt"
 ] );
 
-const CATALOG_DIR = path.join( import.meta.dirname, "englishCompletions" );
+const CATALOG_DIR = path.join( sourceDataRoot, "english-completions" );
 const PLACEHOLDER = /^(?:-|xxx|null|0)?$/i;
 
 /*
@@ -205,8 +207,9 @@ export function assertEnglishCompletionCoverage( fileName, rows, covered = ( _ke
 	}
 	if ( missing.length ) {
 		throw new Error(
-			`Untranslated ${fileName} rows (${missing.length}); add them to scripts/build/shared/englishCompletions/` +
-				`${fileName.replace( /\.txt$/, ".json" )} (scripts/tools/localization/englishGaps.mjs lists them):\n` +
+			`Untranslated ${fileName} rows (${missing.length}); add them to ` +
+				`${path.join( CATALOG_DIR, fileName.replace( /\.txt$/, ".json" ) )} in your source-data folder ` +
+				`(scripts/tools/localization/englishGaps.mjs lists them):\n` +
 				missing.slice( 0, 40 ).join( "\n" )
 		);
 	}
