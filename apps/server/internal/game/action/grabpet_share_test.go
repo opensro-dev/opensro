@@ -40,9 +40,9 @@ func topDamagerPetFixture(t *testing.T, options uint8) (*Runtime, *enterworld.Ch
 	picker := testCharacter()
 	refs := testCosSource(testItems())
 	refs.characters["PET"] = &enterworld.CharacterRef{Codename: "PET", RefObjID: 9, TidWord: 0x21c6, RunSpeed: 100}
-	rt, _, _, peer, registry := sharedPickupFixtureWith(t, picker, refs)
+	rt, _, _, peer, _ := sharedPickupFixtureWith(t, picker, refs)
 	if options != party.PartyOptionItemShare {
-		registry = party.NewRegistry()
+		registry := party.NewRegistry()
 		if _, refusal := registry.Form(testDivision, party.Member{MemberID: enterworld.ObjectIDForCharacter(picker), Name: picker.Name},
 			party.Member{MemberID: enterworld.ObjectIDForCharacter(peer), Name: peer.Name}, options); refusal != "" {
 			t.Fatal(refusal)
