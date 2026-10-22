@@ -94,16 +94,30 @@ test( "a touch tap inspects, a hold uses, a drag drags, and mouse hover is uncha
 		await settle();
 		assert.equal( await lastHover(), null, "a tap on the world releases the inspection" );
 
-		// A tap on another slot moves the inspection there.
+		// A tap lifts a carry slot's item, so the next tap on another slot is
+		// its drop: the carry consumes that press and nothing is inspected.
+		// A further tap there inspects it.
+		await reset();
 		await page.touchscreen.tap( 70, 50 );
+		await page.touchscreen.tap( 310, 50 );
+		await settle();
+		seen = await events();
+		assert.equal(
+			seen.filter( e => e.kind === "drag-end" && e.id === "slot:13" ).length,
+			1,
+			"the second tap drops the lifted item"
+		);
+		assert.equal( await lastHover(), null, "a drop inspects nothing" );
 		await page.touchscreen.tap( 310, 50 );
 		await settle();
 		assert.equal( await lastHover(), "slot:14", "the inspection follows the next tapped slot" );
 
-		// A scroll releases it.
+		// A scroll releases it; the lifted item stays on the cursor until a
+		// world tap drops it.
 		await page.mouse.wheel( 0, 40 );
 		await settle();
 		assert.equal( await lastHover(), null, "a scroll releases the inspection" );
+		await page.touchscreen.tap( 700, 400 );
 
 		// A hold still uses, and inspects nothing.
 		await reset();

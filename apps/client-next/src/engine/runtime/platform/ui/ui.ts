@@ -725,7 +725,10 @@ export function createUiBridge(
 		if ( inspected !== null ) {
 			const held = controls.get( inspected )?.value;
 			if ( held?.inspect && !held.disabled ) return;
+			// A finger has no hover to fall back to: the last touch point would
+			// re-report the slot that just lost its inspection.
 			releaseInspection();
+			return;
 		}
 		if ( !pointerAt || drag ) return;
 		const slot = current( document.elementFromPoint( pointerAt[0], pointerAt[1] ) );
@@ -997,7 +1000,9 @@ export function createUiBridge(
 				}
 				slot.value = control;
 			}
-			if ( hitLayoutChanged ) syncHover();
+			// A held inspection ends when its control loses the flag (an emptied
+			// slot, the option turned off), which moves no hit box.
+			if ( hitLayoutChanged || inspected !== null ) syncHover();
 			const request = state.focusRequest;
 			if ( request && request.revision !== focusRevision ) {
 				if ( request.id === null ) {
