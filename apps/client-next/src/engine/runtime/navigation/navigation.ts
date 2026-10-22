@@ -34,8 +34,20 @@ export function createNavigationStream(
 		| { phase: "loading"; id: number; region: number; catalog: boolean; }
 		| { phase: "admitting" | "ready"; region: number; }
 		| { phase: "failed"; region: number; error: string; } = { phase: "idle" };
-	let disposed = false, requestId = 0, deadline = 0;
+	let disposed = false, requestId = 0, deadline = 0, progressBytes = -1;
 	const recovery = createAssetRecovery();
+	/*
+	================
+	loadProgressBytes
+
+	Stream bytes delivered so far (the loading detail's activity counter).
+	-1 while the owner has published none.
+	================
+	*/
+	function loadProgressBytes(): number {
+		const progress = assets.progress?.();
+		return progress ? (progress.bytesRead ?? progress.bytesReceived) : -1;
+	}
 	/*
 	================
 	cancel
@@ -85,8 +97,17 @@ export function createNavigationStream(
 				if ( state.phase === "loading" ) {
 					const result = assets.take( state.id );
 					if ( !result ) {
-						// No answer within the load deadline is a transport symptom (the
-						// loader's own no-progress retries settle earlier), so it retries.
+						// Byte progress slides the load deadline (GH #1244): a
+						// slow link that keeps delivering is still loading,
+						// not stalled. Only a full window without a single
+						// new byte may expire - and that answer is a transport
+						// symptom (the loader's own no-progress retries settle
+						// earlier), so it retries.
+						const bytes = loadProgressBytes();
+						if ( bytes > progressBytes ) {
+							progressBytes = bytes;
+							deadline = now + LOAD_TIMEOUT_MS;
+						}
 						if ( now >= deadline ) {
 							throw assetFailure( "Navigation loading timed out for region " + state.region, true );
 						}
@@ -128,6 +149,7 @@ export function createNavigationStream(
 				}
 				const url = new URL( path, origin );
 				if ( !isCatalog ) url.hash = String( pose.regionId );
+				progressBytes = loadProgressBytes();
 				deadline = now + LOAD_TIMEOUT_MS;
 				state = {
 					phase: "loading",

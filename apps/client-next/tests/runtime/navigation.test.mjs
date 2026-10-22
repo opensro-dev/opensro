@@ -412,6 +412,45 @@ test("an unanswered navigation load retries, an unanswered admission does not", 
 	stream.dispose();
 });
 
+test("a navigation load that keeps delivering bytes is slow, not timed out", () => {
+	let id = 0, bytesRead = 0;
+	const sent = [], answers = new Map();
+	const assets = {
+		available: () => 4,
+		request: () => ++id,
+		cancel() {},
+		take: key => answers.get( key ) ?? null,
+		progress: () => ({
+			bytesRead,
+			bytesReceived: bytesRead,
+			bytesPerSecond: 40000,
+			filesReady: 0,
+			filesActive: 1,
+			cacheHits: 0,
+			currentFile: ""
+		})
+	};
+	const stream = createNavigationStream( assets, command => sent.push( command ), "https://fixture.test" );
+	const dungeon = { ...pose, regionId: 0x8001 },
+		step = now => stream.step( dungeon, undefined, undefined, undefined, now );
+	step( 0 );
+	// A 40 KB/s link keeps delivering: five minutes with no answer from
+	// the worker, but the byte count grows at every step, so the load
+	// lives and is never re-requested (GH #1244).
+	for ( let now = 10000; now <= 300000; now += 10000 ) {
+		bytesRead += 400000;
+		step( now );
+		assert.equal( stream.error(), null, "still loading at " + now );
+		assert.equal( stream.phase(), "loading" );
+	}
+	assert.equal( id, 1, "no re-request while bytes flow" );
+	// The bytes stop: one full deadline window of silence expires it.
+	step( 300000 + 60000 );
+	assert.match( stream.error(), /loading timed out/ );
+	assert.equal( stream.reconnecting(), true );
+	stream.dispose();
+});
+
 test("navigation permanent failures ignore automatic recovery", () => {
 	let id = 0;
 	const assets = {

@@ -1022,8 +1022,17 @@
 				"available",
 				"request",
 				"take",
-				"cancel"
+				"cancel",
+				"progress"
 			]
+		},
+		{
+			"consumer": "src/engine/runtime/navigation/navigation.ts",
+			"provider": "src/engine/runtime/world/world.ts",
+			"functions": [
+				"progress"
+			],
+			"reason": "GH #1244: the execution graph unions same-named owner methods; navigation reads only the AssetOwner's progress to slide its load deadline, never the world scene's."
 		},
 		{
 			"consumer": "src/engine/runtime/navigation/navigation.ts",
