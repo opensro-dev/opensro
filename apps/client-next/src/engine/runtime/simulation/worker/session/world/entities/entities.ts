@@ -102,6 +102,10 @@ export function createEntities(
 			merchantBranches?: EntityState["merchantBranches"];
 		}>();
 	let receivedAt = 0;
+	// Simulation time the oldest event of the unpublished queue arrived;
+	// take() stamps the span on the batch so the presentation can drop
+	// one-shot events that outlived their natural lifetime in the queue.
+	let queuedAt = 0, queueStamped = false, journalNow = 0;
 	// The monster whose LIFE dead frame came last: the drops that follow it
 	// directly are its own (the server's per-victim publication order).
 	let dropSource = 0;
@@ -182,6 +186,10 @@ export function createEntities(
 		if ( degradations.length < MAX_PENDING_DEGRADATIONS ) degradations.push( degradation );
 	}
 	function append( event: WorldEvent, size = batchCost( event ) ) {
+		if ( !queueStamped ) {
+			queuedAt = journalNow;
+			queueStamped = true;
+		}
 		if ( events.length + (staged?.length ?? 0) >= 8192 || bytes + stagedBytes + size > journalByteLimit ) {
 			// Failure-only census distinguishes a stalled consumer from an
 			// unsupported packet stream without adding a per-frame telemetry walk.
@@ -586,6 +594,7 @@ export function createEntities(
 			staged = null;
 			stagedBytes = 0;
 			events = [];
+			queueStamped = false;
 			pendingGameplay = undefined;
 			sharedArrays = new WeakSet();
 			inflight = null;
@@ -758,6 +767,7 @@ export function createEntities(
 		================
 		*/
 		receive( frame: WireFrame, now = 0 ) {
+			journalNow = now;
 			// Port-only Resolve state; exact, bounded packet independent of native animations.
 			if ( frame.opcode === 0x3fb5 ) {
 				const p = frame.payload;
@@ -1466,7 +1476,12 @@ export function createEntities(
 			if ( inflight || !events.length ) {
 				return null;
 			}
-			inflight = { sequence: ++sequence, events };
+			inflight = {
+				sequence: ++sequence,
+				events,
+				spanMs: queueStamped ? Math.max( 0, journalNow - queuedAt ) : 0
+			};
+			queueStamped = false;
 			inflightAt = performance.now();
 			events = [];
 			pendingPoses.clear();
@@ -1494,6 +1509,7 @@ export function createEntities(
 		================
 		*/
 		step( now: number ) {
+			journalNow = now;
 			// 86DB70/858310: claimant must be a live CICharactor (state-0 bit in +644).
 			for ( const entity of entities.values() ) {
 				if ( entity.groundItem?.claimantGid ) {

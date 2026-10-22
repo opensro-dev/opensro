@@ -229,4 +229,9 @@ Sequence establishes publication order independently of renderer frames.
 export interface WorldBatch {
 	readonly sequence: number;
 	readonly events: readonly WorldEvent[];
+	// Simulation milliseconds between the oldest queued event and this
+	// publication. A live batch spans one publication interval; a long span
+	// means the main thread could not consume (hidden or stalled tab), so
+	// the batch's one-shot presentation is older than its natural lifetime.
+	readonly spanMs?: number;
 }

@@ -386,3 +386,24 @@ test("fresh input cannot carry residual correction across an unadmitted corner",
 	assert.equal( shown.x, target.x );
 	assert.equal( shown.z, target.z, "unsafe diagonal resets instead of cutting the corner" );
 });
+
+test("a long unseen gap snaps a sampled actor to its authoritative pose instead of gliding", () => {
+	const p = createPosePresentation();
+	p.origin( 0 );
+	sample( p, 1, 0 );
+	p.pose( 1, START, 0 );
+	const target = { ...START, x: START.x - 1.6 };
+	sample( p, 2, 600000 );
+	// No frame was drawn for ten minutes (hidden or frozen tab): the return
+	// frame shows the actor where it is, not gliding in from where it was.
+	assert.equal( p.pose( 1, target, 600 ).x, target.x );
+	assert.equal( p.pose( 1, target, 600.016 ).x, target.x );
+});
+
+test("a long unseen gap snaps an untimed actor instead of interpolating the unseen travel", () => {
+	const p = createPosePresentation();
+	p.pose( 1, START, 0 );
+	p.pose( 1, { ...START, x: 98.4 }, .016 );
+	assert.equal( p.pose( 1, { ...START, x: 70 }, 600 ).x, 70 );
+	assert.equal( p.pose( 1, { ...START, x: 70 }, 600.016 ).x, 70 );
+});

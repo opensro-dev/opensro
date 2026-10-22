@@ -101,6 +101,21 @@ test("a walking path shared by many queued states counts once per batch", () => 
 	assert.equal( owner.take().events.length, STATES );
 });
 
+test("a batch stamps how long its oldest event waited unpublished", () => {
+	const owner = createEntities(), shared = walkingPath();
+	owner.publish( { kind: "state", entity: walker( shared, 1 ) } );
+	// The consumer stalls for a minute of simulation time (a hidden or
+	// frozen tab): the batch must say so, so the presentation can drop
+	// one-shot work that outlived its natural lifetime in the queue.
+	owner.step( 60000 );
+	const batch = owner.take();
+	assert.equal( batch.spanMs, 60000 );
+	owner.ack( batch.sequence );
+	// A promptly published batch spans nothing.
+	owner.publish( { kind: "state", entity: walker( shared, 2 ) } );
+	assert.equal( owner.take().spanMs, 0 );
+});
+
 test("distinct paths still count in full and still hit the budget", () => {
 	const owner = createEntities();
 	assert.throws( () => {

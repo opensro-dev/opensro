@@ -37,6 +37,11 @@ import { displaceRegionXZ, sameCoordinateSpace, worldDelta } from "@/engine/foun
 const TICK_SECONDS = SIMULATION_STEP_MS / 1000;
 const DISCONTINUITY_DISTANCE = 192;
 const MAX_SAMPLE_GAP_SECONDS = 0.25;
+// Past this frame gap the interval was never drawn (a hidden or frozen
+// tab, not a visible hitch): snap to the authoritative pose on return
+// instead of gliding the unseen travel. Visible stalls stay below it and
+// keep the tested recovery above.
+const MAX_UNSEEN_GAP_SECONDS = 2;
 const MAX_EXTRAPOLATION_SECONDS = 0.1;
 const CORRECTION_FREQUENCY = 30;
 const MAX_RECOVERY_STEP_SECONDS = 0.033;
@@ -497,6 +502,9 @@ export function createPosePresentation() {
 	let inputs: ReadonlyMap<number, SampleInput> = new Map();
 	// Frame-clock milliseconds of simulation time zero (ClockSample.originMs).
 	let originMs: number | null = null;
+	// Frame-clock seconds of the last pose served; the return frame after a
+	// long unseen gap snaps instead of recovering (MAX_UNSEEN_GAP_SECONDS).
+	let lastPoseAt: number | undefined;
 
 	/*
 	================
@@ -854,6 +862,11 @@ export function createPosePresentation() {
 		================
 		*/
 		pose( gid: number, target: Pose, now: number, settledTranslation = false ): Pose {
+			if ( lastPoseAt !== undefined && now - lastPoseAt > MAX_UNSEEN_GAP_SECONDS ) {
+				tracks.clear();
+				rows.clear();
+			}
+			if ( lastPoseAt === undefined || now > lastPoseAt ) lastPoseAt = now;
 			const input = inputs.get( gid );
 			if ( input && originMs !== null && !settledTranslation ) {
 				return sampledPose( gid, input, target, now );
@@ -969,6 +982,7 @@ export function createPosePresentation() {
 			rows.clear();
 			tracks.clear();
 			inputs = new Map();
+			lastPoseAt = undefined;
 		}
 	};
 }
