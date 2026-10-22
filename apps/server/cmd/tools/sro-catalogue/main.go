@@ -208,12 +208,20 @@ func shardShops(dir string, items enterworld.ItemRefSource) (*commerce.Catalog, 
 ================
 shardItems
 
-The item references as the GameWorld holds them: SRO_TRADE_TIERS prices
-trade goods at TradeGoodsPriceFactor times their v1.150 price.
+The item references as the GameWorld holds them: SRO_STACK_SIZES raises
+the stack caps (port-only), and SRO_TRADE_TIERS prices trade goods at
+TradeGoodsPriceFactor times their v1.150 price.
 ================
 */
 func shardItems(dir string) (*enterworld.TextdataItems, error) {
 	items := enterworld.NewTextdataItems(dir)
+	sizes, err := enterworld.StackSizesFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := items.ApplyStackSizes(sizes); err != nil {
+		return nil, err
+	}
 	if action.TradeTiersFromEnv() {
 		if _, err := items.ApplyTradeGoodsPriceFactor(enterworld.TradeGoodsPriceFactor); err != nil {
 			return nil, err

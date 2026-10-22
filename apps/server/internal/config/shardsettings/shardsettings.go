@@ -197,8 +197,9 @@ var Settings = []Setting{
 	// authored row.
 	{Env: "SRO_BETA_UNIQUE_RESPAWN", NomadVar: "beta_unique_respawn", Default: "on"},
 	// Owner, 2026-10-13 (F7): Lucky Powder stacks to 500; 2026-10-14:
-	// arrows and bolts stack to 2500. "off" is native.
-	{Env: "SRO_STACK_SIZES", NomadVar: "stack_sizes", Default: "arrow=2500,bolt=2500,luckypowder=500", Source: Built},
+	// arrows and bolts stack to 2500. "off" is native. The catalogue
+	// publishes the caps the shard runs, so it reads the setting too.
+	{Env: "SRO_STACK_SIZES", NomadVar: "stack_sizes", Default: "arrow=2500,bolt=2500,luckypowder=500", Catalogue: true, Source: Built},
 	// Owner, 2026-10-17: Qin-Shi Emperor Tomb monsters, skills and walk-in
 	// portals (port-only, not native: v1.150 shipped Tomb visual assets
 	// before the Legend IV server tables); opened in the shard defaults

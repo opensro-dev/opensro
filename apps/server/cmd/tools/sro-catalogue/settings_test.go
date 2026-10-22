@@ -11,7 +11,9 @@ package main
 import (
 	"testing"
 
+	"opensro.online/server/internal/catalogue"
 	"opensro.online/server/internal/config/shardsettings"
+	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/progression"
@@ -75,6 +77,73 @@ func TestUnsetSettingsTakeTheDeploymentDefaults(t *testing.T) {
 	}
 	if rates, _ := alchemy.ReinforceRatesFromEnv(); rates == nil {
 		t.Fatal("the alchemy rates stayed native")
+	}
+}
+
+/*
+================
+TestStackSizesPublishTheShardsCaps
+
+GH #891: with SRO_STACK_SIZES unset the catalogue takes the deployment
+default, so the published maxStack rows are the caps the shard runs. An
+explicit value still wins, and "off" publishes the native caps - the
+GameWorld's own unset staying native is the #838 contract, unchanged.
+================
+*/
+func TestStackSizesPublishTheShardsCaps(t *testing.T) {
+	dir := gamedatatest.TextdataDir(t)
+	native := enterworld.NewTextdataItems(dir)
+	nativeCap := func(codename string) int64 {
+		ref, ok := native.ItemRefByCodename(codename)
+		if !ok {
+			t.Fatalf("no %s reference", codename)
+		}
+		return int64(ref.NativeFields.Get("maxStack"))
+	}
+	for _, c := range []struct {
+		name    string
+		setting string
+		arrow   int64
+		powder  int64
+		elixir  int64
+	}{
+		{"unset takes the deployment default", "", 2500, 500, nativeCap("ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A")},
+		{"explicit off stays native", "off",
+			nativeCap("ITEM_ETC_AMMO_ARROW_01"), nativeCap("ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09"),
+			nativeCap("ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A")},
+		{"explicit sizes win", "elixir=50",
+			nativeCap("ITEM_ETC_AMMO_ARROW_01"), nativeCap("ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09"), 50},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			for _, s := range shardsettings.Settings {
+				if s.Catalogue {
+					t.Setenv(s.Env, "")
+				}
+			}
+			t.Setenv(enterworld.EnvStackSizes, c.setting)
+			if err := resolveShardSettings(); err != nil {
+				t.Fatal(err)
+			}
+			items, err := shardItems(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			published := map[string]int64{}
+			for _, item := range catalogue.BuildItems(catalogue.ItemSource{
+				Refs: itemRefs(items), Usable: action.ItemUseSupported,
+			}) {
+				published[item.Codename] = item.MaxStack
+			}
+			if got := published["ITEM_ETC_AMMO_ARROW_01"]; got != c.arrow {
+				t.Errorf("arrow maxStack = %d, want %d", got, c.arrow)
+			}
+			if got := published["ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09"]; got != c.powder {
+				t.Errorf("lucky powder maxStack = %d, want %d", got, c.powder)
+			}
+			if got := published["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A"]; got != c.elixir {
+				t.Errorf("elixir maxStack = %d, want %d", got, c.elixir)
+			}
+		})
 	}
 }
 
