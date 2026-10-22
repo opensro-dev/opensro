@@ -382,18 +382,7 @@ func newGameplayPlane(
 		}
 		return out
 	}
-	items.CanPickupOwnedDrop = func(divisionID, characterName string, ownerJID uint32) bool {
-		snapshot, ok := parties.Registry().PartyOf(divisionID, characterName)
-		if !ok || snapshot.OptionBits&party.PartyOptionItemShare == 0 {
-			return false
-		}
-		for _, member := range snapshot.Members {
-			if member.MemberID == ownerJID {
-				return true
-			}
-		}
-		return false
-	}
+	items.CanPickupOwnedDrop = parties.Registry().CanPickupOwnedDrop
 	guildInvites := guild.NewInviteRuntime(deps, presence)
 	guildInvites.Unions = unions
 	mentorInvites := mentor.NewInviteRuntime(deps, presence)

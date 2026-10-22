@@ -61,3 +61,34 @@ func TestIndividualLootHasNoPartyRecipient(t *testing.T) {
 		t.Fatal("individual loot entered shared rotation")
 	}
 }
+
+/*
+================
+TestOwnedDropPickupNeedsAnItemShareParty
+
+A member may take another member's reserved drop only while the party
+shares items; a stranger's drop and a party without item share refuse.
+================
+*/
+func TestOwnedDropPickupNeedsAnItemShareParty(t *testing.T) {
+	r := NewRegistry()
+	if _, refusal := r.Form(testDivision, testMember(1), testMember(2), PartyOptionItemShare); refusal != "" {
+		t.Fatal(refusal)
+	}
+	if !r.CanPickupOwnedDrop(testDivision, testMember(1).Name, testMember(2).MemberID) {
+		t.Fatal("an item-share member's drop refused")
+	}
+	if r.CanPickupOwnedDrop(testDivision, testMember(1).Name, testMember(3).MemberID) {
+		t.Fatal("a non-member's drop granted")
+	}
+	if r.CanPickupOwnedDrop(testDivision, testMember(3).Name, testMember(1).MemberID) {
+		t.Fatal("a partyless character granted a member's drop")
+	}
+	plain := NewRegistry()
+	if _, refusal := plain.Form(testDivision, testMember(1), testMember(2), 0); refusal != "" {
+		t.Fatal(refusal)
+	}
+	if plain.CanPickupOwnedDrop(testDivision, testMember(1).Name, testMember(2).MemberID) {
+		t.Fatal("a party without item share granted a member's drop")
+	}
+}
