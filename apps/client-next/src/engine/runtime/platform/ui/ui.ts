@@ -16,13 +16,9 @@ focus from a disabled element and never returns it.
 */
 import type { UiBridge, UiControl, UiEvent, UiSemantics } from "@/engine/contracts/ui";
 import { createLayoutKeys } from "@/engine/foundation/ui/layout-keys";
+import { configureCredentialHints } from "./credential-hints";
 import { createDragShield } from "./drag-shield";
-// The title screen's login edits, the only controls a password manager may
-// save or fill. Value is the autocomplete token that identifies the field.
-const LOGIN_AUTOCOMPLETE: Readonly<Record<string, string>> = {
-	account: "username",
-	password: "current-password"
-};
+import { createTouchInspection } from "./touch-inspect";
 const INPUT_FONT_PIXELS = 12;
 const TOUCH_HOLD_MS = 500;
 const TOUCH_HOLD_SLOP_PIXELS = 8;
@@ -30,27 +26,6 @@ const TOUCH_CLICK_HISTORY = 32;
 // A browser that sends both the Mac Ctrl+click contextmenu and a click sends
 // them together; a later Ctrl+click on the slot is a new gesture.
 const MAC_CTRL_CLICK_WINDOW_MS = 1000;
-/*
-================
-configureCredentialHints
-
-Password managers ignore autocomplete="off", so every other edit (stat-point
-inputs and the like) carries the vendor opt-outs for 1Password, LastPass,
-Bitwarden and Dashlane; otherwise clicking one offers to save a login.
-================
-*/
-function configureCredentialHints( element: HTMLInputElement, id: string ): void {
-	const token = LOGIN_AUTOCOMPLETE[id];
-	if ( token ) {
-		element.autocomplete = token as AutoFill;
-		return;
-	}
-	element.autocomplete = "off";
-	element.setAttribute( "data-1p-ignore", "true" );
-	element.setAttribute( "data-lpignore", "true" );
-	element.setAttribute( "data-bwignore", "true" );
-	element.setAttribute( "data-form-type", "other" );
-}
 /*
 ================
 createUiBridge
@@ -569,13 +544,9 @@ export function createUiBridge(
 			current( document.elementFromPoint( event.clientX, event.clientY ) )?.element !== press.element
 		) return;
 		activatePrimary( press.element, event, true );
-		// Port-only (#1243): the tap also inspects an item or skill slot. Its
-		// action above is unchanged; only the hover outlives the lifted finger.
+		// Port-only (#1243): the tap also inspects; its action above is unchanged.
 		const tapped = current( press.element );
-		if ( tapped?.value.inspect && !tapped.value.disabled ) {
-			inspected = tapped.value.id;
-			if ( reportedHover !== inspected ) reportHover( inspected );
-		}
+		if ( tapped?.value.inspect && !tapped.value.disabled ) touchInspection.inspect( tapped.value.id );
 	}, { signal: lifetime.signal } );
 	/*
 	================
@@ -683,34 +654,16 @@ export function createUiBridge(
 		reportedHover = id;
 		emit( { kind: "hover", id } );
 	}
-	// Port-only (#1243): the item or skill slot a touch tap is inspecting. Its
-	// hover is held after the finger lifts, until the next touch, a scroll,
-	// or the control losing its inspect flag. Mouse hover never sets it.
-	let inspected: string | null = null;
-	/*
-	================
-	releaseInspection
-
-	End a touch inspection and report the hover that replaces it.
-	================
-	*/
-	function releaseInspection( next: string | null = null ) {
-		if ( inspected === null ) return;
-		inspected = null;
-		if ( reportedHover !== next ) reportHover( next );
-	}
-	window.addEventListener( "pointerdown", event => {
-		if ( event.pointerType !== "touch" || inspected === null ) return;
-		const slot = current( event.target );
-		releaseInspection( slot && (!slot.value.disabled || slot.value.helpText) ? slot.value.id : null );
-	}, { capture: true, signal: lifetime.signal } );
-	for ( const name of [ "wheel", "scroll" ] as const ) {
-		window.addEventListener( name, () => releaseInspection(), {
-			capture: true,
-			passive: true,
-			signal: lifetime.signal
-		} );
-	}
+	// Port-only (#1243): a touch tap's held hover. Registered here so its
+	// capture pointerdown runs after the carry and touch-hold ones above.
+	const touchInspection = createTouchInspection( {
+		signal: lifetime.signal,
+		hoverAt: target => hoverId( current( target ) ),
+		inspectable: id => !!controls.get( id )?.value.inspect && !controls.get( id )?.value.disabled,
+		report: id => {
+			if ( id !== reportedHover ) reportHover( id );
+		}
+	} );
 	window.addEventListener( "pointermove", event => {
 		pointerAt = [ event.clientX, event.clientY ];
 	}, { signal: lifetime.signal, passive: true } );
@@ -722,33 +675,30 @@ export function createUiBridge(
 	================
 	*/
 	function syncHover() {
-		if ( inspected !== null ) {
-			const held = controls.get( inspected )?.value;
-			if ( held?.inspect && !held.disabled ) return;
-			// A finger has no hover to fall back to: the last touch point would
-			// re-report the slot that just lost its inspection.
-			releaseInspection();
-			return;
-		}
-		if ( !pointerAt || drag ) return;
-		const slot = current( document.elementFromPoint( pointerAt[0], pointerAt[1] ) );
-		const id = slot && (!slot.value.disabled || slot.value.helpText) ? slot.value.id : null;
+		if ( touchInspection.sync() || !pointerAt || drag ) return;
+		const id = hoverId( current( document.elementFromPoint( pointerAt[0], pointerAt[1] ) ) );
 		if ( id !== reportedHover ) reportHover( id );
 	}
+	/*
+	================
+	hoverId
+
+	The hover a pointer on this control reports: a disabled control still
+	reports one when it has help text to show.
+	================
+	*/
+	function hoverId( slot: ReturnType<typeof current> ) {
+		return slot && (!slot.value.disabled || slot.value.helpText) ? slot.value.id : null;
+	}
 	root.addEventListener( "pointerover", event => {
-		if ( event.pointerType === "touch" && inspected !== null ) return;
+		if ( touchInspection.holds( event ) ) return;
 		const slot = current( event.target );
-		if ( slot !== current( event.relatedTarget ) ) {
-			reportHover( slot && (!slot.value.disabled || slot.value.helpText) ? slot.value.id : null );
-		}
+		if ( slot !== current( event.relatedTarget ) ) reportHover( hoverId( slot ) );
 	}, { signal: lifetime.signal } );
 	root.addEventListener( "pointerout", event => {
 		const next = current( event.relatedTarget );
 		if ( current( event.target ) !== next ) {
-			// A lifting finger leaves its slot; an inspection outlives that.
-			if ( !(event.pointerType === "touch" && inspected !== null) ) {
-				reportHover( next && (!next.value.disabled || next.value.helpText) ? next.value.id : null );
-			}
+			if ( !touchInspection.holds( event ) ) reportHover( hoverId( next ) );
 			emit( { kind: "press", id: null } );
 		}
 	}, { signal: lifetime.signal } );
@@ -797,7 +747,7 @@ export function createUiBridge(
 		if ( !slot ) return;
 		if ( rightPressed?.element === slot.element ) rightPressed = null;
 		if ( touchHold.press?.element === slot.element ) cancelTouchHold();
-		if ( inspected === id ) releaseInspection();
+		touchInspection.retire( id );
 		if ( carry?.id === id ) cancelCarry();
 		if ( drag?.id === id ) {
 			if ( slot.element.hasPointerCapture( drag.pointer ) ) slot.element.releasePointerCapture( drag.pointer );
@@ -1000,9 +950,8 @@ export function createUiBridge(
 				}
 				slot.value = control;
 			}
-			// A held inspection ends when its control loses the flag (an emptied
-			// slot, the option turned off), which moves no hit box.
-			if ( hitLayoutChanged || inspected !== null ) syncHover();
+			// A held inspection ends when its control loses the flag, which moves no hit box.
+			if ( hitLayoutChanged || touchInspection.active ) syncHover();
 			const request = state.focusRequest;
 			if ( request && request.revision !== focusRevision ) {
 				if ( request.id === null ) {

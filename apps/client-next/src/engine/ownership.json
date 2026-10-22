@@ -188,7 +188,9 @@
   },
   "internals": {
     "src/engine/runtime/platform/telemetry.ts": "src/engine/runtime/platform/platform.ts",
+    "src/engine/runtime/platform/ui/credential-hints.ts": "src/engine/runtime/platform/ui/ui.ts",
     "src/engine/runtime/platform/ui/drag-shield.ts": "src/engine/runtime/platform/ui/ui.ts",
+    "src/engine/runtime/platform/ui/touch-inspect.ts": "src/engine/runtime/platform/ui/ui.ts",
     "src/engine/runtime/runtime-errors.ts": "src/engine/runtime/runtime.ts",
     "src/engine/runtime/frame-probes.ts": "src/engine/runtime/runtime.ts",
     "src/engine/runtime/renderer/device/pipelines.ts": "src/engine/runtime/renderer/device/device.ts",
