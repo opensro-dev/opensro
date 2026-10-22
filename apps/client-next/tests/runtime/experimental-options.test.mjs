@@ -16,13 +16,16 @@ import assert from "node:assert/strict";
 const experimentalModule = await import(
 	"../../src/engine/foundation/ui/experimental-options.ts"
 );
-const { experimentalGameplay, experimentalOptions, experimentalVideo, renderScales } = experimentalModule;
+const { experimentalGameplay, experimentalOptions, experimentalVideo, renderScales, uiScaleFactor } =
+	experimentalModule;
 const { createExperimentalHud, EXPERIMENTAL_TABS } = await import(
 	"../../src/engine/runtime/ui/hud/experimental-hud.ts"
 );
 
 const OFF = Object.freeze( {
 	renderScale: 100,
+	// Native 1:1 interface size.
+	uiScale: 100,
 	chatTimestamps: false,
 	monsterGuide: false,
 	developerDiagnostics: false,
@@ -274,6 +277,58 @@ test("render scale accepts only explicit numeric selections and reaches the rend
 	for ( const legacy of [ undefined, null, [], {}, { chatTimestamps: true } ] ) {
 		assert.equal( experimentalOptions( legacy ).renderScale, 100 );
 	}
+});
+
+/*
+================
+UI size preferences
+================
+*/
+test("UI size defaults to the native 100 and only an in-range stop restores", () => {
+	assert.equal( experimentalOptions().uiScale, 100 );
+	for ( const uiScale of [ undefined, null, true, false, "150", 0, 49, 201, 999, NaN, Infinity, [], {} ] ) {
+		assert.equal( experimentalOptions( { uiScale } ).uiScale, 100 );
+	}
+	for ( const uiScale of [ 50, 55, 75, 100, 125, 150, 200 ] ) {
+		const saved = experimentalOptions( JSON.parse( JSON.stringify( { uiScale } ) ) );
+		assert.equal( saved.uiScale, uiScale );
+	}
+	// A stored value between stops snaps to the nearest one.
+	assert.equal( experimentalOptions( { uiScale: 137 } ).uiScale, 135 );
+	assert.equal( experimentalOptions( { uiScale: 138 } ).uiScale, 140 );
+	// The platform factor is exactly 1 at the native size.
+	assert.equal( uiScaleFactor( experimentalOptions() ), 1 );
+	assert.equal( uiScaleFactor( experimentalOptions( { uiScale: 200 } ) ), 2 );
+	assert.equal( uiScaleFactor( experimentalOptions( { uiScale: 50 } ) ), 0.5 );
+	assert.equal( "uiScale" in experimentalVideo( experimentalOptions( { uiScale: 150 } ) ), false );
+	assert.equal( "uiScale" in experimentalGameplay( experimentalOptions( { uiScale: 150 } ) ), false );
+});
+
+/*
+================
+UI size draft selection
+================
+*/
+test("UI size selections remain drafts until Confirm and reject values off the slider", () => {
+	const hud = createExperimentalHud();
+	hud.restore( experimentalOptions( { uiScale: 150 } ) );
+	hud.open();
+	assert.equal( hud.state().draft.uiScale, 150 );
+	hud.setUiScale( 75 );
+	assert.equal( hud.state().draft.uiScale, 75 );
+	assert.equal( hud.state().saved.uiScale, 150 );
+	hud.open();
+	assert.equal( hud.state().draft.uiScale, 150 );
+	hud.setUiScale( 999 );
+	hud.setUiScale( 25 );
+	hud.setUiScale( NaN );
+	assert.equal( hud.state().draft.uiScale, 150 );
+	hud.setUiScale( 200 );
+	assert.equal( hud.confirm().uiScale, 200 );
+	hud.reset();
+	assert.equal( hud.state().draft.uiScale, 100 );
+	assert.equal( hud.state().saved.uiScale, 200 );
+	assert.equal( hud.confirm().uiScale, 100 );
 });
 
 /*

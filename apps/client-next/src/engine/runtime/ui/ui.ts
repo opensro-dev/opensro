@@ -195,7 +195,12 @@ import { createCosHud } from "./hud/cos-hud";
 import { createCompactHud, compactHudLayout, compactWindowDrag, compactCloseControl } from "./hud/compact-hud";
 import { fitUiGroup } from "@/engine/foundation/ui/layout";
 import { createExperimentalHud, experimentalTabs, EXPERIMENTAL_TABS } from "./hud/experimental-hud";
-import { renderScales, type ExperimentalOptions } from "@/engine/foundation/ui/experimental-options";
+import {
+	renderScales,
+	UI_SCALE_MAX,
+	UI_SCALE_MIN,
+	type ExperimentalOptions
+} from "@/engine/foundation/ui/experimental-options";
 import {
 	PET_GEAR_SLOTS,
 	PET_TRAINING_OP,
@@ -2785,7 +2790,7 @@ export function createUi(
 			if ( id.startsWith( "experimental-tab:" ) ) experimental.selectTab( Number( id.slice( 17 ) ) );
 			else if ( id.startsWith( "experimental-render-scale:" ) ) {
 				experimental.selectRenderScale( Number( id.slice( "experimental-render-scale:".length ) ) );
-			} else if ( row && row.key !== "renderScale" ) experimental.toggle( row.key );
+			} else if ( row && row.key !== "renderScale" && row.key !== "uiScale" ) experimental.toggle( row.key );
 			else if ( id === "experimental-default" ) experimental.reset();
 			else if ( id === "experimental-confirm" ) {
 				extensions.saveExperimental?.( experimental.confirm() );
@@ -7673,6 +7678,10 @@ export function createUi(
 					else if ( key === "min" || key === "max" ) {
 						partyForm[key] = event.value.replace( /[^0-9]/g, "" ).slice( 0, 3 );
 					}
+				} else if ( event.id === "experimental-ui-scale" && panel === "Experimental" ) {
+					// Port-only, not native: the range control reports the slider's
+					// stop; the draft helper snaps or rejects it.
+					experimental.setUiScale( Number( event.value ) );
 				} else if ( event.id.startsWith( "option-audio:" ) && panel === "Option" ) {
 					const key = event.id.slice( 13 ), n = Number( event.value );
 					if (
@@ -12336,7 +12345,12 @@ export function createUi(
 						authoredText(
 							{
 								...slot.GDR_GAME_OPTION_SLOT_STA1!,
-								rect: [ 39, top + 4, row.key === "renderScale" ? 130 : 270, 16 ],
+								rect: [
+									39,
+									top + 4,
+									row.key === "renderScale" || row.key === "uiScale" ? 130 : 270,
+									16
+								],
 								client: [ 0, 2, 0, 0 ]
 							},
 							px,
@@ -12356,6 +12370,45 @@ export function createUi(
 									draft.renderScale === scale
 								);
 							}
+						} else if ( row.key === "uiScale" ) {
+							// Port-only, not native: the option slider's thumb over a
+							// drawn groove, as the Audio tab draws its thumb; the
+							// range control under it owns the drag and the keys.
+							const sliderLeft = 168, sliderWidth = 140;
+							rect( [ px + sliderLeft, py + top + 7, sliderWidth, 2 ], [ 0.45, 0.45, 0.45, 1 ] );
+							image(
+								[
+									px + sliderLeft + Math.trunc(
+										(draft.uiScale - UI_SCALE_MIN) * (sliderWidth - 16) /
+											(UI_SCALE_MAX - UI_SCALE_MIN)
+									),
+									py + top,
+									16,
+									16
+								],
+								ROOT + "interface/ifcommon/com_scroll_button.png"
+							);
+							authoredText(
+								{
+									...slot.GDR_GAME_OPTION_SLOT_STA1!,
+									rect: [ 316, top + 4, 45, 16 ],
+									client: [ 0, 2, 0, 0 ]
+								},
+								px,
+								py,
+								draft.uiScale + "%"
+							);
+							controls.push( {
+								id: row.id,
+								label: row.label,
+								kind: "range",
+								rect: [ px + sliderLeft, py + top, sliderWidth, 16 ],
+								min: UI_SCALE_MIN,
+								max: UI_SCALE_MAX,
+								value: String( draft.uiScale ),
+								valueText: draft.uiScale + "%",
+								helpText: draft.uiScale + "%"
+							} );
 						} else {
 							const enabled = draft[row.key];
 							image(
@@ -12373,7 +12426,12 @@ export function createUi(
 						authoredText(
 							{
 								...slot.GDR_GAME_OPTION_SLOT_STA1!,
-								rect: [ 39, top + (row.key === "renderScale" ? 26 : 22), 304, 16 ],
+								rect: [
+									39,
+									top + (row.key === "renderScale" || row.key === "uiScale" ? 26 : 22),
+									304,
+									16
+								],
 								client: [ 0, 0, 0, 0 ],
 								color: [ 180 / 255, 180 / 255, 180 / 255, 1 ]
 							},

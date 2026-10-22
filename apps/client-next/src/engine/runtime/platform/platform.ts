@@ -35,6 +35,7 @@ import {
 	EXPERIMENTAL_STORAGE_KEY,
 	experimentalOptions,
 	storedExperimentalOptions,
+	uiScaleFactor,
 	type ExperimentalOptions
 } from "@/engine/foundation/ui/experimental-options";
 import { gameOptions, initialGameOptions, type GameOptions } from "@/engine/foundation/gameplay/game-options";
@@ -208,7 +209,7 @@ export function createPlatform(
 	================
 	*/
 	function displayScale(): number {
-		return uiPixelScale() / devicePixelRatio;
+		return uiPixelScale() / devicePixelRatio * uiScaleFactor( experimental ); // UI size: 1 at native 100
 	}
 	/*
 	================
@@ -902,7 +903,7 @@ export function createPlatform(
 		================
 		*/
 		readUiViewport() {
-			const physical = readViewport(), scale = uiPixelScale();
+			const physical = readViewport(), scale = uiPixelScale() * uiScaleFactor( experimental );
 			uiViewport.width = physical.width / scale;
 			uiViewport.height = physical.height / scale;
 			return uiViewport;
