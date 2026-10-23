@@ -3,11 +3,11 @@
 
 structureZones.mjs - the event-zone placements GameWorld spawns structures on
 
-SR_GameServer's CObjectStringIfo_Load (98C7F0) reads navmesh\objectstring.ifo
-from Data.pk2: a JMXVOBJI1000 header, a count, then one line per placed
-event zone, `%x %x %d %d %x %x %x %x "name"`: the object id, a flag word,
-the region's X and Z, then x, y, z and yaw as raw float32 bits. The names
-are eventzonedata.txt's zone codenames (STRUCTURE_POS_JA_GATE_01, ...), so
+The native server reads navmesh\objectstring.ifo from Data.pk2: a
+JMXVOBJI1000 header, a count, then one line per placed event zone,
+`%x %x %d %d %x %x %x %x "name"`: the object id, a flag word, the region's
+X and Z, then x, y, z and yaw as raw float32 bits. The names are
+eventzonedata.txt's zone codenames (STRUCTURE_POS_JA_GATE_01, ...), so
 the server joins the two to place each fortress structure.
 
 ===========================================================================
