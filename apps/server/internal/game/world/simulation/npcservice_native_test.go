@@ -3,7 +3,7 @@
 
 npcservice_native_test.go - native NPC codename service registration corpus
 
-The fixture executes the original 4C64E6..4C78B3 classifier instructions.
+The fixture holds the original classifier's verdicts.
 It covers every codename literal, embedded substring matches, lower-case
 variants and overlapping chains. Refdata inheritance and the Magic POP
 binding are separate inputs, outside this codename classifier's contract.

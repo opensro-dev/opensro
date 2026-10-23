@@ -56,14 +56,15 @@ const (
 )
 
 // npcGachaMachines are the NPCs the reference data binds a Magic POP to
-// (4C6350 registers option 0x11 when CRefData_FindNpcGachaName finds one).
+// (the native registration adds option 0x11 when the reference lookup
+// finds a binding).
 // INFERENCE: the v1.150 media ships no gacha binding table; the one machine
 // the client knows (row 0x27, SN_TALK_CH_GACHA_MACHINE_2) is the binding.
 var npcGachaMachines = map[string]bool{"NPC_CH_GACHA_MACHINE": true}
 
 // npcTownSpecialTraders are v1.150's first specialty traders: npcpos spawns
 // them in Jangan, Donwhang and Hotan and refshopgroup binds each to its
-// GROUP_STORE_<town>_SPECIAL of trade goods. INFERENCE: the v1.188 4C6350
+// GROUP_STORE_<town>_SPECIAL of trade goods. INFERENCE: the native
 // chains no longer name them (the later trade rework moved the trade to the
 // SPECIAL2 traders), so the v1.150 server, whose data still sells goods
 // through them, classified them as special traders like their successors.
@@ -74,10 +75,11 @@ var npcTownSpecialTraders = map[string]bool{"NPC_CH_SPECIAL": true, "NPC_WC_SPEC
 ================
 ResolveNpcServices
 
-The service set of a roster row: 4C6350's codename chains, the shop a
+The service set of a roster row: the native codename chains, the shop a
 refshopgroup association grants, the talk row of npcchat speech, the
-Magic POP binding and v1.150's town specialty traders. INFERENCE: v1.188 registers option 2 nowhere in 4C6350;
-the quest and Lua plane adds conversation, which npcchat speech stands for.
+Magic POP binding and v1.150's town specialty traders. INFERENCE: the
+native rule registers option 2 nowhere; the quest and Lua plane adds
+conversation, which npcchat speech stands for.
 ================
 */
 func ResolveNpcServices(npc NpcDef) NpcServices {

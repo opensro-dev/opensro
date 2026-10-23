@@ -5,8 +5,8 @@ npcmagicpop.go - the Magic Pop machine placements missing from npcpos.txt
 
 The v1.150 npcpos.txt table places no NPC_CH_GACHA_MACHINE (RefObj 9251), so
 the shipped world had Magic Pop tickets and a working roll path but no machine
-to hand them to. The later server places the machine through its nest table
-(Tab_RefNest); this file carries those placements for the towns v1.150 has and
+to hand them to. The later server places the machine through its nest
+table; this file carries those placements for the towns v1.150 has and
 appends them to the NPC world roster beside the npcpos rows.
 
 ===========================================================================
