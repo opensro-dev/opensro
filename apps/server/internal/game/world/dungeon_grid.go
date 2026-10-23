@@ -4,14 +4,12 @@
 dungeon_grid.go - the native dungeon message grid and its installed table
 
 A dungeon region is cut into message blocks exactly as the outdoors is:
-320-unit squares, one layer high. CRTNavMeshDungeon_MessageBlockAt
-(v1.188 99A520) takes the DOF navigation bounds' origin, truncates
-(position - origin) / 320 on x and z and / -3200000 on y (one layer for any
-real height), and CRTNavMeshDungeon_NeighborMessageBlocks (99A600) lists
-the blocks at -1..1 on each axis inside the grid. CRgnObject links each
-block to those neighbours (538670 -> CMsgBlock_LinkNeighbor 537CB0), and
-object admission and removal (534340 / 5344B0, shared with the outdoors)
-notify a block and its linked neighbours. A dungeon viewer therefore holds
+320-unit squares, one layer high. The native block lookup takes the DOF
+navigation bounds' origin, truncates (position - origin) / 320 on x and z
+and / -3200000 on y (one layer for any real height), and its neighbour list
+holds the blocks at -1..1 on each axis inside the grid. The region links
+each block to those neighbours, and object admission and removal (shared
+with the outdoors) notify a block and its linked neighbours. A dungeon viewer therefore holds
 the 3x3 block neighbourhood, as outdoors, never the whole region.
 
 This file owns the grid arithmetic and the one table of grids. The movement
@@ -37,7 +35,7 @@ const (
 	// dungeonMessageBlockHeight is the y divisor (qword 0xB45FA0): one layer.
 	dungeonMessageBlockHeight = -3200000.0
 	// dofMessageGridHeaderBytes covers the JMXVDOF 0101 header through the
-	// bounds offset at byte 40 (998E76 loads it as navigation-host mode 8000).
+	// bounds offset at byte 40 (the server loads it as navigation-host mode 8000).
 	dofMessageGridHeaderBytes  = 44
 	dofMessageGridBoundsOffset = 40
 	dofMessageGridBoundsBytes  = 24
@@ -48,7 +46,7 @@ const (
 DungeonMessageGrid
 
 The DOF navigation bounds one dungeon's message grid is cut from: the first
-bounding box at the header offset (998EA7 reads it into host+90..A4).
+bounding box at the header offset, as the native loader reads it.
 ================
 */
 type DungeonMessageGrid struct {
@@ -92,7 +90,7 @@ func ParseDungeonMessageGrid(raw []byte) (DungeonMessageGrid, error) {
 ================
 DungeonMessageGrid.cell
 
-One axis of 99A520: float32 position and difference, truncated quotient.
+One axis of the native block lookup: float32 position and difference, truncated quotient.
 A position outside the bounds has no block.
 ================
 */
@@ -108,7 +106,7 @@ func (g DungeonMessageGrid) cell(axis int, v, width float64) (int, bool) {
 ================
 DungeonMessageGrid.BlockAt
 
-The message block holding a dungeon position (99A520).
+The message block holding a dungeon position.
 ================
 */
 func (g DungeonMessageGrid) BlockAt(regionID uint16, x, y, z float64) (MessageBlock, bool) {
