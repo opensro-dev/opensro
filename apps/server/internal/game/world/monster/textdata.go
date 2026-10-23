@@ -138,7 +138,7 @@ type MonsterRef struct {
 	// (3) rows. The server reads the homologous reference byte before
 	// applying per-instance Nest/Hive promotion.
 	MonsterType uint8
-	// WalkSpeed / RunSpeed are the per-monster +0x24c/+0x250 sources.
+	// WalkSpeed / RunSpeed are the per-monster walk and run speed sources.
 	// Columns 46/47 are identified by the v1.150 shipped rows (1933 =
 	// 8/22, immobile NPC 7495 = 0/0).
 	WalkSpeed float64
