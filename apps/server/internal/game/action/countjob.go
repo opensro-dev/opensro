@@ -1,23 +1,21 @@
 /*
 ===========================================================================
 
-countjob.go - a premium package's limited uses (CUsedItemLimit)
+countjob.go - a premium package's limited uses
 
 A Gold Time package's UIL1 entries (compositeitem.go) let its owner use an
 item's effect a few times each period without holding the item: instant
 return and reverse return three times a day, resurrection once. The chat
 commands /Return, /Reverse Return and /Resurrection send 0x76FD for the
-board row (item/wire/countjob.go); CUsedItemLimit (SR_GameServer vtable
-B05164) runs the item's own rule:
+board row (item/wire/countjob.go), and the limited-use work runs the
+item's own rule:
 
-  - CUsedItemLimit_vf1C 654080 dispatches by the item's type: the return
-    scroll (CheckReturnScrollLocationValidity), the reverse return
-    (UseReverseReturnScroll, the client's chosen point) and the
-    resurrection scroll (CheckPlayerReturnCondition);
-  - a success spends one use (CCompositeItemWork_LogEvent 6538D0);
-  - CUsedObjectLimit_Tick 653C30 refills the uses to the maximum when the
-    period passes (CUsedObjectLimit_Refill 653A40: the next refill moves on
-    by whole periods);
+  - it dispatches by the item's type: the return scroll (the return-location
+    check), the reverse return (the client's chosen point) and the
+    resurrection scroll (the player-return condition);
+  - a success spends one use;
+  - the uses refill to the maximum when the period passes (the next refill
+    moves on by whole periods);
   - the work ends with its package (the keeper's end time).
 
 A refusal answers [2][code] with the item rule's own category-1 code; an
@@ -46,7 +44,7 @@ const (
 	errCodePremiumNotUse  uint8 = 0xcc
 )
 
-// limitedUseKind is the item rule a UIL1 work runs (654080's type switch).
+// limitedUseKind is the item rule a UIL1 work runs (its type switch).
 type limitedUseKind uint8
 
 const (
@@ -87,7 +85,7 @@ func countJobStartFrame(job domain.CompositeJob, nowMs int64) wire.Frame {
 ================
 refillCompositeJob
 
-CUsedObjectLimit_Refill: once the refill time passes, the uses return to
+Once the refill time passes, the uses return to
 the maximum and the next refill moves on by whole periods.
 ================
 */
@@ -193,7 +191,7 @@ func itemUseFailureCode(result OpResult) uint8 {
 ================
 runLimitedUse
 
-654080's type switch over the item rules, with no bag row. Runs inside the
+The limited use's type switch over the item rules, with no bag row. Runs inside the
 character door; a resurrection leaves its revival for the caller to
 publish after the commit.
 ================
@@ -209,7 +207,7 @@ func (rt *Runtime) runLimitedUse(division string, c *enterworld.Character, ref *
 		if !rt.startReturnCast(returnCast{division: division, character: c, row: -1, duration: duration, now: now, mode: mode}, result) {
 			return false
 		}
-		// A recall point keeps its world (recordedPoint, 4E0250).
+		// A recall point keeps its world (recordedPoint).
 		if point, ok := recordedPoint(c, at); ok {
 			c.World.LastRecallPoint = point
 		}
