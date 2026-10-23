@@ -178,9 +178,8 @@ func HandleWhisperBlock(deps Dependencies, divisionID string, character *enterwo
 			// Echo the STORED string, not the request's casing: the
 			// client's erase-by-name is CASE-SENSITIVE (sub_61f2e0
 			// @0061f3a2-0061f3a8 compares raw UTF-16 code units, no
-			// _wcsicmp; the mode-1 duplicate walk sub_4a8a90 ->
-			// sub_4a8560 @004a8577 is likewise raw), so the ack must
-			// carry the exact casing the panel row displays or the
+			// _wcsicmp; the mode-1 duplicate walk is likewise raw), so the
+			// ack must carry the exact casing the panel row displays or the
 			// erase misses and a phantom row survives until the next
 			// enter-world reseed.
 			stored := blocked[at]
