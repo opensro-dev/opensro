@@ -16,7 +16,7 @@ SRO_CAP110_MONSTERS as well and refuses to start without it.
 
 The tomb bosses (Sphinx, Sekhmet, Osiris, Horus, Nephthys) are single-spawn
 nests. The original is likely to have run them from instance triggers, as
-CGameWorld_Chins_Floor5/6::InitTriggers does for the Qin-Shi floors, but the
+the Qin-Shi floors' trigger scripts do, but the
 database rows carry no trigger data. Inference, recorded here: a boss is an
 ordinary persistent nest that respawns after its authored delay.
 ===========================================================================

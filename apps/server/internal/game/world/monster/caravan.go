@@ -3,12 +3,11 @@
 
 caravan.go - the bandits that ambush a trade caravan
 
-Caravan_SpawnBandits (60BF30) chooses each bandit from one of two reference
+The native bandit spawn chooses each bandit from one of two reference
 tables and spawns it with a numbered tactics row. Both tables are built from
-the monster references the way the native refdata does it
-(CRefData_BuildThiefBanditTable 6BB8A0, CRefData_BuildHunterBanditTable
-6BC5A0); the eight tactics rows are the vSRO backup's Tab_RefTactics
-2001..2004 and 2011..2014 of the operator's server tactics reference,
+the monster references the way the native refdata does it; the eight
+tactics rows are the later data's tactics 2001..2004 and 2011..2014 of the
+operator's server tactics reference,
 carried in the projection's derived data (CaravanTacticsFile); without
 them no caravan draws bandits.
 
@@ -93,7 +92,7 @@ func parseCaravanTactics(data []byte) (CaravanTacticsTable, error) {
 			return nil, fmt.Errorf("caravan tactics: invalid row %s", key)
 		}
 		// The same projection the summon factory uses: ChangeTarget is the
-		// target policy byte (+0x20), AdditionOptionFlag the native flags.
+		// target policy byte, AdditionOptionFlag the native flags.
 		out[c.ID] = SummonTactics{
 			TargetPolicy: c.ChangeTarget, SightRange: float64(c.SightRange),
 			NativeFlags: c.Flags, Controls: c, HasControls: true,
@@ -118,7 +117,7 @@ type BanditTables struct {
 ================
 NewBanditTables
 
-6BB8A0 / 6BC5A0: a thief (word 0x10C6) or hunter (0x18C6) reference is
+The native table builders: a thief (word 0x10C6) or hunter (0x18C6) reference is
 filed by its codename prefix (strncmp: MOB_THIEF / MOB_HUNTER zone 0,
 MOB_EU_THIEF / MOB_EU_HUNTER zone 1, anything else zone 2) and level.
 ================
@@ -163,7 +162,7 @@ func banditZone(codename, eastern, western string) int {
 ================
 Pick
 
-6BC4B0 / 6BC760: thieves serve a trader, hunters everyone else. Start at
+The native pick: thieves serve a trader, hunters everyone else. Start at
 the bandit's level (capped at 140) and walk down to the nearest level that
 has references; like the native loop, the walk stops before level 1. One
 CRT draw picks within the bucket.
