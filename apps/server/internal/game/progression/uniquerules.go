@@ -14,9 +14,9 @@ Shaitan ever paid out. Two switches change that, both default ON:
   - SRO_UNIQUE_GAP_EXEMPT: a unique's drops (spawn grade 3 or 8, the
     RollsUniqueDrops grades) bypass the 4C1840 threshold entirely.
   - SRO_UNIQUE_POP_TICKET: every unique kill leaves exactly one Magic
-    Pop ticket (ITEM_MALL_GACHA_CARD). The native assigned rows already
-    carry the card at probability 1.0 (vSRO _RefMonster_AssignedItemDrop;
-    two for the Bone Lord and the Roc), so the rule retires every
+    Pop ticket (ITEM_MALL_GACHA_CARD). The native assigned drops already
+    carry the card at probability 1.0 (two for the Bone Lord and the
+    Roc), so the rule retires every
     admitted native card and appends one guaranteed card instead: never
     zero, never two.
 
