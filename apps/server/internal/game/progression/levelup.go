@@ -336,7 +336,7 @@ func deathPenaltyLoss(levels enterworld.LevelDataSource, level int64, penalty pk
 	loss := int64(math.Trunc(float64(required) * float64(rule.Percent)))
 	limit := basis * rule.CapFactor
 	if penalty.SpecialWorld {
-		// The siege cap: signed dword product, multiplied by widened 0.2f, then truncated.
+		// The special-world cap: signed dword product, multiplied by widened 0.2f, then truncated.
 		const siegeCapScale = float64(float32(0.2))
 		limit = int64(math.Trunc(float64(int32(limit)) * siegeCapScale))
 	}
@@ -393,10 +393,9 @@ func (rt *Runtime) applyDeathPenalty(character *enterworld.Character, penalty pk
 ================
 applyJobDeathPenalty
 
-The job death penalty: the job experience loss gives
-trunc(GoldMin(level) * 10 * 0.125) * 3, then the EXP of leveldata column
-5 of the lower of the two levels times six, less its 0x101 share. No
-level protects a job death.
+The job death penalty takes trunc(GoldMin(level) * 10 * 0.125) * 3, then
+the EXP of leveldata column 5 of the lower of the two levels times six,
+less its 0x101 share. No level protects a job death.
 ================
 */
 func (rt *Runtime) applyJobDeathPenalty(character *enterworld.Character, penalty pk.DeathPenalty) ([]wire.Frame, bool) {

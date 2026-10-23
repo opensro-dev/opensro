@@ -3,14 +3,13 @@
 
 jobexp.go - a job member's job experience and grade
 
-A gain below
-grade 7 that reaches the grade's requirement (leveldata column 6 + job - 1
-of the grade's row) advances one grade and keeps the remainder; any other
-gain accumulates. A loss floors at zero and does nothing when there is no
-job experience. Before either, a thief's or hunter's delta also moves the
-week's contribution (clamped to
-0..2,000,000,000; domain.CharacterJob.WeeklyReward), which the weekly close
-ranks and pays from the pools. Each change publishes v1.150
+The native job-experience rule. A gain below grade 7 that reaches the
+grade's requirement (leveldata column 6 + job - 1 of the grade's row)
+advances one grade and keeps the remainder; any other gain accumulates. A
+loss floors at zero and does nothing when there is no job experience.
+Before either, a thief's or hunter's delta also moves the week's
+contribution (clamped to 0..2,000,000,000; domain.CharacterJob.WeeklyReward),
+which the weekly close ranks and pays from the pools. Each change publishes v1.150
 0x35EE [u8 job][u8 grade][u32 exp].
 
 ===========================================================================

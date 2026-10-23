@@ -4,8 +4,8 @@
 uniquerules.go - unique-monster reward rules (port-only, not native)
 
 Port-only, not native (owner-approved TUNING deviation, 2026-10-20,
-hunting patch). The native rule admits each prepared drop of a unique exactly like any other
-monster's: past six levels above the monster the threshold falls by four
+hunting patch). The native rule admits each prepared drop of a unique
+exactly like any other monster's: past six levels above the monster the threshold falls by four
 percent per level, so a level-90 hunter loots nothing from Tiger Girl
 (level 20, threshold -180) and only same-level uniques such as Demon
 Shaitan ever paid out. Two switches change that, both default ON:
