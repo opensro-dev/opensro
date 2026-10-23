@@ -166,6 +166,9 @@ var Settings = []Setting{
 	// Owner, 2026-10-18: reversed the 2026-10-15 follow setting; the
 	// deployment default stays native ("off", 0x4FD1D0).
 	{Env: "SRO_TRANSPORT_FOLLOW", NomadVar: "transport_follow", Default: "off"},
+	// Owner, 2026-10-24: a following transport keeps the 100 m tether. It
+	// acts only with SRO_TRANSPORT_FOLLOW on.
+	{Env: "SRO_TRANSPORT_FOLLOW_TETHER", NomadVar: "transport_follow_tether", Default: "on"},
 	// Owner, 2026-10-18: reversed the 2026-10-15 testing switch; the
 	// deployment default stays native ("off", town gates refuse a transport).
 	{Env: "SRO_JOB_GOODS_TELEPORT", NomadVar: "job_goods_teleport", Default: "off"},
