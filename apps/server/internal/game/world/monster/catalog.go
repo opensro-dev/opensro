@@ -271,8 +271,9 @@ Stronghold building's bandits and archers (regions 0x5BA0, 0x5CA0), the
 Stone Cave's Nachal and Work Earth Ghost (0x8001), three KT Ong. The v1.150
 client still places every one of them, and the server spawns nothing while
 the live count is not below the cap. A later active nest table keeps the
-same nests, by region and anchor, with live caps (ZeroCapCapsFile); the dungeon layer matches by its own region id. A hive member
-(shared cap above zero) is left alone: the hive's own limit caps it.
+same nests, by region and anchor, with live caps (ZeroCapCapsFile); the
+dungeon layer matches by its own region id. A hive member (shared cap above
+zero) is left alone: the hive's own limit caps it.
 ==================
 */
 func restoreZeroCapNests(refs map[uint32]MonsterRef, nests []NestRow, caps map[populationEvidenceKey]int) {
