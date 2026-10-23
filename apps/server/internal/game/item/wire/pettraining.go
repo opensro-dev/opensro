@@ -5,7 +5,7 @@ pettraining.go - the attack-pet tree's state push (port-only, not native)
 
 The attack-pet expansion (SRO_ATTACK_PET_EXPANSION) shows a pet's skills,
 row cooldowns and worn gear in the pet window. 0x3FB1 is a port-only
-opcode: no v1.150 client or v1.188 server uses it, and only this port's
+opcode: no native client or server uses it, and only this port's
 browser client consumes it. The server sends it on the owner's request and
 after every training or gear change; every rule is decided by the server.
 
