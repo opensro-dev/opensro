@@ -9,6 +9,7 @@ package main
 
 import (
 	"fmt"
+	"opensro.online/server/internal/game/paramkeeper"
 	"os"
 	"strings"
 	"sync"
@@ -305,6 +306,13 @@ func newBootstrapDependencies(
 	ownedShard shard.Definition,
 	textdata *enterworld.TextdataCatalogs,
 ) (*enterworld.Deps, error) {
+	// The parameter definitions every keeper clamps by: the shard refuses
+	// to start without them (paramkeeper.DefinitionsFile).
+	definitions, err := paramkeeper.LoadDefinitions(paths.DerivedDir)
+	if err != nil {
+		return nil, err
+	}
+	paramkeeper.Install(definitions)
 	deps, err := enterworld.NewDevDepsWithRoster(paths, textdata, characterRoster)
 	if err != nil {
 		return nil, err
