@@ -161,7 +161,7 @@ func TestMarkerPublicationReplacementRemovalAndReconnect(t *testing.T) {
 func TestUnfinishedQuestConversationIsInformational(t *testing.T) {
 	licensed.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
-	defs, err := LoadDefinitions(NewCatalog(dir), enterworld.NewTextdataItems(dir))
+	defs, err := LoadDefinitions(NewCatalogWithDerived(dir, derivedForTests(t)), enterworld.NewTextdataItems(dir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +232,7 @@ func TestMarkerGoingStateHonorsEquippedStagePrerequisite(t *testing.T) {
 
 func TestEveryQuestMarkerNpcHasAuthoredPlacement(t *testing.T) {
 	dir := gamedatatest.TextdataDir(t)
-	defs, err := LoadDefinitions(NewCatalog(dir), enterworld.NewTextdataItems(dir))
+	defs, err := LoadDefinitions(NewCatalogWithDerived(dir, derivedForTests(t)), enterworld.NewTextdataItems(dir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -298,7 +298,7 @@ penalty) still sees the report marker and the turn-in it advertises.
 func TestTurnInSurvivesALevelLoss(t *testing.T) {
 	licensed.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
-	defs, err := LoadDefinitions(NewCatalog(dir), enterworld.NewTextdataItems(dir))
+	defs, err := LoadDefinitions(NewCatalogWithDerived(dir, derivedForTests(t)), enterworld.NewTextdataItems(dir))
 	if err != nil {
 		t.Fatal(err)
 	}

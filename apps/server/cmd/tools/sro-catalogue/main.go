@@ -292,7 +292,7 @@ func run(out, release, textdata string) error {
 	if err != nil {
 		return err
 	}
-	questCatalog := quest.NewCatalog(dir)
+	questCatalog := quest.NewCatalogWithDerived(dir, derivedDir)
 	definitions, err := quest.LoadDefinitions(questCatalog, itemSource)
 	if err != nil {
 		return fmt.Errorf("quest definitions: %w", err)

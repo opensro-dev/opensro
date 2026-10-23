@@ -22,7 +22,7 @@ balance and do not ship; its "three times repeatable" prose loses to
 the script's limit 1 the same way). The reward items are the script's
 LuaSetAchievedItem entries, confirmed by the retail reward table:
 ITEM_ETC_HP_POTION_02 x50 and x13, no gold. The ACHIEVED_NOW symbol
-comes from achieved_now_generated.json, not this spec.
+comes from the achieved-now catalogue (AchievedNowCatalogFile), not this spec.
 
 ===========================================================================
 */

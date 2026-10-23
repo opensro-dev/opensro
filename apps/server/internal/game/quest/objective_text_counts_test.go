@@ -80,7 +80,7 @@ TestObjectiveCountsMatchTheirShippedText
 */
 func TestObjectiveCountsMatchTheirShippedText(t *testing.T) {
 	textdata := gamedatatest.TextdataDir(t)
-	defs, err := LoadDefinitions(NewCatalog(textdata), enterworld.NewTextdataItems(textdata))
+	defs, err := LoadDefinitions(NewCatalogWithDerived(textdata, derivedForTests(t)), enterworld.NewTextdataItems(textdata))
 	if err != nil {
 		t.Fatal(err)
 	}

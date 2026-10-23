@@ -10,12 +10,16 @@ import (
 )
 
 func main() {
-	if len(os.Args) != 2 {
-		fmt.Fprintln(os.Stderr, "usage: quest-audit <primary-textdata-directory>")
+	if len(os.Args) != 2 && len(os.Args) != 3 {
+		fmt.Fprintln(os.Stderr, "usage: quest-audit <primary-textdata-directory> [<derived-data-directory>]")
 		os.Exit(2)
 	}
 	dir := os.Args[1]
-	catalog := quest.NewCatalog(dir)
+	derived := ""
+	if len(os.Args) > 2 {
+		derived = os.Args[2]
+	}
+	catalog := quest.NewCatalogWithDerived(dir, derived)
 	defs, err := quest.LoadDefinitions(catalog, enterworld.NewTextdataItems(dir))
 	if err != nil {
 		panic(err)

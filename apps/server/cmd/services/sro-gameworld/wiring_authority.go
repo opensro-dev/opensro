@@ -196,7 +196,12 @@ func openAuthorityPlane(
 		devPaths.EquipItemsEnabled,
 	)
 
-	questCatalog := quest.NewCatalog(textdataDir)
+	questCatalog := quest.NewCatalogWithDerived(textdataDir, devPaths.DerivedDir)
+	if missing, err := quest.MissingCatalogFiles(devPaths.DerivedDir); err != nil {
+		return authorityPlane{}, err
+	} else if len(missing) > 0 {
+		log.Warnf("quests: %s not in the derived game data; only the curated quests load", strings.Join(missing, ", "))
+	}
 	loadQuests := sync.OnceValues(func() (*quest.Definitions, error) {
 		return quest.LoadDefinitions(questCatalog, enterworld.NewTextdataItems(questCatalog.Dir()))
 	})

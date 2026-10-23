@@ -40,7 +40,7 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 	licensed.RequireGameData(t)
 	textdata := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(textdata)
-	defs, err := LoadDefinitions(NewCatalog(textdata), items)
+	defs, err := LoadDefinitions(NewCatalogWithDerived(textdata, derivedForTests(t)), items)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -521,7 +521,7 @@ Unknown records retain every field through storage, unrelated progress and login
 func TestUnimplementedCatalogQuestsArePreservedThroughLogin(t *testing.T) {
 	licensed.RequireGameData(t)
 	textdata := gamedatatest.TextdataDir(t)
-	catalog := NewCatalog(textdata)
+	catalog := NewCatalogWithDerived(textdata, derivedForTests(t))
 	defs, err := LoadDefinitions(catalog, enterworld.NewTextdataItems(textdata))
 	if err != nil {
 		t.Fatal(err)

@@ -5,7 +5,7 @@ generate_compiled_quests.py - project the compiled quest classes to specs
 
 Reads the snapshots in the operator's source-data (quest/) and writes the server's
 QuestSpec rows for the v1.150 quests whose v1.188 implementation is a C++
-class (apps/server/internal/game/quest/.generated/compiled_quests.json),
+class (<source-data>/server/quest/compiled_quests.json),
 with an audit of every class not yet projected and why.
 
 What each source decides:
@@ -38,7 +38,9 @@ import sro_paths  # noqa: E402
 ROOT = Path(__file__).resolve().parents[2]
 DATA = sro_paths.SOURCE_DATA_ROOT / "quest"
 QUEST_PACKAGE = ROOT / "apps/server/internal/game/quest"
-OUTPUT = QUEST_PACKAGE / ".generated"
+# The compiled catalogue is source-data too: the server bundle copies
+# source-data/server into its derived data (quest.CompiledCatalogFile).
+OUTPUT = sro_paths.SOURCE_DATA_ROOT / "server" / "quest"
 
 # CBasicQuest mission kinds (mission +9).
 MISSION_GATHER = 1
@@ -761,7 +763,7 @@ def project(code, quest, text, sql):
 # the curated Go specs. A compiled row may require them.
 # ================
 def authored_elsewhere():
-	codes = {row["Codename"] for row in json.loads((QUEST_PACKAGE / "catalog_generated.json").read_text(encoding="utf-8"))}
+	codes = {row["Codename"] for row in json.loads((OUTPUT / "catalog_generated.json").read_text(encoding="utf-8"))}
 	for source in sorted(QUEST_PACKAGE.glob("*.go")):
 		if source.name.endswith("_test.go"):
 			continue

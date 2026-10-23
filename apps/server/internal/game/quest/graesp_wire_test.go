@@ -31,7 +31,7 @@ func TestGraespKillProducerMatchesClientFeedbackFixture(t *testing.T) {
 	}
 	textdata := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(textdata)
-	defs, err := LoadDefinitions(NewCatalog(textdata), items)
+	defs, err := LoadDefinitions(NewCatalogWithDerived(textdata, derivedForTests(t)), items)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -245,6 +245,28 @@ func RetailTextdataDir(t testing.TB) string {
 
 /*
 ==================
+SourceDataServerDir
+
+<game root>/source-data/server: the operator's server tables, laid out as the
+projection's derived data (gamedata DerivedDirName). Tests hand it to loaders
+as their derived folder. It may not exist; loaders then load no derived table.
+==================
+*/
+func SourceDataServerDir() (string, error) {
+	_ = os.Getenv(IdentityEnv)
+	repository, err := repositoryRoot()
+	if err != nil {
+		return "", err
+	}
+	gameRoot, err := resolveGameRoot(repository)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(gameRoot, "source-data", "server"), nil
+}
+
+/*
+==================
 ReadSourceData
 
 One file of the operator's source-data without a test: its bytes, or false

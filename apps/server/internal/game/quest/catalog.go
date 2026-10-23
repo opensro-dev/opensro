@@ -79,6 +79,10 @@ type ContentsRow struct {
 // the quest plane runs definition-less, refusing every inbound id).
 type Catalog struct {
 	dir string
+	// derivedDir is the projection's derived data (gamedata DerivedDir), where
+	// the generated and compiled quest catalogues live; empty loads only the
+	// curated quests.
+	derivedDir string
 
 	once       sync.Once
 	rows       map[string]CatalogRow
@@ -87,9 +91,22 @@ type Catalog struct {
 	loadedRows int
 }
 
-// NewCatalog returns a lazy loader over the verified projection's textdata directory.
+// NewCatalog returns a lazy loader over the verified projection's textdata
+// directory, without derived data: only the curated quests load.
 func NewCatalog(dir string) *Catalog {
 	return &Catalog{dir: dir}
+}
+
+/*
+================
+NewCatalogWithDerived
+
+The catalog plus the projection's derived data, where the generated and
+compiled quest catalogues (CatalogFiles) come from the operator's source-data.
+================
+*/
+func NewCatalogWithDerived(dir, derivedDir string) *Catalog {
+	return &Catalog{dir: dir, derivedDir: derivedDir}
 }
 
 // Dir answers the resolved textdata directory (the wiring shares it with
