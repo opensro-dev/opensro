@@ -3,7 +3,16 @@ package siege
 import (
 	"testing"
 	"time"
+
+	"opensro.online/server/internal/testsupport/licensed"
 )
+
+// shardSchedule is the operator's schedule.cfg from source-data; the test
+// skips without it.
+func shardSchedule(t *testing.T) string {
+	t.Helper()
+	return string(licensed.SourceDataFile(t, "server/"+ScheduleFile))
+}
 
 /*
 ================
@@ -16,7 +25,7 @@ ten seconds. 2026-10-07 is a Wednesday.
 */
 func TestShippedScheduleRunsTheRetailFortressWeek(t *testing.T) {
 	loc := time.FixedZone("shard", 8*3600)
-	schedules, err := ParseSchedules(shippedSchedule, loc)
+	schedules, err := ParseSchedules(shardSchedule(t), loc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +87,7 @@ During a war its own window; after it, next Wednesday's.
 */
 func TestScheduleWindowFindsTheRunningOrNextWar(t *testing.T) {
 	loc := time.FixedZone("shard", 8*3600)
-	schedules, err := ParseSchedules(shippedSchedule, loc)
+	schedules, err := ParseSchedules(shardSchedule(t), loc)
 	if err != nil {
 		t.Fatal(err)
 	}

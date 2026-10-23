@@ -410,9 +410,17 @@ func newGameplayPlane(
 		return nil, err
 	}
 	items.FortressStore = deps.Fortresses
+	siegeSchedules, err := siege.LoadSchedules(devPaths.DerivedDir, time.Local)
+	if err != nil {
+		return nil, err
+	}
+	if len(siegeSchedules) == 0 {
+		log.Warnf("siege: no %s in the derived game data; no fortress war runs", siege.ScheduleFile)
+	}
 	siegeRuntime, err := siege.NewLane(siege.LaneConfig{
 		Division:   ownedShard.ID,
 		Fortresses: items.Fortresses,
+		Schedules:  siegeSchedules,
 		GuildName: func(guildID int64) string {
 			guild, _, ok := deps.Guilds.Guild(ownedShard.ID, guildID)
 			if !ok {

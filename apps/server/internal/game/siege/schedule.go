@@ -28,15 +28,19 @@ to (not including) the Once end, in the shard's local time.
 package siege
 
 import (
-	_ "embed"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 )
 
-//go:embed data/schedule.cfg
-var shippedSchedule string
+// ScheduleFile is the shard's schedule.cfg in the projection's derived data
+// (gamedata DerivedDir), from the operator's own source-data. Without it
+// the shard runs no fortress war (LoadSchedules returns no schedules).
+const ScheduleFile = "siege/schedule.cfg"
 
 const (
 	scheduleDateLayout = "2006-01-02, 15:04:05"
@@ -59,6 +63,28 @@ type Schedule struct {
 	EveryDays  int
 	// StartSecond and EndSecond are the Once window, seconds after midnight.
 	StartSecond, EndSecond int
+}
+
+/*
+================
+LoadSchedules
+
+The schedules in derivedDir's schedule.cfg, or none when there is no
+derived folder or no file.
+================
+*/
+func LoadSchedules(derivedDir string, loc *time.Location) (map[string]Schedule, error) {
+	if derivedDir == "" {
+		return map[string]Schedule{}, nil
+	}
+	text, err := os.ReadFile(filepath.Join(derivedDir, filepath.FromSlash(ScheduleFile)))
+	if errors.Is(err, os.ErrNotExist) {
+		return map[string]Schedule{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("siege: %s: %w", ScheduleFile, err)
+	}
+	return ParseSchedules(string(text), loc)
 }
 
 /*
