@@ -3,9 +3,8 @@
 
 siege_expiry.go - the siege corpse clock runs out
 
-CGObjPC_OnTick (52D9B0) counts a siege corpse's clock (+0x1CD4) down
-while a fortress war runs; at zero the corpse is sent to town
-(CGObjPC_TeleportToTown 4DF290), asked or not. The port stamps the
+The native player tick counts a siege corpse's clock down while a
+fortress war runs; at zero the corpse is sent to town, asked or not. The port stamps the
 death instant instead of ticking every corpse (domain.SiegeDeathAtMs):
 this sweep, riding the simulation tick beside the fortress phases, is
 the tick that notices the count ran out, and it revives through the
@@ -24,7 +23,7 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// siegeCorpseExpiryMs is the +0x1CD4 count itself: 180 ticks from the
+// siegeCorpseExpiryMs is the corpse clock itself: 180 ticks from the
 // death, at the recorded one second a tick (domain.SiegeDeathAtMs).
 const siegeCorpseExpiryMs = 180 * 1000
 
