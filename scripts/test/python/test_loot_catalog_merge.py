@@ -1,7 +1,7 @@
 """
 ===========================================================================
 
-test_loot_catalog_merge.py - the ISRO-R / vSRO merge rules of the catalog
+test_loot_catalog_merge.py - the later / older data merge rules of the catalog
 
 Small hand-built sources for each rule generate_loot_catalog.py applies:
 class row precedence per level, the live generation of a row, and empty
