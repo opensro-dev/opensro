@@ -137,10 +137,10 @@ func TestRegionCombatReferenceCensus(t *testing.T) {
 		t.Fatalf("load: %v, %v", table, err)
 	}
 	count, protected := 0, 0
-	for _, row := range table.ranges {
-		for id := uint32(row.First); id <= uint32(row.Last); id++ {
+	for _, span := range table.table.spans {
+		for id := uint32(span.first); id <= uint32(span.last); id++ {
 			allowed, known := table.PlayerCombat(uint16(id))
-			if !known || allowed != row.Allowed {
+			if !known || allowed != span.value {
 				t.Fatalf("lost reference row %04x", id)
 			}
 			count++

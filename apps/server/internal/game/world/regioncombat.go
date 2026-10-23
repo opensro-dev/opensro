@@ -16,14 +16,6 @@ the rules that need a town or a battlefield stay off.
 */
 package world
 
-import (
-	"encoding/json"
-	"fmt"
-	"sort"
-
-	"opensro.online/server/internal/gamedata"
-)
-
 // RegionCombatFile is the region combat table in the derived data.
 const RegionCombatFile = "world/region-combat.json"
 
@@ -51,7 +43,7 @@ The loaded table. A nil table knows no region.
 ================
 */
 type RegionCombat struct {
-	ranges []RegionCombatRange
+	table *regionTable[bool]
 }
 
 /*
@@ -63,12 +55,15 @@ answer for the wrong region.
 ================
 */
 func NewRegionCombat(ranges []RegionCombatRange) (*RegionCombat, error) {
+	spans := make([]regionSpan[bool], len(ranges))
 	for i, r := range ranges {
-		if r.First > r.Last || i > 0 && r.First <= ranges[i-1].Last {
-			return nil, fmt.Errorf("region combat: range %d (%04x-%04x) is inverted or overlaps", i, r.First, r.Last)
-		}
+		spans[i] = regionSpan[bool]{first: r.First, last: r.Last, value: r.Allowed}
 	}
-	return &RegionCombat{ranges: append([]RegionCombatRange(nil), ranges...)}, nil
+	table, err := newRegionTable("region combat", spans)
+	if err != nil {
+		return nil, err
+	}
+	return &RegionCombat{table: table}, nil
 }
 
 /*
@@ -79,29 +74,11 @@ The table from derivedDir, or nil when there is none.
 ================
 */
 func LoadRegionCombat(derivedDir string) (*RegionCombat, error) {
-	data, err := gamedata.ReadDerived(derivedDir, RegionCombatFile)
-	if err != nil || data == nil {
+	table, err := loadRegionTable[bool](derivedDir, RegionCombatFile, regionCombatFormat)
+	if err != nil || table == nil {
 		return nil, err
 	}
-	var document struct {
-		Format string
-		Ranges [][3]json.RawMessage
-	}
-	if err := json.Unmarshal(data, &document); err != nil {
-		return nil, fmt.Errorf("region combat: %w", err)
-	}
-	if document.Format != regionCombatFormat {
-		return nil, fmt.Errorf("region combat: format %q, want %q", document.Format, regionCombatFormat)
-	}
-	ranges := make([]RegionCombatRange, len(document.Ranges))
-	for i, row := range document.Ranges {
-		r := &ranges[i]
-		if json.Unmarshal(row[0], &r.First) != nil || json.Unmarshal(row[1], &r.Last) != nil ||
-			json.Unmarshal(row[2], &r.Allowed) != nil {
-			return nil, fmt.Errorf("region combat: malformed range %d", i)
-		}
-	}
-	return NewRegionCombat(ranges)
+	return &RegionCombat{table: table}, nil
 }
 
 /*
@@ -116,11 +93,7 @@ func (t *RegionCombat) PlayerCombat(region uint16) (allowed, known bool) {
 	if t == nil {
 		return false, false
 	}
-	i := sort.Search(len(t.ranges), func(i int) bool { return t.ranges[i].Last >= region })
-	if i == len(t.ranges) || region < t.ranges[i].First {
-		return false, false
-	}
-	return t.ranges[i].Allowed, true
+	return t.table.lookup(region)
 }
 
 /*

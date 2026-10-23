@@ -23,12 +23,50 @@ import (
 	"opensro.online/server/internal/game/caravan"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// caravanBattlefield is a CHINA battlefield region (23196) of zone 0.
-const caravanBattlefield = uint16(23196)
+const (
+	// caravanBattlefield is a battlefield region of bandit zone 0.
+	caravanBattlefield = uint16(23196)
+	// caravanWestRegion is a battlefield region of bandit zone 1.
+	caravanWestRegion = uint16(24900)
+	// caravanThiefFlags and caravanHunterFlags mark the test tactics rows
+	// of the thief (2001..2004) and hunter (2011..2014) families.
+	caravanThiefFlags  = uint32(0x101)
+	caravanHunterFlags = uint32(0x202)
+)
+
+/*
+================
+testCaravanTables
+
+Synthetic caravan tables: the two test regions' zones, and the eight
+native tactics numbers with family flags the tests check.
+================
+*/
+func testCaravanTables(t *testing.T) (*worldgeom.RegionCaravan, monster.CaravanTacticsTable) {
+	t.Helper()
+	zones, err := worldgeom.NewRegionCaravan([]worldgeom.RegionCaravanRange{
+		{First: caravanBattlefield, Last: caravanBattlefield, Zone: 0},
+		{First: caravanWestRegion, Last: caravanWestRegion, Zone: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tactics := monster.CaravanTacticsTable{}
+	for _, id := range []uint32{2001, 2002, 2003, 2004, 2011, 2012, 2013, 2014} {
+		flags := caravanThiefFlags
+		if id >= 2011 {
+			flags = caravanHunterFlags
+		}
+		tactics[id] = monster.SummonTactics{SightRange: 250, NativeFlags: flags, HasControls: true,
+			Controls: monster.TacticsControls{ID: id, SightRange: 250, Flags: flags}}
+	}
+	return zones, tactics
+}
 
 /*
 ================
@@ -63,6 +101,7 @@ func caravanFixture(t *testing.T) (*Runtime, *fakeClock, *enterworld.Character) 
 	levels.gold = map[int64]int64{20: 2784}
 	deps.Levels = levels
 	rt.CaravanRoll = func() (uint32, error) { return 50, nil }
+	rt.ConfigureCaravan(testCaravanTables(t))
 	c.Job.Type = domain.JobTrader
 	gid, _ := enterworld.CosObjectIDForCharacter(c)
 	c.ActiveCOS = &enterworld.CharacterCOS{GID: gid, RefObjID: 3914, Codename: "COS_T_DHORSE3", CurrentHP: 100,
@@ -94,15 +133,15 @@ func TestCaravanUsesTraderContinentAndJobFamily(t *testing.T) {
 			player := vehicle
 			prefix := "MOB_"
 			if western {
-				player.RegionID = 24900
+				player.RegionID = caravanWestRegion
 				prefix += "EU_"
 			}
-			flags := uint32(542)
+			flags := caravanThiefFlags
 			if job == domain.JobTrader {
 				prefix += "THIEF_"
 			} else {
 				prefix += "HUNTER_"
-				flags = 666
+				flags = caravanHunterFlags
 			}
 			rideCaravanTo(rt, c, player)
 			if err := rt.spawnCaravanBandits(testDivision, c, vehicle, clock.Now().UnixMilli()); err != nil {
@@ -183,7 +222,7 @@ func TestLoadedTransportDrawsThievesOnlyOnABattlefield(t *testing.T) {
 	}
 	for _, bandit := range bandits {
 		// Even parity draws the last row: a trader's thieves use 2004.
-		if bandit.Nest.NativeTacticsFlags != 542 || !bandit.NestDetached || bandit.Rarity() != 0 {
+		if bandit.Nest.NativeTacticsFlags != caravanThiefFlags || !bandit.NestDetached || bandit.Rarity() != 0 {
 			t.Fatalf("bandit %+v", bandit)
 		}
 		if distance := math.Hypot(bandit.Spawn.X-field.X, bandit.Spawn.Z-field.Z); distance > 150 {
@@ -210,6 +249,29 @@ func TestEmptiedTransportLeavesTheCaravanRegistry(t *testing.T) {
 	rt.advanceCaravans(clock.Now().UnixMilli())
 	if rt.caravans.Len() != 0 || len(caravanBandits(rt, caravanBattlefield)) != 0 {
 		t.Fatal("an emptied transport kept its caravan or drew bandits")
+	}
+}
+
+/*
+================
+TestCaravanWithoutTablesDrawsNoBandits
+
+Without the operator's caravan tables the ambush is off: no bandit, no
+error, and the caravan's draws are not consumed.
+================
+*/
+func TestCaravanWithoutTablesDrawsNoBandits(t *testing.T) {
+	rt, clock, c := caravanFixture(t)
+	draws := 0
+	rt.CaravanRoll = func() (uint32, error) { draws++; return 50, nil }
+	field := simulation.Spawn{RegionID: caravanBattlefield, X: 960, Y: 20, Z: 960}
+	rideCaravanTo(rt, c, field)
+	rt.ConfigureCaravan(nil, nil)
+	if err := rt.spawnCaravanBandits(testDivision, c, field, clock.Now().UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	if len(caravanBandits(rt, caravanBattlefield)) != 0 || draws != 0 {
+		t.Fatalf("no tables drew %d bandits after %d draws", len(caravanBandits(rt, caravanBattlefield)), draws)
 	}
 }
 

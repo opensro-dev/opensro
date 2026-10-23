@@ -63,7 +63,10 @@ func TestCorePackageBoundaries(t *testing.T) {
 	// The Alexandria switch (port-only): a leaf policy the monster catalog
 	// asks before admitting the city's optional field population.
 	checkPackageImports(t, root, modulePath, "internal/game/world/alexandria", nil, false)
+	// The monster catalog reads its own tables from the projection's derived
+	// data (gamedata.ReadDerived): the operator's server references.
 	checkPackageImports(t, root, modulePath, "internal/game/world/monster", map[string]bool{
+		modulePath + "/internal/gamedata":              true,
 		modulePath + "/internal/domain":                true,
 		modulePath + "/internal/game/world":            true,
 		modulePath + "/internal/game/world/alexandria": true,

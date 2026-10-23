@@ -10,6 +10,7 @@ package monster
 
 import (
 	"encoding/json"
+	"fmt"
 	"opensro.online/server/internal/testsupport/tier"
 	"testing"
 
@@ -19,56 +20,92 @@ import (
 
 /*
 ================
-TestCaravanTacticsRejectUnboundNumbers
+syntheticCaravanTactics
 
-Eight rows alone do not close the native IDs: 2005 must not substitute for
-one of 2001..2004 or 2011..2014, even with otherwise valid controls.
+Eight rows under the native numbers, with controls the tests choose.
 ================
 */
-func TestCaravanTacticsRejectUnboundNumbers(t *testing.T) {
-	var document struct {
-		Source  string
-		Tactics map[string]TacticsControls
+func syntheticCaravanTactics() map[string]TacticsControls {
+	rows := map[string]TacticsControls{}
+	for _, id := range []uint32{2001, 2002, 2003, 2004, 2011, 2012, 2013, 2014} {
+		rows[fmt.Sprint(id)] = TacticsControls{ID: id, SightRange: 100, ChangeTarget: uint8(id % 3), Flags: id}
 	}
-	if err := json.Unmarshal(caravanTacticsJSON, &document); err != nil {
-		t.Fatal(err)
-	}
-	row := document.Tactics["2004"]
-	delete(document.Tactics, "2004")
-	row.ID = 2005
-	document.Tactics["2005"] = row
-	data, err := json.Marshal(document)
+	return rows
+}
+
+/*
+================
+encodeCaravanTactics
+================
+*/
+func encodeCaravanTactics(t *testing.T, rows map[string]TacticsControls) []byte {
+	t.Helper()
+	data, err := json.Marshal(struct{ Tactics map[string]TacticsControls }{rows})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() {
-		if recover() == nil {
-			t.Fatal("unbound tactics number replaced a required native row")
-		}
-	}()
-	loadCaravanTactics(data)
+	return data
+}
+
+/*
+================
+TestCaravanTacticsRejectUnboundNumbers
+
+Eight rows alone do not close the native IDs: 2005 must not substitute for
+one of 2001..2004 or 2011..2014, even with otherwise valid controls; seven
+rows are not the set either.
+================
+*/
+func TestCaravanTacticsRejectUnboundNumbers(t *testing.T) {
+	rows := syntheticCaravanTactics()
+	table, err := parseCaravanTactics(encodeCaravanTactics(t, rows))
+	if err != nil || len(table) != 8 {
+		t.Fatalf("the closed set: %d rows, %v", len(table), err)
+	}
+	if tactics := table[2013]; tactics.NativeFlags != 2013 || tactics.TargetPolicy != 2013%3 || tactics.SightRange != 100 ||
+		!tactics.HasControls {
+		t.Fatalf("projection %+v", tactics)
+	}
+	row := rows["2004"]
+	delete(rows, "2004")
+	if _, err := parseCaravanTactics(encodeCaravanTactics(t, rows)); err == nil {
+		t.Fatal("seven rows admitted")
+	}
+	row.ID = 2005
+	rows["2005"] = row
+	if _, err := parseCaravanTactics(encodeCaravanTactics(t, rows)); err == nil {
+		t.Fatal("unbound tactics number replaced a required native row")
+	}
+	if table, err := LoadCaravanTactics(t.TempDir()); table != nil || err != nil {
+		t.Fatalf("absent table: %v, %v", table, err)
+	}
 }
 
 /*
 ================
 TestCaravanTacticsProjectTheBackupRows
 
-2001..2004 (flags 542) and 2011..2014 (flags 666); the target policy is
-the row's ChangeTarget byte.
+The operator's table (source-data, skips without it): 2001..2004 (flags
+542) and 2011..2014 (flags 666); the target policy is the row's
+ChangeTarget byte.
 ================
 */
 func TestCaravanTacticsProjectTheBackupRows(t *testing.T) {
+	table, err := parseCaravanTactics(licensed.SourceDataFile(t, "server/"+CaravanTacticsFile))
+	if err != nil {
+		t.Fatal(err)
+	}
 	for id, want := range map[uint32]struct {
 		flags  uint32
 		policy uint8
 	}{2001: {542, 0}, 2003: {542, 1}, 2004: {542, 2}, 2011: {666, 0}, 2014: {666, 2}} {
-		tactics, ok := CaravanTactics(id)
+		tactics, ok := table[id]
 		if !ok || tactics.NativeFlags != want.flags || tactics.TargetPolicy != want.policy || !tactics.HasControls ||
 			tactics.SightRange != 250 || tactics.Controls.TraceData != 500 || tactics.Controls.DiversionBasisData[5] != 30 {
 			t.Fatalf("tactics %d: %+v", id, tactics)
 		}
 	}
-	if _, ok := CaravanTactics(2005); ok {
+	if _, ok := table[2005]; ok {
 		t.Fatal("unknown caravan tactics resolved")
 	}
 }

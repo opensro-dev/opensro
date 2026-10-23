@@ -1,11 +1,12 @@
 /*
 ===========================================================================
 
-regioncombat.go - the runtime's battlefield table
+regioncombat.go - the runtime's region tables
 
-Every action owner asks the same table whether a region is a town or a
-battlefield. The table is the operator's derived data
-(worldgeom.RegionCombatFile); without it no region is known.
+Every action owner asks the same tables whether a region is a town or a
+battlefield, and which bandits ambush a caravan there. They are the
+operator's derived data (worldgeom.RegionCombatFile, RegionCaravanFile and
+monster.CaravanTacticsFile); without them no region is known.
 
 ===========================================================================
 */
@@ -17,6 +18,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	worldgeom "opensro.online/server/internal/game/world"
+	"opensro.online/server/internal/game/world/monster"
 )
 
 /*
@@ -76,4 +78,39 @@ A region whose battlefield flag is set: players may fight there.
 */
 func (rt *Runtime) battlefieldRegion(regionID uint16) bool {
 	return rt.regionCombat.Battlefield(regionID)
+}
+
+/*
+================
+LoadCaravan
+
+The caravan ambush tables from the derived data: each region's bandit zone
+and the eight bandit tactics rows. Without either no caravan draws
+bandits, and the runtime says so once.
+================
+*/
+func (rt *Runtime) LoadCaravan(derivedDir string) error {
+	zones, err := worldgeom.LoadRegionCaravan(derivedDir)
+	if err != nil {
+		return fmt.Errorf("caravan zones: %w", err)
+	}
+	tactics, err := monster.LoadCaravanTactics(derivedDir)
+	if err != nil {
+		return err
+	}
+	if zones == nil || tactics == nil {
+		log.Warnf("caravan: no %s or %s in the derived game data; caravans draw no bandits",
+			worldgeom.RegionCaravanFile, monster.CaravanTacticsFile)
+	}
+	rt.ConfigureCaravan(zones, tactics)
+	return nil
+}
+
+/*
+================
+ConfigureCaravan
+================
+*/
+func (rt *Runtime) ConfigureCaravan(zones *worldgeom.RegionCaravan, tactics monster.CaravanTacticsTable) {
+	rt.regionCaravan, rt.caravanTactics = zones, tactics
 }

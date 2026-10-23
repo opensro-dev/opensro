@@ -37,6 +37,7 @@ import (
 	"opensro.online/server/internal/game/social/guildwar"
 	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/world/fortress"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/skillobject"
 )
@@ -180,6 +181,10 @@ type Runtime struct {
 	// regionCombat is the operator's battlefield table (regioncombat.go);
 	// nil knows no region, so player combat and the town rules stay off.
 	regionCombat *worldgeom.RegionCombat
+	// regionCaravan and caravanTactics are the caravan ambush tables
+	// (LoadCaravan); without them no caravan draws bandits.
+	regionCaravan  *worldgeom.RegionCaravan
+	caravanTactics monster.CaravanTacticsTable
 
 	// NpcSpawn scopes the 0x745A liveness gate's NPC-gid domain to the
 	// same env gates that put the roster on the wire (select.go); tests
