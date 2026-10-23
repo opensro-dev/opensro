@@ -19,7 +19,8 @@ import (
 )
 
 // A zero-action-duration skill still owns admission, MP, cooldown, an accepted
-// action and an independently timed effect. Native 5830B0 dispatches category 3.
+// action and an independently timed effect. The native persistent-cast
+// lifecycle dispatches category 3.
 /*
 ================
 acceptInstantSelfEffect
@@ -33,7 +34,7 @@ func (rt *Runtime) acceptInstantSelfEffect(division string, character, snapshot 
 		return OpResult{DiagnosticRefusal: "instant-effect-admission-refused"}
 	}
 	now := rt.Now().UnixMilli()
-	// 4AD870 executes activity != 2 through events 0 and 2 immediately,
+	// Natively activity != 2 executes through events 0 and 2 immediately,
 	// before inspecting the ordinary command queue. An open attack is allowed.
 	if rt.skillCastPostureBlocked(division, snapshot, now) {
 		return OpResult{DiagnosticRefusal: "instant-effect-action-busy"}
@@ -83,7 +84,7 @@ func (rt *Runtime) acceptInstantSelfEffect(division string, character, snapshot 
 		}
 		return OpResult{DiagnosticRefusal: "instant-effect-category-occupied"}
 	}
-	// 583567 open -> 58405E MP -> 58408A action release -> 584297 attach.
+	// Natively: open, then MP, then the action release, then the attach.
 	// The lasting effect has its own token; no animation-duration timer is invented.
 	gid := enterworld.ObjectIDForCharacter(snapshot)
 	open := wire.SkillCastSelfFrame(wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: gid, InstanceToken: token})
@@ -99,19 +100,19 @@ func (rt *Runtime) acceptInstantSelfEffect(division string, character, snapshot 
 ================
 instantSelfEffectCost
 
-The 58D8F0 phases an instant self effect answers itself, in native bit
-order: cooldown (0x01 -> 0x3005), the weapon (0x04 -> 58D480, e.g. 0x300D
+The native admission phases an instant self effect answers itself, in
+native bit order: cooldown (0x01 -> 0x3005), the weapon (0x04, e.g. 0x300D
 for Scud's dagger-only 13/255 without a dagger) and then MP (0x10). The
 dispatch in targetinteract.go reaches this owner before the command
 admission, so without this phase a weapon-restricted row would never be
 checked. Only the equipment phase is added, not the whole execution mask:
-its action-recovery phase (0x80) would refuse the open attack 4AD870 lets
+its action-recovery phase (0x80) would refuse the open attack the native command lets
 an instant effect run beside.
 
-The phase is Skill_ValidateEquipmentRequirements (58D480) whole: a row
-with reqi pairs walks them (+0x3A0), any other row its weapon bytes. Native
-runs it at the press for every skill command but an onff pulse
-(CGCharAutoCommandActor_ProcessCommand 0x4ACED4, mask 0x37), so the Rogue's
+The phase is the native equipment-requirement check whole: a row with reqi
+pairs walks them, any other row its weapon bytes. Native runs it at the
+press for every skill command but an onff pulse (the command acceptance,
+mask 0x37), so the Rogue's
 poison coatings (reqi 6 12 / 6 13) are refused 0x300D without a crossbow or
 a dagger, and Scud (13/255) without a dagger. The Chinese imbue and
 movement rows and the SKILL_MALL_PET_SKILL rows are 0xFF/0xFF without reqi
@@ -159,7 +160,7 @@ projectiles) share the current effect snapshot. att value 5 scales the
 separately evaluated imbue damage, not the primary physical attack.
 
 A chained victim (target entry flag 1, pushed by an imbue's efr) loses the
-physical lane of both (58F1C4, 58F2E4): it takes the magical lane and the
+physical lane of both, as natively: it takes the magical lane and the
 imbue damage only.
 ==================
 */
@@ -173,8 +174,8 @@ func (rt *Runtime) resolvePlayerImpact(division, name string, skill enterworld.S
 resolvePlayerImpactBehindWall
 
 resolvePlayerImpact against a defender that may stand behind a wall
-(58EC6C splits the attack's own lanes). The imbue share joins the
-defender's part afterwards: 58F435 adds it after the split.
+(the native wall splits the attack's own lanes). The imbue share joins the
+defender's part afterwards: natively it is added after the split.
 ==================
 */
 func (rt *Runtime) resolvePlayerImpactBehindWall(division, name string, skill enterworld.SkillRow, attacker, defender combat.Stats, nowMs int64, chained bool, wall *enterworld.SkillWall) (combat.WallOutcome, error) {
@@ -202,7 +203,7 @@ func (rt *Runtime) resolvePlayerImpactBehindWall(division, name string, skill en
 		})
 	}
 	result := split.Defender
-	// A blocked impact takes no imbue share (5905FB skips it).
+	// A blocked impact takes no imbue share, as natively.
 	if err != nil || skill.Attack.Value5 == 0 || result.Blocked {
 		return split, err
 	}
@@ -224,11 +225,11 @@ func (rt *Runtime) resolvePlayerImpactBehindWall(division, name string, skill en
 		return combat.WallOutcome{}, err
 	}
 	result.Damage = uint32(min(uint64(wire.MaxSkillActionDamage), uint64(result.Damage)+uint64(uint16(extra.Damage))*uint64(skill.Attack.Value5)/100))
-	// 58F435 / 58F43C add the imbue's physical and magical words before
+	// Natively the imbue's physical and magical words are added before
 	// scaling its damage share.
 	result.PhysicalDamage += uint32(uint16(extra.PhysicalDamage))
 	result.MagicalDamage += uint32(uint16(extra.MagicalDamage))
-	// The imbue's bu block is rolled with the hit's statuses in 590680.
+	// The imbue's bu block is rolled with the hit's statuses in the native status roll.
 	result.Imbue = imbueAbnormal
 	split.Defender = result
 	return split, nil
