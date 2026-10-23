@@ -6,7 +6,7 @@ betaplayermap.go - the beta world map roster push (port-only, not native)
 The retail world map shows only the local player and party members. For
 the public beta the operator can also show every online player; the
 server pushes their positions with this frame. 0x3FB0 is a port-only
-opcode: no v1.150 client or v1.188 server uses it, and only this port's
+opcode: no v1.150 client or original server uses it, and only this port's
 browser client consumes it.
 
 Body, little-endian:

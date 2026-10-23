@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// The CSOItem body sub_78c830 writes: refObjId, plus, variance, durability,
+// The CSOItem body client 78C830 writes: refObjId, plus, variance, durability,
 // magic-option count. Same shape the 0x31DB equipment rows use.
 func TestItemBodyLayout(t *testing.T) {
 	got := ItemBody{RefObjID: 11459, Durability: 100}.Encode()
@@ -34,20 +34,20 @@ func TestItemMoveResultEncodings(t *testing.T) {
 		want []byte
 	}{
 		{
-			// sub_759a30 case 0 @0x00759ac5: [src][dst][qty u16], then the
+			// client 759A30 case 0 at 759AC5: [src][dst][qty u16], then the
 			// sub-move count @0x00759aea.
 			name: "type 0 bag move",
 			got:  EncodeInventoryMoveResult(13, 14, 1, nil),
 			want: []byte{0x01, 0x00, 13, 14, 1, 0, 0x00},
 		},
 		{
-			// sub_759a30 case 7 @0x00759c8c: [src].
+			// client 759A30 case 7 at 759C8C: [src].
 			name: "type 7 ground drop",
 			got:  EncodeGroundDropResult(13),
 			want: []byte{0x01, 0x07, 13},
 		},
 		{
-			// sub_759a30 case 0xa @0x00759fbd: [amount u32].
+			// client 759A30 case 0xa at 759FBD: [amount u32].
 			name: "type 0x0A gold drop",
 			got:  EncodeGoldDropResult(8800),
 			want: []byte{0x01, 0x0A, 0x60, 0x22, 0x00, 0x00},
@@ -214,8 +214,8 @@ func TestIsGoldPickupOnlyForSentinelSlot(t *testing.T) {
 	}
 }
 
-// sub_697e80 @0x00697f8e writes the sub-move count and then five bytes per
-// row; sub_759a30 @0x00759b04 reads the same five back.
+// Client 697E80 at 697F8E writes the sub-move count and then five bytes per
+// row; 759A30 at 759B04 reads the same five back.
 func TestInventoryMoveResultCarriesSubMoveRows(t *testing.T) {
 	subMoves := []SubMove{
 		{MovementType: MoveTypeInventory, SourceSlot: 13, DestSlot: 14, Quantity: 20},
@@ -249,19 +249,19 @@ func TestItemMoveRequestEncodings(t *testing.T) {
 		want    []byte
 	}{
 		{
-			// sub_697e80 @0x00697f7c
+			// client 697E80 at 697F7C
 			name:    "type 0 bag move",
 			request: ItemMoveRequest{MovementType: MoveTypeInventory, SourceSlot: 13, DestSlot: 14, Quantity: 1},
 			want:    []byte{0x00, 13, 14, 1, 0},
 		},
 		{
-			// sub_697e80 @0x006980d0
+			// client 697E80 at 6980D0
 			name:    "type 7 ground drop",
 			request: ItemMoveRequest{MovementType: MoveTypeGroundDrop, SourceSlot: 13},
 			want:    []byte{0x07, 13},
 		},
 		{
-			// sub_697e80 @0x006984cb
+			// client 697E80 at 6984CB
 			name:    "type 0x0A gold drop",
 			request: ItemMoveRequest{MovementType: MoveTypeGoldDrop, GoldAmount: 8800},
 			want:    []byte{0x0A, 0x60, 0x22, 0x00, 0x00},
@@ -395,8 +395,8 @@ func TestOtherEtcGroupsKeepU16Quantity(t *testing.T) {
 TestGoldHeapExcludesShopTokens
 
 Group 0x280 is one wire width but two meanings: gold heaps (TID 3.3.5.0)
-and the later shop tokens (TID 3.3.5.1), which v1.188's CGItem_IsGold
-(483159..483163) excludes by TID4.
+and the later shop tokens (TID 3.3.5.1), which the later server's gold
+test excludes by TID4.
 ================
 */
 func TestGoldHeapExcludesShopTokens(t *testing.T) {

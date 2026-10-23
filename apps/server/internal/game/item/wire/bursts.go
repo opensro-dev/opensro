@@ -11,11 +11,11 @@ import "opensro.online/server/internal/domain"
 //
 // THE PICKUP-DESPAWN TIMING CONTRACT (bug B, closed as verified-native):
 // the 0x36AB despawn rides the SAME burst as the 0x35C7 scoop trigger and the
-// 0xB06D grant. That is the native trigger - retail-family SR_GameServer
-// sub_526090 sends the anim inline in its success tail and the despawn rides
+// 0xB06D grant. That is the native trigger - the original server's pickup
+// sends the anim inline in its success tail and the despawn rides
 // the item's world-removal in the same grant window. The 0.5-1s of visible
 // linger after the scoop is the CLIENT's own dissolve: CIItem despawn
-// (sub_86e980) arms a fixed 1.5s CIDecoDisappear fade (data_bd5144 = 1.5f,
+// (client 86E980) arms a fixed 1.5s CIDecoDisappear fade (BD5144 = 1.5f,
 // byte-verified). Deferring the despawn to an animation event would DOUBLE
 // the linger and diverge from native - never do it.
 
@@ -73,8 +73,8 @@ func ProgressionPrivateFrames(frames []Frame) []Frame {
 	return private
 }
 
-// Every pickup outcome ends with the 0xB2CD release. Native
-// CGCharAutoCommandActor_OnActionFinish (v1.188 4AD390) sends B074 only
+// Every pickup outcome ends with the 0xB2CD release. The native action
+// finish sends B074 only
 // after the queued pickup action ran its item move and despawn, so the
 // client keeps the drop claimed until the outcome has been applied. A
 // release sent first let a pickup-key press between it and the despawn ask
@@ -109,8 +109,8 @@ func PickupApproachArmFrame() Frame {
 // A gold heap is always consumed whole, so the despawn is unconditional. The
 // 0xFE result already prints UIIT_MSG_STATE_GAIN_GOLD for the whole heap
 // (client CPSMission_ApplyInventoryOperation), so a solo credit refreshes
-// the balance silently (server 4EAD12 pushes notify 0). notify is set only
-// when a party split credited this recipient (CParty_DistributeGold).
+// the balance silently (the native credit pushes notify 0). notify is set
+// only when a party split credited this recipient.
 func PickupGoldGrantFrames(anim PickupAnim, amount uint32, balance uint64, itemGid uint32, notify bool) []Frame {
 	return []Frame{
 		{Opcode: OpPickupAnim, Payload: anim.Encode()},
@@ -131,7 +131,7 @@ func PickupGoldGrantFrames(anim PickupAnim, amount uint32, balance uint64, itemG
 // counts); it runs inside the action, so it precedes the release too.
 //
 // An over-cap pickup leaves the REMAINDER on the ground (the total > iMax arm
-// of sub_756a60): the heap keeps its gid and its rendered entity, so the
+// of client 756A60): the heap keeps its gid and its rendered entity, so the
 // despawn is withheld - a client still drawing the drop is looking at a real,
 // pickable object.
 func PickupItemGrantFrames(anim PickupAnim, destSlot uint8, item ItemBody, itemGid uint32, groundRemainder uint16, progress []Frame) []Frame {
