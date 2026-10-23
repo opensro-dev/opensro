@@ -13,8 +13,10 @@ modules the client ships, not a per-test bundle.
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { defined } from "../helpers/defined.mjs";
+import { sourceDataRoot } from "../../../../scripts/build/world/paths.mjs";
 const { restrictionNotice } = await import( "../../src/engine/foundation/gameplay/system-notices.ts" );
 const { noticeText } = await import( "../../src/engine/foundation/ui/notice-text.ts" );
 const { createGameplay } = await import(
@@ -35,6 +37,15 @@ const lookup = key =>
 		key.includes( "PUNISHMENT" ) ?
 		"%d-%d-%d %s %d:%d" :
 		"";
+// The retail English oracle lives in the operator's source-data, never in
+// this repository; the two tests that read it skip without it.
+const restrictionCatalogPath = join(
+	sourceDataRoot,
+	"fixtures/native/system-notification/restriction-english-catalog.json"
+);
+const restrictionCatalog = existsSync( restrictionCatalogPath ) ?
+	JSON.parse( readFileSync( restrictionCatalogPath, "utf8" ) ).entries :
+	null;
 test("restriction packet retains native masks, noon boundary and both message destinations", () => {
 	for ( const kind of [ 0, 1 ] ) {
 		for ( let hour = 0; hour < 32; hour++ ) {
@@ -80,11 +91,13 @@ test("restriction ingress is atomic and independent of academy bootstrap", () =>
 		assert.deepEqual( defined( next ).social, defined( before ).social );
 	}
 });
-test("secure notice projection does not invent missing translations or render invalid argument types", () => {
+test("secure notice projection does not invent missing translations or render invalid argument types", ( t ) => {
+	if ( !restrictionCatalog ) {
+		t.skip( "source-data restriction catalogue unavailable" );
+		return;
+	}
 	const n = restrictionNotice( 0x36ea, packet( 0, 0 ) ),
-		entries = JSON.parse(
-			readFileSync( "tests/fixtures/native/system-notification/restriction-english-catalog.json", "utf8" )
-		).entries;
+		entries = restrictionCatalog;
 	assert.match( entries[defined( n ).key], /%year/ );
 	assert.equal(
 		noticeText( k => entries[k] ?? "", n ),
@@ -107,11 +120,13 @@ test("secure notice projection does not invent missing translations or render in
 	assert.equal( banner.value( lookup ), "Earlier", "empty text does not erase an earlier native notice" );
 });
 
-test("product localization correction makes both restriction channels usable without changing the native oracle", async () => {
+test("product localization correction makes both restriction channels usable without changing the native oracle", async ( t ) => {
+	if ( !restrictionCatalog ) {
+		t.skip( "source-data restriction catalogue unavailable" );
+		return;
+	}
 	const { completeRestrictionText } = await import( "../../../../scripts/build/shared/textResources.mjs" );
-	const captured = JSON.parse(
-		readFileSync( "tests/fixtures/native/system-notification/restriction-english-catalog.json", "utf8" )
-	).entries;
+	const captured = restrictionCatalog;
 	const entries = { ...captured };
 	completeRestrictionText( entries );
 	const first = { ...entries };

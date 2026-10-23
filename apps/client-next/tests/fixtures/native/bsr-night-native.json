@@ -8,17 +8,7 @@
         {
           "start": 10663152,
           "end": 10663162,
-          "bytes": "b9c800f100e9d62f0000",
-          "instructions": [
-            {
-              "va": 10663152,
-              "asm": "mov     ecx, 0xf100c8"
-            },
-            {
-              "va": 10663157,
-              "asm": "jmp     0xa2e4d0"
-            }
-          ]
+          "bytes": "b9c800f100e9d62f0000"
         }
       ]
     },
@@ -28,21 +18,7 @@
         {
           "start": 10675408,
           "end": 10675421,
-          "bytes": "8b4424048981a8010000c20400",
-          "instructions": [
-            {
-              "va": 10675408,
-              "asm": "mov     eax, dword [esp+0x4]"
-            },
-            {
-              "va": 10675412,
-              "asm": "mov     dword [ecx+0x1a8], eax"
-            },
-            {
-              "va": 10675418,
-              "asm": "retn    0x4"
-            }
-          ]
+          "bytes": "8b4424048981a8010000c20400"
         }
       ]
     }
