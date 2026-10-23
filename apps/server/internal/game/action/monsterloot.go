@@ -23,9 +23,8 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// v1.188 _RefDropGold GoldMax, levels 1..140. The table is keyed by level,
-// so unlike RefObj numeric identities it is safe mechanism/content evidence
-// across the server-dump boundary. GoldMin follows the table's exact
+// GoldMax by level, levels 1..140: the ceiling of the per-level gold
+// table. GoldMin follows the table's exact
 // ceil(3.5*level+24.5) progression and is calculated below.
 var monsterGoldMaxByLevel = [...]uint16{
 	59, 66, 74, 81, 88, 96, 103, 110, 118, 125,
@@ -71,9 +70,10 @@ func (rt *Runtime) rollMonsterGoldAmount(monster monster.Instance) (uint32, bool
 		return 0, false
 	}
 
-	// _RefDropGold probability is 0.0001 in the backup and is scaled by the
-	// loader to the runtime threshold 100. The draw is still consumed: it is
-	// part of the native RNG order even though every 0..100 value succeeds.
+	// The reference drop-gold probability is 0.0001 in the source table
+	// and is scaled by the loader to the runtime threshold 100. The draw
+	// is still consumed: it is part of the native RNG order even though
+	// every 0..100 value succeeds.
 	referenceChance, err := rt.DropRoll()
 	if err != nil || referenceChance%101 > 100 {
 		return 0, false
@@ -101,7 +101,7 @@ func (rt *Runtime) rollMonsterGoldAmount(monster monster.Instance) (uint32, bool
 ================
 monsterGoldMultiplier
 
-CServerData_BuildMonsterGoldHeap @0x726900 rarity multipliers: a party
+The native gold-heap rarity multipliers: a party
 monster's heap is nine times over, a unique's thirty, a giant's four.
 ================
 */
@@ -136,17 +136,17 @@ func MonsterGoldHeapRange(level, rarity uint8) (uint64, uint64, bool) {
 	return uint64(minimum) * multiplier, uint64(maximum) * multiplier, true
 }
 
-// admitMonsterDrop is the publish-side CGObjMob gate. Retail runs it only
+// admitMonsterDrop is the publish-side monster gate. Retail runs it only
 // after the complete prepared-drop list has been generated; keeping it out of
 // the gold builder is what preserves RNG order and permits more than one row.
 /*
 ================
 admitMonsterDrop
 
-CGObjMob_RollDropAdmission (4C1840, vtable +0x634): 100, or past six
-levels above the monster ftol((1 - gap * 0.04f) * 100), times the killer's
-fatigue factor (+0x2280; 1.0 outside the anti-addiction service the port
-does not run), four times for a grade-7 monster (+0x1CF4), capped at 100.
+The native drop-admission roll: 100, or past six
+levels above the monster (1 - gap * 0.04) * 100, times the killer's
+fatigue factor (1.0 outside the anti-addiction service the port
+does not run), four times for a grade-7 monster, capped at 100.
 A negative threshold admits nothing: rand() % 101 is never below zero.
 ================
 */
@@ -156,7 +156,8 @@ func (rt *Runtime) admitMonsterDrop(playerLevel uint8, monster monster.Instance)
 	}
 	// Port-only, not native (owner 2026-10-20): with SRO_UNIQUE_GAP_EXEMPT
 	// a unique's drops ignore the gap threshold, so a capped hunter still
-	// loots Tiger Girl. Off, this branch never runs: byte-native 4C1840.
+	// loots Tiger Girl. Off, this branch never runs: the admission roll
+	// below is byte-native.
 	if rt.UniqueRules.GapExempt && RollsUniqueDrops(monster.Rarity()) {
 		return true
 	}
@@ -175,7 +176,8 @@ func (rt *Runtime) admitMonsterDrop(playerLevel uint8, monster monster.Instance)
 	return err == nil && int32(roll%101) <= threshold
 }
 
-// dropGradeSeven is the grade whose timer flag (+0x1CF4) quadruples 4C1840.
+// dropGradeSeven is the grade whose timer flag quadruples the
+// admission threshold.
 const dropGradeSeven = 7
 
 /*

@@ -3,11 +3,10 @@
 
 mountedcommand.go - on-foot commands from a mounted player
 
-CGCharAutoCommandActor_ProcessCommand (4ACD7A) refuses attack (1) and
-skill (4) commands while CGObjPC_IsMountedOnCOS (vtable +0x540, 4DDCA0)
-holds, before the command record exists, so before admission and before
-the instant-skill dispatch (4AD870). The mount attacks through its own COS
-command instead.
+While a player rides a COS, the server refuses their on-foot attack (1)
+and skill (4) commands before the command record exists, so before
+admission and before the instant-skill dispatch. The mount attacks
+through its own COS command instead.
 
 ===========================================================================
 */
@@ -19,12 +18,12 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 )
 
-// mountedCommandError is v1.188's 0x4004, COS error 4. The v1.150 client
+// mountedCommandError is COS error 4. The v1.150 client
 // reads one byte under notice category 0x19 (689420), where 1..4 show no
 // text.
 const mountedCommandError uint8 = 0x04
 
-// mountedOnCOS is 4DDCA0: a ridden COS and state+0xE == 1.
+// mountedOnCOS reports an active COS the player is riding.
 func mountedOnCOS(c *enterworld.Character) bool {
 	return c.ActiveCOS != nil && c.ActiveCOS.Mounted
 }
@@ -33,7 +32,7 @@ func mountedOnCOS(c *enterworld.Character) bool {
 ==================
 mountedCommandRefusal
 
-SendActionResponseB074 (4AD270) with result 3: the queued command count,
+The action-state answer (B074) with result 3: the queued command count,
 which is zero while mounted since every on-foot command is refused, then
 the error.
 ==================

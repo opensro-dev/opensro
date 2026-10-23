@@ -26,8 +26,8 @@ const (
 ================
 HandleMercenaryAttribute
 
-v1.150 5DB1B8 writes [npc DWORD][attribute BYTE]; v1.188 517D60 validates
-range and NPC service 15 before the guild transaction.
+The v1.150 client (5DB1B8) writes [npc DWORD][attribute BYTE]; the
+server validates range and NPC service 15 before the guild transaction.
 ================
 */
 func (rt *Runtime) HandleMercenaryAttribute(division string, c *enterworld.Character, payload []byte) OpResult {
