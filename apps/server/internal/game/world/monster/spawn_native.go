@@ -3,7 +3,7 @@ package monster
 import "math"
 
 // Native nest spawn (GameServer 5607B0 and its creation callee 5F6EB0),
-// independently corroborated by the ISRO-R GameServer (593393..59349B).
+// independently corroborated by the later data's server (593393..59349B).
 // Every random draw is one VC CRT rand() result in 0..32767; callers pass the
 // same projection used by the AI timers (SummonRandomWord). Draw order is the
 // native order, so one deterministic source replays a spawn decision exactly.
@@ -36,7 +36,7 @@ func NativeTypeWord(ref MonsterRef) uint16 {
 	return ref.TidWord | uint16(ref.TypeID4&0x1f)<<11
 }
 
-// TradeNpcMonster is CGObj_IsThiefMonster (482640) or CGObj_IsHunterMonster
+// TradeNpcMonster is the native thief-monster test (482640) or hunter-monster test
 // (4826E0): the monster class with TID4 2 (thief) or 3 (hunter).
 func TradeNpcMonster(ref MonsterRef) bool {
 	tid := NativeTypeWord(ref)

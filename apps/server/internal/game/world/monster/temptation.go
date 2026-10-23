@@ -16,7 +16,7 @@ import "opensro.online/server/internal/game/abnormal"
 const (
 	// regularMonsterTypeWord is the full TypeID word (NativeTypeWord, TID4
 	// in bits 11-15) of an ordinary MOB, TID4 1. Thieves, hunters and quest
-	// monsters (TID4 2..4) carry other words. CGObjMob_EvaluateHostility
+	// monsters (TID4 2..4) carry other words. The native hostility evaluation
 	// (5299E0) uses the same word, masked with ~1, to decide which monsters
 	// honour a first-attack protection.
 	regularMonsterTypeWord = 0x08c6
