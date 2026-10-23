@@ -4,7 +4,7 @@
 pvp_test.go - players striking players, and what a kill costs and pays
 
 The pair stands in a PvP region (0x62AA) beside each other; the attacker
-already holds the victim as an aggressor, which 5293A0 admits before its
+already holds the victim as an aggressor, which the native permission check admits before its
 level gates, so the level-1 fixture rows stay valid.
 
 ===========================================================================
@@ -88,7 +88,7 @@ func TestPlayerBasicAttackStrikesPlayer(t *testing.T) {
 ================
 TestPlayerAttackRefusesPartyMember
 
-5293A0: party protection precedes every other relation.
+The native permission check: party protection precedes every other relation.
 ================
 */
 func TestPlayerAttackRefusesPartyMember(t *testing.T) {
@@ -109,8 +109,9 @@ func TestPlayerAttackRefusesPartyMember(t *testing.T) {
 ================
 TestMurderBooksTheKiller
 
-4E1F60 kind 3: total +1, penalty (total+1)/2*1200, daily +1 at an even
-level, and the PvP EXP of 4105D0 (two level-1 players: 24 * 1.09 = 26).
+The native murder booking (kind 3): total +1, penalty (total+1)/2*1200,
+daily +1 at an even level, and the native PvP EXP (two level-1 players:
+24 * 1.09 = 26).
 ================
 */
 func TestMurderBooksTheKiller(t *testing.T) {
@@ -164,7 +165,7 @@ func TestMurdererVictimDoublesPvpExperience(t *testing.T) {
 ================
 TestJobKillExperienceRatio
 
-4103E0: the victim's basis against the killer's, held to 0.5..1.5, halved
+The native ratio: the victim's basis against the killer's, held to 0.5..1.5, halved
 for a trader killer.
 ================
 */
@@ -260,7 +261,7 @@ func (l jobKillLevels) WithdrawalGoldBasis(level int64) (int64, bool) {
 ================
 TestThiefMonsterKillPaysHunterJobExp
 
-4E1F60's monster branch: a hunter's killing blow on a thief monster earns
+The native booking's monster branch: a hunter's killing blow on a thief monster earns
 job EXP; a thief monster killed outside job mode earns none.
 ================
 */
@@ -292,8 +293,9 @@ func TestThiefMonsterKillPaysHunterJobExp(t *testing.T) {
 ================
 TestPlayerAttackPKLimitsApplyOnlyToNeutrals
 
-5293A0: a neutral target is refused at the attacker's daily limit
-(0x3014); an aggressor target is a legal enemy (52B6D0) whose attack
+The native permission check: a neutral target is refused at the
+attacker's daily limit (0x3014); an aggressor target is a legal enemy whose
+attack
 never reads the limits.
 ================
 */
@@ -316,7 +318,7 @@ func TestPlayerAttackPKLimitsApplyOnlyToNeutrals(t *testing.T) {
 ================
 TestJobAttackIgnoresTheSuitActivation
 
-529521 admits opposing jobs before 529557 reads +0x2178, so a suit still
+The native check admits opposing jobs before it reads the suit's activation, so a suit still
 activating fights at once; no 0x3019 WAITFOR_JOB_ACTIVATE is sent.
 ================
 */
@@ -341,10 +343,11 @@ func TestJobAttackIgnoresTheSuitActivation(t *testing.T) {
 TestPlayerUnderPKLevelFightsOnlyARetainedOpponent
 
 BR-261006-1818: below level 20 a player is refused (0x3016) on a neutral,
-for basic attacks and skills alike (both reach 5293A0), unless the target
-is already in its aggression map; then 5293A0 admits before the level
+for basic attacks and skills alike (both reach the native permission
+check), unless the target is already in its aggression map; then the check
+admits before the level
 floor, so it may keep fighting that player. The client refuses the click
-below 20 (693EF9) but sends the skill, which is why only skills landed.
+below 20 (client 693EF9) but sends the skill, which is why only skills landed.
 ================
 */
 func TestPlayerUnderPKLevelFightsOnlyARetainedOpponent(t *testing.T) {
@@ -365,7 +368,7 @@ func TestPlayerUnderPKLevelFightsOnlyARetainedOpponent(t *testing.T) {
 ================
 TestAttackingAMurdererLeavesTheAttackerWhite
 
-4E25C0: a murderer is a legal opponent, so hitting one records no
+The native normal hit: a murderer is a legal opponent, so hitting one records no
 aggression and the attacker does not turn purple; hitting a neutral does.
 ================
 */
@@ -424,7 +427,7 @@ func TestAreaSelectChoosesItsKinds(t *testing.T) {
 ================
 TestPlayerKnockbackWalksThroughTheMoveQuery
 
-CGObj_MoveTo moves a pushed player through the move query from its own
+The native push moves a pushed player through the move query from its own
 cell: a refused walk leaves it where it stood, a clipped walk ends at the
 rest, and the published point is where it landed.
 ================
@@ -484,7 +487,7 @@ func TestPlayerKnockbackWalksThroughTheMoveQuery(t *testing.T) {
 ================
 TestAreaStrikesSpareNeutralPlayers
 
-5293A0's control flags, as 5A1AD0 passes them for an area victim. Both
+The permission check's control flags, as the native area strike passes them for an area victim. Both
 players are level 20 in a battle region and the caster is white.
 
   - A neutral target the caster is not fighting: a direct attack is legal
