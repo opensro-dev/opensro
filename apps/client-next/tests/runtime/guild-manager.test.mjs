@@ -140,7 +140,7 @@ test("the vote row learns the candidates and ballots move their counts", () => {
 	/** @type {any} */
 	let state = { ...emptySocial( "Member" ), guild };
 	state = packet( state, 0x3a6c, Uint8Array.of( 1, ...u32( 7 ), 0, ...u32( 600000 ) ) );
-	// 82CEE0: [1][vote][time][n] then n x [candidate jid][ballots] (v1.188 5E79C0).
+	// 82CEE0: [1][vote][time][n] then n x [candidate jid][ballots].
 	state = packet(
 		state,
 		0xb332,
@@ -158,7 +158,7 @@ test("the vote row learns the candidates and ballots move their counts", () => {
 	assert.deepEqual( state.guild.votes[0].candidates, [ { id: 2, ballots: 1 }, { id: 3, ballots: 1 } ] );
 	state = packet( state, 0x3a6c, Uint8Array.of( 4, ...u32( 7 ), 0, 1, 2 ) );
 	assert.deepEqual( state.guild.votes[0].candidates, [ { id: 2, ballots: 0 }, { id: 3, ballots: 2 } ] );
-	// A refusal (no vote, v1.188 0x5006) reads category 0x15, as the ballot's does.
+	// A refusal (no vote) reads notice category 0x15, as the ballot's does.
 	const refused = packet( state, 0xb332, Uint8Array.of( 2, 0x06 ) );
 	const ballot = packet( state, 0xb330, Uint8Array.of( 2, 0x06 ) );
 	assert.deepEqual( [ refused.notice, refused.unresolvedNotice ], [ ballot.notice, ballot.unresolvedNotice ] );

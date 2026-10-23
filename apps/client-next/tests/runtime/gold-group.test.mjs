@@ -5,7 +5,7 @@ gold-group.test.mjs - gold heaps and the shop tokens that share their group
 
 Group 0x280 (TID 3.3.5) is one wire width but two meanings: gold heaps
 (TID4 0) and the later shop tokens (TID4 1, ITEM_ETC_SD_TOKEN_*), which
-v1.188 excludes from its gold predicate. No game data is read.
+the native gold predicate excludes. No game data is read.
 
 ===========================================================================
 */
