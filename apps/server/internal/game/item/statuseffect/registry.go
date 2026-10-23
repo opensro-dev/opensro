@@ -34,7 +34,7 @@ const (
 // the replacement family; voluntary cancellation uses the exact SkillID.
 // InstanceToken optionally distinguishes parallel instances.
 //
-// ClientCancelable mirrors ActiveCharacterEffect_RequestStop(effect, false):
+// ClientCancelable mirrors the native voluntary-stop request (not forced):
 // the UI request is not a privileged purge and cannot remove an effect whose
 // server descriptor forbids voluntary cancellation.
 /*
@@ -46,7 +46,7 @@ type Effect struct {
 	SourceTargetGID   uint32 // source-only B5ED relationship to a population-owned recipient.
 	DamageToMP        bool   // dgmp instance contribution; retirement removes it with its owner.
 	DamageToMPPercent uint32
-	ForcedTargetGID   uint32 // hitm context+28; zero means no target constraint.
+	ForcedTargetGID   uint32 // hitm's forced target; zero means no target constraint.
 	jobClock          relativeJobClock
 	jobClockPresent   bool
 	jobCheckpointDue  bool
@@ -56,7 +56,7 @@ type Effect struct {
 	// producer. It is not inferred from visible icons or reference-counted.
 	InstalledStates  [2]uint32
 	RetirementStates [2]uint32
-	// Area source identity belongs to native context+6C, not the lnks pair.
+	// Area source identity belongs to the native effect context, not the lnks pair.
 	OwnerGID       uint32
 	AreaSourceGID  uint32
 	AreaSourceName string
@@ -106,8 +106,8 @@ type Effect struct {
 	DurationPresent  bool
 	StartedAtMs      int64 // native duration origin; persistent jobs use their own clock
 	ClientCancelable bool
-	// StopRequested is the server-side live flag cleared by
-	// ActiveCharacterEffect_RequestStop(effect, false). The request owner does
+	// StopRequested is the server-side live flag cleared by the native
+	// voluntary-stop request (not forced). The request owner does
 	// not erase the row or emit the ended-instance packet; the character-effect
 	// update owns that second phase.
 	StopRequested bool
@@ -146,9 +146,9 @@ type Registry struct {
 	castingStates      map[string]CastingConflictSnapshot
 	links              map[string]Link
 	threatOwners       map[string]uint32
-	// quotaOwners is ParamKeeper+20C per recipient: its Pain Quota link.
+	// quotaOwners is per recipient: its Pain Quota link.
 	quotaOwners map[string]uint32
-	// screamOwners is ParamKeeper+200 per recipient: its Scream Mask link.
+	// screamOwners is per recipient: its Scream Mask link.
 	screamOwners  map[string]uint32
 	byOwner       map[string][]Effect
 	pendingOwners []string
@@ -663,7 +663,7 @@ func (r *Registry) RetireEvent(division, name string, mask uint8) []Effect {
 	return ended
 }
 
-// RetireInstances is the synchronous RequestRetirement of chosen instances
+// RetireInstances is the synchronous retirement request of chosen instances
 // (the native damage-effect pass): the same teardown as
 // RetireEvent, selected by instance token instead of event bit.
 /*
