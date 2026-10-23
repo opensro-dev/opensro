@@ -24,14 +24,14 @@ const PET_GID = 9;
 const POWER_MASK = 0x203f;
 const GRADE_MASK = 0x017fcfc0;
 const TEXT = {
-	PARAM_BU: "Burn",
-	PARAM_POWER: "Effect",
-	UIIT_STT_GRADE: "level",
-	UIIT_STT_REMAIN_TIME: "Remaining time",
-	PARAM_SECOND: "Second",
-	PARAM_MINUTE: "Minute",
-	PARAM_HOUR: "Hour",
-	PARAM_DAY: "Day"
+	PARAM_BU: "Scorch",
+	PARAM_POWER: "Potency",
+	UIIT_STT_GRADE: "lvl",
+	UIIT_STT_REMAIN_TIME: "Time left",
+	PARAM_SECOND: "sec",
+	PARAM_MINUTE: "min",
+	PARAM_HOUR: "hr",
+	PARAM_DAY: "dy"
 };
 
 /*
@@ -87,11 +87,11 @@ function tooltip( game, source, now = 2000 ) {
 	return buffTooltip( { kind: "abnormal", ...source }, game, now, catalog, text ).map( row => row.value );
 }
 
-test("BUG-040: Burn power 38 is a detail, never the heading grade", () => {
+test("BUG-040: the burn status's power 38 is a detail, never the heading grade", () => {
 	const rows = tooltip( state( 3 ), { gid: LOCAL_GID, bit: 3 } );
-	assert.equal( rows[0], "Burn" );
-	assert.ok( rows.includes( "\nEffect 38" ) );
-	assert.ok( rows.includes( "\nRemaining time 27Second" ) );
+	assert.equal( rows[0], "Scorch" );
+	assert.ok( rows.includes( "\nPotency 38" ) );
+	assert.ok( rows.includes( "\nTime left 27sec" ) );
 });
 
 test("all named abnormal statuses preserve the native power/grade split", () => {
@@ -100,8 +100,8 @@ test("all named abnormal statuses preserve the native power/grade split", () => 
 		if ( !(mask & (POWER_MASK | GRADE_MASK)) ) continue;
 		const rows = tooltip( state( bit ), { gid: LOCAL_GID, bit } );
 		assert.equal( rows[0].includes( "38" ), Boolean( mask & GRADE_MASK ), `heading bit ${bit}` );
-		assert.equal( rows.includes( "\nEffect 38" ), Boolean( mask & POWER_MASK ), `power bit ${bit}` );
-		assert.equal( rows.some( row => row.includes( "Remaining time" ) ), bit !== 24, `time bit ${bit}` );
+		assert.equal( rows.includes( "\nPotency 38" ), Boolean( mask & POWER_MASK ), `power bit ${bit}` );
+		assert.equal( rows.some( row => row.includes( "Time left" ) ), bit !== 24, `time bit ${bit}` );
 	}
 });
 
@@ -110,8 +110,8 @@ test("target and pet viewers use their own grades and never the local snapshot",
 		for ( const bit of [ 3, 11, 14 ] ) {
 			const rows = tooltip( state( bit ), { gid, bit } );
 			assert.ok( rows.every( row => !row.includes( "38" ) ) );
-			assert.equal( rows[0].endsWith( "2level" ), bit !== 3 );
-			assert.ok( rows.every( row => !row.includes( "Remaining time" ) && !row.includes( "Effect" ) ) );
+			assert.equal( rows[0].endsWith( "2lvl" ), bit !== 3 );
+			assert.ok( rows.every( row => !row.includes( "Time left" ) && !row.includes( "Potency" ) ) );
 		}
 	}
 });
@@ -120,7 +120,7 @@ test("party cells suppress grade, power and private timers even for the local me
 	for ( const gid of [ LOCAL_GID, TARGET_GID ] ) {
 		for ( const bit of [ 3, 11, 14 ] ) {
 			const rows = tooltip( state( bit ), { gid, bit, unlevelled: true } );
-			assert.ok( rows.every( row => !/38|2level|Remaining time|Effect/.test( row ) ) );
+			assert.ok( rows.every( row => !/38|2lvl|Time left|Potency/.test( row ) ) );
 		}
 	}
 });
@@ -133,23 +133,23 @@ test("a viewer targeting the local player still uses viewer-only details", () =>
 		assert.equal( icon.helpSource.viewer, true );
 		const rows = tooltip( state( bit ), icon.helpSource );
 		assert.equal( rows[0].includes( "38" ), bit === 14 );
-		assert.ok( rows.every( row => !row.includes( "Effect" ) && !row.includes( "Remaining time" ) ) );
+		assert.ok( rows.every( row => !row.includes( "Potency" ) && !row.includes( "Time left" ) ) );
 	}
 });
 
 test("local grade headings use native spacing and missing snapshots use public grades", () => {
 	const game = state( 11 );
-	assert.equal( tooltip( game, { gid: LOCAL_GID, bit: 11 } )[0], "PARAM_BLOOD 38 level" );
+	assert.equal( tooltip( game, { gid: LOCAL_GID, bit: 11 } )[0], "PARAM_BLOOD 38 lvl" );
 	game.abnormalRecords = [];
 	assert.ok( tooltip( game, { gid: LOCAL_GID, bit: 11 } )[0].includes( "38" ) );
-	assert.ok( tooltip( game, { gid: LOCAL_GID, bit: 11 } ).every( row => !row.includes( "Remaining time" ) ) );
+	assert.ok( tooltip( game, { gid: LOCAL_GID, bit: 11 } ).every( row => !row.includes( "Time left" ) ) );
 });
 
 test("expired, removed and zero-power states do not invent details", () => {
 	const game = state( 3 );
-	assert.ok( tooltip( game, { gid: LOCAL_GID, bit: 3 }, 60000 ).every( row => !row.includes( "Remaining time" ) ) );
+	assert.ok( tooltip( game, { gid: LOCAL_GID, bit: 3 }, 60000 ).every( row => !row.includes( "Time left" ) ) );
 	game.abnormalRecords = [ { ...game.abnormalRecords[0], level: 0 } ];
-	assert.ok( tooltip( game, { gid: LOCAL_GID, bit: 3 } ).every( row => !row.includes( "Effect" ) ) );
+	assert.ok( tooltip( game, { gid: LOCAL_GID, bit: 3 } ).every( row => !row.includes( "Potency" ) ) );
 	game.vitals[0].abnormal = 0;
 	assert.deepEqual( tooltip( game, { gid: LOCAL_GID, bit: 3 } ), [] );
 });

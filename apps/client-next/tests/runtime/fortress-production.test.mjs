@@ -12,7 +12,14 @@ request, through the production HUD.
 */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import { uiFixture } from "../helpers/ui-fixture.mjs";
+
+// The HUD renders notices from the generated text asset; expected wording
+// is read from that asset, never quoted here.
+const TEXT_FILE = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/text/textuisystem.en.json", "utf8" ) );
+const TEXT = TEXT_FILE.entries ?? TEXT_FILE;
 const fortress = await import( "../../src/engine/foundation/gameplay/fortress.ts" );
 const { emptySocial } = await import( "../../src/engine/foundation/gameplay/social.ts" );
 const production = await import( "../../src/engine/foundation/gameplay/fortress-production.ts" );
@@ -22,11 +29,11 @@ const SELF = 5;
 const ITEM = 9001;
 const SMITH_CAPABILITY = 0x2000000;
 const COPY = {
-	UIIT_STT_REMAIN_TIME: "Remaining time",
-	UIIT_STT_HOUR: "Hours",
-	UIIT_STT_MINUTE: "Minutes",
-	PARAM_DAY: "Day",
-	PARAM_SECOND: "Second"
+	UIIT_STT_REMAIN_TIME: "Time left",
+	UIIT_STT_HOUR: "hrs",
+	UIIT_STT_MINUTE: "mins",
+	PARAM_DAY: "dy",
+	PARAM_SECOND: "sec"
 };
 
 /*
@@ -134,10 +141,10 @@ function control( presentation, id ) {
 
 test("the remaining time reads days, hours, rounded-up minutes, then seconds", () => {
 	const copy = key => COPY[key] ?? key;
-	assert.equal( production.fortressProductionTimeText( 90061, copy ), "Remaining time : 1Day 1Hours 1Minutes " );
-	assert.equal( production.fortressProductionTimeText( 3660, copy ), "Remaining time : 1Hours 1Minutes " );
-	assert.equal( production.fortressProductionTimeText( 61, copy ), "Remaining time : 2 Minutes" );
-	assert.equal( production.fortressProductionTimeText( 59, copy ), "Remaining time : 59 Second" );
+	assert.equal( production.fortressProductionTimeText( 90061, copy ), "Time left : 1dy 1hrs 1mins " );
+	assert.equal( production.fortressProductionTimeText( 3660, copy ), "Time left : 1hrs 1mins " );
+	assert.equal( production.fortressProductionTimeText( 61, copy ), "Time left : 2 mins" );
+	assert.equal( production.fortressProductionTimeText( 59, copy ), "Time left : 59 sec" );
 });
 
 test("the count edit keeps two digits capped at twenty", () => {
@@ -163,7 +170,7 @@ test("the smith's row refuses a guild that does not hold the fortress", t => {
 	f.ui.event( { kind: "activate", id: "npc-fortress-production:smith" } );
 	step();
 	assert.equal( sent.length, 0 );
-	assert.ok( f.hasText( "You are not authorized." ), "notice 0x10/0x1E" );
+	assert.ok( f.hasText( TEXT.UIIT_MSG_GUILDERR_PERMISSION_DENIED ), "notice 0x10/0x1E" );
 });
 
 test("the query answer opens the window, and make, cancel and collect follow the order", t => {

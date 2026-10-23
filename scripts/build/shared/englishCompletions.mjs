@@ -68,7 +68,8 @@ markupSignature
 
 The formatting skeleton a translation must preserve verbatim and in order:
 ASCII markup tags (<br>, <font color="...">, <sml2>, ...) and printf specs.
-Korean pseudo-tags such as <아이템 구성> are prose and are translated.
+Korean pseudo-tags (angle-bracketed Korean phrases) are prose and are
+translated.
 ================
 */
 export function markupSignature( text ) {

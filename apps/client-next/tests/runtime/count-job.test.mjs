@@ -35,14 +35,15 @@ const facts = { alive: true, transportOut: false, pvpState: 0 };
 ================
 copy
 
-The English command words.
+The localized command words (stub phrases; the one-word command is a
+prefix of the reverse one, as natively, so match order matters).
 ================
 */
 const copy = symbol =>
 	({
-		UIIT_STT_PREMIUM_COMMAND_RETURN_HIGH_SPEED: "/Return",
-		UIIT_STT_PREMIUM_COMMAND_REVERSE_RETURN: "/Reverse Return",
-		"UIIT_STT_PREMIUM_COMMAND_RESURRECTION_100%": "/Resurrection"
+		UIIT_STT_PREMIUM_COMMAND_RETURN_HIGH_SPEED: "/Warp",
+		UIIT_STT_PREMIUM_COMMAND_REVERSE_RETURN: "/Warp Reverse",
+		"UIIT_STT_PREMIUM_COMMAND_RESURRECTION_100%": "/Revive"
 	})[symbol] ?? symbol;
 
 /*
@@ -76,11 +77,11 @@ function owner() {
 }
 
 test("the commands are the whole localized line", () => {
-	assert.equal( premiumCommand( "/Return", copy ), "return" );
-	assert.equal( premiumCommand( " /reverse return ", copy ), "reverse-return" );
-	assert.equal( premiumCommand( "/Resurrection", copy ), "resurrection" );
-	assert.equal( premiumCommand( "/Return home", copy ), null );
-	assert.equal( premiumCommand( "Return", copy ), null );
+	assert.equal( premiumCommand( "/Warp", copy ), "return" );
+	assert.equal( premiumCommand( " /warp reverse ", copy ), "reverse-return" );
+	assert.equal( premiumCommand( "/Revive", copy ), "resurrection" );
+	assert.equal( premiumCommand( "/Warp home", copy ), null );
+	assert.equal( premiumCommand( "Warp", copy ), null );
 });
 
 test("6AD990 checks in order and sends the package and item", () => {

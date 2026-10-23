@@ -22,7 +22,7 @@ import (
 //	              characters (grade B mechanism, grade A id resolution).
 //	QEVENT_GUIDE  race 3 (both), level 1   -> DELIBERATELY NOT SEEDED
 //	              (declared choice): its shipped questdata row is the
-//	              "EventGuide(서버전용)" server-only marker (title symbol
+//	              server-only event-guide marker (title symbol
 //	              is the literal "xxx" miss), and its client-visible
 //	              machinery is the EVENT-GUIDE plane this server already
 //	              persists (Character.Mission.EventGuideStateMask, the

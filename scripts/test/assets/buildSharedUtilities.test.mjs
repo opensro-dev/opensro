@@ -260,20 +260,20 @@ test("shared JMX readers expose one counted-string contract and validate bounds"
 });
 
 test("JMX names decode as CP949 and asset paths fold ASCII case only", () => {
-	// seventop rock material as stored in its BMT: CP949 C1DF BDC9 BAAE = 중심벽.
-	// Latin-1 plus Unicode lowercase used to publish it as `áß½éº®.png`.
+	// A two-syllable CP949 material name (B0A1 B3AA): names decode as
+	// CP949, never as Latin-1, and path folding lowercases ASCII only.
 	const name = Buffer.concat( [
 		Buffer.from( "Seventop\\", "latin1" ),
-		Buffer.from( [ 0xc1, 0xdf, 0xbd, 0xc9, 0xba, 0xae ] ),
+		Buffer.from( [ 0xb0, 0xa1, 0xb3, 0xaa ] ),
 		Buffer.from( ".DDJ", "latin1" )
 	] );
 	const counted = Buffer.alloc( 4 + name.length );
 	counted.writeUInt32LE( name.length, 0 );
 	name.copy( counted, 4 );
 	const { value } = readCountedString( counted, 0, "seventop.bmt" );
-	assert.equal( value, "Seventop\\중심벽.DDJ" );
+	assert.equal( value, "Seventop\\가나.DDJ" );
 	assert.equal( new BinaryReader( counted, "seventop.bmt" ).str(), value );
-	assert.equal( normalizeAssetPath( value ), "seventop/중심벽.ddj" );
+	assert.equal( normalizeAssetPath( value ), "seventop/가나.ddj" );
 	assert.equal( normalizeAssetPath( "ÁÉ/ABC" ), "ÁÉ/abc" );
 	assert.equal(
 		toPublicImagePath( "Media_extracted", "Icon\\ÁB.DDJ" ),

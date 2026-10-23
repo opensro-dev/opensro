@@ -5,7 +5,8 @@ import path from "node:path";
  * CP949 byte strings and its pk2 lookup folds only ASCII letters; Unicode
  * toLowerCase() would also fold Latin-1/Hangul-adjacent code points and, on a
  * CP949 name carried as Latin-1, rewrite bytes (0xC1 'Á' -> 0xE1 'á'). That
- * turned `중심벽.ddj` into the unresolvable `áß½éº®.png` (2026-09-23).
+ * once turned a CP949 texture name into an unresolvable mojibake .png
+ * (2026-09-23).
  */
 export function foldAssetCase( value ) {
 	return String( value ).replace( /[A-Z]+/g, ( letters ) => letters.toLowerCase() );

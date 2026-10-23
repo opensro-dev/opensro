@@ -36,8 +36,9 @@ async function withTemporaryRoots( run ) {
 
 test("name filter is published byte for byte, including CP949 text", async () => {
 	await withTemporaryRoots( async ( roots ) => {
-		// "욕설" in CP949 followed by a CRLF row break, as in the retail list.
-		const retail = Buffer.from( [ 0xbf, 0xe5, 0xbc, 0xb3, 0x0d, 0x0a, 0x61, 0x62, 0x63, 0x0d, 0x0a ] );
+		// A two-syllable CP949 entry (B0A1 B3AA) followed by a CRLF row
+		// break, as in the retail list.
+		const retail = Buffer.from( [ 0xb0, 0xa1, 0xb3, 0xaa, 0x0d, 0x0a, 0x61, 0x62, 0x63, 0x0d, 0x0a ] );
 		await writeFile( path.join( roots.sourceRoot, "abusefilter.txt" ), retail );
 
 		const result = await buildNameFilterAsset( roots );

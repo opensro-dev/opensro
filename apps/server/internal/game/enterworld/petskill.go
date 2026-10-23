@@ -8,8 +8,8 @@ import (
 )
 
 // PetSkillItemType classifies the ITEM_MALL_PET_SKILL_COLD/FIRE/LIGHTNING and
-// ITEM_MALL_PET_GROWTH_POTION family: tid 3/3/13/15, Param1 1800 under the
-// label 사용시간(초). It is the COS-scoped family whose Param1 is authored in
+// ITEM_MALL_PET_GROWTH_POTION family: tid 3/3/13/15, Param1 1800 under a
+// "duration (seconds)" label. It is the COS-scoped family whose Param1 is authored in
 // SECONDS, which is what sub_6E6E00 kind 3 scales by 1000, so it is the one
 // v1.150 producer of the magic-state board's two-bar slot. A COS summoner is
 // not: its Param1 is minutes (ITEM_COS_P_EXTENSION_1D carries 1440).
