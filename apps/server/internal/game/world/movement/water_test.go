@@ -80,6 +80,7 @@ func moveTo(regionID uint16, x, y, z float64) simulation.MovementRequest {
 
 func TestWaterValidatorSyntheticSurface(t *testing.T) {
 	validator := NewWaterValidator(syntheticWaterRoot(t))
+	validator.SetDeepWaterRefusal(true)
 
 	cases := []struct {
 		name   string
@@ -430,6 +431,7 @@ func TestWaterValidatorNoNavmeshAcceptsAll(t *testing.T) {
 		"navmesh": {"regions": []}
 	}`)
 	validator := NewWaterValidator(root)
+	validator.SetDeepWaterRefusal(true)
 	if refusal := validator.ValidateMovement(moveTo(0x6B4F, 100, 10, 100)); refusal != nil {
 		t.Errorf("no-navmesh bundle must accept (reference gate): %v", refusal)
 	}
@@ -437,6 +439,7 @@ func TestWaterValidatorNoNavmeshAcceptsAll(t *testing.T) {
 
 func TestWaterValidatorMissingAssetsAcceptAll(t *testing.T) {
 	validator := NewWaterValidator(t.TempDir())
+	validator.SetDeepWaterRefusal(true)
 	if refusal := validator.ValidateMovement(moveTo(0x6850, 700, -250, 100)); refusal != nil {
 		t.Errorf("missing catalog must degrade to accept: %v", refusal)
 	}
@@ -557,6 +560,7 @@ func realAuthorityValidator(t testing.TB) *WaterValidator {
 // 0x5FA5 gorge (water 50, bridge decks above it stay legal).
 func TestWaterValidatorRealHarborAndGorge(t *testing.T) {
 	validator := realAuthorityValidator(t)
+	validator.SetDeepWaterRefusal(true)
 
 	// Harbor block (2,0): x in [640,960), z in [0,320), surface -170.
 	if refusal := validator.ValidateMovement(moveTo(0x6850, 700, -250, 100)); refusal == nil {

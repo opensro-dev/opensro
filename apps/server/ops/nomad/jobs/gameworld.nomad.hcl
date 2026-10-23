@@ -224,6 +224,15 @@ variable "closed_object_rescue" {
   default = "on"
 }
 
+# deep_water_refusal refuses a click whose destination lies more than 12
+# units under a water surface (port-only, not native: the original server
+# reads no water height). "off" is native; with it on, a character walked
+# onto a deep seabed cannot click its way out (BR-261023-2025-B5DA).
+variable "deep_water_refusal" {
+  type    = string
+  default = "off"
+}
+
 # most_wanted counts a suited player's job kills into a wanted level
 # (bonuses per level, a bounty on their head) (port-only, not native;
 # owner decision 2026-10-14). "off" is native.
@@ -945,6 +954,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_STORAGE_AUTO_STACK                  = var.storage_auto_stack
         SRO_FAST_DEN_RETURN                     = var.fast_den_return
         SRO_CLOSED_OBJECT_RESCUE                = var.closed_object_rescue
+        SRO_DEEP_WATER_REFUSAL                  = var.deep_water_refusal
         SRO_MOST_WANTED                         = var.most_wanted
         SRO_MOST_WANTED_TEST                    = var.most_wanted_test
         SRO_MOST_WANTED_TEST_KILLS              = var.most_wanted_test_kills
