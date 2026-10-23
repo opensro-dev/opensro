@@ -1,5 +1,0 @@
-# App-local scratch (probe captures). The item catalog lives in .generated/observatory/.
-/temp/
-# Legacy location, superseded by temp/artifacts/.
-/.artifacts/
-node_modules/

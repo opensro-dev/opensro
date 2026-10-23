@@ -14,7 +14,7 @@ player in view. The rendered flow runs as release-smoke.mjs where a GPU is
 available.
 
 The report has the phases and shape the host records as browser evidence
-(ops/release/client_deploy.record_smoke).
+(the operator's release tooling).
 
 	node release-gate.mjs CANDIDATE_JSON OUTPUT_DIRECTORY
 

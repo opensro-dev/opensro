@@ -112,7 +112,7 @@ in the main operations guide.
 
 `config/Caddyfile.example` keeps the landing page at `/var/www/opensro/index.html`
 and serves the game at `/play`, with `/assets/*` from the current client
-release. Install `ops/site/index.html` as the landing page. Never point Caddy
+release. Install your own landing page there. Never point Caddy
 at the checkout or the private source-map directory. Precompressed gzip
 sidecars keep compression off the small VPS's request path. Validate the
 Caddy configuration before reloading. The landing page requires an already

@@ -185,8 +185,8 @@ variable "beta_silk" {
   default = "50"
 }
 
-# maintenance_gate_path is the maintenance release gate (ops/release
-# deploy.py): while the file exists, EnterWorld tokens go only to the
+# maintenance_gate_path is the maintenance release gate the operator's
+# release tooling writes: while the file exists, EnterWorld tokens go only to the
 # accounts it lists. Empty disables the gate.
 variable "maintenance_gate_path" {
   type    = string

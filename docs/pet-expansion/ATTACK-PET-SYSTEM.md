@@ -13,8 +13,7 @@ with [site/attack-pet-system.css](site/attack-pet-system.css). Local preview:
 The visual reference is the live [OpenSRO beta guide](https://opensro.online/guide):
 palace masthead, dark background, left navigation, gold fittings and parchment
 panels. The current live frontend uses Next.js and is not fully present in this
-checkout. `apps/server/ops/site/index.html` is an older minimal landing page;
-do not replace the live homepage with it.
+checkout.
 
 To add the requested tab:
 

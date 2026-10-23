@@ -71,11 +71,6 @@ produce the browser asset tree (content-addressed packs plus a verified
 manifest) and the server game-data projection. See
 [ASSET_PIPELINE.md](ASSET_PIPELINE.md).
 
-## Server observatory (`apps/server-observatory`)
-
-A local, read-only dashboard (Node, no build step) for inspecting running
-shards and the item catalog. Not required to play.
-
 ## Checks
 
 | Gate | Covers |

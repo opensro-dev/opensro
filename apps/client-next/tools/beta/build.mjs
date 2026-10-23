@@ -247,7 +247,7 @@ export async function buildBeta(
 	const manifest = {
 		format: "sro-beta-release-v1",
 		// The release protocol compiled into this build; release admission
-		// compares it with the declared one (ops/release/client_bundle.py).
+		// compares it with the declared one (the operator's release tooling).
 		protocol: RELEASE_PROTOCOL,
 		assetSchema: ASSET_SCHEMA,
 		sourceHash: inputHash,

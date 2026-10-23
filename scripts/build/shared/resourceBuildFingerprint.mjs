@@ -55,7 +55,7 @@ export const ENV_KNOBS = [
 	"SRO_SKIP_TEXTURE_CONVERT",
 	"SRO_ASSET_PACKS_NO_CACHE",
 	"SRO_BUILD_HASH_CACHE",
-	// The release builds against the live layout (RELEASE.md); an up-to-date
+	// A release builds against the live layout (ASSET_DELIVERY.md); an up-to-date
 	// local tree must not skip that and keep its own layout.
 	"SRO_ASSET_PACK_BASELINE"
 ];
