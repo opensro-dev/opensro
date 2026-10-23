@@ -4,12 +4,11 @@
 fortress_dismantle.go - a fortress guild dismisses its summoned objects and
 demolishes its structures
 
-0x71E1 actions 0x16 and 0x17. CGObjPC_HandleSiegeAction705E (519E60) skips
-the NPC range check for both and hands the target object to
-CSiegeFortressMgr_HandleSummonedObjectDismissal (633EC0) or
-CSiegeFortressMgr_HandleStructureDemolition (634020); each reads the
-fortress ID that follows. Success goes through the siege database queue and
-answers from CSiegeFortress_HandleDatabaseResult (6232C0): 0x16 with
+0x71E1 actions 0x16 and 0x17. The native siege action handler skips the
+NPC range check for both and hands the target object to the summoned-object
+dismissal or the structure demolition; each reads the fortress ID that
+follows. Success goes through the siege database queue and answers from
+the database result: 0x16 with
 {0x16, 1}, 0x17 with {0x17, 1, zone}.
 
 ===========================================================================
@@ -26,15 +25,15 @@ import (
 )
 
 const (
-	// Low bytes of the 0x16 and 0x17 refusals (633EC0, 634020).
+	// Low bytes of the native 0x16 and 0x17 refusals.
 	fortressErrNotSiegeObject   uint8 = 0x2a // 0x282A
 	fortressErrNotStructure     uint8 = 0x2b // 0x282B
 	fortressErrNotOwnGuild      uint8 = 0x2c // 0x282C
 	fortressErrDismissRole      uint8 = 0x2e // 0x282E
 	fortressErrDemolishRole     uint8 = 0x2f // 0x282F
-	fortressRoleCommander       uint8 = 1    // CGuildMember_IsFortressRole1 (5CFFB0)
-	fortressRoleSubCommander    uint8 = 2    // CGuildMember_IsFortressRole2 (5CFFC0)
-	fortressRoleBattleCommander uint8 = 4    // CGuildMember_IsFortressRole4 (5CFFD0)
+	fortressRoleCommander       uint8 = 1    // fortress role bit 1
+	fortressRoleSubCommander    uint8 = 2    // fortress role bit 2
+	fortressRoleBattleCommander uint8 = 4    // fortress role bit 4
 )
 
 /*
@@ -66,8 +65,7 @@ func (rt *Runtime) guildFortressRole(division string, c *enterworld.Character) u
 ================
 siegeObject
 
-A fortress-summoned object (vfunc +0x3C4) and the guild it belongs to
-(vfunc +0x648).
+A fortress-summoned object and the guild it belongs to.
 ================
 */
 type siegeObject struct {
@@ -91,7 +89,7 @@ func (rt *Runtime) fortressSiegeObject(_ string, _ uint32) (siegeObject, bool) {
 ================
 releaseSiegeObject
 
-SiegeObject_Release (621FD0): the object leaves its fortress and the world.
+The native siege-object release: the object leaves its fortress and the world.
 The summoned-object owner (#483) supplies it with the objects themselves;
 until then there is nothing to release.
 ================
@@ -104,11 +102,11 @@ func (rt *Runtime) releaseSiegeObject(_ string, _ uint32) bool {
 ================
 fortressDismissObject
 
-633EC0 in its refusal order: not a summoned siege object (0x282A), another
+The native dismissal in its refusal order: not a summoned siege object (0x282A), another
 guild's (0x282C), a member that is neither commander nor battle commander
 (0x282E), an unknown fortress (3). Success releases the object through
-the siege queue (SiegeObject_Release 621FD0, query 0x11), whose result
-answers {0x16, 1} (6232C0); the release belongs to the object's owner
+the siege queue (the object release, query 0x11), whose result answers
+{0x16, 1}; the release belongs to the object's owner
 (#483).
 ================
 */
@@ -141,7 +139,7 @@ func (rt *Runtime) fortressDismissObject(division string, c *enterworld.Characte
 fortressStructureOwner
 
 The fortress whose world holds structure gid, with that world and the
-structure's guild (vfunc +0x644: the fortress holder).
+structure's guild (the fortress holder).
 ================
 */
 func (rt *Runtime) fortressStructureOwner(division string, gid uint32) (uint32, instance.ID, monster.Instance, int64, bool) {
@@ -161,11 +159,11 @@ func (rt *Runtime) fortressStructureOwner(division string, gid uint32) (uint32, 
 ================
 fortressDemolishStructure
 
-634020 in its refusal order: not a siege structure (0x282B), another
+The native demolition in its refusal order: not a siege structure (0x282B), another
 guild's (0x282C), a member that is none of commander, sub-commander and
 battle commander (0x282F), then an unknown fortress or a structure whose
 state is already 1 (3). Success empties the zone (the structure leaves the
-fortress and the world, 6232C0 case 0x15), stores the vacancy and answers
+fortress and the world, the database result's case 0x15), stores the vacancy and answers
 {0x17, 1, zone}.
 ================
 */
@@ -184,8 +182,8 @@ func (rt *Runtime) fortressDemolishStructure(division string, c *enterworld.Char
 	if role != fortressRoleCommander && role != fortressRoleSubCommander && role != fortressRoleBattleCommander {
 		return fortressRefusal(request.Action, fortressErrDemolishRole)
 	}
-	// CSiegeFortress_FindStructureByKey (6227A0) looks the structure up in
-	// the requested fortress; vfunc +0x654 is its state.
+	// The native structure lookup finds the structure in the requested
+	// fortress and reads its state.
 	if _, exists := rt.Fortresses.Get(division, request.Fortress); !exists || request.Fortress != fortressID ||
 		row.StructureState == structureDestroyedMask {
 		return fortressRefusal(request.Action, fortressErrInvalid)
