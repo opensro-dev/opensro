@@ -7,144 +7,48 @@
         {
           "bytes": "8b51048b420480784100751c",
           "sha256": "2a11b1790fee6b368028b4e22419ef1ab399e14677589f567fef78912dfc60c7",
-          "instructions": [
-            {
-              "va": "0xa67d00",
-              "asm": "mov     edx, dword [ecx+0x4]"
-            },
-            {
-              "va": "0xa67d03",
-              "asm": "mov     eax, dword [edx+0x4]"
-            },
-            {
-              "va": "0xa67d06",
-              "asm": "cmp     byte [eax+0x41], 0x0"
-            },
-            {
-              "va": "0xa67d0a",
-              "asm": "jne     0xa67d28"
-            }
-          ],
           "start": 10910976,
           "end": 10910988
         },
         {
           "bytes": "568b74240c8b36",
           "sha256": "756ac9409be79f9f30b141634fcea9b35a3456daed9a6c8912a8aaf00fe6a87d",
-          "instructions": [
-            {
-              "va": "0xa67d0c",
-              "asm": "push    esi"
-            },
-            {
-              "va": "0xa67d0d",
-              "asm": "mov     esi, dword [esp+0xc]"
-            },
-            {
-              "va": "0xa67d11",
-              "asm": "mov     esi, dword [esi]"
-            }
-          ],
           "start": 10910988,
           "end": 10910995
         },
         {
           "bytes": "39700c7305",
           "sha256": "3ea2cfed9dabc98445fddc74cb8e4770f1c4207ef8d53bb1fd3fd7385cbb1edc",
-          "instructions": [
-            {
-              "va": "0xa67d13",
-              "asm": "cmp     dword [eax+0xc], esi"
-            },
-            {
-              "va": "0xa67d16",
-              "asm": "jae     0xa67d1d"
-            }
-          ],
           "start": 10910995,
           "end": 10911000
         },
         {
           "bytes": "8b4008eb04",
           "sha256": "4103f67cf270f5af65d9ca0dfb1cecbdc3a40a4cb1f44e58b3c7fd1a75f2b3ca",
-          "instructions": [
-            {
-              "va": "0xa67d18",
-              "asm": "mov     eax, dword [eax+0x8]"
-            },
-            {
-              "va": "0xa67d1b",
-              "asm": "jmp     0xa67d21"
-            }
-          ],
           "start": 10911000,
           "end": 10911005
         },
         {
           "bytes": "8bd08b00",
           "sha256": "ce94c024f32ee84f1a198ccf850526a635a3f25350f796bc3f7bc3d8cc77fe98",
-          "instructions": [
-            {
-              "va": "0xa67d1d",
-              "asm": "mov     edx, eax"
-            },
-            {
-              "va": "0xa67d1f",
-              "asm": "mov     eax, dword [eax]"
-            }
-          ],
           "start": 10911005,
           "end": 10911009
         },
         {
           "bytes": "8078410074ec",
           "sha256": "2ed8e472740672753408fd1e10320631448f38d766721945c43b2745fcf89f53",
-          "instructions": [
-            {
-              "va": "0xa67d21",
-              "asm": "cmp     byte [eax+0x41], 0x0"
-            },
-            {
-              "va": "0xa67d25",
-              "asm": "je      0xa67d13"
-            }
-          ],
           "start": 10911009,
           "end": 10911015
         },
         {
           "bytes": "5e",
           "sha256": "74cd9ef9c7e15f57bdad73c511462ca65cb674c46c49639c60f1b44650fa1dcb",
-          "instructions": [
-            {
-              "va": "0xa67d27",
-              "asm": "pop     esi"
-            }
-          ],
           "start": 10911015,
           "end": 10911016
         },
         {
           "bytes": "8b4424048950048908c20800",
           "sha256": "2a04008ea611feacb40b5e0b42824e0cb2f54f72322559cbda24cfb666042b81",
-          "instructions": [
-            {
-              "va": "0xa67d28",
-              "asm": "mov     eax, dword [esp+0x4]"
-            },
-            {
-              "va": "0xa67d2c",
-              "asm": "mov     dword [eax+0x4], edx"
-            },
-            {
-              "va": "0xa67d2f",
-              "asm": "mov     dword [eax], ecx"
-            },
-            {
-              "va": "0xa67d31",
-              "asm": "retn    0x8"
-            }
-          ],
           "start": 10911016,
           "end": 10911028
         }
@@ -156,540 +60,132 @@
         {
           "bytes": "83ec14558b6c242485ed894c24040f84e2000000",
           "sha256": "24ff9402c3439bbe1a0c16938862e98f7289c7654bdf61a2a6085e308457f1d1",
-          "instructions": [
-            {
-              "va": "0xae0280",
-              "asm": "sub     esp, 0x14"
-            },
-            {
-              "va": "0xae0283",
-              "asm": "push    ebp"
-            },
-            {
-              "va": "0xae0284",
-              "asm": "mov     ebp, dword [esp+0x24]"
-            },
-            {
-              "va": "0xae0288",
-              "asm": "test    ebp, ebp"
-            },
-            {
-              "va": "0xae028a",
-              "asm": "mov     dword [esp+0x4], ecx"
-            },
-            {
-              "va": "0xae028e",
-              "asm": "je      0xae0376"
-            }
-          ],
           "start": 11403904,
           "end": 11403924
         },
         {
           "bytes": "8b415c85c00f84d7000000",
           "sha256": "5ee11e04dff1240caba87beb4b8bbb60b66655b3eb5a1d7512f9e0525b04c3d2",
-          "instructions": [
-            {
-              "va": "0xae0294",
-              "asm": "mov     eax, dword [ecx+0x5c]"
-            },
-            {
-              "va": "0xae0297",
-              "asm": "test    eax, eax"
-            },
-            {
-              "va": "0xae0299",
-              "asm": "je      0xae0376"
-            }
-          ],
           "start": 11403924,
           "end": 11403935
         },
         {
           "bytes": "83780c00568d7004750a",
           "sha256": "0286a63d1181d31f577202036d7987b11325740104eff3c15575b75d2c32524b",
-          "instructions": [
-            {
-              "va": "0xae029f",
-              "asm": "cmp     dword [eax+0xc], 0x0"
-            },
-            {
-              "va": "0xae02a3",
-              "asm": "push    esi"
-            },
-            {
-              "va": "0xae02a4",
-              "asm": "lea     esi, [eax+0x4]"
-            },
-            {
-              "va": "0xae02a7",
-              "asm": "jne     0xae02b3"
-            }
-          ],
           "start": 11403935,
           "end": 11403945
         },
         {
           "bytes": "5e33c05d83c414c20c00",
           "sha256": "37c7c7995768fe57b398cfded82f29e02b0848f7f432e177d9c413a66f2a2695",
-          "instructions": [
-            {
-              "va": "0xae02a9",
-              "asm": "pop     esi"
-            },
-            {
-              "va": "0xae02aa",
-              "asm": "xor     eax, eax"
-            },
-            {
-              "va": "0xae02ac",
-              "asm": "pop     ebp"
-            },
-            {
-              "va": "0xae02ad",
-              "asm": "add     esp, 0x14"
-            },
-            {
-              "va": "0xae02b0",
-              "asm": "retn    0xc"
-            }
-          ],
           "start": 11403945,
           "end": 11403955
         },
         {
           "bytes": "53578d442428508d4c2418518bcee83a7af8ff8d54242c528d442420508bcee8297af8ff8b7c241485ff8b5e047404",
           "sha256": "4f2e0d5e354e86bec21ddf177fdf9794bdec2c37c0124226d9a1dbd0c5ce53af",
-          "instructions": [
-            {
-              "va": "0xae02b3",
-              "asm": "push    ebx"
-            },
-            {
-              "va": "0xae02b4",
-              "asm": "push    edi"
-            },
-            {
-              "va": "0xae02b5",
-              "asm": "lea     eax, [esp+0x28]"
-            },
-            {
-              "va": "0xae02b9",
-              "asm": "push    eax"
-            },
-            {
-              "va": "0xae02ba",
-              "asm": "lea     ecx, [esp+0x18]"
-            },
-            {
-              "va": "0xae02be",
-              "asm": "push    ecx"
-            },
-            {
-              "va": "0xae02bf",
-              "asm": "mov     ecx, esi"
-            },
-            {
-              "va": "0xae02c1",
-              "asm": "call    0xa67d00"
-            },
-            {
-              "va": "0xae02c6",
-              "asm": "lea     edx, [esp+0x2c]"
-            },
-            {
-              "va": "0xae02ca",
-              "asm": "push    edx"
-            },
-            {
-              "va": "0xae02cb",
-              "asm": "lea     eax, [esp+0x20]"
-            },
-            {
-              "va": "0xae02cf",
-              "asm": "push    eax"
-            },
-            {
-              "va": "0xae02d0",
-              "asm": "mov     ecx, esi"
-            },
-            {
-              "va": "0xae02d2",
-              "asm": "call    0xa67d00"
-            },
-            {
-              "va": "0xae02d7",
-              "asm": "mov     edi, dword [esp+0x14]"
-            },
-            {
-              "va": "0xae02db",
-              "asm": "test    edi, edi"
-            },
-            {
-              "va": "0xae02dd",
-              "asm": "mov     ebx, dword [esi+0x4]"
-            },
-            {
-              "va": "0xae02e0",
-              "asm": "je      0xae02e6"
-            }
-          ],
           "start": 11403955,
           "end": 11404002
         },
         {
           "bytes": "3bfe7405",
           "sha256": "2495f041412e165ed7e33e087ccbef7701d3e99eba4130f7cc3eb1dd5ea5796d",
-          "instructions": [
-            {
-              "va": "0xae02e2",
-              "asm": "cmp     edi, esi"
-            },
-            {
-              "va": "0xae02e4",
-              "asm": "je      0xae02eb"
-            }
-          ],
           "start": 11404002,
           "end": 11404006
         },
         {
           "bytes": "e871ceeeff",
           "sha256": "6b51f03b1aa7d59529fc4f48ff89db5eb442061c0156f53c1fd359565ff98480",
-          "instructions": [
-            {
-              "va": "0xae02e6",
-              "asm": "call    0x9cd15c"
-            }
-          ],
           "start": 11404006,
           "end": 11404011
         },
         {
           "bytes": "8b7424183bf37474",
           "sha256": "7748ccce19a70ffb8564a6765c4ff43227d23cff08dbc65116bd7a53c4213199",
-          "instructions": [
-            {
-              "va": "0xae02eb",
-              "asm": "mov     esi, dword [esp+0x18]"
-            },
-            {
-              "va": "0xae02ef",
-              "asm": "cmp     esi, ebx"
-            },
-            {
-              "va": "0xae02f1",
-              "asm": "je      0xae0367"
-            }
-          ],
           "start": 11404011,
           "end": 11404019
         },
         {
           "bytes": "897c241489742418eb03",
           "sha256": "43163c014c927d8ee1f7a163559be6135ff8d49563190776bf9d92d3699e8ef1",
-          "instructions": [
-            {
-              "va": "0xae02f3",
-              "asm": "mov     dword [esp+0x14], edi"
-            },
-            {
-              "va": "0xae02f7",
-              "asm": "mov     dword [esp+0x18], esi"
-            },
-            {
-              "va": "0xae02fb",
-              "asm": "jmp     0xae0300"
-            }
-          ],
           "start": 11404019,
           "end": 11404029
         },
         {
           "bytes": "85ff7406",
           "sha256": "045c02d45761f13c1b803292d2b2b0aef83b035ec715154a02326879bbb6445e",
-          "instructions": [
-            {
-              "va": "0xae0300",
-              "asm": "test    edi, edi"
-            },
-            {
-              "va": "0xae0302",
-              "asm": "je      0xae030a"
-            }
-          ],
           "start": 11404032,
           "end": 11404036
         },
         {
           "bytes": "3b7c241c7405",
           "sha256": "82708fe0e38096821166c78e46b6121f39a8be5a61e66d0b2bc6e99054393062",
-          "instructions": [
-            {
-              "va": "0xae0304",
-              "asm": "cmp     edi, dword [esp+0x1c]"
-            },
-            {
-              "va": "0xae0308",
-              "asm": "je      0xae030f"
-            }
-          ],
           "start": 11404036,
           "end": 11404042
         },
         {
           "bytes": "e84dceeeff",
           "sha256": "cc8cf868bcb003e314ad5ef3159886cf3643616b3a098d8f6d52430df7809a4f",
-          "instructions": [
-            {
-              "va": "0xae030a",
-              "asm": "call    0x9cd15c"
-            }
-          ],
           "start": 11404042,
           "end": 11404047
         },
         {
           "bytes": "3b7424207452",
           "sha256": "7024c4a4dc3e4b9d2aba41c069fde791ac728d86e41020fe5488251e8fa45634",
-          "instructions": [
-            {
-              "va": "0xae030f",
-              "asm": "cmp     esi, dword [esp+0x20]"
-            },
-            {
-              "va": "0xae0313",
-              "asm": "je      0xae0367"
-            }
-          ],
           "start": 11404047,
           "end": 11404053
         },
         {
           "bytes": "85ff7505",
           "sha256": "13fb22575e53b60150af4698a6a23a42af7f40d75bfce0a22ce55224efdd3f82",
-          "instructions": [
-            {
-              "va": "0xae0315",
-              "asm": "test    edi, edi"
-            },
-            {
-              "va": "0xae0317",
-              "asm": "jne     0xae031e"
-            }
-          ],
           "start": 11404053,
           "end": 11404057
         },
         {
           "bytes": "e83eceeeff",
           "sha256": "1a31a63a44ead68c9671cb5b9544a43b32f33cb1d026fcdea16afc7588d39b35",
-          "instructions": [
-            {
-              "va": "0xae0319",
-              "asm": "call    0x9cd15c"
-            }
-          ],
           "start": 11404057,
           "end": 11404062
         },
         {
           "bytes": "3b77047505",
           "sha256": "c18f5e177d5b36743fbe5f3b40a5e1723a467ff7635740dd8c40e1f78892961b",
-          "instructions": [
-            {
-              "va": "0xae031e",
-              "asm": "cmp     esi, dword [edi+0x4]"
-            },
-            {
-              "va": "0xae0321",
-              "asm": "jne     0xae0328"
-            }
-          ],
           "start": 11404062,
           "end": 11404067
         },
         {
           "bytes": "e834ceeeff",
           "sha256": "115035d4cda42149375cf3c1bec51167f05fd6dd49c7863ba0a23ab918d18fe7",
-          "instructions": [
-            {
-              "va": "0xae0323",
-              "asm": "call    0x9cd15c"
-            }
-          ],
           "start": 11404067,
           "end": 11404072
         },
         {
           "bytes": "3b77048b5e0c7505",
           "sha256": "0a752986b23f13b86ec82b82cb3d2cf9b428b8a6f483ee87a91778421a7f2563",
-          "instructions": [
-            {
-              "va": "0xae0328",
-              "asm": "cmp     esi, dword [edi+0x4]"
-            },
-            {
-              "va": "0xae032b",
-              "asm": "mov     ebx, dword [esi+0xc]"
-            },
-            {
-              "va": "0xae032e",
-              "asm": "jne     0xae0335"
-            }
-          ],
           "start": 11404072,
           "end": 11404080
         },
         {
           "bytes": "e827ceeeff",
           "sha256": "41799d2100f21b3714ae3329be7fdd386a0c4c4c8fa95d13b949adafea9a961e",
-          "instructions": [
-            {
-              "va": "0xae0330",
-              "asm": "call    0x9cd15c"
-            }
-          ],
           "start": 11404080,
           "end": 11404085
         },
         {
           "bytes": "8b4c242c8d46102bcb8948108b4c24108b55008b12508b400451508bcdffd28d4c2414e8135ef8ff8b7424188b7c2414eb99",
           "sha256": "0233fed83acb303f54ff8d1c570e236011eada60b5e2d3c6783e28812bc4cd00",
-          "instructions": [
-            {
-              "va": "0xae0335",
-              "asm": "mov     ecx, dword [esp+0x2c]"
-            },
-            {
-              "va": "0xae0339",
-              "asm": "lea     eax, [esi+0x10]"
-            },
-            {
-              "va": "0xae033c",
-              "asm": "sub     ecx, ebx"
-            },
-            {
-              "va": "0xae033e",
-              "asm": "mov     dword [eax+0x10], ecx"
-            },
-            {
-              "va": "0xae0341",
-              "asm": "mov     ecx, dword [esp+0x10]"
-            },
-            {
-              "va": "0xae0345",
-              "asm": "mov     edx, dword [ebp]"
-            },
-            {
-              "va": "0xae0348",
-              "asm": "mov     edx, dword [edx]"
-            },
-            {
-              "va": "0xae034a",
-              "asm": "push    eax"
-            },
-            {
-              "va": "0xae034b",
-              "asm": "mov     eax, dword [eax+0x4]"
-            },
-            {
-              "va": "0xae034e",
-              "asm": "push    ecx"
-            },
-            {
-              "va": "0xae034f",
-              "asm": "push    eax"
-            },
-            {
-              "va": "0xae0350",
-              "asm": "mov     ecx, ebp"
-            },
-            {
-              "va": "0xae0352",
-              "asm": "call    edx"
-            },
-            {
-              "va": "0xae0354",
-              "asm": "lea     ecx, [esp+0x14]"
-            },
-            {
-              "va": "0xae0358",
-              "asm": "call    0xa66170"
-            },
-            {
-              "va": "0xae035d",
-              "asm": "mov     esi, dword [esp+0x18]"
-            },
-            {
-              "va": "0xae0361",
-              "asm": "mov     edi, dword [esp+0x14]"
-            },
-            {
-              "va": "0xae0365",
-              "asm": "jmp     0xae0300"
-            }
-          ],
           "start": 11404085,
           "end": 11404135
         },
         {
           "bytes": "5f5b5eb8010000005d83c414c20c00",
           "sha256": "23ffcac463ca469f1e46e0f22e03e01e9eb7b33278ff1665793ac2ace8fb0d8b",
-          "instructions": [
-            {
-              "va": "0xae0367",
-              "asm": "pop     edi"
-            },
-            {
-              "va": "0xae0368",
-              "asm": "pop     ebx"
-            },
-            {
-              "va": "0xae0369",
-              "asm": "pop     esi"
-            },
-            {
-              "va": "0xae036a",
-              "asm": "mov     eax, 0x1"
-            },
-            {
-              "va": "0xae036f",
-              "asm": "pop     ebp"
-            },
-            {
-              "va": "0xae0370",
-              "asm": "add     esp, 0x14"
-            },
-            {
-              "va": "0xae0373",
-              "asm": "retn    0xc"
-            }
-          ],
           "start": 11404135,
           "end": 11404150
         },
         {
           "bytes": "33c05d83c414c20c00",
           "sha256": "78e0a42087a5abb044b838b24ad42423cd4ebd3844d17ba46ae3eeb03387ef3b",
-          "instructions": [
-            {
-              "va": "0xae0376",
-              "asm": "xor     eax, eax"
-            },
-            {
-              "va": "0xae0378",
-              "asm": "pop     ebp"
-            },
-            {
-              "va": "0xae0379",
-              "asm": "add     esp, 0x14"
-            },
-            {
-              "va": "0xae037c",
-              "asm": "retn    0xc"
-            }
-          ],
           "start": 11404150,
           "end": 11404159
         }
@@ -701,524 +197,162 @@
         {
           "bytes": "83ec08837940000f84bd000000",
           "sha256": "63b781bc8e72411d77428a85920f652560efe0a068f20e360c6b771b752a59cc",
-          "instructions": [
-            {
-              "va": "0xae0380",
-              "asm": "sub     esp, 0x8"
-            },
-            {
-              "va": "0xae0383",
-              "asm": "cmp     dword [ecx+0x40], 0x0"
-            },
-            {
-              "va": "0xae0387",
-              "asm": "je      0xae044a"
-            }
-          ],
           "start": 11404160,
           "end": 11404173
         },
         {
           "bytes": "8b542410538991900000008d59488b4b048b410480781900568bf1751a",
           "sha256": "f6a6bbe3e09ebca706f4e8515ee9ada4d547ed0e2ecae8cc0e534e565612e75b",
-          "instructions": [
-            {
-              "va": "0xae038d",
-              "asm": "mov     edx, dword [esp+0x10]"
-            },
-            {
-              "va": "0xae0391",
-              "asm": "push    ebx"
-            },
-            {
-              "va": "0xae0392",
-              "asm": "mov     dword [ecx+0x90], edx"
-            },
-            {
-              "va": "0xae0398",
-              "asm": "lea     ebx, [ecx+0x48]"
-            },
-            {
-              "va": "0xae039b",
-              "asm": "mov     ecx, dword [ebx+0x4]"
-            },
-            {
-              "va": "0xae039e",
-              "asm": "mov     eax, dword [ecx+0x4]"
-            },
-            {
-              "va": "0xae03a1",
-              "asm": "cmp     byte [eax+0x19], 0x0"
-            },
-            {
-              "va": "0xae03a5",
-              "asm": "push    esi"
-            },
-            {
-              "va": "0xae03a6",
-              "asm": "mov     esi, ecx"
-            },
-            {
-              "va": "0xae03a8",
-              "asm": "jne     0xae03c4"
-            }
-          ],
           "start": 11404173,
           "end": 11404202
         },
         {
           "bytes": "8b4c24148bff",
           "sha256": "06ad6f02a60593fe162f58866432f0c1ac51afbf3933881d58e4e4baf911d64d",
-          "instructions": [
-            {
-              "va": "0xae03aa",
-              "asm": "mov     ecx, dword [esp+0x14]"
-            },
-            {
-              "va": "0xae03ae",
-              "asm": "mov     edi, edi"
-            }
-          ],
           "start": 11404202,
           "end": 11404208
         },
         {
           "bytes": "39480c7305",
           "sha256": "03a67c6d45da9ccca97fb16cbde88872f9eec4fe8e93926b898bdd8a6b46c2cf",
-          "instructions": [
-            {
-              "va": "0xae03b0",
-              "asm": "cmp     dword [eax+0xc], ecx"
-            },
-            {
-              "va": "0xae03b3",
-              "asm": "jae     0xae03ba"
-            }
-          ],
           "start": 11404208,
           "end": 11404213
         },
         {
           "bytes": "8b4008eb04",
           "sha256": "4103f67cf270f5af65d9ca0dfb1cecbdc3a40a4cb1f44e58b3c7fd1a75f2b3ca",
-          "instructions": [
-            {
-              "va": "0xae03b5",
-              "asm": "mov     eax, dword [eax+0x8]"
-            },
-            {
-              "va": "0xae03b8",
-              "asm": "jmp     0xae03be"
-            }
-          ],
           "start": 11404213,
           "end": 11404218
         },
         {
           "bytes": "8bf08b00",
           "sha256": "f2f1ea54fb7d51ff71a298554e5cc62c57f04010d0e8d39d8952446c7e4a19a3",
-          "instructions": [
-            {
-              "va": "0xae03ba",
-              "asm": "mov     esi, eax"
-            },
-            {
-              "va": "0xae03bc",
-              "asm": "mov     eax, dword [eax]"
-            }
-          ],
           "start": 11404218,
           "end": 11404222
         },
         {
           "bytes": "8078190074ec",
           "sha256": "ab9d025caf870bc2c5747cdeb3cee3988146969172775e85dbe4496278b9a7f5",
-          "instructions": [
-            {
-              "va": "0xae03be",
-              "asm": "cmp     byte [eax+0x19], 0x0"
-            },
-            {
-              "va": "0xae03c2",
-              "asm": "je      0xae03b0"
-            }
-          ],
           "start": 11404222,
           "end": 11404228
         },
         {
           "bytes": "8b4b048b410480781900558be97514",
           "sha256": "351b84fa807869c8f38f4d655bd1401f1ef52e102abec2b1f89107f7b14b8357",
-          "instructions": [
-            {
-              "va": "0xae03c4",
-              "asm": "mov     ecx, dword [ebx+0x4]"
-            },
-            {
-              "va": "0xae03c7",
-              "asm": "mov     eax, dword [ecx+0x4]"
-            },
-            {
-              "va": "0xae03ca",
-              "asm": "cmp     byte [eax+0x19], 0x0"
-            },
-            {
-              "va": "0xae03ce",
-              "asm": "push    ebp"
-            },
-            {
-              "va": "0xae03cf",
-              "asm": "mov     ebp, ecx"
-            },
-            {
-              "va": "0xae03d1",
-              "asm": "jne     0xae03e7"
-            }
-          ],
           "start": 11404228,
           "end": 11404243
         },
         {
           "bytes": "39500c7305",
           "sha256": "f33ca15cedf838e66035437cbf3dfb922630693a5b7eaf829795fac65e5073b1",
-          "instructions": [
-            {
-              "va": "0xae03d3",
-              "asm": "cmp     dword [eax+0xc], edx"
-            },
-            {
-              "va": "0xae03d6",
-              "asm": "jae     0xae03dd"
-            }
-          ],
           "start": 11404243,
           "end": 11404248
         },
         {
           "bytes": "8b4008eb04",
           "sha256": "4103f67cf270f5af65d9ca0dfb1cecbdc3a40a4cb1f44e58b3c7fd1a75f2b3ca",
-          "instructions": [
-            {
-              "va": "0xae03d8",
-              "asm": "mov     eax, dword [eax+0x8]"
-            },
-            {
-              "va": "0xae03db",
-              "asm": "jmp     0xae03e1"
-            }
-          ],
           "start": 11404248,
           "end": 11404253
         },
         {
           "bytes": "8be88b00",
           "sha256": "15c745f54618493b764191371b222ed0fba58ab0e22ca1708155c220e1c9ccba",
-          "instructions": [
-            {
-              "va": "0xae03dd",
-              "asm": "mov     ebp, eax"
-            },
-            {
-              "va": "0xae03df",
-              "asm": "mov     eax, dword [eax]"
-            }
-          ],
           "start": 11404253,
           "end": 11404257
         },
         {
           "bytes": "8078190074ec",
           "sha256": "ab9d025caf870bc2c5747cdeb3cee3988146969172775e85dbe4496278b9a7f5",
-          "instructions": [
-            {
-              "va": "0xae03e1",
-              "asm": "cmp     byte [eax+0x19], 0x0"
-            },
-            {
-              "va": "0xae03e5",
-              "asm": "je      0xae03d3"
-            }
-          ],
           "start": 11404257,
           "end": 11404263
         },
         {
           "bytes": "3bdb578bf97405",
           "sha256": "49276218c1f267379c9e59cabdc023c80fb989ca1dff7b02f4a930307521d84e",
-          "instructions": [
-            {
-              "va": "0xae03e7",
-              "asm": "cmp     ebx, ebx"
-            },
-            {
-              "va": "0xae03e9",
-              "asm": "push    edi"
-            },
-            {
-              "va": "0xae03ea",
-              "asm": "mov     edi, ecx"
-            },
-            {
-              "va": "0xae03ec",
-              "asm": "je      0xae03f3"
-            }
-          ],
           "start": 11404263,
           "end": 11404270
         },
         {
           "bytes": "e869cdeeff",
           "sha256": "1aef25ab0cc05852c2121b97eb8b9372b90517f868094dee2fce4f790526e734",
-          "instructions": [
-            {
-              "va": "0xae03ee",
-              "asm": "call    0x9cd15c"
-            }
-          ],
           "start": 11404270,
           "end": 11404275
         },
         {
           "bytes": "3bf7744f",
           "sha256": "ebd8c4cc60dd4ccae8c549c825152c3726554fda87792012cb055dac0a5e579c",
-          "instructions": [
-            {
-              "va": "0xae03f3",
-              "asm": "cmp     esi, edi"
-            },
-            {
-              "va": "0xae03f5",
-              "asm": "je      0xae0446"
-            }
-          ],
           "start": 11404275,
           "end": 11404279
         },
         {
           "bytes": "8bfb897c241089742414",
           "sha256": "e1c33b9640abaf7dab03876dccf9d08511eca11e93b37c1255b13a9917a1dd66",
-          "instructions": [
-            {
-              "va": "0xae03f7",
-              "asm": "mov     edi, ebx"
-            },
-            {
-              "va": "0xae03f9",
-              "asm": "mov     dword [esp+0x10], edi"
-            },
-            {
-              "va": "0xae03fd",
-              "asm": "mov     dword [esp+0x14], esi"
-            }
-          ],
           "start": 11404279,
           "end": 11404289
         },
         {
           "bytes": "85ff7404",
           "sha256": "76f9dc2667610bdb21ad0a17f982e28176ef99ac96ac8e9829a61d969f9ff955",
-          "instructions": [
-            {
-              "va": "0xae0401",
-              "asm": "test    edi, edi"
-            },
-            {
-              "va": "0xae0403",
-              "asm": "je      0xae0409"
-            }
-          ],
           "start": 11404289,
           "end": 11404293
         },
         {
           "bytes": "3bfb7405",
           "sha256": "9dc59dfc5faef711304e29cefe8bf4af700da655ae30b2458d1d7483ef9b387c",
-          "instructions": [
-            {
-              "va": "0xae0405",
-              "asm": "cmp     edi, ebx"
-            },
-            {
-              "va": "0xae0407",
-              "asm": "je      0xae040e"
-            }
-          ],
           "start": 11404293,
           "end": 11404297
         },
         {
           "bytes": "e84ecdeeff",
           "sha256": "d185dccfcbb17de501abe9d8cc9115fbcd52137b100c85e3feca8d4e2b2ba08f",
-          "instructions": [
-            {
-              "va": "0xae0409",
-              "asm": "call    0x9cd15c"
-            }
-          ],
           "start": 11404297,
           "end": 11404302
         },
         {
           "bytes": "3bf57434",
           "sha256": "9ac1e62ac2abc0d09e9253fdc3c52ee5e2a40128f294456463f6c2f1b4da23a4",
-          "instructions": [
-            {
-              "va": "0xae040e",
-              "asm": "cmp     esi, ebp"
-            },
-            {
-              "va": "0xae0410",
-              "asm": "je      0xae0446"
-            }
-          ],
           "start": 11404302,
           "end": 11404306
         },
         {
           "bytes": "85ff7505",
           "sha256": "13fb22575e53b60150af4698a6a23a42af7f40d75bfce0a22ce55224efdd3f82",
-          "instructions": [
-            {
-              "va": "0xae0412",
-              "asm": "test    edi, edi"
-            },
-            {
-              "va": "0xae0414",
-              "asm": "jne     0xae041b"
-            }
-          ],
           "start": 11404306,
           "end": 11404310
         },
         {
           "bytes": "e841cdeeff",
           "sha256": "ea6459837956fceac1666008aeb12c86c60828af4dc569cd8687205f61d0d8aa",
-          "instructions": [
-            {
-              "va": "0xae0416",
-              "asm": "call    0x9cd15c"
-            }
-          ],
           "start": 11404310,
           "end": 11404315
         },
         {
           "bytes": "3b77047505",
           "sha256": "c18f5e177d5b36743fbe5f3b40a5e1723a467ff7635740dd8c40e1f78892961b",
-          "instructions": [
-            {
-              "va": "0xae041b",
-              "asm": "cmp     esi, dword [edi+0x4]"
-            },
-            {
-              "va": "0xae041e",
-              "asm": "jne     0xae0425"
-            }
-          ],
           "start": 11404315,
           "end": 11404320
         },
         {
           "bytes": "e837cdeeff",
           "sha256": "104f441aa861b65e4b9f4e1b42f67ce92ef99123f0ca49f802625e633397378f",
-          "instructions": [
-            {
-              "va": "0xae0420",
-              "asm": "call    0x9cd15c"
-            }
-          ],
           "start": 11404320,
           "end": 11404325
         },
         {
           "bytes": "8b4e108b018b56148b402452ffd08d4c2410e854f4ffff8b7424148b7c2410ebbb",
           "sha256": "20daa236a26ebe95aa8d837ab436031266d503ce7b14c97f45fec9d2a362eafc",
-          "instructions": [
-            {
-              "va": "0xae0425",
-              "asm": "mov     ecx, dword [esi+0x10]"
-            },
-            {
-              "va": "0xae0428",
-              "asm": "mov     eax, dword [ecx]"
-            },
-            {
-              "va": "0xae042a",
-              "asm": "mov     edx, dword [esi+0x14]"
-            },
-            {
-              "va": "0xae042d",
-              "asm": "mov     eax, dword [eax+0x24]"
-            },
-            {
-              "va": "0xae0430",
-              "asm": "push    edx"
-            },
-            {
-              "va": "0xae0431",
-              "asm": "call    eax"
-            },
-            {
-              "va": "0xae0433",
-              "asm": "lea     ecx, [esp+0x10]"
-            },
-            {
-              "va": "0xae0437",
-              "asm": "call    0xadf890"
-            },
-            {
-              "va": "0xae043c",
-              "asm": "mov     esi, dword [esp+0x14]"
-            },
-            {
-              "va": "0xae0440",
-              "asm": "mov     edi, dword [esp+0x10]"
-            },
-            {
-              "va": "0xae0444",
-              "asm": "jmp     0xae0401"
-            }
-          ],
           "start": 11404325,
           "end": 11404358
         },
         {
           "bytes": "5f5d5e5b",
           "sha256": "e63497e7c0a56027cec0194ede3cdc7b268ed47fe728cb742cc4d6dc8d25e794",
-          "instructions": [
-            {
-              "va": "0xae0446",
-              "asm": "pop     edi"
-            },
-            {
-              "va": "0xae0447",
-              "asm": "pop     ebp"
-            },
-            {
-              "va": "0xae0448",
-              "asm": "pop     esi"
-            },
-            {
-              "va": "0xae0449",
-              "asm": "pop     ebx"
-            }
-          ],
           "start": 11404358,
           "end": 11404362
         },
         {
           "bytes": "83c408c20800",
           "sha256": "057ef009c302dcd4ab9f49688354ec816cda6f12cbfb54b8f215ff766dffd436",
-          "instructions": [
-            {
-              "va": "0xae044a",
-              "asm": "add     esp, 0x8"
-            },
-            {
-              "va": "0xae044d",
-              "asm": "retn    0x8"
-            }
-          ],
           "start": 11404362,
           "end": 11404368
         }
@@ -1230,756 +364,192 @@
         {
           "bytes": "83ec08568bf1578b7e0880bfa0000000007507",
           "sha256": "dc79ad50c8b8b7c0bc2cdedea3275a7c011099c7e8fc83c95e9e7e9957e53525",
-          "instructions": [
-            {
-              "va": "0xae0450",
-              "asm": "sub     esp, 0x8"
-            },
-            {
-              "va": "0xae0453",
-              "asm": "push    esi"
-            },
-            {
-              "va": "0xae0454",
-              "asm": "mov     esi, ecx"
-            },
-            {
-              "va": "0xae0456",
-              "asm": "push    edi"
-            },
-            {
-              "va": "0xae0457",
-              "asm": "mov     edi, dword [esi+0x8]"
-            },
-            {
-              "va": "0xae045a",
-              "asm": "cmp     byte [edi+0xa0], 0x0"
-            },
-            {
-              "va": "0xae0461",
-              "asm": "jne     0xae046a"
-            }
-          ],
           "start": 11404368,
           "end": 11404387
         },
         {
           "bytes": "8bcfe896c0f8ff",
           "sha256": "4f10614d247eaf04006f9d26b351fe29ec89e331d8a2e416c1fca6eba0c5ddfc",
-          "instructions": [
-            {
-              "va": "0xae0463",
-              "asm": "mov     ecx, edi"
-            },
-            {
-              "va": "0xae0465",
-              "asm": "call    0xa6c500"
-            }
-          ],
           "start": 11404387,
           "end": 11404394
         },
         {
           "bytes": "837f58000f8453010000",
           "sha256": "97d2477ea20f86d8b162a8f3eb59973bd08385ab8d750adacae7a37b885508b7",
-          "instructions": [
-            {
-              "va": "0xae046a",
-              "asm": "cmp     dword [edi+0x58], 0x0"
-            },
-            {
-              "va": "0xae046e",
-              "asm": "je      0xae05c7"
-            }
-          ],
           "start": 11404394,
           "end": 11404404
         },
         {
           "bytes": "d9ee8b44241cd918837e10008b7e2c897c24087573",
           "sha256": "b9092e94784347df7a67bbb1bb8437de5b8d491a396ae9a404ae1ccd2598eaa6",
-          "instructions": [
-            {
-              "va": "0xae0474",
-              "asm": "fldz    "
-            },
-            {
-              "va": "0xae0476",
-              "asm": "mov     eax, dword [esp+0x1c]"
-            },
-            {
-              "va": "0xae047a",
-              "asm": "fstp    dword [eax], st0"
-            },
-            {
-              "va": "0xae047c",
-              "asm": "cmp     dword [esi+0x10], 0x0"
-            },
-            {
-              "va": "0xae0480",
-              "asm": "mov     edi, dword [esi+0x2c]"
-            },
-            {
-              "va": "0xae0483",
-              "asm": "mov     dword [esp+0x8], edi"
-            },
-            {
-              "va": "0xae0487",
-              "asm": "jne     0xae04fc"
-            }
-          ],
           "start": 11404404,
           "end": 11404425
         },
         {
           "bytes": "8b7e0880bfa0000000007507",
           "sha256": "fe151da6c421a2bdfc86a9323dce393e759ab11fb7709ec516e779aefb2c6c75",
-          "instructions": [
-            {
-              "va": "0xae0489",
-              "asm": "mov     edi, dword [esi+0x8]"
-            },
-            {
-              "va": "0xae048c",
-              "asm": "cmp     byte [edi+0xa0], 0x0"
-            },
-            {
-              "va": "0xae0493",
-              "asm": "jne     0xae049c"
-            }
-          ],
           "start": 11404425,
           "end": 11404437
         },
         {
           "bytes": "8bcfe864c0f8ff",
           "sha256": "4f4291ca11236236854d664fdc644c25a42312c0710522dcf0d0ecebd2e6ea75",
-          "instructions": [
-            {
-              "va": "0xae0495",
-              "asm": "mov     ecx, edi"
-            },
-            {
-              "va": "0xae0497",
-              "asm": "call    0xa6c500"
-            }
-          ],
           "start": 11404437,
           "end": 11404444
         },
         {
           "bytes": "8b4f58db475885c97d06",
           "sha256": "5c35080e005ef56e9bb89c1f04979c7123afd0ebd69650fa9672aaad3247a8d1",
-          "instructions": [
-            {
-              "va": "0xae049c",
-              "asm": "mov     ecx, dword [edi+0x58]"
-            },
-            {
-              "va": "0xae049f",
-              "asm": "fild    st0, dword [edi+0x58]"
-            },
-            {
-              "va": "0xae04a2",
-              "asm": "test    ecx, ecx"
-            },
-            {
-              "va": "0xae04a4",
-              "asm": "jge     0xae04ac"
-            }
-          ],
           "start": 11404444,
           "end": 11404454
         },
         {
           "bytes": "d8054c61c400",
           "sha256": "b5f397726e2b475eaee8234bdc686cbcdb550f639754e6611f69d22f6ce8d523",
-          "instructions": [
-            {
-              "va": "0xae04a6",
-              "asm": "fadd    dword [0xc4614c]"
-            }
-          ],
           "start": 11404454,
           "end": 11404460
         },
         {
           "bytes": "8b542418db44241885d27d06",
           "sha256": "94c93a10ef67ceaf2e1e1167d1625f671d8bf0cfc661a21c21a2416fcd9c5eae",
-          "instructions": [
-            {
-              "va": "0xae04ac",
-              "asm": "mov     edx, dword [esp+0x18]"
-            },
-            {
-              "va": "0xae04b0",
-              "asm": "fild    st0, dword [esp+0x18]"
-            },
-            {
-              "va": "0xae04b4",
-              "asm": "test    edx, edx"
-            },
-            {
-              "va": "0xae04b6",
-              "asm": "jge     0xae04be"
-            }
-          ],
           "start": 11404460,
           "end": 11404472
         },
         {
           "bytes": "d8054c61c400",
           "sha256": "b5f397726e2b475eaee8234bdc686cbcdb550f639754e6611f69d22f6ce8d523",
-          "instructions": [
-            {
-              "va": "0xae04b8",
-              "asm": "fadd    dword [0xc4614c]"
-            }
-          ],
           "start": 11404472,
           "end": 11404478
         },
         {
           "bytes": "8b442414def985c0db4424147d06",
           "sha256": "9f124511451e18f1281227712819f2d2927528344d978b6038e1b31ced7c349a",
-          "instructions": [
-            {
-              "va": "0xae04be",
-              "asm": "mov     eax, dword [esp+0x14]"
-            },
-            {
-              "va": "0xae04c2",
-              "asm": "fdivp   st1, st0"
-            },
-            {
-              "va": "0xae04c4",
-              "asm": "test    eax, eax"
-            },
-            {
-              "va": "0xae04c6",
-              "asm": "fild    st0, dword [esp+0x14]"
-            },
-            {
-              "va": "0xae04ca",
-              "asm": "jge     0xae04d2"
-            }
-          ],
           "start": 11404478,
           "end": 11404492
         },
         {
           "bytes": "d8054c61c400",
           "sha256": "b5f397726e2b475eaee8234bdc686cbcdb550f639754e6611f69d22f6ce8d523",
-          "instructions": [
-            {
-              "va": "0xae04cc",
-              "asm": "fadd    dword [0xc4614c]"
-            }
-          ],
           "start": 11404492,
           "end": 11404498
         },
         {
           "bytes": "d97c24180fb7442418dec90d000c000089442414d96c2414df7c24088b4c2408894c24088bf9d96c2418",
           "sha256": "82aa856315442d49debac39be9c55c4403ca9bd4955197c24b1e01c0e95df99b",
-          "instructions": [
-            {
-              "va": "0xae04d2",
-              "asm": "fnstcw  word [esp+0x18]"
-            },
-            {
-              "va": "0xae04d6",
-              "asm": "movzx   eax, word [esp+0x18]"
-            },
-            {
-              "va": "0xae04db",
-              "asm": "fmulp   st1, st0"
-            },
-            {
-              "va": "0xae04dd",
-              "asm": "or      eax, 0xc00"
-            },
-            {
-              "va": "0xae04e2",
-              "asm": "mov     dword [esp+0x14], eax"
-            },
-            {
-              "va": "0xae04e6",
-              "asm": "fldcw   word [esp+0x14]"
-            },
-            {
-              "va": "0xae04ea",
-              "asm": "fistp   qword [esp+0x8], st0"
-            },
-            {
-              "va": "0xae04ee",
-              "asm": "mov     ecx, dword [esp+0x8]"
-            },
-            {
-              "va": "0xae04f2",
-              "asm": "mov     dword [esp+0x8], ecx"
-            },
-            {
-              "va": "0xae04f6",
-              "asm": "mov     edi, ecx"
-            },
-            {
-              "va": "0xae04f8",
-              "asm": "fldcw   word [esp+0x18]"
-            }
-          ],
           "start": 11404498,
           "end": 11404540
         },
         {
           "bytes": "538b9e980000003bfb557206",
           "sha256": "6e23fe9e89bb6d6d70bafa176107ca24c57e69f888f87a5a704ff331b6e47783",
-          "instructions": [
-            {
-              "va": "0xae04fc",
-              "asm": "push    ebx"
-            },
-            {
-              "va": "0xae04fd",
-              "asm": "mov     ebx, dword [esi+0x98]"
-            },
-            {
-              "va": "0xae0503",
-              "asm": "cmp     edi, ebx"
-            },
-            {
-              "va": "0xae0505",
-              "asm": "push    ebp"
-            },
-            {
-              "va": "0xae0506",
-              "asm": "jb      0xae050e"
-            }
-          ],
           "start": 11404540,
           "end": 11404552
         },
         {
           "bytes": "8bef2bebeb20",
           "sha256": "e5a9196ed8bdf0a83520c90daa1e4b3ab6cc1b585c7924ba056fa7f875499359",
-          "instructions": [
-            {
-              "va": "0xae0508",
-              "asm": "mov     ebp, edi"
-            },
-            {
-              "va": "0xae050a",
-              "asm": "sub     ebp, ebx"
-            },
-            {
-              "va": "0xae050c",
-              "asm": "jmp     0xae052e"
-            }
-          ],
           "start": 11404552,
           "end": 11404558
         },
         {
           "bytes": "8b6e0880bda0000000007507",
           "sha256": "58c040603dc3ad947adb3530e660c34a9dd9779da6a8bca4ab0df151d1d51fd6",
-          "instructions": [
-            {
-              "va": "0xae050e",
-              "asm": "mov     ebp, dword [esi+0x8]"
-            },
-            {
-              "va": "0xae0511",
-              "asm": "cmp     byte [ebp+0xa0], 0x0"
-            },
-            {
-              "va": "0xae0518",
-              "asm": "jne     0xae0521"
-            }
-          ],
           "start": 11404558,
           "end": 11404570
         },
         {
           "bytes": "8bcde8dfbff8ff",
           "sha256": "aa8aad5ebd1d19c75f6a608cb6c17f63f9da567d03dc4b1d7f760680ca0709f8",
-          "instructions": [
-            {
-              "va": "0xae051a",
-              "asm": "mov     ecx, ebp"
-            },
-            {
-              "va": "0xae051c",
-              "asm": "call    0xa6c500"
-            }
-          ],
           "start": 11404570,
           "end": 11404577
         },
         {
           "bytes": "8b6d588b9e980000002beb03ef",
           "sha256": "8ac829d95afa8e4df2078961328b67c0bf028456ca1c3b25d06fa18415c827b3",
-          "instructions": [
-            {
-              "va": "0xae0521",
-              "asm": "mov     ebp, dword [ebp+0x58]"
-            },
-            {
-              "va": "0xae0524",
-              "asm": "mov     ebx, dword [esi+0x98]"
-            },
-            {
-              "va": "0xae052a",
-              "asm": "sub     ebp, ebx"
-            },
-            {
-              "va": "0xae052c",
-              "asm": "add     ebp, edi"
-            }
-          ],
           "start": 11404577,
           "end": 11404590
         },
         {
           "bytes": "85ed7e73",
           "sha256": "dfed25b81b82f2a8eb8117762c1f3cef660e1e2f3e6e4dd2f6fc48d265d1678c",
-          "instructions": [
-            {
-              "va": "0xae052e",
-              "asm": "test    ebp, ebp"
-            },
-            {
-              "va": "0xae0530",
-              "asm": "jle     0xae05a5"
-            }
-          ],
           "start": 11404590,
           "end": 11404594
         },
         {
           "bytes": "8b4e0880b9a0000000008d3c2b894c24207509",
           "sha256": "c41291f66db664f9621b5918aa0db5dd247a2704ade9c6afddfc01b965ec593d",
-          "instructions": [
-            {
-              "va": "0xae0532",
-              "asm": "mov     ecx, dword [esi+0x8]"
-            },
-            {
-              "va": "0xae0535",
-              "asm": "cmp     byte [ecx+0xa0], 0x0"
-            },
-            {
-              "va": "0xae053c",
-              "asm": "lea     edi, [ebx+ebp]"
-            },
-            {
-              "va": "0xae053f",
-              "asm": "mov     dword [esp+0x20], ecx"
-            },
-            {
-              "va": "0xae0543",
-              "asm": "jne     0xae054e"
-            }
-          ],
           "start": 11404594,
           "end": 11404613
         },
         {
           "bytes": "e8b6bff8ff8b4c2420",
           "sha256": "51c6ccf5ed68dd78f95fdfcd6a52e1d8ac277ef3208357c3438597c5f4683302",
-          "instructions": [
-            {
-              "va": "0xae0545",
-              "asm": "call    0xa6c500"
-            },
-            {
-              "va": "0xae054a",
-              "asm": "mov     ecx, dword [esp+0x20]"
-            }
-          ],
           "start": 11404613,
           "end": 11404622
         },
         {
           "bytes": "3b7958761e",
           "sha256": "c1359c1a1d6499c427f7395e81fae95521552523625559620ad6b7a354bb4281",
-          "instructions": [
-            {
-              "va": "0xae054e",
-              "asm": "cmp     edi, dword [ecx+0x58]"
-            },
-            {
-              "va": "0xae0551",
-              "asm": "jbe     0xae0571"
-            }
-          ],
           "start": 11404622,
           "end": 11404627
         },
         {
           "bytes": "8b7e0880bfa0000000007507",
           "sha256": "fe151da6c421a2bdfc86a9323dce393e759ab11fb7709ec516e779aefb2c6c75",
-          "instructions": [
-            {
-              "va": "0xae0553",
-              "asm": "mov     edi, dword [esi+0x8]"
-            },
-            {
-              "va": "0xae0556",
-              "asm": "cmp     byte [edi+0xa0], 0x0"
-            },
-            {
-              "va": "0xae055d",
-              "asm": "jne     0xae0566"
-            }
-          ],
           "start": 11404627,
           "end": 11404639
         },
         {
           "bytes": "8bcfe89abff8ff",
           "sha256": "d69739a29203b1e532da649cbbd91a5a956c6dea0e75b7b26a662991734ee8ae",
-          "instructions": [
-            {
-              "va": "0xae055f",
-              "asm": "mov     ecx, edi"
-            },
-            {
-              "va": "0xae0561",
-              "asm": "call    0xa6c500"
-            }
-          ],
           "start": 11404639,
           "end": 11404646
         },
         {
           "bytes": "8b7f588bd32bd703eaeb02",
           "sha256": "c7acb3d749134c239e9356c984096b57b105cf769cefb440d0f141c160504ace",
-          "instructions": [
-            {
-              "va": "0xae0566",
-              "asm": "mov     edi, dword [edi+0x58]"
-            },
-            {
-              "va": "0xae0569",
-              "asm": "mov     edx, ebx"
-            },
-            {
-              "va": "0xae056b",
-              "asm": "sub     edx, edi"
-            },
-            {
-              "va": "0xae056d",
-              "asm": "add     ebp, edx"
-            },
-            {
-              "va": "0xae056f",
-              "asm": "jmp     0xae0573"
-            }
-          ],
           "start": 11404646,
           "end": 11404657
         },
         {
           "bytes": "33ed",
           "sha256": "42ca97c72e80c793858560bb0346957d0dd739467c9f756d92aadebb54ed089f",
-          "instructions": [
-            {
-              "va": "0xae0571",
-              "asm": "xor     ebp, ebp"
-            }
-          ],
           "start": 11404657,
           "end": 11404659
         },
         {
           "bytes": "57538bcee804feffff8b4424285057538bcee8f6fcffff57538bcee8edeaffff8b442424d80033db85edd9187f91",
           "sha256": "50fab76507aed92b67a2e09a13d2c65a3fc9a1c90501fed77b85720eaff866a1",
-          "instructions": [
-            {
-              "va": "0xae0573",
-              "asm": "push    edi"
-            },
-            {
-              "va": "0xae0574",
-              "asm": "push    ebx"
-            },
-            {
-              "va": "0xae0575",
-              "asm": "mov     ecx, esi"
-            },
-            {
-              "va": "0xae0577",
-              "asm": "call    0xae0380"
-            },
-            {
-              "va": "0xae057c",
-              "asm": "mov     eax, dword [esp+0x28]"
-            },
-            {
-              "va": "0xae0580",
-              "asm": "push    eax"
-            },
-            {
-              "va": "0xae0581",
-              "asm": "push    edi"
-            },
-            {
-              "va": "0xae0582",
-              "asm": "push    ebx"
-            },
-            {
-              "va": "0xae0583",
-              "asm": "mov     ecx, esi"
-            },
-            {
-              "va": "0xae0585",
-              "asm": "call    0xae0280"
-            },
-            {
-              "va": "0xae058a",
-              "asm": "push    edi"
-            },
-            {
-              "va": "0xae058b",
-              "asm": "push    ebx"
-            },
-            {
-              "va": "0xae058c",
-              "asm": "mov     ecx, esi"
-            },
-            {
-              "va": "0xae058e",
-              "asm": "call    0xadf080"
-            },
-            {
-              "va": "0xae0593",
-              "asm": "mov     eax, dword [esp+0x24]"
-            },
-            {
-              "va": "0xae0597",
-              "asm": "fadd    dword [eax]"
-            },
-            {
-              "va": "0xae0599",
-              "asm": "xor     ebx, ebx"
-            },
-            {
-              "va": "0xae059b",
-              "asm": "test    ebp, ebp"
-            },
-            {
-              "va": "0xae059d",
-              "asm": "fstp    dword [eax], st0"
-            },
-            {
-              "va": "0xae059f",
-              "asm": "jg      0xae0532"
-            }
-          ],
           "start": 11404659,
           "end": 11404705
         },
         {
           "bytes": "8b7c2410",
           "sha256": "3e2834c11859b7d047b113078e541aecda3a335065a1214f9a0419e2c6231c27",
-          "instructions": [
-            {
-              "va": "0xae05a1",
-              "asm": "mov     edi, dword [esp+0x10]"
-            }
-          ],
           "start": 11404705,
           "end": 11404709
         },
         {
           "bytes": "8b5e0880bba0000000007507",
           "sha256": "47c609efa2eacf254aaa01a83832b5caec1f2102c3f75da2eb66ae3c370b866b",
-          "instructions": [
-            {
-              "va": "0xae05a5",
-              "asm": "mov     ebx, dword [esi+0x8]"
-            },
-            {
-              "va": "0xae05a8",
-              "asm": "cmp     byte [ebx+0xa0], 0x0"
-            },
-            {
-              "va": "0xae05af",
-              "asm": "jne     0xae05b8"
-            }
-          ],
           "start": 11404709,
           "end": 11404721
         },
         {
           "bytes": "8bcbe848bff8ff",
           "sha256": "004d7a01423c696c31cd08de612d385f4c6d4f51d6d57f2001ddf213ead13d16",
-          "instructions": [
-            {
-              "va": "0xae05b1",
-              "asm": "mov     ecx, ebx"
-            },
-            {
-              "va": "0xae05b3",
-              "asm": "call    0xa6c500"
-            }
-          ],
           "start": 11404721,
           "end": 11404728
         },
         {
           "bytes": "8bc733d2f773585d5b899698000000",
           "sha256": "861c4dad12e0a142e67ffa3e650bd943e53f22c4fdfb1049141ac42375d78db0",
-          "instructions": [
-            {
-              "va": "0xae05b8",
-              "asm": "mov     eax, edi"
-            },
-            {
-              "va": "0xae05ba",
-              "asm": "xor     edx, edx"
-            },
-            {
-              "va": "0xae05bc",
-              "asm": "div     dword [ebx+0x58]"
-            },
-            {
-              "va": "0xae05bf",
-              "asm": "pop     ebp"
-            },
-            {
-              "va": "0xae05c0",
-              "asm": "pop     ebx"
-            },
-            {
-              "va": "0xae05c1",
-              "asm": "mov     dword [esi+0x98], edx"
-            }
-          ],
           "start": 11404728,
           "end": 11404743
         },
         {
           "bytes": "5f5e83c408c21000",
           "sha256": "84b34188b682856ecb6c92187c7d6fc35e5e410142cd6d34adc4184bbcc02769",
-          "instructions": [
-            {
-              "va": "0xae05c7",
-              "asm": "pop     edi"
-            },
-            {
-              "va": "0xae05c8",
-              "asm": "pop     esi"
-            },
-            {
-              "va": "0xae05c9",
-              "asm": "add     esp, 0x8"
-            },
-            {
-              "va": "0xae05cc",
-              "asm": "retn    0x10"
-            }
-          ],
           "start": 11404743,
           "end": 11404751
         }
@@ -1991,1820 +561,444 @@
         {
           "bytes": "83ec2cd9ee5355d95424108bd98b43348d6b30568b3057895c2414",
           "sha256": "3a93f3d124fefe603c3e921b71c23b3265a95b7b5d310fbe252c25b9de032a82",
-          "instructions": [
-            {
-              "va": "0xadd670",
-              "asm": "sub     esp, 0x2c"
-            },
-            {
-              "va": "0xadd673",
-              "asm": "fldz    "
-            },
-            {
-              "va": "0xadd675",
-              "asm": "push    ebx"
-            },
-            {
-              "va": "0xadd676",
-              "asm": "push    ebp"
-            },
-            {
-              "va": "0xadd677",
-              "asm": "fst     dword [esp+0x10], st0"
-            },
-            {
-              "va": "0xadd67b",
-              "asm": "mov     ebx, ecx"
-            },
-            {
-              "va": "0xadd67d",
-              "asm": "mov     eax, dword [ebx+0x34]"
-            },
-            {
-              "va": "0xadd680",
-              "asm": "lea     ebp, [ebx+0x30]"
-            },
-            {
-              "va": "0xadd683",
-              "asm": "push    esi"
-            },
-            {
-              "va": "0xadd684",
-              "asm": "mov     esi, dword [eax]"
-            },
-            {
-              "va": "0xadd686",
-              "asm": "push    edi"
-            },
-            {
-              "va": "0xadd687",
-              "asm": "mov     dword [esp+0x14], ebx"
-            }
-          ],
           "start": 11392624,
           "end": 11392651
         },
         {
           "bytes": "85edd95c241c8b7b348d43307404",
           "sha256": "21e79d7b6aa8f3ca56a786fea1b84a31212b6e2c7210ed5ca613010d96f25543",
-          "instructions": [
-            {
-              "va": "0xadd68b",
-              "asm": "test    ebp, ebp"
-            },
-            {
-              "va": "0xadd68d",
-              "asm": "fstp    dword [esp+0x1c], st0"
-            },
-            {
-              "va": "0xadd691",
-              "asm": "mov     edi, dword [ebx+0x34]"
-            },
-            {
-              "va": "0xadd694",
-              "asm": "lea     eax, [ebx+0x30]"
-            },
-            {
-              "va": "0xadd697",
-              "asm": "je      0xadd69d"
-            }
-          ],
           "start": 11392651,
           "end": 11392665
         },
         {
           "bytes": "3be87405",
           "sha256": "fa9ef4b9b62ee0285b947fd0e84ded925bbe1389d3acec486e5aa1c714701d3f",
-          "instructions": [
-            {
-              "va": "0xadd699",
-              "asm": "cmp     ebp, eax"
-            },
-            {
-              "va": "0xadd69b",
-              "asm": "je      0xadd6a2"
-            }
-          ],
           "start": 11392665,
           "end": 11392669
         },
         {
           "bytes": "e8bafaeeff",
           "sha256": "c7779c4ae28ec20aa3a8c400feacccc019be040f37a893aa7365e9aa30858b5a",
-          "instructions": [
-            {
-              "va": "0xadd69d",
-              "asm": "call    0x9cd15c"
-            }
-          ],
           "start": 11392669,
           "end": 11392674
         },
         {
           "bytes": "3bf70f84eb000000",
           "sha256": "5a102ffb5be76da5914a9317e36218cf73ebed2bf6f375524493c24fe26d1da5",
-          "instructions": [
-            {
-              "va": "0xadd6a2",
-              "asm": "cmp     esi, edi"
-            },
-            {
-              "va": "0xadd6a4",
-              "asm": "je      0xadd795"
-            }
-          ],
           "start": 11392674,
           "end": 11392682
         },
         {
           "bytes": "85ed7505",
           "sha256": "e100de486acf4666d298fc719aa4693a6fd0560e63fc3747f828706a9db45032",
-          "instructions": [
-            {
-              "va": "0xadd6aa",
-              "asm": "test    ebp, ebp"
-            },
-            {
-              "va": "0xadd6ac",
-              "asm": "jne     0xadd6b3"
-            }
-          ],
           "start": 11392682,
           "end": 11392686
         },
         {
           "bytes": "e8a9faeeff",
           "sha256": "5ec9495d44aaad62e69726c5e4361d3178b5f240e2257ee68b707274d96a2025",
-          "instructions": [
-            {
-              "va": "0xadd6ae",
-              "asm": "call    0x9cd15c"
-            }
-          ],
           "start": 11392686,
           "end": 11392691
         },
         {
           "bytes": "3b75047505",
           "sha256": "c56a37ca397cda002cc985246019bc8ea923ff1f289f644bc7a0871f4be5b3d5",
-          "instructions": [
-            {
-              "va": "0xadd6b3",
-              "asm": "cmp     esi, dword [ebp+0x4]"
-            },
-            {
-              "va": "0xadd6b6",
-              "asm": "jne     0xadd6bd"
-            }
-          ],
           "start": 11392691,
           "end": 11392696
         },
         {
           "bytes": "e89ffaeeff",
           "sha256": "c9c115caa4ede1664caf5a8a4aa0baf780715c020c2a059075cc24c1bcc39dc3",
-          "instructions": [
-            {
-              "va": "0xadd6b8",
-              "asm": "call    0x9cd15c"
-            }
-          ],
           "start": 11392696,
           "end": 11392701
         },
         {
           "bytes": "8b43148b7e088b178b5208508b4424448d4c241c51508bcfffd2a801894424280f8499000000",
           "sha256": "e4307fe696ad39895bb5b6c15271583131ad2a728dcbe4794b62853ba6e5b37c",
-          "instructions": [
-            {
-              "va": "0xadd6bd",
-              "asm": "mov     eax, dword [ebx+0x14]"
-            },
-            {
-              "va": "0xadd6c0",
-              "asm": "mov     edi, dword [esi+0x8]"
-            },
-            {
-              "va": "0xadd6c3",
-              "asm": "mov     edx, dword [edi]"
-            },
-            {
-              "va": "0xadd6c5",
-              "asm": "mov     edx, dword [edx+0x8]"
-            },
-            {
-              "va": "0xadd6c8",
-              "asm": "push    eax"
-            },
-            {
-              "va": "0xadd6c9",
-              "asm": "mov     eax, dword [esp+0x44]"
-            },
-            {
-              "va": "0xadd6cd",
-              "asm": "lea     ecx, [esp+0x1c]"
-            },
-            {
-              "va": "0xadd6d1",
-              "asm": "push    ecx"
-            },
-            {
-              "va": "0xadd6d2",
-              "asm": "push    eax"
-            },
-            {
-              "va": "0xadd6d3",
-              "asm": "mov     ecx, edi"
-            },
-            {
-              "va": "0xadd6d5",
-              "asm": "call    edx"
-            },
-            {
-              "va": "0xadd6d7",
-              "asm": "test    al, 0x1"
-            },
-            {
-              "va": "0xadd6d9",
-              "asm": "mov     dword [esp+0x28], eax"
-            },
-            {
-              "va": "0xadd6dd",
-              "asm": "je      0xadd77c"
-            }
-          ],
           "start": 11392701,
           "end": 11392739
         },
         {
           "bytes": "a8047412",
           "sha256": "4a6e37ae77e354a14a6f94ef76db66c29ee60001845ef711b231c88bd1879b84",
-          "instructions": [
-            {
-              "va": "0xadd6e3",
-              "asm": "test    al, 0x4"
-            },
-            {
-              "va": "0xadd6e5",
-              "asm": "je      0xadd6f9"
-            }
-          ],
           "start": 11392739,
           "end": 11392743
         },
         {
           "bytes": "8b4b1485c9740b",
           "sha256": "65d6bc0774a0fabbc27894ee80586697cef796e8c2031041075b1b344da087f4",
-          "instructions": [
-            {
-              "va": "0xadd6e7",
-              "asm": "mov     ecx, dword [ebx+0x14]"
-            },
-            {
-              "va": "0xadd6ea",
-              "asm": "test    ecx, ecx"
-            },
-            {
-              "va": "0xadd6ec",
-              "asm": "je      0xadd6f9"
-            }
-          ],
           "start": 11392743,
           "end": 11392750
         },
         {
           "bytes": "8b018b106a00576a64ffd2",
           "sha256": "8a6fbcdb388dd88c57ebd42424b0ac02f1ad68e9a5351ebd90f0c3241480202e",
-          "instructions": [
-            {
-              "va": "0xadd6ee",
-              "asm": "mov     eax, dword [ecx]"
-            },
-            {
-              "va": "0xadd6f0",
-              "asm": "mov     edx, dword [eax]"
-            },
-            {
-              "va": "0xadd6f2",
-              "asm": "push    0x0"
-            },
-            {
-              "va": "0xadd6f4",
-              "asm": "push    edi"
-            },
-            {
-              "va": "0xadd6f5",
-              "asm": "push    0x64"
-            },
-            {
-              "va": "0xadd6f7",
-              "asm": "call    edx"
-            }
-          ],
           "start": 11392750,
           "end": 11392761
         },
         {
           "bytes": "837f4400742d",
           "sha256": "8427ad6ad739507eda443a14b28ab1b9aa4affa60da05531823f232454e96222",
-          "instructions": [
-            {
-              "va": "0xadd6f9",
-              "asm": "cmp     dword [edi+0x44], 0x0"
-            },
-            {
-              "va": "0xadd6fd",
-              "asm": "je      0xadd72c"
-            }
-          ],
           "start": 11392761,
           "end": 11392767
         },
         {
           "bytes": "8b4b048b018b901c010000ffd285c0741c",
           "sha256": "dc5c33615b22625746c0fb49571a46fb4d7a784a9059985311dc8b76974c0e0d",
-          "instructions": [
-            {
-              "va": "0xadd6ff",
-              "asm": "mov     ecx, dword [ebx+0x4]"
-            },
-            {
-              "va": "0xadd702",
-              "asm": "mov     eax, dword [ecx]"
-            },
-            {
-              "va": "0xadd704",
-              "asm": "mov     edx, dword [eax+0x11c]"
-            },
-            {
-              "va": "0xadd70a",
-              "asm": "call    edx"
-            },
-            {
-              "va": "0xadd70c",
-              "asm": "test    eax, eax"
-            },
-            {
-              "va": "0xadd70e",
-              "asm": "je      0xadd72c"
-            }
-          ],
           "start": 11392767,
           "end": 11392784
         },
         {
           "bytes": "8b47448b57288b4b04508b01528b901c010000ffd28bc8e8d460fdff",
           "sha256": "d7ec410af06ea55d8ae38067890637d232ef5f3cb8d64b7fe4fc1c840b4d3a70",
-          "instructions": [
-            {
-              "va": "0xadd710",
-              "asm": "mov     eax, dword [edi+0x44]"
-            },
-            {
-              "va": "0xadd713",
-              "asm": "mov     edx, dword [edi+0x28]"
-            },
-            {
-              "va": "0xadd716",
-              "asm": "mov     ecx, dword [ebx+0x4]"
-            },
-            {
-              "va": "0xadd719",
-              "asm": "push    eax"
-            },
-            {
-              "va": "0xadd71a",
-              "asm": "mov     eax, dword [ecx]"
-            },
-            {
-              "va": "0xadd71c",
-              "asm": "push    edx"
-            },
-            {
-              "va": "0xadd71d",
-              "asm": "mov     edx, dword [eax+0x11c]"
-            },
-            {
-              "va": "0xadd723",
-              "asm": "call    edx"
-            },
-            {
-              "va": "0xadd725",
-              "asm": "mov     ecx, eax"
-            },
-            {
-              "va": "0xadd727",
-              "asm": "call    0xab3800"
-            }
-          ],
           "start": 11392784,
           "end": 11392812
         },
         {
           "bytes": "f6442428027549",
           "sha256": "09d065bdf0d0e9b7be59ffbf4ab378e015849964c0647f6041df688be03440cd",
-          "instructions": [
-            {
-              "va": "0xadd72c",
-              "asm": "test    byte [esp+0x28], 0x2"
-            },
-            {
-              "va": "0xadd731",
-              "asm": "jne     0xadd77c"
-            }
-          ],
           "start": 11392812,
           "end": 11392819
         },
         {
           "bytes": "8b078b50048bcfffd23b7504897424387505",
           "sha256": "c2bb4240b3ad5f8c0ed22d89f2dd40df7c570aa6557ef09d3e282c17781b5b88",
-          "instructions": [
-            {
-              "va": "0xadd733",
-              "asm": "mov     eax, dword [edi]"
-            },
-            {
-              "va": "0xadd735",
-              "asm": "mov     edx, dword [eax+0x4]"
-            },
-            {
-              "va": "0xadd738",
-              "asm": "mov     ecx, edi"
-            },
-            {
-              "va": "0xadd73a",
-              "asm": "call    edx"
-            },
-            {
-              "va": "0xadd73c",
-              "asm": "cmp     esi, dword [ebp+0x4]"
-            },
-            {
-              "va": "0xadd73f",
-              "asm": "mov     dword [esp+0x38], esi"
-            },
-            {
-              "va": "0xadd743",
-              "asm": "jne     0xadd74a"
-            }
-          ],
           "start": 11392819,
           "end": 11392837
         },
         {
           "bytes": "e812faeeff",
           "sha256": "8aa96aa5aafc997172c51cdc8c9c799c728db59cfe617e744564b19d5f918ad8",
-          "instructions": [
-            {
-              "va": "0xadd745",
-              "asm": "call    0x9cd15c"
-            }
-          ],
           "start": 11392837,
           "end": 11392842
         },
         {
           "bytes": "3b73348b3e741c",
           "sha256": "168d2dacf24c6fcf8f4a4d58fe7249cf93657333c7f8670c56fe398f8a5faded",
-          "instructions": [
-            {
-              "va": "0xadd74a",
-              "asm": "cmp     esi, dword [ebx+0x34]"
-            },
-            {
-              "va": "0xadd74d",
-              "asm": "mov     edi, dword [esi]"
-            },
-            {
-              "va": "0xadd74f",
-              "asm": "je      0xadd76d"
-            }
-          ],
           "start": 11392842,
           "end": 11392849
         },
         {
           "bytes": "8b460489388b0e8b56046a0c56895104e80a5392ff83c408834338ff",
           "sha256": "7f4d89df034aa29d24b9d2647cb4f355c1e5fc7f7aaf48dd24a83961f33db4e4",
-          "instructions": [
-            {
-              "va": "0xadd751",
-              "asm": "mov     eax, dword [esi+0x4]"
-            },
-            {
-              "va": "0xadd754",
-              "asm": "mov     dword [eax], edi"
-            },
-            {
-              "va": "0xadd756",
-              "asm": "mov     ecx, dword [esi]"
-            },
-            {
-              "va": "0xadd758",
-              "asm": "mov     edx, dword [esi+0x4]"
-            },
-            {
-              "va": "0xadd75b",
-              "asm": "push    0xc"
-            },
-            {
-              "va": "0xadd75d",
-              "asm": "push    esi"
-            },
-            {
-              "va": "0xadd75e",
-              "asm": "mov     dword [ecx+0x4], edx"
-            },
-            {
-              "va": "0xadd761",
-              "asm": "call    0x402a70"
-            },
-            {
-              "va": "0xadd766",
-              "asm": "add     esp, 0x8"
-            },
-            {
-              "va": "0xadd769",
-              "asm": "add     dword [ebx+0x38], 0xffffffff"
-            }
-          ],
           "start": 11392849,
           "end": 11392877
         },
         {
           "bytes": "d944241c8bf7d8442418e90fffffff",
           "sha256": "c909d6b4fe9b26f9924a7c5d35b8d229e83a5f2b7e33ee707351f6e0ad838c3f",
-          "instructions": [
-            {
-              "va": "0xadd76d",
-              "asm": "fld     st0, dword [esp+0x1c]"
-            },
-            {
-              "va": "0xadd771",
-              "asm": "mov     esi, edi"
-            },
-            {
-              "va": "0xadd773",
-              "asm": "fadd    dword [esp+0x18]"
-            },
-            {
-              "va": "0xadd777",
-              "asm": "jmp     0xadd68b"
-            }
-          ],
           "start": 11392877,
           "end": 11392892
         },
         {
           "bytes": "3b75047505",
           "sha256": "c56a37ca397cda002cc985246019bc8ea923ff1f289f644bc7a0871f4be5b3d5",
-          "instructions": [
-            {
-              "va": "0xadd77c",
-              "asm": "cmp     esi, dword [ebp+0x4]"
-            },
-            {
-              "va": "0xadd77f",
-              "asm": "jne     0xadd786"
-            }
-          ],
           "start": 11392892,
           "end": 11392897
         },
         {
           "bytes": "e8d6f9eeff",
           "sha256": "f5df7130d3603bfafb2b627f45b24b7c1f7ded9b70003539507b768ddaca985e",
-          "instructions": [
-            {
-              "va": "0xadd781",
-              "asm": "call    0x9cd15c"
-            }
-          ],
           "start": 11392897,
           "end": 11392902
         },
         {
           "bytes": "d944241c8b36d8442418e9f6feffff",
           "sha256": "d1ce70fd7ae205eea52f82eb150f6d67853beac0f43aeed087a15f16b0bbfdf2",
-          "instructions": [
-            {
-              "va": "0xadd786",
-              "asm": "fld     st0, dword [esp+0x1c]"
-            },
-            {
-              "va": "0xadd78a",
-              "asm": "mov     esi, dword [esi]"
-            },
-            {
-              "va": "0xadd78c",
-              "asm": "fadd    dword [esp+0x18]"
-            },
-            {
-              "va": "0xadd790",
-              "asm": "jmp     0xadd68b"
-            }
-          ],
           "start": 11392902,
           "end": 11392917
         },
         {
           "bytes": "d9ee8b43288b38d95424208d6b24d95c2424c74424280000000090",
           "sha256": "374addacaedb20f54ac5c677fc90edb71f1b71d68efb2ec3fb89e89a91c8f6c8",
-          "instructions": [
-            {
-              "va": "0xadd795",
-              "asm": "fldz    "
-            },
-            {
-              "va": "0xadd797",
-              "asm": "mov     eax, dword [ebx+0x28]"
-            },
-            {
-              "va": "0xadd79a",
-              "asm": "mov     edi, dword [eax]"
-            },
-            {
-              "va": "0xadd79c",
-              "asm": "fst     dword [esp+0x20], st0"
-            },
-            {
-              "va": "0xadd7a0",
-              "asm": "lea     ebp, [ebx+0x24]"
-            },
-            {
-              "va": "0xadd7a3",
-              "asm": "fstp    dword [esp+0x24], st0"
-            },
-            {
-              "va": "0xadd7a7",
-              "asm": "mov     dword [esp+0x28], 0x0"
-            },
-            {
-              "va": "0xadd7af",
-              "asm": "nop     "
-            }
-          ],
           "start": 11392917,
           "end": 11392944
         },
         {
           "bytes": "85ed8b4b288d7324894c24387404",
           "sha256": "60b587d22d700db61776820b13ea11df240020e135a2ba5ef9644b6ea15684ae",
-          "instructions": [
-            {
-              "va": "0xadd7b0",
-              "asm": "test    ebp, ebp"
-            },
-            {
-              "va": "0xadd7b2",
-              "asm": "mov     ecx, dword [ebx+0x28]"
-            },
-            {
-              "va": "0xadd7b5",
-              "asm": "lea     esi, [ebx+0x24]"
-            },
-            {
-              "va": "0xadd7b8",
-              "asm": "mov     dword [esp+0x38], ecx"
-            },
-            {
-              "va": "0xadd7bc",
-              "asm": "je      0xadd7c2"
-            }
-          ],
           "start": 11392944,
           "end": 11392958
         },
         {
           "bytes": "3bee7405",
           "sha256": "bfd4ed063a71c0815f6d060df4f33aa7b7ed7e3fb9176819eea6276672021e59",
-          "instructions": [
-            {
-              "va": "0xadd7be",
-              "asm": "cmp     ebp, esi"
-            },
-            {
-              "va": "0xadd7c0",
-              "asm": "je      0xadd7c7"
-            }
-          ],
           "start": 11392958,
           "end": 11392962
         },
         {
           "bytes": "e895f9eeff",
           "sha256": "a3599b8d8fd4e0879ecdf1005ffbcffe578544ae2694fb185a9e8778374e03f9",
-          "instructions": [
-            {
-              "va": "0xadd7c2",
-              "asm": "call    0x9cd15c"
-            }
-          ],
           "start": 11392962,
           "end": 11392967
         },
         {
           "bytes": "3b7c24380f8430010000",
           "sha256": "e904c7a9edcb62dd45e2a2d043c2fcefc458972aab5eebdec1c867daa5e494f8",
-          "instructions": [
-            {
-              "va": "0xadd7c7",
-              "asm": "cmp     edi, dword [esp+0x38]"
-            },
-            {
-              "va": "0xadd7cb",
-              "asm": "je      0xadd901"
-            }
-          ],
           "start": 11392967,
           "end": 11392977
         },
         {
           "bytes": "85ed7505",
           "sha256": "e100de486acf4666d298fc719aa4693a6fd0560e63fc3747f828706a9db45032",
-          "instructions": [
-            {
-              "va": "0xadd7d1",
-              "asm": "test    ebp, ebp"
-            },
-            {
-              "va": "0xadd7d3",
-              "asm": "jne     0xadd7da"
-            }
-          ],
           "start": 11392977,
           "end": 11392981
         },
         {
           "bytes": "e882f9eeff",
           "sha256": "d09fea48c4f41e899b6223862fac3f3069fecd9461e2ea638e85c17ac01b80d3",
-          "instructions": [
-            {
-              "va": "0xadd7d5",
-              "asm": "call    0x9cd15c"
-            }
-          ],
           "start": 11392981,
           "end": 11392986
         },
         {
           "bytes": "3b7d047505",
           "sha256": "8fe8119741e89a80f302b026d0f82fe6e0ecff855940fda3cc8b4e149a3f3866",
-          "instructions": [
-            {
-              "va": "0xadd7da",
-              "asm": "cmp     edi, dword [ebp+0x4]"
-            },
-            {
-              "va": "0xadd7dd",
-              "asm": "jne     0xadd7e4"
-            }
-          ],
           "start": 11392986,
           "end": 11392991
         },
         {
           "bytes": "e878f9eeff",
           "sha256": "ff2af073c07bb64712a29016b5abb66c847d990280c405e1a129db66bc9c549a",
-          "instructions": [
-            {
-              "va": "0xadd7df",
-              "asm": "call    0x9cd15c"
-            }
-          ],
           "start": 11392991,
           "end": 11392996
         },
         {
           "bytes": "8b43148b77088b168b5208508b4424448d4c241c51508bceffd28bd8f6c3017470",
           "sha256": "0854b2fd3f8a700cfe0ce081e03c4de06d1073f22e159dfb5f9fb724a373da3c",
-          "instructions": [
-            {
-              "va": "0xadd7e4",
-              "asm": "mov     eax, dword [ebx+0x14]"
-            },
-            {
-              "va": "0xadd7e7",
-              "asm": "mov     esi, dword [edi+0x8]"
-            },
-            {
-              "va": "0xadd7ea",
-              "asm": "mov     edx, dword [esi]"
-            },
-            {
-              "va": "0xadd7ec",
-              "asm": "mov     edx, dword [edx+0x8]"
-            },
-            {
-              "va": "0xadd7ef",
-              "asm": "push    eax"
-            },
-            {
-              "va": "0xadd7f0",
-              "asm": "mov     eax, dword [esp+0x44]"
-            },
-            {
-              "va": "0xadd7f4",
-              "asm": "lea     ecx, [esp+0x1c]"
-            },
-            {
-              "va": "0xadd7f8",
-              "asm": "push    ecx"
-            },
-            {
-              "va": "0xadd7f9",
-              "asm": "push    eax"
-            },
-            {
-              "va": "0xadd7fa",
-              "asm": "mov     ecx, esi"
-            },
-            {
-              "va": "0xadd7fc",
-              "asm": "call    edx"
-            },
-            {
-              "va": "0xadd7fe",
-              "asm": "mov     ebx, eax"
-            },
-            {
-              "va": "0xadd800",
-              "asm": "test    bl, 0x1"
-            },
-            {
-              "va": "0xadd803",
-              "asm": "je      0xadd875"
-            }
-          ],
           "start": 11392996,
           "end": 11393029
         },
         {
           "bytes": "f6c3047416",
           "sha256": "8111669cf16b84af5ee872595d8e85cbaf3192c3e6b6f2938d2a6d978d060559",
-          "instructions": [
-            {
-              "va": "0xadd805",
-              "asm": "test    bl, 0x4"
-            },
-            {
-              "va": "0xadd808",
-              "asm": "je      0xadd820"
-            }
-          ],
           "start": 11393029,
           "end": 11393034
         },
         {
           "bytes": "8b4424148b481485c9740b",
           "sha256": "97573c84fce5ba20eb378f4a9102e47ee13359859e0596be158009e39d9b68d2",
-          "instructions": [
-            {
-              "va": "0xadd80a",
-              "asm": "mov     eax, dword [esp+0x14]"
-            },
-            {
-              "va": "0xadd80e",
-              "asm": "mov     ecx, dword [eax+0x14]"
-            },
-            {
-              "va": "0xadd811",
-              "asm": "test    ecx, ecx"
-            },
-            {
-              "va": "0xadd813",
-              "asm": "je      0xadd820"
-            }
-          ],
           "start": 11393034,
           "end": 11393045
         },
         {
           "bytes": "8b118b026a00566a64ffd0",
           "sha256": "eb204de05f7d34cd4c322ec3fe9a80f4e4d1b716de05e163161784ea32909e93",
-          "instructions": [
-            {
-              "va": "0xadd815",
-              "asm": "mov     edx, dword [ecx]"
-            },
-            {
-              "va": "0xadd817",
-              "asm": "mov     eax, dword [edx]"
-            },
-            {
-              "va": "0xadd819",
-              "asm": "push    0x0"
-            },
-            {
-              "va": "0xadd81b",
-              "asm": "push    esi"
-            },
-            {
-              "va": "0xadd81c",
-              "asm": "push    0x64"
-            },
-            {
-              "va": "0xadd81e",
-              "asm": "call    eax"
-            }
-          ],
           "start": 11393045,
           "end": 11393056
         },
         {
           "bytes": "f6c3020f85c3000000",
           "sha256": "1ec51a1a89b9dcc8fb22a0291446589da85b63609fab823062844fb98c09a224",
-          "instructions": [
-            {
-              "va": "0xadd820",
-              "asm": "test    bl, 0x2"
-            },
-            {
-              "va": "0xadd823",
-              "asm": "jne     0xadd8ec"
-            }
-          ],
           "start": 11393056,
           "end": 11393065
         },
         {
           "bytes": "8b168b42048bceffd03b7d04897c24307505",
           "sha256": "69c24971c022ffffeaad1badd402c2b2895ef0651eded501ccae49b561f4067d",
-          "instructions": [
-            {
-              "va": "0xadd829",
-              "asm": "mov     edx, dword [esi]"
-            },
-            {
-              "va": "0xadd82b",
-              "asm": "mov     eax, dword [edx+0x4]"
-            },
-            {
-              "va": "0xadd82e",
-              "asm": "mov     ecx, esi"
-            },
-            {
-              "va": "0xadd830",
-              "asm": "call    eax"
-            },
-            {
-              "va": "0xadd832",
-              "asm": "cmp     edi, dword [ebp+0x4]"
-            },
-            {
-              "va": "0xadd835",
-              "asm": "mov     dword [esp+0x30], edi"
-            },
-            {
-              "va": "0xadd839",
-              "asm": "jne     0xadd840"
-            }
-          ],
           "start": 11393065,
           "end": 11393083
         },
         {
           "bytes": "e81cf9eeff",
           "sha256": "39abd6b1533bdff78bc5aba5c6841777efcdb8b383c992452016ebdcf9abf278",
-          "instructions": [
-            {
-              "va": "0xadd83b",
-              "asm": "call    0x9cd15c"
-            }
-          ],
           "start": 11393083,
           "end": 11393088
         },
         {
           "bytes": "8b5c24148b3783c3243b7b04741c",
           "sha256": "2972c8a170ed23ec8be4dc1e26964e9cde742bf805fe94d634dc50f8d502af3e",
-          "instructions": [
-            {
-              "va": "0xadd840",
-              "asm": "mov     ebx, dword [esp+0x14]"
-            },
-            {
-              "va": "0xadd844",
-              "asm": "mov     esi, dword [edi]"
-            },
-            {
-              "va": "0xadd846",
-              "asm": "add     ebx, 0x24"
-            },
-            {
-              "va": "0xadd849",
-              "asm": "cmp     edi, dword [ebx+0x4]"
-            },
-            {
-              "va": "0xadd84c",
-              "asm": "je      0xadd86a"
-            }
-          ],
           "start": 11393088,
           "end": 11393102
         },
         {
           "bytes": "8b4f0489318b178b47046a0c57894204e80d5292ff83c408834308ff",
           "sha256": "a0739253a7215570a4590c39da44e19b85aaec71ef37bd30ed3c8994cc66e4c8",
-          "instructions": [
-            {
-              "va": "0xadd84e",
-              "asm": "mov     ecx, dword [edi+0x4]"
-            },
-            {
-              "va": "0xadd851",
-              "asm": "mov     dword [ecx], esi"
-            },
-            {
-              "va": "0xadd853",
-              "asm": "mov     edx, dword [edi]"
-            },
-            {
-              "va": "0xadd855",
-              "asm": "mov     eax, dword [edi+0x4]"
-            },
-            {
-              "va": "0xadd858",
-              "asm": "push    0xc"
-            },
-            {
-              "va": "0xadd85a",
-              "asm": "push    edi"
-            },
-            {
-              "va": "0xadd85b",
-              "asm": "mov     dword [edx+0x4], eax"
-            },
-            {
-              "va": "0xadd85e",
-              "asm": "call    0x402a70"
-            },
-            {
-              "va": "0xadd863",
-              "asm": "add     esp, 0x8"
-            },
-            {
-              "va": "0xadd866",
-              "asm": "add     dword [ebx+0x8], 0xffffffff"
-            }
-          ],
           "start": 11393102,
           "end": 11393130
         },
         {
           "bytes": "8b5c24148bfee93bffffff",
           "sha256": "dcc14ce8f00951a0014540fce487aa16590d0a51eb831db5498f62d4edb1ffd1",
-          "instructions": [
-            {
-              "va": "0xadd86a",
-              "asm": "mov     ebx, dword [esp+0x14]"
-            },
-            {
-              "va": "0xadd86e",
-              "asm": "mov     edi, esi"
-            },
-            {
-              "va": "0xadd870",
-              "asm": "jmp     0xadd7b0"
-            }
-          ],
           "start": 11393130,
           "end": 11393141
         },
         {
           "bytes": "837e10007571",
           "sha256": "771bdcfc54d2f5bf759583541887342008031e0674947d6fde813acd83c1366b",
-          "instructions": [
-            {
-              "va": "0xadd875",
-              "asm": "cmp     dword [esi+0x10], 0x0"
-            },
-            {
-              "va": "0xadd879",
-              "asm": "jne     0xadd8ec"
-            }
-          ],
           "start": 11393141,
           "end": 11393147
         },
         {
           "bytes": "d94424208b5e0880bba000000000d84638d95c2420d94638d95c24107507",
           "sha256": "6c961525a878a2c5979dc445914febb45c51760968e84c6a185d7ae9f7f8471e",
-          "instructions": [
-            {
-              "va": "0xadd87b",
-              "asm": "fld     st0, dword [esp+0x20]"
-            },
-            {
-              "va": "0xadd87f",
-              "asm": "mov     ebx, dword [esi+0x8]"
-            },
-            {
-              "va": "0xadd882",
-              "asm": "cmp     byte [ebx+0xa0], 0x0"
-            },
-            {
-              "va": "0xadd889",
-              "asm": "fadd    dword [esi+0x38]"
-            },
-            {
-              "va": "0xadd88c",
-              "asm": "fstp    dword [esp+0x20], st0"
-            },
-            {
-              "va": "0xadd890",
-              "asm": "fld     st0, dword [esi+0x38]"
-            },
-            {
-              "va": "0xadd893",
-              "asm": "fstp    dword [esp+0x10], st0"
-            },
-            {
-              "va": "0xadd897",
-              "asm": "jne     0xadd8a0"
-            }
-          ],
           "start": 11393147,
           "end": 11393177
         },
         {
           "bytes": "8bcbe860ecf8ff",
           "sha256": "cb82a815fc62ff6a55888efe84cebb9f7861dfabd5cb46e953ea900e6e9fbf17",
-          "instructions": [
-            {
-              "va": "0xadd899",
-              "asm": "mov     ecx, ebx"
-            },
-            {
-              "va": "0xadd89b",
-              "asm": "call    0xa6c500"
-            }
-          ],
           "start": 11393177,
           "end": 11393184
         },
         {
           "bytes": "8b4b58db435885c97d06",
           "sha256": "6e26d4f7fd80a8ab0b1e995432fbf28b62f220205769f25aa4b0dc139eb71743",
-          "instructions": [
-            {
-              "va": "0xadd8a0",
-              "asm": "mov     ecx, dword [ebx+0x58]"
-            },
-            {
-              "va": "0xadd8a3",
-              "asm": "fild    st0, dword [ebx+0x58]"
-            },
-            {
-              "va": "0xadd8a6",
-              "asm": "test    ecx, ecx"
-            },
-            {
-              "va": "0xadd8a8",
-              "asm": "jge     0xadd8b0"
-            }
-          ],
           "start": 11393184,
           "end": 11393194
         },
         {
           "bytes": "d8054c61c400",
           "sha256": "b5f397726e2b475eaee8234bdc686cbcdb550f639754e6611f69d22f6ce8d523",
-          "instructions": [
-            {
-              "va": "0xadd8aa",
-              "asm": "fadd    dword [0xc4614c]"
-            }
-          ],
           "start": 11393194,
           "end": 11393200
         },
         {
           "bytes": "d84c2410d97c24100fb74424100d000c00008944242cd96c242cdf7c242c8b54242c01542428d96c2410db442440d84e38d84e34d8442424d95c2424",
           "sha256": "56590569e13dd2712fa42d1aedca3319000be31fa185901ef75f67e3d91d9320",
-          "instructions": [
-            {
-              "va": "0xadd8b0",
-              "asm": "fmul    st0, dword [esp+0x10]"
-            },
-            {
-              "va": "0xadd8b4",
-              "asm": "fnstcw  word [esp+0x10]"
-            },
-            {
-              "va": "0xadd8b8",
-              "asm": "movzx   eax, word [esp+0x10]"
-            },
-            {
-              "va": "0xadd8bd",
-              "asm": "or      eax, 0xc00"
-            },
-            {
-              "va": "0xadd8c2",
-              "asm": "mov     dword [esp+0x2c], eax"
-            },
-            {
-              "va": "0xadd8c6",
-              "asm": "fldcw   word [esp+0x2c]"
-            },
-            {
-              "va": "0xadd8ca",
-              "asm": "fistp   qword [esp+0x2c], st0"
-            },
-            {
-              "va": "0xadd8ce",
-              "asm": "mov     edx, dword [esp+0x2c]"
-            },
-            {
-              "va": "0xadd8d2",
-              "asm": "add     dword [esp+0x28], edx"
-            },
-            {
-              "va": "0xadd8d6",
-              "asm": "fldcw   word [esp+0x10]"
-            },
-            {
-              "va": "0xadd8da",
-              "asm": "fild    st0, dword [esp+0x40]"
-            },
-            {
-              "va": "0xadd8de",
-              "asm": "fmul    st0, dword [esi+0x38]"
-            },
-            {
-              "va": "0xadd8e1",
-              "asm": "fmul    st0, dword [esi+0x34]"
-            },
-            {
-              "va": "0xadd8e4",
-              "asm": "fadd    dword [esp+0x24]"
-            },
-            {
-              "va": "0xadd8e8",
-              "asm": "fstp    dword [esp+0x24], st0"
-            }
-          ],
           "start": 11393200,
           "end": 11393260
         },
         {
           "bytes": "3b7d047505",
           "sha256": "8fe8119741e89a80f302b026d0f82fe6e0ecff855940fda3cc8b4e149a3f3866",
-          "instructions": [
-            {
-              "va": "0xadd8ec",
-              "asm": "cmp     edi, dword [ebp+0x4]"
-            },
-            {
-              "va": "0xadd8ef",
-              "asm": "jne     0xadd8f6"
-            }
-          ],
           "start": 11393260,
           "end": 11393265
         },
         {
           "bytes": "e866f8eeff",
           "sha256": "4918196aca66659c5b07fc8235b8010017b001b48fd740a23fbee0c24bce66ee",
-          "instructions": [
-            {
-              "va": "0xadd8f1",
-              "asm": "call    0x9cd15c"
-            }
-          ],
           "start": 11393265,
           "end": 11393270
         },
         {
           "bytes": "8b3f8b5c2414e9affeffff",
           "sha256": "9b092faf6fead879ce9187f855b88d40c0bf99500d112a0c3ca0db349c93ffde",
-          "instructions": [
-            {
-              "va": "0xadd8f6",
-              "asm": "mov     edi, dword [edi]"
-            },
-            {
-              "va": "0xadd8f8",
-              "asm": "mov     ebx, dword [esp+0x14]"
-            },
-            {
-              "va": "0xadd8fc",
-              "asm": "jmp     0xadd7b0"
-            }
-          ],
           "start": 11393270,
           "end": 11393281
         },
         {
           "bytes": "d9eed9442420d8d1dfe0ddd9f6c4417566",
           "sha256": "3d3e12396d7a2e33c78cb47dd0c37f8e678668427fbd168202f24117e733b3c1",
-          "instructions": [
-            {
-              "va": "0xadd901",
-              "asm": "fldz    "
-            },
-            {
-              "va": "0xadd903",
-              "asm": "fld     st0, dword [esp+0x20]"
-            },
-            {
-              "va": "0xadd907",
-              "asm": "fcom    st0, st1"
-            },
-            {
-              "va": "0xadd909",
-              "asm": "fnstsw  ax"
-            },
-            {
-              "va": "0xadd90b",
-              "asm": "fstp    st1, st0"
-            },
-            {
-              "va": "0xadd90d",
-              "asm": "test    ah, 0x41"
-            },
-            {
-              "va": "0xadd910",
-              "asm": "jne     0xadd978"
-            }
-          ],
           "start": 11393281,
           "end": 11393298
         },
         {
           "bytes": "d94424248b4c2428d8f1d97c24400fb74424400d000c00008944242cd96c242cdf7c24348b44243401430c85c9d96c2440db4424287d06",
           "sha256": "31d96f4ecb19426a78ca262a843a1c32a5c8d1f07fe25d57fa04bf946bf01c3c",
-          "instructions": [
-            {
-              "va": "0xadd912",
-              "asm": "fld     st0, dword [esp+0x24]"
-            },
-            {
-              "va": "0xadd916",
-              "asm": "mov     ecx, dword [esp+0x28]"
-            },
-            {
-              "va": "0xadd91a",
-              "asm": "fdiv    st0, st1"
-            },
-            {
-              "va": "0xadd91c",
-              "asm": "fnstcw  word [esp+0x40]"
-            },
-            {
-              "va": "0xadd920",
-              "asm": "movzx   eax, word [esp+0x40]"
-            },
-            {
-              "va": "0xadd925",
-              "asm": "or      eax, 0xc00"
-            },
-            {
-              "va": "0xadd92a",
-              "asm": "mov     dword [esp+0x2c], eax"
-            },
-            {
-              "va": "0xadd92e",
-              "asm": "fldcw   word [esp+0x2c]"
-            },
-            {
-              "va": "0xadd932",
-              "asm": "fistp   qword [esp+0x34], st0"
-            },
-            {
-              "va": "0xadd936",
-              "asm": "mov     eax, dword [esp+0x34]"
-            },
-            {
-              "va": "0xadd93a",
-              "asm": "add     dword [ebx+0xc], eax"
-            },
-            {
-              "va": "0xadd93d",
-              "asm": "test    ecx, ecx"
-            },
-            {
-              "va": "0xadd93f",
-              "asm": "fldcw   word [esp+0x40]"
-            },
-            {
-              "va": "0xadd943",
-              "asm": "fild    st0, dword [esp+0x28]"
-            },
-            {
-              "va": "0xadd947",
-              "asm": "jge     0xadd94f"
-            }
-          ],
           "start": 11393298,
           "end": 11393353
         },
         {
           "bytes": "d8054c61c400",
           "sha256": "b5f397726e2b475eaee8234bdc686cbcdb550f639754e6611f69d22f6ce8d523",
-          "instructions": [
-            {
-              "va": "0xadd949",
-              "asm": "fadd    dword [0xc4614c]"
-            }
-          ],
           "start": 11393353,
           "end": 11393359
         },
         {
           "bytes": "def1d97c24400fb74424400d000c00008944242cd96c242cdf7c24348b542434895308d96c2440eb09",
           "sha256": "e719ccc14376dcc73113ab5841b4a7c8cbd7433e23ad9b73298da300b87d8d62",
-          "instructions": [
-            {
-              "va": "0xadd94f",
-              "asm": "fdivrp  st1, st0"
-            },
-            {
-              "va": "0xadd951",
-              "asm": "fnstcw  word [esp+0x40]"
-            },
-            {
-              "va": "0xadd955",
-              "asm": "movzx   eax, word [esp+0x40]"
-            },
-            {
-              "va": "0xadd95a",
-              "asm": "or      eax, 0xc00"
-            },
-            {
-              "va": "0xadd95f",
-              "asm": "mov     dword [esp+0x2c], eax"
-            },
-            {
-              "va": "0xadd963",
-              "asm": "fldcw   word [esp+0x2c]"
-            },
-            {
-              "va": "0xadd967",
-              "asm": "fistp   qword [esp+0x34], st0"
-            },
-            {
-              "va": "0xadd96b",
-              "asm": "mov     edx, dword [esp+0x34]"
-            },
-            {
-              "va": "0xadd96f",
-              "asm": "mov     dword [ebx+0x8], edx"
-            },
-            {
-              "va": "0xadd972",
-              "asm": "fldcw   word [esp+0x40]"
-            },
-            {
-              "va": "0xadd976",
-              "asm": "jmp     0xadd981"
-            }
-          ],
           "start": 11393359,
           "end": 11393400
         },
         {
           "bytes": "ddd8c7430800000000",
           "sha256": "67e5adef59bebdeaebda4e72bfc22799cd158db23dfd8f9e0027f04a9c84bc50",
-          "instructions": [
-            {
-              "va": "0xadd978",
-              "asm": "fstp    st0, st0"
-            },
-            {
-              "va": "0xadd97a",
-              "asm": "mov     dword [ebx+0x8], 0x0"
-            }
-          ],
           "start": 11393400,
           "end": 11393409
         },
         {
           "bytes": "8b4b0885c97610",
           "sha256": "ec24a4518ec4d2496ece4c659ddcc20f0971e69d136d7f0a317f1361d655f361",
-          "instructions": [
-            {
-              "va": "0xadd981",
-              "asm": "mov     ecx, dword [ebx+0x8]"
-            },
-            {
-              "va": "0xadd984",
-              "asm": "test    ecx, ecx"
-            },
-            {
-              "va": "0xadd986",
-              "asm": "jbe     0xadd998"
-            }
-          ],
           "start": 11393409,
           "end": 11393416
         },
         {
           "bytes": "8b430c3bc17210",
           "sha256": "29dd4335186e234305a2b5401bc72865864725eae514a04b0cf2ec4fe7a35b93",
-          "instructions": [
-            {
-              "va": "0xadd988",
-              "asm": "mov     eax, dword [ebx+0xc]"
-            },
-            {
-              "va": "0xadd98b",
-              "asm": "cmp     eax, ecx"
-            },
-            {
-              "va": "0xadd98d",
-              "asm": "jb      0xadd99f"
-            }
-          ],
           "start": 11393416,
           "end": 11393423
         },
         {
           "bytes": "33d2f7f189530ceb07",
           "sha256": "6fb048ff3b1a7f3dec28d78a2714e54e31e219e63370c66aedbc7cd74082f720",
-          "instructions": [
-            {
-              "va": "0xadd98f",
-              "asm": "xor     edx, edx"
-            },
-            {
-              "va": "0xadd991",
-              "asm": "div     ecx"
-            },
-            {
-              "va": "0xadd993",
-              "asm": "mov     dword [ebx+0xc], edx"
-            },
-            {
-              "va": "0xadd996",
-              "asm": "jmp     0xadd99f"
-            }
-          ],
           "start": 11393423,
           "end": 11393432
         },
         {
           "bytes": "c7430c00000000",
           "sha256": "60be580f82aa25375a06435c40a6628c85db66a2248df4e93e6680652b253c1c",
-          "instructions": [
-            {
-              "va": "0xadd998",
-              "asm": "mov     dword [ebx+0xc], 0x0"
-            }
-          ],
           "start": 11393432,
           "end": 11393439
         },
         {
           "bytes": "8b46048b38",
           "sha256": "08e37cf798098cc5ac57e207c89414741ca0b3804dfbd79097b847254edf9171",
-          "instructions": [
-            {
-              "va": "0xadd99f",
-              "asm": "mov     eax, dword [esi+0x4]"
-            },
-            {
-              "va": "0xadd9a2",
-              "asm": "mov     edi, dword [eax]"
-            }
-          ],
           "start": 11393439,
           "end": 11393444
         },
         {
           "bytes": "3bf68b6e047405",
           "sha256": "b9b53f6d2cb3588a0cbf4c8506fb6e77b5c513c33bc4a4e301db0f03ca3af369",
-          "instructions": [
-            {
-              "va": "0xadd9a4",
-              "asm": "cmp     esi, esi"
-            },
-            {
-              "va": "0xadd9a6",
-              "asm": "mov     ebp, dword [esi+0x4]"
-            },
-            {
-              "va": "0xadd9a9",
-              "asm": "je      0xadd9b0"
-            }
-          ],
           "start": 11393444,
           "end": 11393451
         },
         {
           "bytes": "e8acf7eeff",
           "sha256": "58edfd3751caacb20371889f97c46240c4d70f0fa81187decd83f24ecd7590e0",
-          "instructions": [
-            {
-              "va": "0xadd9ab",
-              "asm": "call    0x9cd15c"
-            }
-          ],
           "start": 11393451,
           "end": 11393456
         },
         {
           "bytes": "3bfd7445",
           "sha256": "15d29640a4a1f28144ceb795b30f0cbb64e2591d08261ce11c9a7adb6a1a2bd0",
-          "instructions": [
-            {
-              "va": "0xadd9b0",
-              "asm": "cmp     edi, ebp"
-            },
-            {
-              "va": "0xadd9b2",
-              "asm": "je      0xadd9f9"
-            }
-          ],
           "start": 11393456,
           "end": 11393460
         },
         {
           "bytes": "3b7e047505",
           "sha256": "942ee537d69aedb21aac6147012abcd9367076298694d6e74aa2395d6a4dcd05",
-          "instructions": [
-            {
-              "va": "0xadd9b4",
-              "asm": "cmp     edi, dword [esi+0x4]"
-            },
-            {
-              "va": "0xadd9b7",
-              "asm": "jne     0xadd9be"
-            }
-          ],
           "start": 11393460,
           "end": 11393465
         },
         {
           "bytes": "e89ef7eeff",
           "sha256": "cb49536aced5a44e530f1f343aeefdd7981ddea45edbbfd3f9f851a309f65871",
-          "instructions": [
-            {
-              "va": "0xadd9b9",
-              "asm": "call    0x9cd15c"
-            }
-          ],
           "start": 11393465,
           "end": 11393470
         },
         {
           "bytes": "8b4b148b43088b6f08518b4b0c8d54241c5250518bcde8772a0000837d1000750c",
           "sha256": "750e451fc67cd5609ea3dd4ed8ff6487a546b05be16aa5c51c7b551024582eaa",
-          "instructions": [
-            {
-              "va": "0xadd9be",
-              "asm": "mov     ecx, dword [ebx+0x14]"
-            },
-            {
-              "va": "0xadd9c1",
-              "asm": "mov     eax, dword [ebx+0x8]"
-            },
-            {
-              "va": "0xadd9c4",
-              "asm": "mov     ebp, dword [edi+0x8]"
-            },
-            {
-              "va": "0xadd9c7",
-              "asm": "push    ecx"
-            },
-            {
-              "va": "0xadd9c8",
-              "asm": "mov     ecx, dword [ebx+0xc]"
-            },
-            {
-              "va": "0xadd9cb",
-              "asm": "lea     edx, [esp+0x1c]"
-            },
-            {
-              "va": "0xadd9cf",
-              "asm": "push    edx"
-            },
-            {
-              "va": "0xadd9d0",
-              "asm": "push    eax"
-            },
-            {
-              "va": "0xadd9d1",
-              "asm": "push    ecx"
-            },
-            {
-              "va": "0xadd9d2",
-              "asm": "mov     ecx, ebp"
-            },
-            {
-              "va": "0xadd9d4",
-              "asm": "call    0xae0450"
-            },
-            {
-              "va": "0xadd9d9",
-              "asm": "cmp     dword [ebp+0x10], 0x0"
-            },
-            {
-              "va": "0xadd9dd",
-              "asm": "jne     0xadd9eb"
-            }
-          ],
           "start": 11393470,
           "end": 11393503
         },
         {
           "bytes": "d944241cd8442418d95c241c",
           "sha256": "30ed22f5616bf9df5f544404841c43e2ed2804a7de57bceb180dfac5cd04dc43",
-          "instructions": [
-            {
-              "va": "0xadd9df",
-              "asm": "fld     st0, dword [esp+0x1c]"
-            },
-            {
-              "va": "0xadd9e3",
-              "asm": "fadd    dword [esp+0x18]"
-            },
-            {
-              "va": "0xadd9e7",
-              "asm": "fstp    dword [esp+0x1c], st0"
-            }
-          ],
           "start": 11393503,
           "end": 11393515
         },
         {
           "bytes": "3b7e047505",
           "sha256": "942ee537d69aedb21aac6147012abcd9367076298694d6e74aa2395d6a4dcd05",
-          "instructions": [
-            {
-              "va": "0xadd9eb",
-              "asm": "cmp     edi, dword [esi+0x4]"
-            },
-            {
-              "va": "0xadd9ee",
-              "asm": "jne     0xadd9f5"
-            }
-          ],
           "start": 11393515,
           "end": 11393520
         },
         {
           "bytes": "e867f7eeff",
           "sha256": "aa71b7ee2b5030626de71c3c755275e1866b4e2c709aa3b01c3dcfb385a04580",
-          "instructions": [
-            {
-              "va": "0xadd9f0",
-              "asm": "call    0x9cd15c"
-            }
-          ],
           "start": 11393520,
           "end": 11393525
         },
         {
           "bytes": "8b3febab",
           "sha256": "90404041318af5859b8d5d29eef32e8790831230ad186730e5ed76f694552ce4",
-          "instructions": [
-            {
-              "va": "0xadd9f5",
-              "asm": "mov     edi, dword [edi]"
-            },
-            {
-              "va": "0xadd9f7",
-              "asm": "jmp     0xadd9a4"
-            }
-          ],
           "start": 11393525,
           "end": 11393529
         },
         {
           "bytes": "d944241c5f5e5d5b83c42cc20400",
           "sha256": "1c27e196ffce0004a115542d4d53d0f043c228b23e2b5c8ae4106a99e0e8ef9f",
-          "instructions": [
-            {
-              "va": "0xadd9f9",
-              "asm": "fld     st0, dword [esp+0x1c]"
-            },
-            {
-              "va": "0xadd9fd",
-              "asm": "pop     edi"
-            },
-            {
-              "va": "0xadd9fe",
-              "asm": "pop     esi"
-            },
-            {
-              "va": "0xadd9ff",
-              "asm": "pop     ebp"
-            },
-            {
-              "va": "0xadda00",
-              "asm": "pop     ebx"
-            },
-            {
-              "va": "0xadda01",
-              "asm": "add     esp, 0x2c"
-            },
-            {
-              "va": "0xadda04",
-              "asm": "retn    0x4"
-            }
-          ],
           "start": 11393529,
           "end": 11393543
         }

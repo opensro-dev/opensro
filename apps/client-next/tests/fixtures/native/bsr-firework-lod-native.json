@@ -7,359 +7,37 @@
         {
           "start": 8733424,
           "end": 8733606,
-          "bytes": "8b542404538bd9568b72045783c6708d7b70b907000000f3a58b720481c69c0600008dbb9c060000b907000000f3a58b42048b888c000000058c000000898b8c0000008b4804898b900000008b40088983940000008b0a51b970c8ce00e81ebbf9ff8bf08d560852b96893f000e8de2f0c006a0181c638010000568bcb89835c070000e8f8faffff6a018bcbe89ff7ffffd983ac000000dc05d045c0008b835c070000d99bac0000008b88980000008b410485c0740a",
-          "instructions": [
-            {
-              "address": 8733424,
-              "text": "mov     edx, dword [esp+0x4]"
-            },
-            {
-              "address": 8733428,
-              "text": "push    ebx"
-            },
-            {
-              "address": 8733429,
-              "text": "mov     ebx, ecx"
-            },
-            {
-              "address": 8733431,
-              "text": "push    esi"
-            },
-            {
-              "address": 8733432,
-              "text": "mov     esi, dword [edx+0x4]"
-            },
-            {
-              "address": 8733435,
-              "text": "push    edi"
-            },
-            {
-              "address": 8733436,
-              "text": "add     esi, 0x70"
-            },
-            {
-              "address": 8733439,
-              "text": "lea     edi, [ebx+0x70]"
-            },
-            {
-              "address": 8733442,
-              "text": "mov     ecx, 0x7"
-            },
-            {
-              "address": 8733447,
-              "text": "rep movsd dword [edi], [esi]"
-            },
-            {
-              "address": 8733449,
-              "text": "mov     esi, dword [edx+0x4]"
-            },
-            {
-              "address": 8733452,
-              "text": "add     esi, 0x69c"
-            },
-            {
-              "address": 8733458,
-              "text": "lea     edi, [ebx+0x69c]"
-            },
-            {
-              "address": 8733464,
-              "text": "mov     ecx, 0x7"
-            },
-            {
-              "address": 8733469,
-              "text": "rep movsd dword [edi], [esi]"
-            },
-            {
-              "address": 8733471,
-              "text": "mov     eax, dword [edx+0x4]"
-            },
-            {
-              "address": 8733474,
-              "text": "mov     ecx, dword [eax+0x8c]"
-            },
-            {
-              "address": 8733480,
-              "text": "add     eax, 0x8c"
-            },
-            {
-              "address": 8733485,
-              "text": "mov     dword [ebx+0x8c], ecx"
-            },
-            {
-              "address": 8733491,
-              "text": "mov     ecx, dword [eax+0x4]"
-            },
-            {
-              "address": 8733494,
-              "text": "mov     dword [ebx+0x90], ecx"
-            },
-            {
-              "address": 8733500,
-              "text": "mov     eax, dword [eax+0x8]"
-            },
-            {
-              "address": 8733503,
-              "text": "mov     dword [ebx+0x94], eax"
-            },
-            {
-              "address": 8733509,
-              "text": "mov     ecx, dword [edx]"
-            },
-            {
-              "address": 8733511,
-              "text": "push    ecx"
-            },
-            {
-              "address": 8733512,
-              "text": "mov     ecx, 0xcec870"
-            },
-            {
-              "address": 8733517,
-              "text": "call    0x7efe70"
-            },
-            {
-              "address": 8733522,
-              "text": "mov     esi, eax"
-            },
-            {
-              "address": 8733524,
-              "text": "lea     edx, [esi+0x8]"
-            },
-            {
-              "address": 8733527,
-              "text": "push    edx"
-            },
-            {
-              "address": 8733528,
-              "text": "mov     ecx, 0xf09368"
-            },
-            {
-              "address": 8733533,
-              "text": "call    0x917340"
-            },
-            {
-              "address": 8733538,
-              "text": "push    0x1"
-            },
-            {
-              "address": 8733540,
-              "text": "add     esi, 0x138"
-            },
-            {
-              "address": 8733546,
-              "text": "push    esi"
-            },
-            {
-              "address": 8733547,
-              "text": "mov     ecx, ebx"
-            },
-            {
-              "address": 8733549,
-              "text": "mov     dword [ebx+0x75c], eax"
-            },
-            {
-              "address": 8733555,
-              "text": "call    0x853e70"
-            },
-            {
-              "address": 8733560,
-              "text": "push    0x1"
-            },
-            {
-              "address": 8733562,
-              "text": "mov     ecx, ebx"
-            },
-            {
-              "address": 8733564,
-              "text": "call    0x853b20"
-            },
-            {
-              "address": 8733569,
-              "text": "fld     st0, dword [ebx+0xac]"
-            },
-            {
-              "address": 8733575,
-              "text": "fadd    qword [0xc045d0]"
-            },
-            {
-              "address": 8733581,
-              "text": "mov     eax, dword [ebx+0x75c]"
-            },
-            {
-              "address": 8733587,
-              "text": "fstp    dword [ebx+0xac], st0"
-            },
-            {
-              "address": 8733593,
-              "text": "mov     ecx, dword [eax+0x98]"
-            },
-            {
-              "address": 8733599,
-              "text": "mov     eax, dword [ecx+0x4]"
-            },
-            {
-              "address": 8733602,
-              "text": "test    eax, eax"
-            },
-            {
-              "address": 8733604,
-              "text": "je      0x8543b0"
-            }
-          ]
+          "bytes": "8b542404538bd9568b72045783c6708d7b70b907000000f3a58b720481c69c0600008dbb9c060000b907000000f3a58b42048b888c000000058c000000898b8c0000008b4804898b900000008b40088983940000008b0a51b970c8ce00e81ebbf9ff8bf08d560852b96893f000e8de2f0c006a0181c638010000568bcb89835c070000e8f8faffff6a018bcbe89ff7ffffd983ac000000dc05d045c0008b835c070000d99bac0000008b88980000008b410485c0740a"
         },
         {
           "start": 8733606,
           "end": 8733616,
-          "bytes": "8b49082bc8c1f9027505",
-          "instructions": [
-            {
-              "address": 8733606,
-              "text": "mov     ecx, dword [ecx+0x8]"
-            },
-            {
-              "address": 8733609,
-              "text": "sub     ecx, eax"
-            },
-            {
-              "address": 8733611,
-              "text": "sar     ecx, 0x2"
-            },
-            {
-              "address": 8733614,
-              "text": "jne     0x8543b5"
-            }
-          ]
+          "bytes": "8b49082bc8c1f9027505"
         },
         {
           "start": 8733616,
           "end": 8733621,
-          "bytes": "e84bfeffff",
-          "instructions": [
-            {
-              "address": 8733616,
-              "text": "call    0x854200"
-            }
-          ]
+          "bytes": "e84bfeffff"
         },
         {
           "start": 8733621,
           "end": 8733633,
-          "bytes": "8b008b700883c00485f67418",
-          "instructions": [
-            {
-              "address": 8733621,
-              "text": "mov     eax, dword [eax]"
-            },
-            {
-              "address": 8733623,
-              "text": "mov     esi, dword [eax+0x8]"
-            },
-            {
-              "address": 8733626,
-              "text": "add     eax, 0x4"
-            },
-            {
-              "address": 8733629,
-              "text": "test    esi, esi"
-            },
-            {
-              "address": 8733631,
-              "text": "je      0x8543d9"
-            }
-          ]
+          "bytes": "8b008b700883c00485f67418"
         },
         {
           "start": 8733633,
           "end": 8733657,
-          "bytes": "8b48082bceb867666666f7e9c1fa068bc2c1e81f03c27505",
-          "instructions": [
-            {
-              "address": 8733633,
-              "text": "mov     ecx, dword [eax+0x8]"
-            },
-            {
-              "address": 8733636,
-              "text": "sub     ecx, esi"
-            },
-            {
-              "address": 8733638,
-              "text": "mov     eax, 0x66666667"
-            },
-            {
-              "address": 8733643,
-              "text": "imul    ecx"
-            },
-            {
-              "address": 8733645,
-              "text": "sar     edx, 0x6"
-            },
-            {
-              "address": 8733648,
-              "text": "mov     eax, edx"
-            },
-            {
-              "address": 8733650,
-              "text": "shr     eax, 0x1f"
-            },
-            {
-              "address": 8733653,
-              "text": "add     eax, edx"
-            },
-            {
-              "address": 8733655,
-              "text": "jne     0x8543de"
-            }
-          ]
+          "bytes": "8b48082bceb867666666f7e9c1fa068bc2c1e81f03c27505"
         },
         {
           "start": 8733657,
           "end": 8733662,
-          "bytes": "e8a2fdffff",
-          "instructions": [
-            {
-              "address": 8733657,
-              "text": "call    0x854180"
-            }
-          ]
+          "bytes": "e8a2fdffff"
         },
         {
           "start": 8733662,
           "end": 8733698,
-          "bytes": "0fb64e095f5e898b54070000c7835007000000000000c78358070000d00700005bc20400",
-          "instructions": [
-            {
-              "address": 8733662,
-              "text": "movzx   ecx, byte [esi+0x9]"
-            },
-            {
-              "address": 8733666,
-              "text": "pop     edi"
-            },
-            {
-              "address": 8733667,
-              "text": "pop     esi"
-            },
-            {
-              "address": 8733668,
-              "text": "mov     dword [ebx+0x754], ecx"
-            },
-            {
-              "address": 8733674,
-              "text": "mov     dword [ebx+0x750], 0x0"
-            },
-            {
-              "address": 8733684,
-              "text": "mov     dword [ebx+0x758], 0x7d0"
-            },
-            {
-              "address": 8733694,
-              "text": "pop     ebx"
-            },
-            {
-              "address": 8733695,
-              "text": "retn    0x4"
-            }
-          ]
+          "bytes": "0fb64e095f5e898b54070000c7835007000000000000c78358070000d00700005bc20400"
         }
       ]
     },
@@ -369,247 +47,37 @@
         {
           "start": 8733712,
           "end": 8733734,
-          "bytes": "568bf1e8789400008b86500700003b8654070000736a",
-          "instructions": [
-            {
-              "address": 8733712,
-              "text": "push    esi"
-            },
-            {
-              "address": 8733713,
-              "text": "mov     esi, ecx"
-            },
-            {
-              "address": 8733715,
-              "text": "call    0x85d890"
-            },
-            {
-              "address": 8733720,
-              "text": "mov     eax, dword [esi+0x750]"
-            },
-            {
-              "address": 8733726,
-              "text": "cmp     eax, dword [esi+0x754]"
-            },
-            {
-              "address": 8733732,
-              "text": "jae     0x854490"
-            }
-          ]
+          "bytes": "568bf1e8789400008b86500700003b8654070000736a"
         },
         {
           "start": 8733734,
           "end": 8733752,
-          "bytes": "8b8e580700000fafc83b4e3c0f8780000000",
-          "instructions": [
-            {
-              "address": 8733734,
-              "text": "mov     ecx, dword [esi+0x758]"
-            },
-            {
-              "address": 8733740,
-              "text": "imul    ecx, eax"
-            },
-            {
-              "address": 8733743,
-              "text": "cmp     ecx, dword [esi+0x3c]"
-            },
-            {
-              "address": 8733746,
-              "text": "ja      0x8544b8"
-            }
-          ]
+          "bytes": "8b8e580700000fafc83b4e3c0f8780000000"
         },
         {
           "start": 8733752,
           "end": 8733840,
-          "bytes": "83c00157898650070000ff159c89f000d986900000008b965c070000dc0580dcbc006a006a016a00d99e90000000528bf8566a008bcfe87d920800d98690000000dc2580dcbc00578bced99e90000000e8937b00005f5ec3",
-          "instructions": [
-            {
-              "address": 8733752,
-              "text": "add     eax, 0x1"
-            },
-            {
-              "address": 8733755,
-              "text": "push    edi"
-            },
-            {
-              "address": 8733756,
-              "text": "mov     dword [esi+0x750], eax"
-            },
-            {
-              "address": 8733762,
-              "text": "call    dword [0xf0899c]"
-            },
-            {
-              "address": 8733768,
-              "text": "fld     st0, dword [esi+0x90]"
-            },
-            {
-              "address": 8733774,
-              "text": "mov     edx, dword [esi+0x75c]"
-            },
-            {
-              "address": 8733780,
-              "text": "fadd    qword [0xbcdc80]"
-            },
-            {
-              "address": 8733786,
-              "text": "push    0x0"
-            },
-            {
-              "address": 8733788,
-              "text": "push    0x1"
-            },
-            {
-              "address": 8733790,
-              "text": "push    0x0"
-            },
-            {
-              "address": 8733792,
-              "text": "fstp    dword [esi+0x90], st0"
-            },
-            {
-              "address": 8733798,
-              "text": "push    edx"
-            },
-            {
-              "address": 8733799,
-              "text": "mov     edi, eax"
-            },
-            {
-              "address": 8733801,
-              "text": "push    esi"
-            },
-            {
-              "address": 8733802,
-              "text": "push    0x0"
-            },
-            {
-              "address": 8733804,
-              "text": "mov     ecx, edi"
-            },
-            {
-              "address": 8733806,
-              "text": "call    0x8dd6f0"
-            },
-            {
-              "address": 8733811,
-              "text": "fld     st0, dword [esi+0x90]"
-            },
-            {
-              "address": 8733817,
-              "text": "fsub    st0, qword [0xbcdc80]"
-            },
-            {
-              "address": 8733823,
-              "text": "push    edi"
-            },
-            {
-              "address": 8733824,
-              "text": "mov     ecx, esi"
-            },
-            {
-              "address": 8733826,
-              "text": "fstp    dword [esi+0x90], st0"
-            },
-            {
-              "address": 8733832,
-              "text": "call    0x85c020"
-            },
-            {
-              "address": 8733837,
-              "text": "pop     edi"
-            },
-            {
-              "address": 8733838,
-              "text": "pop     esi"
-            },
-            {
-              "address": 8733839,
-              "text": "retn    "
-            }
-          ]
+          "bytes": "83c00157898650070000ff159c89f000d986900000008b965c070000dc0580dcbc006a006a016a00d99e90000000528bf8566a008bcfe87d920800d98690000000dc2580dcbc00578bced99e90000000e8937b00005f5ec3"
         },
         {
           "start": 8733840,
           "end": 8733849,
-          "bytes": "83be8002000000751f",
-          "instructions": [
-            {
-              "address": 8733840,
-              "text": "cmp     dword [esi+0x280], 0x0"
-            },
-            {
-              "address": 8733847,
-              "text": "jne     0x8544b8"
-            }
-          ]
+          "bytes": "83be8002000000751f"
         },
         {
           "start": 8733849,
           "end": 8733868,
-          "bytes": "8b46308b0df0c8f00050e8a8d0c8ff85c0740c",
-          "instructions": [
-            {
-              "address": 8733849,
-              "text": "mov     eax, dword [esi+0x30]"
-            },
-            {
-              "address": 8733852,
-              "text": "mov     ecx, dword [0xf0c8f0]"
-            },
-            {
-              "address": 8733858,
-              "text": "push    eax"
-            },
-            {
-              "address": 8733859,
-              "text": "call    0x4e1550"
-            },
-            {
-              "address": 8733864,
-              "text": "test    eax, eax"
-            },
-            {
-              "address": 8733866,
-              "text": "je      0x8544b8"
-            }
-          ]
+          "bytes": "8b46308b0df0c8f00050e8a8d0c8ff85c0740c"
         },
         {
           "start": 8733868,
           "end": 8733880,
-          "bytes": "8b0df0c8f00056e8f8a41b00",
-          "instructions": [
-            {
-              "address": 8733868,
-              "text": "mov     ecx, dword [0xf0c8f0]"
-            },
-            {
-              "address": 8733874,
-              "text": "push    esi"
-            },
-            {
-              "address": 8733875,
-              "text": "call    0xa0e9b0"
-            }
-          ]
+          "bytes": "8b0df0c8f00056e8f8a41b00"
         },
         {
           "start": 8733880,
           "end": 8733882,
-          "bytes": "5ec3",
-          "instructions": [
-            {
-              "address": 8733880,
-              "text": "pop     esi"
-            },
-            {
-              "address": 8733881,
-              "text": "retn    "
-            }
-          ]
+          "bytes": "5ec3"
         }
       ]
     },
@@ -619,73 +87,7 @@
         {
           "start": 11212864,
           "end": 11212922,
-          "bytes": "d9053450bd008bc133c9c70094b0c300c740340f000000894830884820d9583c89480489480c894808894810894814c74018ffffffff894838c3",
-          "instructions": [
-            {
-              "address": 11212864,
-              "text": "fld     st0, dword [0xbd5034]"
-            },
-            {
-              "address": 11212870,
-              "text": "mov     eax, ecx"
-            },
-            {
-              "address": 11212872,
-              "text": "xor     ecx, ecx"
-            },
-            {
-              "address": 11212874,
-              "text": "mov     dword [eax], 0xc3b094"
-            },
-            {
-              "address": 11212880,
-              "text": "mov     dword [eax+0x34], 0xf"
-            },
-            {
-              "address": 11212887,
-              "text": "mov     dword [eax+0x30], ecx"
-            },
-            {
-              "address": 11212890,
-              "text": "mov     byte [eax+0x20], cl"
-            },
-            {
-              "address": 11212893,
-              "text": "fstp    dword [eax+0x3c], st0"
-            },
-            {
-              "address": 11212896,
-              "text": "mov     dword [eax+0x4], ecx"
-            },
-            {
-              "address": 11212899,
-              "text": "mov     dword [eax+0xc], ecx"
-            },
-            {
-              "address": 11212902,
-              "text": "mov     dword [eax+0x8], ecx"
-            },
-            {
-              "address": 11212905,
-              "text": "mov     dword [eax+0x10], ecx"
-            },
-            {
-              "address": 11212908,
-              "text": "mov     dword [eax+0x14], ecx"
-            },
-            {
-              "address": 11212911,
-              "text": "mov     dword [eax+0x18], 0xffffffff"
-            },
-            {
-              "address": 11212918,
-              "text": "mov     dword [eax+0x38], ecx"
-            },
-            {
-              "address": 11212921,
-              "text": "retn    "
-            }
-          ]
+          "bytes": "d9053450bd008bc133c9c70094b0c300c740340f000000894830884820d9583c89480489480c894808894810894814c74018ffffffff894838c3"
         }
       ]
     },
@@ -695,121 +97,7 @@
         {
           "start": 11417568,
           "end": 11417661,
-          "bytes": "6aff68b8f8b90064a100000000505156a1a075cd0033c4508d44240c64a3000000008bf1e837e0fcffd9053028c10033c0c70694bac30089464489464889464cd95e3cc74618050000008bc68b4c240c64890d00000000595e83c410c3",
-          "instructions": [
-            {
-              "address": 11417568,
-              "text": "push    0xffffffff"
-            },
-            {
-              "address": 11417570,
-              "text": "push    0xb9f8b8"
-            },
-            {
-              "address": 11417575,
-              "text": "mov     eax, dword [fs:0x0]"
-            },
-            {
-              "address": 11417581,
-              "text": "push    eax"
-            },
-            {
-              "address": 11417582,
-              "text": "push    ecx"
-            },
-            {
-              "address": 11417583,
-              "text": "push    esi"
-            },
-            {
-              "address": 11417584,
-              "text": "mov     eax, dword [0xcd75a0]"
-            },
-            {
-              "address": 11417589,
-              "text": "xor     eax, esp"
-            },
-            {
-              "address": 11417591,
-              "text": "push    eax"
-            },
-            {
-              "address": 11417592,
-              "text": "lea     eax, [esp+0xc]"
-            },
-            {
-              "address": 11417596,
-              "text": "mov     dword [fs:0x0], eax"
-            },
-            {
-              "address": 11417602,
-              "text": "mov     esi, ecx"
-            },
-            {
-              "address": 11417604,
-              "text": "call    0xab1840"
-            },
-            {
-              "address": 11417609,
-              "text": "fld     st0, dword [0xc12830]"
-            },
-            {
-              "address": 11417615,
-              "text": "xor     eax, eax"
-            },
-            {
-              "address": 11417617,
-              "text": "mov     dword [esi], 0xc3ba94"
-            },
-            {
-              "address": 11417623,
-              "text": "mov     dword [esi+0x44], eax"
-            },
-            {
-              "address": 11417626,
-              "text": "mov     dword [esi+0x48], eax"
-            },
-            {
-              "address": 11417629,
-              "text": "mov     dword [esi+0x4c], eax"
-            },
-            {
-              "address": 11417632,
-              "text": "fstp    dword [esi+0x3c], st0"
-            },
-            {
-              "address": 11417635,
-              "text": "mov     dword [esi+0x18], 0x5"
-            },
-            {
-              "address": 11417642,
-              "text": "mov     eax, esi"
-            },
-            {
-              "address": 11417644,
-              "text": "mov     ecx, dword [esp+0xc]"
-            },
-            {
-              "address": 11417648,
-              "text": "mov     dword [fs:0x0], ecx"
-            },
-            {
-              "address": 11417655,
-              "text": "pop     ecx"
-            },
-            {
-              "address": 11417656,
-              "text": "pop     esi"
-            },
-            {
-              "address": 11417657,
-              "text": "add     esp, 0x10"
-            },
-            {
-              "address": 11417660,
-              "text": "retn    "
-            }
-          ]
+          "bytes": "6aff68b8f8b90064a100000000505156a1a075cd0033c4508d44240c64a3000000008bf1e837e0fcffd9053028c10033c0c70694bac30089464489464889464cd95e3cc74618050000008bc68b4c240c64890d00000000595e83c410c3"
         }
       ]
     },
@@ -819,67 +107,17 @@
         {
           "start": 11202912,
           "end": 11202930,
-          "bytes": "8b4108d9407cd9413cded9dfe0f6c4057a03",
-          "instructions": [
-            {
-              "address": 11202912,
-              "text": "mov     eax, dword [ecx+0x8]"
-            },
-            {
-              "address": 11202915,
-              "text": "fld     st0, dword [eax+0x7c]"
-            },
-            {
-              "address": 11202918,
-              "text": "fld     st0, dword [ecx+0x3c]"
-            },
-            {
-              "address": 11202921,
-              "text": "fcompp  "
-            },
-            {
-              "address": 11202923,
-              "text": "fnstsw  ax"
-            },
-            {
-              "address": 11202925,
-              "text": "test    ah, 0x5"
-            },
-            {
-              "address": 11202928,
-              "text": "jpe     0xaaf175"
-            }
-          ]
+          "bytes": "8b4108d9407cd9413cded9dfe0f6c4057a03"
         },
         {
           "start": 11202930,
           "end": 11202933,
-          "bytes": "33c0c3",
-          "instructions": [
-            {
-              "address": 11202930,
-              "text": "xor     eax, eax"
-            },
-            {
-              "address": 11202932,
-              "text": "retn    "
-            }
-          ]
+          "bytes": "33c0c3"
         },
         {
           "start": 11202933,
           "end": 11202939,
-          "bytes": "b801000000c3",
-          "instructions": [
-            {
-              "address": 11202933,
-              "text": "mov     eax, 0x1"
-            },
-            {
-              "address": 11202938,
-              "text": "retn    "
-            }
-          ]
+          "bytes": "b801000000c3"
         }
       ]
     }
