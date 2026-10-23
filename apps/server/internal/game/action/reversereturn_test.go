@@ -112,7 +112,7 @@ func guideReturn(rt *Runtime, c *enterworld.Character, choice uint8) OpResult {
 ================
 TestGuideReverseReturnTravelsFreeToWhereItDied
 
-4F2B50 case 5 moves a max level 20 character at no cost.
+The guide's case 5 moves a max level 20 character at no cost.
 ================
 */
 func TestGuideReverseReturnTravelsFreeToWhereItDied(t *testing.T) {
@@ -169,7 +169,7 @@ func TestGuideReverseReturnRefusesInTheNativeOrder(t *testing.T) {
 ================
 TestReverseReturnWithoutADeathRefusesAndKeepsTheScroll
 
-4A00C0: no recorded death answers 0x1886 (notice 390) and spends nothing.
+The scroll use: no recorded death answers 0x1886 (notice 390) and spends nothing.
 ================
 */
 func TestReverseReturnWithoutADeathRefusesAndKeepsTheScroll(t *testing.T) {
@@ -231,7 +231,7 @@ func TestReturnScrollAndDeathRecordTheReverseReturnPoints(t *testing.T) {
 ================
 TestRecordedPointsKeepTheirWorld
 
-4E0250 / 4E0330 record a point only in a type-0 world and keep its
+The server records a point only in a type-0 world and keeps its
 GameWorldID: the field is the absent default, a fortress names itself, and
 an instance dungeon (type 1) records nothing.
 ================
@@ -278,7 +278,7 @@ func useReverseScroll(rt *Runtime, c *enterworld.Character, tail ...byte) OpResu
 ================
 TestReverseScrollWorldAdmissionsBeforeConsumption
 
-4A00D6 refuses non-permanent current worlds; 4A02CE refuses job-dressed
+The scroll refuses non-permanent current worlds, and job-dressed
 or wartime entry into a siege destination. Both point choices share this.
 ================
 */
@@ -329,7 +329,7 @@ func TestReverseScrollWorldAdmissionsBeforeConsumption(t *testing.T) {
 ================
 TestReverseScrollFromTheBagTakesThePlayerToWhereItDied
 
-The bag use runs 4A00C0 as the gate row does: one scroll spent, the cast,
+The bag use runs the scroll rule as the gate row does: one scroll spent, the cast,
 and the reentry at the recorded death point.
 ================
 */
@@ -359,7 +359,7 @@ func TestReverseScrollFromTheBagTakesThePlayerToWhereItDied(t *testing.T) {
 TestReverseScrollFromTheBagRefusesWithoutAPointOrChoice
 
 A missing recall point answers 0x1885; a missing or unknown choice byte
-(v1.188's saved point 7 has no v1.150 sender) is refused. None spend.
+(a later server's saved point 7 has no v1.150 sender) is refused. None spend.
 ================
 */
 func TestReverseScrollFromTheBagRefusesWithoutAPointOrChoice(t *testing.T) {
