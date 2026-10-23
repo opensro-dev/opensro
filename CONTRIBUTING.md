@@ -21,7 +21,7 @@ OpenSRO ports the original game's behaviour; it does not reinvent it.
 - **The v1.150 client defines what exists:** its data, its network messages and its interface.
 - **Server-only rules** follow the original server's instructions, trimmed to the v1.150 feature set.
 - **When neither binary shows a rule,** infer how the original would have done it, write that inference in a code comment, and ship it. Don't leave an open "no evidence" question behind.
-- **Cite your evidence briefly:** a function address in a comment, the value in a named constant. Long disassembly notes belong in the research tree, not in the source.
+- **Cite your evidence briefly:** a v1.150 client function address in a comment, the value in a named constant. For server-only rules, describe the behaviour in prose: the server binary's name, version, addresses and symbols stay out of the repository. Long disassembly notes belong in the research tree, not in the source.
 
 A change that makes the game behave like the original needs no special approval; it needs evidence and tests.
 
@@ -93,6 +93,9 @@ Also:
   data, native capture, or inference (stated in a code comment). A claim
   that contradicts an existing comment or research note says so, and the PR
   corrects the old text.
+  A server-only claim names its research note as evidence ("research note,
+  server behaviour"), never a server address or symbol: pull requests are
+  public too.
 - **Say whether an open browser tab still copes.** A release that keeps the
   browser protocol leaves every open tab running the old client. The release
   tool refuses such a release while a commit since the live client changes
