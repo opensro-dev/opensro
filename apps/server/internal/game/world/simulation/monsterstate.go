@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	worldgeom "opensro.online/server/internal/game/world"
@@ -86,6 +87,9 @@ and commit changes only through this state boundary.
 ==================
 */
 type MonsterState struct {
+	// regionCombat is the battlefield table SafeZoneRegion reads
+	// (monsterstuck.go); nil knows no town.
+	regionCombat atomic.Pointer[worldgeom.RegionCombat]
 	// abnormalContext resolves casters, rolls and parameters for the
 	// abnormal-state engine; see MonsterAbnormalContext.
 	abnormalContext MonsterAbnormalContext

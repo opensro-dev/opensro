@@ -17,7 +17,7 @@ func newActiveEffectTestRuntime(t *testing.T, skills staticSkillSource) (*Runtim
 		Items:      testItems(),
 		Skills:     skills,
 	}
-	return NewRuntime(deps, nil), character
+	return newRegionTestRuntime(deps, nil), character
 }
 
 func TestCancelActiveEffectUsesExactSkillThenRetiresOnTick(t *testing.T) {

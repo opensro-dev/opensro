@@ -242,7 +242,7 @@ func newCombatTestRuntimeAtLevel(t *testing.T, monsterHP uint32, level uint8) (*
 			CombatPinned: true,
 		}},
 	}
-	rt := NewRuntime(deps, monsters)
+	rt := newRegionTestRuntime(deps, monsters)
 	rt.BerserkRoll = func() (uint32, error) { return 9999, nil }
 	// Combat-order fixtures must not acquire extra frames from random loot.
 	// Loot cases supply their own draws through this same injection boundary.

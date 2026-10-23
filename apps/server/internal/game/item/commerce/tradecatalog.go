@@ -9,13 +9,12 @@ package commerce
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strconv"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/gamedata"
 )
 
 // TradeQuotationsFile is the merchant quotation table in the projection's
@@ -59,15 +58,9 @@ silently dropping that state. Publishes only a fully admitted table.
 ================
 */
 func (c *Catalog) LoadTradeQuotations(derivedDir string) (bool, error) {
-	if derivedDir == "" {
-		return false, nil
-	}
-	data, err := os.ReadFile(filepath.Join(derivedDir, filepath.FromSlash(TradeQuotationsFile)))
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("commerce: %s: %w", TradeQuotationsFile, err)
+	data, err := gamedata.ReadDerived(derivedDir, TradeQuotationsFile)
+	if err != nil || data == nil {
+		return false, err
 	}
 	quotations, err := parseTradeQuotations(data)
 	if err != nil {

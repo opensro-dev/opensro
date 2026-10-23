@@ -98,6 +98,7 @@ func Check() (Result, error) {
 		configure func(string) error
 	}{
 		{"portal catalogue", items.ConfigurePortals},
+		{"region combat", func(string) error { return items.LoadRegionCombat(devPaths.DerivedDir) }},
 		{"alchemy catalogue", func(dir string) error { return items.ConfigureAlchemy(dir, devPaths.DerivedDir) }},
 		{"gacha catalogue", items.ConfigureGacha},
 		{"stall network", items.ConfigureStallNetwork},

@@ -141,7 +141,7 @@ func (rt *Runtime) fireCaravan(entry caravan.Entry, nowMs int64) bool {
 		return false
 	}
 	vehicle := rt.cosLiveSpawn(entry.Division, c, nowMs)
-	if battlefield, known := world.RegionPlayerCombat(vehicle.RegionID); !known || !battlefield {
+	if battlefield, known := rt.regionCombat.PlayerCombat(vehicle.RegionID); !known || !battlefield {
 		return true
 	}
 	if err := rt.spawnCaravanBandits(entry.Division, c, vehicle, nowMs); err != nil {

@@ -86,7 +86,7 @@ func (rt *Runtime) petCounterStun(hit petCounterHit) []wire.Frame {
 	if index == 1 {
 		at = rt.liveSpawn(simulation.WorldKey(hit.division, owner.Name), owner, hit.now)
 	}
-	if townRegion(at.RegionID) {
+	if rt.townRegion(at.RegionID) {
 		state.trained.counterHits[index] = 0
 		return nil
 	}

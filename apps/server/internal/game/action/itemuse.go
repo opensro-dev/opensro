@@ -451,7 +451,7 @@ func (rt *Runtime) HandleItemUse(
 			// CGItemExpendable_UseItem 49BD8A..49BDCA answers 0x1895, the
 			// client's error 149, whose English text names the Thieves' Den.
 			if cosRef.TidWord>>11 == cosBandTransport && enterworld.DressedJob(character) == domain.JobThief &&
-				townRegion(rt.liveSpawn(simulation.WorldKey(divisionID, character.Name), character, rt.Now().UnixMilli()).RegionID) {
+				rt.townRegion(rt.liveSpawn(simulation.WorldKey(divisionID, character.Name), character, rt.Now().UnixMilli()).RegionID) {
 				result = itemUseFailure(errCodeThiefCartInTown)
 				return false
 			}

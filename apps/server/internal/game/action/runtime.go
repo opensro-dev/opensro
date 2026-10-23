@@ -11,6 +11,7 @@ package action
 import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/caravan"
+	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/calendar"
 	"sync"
 	"sync/atomic"
@@ -175,6 +176,10 @@ type Runtime struct {
 	// Monsters is the shared division-keyed population authority. It is nil
 	// only when the composition root's explicit monster kill switch is on.
 	Monsters *simulation.MonsterState
+
+	// regionCombat is the operator's battlefield table (regioncombat.go);
+	// nil knows no region, so player combat and the town rules stay off.
+	regionCombat *worldgeom.RegionCombat
 
 	// NpcSpawn scopes the 0x745A liveness gate's NPC-gid domain to the
 	// same env gates that put the roster on the wire (select.go); tests

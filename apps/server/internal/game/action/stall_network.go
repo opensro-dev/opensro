@@ -34,7 +34,6 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
-	"opensro.online/server/internal/game/world"
 )
 
 const (
@@ -118,7 +117,7 @@ A region that forbids player combat is a town (_RefRegion.IsBattleField).
 ================
 */
 func (rt *Runtime) inTown(division string, c *enterworld.Character) bool {
-	allowed, known := world.RegionPlayerCombat(rt.LiveSpawnFor(division, c).RegionID)
+	allowed, known := rt.regionCombat.PlayerCombat(rt.LiveSpawnFor(division, c).RegionID)
 	return known && !allowed
 }
 

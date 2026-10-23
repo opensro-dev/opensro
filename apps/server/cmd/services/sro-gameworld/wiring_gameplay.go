@@ -153,6 +153,9 @@ func newGameplayPlane(
 	deps.EntryCompanionActionSpeed = items.EntryCompanionActionSpeed
 	deps.EntryCompanionSpawn = items.EntryCompanionSpawn
 	deps.EntryCompanionMovementSpeeds = items.EntryCompanionMovementSpeeds
+	if err := items.LoadRegionCombat(devPaths.DerivedDir); err != nil {
+		return nil, err
+	}
 	if err := items.ConfigureAlchemy(devPaths.TextdataDir, devPaths.DerivedDir); err != nil {
 		return nil, fmt.Errorf("alchemy catalogue: %w", err)
 	}

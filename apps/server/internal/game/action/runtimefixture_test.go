@@ -107,7 +107,7 @@ func newTestRuntime(character *enterworld.Character, items enterworld.ItemRefSou
 		Items:      items,
 		NpcSpawns:  enterworld.NpcSpawnConfig{Roster: simulation.DefaultNpcRoster()},
 	}
-	rt := NewRuntime(deps, nil)
+	rt := newRegionTestRuntime(deps, nil)
 	clock := &fakeClock{now: time.UnixMilli(1_000_000)}
 	rt.BerserkRoll = func() (uint32, error) { return 9999, nil }
 	// 99 % 100 + 1 = 100: equipment wears only where a test asks it to.

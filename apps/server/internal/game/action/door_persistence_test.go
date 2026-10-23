@@ -118,7 +118,7 @@ func openDoorRuntime(t *testing.T, dir string, seed *enterworld.Character) *door
 	// authority transaction as production wiring_authority.go.
 	deps.MutateCharacters = authority.MutateCharacters
 	deps.UpdateCharacters = authority.UpdateCharacters
-	rt := NewRuntime(deps, nil)
+	rt := newRegionTestRuntime(deps, nil)
 	clock := &fakeClock{now: time.UnixMilli(1_000_000)}
 	rt.Now = clock.Now
 	authority.AttachGround(rt.Ground)
@@ -521,7 +521,7 @@ func TestTwoPlaneOpsNeverTearOnDisk(t *testing.T) {
 		}
 		return changed
 	}
-	rt := NewRuntime(deps, nil)
+	rt := newRegionTestRuntime(deps, nil)
 	clock := &fakeClock{now: time.UnixMilli(1_000_000)}
 	rt.Now = clock.Now
 	authority.AttachGround(rt.Ground)
@@ -833,7 +833,7 @@ func burstHelperMain(t *testing.T) {
 	deps.MutateCharacter = func(_ *enterworld.Character, label string, fn func()) {
 		authority.Mutate(label, fn)
 	}
-	rt := NewRuntime(deps, nil)
+	rt := newRegionTestRuntime(deps, nil)
 	authority.AttachGround(rt.Ground)
 	rt.Ground.Restore(authority.GroundSnapshotForRestore())
 

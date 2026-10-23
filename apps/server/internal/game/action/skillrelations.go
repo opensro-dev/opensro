@@ -15,7 +15,6 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
-	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -230,7 +229,7 @@ func (rt *Runtime) playerAttackRefusal(division string, caster, target *enterwor
 	}
 	for _, actor := range []*enterworld.Character{caster, target} {
 		at := rt.liveSpawn(simulation.WorldKey(division, actor.Name), actor, now)
-		allowed, known := worldgeom.RegionPlayerCombat(at.RegionID)
+		allowed, known := rt.regionCombat.PlayerCombat(at.RegionID)
 		if !known {
 			return 0x3009
 		}

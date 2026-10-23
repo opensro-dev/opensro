@@ -34,7 +34,7 @@ func TestShippedMangnyangAttackPlanIsRunnable(t *testing.T) {
 	if !ok {
 		t.Skip("shipped characterdata is unavailable")
 	}
-	rt := NewRuntime(&enterworld.Deps{Skills: enterworld.NewTextdataSkills(dir)}, nil)
+	rt := newRegionTestRuntime(&enterworld.Deps{Skills: enterworld.NewTextdataSkills(dir)}, nil)
 	plan, ok := rt.MonsterAttackPlan(monster.Instance{Ref: ref}, 0, simulation.AttackPick{})
 	if !ok || plan.SkillID != 160 || plan.Reach != 10 || plan.CooldownMs != 3000 ||
 		plan.ActionLifecycleMs != 2400 {
@@ -53,7 +53,7 @@ func TestShippedMoviaAttackPlanIncludesCastingAndRecoveryPhases(t *testing.T) {
 	if !ok {
 		t.Skip("shipped characterdata is unavailable")
 	}
-	rt := NewRuntime(&enterworld.Deps{Skills: enterworld.NewTextdataSkills(dir)}, nil)
+	rt := newRegionTestRuntime(&enterworld.Deps{Skills: enterworld.NewTextdataSkills(dir)}, nil)
 	for skillID, wantDuration := range map[uint32]int64{3598: 2000, 3599: 2000} {
 		plan, planned := rt.MonsterAttackPlan(monster.Instance{Ref: ref}, skillID, simulation.AttackPick{})
 		if !planned || plan.SkillID != skillID || plan.ActionLifecycleMs != wantDuration ||
