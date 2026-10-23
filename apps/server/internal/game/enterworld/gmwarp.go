@@ -3,11 +3,9 @@
 
 gmwarp.go - GM /warp destination validation and height normalization
 
-Native GM /wp (0x0051DE90 CGObjPC_MsgHandler_SpecialCommand case 0xC at
-0x0051E440 -> vtable+0x378 0x004DF590 CGObjPC_TeleportToPosition_vf378 ->
-0x00485360 CGObj_EnterWorld at 0x004853CD / 0x00485740 CGObj_MoveTo at
-0x0048575F -> vtable+0x2C 0x0098B1D0 CRegionManagerBody_CheckPointValid ->
-0x0099FD90 CRTNavMeshTerrain_FindNavCell) admits a warp when the target
+Native GM /wp (the GM special command 0xC, through the PC's position
+teleport, world entry and move, then the region manager's point check and
+the terrain's nav-cell lookup) admits a warp when the target
 resolves to a valid object-nav cell or walkable terrain tile and lifts
 below-terrain Y onto the resolved surface.
 

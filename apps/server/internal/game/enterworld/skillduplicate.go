@@ -4,11 +4,11 @@
 skillduplicate.go - the Rogue's Duplicate and Sable Duplicate
 
 msch 2 {level} dura skc [reqi]: the Rogue takes the look of an allied
-player no higher than the level word (TargetValidation 58D23B). The
-instance lives on the caster; CastLifecycle_ProcessPersistent (583BC6)
-stores the copied player's gid in its context and
-CGObjPC_ApplyDupleTransform (4F0040) copies that player's model and worn
-equipment (4F0320). skc ends it on the next skill cast.
+player no higher than the level word (the native target validation). The
+instance lives on the caster; the native persistent-cast lifecycle stores
+the copied player's gid in its context and the native duplicate transform
+copies that player's model and worn equipment. skc ends it on the next
+skill cast.
 
 ===========================================================================
 */

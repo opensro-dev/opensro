@@ -81,9 +81,9 @@ func TestImbueRefusesPartialAndUnknownPrograms(t *testing.T) {
 ================
 TestBasicAttackResumesOnlyOnOne
 
-CGCharAutoCommandActor_Handler_SkillCast compares ref +0x90 with exactly
-1 at 4AED19: Strong Bow (1) resumes the basic attack, Cold Wave (0) and a
-row authoring 2 (Sword Geomgi D) end it.
+The native auto-command's skill-cast handler compares the row's
+basic-attack resume word with exactly 1: Strong Bow (1) resumes the basic
+attack, Cold Wave (0) and a row authoring 2 (Sword Geomgi D) end it.
 ================
 */
 func TestBasicAttackResumesOnlyOnOne(t *testing.T) {
