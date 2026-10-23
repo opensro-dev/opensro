@@ -37,6 +37,28 @@ var CatalogFiles = [3]string{GeneratedCatalogFile, AchievedNowCatalogFile, Compi
 
 /*
 ================
+MissingCatalogFiles
+
+The derived quest catalogues absent from derivedDir, for the startup
+warning: without them only the curated quests load.
+================
+*/
+func MissingCatalogFiles(derivedDir string) ([]string, error) {
+	var missing []string
+	for _, name := range CatalogFiles {
+		data, err := gamedata.ReadDerived(derivedDir, name)
+		if err != nil {
+			return nil, err
+		}
+		if data == nil {
+			missing = append(missing, name)
+		}
+	}
+	return missing, nil
+}
+
+/*
+================
 readCatalogFile
 
 One derived quest catalogue, or an empty JSON value when it is absent.
