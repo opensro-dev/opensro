@@ -5,30 +5,29 @@ reversereturn.go - the reverse return scroll: back to the last recall point
 or to where the player died
 
 The beginner guides (NPC_EU_ADVICE3, NPC_CH_SOLDIER_EM1) hold service 0x1E
-(CGObjNPC_SpawnAndConfigureServices 4C6350), so their select grant carries
-capability 0x20000000; the talk window then lists two rows (5D4410, action
-0x2B) and a click sends 0x7495 [u32 gid][u8 5][u8 choice] (6FEF10): 2 is the
-last recall point, 3 the place of the last death.
+from the server's NPC setup, so their select grant carries capability
+0x20000000; the talk window then lists two rows (5D4410, action 0x2B) and a
+click sends 0x7495 [u32 gid][u8 5][u8 choice] (6FEF10): 2 is the last recall
+point, 3 the place of the last death.
 
-CGObjPC_HandleTeleportUseRequest0x705A_Body (4F2B50) case 5 is free: the
-NPC must offer a teleport service (CGObj_HasTeleportService 485D00: 8, 9,
-0x1C or 0x1E, else 3), then 0x1C17 under operation mask 0x40000, 0x1C10
-with a transport out, 0x1C20 past max level 20, 2 for any other choice or
-a missing point (0x1C21 for one outside any world), and the move. Its
-own 0x1E test (4F36A4) asks the player's service set, which is always
-empty, so it never refuses.
+The server's teleport-use request treats case 5 as free: the NPC must offer
+a teleport service (8, 9, 0x1C or 0x1E, else 3), then 0x1C17 under
+operation mask 0x40000, 0x1C10 with a transport out, 0x1C20 past max level
+20, 2 for any other choice or a missing point (0x1C21 for one outside any
+world), and the move. Its own 0x1E test asks the player's service set,
+which is always empty, so it never refuses.
 
 ITEM_MALL_REVERSE_RETURN_SCROLL (3/3/3/3) is used from the bag. A right
 click opens a two-row choice box (message box 0x1E); CGInterface_OnMsgBoxResult
 (6971B0) answers it with CIFInventory_ExecuteItemAction, which sends 0x75BD
 [slot][u16 type][u8 choice]: 2 the last recall point, 3 the last death
-point. 755E40 (type 4 = 3) starts the cast as a return scroll's.
-CGItemExpendable_UseReverseReturnScroll (v1.188 4A00C0) reads the byte: the
-shared return admissions, the recorded point (0x1885 / 0x1886 when absent),
-the timed cast, and the answer on the item-use channel (0xB5BD with the
-scroll's slot, category-1 notice 390). The v1.150 dialog sends only 2 and
-3. v1.188's choice 7 (a saved point, u32 id) is refused unless the
-port-only SRO_REVERSE_RETURN_MAP option is on (reversemap.go).
+point. 755E40 (type 4 = 3) starts the cast as a return scroll's. The
+server's scroll use reads the byte: the shared return admissions, the
+recorded point (0x1885 / 0x1886 when absent), the timed cast, and the answer
+on the item-use channel (0xB5BD with the scroll's slot, category-1 notice
+390). The v1.150 dialog sends only 2 and 3. A later server's choice 7 (a
+saved point, u32 id) is refused unless the port-only
+SRO_REVERSE_RETURN_MAP option is on (reversemap.go).
 
 INFERENCE: a teleport gate also lists the rows while the player holds a
 scroll, and the click runs the same scroll rule.
@@ -54,10 +53,10 @@ const (
 	reverseReturnLastRecall uint8 = 2
 	reverseReturnLastDeath  uint8 = 3
 
-	// guideReturnMaxLevel is the highest max level 4F2B50 case 5 serves.
+	// guideReturnMaxLevel is the highest max level the guide's case 5 serves.
 	guideReturnMaxLevel int64 = 20
 
-	// The low bytes of 4F2B50 case 5's refusals.
+	// The low bytes of the guide's case 5 refusals.
 	errCodeTeleportService uint8 = 0x03
 	errCodeGuideQuestBlock uint8 = 0x17
 	errCodeGuideTransport  uint8 = 0x10
@@ -67,10 +66,10 @@ const (
 	// operationMaskQuestTravel is the operation mask bit 0x1C17 refuses.
 	operationMaskQuestTravel uint32 = 0x40000
 
-	// The low bytes of 4A00C0's 0x1885 and 0x1886.
+	// The low bytes of the scroll use's 0x1885 and 0x1886.
 	errCodeNoRecallPoint uint8 = 0x85
 	errCodeNoDeathPoint  uint8 = 0x86
-	// 4A00D6..4A0102 and 4A02CE..4A030C: reverse-scroll world restrictions.
+	// The reverse scroll's world, job and war restrictions.
 	errCodeReverseWorld uint8 = 0xf5
 	errCodeReverseJob   uint8 = 0xe9
 	errCodeReverseWar   uint8 = 0xf2
@@ -157,7 +156,7 @@ func reverseReturnPoint(c *enterworld.Character, choice uint8) (travelPoint, uin
 ================
 hasTeleportService
 
-CGObj_HasTeleportService (485D00): a teleport, recall, gate or reverse
+Whether the NPC offers a teleport service: a teleport, recall, gate or reverse
 return service.
 ================
 */
@@ -171,7 +170,7 @@ func hasTeleportService(npc simulation.NpcDef) bool {
 handleReverseReturn
 
 0x7495 type 5 from the selected NPC: a teleport gate spends a held scroll
-(the inference above), every other teleport service NPC runs 4F2B50's free
+(the inference above), every other teleport service NPC runs the server's free
 case 5.
 ================
 */
@@ -188,7 +187,7 @@ func (rt *Runtime) handleReverseReturn(division string, c *enterworld.Character,
 	if !ok {
 		return portalFailure(2)
 	}
-	// 4A8E10 before the service test, as every 4F2B50 kind.
+	// The hit-range test comes before the service test, as for every teleport kind.
 	if !rt.npcWithinHitRange(division, c, npc) {
 		return portalFailure(hitRangeTooFar)
 	}
@@ -254,12 +253,12 @@ type reverseReturnTarget struct {
 ================
 beginReverseReturnScroll
 
-4A00C0: the scroll in bag row `row` starts its cast to the chosen point.
+The scroll use: the scroll in bag row `row` starts its cast to the chosen point.
 The caller holds the character's update.
 ================
 */
 func (rt *Runtime) beginReverseReturnScroll(division string, c *enterworld.Character, ref *enterworld.ItemRef, row int, target reverseReturnTarget, now int64, result *OpResult) bool {
-	// 5F85A0 requires the current world's reference type (+0x20) to be zero.
+	// The current world's reference type must be zero.
 	if here, ok := instance.Lookup(instance.ID(domain.CharacterWorldInstance(c)).Definition()); !ok || here.NativeType != 0 {
 		*result = itemUseFailure(errCodeReverseWorld)
 		return false
@@ -291,7 +290,7 @@ func (rt *Runtime) beginReverseReturnScroll(division string, c *enterworld.Chara
 		return false
 	}
 	// Reverse return has its own siege admission, not the gate's guild or
-	// population rules. Job mode is refused before active-war mode (4A02CE).
+	// population rules. Job mode is refused before active-war mode.
 	if world, ok := instance.Lookup(destination.world.Definition()); ok && world.Siege() {
 		if rt.jobDressed(c) {
 			*result = itemUseFailure(errCodeReverseJob)
@@ -311,7 +310,7 @@ func (rt *Runtime) beginReverseReturnScroll(division string, c *enterworld.Chara
 ================
 guideReverseReturn
 
-4F2B50 case 5: the free move to the chosen point, refused in the native
+The guide's case 5: the free move to the chosen point, refused in the native
 order. The caller holds the division lock.
 ================
 */
