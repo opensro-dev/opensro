@@ -2,7 +2,6 @@ package monster
 
 import (
 	"bytes"
-	_ "embed"
 	"encoding/json"
 	"fmt"
 )
@@ -42,9 +41,6 @@ type tacticsControlPair struct {
 	Normal, Champion TacticsControls
 	HasChampion      bool
 }
-
-//go:embed data/tactics_controls.json
-var tacticsControlsJSON []byte
 
 func loadTacticsControls(data []byte) map[populationEvidenceKey]tacticsControlPair {
 	var doc struct {

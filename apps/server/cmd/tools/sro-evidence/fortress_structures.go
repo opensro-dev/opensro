@@ -32,7 +32,11 @@ func runFortressStructures(args []string) error {
 	if err != nil {
 		return fmt.Errorf("textdata: %w", err)
 	}
-	template := monster.LoadTemplate(dir)
+	// The references alone: no population evidence changes which exist.
+	template, err := monster.LoadTemplate(dir, nil)
+	if err != nil {
+		return err
+	}
 	refs := make([]monsterRosterRef, 0)
 	for _, ref := range template.Refs {
 		if ref.Structure && ref.MaxHP > 0 {

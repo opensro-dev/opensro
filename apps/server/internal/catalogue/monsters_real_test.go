@@ -13,12 +13,12 @@ uniques' unplaced incarnations are gone.
 package catalogue
 
 import (
+	"opensro.online/server/internal/testsupport/monstertest"
 	"opensro.online/server/internal/testsupport/tier"
 	"sort"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 )
 
@@ -34,7 +34,7 @@ TestEveryListedMonsterHasASpawnSource
 func TestEveryListedMonsterHasASpawnSource(t *testing.T) {
 	tier.Long(t, "every listed monster has a spawn source")
 	dir := gamedatatest.TextdataDir(t)
-	source := MonsterSource{Template: monster.LoadTemplate(dir), ItemID: func(string) uint32 { return 0 },
+	source := MonsterSource{Template: monstertest.Template(t, dir), ItemID: func(string) uint32 { return 0 },
 		Skills: enterworld.NewTextdataSkills(dir)}
 	produced, err := producibleMonsters(source)
 	if err != nil {

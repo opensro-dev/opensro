@@ -7,11 +7,11 @@ import (
 )
 
 func TestPopulationEvidenceSemantics(t *testing.T) {
-	if got := len(v1188PopulationEvidence); got != 4449 {
+	if got := len(v1188PopulationEvidence(t)); got != 4449 {
 		t.Fatalf("population evidence rows = %d, want 4449", got)
 	}
 
-	mangnyang, ok := v1188PopulationEvidence[evidenceKey(
+	mangnyang, ok := v1188PopulationEvidence(t)[evidenceKey(
 		"MOB_CH_MANGNYANG", 25258, 812.679993, 75.080002, 392.899994,
 	)]
 	if !ok {
@@ -28,7 +28,7 @@ func TestPopulationEvidenceSemantics(t *testing.T) {
 		t.Fatalf("Mangnyang evidence = %+v", mangnyang)
 	}
 
-	stoneGhost, ok := v1188PopulationEvidence[evidenceKey(
+	stoneGhost, ok := v1188PopulationEvidence(t)[evidenceKey(
 		"MOB_CH_STONEGHOST", 24236, 703.539978, 194.589996, 437.940002,
 	)]
 	if !ok || !stoneGhost.Aggressive {
@@ -117,9 +117,9 @@ func TestPopulationAnchorUsesNativeFloatBeforeQuantization(t *testing.T) {
 		t.Fatal("distinct anchor identity merged")
 	}
 	for _, code := range []string{"MOB_EU_KERBEROS", "MOB_OA_URUCHI"} {
-		for key := range v1188PopulationEvidence {
+		for key := range v1188PopulationEvidence(t) {
 			if key.Codename == code {
-				if _, ok := hiveCaps[key]; !ok {
+				if _, ok := hiveCaps(t)[key]; !ok {
 					t.Fatalf("population/hive normalization diverged: %+v", key)
 				}
 			}

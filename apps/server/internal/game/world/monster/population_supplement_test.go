@@ -1,20 +1,24 @@
 package monster
 
-import "testing"
+import (
+	"testing"
+
+	"opensro.online/server/internal/testsupport/licensed"
+)
 
 func TestPopulationSupplementPreservesExistingPolicies(t *testing.T) {
-	supplement := mustLoadPopulationEvidence(populationSupplementTSV)
+	supplement := mustLoadPopulationEvidence(string(licensed.SourceDataFile(t, "server/"+PopulationSupplementFile)))
 	if len(supplement) != 4229 {
 		t.Fatalf("supplement has %d anchors, want 4229", len(supplement))
 	}
-	for key, original := range v1188PopulationEvidence {
-		if populationEvidenceRows[key] != original {
+	for key, original := range v1188PopulationEvidence(t) {
+		if populationEvidenceRows(t)[key] != original {
 			t.Fatalf("existing policy changed: %+v", key)
 		}
 	}
 	counts := map[int]bool{}
 	for key, row := range supplement {
-		if _, exists := v1188PopulationEvidence[key]; exists {
+		if _, exists := v1188PopulationEvidence(t)[key]; exists {
 			t.Fatalf("supplement overlaps original: %+v", key)
 		}
 		counts[row.MaxCount] = true
@@ -28,7 +32,7 @@ func TestPopulationSupplementPreservesExistingPolicies(t *testing.T) {
 // tactics 189, which is aggressive with sight 150. Promoted Movia champions
 // and giants must therefore hunt while ordinary Movia stay passive.
 func TestMoviaNestCarriesAggressiveChampionTactics(t *testing.T) {
-	row, ok := populationEvidenceRows[evidenceKey("MOB_EU_MOVOI", 27212, 539.909973, 0, 804.669983)]
+	row, ok := populationEvidenceRows(t)[evidenceKey("MOB_EU_MOVOI", 27212, 539.909973, 0, 804.669983)]
 	if !ok {
 		t.Fatal("missing Movia population evidence")
 	}

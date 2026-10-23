@@ -2,6 +2,8 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import {launchProbeBrowser} from '../../../../scripts/lib/probeBrowser.mjs';
+import {join} from 'node:path';
+import {sourceDataRoot} from '../../../../scripts/build/world/paths.mjs';
 import {openProbeAgentSession,readProbeCharacterSpawnFromSession} from '../../../../scripts/lib/probeSession.mjs';
 import {resetMissionMovementFixture} from '../../../../scripts/lib/missionMovementFixture.mjs';
 import {assertCharacterAllowed} from '../../../../scripts/lib/probeCharacter.mjs';
@@ -18,7 +20,7 @@ test('live promoted Movia acquires a player while ordinary Movia stay passive',{
  const character=assertCharacterAllowed('asd2',{context:'live champion aggro'});
  const authority=await openProbeAgentSession();
  const original=await readProbeCharacterSpawnFromSession(authority,character);assert.ok(original);
- const table=await readFile(new URL('../../../server/internal/game/world/monster/data/isror_population_supplement.tsv',import.meta.url),'utf8');
+ const table=await readFile(join(sourceDataRoot,'server','monster','population-supplement.tsv'),'utf8');
  const anchors=table.split(/\r?\n/).map(line=>line.split('\t')).filter(c=>MOVIA_CODES.has(c[0])&&c[16]==='1'&&c[17]==='1')
   .map(c=>({code:c[0],regionId:Number(c[1]),x:Number(c[2]),y:Number(c[3]),z:Number(c[4])}));
  assert.ok(anchors.length>=10,'Movia champion tactics evidence is required');

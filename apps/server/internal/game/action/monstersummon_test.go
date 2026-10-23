@@ -7,6 +7,7 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/monstertest"
 	"testing"
 	"time"
 )
@@ -15,6 +16,7 @@ func TestShippedUniqueSummonActionsAcrossAllHealthBands(t *testing.T) {
 	licensed.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	refs := monster.LoadMonsterRefs(dir)
+	summon := monstertest.Evidence(t).SummonTactics()
 	skills := enterworld.NewTextdataSkills(dir)
 	rt := newRegionTestRuntime(&enterworld.Deps{Skills: skills}, nil)
 	covered, waves, fallbacks := 0, 0, 0
@@ -46,6 +48,7 @@ func TestShippedUniqueSummonActionsAcrossAllHealthBands(t *testing.T) {
 			for _, hp := range []uint32{90, 70, 50, 30, 10} {
 				for _, sample := range []float64{0, .999} {
 					state := simulation.NewMonsterState(monster.TemplateFromParts(refs, []monster.NestRow{{SpawnPoint: monster.SpawnPoint{RefObjID: ref.RefObjID, RegionID: 0x62aa, X: 960, Z: 960}}}))
+					state.SetSummonTactics(summon)
 					state.SetTimeSource(func() time.Time { return time.UnixMilli(1000) })
 					state.SetRandomSource(func() float64 { return 0 })
 					state.StartDivision("summon")
@@ -106,7 +109,7 @@ func TestShippedUniqueSummonActionsAcrossAllHealthBands(t *testing.T) {
 					for _, entry := range row.Summon.Entries {
 						if entry.RefObjID != 0 {
 							want += int(min(entry.Minimum, 50))
-							if _, known := monster.SummonedSightRange(refs[entry.RefObjID], entry.Grade, func() float64 { return 0 }); !known {
+							if _, known := summon.SummonedSightRange(refs[entry.RefObjID], entry.Grade, func() float64 { return 0 }); !known {
 								missingTactics[refs[entry.RefObjID].Codename] = refs[entry.RefObjID].OriginalCodename
 							}
 						}
@@ -123,7 +126,7 @@ func TestShippedUniqueSummonActionsAcrossAllHealthBands(t *testing.T) {
 						if !exists || mover.ControllerGID() != instance.Gid || child.SummonerGID != instance.Gid || mover.TargetGID() != 0 || child.CurrentHP != child.EffectiveMaxHP() {
 							t.Fatalf("child admission/binding: %+v", child)
 						}
-						tactics, known := monster.ResolveSummonTactics(child.Ref, child.Rarity(), func() float64 { return 0 })
+						tactics, known := summon.Resolve(child.Ref, child.Rarity(), func() float64 { return 0 })
 						if known {
 							behaviorKey := [3]uint32{ref.RefObjID, child.Ref.RefObjID, uint32(child.Rarity())}
 							if !behaviorCases[behaviorKey] {
@@ -189,8 +192,10 @@ func TestDevelopmentSummonSelectionUsesRequestedAuthoredFamily(t *testing.T) {
 	licensed.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	refs := monster.LoadMonsterRefs(dir)
+	summon := monstertest.Evidence(t).SummonTactics()
 	rt := newRegionTestRuntime(&enterworld.Deps{Skills: enterworld.NewTextdataSkills(dir)}, nil)
 	rt.Monsters = simulation.NewMonsterState(monster.TemplateFromParts(refs, nil))
+	rt.Monsters.SetSummonTactics(summon)
 	for _, code := range []string{"MOB_AM_IVY", "MOB_EU_KERBEROS"} {
 		got, err := rt.DevelopmentSummonReferenceByCodename(code)
 		if err != nil || got.Codename != code {
@@ -213,9 +218,11 @@ func TestMonsterSummonCastHasNoDamageAndClosesOnce(t *testing.T) {
 	row.TimingPinned = true
 	row.CoolTimeMs = 2000
 	skills[2] = row
+	summon := monstertest.Evidence(t).SummonTactics()
 	parent := monster.MonsterRef{RefObjID: 1, Codename: "MOB_CH_TIGERWOMAN", MaxHP: 1000}
 	parent.DefaultSkillIDs[0] = 2
 	rt.Monsters = simulation.NewMonsterState(monster.TemplateFromParts(map[uint32]monster.MonsterRef{1: parent, 2: {RefObjID: 2, MaxHP: 100}}, []monster.NestRow{{SpawnPoint: monster.SpawnPoint{RefObjID: 1, RegionID: 0x62a8}}}))
+	rt.Monsters.SetSummonTactics(summon)
 	rt.Monsters.SetTimeSource(clock.Now)
 	rt.Monsters.StartDivision(testDivision)
 	rt.Monsters.AdvancePopulation(rt.Monsters.CurrentTimeMillis())

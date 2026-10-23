@@ -133,7 +133,7 @@ func (s *MonsterState) SpawnGMMonstersTracked(request GMMonsterSpawn) []uint32 {
 			},
 		}
 		actor.CurrentHP = actor.EffectiveMaxHP()
-		if tactics, found := monster.ResolveSummonTactics(ref, 0, s.random); found {
+		if tactics, found := s.summonTactics.Resolve(ref, 0, s.random); found {
 			actor.Nest.NativeTacticsFlags = tactics.NativeFlags
 			actor.Nest.TargetPolicy = tactics.TargetPolicy
 			if tactics.HasControls {

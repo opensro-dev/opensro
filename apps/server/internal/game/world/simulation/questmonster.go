@@ -92,7 +92,7 @@ func (s *MonsterState) SpawnQuestMonster(request QuestMonsterSpawn) bool {
 		SpawnHeading: uint16(angle), Nest: monster.NestRow{SpawnPoint: spawn, PolicyPinned: true},
 	}
 	actor.CurrentHP = actor.EffectiveMaxHP()
-	if tactics, found := monster.ResolveSummonTactics(ref, 0, s.random); found {
+	if tactics, found := s.summonTactics.Resolve(ref, 0, s.random); found {
 		actor.Nest.NativeTacticsFlags = tactics.NativeFlags
 		actor.Nest.TargetPolicy = tactics.TargetPolicy
 		if tactics.HasControls {

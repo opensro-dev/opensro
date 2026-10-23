@@ -1,13 +1,9 @@
 package monster
 
 import (
-	_ "embed"
 	"fmt"
 	"strings"
 )
-
-//go:embed data/v1188_hive_caps.tsv
-var hiveCapsTSV string
 
 type hiveCap struct {
 	WorldCode string

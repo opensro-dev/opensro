@@ -21,6 +21,7 @@ import (
 	. "opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/monstertest"
 )
 
 /*
@@ -275,7 +276,7 @@ func TestShippedTemplateCanary(t *testing.T) {
 		t.Skip("shipped textdata not present in this checkout")
 	}
 
-	template := LoadTemplate(dir)
+	template := monstertest.Template(t, dir)
 	structures := 0
 	for _, ref := range template.Refs {
 		if ref.Structure {

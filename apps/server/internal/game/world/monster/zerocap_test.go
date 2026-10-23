@@ -13,6 +13,7 @@ the same nest; a hive member keeps its zero, since its hive caps it.
 package monster
 
 import (
+	"opensro.online/server/internal/testsupport/licensed"
 	"testing"
 
 	"opensro.online/server/internal/testsupport/gamedatatest"
@@ -54,11 +55,11 @@ func TestRestoreZeroCapNestsTakesTheISRORCap(t *testing.T) {
 ================
 TestZeroCapEvidenceCoversEveryRow
 
-Every generated row parses to a positive cap.
+Every row of the operator's table (source-data) parses to a positive cap.
 ================
 */
 func TestZeroCapEvidenceCoversEveryRow(t *testing.T) {
-	if caps := loadZeroCapCaps(zeroCapCapsTSV); len(caps) != 173 {
+	if caps := loadZeroCapCaps(string(licensed.SourceDataFile(t, "server/"+ZeroCapCapsFile))); len(caps) != 173 {
 		t.Fatalf("%d zero-cap evidence rows, want 173", len(caps))
 	}
 }
@@ -72,7 +73,7 @@ Thread 1559583744489291979: every nest in the Bandit Stronghold building
 ================
 */
 func TestShippedBanditStrongholdIsPopulated(t *testing.T) {
-	template := LoadTemplate(gamedatatest.TextdataDir(t))
+	template := sourceTemplate(t, gamedatatest.TextdataDir(t))
 	stronghold := 0
 	for _, nest := range template.Nests {
 		if nest.RetailEvidence && nest.MaxCount == 0 && nest.HiveMaxCount == 0 {

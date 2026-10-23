@@ -42,6 +42,10 @@ func TestRetiredSummonBuffReachesViewerAfterSeveralShownTicks(t *testing.T) {
 	}
 	now := int64(1000)
 	s := simulation.NewMonsterState(monster.TemplateFromParts(refs, nil))
+	// The wolf's tactics bind skill 10498 below half health, in both groups.
+	wolf := monster.SummonTactics{SightRange: 100, HasControls: true, Controls: monster.TacticsControls{ID: 1}}
+	wolf.ConditionalSkills[0] = monster.ConditionalSkill{TacticsID: 1, SkillID: 10498, Data: 50}
+	s.SetSummonTactics(monster.SummonTacticsTable{"MOB_AM_WOLF": {{wolf}, {wolf}}})
 	s.SetTimeSource(func() time.Time { return time.UnixMilli(now) })
 	s.SetRandomSource(func() float64 { return 0 })
 	parent, err := s.DevelopmentCreateLeader("summon", 1, monster.Pose{RegionID: 0x62aa, X: 1910, Y: 20, Z: 100}, 100000)

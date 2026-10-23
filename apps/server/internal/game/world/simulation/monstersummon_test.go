@@ -18,6 +18,9 @@ func summonFixture(t *testing.T) (*MonsterState, monster.Instance, monster.Summo
 	s := NewMonsterState(monster.TemplateFromParts(refs, []monster.NestRow{{SpawnPoint: monster.SpawnPoint{RefObjID: 1, RegionID: 0x62aa, X: 1910, Y: 20, Z: 100}}}))
 	s.SetTimeSource(func() time.Time { return time.UnixMilli(now) })
 	s.SetRandomSource(func() float64 { return 0 })
+	// The child's default tactics: one normal and one champion row (grade 6
+	// draws the champion row, whose sight adds the body radius).
+	s.SetSummonTactics(monster.SummonTacticsTable{"MOB_CH_MANGNYANG": {{{SightRange: 115}}, {{SightRange: 130}}}})
 	s.StartDivision("summon")
 	s.AdvancePopulation(s.CurrentTimeMillis())
 	s.StartDivision("summon")

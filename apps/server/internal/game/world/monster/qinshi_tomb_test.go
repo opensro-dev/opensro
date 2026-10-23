@@ -128,7 +128,7 @@ TestWithQinShiTombAppendsRefsAndFloor1To6Nests
 func TestWithQinShiTombAppendsRefsAndFloor1To6Nests(t *testing.T) {
 	licensed.RequireGameData(t)
 	dir := licensed.RetailTextdataDir(t)
-	base := LoadTemplate(dir)
+	base := sourceTemplate(t, dir)
 	if len(base.Refs) == 0 || len(base.Nests) == 0 {
 		t.Fatal("expected non-empty base monster template")
 	}

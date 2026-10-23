@@ -1,6 +1,7 @@
 package action
 
 import (
+	"opensro.online/server/internal/testsupport/monstertest"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 func testShippedSummonedChildDecisions(t *testing.T, rt *Runtime, refs map[uint32]monster.MonsterRef, leaderRef monster.MonsterRef, authored monster.Instance) {
 	t.Helper()
 	s := simulation.NewMonsterState(monster.TemplateFromParts(refs, nil))
+	s.SetSummonTactics(monstertest.Evidence(t).SummonTactics())
 	s.SetTimeSource(func() time.Time { return time.UnixMilli(1000) })
 	s.SetRandomSource(func() float64 { return 0 })
 	parent, err := s.DevelopmentCreateLeader("child", leaderRef.RefObjID, monster.Pose{RegionID: 0x62aa, X: 960, Z: 960}, 1000000)
@@ -27,7 +29,7 @@ func testShippedSummonedChildDecisions(t *testing.T, rt *Runtime, refs map[uint3
 		t.Fatal("isolated authored child was not created")
 	}
 	child := children[0]
-	selected, known := monster.ResolveSummonTactics(child.Ref, child.Rarity(), func() float64 { return 0 })
+	selected, known := s.SummonTactics().Resolve(child.Ref, child.Rarity(), func() float64 { return 0 })
 	if !known || !child.NestDetached || selected.HasControls && (!child.Nest.HasControls || child.Nest.Controls != selected.Controls || child.Nest.ConditionalSkills != selected.ConditionalSkills) {
 		t.Fatal("child factory lost complete tactics/bindings or attached a synthetic CNest")
 	}

@@ -2,6 +2,8 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import {launchProbeBrowser} from '../../../../scripts/lib/probeBrowser.mjs';
+import {join} from 'node:path';
+import {sourceDataRoot} from '../../../../scripts/build/world/paths.mjs';
 import {resetMissionMovementFixture} from '../../../../scripts/lib/missionMovementFixture.mjs';
 import {openProbeAgentSession,readProbeCharacterSpawnFromSession} from '../../../../scripts/lib/probeSession.mjs';
 import {assertCharacterAllowed} from '../../../../scripts/lib/probeCharacter.mjs';
@@ -11,7 +13,7 @@ test('live ordinary Movia retain scattered positions while wandering',{timeout:1
  const character=assertCharacterAllowed('asd2',{context:'monster wander spread regression'});
  const authority=await openProbeAgentSession(),original=await readProbeCharacterSpawnFromSession(authority,character);
  assert.ok(original);
- const table=await readFile(new URL('../../../server/internal/game/world/monster/data/isror_population_supplement.tsv',import.meta.url),'utf8');
+ const table=await readFile(join(sourceDataRoot,'server','monster','population-supplement.tsv'),'utf8');
  const anchors=table.split(/\r?\n/).map(l=>l.split('\t')).filter(c=>c[0]==='MOB_EU_MOVOI').map(c=>({regionId:+c[1],x:+c[2],z:+c[4]}));
  const label=process.env.SRO_SPREAD_LABEL??'after',out='temp/artifacts/monster-wander-spread';await mkdir(out,{recursive:true});
  let browser,page;

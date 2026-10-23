@@ -26,7 +26,11 @@ func TestEarthGhostSuppliedBundlePopulation(t *testing.T) {
 	if got := fmt.Sprintf("%x", sha256.Sum256(bytes)); got != manifest {
 		t.Fatalf("this regression pins supplied manifest %s, got %s", manifest, got)
 	}
-	catalog := monster.LoadTemplate(filepath.Join(root, "textdata"))
+	// The references alone: no population evidence changes a reference row.
+	catalog, err := monster.LoadTemplate(filepath.Join(root, "textdata"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	ref, ok := catalog.Refs[1963]
 	if !ok || ref.Codename != "MOB_WC_EARTHGHOST" || ref.RunSpeed != 75 || ref.BodyRadius != 3 || ref.DefaultSkillIDs[0] != 210 {
 		t.Fatalf("reference mismatch %+v", ref)

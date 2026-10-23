@@ -15,10 +15,10 @@ package enterworld
 import (
 	"testing"
 
-	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/monstertest"
 )
 
 /*
@@ -67,7 +67,7 @@ its trade appearance (861720) picks a skin pool by.
 */
 func TestEveryCreatableMonsterIsPublished(t *testing.T) {
 	licensed.RequireGameData(t)
-	template := monster.LoadTemplate(gamedatatest.TextdataDir(t))
+	template := monstertest.Template(t, gamedatatest.TextdataDir(t))
 	rows := PublicMonsterRefObjRows(simulation.NewMonsterState(template))
 	byName := map[string]RefObjRow{}
 	byID := map[uint32]bool{}

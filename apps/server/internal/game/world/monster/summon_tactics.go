@@ -1,7 +1,6 @@
 package monster
 
 import (
-	_ "embed"
 	"strings"
 )
 
@@ -9,11 +8,10 @@ import (
 // 54C0E0/54C1C0: own reference, then original reference; grade zero uses
 // the normal list, nonzero the other list; missing list flips preference.
 // Multiple candidates consume one CRT modulo draw; singleton lists do not.
-//
-//go:embed data/v1188_summon_tactics.tsv
-var summonTacticsEvidence string
 
-var summonTacticsByCode = loadSummonTactics()
+// SummonTacticsTable maps a reference codename to its normal and other
+// tactics lists (Evidence.SummonTactics). A nil table resolves nothing.
+type SummonTacticsTable map[string][2][]SummonTactics
 
 type SummonTactics struct {
 	TargetPolicy      uint8
@@ -34,9 +32,9 @@ type ConditionalSkill struct {
 	SourceOffset                    uint64
 }
 
-func loadSummonTactics() map[string][2][]SummonTactics {
-	out := map[string][2][]SummonTactics{}
-	for line, text := range strings.Split(summonTacticsEvidence, "\n") {
+func loadSummonTactics(evidence string, supplement []byte) SummonTacticsTable {
+	out := SummonTacticsTable{}
+	for line, text := range strings.Split(evidence, "\n") {
 		text = strings.TrimSpace(text)
 		if text == "" || strings.HasPrefix(text, "#") {
 			continue
@@ -57,20 +55,20 @@ func loadSummonTactics() map[string][2][]SummonTactics {
 		})
 		out[cols[0]] = rows
 	}
-	loadSupplementalSummonTactics(out)
+	loadSupplementalSummonTactics(out, supplement)
 	return out
 }
 
-func SummonedSightRange(ref MonsterRef, grade uint8, random func() float64) (float64, bool) {
-	row, ok := ResolveSummonTactics(ref, grade, random)
+func (t SummonTacticsTable) SummonedSightRange(ref MonsterRef, grade uint8, random func() float64) (float64, bool) {
+	row, ok := t.Resolve(ref, grade, random)
 	return row.SightRange, ok
 }
 
 // ResolveSummonTactics selects one whole record, consuming at most one draw.
-func ResolveSummonTactics(ref MonsterRef, grade uint8, random func() float64) (SummonTactics, bool) {
-	rows, ok := summonTacticsByCode[ref.Codename]
+func (t SummonTacticsTable) Resolve(ref MonsterRef, grade uint8, random func() float64) (SummonTactics, bool) {
+	rows, ok := t[ref.Codename]
 	if !ok {
-		rows, ok = summonTacticsByCode[ref.OriginalCodename]
+		rows, ok = t[ref.OriginalCodename]
 	}
 	if !ok {
 		return SummonTactics{}, false

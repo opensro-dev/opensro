@@ -2,6 +2,8 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import {launchProbeBrowser} from '../../../../scripts/lib/probeBrowser.mjs';
+import {join} from 'node:path';
+import {sourceDataRoot} from '../../../../scripts/build/world/paths.mjs';
 import {openProbeAgentSession,readProbeCharacterSpawnFromSession} from '../../../../scripts/lib/probeSession.mjs';
 import {resetMissionMovementFixture} from '../../../../scripts/lib/missionMovementFixture.mjs';
 import {assertCharacterAllowed} from '../../../../scripts/lib/probeCharacter.mjs';
@@ -14,7 +16,7 @@ test('Logos Baroi retains a fleeing target through arrow release',{timeout:18000
  const character=assertCharacterAllowed('asd2',{context:'Baroi cast range regression'}),out='temp/artifacts/baroi-moving-target';
  const session=await openProbeAgentSession();assert.equal(session.divisionId,'test');
  const original=await readProbeCharacterSpawnFromSession(session,character);assert.ok(original);
- const rows=(await readFile(new URL('../../../server/internal/game/world/monster/data/isror_population_supplement.tsv',import.meta.url),'utf8')).split('\n').map(r=>r.split('\t'));
+ const rows=(await readFile(join(sourceDataRoot,'server','monster','population-supplement.tsv'),'utf8')).split('\n').map(r=>r.split('\t'));
  const row=rows.find(r=>r[0]==='MOB_EU_BAROI_CLON');assert.ok(row);
  const start={regionId:+row[1],x:+row[2],y:+row[3],z:+row[4]};
  await mkdir(out,{recursive:true});await writeFile(out+'/restore.json',JSON.stringify({character,original},null,2));
