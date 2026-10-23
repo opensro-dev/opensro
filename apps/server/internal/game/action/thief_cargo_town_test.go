@@ -20,7 +20,6 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
-	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -28,23 +27,13 @@ import (
 ================
 regionsByCombat
 
-The first known town (player combat disallowed) and battlefield regions.
+A town and a battlefield of the test battlefield table
+(regioncombatfixture_test.go).
 ================
 */
 func regionsByCombat(t *testing.T) (town, field uint16) {
 	t.Helper()
-	foundTown, foundField := false, false
-	for id := 0; id <= 0xffff && !(foundTown && foundField); id++ {
-		if townRegion(uint16(id)) && !foundTown {
-			town, foundTown = uint16(id), true
-		} else if allowed, known := worldgeom.RegionPlayerCombat(uint16(id)); known && allowed && !foundField {
-			field, foundField = uint16(id), true
-		}
-	}
-	if !foundTown || !foundField {
-		t.Fatal("no town or battlefield region in the combat table")
-	}
-	return town, field
+	return testTownRegion, testFieldRegion
 }
 
 /*
@@ -73,10 +62,10 @@ within a protected region all pass.
 ================
 */
 func TestThiefWithTransportCannotEnterATown(t *testing.T) {
-	town, field := regionsByCombat(t)
 	thief := testCharacter()
 	dressThief(thief)
 	rt, _ := newTestRuntime(thief, testCosSource(testItems()))
+	town, field := regionsByCombat(t)
 	if rt.ThiefCargoTownBlocked(thief, field, town) {
 		t.Fatal("a thief without a transport was refused a town")
 	}
@@ -90,7 +79,7 @@ func TestThiefWithTransportCannotEnterATown(t *testing.T) {
 	}
 	// Inside a protected region nothing is crossed: the thief walks the
 	// Thieves' Den (and a town it is already in) to sell its goods.
-	if townRegion(thiefTown) == false {
+	if rt.townRegion(thiefTown) == false {
 		t.Fatalf("thief town %#x is not a protected region", thiefTown)
 	}
 	if rt.ThiefCargoTownBlocked(thief, thiefTown, thiefTown) || rt.ThiefCargoTownBlocked(thief, town, town) {
@@ -120,7 +109,7 @@ func TestThiefCannotSummonATransportInTown(t *testing.T) {
 		Codename: "ITEM_COS_T_DHORSE3", TypeFlags: wire.PackTypeFlags(3, 3, 3, 2), StackCount: 1})
 	rt, _ := newTestRuntime(thief, testCosSource(testItems()))
 	at := rt.liveSpawn(simulation.WorldKey(testDivision, thief.Name), thief, rt.Now().UnixMilli())
-	if !townRegion(at.RegionID) {
+	if !rt.townRegion(at.RegionID) {
 		t.Fatalf("the default start region %#x is not a town", at.RegionID)
 	}
 	assertItemUseRefusedUnchanged(t, rt, thief, []byte{22, 0xec, 0x11}, errCodeThiefCartInTown)

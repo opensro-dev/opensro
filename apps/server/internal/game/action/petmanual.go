@@ -45,7 +45,7 @@ func (rt *Runtime) manualPetSkill(division string, owner, snapshot *enterworld.C
 	switch skill.EffectName() {
 	case "Challenging Roar":
 		level := companion.EffectiveLevel(pet, skill, companion.ModifiersFor(pet))
-		if rt.inTown(division, snapshot) || townRegion(state.follower.Position(now).RegionID) {
+		if rt.inTown(division, snapshot) || rt.townRegion(state.follower.Position(now).RegionID) {
 			return petTrainingReceipt("Challenging Roar cannot be cast in town.")
 		}
 		empowered := false
@@ -164,7 +164,7 @@ func (rt *Runtime) advancePetRoar(step petCombatStep) bool {
 	if cast == nil {
 		return false
 	}
-	if rt.inTown(step.key.division, step.snapshot) || townRegion(step.state.follower.Position(step.nowMs).RegionID) {
+	if rt.inTown(step.key.division, step.snapshot) || rt.townRegion(step.state.follower.Position(step.nowMs).RegionID) {
 		step.state.roar = nil
 		return false
 	}

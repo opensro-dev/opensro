@@ -59,7 +59,7 @@ func (rt *Runtime) wolfCompanion(division string, owner *enterworld.Character, g
 		}
 		from := state.follower.Position(now)
 		at := rt.liveSpawn(simulation.WorldKey(division, snapshot.Name), snapshot, now)
-		if !samePlaneAdjacent(from, at) || areaDistance(from, at) > 20*petAreaPerMeter || townRegion(from.RegionID) {
+		if !samePlaneAdjacent(from, at) || areaDistance(from, at) > 20*petAreaPerMeter || rt.townRegion(from.RegionID) {
 			continue
 		}
 		ref, found := rt.cosReference(pet)

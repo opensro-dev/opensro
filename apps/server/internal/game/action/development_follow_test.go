@@ -25,7 +25,7 @@ func TestDevelopmentFixtureUsesAuthoredDelayedSummonAndCleansFamily(t *testing.T
 	}
 	state := simulation.NewMonsterState(monster.TemplateFromParts(refs, nests))
 	state.SetRandomSource(func() float64 { return 0 })
-	rt := NewRuntime(&enterworld.Deps{Skills: skills}, state)
+	rt := newRegionTestRuntime(&enterworld.Deps{Skills: skills}, state)
 	rt.Now = func() time.Time { return time.UnixMilli(100000) }
 	var frames []wire.Frame
 	rt.PushDivisionPeerFrames = func(_, _ string, got []wire.Frame) { frames = append(frames, got...) }

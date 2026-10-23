@@ -14,16 +14,15 @@ those rules read.
 package alchemy
 
 import (
-	"errors"
 	"fmt"
 	"math"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
+	"opensro.online/server/internal/gamedata"
 )
 
 /*
@@ -211,7 +210,7 @@ func LoadCatalog(sources Sources) (*Catalog, error) {
 	if err := c.loadAvatarOptions(dir); err != nil {
 		return nil, err
 	}
-	if profile, err := readDerived(sources.DerivedDir, DissolveProfileFile); err != nil {
+	if profile, err := gamedata.ReadDerived(sources.DerivedDir, DissolveProfileFile); err != nil {
 		return nil, err
 	} else if profile != nil {
 		if err := c.loadDissolveProfile(profile); err != nil {
@@ -315,26 +314,4 @@ func (m Magic) Allows(flags uint16) bool {
 		}
 	}
 	return false
-}
-
-/*
-================
-readDerived
-
-One table of the projection's derived data, or nil when there is no derived
-folder or the table is absent (the feature it feeds stays off).
-================
-*/
-func readDerived(dir, name string) ([]byte, error) {
-	if dir == "" {
-		return nil, nil
-	}
-	data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(name)))
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("alchemy: %s: %w", name, err)
-	}
-	return data, nil
 }

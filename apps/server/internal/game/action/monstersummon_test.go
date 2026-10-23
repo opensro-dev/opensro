@@ -16,7 +16,7 @@ func TestShippedUniqueSummonActionsAcrossAllHealthBands(t *testing.T) {
 	dir := gamedatatest.TextdataDir(t)
 	refs := monster.LoadMonsterRefs(dir)
 	skills := enterworld.NewTextdataSkills(dir)
-	rt := NewRuntime(&enterworld.Deps{Skills: skills}, nil)
+	rt := newRegionTestRuntime(&enterworld.Deps{Skills: skills}, nil)
 	covered, waves, fallbacks := 0, 0, 0
 	childrenChecked := map[uint32]bool{}
 	behaviorChecked := map[uint32]bool{}
@@ -189,7 +189,7 @@ func TestDevelopmentSummonSelectionUsesRequestedAuthoredFamily(t *testing.T) {
 	licensed.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	refs := monster.LoadMonsterRefs(dir)
-	rt := NewRuntime(&enterworld.Deps{Skills: enterworld.NewTextdataSkills(dir)}, nil)
+	rt := newRegionTestRuntime(&enterworld.Deps{Skills: enterworld.NewTextdataSkills(dir)}, nil)
 	rt.Monsters = simulation.NewMonsterState(monster.TemplateFromParts(refs, nil))
 	for _, code := range []string{"MOB_AM_IVY", "MOB_EU_KERBEROS"} {
 		got, err := rt.DevelopmentSummonReferenceByCodename(code)

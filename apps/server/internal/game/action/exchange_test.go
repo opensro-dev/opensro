@@ -38,7 +38,7 @@ func exchangeFixture(t *testing.T) (*Runtime, *enterworld.Character, *enterworld
 		Items:      items,
 		NpcSpawns:  enterworld.NpcSpawnConfig{Roster: simulation.DefaultNpcRoster()},
 	}
-	rt := NewRuntime(deps, nil)
+	rt := newRegionTestRuntime(deps, nil)
 	clock := &fakeClock{}
 	clock.now = clock.now.Add(1)
 	rt.Now = clock.Now

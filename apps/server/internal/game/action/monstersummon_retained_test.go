@@ -13,7 +13,7 @@ func TestUniqueRetainedSkillSurvivesDamageAndHealthBandChange(t *testing.T) {
 	licensed.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	refs := monster.LoadMonsterRefs(dir)
-	rt := NewRuntime(&enterworld.Deps{Skills: enterworld.NewTextdataSkills(dir)}, nil)
+	rt := newRegionTestRuntime(&enterworld.Deps{Skills: enterworld.NewTextdataSkills(dir)}, nil)
 	var ref monster.MonsterRef
 	for _, r := range refs {
 		if r.Codename == "MOB_CH_TIGERWOMAN" {

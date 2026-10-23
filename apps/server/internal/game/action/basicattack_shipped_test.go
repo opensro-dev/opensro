@@ -21,7 +21,7 @@ func TestShippedEuropeanSwordBaseAttackResolves(t *testing.T) {
 		Items:  enterworld.NewTextdataItems(textdataDir),
 		Skills: enterworld.NewTextdataSkills(textdataDir),
 	}
-	runtime := NewRuntime(deps, nil)
+	runtime := newRegionTestRuntime(deps, nil)
 	runtime.WearRoll = func() (uint32, error) { return 99, nil }
 
 	skill, loadout, refusal := runtime.resolveBasicAttack(character)

@@ -68,7 +68,7 @@ func crowdStoreRuntime(tb testing.TB, batched bool) (*Runtime, *store.Store, *fa
 		deps.UpdateCharacterDeferred = st.UpdateCharacterDeferred
 		deps.UpdateCharactersDeferred = st.UpdateCharactersDeferred
 	}
-	rt := NewRuntime(deps, nil)
+	rt := newRegionTestRuntime(deps, nil)
 	clock := &fakeClock{now: time.UnixMilli(1_000_000)}
 	rt.Now = clock.Now
 	for i, c := range crowd {

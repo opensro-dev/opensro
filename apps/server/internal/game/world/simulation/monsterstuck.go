@@ -279,7 +279,7 @@ nest respawns it (560D00). This is why monsters never walk into a town.
 */
 func (ops *MonsterMoverOps) vanishInSafeZone(divisionID string, gid uint32, nowMs int64) {
 	mover, ok := ops.Monsters.Mover(divisionID, gid)
-	if ok && SafeZoneRegion(mover.LivePoseAt(nowMs, nil).RegionID) {
+	if ok && ops.Monsters.SafeZoneRegion(mover.LivePoseAt(nowMs, nil).RegionID) {
 		ops.Monsters.Defeat(divisionID, gid, time.UnixMilli(nowMs))
 	}
 }
@@ -288,11 +288,22 @@ func (ops *MonsterMoverOps) vanishInSafeZone(divisionID string, gid uint32, nowM
 ================
 SafeZoneRegion
 
-A region _RefRegion marks as no battlefield. A region the table does not
-know is not one, as 52943E refuses unknown regions separately.
+A region the battlefield table marks as no battlefield. A region the table
+does not know is not one, as 52943E refuses unknown regions separately;
+without a table no monster vanishes.
 ================
 */
-func SafeZoneRegion(region uint16) bool {
-	allowed, known := worldgeom.RegionPlayerCombat(region)
-	return known && !allowed
+func (s *MonsterState) SafeZoneRegion(region uint16) bool {
+	return s.regionCombat.Load().Town(region)
+}
+
+/*
+================
+SetRegionCombat
+
+Installs the operator's battlefield table (worldgeom.RegionCombatFile).
+================
+*/
+func (s *MonsterState) SetRegionCombat(table *worldgeom.RegionCombat) {
+	s.regionCombat.Store(table)
 }

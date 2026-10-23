@@ -44,7 +44,6 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
-	"opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -147,7 +146,7 @@ func (rt *Runtime) dropDisconnectedCargoInDoor(division string, c *enterworld.Ch
 		return nil
 	}
 	at := rt.companionLiveSpawn(division, c, pet, now)
-	if allowed, known := world.RegionPlayerCombat(at.RegionID); known && !allowed {
+	if allowed, known := rt.regionCombat.PlayerCombat(at.RegionID); known && !allowed {
 		return nil
 	}
 	public := rt.scatterTransportCargo(division, c, pet, now)

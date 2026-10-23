@@ -41,7 +41,6 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
-	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -252,25 +251,13 @@ func (rt *Runtime) jobStripRefusal(division string, c *enterworld.Character, des
 		return jobWearErrParty
 	}
 	at := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now)
-	if battlefield, known := worldgeom.RegionPlayerCombat(at.RegionID); !known || battlefield {
+	if battlefield, known := rt.regionCombat.PlayerCombat(at.RegionID); !known || battlefield {
 		return jobWearErrNoPosition
 	}
 	if _, taken := inventoryRowAt(c, dest); taken || !inventory.IsBagSlot(dest, inventory.BagEnd(c)) {
 		return jobWearErrBagFull
 	}
 	return 0
-}
-
-/*
-================
-townRegion
-
-A town is a region where players may not fight (the safe zones).
-================
-*/
-func townRegion(regionID uint16) bool {
-	allowed, known := worldgeom.RegionPlayerCombat(regionID)
-	return known && !allowed
 }
 
 /*
@@ -294,19 +281,7 @@ refused (native tests each region change the transport makes).
 */
 func (rt *Runtime) ThiefCargoTownBlocked(c *enterworld.Character, fromRegion, toRegion uint16) bool {
 	return enterworld.DressedJob(c) == domain.JobThief && rt.summonedVehicle(c) &&
-		battlefieldRegion(fromRegion) && townRegion(toRegion)
-}
-
-/*
-================
-battlefieldRegion
-
-A region whose _RefRegion.IsBattleField is set: players may fight there.
-================
-*/
-func battlefieldRegion(regionID uint16) bool {
-	allowed, known := worldgeom.RegionPlayerCombat(regionID)
-	return known && allowed
+		rt.battlefieldRegion(fromRegion) && rt.townRegion(toRegion)
 }
 
 /*

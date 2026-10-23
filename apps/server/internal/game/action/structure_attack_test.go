@@ -20,7 +20,7 @@ weapon's basic attack lands, and never from the guild holding the fortress.
 */
 func TestStructuresTakeOnlyBasicAttacksDuringTheWar(t *testing.T) {
 	textdataDir := gamedatatest.TextdataDir(t)
-	rt := NewRuntime(&enterworld.Deps{
+	rt := newRegionTestRuntime(&enterworld.Deps{
 		Items:  enterworld.NewTextdataItems(textdataDir),
 		Skills: enterworld.NewTextdataSkills(textdataDir),
 	}, nil)
@@ -74,7 +74,7 @@ refuses every attacker 0x3042; shut (word 0), it takes the basic attack.
 */
 func TestAnOpenGateCannotBeStruck(t *testing.T) {
 	textdataDir := gamedatatest.TextdataDir(t)
-	rt := NewRuntime(&enterworld.Deps{
+	rt := newRegionTestRuntime(&enterworld.Deps{
 		Items:  enterworld.NewTextdataItems(textdataDir),
 		Skills: enterworld.NewTextdataSkills(textdataDir),
 	}, nil)
