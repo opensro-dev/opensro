@@ -9,8 +9,9 @@ package inventory
 
 import "opensro.online/server/internal/game/item/wire"
 
-// TransferWholeTo applies a whole-source transfer between bag owners. Native
-// 756CF0 supplies the source count to 756A60 for both COS directions: compatible
+// TransferWholeTo applies a whole-source transfer between bag owners. The
+// client's transfer plumbing (756CF0 feeding the source count into its
+// transfer-stack legs at 756A60) covers both COS directions: compatible
 // stacks merge (including the full-destination count exchange), otherwise swap.
 /*
 ================
@@ -87,9 +88,8 @@ summonerItemFault
 
 Validates the structural invariants of a summoner item row (type flags,
 unit stack count, and COS record validity). Intra-bag moves and swaps
-(CGObjPC_DispatchInventorySlotMove 523860 -> CGStorage_MoveOrMergeStack
-4B2450) check only these invariants; an active companion's scroll may
-move or swap freely inside the owner's bag.
+(the native slot-move dispatch) check only these invariants; an active
+companion's scroll may move or swap freely inside the owner's bag.
 ================
 */
 func summonerItemFault(item Item) *Fault {
@@ -106,10 +106,9 @@ func summonerItemFault(item Item) *Fault {
 ================
 summonerTransferFault
 
-CGObjPC_TransferItemBetweenStorages (523F70 at 523FB8..523FEA) and ground
-drop/grant gates refuse a summoner item whose companion is currently
-summoned (CCOSData+0x38 & 2), so an active actor cannot cross an item
-container boundary.
+The native cross-storage transfer and ground drop/grant gates refuse a
+summoner item whose companion is currently summoned (the record's summoned
+bit), so an active actor cannot cross an item container boundary.
 ================
 */
 func summonerTransferFault(item Item) *Fault {
