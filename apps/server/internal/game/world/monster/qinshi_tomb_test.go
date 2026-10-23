@@ -94,7 +94,7 @@ func TestQinShiTombEmbeddedOverlay(t *testing.T) {
 		}
 		for _, skillID := range ref.DefaultSkillIDs {
 			if skillID >= 12131 && skillID <= 12300 {
-				t.Fatalf("tomb ref %d (%s) retains unremapped v1.188 skill ID %d", id, ref.Codename, skillID)
+				t.Fatalf("tomb ref %d (%s) retains unremapped later-table skill ID %d", id, ref.Codename, skillID)
 			}
 		}
 	}
