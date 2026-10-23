@@ -8,8 +8,8 @@ import (
 	"testing"
 )
 
-// This is a bounded comparison against emulated research-server instructions,
-// with an injected CRT stream and explicit assertion boundary. It does not
+// This is a bounded comparison against emulated original-server instructions,
+// with an injected random stream and explicit assertion boundary. It does not
 // validate OS effects, concurrency, complete AI or live packet consumption.
 func TestAITimerFrozenNativeDifferential(t *testing.T) {
 	type outcome struct {
