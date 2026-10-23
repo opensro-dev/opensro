@@ -3,14 +3,12 @@
 
 gradescale.go - a graded monster's larger body
 
-CGObjMob_SpawnBase (4C10C0) stores the grade (+0x1CD8) and calls
-CGObjMob_RefreshGradeScale1CDC (4C1550), which keeps one scale at +0x1CDC:
-a champion 1.5, a giant 3, an elite 1.7, every other grade 1. Two owners
-read it. CGObjMob_ApplyGradeSpeedScale (vtable +0x35C, 4C1690) multiplies
-the walk and run speeds the reference seeds (parameters 0x17 and 0x18), so
-a larger body covers ground at its stride; CGObjMob_GetBodyRadius (vtable
-+0x560, 4C1BF0) truncates BCRadius times the scale, the radius every
-combat spacing reads.
+The native monster spawn stores the grade and keeps one scale for it: a
+champion 1.5, a giant 3, an elite 1.7, every other grade 1. Two owners
+read it. The native speed scaling multiplies the walk and run speeds the
+reference seeds (parameters 0x17 and 0x18), so a larger body covers ground
+at its stride; the native body radius truncates BCRadius times the scale,
+the radius every combat spacing reads.
 
 ===========================================================================
 */
@@ -29,7 +27,7 @@ const (
 ================
 GradeScale
 
-4C1550 on the grade's low nibble. An unknown grade dumps and takes 1.
+The native scale on the grade's low nibble. An unknown grade dumps and takes 1.
 ================
 */
 func GradeScale(rarity uint8) float32 {
@@ -48,7 +46,8 @@ func GradeScale(rarity uint8) float32 {
 ================
 gradeSpeed
 
-4C1690: the seeded speed times the scale on the x87 stack, stored float32.
+The native speed scaling: the seeded speed times the scale on the x87
+stack, stored float32.
 ================
 */
 func (i Instance) gradeSpeed(base float64) float64 {
@@ -59,7 +58,7 @@ func (i Instance) gradeSpeed(base float64) float64 {
 ================
 BodyRadius
 
-4C1BF0: ftol(BCRadius * scale).
+The native body radius: ftol(BCRadius * scale).
 ================
 */
 func (i Instance) BodyRadius() float64 {

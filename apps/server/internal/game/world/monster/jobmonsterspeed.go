@@ -3,9 +3,9 @@
 
 jobmonsterspeed.go - faster thief and hunter monsters (port-only, not native)
 
-The job system's monsters (CGObj_IsThiefMonster 482640, IsHunterMonster
-4826E0) walk and run at their characterdata speeds natively. The owner
-approved the balance advisor's 20% more as a server setting (2026-10-15).
+The job system's monsters (the thief and hunter monster TypeIDs) walk and
+run at their characterdata speeds natively. The owner approved the balance
+advisor's 20% more as a server setting (2026-10-15).
 SRO_JOB_MONSTER_SPEED "on" scales those references' walk and run speed by
 jobMonsterSpeedFactor once, when the population template is built, so the
 movers, the chase timing and the spawn rows' speeds (which the client

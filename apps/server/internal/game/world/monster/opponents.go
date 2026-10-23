@@ -1,6 +1,6 @@
 package monster
 
-// Opponent is one of the two native AI records at +BC/+D0 (stride 20).
+// Opponent is one of the two native AI opponent records.
 // Damage and aggression are distinct accumulators. HitCount wraps as a byte.
 type Opponent struct {
 	GID        uint32
@@ -15,23 +15,23 @@ type OpponentCandidate struct {
 	GID      uint32
 	Eligible bool
 	Distance float64
-	// ActorDistance is CAITactics_DistanceBetweenActors (53D7A0) from the
-	// struck monster, which 5473C0's sight test reads.
+	// ActorDistance is the native actor distance from the struck monster,
+	// which the native hit record's sight test reads.
 	ActorDistance float32
 }
 
-// gradeUnique is CGObjMob_GetBaseGrade's unique grade (vtable +0x12C).
+// gradeUnique is the native base grade's unique grade.
 const gradeUnique = 3
 
 /*
 ==================
 IgnoresDistantHate
 
-5473C0's first branch (5473F7..547486): a unique whose live walk and run
+The native hit record's first branch: a unique whose live walk and run
 speeds are both at most zero takes no hate from an attacker beyond its
-tactics SightRange (the row's +0x14, without the body radius). That
+tactics SightRange (without the body radius). That
 attacker's record loses its aggression, and nothing else is credited: no
-damage, no hit, not the damage since the last summon (+0xB0).
+damage, no hit, not the damage since the last summon.
 ==================
 */
 func (i Instance) IgnoresDistantHate(distance float32) bool {
@@ -48,8 +48,8 @@ func (i Instance) IgnoresDistantHate(distance float32) bool {
 ==================
 ZeroOpponentAggression
 
-The record update of that branch: the primary's aggression (+0xC4) when the
-attacker is the primary, otherwise the secondary's (+0xD8) when it is the
+The record update of that branch: the primary's aggression when the
+attacker is the primary, otherwise the secondary's when it is the
 secondary.
 ==================
 */
@@ -63,8 +63,8 @@ func ZeroOpponentAggression(records *[2]Opponent, attacker uint32) {
 	}
 }
 
-// RecordOpponentHit is 5473C0's record update followed by 548090/545680's
-// selection. The caller supplies current entity resolution and distance;
+// RecordOpponentHit is the native hit record's update followed by its
+// opponent selection. The caller supplies current entity resolution and distance;
 // this value operation owns neither entity lookup nor movement publication.
 func RecordOpponentHit(records *[2]Opponent, policy uint8, attacker uint32, damage uint32, aggression, percent int32, now, cadence uint32, candidates [3]OpponentCandidate) uint32 {
 	slot := 2
@@ -92,7 +92,7 @@ func RecordOpponentHit(records *[2]Opponent, policy uint8, attacker uint32, dama
 	switch policy {
 	case 1:
 		if primary != attacker {
-			// 53FFE0 changes the primary identity/time, not the score bytes.
+			// The native registration changes the primary identity/time, not the score bytes.
 			records[0].GID, records[0].LastHitMs = attacker, now
 		}
 		return attacker
