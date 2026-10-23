@@ -11,7 +11,6 @@ The v1.150 client owns option identities, degrees, values and applicability.
 package loot
 
 import (
-	_ "embed"
 	"encoding/json"
 	"fmt"
 
@@ -25,9 +24,6 @@ const (
 	magicCountChoices      = 6
 	nonRepairTag           = 0x6e726570
 )
-
-//go:embed .generated/properties.json
-var propertiesJSON []byte
 
 /*
 ================
@@ -76,23 +72,20 @@ type propertyCatalog struct {
 	nonRepair   propertyOption
 }
 
-var properties = loadProperties()
+// properties is set by Load (tables.go); empty until then.
+var properties propertyCatalog
 
 /*
 ================
-loadProperties
+parseProperties
 ================
 */
-func loadProperties() propertyCatalog {
+func parseProperties(data []byte) (propertyCatalog, error) {
 	var c propertyCatalog
-	if err := json.Unmarshal(propertiesJSON, &c); err != nil {
-		panic(err)
+	if err := json.Unmarshal(data, &c); err != nil {
+		return propertyCatalog{}, fmt.Errorf("loot properties: %w", err)
 	}
-	result, err := compileProperties(c)
-	if err != nil {
-		panic(err)
-	}
-	return result
+	return compileProperties(c)
 }
 
 /*

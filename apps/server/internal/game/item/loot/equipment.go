@@ -9,7 +9,6 @@ equipment.go - immutable equipment class and weighted assignment selection
 package loot
 
 import (
-	_ "embed"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -18,8 +17,6 @@ import (
 // Generated catalog: scripts/build/generate_loot_catalog.py. The backup's
 // numeric identities never enter the runtime: every key exists in v1.150 media.
 //
-//go:embed .generated/equipment.json
-var equipmentJSON []byte
 
 /*
 ================
@@ -105,7 +102,8 @@ const (
 	negligibleProbability = 0.000001
 )
 
-var equipment = mustEquipmentCatalog()
+// equipment is set by Load (tables.go); empty until then.
+var equipment equipmentCatalog
 
 /*
 ================
@@ -124,19 +122,15 @@ type equipmentSource struct {
 
 /*
 ================
-mustEquipmentCatalog
+parseEquipment
 ================
 */
-func mustEquipmentCatalog() equipmentCatalog {
+func parseEquipment(data []byte) (equipmentCatalog, error) {
 	var source equipmentSource
-	if err := json.Unmarshal(equipmentJSON, &source); err != nil {
-		panic(err)
+	if err := json.Unmarshal(data, &source); err != nil {
+		return equipmentCatalog{}, fmt.Errorf("loot equipment: %w", err)
 	}
-	c, err := compileEquipment(source)
-	if err != nil {
-		panic(err)
-	}
-	return c
+	return compileEquipment(source)
 }
 
 /*

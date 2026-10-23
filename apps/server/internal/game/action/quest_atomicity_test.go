@@ -2,6 +2,7 @@ package action
 
 import (
 	"errors"
+	"opensro.online/server/internal/testsupport/loottest"
 	"path/filepath"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 )
 
 func TestInventoryAndQuestProgressUseOneTransaction(t *testing.T) {
+	loottest.Require(t)
 	runtime := openDoorRuntime(
 		t,
 		filepath.Join(t.TempDir(), "authority"),

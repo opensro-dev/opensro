@@ -14,6 +14,7 @@ Lord's native two probability-1.0 cards stay two.
 package action
 
 import (
+	"opensro.online/server/internal/testsupport/loottest"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -144,6 +145,7 @@ with the ticket switch on they are retired into exactly one.
 ================
 */
 func TestBoneLordTicketCountTogether(t *testing.T) {
+	loottest.Require(t)
 	rt, c, target := uniqueKillFixture(t, "MOB_TK_BONELORD", 90, 3, 90)
 	rt.UniqueRules = progression.UniqueRules{}
 	if items, total := countDrops(planUniqueKill(rt, c, target), gacha.CardCodename); items != 2 || total != 2 {

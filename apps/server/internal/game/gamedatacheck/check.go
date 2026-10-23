@@ -28,6 +28,7 @@ import (
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
+	"opensro.online/server/internal/game/item/loot"
 	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/world/worldarea"
 	"opensro.online/server/internal/gamedata"
@@ -86,6 +87,9 @@ func Check() (Result, error) {
 	items := action.NewRuntime(deps, deps.MonsterState)
 	items.Guilds = deps.Guilds
 	items.UnlimitedItems = enterworld.StarterKitCodenames(deps.StarterKit)
+	if _, err := loot.Load(devPaths.DerivedDir); err != nil {
+		return result, fmt.Errorf("loot catalogue: %w", err)
+	}
 	if err := items.ValidateLootReferences(); err != nil {
 		return result, fmt.Errorf("loot catalogue: %w", err)
 	}

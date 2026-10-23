@@ -10,8 +10,7 @@ package action
 
 import (
 	"encoding/json"
-	"os"
-	"path/filepath"
+	"opensro.online/server/internal/testsupport/loottest"
 	"reflect"
 	"slices"
 	"testing"
@@ -30,6 +29,7 @@ TestHigherLevelFatalDropReferencePickupAndRestore
 ================
 */
 func TestHigherLevelFatalDropReferencePickupAndRestore(t *testing.T) {
+	loottest.Require(t)
 	rt, clock, c, target := newCombatTestRuntimeAtLevel(t, 1, 80)
 	ref := &enterworld.ItemRef{RefObjID: 50080, Codename: "ITEM_CH_SWORD_09_B", Name: "Level 80 sword", TypeIDs: [4]int64{3, 1, 6, 2}, MaxDurability: 100, NativeFields: enterworld.NewNativeFields(map[string]float64{"itemClass": 26})}
 	rt.deps.ItemReferences().(staticItemSource)[ref.Codename] = ref
@@ -138,10 +138,7 @@ TestFullEquipmentCatalogMatchesShippedMedia
 func TestFullEquipmentCatalogMatchesShippedMedia(t *testing.T) {
 	licensed.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
-	raw, err := os.ReadFile(filepath.Join("..", "item", "loot", ".generated", "equipment.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := licensed.SourceDataFile(t, "server/loot/equipment.json")
 	var catalog struct {
 		Items []struct {
 			Codename string

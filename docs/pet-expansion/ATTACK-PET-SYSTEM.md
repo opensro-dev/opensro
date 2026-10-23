@@ -217,8 +217,8 @@ go run ./cmd/tools/sro-pet-loot -authority-dir '<actual-authority-directory>' -f
 
 The CLI uses the normal authority lock and changes only this config value.
 The old workbook “Drop % per kill (General)” column is no longer the runtime
-rate. Normal equipment tables are generated in
-`internal/game/item/loot/.generated/equipment.json`; kills do not query an original
+rate. Normal equipment tables are generated into the loot catalogue
+(`loot.TableFiles`); kills do not query an original
 MSSQL drop table. See [PET-LOOT-DB-CONFIG.md](PET-LOOT-DB-CONFIG.md).
 
 ## Blue limits, selection weight and high-roll rarity

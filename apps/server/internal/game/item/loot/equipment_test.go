@@ -20,6 +20,7 @@ TestEquipmentSelectionAcrossShippedLevelRange
 ================
 */
 func TestEquipmentSelectionAcrossShippedLevelRange(t *testing.T) {
+	requireTables(t)
 	for _, tc := range []struct {
 		level  uint8
 		suffix string
@@ -71,6 +72,7 @@ TestEquipmentProbabilityBoundaries
 ================
 */
 func TestEquipmentProbabilityBoundaries(t *testing.T) {
+	requireTables(t)
 	if g, ok := EquipmentGroup(1, false, 33332); !ok || g != 0 {
 		t.Fatal("lower-bound inclusion lost")
 	}
@@ -132,6 +134,7 @@ tier rather than into an adjacent seal grade.
 ================
 */
 func TestRareEquipmentFallbackStepsWithinTier(t *testing.T) {
+	requireTables(t)
 	rollZero := func() (uint32, error) { return 0, nil }
 	// Empty degree-10 Star (G27) and Moon (G28) buckets at level 86 must step
 	// by 3 into degree-9 Star (G24 -> _09_A_RARE) and Moon (G25 -> _09_B_RARE),

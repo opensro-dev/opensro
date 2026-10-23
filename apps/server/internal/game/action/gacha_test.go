@@ -15,6 +15,7 @@ package action
 import (
 	"bytes"
 	"errors"
+	"opensro.online/server/internal/testsupport/loottest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -278,6 +279,7 @@ TestGachaExchangeSwapsTheVoucherForItsRecordedReward
 ================
 */
 func TestGachaExchangeSwapsTheVoucherForItsRecordedReward(t *testing.T) {
+	loottest.Require(t)
 	for _, tc := range []struct {
 		name   string
 		roll   uint32
@@ -331,6 +333,7 @@ TestGachaExchangeEquipmentRollsNativeSpecialProperties
 ================
 */
 func TestGachaExchangeEquipmentRollsNativeSpecialProperties(t *testing.T) {
+	loottest.Require(t)
 	for _, tc := range []struct {
 		name     string
 		plusDraw [2]uint32
@@ -494,6 +497,7 @@ TestGachaExchangeTakesTheLowestSlotVoucherFirst
 ================
 */
 func TestGachaExchangeTakesTheLowestSlotVoucherFirst(t *testing.T) {
+	loottest.Require(t)
 	rt, c, p := operatorFixture(t, 0)
 	extra := c.MissionInventory[0]
 	extra.Slot = 20
@@ -517,6 +521,7 @@ TestGachaExchangeConsumesTheVoucherItRead
 ================
 */
 func TestGachaExchangeConsumesTheVoucherItRead(t *testing.T) {
+	loottest.Require(t)
 	rt, c, p := operatorFixture(t, 0)
 	// The paid voucher sits at slot 20; a same-codename card without a pair
 	// (an operator grant, say) sits below it at slot 13.
@@ -604,6 +609,7 @@ TestGachaExchangeReplayFindsNoVoucher
 ================
 */
 func TestGachaExchangeReplayFindsNoVoucher(t *testing.T) {
+	loottest.Require(t)
 	rt, c, p := operatorFixture(t, 0)
 	if _, reason := rt.HandleGachaExchange(testDivision, c, p); reason != "" {
 		t.Fatal(reason)

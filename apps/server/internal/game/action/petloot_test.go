@@ -9,6 +9,7 @@ package action
 
 import (
 	"encoding/json"
+	"opensro.online/server/internal/testsupport/loottest"
 	"reflect"
 	"testing"
 	"time"
@@ -143,6 +144,7 @@ preserve its options without allowing a second pickup or repeated kill.
 ================
 */
 func TestMonsterPetGearDeathPickupAndReplay(t *testing.T) {
+	loottest.Require(t)
 	rt, clock, c, target := newCombatTestRuntime(t, 1)
 	d := companion.D.Gear[0]
 	item := d.Items[0]

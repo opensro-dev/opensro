@@ -40,6 +40,7 @@ TestSealBandGivesLevels81To94EndgameStarAndMoon
 ================
 */
 func TestSealBandGivesLevels81To94EndgameStarAndMoon(t *testing.T) {
+	requireTables(t)
 	if sealBandRows == nil {
 		t.Fatal("the catalogue's rare rows lost the band's prefix shape")
 	}

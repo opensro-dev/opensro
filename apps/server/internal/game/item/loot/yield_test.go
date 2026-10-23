@@ -26,6 +26,7 @@ keeps the vSRO 0.180%.
 ================
 */
 func TestEquipmentClassRatesPerLevel(t *testing.T) {
+	requireTables(t)
 	for _, tc := range []struct {
 		level uint8
 		last  uint32
@@ -50,6 +51,7 @@ The magic and attribute stone families admit 2.55% at level 80 (vSRO was
 ================
 */
 func TestStoneClassRateAtLevel80(t *testing.T) {
+	requireTables(t)
 	const firstDegree9, last = 20000, 25518
 	for family, prefix := range map[int]string{8: "ITEM_ETC_ARCHEMY_MAGICSTONE_", 9: "ITEM_ETC_ARCHEMY_ATTRSTONE_"} {
 		for _, tc := range []struct {

@@ -3,6 +3,7 @@ package loot
 import "testing"
 
 func TestEquipmentCatalogCountriesAndRoster(t *testing.T) {
+	requireTables(t)
 	if !HasEquipmentCountry(0) || !HasEquipmentCountry(1) || HasEquipmentCountry(2) {
 		t.Fatal("equipment country buckets")
 	}

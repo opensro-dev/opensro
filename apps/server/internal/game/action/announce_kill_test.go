@@ -13,6 +13,7 @@ not, so most seal drops went unannounced.
 package action
 
 import (
+	"opensro.online/server/internal/testsupport/loottest"
 	"strings"
 	"testing"
 
@@ -29,6 +30,7 @@ none.
 ================
 */
 func TestSingleTargetKillAnnouncesASealDrop(t *testing.T) {
+	loottest.Require(t)
 	for _, on := range []bool{true, false} {
 		rt, _, character, target := newCombatTestRuntime(t, 1)
 		installSmallGoldRef(rt)

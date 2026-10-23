@@ -9,15 +9,11 @@ consumables.go - immutable consumable and assigned reward selection
 package loot
 
 import (
-	_ "embed"
 	"encoding/json"
 	"fmt"
 	"math"
 	"sort"
 )
-
-//go:embed .generated/consumables.json
-var consumablesJSON []byte
 
 /*
 ================
@@ -106,23 +102,20 @@ type consumableCatalog struct {
 	groups   map[int][]groupDrop
 }
 
-var consumables = mustConsumables()
+// consumables is set by Load (tables.go); empty until then.
+var consumables consumableCatalog
 
 /*
 ================
-mustConsumables
+parseConsumables
 ================
 */
-func mustConsumables() consumableCatalog {
+func parseConsumables(data []byte) (consumableCatalog, error) {
 	var source consumableSource
-	if err := json.Unmarshal(consumablesJSON, &source); err != nil {
-		panic(err)
+	if err := json.Unmarshal(data, &source); err != nil {
+		return consumableCatalog{}, fmt.Errorf("loot consumables: %w", err)
 	}
-	c, err := compileConsumables(source)
-	if err != nil {
-		panic(err)
-	}
-	return c
+	return compileConsumables(source)
 }
 
 /*

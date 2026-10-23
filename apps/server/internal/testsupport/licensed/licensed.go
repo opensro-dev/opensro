@@ -245,6 +245,31 @@ func RetailTextdataDir(t testing.TB) string {
 
 /*
 ==================
+ReadSourceData
+
+One file of the operator's source-data without a test: its bytes, or false
+when it is absent. For TestMain loaders (loottest); tests use SourceDataFile.
+==================
+*/
+func ReadSourceData(name string) ([]byte, bool, error) {
+	_ = os.Getenv(IdentityEnv)
+	repository, err := repositoryRoot()
+	if err != nil {
+		return nil, false, err
+	}
+	gameRoot, err := resolveGameRoot(repository)
+	if err != nil {
+		return nil, false, err
+	}
+	data, err := os.ReadFile(filepath.Join(gameRoot, "source-data", filepath.FromSlash(name)))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, false, nil
+	}
+	return data, err == nil, err
+}
+
+/*
+==================
 SourceDataFile
 
 One file of the operator's source-data (<game root>/source-data/<name>,

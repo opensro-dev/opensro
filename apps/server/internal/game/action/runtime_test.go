@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"math"
+	"opensro.online/server/internal/testsupport/loottest"
 	"testing"
 	"time"
 
@@ -33,6 +34,7 @@ HANDLER calling LiveSpawnAt, not just the planner.
 ==================
 */
 func TestHandlerGroundDropMidMoveLandsUnderfoot(t *testing.T) {
+	loottest.Require(t)
 	character := testCharacter()
 	rt, clock := newTestRuntime(character, testItems())
 	goal := installMidMove(rt, character, clock)
@@ -250,6 +252,7 @@ travel is active; the request handler still revalidates a superseded path.
 ==================
 */
 func TestPickupApproachMaturesIntoGrant(t *testing.T) {
+	loottest.Require(t)
 	character := testCharacter()
 	rt, clock := newTestRuntime(character, testItems())
 

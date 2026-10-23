@@ -1,7 +1,7 @@
 # Pet drops: native equipment tables plus DB factor
 
 Port-only, behind `SRO_ATTACK_PET_EXPANSION`. The original shared level/country
-equipment tables are generated into `loot/.generated/equipment.json`; this
+equipment tables are generated into the loot catalogue (`loot.TableFiles`); this
 server does not query an original MSSQL drop table during kills.
 
 Each actual admitted character-equipment drop independently has a chance to

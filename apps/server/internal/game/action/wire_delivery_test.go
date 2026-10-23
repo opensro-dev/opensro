@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"opensro.online/server/internal/testsupport/loottest"
 	"testing"
 	"time"
 
@@ -288,6 +289,7 @@ func (o *oracle) oracleRowTail(gid uint32) []byte {
 //
 // byte-for-byte the Node oracle's moveMissionItem type-7 packets/broadcast.
 func TestGroundDropDeliversLiveSpawnOverTransport(t *testing.T) {
+	loottest.Require(t)
 	t.Parallel()
 	character := wireCharacter()
 	rt, _ := newTestRuntime(character, testItems())

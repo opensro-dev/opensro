@@ -28,7 +28,9 @@ import sro_paths  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = sro_paths.SOURCE_DATA_ROOT / "loot"
-OUTPUT = ROOT / "apps/server/internal/game/item/loot/.generated"
+# The compiled tables are source-data too: the server bundle copies
+# source-data/server into its derived data (loot.TableFiles).
+OUTPUT = sro_paths.SOURCE_DATA_ROOT / "server" / "loot"
 INFERRED_RATES = {2: 0.10, 3: 0.02, 4: 0.05, 5: 0.05, 6: 0.01}
 SPECIAL_ITEMS = ["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_" + kind + "_B"
 	for kind in ("WEAPON", "SHIELD", "ARMOR", "ACCESSARY")] + ["ITEM_ETC_SCROLL_RETURN_02"]

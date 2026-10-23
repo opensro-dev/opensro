@@ -12,6 +12,7 @@ drops as often as native while equipment keeps the beta rate.
 package action
 
 import (
+	"opensro.online/server/internal/testsupport/loottest"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -68,6 +69,7 @@ TestBetaDropMixRunsEachFamilyAtItsOwnRate
 ================
 */
 func TestBetaDropMixRunsEachFamilyAtItsOwnRate(t *testing.T) {
+	loottest.Require(t)
 	nativeSwords, nativePotions := mixedKillCounts(t, 1, nil)
 	if nativeSwords != 1 || nativePotions != 1 {
 		t.Fatalf("native kill: %d swords, %d potions; want 1 and 1", nativeSwords, nativePotions)

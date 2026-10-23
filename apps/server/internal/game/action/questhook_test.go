@@ -1,6 +1,7 @@
 package action
 
 import (
+	"opensro.online/server/internal/testsupport/loottest"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -14,6 +15,7 @@ import (
 // burst; a nil hook changes nothing (the pre-quest wiring and every
 // sibling test in this package).
 func TestQuestInventoryHookRidesTheItemBursts(t *testing.T) {
+	loottest.Require(t)
 	character := testCharacter()
 	rt, _ := newTestRuntime(character, testItems())
 

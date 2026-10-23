@@ -12,6 +12,7 @@ package action
 import (
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/loottest"
 	"testing"
 	"time"
 
@@ -89,6 +90,7 @@ TestAlchemyFatalPublishesReferenceSpawnAndPickup
 ================
 */
 func TestAlchemyFatalPublishesReferenceSpawnAndPickup(t *testing.T) {
+	loottest.Require(t)
 	rt, clock, c, target := newCombatTestRuntimeAtLevel(t, 1, 80)
 	chosen, ok := loot.SelectConsumable(8, 80, 0, func() (uint32, error) { return 0, nil })
 	if !ok {

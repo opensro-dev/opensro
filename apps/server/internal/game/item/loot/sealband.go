@@ -43,7 +43,8 @@ const (
 
 // sealBandRows are the extended rare rows of levels sealStarEdge+1 through
 // sealBandEnd; nil when the catalogue's rows do not have the prefix shape.
-var sealBandRows = buildSealBandRows(equipment)
+// Load derives them from the native equipment catalogue.
+var sealBandRows [][]classThreshold
 
 /*
 ================
