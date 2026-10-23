@@ -23,8 +23,6 @@ import (
 	"opensro.online/server/internal/game/caravan"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
-	"opensro.online/server/internal/game/world"
-	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -161,6 +159,10 @@ roll.
 ================
 */
 func (rt *Runtime) spawnCaravanBandits(division string, c *enterworld.Character, vehicle simulation.Spawn, nowMs int64) error {
+	if rt.caravanTactics == nil || rt.regionCaravan == nil {
+		// Without the operator's tables no caravan is ambushed (LoadCaravan).
+		return nil
+	}
 	roll := rt.caravanRoll()
 	// Port-only, not native with SRO_TRADE_TIERS: both from cargo gold
 	// (tradetiers.go).
@@ -185,7 +187,7 @@ func (rt *Runtime) spawnCaravanBandits(division string, c *enterworld.Character,
 	if err != nil {
 		return err
 	}
-	tactics, ok := monster.CaravanTactics(tacticsID)
+	tactics, ok := rt.caravanTactics[tacticsID]
 	if !ok {
 		return nil
 	}
@@ -195,7 +197,7 @@ func (rt *Runtime) spawnCaravanBandits(division string, c *enterworld.Character,
 	}
 	tables := rt.Monsters.BanditTables()
 	player := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, nowMs)
-	zone, known := world.RegionCaravanZone(player.RegionID)
+	zone, known := rt.regionCaravan.Zone(player.RegionID)
 	if !known {
 		return fmt.Errorf("caravan region %#x has no continent evidence", player.RegionID)
 	}

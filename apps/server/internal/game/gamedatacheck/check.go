@@ -99,6 +99,7 @@ func Check() (Result, error) {
 	}{
 		{"portal catalogue", func(dir string) error { return items.ConfigurePortals(dir, devPaths.DerivedDir) }},
 		{"region combat", func(string) error { return items.LoadRegionCombat(devPaths.DerivedDir) }},
+		{"caravan", func(string) error { return items.LoadCaravan(devPaths.DerivedDir) }},
 		{"alchemy catalogue", func(dir string) error { return items.ConfigureAlchemy(dir, devPaths.DerivedDir) }},
 		{"gacha catalogue", items.ConfigureGacha},
 		{"stall network", items.ConfigureStallNetwork},

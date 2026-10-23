@@ -8,7 +8,9 @@ tables and spawns it with a numbered tactics row. Both tables are built from
 the monster references the way the native refdata does it
 (CRefData_BuildThiefBanditTable 6BB8A0, CRefData_BuildHunterBanditTable
 6BC5A0); the eight tactics rows are the vSRO backup's Tab_RefTactics
-2001..2004 and 2011..2014 (scripts/build/import_caravan_evidence.py).
+2001..2004 and 2011..2014 of the operator's server tactics reference,
+carried in the projection's derived data (CaravanTacticsFile); without
+them no caravan draws bandits.
 
 ===========================================================================
 */
@@ -17,11 +19,12 @@ package monster
 
 import (
 	"bytes"
-	_ "embed"
 	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
+
+	"opensro.online/server/internal/gamedata"
 )
 
 const (
@@ -29,24 +32,47 @@ const (
 	BanditZones = 3
 	// banditLevels is the bucket count: levels 1..140 (index 0..0x8B).
 	banditLevels = 0x8c
-	// caravanTacticsSource pins the shard backup the rows come from.
-	caravanTacticsSource = "9b9179e598f303f3293df1771ed7a9339a5e9c9de0dd2401884db2817d5dd9a4"
+	// caravanTacticsRows is the closed set the native binds by number:
+	// 2001..2004 for thieves, 2011..2014 for hunters.
+	caravanTacticsRows = 8
 )
 
-//go:embed data/caravan_tactics.json
-var caravanTacticsJSON []byte
-
-var caravanTactics = loadCaravanTactics(caravanTacticsJSON)
+// CaravanTacticsFile is the bandit tactics table in the derived data.
+const CaravanTacticsFile = "monster/caravan-tactics.json"
 
 /*
 ================
-loadCaravanTactics
+CaravanTacticsTable
 
-The embedded rows are a build input: a missing or malformed row is a
-build defect, not a runtime error.
+The eight bandit tactics rows by native number. A nil table has none.
 ================
 */
-func loadCaravanTactics(data []byte) map[uint32]SummonTactics {
+type CaravanTacticsTable map[uint32]SummonTactics
+
+/*
+================
+LoadCaravanTactics
+
+The table from derivedDir, or nil when there is none.
+================
+*/
+func LoadCaravanTactics(derivedDir string) (CaravanTacticsTable, error) {
+	data, err := gamedata.ReadDerived(derivedDir, CaravanTacticsFile)
+	if err != nil || data == nil {
+		return nil, err
+	}
+	return parseCaravanTactics(data)
+}
+
+/*
+================
+parseCaravanTactics
+
+Exactly the eight native numbers, each with valid controls: a missing,
+foreign or malformed row refuses the whole table.
+================
+*/
+func parseCaravanTactics(data []byte) (CaravanTacticsTable, error) {
 	var doc struct {
 		Source  string
 		Tactics map[string]TacticsControls
@@ -54,17 +80,17 @@ func loadCaravanTactics(data []byte) map[uint32]SummonTactics {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&doc); err != nil {
-		panic(fmt.Errorf("caravan tactics: %w", err))
+		return nil, fmt.Errorf("caravan tactics: %w", err)
 	}
-	if doc.Source != caravanTacticsSource || len(doc.Tactics) != 8 {
-		panic("caravan tactics provenance/closure mismatch")
+	if len(doc.Tactics) != caravanTacticsRows {
+		return nil, fmt.Errorf("caravan tactics: %d rows, want %d", len(doc.Tactics), caravanTacticsRows)
 	}
-	out := make(map[uint32]SummonTactics, len(doc.Tactics))
+	out := make(CaravanTacticsTable, len(doc.Tactics))
 	for key, c := range doc.Tactics {
 		thief := c.ID >= 2001 && c.ID <= 2004
 		hunter := c.ID >= 2011 && c.ID <= 2014
 		if fmt.Sprint(c.ID) != key || (!thief && !hunter) || c.SightRange < 0 || c.ChampionID != 0 {
-			panic("invalid caravan tactics row " + key)
+			return nil, fmt.Errorf("caravan tactics: invalid row %s", key)
 		}
 		// The same projection the summon factory uses: ChangeTarget is the
 		// target policy byte (+0x20), AdditionOptionFlag the native flags.
@@ -73,19 +99,7 @@ func loadCaravanTactics(data []byte) map[uint32]SummonTactics {
 			NativeFlags: c.Flags, Controls: c, HasControls: true,
 		}
 	}
-	return out
-}
-
-/*
-================
-CaravanTactics
-
-One of the eight bandit tactics rows by its native number.
-================
-*/
-func CaravanTactics(id uint32) (SummonTactics, bool) {
-	tactics, ok := caravanTactics[id]
-	return tactics, ok
+	return out, nil
 }
 
 /*
