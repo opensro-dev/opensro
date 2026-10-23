@@ -4,11 +4,11 @@
 fortress.go - the persisted fortress state
 
 The shard rows a fortress war leaves behind: who occupies each fortress
-and who holds it during a war (_SiegeFortress GuildID and TempGuildID),
+and who holds it during a war (the occupying and the temporary guild),
 its signed tax rate and accumulated tax gold,
-the guilds registered for the coming war (_SiegeFortressRequest), and the
-structures standing on its event zones with their hit points and state
-(_SiegeFortressStruct). They are cross-character state, so they live in
+the guilds registered for the coming war, and the
+structures standing on its event zones with their hit points and state.
+They are cross-character state, so they live in
 the authority store's fortresses, fortress_requests and
 fortress_structures tables, reached through FortressStore.
 
@@ -20,7 +20,7 @@ package domain
 ================
 FortressRecord
 
-One _SiegeFortress row.
+One fortress row.
 ================
 */
 type FortressRecord struct {
@@ -37,7 +37,7 @@ type FortressRecord struct {
 ================
 FortressRequestRecord
 
-One _SiegeFortressRequest row: a guild's application and its kind (0 to
+One fortress war-request row: a guild's application and its kind (0 to
 attack, 1 to ally with the occupier).
 ================
 */
@@ -51,7 +51,7 @@ type FortressRequestRecord struct {
 ================
 FortressStructureRecord
 
-One _SiegeFortressStruct row: the structure installed on an event zone,
+One fortress structure row: the structure installed on an event zone,
 its owner, hit points and state word.
 ================
 */
@@ -91,7 +91,7 @@ type FortressStore interface {
 ================
 FortressBattleRecord
 
-_SiegeFortressBattleRecord: the fortress is the containing row; rank and
+The fortress battle record: the fortress is the containing row; rank and
 its last promotion time survive reconnect independently of a live buff.
 ================
 */

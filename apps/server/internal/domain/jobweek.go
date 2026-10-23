@@ -165,7 +165,7 @@ func rankJob(members []*Character, kind uint8) []JobRankRow {
 ================
 CloseJobWeek
 
-Runs _UpdateTriangleJobWeekly over a division's characters and pool. The
+Runs the weekly job close over a division's characters and pool. The
 contribution list of a job nobody contributed to keeps last week's rows,
 as the procedure leaves that table alone.
 ================
