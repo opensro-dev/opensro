@@ -4,7 +4,7 @@
 loot_yield_probe_test.go - what a synthetic level-80 kill drops, per kill
 
 A measurement, not a regression: issue #461 reports the yield before and
-after the ISRO-R loot merge. Runs only with SRO_LOOT_YIELD_PROBE=1 and the
+after the later-data loot merge. Runs only with SRO_LOOT_YIELD_PROBE=1 and the
 shipped item references, and logs gold heaps, equipment and other stacks per
 kill at the native rate and at the beta rate. The fixture is a Mangnyang with
 its level changed to 80, not a sample of all production level-80 monsters.

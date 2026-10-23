@@ -3,14 +3,13 @@
 
 fortress_war.go - what a fortress world does when its war begins and ends
 
-CGameWorld_Siege_Tick (600F60) runs the war's phases on the fortress
-world: five seconds after the war begins (timer slot 1, 0x1388 ms) and at
-once when it ends (slot 2), CGameWorld_Siege_BroadcastWarPhase (601170)
-walks the PCs of the world's layer. At the beginning (mode 0) an occupied
-fortress keeps its occupying guild, which is sent its fortress row
-(CGObjPC_SendFortressRow 4E0680); everyone else, and everyone when the
-fortress is unoccupied, is teleported to the fortress's town gate
-(CGameWorld_Siege_GetFortressTeleportPos 601690). At the end (mode 2)
+The native siege world tick runs the war's phases on the fortress world:
+five seconds after the war begins (timer slot 1, 0x1388 ms) and at once
+when it ends (slot 2), the native war-phase broadcast walks the PCs of the
+world's layer. At the beginning (mode 0) an occupied fortress keeps its
+occupying guild, which is sent its fortress row; everyone else, and
+everyone when the fortress is unoccupied, is teleported to the fortress's
+town gate. At the end (mode 2)
 only the guilds the fortress keeps after the war stay: its occupying
 guild and the unions retained by the fortress.
 
@@ -28,7 +27,7 @@ import (
 const (
 	fortressPhaseBegin uint8 = 0
 	fortressPhaseEnd   uint8 = 2
-	// 600F60 slot 1: the beginning's expulsion waits five seconds.
+	// Timer slot 1: the beginning's expulsion waits five seconds.
 	fortressBeginDelayMs = 5000
 )
 
@@ -97,7 +96,7 @@ func (rt *Runtime) advanceFortressPhases(nowMs int64) {
 ================
 runFortressPhase
 
-601170 for every fortress world of the division.
+The native war-phase broadcast for every fortress world of the division.
 ================
 */
 func (rt *Runtime) runFortressPhase(phase fortressPhase) {
@@ -192,8 +191,8 @@ func (rt *Runtime) fortressTownGate(code string) (travelPoint, bool) {
 ================
 fortressEndGuilds
 
-61EE70 builds the holder's side from the registered guilds and their
-alliance, plus the holder itself. 601170 mode two keeps this set before
+The native holder side is built from the registered guilds and their
+alliance, plus the holder itself. Mode two keeps this set before
 clearing registrations. An unregistered alliance member is expelled.
 ================
 */

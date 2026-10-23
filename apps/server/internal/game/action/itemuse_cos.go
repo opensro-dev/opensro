@@ -20,7 +20,7 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// petPotionLane is the 1.1 s lock 49D240 starts on the owner for TID4 4/5/7.
+// petPotionLane is the 1.1 s lock the native pet item use starts on the owner for TID4 4/5/7.
 /*
 ================
 petPotionLane
@@ -51,7 +51,7 @@ func readCosGID(tail []byte) (uint32, bool) {
 	return binary.LittleEndian.Uint32(tail), true
 }
 
-// applyCosItemUse is 49D240 trimmed to the v1.150 pet UI: potions TID4 4/5/7,
+// applyCosItemUse is the native pet item use trimmed to the v1.150 pet UI: potions TID4 4/5/7,
 // revival TID4 6, and the TID3 2 TID4 7 cure. It runs inside the item-use door.
 /*
 ================
@@ -87,11 +87,11 @@ func (rt *Runtime) applyCosItemUse(
 ================
 petItemVisualTarget
 
-The object a pet item's sparkle plays on. CGObjPC_HandleUseItem (510980)
-sends 0x305C with the gid the item's handler leaves in its out argument,
-the user's by default. 49D240 writes the pet's gid there for the potions
-(TID4 4/5/7: the gid read at 49D44D, written at 49D50F from pet+8) and for
-the HGP potion (TID4 9: the gid read at 49D6E7); the revival scroll (6) and
+The object a pet item's sparkle plays on. The native item use sends the
+later protocol's 0x305C with the gid the item's handler leaves in its out
+argument, the user's by default. The pet item use writes the pet's gid
+there for the potions (TID4 4/5/7) and for the HGP potion (TID4 9); the
+revival scroll (6) and
 the pet cure write nothing, so they sparkle on the owner. 0 keeps the user.
 ================
 */
@@ -142,7 +142,7 @@ func (rt *Runtime) applyPetCure(
 	for i := range ref.CureLevels {
 		stored[i] = int32(ref.CureLevels[i])
 	}
-	// 49D240 calls 4A56C0 with the 49AC50 level words and null mask/limit.
+	// Natively the pet item use calls the cure with the level words and a null mask/limit.
 	// There is no reuse lock on this arm.
 	random := &abnormalRandom{rt: rt, actor: criticalActor{division: divisionID, character: character.Name}}
 	owner.changed = owner.block.Cure(owner, &stored, nil, nil, -1, random.Rand)
@@ -193,7 +193,7 @@ func (rt *Runtime) applyPetRevival(
 		*result = itemUseFailure(wire.ErrCodeCosRefused)
 		return false
 	}
-	// Bit 0 already set: the COS is not a revival candidate (49D240: 3).
+	// Bit 0 already set: the COS is not a revival candidate (natively 3).
 	if pet.StateFlags&1 != 0 {
 		*result = itemUseFailure(wire.ErrCodeCosRefused)
 		return false
@@ -207,7 +207,7 @@ func (rt *Runtime) applyPetRevival(
 		return false
 	}
 	pet.StateFlags |= 1
-	// HP is CCOSData+0x2C from ref+0x19C; MP is +0x30 from ref+0x1A0.
+	// HP and MP are restored to the reference's maxima, as natively.
 	pet.CurrentHP = cosRef.MaxHP
 	pet.CurrentMP = cosRef.MaxMP
 	// Hunger percent is (word * 100) / 10000. Below 30, set 3000 (0xBB8).
@@ -264,8 +264,8 @@ func (rt *Runtime) applyPetPotion(
 	if statsErr != nil {
 		return false
 	}
-	// 49AA70 reads the item owner's STR/INT/level (PC vfuncs), then
-	// 4A86A0 applies the COS recovery reductions and effective maxima.
+	// Natively the item owner's STR/INT/level are read, then the COS
+	// recovery reductions and effective maxima apply.
 	maxHP, maxMP, _, _ := keeperVitalsFrom(character, stats, nil)
 	amount, valid := computePotionAmount(ref, stats.Level, stats.Strength, stats.Intellect, maxHP, maxMP)
 	if !valid {
