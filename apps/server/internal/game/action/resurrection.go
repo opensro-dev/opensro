@@ -374,9 +374,10 @@ Revives a dead player where the corpse lies with 1 HP (every revival also
 clears the recorded EXP loss), then adds the offer's EXP (a refund of the
 loss, outside the port's growth rates), HP and MP (applySkillRecovery is
 the reduced-recovery path) and rmut skill. Native starts rmut as an
-indirect cast; this port installs its effect directly. Callers hold the division lock, run
-inside the character's Update and have checked the player is dead:
-the answer handler for a resurrection skill, the item use for a resurrection scroll.
+indirect cast; this port installs its effect directly. Callers hold the
+division lock, run inside the character's Update and have checked the
+player is dead: the answer handler for a resurrection skill, the item use
+for a resurrection scroll.
 ==================
 */
 func (rt *Runtime) reviveWhereDead(division string, character *enterworld.Character, offer resurrectionOffer, nowMs int64) revivedWhereDead {

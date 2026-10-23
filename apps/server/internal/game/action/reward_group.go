@@ -187,7 +187,8 @@ func withinPartyRewardRange(a, b simulation.Spawn) bool {
 isPartyMonster
 
 A party monster: the rarity byte's high nibble is exactly 1. The native
-level-difference scale then halves EXP (0.5f) when the monster's level is below the receiver's (or the party average).
+level-difference scale then halves EXP (0.5f) when the monster's level is
+below the receiver's (or the party average).
 ================
 */
 func isPartyMonster(instance monster.Instance) bool {
@@ -213,7 +214,7 @@ partyRewardFactors
 Natively bonus and level shares spill independently to float32.
 
 evenFloor is a deliberate beta deviation (the growth switch turns it on):
-native CParty_DistributeKillExperience weights each share by level alone,
+native party EXP split weights each share by level alone,
 so a level 1 beside a level 23 took 1/24 of its own kill EXP and party
 power-levelling fell ~13x behind soloing. With the floor no member's share
 drops below an even 1/N split; higher levels keep their larger share.
