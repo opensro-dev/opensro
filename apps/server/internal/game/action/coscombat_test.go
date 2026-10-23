@@ -102,7 +102,7 @@ func TestMonsterCosCastCancelsDepartedOrReplacedPet(t *testing.T) {
 ================
 TestMonsterHitOnMountedRiderLandsOnTheRide
 
-CSkillManager_InitiateSkillCast (59B5F3) retargets a hostile single-target
+The native cast admission retargets a hostile single-target
 skill aimed at a mounted player to the ridden COS. Unmounted, or once the
 ride is dead, the rider keeps the target and the ride is never struck.
 ================

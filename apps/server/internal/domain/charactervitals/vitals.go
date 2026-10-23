@@ -28,7 +28,7 @@ const StatWordMax int64 = 0xffff
 // two DISJOINT derivations agree on this closed form - the community
 // derived it empirically from live retail of exactly our era (S13/S14:
 // nivlam-era emulator scene, 2008/09), and LANE-3 read the same structure
-// out of the cross-version GameServer binary (ParamKeeper seeded with
+// out of the native parameter keeper (seeded with
 // level/STR/INT and a 1.02^(level-1) scale, lane3 notes section F) without
 // ever seeing the closed form. Period observations reproduce it to the
 // digit, and the vendor _AddNewChar SQL creates characters at STR/INT
