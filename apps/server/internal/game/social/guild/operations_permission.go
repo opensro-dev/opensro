@@ -5,16 +5,14 @@ operations_permission.go - the guild master grants member rights
 
 CIFGuildGrantPower's apply (5EE410) sends 0x744E [u8 count] and a [u32
 member jid][u32 rights] pair per changed member
-(NetClient_SendGuildPermissionUpdate744E 5EE1C0); the v1.188 handler is
-CGObjPC_HandleGuildUpdatePermission7104 (5173E0). Only the master grants
-(GuildManager_RequestPermissionUpdate 5C69F0: 0x4C1E), and no more than
-twelve members may hold the union chat right afterwards
-(CGuild_UnionChatWithinLimit 5C49A0: 0x4C4B). A refusal answers 0xB44E
+(client NetClient_SendGuildPermissionUpdate744E 5EE1C0). In the original
+server only the master grants (0x4C1E), and no more than twelve members
+may hold the union chat right afterwards (0x4C4B). A refusal answers 0xB44E
 [2][code] (CPSMission_OnGuildPermissionResult0xB44E 75CB80); success
 sends no answer, only the 0x3B29 0x16 batch of the new rights (mask 0x10)
 to every online member.
 
-INFERENCE: 5C69F0 also refuses removing the storage right from the
+INFERENCE: the original also refuses removing the storage right from the
 member using the guild storage (0x4C4C); no guild storage is ported, so
 that test always admits. The master's own rights are not edited: the
 leader holds them all.
@@ -35,7 +33,7 @@ const (
 	guildUpdateMemberBatch uint8 = 0x16
 	memberDeltaPermissions uint8 = 0x10
 
-	// unionChatMemberLimit is 5C49A0's `count <= 0xC`.
+	// unionChatMemberLimit is the native union-chat limit, `count <= 0xC`.
 	unionChatMemberLimit = 12
 
 	permErrUnionChatFull uint8 = 0x4B
