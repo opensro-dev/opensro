@@ -15,6 +15,8 @@ import (
 	"math"
 	"os"
 	"testing"
+
+	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -97,10 +99,7 @@ TestImportedQuotationRowsRemainDistinctAndPriceable
 ================
 */
 func TestImportedQuotationRowsRemainDistinctAndPriceable(t *testing.T) {
-	data, err := os.ReadFile(".generated/item-quotations.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	data := licensed.SourceDataFile(t, "server/"+TradeQuotationsFile)
 	var catalog struct {
 		Rows []struct {
 			TradeQuotation

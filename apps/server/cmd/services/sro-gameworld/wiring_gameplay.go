@@ -213,7 +213,7 @@ func newGameplayPlane(
 	// SRO_TRADE_TIERS (port-only, not native) prices the shops' trade goods
 	// as ConfigureCommerce loads them, so it is set first.
 	items.TradeTiers = action.TradeTiersFromEnv()
-	if err := items.ConfigureCommerce(devPaths.TextdataDir, extraGoods); err != nil {
+	if err := items.ConfigureCommerce(devPaths.TextdataDir, devPaths.DerivedDir, extraGoods); err != nil {
 		return nil, fmt.Errorf("commerce catalogue: %w", err)
 	}
 	items.ConfigureStorage(authorityStore)

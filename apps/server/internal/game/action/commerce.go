@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"math"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
@@ -39,10 +40,15 @@ The shipped catalogue plus the operator's extra goods (port-only, not
 native; commerce.AddExtraGoods). Nil extra is the v1.150 stock.
 ================
 */
-func (rt *Runtime) ConfigureCommerce(dir string, extra []commerce.ExtraGood) error {
+func (rt *Runtime) ConfigureCommerce(dir, derivedDir string, extra []commerce.ExtraGood) error {
 	c, e := commerce.LoadWithExtraGoods(dir, rt.deps.ItemReferences(), extra)
 	if e != nil {
 		return e
+	}
+	if quoted, err := c.LoadTradeQuotations(derivedDir); err != nil {
+		return err
+	} else if !quoted {
+		log.Warnf("commerce: no %s in the derived game data; trade goods sell at their base price", commerce.TradeQuotationsFile)
 	}
 	// Port-only, not native, and permanent (owner 2026-10-20): no NPC
 	// sells degree-9 Sun gear, whatever SRO_SUN_EVENT_ONLY says. That
