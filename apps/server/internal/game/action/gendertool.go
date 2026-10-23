@@ -3,22 +3,22 @@
 
 gendertool.go - the armour gender change tool
 
-ITEM_MALL_EQUIP_TRANSGENDER_* and their quest twins (3/3/13/8) are 49C2B0
-case 7. The v1.150 client sends the tool dropped on a bag item:
+ITEM_MALL_EQUIP_TRANSGENDER_* and their quest twins (3/3/13/8) run the
+native item-use case 7. The v1.150 client sends the tool dropped on a bag item:
 0x75BD [slot][type][u8 target slot] (CIFInventory_ExecuteItemAction). The
 server admits it:
 
   - the target is a bag slot 13..0x6F (0x1882);
   - it is equipment made for one sex (0x1884,
     UIIT_MSG_STRGERR_INVALID_TRANSGENDER_TARGET);
-  - its degree (CGItem_GetDegree 4775A0: (ItemClass - 1) / 3 + 1) is at
+  - its degree ((ItemClass - 1) / 3 + 1) is at
     most the tool's Param1 (0x1883);
 
-then CGObjPC_ChangeInventoryItemRef (4EFB60) swaps the item's reference in
+then the server swaps the item's reference in
 place and answers v1.150 0x3645 [slot][1][u32 ref], keeping every other
 field of the item.
 
-INFERENCE: v1.188 finds the other sex's item through a reference-data
+INFERENCE: the native server finds the other sex's item through a reference-data
 string this port does not load; the shipped data pairs every such item by
 its codename's _M_ / _W_ segment with the same type, so the port swaps
 that segment and requires the twin to exist.
@@ -37,11 +37,11 @@ import (
 )
 
 const (
-	// Category 1 notices (v1.188 0x188x low bytes).
+	// Category 1 notices (the native 0x188x low bytes).
 	genderErrSlot   uint8 = 0x82
 	genderErrDegree uint8 = 0x83
 	genderErrTarget uint8 = 0x84
-	// itemStateRefFlag is 0x3645's reference field (7654B0 flag 1).
+	// itemStateRefFlag is 0x3645's reference-field flag.
 	itemStateRefFlag uint8 = 1
 )
 
@@ -72,7 +72,7 @@ Runs inside the item use's character Update.
 func (rt *Runtime) useGenderTool(use skillItemUse, c *enterworld.Character, tail []byte, result *OpResult) bool {
 	r := wire.NewReader(tail)
 	target, e := r.U8()
-	// 49C4F3 bounds the slot by v1.188's largest bag (13 + 0x62); every
+	// The native rule bounds the slot by its largest bag (13 + 0x62); every
 	// v1.150 bag is smaller, so the character's own capacity bounds it here.
 	if e != nil || r.Done() != nil || !inventory.IsBagSlot(target, inventory.BagEnd(c)) {
 		*result = itemUseFailure(genderErrSlot)
@@ -100,7 +100,7 @@ func (rt *Runtime) useGenderTool(use skillItemUse, c *enterworld.Character, tail
 		return false
 	}
 	limit, _ := use.ref.NativeFields.Lookup("itemParam1_29c")
-	// 49C55C reads the target's degree through 4775A0.
+	// The native tool reads the target's degree.
 	if int64(enterworld.ItemDegree(ref)) > int64(limit) {
 		*result = itemUseFailure(genderErrDegree)
 		return false
