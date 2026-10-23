@@ -166,7 +166,7 @@ func (rt *Runtime) HandleItemUse(
 		family := admittedItemUseFamily(ref)
 		used = ref
 		// Only the resurrection scroll is usable dead; it refuses the living
-		// itself (49FF20).
+		// itself, as the native use handler does.
 		if family != itemUseResurrection && !enterworld.CharacterAlive(character) {
 			result = itemUseFailure(wire.ErrCodeItemUseDead)
 			return false
@@ -200,7 +200,7 @@ func (rt *Runtime) HandleItemUse(
 				return false
 			}
 			// A quest tool may grant its result before it is spent (the
-			// warehouse amulets, 895BC0): find the used row again by its slot.
+			// warehouse amulets): find the used row again by its slot.
 			rowIndex = slices.IndexFunc(character.MissionInventory, func(row enterworld.InventoryRow) bool {
 				return row.Slot == int64(request.Slot) && row.Codename == ref.Codename
 			})
@@ -400,7 +400,7 @@ func (rt *Runtime) HandleItemUse(
 				return false
 			}
 			if character.NativeBodyStatus == 6 || character.NativeBodyStatus == 7 {
-				result = itemUseFailure(cosSummonPosture) // 49C0B6: posture admission precedes actor creation.
+				result = itemUseFailure(cosSummonPosture) // Natively, posture admission precedes actor creation.
 				return false
 			}
 			if rt.PlayerAttackLocked(divisionID, character.Name) || rt.objectActionCommitted(divisionID, character.Name) {
@@ -545,9 +545,9 @@ func (rt *Runtime) HandleItemUse(
 			return false
 		}
 		if family == itemUseCure {
-			// 49B710 TID3 2: 4EB410 lane 0x100 (universal pill) or 0x40 (other
-			// cures) refuses with the reuse delay; the cure result is ignored,
-			// the use always succeeds and 4E0AB0 locks the lane for 20.1 s
+			// TID3 2: the lane check, 0x100 (universal pill) or 0x40 (other
+			// cures), refuses with the reuse delay; the cure result is ignored,
+			// the use always succeeds and the lane locks for 20.1 s
 			// (pill) or 1.1 s.
 			lane, lockMs := 1, int64(1100)
 			if ref.TypeIDs[3] == 1 {
@@ -593,9 +593,9 @@ func (rt *Runtime) HandleItemUse(
 		}
 		// The cooldown debit and recovery/consumption share this update door.
 		// Refused requests neither extend a deadline nor emit success frames.
-		// 49B710 TID3 1: the lane check (4EB410) precedes the amount; 49AA70
-		// sizes the potion; both amounts <= 0 is error 2; otherwise the item
-		// is consumed even into a full gauge (4EF450 clamps the recovery).
+		// TID3 1: the lane check precedes the amount; the potion sizing
+		// comes next; both amounts <= 0 is error 2; otherwise the item is
+		// consumed even into a full gauge (the recovery is clamped).
 		tid4, _ := potionType(ref.TypeIDs)
 		if character.ItemUseCooldowns[tid4-1] > nowMs {
 			result = itemUseFailure(wire.ErrCodeItemReuseDelay)
@@ -631,7 +631,7 @@ func (rt *Runtime) HandleItemUse(
 			if zombie {
 				nextHP = max(currentHP-amount.hp, 0)
 			} else {
-				// 49A5B0 routes potion steps through the same 4A86A0 recovery
+				// Natively, potion steps go through the same recovery
 				// reduction as skills. Panic applies after potion sizing.
 				reduction, _ := stats.Param(combat.HPRecoveryReductionParameter)
 				nextHP = combat.RecoverVital(currentHP, maxHP, credit.HP, reduction)

@@ -263,7 +263,7 @@ func (rt *Runtime) HandleJobAlias(division string, c *enterworld.Character, payl
 		!rt.nameAllowed(alias) {
 		return jobAliasRefusal(jobErrAliasRule, mode, alias)
 	}
-	// 512540 tests a change's fee before its database job checks the name.
+	// The alias handler tests a change's fee before its database job checks the name.
 	if mode == jobAliasModeCreate && uint64(jobAliasChangeFee(c)) > goldOf(c) {
 		return jobAliasRefusal(jobErrNoGold, mode, alias)
 	}
@@ -304,7 +304,7 @@ func (rt *Runtime) HandleJobAlias(division string, c *enterworld.Character, payl
 jobAliasChangeFee
 
 The gold changing an alias costs: nothing for a first alias, else the
-level times 50,000 (512540: a non-empty current alias is a change).
+level times 50,000 (a non-empty current alias is a change).
 ================
 */
 func jobAliasChangeFee(c *enterworld.Character) int64 {

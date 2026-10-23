@@ -75,7 +75,7 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	if ref.TypeIDs == [4]int64{3, 3, 12, 1} {
 		return itemUseMercenary
 	}
-	// 49B9F0 case 4 (type 4 = 5): the Global Chatting item (globalchat.go).
+	// The use dispatch's case 4 (type 4 = 5): the Global Chatting item (globalchat.go).
 	if ref.TypeIDs == [4]int64{3, 3, 3, 5} {
 		return itemUseGlobalChat
 	}
@@ -155,11 +155,11 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 		}
 		return itemUseStatRecall
 	}
-	// 49F590: the composite scroll (UIU1 param jobs).
+	// The composite scroll (UIU1 param jobs).
 	if ref.TypeIDs == [4]int64{3, 3, 13, 14} {
 		return itemUseComposite
 	}
-	// 49D240, and the v1.150 client appends the COS gid for TID4 4/5/7
+	// The pet item use, and the v1.150 client appends the COS gid for TID4 4/5/7
 	// (6963CF) and for the TID3 2 TID4 7 cure (696336). TID4 6 is the
 	// revival scroll (696490 / server case 6).
 	if ref.TypeIDs[0] == 3 && ref.TypeIDs[1] == 3 && ref.TypeIDs[2] == 1 {
@@ -175,8 +175,8 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	if ref.TypeIDs == [4]int64{3, 3, 2, 7} {
 		return itemUsePetCure
 	}
-	// 49B710: TID3 2 is the player cure family; TID4 1 is the universal pill.
-	// TID4 7 is the pet cure, which 49D240 applies to the owner's COS, not
+	// TID3 2 is the player cure family; TID4 1 is the universal pill.
+	// TID4 7 is the pet cure, which the pet item use applies to the owner's COS, not
 	// the player, so it never enters the player cure path.
 	if ref.TypeIDs[0] == 3 && ref.TypeIDs[1] == 3 && ref.TypeIDs[2] == 2 && ref.TypeIDs[3] != 7 {
 		return itemUseCure

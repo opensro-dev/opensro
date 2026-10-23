@@ -417,8 +417,8 @@ func (rt *Runtime) reloadJobDress(division string, c *enterworld.Character, now 
 ================
 advanceJobDresses
 
-Carries out every suit move whose timer ran out: 4F0C90 validates the
-remembered move again and answers it.
+Carries out every suit move whose timer ran out: the native dress handler
+validates the remembered move again and answers it.
 ================
 */
 func (rt *Runtime) advanceJobDresses(now int64) {
