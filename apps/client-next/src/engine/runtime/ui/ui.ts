@@ -2109,7 +2109,7 @@ export function createUi(
 			// an inventory activation. A confirmed use already has its target.
 			if (
 				item && armsItemTargetCursor( item.typeFlags ) && command.summonerSlot === undefined &&
-				command.revivalSlot === undefined
+				command.revivalSlot === undefined && command.targetSlot === undefined
 			) {
 				if ( item.slot < 13 || view?.gameplay?.inventoryPending ) return;
 				carriedItem = null;

@@ -182,12 +182,13 @@ export function isRevivalGrass( flags: number ): boolean {
 armsItemTargetCursor
 
 Right-button use of these items arms cursor A6 instead of using them
-(561D50: group 1 subtype 6 at 5621C9, the clock through the group-13 branch).
+(561D50: group 1 subtype 6; group 13 subtypes 8 and 12 at 562140..5621D9).
 The next inventory click names the item they act on.
 ================
 */
 export function armsItemTargetCursor( flags: number ): boolean {
-	return isRevivalGrass( flags ) || isCompanionLeaseItem( flags );
+	return isRevivalGrass( flags ) || isCompanionLeaseItem( flags ) ||
+		(flags & 0x7c) === 0x6c && (flags >>> 7 & 15) === 13 && (flags >>> 11 & 31) === 8;
 }
 
 /*
