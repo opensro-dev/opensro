@@ -3,13 +3,13 @@
 
 rewardchoice.go - selection rewards offered as NPC completion rows
 
-_RefQuestReward SelectionCnt quests grant one of several item rewards. The
+Reward-table SelectionCnt quests grant one of several item rewards. The
 v1.150 client ships no reward-selection window (its CIFQuestReward only
-gives up or completes, 5C1FA0), so the completing NPC lists one row per
+gives up or completes, client 5C1FA0), so the completing NPC lists one row per
 choice, titled by the choice's own symbol (QNO_EU_EASTEU_5's _09 Str
 Scroll and _10 Int Scroll rows) or by its item's name, and the row picked
-names the reward. v1.188's selection packet 0x7515 (SR_GameServer
-51B370: quest id, SelectionCnt, the picked indices) has no v1.150
+names the reward. The later protocol's selection packet 0x7515 (quest
+id, SelectionCnt, the picked indices) has no v1.150
 counterpart: there 0x7515 opens the guild storage (client 701770).
 
 ===========================================================================
@@ -110,7 +110,7 @@ func resolveRewardChoices(spec QuestSpec, items enterworld.ItemRefSource) ([]Rew
 rewardChoiceOffered
 
 Whether the character may pick choice i. IsCheckCountry hides an item of
-the other country; a country-3 item suits everyone. The v1.188 server
+the other country; a country-3 item suits everyone. The later server
 skips the IsCheck* columns because its client filters the selection
 window; the v1.150 NPC rows have no client filter, so the server applies
 the one check the item data can answer. IsCheckClass and IsCheckGender
