@@ -19,7 +19,7 @@ Thanks for helping rebuild Silkroad Online! OpenSRO is a full client and server,
 OpenSRO ports the original game's behaviour; it does not reinvent it.
 
 - **The v1.150 client defines what exists:** its data, its network messages and its interface.
-- **Server-only rules** follow the original server's instructions (the v1.188 server binary), trimmed to the v1.150 feature set.
+- **Server-only rules** follow the original server's instructions, trimmed to the v1.150 feature set.
 - **When neither binary shows a rule,** infer how the original would have done it, write that inference in a code comment, and ship it. Don't leave an open "no evidence" question behind.
 - **Cite your evidence briefly:** a function address in a comment, the value in a named constant. Long disassembly notes belong in the research tree, not in the source.
 
