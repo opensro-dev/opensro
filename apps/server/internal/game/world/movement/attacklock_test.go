@@ -3,9 +3,8 @@
 
 attacklock_test.go - a ground command during a cast is dropped
 
-CGObjPC_IsMotionChangeLocked (4EF880) feeds CGObjChar_IsAttackLocked
-(4AAB40) to CGObjChar_HandleMoveCommand (4B0EA0): while the casting
-instance is held, 0x7021 is dropped, not queued.
+The native attack lock gates the move-command handler: while the
+casting instance is held, 0x7021 is dropped, not queued.
 
 ===========================================================================
 */
