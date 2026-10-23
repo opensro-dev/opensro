@@ -38,18 +38,21 @@ import (
 
 /*
 ================
-textdataDir
+dataDirs
+
+The textdata and derived-data folders: the verified projection's, or only
+the -textdata override (which has no derived data).
 ================
 */
-func textdataDir(override string) (string, error) {
+func dataDirs(override string) (string, string, error) {
 	if override != "" {
-		return override, nil
+		return override, "", nil
 	}
 	paths, err := gamedata.Resolve()
 	if err != nil {
-		return "", fmt.Errorf("server game data: %w", err)
+		return "", "", fmt.Errorf("server game data: %w", err)
 	}
-	return paths.TextdataDir, nil
+	return paths.TextdataDir, paths.DerivedDir, nil
 }
 
 /*
@@ -260,7 +263,7 @@ func run(out, release, textdata string) error {
 	if err := resolveShardSettings(); err != nil {
 		return err
 	}
-	dir, err := textdataDir(textdata)
+	dir, derivedDir, err := dataDirs(textdata)
 	if err != nil {
 		return err
 	}
@@ -330,7 +333,7 @@ func run(out, release, textdata string) error {
 	if err != nil {
 		return fmt.Errorf("shops: %w", err)
 	}
-	alchemyCatalog, err := alchemy.LoadCatalog(dir, itemSource)
+	alchemyCatalog, err := alchemy.LoadCatalog(alchemy.Sources{TextdataDir: dir, DerivedDir: derivedDir, Items: itemSource})
 	if err != nil {
 		return fmt.Errorf("alchemy: %w", err)
 	}

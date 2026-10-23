@@ -153,7 +153,7 @@ func newGameplayPlane(
 	deps.EntryCompanionActionSpeed = items.EntryCompanionActionSpeed
 	deps.EntryCompanionSpawn = items.EntryCompanionSpawn
 	deps.EntryCompanionMovementSpeeds = items.EntryCompanionMovementSpeeds
-	if err := items.ConfigureAlchemy(devPaths.TextdataDir); err != nil {
+	if err := items.ConfigureAlchemy(devPaths.TextdataDir, devPaths.DerivedDir); err != nil {
 		return nil, fmt.Errorf("alchemy catalogue: %w", err)
 	}
 	if err := items.ConfigureGacha(devPaths.TextdataDir); err != nil {

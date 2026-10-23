@@ -9,6 +9,7 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/inventory"
+	"opensro.online/server/internal/testsupport/licensed"
 )
 
 // Portable fixture for admission and transaction tests. PublishedCatalog tests
@@ -23,7 +24,8 @@ func dissolveProfileFixture(t *testing.T) (*Catalog, []inventory.Item) {
 			Degree   int
 		}
 	}
-	if err := json.Unmarshal(dissolveV1150, &p); err != nil {
+	profile := dissolveProfile(t)
+	if err := json.Unmarshal(profile, &p); err != nil {
 		t.Fatal(err)
 	}
 	for i, row := range p.Rows {
@@ -47,10 +49,17 @@ func dissolveProfileFixture(t *testing.T) (*Catalog, []inventory.Item) {
 	c.Items[r.Name] = r
 	c.Magic[99] = Magic{ID: 99}
 	items[0].MagicOptions = []uint64{99}
-	if err := c.loadDissolveProfile(); err != nil {
+	if err := c.loadDissolveProfile(profile); err != nil {
 		t.Fatal(err)
 	}
 	return c, items
+}
+
+// dissolveProfile is the operator's profile from source-data; the test
+// skips without it.
+func dissolveProfile(t *testing.T) []byte {
+	t.Helper()
+	return licensed.SourceDataFile(t, "server/"+DissolveProfileFile)
 }
 
 func TestDissolveProfileWeightsAndExclusions(t *testing.T) {
@@ -123,7 +132,7 @@ func TestDissolveProfileAdmissionIsAtomic(t *testing.T) {
 			case "element":
 				delete(c.Items, "ITEM_ETC_ARCHEMY_ELEMENT_WIND_12")
 			}
-			if err := c.loadDissolveProfile(); err == nil || !reflect.DeepEqual(before, c.DissolveDrops) {
+			if err := c.loadDissolveProfile(dissolveProfile(t)); err == nil || !reflect.DeepEqual(before, c.DissolveDrops) {
 				t.Fatal("partial/invalid profile published", err)
 			}
 		})

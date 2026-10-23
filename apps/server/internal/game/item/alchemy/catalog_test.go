@@ -36,8 +36,13 @@ func TestPublishedCatalog(t *testing.T) {
 	// checkout skips, the full check (SRO_REQUIRE_GAME_DATA=1) fails.
 	licensed.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
-	c, err := LoadCatalog(dir, enterworld.NewTextdataItems(dir))
+	c, err := LoadCatalog(Sources{TextdataDir: dir, Items: enterworld.NewTextdataItems(dir)})
 	if err != nil {
+		t.Fatal(err)
+	}
+	// The profile is the operator's source-data, admitted against the real
+	// tables here whether or not the projection was rebuilt with it.
+	if err := c.loadDissolveProfile(dissolveProfile(t)); err != nil {
 		t.Fatal(err)
 	}
 	if len(c.Items) < 1000 || len(c.Magic) < 100 {

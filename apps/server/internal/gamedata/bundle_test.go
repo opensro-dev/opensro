@@ -26,7 +26,8 @@ func TestOpenValidatesCompletePinnedBundle(t *testing.T) {
 	}
 	if bundle.CharacterAuthorityDir != filepath.Join(root, "character-authority") ||
 		bundle.TextdataDir != filepath.Join(root, "textdata") ||
-		bundle.WorldAuthorityDir != filepath.Join(root, "world-authority") {
+		bundle.WorldAuthorityDir != filepath.Join(root, "world-authority") ||
+		bundle.DerivedDir != filepath.Join(root, DerivedDirName) {
 		t.Fatalf("unexpected projection paths: %+v", bundle)
 	}
 }

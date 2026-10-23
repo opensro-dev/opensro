@@ -32,6 +32,7 @@ func TestResolveUsesShippedProjection(t *testing.T) {
 		"character authority": paths.CharacterAuthorityDir,
 		"textdata":            paths.TextdataDir,
 		"world authority":     paths.WorldAuthorityDir,
+		"derived":             paths.DerivedDir,
 	} {
 		if !filepath.IsAbs(value) {
 			t.Fatalf("%s path is not absolute: %q", name, value)

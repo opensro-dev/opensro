@@ -2,19 +2,27 @@ package alchemy
 
 import (
 	"bytes"
-	_ "embed"
 	"encoding/json"
 	"fmt"
 )
 
-// This is a version adapter, not recovered Service=2 data. The user-authorized
-// inference preserves the later dump's relative weights for v1.150-published
-// stones. Source Service remains 1.
-//
-//go:embed dissolve_v1150.json
-var dissolveV1150 []byte
+// DissolveProfileFile is the dissolution profile in the projection's
+// derived data (gamedata DerivedDir). It is a version adapter, not
+// recovered Service=2 data: the user-authorized inference preserves the
+// later dump's relative weights for v1.150-published stones. Source
+// Service remains 1. It comes from the operator's source-data, never the
+// repository; without it dissolution is unavailable.
+const DissolveProfileFile = "alchemy/dissolve_v1150.json"
 
-func (c *Catalog) loadDissolveProfile() error {
+/*
+================
+loadDissolveProfile
+
+Admit the whole profile or nothing: pools publish only after every row,
+degree and element checks out.
+================
+*/
+func (c *Catalog) loadDissolveProfile(data []byte) error {
 	var profile struct {
 		Policy         string `json:"policy"`
 		SourceService  int    `json:"sourceService"`
@@ -26,7 +34,7 @@ func (c *Catalog) loadDissolveProfile() error {
 			Weight   uint32 `json:"weight"`
 		} `json:"rows"`
 	}
-	d := json.NewDecoder(bytes.NewReader(dissolveV1150))
+	d := json.NewDecoder(bytes.NewReader(data))
 	d.DisallowUnknownFields()
 	if err := d.Decode(&profile); err != nil {
 		return fmt.Errorf("alchemy: dissolution profile: %w", err)

@@ -59,6 +59,9 @@ type DevPaths struct {
 	// StructureZones is world-authority/structure-zones.json: the event
 	// zones the fortress worlds' structures stand on.
 	StructureZones string
+	// DerivedDir is the projection's derived data (gamedata Paths.DerivedDir):
+	// tables from the operator's source-data. Empty disables what they feed.
+	DerivedDir string
 }
 
 /*

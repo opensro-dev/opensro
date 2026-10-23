@@ -4,7 +4,8 @@
 buildServerGameDataBundle.mjs - the verified server game-data projection
 
 Builds the immutable projection GameWorld reads: the retail textdata, the
-character authority, authored areas and movement authority, with a manifest
+character authority, authored areas and movement authority, the derived
+tables from the operator's source-data (derived/), with a manifest
 that pins every file's size and digest, plus its lossless release archive.
 It is written inside the Go module (paths.mjs serverGameDataRoot), where the
 server's tests and Go's test cache see it.
@@ -26,7 +27,8 @@ import {
 	publicRoot,
 	rebuildRoot,
 	retailTextdataRoot,
-	serverGameDataRoot
+	serverGameDataRoot,
+	sourceDataRoot
 } from "../world/paths.mjs";
 import { buildStructureZoneProjection } from "./structureZones.mjs";
 import { buildServerGameDataArchive } from "./serverGameDataArchive.mjs";
@@ -74,6 +76,7 @@ export async function buildServerGameDataBundle( options ) {
 		await buildAreaProjection( temporaryRoot, worldPublicRoot );
 		await buildMovementProjection( temporaryRoot, worldPublicRoot );
 		await buildStructureZoneProjection( temporaryRoot, options.objectStringFile ?? OBJECT_STRING_FILE );
+		await copyDerivedProjection( temporaryRoot, options.derivedRoot ?? path.join( sourceDataRoot, "server" ) );
 
 		const files = await describeProjectionFiles( temporaryRoot );
 		const manifest = {
@@ -639,6 +642,29 @@ function projectDungeonResources( source ) {
 				}) )
 		}
 	};
+}
+
+/*
+================
+copyDerivedProjection
+
+Tables derived from the operator's own sources (<game root>/source-data/
+server), copied unchanged into derived/ (gamedata DerivedDirName). The
+repository never carries them; without the folder the projection simply
+has no derived/, and the server disables only the features they feed.
+================
+*/
+async function copyDerivedProjection( bundleRoot, sourceRoot ) {
+	if ( !(await directoryExists( sourceRoot )) ) {
+		console.log( `  derived: none (no ${sourceRoot})` );
+		return;
+	}
+	const targetRoot = path.join( bundleRoot, "derived" );
+	await walkFiles( sourceRoot, async ( absolutePath ) => {
+		const target = path.join( targetRoot, path.relative( sourceRoot, absolutePath ) );
+		await mkdir( path.dirname( target ), { recursive: true } );
+		await copyFile( absolutePath, target );
+	} );
 }
 
 /*

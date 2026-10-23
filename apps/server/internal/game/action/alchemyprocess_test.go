@@ -17,6 +17,8 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sync"
 	"testing"
@@ -34,7 +36,17 @@ func TestAlchemyPublishedDissolveCommitsOnceThroughHandler(t *testing.T) {
 	// checkout skips, the full check (SRO_REQUIRE_GAME_DATA=1) fails.
 	licensed.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
-	catalog, err := alchemy.LoadCatalog(dir, enterworld.NewTextdataItems(dir))
+	// The dissolution profile is the operator's source-data: lay it out as the
+	// projection's derived data would (skips without it).
+	derived := t.TempDir()
+	profile := filepath.Join(derived, filepath.FromSlash(alchemy.DissolveProfileFile))
+	if err := os.MkdirAll(filepath.Dir(profile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(profile, licensed.SourceDataFile(t, "server/"+alchemy.DissolveProfileFile), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	catalog, err := alchemy.LoadCatalog(alchemy.Sources{TextdataDir: dir, DerivedDir: derived, Items: enterworld.NewTextdataItems(dir)})
 	if err != nil {
 		t.Fatal(err)
 	}

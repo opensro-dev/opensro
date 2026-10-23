@@ -34,7 +34,7 @@ TestAstralOnAccessoryFollowsTheImmortalCharge
 func TestAstralOnAccessoryFollowsTheImmortalCharge(t *testing.T) {
 	licensed.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
-	c, err := LoadCatalog(dir, enterworld.NewTextdataItems(dir))
+	c, err := LoadCatalog(Sources{TextdataDir: dir, Items: enterworld.NewTextdataItems(dir)})
 	if err != nil {
 		t.Fatal(err)
 	}

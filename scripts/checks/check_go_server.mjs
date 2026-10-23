@@ -59,7 +59,7 @@ import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "n
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { publicAssetsRoot, retailTextdataRoot } from "../build/world/paths.mjs";
+import { publicAssetsRoot, retailTextdataRoot, sourceDataRoot } from "../build/world/paths.mjs";
 import { findPass, fingerprintOf, recordPass, snapshotAsync } from "./checkStamps.mjs";
 
 const scriptDirectory = path.dirname( fileURLToPath( import.meta.url ) );
@@ -507,8 +507,9 @@ function compilerFirstEnvironment() {
 licensedDataIdentity
 
 A digest of the licensed data the server's tests read from outside the
-module: the stat of every retail textdata file and the published pack
-manifest's bytes (which pin every packed asset by sha256). Absent data
+module: the stat of every retail textdata file, the stat of every file in
+the operator's source-data (licensed.SourceDataFile reads it) and the
+published pack manifest's bytes (which pin every packed asset by sha256). Absent data
 contributes its absence, so building it later changes the identity.
 ================
 */
@@ -521,6 +522,18 @@ function licensedDataIdentity() {
 		}
 	} catch ( error ) {
 		hash.update( `textdata ${error.code ?? error}\n` );
+	}
+	try {
+		for ( const name of readdirSync( sourceDataRoot, { recursive: true } ).map( String ).sort() ) {
+			const info = statSync( path.join( sourceDataRoot, name ) );
+			if ( info.isFile() ) {
+				hash.update( `source-data/${name}|${info.size}|${info.mtimeMs}
+` );
+			}
+		}
+	} catch ( error ) {
+		hash.update( `source-data ${error.code ?? error}
+` );
 	}
 	try {
 		hash.update( readFileSync( path.join( publicAssetsRoot, "packs", "manifest.json" ) ) );

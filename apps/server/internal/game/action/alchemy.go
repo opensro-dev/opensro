@@ -15,10 +15,14 @@ import (
 	"opensro.online/server/internal/transport"
 )
 
-func (rt *Runtime) ConfigureAlchemy(dir string) error {
-	c, err := alchemy.LoadCatalog(dir, rt.deps.ItemReferences())
+func (rt *Runtime) ConfigureAlchemy(textdataDir, derivedDir string) error {
+	c, err := alchemy.LoadCatalog(alchemy.Sources{TextdataDir: textdataDir, DerivedDir: derivedDir,
+		Items: rt.deps.ItemReferences()})
 	if err != nil {
 		return err
+	}
+	if c.DissolveDrops == nil {
+		log.Warnf("alchemy: no %s in the derived game data; dissolution is unavailable", alchemy.DissolveProfileFile)
 	}
 	// Port-only, not native: unset or "off" keeps every authored chance.
 	if c.Rates, err = alchemy.ReinforceRatesFromEnv(); err != nil {

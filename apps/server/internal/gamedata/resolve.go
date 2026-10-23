@@ -68,6 +68,7 @@ type Paths struct {
 	CharacterAuthorityDir string
 	TextdataDir           string
 	WorldAuthorityDir     string
+	DerivedDir            string
 }
 
 /*
@@ -190,6 +191,7 @@ func resolveUncached(runtimeRoot, expectedManifestDigest string) (Paths, error) 
 		CharacterAuthorityDir: bundle.CharacterAuthorityDir,
 		TextdataDir:           bundle.TextdataDir,
 		WorldAuthorityDir:     bundle.WorldAuthorityDir,
+		DerivedDir:            bundle.DerivedDir,
 	}, nil
 }
 

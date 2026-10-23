@@ -245,6 +245,45 @@ func RetailTextdataDir(t testing.TB) string {
 
 /*
 ==================
+SourceDataFile
+
+One file of the operator's source-data (<game root>/source-data/<name>,
+slash-separated), the inputs the repository never carries. Absent, it
+skips the test, or fails it under SRO_REQUIRE_GAME_DATA=1, by the same
+verdict as RequireGameData. check_go_server.mjs folds the folder into
+SRO_LICENSED_DATA_IDENTITY, so cached results follow its contents.
+==================
+*/
+func SourceDataFile(t testing.TB, name string) []byte {
+	t.Helper()
+	_ = os.Getenv(IdentityEnv)
+	repository, err := repositoryRoot()
+	if err != nil {
+		t.Fatalf("locate the repository: %v", err)
+	}
+	gameRoot, err := resolveGameRoot(repository)
+	if err != nil {
+		t.Fatalf("locate the game root: %v", err)
+	}
+	path := filepath.Join(gameRoot, "source-data", filepath.FromSlash(name))
+	data, err := os.ReadFile(path)
+	if err == nil {
+		return data
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("read source-data %s: %v", name, err)
+	}
+	switch verdict, reason := gameDataVerdict([]string{path}, nil, os.Getenv(RequireEnv) == "1"); verdict {
+	case gameDataFail:
+		t.Fatal(reason)
+	default:
+		t.Skip(reason)
+	}
+	return nil
+}
+
+/*
+==================
 resolveGameRoot
 
 The directory holding extracted/, by the rule of scripts/build/world/paths.mjs

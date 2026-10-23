@@ -19,6 +19,14 @@ this way (see `internal/game/world/movement/runtime.go`); match it.
   binary and covered by tests, so a bad row is a build defect (the
   `regexp.MustCompile` pattern), not an input error. Do not convert those
   panics into error plumbing.
+- Game data is never embedded or written into Go source: no tables extracted
+  from database backups, server files or the client. It comes from the
+  operator's `<game root>/source-data/server`, which the bundle build copies
+  into the projection's `derived/` (`gamedata.Paths.DerivedDir`, carried in
+  `enterworld.DevPaths.DerivedDir`). A loader reads its table there; a missing
+  table disables only the feature it feeds, with one startup warning.
+  Tests read the table with `licensed.SourceDataFile` (skips without it) or
+  use a small synthetic table. `alchemy.DissolveProfileFile` is the reference.
 - Prefer a sub-package over another prefix-named file group inside
   `internal/game/action` or `internal/game/enterworld`.
 - Avoid new package-level mutable state and `context.Background()` in

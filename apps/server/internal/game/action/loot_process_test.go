@@ -30,7 +30,7 @@ func TestPublishedLootTabletsProduceAuthoredProduct(t *testing.T) {
 	licensed.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(dir)
-	catalog, err := alchemy.LoadCatalog(dir, items)
+	catalog, err := alchemy.LoadCatalog(alchemy.Sources{TextdataDir: dir, Items: items})
 	if err != nil {
 		t.Fatal(err)
 	}

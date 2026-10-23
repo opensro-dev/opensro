@@ -176,6 +176,7 @@ func newGameWorldApplication(
 	)
 	devPaths.AuthoredAreas = authoredAreas
 	devPaths.StructureZones = filepath.Join(dataPaths.WorldAuthorityDir, "structure-zones.json")
+	devPaths.DerivedDir = dataPaths.DerivedDir
 	characterRoster, err := enterworld.LoadRoster(devPaths.RosterPath)
 	if err != nil {
 		return nil, fmt.Errorf("character roster: %w", err)

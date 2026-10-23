@@ -33,6 +33,10 @@ const (
 	maxBundleBytes   = int64(32) << 30
 )
 
+// DerivedDirName is the projection folder for data derived from the
+// operator's source-data (buildServerGameDataBundle.mjs copyDerivedProjection).
+const DerivedDirName = "derived"
+
 var requiredServerFiles = []string{
 	"character-authority/catalog.json",
 	"textdata/characterdata.txt",
@@ -82,6 +86,10 @@ type Bundle struct {
 	CharacterAuthorityDir string
 	TextdataDir           string
 	WorldAuthorityDir     string
+	// DerivedDir holds game data derived from the operator's own sources
+	// (<game root>/source-data/server), never from the repository. A table
+	// that is absent disables only the feature it feeds.
+	DerivedDir string
 }
 
 // Open validates identity, compatibility, the exact file set, every file
@@ -165,6 +173,7 @@ func Open(root, expectedManifestDigest string) (Bundle, error) {
 		CharacterAuthorityDir: filepath.Join(realRoot, "character-authority"),
 		TextdataDir:           filepath.Join(realRoot, "textdata"),
 		WorldAuthorityDir:     filepath.Join(realRoot, "world-authority"),
+		DerivedDir:            filepath.Join(realRoot, DerivedDirName),
 	}, nil
 }
 

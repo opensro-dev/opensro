@@ -66,6 +66,7 @@ func Check() (Result, error) {
 	devPaths := enterworld.DevPathsFromEnv(dataPaths.CharacterAuthorityDir, dataPaths.TextdataDir)
 	devPaths.AuthoredAreas = authoredAreas
 	devPaths.StructureZones = filepath.Join(dataPaths.WorldAuthorityDir, "structure-zones.json")
+	devPaths.DerivedDir = dataPaths.DerivedDir
 	roster, err := enterworld.LoadRoster(devPaths.RosterPath)
 	if err != nil {
 		return result, fmt.Errorf("character roster: %w", err)
@@ -93,7 +94,7 @@ func Check() (Result, error) {
 		configure func(string) error
 	}{
 		{"portal catalogue", items.ConfigurePortals},
-		{"alchemy catalogue", items.ConfigureAlchemy},
+		{"alchemy catalogue", func(dir string) error { return items.ConfigureAlchemy(dir, devPaths.DerivedDir) }},
 		{"gacha catalogue", items.ConfigureGacha},
 		{"stall network", items.ConfigureStallNetwork},
 		// The owner's default extra goods must resolve against the data.

@@ -46,7 +46,7 @@ func TestPublishedCatalogStoneStackPlacement(t *testing.T) {
 					t.Fatalf("raise stone caps: count %d, error %v", count, err)
 				}
 			}
-			catalog, err := LoadCatalog(dir, source)
+			catalog, err := LoadCatalog(Sources{TextdataDir: dir, Items: source})
 			if err != nil {
 				t.Fatal(err)
 			}

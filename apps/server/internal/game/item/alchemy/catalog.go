@@ -14,8 +14,10 @@ those rules read.
 package alchemy
 
 import (
+	"errors"
 	"fmt"
 	"math"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -90,10 +92,26 @@ type Catalog struct {
 
 /*
 ================
+Sources
+
+What LoadCatalog reads: the projection's textdata and derived data
+(gamedata Paths) and the item references. An empty DerivedDir, or a
+missing table in it, leaves only the feature that table feeds disabled.
+================
+*/
+type Sources struct {
+	TextdataDir string
+	DerivedDir  string
+	Items       enterworld.ItemRefSource
+}
+
+/*
+================
 LoadCatalog
 ================
 */
-func LoadCatalog(dir string, source enterworld.ItemRefSource) (*Catalog, error) {
+func LoadCatalog(sources Sources) (*Catalog, error) {
+	dir, source := sources.TextdataDir, sources.Items
 	c := &Catalog{Items: map[string]Reference{}, Magic: map[uint16]Magic{}}
 	stackOverrides := map[string]uint16{}
 	files, err := filepath.Glob(filepath.Join(dir, "itemdata*.txt"))
@@ -193,8 +211,12 @@ func LoadCatalog(dir string, source enterworld.ItemRefSource) (*Catalog, error) 
 	if err := c.loadAvatarOptions(dir); err != nil {
 		return nil, err
 	}
-	if err := c.loadDissolveProfile(); err != nil {
+	if profile, err := readDerived(sources.DerivedDir, DissolveProfileFile); err != nil {
 		return nil, err
+	} else if profile != nil {
+		if err := c.loadDissolveProfile(profile); err != nil {
+			return nil, err
+		}
 	}
 	// The dissolution profile validates authored singleton stones. Apply
 	// port-only placement caps after admission so production uses the same
@@ -293,4 +315,26 @@ func (m Magic) Allows(flags uint16) bool {
 		}
 	}
 	return false
+}
+
+/*
+================
+readDerived
+
+One table of the projection's derived data, or nil when there is no derived
+folder or the table is absent (the feature it feeds stays off).
+================
+*/
+func readDerived(dir, name string) ([]byte, error) {
+	if dir == "" {
+		return nil, nil
+	}
+	data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(name)))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("alchemy: %s: %w", name, err)
+	}
+	return data, nil
 }
