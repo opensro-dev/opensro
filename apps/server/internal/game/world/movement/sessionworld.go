@@ -235,7 +235,7 @@ capturePeerAppearance copies the appearance inputs off the live record.
 MUST run inside the store's read door (Deps.Read) - it dereferences the
 ModelRef/GuildID/BodyShapeByte pointers and walks the MissionInventory
 slice, all of which MutateCharacter closures swap concurrently. Only the
-equipment-band rows copy (the sub_86afb0 equip loop's input); the row
+equipment-band rows copy (the 86AFB0 equip loop's input); the row
 filter matches the emission filter peerAppearance applied before the
 capture/build split, so the wire output is unchanged.
 ==================
@@ -263,9 +263,8 @@ func capturePeerAppearance(character *enterworld.Character, resolvedModelRef uin
 	}
 	captured.visualFlags = enterworld.ResolveVisualFlags(character)
 	// A worn job suit shows the job and its grade (job mode), and other
-	// players see the job alias in place of the name: v1.188's spawn tail
-	// (4E5B00, 4E5B55) writes vfunc +0xF0 (the alias, CInstancePC +0x48)
-	// unless the job state is 4, and the name (+0xEC) only then. The
+	// players see the job alias in place of the name: the native spawn tail
+	// writes the alias unless the job state is 4, and the name only then. The
 	// v1.150 client reads that one string as the peer's name (869E77). Its
 	// own board takes the alias only at world entry (8675F0 calls vtable
 	// +0x74 with +0x1898 when the entry's slot-8 suit sets a job class);
@@ -318,11 +317,11 @@ peerAppearance
 
 peerAppearance builds the tick-time simulation.PeerAppearance value copy from
 the door-captured character fields - every field is REAL persisted state:
-the model ref (the sub_850c60 resolve target on the viewer's client), the
+the model ref (the 850C60 resolve target on the viewer's client), the
 character name, the creation body-shape byte (-> CICUser +0x758), the
 WORN inventory rows (the equipment-band slots 0..12) in slot order for the
-sub_86afb0 equip loop, and - for guild members - the guild identity the
-sub_869df0 non-local tail carries (name/id/grant/crestParam, resolved
+86AFB0 equip loop, and - for guild members - the guild identity the
+869DF0 non-local tail carries (name/id/grant/crestParam, resolved
 through the SAME guild door the 0x32C4 seed encodes from; a non-member or
 a dangling FK honestly leaves the guild fields zero, so the client's
 BindGuild leg stays unreached exactly like the retail no-guild row). nil
@@ -366,7 +365,7 @@ func peerAppearance(guilds enterworld.GuildStore, unions *union.Authority, divis
 					appearance.GuildGrantName = member.GrantName
 					// The member row's fortress-war role byte rides the
 					// spawn guild sub-block's trailing team byte (client
-					// sub_869df0 @0x0086a1b2 -> CICPlayer+0x7e0) - the
+					// 869DF0 @0x0086a1b2 -> CICPlayer+0x7e0) - the
 					// same persisted byte the 0x32C4 member loop encodes.
 					appearance.FortSiegeAuthority = member.FortressRole
 					break

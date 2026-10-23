@@ -10,14 +10,14 @@ motionstate.go - movement command admission and state transitions
 //
 // WIRE CONTRACT (the client folds are the surviving contract):
 //
-//   - C->S 0x7017 (sub_6ff740 NetSend_MotionState7017): exactly ONE code
-//     byte. 2 = request walk / 3 = request run (sub_862850 sends the
-//     opposite of the +0x255 mode byte, which sub_858450 writes as
-//     0=walk/1=run) and 4 = sit/stand toggle (sub_862870 always sends 4;
+//   - C->S 0x7017 (6FF740 NetSend_MotionState7017): exactly ONE code
+//     byte. 2 = request walk / 3 = request run (862850 sends the
+//     opposite of the +0x255 mode byte, which 858450 writes as
+//     0=walk/1=run) and 4 = sit/stand toggle (862870 always sends 4;
 //     sit-vs-stand is server-authoritative).
-//   - S->C 0xB017 (sub_775db0): [u8 result], result 1 = silent success.
-//   - S->C 0x3122 stateType 1 (sub_777b60 -> sub_858450 SetRunWalkMode +
-//     sub_58bbc0 SetupActionButton + sub_573b70 HUD icons):
+//   - S->C 0xB017 (775DB0): [u8 result], result 1 = silent success.
+//   - S->C 0x3122 stateType 1 (777B60 -> 858450 SetRunWalkMode +
+//     58BBC0 SetupActionButton + 573B70 HUD icons):
 //     [u32 gid][u8 1][u8 value] with value 0 stand / 2 walk / 3 run /
 //     4 sit - one shared motion enum in both directions.
 //
@@ -76,7 +76,7 @@ authoritative world plane and answers with the client-contract frames.
 Codes 2/3 set WorldState.MovementMode (persisted through the same
 write-back the move lane owns) and, when a move is in flight and the
 gait actually changed, re-time the live segment from the interpolated
-point at the new wire speed - the server mirror of sub_858450 restarting
+point at the new wire speed - the server mirror of 858450 restarting
 an active path-follow state on the new speed channel. Code 4 toggles the
 runtime-only sitting posture; the answered 0x3122 value is 4 (sit) or
 0 (stand), the two SetRunWalkMode motion-state arms.
@@ -112,8 +112,7 @@ func (rt *Runtime) HandleMotionState(divisionID string, character *enterworld.Ch
 		return refusedMotion(fmt.Sprintf("unknownCode 0x%02X", code))
 	}
 
-	// CGObjChar_RequestMotionChange (4B14B2): a masked player (msch 1)
-	// cannot sit, stand or change gait.
+	// Natively a masked player (msch 1) cannot sit, stand or change gait.
 	if characterSnapshot.TransformMode == 1 {
 		return refusedMotion("transformed")
 	}
@@ -125,7 +124,7 @@ func (rt *Runtime) HandleMotionState(divisionID string, character *enterworld.Ch
 	// the request is DROPPED - no ack, no state push, nothing on the wire.
 	// This is the whole handler, not just the sit arm: the later retail
 	// build wraps its entire body in "current motion state is not the
-	// in-progress one" (v1.188 LEAD, seq: MotionStateChangeReq folder), so
+	// in-progress one", so
 	// a gait request lands in the same lockout as a second posture request.
 	// Reading before the Mutate keeps a dropped request off the persistence
 	// lane entirely; the character operation lock makes the peek-then-update
@@ -188,7 +187,7 @@ func (rt *Runtime) HandleMotionState(divisionID string, character *enterworld.Ch
 	// (Ruling 44 must-haves B / B') the truncation correction rides the
 	// MOVEMENT channel (0xB2F5 OpObjectSourceCorrection), NOT the sit ack
 	// (0xB017): the v1.150 client's sit-ack handler never touches the mover
-	// (sub_775db0, binary-certified), so a stop sent there is silently
+	// (775DB0, binary-certified), so a stop sent there is silently
 	// swallowed. And the tick's own 0xB2F5 settle EXCLUDES the acting session
 	// (tick.go), so the correction must go to SELF as well as peers or the
 	// sitting player keeps sliding on its own uncleared move goal (a
@@ -234,7 +233,7 @@ the move-goal flags +0x84/+0x80 is the integrator's own arrival/blocked
 path (binary+dump two-source, clipreplicate-wave seq431/483/514) - so a
 server that keeps interpolating leaves a seated character sliding to the
 goal, which is the reported defect. The later retail build performed this
-stop server-side (v1.188 LEAD, survived independent re-derive, seq686/698);
+stop server-side (survived independent re-derive, seq686/698);
 we CANNOT prove v1.150's retail server sent such a stop - only that our
 client can RECEIVE a server position correction (0xB2F5 -> mover goal clear,
 binary-certified) and cannot self-cancel. So this is server position
