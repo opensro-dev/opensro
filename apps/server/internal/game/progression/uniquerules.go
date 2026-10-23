@@ -4,15 +4,14 @@
 uniquerules.go - unique-monster reward rules (port-only, not native)
 
 Port-only, not native (owner-approved TUNING deviation, 2026-10-20,
-hunting patch). Native CGObjMob_RollDropAdmission (SR_GameServer
-0x004C1840) admits each prepared drop of a unique exactly like any other
+hunting patch). The native rule admits each prepared drop of a unique exactly like any other
 monster's: past six levels above the monster the threshold falls by four
 percent per level, so a level-90 hunter loots nothing from Tiger Girl
 (level 20, threshold -180) and only same-level uniques such as Demon
 Shaitan ever paid out. Two switches change that, both default ON:
 
   - SRO_UNIQUE_GAP_EXEMPT: a unique's drops (spawn grade 3 or 8, the
-    RollsUniqueDrops grades) bypass the 4C1840 threshold entirely.
+    RollsUniqueDrops grades) bypass the native threshold entirely.
   - SRO_UNIQUE_POP_TICKET: every unique kill leaves exactly one Magic
     Pop ticket (ITEM_MALL_GACHA_CARD). The native assigned drops already
     carry the card at probability 1.0 (two for the Bone Lord and the
