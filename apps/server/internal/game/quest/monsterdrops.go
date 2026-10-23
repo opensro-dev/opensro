@@ -34,17 +34,15 @@ type MonsterDropRule struct {
 	AnyMonster       bool
 	ChancePercent    float32
 	// Optional rates aligned with MonsterCodenames; exclusive with the shared
-	// rate. Lua stores each species' probability as float32 (86c077..86c081).
+	// rate. Lua stores each species' probability as float32.
 	SpeciesChancePercent []float32
 	// MonsterGrades, when set, is aligned with MonsterCodenames: a kill counts
-	// only when the monster's grade (rarity & 15, CGObjMob_GetBaseGrade
-	// 4C1C60) matches. Gather missions set it with +0x10D and list the
-	// grades at +0x111 (91C4D0).
+	// only when the monster's grade (rarity & 15) matches. Gather missions
+	// carry the grades alongside the species list.
 	MonsterGrades  []uint8
 	MinPlayerLevel uint8
 	MaxHeld        uint32
-	// DropCount is the stack one successful drop leaves (mission +0x245,
-	// read by 91C660); zero means one.
+	// DropCount is the stack one successful drop leaves; zero means one.
 	DropCount uint16
 }
 
@@ -186,8 +184,9 @@ func missionMonsterDrops(c *enterworld.Character, def *Definition, monster strin
 ================
 nativeQuestDropChance
 
-57BE70 joins two 15-bit draws and rounds the normalized sample to float32
-before comparison. Zero fails and equality succeeds, including fractional rates.
+The native roll joins two 15-bit draws and rounds the normalized sample
+to float32 before comparison. Zero fails and equality succeeds,
+including fractional rates.
 ================
 */
 func nativeQuestDropChance(chance float32, first, second uint32) bool {

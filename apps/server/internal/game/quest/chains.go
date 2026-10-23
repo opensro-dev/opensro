@@ -62,7 +62,7 @@ func prerequisitesMet(c *enterworld.Character, def *Definition) bool {
 ================
 heldItemsMet
 
-9262A0 under flag 4: every RequiredHeldItems codename held at least once
+Under flag 4: every RequiredHeldItems codename held at least once
 (CountItemByCodename > 0), and one of RequiredAnyHeldItems when listed.
 The count's location argument (2) is taken to mean the bag: inference, as
 every item these lists name is a quest item that only the bag holds.
@@ -83,10 +83,10 @@ func heldItemsMet(c *enterworld.Character, def *Definition) bool {
 ================
 JobCondition
 
-9262A0 under flag 0x1000: byte +0x21 set requires the job state
-(CGObjPC_GetJobState 4DDC80, the worn suit's job, zero outside job mode)
-to equal +0x20; clear, to differ from it. The trade quests require a
-dressed trader (1, set); Rahid 3 and 4 refuse a dressed thief (2, clear).
+Under flag 0x1000: the set arm requires the job state (the worn suit's
+job, zero outside job mode) to equal the authored job; the clear arm, to
+differ from it. The trade quests require a dressed trader (1, set);
+Rahid 3 and 4 refuse a dressed thief (2, clear).
 ================
 */
 type JobCondition struct {
