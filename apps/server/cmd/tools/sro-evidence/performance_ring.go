@@ -260,7 +260,7 @@ func runPerformanceRing(_ []string) error {
 		}
 	}
 	fmt.Printf(
-		"\nASD2 NEAR-FIELD density (production terrain authority; %d initial rows, %d after ten one-second refill passes, %d backed by v1.188 nest evidence):\n",
+		"\nASD2 NEAR-FIELD density (production terrain authority; %d initial rows, %d after ten one-second refill passes, %d backed by later-version nest evidence):\n",
 		initialProbeRows,
 		len(probeInstances),
 		retailEvidenceRows,
