@@ -102,7 +102,7 @@ func TestReinforceNativeBranches(t *testing.T) {
 TestReinforceNeverDestroysACashItem
 
 The destroy draw that ruins ordinary gear (+5, second draw under 50) only
-resets a cash item, as 506CE0 tests CGObj_IsCashItem before destroying.
+resets a cash item: the native destroy path spares cash items.
 ================
 */
 func TestReinforceNeverDestroysACashItem(t *testing.T) {
