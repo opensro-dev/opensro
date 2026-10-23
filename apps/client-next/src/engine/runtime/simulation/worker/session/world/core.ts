@@ -314,7 +314,7 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 		}
 		if ( frame.opcode === 0x314d ) {
 			// CPSMission_OnTargetActionState0x314D (7786E0): quest id, then the
-			// capture result (1 caught, 2 failed; v1.188 sends it as 0x30DC).
+			// capture result (1 caught, 2 failed; the newer server sends it as 0x30DC).
 			if ( frame.payload.length !== 5 ) throw Error( "Invalid capture result" );
 			if ( frame.payload[4] === 1 ) entities.markCaptured( gameplay.selectedTarget() );
 		}
