@@ -30,18 +30,28 @@ const DefinitionsFile = "paramkeeper/definitions.json"
 // rows.
 const definitionsFormat = "sro-paramkeeper-definitions-v1"
 
+// definitionColumns is the width of one row: id, min, max, base, ignore.
+const definitionColumns = 5
+
 // installed is the table Install published; nil before any.
 var installed atomic.Pointer[map[uint16]Definition]
 
 /*
 ================
 ParseDefinitions
+
+Every row must carry exactly definitionColumns numbers. encoding/json would
+zero-fill a short fixed-size row and drop a long one's tail without an
+error, so a truncated table would install wrong clamps (a percent factor
+whose base reads 0) instead of refusing; rows are therefore decoded at
+their own length, with null cells kept apart from zeros. An empty table is
+refused for the same reason.
 ================
 */
 func ParseDefinitions(data []byte) (map[uint16]Definition, error) {
 	var document struct {
 		Format      string
-		Definitions [][5]float64
+		Definitions [][]*float64
 	}
 	if err := json.Unmarshal(data, &document); err != nil {
 		return nil, fmt.Errorf("parameter definitions: %w", err)
@@ -49,8 +59,15 @@ func ParseDefinitions(data []byte) (map[uint16]Definition, error) {
 	if document.Format != definitionsFormat {
 		return nil, fmt.Errorf("parameter definitions: format %q, want %q", document.Format, definitionsFormat)
 	}
+	if len(document.Definitions) == 0 {
+		return nil, fmt.Errorf("parameter definitions: the table has no rows")
+	}
 	table := make(map[uint16]Definition, len(document.Definitions))
-	for i, row := range document.Definitions {
+	for i, cells := range document.Definitions {
+		row, err := definitionRow(i, cells)
+		if err != nil {
+			return nil, err
+		}
 		id := row[0]
 		if id < 0 || id > math.MaxUint16 || id != math.Trunc(id) || row[1] > row[2] {
 			return nil, fmt.Errorf("parameter definitions: malformed row %d", i)
@@ -62,6 +79,27 @@ func ParseDefinitions(data []byte) (map[uint16]Definition, error) {
 			Ignore: float32(row[4])}
 	}
 	return table, nil
+}
+
+/*
+================
+definitionRow
+
+One decoded row as its five numbers, or the error naming row i.
+================
+*/
+func definitionRow(i int, cells []*float64) ([definitionColumns]float64, error) {
+	var row [definitionColumns]float64
+	if len(cells) != definitionColumns {
+		return row, fmt.Errorf("parameter definitions: row %d has %d columns, want %d", i, len(cells), definitionColumns)
+	}
+	for column, cell := range cells {
+		if cell == nil {
+			return row, fmt.Errorf("parameter definitions: row %d column %d is null", i, column)
+		}
+		row[column] = *cell
+	}
+	return row, nil
 }
 
 /*
