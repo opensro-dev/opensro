@@ -493,9 +493,9 @@ const maxGuildMarkBytes int64 = 1 << 20
 // from the configured marks directory - a raw passthrough, no
 // transformation (the client's sub_4ba950 loader consumes the bytes and
 // caches them locally as .rd under its 0xcbc340 cache root). The server
-// stores only crest REVISION params (the v1.188 _Guild.CurCrestRev
-// lineage), never images, so art is host-supplied: no directory or no
-// file is an honest 404 and the client draws nothing for that crest.
+// stores only crest REVISION params, never images, so art is
+// host-supplied: no directory or no file is an honest 404 and the
+// client draws nothing for that crest.
 /*
 ================
 handleGuildMark
