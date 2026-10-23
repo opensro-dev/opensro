@@ -13,7 +13,7 @@ import type { AssetOwner } from "@/engine/contracts/assets";
 import type { UiRect, UiQuad } from "@/engine/contracts/ui";
 import { decodeUiFont, titleText, titleTextBox, drawableGlyph } from "@/engine/foundation/rendering/ui-glyphs";
 import type { FontAtlas, GlyphStyle } from "@/engine/foundation/rendering/ui-glyphs";
-import { guideContent, type GuideToken } from "@/engine/foundation/ui/guide-content";
+import { guideContent, type GuideBlock, type GuideToken } from "@/engine/foundation/ui/guide-content";
 
 const FONT_BYTE_LIMIT = 4 << 20;
 const BOARD_EXTRA_HEIGHT = 5;
@@ -126,10 +126,11 @@ export function createUiText( assets: Pick<AssetOwner, "available" | "request" |
 			rect: UiRect,
 			clip: UiRect,
 			color: UiQuad["color"],
-			size: ( path: string ) => readonly [number, number] | undefined
+			size: ( path: string ) => readonly [number, number] | undefined,
+			block?: GuideBlock
 		) {
 			return state.kind === "ready" ?
-				guideContent( state.font, tokens, rect, clip, color, size ) :
+				guideContent( state.font, tokens, rect, clip, color, size, block ) :
 				{ quads: [], paths: [], height: 0 };
 		},
 		/*

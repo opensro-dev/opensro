@@ -9568,7 +9568,17 @@ export function createUi(
 					if ( node.texture ) authoredImage( node, ox, oy );
 					if ( node.type === "CIFStatic" && node.text ) authoredText( node, ox, oy, hudCopy( node.text ) );
 				} else if ( node.type === "CIFPML" ) {
-					const out = text.guide( guideTokens( hudCopy( node.text ) ), r, r, node.color, resources.size );
+					const out = text.guide(
+						guideTokens( hudCopy( node.text ) ),
+						r,
+						r,
+						node.color,
+						resources.size,
+						{
+							align: node.hAlign === 1 ? "center" : node.hAlign === 2 ? "right" : "left",
+							vAlign: node.vAlign
+						}
+					);
 					quads.push( ...out.quads );
 					paths.push( ...out.paths );
 				}
@@ -20521,7 +20531,10 @@ export function createUi(
 								"%s",
 								next.session?.character ?? ""
 							).replace( "%s", partyJoining.name ),
-							out = text.guide( guideTokens( copy ), r, r, white, resources.size );
+							out = text.guide( guideTokens( copy ), r, r, white, resources.size, {
+								align: node.hAlign === 1 ? "center" : node.hAlign === 2 ? "right" : "left",
+								vAlign: node.vAlign
+							} );
 						quads.push( ...out.quads );
 						paths.push( ...out.paths );
 					} else if ( node.type === "CIFGauge" ) {
