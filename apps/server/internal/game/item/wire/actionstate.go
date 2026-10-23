@@ -31,7 +31,7 @@ const (
 ActionState
 
 State is the command count, not the kind or a boolean. The v1.150 notice
-reader consumes one error byte; v1.188's two-byte error is a different wire.
+reader consumes one error byte; the later two-byte error is a different wire.
 ================
 */
 type ActionState struct {

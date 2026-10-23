@@ -13,7 +13,7 @@ package wire
 ItemUseRequest
 
 ItemUseRequest is the v1.150 0x75BD body composed by
-sub_6961b0_CGInterface_ExecuteSelectedInteractionAction:
+CGInterface_ExecuteSelectedInteractionAction (6961B0):
 
 	[u8 inventory wire slot][u16 RefItem type word, little-endian]
 
@@ -53,7 +53,7 @@ func DecodeItemUseRequest(payload []byte) (ItemUseRequest, error) {
 ReadItemUseRequest
 
 ReadItemUseRequest reads the three-byte header and returns any tail.
-49D240 pet potions and the pet cure append the COS gid (u32). Revival
+Pet potions and the pet cure append the COS gid (u32). Revival
 (TID4 6) appends the pet-item slot (u8). Other families must have an
 empty tail; DecodeItemUseRequest still rejects a tail on its own.
 ==================
@@ -77,7 +77,7 @@ func ReadItemUseRequest(payload []byte) (ItemUseRequest, []byte, error) {
 }
 
 // OpItemUseVisual is v1.150's external item effect (client 74F540): [u32
-// gid][u32 item reference id]. v1.188 numbers it 0x305C.
+// gid][u32 item reference id]. A later protocol numbers it 0x305C.
 const OpItemUseVisual uint16 = 0x3449
 
 /*
@@ -85,7 +85,7 @@ const OpItemUseVisual uint16 = 0x3449
 EncodeItemUseSuccess
 
 EncodeItemUseSuccess builds the successful v1.150 0xB5BD body parsed by
-sub_755e40:
+755E40:
 
 	[01][u8 slot][u16 remaining quantity][u16 type word]
 
@@ -104,7 +104,7 @@ func EncodeItemUseSuccess(slot uint8, remaining uint16, typeWord uint16) []byte 
 ==================
 EncodeItemUseError
 
-EncodeItemUseError builds the failure arm parsed by sub_755e40:
+EncodeItemUseError builds the failure arm parsed by 755E40:
 
 	[02][u8 notice code]
 
