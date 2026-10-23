@@ -347,7 +347,7 @@ const SKILL_RIDING_REFUSAL = 0x21;
 // The guild notices' category; 0x1F refuses a ban of the master or oneself.
 const GUILD_NOTICE_CATEGORY = 0x10;
 const GUILD_BAN_REFUSED = 0x1f;
-// Server 0x3011 (529D6D), the victim's death kind; CPSMission 74FE50 here.
+// Server 0x3011, the victim's death kind; CPSMission 74FE50 here.
 const DEATH_NOTICE = 0x37ce;
 // 75B8D0: the transport bag's trade level [u8].
 const OP_TRADE_STAR_COUNT = 0x352d;
@@ -931,7 +931,7 @@ reuse gate as manual activation. Recovery completion is server-owned.
 localCastHolds
 
 The local player's own cast is live (not cancelled) and its action still
-runs: the server's attack lock (4AAB40) drops ground commands until it
+runs: the server's attack lock drops ground commands until it
 releases. A persistent cast (a wall, an aura) stays in the cast table for
 the object's whole life, but its action ends with the authored action
 time (actionMs); counted for its whole life it blocked the predicted cast
@@ -1529,7 +1529,7 @@ Entity removal retires targeting and combat references in the same frame.
 			cosPickup.track( event );
 			if ( event.kind === "spawn" ) {
 				combat.seedEffects( event.entity.gid, event.entity.spawnSkills ?? [], soundClock );
-				// 4FA0B0: a structure's spawn row sets its hit points
+				// A structure's spawn row sets its hit points
 				// (CICharactor_SetCurrentHP) beside its record's maximum.
 				const { structureHp, maxHp } = event.entity;
 				if ( event.entity.kind === "structure" && structureHp !== undefined ) {
@@ -3338,8 +3338,8 @@ Packet handling must not depend on which HUD panel is currently open.
 				}
 				if ( fortressNext ) return true;
 				if ( frame.opcode === 0x3508 && frame.payload[4] === 7 ) {
-					// 77A570 case 7: a growing pet becomes its next form (server
-					// 4EFD10). The owner's record takes the reference and the full
+					// 77A570 case 7: a growing pet becomes its next form. The
+					// owner's record takes the reference and the full
 					// satiety; the entity lane then swaps every viewer's model.
 					const p = frame.payload;
 					if ( p.length !== 9 ) throw Error( "Invalid COS reference change" );
@@ -3856,7 +3856,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				// 77A570 case 1 (CPSMission_OnCosPetExpUpdate0x3508): the server's
-				// detach notice (v1.188 0x30C9 type 1, 4D2140, sent on every release
+				// detach notice (0x30C9 type 1, sent on every release
 				// and COS death) is the only thing that drops an owned companion:
 				// CIFCOSManager_RemoveCompanion (6F2900) takes its status icon, its
 				// command panel and its record, and its open bag window closes.
@@ -4380,7 +4380,7 @@ before take assembles the presentation snapshot.
 				) {
 					// 693AD0 via CNavigationDeadreckon_OnTick: the pending select is
 					// dispatched once in reach or when the walk ends, wherever that is;
-					// the server's 4A8E10 range check decides.
+					// the server's range check decides.
 					if ( approach.visit ) visitStall( approachingTarget );
 					else selectEntity( approachingTarget, now );
 					approach = interactionApproachTransition( approach, { kind: "arrived" } );
