@@ -101,8 +101,8 @@ func TestDefaultSkillRowsRefuseAMissingCodename(t *testing.T) {
 }
 
 // FAIL LOUD half 2: a codename that resolves to the wrong KIND of row
-// (the 1.188-contamination shape: chain sub, wrong level, priced) refuses
-// rather than seeding it.
+// (the cross-version contamination shape: chain sub, wrong level, priced)
+// refuses rather than seeding it.
 func TestDefaultSkillRowsRefuseANonRootRow(t *testing.T) {
 	for name, mutate := range map[string]func(row SkillRow) SkillRow{
 		"wrongLevel": func(row SkillRow) SkillRow { row.Level = 7; return row },

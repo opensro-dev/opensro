@@ -9,20 +9,21 @@ import (
 // at creation.
 //
 // MECHANISM (lane6 notes section 3, adopt-wave): retail seeds a fresh
-// character's learned-skill list in the _AddNewChar stored procedure from
-// the _RefCharDefault_Skill table (vendor SQL, Korean comments intact),
-// selecting rows WHERE Race = the character's country OR Race = 3 (both).
+// character's learned-skill list at creation from the per-race
+// default-skill table,
+// selecting rows where the race is the character's country or the shared
+// race (both).
 // The v1.150 client never self-grants and tolerates an empty list (lane4
 // notes), but retail characters never HAD an empty list - auto-attack
 // availability on a fresh retail character never depended on a manual
 // 0-SP learn.
 //
 // THE LISTS ARE CODENAMES, NEVER NUMERIC IDS - this is load-bearing, not
-// style. The published 1.188 _RefCharDefault_Skill ids resolve in OUR
+// style. The published newer-version default-skill ids resolve in OUR
 // v1.150 skilldata to chain SUB-rows (8419/8420 - rows the learn plane
 // refuses by design), wrong-kind rows, TSKILL_* test rows, and one id
 // that does not exist at all (lane6 3.2, the version-contamination
-// catch). The EU id space shifted between 1.150 and 1.188; codenames are
+// catch). The EU id space shifted between versions; codenames are
 // the version-stable key. The 13 rows below are the v1.150-native
 // equivalent set (lane6 3.3): every non-TSKILL *_BASE_01 weapon base plus
 // SKILL_PUNCH_01, verified against the shipped table to be level 1 /
@@ -34,7 +35,7 @@ import (
 // short (or garbage) seed persisted into character records is not.
 
 // chDefaultSkillCodenames is the Chinese creation seed: punch plus the
-// three CH weapon bases (1.188 Race-0 rows + the shared Race-3 punch).
+// three CH weapon bases (the Chinese race rows + the shared-race punch).
 var chDefaultSkillCodenames = []string{
 	"SKILL_PUNCH_01",
 	"SKILL_CH_SWORD_BASE_01",
@@ -43,13 +44,11 @@ var chDefaultSkillCodenames = []string{
 }
 
 // euDefaultSkillCodenames is the European creation seed: the nine EU
-// weapon bases (1.188 Race-1 rows), plus SKILL_PUNCH_01.
+// weapon bases (the European race rows), plus SKILL_PUNCH_01.
 //
-// Rechecked against the restored SQL data page @0x13a200: slot 96 has
-// fixed payload Race=3, SkillID=1. The creation query includes Race=3 for
+// The shared-race row carries the punch skill (SkillID=1), and the
+// creation selection includes the shared race for
 // both countries. Punch is therefore shared, not an inferred EU convenience.
-// Table identity comes from the sysschobjs row @0x86a200+2712, object
-// 1430152736. See the gameplay work item's read-only extraction evidence.
 var euDefaultSkillCodenames = []string{
 	"SKILL_PUNCH_01",
 	"SKILL_EU_SWORD_BASE_01",

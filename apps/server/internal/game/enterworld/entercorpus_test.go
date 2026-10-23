@@ -147,8 +147,8 @@ func corpusTrackedQuestWithOptional() TrackedQuestRecord {
 // Magic-option content pins: v1.150 magicoption.txt rows resolved by
 // MATTR_* CODENAME + degree (TestEnterCorpusContentPins cross-pins each id
 // against the shipped table so a table swap cannot silently re-point them).
-// Declared choices (SRO-standard blue conventions; the v1.188 shard was not
-// needed - STR/INT/DUR on a weapon is the standard retail pairing):
+// Declared choices (SRO-standard blue conventions - STR/INT/DUR on a
+// weapon is the standard retail pairing):
 //   - MATTR_STR degree 1  = param id 11, paramName "+"  (visible)
 //   - MATTR_INT degree 1  = param id  5, paramName "+"  (visible)
 //   - MATTR_DUR degree 2  = param id 81, paramName "+"  (visible)

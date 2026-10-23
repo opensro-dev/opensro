@@ -43,12 +43,13 @@ type ItemRef struct {
 	// must instantiate. It is a natural-key join, never a client-supplied
 	// RefObj id.
 	AssociatedCharacterCodename string
-	// RefItem+0x530 byte set from Desc2, including native 1/255 sentinels.
+	// The reference byte set from Desc2, including native 1/255 sentinels.
 	// Nil preserves the exact associated reference without a level suffix.
 	SummonLevelThresholds []uint8
 	// Skill consumables resolve the same authored Param1 reference as a skill.
 	AssociatedSkillCodename string
-	// Return-scroll Param3 text (column 123), consumed by v1.188 4A0380.
+	// Return-scroll Param3 text (column 123), consumed by the native
+	// server's return-scroll use.
 	ReturnDestination string
 	// ReturnTeleport is a THIEFDEN scroll's Param4 text (column 125): the
 	// teleport building whose gate it returns to (STORE_TD_GATE).
@@ -74,23 +75,22 @@ type ItemRef struct {
 	// RefItemData bytes). Absent columns default to their pass values so a
 	// degraded textdata load never invents a refusal.
 
-	// Country is media column 14 (native ref[0x27]): 0 China, 1 Europe,
+	// Country is media column 14: 0 China, 1 Europe,
 	// 3 = every character (the sub_789c60 bit 0x200 wildcard). Default 3.
 	Country int64
 	// CashItem (column 7), Rarity (column 15) and CanDropOnDeath feed the
-	// death-penalty drop gate CGItem_CanDropOnDeathPenalty (4B7CF0).
-	// CanDropOnDeath is RefObj m_dwAvailableOPs bit 14, which the
-	// _RefObjCommon loader (6A3090) takes from bit 1 of CanDrop (column
+	// native death-penalty drop gate.
+	// CanDropOnDeath is the reference's available-operations bit 14, which
+	// the native reference loader takes from bit 1 of CanDrop (column
 	// 20); a row with CanTrade 0 and CanDrop 1 is cleared first, which
 	// leaves bit 1 clear either way.
 	CashItem       bool
 	Rarity         int64
 	CanDropOnDeath bool
 	// ReqQuadTypes/ReqQuadValues are the four typed requirement pairs
-	// (media columns 32/34/36/38 types + 33/35/37/39 values; native
-	// +0xc8..+0xd4 types and +0xd8..+0xe4 values). Semantics per the
-	// sub_789c60 legs:
-	//   type 1     = character level (bit 0x020 vs player +0x820);
+	// (media columns 32/34/36/38 types + 33/35/37/39 values). Semantics
+	// per the sub_789c60 legs:
+	//   type 1     = character level (bit 0x020 vs the player's level);
 	//   type > 0xa = a masterydata ID (bit 0x100 vs the trained level;
 	//                EU armor carries 513..518);
 	//   types 2/3/4 (job grades) and 0xa (guild level) are tooltip-only -
@@ -103,20 +103,19 @@ type ItemRef struct {
 	// (itemdataRecordColumns).
 	ReqQuadTypes  [4]int64
 	ReqQuadValues [4]int64
-	// RequiredSex is media column 58 (native ref[0x6b] / +0x1ac, bit
+	// RequiredSex is media column 58 (bit
 	// 0x040): 0 female, 1 male, 2 = unisex (verified against the shipped
 	// itemdata: _W_ avatar rows carry 0, _M_ rows 1, weapons 2). Default 2.
 	RequiredSex int64
-	// RequiredStr / RequiredInt are media columns 59/60 (native
-	// +0x1b0/+0x1b4, bits 0x008/0x010 vs the player STR/INT words
-	// +0x834/+0x836). Zero across the entire shipped itemdata; default 0
-	// (no requirement).
+	// RequiredStr / RequiredInt are media columns 59/60 (bits 0x008/0x010
+	// vs the player's STR/INT). Zero across the entire shipped itemdata;
+	// default 0 (no requirement).
 	RequiredStr int64
 	RequiredInt int64
 	// MaxDurability is media column 64 (Dur_U / varianceIntMax1c4): the
 	// class-level "this item HAS a durability attribute" marker the razed
 	// gate (sub_789c60 bit 0x004) is conditioned on - native tests the
-	// instance attribute blob (+0xc0)[5], which only durability-bearing
+	// instance attribute blob, which only durability-bearing
 	// classes carry. Shipped data: weapons/armor N > 0, accessories 0.
 	// Default 0 (no durability concept, gate never fires).
 	MaxDurability int64
@@ -127,18 +126,18 @@ type ItemRef struct {
 	RecoveryHPPercent float64
 	RecoveryMP        float64
 	RecoveryMPPercent float64
-	// Cure fields are the same param stride as itemParamN (column 118+i*2
-	// is RefItem+0x29C+i*4). 49B710's universal pill (TID4 1) passes
-	// +0x2A0, +0x2E0, +0x2C0 as the mask, the chance numerator and the
-	// grade base. A level cure reads six words at +0x2A0/+0x2C0/+0x2E0/
-	// +0x300/+0x320/+0x340 (49AC50). The loaded param window ends at
-	// +0x2E8, so the last three words stay 0.
+	// Cure fields are the same param stride as itemParamN (column
+	// 118+i*2). The universal pill (TID4 1) passes the first three param
+	// words as the mask, the chance numerator and the
+	// grade base. A level cure reads six words from the param window.
+	// The loaded param window ends before the last three words, so they
+	// stay 0.
 	CureMask     int64
 	CureChance   int64
 	CureGradeSub int64
 	CureLevels   [6]int64
-	// FortressRoleMask is media column 124 (native +0x2ac / ref[0xab],
-	// LOW BYTE compared): the fortress-guild role bits allowed to wield a
+	// FortressRoleMask is media column 124 (LOW BYTE compared): the
+	// fortress-guild role bits allowed to wield a
 	// fortress siege weapon (sub_789c60 bit 0x400). Only the 14
 	// TID-(3,1,6,16) hammer/axe rows carry it, all -1 (0xff = any role).
 	// Default 0 - non-fortress items never reach the compare (the TID
@@ -199,7 +198,7 @@ type CharacterRef struct {
 	// Characterdata column 4 groups the level rows used by guild scrolls.
 	GroupCodename string
 	// NextCodename is column 6: the reference an attack pet becomes at its
-	// next level (CGObjAttackCOS_AdvanceLevelAndReference walks it, 4D6210).
+	// next level (the native attack-pet level advance walks it).
 	NextCodename               string
 	NameStrID                  string
 	Name                       string
