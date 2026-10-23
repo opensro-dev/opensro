@@ -96,7 +96,7 @@ test("guide title completions fill only untranslated cells and never shadow ship
 	const entries = {
 		SRO_GGW_MENU_QCH_MSG: "0",
 		SRO_GGW_MENU_QCONS_MSG: "",
-		SRO_GGW_MENU_GDG_MSG: "그래드 시스템",
+		SRO_GGW_MENU_GDG_MSG: "길드 안내",
 		REAL_KEY: "Real English",
 		OTHER: "0"
 	};

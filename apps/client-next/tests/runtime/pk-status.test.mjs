@@ -11,8 +11,10 @@ with 6B5150's two lines only while one counter is non-zero.
 */
 import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { pathToFileURL as sourceFileUrl } from "node:url";
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import { uiFixture } from "../helpers/ui-fixture.mjs";
 
 const { pkStatusBootstrap, pkStatusPacket, pkStatusTooltip, PK_DAILY_LIMIT } = await import(
@@ -20,9 +22,16 @@ const { pkStatusBootstrap, pkStatusPacket, pkStatusTooltip, PK_DAILY_LIMIT } = a
 );
 
 const TEXT = {
-	UIIT_TOOLTIP_PK_DAY: "Daily PK %d / %d",
-	UIIT_TOOLTIP_PK_PENALTY_TIME: "murderer level %d (%d level)"
+	UIIT_TOOLTIP_PK_DAY: "Day tally %d of %d",
+	UIIT_TOOLTIP_PK_PENALTY_TIME: "wanted grade %d (rank %d)"
 };
+
+// The HUD renders through hudCopy over the generated text asset, so the
+// expected tooltip is the production formatter applied to that asset -
+// never a quoted copy of its wording here.
+const TEXT_ASSET_FILE = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/text/textuisystem.en.json", "utf8" ) );
+const TEXT_ASSET = TEXT_ASSET_FILE.entries ?? TEXT_ASSET_FILE;
+const assetCopy = symbol => TEXT_ASSET[symbol] ?? symbol;
 
 /*
 ================
@@ -62,7 +71,7 @@ test("6B5150: hidden while all zero; daily against the limit, then penalty and t
 	assert.equal( pkStatusTooltip( { daily: 0, total: 0, penalty: 0 }, text ), null );
 	assert.equal(
 		pkStatusTooltip( { daily: 2, total: 5, penalty: 300 }, text ),
-		`Daily PK 2 / ${PK_DAILY_LIMIT}\nmurderer level 300 (5 level)`
+		`Day tally 2 of ${PK_DAILY_LIMIT}\nwanted grade 300 (rank 5)`
 	);
 	// Any single non-zero counter shows the control.
 	assert.ok( pkStatusTooltip( { daily: 0, total: 1, penalty: 0 }, text ) );
@@ -76,7 +85,7 @@ test("the mini-info shows GDR_PMI_PK with the native tooltip only while a counte
 		for ( let time = 0; time < 1200; time += 100 ) shown = f.ui.step( f.state, time ) ?? shown;
 		const pk = shown?.controls.find( c => c.id === "GDR_PMI_PK" );
 		assert.ok( pk, "GDR_PMI_PK is shown" );
-		assert.equal( pk.helpText, "Daily PK 2 / 15\nmurderer level 300 (5 level)" );
+		assert.equal( pk.helpText, pkStatusTooltip( { daily: 2, total: 5, penalty: 300 }, assetCopy ) );
 		// The worker publishes a new state object on every change.
 		f.state = { ...f.state, gameplay: { ...f.state.gameplay, pkStatus: { daily: 0, total: 0, penalty: 0 } } };
 		let hidden;

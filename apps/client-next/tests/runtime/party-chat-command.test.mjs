@@ -3,8 +3,8 @@
 
 party-chat-command.test.mjs - the party's chat commands (6AD990)
 
-"/Invite to party name", "/Banish from party name" and "/Leave the party"
-parse by their localized words and order what 6AD990 would.
+The invite, banish and leave commands parse by their localized words
+(the stub phrases below stand in for them) and order what 6AD990 would.
 
 ===========================================================================
 */
@@ -18,9 +18,9 @@ const { createWorldCore } = await import( "../../src/engine/runtime/simulation/w
 
 /** @type {Record<string, string>} */
 const TEXT = {
-	UIIT_STT_CHAT_COMMAND_PARTY_INVITE: "/Invite to party",
-	UIIT_STT_CHAT_COMMAND_PARTY_EXPEL: "/Banish from party",
-	UIIT_STT_CHAT_COMMAND_PARTY_EXIT: "/Leave the party"
+	UIIT_STT_CHAT_COMMAND_PARTY_INVITE: "/Enlist in crew",
+	UIIT_STT_CHAT_COMMAND_PARTY_EXPEL: "/Banish from crew",
+	UIIT_STT_CHAT_COMMAND_PARTY_EXIT: "/Leave the crew"
 };
 /** @param {string} symbol */
 const copy = symbol => TEXT[symbol] ?? symbol;
@@ -37,23 +37,23 @@ const social = ( fields = {} ) => ({
 	...fields
 });
 
-test("the English multi-word commands parse, with the rest of the line as the name", () => {
-	assert.deepEqual( partyChatCommand( "/Invite to party Friend", copy ), { kind: "invite", name: "Friend" } );
-	assert.deepEqual( partyChatCommand( " /invite TO party  Two Words ", copy ), {
+test("the localized multi-word commands parse, with the rest of the line as the name", () => {
+	assert.deepEqual( partyChatCommand( "/Enlist in crew Friend", copy ), { kind: "invite", name: "Friend" } );
+	assert.deepEqual( partyChatCommand( " /enlist IN crew  Two Words ", copy ), {
 		kind: "invite",
 		name: "Two Words"
 	} );
-	assert.deepEqual( partyChatCommand( "/Banish from party Friend", copy ), { kind: "banish", name: "Friend" } );
-	assert.deepEqual( partyChatCommand( "/Leave the party", copy ), { kind: "leave" } );
+	assert.deepEqual( partyChatCommand( "/Banish from crew Friend", copy ), { kind: "banish", name: "Friend" } );
+	assert.deepEqual( partyChatCommand( "/Leave the crew", copy ), { kind: "leave" } );
 });
 
 test("other lines are not party commands", () => {
 	for (
 		const line of [
-			"Invite to party Friend",
-			"/Invite to party",
-			"/Invite to partyFriend",
-			"/Leave the party now",
+			"Enlist in crew Friend",
+			"/Enlist in crew",
+			"/Enlist in crewFriend",
+			"/Leave the crew now",
 			"hello"
 		]
 	) {

@@ -19,7 +19,10 @@ const { iconPath } = await import( "../../src/engine/foundation/ui/icon.ts" );
 test("shipped skill name and icon resolve to published assets", () => {
 	const names = JSON.parse( fs.readFileSync( CLIENT_PUBLIC_ROOT + "/assets/text/textdataname.en.json", "utf8" ) )
 		.entries;
-	assert.equal( names.SN_SKILL_CH_SWORD_SMASH_A, "Strike n' smash" );
+	// The published name asset resolves the symbol (its wording is the
+	// asset's own and is never quoted here), and the icon file exists.
+	assert.equal( typeof names.SN_SKILL_CH_SWORD_SMASH_A, "string" );
+	assert.ok( names.SN_SKILL_CH_SWORD_SMASH_A.length > 0 );
 	assert.ok( fs.existsSync( CLIENT_PUBLIC_ROOT + iconPath( "skill\\china\\sword_smash_a.ddj" ) ) );
 });
 test("skill icons resolve inside the native icon root and reject traversal or remote URLs", () => {

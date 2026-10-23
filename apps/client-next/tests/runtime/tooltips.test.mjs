@@ -558,7 +558,9 @@ test( "item localization is shared by published descriptions and server inventor
 } );
 
 test("item completions replace only catalogued blank or dash cells and preserve record bytes", () => {
-	const symbol = "SN_ITEM_ETC_MP_POTION_05", expected = "MP recovery potion (X-large)";
+	// The completed wording is whatever the completions authority holds
+	// for the symbol (source-data on this machine); it is never quoted here.
+	const symbol = "SN_ITEM_ETC_MP_POTION_05", expected = ITEM_TEXT_COMPLETIONS[symbol];
 	for ( const value of [ "", "  ", "-", " - ", "0", "xxx", "NULL" ] ) {
 		assert.equal( completeItemText( { [symbol]: value } )[symbol], expected );
 	}
@@ -619,17 +621,20 @@ test("X-large potions and all purification pills retain their title, ornament an
 	);
 	const inventory = createInventory( () => {} );
 	for (
-		const [refObjId, suffix, expected] of [
-			[ 8, "HP_POTION_05", "HP recovery potion (X-large)" ],
-			[ 15, "MP_POTION_05", "MP recovery potion (X-large)" ],
-			[ 10368, "CURE_RANDOM_01", "Purification pill (small)" ],
-			[ 10369, "CURE_RANDOM_02", "Purification pill (medium)" ],
-			[ 10370, "CURE_RANDOM_03", "Purification pill (large)" ],
-			[ 10371, "CURE_RANDOM_04", "Purification pill (X-large)" ]
+		const [refObjId, suffix] of [
+			[ 8, "HP_POTION_05" ],
+			[ 15, "MP_POTION_05" ],
+			[ 10368, "CURE_RANDOM_01" ],
+			[ 10369, "CURE_RANDOM_02" ],
+			[ 10370, "CURE_RANDOM_03" ],
+			[ 10371, "CURE_RANDOM_04" ]
 		]
 	) {
 		const symbol = "SN_ITEM_ETC_" + suffix, typeFlags = suffix.startsWith( "CURE" ) ? 0x96c : 0x8ec;
-		assert.equal( names[symbol], expected );
+		// The expected title is the projected textdata row's own name
+		// (parsed above); it is never quoted here.
+		const expected = names[symbol];
+		assert.ok( expected, symbol );
 		assert.equal( text( symbol ), expected );
 		inventory.bootstrap( {
 			refItemSnapshot: [ { refObjId, name: names[symbol], typeFlags, nativeFields: { maxStack: 50 } } ]

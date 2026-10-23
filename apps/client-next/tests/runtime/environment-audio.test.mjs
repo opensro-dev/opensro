@@ -181,8 +181,19 @@ test("published Jangan boundary follows native RECT before town ALL", async () =
 	const regions = decodeAudioRegions(
 		JSON.parse( await readFile( CLIENT_PUBLIC_ROOT + "/assets/audio/regioninfo.json", "utf8" ) )
 	);
-	assert.equal( ambientProfileName( regions, { ...pose, regionId: 169 | (97 << 8), x: 1720, z: 1000 } ), "장안필드" );
-	assert.equal( ambientProfileName( regions, { ...pose, regionId: 169 | (97 << 8), x: 1721, z: 1000 } ), "장안" );
+	// Expected names are read from the published asset, never quoted here:
+	// inside the sector's RECT the rect profile wins, one step past its
+	// edge the sector's ALL fallback answers.
+	const sector = regions.get( 169 | (97 << 8) );
+	const field = sector?.rectangles.find(
+		r => 1720 >= r.bounds[0] && 1720 <= r.bounds[2] && 1000 >= r.bounds[1] && 1000 <= r.bounds[3]
+	)?.name;
+	assert.ok( field && sector.fallback && field !== sector.fallback );
+	assert.equal( ambientProfileName( regions, { ...pose, regionId: 169 | (97 << 8), x: 1720, z: 1000 } ), field );
+	assert.equal(
+		ambientProfileName( regions, { ...pose, regionId: 169 | (97 << 8), x: 1721, z: 1000 } ),
+		sector.fallback
+	);
 });
 test("frozen native callback recording binds RTTI owner and pre-update RNG countdowns", async () => {
 	const trace = JSON.parse( await readFile( "tests/fixtures/native/native-environment-audio-order.json", "utf8" ) );

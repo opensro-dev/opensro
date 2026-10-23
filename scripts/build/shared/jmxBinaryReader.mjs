@@ -136,8 +136,8 @@ export function readJmxSignature( buffer, expectedSignature, sourcePath = "<jmx>
 
 // JMX resources store names and paths as CP949 (the v1.150 client's ANSI
 // codepage); the extracted pk2 file names are decoded the same way. Decoding
-// as Latin-1 kept the bytes but produced names like `Áß½Éº®` that never match
-// the extracted `중심벽.ddj`. ASCII is returned unchanged (fast path).
+// as Latin-1 kept the bytes but produced mojibake names that never match
+// the extracted files. ASCII is returned unchanged (fast path).
 const cp949 = new TextDecoder( "euc-kr" );
 
 /** Decode JMX text bytes (CP949) to the Unicode name the extracted tree uses. */

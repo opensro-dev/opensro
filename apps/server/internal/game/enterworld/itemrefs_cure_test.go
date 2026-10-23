@@ -10,8 +10,9 @@ package enterworld
 
 import "testing"
 
-// The shipped rows pin the cure params (labels 상태치료가능타입 / 치료가능레벨 /
-// 치료확률 and the six 치료포인트 columns): Param1..6 are columns 118..128.
+// The shipped rows pin the cure params (the curable-type, cure-level and
+// cure-chance labels and the six cure-point columns): Param1..6 are
+// columns 118..128.
 func TestShippedCureItemsLoadTheirParams(t *testing.T) {
 	items := sharedShippedItems(t)
 	pill, ok := items.ItemRefByCodename("ITEM_ETC_CURE_RANDOM_01")

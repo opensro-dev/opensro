@@ -17,9 +17,9 @@ import { imagePublicRoot, imageSourceRoot, normalizeAssetPath } from "../paths.m
 import { resolveLoginSkyEnvironment } from "./environment/index.mjs";
 import { buildNativeLensResources } from "../../shared/nativeLensResources.mjs";
 
-// Title/login renders the Constantinople city, which belongs to the "동유럽" (E.Europe) zone,
+// Title/login renders the Constantinople city, which belongs to the E.Europe zone,
 // so its sky uses that zone's town env ("Env8" family, env key 33), derived (not hardcoded)
-// from the environment.ifo region->env tree. Unlike the unused authored "로그인" node (env 24 / "Env23":
+// from the environment.ifo region->env tree. Unlike the unused authored login node (env 24 / "Env23":
 // cyan, star-less night), Env8 has a violet starry night, a yellow dawn, and no midday stars -
 // matching the original night login (bright day/night star field via env track 0x36c). The
 // general per-region catalog lives in environment.json; any other map resolves its own key.

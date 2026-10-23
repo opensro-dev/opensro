@@ -387,24 +387,24 @@ const result = await import( "../../src/engine/foundation/ui/alchemy-result.ts" 
 test("62B0B0 words the outcome and plays its effect once", () => {
 	const copy = key =>
 		({
-			UIIT_MSG_REINFORCERR_SUCCESS: "success [%d]",
-			UIIT_MSG_REINFORCERR_FAIL: "fail",
-			UIIT_MSG_REINFORCERR_FAIL_RESULT_OPTLV_ZERO: "level gone",
-			UIIT_MSG_REINFORCERR_FAIL_RESULT_OPTLV_DOWN: "level [%d] (down %d)",
-			UIIT_MSG_REINFORCERR_FAILDOWN_DURABILITY: "durability [%d] (down %d)",
-			UIIT_MSG_REINFORCERR_BREAKDOWN: "destroyed"
+			UIIT_MSG_REINFORCERR_SUCCESS: "win [%d]",
+			UIIT_MSG_REINFORCERR_FAIL: "no",
+			UIIT_MSG_REINFORCERR_FAIL_RESULT_OPTLV_ZERO: "rank wiped",
+			UIIT_MSG_REINFORCERR_FAIL_RESULT_OPTLV_DOWN: "rank [%d] (down %d)",
+			UIIT_MSG_REINFORCERR_FAILDOWN_DURABILITY: "wear [%d] (down %d)",
+			UIIT_MSG_REINFORCERR_BREAKDOWN: "broken"
 		})[key] ?? key;
 	const outcome = flags => ({ sequence: 1, flags, plus: 3, previousPlus: 5, durability: 40, previousDurability: 52 });
-	assert.deepEqual( result.alchemyResultLines( outcome( 0x10 ), copy ), [ "success [3]" ] );
-	assert.deepEqual( result.alchemyResultLines( outcome( 0x20 ), copy ), [ "fail" ] );
+	assert.deepEqual( result.alchemyResultLines( outcome( 0x10 ), copy ), [ "win [3]" ] );
+	assert.deepEqual( result.alchemyResultLines( outcome( 0x20 ), copy ), [ "no" ] );
 	assert.deepEqual( result.alchemyResultLines( outcome( 0x23 ), copy ), [
-		"level [3] (down 2)",
-		"durability [40] (down 12)"
+		"rank [3] (down 2)",
+		"wear [40] (down 12)"
 	] );
-	assert.deepEqual( result.alchemyResultLines( { ...outcome( 0x21 ), plus: 0 }, copy ), [ "level gone" ] );
-	assert.deepEqual( result.alchemyResultLines( outcome( 0x40 ), copy ), [ "destroyed" ] );
+	assert.deepEqual( result.alchemyResultLines( { ...outcome( 0x21 ), plus: 0 }, copy ), [ "rank wiped" ] );
+	assert.deepEqual( result.alchemyResultLines( outcome( 0x40 ), copy ), [ "broken" ] );
 	// 62B0B0's 0x80 arm: a stone's failed roll says the alchemy failed.
-	assert.deepEqual( result.alchemyResultLines( outcome( 0x80 ), copy ), [ "fail" ] );
+	assert.deepEqual( result.alchemyResultLines( outcome( 0x80 ), copy ), [ "no" ] );
 	assert.equal( result.alchemyEffectTexture( 0x80 ), "interface/alchemy/alcm_effect_fail_1" );
 	assert.equal( result.alchemyEffectTexture( 0x10 ), "interface/alchemy/alcm_effect_success" );
 	assert.equal( result.alchemyEffectTexture( 0x40 ), "interface/alchemy/alcm_effect_fail_1" );

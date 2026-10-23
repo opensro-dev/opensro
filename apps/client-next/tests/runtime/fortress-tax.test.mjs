@@ -26,9 +26,9 @@ const TEXT = TEXT_FILE.entries ?? TEXT_FILE;
 const MANAGER = 23;
 const SELF = 5;
 const COPY = {
-	SN_FORTRESS_JANGAN: "Jangan",
-	UIIT_MSG_FORT_MANAGER_TAXCHANGE_COMPLETE: "Tax rate of [%s] has been changed to [%d]%%.",
-	UIIT_MSG_FORT_MANAGER_TAXLEVY_COMPLETE: "[%d] gold was levied as the tax."
+	SN_FORTRESS_JANGAN: "Testhold",
+	UIIT_MSG_FORT_MANAGER_TAXCHANGE_COMPLETE: "Rate for [%s] is now [%d]%%.",
+	UIIT_MSG_FORT_MANAGER_TAXLEVY_COMPLETE: "[%d] coins were collected as tax."
 };
 
 /*
@@ -183,7 +183,21 @@ test("an unchanged rate is refused locally and a moved slider sends action 1", t
 	f.ui.event( { kind: "edit", id: "fortress-tax-rate", value: "35", start: 2, end: 2, composing: false } );
 	f.ui.event( { kind: "activate", id: "fortress-tax-modify" } );
 	step();
-	assert.ok( f.hasText( "Current tax rate [10]%" ) && f.hasText( "Changed tax rate [15]%" ) );
+	// The confirm lines are the generated asset's formats composed by the
+	// production notice formatter - derived here, never quoted.
+	const assetCopy = key => TEXT[key] ?? key;
+	assert.ok(
+		f.hasText(
+			noticeText( assetCopy, { key: "UIIT_MSG_FORT_MANAGER_TAXCHANGE_WINDOW2", value: 0, arguments: [ "10" ] } )
+		) &&
+			f.hasText(
+				noticeText( assetCopy, {
+					key: "UIIT_MSG_FORT_MANAGER_TAXCHANGE_WINDOW3",
+					value: 0,
+					arguments: [ "15" ]
+				} )
+			)
+	);
 	f.ui.event( { kind: "activate", id: "fortress-tax-yes" } );
 	assert.deepEqual( sent.at( -1 ), { kind: "fortress-tax-rate", gid: MANAGER, fortress: 1, rate: 15 } );
 	const shown = answer( { action: 1, result: 1, taxRate: 15 } );
@@ -255,8 +269,8 @@ test("rate and levy answers report through the native messages", () => {
 	assert.equal( fold( [ 1, 1, 5, 0 ] ), null );
 	assert.equal( fold( [ 0, 1, 1, 0, 0, 0, 10, 0, 0x10, 0x27, 0, 0, 0, 0, 0, 0 ] ), null );
 	assert.equal( tracked, 1 );
-	assert.equal( fold( [ 1, 1, 0xfb, 0xff ] ), "Tax rate of [Jangan] has been changed to [-5]%." );
-	assert.equal( fold( [ 2, 1, 0x10, 0x27, 0, 0, 0, 0, 0, 0 ] ), "[10000] gold was levied as the tax." );
+	assert.equal( fold( [ 1, 1, 0xfb, 0xff ] ), "Rate for [Testhold] is now [-5]%." );
+	assert.equal( fold( [ 2, 1, 0x10, 0x27, 0, 0, 0, 0, 0, 0 ] ), "[10000] coins were collected as tax." );
 });
 
 test("the tax requests are 0x71E1 actions 0, 1 and 2", () => {

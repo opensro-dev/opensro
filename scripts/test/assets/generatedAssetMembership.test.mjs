@@ -249,24 +249,22 @@ test("packed game-data bytes match their current generated source files", async 
 });
 
 test("generated message-tip catalog contains native right-box guide rows and is packed as game-data", async () => {
-	const [catalog, { packAssetsByPath }] = await Promise.all( [
+	const [catalog, textHelpFile, { packAssetsByPath }] = await Promise.all( [
 		readJson( path.join( publicRoot, "assets/text/messagetips.en.json" ) ),
+		readJson( path.join( publicRoot, "assets/text/texthelp.en.json" ) ),
 		loadGeneratedAssetMembership()
 	] );
+	const textHelp = textHelpFile.entries ?? textHelpFile;
 
 	assert.equal( catalog.format, "sro-messagetipdata" );
 	assert.equal( catalog.language, "en" );
 	assert.deepEqual( catalog.unresolvedTextKeys, [] );
 
+	// Row wording is the generated texthelp asset's own: the catalog must
+	// carry it verbatim, and it is never quoted here.
 	const rowsByTextKey = new Map( catalog.rows.map( ( row ) => [ row.textKey, row ] ) );
-	assert.equal(
-		rowsByTextKey.get( "SRO_MSGTIP_11" )?.text,
-		"[Guide] The stronger the monster, the more experience you get but the riskier."
-	);
-	assert.equal(
-		rowsByTextKey.get( "SRO_MSGTIP_25" )?.text,
-		"[Guide] If your power is high, your physical balance is increased while your magical balance is decreased."
-	);
+	assert.equal( rowsByTextKey.get( "SRO_MSGTIP_11" )?.text, textHelp.SRO_MSGTIP_11 );
+	assert.equal( rowsByTextKey.get( "SRO_MSGTIP_25" )?.text, textHelp.SRO_MSGTIP_25 );
 	assert.equal( rowsByTextKey.get( "SRO_MSGTIP_11" )?.type, 3 );
 	assert.equal( rowsByTextKey.get( "SRO_MSGTIP_11" )?.minLevel, 1 );
 	assert.equal( rowsByTextKey.get( "SRO_MSGTIP_11" )?.maxLevel, 40 );
