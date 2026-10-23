@@ -13,9 +13,10 @@ credentials, generated packs and GM character fixtures stay local and ignored.
 The skill implementation is in commit `0f2d2372`, with the subsequent focused
 icon-publication fix in this handoff's commit. The importer adds 1,518 rows,
 preserves 757 existing imported IDs and allocates 761 database-tier IDs. All
-1,090 board-eligible imported ranks are published. Review detailed provenance,
-earlier commits and limitations in `CAP110_PROGRESS.md` and
-`CAP110_SKILL_ASSET_AUDIT.md`; this document does not replace them.
+1,090 board-eligible imported ranks are published. Review behaviour and
+limitations in `CAP110_PROGRESS.md` and `CAP110_SKILL_ASSET_AUDIT.md`; the
+detailed provenance is kept outside the repository. This document does not
+replace them.
 
 ## Validation evidence
 
