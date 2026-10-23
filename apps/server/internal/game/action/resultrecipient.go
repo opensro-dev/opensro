@@ -3,11 +3,9 @@
 
 resultrecipient.go - what a landed offensive result does to a player
 
-SkillCombat_ApplyResultRecipients (593800) is the one owner that applies a
-skill or basic-attack result to each recipient. Its offensive branch
-(tagRefSkill_MatchesExecutionSelector) treats a record absorbed by a
-standing wall (+0x10, drained from +0x303) separately; every other record
-lands. This file is the port's single owner of the recipient side of a
+One owner applies a skill or basic-attack result to each recipient. Its
+offensive branch treats a record absorbed by a standing wall separately;
+every other record lands. This file is the port's single owner of the recipient side of a
 landed record: every path that applies an offensive result to a player
 calls offensiveResultRecipient once per landed hit, inside its division
 lock and after its commit, so no hit path can forget a rule.
@@ -26,10 +24,9 @@ import (
 ==================
 offensiveResultRecipient
 
-593AE8: a landed, unabsorbed hit on a seated recipient calls
-CGObjChar_RequestMotionChange(recipient, 0) and stands it. The native test
-also skips a recipient whose flag +0x34D bit 0x40 is set; that flag's owner
-was not identified in the v1.188 server and no port state models it. Returns
+A landed, unabsorbed hit on a seated recipient stands it. The native test
+also skips a recipient whose related flag, bit 0x40, is set; that flag's
+owner is not identified and no port state models it. Returns
 the frames every observer must see.
 ==================
 */

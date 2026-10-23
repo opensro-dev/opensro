@@ -4,13 +4,12 @@
 premiumclock.go - the premium ticket's daily allotment
 
 A premium time ticket (premiumticket.go) raises the EXP and skill-EXP
-keepers for its whole period, but CTJ_PremiumKeeper (SR_GameServer:
-CTJ_PremiumKeeper_Load 6524B0, CTJ_PremiumKeeper_Tick 6529D0) applies them
+keepers for its whole period, but the premium keeper applies them
 only while the day's allotment lasts. The ticket's Param3 is that
 allotment in milliseconds a day (10,800,000: three hours; the PLUS ticket
 five).
 
-  - Days are counted on the wall clock from the ticket's use (0x15180
+  - Days are counted on the wall clock from the ticket's use (86,400
     seconds). On each new day the previous day's remainder becomes the
     carry and the day's grant is refilled; a second missed day leaves the
     whole grant as the carry (the load loop repeats the shift).
@@ -20,10 +19,10 @@ five).
     state); the port keeps the spend in memory between commits the same
     way, and commits it when the owner leaves the world.
 
-INFERENCE: the tick also tests an owner byte (+0x30 -> +0x0D) before
-spending, and v1.188 can pause the ticket after a 20-second confirmation
-(+0x80). No v1.150 client control writes either, so the port spends while
-the owner is in the world and has no pause.
+INFERENCE: the tick also tests an owner flag before spending, and the
+original can pause the ticket after a 20-second confirmation. No v1.150
+client control writes either, so the port spends while the owner is in
+the world and has no pause.
 
 ===========================================================================
 */
@@ -38,7 +37,7 @@ import (
 )
 
 const (
-	// premiumDayMs is the keeper's day (0x15180 seconds).
+	// premiumDayMs is the keeper's day (86,400 seconds).
 	premiumDayMs int64 = 86_400_000
 	// premiumCommitMs is the keeper's 600-second state write.
 	premiumCommitMs int64 = 600_000
@@ -48,7 +47,7 @@ const (
 ================
 premiumClockRoll
 
-Brings a clock to the day nowMs falls in (CTJ_PremiumKeeper_Load's loop):
+Brings a clock to the day nowMs falls in (the keeper's load loop):
 each day passed shifts today's remainder into the carry and refills today.
 ================
 */
@@ -73,7 +72,7 @@ func premiumClockRoll(clock *domain.PremiumClock, nowMs int64) bool {
 ================
 premiumClockSpend
 
-Spends elapsed online time, carry first (CTJ_PremiumKeeper_Tick).
+Spends elapsed online time, carry first (the keeper's daily spend).
 ================
 */
 func premiumClockSpend(clock *domain.PremiumClock, elapsedMs int64) {
@@ -146,7 +145,7 @@ premiumSpendLedger.take
 
 Advances an owner's row to nowMs and reports whether its spend is due for a
 commit: the allotment it holds runs out on this tick, or 600 seconds passed
-(CTJ_PremiumKeeper_Tick's state write, 652EE3 -> 652F60, which still runs
+(the keeper's 600-second state write, which still runs
 while the period lasts with the allotment spent). A spent allotment has
 nothing left to run out: it waits for the cadence, the day's refill or the
 period's end, or it would commit the unchanged clock on every tick.
