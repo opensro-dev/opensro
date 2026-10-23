@@ -4,10 +4,9 @@
 record.go - the durable PK record: daily count, total count, penalty
 
 Package pk owns the player-killing rules that are pure arithmetic over a
-character's domain.PKRecord: the three clamped counters
-(CGObjPC_AddDailyPK 4EB140, CGObjPC_AddTotalPK 4EAFD0,
-CGObjPC_AddPKPenaltyPoints 4EAE70), the murder bookkeeping of
-CGObjPC_ProcessPvpKillRewards (4E1F60), the reliefs of a death and of a
+character's domain.PKRecord: the three clamped counters (daily, total and
+penalty points), the murder bookkeeping of a PvP kill, the reliefs of a
+death and of a
 monster kill, the daily reset and the penalty keeper's total decay. The
 action runtime owns when they run and what they publish.
 
@@ -27,14 +26,14 @@ import (
 )
 
 const (
-	// MaxDaily and MaxTotal clamp +0xB0 and +0xB2 (4EB140, 4EAFD0).
+	// MaxDaily and MaxTotal clamp the daily and total counters.
 	MaxDaily = 15
 	MaxTotal = 15
-	// MaxPenalty clamps +0xB4 (4EAE70, 0x30D40).
+	// MaxPenalty clamps the penalty points (0x30D40).
 	MaxPenalty = 200000
 	// totalDecaySeconds is the penalty keeper's period (0x2A300 s, 48 h).
 	totalDecaySeconds = 0x2a300
-	// murderPenaltyUnit is the 0x4B0 of 4E2032.
+	// murderPenaltyUnit is the native 0x4B0 unit.
 	murderPenaltyUnit = 1200
 )
 
@@ -69,7 +68,7 @@ func ensure(c *domain.Character) *domain.PKRecord {
 ================
 AddDaily
 
-4EB140: the delta is capped at 15 first, then the sum is clamped to
+The delta is capped at 15 first, then the sum is clamped to
 0..15.
 ================
 */
@@ -92,7 +91,7 @@ func AddDaily(c *domain.Character, delta int32, now time.Time) Changes {
 ================
 AddTotal
 
-4EAFD0: the sum is clamped to 0..15.
+The sum is clamped to 0..15.
 ================
 */
 func AddTotal(c *domain.Character, delta int32) Changes {
@@ -115,7 +114,7 @@ func AddTotal(c *domain.Character, delta int32) Changes {
 ================
 AddPenalty
 
-4EAE70: the sum is clamped to 0..200000. A penalty that reaches zero
+The sum is clamped to 0..200000. A penalty that reaches zero
 while the total is positive starts the penalty keeper (type 2, 48 h of
 wall time). Inferred: a keeper already running keeps its deadline - the
 native create path only fails on a database insert error.
@@ -141,7 +140,7 @@ func AddPenalty(c *domain.Character, delta int32, now time.Time) Changes {
 ================
 RecordMurder
 
-4E1FFA..4E2081, the killer's side of an ordinary-relation kill: total +1,
+The killer's side of an ordinary-relation kill: total +1,
 penalty += ((total + 1) / 2) * 1200 with the incremented total, daily +=
 the level-gap weight.
 ================
@@ -157,7 +156,7 @@ func RecordMurder(killer *domain.Character, killerLevel, victimLevel uint8, now 
 ================
 DailyWeight
 
-4E2044..4E2076: one, or |gap| / 5 * 2 + 1 when the victim is the lower.
+One, or |gap| / 5 * 2 + 1 when the victim is the lower.
 ================
 */
 func DailyWeight(killerLevel, victimLevel uint8) int32 {
@@ -172,8 +171,8 @@ func DailyWeight(killerLevel, victimLevel uint8) int32 {
 ================
 MonsterKillRelief
 
-CGObjPC_ReducePKPenaltyOnMonsterKill (4EB6B0) by
-Formulae_ClassifyLevelDiff_Extended (40FE90) over monster - player level.
+The native monster-kill relief, by the level-difference class of
+monster - player level.
 ================
 */
 func MonsterKillRelief(monsterLevel, playerLevel uint8) int32 {
@@ -195,8 +194,8 @@ func MonsterKillRelief(monsterLevel, playerLevel uint8) int32 {
 ================
 DecayTotal
 
-CTJ_PenaltyKeeper_TickDecay (652080) and CTimedJob_ResumeAfterLoad
-(651D30): each elapsed 48 h period of wall time, offline included, drops
+The native penalty keeper's tick and its resume after load: each elapsed
+48 h period of wall time, offline included, drops
 the total by one and re-arms while the total stays positive.
 ================
 */
@@ -217,7 +216,7 @@ func DecayTotal(c *domain.Character, now time.Time) Changes {
 ================
 RepairKeeper
 
-4E1120 at entry: a positive total with no penalty keeper is repaired to
+At entry, natively, a positive total with no penalty keeper is repaired to
 penalty 1 (the "Penalty ( record empty )" path), which makes the player a
 murderer until the next relief re-arms the keeper.
 ================
@@ -235,8 +234,8 @@ func RepairKeeper(c *domain.Character, now time.Time) Changes {
 ================
 ResetDailyIfStale
 
-CGame_TickPlayers resets every online player's daily count when the local
-day changes (CGObjPC_ResetDailyPK 4EB200). Inferred: an offline player's
+The native player tick resets every online player's daily count when the
+local day changes. Inferred: an offline player's
 count is reset the same way when it next enters or ticks, standing in for
 the database's day rollover.
 ================
