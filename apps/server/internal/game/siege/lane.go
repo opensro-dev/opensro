@@ -93,8 +93,9 @@ type Lane struct {
 ================
 NewLane
 
-The shipped schedule unless the config names one. Every edge schedule must
-exist: a schedule.cfg missing one would silently drop a war phase.
+Schedules come from LoadSchedules. None at all is a shard without fortress
+war: no edge ever runs. Otherwise every edge schedule must exist, since a
+schedule.cfg missing one would silently drop a war phase.
 ================
 */
 func NewLane(config LaneConfig) (*Lane, error) {
@@ -105,14 +106,10 @@ func NewLane(config LaneConfig) (*Lane, error) {
 		config.Location = time.Local
 	}
 	if config.Schedules == nil {
-		parsed, err := ParseSchedules(shippedSchedule, config.Location)
-		if err != nil {
-			return nil, fmt.Errorf("siege: shipped schedule: %w", err)
-		}
-		config.Schedules = parsed
+		return nil, fmt.Errorf("siege: lane needs its schedules (LoadSchedules)")
 	}
 	for _, edge := range edgeOrder {
-		if _, ok := config.Schedules[edge.name]; !ok {
+		if _, ok := config.Schedules[edge.name]; !ok && len(config.Schedules) > 0 {
 			return nil, fmt.Errorf("siege: schedule %s is missing", edge.name)
 		}
 	}
