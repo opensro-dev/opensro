@@ -24,7 +24,7 @@ Machine-specific notes belong in an untracked `CLAUDE.local.md`, not here.
   Read it for evidence; never import from it.
 
 Scope rule: the v1.150 client defines what exists (data, wire, UI). For
-server-only mechanics take the v1.188 `SR_GameServer` rule, trimmed to the
+server-only mechanics take the original server's rule, trimmed to the
 v1.150 feature set. When neither binary shows a rule, infer how the original
 would have implemented it, record the inference in a code comment, and ship
 it. Do not leave "no evidence" open questions.
