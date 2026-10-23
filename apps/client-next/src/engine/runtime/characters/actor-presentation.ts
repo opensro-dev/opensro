@@ -29,7 +29,7 @@ undroppedLoot
 
 The selected entities without the drops still waiting on their monster's
 death. The server publishes a victim's drops at its death transition
-(CGObjMob_CreditKillerOnDeath 4C42F0), but the client holds that death until
+(the native death credit), but the client holds that death until
 the killing hit plays; the drops wait with it, unseen and unpickable, so the
 item lands when the monster falls instead of before the last blow.
 ================
