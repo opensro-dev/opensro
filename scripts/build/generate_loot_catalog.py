@@ -6,8 +6,9 @@ generate_loot_catalog.py - compile immutable v1.150 loot and eligibility audit
 Only normalized evidence from the operator's source-data is read: the client snapshot, both
 backups' drop selection (vsro/isro-drops-source.json) and their reward rules.
 Neither backup is proven retail, so the merge below is an inference (#459):
-ISRO-R is preferred wherever it authors a class row or assigns an item, and
-vSRO fills every level and item ISRO-R leaves empty. The audit names the
+the later data is preferred wherever it authors a class row or assigns an
+item, and the older data fills every level and item the later data leaves
+empty. The audit names the
 source of every class row and assignment and every row the merge dropped.
 Inferred ordinary consumable rates are deliberately explicit here; they are
 not represented as recovered rates.
@@ -37,14 +38,14 @@ SPECIAL_ITEMS = ["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_" + kind + "_B"
 # Preference order: the first source that authors a row or an item wins.
 SOURCE_ORDER = ("isro", "vsro")
 # Owner, 2026-10-10 (#457): rare equipment keeps vSRO's table and items.
-# ISRO-R's rare table rolls only d9 A at levels 76-90, which would leave
+# The later data's rare table rolls only d9 A at levels 76-90, which would leave
 # every other degree's rare unreachable there.
 RARE_SOURCE_ORDER = ("vsro", "isro")
 # The catalog's level rows, as the runtime's catalogLevels.
 CATALOG_LEVELS = 180
 # The runtime's negligibleProbability: a class at or below it never rolls.
 NEGLIGIBLE = 0.000001
-# _RefDropItemAssign service value of an enabled row.
+# The drop-assignment service value of an enabled row.
 SERVICE_ENABLED = 1
 # The equipment class tables, keyed by the catalog's rare flag.
 EQUIPMENT_TABLES = {False: "Equip", True: "RareEquip"}
@@ -127,7 +128,7 @@ def merge_class_table(drops, table):
 # ================
 # live_generations
 #
-# A backup keeps older generations of an updated _RefDropItemAssign row on
+# A backup keeps older generations of an updated drop-assignment row on
 # other pages. The row on the page with the newest LSN is the live one: it
 # reproduces every choice of the old committed vSRO projection (336 of 336
 # duplicated stones). Generations are keyed by item and class and chosen
@@ -154,7 +155,7 @@ def live_generations(rows, audit, source):
 # ================
 # select_assignments
 #
-# Each item's live, enabled _RefDropItemAssign rows from the first source
+# Each item's live, enabled drop-assignment rows from the first source
 # that enables it, in RARE_SOURCE_ORDER for rare equipment. Rows naming an item the v1.150 client lacks are dropped and
 # logged by source and raw id; zero-weight rows are dropped and logged.
 # ================
@@ -181,8 +182,9 @@ def select_assignments(drops, items, audit):
 		audit["assignmentSources"][source].append(codename)
 	for source in SOURCE_ORDER:
 		audit["assignmentSources"][source].sort()
-	# ISRO-R service-0 rows for an item only vSRO enables: vSRO still
-	# supplies it, since ISRO-R retired content v1.150 still has.
+	# Later-data service-0 rows for an item only the older data enables: the
+	# older data still supplies it, since the later data retired content
+	# v1.150 still has.
 	retired = set()
 	for row in drops["isro"]["assignments"]:
 		if row["service"] != SERVICE_ENABLED and row["client"] and chosen.get(row["codename"], ("", None))[0] == "vsro":
