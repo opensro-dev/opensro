@@ -3,11 +3,9 @@
 
 deathdrop.go - which inventory item a death drops
 
-CGObjPC_ApplyDeathPenalty (4E6980, 4E6BF6..4E6CB0) rolls the drop chance
-and asks the inventory for a slot
-(CGStorageOP_Inventory_RandomSelectSlotForDeathPenalty 4BB460); the item
-then leaves through the ordinary ground drop (move 0x17 re-typed to 7 by
-CGObjPC_ItemMove_GroundDropOrDeathDrop 5264E0). Every rand() draw is the
+The native death penalty rolls the drop chance and asks the inventory for
+a random slot; the item then leaves through the ordinary ground drop (move
+0x17 re-typed to 7). Every rand() draw is the
 native's, in its order.
 
 ===========================================================================
@@ -21,7 +19,7 @@ const (
 	// equipmentSlots is the 13 equipped slots 0..12; the bag starts at 13.
 	equipmentSlots = 13
 	// The weapon (6) and the job suit / cape (8) never drop; slot 7
-	// rerolls when it holds ammunition (CGObj_IsAmmunition, TID 3/3/4).
+	// rerolls when it holds ammunition (TID 3/3/4).
 	weaponSlot     = 6
 	secondarySlot  = 7
 	jobSlot        = 8
@@ -33,8 +31,8 @@ const (
 ================
 DropSlot
 
-One inventory slot as the picker sees it. Droppable is
-CGItem_CanDropOnDeathPenalty (4B7CF0).
+One inventory slot as the picker sees it. Droppable is the item's native
+death-drop test.
 ================
 */
 type DropSlot struct {
@@ -56,7 +54,7 @@ type DropRoll func() (uint32, error)
 ================
 RollsDrop
 
-4E6BF6: rand() % 101 <= the penalty's chance.
+Natively rand() % 101 <= the penalty's chance.
 ================
 */
 func RollsDrop(penalty uint32, roll DropRoll) (bool, error) {
@@ -71,7 +69,7 @@ func RollsDrop(penalty uint32, roll DropRoll) (bool, error) {
 ================
 SelectDropSlot
 
-4BB460. A murderer (penalty > 0; a guild-war death passes 0) first rolls
+The native slot pick. A murderer (penalty > 0; a guild-war death passes 0) first rolls
 an equipped slot; when that slot holds nothing droppable, or for anyone
 else, the nth occupied bag slot is taken, n = rand() % occupied + 1, and
 dropped only when that item may drop. False: nothing drops.
