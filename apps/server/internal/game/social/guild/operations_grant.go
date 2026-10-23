@@ -64,9 +64,9 @@ func refusedGrant(reason string) grantOutcome {
 // view keep the title their spawn row carried (ICUser +0x78C is written
 // only by the 0x30D7 parse) until they next come into view, as native.
 //
-// Port-only, not native: v1.188 hands the grant to the shard manager
-// (CGObjPC_HandleGuildUpdateNickname7256, 517B70) and its push to the other
-// members was not found; the earlier port sent subOp-6 &0x20, which v1.150
+// Port-only, not native: the native rule hands the grant to the shard
+// manager, and its push to the other members was not found; the earlier
+// port sent subOp-6 &0x20, which v1.150
 // applies to the member name. Whatever native sent, the v1.150 delta cannot
 // carry a title, so this re-seed is a deliberate deviation that fixes it. Beyond the shared leader gate the
 // guild must be level GuildNameGrantMinLevel+ (the pinned client arm),
@@ -178,9 +178,9 @@ func HandlePositionGrant(deps Dependencies, divisionID string, actor *enterworld
 	}
 	// The commander is the guild master's own role: the client's grant
 	// window offers 0, 2, 4, 8, 0x10 and 0x20 only (5F4D70), the retail
-	// _Guild_FnAddMember gives it to MemberClass 0, and
-	// _Guild_Delegate_Master refuses (-1002) a master without it. A grant
-	// can neither hand it out nor take it from the master.
+	// add-member step gives it to the leader class, and the master
+	// handover refuses (-1002) a master without it. A grant can neither
+	// hand it out nor take it from the master.
 	if request.Position == FortressRoleCommander {
 		return refusedGrant("the commander role belongs to the guild master")
 	}

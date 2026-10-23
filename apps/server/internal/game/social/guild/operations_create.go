@@ -37,7 +37,7 @@ func refusedCreateCode(reason string, code byte) CreateOutcome {
 // conflict (DECISION - the CreateCharacter EqualFold precedent; no
 // native pin on guild-name collation exists). The two NAME-LENGTH
 // refusals answer 0xB663 {2, GuildErrInvalidGuildNameLen} - the pinned
-// v1.188 0x4C18 emit covers both the empty and the over-cap name
+// native 0x4C18 emit covers both the empty and the over-cap name
 // (errors.go); every other refusal stays silent. The selected NPC gid is
 // decoded and surfaced for the log only: no NPC-interaction plane
 // exists server-side, so there is nothing honest to validate it
@@ -55,11 +55,10 @@ func refusedCreateCode(reason string, code byte) CreateOutcome {
 // friend lane's FriendJID projection.
 //
 // The leader's fortressRole is the commander's (1), evidenced: the retail
-// _Guild_FnAddMember sets SiegeAuthority 1 for MemberClass 0, and the
-// master's handover (v1.188 5C46E0, _Guild_Delegate_Master) moves it with
-// the grade. The client's fortress windows gate on that role (827DB0)
-// while the server gates on the grade (CGuild_IsMemberMaster 5D0F50); the
-// two agree only while the leader holds it.
+// add-member step sets SiegeAuthority 1 for the leader class, and the
+// master's handover moves it with the grade. The client's fortress
+// windows gate on that role (827DB0) while the server gates on the
+// grade; the two agree only while the leader holds it.
 func HandleCreate(deps Dependencies, divisionID string, actor *enterworld.Character, payload []byte, online func(name string) bool) CreateOutcome {
 	if actor == nil {
 		return refusedCreate("characterNotFound")
