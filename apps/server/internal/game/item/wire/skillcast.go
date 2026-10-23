@@ -18,7 +18,7 @@ import "math"
 // Ordinary cast brackets own one 0xB505 mode-2 finalize with the
 // same token. Exception: tele guided travel closes on arrival (8DD611/8DD61C),
 // with secondary motion authored by its effect metadata. The client has no
-// arbitrary wall-clock finalize - sub_8dcf40
+// arbitrary wall-clock finalize - 8DCF40
 // callers are event-driven - so without a steering payload the ONLY thing that
 // clears busy bit 2 (and reopens the 0x2476 move gate) is a received 0xB505
 // mode 2. B245 opens the action bracket immediately. B505 mode 1 releases
@@ -29,19 +29,19 @@ import "math"
 // Opcodes of the skill-cast bracket.
 const (
 	// OpSkillCastResult is the Sâ†’C 0xB245 cast bracket open: success enters
-	// motion state 2 through sub_776830 â†’ sub_8e06e0 Init. The fail form
+	// motion state 2 through 776830 â†’ 8E06E0 Init. The fail form
 	// ([ok != 1][errCode]) is a pure notice - not composed here; landing 1
 	// keeps every non-accepted shape on its pre-existing refuse path.
 	OpSkillCastResult uint16 = 0xB245
 	// OpSkillEffectControl is the Sâ†’C 0xB505 effect-control packet
-	// (sub_8e2c90 via thunk sub_7754f0): mode 1 re-arms steering, mode 2
-	// finalizes (sub_8dcf40 â†’ busy bit 2 clears). The client never sends
+	// (8E2C90 via thunk 7754F0): mode 1 re-arms steering, mode 2
+	// finalizes (8DCF40 â†’ busy bit 2 clears). The client never sends
 	// it - a deferred close must be a server emit.
 	OpSkillEffectControl uint16 = 0xB505
 )
 
 // SkillCastSuccess is the common 0xB245 success prefix pinned in the
-// sub_776830 fold research. Live combat appends its target/result block via
+// 776830 fold research. Live combat appends its target/result block via
 // SkillCastSingleTargetResult:
 //
 //	[ok=0x01][btResult u8][skillId u32][casterGid u32][instanceToken u32]
@@ -71,9 +71,9 @@ type SkillCastSuccess struct {
 	// client's f08a48 instance map and the finalize must echo it.
 	InstanceToken uint32
 	// OwnerOrTargetGid is the 4 bytes the plan mislabeled "dur f32": a u32
-	// GID, stored to SkillEffectObj+0xcc by an integer mov (sub_8e0440
-	// @0x8e0493/97, no fld/fstp) and consumed by
-	// GidObjectRegistry_FindCharacterByGid (sub_8d9740), read on the
+	// GID, stored to SkillEffectObj+0xcc by an integer mov (8E0440
+	// 8E0493/97, no fld/fstp) and consumed by
+	// GidObjectRegistry_FindCharacterByGid (8D9740), read on the
 	// local-echo path REGARDLESS of steeringFlags. Single-target result
 	// encoding derives this from TargetGid so the animation/effect owner and
 	// the damage-row owner cannot diverge. Other cast shapes may still send 0.
@@ -120,8 +120,8 @@ func SkillCastTravelFrame(cast SkillCastSuccess, destination SkillCastFacingPoin
 SkillCastTeleportFrame
 
 The Wizard's Teleport (tel2): the same result with bit 2 in place of bit 8
-(5862E0 sets +0x4C |= 2 for the tel2 block). The client takes bit 2 as a
-position it applies at once, not a travel it walks.
+(the native handling sets that position flag for the tel2 block). The
+client takes bit 2 as a position it applies at once, not a travel it walks.
 ================
 */
 func SkillCastTeleportFrame(cast SkillCastSuccess, destination SkillCastFacingPoint) Frame {
@@ -207,8 +207,8 @@ func (p SkillCastFacingPoint) writeTo(writer *Writer) *Writer {
 }
 
 // MaxSkillActionDamage is the 24-bit damage ceiling of a type-0 action-result
-// row. The client obtains damage from packedResult>>8, and the v1.188
-// Formulae.cpp helpers clamp their result to the same 16,777,215 ceiling.
+// row. The client obtains damage from packedResult>>8, and the native
+// damage helpers clamp their result to the same 16,777,215 ceiling.
 const MaxSkillActionDamage uint32 = 0x00FFFFFF
 
 // SkillCastTargetImpact is one authoritative stage row in a single-target
@@ -229,16 +229,16 @@ type SkillCastTargetImpact struct {
 	Knockdown SkillCastFacingPoint
 	Knockback SkillCastFacingPoint
 	// Absorb makes this a Force wall's type-7 record; Skipped a bare type 8;
-	// Blocked a bare type 2; Slain a ck kill, the bare 0x86 (5855F0 writes
-	// only the kind byte).
+	// Blocked a bare type 2; Slain a ck kill, the bare 0x86 (the native
+	// writer writes only the kind byte).
 	Absorb  *SkillCastAbsorb
 	Skipped bool
 	Blocked bool
 	Slain   bool
 }
 
-// SkillCastAbsorb is the rest of a type-7 record (5855F0): the pool left
-// once this impact's absorbed damage is counted, and the authored pool.
+// SkillCastAbsorb is the rest of a type-7 record: the pool left once this
+// impact's absorbed damage is counted, and the authored pool.
 // Broken (tag bit 7) marks the impact that emptied it.
 /*
 ================
@@ -266,7 +266,7 @@ type SkillCastAbsorb struct {
 //
 // tag bit 7 is the stop/death transition and its low seven bits are the result
 // kind (zero here). packedResult keeps result flags in its low byte and each
-// full hit damage in its high 24 bits (native 585664). Damage must come from
+// full hit damage in its high 24 bits. Damage must come from
 // a committed hit; its magnitude may exceed the victim's remaining HP. The
 // HP owner clamps its debit separately from this feedback value.
 /*
@@ -283,7 +283,7 @@ type SkillCastSingleTargetResult struct {
 	// bit 3 installs a movement controller; stationary casts omit it.
 	facingPoint SkillCastFacingPoint
 	// absorb is the defender's wall group: a second target entry with the
-	// same gid (58EC9F appends it to the result's target list).
+	// same gid (the native result appends it to the result's target list).
 	absorb []SkillCastTargetImpact
 }
 
@@ -402,11 +402,11 @@ func (r SkillCastSingleTargetResult) Encode() []byte {
 }
 
 // SkillCastFinalize is the 0xB505 mode-2 finalize, shape pinned in the
-// sub_8e2c90 fold research:
+// 8E2C90 fold research:
 //
 //	[mode=0x02][extra u8 (read, discarded)][instanceToken u32]
 //
-// A token miss is a SILENT consume-and-return (sub_8e2bc0) - the bracket
+// A token miss is a SILENT consume-and-return (8E2BC0) - the bracket
 // never closes - so the token must echo the success frame's exactly.
 /*
 ================

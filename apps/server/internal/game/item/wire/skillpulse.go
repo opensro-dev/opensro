@@ -3,8 +3,8 @@
 
 skillpulse.go - linked attack result notifications without cast ownership
 
-The v1.150 client reads B3C6 mode 2 at 7757CB. The v1.188 server sends the
-same payload under B0BC from 59B220. Each pulse owns only its result batch.
+The v1.150 client reads B3C6 mode 2 at 7757CB. The native server sends the
+same payload under B0BC. Each pulse owns only its result batch.
 
 ===========================================================================
 */
@@ -38,8 +38,9 @@ func SkillPulseFrame(caster, skill uint32, targets []SkillAreaTarget) Frame {
 ================
 SkillTrapResultsFrame
 
-59B2A0 writes mode 3 and the trap GID. The receiver resolves the skill and
-explicit effect position from that object's previously published spawn.
+The native trap sender writes mode 3 and the trap GID. The receiver
+resolves the skill and explicit effect position from that object's
+previously published spawn.
 ================
 */
 func SkillTrapResultsFrame(trap uint32, targets []SkillAreaTarget) Frame {
@@ -53,7 +54,7 @@ func SkillTrapResultsFrame(trap uint32, targets []SkillAreaTarget) Frame {
 ================
 skillResultBatch
 
-Both independent result envelopes use the same 585730 target grammar.
+Both independent result envelopes use the same target grammar.
 ================
 */
 func skillResultBatch(w *Writer, targets []SkillAreaTarget) Frame {
