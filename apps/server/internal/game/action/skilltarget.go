@@ -3,12 +3,11 @@
 
 skilltarget.go - may this skill act on that player?
 
-The player-target part of TargetValidation_ValidateAllTargets (58CC70) and
-Skill_ValidateTargetPermissions (58D7A0), read against the row's target
-columns (enterworld.SkillTargets), and the walk into reach that the command
-actor makes before a player-targeted cast. Target vfuncs: IsPlayer 482560,
-IsNPC 4825C0, IsMonster 482600, GetLifeStateByte 485EE0, GetMotionState
-4AA590.
+The player-target part of the native target validation and target
+permissions, read against the row's target columns
+(enterworld.SkillTargets), and the walk into reach that the command actor
+makes before a player-targeted cast. The target's kind, life state and
+motion state come from the target object, as natively.
 
 ===========================================================================
 */
@@ -26,12 +25,12 @@ import (
 ==================
 playerSkillTarget
 
-58CC70 for a player target. Returns 0 to admit, else the refusal code:
+The native target validation for a player target. Returns 0 to admit, else the refusal code:
 
   - missing, or on another plane or sector              0x3006
   - dead, unless the row selects corpses or resu        0x3006
   - refused by skillTargetPermission                    0x3006
-  - resu, above a nonzero word 0 (58D0CE)               0x3012
+  - resu, above a nonzero word 0                         0x3012
 
 A resu row may admit the dead; its corpse selector independently refuses
 a living target in the common permission predicate.
@@ -45,7 +44,7 @@ func (rt *Runtime) playerSkillTarget(division string, caster, target *enterworld
 ================
 playerSkillTargetWith
 
-playerSkillTarget with 5293A0's control flags for its hostile-player test
+playerSkillTarget with the attack permission's control flags for its hostile-player test
 (playerAttackArea when the target is an area victim).
 ================
 */
@@ -103,16 +102,16 @@ func (rt *Runtime) playerSkillTargetWith(division string, caster, target *enterw
 ==================
 skillTargetPermission
 
-58D7A0 for a player caster and a player target, in its order:
+The native target permissions for a player caster and a player target, in its order:
 
   - DontCare admits at once
   - no Self and the target is the caster: refuse
   - DeadBody and a living target: refuse
   - EnemyM without EnemyP: refuse (the target is a player)
   - Party without Ally or Self: both must have a party object
-    (+0x1CB8) with the same id (CGObjPC_GetPartyID 4EA280)
+    with the same id
 
-Motion 8 without da (+0x240) would also refuse; players here have no
+Motion 8 without da would also refuse; players here have no
 motion-8 channel, only sit, so that compare cannot fire.
 ==================
 */
@@ -140,7 +139,7 @@ func skillTargetPermission(t enterworld.SkillTargets, sameObject, targetAlive, s
 ================
 sharePartyObject
 
-Both players have a party object (+0x1CB8) with the same ID.
+Both players have a party object with the same ID.
 ================
 */
 func (rt *Runtime) sharePartyObject(division string, a, b *enterworld.Character) bool {
@@ -176,7 +175,7 @@ func (rt *Runtime) supportTargetSpacing(caster, target *enterworld.Character, sk
 ==================
 beginSupportApproach
 
-Native 58D8F0 never refuses a target for range: the command actor walks
+The native admission never refuses a target for range: the command actor walks
 the caster into reach first. The port keeps that command as a support
 intent (basicAttackIntent.SupportCast); the simulation tick keeps walking
 and casts once the target is in reach (advanceSupportCastIntent).

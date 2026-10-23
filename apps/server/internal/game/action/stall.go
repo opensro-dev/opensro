@@ -3,19 +3,19 @@
 
 stall.go - street stalls: opening, visiting, editing and selling
 
-CGObjPC_HandleStallCreate70B1 (515F10) opens a stall for a standing PC
+The native 0x70B1 stall create opens a stall for a standing PC
 outside a job suit; the stall shows nearby (0x30DF) and on the spawn row of
-everyone who comes into view (the title block 86A26D reads). A visitor
-within 100 units (516270: Vec3_Length <= 100) sees its greeting, offers and
+everyone who comes into view (the title block client 86A26D reads). A
+visitor within 100 units (natively a length <= 100) sees its greeting, offers and
 visitors; while the stall is open for business (the owner's 0x71A8 kind 5)
-a visitor buys a slot (CFleaMarket 472700: 0x3C2E closed, 0x3C10 empty
+a visitor buys a slot (the native flea market: 0x3C2E closed, 0x3C10 empty
 slot, 0x3C11 short of gold, 0x3C12 full bag). The owner edits only while it
-is closed, apart from the mode, the open flag and the greeting (472E20).
+is closed, apart from the mode, the open flag and the greeting.
 The sale moves the slot's count out of the owner's bag into the buyer's
 first empty bag slot and the price the other way, in one transaction, as
-the buyer's client places it (5A3870).
+the buyer's client places it (client 5A3870).
 
-INFERENCE: four rules follow the v1.150 texts where the GameServer's codes
+INFERENCE: four rules follow the v1.150 texts where the original server's codes
 have none:
 
   - a closed stall answers UIIT_MSG_FLEAMARKET_ERR_MARKET_CLOSED (0x0E)
@@ -45,7 +45,7 @@ import (
 )
 
 const (
-	// stallVisitReach is 516270's Vec3_Length <= 100.
+	// stallVisitReach is the native length <= 100.
 	stallVisitReach = 100
 	// stallErrNotHost is 0x3C2A: the target keeps no stall.
 	stallErrNotHost uint8 = 0x2A
@@ -107,7 +107,7 @@ func (rt *Runtime) HandleStallCreate(division string, c *enterworld.Character, p
 	if err := rt.Stalls.Open(division, c.Name, title, decoration); err != nil {
 		return refuse(wire.StallErrHasStall)
 	}
-	// CGObjPC_SetStallState (515EAA) writes the interaction state 4.
+	// Natively the stall state writes the interaction state 4.
 	rt.endStorageInteraction(division, c.Name)
 	opened := wire.Frame{Opcode: wire.OpStallOpened, Payload: wire.EncodeStallOpened(enterworld.ObjectIDForCharacter(c), title, decoration)}
 	rt.PushDivisionPeerFrames(division, c.Name, []wire.Frame{opened})
@@ -118,7 +118,7 @@ func (rt *Runtime) HandleStallCreate(division string, c *enterworld.Character, p
 ================
 stallPlaceRefusal
 
-515F10's state tests: a living world, not riding, no job suit.
+The native stall create's state tests: a living world, not riding, no job suit.
 ================
 */
 func (rt *Runtime) stallPlaceRefusal(division string, c *enterworld.Character) uint8 {
@@ -359,7 +359,7 @@ func (rt *Runtime) HandleStallEdit(division string, c *enterworld.Character, pay
 	if !ok {
 		return refuse(stallErrNotHost)
 	}
-	// 472E20: an open stall takes only the mode, the open flag and the
+	// Natively an open stall takes only the mode, the open flag and the
 	// greeting.
 	if current.Open && kind != wire.StallEditMode && kind != wire.StallEditOpen && kind != wire.StallEditGreeting {
 		return refuse(wire.StallErrHostState)
@@ -616,7 +616,7 @@ func (rt *Runtime) stallOfferable(division string, c *enterworld.Character, bagS
 ================
 stallCountRefusal
 
-472E20: a count of at least one, no more than the bag stack holds.
+Natively a count of at least one, no more than the bag stack holds.
 ================
 */
 func (rt *Runtime) stallCountRefusal(division string, c *enterworld.Character, bagSlot uint8, count uint16) uint8 {
@@ -768,7 +768,7 @@ func (rt *Runtime) sellStallSlot(division, ownerName string, slot uint8, buyer *
 stallCommission
 
 The stall network's 1% (UIIT_MSG_WARENETWORK_REGIST_03), clamped to
-[1, 100000] as 755960 prints it.
+[1, 100000] as client 755960 prints it.
 ================
 */
 func stallCommission(price uint32) uint64 {
