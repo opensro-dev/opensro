@@ -79,7 +79,7 @@ mutation, or B245 bracket exists.
 A fresh press from a seat never gets here: standForSeatedCommand stands
 the player first (seatedcommand.go has the native case). This refusal
 covers the continuations - approach, release and resumed attacks - that
-meet a seat or a transition later. playerCastBlocked adds the frozen, sleeping or stunned caster (58DAEF).
+meet a seat or a transition later. playerCastBlocked adds the frozen, sleeping or stunned caster.
 ==================
 */
 func (rt *Runtime) skillCastPostureBlocked(
@@ -106,7 +106,7 @@ acceptSkillCast
 acceptSkillCast owns learned racial base attacks and admitted direct-damage
 offensive skills against one live monster. It snapshots
 player stats, derives equipped-item ParamKeeper contributions, evaluates
-the pinned v1.188 normal-result formula, commits HP through the monster
+the pinned native normal-result formula, commits HP through the monster
 registry's sole mutation door, and serializes that committed outcome.
 
 Unsupported shapes fail closed before a token is minted. In particular,
@@ -155,9 +155,9 @@ func (rt *Runtime) acceptSkillCastAt(
 ================
 linkedStageTargetRefusal
 
-A linked stage (a combo's next row) beyond reach. 4AECE7 returns it to
-action state 2, which executes without measuring range (only state 1
-pursues), and 58CC70 asks of the target only the same plane and adjacent
+A linked stage (a combo's next row) beyond reach. The native chain returns
+it to action state 2, which executes without measuring range (only state 1
+pursues), and its target check asks only the same plane and adjacent
 sectors. Returns 0 to execute, else the refusal code.
 ================
 */
@@ -239,7 +239,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	}
 	consumeAmmo := (basic && !transformStrike && weaponRequiresAmmunition(loadout.WeaponKind)) || (advanced && skill.Ammunition.Count != 0)
 	if consumeAmmo {
-		// 58E32D refuses any skill whose cnsm requirement is unmet with
+		// The native admission refuses any skill whose cnsm requirement is unmet with
 		// 0x300E, the basic attack included: SKILL_CH_BOW_BASE and
 		// SKILL_EU_CROSSBOW_BASE carry cnsm 4/1 and 4/2. The client shows
 		// the out-of-ammunition notice for it, as it does for skills.
@@ -280,7 +280,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	if err != nil {
 		return OpResult{}, skillCastRefused
 	}
-	// 4AECE7 returns the linked row to admission state 2. Each stage
+	// The native chain returns the linked row to admission state 2. Each stage
 	// checks and pays its own resources; root ownership only skips the shared cooldown.
 	mask := admitExecution
 	if rootID != 0 {
@@ -315,7 +315,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	)
 	spacing, spacingOK := rt.playerToMonsterCombatSpacing(snapshot, target, actionReach)
 	// The approach radius admits a new cast. An already-owned release uses
-	// the native 585CD1 -> 58D8D0 target validation, not another range test.
+	// the native release target validation, not another range test.
 	// Keep this symmetric with monsterAttackStage; fleeing is not cast cancel.
 	if !spacingOK || simulation.IsDungeonRegion(playerPose.RegionID) != simulation.IsDungeonRegion(monsterPose.RegionID) {
 		return OpResult{}, skillCastDeferred
@@ -329,7 +329,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 			return offensiveRefusal(code), skillCastRefused
 		}
 	}
-	// 4ADD44 / 4AEB6E: the attack starting here aims the caster's hawk.
+	// The attack starting here aims the caster's hawk, as natively.
 	if release == nil && rootID == 0 {
 		rt.noteHawkOwnerAttack(divisionID, snapshot, target.Gid, nowMs)
 	}
@@ -354,8 +354,8 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	if skill.OffensiveArea.Radius != 0 {
 		return rt.acceptSkillAreaAt(divisionID, character, snapshot, skill, skill.OffensiveArea, false, true, primary, attacker, loadout, consumeAmmo, nowMs, rootID, release)
 	}
-	// 586E04..586E1B: with no area of its own, an imbue-eligible attack
-	// (att value 5) that passes 589D20 selects its victims with the active
+	// With no area of its own, an imbue-eligible attack (att value 5) that
+	// passes the native execution selector picks its victims with the active
 	// imbue's efr (the Lightning Force); the chain's victims are flagged.
 	if skill.Attack.Value5 != 0 && skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector {
 		if imbue, _ := rt.activeWeaponImbue(divisionID, snapshot.Name, nowMs); imbue.Pinned && imbue.Area.Radius != 0 {
@@ -452,7 +452,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 				tuning = rt.commitTuningMana(divisionID, character, skill.FixedDamage, committed)
 			}
 			if skill.LifeSteal.Present {
-				// 40F750: the caster recovers the life taken (skilllifesteal.go).
+				// The caster recovers the life taken (skilllifesteal.go).
 				stolen = rt.commitLifeSteal(divisionID, character, committed)
 			}
 			if skill.PositionEffect.Charge {
@@ -509,7 +509,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	}
 	if skill.ActionHandler == enterworld.SkillActionProjectile {
 		flight := projectileFlightMs(playerPose, targetAt, skill.ProjectileSpeed)
-		// 5860D2 retains zero-preparation shots too. A fast shot or linked
+		// The native release retains zero-preparation shots too. A fast shot or linked
 		// stage must not lose its effect actor before the projectile arrives.
 		closeAt = max(closeAt, nowMs+flight+1)
 	}
@@ -562,7 +562,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	if consumeAmmo {
 		actorFrames = append(actorFrames, ammunitionFrames(ammo)...)
 	}
-	// 593832: the attacker's unblocked attempts wear its weapon.
+	// Natively the attacker's unblocked attempts wear its weapon.
 	var tally wearTally
 	for _, formula := range formulas {
 		tally.note(formula.Blocked, true)
@@ -597,7 +597,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	// Other recipients' public level-up effects also belong in the actor's
 	// projection; its own public subset is already in killProgressionFrames.
 	actorFrames = append(actorFrames, settlement.otherPublic...)
-	// Entering battle (4E27C0) is a consequence of the hit, published after
+	// Entering battle is a consequence of the hit, published after
 	// its burst like the other damage-application state changes.
 	actorFrames = append(actorFrames, battleFrames...)
 	broadcastFrames = append(broadcastFrames, battleFrames...)
@@ -756,8 +756,8 @@ func (rt *Runtime) extendChainBracket(divisionID, characterName string, closeAtM
 chainStageBlocked
 
 chainStageBlocked is the gate a server-owned chain stage waits on. Native
-KEEP_UP (4AECB6..4AECC9) holds only while the casting instance at
-manager+1D8 (char+C08) is set, i.e. a positive-time step has not released.
+KEEP_UP holds only while the skill manager's casting instance is set,
+i.e. a positive-time step has not released.
 Queued closes and zero-time releases are presentation, not this command;
 the chain's own root bracket in particular must stay open meanwhile.
 ==================
@@ -963,10 +963,10 @@ func (rt *Runtime) drainSelectedSkillFinalizes(nowMs int64, monstersOnly bool) [
 ==================
 danceSelectorActive
 
-danceSelectorActive is CSkillManager_CheckOwnerCondition 59DDF0: bit 0 of
-skill-manager +0x1D0. 5842AC installs it from an active persistent skill's
-scls word and 582C76 clears it when that skill retires, so it is set exactly
-while such an effect is live.
+danceSelectorActive is the native owner-condition test: bit 0 of the skill
+manager's owner condition. An active persistent skill's scls word installs
+it and the skill's retirement clears it, so it is set exactly while such an
+effect is live.
 
 Owner's rule: a Dancing needs the dancer inside ANOTHER Bard's music. Only
 an instance handed out by someone else's aura counts (a child, with an
