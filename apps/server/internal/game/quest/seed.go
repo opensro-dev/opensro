@@ -9,13 +9,11 @@ import (
 // The character-creation quest seed: the active quest(s) retail grants a
 // fresh character.
 //
-// MECHANISM (v1.188 Eternity shard, _RefCharDefault_Quest - recovered
-// cluster fixedEnd=11/ncols=5: [u8
-// service][u32 shard quest id][u8 race][u8 level] + quest codename):
-// retail seeds fresh characters' quest state at creation from a
-// race-keyed default table, exactly parallel to _RefCharDefault_Skill
-// (the defaultskills.go seed). THE LIST IS CODENAMES (the load-bearing
-// cross-version rule); exactly two shard rows survive the codename join
+// MECHANISM: retail seeds fresh characters' quest state at creation
+// from a race-keyed default table, exactly parallel to the
+// default-skills seed (defaultskills.go). THE LIST IS CODENAMES (the
+// load-bearing
+// cross-version rule); exactly two default rows survive the codename join
 // into the shipped v1.150 questdata:
 //
 //	QTUTORIAL_CH  race 0 (China), level 1  -> SEEDED for Chinese
@@ -30,9 +28,9 @@ import (
 //	              put a titleless row in the quest window that retail
 //	              players never saw.
 //
-// The shard's other 12 rows are its custom QEV_ALL_BASIC_* event chain
+// The remaining default rows are a custom QEV_ALL_BASIC_* event chain
 // (level-keyed grants) whose codenames do not exist in v1.150 - the
-// codename join self-filters them, the extract_shard_bak.py precedent.
+// codename join self-filters them.
 //
 // Europe seeds NOTHING (grade B negative: no race-1 row survives the
 // join). v1.150 does ship QTUTORIAL_EU (id 210), but as an offer: Guide
