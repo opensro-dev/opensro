@@ -274,7 +274,7 @@ test("published Baroi locomotion is horizontally in-place", () => {
 // p_jinn, p_jinn_02, p_bear01, p_bear02), which stay COS.
 //
 // Actors: 145, including MOB_DH_SOLDIEREARTHGHOST, which the v1.150 client
-// places and a quest needs (the server keeps it spawnable despite the v1.188
+// places and a quest needs (the server keeps it spawnable despite the later
 // shard's all-zero caps, monster laterDisabledCodenames), and
 // common/automob.glb (MOB_AUTOMOB, creatable since #418).
 const COS_LOCOMOTION_RESOURCES = 43;
