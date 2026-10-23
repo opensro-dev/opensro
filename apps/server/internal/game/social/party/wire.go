@@ -11,8 +11,8 @@
 // 0x3393 {01 01} accept.
 //
 // Every opcode number and byte layout here is pinned from the v1.150
-// CLIENT folds (..\research\wip\browser-1to1\functions\); v1.188 /
-// DuckSoup numbers are behavior reference only and never copied. The
+// CLIENT folds (..\research\wip\browser-1to1\functions\); later-protocol
+// and third-party numbers are behavior reference only and never copied. The
 // client category-2 byte table is recovered. Existing-member predicates
 // are now connected to B0D5/B51A; other refusal producers remain under audit.
 package party
@@ -31,7 +31,7 @@ const OpPartyJoinInviteAck uint16 = 0xB51A
 const OpPartyJoinAck uint16 = 0xB452
 
 // partyErrorBusy is the reason a refused transaction submit reports
-// (4E7337 pushes 2): the target already has a proposal waiting.
+// (natively 2): the target already has a proposal waiting.
 const partyErrorBusy byte = 0x02
 
 // C->S opcodes, pinned from the client composers.
@@ -192,7 +192,7 @@ const (
 const PartyMaxMembers = 8
 
 // partyCapacity is admission capacity, distinct from the eight-slot wire/UI
-// storage bound. Research server 514560 tests party option bit 0: four members
+// storage bound. The original server tests party option bit 0: four members
 // without experience sharing, eight with it. Client category 2 codes 14/13
 // independently distinguish the two full-party refusals.
 func partyCapacity(options uint8) int {
