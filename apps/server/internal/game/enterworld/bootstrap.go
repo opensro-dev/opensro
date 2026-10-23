@@ -682,7 +682,7 @@ func (c *refItemCollector) finish() []RefItemRow {
 			continue
 		}
 		c.rows[i].DescriptionSymbol = item.DescriptionSymbol
-		c.rows[i].NativeFields = ItemUseNativeFields(item, c.deps.Skills)
+		c.rows[i].NativeFields = ItemStoneNativeFields(ItemUseNativeFields(item, c.deps.Skills), item, c.deps.MagicOptions)
 		if characters == nil || item.AssociatedCharacterCodename == "" {
 			continue
 		}

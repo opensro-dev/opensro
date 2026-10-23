@@ -11,6 +11,7 @@ package enterworld
 import (
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
@@ -53,6 +54,11 @@ type MagicOptionRow struct {
 	// Tag is column 7, the packed ASCII code the server's option switch
 	// (498690 / 496A70) dispatches on ('str', 'fz', 'hr', ...). Server-only.
 	Tag uint32 `json:"-"`
+	// Descriptors are the ten (word, flag) pairs at columns 29..48 with
+	// flag 1, minus the 'xxx' fillers: the authored equipment-family words
+	// the native stone binder substring-searches when a stone is placed on
+	// a target (see stonefamily.go). Server-only.
+	Descriptors []string `json:"-"`
 }
 
 /*
@@ -211,13 +217,22 @@ func (t *TextdataMagicOptions) load() {
 				tag = uint32(n)
 			}
 		}
+		var descriptors []string
+		for i := 0; i < 10 && len(fields) > 30+i*2; i++ {
+			word := strings.TrimSpace(fields[29+i*2])
+			flag, ok := textdataInt(fields[30+i*2])
+			if ok && flag == 1 && word != "" && word != "xxx" {
+				descriptors = append(descriptors, word)
+			}
+		}
 		t.byParamID[uint32(paramID)] = &MagicOptionRow{
-			Tag:        tag,
-			RangeWords: words,
-			ParamID:    uint32(paramID),
-			OptionName: fields[2],
-			ParamName:  fields[3],
-			Degree:     degree,
+			Tag:         tag,
+			RangeWords:  words,
+			ParamID:     uint32(paramID),
+			OptionName:  fields[2],
+			ParamName:   fields[3],
+			Degree:      degree,
+			Descriptors: descriptors,
 		}
 	}
 	log.Infof("bootstrap: magicoption.txt loaded from %s (%d row(s))", t.dir, len(t.byParamID))

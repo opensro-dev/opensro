@@ -16,7 +16,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { defined } from "../helpers/defined.mjs";
-const { alchemySelection } = await import( "../../src/engine/foundation/ui/alchemy-selection.ts" );
+const { alchemySelection, alchemyStoneRefusal, STONE_FAMILY_BITS } = await import(
+	"../../src/engine/foundation/ui/alchemy-selection.ts"
+);
 const { nativeWindowSections } = await import( "../../src/engine/foundation/ui/native-window-sections.ts" );
 const { decodeAuthoredLayout } = await import( "../../src/engine/foundation/ui/authored-layout.ts" );
 const { shopCatalog } = await import( "../../src/engine/foundation/gameplay/commerce.ts" );
@@ -52,6 +54,91 @@ test("reagents preserve every existing alchemy operation without a synthetic mod
 	assert.equal( alchemySelection( "advanced", [ 13 ], item( 14, 0x8ec ) ), null );
 	assert.deepEqual( defined( alchemySelection( "magic", [ 13, 14 ], item( 13, 0x32c ) ) ).slots, [] );
 	assert.equal( alchemySelection( "reinforce", [], item( 6, 0x32c ) ), null );
+});
+test("stone placement refuses degree first, then family, and binds without published data", () => {
+	const B = STONE_FAMILY_BITS;
+	// (tid3, tid4) packed the native way: tid3 at bits 7..10, tid4 at 11..15.
+	const equip = ( tid3, tid4 ) => 0x2c | (tid3 << 7) | (tid4 << 11);
+	const target = ( typeFlags, fields, magicReferences ) => ({
+		slot: 13,
+		typeFlags,
+		tooltip: { fields },
+		...(magicReferences ? { magicReferences } : {})
+	});
+	const stone = ( fields ) => ({ slot: 14, typeFlags: 0x0dec, tooltip: { fields } });
+	const weapon = target( equip( 6, 1 ), { itemClass: 4 } );
+
+	// Degree gate first: a degree mismatch reports the degree message even
+	// when the family mask would also refuse.
+	assert.equal(
+		alchemyStoneRefusal( weapon, stone( { itemParam1_29c: 3, stoneFamilyMask: 0 } ) ),
+		"UIIT_MSG_ENCHANT_EQUIPCLASS_MISMATCH"
+	);
+	// Signed truncation: target class 0 is degree class 1, not an underflow.
+	assert.equal(
+		alchemyStoneRefusal(
+			target( equip( 6, 1 ), { itemClass: 0 } ),
+			stone( { itemParam1_29c: 1, stoneFamilyMask: B.weapon } )
+		),
+		null
+	);
+	// Weapon family admitted by the weapon bit only.
+	assert.equal( alchemyStoneRefusal( weapon, stone( { itemParam1_29c: 2, stoneFamilyMask: B.weapon } ) ), null );
+	assert.equal(
+		alchemyStoneRefusal( weapon, stone( { itemParam1_29c: 2, stoneFamilyMask: B.shield } ) ),
+		"UIIT_STRGERR_CANNOT_BE_USED_TO_TARGET"
+	);
+	// A published zero mask (the folded kind gate) refuses every target.
+	assert.equal(
+		alchemyStoneRefusal( weapon, stone( { itemParam1_29c: 2, stoneFamilyMask: 0 } ) ),
+		"UIIT_STRGERR_CANNOT_BE_USED_TO_TARGET"
+	);
+	// Armour targets try the generic 'armor' word before the slot word.
+	const boots = target( equip( 1, 6 ), { itemClass: 4 } );
+	assert.equal( alchemyStoneRefusal( boots, stone( { itemParam1_29c: 2, stoneFamilyMask: B.armor } ) ), null );
+	assert.equal( alchemyStoneRefusal( boots, stone( { itemParam1_29c: 2, stoneFamilyMask: B.boots } ) ), null );
+	assert.equal(
+		alchemyStoneRefusal( boots, stone( { itemParam1_29c: 2, stoneFamilyMask: B.mail } ) ),
+		"UIIT_STRGERR_CANNOT_BE_USED_TO_TARGET"
+	);
+	// Accessories try 'accessory' before the subtype word.
+	const ring = target( equip( 12, 3 ), { itemClass: 4 } );
+	assert.equal( alchemyStoneRefusal( ring, stone( { itemParam1_29c: 2, stoneFamilyMask: B.accessory } ) ), null );
+	assert.equal( alchemyStoneRefusal( ring, stone( { itemParam1_29c: 2, stoneFamilyMask: B.ring } ) ), null );
+	// A repair-carrying target is searched as 'honor' for a repair stone
+	// and as 'weapon' for any other stone.
+	const repairWeapon = target( equip( 6, 1 ), { itemClass: 4 }, [ { optionName: "MATTR_REPAIR" } ] );
+	assert.equal( alchemyStoneRefusal( repairWeapon, stone( { itemParam1_29c: 2, stoneFamilyMask: B.honor } ) ), null );
+	assert.equal(
+		alchemyStoneRefusal( repairWeapon, stone( { itemParam1_29c: 2, stoneFamilyMask: B.weapon } ) ),
+		null
+	);
+	assert.equal(
+		alchemyStoneRefusal( repairWeapon, stone( { itemParam1_29c: 2, stoneFamilyMask: B.shield } ) ),
+		"UIIT_STRGERR_CANNOT_BE_USED_TO_TARGET"
+	);
+	// Without the published mask (or any tooltip) the stone binds as before
+	// and the server fuse stays the only gate.
+	assert.equal( alchemyStoneRefusal( weapon, stone( { itemParam1_29c: 2 } ) ), null );
+	assert.equal(
+		alchemyStoneRefusal(
+			{ slot: 13, typeFlags: equip( 6, 1 ) },
+			stone( { itemParam1_29c: 2, stoneFamilyMask: 0 } )
+		),
+		null
+	);
+
+	// The selection carries the refusal and binds nothing; without a target
+	// item the historical bind still happens.
+	const refused = defined(
+		alchemySelection( "reinforce", [ 13 ], stone( { itemParam1_29c: 3, stoneFamilyMask: 0 } ), weapon )
+	);
+	assert.equal( refused.refusal, "UIIT_MSG_ENCHANT_EQUIPCLASS_MISMATCH" );
+	assert.deepEqual( refused.slots, [ 13 ] );
+	assert.deepEqual( alchemySelection( "reinforce", [ 13 ], { slot: 14, typeFlags: 0x0dec } ), {
+		mode: "magic",
+		slots: [ 13, 14 ]
+	} );
 });
 test("constructor admission excludes dormant pages and auxiliary Guild dialogs", () => {
 	const read = name =>

@@ -3589,8 +3589,12 @@ export function createUi(
 		} else if ( id.startsWith( "alchemy-slot:" ) ) {
 			const item = view.gameplay?.inventory.find( r => r.slot === Number( id.slice( 13 ) ) );
 			if ( item && !view.gameplay?.inventoryPending ) {
-				const next = alchemySelection( alchemyMode, alchemySlots, item );
-				if ( next ) {
+				const target = alchemySlots.length ?
+					view.gameplay?.inventory.find( r => r.slot === alchemySlots[0] ) :
+					undefined;
+				const next = alchemySelection( alchemyMode, alchemySlots, item, target );
+				if ( next?.refusal ) hudMessages.append( hudCopy( next.refusal ) );
+				else if ( next ) {
 					alchemyMode = next.mode;
 					alchemySlots = next.slots;
 					alchemyQuantity = "1";
