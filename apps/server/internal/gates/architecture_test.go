@@ -56,7 +56,11 @@ func TestCorePackageBoundaries(t *testing.T) {
 	// Leaf rule engines monster instances carry: the textdata cell splitter,
 	// the paramkeeper channel model and the abnormal-status engine over it.
 	checkPackageImports(t, root, modulePath, "internal/data/texttable", nil, false)
-	checkPackageImports(t, root, modulePath, "internal/game/paramkeeper", nil, false)
+	// The parameter definitions load from the projection's derived data
+	// (paramkeeper.DefinitionsFile).
+	checkPackageImports(t, root, modulePath, "internal/game/paramkeeper", map[string]bool{
+		modulePath + "/internal/gamedata": true,
+	}, false)
 	checkPackageImports(t, root, modulePath, "internal/game/abnormal", map[string]bool{
 		modulePath + "/internal/game/paramkeeper": true,
 	}, false)

@@ -23,6 +23,7 @@ package gamedatacheck
 
 import (
 	"fmt"
+	"opensro.online/server/internal/game/paramkeeper"
 	"path/filepath"
 
 	"opensro.online/server/internal/game/action"
@@ -84,6 +85,11 @@ func Check() (Result, error) {
 	if _, err := quest.LoadDefinitions(questCatalog, enterworld.NewTextdataItems(questCatalog.Dir())); err != nil {
 		return result, fmt.Errorf("quests: %w", err)
 	}
+	definitions, err := paramkeeper.LoadDefinitions(devPaths.DerivedDir)
+	if err != nil {
+		return result, err
+	}
+	paramkeeper.Install(definitions)
 	deps, err := enterworld.NewDevDepsWithRoster(devPaths, textdata, roster)
 	if err != nil {
 		return result, fmt.Errorf("bootstrap dependencies: %w", err)

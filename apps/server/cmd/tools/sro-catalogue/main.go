@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"opensro.online/server/internal/game/paramkeeper"
 	"os"
 	"path/filepath"
 	"strings"
@@ -273,6 +274,11 @@ func run(out, release, textdata string) error {
 	header := catalogue.Header{SchemaVersion: catalogue.SchemaVersion, Release: release,
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339)}
 	cap110 := monster.Cap110Enabled()
+	parameters, err := paramkeeper.LoadDefinitions(derivedDir)
+	if err != nil {
+		return err
+	}
+	paramkeeper.Install(parameters)
 	if _, err := loot.Load(derivedDir); err != nil {
 		return err
 	}

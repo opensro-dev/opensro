@@ -10,19 +10,21 @@ package combat
 
 import (
 	"encoding/json"
-	"os"
 	"testing"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/paramkeeper"
+	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/paramtest"
 )
 
 func TestCombatDefinitionsMatchExtractedNativeTable(t *testing.T) {
-	b, err := os.ReadFile("testdata/paramkeeper-definitions-188.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	// The installed table against the operator's extraction record; both are
+	// source-data.
+	paramtest.RequireOperatorTable(t)
+	b := licensed.SourceDataFile(t, "fixtures/server/internal/game/combat/testdata/paramkeeper-definitions-188.json")
+	var err error
 	var report struct {
 		Definitions []struct {
 			ID                     uint16
@@ -78,14 +80,17 @@ func TestProductionGraphPreservesIndependentDefenseSources(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertDefense(69)
-	// Param 12 is capped at 100 in the native definition, even if distinct
-	// equipment and passive sources would sum above that cap.
-	if err = g.ApplyBatch([]paramkeeper.Write{{Parameter: 12, Source: 1024, Value: 80}, {Parameter: 12, Source: 2048, Value: 40}}); err != nil {
-		t.Fatal(err)
-	}
-	if v, e := g.Value(12); e != nil || v != 100 {
-		t.Fatalf("critical cap: %v %v", v, e)
-	}
+	// Param 12 is capped at 100 in the operator's definition, even if
+	// distinct equipment and passive sources would sum above that cap.
+	t.Run("critical cap", func(t *testing.T) {
+		paramtest.RequireOperatorTable(t)
+		if err := g.ApplyBatch([]paramkeeper.Write{{Parameter: 12, Source: 1024, Value: 80}, {Parameter: 12, Source: 2048, Value: 40}}); err != nil {
+			t.Fatal(err)
+		}
+		if v, e := g.Value(12); e != nil || v != 100 {
+			t.Fatalf("critical cap: %v %v", v, e)
+		}
+	})
 }
 
 func TestPlayerStatsRejectsDuplicateEquipmentSource(t *testing.T) {
