@@ -4,8 +4,8 @@
 generate_compiled_quests.py - project the compiled quest classes to specs
 
 Reads the snapshots in the operator's source-data (quest/) and writes the server's
-QuestSpec rows for the v1.150 quests whose v1.188 implementation is a C++
-class (<source-data>/server/quest/compiled_quests.json),
+QuestSpec rows for the v1.150 quests whose server implementation is a
+compiled class (<source-data>/server/quest/compiled_quests.json),
 with an audit of every class not yet projected and why.
 
 What each source decides:
@@ -13,8 +13,8 @@ What each source decides:
 	  prerequisites, completion limit, and each mission's kind, NPC, item,
 	  monsters and drop chance;
 	- the v1.150 text (v150-text-source.json): every count an objective
-	  line asks for, and the rewards a popup advertises; v1.188 rebalanced
-	  both, so the class's own counts stand only where the line names none;
+	  line asks for, and the rewards a popup advertises; the later server
+	  rebalanced both, so the class's own counts stand only where the line names none;
 	- the SQL rows (sql-rewards-source.json): the reward items, and the
 	  scalars of a quest whose popup advertises none.
 
@@ -42,7 +42,7 @@ QUEST_PACKAGE = ROOT / "apps/server/internal/game/quest"
 # source-data/server into its derived data (quest.CompiledCatalogFile).
 OUTPUT = sro_paths.SOURCE_DATA_ROOT / "server" / "quest"
 
-# CBasicQuest mission kinds (mission +9).
+# The quest mission kinds (mission +9).
 MISSION_GATHER = 1
 MISSION_KILL = 2
 MISSION_DELIVER = 3
@@ -65,17 +65,17 @@ MENU_MIDDLE = 0x13d
 # Quest lists (dword index of the object).
 LIST_COMPLETION_NPCS, LIST_QUEST_NPCS = "0xf3", "0xf7"
 LIST_REQUIRED_DONE, LIST_REQUIRED_ACTIVE = "0x102", "0x10c"
-# One of these completed suffices (CBasicQuest_MeetsPrerequisites 9262A0).
+# One of these completed suffices (the prerequisite check).
 LIST_REQUIRED_ANY = "0x114"
-# Each ended and never completed (9262A0: count 0 and state 5).
+# Each ended and never completed (count 0 and state 5).
 LIST_REQUIRED_ENDED = "0x108"
 KNOWN_LISTS = {LIST_COMPLETION_NPCS, LIST_QUEST_NPCS, LIST_REQUIRED_DONE, LIST_REQUIRED_ACTIVE, LIST_REQUIRED_ANY,
 	LIST_REQUIRED_ENDED}
 
 # The byte and word fields an initializer may write inside a dword slot,
-# with the value the CBasicQuest constructor (91E200) leaves there:
-#	0x106.b: the first prerequisite's completion count (+0x418, one byte
-#	         per list 0x102 entry; CBasicQuest_MeetsPrerequisites 9262A0),
+# with the value the base quest constructor leaves there:
+#	0x106.b: the first prerequisite's completion count (one byte per list
+#	         0x102 entry, read by the prerequisite check),
 #	         projected as RequiredQuestCompletions
 #	0xc3.b:  the initializers only rewrite its default
 #	0x15b.b: the quest belongs to an instance world, whose id 0x15c.w
@@ -88,19 +88,18 @@ FIELD_MEANINGS = {
 	"0x15c.w": "instance world quest",
 }
 
-# 8A5CA0, the talk KT_SMITH_3 and KT_ACCESSORY_2/3 share, is the base talk
-# in effect: it drops gates these quests do not use, and its record byte 0
-# check passes because acceptance sets the byte (922DE0).
+# The talk KT_SMITH_3 and KT_ACCESSORY_2/3 share is the base talk in
+# effect: it drops gates these quests do not use, and its record byte 0
+# check passes because acceptance sets the byte.
 KT_SHARED_TALK = {}
 
-# The condition table's flag word (table 0xC2 +0, CBasicQuest_MeetsPrerequisites
-# 9262A0): which conditions apply to the offer.
+# The condition table's flag word (table 0xC2 +0, read by the prerequisite
+# check): which conditions apply to the offer.
 #	1:     the character's level is at least +0x4 (MinLevel). +0x23 is the
-#	       questdata level, which only picks the marker (CBasicQuest_vf118)
+#	       questdata level, which only picks the marker
 #	2:     the repeat limit and the prerequisite lists are checked
 #	4:     items the character must hold: every one of the vector at +0x28
-#	       (9262A0 reads its begin/end at +0x2C) and, when listed, any one
-#	       of +0x38 (+0x3C); RequiredHeldItems and RequiredAnyHeldItems
+#	       and, when listed, any one of +0x38; RequiredHeldItems and RequiredAnyHeldItems
 #	0x100: country +0x27 (3 = both); the port reads questcontentsdata's
 #	       country byte, which carries the same value
 # Any other bit is a condition the port does not check, so the quest is
@@ -118,23 +117,22 @@ HELD_ALL, HELD_ANY = "0x28", "0x38"
 
 # What a class's own override does, as the QuestSpec fields that port it,
 # keyed by (quest, vtable slot). Each row cites the override it reads.
-# The classes that override CBasicQuest vtable +0x4, the quest-item use
-# handler (the base, 559000, answers 0). The methods dump lists no +0x4
-# entry, so this census of the v1.188 vtables (2026-10-09) stands in for
-# it: a class here is projected only once CLASS_BEHAVIOUR names its
+# The classes that override the quest-item use slot (vtable +0x4; the base
+# answers 0). The class snapshot lists no +0x4 entry, so this census stands
+# in for it: a class here is projected only once CLASS_BEHAVIOUR names its
 # (code, "0x4") row, whose handler the server's quest tools port.
 ITEM_USE_HANDLERS = {
-	"QNO_CA_GORIA_7": 0x8C47E0, "QNO_CA_TREASURE_5": 0x8C7910, "QNO_CA_WAREHOUSE_1": 0x8C87B0,
-	"QNO_CA_WAREHOUSE_3": 0x8CA7B0, "QNO_EU_ADVENTURER_1": 0x8B6840, "QNO_EU_EASTEU_1": 0x8AA700,
-	"QNO_EU_EASTEU_11_1": 0x8AE6C0, "QNO_EU_EASTEU_14_1": 0x8B05B0, "QNO_EU_EASTEU_17_1": 0x8B1C30,
-	"QNO_EU_EASTEU_19": 0x8B2AB0, "QNO_EU_EASTEU_21": 0x8B5D40, "QNO_EU_EASTEU_5": 0x8ACAD0,
-	"QNO_EU_GENERAL_2": 0x8B8C40, "QNO_EU_IVY_2": 0x8BB6C0, "QNO_EU_IVY_3": 0x8BEF10,
-	"QNO_EU_WITCH_1": 0x8BFF70, "QNO_RM_FLYSHIP1_3": 0x89D0E0, "QNO_RM_OLDWOMAN_5": 0x8A0AA0,
-	"QNO_WC_WAREHOUSE_W_2": 0x895BC0, "QNO_WC_WAREHOUSE_W_3": 0x8970F0,
+	"QNO_CA_GORIA_7", "QNO_CA_TREASURE_5", "QNO_CA_WAREHOUSE_1",
+	"QNO_CA_WAREHOUSE_3", "QNO_EU_ADVENTURER_1", "QNO_EU_EASTEU_1",
+	"QNO_EU_EASTEU_11_1", "QNO_EU_EASTEU_14_1", "QNO_EU_EASTEU_17_1",
+	"QNO_EU_EASTEU_19", "QNO_EU_EASTEU_21", "QNO_EU_EASTEU_5",
+	"QNO_EU_GENERAL_2", "QNO_EU_IVY_2", "QNO_EU_IVY_3",
+	"QNO_EU_WITCH_1", "QNO_RM_FLYSHIP1_3", "QNO_RM_OLDWOMAN_5",
+	"QNO_WC_WAREHOUSE_W_2", "QNO_WC_WAREHOUSE_W_3",
 }
 REQUIRED_MISSIONS = "vf17c"
 
-# Classes whose v1.188 mission captions v1.150 never shipped as contents:
+# Classes whose later mission captions v1.150 never shipped as contents:
 # v1.150's questcontentsdata names one caption per quest, which every
 # mission node then carries. Irina's orders caption their missions
 # SN_CON_..._W_2_01/_02 ("genuine charms"); v1.150 names
@@ -145,13 +143,12 @@ CONTENTS_CAPTIONS = {
 }
 
 CLASS_BEHAVIOUR = {
-	# CQNO_EU_ADVENTURER_1_UseShinyMoss (8B6840): the archers' Shiny Moss
+	# ADVENTURER_1's item use: the archers' Shiny Moss
 	# calls a crab near the Troy wooden horse (quest.useShinyMoss).
 	("QNO_EU_ADVENTURER_1", "0x4"): {},
 	# Sunset Witch's stable (QNO_EU_EASTEU_1). Holy water used by the stable
-	# (8AA700, vtable +0x4) runs the shared countdown (8C8620 +0xC, 8C8770
-	# +0x94) that 8AA630 (+0x98) ends with a Stable Filth (quest.gather.go).
-	# Its talk (8AA0C0) answers _04 ("get holy water first") while none is
+	# (its vtable +0x4) runs the shared countdown (+0xC, +0x94) that the
+	# +0x98 slot ends with a Stable Filth (quest.gather.go). Its talk answers _04 ("get holy water first") while none is
 	# held, else _05; the base words supply the rest.
 	("QNO_EU_EASTEU_1", "0x4"): {},
 	("QNO_EU_EASTEU_1", "0xc"): {},
@@ -162,42 +159,40 @@ CLASS_BEHAVIOUR = {
 		"ToolMissingSymbol": "SN_TALK_QNO_EU_EASTEU_1_04",
 		"ToolCodename": "ITEM_QNO_EU_EASTEU_3_02",
 	},
-	# Uvetino's talk (8AB070): the base talk, and once the quest is done his
+	# Uvetino's talk: the base talk, and once the quest is done his
 	# daily holy water (quest.captureSupplies).
 	("QNO_EU_EASTEU_3", "0x58"): {},
-	# CQNO_WC_WAREHOUSE_W_2/W_3_UseAmulet (895BC0 / 8970F0): a hunted amulet
+	# WAREHOUSE_W_2/W_3's item use: a hunted amulet
 	# is right-clicked into an authentic or a flawed one (quest.useAmulet).
 	("QNO_WC_WAREHOUSE_W_2", "0x4"): {},
 	("QNO_WC_WAREHOUSE_W_3", "0x4"): {},
-	# CQNO_WC_WAREHOUSE_W_2_OnNpcTalk (895740): the base talk, except that a
-	# second run (completion count +0x1A4 > 0) is offered with _07 and a
+	# WAREHOUSE_W_2's talk: the base talk, except that a second run
+	# (completion count above 0) is offered with _07 and a
 	# single OK row (word 0x140) that accepts, answered _08.
 	("QNO_WC_WAREHOUSE_W_2", "0x58"): {
 		"RepeatOfferPromptSymbol": "SN_TALK_QNO_WC_WAREHOUSE_W_2_07",
 		"RepeatOfferAcceptRowSymbol": "SN_TALK_COMMON_OK",
 		"RepeatAcceptResponseSymbol": "SN_TALK_QNO_WC_WAREHOUSE_W_2_08",
 	},
-	# CQSP_KT_EXINVENTORY_3_OnNpcTalk (8CF8F0): the base talk, plus a
+	# KT_EXINVENTORY_3's talk: the base talk, plus a
 	# 10,000 gold fee checked before the reward and taken after it.
 	("QSP_KT_EXINVENTORY_3", "0x58"): {
 		"TurnInGold": 10000,
 		"TurnInGoldShortSymbol": "SN_TALK_QSP_KT_EXINVENTORY_3_05",
 	},
-	# CBasicQuest_vf90 (921CE0) applies the travel block (0x60000, no Return
-	# or teleport) when the quest's byte +0x30C (word 0xC3) is set or a
-	# mission's +0x11 is not 1. These classes override it with
-	# CBasicQuest_NoOpEvent (92F270): they never block, as the port's
-	# compiled quests already do not. Neither trigger fires for a compiled
-	# quest: QuestMission_Construct (872110) writes +0x11 = 1, which no
-	# initializer overrides, and +0x30C keeps its default of 0.
+	# The base quest's vf90 slot applies the travel block (0x60000, no
+	# Return or teleport) when the quest's word 0xC3 is set or a mission's
+	# +0x11 is not 1. These classes override it with a no-op: they never
+	# block, as the port's compiled quests already do not. Neither trigger
+	# fires for a compiled quest: the mission constructor writes +0x11 = 1,
+	# which no initializer overrides, and word 0xC3 keeps its default of 0.
 	("QNO_CA_GORIA_3", "0x90"): {},
 	("QNO_EU_CONS_6", "0x90"): {},
 	("QNO_EU_EASTEU_9", "0x90"): {},
 	("QNO_EU_EASTEU_12", "0x90"): {},
 	("QNO_EU_EASTEU_15", "0x90"): {},
-	# The four TRADE_*_SPECIAL classes (start-NPC talk 8CB8A0, 8CDE60,
-	# 8CD270, 8CC490; hand-over TradeSpecialQuest_OnTalkHandOverNpc 8CC8D0)
-	# pair a two-leg delivery (mission 0, bit 0 of record byte 3) with a
+	# The four TRADE_*_SPECIAL classes (their start-NPC talks and one shared
+	# hand-over talk) pair a two-leg delivery (mission 0, bit 0 of record byte 3) with a
 	# hunt (mission 1, bit 1). Unachieved, the start NPC names what is
 	# left: _04 (the hunt) once the box is delivered, _05 (the delivery)
 	# once the hunt is done, _06 for both. A full bag at the pay answers
@@ -208,20 +203,20 @@ CLASS_BEHAVIOUR = {
 		"RewardFullSymbol": "SN_TALK_" + code + "_08",
 		"SolePendingSymbols": {MISSION_DELIVER: "SN_TALK_" + code + "_05", MISSION_KILL: "SN_TALK_" + code + "_04"},
 	} for code in ("QNO_TRADE_CH_SPECIAL2_1", "QNO_TRADE_RM_SPECIAL_1", "QNO_TRADE_TK_SPECIAL_1", "QNO_TRADE_WC_SPECIAL2_1")},
-	# CQNO_EU_EASTEU_4_OnNpcTalk (8AB930): the base talk behind one story
-	# page, _01 with the reply _02, before the 0x130 offer. Its initializer
-	# (8AB710) pushes no prerequisite: the v1.150 "Link (Stable
+	# EASTEU_4's talk: the base talk behind one story page, _01 with the
+	# reply _02, before the 0x130 offer. Its initializer pushes no prerequisite: the v1.150 "Link (Stable
 	# Purification)" caption is display text only.
 	("QNO_EU_EASTEU_4", "0x58"): {
 		"OfferPages": [{"PromptSymbol": "SN_TALK_QNO_EU_EASTEU_4_01", "ReplySymbol": "SN_TALK_QNO_EU_EASTEU_4_02"}],
 	},
-	# 8E6440 sends the start NPC to vtable +0x19C and the end NPC to +0x1A0.
+	# The talk dispatch sends the start NPC to vtable +0x19C and the end NPC to +0x1A0.
 	# Their lines are hard-coded; the base words supply the rest. None of the
 	# three sets a travel block, though SMITH_3's _02 warns against Return.
 	#
-	# CQNO_WC_POTION_3 8960A0 / 896360: _01 [NEXT], then _02 accept/deny,
+	# WC_POTION_3 (start and end talks): _01 [NEXT], then _02 accept/deny,
 	# deny _04; while active Bori answers _05. The hand-over (+0x111 cleared)
-	# keeps the medicine and letter, and 896360 sends _16 once it completes.
+	# keeps the medicine and letter, and the end talk sends _16 once it
+	# completes.
 	("QNO_WC_POTION_3", "0x58"): {
 		"OfferPages": [{"PromptSymbol": "SN_TALK_QNO_WC_POTION_3_01", "ReplySymbol": "SN_TALK_COMMON_NEXT"}],
 		"OfferPromptSymbol": "SN_TALK_QNO_WC_POTION_3_02",
@@ -229,7 +224,7 @@ CLASS_BEHAVIOUR = {
 		"SideTalks": [{"NpcCodename": "NPC_WC_POTION", "PromptSymbol": "SN_TALK_QNO_WC_POTION_3_05"}],
 		"CompleteNoticeSymbol": "SN_TALK_QNO_WC_POTION_3_16",
 	},
-	# CQNO_WC_POTION_4 897680 / 897A40: Jinjin's _01 [NEXT] accepts at once,
+	# WC_POTION_4 (start and end talks): Jinjin's _01 [NEXT] accepts at once,
 	# taking one medicine and one letter before the wrapped gift is granted;
 	# while active she answers _03. Asa pages _05 [NEXT], says _06, then
 	# takes the gift and pays.
@@ -245,17 +240,17 @@ CLASS_BEHAVIOUR = {
 		"TalkPages": [{"PromptSymbol": "SN_TALK_QNO_WC_POTION_4_05", "ReplySymbol": "SN_TALK_COMMON_NEXT"}],
 		"CompletePromptSymbol": "SN_TALK_QNO_WC_POTION_4_06",
 	},
-	# CQNO_WC_SMITH_3 896840 / 896AA0: _01 accept/deny, deny _03; while
+	# WC_SMITH_3 (start and end talks): _01 accept/deny, deny _03; while
 	# active Agol answers _04, the mission's own not-delivered line (+0xC4).
 	("QNO_WC_SMITH_3", "0x58"): {
 		"OfferPromptSymbol": "SN_TALK_QNO_WC_SMITH_3_01",
 		"DenyResponseSymbol": "SN_TALK_QNO_WC_SMITH_3_03",
 		"SideTalks": [{"NpcCodename": "NPC_WC_SMITH", "PromptSymbol": "SN_TALK_QNO_WC_SMITH_3_04"}],
 	},
-	# CQNO_KT_SMITH_2_OnNpcTalk (8A77A0): the blacksmith's fork. Page _01
+	# KT_SMITH_2's talk: the blacksmith's fork. Page _01
 	# offers _02 (word 0x143) to go on to the offer, or _04 (0x144) to
 	# turn it down for good: _05, and SMITH_2 and SMITH_3 end. Pressing
-	# Accept ends ACCESSORY_2 and ACCESSORY_3 (8A789E on).
+	# Accept ends ACCESSORY_2 and ACCESSORY_3.
 	("QNO_KT_SMITH_2", "0x58"): {
 		"OfferPages": [{
 			"PromptSymbol": "SN_TALK_QNO_KT_SMITH_2_01",
@@ -267,7 +262,7 @@ CLASS_BEHAVIOUR = {
 		"AcceptEndsQuests": ["QNO_KT_ACCESSORY_2", "QNO_KT_ACCESSORY_3"],
 	},
 	("QNO_KT_SMITH_3", "0x58"): KT_SHARED_TALK,
-	# CQNO_CA_THIEF_5_OnNpcTalk (8C6180): the 0x130 offer replies _02 (the
+	# CA_THIEF_5's talk: the 0x130 offer replies _02 (the
 	# fake evidence) or _04 (refuse the thief's deal). Each accepts with its
 	# own line and closes the other follow-up for good: _02 answers _03 and
 	# ends QNO_CA_THIEF_6_2 ("Reporting Truth"), _04 answers _05 and ends
@@ -340,8 +335,8 @@ def mission_monsters(fields, first, count_field):
 # delivery_items
 #
 # A deliver mission holds +0x19 (byte) items, each a codename at +0x42 and
-# its quantity at +0x1A, both at a four-byte stride: the pairs
-# QuestBase_ValidateAndGrantMissionItems (9208D0) grants at acceptance.
+# its quantity at +0x1A, both at a four-byte stride: the pairs the quest
+# grants at acceptance.
 # The v1.150 line's count wins for a lone item, as it does elsewhere.
 # ================
 def delivery_items(text, mission):
@@ -365,7 +360,7 @@ def delivery_items(text, mission):
 # ================
 # handover_pages
 #
-# A deliver mission's hand-over dialogue (91CA00). With +0xBF pages the NPC
+# A deliver mission's hand-over dialogue. With +0xBF pages the NPC
 # first shows +0xC0 with the reply +0xE8, then page k (1..N-1) at
 # +0xC4 + 4(k+1) with the reply +0xE8 + 4k, and the hand-over itself speaks
 # +0xC8 + 4N. Without pages it speaks +0xC0. Returns (pages, line).
@@ -393,7 +388,7 @@ def handover_pages(fields):
 # parallel_deliveries
 #
 # Several deliver missions in one quest: each is handed over at its own
-# NPC (two legs, +0x110 clear) and latches its own bit (91CEB0), and the
+# NPC (two legs, +0x110 clear) and latches its own bit, and the
 # quest pays at its start NPC with the ACHIEVED word once all have been.
 # A one-leg mission among them would complete the quest at its NPC, which
 # no shipped class does, so it is refused.
@@ -453,7 +448,7 @@ def delivery_row(text, mission):
 # ================
 # exchange_items
 #
-# What a two-leg hand-over gives back (91CA00): +0x6A (byte) the number of
+# What a two-leg hand-over gives back: +0x6A (byte) the number of
 # items, +0x93 their codenames and +0x6B their quantities, stride four.
 # ================
 def exchange_items(fields):
@@ -490,7 +485,7 @@ def project_mission(text, mission):
 		row.update({"Objective": OBJECTIVE_KILL, "KillMonsterCodenames": mission_monsters(fields, 0x19, "0x15"),
 			"KillCount": objective_count(text, mission, "0x149")})
 		return row
-	# CMissionChangeItem (IsIncomplete 91D540): hold +0x19 of +0x1D. The
+	# A change-item mission is incomplete until it holds +0x19 of +0x1D. The
 	# item comes from the class's own item-use handler (vtable +0x4), which
 	# turns +0x15 into it.
 	if kind == MISSION_CHANGE_ITEM:
@@ -681,15 +676,15 @@ def project(code, quest, text, sql):
 			spec.update({"Objective": OBJECTIVE_DELIVERY, "DeliveryItems": delivery_items(text, missions[0])})
 			if pages and "TalkPages" not in behaviour:
 				spec["TalkPages"] = pages
-			# 91CA00 answers missing items with the mission's own line
+			# The hand-over answers missing items with the mission's own line
 			# (+0xC4); the base word 0x133 wins where the class has one.
 			if "NotAchievedSymbol" not in spec and isinstance(fields.get("0xc4"), str):
 				spec["NotAchievedSymbol"] = fields["0xc4"]
-			# 91CA00 removes the delivered items only while +0x111 is set,
-			# as the mission constructor (872040) leaves it.
+			# The hand-over removes the delivered items only while +0x111 is set,
+			# as the mission constructor leaves it.
 			if fields.get("0x111", 1) == 0:
 				spec["DeliveryKeepsItems"] = True
-			# +0x110 clear (the 872040 default): the hand-over only latches
+			# +0x110 clear (the constructor's default): the hand-over only latches
 			# the mission, and the quest pays where the achieved-now line
 			# sends the player, its start NPC, with the ACHIEVED word.
 			if fields.get("0x110", 0) == 0 and "EndNpcCodename" not in behaviour:
@@ -734,7 +729,7 @@ def project(code, quest, text, sql):
 			raise Unsupported("contents caption unavailable")
 		for row in spec["Objectives"]:
 			row["ContentsSymbol"] = CONTENTS_CAPTIONS[code]
-	# vf17C's N (CBasicQuest_vfE4 91F7D0): only the first N missions make
+	# vf17C's N (read by the base quest's vfE4): only the first N missions make
 	# the reward key; a later one still runs (its drops, its journal node)
 	# but never gates the pay. N = 0 requires every mission.
 	required = quest["words"].get(REQUIRED_MISSIONS, 0)
