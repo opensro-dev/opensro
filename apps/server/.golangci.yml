@@ -36,6 +36,10 @@ version: "2"
 
 run:
   timeout: 10m
+  # Lint the operator build too (sro-nomad operator_commands.go): it is the
+  # superset, missing only the developer build's empty command table.
+  build-tags:
+    - opensro_ops
 
 linters:
   default: none

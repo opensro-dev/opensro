@@ -95,8 +95,8 @@ NOMAD_TLS_SERVER_NAME
 
 Do not set `NOMAD_SKIP_VERIFY` in production.
 
-Production `validate`, `deploy`, `stop`, and `rotate-session-key` commands
-accept only a region-local Nomad client token with exactly the direct
+Production `validate`, `deploy`, `stop`, and `rotate-session-key` (an
+operator-build subcommand, `-tags opensro_ops`) commands accept only a region-local Nomad client token with exactly the direct
 `sro-deployer` policy. It must expire, have been issued for no more than two
 hours, and retain at least twenty minutes at command start. A one-hour token
 brokered by Vault or created with `nomad acl token create -ttl 1h` is the
@@ -308,10 +308,10 @@ shutdown delay and task kill timeout remain active.
 
 ### Credential rotation
 
-Agent session signing keys rotate online:
+Agent session signing keys rotate online with the operator build:
 
 ```powershell
-go run ./cmd/operations/sro-nomad rotate-session-key `
+go run -tags opensro_ops ./cmd/operations/sro-nomad rotate-session-key `
   -namespace sro `
   -host-network game-private `
   -agent-url http://agent.service.consul:8787 `
@@ -405,11 +405,11 @@ Delete-pending characters retain their slot until deletion matures. Resolve
 pre-release overflow explicitly:
 
 ```powershell
-go run ./cmd/operations/sro-archive-character `
+go run -tags opensro_ops ./cmd/operations/sro-archive-character `
   -shard global-official `
   -character ExactName
 
-go run ./cmd/operations/sro-archive-character `
+go run -tags opensro_ops ./cmd/operations/sro-archive-character `
   -shard global-official `
   -character ExactName `
   -commit

@@ -464,10 +464,10 @@ and could expose secret rotation through release path names.
 ### Credential change
 
 Agent owns an Ed25519 private signing ring. GameWorld Variables receive only
-its public projection. Rotate it online with the guarded command:
+its public projection. Rotate it online with the guarded operator-build command:
 
 ```powershell
-go run ./cmd/operations/sro-nomad rotate-session-key `
+go run -tags opensro_ops ./cmd/operations/sro-nomad rotate-session-key `
   -namespace sro `
   -host-network game-private `
   -agent-url http://agent.service.consul:8787 `

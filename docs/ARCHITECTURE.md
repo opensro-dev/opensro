@@ -22,7 +22,9 @@ ownership into two process roles:
 
 **Nomad** supervises both: placement, health checks, restarts, logs and rolling
 updates. `cmd/operations/sro-nomad` is the only fleet entry point (`dev-agent`,
-`validate`, `deploy`, `status`, `stop`, `rotate-session-key`). It is a
+`validate`, `deploy`, `status`, `stop`; the operator build, `-tags
+opensro_ops`, adds `rotate-session-key`, `publish-client`, `notice` and
+`maintenance-list`). It is a
 stateless desired-state client, not a supervisor.
 
 Shards are declared in `config/shards.json`. Each shard is an authority

@@ -1,3 +1,5 @@
+//go:build opensro_ops
+
 // Command sro-account-owner previews or commits an offline, atomic transfer of
 // every live character from one login account to another. It exists for
 // explicit account administration; it never edits SQLite directly.

@@ -1,3 +1,5 @@
+//go:build opensro_ops
+
 package main
 
 import (
