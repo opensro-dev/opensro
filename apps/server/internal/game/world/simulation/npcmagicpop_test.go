@@ -30,17 +30,21 @@ func TestAppendMagicPopMachinesPlacesOnePerTown(t *testing.T) {
 	}, 9252: {
 		refObjID: 9252, tidWord: 0x0146, codename: magicPopOperatorCodename, scale: 1,
 	}}
-	roster := appendMagicPopMachines(nil, refs, worldNpcLookups{})
-	if len(roster) != len(magicPopPlacements)+len(magicPopOperatorPlacements) {
-		t.Fatalf("appended %d NPCs, want %d", len(roster), len(magicPopPlacements)+len(magicPopOperatorPlacements))
+	// Test-authored placements, not any server's.
+	machines := []Spawn{{RegionID: 25000, X: 100, Z: 100}, {RegionID: 26265, X: 200, Z: 200}}
+	operators := []Spawn{{RegionID: 25000, X: 110, Z: 110}, {RegionID: 26265, X: 210, Z: 210}}
+	lookups := worldNpcLookups{headings: &NPCHeadings{magicPopMachines: machines, magicPopOperators: operators}}
+	roster := appendMagicPopMachines(nil, refs, lookups)
+	if len(roster) != len(machines)+len(operators) {
+		t.Fatalf("appended %d NPCs, want %d", len(roster), len(machines)+len(operators))
 	}
 	if err := ValidateNpcRoster(roster); err != nil {
 		t.Fatal(err)
 	}
 	for index, npc := range roster {
-		placements, want := magicPopPlacements[:], NpcTalkFlagGachaMachine
+		placements, want := machines, NpcTalkFlagGachaMachine
 		if npc.Codename == magicPopOperatorCodename {
-			placements, want, index = magicPopOperatorPlacements[:], NpcTalkFlagGachaOperator, index-len(magicPopPlacements)
+			placements, want, index = operators, NpcTalkFlagGachaOperator, index-len(machines)
 		}
 		if npc.Spawn.RegionID != placements[index].RegionID {
 			t.Fatalf("%s %d region = %d", npc.Codename, index, npc.Spawn.RegionID)
@@ -52,7 +56,11 @@ func TestAppendMagicPopMachinesPlacesOnePerTown(t *testing.T) {
 	// Every placement has a facing in the operator's table (skips without it).
 	t.Run("facing", func(t *testing.T) {
 		headings := sourceNPCHeadings(t)
-		for index, npc := range roster {
+		real := appendMagicPopMachines(nil, refs, worldNpcLookups{headings: headings})
+		if len(real) == 0 {
+			t.Fatal("the operator's table has no Magic Pop placements")
+		}
+		for index, npc := range real {
 			if _, found := headings.placement(npc.Codename, npc.Spawn.RegionID, npc.Spawn.X, npc.Spawn.Y, npc.Spawn.Z); !found {
 				t.Fatalf("machine %d has no recovered facing", index)
 			}
@@ -108,12 +116,13 @@ func TestShippedWorldHasMagicPopMachines(t *testing.T) {
 		}
 		regions[npc.Spawn.RegionID] = true
 	}
-	for _, spawn := range magicPopPlacements {
+	machineSpawns, operatorSpawns := headings.magicPop()
+	for _, spawn := range machineSpawns {
 		if !regions[spawn.RegionID] {
 			t.Fatalf("no machine in region %d", spawn.RegionID)
 		}
 	}
-	for _, spawn := range magicPopOperatorPlacements {
+	for _, spawn := range operatorSpawns {
 		if !operators[spawn.RegionID] {
 			t.Fatalf("no operator in region %d", spawn.RegionID)
 		}

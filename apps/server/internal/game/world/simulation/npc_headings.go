@@ -62,6 +62,9 @@ The loaded table in precedence order. A nil table knows no placement.
 type NPCHeadings struct {
 	// sections are consulted in order: recovered, supplement, alexandria.
 	sections [3]map[npcHeadingKey]uint16
+	// magicPopMachines and magicPopOperators are the Magic Pop placements
+	// (the optional MagicPop section): one machine and one operator per town.
+	magicPopMachines, magicPopOperators []Spawn
 }
 
 /*
@@ -79,6 +82,10 @@ func LoadNPCHeadings(derivedDir string) (*NPCHeadings, error) {
 	var document struct {
 		Format                            string
 		Recovered, Supplement, Alexandria [][6]json.RawMessage
+		// MagicPop is optional: [region, x, y, z] rows.
+		MagicPop struct {
+			Machines, Operators [][4]float64
+		}
 	}
 	if err := json.Unmarshal(data, &document); err != nil {
 		return nil, fmt.Errorf("npc headings: %w", err)
@@ -104,7 +111,32 @@ func LoadNPCHeadings(derivedDir string) (*NPCHeadings, error) {
 		}
 		headings.sections[i] = section
 	}
+	for _, set := range []struct {
+		rows [][4]float64
+		out  *[]Spawn
+	}{{document.MagicPop.Machines, &headings.magicPopMachines}, {document.MagicPop.Operators, &headings.magicPopOperators}} {
+		for n, row := range set.rows {
+			if row[0] < 1 || row[0] > 0xFFFF || row[0] != float64(uint16(row[0])) {
+				return nil, fmt.Errorf("npc headings: malformed magic pop row %d", n)
+			}
+			*set.out = append(*set.out, Spawn{RegionID: uint16(row[0]), X: row[1], Y: row[2], Z: row[3]})
+		}
+	}
 	return headings, nil
+}
+
+/*
+================
+magicPop
+
+The Magic Pop machine and operator placements; none for a nil table.
+================
+*/
+func (h *NPCHeadings) magicPop() (machines, operators []Spawn) {
+	if h == nil {
+		return nil, nil
+	}
+	return h.magicPopMachines, h.magicPopOperators
 }
 
 /*
