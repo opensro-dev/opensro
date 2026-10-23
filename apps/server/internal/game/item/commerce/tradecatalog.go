@@ -106,7 +106,7 @@ func parseTradeQuotations(data []byte) (map[[2]uint32]TradeQuotation, error) {
 ================
 RequiredTradeQuest
 
-CGObjNPC_RequiredTradeQuest (4C9110), exact codename comparisons.
+The native required-trade-quest rule, exact codename comparisons.
 ================
 */
 func RequiredTradeQuest(npc string) string {
