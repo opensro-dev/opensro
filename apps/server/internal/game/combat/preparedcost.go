@@ -4,7 +4,7 @@
 preparedcost.go - the MP a cast is charged
 
 The execution context snapshots the cost when the cast is prepared
-(58312C persistent, 5867DC instant). The server runs its FPU with
+(persistent and instant casts alike). The server runs its FPU with
 FPCW 0x27F (53-bit precision), so the x87 stack is IEEE double here.
 
 ===========================================================================
@@ -47,11 +47,11 @@ func PreparedCost(current, flat uint32, percent uint16, persistent, player bool,
 ==================
 ApplyMPDecrease
 
-The WIMD / BDMD / HLMD cuts on a prepared MP cost:
-instant 5868F1 / 58695F / 5869CD, persistent 58327A / 5832E6 / 583352.
+The WIMD / BDMD / HLMD cuts on a prepared MP cost, on both the instant and
+persistent paths.
 
 For each modifier the skill asks for (getv), the caster's value v
-(CSkillManager_GetSkillModifier 5A0330) gives
+(the native skill-modifier read) gives
 
 	cost = trunc(unsigned(cost) * (1 - unsigned(v) / 100))
 
@@ -59,8 +59,8 @@ FISTP keeps the low dword, so v > 100 wraps; there is no clamp. A modifier
 the caster lacks reads 0 and leaves the cost alone. Projectile casts read
 none of these.
 
-58436B and 58535D are actor vfunc +0x55C calls, not HLMD. 58528A scales
-only BDMD onto the vfunc +0x10C amount before vfunc +0x308: the same cut,
+Two other call sites are actor virtual calls, not HLMD. One scales only
+BDMD onto the actor's MP amount before the debit call: the same cut,
 taken when the persistent context is rebuilt.
 ==================
 */
@@ -83,8 +83,8 @@ func ApplyMPDecrease(cost int32, mask enterworld.SkillParameterMask, values ente
 ==================
 CutMPCost
 
-One percent cut of a prepared MP cost, the 5868F1 arithmetic every MP
-Decrease key uses: cost x (1 - percent / 100), stored by FISTP.
+One percent cut of a prepared MP cost, the arithmetic every MP Decrease
+key uses: cost x (1 - percent / 100), stored by FISTP.
 ==================
 */
 func CutMPCost(cost int32, percent uint32) int32 {
