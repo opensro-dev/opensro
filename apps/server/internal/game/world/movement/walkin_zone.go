@@ -6,10 +6,9 @@ walkin_zone.go - the event zones a placed object's nav cells carry
 A walk-in gate (the Donwhang cave's mouth, the red circle of a dungeon
 door) is not an object a player clicks: it is a set of nav cells of a
 placed object's collision mesh, named by the mesh's event-name list.
-v1.188's region manager reports an object entering such a cell to the
-GameServer's callback (CMap_Load 5304E0 registers 5301B0 at
-RegionManagerBody+0xC8), which hands it to the PC's walk-in handler
-(4EF480). This file answers which zone, if any, a point stands in; the
+The original server's region manager reports an object entering such a
+cell to a callback the map load registers, which hands it to the player's
+walk-in handler. This file answers which zone, if any, a point stands in; the
 action lane owns what entering one does.
 
 Two encodings exist in the v1.150 meshes:
