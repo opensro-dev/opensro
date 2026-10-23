@@ -11,7 +11,7 @@ sends a ballot (CIFGuildMasterElection 5EFF00):
 	0x7330 [u32 npc][u32 vote][u8 opt]   ballot   -> 0xB330 [1] | [2][code]
 
 Opening the vote window, the vote row first asks for the candidates
-(5DA1B0 case 0x1A, NetClient_Send7332 700FF0):
+(NetClient_Send7332 700FF0):
 
 	0x7332 [u32 vote]                    candidates -> 0xB332 [1][body] | [2][code]
 
@@ -42,7 +42,7 @@ const (
 	opGuildVotePush          uint16 = 0x3a6c
 
 	// The ballot refusals the client reads in category 0x15 (75CC50).
-	// INFERENCE: the low bytes of v1.188 5E7EA0's 0x5006 (no vote) and
+	// INFERENCE: the low bytes of the native 0x5006 (no vote) and
 	// 0x5008 (no such candidate).
 	ballotErrNoVote       uint8 = 0x06
 	ballotErrNotCandidate uint8 = 0x08
@@ -99,9 +99,9 @@ func (rt *Runtime) pushGuildMembers(division string, guildID int64, members []do
 ================
 HandleGuildMasterRelease
 
-0x76DC: 5C6AC0's admission (0x0D outside a guild, 0x37 while a vote runs,
-0x33 while the master is not long gone), then the vote opens for ten
-minutes.
+0x76DC: the native admission (0x0D outside a guild, 0x37 while a vote
+runs, 0x33 while the master is not long gone), then the vote opens for
+ten minutes.
 ================
 */
 func (rt *Runtime) HandleGuildMasterRelease(division string, c *enterworld.Character, payload []byte) OpResult {
@@ -138,7 +138,7 @@ func (rt *Runtime) HandleGuildMasterRelease(division string, c *enterworld.Chara
 ================
 HandleGuildBallot
 
-0x7330 from the election window: VoteMgr_CastBallot (5E7EA0).
+0x7330 from the election window: the native ballot cast.
 ================
 */
 func (rt *Runtime) HandleGuildBallot(division string, c *enterworld.Character, payload []byte) OpResult {
@@ -178,10 +178,10 @@ func (rt *Runtime) HandleGuildBallot(division string, c *enterworld.Character, p
 HandleGuildVoteParticipate
 
 0x7332 [u32 vote] from the vote row while the client holds no candidates
-for it: the open vote's candidates and their ballots, the body of v1.188's
-VoteMgr_SendParticipation (5E7F00). A member of no guild, or a vote that
-is not the guild's open one, is refused [2][0x06], the low byte of its
-0x5006. INFERENCE: a vote past its end that the tick has not closed yet is
+for it: the open vote's candidates and their ballots, the body of the
+native participation answer. A member of no guild, or a vote that is not
+the guild's open one, is refused [2][0x06], the low byte of its 0x5006.
+INFERENCE: a vote past its end that the tick has not closed yet is
 already over for the client's countdown, so it is refused the same way.
 ================
 */
@@ -211,9 +211,9 @@ func (rt *Runtime) HandleGuildVoteParticipate(division string, c *enterworld.Cha
 ================
 advanceGuildVotes
 
-The ShardManager's close, on the tick: each due vote in a division with
-players in it closes, electing where the tally allows, and its members
-learn the result and the new grades.
+The native close, on the tick: each due vote in a division with players
+in it closes, electing where the tally allows, and its members learn the
+result and the new grades.
 ================
 */
 func (rt *Runtime) advanceGuildVotes(nowMs int64) {
@@ -234,7 +234,7 @@ func (rt *Runtime) advanceGuildVotes(nowMs int64) {
 				frames = append(frames,
 					wire.Frame{Opcode: guild.OpGuildUpdatePush, Payload: guild.EncodeMemberGrade3B29(outcome.Former.JID, outcome.Former.Grade, outcome.Former.PermMask)},
 					wire.Frame{Opcode: guild.OpGuildUpdatePush, Payload: guild.EncodeMemberGrade3B29(outcome.Heir.JID, outcome.Heir.Grade, outcome.Heir.PermMask)},
-					// The commander role moves with the master (5C46E0).
+					// The commander role moves with the master.
 					wire.Frame{Opcode: guild.OpGuildUpdatePush, Payload: guild.EncodeMemberFortressRole3B29(outcome.Former.JID, outcome.Former.FortressRole)},
 					wire.Frame{Opcode: guild.OpGuildUpdatePush, Payload: guild.EncodeMemberFortressRole3B29(outcome.Heir.JID, outcome.Heir.FortressRole)})
 			}

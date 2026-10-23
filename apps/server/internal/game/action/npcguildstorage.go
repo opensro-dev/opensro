@@ -12,11 +12,12 @@ makes the client ask to open the room (CPSMission_OnNpcInteractionResponse
 	0x7428 [u32 npc]   close  -> 0xB428 [1]
 
 then the five guild move types (item/wire/storage.go) move items and gold
-through the guild's room in one store commit each. v1.188 is 0x7250 open
-(5C7440: 0x0D outside a guild, 0x4A below level 2, the master or member
-permission 8 else 0x1E, then the lock job 0x24), 0x7252 list (level 2,
-the lock's holder, job 5) and 0x7251 close. The holder is runtime state:
-it ends with the close or when the holder leaves the world.
+through the guild's room in one store commit each. The native rule is
+0x7250 open (0x0D outside a guild, 0x4A below level 2, the master or
+member permission 8 else 0x1E, then the lock job 0x24), 0x7252 list
+(level 2, the lock's holder, job 5) and 0x7251 close. The holder is
+runtime state: it ends with the close or when the holder leaves the
+world.
 
 ===========================================================================
 */
@@ -111,7 +112,7 @@ func (rt *Runtime) guildStorageHolder(key guildStorageKey) (string, bool) {
 ================
 HandleGuildStorageOpen
 
-0x7515: 5C7440's admission, then the room's single-user lock.
+0x7515: the native admission, then the room's single-user lock.
 ================
 */
 func (rt *Runtime) HandleGuildStorageOpen(division string, c *enterworld.Character, payload []byte) OpResult {
