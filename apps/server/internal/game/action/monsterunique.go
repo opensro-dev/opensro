@@ -3,7 +3,7 @@
 
 monsterunique.go - the native unique-monster reward prepass
 
-SR_GameServer 726020 runs this producer before assigned and ordinary rewards.
+The server runs this producer before assigned and ordinary rewards.
 Each generated instance goes through the common property and ground-item door.
 
 ===========================================================================
@@ -51,8 +51,8 @@ func (rt *Runtime) rollUniqueCount(minimum, maximum int) (int, bool) {
 ================
 prepareUniqueEquipment
 
-725600 refuses accessories. The first unique equipment batch retries those
-choices; other constructor failures consume the attempt (726020).
+The accessory step refuses accessories. The first unique equipment batch retries those
+choices; other constructor failures consume the attempt.
 ================
 */
 func (rt *Runtime) prepareUniqueEquipment(ctx uniqueDropContext, nonRepair bool) (grounditem.Item, bool, bool) {
