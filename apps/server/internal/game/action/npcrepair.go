@@ -10,11 +10,10 @@ CGInterface_SendNpcRepairRequest746F_758C). The answer is 0xB46F [1] or
 [2, notice] in category 13 (CPSMission_OnNpcRepairResponse0xB46F); each
 repaired item's durability rides 0x31E8 and the balance 0x30B3.
 
-v1.188 is CGObjNPC_ApplyRepairRequest0x703E (4C7A10): the NPC must offer
-service 4 (CGObjNPC_SpawnAndConfigureServices registers it on every town
-smith and armourer and the fortress smiths), the player must hold gold,
-mode 1 repairs one slot and mode 2 walks every inventory slot until the
-gold runs out (CGObjNPC_RepairInventorySlot 4C7AF0 per slot).
+The native repair request is 0x703E: the NPC must offer service 4
+(registered on every town smith and armourer and the fortress smiths),
+the player must hold gold, mode 1 repairs one slot and mode 2 walks
+every inventory slot until the gold runs out.
 
 ===========================================================================
 */
@@ -39,8 +38,8 @@ const (
 	repairOneSlot  uint8 = 1
 	repairAllSlots uint8 = 2
 
-	// The category-13 notices 0xB46F raises (v1.188 0x1Cxx low bytes).
-	// 4C7AF0 answers an empty slot with 3 and 496E60 a whole item with
+	// The category-13 notices 0xB46F raises (native 0x1Cxx low bytes).
+	// The native rule answers an empty slot with 3 and a whole item with
 	// 0x1C09; the v1.150 client shows neither (689420 leaves them silent).
 	repairErrEmptySlot   uint8 = 0x03
 	repairErrTooFar      uint8 = 0x04
@@ -50,8 +49,8 @@ const (
 	repairErrNotRepaired uint8 = 0x11
 	repairErrNotRevived  uint8 = 0x12
 
-	// errCodeNothingToRepair is the low byte of 49C4DB's 0x1888 (v1.150
-	// notice 392, UIIT_MSG_STRGERR_THERE_IS_NO_ITEM_TO_REPAIR).
+	// errCodeNothingToRepair is the low byte of the native 0x1888 error
+	// (v1.150 notice 392, UIIT_MSG_STRGERR_THERE_IS_NO_ITEM_TO_REPAIR).
 	errCodeNothingToRepair uint8 = 0x88
 )
 
@@ -110,8 +109,8 @@ func (rt *Runtime) HandleNpcRepair(division string, c *enterworld.Character, pay
 				return false
 			}
 		} else {
-			// 4C7A10 walks every slot, stops only when the gold runs out and
-			// answers 1 whatever the slots said.
+			// The native repair walks every slot, stops only when the gold
+			// runs out and answers 1 whatever the slots said.
 			for _, row := range append([]enterworld.InventoryRow(nil), c.MissionInventory...) {
 				if row.Slot < 0 || row.Slot > 0xff {
 					continue
@@ -140,15 +139,15 @@ func (rt *Runtime) HandleNpcRepair(division string, c *enterworld.Character, pay
 ================
 repairInventorySlot
 
-CGObjNPC_RepairInventorySlot (4C7AF0) inside the character's Update: the
-item must be repairable equipment, a broken one must also be revivable,
-the quote must find the gold, then CGObjPC_RepairItemForGold (4E7210)
-restores the points, charges the gold and spends a MATTR_REPAIR charge.
-Returns the frames and 0, or a refusal byte.
+The native repair, inside the character's Update: the item must be
+repairable equipment, a broken one must also be revivable, the quote
+must find the gold, then the repair restores the points, charges the
+gold and spends a MATTR_REPAIR charge. Returns the frames and 0, or a
+refusal byte.
 
 A whole item answers 0x09, never "no gold": the client prices its maximum
 rounded (CSOItem_CalculateVarianceStats 78BD00, lo + span*v/31 + 0.5) and
-the server truncated (495D60), so a fresh drop can read one point short
+the native repair truncated, so a fresh drop can read one point short
 on the client while it is whole here, as in retail.
 ================
 */
@@ -169,7 +168,7 @@ func (rt *Runtime) repairInventorySlot(division string, c *enterworld.Character,
 	if !ok || ref == nil || !rt.itemRepairable(ref, row) {
 		return wearFrames{}, repairErrNotRepaired
 	}
-	// 4C7BB2: a broken item needs itemdata CanRevive (CGObj_CanRevive 483EB0).
+	// A broken item needs itemdata CanRevive.
 	if canRevive, _ := ref.NativeFields.Lookup("canRevive"); row.Durability == 0 && canRevive == 0 {
 		return wearFrames{}, repairErrNotRevived
 	}
@@ -197,7 +196,7 @@ func (rt *Runtime) repairInventorySlot(division string, c *enterworld.Character,
 ================
 itemRepairable
 
-CGItemEquip_CanRepair (497340): equipment, not an accessory (family 5 or
+The native repair admission: equipment, not an accessory (family 5 or
 12) or a job suit (7), itemdata CanRepair, and its options allow it.
 ================
 */
@@ -221,8 +220,7 @@ func (rt *Runtime) itemRepairable(ref *enterworld.ItemRef, row enterworld.Invent
 ================
 spendRepairCharge
 
-CGItemEquip_ConsumeRepairMagicCharge (491890): a MATTR_REPAIR count above 1
-loses one.
+The native charge spend: a MATTR_REPAIR count above 1 loses one.
 ================
 */
 func (rt *Runtime) spendRepairCharge(c *enterworld.Character, index int) {
@@ -246,10 +244,9 @@ func (rt *Runtime) spendRepairCharge(c *enterworld.Character, index int) {
 ================
 hammerRepair
 
-The repair hammer (49C2B0 case 6): every repairable item in the inventory
-below its maximum is restored free (CGObjPC_OffsetItemDurability by the
-missing points) and spends a MATTR_REPAIR charge. Runs inside the item
-use's character Update.
+The repair hammer: every repairable item in the inventory below its
+maximum is restored free (by the missing points) and spends a
+MATTR_REPAIR charge. Runs inside the item use's character Update.
 ================
 */
 func (rt *Runtime) hammerRepair(division string, c *enterworld.Character) wearFrames {
