@@ -5,7 +5,7 @@ tether.go - movement tethers: how far a mover may walk from an anchor
 
 A trader whose trade transport stands parked may not walk away from it.
 The native server checks every movement step of the player
-(CGObjPC_ValidateMoveAgainstCOSTethers 4F1230, CGObjPC vtable +0x620,
+(the native COS-tether move check 4F1230, vtable +0x620,
 through CCOSManager_ValidateOwnerMovementTethers 4FD1D0) and stops the
 player when the step would take it further from the transport while it
 already stands past the range. The action owner knows where the transport

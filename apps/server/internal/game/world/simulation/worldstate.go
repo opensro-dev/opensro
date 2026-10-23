@@ -101,7 +101,7 @@ type WorldState struct {
 	Spawn Spawn `json:"spawn"`
 	// MoveSegment is the live-position plane's input; nil when settled.
 	MoveSegment *MoveSegment `json:"moveSegment,omitempty"`
-	// Nav is the retained native pNavCell (CGObj+0x7C) of Spawn, valid only
+	// Nav is the retained native pNavCell (object +0x7C) of Spawn, valid only
 	// while NavAt equals Spawn; read it through GoalOwner/LiveOwnerAt. Never
 	// re-derive ownership from a wire-quantized Y (navowner.go). Runtime-only
 	// like the native cell pointer: a re-entered position is re-resolved.
@@ -170,7 +170,7 @@ func (w *WorldState) StandUp(nowMs int64) bool {
 	return true
 }
 
-// Native motion bytes (CGObj state+0x2) this port models for players.
+// Native motion bytes (object state+0x2) this port models for players.
 const (
 	MotionNone       uint8 = 0
 	MotionSitting    uint8 = 4
