@@ -196,7 +196,7 @@ func openAuthorityPlane(
 		devPaths.EquipItemsEnabled,
 	)
 
-	questCatalog := quest.NewCatalog(textdataDir)
+	questCatalog := quest.NewCatalogWithDerived(textdataDir, devPaths.DerivedDir)
 	loadQuests := sync.OnceValues(func() (*quest.Definitions, error) {
 		return quest.LoadDefinitions(questCatalog, enterworld.NewTextdataItems(questCatalog.Dir()))
 	})

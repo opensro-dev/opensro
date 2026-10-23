@@ -76,7 +76,7 @@ func Check() (Result, error) {
 	if err != nil {
 		return result, fmt.Errorf("textdata: %w", err)
 	}
-	questCatalog := quest.NewCatalog(devPaths.TextdataDir)
+	questCatalog := quest.NewCatalogWithDerived(devPaths.TextdataDir, devPaths.DerivedDir)
 	if _, err := quest.LoadDefinitions(questCatalog, enterworld.NewTextdataItems(questCatalog.Dir())); err != nil {
 		return result, fmt.Errorf("quests: %w", err)
 	}

@@ -2,9 +2,9 @@
 
 Ninety-one v1.150 quests are hand-written C++ quest classes, not Lua scripts,
 so the script-backed catalog
-(`apps/server/internal/game/quest/catalog_generated.json`) never covered them.
+(the generated quest catalogue, `quest.GeneratedCatalogFile`) never covered them.
 `generate_compiled_quests.py` compiles these committed snapshots into
-`apps/server/internal/game/quest/.generated/`; the server embeds the result.
+`<source-data>/server/quest`; the server loads the result from its derived data.
 `pnpm task check:compiled-quests` checks byte-for-byte regeneration.
 
 ## Inputs and reproduction

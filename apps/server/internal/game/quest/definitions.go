@@ -249,7 +249,7 @@ type QuestSpec struct {
 	RewardFullSymbol string
 	// AchievedNowSymbol is BASIC_MENUSTRING_ACHIEVED_NOW: the banner sent
 	// when the objective first stands complete ("... report to <NPC>").
-	// Script-backed quests take it from achieved_now_generated.json.
+	// Script-backed quests take it from the achieved-now catalogue.
 	AchievedNowSymbol    string
 	DeliveryNpcCodename  string
 	DeliveryPromptSymbol string

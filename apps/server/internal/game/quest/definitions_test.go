@@ -137,7 +137,7 @@ func writeTestCatalog(t *testing.T, withContents bool) *Catalog {
 			t.Fatal(err)
 		}
 	}
-	return NewCatalog(dir)
+	return NewCatalogWithDerived(dir, derivedForTests(t))
 }
 
 /*
@@ -169,7 +169,7 @@ func loadShippedDefinitions(t *testing.T) (*Definitions, *enterworld.TextdataIte
 	licensed.RequireGameData(t)
 	textdata := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(textdata)
-	defs, err := LoadDefinitions(NewCatalog(textdata), items)
+	defs, err := LoadDefinitions(NewCatalogWithDerived(textdata, derivedForTests(t)), items)
 	if err != nil {
 		t.Fatalf("LoadDefinitions: %v", err)
 	}
@@ -270,7 +270,7 @@ func TestLoadDefinitionsAgainstShippedMedia(t *testing.T) {
 	if dir == "" {
 		t.Skip("shipped questdata.txt not present in this checkout")
 	}
-	catalog := NewCatalog(dir)
+	catalog := NewCatalogWithDerived(dir, derivedForTests(t))
 	if catalog.Len() != 224 {
 		t.Fatalf("shipped questdata rows = %d, want 224", catalog.Len())
 	}
