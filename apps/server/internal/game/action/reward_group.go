@@ -62,6 +62,9 @@ type rewardRoster struct {
 	division   string
 	actors     map[uint32]rewardActor
 	characters []*enterworld.Character
+	// companionKill: the fatal hit came from a pet or COS, which the
+	// original's quest kill event never credits (creditQuestKillInsideDoor).
+	companionKill bool
 }
 
 /*
@@ -335,8 +338,9 @@ func (rt *Runtime) settleMonsterInsideDoor(division string, actor *enterworld.Ch
 		}
 	}
 	// 4E27C0 -> 4E1F60: the killing blow's job wearer earns job EXP for a
-	// thief or hunter monster (pkreward.go).
-	if actor != nil {
+	// thief or hunter monster (pkreward.go). Only a player's own blow reaches
+	// it in the original; a pet's or COS's fatal hit pays no job EXP.
+	if actor != nil && !roster.companionKill {
 		jobFrames, others := rt.payMonsterJobKillInDoor(division, actor, impact.Instance, pose, now)
 		out.actorFrames = append(out.actorFrames, jobFrames...)
 		out.others = append(out.others, others...)
@@ -415,7 +419,6 @@ func (rt *Runtime) settleMonsterInsideDoor(division string, actor *enterworld.Ch
 		planned := rt.planMonsterKillLoot(a.character, impact.Instance, pose, now)
 		rt.applyMonsterGoldBonus(division, a.character, planned)
 		rt.applyThiefPartyGold(division, a.character, planned, settings)
-		planned = append(planned, rt.planQuestKillDrops(a.character, impact.Instance, pose, now)...)
 		frames, drops, _ := rt.applyMonsterKillInsideDoor(division, a.character, 0, 0, impact.Instance.Gid, planned)
 		out.drops = drops
 		if a.character == actor {
@@ -426,6 +429,11 @@ func (rt *Runtime) settleMonsterInsideDoor(division string, actor *enterworld.Ch
 		if ref, announced := rt.Monsters.RecordUniqueKiller(division, impact.Instance.Gid, a.character.Name); announced && rt.RecordUniqueKill != nil {
 			rt.RecordUniqueKill(division, domain.UniqueKill{AtMs: now, RefObjID: ref, KillerCharID: a.character.ID, KillerName: a.character.Name})
 		}
+	}
+	if !roster.companionKill && actor != nil {
+		frames, drops := rt.creditQuestKillInsideDoor(division, actor, impact.Instance, pose, now)
+		out.actorFrames = append(out.actorFrames, frames...)
+		out.drops = append(out.drops, drops...)
 	}
 	rt.Monsters.ArmNestFromReward(division, impact.Instance.Gid, count)
 	return out
