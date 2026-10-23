@@ -4,8 +4,8 @@
 
 The earlier visual repairs below did not establish complete cast timing.
 The server loader has an additional normalization step that the port omitted:
-`SkillGlobal_LoadReferenceData` reads preparation from reference `+70` at
-`5894E3` and adds it into casting at `+74` at `5894E6`. This runs for every
+it reads preparation from the reference record and adds it into casting.
+This runs for every
 loaded reference, before parameter indexing. Runtime handlers therefore read
 columns **11 + 12**, not raw column 12. The addition wraps as a 32-bit integer.
 
@@ -20,7 +20,7 @@ The authored census checks all 27,835 rows; 4,297 have nonzero preparation.
 Tests cover the strict release boundary, repeated loads, zero preparation,
 preparation-only rows, integer wrapping and malformed timing values. The full
 server gate passed, including race checks, followed by all 13 source gates.
-Binary Ninja server snapshot 447 contains the normalization annotation.
+The normalization was checked against the original instructions.
 
 The isolated build was installed into the local Nomad gameworld, preserving
 its authority database. A connected CodexProbe capture observed Anti Devil's
@@ -36,16 +36,16 @@ descriptions. These checks do not establish whole-program equivalence.
 
 ## Column and handler follow-up
 
-Column 68 selects the server action handler (`589B98..589C14`): 0 instant,
+Column 68 selects the server action handler: 0 instant,
 1 projectile, 3 persistent, 4 continuous. Slots 2, 5 and 6 are null. The
 v1.150 data uses only 0, 1, 3 and 4. Flight speed is independent: the
-projectile handler explicitly stores zero flight time at `585DF1` when
+projectile handler explicitly stores zero flight time when
 column 16 is zero. Offense admission, primary-area pose retention and
 projectile lifetime retention now use the handler rather than nonzero speed.
 Tests include the authored zero-speed Spear Shoot alongside thrown swords.
 The existing MP-cost owner already distinguishes handlers correctly.
 
-Column 47 is the learning country requirement. Native `59E579..59E591`
+Column 47 is the learning country requirement. The native check
 accepts 3 unconditionally and otherwise compares the character country
 (0 China, 1 Europe), refusing with `3405` on mismatch. The requirement now
 survives the loader and resident-row compaction and is checked inside the
@@ -54,17 +54,17 @@ guide notice. Tests cover both countries against requirements 0, 1, 2 and 3,
 including unchanged SP/skills on refusal. European passive persistence tests
 now use European characters rather than Chinese characters with EU masteries.
 
-The learning validator now also preserves `59E450`'s first-failure order and
+The learning validator now also preserves the native first-failure order and
 distinct refusal codes: unavailable or zero-SP row (09), missing mastery
 (01), low mastery (02), STR (03), INT (04), country (05), wrong next rank
 (0C), missing prerequisite (06), low prerequisite (07), insufficient SP
 (0A). A regression starts with simultaneous failures and satisfies them one
 at a time; every refused transaction preserves SP and learned skills.
 
-Column 67 has an execution consumer: `5A0650` generates healing threat only
-for category H (0x48). Its previous database name, "ApplyDamageReturn", was
-wrong. It snapshots the healed actor's target squad, filters actor classes
-through `589CC0`, and publishes half the signed, wrapping HP+MP recovery sum,
+Column 67 has an execution consumer: it generates healing threat only
+for category H (0x48). The field was previously misread as a damage-return
+field. It snapshots the healed actor's target squad, filters actor classes
+through a native class predicate, and publishes half the signed, wrapping HP+MP recovery sum,
 truncated toward zero. The sum is taken before recovery reductions and gauge
 clamping. Even a one-point heal publishes its resulting zero-threat event;
 an actual zero sum publishes none. Linked threat goes to the source before
@@ -78,10 +78,9 @@ events and native actor-class predicates. Column 66 is retained as a native
 word rather than a byte. All 27,835 rows are checked after resident compaction
 for preparation, country, category and AI weight.
 
-Saved server snapshot 449 was read back and contains the corrected healing,
-actor-filter, squad-lookup and supporting container/exception labels.
-Client snapshot 404 was also read back for the board-construction,
-learnability, mastery/group index, requirement-tooltip and container labels.
+The corrected healing, actor-filter, squad-lookup and supporting labels were
+read back and verified. The board-construction, learnability, mastery/group
+index, requirement-tooltip and container labels were read back as well.
 The final source pass completed all 13 gates, including the full server gate;
 fresh licensed recovery, repair, learning and 27,835-row census tests passed.
 
@@ -106,7 +105,7 @@ It is not a claim of whole-program machine equivalence:
 | 22–33 | Target requirement, animal/land/building, relations and corpse selection (`skilltargets.go`). |
 | 34–46 | Two masteries, STR/INT, three prerequisite groups/ranks and learning SP; native refusal ladder now preserved. |
 | 47 | Explicit country requirement, newly wired end to end. |
-| 48–49 | Zero in every v1.150 row. Native `59E450` skips these bytes between country and weapon fields; no additional learning gate is inferred. |
+| 48–49 | Zero in every v1.150 row. The learning validator skips these bytes between country and weapon fields; no additional learning gate is inferred. |
 | 50–51 | Required weapon alternatives and encoded equipment-requirement integration. |
 | 52–55 | Flat and percentage HP/MP costs. |
 | 56 | Zero throughout the audited data; offense envelope currently validates zero. |
@@ -149,8 +148,8 @@ Cold Wave Arrest SHOT use the shared 200 ms entry blend.
 - `8DF180` still permits a server release to interrupt the READY stage when
   a WAIT motion exists. The repair does not delay the authoritative release.
 
-Binary Ninja client snapshot 394 contains the five newly identified
-one-shot playback labels. They were read back from its saved symbol table.
+The five newly identified one-shot playback labels were saved and read
+back rather than trusting the save return value.
 
 `apps/client-next/tools/native-action-entry.py` executes original reset,
 transition setup and advancement bytes. It isolates key/sound/root-motion
@@ -187,8 +186,8 @@ rider GID through the active mount, as 775EB0 does. READY and SHOT capture the
 actor rate when installed; later updates do not retime existing clips. Entry
 and natural-exit blends remain wall-clock intervals.
 
-Server 4AA530 publishes parameter 8C as a GID and float denominator (v1.188
-opcode 3200, v1.150 opcode 3453). Frostbite and slow callbacks call both the
+The server publishes parameter 8C as a GID and float denominator (v1.150
+opcode 3453). Frostbite and slow callbacks call both the
 movement and action-speed publishers. The port now does so for players, COS
 and monsters, and projects the same value into local, companion and remote
 scope-entry snapshots. New hooks are wired in sro-gameworld.
@@ -226,9 +225,9 @@ The adjacent phase branches are now ported and tested:
   retires the old motion producer when replaced, preserving distinct clips and
   other actors. A zero-weight entry also replaces the old installation.
 
-Binary Ninja snapshots 398 and 399 contain the investigated timed-installation,
-binding-cache, command-dispatch and container labels. Saved symbols were read
-back rather than relying on the save return value.
+The investigated timed-installation, binding-cache, command-dispatch and
+container labels were saved and read back rather than relying on the save
+return value.
 
 ## Coverage and limits
 
@@ -291,7 +290,7 @@ and +694 interior-pointer construction; within the skill-record owners these
 are parsing, construction, destruction or the getter, not another timer or
 board dimension. Newly followed codename lookup, adjacent-rank linkage,
 original-name resolution, use-requirement formatting and container helpers
-were labeled. Client snapshot 405 was read back and verified.
+were labeled, and the labels were read back and verified.
 
 The decision for columns 10/15/58 remains no additional runtime behavior in
 this v1.150 port. That is a documented inference from the traced consumers,
