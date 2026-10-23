@@ -15,9 +15,8 @@ import (
 	"sync"
 )
 
-// State is the server effect-row lifecycle observed by
-// CSkillManager_FindActiveBuffBySkillID (v1.188
-// SR_GameServer 0x59ef90). Only states 1 and 2 are eligible for the native
+// State is the server effect-row lifecycle the native active-buff lookup
+// observes. Only states 1 and 2 are eligible for the native
 // client-cancellation action.
 /*
 ================
@@ -83,7 +82,7 @@ type Effect struct {
 	// restoration when this visible buff temporarily contributes zero.
 	MovementPercent uint32
 	// HidePenaltyPercent and HideBonusPercent are the two PercentProduct
-	// sources a hide installs on walk and run (5965D9, 596652): minus its
+	// sources a hide installs on walk and run: minus its
 	// speed word under the instance's own key, plus STSP under key 6. They
 	// leave with the instance, never through the haste slot.
 	HidePenaltyPercent uint32
@@ -199,7 +198,7 @@ func (r *Registry) Apply(effect Effect) bool {
 ================
 ApplyAfterRetirement
 
-59BB80 walks old active instances before later installations. Retire stopped
+The native install walks old active instances before later installations. Retire stopped
 rows before the incoming instance contributes parameters or casting states.
 Validation failure leaves the old retirement queue intact.
 ================
@@ -397,7 +396,7 @@ func (r *Registry) drainStoppedOwnerLocked(key string) []Effect {
 				r.retireLinkHalfLocked(effect)
 			}
 			if effect.jobClockPresent {
-				// 582F93 -> embedded trigger -> 651480(reason=1).
+				// Natively teardown fires the embedded trigger with reason 1.
 				// This callback belongs to teardown, not the stop request.
 				effect.jobClock.retire(1)
 				effect.jobCheckpointDue = false
@@ -481,7 +480,7 @@ func (r *Registry) RetireBodyStatusesOnDeath(divisionID, characterName string) [
 		}
 	}
 	for _, effect := range rows {
-		// 59FFD3 forces selection of every unprotected application. A
+		// The native death teardown forces selection of every unprotected application. A
 		// presentation-only buff (a planted trap's board entry) ends too.
 		if RetirementSelected(true, 0, false, 0, false, false, effect.DeathProtected || effect.Persistent) {
 			r.changeEffectStatesLocked(key, effect, true)
@@ -502,7 +501,7 @@ func (r *Registry) RetireBodyStatusesOnDeath(divisionID, characterName string) [
 }
 
 // Expired is the shared retirement and consumer boundary. Ordinary duration
-// effects use native 5830B0:5851E5..5851E7 (unsigned elapsed > duration+rider),
+// effects use the native lifecycle test (unsigned elapsed > duration+rider),
 // including zero duration. Durable jobs use the native online-seconds clock.
 // No caller should infer liveness from a positive remaining-duration display.
 /*
@@ -627,7 +626,7 @@ func (r *Registry) TakeJobCheckpoints(nowMs int64) []EndedBatch {
 	return out
 }
 
-// RetireEvent implements synchronous 5A16C0 event-mask teardown. Producers
+// RetireEvent implements the native synchronous event-mask teardown. Producers
 // bind only descriptors with nonzero activity and execution context mode 1.
 /*
 ================
@@ -665,7 +664,7 @@ func (r *Registry) RetireEvent(division, name string, mask uint8) []Effect {
 }
 
 // RetireInstances is the synchronous RequestRetirement of chosen instances
-// (CSkillManager_ProcessDamageEffects 5A1691): the same teardown as
+// (the native damage-effect pass): the same teardown as
 // RetireEvent, selected by instance token instead of event bit.
 /*
 ================
