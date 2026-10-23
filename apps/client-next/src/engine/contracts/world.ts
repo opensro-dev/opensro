@@ -164,7 +164,7 @@ export interface EntityState {
 		readonly claimantGid?: number;
 		// The monster whose death published this drop: the server sends a
 		// victim's drops right after its LIFE dead frame (the native death
-		// credit, CGObjMob_CreditKillerOnDeath 4C42F0). The drop waits while
+		// credit). The drop waits while
 		// that death still waits for its killing hit.
 		readonly dropperGid?: number;
 	};
