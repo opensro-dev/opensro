@@ -17,15 +17,14 @@ import (
 )
 
 // Surface ownership for the movement authority. See simulation/navowner.go
-// for the native contract (HLIL-verified, v1.188 SR_GameServer):
+// for the native contract (HLIL-verified):
 //
-//   - a move walks from the RETAINED source cell (QueryMovement 0x98B300);
+//   - a move walks from the RETAINED source cell;
 //   - terrain enters a placed object only by walking into it: the terrain
 //     walker transforms the chord into the placement frame and runs the
-//     object's own Move (CRTNavMeshTerrain_StepPlacedObject 0x9A0030 ->
-//     vtable+8, 0x9B5A80); the reached cell becomes the owner;
-//   - nearest-|deltaY| (CRTNavMeshTerrain_FindNavCell 0x99FD90, terrain wins
-//     ties) is ONLY the teleport/entry rule (CheckPointValid 0x98B1D0).
+//     object's own Move; the reached cell becomes the owner;
+//   - nearest-|deltaY| (terrain wins ties) is ONLY the teleport/entry
+//     rule.
 //
 // Do not reintroduce "is this chord point near a deck height?" tests: the
 // chord Y of a move is the client's int16-truncated destination height, and
@@ -240,7 +239,8 @@ navWalk
 type navWalk struct {
 	paths []*objectOwnedPath // ascending, non-overlapping global-t spans
 	// bridges are the [visit, crossing] fractions an outline entry skips
-	// (CRTNavMeshObj_EnterFromOutside places the walker at the crossing).
+	// (the native outline entry, client 428300, places the walker at the
+	// crossing).
 	bridges [][2]float64
 }
 
@@ -772,7 +772,7 @@ type ownerClipValidator interface {
 ================
 segmentClipValidator
 
-segmentClipValidator is the per-leg clip LineOfSight drives (98D880):
+segmentClipValidator is the per-leg clip LineOfSight drives:
 one chord per call, the report's continuation marking a leg the test
 resumes from its rest point. Validators without the seam keep the
 single-query answer.
