@@ -219,7 +219,7 @@ func TestHandleCreateEmitsB663Oracle(t *testing.T) {
 
 // TestHandleCreateRefusals pins BOTH refusal postures: the evidenced
 // name-length arms answer the hand-rolled 0xB663 {u8 2}{u8 0x18} oracle
-// (INVALID_GUILDNAME_LEN - the pinned v1.188 0x4C18 emit covers the
+// (INVALID_GUILDNAME_LEN - the pinned native 0x4C18 emit covers the
 // empty and the over-cap name), and every other arm stays fully silent
 // (nil error payload - the trigger/code pairs are unpinned).
 func TestHandleCreateRefusals(t *testing.T) {

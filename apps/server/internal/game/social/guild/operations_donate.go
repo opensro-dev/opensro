@@ -17,8 +17,8 @@ import (
 // rationale, DECISION). EVERY refusal stays fully wire-silent -
 // deliberately no ErrorPayload slot: the client's 0xB40F result-2 arm
 // exists (sub_766ad0 @0x00766b8e -> cat 0x10), but no donate
-// trigger->code pair is pinned in the v1.150 dump or the v1.188 server
-// dump (the recon chased the GP_Donation schema column only), so
+// trigger->code pair is pinned in the v1.150 dump or the native server
+// dump (the recon chased the donation schema column only), so
 // emitting a code would invent the pairing (errors.go posture; the
 // insufficient-SP guard is client-LOCAL - the edit seeds against
 // CICPlayer+0x838 and UIIT_MSG_GUILD_ERROR_GP_SUBSCRIPION_SP has no
@@ -41,9 +41,9 @@ func refusedGpDonate(reason string) GpDonateOutcome {
 // GP state on a crash between commits). The arm is IN-GUILD ONLY: the
 // client's donate button gates solely on sub_8188b0 (@0x005e4db8) with
 // NO permission-mask bit and NO grade gate, so any member may donate.
-// Validation order mirrors the v1.188 job posture (identity -> state ->
-// resource last; EVIDENCE(v1.188, logic) - the 0x4c0c gold-deficit
-// family checks resources after resolving both parties): the amount
+// Validation order mirrors the native job posture (identity -> state ->
+// resource last: the 0x4c0c gold-deficit family checks resources after
+// resolving both parties): the amount
 // floor (>= 1), the SP sufficiency and the u32 wrap guards all
 // re-validate INSIDE the door under the store lock.
 func HandleGpDonate(deps Dependencies, divisionID string, actor *enterworld.Character, payload []byte) GpDonateOutcome {

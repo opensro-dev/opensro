@@ -115,7 +115,7 @@ func HandleKick(deps Dependencies, divisionID string, actor *enterworld.Characte
 // (their client's jid==me arm performs the full guild reset; the ack
 // alone does not wipe the guild block). EVERY refusal stays fully
 // silent - deliberately no ErrorPayload slot: the leader-refuse 0x36
-// and no-guild 0x1E codes are pinned only on the classic v1.188 leave
+// and no-guild 0x1E codes are pinned only on the classic native leave
 // job (PROBABLE for Legend), so emitting either would invent a
 // contract.
 type LeaveOutcome struct {

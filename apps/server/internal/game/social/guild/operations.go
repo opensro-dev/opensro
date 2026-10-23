@@ -11,7 +11,7 @@ const (
 	maxGuildMemberLevel     int64 = 140
 
 	// GuildNameMaxBytes is the guild-name byte cap. SOFT PIN: the
-	// v1.188 client rejects a create name longer than 12 bytes before
+	// later client rejects a create name longer than 12 bytes before
 	// composing; no v1.150-side pin exists, so 12 is adopted as the
 	// documented DECISION (it also matches the character-name cap the
 	// same UI family enforces).
@@ -31,8 +31,8 @@ const (
 	PermMaskNoticeEdit uint32 = 0x10
 	PermMaskKick       uint32 = 0x2
 	PermMaskInvite     uint32 = 0x1
-	// PermMaskStorage is the warehouse bit 5C7440 asks of a non-master
-	// (CGuild_MemberHasPermission(member, 8)).
+	// PermMaskStorage is the warehouse bit the native storage admission
+	// asks of a non-master.
 	PermMaskStorage uint32 = 0x8
 	// LeaderGrade is the member grade the client's sub_826610 fold
 	// publishes as the leader name (grade 0 = leader).
