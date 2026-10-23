@@ -34,7 +34,7 @@ func (s *MonsterState) CombatCandidatesInSphere(divisionID string, center Spawn,
 CombatCandidatesForChain
 
 CombatCandidatesForChain uses center-to-center distance and nearest-first
-order. Native 58C8DC..58C97A does not add body radii as sphere areas do.
+order. The native chain query does not add body radii as sphere areas do.
 The primary remains the center for a targeted chain; candidates are not
 admitted merely because they are near a previously selected secondary.
 ==================
@@ -117,7 +117,7 @@ func (s *MonsterState) CombatCandidatesInPopulation(divisionID string, lease ins
 		if distance <= limit {
 			instance, exists := state.instances.lookup(gid)
 			// A fortress structure takes only a weapon's basic attack aimed
-			// at it (CGObjPC_CanAttackTarget 52BF90), so it is never an
+			// at it (the native can-attack check), so it is never an
 			// area, chain or secondary victim.
 			if !exists || instance.CurrentHP == 0 || instance.Ref.Structure {
 				continue
@@ -152,8 +152,8 @@ MonsterDamagePlan
 */
 type MonsterDamagePlan struct {
 	StatusHit abnormal.HitContext
-	// Abnormal holds the statuses 590680 rolled for this impact, applied
-	// only if the monster survives it (593F0C after 4FC).
+	// Abnormal holds the statuses the native roll produced for this
+	// impact, applied only if the monster survives it.
 	Abnormal []abnormal.Record
 	// Prepared outside character and population mutation doors; never resolved during commit.
 	AbnormalSources         map[uint32]MonsterAbnormalSource

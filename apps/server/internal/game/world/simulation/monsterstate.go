@@ -52,7 +52,7 @@ type divisionMonsterState struct {
 	// uniqueTimes is the public tracker's spawn and death record
 	// (unique_states.go, port-only).
 	uniqueTimes map[uint32]*uniqueTimeline
-	// lifetimes holds the CGObjMob tick timers (monsterlifetime.go).
+	// lifetimes holds the native tick timers (monsterlifetime.go).
 	lifetimes map[uint32]monsterLifetime
 	// byRegion indexes generated spawn regions for nest/lifecycle queries
 	// and non-mover interest fallback. Movers own their live spatial index.
@@ -135,11 +135,11 @@ type MonsterSpawnGroundResolver func(regionID uint16, x, authoredY, z float64) (
 ==================
 MonsterSpawnCollisionTest
 
-MonsterSpawnCollisionTest is the navmesh move test creation 5F6EB0 runs
-from the nest centre to a generated candidate (region manager vtable +0x30).
+MonsterSpawnCollisionTest is the navmesh move test the native
+creation runs from the nest centre to a generated candidate.
 Result carries the native bits (monster.NavResultClipped / NavResultBlocked;
 zero admits the candidate). Rest is where the walk came to rest, on the
-surface it walked: 5F6EB0 creates the monster at that written position.
+surface it walked: the native creation creates the monster there.
 ==================
 */
 type MonsterSpawnCollisionTest func(from, to Spawn) MonsterSpawnMove
@@ -275,12 +275,11 @@ func (s *MonsterState) ReferenceByCodename(code string) (monster.MonsterRef, boo
 ================
 division
 
-Opens a division the way the shard boots. SR_ShardManager 65BD60 runs
-_GameWorldInitialize, then walks every RefGameWorld and opens the first
-layer (65C200 -> world vtable +0x18) of each record whose type byte (+0x20)
-is zero; the GameServer builds that layer when the job arrives (5F7BD0 ->
-CGameWorld_AllocateLayer). INS_DEFAULT and the INS_FORT_* siege worlds are
-the shipped type-0 rows. One process plays both roles here, so the
+Opens a division the way the shard boots. The native shard manager
+initializes the worlds, then walks every world record and opens the
+first layer of each record whose type byte is zero; the server
+builds that layer when the job arrives. INS_DEFAULT and the
+INS_FORT_* siege worlds are
 division owner opens them directly, in authored row order.
 ================
 */

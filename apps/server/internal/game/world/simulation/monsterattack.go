@@ -33,7 +33,7 @@ AttackPick
 
 What a new choice among a monster's default skills reads: the uniform
 sample its CRT draw is taken from, and the target it chooses against.
-561B00 weighs a skill up by how far its reach exceeds the target's
+The native selector weighs a skill up by how far its reach exceeds
 distance, so a choice without a target weighs the authored weights alone.
 ================
 */
@@ -46,8 +46,8 @@ type AttackPick struct {
 ================
 AttackTarget
 
-CAITactics_DistanceBetweenActors (53D7A0) from the monster to the target,
-and the target's body radius (its vtable +0x560).
+The native actor distance from the monster to the target, and the
+target's body radius.
 ================
 */
 type AttackTarget struct {
@@ -126,7 +126,7 @@ func (ops *MonsterMoverOps) selectMonsterAttack(divisionID string, instance mons
 	if ops.AttackPlan == nil {
 		return MonsterAttackPlan{}, false
 	}
-	// Research 5472CB..5472FE reuses the active skill before invoking the
+	// The native path reuses the active skill before invoking the
 	// selector. Resolving a retained authored ID must not consume a choice
 	// draw; its interval draw was already consumed on adoption.
 	if requestedSkillID != 0 {
@@ -183,7 +183,7 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 	if tactics.ChaseLeash > 0 && planarDistance(live, anchorPose(instance)) > tactics.ChaseLeash {
 		return ops.startReturnLeg(divisionID, instance, tactics, mover, monster.MoverEventLeashBroken, nowMs), nil, true
 	}
-	// 5472A0 returns 2 while Timer 5 is closed; 55A1D5 chases only on 1.
+	// The native gate returns 2 while Timer 5 is closed; the chase runs only on 1.
 	// Retain this port's existing accepted-action deadline before range-driven
 	// replanning. This does not change skill timing or interval selection.
 	// Target loss and eligibility are still checked above.
@@ -248,7 +248,7 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 	}
 	// Admit facing/action ownership BEFORE the callback can commit damage.
 	// Reserve the selected strategy interval, including its native jitter,
-	// in that same value (547342 uses strategy +48, not raw skill cooldown).
+	// in that same value (the strategy interval, not raw skill cooldown).
 	// Retaliation must retain it if post-cast bookkeeping is superseded.
 	mover.NextAttackMs = nowMs + int64(mover.AttackIntervalMs)
 	if !ops.Monsters.CommitMover(divisionID, instance.Gid, mover) {
@@ -265,8 +265,8 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 	if !result.Accepted {
 		switch result.Refusal {
 		case MonsterAttackApproachRequired, MonsterAttackCommandRejected:
-			// Research 5472A0 admission refusal retains the selected skill;
-			// 59ADF1 -> event 4(-1) -> 558F70 completes/clears it instead.
+			// The native admission refusal retains the selected skill; the
+			// completion path completes/clears it instead.
 			// Neither owns a HOMING transition. Recheck the live target and
 			// range on the next AI tick, without recursively retrying damage.
 			event := monster.MoverEventAttackApproachRequired

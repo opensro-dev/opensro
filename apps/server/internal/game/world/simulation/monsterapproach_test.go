@@ -1,11 +1,11 @@
 /*
 ===========================================================================
 
-monsterapproach_test.go - the +0x114 pursuit admission for dynamic spawns
+monsterapproach_test.go - the native pursuit admission for dynamic spawns
 
 A spawn that resolves its tactics from the spawn table alone has no
-FleeType and no BattleStyle, and native installs the pursuit callback for
-it as well (0x0053FC00 at 0x0053FC67). The port must admit those spawns,
+FleeType and no BattleStyle, and the native installs the pursuit
+callback for it as well. The port must admit those spawns,
 and must not admit a nest that only looks like one.
 
 ===========================================================================
@@ -24,8 +24,8 @@ import (
 ================
 TestOrdinarySquadApproachAdmitsDetachedPolicySpawns
 
-0x0053FC00 stores CAITactics_PursueTargetWithDirectionGate (0x00548BE0)
-into slot +0x114 in an unconditional run at function entry (0x0053FC67).
+The native strategy table stores the direction-gated pursuit
+callback into the pursuit slot in an unconditional run at entry.
 A dynamic spawn carries neither a TacticsControls row nor a summoner, so
 the callback belongs to it.
 ================
@@ -40,7 +40,7 @@ func TestOrdinarySquadApproachAdmitsDetachedPolicySpawns(t *testing.T) {
 		"GM spawn":       questSpawn,
 	} {
 		if !ordinarySquadApproach(actor) {
-			t.Fatalf("%s excluded from ordinarySquadApproach (+0x114 0x00548BE0)", name)
+			t.Fatalf("%s excluded from ordinarySquadApproach (native pursuit slot)", name)
 		}
 	}
 }
@@ -50,7 +50,7 @@ func TestOrdinarySquadApproachAdmitsDetachedPolicySpawns(t *testing.T) {
 TestOrdinarySquadApproachAdmitsAnAuthoredAreaNestAfterItsSlotIsReleased
 
 A resource-authored area nest is policy-pinned and holds its slot, so it
-stays out while it holds it. Releasing the slot (53FD40, through
+stays out while it holds it. Releasing the slot (through
 detachCrossPlaneNest) leaves the actor detached and policy-pinned, and the
 predicate then admits it. Native installs the callback for every tactics
 instance at its spawn, so admitting the actor after the release is the
@@ -100,7 +100,7 @@ func TestOrdinarySquadApproachAdmitsAnAuthoredAreaNestAfterItsSlotIsReleased(t *
 TestOrdinarySquadApproachKeepsUnpinnedAndAttachedNestsOut
 
 Native resolves a monster's tactics once, when it is spawned, so a
-monster that loses its nest slot later (53FD40) keeps the tactics it came
+monster that loses its nest slot later keeps the tactics it came
 with and stays admitted. What never resolved a spawn table row stays out:
 a nest that was never pinned (the stuck path) and a resource-authored area
 nest that still holds its slot.
@@ -122,8 +122,8 @@ func TestOrdinarySquadApproachKeepsUnpinnedAndAttachedNestsOut(t *testing.T) {
 ================
 TestQuestAndGMSpawnsJoinTheOrdinaryPursuit
 
-A quest script (0x008B9B60, 0x008B2AB0, 0x008B6840, 0x008C7910) and
-/LOADMONSTER (0x00520A40) both spawn without a tactics id, so the server
+A quest script and /LOADMONSTER both spawn without a tactics id,
+so the server
 resolves the spawn table row itself. The spawn table rows of the four
 quest monsters carry no control block, so the pursuit belongs to them.
 ================
@@ -151,7 +151,7 @@ func TestQuestAndGMSpawnsJoinTheOrdinaryPursuit(t *testing.T) {
 		t.Fatal("the guardian's spawn table row grew a control block")
 	}
 	if !ordinarySquadApproach(actors[0]) {
-		t.Fatal("the quest guardian is excluded from the +0x114 pursuit")
+		t.Fatal("the quest guardian is excluded from the native pursuit")
 	}
 
 	gm, gmLease := gmMonsterState(t, 0)
@@ -164,6 +164,6 @@ func TestQuestAndGMSpawnsJoinTheOrdinaryPursuit(t *testing.T) {
 		t.Fatalf("GM population %d, want 1", len(loaded))
 	}
 	if !ordinarySquadApproach(loaded[0]) {
-		t.Fatal("the /LOADMONSTER spawn is excluded from the +0x114 pursuit")
+		t.Fatal("the /LOADMONSTER spawn is excluded from the native pursuit")
 	}
 }
