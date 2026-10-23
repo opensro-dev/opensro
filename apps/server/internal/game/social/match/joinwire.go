@@ -16,24 +16,23 @@ package match
 // JOIN IS AN OWNER-APPROVAL HANDSHAKE, pinned from the v1.150 client
 // alone:
 //
-//   - the joiner's ack consumer (sub_75ebd0 @0x0075ebd0 / sub_769ca0
+//   - the joiner's ack consumer (75EBD0 @0x0075ebd0 / 769CA0
 //     @0x00769ca0) reads a three-way detail byte - 1 COMPLETE banner,
 //     0 REFUSED guide, 2 NOREPLY guide - a shape only an approval flow
 //     with a timeout produces;
 //   - the owner's window composes a three-way ANSWER: party accept
-//     sub_63c410 @0x0063c410 (byte 1), refuse sub_63c460 @0x0063c460
-//     (byte 0), no-reply sub_63c340 @0x0063c340 (byte 2), all through
-//     the 0x30FA composer sub_6fe370 @0x006fe370; the mentor twin rides
-//     msgbox kind 0xe -> sub_6971b0 case 0xb -> sub_6fe690 @0x006fe690
+//     63C410 @0x0063c410 (byte 1), refuse 63C460 @0x0063c460
+//     (byte 0), no-reply 63C340 @0x0063c340 (byte 2), all through
+//     the 0x30FA composer 6FE370 @0x006fe370; the mentor twin rides
+//     msgbox kind 0xe -> 6971B0 case 0xb -> 6FE690 @0x006fe690
 //     on 0x35D5 (accept 1 / refuse 0).
 //
-// EVIDENCE(v1.188, logic): the retail GameServer forwards match-join
+// EVIDENCE(later server, logic): the original server forwards match-join
 // requests as coordinator jobs carrying a member-info snapshot of the
-// joiner (sub_5bae80 @0x005bae80: name, race byte, packed HP/MP tenth
-// nibbles, region + coords - the same masked member-info shape) and
-// separately validates registration/modify purpose-vs-job compatibility
-// (sub_5bf2a0 @0x005bf362
-// -> error 0x2C23). The opcode numbers are renumbered vs Legend; only
+// joiner (name, race byte, packed HP/MP tenth nibbles, region + coords -
+// the same masked member-info shape) and separately validates
+// registration/modify purpose-vs-job compatibility (error 0x2C23). The
+// opcode numbers are renumbered vs Legend; only
 // the logic transfers. This one-process gateway collapses the
 // coordinator hop.
 //
@@ -48,33 +47,33 @@ import "opensro.online/server/internal/game/item/wire"
 // Join C->S / S->C opcodes.
 const (
 	// OpPartyJoinRequest is BOTH directions of the party-match join
-	// opcode: C->S {u32 entryId} (composer sub_6fe2b0 @0x006fe31d,
-	// caller sub_6353f0 - the window's JOIN button 0xf) and the S->C
-	// owner notify (handler sub_75ea70 @0x0075ea70, registered on
+	// opcode: C->S {u32 entryId} (composer 6FE2B0 @0x006fe31d,
+	// caller 6353F0 - the window's JOIN button 0xf) and the S->C
+	// owner notify (handler 75EA70 @0x0075ea70, registered on
 	// CPSMission @0x0074e25e).
 	OpPartyJoinRequest uint16 = 0x75BF
 	// OpPartyJoinAnswer: the owner's reply {u32 echoA, u32 echoB,
-	// u8 answer} - composer sub_6fe370 @0x006fe370, fired by the
-	// CIFPartyMatchReqJoin pane's accept (sub_63c410, answer 1),
-	// refuse (sub_63c460, answer 0) and no-reply (sub_63c340,
+	// u8 answer} - composer 6FE370 @0x006fe370, fired by the
+	// CIFPartyMatchReqJoin pane's accept (63C410, answer 1),
+	// refuse (63C460, answer 0) and no-reply (63C340,
 	// answer 2) legs; the two u32s echo the notify's first two fields
-	// (stored at wnd+0x7b8/+0x7bc by sub_63cbc0).
+	// (stored at wnd+0x7b8/+0x7bc by 63CBC0).
 	OpPartyJoinAnswer uint16 = 0x30FA
-	// OpPartyJoinAck: the joiner's ack - handler sub_75ebd0
+	// OpPartyJoinAck: the joiner's ack - handler 75EBD0
 	// @0x0075ebd0, registered @0x0074e27f.
 	OpPartyJoinAck uint16 = 0xB5BF
 
-	// OpMentorJoinRequest: C->S {u32 entryId} (composer sub_6fe5d0
-	// @0x006fe63d, caller sub_672820) AND the S->C owner notify
-	// (handler sub_769e30 @0x00769e30, CNetProcessSecond @0x0076eccb).
+	// OpMentorJoinRequest: C->S {u32 entryId} (composer 6FE5D0
+	// @0x006fe63d, caller 672820) AND the S->C owner notify
+	// (handler 769E30 @0x00769e30, CNetProcessSecond @0x0076eccb).
 	OpMentorJoinRequest uint16 = 0x7592
 	// OpMentorJoinAnswer: the owner's reply {u32 echoA, u32 echoB,
-	// u8 answer} - composer sub_6fe690 @0x006fe690, fired from msgbox
-	// kind 0xe (sub_6971b0 case 0xb: accept pushes 1, refuse 0); the
+	// u8 answer} - composer 6FE690 @0x006fe690, fired from msgbox
+	// kind 0xe (6971B0 case 0xb: accept pushes 1, refuse 0); the
 	// echo pair is the notify blob's +0x2c/+0x30 fields the msgbox
 	// stashed at interface +0xa7c/+0xa80 (ConfigureKind @0x0053021a).
 	OpMentorJoinAnswer uint16 = 0x35D5
-	// OpMentorJoinAck: the joiner's ack - handler sub_769ca0
+	// OpMentorJoinAck: the joiner's ack - handler 769CA0
 	// @0x00769ca0, CNetProcessSecond @0x0076ecec.
 	OpMentorJoinAck uint16 = 0xB592
 )
@@ -86,10 +85,10 @@ const (
 	JoinAnswerNoReply uint8 = 2
 )
 
-// Joiner ack detail bytes, pinned from the ack consumers: sub_75ebd0
+// Joiner ack detail bytes, pinned from the ack consumers: 75EBD0
 // detail 1 -> UIIT_MSG_PARTYMATCH_JOIN_COMPLETE_MASTER banner + auto-
 // queue clear, 0 -> UIIT_MSG_PARTYERR_CREATE_PARTY_REFUSED guide, 2 ->
-// UIIT_MSG_PARTYMATCH_JOIN_NOREPLY guide; sub_769ca0 mirrors with the
+// UIIT_MSG_PARTYMATCH_JOIN_NOREPLY guide; 769CA0 mirrors with the
 // TC strings (TC_MACHING_COMPLETE / TC_JOIN_CANCEL / TC_JOIN_NOREPLY).
 // The outer==2 error arm carries a category-2 code byte; its keys are the
 // client's own notice table (EncodeJoinError), so refusals with a named
@@ -101,7 +100,7 @@ const (
 	JoinAckNoReply  uint8 = 2
 )
 
-// DecodeJoinRequest strict-decodes the shared sub_6fe2b0 / sub_6fe5d0
+// DecodeJoinRequest strict-decodes the shared 6FE2B0 / 6FE5D0
 // body {u32 entryId}.
 func DecodeJoinRequest(payload []byte) (uint32, error) {
 	reader := wire.NewReader(payload)
@@ -122,7 +121,7 @@ type JoinAnswer struct {
 	Answer uint8
 }
 
-// DecodeJoinAnswer strict-decodes the shared sub_6fe370 / sub_6fe690
+// DecodeJoinAnswer strict-decodes the shared 6FE370 / 6FE690
 // body {u32 echoA, u32 echoB, u8 answer}.
 func DecodeJoinAnswer(payload []byte) (JoinAnswer, error) {
 	reader := wire.NewReader(payload)
@@ -169,10 +168,10 @@ func EncodePartyJoinNotify75BF(requestID, entryID uint32, applicant PartyApplica
 EncodeMentorJoinNotify7592
 
 EncodeMentorJoinNotify7592 renders the S->C owner notify the msgbox
-kind-0xe prompt consumes. READ order PINNED (sub_769e30
+kind-0xe prompt consumes. READ order PINNED (769E30
 @0x00769e7d/@0x00769e8b reads the echo pair into the record's
 +0x2c/+0x30 - the stack layout var_44+0x2c == var_18 proves the
-offsets - then sub_768200 @0x00768200 reads {u32 f00, u32 f04,
+offsets - then 768200 @0x00768200 reads {u32 f00, u32 f04,
 u8 f08, u8 f09, u32 f0c, sized-narrow name}). Consumer-pinned
 semantics (ConfigureKind case for kind 0xe, @0x00530511..0x00530595):
 
@@ -180,7 +179,7 @@ semantics (ConfigureKind case for kind 0xe, @0x00530511..0x00530595):
 	          the mentor listing's byte09/dword08 posture: both carry
 	          the level)
 	f0c     = the joiner's model RefObjID - the race label resolves
-	          through sub_7efeb0(f0c)+0x9c (@0x0053054a)
+	          through 7EFEB0(f0c)+0x9c (@0x0053054a)
 	name    = the joiner's name - the UIIT_STT_TC_JOIN_REQUEST body
 	          format (@0x00530365)
 	f00/f04 = 0 (DECISION: unread by the msgbox configure - zero floor)
@@ -221,7 +220,7 @@ const (
 	JoinErrorDuplicate     uint8 = 0x1F // UIIT_MSG_PARTYMATCH_JOIN_ERROR_DUPLE
 )
 
-// EncodeJoinError is the outer-2 arm {u8 2, u8 code}: sub_75ebd0 shows the
+// EncodeJoinError is the outer-2 arm {u8 2, u8 code}: 75EBD0 shows the
 // code's category-2 notice instead of the generic refusal.
 func EncodeJoinError(code uint8) []byte {
 	return wire.NewWriter(2).U8(2).U8(code).Payload()
