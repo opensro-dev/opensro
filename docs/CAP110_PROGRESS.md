@@ -96,7 +96,8 @@ rewards. A release rollback needs its own content/state policy.
 
 Converter tests cover native precedence, ID collisions, both races,
 parameter-link trimming, required names, off/on/off rebuilds and identity
-retention; `check_identity_parity.py` joins client and server
+retention; `check_identity_parity.py` (an overlay tool kept outside this
+repository) joins client and server
 character/skill/item data by codename and fails on any differing ID.
 Production loaders must accept the staged tables, and published packs are
 checked against the server's IDs. Source gates (scripts, formatting,

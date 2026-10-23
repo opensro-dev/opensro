@@ -91,14 +91,14 @@ in the browser, the ledger and data releases are described in
 
 ## Alexandria (port-only, not native)
 
-v1.150 has no Alexandria. `SRO_ALEXANDRIA=1 py -3 scripts/import_vsro_alexandria.py --vsro-root <VSRO client>`
+v1.150 has no Alexandria. These overlay tools are kept outside this repository, with the operator's other import tools. `SRO_ALEXANDRIA=1 import_vsro_alexandria.py --vsro-root <VSRO client>`
 (or `SRO_VSRO_ROOT`) copies the city's 36 regions (map files, navmesh, the
 ground tiles they paint), the VSRO tile and object catalogs and the city's
 table rows into `extracted/Alexandria_extracted/`, with a manifest that
 reports where the VSRO catalogs conflict with the native ones. It never
 touches the v1.150 extraction.
 
-`SRO_ALEXANDRIA=1 py -3 scripts/build_alexandria_variant.py --variant-root <folder>`
+`SRO_ALEXANDRIA=1 build_alexandria_variant.py --variant-root <folder>`
 then makes a second game root: the native files hard-linked, plus the city's
 regions (6 conflicting tile ids remapped), merged tile and object catalogs, the
 VSRO building and effect files the native tree lacks and the city's navmesh.

@@ -1,22 +1,31 @@
 """
 ===========================================================================
-test_quest_text_evidence.py - multiline quest text, versioned reward precedence
-and delivery mission items
+test_compiled_quest_projection.py - versioned reward precedence and delivery
+mission items in the compiled-quest generator
 
-Synthetic text tables exercise the production importer and reward projector.
-The older popup owns advertised counts; newer SQL supplies unspecified values
-and item rewards. No licensed input or generated output is read or written.
+The advertised popup rewards are given as the parsed values the quest-text
+importer (private tools) produces; the generator owns what follows: the
+older popup's counts win, newer SQL supplies unspecified values and item
+rewards, and delivery missions project their items and legs. No licensed
+input or generated output is read or written.
 ===========================================================================
 """
 
 import pathlib
 import sys
-import tempfile
 import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "build"))
-from import_quest_text_evidence import advertised_rewards, plain, read_table
 from generate_compiled_quests import Unsupported, delivery_items, handover_pages, project, rewards
+
+
+# ================
+# advertised
+#
+# One popup's parsed reward paragraph.
+# ================
+def advertised(exp=0, slots=0):
+	return {"choices": False, "exp": exp, "skillExp": 0, "gold": 0, "inventorySlots": slots}
 
 
 # ================
@@ -32,50 +41,16 @@ def sql_reward():
 
 
 # ================
-# QuestTextEvidenceTests
+# CompiledQuestProjectionTests
 # ================
-class QuestTextEvidenceTests(unittest.TestCase):
-	# ================
-	# test_multiline_records_preserve_boundaries_and_reward_paragraph
-	# ================
-	def test_multiline_records_preserve_boundaries_and_reward_paragraph(self):
-		text = (
-			"1\tSN_PAYCON_FIXTURE\t<font>Quest title\r\n"
-			"\r\n보상\r\n인벤토리 2칸</font>\tEND\r\n"
-			"1\tSN_CON_NEXT\tCollect 20개\r\n"
-			"0\tSN_DISABLED\tDisabled body"
-		)
-		for encoding in ("cp949", "utf-16"):
-			with self.subTest(encoding=encoding), tempfile.TemporaryDirectory() as folder:
-				path = pathlib.Path(folder) / "textquest.txt"
-				encoded = text.encode(encoding)
-				path.write_bytes(encoded)
-				raw, rows = read_table(path)
-				self.assertEqual(raw, encoded)
-				self.assertEqual(len(rows), 3)
-				self.assertEqual(rows[0], ["1", "SN_PAYCON_FIXTURE", "<font>Quest title\n\n보상\n인벤토리 2칸</font>", "END"])
-				self.assertEqual(rows[1], ["1", "SN_CON_NEXT", "Collect 20개"])
-				self.assertEqual(rows[2], ["0", "SN_DISABLED", "Disabled body"])
-				self.assertEqual(advertised_rewards(plain(rows[0][2]))["inventorySlots"], 2)
-
-	# ================
-	# test_reward_numbers_stop_before_scenario_text
-	# ================
-	def test_reward_numbers_stop_before_scenario_text(self):
-		body = plain("<b>보상</b> 경험치 10,500 스킬 경험치 500 GOLD 3,800 인벤토리 10칸 관련 시나리오 인벤토리 99칸")
-		self.assertEqual(advertised_rewards(body), {
-			"choices": False, "exp": 10500, "skillExp": 500, "gold": 3800, "inventorySlots": 10,
-		})
-		self.assertEqual(advertised_rewards("보상 경험치 42 관련 시나리오 인벤토리 99칸")["inventorySlots"], 0)
-		self.assertIsNone(advertised_rewards("인벤토리 99칸 is scenario text without a reward heading"))
-
+class CompiledQuestProjectionTests(unittest.TestCase):
 	# ================
 	# test_popup_slot_counts_override_newer_sql_and_keep_sql_items
 	# ================
 	def test_popup_slot_counts_override_newer_sql_and_keep_sql_items(self):
 		for slots in (2, 10):
 			with self.subTest(slots=slots):
-				text = {"reward": advertised_rewards(f"보상 경험치 10,500 인벤토리 {slots}칸")}
+				text = {"reward": advertised(exp=10500, slots=slots)}
 				projected = rewards("QUEST", text, {"QUEST": sql_reward()})
 				self.assertEqual(projected, {
 					"RewardExp": 10500, "RewardSkillExp": 0, "RewardGold": 0,
@@ -87,12 +62,11 @@ class QuestTextEvidenceTests(unittest.TestCase):
 	# test_sql_fills_unspecified_rewards_and_slot_only_popup_keeps_its_count
 	# ================
 	def test_sql_fills_unspecified_rewards_and_slot_only_popup_keeps_its_count(self):
-		for paragraph, slots in ((None, 4), ("보상 경험치 100", 4), ("보상 인벤토리 2칸", 2)):
+		for paragraph, slots in ((None, 4), (advertised(exp=100), 4), (advertised(slots=2), 2)):
 			with self.subTest(paragraph=paragraph):
-				advertised = advertised_rewards(paragraph) if paragraph else None
-				projected = rewards("QUEST", {"reward": advertised}, {"QUEST": sql_reward()})
+				projected = rewards("QUEST", {"reward": paragraph}, {"QUEST": sql_reward()})
 				self.assertEqual(projected["RewardInventorySlots"], slots)
-				self.assertEqual(projected["RewardExp"], 100 if paragraph == "보상 경험치 100" else 12450)
+				self.assertEqual(projected["RewardExp"], 100 if paragraph and paragraph["exp"] == 100 else 12450)
 
 	# ================
 	# test_unimplemented_reward_kinds_are_not_silently_dropped
@@ -103,7 +77,7 @@ class QuestTextEvidenceTests(unittest.TestCase):
 				row = sql_reward()
 				row[field] = 1
 				with self.assertRaisesRegex(Unsupported, "reward " + field):
-					rewards("QUEST", {"reward": advertised_rewards("보상 인벤토리 2칸")}, {"QUEST": row})
+					rewards("QUEST", {"reward": advertised(slots=2)}, {"QUEST": row})
 
 	# ================
 	# test_delivery_items_pair_each_codename_with_its_quantity
@@ -144,7 +118,7 @@ class QuestTextEvidenceTests(unittest.TestCase):
 	# constructor's default; the importer records only explicit writes.
 	# ================
 	def test_delivery_keeps_items_only_when_the_mission_clears_0x111(self):
-		text = {"objectives": {}, "reward": advertised_rewards("")}
+		text = {"objectives": {}, "reward": None}
 		sql = {"QUEST": sql_reward() | {"items": [], "inventorySlots": 0}}
 		for written, kept in ((None, False), (1, False), (0, True)):
 			with self.subTest(written=written):
@@ -168,7 +142,7 @@ class QuestTextEvidenceTests(unittest.TestCase):
 	# the ACHIEVED word. +0x110 set keeps the one-leg turn-in.
 	# ================
 	def test_two_leg_delivery_hands_over_then_reports_to_the_start_npc(self):
-		text = {"objectives": {}, "reward": advertised_rewards("")}
+		text = {"objectives": {}, "reward": None}
 		sql = {"QUEST": sql_reward() | {"items": [], "inventorySlots": 0}}
 		fields = {
 			"0x9": 3, "0x15": "NPC_HAND_OVER", "0x19": 1, "0x1a": 1, "0x42": "ITEM_FIRECRACKERS",
@@ -214,7 +188,7 @@ class QuestTextEvidenceTests(unittest.TestCase):
 	# hand-overs paid at the start NPC; a one-leg one among them is refused.
 	# ================
 	def test_parallel_deliveries_hand_over_then_report(self):
-		text = {"objectives": {}, "reward": advertised_rewards("")}
+		text = {"objectives": {}, "reward": None}
 		sql = {"QUEST": sql_reward() | {"items": [], "inventorySlots": 0}}
 		def mission(index, npc):
 			return {"fields": {"0x8": index, "0x9": 3, "0x15": npc, "0xd": "SN_CON_%d" % index, "0x19": 1, "0x1a": 1,
@@ -228,6 +202,7 @@ class QuestTextEvidenceTests(unittest.TestCase):
 		quest["missions"][1]["fields"]["0x110"] = 1
 		with self.assertRaisesRegex(Unsupported, "one-leg mission in a parallel delivery"):
 			project("QUEST", quest, text, sql)
+
 
 if __name__ == "__main__":
 	unittest.main()

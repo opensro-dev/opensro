@@ -8,7 +8,7 @@ its own GameWorldID (57, 58, 59). This port runs every tomb as a persistent
 shared area on the INS_DEFAULT world, as the Qin-Shi Emperor Tomb does
 (qinshi_tomb.go); the original's per-tomb world separation is not modelled.
 
-The importer (scripts/cap110_monsters.py, TOMB_FILE) writes cap110-tomb.txt in the same row
+The overlay importer (cap110_monsters.py, TOMB_FILE) writes cap110-tomb.txt in the same row
 schema as the field population (cap110.go). Unlike the field it admits the
 elite (grade 6) and unique (grade 8) monsters the tombs are made of. Equipment
 drops come from the cap-110 loot catalogue, so the tomb requires

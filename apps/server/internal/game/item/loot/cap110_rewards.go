@@ -5,7 +5,7 @@ cap110_rewards.go - optional database-authored monster rewards.
 Port-only, not native. The loot catalogue treats the native v1.150 client as
 its content boundary, so the reward rules of the Alexandria and Pharaoh Tomb
 monsters (fixed drops, random groups) were never carried. cap110-rewards.txt
-(scripts/cap110_rewards.py) adds them. They join the assigned-drop tables of
+(the overlay tool cap110_rewards.py) adds them. They join the assigned-drop tables of
 consumables.go; the native rules of native monsters are never replaced.
 ===========================================================================
 */

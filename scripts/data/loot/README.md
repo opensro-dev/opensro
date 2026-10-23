@@ -35,10 +35,11 @@ never become runtime item identities.
   authors most tables only around levels 71-90, and the older source's levels
   74-89 run about ten times lower than the newer source's.
 
-To refresh the client, reward and drop snapshots from local evidence:
+The client, reward and drop snapshots are refreshed from local evidence by
+the loot importer, kept outside this repository with the operator's other
+import tools. Then:
 
 ```text
-python -B scripts/build/import_loot_evidence.py --media <v1.150-textdata> --vsro <older-snapshot> --isro <newer-snapshot> --output scripts/data/loot
 python -B scripts/build/generate_loot_catalog.py
 python -B scripts/build/generate_loot_catalog.py --check
 ```
