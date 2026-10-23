@@ -3,20 +3,15 @@
 
 battlestate.go - the player battle state
 
-CGObjPC_SetBattleState (4E2910) stores state+0xD (state channel 8) and, on
-entry, arms the 20-count timer at +0x203C; a change of value publishes
-0x30BF through CGObjChar_BroadcastStateChannel (4A8340), 0x3122 channel 8
-on the v1.150 wire (client 777E84 -> localPlayer +0x781).
-CGObjPC_TickStateTimers (52AA90) counts the timer down and leaves battle at
-zero. A player enters battle by striking (CGObjPC_EnterBattleOnAttack
-4E27C0, vtable +0x508), by being struck (CGObjPC_EnterBattleOnAttacked
-4E1DF0 from ProcessNormalHit) and by a hit on their pet
-(CGObjCOS_ProcessNormalHit 52A1E0). Death leaves battle (529C93) before
-the life change.
+The native battle state is state channel 8; on entry it arms a 20-count
+timer, and a change of value publishes the later protocol's 0x30BF state
+broadcast, 0x3122 channel 8 on the v1.150 wire (client 777E84 ->
+localPlayer +0x781). The native state tick counts the timer down and leaves
+battle at zero. A player enters battle by striking, by being struck and by
+a hit on their pet. Death leaves battle before the life change.
 
-The tick behind +0x680 is a scheduled callback whose period was not
-recovered; this port counts the 20 ticks as seconds. The pet arm is
-monsterHitSummonedCOS.
+The native tick is a scheduled callback whose period was not recovered; this
+port counts the 20 ticks as seconds. The pet arm is monsterHitSummonedCOS.
 
 ===========================================================================
 */
@@ -31,7 +26,7 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// battleStateMs is the +0x203C count (4E2915) at one tick per second.
+// battleStateMs is the native 20-count at one tick per second.
 const battleStateMs = 20 * 1000
 
 // battleExpiry is the tick index entry; the character store owns the state.
@@ -40,7 +35,7 @@ type battleExpiry struct {
 	until          int64
 }
 
-// battleStateFrame is 0x3122 channel 8 with the new state+0xD value.
+// battleStateFrame is 0x3122 channel 8 with the new battle state.
 func battleStateFrame(gid uint32, inBattle bool) wire.Frame {
 	value := uint8(0)
 	if inBattle {
@@ -50,7 +45,7 @@ func battleStateFrame(gid uint32, inBattle bool) wire.Frame {
 	return wire.Frame{Opcode: wire.OpObjectStateRefresh, Payload: refresh.Encode()}
 }
 
-// inBattleState reports state+0xD at nowMs.
+// inBattleState reports the battle state at nowMs.
 func inBattleState(c *enterworld.Character, nowMs int64) bool {
 	return nowMs < c.BattleUntilMs
 }
@@ -61,7 +56,7 @@ enterBattleState
 
 Restarts the countdown. The caller holds the character update door and
 publishes the returned frames after it: only a player who was out of
-battle changes state+0xD, so only then is there a frame.
+battle changes the state, so only then is there a frame.
 ==================
 */
 func (rt *Runtime) enterBattleState(division string, c *enterworld.Character, nowMs int64) []wire.Frame {
@@ -78,7 +73,7 @@ func (rt *Runtime) enterBattleState(division string, c *enterworld.Character, no
 ==================
 leaveBattleState
 
-Clears the state (death, 529C93). The caller holds the character door and
+Clears the state (death, as natively). The caller holds the character door and
 publishes the returned frame, if any, before the life change.
 ==================
 */
@@ -96,7 +91,7 @@ func (rt *Runtime) leaveBattleState(division string, c *enterworld.Character, no
 ==================
 advanceBattleStates
 
-The 52AA90 countdown: players whose timer ran out leave battle and every
+The native countdown: players whose timer ran out leave battle and every
 observer sees channel 8 return to 0. A restarted timer or a cleared state
 leaves the stale index entry without effect.
 ==================

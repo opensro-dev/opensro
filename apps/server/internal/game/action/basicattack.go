@@ -44,13 +44,13 @@ const attackPursuitPositionEpsilon = 0.01
 ==================
 skillActionReach
 
-skillActionReach resolves the action before its equipment fallback. Native
-4ADA8C..4ADAB8 uses the skill's nonzero range for basic and advanced casts;
+skillActionReach resolves the action before its equipment fallback. The
+native reach uses the skill's nonzero range for basic and advanced casts;
 only zero calls the equipped/unarmed range resolver. Keep pursuit and hit
 admission on this same rule (EU caster basic skills author 150, not zero).
 
-4ADAB8..4ADB4E (and 4AE87E..4AE912 for casts) then add the caster's CBRA
-and WIRU values when the row asks for them (getv +0x50C, +0x4E8), and cut
+The native reach (for basic attacks and casts alike) then adds the
+caster's CBRA and WIRU values when the row asks for them (getv), and cuts
 the sum by keeper param 0xB7 percent. Each step is stored as a float.
 ==================
 */
@@ -60,7 +60,7 @@ func skillActionReach(skill enterworld.SkillRow, loadout combat.Loadout, caster 
 	case skill.ActionRange > 0:
 		reach = float32(skill.ActionRange)
 	case loadout.HasWeapon:
-		// 4AC890 truncates the keeper: the weapon's range plus every ru
+		// Natively the keeper is truncated: the weapon's range plus every ru
 		// an active buff adds (Demon Soul Arrow), else the weapon alone.
 		reach = float32(loadout.ActionRange)
 		if keeper, ok := caster.Param(combat.AttackRangeParameter); ok && keeper > 0 {
@@ -69,7 +69,7 @@ func skillActionReach(skill enterworld.SkillRow, loadout combat.Loadout, caster 
 	default:
 		reach = defaultUnarmedActionRange
 	}
-	// 4AE849..4AE87A adds ru only on the equipment fallback, before getv
+	// Natively ru is added only on the equipment fallback, before getv
 	// bonuses and the range-reduction keeper. It is a distance, not a rate.
 	if skill.ActionRange == 0 && skill.BuffModifiers.Ru {
 		reach = float32(float64(reach) + float64(skill.BuffModifiers.RuRate))
@@ -87,7 +87,7 @@ func skillActionReach(skill enterworld.SkillRow, loadout combat.Loadout, caster 
 ================
 reducedActionReach
 
-4ADAB8..4ADB4E applies Myopia after the skill and keeper range contributions.
+The native reach applies Myopia after the skill and keeper range contributions.
 Players, monsters and their COS targets share the same float store boundary.
 ================
 */
@@ -140,9 +140,10 @@ type basicAttackIntent struct {
 	CooldownMs     int64
 	NextActionMs   int64
 	// ChainLatencyConsumedMs is how much of the command's native 500 ms chain
-	// latency budget (record+28, reset by CActionRecord_Release 4AC954) the
-	// chain steps have consumed. ChainLatencyUsedMs mirrors record+2C, which
-	// grows only when a step outlasts the remaining budget (4AEC48).
+	// latency budget (reset when the native action record is released) the
+	// chain steps have consumed. ChainLatencyUsedMs mirrors the record's
+	// used latency, which grows only when a step outlasts the remaining
+	// budget.
 	ChainLatencyConsumedMs int64
 	ChainLatencyUsedMs     int64
 
@@ -167,10 +168,10 @@ const chainLatencyBudgetMs = 500
 spendChainLatency
 
 spendChainLatency returns how long a chain step holds before the next step
-may execute. Native EXECUTE (4AEC2D..4AEC62) waits the step's action
-duration (ref+78, column 13), NOT casting+duration, after first spending
+may execute. Native EXECUTE waits the step's action duration (column 13),
+NOT casting+duration, after first spending
 what remains of the 500 ms budget. The wait is measured from the step's
-own execution; KEEP_UP (4AECDA) compares strictly, hence the caller's +1.
+own execution; KEEP_UP compares strictly, hence the caller's +1.
 ==================
 */
 func (intent *basicAttackIntent) spendChainLatency(durationMs int64) int64 {
@@ -377,7 +378,7 @@ func (rt *Runtime) beginBasicAttack(divisionID string, character *enterworld.Cha
 	if !ok {
 		return OpResult{DiagnosticRefusal: "target-unavailable"}
 	}
-	// CGObjPC_CanAttackTarget (52BF90 -> 5293A0): a player (or a COS through
+	// The native attack permission: a player (or a COS through
 	// its owner) the attacker may not fight is refused at the command, before
 	// any walk.
 	if target.cos != nil {
@@ -389,8 +390,8 @@ func (rt *Runtime) beginBasicAttack(divisionID string, character *enterworld.Cha
 			return offensiveRefusal(code)
 		}
 	}
-	// Command acceptance runs phase 0x37 (4ACED4) with the ammo bit 0x20
-	// (58E32D): an empty bow is refused at the double-click, before the
+	// Command acceptance runs phase 0x37 with the ammo bit 0x20, as
+	// natively: an empty bow is refused at the double-click, before the
 	// approach. A transformed strike is the monster's and spends nothing.
 	if rt.transformAttackSkill(snapshot) == 0 && weaponRequiresAmmunition(loadout.WeaponKind) {
 		if _, valid := rt.planEquippedAmmunition(snapshot, loadout.WeaponKind, ammunitionSpent(skill, false)); !valid {
@@ -444,8 +445,8 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
 		return OpResult{}
 	}
-	// CGObjChar_CheckTargetAttackable (5291D0), reached from
-	// CGObjPC_CanAttackTarget (52BF90, vtable +0x62C): an untouchable attacker
+	// The native attackability check, reached from the attack permission:
+	// an untouchable attacker
 	// (body mode 2) may not attack anything.
 	if snapshot.NativeBodyStatus == untouchableBodyStatus {
 		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
@@ -458,7 +459,7 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 		if nowMs <= intent.NextActionMs || rt.hasOpenSkillCast(intent.DivisionID, intent.CharacterName) {
 			return OpResult{}
 		}
-		// 4AED19..4AEDD0 transfers the target to a new basic command. Resolve
+		// Natively the target transfers to a new basic command. Resolve
 		// its weapon/learned row now, never repeat or re-charge the old skill.
 		basic, _, why := rt.resolveBasicAttack(snapshot)
 		if why != "" {
@@ -510,7 +511,7 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
 		return OpResult{DiagnosticRefusal: "combat-spacing-unavailable"}
 	}
-	// 4AECE7 returns a linked stage to action state 2, which executes it;
+	// Natively a linked stage returns to action state 2, which executes it;
 	// only state 1 measures range and pursues. A combo stage therefore
 	// never pursues, and never waits for its target to come back in reach.
 	if !spacing.Contains(live, targetSpawn) && intent.ComboRootID == 0 {
@@ -543,10 +544,9 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 	}
 	intent.HasApproach = false
 	rt.setCombatIntent(intent)
-	// CGCharAutoCommandActor_Handler_NormalAttack (4AD8E0) checks vt+0x5A0
-	// (CGObjPC_IsMotionChangeLocked 4EF880 -> CGObjChar_IsAttackLocked 4AAB40)
-	// in state 0 (4AD91A..4AD929), holding basic attacks while a wall stands
-	// or a skill cast is open; SkillCast (4AE590) allows an in-range non-ao/pw
+	// The native normal-attack handler checks the motion and attack locks in
+	// state 0, holding basic attacks while a wall stands or a skill cast is
+	// open; the skill-cast handler allows an in-range non-ao/pw
 	// skill to fire in place.
 	if nowMs < intent.NextActionMs || rt.actionAdmissionBlocked(intent.DivisionID, intent.CharacterName, intent.ComboRootID != 0) || (!intent.SingleCast && rt.PlayerAttackLocked(intent.DivisionID, intent.CharacterName)) {
 		return combatTransition
@@ -578,7 +578,7 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 		if skill.ContinueBasicAttack && alive {
 			intent.ResumeBasic = true
 			lifetime, _ := skill.ActionLifecycleMs()
-			// 4AEC9E..4AECB3: an authored basic-attack continuation also
+			// Natively an authored basic-attack continuation also
 			// returns the chain latency the steps borrowed.
 			intent.NextActionMs = nowMs + int64(lifetime) + intent.ChainLatencyUsedMs
 			rt.setCombatIntent(intent)
@@ -661,10 +661,8 @@ commitIntentMovement
 ================
 */
 func (rt *Runtime) commitIntentMovement(character, snapshot *enterworld.Character, move intentMovement) OpResult {
-	// CGCharAutoNavigator_TickPursuit (4B0490 at 4B0813 / 4B0A89) dispatches
-	// its pursuit walk through CGObjChar_HandleMoveCommand (4B0EA0), which
-	// drops the move at 4B0F8E when vt+0x5A0 (CGObjPC_IsMotionChangeLocked
-	// 4EF880 -> CGObjChar_IsAttackLocked 4AAB40) is true.
+	// The native pursuit dispatches its walk through the move command, which
+	// drops the move while the motion and attack locks hold.
 	if rt.PlayerAttackLocked(move.intent.DivisionID, character.Name) {
 		return OpResult{}
 	}
@@ -722,7 +720,7 @@ func (rt *Runtime) commitIntentMovement(character, snapshot *enterworld.Characte
 	frames := []wire.Frame{{Opcode: simulation.OpMovementAck, Payload: ack,
 		Current: func() bool { return rt.Worlds.GroundPathCurrent(worldKey, movementState) }}}
 	if runChanged {
-		// 4B0800 switches a pursuing walker to run after issuing its goal.
+		// Natively a pursuing walker switches to run after issuing its goal.
 		frames = append(frames, wire.Frame{Opcode: wire.OpObjectStateRefresh, Payload: wire.ObjectStateRefresh{
 			Gid: enterworld.ObjectIDForCharacter(character), StateType: wire.StateChannelMove, Value: simulation.RunMode,
 		}.Encode()})
