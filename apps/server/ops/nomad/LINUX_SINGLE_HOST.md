@@ -121,7 +121,8 @@ provisioned account; it does not provide account signup.
 ## Publish a browser release
 
 Build and verify the package with `apps/client-next/tools/beta`, copy it to
-the host, then publish it:
+the host, then publish it with the operator build of `sro-nomad`
+(`-tags opensro_ops`):
 
 ```
 sudo sro-nomad publish-client -package /opt/opensro/client-package -web-root /var/www/opensro

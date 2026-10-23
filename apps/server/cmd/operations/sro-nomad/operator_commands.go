@@ -21,6 +21,5 @@ var operatorCommands = map[string]operatorCommand{
 	"publish-client":     {run: func(_ context.Context, arguments []string) error { return runPublishClient(arguments) }},
 	"notice":             {run: runNotice, signals: true},
 	"rotate-session-key": {run: runRotateSessionKey, signals: true},
-	"maintenance-list": {run: func(_ context.Context, arguments []string) error { return runMaintenanceList(arguments) },
-		signals: true},
+	"maintenance-list":   {run: func(_ context.Context, arguments []string) error { return runMaintenanceList(arguments) }, signals: true},
 }

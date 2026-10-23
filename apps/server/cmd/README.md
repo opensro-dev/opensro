@@ -76,6 +76,7 @@ fleet operations.
   login accounts.
 - `hash-agent-password` — reads a password without terminal echo and emits its
   accepted bcrypt hash.
+
 The live-shard tools below are operator builds too (`-tags opensro_ops`):
 `sro-account-owner`, `sro-archive-character` and `sro-swap-sun`.
 
