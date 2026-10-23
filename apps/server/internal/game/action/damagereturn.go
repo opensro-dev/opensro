@@ -3,14 +3,13 @@
 
 damagereturn.go - dmgr: a player striking back at whoever damages it
 
-CSkillManager_ProcessDamageEffects (5A0C2D) runs on the defender's skill
-manager for every hit SkillCombat_CalculateHitOutcome resolves. Its rule
-is the learned passive's (+0x204, the Warrior's two-hand return) while
-that passive is enabled, else the live buff's (+0x208, the Warlock's Soul
-Return). Each damaging hit of an attacker in range rolls the rule's chance
+The native damage-effect pass runs on the defender's skills for every
+resolved hit. Its rule is the learned passive's (the Warrior's two-hand
+return) while that passive is enabled, else the live buff's (the
+Warlock's Soul Return). Each damaging hit of an attacker in range rolls the rule's chance
 under the defender's key 0x46000000; the returns of one attack sum into
-one area-effect context (+0x70) that 593D62 queues on the attacker
-(CSkillManager_QueueAreaEffect 59EC50), so the attacker takes them after
+one area-effect context that is queued on the attacker, so the attacker
+takes them after
 the hit, as one credited hit of the defender.
 
 The defender half (rule, roll, range, amount) is attacker-neutral; the
@@ -35,9 +34,8 @@ import (
 damageReturnRule
 
 The defender's dmgr and the row that owns it (the hostility row of the
-returned hit). The passive wins while enabled (5A0C2D 5A0C51..5A0C5E: +0x204
-when its +0x10 is 1, else +0x208). +0x208 is the instance most recently
-installed; inferred: the latest live start stands in for that slot.
+returned hit). The passive wins while enabled, else the buff. The buff is
+the instance most recently installed; inferred: the latest live start stands in for that slot.
 ================
 */
 func (rt *Runtime) damageReturnRule(division string, c *enterworld.Character, defender combat.Stats, now int64) (enterworld.SkillDamageReturn, enterworld.SkillRow, bool) {
@@ -75,7 +73,7 @@ func (rt *Runtime) damageReturnRule(division string, c *enterworld.Character, de
 rollDamageReturn
 
 The sum the attacker takes back for hits, or zero. Each damaging hit of an
-attacker within range rolls once (CSkillManager_RollProbability with the
+attacker within range rolls once (the native probability roll with the
 rule's chance) and returns its two lane shares.
 ================
 */
@@ -105,8 +103,8 @@ returnDamageToMonster
 
 The monster branch: after attacker struck c with hits, c's dmgr returns its
 share to the attacker as c's credited hit. The frames are the attack's own
-publication: a pulse result (B3C6 mode 2, the B0BC 59B220 sends for queued
-area effects) with c as its source and the attack's skill (context +0xC),
+publication: a pulse result (B3C6 mode 2, the B0BC sent for queued area
+effects) with c as its source and the attack's skill,
 then the kill. Inferred: the queued context is published as the linked
 pulses' are, since both are tagAreaEffectContext records the attacker's
 manager drains.
@@ -149,7 +147,7 @@ returnDamageToPlayer
 
 The player branch: c's dmgr returns its share to the attacking player as
 c's credited hit, published as the monster branch's is. INFERENCE: the
-queued context (+0x70) is not a hit outcome, so the attacker's own wall
+queued context is not a hit outcome, so the attacker's own wall
 does not split it.
 ================
 */
