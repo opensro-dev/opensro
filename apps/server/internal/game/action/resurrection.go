@@ -3,22 +3,20 @@
 
 resurrection.go - resu: the proposal to a dead player and its answer
 
-A resurrection cast revives nobody by itself. SkillCombat_Apply-
-SkillEffectsToTargets (5946C5..5949A6) looks at each target that is a dead
-player (life 2) no higher than resu word 0, works out what a revival would
-give, and queues a proposal through CGObjPC_EnqueuePeerResponseProposal
-(4EA0D0): 0x3080 type 4, or type 8 with an rmut skill. The v1.150 wire is
-0x3393 {u8 type, u32 casterGid}: type 4 opens confirm box kind 4 (7644E0
-case 3), type 8 the REBIRTH_MUTATION message box (7644E0 case 7); both
-answer 0x3393 {1, button} (CGInterface_OnMsgBoxResult case 1).
+A resurrection cast revives nobody by itself. The native skill-effect pass
+looks at each target that is a dead player (life 2) no higher than resu
+word 0, works out what a revival would give, and queues a peer proposal:
+0x3080 type 4, or type 8 with an rmut skill. The v1.150 wire is 0x3393
+{u8 type, u32 casterGid}: type 4 opens confirm box kind 4 (client 7644E0
+case 3), type 8 the REBIRTH_MUTATION message box (client 7644E0 case 7);
+both answer 0x3393 {1, button} (client CGInterface_OnMsgBoxResult case 1).
 
-TrsWaitResponse_OnResponse (46CB30) applies a nonzero answer from a player
-who is still dead: revive where the corpse lies (CGObjPC_TeleportToTown
-4DF290, arg 1), add the EXP, add the HP and MP through
-CGObjChar_ApplyReducedRecovery, then start the rmut skill. A refusal, a
-repeated answer and the 30 s timeout (Transaction_Construct 46C6C0) do
-nothing. The transaction manager keys proposals by the answering player,
-so one already waiting drops the new one (TransactionMgr_InsertUnique).
+The native answer handler applies a nonzero answer from a player who is
+still dead: revive where the corpse lies, add the EXP, add the HP and MP
+through the reduced-recovery path, then start the rmut skill. A refusal, a
+repeated answer and the 30 s timeout do nothing. The transaction manager
+keys proposals by the answering player, so one already waiting drops the
+new one.
 
 ===========================================================================
 */
@@ -46,11 +44,11 @@ const (
 	// resurrectionProposalType is the 0x3393 kind that opens box kind 4.
 	resurrectionProposalType uint8 = 4
 	// mutationProposalType is the 0x3393 kind for a resu row with an rmut
-	// skill (4EA0D0); the client asks UIIT_MSG_MSGBOX_ASK_REBIRTH_MUTATION.
+	// skill; the client asks UIIT_MSG_MSGBOX_ASK_REBIRTH_MUTATION.
 	mutationProposalType uint8 = 8
 
 	// resurrectionAnswerWindowMs is the transaction's 30 s timeout;
-	// 46F1E0 expires a proposal after it, not at it.
+	// natively a proposal expires after it, not at it.
 	resurrectionAnswerWindowMs = 30 * 1000
 )
 
@@ -58,7 +56,7 @@ const (
 ==================
 resurrectionOffer
 
-What the proposal carries (trs_wait_response +0x2C..+0x40): the caster,
+What the proposal carries: the caster,
 the EXP, HP and MP a revival adds, and the rmut skill it starts.
 ==================
 */
@@ -158,7 +156,7 @@ PROPOSAL
 ==================
 proposeResurrection
 
-The 5946C5 arm for one recipient. The caller holds the division lock and
+The native proposal arm for one recipient. The caller holds the division lock and
 has already validated the target (0x3012 above word 0). Returns the prompt
 for the recipient, or nothing when the player is not dead or already has a
 proposal waiting.
@@ -200,7 +198,7 @@ func (rt *Runtime) proposeResurrection(division string, caster, recipient *enter
 ==================
 resurrectionVitals
 
-594780..5947FF: with a heal block, HP is word 0 plus word 1 percent of the
+Natively, with a heal block, HP is word 0 plus word 1 percent of the
 recipient's maximum and MP is word 2 plus word 3 percent. Each product is a
 32-bit IMUL read unsigned, divided by -100 and truncated, then subtracted.
 Without a heal block both are 0.
@@ -223,8 +221,8 @@ func resurrectionVitals(heal enterworld.SkillHeal, maxHP, maxMP int64) (hp, mp i
 ==================
 resurrectionExp
 
-594805..594848: the recovered EXP is |char+0x1CE0| times word 1 percent,
-held as a float and truncated. A murderer (PvP state, state+0xC, is 2)
+Natively the recovered EXP is |the last EXP loss| times word 1 percent,
+held as a float and truncated. A murderer (PvP state 2)
 gets half the percent.
 ==================
 */
@@ -330,7 +328,7 @@ func (c *ResurrectionConsent) ApplyConsent(_ *transport.Session, divisionID stri
 ==================
 acceptResurrection
 
-46CB30 for a yes. The player must still be dead; the revival itself is
+The native answer handler for a yes. The player must still be dead; the revival itself is
 reviveWhereDead, shared with the resurrection scroll.
 ==================
 */
@@ -372,14 +370,14 @@ type revivedWhereDead struct {
 ==================
 reviveWhereDead
 
-Revives a dead player where the corpse lies with 1 HP (4DF290 arg 1: every
-revival also clears the recorded EXP loss), then adds the offer's EXP
-(vfunc +0x170, a refund of the loss, outside the port's growth rates), HP
-and MP (applySkillRecovery is ApplyReducedRecovery) and rmut skill. Native
-starts rmut as an indirect cast (CSkillManager_BeginIndirectSkill); this
-port installs its effect directly. Callers hold the division lock, run
-inside the character's Update and have checked the player is dead:
-46CB30 for a resurrection skill, 49FF20 for a resurrection scroll.
+Revives a dead player where the corpse lies with 1 HP (every revival also
+clears the recorded EXP loss), then adds the offer's EXP (a refund of the
+loss, outside the port's growth rates), HP and MP (applySkillRecovery is
+the reduced-recovery path) and rmut skill. Native starts rmut as an
+indirect cast; this port installs its effect directly. Callers hold the
+division lock, run inside the character's Update and have checked the
+player is dead: the answer handler for a resurrection skill, the item use
+for a resurrection scroll.
 ==================
 */
 func (rt *Runtime) reviveWhereDead(division string, character *enterworld.Character, offer resurrectionOffer, nowMs int64) revivedWhereDead {
@@ -407,7 +405,7 @@ func (rt *Runtime) reviveWhereDead(division string, character *enterworld.Charac
 	character.CurrentHP = &revived
 	character.LastExpLoss = 0
 	character.DeathKind = 0
-	// 46CB30 revives through 4DF290 before applying the offered recovery.
+	// Natively the revival happens before the offered recovery is applied.
 	// Use the same protection owner as self-rebirth so expiry and replacement
 	// cannot leave the player permanently protected or immediately vulnerable.
 	done.untouchable = rt.grantReviveUntouchable(division, character, nowMs)
