@@ -2,6 +2,8 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdir,writeFile,readFile} from 'node:fs/promises';
 import {launchProbeBrowser} from '../../../../scripts/lib/probeBrowser.mjs';
+import {join} from 'node:path';
+import {sourceDataRoot} from '../../../../scripts/build/world/paths.mjs';
 import {bootPlayableSession} from './helpers/playable-session.mjs';
 import {openProbeAgentSession,readProbeCharacterSpawnFromSession} from '../../../../scripts/lib/probeSession.mjs';
 import {resetMissionMovementFixture} from '../../../../scripts/lib/missionMovementFixture.mjs';
@@ -15,7 +17,7 @@ test(process.env.SRO_SELECTION_DECAL==='1'?'same-monster double-click restores t
  const directory=(process.env.SRO_SELECTION_DECAL==='1'?'temp/artifacts/selection-decal/':slashMode?'temp/artifacts/slash-hotkey/':'temp/artifacts/skill-activation/')+(captureOnly?'before':'after');await mkdir(directory,{recursive:true});
  const checked=assertCharacterAllowed(character,{context:'skill activation'}),authority=await openProbeAgentSession();
  const original=await readProbeCharacterSpawnFromSession(authority,checked);assert.ok(original);
- const table=await readFile(new URL('../../../server/internal/game/world/monster/data/v1188_population_evidence.tsv',import.meta.url),'utf8');
+ const table=await readFile(join(sourceDataRoot,'server','monster','population-evidence.tsv'),'utf8');
  const anchor=table.split('\n').map(l=>l.split('\t')).find(c=>waterGhost?c[0]==='MOB_CH_WATERGHOST'&&c[1]==='25511':c[0]==='MOB_CH_TOMBSTONE'&&c[1]==='24235'&&c[12]==='1');assert.ok(anchor);
  const start={regionId:Number(anchor[1]),x:Number(anchor[2]),y:Number(anchor[3]),z:Number(anchor[4])};
  const {browser,page}=await launchProbeBrowser(),report={character,wire:[],errors:[],samples:[]};let originalBinding,restored=false,weaponSwap,ammoSwap,originalBodyStatus;

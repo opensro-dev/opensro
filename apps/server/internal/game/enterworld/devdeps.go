@@ -186,8 +186,19 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 	monsterSpawns := paths.MonsterSpawns
 	var monsters *simulation.MonsterState
 	if monsterSpawns.Enabled {
-		template := monster.LoadTemplate(textdataDir)
-		template, err := monster.AppendCap110(template, textdataDir, monster.Cap110Enabled())
+		evidence, err := monster.LoadEvidence(paths.DerivedDir)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
+		if evidence == nil {
+			log.Warnf("bootstrap: no monster evidence (%s ...) in the derived game data; nests keep their default caps and tactics, summons resolve none",
+				monster.PopulationEvidenceFile)
+		}
+		template, err := monster.LoadTemplate(textdataDir, evidence)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
+		template, err = monster.AppendCap110(template, textdataDir, monster.Cap110Enabled())
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
@@ -227,6 +238,7 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 			log.Infof("bootstrap: %d job monster types move 20%% faster (%s)", scaled, monster.EnvJobMonsterSpeed)
 		}
 		monsters = simulation.NewMonsterState(template)
+		monsters.SetSummonTactics(evidence.SummonTactics())
 		log.Infof("bootstrap: monster population ON (kill switch MISSION_SPAWN_MONSTERS=0): template %d nest rows / %d spawnable types; per-viewer native 320-unit block interest",
 			len(template.Nests), len(template.SpawnableRefs()))
 	} else {

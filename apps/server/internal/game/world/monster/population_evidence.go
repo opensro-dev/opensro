@@ -1,26 +1,11 @@
 package monster
 
 import (
-	_ "embed"
 	"fmt"
 	"math"
 	"strconv"
 	"strings"
 )
-
-// populationEvidenceTSV is a derived cross-version evidence table from v1.188
-// population observations. Runtime identity is intentionally absent: rows
-// join to v1.150 by codename, region, and anchor coordinates. The proprietary
-// source database is not distributed with this repository.
-//
-//go:embed data/v1188_population_evidence.tsv
-var populationEvidenceTSV string
-
-// The archived ISRO-R nest table supplements missing exact v1.150 anchors.
-// Its newer active-table balance is not merged into existing evidence.
-//
-//go:embed data/isror_population_supplement.tsv
-var populationSupplementTSV string
 
 type populationEvidence struct {
 	TargetPolicy          uint8

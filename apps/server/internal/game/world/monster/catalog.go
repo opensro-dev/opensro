@@ -9,6 +9,7 @@ catalog.go - monster templates, nests and live instance values
 package monster
 
 import (
+	"fmt"
 	"iter"
 	"math"
 	"opensro.online/server/internal/game/abnormal"
@@ -168,18 +169,30 @@ type Template struct {
 LoadTemplate
 
 LoadTemplate builds the population template from one textdata directory
-(the verified projection's textdata directory; both characterdata*.txt and npcpos.txt live there).
-Empty data degrades to an empty template - simulation state over it allocates
-nothing and emission stays empty, never a fault.
+(the verified projection's textdata directory; both characterdata*.txt and npcpos.txt live there)
+and the operator's evidence (LoadEvidence). Empty data degrades to an empty
+template - simulation state over it allocates nothing and emission stays
+empty, never a fault. Without evidence every nest keeps the unmatched-anchor
+defaults; evidence that disagrees with itself is an error.
 ==================
 */
-func LoadTemplate(textdataDir string) Template {
+func LoadTemplate(textdataDir string, ev *Evidence) (template Template, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			template, err = Template{}, fmt.Errorf("monster template: %v", r)
+		}
+	}()
 	// Evidence joins are compilation inputs. The returned template owns the
-	// runtime projection; retaining these three source indexes duplicates it.
-	populationEvidenceRows := combinePopulationEvidence(mustLoadPopulationEvidence(populationEvidenceTSV), mustLoadPopulationEvidence(populationSupplementTSV))
+	// runtime projection; retaining these source indexes duplicates it.
+	var populationEvidenceRows map[populationEvidenceKey]populationEvidence
+	var populationTacticsControls map[populationEvidenceKey]tacticsControlPair
+	var hiveCaps map[populationEvidenceKey]hiveCap
+	var zeroCaps map[populationEvidenceKey]int
+	if ev != nil {
+		populationEvidenceRows, populationTacticsControls = ev.population, ev.controls
+		hiveCaps, zeroCaps = ev.hiveCaps, ev.zeroCaps
+	}
 	laterDisabled := laterDisabledCodenames(populationEvidenceRows)
-	populationTacticsControls := loadTacticsControls(tacticsControlsJSON)
-	hiveCaps := loadHiveCaps(hiveCapsTSV)
 	refs := LoadMonsterRefs(textdataDir)
 	var nests []NestRow
 	evidenceMatches := 0
@@ -236,10 +249,12 @@ func LoadTemplate(textdataDir string) Template {
 		}
 		nests = append(nests, nest)
 	}
-	restoreZeroCapNests(refs, nests, loadZeroCapCaps(zeroCapCapsTSV))
-	template := TemplateFromParts(refs, nests)
+	if ev != nil {
+		restoreZeroCapNests(refs, nests, zeroCaps)
+	}
+	template = TemplateFromParts(refs, nests)
 	template.EvidenceMatches = evidenceMatches
-	return template
+	return template, nil
 }
 
 /*
@@ -255,9 +270,8 @@ building's bandits and archers (regions 0x5BA0, 0x5CA0), the Stone Cave's
 Nachal and Work Earth Ghost (0x8001), three KT Ong. The v1.150 client still
 places every one of them, and native 55EA90 spawns nothing while the live
 count is not below dwMaxTotalCount. ISRO-R's active Tab_RefNest keeps the
-same nests, by region and anchor, with live caps (isror_zero_cap_caps.tsv,
-scripts/build/import_isror_zero_caps.py); the dungeon layer matches by its
-own region id. A hive member (dwOverwriteMaxTotalCount above zero) is left
+same nests, by region and anchor, with live caps (ZeroCapCapsFile); the
+dungeon layer matches by its own region id. A hive member (dwOverwriteMaxTotalCount above zero) is left
 alone: 55EC10 caps it with the hive's own limit.
 ==================
 */

@@ -10,15 +10,23 @@ import (
 )
 
 func main() {
-	if len(os.Args) != 2 {
-		fmt.Fprintln(os.Stderr, "usage: population-audit <textdata-directory>")
+	if len(os.Args) != 2 && len(os.Args) != 3 {
+		fmt.Fprintln(os.Stderr, "usage: population-audit <textdata-directory> [<derived-directory>]")
 		os.Exit(2)
+	}
+	derivedDir := ""
+	if len(os.Args) == 3 {
+		derivedDir = os.Args[2]
 	}
 	if _, err := os.Stat(filepath.Join(os.Args[1], "npcpos.txt")); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	t := monster.LoadTemplate(os.Args[1])
+	t, err := monster.LoadTemplateFrom(os.Args[1], derivedDir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	rows := []any{}
 	unmatched := map[string]int{}
 	total := 0

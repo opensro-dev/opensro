@@ -20,10 +20,10 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/instance"
-	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/monstertest"
 )
 
 const (
@@ -159,7 +159,7 @@ func TestReverseMapTableFromShippedData(t *testing.T) {
 	if err := rt.ConfigurePortals(dir, ""); err != nil {
 		t.Fatal(err)
 	}
-	rt.Monsters = simulation.NewMonsterState(monster.LoadTemplate(dir))
+	rt.Monsters = simulation.NewMonsterState(monstertest.Template(t, dir))
 	rt.ConfigureReverseReturnMap(true)
 	points := rt.ReverseReturnMapPoints()
 	towns := map[string]bool{}

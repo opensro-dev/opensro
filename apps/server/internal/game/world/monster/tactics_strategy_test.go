@@ -22,7 +22,7 @@ per-activation roll first.
 ================
 */
 func TestShippedTacticsUseOnlyFixedAggression(t *testing.T) {
-	for key, pair := range populationTacticsControls {
+	for key, pair := range populationTacticsControls(t) {
 		rows := []TacticsControls{pair.Normal}
 		if pair.HasChampion {
 			rows = append(rows, pair.Champion)
@@ -46,7 +46,7 @@ shipped rows, and none of them carries a redirect flag.
 func TestFixedQueryRowsAreTheThreeUniques(t *testing.T) {
 	want := map[string]bool{"MOB_CH_TIGERWOMAN": true, "MOB_OA_URUCHI": true, "MOB_KK_ISYUTARU": true}
 	seen := map[string]bool{}
-	for key, pair := range populationTacticsControls {
+	for key, pair := range populationTacticsControls(t) {
 		if pair.Normal.FixedQuery() {
 			if !want[key.Codename] {
 				t.Fatalf("%s runs the fixed query", key.Codename)

@@ -2,17 +2,13 @@ package monster
 
 import (
 	"bytes"
-	_ "embed"
 	"encoding/json"
 	"fmt"
 )
 
-// Catalog-owned later ISRO-R data, not v1.150 server provenance. Only the
-// sixteen previously absent own references are supplemented. Existing v1.188
-// records and the native own-before-original lookup remain authoritative.
-//
-//go:embed data/isror_summon_tactics.json
-var supplementalSummonTacticsJSON []byte
+// A later server's tactics for the sixteen own references the primary table
+// lacks (SummonTacticsSupplementFile). Existing records and the native
+// own-before-original lookup remain authoritative.
 
 type supplementalSummonTactics struct {
 	Source, SourceSHA256 string
@@ -26,15 +22,15 @@ type supplementalSummonTactics struct {
 	}
 }
 
-func loadSupplementalSummonTactics(out map[string][2][]SummonTactics) {
+func loadSupplementalSummonTactics(out SummonTacticsTable, data []byte) {
 	var doc supplementalSummonTactics
-	d := json.NewDecoder(bytes.NewReader(supplementalSummonTacticsJSON))
+	d := json.NewDecoder(bytes.NewReader(data))
 	d.DisallowUnknownFields()
 	if err := d.Decode(&doc); err != nil {
 		panic(fmt.Errorf("summon tactics supplement: %w", err))
 	}
-	if doc.Source != "isror-catalog-owned" || doc.SourceSHA256 != "89c6835f8e51b1a75950242c89cf3ad639ea7d50a22191a90632cca333664a45" || len(doc.Rows) != 16 {
-		panic("summon tactics supplement provenance/closure mismatch")
+	if len(doc.Rows) != 16 {
+		panic("summon tactics supplement closure mismatch")
 	}
 	for _, row := range doc.Rows {
 		if _, exists := out[row.Codename]; exists {

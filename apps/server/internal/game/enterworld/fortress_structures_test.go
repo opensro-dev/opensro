@@ -8,6 +8,7 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/monstertest"
 )
 
 /*
@@ -22,7 +23,7 @@ and the unplaced defensive sites hold nothing.
 func TestJanganFortressStartsWithItsStructures(t *testing.T) {
 	licensed.RequireGameData(t)
 	textdata := gamedatatest.TextdataDir(t)
-	template, err := appendFortressStructures(monster.LoadTemplate(textdata), textdata,
+	template, err := appendFortressStructures(monstertest.Template(t, textdata), textdata,
 		filepath.Join(gamedatatest.WorldAuthorityDir(t), "structure-zones.json"))
 	if err != nil {
 		t.Fatal(err)

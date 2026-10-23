@@ -2,6 +2,8 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import {launchProbeBrowser} from '../../../../scripts/lib/probeBrowser.mjs';
+import {join} from 'node:path';
+import {sourceDataRoot} from '../../../../scripts/build/world/paths.mjs';
 import {openProbeAgentSession,readProbeCharacterSpawnFromSession} from '../../../../scripts/lib/probeSession.mjs';
 import {resetMissionMovementFixture} from '../../../../scripts/lib/missionMovementFixture.mjs';
 import {assertCharacterAllowed} from '../../../../scripts/lib/probeCharacter.mjs';
@@ -13,7 +15,7 @@ test('live aggressive monster attacks a player who has not attacked it',{timeout
  const character=assertCharacterAllowed('asd2',{context:'live sight aggro'});
  const authority=await openProbeAgentSession();
  const original=await readProbeCharacterSpawnFromSession(authority,character);assert.ok(original);
- const table=await readFile(new URL('../../../server/internal/game/world/monster/data/v1188_population_evidence.tsv',import.meta.url),'utf8');
+ const table=await readFile(join(sourceDataRoot,'server','monster','population-evidence.tsv'),'utf8');
  const row=table.split('\n').map(line=>line.split('\t')).find(c=>c[0]==='MOB_CH_TOMBSTONE'&&c[1]==='24235'&&c[12]==='1');
  assert.ok(row,'authored aggressive field is required');
  const start={regionId:Number(row[1]),x:Number(row[2]),y:Number(row[3]),z:Number(row[4])};

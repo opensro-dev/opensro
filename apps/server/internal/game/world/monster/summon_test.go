@@ -65,13 +65,15 @@ func TestSummonAFirstAuthoredBandAndMissingBand(t *testing.T) {
 }
 
 func TestSummonDefaultTacticsNormalChampionAndOriginalFallback(t *testing.T) {
+	// One normal and one champion row; the sight adds the body radius.
+	table := SummonTacticsTable{"MOB_CH_MANGNYANG": {{{SightRange: 115}}, {{SightRange: 130}}}}
 	ref := MonsterRef{Codename: "MOB_CH_MANGNYANG", BodyRadius: 6}
 	draws := 0
 	random := func() float64 { draws++; return 0 }
-	if radius, ok := SummonedSightRange(ref, 0, random); !ok || radius != 121 {
+	if radius, ok := table.SummonedSightRange(ref, 0, random); !ok || radius != 121 {
 		t.Fatalf("normal sight=%v/%v", radius, ok)
 	}
-	if radius, ok := SummonedSightRange(ref, 6, random); !ok || radius != 136 {
+	if radius, ok := table.SummonedSightRange(ref, 6, random); !ok || radius != 136 {
 		t.Fatalf("champion sight=%v/%v", radius, ok)
 	}
 	if draws != 0 {
@@ -79,11 +81,11 @@ func TestSummonDefaultTacticsNormalChampionAndOriginalFallback(t *testing.T) {
 	}
 	ref.OriginalCodename = ref.Codename
 	ref.Codename = "UNPUBLISHED_VARIANT"
-	if radius, ok := SummonedSightRange(ref, 6, random); !ok || radius != 136 {
+	if radius, ok := table.SummonedSightRange(ref, 6, random); !ok || radius != 136 {
 		t.Fatal("original reference fallback lost")
 	}
 	ref.OriginalCodename = "UNKNOWN"
-	if _, ok := SummonedSightRange(ref, 0, random); ok {
+	if _, ok := table.SummonedSightRange(ref, 0, random); ok {
 		t.Fatal("invented missing native tactics")
 	}
 }

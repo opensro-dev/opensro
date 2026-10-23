@@ -322,7 +322,11 @@ func run(out, release, textdata string) error {
 	quests := catalogue.BuildQuests(catalogue.QuestSource{Catalog: questCatalog, Definitions: definitions,
 		Text: englishText(dir), Listed: listedQuests(dir), ItemID: itemID})
 	skillData := enterworld.NewTextdataSkills(dir)
-	template, err := monster.AppendCap110(monster.LoadTemplate(dir), dir, cap110)
+	shipped, err := monster.LoadTemplateFrom(dir, derivedDir)
+	if err != nil {
+		return fmt.Errorf("catalogue population: %w", err)
+	}
+	template, err := monster.AppendCap110(shipped, dir, cap110)
 	if err != nil {
 		return fmt.Errorf("catalogue population: %w", err)
 	}

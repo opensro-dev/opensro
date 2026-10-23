@@ -67,7 +67,10 @@ func runPerformanceRing(_ []string) error {
 	}
 	dir := dataPaths.TextdataDir
 
-	template := monster.LoadTemplate(dir)
+	template, err := monster.LoadTemplateFrom(dir, dataPaths.DerivedDir)
+	if err != nil {
+		return err
+	}
 	fmt.Printf("template: %d monster nest rows, %d refs, %d spawnable refs\n",
 		len(template.Nests), len(template.Refs), len(template.SpawnableRefs()))
 

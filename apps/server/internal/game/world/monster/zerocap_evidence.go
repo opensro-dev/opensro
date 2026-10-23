@@ -3,7 +3,7 @@
 
 zerocap_evidence.go - ISRO-R live caps for the nests the v1.188 shard zeroed
 
-Generated evidence (scripts/build/import_isror_zero_caps.py) keyed like the
+The operator's evidence (ZeroCapCapsFile) keyed like the
 population evidence: codename, region and float32 anchor. restoreZeroCapNests
 (catalog.go) reads it.
 
@@ -12,13 +12,9 @@ population evidence: codename, region and float32 anchor. restoreZeroCapNests
 package monster
 
 import (
-	_ "embed"
 	"fmt"
 	"strings"
 )
-
-//go:embed data/isror_zero_cap_caps.tsv
-var zeroCapCapsTSV string
 
 /*
 ==================

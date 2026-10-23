@@ -45,7 +45,7 @@ func TestNativeTraceReasonsAndGates(t *testing.T) {
 }
 
 func TestAuthoredBaroiCompleteControlsAndPromotion(t *testing.T) {
-	pair, ok := populationTacticsControls[evidenceKey("MOB_EU_BAROI_CLON", 26696, 1687.52002, -179.660004, 1829.98999)]
+	pair, ok := populationTacticsControls(t)[evidenceKey("MOB_EU_BAROI_CLON", 26696, 1687.52002, -179.660004, 1829.98999)]
 	if !ok {
 		t.Fatal("Baroi source join missing")
 	}

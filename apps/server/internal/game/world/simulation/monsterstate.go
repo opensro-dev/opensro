@@ -97,9 +97,12 @@ type MonsterState struct {
 	regionDormancy  bool
 	// Installed before listeners. Called outside the population mutex so
 	// character snapshots cannot invert the character -> population lock order.
-	players              func(string, int64) []PopulationPlayer
-	mu                   sync.Mutex
-	template             monster.Template
+	players  func(string, int64) []PopulationPlayer
+	mu       sync.Mutex
+	template monster.Template
+	// summonTactics resolves summoned and quest monsters' default tactics
+	// (SetSummonTactics); nil resolves none.
+	summonTactics        monster.SummonTacticsTable
 	counter              uint32
 	divs                 map[string]*divisionMonsterState
 	worldAllocators      map[string]*instance.Registry
@@ -587,4 +590,24 @@ func (s *MonsterState) UniqueReturnAnchors() []monster.SpawnPoint {
 		points = append(points, nest.SpawnPoint)
 	}
 	return points
+}
+
+/*
+================
+SetSummonTactics
+
+Installs the operator's summon tactics before the population serves.
+================
+*/
+func (s *MonsterState) SetSummonTactics(table monster.SummonTacticsTable) {
+	s.summonTactics = table
+}
+
+/*
+================
+SummonTactics
+================
+*/
+func (s *MonsterState) SummonTactics() monster.SummonTacticsTable {
+	return s.summonTactics
 }

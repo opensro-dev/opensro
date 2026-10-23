@@ -19,6 +19,7 @@ import (
 
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/monstertest"
 )
 
 /*
@@ -59,7 +60,7 @@ func TestQinShiTombSkillsAndMonsterDefaultSkills(t *testing.T) {
 		t.Fatalf("added tomb skills = %d, want %d", got, want)
 	}
 
-	baseMonsters := monster.LoadTemplate(dir)
+	baseMonsters := monstertest.Template(t, dir)
 	withTomb, err := baseMonsters.WithQinShiTomb(dir)
 	if err != nil {
 		t.Fatalf("WithQinShiTomb: %v", err)

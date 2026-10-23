@@ -20,6 +20,7 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/monstertest"
 )
 
 /*
@@ -42,7 +43,7 @@ func TestShippedCerberusSpawnLifecycle(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "npcpos.txt")); err != nil {
 		t.Skip("shipped textdata not present in this checkout")
 	}
-	shipped := monster.LoadTemplate(dir)
+	shipped := monstertest.Template(t, dir)
 	var nests []monster.NestRow
 	var regions []uint16
 	for _, nest := range shipped.Nests {

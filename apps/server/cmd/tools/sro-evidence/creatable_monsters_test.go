@@ -37,7 +37,11 @@ func TestCreatableRosterHoldsEveryRuntimeMonster(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	template := monster.LoadTemplate(dir)
+	// The references alone: no population evidence changes which exist.
+	template, err := monster.LoadTemplate(dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	creatable := map[uint32]bool{}
 	for _, ref := range template.CreatableRefs() {
 		if ref.Structure {

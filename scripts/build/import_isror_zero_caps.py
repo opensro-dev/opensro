@@ -2,12 +2,12 @@
 ===========================================================================
 import_isror_zero_caps.py - live caps for the nests the v1.188 shard zeroed
 
-The population evidence (scripts/analysis/extract_shard_bak.py, from the
-v1.188 shard backup) sets dwMaxTotalCount 0 on standalone nests the shard
-had disabled. ISRO-R's active Tab_RefNest keeps the same nests, by region
+The population evidence (<source-data>/server/monster/population-evidence.tsv)
+sets dwMaxTotalCount 0 on standalone nests the shard had disabled. ISRO-R's active Tab_RefNest keeps the same nests, by region
 and float32 anchor, with their live caps. For every zero-cap evidence row
-that no hive caps (v1188_hive_caps.tsv max-live 0) this writes the ISRO-R
-cap, and refuses to write anything if one has none. Reads the backup; it
+that no hive caps (hive-caps.tsv max-live 0) this writes the ISRO-R cap to
+<source-data>/server/monster/zero-cap-caps.tsv, and refuses to write
+anything if one has none. Reads the backup; it
 never restores or modifies a database.
 ===========================================================================
 """
@@ -16,8 +16,14 @@ import argparse
 import hashlib
 import pathlib
 import struct
+import sys
 
 from loot_sql_pages import Backup
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+import sro_paths  # noqa: E402
+
+MONSTER = sro_paths.SOURCE_DATA_ROOT / "server" / "monster"
 
 # Anchors match within this distance: the evidence prints float32 values
 # rounded to six figures.
@@ -65,10 +71,10 @@ def read_nests(path):
 # ================
 def main():
 	parser = argparse.ArgumentParser(description=__doc__)
-	parser.add_argument("evidence", type=pathlib.Path, help="v1188_population_evidence.tsv")
-	parser.add_argument("hives", type=pathlib.Path, help="v1188_hive_caps.tsv")
 	parser.add_argument("backup", type=pathlib.Path, help="ISRO-R shard backup")
-	parser.add_argument("output", type=pathlib.Path)
+	parser.add_argument("--evidence", type=pathlib.Path, default=MONSTER / "population-evidence.tsv")
+	parser.add_argument("--hives", type=pathlib.Path, default=MONSTER / "hive-caps.tsv")
+	parser.add_argument("--output", type=pathlib.Path, default=MONSTER / "zero-cap-caps.tsv")
 	args = parser.parse_args()
 	hived = {(r[0], r[1], r[2], r[3], r[4]) for r in evidence_rows(args.hives) if int(r[6]) > 0}
 	nests = read_nests(args.backup)

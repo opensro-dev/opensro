@@ -11,9 +11,10 @@ func TestRecoveredSixteenOwnTacticsEveryGrade(t *testing.T) {
 	licensed.RequireGameData(t)
 	refs := LoadMonsterRefs(gamedatatest.TextdataDir(t))
 	var doc supplementalSummonTactics
-	if err := json.Unmarshal(supplementalSummonTacticsJSON, &doc); err != nil {
+	if err := json.Unmarshal(licensed.SourceDataFile(t, "server/"+SummonTacticsSupplementFile), &doc); err != nil {
 		t.Fatal(err)
 	}
+	table := sourceEvidence(t).SummonTactics()
 	bindings := 0
 	for _, row := range doc.Rows {
 		ref, ok := refs[row.PrimaryRefID]
@@ -21,7 +22,7 @@ func TestRecoveredSixteenOwnTacticsEveryGrade(t *testing.T) {
 			t.Fatalf("target identity lost: %s", row.Codename)
 		}
 		for grade := 0; grade < 256; grade++ {
-			got, found := ResolveSummonTactics(ref, uint8(grade), func() float64 { t.Fatal("singleton tactics consumed entropy"); return 0 })
+			got, found := table.Resolve(ref, uint8(grade), func() float64 { t.Fatal("singleton tactics consumed entropy"); return 0 })
 			want := row.Normal[0]
 			if grade&15 != 0 {
 				want = row.Champion[0]

@@ -75,7 +75,7 @@ func (rt *Runtime) DevelopmentSummonReferenceByCodename(codename string) (monste
 				supported = false
 				break
 			}
-			if _, found = monster.ResolveSummonTactics(child, entry.Grade, func() float64 { return 0 }); !found {
+			if _, found = rt.Monsters.SummonTactics().Resolve(child, entry.Grade, func() float64 { return 0 }); !found {
 				supported = false
 				break
 			}

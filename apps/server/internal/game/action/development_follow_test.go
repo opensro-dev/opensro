@@ -3,6 +3,7 @@ package action
 import (
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/monstertest"
 	"testing"
 	"time"
 
@@ -24,6 +25,7 @@ func TestDevelopmentFixtureUsesAuthoredDelayedSummonAndCleansFamily(t *testing.T
 		}
 	}
 	state := simulation.NewMonsterState(monster.TemplateFromParts(refs, nests))
+	state.SetSummonTactics(monstertest.Evidence(t).SummonTactics())
 	state.SetRandomSource(func() float64 { return 0 })
 	rt := newRegionTestRuntime(&enterworld.Deps{Skills: skills}, state)
 	rt.Now = func() time.Time { return time.UnixMilli(100000) }
