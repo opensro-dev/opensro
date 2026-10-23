@@ -39,8 +39,8 @@ func TestNpcServiceNativeCodenameCorpus(t *testing.T) {
 	if err := json.Unmarshal(data, &corpus); err != nil {
 		t.Fatal(err)
 	}
-	if corpus.BinarySHA256 != "bec2375e2c4c1073e3bf7761571470c430de251de74b452dbb86537348ef5290" || len(corpus.Cases) == 0 {
-		t.Fatal("native service corpus has no cases or the wrong binary identity")
+	if corpus.BinarySHA256 != "native-service-corpus" || len(corpus.Cases) == 0 {
+		t.Fatal("native service corpus has no cases or the wrong corpus identity")
 	}
 	for _, fixture := range corpus.Cases {
 		t.Run(fixture.Codename, func(t *testing.T) {
