@@ -213,7 +213,7 @@ func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
 		}
 		out = append(out, routed...)
 		// The pet is the source: its own viewers see what it does
-		// (CGObj_SendPacketToNearbySessions 484D90 on the COS object), the
+		// (the native nearby-session send on the COS object), the
 		// same audience its queued B505 closes reach. Routed by the owner, a
 		// viewer who saw the owner but not the pet got each cast open and
 		// never its close (#804). The owner has these in its private batch.
@@ -381,8 +381,8 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 		state.roar = nil
 		state.follower = nil
 		if found && ref != nil && ref.RefObjID == cos.RefObjID && isVehicleCOS(ref.TidWord) {
-			// 4FD720: the first primary actor is a vehicle (CGObj_IsVehicleCOS
-			// 4827F0, the band-2 trade transport), so it holds its owner.
+			// Natively the first primary actor is a vehicle (the band-2 trade
+			// transport), so it holds its owner.
 			state.tether = &simulation.Tether{Anchor: rt.companionLiveSpawn(key.division, snapshot, cos, nowMs),
 				Range: simulation.TradeTransportTetherRange, Reason: simulation.TetherTradeTransport}
 		}
@@ -419,7 +419,7 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 		return state.follower.Stop(nowMs)
 	}
 	block := rt.cosAbnormal(key.division, snapshot.Name, cos.GID)
-	// The step keeps the native run: 548A30 compares it with the authored
+	// The step keeps the native run: the native step compares it with the authored
 	// speed. Only the follower moves at the paced one.
 	walk, run := cosParameter(ref, cos, block, movementWalkParameter), cosParameter(ref, cos, block, movementRunParameter)
 	state.follower.SetMovementSpeeds(walk, rt.cosPacedRun(ref, run), nowMs)
@@ -665,7 +665,7 @@ func (rt *Runtime) rememberTransportCOS(division string, c *enterworld.Character
 	// transportfollow.go) sets out from here on the next pet tick.
 	state.follower = nil
 	state.generation++
-	// 4FA861: a transport summoned with goods aboard is a caravan.
+	// Natively a transport summoned with goods aboard is a caravan.
 	rt.registerCaravan(division, c)
 }
 
@@ -796,7 +796,7 @@ func followingCOSBand(band uint16) bool {
 CompanionTargets
 
 The monster tick's companion targets for one owner: every summoned,
-living, unmounted companion in container order (5464E0), at its presented
+living, unmounted companion in container order, as natively, at its presented
 pose. A mounted ride is struck through its rider (monsterAttackStage).
 ================
 */
@@ -821,7 +821,7 @@ func (rt *Runtime) companionTargets(division string, ownerGID uint32, nowMs int6
 	}
 	var out []simulation.CompanionTarget
 	for _, pet := range rt.companionPresentations(division, owner.Name) {
-		// 5299E0 is never hostile to a grab pet (CGObj_IsPickPetCOS, slot 0x43C).
+		// The native hostility test is never hostile to a grab pet.
 		if pet.Mounted || pet.LifeState == wire.LifeStateDead || pet.Row.Band == domain.PickupPetBand {
 			continue
 		}
