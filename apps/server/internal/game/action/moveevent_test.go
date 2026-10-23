@@ -3,8 +3,8 @@
 
 moveevent_test.go - an accepted move ends the move-cancelled effects
 
-CGObjChar_HandleMoveCommand (4B0EA0) raises event bit 1 through
-CSkillManager_RetireEffectsForEventMask (5A16C0) once a move is accepted.
+The native move command raises event bit 1 through the event retirement
+once a move is accepted.
 
 ===========================================================================
 */
