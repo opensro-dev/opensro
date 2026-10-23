@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-zerocap_evidence.go - ISRO-R live caps for the nests the v1.188 shard zeroed
+zerocap_evidence.go - live caps for the nests the primary table zeroed
 
 The operator's evidence (ZeroCapCapsFile) keyed like the
 population evidence: codename, region and float32 anchor. restoreZeroCapNests

@@ -5,7 +5,7 @@ package monster
 Monster tactics
 
 Hostility belongs to the server. The v1.150 client method at vslot +0xA0 is
-an unconditional false return, while the v1.188 server tables carry the
+an unconditional false return, while the server's tables carry the
 per-tactic aggression flag and sight range. Production behavior therefore
 comes from the matched Nest/Tactics evidence attached to each Instance.
 
@@ -15,15 +15,15 @@ repeats IDLE (the native 1..100 roll is <25) or enters WANDER. WANDER owns its
 5.000..5.999 second state deadline and requests a 46..124-unit movement after
 a separate 30-unit collision probe. An unmatched v1.150 npcpos anchor receives that passive
 lifecycle. Aggression, sight, and chase leash remain evidence-only because
-they are authored per Nest/Tactics row in the v1.188 source.
+they are authored per Nest/Tactics row in the server's data.
 ================================================================================
 */
 
 const (
-	// The v1.188 SPAWN state dispatches its completion event after 3000ms.
+	// The native SPAWN state dispatches its completion event after 3000ms.
 	RetailSpawnHoldMs int64 = 3000
 
-	// The v1.188 IDLE state calls sub_545b70(1). Its integer result is the
+	// The native IDLE state draws its delay in mode 1. Its integer result is the
 	// inclusive 2.001..5.999 second band around the 4-second center.
 	RetailIdleDelayMinMs int64 = 2001
 	RetailIdleDelayMaxMs int64 = 5999
@@ -32,12 +32,12 @@ const (
 	// result is strictly below 25: 24 repeat outcomes, 76 wander outcomes.
 	RetailIdleRepeatThreshold = 25
 
-	// The v1.188 idle-move action calls sub_545b70(2), which returns
+	// The native idle-move action draws its delay in mode 2, which returns
 	// rand()%1000 + 5000.
 	retailWanderDelayMinMs int64 = 5000
 	retailWanderDelayMaxMs int64 = 5999
 
-	// sub_545860 probes 30 units ahead; 541730 uses a separate distance.
+	// The wander probe looks 30 units ahead; the move itself uses a separate distance.
 	retailWanderProbeDistance = 30
 )
 
@@ -53,7 +53,7 @@ func RetailBehaviorPolicy() BehaviorPolicy { return BehaviorPolicy{} }
 
 func (BehaviorPolicy) SpawnHoldMs() int64 { return RetailSpawnHoldMs }
 
-// 545B84..545BB4: sign draw first, then rand()%2000. The two zero-offset
+// The native draw: sign first, then rand()%2000. The two zero-offset
 // outcomes both produce 4000; a uniform 3999-value distribution is different.
 func NativeIdleDelayMs(random func() uint32) int64 {
 	sign := int64(-1)
@@ -131,7 +131,7 @@ func ResolveTactics(instance Instance) Tactics {
 	tactics.SightRange = nest.SightRange
 	tactics.ChaseLeash = nest.Radius
 	if nest.HasControls {
-		// 53FA37..53FA4F: effective sight includes the actor's body radius.
+		// Natively, effective sight includes the actor's body radius.
 		tactics.SightRange = float64(float32(nest.SightRange + instance.BodyRadius()))
 		// Native combat containment is TraceData relative to the target.
 		// Radius still owns nest/home geometry; it is not a battle leash.

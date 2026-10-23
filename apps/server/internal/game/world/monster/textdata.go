@@ -11,8 +11,8 @@ HP, respawns, and mover commits live exclusively in simulation.MonsterState.
 ROLE: the v1.150 client parses npcpos into a map that nothing reads back;
 it is reference data, not a native spawn producer. The server population
 keeps those v1.150 codenames and anchors, then enriches exact natural-key
-matches with Nest/Hive/Tactics evidence recovered from the v1.188 shard
-backup. Numeric ids never cross the version boundary.
+matches with Nest/Hive/Tactics evidence from the operator's derived game
+data. Numeric ids never cross the version boundary.
 
 ===========================================================================
 */
@@ -44,11 +44,11 @@ wander mover need.
 */
 type MonsterRef struct {
 	RefObjID uint32
-	// TidWord is the packed RefObj TypeID word the client's sub_851420
+	// TidWord is the packed RefObj TypeID word the client's 851420
 	// cascade classifies on. ARBITER-CLOSED (RZ seq42 gate + seq234
 	// column ruling): the binary selects CLASS_CICMONSTER iff
 	// (W & 0x7FE) == 0x0C6, W = word[RefObj+0] via
-	// CGlobalDataManager::GetTIDFromObjectID (sub_7efef0). Every row this
+	// CGlobalDataManager::GetTIDFromObjectID (7EFEF0). Every row this
 	// loader classifies as a monster packs to exactly 0x00C6 (bit0 and
 	// bits11-15 are never set by the packer), the canonical value for
 	// create-row/refObjSnapshot emission.
@@ -60,18 +60,16 @@ type MonsterRef struct {
 	// it, from SRO_PHARAOH_TOMB_GEAR_RATE; 0 is every other monster, and 1 the
 	// native rate.
 	PharaohGearRate uint8
-	// CostRepair and CostRevive are _RefObjCommon columns 27 and 28, the
-	// reference's +0xA4 and +0xA8: a structure's full-repair price
-	// (CGObjSiegeStruct_ComputeRepairCost 4CFD50; the item repair 496E60
-	// reads the same field) and the base a destroyed one pays first
-	// (634950). CanRevive is column 23, bit 7 of the packed flags at +0x8C
-	// (4CECF0).
+	// CostRepair and CostRevive are characterdata columns 27 and 28: a
+	// structure's full-repair price (the item repair reads the same field)
+	// and the base a destroyed one pays first. CanRevive is column 23, bit 7
+	// of the reference's packed flags.
 	CostRepair, CostRevive uint32
 	CanRevive              bool
 	// TypeID4 is characterdata column 12. The client classification gates
-	// ignore it, but the GameServer spawn routine reads the full TypeID word:
+	// ignore it, but the server's spawn routine reads the full TypeID word:
 	// monster TID4 4 (the MOB_QT_* quest monsters) never becomes a party
-	// monster (5607B0 -> 561020). NativeTypeWord packs it into bits 11-15.
+	// monster. NativeTypeWord packs it into bits 11-15.
 	TypeID4  uint8
 	Codename string
 	// Own characterdata OrgObjCodeName128, used by native default-tactics fallback.
@@ -106,8 +104,8 @@ type MonsterRef struct {
 	// guessing by codename or leaking the player's race across the boundary.
 	Country uint8
 	// The eight RefObjChar combat parameters are columns 77..84 in the
-	// shipped v1.150 characterdata. The v1.188 producer sub_4c3730 writes
-	// the homologous fields to ParamKeeper 5..12 in exactly this order.
+	// shipped v1.150 characterdata. The server writes the homologous
+	// fields to ParamKeeper 5..12 in exactly this order.
 	// CombatPinned distinguishes a real all-column snapshot from a
 	// synthetic/admin ref that omitted the combat tail.
 	CombatPinned    bool
@@ -119,14 +117,14 @@ type MonsterRef struct {
 	BlockRate       float64
 	HitRate         float64
 	CriticalRate    float64
-	// ElementResist is characterdata columns 61..66 (RefObjChar +1A4..+1B8:
-	// frozen, frostbite, burn, electric shock, poison, zombie). 4CEFE0 stores
-	// them as parameters 1B, 1C, 1E, 1D, 1F and 20; the abnormal roll reads
+	// ElementResist is characterdata columns 61..66 (frozen, frostbite,
+	// burn, electric shock, poison, zombie). The server stores them as
+	// parameters 1B, 1C, 1E, 1D, 1F and 20; the abnormal roll reads
 	// them in its own order (freeze, frostbite, shock, burn, poison, zombie).
 	ElementResist [6]uint8
 	// Reward/default-action tail, from the same shipped v1.150
 	// characterdata row. ExpToGive is column 85. Columns 89..98 are the ten
-	// default skill ids the retail GameServer chooses from for autonomous
+	// default skill ids the server chooses from for autonomous
 	// attacks. RewardActionPinned is all-or-none so combat never silently
 	// manufactures a reward or animation skill when a row is truncated.
 	RewardActionPinned bool
@@ -137,21 +135,19 @@ type MonsterRef struct {
 	DefaultSkillIDs    [10]uint32
 	// MonsterType is characterdata column 15, the static RefObjChar
 	// monster-type byte. v1.150 contains 5,967 normal (0) and 19 unique
-	// (3) rows. The v1.188 GameServer reads the homologous RefObj byte
-	// before applying per-instance Nest/Hive promotion.
+	// (3) rows. The server reads the homologous reference byte before
+	// applying per-instance Nest/Hive promotion.
 	MonsterType uint8
 	// WalkSpeed / RunSpeed are the per-monster +0x24c/+0x250 sources.
 	// Columns 46/47 are identified by the v1.150 shipped rows (1933 =
-	// 8/22, immobile NPC 7495 = 0/0) and cross-checked against the labelled
-	// v1.188 server data.
+	// 8/22, immobile NPC 7495 = 0/0).
 	WalkSpeed float64
 	RunSpeed  float64
-	// ScaleDenom is the third scalar consumed by sub_85fb20 (column 48).
+	// ScaleDenom is the third scalar consumed by the client's 85FB20 (column 48).
 	// It varies across the shipped roster and must remain per monster.
 	ScaleDenom float64
-	// BodyRadius is RefObjChar BCRadius (column 50, record+0xEE). The retail
-	// GameServer reads it through actor vtable+0x560 and combines both actors'
-	// radii with action reach before approach/range admission.
+	// BodyRadius is BCRadius (column 50). The server reads it per actor and
+	// combines both actors' radii with action reach before approach/range admission.
 	BodyRadius float64
 }
 
@@ -198,7 +194,7 @@ const (
 	colDefaultSkill1 = 89
 	colDefaultSkillN = 98
 
-	// _RefObjCommon's CanRevive, CostRepair and CostRevive.
+	// The reference's CanRevive, CostRepair and CostRevive.
 	colCanRevive  = 23
 	colCostRepair = 27
 	colCostRevive = 28
@@ -229,7 +225,7 @@ func tidWordFromColumns(charBit, tid1, tid2, tid3 uint16) uint16 {
 ==================
 monsterTidGate
 
-monsterTidGate is the exact sub_851420 CLASS_CICMONSTER selection,
+monsterTidGate is the client's exact 851420 CLASS_CICMONSTER selection,
 binary-proven and arbiter-confirmed (RZ seq42 gate + seq234 re-read):
 four cmp gates @0x851460/0x85146b/0x851475/0x851484 combine to
 (W & 0x7FE) == 0x0C6 (bit0 and bits11-15 are don't-care). Over the
@@ -255,7 +251,7 @@ structureTidGate
 
 The fortress structures' band: TID1=1, TID2=2, TID3=5 packs to 0x02C6, the
 word RefObjTypeFlags_IsATStruct (4F3A50) selects CLASS_CICATStruct by.
-v1.188 keeps them as CGObjChar subclasses beside the monsters, so they
+The server keeps them as characters beside the monsters, so they
 share the population owner, its targeting and its damage; Structure marks
 the rows whose spawn row, behavior and damage rules differ.
 ==================
@@ -578,7 +574,7 @@ loadMonsterRideMetadata
 
 loadMonsterRideMetadata projects the complete native ride contract from
 skilleffect.txt. The enum values are executable-authored (the static table
-consumed by sub_916700 at 0xf091fc): none=0, RT_FIXED=1, RT_DUMMY=2.
+consumed by the client's 916700 at 0xf091fc): none=0, RT_FIXED=1, RT_DUMMY=2.
 Unknown tokens are rejected rather than silently inventing a transform.
 Records with no ride are kept: they end the 9171B0 lookup.
 ==================

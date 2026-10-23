@@ -3,9 +3,8 @@
 
 summon.go - unique monster summon policy and health-band selection
 
-Implements the SR_GameServer 0x0053f780 unique-encounter summon dispatch
-(561F20 health-band selection and 562120 random-set selection) and 596E50
-nine-tuple ssou entry layout.
+Implements the native unique-encounter summon dispatch (health-band
+selection and random-set selection) and the nine-tuple ssou entry layout.
 
 ===========================================================================
 */
@@ -16,7 +15,7 @@ package monster
 ================
 SummonEntry
 
-One of the nine ssou tuples consumed by GameServer 596E50: reference,
+One of the nine ssou tuples the summon reads: reference,
 low-nibble grade, inclusive minimum/maximum count.
 ================
 */
@@ -54,11 +53,11 @@ const (
 ================
 UniqueSummonPolicy
 
-Natural-key bindings of the 53F780 tactics dispatch, not version-dependent
+Natural-key bindings of the tactics dispatch, not version-dependent
 numeric monster IDs. L2/L3 rows retain the same authored skill family in
 v1.150. Tactics 32900..33300 and 33500 dispatch the Qin-Shi Emperor Tomb
-Floor 5 Guardians and Floor 6 BlackSnake/WhiteSnake (BeakYung) to 561F20
-(SummonByHealthBand).
+Floor 5 Guardians and Floor 6 BlackSnake/WhiteSnake (BeakYung) to the
+health-band selection (SummonByHealthBand).
 ================
 */
 func UniqueSummonPolicy(codename string) SummonPolicy {
