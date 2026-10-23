@@ -12,10 +12,10 @@ camera ray's yaw with angular flag 1 (GO). The ack then starts
 CNavigationController_StartDirectMove (0x86D150): nav state 2, which has
 no arrival and walks until the region manager's ground move test blocks it.
 
-The v1.188 server mirrors it with CGObjMoverByCmd: SetCommand (0x48C140)
-latches the angle and flags, bit 0 makes it move, ComputeStep (0x48BFF0)
-steps speed * dt with no distance cap, SetAngle (0x48C0E0) steers without
-dropping GO and Cancel (0x48C110) stops it.
+The server mirrors it with its command mover: the set-command arm
+latches the angle and flags, bit 0 makes it move, the step arm advances
+speed * dt with no distance cap, the set-angle arm steers without dropping
+GO and the cancel arm stops it.
 
 This file owns the wire flags, the opcodes of the steer/stop pair, and the
 pure state transition of one direction leg. The movement runtime owns the
@@ -27,15 +27,14 @@ package simulation
 
 import "math"
 
-// Angular flag bits of the 0x7738/0xB738 mode-0 body (record +0x0E, the
-// server's CGObjMoverByCmd +0x14 flags).
+// Angular flag bits of the 0x7738/0xB738 mode-0 body.
 const (
-	// AngularFlagGo is bit 0: walk along the heading (SetCommand sets the
-	// mover's moving latch only when it is present).
+	// AngularFlagGo is bit 0: walk along the heading (the set-command arm
+	// sets the mover's moving latch only when it is present).
 	AngularFlagGo uint8 = 0x01
 	// AngularFlagSteerLeft and AngularFlagSteerRight are the arrow-key
 	// steering bits MovementController_SetDirectionVector (0x877FB0) keeps
-	// client-side; CGObjMoverByCmd_TickTurn (0x48C1E0) turns pi rad/s while
+	// client-side; the server's mover turns pi rad/s while
 	// one is held. The v1.150 client never puts them on 0x7738 (0x877F30
 	// always writes flag 1), so the port reads only AngularFlagGo.
 	AngularFlagSteerLeft  uint8 = 0x10
@@ -62,7 +61,7 @@ const (
 
 // DirectionLegUnits is how far ahead one direction leg is planned.
 //
-// INFERENCE: the native server has no legs - ComputeStep advances the mover
+// INFERENCE: the native server has no legs - its step arm advances the mover
 // every tick until the move test blocks it. The port's live plane needs a
 // goal for its segment, so the walk is planned as consecutive legs. 1000
 // units is the ground pick's own ray cap (SWorld_PickGroundTerrainAndNavigation
@@ -82,7 +81,7 @@ const DirectionLegLookaheadMs int64 = 500
 MovementRequest.IsDirectionWalk
 
 Mode 0 with GO: walk along HeadingWord until blocked. Mode 0 without GO is
-the stationary SetCommand arm, a turn in place (applyTurn).
+the stationary set-command arm, a turn in place (applyTurn).
 ================
 */
 func (m MovementRequest) IsDirectionWalk() bool {
@@ -159,7 +158,7 @@ func ApplyDirectionLeg(world *WorldState, objectID uint32, movement MovementRequ
 ================
 ApplyDirectionStop
 
-The Cancel arm (CGObjMover Cancel 0x48C110): the walker settles at its live
+The cancel arm: the walker settles at its live
 point facing the heading the client stopped with. The caller publishes the
 0xB2F5 correction built from the returned spawn. Facing is not part of a
 nav position (samePosition), so the settled owner stays valid.
@@ -178,7 +177,7 @@ ApplyStandingTurn
 A heading change for a mover that is not walking: the facing changes where
 it stands. Returns false, and changes nothing, while a segment is in flight.
 
-INFERENCE: SetAngle (0x48C0E0) belongs to the command mover. A destination
+INFERENCE: the set-angle arm belongs to the command mover. A destination
 walk owns its own facing, so a steer that races the end of a direction walk
 must not bend it.
 ================

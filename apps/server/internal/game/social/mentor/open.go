@@ -12,11 +12,11 @@ The answer 0xB2EC (76FBA0) is [1] and the new camp, read by the same
 82AA10 record reader the 0x3AC5 status-10 seed uses, or [2] and one
 category-0x1D code.
 
-The server rule is v1.188's, whose academy opcodes are renumbered (0x7470):
-4E4680 refuses a dead master (0x6807), a level under 60 (0x6809), gold
-under 100,000 (0x680A) and a master already in a camp (0x6812); 5DFCC0
-burns the fee (4E4650: -0x186A0) and answers [1] with the camp. The store
-door applies the checks, the debit and the new rows in one commit.
+The server rule refuses a dead master (0x6807), a level under 60
+(0x6809), gold under 100,000 (0x680A) and a master already in a camp
+(0x6812); on acceptance the fee burns (0x186A0) and [1] answers with
+the camp. The store door applies the checks, the debit and the new
+rows in one commit.
 
 ===========================================================================
 */
@@ -40,11 +40,12 @@ const OpTCOpenRequest uint16 = 0x72EC
 const OpTCOpenAnswer uint16 = 0xB2EC
 
 // CampOpenFee is the gold an opening burns: the confirm text's 100,000,
-// the client's own check at 5D2878 (0x186A0) and v1.188 4E4650's debit.
+// the client's own check at 5D2878 (0x186A0) and the server's debit.
 const CampOpenFee = 100000
 
-// The category-0x1D codes an opening answers with (the 689420 table at
-// 68C070/68C004, base 3): v1.188's 0x68xx returns keep their low byte.
+// The category-0x1D codes an opening answers with (the client's 689420
+// table at 68C070/68C004, base 3): the native 0x68xx returns carry
+// these low bytes on the wire.
 const (
 	OpenErrDead       uint8 = 0x07 // UIIT_MSG_TC_ERROR_DIE_PASSING
 	OpenErrLevel      uint8 = 0x09 // UIIT_MSG_TC_ERROR_OPEN_LEVEL

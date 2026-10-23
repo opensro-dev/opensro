@@ -18,18 +18,18 @@ import (
 
 // Monster create-row emission (Q1, monster-live wave).
 //
-// Layout source: the prior monster-spawn board's binary derivation of
-// sub_861b00 CICMonster_DeserializeSpawn (vt+0x64 @ vtable 0xc11e54): the
-// monster row is the SAME shared bionic spawn tail the NPC row ships
-// (sub_852f80 pos block -> sub_776170 packed movement -> sub_85fb20
-// scalars -> sub_859d40 name) followed by ONE extra u8 rarity byte
-// (@0x861b74; low nibble 0=normal/1=champion/4=giant/6=elite). HP is NOT
+// Layout source: the client's monster spawn reader
+// (CICMonster_DeserializeSpawn 861B00): the monster row is the SAME
+// shared spawn tail the NPC row ships
+// (852F80 pos block -> 776170 packed movement -> 85FB20
+// scalars -> 859D40 name) followed by ONE extra u8 rarity byte
+// (861B74; low nibble 0=normal/1=champion/4=giant/6=elite). HP is NOT
 // on the create row. A selected monster receives current HP through the
 // non-CICUser vitals block of 0xB45A; later damage results mutate it.
 //
 // The decoder layout and monster tidWord (0x00C6) are pinned directly to
 // the v1.150 client. The scalar fields line up with the shipped v1.150
-// characterdata columns and the independently labelled v1.188 server data.
+// characterdata columns and the independently labelled server data.
 // Per-instance rarity and AI inputs are resolved by monster from the
 // evidence-backed server population.
 /*
@@ -45,15 +45,15 @@ type MonsterDef struct {
 	TargetEffects monster.TargetEffects
 	RefObjID      uint32
 	// TidWord rides the refObjSnapshot mirror row (kind "monster"), not
-	// the create row; the client's sub_851420 cascade classifies on it.
+	// the create row; the client's 851420 cascade classifies on it.
 	TidWord  uint16
 	Codename string
-	// Name is the optional wire name the client-pinned sub_859d40
+	// Name is the optional wire name the client-pinned 859D40
 	// mask-bit0 leg carries. The web port deliberately sends the localized
 	// retail name. This is a source-fidelity decision, not a claim that the
 	// native retail producer populated the optional field.
 	Name string
-	// WalkSpeed / RunSpeed are the +0x24c/+0x250 sources from the
+	// WalkSpeed / RunSpeed are the speed sources from the
 	// monster's own characterdata row (not the 20/50 fixture pair the NPC
 	// roster ships).
 	WalkSpeed float64
@@ -77,16 +77,16 @@ type MonsterDef struct {
 	EventStructID  uint32
 	StructureState uint16
 	TypeID4        uint8
-	// TradeNpc rows end with TradeVariant (CGObjMob_WriteSpawnData 4C1930).
+	// TradeNpc rows end with TradeVariant (appended by the server's spawn writer).
 	TradeNpc     bool
 	TradeVariant uint8
 }
 
-// MonsterRarityNormal is the +0x770 low-nibble value for an ordinary
+// MonsterRarityNormal is the low-nibble value for an ordinary
 // (non-champion) monster row.
 const MonsterRarityNormal uint8 = 0
 
-// MonsterAppearByte is the vt+0x68 appear/effect byte a 0x30D7 SINGLE
+// MonsterAppearByte is the appear/effect byte a 0x30D7 SINGLE
 // spawn carries after the create row (object-list rows MUST NOT carry it
 // - WIP C3 contract, fold-verified both arms). Value 1 = the drop-in
 // presentation convention the grounditem and peervis singles already
@@ -103,13 +103,13 @@ const MonsterAppearByte uint8 = 1
 const MonsterSpawnSpeedChannel uint8 = 2
 
 // BuildMonsterCreateRow encodes one object-list create row for a monster
-// standing at spawn (the sub_777220 -> monster leg -> vt+0x64 sub_861b00
+// standing at spawn (the 777220 -> monster leg -> 861B00
 // consumer). Byte-identical to the NPC row (BuildNpcCreateRow) through the
 // name block - same standing movement block and mastery count 0 - then
 // the monster rarity byte. The three scalar values come from the
 // monster's characterdata row. The gid comes from the monster registry
 // (the sole allocator for the 400000+ band); the position is the spawn
-// point itself, not the NPC fixture's +8/+5 offset.
+// point itself, not offset the way the NPC fixture's is.
 /*
 ================
 BuildMonsterCreateRow
@@ -235,7 +235,7 @@ func BuildStructureCreateRow(def MonsterDef, gid uint32, spawn Spawn) []byte {
 const structureHeadquarters = 5
 
 // BuildMonsterSpawnSingle encodes the 0x30D7 single-spawn body: the same
-// create row plus the trailing vt+0x68 appear byte (sub_777220 single
+// create row plus the trailing appear byte (777220 single
 // mode reads it; the list path does not).
 /*
 ================
@@ -262,7 +262,7 @@ func MonsterWireDefFromInstance(instance monster.Instance, nowMs int64) MonsterD
 	ref := instance.Ref
 	def := MonsterDef{
 		RefObjID: ref.RefObjID, TidWord: ref.TidWord, Codename: ref.Codename,
-		// The live speeds: graded (4C1690) and under any slowing status.
+		// The live speeds: graded and under any slowing status.
 		Name: ref.DisplayName(), WalkSpeed: instance.WalkSpeed(), RunSpeed: instance.RunSpeed(),
 		ScaleDenom: instance.ActionSpeed(), Rarity: instance.Rarity(),
 		MotionState: instance.Motion.StateAt(nowMs),
