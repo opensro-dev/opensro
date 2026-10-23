@@ -36,10 +36,9 @@ func worldSpawnFromMission(spawn simulation.Spawn) *enterworld.WorldSpawn {
 ================
 recordedPoint
 
-The point a recall or death records (CGObjPC_SaveLatestRecallPosition
-4E0250, SaveLatestDeathPosition 4E0330): the position and the PC's world,
-or nothing when that world is not a type-0 world (the RefGameWorld byte
-+0x20 test), in which case the previous point stands.
+The point a recall or death records, as natively: the position and the
+PC's world, or nothing when that world is not a type-0 world (the game-world
+type test), in which case the previous point stands.
 ================
 */
 func recordedPoint(c *enterworld.Character, spawn simulation.Spawn) (*domain.WorldPoint, bool) {
@@ -97,7 +96,7 @@ func defaultRebirthPoint(character *enterworld.Character) simulation.Spawn {
 appointedRebirthPoint
 
 Both death and return scrolls resolve the appointed reference through the
-current authored catalog (research server 4E08A0 -> 407760). Stored coordinates
+current authored catalog, as the native town recall does. Stored coordinates
 are the fallback, so old saves and subsequently removed gates remain usable.
 ==================
 */
@@ -109,11 +108,11 @@ func (rt *Runtime) appointedRebirthPoint(character *enterworld.Character) simula
 ================
 appointedRebirth
 
-The appointed town and the world it lies in. CGObjPC_ResolveTownRecallPosition
-(4E08A0) reads the appointed teleport through CRefTeleport_ResolveSpawnCoords,
-which also yields the teleport's GenWorldID. The stored fallback is a field
+The appointed town and the world it lies in. The native town recall reads
+the appointed teleport's spawn coordinates, which also yield the teleport's
+GenWorldID. The stored fallback is a field
 position. During a fortress war a PC inside a fortress world revives where
-that world says instead (siege vtable +0x90, fortress_revival.go).
+that world says instead (the siege world's revival, fortress_revival.go).
 ================
 */
 func (rt *Runtime) appointedRebirth(division string, character *enterworld.Character) travelPoint {
@@ -217,8 +216,8 @@ func (rt *Runtime) HandleRebirthPointAppointment(
 	}}}
 }
 
-// siegeRebirthRefusalMs is the +0x1CD4 > 0xA5 window: the 180 ticks
-// CGObjPC::OnDeath stamps at 52CFBA, read down to 165 - the first 15
+// siegeRebirthRefusalMs is the corpse clock > 0xA5 window: the 180 ticks
+// the native death stamps, read down to 165 - the first 15
 // ticks of the siege corpse clock, at one second a tick
 // (domain.SiegeDeathAtMs).
 const siegeRebirthRefusalMs = 15 * 1000
@@ -227,14 +226,13 @@ const siegeRebirthRefusalMs = 15 * 1000
 ================
 siegeRebirthRefused
 
-50FEE0 before the death-kind check (510086..5100D6): while a siege war
-is active (MainProcess_IsSiegeWarActive 62EB50), the corpse lies in a
-siege world (CGameWorldMgr_CallGameWorldSlot31 answers nonzero), and
-its corpse clock (+0x1CD4, stamped 180 at the death) still
+The native revival handler, before the death-kind check: while a siege war
+is active, the corpse lies in a siege world (the world's siege query
+answers nonzero), and its corpse clock (stamped 180 at the death) still
 reads above 165, the handler returns without reviving - whatever the
 death kind or the player's choice. The port's clock is the elapsed
 time since SiegeDeathAtMs; Fortresses.WarActive is the war mirror and
-Definition.Siege is slot 31's answer, the same pair worldPlayerEnemy
+Definition.Siege is the siege query's answer, the same pair worldPlayerEnemy
 consults.
 ================
 */
@@ -242,7 +240,7 @@ consults.
 ================
 inSiegeWorld
 
-CGameWorldMgr_CallGameWorldSlot31's answer for the character's world:
+The native siege query's answer for the character's world:
 a fortress siege world.
 ================
 */
@@ -296,8 +294,7 @@ handleRebirthInDoor
 
 The settled corpse's revival, with the caller holding the division
 door. forceTown is the corpse clock's expiry (advanceSiegeCorpses):
-CGObjPC_OnTick sends the run-out corpse to town directly
-(CGObjPC_TeleportToTown 4DF290), so a death that would revive where
+the native tick sends the run-out corpse to town directly, so a death that would revive where
 it fell still goes to town and the choice must already name the town
 point. Every other caller takes the player's own choice.
 =================
@@ -321,14 +318,14 @@ func (rt *Runtime) handleRebirthInDoor(
 	if before.DeletePending || enterworld.CharacterAlive(before) || corpse.MoveSegment != nil {
 		return OpResult{DiagnosticRefusal: "rebirth-requires-settled-corpse"}
 	}
-	// 50FEE0 ahead of the kind check (510075..5100D6): a fresh siege
+	// The native handler, ahead of the kind check: a fresh siege
 	// corpse in an active siege world is refused outright (below).
 	if rt.siegeRebirthRefused(divisionID, before) {
 		return OpResult{}
 	}
-	// 50FEE0 (5100D6): a team death (free-battle capes, arena) revives where
+	// The native handler: a team death (free-battle capes, arena) revives where
 	// it fell at any level, whatever the choice; otherwise the present point
-	// is a beginner's (level 10 or below, 51017F). The shard may set the town
+	// is a beginner's (level 10 or below). The shard may set the town
 	// rule for team deaths too (teamdeath.go).
 	inPlace := rt.revivesInPlace(before.DeathKind)
 	if inPlace && !forceTown {
@@ -403,8 +400,8 @@ func (rt *Runtime) handleRebirthInDoor(
 		character.World.MoveSegment = nil
 		setCharacterWorld(character, arrivalWorld)
 		character.CurrentHP, character.CurrentMP = &restoredHP, &restoredMP
-		character.LastExpLoss = 0 // CGObjPC_TeleportToTown 4DF2E8
-		character.DeathKind = 0   // CGObjPC_TeleportToTown 4DF2EE
+		character.LastExpLoss = 0 // cleared by the native town teleport
+		character.DeathKind = 0   // cleared by the native town teleport
 		// The re-entry presents any waiting inventory expansion; the record
 		// adopts the capacity those packets carry (zero for a present-point
 		// rebirth, which builds no entry).
