@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-skinchange_test.go - CGObjPC_ChangeCharacterModel through the skin scroll
+skinchange_test.go - the native character-model change through the skin scroll
 
 ===========================================================================
 */
