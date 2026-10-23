@@ -37,8 +37,8 @@ const questAlchemyPrefix = "ITEM_QNO_RM_ARCHEMY"
 ================
 isPersonalQuestPickupItem
 
-ItemTID_IsQuestItem (42FDC0: TypeID1=3, TypeID2=3, TypeID3=9)
-without the ITEM_QNO_RM_ARCHEMY prefix (525DE9, 4D5560, 4D5755).
+The native quest-item test (TypeID1=3, TypeID2=3, TypeID3=9) without the
+ITEM_QNO_RM_ARCHEMY prefix.
 ================
 */
 func isPersonalQuestPickupItem(item grounditem.Item) bool {
@@ -51,8 +51,9 @@ func isPersonalQuestPickupItem(item grounditem.Item) bool {
 ================
 partyPickupRecipient
 
-Server 525F5F..52606F: item-share bit, rotating member alive (life byte 1,
-525FAE), same packed world, 3D distance <= 1000; fallback is the picker. Quest items stay personal,
+The original server: item-share bit, rotating member alive (life byte 1),
+same packed world, 3D distance <= 1000; fallback is the picker. Quest items
+stay personal,
 except the native alchemy prefix.
 ================
 */
@@ -100,11 +101,11 @@ type goldShare struct {
 ================
 partyGoldShares
 
-CGObjPC_CreditPickedUpGold (4EACA0) and CParty_DistributeGold (5BC7F0): with
+The native gold credit and party gold split: with
 the item-share option set, the heap the rotation handed to recipient is split
 among the recipient and every party member, in party-list order, who is
 online, in the recipient's world and within 1000 of the recipient
-(CParty_IsWithinShareRange: 3D, float32 sum of squares, <= 1000.0). Life is
+(the native share range: 3D, float32 sum of squares, <= 1000.0). Life is
 not checked. share = amount / n and the recipient also takes amount % n;
 when share is 0 the recipient takes the whole heap. Returns nil when no
 split applies (no party, option clear).
@@ -155,7 +156,7 @@ func (rt *Runtime) partyGoldShares(division string, recipient *enterworld.Charac
 ================
 withinGoldShareRange
 
-CParty_IsWithinShareRange (5BDB30): the squared distance is stored as
+The native share range: the squared distance is stored as
 float32 before the square root, and an unordered result is refused.
 ================
 */
@@ -204,8 +205,8 @@ routeSharedPickup
 
 Movement/action completion belongs to the picker; inventory, currency and
 quest receipts belong to the awarded member. Public scoop/despawn is shared.
-When a player pickup's rotated recipient has a full bag, CPlayer_ExecuteGroundPickup
-(526343..5263B2) sends 0x1807 (ErrCodeStorageFull) to the recipient and
+When a player pickup's rotated recipient has a full bag, the native ground
+pickup sends 0x1807 (ErrCodeStorageFull) to the recipient and
 returns 0x18DA (ErrCodePartyInventoryFull) to the picker.
 ================
 */
@@ -244,11 +245,10 @@ func routeSharedPickup(result OpResult, picker, recipient *enterworld.Character,
 ================
 partyLootNotice
 
-CParty_BroadcastLootNotice (5BDC80): after a granted pickup in a party
+The native party loot notice: after a granted pickup in a party
 whose item-share option is set, every member learns what the recipient got.
-Gold never announces: CPlayer_ExecuteGroundPickup keeps the object's
-is-gold slot (vtable +0x7C, stored at 5262AA) and skips the call when it
-is set (5263C8).
+Gold never announces: the native ground pickup keeps the object's is-gold
+answer and skips the call when it is set.
 ================
 */
 func (rt *Runtime) partyLootNotice(division string, picker, recipient *enterworld.Character, item grounditem.Item, nowMs int64) []RecipientFrames {
