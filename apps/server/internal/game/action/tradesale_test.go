@@ -90,9 +90,9 @@ func TestTraderQuoteAndPartialSaleUseNativeProfitAndTax(t *testing.T) {
 ================
 TestTraderSellsUnquotedForeignGoodAtBaseSellPrice
 
-Native CGObjNPC_QuoteTradeGoods (4C8D10) sells a foreign good that has no
+The native trade-goods quote sells a foreign good that has no
 quotation entry at the item's base sell price instead of refusing it (the
-"CANNOT FIND QUOT DATA" fall-through at 4C8E54..4C8E77), with zero trade
+"CANNOT FIND QUOT DATA" fall-through), with zero trade
 profit. Unquoted goods (such as Asia Minor's TRADE_AM_01..03) have no
 _ItemQuotation rows, so a trader sells them at that fallback price and earns
 no route profit, job experience or pool contribution from the sale.
@@ -295,7 +295,7 @@ func TestTradeTransactionRefusalDoesNotPublishOrRemoveCargo(t *testing.T) {
 ================
 TestTradePurchaseRequiresMerchantJobQuestAndTransport
 
-6182A0's order and codes: a non-special merchant, then 4EC860 (a suited
+The native purchase's order and codes: a non-special merchant, then the job check (a suited
 trader with a transport, else 0x60 even for a suited thief), level 20
 (0x4E), the required quest (0xB0) and the transport's distance.
 ================
@@ -345,7 +345,7 @@ func TestTradePurchaseRequiresMerchantJobQuestAndTransport(t *testing.T) {
 ================
 TestTradeSaleJobAndQuantityRules
 
-617F70 refuses a sale in a hunter's suit or in no suit (job states 3 and
+The native sale refuses a sale in a hunter's suit or in no suit (job states 3 and
 4, code 5). Its tail answers a quantity above the held count with 0x14 and one
 above the stack cap with 0x15.
 ================
