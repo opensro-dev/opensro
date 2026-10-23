@@ -31,15 +31,15 @@ const (
 	tagTimedLinkedThreat  = 0x6c6b6167
 	tagTimedLinkPerTarget = 0x6c6b7332
 	tagTimedLinkedDamage  = 0x6c6b6468
-	// tagTimedHunt is hntp (+0x48C, no words): the link's recipient is
-	// tracked for its source (SkillCombat_EngageSkill 593757).
+	// tagTimedHunt is hntp (no words): the link's recipient is
+	// tracked for its source, as the native skill engage does.
 	tagTimedHunt         = 0x686e7470
 	tagTimedLinkedFence  = 0x6c6b6472 // lkdr
 	tagTimedLinkedQuota  = 0x6c6b6464 // lkdd
 	tagTimedLinkedScream = 0x61626e62 // abnb
-	// tagTimedDisguise is msch (+0x4A4). Word 0 mode 3 is the reference
-	// disguise (Illusion): SkillCombat_ApplySkillEffectsToTargets' mode
-	// switch (594AA4) has no server work for it, and the client redresses
+	// tagTimedDisguise is msch. Word 0 mode 3 is the reference
+	// disguise (Illusion): the native skill-effect pass's mode switch has
+	// no server work for it, and the client redresses
 	// the caster per viewer (appearance-lookup.ts).
 	tagTimedDisguise           = 0x6d736368
 	timedDisguiseMode          = 3
@@ -78,14 +78,14 @@ const (
 ================
 SkillTimedEffect
 
-An entire category-three program. Native 5830B0 owns preparation and release;
-594AC0 installs recipient modifiers. Area instances have independent lifetimes.
+An entire category-three program. The native persistent-cast lifecycle owns
+preparation and release; the native buff install sets the recipient modifiers. Area instances have independent lifetimes.
 ================
 */
 type SkillTimedEffect struct {
 	DamageToMP        bool // dgmp installs the damage processor's single recipient instance.
 	DamageToMPPercent uint32
-	ForcedTarget      bool // hitm: recipient may target only its caster (58CF7F).
+	ForcedTarget      bool // hitm: recipient may target only its caster.
 	// Periodic has a separate execution contract from friendly timed buffs.
 	Periodic SkillPeriodicEffect
 	// ItemProgram marks an item-owned timed job (compileTimedItemEffect).
@@ -94,33 +94,33 @@ type SkillTimedEffect struct {
 	Recovery                  SkillRecoveryRates
 	GoldDropPercent           uint32
 	// Reat and Real are a buff's reat and real, the blocks the resistance
-	// passives (Protection) author: 594AC0 installs a buff's reat on the
-	// keeper as it does a learned passive's (595542..59568F), and real files
-	// its resistance under the instance's execution context (59DF20), so
+	// passives (Protection) author: the native buff install puts a buff's reat on the
+	// keeper as it does a learned passive's, and real files
+	// its resistance under the instance's execution context, so
 	// both last as long as the instance. Holy Word / Holy Spell and Poison
 	// Circle / Vein Circle carry them.
 	Reat SkillPassiveReat
 	Real SkillPassiveReal
-	// Bgra is Fire Shield's block (+0x2F8): the same mask and value shape as
-	// reat, written to the element resistances 0x1B+i instead (595698..5957EE).
+	// Bgra is Fire Shield's block: the same mask and value shape as
+	// reat, written to the element resistances 0x1B+i instead.
 	Bgra       SkillPassiveReat
 	Pinned     bool
 	Persistent bool
 	// IncomingReduction marks an admitted odar block (Earth Barrier).
 	IncomingReduction bool
-	// Hawk is summ (+0x308): the attacking hawk of Black and Light Hawk
+	// Hawk is summ: the attacking hawk of Black and Light Hawk
 	// Summon (SkillSummonedHawk).
 	Hawk SkillSummonedHawk
 	// Disguise is msch 3 (Illusion): the instance is the whole effect; the
 	// client draws the caster as another character while it lives.
 	Disguise bool
 	// HitRate and Range mark an admitted hr block (White Hawk Summon) and
-	// ru block (Demon Soul Arrow): like odar, 594AC0 installs both from the
+	// ru block (Demon Soul Arrow): like odar, the native buff install sets both from the
 	// row's BuffModifiers, so the program only has to agree with them.
 	HitRate, Range bool
 	// Parry marks an admitted er block (Concentration, #508).
 	Parry bool
-	// ShieldAttack is spda (+0x264, Flying Heaven Art): percents of the
+	// ShieldAttack is spda (Flying Heaven Art): percents of the
 	// shield's own defense moved from defense to attack (combat/shieldattack.go).
 	ShieldAttack                  SkillShieldAttack
 	Physical, Magical, CapPercent uint32
@@ -130,34 +130,34 @@ type SkillTimedEffect struct {
 	// Area is an efr kind 1 selection. Each selected actor gets an instance;
 	// select 4/5 uses the party selector, other masks use around-source.
 	Area SkillRecipientArea
-	// Field is efr kind 3 (+0x294): the cast plants a skill object that
+	// Field is efr kind 3: the cast plants a skill object that
 	// hands each recipient standing in it an instance and retires it when
-	// the recipient leaves (48CEA0, 48D690; skillfield.go). Harmony
+	// the recipient leaves (skillfield.go). Harmony
 	// therapy. Select takes bits 1 (owner), 2 (non-hostile others) and
 	// 4 (party).
 	Field SkillRecipientArea
 	// PhysicalAddend and MagicalAddend are getv HLBP / HLSM: the caster's
-	// value joins the recipient's defp (58381F; HLBP wins when both appear).
+	// value joins the recipient's defp (HLBP wins when both appear).
 	PhysicalAddend, MagicalAddend bool
-	// Strength and Intellect are stri (+0x3F0) and inti (+0x3F4): 594F69
+	// Strength and Intellect are stri and inti: natively the install
 	// adds {value + context addend} to parameter 1 / 2, capped at cap
 	// percent of the recipient's current value when the cap is nonzero.
 	Strength, Intellect SkillStatBoost
 	// StrengthAddend and IntellectAddend are getv HLFS / HLMI: the caster's
-	// value rides context +2C / +30 (583A65..583AB0).
+	// value rides context +2C / +30.
 	StrengthAddend, IntellectAddend bool
-	// Link is lnks (+0x370): the cast installs a source half on the caster
-	// and the recipient half on the target (5830B0, 59DC80).
+	// Link is lnks: the cast installs a source half on the caster
+	// and the recipient half on the target.
 	Link SkillEffectLink
-	// Defense marks a defp block; Block is br (+0x278) {lane mask, value}:
-	// the flat block-rate bonus 594AC0 installs (0x595DFD).
+	// Defense marks a defp block; Block is br {lane mask, value}:
+	// the flat block-rate bonus the native buff install sets.
 	Defense    bool
 	Block      SkillBlockBoost
 	Attributes SkillAttributeBoost
 	// Preemptive is pola (Noise): while the effect lasts, the monsters it
 	// names do not acquire its owner first.
 	Preemptive SkillPreemptiveGuard
-	// DamageReturn is dmgr on a buff (+0x208, the Warlock's Soul Return):
+	// DamageReturn is dmgr on a buff (the Warlock's Soul Return):
 	// the recipient strikes back at whoever damages it.
 	DamageReturn SkillDamageReturn
 	// PulseArea is the Warlock's Soul Chaos: the instance strikes the
@@ -169,9 +169,9 @@ type SkillTimedEffect struct {
 ================
 SkillDamageReturn
 
-dmgr {chance, physical %, magical %, range} (+0x204 on a passive, +0x208
-on a buff). CSkillManager_ProcessDamageEffects (5A0C2D) runs on the
-defender of every hit SkillCombat_CalculateHitOutcome resolves: an
+dmgr {chance, physical %, magical %, range} (on a passive or on a buff).
+The native damage-effect pass runs on the defender of every resolved hit:
+an
 attacker within range (range > distance) takes back, with chance percent,
 trunc(physical% of the hit's physical lane) + trunc(magical% of its
 magical lane). The defender's own damage is not reduced.
@@ -202,7 +202,7 @@ func parseDamageReturn(op SkillInstruction) (SkillDamageReturn, bool) {
 SkillShieldAttack
 
 spda {defense percent, attack percent}, both of the equipped shield's
-physical defense (594AC0 5950DD..5951CE).
+physical defense.
 ================
 */
 type SkillShieldAttack struct {
@@ -216,7 +216,7 @@ SkillPreemptiveGuard
 
 pola {grade mask, level}, the "Preemptive attack prevention (lv word 1)"
 row of the client tooltip (sub_7f9bd0). Inferred from the protection
-branch of CGObjMob_EvaluateHostility (5299E0), whose target carries a
+branch of the native hostility test, whose target carries a
 mask and a level: a regular monster (type word 0x8C6) whose grade bit
 (normal 1, champion 2, unique 4, elite 8) is in Mask and whose level does
 not exceed Level does not choose the protected player. Every v1.150 row
@@ -233,7 +233,7 @@ type SkillPreemptiveGuard struct {
 ================
 SkillAttributeBoost
 
-594AC0 installs these keeper contributions for the descriptor's lifetime.
+The native buff install keeps these keeper contributions for the descriptor's lifetime.
 pmdg mode two is an outgoing-damage multiplier, not an abnormal status.
 ================
 */
@@ -242,12 +242,12 @@ type SkillAttributeBoost struct {
 	HPFlat, HPPercent               uint32
 	PhysicalAttack, MagicalAttack   uint32
 	PhysicalPenalty, MagicalPenalty uint32
-	// DamageRate is dru: 594AC0 installs it from BuffModifiers for every
+	// DamageRate is dru: the native buff install sets it from BuffModifiers for every
 	// effect, so the program only has to be admitted. MaxHPPenalty is pmhp.
 	DamageRate, MaxHPPenalty bool
 	HPPenaltyPercent         uint32
 	// DefensePenalty is pmdp {duration, physical %, magical %, mode 2}:
-	// 594AC0 0x596252..0x5962BC lowers physical and magical defense
+	// the native buff install lowers physical and magical defense
 	// (parameters 5 and 6) by those percents on channel 1 (the Rogue's
 	// Mad Bow and Dagger Up).
 	DefensePenalty                                bool
@@ -298,7 +298,7 @@ SkillEffectLink
 lnks {group, max distance, max outgoing, board}. A zero board word hides the
 source half from the caster's board; both halves still exist on the server.
 Threat is lkag {percent, 0}: the share of the recipient's aggression that
-5A03A0 (combat.SplitLinkedThreat) hands to the link source.
+the native threat split (combat.SplitLinkedThreat) hands to the link source.
 
 Mana is lkdh {HP percent, MP percent, cap} (the Bard's Mana Switch): the
 MP share of each hit the recipient deals, at most cap per hit, goes to
@@ -320,25 +320,25 @@ type SkillEffectLink struct {
 	PerTarget                           bool
 	Mana                                bool
 	ManaHPPercent, ManaPercent, ManaCap uint32
-	// Hunt is hntp: while the link lives, 593757 attaches the recipient's
-	// action records to a task of the source (CActionTargetContext_SetCoordinates
-	// 4F9A90), so the source keeps receiving the recipient's position
+	// Hunt is hntp: while the link lives, the native engage attaches the
+	// recipient's action records to a task of the source, so the source keeps
+	// receiving the recipient's position
 	// (Tag Point, Hunting Point).
 	Hunt bool
-	// Fence is lkdr {mask, percent, max hits} (+0x478, the Warrior's
-	// Physical / Magical Fence): 5A0F01 moves percent of the recipient's
+	// Fence is lkdr {mask, percent, max hits} (the Warrior's
+	// Physical / Magical Fence): natively the fence moves percent of the recipient's
 	// physical and/or magical damage lanes to the link source. FenceMask
 	// holds the loader's fix-up (linkFenceMask). A zero max hits never
 	// retires the link; every shipped row authors 0.
 	Fence                   bool
 	FenceMask, FencePercent uint32
 	FenceMaxHits            uint32
-	// Quota is lkdd {percent} (+0x480, Pain Quota): 5A11BF keeps
+	// Quota is lkdd {percent} (Pain Quota): natively the quota keeps
 	// 100 - percent of the recipient's hit and divides the rest among
 	// its party members within linkQuotaRange.
 	Quota        bool
 	QuotaPercent uint32
-	// Scream is abnb {range} (+0x41C, Scream Mask): 5A14D8 rolls the row's
+	// Scream is abnb {range} (Scream Mask): natively the mask rolls the row's
 	// status blocks on an attacker that hits the recipient from strictly
 	// inside ScreamRange.
 	Scream      bool
@@ -349,9 +349,8 @@ type SkillEffectLink struct {
 ================
 linkFenceMask
 
-SkillGlobal_BuildParameterIndex (588A06..588A44) completes lkdr word 0 as it
-indexes it: a lane value (4 physical, 8 magical, 12 both) gains both share
-bits (|1|2), and a share value (1, 2, 3) gains both lanes (|4|8). 5A0F01
+The native parameter index completes lkdr word 0 as it indexes it: a lane value (4 physical, 8 magical, 12 both) gains both share
+bits (|1|2), and a share value (1, 2, 3) gains both lanes (|4|8). The fence
 moves a lane only when its lane bit and a share bit are both set.
 ================
 */
@@ -378,13 +377,13 @@ const (
 ================
 SkillSummonedHawk
 
-summ {duration, word1, interval, physical, magical} (+0x308, 5 words). While
-its buff runs, SkillCombat_EngageSkill (593540) keeps a periodic-damage
+summ {duration, word1, interval, physical, magical} (5 words). While
+its buff runs, the native skill engage keeps a periodic-damage
 record on the caster; every attack the caster makes aims it at that target,
-and Skill_ProcessPeriodicDamage (582750) strikes once per interval while the
+and the native periodic-damage pass strikes once per interval while the
 caster attacked within the last interval. The physical and magical words
-are the strike's flat bases (40F1B0 / 40F3D0). Word 1 (10 on every row) has
-no reader in 582750.
+are the strike's flat bases. Word 1 (10 on every row) has
+no native reader.
 ================
 */
 type SkillSummonedHawk struct {
@@ -432,7 +431,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	// The one targeted shape is Required+Animal+Ally+Party with a range.
 	// Self (column 26) may join it.
 	// Party (28) with or without Ally (27): a party-only row (Pain Quota) is
-	// held to the caster's party by 58D7A0 (action.skillTargetPermission).
+	// held to the caster's party by the native target permission (action.skillTargetPermission).
 	targeted := fields[21] != "0" && fields[22] == "1" && fields[23] == "1" && fields[28] == "1"
 	// Illusion authors a range word (column 21) with no target. Inferred:
 	// it is unread, as a self buff reaches nobody; a disguise row keeps it.
@@ -444,10 +443,10 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	}
 	// Mana Switch also names Enemy_M and Enemy_P (columns 29, 30). Inferred:
 	// the link binds two players (acceptTimedTargetEffect refuses anything
-	// else with 0x3006), so those bytes only widen 58D7A0's player check;
+	// else with 0x3006), so those bytes only widen the native player check;
 	// they are tolerated on a targeted lkdh row alone.
 	// Tag Point and Hunting Point (hntp) name Enemy_P (column 30) on the
-	// same targeted shape: the mark lands on any player 58D7A0 admits.
+	// same targeted shape: the mark lands on any player the native check admits.
 	damageLink, huntLink := false, false
 	for i := 0; i < program.Len(); i++ {
 		damageLink = damageLink || program.Instruction(i).Tag == tagTimedLinkedDamage
@@ -474,7 +473,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	}
 	// Column 19 (continueBasicAttackColumn) is not among them: it only says
 	// whether the basic attack resumes after the cast. The bow buffs (White
-	// Hawk Summon, Demon Soul Arrow) author 2, which 4AED19 does not resume.
+	// Hawk Summon, Demon Soul Arrow) author 2, which the native chain does not resume.
 	if _, ok := textdataByte(fields[continueBasicAttackColumn]); !ok {
 		return
 	}
@@ -563,8 +562,8 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 				}
 				a.DefensePenalty, a.PhysicalDefensePenalty, a.MagicalDefensePenalty = true, op.Arguments[1], op.Arguments[2]
 			case tagTimedThreat:
-				// 5903EC consumes tnt2 only when producing a target hit.
-				// A self buff has no hostile target result; 594AC0 does not
+				// Natively tnt2 is consumed only when producing a target hit.
+				// A self buff has no hostile target result; the native buff install does not
 				// install tnt2 as tant's independent keeper contribution.
 				if op.Arguments[0] != 0 {
 					return
@@ -601,15 +600,15 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 				return
 			}
 		case tagTimedLink:
-			// Group 0 is legal: 59DC80 applies its same-group rule only to a
+			// Group 0 is legal: the native link install applies its same-group rule only to a
 			// nonzero group (Pain Quota authors 0).
 			if result.Link.Present || op.Count != 4 || !targeted {
 				return
 			}
 			result.Link = SkillEffectLink{Present: true, Group: op.Arguments[0], MaxDistance: op.Arguments[1], MaxOutgoing: op.Arguments[2], Board: op.Arguments[3]}
 		case tagTimedLinkedThreat:
-			// lkag rides the link context (ApplyLink, 594EAC): 5A03A0 reads
-			// word 0 only (+0x47C), word 1 has no reader, and the share is
+			// lkag rides the link context: the native threat split reads
+			// word 0 only, word 1 has no reader, and the share is
 			// formed as authored. The row's lnks is checked after the walk.
 			if linkThreat || op.Count != 2 {
 				return
@@ -624,7 +623,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 			}
 			result.Link.PerTarget = true
 		case tagTimedLinkedDamage:
-			// lkdh {HP percent, MP percent, cap} (+0x3E0): 5A04A0 pays the
+			// lkdh {HP percent, MP percent, cap}: the native shared-damage pass pays the
 			// link source both shares as authored, each held at the cap.
 			if linkDamage || op.Count != 3 {
 				return
@@ -636,21 +635,21 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 				return
 			}
 		case tagTimedLinkedFence:
-			// lkdr {mask, percent, max hits} (+0x478, 588A03: three words).
+			// lkdr {mask, percent, max hits} (three words).
 			if linkFence || op.Count != 3 || op.Arguments[1] == 0 || op.Arguments[1] > 100 {
 				return
 			}
 			linkFence = true
 			linkFenceWords = [3]uint32{linkFenceMask(op.Arguments[0]), op.Arguments[1], op.Arguments[2]}
 		case tagTimedLinkedScream:
-			// abnb {range} (+0x41C, one word): the status blocks after it
-			// are the row's own, rolled by 590680.
+			// abnb {range} (one word): the status blocks after it
+			// are the row's own, rolled by the abnormal-status roll.
 			if linkScream || op.Count != 1 || op.Arguments[0] == 0 {
 				return
 			}
 			linkScream, linkScreamRange = true, op.Arguments[0]
 		case tagTimedLinkedQuota:
-			// lkdd {percent} (+0x480, 5889E2: one word).
+			// lkdd {percent} (one word).
 			if linkQuota || op.Count != 1 || op.Arguments[0] == 0 || op.Arguments[0] > 100 {
 				return
 			}
@@ -661,28 +660,28 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 			}
 			result.DamageToMP, result.DamageToMPPercent = true, op.Arguments[0]
 		case tagTimedIncomingReduction:
-			// odar is installed from BuffModifiers for every recipient (594AC0);
+			// odar is installed from BuffModifiers for every recipient;
 			// the program only has to agree with that projection.
 			if result.IncomingReduction || op.Count != 2 || !row.BuffModifiers.Odar || op.Arguments[1] != row.BuffModifiers.OdarWord {
 				return
 			}
 			result.IncomingReduction = true
 		case skillTagHitRate:
-			// hr {flat, rate}: 594AC0 0x59583F writes the hit-rate keeper (0xB).
+			// hr {flat, rate}: the native buff install writes the hit-rate keeper (0xB).
 			if result.HitRate || op.Count != 2 || targeted || result.Area.Present || !row.BuffModifiers.Hr ||
 				op.Arguments[0] != row.BuffModifiers.HrFlat || op.Arguments[1] != row.BuffModifiers.HrRate {
 				return
 			}
 			result.HitRate = true
 		case skillTagParry:
-			// er {flat, rate}: 594AC0 0x595883 writes the parry keeper (9).
+			// er {flat, rate}: the native buff install writes the parry keeper (9).
 			if result.Parry || op.Count != 2 || targeted || result.Area.Present || !row.BuffModifiers.Er ||
 				op.Arguments[0] != row.BuffModifiers.ErFlat || op.Arguments[1] != row.BuffModifiers.ErRate {
 				return
 			}
 			result.Parry = true
 		case skillTagRange:
-			// ru {distance}: 594AC0 0x5958E7 adds to the attack-range keeper
+			// ru {distance}: the native buff install adds to the attack-range keeper
 			// (0x21), the reach of a skill without its own range.
 			if result.Range || op.Count != 1 || targeted || result.Area.Present || !row.BuffModifiers.Ru ||
 				op.Arguments[0] != row.BuffModifiers.RuRate {
@@ -691,7 +690,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 			result.Range = true
 		case tagDamageReturn:
 			// A party Soul Return (efr) installs the rule on every member it
-			// selects, as 594AC0 does any recipient block; a targeted row
+			// selects, as the native buff install does any recipient block; a targeted row
 			// authors none.
 			rule, ok := parseDamageReturn(op)
 			if result.DamageReturn.Present || !ok || targeted || result.Link.Present {
@@ -711,14 +710,14 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 			}
 			result.Reat = SkillPassiveReat{Mask: op.Arguments[0], Value: op.Arguments[1]}
 		case tagTimedShieldAttack:
-			// A self buff: the shield read is the recipient's own (5950FD).
+			// A self buff: the shield read is the recipient's own.
 			if result.ShieldAttack.Present || op.Count != 2 || targeted || result.Area.Present || result.Field.Present ||
 				op.Arguments[0] == 0 && op.Arguments[1] == 0 {
 				return
 			}
 			result.ShieldAttack = SkillShieldAttack{Present: true, DefensePercent: op.Arguments[0], AttackPercent: op.Arguments[1]}
 		case tagTimedRecovery:
-			// irgc {HP %, MP %}: 595A33..595A93 add both to the recovery
+			// irgc {HP %, MP %}: natively both are added to the recovery
 			// parameters 25 and 26 on the percent channel.
 			if result.Recovery.Present || op.Count != 2 {
 				return
@@ -736,32 +735,32 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 			result.Real = SkillPassiveReal{Mask: op.Arguments[0], Flat: op.Arguments[1], Grade: op.Arguments[2]}
 		case tagTimedOverlap: // ovl2: the replacement descriptor's casting-state word
 		case tagTimedDisguise:
-			// 58DE1E admits the cast (action.mschRefusal); nothing installs.
+			// The native cast admission admits it (action.mschRefusal); nothing installs.
 			if !disguise || op.Arguments[0] != timedDisguiseMode {
 				return
 			}
 			result.Disguise = true
 		case tagSkc:
 			// The event mask is the replacement's (skillreplacement.go);
-			// Illusion's 2 ends it on the caster's next cast (59B745).
+			// Illusion's 2 ends it on the caster's next cast.
 			if !disguise {
 				return
 			}
 		case tagStatusThreat:
 			// tant (+3C8) is read only into a hit record's aggression
-			// (590402); a self buff's one record is the caster's own, which
+			//; a self buff's one record is the caster's own, which
 			// holds no hostility ledger. Inferred inert on a disguise.
 			if !disguise {
 				return
 			}
 		case tagNbuf, tagBbuf: // cancellation policy and secondary board, already projected
-		case tagReqi, tagTimedRequireNot: // 58D480 admits, 59F0E0 re-checks on equipment change
+		case tagReqi, tagTimedRequireNot: // admitted at cast, re-checked on equipment change
 		case tagEfr: // read above
 		case tagGetv:
 			switch op.Arguments[0] {
 			case parameterBardMP, parameterMusicArea:
-				// 5832E6 applies BDMD to the prepared cost. MUER is indexed,
-				// but 5830B0 reads it only when creating an efr-kind-2 aura;
+				// Natively BDMD applies to the prepared cost. MUER is indexed,
+				// but the lifecycle reads it only when creating an efr-kind-2 aura;
 				// the kind-1 March selection keeps its authored radius.
 				musicParameters = true
 			case parameterWizardMP:
@@ -777,7 +776,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 			default:
 				return
 			}
-		case tagCbuf: // 59B8D0: cbuf + dura enters the owner timed-job path
+		case tagCbuf: // cbuf + dura enters the owner timed-job path
 			result.Persistent = true
 		case skillTagSummon:
 			// The hawk follows its caster alone (summ on a self buff).
@@ -799,8 +798,8 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 		}
 		result.Link.Hunt = true
 	}
-	// 594E5D installs one link slot per effect (+0x478, +0x3E0, +0x480,
-	// +0x47C, in that order); every shipped row authors one kind.
+	// Natively one link slot is installed per effect (lkdh, lkdd, lkag, in
+	// that order); every shipped row authors one kind.
 	kinds := 0
 	if statusBlocks != 0 && !linkScream {
 		return
@@ -837,7 +836,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 			linkDamageWords[0], linkDamageWords[1], linkDamageWords[2]
 	}
 	// A link carries only the stat blessings and lkag so far; a linked defp
-	// would need the source-half rule of 5951FC checked first. The linked
+	// would need the native source-half rule checked first. The linked
 	// runtime installs only stri/inti writes, so a threat link with blk or
 	// odar would silently drop them and stays refused.
 	// A damage link carries lkdh alone: the linked runtime has no rule for
@@ -889,7 +888,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 TimedJobExecutable
 
 Require a complete producer, not cbuf presence alone. Ordinary party buffs do
-not survive logout through the timed-item-job protocol (59B8D0/650E70).
+not survive logout through the timed-item-job protocol.
 ================
 */
 func (row SkillRow) TimedJobExecutable() bool {
