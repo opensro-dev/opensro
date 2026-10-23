@@ -3,8 +3,8 @@
 
 stats.go - combat stat snapshots for players and monsters
 
-Package combat owns immutable combat-stat snapshots and the v1.188
-CFormulae translation. It never owns live HP; simulation.MonsterState remains
+Package combat owns immutable combat-stat snapshots and the native
+formulae translation. It never owns live HP; simulation.MonsterState remains
 the sole mutation authority.
 
 ===========================================================================
@@ -30,7 +30,7 @@ import (
 ==================
 Stats
 
-Stats is the ParamKeeper 1..16 subset read by the v1.188 damage helpers.
+Stats is the ParamKeeper 1..16 subset read by the native damage helpers.
 Values are a detached snapshot: formula evaluation cannot retain a live
 character or monster pointer.
 ==================
@@ -38,7 +38,7 @@ character or monster pointer.
 type Stats struct {
 	PhysicalBasicRate, PhysicalSkillRate, MagicalBasicRate, MagicalSkillRate float64
 	Berserk                                                                  bool // body-mode1 contributes native result flag4, not attack stats
-	StealthStrike                                                            bool // command issued in body mode 6: hit flag 8 (58EDD7)
+	StealthStrike                                                            bool // command issued in body mode 6: hit flag 8
 	// Native B2..B5 final lane factors. Zero is the native no-modifier sentinel.
 	PhysicalOutgoing, MagicalOutgoing, PhysicalIncoming, MagicalIncoming float32
 	// Native AE..B1 received-damage factors by lane and attack kind (odar,
@@ -46,10 +46,10 @@ type Stats struct {
 	PhysicalBasicTaken, PhysicalSkillTaken, MagicalBasicTaken, MagicalSkillTaken float32
 	masteries                                                                    []domain.CharacterMastery       // private copied snapshot; never aliases live authority
 	MotionState                                                                  uint8                           // live authority snapshot; native state 8 is knocked down
-	AbnormalMask                                                                 uint32                          // character +0xD34, the published abnormal mask; atca 58F52F tests it
+	AbnormalMask                                                                 uint32                          // the published abnormal mask; atca tests it
 	SkillParameters                                                              enterworld.SkillParameterValues // learned native dictionary; not displayed stats
 	// StatusResistance is the learned status-resistance buckets real fills,
-	// indexed like abnormal.Source.Resist (59DE50).
+	// indexed like abnormal.Source.Resist.
 	StatusResistance [17]abnormal.Resistance
 	// DamageReturn is the enabled learned dmgr passive (+0x204) and
 	// DamageReturnSkill its row; the runtime falls back to a live buff's
@@ -106,8 +106,8 @@ type Catalogs struct {
 	MagicOptions enterworld.MagicOptionSource
 }
 
-// AttackRangeParameter is the attack-range keeper (CGObjChar_GetAttackRangeParam
-// 4AC890): the weapon's reach plus every active ru.
+// AttackRangeParameter is the attack-range keeper: the weapon's reach
+// plus every active ru.
 const AttackRangeParameter uint16 = 0x21
 
 /*
@@ -174,7 +174,7 @@ func PlayerStatsWithModifiers(
 		Level:    level,
 		MaxLevel: maxLevel,
 		Berserk:  character.NativeBodyStatus == 1,
-		// Native reads body mode 6 once per command (4ACE9E); this reads it
+		// Native reads body mode 6 once per command; this reads it
 		// per strike, which differs only for a command that outlives stealth.
 		StealthStrike: character.NativeBodyStatus == 6,
 	}
@@ -232,8 +232,8 @@ func PlayerStatsWithModifiers(
 		if durability.Broken(ref.TypeFlags(), row.Durability == 0) {
 			continue
 		}
-		// reqi reads slot 6 through 4EAD40 and CGObjPC +5D0 (4EC5A0).
-		// Both reject item+190, whose 495980/496D90 producer marks depleted
+		// The native requirement read of slot 6 and the character check
+		// both reject the item whose producer marks depleted
 		// durability. An unavailable/broken weapon must not activate a passive.
 		if row.Slot == 6 && ref.TypeIDs[0] == 3 && ref.TypeIDs[1] == 1 && ref.TypeIDs[2] == 6 {
 			passiveWeaponKind = uint8(ref.TypeIDs[3])
@@ -264,8 +264,9 @@ func PlayerStatsWithModifiers(
 		if err != nil {
 			return Stats{}, Loadout{}, err
 		}
-		// 495CA0: CalculateBaseStats, then ApplyMagicOptions scales the
-		// item's own HR (+1D8) and ER (+19C) before any keeper insertion.
+		// The base-stat calculation runs first, then the magic-option
+		// application scales the item's own HR and ER before any keeper
+		// insertion.
 		applyItemMagicOptions(&contribution, options)
 		source := uint32(1024 + row.Slot)
 		writes = append(writes, statWrites(contribution, source)...)
@@ -286,9 +287,8 @@ func PlayerStatsWithModifiers(
 			loadout.WeaponKind = uint8(ref.TypeIDs[3])
 			loadout.ActionRange = ref.Combat.ActionRange
 			// Inferred: the weapon's range is the attack-range keeper (0x21).
-			// CGObjChar_GetAttackRangeParam (4AC890) reads it as the reach
-			// of a skill without its own range, and a buff's ru (594AC0
-			// 0x5958E7) adds to it.
+			// The native attack-range read takes it as the reach
+			// of a skill without its own range, and a buff's ru adds to it.
 			writes = append(writes, paramkeeper.Write{
 				Parameter: AttackRangeParameter,
 				Source:    source,
@@ -399,13 +399,13 @@ func PlayerBaseStatsWithModifiers(
 		MagicalDefense:    clampDisplayU16(stats.MagicalDefense),
 		HitRate:           clampDisplayU16(stats.HitRate),
 		ParryRate:         clampDisplayU16(stats.EvasionRate),
-		// Params 3 and 4 are the keeper maxima (4E3294): item HP/MP options
+		// Params 3 and 4 are the keeper maxima: item HP/MP options
 		// and abnormal factors are already in the graph.
 		MaxHP: clampDisplayU32(float64(hp)),
 		MaxMP: clampDisplayU32(float64(mp)),
-		// 75BE90 applies the final words on every refresh. They are the
-		// keeper's params 1 and 2, buffs included, truncated as
-		// CGObjPC_SendParameterStats (4EBE30) writes them: a stri/inti
+		// The final words are applied on every refresh. They are the
+		// keeper's params 1 and 2, buffs included, truncated as the
+		// native parameter-stat writer sends them: a stri/inti
 		// effect (the premium tickets' APRU buff) raises the STR and INT
 		// the client shows and its equip gates read.
 		StrWord: clampDisplayU16(stats.Strength),

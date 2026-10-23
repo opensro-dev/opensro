@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-formula.go - hit damage (the v1.188 CFormulae call tree)
+formula.go - hit damage (the native formulae call tree)
 
 ===========================================================================
 */
@@ -26,7 +26,7 @@ const (
 )
 
 // Roll32767 returns one value in the same inclusive 0..32767 domain as the
-// CRT rand() calls in the v1.188 helpers.
+// CRT rand() calls in the native helpers.
 /*
 ================
 Roll32767
@@ -62,20 +62,22 @@ Result
 */
 type Result struct {
 	// Imbue is the active weapon imbue's abnormal authority (its bu block),
-	// rolled per impact after the skill's own statuses (590B24).
+	// rolled per impact after the skill's own statuses.
 	Imbue  abnormal.SkillParams
 	Damage uint32
 	// MagicalDamage retains the lane accumulator before total-damage
-	// scaling. 58F491 releases Root only when this accumulator is nonzero.
+	// scaling. The native hit step releases Root only when this
+	// accumulator is nonzero.
 	MagicalDamage uint32
-	// PhysicalDamage is the physical lane accumulator (+0x28; the imbue's
-	// physical word joins it at 58F435). Damage return (5A0C2D) reads it.
+	// PhysicalDamage is the physical lane accumulator; the imbue's
+	// physical word joins it. Damage return reads it.
 	PhysicalDamage uint32
 	ResultFlags    uint8
-	// Blocked is a type-2 record (0x58F0EF): no damage, no imbue share, no
-	// status roll, no knockdown (the defender's +0xD2C is never set).
+	// Blocked is a type-2 record: no damage, no imbue share, no
+	// status roll, no knockdown (the defender's knockdown word is never
+	// set).
 	Blocked bool
-	// Slain is a ck kill, record 0x86 (58F774): no damage, and the
+	// Slain is a ck kill, record 0x86: no damage, and the
 	// defender dies outright.
 	Slain bool
 }
@@ -84,7 +86,7 @@ type Result struct {
 ==================
 Resolve
 
-Resolve ports the normal-result physical and magical CFormulae lanes.
+Resolve ports the normal-result physical and magical native formula lanes.
 Attack.Flags selects either or both helpers, exactly like the retail
 attack-block gate. The learned E2SA channel is consumed only by its physical
 getv branch. Other unimplemented modifier planes retain neutral inputs.
@@ -104,7 +106,7 @@ func Resolve(
 ResolveMonster
 
 ResolveMonster evaluates the non-player attacker branch of the same
-v1.188 CFormulae call tree. Monster default-skill `att` rows already carry
+native formulae call tree. Monster default-skill `att` rows already carry
 their authored attack interval; unlike a CICPlayer they do not multiply
 that interval by the STR/INT balance helpers. Keeping this entry point
 separate prevents a synthetic zero-STR monster from collapsing to minimum
@@ -125,8 +127,8 @@ func ResolveMonster(
 AttackCalculation
 
 Keep the authored effect and initiating attack separate from the selected
-damage lanes. 410BB0 classifies by both RefSkill rows; a wall or chained
-recipient can suppress a lane without rewriting either authored row.
+damage lanes. The native classifier reads both RefSkill rows; a wall or
+chained recipient can suppress a lane without rewriting either authored row.
 ================
 */
 type AttackCalculation struct {
@@ -157,7 +159,7 @@ func ResolveCalculation(attacker, defender Stats, calculation AttackCalculation,
 	}
 	if calculation.Lanes&(physicalAttackFlag|magicalAttackFlag) == 0 {
 		return Result{}, fmt.Errorf(
-			"combat: attack flags %#x select neither CFormulae damage lane",
+			"combat: attack flags %#x select neither native damage lane",
 			attack.Flags,
 		)
 	}
@@ -180,8 +182,8 @@ func ResolveCalculation(attacker, defender Stats, calculation AttackCalculation,
 		magicalDamage = downAttackDamage(damage, defender.MotionState, attack.DownAttack)
 		total += uint64(magicalDamage)
 	}
-	// 58F52F: atca scales the summed lane dword by (1 + percent/100) when
-	// its mask shares a bit with the target's abnormal mask (+0xD34).
+	// atca scales the summed lane dword by (1 + percent/100) when
+	// its mask shares a bit with the target's abnormal mask.
 	if attack.Atca && defender.AbnormalMask&attack.AtcaMask != 0 {
 		total = uint64(fistpLow(float64(uint32(total)) * (1 + float64(attack.AtcaPercent)/100)))
 	}
@@ -213,7 +215,8 @@ type laneRoll struct {
 ================
 defenseAbsorption
 
-40EBE0/40EEF0 never call 410BB0: a Force wall has its own damage pool,
+The native absorption helpers never classify: a Force wall has its own
+damage pool,
 so the protected character's absorption does not reduce the wall's damage.
 ================
 */
@@ -262,7 +265,7 @@ func resolveLane(attacker, defender Stats, calculation AttackCalculation, lane l
 	attackMin += float64(attack.Min)
 	attackMax += float64(attack.Max)
 
-	// 59E770: absent MAAT is zero; each absent mastery ID contributes one,
+	// Absent MAAT is zero; each absent mastery ID contributes one,
 	// otherwise consume the learned level, and choose the larger slot.
 	enhancement := float64(masteryEnhancement(attacker.masteries, attack))
 	attackMin *= 1 + enhancement/100
@@ -299,7 +302,7 @@ func resolveLane(attacker, defender Stats, calculation AttackCalculation, lane l
 		damage = 0
 	}
 	damage *= float64(attack.Percent) / 100
-	// 40E58C/40E59A and 40E934/40E940 select 80..83 after defense
+	// The keeper slots 80..83 are selected after defense
 	// subtraction and attack-percent scaling. This is not attack-stat scaling.
 	rate := float64(0)
 	if attack.Flags&1 != 0 {
@@ -318,13 +321,13 @@ func resolveLane(attacker, defender Stats, calculation AttackCalculation, lane l
 	if rate != 0 {
 		damage = float64(float32(damage * (1 + rate/100)))
 	}
-	// 410BB0 uses the current effect's physical bit before its magical bit,
-	// then the ORIGINAL attack's basic/skill bit (58F2F3 and 58F312).
+	// The classifier uses the current effect's physical bit before its
+	// magical bit, then the ORIGINAL attack's basic/skill bit.
 	taken := defenseAbsorption(defender, calculation)
 	if taken != 0 {
 		damage = float64(float32(damage * float64(taken)))
 	}
-	// 58E5F0 body1 sets result bit4; 40E450/40E830 multiply by2
+	// Body mode 1 sets result bit4; the berserk helpers multiply by 2
 	// before level, balance and minimum-damage fallback.
 	if attacker.Berserk {
 		damage = float64(float32(damage * 2))
@@ -357,7 +360,7 @@ func resolveLane(attacker, defender Stats, calculation AttackCalculation, lane l
 		}
 		damage = 1 + (ceiling-1)*floorRoll
 	}
-	// 40E758/40EB0A: modifiers follow the minimum-damage fallback.
+	// The outgoing/incoming modifiers follow the minimum-damage fallback.
 	outgoing, incoming := attacker.PhysicalOutgoing, defender.PhysicalIncoming
 	if magical {
 		outgoing, incoming = attacker.MagicalOutgoing, defender.MagicalIncoming
