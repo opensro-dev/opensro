@@ -14,7 +14,6 @@
         "test": "node scripts/task.mjs test",
         "check": "node scripts/task.mjs check",
         "assets": "node scripts/task.mjs assets",
-        "release": "node scripts/task.mjs release",
         "task": "node scripts/task.mjs",
         "typecheck": "pnpm -r --filter=!sro-browser-rebuild typecheck",
         "hooks:install": "node scripts/setup_git_hooks.mjs"

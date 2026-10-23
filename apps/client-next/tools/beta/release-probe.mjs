@@ -6,7 +6,7 @@ release-probe.mjs - what every release probe of a staged candidate shares
 The release gate (release-gate.mjs) and the rendered smoke
 (release-smoke.mjs) take the same inputs, identify the same candidate entry,
 record phases in the shape the host keeps as browser evidence
-(ops/release/client_deploy.record_smoke), and treat the same browser output
+(the operator's release tooling), and treat the same browser output
 as a runtime error. Each owns only its own flow.
 
 ===========================================================================

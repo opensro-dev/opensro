@@ -19,7 +19,6 @@ in [tasks/](tasks/README.md). The pipeline itself is described in
 | `rebuildLock.mjs`, `rebuild_lock.py` | The generated-asset lock shared by the JS and Python steps; `pnpm assets lock` |
 | `convert_images.py` | Spawned by the build: DDJ/DDS to browser images |
 | `extract_client_cursors.py` | Spawned by the build: client cursors |
-| `clean_release_workspace.mjs` | `pnpm release` |
 | `setup_git_hooks.mjs` | `pnpm task hooks install` |
 | `task.mjs` | The task CLI |
 

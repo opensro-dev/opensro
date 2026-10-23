@@ -3,7 +3,7 @@ import { parseArgs } from "node:util";
 import { getTask, listTasks } from "./tasks/registry.mjs";
 import { runTask } from "./tasks/runner.mjs";
 
-const KIND_ORDER = ["dev", "build", "test", "check", "assets", "release"];
+const KIND_ORDER = ["dev", "build", "test", "check", "assets"];
 
 async function main(args) {
   if (args.length === 0 || args[0] === "help" || args[0] === "--help" || args[0] === "-h") {

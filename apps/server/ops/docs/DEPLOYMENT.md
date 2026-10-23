@@ -264,7 +264,7 @@ relies on modify indexes for the actual writes.
 `validate -assume-stopped` plans as if the fleet were already stopped: a
 credential variable that differs while its job is registered is reported as
 one `requires-stop <job> <path>` line instead of refused. The release
-receiver runs it at staging time (`ops/release/deploy.py` `rehearse`), with
+receiver runs it at staging time (its `rehearse` step), with
 the staged server's own `sro-nomad` over a throwaway copy of production's
 module, so a release that would fail inside its window is refused at
 staging. A release that replaces a credential variable can only deploy as

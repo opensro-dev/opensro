@@ -30,34 +30,15 @@ export const BUILD_TASKS = [
 		command: "pnpm",
 		args: [ "-r", "--filter=!sro-browser-rebuild", "build" ]
 	} ),
-	seriesTask( {
-		name: "build:server-game-data",
-		description: "Build the server game-data bundle, then the dashboard item catalog read from it",
-		kind: "build",
-		ci: false,
-		requires: [ "server-data" ],
-		timeoutClass: "long",
-		tasks: [ "build:server-game-data:bundle", "build:observatory-items" ]
-	} ),
 	commandTask( {
-		name: "build:server-game-data:bundle",
+		name: "build:server-game-data",
 		description: "Build the server game-data projection and bundle",
-		kind: "internal",
+		kind: "build",
 		ci: false,
 		requires: [ "server-data" ],
 		timeoutClass: "long",
 		command: "node",
 		args: [ "scripts/build/server/buildServerGameDataBundle.mjs" ]
-	} ),
-	commandTask( {
-		name: "build:observatory-items",
-		description: "Export the server item references for the operations dashboard",
-		kind: "internal",
-		ci: false,
-		requires: [ "server-data" ],
-		timeoutClass: "medium",
-		command: "node",
-		args: [ "apps/server-observatory/tools/item-catalog.mjs" ]
 	} ),
 	commandTask( {
 		name: "build:catalogue",
@@ -68,15 +49,5 @@ export const BUILD_TASKS = [
 		timeoutClass: "medium",
 		command: "node",
 		args: [ "scripts/build/catalogue/buildCatalogue.mjs" ]
-	} ),
-	commandTask( {
-		name: "release",
-		description: "Prepare a clean release workspace using the repository release tool",
-		kind: "release",
-		ci: false,
-		requires: [ "release-workspace" ],
-		timeoutClass: "long",
-		command: "node",
-		args: [ "scripts/clean_release_workspace.mjs" ]
 	} )
 ];

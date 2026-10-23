@@ -8,7 +8,7 @@ next to the shard's other operator stores, never inside the authority
 store). settings.db in the shard's state directory holds the approved
 overrides, the pending proposals and an append-only audit; it holds no
 player data. Its name ends in .db so the host backup snapshots it online
-with SQLite's backup API and checks its integrity (ops/backup), like the
+with SQLite's backup API and checks its integrity (the operator's backup), like the
 authority store, rather than copying a live WAL.
 
 An older GameWorld never opens the file, so a revert is a normal release:

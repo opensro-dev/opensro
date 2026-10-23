@@ -4,7 +4,7 @@
 main.go - sro-item-catalog: export the server's item references as JSON
 
 Exports the same item references the server and the GM command composer
-use, for the operations dashboard (apps/server-observatory). The textdata
+use, for an operator's dashboard. The textdata
 comes from the verified server game-data projection (gamedata.Resolve,
 which also opens the packed .srogz), unless -textdata names a directory.
 

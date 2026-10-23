@@ -3,7 +3,7 @@
 
 maintenance_gate.go - who may enter the world during a maintenance release
 
-A maintenance release (ops/release coordinated.py) upgrades the database and
+A maintenance release (the operator's release tooling) upgrades the database and
 deploys the new server and client with players kept out until the release
 is confirmed, so a failed release can restore the database without losing
 anyone's play. The release tool writes a gate file naming the accounts that

@@ -13,10 +13,6 @@ and every suite that reads them.
 
 import { commandTask, pipelineTask, seriesTask } from "./define.mjs";
 
-// The operator console and its sign-in service: no game data, so their tests
-// are source gates (check:console), not left to the full workspace check.
-const CONSOLE_PACKAGES = [ "@sro/server-observatory", "@sro/server-console-auth" ];
-
 export const CHECK_TASKS = [
 	commandTask( {
 		name: "check:loot-catalog",
@@ -59,14 +55,14 @@ export const CHECK_TASKS = [
 		args: [ "--test", "scripts/test/pipeline/*.test.mjs" ]
 	} ),
 	commandTask( {
-		name: "check:release",
-		description: "Test release admission, publication recovery and monitoring",
+		name: "check:release-contract",
+		description: "Hold the client build to the declared release protocol and asset schema",
 		kind: "check",
 		ci: true,
 		requires: [],
 		timeoutClass: "short",
 		command: "node",
-		args: [ "scripts/checks/check_release.mjs" ]
+		args: [ "scripts/checks/check_release_contract.mjs" ]
 	} ),
 	pipelineTask( {
 		name: "check",
@@ -251,16 +247,6 @@ export const CHECK_TASKS = [
 		args: [ "-r", "--filter=!sro-browser-rebuild", "typecheck" ]
 	} ),
 	commandTask( {
-		name: "check:console",
-		description: "Run the operator console and console sign-in tests",
-		kind: "check",
-		ci: true,
-		requires: [],
-		timeoutClass: "medium",
-		command: "pnpm",
-		args: [ "--filter", CONSOLE_PACKAGES[0], "--filter", CONSOLE_PACKAGES[1], "check" ]
-	} ),
-	commandTask( {
 		name: "workspace:check",
 		description: "Run each non-root workspace package check script",
 		kind: "internal",
@@ -268,19 +254,12 @@ export const CHECK_TASKS = [
 		requires: [],
 		timeoutClass: "long",
 		command: "pnpm",
-		// check:console already runs the console packages in the source gates.
-		args: [
-			"-r",
-			"--filter=!sro-browser-rebuild",
-			...CONSOLE_PACKAGES.map( ( name ) => "--filter=!" + name ),
-			"check"
-		]
+		args: [ "-r", "--filter=!sro-browser-rebuild", "check" ]
 	} )
 ];
 
 const sourceTasks = [
-	"check:release",
-	"check:console",
+	"check:release-contract",
 	"check:loot-catalog",
 	"check:compiled-quests",
 	"check:client-preparation",
@@ -323,7 +302,7 @@ export const CHECK_PIPELINES = Object.freeze( {
 		{ id: "test-region", task: "test:region", after: [ "build-resources" ] }
 	],
 	full: [
-		{ id: "release", task: "check:release", after: [] },
+		{ id: "release-contract", task: "check:release-contract", after: [] },
 		{ id: "loot-catalog", task: "check:loot-catalog", after: [] },
 		{ id: "compiled-quests", task: "check:compiled-quests", after: [] },
 		{ id: "client-preparation", task: "check:client-preparation", after: [] },
@@ -343,8 +322,6 @@ export const CHECK_PIPELINES = Object.freeze( {
 		// The Go tests and the package checks read the server projection.
 		{ id: "server", task: "check:server", after: [ "server-game-data" ] },
 		{ id: "typecheck-packages", task: "workspace:check", after: [ "server-game-data" ] },
-		// The console's item test reads the observatory catalog that build writes.
-		{ id: "console", task: "check:console", after: [ "server-game-data" ] },
 		{ id: "test-assets", task: "test:assets", after: [ "build-resources" ] },
 		{ id: "asset-pack-integrity", task: "assets:check:integrity", after: [ "build-resources" ] },
 		{ id: "test-cif", task: "test:cif", after: [ "build-resources" ] },

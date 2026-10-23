@@ -3,8 +3,7 @@
 How game data travels from the licensed client on a developer's disk to a
 player's browser, what each byte costs on the way, how the build keeps old
 output from shipping, and how a data release is staged.
-[ASSET_PIPELINE.md](ASSET_PIPELINE.md) covers the build commands;
-[RELEASE.md](../RELEASE.md) is the release checklist. This document explains
+[ASSET_PIPELINE.md](ASSET_PIPELINE.md) covers the build commands. This document explains
 why things are the way they are, so read it before changing a builder, a
 pack format, the asset worker or the release tools.
 
@@ -477,14 +476,9 @@ at the commit being released:
    `apps/client-next`). It writes
    `temp/artifacts/beta/<stamp>/package/` and verifies every pack and
    member against the manifest.
-5. Stage: `python apps/server/ops/release/data_release.py <package> <output>
-   --origin https://<origin> --ssh-target <stage user>@<host> --identity
-   <stage key>`. It reads the live release, uploads in batches only the
-   content the live site lacks (keyed by sha256), and prints the
-   `candidate` and `commit` for approval. Interrupted uploads resume.
-6. Approve the candidate in the operator's release workflow.
-   [apps/server/ops/release/README.md](../apps/server/ops/release/README.md)
-   describes what the host checks and how rollback works.
+5. Stage and publish the package with your own release tooling: upload only
+   the content the live site lacks (keyed by sha256), and keep the previous
+   release for rollback.
 
 Bumping `ASSET_SCHEMA` (`scripts/build/assetSchema.mjs`) makes old clients
 refuse the new data; ship the rebuilt data and the matching client
