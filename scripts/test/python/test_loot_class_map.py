@@ -1,6 +1,6 @@
 """
 ===========================================================================
-test_loot_class_map.py - the ISRO-R / vSRO drop class of real v1.150 items
+test_loot_class_map.py - the later / older data drop class of real v1.150 items
 
 Real client records from the committed loot snapshot (client-source.json)
 and assignment rows shaped as the backups author them.
@@ -26,7 +26,7 @@ CLIENT = json.loads((LOOT / "client-source.json").read_text(encoding="utf-8"))["
 # ================
 # row
 #
-# A _RefDropItemAssign row as the #458 snapshot keeps it.
+# A drop-assignment row as the #458 snapshot keeps it.
 # ================
 def row(codename, assigned_class):
 	return [1, codename, 100, 100, assigned_class, 1]
