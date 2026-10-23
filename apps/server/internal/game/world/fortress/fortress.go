@@ -3,10 +3,10 @@
 
 fortress.go - who holds each fortress, and whether its war is running
 
-Package fortress is the CSiegeFortressMgr state the rest of the server asks
-about a fortress: the occupying guild (_SiegeFortress.GuildID), the guild
+Package fortress is the fortress-manager state the rest of the server asks
+about a fortress: the occupying guild (the fortress row's GuildID), the guild
 holding it temporarily during a war (TempGuildID), and the war mode the
-entry rules branch on (MainProcess_IsMode42425). It owns no wire and no
+entry rules branch on. It owns no wire and no
 schedule; the war lane drives it through its functions.
 
 A fresh shard has every fortress unoccupied and no war running, which is
@@ -29,24 +29,24 @@ import (
 ================
 Record
 
-One fortress row: the CRefSiegeFortress identity joined to its live state.
+One fortress row: the catalog identity joined to its live state.
 ================
 */
 type Record struct {
-	// _SiegeFortress +0x30: hired staff, independent of the war period.
+	// Hired staff, independent of the war period.
 	StaffFlags uint8
 	ID         uint32
 	CodeName   string
-	// GuildID is the occupying guild (_SiegeFortress.GuildID); zero when
+	// GuildID is the occupying guild; zero when
 	// nobody holds the fortress.
 	GuildID int64
 	// TempGuildID holds the fortress between a war's capture and its end
-	// (UPDATE _SiegeFortress SET TempGuildID).
+	// (the occupation write at capture).
 	TempGuildID int64
-	// 61DA40 serializes the signed tax ratio and accumulated tax gold.
+	// The native write serializes the signed tax ratio and accumulated tax gold.
 	TaxRate int16
 	TaxGold int64
-	// savedTax is the TaxGold last written (6201A0's +0x80); the treasury
+	// savedTax is the TaxGold last written; the treasury
 	// is written again once it has grown past it by taxFlushThreshold.
 	savedTax int64
 	// MaxEntrance, RequestFee and OfficialNpc copy the catalog row.
@@ -55,12 +55,12 @@ type Record struct {
 	OfficialNpc string
 	TownGate    string
 	// Applicants are the guilds registered for the coming war
-	// (_SiegeFortressRequest), each with its request kind.
+	// (the request rows), each with its request kind.
 	Applicants map[int64]RequestKind
-	// EntryOpen is the siege world's +0x84 flag: open from the world's
-	// construction (600C60), shut by a temporary capture and open again
-	// five minutes later (CGameWorld_Siege_Tick case 3, 0x493E0 ms); it
-	// lets attackers through the gates (slot 41, 601C20).
+	// EntryOpen is the siege world's entry flag: open from the world's
+	// construction, shut by a temporary capture and open again
+	// five minutes later (0x493E0 ms); it
+	// lets attackers through the gates.
 	EntryOpen bool
 	// The capture state of a running war (capture.go).
 	capture
@@ -81,17 +81,17 @@ The fortress identities a shard serves: siegefortress.txt's enabled rows.
 type Catalog struct {
 	ID       uint32
 	CodeName string
-	// MaxEntrance is the row's u16 at +0x7A (siegefortress.txt column 8):
+	// MaxEntrance is the row's u16 (siegefortress.txt column 8):
 	// how many PCs one side may bring into the fortress during its war.
 	MaxEntrance uint32
-	// RequestFee is the row's u32 at +0x80 (column 12), the gold an
-	// attacking guild pays to apply (633910, charged by the 0xA result).
+	// RequestFee is the row's u32 (column 12), the gold an
+	// attacking guild pays to apply (charged by the 0xA result).
 	RequestFee uint64
 	// OfficialNpc is the codename of the NPC that takes applications
-	// (column 14; 63BBC0 matches the selected NPC against it).
+	// (column 14; the official matches the selected NPC against it).
 	OfficialNpc string
 	// TownGate is the teleport code of the fortress's town gate (column 6),
-	// where the war's phases send the PCs that must leave (601690).
+	// where the war's phases send the PCs that must leave.
 	TownGate string
 }
 
@@ -133,12 +133,12 @@ type Authority struct {
 
 type division struct {
 	records map[uint32]*Record
-	// warActive is the shard's fortress-war mode (MainProcess +0x42425):
-	// one flag for every fortress, set while SiegeProgressing runs.
+	// warActive is the shard's fortress-war mode: one flag for every
+	// fortress, set while the war runs.
 	warActive bool
-	// requestPeriod is MainProcess +0x42424 (AllowSiegeRequest), taxPeriod
-	// +0x42426 (AllowSiegeTaxJob); CSiegeFortressMgr_OnShardMessage (62EE90)
-	// sets them on the 0x33/0x34 and 0x31/0x32 edges.
+	// requestPeriod is the request phase flag (AllowSiegeRequest), taxPeriod
+	// the tax phase flag (AllowSiegeTaxJob); the shard message edges
+	// set them on the 0x33/0x34 and 0x31/0x32 edges.
 	requestPeriod, taxPeriod bool
 }
 
@@ -147,7 +147,7 @@ type division struct {
 Period
 
 The three shard-wide fortress periods, the flags byte of the fortress list
-(CSiegeFortressMgr_WriteFortressList 62EBE0: war 1, request 2, tax 4).
+(war 1, request 2, tax 4).
 ================
 */
 type Period uint8
@@ -191,9 +191,9 @@ func (a *Authority) divisionLocked(divisionID string) *division {
 ================
 ForWorld
 
-The fortress a siege world belongs to: CGameWorld_Siege_ResolveFortress
-(6019F0), bound at world creation (5F5B60) by joining the RefGameWorld's
-fortress codename (its first string column) to REF_SIEGE_FORTRESS.
+The fortress a siege world belongs to, bound at world creation
+by joining the RefGameWorld's
+fortress codename (its first string column) to the fortress catalog.
 ================
 */
 func (a *Authority) ForWorld(world instance.Definition) (uint32, bool) {
@@ -238,7 +238,7 @@ func (a *Authority) Get(divisionID string, fortressID uint32) (Record, bool) {
 ================
 AppliedFortress
 
-The fortress a guild has applied to, if any (5C3380 scans every
+The fortress a guild has applied to, if any (the native read scans every
 fortress's requests).
 ================
 */
@@ -257,7 +257,7 @@ func (a *Authority) AppliedFortress(divisionID string, guildID int64) (uint32, b
 ================
 OwnedFortress
 
-The fortress a guild occupies, if any (5C5730).
+The fortress a guild occupies, if any.
 ================
 */
 func (a *Authority) OwnedFortress(divisionID string, guildID int64) (uint32, bool) {
@@ -338,7 +338,7 @@ func (a *Authority) Occupy(divisionID string, fortressID uint32, guildID int64) 
 ================
 GuildOwns
 
-CSiegeFortressMgr_IsGuildOwner (6353F0): the fortress's occupying guild is
+The native owner check: the fortress's occupying guild is
 this guild. A guildless player never owns one.
 ================
 */
@@ -432,7 +432,7 @@ func (a *Authority) Records(divisionID string) []Record {
 GuildInWar
 
 A guild fighting a running war: it holds, temporarily holds or applied
-to a fortress (SiegeManager_IsGuildOutOfWar 635470 asks every fortress
+to a fortress (the native query asks every fortress
 whether the guild takes part). Union changes are refused then.
 ================
 */
