@@ -1,7 +1,7 @@
 // Package gmcommand is the GM command lane of the v1.150 gateway: the C->S
 // 0x75B6 GM command request (the client's GmCommand_ProcessChatSlashCommand
-// composer, sub_509cf0 @0x00509cf0) and its S->C 0xB5B6 acknowledgement
-// (the client's sub_751ec0 @0x00751ec0 consumer).
+// composer, 509CF0) and its S->C 0xB5B6 acknowledgement (the client's
+// 751EC0 consumer).
 //
 // Every opcode and byte layout here is pinned from the v1.150 CLIENT folds
 // (the source of truth for what it composes/parses), never invented. The
@@ -11,9 +11,9 @@
 // honors the commands the server can actually execute with existing
 // capabilities, and REFUSES the rest with the pinned 0xB5B6 result-2 ack -
 // the faithful posture: a retail v1.150 client composes commands the server
-// declines, and the per-action privilege vfunc in the v1.188 dump
-// (*(arg1+0x634))(actionCode) could not be resolved, so no privilege LEVELS
-// are invented - the boolean GMPrivilege is the sole gate.
+// declines, and the later server's per-action privilege check could not be
+// resolved, so no privilege LEVELS are invented - the boolean GMPrivilege
+// is the sole gate.
 //
 // Server-side, FINDUSER, MAKEITEM, coordinate warp, the town and player
 // teleports and the action-owned body toggles are implemented. Commands without a production authority remain refused.
@@ -29,20 +29,20 @@ import (
 
 // Opcodes, pinned from the v1.150 client.
 const (
-	// OpGmCommand is the C->S GM command request: sub_509cf0 builds one
-	// 0x75B6 buffer (@0x00509e33 var_4d8_4 = 0x75b6) with a subcommand byte
-	// + per-command payload and submits it once (@0x0050cc8d, gated on the
-	// internal var_4bb "did match" flag).
+	// OpGmCommand is the C->S GM command request: the client's 509CF0
+	// builds one 0x75B6 buffer (@0x00509e33 var_4d8_4 = 0x75b6) with a
+	// subcommand byte + per-command payload and submits it once
+	// (@0x0050cc8d, gated on the internal var_4bb "did match" flag).
 	OpGmCommand uint16 = 0x75B6
-	// OpGmCommandAck is the S->C acknowledgement, handler sub_751ec0
-	// @0x00751ec0: u8 result (1 = OK, 2 = FAIL), u8 subcmd (the echoed
-	// outgoing subcommand), then a per-subcmd body.
+	// OpGmCommandAck is the S->C acknowledgement, handler 751EC0: u8 result
+	// (1 = OK, 2 = FAIL), u8 subcmd (the echoed outgoing subcommand), then
+	// a per-subcmd body.
 	OpGmCommandAck uint16 = 0xB5B6
 )
 
-// Subcommand bytes, pinned from sub_509cf0's per-command var_4bc/var_4ba/
-// var_4b9 stores. Only the ones this lane names are listed; the client
-// composes the full table.
+// Subcommand bytes, pinned from the client composer's (509CF0) per-command
+// var_4bc/var_4ba/var_4b9 stores. Only the ones this lane names are listed;
+// the client composes the full table.
 const (
 	SubInvisible  uint8 = 0x0E
 	SubInvincible uint8 = 0x0F
@@ -60,23 +60,22 @@ const (
 	// 1..255). The server loads the monsters and kills them for rewards.
 	SubZoe uint8 = 0x0C
 	// SubSetTime: /SETTIME hour - subcmd + u8 hour 0..23 (509CF0 clamps;
-	// 51DE90 case 8 relays it to the shard manager as SetGameTime).
+	// the native case 8 relays it to the shard manager).
 	SubSetTime uint8 = 0x0A
-	// SubWorldStatus: /WORLDSTATUS - subcmd alone (51DE90 case 3).
+	// SubWorldStatus: /WORLDSTATUS - subcmd alone (the native case 3).
 	SubWorldStatus uint8 = 0x04
-	// SubBan: /BAN - subcmd + ANSI name (51DE90 case 0xA).
+	// SubBan: /BAN - subcmd + ANSI name (the native case 0xA).
 	SubBan uint8 = 0x0D
 	// SubRecallGuild: /RECALLGUILD - subcmd + ANSI guild name (case 0xE).
 	SubRecallGuild uint8 = 0x12
-	// SubGoTown: /GOTOWN - subcmd alone. The server answers it in
-	// CGObjPC_MsgHandler_SpecialCommand (v1.188 51DE90) case 1.
+	// SubGoTown: /GOTOWN - subcmd alone. The native server answers it in
+	// case 1.
 	SubGoTown uint8 = 0x02
-	// SubToTown: /TOTOWN - subcmd + ANSI name (51DE90 case 2).
+	// SubToTown: /TOTOWN - subcmd + ANSI name (the native case 2).
 	SubToTown uint8 = 0x03
-	// SubMoveToUser: /MOVETOUSER - subcmd + ANSI name (51DE90 case 7).
+	// SubMoveToUser: /MOVETOUSER - subcmd + ANSI name (the native case 7).
 	SubMoveToUser uint8 = 0x08
-	// SubRecallUser: /RECALLUSER - subcmd + ANSI name (51DE90 case 0xD,
-	// relayed to CGame_ProcessGMCommand 4154D0).
+	// SubRecallUser: /RECALLUSER - subcmd + ANSI name (the native case 0xD).
 	SubRecallUser uint8 = 0x11
 	// SubFindUser: /FINDUSER (@0x00509ee5 var_4bc = 1) - subcmd + ANSI name.
 	SubFindUser uint8 = 0x01
@@ -84,23 +83,24 @@ const (
 	SubLieName uint8 = 0x19
 	// SubRealName: /REALNAME (@0x0050bbd1 var_4bc = 0x1a) - subcmd + ANSI name.
 	SubRealName uint8 = 0x1A
-	// The quest tools (509CF0 50CA69..50CBE6): the discriminator byte, then
-	// for all but /RESETQ a sized ANSI quest codename (4C4350 then 4FD5B0).
+	// The quest tools (the client's 50CA69..50CBE6): the discriminator byte,
+	// then for all but /RESETQ a sized ANSI quest codename (4C4350 then
+	// 4FD5B0).
 	SubInitQ   uint8 = 0x1B
 	SubResetQ  uint8 = 0x1C
 	SubCompQ   uint8 = 0x1D
 	SubRemoveQ uint8 = 0x1E
-	// SubOpenWorld: /INSTANCE worldId layerId (50B56C..50B627 / 51FCBD..51FD1C).
+	// SubOpenWorld: /INSTANCE worldId layerId (the client's 50B56C..50B627).
 	SubOpenWorld uint8 = 0x13
-	// SubMoveToNPC: /movetonpc codename (50C982..50CA57 / 520013 -> 520350).
+	// SubMoveToNPC: /movetonpc codename (the client's 50C982..50CA57).
 	SubMoveToNPC uint8 = 0x1F
 	// SubSiegeStructure: /SIEGE STRUCT_BUILD|STRUCT_UPGRADE|STRUCT_REPAIR|GATE
-	// (50C2FD..50C66B / 51FC78 -> 51A4F0).
+	// (the client's 50C2FD..50C66B).
 	SubSiegeStructure uint8 = 0x20
 	// SubSiegePeriod: /SIEGE STARTWAR|ENDWAR|STARTTAX|ENDTAX|STARTREQ|ENDREQ
-	// (50C1DF..50C2DC / 520028..5200FA -> 62EE90).
+	// (the client's 50C1DF..50C2DC).
 	SubSiegePeriod uint8 = 0x21
-	// SubFlagWorld: /flagworld n (50C88F..50C971 / 51FE18..51FEA8).
+	// SubFlagWorld: /flagworld n (the client's 50C88F..50C971).
 	SubFlagWorld uint8 = 0x30
 	// SubGrantSilk is the port's /SILK name amount (operator tooling, not
 	// native): subcmd, u16 len + ANSI name, u32 amount. The native table
@@ -112,7 +112,7 @@ const (
 )
 
 // Siege structure sub-actions for SubSiegeStructure (0x20) and period codes for
-// SubSiegePeriod (0x21), pinned from 50C1DF..50C66B and 51A4F0 / 520028.
+// SubSiegePeriod (0x21), pinned from the client's 50C1DF..50C66B.
 const (
 	SiegeActionBuild   uint8 = 0x0A
 	SiegeActionUpgrade uint8 = 0x0B
@@ -127,8 +127,7 @@ const (
 	SiegePeriodEndReq   uint8 = 6
 )
 
-// Ack result bytes (sub_751ec0 @0x00751f08 result == 1 / @0x00752111
-// result == 2).
+// Ack result bytes (the client's 751EC0 consumer: result == 1, result == 2).
 const (
 	AckResultOK   uint8 = 1
 	AckResultFail uint8 = 2
@@ -147,7 +146,8 @@ type Request struct {
 	RefObjID    uint32
 	Amount      uint8
 	Destination wire.Position
-	// MonsterType is /LOADMONSTER's requested type byte (server 520A89 &0xF).
+	// MonsterType is /LOADMONSTER's requested type byte, masked to its low
+	// nibble natively.
 	MonsterType uint8
 	// TargetGID is /MOBKILL's selected monster object id.
 	TargetGID uint32
@@ -177,7 +177,7 @@ type Request struct {
 }
 
 // nameSubcommands are the subcommands whose payload is a single sized ANSI
-// name (subcmd byte then sub_4fd5b0 u16 len + bytes). This lane decodes the
+// name (subcmd byte then the 4FD5B0 u16 len + bytes). This lane decodes the
 // name for exactly these; MAKEITEM is decoded independently below.
 var nameSubcommands = map[uint8]bool{
 	SubFindUser:    true,
@@ -383,7 +383,7 @@ func DecodeGmCommand(payload []byte) (Request, error) {
 
 // EncodeAckGuide renders the 0xB5B6 result-1 body for a subcommand whose OK
 // arm carries a guide string: {0x01, subcmd, u16 len + ANSI text}. FINDUSER
-// (subcmd 0x01) lands in sub_751ec0's case-0 guide-message arm (@0x00751f3d).
+// (subcmd 0x01) lands in the client's 751EC0 case-0 guide-message arm.
 func EncodeAckGuide(subcmd uint8, text string) []byte {
 	textBytes := []byte(text)
 	writer := wire.NewWriter(4 + len(textBytes))
@@ -394,8 +394,8 @@ func EncodeAckGuide(subcmd uint8, text string) []byte {
 	return writer.Payload()
 }
 
-// EncodeAckFail renders the 0xB5B6 result-2 body {0x02, subcmd}: sub_751ec0's
-// result-2 default arm (@0x00752148) shows a generic system message keyed by
+// EncodeAckFail renders the 0xB5B6 result-2 body {0x02, subcmd}: the client's
+// 751EC0 result-2 default arm shows a generic system message keyed by
 // the subcommand code. This is the faithful refusal for every command this
 // server cannot honor.
 func EncodeAckFail(subcmd uint8) []byte {
@@ -403,7 +403,7 @@ func EncodeAckFail(subcmd uint8) []byte {
 }
 
 // EncodeRequestFailure retains the two alias-command failure payloads consumed
-// by native 751EC0: sized name followed by one ignored reason byte.
+// by the client's 751EC0: sized name followed by one ignored reason byte.
 func EncodeRequestFailure(request Request) []byte {
 	if request.Subcmd == SubLieName || request.Subcmd == SubRealName {
 		result := EncodeAckGuide(request.Subcmd, request.Name)
