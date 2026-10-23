@@ -2,8 +2,8 @@
 ===========================================================================
 loot_class_map.py - the drop class an assigned item belongs to, per source
 
-_RefDropItemAssign rows are [service][item][weight][absolute][class][count].
-The generator (#459) asks class_for() which class of a _RefDropClassSel_*
+Drop-assignment rows are [service][item][weight][absolute][class][count].
+The generator (#459) asks class_for() which class of a drop class-selection
 table an item joins, for either backup:
 
   - Equipment rows author class -1; the item's own class decides. The
@@ -15,17 +15,17 @@ table an item joins, for either backup:
     so the index is the authored class less one, as the committed vSRO
     projection holds (HP_POTION_01, class 1, at group 0). Both backups
     author the same way: a magic or attribute stone's class is its degree
-    (vSRO 1..12, ISRO-R 1..15) and Reinforce A/B are 1/2. The level rows
+    (the older data 1..12, the later data 1..15) and Reinforce A/B are 1/2. The level rows
     agree: at level 30 Equip rolls index 11 (d4 C) and the stones index 3
-    (degree 4). ISRO-R's wider tables (stones 20, Reinforce 3, RareEquip
+    (degree 4). The later data's wider tables (stones 20, Reinforce 3, RareEquip
     60) only add classes v1.150 has no item for; RareEquip never rolls an
     index above 35 at any level.
 
-The level-90 difference (ISRO-R rolls ordinary class 26, d9 C; vSRO class
+The level-90 difference (the later data rolls ordinary class 26, d9 C; the older data class
 27, d10 A) is in the class rows, not this mapping: levels 74, 80 and 88 use
 classes 23, 25 and 26 in both backups.
 
-Evidence: the probe over SILKROAD_R_SHARD and SRO_VT_SHARD recorded in
+Evidence: the probe over both backups recorded in
 #460; the mapping is pinned by test_loot_class_map.py on real items.
 ===========================================================================
 """
@@ -36,7 +36,7 @@ EQUIPMENT_TABLES = ("Equip", "RareEquip")
 STONE_TABLES = ("Alchemy_MagicStone", "Alchemy_ATTRStone")
 # The sources this mapping is proven for.
 SOURCES = ("isro", "vsro")
-# _RefDropItemAssign's class field for an item-classed (equipment) row.
+# The drop-assignment class field for an item-classed (equipment) row.
 ITEM_CLASSED = -1
 # A v1.150 equipment class column spans degrees 1..12, grades A..C.
 MAX_EQUIPMENT_CLASS = 36
