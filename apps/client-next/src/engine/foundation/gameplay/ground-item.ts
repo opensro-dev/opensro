@@ -17,8 +17,8 @@ export function isGoldGroupType( typeFlags: number ): boolean {
 isGoldHeapType
 
 A gold heap (TID 3.3.5.0, ITEM_ETC_GOLD_*): the group without the later shop
-tokens (TID4 1, ITEM_ETC_SD_TOKEN_*), which v1.188 excludes the same way
-(CGItem_IsGold 483159..483163). Native data holds only heaps; server
+tokens (TID4 1, ITEM_ETC_SD_TOKEN_*), which the later
+server excludes the same way. Native data holds only heaps; server
 wire.IsGoldHeap is the same rule.
 ================
 */

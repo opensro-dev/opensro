@@ -783,7 +783,7 @@ export function socialPacket(
 		}
 	} else if ( op === 0xb332 && p[0] === 1 ) {
 		// 75CBD0 -> 82CEE0: the candidates the vote row asked for (0x7332),
-		// each with its ballots, as v1.188 writes them (5E79C0).
+		// each with its ballots, as the server writes them.
 		u8();
 		const id = u32(), remainingMs = u32(), count = u8(), guild = next.guild;
 		const candidates = Array.from( { length: count }, () => {

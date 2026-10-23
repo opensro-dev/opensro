@@ -60,7 +60,7 @@ export interface CommercePreview {
 }
 // refpricepolicyofitem payment types an NPC shop takes: gold, the guild
 // store's guild points and Training Camp honor. Each is the bit 1 << index
-// of the native payment index 5592B0 walks (0 gold, 3 GP, 5 honor).
+// of the native payment order (0 gold, 3 GP, 5 honor).
 export const SHOP_CURRENCY_GOLD = 1;
 export const SHOP_CURRENCY_GUILD_POINT = 8;
 export const SHOP_CURRENCY_HONOR = 32;
@@ -74,7 +74,7 @@ ShopPrice
 One price row of a package: its payment bit and amount. A package priced in
 two currencies (an honor store or guild store good: gold and honor, or gold
 and guild points) carries every row, in payment order, and the purchase
-charges them all (v1.188 CShopApp_CheckPurchasePayment 617360).
+charges them all.
 ================
 */
 export interface ShopPrice {

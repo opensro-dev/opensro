@@ -5,7 +5,7 @@ reverse-return-map.ts - the reverse return scroll's map destinations
 
 Port-only, not native. v1.150's scroll offers two points (count-job.ts
 REVERSE_RETURN_LAST_*). Later clients add "move to a location on the map":
-v1.188's 4A00C0 reads choice 7 and a u32 saved-point id. The server
+a later version reads choice 7 and a u32 saved-point id. The server
 publishes its table of points in the world references only when its
 SRO_REVERSE_RETURN_MAP option is on; the box offers the map whenever a
 table is published. A use sends only the point id; the server resolves it.
@@ -16,7 +16,7 @@ The map choice was first written by GrazKe in #336.
 
 import { isDungeonRegion, REGION_SIZE } from "@/engine/foundation/world/world-space";
 
-// REVERSE_RETURN_MAP is v1.188's saved-point choice (4A00C0 case 7).
+// REVERSE_RETURN_MAP is the later version's saved-point choice, 7.
 export const REVERSE_RETURN_MAP = 7;
 // MAX_REVERSE_MAP_POINTS bounds the published table (server maxReverseMapPoints).
 const MAX_REVERSE_MAP_POINTS = 4096;
