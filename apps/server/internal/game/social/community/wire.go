@@ -7,10 +7,10 @@
 //
 // Every opcode number and byte layout here is pinned from the v1.150
 // CLIENT (the source of truth for what it parses/composes), never from
-// v1.188/DuckSoup docs - those renumber social opcodes wholesale (e.g.
-// DuckSoup friend-add 0x7302 vs our 0x7164; their party-match 0x706D
-// collides with our item-move). Per-frame fold citations sit on each
-// constant.
+// later-version or third-party docs - those renumber social opcodes
+// wholesale (e.g. a third-party friend-add 0x7302 vs our 0x7164; their
+// party-match 0x706D collides with our item-move). Per-frame fold
+// citations sit on each constant.
 package community
 
 import (
@@ -83,7 +83,7 @@ const (
 	// blocking panel LIVE. Results 1/2/3 raise the msgboxes "Name
 	// already exists." / "User does not exist." / "Cannot register any
 	// more users to block list."; 4 is a no-op (composed here for the
-	// sub_7312f0 quote-scan refuse, retail's mapping).
+	// quote-scan refuse, retail's mapping).
 	OpWhisperBlockAck uint16 = 0xB66F
 )
 
@@ -107,10 +107,9 @@ const (
 	WhisperBlockResultListFull uint8 = 3
 	// WhisperBlockResultNoEffect: the client's no-op arm - sub_771550
 	// reads the byte and does nothing (no msgbox, no panel change). The
-	// v1.188 GameServer sends it for the sub_7312f0 quote-scan hit and
-	// for job-enqueue failures (its ADD caller maps every internal
-	// result > 3 to wire 4, sub_518db0 @00518f13); this server composes
-	// it for the quote refuse only.
+	// retail server sends it for a quote-scan hit and for job-enqueue
+	// failures (its add path maps every internal result > 3 to wire 4);
+	// this server composes it for the quote refuse only.
 	WhisperBlockResultNoEffect uint8 = 4
 )
 
@@ -118,9 +117,9 @@ const (
 // the sub_61dc50 ": %d / %d" count rewrite.
 const WhisperBlockMaxCount = 0x14
 
-// WhisperBlockNameLenBound: the retail GameServer (AQ_WhisperBlockingJob,
-// v1.188 dump) rejects names of length >= 0x80 before SQL; the decode
-// applies the same bound (a silent refusal like every decode error).
+// WhisperBlockNameLenBound: the retail server rejects names of length
+// >= 0x80 before storing them; the decode applies the same bound (a
+// silent refusal like every decode error).
 const WhisperBlockNameLenBound = 0x80
 
 // WhisperBlockRequest is one decoded 0x766F frame.
@@ -156,7 +155,7 @@ func DecodeWhisperBlockRequest(payload []byte) (WhisperBlockRequest, error) {
 		return WhisperBlockRequest{}, fmt.Errorf("community: whisper-block name is empty")
 	}
 	if nameLen >= WhisperBlockNameLenBound {
-		return WhisperBlockRequest{}, fmt.Errorf("community: whisper-block name length %d breaches the 0x80 GameServer bound", nameLen)
+		return WhisperBlockRequest{}, fmt.Errorf("community: whisper-block name length %d breaches the 0x80 bound", nameLen)
 	}
 	return WhisperBlockRequest{Mode: mode, Name: string(nameBytes)}, nil
 }
