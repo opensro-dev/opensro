@@ -5,11 +5,11 @@ avatar.go - the smith's avatar magic option grant
 
 A smith's 0x2F row opens CIFGrantMagicAttributeWnd; the player drops an
 avatar hat, dress or attachment and picks one of the options
-magicoptionassign.txt assigns to that avatar part. v1.188 grants it through
-CBless_AvatarItemWithNPC (handler 5079C0): the success ratio is a fixed 100
-(504D00), there is no fee and no material, and the value comes from the
-option's own generator. The client fills its option list from the same
-table (78C720), keyed by the item's TID3/TID4.
+magicoptionassign.txt assigns to that avatar part. The native server
+grants it through the avatar bless: the success ratio is a fixed 100,
+there is no fee and no material, and the value comes from the option's
+own generator. The client fills its option list from the same table
+(78C720), keyed by the item's TID3/TID4.
 
 ===========================================================================
 */
@@ -29,27 +29,27 @@ const (
 	avatarTypeID1    = 3
 	avatarTypeID2    = 1
 	avatarTypeID3    = 13
-	avatarFlagTypeID = 4 // TID4 4, the avatar flag: refused by both sides (6EA1B0)
+	avatarFlagTypeID = 4 // TID4 4, the avatar flag: refused by both sides
 
-	// 5079C0 accepts inventory slots 0x0D..0x6F.
+	// The native bless accepts inventory slots 0x0D..0x6F.
 	avatarSlotFirst = 0x0d
 	avatarSlotLast  = 0x6f
 
-	// 505810 clamps every generated value to 1..0x6A4.
+	// The bless clamps every generated value to 1..0x6A4.
 	avatarValueMax = 0x6a4
 
-	// 505810 stacks the protection tags by one up to these ceilings.
+	// The bless stacks the protection tags by one up to these ceilings.
 	avatarStackMax  = 6
 	avatarRepairMax = 7
 )
 
 // Avatar grant answers (0x32D9 [2][code], category 0x20 notices).
 const (
-	AvatarNoItem    Refusal = 3    // 5079C0: no item in the slot
+	AvatarNoItem    Refusal = 3    // the native bless: no item in the slot
 	AvatarFull      Refusal = 6    // UIIT_MSG_AVATAR_MAGICOPTION_ADD_ERORR
-	AvatarFailed    Refusal = 7    // UIIT_STT_AVATAR_MAGICOPTION_ADD_FAIL (5056E0's failed roll)
+	AvatarFailed    Refusal = 7    // UIIT_STT_AVATAR_MAGICOPTION_ADD_FAIL (the failed roll)
 	AvatarNotAvatar Refusal = 8    // UIIT_STT_AVATAR_MAGICOPTION_ONLY_AVATAR
-	AvatarBadSlot   Refusal = 9    // 5079C0: slot outside the bag
+	AvatarBadSlot   Refusal = 9    // the native bless: slot outside the bag
 	AvatarWrong     Refusal = 0x0a // UIIT_STT_AVATAR_MAGICOPTION_WRONG
 	AvatarNoDegree  Refusal = 0x0b // no option row at the item's degree
 )
@@ -112,8 +112,7 @@ func avatarPart(flags uint16) (uint8, bool) {
 ================
 avatarAssigned
 
-RefData_IsMagicOptionAssignedToItem (727EF0): the codename is on the part's
-magicoptionassign row.
+Whether the codename is on the part's magicoptionassign row.
 ================
 */
 func (c *Catalog) avatarAssigned(part uint8, codename string) bool {
@@ -129,10 +128,10 @@ func (c *Catalog) avatarAssigned(part uint8, codename string) bool {
 ================
 BlessAvatar
 
-CBless_AvatarItemWithNPC_BlessItem (505810) over a detached bag. An option
-the item already carries is rewritten in place (same param id, new value)
-and costs no slot; a new one needs a free slot. The grant always succeeds
-(504D00 returns 100).
+The native avatar bless over a detached bag. An option the item already
+carries is rewritten in place (same param id, new value) and costs no
+slot; a new one needs a free slot. The grant always succeeds (the native
+ratio returns 100).
 ================
 */
 func (c *Catalog) BlessAvatar(items []inventory.Item, slot uint8, codename string, roll Roll) (Outcome, error) {
@@ -174,7 +173,7 @@ func (c *Catalog) BlessAvatar(items []inventory.Item, slot uint8, codename strin
 	index, old := c.findMagic(*item, option.Tag)
 	id := option.ID
 	if index >= 0 {
-		// 505810 keeps the carried param id (CGItemEquip_FindMagicParam).
+		// The bless keeps the carried param id.
 		id = uint16(item.MagicOptions[index])
 	}
 	var value uint32
@@ -201,7 +200,7 @@ func (c *Catalog) BlessAvatar(items []inventory.Item, slot uint8, codename strin
 	case len(item.MagicOptions) < limit:
 		item.MagicOptions = append(item.MagicOptions, encoded)
 	default:
-		// INFERENCE: 505810 answers 2 here, which the v1.150 client has no
+		// INFERENCE: the native bless answers 2 here, which the v1.150 client has no
 		// text for; it refuses the same full item before sending with
 		// ADD_ERORR, so the server names that notice too.
 		return zero, AvatarFull
@@ -213,7 +212,7 @@ func (c *Catalog) BlessAvatar(items []inventory.Item, slot uint8, codename strin
 ================
 knownOption
 
-RefData_FindMagicOptionByCodename (727DB0): any row carries the codename.
+Whether any option row carries the codename.
 ================
 */
 func (c *Catalog) knownOption(codename string) bool {

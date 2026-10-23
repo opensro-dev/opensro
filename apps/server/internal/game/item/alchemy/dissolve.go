@@ -15,8 +15,9 @@ type WeightedStone struct {
 type DissolvePool struct{ Attribute, Magic []WeightedStone }
 
 // Dissolve keeps the reward plan detached until every draw, reference lookup,
-// Rondo requirement and output slot has been admitted. Native 50B4E0 requires
-// both selectors even when the eventual count of bonus stones is zero.
+// Rondo requirement and output slot has been admitted. The native dissolve
+// requires both selectors even when the eventual count of bonus stones is
+// zero.
 func (c *Catalog) Dissolve(items []inventory.Item, r ProcessRequest, roll Roll) (ProcessOutcome, error) {
 	var out ProcessOutcome
 	if r.Mode != 3 || r.Quantity != 1 || len(r.Slots) < 1 || len(r.Slots) > 2 {
@@ -28,9 +29,9 @@ func (c *Catalog) Dissolve(items []inventory.Item, r ProcessRequest, roll Roll) 
 	}
 	// v1.150's alchemy box sends its first two window slots in window order
 	// (CIFAlchemyBox_ExecuteAction 6220A0 -> 702080), and the player fills
-	// them in either order. The later server never trusts position: it sorts
-	// each named slot by kind and finds the Rondo in the bag itself (v1.188
-	// 50C160 -> 50A6F0, 50A740). So the selection is one equipment item plus,
+	// them in either order. The native server never trusts position: it sorts
+	// each named slot by kind and finds the Rondo in the bag itself. So the
+	// selection is one equipment item plus,
 	// optionally, the Destroyer Rondo, in either order.
 	target := rows[r.Slots[0]]
 	if len(r.Slots) == 2 {
@@ -44,8 +45,8 @@ func (c *Catalog) Dissolve(items []inventory.Item, r ProcessRequest, roll Roll) 
 	}
 	ref := c.Items[target.Codename]
 	degree := ref.Degree()
-	// 50C070/50C160: job equipment and either repair restriction refuse
-	// dissolution. Presence is the gate, even when the encoded value is zero.
+	// Job equipment and either repair restriction refuse dissolution
+	// natively. Presence is the gate, even when the encoded value is zero.
 	if ref.Flags&0x7fe == 0x72c {
 		return out, Refusal(0x17)
 	}
@@ -72,7 +73,7 @@ func (c *Catalog) Dissolve(items []inventory.Item, r ProcessRequest, roll Roll) 
 	if err = c.consumeRondo(rows, consume, dissolveRondo, uint64(ref.Price/20000+1)); err != nil {
 		return out, err
 	}
-	// 50B520/50B580 constants; 50B6F9 and 50B731 choose two ordered,
+	// The native divisor constants; the native draw chooses two ordered,
 	// distinct element pairs, then two amounts per pair.
 	divisors := [12]float64{75, 140, 215, 290, 365, 458, 551, 660, 776, 903, 1035, 1180}
 	stoneDivisors := [12]float64{18750, 34950, 53700, 72340, 91150, 114280, 137690, 164830, 193830, 225240, 258180, 294706}
@@ -137,8 +138,9 @@ func (c *Catalog) Dissolve(items []inventory.Item, r ProcessRequest, roll Roll) 
 	return out, err
 }
 
-// 50AE10 reads parameter 2 AND 3, in low-byte-first order, and returns zero
-// without drawing when both are empty (e.g. Solid/Luck). Manufacture differs.
+// The native assimilation reads parameter 2 AND 3, in low-byte-first order,
+// and returns zero without drawing when both are empty (e.g. Solid/Luck).
+// Manufacture differs.
 func dissolveAssimilation(ref Reference, roll Roll) (uint8, error) {
 	values := assimilationValues(ref.Params[1], ref.Params[2])
 	if len(values) == 0 {
