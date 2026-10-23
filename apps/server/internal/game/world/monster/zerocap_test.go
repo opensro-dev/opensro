@@ -1,11 +1,11 @@
 /*
 ===========================================================================
 
-zerocap_test.go - standalone nests capped at zero take their ISRO-R cap
+zerocap_test.go - standalone nests capped at zero take their later-data cap
 
 The shard backup behind the population evidence zeroes single nests of
 monsters it keeps live beside them (the Bandit Stronghold building).
-restoreZeroCapNests gives them the live cap ISRO-R's Tab_RefNest holds for
+restoreZeroCapNests gives them the live cap the later data's nest table holds for
 the same nest; a hive member keeps its zero, since its hive caps it.
 
 ===========================================================================
@@ -45,7 +45,7 @@ func TestRestoreZeroCapNestsTakesTheISRORCap(t *testing.T) {
 	}
 	defer func() {
 		if recover() == nil {
-			t.Fatal("a zero-cap nest without an ISRO-R cap loaded")
+			t.Fatal("a zero-cap nest without a later-data cap loaded")
 		}
 	}()
 	restoreZeroCapNests(refs, []NestRow{nest(8, 0)}, caps)

@@ -18,7 +18,7 @@ import (
 ================
 TestStructureRefsCarryRepairAndRevive
 
-_RefObjCommon columns 23, 27 and 28 on the shipped structures: the Jangan
+characterdata columns 23, 27 and 28 on the shipped structures: the Jangan
 fort stone's CostRepair is its 187200, no structure authors a CostRevive,
 and 42 of the 52 structures the loader serves may be revived. (The raw
 file holds 66 STRUCTURE_ rows, 44 revivable; the loader drops the records

@@ -22,7 +22,7 @@ type SummonTactics struct {
 	ConditionalSkills [8]ConditionalSkill
 }
 
-// A catalog-owned Tab_RefAISkill binding resolved by codename against the
+// A catalog-owned AI-skill binding resolved by codename against the
 // target version. Source tactics IDs never become target skill IDs.
 type ConditionalSkill struct {
 	TacticsID, SkillID              uint32

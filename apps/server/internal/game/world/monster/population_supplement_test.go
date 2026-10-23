@@ -28,7 +28,7 @@ func TestPopulationSupplementPreservesExistingPolicies(t *testing.T) {
 	}
 }
 
-// ISRO-R Tab_RefTactics 190 (Movia nest) is passive and names champion
+// The later data's tactics 190 (Movia nest) is passive and names champion
 // tactics 189, which is aggressive with sight 150. Promoted Movia champions
 // and giants must therefore hunt while ordinary Movia stay passive.
 func TestMoviaNestCarriesAggressiveChampionTactics(t *testing.T) {
