@@ -223,8 +223,8 @@ func TestTrainingCampAdmissionRefusesInvalidAggregateCommands(t *testing.T) {
 ================
 TestTrainingCampOpenChecksThenBurnsTheFee
 
-4E4680's refusals in its order (dead, level, gold, already in a camp) change
-nothing; an accepted opening burns the fee, installs the camp and its one
+The native refusals in their order (dead, level, gold, already in a camp)
+change nothing; an accepted opening burns the fee, installs the camp and its one
 master row, books an academy_fee ledger row, and survives a reopen.
 ================
 */
@@ -495,8 +495,7 @@ func TestTrainingCampHonorLifecycleAndPersistence(t *testing.T) {
 ================
 TestTrainingCampGraduationHonorFormulasAndTierBoundaries
 
-Verifies the native SR_GameServer.exe (0x00519600, 0x005DDD50, 0x005E3730) and
-_TRAINING_CAMP_MEMBER_GRADUATE / _TRAINING_CAMP_UPDATEHONORRANK rules:
+Verifies the native graduation and honor-rank rules:
   - joinLevel <= 30 grants Master (40 - joinLevel) and Sub-Mentor (40 - joinLevel)/10
     even when satisfaction == 0 (-3 evaluation delta).
   - joinLevel > 30 increments GraduateCount by 1 and awards 0 Honor and 0 Evaluation.
@@ -554,7 +553,7 @@ func TestTrainingCampGraduationHonorFormulasAndTierBoundaries(t *testing.T) {
 		}
 	}
 
-	// Stage subMentor as Kind 1 (Sub-Mentor, v1.188 0x005DF704..0x005DF713: level > 0x27 -> Kind 1).
+	// Stage subMentor as Kind 1 (Sub-Mentor: level > 0x27 -> Kind 1).
 	s.campMembers[testDivision][opened.Camp.ID][1].Kind = 1
 
 	setLevel(app15, 40)
