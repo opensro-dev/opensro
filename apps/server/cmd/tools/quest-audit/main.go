@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	if len(os.Args) != 2 {
+	if len(os.Args) != 2 && len(os.Args) != 3 {
 		fmt.Fprintln(os.Stderr, "usage: quest-audit <primary-textdata-directory> [<derived-data-directory>]")
 		os.Exit(2)
 	}
