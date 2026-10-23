@@ -4,12 +4,12 @@
 honor.go - academy dissolution, leave, kick, graduation, and honor rankings
 
 Implements the v1.150 Academy and Honor Camp lifecycle handlers:
-  - 0x77C5 -> 0xB7C5: camp dissolution (CGObjPC_HandleAcademyDisband7471 0x00519120)
-  - 0x7785 -> 0xB785: voluntary leave (CGObjPC_HandleAcademyLeave7474 0x00519510, flag 1)
-  - 0x74D4 -> 0xB4D4: member expulsion (CGObjPC_HandleAcademyKick7473 0x005193A0, flag 2)
-  - 0x710A -> 0xB10A: voluntary graduation + evaluation (CGObjPC_HandleAcademyGraduate7475 0x00519600, flag 0)
-  - 0x736D -> 0xB36D: compulsory graduation by master (CGObjPC_HandleAcademyCompulsoryGraduate7476 0x00519770, flag 1)
-  - 0x72D0 -> 0xB2D0: honor rankings board (client 771750, server 0x00519AD0 / 0x005DF010 / 0x005DD1C0)
+  - 0x77C5 -> 0xB7C5: camp dissolution
+  - 0x7785 -> 0xB785: voluntary leave (flag 1)
+  - 0x74D4 -> 0xB4D4: member expulsion (flag 2)
+  - 0x710A -> 0xB10A: voluntary graduation + evaluation (flag 0)
+  - 0x736D -> 0xB36D: compulsory graduation by master (flag 1)
+  - 0x72D0 -> 0xB2D0: honor rankings board (client 771750)
 
 ===========================================================================
 */
@@ -39,9 +39,9 @@ const (
 	OpTCHonorRankAnswer           uint16 = 0xB2D0
 )
 
-// Category-0x1D error codes (v1.188 SR_GameServer.exe 0x004E4780 /
-// 0x00519120..0x005198F2 low bytes; client sub_689420 category 0x1D switch at
-// 0x0068AFD0..0x0068B0DF).
+// Category-0x1D error codes. The server answers with the same low bytes
+// the client's category 0x1D switch displays (the 689420 table's switch
+// at 0x0068AFD0..0x0068B0DF).
 const (
 	ErrTCDead          uint8 = 0x07 // 0x6807 -> UIIT_MSG_TC_ERROR_DIE_PASSING
 	ErrTCNotInCamp     uint8 = 0x0B // 0x680B -> UIIT_MSG_TC_ERROR_TRAININGCAMP_NOTHING
@@ -55,9 +55,9 @@ const (
 )
 
 // GraduateBonusExp is the flat 2,000,000 EXP reward granted to an apprentice
-// upon voluntary graduation (v1.188 CTrainingCampMgr_OnGraduateDBSuccess
-// 0x005DFC30 @ 0x005DFC69: push 0x1E8480 -> vtable+0x170 CGObjPC_ApplyExpDelta
-// 0x004E5250 when +0x38 == 1 && +0x40 == 1).
+// upon voluntary graduation (the native graduate flow applies the
+// 2,000,000 = 0x1E8480 grant when its saved graduate record carries
+// both expected flags).
 const GraduateBonusExp int64 = 2_000_000
 
 /*
@@ -65,8 +65,7 @@ const GraduateBonusExp int64 = 2_000_000
 BonusGraduateExp
 
 BonusGraduateExp returns the native voluntary apprentice graduation experience
-reward (2,000,000 EXP = 0x1E8480, v1.188 CTrainingCampMgr_OnGraduateDBSuccess
-0x005DFC30 @ 0x005DFC69).
+reward (2,000,000 EXP = 0x1E8480).
 ================
 */
 func BonusGraduateExp(joinLevel uint8, _ enterworld.LevelDataSource) int64 {
@@ -99,8 +98,8 @@ func encodeResultError(code uint8) []byte {
 encodeDisbandWaitError
 
 CPSMission_OnTrainingCampResponse0xB7C5 (0x0076FC90 @ 0x0076FCD0..0x0076FCDF)
-reads [u8 2][u8 0x1D][u32 remainingSeconds] when DisbandCamp refuses within the
-7-day creation window (0x004E4780 -> 0x005DD350).
+reads [u8 2][u8 0x1D][u32 remainingSeconds] when the camp dissolution refuses
+within the 7-day creation window.
 ================
 */
 func encodeDisbandWaitError(remainingSeconds uint32) []byte {
@@ -152,8 +151,7 @@ func (r *InviteRuntime) publishRankChanges(divisionID string, changes []domain.T
 ================
 handleDisband
 
-Handles 0x77C5 (client 702E70, 0 bytes; v1.188 CGObjPC_HandleAcademyDisband7471
-0x00519120 -> TrainingCamp_ValidateDisband 0x004E4780). The master dissolves the
+Handles 0x77C5 (client 702E70, 0 bytes). The master dissolves the
 camp at least 7 days after opening, receives 0xB7C5 [1], all online members
 receive 0x3AC5 [1], and any changed Honor Rank buffs are synchronized.
 ================
@@ -199,10 +197,9 @@ func (r *InviteRuntime) handleDisband(s *transport.Session, opcode uint16, paylo
 ================
 handleLeave
 
-Handles 0x7785 (client 702FD0, 0 bytes; v1.188 CGObjPC_HandleAcademyLeave7474
-0x00519510). A non-master member leaves their camp voluntarily after 24 hours
-in the camp, receives 0xB785 [1], and all online camp members (including the
-leaver) receive 0x3AC5 [3][u32 gid][1].
+Handles 0x7785 (client 702FD0, 0 bytes). A non-master member leaves their camp
+voluntarily after 24 hours in the camp, receives 0xB785 [1], and all online
+camp members (including the leaver) receive 0x3AC5 [3][u32 gid][1].
 ================
 */
 func (r *InviteRuntime) handleLeave(s *transport.Session, opcode uint16, payload []byte) {
@@ -257,10 +254,9 @@ func decodeCampTargetName(payload []byte) (string, bool) {
 ================
 handleKick
 
-Handles 0x74D4 (client 704BB0, {str name}; v1.188 CGObjPC_HandleAcademyKick7473
-0x005193A0). The master expels a non-master camp member after 24 hours in the
-camp, receives 0xB4D4 [1], and all online camp members (including the kicked
-target) receive 0x3AC5 [3][u32 targetGid][2].
+Handles 0x74D4 (client 704BB0, {str name}). The master expels a non-master
+camp member after 24 hours in the camp, receives 0xB4D4 [1], and all online
+camp members (including the kicked target) receive 0x3AC5 [3][u32 targetGid][2].
 ================
 */
 func (r *InviteRuntime) handleKick(s *transport.Session, opcode uint16, payload []byte) {
@@ -305,9 +301,8 @@ func (r *InviteRuntime) handleKick(s *transport.Session, opcode uint16, payload 
 ================
 handleGraduate
 
-Handles 0x710A (client 702F10, {u8 satisfaction}; v1.188
-CGObjPC_HandleAcademyGraduate7475 0x00519600). A level-40+ student graduates,
-awards the camp's evaluation points and mentor honor points, receives bonus
+Handles 0x710A (client 702F10, {u8 satisfaction}). A level-40+ student
+graduates, awards the camp's evaluation points and mentor honor points, receives bonus
 graduate EXP, and broadcasts 0x3AC5 [4][gid][0], [5][mentorGid][3][honor],
 and (when any camp's EvaluationRank changes) [12][evaluationRank].
 ================
@@ -332,11 +327,10 @@ func (r *InviteRuntime) handleGraduate(s *transport.Session, opcode uint16, payl
 		r.publishGraduationUpdates(divisionID, res)
 		if res.AwardedExp {
 			// The EXP grant rides behind the status-4 broadcast. The native
-			// order between CTrainingCamp_OnMemberGraduatedUpdatePoints
-			// 0x005DDD50 and CTrainingCampMgr_OnGraduateDBSuccess 0x005DFC30
-			// is not documented in the v1.188 sources we hold, so the port
-			// keeps the order it always had and the client sees the grant
-			// after the membership frame. Inference, not a verified order.
+			// order between its points update and its EXP grant is not
+			// documented in the sources we hold, so the port keeps the
+			// order it always had and the client sees the grant after
+			// the membership frame. Inference, not a verified order.
 			if bonus := BonusGraduateExp(res.Graduate.JoinLevel, r.LevelData); bonus > 0 && r.GrantGraduateExperience != nil {
 				r.GrantGraduateExperience(divisionID, actor.ID, bonus)
 			}
@@ -357,11 +351,10 @@ func (r *InviteRuntime) handleGraduate(s *transport.Session, opcode uint16, payl
 ================
 handleCompulsoryGraduate
 
-Handles 0x736D (client 704D30, {str name}; v1.188
-CGObjPC_HandleAcademyCompulsoryGraduate7476 0x00519770). The master
+Handles 0x736D (client 704D30, {str name}). The master
 compulsory-graduates a level-41+ student, awarding satisfaction=2
-(Compulsory: +1 eval point per 0x005198A4: push 0x1) and mentor honor points
-(no bonus EXP per 0x005DFC30).
+(Compulsory: +1 eval point) and mentor honor points
+(no bonus EXP).
 ================
 */
 func (r *InviteRuntime) handleCompulsoryGraduate(s *transport.Session, opcode uint16, payload []byte) {
@@ -521,8 +514,7 @@ NotifyMemberLevel
 
 NotifyMemberLevel broadcasts a 0x3AC5 status 5 flag 2 level update to all
 online members of character's camp when character's level changes
-(v1.188 CGObjPC_ApplyLevelTransitionAndRecoverVitals 0x004E4D90 @ 0x004E4E21 /
-0x004E4E50 -> CTrainingCampMgr_SendMemberStatusUpdateToSM 0x005DE6C0).
+(the native level-transition flow routes the same member status update).
 ================
 */
 func (r *InviteRuntime) NotifyMemberLevel(divisionID string, character *enterworld.Character) {

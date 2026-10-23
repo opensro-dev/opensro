@@ -25,12 +25,8 @@ seed and the 0xB2EC opening share.
 // lane's pending-invite ownership - this lane never registers 0x3393.
 //
 // Camp state persists in the authority store's training_camps /
-// training_camp_members tables - EVIDENCE(v1.188, logic): the retail
-// GameServer's _TRAININGCAMP / _TRAININGCAMPMEMBER CDBRecord binds
-// (SR_GameServer dump @0x00848bd1 / @0x008495f1) and the
-// trs_sm_trainingcampjob DB job family (@0x0046c657) persist camps and
-// memberships; join/leave ride SendOlappedTrainingCampJobReqToSM
-// (@0x005df688 "can't find training camp to join!").
+// training_camp_members tables; join/leave ride the store's camp-job
+// family, which fails a join against a missing camp.
 //
 // A camp is opened at the storage NPC (open.go: 0x72EC -> 0xB2EC, the
 // client's "Academy Establishment" row 0x2D) and only its master invites
@@ -374,9 +370,7 @@ func EncodeCampNotice3AC5(code uint8) []byte {
 EncodeCampDisband3AC5
 
 EncodeCampDisband3AC5 renders the status-1 camp dissolution push
-(CTrainingCamp_OnDisbandCancelBuffs 0x005DDAF0 @ 0x005DDB14,
-CTrainingCampMgr_OnSMDisbandCamp 0x005E04F0 @ 0x005E05A5; client sub_773c60
-case 0 @0x00773cac): {u8 1}.
+(the client fold's case 0 @0x00773cac): {u8 1}.
 ================
 */
 func EncodeCampDisband3AC5() []byte {
@@ -388,9 +382,8 @@ func EncodeCampDisband3AC5() []byte {
 EncodeCampMemberLeave3AC5
 
 EncodeCampMemberLeave3AC5 renders the status-3 member removal push
-(Calls_CreateOwnerTimedJob_2_var 0x005DDBE0 @ 0x005DDC5F; client sub_773c60
-case 2 @0x00774010): {u8 3}{u32 memberID}{u8 flag}, where flag=1 is a
-voluntary leave and flag=2 is an expulsion/ban.
+(the client fold's case 2 @0x00774010): {u8 3}{u32 memberID}{u8 flag},
+where flag=1 is a voluntary leave and flag=2 is an expulsion/ban.
 ================
 */
 func EncodeCampMemberLeave3AC5(memberID uint32, flag uint8) []byte {
@@ -402,9 +395,9 @@ func EncodeCampMemberLeave3AC5(memberID uint32, flag uint8) []byte {
 EncodeCampMemberGraduate3AC5
 
 EncodeCampMemberGraduate3AC5 renders the status-4 graduation push
-(CTrainingCamp_OnMemberGraduatedUpdatePoints 0x005DDD50 @ 0x005DDDBE; client
-sub_773c60 case 3 @0x007741a2): {u8 4}{u32 memberID}{u8 flag}, where flag=0 is a
-voluntary graduation and flag=1 is a compulsory graduation by the master.
+(the client fold's case 3 @0x007741a2): {u8 4}{u32 memberID}{u8 flag},
+where flag=0 is a voluntary graduation and flag=1 is a compulsory
+graduation by the master.
 ================
 */
 func EncodeCampMemberGraduate3AC5(memberID uint32, flag uint8) []byte {
@@ -416,9 +409,8 @@ func EncodeCampMemberGraduate3AC5(memberID uint32, flag uint8) []byte {
 EncodeCampMemberLevelUpdate3AC5
 
 EncodeCampMemberLevelUpdate3AC5 renders the status-5 flag-2 level update
-push (CTrainingCampMgr_SendMemberStatusUpdateToSM 0x005DE6C0 ->
-CTrainingCamp_UpdateMemberStatusFromSM 0x005DD4F0 @ 0x005DD53C / 0x005DD5BD;
-client sub_773c60 case 4 flag 2 @0x00774427): {u8 5}{u32 memberID}{u8 2}{u8 level}.
+push (the client fold's case 4 flag 2 @0x00774427): {u8 5}{u32 memberID}
+{u8 2}{u8 level}.
 ================
 */
 func EncodeCampMemberLevelUpdate3AC5(memberID uint32, level uint8) []byte {
@@ -430,10 +422,7 @@ func EncodeCampMemberLevelUpdate3AC5(memberID uint32, level uint8) []byte {
 EncodeCampMemberHonorUpdate3AC5
 
 EncodeCampMemberHonorUpdate3AC5 renders the status-5 flag-3 honor point
-balance push (CTrainingCampMgr_SendMemberStatusUpdateToSM 0x005DE6C0 ->
-CTrainingCamp_UpdateMemberStatusFromSM 0x005DD4F0 @ 0x005DD53C / 0x005DD5E6
-and CTrainingCamp_OnMemberGraduatedUpdatePoints 0x005DDD50 @
-0x005DDFBC..0x005DE019; client sub_773c60 case 4 flag 3 @0x00774568):
+balance push (the client fold's case 4 flag 3 @0x00774568):
 {u8 5}{u32 memberID}{u8 3}{u32 honorPoints}.
 ================
 */
