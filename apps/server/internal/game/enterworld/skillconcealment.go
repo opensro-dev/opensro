@@ -3,8 +3,8 @@
 
 skillconcealment.go - hiding and detection programs
 
-Four shipped families, every one ActionHandler 3 and released by
-CastLifecycle_ProcessPersistent (5830B0):
+Four shipped families, every one ActionHandler 3 and released by the
+native persistent-cast lifecycle:
 
 	hide skc [getv reqi]           the caster hides (Rogue stealth,
 	                               Wizard invisibility A)
@@ -14,8 +14,8 @@ CastLifecycle_ProcessPersistent (5830B0):
 	                               around the caster
 	dtt efr2 [reqi cbuf]           the caster's own sight
 
-The RefSkill words: hide +0x428 {mode, level, speed%}, dtt +0x420 and
-dttp +0x424 {mask, level}, skc +0x490 {damage mask, event mask, keep%}.
+The skill words: hide {mode, level, speed%}, dtt and dttp {mask, level},
+skc {damage mask, event mask, keep%}.
 Mode 1 is stealth (body status 6), mode 2 invisibility (7); the hide
 masks are 1 stealth, 2 invisibility, 4 trap.
 
@@ -43,12 +43,12 @@ const (
 ==================
 SkillDamageCancel
 
-skc words 0 and 2. CSkillManager_ProcessDamageEffects (5A1612) retires an
-effect when the landing attack's att flags (+0x230 word 0) share a bit
+skc words 0 and 2. The native damage-effect pass retires an effect when
+the landing attack's att flags (att word 0) share a bit
 with Mask. Word 1, the event mask, is SkillReplacement.EventCancelMask.
 
 KeepPercent is word 2, the chance a masked hit leaves the effect running:
-5A160A..5A1691 adds the caster's getv MUCR and getv DSER modifiers to it
+the native pass adds the caster's getv MUCR and getv DSER modifiers to it
 and retires with RollProbability(100 - keep). The Bard's skc(15,0,80) keeps
 its aura on 80 % of the hits; the shipped hides author 0 and end on every
 masked hit.
@@ -89,24 +89,24 @@ type SkillConcealment struct {
 	// Persistent is cbuf: the item-cast detection timed job.
 	Persistent bool
 
-	// Hide is the +0x428 block.
+	// Hide is the hide block.
 	Hide         bool
 	HideMode     uint8 // 1 stealth, 2 invisibility
 	HideLevel    uint32
 	SpeedPercent uint32 // taken off walk and run (0x17/0x18)
-	// DurationBonus and SpeedBonus are getv STDU (+0x518) and STSP (+0x514).
+	// DurationBonus and SpeedBonus are getv STDU and STSP.
 	DurationBonus bool
 	SpeedBonus    bool
 
-	// Sight is dtt (+0x420): what the caster itself sees through.
-	// Reveal is dttp (+0x424): laid on the characters around the caster.
+	// Sight is dtt: what the caster itself sees through.
+	// Reveal is dttp: laid on the characters around the caster.
 	Sight, Reveal SkillStatusLevel
 
 	// Area is the efr kind 1 selection the recipients come from; without
 	// it the caster alone receives the effect.
 	Area SkillRecipientArea
 	// Range is the client's detection distance: an efr whose shape is 1
-	// lends its radius (85CC70), 0 means everywhere.
+	// lends its radius (client 85CC70), 0 means everywhere.
 	Range uint32
 }
 
@@ -119,7 +119,7 @@ type SkillRecipientArea struct {
 	Select     uint32
 }
 
-// The select bits TargetSelection_AroundSource (58A020) reads.
+// The select bits the native around-source selection reads.
 const (
 	SelectCaster    uint32 = 0x01
 	SelectCharacter uint32 = 0x02
@@ -219,7 +219,7 @@ func parseSkillConcealment(fields []string, row *SkillRow) {
 		case kind == 1 && (c.Hide || c.Reveal.Present):
 			c.Area = SkillRecipientArea{Present: true, Radius: radius, MaxTargets: most, Select: sel}
 		case kind == 2 && c.Sight.Present:
-			// 5840FB: a dtt row opens no area context; efr only lends
+			// Natively a dtt row opens no area context; efr only lends
 			// the client its range.
 		default:
 			return
@@ -242,7 +242,7 @@ func parseSkillConcealment(fields []string, row *SkillRow) {
 	row.Concealment = c
 }
 
-// encodedDetectRange is what 85CC70 reads from +0x64: the radius of the
+// encodedDetectRange is what client 85CC70 reads from +0x64: the radius of the
 // last efr block when its shape is 1, else 0.
 func encodedDetectRange(fields []string) uint32 {
 	values, ok := encodedLastParameters(fields, tagEfr)

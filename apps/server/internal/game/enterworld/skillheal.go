@@ -14,14 +14,13 @@ package enterworld
 ==================
 SkillHeal
 
-	heal +0x324  {hp, hp%, mp, mp%}
-	mwhh +0x328  add the caster's weapon term to the HP amount
-	mwmh +0x32C  add it to the MP amount
-	nmh  +0x598  a cast heal's HP percent is a share of maximum HP
+	heal  {hp, hp%, mp, mp%}
+	mwhh  add the caster's weapon term to the HP amount
+	mwmh  add it to the MP amount
+	nmh   a cast heal's HP percent is a share of maximum HP
 
-CSkillManager_ApplySkillHeal (5A0850) reads it for a cast heal and
-CSkillManager_ApplyHealRecovery (5A09F0) for the eshp aura. The two apply the
-percent words differently.
+The native skill heal reads it for a cast heal and the native heal recovery
+for the eshp aura. The two apply the percent words differently.
 ==================
 */
 type SkillHeal struct {
