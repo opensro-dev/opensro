@@ -29,7 +29,7 @@ mustPortalCatalog
 */
 func mustPortalCatalog(t *testing.T, dir string) *portalCatalog {
 	t.Helper()
-	catalog, err := loadPortalCatalog(dir)
+	catalog, err := loadPortalCatalog(dir, "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -14,7 +14,7 @@ import (
 
 func TestPortalPrimaryCatalogAndQuestAdmission(t *testing.T) {
 	licensed.RequireGameData(t)
-	catalog, err := loadPortalCatalog(gamedatatest.TextdataDir(t))
+	catalog, err := loadPortalCatalog(gamedatatest.TextdataDir(t), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestPortalSelectedNpcTransactionAndRollback(t *testing.T) {
 	dir := gamedatatest.TextdataDir(t)
 	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 2001, RefObjID: 2011, Codename: "NPC_CH_FERRY", TalkFlags: 2}}
 	rt.NpcSpawn.Enabled = true
-	if err := rt.ConfigurePortals(dir); err != nil {
+	if err := rt.ConfigurePortals(dir, ""); err != nil {
 		t.Fatal(err)
 	}
 	if rt.NpcRoster[0].TalkFlags&0x80 == 0 {
@@ -106,7 +106,7 @@ func TestPortalStructureGrantAndDestinationTransaction(t *testing.T) {
 	// The fixture gate stands at the player, inside its hit range.
 	rt.NpcSpawn.Enabled, rt.NpcSpawn.AtPlayer = true, true
 	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 252094, RefObjID: 2094, Codename: "STORE_CH", Teleport: &simulation.TeleportGateBounds{Radius: 10, Height: 25, FortressID: 1}}}
-	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t)); err != nil {
+	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t), ""); err != nil {
 		t.Fatal(err)
 	}
 	out := rt.HandleObjectSelect(testDivision, c, wire.NewWriter(4).U32(252094).Payload())
@@ -134,7 +134,7 @@ func TestFortressGateFeeTaxFillsTheTreasury(t *testing.T) {
 	rt.NpcSpawn.Enabled, rt.NpcSpawn.AtPlayer = true, true
 	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 252094, RefObjID: 2094, Codename: "STORE_CH", FortressID: 1,
 		Teleport: &simulation.TeleportGateBounds{Radius: 10, Height: 25, FortressID: 1}}}
-	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t)); err != nil {
+	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t), ""); err != nil {
 		t.Fatal(err)
 	}
 	bindMerchantTax(t, rt, 2094, 10, 0)
@@ -207,8 +207,8 @@ func TestGateRefusesAFarTransport(t *testing.T) {
 ================
 TestShippedTownGatesRefuseATransportAndFerriesAllowIt
 
-The shipped links take Restrict kind 2 from the server databases
-(portaltransport_generated.go), not from the client's teleportlink.txt:
+The shipped links take Restrict kind 2 from the server database
+(PortalTransportFile, the operator's), not from the client's teleportlink.txt:
 the four town gate links (Jangan-Donwhang, Donwhang-Hotan) refuse a near summoned
 transport 0x1C10, and all 30 ferry, flyship and tunnel links let it through, still
 behind the 1000-unit range (#916).
@@ -216,7 +216,7 @@ behind the 1000-unit range (#916).
 */
 func TestShippedTownGatesRefuseATransportAndFerriesAllowIt(t *testing.T) {
 	licensed.RequireGameData(t)
-	catalog, err := loadPortalCatalog(gamedatatest.TextdataDir(t))
+	catalog, err := loadPortalCatalog(gamedatatest.TextdataDir(t), sourceDataPortalTransport(t))
 	if err != nil {
 		t.Fatal(err)
 	}

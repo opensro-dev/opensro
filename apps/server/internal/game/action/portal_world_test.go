@@ -62,7 +62,7 @@ func fortressFixtureWithPopulation(t *testing.T, gateRef uint32, template monste
 	rt.NpcSpawn.Enabled, rt.NpcSpawn.AtPlayer = true, true
 	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 900000 + gateRef, RefObjID: gateRef, Codename: "GATE",
 		Teleport: &simulation.TeleportGateBounds{Radius: 10, Height: 25}}}
-	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t)); err != nil {
+	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t), ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := rt.AdmitCharacterSession(testDivision, c.Name, 1); err != nil {

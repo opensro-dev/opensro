@@ -150,7 +150,7 @@ real data so a fabricated catalog cannot hide an unusable production selector.
 func TestOperatorTownsFromPublishedCatalog(t *testing.T) {
 	licensed.RequireGameData(t)
 	rt, _ := newTestRuntime(rebirthTestCharacter(20, 100), testItems())
-	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t)); err != nil {
+	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t), ""); err != nil {
 		t.Fatal(err)
 	}
 	towns := rt.OperatorTowns()

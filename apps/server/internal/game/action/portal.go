@@ -10,6 +10,7 @@ package action
 import (
 	_ "embed"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"math"
 	"opensro.online/server/internal/data/texttable"
 	"opensro.online/server/internal/domain"
@@ -69,25 +70,6 @@ const portalConditionTransport uint32 = 2
 
 /*
 ================
-linkRefusesTransport
-
-Whether a link refuses a summoned transport. The server reads Restrict from
-its database, and both research databases (portaltransport_generated.go)
-put kind 2 on the town gates and none on the ferries, flyships and tunnels,
-as the v1.150 client's own text says (UIIT_MSG_STRGERR_CANT_TELEPORT_WITH_CART:
-"... ferries can be used"). The client's teleportlink.txt carries the kind
-on the reverse links, so it is used only for a link the databases lack.
-================
-*/
-func linkRefusesTransport(source, target string, clientTransport bool) bool {
-	if refuses, known := serverTransportLinks[[2]string{source, target}]; known {
-		return refuses
-	}
-	return clientTransport
-}
-
-/*
-================
 portalLink
 ================
 */
@@ -111,6 +93,8 @@ type portalCatalog struct {
 	// walkIns maps a TELEPORT event zone's codename to its teleport's one
 	// link (walkin.go).
 	walkIns map[string]portalLink
+	// serverTransport records that the operator's transport table applied.
+	serverTransport bool
 }
 
 // Both tables remain server-owned. The request carries neither a price nor a
@@ -120,10 +104,13 @@ type portalCatalog struct {
 loadPortalCatalog
 ================
 */
-func loadPortalCatalog(dir string) (*portalCatalog, error) {
+func loadPortalCatalog(dir, derivedDir string) (*portalCatalog, error) {
 	key := texttable.Fingerprint(filepath.Join(dir, "teleportbuilding.txt"),
 		filepath.Join(dir, "teleportdata.txt"), filepath.Join(dir, "teleportlink.txt"),
 		filepath.Join(dir, alexandria.OverlayFile))
+	if derivedDir != "" {
+		key += "+" + texttable.Fingerprint(filepath.Join(derivedDir, filepath.FromSlash(PortalTransportFile)))
+	}
 	if monster.QinShiTombFromEnv() {
 		key += "+qinshi_tomb"
 	}
@@ -131,7 +118,11 @@ func loadPortalCatalog(dir string) (*portalCatalog, error) {
 		key += "+alexandria"
 	}
 	parsed := portalCatalogParses.Get(key, func() *portalCatalogParse {
-		catalog, err := parsePortalCatalog(dir)
+		transport, err := loadPortalTransport(derivedDir)
+		if err != nil {
+			return &portalCatalogParse{err: err}
+		}
+		catalog, err := parsePortalCatalog(dir, transport)
 		return &portalCatalogParse{catalog: catalog, err: err}
 	})
 	return parsed.catalog, parsed.err
@@ -152,9 +143,9 @@ var portalCatalogParses texttable.SharedParses[portalCatalogParse]
 parsePortalCatalog
 ================
 */
-func parsePortalCatalog(dir string) (*portalCatalog, error) {
+func parsePortalCatalog(dir string, transport portalTransport) (*portalCatalog, error) {
 	c := &portalCatalog{destinations: map[uint32]portalDestination{}, sources: map[uint32]uint32{}, links: map[[2]uint32]portalLink{},
-		buildings: map[string]uint32{}}
+		buildings: map[string]uint32{}, serverTransport: transport != nil}
 	number := func(s string) (uint32, error) { v, e := strconv.ParseUint(s, 10, 32); return uint32(v), e }
 	buildings := map[uint32]bool{}
 	fortressGates := map[uint32]bool{}
@@ -315,7 +306,7 @@ func parsePortalCatalog(dir string) (*portalCatalog, error) {
 			}
 			link.conditions = append(link.conditions, portalCondition{k, a, b})
 		}
-		if linkRefusesTransport(c.destinations[link.source].code, c.destinations[link.target].code, clientTransport) {
+		if transport.refuses(c.destinations[link.source].code, c.destinations[link.target].code, clientTransport) {
 			link.conditions = append(link.conditions, portalCondition{kind: portalConditionTransport})
 		}
 		key := [2]uint32{link.source, link.target}
@@ -368,13 +359,21 @@ func portalFailure(code byte) OpResult {
 
 /*
 ================
-error
+ConfigurePortals
+
+The teleport tables from textdata dir, with the operator's transport
+restrictions from derivedDir (portaltransport.go), and the fortresses they
+name.
 ================
 */
-func (rt *Runtime) ConfigurePortals(dir string) error {
-	catalog, err := loadPortalCatalog(dir)
+func (rt *Runtime) ConfigurePortals(dir, derivedDir string) error {
+	catalog, err := loadPortalCatalog(dir, derivedDir)
 	if err != nil {
 		return err
+	}
+	if !catalog.serverTransport {
+		log.Warnf("portals: no %s in the derived game data; transport restrictions follow the client's teleportlink.txt",
+			PortalTransportFile)
 	}
 	rt.portals = catalog
 	fortresses, err := loadFortressCatalog(dir)
