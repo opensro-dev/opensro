@@ -25,7 +25,7 @@ const cap110RewardsVersion = 1
 // nativeConsumables is the catalogue as the generator compiled it. InitCap110
 // always joins onto it, so a second call replaces the first instead of
 // stacking on it.
-var nativeConsumables = consumables
+var nativeConsumables consumableCatalog
 
 /*
 ================

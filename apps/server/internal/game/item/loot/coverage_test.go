@@ -22,6 +22,7 @@ TestInferredConsumableBandBoundaries
 ================
 */
 func TestInferredConsumableBandBoundaries(t *testing.T) {
+	requireTables(t)
 	for _, level := range []uint8{1, 19, 20, 39, 40, 59, 60, 79, 80, 89, 90, 110} {
 		band := 0
 		for _, boundary := range []uint8{20, 40, 60, 80, 90} {
@@ -122,6 +123,7 @@ TestDistinctGroupOvercommitIsInvalid
 ================
 */
 func TestDistinctGroupOvercommitIsInvalid(t *testing.T) {
+	requireTables(t)
 	var source consumableSource
 	if err := json.Unmarshal(consumablesJSON, &source); err != nil {
 		t.Fatal(err)
@@ -139,6 +141,7 @@ TestEquipmentMagicAndNonRepairProperties
 ================
 */
 func TestEquipmentMagicAndNonRepairProperties(t *testing.T) {
+	requireTables(t)
 	code := "ITEM_CH_SWORD_03_A"
 	options, entered, err := EquipmentMagic(code, zeroRoll)
 	if err != nil || !entered || len(options) != 1 || uint16(options[0]) != 13 || options[0]>>32 != 1 {

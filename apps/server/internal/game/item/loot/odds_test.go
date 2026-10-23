@@ -133,6 +133,7 @@ TestAssignedChancesReadTheMonstersRows
 ================
 */
 func TestAssignedChancesReadTheMonstersRows(t *testing.T) {
+	requireTables(t)
 	rows, err := AssignedDropChances("MOB_CH_TIGERWOMAN")
 	if err != nil || len(rows) == 0 {
 		t.Fatalf("Tiger Girl rows %v, %v", rows, err)

@@ -9,6 +9,7 @@ package catalogue
 
 import (
 	"math"
+	"opensro.online/server/internal/testsupport/loottest"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -136,6 +137,7 @@ one; the native rare chance is 33 of 32768 draws.
 ================
 */
 func TestDropTablesSumToAnAttempt(t *testing.T) {
+	loottest.Require(t)
 	monsters := []Monster{{Level: 30, Country: 3, Table: equipmentTableKey(30, 3), Unique: &UniqueBonus{Table: equipmentTableKey(30, 3)}}}
 	itemID := func(codename string) uint32 { return uint32(len(codename)) }
 	file := BuildDropTables(monsters, itemID, Header{})

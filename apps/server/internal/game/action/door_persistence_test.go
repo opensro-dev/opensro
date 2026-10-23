@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"opensro.online/server/internal/testsupport/loottest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -187,6 +188,7 @@ pre-mutation one.
 ==================
 */
 func TestEveryMutationSiteSurvivesRestart(t *testing.T) {
+	loottest.Require(t)
 	t.Parallel()
 	t.Run("S2 inventory move survives", func(t *testing.T) {
 		t.Parallel()
@@ -606,6 +608,7 @@ successful commit self-heals with ALL accumulated state.
 ==================
 */
 func TestPersistFailureLoudAndNonFatal(t *testing.T) {
+	loottest.Require(t)
 	t.Parallel()
 	d := openDoorRuntime(t, filepath.Join(t.TempDir(), "authority"), testCharacter())
 

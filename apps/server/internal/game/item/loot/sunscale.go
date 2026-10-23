@@ -28,8 +28,9 @@ const (
 	sunScaleMaxLevel = 90
 )
 
-// sunClassGroup is the rare table's degree-9 Sun class, derived at build.
-var sunClassGroup = deriveSunClassGroup(equipment)
+// sunClassGroup is the rare table's degree-9 Sun class; Load derives it
+// from the native equipment catalogue (-1 until then).
+var sunClassGroup = -1
 
 /*
 ================

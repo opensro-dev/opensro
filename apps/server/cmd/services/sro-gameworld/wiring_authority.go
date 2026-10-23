@@ -131,6 +131,13 @@ func openAuthorityPlane(
 	if err != nil {
 		return authorityPlane{}, err
 	}
+	// The loot catalogue's tables come from the derived data, before cap110
+	// joins onto them.
+	if loaded, err := loot.Load(devPaths.DerivedDir); err != nil {
+		return authorityPlane{}, err
+	} else if !loaded {
+		log.Warn("loot: no catalogue tables in the derived game data; monsters drop no generated loot")
+	}
 	if err := loot.InitCap110(textdataDir, monster.Cap110Enabled()); err != nil {
 		return authorityPlane{}, err
 	}

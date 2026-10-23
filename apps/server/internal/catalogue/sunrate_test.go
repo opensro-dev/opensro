@@ -13,6 +13,7 @@ off, the rate publishes as 0 and no table carries a widened row.
 package catalogue
 
 import (
+	"opensro.online/server/internal/testsupport/loottest"
 	"testing"
 
 	"opensro.online/server/internal/game/progression"
@@ -24,6 +25,7 @@ TestDropTablesPublishTheSunRate
 ================
 */
 func TestDropTablesPublishTheSunRate(t *testing.T) {
+	loottest.Require(t)
 	monsters := []Monster{{Level: 80, Country: 0, Table: equipmentTableKey(80, 0)}}
 	ids := map[string]uint32{}
 	itemID := func(codename string) uint32 {

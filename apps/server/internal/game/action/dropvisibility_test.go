@@ -8,6 +8,7 @@ package action
 import (
 	"math"
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/testsupport/loottest"
 	"reflect"
 	"testing"
 	"time"
@@ -25,6 +26,7 @@ import (
 //	(d) is IMMEDIATELY visible to both the bootstrap object list and a
 //	    pickup of the exact gid the 0x30D7 reply advertised.
 func TestGroundDropStoreLifecycleImmediatelyVisible(t *testing.T) {
+	loottest.Require(t)
 	character := testCharacter()
 	rt, clock := newTestRuntime(character, testItems())
 	goal := installMidMove(rt, character, clock)
@@ -123,6 +125,7 @@ func TestGroundDropStoreLifecycleImmediatelyVisible(t *testing.T) {
 // run on Node's 5s cadence (SweepInterval), so the probe 1ms shy of the
 // lifetime consumes one sweep slot and the reap lands on the next one.
 func TestGroundDropLifetimeMatchesNodeFixture(t *testing.T) {
+	loottest.Require(t)
 	if grounditem.FixtureLifetime != 180*time.Second {
 		t.Fatalf("FixtureLifetime = %v, want Node's 180s missionGroundItemFixtureLifetimeMs", grounditem.FixtureLifetime)
 	}

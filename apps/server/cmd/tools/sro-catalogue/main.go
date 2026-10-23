@@ -273,6 +273,9 @@ func run(out, release, textdata string) error {
 	header := catalogue.Header{SchemaVersion: catalogue.SchemaVersion, Release: release,
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339)}
 	cap110 := monster.Cap110Enabled()
+	if _, err := loot.Load(derivedDir); err != nil {
+		return err
+	}
 	if err := loot.InitCap110(dir, cap110); err != nil {
 		return fmt.Errorf("catalogue loot: %w", err)
 	}

@@ -11,6 +11,7 @@ package action
 import (
 	"bytes"
 	"math"
+	"opensro.online/server/internal/testsupport/loottest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -281,6 +282,7 @@ TestFatalHitCommitsAndPublishesEveryPreparedDropInNativeOrder
 ================
 */
 func TestFatalHitCommitsAndPublishesEveryPreparedDropInNativeOrder(t *testing.T) {
+	loottest.Require(t)
 	rt, _, character, target := newCombatTestRuntime(t, 1)
 	installSmallGoldRef(rt)
 	// Zero selects gold minimum, ordinary equipment group 1, the first CH
@@ -321,6 +323,7 @@ TestLowGradeEquipmentCountryBucketsCoverChinaAndEurope
 ================
 */
 func TestLowGradeEquipmentCountryBucketsCoverChinaAndEurope(t *testing.T) {
+	loottest.Require(t)
 	for _, tc := range []struct {
 		country  uint8
 		codename string
@@ -409,6 +412,7 @@ gold heap and one equipment item.
 ================
 */
 func TestBetaDropRateScalesEveryDropButTheGoldHeapCount(t *testing.T) {
+	loottest.Require(t)
 	for _, rate := range []int{1, 3} {
 		rt, _, character, target := newCombatTestRuntime(t, 1)
 		installSmallGoldRef(rt)

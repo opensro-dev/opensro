@@ -29,6 +29,7 @@ TestAlchemyAndInferredConsumableSelections
 ================
 */
 func TestAlchemyAndInferredConsumableSelections(t *testing.T) {
+	requireTables(t)
 	for _, family := range []int{8, 9, 10} {
 		for _, level := range []uint8{20, 50, 80, 90} {
 			r, ok := SelectConsumable(family, level, 0, zeroRoll)
@@ -55,6 +56,7 @@ TestPotionSelectionUsesAuthoredClassAndQuantity
 ================
 */
 func TestPotionSelectionUsesAuthoredClassAndQuantity(t *testing.T) {
+	requireTables(t)
 	var source consumableSource
 	if err := json.Unmarshal(consumablesJSON, &source); err != nil {
 		t.Fatal(err)
@@ -87,6 +89,7 @@ TestUniqueSpecificDropsAndCaps
 ================
 */
 func TestUniqueSpecificDropsAndCaps(t *testing.T) {
+	requireTables(t)
 	// Three vSRO rewards, then her five v1.150 characterdata materials.
 	rows := AssignedDrops("MOB_CH_TIGERWOMAN", 60, zeroRoll)
 	if len(rows) != 8 || rows[0].Codename != "ITEM_MALL_GLOBAL_CHATTING" || rows[1].Codename != "ITEM_MALL_REVERSE_RETURN_SCROLL" ||
@@ -177,6 +180,7 @@ TestCatalogRejectsDuplicateAssignmentAndInvalidProbability
 ================
 */
 func TestCatalogRejectsDuplicateAssignmentAndInvalidProbability(t *testing.T) {
+	requireTables(t)
 	var source consumableSource
 	json.Unmarshal(consumablesJSON, &source)
 	source.Items = append(source.Items, source.Items[0])
@@ -201,6 +205,7 @@ admission. Measure it with the real catalogue and the native two-draw roll.
 ================
 */
 func TestRecoveryPotionDropRate(t *testing.T) {
+	requireTables(t)
 	const kills = 200000
 	prng := rand.New(rand.NewPCG(1, 2))
 	draw := func() (uint32, error) { return uint32(prng.IntN(32768)), nil }
@@ -242,6 +247,7 @@ Yeowa its own, and a roll above the authored probability drops nothing.
 ================
 */
 func TestMonstersDropTheirOwnMaterials(t *testing.T) {
+	requireTables(t)
 	got := map[string]bool{}
 	for _, drop := range AssignedDrops("MOB_OA_YEOWA_CLON", 8, zeroRoll) {
 		got[drop.Codename] = drop.Count == 1 && drop.Assigned
@@ -275,6 +281,7 @@ drops her fixed rewards plus her five WHITESNAKE1..5 materials.
 ================
 */
 func TestQinShiTombMonsterAndWhiteSnakeDrops(t *testing.T) {
+	requireTables(t)
 	whiteSnake := AssignedDrops("MOB_TQ_WHITESNAKE", 60, zeroRoll)
 	if len(whiteSnake) != 19 {
 		t.Fatalf("MOB_TQ_WHITESNAKE assigned drops = %d (%+v), want 19 (14 fixed mall rewards + 5 materials)", len(whiteSnake), whiteSnake)

@@ -18,6 +18,7 @@ TestCap110EquipmentUsesInstalledExpansionBucket
 ================
 */
 func TestCap110EquipmentUsesInstalledExpansionBucket(t *testing.T) {
+	requireTables(t)
 	var source cap110Catalog
 	source.Version = 1
 	if err := json.Unmarshal(equipmentJSON, &source.Equipment); err != nil {
@@ -121,6 +122,7 @@ TestCap110RewardsRefuseWhatWouldChangeNativeOrDangle
 ================
 */
 func TestCap110RewardsRefuseWhatWouldChangeNativeOrDangle(t *testing.T) {
+	requireTables(t)
 	var native string
 	for monster := range nativeConsumables.fixed {
 		native = monster
@@ -172,6 +174,7 @@ TestInitCap110RequiresRewardsAndIsRepeatable
 ================
 */
 func TestInitCap110RequiresRewardsAndIsRepeatable(t *testing.T) {
+	requireTables(t)
 	var source cap110Catalog
 	source.Version = 1
 	if err := json.Unmarshal(equipmentJSON, &source.Equipment); err != nil {
@@ -220,6 +223,7 @@ may pick the item.
 ================
 */
 func TestCap110ExpansionBucketsStayAwayFromNativeLevels(t *testing.T) {
+	requireTables(t)
 	var source cap110Catalog
 	source.Version = 1
 	if err := json.Unmarshal(equipmentJSON, &source.Equipment); err != nil {

@@ -1,7 +1,8 @@
 # v1.150 monster loot evidence
 
-`generate_loot_catalog.py` compiles these committed snapshots into
-`apps/server/internal/game/item/loot/.generated/`. The server embeds the result;
+`generate_loot_catalog.py` compiles the snapshots in the operator's
+`<game root>/source-data/loot` into `source-data/server/loot`. Neither is in
+the repository; the server loads the result from its derived data (`loot.Load`);
 neither the build nor the running server reads research directories or SQL
 backups. `pnpm task check:loot-catalog` checks byte-for-byte regeneration.
 

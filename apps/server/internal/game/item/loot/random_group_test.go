@@ -83,6 +83,7 @@ TestEveryPublishedGroupMemberIsSelectable
 ================
 */
 func TestEveryPublishedGroupMemberIsSelectable(t *testing.T) {
+	requireTables(t)
 	if len(consumables.random) != 44 || len(consumables.groups) != 2 {
 		t.Fatal("compatible ISRO group join changed")
 	}

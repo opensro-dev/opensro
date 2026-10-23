@@ -68,6 +68,7 @@ TestSunScaleDerivesTheCRAREClass
 ================
 */
 func TestSunScaleDerivesTheCRAREClass(t *testing.T) {
+	requireTables(t)
 	if sunClassGroup != 26 {
 		t.Fatalf("derived Sun class %d, want 26 (the *_09_C_RARE class)", sunClassGroup)
 	}
@@ -82,6 +83,7 @@ TestSunScaleM60WidensSunSixtyfoldOnly
 ================
 */
 func TestSunScaleM60WidensSunSixtyfoldOnly(t *testing.T) {
+	requireTables(t)
 	for _, level := range []uint8{76, 80, 85, 86, 90} {
 		native := equipment.classes[1][level-1]
 		scaled := scaleSunClass(native, level, 60)
@@ -106,6 +108,7 @@ TestSunScaleM1IsTheNativeRow
 ================
 */
 func TestSunScaleM1IsTheNativeRow(t *testing.T) {
+	requireTables(t)
 	for _, level := range []uint8{76, 85, 90} {
 		native := equipment.classes[1][level-1]
 		scaled := scaleSunClass(native, level, 1)
@@ -126,6 +129,7 @@ TestSunScaleComposedChancesMatchTheRow
 ================
 */
 func TestSunScaleComposedChancesMatchTheRow(t *testing.T) {
+	requireTables(t)
 	// The odds publication and the roll must agree. Exactness lives in
 	// the integer sweep above (TestSunScaleM60WidensSunSixtyfoldOnly):
 	// the published chance folds each class mass through the combined
