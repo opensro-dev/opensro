@@ -189,13 +189,16 @@ stock.
 /*
 ================
 */
-func shardShops(dir string, items enterworld.ItemRefSource) (*commerce.Catalog, error) {
+func shardShops(dir, derivedDir string, items enterworld.ItemRefSource) (*commerce.Catalog, error) {
 	extra, err := commerce.ExtraGoodsFromEnv()
 	if err != nil {
 		return nil, err
 	}
 	shops, err := commerce.LoadWithExtraGoods(dir, items, extra)
 	if err != nil {
+		return nil, err
+	}
+	if _, err := shops.LoadTradeQuotations(derivedDir); err != nil {
 		return nil, err
 	}
 	// The GameWorld withholds the same goods permanently (action.ConfigureCommerce).
@@ -329,7 +332,7 @@ func run(out, release, textdata string) error {
 	if err != nil {
 		return fmt.Errorf("monsters: %w", err)
 	}
-	shops, err := shardShops(dir, itemSource)
+	shops, err := shardShops(dir, derivedDir, itemSource)
 	if err != nil {
 		return fmt.Errorf("shops: %w", err)
 	}

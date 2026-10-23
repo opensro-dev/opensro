@@ -166,7 +166,7 @@ func TestUnsetShopSettingPublishesTheShardsGoods(t *testing.T) {
 	if err := resolveShardSettings(); err != nil {
 		t.Fatal(err)
 	}
-	shops, err := shardShops(dir, items)
+	shops, err := shardShops(dir, "", items)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -103,7 +103,7 @@ func Check() (Result, error) {
 			if err != nil {
 				return err
 			}
-			return items.ConfigureCommerce(dir, goods)
+			return items.ConfigureCommerce(dir, devPaths.DerivedDir, goods)
 		}},
 	} {
 		if err := step.configure(devPaths.TextdataDir); err != nil {

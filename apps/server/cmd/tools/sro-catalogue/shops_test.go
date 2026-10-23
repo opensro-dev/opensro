@@ -63,7 +63,7 @@ func TestPublishedShopsAreTheShardsShops(t *testing.T) {
 	}
 	for _, setting := range []string{"off", "on"} {
 		t.Setenv(commerce.EnvShopExtraGoods, setting)
-		published, err := shardShops(dir, items)
+		published, err := shardShops(dir, "", items)
 		if err != nil {
 			t.Fatalf("%s: %v", setting, err)
 		}

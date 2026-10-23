@@ -33,6 +33,19 @@ func TestShippedCatalog(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
+	// The quotations are the operator's source-data, laid out as the
+	// projection's derived data would hold them (skips without it).
+	derived := t.TempDir()
+	quotations := filepath.Join(derived, filepath.FromSlash(TradeQuotationsFile))
+	if err := os.MkdirAll(filepath.Dir(quotations), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(quotations, licensed.SourceDataFile(t, "server/"+TradeQuotationsFile), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if quoted, err := c.LoadTradeQuotations(derived); err != nil || !quoted {
+		t.Fatalf("trade quotations: loaded %v, %v", quoted, err)
+	}
 	count := 0
 	hp := false
 	for _, offers := range c.Tabs {

@@ -104,7 +104,7 @@ func TestSunLeavesTheShopsWithTheFlag(t *testing.T) {
 		rt, _, _, _ := newCombatTestRuntime(t, 1)
 		rt.deps.(*enterworld.Deps).Items = shippedItems(t)
 		rt.SunEventOnly = progression.SunEventOnlyFromEnv()
-		if err := rt.ConfigureCommerce(gamedatatest.TextdataDir(t), extra); err != nil {
+		if err := rt.ConfigureCommerce(gamedatatest.TextdataDir(t), "", extra); err != nil {
 			t.Fatal(err)
 		}
 		held := shelvedCodenames(rt.Commerce)

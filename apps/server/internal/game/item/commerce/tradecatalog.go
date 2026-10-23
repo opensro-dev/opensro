@@ -8,51 +8,32 @@ tradecatalog.go - imported merchant quotations joined by native reference IDs
 package commerce
 
 import (
-	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 
 	"opensro.online/server/internal/game/enterworld"
 )
 
-//go:embed .generated/item-quotations.json
-var tradeQuotationData []byte
+// TradeQuotationsFile is the merchant quotation table in the projection's
+// derived data (gamedata DerivedDir), imported from the operator's own
+// source-data. Without it every trade good sells at its base sell price,
+// the native path for a good with no quotation entry (tradesale.go).
+const TradeQuotationsFile = "commerce/item-quotations.json"
 
 /*
 ================
 loadTradeCatalog
 
-All shipped quotation rows have equal lower/upper rates. Stock writes cannot
-change their price, so the port needs no second persistent stock authority.
-Reject a new variable-rate dataset instead of silently dropping that state.
+The trade quests named in questdata; quotations load separately
+(LoadTradeQuotations).
 ================
 */
 func (c *Catalog) loadTradeCatalog(dir string) error {
-	var document struct {
-		Rows []struct {
-			TradeQuotation
-			NPC, Item uint32
-		}
-	}
-	if err := json.Unmarshal(tradeQuotationData, &document); err != nil {
-		return err
-	}
-	c.TradeQuotations = make(map[[2]uint32]TradeQuotation, len(document.Rows))
-	for _, row := range document.Rows {
-		if row.NPC == 0 || row.Item == 0 || row.Lower != row.Upper {
-			return fmt.Errorf("commerce: quotation requires variable stock authority")
-		}
-		if _, err := TradeQuotationPrice(1, row.TradeQuotation); err != nil {
-			return err
-		}
-		key := [2]uint32{row.NPC, row.Item}
-		if _, exists := c.TradeQuotations[key]; exists {
-			return fmt.Errorf("commerce: duplicate trade quotation")
-		}
-		c.TradeQuotations[key] = row.TradeQuotation
-	}
+	c.TradeQuotations = map[[2]uint32]TradeQuotation{}
 	c.TradeQuests = map[string]uint32{}
 	for _, row := range enterworld.ReadTextdataFile(filepath.Join(dir, "questdata.txt")) {
 		if len(row) < 3 || row[0] != "1" {
@@ -64,6 +45,68 @@ func (c *Catalog) loadTradeCatalog(dir string) error {
 		}
 	}
 	return nil
+}
+
+/*
+================
+LoadTradeQuotations
+
+The quotation table from derivedDir, or false when there is none (an empty
+dir or an absent file). All shipped rows have equal lower/upper rates:
+stock writes cannot change their price, so the port needs no second
+persistent stock authority. A variable-rate dataset is rejected instead of
+silently dropping that state. Publishes only a fully admitted table.
+================
+*/
+func (c *Catalog) LoadTradeQuotations(derivedDir string) (bool, error) {
+	if derivedDir == "" {
+		return false, nil
+	}
+	data, err := os.ReadFile(filepath.Join(derivedDir, filepath.FromSlash(TradeQuotationsFile)))
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("commerce: %s: %w", TradeQuotationsFile, err)
+	}
+	quotations, err := parseTradeQuotations(data)
+	if err != nil {
+		return false, err
+	}
+	c.TradeQuotations = quotations
+	return true, nil
+}
+
+/*
+================
+parseTradeQuotations
+================
+*/
+func parseTradeQuotations(data []byte) (map[[2]uint32]TradeQuotation, error) {
+	var document struct {
+		Rows []struct {
+			TradeQuotation
+			NPC, Item uint32
+		}
+	}
+	if err := json.Unmarshal(data, &document); err != nil {
+		return nil, err
+	}
+	quotations := make(map[[2]uint32]TradeQuotation, len(document.Rows))
+	for _, row := range document.Rows {
+		if row.NPC == 0 || row.Item == 0 || row.Lower != row.Upper {
+			return nil, fmt.Errorf("commerce: quotation requires variable stock authority")
+		}
+		if _, err := TradeQuotationPrice(1, row.TradeQuotation); err != nil {
+			return nil, err
+		}
+		key := [2]uint32{row.NPC, row.Item}
+		if _, exists := quotations[key]; exists {
+			return nil, fmt.Errorf("commerce: duplicate trade quotation")
+		}
+		quotations[key] = row.TradeQuotation
+	}
+	return quotations, nil
 }
 
 /*
