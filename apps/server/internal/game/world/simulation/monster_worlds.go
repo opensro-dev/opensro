@@ -19,9 +19,9 @@ import (
 )
 
 const (
-	// RefGameWorld +0x20: zero marks a world the shard opens at boot.
+	// The world record's type word: zero marks a world the shard opens at boot.
 	permanentWorldType = 0
-	// 65C200: the first layer a world hands out; zero is its controller.
+	// The first layer a world hands out; zero is its controller.
 	firstResidentLayer = 1
 	// INS_DEFAULT, the field every character starts in.
 	defaultWorldDefinition instance.DefinitionID = 1
@@ -74,8 +74,7 @@ func (s *MonsterState) AllocatePopulation(division string, id instance.ID) (inst
 ================
 OpenInstanceLayer
 
-5F7440 (CGameWorldMgr_OpenWorldLayer) -> 5EC530 (CGameWorld_HasAvailableLayerSlot)
--> 5EB830 (CGameWorld_AllocateLayer): opens the first unallocated layer slot in
+The native layer manager opens the first unallocated layer slot in
 1..LayerLimit on an instance world (NativeType != 0). Permanent worlds
 (NativeType == 0) and full worlds refuse.
 ================
@@ -111,7 +110,7 @@ func (s *MonsterState) OpenInstanceLayer(division string, defID instance.Definit
 ================
 FirstNestSpawnByCodename
 
-520350's _GetNPCPosByCodename fallback: the first authored nest anchor for a
+The native codename-position fallback: the first authored nest anchor for a
 reference codename and the world code its hive names.
 ================
 */
@@ -215,7 +214,7 @@ func (s *MonsterState) PopulationLease(division string, id instance.ID) (instanc
 ================
 CheckPopulationTransfer
 
-CGameWorld_CheckTransfer (5EC5B0): the non-mutating door a teleport asks
+The native transfer check: the non-mutating door a teleport asks
 before it moves a PC into another world. Nothing is reserved.
 ================
 */
@@ -293,7 +292,7 @@ func (s *MonsterState) requestPopulationRetirement(division string, lease instan
 	s.retirementRequests[populationKey{division, lease}] = struct{}{}
 }
 
-// PendingPopulationRetirements is the manager's native 7C14 release-request
+// PendingPopulationRetirements is the manager's native release-request
 // inbox. Reading does not acknowledge it: only releasing that exact lifetime
 // removes the request, so a disconnected caller cannot lose the last leave.
 /*
@@ -372,7 +371,7 @@ populationInterestGIDs
 
 The spawn index owns nest/lifecycle queries. Visibility instead queries the
 mover's live region bounds: a pursuing actor can leave its spawn region ring.
-Filter exact live blocks before any archived actor read (native 53AC20).
+Filter exact live blocks before any archived actor read (the native order).
 Caller holds MonsterState.mu.
 
 A mover whose segment spans regions is listed in each; the index marks

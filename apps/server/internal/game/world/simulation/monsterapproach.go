@@ -1,11 +1,11 @@
 /*
 ===========================================================================
 
-monsterapproach.go - native +0x114 squad approach slots and pursuit goals
+monsterapproach.go - native squad approach slots and pursuit goals
 
-Manages the per-target 8-slot approach circle (AIApproachSlots_ReassignTactics
-at 0x00545620) and endpoint construction for CAITactics_PursueTargetWithDirectionGate
-(0x00548BE0) and CAITactics_PursueTargetWithRegionRoute (0x00549460).
+Manages the per-target 8-slot approach circle and endpoint
+construction for the two native pursuit callbacks (the direction-
+gated outdoor one and the region-route dungeon one).
 
 ===========================================================================
 */
@@ -67,18 +67,17 @@ func (state *divisionMonsterState) releaseApproachActor(gid uint32) {
 ================
 ordinarySquadApproach
 
-Whether the actor runs the native +0x114 pursuit callback
-(CAITactics_PursueTargetWithDirectionGate at 0x00548BE0 outdoors,
-CAITactics_PursueTargetWithRegionRoute at 0x00549460 in dungeons).
-0x0053FC00 stores 0x00548BE0 into slot +0x114 in an unconditional run at
-function entry (0x0053FC67): the function has no FleeType (+0x1d) or
-BattleStyle (+0x20) gate, and the dungeon variant is picked by the region
-test at 0x0053FD04. Flags bits 0x04 and 0x80 replace only slot +0x100
-(target check), not +0x114.
+Whether the actor runs the native pursuit callback (the
+direction-gated one outdoors, the region-route one in dungeons).
+The native tactics strategy table stores the outdoor callback
+into the pursuit slot in an unconditional run at function entry:
+it has no FleeType or BattleStyle gate, and the dungeon variant
+is picked by a region test. Tactics flag bits 0x04 and 0x80
+replace only the target-check slot, not the pursuit slot.
 
 Native resolves a monster's tactics once, when it is spawned
-(CGameAI_SelectSpawnTactics at 0x0054C0E0, called with dwTacticsID == 0 at
-0x005EBAA6), so a spawn without a tactics id reads its spawn table row
+(the native spawn-tactics selection, called with tactics id 0),
+so a spawn without a tactics id reads its spawn table row
 alone. Such a row carries no control block, and the pursuit callback
 belongs to that spawn as well.
 
@@ -86,12 +85,12 @@ The port has to recognise those spawns without inventing a gate native does
 not have. A spawn that carries a TacticsControls row keeps the row's own
 FleeType and BattleStyle. A spawn without one is admitted when it came
 from a summoner (SummonerGID != 0), or when it is a dynamic spawn that is
-detached and policy-pinned: the quest scripts (0x008B9B60, 0x008B2AB0,
-0x008B6840, 0x008C7910) and /LOADMONSTER (0x00520A40) build exactly that,
+detached and policy-pinned: the quest scripts and /LOADMONSTER
+build exactly that,
 with a detached, policy-pinned nest.
 
 A resource-authored area nest is policy-pinned and holds its slot, so it
-stays out while it holds it. Releasing that slot (53FD40, through
+stays out while it holds it. Releasing that slot (through
 detachCrossPlaneNest) leaves the actor detached and policy-pinned, and the
 predicate then admits it. Native installs the callback for that actor at
 its spawn, so admitting it after the release is the closer of the two
@@ -226,7 +225,7 @@ func (s *MonsterState) prepareApproachNavigation(division string, actor monster.
 		assign(gid)
 	}
 	member := p.group.members[actor.Gid]
-	// 545620 releases only the actor's own reservation. A remembered direction
+	// The native reassignment releases only the actor's own reservation.
 	// that has been preempted must not clear the replacement owner's slot.
 	if member.slot != -1 || len(p.group.members) < 8 {
 		p.group.slots.Release(actor.Gid)
@@ -299,12 +298,13 @@ func squadApproachGoal(live monster.Pose, target playerPose, spacing CombatSpaci
 	goal.X = float64(float32(float32(goal.X) + x))
 	goal.Z = float64(float32(float32(goal.Z) + z))
 	goal = NormalizeSpawnFrame(goal)
-	// Dungeon actors run 549460 (installed at 53FD04), which steers to the slot
-	// point whether or not the target moves; only outdoor 548BE0 extends.
+	// Dungeon actors run the region-route callback (picked by the region
+	// test), which steers to the slot point whether or not the target moves;
+	// only the outdoor direction-gated callback extends.
 	if IsDungeonRegion(live.RegionID) || !target.chaseGuidance().TargetMoving() {
 		return goal
 	}
-	// 548CF6 uses actor-to-target center distance, not distance to the slot.
+	// The outdoor extension uses actor-to-target center distance, not
 	candidate := monster.Pose{RegionID: goal.RegionID, X: goal.X, Y: goal.Y, Z: goal.Z}
 	dx, _, dz := monster.NativeTacticsRelative(live, candidate)
 	dy := float32(candidate.Y) - float32(live.Y)
