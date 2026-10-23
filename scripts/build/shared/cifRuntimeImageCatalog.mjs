@@ -1187,7 +1187,7 @@ export const runtimeCifImageReferences = [
 	// (record+0x9c, rooted under icon\) and inserts the sprite into the
 	// fortress-id -> emblem map at 0xf0935c keyed by record+0x00. This Media's
 	// siegefortress.txt ships ONE row (id 1 FORTRESS_JANGAN ->
-	// etc\fort_jangan.ddj); the retail/Eternity reference tables also carry
+	// etc\fort_jangan.ddj); the later data's fortress tables also carry
 	// id 3 hotan and id 6 bijeokdan and both DDJs ship in this Media.pk2, so
 	// publish them too - the client stays correct if the textdata grows back.
 	// NOT listed here (on disk under icon/etc/ but referenced by no known
