@@ -94,7 +94,7 @@ func monsterContributionReward(character *enterworld.Character, target monster.I
 	)
 	// The SEXP arm keeps base*grade*100/basis in x87 until it multiplies the
 	// same independently spilled factor set, then stores the finished value
-	// to one dword at 0x41083e.
+	// to one dword.
 	skillExp := nativePositiveReward(float32(
 		float64(target.Ref.ExpToGive) *
 			float64(gradeMultiplier) *
