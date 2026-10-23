@@ -48,10 +48,16 @@ func TestAppendMagicPopMachinesPlacesOnePerTown(t *testing.T) {
 		if npc.TalkFlags != want {
 			t.Fatalf("NPC %d talk flags %#x, want %#x", index, npc.TalkFlags, want)
 		}
-		if _, found := npcPlacementHeading(npc.Codename, npc.Spawn.RegionID, npc.Spawn.X, npc.Spawn.Y, npc.Spawn.Z); !found {
-			t.Fatalf("machine %d has no recovered facing", index)
-		}
 	}
+	// Every placement has a facing in the operator's table (skips without it).
+	t.Run("facing", func(t *testing.T) {
+		headings := sourceNPCHeadings(t)
+		for index, npc := range roster {
+			if _, found := headings.placement(npc.Codename, npc.Spawn.RegionID, npc.Spawn.X, npc.Spawn.Y, npc.Spawn.Z); !found {
+				t.Fatalf("machine %d has no recovered facing", index)
+			}
+		}
+	})
 }
 
 /*
@@ -76,7 +82,8 @@ npcpos identities below it are untouched.
 */
 func TestShippedWorldHasMagicPopMachines(t *testing.T) {
 	licensed.RequireGameData(t)
-	roster := LoadNpcWorldRoster(gamedatatest.TextdataDir(t))
+	headings := sourceNPCHeadings(t)
+	roster := LoadNpcWorldRoster(gamedatatest.TextdataDir(t), headings)
 	regions, operators := map[uint16]bool{}, map[uint16]bool{}
 	for _, npc := range roster {
 		if npc.Codename == magicPopOperatorCodename {

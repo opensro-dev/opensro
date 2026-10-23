@@ -10,7 +10,7 @@ import (
 func TestTeleportGateRosterAndWire(t *testing.T) {
 	licensed.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
-	rows, err := AppendTeleportGates(dir, LoadNpcWorldRoster(dir))
+	rows, err := AppendTeleportGates(dir, LoadNpcWorldRoster(dir, nil))
 	if err != nil {
 		t.Fatal(err)
 	}

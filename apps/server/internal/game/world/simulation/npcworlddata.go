@@ -62,8 +62,9 @@ type npcWorldRef struct {
 // LoadNpcWorldRoster projects every enabled NPC position in the shipped
 // v1.150 data. Identities occupy the dedicated [200001,299999] band and are
 // stable because npcpos file order is authored and deterministic. Only rows
-// whose packed TID passes the native NPC class gate are admitted.
-func LoadNpcWorldRoster(textdataDir string) []NpcDef {
+// whose packed TID passes the native NPC class gate are admitted. Each faces
+// its heading from headings (LoadNPCHeadings); nil faces every NPC at zero.
+func LoadNpcWorldRoster(textdataDir string, headings *NPCHeadings) []NpcDef {
 	refs := loadNpcWorldRefs(textdataDir)
 	if len(refs) == 0 {
 		return nil
@@ -84,6 +85,7 @@ func LoadNpcWorldRoster(textdataDir string) []NpcDef {
 	}
 
 	lookups := worldNpcLookups{
+		headings:      headings,
 		fortresses:    fortresses,
 		storeGroups:   storeGroupsByNpc,
 		fixtureByCode: fixtureByCode,

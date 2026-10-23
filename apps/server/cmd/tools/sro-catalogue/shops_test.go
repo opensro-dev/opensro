@@ -54,7 +54,7 @@ grocer's degree 9 STR stone at 2,000,000.
 func TestPublishedShopsAreTheShardsShops(t *testing.T) {
 	dir := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(dir)
-	roster := simulation.LoadNpcWorldRoster(dir)
+	roster := simulation.LoadNpcWorldRoster(dir, nil)
 	priced := map[string]uint64{
 		"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A": 1000000,
 		"ITEM_ETC_ARCHEMY_MAGICSTONE_STR_09":         2000000,

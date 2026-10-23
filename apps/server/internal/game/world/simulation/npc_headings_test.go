@@ -3,9 +3,10 @@
 
 npc_headings_test.go - complete facing coverage and emitted spawn headings
 
-Pin the reviewed supplemental directions, including valid zero and signed SQL
-values. Every published placement must resolve and reach the shared spawn wire
-used by both world entry and later interest publication.
+The lookup rules run on small synthetic tables. The operator's table
+(source-data, skipped without it) pins the reviewed directions, including
+valid zero and signed SQL values; every published placement must resolve
+and reach the shared spawn wire used by world entry and interest.
 
 ===========================================================================
 */
@@ -13,8 +14,11 @@ package simulation
 
 import (
 	"encoding/binary"
-	"opensro.online/server/internal/testsupport/tier"
+	"os"
+	"path/filepath"
 	"testing"
+
+	"opensro.online/server/internal/testsupport/tier"
 
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
@@ -22,10 +26,96 @@ import (
 
 /*
 ================
+sourceNPCHeadings
+
+The operator's table, laid out as the projection's derived data holds it
+(skips without it).
+================
+*/
+func sourceNPCHeadings(t *testing.T) *NPCHeadings {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, filepath.FromSlash(NPCHeadingsFile))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, licensed.SourceDataFile(t, "server/"+NPCHeadingsFile), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	headings, err := LoadNPCHeadings(dir)
+	if err != nil || headings == nil {
+		t.Fatalf("load: %v, %v", headings, err)
+	}
+	return headings
+}
+
+/*
+================
+syntheticNPCHeadings
+
+Rows written as the table holds them: [codename, region, x10, y10, z10,
+heading], in the recovered, supplement and alexandria sections.
+================
+*/
+func syntheticNPCHeadings(t *testing.T, recovered, supplement, alexandria string) *NPCHeadings {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, filepath.FromSlash(NPCHeadingsFile))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	text := `{"format":"sro-npc-headings-v1","recovered":[` + recovered + `],"supplement":[` + supplement +
+		`],"alexandria":[` + alexandria + `]}`
+	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	headings, err := LoadNPCHeadings(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return headings
+}
+
+/*
+================
+TestNPCHeadingPrecedenceAndAbsence
+
+The earlier section wins a placement two sections hold; a nil or absent
+table knows none; a malformed table is refused.
+================
+*/
+func TestNPCHeadingPrecedenceAndAbsence(t *testing.T) {
+	headings := syntheticNPCHeadings(t, `["NPC_A",1,10,0,20,100]`, `["NPC_A",1,10,0,20,200],["NPC_B",1,10,0,20,300]`,
+		`["NPC_C",2,0,0,0,0]`)
+	for _, tc := range []struct {
+		code   string
+		region uint16
+		want   uint16
+	}{{"NPC_A", 1, 100}, {"NPC_B", 1, 300}, {"NPC_C", 2, 0}} {
+		x, z := 1.0, 2.0
+		if tc.code == "NPC_C" {
+			x, z = 0, 0
+		}
+		if got, found := headings.placement(tc.code, tc.region, x, 0, z); !found || got != tc.want {
+			t.Fatalf("%s heading=%d found=%v, want %d", tc.code, got, found, tc.want)
+		}
+	}
+	var none *NPCHeadings
+	if _, found := none.placement("NPC_A", 1, 1, 0, 2); found {
+		t.Fatal("a missing table knows a placement")
+	}
+	if absent, err := LoadNPCHeadings(t.TempDir()); absent != nil || err != nil {
+		t.Fatalf("absent table: %v, %v", absent, err)
+	}
+}
+
+/*
+================
 TestAlexandriaNPCHeadingsUseAuthoredPlacements
 ================
 */
 func TestAlexandriaNPCHeadingsUseAuthoredPlacements(t *testing.T) {
+	headings := sourceNPCHeadings(t)
 	for _, row := range []struct {
 		code    string
 		region  uint16
@@ -39,11 +129,11 @@ func TestAlexandriaNPCHeadingsUseAuthoredPlacements(t *testing.T) {
 		{"NPC_SD_M_AREA_WATERMAN_2", 24111, 1470.21, 545, 563.01001, 27670},
 		{"NPC_SD_M_AREA_WATERMAN_2", 24112, 1689.52, 519.32001, 157.02, 33131},
 	} {
-		if got, found := npcPlacementHeading(row.code, row.region, row.x, row.y, row.z); !found || got != row.heading {
+		if got, found := headings.placement(row.code, row.region, row.x, row.y, row.z); !found || got != row.heading {
 			t.Fatalf("%s heading=%d found=%v, want=%d", row.code, got, found, row.heading)
 		}
 	}
-	if _, found := npcPlacementHeading("NPC_SD_T_AREA_ARMOR", 23346, 708.39001, 1310.96, 1730.5); found {
+	if _, found := headings.placement("NPC_SD_T_AREA_ARMOR", 23346, 708.39001, 1310.96, 1730.5); found {
 		t.Fatal("removed inferred Viviana position inherited an authored heading")
 	}
 }
@@ -54,22 +144,23 @@ TestNPCHeadingUsesPlacementNotCrossVersionIdentity
 ================
 */
 func TestNPCHeadingUsesPlacementNotCrossVersionIdentity(t *testing.T) {
+	headings := syntheticNPCHeadings(t, `["NPC_CH_WAREHOUSE_M",25000,9808,-324,9891,16565],["NPC_CH_WAREHOUSE_W",25000,9803,-325,9892,16565]`, ``, ``)
 	for _, code := range []string{"NPC_CH_WAREHOUSE_M", "NPC_CH_WAREHOUSE_W"} {
 		x, y, z := 980.8, -32.43, 989.13
 		if code == "NPC_CH_WAREHOUSE_W" {
 			x, y, z = 980.35, -32.52, 989.19
 		}
-		if got, found := npcPlacementHeading(code, 25000, x, y, z); !found || got != 16565 {
+		if got, found := headings.placement(code, 25000, x, y, z); !found || got != 16565 {
 			t.Fatalf("%s heading=%d found=%v", code, got, found)
 		}
-		if _, found := npcPlacementHeading(code, 25000, x+1, y, z); found {
+		if _, found := headings.placement(code, 25000, x+1, y, z); found {
 			t.Fatal("moved NPC inherited heading")
 		}
-		if _, found := npcPlacementHeading(code, 25001, x, y, z); found {
+		if _, found := headings.placement(code, 25001, x, y, z); found {
 			t.Fatal("different region inherited heading")
 		}
 	}
-	if _, found := npcPlacementHeading("NPC_UNKNOWN", 25000, 980.8, -32.43, 989.13); found {
+	if _, found := headings.placement("NPC_UNKNOWN", 25000, 980.8, -32.43, 989.13); found {
 		t.Fatal("unknown codename inherited heading")
 	}
 }
@@ -83,7 +174,8 @@ func TestPublishedNPCHeadingCoverage(t *testing.T) {
 	tier.Long(t, "every published NPC placement has a heading")
 	licensed.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
-	roster := LoadNpcWorldRoster(dir)
+	headings := sourceNPCHeadings(t)
+	roster := LoadNpcWorldRoster(dir, headings)
 	if len(roster) < 150 {
 		t.Fatal("published NPC roster missing")
 	}
@@ -91,7 +183,7 @@ func TestPublishedNPCHeadingCoverage(t *testing.T) {
 	const npcSpawnHeadingOffset = 22
 	for _, npc := range roster {
 		s := npc.Spawn
-		heading, found := npcPlacementHeading(npc.Codename, s.RegionID, s.X, s.Y, s.Z)
+		heading, found := headings.placement(npc.Codename, s.RegionID, s.X, s.Y, s.Z)
 		if !found {
 			t.Fatalf("%s at region %d (%g,%g,%g) silently falls back to zero", npc.Codename, s.RegionID, s.X, s.Y, s.Z)
 		}
@@ -122,6 +214,7 @@ TestNPCClassStructuresUseRecoveredHeadings
 ================
 */
 func TestNPCClassStructuresUseRecoveredHeadings(t *testing.T) {
+	headings := sourceNPCHeadings(t)
 	for _, row := range []struct {
 		code    string
 		region  uint16
@@ -132,7 +225,7 @@ func TestNPCClassStructuresUseRecoveredHeadings(t *testing.T) {
 		{"STRUCTURE_GATE_PULLEY_JA_02", 17990, 353.53, 40, 597.38, 48423},
 		{"STRUCTURE_GATE_PULLEY_JA_01", 17735, 370.66, 0, 420.91, 48423},
 	} {
-		if got, ok := npcPlacementHeading(row.code, row.region, row.x, row.y, row.z); !ok || got != row.heading {
+		if got, ok := headings.placement(row.code, row.region, row.x, row.y, row.z); !ok || got != row.heading {
 			t.Fatalf("%s: %d, found %v", row.code, got, ok)
 		}
 	}
@@ -144,6 +237,7 @@ TestNPCSupplementPreservesReviewedPlacements
 ================
 */
 func TestNPCSupplementPreservesReviewedPlacements(t *testing.T) {
+	headings := sourceNPCHeadings(t)
 	cases := []struct {
 		code    string
 		region  uint16
@@ -169,11 +263,11 @@ func TestNPCSupplementPreservesReviewedPlacements(t *testing.T) {
 		{"NPC_CH_EVENT_KISAENG1", 26265, 911.34003, -106.76, 1569.58, 16201},
 	}
 	for _, row := range cases {
-		got, found := npcPlacementHeading(row.code, row.region, row.x, row.y, row.z)
+		got, found := headings.placement(row.code, row.region, row.x, row.y, row.z)
 		if !found || got != row.heading {
 			t.Fatalf("%s region %d heading=%d found=%v want=%d", row.code, row.region, got, found, row.heading)
 		}
-		if _, found := npcPlacementHeading(row.code, row.region, row.x+1, row.y, row.z); found {
+		if _, found := headings.placement(row.code, row.region, row.x+1, row.y, row.z); found {
 			t.Fatalf("%s silently inherited a relocated heading", row.code)
 		}
 	}
@@ -185,6 +279,7 @@ TestNPCHeadingKeepsEarlierExactEvidence
 ================
 */
 func TestNPCHeadingKeepsEarlierExactEvidence(t *testing.T) {
+	headings := sourceNPCHeadings(t)
 	cases := []struct {
 		code    string
 		region  uint16
@@ -195,7 +290,7 @@ func TestNPCHeadingKeepsEarlierExactEvidence(t *testing.T) {
 		{"NPC_CA_ARMOR", 27499, 1298.11, 180.0, 358.28, 52063},
 	}
 	for _, row := range cases {
-		got, found := npcPlacementHeading(row.code, row.region, row.x, row.y, row.z)
+		got, found := headings.placement(row.code, row.region, row.x, row.y, row.z)
 		if !found || got != row.heading {
 			t.Fatalf("%s lost earlier evidence: heading=%d found=%v", row.code, got, found)
 		}

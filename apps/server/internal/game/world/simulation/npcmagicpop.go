@@ -35,6 +35,7 @@ const (
 // worldNpcLookups are the reference joins every static NPC row shares,
 // loaded once per roster build.
 type worldNpcLookups struct {
+	headings      *NPCHeadings
 	fortresses    map[string]uint32
 	storeGroups   map[string][]NpcTalkStoreGroup
 	fixtureByCode map[string]NpcDef
@@ -48,7 +49,7 @@ Tab_RefNest placements of NPC_CH_GACHA_MACHINE in the v1.188 server's nest
 table, restricted to the towns that exist in v1.150: Jangan (25000), Donwhang
 (26265), Hotan (23687) and Samarkand (27244). The fifth later placement, region
 23088, is a town the v1.150 world has no NPC in, so it is left out. Every
-position has a recovered facing in npc_headings_generated.go, and the
+position has a recovered facing in the heading table (NPCHeadingsFile), and the
 published-roster heading test keeps them joined.
 
 INFERENCE: the later nest table is the evidence that the original placed one
@@ -67,7 +68,7 @@ var magicPopPlacements = [...]Spawn{
 magicPopOperatorPlacements
 
 Tab_RefNest placements of NPC_CH_GACHA_OPERATOR, taken from the facings the same
-later table recovered (npc_headings_generated.go keeps position and facing
+later table recovered (NPCHeadingsFile keeps position and facing
 joined at a tenth of a unit). The same four v1.150 towns as the machines; the
 fifth, region 23088, is left out for the reason given above.
 
@@ -91,7 +92,7 @@ shop groups and the service and talk words derived from them.
 ================
 */
 func newWorldNpc(ref npcWorldRef, objectID uint32, spawn Spawn, lookups worldNpcLookups) NpcDef {
-	spawn.Angle, _ = npcPlacementHeading(ref.codename, spawn.RegionID, spawn.X, spawn.Y, spawn.Z)
+	spawn.Angle, _ = lookups.headings.placement(ref.codename, spawn.RegionID, spawn.X, spawn.Y, spawn.Z)
 	row := NpcDef{
 		ObjectID:          objectID,
 		RefObjID:          ref.refObjID,

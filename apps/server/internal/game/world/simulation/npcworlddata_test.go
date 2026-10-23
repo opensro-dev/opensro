@@ -25,7 +25,7 @@ TestShippedNpcWorldRosterCarriesConversationAndShopAuthority
 */
 func TestShippedNpcWorldRosterCarriesConversationAndShopAuthority(t *testing.T) {
 	dir := licensed.RetailTextdataDir(t)
-	roster := LoadNpcWorldRoster(dir)
+	roster := LoadNpcWorldRoster(dir, nil)
 	if len(roster) < 150 {
 		t.Skipf("shipped NPC world data unavailable (loaded %d rows)", len(roster))
 	}
@@ -59,7 +59,7 @@ TestPublishedMerchantBranchesCoverAllTabs
 func TestPublishedMerchantBranchesCoverAllTabs(t *testing.T) {
 	licensed.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
-	roster := LoadNpcWorldRoster(dir)
+	roster := LoadNpcWorldRoster(dir, nil)
 	if len(roster) < 150 {
 		t.Fatal("published merchant roster missing")
 	}
@@ -94,7 +94,7 @@ TestNpcQuestGreetingsNeverBorrowMissingNpcChatPS
 func TestNpcQuestGreetingsNeverBorrowMissingNpcChatPS(t *testing.T) {
 	licensed.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
-	roster := LoadNpcWorldRoster(dir)
+	roster := LoadNpcWorldRoster(dir, nil)
 	text := map[string]bool{}
 	for _, row := range readNpcTabbed(filepath.Join(dir, "textquest.txt")) {
 		if len(row) > 2 {
@@ -130,7 +130,7 @@ and rows naming no fortress stay untaxed.
 */
 func TestShippedFortressBindingsComeFromColumn55(t *testing.T) {
 	dir := licensed.RetailTextdataDir(t)
-	roster := LoadNpcWorldRoster(dir)
+	roster := LoadNpcWorldRoster(dir, nil)
 	if len(roster) < 150 {
 		t.Skipf("shipped NPC world data unavailable (loaded %d rows)", len(roster))
 	}
