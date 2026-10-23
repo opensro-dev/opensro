@@ -44,8 +44,8 @@ type MercenaryStore interface {
 ================
 MercenaryCount
 
-5C56C0 indexes ADE900/ADE93C by guild level. Only the leading guild of
-an existing union uses the second table.
+The native count lookup indexes its two tables by guild level. Only the
+leading guild of an existing union uses the second table.
 ================
 */
 func MercenaryCount(level uint8, unionMaster bool) int {
@@ -110,8 +110,9 @@ func (c *Character) RemoveMercenary(gid uint32) bool {
 ================
 MercenaryAttributePrice
 
-5D0E00 uses the same gold fee for an attribute and reset, but less GP for
-reset. The native fallback for an unknown byte is 100 million of each.
+The native price lookup uses the same gold fee for an attribute and reset,
+but less GP for reset. The native fallback for an unknown byte is 100
+million of each.
 ================
 */
 func MercenaryAttributePrice(attribute uint8) (gold int64, gp uint32) {

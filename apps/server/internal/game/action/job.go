@@ -12,8 +12,8 @@ alias window send:
 	0x7620 [u32 npc][u8 mode][ascii alias] alias     -> 0xB620 [1][mode][ascii alias]
 
 and every refusal is [2][code] in notice category 0x18 (the alias reply
-also echoes mode and alias). The rules are v1.188's CGObjPC_HandleJobJoin70E1
-(5120F0), HandleJobLeave70E2 (5122B0) and HandleJobAlias70E3 (512540):
+also echoes mode and alias). The rules are the native job join, leave and
+alias handlers':
 
   - join: the NPC keeps that job's guild, level 20, no job yet, gold for
     (level - 20) * 5000, and a thief or hunter who withdrew waits seven days;
@@ -22,12 +22,13 @@ also echoes mode and alias). The rules are v1.188's CGObjPC_HandleJobJoin70E1
   - alias: the NPC keeps the player's guild, no job suit is worn, and the
     name passes the naming rule; mode 0 only asks whether it is free and
     mode 1 takes it. Changing an alias the player already has costs
-    level x 50,000 gold (512540 tests it before its database job: 0x4807
-    short), the cost the client's modify window shows (645E90).
+    level x 50,000 gold (the alias handler tests it before its database
+    job: 0x4807 short), the cost the client's modify window shows (645E90).
 
-INFERENCE: v1.188 tests the join and alias-change fees but the deduction
-happens inside its database jobs; the port charges each with its commit. The alias follows the
-character name shape (sub_4184a0 is the shared name filter) and is unique
+INFERENCE: the native server tests the join and alias-change fees but the
+deduction happens inside its database jobs; the port charges each with its
+commit. The alias follows the
+character name shape (the shared name filter) and is unique
 among the division's aliases.
 
 ===========================================================================
@@ -53,7 +54,7 @@ const (
 	opJobAliasRequest     uint16 = 0x7620
 	opJobAliasResponse    uint16 = 0xB620
 
-	// Category 0x18 notice codes (v1.188 0x48xx low bytes).
+	// Category 0x18 notice codes (native 0x48xx low bytes).
 	jobErrTooFar       uint8 = 0x03
 	jobErrNoGold       uint8 = 0x07
 	jobErrNotGuild     uint8 = 0x0f
@@ -67,14 +68,16 @@ const (
 	jobAliasModeCheck  uint8 = 0
 	jobAliasModeCreate uint8 = 1
 
-	// jobMinLevel and jobFeePerLevel are 5120F0's level 20 and 5000 gold
-	// for each level above it.
+	// jobMinLevel and jobFeePerLevel are the join handler's level 20 and
+	// 5000 gold for each level above it.
 	jobMinLevel    = 20
 	jobFeePerLevel = 5000
-	// jobAliasChangePerLevel is 512540's 0xC350: changing an existing alias
+	// jobAliasChangePerLevel is the alias handler's 0xC350: changing an
+	// existing alias
 	// costs the level times 50,000 gold (the client's 645E90 shows it).
 	jobAliasChangePerLevel = 50000
-	// jobRejoinWaitMs is 5122B0's 0x93A80-second timed job: seven days.
+	// jobRejoinWaitMs is the leave handler's 0x93A80-second timed job:
+	// seven days.
 	jobRejoinWaitMs = 604800 * 1000
 	// jobStartGrade is the grade a new member starts at (CICUser_ResetSpawn).
 	jobStartGrade = 1
@@ -260,7 +263,7 @@ func (rt *Runtime) HandleJobAlias(division string, c *enterworld.Character, payl
 		!rt.nameAllowed(alias) {
 		return jobAliasRefusal(jobErrAliasRule, mode, alias)
 	}
-	// 512540 tests a change's fee before its database job checks the name.
+	// The alias handler tests a change's fee before its database job checks the name.
 	if mode == jobAliasModeCreate && uint64(jobAliasChangeFee(c)) > goldOf(c) {
 		return jobAliasRefusal(jobErrNoGold, mode, alias)
 	}
@@ -301,7 +304,7 @@ func (rt *Runtime) HandleJobAlias(division string, c *enterworld.Character, payl
 jobAliasChangeFee
 
 The gold changing an alias costs: nothing for a first alias, else the
-level times 50,000 (512540: a non-empty current alias is a change).
+level times 50,000 (a non-empty current alias is a change).
 ================
 */
 func jobAliasChangeFee(c *enterworld.Character) int64 {

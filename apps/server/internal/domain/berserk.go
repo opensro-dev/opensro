@@ -1,6 +1,6 @@
 package domain
 
-// ModifyBerserkPoints is the persistent point owner (native 4E4D00).
+// ModifyBerserkPoints is the persistent point owner.
 // Call only inside the character store mutation door.
 func (c *Character) ModifyBerserkPoints(delta int) bool {
 	if delta == 0 || delta > 0 && c.NativeBodyStatus == 1 {

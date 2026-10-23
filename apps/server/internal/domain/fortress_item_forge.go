@@ -3,12 +3,12 @@
 
 fortress_item_forge.go - the fortress smith's and trainer's production
 
-One _SiegeFortressItemForge row per running production: the fortress, the
+One row per running production: the fortress, the
 item, how many remain to collect, whether the order is done and when it
 started and ends. A fortress holds at most one order per staff member
-(CSiegeFortress_FindItemForgeByKind 61DAC0: +0x38 at most 2). Start,
-cancel and collect are the shard's QUERY_SIEGE_ITEM_FORGE_ADD, _REMOVE and
-_SiegeFortressCollectForgedItem; the siege tick's _UPDATE marks it done.
+(at most 2 per kind). Start,
+cancel and collect are the shard's forge add, remove and collect queries;
+the siege tick's update marks it done.
 
 ===========================================================================
 */
@@ -18,7 +18,7 @@ package domain
 ================
 FortressItemForgeRecord
 
-One _SiegeFortressItemForge row. Count is what remains to collect; a
+One fortress item-forge row. Count is what remains to collect; a
 collection lowers it and the last one removes the row.
 ================
 */
@@ -44,7 +44,7 @@ type FortressItemForgeStart struct {
 	Holder  int64
 	ActorID int64
 	// Role is the fortress-role bit that grants production besides the
-	// master: 0x08 for the smith, 0x10 for the trainer (632767, 632B5C).
+	// master: 0x08 for the smith, 0x10 for the trainer.
 	Role uint8
 	Gold int64
 	GP   uint32
@@ -88,8 +88,8 @@ type FortressItemForgeStore interface {
 	CollectFortressItemForge(divisionID string, collect FortressItemForgeCollect) (uint8, error)
 }
 
-// v1.150 754A40 reads the low byte of the v1.188 production refusals
-// (CSiegeFortressMgr_HandleSmith*/HandleTrainer*, 6324A0..6333C0).
+// The client reads the low byte of the native production refusals
+// (the fortress smith/trainer handlers).
 const (
 	FortressForgeErrFailure  uint8 = 0x02
 	FortressForgeErrUnknown  uint8 = 0x03

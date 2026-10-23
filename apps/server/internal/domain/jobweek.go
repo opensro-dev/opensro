@@ -3,8 +3,8 @@
 
 jobweek.go - the job guilds' weekly cycle and its ranking snapshot
 
-The shard database's _UpdateTriangleJobWeekly (SRO_VT_SHARD, run weekly by a
-SQL Agent job) closes a job week:
+The shard's weekly job procedure (run weekly by a database agent job)
+closes a job week:
 
  1. thieves, then hunters: when the members contributed or the pool holds
     gold, each member's Reward grows by pool * Contribution / total
@@ -14,7 +14,7 @@ SQL Agent job) closes a job week:
     Contribution DESC, then every member's Contribution returns to 0.
 
 The lists are what the guild NPC shows as last week's rankings
-(CGObjPC_HandleJobRanking70E4 512C20 serves them unchanged).
+(the native ranking handler serves them unchanged).
 
 ===========================================================================
 */

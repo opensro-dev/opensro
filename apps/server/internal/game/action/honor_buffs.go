@@ -3,9 +3,9 @@
 
 honor_buffs.go - Training Camp Honor Rank buffs (20160..20163)
 
-CTrainingCampMgr_RebuildAllHonorRanksAndNotify_5DCB20 (SR_GameServer.exe
-0x005dcb20) assigns each ranked camp an evaluation rank 1..4 (1 King,
-2 Gold, 3 Silver, 4 Bronze). A camp master receives the cumulative Honor
+The native honor-rank rebuild assigns each ranked camp an evaluation
+rank 1..4 (1 King, 2 Gold, 3 Silver, 4 Bronze). A camp master receives
+the cumulative Honor
 buff skills up to their camp's evaluation rank from skilldata_25000.txt:
 
   - 20160 SKILL_TC_COPPER_BUFF_01 (rank 4..1): hr +10% attack rate
@@ -13,9 +13,8 @@ buff skills up to their camp's evaluation rank from skilldata_25000.txt:
   - 20162 SKILL_TC_GOLD_BUFF_01   (rank 2..1): dru +5% phy/mag damage,
     odar +5% phy/mag absorption
   - 20163 SKILL_TC_CROWN_BUFF_01  (rank 1):    hwir +20% berserk gauge gain
-    (SkillGlobal_BuildParameterIndex 0x005888d3 -> esi+0x4d0 ->
-    CSkillManager_ApplyBuffModifiersToActor 0x005963be parameter 0xb8 ->
-    Formulae_CalculateBerserkPointGain 0x004109a8..0x004109dc)
+    (through the buff-modifier parameter 0xb8 into the berserk point
+    gain formula)
 
 ===========================================================================
 */

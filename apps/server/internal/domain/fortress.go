@@ -132,7 +132,7 @@ const (
 	FortressStaffGP   uint32 = 3000
 )
 
-// v1.150 754A40 reads the low byte of the v1.188 fortress refusal.
+// The client reads the low byte of the native fortress refusal.
 const (
 	FortressTaxErrFailure uint8 = 2
 	FortressTaxErrUnknown uint8 = 3

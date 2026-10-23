@@ -15,12 +15,10 @@ package domain
 // A training camp is a cross-character entity like a guild, so it persists
 // in the authority store's training_camps / training_camp_members tables
 // (the guilds/guild_members pattern), reached through the TrainingCampStore
-// door below. EVIDENCE(v1.188, logic): the retail GameServer persists camps
-// in the _TRAININGCAMP / _TRAININGCAMPMEMBER DB tables (SR_GameServer dump
-// @0x00848bd1 / @0x008495f1 CDBRecord table binds) with honor-rank and
-// buff-status satellites (@0x0084a201 / @0x0084a761) - the satellites are
-// deliberately NOT modeled here (honor/buff mechanics are outside the
-// invite lane).
+// door below. The retail server persists camps in its training-camp and
+// camp-member tables with honor-rank and buff-status satellites - the
+// satellites are deliberately NOT modeled here (honor/buff mechanics are
+// outside the invite lane).
 //
 // Deliberately NO Character FK (unlike GuildID): the camp seed resolves
 // through CampOfCharacter at enter-world, so a second character-schema key
@@ -51,9 +49,8 @@ type TrainingCampRecord struct {
 type TrainingCampMemberRecord struct {
 	CharID int64 `json:"charId"`
 	// Kind is the client record's +0x44 byte: 0 master, 1 sub-mentor
-	// (assistant guardian), 2 student/apprentice - the
-	// TrainingCampMember_ClassifyGrade (0x0081E9F0) grade classifier's
-	// input (@0x0081ea08..0x0081ea71).
+	// (assistant guardian), 2 student/apprentice - the grade classifier's
+	// input.
 	Kind        uint8  `json:"kind"`
 	JoinedAtMs  int64  `json:"joinedAtMs,omitempty"`
 	JoinLevel   uint8  `json:"joinLevel,omitempty"`
@@ -85,8 +82,8 @@ type TrainingCampAdmissionResult struct {
 	Members []TrainingCampMemberRecord
 }
 
-// TrainingCampOpening is the policy input for opening a camp at the NPC
-// (v1.188 4E4680 -> 5DFCC0): the master's level floor and the gold fee the
+// TrainingCampOpening is the policy input for opening a camp at the NPC:
+// the master's level floor and the gold fee the
 // opening burns. The gameplay package supplies both; the store applies them
 // with the debit and the new rows under one lock.
 type TrainingCampOpening struct {
@@ -105,7 +102,7 @@ const (
 	// TrainingCampOpenUnavailable: no such live character, or one pending
 	// deletion. No answer names it.
 	TrainingCampOpenUnavailable
-	// TrainingCampOpenDead: 4E4680's IsAlive test (0x6807).
+	// TrainingCampOpenDead: the native IsAlive test (0x6807).
 	TrainingCampOpenDead
 	// TrainingCampOpenLevel: below the level floor (0x6809).
 	TrainingCampOpenLevel
@@ -135,13 +132,9 @@ type TrainingCampRankChange struct {
 	Members      []TrainingCampMemberRecord
 }
 
-// TrainingCampDisbandRefusal is why DisbandCamp refused
-// (v1.188 CGObjPC_HandleAcademyDisband7471 0x00519120 ->
-// TrainingCamp_ValidateDisband 0x004E4780 ->
-// TrainingCamp_SubmitDisband 0x005DF140 @ 0x005191F3 ->
-// CTrainingCampManager_SetCampDeletedAndDisband 0x005DE920 ->
-// CTrainingCamp_OnDisbandCancelBuffs 0x005DDAF0 ->
-// CGObjPC_SetTrainingCampLeaveTimestamp 0x004E4950 @ 0x005DDBAC).
+// TrainingCampDisbandRefusal is why DisbandCamp refused. The native
+// disband path validates, submits, marks the camp deleted, cancels its
+// buffs and stamps the master's leave time, in that order.
 type TrainingCampDisbandRefusal uint8
 
 const (
@@ -162,9 +155,8 @@ type TrainingCampDisbandResult struct {
 	RankChanges      []TrainingCampRankChange
 }
 
-// TrainingCampLeaveRefusal is why LeaveCamp refused
-// (v1.188 CGObjPC_HandleAcademyLeave7474 0x00519510 ->
-// TrainingCamp_SubmitLeaveOrBanCommand_5DEEB0 0x005DEEB0).
+// TrainingCampLeaveRefusal is why LeaveCamp refused (the native leave
+// handler submits through the shared leave-or-ban path).
 type TrainingCampLeaveRefusal uint8
 
 const (
@@ -184,9 +176,8 @@ type TrainingCampLeaveResult struct {
 	MembersBefore []TrainingCampMemberRecord
 }
 
-// TrainingCampKickRefusal is why KickMember refused
-// (v1.188 CGObjPC_HandleAcademyKick7473 0x005193A0 ->
-// TrainingCamp_SubmitLeaveOrBanCommand_5DEEB0 0x005DEEB0).
+// TrainingCampKickRefusal is why KickMember refused (the native kick
+// handler submits through the shared leave-or-ban path).
 type TrainingCampKickRefusal uint8
 
 const (
@@ -208,8 +199,7 @@ type TrainingCampKickResult struct {
 }
 
 // TrainingCampGraduateRefusal is why Graduate or CompulsoryGraduate refused
-// (v1.188 CGObjPC_HandleAcademyGraduate7475 0x00519600 /
-// CGObjPC_HandleAcademyCompulsoryGraduate7476 0x00519770).
+// (the native graduate and compulsory-graduate handlers).
 type TrainingCampGraduateRefusal uint8
 
 const (
@@ -244,8 +234,7 @@ type TrainingCampGraduateResult struct {
 }
 
 // TrainingCampHonorRanking is one row of the Top-50 division Honor Ranking
-// table (0xB2D0, v1.188 CTrainingCamp_WriteHonorRankEntry_5DD1C0 0x005DD1C0 /
-// CTrainingCampMgr_SendHonorRankList_B478 0x005DF010).
+// table (0xB2D0).
 type TrainingCampHonorRanking struct {
 	Ranking       uint32
 	Rank          uint8

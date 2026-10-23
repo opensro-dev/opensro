@@ -26,8 +26,9 @@ reads it). varianceBits persists as a decimal string because JSON has no
 ==================
 */
 type InventoryRow struct {
-	// TradeOwner is the original job alias in the goods record's owner string
-	// (490930). A transfer changes the holder, never this sale-admission identity.
+	// TradeOwner is the original job alias in the goods record's owner
+	// string. A transfer changes the holder, never this sale-admission
+	// identity.
 	TradeOwner string        `json:"tradeOwner,omitempty"`
 	Summon     *CharacterCOS `json:"summon,omitempty"`
 	// Portable persistence for an already supplied native +20/+24 identity.
@@ -56,8 +57,8 @@ type InventoryRow struct {
 	// bump). Persisted as JSON numbers: real option magnitudes are u32, so
 	// every encoded value stays far below the 2^53 float boundary.
 	MagicOptions []uint64 `json:"magicOptions,omitempty"`
-	// TransformRefObjID is a monster capsule's Data (item record +0x38,
-	// 42E54B): the monster the mask turns its user into.
+	// TransformRefObjID is a monster capsule's Data: the monster the mask
+	// turns its user into.
 	TransformRefObjID uint32 `json:"transformRefObjId,omitempty"`
 }
 
@@ -104,7 +105,7 @@ movement lane, the snapshot only echoes it).
 */
 type CharacterWorld struct {
 	// SavedReturn is the native CSO return world/region/position. Region
-	// admission updates it only in type-0 worlds on layer 1 (4E6FE0).
+	// admission updates it only in type-0 worlds on layer 1.
 	// It is independent of the movement goal and appointed rebirth town.
 	SavedReturn *SavedReturnLocation `json:"savedReturn,omitempty"`
 	// PackedInstance is the native world identity: definition in the low
@@ -125,11 +126,10 @@ type CharacterWorld struct {
 	// Native char-data +0xa4 stores the appointed RefObj identity, not a runtime GID.
 	// RebirthPoint remains the durable fallback for legacy records and removed gates.
 	RebirthGateRefID uint32 `json:"rebirthGateRefId,omitempty"`
-	// LastRecallPoint is where the player last used a return scroll (native
-	// char-data +0xCC.., CGObjPC_SaveLatestRecallPosition 4E0250, called from
-	// the return scroll's location check); LastDeathPoint is where the player
-	// last died (+0xDC.., CGObjPC_SaveLatestDeathPosition 4E0330 from
-	// ProcessNormalDeath). Both record only in a type-0 world. The reverse
+	// LastRecallPoint is where the player last used a return scroll (saved
+	// from the return scroll's location check); LastDeathPoint is where the
+	// player last died (saved by the normal-death path). Both record only in
+	// a type-0 world. The reverse
 	// return scroll takes the player back to either, in its world.
 	LastRecallPoint *WorldPoint `json:"lastRecallPoint,omitempty"`
 	LastDeathPoint  *WorldPoint `json:"lastDeathPoint,omitempty"`
@@ -206,23 +206,22 @@ type Character struct {
 	// door. Writers use TransitionBodyStatus; presentation never owns it.
 	BerserkPoints  uint8 `json:"berserkPoints"`
 	BerserkUntilMs int64 `json:"-"`
-	// BattleUntilMs ends the battle state (CGObjPC state+0xD, channel 8).
+	// BattleUntilMs ends the battle state (channel 8).
 	// Striking or being struck restarts its countdown; zero is peace.
 	BattleUntilMs int64 `json:"-"`
-	// LastExpLoss is CGObjPC+0x1CE0, the size of the last negative EXP
-	// change (CGObjPC_ApplyExpDelta 4E5710). Resurrection returns a percent
+	// LastExpLoss is the size of the last negative EXP
+	// change. Resurrection returns a percent
 	// of it; every revival clears it.
 	LastExpLoss int64 `json:"-"`
-	// DeathKind is CGObjPC+0x1CB4, the last death's kind (pk.DeathKind):
-	// 4E6EC0 records it, the 0x37CE notice carries it, and the rebirth
-	// (50FEE0) revives a team death where it fell. Every revival clears it
-	// (CGObjPC_TeleportToTown 4DF2EE). Runtime-only, as natively.
+	// DeathKind is the last death's kind (pk.DeathKind):
+	// the death path records it, the 0x37CE notice carries it, and the
+	// rebirth revives a team death where it fell. Every revival clears it
+	// on the teleport to town. Runtime-only, as natively.
 	DeathKind uint8 `json:"-"`
-	// SiegeDeathAtMs is CGObjPC+0x1CD4 kept as the death instant:
-	// CGObjPC::OnDeath (52CDB0, misnamed CGObjPC_ProcessSiegeDeath)
-	// sets the counter to 180 ticks at 52CFBA on every death, OnTick
-	// (52D9EB) decays it one a tick while a siege war runs and the corpse
-	// waits, and the rebirth (5100D0) refuses outright while it still
+	// SiegeDeathAtMs is the death instant behind the siege corpse clock:
+	// the native death path sets the counter to 180 ticks on every death,
+	// the tick decays it one a tick while a siege war runs and the corpse
+	// waits, and the rebirth refuses outright while it still
 	// reads above 165. The port measures elapsed ticks from the stamp
 	// instead of ticking every corpse. One tick is one second, inferred
 	// from the native constants: a 180-tick corpse clock and a 15-tick
@@ -231,16 +230,15 @@ type Character struct {
 	SiegeDeathAtMs   int64  `json:"-"`
 	NativeBodyStatus uint8  `json:"-"`
 	BodyStatusOwner  uint64 `json:"-"`
-	// TransformRefObjID is the transform block (CGObjPC+0x21A0): the monster
+	// TransformRefObjID is the transform record: the monster
 	// a mask made the player (msch 1), or the player a Duplicate copies
-	// (msch 2). Runtime-only; the effect instance that set it clears it
-	// (4F0210).
+	// (msch 2). Runtime-only; the effect instance that set it clears it.
 	TransformRefObjID uint32 `json:"-"`
 	// TransformMode is that instance's msch word (1 mask, 2 duplicate), the
-	// value CSkillManager_GetTransformMschMode (49A1B0) answers; 0 when none.
+	// value the skill manager's transform query answers; 0 when none.
 	TransformMode uint8 `json:"-"`
 	// TransformShape and TransformEquipment are a Duplicate's copy of the
-	// other player's record byte and nine worn slots (4F0320).
+	// other player's record byte and nine worn slots.
 	TransformShape     uint8          `json:"-"`
 	TransformEquipment [9]uint32      `json:"-"`
 	BuybackNext        uint32         `json:"buybackNext,omitempty"`
@@ -287,25 +285,25 @@ type Character struct {
 	// must match this exact GID and never trust a client-proposed vehicle.
 	ActiveCOS *CharacterCOS `json:"activeCos,omitempty"`
 	// Guild soldiers are character-owned rows, independent of the consumed
-	// scroll. 4FA430 restores their remaining calendar leases.
+	// scroll. The native restore path renews their remaining calendar leases.
 	Mercenaries []*CharacterCOS `json:"mercenaries,omitempty"`
-	// Owner timed job (2, 4), created by 4FB0FC for 1,200 seconds.
+	// Owner timed job (2, 4), created for 1,200 seconds.
 	MercenarySummonUntilMs int64 `json:"mercenarySummonUntilMs,omitempty"`
 	// CapturedCOS is a capture-escort quest's captured monster (TypeID
 	// 1/2/3/6, client 692260): runtime-only, never persisted. The quest
 	// record keeps the capture; a relog either re-summons it or fails it.
 	CapturedCOS     *CharacterCOS    `json:"-"`
 	PetSkillWindows []PetSkillWindow `json:"petSkillWindows,omitempty"`
-	// ParamJobs are the live item parameter jobs (CTJ_CharParamKeeper):
-	// EXP/skill-EXP scroll bonuses with an absolute deadline.
+	// ParamJobs are the live item parameter jobs (the character param
+	// keeper): EXP/skill-EXP scroll bonuses with an absolute deadline.
 	ParamJobs []ParamJob `json:"paramJobs,omitempty"`
 	// CompositeJobs are the premium package's limited uses and booth buffs
-	// (CTJ_CompositeItemKeeper works UIL1, UQL1, BFI1).
+	// (the composite item keeper works UIL1, UQL1, BFI1).
 	CompositeJobs []CompositeJob `json:"compositeJobs,omitempty"`
 	// StallDecoration is the stall booth decoration (ITEM_MALL_BOOTH_*, TID
-	// 3.3.3.4) the character applied for good: v1.188 CGItemExpendable_UseItem
-	// stores the item's reference id in the persistent record through
-	// 4A3F10. Zero is the country's default stall.
+	// 3.3.3.4) the character applied for good: the native expendable-item
+	// use stores the item's reference id in the persistent record.
+	// Zero is the country's default stall.
 	StallDecoration uint32 `json:"stallDecoration,omitempty"`
 	// PublicHidden keeps the character off the community site's public read
 	// API (port-only, not native: the opensro.online privacy choice). Its
@@ -327,17 +325,17 @@ type Character struct {
 	// milliseconds, for the site's player database (port-only, not native).
 	LastLoginAtMs int64 `json:"lastLoginAtMs,omitempty"`
 	// PremiumClock is the running premium ticket's daily allotment
-	// (CTJ_PremiumKeeper); nil when no ticket runs.
+	// (the premium keeper); nil when no ticket runs.
 	PremiumClock *PremiumClock `json:"premiumClock,omitempty"`
 	// ItemGroupCooldowns maps an item COOLTIME group to its absolute end.
 	ItemGroupCooldowns map[uint32]int64 `json:"itemGroupCooldowns,omitempty"`
 	TimedSkillJobs     []TimedSkillJob  `json:"timedSkillJobs,omitempty"`
 	// FortressReturnUntilMs ends the fortress-return cooldown, the owner
-	// timed job (2, 5) of 600 s CGObjPC_HandleSiegeReturn705D (51A5B0)
+	// timed job (2, 5) of 600 s the siege-return handler
 	// creates; zero when none runs.
 	FortressReturnUntilMs int64 `json:"fortressReturnUntilMs,omitempty"`
 	// CampDisbandedAtMs is when the character last dissolved a training camp
-	// (SR_GameServer 0x005dd3f0: 7-day / 604,800 s reopen cooldown, error
+	// (7-day / 604,800 s reopen cooldown, error
 	// 0x681C -> client 0x1C UIIT_MSG_TC_ERROR_NOT_OPEN_7D).
 	CampDisbandedAtMs int64 `json:"campDisbandedAtMs,omitempty"`
 
@@ -401,14 +399,15 @@ type Character struct {
 	// timer/map per item. Only the successful item-use transaction writes it;
 	// reconnect, stack movement and rebirth must not reset these deadlines.
 	ItemUseCooldowns [3]int64 `json:"itemUseCooldowns,omitempty"`
-	// ItemCureCooldowns are the cure lanes of the same reuse mask (4EB410):
+	// ItemCureCooldowns are the cure lanes of the same reuse mask:
 	// [0] the universal pill (bit 0x100), [1] every other cure (bit 0x40).
 	ItemCureCooldowns [2]int64 `json:"itemCureCooldowns,omitempty"`
-	// PetPotionCooldowns are 49D240's 1.1 s recovery lock on the owner, one
+	// PetPotionCooldowns are the native 1.1 s pet-potion recovery lock on
+	// the owner, one
 	// lane per pet-potion TID4 the v1.150 client sends (4, 5, 7).
 	PetPotionCooldowns [3]int64 `json:"petPotionCooldowns,omitempty"`
 
-	// Job is the job guild membership (v1.188 CJobInfo at CGObjPC+0x1FB4).
+	// Job is the job guild membership.
 	Job CharacterJob `json:"job,omitzero"`
 
 	// QuickSlots are the persisted CIFUnderBar bindings. The entered-player
@@ -421,13 +420,13 @@ type Character struct {
 	Mission *MissionRuntime `json:"mission,omitempty"`
 
 	// CompletedQuestIds are the finished-quest questdata ids the 0x32B3
-	// quest block's FIRST section emits (sub_8673d0 section 1: u8 count +
+	// quest block's FIRST section emits (section 1: u8 count +
 	// count x u32 refId into the CICPlayer +0x18d0 container's completed
 	// list). Content ids are v1.150-NATIVE: rows of the shipped
 	// server_dep/silkroad/textdata/questdata.txt (also mirrored to the
 	// client at assets/data/questData.json), resolved by CODENAME - e.g.
-	// 2 = QTUTORIAL_CH, 3 = QNO_CH_SMITH_1 - never transplanted from the
-	// v1.188 shard dump. Absent = none completed (the BlockedWhisperers
+	// 2 = QTUTORIAL_CH, 3 = QNO_CH_SMITH_1 - never transplanted from a
+	// newer shard. Absent = none completed (the BlockedWhisperers
 	// posture: optional omitempty list, no schema version bump - strict
 	// decode knows the key from this struct).
 	CompletedQuestIds []uint32 `json:"completedQuestIds,omitempty"`
@@ -436,15 +435,15 @@ type Character struct {
 	QuestCompletionCounts map[uint32]uint32           `json:"questCompletionCounts,omitempty"`
 	QuestSupplies         map[uint32]QuestSupplyState `json:"questSupplies,omitempty"`
 	// EndedQuestIds are quests closed for good without being completed
-	// (native quest state 5, QuestManager_CreateEndedRecord 570F10): a
+	// (native quest state 5, the ended-record creation path): a
 	// branch the character turned down. Server-side only, like the
 	// counts: the native server sends no update for state 5. A completed
 	// quest that is also ended keeps its completion and count.
 	EndedQuestIds []uint32 `json:"endedQuestIds,omitempty"`
 
 	// ActiveQuests are the in-progress quest records the 0x32B3 quest
-	// block's SECOND section emits (sub_8673d0 section 2: u8 count +
-	// count x [u32 refId + SQuestInfo body], client parse sub_788210).
+	// block's SECOND section emits (section 2: u8 count +
+	// count x [u32 refId + quest-info body], client parse sub_788210).
 	// Quest ids follow the CompletedQuestIds content rule (v1.150-native
 	// questdata rows resolved by codename). The client registry insert is
 	// insert-if-absent (@0x789039: a duplicate refId keeps the FIRST
@@ -453,7 +452,7 @@ type Character struct {
 	ActiveQuests []ActiveQuestRecord `json:"activeQuests,omitempty"`
 
 	// TrackedQuests are the tracker records the 0x32B3 quest block's
-	// THIRD section emits (sub_8673d0 section 3, applied client-side by
+	// THIRD section emits (section 3, applied client-side by
 	// sub_866c60: quest-state apply + tracker UI refresh - the browser
 	// client hosts it over its quest plane and drives the CIFQuest +0x398
 	// tracked id the minimap quest pass gates on). Absent = none tracked.
@@ -473,10 +472,9 @@ type Character struct {
 	// running (the same no-bump omitempty posture as above).
 	EnterEventGroupIds []uint32 `json:"enterEventGroupIds,omitempty"`
 
-	// BlockedWhisperers is the persisted whisper-block name list (the
-	// retail _BlockedWhisperer(OwnerID, TargetName) shape carried as a
-	// JSON list on the character record; the Eternity dump is schema
-	// reference only). Mutated exclusively by the community lane's
+	// BlockedWhisperers is the persisted whisper-block name list (carried
+	// as a JSON list on the character record). Mutated exclusively by the
+	// community lane's
 	// 0x766F handler through the Mutate door; read by the entered
 	// chunk-C emission (BuildLocalPlayerEntryPayload), which is the
 	// client's ONLY reflection channel for this list - sub_77ad10 reads
@@ -485,10 +483,8 @@ type Character struct {
 	// (sub_61dc50 ": %d / %d").
 	BlockedWhisperers []string `json:"blockedWhisperers,omitempty"`
 
-	// Friends is the persisted friend-edge list (the retail
-	// _Friend(CharID, FriendCharID, FriendCharName, RefObjID) shape
-	// carried as a JSON list on the character record; DuckSoup/Eternity
-	// are schema reference only). Edges are MUTUAL by construction: the
+	// Friends is the persisted friend-edge list (carried as a JSON list
+	// on the character record). Edges are MUTUAL by construction: the
 	// community friend-add handler appends to BOTH characters through
 	// one multi-record Mutate door, and delete removes both sides through
 	// the same door. The online
@@ -524,7 +520,8 @@ type Character struct {
 	// False means an ordinary player.
 	GMPrivilege bool `json:"gmPrivilege,omitempty"`
 
-	// PC-room event eligibility is server-owned: client 862A80 -> 547750(1).
+	// PC-room event eligibility is server-owned (the client asks, the
+	// server answers 1).
 	PCRoomEvent bool               `json:"pcRoomEvent,omitempty"`
 	AutoPotion  AutoPotionSettings `json:"autoPotion"`
 
@@ -544,9 +541,9 @@ CharacterCOS is the durable half of one summoned COS lifecycle. Static
 model/speed/TID data remains in characterdata and is re-resolved by
 codename; only mutable entity identity/state belongs on the character.
 PetSkillWindow is one live ITEM_MALL_PET_SKILL_* / growth-potion usage
-window. sub_6E6150 keys its board row by kind and item id, so the ref id is
+window. The client keys its board row by kind and item id, so the ref id is
 the identity. EndUnixMs is absolute rather than a countdown, the way retail
-persists _CharCOS.RentEndTime, so a save keeps the real deadline.
+persists the COS rent end time, so a save keeps the real deadline.
 ==================
 */
 type PetSkillWindow struct {
@@ -562,7 +559,7 @@ type PetSkillWindow struct {
 ================
 ParamJob
 
-One live CTJ_CharParamKeeper (SR_GameServer 654F30): an internal param item
+One live character param keeper job: an internal param item
 (TID 3/3/3/10) writes Value to ParamKeeper parameter Param until EndUnixMs.
 The internal item's reference id is the client board row's identity
 (UpdateMagicStateSlot kind 4).
@@ -576,7 +573,7 @@ type ParamJob struct {
 	EndUnixMs    int64  `json:"endUnixMs"`
 }
 
-// Composite work kinds (49F590 entry tags; CTJ_CompositeItemKeeper 654C40).
+// Composite work kinds (the composite item keeper's entry tags).
 const (
 	CompositeUsedItemLimit  = "UIL1" // CUsedItemLimit: an item's effect N times a period
 	CompositeUsedQuestLimit = "UQL1" // CUsedQuestLimit: a premium quest N times a period
@@ -587,12 +584,12 @@ const (
 ================
 CompositeJob
 
-One CTJ_CompositeItemKeeper work, identified by its package and target.
+One composite item keeper work, identified by its package and target.
 The package's reference id is the client board's kind-5 slot (its icon and
 period); Target is the limited item's or booth item's reference id, the
 board's count key, or zero for a quest limit, whose quest is QuestCodename. A limited work holds Uses of
 MaxUses until NextRefillUnixMs, when every PeriodSeconds the count returns
-to MaxUses (CUsedObjectLimit_Refill 653A40). The work ends at EndUnixMs.
+to MaxUses. The work ends at EndUnixMs.
 ================
 */
 type CompositeJob struct {
@@ -612,7 +609,7 @@ type CompositeJob struct {
 ================
 PremiumClock
 
-CTJ_PremiumKeeper's daily allotment (CTJ_PremiumKeeper_Tick 6529D0). The
+The premium keeper's daily allotment. The
 ticket's period starts at StartUnixMs; each 86,400 s day grants
 DailyAllotmentMs, and what a day leaves unspent carries into the next day
 only (CarriedMs), spent first. Today is what remains of the current day's
@@ -642,10 +639,12 @@ type CharacterCOS struct {
 	Training PetTraining `json:"training,omitzero"`
 	// Port-only combat stacks; never restored from a summoner item.
 	ResolveStacks uint8 `json:"-"`
-	// Runtime source-zero movement multiplier installed by 548A30.
+	// Runtime source-zero movement multiplier the native follow path
+	// installs.
 	FollowRunFactor float32 `json:"-"`
 	FollowRunSet    bool    `json:"-"`
-	// The installed 4D9850 source, refreshed by the guild owner on a purchase.
+	// The installed attribute source, refreshed by the guild owner on a
+	// purchase.
 	MercenaryAttributes    uint8         `json:"mercenaryAttributes,omitempty"`
 	SummonGeneration       uint64        `json:"summonGeneration,omitempty"`
 	RentalExpiresAtUnix    int64         `json:"rentalExpiresAtUnix,omitempty"`
@@ -664,7 +663,7 @@ type CharacterCOS struct {
 	Name                   string        `json:"name,omitempty"`
 	CurrentHP              uint32        `json:"currentHp"`
 	CurrentMP              uint32        `json:"currentMp"`
-	// StateFlags bit 0 is CCOSData+0x38 (49D240): revival refuses while it
+	// StateFlags bit 0 is the COS revival flag: revival refuses while it
 	// is set and sets it when the revive succeeds.
 	StateFlags uint32 `json:"stateFlags,omitempty"`
 	Summoned   bool   `json:"summoned"`
@@ -734,7 +733,7 @@ type COSContainer struct {
 	Rows     []InventoryRow `json:"rows"`
 }
 
-// Job types (v1.150 CICPlayer+0x782; v1.188 CJobInfo_GetJobType).
+// Job types (v1.150 CICPlayer+0x782).
 const (
 	JobNone   uint8 = 0
 	JobTrader uint8 = 1
@@ -749,11 +748,11 @@ CharacterJob
 A job guild membership: the job type joined at a guild NPC, its grade
 (+0x783, 1 on joining) and experience (+0x18B4), the alias a dressed job
 player shows, and the time before a thief or hunter who withdrew may join
-again (v1.188 CGObjPC_HandleJobLeave70E2's seven-day timed job).
+again (the job-leave handler's seven-day timed job).
 
-WeeklyReward is the native _CharTrijob.Contribution (CJobInfo +0x24,
-CJobInfo_AddContribution 60E0A0): a trader's sale share or a thief's or
-hunter's job experience this week. Reward (+0x28) is the outcome a thief or
+WeeklyReward is the native per-character job contribution: a trader's sale
+share or a thief's or
+hunter's job experience this week. Reward is the outcome a thief or
 hunter collects at the guild; the weekly cycle (jobweek.go) credits it.
 ==================
 */
