@@ -8,16 +8,15 @@ commitCharacterEffect sets body status 6 or 7 and the speed cut. What
 this file adds is who else receives a cast (efr kind 1 recipients) and
 the two ways effects end early:
 
-	event   CSkillManager_RetireEffectsForEventMask (5A16C0): an
-	        accepted move (bit 1, CGObjChar_HandleMoveCommand 4B0EA0)
-	        or a skill cast (bit 2, from InitiateSkillCast 59B745) ends
-	        every effect whose skc event mask holds the bit
-	damage  CSkillManager_ProcessDamageEffects (5A0B80): a landed or
+	event   the native event retirement: an accepted move (bit 1) or
+	        a skill cast (bit 2) ends every effect whose skc event mask
+	        holds the bit
+	damage  the native damage-effect pass: a landed or
 	        blocked hit whose att flags share a bit with the effect's
 	        skc damage mask ends it, unless the keep roll holds
 
 Whether a hidden character is seen is the observer client's decision
-(CICharactor_UpdateStatesAndOwnedDecorations 85D890); the server only
+(client CICharactor_UpdateStatesAndOwnedDecorations 85D890); the server only
 installs the hide, dtt and dttp effects it reads.
 
 ===========================================================================
@@ -38,12 +37,12 @@ import (
 
 // Event bits of the skc event mask (the second word).
 const (
-	effectEventMove      uint8 = 1 // an accepted move command (4B0EA0)
-	effectEventSkillCast uint8 = 2 // InitiateSkillCast, and a pet's attack command (4D2592)
-	effectEventBerserk   uint8 = 4 // berserk request (515C43)
+	effectEventMove      uint8 = 1 // an accepted move command
+	effectEventSkillCast uint8 = 2 // a skill cast, and a pet's attack command
+	effectEventBerserk   uint8 = 4 // berserk request
 )
 
-// damageCancelRollKey is the probability stream 5A166A rolls on the victim.
+// damageCancelRollKey is the probability stream the native cancel rolls on the victim.
 const damageCancelRollKey = 0x4b000000
 
 /*
@@ -59,9 +58,9 @@ RECIPIENTS
 concealmentRecipients
 
 The other characters an efr kind 1 program lands on. Select 4/5 dispatches
-to TargetSelection_Party (58CB70 -> 58BEF0): center distance, no body-radius
+to the native party selection: center distance, no body-radius
 expansion and no target-cap read. This includes March, Heal Shield and party
-invisibility. Other selections retain the around-source walk (58A020).
+invisibility. Other selections retain the native around-source walk.
 ==================
 */
 func (rt *Runtime) concealmentRecipients(division string, caster *enterworld.Character, area enterworld.SkillRecipientArea, now int64) []*enterworld.Character {
@@ -93,7 +92,7 @@ func (rt *Runtime) concealmentRecipients(division string, caster *enterworld.Cha
 		}
 		to := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now)
 		if partyOnly {
-			// 58C078 compares the unsigned radius with the x87 length;
+			// The native party-area test compares the unsigned radius with the x87 length;
 			// equality is included, and no body-radius getter is called.
 			if !partyAreaReach(from, to, area.Radius) {
 				continue
@@ -128,7 +127,7 @@ func (rt *Runtime) concealmentRecipients(division string, caster *enterworld.Cha
 ==================
 installRecipientEffects
 
-The recipient loop of 5830B0 (583DFE..583FE2): every recipient gets its
+The native recipient loop: every recipient gets its
 own instance, in execution context mode 2, if buff replacement admits it.
 Runs after the caster's own door; each recipient is published to itself
 and its observers. Returns the recipients that received an instance.
@@ -168,8 +167,8 @@ func (rt *Runtime) installRecipientEffects(division string, recipients []*enterw
 ================
 skillDurationRider
 
-RPBU milliseconds extend a poison coating (5833BE); otherwise STDU extends
-a hide (5833C8). The same rider owns the server lifetime and client timer.
+RPBU milliseconds extend a poison coating; otherwise STDU extends
+a hide, as natively. The same rider owns the server lifetime and client timer.
 ================
 */
 func (rt *Runtime) skillDurationRider(division string, caster *enterworld.Character, skill enterworld.SkillRow) (uint32, bool) {
@@ -194,10 +193,9 @@ func (rt *Runtime) skillDurationRider(division string, caster *enterworld.Charac
 ================
 startSkillCast
 
-InitiateSkillCast (59B480) before a fresh cast installs or strikes: the
-caster's walk stops (haltCasterWalk, 59B5F6), then the event retirement
-(59B745). Basic attacks share this event; the caller holds the character
-door.
+The native cast start, before a fresh cast installs or strikes: the
+caster's walk stops (haltCasterWalk), then the event retirement. Basic
+attacks share this event; the caller holds the character door.
 ================
 */
 func (rt *Runtime) startSkillCast(division string, c *enterworld.Character, skill enterworld.SkillRow, now int64) {
@@ -217,7 +215,7 @@ EARLY RETIREMENT
 ==================
 retireEffectsOnEvent
 
-5A16C0 for one event bit. The caller holds c's door; the ended effects
+The native event retirement for one event bit. The caller holds c's door; the ended effects
 are published at once, ahead of whatever the event itself sends, as the
 native retires them before it broadcasts the cast.
 ==================
@@ -233,7 +231,7 @@ func (rt *Runtime) retireEffectsOnEvent(division string, c *enterworld.Character
 ==================
 RetireMoveEffects
 
-The movement event of CGObjChar_HandleMoveCommand (4B0EA0): once a player's
+The native move command's movement event: once a player's
 move is accepted, every effect whose skc event mask holds bit 1 ends. The
 movement runtime calls it after releasing the character lock.
 ==================
@@ -255,7 +253,7 @@ func (rt *Runtime) RetireMoveEffects(division, name string, now int64) {
 ==================
 cancelEffectsOnDamage
 
-5A15E0..5A1696 for one landed or blocked hit on c. flags are the
+The native damage-effect pass for one landed or blocked hit on c. flags are the
 attack's att word 0. Each effect whose skc damage mask the hit matches
 ends with 100 - damageKeepPercent, rolled on the victim's probability
 stream.
@@ -301,10 +299,10 @@ func (rt *Runtime) cancelEffectsOnDamage(division string, c *enterworld.Characte
 damageKeepPercent
 
 The chance one masked hit leaves an effect of row on c running, as
-CSkillManager_ProcessDamageEffects (5A160A..5A1691) forms it: skc word 2,
-plus c's learned MUCR when the row reads getv MUCR (+0x548), plus c's
-learned DSER when it reads getv DSER (+0x54C), held at 100. The roll then
-ends the effect with 100 - keep. DSCR (+0x550) has no reader and adds
+the native damage-effect pass forms it: skc word 2, plus c's learned MUCR
+when the row reads getv MUCR, plus c's learned DSER when it reads getv
+DSER, held at 100. The roll then ends the effect with 100 - keep. DSCR has
+no reader and adds
 nothing.
 
 ok is false when c's stats cannot be read; the hit then ends nothing.
@@ -332,8 +330,8 @@ func (rt *Runtime) damageKeepPercent(division string, c *enterworld.Character, r
 ==================
 retireHide
 
-A direct RequestRetirement of the character's hide instance (char+0xC1C):
-an NPC function request (510262) and a scroll's indirect skill (493D5E).
+A direct retirement of the character's hide instance, as natively on an
+NPC function request and a scroll's indirect skill.
 The caller holds c's door; the result reports whether a hide ended.
 ==================
 */

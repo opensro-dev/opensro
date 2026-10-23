@@ -120,8 +120,8 @@ func caravanFixture(t *testing.T) (*Runtime, *fakeClock, *enterworld.Character) 
 ================
 TestCaravanUsesTraderContinentAndJobFamily
 
-60BF30 passes the trader to 60BDD0, while placing each bandit around the
-vehicle. Both imported tactics families must reach the population owner.
+The native spawn passes the trader to the population step, while placing
+each bandit around the vehicle. Both imported tactics families must reach the population owner.
 ================
 */
 func TestCaravanUsesTraderContinentAndJobFamily(t *testing.T) {
@@ -205,7 +205,7 @@ func TestLoadedTransportDrawsThievesOnlyOnABattlefield(t *testing.T) {
 		t.Fatal("a loaded transport did not register a caravan")
 	}
 	rt.advanceCaravans(clock.Now().UnixMilli())
-	// 60BC80: a roll of 50 draws float32(50/32767) x 60000 + 60000 ms.
+	// The native timer: a roll of 50 draws float32(50/32767) x 60000 + 60000 ms.
 	clock.Advance(60091 * time.Millisecond)
 	rt.advanceCaravans(clock.Now().UnixMilli())
 	if len(caravanBandits(rt, town.RegionID)) != 0 || rt.caravans.Len() != 1 {
@@ -235,7 +235,7 @@ func TestLoadedTransportDrawsThievesOnlyOnABattlefield(t *testing.T) {
 ================
 TestEmptiedTransportLeavesTheCaravanRegistry
 
-60BD40 drops a caravan whose vehicle no longer carries goods.
+Natively a caravan whose vehicle no longer carries goods is dropped.
 ================
 */
 func TestEmptiedTransportLeavesTheCaravanRegistry(t *testing.T) {
@@ -328,7 +328,7 @@ func TestCaravanReferenceDrawFailureDoesNotSpawn(t *testing.T) {
 ================
 TestThiefCannotRobALevelOneCaravan
 
-52B760: a dressed thief is refused against a dressed trader carrying a
+Natively a dressed thief is refused against a dressed trader carrying a
 level-1 caravan (0x3024), and that trader against the thief (0x3006);
 an empty transport protects nobody.
 ================
@@ -365,7 +365,7 @@ func TestThiefCannotRobALevelOneCaravan(t *testing.T) {
 heavyCaravanAmbush
 
 The caravan fixture with a heavy cargo (20 special goods in a 40-slot
-transport over a base death EXP of 1), so 60C460 rolls far more bandits
+transport over a base death EXP of 1), so the native count rolls far more bandits
 than the cap; it spawns them on a battlefield and returns the bandits and
 every draw the ambush made. configure, when given, adjusts the runtime and
 character just before the ambush.
@@ -390,7 +390,7 @@ func heavyCaravanAmbush(t *testing.T, limit int, configure ...func(*Runtime, *en
 	var draws []uint32
 	next := uint32(0)
 	rt.CaravanRoll = func() (uint32, error) {
-		// The first two draws (60C460's half and 2%) are 50, so the count
+		// The first two draws (the bandit count's half and 2%) are 50, so the count
 		// is the stars; later draws spread each bandit's own values.
 		value := uint32(50)
 		if len(draws) >= 2 {
@@ -417,7 +417,7 @@ TestCaravanBanditCapTrimsTheAmbush
 
 Port-only, not native: SRO_CARAVAN_BANDIT_CAP 16 spawns 16 of the bandits
 the cargo rolls, and the capped ambush's draws are exactly the
-first draws of the native one (60BF30 draws per bandit inside the loop and
+first draws of the native one (the native spawn draws per bandit inside the loop and
 nothing after it). A cap of 0 is native.
 ================
 */
@@ -473,7 +473,7 @@ func TestStarAmbushFixesTheCountPerStar(t *testing.T) {
 ================
 TestIdleCaravanBanditsLeave
 
-CGObjMob_SpawnBase (4C10C0) gives a bandit the job monster's idle timer:
+The native monster spawn gives a bandit the job monster's idle timer:
 an ambush that never strikes leaves 20 s after it spawned, as every other
 thief or hunter monster does.
 ================
