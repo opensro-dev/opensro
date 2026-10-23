@@ -495,7 +495,8 @@ for a dead source only on a lethal tick.
 func TestDamageOverTimeCredit(t *testing.T) {
 	var b Block
 	o := &fakeOwner{alive: true, monster: true, block: &b, hp: 30, sourceDead: true}
-	// Native GetTickCount is large, so the zero +68 makes the first tick due.
+	// Native GetTickCount is large, so the zero last-tick time makes the
+	// first tick due.
 	const start = 1_000_000
 	b.Apply(o, Record{Status: Poison, Level: 1, DurationMs: 9000, Param38: 100}, start)
 	o.now = start + 1

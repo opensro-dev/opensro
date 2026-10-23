@@ -65,7 +65,7 @@ RollInput is everything the roll reads besides its random source.
 */
 type RollInput struct {
 	Params *SkillParams
-	// SkipGroup is hit-group+05 == 2, which never rolls.
+	// SkipGroup is the hit group's skip value 2, which never rolls.
 	SkipGroup bool
 	// TargetImmune is set for an attack COS or a fortress structure.
 	TargetImmune bool

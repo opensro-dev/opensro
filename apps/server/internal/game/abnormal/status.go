@@ -202,7 +202,8 @@ type SkillParams struct {
 	EffectArea EffectArea
 	// AdmitDeadParty is the resu tag (0x72657375) of the skill record.
 	// The party target selection skips the alive check while it is set.
-	// Word 0 is the highest level it revives (none when 0); word 1 is
+	// Word 0 is the highest level it revives (a level above it answers
+	// 0x3012; none when 0); word 1 is
 	// the percent of the last EXP loss it returns.
 	AdmitDeadParty bool
 	ResuMaxLevel   uint32
