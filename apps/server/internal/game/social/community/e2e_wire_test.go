@@ -24,7 +24,7 @@ package community_test
 //	                (the enter-world reflection channel - sub_77ad10
 //	                reads exactly these bytes into the whisper panel);
 //	0x766F cancel-> 0xB66F {2, 0, name}; the store view drops the name;
-//	cancel miss  -> 0xB66F {2, 2} (the v1.188 GameServer remove-miss
+//	cancel miss  -> 0xB66F {2, 2} (the native server remove-miss
 //	                remap, MEDIUM confidence - the evidence note sits on
 //	                the handler's cancel arm).
 
@@ -331,7 +331,7 @@ func TestCommunityLaneEndToEndOverWire(t *testing.T) {
 	first := startCommunityServer(t, dir, seed)
 
 	// "Berk" must EXIST for the register to succeed (retail requires the
-	// target in _CharNameList); provision it beside the actor.
+	// target in its character-name list); provision it beside the actor.
 	if err := first.authority.CreateCharacter(e2eDivision, "test-account", &enterworld.Character{
 		Name:          "Berk",
 		ModelCodename: "CHAR_CH_MAN_ADVENTURER",
@@ -363,7 +363,7 @@ func TestCommunityLaneEndToEndOverWire(t *testing.T) {
 	sendFrame(t, conn, community.OpWhisperBlockRequest, whisperBlockRequest(community.WhisperBlockModeRegister, "Cale"))
 	expectWhisperBlockAck(t, conn, []byte{0x01, 0x02}, "unknown-target ack")
 	// Friend-add refusal arm: "Cale" is not a division character, so the
-	// requester is told UNKNOWNUSER (0xB164 {2, 0x0D}, 447650's 0x640D).
+	// requester is told UNKNOWNUSER (0xB164 {2, 0x0D}, error word 0x640D).
 	friendAdd := wire.NewWriter(6).U16(4).Bytes([]byte("Cale")).Payload()
 	sendFrame(t, conn, community.OpFriendAddRequest, friendAdd)
 	if got := expectFrame(t, conn, community.OpFriendInviteAnswer, "friend-add refusal"); !bytes.Equal(got, community.EncodeFriendInviteErrorB164(community.FriendErrUnknownUser)) {
@@ -403,8 +403,8 @@ func TestCommunityLaneEndToEndOverWire(t *testing.T) {
 		t.Fatalf("store block list after cancel = %v, want empty", got)
 	}
 
-	// Cancel MISS: 0xB66F {2, 2} - the v1.188 GameServer remove-miss
-	// remap (sub_435cd0 SQL 1 -> wire 2), MEDIUM confidence; the full
+	// Cancel MISS: 0xB66F {2, 2} - the native server remove-miss
+	// remap (procedure 1 -> wire 2), MEDIUM confidence; the full
 	// evidence note sits on the handler's cancel arm.
 	sendFrame(t, conn2, community.OpWhisperBlockRequest, whisperBlockRequest(community.WhisperBlockModeCancel, "Berk"))
 	expectWhisperBlockAck(t, conn2, []byte{0x02, 0x02}, "cancel-miss ack")
