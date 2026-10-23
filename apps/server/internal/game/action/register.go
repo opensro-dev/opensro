@@ -237,15 +237,25 @@ func BroadcastObservedFrames(hub *transport.Hub, division string, exceptSession 
 				continue
 			}
 		}
-		run := frames[start:i]
-		batch := make([]transport.Frame, len(run))
-		for j, f := range run {
-			batch[j] = transport.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: transport.ScopeChanges(f.Scope)}
-		}
-		hub.BroadcastObserved(division, exceptSession, currentSource, batch)
+		hub.BroadcastObserved(division, exceptSession, currentSource, transportFrames(frames[start:i]))
 		start = i
 		currentSource = nextSource
 	}
+}
+
+/*
+================
+transportFrames
+
+The game lane's frames as the transport queues them, scope changes included.
+================
+*/
+func transportFrames(frames []wire.Frame) []transport.Frame {
+	batch := make([]transport.Frame, len(frames))
+	for i, f := range frames {
+		batch[i] = transport.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: transport.ScopeChanges(f.Scope)}
+	}
+	return batch
 }
 
 // SendFrames publishes a complete action result, including scene replacement,
@@ -256,10 +266,7 @@ SendFrames
 ================
 */
 func SendFrames(s *transport.Session, frames []wire.Frame) {
-	batch := make([]transport.Frame, len(frames))
-	for i, f := range frames {
-		batch[i] = transport.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: transport.ScopeChanges(f.Scope)}
-	}
+	batch := transportFrames(frames)
 	var err error
 	if len(batch) > 0 && (batch[0].Opcode == enterworld.OpcodeResetClient || batch[0].Opcode == 0x366a) {
 		err = s.SendSceneReset(batch)

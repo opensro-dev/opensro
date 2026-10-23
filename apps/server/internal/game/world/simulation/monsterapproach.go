@@ -70,17 +70,42 @@ ordinarySquadApproach
 Whether the actor runs the native +0x114 pursuit callback
 (CAITactics_PursueTargetWithDirectionGate at 0x00548BE0 outdoors,
 CAITactics_PursueTargetWithRegionRoute at 0x00549460 in dungeons).
-0x0053FC00 installs 0x00548BE0 unconditionally in slot +0x114; Flags bits
-0x04 and 0x80 replace only slot +0x100 (target check), not +0x114. Summoned
-monsters whose summon-tactics row omits a full TacticsControls block still
-carry SummonerGID != 0 and use the same +0x114 pursuit.
+0x0053FC00 stores 0x00548BE0 into slot +0x114 in an unconditional run at
+function entry (0x0053FC67): the function has no FleeType (+0x1d) or
+BattleStyle (+0x20) gate, and the dungeon variant is picked by the region
+test at 0x0053FD04. Flags bits 0x04 and 0x80 replace only slot +0x100
+(target check), not +0x114.
+
+Native resolves a monster's tactics once, when it is spawned
+(CGameAI_SelectSpawnTactics at 0x0054C0E0, called with dwTacticsID == 0 at
+0x005EBAA6), so a spawn without a tactics id reads its spawn table row
+alone. Such a row carries no control block, and the pursuit callback
+belongs to that spawn as well.
+
+The port has to recognise those spawns without inventing a gate native does
+not have. A spawn that carries a TacticsControls row keeps the row's own
+FleeType and BattleStyle. A spawn without one is admitted when it came
+from a summoner (SummonerGID != 0), or when it is a dynamic spawn that is
+detached and policy-pinned: the quest scripts (0x008B9B60, 0x008B2AB0,
+0x008B6840, 0x008C7910) and /LOADMONSTER (0x00520A40) build exactly that,
+with a detached, policy-pinned nest.
+
+A resource-authored area nest is policy-pinned and holds its slot, so it
+stays out while it holds it. Releasing that slot (53FD40, through
+detachCrossPlaneNest) leaves the actor detached and policy-pinned, and the
+predicate then admits it. Native installs the callback for that actor at
+its spawn, so admitting it after the release is the closer of the two
+approximations, and the flip is deliberate rather than a fallthrough.
 ================
 */
 func ordinarySquadApproach(actor monster.Instance) bool {
 	if actor.Nest.HasControls {
 		return actor.Nest.Controls.FleeType == 0 && actor.Nest.Controls.BattleStyle == 0
 	}
-	return actor.SummonerGID != 0
+	if actor.SummonerGID != 0 {
+		return true
+	}
+	return actor.NestDetached && actor.Nest.PolicyPinned
 }
 
 /*

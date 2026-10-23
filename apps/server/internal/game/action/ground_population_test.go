@@ -49,7 +49,7 @@ func TestGroundPickupCannotUsePartyOwnershipAcrossWorlds(t *testing.T) {
 	rt, clock := newTestRuntime(c, testItems())
 	rt.Monsters = simulation.NewMonsterState(monster.TemplateFromParts(nil, nil))
 	drop := ownedGoldAtPlayer(t, rt, clock, c, 100099)
-	rt.CanPickupOwnedDrop = func(string, string, uint32) bool { return true }
+	rt.CanPickupOwnedDrop = itemSharePartyWith(t, c, 100099).CanPickupOwnedDrop
 	packed := uint32(instance.Pack(10, 1))
 	if c.World == nil {
 		c.World = &domain.CharacterWorld{}

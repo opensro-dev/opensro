@@ -157,6 +157,22 @@ func (s *Session) SendObservedBatch(revision uint64, gid uint32, frames []Frame)
 	return s.sendSceneObjectBatch(frames, sceneBatchOptions{revision: &revision, observedGID: gid})
 }
 
+/*
+================
+SendUnobservedBatch
+
+Introduces gid to a live scene that does not show it yet. The membership
+check and enqueue share the queue lock, so a creation another producer
+admitted first is never sent twice.
+================
+*/
+func (s *Session) SendUnobservedBatch(revision uint64, gid uint32, frames []Frame) error {
+	if gid == 0 {
+		return nil
+	}
+	return s.sendSceneObjectBatch(frames, sceneBatchOptions{revision: &revision, unobservedGID: gid})
+}
+
 // BroadcastObserved queues one public transaction only for admitted viewers
 // of its source. SendObservedBatch rechecks membership under the queue lock.
 /*

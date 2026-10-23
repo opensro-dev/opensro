@@ -6,7 +6,7 @@ grabpet_share_test.go - a grab pet shares the top damager's drops
 A report said that in an item-share party the member who dealt the most
 damage got every item and the other none. Drops are reserved to the top
 damager (OwnerJID). These tests build that case with the ownership rule
-the GameWorld wires (wiring_gameplay.go CanPickupOwnedDrop: an item-share
+the GameWorld wires (party Registry.CanPickupOwnedDrop: an item-share
 party's member may take another member's drop) and pin the native rotation
 (525DC0, 4D4840): the lower-damage member's pet picks the top damager's
 drops and the items alternate between the two. Without item share the
@@ -40,27 +40,15 @@ func topDamagerPetFixture(t *testing.T, options uint8) (*Runtime, *enterworld.Ch
 	picker := testCharacter()
 	refs := testCosSource(testItems())
 	refs.characters["PET"] = &enterworld.CharacterRef{Codename: "PET", RefObjID: 9, TidWord: 0x21c6, RunSpeed: 100}
-	rt, _, _, peer, registry := sharedPickupFixtureWith(t, picker, refs)
+	rt, _, _, peer, _ := sharedPickupFixtureWith(t, picker, refs)
 	if options != party.PartyOptionItemShare {
-		registry = party.NewRegistry()
+		registry := party.NewRegistry()
 		if _, refusal := registry.Form(testDivision, party.Member{MemberID: enterworld.ObjectIDForCharacter(picker), Name: picker.Name},
 			party.Member{MemberID: enterworld.ObjectIDForCharacter(peer), Name: peer.Name}, options); refusal != "" {
 			t.Fatal(refusal)
 		}
 		rt.NextPartyLootMember = registry.NextLootMember
-	}
-	// wiring_gameplay.go: an item-share party's member may take a member's drop.
-	rt.CanPickupOwnedDrop = func(divisionID, characterName string, ownerJID uint32) bool {
-		snapshot, ok := registry.PartyOf(divisionID, characterName)
-		if !ok || snapshot.OptionBits&party.PartyOptionItemShare == 0 {
-			return false
-		}
-		for _, member := range snapshot.Members {
-			if member.MemberID == ownerJID {
-				return true
-			}
-		}
-		return false
+		rt.CanPickupOwnedDrop = registry.CanPickupOwnedDrop
 	}
 	rt.Now = func() time.Time { return time.UnixMilli(1000) }
 	gid, _ := enterworld.CosObjectIDForCharacter(picker)

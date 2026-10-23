@@ -50,6 +50,7 @@ func sharedPickupFixtureWith(t *testing.T, picker *enterworld.Character, source 
 		t.Fatal(refusal)
 	}
 	rt.NextPartyLootMember = registry.NextLootMember
+	rt.CanPickupOwnedDrop = registry.CanPickupOwnedDrop
 	rt.RewardParties = func(division string) []RewardParty {
 		var result []RewardParty
 		for _, row := range registry.RewardSnapshots(division) {
@@ -62,6 +63,24 @@ func sharedPickupFixtureWith(t *testing.T, picker *enterworld.Character, source 
 		return result
 	}
 	return rt, clock, picker, peer, registry
+}
+
+/*
+================
+itemSharePartyWith
+
+An item-share party of c and the member ownerJID, for tests whose drop is
+reserved to a party member the fixture does not otherwise build.
+================
+*/
+func itemSharePartyWith(t *testing.T, c *enterworld.Character, ownerJID uint32) *party.Registry {
+	t.Helper()
+	registry := party.NewRegistry()
+	if _, refusal := registry.Form(testDivision, party.Member{MemberID: enterworld.ObjectIDForCharacter(c), Name: c.Name},
+		party.Member{MemberID: ownerJID, Name: "ShareOwner"}, party.PartyOptionItemShare); refusal != "" {
+		t.Fatal(refusal)
+	}
+	return registry
 }
 
 /*

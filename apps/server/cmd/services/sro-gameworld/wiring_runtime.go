@@ -59,6 +59,11 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 		func(nowMs int64) []simulation.DivisionFrames {
 			return game.items.AdvanceSkillObjects(nowMs, sessionViews(ticker.Source))
 		},
+		// Drops enter and leave each scene with its range (#617).
+		func(nowMs int64) []simulation.DivisionFrames {
+			game.items.AdvanceGroundScope(nowMs, sessionViews(ticker.Source), ticker.Source.(*worldsession.Bridge).SceneSession)
+			return nil
+		},
 		// A marked player's moves reach its hunter out of sight (hntp).
 		func(nowMs int64) []simulation.DivisionFrames {
 			return game.items.AdvanceHuntingPoints(nowMs, sessionViews(ticker.Source))

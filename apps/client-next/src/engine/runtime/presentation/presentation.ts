@@ -12,6 +12,11 @@ indexes the skill catalog once per catalog for per-frame UI lookups.
 import { createEffectiveHp } from "./effective-hp";
 import { mergeGameplaySnapshots } from "@/engine/foundation/gameplay/gameplay-snapshot";
 import type { EntityState, WorldBatch, WorldEvent } from "@/engine/contracts/world";
+// A live batch spans one publication interval (16 ms steps, ~100 ms at the
+// hidden maintenance pace). Past a second in the queue, a one-shot effect
+// is older than its natural lifetime: apply the batch's state, but do not
+// replay its one-shots on the return frame.
+const STALE_PRESENTATION_MS = 1000;
 /*
 ================
 createPresentation
@@ -68,6 +73,7 @@ export function createPresentation() {
 		apply( batch: WorldBatch ) {
 			if ( disposed ) throw new Error( "Presentation disposed" );
 			if ( batch.sequence !== sequence + 1 ) throw new Error( "Presentation journal gap" );
+			const stale = (batch.spanMs ?? 0) > STALE_PRESENTATION_MS;
 			const nextSounds = [ ...sounds ], nextOrbs = [ ...orbs ];
 			let next = entities;
 			/*
@@ -100,9 +106,12 @@ export function createPresentation() {
 				} else if ( event.kind === "travel" ) nextTravel = { ...event.travel };
 				else if (
 					event.kind === "item-effect" || event.kind === "level-up" || event.kind === "system-effect" ||
-					event.kind === "orb-feedback" ||
-					event.kind === "orb-clear" || event.kind === "orb-gauge"
-				) nextOrbs.push( event );
+					event.kind === "orb-feedback"
+				) {
+					// One-shot presentation: a stale batch drops it instead of
+					// replaying every queued effect on the return frame.
+					if ( !stale ) nextOrbs.push( event );
+				} else if ( event.kind === "orb-clear" || event.kind === "orb-gauge" ) nextOrbs.push( event );
 				else if ( event.kind === "ui-sound" || event.kind === "item-sound" || event.kind === "buff-ended" ) {
 					nextSounds.push( event );
 				} else if ( event.kind === "gameplay" ) {

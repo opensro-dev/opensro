@@ -382,18 +382,7 @@ func newGameplayPlane(
 		}
 		return out
 	}
-	items.CanPickupOwnedDrop = func(divisionID, characterName string, ownerJID uint32) bool {
-		snapshot, ok := parties.Registry().PartyOf(divisionID, characterName)
-		if !ok || snapshot.OptionBits&party.PartyOptionItemShare == 0 {
-			return false
-		}
-		for _, member := range snapshot.Members {
-			if member.MemberID == ownerJID {
-				return true
-			}
-		}
-		return false
-	}
+	items.CanPickupOwnedDrop = parties.Registry().CanPickupOwnedDrop
 	guildInvites := guild.NewInviteRuntime(deps, presence)
 	guildInvites.Unions = unions
 	mentorInvites := mentor.NewInviteRuntime(deps, presence)
@@ -480,7 +469,7 @@ func appendGroundObjectRows(deps *enterworld.Deps, items *action.Runtime) {
 		if npcRows != nil {
 			rows = npcRows(divisionID, character, entry)
 		}
-		rows = append(rows, enterworld.GroundObjectListRows(items.CharacterGroundItems(divisionID, character))...)
+		rows = append(rows, items.GroundObjectRows(divisionID, character, entry)...)
 		return append(rows, items.SkillObjectRows(divisionID, character, entry)...)
 	}
 }

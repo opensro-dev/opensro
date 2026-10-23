@@ -37,7 +37,7 @@ nativeFieldSchema
 ================
 */
 func nativeFieldSchema() ([]string, map[string]int) {
-	names := []string{"maxDurability", "useCooldownGroup524", "useCooldownDuration528", "useSkillId", "useSkillDurationMs"}
+	names := []string{"maxDurability", "useCooldownGroup524", "useCooldownDuration528", "useSkillId", "useSkillDurationMs", "stoneFamilyMask"}
 	for _, c := range itemdataRecordColumns {
 		names = append(names, c.Name)
 	}

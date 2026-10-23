@@ -53,9 +53,7 @@ func TestOwnedPickupAllowsSelfAndItemSharingPartyOnly(t *testing.T) {
 		character := testCharacter()
 		rt, clock := newTestRuntime(character, testItems())
 		drop := ownedGoldAtPlayer(t, rt, clock, character, 100099)
-		rt.CanPickupOwnedDrop = func(divisionID, characterName string, ownerJID uint32) bool {
-			return divisionID == testDivision && characterName == character.Name && ownerJID == 100099
-		}
+		rt.CanPickupOwnedDrop = itemSharePartyWith(t, character, 100099).CanPickupOwnedDrop
 		result := rt.HandleTargetInteract(testDivision, character, wire.TargetInteract{Gid: drop.Gid}.Encode())
 		assertOpcodes(t, result.Frames, wire.OpPickupAnim,
 			wire.OpItemMoveResponse, wire.OpPointsUpdate, wire.OpObjectDespawn, wire.OpActionState)

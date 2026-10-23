@@ -357,6 +357,14 @@ func TestOrdinarySquadApproachAdmitsCaravanBanditsAndSummonedMonsters(t *testing
 				inst.SummonSightRange = 80
 			},
 		},
+		{
+			name: "scripted spawn",
+			configure: func(inst *monster.Instance) {
+				inst.Nest.HasControls = false
+				inst.NestDetached = true
+				inst.Nest.PolicyPinned = true
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ops, instance := monsterLegFixture(t, aggressiveTactics())

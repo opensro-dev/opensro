@@ -97,3 +97,48 @@ func TestObservedConcurrentDeparture(t *testing.T) {
 		t.Fatalf("action escaped lifecycle: %+v", s.queue)
 	}
 }
+
+/*
+================
+TestUnobservedPublicationIntroducesOnce
+
+SendUnobservedBatch introduces an object only to a live scene that lacks it:
+never twice, never while loading, never after its removal is forgotten by a
+stale revision.
+================
+*/
+func TestUnobservedPublicationIntroducesOnce(t *testing.T) {
+	hub := newHub(testCfg())
+	s, err := hub.createSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer hub.closeSession(s, nil)
+	const gid = 81
+	spawn := []Frame{{Opcode: 0x30d7, Scope: []ObjectScopeChange{{GID: gid, Visible: true}}}}
+	s.BeginSceneAdmission()
+	loading, _ := s.SceneRevision()
+	_ = s.SendUnobservedBatch(loading, gid, spawn)
+	if !s.FinishSceneReentry() {
+		t.Fatal("scene did not resume")
+	}
+	revision, _ := s.SceneRevision()
+	_ = s.SendUnobservedBatch(revision, gid, spawn)
+	_ = s.SendUnobservedBatch(revision, gid, spawn)
+	_ = s.PublishSceneObjects(revision, []ObjectScopeChange{{GID: gid, Visible: false}}, []Frame{{Opcode: 0x36ab}})
+	_ = s.SendUnobservedBatch(revision, gid, spawn)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	want := []uint16{0x30d7, 0x36ab, 0x30d7}
+	if len(s.queue) != len(want) {
+		t.Fatalf("unexpected publication: %+v", s.queue)
+	}
+	for i, op := range want {
+		if s.queue[i].Opcode != op {
+			t.Fatalf("frame %d: %x != %x", i, s.queue[i].Opcode, op)
+		}
+	}
+	if _, observed := s.observedObjects[gid]; !observed {
+		t.Fatal("the reintroduced object is not in scope")
+	}
+}

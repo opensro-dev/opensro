@@ -13,8 +13,8 @@ import type { FontAtlas, Glyph } from "@/engine/foundation/rendering/ui-glyphs";
 import { titleText, drawableGlyph } from "@/engine/foundation/rendering/ui-glyphs";
 import type { UiQuad, UiRect } from "@/engine/contracts/ui";
 
+// CIFPML_RebuildLayout (535B8C) seeds the first line state with margin 5.
 const PML_LINE_MARGIN = 5;
-const BOARD_EXTRA_HEIGHT = 5;
 /*
 ================
 GuideToken
@@ -237,11 +237,68 @@ function fitPmlText( glyphs: Record<string, Glyph>, chars: readonly string[], st
 }
 /*
 ================
+GuideBlock
+
+A CIFPML control's authored frame for its text block: the res HAlign that
+seeds the first line's alignment and the res VAlign that shifts the whole
+block inside its rect. CIFPML_RebuildLayout (535B84) maps HAlign 0/1/2 to
+the line alignments left/center/right, and its tail (535C21..535C85)
+shifts the laid-out layer down by the client height minus the content
+height - halved for VAlign 1, full for VAlign 2, never when the content
+is taller.
+================
+*/
+export interface GuideBlock {
+	align: GuideAlign;
+	vAlign: number;
+}
+
+/*
+================
+styledHeight
+
+The styled height of a font face: CTextBlock_GetStyledLine (781C40)
+returns the TEXTMETRIC tmHeight that CGfxFont_InitializeGdiStyleSlots
+(A17690) stores per style slot with GetTextMetricsA. The atlas records
+that same metric as ascent + descent for every face and style.
+================
+*/
+function styledHeight( font: { ascent: number; descent: number; } ): number {
+	return font.ascent + font.descent;
+}
+
+/*
+================
+shiftQuad
+
+A laid-out quad moved by (dx, dy); a text run's layout box moves with its
+glyphs so overlap fitting keeps seeing the placed cell.
+================
+*/
+function shiftQuad( q: UiQuad, dx: number, dy: number ): UiQuad {
+	if ( !dx && !dy ) return q;
+	const box = q.textLayout?.box;
+	const moved: UiQuad = {
+		...q,
+		rect: [ q.rect[0] + dx, q.rect[1] + dy, q.rect[2], q.rect[3] ],
+		...(box ?
+			{ textLayout: { ...q.textLayout, box: [ box[0] + dx, box[1] + dy, box[2], box[3] ] as UiRect } } :
+			{})
+	};
+	return moved;
+}
+
+/*
+================
 guideContent
 
-83E8F0 lays out each PML text resource through the fitted CTextBoard and
-continues its returned suffix on the next line. Keep run boundaries and
-spaces: fitPmlText applies the owner-approved word-wrap deviation.
+CPMLLayer_LayoutContent (840840) lays a PML document out as CTextBlock
+lines (83E8F0): each line carries its own height, margin and alignment,
+a finished line advances the cursor by its height plus its margin
+(83E6B0), and every run or image sits on the line's bottom edge
+(83D000). A line's height is the tallest styled height or image on it.
+Keep run boundaries and spaces: fitPmlText applies the owner-approved
+word-wrap deviation.
 ================
 */
 export function guideContent(
@@ -250,56 +307,55 @@ export function guideContent(
 	r: UiRect,
 	clip: UiRect,
 	color: UiQuad["color"],
-	size: ( path: string ) => readonly [number, number] | undefined
+	size: ( path: string ) => readonly [number, number] | undefined,
+	block?: GuideBlock
 ) {
 	const quads: UiQuad[] = [], paths: string[] = [];
-	let x = r[0], y = r[1], margin = PML_LINE_MARGIN, line = atlas.fonts["0"]!.recordHeight + margin;
-	// The current alignment, and the first quad of the line being laid out.
-	let align: GuideAlign = "left", lineStart = 0;
+	// The line being filled: its origin, the margin and alignment it will
+	// advance by, its height so far, and its quads awaiting the bottom edge.
+	let x = r[0], y = r[1], margin = PML_LINE_MARGIN, align: GuideAlign = block?.align ?? "left";
+	let lineHeight = 0, height = 0;
+	let pending: { index: number; cell: number; }[] = [];
 	/*
 	================
 	finishLine
 
-	Shifts the finished line's quads to its alignment within r.
+	Aligns the finished line within r, drops its quads onto the line's
+	bottom edge, and advances by the line's height plus its margin.
 	================
 	*/
 	const finishLine = () => {
-		const spare = r[2] - (x - r[0]);
-		if ( align !== "left" && spare > 0 ) {
-			const dx = align === "center" ? Math.floor( spare / 2 ) : spare;
-			for ( let i = lineStart; i < quads.length; i++ ) {
-				const q = quads[i]!;
-				quads[i] = { ...q, rect: [ q.rect[0] + dx, q.rect[1], q.rect[2], q.rect[3] ] };
-			}
+		const spare = r[2] - (x - r[0]),
+			dx = spare > 0 && align === "center" ? Math.floor( spare / 2 ) : spare > 0 && align === "right" ? spare : 0,
+			bottom = y + lineHeight;
+		for ( const item of pending ) {
+			const q = quads[item.index]!;
+			quads[item.index] = shiftQuad(
+				q,
+				dx,
+				bottom - item.cell - (q.textLayout ? q.textLayout.box[1] : q.rect[1])
+			);
 		}
-		lineStart = quads.length;
-	};
-	/*
-	================
-	newline
-	================
-	*/
-	const newline = () => {
-		finishLine();
+		pending = [];
+		y = bottom + margin;
+		height = y - r[1];
 		x = r[0];
-		y += line;
-		line = atlas.fonts["0"]!.recordHeight + margin;
+		lineHeight = 0;
 	};
 	for ( const token of tokens ) {
 		if ( token.kind === "align" ) {
 			// An alignment scope starts on its own line.
-			if ( x > r[0] ) newline();
+			if ( x > r[0] ) finishLine();
 			align = token.align;
 			continue;
 		}
 		if ( token.kind === "paragraph" ) {
-			if ( x > r[0] ) newline();
+			if ( x > r[0] ) finishLine();
 			margin = token.margin;
-			line = atlas.fonts["0"]!.recordHeight + margin;
 			continue;
 		}
 		if ( token.kind === "break" ) {
-			newline();
+			finishLine();
 			continue;
 		}
 		if ( token.kind === "image" ) {
@@ -307,7 +363,8 @@ export function guideContent(
 			const extent = size( token.path );
 			if ( !extent ) continue;
 			const [w, h] = extent;
-			if ( x > r[0] && x + w > r[0] + r[2] ) newline();
+			if ( x > r[0] && x + w > r[0] + r[2] ) finishLine();
+			pending.push( { index: quads.length, cell: h } );
 			quads.push( {
 				rect: [ x, y, w, h ],
 				clip,
@@ -315,34 +372,44 @@ export function guideContent(
 				texture: token.path,
 				color: [ 1, 1, 1, 1 ]
 			} );
+			lineHeight = Math.max( lineHeight, h );
 			x += w;
-			line = Math.max( line, h + margin );
 			continue;
 		}
 		const font = atlas.fonts[token.strong ? "0:2" : "0"];
 		if ( !font ) throw Error( "Missing native emphasis font" );
-		const chars = Array.from( token.value );
+		const cell = styledHeight( font ), chars = Array.from( token.value );
 		let start = 0;
 		while ( start < chars.length ) {
 			const fit = fitPmlText( font.glyphs, chars, start, r[0] + r[2] - x );
-			quads.push(
-				...titleText(
-					atlas,
-					chars.slice( start, fit.end ).join( "" ),
-					[ x, y, fit.width, font.recordHeight + BOARD_EXTRA_HEIGHT ],
-					clip,
-					token.color ?? color,
-					{
-						fontStyle: token.strong ? 2 : 0,
-						vAlign: 0
-					}
-				)
+			const placed = titleText(
+				atlas,
+				chars.slice( start, fit.end ).join( "" ),
+				[ x, y, fit.width, cell ],
+				clip,
+				token.color ?? color,
+				{
+					fontStyle: token.strong ? 2 : 0,
+					vAlign: 0
+				}
 			);
+			if ( placed.length ) pending.push( { index: quads.length, cell } );
+			quads.push( ...placed );
+			lineHeight = Math.max( lineHeight, cell );
 			x += fit.width;
 			start = fit.end;
-			if ( start < chars.length ) newline();
+			if ( start < chars.length ) finishLine();
 		}
 	}
 	finishLine();
-	return { quads, paths, height: y - r[1] + line };
+	// CIFPML_RebuildLayout shifts the whole block for the authored VAlign.
+	const shiftY = block?.vAlign === 1 ?
+		Math.floor( Math.max( 0, r[3] - height ) / 2 ) :
+		block?.vAlign === 2 ?
+		Math.max( 0, r[3] - height ) :
+		0;
+	if ( shiftY ) {
+		for ( let i = 0; i < quads.length; i++ ) quads[i] = shiftQuad( quads[i]!, 0, shiftY );
+	}
+	return { quads, paths, height };
 }

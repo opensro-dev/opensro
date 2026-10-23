@@ -4,7 +4,9 @@
 loot.go - party-owned rotating pickup recipients
 
 Retail 4D4840 moves the first member entry to the tail and returns its GID.
-Pickup eligibility is evaluated by the action owner after this rotation.
+Pickup eligibility is evaluated by the action owner after this rotation;
+the party half of it (may a member take another member's drop) lives here,
+so the GameWorld wiring and the action tests share one rule.
 
 ===========================================================================
 */
@@ -50,4 +52,28 @@ func (r *Registry) NextLootMember(division, name string) uint32 {
 	order[len(order)-1] = gid
 	p.lootOrder = order
 	return gid
+}
+
+/*
+================
+CanPickupOwnedDrop
+
+A character may take a drop reserved to ownerJID when both are in the same
+party and that party shares items. Self-ownership is the action owner's
+check, not this one. The action runtime takes this as CanPickupOwnedDrop.
+================
+*/
+func (r *Registry) CanPickupOwnedDrop(divisionID, characterName string, ownerJID uint32) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	p := r.byKey[memberKey(divisionID, characterName)]
+	if p == nil || p.optionBits&PartyOptionItemShare == 0 {
+		return false
+	}
+	for _, member := range p.members {
+		if member.MemberID == ownerJID {
+			return true
+		}
+	}
+	return false
 }
