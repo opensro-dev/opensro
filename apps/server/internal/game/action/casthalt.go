@@ -3,12 +3,11 @@
 
 casthalt.go - a skill cast stops its caster's walk
 
-CSkillManager_InitiateSkillCast (v1.188 59B480) stops a moving caster
-before anything else happens to the cast. For every skill with activity 2
-(column 8, ref +0x65: the ordinary cast that queues on the command actor,
-4AD870) it calls the character's StopMove (vtable +0x4B0, CGObjChar_StopMove
-4A9430) with the move angle and broadcast set. The caster stands at its live
-point and its nearby sessions get the stop (v1.188 0xB023, v1.150 0xB2F5)
+The original server stops a moving caster when a cast starts, before
+anything else happens to the cast. For every skill with activity 2 (column
+8: the ordinary cast that queues on the command actor) it stops the
+character's move with the move angle and broadcast set. The caster stands
+at its live point and its nearby sessions get the stop (0xB2F5 in v1.150)
 ahead of the cast. Instant activities (imbues, speed skills) keep the walk.
 
 Targeted casts already reach this point settled: the approach ends in
@@ -52,7 +51,7 @@ func sourceCorrectionFrame(c *enterworld.Character, spawn simulation.Spawn) wire
 ================
 haltCasterWalk
 
-59B5F6..59B62C for one cast. The caller holds c's door; the stop is
+The stop for one cast. The caller holds c's door; the stop is
 published at once, so it reaches the caster and its peers before the cast
 the caller returns. A mounted rider never walks itself (its vehicle does,
 and skills are refused on a saddle), so it has nothing to stop.
@@ -66,7 +65,7 @@ func (rt *Runtime) haltCasterWalk(division string, c *enterworld.Character, skil
 	state := rt.Worlds.Update(simulation.WorldKey(division, c.Name),
 		func() simulation.WorldState { return simulation.SeedWorldState(c) },
 		func(world *simulation.WorldState) {
-			// CGObjChar IsMoving (vtable +0x4C0): a segment still in flight.
+			// Moving: a segment still in flight.
 			if !world.MovingAt(now) {
 				return
 			}
