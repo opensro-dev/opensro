@@ -129,7 +129,7 @@ func newGameplayPlane(
 	if monster.QinShiTombFromEnv() {
 		log.Infof("portals: Qin-Shi Tomb ON (%s): the door by Jangan admits level 70 and above", monster.EnvQinShiTomb)
 	}
-	if err := items.ConfigurePortals(devPaths.TextdataDir); err != nil {
+	if err := items.ConfigurePortals(devPaths.TextdataDir, devPaths.DerivedDir); err != nil {
 		return nil, fmt.Errorf("portal catalogue: %w", err)
 	}
 	// Port-only, not native: the reverse return scroll's map destinations.

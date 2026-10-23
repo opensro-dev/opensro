@@ -31,7 +31,7 @@ fortressBattlePair
 func fortressBattlePair(t *testing.T) (*Runtime, *fakeClock, *enterworld.Character, *enterworld.Character, uint32) {
 	t.Helper()
 	rt, clock, killer, victim := newPvpPair(t)
-	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t)); err != nil {
+	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t), ""); err != nil {
 		t.Fatal(err)
 	}
 	packed := uint32(instance.Pack(2, 1))

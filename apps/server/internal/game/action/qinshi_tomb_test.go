@@ -68,7 +68,7 @@ func TestQinShiTombPortalsAndWalkIns(t *testing.T) {
 	dir := licensed.RetailTextdataDir(t)
 
 	t.Setenv(monster.EnvQinShiTomb, "off")
-	baseCatalog, err := loadPortalCatalog(dir)
+	baseCatalog, err := loadPortalCatalog(dir, "")
 	if err != nil {
 		t.Fatalf("loadPortalCatalog(off): %v", err)
 	}
@@ -77,7 +77,7 @@ func TestQinShiTombPortalsAndWalkIns(t *testing.T) {
 	}
 
 	t.Setenv(monster.EnvQinShiTomb, "on")
-	tombCatalog, err := loadPortalCatalog(dir)
+	tombCatalog, err := loadPortalCatalog(dir, "")
 	if err != nil {
 		t.Fatalf("loadPortalCatalog(on): %v", err)
 	}
@@ -228,11 +228,11 @@ func TestQinShiOffCatalogIsByteIdentical(t *testing.T) {
 	dir := gamedatatest.TextdataDir(t)
 
 	t.Setenv(monster.EnvQinShiTomb, "off")
-	off, err := loadPortalCatalog(dir)
+	off, err := loadPortalCatalog(dir, "")
 	if err != nil {
 		t.Fatalf("loadPortalCatalog(off): %v", err)
 	}
-	offAgain, err := loadPortalCatalog(dir)
+	offAgain, err := loadPortalCatalog(dir, "")
 	if err != nil {
 		t.Fatalf("loadPortalCatalog(off) again: %v", err)
 	}
@@ -246,7 +246,7 @@ func TestQinShiOffCatalogIsByteIdentical(t *testing.T) {
 	}
 
 	t.Setenv(monster.EnvQinShiTomb, "on")
-	on, err := loadPortalCatalog(dir)
+	on, err := loadPortalCatalog(dir, "")
 	if err != nil {
 		t.Fatalf("loadPortalCatalog(on): %v", err)
 	}
@@ -295,7 +295,7 @@ keeps its level-70..999 gate (GH #1013).
 func TestQinShiTombClosedLinkGraph(t *testing.T) {
 	licensed.RequireGameData(t)
 	t.Setenv(monster.EnvQinShiTomb, "on")
-	catalog, err := loadPortalCatalog(gamedatatest.TextdataDir(t))
+	catalog, err := loadPortalCatalog(gamedatatest.TextdataDir(t), "")
 	if err != nil {
 		t.Fatalf("loadPortalCatalog(on): %v", err)
 	}
@@ -391,7 +391,7 @@ func TestWalkingIntoTheTombDoorLevels(t *testing.T) {
 	licensed.RequireGameData(t)
 	t.Setenv(monster.EnvQinShiTomb, "on")
 	rt, c, _, _ := returnFixture(t, 30000)
-	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t)); err != nil {
+	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t), ""); err != nil {
 		t.Fatal(err)
 	}
 	rt.Monsters = simulation.NewMonsterState(monster.TemplateFromParts(nil, nil))

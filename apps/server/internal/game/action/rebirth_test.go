@@ -325,7 +325,7 @@ func TestRecallAppointmentGateCatalogAndPersistence(t *testing.T) {
 		t.Fatal(err)
 	}
 	rt.NpcRoster = roster
-	if err = rt.ConfigurePortals(dir); err != nil {
+	if err = rt.ConfigurePortals(dir, ""); err != nil {
 		t.Fatal(err)
 	}
 	count := 0
@@ -427,7 +427,7 @@ func TestRecallAppointmentSurvivesAuthorityReopen(t *testing.T) {
 	d.rt.NpcSpawn.Enabled = true
 	d.rt.NpcRoster = []simulation.NpcDef{{ObjectID: 252094, RefObjID: 2094, Teleport: &simulation.TeleportGateBounds{Radius: 100, Height: 200}}}
 	dir := gamedatatest.TextdataDir(t)
-	if err := d.rt.ConfigurePortals(dir); err != nil {
+	if err := d.rt.ConfigurePortals(dir, ""); err != nil {
 		t.Fatal(err)
 	}
 	d.rt.Selected.Set(testDivision, d.character.Name, 252094)
@@ -440,7 +440,7 @@ func TestRecallAppointmentSurvivesAuthorityReopen(t *testing.T) {
 	if d.character.World.RebirthGateRefID != 2094 {
 		t.Fatal("reboot lost gate identity")
 	}
-	if err := d.rt.ConfigurePortals(dir); err != nil {
+	if err := d.rt.ConfigurePortals(dir, ""); err != nil {
 		t.Fatal(err)
 	}
 	if d.rt.appointedRebirthPoint(d.character) != want {

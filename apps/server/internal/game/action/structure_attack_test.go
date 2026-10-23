@@ -24,7 +24,7 @@ func TestStructuresTakeOnlyBasicAttacksDuringTheWar(t *testing.T) {
 		Items:  enterworld.NewTextdataItems(textdataDir),
 		Skills: enterworld.NewTextdataSkills(textdataDir),
 	}, nil)
-	if err := rt.ConfigurePortals(textdataDir); err != nil {
+	if err := rt.ConfigurePortals(textdataDir, ""); err != nil {
 		t.Fatal(err)
 	}
 	c := shippedEuropeanSwordsman()
@@ -78,7 +78,7 @@ func TestAnOpenGateCannotBeStruck(t *testing.T) {
 		Items:  enterworld.NewTextdataItems(textdataDir),
 		Skills: enterworld.NewTextdataSkills(textdataDir),
 	}, nil)
-	if err := rt.ConfigurePortals(textdataDir); err != nil {
+	if err := rt.ConfigurePortals(textdataDir, ""); err != nil {
 		t.Fatal(err)
 	}
 	c := shippedEuropeanSwordsman()

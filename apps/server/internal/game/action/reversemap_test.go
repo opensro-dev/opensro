@@ -156,7 +156,7 @@ func TestReverseMapTableFromShippedData(t *testing.T) {
 	licensed.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	rt, _ := newTestRuntime(rebirthTestCharacter(20, 100), testItems())
-	if err := rt.ConfigurePortals(dir); err != nil {
+	if err := rt.ConfigurePortals(dir, ""); err != nil {
 		t.Fatal(err)
 	}
 	rt.Monsters = simulation.NewMonsterState(monster.LoadTemplate(dir))

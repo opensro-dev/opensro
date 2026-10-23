@@ -40,7 +40,6 @@
 	"excludes": [
 		"apps/server/internal/game/item/commerce/.generated/**",
 		"apps/server/internal/game/item/commerce/testdata/native-trade-rewards.json",
-		"apps/server/internal/game/action/portaltransport_generated.go",
 		"apps/server/internal/game/quest/.generated/**",
 		"**/node_modules",
 		"**/temp",

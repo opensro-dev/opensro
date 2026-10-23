@@ -28,13 +28,13 @@ TestWalkInGatesLoadFromTheReferenceData
 
 v1.150's TELEPORT event zones are the cave's two gates, each with its one
 link: in from level 50, both refusing a summoned transport (the server
-DB's restriction, portaltransport_generated.go), both free. The tomb door's zone
+DB's restriction, PortalTransportFile), both free. The tomb door's zone
 has no reference row in v1.150, so it moves nobody.
 ================
 */
 func TestWalkInGatesLoadFromTheReferenceData(t *testing.T) {
 	licensed.RequireGameData(t)
-	catalog, err := loadPortalCatalog(gamedatatest.TextdataDir(t))
+	catalog, err := loadPortalCatalog(gamedatatest.TextdataDir(t), sourceDataPortalTransport(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func walkInFixture(t *testing.T) (*Runtime, *enterworld.Character, *[][]wire.Fra
 	t.Helper()
 	licensed.RequireGameData(t)
 	rt, c, _, _ := returnFixture(t, 30000)
-	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t)); err != nil {
+	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t), ""); err != nil {
 		t.Fatal(err)
 	}
 	rt.Monsters = simulation.NewMonsterState(monster.TemplateFromParts(nil, nil))
