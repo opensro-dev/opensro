@@ -50,7 +50,7 @@ const (
 	hunterTacticsBase = 2011
 	// percentRare is the 2% (rand%100 < 2) every doubling and champion uses.
 	percentRare = 2
-	// traderJob is CGObjPC job state 1.
+	// traderJob is the native PC job state 1.
 	traderJob = 1
 )
 
@@ -82,8 +82,8 @@ type Entry struct {
 ================
 Registry
 
-The registered caravans by trader (CaravanManager's map). The action
-runtime owns one and serializes every call.
+The registered caravans by trader. The action runtime owns one and
+serializes every call.
 ================
 */
 type Registry struct {
@@ -183,7 +183,7 @@ func (r *Registry) Due(deltaMs int64, roll Roll) ([]Entry, error) {
 ================
 resetTimer
 
-Caravan_ResetSpawnTimer: elapsed 0, next = ftol(float32(rand/32767) *
+The native timer reset: elapsed 0, next = ftol(float32(rand/32767) *
 60000) + 60000.
 ================
 */
