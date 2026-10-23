@@ -69,7 +69,7 @@ func TestOpenRefusesWrongDeploymentPin(t *testing.T) {
 
 func TestOpenRefusesIncompatibleIdentity(t *testing.T) {
 	root, _ := writeTestBundle(t, func(manifest *Manifest) {
-		manifest.GameVersion = "1.188"
+		manifest.GameVersion = "9.999"
 	})
 
 	_, err := Open(root, "")
