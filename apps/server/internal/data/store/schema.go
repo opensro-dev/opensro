@@ -88,7 +88,10 @@ func isVersionMismatch(err error) bool {
 // rewrites no record.
 // Version 28 adds opt-in companion training/treeVersion to both schema-27
 // histories. The preserving upgrade never rewrites a character record.
-const CurrentVersion = 28
+// Version 29 adds the optional instance return anchor (world.instanceReturn):
+// the packed world and pose a character returns to when an instanced world
+// ends. The preserving upgrade never rewrites a character record.
+const CurrentVersion = 29
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.
