@@ -1,8 +1,0 @@
-{
-  "binarySHA256": "bec2375e2c4c1073e3bf7761571470c430de251de74b452dbb86537348ef5290",
-  "candidateSHA256": "4e6eef52692ec03fad7b5212d0085ca435520016c01f1581d9e5d7e58eeebc6e",
-  "generatorSHA256": "7a0dc2968c9683ca75f2752c4ce6b484d39a611e14281d863d6bf64b602133ba",
-  "corpusSHA256": "960efbd70dd89881d2e1d0f59f874d9ad896395c4bb812620e440226d424f20b",
-  "evidence": "Frozen bounded x86 homing/automatic-help evidence, never an OS process.\n\nHoming executes 545C50 up to region normalization at 545DCE; real 430AD0,\n4328C0 and CRT float helpers execute. Actor-class return and CRT rand are\nexplicit inputs. Help executes 548950 including real 541D70/541FD0; entity\nlookup and HP getter returns are explicit inputs. No external imports run.\nThis is bounded differential evidence, not exact-lowering or live parity.\n",
-  "emulatorVersion": "2.1.4"
-}

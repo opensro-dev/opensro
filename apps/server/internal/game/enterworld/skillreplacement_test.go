@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"opensro.online/server/internal/testsupport/licensed"
 	"os"
 	"strconv"
 	"testing"
@@ -33,7 +34,7 @@ func TestReplacementMetadataNativeExecution(t *testing.T) {
 			Expected statuseffect.ReplacementDescriptor
 		}
 	}
-	raw, err := os.ReadFile("testdata/native-replacement-metadata.json")
+	raw, err := licensed.ServerFixture(t, "internal/game/enterworld/testdata/native-replacement-metadata.json")
 	if err != nil {
 		t.Fatal(err)
 	}

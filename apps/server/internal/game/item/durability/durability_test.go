@@ -4,12 +4,12 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"os"
+	"opensro.online/server/internal/testsupport/licensed"
 	"testing"
 )
 
 func TestNativeSequences(t *testing.T) {
-	f, e := os.Open("testdata/native-equipment-durability-20260921.txt")
+	f, e := licensed.ServerFixtureReader(t, "internal/game/item/durability/testdata/native-equipment-durability-20260921.txt")
 	if e != nil {
 		t.Fatal(e)
 	}

@@ -37,7 +37,6 @@
 	],
 	"excludes": [
 		"apps/server/internal/game/item/commerce/.generated/**",
-		"apps/server/internal/game/item/commerce/testdata/native-trade-rewards.json",
 		"**/node_modules",
 		"**/temp",
 		"**/*.d.ts",

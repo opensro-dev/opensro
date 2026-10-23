@@ -5,12 +5,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"math"
+	"opensro.online/server/internal/testsupport/licensed"
 	"os"
 	"testing"
 )
 
 func TestNativeActorDistanceOriginalByteVectors(t *testing.T) {
-	data, err := os.ReadFile("testdata/native-actor-distance.json")
+	data, err := licensed.ServerFixture(t, "internal/game/world/monster/testdata/native-actor-distance.json")
 	if err != nil {
 		t.Fatal(err)
 	}

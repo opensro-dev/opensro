@@ -8,7 +8,7 @@ package commerce
 import (
 	"encoding/json"
 	"opensro.online/server/internal/domain"
-	"os"
+	"opensro.online/server/internal/testsupport/licensed"
 	"testing"
 )
 
@@ -18,7 +18,7 @@ TestTradeRewardsAgainstNativeInstructions
 ================
 */
 func TestTradeRewardsAgainstNativeInstructions(t *testing.T) {
-	raw, err := os.ReadFile("testdata/native-trade-rewards.json")
+	raw, err := licensed.ServerFixture(t, "internal/game/item/commerce/testdata/native-trade-rewards.json")
 	if err != nil {
 		t.Fatal(err)
 	}

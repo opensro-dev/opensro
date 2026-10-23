@@ -14,7 +14,7 @@ package recovery
 
 import (
 	"encoding/json"
-	"os"
+	"opensro.online/server/internal/testsupport/licensed"
 	"reflect"
 	"testing"
 )
@@ -35,7 +35,7 @@ TestOriginalMachineQueueCorpus
 ================
 */
 func TestOriginalMachineQueueCorpus(t *testing.T) {
-	data, err := os.ReadFile("testdata/native-queue.json")
+	data, err := licensed.ServerFixture(t, "internal/game/item/recovery/testdata/native-queue.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestOriginalMachineQueueCorpus(t *testing.T) {
 	if err := json.Unmarshal(data, &corpus); err != nil {
 		t.Fatal(err)
 	}
-	if corpus.BinarySHA256 != "bec2375e2c4c1073e3bf7761571470c430de251de74b452dbb86537348ef5290" || len(corpus.Cases) != 2528 {
+	if !licensed.SHA256Hex(corpus.BinarySHA256) || len(corpus.Cases) != 2528 {
 		t.Fatal("unexpected native corpus identity")
 	}
 	for i, row := range corpus.Cases {

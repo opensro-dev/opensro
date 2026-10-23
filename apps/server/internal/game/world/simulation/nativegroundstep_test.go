@@ -14,7 +14,7 @@ package simulation
 import (
 	"encoding/json"
 	"math"
-	"os"
+	"opensro.online/server/internal/testsupport/licensed"
 	"testing"
 )
 
@@ -24,7 +24,7 @@ TestNativeGroundStepReference
 ================
 */
 func TestNativeGroundStepReference(t *testing.T) {
-	data, err := os.ReadFile("testdata/native-mover-step-reference.json")
+	data, err := licensed.ServerFixture(t, "internal/game/world/simulation/testdata/native-mover-step-reference.json")
 	if err != nil {
 		t.Fatal(err)
 	}

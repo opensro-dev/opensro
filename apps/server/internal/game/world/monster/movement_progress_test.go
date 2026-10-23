@@ -3,7 +3,7 @@ package monster
 import (
 	"encoding/json"
 	"math"
-	"os"
+	"opensro.online/server/internal/testsupport/licensed"
 	"strconv"
 	"testing"
 )
@@ -11,7 +11,7 @@ import (
 // This fixture executes the original x86 comparison/increment and both actor
 // class predicates. Expected values are not calculated by the Go candidate.
 func TestMovementProgressOriginalMachineSeams(t *testing.T) {
-	data, err := os.ReadFile("testdata/ai-stuck-native-v1188.json")
+	data, err := licensed.ServerFixture(t, "internal/game/world/monster/testdata/ai-stuck-native-v1188.json")
 	if err != nil {
 		t.Fatal(err)
 	}

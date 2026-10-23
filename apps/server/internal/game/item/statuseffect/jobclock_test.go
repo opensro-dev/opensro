@@ -4,12 +4,12 @@ import (
 	"bufio"
 	"fmt"
 	"math"
-	"os"
+	"opensro.online/server/internal/testsupport/licensed"
 	"testing"
 )
 
 func TestRelativeJobClockAgainstNativeSequences(t *testing.T) {
-	f, err := os.Open("testdata/native-timed-job-sequences.txt")
+	f, err := licensed.ServerFixtureReader(t, "internal/game/item/statuseffect/testdata/native-timed-job-sequences.txt")
 	if err != nil {
 		t.Fatal(err)
 	}

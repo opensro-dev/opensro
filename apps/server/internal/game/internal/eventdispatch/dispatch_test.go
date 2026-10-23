@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
+	"opensro.online/server/internal/testsupport/licensed"
 	"testing"
 )
 
@@ -38,7 +38,7 @@ func (p *probe) Unregister(h *Handler) {
 	h.Enabled = 0
 }
 func TestNativeDispatchSequences(t *testing.T) {
-	f, err := os.Open("testdata/native-event-dispatch-20260921.txt")
+	f, err := licensed.ServerFixtureReader(t, "internal/game/internal/eventdispatch/testdata/native-event-dispatch-20260921.txt")
 	if err != nil {
 		t.Fatal(err)
 	}

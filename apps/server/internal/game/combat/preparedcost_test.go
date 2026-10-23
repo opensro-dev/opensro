@@ -12,14 +12,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
+	"opensro.online/server/internal/testsupport/licensed"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
 )
 
 func TestPreparedCostNativeRegions(t *testing.T) {
-	f, err := os.Open("testdata/native-prepared-costs-20260920.txt")
+	f, err := licensed.ServerFixtureReader(t, "internal/game/combat/testdata/native-prepared-costs-20260920.txt")
 	if err != nil {
 		t.Fatal(err)
 	}

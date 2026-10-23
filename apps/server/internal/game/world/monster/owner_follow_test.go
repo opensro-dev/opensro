@@ -11,7 +11,7 @@ import (
 	"encoding/json"
 	"math"
 	worldgeom "opensro.online/server/internal/game/world"
-	"os"
+	"opensro.online/server/internal/testsupport/licensed"
 	"testing"
 )
 
@@ -24,7 +24,7 @@ Only the timer, formation goal provider and command sinks are injected.
 ================
 */
 func TestOwnerFollowOriginalMachineSteering(t *testing.T) {
-	data, err := os.ReadFile("testdata/owner_follow_native.json")
+	data, err := licensed.ServerFixture(t, "internal/game/world/monster/testdata/owner_follow_native.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +151,7 @@ TestOwnerFollowOriginalMachineSurface
 ================
 */
 func TestOwnerFollowOriginalMachineSurface(t *testing.T) {
-	data, err := os.ReadFile("testdata/owner_follow_surface_native.json")
+	data, err := licensed.ServerFixture(t, "internal/game/world/monster/testdata/owner_follow_surface_native.json")
 	if err != nil {
 		t.Fatal(err)
 	}

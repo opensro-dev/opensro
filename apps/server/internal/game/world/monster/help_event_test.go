@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"opensro.online/server/internal/testsupport/licensed"
 	"os"
 	"testing"
 )
@@ -20,7 +21,7 @@ func TestFrozenHelpTraceNativeVectors(t *testing.T) {
 			Expected                       uint8
 		}
 	}
-	b, err := os.ReadFile("testdata/ai-help-trace-native-v1188.json")
+	b, err := licensed.ServerFixture(t, "internal/game/world/monster/testdata/ai-help-trace-native-v1188.json")
 	if err != nil {
 		t.Fatal(err)
 	}

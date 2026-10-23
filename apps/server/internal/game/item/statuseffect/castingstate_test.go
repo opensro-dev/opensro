@@ -4,12 +4,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"opensro.online/server/internal/testsupport/licensed"
 	"os"
 	"testing"
 )
 
 func TestCastingStateNativeComparisons(t *testing.T) {
-	data, err := os.ReadFile("testdata/native-casting-state.json")
+	data, err := licensed.ServerFixture(t, "internal/game/item/statuseffect/testdata/native-casting-state.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +27,7 @@ func TestCastingStateNativeComparisons(t *testing.T) {
 	if err := json.Unmarshal(data, &fixture); err != nil {
 		t.Fatal(err)
 	}
-	if fixture.Schema != "sro-native-casting-state-v1" || fixture.ServerHash != "bec2375e2c4c1073e3bf7761571470c430de251de74b452dbb86537348ef5290" || len(fixture.Cases) != 2312 {
+	if fixture.Schema != "sro-native-casting-state-v1" || !licensed.SHA256Hex(fixture.ServerHash) || len(fixture.Cases) != 2312 {
 		t.Fatal("unexpected native fixture identity")
 	}
 	source, err := os.ReadFile("castingstate.go")

@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"os"
 	"testing"
 
 	"opensro.online/server/internal/domain"
@@ -29,7 +28,7 @@ TestPassiveDefenseNativeWriterVectors
 */
 func TestPassiveDefenseNativeWriterVectors(t *testing.T) {
 	licensed.RequireGameData(t)
-	b, err := os.ReadFile("testdata/native-defp-vectors.json")
+	b, err := licensed.ServerFixture(t, "internal/game/combat/testdata/native-defp-vectors.json")
 	if err != nil {
 		t.Fatal(err)
 	}

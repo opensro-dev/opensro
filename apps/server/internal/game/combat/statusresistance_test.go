@@ -13,7 +13,7 @@ package combat
 
 import (
 	"encoding/json"
-	"os"
+	"opensro.online/server/internal/testsupport/licensed"
 	"testing"
 
 	"opensro.online/server/internal/game/abnormal"
@@ -26,7 +26,7 @@ TestFileStatusResistanceNativeReader
 ================
 */
 func TestFileStatusResistanceNativeReader(t *testing.T) {
-	data, err := os.ReadFile("testdata/native-status-resistance.json")
+	data, err := licensed.ServerFixture(t, "internal/game/combat/testdata/native-status-resistance.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,7 @@ func TestFileStatusResistanceNativeReader(t *testing.T) {
 	if err := json.Unmarshal(data, &fixture); err != nil {
 		t.Fatal(err)
 	}
-	if fixture.BinarySHA256 != "bec2375e2c4c1073e3bf7761571470c430de251de74b452dbb86537348ef5290" || len(fixture.Cases) != 2401 {
+	if !licensed.SHA256Hex(fixture.BinarySHA256) || len(fixture.Cases) != 2401 {
 		t.Fatal("native fixture identity or scope")
 	}
 	for _, row := range fixture.Cases {

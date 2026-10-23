@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"math"
+	"opensro.online/server/internal/testsupport/licensed"
 	"os"
 	"testing"
 )
@@ -24,7 +25,7 @@ func TestFrozenHomingNativeVectors(t *testing.T) {
 			}
 		}
 	}
-	data, err := os.ReadFile("testdata/ai-homing-help-native-v1188.json")
+	data, err := licensed.ServerFixture(t, "internal/game/world/monster/testdata/ai-homing-help-native-v1188.json")
 	if err != nil {
 		t.Fatal(err)
 	}
