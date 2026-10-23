@@ -138,6 +138,10 @@ const longTier = process.argv.includes( "--long" ) || process.env.SRO_GO_LONG_TE
 const tierArgs = longTier ? [] : [ "-short" ];
 testKeys.push( `=tier ${longTier ? "long" : "short"}` );
 const testArgs = [ "test", `-p=${packageParallelism}`, ...tierArgs, ...(testCache ? [] : [ "-count=1" ]), "./..." ];
+// The operator commands build only with -tags opensro_ops (sro-nomad
+// operator_commands.go and the live-shard tools beside it); the "operator
+// build" step vets and tests them.
+const OPERATOR_PACKAGE = "./cmd/operations/...";
 const budgetLedger = readBudgetLedger();
 const steps = selectSteps( longTier ? "tests (long tier),race" : process.env.SRO_GO_GATES, [
 	{
@@ -166,6 +170,13 @@ const steps = selectSteps( longTier ? "tests (long tier),race" : process.env.SRO
 		label: "vet",
 		command: "go",
 		args: [ "vet", "./..." ],
+		select: isModuleGo,
+		keys: [ toolchain, stepEnvironment ]
+	},
+	{
+		label: "operator build",
+		command: "go",
+		args: [ "test", "-tags", "opensro_ops", ...(testCache ? [] : [ "-count=1" ]), OPERATOR_PACKAGE ],
 		select: isModuleGo,
 		keys: [ toolchain, stepEnvironment ]
 	},

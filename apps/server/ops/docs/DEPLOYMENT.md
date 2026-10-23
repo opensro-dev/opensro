@@ -405,11 +405,11 @@ Delete-pending characters retain their slot until deletion matures. Resolve
 pre-release overflow explicitly:
 
 ```powershell
-go run ./cmd/operations/sro-archive-character `
+go run -tags opensro_ops ./cmd/operations/sro-archive-character `
   -shard global-official `
   -character ExactName
 
-go run ./cmd/operations/sro-archive-character `
+go run -tags opensro_ops ./cmd/operations/sro-archive-character `
   -shard global-official `
   -character ExactName `
   -commit

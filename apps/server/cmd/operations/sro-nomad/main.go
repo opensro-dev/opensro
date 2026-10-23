@@ -38,46 +38,70 @@ func main() {
 		}
 		return
 	}
-	// Browser releases are files behind the edge, not Nomad jobs.
-	if os.Args[1] == "publish-client" {
-		if err := runPublishClient(os.Args[2:]); err != nil {
-			fmt.Fprintf(os.Stderr, "sro-nomad publish-client: %v\n", err)
-			os.Exit(1)
-		}
-		return
+	ctx := context.Background()
+	operator, isOperator := operatorCommands[os.Args[1]]
+	if !isOperator || operator.signals {
+		var stopSignals context.CancelFunc
+		ctx, stopSignals = signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+		defer stopSignals()
 	}
 
-	ctx, stopSignals := signal.NotifyContext(
-		context.Background(),
-		os.Interrupt,
-		syscall.SIGTERM,
-	)
-	defer stopSignals()
-
 	var err error
-	switch os.Args[1] {
-	case "validate":
-		err = runValidate(ctx, os.Args[2:])
-	case "deploy":
-		err = runDeploy(ctx, os.Args[2:])
-	case "stop":
-		err = runStop(ctx, os.Args[2:])
-	case "status":
-		err = runStatus(ctx, os.Args[2:])
-	case "notice":
-		err = runNotice(ctx, os.Args[2:])
-	case "rotate-session-key":
-		err = runRotateSessionKey(ctx, os.Args[2:])
-	case "maintenance-list":
-		err = runMaintenanceList(os.Args[2:])
-	default:
-		usage()
-		os.Exit(2)
+	if isOperator {
+		err = operator.run(ctx, os.Args[2:])
+	} else {
+		err = runFleetCommand(ctx, os.Args[1], os.Args[2:])
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sro-nomad %s: %v\n", os.Args[1], err)
 		os.Exit(1)
 	}
+}
+
+/*
+================
+operatorCommand
+
+One subcommand of the operator build (operator_commands.go). signals is
+false for a command that keeps the default interrupt, as publish-client
+did: its files land behind the edge, not in a Nomad job to drain.
+================
+*/
+type operatorCommand struct {
+	run     func(context.Context, []string) error
+	signals bool
+}
+
+// operatorCommandNames are the subcommands only the operator build has.
+var operatorCommandNames = []string{"publish-client", "notice", "rotate-session-key", "maintenance-list"}
+
+/*
+================
+runFleetCommand
+
+The fleet commands every build has. An operator subcommand reaching here is
+a developer build: it says which build has it.
+================
+*/
+func runFleetCommand(ctx context.Context, command string, arguments []string) error {
+	for _, name := range operatorCommandNames {
+		if command == name {
+			return fmt.Errorf("an operator command; build sro-nomad with -tags opensro_ops")
+		}
+	}
+	switch command {
+	case "validate":
+		return runValidate(ctx, arguments)
+	case "deploy":
+		return runDeploy(ctx, arguments)
+	case "stop":
+		return runStop(ctx, arguments)
+	case "status":
+		return runStatus(ctx, arguments)
+	}
+	usage()
+	os.Exit(2)
+	return nil
 }
 
 /*
@@ -420,6 +444,6 @@ usage
 func usage() {
 	fmt.Fprintln(
 		os.Stderr,
-		"usage: sro-nomad <dev-agent|validate|deploy|stop|status|notice|rotate-session-key|maintenance-list> [options]",
+		"usage: sro-nomad <dev-agent|validate|deploy|stop|status> [options] (operator builds add publish-client|notice|rotate-session-key|maintenance-list)",
 	)
 }

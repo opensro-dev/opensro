@@ -1,3 +1,5 @@
+//go:build opensro_ops
+
 // Command sro-archive-character performs an explicit offline soft deletion.
 // The final character record is preserved in deleted_characters; social edges
 // and mail are healed through the same store-owned archive transaction.

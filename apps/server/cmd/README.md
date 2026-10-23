@@ -33,9 +33,13 @@ policy emerges. `sro-evidence` stays separate and read-only by design.
     mutation;
   - `deploy`: reconcile Agent and enabled GameWorld jobs;
   - `status`: report configured and running jobs;
-  - `stop`: gracefully drain and deregister the managed fleet;
-  - `rotate-session-key`: perform acknowledged online Agent signing-key
-    rotation.
+  - `stop`: gracefully drain and deregister the managed fleet.
+
+  An operator build (`go build -tags opensro_ops`) adds the production
+  subcommands a developer's local server never needs: `publish-client`,
+  `notice`, `rotate-session-key` (acknowledged online Agent signing-key
+  rotation) and `maintenance-list`. A developer build names the tag when one
+  of them is asked for.
 
   It uses the official Nomad API and is stateless; Nomad, not this command,
   owns process supervision.
@@ -72,6 +76,9 @@ fleet operations.
   login accounts.
 - `hash-agent-password` — reads a password without terminal echo and emits its
   accepted bcrypt hash.
+The live-shard tools below are operator builds too (`-tags opensro_ops`):
+`sro-account-owner`, `sro-archive-character` and `sro-swap-sun`.
+
 - `sro-account-owner` — previews/commits an offline atomic ownership transfer.
 - `sro-archive-character` — previews/commits an offline soft archive, including
   store-owned social cleanup. It is the explicit tool for pre-release roster
