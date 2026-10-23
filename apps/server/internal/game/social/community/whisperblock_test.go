@@ -64,12 +64,12 @@ func TestDecodeWhisperBlockRequest(t *testing.T) {
 			wantErr: "trailing",
 		},
 		{
-			label:   "name just under the 0x80 GameServer bound",
+			label:   "name just under the 0x80 bound",
 			payload: whisperBlockPayload(WhisperBlockModeRegister, strings.Repeat("B", 0x7F)),
 			want:    WhisperBlockRequest{Mode: 1, Name: strings.Repeat("B", 0x7F)},
 		},
 		{
-			label:   "name at the 0x80 GameServer bound",
+			label:   "name at the 0x80 bound",
 			payload: whisperBlockPayload(WhisperBlockModeRegister, strings.Repeat("B", 0x80)),
 			wantErr: "0x80",
 		},
@@ -140,16 +140,16 @@ func TestHandleWhisperBlockMutations(t *testing.T) {
 			wantAfter:   fullList,
 		},
 		{
-			// The actor is "asd2": the sub_4356f0 self-compare
-			// (@00435820, wire 2 via sub_518db0 @00518f09) refuses.
+			// The actor is "asd2": the native self-compare refuses
+			// (wire 2).
 			label:       "register self refused",
 			payload:     whisperBlockPayload(WhisperBlockModeRegister, "asd2"),
 			wantRefusal: "cannot block yourself",
 			wantAfter:   nil,
 		},
 		{
-			// sub_7312f0 quote scan (0x27 @00731459 / 0x22 @00731483):
-			// the list never changes and the {1,4} no-op ack answers.
+			// The native quote scan (0x27 / 0x22): the list never
+			// changes and the {1,4} no-op ack answers.
 			label:       "register quoted name refused",
 			payload:     whisperBlockPayload(WhisperBlockModeRegister, "O'Brien"),
 			wantRefusal: "quote",
@@ -188,8 +188,9 @@ func TestHandleWhisperBlockMutations(t *testing.T) {
 		character := &enterworld.Character{ID: 1, Name: "asd2", BlockedWhisperers: c.before}
 		var labels []string
 		deps := &enterworld.Deps{
-			// Register now requires the target to EXIST (retail
-			// _CharNameList); "Berk" is the only name these cases add.
+			// Register now requires the target to EXIST (retail's
+			// character-name list); "Berk" is the only name these
+			// cases add.
 			Characters: enterworld.StaticCharacterSource{
 				"global-official": {character, {ID: 2, Name: "Berk"}},
 			},
@@ -284,10 +285,9 @@ func whisperBlockAckDeps(before []string) (*enterworld.Deps, *enterworld.Charact
 // (panel applies live), 1 "Name already exists.", 2 "User does not
 // exist.", 3 "Cannot register any more users to block list.", 4 the
 // no-op arm. A nil ack is SILENCE - no 0xB66F frame leaves at all. The
-// rule ORDER is retail's in-memory ADD gate sub_4356f0 (v1.188 dump):
-// duplicate @00435762, capacity @00435782, self-compare @00435820,
-// quote scan @00435867, then existence (enforced by the SQL proc after
-// the enqueue), then persist.
+// rule ORDER is retail's in-memory add gate: duplicate, capacity,
+// self-compare, quote scan, then existence (enforced by the stored
+// procedure after the enqueue), then persist.
 func TestWhisperBlockAckContract(t *testing.T) {
 	fullList := make([]string, WhisperBlockMaxCount)
 	for i := range fullList {
@@ -322,41 +322,39 @@ func TestWhisperBlockAckContract(t *testing.T) {
 			wantAfter: fullList,
 		},
 		{
-			// sub_4356f0 runs the duplicate walk FIRST (sub_435db0 == 2
-			// -> internal 2 @00435762 -> wire 1 via sub_518db0 case 2
-			// @00518ef5) and the 0x14 capacity check second (@00435782
-			// -> internal 1 -> wire 3 @00518eff), so a name that is both
-			// duplicate and over-cap acks {1,1}.
-			label:     "duplicate wins over full list (sub_4356f0 rule order)",
+			// The add gate runs the duplicate walk FIRST (internal 2
+			// -> wire 1) and the 0x14 capacity check second (internal
+			// 1 -> wire 3), so a name that is both duplicate and
+			// over-cap acks {1,1}.
+			label:     "duplicate wins over full list (add-gate rule order)",
 			before:    fullListWithBerk,
 			payload:   whisperBlockPayload(WhisperBlockModeRegister, "Berk"),
 			wantAck:   []byte{0x01, 0x01},
 			wantAfter: fullListWithBerk,
 		},
 		{
-			// Duplicate (@00435762) precedes existence (SQL-side, after
-			// the enqueue), so an already-listed name acks {1,1} even
-			// though no character carries it.
-			label:     "duplicate wins over no-such-user (sub_4356f0 rule order)",
+			// Duplicate precedes existence (stored-procedure-side,
+			// after the enqueue), so an already-listed name acks {1,1}
+			// even though no character carries it.
+			label:     "duplicate wins over no-such-user (add-gate rule order)",
 			before:    []string{"Cale"},
 			payload:   whisperBlockPayload(WhisperBlockModeRegister, "Cale"),
 			wantAck:   []byte{0x01, 0x01},
 			wantAfter: []string{"Cale"},
 		},
 		{
-			// SELF-BLOCK: sub_4356f0 compares the requested name against
-			// the owner's own CharName (vcall +0xec @004357fb, then
-			// CompareStringA @00435820); EQUAL -> internal 3, and the
-			// caller sub_518db0 remaps 3 -> wire 2 @00518f09 - the
+			// SELF-BLOCK: the add gate compares the requested name
+			// against the owner's own character name; EQUAL ->
+			// internal 3, and the caller remaps 3 -> wire 2 - the
 			// "User does not exist." msgbox. The actor is "asd2".
-			label:     "register self acks {1,2} (sub_4356f0 self-compare)",
+			label:     "register self acks {1,2} (add-gate self-compare)",
 			payload:   whisperBlockPayload(WhisperBlockModeRegister, "asd2"),
 			wantAck:   []byte{0x01, 0x02},
 			wantAfter: nil,
 		},
 		{
-			// Retail's CompareStringA runs with flags 0 (case-SENSITIVE
-			// @00435820); we fold instead - names are CI-unique
+			// Retail's self-compare runs case-SENSITIVELY; we fold
+			// instead - names are CI-unique
 			// (idx_characters_name on name_lower), so "ASD2" resolves to
 			// the same character and a sensitive compare would let the
 			// self-block through on a casing technicality. Deliberate
@@ -367,38 +365,37 @@ func TestWhisperBlockAckContract(t *testing.T) {
 			wantAfter: nil,
 		},
 		{
-			// Capacity (@00435782, step 2) precedes the self-compare
-			// (@00435820, step 3): self onto a full list acks {1,3}.
-			label:     "full list wins over self (sub_4356f0 rule order)",
+			// Capacity (step 2) precedes the self-compare (step 3):
+			// self onto a full list acks {1,3}.
+			label:     "full list wins over self (add-gate rule order)",
 			before:    fullList,
 			payload:   whisperBlockPayload(WhisperBlockModeRegister, "asd2"),
 			wantAck:   []byte{0x01, 0x03},
 			wantAfter: fullList,
 		},
 		{
-			// QUOTE SCAN: sub_7312f0 @007312f0 walks the name with
-			// CharNextA and returns 1 on 0x27 '\'' ("quotation"
-			// @00731459); sub_4356f0 then lands internal 4 @00435887 and
-			// the caller maps every result > 3 to wire 4 @00518f13 - the
-			// client's sub_771550 no-op arm (no msgbox, no panel change).
-			// NOT silence: retail does send the {1,4} frame.
-			label:     "register single-quoted name acks {1,4} (sub_7312f0 quote scan)",
+			// QUOTE SCAN: the native scan walks the name and returns
+			// 1 on 0x27; the add gate then lands internal 4 and
+			// the caller maps every result > 3 to wire 4 - the
+			// client's sub_771550 no-op arm (no msgbox, no panel
+			// change). NOT silence: retail does send the {1,4} frame.
+			label:     "register single-quoted name acks {1,4} (native quote scan)",
 			payload:   whisperBlockPayload(WhisperBlockModeRegister, "O'Brien"),
 			wantAck:   []byte{0x01, 0x04},
 			wantAfter: nil,
 		},
 		{
-			// The 0x22 '"' arm of the same scan ("dbl quotation"
-			// @00731483) -> internal 4 -> wire 4.
-			label:     "register double-quoted name acks {1,4} (sub_7312f0 quote scan)",
+			// The 0x22 arm of the same scan -> internal 4 -> wire 4.
+			label:     "register double-quoted name acks {1,4} (native quote scan)",
 			payload:   whisperBlockPayload(WhisperBlockModeRegister, `a"b`),
 			wantAck:   []byte{0x01, 0x04},
 			wantAfter: nil,
 		},
 		{
-			// Quote scan (@00435867, step 4) runs BEFORE existence
-			// (SQL-side): a quoted unknown name acks {1,4}, not {1,2}.
-			label:     "quote scan wins over no-such-user (sub_4356f0 rule order)",
+			// Quote scan (step 4) runs BEFORE existence (stored-
+			// procedure-side): a quoted unknown name acks {1,4}, not
+			// {1,2}.
+			label:     "quote scan wins over no-such-user (add-gate rule order)",
 			payload:   whisperBlockPayload(WhisperBlockModeRegister, "no'body"),
 			wantAck:   []byte{0x01, 0x04},
 			wantAfter: nil,
@@ -406,7 +403,7 @@ func TestWhisperBlockAckContract(t *testing.T) {
 		{
 			// Capacity (step 2) precedes the quote scan (step 4): a
 			// quoted name onto a full list acks {1,3}.
-			label:     "full list wins over quote scan (sub_4356f0 rule order)",
+			label:     "full list wins over quote scan (add-gate rule order)",
 			before:    fullList,
 			payload:   whisperBlockPayload(WhisperBlockModeRegister, "O'Brien"),
 			wantAck:   []byte{0x01, 0x03},
@@ -423,7 +420,8 @@ func TestWhisperBlockAckContract(t *testing.T) {
 			// fails store.CharacterNameShapeValid (^[A-Za-z0-9_]+$), so
 			// no such character can exist and the EXISTENCE check refuses
 			// it as {1,2} - the identical wire outcome the gate produced
-			// (even the v1.188 shard's SQL return 3 remapped to wire 2).
+			// (even the native shard's procedure return 3 remapped to
+			// wire 2).
 			label:     "register [GM]-shaped name acks {1,2} via existence (gate deleted)",
 			payload:   whisperBlockPayload(WhisperBlockModeRegister, "[GM]Berk"),
 			wantAck:   []byte{0x01, 0x02},
@@ -477,8 +475,8 @@ func TestWhisperBlockAckContract(t *testing.T) {
 			wantAfter: nil,
 		},
 		{
-			// Cancel miss acks {2,2} - the v1.188 GameServer evidence
-			// (sub_435cd0 SQL 1 -> wire 2; sub_518db0 (result!=3)*2+2),
+			// Cancel miss acks {2,2} - the native server evidence
+			// (procedure 1 -> wire 2; caller's (result!=3)*2+2),
 			// MEDIUM confidence; the full note sits on the handler arm.
 			label:     "cancel miss acks {2,2}, store unchanged",
 			before:    []string{"Alder"},

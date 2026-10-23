@@ -12,10 +12,10 @@ Native v1.150 adds a friend only with the other player's consent:
 	                                                   (OnMsgBoxResult, 701A50)
 	requester  S->C 0xB164 {u8 1} or {u8 2, u8 code[, ...]} (760AF0)
 
-The checks and their codes are v1.188's: the GameServer's CMessengerMgr
-add (5D7620) and the ShardManager's request job (447650), whose error
-words' low bytes are the v1.150 client's 0x13 notice codes. A request
-waits 30 s for its answer (the ShardManager job's 30.0f timeout); a
+The checks and their codes are the native ones: the messenger add
+check and the shard's request job, whose error words' low bytes are
+the v1.150 client's 0x13 notice codes. A request waits 30 s for its
+answer (the request job's 30.0f timeout); a
 timeout or a party leaving ends it on both sides with the client's
 "cancelled" form (0xB164 {2, 0x0B, 2, name}: the requester sees
 UIIT_MSG_FRIEND_SYSCANCEL, the target's prompt is retired).
@@ -51,11 +51,10 @@ const OpFriendDeleteAnswer uint16 = 0xB5DB
 // (enterworld.RegisterGameReady).
 const FriendConsentLength = enterworld.ConsentAnswerLength
 
-// FriendAnswerWindow is the ShardManager request job's 30.0f timeout
-// (447650).
+// FriendAnswerWindow is the native request job's 30.0f timeout.
 const FriendAnswerWindow = 30 * time.Second
 
-// FriendNameMaxLength is CMessengerMgr add's name bound (5D7620: 1..0x20).
+// FriendNameMaxLength is the native add check's name bound (1..0x20).
 const FriendNameMaxLength = 0x20
 
 // 0xB164 result bytes (760AF0).
@@ -64,17 +63,17 @@ const (
 	friendResultError uint8 = 2
 )
 
-// 0xB164 error codes: v1.188's 0x64xx words' low bytes, which the v1.150
-// client shows as notice 0x13/code (CGInterface_ShowSystemNotification).
+// 0xB164 error codes: the native 0x64xx error words' low bytes, which
+// the v1.150 client shows as notice 0x13/code (CGInterface_ShowSystemNotification).
 const (
-	FriendErrInvalidName    uint8 = 0x02 // 5D7620: name length outside 1..32
-	FriendErrSelf           uint8 = 0x03 // 5D7620: own name
-	FriendErrListFull       uint8 = 0x08 // 5D7620: own list at 20
-	FriendErrAlreadyFriend  uint8 = 0x09 // 5D6890 / 447650: already listed
+	FriendErrInvalidName    uint8 = 0x02 // name length outside 1..32
+	FriendErrSelf           uint8 = 0x03 // own name
+	FriendErrListFull       uint8 = 0x08 // own list at 20
+	FriendErrAlreadyFriend  uint8 = 0x09 // already listed (either side)
 	FriendErrConsent        uint8 = 0x0B // carries a consent sub-reason
-	FriendErrUnknownUser    uint8 = 0x0D // 447650: target absent or not in game
+	FriendErrUnknownUser    uint8 = 0x0D // target absent or not in game
 	FriendErrInProgress     uint8 = 0x0E // a request already waits (see Ask)
-	FriendErrTargetListFull uint8 = 0x0F // 447650: target list at 20
+	FriendErrTargetListFull uint8 = 0x0F // target list at 20
 )
 
 // Sub-reasons of FriendErrConsent (760AF0).
@@ -185,11 +184,11 @@ func DecodeFriendConsent3012(payload []byte) (jid, serial uint32, accept bool, e
 CheckFriendAdd
 
 The target of a friend request and 0, or the native refusal code, in the
-native order: GameServer 5D7620 (name, self, listed, own cap), then the
-ShardManager's 447650 (target absent or offline, target cap, listed from
-the target's side).
+native order: the add check (name, self, listed, own cap), then the
+request job (target absent or offline, target cap, listed from the
+target's side).
 
-5D7620 also answers 3 for a name CShardDB_FindRejectedText matches (the
+The add check also answers 3 for a name the forbidden-name table
 forbidden-name table). It is skipped here: a request resolves only to an
 existing character, whose name already passed character creation, so a
 rejected name can only ever answer UNKNOWNUSER, as an unknown name does.
@@ -303,8 +302,8 @@ FriendRequests.Ask
 Handles one C->S 0x7164. A refusal answers the requester at once; an
 accepted request prompts the target and waits FriendAnswerWindow.
 
-Not found yet in v1.188 (the request job's class was opaque): which code
-a second request gets while one waits. FriendErrInProgress (0x0E,
+Not settled natively (the request job's internals were opaque): which
+code a second request gets while one waits. FriendErrInProgress (0x0E,
 UIIT_MSG_FRIEND_SYSPROGRESS, "a request is in progress") is the client's
 own text for it, and only one prompt per player can be on screen.
 ================
