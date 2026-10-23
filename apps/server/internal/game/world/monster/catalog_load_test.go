@@ -339,8 +339,9 @@ func TestShippedTemplateCanary(t *testing.T) {
 		}
 	}
 	// 178 includes MOB_DH_SOLDIEREARTHGHOST and its clone: the v1.150 client
-	// places them and QNO_WC_SOLDIER_EA2_1 needs 1,600 kills, while the v1.188
-	// shard backup caps every one of their nests at zero (laterDisabledCodenames).
+	// places them and QNO_WC_SOLDIER_EA2_1 needs 1,600 kills, while a later
+	// operator's population data caps every one of their nests at zero
+	// (laterDisabledCodenames).
 	if got := len(template.SpawnableRefs()); got != 178 {
 		t.Fatalf("spawnable refs = %d, want 178", got)
 	}

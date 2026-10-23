@@ -19,12 +19,12 @@ type populationEvidence struct {
 	Aggressive            bool
 	SightRange            float64
 	NativeTacticsFlags    uint32
-	// Champion projects four fields from the row named by dwChampionTacticsID;
+	// Champion projects four fields from the row named by the champion tactics id;
 	// it does not certify coverage of the remaining native tactics fields.
 	// HasChampion is false when that id is zero.
 	HasChampion bool
 	Champion    ChampionTactics
-	// InitialDir is Tab_RefNest.wInitialDir (runtime nest +1C).
+	// InitialDir is the nest table's authored heading word.
 	InitialDir uint16
 }
 
@@ -56,8 +56,8 @@ laterDisabledCodenames
 
 Returns the monsters whose every evidence row is capped at zero.
 
-The v1.188 evidence comes from one operator's shard backup, not from
-retail. For all but these it agrees with the v1.150 client. For these it
+The cross-version evidence comes from one operator's later data, not
+from retail. For all but these it agrees with the v1.150 client. For these it
 disables every nest of a monster the v1.150 client still places (npcpos)
 and still requires: MOB_DH_SOLDIEREARTHGHOST, the Donwhang Stone Cave
 target of QNO_WC_SOLDIER_EA2_1 (1,600 kills) and a QNO_WC_PRIEST2_1 drop.
@@ -84,7 +84,7 @@ func laterDisabledCodenames(rows map[populationEvidenceKey]populationEvidence) m
 	return disabled
 }
 
-// Native Nest coordinates are float32. Client text and recovered SQL rows
+// Native nest coordinates are float32. Population rows and client text
 // can print the same float with different decimal precision. Normalize that
 // representation before quantizing; otherwise half-tenth anchors lose both
 // their population policy and shared hive identity.
