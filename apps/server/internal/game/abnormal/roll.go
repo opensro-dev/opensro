@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-roll.go - the per-hit abnormal roll (SkillCombat_RollAbnormalStatus 590680)
+roll.go - the per-hit abnormal roll
 
 ===========================================================================
 */
@@ -14,32 +14,32 @@ import "math"
 ================
 Record
 
-Record is tagSkillStatusEffect (5AA450 initialises +05/+06/+08). Offsets
-name the native fields each consumer reads.
+Record is one native status-effect record. Offsets name the native
+fields each consumer reads.
 ================
 */
 type Record struct {
 	Status     Status
-	DurationMs uint32  // +0C
-	PeriodMs   uint32  // +10
-	Chance     uint32  // +14 (statuses 0..5)
-	Grade      uint8   // +18
-	Level      uint16  // +1A
-	Damage1C   uint32  // +1C time-bomb damage
-	Scale20    float32 // +20 burn scale
-	Rate24     uint32  // +24 burn damage table value
-	Param28    uint32  // +28 electric-shock evasion cut
-	Param2C    uint32  // +2C panic/combustion maximum cut
-	Param34    uint32  // +34 decay/weaken cap, panic/combustion recovery
-	Param38    uint32  // +38 poison/bleeding damage, curse magnitude, drain percent
-	Param3C    uint32  // +3C myopia range
-	Param40    uint32  // +40 bleeding defense cut
-	Param44    uint32  // +44 disease bonus
-	Param48    uint32  // +48 dark hit-rate cut
-	SourceGID  uint32  // +4C
-	TargetGID  uint32  // +50
+	DurationMs uint32
+	PeriodMs   uint32
+	Chance     uint32 // statuses 0..5
+	Grade      uint8
+	Level      uint16
+	Damage1C   uint32  // time-bomb damage
+	Scale20    float32 // burn scale
+	Rate24     uint32  // burn damage table value
+	Param28    uint32  // electric-shock evasion cut
+	Param2C    uint32  // panic/combustion maximum cut
+	Param34    uint32  // decay/weaken cap, panic/combustion recovery
+	Param38    uint32  // poison/bleeding damage, curse magnitude, drain percent
+	Param3C    uint32  // myopia range
+	Param40    uint32  // bleeding defense cut
+	Param44    uint32  // disease bonus
+	Param48    uint32  // dark hit-rate cut
+	SourceGID  uint32
+	TargetGID  uint32
 	// SourceName is the port's durable caster identity; native resolves the
-	// source through ObjMgr by +4C alone.
+	// source by its id alone.
 	SourceName string
 }
 
@@ -47,9 +47,9 @@ type Record struct {
 ==================
 Resistance
 
-Resistance is one CSkillManager status-resistance entry read by 59DE50:
-a flat chance reduction halved once per grade above its grade, and a
-percentage applied to a positive chance.
+Resistance is one native status-resistance entry: a flat chance
+reduction halved once per grade above its grade, and a percentage
+applied to a positive chance.
 ==================
 */
 type Resistance struct {
@@ -60,18 +60,18 @@ type Resistance struct {
 ================
 RollInput
 
-RollInput is everything 590680 reads besides its random source.
+RollInput is everything the roll reads besides its random source.
 ================
 */
 type RollInput struct {
 	Params *SkillParams
 	// SkipGroup is hit-group+05 == 2, which never rolls.
 	SkipGroup bool
-	// TargetImmune is target vfunc+34 (attack COS) or +3E0 (fortress structure).
+	// TargetImmune is set for an attack COS or a fortress structure.
 	TargetImmune bool
-	// WallMask is the optional pw context at RefSkill+2B4, not hit-result
-	// flags. 590735 reads its lane mask; 591E7C excludes stun whenever
-	// the context is present. A shield-blocked hit is SkipGroup instead.
+	// WallMask is the optional pw context of the skill record, not
+	// hit-result flags. The roll reads its lane mask; Stun is excluded whenever the
+	// context is present. A shield-blocked hit is SkipGroup instead.
 	WallMask    *uint32
 	TargetLevel uint8
 	// TargetBonus is target parameter 0xA9 (raised by disease), truncated.
@@ -83,10 +83,10 @@ type RollInput struct {
 	// Resistance is indexed by Source.Resist.
 	Resistance  [17]Resistance
 	CasterLevel uint8
-	// CasterFortressHeart is caster vfunc+3D0; its grade comes from +654.
+	// CasterFortressHeart marks a fortress-heart caster.
 	CasterFortressHeart bool
 	CasterSiegeGrade    uint8
-	// CasterModifier is CSkillManager_GetSkillModifier on the caster.
+	// CasterModifier reads the caster's skill modifiers.
 	CasterModifier       func(key uint32) (uint32, bool)
 	SourceGID, TargetGID uint32
 	SourceName           string
@@ -96,8 +96,8 @@ type RollInput struct {
 ================
 Random
 
-Random is the caster's CZoeZoeRnd stream (CSkillManager_RollProbability,
-keyed by ECX) and the process rand() consumed by the time bomb.
+Random is the caster's keyed probability stream and the process rand()
+consumed by the time bomb.
 ================
 */
 type Random interface {
@@ -109,9 +109,9 @@ type Random interface {
 ==================
 durationPerLevel
 
-durationPerLevel is Formulae_GetAbnormalDurationPerLevel (410B40): the
-milliseconds per level of states 0..5. It sizes rolled durations (590680)
-and level-cure cuts (4A56C0). Other slots are the native MiniDump path (0).
+durationPerLevel is the native milliseconds per level of states 0..5.
+It sizes rolled durations and level-cure cuts. Other slots carry no
+per-level duration (0).
 ==================
 */
 func durationPerLevel(status Status, level uint16) uint32 {
@@ -125,7 +125,7 @@ func durationPerLevel(status Status, level uint16) uint32 {
 ================
 burnDamage
 
-burnDamage is C63C94: a uint32 table read by level at 590BF2.
+burnDamage reads the native burn table by level.
 ================
 */
 func burnDamage(level uint32) uint32 {
@@ -152,7 +152,8 @@ func ftol(v float64) int32 {
 ================
 Roll
 
-Roll ports 590680. Returned records are in native list order.
+Roll is the per-hit abnormal roll. Returned records are in native list
+order.
 ================
 */
 func Roll(in RollInput, random Random) []Record {
@@ -267,7 +268,7 @@ func Roll(in RollInput, random Random) []Record {
 		}
 		var bombDuration uint32
 		if source.Status == TimeBomb {
-			// 592F9D: the nonzero bytes of the first argument are candidate
+			// The nonzero bytes of the first argument are candidate
 			// seconds; rand() is drawn before the probability roll.
 			var candidates []uint8
 			for shift := 0; shift < 32; shift += 8 {

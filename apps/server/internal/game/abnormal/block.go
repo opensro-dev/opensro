@@ -8,8 +8,8 @@ block.go - the 32-slot abnormal-state owner block: apply, cure, expire
 
 package abnormal
 
-// Slot is one 0x70-byte slot of the owner block (block+0C, stride 0x70):
-// the admitted record (+00..+5F) and its runtime state.
+// Slot is one slot of the owner block: the admitted record and its
+// runtime state.
 /*
 ================
 Slot
@@ -17,13 +17,13 @@ Slot
 */
 type Slot struct {
 	Record
-	Active     bool  // +60
-	Retired    bool  // +61: cleared by cure/death rather than natural expiry
-	Refreshed  bool  // +62: a stronger record replaced an active one
-	StartedAt  int64 // +64 GetTickCount at admission (ms)
-	LastTickAt int64 // +68 zero until the first periodic tick
-	SourceDied bool  // +6C dead-source latch of damage-over-time
-	// Drain is +30: the per-tick resource drain panic/combustion computes
+	Active     bool  // an admitted record occupies the slot
+	Retired    bool  // cleared by cure/death rather than natural expiry
+	Refreshed  bool  // a stronger record replaced an active one
+	StartedAt  int64 // admission time (ms)
+	LastTickAt int64 // zero until the first periodic tick
+	SourceDied bool  // dead-source latch of damage-over-time
+	// Drain is the per-tick resource drain panic/combustion computes
 	// from the owner's maximum at installation.
 	Drain uint16
 }
@@ -49,8 +49,8 @@ type Modifier struct {
 // most three writes; all 23 statuses fit well below this bound.
 const MaxModifiers = 48
 
-// Block is tagAbnormalStateBlock. It is a plain value: owners store it in
-// their snapshot and copy it without aliasing.
+// Block is the abnormal-state owner block. It is a plain value: owners
+// store it in their snapshot and copy it without aliasing.
 /*
 ================
 Block
@@ -58,9 +58,9 @@ Block
 */
 type Block struct {
 	Slots [SlotCount]Slot
-	Mask  uint32 // +04
-	// SpeedOwner is +08: 1 while frostbite owns the movement factors, 8
-	// while slow does (4A45D0 / 4A4A90).
+	Mask  uint32
+	// SpeedOwner is 1 while frostbite owns the movement factors, 8
+	// while slow does.
 	SpeedOwner uint8
 	Modifiers  [MaxModifiers]Modifier
 }
@@ -111,7 +111,7 @@ func (b *Block) applyModifier(param uint16, channel uint8, source uint32, value 
 	b.Modifiers[free] = Modifier{Used: true, Param: param, Channel: channel, Source: source, Value: value}
 }
 
-// removeModifier removes every channel entry of one source (4B31A0).
+// removeModifier removes every channel entry of one source.
 /*
 ================
 removeModifier
@@ -149,9 +149,9 @@ func (b *Block) ModifiersFor(param uint16) []Modifier {
 ==================
 Apply
 
-Apply ports 4A4270. The owner must be alive and the record's source must
-still resolve; an active slot is replaced only by a strictly stronger
-level (+1A) or, when the level is zero, grade (+18). It returns whether the
+Apply admits one record. The owner must be alive and the record's source
+must still resolve; an active slot is replaced only by a strictly
+stronger level or, when the level is zero, grade. It returns whether the
 record took hold; the start callback has then already run.
 ==================
 */
@@ -170,12 +170,13 @@ func (b *Block) Apply(o Owner, r Record, now int64) bool {
 		}
 	}
 	if slot.Active {
-		slot.Refreshed = true // 4A42D9, set before the source lookup
+		slot.Refreshed = true // set before the source lookup
 	}
 	if !o.SourceExists(r.SourceGID) {
 		return false
 	}
-	// 4A433A copies 0x60 record bytes; +62 and the +6C latch survive.
+	// Copying the record leaves the refreshed flag and the dead-source
+	// latch untouched.
 	slot.Record, slot.Drain = r, 0
 	slot.Active, slot.Retired, slot.StartedAt, slot.LastTickAt = true, false, now, 0
 	callback(b, o, 0, slot)
@@ -190,7 +191,7 @@ Result
 ================
 */
 type Result struct {
-	Changed bool   // publish the mask (4A4540)
+	Changed bool   // publish the mask
 	Mask    uint32 // the recomputed mask
 }
 
@@ -198,9 +199,9 @@ type Result struct {
 ==================
 Update
 
-Update ports 4A4390: retire expired or cured slots (callback 2), tick the
-others (callback 1) and recompute the mask. When the time bomb expires it
-also wakes sleep and root, and breaks stun with a 25 % roll.
+Update ticks the block: retire expired or cured slots (callback 2), tick
+the others (callback 1) and recompute the mask. When the time bomb
+expires it also wakes sleep and root, and breaks stun with a 25 % roll.
 ==================
 */
 func (b *Block) Update(o Owner, now int64) Result {
@@ -249,7 +250,8 @@ func (b *Block) Update(o Owner, now int64) Result {
 	return Result{Changed: true, Mask: mask}
 }
 
-// SkillLevelCure is RefSkill+0x40C (curt): one mask and one shared level.
+// SkillLevelCure is the skill cure record (curt): one mask and one
+// shared level.
 /*
 ================
 SkillLevelCure
@@ -264,14 +266,15 @@ type SkillLevelCure struct {
 ==================
 Cure
 
-Cure ports 4A56C0. levels is the six words from 49AC50 (statuses 0..5);
-a nil levels pointer skips that arm. skill is arg3 (curt). mask, when
-non-nil, is the pill (curl): bit mask, chance numerator, grade base.
-limit < 0 is a null limit pointer (every selected slot). limit == 0 is a
-present zero cap and treats nothing. A positive limit shuffles by 4A6560
-(MSVC random_shuffle, rand() % (i+1)) and keeps that many. A pill bit is
-taken before an arg3 bit. Arg3 shortens +64 by durationPerLevel and clears
-the slot when elapsed time passes the duration; a zero cut skips the slot.
+Cure is the cure pass. levels holds the six per-status cure levels
+(statuses 0..5); a nil levels pointer skips that arm. skill is the skill
+cure (curt). mask, when non-nil, is the pill (curl): bit mask, chance
+numerator, grade base. limit < 0 is a null limit (every selected slot).
+limit == 0 is a present zero cap and treats nothing. A positive limit
+shuffles the picks (for i >= 1, swap i with rand() % (i+1)) and keeps
+that many. A pill bit is taken before a skill bit. The skill arm ages the
+slot by durationPerLevel and clears it when the elapsed time passes the
+duration; a zero cut skips the slot.
 ==================
 */
 func (b *Block) Cure(o Owner, levels *[6]int32, skill *SkillLevelCure, mask *[3]int32, limit int, rand func() int32) bool {
@@ -304,7 +307,7 @@ func (b *Block) Cure(o Owner, levels *[6]int32, skill *SkillLevelCure, mask *[3]
 		return false
 	}
 	if limit > 0 {
-		// 4A6560: for i >= 1, swap i with rand() % (i+1). Every bound here is
+		// Shuffle: for i >= 1, swap i with rand() % (i+1). Every bound here is
 		// at most 32, below RAND_MAX, so the extended-rand branch never runs.
 		for i := 1; i < len(picks); i++ {
 			j := int(uint32(rand()&0x7fff) % uint32(i+1))
@@ -344,7 +347,7 @@ func (b *Block) Cure(o Owner, levels *[6]int32, skill *SkillLevelCure, mask *[3]
 		if levels == nil || picked.status > Zombie {
 			continue
 		}
-		// 4A5857: a zero word skips the slot; any other word is taken as u16.
+		// A zero word skips the slot; any other word is taken as u16.
 		level := levels[picked.status]
 		if level == 0 {
 			continue
@@ -363,7 +366,7 @@ func (b *Block) Cure(o Owner, levels *[6]int32, skill *SkillLevelCure, mask *[3]
 	return changed
 }
 
-// Clear ports 4A5660: retire one slot as a cure/break (+61 = 1).
+// Clear retires one slot as a cure/break.
 /*
 ================
 Clear
@@ -386,7 +389,7 @@ func (b *Block) Clear(o Owner, s Status) bool {
 	return true
 }
 
-// ClearAll ports 4A59F0 (death and town teleport).
+// ClearAll retires every slot (death and town teleport).
 /*
 ================
 ClearAll
@@ -412,8 +415,8 @@ func (b *Block) ClearAll(o Owner) bool {
 ================
 HitContext
 
-The magical lane releases Root at 58F491. The execution selector admits
-Sleep/Stun retirement at 5939D8, independently of shield-blocked damage.
+Magical damage releases Root. Sleep and stun retirement on an attack
+result is admitted independently of shield-blocked damage.
 ================
 */
 type HitContext struct {
@@ -425,10 +428,10 @@ type HitContext struct {
 ==================
 BreakOnHit
 
-BreakOnHit ports the separate consequences of 58F491 and 593BEF: magical
-damage frees root; an attack result wakes sleep (motion reset) and breaks
-stun with a 25 % roll, unless a time bomb is attached. It runs before the
-hit's own statuses are applied.
+BreakOnHit applies the hit consequences: magical damage frees root; an
+attack result wakes sleep (motion reset) and breaks stun with a 25 %
+roll, unless a time bomb is attached. It runs before the hit's own
+statuses are applied.
 ==================
 */
 func (b *Block) BreakOnHit(o Owner, hit HitContext) bool {
@@ -491,7 +494,7 @@ func elapsed(now, since int64) uint32 {
 }
 
 // ForgetSource detaches a caster identity without curing the victim: a
-// disconnected source no longer resolves through ObjMgr (its GID is gone).
+// disconnected source no longer resolves (its GID is gone).
 /*
 ================
 ForgetSource
