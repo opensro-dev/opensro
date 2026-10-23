@@ -3,7 +3,7 @@
 
 tradereward.go - shard-owned hunter and thief trade reward pools
 
-AQ_AddTrijobReward (465220) credits hunters for trader sales and thieves
+The shard's trijob reward path credits hunters for trader sales and thieves
 for thief sales. These funds belong to the shard, not the selling character.
 
 ===========================================================================

@@ -13,7 +13,7 @@ package domain
 const (
 	// GrowthPetBand is the attack (growth) pet family.
 	GrowthPetBand = 3
-	// PickupPetBand is the grab (pickup) pet family: CGObj_IsPickPetCOS
-	// (483930) in the v1.188 research server.
+	// PickupPetBand is the grab (pickup) pet family, the band the native
+	// pick-pet test accepts.
 	PickupPetBand = 4
 )

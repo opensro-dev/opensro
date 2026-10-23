@@ -4,20 +4,20 @@
 guildvote.go - the master release vote a guild holds at its manager
 
 A member may call a vote to replace a master who has been gone 45 days
-(v1.188 GuildManager_RequestMasterRelease 5C6AC0 asks the shard
-_Guild_Master_Election_Available(master, 45)). The vote lasts ten minutes
+(the native availability test takes the master and the 45 days). The vote
+lasts ten minutes
 (UIIT_MSG_MRELEASE_CONFIRM), members away three days have no part in it
 (UIIT_MSG_MRELEASEERR_NOTVOTING), and its voters and candidates may not
-leave or be expelled while it runs (0x38 / 0x39). v1.188 moves ballots
-between options (Vote_MoveBallot 5E7A70) and the ShardManager closes it.
+leave or be expelled while it runs (0x38 / 0x39). The native server moves
+ballots between options and the shard manager closes the vote.
 
-INFERENCE (the ShardManager is not in the research binaries): the
-candidates are the members seen within three days other than the master,
+INFERENCE (the shard manager's close rule is not in the research binaries):
+the candidates are the members seen within three days other than the master,
 in roster order; a vote with one candidate strictly ahead and at least one
 ballot elects them, any other closes broken (UIIT_MSG_MRELEASE_BROKEN).
 The v1.150 client learns the candidates by asking: its vote row sends
 0x7332 and the 0xB332 answer carries them with their ballots (5DA1B0 case
-0x1A, 82CEE0; v1.188 writes the same body, 5E7F00 / 5E79C0). The 0x3A6C
+0x1A, 82CEE0; the native server writes the same body). The 0x3A6C
 push never carries them (type 2 is an assert in 7603D0).
 
 ===========================================================================
@@ -31,17 +31,16 @@ import (
 )
 
 const (
-	// GuildVoteMasterRelease is the vote kind the release row looks up
-	// (SGuildData_FindVoteEntry(0), 82CC00).
+	// GuildVoteMasterRelease is the vote kind the release row looks up.
 	GuildVoteMasterRelease uint8 = 0
 	// GuildVoteDurationMs is the ten minutes of UIIT_MSG_MRELEASE_CONFIRM.
 	GuildVoteDurationMs int64 = 10 * 60 * 1000
-	// GuildMasterAbsenceMs is the 45 days 5C6AC0 hands the shard.
+	// GuildMasterAbsenceMs is the 45 days the availability test takes.
 	GuildMasterAbsenceMs int64 = 45 * 24 * 60 * 60 * 1000
 	// GuildVoterAbsenceMs is the three days of UIIT_MSG_MRELEASEERR_NOTVOTING.
 	GuildVoterAbsenceMs int64 = 3 * 24 * 60 * 60 * 1000
 	// GuildVoteNoOption is the "no previous ballot" option 0x3A6C type 4
-	// carries (82D0B0 skips the decrement for 0xFF).
+	// carries (the native writer skips the decrement for 0xFF).
 	GuildVoteNoOption uint8 = 0xff
 )
 

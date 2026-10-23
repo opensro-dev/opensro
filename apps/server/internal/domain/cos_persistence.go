@@ -15,7 +15,8 @@ package domain
 ================
 COSRental
 
-492D40 writes kind 0 or 5; kind 5 additionally carries a tag and flag.
+The native rental writer writes kind 0 or 5; kind 5 additionally carries
+a tag and flag.
 Absolute deadlines survive offline time. RemainingSeconds is the native
 projection cached at the last authority checkpoint.
 ================
@@ -55,7 +56,8 @@ func CloneCOS(source *CharacterCOS) *CharacterCOS {
 ================
 COSItemState
 
-492D20 derives the item state from the retained record's alive/summoned bits.
+The native state derivation derives the item state from the retained
+record's alive/summoned bits.
 State 1 means the item has never acquired a record, not a dormant companion.
 ================
 */
@@ -133,7 +135,8 @@ func (c *Character) CompanionByGID(gid uint32) *CharacterCOS {
 ================
 RefreshRentalTimes
 
-Native 492D40 clamps calendar-time differences to a signed wire dword. The
+The native rental writer clamps calendar-time differences to a signed
+wire dword. The
 clock belongs to the authority caller, so offline time cannot pause leases.
 ================
 */

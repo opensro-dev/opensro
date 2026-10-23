@@ -25,20 +25,20 @@ type GuildRecord struct {
 	NoticeContents string `json:"noticeContents"`
 	CrestParam     uint32 `json:"crestParam"`
 	Byte10         uint8  `json:"byte10"`
-	// WarCompensation is the gold guild wars owe the guild (v1.188 guild
-	// +0x8C, paid to the master at a guild manager, 5C72A0 / 5C7330).
+	// WarCompensation is the gold guild wars owe the guild (paid to the
+	// master at a guild manager).
 	WarCompensation int64 `json:"warCompensation,omitempty"`
 	// Vote is the open master release vote (guildvote.go), or nil.
 	Vote *GuildVote `json:"vote,omitempty"`
 	// Storage is the guild warehouse's gold and rows; its capacity follows
 	// the level (GuildStorageCapacity), never the record.
 	Storage *AccountStorage `json:"storage,omitempty"`
-	// FoundedAtMs is when the guild was created (unix ms), the native
-	// _Guild.FoundationDate column (v1.188 CInstanceGuild_RegisterSchema_84B050
-	// registers it; SRO_VT_SHARD keeps it as smalldatetime, and _AllianceCreate
-	// stamps a union's with GetDate()). The guild-create procedure is not in
-	// the shard backup; that it stamps creation time as the union one does
-	// is an INFERENCE. Zero for a guild created before store schema 26.
+	// FoundedAtMs is when the guild was created (unix ms), the guild row's
+	// foundation date (kept as a smalldatetime; the union-create path stamps
+	// a union's with the current time). The guild-create procedure is not in
+	// the available shard evidence; that it stamps creation time as the
+	// union one does is an INFERENCE. Zero for a guild created before store
+	// schema 26.
 	FoundedAtMs int64 `json:"foundedAtMs,omitempty"`
 }
 
@@ -70,9 +70,9 @@ type GuildMemberRecord struct {
 }
 
 // GuildLeaderGrade is the master's member grade; GuildFortressRoleCommander
-// is the fortress role the master alone holds. The retail
-// _Guild_FnAddMember gives MemberClass 0 SiegeAuthority 1, and a master
-// handover moves it (v1.188 5C46E0, _Guild_Delegate_Master). The client's
+// is the fortress role the master alone holds. The native member-add path
+// gives the master class 0 with siege authority 1, and a master
+// handover moves it. The client's
 // fortress windows gate on the role (827DB0), the server on the grade.
 const (
 	GuildLeaderGrade           uint8 = 0
