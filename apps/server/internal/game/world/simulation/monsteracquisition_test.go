@@ -2,7 +2,7 @@ package simulation
 
 import (
 	"encoding/json"
-	"os"
+	"opensro.online/server/internal/testsupport/licensed"
 	"reflect"
 	"testing"
 
@@ -171,7 +171,7 @@ func TestAcquisitionDrivesOrdinaryWanderAndSummonChase(t *testing.T) {
 }
 
 func TestProductionRankingAgainstFrozenNativeSlice(t *testing.T) {
-	data, err := os.ReadFile("testdata/acquisition-ranking-native-v1188.json")
+	data, err := licensed.ServerFixture(t, "internal/game/world/simulation/testdata/acquisition-ranking-native-v1188.json")
 	if err != nil {
 		t.Fatal(err)
 	}

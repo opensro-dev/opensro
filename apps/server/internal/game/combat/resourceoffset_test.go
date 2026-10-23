@@ -3,12 +3,12 @@ package combat
 import (
 	"bufio"
 	"fmt"
-	"os"
+	"opensro.online/server/internal/testsupport/licensed"
 	"testing"
 )
 
 func TestNativeResourceOffsets(t *testing.T) {
-	f, err := os.Open("testdata/native-resource-offsets-20260920.txt")
+	f, err := licensed.ServerFixtureReader(t, "internal/game/combat/testdata/native-resource-offsets-20260920.txt")
 	if err != nil {
 		t.Fatal(err)
 	}

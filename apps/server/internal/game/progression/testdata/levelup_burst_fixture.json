@@ -1,5 +1,5 @@
 {
-  "comment": "Level-transition regression fixture over shipped leveldata. SR_GameServer 4E5065..4E50AF invokes reduced HP/MP recovery on an upward crossing; the v1.150 client reads absolute currents through 77A080 (33A6), independently of 343C maxima and 30D2 experience. The burst carries presentation, final maxima, recovered currents with source 0080, then the experience delta and absolute stat-point tail. Values are little-endian; expected bytes are authored independently of the emitter.",
+  "comment": "Level-transition regression fixture over shipped leveldata. The server invokes reduced HP/MP recovery on an upward crossing; the v1.150 client reads absolute currents through 77A080 (33A6), independently of 343C maxima and 30D2 experience. The burst carries presentation, final maxima, recovered currents with source 0080, then the experience delta and absolute stat-point tail. Values are little-endian; expected bytes are authored independently of the emitter.",
   "playerGid": 100002,
   "leveldataCol1Rows": { "1": 118, "2": 470, "3": 1058 },
   "scenarios": [

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"math"
 	"opensro.online/server/internal/testsupport/licensed"
-	"os"
 	"reflect"
 	"testing"
 
@@ -150,7 +149,7 @@ func TestNativeQuestDropFractionalAndFloatBoundary(t *testing.T) {
 }
 
 func TestQuestDropMatchesExecutedNativeMachineCases(t *testing.T) {
-	data, err := os.ReadFile("testdata/native-drop-probability.json")
+	data, err := licensed.ServerFixture(t, "internal/game/quest/testdata/native-drop-probability.json")
 	if err != nil {
 		t.Fatal(err)
 	}

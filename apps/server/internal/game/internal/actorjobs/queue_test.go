@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"os"
+	"opensro.online/server/internal/testsupport/licensed"
 	"reflect"
 	"testing"
 )
@@ -32,7 +32,7 @@ func (p *probe) Flags() uint32                     { return p.flags }
 func (p *probe) Category() uint8                   { return 1 }
 func (p *probe) Matches(kind, value uint32) uint32 { return p.match }
 func TestNativeQueue(t *testing.T) {
-	f, err := os.Open("testdata/native-actor-jobs-20260921.txt")
+	f, err := licensed.ServerFixtureReader(t, "internal/game/internal/actorjobs/testdata/native-actor-jobs-20260921.txt")
 	if err != nil {
 		t.Fatal(err)
 	}

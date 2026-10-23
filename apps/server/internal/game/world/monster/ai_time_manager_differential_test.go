@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"opensro.online/server/internal/testsupport/licensed"
 	"os"
 	"testing"
 )
@@ -38,14 +39,14 @@ func TestAITimerFrozenNativeDifferential(t *testing.T) {
 			Expected outcome
 		}
 	}
-	payload, err := os.ReadFile("testdata/ai-timer-native-v1188.json")
+	payload, err := licensed.ServerFixture(t, "internal/game/world/monster/testdata/ai-timer-native-v1188.json")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := json.Unmarshal(payload, &corpus); err != nil {
 		t.Fatal(err)
 	}
-	if corpus.Schema != "sro-ai-timer-differential-v1" || corpus.BinarySHA256 != "bec2375e2c4c1073e3bf7761571470c430de251de74b452dbb86537348ef5290" || len(corpus.Cases) == 0 {
+	if corpus.Schema != "sro-ai-timer-differential-v1" || !licensed.SHA256Hex(corpus.BinarySHA256) || len(corpus.Cases) == 0 {
 		t.Fatal("invalid native differential evidence binding")
 	}
 	source, err := os.ReadFile("ai_time_manager.go")

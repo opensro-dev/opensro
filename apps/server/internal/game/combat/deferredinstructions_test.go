@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"math"
-	"os"
+	"opensro.online/server/internal/testsupport/licensed"
 	"reflect"
 	"strings"
 	"testing"
@@ -39,7 +39,7 @@ func (h *deferredProbe) DamageEquipment(k, p uint32) {
 }
 
 func TestNativeDeferredInstructions(t *testing.T) {
-	f, err := os.Open("testdata/native-deferred-instructions-20260921.txt")
+	f, err := licensed.ServerFixtureReader(t, "internal/game/combat/testdata/native-deferred-instructions-20260921.txt")
 	if err != nil {
 		t.Fatal(err)
 	}

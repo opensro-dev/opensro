@@ -13,7 +13,6 @@ package commerce
 import (
 	"encoding/json"
 	"math"
-	"os"
 	"testing"
 
 	"opensro.online/server/internal/testsupport/licensed"
@@ -25,7 +24,7 @@ TestTradeQuotationsAgainstNativeInstructions
 ================
 */
 func TestTradeQuotationsAgainstNativeInstructions(t *testing.T) {
-	data, err := os.ReadFile("testdata/native-trade-quotations.json")
+	data, err := licensed.ServerFixture(t, "internal/game/item/commerce/testdata/native-trade-quotations.json")
 	if err != nil {
 		t.Fatal(err)
 	}

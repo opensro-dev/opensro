@@ -3,13 +3,13 @@ package statuseffect
 import (
 	"fmt"
 	"opensro.online/server/internal/game/paramkeeper"
-	"os"
+	"opensro.online/server/internal/testsupport/licensed"
 	"strings"
 	"testing"
 )
 
 func TestRetirementSelectionAgainstNative(t *testing.T) {
-	raw, err := os.ReadFile("testdata/native-retirement-selector.txt")
+	raw, err := licensed.ServerFixture(t, "internal/game/item/statuseffect/testdata/native-retirement-selector.txt")
 	if err != nil {
 		t.Fatal(err)
 	}

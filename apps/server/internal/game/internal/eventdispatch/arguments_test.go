@@ -3,7 +3,7 @@ package eventdispatch
 import (
 	"bufio"
 	"fmt"
-	"os"
+	"opensro.online/server/internal/testsupport/licensed"
 	"testing"
 )
 
@@ -47,7 +47,7 @@ func TestArgumentsCapacity(t *testing.T) {
 }
 
 func TestArgumentsNativeReads(t *testing.T) {
-	f, err := os.Open("testdata/native-event-arguments-20260921.txt")
+	f, err := licensed.ServerFixtureReader(t, "internal/game/internal/eventdispatch/testdata/native-event-arguments-20260921.txt")
 	if err != nil {
 		t.Fatal(err)
 	}

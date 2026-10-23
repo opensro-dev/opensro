@@ -6,12 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"opensro.online/server/internal/testsupport/licensed"
 	"os"
 	"testing"
 )
 
 func TestDefenseModifierNativeProducer(t *testing.T) {
-	b, err := os.ReadFile("testdata/native-defense-writer-v2.json")
+	b, err := licensed.ServerFixture(t, "internal/game/combat/testdata/native-defense-writer-v2.json")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -3,13 +3,13 @@ package inventory
 import (
 	"bufio"
 	"fmt"
-	"os"
+	"opensro.online/server/internal/testsupport/licensed"
 	"strings"
 	"testing"
 )
 
 func TestSlotQueriesAgainstNative(t *testing.T) {
-	f, err := os.Open("testdata/native-inventory-slots-20260921.txt")
+	f, err := licensed.ServerFixtureReader(t, "internal/game/item/inventory/testdata/native-inventory-slots-20260921.txt")
 	if err != nil {
 		t.Fatal(err)
 	}

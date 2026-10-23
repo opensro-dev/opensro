@@ -1,7 +1,0 @@
-{
-  "binarySHA256": "bec2375e2c4c1073e3bf7761571470c430de251de74b452dbb86537348ef5290",
-  "candidateSHA256": "df3f891d960941dfa2706d88e5e2fd0e373e8b4d0a80dddae6eeb09ee295d84d",
-  "corpusSHA256": "7efecb19122c87f2b163965dc499bf90b37df48a91bec11d181263c5d52f5b78",
-  "generatorSHA256": "4f3068ed7b4faf57dc0b174205782a1842d691c66d11d51339bf4588f7a9c83b",
-  "evidence": "bounded native 545E50 with native callees, synthetic actor positions; no live/whole-program claim"
-}

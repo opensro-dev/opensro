@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"opensro.online/server/internal/testsupport/licensed"
 	"os"
 	"strings"
 	"testing"
@@ -18,7 +19,7 @@ func TestAICommandDurationNativeVectors(t *testing.T) {
 			Percent                               float32
 		}
 	}
-	raw, err := os.ReadFile("testdata/native-ai-command-duration.json")
+	raw, err := licensed.ServerFixture(t, "internal/game/enterworld/testdata/native-ai-command-duration.json")
 	if err != nil {
 		t.Fatal(err)
 	}

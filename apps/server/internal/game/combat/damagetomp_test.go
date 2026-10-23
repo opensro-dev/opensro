@@ -7,7 +7,7 @@ package combat
 
 import (
 	"encoding/json"
-	"os"
+	"opensro.online/server/internal/testsupport/licensed"
 	"testing"
 )
 
@@ -17,7 +17,7 @@ TestDamageToMPNativeCorpus
 ================
 */
 func TestDamageToMPNativeCorpus(t *testing.T) {
-	data, err := os.ReadFile("testdata/native-damage-to-mp.json")
+	data, err := licensed.ServerFixture(t, "internal/game/combat/testdata/native-damage-to-mp.json")
 	if err != nil {
 		t.Fatal(err)
 	}
