@@ -164,7 +164,7 @@ test("world transfer and death discard held movement", () => {
 ================
 basic attack cancel releases a held move before the swing closes
 
-CGObjPC_IsMotionChangeLocked (server 4EF880) blocks movement only for a
+The server's motion lock blocks movement only for a
 committed front command. A cancelled basic attack reports count 0 at once,
 so the held move goes without waiting for the swing's cast to close.
 ================
