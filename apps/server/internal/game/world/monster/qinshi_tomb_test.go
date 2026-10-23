@@ -46,6 +46,7 @@ TestQinShiTombEmbeddedOverlay
 ================
 */
 func TestQinShiTombEmbeddedOverlay(t *testing.T) {
+	requireQinShiTomb(t)
 	seed := TemplateFromParts(
 		map[uint32]MonsterRef{1933: {RefObjID: 1933, Codename: "MOB_CH_MANGNYANG", Level: 1, MaxHP: 59}},
 		nil,

@@ -30,6 +30,7 @@ import (
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/loot"
 	"opensro.online/server/internal/game/quest"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/worldarea"
 	"opensro.online/server/internal/gamedata"
 )
@@ -68,6 +69,9 @@ func Check() (Result, error) {
 	devPaths.AuthoredAreas = authoredAreas
 	devPaths.StructureZones = filepath.Join(dataPaths.WorldAuthorityDir, "structure-zones.json")
 	devPaths.DerivedDir = dataPaths.DerivedDir
+	if _, err := monster.LoadQinShiTomb(devPaths.DerivedDir); err != nil {
+		return result, fmt.Errorf("qinshi tomb: %w", err)
+	}
 	roster, err := enterworld.LoadRoster(devPaths.RosterPath)
 	if err != nil {
 		return result, fmt.Errorf("character roster: %w", err)

@@ -355,7 +355,7 @@ func publicRules() publicstats.RulesResponse {
 					settings.Int(tunables.TradeJobTraderPercentPerHunter), settings.Int(tunables.TradeJobTraderPercentCap),
 					settings.Int(tunables.TradeJobHunterPercentPerTrader), settings.Int(tunables.TradeJobHunterPercentCap)),
 				Why: "Requested for the beta, so traders and hunters gain from escorting each other; the original returns with one setting."},
-			{Flag: monster.EnvQinShiTomb, On: monster.QinShiTombFromEnv(),
+			{Flag: monster.EnvQinShiTomb, On: monster.QinShiTombEnabled(),
 				Native: "Qin-Shi Emperor Tomb has its geometry and entrance in the v1.150 client, without monster spawns or walk-in gates; its door moves nobody.",
 				Now:    "Qin-Shi Emperor Tomb is open on all six floors: its door by Jangan admits players of level 70 and above, its gates move between floors, and its monsters are awake.",
 				Why:    "Opens the Jangan tomb dungeon shipped in the v1.150 client assets (GH #1013); the original returns with one setting."},

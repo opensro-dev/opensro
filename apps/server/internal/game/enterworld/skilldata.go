@@ -9,7 +9,6 @@ skilldata.go - the skill table: loading and projecting skilldata rows
 package enterworld
 
 import (
-	_ "embed"
 	"fmt"
 	"opensro.online/server/internal/data/texttable"
 	"opensro.online/server/internal/game/abnormal"
@@ -21,9 +20,6 @@ import (
 
 	log "github.com/sirupsen/logrus"
 )
-
-//go:embed data/qinshi_tomb_skilldata.tsv
-var qinshiTombSkillDataTSV string
 
 // The skill-learn authority table.
 //
@@ -623,7 +619,7 @@ func (t *TextdataSkills) load() {
 		paths = append(paths, filepath.Join(t.dir, shard))
 	}
 	t.sharedKey = texttable.Fingerprint(paths...)
-	if monster.QinShiTombFromEnv() {
+	if monster.QinShiTombEnabled() {
 		t.sharedKey += "+qinshi_tomb"
 	}
 	// The rank index is a pure function of the rows, so it is built once
@@ -893,10 +889,10 @@ func (t *TextdataSkills) parse(shards []string) {
 		log.Warnf("bootstrap: %v; skill learning will refuse every request", t.loadErr)
 		return
 	}
-	if monster.QinShiTombFromEnv() {
+	if monster.QinShiTombEnabled() {
 		// Port-only, not native: append the 230 Qin-Shi Emperor Tomb monster
 		// skills mapped into the v1.150 skill ID gaps (monster/qinshi_tomb.go).
-		parseRows(monster.SplitTabbedText(qinshiTombSkillDataTSV))
+		parseRows(monster.SplitTabbedText(monster.QinShiTomb().SkillData))
 	}
 	// Chain sub-rows are the TARGETS of other rows' links. Marking them
 	// needs the whole table, so it runs after every shard loaded.
