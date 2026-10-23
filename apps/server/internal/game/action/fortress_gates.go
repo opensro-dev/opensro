@@ -5,9 +5,8 @@ fortress_gates.go - a fortress gate opened and shut by its pulley
 
 The pulleys (STRUCTURE_GATE_PULLEY_*) are NPCs with service 0x1F; each
 names its gate's event zone in its characterdata column 4
-(STRUCTURE_POS_JA_GATE_01). CSiegeFortressMgr_HandleGatePulleyOperation
-(634C90) reads the gate through that link (the pulley reference's
-struct-ext +0x48) and sets the gate's state word.
+(STRUCTURE_POS_JA_GATE_01). The native pulley operation reads the gate
+through that link and sets the gate's state word.
 
 The port's gates do not block movement as objects yet, so the state is the
 gate's published look and record: an open gate is not yet walkable.
@@ -30,7 +29,7 @@ import (
 )
 
 const (
-	// Low bytes of the pulley refusals (634C90).
+	// Low bytes of the native pulley refusals.
 	fortressErrGateNoZoneOpen       uint8 = 0x27 // 0x2827, an open request
 	fortressErrGateNoZoneShut       uint8 = 0x28 // 0x2828, a shut request
 	fortressErrGateWrongFort        uint8 = 0x29 // 0x2829
@@ -47,7 +46,7 @@ loadGatePulleys
 
 Each pulley's RefObjID and the event zone its column 4 names. A pulley
 whose zone v1.150 does not serve (the Bandit and Hotan fortresses) is left
-out: 634C90 answers its request 0x27 or 0x28, as for a missing record.
+out: the native operation answers its request 0x27 or 0x28, as for a missing record.
 ================
 */
 func loadGatePulleys(dir string) (map[uint32]uint32, error) {
@@ -110,11 +109,11 @@ func parseGatePulleys(dir string, files []string) (map[uint32]uint32, error) {
 ================
 fortressGatePulley
 
-634C90 in its refusal order: a pulley with no gate zone answers 0x27 for
+The native pulley operation in its refusal order: a pulley with no gate zone answers 0x27 for
 an open request and 0x28 for a shut one, a gate of another fortress 0x29,
-no gate on the zone 3, a destroyed gate 0x3C. CGObjSiegeStruct_SetState
-(4CF860) applies the state mask and reports whether it changed. Only a
-change broadcasts 0x3887 and queues success (634E0F); 6232C0's 0x15 result
+no gate on the zone 3, a destroyed gate 0x3C. The native structure state
+applies the state mask and reports whether it changed. Only a change
+broadcasts 0x3887 and queues success; the database result's 0x15 result
 carries the resulting state with the fortress and zone, not the request.
 ================
 */
