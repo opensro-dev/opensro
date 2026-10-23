@@ -110,8 +110,11 @@ Structure the code the way id did:
 - Few parameters. More than about four, or a list of optional callbacks,
   becomes one plain struct/object.
 - Straight-line code over clever code. Early returns over nesting.
-- Short native provenance: cite an address as evidence in a comment, name the
-  value in a constant, keep long disassembly trails in `../research`.
+- Short native provenance: cite a v1.150 client address as evidence in a
+  comment, name the value in a constant, keep long disassembly trails in
+  `../research`. Server-only rules are described in prose; the server
+  binary's name, version, addresses, symbols and record offsets stay out of
+  the repository, in `../research`.
 
 Do not copy C-isms that Go and TypeScript replace: modules and packages stand
 in for `SV_` / `CL_` name prefixes, and each language keeps its own naming
