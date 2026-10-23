@@ -8,9 +8,9 @@ when the player is already within its interaction reach. Farther away it
 stores the target (+0x62C), an approach distance (+0x630) and a stop
 tolerance (+0x634), starts CNavigationDeadreckon_StartApproachTargetEntity,
 and CNavigationDeadreckon_OnTick dispatches the pending select (693AD0
-type 0) once the walk ends. The server checks the same interaction in
-CGObjChar_CheckHitRange (4A8E10: NPC 300, gate 800), so a far click never
-opens a dialog it would refuse.
+type 0) once the walk ends. The server checks the same interaction with its
+own range test (NPC 300, gate 800), so a far click never opens a dialog it
+would refuse.
 
 A player keeping a stall (title mode 4) is selected wherever it stands;
 698740 then sends the visit (0x761F) inside 100 units, else approaches to
