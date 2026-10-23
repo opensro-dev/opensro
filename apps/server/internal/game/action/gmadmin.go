@@ -3,8 +3,8 @@
 
 gmadmin.go - the GM's world status and guild recall
 
-/WORLDSTATUS (sub 4), /RECALLGUILD (sub 0x12) and /SETTIME (sub 0xA), arms of the v1.188
-per-player GM handler CGObjPC_MsgHandler_SpecialCommand (51DE90). The
+/WORLDSTATUS (sub 4), /RECALLGUILD (sub 0x12) and /SETTIME (sub 0xA), arms of the native
+per-player GM handler. The
 gmcommand dispatcher decodes the request and answers on the wire; this
 file reads the world and moves characters.
 
@@ -23,9 +23,10 @@ import (
 ================
 WorldStatusGM
 
-51DE90 case 3 ("ShowMeStatistics: [PC: %d, NPC: %d, ItemOnGrd: %d"): the
-players in the world, every other world object, and the items on the
-ground. INFERENCE: native counts objects in its one object manager; the
+The native GM statistics case ("ShowMeStatistics: [PC: %d, NPC: %d,
+ItemOnGrd: %d"): the players in the world, every other world object, and
+the items on the ground. INFERENCE: native counts objects in its one
+object manager; the
 port's division holds admitted players, resident monsters across every
 population, the NPC roster and the ground registry.
 ================
@@ -54,9 +55,10 @@ func (rt *Runtime) WorldStatusGM(division string) (players, others, items uint32
 ================
 RecallGuildGM
 
-51DE90 case 0xE: CGuildMgr_RecallGuild finds the guild by name and relays
-0x7010 to the shard manager, which brings its members to where the GM
-stands. The port has one GameWorld per division, so it recalls them here,
+The native guild-recall case: the guild manager finds the guild by name
+and relays 0x7010 to the shard manager, which brings its members to where
+the GM stands. The port has one GameWorld per division, so it recalls
+them here,
 each through RecallUserGM: a member who is offline, dead or riding stays
 where they are. Reports whether the guild exists; an empty recall still
 succeeds, as native acks the relay, not the arrivals.
@@ -116,10 +118,10 @@ func (rt *Runtime) guildMembersByName(division, name string) ([]string, bool) {
 ================
 SetGameTimeGM
 
-/SETTIME hour (51DE90 case 8, "SetGameTime to %d"): the world clock moves
+/SETTIME hour (the native case 8): the world clock moves
 to that hour, and every player in the world gets the 0x31AD clock push,
 since a client keeps its own clock after entry. The clock is one per
-process, as SR_GameServer's is, so every division's players hear it.
+process, as the native server's is, so every division's players hear it.
 
 The push holds every division's publication gate (lockTickPublication, the
 tick's own order). An entry binds its session and sends its EnterWorld

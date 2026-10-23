@@ -3,19 +3,16 @@
 
 status.go - the abnormal status table and its parameter sources
 
-Package abnormal ports the native abnormal-state engine of SR_GameServer
-(v1.188 research executable): the per-hit roll SkillCombat_RollAbnormalStatus
-(590680), the 32-slot owner block initialised by GCharAbnormalState_Initialize
-(4A40C0), admission CGObjChar_ApplyAbnormalStateRecord (4A4270), the update
-CGObjChar_UpdateAbnormalStates (4A4390) and the per-status callbacks at
-block+0xE0C. It has no world dependencies: owners adapt it to monsters and
-players through the Owner interface.
+Package abnormal ports the native abnormal-state engine: the per-hit
+status roll, the 32-slot owner block, status admission, the periodic
+update and the per-status callbacks. It has no world dependencies:
+owners adapt it to monsters and players through the Owner interface.
 
 ===========================================================================
 */
 package abnormal
 
-// Status is the native slot index stored at tagSkillStatusEffect+05.
+// Status is the native slot index of a status-effect record.
 /*
 ================
 Status
@@ -51,10 +48,10 @@ const (
 	TimeBomb
 )
 
-// SlotCount is the block's fixed slot array (4A40C0 initialises 0x20 slots).
+// SlotCount is the owner block's fixed slot count.
 const SlotCount = 32
 
-// Bit is g_adwAbnormalStatusBit (C63EC8): identity except slots 2 and 3,
+// Bit is the native status-mask bit: identity except slots 2 and 3,
 // which swap so burn is mask bit 3 and electric shock mask bit 2.
 /*
 ================
@@ -71,7 +68,7 @@ func (s Status) Bit() uint32 {
 	return 1 << s
 }
 
-// Category is tagSkillStatusEffect+06 (5AA450): 1 for the level-carrying
+// Category is the status record's category field: 1 for the level-carrying
 // element statuses, 2 for grade-carrying statuses, 0 otherwise.
 /*
 ================
@@ -88,17 +85,17 @@ func (s Status) Category() uint8 {
 	return 0
 }
 
-// GradeMask selects the bits whose grade byte follows the v1.150 vitals mask
-// (client 77A080 reads 017FCFC0; dark carries none on this wire).
+// GradeMask selects the bits whose grade byte follows the v1.150 client's
+// vitals mask (017FCFC0); dark carries none on this wire.
 const GradeMask uint32 = 0x017fcfc0
 
 /*
 ==================
 Source
 
-Source is one tagRefSkill abnormal parameter block in native field order.
-Key is the per-actor probability key the roll passes in ECX (the field
-ordinal), Resist the CSkillManager status-resistance index of statuses 6+.
+Source is one abnormal parameter block of the skill record, in native
+field order. Key is the per-actor probability key the roll uses, Resist
+the status resistance index of statuses 6 and above.
 ==================
 */
 type Source struct {
@@ -109,13 +106,15 @@ type Source struct {
 	Arity  uint8
 }
 
-// Sources lists the 23 parameter blocks in 590680 evaluation order.
-// tagRefSkill offsets: 30C..320 then 430..474 (448 is stns, not a status).
+// Sources lists the 23 parameter blocks in the order the native roll
+// evaluates them.
+// The 23 blocks come from two field groups of the skill record; one
+// field between them (stns) is not a status.
 var Sources = [...]Source{
 	{0x667a, Freeze, 0x01000000, -1, 2},
 	{0x6662, Frostbite, 0x02000000, -1, 2},
 	{0x6573, ElectricShock, 0x03000000, -1, 3},
-	{0x6275, Burn, 0x04000000, -1, 3}, // 590B24: one caster key shared across victims and imbues
+	{0x6275, Burn, 0x04000000, -1, 3}, // one caster key is shared across victims and imbues
 	{0x7073, Poison, 0x05000000, -1, 3},
 	{0x7a62, Zombie, 0x06000000, -1, 2},
 	{0x7365, Sleep, 0x07000000, 0, 3},
@@ -155,7 +154,7 @@ func SourceIndex(tag uint32) (int, bool) {
 	return 0, false
 }
 
-// Param is one parsed abnormal block: the pointer at its tagRefSkill slot.
+// Param is one parsed abnormal block of the skill record.
 /*
 ================
 Param
@@ -166,11 +165,11 @@ type Param struct {
 	Args    [6]uint32
 }
 
-// Caster getv keys read by 590680 through CSkillManager_GetSkillModifier.
+// Caster modifier keys the status roll reads.
 const (
-	KeyPoisonDamage   uint32 = 0x52504455 // RPDU, tagRefSkill+500
-	KeyPoisonDuration uint32 = 0x52505455 // RPTU, tagRefSkill+504
-	KeyTrapDamage     uint32 = 0x54524141 // TRAA, tagRefSkill+53C
+	KeyPoisonDamage   uint32 = 0x52504455 // RPDU
+	KeyPoisonDuration uint32 = 0x52505455 // RPTU
+	KeyTrapDamage     uint32 = 0x54524141 // TRAA
 )
 
 // SkillParams is the skill's complete abnormal authority.
@@ -181,16 +180,16 @@ SkillParams
 */
 type SkillParams struct {
 	Params [SourceCount]Param
-	// Pulse is 'puls' (tagRefSkill+384): the tick period copied into
+	// Pulse is the 'puls' field: the tick period copied into
 	// periodic statuses, 2000 ms when absent.
 	Pulse        uint32
 	PulsePresent bool
 	// Getv records which caster modifiers the program requests
-	// (RPDU +500, RPTU +504, TRAA +53C).
+	// (RPDU, RPTU, TRAA).
 	PoisonDamageGetv, PoisonDurationGetv, TrapDamageGetv bool
-	// Curt is RefSkill+0x40C (tag curt): one mask and one level for every
-	// matching slot. Curl is +0x410 (tag curl): the pill's mask, chance and
-	// grade. Rcur is +0x414 (tag rcur): a present limit, including zero.
+	// Curt is the 'curt' block: one mask and one level for every
+	// matching slot. Curl is the 'curl' block: the pill's mask, chance
+	// and grade. Rcur is the 'rcur' block: a present limit, zero included.
 	CurtMask                        uint32
 	CurtLevel                       uint16
 	Curt                            bool
@@ -198,18 +197,19 @@ type SkillParams struct {
 	Curl                            bool
 	Rcur                            int32
 	RcurSet                         bool
-	// EffectArea is the kind-1 efr (0x656672) block at RefSkill+0x28C.
+	// EffectArea is the kind-1 efr (0x656672) block of the skill record.
 	// Select 4 or 5 forces the party selector unless the shape is already 5 or 6.
 	EffectArea EffectArea
-	// AdmitDeadParty is the resu tag (0x72657375) stored at RefSkill+0x330.
-	// TargetSelection_Party skips the alive check when that pointer is set.
-	// Word 0 is the highest level it revives (0x3012 above it, none when
-	// 0), word 1 the percent of the last EXP loss it returns.
+	// AdmitDeadParty is the resu tag (0x72657375) of the skill record.
+	// The party target selection skips the alive check while it is set.
+	// Word 0 is the highest level it revives (a level above it answers
+	// 0x3012; none when 0); word 1 is
+	// the percent of the last EXP loss it returns.
 	AdmitDeadParty bool
 	ResuMaxLevel   uint32
 	ResuExpPercent uint32
-	// Rmut is the rmut tag (0x726D7574, RefSkill+0x4AC): the skill a
-	// resurrected player starts on accepting (TrsWaitResponse_OnResponse).
+	// Rmut is the rmut tag (0x726D7574) of the skill record: the skill a
+	// resurrected player starts on accepting.
 	Rmut uint32
 }
 
@@ -217,9 +217,9 @@ type SkillParams struct {
 ==================
 EffectArea
 
-EffectArea is the efr argument block at RefSkill+0x28C (kind 1, the action
-area). Offsets: +4 shape, +8 radius, +0xC max targets, +0x10 reduction,
-+0x14 select (bit 0 includes the caster in party selection).
+EffectArea is the efr argument block (kind 1, the action area): shape,
+radius, max targets, reduction and select (bit 0 includes the caster in
+party selection).
 ==================
 */
 type EffectArea struct {
@@ -228,7 +228,7 @@ type EffectArea struct {
 	Reduction, Select               uint32
 }
 
-// CurePresent reports a curt or curl block. Both null skips 593F50's cure.
+// CurePresent reports a curt or curl block. Both absent skips the cure pass.
 /*
 ================
 CurePresent
@@ -253,8 +253,9 @@ func (p SkillParams) Present() bool {
 	return false
 }
 
-// Stun reports tagRefSkill+450. Its presence bypasses the magical-wall
-// exclusion for other statuses; a wall still excludes Stun itself (591E7C).
+// Stun reports the stun block's presence. Its presence bypasses the
+// magical-wall exclusion for other statuses; a wall still excludes Stun
+// itself.
 /*
 ================
 Stun

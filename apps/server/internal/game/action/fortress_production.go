@@ -5,9 +5,8 @@ fortress_production.go - the fortress smith's and trainer's orders
 
 0x71E1 actions 0x0D..0x10 (smith, NPC service 0x1A) and 0x11..0x14
 (trainer, 0x1B): query, start, cancel and collect one order per staff
-member. The handlers are the CSiegeFortressMgr_HandleSmith and
-HandleTrainer families (6324A0..6333C0); the v1.150 replies are what
-754A40 reads, which match the v1.188 writers byte for byte after the
+member. The v1.150 replies are what
+754A40 reads, and they match the native writers byte for byte after the
 [action][result] header:
 
 	query   [fortress u32][present u8]{ref u32, count u16, done u8, remaining i64}
@@ -35,15 +34,15 @@ import (
 )
 
 const (
-	// 632767 / 632B5C test the actor's fortress role against these bits;
-	// a member holding exactly the bit is the staff's own role for the
-	// discount (CGuild_HasFortressRole8Member 5D13C0, ...16Member 5D1350).
+	// The native order path tests the actor's fortress role against these
+	// bits; a member holding exactly the bit is the staff's own role for
+	// the discount.
 	fortressRoleSmith   uint8 = 0x08
 	fortressRoleTrainer uint8 = 0x10
-	// 632660 refuses more than twenty items in one order (0x2816).
+	// The native forge refuses more than twenty items in one order (0x2816).
 	fortressForgeMaxCount = 20
 	// The x87 float 0.85 the price and the time take when the staff role
-	// is held (632660: fconvert of 0.850000024f).
+	// is held.
 	fortressForgeDiscount = float32(0.85)
 )
 
@@ -52,8 +51,7 @@ const (
 fortressForgeRow
 
 One siegefortressitemforge.txt row: gold and guild points per item and
-the minutes one item takes (CRefData_FindSiegeFortressItemForge 63BCA0:
-+0xC, +0x10, +0x14).
+the minutes one item takes.
 ================
 */
 type fortressForgeRow struct {
@@ -109,7 +107,7 @@ func productionFor(action uint8) fortressProduction {
 ================
 trainerItem
 
-61DAC0's class test: the trainer's items are TypeID 3/3/3/2; every other
+The native class test: the trainer's items are TypeID 3/3/3/2; every other
 item, or an unknown one, is the smith's.
 ================
 */
@@ -232,7 +230,7 @@ func (rt *Runtime) fortressProductionService(division string, c *enterworld.Char
 ================
 fortressProductionQuery
 
-6324A0: only an unknown fortress refuses (3).
+Only an unknown fortress refuses (3).
 ================
 */
 func (rt *Runtime) fortressProductionQuery(division string, request siege.Interaction, p fortressProduction) OpResult {
@@ -334,8 +332,8 @@ func (rt *Runtime) withHolderGP(division string, c *enterworld.Character, holder
 ================
 fortressProductionCancel
 
-632E50: war period, fortress, holder, role, then the order (0x2819) and
-its item (3). Nothing is refunded.
+The native cancel order: war period, fortress, holder, role, then the
+order (0x2819) and its item (3). Nothing is refunded.
 ================
 */
 func (rt *Runtime) fortressProductionCancel(division string, c *enterworld.Character, request siege.Interaction, p fortressProduction) OpResult {
