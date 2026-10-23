@@ -6,7 +6,7 @@ jobweek.go - the job guilds' weekly close and its ranking snapshot
 One authority commit closes a division's job week (domain.CloseJobWeek):
 every job member's reward and contribution, the thief and hunter pools and
 the new ranking snapshot. The snapshot lives in metadata beside the pools,
-as the shard database kept Tab_RefRanking_* beside _TrijobRewards.
+as the original shard database kept its rankings beside the job rewards.
 
 ===========================================================================
 */

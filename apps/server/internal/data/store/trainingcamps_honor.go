@@ -27,11 +27,9 @@ import (
 ================
 Graduate
 
-CGObjPC_HandleAcademyGraduate7475 (0x00519600) ->
-TrainingCamp_ApplyMemberCommand (0x005DEF20) ->
-TrainingCampManager_SubmitPersistentOperation (0x005DF5C0, case 4):
-Voluntary apprentice graduation at level >= 40 with satisfaction 0..4
-(0x0051972E: cmp dl, 0x5; jae 0x519667).
+The native 0x7475 graduation, through the camp's member command and its
+persistent operation: voluntary apprentice graduation at level >= 40 with
+satisfaction 0..4 (5 or more is refused).
 ================
 */
 func (door storeCampDoor) Graduate(divisionID string, memberCharID int64, satisfaction uint8, nowMs int64) domain.TrainingCampGraduateResult {
@@ -80,12 +78,11 @@ func (door storeCampDoor) Graduate(divisionID string, memberCharID int64, satisf
 ================
 CompulsoryGraduate
 
-CGObjPC_HandleAcademyCompulsoryGraduate7476 (0x00519770) ->
-TrainingCamp_ApplyMemberCommand (0x005DEF20 @ 0x005198AB):
-Master-initiated compulsory graduation of a level-41+ apprentice
-(TrainingCampMember_IsState2 0x005E36E0 @ 0x0051987A; 0x00519883: cmp dl, 0x28;
-jbe 0x519898 -> push 0x6822), passing arg3 = +1 (@Evaluation delta +1, matching
-0x00ADE9A4[2] = satisfaction 2) and arg2 = 0 (compulsory) at 0x005198A4..0x005198AB.
+The native 0x7476 compulsory graduation, through the camp's member command:
+master-initiated compulsory graduation of a level-41+ apprentice (a member
+in state 2; level 40 or below is refused with 0x6822), passing an
+evaluation delta of +1 (the satisfaction-2 entry of the evaluation table)
+and the compulsory flag.
 ================
 */
 func (door storeCampDoor) CompulsoryGraduate(divisionID string, masterCharID int64, targetName string, nowMs int64) domain.TrainingCampGraduateResult {
@@ -138,22 +135,20 @@ func (door storeCampDoor) CompulsoryGraduate(divisionID string, masterCharID int
 ================
 completeGraduationLocked
 
-CTrainingCamp_OnMemberGraduatedUpdatePoints (0x005DDD50),
-CTrainingCamp_AwardGraduationHonorAndEvalPoints (0x005E3730),
-TrainingCampMember_AddHonorPointsClamped (0x005E3760), and retail stored
-procedure _TRAINING_CAMP_MEMBER_GRADUATE (SRO_VT_SHARD.bak @ 0x53E8B30):
-  - Always increments camp.GraduateCount by 1 (0x005DDE56; SQL 0x53E9376/0x53E94B0).
-  - When joinLevel <= 30 (0x1E at 0x005DDE8E / 0x005E3741; SQL IF @JoinLvl <= 30 at 0x53E9104):
-  - mentorPoint = 40 - joinLevel (0x005E3748: mov eax, 0x28; sub eax, ecx)
-  - subMentorPoint = (40 - joinLevel) / 10 (0x005DDEB0..0x005DDED0: x87 trunc(* 0.1); SQL @MentorPoint / 10)
+The native graduation update, its honor and evaluation award, the clamped
+honor add, and the original database's graduation procedure:
+  - Always increments camp.GraduateCount by 1.
+  - When joinLevel <= 30:
+  - mentorPoint = 40 - joinLevel
+  - subMentorPoint = (40 - joinLevel) / 10 (x87 trunc(* 0.1))
   - Master (Kind 0) gains mentorPoint; Sub-Mentors (Kind 1) gain subMentorPoint
-    (clamped against signed int32 overflow 0x7FFFFFFF per 0x005E3760, and
-    emitting HonorDeltas only when reward > 0 per 0x005DDF96: test edx, edx; je 0x5de022).
-  - Evaluation delta from 0x00ADE9A4 indexed at 0x0051973A: [-3, -1, +1, +3, +5]
-    for satisfaction 0..4 (compulsory graduation passes satisfaction 2 = +1 per 0x005198A4).
+    (clamped against signed int32 overflow 0x7FFFFFFF, and emitting
+    HonorDeltas only when reward > 0).
+  - Evaluation delta from the native table: [-3, -1, +1, +3, +5]
+    for satisfaction 0..4 (compulsory graduation passes satisfaction 2 = +1).
   - When joinLevel > 30, neither Honor points nor Evaluation points change.
-  - Voluntary apprentice graduation sets AwardedExp = true (CTrainingCampMgr_OnGraduateDBSuccess
-    0x005DFC30 @ 0x005DFC4F..0x005DFC72).
+  - Voluntary apprentice graduation sets AwardedExp = true, as the native
+    graduation success does.
 
 ================
 */
@@ -244,10 +239,9 @@ func (door storeCampDoor) completeGraduationLocked(
 ================
 qualifiedHonorCampsLocked
 
-Retail stored procedure _TRAINING_CAMP_UPDATEHONORRANK (SRO_VT_SHARD.bak
-@ 0x53FAE8C: SELECT TOP 50 [ID] FROM _TrainingCamp WITH (NOLOCK) WHERE
-EvaluationPoint >= 1 ORDER BY EvaluationPoint DESC, LatestEvaluationDate ASC):
-Collects camps with GraduateCount >= 1 and EvaluationPoints >= 1, sorted by
+The original database's honor-rank procedure (the top 50 camps with an
+evaluation point, by evaluation points descending, then the latest
+evaluation date ascending): collects camps with GraduateCount >= 1 and EvaluationPoints >= 1, sorted by
 EvaluationPoints descending, then LatestEvaluationAtMs ascending, capped
 at Top 50.
 ================
@@ -284,8 +278,7 @@ func (door storeCampDoor) qualifiedHonorCampsLocked(divisionID string) []domain.
 ================
 honorTierRankForIndex
 
-Retail stored procedure _TRAINING_CAMP_UPDATEHONORRANK (SRO_VT_SHARD.bak
-@ 0x53FB099) and CTrainingCamp_EngageHonorBuffSkills (0x005DD9B0):
+The original database's honor-rank procedure and the native honor buffs:
   - Rankings 1..5   (index 0..4)   = Rank 1 (King: Crown + Gold + Silver + Copper buffs)
   - Rankings 6..15  (index 5..14)  = Rank 2 (Gold: Gold + Silver + Copper buffs)
   - Rankings 16..30 (index 15..29) = Rank 3 (Silver: Silver + Copper buffs)
@@ -311,9 +304,8 @@ func honorTierRankForIndex(index int) uint8 {
 ================
 recomputeEvaluationRanksLocked
 
-Recomputes EvaluationRank (0 unranked, 1..4 ranked; native DB sentinel 5 in
-CTrainingCampMgr_ApplyReloadedHonorRanks 0x005E1410 ->
-CTrainingCamp_SetHonorRankAndBroadcast 0x005DD830) across all camps in the
+Recomputes EvaluationRank (0 unranked, 1..4 ranked; the native database
+sentinel 5 when the ranks reload and broadcast) across all camps in the
 division and returns every camp whose EvaluationRank changed.
 ================
 */
@@ -355,11 +347,7 @@ func (door storeCampDoor) recomputeEvaluationRanksLocked(divisionID string) []do
 ================
 HonorRankings
 
-CGObjPC_HandleAcademyHonorRank7478 (0x00519AD0) ->
-CTrainingCampMgr_SendHonorRankList_B478 (0x005DF010),
-CTrainingCampMgr_RebuildHonorRankPacketBuffer (0x005E16A0), and
-CTrainingCamp_WriteHonorRankEntry_5DD1C0 (0x005DD1C0):
-Returns the division's Top-50 honor-ranked camps in ranking order.
+The native 0x7478 honor-rank request and its 0xB478 list: returns the division's Top-50 honor-ranked camps in ranking order.
 ================
 */
 func (door storeCampDoor) HonorRankings(divisionID string) []domain.TrainingCampHonorRanking {
