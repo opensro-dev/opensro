@@ -177,8 +177,8 @@ func validImpactDisplacement(ko, kb *MonsterKnockdownPlan) bool {
 ================
 clipDisplacementLocked
 
-The displacement walks as a move (593D24 -> CGObjChar_MoveByStep 48B920 ->
-CGObjMobile_MoveTo 48B660 -> CGObj_MoveTo 485740): the region manager's
+The displacement walks as a move (593D24 -> the native step 48B920 -> the
+mobile move 48B660 -> the object move 485740): the region manager's
 move query runs from the live position, a blocked result (0x10000000)
 leaves the victim where it stood, and any other result moves it to the
 point the query wrote, short of a blocked edge. A knockback therefore never

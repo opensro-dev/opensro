@@ -35,7 +35,7 @@ const (
 	npcColScale     = 48
 	npcColModel     = 52
 	// npcColFortress is the reference row's fortress codename ("xxx" binds
-	// nothing), read by CGObj_BindFortressFromReference (486140). The same
+	// nothing), read by the native fortress binding (486140). The same
 	// column carries it in teleportbuilding.txt.
 	npcColFortress = 55
 	npcColLevel    = 57

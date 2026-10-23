@@ -97,7 +97,7 @@ func TestMonsterStuckDetachAndIdleOnBlockedHoming(t *testing.T) {
 		t.Fatalf("mover mode = %v, want MoverIdle", settled.Mode())
 	}
 	if settled.ControllerGID() != 9001 {
-		t.Fatalf("controller GID = %d, want 9001 (CAITactics_ReleaseCommand preserves +0x14C)", settled.ControllerGID())
+		t.Fatalf("controller GID = %d, want 9001 (the native command release preserves it)", settled.ControllerGID())
 	}
 	if settled.Progress().Failures() != 0 || settled.Stuck() {
 		t.Fatalf("stuck progress not reset on idle transition: failures=%d stuck=%v", settled.Progress().Failures(), settled.Stuck())
@@ -122,7 +122,7 @@ Verifies CAIState_BATTLE_OnStuck_RelocateToTarget (0x0055A250):
     its live combat target via 0xB2F5 (OpObjectSourceCorrection) while keeping
     MoverChasing and the combat target.
   - When the monster is outdoors and the combat target is in a dungeon region,
-    CAITactics_RequestPositionRelocation (0x00541110) refuses the relocation.
+    the native position relocation (0x00541110) refuses the relocation.
 
 ================
 */

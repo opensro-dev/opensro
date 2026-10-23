@@ -26,7 +26,7 @@ type NpcDef struct {
 	ObjectID uint32
 	RefObjID uint32
 	// FortressID is the fortress whose tax this object charges and collects
-	// (CGObj_BindFortressFromReference 486140 resolves the reference row's
+	// (the native fortress binding 486140 resolves the reference row's
 	// column 55 codename at spawn); zero binds nothing. A gate also carries
 	// it in Teleport for the browser's fortress gate flag.
 	FortressID uint32
@@ -48,7 +48,7 @@ type NpcDef struct {
 	// from a second codename allowlist.
 	TalkFlags uint32
 	// Services is the NPC's service option set (npcservice.go), which
-	// handlers check (CGObj_HasService 484DF0) and TalkFlags projects.
+	// handlers check (the native service test 484DF0) and TalkFlags projects.
 	Services NpcServices
 	// AuthoredSpawn distinguishes npcpos.txt world coordinates from the
 	// synthetic anchor used by the old fixture.

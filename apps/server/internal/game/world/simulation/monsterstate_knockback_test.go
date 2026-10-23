@@ -41,7 +41,7 @@ func TestKnockbackHoldsMoverAndPublishesCurrentSpawnMotion(t *testing.T) {
 ================
 TestKnockbackWalksThroughTheMoveTest
 
-CGObj_MoveTo (485740) moves a displaced victim through the region
+The native object move (485740) moves a displaced victim through the region
 manager's move query: a blocked result leaves it where it stood, a clipped
 one stops it at the point the query wrote, and an open one lands it on the
 push.
