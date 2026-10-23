@@ -22,21 +22,34 @@ var sourceEvidenceOnce struct {
 	once     sync.Once
 	evidence *Evidence
 	v1188    map[populationEvidenceKey]populationEvidence
+	missing  string
 	err      error
 }
 
 /*
 ================
 loadSourceEvidence
+
+Reads and parses the set once per test binary; a test only pays for the
+skip or the failure.
 ================
 */
 func loadSourceEvidence(t testing.TB) {
 	t.Helper()
-	data := map[string][]byte{}
-	for _, name := range evidenceFiles {
-		data[name] = licensed.SourceDataFile(t, "server/"+name)
-	}
 	sourceEvidenceOnce.once.Do(func() {
+		data := map[string][]byte{}
+		for _, name := range evidenceFiles {
+			table, ok, err := licensed.ReadSourceData("server/" + name)
+			if err != nil {
+				sourceEvidenceOnce.err = err
+				return
+			}
+			if !ok {
+				sourceEvidenceOnce.missing = name
+				return
+			}
+			data[name] = table
+		}
 		sourceEvidenceOnce.evidence, sourceEvidenceOnce.err = EvidenceFromTables(data)
 		if sourceEvidenceOnce.err == nil {
 			sourceEvidenceOnce.v1188 = mustLoadPopulationEvidence(string(data[PopulationEvidenceFile]))
@@ -44,6 +57,11 @@ func loadSourceEvidence(t testing.TB) {
 	})
 	if sourceEvidenceOnce.err != nil {
 		t.Fatal(sourceEvidenceOnce.err)
+	}
+	if sourceEvidenceOnce.missing != "" {
+		// Skips, or fails under SRO_REQUIRE_GAME_DATA=1, with the usual reason.
+		licensed.SourceDataFile(t, "server/"+sourceEvidenceOnce.missing)
+		t.Skip("monster evidence is not in source-data")
 	}
 }
 
