@@ -364,7 +364,7 @@ func (p *PetFollower) noteIssued(from Spawn, nowMs int64) {
 ================
 noteStopped
 
-CGObjChar_StopMove (4A9430) raises AI event 8 whenever a non-player's move
+The native stop (4A9430) raises AI event 8 whenever a non-player's move
 stops, arrived or blocked. CAIState_OnMoveStopped_CountStuck (559010)
 counts the stop when it is within 20 of the sequence origin; from the tenth
 such stop the stuck event is raised (5597B0, event 0x28).
@@ -421,7 +421,7 @@ func (p *PetFollower) ResetStuck() {
 ================
 RelocateTo
 
-CAITactics_RequestPositionRelocation (541110): place the pet on the given
+The native position relocation (541110): place the pet on the given
 point at its surface height. False when that point has no surface.
 ================
 */

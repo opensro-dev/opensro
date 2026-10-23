@@ -127,8 +127,8 @@ func (s *SessionSnapshot) ownsCompanion(gid uint32) bool {
 ==================
 SessionSnapshot.mountedOnCOS
 
-CGObjPC_IsMountedOnCOS (4DDCA0): the player is mounted on a rideable COS
-(483940 CGObj_IsRideableCOS, 4DA7D0 CGObjCOS_GetRider == this).
+The native mounted test (4DDCA0): the player is mounted on a rideable COS
+(483940, and the COS's rider 4DA7D0 is this player).
 ==================
 */
 func (s *SessionSnapshot) mountedOnCOS() bool {
