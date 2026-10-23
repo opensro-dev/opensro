@@ -44,8 +44,8 @@ func TestTextdataLevelsReadsTheSkillPointColumn(t *testing.T) {
 	}
 }
 
-// The exp-requirement cell is the SECOND column (the 0x30D2 level walk's
-// sub_7e0f20 row +0x08 u64). The synthetic table's columns carry values
+// The exp-requirement cell is the SECOND column (the one the client's
+// 0x30D2 level walk reads). The synthetic table's columns carry values
 // that cannot coincide, so a loader reading the wrong cell fails here.
 func TestTextdataLevelsReadsTheExpColumn(t *testing.T) {
 	dir := t.TempDir()
@@ -77,7 +77,7 @@ func TestTextdataLevelsReadsTheExpColumn(t *testing.T) {
 	}
 }
 
-// CRefLevel +0x1c is GUST_Mob_Exp: the v1.188 monster-SEXP divisor and
+// GUST_Mob_Exp (column 5) is the monster skill-EXP divisor and the
 // ordinary-death ceiling basis. Keep it independent from the EXP and SP-cost
 // columns because both consumers otherwise produce plausible wrong values.
 func TestTextdataLevelsReadsTheMonsterExpBasisColumn(t *testing.T) {

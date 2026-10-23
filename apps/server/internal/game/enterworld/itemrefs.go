@@ -33,7 +33,7 @@ const itemCooldownGroupMask = 0xff
 TextdataItems
 
 TextdataItems is the ItemRefSource over the extracted tab-separated
-Silkroad textdata (the server_dep form of the _REF* tables), the same
+Silkroad textdata (the server_dep form of the reference tables), the same
 source the (retired) Node launcher-api read through referenceData.mjs. Lazy +
 cached; degrades to empty when the textdata is not present, so the server
 still boots (and the equip roster behaves like MISSION_EQUIP_ITEMS=0).
@@ -379,9 +379,9 @@ func characterNextCodename(field string) string {
 itemdataRecordColumn
 
 itemdataRecordColumn is one v1.150 itemdata projection entry: media column
-index -> named native RefItemData field. kind "int": native fild (signed
-integer, media text float-formatted so parse via trunc); "float": native
-fld float32; "permille": stored as parse/1000.0 by the native row parser.
+index -> the named native item-record field. kind "int": a signed integer
+(media text float-formatted so parse via trunc); "float": a float32;
+"permille": stored as parse/1000.0 by the native row parser.
 ==================
 */
 type itemdataRecordColumn struct {
@@ -392,39 +392,39 @@ type itemdataRecordColumn struct {
 
 // itemdataRecordColumns is the current v1.150 projection proven by the
 // tooltip status-C evidence. It includes the full native requirement quad
-// (RefItemData +0xc8..+0xd4 types / +0xd8..+0xe4 values); the names
+// (four type cells followed by their four value cells); the names
 // extend the 32/33 precedent as reqLevelTypeN/requiredLevelN, keeping
 // the historical unsuffixed "requiredLevel" for slot 1.
 var itemdataRecordColumns = []itemdataRecordColumn{
-	// Token 7 is RefObjCommon CashItem, natively bit 0 of the type word
-	// (808AD0). The port keeps that bit clear (equiproster.go), so the
+	// Token 7 is CashItem, natively bit 0 of the type word.
+	// The port keeps that bit clear (equiproster.go), so the
 	// client reads it here: CIFItemSlot_DispatchActivation 567290 refuses a
 	// quick sell when ItemTid_IsMallItem 550130 holds.
 	{7, "cashItem", "int"},
 	{14, "country", "int"},
 	{15, "rarity", "int"},
-	// Token 16 is RefObjCommon CanTrade, beside CanSell (17) and CanBorrow
+	// Token 16 is CanTrade, beside CanSell (17) and CanBorrow
 	// (19): 0 keeps an item off the exchange table (exchange.go).
 	{16, "canTrade", "int"},
-	// 808AD0 reads token 17 into RefObjData+A5; 5B6D22 tests this byte
-	// before merchant sale. Shop membership is not a sale permission.
+	// Token 17 is CanSell, tested before merchant sale. Shop membership is
+	// not a sale permission.
 	{17, "canSell", "int"},
-	// Token 19 (RefObjData+0xA7): bit 0x80 admits the item to the warehouse
+	// Token 19: bit 0x80 admits the item to the warehouse
 	// (CIFStorage_OnSlotTransfer; 0 refuses with notice 1:0x43).
 	{19, "canBorrow", "int"},
-	// Token 22 (server ref +0x8C bit 6, client RefObjData+0xAA): itemdata
-	// CanRepair, read by CGObj_CanRepair 483E80 for NPC and hammer repair.
+	// Token 22: itemdata CanRepair (bit 6 of its flags cell), read for NPC
+	// and hammer repair.
 	{22, "canRepair", "int"},
-	// Token 23 (server ref +0x8C bit 7): itemdata CanRevive, read by
-	// CGObj_CanRevive 483EB0 before a smith repairs a broken item.
+	// Token 23: itemdata CanRevive (bit 7), read before a smith repairs a
+	// broken item.
 	{23, "canRevive", "int"},
 	// Authored CanUse flags: bit 0 admits direct activation; other bits
 	// describe additional behavior (pet skill rows carry 129, not just 1).
 	{24, "canUse", "int"},
 	{26, "price", "int"},
-	// Native RefItemData+0xb4/+0xb8. These are consumed independently by
-	// sub_789630: CostRepair prices missing durability points; CostRevive is
-	// the extra charge when current durability is zero.
+	// The repair and revive price cells, consumed independently: CostRepair
+	// prices missing durability points; CostRevive is the extra charge when
+	// current durability is zero.
 	{27, "repairCostB4", "int"},
 	{28, "reviveCostB8", "int"},
 	// Token 30: the per-unit gold a warehouse deposit charges.
@@ -499,29 +499,28 @@ var itemdataRecordColumns = []itemdataRecordColumn{
 	{115, "varianceFloatPerPlus290", "float"},
 	{116, "varianceIntMin294", "int"},
 	{117, "varianceIntMax298", "int"},
-	// Native RefItemData+0x29C/+0x2A4, itemdata's Param1 and Param3. The
-	// record's param block is 20 contiguous ints followed by 20 contiguous
-	// description strings (sub_64DF40 walks them as two separate runs), so the
-	// params are NOT interleaved with their labels: Param1 is +0x29C, Param2
-	// is +0x2A0 and Param3 is +0x2A4. Itemdata pairs them as (Param, Desc)
-	// columns, which is why Param3 is column 122 rather than 120.
-	// sub_6E6E00 kind 3 reads Param1 as SECONDS and Param2 as a millisecond
+	// Itemdata's Param1 and Param3 cells. The native record's param block
+	// is 20 contiguous ints followed by 20 contiguous description strings,
+	// walked as two separate runs, so the params are NOT interleaved with
+	// their labels. Itemdata pairs them as (Param, Desc) columns, which is
+	// why Param3 is column 122 rather than 120.
+	// A kind-3 reader takes Param1 as SECONDS and Param2 as a millisecond
 	// limit, but the column's unit is per item family - minutes for a COS
 	// summoner (ITEM_COS_P_EXTENSION_1D carries 1440), milliseconds for a
 	// recall scroll (30000 against the 30-second retail return), seconds for
 	// the ITEM_MALL_PET_SKILL_* and GOLD_TIME_SERVICE families that match the
 	// kind-3 contract. Publish both unscaled and let the consumer decide.
 	{118, "itemParam1_29c", "int"},
-	// The resurrection scroll (v1.188 49FF20) reads all three: Param1 a
+	// The resurrection scroll reads all three: Param1 a
 	// fixed HP/MP amount, Param2 their percentage, Param3 the EXP refund.
 	{120, "itemParam2_2a0", "int"},
 	{122, "itemParam3_2a4", "int"},
-	// The premium time tickets (49C2B0 cases 3 and 4) read the EXP and
+	// The premium time tickets (cases 3 and 4) read the EXP and
 	// skill-EXP bonus percentages from Param4 and Param5.
 	{124, "itemParam4_2a8", "int"},
 	{126, "itemParam5_2ac", "int"},
-	// 80BFAC/80BFBC store the two tokens after the 20 (value,label)
-	// pairs. 8093C0 returns CItemData+8, hence record offsets 51C/51D.
+	// The client's parser stores the two tokens after the 20 (value,label)
+	// pairs, so they land at columns 158 and 159.
 	{158, "maxMagicOptions51c", "byte"},
 	{159, "avatarAttachment51d", "byte"},
 }
@@ -574,9 +573,9 @@ func buildItemRef(fields []string, names map[string]string) *ItemRef {
 	if len(fields) > 121 {
 		ref.SummonLevelThresholds = summonLevelThresholds(ref)
 	}
-	// Desc1 (RefItem+0x2A4) names the skill a scroll (TID3 13) or a
-	// monster mask (CGItemMonsterCapsule, TID 3/2/2; 493C30), or a fortress
-	// repair kit (49CC80) casts.
+	// Desc1 names the skill a scroll (TID3 13) or a
+	// monster mask (TID 3/2/2), or a fortress
+	// repair kit casts.
 	capsule := ref.TypeIDs[0] == 3 && ref.TypeIDs[1] == 2 && ref.TypeIDs[2] == 2
 	repair := ref.TypeIDs == [4]int64{3, 3, 1, 10}
 	if (ref.TypeIDs[2] == 13 || capsule || repair) && len(fields) > 119 {
@@ -629,7 +628,7 @@ func buildItemRef(fields []string, names map[string]string) *ItemRef {
 	}
 	// The first .ddj path field is the icon (the .bsr fields before it are
 	// the world/drop models); the LAST .bsr is the AssocFileDrop ground
-	// model (native RefItemData+0x138).
+	// model.
 	// v1.150 itemdata column 54 is AssocFileIcon; do not infer from models.
 	if len(fields) > 54 {
 		ref.Icon = strings.TrimSpace(fields[54])
@@ -657,7 +656,7 @@ func buildItemRef(fields []string, names map[string]string) *ItemRef {
 		}
 	}
 	// Potion recovery parameters are authoritative SERVER gameplay inputs,
-	// not part of the browser RefItemData field projection. The adjacent media label columns pin
+	// not part of the browser item-record field projection. The adjacent media label columns pin
 	// these cells in the shipped v1.150 rows:
 	//   118 HP amount, 120 HP percent, 122 MP amount, 124 MP percent.
 	if len(fields) > 118 {
@@ -677,8 +676,8 @@ func buildItemRef(fields []string, names map[string]string) *ItemRef {
 			ref.FortressRoleMask = v
 		}
 	}
-	// 49AC50 / 49B710 read the SERVER record's Param1..Param6 at +2A0 with a
-	// 0x20 stride - the same slots as the potion amounts above, so ParamN is
+	// The server reads Param1..Param6 from
+	// the same slots as the potion amounts above, so ParamN is
 	// column 118+2(N-1). The shipped labels pin the roles: the universal pill
 	// (ITEM_ETC_CURE_RANDOM_*) carries the curable mask, curable level and
 	// chance in Param1..3; ITEM_ETC_CURE_ALL_* carries freeze, frostbite, burn,
@@ -779,7 +778,7 @@ func buildItemCombatRef(fields []string) *ItemCombatRef {
 	}
 }
 
-// buildItemNativeFields renders the finite numeric RefItemData projection.
+// buildItemNativeFields renders the finite numeric item-record projection.
 // Non-finite or absent source cells stay absent instead of fabricating PK2 data.
 /*
 ================
