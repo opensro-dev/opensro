@@ -1,6 +1,6 @@
 package enterworld
 
-const skillCriticalTag = 0x6372 // "cr": v1.188 5877D7 stores the following pair at skill+244.
+const skillCriticalTag = 0x6372 // "cr": the following pair is stored for the skill.
 
 // SkillCriticalModifier belongs to the executing skill, not the character's
 // permanent stats. Passive/buff cr blocks need their own ParamKeeper producer;
@@ -11,7 +11,7 @@ type SkillCriticalModifier struct {
 }
 
 // Read at parameter boundaries: an argument equal to "cr" is not a tag.
-// The native parser overwrites +244 on a repeated cr block (last wins).
+// The parser overwrites the stored pair on a repeated cr block (last wins).
 // Player offensive admission separately rejects duplicate effect blocks.
 // Zero padding advances one word (client 84B322..84B32B); only ssou ends
 // decoding. Do not replace this walk with a search for the numeric tag.

@@ -76,9 +76,9 @@ func EquipmentDegree(ref *ItemRef) int {
 ================
 ItemDegree
 
-Any item's degree, the server's CGItem_GetDegree (v1.188 4775A0): 0
-without a class, the equipment rule for equipment, and the class itself
-for anything else (an elixir or alchemy stone's class is its degree).
+Any item's degree: 0 without a class, the equipment rule for equipment,
+and the class itself for anything else (an elixir or alchemy stone's
+class is its degree).
 ================
 */
 func ItemDegree(ref *ItemRef) int {

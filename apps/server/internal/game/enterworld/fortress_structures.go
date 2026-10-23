@@ -6,10 +6,9 @@ fortress_structures.go - the structures a fortress world starts with
 A fortress structure stands on an event zone: eventzonedata.txt names each
 zone (STRUCTURE_POS_JA_GATE_01), its kind, its default structure codename
 and its world; navmesh\objectstring.ifo places it (the server bundle's
-world-authority/structure-zones.json). The retail shard keeps installed
-structures in _SiegeFortressStruct and installs new ones through
-_SiegeFortressStructInsert; nothing in SR_GameServer creates a fortress's
-first structures, which a new shard's database holds.
+world-authority/structure-zones.json). The retail shard's database keeps
+the installed structures; nothing on the server creates a fortress's
+first structures - a new shard's database already holds them.
 
 INFERENCE: a fresh shard's fortress holds, on every placed zone of kinds 1
 (fort stone, guard towers) and 3 (gates), that zone's default structure.

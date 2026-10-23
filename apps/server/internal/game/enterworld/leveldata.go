@@ -32,41 +32,40 @@ type LevelDataSource interface {
 	// which must refuse the training rather than default to zero.
 	SkillPointCost(level int64) (int64, bool)
 	// ExpRequired answers the experience needed to advance FROM level to
-	// level+1: the exp curve the client's own level-up walk reads (the
-	// 0x30D2 handler sub_779620 calls sub_7e0f20(level) and reads the
-	// u64 at row +0x08/+0x0c, immediately before the SP-cost field at
-	// +0x10 - it is column index 1 of leveldata.txt). The second result
+	// level+1: the exp curve the client's own level-up walk reads (its
+	// 0x30D2 handler reads this row's u64, immediately before the SP-cost
+	// field - column index 1 of leveldata.txt). The second result
 	// is false when the table has no row, which must refuse the exp
 	// grant rather than invent a threshold.
 	ExpRequired(level int64) (int64, bool)
-	// MonsterExpBasis answers the CRefLevel +0x1c field (GUST_Mob_Exp,
-	// column 5). The v1.188 GameServer uses this one authored value at both
-	// sides of the progression boundary: Formulae_ComputeMonsterSkillExpReward
-	// divides the monster's EXP reward by it, while
-	// CGObjPC_ApplyDeathPenalties multiplies it by 100 for the ordinary-death
-	// loss ceiling. Missing rows must refuse either mutation atomically.
+	// MonsterExpBasis answers the GUST_Mob_Exp value (column 5). The server
+	// uses this one authored value at both sides of the progression
+	// boundary: the monster skill-EXP reward divides the monster's EXP
+	// reward by it, while the ordinary-death penalty multiplies it by 100
+	// for the loss ceiling. Missing rows must refuse either mutation atomically.
 	MonsterExpBasis(level int64) (int64, bool)
 }
 
-// leveldataSkillPointColumn is the SP-cost cell (the sub_7e0f20 row's
-// +0x10 field): the third tab-separated column.
+// leveldataSkillPointColumn is the SP-cost cell: the third
+// tab-separated column.
 const leveldataSkillPointColumn = 2
 
-// leveldataExpColumn is the exp-requirement cell (the sub_7e0f20 row's
-// +0x08 u64, read by the 0x30D2 exp walk @0x77977a..0x7797f3): the second
-// tab-separated column. First rows read level 1 -> 118, 2 -> 470,
+// leveldataExpColumn is the exp-requirement cell (the u64 the client's
+// 0x30D2 exp walk reads): the second tab-separated column. First rows
+// read level 1 -> 118, 2 -> 470,
 // 3 -> 1058; row 140 carries 34900085783 (> u32, hence int64).
 const leveldataExpColumn = 1
 
-// leveldataMonsterExpBasisColumn is CRefLevel::GUST_Mob_Exp (+0x1c) in
-// v1.188 and the client CLevelData reward-feedback divisor (+0x28) in v1.150.
-// It is column 5 in the shared textdata. The shipped rows carry level 1 ->
+// leveldataMonsterExpBasisColumn is the GUST_Mob_Exp column: the
+// monster-EXP basis the server's reward math divides by, and the divisor
+// the v1.150 client uses for reward feedback. It is column 5 in the
+// shared textdata. The shipped rows carry level 1 ->
 // 24, level 4 -> 94, level 11 -> 259 and level 90 -> 6949.
 const leveldataMonsterExpBasisColumn = 5
 
-// leveldataJobExpColumn is the trader's job-EXP requirement (CRefLevel
-// +0x20); the thief's (+0x24) and the hunter's (+0x28) follow it.
-// CJobInfo_AddJobExp (60DD90) reads the row of the job grade.
+// leveldataJobExpColumn is the trader's job-EXP requirement; the thief's
+// and the hunter's columns follow it. The job-EXP grant reads the row of
+// the job grade.
 const leveldataJobExpColumn = 6
 
 /*
