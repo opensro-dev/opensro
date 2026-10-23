@@ -3,7 +3,7 @@
 
 expandedBuild.mjs - whether the build in use adds content to v1.150
 
-A game root made by scripts/build_alexandria_variant.py carries the manifest
+A game root made by the overlay tool build_alexandria_variant.py carries the manifest
 named below. Builds from it add skills, items, portals, effects and sounds to
 the native data, so a gate that pins the native catalog byte for byte cannot
 hold there; it checks that the native rows survive instead. A native build

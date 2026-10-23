@@ -21,12 +21,12 @@ so the script-backed catalog
 
 The dumps the class snapshot is imported from are kept outside the product,
 in the owner's local research tree, with hashes recorded in the snapshot.
-Re-importing them must reproduce `compiled-quests-source.json` byte for byte.
+Re-importing them must reproduce `compiled-quests-source.json` byte for byte. The
+quest-text importer, which writes the text and SQL-reward snapshots, is kept
+outside this repository with the operator's other import tools.
 
 ```text
 python -B scripts/build/import_compiled_quest_evidence.py --hlil <dump> --methods <dump>
-python -B scripts/build/import_quest_text_evidence.py --textdata <v1.150-textdata> --sql <shard-snapshot>
-python -B scripts/build/import_quest_text_evidence.py --textdata <v1.150-textdata>   # the text snapshot alone
 python -B scripts/build/generate_compiled_quests.py
 python -B scripts/build/generate_compiled_quests.py --check
 ```
