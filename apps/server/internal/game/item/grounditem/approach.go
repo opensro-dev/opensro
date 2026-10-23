@@ -29,7 +29,7 @@ const (
 	DungeonSectorBit uint16 = worldgeom.DungeonRegionBit
 
 	// WalkSpeed and RunSpeed are the per-second speeds shipped on every spawn
-	// block (+0x24c and +0x250).
+	// block.
 	WalkSpeed = 20.0
 	RunSpeed  = 50.0
 
@@ -40,11 +40,10 @@ const (
 	// ExecuteRange is how close a character must be for a pickup to execute
 	// rather than trigger an approach.
 	//
-	// MEASURED (supersedes the provisional 50u): the retail-family
-	// SR_GameServer.exe pickup executor sub_526090 loads a single global
-	// float32 = 10.0 (.rdata:0x00b45b44 = 0x41200000), feeds it to the reach
-	// checker sub_4a9050, and compares it INCLUSIVELY (distance <= 10.0)
-	// against a LINEAR region-aware distance (post-fsqrt, 1920u/region). The
+	// MEASURED (supersedes the provisional 50u): the retail
+	// pickup executor loads a single global float32 = 10.0, feeds it to
+	// the reach checker, and compares it INCLUSIVELY (distance <= 10.0)
+	// against a LINEAR region-aware distance (1920u/region). The
 	// client ships no player pickup range because the value is
 	// server-authoritative, and there is no too-far refusal in the item
 	// error family - retail always walks you there.
@@ -165,7 +164,7 @@ type Pending struct {
 // PendingTracker holds the one approach each character may have in flight.
 //
 // The native target-move latch is a single slot: issuing any new command
-// replaces it (sub_67b0e0), which is why arming an approach overwrites rather
+// replaces it, which is why arming an approach overwrites rather
 // than queues.
 /*
 ================
