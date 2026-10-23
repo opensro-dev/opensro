@@ -1,8 +1,8 @@
 package monster
 
-// Bounded v1.188 timer model used by the Go simulation cadence adapter.
+// Bounded native timer model used by the Go simulation cadence adapter.
 // Native-vector tests establish only their declared execution bounds; this
-// is not a proof-accepted C++ replacement or proof of v1.150 AI parity.
+// is not a proof-accepted replacement or proof of v1.150 AI parity.
 type AITimerID int32
 
 const TimerIDAcquisition AITimerID = 1
@@ -16,8 +16,9 @@ type AITimerEntry struct {
 	IntervalMs     uint32
 }
 
-// AITimeManager owns both banks and selected-slot identity. 53D4B0 allocates
-// nine first-bank entries and three second-bank entries, with split=9.
+// AITimeManager owns both banks and selected-slot identity. The native
+// manager allocates nine first-bank entries and three second-bank
+// entries, with split=9.
 // ID 9 fails native bounds checking; 10/11 address second-bank indices 1/2.
 // A map accepting arbitrary IDs would erase that exceptional branch.
 type AITimeManager struct {
@@ -48,12 +49,12 @@ func (m *AITimeManager) slot(id AITimerID) *AITimerEntry {
 	} else if index := uint32(id - 9); index < uint32(len(m.second)) {
 		return &m.second[index]
 	}
-	// 53D633/53D690/53D749 reaches non-returning 543040. This panic
-	// preserves fail-closed ownership, not native exception/ABI equivalence.
+	// The native lookup ends in a non-returning trap. This panic preserves
+	// fail-closed ownership, not native exception equivalence.
 	panic("AI timer ID outside native timer banks")
 }
 
-// CRT 9DD338 yields 0..32767. Intn(modulus) has a different distribution from
+// The native CRT draw yields 0..32767. Intn(modulus) has a different distribution from
 // rand()%modulus and hides discarded random calls. Never silently inject zero.
 func nextAITimerRandom(next func() uint32) uint32 {
 	if next == nil {
@@ -67,7 +68,7 @@ func nextAITimerRandom(next func() uint32) uint32 {
 }
 
 // InitAcquisitionTimer retains both flag branches, both modulo operations
-// (53F712..53F765), and SetTimer's otherwise discarded third random draw.
+// and SetTimer's otherwise discarded third random draw.
 // Gameplay meanings of these flag bits remain unverified.
 func (m *AITimeManager) InitAcquisitionTimer(flags uint8, next func() uint32) {
 	base, modulo := uint32(1000), uint32(491)
@@ -78,7 +79,7 @@ func (m *AITimeManager) InitAcquisitionTimer(flags uint8, next func() uint32) {
 	m.SetTimer(TimerIDAcquisition, base, jitter, 0, false, next)
 }
 
-// SetTimer models 53D600's bank-specific writes. Its EAX result is the phase
+// SetTimer models the native bank-specific writes. Its result is the phase
 // sample in the first bank, the quotient in the second. The second bank
 // preserves its armed flag. Arithmetic wraps BEFORE the minimum-one clamp.
 func (m *AITimeManager) SetTimer(id AITimerID, base, jitter, now uint32, selectTimer bool, next func() uint32) uint32 {
@@ -108,7 +109,7 @@ func (m *AITimeManager) SetTimer(id AITimerID, base, jitter, now uint32, selectT
 // GetTimer returns a detached copy; the private slot pointer never escapes.
 func (m *AITimeManager) GetTimer(id AITimerID) AITimerEntry { return *m.slot(id) }
 
-// SUB(now, interval); unsigned CMP(result, last). Do not commute subtraction:
+// The check subtracts first, then compares unsigned. Do not commute it:
 // now=1, interval=225, last=0 fires because uint32(1-225) wraps, whereas
 // (now-last)>=interval is false. Native startup/rollover quirks are retained.
 func fireAITimer(entry *AITimerEntry, now uint32) bool {
@@ -121,7 +122,7 @@ func fireAITimer(entry *AITimerEntry, now uint32) bool {
 
 // CheckTimer gates the selected slot BEFORE looking up the requested slot.
 // Firing selection clears it, then continues; it does not return success.
-// When selected=requested, the same slot is checked twice (53D6E0..53D773).
+// When selected=requested, the same slot is checked twice.
 // Selection aliases the bank entry, including replacements via SetTimer.
 func (m *AITimeManager) CheckTimer(id AITimerID, now uint32) bool {
 	if !m.CheckSelectedTimer(now) {
@@ -130,7 +131,7 @@ func (m *AITimeManager) CheckTimer(id AITimerID, now uint32) bool {
 	return fireAITimer(m.slot(id), now)
 }
 
-// CheckSelectedTimer is the shared prefix of native 53D6E0. The battle
+// CheckSelectedTimer is the shared prefix of the native check. The battle
 // adapter uses this before its existing action-interval deadline; it must
 // neither consume another timer nor reset the selection on a state change.
 func (m *AITimeManager) CheckSelectedTimer(now uint32) bool {

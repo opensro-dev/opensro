@@ -30,8 +30,8 @@ const GidBase uint32 = domain.MonsterGIDBase
 ==================
 NestRow
 
-NestRow is one v1.150 npcpos anchor enriched by a matching v1.188
-Nest/Tactics row. Numeric ids never cross that version boundary: the
+NestRow is one v1.150 npcpos anchor enriched by a matching later-version
+nest/tactics row. Numeric ids never cross that version boundary: the
 adapter joins by codename, region, and the rounded anchor coordinates.
 ==================
 */
@@ -42,10 +42,10 @@ type NestRow struct {
 	Controls          TacticsControls
 	HasControls       bool
 	ConditionalSkills [8]ConditionalSkill
-	TargetPolicy      uint8 // native tactics+20: 0 retain, 1 latest, 2 scored
+	TargetPolicy      uint8 // the tactics target policy: 0 retain, 1 latest, 2 scored
 	SpawnPoint
 	// EventStructID is a fortress structure's event zone (eventzonedata id):
-	// the RefEventStructID its spawn row carries (CICATStruct 4FA0B0).
+	// the RefEventStructID its spawn row carries.
 	EventStructID uint32
 	// StartVacant is a fortress zone that starts with no structure (a
 	// barricade site): its nest spawns nothing until the zone takes an
@@ -58,48 +58,48 @@ type NestRow struct {
 	RetailEvidence bool
 	// PolicyPinned says the population policy fields are intentionally
 	// authored. RetailEvidence is provenance; resource-authored game areas set
-	// PolicyPinned without pretending their rows came from the v1.188 tables.
+	// PolicyPinned without pretending their rows came from the later-version tables.
 	PolicyPinned bool
-	// RarityOverride is an instance's full spawn byte: the grade 5607B0 rolled
+	// RarityOverride is an instance's full spawn byte: the grade the spawn rolls
 	// (or a summon wave's authored grade). Template nests never carry one;
 	// an instance without it inherits MonsterRef.MonsterType.
 	RarityOverride    uint8
 	HasRarityOverride bool
-	// Radius is the Tab_RefNest nRadius containment radius.
+	// Radius is the nest table's containment radius.
 	Radius float64
-	// GenerateRadius is passed by CNest to the native spawn routine.
+	// GenerateRadius is passed to the native spawn routine.
 	GenerateRadius float64
-	// ChampionGenPercentage is Tab_RefNest.nChampionGenPercentage.
-	// The GameServer rolls it when activating an ordinary monster slot,
+	// ChampionGenPercentage is the nest table's champion percentage.
+	// The server rolls it when activating an ordinary monster slot,
 	// then splits a successful promotion between champion and giant.
 	ChampionGenPercentage int
-	// MaxCount is the native dwMaxTotalCount live-instance cap.
+	// MaxCount is the native live-instance cap.
 	MaxCount int
 	// Shared population cap across alternative nest locations. Key is a hash
 	// of codename/anchor membership, not a newer-server numeric entity ID.
-	// HiveMaxCount is dwOverwriteMaxTotalCount; HiveOrder is this nest's rank
-	// in native hive order (ascending dwNestID).
+	// HiveMaxCount is the hive's shared cap; HiveOrder is this nest's rank
+	// in native hive order (ascending nest id).
 	HiveKey      string
 	HiveMaxCount int
 	HiveOrder    int
 	HiveDensity  HiveDensityPolicy
-	// Seconds are converted to milliseconds before 560380 samples its CRT
-	// fraction. This is a millisecond interval, not an integer-second roll.
+	// Seconds are converted to milliseconds before the server samples its
+	// random fraction. This is a millisecond interval, not an integer-second roll.
 	RespawnDelayMinSec int
 	RespawnDelayMaxSec int
 	Respawn            bool
-	// Aggressive is btAggressType == 0. Type 1 is passive.
+	// Aggressive is aggress type 0. Type 1 is passive.
 	Aggressive bool
 	SightRange float64
-	// Raw reference-tactics +90 bits. Aggressive is a different native field;
+	// Raw reference-tactics flag bits. Aggressive is a different native field;
 	// never synthesize detection or acquisition cadence from that boolean.
 	NativeTacticsFlags uint32
-	// Champion is the tactics row named by this nest tactics' ChampionTacticsID
-	// (runtime +8C). Without one, GameServer 5607B0 never promotes the slot.
+	// Champion is the tactics row named by this nest tactics' champion id.
+	// Without one, the server never promotes the slot.
 	HasChampionTactics bool
 	ChampionTactics    ChampionTactics
-	// InitialDir is Tab_RefNest.wInitialDir: the authored heading word used
-	// for uniques and non-monster classes (5609BF / 560A1B).
+	// InitialDir is the nest table's authored heading word, used for uniques
+	// and non-monster classes.
 	InitialDir uint16
 }
 
@@ -110,7 +110,7 @@ ChampionTactics
 ChampionTactics includes the complete numeric row in Controls when sourced.
 Storage coverage and runtime branch coverage are separate contracts.
 A promoted champion or giant is created with this row instead of the nest's
-ordinary tactics (5607B0 560968 -> 5F6EB0; ISRO-R 593470 -> 593488).
+ordinary tactics.
 ==================
 */
 type ChampionTactics struct {
@@ -261,18 +261,18 @@ func LoadTemplate(textdataDir string, ev *Evidence) (template Template, err erro
 ==================
 restoreZeroCapNests
 
-Gives a standalone nest capped at zero its live cap from ISRO-R.
+Gives a standalone nest capped at zero its live cap from a later active
+nest table.
 
-The v1.188 evidence is one operator's shard backup. Beside the monsters it
-disables everywhere (laterDisabledCodenames), it zeroes single nests of
-monsters that keep live nests right beside them: the Bandit Stronghold
-building's bandits and archers (regions 0x5BA0, 0x5CA0), the Stone Cave's
-Nachal and Work Earth Ghost (0x8001), three KT Ong. The v1.150 client still
-places every one of them, and native 55EA90 spawns nothing while the live
-count is not below dwMaxTotalCount. ISRO-R's active Tab_RefNest keeps the
-same nests, by region and anchor, with live caps (ZeroCapCapsFile); the
-dungeon layer matches by its own region id. A hive member (dwOverwriteMaxTotalCount above zero) is left
-alone: 55EC10 caps it with the hive's own limit.
+The cross-version evidence is one operator's later data. Beside the
+monsters it disables everywhere (laterDisabledCodenames), it zeroes single
+nests of monsters that keep live nests right beside them: the Bandit
+Stronghold building's bandits and archers (regions 0x5BA0, 0x5CA0), the
+Stone Cave's Nachal and Work Earth Ghost (0x8001), three KT Ong. The v1.150
+client still places every one of them, and the server spawns nothing while
+the live count is not below the cap. A later active nest table keeps the
+same nests, by region and anchor, with live caps (ZeroCapCapsFile); the dungeon layer matches by its own region id. A hive member
+(shared cap above zero) is left alone: the hive's own limit caps it.
 ==================
 */
 func restoreZeroCapNests(refs map[uint32]MonsterRef, nests []NestRow, caps map[populationEvidenceKey]int) {
@@ -284,7 +284,7 @@ func restoreZeroCapNests(refs map[uint32]MonsterRef, nests []NestRow, caps map[p
 		key := evidenceKey(refs[nest.RefObjID].Codename, nest.RegionID, nest.X, nest.Y, nest.Z)
 		cap, ok := caps[key]
 		if !ok {
-			panic("monster: no ISRO-R cap for zero-cap nest " + key.Codename)
+			panic("monster: no later-table cap for zero-cap nest " + key.Codename)
 		}
 		nest.MaxCount = cap
 	}
@@ -303,7 +303,7 @@ func TemplateFromParts(refs map[uint32]MonsterRef, nests []NestRow) Template {
 	template := Template{Refs: refs, Nests: make([]NestRow, 0, len(nests)), nestsByRegion: make(map[uint16][]int), nestsByHive: make(map[string][]int)}
 	for _, nest := range nests {
 		if nest.HasRarityOverride {
-			panic("monster: template nests carry no spawn grade; 5607B0 rolls it per spawn")
+			panic("monster: template nests carry no spawn grade; the server rolls it per spawn")
 		}
 		template.Nests = append(template.Nests, nest)
 		index := len(template.Nests) - 1
@@ -507,31 +507,30 @@ type Instance struct {
 	// particular instance's generated home point inside Nest.GenerateRadius.
 	Nest  NestRow
 	Spawn SpawnPoint
-	// NestDetached records removal of the live CNest attachment. The authored
+	// NestDetached records removal of the live nest attachment. The authored
 	// row and its creation-time home remain intact; simulation owns this flag
 	// together with population capacity, independently of actor lifetime.
 	NestDetached bool
 	// SpawnHeading is the wire heading word of the native creation heading
-	// (5607B0: random for monsters, wInitialDir for uniques).
+	// (random for monsters, the authored heading word for uniques).
 	SpawnHeading uint16
 	// TradeVariant picks a thief or hunter trade NPC's equipment
-	// (TradeNpcMonster): CGObjMob_ResetRuntimeState (4C1030) draws it as
-	// rand() & 0xFF, CGObjMob_WriteSpawnData (4C1930) sends it after the
-	// spawn grade, and CICMonster_InitializeTradeEquipmentAndSkill (client
-	// 861720) indexes the trade equipment table with it.
+	// (TradeNpcMonster): the server's spawn-state reset draws it as
+	// rand() & 0xFF and its spawn data sends it after the spawn grade; the
+	// client's trade-equipment setup (861720) indexes the trade equipment
+	// table with it.
 	TradeVariant uint8
-	// StructureState is a fortress structure's state word (+0x764 on the
-	// client, CGObjSiegeStruct_GetStateWord 4CED50): bit 0 destroyed.
+	// StructureState is a fortress structure's state word: bit 0 destroyed.
 	StructureState uint16
 	// CurrentHP is mutable instance state. Ref.MaxHP is only the static
 	// RefObjChar base; EffectiveMaxHP applies the client-pinned rarity and
 	// party-monster multipliers used by the target-status plane.
 	CurrentHP uint32
-	// AI +B0 accumulator; reset when the selected ssou command completes,
-	// including command error (562540), before any delayed cast release.
+	// AI damage accumulator; reset when the selected ssou command completes,
+	// including command error, before any delayed cast release.
 	DamageSinceSummon   uint32
 	LastSummonCommandMs uint32
-	// Identity projection of native AI target records +BC/+D0. Simulation owns
+	// Identity projection of the native AI target records. Simulation owns
 	// insertion and clearing; this is separate from the mover's active pursuit.
 	Opponents [2]Opponent
 	// Zero is idle; a positive deadline owns an accepted summon action.
