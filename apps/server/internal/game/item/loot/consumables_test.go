@@ -90,7 +90,7 @@ TestUniqueSpecificDropsAndCaps
 */
 func TestUniqueSpecificDropsAndCaps(t *testing.T) {
 	requireTables(t)
-	// Three vSRO rewards, then her five v1.150 characterdata materials.
+	// Three rewards from the older table, then her five v1.150 characterdata materials.
 	rows := AssignedDrops("MOB_CH_TIGERWOMAN", 60, zeroRoll)
 	if len(rows) != 8 || rows[0].Codename != "ITEM_MALL_GLOBAL_CHATTING" || rows[1].Codename != "ITEM_MALL_REVERSE_RETURN_SCROLL" ||
 		rows[3].Codename != "ITEM_ETC_ARCHEMY_MATERIAL_CH_TIGERWOMAN1" || rows[7].Codename != "ITEM_ETC_ARCHEMY_MATERIAL_CH_TIGERWOMAN5" {
@@ -275,8 +275,8 @@ func TestMonstersDropTheirOwnMaterials(t *testing.T) {
 TestQinShiTombMonsterAndWhiteSnakeDrops
 
 Qin-Shi Emperor Tomb monsters (#1023) drop their own 9th-10th degree alchemy
-materials from characterdata columns 99..108, roll ISRO-R random group 107
-(9th-degree Seal of Star armor/accessories), and BeakYung (MOB_TQ_WHITESNAKE)
+materials from characterdata columns 99..108, roll the widened random
+group 107 (9th-degree Seal of Star armor/accessories), and BeakYung (MOB_TQ_WHITESNAKE)
 drops her fixed rewards plus her five WHITESNAKE1..5 materials.
 ================
 */

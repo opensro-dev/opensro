@@ -1,12 +1,13 @@
 /*
 ===========================================================================
 
-yield_test.go - the class-table rates the ISRO-R merge ships (#461)
+yield_test.go - the class-table rates the widened catalog merge ships (#461)
 
 The generator takes each level's whole class row from the first source that
-has one: ISRO-R, then vSRO (rare stays vSRO). These pin the last admitted
+has one: the widened source first, then the thinner fallback (rare stays
+with the fallback). These pin the last admitted
 class roll (of 10^6) at the levels the issue measured, so a regenerated
-catalog that drops back to the thinner vSRO rows fails here, not in play.
+catalog that drops back to the thinner fallback rows fails here, not in play.
 
 ===========================================================================
 */
@@ -21,8 +22,8 @@ import (
 ================
 TestEquipmentClassRatesPerLevel
 
-Level 80 admits 0.533% (vSRO was 0.053%); level 60 has no ISRO-R row and
-keeps the vSRO 0.180%.
+Level 80 admits 0.533% (the fallback was 0.053%); level 60 has no widened-
+source row and keeps the fallback 0.180%.
 ================
 */
 func TestEquipmentClassRatesPerLevel(t *testing.T) {
@@ -46,8 +47,8 @@ func TestEquipmentClassRatesPerLevel(t *testing.T) {
 ================
 TestStoneClassRateAtLevel80
 
-The magic and attribute stone families admit 2.55% at level 80 (vSRO was
-0.037%): 2% degree 8, then 0.55% degree 9, both stones the v1.150 client has.
+The magic and attribute stone families admit 2.55% at level 80 (the fallback
+was 0.037%): 2% degree 8, then 0.55% degree 9, both stones the v1.150 client has.
 ================
 */
 func TestStoneClassRateAtLevel80(t *testing.T) {
