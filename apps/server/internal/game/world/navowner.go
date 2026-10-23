@@ -31,8 +31,8 @@ type NavObjectCell struct {
 	Cell    int32
 }
 
-// NavOwner is the retained native pNavCell of a position (tagNavPos at
-// CGObj+0x7C in the v1.188 server).
+// NavOwner is the retained native pNavCell of a position (the server
+// object's navigation position).
 type NavOwner struct {
 	Kind   NavOwnerKind
 	Object NavObjectCell // valid only for NavOwnerObject
