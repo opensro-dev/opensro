@@ -2,18 +2,17 @@
 
 [![Discord](https://img.shields.io/discord/1521398829260210337?label=Discord&logo=discord&logoColor=white&color=5865F2)](https://discord.gg/RUua9HY657)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
-[![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-support-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/opensro)
 
-**Silkroad Online v1.150 (Legend III), rebuilt end to end as open-source software for the browser.**
+**An open-source, browser-based reimplementation compatible with Silkroad Online v1.150 (Legend III) game files.** Unofficial; not affiliated with or endorsed by WeMade Max / Joymax.
 
-OpenSRO is a complete game stack, not just an emulator:
+OpenSRO is a complete software stack. It ships code only: you bring your own game files.
 
-- 🎮 **A full browser client:** TypeScript and WebGPU, no install and no plugin. The original interface, world, characters, effects and sound, drawn natively in the browser.
+- 🎮 **A full browser client:** TypeScript and WebGPU, no install and no plugin. The interface, world, characters, effects and sound come from your own game files and are drawn natively in the browser.
 - ⚔️ **A full game server:** Go, with an Agent (login, accounts, characters) and GameWorld shards (combat, skills, monsters, quests, guilds, fortresses, PK, trade).
 - 🧰 **An asset pipeline:** turns your own v1.150 client installation into compact browser- and server-ready game data.
 - 🛰️ **Local server tooling:** Nomad jobs to run your own Agent and GameWorld on your machine.
 
-Behaviour is ported from the original game, not guessed: the v1.150 client defines what exists, and server rules follow the original server's instructions. Reverse-engineering evidence (function addresses) sits right next to the code that ports it.
+Behaviour is reconstructed, not guessed: the v1.150 client defines what exists, and the server reimplements the rules the client expects.
 
 > 💬 **Questions about the code?** Join our [Discord](https://discord.gg/RUua9HY657).
 
@@ -82,17 +81,11 @@ New here? Start with **[CONTRIBUTING.md](CONTRIBUTING.md)**: setup, the native-f
 
 ---
 
-## ❤️ Support the project
+## ⚖️ Rights holders and servers
 
-**OpenSRO is open-source software and will always stay open source, so anyone can learn from it and build on it.** If the code is useful to you, you can support its development on **[Ko-fi](https://ko-fi.com/opensro)**.
+OpenSRO publishes source code only. It does not host, distribute or sell game files, artwork, audio, game data or accounts, it does not operate a game service, and it takes no payment of any kind. It does not operate, endorse or support any game server run by others.
 
-No one makes money from OpenSRO. It's built by volunteers who put in their own time and money because they love the game, and every donation goes back into development.
-
-- 💸 **Where it goes:** development of this repository: dev tools, CI and documentation.
-- 🎁 **A thank-you, nothing more:** a donation buys no access, items, perks or advantages of any kind.
-- 🙅 **Never required:** the code is the same for everyone, under the [AGPL](LICENSE).
-
-The full promise is in [SUPPORT.md](SUPPORT.md).
+**If you hold rights in anything this project publishes and want it changed or removed, email [info@opensro.online](mailto:info@opensro.online).** We aim to reply within 48 hours, and when a request identifies material we remove it first and discuss afterwards. Details are in [NOTICE.md](NOTICE.md).
 
 ---
 
@@ -100,5 +93,5 @@ The full promise is in [SUPPORT.md](SUPPORT.md).
 
 - 📖 [docs/README.md](docs/README.md): the documentation index (architecture, asset pipeline, profiling, design notes)
 - 🔒 [SECURITY.md](SECURITY.md): how to report a vulnerability
-- ❤️ [SUPPORT.md](SUPPORT.md): getting help, and supporting development
+- 💬 [SUPPORT.md](SUPPORT.md): getting help
 - ⚖️ [AGPL-3.0-or-later](LICENSE); origin, trademark and asset scope are in [NOTICE.md](NOTICE.md)
