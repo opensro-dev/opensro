@@ -107,7 +107,7 @@ senderDisplayName
 
 The name a composed chat line carries for its author: the job alias
 while the author is dressed in a job suit, the character name otherwise
-(native CGObjPC_GetNickName 4DDC50 - the same identity the party roster
+(the native nickname read - the same identity the party roster
 writes via enterworld.PartyMemberName). Presence, party, stall and
 guild routing keep keying on the character name; only the payload's
 author field changes.
@@ -124,11 +124,11 @@ func senderDisplayName(sender *enterworld.Character) string {
 // delivery when disabled, so local GID-authored chat cannot escape visibility.
 //
 // NOT built, on purpose:
-//   - the cross-shard whisper forward (the dump's offline arm): no
+//   - the cross-shard whisper forward (the native offline arm): no
 //     second shard exists; offline acks ChatErrCantFindTarget.
-//   - a GM bypass of the whisper block: the dump has none and the
+//   - a GM bypass of the whisper block: native has none and the
 //     v1.150 client shows none.
-//   - a chat rate gate (the dump's vt+0x638): the transport already
+//   - a chat rate gate (native's own gate): the transport already
 //     rate-limits inbound frames per session (hub ratelimit) and the
 //     retail client gates its own 0x7367 sends (CanSendOpcode,
 //     sub_71fba0 direct-imported in the sub_6aebd0 fold), so a third
@@ -183,9 +183,9 @@ func HandleChat(deps Dependencies, views Views, divisionID string, sender *enter
 	}
 }
 
-// handleAllChat is the shared All/GM arm (the v1.188 sub_4b1750 shape:
+// handleAllChat is the shared All/GM arm (the native handler's shape:
 // requested types 1 and 3 land in one arm). The BROADCAST type byte is
-// server-forced: 3 for a privileged speaker (vt+0x53c()==1 in the dump;
+// server-forced: 3 for a privileged speaker (the native GM test;
 // our GMPrivilege flag - the same bit the client reads into
 // CICPlayer+0x1890), 1 for everyone else - a non-GM requesting type 3
 // broadcasts as plain All. The ACK echoes the REQUESTED type untouched
@@ -214,7 +214,7 @@ func handleAllChat(request Request, sender *enterworld.Character, global bool) O
 // division character, consult the TARGET's blocked-whisperer list, and
 // deliver the 0x3667 type-2 line - or don't.
 //
-// THE PRIVACY RULE (v1.188 sub_4b1750, deliberate): a blocked whisper
+// THE PRIVACY RULE (native, deliberate): a blocked whisper
 // acks SUCCESS to the sender and delivers NOTHING - the sender cannot
 // distinguish blocked from delivered. There is no GM bypass.
 //
@@ -382,7 +382,7 @@ func handleGuildChat(deps Dependencies, divisionID string, sender *enterworld.Ch
 ================
 handleUnionChat
 
-Union chat (type 0x0B, CGObjPC_OnChatRequest 4B1750 case 0xA): a
+Union chat (type 0x0B, the native chat handler's case 0xA): a
 guildless sender acks ChatErrNoGuild (0x0B), a guild outside a union
 ChatErrNoUnion (0x0C), a member without the union chat right 0x0E
 (UIIT_MSG_GUILD_UNION_CHAT_LIMIT); otherwise the line reaches the

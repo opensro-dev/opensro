@@ -6,12 +6,13 @@
 //
 // Every opcode number and byte layout here is pinned from the v1.150
 // CLIENT folds (the source of truth for what it parses/composes), never
-// from the v1.188 GameServer dump - that version renumbers chat opcodes
+// from the newer server dump - that version renumbers chat opcodes
 // wholesale (its 0x7025/0xB025/0x3026 collide with our war-horn lane).
 // Per-frame fold citations sit on each constant.
 //
 // WHISPER IS CHAT TYPE 2 - settled against three independent v1.150
-// client legs (a v1.188-reading mapper claimed 4; the v1.150 dump wins):
+// client legs (a mapper reading the later server claimed 4; the v1.150
+// dump wins):
 //   - SEND: sub_6aebd0's prefix switch @0x006aed46 on firstChar-0x23
 //     writes this+0x108 = 2 for '$' (case 1 @0x006aed4d) and 4 for '#'
 //     (case 0 @0x006aed6d) - whisper is 2, party is 4.
@@ -74,7 +75,7 @@ const (
 	ChatTypeWhisper uint8 = 2
 	// ChatTypeGM: no prefix with the CICPlayer+0x1890 bit-0 GM mark set.
 	// The server FORCES the broadcast type byte to 3 for a privileged
-	// speaker (v1.188 sub_4b1750's vt+0x53c()==1 arm - the SHAPE we
+	// speaker (the native handler's GM arm - the SHAPE we
 	// port; the client renders it with the case-3 pink 0xffffaec3).
 	ChatTypeGM uint8 = 3
 	// ChatTypeParty: the '#' prefix (@0x006aed6d writes 4).
@@ -111,13 +112,13 @@ const (
 	ChatErrNotPartyMember uint8 = 0x0A
 	// ChatErrNoGuild / ChatErrNoUnion both render
 	// UIIT_CHATERR_ALLIANCE_PERMISSION_DENIED (@0x00753647, the shared
-	// 0x0B/0x0C arm). The v1.188 shape acks its guild-membership miss as
+	// 0x0B/0x0C arm). The later server acks its guild-membership miss as
 	// 0x200B and the union-permission miss as 0x200C; the low byte is
 	// what the v1.150 client reads.
 	ChatErrNoGuild uint8 = 0x0B
 	ChatErrNoUnion uint8 = 0x0C
-	// ChatErrNoStall: a stall line from a player at no stall (server
-	// CGObjPC_OnChatRequest 4B1750 type 9); the client shows no text.
+	// ChatErrNoStall: a stall line from a player at no stall (the native
+	// chat handler's type 9); the client shows no text.
 	ChatErrNoStall uint8 = 5
 )
 
@@ -128,8 +129,8 @@ const (
 // than trusting the client or truncating server-side.
 const ChatMessageMaxWideChars = 0x64
 
-// ChatTargetNameLenBound mirrors WhisperBlockNameLenBound: the retail
-// GameServer rejects names of length >= 0x80 before any lookup.
+// ChatTargetNameLenBound mirrors WhisperBlockNameLenBound: the native
+// server rejects names of length >= 0x80 before any lookup.
 const ChatTargetNameLenBound = 0x80
 
 // Request is one decoded 0x7367 frame. Message is the UTF-16-decoded
@@ -150,7 +151,8 @@ type Request struct {
 // sub_694490), and the client's ack handler pops its pending
 // outgoing-chat record keyed on {chatType, second} (sub_753290
 // @0x0075331e) - so the only correct server posture is accept-and-echo.
-// A v1.188 mapper read sub_4b1750 as "abort if second >= 0xFF"; that
+// A mapper reading the later server read its handler as "abort if
+// second >= 0xFF"; that
 // sense would refuse EVERY retail frame, so the branch must be the
 // opposite arm (or a forward-queue index check with no v1.150
 // equivalent). Rejected.
@@ -215,7 +217,7 @@ func EncodeChatAckSuccess(chatType, second uint8) []byte {
 // chatType, second}: sub_753290 reads the error byte (@0x007534aa), maps
 // it through jump_table_75372c to the UIIT_CHATERR_* guide line, then
 // pops (and resets) the pending record keyed on the two echoed bytes
-// (@0x007534cb/@0x007534d9/@0x007534f6). All fields are u8 - the v1.188
+// (@0x007534cb/@0x007534d9/@0x007534f6). All fields are u8 - the later
 // dump's 0x200A-style codes are that server's internal constants; only
 // the low byte fits the client's single-byte read.
 func EncodeChatAckError(errCode, chatType, second uint8) []byte {
