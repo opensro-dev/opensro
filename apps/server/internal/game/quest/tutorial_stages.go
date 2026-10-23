@@ -41,8 +41,8 @@ europeanTutorialStages
 QTUTORIAL_EU (v1.150 id 210): the European tutorial the client's game guide
 names ("Europe Tutorial Progressed Through Lipria", SN_PAYCON_QTUTORIAL_EU)
 and whose seven SN_CON_QTUTORIAL_EU_01..07 contents the quest window steps
-through. No server build carries its script (the v1.188 and iSRO-R servers
-compile only the later QTUTORIAL2_EU chain), so the stages are reconstructed
+through. No server build carries its script (the later server builds
+compile only the QTUTORIAL2_EU chain), so the stages are reconstructed
 from its own v1.150 dialogue, in the shape of the Chinese tutorial above.
 NPCs, item rewards and the Movia targets are the ones the QNO_EU_TUTORIAL
 reconstruction already resolved for the same route.

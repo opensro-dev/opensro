@@ -11,8 +11,8 @@
 // registered handler sub_75c1d0 (registered @0x0074e5fa..0x0074e60a)
 // plus the SQuestInfo deserializer sub_788210 it drives; the two C->S
 // bodies are the composers sub_6ffcd0 (0x71EB) and sub_6ffc10 (0x729A),
-// each a bare 4-byte refId append (sub_4c3cf0(&refId, 4)). v1.188/
-// DuckSoup opcode numbers never cross the boundary - their 0x7515 is a
+// each a bare 4-byte refId append (sub_4c3cf0(&refId, 4)). Other
+// builds' opcode numbers never cross the boundary - their 0x7515 is a
 // different packet entirely in v1.150 (the hosted interaction sender).
 package quest
 
