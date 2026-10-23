@@ -65,7 +65,7 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 		return rt.beginFollow(divisionID, character, request, rt.Now().UnixMilli())
 
 	case wire.TargetActionBasicAttack:
-		// 692CB0 emits family 1 for an attack; family 3 belongs to Trace.
+		// Client 692CB0 emits family 1 for an attack; family 3 belongs to Trace.
 		// A malformed attack must not answer or release the pickup latch.
 		engage, err := wire.DecodeBasicAttackEngage(payload)
 		if err != nil {
@@ -87,7 +87,7 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 		return rt.beginBasicAttack(divisionID, character, engage, nowMs)
 
 	case wire.TargetActionSkill:
-		// 6FCD50 flags 00/01 and 878100 flag 02 share this
+		// Client 6FCD50 flags 00/01 and client 878100 flag 02 share this
 		// discriminator. Malformed 0x04-family bytes remain skill-owned and
 		// fail closed without emitting pickup frames.
 		cast, err := wire.DecodeSkillAction(payload)
@@ -106,8 +106,8 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 			return stand
 		}
 
-		// 4AE601: a masked player (msch 1) has only its basic attack; every
-		// skill command, instant ones included (4AD870 runs state 0 too),
+		// Natively a masked player (msch 1) has only its basic attack; every
+		// skill command, instant ones included (state 0 runs too),
 		// answers 0x3030 once the skill itself resolves (0x3003).
 		if snapshot.TransformMode == 1 {
 			if source := rt.deps.SkillData(); source != nil {
@@ -118,7 +118,7 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 			return offensiveRefusal(0x3030)
 		}
 
-		// 4AD870 dispatches non-attack activity skills before touching the
+		// Natively non-attack activity skills dispatch before touching the
 		// command queue. Instant imbues preserve the current attack/approach.
 		if source := rt.deps.SkillData(); source != nil {
 			if skill, ok := source.SkillByID(cast.ActionId); ok &&
@@ -127,7 +127,7 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 			}
 		}
 
-		// CGCharAutoCommandActor_ProcessCommand (4ACC40, call at 4ACED4) admits
+		// The native command acceptance admits
 		// a skill command with mask 0x37 (cooldown, replacement, equipment,
 		// resources, ammunition) before it touches the queue, busy or not: a
 		// refused press answers its error and the running attack, its swing and
@@ -154,7 +154,7 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 		return rt.dispatchRetainingAttack(divisionID, character, snapshot, cast)
 
 	case wire.TargetActionFortressStructure:
-		// 692CB0's CICATStruct [02][01][01][gid] form is retail-valid,
+		// Client 692CB0's CICATStruct [02][01][01][gid] form is retail-valid,
 		// but this gateway does not yet own spawned siege-structure HP/action
 		// state. Keep it isolated and silent rather than aliasing bare cancel
 		// or pickup. Decode here so the exact wire remains exercised.
@@ -166,8 +166,8 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 
 	case wire.TargetActionCancelActiveEffect:
 		// CIFMagicStateBoard and CIFDelayInfo both enter this generic effect
-		// session. 4AE566 passes reference+4 (skill ID), not reference+8
-		// (group), to 59EF90's active-command+8 comparison. The optional token
+		// session. Natively the skill ID, not the group, is compared with the
+		// active command's skill. The optional token
 		// narrows that exact skill match; zero is a token wildcard only.
 		request, err := wire.DecodeCancelActiveEffectRequest(payload)
 		if err != nil || character == nil {
@@ -189,7 +189,7 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 		}
 
 		// This command completes independently of the retained combat queue.
-		// 4AD270 reports that queue's actual count; effect teardown later emits
+		// Natively that queue's actual count is reported; effect teardown later emits
 		// B6A0. Zero here would make an unrelated buff cancel hide auto-attack.
 		state := wire.ReleaseActionState()
 		state.State = rt.actionQueueCount(divisionID, snapshot.Name)
@@ -242,7 +242,7 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 		groundItem.OwnerJID != enterworld.ObjectIDForCharacter(snapshot) &&
 		(rt.CanPickupOwnedDrop == nil || !rt.CanPickupOwnedDrop(divisionID, snapshot.Name, groundItem.OwnerJID)) {
 		rt.Pending.Clear(pendingKey)
-		// 4A9050's owner gate (0x1812): the drop is another's for now.
+		// The native owner gate (0x1812): the drop is another's for now.
 		return pickupRefusal(wire.ErrCodeLockedByOther)
 	}
 
@@ -276,7 +276,7 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 	if !grounditem.SameWorld(from, groundItem.Position) {
 		rt.Pending.Clear(pendingKey)
 		// Another plane: the presser's world holds no such object, the
-		// same answer 4A9050 seeds (3) before its lookup resolves nothing.
+		// same answer the native pickup seeds (3) before its lookup resolves nothing.
 		return pickupRefusal(wire.ErrCodeTargetGone)
 	}
 
@@ -347,7 +347,7 @@ func routeSkillCommand(skill enterworld.SkillRow) skillRoute {
 	case skill.Threat.Only && !skill.TargetRequired:
 		return skillRouteTaunt
 	// Untargeted party-area heals, heals over time and resurrections: their
-	// action vector is the party selection (58BEF0).
+	// action vector is the native party selection.
 	case skill.Recovery.PartyResurrectPinned || skill.Recovery.PartyHealPinned || skill.Recovery.LowestHealPinned ||
 		skill.Recovery.HealOverTimePinned:
 		return skillRouteSupport
@@ -464,7 +464,7 @@ func (rt *Runtime) dispatchSkillCommand(divisionID string, character, snapshot *
 ================
 dispatchRetainingAttack
 
-4ACC40 never lets a refused command touch the queue: the attack it would
+The native command acceptance never lets a refused command touch the queue: the attack it would
 have replaced keeps swinging, its continuation keeps its place. Owners here
 refuse after the intent is cleared (an open action, a seated or masked
 caster, a vanished target), so a refused or empty answer that installed no
