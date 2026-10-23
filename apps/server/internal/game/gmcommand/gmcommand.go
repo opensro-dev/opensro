@@ -106,7 +106,7 @@ func HandleGmCommand(deps Dependencies, presence PresenceView, divisionID string
 		}
 		return Outcome{Ack: EncodeRequestFailure(request), Refusal: "zoe-refused"}
 	case SubMobKill:
-		// sub_751ec0 selects case 5 (no tail) for result 1 and the generic
+		// The client's 751EC0 selects case 5 (no tail) for result 1 and the generic
 		// system message for result 2, like every other relayed command.
 		if len(status) > 0 {
 			if owner, ok := status[0].(interface {
@@ -179,10 +179,10 @@ func HandleGmCommand(deps Dependencies, presence PresenceView, divisionID string
 		}
 		return Outcome{Ack: EncodeRequestFailure(request), Refusal: "siege-period-refused"}
 	case SubFlagWorld:
-		// 0x0051FCF3..0x0051FD7D (subcmd 0x30): reads u8 flagCmd, sends
-		// 0x74B0 [u8(3), u32(flagCmd)] to ShardManager (CFlagWorldMgr Capture
-		// the Flag, a v1.188 battle-arena feature outside v1.150), and
-		// unconditionally replies [1, 0x30].
+		// The native subcmd 0x30 handler reads u8 flagCmd, sends 0x74B0
+		// [u8(3), u32(flagCmd)] to the shard manager (the later server's
+		// Capture the Flag feature, outside v1.150), and unconditionally
+		// replies [1, 0x30].
 		return Outcome{Ack: []byte{AckResultOK, SubFlagWorld}}
 	case SubSetTime:
 		return handleSetTime(request, status)
@@ -237,8 +237,8 @@ type PlayerTeleports interface {
 	RecallUserGM(division, name, target string) bool
 }
 
-// handlePlayerTeleport honors /TOTOWN, /MOVETOUSER and /RECALLUSER. 51DE90
-// acks the teleport it performed with [1, subcmd]; an empty name, a target
+// handlePlayerTeleport honors /TOTOWN, /MOVETOUSER and /RECALLUSER. The
+// native handler acks the teleport it performed with [1, subcmd]; an empty name, a target
 // not in the world or a refused move is the result-2 ack.
 func handlePlayerTeleport(divisionID string, sender *enterworld.Character, request Request, status []BodyStatusCommands) Outcome {
 	refusal := Outcome{Ack: EncodeRequestFailure(request), Refusal: fmt.Sprintf("gmcommand: teleport 0x%02X refused", request.Subcmd)}
@@ -317,7 +317,7 @@ type BodyStatusCommands interface {
 
 // handleFindUser honors /FINDUSER (subcmd 0x01): resolve the target name in
 // the sender's division and answer with the result-1 guide message the
-// client's sub_751ec0 case-0 arm presents. Read-only - it mutates nothing.
+// client's 751EC0 case-0 arm presents. Read-only - it mutates nothing.
 // A target that is unknown or offline is refused with the result-2 ack (the
 // native FINDUSER-fail leg, generic subcmd-1 system message).
 func handleFindUser(deps Dependencies, presence PresenceView, divisionID string, sender *enterworld.Character, request Request) Outcome {
