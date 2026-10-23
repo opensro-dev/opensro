@@ -158,7 +158,14 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 
 	npcSpawns := paths.NpcSpawns
 	if len(npcSpawns.Roster) == 0 {
-		npcSpawns.Roster = simulation.LoadNpcWorldRoster(textdataDir)
+		headings, err := simulation.LoadNPCHeadings(paths.DerivedDir)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
+		if headings == nil {
+			log.Warnf("bootstrap: no %s in the derived game data; every NPC faces heading zero", simulation.NPCHeadingsFile)
+		}
+		npcSpawns.Roster = simulation.LoadNpcWorldRoster(textdataDir, headings)
 		var gateErr error
 		npcSpawns.Roster, gateErr = simulation.AppendTeleportGates(textdataDir, npcSpawns.Roster)
 		if gateErr != nil {

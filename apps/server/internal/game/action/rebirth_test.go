@@ -320,7 +320,7 @@ func TestRecallAppointmentGateCatalogAndPersistence(t *testing.T) {
 	rt, _ := newTestRuntime(c, testItems())
 	rt.NpcSpawn.Enabled = true
 	dir := gamedatatest.TextdataDir(t)
-	roster, err := simulation.AppendTeleportGates(dir, simulation.LoadNpcWorldRoster(dir))
+	roster, err := simulation.AppendTeleportGates(dir, simulation.LoadNpcWorldRoster(dir, nil))
 	if err != nil {
 		t.Fatal(err)
 	}

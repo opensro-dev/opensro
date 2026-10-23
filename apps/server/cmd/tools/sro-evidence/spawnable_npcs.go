@@ -30,7 +30,8 @@ func runSpawnableNPCs(args []string) error {
 		return fmt.Errorf("textdata: %w", err)
 	}
 
-	roster := simulation.LoadNpcWorldRoster(dir)
+	// Which NPCs exist, not where they face: no heading table is needed.
+	roster := simulation.LoadNpcWorldRoster(dir, nil)
 	if len(roster) == 0 {
 		return fmt.Errorf("npc roster: no enabled NPC positions resolved under %s", dir)
 	}

@@ -237,7 +237,7 @@ func TestEveryQuestMarkerNpcHasAuthoredPlacement(t *testing.T) {
 		t.Fatal(err)
 	}
 	anchors := map[string]int{}
-	for _, npc := range simulation.LoadNpcWorldRoster(dir) {
+	for _, npc := range simulation.LoadNpcWorldRoster(dir, nil) {
 		anchors[npc.Codename]++
 	}
 	for _, def := range defs.All() {
