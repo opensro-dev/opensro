@@ -5,21 +5,18 @@ complete companion AI graph.
 
 ## Native evidence
 
-v1.188 `SR_GameServer.exe`, SHA-256
-`bec2375e2c4c1073e3bf7761571470c430de251de74b452dbb86537348ef5290`,
-image base `0x400000`. Addresses below are VAs; subtract the base for RVAs.
+The rules below were read from the original machine code; the raw
+instructions, not the function labels, establish each behaviour.
 
 | Owner | Instructions and behavior | Coverage |
 | --- | --- | --- |
-| COS attack dispatcher `4D2200` | `4D2568..4D2578` submits AI event `0x19` with the target GID. `4D257A..4D2582` checks the owner pointer; `4D2588..4D2592` retires the owner's effect mask 2. The event return value is not tested before retirement. | Owner-effect side effect implemented and tested for first and repeated orders. Existing admission/refusal predicates remain separate. |
-| Attack event `5595C0` | Calls `53FFE0` to set the target, then `53FF30` to enter state 3 when target admission succeeds. | Traced, not a complete state-transition proof. |
-| Follow event `559600` | Enters state 8 through `53FF30`. | Existing follow/cancel tests retained; no new follow behavior in this fix. |
-| State transition `53FF30` | Invokes old-state exit and new-state entry callbacks. | Complete callback bodies and repeated-order timing remain to audit; this patch does not claim the port's retained strategy is equivalent. |
+| COS attack dispatcher | Submits AI event `0x19` with the target GID, checks the owner pointer, then retires the owner's effect mask 2. The event return value is not tested before retirement. | Owner-effect side effect implemented and tested for first and repeated orders. Existing admission/refusal predicates remain separate. |
+| Attack event | Sets the target, then enters state 3 when target admission succeeds. | Traced, not a complete state-transition proof. |
+| Follow event | Enters state 8 through the same transition. | Existing follow/cancel tests retained; no new follow behavior in this fix. |
+| State transition | Invokes old-state exit and new-state entry callbacks. | Complete callback bodies and repeated-order timing remain to audit; this patch does not claim the port's retained strategy is equivalent. |
 
-The original 55 bytes `[4D2560,4D2597)` have SHA-256
-`3d3f77d4eb4297fd116713d17ff78d627d071a871d390193ebe4e7bc14ae3dc2`.
-The raw instructions, not the function labels, establish the unconditional
-owner-effect retirement after event dispatch. No database labels were changed.
+The raw instructions establish the unconditional owner-effect retirement
+after event dispatch.
 
 ## Defect and fix
 
@@ -43,14 +40,11 @@ self-application phase, so the event mask is actually live.
 
 ### Direct orders against another companion
 
-The native dispatcher explicitly handles a COS victim:
-`4D2495..4D24C3` checks target virtual `+0x2C` and substitutes that object's
-owner at `+0x1CD8` for permission checking. `4D24E4` calls the attacking
-companion's validator through virtual `+0x624`. Once admitted, `4D2575` pushes
-the retained target GID for event `0x19`, so permission through an owner does
-not redirect damage to that owner. The 229 bytes `[4D2495,4D257A)` have SHA-256
-`0cc1f97050156df92c7191a4d0002872d7940c492f0da8c71e021e3c24237e7d`
-in the server binary identified above.
+The native dispatcher explicitly handles a COS victim: it checks whether
+the target is a COS and substitutes that object's owner for permission
+checking, while the attacking companion's own validator still runs. Once
+admitted, the retained target GID goes to event `0x19`, so permission
+through an owner does not redirect damage to that owner.
 
 The command path used the player/monster-only resolver, silently rejecting a
 companion GID, while ongoing combat already had a companion-aware resolver.

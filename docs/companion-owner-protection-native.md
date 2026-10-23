@@ -5,23 +5,14 @@ shared target resolver; it does not establish the complete AI callback graph.
 
 ## Native evidence
 
-The original v1.188 `SR_GameServer.exe` has SHA-256
-`bec2375e2c4c1073e3bf7761571470c430de251de74b452dbb86537348ef5290`
-and image base `0x400000`. Addresses below are VAs.
+The rules below were read from the original machine code. Raw instructions
+confirm that the common attack validator, after checking a COS target,
+loads the target's owner, reads the owner's body mode, and compares
+against 2, 3, and 4. Each match branches to refusal. The PC permission
+validator also checks a COS before normalizing to its owner and checking
+that owner.
 
-Binary Ninja identified the common attack validator at `0x5291D0`. Raw
-instructions in the hash-matched executable confirm that, after checking a
-COS target, it loads the target's owner from `+0x1CD8` at `0x529304`, reads
-the owner's body mode through virtual `+0x100`, and compares against 2, 3,
-and 4 at `0x52931A..0x529324`. Each match branches to refusal at `0x52935D`.
-The PC permission validator also checks a COS before normalizing to its owner
-at `0x5293DB` and checking that owner at `0x5293F2`.
-
-The 69 bytes `[0x5292FE,0x529343)` have SHA-256
-`fdf0e6d651623eef5654697d945d3f72e42bed5664c5103e96b1ecff52abc7e9`.
-The disassembly is saved in the canonical research target's notes as
-`001292fe-companion-owner-protection-2026-10-10.txt`. No database labels
-were changed; the encountered validators were already named.
+The disassembly is retained in the research evidence.
 
 ## Port gap and coverage
 

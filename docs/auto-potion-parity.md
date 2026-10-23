@@ -1,12 +1,10 @@
 # Auto-potion parity follow-up
 
 Native evidence: v1.150 client SHA256
-`375e868234437e815af8ce9289ddea7ec9144430f4ea24e32988a6d6c9dd108a`;
-v1.188 server SHA256
-`bec2375e2c4c1073e3bf7761571470c430de251de74b452dbb86537348ef5290`,
-restricted to the v1.150 item catalog. Binary Ninja MCP was used to inspect
-both decompilation and instructions. This is bounded verification, not an
-exhaustive equivalence proof of every reachable native feature.
+`375e868234437e815af8ce9289ddea7ec9144430f4ea24e32988a6d6c9dd108a`,
+restricted to the v1.150 item catalog. Both decompilation and instructions
+were inspected. This is bounded verification, not an exhaustive equivalence
+proof of every reachable native feature.
 
 ## Completed dependency integrations
 
@@ -14,11 +12,11 @@ exhaustive equivalence proof of every reachable native feature.
 | --- | --- | --- |
 | Visible owner/visitor stall prevents automatic item use | Client 561E57..561E6B | Existing stall state gates the attempt without cancelling its retry timer. Separate stall network is allowed. Auto-potion transition tests. |
 | Authored item cooldown | Client 80B870 parser, 755E40 receipt, 565400 icon | Scan all 20 description pairs; last COOLTIME declaration wins. Category 18 uses authored group byte or item reference. Inventory and quickslot icons retain the timer after the final unit is spent. |
-| Fortress repair target admission | Server 49CC80 | Existing war, fortress holder, guild-member role, structure HP/state, world and range owners. Target refusals leave the stack untouched. |
+| Fortress repair target admission | The native admission rule | Existing war, fortress holder, guild-member role, structure HP/state, world and range owners. Target refusals leave the stack untouched. |
 | Three repair grades | Items 19234/19609/19610; skills 20507/20508/20509 | Complete dura/puls/heal/lnks/skc/ao/rpkt programs. 1/2/3 percent maximum-HP healing every 3000 ms for 12000 ms. Descriptors survive compact skill storage. |
-| Persistent repair timing | Server 5830B0, 5A09F0 | Existing linked-pulse registry; one pulse per due update, no catch-up loop, pulse before strict duration expiry. Existing structure population owns HP and persistence. |
-| Stop, damage, death and logout | Server persistent handler and existing effect retirement owners | Voluntary stop, damage interruption, source retirement, death, logout, world change and destroyed target stop subsequent healing. Paired instance teardown uses existing effect packets. |
-| Repair use rejected by inner skill | Server 59B480:59B7A8, 49CC80 | Native targeted invocation returns success after a skill-handler refusal. Emit skill refusal then item success, consuming one kit without installing a heal. Target-admission failures still do not consume. |
+| Persistent repair timing | The native persistent timer | Existing linked-pulse registry; one pulse per due update, no catch-up loop, pulse before strict duration expiry. Existing structure population owns HP and persistence. |
+| Stop, damage, death and logout | The native persistent handler and existing effect retirement owners | Voluntary stop, damage interruption, source retirement, death, logout, world change and destroyed target stop subsequent healing. Paired instance teardown uses existing effect packets. |
+| Repair use rejected by inner skill | The native targeted invocation | Native targeted invocation returns success after a skill-handler refusal. Emit skill refusal then item success, consuming one kit without installing a heal. Target-admission failures still do not consume. |
 | Repair delay row | Client 755E40, 6B1B30, 6FFE50, 6FD710 | Resolve item-owned skill duration on bootstrap and reference deltas. Bind the source effect even when it precedes the item receipt. Skill-only cancel request; token retirement, death, reset and expiry clear the row. |
 
 The repair source uses the character effect registry for cancellation; the
@@ -45,7 +43,7 @@ native-versus-webport consumption capture.
 ## Retained exception and verification scope
 
 The user explicitly retained strongest usable HP/MP potion replacement on
-exhaustion. Native 573390 replaces only with the same item reference.
+exhaustion. The native rule replaces only with the same item reference.
 
 Native does not wait for the entire preceding potion recovery sequence.
 Reuse admission and queued recovery are separate; accepting another potion
@@ -60,9 +58,9 @@ world entry, target restriction and the revival dialog. The event receiver
 resets the marker and updates the participant tree, but does not activate
 the marker. No reachable non-FF writer was found in this binary. The gate
 is therefore classified as dormant for this v1.150 mission lifecycle,
-rather than inventing event state in the port. The old Binary Ninja label
-on wrapper 74F350 incorrectly called it a quickslot assignment; it now
-names the flag-war event receiver it actually calls.
+rather than inventing event state in the port. Wrapper 74F350 was once
+misread as a quickslot assignment; it is the flag-war event receiver it
+actually calls.
 
 The subsequent [branch and lifecycle verification](auto-potion-branch-matrix.md)
 adds the complete 64-item census, 35,424 original-machine queue calls, real
@@ -93,7 +91,7 @@ auto-potion test; select `SRO_POTION_EXPECT_BETA_REFILL=1` only for that server
 profile. The fixture restores the scratch character's position and settings.
 The capture is under `temp/artifacts/auto-potion-connected/incident.json`.
 
-Binary Ninja assembly recheck: 561D50 tests 69B040, which reads active NPC
+Assembly recheck: 561D50 tests 69B040, which reads active NPC
 interaction byte +794; 69F870 sets that byte separately from the shop UI.
 Retained catalog presence is not the native condition. The encountered helpers
 5DBD40 and 5B4A20 were inspected and named for selected NPC localization and the

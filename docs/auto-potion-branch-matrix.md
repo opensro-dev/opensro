@@ -2,12 +2,12 @@
 
 This matrix records the application-level audit completed on 2026-10-06.
 The scope is the v1.150 client's auto-potion entry points and its complete
-shipped recovery/cure catalog, with v1.188 server mechanics restricted to
+shipped recovery/cure catalog, with the native server mechanics restricted to
 those references. It includes the downstream item-use, receipt, recovery,
 configuration and actor-lifetime boundaries. It does not claim formal
 whole-program equivalence of the native executables or their runtime libraries.
 
-The binary hashes and the earlier repair/stall integrations are in
+The client binary hash and the earlier repair/stall integrations are in
 [auto-potion-parity.md](auto-potion-parity.md). Native instructions, oracle
 sources and run records are retained in the research evidence directory
 `docs/work-items/world/auto-potion-evidence-2026-10-05` in the sibling research
@@ -26,7 +26,7 @@ checkout. Runtime code does not import that directory.
 | Draft open/edit/cancel/apply, disabled sliders, re-enable and empty cure combos | Native option/potion control evidence in the archived UI audit | `auto-potion.ts`, `auto-potion-input.ts`, production `game-options.test.mjs`: clamp, committed-value restoration, cancel, save and persistence. |
 | Save enqueue failure, unchanged save, character bootstrap and durable restart | 70C3D0 and native save/bootstrap receivers | Failed enqueue does not commit; unchanged settings suppress traffic; server `autopotion_persistence_test.go` reopens the store. |
 | Binding is empty, skill, equipment, other consumable or a valid potion | 70C300, 5729E0, 5503A0, 572770 | Every 65,536 type word; `autoPotionItemSlot`; runtime refusal tests. |
-| Exhausted stack replacement | 573390 | Same-reference native rule documented. Strongest usable HP/MP replacement remains the user's explicit exception. |
+| Exhausted stack replacement | The native replacement rule | Same-reference native rule documented. Strongest usable HP/MP replacement remains the user's explicit exception. |
 | Selected/dragged control, Item Mall, NPC shop/storage, visible stall, return/repair delay | 572770, 561D50, 6961B0 and archived interaction-helper instructions | Existing UI/inventory owners supply gates; refusal notices and armed-retry retention tested. Stall naming/network are separate from visible owner/visitor stalls. |
 | Disabled item/CanUse and special high-bit confirmation | 561D50 | The complete 64-reference census has nonzero CanUse. The high-bit confirmation branch additionally requires TID3=13, excluded by the auto-potion filter. |
 | Flag-war marker gate | 561DAA, 4B1589 | Dormant in the audited v1.150 lifecycle: reset writes FF; all state references and event receiver inspected; no non-FF activation writer found. |
@@ -85,14 +85,14 @@ shipped references in this catalog; they must not be counted as missing items.
 ## Queue algorithms and lifetime
 
 The expanded oracle executes **35,424 calls across 2,528 scenarios** using
-unaltered bytes from the pinned server executable. Original routines run for
-admission (49A5B0), front-only ticking (49A510), pulse sizing (49A0C0), promised
-credit (49A110), node construction (4A0F30), capacity increment (4A0FE0), erasure
-(4A0AF0) and list clearing (695450). The Go corpus test checks the credited HP/MP
-and both complete queue contents after every admission and tick. All matched.
+unaltered bytes from the pinned native executable. The original routines run
+for admission, front-only ticking, pulse sizing, promised credit, node
+construction, capacity increment, erasure and list clearing. The Go corpus
+test checks the credited HP/MP and both complete queue contents after every
+admission and tick. All matched.
 
 The harness intercepts allocation/free, actor vital getters, the final keeper
-credit sink (4A86A0) and diagnostic dumping. It does not intercept the queue
+credit sink and diagnostic dumping. It does not intercept the queue
 or container algorithms. Every emulation must reach its return sentinel;
 instruction-budget exhaustion fails. Linked-list forward/back links and counts
 are validated. Seeded lists include empty, single and multiple entries with
