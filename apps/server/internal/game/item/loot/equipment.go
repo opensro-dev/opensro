@@ -109,8 +109,8 @@ var equipment equipmentCatalog
 ================
 equipmentSource
 
-Version 1 is vSRO's fixed 36/36 layout; version 2 names each table's
-width, which ISRO-R widens (its RareEquip table has 60 classes).
+Version 1 is the older fixed 36/36 layout; version 2 names each table's
+width, which the widened source extends (its rare table has 60 classes).
 ================
 */
 type equipmentSource struct {

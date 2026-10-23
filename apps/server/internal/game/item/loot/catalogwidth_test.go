@@ -3,8 +3,9 @@
 
 catalogwidth_test.go - version 2 catalogs: per-table class widths (#460)
 
-ISRO-R widens RareEquip to 60 classes, the stones to 20 and Reinforce to 3;
-a version 2 file names each table's width and the loader enforces it.
+The widened source extends the rare table to 60 classes, the stones to 20
+and the reinforce table to 3; a version 2 file names each table's width and
+the loader enforces it.
 
 ===========================================================================
 */
