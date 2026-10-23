@@ -14,7 +14,7 @@ more") and sent (CIFCOSInfo_OnNameBoxResult_Send7571 6A5570):
 	S->C 0x3508  u32 cos gid, u8 5, u16 length, ASCII name (the new name, to
 	             the owner and to everyone near: 77A570 case 5)
 
-The server (v1.188 0x7117 handler 511BB0) refuses with 0x440E (the name
+The server refuses with 0x440E (the name
 rules: 12:14 NOTPUT), 0x440F (already used: 12:15 SUMENESS), 3 (not the
 caller's summoned pet) and 5 (a bad length, or a pet already named).
 

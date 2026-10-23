@@ -34,10 +34,10 @@ export const FRIEND_DELETE_RESULT_OPCODE = 0xb5db;
 export const FRIEND_CONSENT_OPCODE = 0x3012;
 
 // The friend list's row cap: the 0x14 of the panel's ": %d / %d" count
-// (sub_600f80) and v1.188's CMessengerMgr add check.
+// (sub_600f80), which the server's add check matches.
 export const FRIEND_LIST_LIMIT = 20;
 
-// CMessengerMgr add's name bound (v1.188 5D7620: 1..0x20 bytes).
+// The server add's name bound (1..0x20 bytes).
 export const FRIEND_NAME_LIMIT = 32;
 
 // The notice category the client shows friend codes in (689420 0x13/code).

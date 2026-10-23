@@ -154,7 +154,7 @@ export function fortressServiceRequest( request: FortressServiceRequest ): WireF
 fortressServiceReply
 
 74F4F0 reads each schedule as sixteen bytes; 754A40 reads a one-byte
-refusal, unlike the v1.188 server's two-byte 0x28xx code.
+refusal, unlike the later server's two-byte 0x28xx code.
 ================
 */
 export function fortressServiceReply( frame: WireFrame ): FortressServiceReply | null {
