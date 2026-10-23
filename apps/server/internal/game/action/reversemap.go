@@ -5,10 +5,9 @@ reversemap.go - the reverse return scroll's map destinations
 
 Port-only, not native. v1.150's reverse return scroll offers two points,
 the last recall point and the last death point (reversereturn.go). Later
-clients add a third: "move to a location on the map". v1.188's
-CGItemExpendable_UseReverseReturnScroll (4A00C0) reads that as choice 7
-followed by a u32 point id, which it looks up in the optional-teleport
-table (4A1F00 / 4A1ED0). v1.150 ships no such table, so the port builds
+versions add a third: "move to a location on the map", read as choice 7
+followed by a u32 point id, looked up in an optional-teleport
+table. v1.150 ships no such table, so the port builds
 one at boot.
 
 INFERENCE for the table: every outdoor town recall gate (the points
@@ -41,7 +40,7 @@ import (
 const EnvReverseReturnMap = "SRO_REVERSE_RETURN_MAP"
 
 const (
-	// reverseReturnMapChoice is v1.188's saved-point choice (4A00C0 case 7).
+	// reverseReturnMapChoice is the later version's saved-point choice, 7.
 	reverseReturnMapChoice uint8 = 7
 	// reverseMapTailBytes is the choice byte and its u32 point id.
 	reverseMapTailBytes = 5

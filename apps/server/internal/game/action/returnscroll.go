@@ -18,21 +18,21 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// The channel-11 teleport modes a return cast sets (4A0380).
+// The channel-11 teleport modes a return cast sets.
 const (
 	teleportModeBlocking uint8 = 1
 	teleportModeFree     uint8 = 2
 )
 
-// berserkBodyMode is body mode 1. AJStateChanger_Advance (405F70) case 0xB
+// berserkBodyMode is body mode 1. The state machine's berserk case
 // postpones a teleport job by returnPostponeMs while the actor's body
-// channel ([[actor+0x30]+4], GetBodyMode) holds it.
+// channel holds it.
 const berserkBodyMode uint8 = 1
 
 // returnPostponeMs is that postponement.
 const returnPostponeMs = 1000
 
-// errCodeThievesOnly is 4A0380's 0x186A (UIIT_MSG_STRGERR_ONLY_ROBBER_CAN_USE_THIS_ITEM).
+// errCodeThievesOnly is the native 0x186A (UIIT_MSG_STRGERR_ONLY_ROBBER_CAN_USE_THIS_ITEM).
 const errCodeThievesOnly uint8 = 0x6a
 
 /*
@@ -66,9 +66,9 @@ func teleportState(c *enterworld.Character, mode uint8) wire.Frame {
 ================
 returnScrollDuration
 
-v1.188 4A0380: Param1 is the cast duration (milliseconds in v1.150 data;
-v1.188 timers use seconds) and Param2 must be blocking mode 1. A zero
-duration takes 4E0B50's minimum timer interval.
+Param1 is the cast duration (milliseconds in the shipped data) and
+Param2 must be blocking mode 1. A zero duration takes the scheduler's
+minimum timer interval.
 ================
 */
 func returnScrollDuration(ref *enterworld.ItemRef) (int64, bool) {
@@ -80,8 +80,8 @@ func returnScrollDuration(ref *enterworld.ItemRef) (int64, bool) {
 ================
 returnScrollTiming
 
-Param1's duration and the teleport mode Param2 selects: 4A0380 passes
-(Param2 == 0) + 1, so a blocking scroll (1) casts in mode 1 and the Thief
+Param1's duration and the teleport mode Param2 selects: the native mode
+is (Param2 == 0) + 1, so a blocking scroll (1) casts in mode 1 and the Thief
 Den scroll (0) in mode 2, which leaves the player free to move.
 ================
 */
@@ -119,9 +119,10 @@ func teleportBlocks(mode uint8) bool {
 ================
 returnScrollAdmission
 
-The player checks every return cast shares: the ordinary scroll (4A0380)
-and the reverse return (4A00C0). A native refusal sets *result; a silent
-one leaves it. v1.188 error low bytes agree with v1.150 689420 category 1.
+The player checks every return cast shares: the ordinary scroll (this
+file) and the reverse return (reversereturn.go). A native refusal sets *result; a silent
+one leaves it. The error low bytes agree with the v1.150 client's notice
+table (689420, category 1).
 ================
 */
 func (rt *Runtime) returnScrollAdmission(division string, c *enterworld.Character, result *OpResult) bool {
@@ -140,12 +141,12 @@ func (rt *Runtime) returnScrollAdmission(division string, c *enterworld.Characte
 returnCastAdmission
 
 The checks every return cast shares before its destination's own: the
-Thief Den scroll skips RESURRECT's transport refusal (4A0380 tests it only
-on that branch).
+Thief Den scroll skips RESURRECT's transport refusal (the native check
+runs only on that branch).
 ================
 */
 func (rt *Runtime) returnCastAdmission(division string, c *enterworld.Character, result *OpResult) bool {
-	// Native 4a0399 checks the quest mask before the active-cast test.
+	// The native check reads the quest mask before the active-cast test.
 	if rt.QuestTravelBlocks != nil && rt.QuestTravelBlocks(c)&0x20000 != 0 {
 		*result = itemUseFailure(0x5f)
 		return false
@@ -154,8 +155,7 @@ func (rt *Runtime) returnCastAdmission(division string, c *enterworld.Character,
 		*result = itemUseFailure(0x5d)
 		return false
 	}
-	// 4E2940 writes actor core +0x0c from the criminal-state owner. Only
-	// state 2 blocks return; transient aggression (state 1) does not.
+	// Only PK state 2 blocks return; transient aggression (state 1) does not.
 	if c.PVPState() == 2 {
 		*result = itemUseFailure(0x75)
 		return false
@@ -171,11 +171,11 @@ func (rt *Runtime) returnCastAdmission(division string, c *enterworld.Character,
 ================
 beginReturnScroll
 
-Inside the item-use character mutation door. v1.188 49B9F0 -> 4A0380
+Inside the item-use character mutation door. The item-use handler
 selects Param1 duration, Param2 blocking mode and Param3 destination. The
 ordinary RESURRECT family has no destination payload; other return
 families must never silently teleport to the race start. The location
-check records where the scroll was used (4E0250, slot 0x264): the reverse
+check records where the scroll was used: the reverse
 return's "last recall point".
 ================
 */
@@ -191,7 +191,7 @@ func (rt *Runtime) beginReturnScroll(division string, c *enterworld.Character, r
 			return false
 		}
 	case "THIEFDEN":
-		// 4A0380: only a thief in job mode (job state 2) returns to the den,
+		// Only a thief in job mode (job state 2) returns to the den,
 		// at the gate Param4 names.
 		if !rt.returnCastAdmission(division, c, result) {
 			return false
@@ -241,7 +241,7 @@ type returnCast struct {
 	destination *travelPoint
 	now         int64
 	// mode is the channel-11 teleport mode; zero is a return's 1. The skin
-	// change reloads in place under mode 3 (4EFFC0).
+	// change reloads in place under mode 3.
 	mode uint8
 	// thiefDen marks the Bandit Den scroll's cast.
 	thiefDen bool
@@ -290,8 +290,8 @@ func (rt *Runtime) startReturnCast(cast returnCast, result *OpResult) bool {
 		result.Frames = append(result.Frames, wire.Frame{Opcode: wire.OpItemUseResponse,
 			Payload: wire.EncodeItemUseSuccess(cast.slot, remaining, cast.typeWord)})
 	}
-	// 466F90 is a log record, not a state publication. 4A9430 emits
-	// the moving-only correction before 4E0B50 publishes channel 11.
+	// A log record is not a state publication: the moving-only
+	// correction goes out before the teleport-state publication.
 	if moving {
 		result.Frames = append([]wire.Frame{stop}, result.Frames...)
 		result.Broadcast = append([]wire.Frame{stop}, result.Broadcast...)
@@ -337,8 +337,7 @@ func (rt *Runtime) HandleReturnCancel(division string, c *enterworld.Character, 
 ================
 cancelReturnOnDeathInDoor
 
-CGObjPC_ProcessNormalDeath (529B10) calls CGObjPC_RefreshJobStateJob
-(513EA0) while the teleport mode is set: it removes the queued channel-11
+Death while the teleport mode is set removes the queued channel-11
 job and resets the mode to 0, the same cancel a 0x705B request runs. Only a
 job of destination kind 6 survives, and no scroll queues one (the return
 scroll 0 or 1, the reverse return 2, 3 or 7), so a death during a return or
@@ -431,7 +430,7 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 			c.NativeTeleportMode, cancelled = 0, true
 			return true
 		}
-		// 40614E: the body channel at berserk postpones the teleport.
+		// The body channel at berserk postpones the teleport.
 		if c.NativeBodyStatus == berserkBodyMode {
 			job.due = now + returnPostponeMs
 			rt.returnCasts.Store(key, job)
@@ -508,8 +507,7 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 	return frames, append(corpseDespawns, clear, wire.Frame{Opcode: wire.OpObjectSourceCorrection, Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{RegionID: destination.RegionID, X: float32(destination.X), Y: float32(destination.Y), Z: float32(destination.Z), Heading: destination.Angle}}.Encode()})
 }
 
-// 4EC8A0 -> 4FD720 -> COS virtual +30 / 4827F0. Transport COS
-// (1/2/3/2) block ordinary returns; pets are a separate migration branch.
+// Transport COS block ordinary returns; pets are a separate migration branch.
 /*
 ================
 bool
@@ -537,8 +535,8 @@ retireReturnForReentry
 */
 func (rt *Runtime) retireReturnForReentry(division string, c *enterworld.Character) {
 	rt.jobDresses.Delete(simulation.WorldKey(division, c.Name))
-	// A mode-3 reload re-enters the same actor in place (4E0B50 keeps the
-	// object and its state timers), so a suit's activation wait survives
+	// A mode-3 reload re-enters the same actor in place (the reload keeps
+	// the object and its state timers), so a suit's activation wait survives
 	// the reload that follows its dress (reloadJobDress).
 	if c.NativeTeleportMode != skinTeleportMode {
 		rt.endJobActivation(division, c)
