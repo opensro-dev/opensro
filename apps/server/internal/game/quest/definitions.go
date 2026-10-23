@@ -70,7 +70,7 @@ type RewardItemLead struct {
 ================
 RewardChoice
 
-One alternative item reward of a selection quest (_RefQuestReward
+One alternative item reward of a selection quest (the reward table's
 SelectionCnt). The v1.150 client has no reward-selection window, so the
 NPC offers one completion row per choice, titled by TitleSymbol. A
 choice with one item and no authored title is titled by that item's name
@@ -90,10 +90,10 @@ type RewardChoice struct {
 OfferPage
 
 One story page an NPC shows before a quest offer: its prompt and the single
-reply row that turns the page (Rahid 5's 8A03F0 dialogue states 0xA..0x28).
+reply row that turns the page (Rahid 5's dialogue states 0xA..0x28).
 A page with a RefuseSymbol shows it as a second row: choosing it answers
 RefuseResponseSymbol and ends the quest's RefuseEndsQuests (KT_SMITH_2's
-_01 page, rows _02/_04, 8A77A0).
+_01 page, rows _02/_04).
 ================
 */
 type OfferPage struct {
@@ -108,10 +108,9 @@ type OfferPage struct {
 SideTalk
 
 A line another NPC speaks while the quest is active, from a dialogue mission
-that never completes (CMissionDialog 91D770 without +0x6B): Rahid 4's
-slaves who never met Rahid. 89FDA0 speaks the mission's prompt (+0x1E)
-while its pending bit is set and clears the bit on the next step; once
-heard, the NPC answers its repeat line (+0x22). Without a repeat line the
+that never completes: Rahid 4's slaves who never met Rahid. The native
+quest speaks the mission's prompt while its pending bit is set and clears
+the bit on the next step; once heard, the NPC answers its repeat line. Without a repeat line the
 prompt is spoken every time (Bukhra's not-achieved line).
 ================
 */
@@ -146,39 +145,39 @@ type QuestSpec struct {
 	CompletedBy    []string
 	MaxCompletions uint32
 	// MinLevel is the lowest level that may take the quest (condition
-	// table 0xC2 +0x4 under flag 1, CBasicQuest_MeetsPrerequisites 9262A0).
+	// table 0xC2 under flag 1, as the native prerequisite check reads it).
 	// Zero means the questdata level, which otherwise only picks the marker.
 	MinLevel uint8
 	// RequiredHeldItems must all be in the bag and RequiredAnyHeldItems needs
 	// one, for the quest to be offered (condition table 0xC2 flag 4, its
-	// vectors at +0x28 and +0x38; CBasicQuest_MeetsPrerequisites 9262A0).
+	// two item lists).
 	RequiredHeldItems    []string
 	RequiredAnyHeldItems []string
 	// JobCondition gates the offer on the dressed job (condition table
-	// 0xC2 flag 0x1000; 9262A0 compares +0x20 with CGObjPC_GetJobState).
+	// 0xC2 flag 0x1000, compared natively with the character's job state).
 	JobCondition         *JobCondition
 	Stages               []QuestStage
 	MonsterDrop          *MonsterDropRule
 	Codename             string
 	RequiredQuests       []string
 	RequiredActiveQuests []string
-	// RequiredAnyQuests is quest list 0x114 (+0x450): one of these completed
-	// suffices (CBasicQuest_MeetsPrerequisites 9262A0).
+	// RequiredAnyQuests is quest list 0x114: one of these completed
+	// suffices.
 	RequiredAnyQuests []string
 	// RequiredQuestCompletions[i] is how many times RequiredQuests[i] must
-	// be completed (the +0x418 bytes, 9262A0); a missing entry is 1.
+	// be completed (the native per-quest counts); a missing entry is 1.
 	RequiredQuestCompletions []uint32
-	// RequiredEndedQuests is quest list 0x108 (+0x420): each must be ended
-	// and never completed (9262A0: count 0 and state 5).
+	// RequiredEndedQuests is quest list 0x108: each must be ended and never
+	// completed (count 0 and state 5).
 	RequiredEndedQuests []string
 	// AcceptEndsQuests are ended when the offer's Accept is pressed, and
 	// RefuseEndsQuests when an offer page's refusal row is chosen
-	// (KT_SMITH_2 8A77A0). See ended.go.
+	// (KT_SMITH_2). See ended.go.
 	AcceptEndsQuests []string
 	RefuseEndsQuests []string
 	Repeatable       bool
 	// KindByte is the wire u10 the CIFQuestReward content button
-	// switches on (sub_5c26e0): 1/7/8 open the give-up window, 2 opens
+	// switches on (client 5C26E0): 1/7/8 open the give-up window, 2 opens
 	// the REWARD window (its action button composes 0x729A - the
 	// turn-in this server can actually receive). DECLARED CHOICE
 	// (grade D): retail's kind assignment never shipped; policy here is
@@ -193,7 +192,7 @@ type QuestSpec struct {
 	// CollectItemCodename/CollectCount apply to ObjectiveCollect only.
 	CollectItemCodename string
 	CollectCount        uint32
-	// Kill targets are codenames: v1.188 numeric RefObj IDs are not portable.
+	// Kill targets are codenames: the later data's numeric RefObj IDs are not portable.
 	KillMonsterCodenames []string
 	KillRanks            []uint8
 	KillCount            uint32
@@ -207,26 +206,26 @@ type QuestSpec struct {
 	// RewardChoices are granted on top of RewardItems: exactly one, picked
 	// from the completing NPC's rows (RewardChoice).
 	RewardChoices []RewardChoice
-	// RewardChoiceCheckCountry is _RefQuestReward IsCheckCountry: a choice
+	// RewardChoiceCheckCountry is the reward table's IsCheckCountry: a choice
 	// whose item belongs to the other country is not offered.
 	RewardChoiceCheckCountry bool
-	// RewardInventorySlots is the reward row's inventory slots (byte +0x3db,
-	// paid after the items and gold by CBasicQuest_PayRewardRow 924CF0). They
+	// RewardInventorySlots is the reward row's inventory slots (paid after
+	// the items and gold, as natively). They
 	// wait for the next world entry (domain.GrantInventoryExpansion).
 	RewardInventorySlots uint8
 	// TurnInGold is a fee the completing NPC takes once the reward is paid
-	// (QSP_KT_EXINVENTORY_3, 8CF8F0). A character who cannot pay it is
+	// (QSP_KT_EXINVENTORY_3). A character who cannot pay it is
 	// answered with TurnInGoldShortSymbol and keeps the quest.
 	TurnInGold            int64
 	TurnInGoldShortSymbol string
 	// NPC/session fields are codename/symbol keyed because their numeric IDs
 	// are version-local. They are curated only where shipped dialogue text
-	// and the v1.188 mechanism establish a complete interaction segment.
+	// and the later server's mechanism establish a complete interaction segment.
 	StartNpcCodename string
 	EndNpcCodename   string
 	// OfferPages precede OfferPromptSymbol when the quest is offered;
 	// TalkPages precede CompletePromptSymbol at the talk objective's NPC
-	// (CMissionDialog +0x1E/+0x46 rows).
+	// (the dialogue mission's prompt and talk rows).
 	OfferPages []OfferPage
 	TalkPages  []OfferPage
 	SideTalks  []SideTalk
@@ -253,43 +252,43 @@ type QuestSpec struct {
 	AchievedNowSymbol    string
 	DeliveryNpcCodename  string
 	DeliveryPromptSymbol string
-	// DeliveryKeepsItems is the deliver mission's byte +0x111 cleared: the
-	// hand-over leaves the delivered items in the bag. 91CA00 removes them
-	// only while it is set, the mission constructor's default (872040).
+	// DeliveryKeepsItems clears the deliver mission's remove flag: the
+	// hand-over leaves the delivered items in the bag. The native hand-over
+	// removes them only while that flag is set, the mission's default.
 	// QNO_WC_POTION_3's medicine and letter stay for QNO_WC_POTION_4.
 	DeliveryKeepsItems bool
 	// AcceptanceConsumes leave the bag when the quest is accepted, each up
-	// to Count and only as many as are held: 897680 takes QNO_WC_POTION_3's
+	// to Count and only as many as are held: the native class takes QNO_WC_POTION_3's
 	// medicine and letter before it grants the wrapped gift.
 	AcceptanceConsumes []RewardItemLead
 	// CompleteNoticeSymbol is the notice sent once the quest completes
-	// (896360's _16, "Ask Jinjin about the birthday gift").
+	// (the quest class's _16, "Ask Jinjin about the birthday gift").
 	CompleteNoticeSymbol string
 	// OfferAcceptRowSymbol replaces the offer's yes/no with this one row,
-	// which accepts: 897680 accepts on _01's SN_TALK_COMMON_NEXT.
+	// which accepts: the native class accepts on _01's SN_TALK_COMMON_NEXT.
 	OfferAcceptRowSymbol string
 	// RepeatOfferAcceptRowSymbol and RepeatAcceptResponseSymbol replace the
-	// row and the answer when RepeatOfferPromptSymbol is offered: 895740
+	// row and the answer when RepeatOfferPromptSymbol is offered: the class
 	// offers a second run with _07 and one OK row (word 0x140) that
 	// accepts, answered _08 (QNO_WC_WAREHOUSE_W_2).
 	RepeatOfferAcceptRowSymbol string
 	RepeatAcceptResponseSymbol string
 	// ToolMissingSymbol is the not-achieved line while ToolCodename is not
-	// held: 8AA0C0 sends the Sunset Witch's players for holy water (_04)
+	// held: the Sunset Witch's quest sends its players for holy water (_04)
 	// before it reminds them of the hunt (_05).
 	ToolMissingSymbol string
 	ToolCodename      string
-	// HandOverNpcCodename makes a delivery two legs (mission +0x110 clear,
-	// the 872040 default). 91CA00 takes the items at this NPC after
-	// HandOverSymbol (+0xC0), gives ExchangeItems back (+0x6A count, +0x93
-	// codenames, +0x6B quantities) and latches the mission. The reward then
+	// HandOverNpcCodename makes a delivery two legs (the mission's one-leg
+	// flag clear, its default). The native hand-over takes the items at this
+	// NPC after HandOverSymbol, gives ExchangeItems back (count, codenames and
+	// quantities) and latches the mission. The reward then
 	// waits at EndNpcCodename, the start NPC the achieved-now line names, or
-	// back here: CBasicQuest_vf154 pays at either NPC of the quest's table.
-	// ExchangeFullSymbol (+0xC8) answers a bag without room for the exchange.
+	// back here: the native quest pays at either NPC of the quest's table.
+	// ExchangeFullSymbol answers a bag without room for the exchange.
 	HandOverNpcCodename string
 	HandOverSymbol      string
 	// HandOverPages precede HandOverSymbol at the hand-over NPC (the
-	// mission's +0xBF pages, 91CA00).
+	// mission's hand-over pages).
 	HandOverPages      []OfferPage
 	ExchangeItems      []RewardItemLead
 	ExchangeFullSymbol string
@@ -305,7 +304,7 @@ var starterQuestSpecs = []QuestSpec{
 	{
 		// Shipped EU starter quest 143. The display row, chain edge and
 		// dialogue symbols are v1.150 media; ordinary NPC choices ride the
-		// v1.188 Lua/session mechanism reconstructed through 0x3773.
+		// later server's Lua/session mechanism reconstructed through 0x3773.
 		Codename:              "QNO_EU_TUTORIAL_1",
 		AcceptanceUnavailable: qnoTutorialSuperseded,
 		RewardExp:             60,
@@ -318,10 +317,10 @@ var starterQuestSpecs = []QuestSpec{
 	},
 	{
 		// The Chinese tutorial (shipped id 2). Creation-seeded (the
-		// _RefCharDefault_Quest race-0 row, grade B - seed.go). The
+		// default-quest table's race-0 row, grade B - seed.go). The
 		// shipped objective string is "Talk to Sonhyeon"
 		// (SN_CON_QTUTORIAL_CH_01, grade A): a talk objective with no
-		// counter. No _RefQuestReward row joins (grade B negative):
+		// counter. No reward-table row joins (grade B negative):
 		// reward none. Kind 1: give-up-able, not reward-window
 		// completable (grade D policy above).
 		Codename:             "QTUTORIAL_CH",
