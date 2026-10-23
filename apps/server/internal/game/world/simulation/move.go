@@ -43,8 +43,7 @@ type MovementRequest struct {
 	X        float64
 	Y        float64
 	Z        float64
-	// AngularMode is the angular-form flag byte (record +0x0E in
-	// sub_877cc0). The only native producer on 0x7738,
+	// AngularMode is the angular-form flag byte. The only native producer on 0x7738,
 	// CNavigationDeadreckon_SendAngleMoveCommand (0x877F30), sends
 	// AngularFlagGo; the ack parser MovementPayload_ReadFromStream
 	// (0x776170) reads the echoed byte back.
@@ -123,7 +122,7 @@ func MovementSourceFromSpawn(spawn Spawn) MovementSource {
 BuildMovementAckPayload
 
 Encodes the 0xB738 payload exactly as the client parser consumes it
-(sub_776200 -> sub_776170):
+(776200 -> 776170):
 
 	[u32 objectId][u8 mode]
 	then mode!=0: [u16 region][u16 x][u16 y][u16 z]
@@ -131,12 +130,12 @@ Encodes the 0xB738 payload exactly as the client parser consumes it
 	then [u8 1][u16 srcRegion][u16 srcX*10][f32 srcY][u16 srcZ*10]
 	or   [u8 0]
 
-The angular arm mirrors sub_776170's mode-0 read ([u8 angularFlag]
-[u16 headingWord] @0x77619b..0x7761b1) and carries the request's own bytes
+The angular arm mirrors 776170's mode-0 read ([u8 angularFlag]
+[u16 headingWord] 77619B..7761B1) and carries the request's own bytes
 back - the same verbatim-echo contract as the destination arm.
 
-RETAIL WIRE PARITY: the native 0xB738 handler (sub_776200 at
-0x007762c1..0x007762ff) divides the source-block X/Z i16 fields by 10.0f,
+RETAIL WIRE PARITY: the native 0xB738 handler (776200 at
+7762C1..7762FF) divides the source-block X/Z i16 fields by 10.0f,
 so the server PREMULTIPLIES them by 10 (the middle Y dword stays a raw
 float). The active-probe's unscaled source block is the known-wrong shape
 (REV-1 finding 4); do not copy it.
@@ -306,8 +305,8 @@ func ApplyMove(world *WorldState, objectID uint32, movement MovementRequest, mov
 ================
 applyTurn
 
-The stationary angular arm: mode 0 without AngularFlagGo. The v1.188
-CGObjMoverByCmd_SetCommand (0x48C140) latches the angle and sets its moving
+The stationary angular arm: mode 0 without AngularFlagGo. The server's
+set-command arm latches the angle and sets its moving
 latch only for bit 0, so without it the mover stands and faces the heading.
 The v1.150 client never sends this form (0x877F30 always writes GO); it is
 kept because the wire admits it and it must never start a walk.

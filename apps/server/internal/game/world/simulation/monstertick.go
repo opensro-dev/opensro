@@ -66,19 +66,19 @@ type MonsterMoverOps struct {
 	// is a nil RESULT and never authorizes a straight-line fallback.
 	PlanPath func(from, goal monster.Pose) *monster.NavigationPath
 	// PlanPathFrom is PlanPath from the monster's retained surface owner
-	// (native source pNavCell). Production wires it; when set, every leg that
+	// cell. Production wires it; when set, every leg that
 	// departs from the monster's own live pose uses it (planPath below).
 	PlanPathFrom func(from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationPath
 	// AI route policy, separate from raw clipping used by sight/help probes.
 	PlanRoute func(from, goal monster.Pose) *monster.NavigationRoute
 	// Rand returns a uniform [0,1) sample (seam for deterministic tests).
 	Rand func() float64
-	// AttackPlan resolves one of RefObjChar's ten default-skill ids against
+	// AttackPlan resolves one of the character record's ten default-skill ids against
 	// the shipped v1.150 skill table. requestedSkillID preserves a choice
 	// while the mover approaches; zero chooses from the valid authored set.
 	// Retained-ID resolution receives a zero pick and must not reselect based
 	// on changed health/damage. New selections alone consume choice entropy,
-	// and they carry the target the weighted choice (561B00) measures.
+	// and they carry the target the weighted choice measures.
 	AttackPlan func(instance monster.Instance, requestedSkillID uint32, pick AttackPick) (MonsterAttackPlan, bool)
 	// BasicAttack commits one monster->player hit and returns the same B245
 	// action bracket the browser already uses for player attacks.
@@ -92,7 +92,7 @@ type MonsterMoverOps struct {
 	// Bard's Noise) from the effect owner. nil protects nobody.
 	FirstAttackGuard func(divisionID string, playerGID uint32, nowMs int64) monster.FirstAttackGuard
 	// Companions lists a player's summoned, living, unmounted companions in
-	// its owner's container order (CCOSManager_AppendOwnedActorsInContainerOrder).
+	// its owner's container order.
 	// nil means no companion is ever a target.
 	Companions func(divisionID string, ownerGID uint32, nowMs int64) []CompanionTarget
 
@@ -140,11 +140,11 @@ func (ops *MonsterMoverOps) logScopeBudgetBreach(divisionID string, count int) {
 
 const (
 	// monsterMovementSourceTurnThreshold is the retail server's optional
-	// source-block gate for an already-moving entity. The v1.188
-	// EntityMovement_UpdateAndBroadcastB021 body normalizes the old and new
+	// source-block gate for an already-moving entity. The native movement
+	// update normalizes the old and new
 	// directions, converts their dot product to an angular delta, and writes
-	// the source only when the delta is GREATER than qword[0x00b460e0]:
-	// 0.785398185253143 radians (Rizin 0x004b1109..0x004b118f).
+	// the source only when the delta is GREATER than
+	// 0.785398185253143 radians (pi/4).
 	//
 	// This is version-adjacent server evidence applied to the byte-identical
 	// v1.150 client source block. It replaces the incorrect player-plane
@@ -197,7 +197,7 @@ MonsterDespawnBracketFrames
 
 MonsterDespawnBracketFrames encodes a byListSub=2 object-list group:
 0x30CB {0x02, u16 count} begin, one 0x3417 chunk of 4-byte gids (the
-sub_777310 despawn bodies the finalize loop consumes), empty 0x330A
+777310 despawn bodies the finalize loop consumes), empty 0x330A
 finalize. The native bulk-eviction shape (byListSub=2 pinned by
 RZ seq134/DUMP seq91; client-side handling sabotage-proven by WIP's
 ensureDespawn4cBinding chain, board seq359/373).
@@ -265,11 +265,10 @@ type playerPose struct {
 	OwnerGid uint32
 	// Band is a companion's COS band (TypeID 4).
 	Band uint8
-	// JobState is a player's job state (CGObjPC_GetJobState 4DDC80, +0x30
-	// +0xF): the dressed job, 4 outside job mode (4E1120).
+	// JobState is a player's job state: the dressed job, 4 outside job mode.
 	JobState uint8
-	// Mounted is CGObjPC_IsMountedOnCOS (4DDCA0): whether the player is
-	// mounted on a COS when acquisition chooses a companion (547A46/547BEF/547EEF).
+	// Mounted is whether the player is
+	// mounted on a COS when acquisition chooses a companion.
 	Mounted bool
 }
 
@@ -519,8 +518,8 @@ func (ops *MonsterMoverOps) startWanderLeg(divisionID string, instance monster.I
 	return ops.Monsters.commitNavigation(divisionID, before, mover, frames)
 }
 
-// startReturnLeg uses the native movement-channel consumer (5489B0), not
-// the unrelated obstacle rotation sign at CTactics+164.
+// startReturnLeg uses the native movement-channel consumer, not
+// the unrelated obstacle rotation sign in the tactics record.
 /*
 ================
 startReturnLeg
@@ -549,7 +548,7 @@ func (ops *MonsterMoverOps) planReturnLeg(instance monster.Instance, mover monst
 	mover.BehaviorDeadlineMs = 0
 	if instance.Nest.HasControls {
 		mover.HomingStartedMs = uint32(nowMs)
-		// 55A60E..55A63E: (effective sight / run speed) * 1000, truncate.
+		// (Effective sight / run speed) * 1000, truncate.
 		// A stationary actor cannot complete this travel-dependent gate.
 		mover.HomingAcquireAfterMs = ^uint32(0)
 		if monster.HomingRuns(instance.Ref.RunSpeed) {
@@ -560,7 +559,7 @@ func (ops *MonsterMoverOps) planReturnLeg(instance monster.Instance, mover monst
 	if instance.Nest.HasControls {
 		dest = normalizeMonsterPose(monster.HomingCandidate(dest, live, float32(instance.Nest.Radius), instance.Ref, func() uint32 { return monster.SummonRandomWord(ops.rand()) }))
 		if ops.hasPlanner() {
-			// 545E14: clip from HOME, not the actor's current position. The
+			// Clip from HOME, not the actor's current position. The
 			// anchor has no walked cell: the teleport rule resolves it.
 			path := ops.planPath(navReturn, anchorPose(instance), NavOwner{}, dest)
 			if path == nil {
@@ -589,7 +588,7 @@ commitSegment
 commitSegment is THE single emit seam: computes the timed segment from
 the live departure pose, commits the mover, and builds the frames -
 an optional 0x3122 MOVE channel push (only when the run/walk channel
-changes; sub_777b60 case 1 -> SetRunWalkMode, the pinned wire that
+changes; 777B60 case 1 -> SetRunWalkMode, the pinned wire that
 keeps the client integrator at the server's segment speed - BUG-7
 speed-half fix) followed by the 0xB738 goal. The optional source follows
 the retail autonomous-entity turn gate, not the player ack's first-move
@@ -648,11 +647,11 @@ func (ops *MonsterMoverOps) planDirectSegment(instance monster.Instance, mover m
 		}
 	}
 
-	// Capture the old leg before replacing it. The v1.188 server's movement
+	// Capture the old leg before replacing it. The server's movement
 	// writer includes the live source only for a >45-degree discontinuity.
 	// Shallow chase re-aims therefore preserve the client's PATH source cursor;
 	// reversals and hard cuts re-anchor that logical cursor at this live pose.
-	// This says nothing about animation playback: v1.150 sub_776200 re-enters
+	// This says nothing about animation playback: v1.150 776200 re-enters
 	// state 9 for every B738 destination, and the cyclic mixer reset clears its
 	// authored cursor. The browser presentation adapter separately retains the
 	// visible walk/run phase while that locomotion lane remains continuously live.
@@ -673,7 +672,7 @@ func (ops *MonsterMoverOps) planDirectSegment(instance monster.Instance, mover m
 	}
 	var navigation *monster.NavigationPath
 	if ops.hasPlanner() {
-		// Walk from the cell under the monster (native source pNavCell).
+		// Walk from the cell under the monster (its retained surface owner).
 		navigation = ops.planPath(callerForMode(mover.Mode()), from, mover.LiveNavOwner(nowMs), goal)
 		if navigation == nil {
 			if moveIssued && mover.ArriveMs <= mover.DepartMs {
@@ -767,8 +766,8 @@ func (ops *MonsterMoverOps) holdNavigation(gid uint32, mover monster.MoverState,
 ==================
 monsterMovementSourceRequired
 
-monsterMovementSourceRequired mirrors the v1.188 GameServer's positional
-movement source gate at 0x004b1109..0x004b118f. A settled entity's current
+monsterMovementSourceRequired mirrors the server's positional
+movement source gate. A settled entity's current
 facing is its last committed heading; an in-flight entity's facing is the
 old segment direction. Degenerate vectors source defensively because they
 cannot establish continuous steering.
@@ -841,7 +840,7 @@ planPath
 
 planPath plans from `from` walking from fromOwner. Legs departing from the
 monster's live pose pass mover.LiveNavOwner; a leg from the nest anchor
-passes the zero owner (native teleport rule, 545E14 clips from HOME).
+passes the zero owner (native teleport rule: clips from HOME).
 ==================
 */
 func (ops *MonsterMoverOps) planPath(caller navCaller, from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationPath {
@@ -873,7 +872,7 @@ anchorPose
 */
 func anchorPose(instance monster.Instance) monster.Pose {
 	if instance.Nest.HasControls {
-		// 545F70/545C50 use CNest+10, not the randomized spawn candidate.
+		// The nest anchor is the authored nest point, not the randomized spawn candidate.
 		// Using Spawn shifts the home boundary separately for every sibling.
 		return monster.Pose{RegionID: instance.Nest.RegionID, X: instance.Nest.X, Y: instance.Nest.Y, Z: instance.Nest.Z}
 	}
@@ -966,8 +965,8 @@ func (ops *MonsterMoverOps) idleDelayMs() int64 {
 sessionPlayerPose
 
 One combat-eligible session as the monster tick weighs it. Its job state
-is the native one (CGObjPC_GetJobState 4DDC80): the worn suit's job, else
-4, the state CGObjPC_InitPvpAndJobStateOnLoad (4E1120) sets first.
+is the native one: the worn suit's job, else
+4, the state the load path sets first.
 ================
 */
 func sessionPlayerPose(session SessionSnapshot, nowMs int64) playerPose {
