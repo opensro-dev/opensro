@@ -146,8 +146,8 @@ func TestStackedStoneSpendsOneAndKeepsItsValue(t *testing.T) {
 ================
 TestStoneOfAnotherDegreeIsRefusedWithItsOwnCode
 
-v1.188 refuses an attribute stone of another degree with 0x5421 (502A40)
-and a magic stone with 0x540F (503810); both keep the stone.
+The native server refuses an attribute stone of another degree with
+0x5421 and a magic stone with 0x540F; both keep the stone.
 ================
 */
 func TestStoneOfAnotherDegreeIsRefusedWithItsOwnCode(t *testing.T) {

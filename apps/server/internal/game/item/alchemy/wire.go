@@ -25,8 +25,8 @@ func DecodeReinforce(p []byte) ([]uint8, error) {
 	return append([]uint8(nil), p[1:]...), nil
 }
 
-// ReinforceFrames uses the v1.150 client's grammar, not v1.188 B150's extra
-// mode byte. Material deltas precede the result so presentation sees the
+// ReinforceFrames uses the v1.150 client's grammar, not the later server's
+// B150 extra mode byte. Material deltas precede the result so presentation sees the
 // committed inventory. The target body/destruction belongs to B373 alone.
 func ReinforceFrames(before []inventory.Item, result Outcome) []wire.Frame {
 	return ResultFrames(OpReinforceResult, before, result)
@@ -53,8 +53,8 @@ func ResultFrames(op uint16, before []inventory.Item, result Outcome) []wire.Fra
 	if result.Success {
 		status = 1
 	}
-	// Native 50376F/50338F: an unsuccessful stone attempt consumes the
-	// stone and returns 0x5423, not a synthetic unchanged equipment body.
+	// Natively an unsuccessful stone attempt consumes the stone and
+	// returns 0x5423, not a synthetic unchanged equipment body.
 	if op == OpStoneResult && !result.Success {
 		return append(frames, wire.Frame{Opcode: op, Payload: []byte{2, 0x23}})
 	}
