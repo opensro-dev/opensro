@@ -29,6 +29,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/alexandria"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/worldarea"
 	"opensro.online/server/internal/gamedata"
@@ -177,6 +178,11 @@ func newGameWorldApplication(
 	devPaths.AuthoredAreas = authoredAreas
 	devPaths.StructureZones = filepath.Join(dataPaths.WorldAuthorityDir, "structure-zones.json")
 	devPaths.DerivedDir = dataPaths.DerivedDir
+	if loaded, err := monster.LoadQinShiTomb(devPaths.DerivedDir); err != nil {
+		return nil, fmt.Errorf("qinshi tomb: %w", err)
+	} else if !loaded && monster.QinShiTombFromEnv() {
+		log.Warnf("qinshi tomb: %s is on but %s/ is not in the derived game data; the tomb stays sealed", monster.EnvQinShiTomb, monster.QinShiTombDir)
+	}
 	characterRoster, err := enterworld.LoadRoster(devPaths.RosterPath)
 	if err != nil {
 		return nil, fmt.Errorf("character roster: %w", err)

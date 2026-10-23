@@ -14,6 +14,7 @@ DefaultSkillIDs and summon references.
 package enterworld
 
 import (
+	"opensro.online/server/internal/testsupport/qinshitest"
 	"opensro.online/server/internal/testsupport/tier"
 	"testing"
 
@@ -28,7 +29,8 @@ TestQinShiTombEmbeddedSkills
 ================
 */
 func TestQinShiTombEmbeddedSkills(t *testing.T) {
-	rows := monster.SplitTabbedText(qinshiTombSkillDataTSV)
+	qinshitest.Require(t)
+	rows := monster.SplitTabbedText(monster.QinShiTomb().SkillData)
 	if got, want := len(rows), 230; got != want {
 		t.Fatalf("embedded tomb skill rows = %d, want %d", got, want)
 	}

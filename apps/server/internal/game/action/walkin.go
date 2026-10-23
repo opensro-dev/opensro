@@ -44,7 +44,6 @@ tick, though a path that only clips a corner may.
 package action
 
 import (
-	_ "embed"
 	"fmt"
 	"math"
 	"path/filepath"
@@ -58,9 +57,6 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
-
-//go:embed data/qinshi_tomb_eventzone.tsv
-var qinshiTombEventZoneTSV string
 
 const (
 	// eventZoneTypeColumn and eventZoneTeleportColumn of eventzonedata:
@@ -91,10 +87,10 @@ func loadWalkIns(dir string, catalog *portalCatalog) (map[string]portalLink, err
 	}
 	walkIns := map[string]portalLink{}
 	rows := enterworld.ReadTextdataFile(filepath.Join(dir, "eventzonedata.txt"))
-	if monster.QinShiTombFromEnv() {
+	if monster.QinShiTombEnabled() {
 		// Port-only, not native: append the 72 Qin-Shi Emperor Tomb TELEPORT
 		// event zones (IDs 3..82 plus the 8 Floor 5-6 walk-in zones 83..90).
-		rows = append(rows, monster.SplitTabbedText(qinshiTombEventZoneTSV)...)
+		rows = append(rows, monster.SplitTabbedText(monster.QinShiTomb().EventZone)...)
 	}
 	for _, row := range rows {
 		if len(row) <= eventZoneTeleportColumn || row[0] != "1" || strings.TrimSpace(row[eventZoneTypeColumn]) != eventZoneTypeTeleport {
@@ -153,7 +149,7 @@ func (rt *Runtime) walkInZoneAt(pose simulation.Spawn) string {
 			return zone
 		}
 	}
-	if monster.QinShiTombFromEnv() && pose.RegionID == tombFloor6RegionID {
+	if monster.QinShiTombEnabled() && pose.RegionID == tombFloor6RegionID {
 		dx := pose.X - tombFloor6NorthPortalX
 		dz := pose.Z - tombFloor6NorthPortalZ
 		if math.Hypot(dx, dz) <= tombOperatePortalRadius && math.Abs(pose.Y-tombFloor6NorthPortalY) <= tombOperatePortalRadius {

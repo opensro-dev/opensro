@@ -8,7 +8,6 @@ portal.go - authoritative travel and scene re-entry
 package action
 
 import (
-	_ "embed"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"math"
@@ -27,12 +26,6 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
-
-//go:embed data/qinshi_tomb_teleportdata.tsv
-var qinshiTombTeleportDataTSV string
-
-//go:embed data/qinshi_tomb_teleportlink.tsv
-var qinshiTombTeleportLinkTSV string
 
 /*
 ================
@@ -111,7 +104,7 @@ func loadPortalCatalog(dir, derivedDir string) (*portalCatalog, error) {
 	if derivedDir != "" {
 		key += "+" + texttable.Fingerprint(filepath.Join(derivedDir, filepath.FromSlash(PortalTransportFile)))
 	}
-	if monster.QinShiTombFromEnv() {
+	if monster.QinShiTombEnabled() {
 		key += "+qinshi_tomb"
 	}
 	if on, _ := alexandria.EnabledFromEnv(); on {
@@ -191,10 +184,10 @@ func parsePortalCatalog(dir string, transport portalTransport) (*portalCatalog, 
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("teleportdata is absent or empty")
 	}
-	if monster.QinShiTombFromEnv() {
+	if monster.QinShiTombEnabled() {
 		// Port-only, not native: append the 13 Qin-Shi Emperor Tomb Floor 5-6
 		// walk-in teleport source/destination rows (IDs 136..148).
-		rows = append(rows, monster.SplitTabbedText(qinshiTombTeleportDataTSV)...)
+		rows = append(rows, monster.SplitTabbedText(monster.QinShiTomb().TeleportData)...)
 	}
 	for i, r := range rows {
 		if r[0] != "1" {
@@ -255,10 +248,10 @@ func parsePortalCatalog(dir string, transport portalTransport) (*portalCatalog, 
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("teleportlink is absent or empty")
 	}
-	if monster.QinShiTombFromEnv() {
+	if monster.QinShiTombEnabled() {
 		// Port-only, not native: append the 77 Qin-Shi Emperor Tomb teleport
 		// links (72 walk-in links + 5 building links 125 and 131..134).
-		rows = append(rows, monster.SplitTabbedText(qinshiTombTeleportLinkTSV)...)
+		rows = append(rows, monster.SplitTabbedText(monster.QinShiTomb().TeleportLink)...)
 	}
 	for i, r := range rows {
 		if r[0] != "1" {

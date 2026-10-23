@@ -218,7 +218,7 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
-		if monster.QinShiTombFromEnv() {
+		if monster.QinShiTombEnabled() {
 			// Port-only, not native: Qin-Shi Emperor Tomb Floor 1-4
 			// monster refs and spawn nests (monster/qinshi_tomb.go).
 			template, err = template.WithQinShiTomb(textdataDir)

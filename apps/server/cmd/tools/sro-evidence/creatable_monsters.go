@@ -67,7 +67,7 @@ func runCreatableMonsters(args []string) error {
 	}
 	// Port-only, not native: a flag-on bake must cover the Tomb references
 	// the flag-on server can spawn (monster.WithQinShiTomb).
-	if monster.QinShiTombFromEnv() {
+	if monster.QinShiTombEnabled() {
 		withTomb, err := template.WithQinShiTomb(dir)
 		if err != nil {
 			return fmt.Errorf("qinshi tomb: %w", err)

@@ -19,6 +19,7 @@ package action
 import (
 	"bytes"
 	"fmt"
+	"opensro.online/server/internal/testsupport/qinshitest"
 	"sort"
 	"strings"
 	"testing"
@@ -37,7 +38,8 @@ TestQinShiTombEmbeddedTeleportLinks
 ================
 */
 func TestQinShiTombEmbeddedTeleportLinks(t *testing.T) {
-	dataRows := monster.SplitTabbedText(qinshiTombTeleportDataTSV)
+	qinshitest.Require(t)
+	dataRows := monster.SplitTabbedText(monster.QinShiTomb().TeleportData)
 	if got, want := len(dataRows), 13; got != want {
 		t.Fatalf("embedded tomb teleportdata rows = %d, want %d", got, want)
 	}
@@ -47,7 +49,7 @@ func TestQinShiTombEmbeddedTeleportLinks(t *testing.T) {
 		}
 	}
 
-	rows := monster.SplitTabbedText(qinshiTombTeleportLinkTSV)
+	rows := monster.SplitTabbedText(monster.QinShiTomb().TeleportLink)
 	if got, want := len(rows), 77; got != want {
 		t.Fatalf("embedded tomb teleportlink rows = %d, want %d", got, want)
 	}

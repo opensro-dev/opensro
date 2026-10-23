@@ -126,7 +126,7 @@ func newGameplayPlane(
 	// and spawns join at catalog load; unset is the sealed native tomb.
 	// The catalog loaders read the flag themselves (world/monster); this
 	// line only leaves the operator a boot record.
-	if monster.QinShiTombFromEnv() {
+	if monster.QinShiTombEnabled() {
 		log.Infof("portals: Qin-Shi Tomb ON (%s): the door by Jangan admits level 70 and above", monster.EnvQinShiTomb)
 	}
 	if err := items.ConfigurePortals(devPaths.TextdataDir, devPaths.DerivedDir); err != nil {
