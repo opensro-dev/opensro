@@ -31,13 +31,12 @@ import (
 ================
 linkedManaShare
 
-lkdh's HP and MP for one batch of impacts, per impact as
-CSkillManager_DistributeSharedDamage (5A04A0) runs per hit record: the HP
-the impact took (SkillCombat_ApplyResultRecipients passes the damage, or
-the remaining HP on a fatal hit) is skipped when it is 1 or less
-(593BDD), divided by the links the attacker holds and stored as a float32
-share; HP is ftol(word 0 / 100.0 * share) and MP ftol(share * (word 1 /
-100.0)), each held at word 2.
+lkdh's HP and MP for one batch of impacts, per impact as the native
+shared-damage distribution runs per hit record: the HP the impact took (the
+native result step passes the damage, or the remaining HP on a fatal hit) is
+skipped when it is 1 or less, divided by the links the attacker holds and
+stored as a float32 share; HP is ftol(word 0 / 100.0 * share) and MP
+ftol(share * (word 1 / 100.0)), each held at word 2.
 ================
 */
 func linkedManaShare(impacts []simulation.MonsterDamageResult, link statuseffect.Link, held int) (hp, mp int64) {
