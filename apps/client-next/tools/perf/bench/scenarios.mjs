@@ -224,7 +224,7 @@ export async function cross( page, fixture ) {
 }
 
 // Units around the character that hold the loaded combat scene. GM-loaded
-// monsters appear on the GM's point (SR_GameServer 520A40) and fight there.
+// monsters appear on the GM's point, as natively, and fight there.
 const COMBAT_RADIUS = 150;
 const COMBAT_LOAD_TIMEOUT_MS = 15000;
 // A window needs this many accepted damaging casts of its own to count as combat.
