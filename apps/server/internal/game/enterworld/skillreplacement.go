@@ -27,10 +27,11 @@ compileSkillReplacement
 Builds replacement metadata. Does not admit the skill for execution.
 
 Decode the complete v1.150 program first. Argument words can look like
-opcodes. The v1.188 research server's strides do not describe this client.
+opcodes, and strides taken from any other build do not describe this
+client.
 
-Native references (research server v1.188):
-587630 indexer, 589D20 selector, 59D870 replacement, 59DB10 state conflict.
+Native references: the replacement indexer, the selector, the
+replacement rule and the state-conflict rule.
 ================
 */
 func compileSkillReplacement(fields []string) (statuseffect.ReplacementDescriptor, error) {
@@ -83,26 +84,26 @@ func compileSkillReplacement(fields []string) (statuseffect.ReplacementDescripto
 	for _, inst := range p.instructions {
 		switch inst.Tag {
 		case 0x736b63: // skc
-			// event retirement (5A16C0), independent of voluntary nbuf
+			// event retirement, independent of voluntary nbuf
 			d.EventCancelMask = uint8(inst.Arguments[1])
 
 		case 0x6d736368: // msch
-			// +4A4: the last block wins
+			// the last block wins
 			d.MschPresent = true
 			d.MschMode = inst.Arguments[0]
 
 		case 0x63627566: // cbuf
-			// +358: presence counts even without a payload
+			// presence counts even without a payload
 			d.Cbuf = true
 
 		case 0x64747470: // dttp
-			// +424
+			// detection kind and rank
 			d.DttpPresent = true
 			d.DttpKind = inst.Arguments[0]
 			d.DttpRank = inst.Arguments[1]
 
 		case 0x656672: // efr
-			// discriminator 2 uses +290; other variants have separate slots
+			// discriminator 2 has its own slot; other variants have separate slots
 			d.Efr2 = d.Efr2 || inst.Arguments[0] == 2
 
 		case 0x6c6e6b73: // lnks
@@ -116,7 +117,7 @@ func compileSkillReplacement(fields []string) (statuseffect.ReplacementDescripto
 			d.Ovl2 = inst.Arguments[0]
 
 		case 0x61626e62: // abnb
-			// +41C: overrides the complete selector
+			// overrides the complete selector
 			abnb = true
 		}
 
@@ -137,8 +138,8 @@ func compileSkillReplacement(fields []string) (statuseffect.ReplacementDescripto
 ================
 replacementExecutionInstruction
 
-The 36 pointer slots tested by 589D20, resolved through 587630.
-Only presence matters. Argument values do not affect this test.
+The 36 pointer slots the native selector tests, resolved through the
+indexer. Only presence matters. Argument values do not affect this test.
 
 Tests use the original native indexer and selector execution for
 expected results, not this table.
