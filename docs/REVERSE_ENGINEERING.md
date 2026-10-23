@@ -1,12 +1,11 @@
 # Reverse engineering with Python
 
-You can investigate `SRO_Client.exe` and `SR_GameServer.exe` with Python without
+You can investigate `SRO_Client.exe` with Python without
 owning Binary Ninja. This tutorial gets you from a retail executable to readable
 instructions and a saved, reviewable finding. It does not produce an automatic
 C++ reconstruction or run the entire game inside Python.
 
-The v1.150 client defines data, wire messages and UI. For server-only mechanics,
-use the v1.188 server, restricted to the v1.150 feature set. Names and version
+The v1.150 client defines data, wire messages and UI. Names and version
 strings are not sufficient identity: hash each file. Never transfer addresses
 between builds without checking them.
 
@@ -158,15 +157,13 @@ PowerShell example; replace both paths with your actual locations:
 $rePython = (Resolve-Path .state/re-venv/Scripts/python.exe).Path
 $researchDir = 'D:/sro-research'
 $clientExe = 'D:/games/SRO_Client.exe'
-$serverExe = 'D:/games/SR_GameServer.exe'
 & $rePython "$researchDir/inspect_pe.py" $clientExe
-& $rePython "$researchDir/inspect_pe.py" $serverExe
 ```
 
 To inspect a window, use `--va 0xADDRESS --size 0x40 --sha256 HASH`, substituting
 a real preferred VA and the saved full hash. Start with the printed entry VA
 for a tool smoke test; it is usually startup code, not the gameplay feature.
-Repeat separately for the server. On POSIX use `.state/re-venv/bin/python` with
+On POSIX use `.state/re-venv/bin/python` with
 the same script arguments.
 
 Three addresses must stay distinct:
@@ -234,7 +231,7 @@ On POSIX replace the interpreter path as above. Use the
 For a concrete repository example, read
 [`native-region-move-reference.py`](../apps/client-next/tools/native-region-move-reference.py)
 before running it. It pins one client hash and constructs specific states; it is
-not a generic harness for another build or for `SR_GameServer.exe`.
+not a generic harness for another build.
 
 An evidence-producing harness needs all of the following:
 
