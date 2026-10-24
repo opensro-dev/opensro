@@ -9,11 +9,14 @@ browser presentation contains the illustration above a readable footer.
 import type { UiQuad, UiRect } from "@/engine/contracts/ui";
 const DESKTOP_WIDTH = 800;
 const DESKTOP_HEIGHT = 600;
-const COMPACT_FOOTER = 120;
+// The compact footer, bottom up: the DOM status (loading.css: up to three
+// wrapped rows, 12..80 px from the bottom), the native Now Loading label,
+// then the gauge frame. Each keeps its own strip.
+const COMPACT_FOOTER = 150;
 const COMPACT_MARGIN = 16;
 const COMPACT_FRAME_WIDTH = 560;
-const COMPACT_FRAME_BOTTOM = 100;
-const COMPACT_LABEL_BOTTOM = 64;
+const COMPACT_FRAME_BOTTOM = 136;
+const COMPACT_LABEL_BOTTOM = 100;
 const COMPACT_LABEL_WIDTH = 108;
 const COMPACT_LABEL_HEIGHT = 15;
 const root = "/assets/images/Media_extracted/interface/loading/";
@@ -95,6 +98,7 @@ export function missionLoadingQuads( width: number, height: number, variant: num
 loadingScreenQuads
 
 Compact footer placement is paired with the native status row in loading.css.
+An empty background draws no art (travel mode 6 shows the chrome alone).
 ================
 */
 export function loadingScreenQuads( width: number, height: number, background: string, progress: number ): UiQuad[] {
@@ -113,20 +117,18 @@ export function loadingScreenQuads( width: number, height: number, background: s
 		clip: full
 	});
 	if ( width < DESKTOP_WIDTH || height < DESKTOP_HEIGHT ) {
-		// Port-only, owner-approved. The 4:3 art covers the area above a
-		// readable footer (GH #1244): the quad fills the area and samples
-		// the centered window of the texture that matches its shape, so
-		// the illustration is never stretched, its focal center survives
-		// on tall phones, and no black letterbox bars remain.
+		// Port-only, owner-approved. The whole 4:3 illustration fits the area
+		// above a readable footer, never stretched and never cropped (owner,
+		// 2026-10-24: a cover crop cut the logo and the figure off on
+		// phones). The strips around it stay black: a dimmed cover copy behind
+		// it read as the splash drawn twice (owner, 2026-10-24).
 		const areaHeight = Math.max( 0, height - COMPACT_FOOTER );
-		const coverScale = Math.max( width / 1600, areaHeight / 1200 ) || 1;
-		const sampledWidth = width / coverScale, sampledHeight = areaHeight / coverScale;
-		const art: UiRect = [ 0, 0, width, areaHeight ];
-		const artUv: UiRect = [
-			(1600 - sampledWidth) / 2 / 1600,
-			(1200 - sampledHeight) / 2 / 1200,
-			sampledWidth / 1600,
-			sampledHeight / 1200
+		const fitScale = Math.min( width / 1600, areaHeight / 1200 );
+		const art: UiRect = [
+			(width - 1600 * fitScale) / 2,
+			(areaHeight - 1200 * fitScale) / 2,
+			1600 * fitScale,
+			1200 * fitScale
 		];
 		const frameScale = Math.max( 0, Math.min( COMPACT_FRAME_WIDTH, width - COMPACT_MARGIN * 2 ) ) / 1121;
 		const frame: UiRect = [
@@ -144,7 +146,7 @@ export function loadingScreenQuads( width: number, height: number, background: s
 		const fraction = Math.max( 0, Math.min( 1, progress ) );
 		return [
 			{ ...quad( full, "" ), color: [ 0, 0, 0, 1 ] },
-			quad( art, background, artUv ),
+			...(background ? [ quad( art, background ) ] : []),
 			quad( frame, assets[2]! ),
 			quad( [ gauge[0], gauge[1], gauge[2] * fraction, gauge[3] ], assets[3]!, [ 0, 0, fraction, 1 ] ),
 			quad( [
@@ -174,10 +176,12 @@ export function loadingScreenQuads( width: number, height: number, background: s
 	const gauge = scale( [ 268, 985, 1064, 20 ] ), fraction = Math.max( 0, Math.min( 1, progress ) );
 	return [
 		{ ...quad( full, "" ), color: [ 0, 0, 0, 1 ] },
-		quad(
-			[ Math.trunc( (width - height * 4 / 3) / 2 + .5 ), 0, Math.trunc( height * 4 / 3 + .5 ), height ],
-			background
-		),
+		...(background ?
+			[ quad(
+				[ Math.trunc( (width - height * 4 / 3) / 2 + .5 ), 0, Math.trunc( height * 4 / 3 + .5 ), height ],
+				background
+			) ] :
+			[]),
 		quad( scale( [ 241, 973, 1121, 64 ] ), assets[2]! ),
 		quad( [ gauge[0], gauge[1], gauge[2] * fraction, gauge[3] ], assets[3]!, [ 0, 0, fraction, 1 ] ),
 		quad( scale( [ 268, 1025, 252, 35 ] ), assets[4]! )
@@ -219,8 +223,7 @@ export function travelLoadingQuads(
 	progress: number
 ): UiQuad[] {
 	const background = travelLoadingBackground( travel, variant );
-	const quads = loadingScreenQuads( width, height, background ?? "", progress );
-	return background === null ? quads.filter( ( _, index ) => index !== 1 ) : quads;
+	return loadingScreenQuads( width, height, background ?? "", progress );
 }
 /*
 ================

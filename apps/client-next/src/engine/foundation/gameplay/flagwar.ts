@@ -11,10 +11,10 @@ worker keeps the timer value honest (mission start arms 0x124f80 ms,
 the elapsed sync re-arms it) and publishes the carrier gid. The drawn
 plate is the native CIFTimerWnd (resinfo/iftimerwnd.txt, armed through
 CGInterface_GetFlagWarTimerControl by the CIFEventTimer calls in the
-0x4B2530 handler): its creation anchor and digit-texture mapping are
-the two pins still owed, so no position is drawn yet, and the
-carrier's interaction-state-5 model waits on the entity lane. Both
-read the one snapshot the worker already publishes.
+0x4B2530 handler): the runtime draws it from this snapshot - the
+creation anchor (ginterface GDR_TIMER_WND) and the digit-texture
+mapping are pinned in foundation/ui/flagwar-timer-plate.ts. The
+carrier's interaction-state-5 model waits on the entity lane.
 
 ===========================================================================
 */

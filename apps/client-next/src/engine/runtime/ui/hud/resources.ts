@@ -267,7 +267,8 @@ export function createHudResources(
 		"ifcompositeitemwnd",
 		"ifwholechat",
 		"ifspecialtydeal",
-		"ifjobalias"
+		"ifjobalias",
+		"iftimerwnd"
 	];
 	const layouts = [
 		"ginterface",

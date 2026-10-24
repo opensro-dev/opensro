@@ -2,9 +2,10 @@
 ===========================================================================
 loading-resize.test.mjs - real loading artwork through GPU viewport changes
 
-Preserve native art proportions - compact backgrounds cover their area
-with a centered texture window (GH #1244) - across destination branches,
-including travel that intentionally omits the scene.
+Preserve native art proportions across destination branches, including
+travel that intentionally omits the scene. Compact screens show the whole
+illustration over a dimmed cover crop of the same art (GH #1244 and the
+owner's 2026-10-24 call: never cropped, no bare black bars).
 ===========================================================================
 */
 import { test } from "node:test";
@@ -94,7 +95,10 @@ test(
 							gold,
 							background: mode === 6 ? null : quads[1].rect,
 							backgroundUv: mode === 6 ? null : quads[1].uv,
-							backgroundSource: mode === 6 ? null : textures.get( quads[1].texture )
+							backgroundSource: mode === 6 ? null : textures.get( quads[1].texture ),
+							art: mode === 6 || (width >= 800 && height >= 600) ?
+								null :
+								{ rect: quads[1].rect, uv: quads[1].uv }
 						};
 					}
 				};
@@ -118,14 +122,13 @@ test(
 					assert.ok( Math.abs( row.rect[2] / row.rect[3] - row.source[0] / row.source[1] ) < 1e-10 );
 					assert.ok( row.gold > 10, JSON.stringify( row ) );
 					if ( (width < 800 || height < 600) && row.background ) {
-						const [x, y, w, h] = row.background;
-						// Cover (GH #1244): the quad fills the area above the
-						// footer, and the sampled texture window keeps the
-						// rect's shape, so the art is never stretched.
-						assert.deepEqual( [ x, y, w, h ], [ 0, 0, width, Math.max( 0, height - 120 ) ] );
-						const sampledW = row.backgroundUv[2] * row.backgroundSource[0],
-							sampledH = row.backgroundUv[3] * row.backgroundSource[1];
-						assert.ok( Math.abs( sampledW / sampledH - w / h ) < 1e-9 );
+						const h = Math.max( 0, height - 150 );
+						// The illustration, drawn once: the whole texture, 4:3, inside
+						// the area above the footer.
+						assert.deepEqual( row.art.uv, [ 0, 0, 1, 1 ] );
+						assert.ok( Math.abs( row.art.rect[2] / row.art.rect[3] - 4 / 3 ) < 1e-9 );
+						assert.ok( row.art.rect[0] >= 0 && row.art.rect[0] + row.art.rect[2] <= width + 1e-9 );
+						assert.ok( row.art.rect[1] >= 0 && row.art.rect[1] + row.art.rect[3] <= h + 1e-9 );
 					}
 					if ( mode === 0 ) {
 						await page.screenshot( {
