@@ -246,6 +246,31 @@ test("a small server correction glides back over about 0.1 s; a teleport snaps",
 	assert.ok( Math.abs( frame( ms += 16, teleport ).x - far.x ) < 1e-6, "a teleport snaps" );
 });
 
+test("a correction while walking never draws a frame faster than the walk (A5's 1.05 bar)", () => {
+	const { frame, leg } = straight();
+	let ms = 36, previous = frame( ms );
+	for ( ms += 16; ms < 600; ms += 16 ) previous = frame( ms );
+	// The server moves the walk 3 units sideways and walks on from there.
+	const tick = Math.floor( (ms - 20) / STEP_MS ) * STEP_MS;
+	const from = { ...legAt( leg, 0, tick ), z: legAt( leg, 0, tick ).z + 3 };
+	const moved = { from, to: { ...from, x: from.x + 1000 } };
+	let peak = 0, settledAt;
+	for ( let i = 0; i < 120; i++, ms += FRAMES[i % FRAMES.length] ) {
+		const now = Math.floor( (ms - 20) / STEP_MS ) * STEP_MS;
+		const drawn = frame( ms, {
+			input: { atMs: now, revision: 2, from: moved.from, to: moved.to, durationMs: 10_000 },
+			pose: legAt( moved, tick, now )
+		} );
+		const dt = FRAMES[i % FRAMES.length] / 1000;
+		if ( i ) peak = Math.max( peak, Math.hypot( drawn.x - previous.x, drawn.z - previous.z ) / dt );
+		if ( settledAt === undefined && Math.abs( drawn.z - from.z ) < 1e-3 ) settledAt = i;
+		previous = drawn;
+	}
+	assert.ok( peak <= SPEED * 1.05, `peak ${peak.toFixed( 1 )} u/s against ${SPEED}` );
+	// The offset still drains: within the 120 frames (about 2.7 s).
+	assert.ok( settledAt !== undefined, "the sideways offset settled" );
+});
+
 test("a worker stall keeps the walk on its leg at walking speed, with no catch-up after it", () => {
 	const { presentation, frame, leg } = straight();
 	let ms = 36, previous = frame( ms ), peak = 0;

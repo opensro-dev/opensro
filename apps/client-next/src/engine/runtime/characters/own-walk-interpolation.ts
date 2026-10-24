@@ -63,6 +63,13 @@ const CONSISTENT_DISTANCE = .25;
 const CORRECTION_SMOOTH_SECONDS = .1;
 // A correction farther than this snaps (a teleport, a relocation).
 const MAX_SMOOTHED_CORRECTION = 96;
+// While a correction offset decays, a frame's whole drawn step (the walk
+// plus the offset it gives back) is at most this many times walking speed
+// times the frame time. Unreal lets the mesh offset glide faster than the
+// walk; here no drawn frame outruns the walk by more than this margin, so
+// the camera, which follows the drawn body, never surges at a redirect.
+// What does not fit carries to the next frame.
+const CORRECTION_SPEED_MARGIN = 1.04;
 
 /*
 ================
@@ -212,6 +219,9 @@ export function createOwnWalkInterpolation() {
 	// A leg that began before the render time already drawn: its start was
 	// published later than the delay covers, so the body walked on past it.
 	let lateTurn: { atMs: number; speed: number; overshoot: number; } | undefined;
+	// The latest leg's walking speed (units per millisecond): what bounds a
+	// frame's step while an offset decays, also after the walk stopped.
+	let walkSpeed: number | undefined;
 
 	/*
 	================
@@ -409,7 +419,20 @@ export function createOwnWalkInterpolation() {
 			// Drop states the render time has passed, keeping its bracket.
 			while ( history.length > 2 && history[1]!.atMs <= renderMs ) history.shift();
 			const base = poseAt( renderMs );
-			const drawn = offsetPose( base, offset );
+			if ( leg ) walkSpeed = leg.speed;
+			let drawn = offsetPose( base, offset );
+			const frameMs = lastNowMs === undefined ? 0 : Math.max( 0, nowMs - lastNowMs );
+			if ( (offset[0] || offset[1] || offset[2]) && lastDrawn && walkSpeed && frameMs > 0 ) {
+				// Bound the frame's whole step; keep the rest of the offset.
+				const step = delta( lastDrawn, drawn );
+				const length = step ? hypot3( ...step ) : 0;
+				const budget = walkSpeed * CORRECTION_SPEED_MARGIN * frameMs;
+				if ( step && length > budget ) {
+					const k = budget / length;
+					drawn = offsetPose( lastDrawn, [ step[0] * k, step[1] * k, step[2] * k ] );
+					offset = delta( base, drawn ) ?? [ 0, 0, 0 ];
+				}
+			}
 			lastBase = base;
 			lastDrawn = drawn;
 			lastDrawnAtMs = renderMs;
@@ -469,6 +492,7 @@ export function createOwnWalkInterpolation() {
 			lastBase = undefined;
 			lastNowMs = undefined;
 			lateTurn = undefined;
+			walkSpeed = undefined;
 		}
 	};
 }
