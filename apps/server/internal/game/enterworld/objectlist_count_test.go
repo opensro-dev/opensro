@@ -1,10 +1,10 @@
 package enterworld
 
-// Count-field boundary tests for the u8->u16 object-list start fix and
-// the u8 count clamps: past 255 rows the start packet's count is a proper
-// LE u16 (the encoding monstertick.go's despawn bracket always used), and
-// every u8-counted list clamps its bodies with its count so the two can
-// never disagree on the wire.
+// Count-field boundary tests for the u8->u16 object-list start fix: past
+// 255 rows the start packet's count is a proper LE u16 (the encoding
+// monstertick.go's despawn bracket always used). The char-data skill
+// list is the opposite shape - the native reader is marker-terminated
+// and reads no count - so its bodies are never clamped.
 
 import (
 	"bytes"
@@ -100,11 +100,12 @@ func TestObjectListRowsClampAtTheU16Ceiling(t *testing.T) {
 	}
 }
 
-// TestCharDataSkillListClampsAtTheU8Count: skill learning has no cap, so a
-// record past 255 learned skills must emit count 255 with exactly 255
-// bodies - the wrapped count byte the unclamped writer produced desynced
-// the client stream.
-func TestCharDataSkillListClampsAtTheU8Count(t *testing.T) {
+// TestCharDataSkillListEmitsEveryLearnedSkill: skill learning has no cap,
+// and the native reader (client 0x866e50) discards the lead byte and
+// takes marker-framed rows until the terminator - so a record past 255
+// learned skills emits every body, and the tail the old clamp dropped
+// reaches the client.
+func TestCharDataSkillListEmitsEveryLearnedSkill(t *testing.T) {
 	skills := make([]uint32, 300)
 	for i := range skills {
 		skills[i] = uint32(i + 1)
@@ -118,18 +119,18 @@ func TestCharDataSkillListClampsAtTheU8Count(t *testing.T) {
 
 	payload := BuildLocalPlayerEntryPayload(character, entry, 0, nil)
 
-	// The expected subsequence: empty mastery framing, skill count 255,
-	// then exactly 255 marker-framed bodies (ids 1..255) and the end
-	// marker before the empty quest block.
+	// The expected subsequence: empty mastery framing, the lead byte
+	// (300 in a byte, unread), then all 300 marker-framed bodies
+	// (ids 1..300) and the end marker before the empty quest block.
 	var want bytes.Buffer
 	want.Write([]byte{0x00, 0x02}) // mastery list: count 0, end marker
-	want.WriteByte(0xff)           // skill count, clamped
-	for i := 1; i <= 0xff; i++ {
+	want.WriteByte(300 & 0xff)     // skill lead byte, wrapped and unread
+	for i := 1; i <= 300; i++ {
 		want.Write([]byte{0x01, byte(i), byte(i >> 8), 0x00, 0x00, 0x01})
 	}
 	want.Write([]byte{0x02})             // skill end marker
 	want.Write([]byte{0x00, 0x00, 0x00}) // empty quest block
 	if !bytes.Contains(payload, want.Bytes()) {
-		t.Fatal("char-data payload does not carry the clamped 255-body skill list")
+		t.Fatal("char-data payload does not carry the full 300-body skill list")
 	}
 }

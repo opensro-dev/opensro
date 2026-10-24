@@ -39,9 +39,11 @@ export function createNetwork(
 ): NetworkOwner {
 	const codec = createCodec();
 	let socket: WebSocket | null = null, epoch = 0, disposed = false, welcomed = false;
-	let bytes = 0, inboundFrames = 0;
+	let bytes = 0;
 	let pingToken = 0, pendingPing = false, pingSentAt = -Infinity, pingReceivedAt = -Infinity;
 	let measuredPing: number | null = null;
+	// Frames received on any socket (received()); pings and pongs included.
+	let receivedFrames = 0;
 	const inbox: WireFrame[] = [];
 	let journal = new Float64Array( NET_JOURNAL_RECORDS * NET_JOURNAL_FIELDS ), journalCount = 0;
 	// The incident ring: the bug-report journal above is drained every second,
@@ -174,16 +176,15 @@ export function createNetwork(
 	return {
 		disconnect,
 		/*
-	================
-	inboundActivity
+		================
+		received
 
-	Every inbound frame decoded since this owner was created, keepalives
-	included. Monotonic across reconnects: the world session only ever
-	asks whether the count moved, never what it is (#1417).
-	================
-	*/
-		inboundActivity() {
-			return inboundFrames;
+		Every frame received so far, transport pings and pongs included: the
+		world session's stall detector reads a live link from its change.
+		================
+		*/
+		received() {
+			return receivedFrames;
 		},
 		/*
   ================
@@ -243,7 +244,7 @@ export function createNetwork(
 						throw new Error( "Non-binary transport frame" );
 					}
 					const frame = codec.decode( new Uint8Array( event.data ) );
-					inboundFrames++;
+					receivedFrames++;
 					note( NET_JOURNAL_IN, frame.opcode, event.data.byteLength );
 					if ( frame.opcode === 5 ) {
 						if ( frame.payload.length !== 1 ) throw new Error( "Invalid transport goodbye" );

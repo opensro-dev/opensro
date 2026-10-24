@@ -23,6 +23,7 @@ import {
 	INVENTORY_TRANSACTION_TIMEOUT,
 	MOVEMENT_RECEIPT_TIMEOUT,
 	TARGET_RELEASE_TIMEOUT,
+	TRANSPORT_STALLED,
 	type NetworkFailure,
 	INCIDENT_DUMP_BYTES,
 	INCIDENT_MESSAGE_LENGTH,
@@ -32,6 +33,15 @@ const ADMISSION_TIMEOUT_MS = 10000;
 const REFERENCE_TIMEOUT_MS = 30000;
 const RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 4000;
+// A request waiting this long with no frame of any kind arriving since it
+// left means the link stalled, not the request: the client pings every 5 s
+// (network.ts PING_INTERVAL_MS) and a live link answers within the round
+// trip. Prod's 125 movement receipt timeouts (#1418) were such stalls,
+// found only by the lane's 10 s watchdog.
+const TRANSPORT_STALL_MS = 7000;
+// The stall must still hold this much later: after a frozen tab the browser
+// can deliver the frames that arrived meanwhile only after a step has run.
+const TRANSPORT_STALL_CONFIRM_MS = 1000;
 // The Agent keeps a detached session resumable for its GracePeriod (30 s,
 // apps/server/internal/transport/config.go). Retry for all of it: a laptop
 // waking or a Wi-Fi hand-over outlasts a few fast attempts.
@@ -49,7 +59,7 @@ the session, whose bootstrap retires the request without replaying it.
 */
 function lostAnswer( cause: unknown ): boolean {
 	return cause === MOVEMENT_RECEIPT_TIMEOUT || cause === INVENTORY_TRANSACTION_TIMEOUT ||
-		cause === TARGET_RELEASE_TIMEOUT;
+		cause === TARGET_RELEASE_TIMEOUT || cause === TRANSPORT_STALLED;
 }
 
 /*
@@ -192,6 +202,10 @@ onNetworkFailure
 		error: string;
 	} = { kind: "idle" };
 	let lastError: string | undefined;
+	// When the last frame of any kind arrived (step clock), and when the
+	// current stall was first seen.
+	let lastInboundAtMs = -Infinity, lastReceived = 0;
+	let stallSeenAtMs: number | undefined;
 	let huntingGuide: import("@/engine/contracts/hunting-guide").HuntingGuideSource | undefined;
 	let now = 0,
 		deadline = 0,
@@ -235,6 +249,49 @@ deadline stays cleared (the presentation barrier owns that wait).
 	*/
 	function noteProgress() {
 		if ( deadline ) deadline = now + deadlineWindow;
+	}
+	/*
+================
+inboundAge
+
+How long ago the last frame arrived, for the lost-answer incidents.
+================
+	*/
+	function inboundAge(): string {
+		return lastInboundAtMs === -Infinity ?
+			"no frame received yet" :
+			`last inbound ${Math.round( now - lastInboundAtMs )} ms ago`;
+	}
+	/*
+================
+stepStall
+
+A request has waited TRANSPORT_STALL_MS with nothing at all arriving since
+it left, and still so TRANSPORT_STALL_CONFIRM_MS later: the link stalled.
+Resume now (the lost-answer path), naming the link instead of the request.
+================
+	*/
+	function stepStall() {
+		const since = core.outstandingSince();
+		// Alive only if a frame arrived after the request left.
+		if ( since === undefined || now - since < TRANSPORT_STALL_MS || lastInboundAtMs > since ) {
+			stallSeenAtMs = undefined;
+			return;
+		}
+		stallSeenAtMs ??= now;
+		if ( now - stallSeenAtMs < TRANSPORT_STALL_CONFIRM_MS ) return;
+		stallSeenAtMs = undefined;
+		onNetworkFailure(
+			`Transport stalled: a request waited ${
+				Math.round( now - since )
+			} ms with no frame arriving; ${inboundAge()}`,
+			undefined,
+			{
+				category: "unknown",
+				code: TRANSPORT_STALLED,
+				message: "The connection stalled. Reconnecting..."
+			}
+		);
 	}
 	// Cancelling transport work does not revoke the admitted world snapshot.
 	// Only logout/fresh admission may clear equipment, identity and HUD data.
@@ -576,6 +633,13 @@ step
 			// A command may already have advanced this clock while an overdue
 			// fixed tick was queued. Catch-up must never rewind that command.
 			now = Math.max( now, time );
+			// network.ts answers pings and pongs itself; its frame count sees
+			// them. Sampled every step so a frame is dated to the step it came in.
+			const received = network.received();
+			if ( received !== lastReceived ) {
+				lastReceived = received;
+				lastInboundAtMs = now;
+			}
 			if ( disposed ) {
 				return;
 			}
@@ -638,7 +702,7 @@ step
 			// without surfacing a frame: the only sign here is the inbound
 			// count moving. A wire that still answers is not stalled, however
 			// long the entry takes; only true silence fails the attempt (#1417).
-			const activity = network.inboundActivity();
+			const activity = network.received();
 			if ( activity !== inboundSeen ) {
 				inboundSeen = activity;
 				noteProgress();
@@ -653,7 +717,8 @@ step
 			// (an auto-potion, a skill queue, a pet order) can send a request
 			// the server, still loading the scene, would discard unanswered.
 			const live = phase === "world" && ready && !failure;
-			if ( live ) {
+			if ( live ) stepStall();
+			if ( live && !failure ) {
 				try {
 					departure.step( now );
 					core.step( now );
@@ -662,7 +727,7 @@ step
 					// the bootstrap, which rebuilds the state the request left pending.
 					const cause = error instanceof Error ? error.cause : undefined;
 					const lost = lostAnswer( cause );
-					onNetworkFailure( String( error ), undefined, {
+					onNetworkFailure( lost ? `${String( error )}; ${inboundAge()}` : String( error ), undefined, {
 						category: lost ? "unknown" : "software",
 						code: lost ? cause as string : "simulation_failed",
 						message: cause === MOVEMENT_RECEIPT_TIMEOUT ?

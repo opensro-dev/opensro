@@ -434,6 +434,7 @@ the entry continues it like the one after a world transfer.
 			if ( pendingTravel ) entities.publish( { kind: "travel", travel: pendingTravel } );
 		},
 		receive,
+		outstandingSince: gameplay.outstandingSince,
 		notice: gameplay.notice,
 		chatBlocks: gameplay.chatBlocks,
 		options: gameplay.options,
