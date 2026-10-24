@@ -127,8 +127,9 @@ var Settings = []Setting{
 	{Env: "SRO_TRADE_ROUTE_SAMARKAND_PERCENT", NomadVar: "trade_route_samarkand_percent", Default: "200", Catalogue: true},
 	{Env: "SRO_TRADE_ROUTE_CONSTANTINOPLE_PERCENT", NomadVar: "trade_route_constantinople_percent", Default: "300",
 		Catalogue: true},
-	// Owner, 2026-10-14: trader and hunter suits hide worn armour.
-	{Env: "SRO_JOB_SUIT_HIDES_ARMOR", NomadVar: "job_suit_hides_armor", Default: "on"},
+	// Owner, 2026-10-14: trader and hunter suits hide worn armour. Owner,
+	// 2026-10-24: off (native) again; the rule stays available.
+	{Env: "SRO_JOB_SUIT_HIDES_ARMOR", NomadVar: "job_suit_hides_armor", Default: "off"},
 	// Owner, 2026-10-15: level-20 thief suits wear the Moonlit Ash look.
 	{Env: "SRO_MOONLIT_THIEF_SUIT", NomadVar: "moonlit_thief_suit", Default: "on"},
 	// Owner, 2026-10-14: no transport summon during the Bandit Den countdown.
