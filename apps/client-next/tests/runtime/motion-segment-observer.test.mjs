@@ -25,9 +25,13 @@ const REGION = 25000;
 entity
 ================
 */
+/** @returns {import("../../src/engine/contracts/world.ts").EntityState} */
 function entity( extra = {} ) {
 	return {
 		gid: GID,
+		refObjId: 1,
+		kind: "monster",
+		name: "",
 		regionId: REGION,
 		x: 100,
 		y: 10,
@@ -65,7 +69,7 @@ test("the observer hears every installed segment, then silence when cleared", ()
 	try {
 		const motion = createEntityMotion();
 		motion.spawn(
-			entity( { spawnDestination: { regionId: REGION, x: 160, y: 10, z: 200 } } ),
+			entity( { spawnDestination: { regionId: REGION, x: 160, y: 10, z: 200, angle: 0 } } ),
 			1000
 		);
 		motion.receive( destinationPacket( 160, 260 ), entity(), 2000 );
