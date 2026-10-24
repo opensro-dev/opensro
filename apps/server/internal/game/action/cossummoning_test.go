@@ -574,11 +574,11 @@ func TestSummonedPetScrollMovesWithinBagAndUpdatesStateSlot(t *testing.T) {
 ================
 TestPetSummonInBattleAnswersBattleBeforeBusy
 
-CGItemCOSSummoner_Use (493100) tests the battle byte (493183, answer
-0x1878) before the motion-change lock (4931C4) and the standing-wall slot
-(4931D6), both of which answer 5. A player casting in a fight must hear
-the battle notice (UIIT_MSG_COS_CAN_NOT_CREATE_BATTLE), not the silent
-busy code; with the battle state gone, the open cast still answers busy.
+The reference server's pet summoner tests the battle state (answer 0x78)
+before the casting and motion-lock tests, which answer 5. A player
+casting in a fight must hear the battle notice
+(UIIT_MSG_COS_CAN_NOT_CREATE_BATTLE), not the silent busy code; with the
+battle state gone, the open cast still answers busy.
 ================
 */
 func TestPetSummonInBattleAnswersBattleBeforeBusy(t *testing.T) {

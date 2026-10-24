@@ -94,9 +94,9 @@ func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResu
 		return false
 	}
 	// Only then the busy tests, which answer 5 (silent in the client): the
-	// casting motion states 0x11/0xF (4931A6/4931BA), the motion-change lock
-	// (vt+0x5A0 at 4931C4) and the standing-wall slot (+0xC0C at 4931D6). A
-	// player casting in a fight therefore hears the battle notice above.
+	// reference server tests a casting motion, the motion-change lock and a
+	// standing wall after the battle state, so a player casting in a fight
+	// hears the battle notice above, and busy only once the fight is over.
 	if rt.PlayerAttackLocked(use.division, c.Name) || rt.objectActionCommitted(use.division, c.Name) {
 		*result = itemUseFailure(cosSummonBusy)
 		return false
