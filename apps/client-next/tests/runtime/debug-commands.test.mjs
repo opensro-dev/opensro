@@ -5,7 +5,9 @@ debug-commands.test.mjs - config\command.txt in the GM console
 
 The published table parses as 68D9C0 reads it, a console line is looked up
 as 68DD10 does, and the console family (690C40 cases 0, 1 and 4) runs in
-the production HUD while every other line still goes to the server.
+the production HUD while every other line still goes to the server. The
+weather rows (ids 99/105-107) go to the worker as a debug-weather command
+and the time rows (ids 100-109) drive the local clock (debug-clock.ts).
 
 ===========================================================================
 */
@@ -142,4 +144,108 @@ test("command words read as wcstol reads them", () => {
 	assert.equal( commands.commandInteger( "13" ), 13 );
 	assert.equal( commands.commandInteger( "-4x" ), -4 );
 	assert.equal( commands.commandInteger( "slot" ), 0 );
+	assert.equal( commands.commandFloat( "18.5" ), 18.5 );
+	assert.equal( commands.commandFloat( "hour" ), 0 );
+});
+
+/*
+================
+consoleFixture
+
+The GM console open over a fixture whose clock seed is day 10, 06:30.
+================
+*/
+function consoleFixture() {
+	/** @type {any[]} */
+	const sent = [];
+	const f = uiFixture( message => {
+		if ( message.kind === "gameplay" ) sent.push( message.command );
+	} );
+	Object.assign( f.state.gameplay, {
+		eligibility: { gm: true },
+		worldClock: { day: 10, hour: 6, minute: 30, receivedAtMs: 0 }
+	} );
+	let now = 0;
+	const step = () => {
+		for ( let i = 0; i < 16; i++ ) f.ui.step( f.state, now += 100 );
+	};
+	const type = line => {
+		f.ui.event( {
+			kind: "edit",
+			id: "gm-input",
+			value: line,
+			start: line.length,
+			end: line.length,
+			composing: false
+		} );
+		f.ui.event( { kind: "activate", id: "submit" } );
+		step();
+	};
+	step();
+	f.ui.event( { kind: "key", code: "Backquote", shift: true } );
+	step();
+	return { f, sent, type, now: () => now };
+}
+
+test("the GM console sends the weather rows to the worker", () => {
+	const { f, sent, type } = consoleFixture();
+	try {
+		type( "/rain 200" );
+		assert.deepEqual( sent, [ { kind: "debug-weather", mode: 2, amount: 200 } ] );
+		type( "/snow 5" );
+		assert.deepEqual( sent[1], { kind: "debug-weather", mode: 3, amount: 5 } );
+		type( "/power 42" );
+		assert.deepEqual( sent[2], { kind: "debug-weather", amount: 42 }, "power keeps the mode" );
+		type( "/clear" );
+		assert.deepEqual( sent[3], { kind: "debug-weather", mode: 1, amount: 255 } );
+		type( "/rain" );
+		type( "/rain 1 2" );
+		assert.equal( sent.length, 4, "a weather row without exactly one word ran" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("the GM console drives the local clock", async () => {
+	const { sampleWorldClock, worldClockWallTime } = await import(
+		"../../src/engine/foundation/gameplay/world-clock.ts"
+	);
+	const { f, sent, type, now } = consoleFixture();
+	try {
+		const seed = { day: 10, hour: 6, minute: 30, receivedAtMs: 0 };
+		const sampled = at => sampleWorldClock( f.ui.debugClockSeed( seed, at ), at );
+		const wall = at => {
+			const value = worldClockWallTime( f.ui.debugClockSeed( seed, at ), at );
+			assert.ok( value );
+			return value;
+		};
+		assert.notDeepEqual( sampled( 900000 ), sampled( 100000 ), "the live clock did not run" );
+		type( "/timeoff" );
+		assert.deepEqual( sampled( 900000 ), sampled( 100000 ), "timeoff did not hold the clock" );
+		assert.deepEqual( sent, [], "a time row reached the server" );
+		// "/+" steps a held clock back 72 minutes, "/-" forward again.
+		const heldAt = wall( 100000 );
+		type( "/+" );
+		const stepped = wall( 100000 );
+		assert.equal(
+			(stepped.day * 1440 + stepped.hour * 60 + stepped.minute) -
+				(heldAt.day * 1440 + heldAt.hour * 60 + heldAt.minute),
+			-72
+		);
+		type( "/-" );
+		assert.deepEqual( wall( 100000 ), heldAt );
+		type( "/timeon" );
+		assert.notDeepEqual( sampled( 900000 ), sampled( 100000 ), "timeon did not resume the clock" );
+		// The setters re-seed at the fixture's current step time; read the
+		// wall time there (a minute of game time later at most).
+		const wallNow = () => wall( now() );
+		type( "/time 18" );
+		assert.equal( wallNow().hour, 18 );
+		type( "/day" );
+		assert.equal( wallNow().hour, 12 );
+		type( "/night" );
+		assert.equal( wallNow().hour, 0 );
+	} finally {
+		f.dispose();
+	}
 });

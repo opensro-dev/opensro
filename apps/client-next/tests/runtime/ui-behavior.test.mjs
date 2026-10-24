@@ -2339,6 +2339,62 @@ test("storage gold withdraws with an empty bag and clamps to the room's gold (BR
 	}
 });
 
+test("an unsendable storage gold amount closes the dialog instead of dead-ending it (BR-261022-2026-ED06)", () => {
+	const sent = [], f = uiFixture( command => sent.push( command ) );
+	try {
+		const game = {
+			...f.state.gameplay,
+			inventoryPending: false,
+			progression: { gold: "5000", masteries: [] },
+			storage: { npc: 7, phase: "open", capacity: 150, gold: "0", items: [] }
+		};
+		const state = { ...f.state, gameplay: game };
+		let now = 0, scene;
+		const click = id => {
+			f.ui.event( { kind: "activate", id } );
+			scene = f.ui.step( state, ++now ) ?? scene;
+		};
+		const edit = value => {
+			f.ui.event( {
+				kind: "edit",
+				id: "gold-amount",
+				value,
+				start: value.length,
+				end: value.length,
+				composing: false
+			} );
+			scene = f.ui.step( state, ++now ) ?? scene;
+		};
+		const dialogOpen = () => defined( scene ).controls.some( c => c.id === "gold-amount" );
+		const deposit = gold => ({
+			kind: "gameplay",
+			command: { kind: "storage-move", move: { type: 0x0c, source: 0, destination: 0, quantity: 0, gold } }
+		});
+		f.ui.step( state, now );
+		// The deposit dialog opens on 0; confirming it closes without sending.
+		click( "inventory-gold" );
+		assert.equal( dialogOpen(), true, "the deposit dialog opened" );
+		click( "drop-gold" );
+		assert.equal( sent.length, 0, "confirming 0 sent nothing" );
+		assert.equal( dialogOpen(), false, "confirming 0 closed the deposit dialog" );
+		// A valid deposit still sends exactly one storage-gold move.
+		click( "inventory-gold" );
+		edit( "700" );
+		click( "drop-gold" );
+		assert.deepEqual( sent.pop(), deposit( 700 ) );
+		assert.equal( dialogOpen(), false, "a sent deposit closed the dialog" );
+		// Withdrawing against an empty room: the draft clamps to 0, and
+		// confirming closes instead of sitting open.
+		click( "storage-gold" );
+		edit( "100" );
+		click( "drop-gold" );
+		assert.equal( sent.length, 0, "withdrawing from an empty room sent nothing" );
+		assert.equal( dialogOpen(), false, "confirming an unsendable withdraw closed the dialog" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("GPU shop gates merchant capability, affordability and exact sale confirmation", () => {
 	const sent = [], f = uiFixture( c => sent.push( c.command ) );
 	try {
