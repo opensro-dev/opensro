@@ -223,7 +223,7 @@ import {
 	abnormalSnapshotNotices,
 	type AbnormalRecord
 } from "@/engine/foundation/gameplay/abnormal-snapshot";
-import { entryEnvironment, environmentPacket } from "@/engine/foundation/gameplay/event-environment";
+import { debugWeather, entryEnvironment, environmentPacket } from "@/engine/foundation/gameplay/event-environment";
 import {
 	cosContainerRequest,
 	cosContainerResult,
@@ -1993,6 +1993,14 @@ state here before a command can claim a native wire conversation.
 					default:
 						return null;
 				}
+			}
+			if ( command.kind === "debug-weather" ) {
+				// The console's weather rows write the worker's weather
+				// slot, behind the same GM gate as the gm-command family.
+				if ( !eligibility.gm ) return null;
+				environment = debugWeather( environment, command.mode, command.amount );
+				dirty = true;
+				return null;
 			}
 			if ( command.kind === "rebirth" ) {
 				if ( local?.gid !== localGid || local?.appearanceState?.[0] !== 2 ) return null;
@@ -4285,6 +4293,10 @@ Packet handling must not depend on which HUD panel is currently open.
 							flagWarTimerEndsAt = 0;
 							flagWarCarrierGid = 0;
 							if ( event.type === "gameStart" ) flagWarTeam = null;
+						} else if ( event.type === "flagDrop" || event.type === "missionScored" ) {
+							// The flag is on the ground, or scored: nobody
+							// carries it until the next carrier mark.
+							flagWarCarrierGid = 0;
 						}
 						if ( event.type === "carrier" ) flagWarCarrierGid = event.gid;
 						const notice = flagWarNotice( event, flagWarJoinExpected, flagWarTeam );

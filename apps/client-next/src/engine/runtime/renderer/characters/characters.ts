@@ -34,7 +34,7 @@ import {
 import { createCharacterHierarchy } from "@/engine/foundation/animation/character-hierarchy";
 import { attachedOpacity } from "@/engine/foundation/animation/character-fade";
 import { characterBindBounds, characterPickVolume } from "@/engine/foundation/animation/character-pick-volume";
-import { meshUnderRays, selectPickCandidate, type PickCandidate } from "@/engine/foundation/animation/character-pick";
+import { selectPickCandidate, type PickCandidate } from "@/engine/foundation/animation/character-pick";
 import { pickVolume, pickVolumeDepth } from "@/engine/foundation/rendering/pick-volume";
 import {
 	createRibbonChain,
@@ -292,8 +292,6 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		}
 		return bounds;
 	};
-	// Scratch evaluators for mesh-refined picks, one per admitted model.
-	const pickPoses = new WeakMap<CharacterModel, ReturnType<typeof createCharacterPose>>();
 	const textures = new Map<WorldTexture, ImageDraw>();
 	// Snapshots retain identity while their fields change. Recheck the complete
 	// variant each frame, but retain the long assembly prefix and its string hash.
@@ -2646,33 +2644,14 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 				}
 				if ( hits.length ) candidates.push( { actor, matrix, model: resource.model, hits } );
 			}
-			// A box is far larger than a posed body (a T-posed giant's club spans
-			// 70 units). A winner whose posed triangles meet none of the rays yields
-			// to candidates that are confirmed: a drop, or a body actually under
-			// the rays. Without a confirmed rival the native box winner stands, so
-			// near-misses on a lone target still select it. Deliberate deviation
-			// from 692680, which always keeps the nearest box hit.
-			/*
-			================
-			confirmed
-			================
-			*/
-			const confirmed = ( candidate: PickCandidate ) => {
-				if ( candidate.actor.groundItem ) return true;
-				let scratch = pickPoses.get( candidate.model );
-				if ( !scratch ) {
-					scratch = createCharacterPose( candidate.model );
-					pickPoses.set( candidate.model, scratch );
-				}
-				return meshUnderRays( candidate, rays, scratch );
-			};
-			let result = selectPickCandidate( candidates );
-			if ( result && candidates.length > 1 && !confirmed( result.candidate ) ) {
-				const rivals = candidates.filter( candidate =>
-					candidate !== result!.candidate && confirmed( candidate )
-				);
-				if ( rivals.length ) result = selectPickCandidate( rivals );
-			}
+			// 692680 keeps the nearest box hit: it has no mesh test, so a
+			// click on a body's authored box selects it even where the posed
+			// triangles sit off the rays (a thief mid-swing beside a transport
+			// whose still body fills its box). A mesh-confirmation override
+			// here used to hand such clicks to the farther confirmed body -
+			// the transport - and is removed for the native rule (thread
+			// 1562057167144493107 item 7).
+			const result = selectPickCandidate( candidates );
 			if ( !result ) return null;
 			// 692680: a mounted winner answers with its rider, as does a linked ride.
 			const rider = actors.find( actor => actor.mountedOn === result!.gid ),

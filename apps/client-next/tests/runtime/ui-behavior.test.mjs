@@ -28,6 +28,7 @@ async function load( file ) {
 const { createUiAssets } = await load( "src/engine/runtime/ui/resources/resources.ts" );
 const { topmostControlAt } = await load( "src/engine/foundation/ui/hit-test.ts" );
 const { panelCloseId } = await load( "src/engine/foundation/ui/panels.ts" );
+const { SYSTEM_MENU_HEIGHT } = await load( "src/engine/foundation/ui/system-menu.ts" );
 const { refreshNameColor } = await load( "src/engine/foundation/gameplay/name-color.ts" );
 const { createGameplay } = await load( "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts" );
 const { createQuests } = await load( "src/engine/runtime/simulation/worker/session/world/gameplay/quests/quests.ts" );
@@ -1933,6 +1934,31 @@ test("modal admission retires a captured System title drag before its handler ru
 	}
 });
 
+test("System menu render clamps a stored corner back on screen when the viewport shrinks", () => {
+	const f = uiFixture();
+	try {
+		for ( let t = 0; t < 1000; t += 100 ) f.ui.step( f.state, t );
+		f.ui.event( { kind: "key", code: "Escape" } );
+		let scene = f.ui.step( f.state, 1100 );
+		// Park the menu in the bottom-right corner of the 1600x900 viewport.
+		f.ui.event( { kind: "drag", id: "system-drag", dx: 5000, dy: 5000 } );
+		scene = f.ui.step( f.state, 1200 );
+		assert.deepEqual(
+			scene.controls.find( c => c.id === "system-drag" ).rect,
+			[ 1600 - 214 + 10, 900 - SYSTEM_MENU_HEIGHT, 193, 34 ]
+		);
+		// Shrink the window: the stored corner is outside the new viewport, so
+		// the render clamps it back instead of stranding the menu off screen.
+		scene = f.ui.step( { ...f.state, width: 800, height: 600 }, 1300 );
+		assert.deepEqual(
+			scene.controls.find( c => c.id === "system-drag" ).rect,
+			[ 800 - 214 + 10, 600 - SYSTEM_MENU_HEIGHT, 193, 34 ]
+		);
+	} finally {
+		f.dispose();
+	}
+});
+
 test("title discovers servers once, preselects an operating row and submits with Enter without List", () => {
 	const sent = [], f = uiFixture( command => sent.push( command ) );
 	try {
@@ -2334,6 +2360,62 @@ test("storage gold withdraws with an empty bag and clamps to the room's gold (BR
 		edit( "900" );
 		click( "drop-gold" );
 		assert.deepEqual( sent.pop(), withdraw( 500 ) );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("an unsendable storage gold amount closes the dialog instead of dead-ending it (BR-261022-2026-ED06)", () => {
+	const sent = [], f = uiFixture( command => sent.push( command ) );
+	try {
+		const game = {
+			...f.state.gameplay,
+			inventoryPending: false,
+			progression: { gold: "5000", masteries: [] },
+			storage: { npc: 7, phase: "open", capacity: 150, gold: "0", items: [] }
+		};
+		const state = { ...f.state, gameplay: game };
+		let now = 0, scene;
+		const click = id => {
+			f.ui.event( { kind: "activate", id } );
+			scene = f.ui.step( state, ++now ) ?? scene;
+		};
+		const edit = value => {
+			f.ui.event( {
+				kind: "edit",
+				id: "gold-amount",
+				value,
+				start: value.length,
+				end: value.length,
+				composing: false
+			} );
+			scene = f.ui.step( state, ++now ) ?? scene;
+		};
+		const dialogOpen = () => defined( scene ).controls.some( c => c.id === "gold-amount" );
+		const deposit = gold => ({
+			kind: "gameplay",
+			command: { kind: "storage-move", move: { type: 0x0c, source: 0, destination: 0, quantity: 0, gold } }
+		});
+		f.ui.step( state, now );
+		// The deposit dialog opens on 0; confirming it closes without sending.
+		click( "inventory-gold" );
+		assert.equal( dialogOpen(), true, "the deposit dialog opened" );
+		click( "drop-gold" );
+		assert.equal( sent.length, 0, "confirming 0 sent nothing" );
+		assert.equal( dialogOpen(), false, "confirming 0 closed the deposit dialog" );
+		// A valid deposit still sends exactly one storage-gold move.
+		click( "inventory-gold" );
+		edit( "700" );
+		click( "drop-gold" );
+		assert.deepEqual( sent.pop(), deposit( 700 ) );
+		assert.equal( dialogOpen(), false, "a sent deposit closed the dialog" );
+		// Withdrawing against an empty room: the draft clamps to 0, and
+		// confirming closes instead of sitting open.
+		click( "storage-gold" );
+		edit( "100" );
+		click( "drop-gold" );
+		assert.equal( sent.length, 0, "withdrawing from an empty room sent nothing" );
+		assert.equal( dialogOpen(), false, "confirming an unsendable withdraw closed the dialog" );
 	} finally {
 		f.dispose();
 	}

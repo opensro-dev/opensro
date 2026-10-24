@@ -24,14 +24,6 @@ const (
 	teleportModeFree     uint8 = 2
 )
 
-// berserkBodyMode is body mode 1. AJStateChanger_Advance (405F70) case 0xB
-// postpones a teleport job by returnPostponeMs while the actor's body
-// channel ([[actor+0x30]+4], GetBodyMode) holds it.
-const berserkBodyMode uint8 = 1
-
-// returnPostponeMs is that postponement.
-const returnPostponeMs = 1000
-
 // errCodeThievesOnly is 4A0380's 0x186A (UIIT_MSG_STRGERR_ONLY_ROBBER_CAN_USE_THIS_ITEM).
 const errCodeThievesOnly uint8 = 0x6a
 
@@ -431,12 +423,9 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 			c.NativeTeleportMode, cancelled = 0, true
 			return true
 		}
-		// 40614E: the body channel at berserk postpones the teleport.
-		if c.NativeBodyStatus == berserkBodyMode {
-			job.due = now + returnPostponeMs
-			rt.returnCasts.Store(key, job)
-			return false
-		}
+		// Body mode does not hold this teleport: berserk (body mode 1) is
+		// not the state the native completion waits on, so the cast
+		// completes on its timer even mid-berserk.
 		arrival = rt.appointedRebirth(job.division, c)
 		if job.destination != nil {
 			arrival = *job.destination
