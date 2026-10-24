@@ -15,6 +15,11 @@ the same order as the command bar's attack button: 0x769E [u32 pet][u8 2]
 re-ordered on every swing. CICCos_OnUpdate (854B35) forgets it once the
 target is gone, is no character, or is dead; the command bar's attack sets
 it and its follow (tag 9) clears it (CICCos_ExecuteActionCommand 6A2350).
+A halt (0xB2F5) naming an owned pet that holds a target also starts its
+countdown (+0xAB30 = 3000 ms, 775B50 at 0x775BE9); the per-frame COS tick
+(77DFA0) runs it down and forgets the target at zero, and the pet's own
+cast broadcast cancels it (776830 at 0x7769D8) - so a pet stopped short
+of its target is ordered again on the owner's next swing.
 
 INFERENCE: 776830 also skips a pet whose action-state word has any bit of
 0x476. The port tracks a pet's life (record dead, HP 0) but no other action
@@ -41,6 +46,9 @@ const COS_COMMAND = 0x769e;
 const COS_ATTACK = 2;
 // appearanceState[0], the life state: 2 is dead.
 const LIFE_DEAD = 2;
+// The halt countdown (+0xAB30): 3000 ms from the halt (0x775BE9 writes
+// 0xBB8), -1 (no entry here) while none runs.
+export const PET_ASSIST_COUNTDOWN_MS = 3000;
 
 /*
 ================
@@ -108,6 +116,76 @@ export function petAssistOrders(
 		next.set( pet.gid, target );
 	}
 	return { orders, assisting: orders.length ? next : assisting };
+}
+
+/*
+================
+haltedPetAssistCountdowns
+
+775B50 (0x775BDE-0x775BE9): a 0xB2F5 naming an owned COS that holds an
+assist target starts its countdown (+0xAB30 = 3000) when none is running
+(+0xAB30 < 0). The map holds worker-clock deadlines; no entry is -1.
+================
+*/
+export function haltedPetAssistCountdowns(
+	countdowns: ReadonlyMap<number, number>,
+	pet: number,
+	assisting: ReadonlyMap<number, number>,
+	now: number
+): ReadonlyMap<number, number> {
+	if ( !assisting.has( pet ) || countdowns.has( pet ) ) return countdowns;
+	const next = new Map( countdowns );
+	next.set( pet, now + PET_ASSIST_COUNTDOWN_MS );
+	return next;
+}
+
+/*
+================
+castPetAssistCountdowns
+
+776830 (0x7769D8): a cast broadcast whose caster is an owned COS cancels
+its countdown (+0xAB30 = -1), so the pet keeps its assist target.
+================
+*/
+export function castPetAssistCountdowns(
+	countdowns: ReadonlyMap<number, number>,
+	caster: number
+): ReadonlyMap<number, number> {
+	if ( !countdowns.has( caster ) ) return countdowns;
+	const next = new Map( countdowns );
+	next.delete( caster );
+	return next;
+}
+
+/*
+================
+advancedPetAssistCountdowns
+
+77DFA0 (the per-frame COS tick): the countdown runs down by the frame's
+elapsed time; at zero the assist target is forgotten (+0xAB2C = 0) and
+the countdown resets to -1, as it also does when the target is already
+gone. The port keeps worker-clock deadlines instead of a per-frame
+decrement: a step at or past the deadline is the zero crossing.
+================
+*/
+export function advancedPetAssistCountdowns(
+	assisting: ReadonlyMap<number, number>,
+	countdowns: ReadonlyMap<number, number>,
+	now: number
+): {
+	readonly assisting: ReadonlyMap<number, number>;
+	readonly countdowns: ReadonlyMap<number, number>;
+} {
+	let nextAssisting: Map<number, number> | undefined, nextCountdowns: Map<number, number> | undefined;
+	for ( const [pet, deadline] of countdowns ) {
+		if ( !assisting.has( pet ) ) {
+			(nextCountdowns ??= new Map( countdowns )).delete( pet );
+		} else if ( now >= deadline ) {
+			(nextCountdowns ??= new Map( countdowns )).delete( pet );
+			(nextAssisting ??= new Map( assisting )).delete( pet );
+		}
+	}
+	return { assisting: nextAssisting ?? assisting, countdowns: nextCountdowns ?? countdowns };
 }
 
 /*
