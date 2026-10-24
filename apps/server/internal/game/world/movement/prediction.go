@@ -33,8 +33,15 @@ registerPredictedMovement
 */
 func (rt *Runtime) registerPredictedMovement(hub *transport.Hub) {
 	ledger := newPredictionLedger()
+	rt.predictLedger = ledger
 	hub.OnSessionClose(func(s *transport.Session, _ error) { ledger.forget(s.ID) })
 	hub.Handle(transport.OpPredictedMove, func(s *transport.Session, _ uint16, p []byte) {
+		if _, live := s.SceneRevision(); !live {
+			// Scene still loading: hold the command for scene-ready so
+			// its receipt answers inside the freshly built scene.
+			rt.queueLoadingMove(s, true, p)
+			return
+		}
 		character, division, bound := enterworld.SessionCharacter(rt.deps, s)
 		if !bound {
 			character = nil

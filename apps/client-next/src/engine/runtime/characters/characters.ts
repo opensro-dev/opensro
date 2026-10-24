@@ -343,6 +343,7 @@ export function createCharacterPresentation(
 		resources.begin( seconds );
 		output.failure = null;
 		const { localMover, logicalPose, samples } = createPresentationSamples( entities, gameplay );
+		posePresentation.interpolateOwnWalk( renderer.interpolatedOwnWalk?.() === true );
 		posePresentation.samples( samples );
 		const result = resources.poll();
 		const skillObjectResult = result && SKILL_OBJECT_MANIFESTS.some( path => path === result.path );
