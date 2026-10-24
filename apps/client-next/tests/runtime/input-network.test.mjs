@@ -500,3 +500,247 @@ test("a journal overflow leaves a gap row that counts every dropped frame", t =>
 	assert.equal( frames, sends + 2, "kept frames plus the gap count account for every frame" );
 	network.dispose();
 });
+
+/*
+================
+settle
+================
+*/
+const settle = () => new Promise( resolve => setImmediate( resolve ) );
+/*
+================
+flush
+
+Let the WebTransport attempt's promise chain run to its next rest.
+================
+*/
+async function flush( rounds = 8 ) {
+	for ( let i = 0; i < rounds; i++ ) await settle();
+}
+/*
+================
+record
+
+One u32-length-prefixed stream record carrying a frame (server envelope).
+================
+*/
+function record( frame ) {
+	const out = new Uint8Array( frame.byteLength + 4 );
+	new DataView( out.buffer ).setUint32( 0, frame.byteLength, true );
+	out.set( frame, 4 );
+	return out;
+}
+/*
+================
+wtHarness
+
+A controllable WebTransport global: sessions the test drives by hand.
+Written chunks are recorded; nothing does I/O of its own. The cert-hash
+fetch answers from fetchDoc, or not at all (a 404) when it is null.
+================
+*/
+function wtHarness( t, fetchDoc = null ) {
+	const transports = [];
+	class Transport {
+		constructor( url, options ) {
+			this.url = String( url );
+			this.options = options;
+			this.written = [];
+			this.closedFlag = false;
+			this.ready = new Promise( ( resolve, reject ) => {
+				this.readyResolve = resolve;
+				this.readyReject = reject;
+			} );
+			this.closed = new Promise( resolve => {
+				this.closedResolve = resolve;
+			} );
+			transports.push( this );
+		}
+		/*
+		================
+		createBidirectionalStream
+		================
+		*/
+		createBidirectionalStream() {
+			const readable = new ReadableStream( {
+				/*
+				================
+				start
+				================
+				*/
+				start: controller => {
+					this.inbound = controller;
+				}
+			} );
+			const writable = new WritableStream( {
+				/*
+				================
+				write
+				================
+				*/
+				write: chunk => {
+					this.written.push( chunk.slice() );
+				}
+			} );
+			return Promise.resolve( { readable, writable } );
+		}
+		/*
+		================
+		close
+		================
+		*/
+		close() {
+			this.closedFlag = true;
+			this.closedResolve();
+		}
+		/*
+		================
+		push
+		================
+		*/
+		push( bytes ) {
+			this.inbound.enqueue( bytes );
+		}
+	}
+	const original = Object.getOwnPropertyDescriptor( globalThis, "WebTransport" );
+	Object.defineProperty( globalThis, "WebTransport", { value: Transport, configurable: true, writable: true } );
+	t.after( () => {
+		if ( original ) Object.defineProperty( globalThis, "WebTransport", original );
+		else Reflect.deleteProperty( globalThis, "WebTransport" );
+	} );
+	t.mock.method(
+		globalThis,
+		"fetch",
+		async () => fetchDoc ? { ok: true, json: async () => fetchDoc } : { ok: false }
+	);
+	return transports;
+}
+
+test("webtransport carries the handshake and frames on its control stream when enabled", async t => {
+	const sockets = socketHarness( t ), transports = wtHarness( t ), failures = [], frames = [];
+	const network = createNetwork( e => failures.push( e ) );
+	network.webTransport( true );
+	network.connect( "wss://localhost/transport/ws", "abc" );
+	await flush();
+	assert.equal( sockets.length, 0, "the socket waits for the QUIC attempt" );
+	assert.equal( transports.length, 1 );
+	const transport = transports[0];
+	assert.equal( transport.url, "https://localhost/transport/wt" );
+	assert.equal( transport.options, undefined, "no certificate document, no pins" );
+	assert.throws( () => network.send( { opcode: 256, payload: new Uint8Array() } ), /handshake/ );
+	transport.readyResolve();
+	await flush();
+	// The hello crossed as one framed record (the codec's golden hello).
+	assert.deepEqual( [ ...transport.written[0] ], [ 9, 0, 0, 0, 1, 0, 2, 0, 3, 0, 97, 98, 99 ] );
+	// The WELCOME arrives split across two chunks and still admits.
+	const admitted = record( welcome() );
+	transport.push( admitted.subarray( 0, 10 ) );
+	await flush();
+	transport.push( admitted.subarray( 10 ) );
+	transport.push( record( Uint8Array.of( 0, 1, 11 ) ) );
+	await flush();
+	network.drain( frame => frames.push( frame.opcode ) );
+	assert.deepEqual( frames, [ 2, 256 ] );
+	network.send( { opcode: 300, payload: Uint8Array.of( 9 ) } );
+	await flush();
+	assert.deepEqual( [ ...transport.written.at( -1 ) ], [ 3, 0, 0, 0, 44, 1, 9 ] );
+	// A server ping is answered on the stream, through the one dispatch.
+	transport.push( record( Uint8Array.of( 3, 0, 99 ) ) );
+	await flush();
+	assert.deepEqual( [ ...transport.written.at( -1 ) ], [ 3, 0, 0, 0, 4, 0, 99 ] );
+	assert.deepEqual( failures, [] );
+	network.dispose();
+	assert.ok( transport.closedFlag );
+});
+
+test("a failed webtransport attempt falls back to the socket with the same admission", async t => {
+	const sockets = socketHarness( t ), transports = wtHarness( t ), failures = [];
+	const network = createNetwork( e => failures.push( e ) );
+	network.webTransport( true );
+	network.connect( "ws://localhost/transport/ws", "abc" );
+	await flush();
+	assert.equal( transports.length, 1 );
+	transports[0].readyReject( new Error( "QUIC refused" ) );
+	await flush();
+	assert.equal( sockets.length, 1, "the socket takes the untouched admission over" );
+	const socket = sockets[0];
+	socket.onopen();
+	assert.deepEqual( [ ...socket.sent[0] ], [ 1, 0, 2, 0, 3, 0, 97, 98, 99 ] );
+	socket.receive( welcome() );
+	// The dead path is remembered: the next connect is the socket at once.
+	network.connect( "ws://localhost/transport/ws", "abc" );
+	assert.equal( transports.length, 1 );
+	assert.equal( sockets.length, 2 );
+	assert.deepEqual( failures, [] );
+	network.dispose();
+});
+
+test("webtransport silence before the welcome fails the path inside its window", async t => {
+	const sockets = socketHarness( t ), transports = wtHarness( t ), failures = [];
+	t.mock.timers.enable( { apis: [ "setTimeout" ] } );
+	const network = createNetwork( e => failures.push( e ) );
+	network.webTransport( true );
+	network.connect( "ws://localhost/transport/ws", "abc" );
+	await flush();
+	transports[0].readyResolve();
+	await flush();
+	assert.equal( transports[0].written.length, 1, "the hello went out on the stream" );
+	t.mock.timers.tick( 10000 );
+	assert.deepEqual( failures, [ "Transport connection failed" ] );
+	assert.ok( transports[0].closedFlag, "the stalled transport is closed" );
+	// Remembered: the retry is the socket, no second QUIC attempt.
+	network.connect( "ws://localhost/transport/ws", "abc" );
+	assert.equal( transports.length, 1 );
+	assert.equal( sockets.length, 1 );
+	network.dispose();
+});
+
+test("webtransport pins only a short-lived certificate's hash", async t => {
+	const pinned = {
+		sha256Base64: Buffer.from( Array.from( { length: 32 }, ( _v, i ) => i ) ).toString( "base64" ),
+		notBefore: "2026-10-20T00:00:00.000Z",
+		notAfter: "2026-11-01T00:00:00.000Z"
+	};
+	const transports = wtHarness( t, pinned ), failures = [];
+	const network = createNetwork( e => failures.push( e ) );
+	network.webTransport( true );
+	network.connect( "wss://localhost/transport/ws", "abc" );
+	await flush();
+	assert.equal( transports.length, 1 );
+	assert.deepEqual( transports[0].options, {
+		serverCertificateHashes: [ {
+			algorithm: "sha-256",
+			value: new Uint8Array( Array.from( { length: 32 }, ( _v, i ) => i ) )
+		} ]
+	} );
+	transports[0].readyReject( new Error( "stop here" ) );
+	await flush();
+	network.dispose();
+	assert.deepEqual( failures, [] );
+});
+
+test("a long-lived certificate is used plainly, never pinned", async t => {
+	const publicDoc = {
+		sha256Base64: Buffer.from( new Uint8Array( 32 ) ).toString( "base64" ),
+		notBefore: "2026-10-20T00:00:00.000Z",
+		notAfter: "2027-01-18T00:00:00.000Z"
+	};
+	const transports = wtHarness( t, publicDoc );
+	const network = createNetwork( () => {} );
+	network.webTransport( true );
+	network.connect( "wss://localhost/transport/ws", "abc" );
+	await flush();
+	assert.equal( transports.length, 1 );
+	assert.equal( transports[0].options, undefined );
+	network.dispose();
+});
+
+test("webtransport is never attempted while the row is off", async t => {
+	const sockets = socketHarness( t ), transports = wtHarness( t );
+	const network = createNetwork( () => {} );
+	network.connect( "ws://localhost/transport/ws", "abc" );
+	await flush();
+	assert.equal( transports.length, 0 );
+	assert.equal( sockets.length, 1 );
+	network.dispose();
+});

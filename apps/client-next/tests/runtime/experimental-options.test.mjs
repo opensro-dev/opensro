@@ -93,6 +93,8 @@ const OFF = Object.freeze( {
 	petFilterOther: true,
 	// On by default (owner 2026-10-22, #1243): a touch tap keeps an item or skill tooltip up.
 	touchInspect: true,
+	// Off by default (#1448): the WebSocket stays the default transport until #1450.
+	webTransport: false,
 	// Off by default: the M window shows only the five native towns and 28 x 8 overview.
 	expandedWorldMap: false,
 	// Off by default (#840): the maps mark the tracked quest's targets only.
@@ -431,6 +433,7 @@ test("the predicted run-up defaults off and reaches only the worker's slice", ()
 	// The native press (6FCD50) never walks before the server answers.
 	assert.deepEqual( experimentalGameplay( experimentalOptions() ), {
 		predictedRunUp: false,
+		webTransport: false,
 		jobKillNotices: true,
 		dropPlusNotices: true,
 		plusSevenNotices: true,
@@ -444,6 +447,7 @@ test("the predicted run-up defaults off and reaches only the worker's slice", ()
 	const on = experimentalOptions( { predictedRunUp: true } );
 	assert.deepEqual( experimentalGameplay( on ), {
 		predictedRunUp: true,
+		webTransport: false,
 		jobKillNotices: true,
 		dropPlusNotices: true,
 		plusSevenNotices: true,

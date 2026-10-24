@@ -570,6 +570,13 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/world.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"functions": [
+				"experimental"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/simulation/worker/session/http/http.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/world.ts",
 			"functions": [

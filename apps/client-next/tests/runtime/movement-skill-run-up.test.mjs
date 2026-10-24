@@ -197,6 +197,7 @@ function gameplayPress( predicted = true ) {
 	game.seed( local );
 	game.experimental( {
 		predictedRunUp: predicted,
+		webTransport: false,
 		jobKillNotices: true,
 		dropPlusNotices: true,
 		plusSevenNotices: true

@@ -190,15 +190,15 @@ export const EXPERIMENTAL_TABS: readonly {
 			label: "V hides pets and transports",
 			description: "Holding V also hides other players' pets and transports."
 		}, {
-			key: "smartPetPickup",
-			id: "experimental-smart-pet-pickup",
-			label: "Keep pet gold pickup when full",
-			description: "Keep picking up gold when a full bag refuses an item."
-		}, {
 			key: "touchInspect",
 			id: "experimental-touch-inspect",
 			label: "Tap shows item details",
 			description: "On touch, a tap on an item or skill keeps its tooltip up."
+		}, {
+			key: "webTransport",
+			id: "experimental-web-transport",
+			label: "WebTransport connection",
+			description: "Connect over QUIC/UDP; falls back to WebSocket."
 		} ]
 	},
 	{
@@ -229,6 +229,11 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-short-notices",
 			label: "Short notices",
 			description: "Show notices for up to the original 7 seconds."
+		}, {
+			key: "questTrackerMarkers",
+			id: "experimental-quest-tracker-markers",
+			label: "Quest target markers",
+			description: "Show every active quest's target on M and the minimap."
 		} ]
 	},
 	{
@@ -264,11 +269,6 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-confirm-guild-ban",
 			label: "Confirm guild ban",
 			description: "Ask before Withdraw bans a guild member."
-		}, {
-			key: "questTrackerMarkers",
-			id: "experimental-quest-tracker-markers",
-			label: "Quest target markers",
-			description: "Show every active quest's target on M and the minimap."
 		} ]
 	},
 	{
@@ -289,6 +289,11 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-pet-click-opens-window",
 			label: "Pet panel opens window",
 			description: "Click a pet panel to open its window."
+		}, {
+			key: "smartPetPickup",
+			id: "experimental-smart-pet-pickup",
+			label: "Keep pet gold pickup when full",
+			description: "Keep picking up gold when a full bag refuses an item."
 		}, {
 			key: "petPickupFilter",
 			id: "experimental-pet-pickup-filter",

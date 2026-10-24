@@ -493,7 +493,10 @@ takeDeparture
 			return value;
 		},
 		options: core.options,
-		experimental: core.experimental,
+		experimental( value: import("@/engine/foundation/ui/experimental-options").ExperimentalGameplay ) {
+			network.webTransport( value.webTransport );
+			core.experimental( value );
+		},
 		/*
 ================
 command
