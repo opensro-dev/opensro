@@ -11,6 +11,7 @@ package action
 import (
 	"math"
 	"opensro.online/server/internal/game/abnormal"
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
@@ -223,5 +224,38 @@ func TestPartyShareFloor(t *testing.T) {
 	}
 	if math.Abs(float64(floored[0])-bonus/2) > 1e-6 || floored[1] != native[1] {
 		t.Fatalf("floored factors %v, native %v", floored, native)
+	}
+}
+
+/*
+================
+TestPetBurstKillCreditsNoQuest
+
+The port-only pet bursts (pet shield, wolf hunt) land their hit in the
+owner's name through the credited-hit lane. Their fatal hit is still a
+companion kill: no quest kill, where the owner's own blow credits one.
+================
+*/
+func TestPetBurstKillCreditsNoQuest(t *testing.T) {
+	for _, companion := range []bool{false, true} {
+		rt, clock, c, mob := newCombatTestRuntime(t, 1)
+		quested := 0
+		rt.UpdateQuestKill = func(*enterworld.Character, string, uint8) ([]wire.Frame, bool) {
+			quested++
+			return nil, true
+		}
+		row := rt.deps.SkillData().(staticSkillSource)[2]
+		snapshot := rt.characterSnapshot(testDivision, c)
+		commit := rt.commitCreditedMonsterHit
+		if companion {
+			commit = rt.commitCompanionCreditedMonsterHit
+		}
+		hit, ok := commit(testDivision, c, snapshot, row, mob, combat.Result{Damage: 50, ResultFlags: 1}, "test-kill", clock.NowMs())
+		if !ok || !hit.impacts[0].Fatal {
+			t.Fatalf("companion=%v: the kill did not commit", companion)
+		}
+		if want := map[bool]int{false: 1, true: 0}[companion]; quested != want {
+			t.Fatalf("companion=%v: %d quest kills, want %d", companion, quested, want)
+		}
 	}
 }
