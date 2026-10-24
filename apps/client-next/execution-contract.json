@@ -1654,6 +1654,13 @@
 			]
 		},
 		{
+			"consumer": "src/engine/foundation/gameplay/transport-auto-potion.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"maxHp"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/ui/item-tooltip-recovery.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
