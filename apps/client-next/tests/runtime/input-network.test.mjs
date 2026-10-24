@@ -675,8 +675,8 @@ test("a failed webtransport attempt falls back to the socket with the same admis
 	network.dispose();
 });
 
-test("webtransport silence before the welcome fails the path inside its window", async t => {
-	const sockets = socketHarness( t ), transports = wtHarness( t ), failures = [];
+test("webtransport silence before the welcome hands the connect to the socket", async t => {
+	const sockets = socketHarness( t ), transports = wtHarness( t ), failures = [], frames = [];
 	t.mock.timers.enable( { apis: [ "setTimeout" ] } );
 	const network = createNetwork( e => failures.push( e ) );
 	network.webTransport( true );
@@ -685,11 +685,64 @@ test("webtransport silence before the welcome fails the path inside its window",
 	transports[0].readyResolve();
 	await flush();
 	assert.equal( transports[0].written.length, 1, "the hello went out on the stream" );
+	assert.equal( sockets.length, 0, "the socket waits out the welcome window" );
+	// Silence past the window: the server consumes the admission only at
+	// the WELCOME write (#1447), so the same ticket is still presentable
+	// and the socket takes this connect over - no failure is reported.
 	t.mock.timers.tick( 10000 );
-	assert.deepEqual( failures, [ "Transport connection failed" ] );
 	assert.ok( transports[0].closedFlag, "the stalled transport is closed" );
-	// Remembered: the retry is the socket, no second QUIC attempt.
+	assert.equal( sockets.length, 1 );
+	assert.deepEqual( failures, [] );
+	const socket = sockets[0];
+	socket.onopen();
+	assert.deepEqual( [ ...socket.sent[0] ], [ 1, 0, 2, 0, 3, 0, 97, 98, 99 ], "the same hello, once more" );
+	socket.receive( welcome() );
+	network.drain( frame => frames.push( frame.opcode ) );
+	assert.deepEqual( frames, [ 2 ] );
+	assert.deepEqual( failures, [] );
+	// Remembered: the next connect is the socket at once, no second attempt.
 	network.connect( "ws://localhost/transport/ws", "abc" );
+	assert.equal( transports.length, 1 );
+	assert.equal( sockets.length, 2 );
+	network.dispose();
+});
+
+test("a webtransport session that closes before the welcome hands the connect to the socket", async t => {
+	const sockets = socketHarness( t ), transports = wtHarness( t ), failures = [];
+	const network = createNetwork( e => failures.push( e ) );
+	network.webTransport( true );
+	network.connect( "ws://localhost/transport/ws", "abc" );
+	await flush();
+	transports[0].readyResolve();
+	await flush();
+	assert.equal( transports[0].written.length, 1, "the hello went out on the stream" );
+	transports[0].close();
+	await flush();
+	assert.equal( sockets.length, 1, "the socket takes the same admission over" );
+	assert.deepEqual( failures, [] );
+	sockets[0].onopen();
+	assert.deepEqual( [ ...sockets[0].sent[0] ], [ 1, 0, 2, 0, 3, 0, 97, 98, 99 ] );
+	sockets[0].receive( welcome() );
+	assert.deepEqual( failures, [] );
+	network.dispose();
+});
+
+test("when the socket fallback also dies before the welcome, the failure is reported once", async t => {
+	const sockets = socketHarness( t ), transports = wtHarness( t ), failures = [];
+	t.mock.timers.enable( { apis: [ "setTimeout" ] } );
+	const network = createNetwork( e => failures.push( e ) );
+	network.webTransport( true );
+	network.connect( "ws://localhost/transport/ws", "abc" );
+	await flush();
+	transports[0].readyResolve();
+	await flush();
+	t.mock.timers.tick( 10000 );
+	assert.equal( sockets.length, 1 );
+	// The rung below the fallback (a ticket consumed under a lost
+	// WELCOME is refused here): the standard failure, reported once,
+	// and the admission is never presented a third time.
+	sockets[0].onerror();
+	assert.deepEqual( failures, [ "Transport connection failed" ] );
 	assert.equal( transports.length, 1 );
 	assert.equal( sockets.length, 1 );
 	network.dispose();

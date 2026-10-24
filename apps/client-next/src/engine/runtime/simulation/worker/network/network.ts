@@ -8,9 +8,12 @@ WebSocket (one message is one frame), or, behind the Experimental
 WebTransport row (#1448), a WebTransport control stream carrying the
 same frames u32-length-prefixed (the server envelope's stream form).
 Callbacks admit packets, simulation ticks consume them in order.
-Reconnection is explicit. Never retry commands or reuse admission
-tickets here. A frame its consumer cannot apply ends the session, and
-the failure names that frame so it can be reported (session.ts).
+Reconnection is explicit. Never retry commands here; an admission is
+presented once per transport and never after a WELCOME (the server
+consumes it at the WELCOME write, #1447), which is what lets a dead
+WebTransport path hand its connect to the socket below. A frame its
+consumer cannot apply ends the session, and the failure names that
+frame so it can be reported (session.ts).
 
 ===========================================================================
 */
@@ -35,8 +38,8 @@ const NET_JOURNAL_RECORDS = 4096;
 // A WebTransport attempt gets this long to fetch its certificate pin and
 // establish (session plus control stream) before the socket takes the
 // same admission over, and this long after the hello for the WELCOME
-// before the path counts as failed for the session: a QUIC path that
-// stalls pre-WELCOME never silently holds a login.
+// before the path counts as failed and the socket takes over instead: a
+// QUIC path that stalls pre-WELCOME never silently holds a login.
 const WT_CONNECT_DEADLINE_MS = 3000;
 const WT_WELCOME_DEADLINE_MS = 10000;
 // The serverCertificateHashes pinning window: the browser pins only
@@ -75,6 +78,10 @@ export function createNetwork(
 	// wtFailed is the session's memory of a dead QUIC path: after any
 	// WebTransport failure, connects go straight to the socket.
 	let wtEnabled = false, wtFailed = false;
+	// The connect in flight: endpoint and hello for the socket fallback,
+	// and whether that fallback already ran. It runs at most once - see
+	// wtClosed - so an admission is never presented a third time.
+	let attempt: { endpoint: URL; hello: WireFrame; fellBack: boolean; } | null = null;
 	let welcomeTimer: ReturnType<typeof setTimeout> | null = null;
 	let bytes = 0;
 	let pingToken = 0, pendingPing = false, pingSentAt = -Infinity, pingReceivedAt = -Infinity;
@@ -133,6 +140,7 @@ export function createNetwork(
 		inbox.length = 0;
 		ended = null;
 		endReason = undefined;
+		attempt = null;
 		clearWelcomeDeadline();
 		const previous = link;
 		link = null;
@@ -446,50 +454,58 @@ export function createNetwork(
 	armWelcomeDeadline
 
 	A WebTransport path that handshakes but stalls before the WELCOME has
-	failed: end the attempt inside this window as the socket's connection
-	failure, so the session's retry reaches the socket with a fresh
-	admission instead of knocking on the dead path again.
+	failed: end it inside this window through wtClosed, which hands the
+	connect to the socket, instead of silently holding the login.
 	================
 	*/
-	function armWelcomeDeadline( generation: number ) {
+	function armWelcomeDeadline( generation: number, mine: Link ) {
 		clearWelcomeDeadline();
 		welcomeTimer = setTimeout( () => {
 			welcomeTimer = null;
-			if ( disposed || generation !== epoch || welcomed ) return;
-			wtFailed = true;
-			fail( "Transport connection failed", undefined, {
-				category: "connection",
-				code: "connection_failed",
-				message: "Connection lost. Please reconnect."
-			} );
+			wtClosed( generation, mine );
 		}, WT_WELCOME_DEADLINE_MS );
 	}
 	/*
 	================
 	wtClosed
 
-	The WebTransport session or its control stream ended. Before the
-	WELCOME the path itself failed - remembered for the session, and
-	reported as the socket's connection failure; after it, the link
-	simply closed, as a socket would.
+	The WebTransport session or its control stream ended. After the
+	WELCOME the link simply closed, as a socket would. Before it the
+	path itself failed: it is remembered for the session, and the socket
+	takes the connect over with the same admission - the server consumes
+	a ticket at the WELCOME write (#1447), so an attempt that died
+	before it leaves the ticket presentable. The fallback runs once: if
+	the socket also dies before the WELCOME (a ticket the server did
+	consume under a WELCOME the client never saw is refused), the
+	socket's own failure paths report it and the session's retry mints a
+	fresh admission; the ticket is never presented a third time.
 	================
 	*/
 	function wtClosed( generation: number, mine: Link ) {
 		if ( disposed || generation !== epoch || link !== mine ) return;
-		if ( !welcomed ) {
-			wtFailed = true;
-			fail( "Transport connection failed", undefined, {
-				category: "connection",
-				code: "connection_failed",
-				message: "Connection lost. Please reconnect."
-			} );
-		} else {
+		if ( welcomed ) {
 			end( "Transport connection closed", {
 				category: "unknown",
 				code: "connection_closed",
 				message: "Connection lost. The cause is unknown."
 			} );
+			return;
 		}
+		wtFailed = true;
+		const current = attempt;
+		if ( current && !current.fellBack ) {
+			current.fellBack = true;
+			clearWelcomeDeadline();
+			link = null;
+			mine.close();
+			connectSocket( current.endpoint, current.hello, generation );
+			return;
+		}
+		fail( "Transport connection failed", undefined, {
+			category: "connection",
+			code: "connection_failed",
+			message: "Connection lost. Please reconnect."
+		} );
 	}
 	/*
 	================
@@ -543,8 +559,8 @@ export function createNetwork(
 	unused: reliable parity first). True when the link is live with the
 	hello sent. False when the path failed before the hello went out -
 	the admission never left the client, so the caller falls back to
-	the socket with it untouched. A failure after the hello ends this
-	attempt through the usual failure paths; either way, a failed path
+	the socket with it untouched. A failure after the hello hands the
+	connect to the socket through wtClosed; either way, a failed path
 	is remembered for the session.
 	================
 	*/
@@ -599,7 +615,7 @@ export function createNetwork(
 			);
 			void wtPump( reader, generation, mine );
 			send( hello );
-			armWelcomeDeadline( generation );
+			armWelcomeDeadline( generation, mine );
 			return true;
 		} catch {
 			transport?.close();
@@ -647,6 +663,7 @@ export function createNetwork(
 			}
 			const hello = codec.hello( admission, resume );
 			disconnect();
+			attempt = { endpoint, hello, fellBack: false };
 			const generation = epoch;
 			if ( wtEnabled && !wtFailed && typeof WebTransport !== "undefined" ) {
 				void connectWebTransport( endpoint, hello, generation ).then( linked => {
