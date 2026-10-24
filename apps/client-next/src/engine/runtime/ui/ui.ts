@@ -694,20 +694,43 @@ import {
 	PARTY_OPTION
 } from "@/engine/foundation/ui/party-proposal";
 import {
+	commandFloat,
 	commandInteger,
+	DEBUG_COMMAND_CLEAR,
+	DEBUG_COMMAND_DAY,
 	DEBUG_COMMAND_DEBUG,
 	DEBUG_COMMAND_GET_POSITION,
 	DEBUG_COMMAND_ITEM,
 	DEBUG_COMMAND_MESSAGE_CLEAR,
+	DEBUG_COMMAND_NIGHT,
 	DEBUG_COMMAND_NULL,
 	DEBUG_COMMAND_PLAYER_COUNT,
 	DEBUG_COMMAND_POSITION,
+	DEBUG_COMMAND_POWER,
+	DEBUG_COMMAND_RAIN,
+	DEBUG_COMMAND_SNOW,
+	DEBUG_COMMAND_TIME_MINUS,
+	DEBUG_COMMAND_TIME_OFF,
+	DEBUG_COMMAND_TIME_ON,
+	DEBUG_COMMAND_TIME_PLUS,
+	DEBUG_COMMAND_TIME_SET,
 	DEBUG_COMMAND_SET_FIELD_OF_VIEW,
 	debugCommand,
 	debugFieldOfView,
 	debugPosition,
 	type DebugCommand
 } from "@/engine/foundation/ui/debug-commands";
+import {
+	createDebugClock,
+	DEBUG_CLOCK_STEP_MINUTES,
+	debugClockHold,
+	debugClockResume,
+	debugClockSeed,
+	debugClockSetFraction,
+	debugClockSetHours,
+	debugClockStep,
+	type DebugClock
+} from "@/engine/foundation/gameplay/debug-clock";
 import { messageBox } from "@/engine/foundation/ui/message-box";
 import { resourceErrorLines } from "@/engine/foundation/ui/resource-error";
 import { disconnectDialog } from "@/engine/foundation/ui/disconnect-dialog";
@@ -946,6 +969,9 @@ export function createUi(
 	let consoleRows: string[] = [], consoleHistory: string[] = [], consoleHistoryIndex = 0;
 	// +0x7BC, the /Debug flag: the native debug-message switch (690C40 case 0).
 	let debugMessages = false;
+	// The interface timer's debug state (690C40 ids 100-109): the sampler
+	// reads it through the handle's debugClockSeed.
+	let debugClock: DebugClock = createDebugClock();
 	let video = defaultVideoOptions(), videoDraft = video, videoScroll = 0, videoCombo = VIDEO_COMBO_CLOSED;
 	let bindings = defaultInputOptions(), bindingDraft = bindings, bindingSelected = -1, bindingScroll = 0;
 	let sight: SightMode = 0, sightDraft: SightMode = 0;
@@ -2555,9 +2581,11 @@ export function createUi(
 	================
 	runDebugCommand
 
-	CGInterface_OnCommandMessage for the console family, the position
-	pair, bag-slot use and FOV. The remaining command.txt families leave
-	the line as typed.
+	CGInterface_OnCommandMessage (690C40) for the console family, the position
+	pair, bag-slot use and FOV. The weather rows write the worker's weather
+	slot (the sampler's state, not this window's); the time rows drive the
+	local debug clock the sampler reads through debugClockSeed. The camera and
+	render-toggle families are not ported yet and leave the line as typed.
 	================
 	*/
 	function runDebugCommand( command: DebugCommand ) {
@@ -2595,6 +2623,63 @@ export function createUi(
 				// The 0x190 branch: exactly one word, read by wcstol, then
 				// CIFInventory_ExecuteItemAction(slot, -1, -1) as a double click.
 				if ( command.args.length === 1 ) useInventorySlot( commandInteger( command.args[0]! ) );
+				break;
+			case DEBUG_COMMAND_POWER:
+				// 99: one word; the weather intensity alone (mode kept).
+				if ( command.args.length === 1 ) {
+					sendGameplay( { kind: "debug-weather", amount: commandInteger( command.args[0]! ) } );
+				}
+				break;
+			case DEBUG_COMMAND_RAIN:
+				// 105: one word; rain at the word's intensity.
+				if ( command.args.length === 1 ) {
+					sendGameplay( { kind: "debug-weather", mode: 2, amount: commandInteger( command.args[0]! ) } );
+				}
+				break;
+			case DEBUG_COMMAND_SNOW:
+				// 106: one word; snow at the word's intensity.
+				if ( command.args.length === 1 ) {
+					sendGameplay( { kind: "debug-weather", mode: 3, amount: commandInteger( command.args[0]! ) } );
+				}
+				break;
+			case DEBUG_COMMAND_CLEAR:
+				// 107: clear weather at full intensity, no word read.
+				sendGameplay( { kind: "debug-weather", mode: 1, amount: 255 } );
+				break;
+			case DEBUG_COMMAND_TIME_OFF:
+				// 100: hold the interface timer where it stands (+0x7AD).
+				debugClock = debugClockHold( debugClock, view?.gameplay?.worldClock, quickslotTime );
+				break;
+			case DEBUG_COMMAND_TIME_ON:
+				// 101: let the timer run again from the held time.
+				debugClock = debugClockResume( debugClock, quickslotTime );
+				break;
+			case DEBUG_COMMAND_TIME_SET:
+				// 102: one word, an atof hour the timer restarts from.
+				if ( command.args.length === 1 ) {
+					debugClock = debugClockSetHours(
+						debugClock,
+						view?.gameplay?.worldClock,
+						quickslotTime,
+						commandFloat( command.args[0]! )
+					);
+				}
+				break;
+			case DEBUG_COMMAND_DAY:
+				// 103: the day fraction set to 0.5.
+				debugClock = debugClockSetFraction( debugClock, view?.gameplay?.worldClock, quickslotTime, 0.5 );
+				break;
+			case DEBUG_COMMAND_NIGHT:
+				// 104: the day fraction set to 1.0.
+				debugClock = debugClockSetFraction( debugClock, view?.gameplay?.worldClock, quickslotTime, 1.0 );
+				break;
+			case DEBUG_COMMAND_TIME_PLUS:
+				// 108: "/+" steps a held clock BACK (the native sign quirk).
+				debugClock = debugClockStep( debugClock, -DEBUG_CLOCK_STEP_MINUTES );
+				break;
+			case DEBUG_COMMAND_TIME_MINUS:
+				// 109: "/-" steps a held clock forward.
+				debugClock = debugClockStep( debugClock, DEBUG_CLOCK_STEP_MINUTES );
 				break;
 			case DEBUG_COMMAND_SET_FIELD_OF_VIEW: {
 				const degrees = debugFieldOfView( command.args );
@@ -4881,13 +4966,19 @@ export function createUi(
 			}
 		} else if ( id === "drop-gold" && view.gameplay && (goldDialog === "deposit" || goldDialog === "withdraw") ) {
 			// 59A430 caps warehouse deposits at min(carriedGold, 100_000_000);
-			// 59C510 closes the modal without sending when amount <= 0.
+			// 59C510 closes the modal without sending when amount <= 0, as the
+			// exchange branch above does: an unsendable amount used to leave
+			// the dialog sitting open with no answer (BR-261022-2026-ED06).
 			const amount = Number( goldAmount ),
 				balance = goldDialog === "withdraw" ? view.gameplay.storage?.gold : view.gameplay.progression?.gold,
 				cap = goldDialog === "deposit" ? 100000000 : 0xffffffff;
-			if (
-				!view.gameplay.inventoryPending && /^\d+$/.test( goldAmount ) && Number.isSafeInteger( amount ) &&
-				amount > 0 && amount <= cap && balance !== undefined && BigInt( amount ) <= BigInt( balance )
+			if ( !/^\d+$/.test( goldAmount ) || amount === 0 ) {
+				goldDialog = false;
+				focus = null;
+				goldAmount = "";
+			} else if (
+				!view.gameplay.inventoryPending && Number.isSafeInteger( amount ) &&
+				amount <= cap && balance !== undefined && BigInt( amount ) <= BigInt( balance )
 			) {
 				sendGameplay( {
 					kind: "storage-move",
@@ -5188,6 +5279,21 @@ export function createUi(
 			];
 	}
 	return {
+		/*
+		================
+		debugClockSeed
+
+		The world-clock seed the sampler sees, with the console's time
+		rows (690C40 ids 100-109) applied. Untouched while the clock runs
+		live.
+		================
+		*/
+		debugClockSeed(
+			seed: import("@/engine/contracts/gameplay").WorldClockSeed | undefined,
+			nowMs: number
+		) {
+			return debugClockSeed( debugClock, seed, nowMs );
+		},
 		/*
 		================
 		mallPreview
@@ -12203,8 +12309,14 @@ export function createUi(
 				}
 				if ( panel === "System" && hudData ) {
 					const admission = beginWindow();
-					const sx = systemX ?? Math.trunc( (w - 214) / 2 ),
-						sy = systemY ?? Math.trunc( (h - SYSTEM_MENU_HEIGHT) / 2 );
+					// Clamp at render like the drag does: a position stored on a
+					// larger viewport must not strand the menu off screen after
+					// the window shrinks.
+					const sx = Math.max( 0, Math.min( w - 214, systemX ?? Math.trunc( (w - 214) / 2 ) ) ),
+						sy = Math.max(
+							0,
+							Math.min( h - SYSTEM_MENU_HEIGHT, systemY ?? Math.trunc( (h - SYSTEM_MENU_HEIGHT) / 2 ) )
+						);
 					systemX = sx;
 					systemY = sy;
 					const authored = hudData.windows.ifsystemwnd!,

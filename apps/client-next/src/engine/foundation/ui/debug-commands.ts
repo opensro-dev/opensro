@@ -26,6 +26,19 @@ export const DEBUG_COMMAND_GET_POSITION = 4;
 export const DEBUG_COMMAND_NULL = 5;
 // 690C40's 0x190 branch: use the bag slot named by the single argument.
 export const DEBUG_COMMAND_ITEM = 400;
+// The weather and time families (690C40 ids 99-109): the interface's own
+// weather and timer fields, driven locally with no server frame.
+export const DEBUG_COMMAND_POWER = 99;
+export const DEBUG_COMMAND_TIME_OFF = 100;
+export const DEBUG_COMMAND_TIME_ON = 101;
+export const DEBUG_COMMAND_TIME_SET = 102;
+export const DEBUG_COMMAND_DAY = 103;
+export const DEBUG_COMMAND_NIGHT = 104;
+export const DEBUG_COMMAND_RAIN = 105;
+export const DEBUG_COMMAND_SNOW = 106;
+export const DEBUG_COMMAND_CLEAR = 107;
+export const DEBUG_COMMAND_TIME_PLUS = 108;
+export const DEBUG_COMMAND_TIME_MINUS = 109;
 export const DEBUG_COMMAND_SET_FIELD_OF_VIEW = 500;
 
 const MIN_FIELD_OF_VIEW_DEGREES = 10;
@@ -112,6 +125,19 @@ zero when there are none.
 export function commandInteger( word: string ): number {
 	const match = /^\s*[+-]?\d+/.exec( word );
 	return match ? Number.parseInt( match[0], 10 ) : 0;
+}
+
+/*
+================
+commandFloat
+
+atof as the time family reads its hour: the leading decimal number, zero
+when there is none.
+================
+*/
+export function commandFloat( word: string ): number {
+	const value = Number.parseFloat( word );
+	return Number.isFinite( value ) ? value : 0;
 }
 
 /*
