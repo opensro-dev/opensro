@@ -488,6 +488,7 @@ the entry continues it like the one after a world transfer.
 		},
 		receive,
 		outstandingSince: gameplay.outstandingSince,
+		noteInput: gameplay.noteInput,
 		notice: gameplay.notice,
 		chatBlocks: gameplay.chatBlocks,
 		options: gameplay.options,
