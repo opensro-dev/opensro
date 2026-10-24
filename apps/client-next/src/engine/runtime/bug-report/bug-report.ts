@@ -209,18 +209,36 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 	================
 	*/
 	function note( message: string ) {
+		listError( message );
+		journal.record( "error", { message: message.slice( 0, MAX_ERROR_LENGTH ) } );
+	}
+
+	/*
+	================
+	listError
+
+	The report's recent-errors list. Uncaught page failures only join the
+	list here: the journal records them for the timeline itself, with
+	their stacks (journal.ts recordError), so noting them again would
+	double every failure in the timeline.
+	================
+	*/
+	function listError( message: string ) {
 		const line = `${new Date().toISOString().slice( 11, 19 )} ${message}`.slice( 0, MAX_ERROR_LENGTH );
 		if ( errors[errors.length - 1] === line ) return;
 		errors.push( line );
-		journal.record( "error", { message: message.slice( 0, MAX_ERROR_LENGTH ) } );
 		if ( errors.length > MAX_ERRORS ) errors.splice( 0, errors.length - MAX_ERRORS );
 	}
-	window.addEventListener( "error", event => note( event.message || String( event.error ) ), {
+	window.addEventListener( "error", event => listError( event.message || String( event.error ) ), {
 		signal: lifetime.signal
 	} );
-	window.addEventListener( "unhandledrejection", event => note( "Unhandled rejection: " + String( event.reason ) ), {
-		signal: lifetime.signal
-	} );
+	window.addEventListener(
+		"unhandledrejection",
+		event => listError( "Unhandled rejection: " + String( event.reason ) ),
+		{
+			signal: lifetime.signal
+		}
+	);
 
 	/*
 	================

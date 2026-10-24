@@ -4293,6 +4293,10 @@ Packet handling must not depend on which HUD panel is currently open.
 							flagWarTimerEndsAt = 0;
 							flagWarCarrierGid = 0;
 							if ( event.type === "gameStart" ) flagWarTeam = null;
+						} else if ( event.type === "flagDrop" || event.type === "missionScored" ) {
+							// The flag is on the ground, or scored: nobody
+							// carries it until the next carrier mark.
+							flagWarCarrierGid = 0;
 						}
 						if ( event.type === "carrier" ) flagWarCarrierGid = event.gid;
 						const notice = flagWarNotice( event, flagWarJoinExpected, flagWarTeam );

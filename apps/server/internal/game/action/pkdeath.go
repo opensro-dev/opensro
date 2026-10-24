@@ -63,6 +63,12 @@ func (rt *Runtime) deathKind(division string, victim *enterworld.Character, kill
 	if killer.siege {
 		return pk.DeathSpecialWorld
 	}
+	// A flag war kill settles as an event-world death, like the siege
+	// lane: the arena's own rules, not the open-field PK ladder
+	// (flagwar_arena.go).
+	if killer.player != nil && rt.flagWarHostile(division, victim, killer.player) {
+		return pk.DeathSpecialWorld
+	}
 	switch {
 	case killer.monster != nil:
 		m := killer.monster

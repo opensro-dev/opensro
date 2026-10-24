@@ -245,6 +245,7 @@ const TECHNICAL_FIELDS = new Set( [
 	"acknowledged",
 	"cos",
 	"error",
+	"stack",
 	"gameplayError",
 	"worldSequence",
 	"walkSpeed",
@@ -321,7 +322,11 @@ const TECHNICAL_STRINGS: Readonly<Record<string, readonly string[]>> = {
 const TECHNICAL_PATTERNS: Readonly<Record<string, RegExp>> = {
 	control: UI_CONTROL_PREFIX,
 	vendor: new RegExp( GPU_TOKEN_PATTERN ),
-	architecture: new RegExp( GPU_TOKEN_PATTERN )
+	architecture: new RegExp( GPU_TOKEN_PATTERN ),
+	// A journal stack is recorded with the page's origin already stripped
+	// (journal.ts errorEventFields); anything that still carries a URL
+	// scheme did not come from that recorder and stays behind.
+	stack: /^(?![\s\S]*:\/\/)[\s\S]+$/
 };
 const README = `OpenSRO bug report
 
@@ -335,7 +340,7 @@ timeline.json     what happened during that minute, on replay.mp4's clock (t, se
                              keeps only the control's kind and slot number)
                   refusal    a command the game refused, by reason (inventory-busy, ...)
                   chat       chat lines seen or sent
-                  error      JavaScript and runtime failures
+                  error      JavaScript and runtime failures (message and stack)
                   long-frame main-thread hitches, with the scripts the browser blamed
                   sample     once a second: phase, region and position, HP/MP, target, heap
 network.json      every transport frame of that window, on the timeline's clock:
