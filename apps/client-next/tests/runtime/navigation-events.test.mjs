@@ -20,7 +20,7 @@ const { navigationEventDirection, navigationEvents } = await load( "foundation/n
 const { dungeonOwnerPath } = await load( "foundation/navigation/dungeon-ownership.ts" );
 const { objectNavigation } = await load( "foundation/navigation/object-navigation.ts" );
 const { createNavigation } = await load(
-	"runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts"
+	"foundation/navigation/clipper.ts"
 );
 const room = ( y = 0 ) => ({
 	x: 0,

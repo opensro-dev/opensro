@@ -99,6 +99,11 @@ type Session struct {
 
 	done chan struct{} // closed exactly once at final teardown
 
+	// sceneReadyHooks run once, in order, when the current scene finishes
+	// loading (FinishSceneReentry). Owners that hold requests during
+	// loading register one to replay them into the ready scene.
+	sceneReadyHooks []func()
+
 	// limiter is the per-session inbound dispatch budget (ratelimit.go).
 	// Owned by the session so its state dies with the session — churn can
 	// never accumulate limiter state anywhere. nil = limiting disabled.
@@ -943,44 +948,5 @@ func (s *Session) dispatchGeneration(gen int, f Frame) {
 	s.mu.Unlock()
 	if current {
 		s.hub.dispatch(s, f)
-	}
-}
-
-// keepaliveLoop pings an attached-but-quiet client and detaches one that
-// has gone silent past the idle timeout, giving it the resume grace window.
-/*
-================
-keepaliveLoop
-================
-*/
-func (s *Session) keepaliveLoop() {
-	interval := s.hub.cfg.KeepaliveInterval
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-s.done:
-			return
-		case <-ticker.C:
-			s.mu.Lock()
-			if s.closed {
-				s.mu.Unlock()
-				return
-			}
-			if !s.attached {
-				s.mu.Unlock()
-				continue
-			}
-			idle := time.Since(s.lastRecv)
-			gen := s.gen
-			s.mu.Unlock()
-			if idle > s.hub.cfg.IdleTimeout {
-				s.detachGen(gen, errIdle)
-				continue
-			}
-			if idle >= interval {
-				_ = s.Send(OpPing, nil)
-			}
-		}
 	}
 }

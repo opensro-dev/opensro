@@ -451,7 +451,8 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 			if !bytes.Equal(before, snapshot()) {
 				t.Fatal("duplicate reward mutated authority")
 			}
-			_, err = rt.StartQuest(character, acceptToken(def))
+			// Subtest-local: the parallel rows must not share the outer err.
+			_, err := rt.StartQuest(character, acceptToken(def))
 			canRepeat := def.AcceptanceUnavailable == "" && (def.Repeatable || def.MaxCompletions > 1)
 			if (err == nil) != canRepeat {
 				t.Fatalf("repeatability=%v error=%v", def.Repeatable, err)

@@ -328,6 +328,8 @@ export function createCharacterPresentation(
 		// The local player (and the mount it rides) is where its movement owner
 		// put it; its entity row can still hold the spawn point, and a LOD
 		// measured from that drifts while running (equipment glow, effects).
+		// Detail tiers are selection logic (#1442): the origin stays the
+		// logical pose, not the presented one.
 		entityLod.step(
 			entities,
 			gameplay?.localGid,
@@ -341,6 +343,7 @@ export function createCharacterPresentation(
 		resources.begin( seconds );
 		output.failure = null;
 		const { localMover, logicalPose, samples } = createPresentationSamples( entities, gameplay );
+		posePresentation.interpolateOwnWalk( renderer.interpolatedOwnWalk?.() === true );
 		posePresentation.samples( samples );
 		const result = resources.poll();
 		const skillObjectResult = result && SKILL_OBJECT_MANIFESTS.some( path => path === result.path );
@@ -432,6 +435,8 @@ export function createCharacterPresentation(
 		// and its mount, then nearest entities with a stable identity tie-break.
 		const sampleActorDetails = probe?.sampleDetails();
 		probe?.detailBegin( "presentation-selection" );
+		// Which entities earn resident models and dungeon admission is budget
+		// logic (#1442): the anchor is the logical pose, not the presented one.
 		const anchor = gameplay?.pose;
 		const local = entities.find( entity => entity.gid === gameplay?.localGid );
 		const priority = ( entity: EntityState ) =>
@@ -780,6 +785,8 @@ export function createCharacterPresentation(
 			ORB_DETAIL_FULL,
 			resources.failed
 		);
+		// The stage budget ranks effect actors by distance to the player: budget
+		// logic (#1442), so the anchor is the logical pose, not the drawn one.
 		auxiliary.presentStages(
 			{ orbActors, effectActors, next, seconds, animationHolders, player: gameplay?.pose ?? undefined },
 			{ renderer, resources, effects, probe }

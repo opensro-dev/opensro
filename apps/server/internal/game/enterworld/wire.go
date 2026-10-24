@@ -359,18 +359,18 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 		writer.U8(uint8(slot))
 		writer.Bytes(BuildItemBody(item))
 	}
-	// Mastery list (sub_866e50): u8 counter, then per row a marker byte 1
-	// + u32 masterydata id + u8 level, terminated by marker 2. Rows come
-	// from the persisted character masteries (schema v4: the racial set,
-	// seeded at level 1); a mastery-less record emits the same empty
+	// Mastery list (the reader's first loop in sub_866e50): per row a marker
+	// byte 1 + u32 masterydata id + u8 level, terminated by marker 2. Rows
+	// come from the persisted character masteries (schema v4: the racial
+	// set, seeded at level 1); a mastery-less record emits the same empty
 	// [0][2] bytes as before.
-	// The count is a u8; masteries are capped at the racial set (<=7) so
-	// the clamp only guards a hand-edited store record.
+	// The v1.150 reader discards the lead byte and takes rows until the
+	// terminator marker 2 - it reads no count, so the list has no 255 cap:
+	// every persisted mastery is emitted. The data layer caps masteries at
+	// the racial set (<=7), so a longer list exists only in a hand-edited
+	// record; the lead byte stays the row count in a byte, as before, and
+	// wraps unread if one ever runs long.
 	masteries := character.Masteries
-	if len(masteries) > 0xff {
-		log.Warnf("bootstrap: char-data mastery list for %s clamped from %d to 255 rows (u8 count)", name, len(masteries))
-		masteries = masteries[:0xff]
-	}
 	writer.U8(uint8(len(masteries)))
 	for _, mastery := range masteries {
 		writer.U8(1)
@@ -404,6 +404,7 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 	// doc). An empty list emits the same single zero byte as before.
 	completedQuests := character.CompletedQuestIds
 	if len(completedQuests) > 0xff {
+		log.Warnf("bootstrap: char-data completed quest list for %s clamped from %d to 255 rows (u8 count) - the tail is NOT emitted", name, len(completedQuests))
 		completedQuests = completedQuests[:0xff]
 	}
 	writer.U8(uint8(len(completedQuests)))
@@ -417,6 +418,7 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 	// the composer hardcoded before this section was modeled.
 	activeQuests := character.ActiveQuests
 	if len(activeQuests) > 0xff {
+		log.Warnf("bootstrap: char-data active quest list for %s clamped from %d to 255 rows (u8 count) - the tail is NOT emitted", name, len(activeQuests))
 		activeQuests = activeQuests[:0xff]
 	}
 	writer.U8(uint8(len(activeQuests)))
@@ -434,6 +436,7 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 		if quest.Flags&0x10 != 0 {
 			contents := quest.Contents
 			if len(contents) > 0xff {
+				log.Warnf("bootstrap: char-data quest contents for %s clamped from %d to 255 rows (u8 count) - the tail is NOT emitted", name, len(contents))
 				contents = contents[:0xff]
 			}
 			writer.U8(uint8(len(contents)))
@@ -451,6 +454,7 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 				// 0xFF would read as the sentinel; a well-formed record
 				// never approaches it (retail objectives are 1-2 values).
 				if len(values) > 0xfe {
+					log.Warnf("bootstrap: char-data quest objective values for %s clamped from %d to 254 rows (u8 count, 0xFF is the sentinel) - the tail is NOT emitted", name, len(values))
 					values = values[:0xfe]
 				}
 				writer.U8(uint8(len(values)))
@@ -462,6 +466,7 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 		if quest.Flags&0x40 != 0 {
 			targets := quest.TargetIds
 			if len(targets) > 0xff {
+				log.Warnf("bootstrap: char-data quest targets for %s clamped from %d to 255 rows (u8 count) - the tail is NOT emitted", name, len(targets))
 				targets = targets[:0xff]
 			}
 			writer.U8(uint8(len(targets)))
@@ -478,6 +483,7 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 	// emits the same single zero byte as before.
 	trackedQuests := character.TrackedQuests
 	if len(trackedQuests) > 0xff {
+		log.Warnf("bootstrap: char-data tracked quest list for %s clamped from %d to 255 rows (u8 count) - the tail is NOT emitted", name, len(trackedQuests))
 		trackedQuests = trackedQuests[:0xff]
 	}
 	writer.U8(uint8(len(trackedQuests)))
@@ -584,9 +590,11 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 	// per name u16 len + ANSI bytes (stream.readString). The persisted
 	// list is capped at the mutate site (WhisperBlockMaxCount = the
 	// client panel's 0x14); the emission clamp here only guards a
-	// hand-edited store record from overflowing the count byte.
+	// hand-edited store record from overflowing the count byte, and
+	// warns when it trims (the #1459 posture: never silent).
 	blocked := character.BlockedWhisperers
 	if len(blocked) > 0xff {
+		log.Warnf("bootstrap: char-data whisper-block list for %s clamped from %d to 255 rows (u8 count) - the tail is NOT emitted", name, len(blocked))
 		blocked = blocked[:0xff]
 	}
 	writer.U8(uint8(len(blocked)))
@@ -604,6 +612,7 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 	// the same single zero byte as before.
 	eventGroups := character.EnterEventGroupIds
 	if len(eventGroups) > 0xff {
+		log.Warnf("bootstrap: char-data event-group list for %s clamped from %d to 255 ids (u8 count) - the tail is NOT emitted", name, len(eventGroups))
 		eventGroups = eventGroups[:0xff]
 	}
 	writer.U8(uint8(len(eventGroups)))

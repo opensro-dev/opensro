@@ -28,6 +28,51 @@ const PING_BACKLOG_LIMIT = 65536;
 // The frame journal for bug reports (takeJournal) holds at most this many
 // frames between takes. Opcodes and sizes only: no payload ever enters it.
 const NET_JOURNAL_RECORDS = 4096;
+// A server close reason is free text; the report keeps a short, plain copy.
+const CLOSE_REASON_LENGTH = 64;
+
+/*
+================
+CloseFacts
+
+What the browser knows when a socket goes away (GH #1428).
+================
+*/
+export interface CloseFacts {
+	readonly code: number;
+	readonly reason: string;
+	readonly wasClean: boolean;
+	readonly errored: boolean;
+	readonly sinceLastFrameMs: number | null;
+	readonly openForMs: number | null;
+	readonly online: boolean;
+}
+
+/*
+================
+closeDetail
+
+One line for the incident report: the WebSocket close code and reason,
+whether the close was clean, whether an error event preceded it, how long
+since the last inbound frame and how long the socket was open, and the
+browser's online flag. 1006 with a long silence reads as a network drop;
+a clean server code with a reason reads as a server close.
+================
+*/
+export function closeDetail( facts: CloseFacts ): string {
+	const seconds = ( ms: number ) => (ms / 1000).toFixed( 1 ) + " s";
+	const reason = facts.reason.replace( /[^\x20-\x7e]/g, "?" ).slice( 0, CLOSE_REASON_LENGTH );
+	return [
+		"WebSocket " + facts.code + (reason ? ' "' + reason + '"' : ""),
+		facts.wasClean ? "clean" : "not clean",
+		...(facts.errored ? [ "after an error event" ] : []),
+		facts.sinceLastFrameMs === null ?
+			"no frame received" :
+			"last frame " + seconds( facts.sinceLastFrameMs ) + " ago",
+		facts.openForMs === null ? "never opened" : "open " + seconds( facts.openForMs ),
+		facts.online ? "online" : "offline"
+	].join( ", " );
+}
 
 /*
 ================
@@ -42,6 +87,8 @@ export function createNetwork(
 	let bytes = 0;
 	let pingToken = 0, pendingPing = false, pingSentAt = -Infinity, pingReceivedAt = -Infinity;
 	let measuredPing: number | null = null;
+	// Frames received on any socket (received()); pings and pongs included.
+	let receivedFrames = 0;
 	const inbox: WireFrame[] = [];
 	let journal = new Float64Array( NET_JOURNAL_RECORDS * NET_JOURNAL_FIELDS ), journalCount = 0;
 	// The incident ring: the bug-report journal above is drained every second,
@@ -49,6 +96,8 @@ export function createNetwork(
 	const recent = new Float64Array( INCIDENT_JOURNAL_ROWS * NET_JOURNAL_FIELDS );
 	let recentNext = 0, recentCount = 0;
 	let ended: string | null = null;
+	// The current socket's open and last-inbound times (performance.now()).
+	let openedAt = -Infinity, receivedAt = -Infinity;
 	/*
 	================
 	note
@@ -174,6 +223,17 @@ export function createNetwork(
 	return {
 		disconnect,
 		/*
+		================
+		received
+
+		Every frame received so far, transport pings and pongs included: the
+		world session's stall detector reads a live link from its change.
+		================
+		*/
+		received() {
+			return receivedFrames;
+		},
+		/*
   ================
   pingMs
 
@@ -213,8 +273,13 @@ export function createNetwork(
 			socket = current;
 			current.binaryType = "arraybuffer";
 			const active = () => !disposed && generation === epoch && socket === current;
+			// An error event is always followed by a close event (WebSocket
+			// close steps), which alone carries the code: report at the close.
+			let errored = false;
+			openedAt = receivedAt = -Infinity;
 			current.onopen = () => {
 				if ( active() ) {
+					openedAt = performance.now();
 					try {
 						send( hello );
 					} catch ( error ) {
@@ -230,7 +295,9 @@ export function createNetwork(
 					if ( !(event.data instanceof ArrayBuffer) ) {
 						throw new Error( "Non-binary transport frame" );
 					}
+					receivedAt = performance.now();
 					const frame = codec.decode( new Uint8Array( event.data ) );
+					receivedFrames++;
 					note( NET_JOURNAL_IN, frame.opcode, event.data.byteLength );
 					if ( frame.opcode === 5 ) {
 						if ( frame.payload.length !== 1 ) throw new Error( "Invalid transport goodbye" );
@@ -301,22 +368,35 @@ export function createNetwork(
 				}
 			};
 			current.onerror = () => {
-				if ( active() ) {
+				if ( active() ) errored = true;
+			};
+			current.onclose = event => {
+				if ( !active() ) return;
+				const now = performance.now();
+				const detail = closeDetail( {
+					code: event.code,
+					reason: event.reason,
+					wasClean: event.wasClean,
+					errored,
+					sinceLastFrameMs: Number.isFinite( receivedAt ) ? now - receivedAt : null,
+					openForMs: Number.isFinite( openedAt ) ? now - openedAt : null,
+					online: globalThis.navigator?.onLine ?? true
+				} );
+				if ( errored ) {
 					fail( "Transport connection failed", undefined, {
 						category: "connection",
 						code: "connection_failed",
-						message: "Connection lost. Please reconnect."
+						message: "Connection lost. Please reconnect.",
+						detail
 					} );
+					return;
 				}
-			};
-			current.onclose = () => {
-				if ( active() ) {
-					end( "Transport connection closed", {
-						category: "unknown",
-						code: "connection_closed",
-						message: "Connection lost. The cause is unknown."
-					} );
-				}
+				end( "Transport connection closed", {
+					category: "unknown",
+					code: "connection_closed",
+					message: "Connection lost. The cause is unknown.",
+					detail
+				} );
 			};
 		},
 		send( frame ) {

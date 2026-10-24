@@ -208,7 +208,10 @@ test("world incidents carry the admitted region and a 401 transport-token refusa
 	defined( socket ).receive( 7, payload );
 	session.step( 5 );
 	transportUnauthorized = true;
+	// A browser always follows an error event with the close that carries
+	// the code; the failure is reported at the close (GH #1428).
 	defined( socket ).onerror?.();
+	defined( socket ).onclose?.( { code: 1006, reason: "", wasClean: false } );
 	session.step( 100 );
 	await settle();
 	assert.equal( reports.length, 1 );

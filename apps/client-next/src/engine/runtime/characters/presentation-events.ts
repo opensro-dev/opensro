@@ -462,7 +462,10 @@ export function createPresentationEvents() {
 				const observer = gameplay?.pose;
 				// Local movement owns gameplay.pose; the entity row can still
 				// contain the spawn position. Admission and text placement must
-				// use the same current victim position.
+				// use the same current victim position. Admission is a distance
+				// cull, not an anchor (logic, #1442): both sides stay on the
+				// logical poses here; the text itself is placed at the
+				// presented pose below.
 				const native = logicalPose( target );
 				const [dx, dz] = observer ? worldDelta( observer, native ) : [ Infinity, Infinity ];
 				const dy = observer ? native.y - observer.y : Infinity;
@@ -613,8 +616,16 @@ export function createPresentationEvents() {
 			}
 			health?.finishedCasts();
 			const pendingDeaths = feedback.pendingDeaths( gameplay?.casts ?? [], health?.currentResult );
+			// A sound at the local player sits on the body as drawn, like
+			// every drawn anchor (#1442): its presented pose, resolved here
+			// in the frame (pose() is idempotent within one frame time),
+			// not the movement owner's logical one. Other emitters keep
+			// their entity row.
+			const localDrawn = gameplay?.pose ?
+				posePresentation.pose( gameplay.localGid, gameplay.pose, seconds ) :
+				undefined;
 			sounds.flush( seconds, gid => {
-				const pose = gid === gameplay?.localGid ? gameplay.pose : entitiesByGid.get( gid );
+				const pose = gid === gameplay?.localGid ? localDrawn : entitiesByGid.get( gid );
 				return pose ? worldAudioPosition( pose ) : undefined;
 			} );
 			return { hitByActor, effectActors, pendingDeaths };

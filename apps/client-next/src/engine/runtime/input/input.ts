@@ -42,6 +42,9 @@ export function createInput(): InputOwner {
 	// Either Alt key, as GetKeyState(VK_MENU) reads it (6FCD50).
 	let altLeft = false, altRight = false;
 	let sight: SightMode = 0, mouseMode: 0 | 1 = 0;
+	// The interface's zoom byte (CGInterface +0x3CF), set by its constructor:
+	// while it stands the wheel clamps distance to the 150 rail (67CC3C).
+	let zoomRailEnabled = true;
 	let pointer: { x: number; y: number; } | null = null,
 		buttons = 0,
 		yaw = initialCameraYaw(),
@@ -79,6 +82,14 @@ export function createInput(): InputOwner {
 			mouseMode = value;
 			pointer = null;
 			buttons = 0;
+		},
+		/*
+		================
+		zoomRail
+		================
+		*/
+		zoomRail( value: boolean ) {
+			zoomRailEnabled = value;
 		},
 		/*
 		================
@@ -137,7 +148,7 @@ export function createInput(): InputOwner {
 				return;
 			}
 			if ( event.kind === "wheel" ) {
-				distance = zoomCamera( distance, event.delta );
+				distance = zoomCamera( distance, event.delta, zoomRailEnabled );
 				return;
 			}
 			if ( queue.length >= MAX_QUEUED_COMMANDS ) {
