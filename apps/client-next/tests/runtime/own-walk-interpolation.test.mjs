@@ -351,6 +351,8 @@ test("the main-thread mover's walk is drawn while it predicts and handed back wi
 	}
 	assert.ok( peak <= SPEED * 1.05, `handback peak ${peak.toFixed( 1 )} u/s against ${SPEED}` );
 	assert.ok( Math.abs( previous.x - legAt( leg, 0, Math.floor( (ms - 20) / STEP_MS ) * STEP_MS ).x ) < 30 );
+});
+
 test("a base walk pushed ahead (a frame-clock jump) is still drawn no faster than the walk", () => {
 	const { presentation, frame } = straight();
 	let ms = 36, previous = frame( ms ), peak = 0;
