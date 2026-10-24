@@ -1674,6 +1674,13 @@
 		},
 		{
 			"consumer": "src/engine/runtime/simulation/worker/session/world/world.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/movement.ts",
+			"functions": [
+				"noteInput"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/world.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
 			"functions": [
 				"outstandingSince"

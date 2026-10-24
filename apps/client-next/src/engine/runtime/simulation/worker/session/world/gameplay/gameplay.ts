@@ -4421,6 +4421,7 @@ release), or undefined. The world
 session reads it to tell a stalled connection from a lost answer.
 ================
 		*/
+		noteInput: movement.noteInput,
 		outstandingSince(): number | undefined {
 			// Every lane whose lost answer resumes the session (world.ts
 			// lostAnswer): moves, the inventory transaction (mall purchases

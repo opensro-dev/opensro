@@ -52,7 +52,13 @@ export type SessionCommand =
 		readonly value: import("@/engine/foundation/gameplay/game-options").GameOptions;
 	}
 	| CharacterOperationCommand
-	| { readonly kind: "gameplay"; readonly command: import("./gameplay").GameplayCommand; }
+	| {
+		readonly kind: "gameplay";
+		readonly command: import("./gameplay").GameplayCommand;
+		// The main thread's input sequence, stamped by the simulation host
+		// (movement-input.ts, #1441a).
+		readonly inputSeq?: number;
+	}
 	| { readonly kind: "enter-world"; readonly character: string; }
 	| { readonly kind: "disconnect"; }
 	| { readonly kind: "restart"; }
