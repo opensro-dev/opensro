@@ -99,3 +99,51 @@ func TestInstanceHandlersMayReenterFromEveryKind(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestInstanceEventDeliveryResumesAfterASinkPanic
+
+A handler that panics must not wedge the queue: the panic propagates
+out of the lane release, but the in-flight mark is reset, so whatever
+recovered the panic keeps receiving events at the next release.
+================
+*/
+func TestInstanceEventDeliveryResumesAfterASinkPanic(t *testing.T) {
+	f := newInstanceInviteFixture(t, instanceInviteShareOptions)
+
+	panics := 1
+	f.rt.InstanceEventSink = func(event InstanceEvent) {
+		if panics > 0 {
+			panics--
+			panic("handler bug")
+		}
+		f.events = append(f.events, event)
+	}
+
+	// The invite's lane release delivers the queued Setup first; the
+	// sink panics on it and the panic leaves InvitePartyToInstance
+	// through the deferred release.
+	func() {
+		defer func() { _ = recover() }()
+		f.invite(t)
+	}()
+	if panics != 0 {
+		t.Fatal("the sink never panicked: the invite delivered nothing")
+	}
+	// The leader still moved in - the transfer runs under the lock,
+	// before the release that panicked.
+	if !f.inside(f.leader) {
+		t.Fatal("leader not inside after the panicking delivery")
+	}
+
+	// The next occurrence is delivered: the queue is not wedged
+	// behind the panic.
+	f.rt.recordInstanceDeath(testDivision, f.leader)
+	unlock := f.rt.lockDivision(testDivision)
+	unlock()
+	kinds := f.kinds()
+	if len(kinds) != 1 || kinds[0] != InstanceEventDead {
+		t.Fatalf("events after the panic = %v, want [Dead]", kinds)
+	}
+}

@@ -130,8 +130,7 @@ Called from the division lane's release (operation_locks.go), so
 handlers always run with no division lock held; a handler may queue
 further events (by calling back into the runtime), and this same pass
 delivers them after the current batch. A flush attempted while a pass
-is already running on this stack is a no-op - the running pass sees
-the whole queue.
+is already running is a no-op - the running pass sees the whole queue.
 ================
 */
 func (rt *Runtime) flushInstanceEvents() {
@@ -147,15 +146,34 @@ func (rt *Runtime) flushInstanceEvents() {
 		sink := rt.InstanceEventSink
 		rt.instanceEvents.mu.Unlock()
 
-		if sink != nil {
-			for _, event := range batch {
-				sink(event)
-			}
-		}
+		rt.deliverInstanceEvents(sink, batch)
+	}
+}
 
+/*
+================
+deliverInstanceEvents
+
+Runs one batch to the sink. The deferred reset clears the in-flight
+mark on every exit - a panicking handler included: the panic still
+propagates to the lane release's caller, but the queue is never left
+wedged behind it, so the next release resumes delivery (whatever
+recovered the panic keeps receiving events). The undelivered tail of
+a panicking batch is dropped; those occurrences' handler already
+failed loudly.
+================
+*/
+func (rt *Runtime) deliverInstanceEvents(sink func(InstanceEvent), batch []InstanceEvent) {
+	defer func() {
 		rt.instanceEvents.mu.Lock()
 		rt.instanceEvents.flushing = false
 		rt.instanceEvents.mu.Unlock()
+	}()
+	if sink == nil {
+		return
+	}
+	for _, event := range batch {
+		sink(event)
 	}
 }
 

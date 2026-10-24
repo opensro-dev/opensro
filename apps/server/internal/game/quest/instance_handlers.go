@@ -26,7 +26,10 @@ released, in occurrence order (instance_events.go there). A handler
 may call back into the runtime - InvitePartyToInstance included;
 before this contract, six of the seven kinds were delivered under
 the non-reentrant division lock and only InvitationAnswered without
-it, so the same call deadlocked from every other kind.
+it, so the same call deadlocked from every other kind. One gate
+stays off limits: delivery can run while the caller still holds the
+publication gate (LockPublication spans lane use and is not
+reentrant), so a handler must never take it.
 
 ===========================================================================
 */
