@@ -4578,6 +4578,87 @@ test("the alchemy frame keeps its authored height, so the description sits on th
 	}
 });
 
+/*
+================
+a destroyed alchemy target frees the window for the next item
+
+BR-261020-1019-8648: after a reinforcement destroys the target, the
+window kept its slot, so the next item clicked read as a reagent onto
+the ghost target and nothing could be bound again.
+================
+*/
+test("a destroyed alchemy target frees the window for the next item (BR-261020-1019-8648)", () => {
+	const f = uiFixture();
+	try {
+		const weapon = slot => ({
+			slot,
+			refObjId: 900,
+			quantity: 1,
+			plus: 0,
+			durability: 100,
+			variance: "0",
+			magic: [],
+			typeFlags: 0xb2c
+		});
+		const state = {
+			...f.state,
+			gameplay: {
+				...f.state.gameplay,
+				inventory: [ weapon( 20 ), weapon( 21 ) ],
+				inventoryPending: false,
+				alchemy: { visible: true, pending: false, mode: "reinforce", flags: 0, error: null, slot: null }
+			}
+		};
+		let now = 0;
+		f.ui.step( state, ++now );
+		f.ui.event( { kind: "activate", id: "open-window:Alchemy" } );
+		let scene = f.ui.step( state, ++now );
+		f.ui.event( { kind: "activate", id: "alchemy-slot:20" } );
+		scene = f.ui.step( state, ++now ) ?? scene;
+		assert.ok(
+			defined( scene ).controls.some( c => c.id === "alchemy-slot:20" ),
+			"the clicked weapon fills the target cell"
+		);
+		// The reinforcement destroys slot 20's weapon: the inventory loses
+		// the row and the outcome carries the destroyed bit (0x40).
+		const after = {
+			...state,
+			gameplay: {
+				...state.gameplay,
+				inventory: [ weapon( 21 ) ],
+				alchemy: {
+					...state.gameplay.alchemy,
+					outcome: {
+						sequence: 1,
+						flags: 0x40,
+						plus: 8,
+						previousPlus: 7,
+						durability: 0,
+						previousDurability: 41
+					}
+				}
+			}
+		};
+		scene = f.ui.step( after, ++now ) ?? scene;
+		assert.ok(
+			defined( scene ).controls.some( c => c.id === "alchemy-empty:0" ),
+			"the destroyed target's cell empties"
+		);
+		assert.ok(
+			!defined( scene ).controls.some( c => c.id === "alchemy-slot:20" ),
+			"no ghost target remains bound"
+		);
+		f.ui.event( { kind: "activate", id: "alchemy-slot:21" } );
+		scene = f.ui.step( after, ++now ) ?? scene;
+		assert.ok(
+			defined( scene ).controls.some( c => c.id === "alchemy-slot:21" ),
+			"the next weapon binds as the new target"
+		);
+	} finally {
+		f.dispose();
+	}
+});
+
 test("low-HP caution atlas keeps its 100 ms cadence on retained world frames", async () => {
 	const { defaultGameOptions } = await load( "src/engine/foundation/gameplay/game-options.ts" );
 	const f = uiFixture();

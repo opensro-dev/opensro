@@ -1,15 +1,25 @@
+/*
+===========================================================================
+
+characters.go - account-scoped character selection and creation
+
+The GameWorld owns the roster and validates names with its shared filter.
+The public Agent forwards authenticated requests to this shard boundary.
+
+===========================================================================
+*/
 package agentapi
 
 import (
 	"errors"
 	"net/http"
-	"opensro.online/server/internal/releaseprotocol"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/domain/charactervitals"
+	"opensro.online/server/internal/releaseprotocol"
 	"opensro.online/server/internal/security/auth"
 )
 
@@ -19,6 +29,11 @@ import (
 const CharacterRosterContractVersion = releaseprotocol.RosterContract
 
 // CharacterItem is one worn or avatar item: native (RefItemID, plus).
+/*
+================
+CharacterItem
+================
+*/
 type CharacterItem struct {
 	RefObjID uint32 `json:"refObjId"`
 	Plus     int64  `json:"plus"`
@@ -29,6 +44,11 @@ type CharacterItem struct {
 // (SCharacterInfo_ReadFromPacket): the model, the worn items and the avatar
 // items. Browser asset URLs are deliberately absent; the client resolves
 // every attachment from its item catalog, as it does in the world.
+/*
+================
+CharacterVisualLoadout
+================
+*/
 type CharacterVisualLoadout struct {
 	ModelCodename    string          `json:"modelCodename"`
 	Items            []CharacterItem `json:"items"`
@@ -41,6 +61,11 @@ type CharacterVisualLoadout struct {
 // CharacterPresentation is the canonical account-roster projection. Raw
 // creation indices remain persistence provenance; every UI-visible identity
 // comes from this single projection.
+/*
+================
+CharacterPresentation
+================
+*/
 type CharacterPresentation struct {
 	RaceIndex         int64
 	Gender            int64
@@ -48,12 +73,35 @@ type CharacterPresentation struct {
 	VisualLoadout     CharacterVisualLoadout
 }
 
+/*
+================
+CharacterPresentationProjector
+================
+*/
 type CharacterPresentationProjector func(*domain.Character) CharacterPresentation
+
+/*
+================
+CharacterCreationValidator
+================
+*/
 type CharacterCreationValidator func(*domain.Character) bool
+
+/*
+================
+CharacterNameValidator
+================
+*/
+type CharacterNameValidator func(string) bool
 
 // Character endpoints are the account-scoped application boundary over the
 // authority store. Session middleware establishes account ownership before
 // any handler reaches this file.
+/*
+================
+handleCharacterList
+================
+*/
 func (api *API) handleCharacterList(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -85,6 +133,11 @@ func (api *API) handleCharacterList(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+/*
+================
+handleNameOverlap
+================
+*/
 func (api *API) handleNameOverlap(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -113,10 +166,18 @@ func (api *API) handleNameOverlap(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"action": 4, "nativeResult": 1})
 }
 
-// nameRefusal mirrors the create path's validation for the pre-check:
-// shape first (0x0c), then case-insensitive overlap (0x11).
+/*
+================
+nameRefusal
+
+Creation and its pre-check share the same refusal order: shape and filter
+use the existing invalid-name result (0x0c), then overlap uses 0x11.
+The shape gate limits character names to ASCII, so the shared filter's
+CP949 handling for non-ASCII input is outside this path.
+================
+*/
 func (api *API) nameRefusal(division, name string) (int, bool) {
-	if !store.CharacterNameShapeValid(name) {
+	if !store.CharacterNameShapeValid(name) || !api.characterNameAllowed(name) {
 		return errCodeInvalidName, true
 	}
 	taken := false
@@ -135,6 +196,11 @@ func (api *API) nameRefusal(division, name string) (int, bool) {
 }
 
 // createRequest is the client's CPSCharacterCreateCreateRequest.
+/*
+================
+createRequest
+================
+*/
 type createRequest struct {
 	DivisionID     string `json:"divisionId"`
 	CharacterName  string `json:"characterName"`
@@ -147,6 +213,11 @@ type createRequest struct {
 	WeaponSelected bool   `json:"weaponSelected"`
 }
 
+/*
+================
+handleCharacterCreate
+================
+*/
 func (api *API) handleCharacterCreate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -215,6 +286,11 @@ func (api *API) handleCharacterCreate(w http.ResponseWriter, r *http.Request) {
 // nil ON PURPOSE: nil means never-seeded, so the first enter-world runs
 // the S8 starter seed (inventory + dev gold) exactly like every existing
 // character did.
+/*
+================
+characterFromCreate
+================
+*/
 func (api *API) characterFromCreate(request createRequest) *domain.Character {
 	level := int64(1)
 	gold := int64(0)
@@ -246,6 +322,11 @@ func (api *API) characterFromCreate(request createRequest) *domain.Character {
 	return c
 }
 
+/*
+================
+coerceIndex
+================
+*/
 func coerceIndex(v *int64) int64 {
 	if v == nil || *v < 0 {
 		return 0
@@ -255,12 +336,22 @@ func coerceIndex(v *int64) int64 {
 
 // deleteActionRequest is the client's CPSCharacterSelectDeleteRecoveryRequest:
 // action 3 reserves a deletion, action 5 restores.
+/*
+================
+deleteActionRequest
+================
+*/
 type deleteActionRequest struct {
 	Action        int    `json:"action"`
 	CharacterName string `json:"characterName"`
 	DivisionID    string `json:"divisionId"`
 }
 
+/*
+================
+handleDeleteAction
+================
+*/
 func (api *API) handleDeleteAction(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -360,6 +451,11 @@ func (api *API) handleDeleteAction(w http.ResponseWriter, r *http.Request) {
 // can carry a CharacterRosterRecord. The browser validates this field before
 // any response reaches application state, making a mixed client/GameWorld
 // deployment fail at the transport boundary instead of inside React.
+/*
+================
+writeCharacterRosterResponse
+================
+*/
 func writeCharacterRosterResponse(w http.ResponseWriter, body map[string]interface{}) {
 	body["characterRosterContractVersion"] = CharacterRosterContractVersion
 	writeJSON(w, http.StatusOK, body)
@@ -368,6 +464,11 @@ func writeCharacterRosterResponse(w http.ResponseWriter, body map[string]interfa
 // handleAgentPacket answers the select-start request (0x7426 -> 0xB426):
 // the scene handoff gate. The actual enter-world rides the game
 // transport; this only proves the character exists and is startable.
+/*
+================
+handleAgentPacket
+================
+*/
 func (api *API) handleAgentPacket(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -404,6 +505,11 @@ func (api *API) handleAgentPacket(w http.ResponseWriter, r *http.Request) {
 // characterStartable resolves, under the read door, whether the named
 // character exists and can enter the world (not delete-pending) — the
 // same gate select-start and the EnterWorld token mint share.
+/*
+================
+characterStartable
+================
+*/
 func (api *API) characterStartable(division, accountID, name string) (found, startable bool) {
 	api.store.ReadCharacters(division, func(characters []*domain.Character) {
 		for _, c := range characters {
@@ -428,6 +534,11 @@ func (api *API) characterStartable(division, accountID, name string) (found, sta
 //
 // The signing secret is a construction prerequisite and arrives through the
 // process composition (auth.EnvSecret), never a literal.
+/*
+================
+handleEnterWorldToken
+================
+*/
 func (api *API) handleEnterWorldToken(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -474,6 +585,11 @@ func (api *API) handleEnterWorldToken(w http.ResponseWriter, r *http.Request) {
 // findCharacter resolves a name to the store's shared record under the
 // read door. Names are immutable, so the returned POINTER stays valid;
 // its fields must be read back under a door.
+/*
+================
+findCharacter
+================
+*/
 func (api *API) findCharacter(division, accountID, name string) *domain.Character {
 	var found *domain.Character
 	api.store.ReadCharacters(division, func(characters []*domain.Character) {
@@ -490,6 +606,11 @@ func (api *API) findCharacter(division, accountID, name string) *domain.Characte
 // createdCharacterJSON keeps persisted creation controls as provenance, but
 // exposes exactly one assembled visual answer. Consumers must never rebuild a
 // second appearance by merging the raw controls back into visualLoadout.
+/*
+================
+createdCharacterJSON
+================
+*/
 func (api *API) createdCharacterJSON(c *domain.Character) map[string]interface{} {
 	presentation := api.characterPresentation(c)
 	presentation.VisualLoadout = characterVisualLoadoutForWire(presentation.VisualLoadout)
@@ -567,6 +688,11 @@ func characterVisualLoadoutForWire(loadout CharacterVisualLoadout) CharacterVisu
 // matching the persisted WorldSpawn json tags). Safe to marshal after
 // the read door closes: the movement lanes' write-backs copy-then-swap
 // the World/Spawn structs and never mutate the old values in place.
+/*
+================
+characterWorldJSON
+================
+*/
 func characterWorldJSON(world *domain.CharacterWorld) map[string]interface{} {
 	out := map[string]interface{}{}
 	if world.Spawn != nil {
@@ -586,6 +712,11 @@ func characterWorldJSON(world *domain.CharacterWorld) map[string]interface{} {
 	return out
 }
 
+/*
+================
+coerceOr
+================
+*/
 func coerceOr(v *int64, fallback int64) int64 {
 	if v == nil {
 		return fallback

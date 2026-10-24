@@ -11,6 +11,14 @@ import assert from "node:assert/strict";
 const { createCosPickup, cosPickupRequest } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/cos-pickup.ts"
 );
+const {
+	PICKUP_KIND_ALL,
+	PICKUP_KIND_ALCHEMY,
+	PICKUP_KIND_EQUIPMENT,
+	PICKUP_KIND_GOLD,
+	PICKUP_KIND_OTHER,
+	PICKUP_KIND_POTIONS
+} = await import( "../../src/engine/foundation/gameplay/ground-item.ts" );
 const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
 );
@@ -265,6 +273,54 @@ test("native category and reservation filters cover own, party, public and quest
 	assert.deepEqual( f.owner.step( f.frame ), [] );
 });
 
+/*
+================
+the experimental item filter narrows the native loop by kind
+
+Port-only (#841): with a kind mask the loop proposes only drops whose
+kind (ground-item's pickupItemKind, from the documented type words) is
+in the mask. It never widens: the native quest-special gate still wins
+over a full mask, and no mask at all is the native loop.
+================
+*/
+test("the experimental item filter narrows the native loop by kind and never widens it", () => {
+	// Documented type words: gold heap 0x2ec, equipment 0x82c, HP potion
+	// 0x08ec, elixir 0x0d6c, tablet 0x1dec, plain etc 0x06c.
+	const cases = [
+		[ 0x2ec, PICKUP_KIND_GOLD ],
+		[ 0x82c, PICKUP_KIND_EQUIPMENT ],
+		[ 0x08ec, PICKUP_KIND_POTIONS ],
+		[ 0x0d6c, PICKUP_KIND_ALCHEMY ],
+		[ 0x1dec, PICKUP_KIND_ALCHEMY ],
+		[ 0x06c, PICKUP_KIND_OTHER ]
+	];
+	for ( const [typeFlags, kind] of cases ) {
+		const admitted = fixture();
+		admitted.drop( 10, 1, typeFlags );
+		assert.deepEqual(
+			admitted.owner.step( { ...admitted.frame, pickupKinds: kind } ),
+			[ cosPickupRequest( 2, 10 ) ],
+			`mask ${kind} admits its own drop 0x${typeFlags.toString( 16 )}`
+		);
+		const refused = fixture();
+		refused.drop( 10, 1, typeFlags );
+		assert.deepEqual(
+			refused.owner.step( { ...refused.frame, pickupKinds: PICKUP_KIND_ALL & ~kind } ),
+			[],
+			`mask without ${kind} refuses 0x${typeFlags.toString( 16 )}`
+		);
+	}
+	const empty = fixture();
+	empty.drop( 10, 1, 0x2ec );
+	assert.deepEqual( empty.owner.step( { ...empty.frame, pickupKinds: 0 } ), [] );
+	const quest = fixture();
+	quest.drop( 10, 1, 0x46c );
+	assert.deepEqual( quest.owner.step( { ...quest.frame, pickupKinds: PICKUP_KIND_ALL } ), [] );
+	const native = fixture();
+	native.drop( 10, 1, 0x0d6c );
+	assert.deepEqual( native.owner.step( native.frame ), [ cosPickupRequest( 2, 10 ) ] );
+});
+
 test("native retry classes expire on simulation time and stale results cannot release a new command", () => {
 	const f = fixture();
 	f.drop( 4, 1 );
@@ -322,6 +378,60 @@ test("smartPetPickup keeps 0x80 enabled on 0xB4/0xB5, pauses non-gold items with
 	gameplay.receive( { opcode: 0xb05b, payload: Uint8Array.of( 1, 2, 0, 0, 0, 2, 0xc7, 0, 0, 0 ) }, 12002 );
 	gameplay.step( 12003, f.frame.local );
 	assert.deepEqual( sent[2], cosPickupRequest( 2, 20 ) );
+	gameplay.dispose();
+});
+
+/*
+================
+the item filter reaches the pickup loop through the experimental slice
+
+Port-only (#841): no mask (the row off) is the native loop; a gold-only
+mask holds an elixir drop the native loop would take; clearing the mask
+restores the native proposal.
+================
+*/
+test("the item filter reaches the pickup loop through the experimental slice", () => {
+	const f = fixture();
+	const sent = [];
+	const gameplay = createGameplay( frame => sent.push( frame ), undefined, undefined, f.frame.read );
+	gameplay.bootstrap( {
+		inventorySlotCount: 45,
+		equipmentSlotCount: 13,
+		refObjSnapshot: [ { kind: "cos", refObjId: 9, tidWord: 0x21c6 } ]
+	} );
+	gameplay.worldReady();
+	gameplay.seed( f.frame.local );
+	const record = new Uint8Array( 29 );
+	const view = new DataView( record.buffer );
+	view.setUint32( 0, 2, true );
+	view.setUint32( 4, 9, true );
+	view.setUint32( 8, 100, true );
+	view.setUint32( 16, 0xc7, true );
+	record[22] = 28;
+	gameplay.receive( { opcode: 0x3158, payload: record }, 0 );
+	gameplay.entityLifecycle( { kind: "spawn", entity: f.drop( 20, 10, 0x0d6c ) } );
+	gameplay.entityLifecycle( { kind: "spawn", entity: f.drop( 21, 20, 0x0d6c ) } );
+	gameplay.step( 0, f.frame.local );
+	assert.deepEqual( sent, [ cosPickupRequest( 2, 20 ) ] );
+	gameplay.receive( { opcode: 0xb69e, payload: Uint8Array.of( 1, 8, 2, 0, 0, 0, 20, 0, 0, 0 ) }, 1 );
+	gameplay.experimental( {
+		predictedRunUp: false,
+		jobKillNotices: true,
+		dropPlusNotices: true,
+		plusSevenNotices: true,
+		petPickupKinds: PICKUP_KIND_GOLD
+	} );
+	gameplay.step( 2, f.frame.local );
+	assert.equal( sent.length, 1 );
+	gameplay.experimental( {
+		predictedRunUp: false,
+		jobKillNotices: true,
+		dropPlusNotices: true,
+		plusSevenNotices: true,
+		petPickupKinds: undefined
+	} );
+	gameplay.step( 3, f.frame.local );
+	assert.deepEqual( sent[1], cosPickupRequest( 2, 21 ) );
 	gameplay.dispose();
 });
 

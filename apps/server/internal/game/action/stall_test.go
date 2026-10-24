@@ -13,6 +13,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 /*
@@ -175,5 +176,69 @@ func TestStallNetworkDegreeIsTheItemsDegree(t *testing.T) {
 		if got := p.Frames[len(p.Frames)-1].Payload; got[1] != c.rows {
 			t.Errorf("degree %d search % X, want %d rows", c.degree, got, c.rows)
 		}
+	}
+}
+
+/*
+================
+TestStallCreateStopsAWalkingHost
+
+BR thread "Stall Jackson": a host opening a stall on the move kept
+walking with the stall up. The original admits the stall and stops the
+host first: the walk settles at the live point, the stop (B2F5) reaches
+the host and its viewers ahead of the create answer, and the pending
+attack command is gone.
+================
+*/
+func TestStallCreateStopsAWalkingHost(t *testing.T) {
+	rt, owner, _, _ := stallFixture(t)
+	key := simulation.WorldKey(testDivision, owner.Name)
+	now := rt.Now().UnixMilli()
+	before := rt.Worlds.Update(key,
+		func() simulation.WorldState { return simulation.SeedWorldState(owner) },
+		func(w *simulation.WorldState) {
+			from := w.Spawn
+			w.Spawn.X += 200
+			w.MoveSegment = &simulation.MoveSegment{From: from, StartedAtMs: now - 2000, ArrivesAtMs: now + 2000}
+		})
+	want := before.LiveSpawnAt(now)
+	rt.setCombatIntent(basicAttackIntent{DivisionID: testDivision, CharacterName: owner.Name, TargetGid: 7})
+
+	out := rt.HandleStallCreate(testDivision, owner, wire.NewWriter(16).WStr("Potions").Payload())
+	if len(out.Frames) < 2 || out.Frames[0].Opcode != wire.OpObjectSourceCorrection || out.Frames[1].Opcode != wire.OpStallCreateResult ||
+		!bytes.Equal(out.Frames[1].Payload, []byte{1}) {
+		t.Fatalf("create frames %+v, want the stop then a successful create", out.Frames)
+	}
+	for name, frames := range map[string][]wire.Frame{"host": out.Frames, "viewers": out.Broadcast} {
+		stop, ok := findCorrection(frames)
+		if !ok || stop.Gid != enterworld.ObjectIDForCharacter(owner) || stop.Position.X != float32(want.X) || stop.Position.Z != float32(want.Z) {
+			t.Fatalf("%s stop %+v (%v), want %+v", name, stop, ok, want)
+		}
+	}
+	after := rt.Worlds.Snapshot(key, func() simulation.WorldState { panic("lost world") })
+	if after.MovingAt(rt.Now().UnixMilli()) || after.Spawn.X != want.X || after.Spawn.Z != want.Z {
+		t.Fatalf("host still walking with the stall up: %+v, want standing at %+v", after, want)
+	}
+	rt.basicAttackIntentsMu.Lock()
+	_, pending := rt.basicAttackIntents[key]
+	rt.basicAttackIntentsMu.Unlock()
+	if pending {
+		t.Fatal("the host's pending attack survived the stall opening")
+	}
+}
+
+/*
+================
+TestStallCreateLeavesAStandingHostAlone
+
+A standing host gets no stop frame: the create answer comes first, as
+before.
+================
+*/
+func TestStallCreateLeavesAStandingHostAlone(t *testing.T) {
+	rt, owner, _, _ := stallFixture(t)
+	out := rt.HandleStallCreate(testDivision, owner, wire.NewWriter(16).WStr("Potions").Payload())
+	if out.Frames[0].Opcode != wire.OpStallCreateResult || len(out.Broadcast) != 0 {
+		t.Fatalf("create frames %+v broadcast %+v, want only the create answer", out.Frames, out.Broadcast)
 	}
 }

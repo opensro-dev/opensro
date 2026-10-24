@@ -77,6 +77,16 @@ const OFF = Object.freeze( {
 	// On by default (owner 2026-10-20): keep bit 0x80 enabled on 0xB4/0xB5 so the
 	// pet keeps picking up gold when full; off restores the native 0x0077DD61 disable.
 	smartPetPickup: true,
+	// Off by default (#841): the pickup pet proposes the native categories
+	// until the item filter is turned on.
+	petPickupFilter: false,
+	// The filter's kinds include everything unless one is explicitly off;
+	// they are read only while the filter itself is on.
+	petFilterGold: true,
+	petFilterEquipment: true,
+	petFilterAlchemy: true,
+	petFilterPotions: true,
+	petFilterOther: true,
 	// On by default (owner 2026-10-22, #1243): a touch tap keeps an item or skill tooltip up.
 	touchInspect: true,
 	// Off by default: the M window shows only the five native towns and 28 x 8 overview.
@@ -248,7 +258,7 @@ Tabs
 test("the window's tabs cover every preference once and Open returns to Image", () => {
 	assert.deepEqual(
 		EXPERIMENTAL_TABS.map( tab => tab.title ),
-		[ "Image", "World", "Lighting", "Game", "Notices", "Other", "Pets" ]
+		[ "Image", "World", "Lighting", "Game", "Notices", "Other", "Pets", "Pickup" ]
 	);
 	// Lighting keeps the direct-light stages; render scale joins Image without
 	// changing the indices used to reopen the existing tabs.
@@ -419,7 +429,8 @@ test("the predicted run-up defaults off and reaches only the worker's slice", ()
 		dropPlusNotices: true,
 		plusSevenNotices: true,
 		homingProjectiles: false,
-		smartPetPickup: true
+		smartPetPickup: true,
+		petPickupKinds: undefined
 	} );
 	for ( const value of [ 1, "true", null, {} ] ) {
 		assert.equal( experimentalOptions( { predictedRunUp: value } ).predictedRunUp, false );
@@ -431,9 +442,53 @@ test("the predicted run-up defaults off and reaches only the worker's slice", ()
 		dropPlusNotices: true,
 		plusSevenNotices: true,
 		homingProjectiles: false,
-		smartPetPickup: true
+		smartPetPickup: true,
+		petPickupKinds: undefined
 	} );
 	assert.equal( "predictedRunUp" in experimentalVideo( on ), false );
+});
+
+test("the pickup pet item filter is off by default and only narrows inside itself", () => {
+	// ground-item's PICKUP_KIND bits: gold 1, equipment 2, alchemy 4,
+	// potions 8, other 16; the mask reaches the worker only while the
+	// filter row is on, so off is the native loop.
+	for ( const value of [ undefined, null, {}, { petPickupFilter: "true" }, { petPickupFilter: 1 } ] ) {
+		const options = experimentalOptions( value );
+		assert.equal( options.petPickupFilter, false, JSON.stringify( value ) );
+		assert.equal( experimentalGameplay( options ).petPickupKinds, undefined );
+	}
+	const on = experimentalOptions( { petPickupFilter: true } );
+	assert.equal( experimentalGameplay( on ).petPickupKinds, 31 );
+	// Kinds narrow only on an explicit false, never on a stored non-boolean.
+	for ( const value of [ "false", 0, null ] ) {
+		assert.equal(
+			experimentalGameplay( experimentalOptions( { petPickupFilter: true, petFilterGold: value } ) )
+				.petPickupKinds,
+			31,
+			JSON.stringify( value )
+		);
+	}
+	assert.equal(
+		experimentalGameplay( experimentalOptions( { petPickupFilter: true, petFilterGold: false } ) )
+			.petPickupKinds,
+		30
+	);
+	assert.equal(
+		experimentalGameplay( experimentalOptions( {
+			petPickupFilter: true,
+			petFilterGold: false,
+			petFilterEquipment: false,
+			petFilterAlchemy: false,
+			petFilterPotions: false,
+			petFilterOther: false
+		} ) ).petPickupKinds,
+		0
+	);
+	// Kind switches stored without the master row still change nothing.
+	assert.equal(
+		experimentalGameplay( experimentalOptions( { petFilterGold: false } ) ).petPickupKinds,
+		undefined
+	);
 });
 
 test("compressed textures are on unless explicitly false, and the stored reader parses the saved key", () => {

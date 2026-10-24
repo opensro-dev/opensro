@@ -114,10 +114,13 @@ export function createCompactHud() {
 compactWindowDrag
 
 Window positions remain desktop preferences. Gameplay carries and shortcut
-binding drags use the published hit rectangles and must remain enabled.
+binding drags use the published hit rectangles and must remain enabled. The
+extended bar is no window position: its handle moves a saved quickslot
+preference, so it stays draggable on compact.
 ================
 */
 export function compactWindowDrag( control: UiControl ): boolean {
+	if ( control.id === "ext-drag" ) return false;
 	return control.id.endsWith( "-drag" ) || control.id.startsWith( "window-drag:" ) || control.id === "map-pan";
 }
 

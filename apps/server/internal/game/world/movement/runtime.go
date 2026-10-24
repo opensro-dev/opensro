@@ -408,9 +408,9 @@ func (rt *Runtime) handleMoveLocked(divisionID string, character *enterworld.Cha
 		return rt.startDirectionWalk(divisionID, character, cosGID, admission, request)
 	}
 
-	// The deep-water gate (retail agent-server authority): refuse mode-1
-	// destinations submerged past the wade depth. A nil validator accepts,
-	// which is also the reference behavior when the surface is unreadable.
+	// The deep-water gate (port-only, SRO_DEEP_WATER_REFUSAL, off by
+	// default): refuse mode-1 destinations submerged past the wade depth.
+	// A nil validator accepts, as does an unreadable surface.
 	if rt.Validator != nil {
 		if refusal := rt.Validator.ValidateMovement(request); refusal != nil {
 			return refusedMove(refusal)

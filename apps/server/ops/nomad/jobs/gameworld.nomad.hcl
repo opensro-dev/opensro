@@ -224,6 +224,15 @@ variable "closed_object_rescue" {
   default = "on"
 }
 
+# deep_water_refusal refuses a click whose destination lies more than 12
+# units under a water surface (port-only, not native: the original server
+# reads no water height). "off" is native; with it on, a character walked
+# onto a deep seabed cannot click its way out (BR-261023-2025-B5DA).
+variable "deep_water_refusal" {
+  type    = string
+  default = "off"
+}
+
 # most_wanted counts a suited player's job kills into a wanted level
 # (bonuses per level, a bounty on their head) (port-only, not native;
 # owner decision 2026-10-14). "off" is native.
@@ -636,6 +645,15 @@ variable "transport_follow" {
   default = "off"
 }
 
+# transport_follow_tether keeps the 100 m tether on a following transport:
+# the trader may not walk more than 100 m from where it walks (port-only,
+# not native; owner decision 2026-10-24). It acts only with transport_follow
+# on; with that off the original parked transport tethers as always.
+variable "transport_follow_tether" {
+  type    = string
+  default = "on"
+}
+
 # job_goods_teleport lets a trader with a transport out use town gates,
 # return scrolls and the reverse return, the transport travelling along
 # (port-only, not native; owner decision 2026-10-18 reversed 2026-10-15).
@@ -936,6 +954,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_STORAGE_AUTO_STACK                  = var.storage_auto_stack
         SRO_FAST_DEN_RETURN                     = var.fast_den_return
         SRO_CLOSED_OBJECT_RESCUE                = var.closed_object_rescue
+        SRO_DEEP_WATER_REFUSAL                  = var.deep_water_refusal
         SRO_MOST_WANTED                         = var.most_wanted
         SRO_MOST_WANTED_TEST                    = var.most_wanted_test
         SRO_MOST_WANTED_TEST_KILLS              = var.most_wanted_test_kills
@@ -1000,6 +1019,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_CARAVAN_STAR_AMBUSH                 = var.caravan_star_ambush
         SRO_JOB_MONSTER_SPEED                   = var.job_monster_speed
         SRO_TRANSPORT_FOLLOW                    = var.transport_follow
+        SRO_TRANSPORT_FOLLOW_TETHER             = var.transport_follow_tether
         SRO_JOB_GOODS_TELEPORT                  = var.job_goods_teleport
         SRO_ELIXIR_DROPS_OFF                    = var.elixir_drops_off
         SRO_ALCHEMY_MATERIAL_DROPS_OFF          = var.alchemy_material_drops_off

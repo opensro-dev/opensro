@@ -23,6 +23,10 @@ import (
 // along a dungeon chord (see the floor walk in clipDungeonPath).
 const maxDungeonFloorSampleSpacing = 2.0
 
+// maxDungeonFloorStep is the largest height change between two floor
+// samples a walk takes as the same floor; a larger one is another floor.
+const maxDungeonFloorStep = 2.0
+
 // Dungeon movement never uses outdoor sector arithmetic. Missing coverage and
 // cross-dungeon requests retain the start; teleportation owns region changes.
 func (v *WaterValidator) clipDungeonPath(from, to simulation.Spawn) ClipReport {
@@ -132,7 +136,7 @@ func (v *WaterValidator) clipDungeonPath(from, to simulation.Spawn) ClipReport {
 			hint := startY + (to.Y-from.Y)*t
 			single := dungeonSpawnSurface{blocks: surface.blocks[i : i+1]}
 			h, inside := single.heightAt(px, hint, pz)
-			if inside && math.Abs(h-hint) <= 2 {
+			if inside && math.Abs(h-hint) <= maxDungeonFloorStep {
 				if t < best {
 					best = t
 					// 99873E/998756 return bit 0 for a circle contact;
@@ -167,7 +171,8 @@ floorWalk:
 		for s := 0; s < samples; s++ {
 			t := cuts[i-1] + (cuts[i]-cuts[i-1])*(float64(s)+0.5)/float64(samples)
 			h, ok := surface.heightAt(from.X+dx*t, curY, from.Z+dz*t)
-			if (!ok || math.Abs(h-curY) > 2) && !passages.covers(t) {
+			sameFloor := ok && math.Abs(h-curY) <= maxDungeonFloorStep
+			if !sameFloor && !passages.covers(t) {
 				if cuts[i-1] < best {
 					best = cuts[i-1]
 					result = monster.NavResultBlocked
@@ -175,7 +180,14 @@ floorWalk:
 				}
 				break floorWalk
 			}
-			if ok {
+			// A passage lets the walk cross the seam between two blocks of
+			// the walked floor, not change floors: where a hairline gap at
+			// the seam leaves only a stacked floor under the sample, the
+			// walk keeps its height. Taking that floor's height lifted the
+			// Donwhang Cave walker from the ground floor to 140 and then 280
+			// at x 0 (BR-261020-1126-03CF), so the server clipped against
+			// the wrong floor while the client walked the right one.
+			if sameFloor {
 				curY = h
 			}
 		}
@@ -194,7 +206,7 @@ floorWalk:
 		report.Rest.X += dx * t
 		report.Rest.Z += dz * t
 		report.Rest.Y = curY
-		if h, ok := surface.heightAt(report.Rest.X, curY, report.Rest.Z); ok && math.Abs(h-curY) <= 2 {
+		if h, ok := surface.heightAt(report.Rest.X, curY, report.Rest.Z); ok && math.Abs(h-curY) <= maxDungeonFloorStep {
 			report.Rest.Y = h
 		}
 		return report
@@ -207,8 +219,13 @@ floorWalk:
 	// that ends past it onto a floor-1 gap covered only by an upper floor
 	// must block here, not arrive on that floor (curY is the walked
 	// height, so a far h is a different floor, not a step).
-	if math.Abs(h-curY) > 2 && !passages.covers(1) {
-		return report
+	if math.Abs(h-curY) > maxDungeonFloorStep {
+		if !passages.covers(1) {
+			return report
+		}
+		// An endpoint on a passage's seam gap keeps the walked floor, as
+		// the samples above do.
+		h = curY
 	}
 	to.Y = h
 	return ClipReport{Outcome: ClipArrived, Rest: to}
