@@ -342,220 +342,7 @@ func helloProgressionWS(t *testing.T, c *websocket.Conn) {
 	}
 }
 
-// --- EnterWorld + char-data parsing ----------------------------------------
-
-/*
-==================
-charData
-
-charData is the subset of the 0x32B3 chunk this lane asserts, parsed
-with BuildLocalPlayerEntryPayload's exact field order (internal/game/enterworld/
-wire.go; itself byte-pinned to the native reader sub_863880/sub_866e50).
-==================
-*/
-type charData struct {
-	Level       uint8
-	MaxLevel    uint8
-	Exp         uint64
-	SkillExp    uint32
-	SkillPoints uint32
-	StatPoints  uint16
-	CurrentHP   uint32
-	CurrentMP   uint32
-	Masteries   map[uint32]uint8
-	Skills      []uint32
-	// The 0x32B3 quest block's three section id lists (sub_8673d0):
-	// walked so a populated section cannot hide behind the skill pins.
-	CompletedQuests []uint32
-	ActiveQuests    []uint32
-	TrackedQuests   []uint32
-}
-
-/*
-================
-parseCharData
-================
-*/
-func parseCharData(t *testing.T, payload []byte) charData {
-	t.Helper()
-	r := wire.NewReader(payload)
-	fail := func(what string, err error) {
-		if err != nil {
-			t.Fatalf("0x32B3 parse: %s: %v", what, err)
-		}
-	}
-	skip := func(n int, what string) {
-		_, err := r.Bytes(n)
-		fail(what, err)
-	}
-
-	// Base runtime block, in writer order: modelRef u32, bodyShape u8,
-	// level u8, maxLevel u8, exp u64, skillExp u32, gold u64. The
-	// level/exp fields are parsed (not skipped) since the levelup wave:
-	// the levelling e2e asserts the persisted walk through them.
-	skip(4+1, "modelRef + bodyShape")
-	out := charData{Masteries: map[uint32]uint8{}}
-	var err error
-	out.Level, err = r.U8()
-	fail("level", err)
-	out.MaxLevel, err = r.U8()
-	fail("maxLevel", err)
-	out.Exp, err = r.U64()
-	fail("exp", err)
-	out.SkillExp, err = r.U32()
-	fail("skillExp", err)
-	skip(8, "gold")
-	out.SkillPoints, err = r.U32()
-	fail("skillPoints", err)
-	out.StatPoints, err = r.U16()
-	fail("statPoints", err)
-	skip(1+4, "berserk + wireValue844")
-	out.CurrentHP, err = r.U32()
-	fail("currentHp", err)
-	out.CurrentMP, err = r.U32()
-	fail("currentMp", err)
-	skip(1+1+2+4, "pk block")
-
-	// Inventory block: u8 capacity, u8 count, per item u8 slot + the
-	// VARIABLE-length CSOItem equipment body (17 fixed bytes + u8
-	// magicParamCount + count x u64 - BuildEquipmentItemBody /
-	// sub_78b1b0).
-	skipItemBody := func(what string) {
-		skip(4+1+8+4, what+" body head")
-		magicCount, err := r.U8()
-		fail(what+" magic count", err)
-		skip(int(magicCount)*8, what+" magic params")
-	}
-	skip(1, "inventory capacity")
-	invCount, err := r.U8()
-	fail("inventory count", err)
-	for i := 0; i < int(invCount); i++ {
-		skip(1, "inventory slot")
-		skipItemBody("inventory item")
-	}
-
-	// Avatar block: u8 capacity + u8 count + count x [u8 slot + the same
-	// variable CSOItem body] (sub_8675f0 avatar loop).
-	skip(1, "avatar capacity")
-	avatarCount, err := r.U8()
-	fail("avatar count", err)
-	for i := 0; i < int(avatarCount); i++ {
-		skip(1, "avatar slot")
-		skipItemBody("avatar item")
-	}
-
-	// Mastery list: u8 count, per row marker 1 + u32 id + u8 level,
-	// terminated by marker 2 (sub_866e50's first loop).
-	masteryCount, err := r.U8()
-	fail("mastery count", err)
-	for i := 0; i < int(masteryCount); i++ {
-		marker, err := r.U8()
-		fail("mastery marker", err)
-		if marker != 1 {
-			t.Fatalf("0x32B3 mastery row %d marker = %d, want 1", i, marker)
-		}
-		id, err := r.U32()
-		fail("mastery id", err)
-		level, err := r.U8()
-		fail("mastery level", err)
-		out.Masteries[id] = level
-	}
-	terminator, err := r.U8()
-	fail("mastery terminator", err)
-	if terminator != 2 {
-		t.Fatalf("0x32B3 mastery terminator = %d, want 2", terminator)
-	}
-
-	// Skill list: u8 count, per row marker 1 + u32 id + u8 value(1),
-	// terminated by marker 2 (sub_866e50's second loop).
-	skillCount, err := r.U8()
-	fail("skill count", err)
-	for i := 0; i < int(skillCount); i++ {
-		marker, err := r.U8()
-		fail("skill marker", err)
-		if marker != 1 {
-			t.Fatalf("0x32B3 skill row %d marker = %d, want 1", i, marker)
-		}
-		id, err := r.U32()
-		fail("skill id", err)
-		value, err := r.U8()
-		fail("skill value", err)
-		if value != 1 {
-			t.Fatalf("0x32B3 skill row %d value byte = %d, want the native ctor default 1", i, value)
-		}
-		out.Skills = append(out.Skills, id)
-	}
-	terminator, err = r.U8()
-	fail("skill terminator", err)
-	if terminator != 2 {
-		t.Fatalf("0x32B3 skill terminator = %d, want 2", terminator)
-	}
-
-	// Quest block (sub_8673d0's three counted sections; the composer
-	// emits all three for real since the 2026-07-29 quest wave, so this
-	// parser walks the full grammar instead of stopping blind after the
-	// skills - a populated section cannot hide from the e2e assertions).
-	// Section 1: completed refs.
-	completedCount, err := r.U8()
-	fail("completed quest count", err)
-	for i := 0; i < int(completedCount); i++ {
-		id, err := r.U32()
-		fail("completed quest id", err)
-		out.CompletedQuests = append(out.CompletedQuests, id)
-	}
-	// Section 2: active SQuestInfo records (sub_788210 flag-gated body).
-	activeCount, err := r.U8()
-	fail("active quest count", err)
-	for i := 0; i < int(activeCount); i++ {
-		id, err := r.U32()
-		fail("active quest refId", err)
-		out.ActiveQuests = append(out.ActiveQuests, id)
-		skip(2, "active quest u08+u09")
-		flags, err := r.U8()
-		fail("active quest flags", err)
-		if flags&0x04 != 0 {
-			skip(4, "active quest progress")
-		}
-		if flags&0x08 != 0 {
-			skip(1, "active quest u10")
-		}
-		if flags&0x10 != 0 {
-			contentsCount, err := r.U8()
-			fail("active quest contents count", err)
-			for node := 0; node < int(contentsCount); node++ {
-				skip(2, "contents tag+kind")
-				strLen, err := r.U16()
-				fail("contents string length", err)
-				skip(int(strLen), "contents string")
-				objectiveCount, err := r.U8()
-				fail("contents objective count", err)
-				if objectiveCount != 0xff {
-					skip(int(objectiveCount)*4, "contents objective values")
-				}
-			}
-		}
-		if flags&0x40 != 0 {
-			targetCount, err := r.U8()
-			fail("active quest target count", err)
-			skip(int(targetCount)*4, "active quest target ids")
-		}
-	}
-	// Section 3: tracked records (optional u32 iff flags&0x02).
-	trackedCount, err := r.U8()
-	fail("tracked quest count", err)
-	for i := 0; i < int(trackedCount); i++ {
-		id, err := r.U32()
-		fail("tracked quest refId", err)
-		out.TrackedQuests = append(out.TrackedQuests, id)
-		flags, err := r.U8()
-		fail("tracked quest flags", err)
-		skip(1+2+6, "tracked quest valueA+word+tail")
-		if flags&0x02 != 0 {
-			skip(4, "tracked quest optional")
-		}
-	}
-	return out
-}
+// --- EnterWorld ---------------------------------------------------------
 
 /*
 ==================
@@ -955,6 +742,52 @@ func TestProgressionPlaneEndToEndOverWire(t *testing.T) {
 	}
 
 	sendFrame(t, conn2, transport.OpBye, []byte{transport.ByeReasonNormal})
+}
+
+/*
+================
+TestCharDataSkillListPast255OverWire
+
+Since #1457 the writer emits EVERY learned skill: the native reader
+discards the list's lead byte and takes marker-1 rows until marker 2,
+so a list past 255 rows has no cap and its lead byte wraps unread. The
+parser above must read the same grammar: a character holding 260 skills
+enters with all 260 on the 0x32B3 chunk, in stored order (#1480).
+================
+*/
+func TestCharDataSkillListPast255OverWire(t *testing.T) {
+	t.Parallel()
+	dir := filepath.Join(t.TempDir(), "authority")
+
+	// 260 learned skills: the lead byte wraps to 4, which the old
+	// count-based reading mistook for the whole list.
+	skills := make([]uint32, 0, 260)
+	for i := 0; i < 260; i++ {
+		skills = append(skills, 20000+uint32(i))
+	}
+	seed := &enterworld.Character{
+		Name:          "e2eManySkill",
+		ModelCodename: "CHAR_CH_MAN_ADVENTURER",
+		RaceIndex:     e2eInt64(enterworld.RaceChina),
+		Gender:        e2eInt64(enterworld.GenderMale),
+		Level:         e2eInt64(40),
+		Skills:        skills,
+	}
+	seed.Masteries = enterworld.DefaultMasteries(enterworld.RaceKeyChina)
+
+	server := startProgressionServer(t, dir, seed)
+	conn := dialProgressionWS(t, server.srv)
+	helloProgressionWS(t, conn)
+
+	parsed, _ := enterWorldAs(t, conn, seed.Name)
+	if !reflect.DeepEqual(parsed.Skills, skills) {
+		t.Fatalf("0x32B3 skill list = %d rows %v..., want the seeded 260 in order", len(parsed.Skills), parsed.Skills[:min(8, len(parsed.Skills))])
+	}
+	if len(parsed.Masteries) != 7 {
+		t.Fatalf("0x32B3 mastery rows = %d, want the 7 CH racial rows", len(parsed.Masteries))
+	}
+
+	sendFrame(t, conn, transport.OpBye, []byte{transport.ByeReasonNormal})
 }
 
 // --- the levelling path (levelup wave, LANE-5) ------------------------------

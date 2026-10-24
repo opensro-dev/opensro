@@ -131,3 +131,76 @@ func TestItemStoneNativeFields(t *testing.T) {
 		t.Fatal("degreeless stone published a mask")
 	}
 }
+
+/*
+================
+TestStoneTooltipMaskFor
+================
+*/
+func TestStoneTooltipMaskFor(t *testing.T) {
+	if got := stoneTooltipMaskFor("weapon armor"); got != stoneTargetWeapon|stoneTargetArmor {
+		t.Fatalf("weapon armor tooltip mask = %d", got)
+	}
+	// The native find runs on the whole text: 'ring' matches inside
+	// 'earring', so both bits print.
+	if got := stoneTooltipMaskFor("earring necklace"); got != stoneTargetEarring|stoneTargetNecklace|stoneTargetRing {
+		t.Fatalf("earring necklace tooltip mask = %d", got)
+	}
+	if got := stoneTooltipMaskFor("Weapon"); got != 0 {
+		t.Fatalf("uppercase tooltip mask = %d", got)
+	}
+	if got := stoneTooltipMaskFor(""); got != 0 {
+		t.Fatalf("empty tooltip mask = %d", got)
+	}
+}
+
+/*
+================
+TestItemStoneTooltipMask
+================
+*/
+func TestItemStoneTooltipMask(t *testing.T) {
+	magic := fakeStoneMagicOptions{rows: map[string]*MagicOptionRow{
+		"MATTR_TEST":   {OptionName: "MATTR_TEST", Degree: 2, Descriptors: []string{"weapon", "armor"}},
+		"MATTR_REPAIR": {OptionName: "MATTR_REPAIR", Degree: 2, Descriptors: []string{"weapon"}},
+	}}
+	base := NewNativeFields(map[string]float64{"itemParam1_29c": 2})
+
+	mask, ok := ItemStoneNativeFields(base, stoneTestRef(1, "MATTR_TEST"), magic).Lookup("stoneTooltipMask")
+	if !ok || uint32(mask) != stoneTargetWeapon|stoneTargetArmor {
+		t.Fatalf("magic stone tooltip mask = %v, %v", mask, ok)
+	}
+
+	// A repair stone searches its own fourth description, not the
+	// option's words (557C50): the option says weapon, the description
+	// says honor, and only honor prints.
+	repair := stoneTestRef(7, "MATTR_REPAIR")
+	repair.ParamDescriptions[3] = "honor"
+	mask, ok = ItemStoneNativeFields(base, repair, magic).Lookup("stoneTooltipMask")
+	if !ok || uint32(mask) != stoneTargetHonor {
+		t.Fatalf("repair stone tooltip mask = %v, %v", mask, ok)
+	}
+
+	attribute := stoneTestRef(2)
+	attribute.ParamDescriptions[3] = "armor,shield"
+	mask, ok = ItemStoneNativeFields(base, attribute, magic).Lookup("stoneTooltipMask")
+	if !ok || uint32(mask) != stoneTargetArmor|stoneTargetShield {
+		t.Fatalf("attribute stone tooltip mask = %v, %v", mask, ok)
+	}
+
+	// 557C50 prints the row even when the option does not resolve: a
+	// present zero, where the binder mask stays unpublished.
+	fields := ItemStoneNativeFields(base, stoneTestRef(1, "MATTR_MISSING"), magic)
+	mask, ok = fields.Lookup("stoneTooltipMask")
+	if !ok || mask != 0 {
+		t.Fatalf("missing option tooltip mask = %v, %v", mask, ok)
+	}
+	if _, ok = fields.Lookup("stoneFamilyMask"); ok {
+		t.Fatal("missing option published a family mask")
+	}
+
+	plain := &ItemRef{TypeIDs: [4]int64{3, 1, 6, 1}}
+	if _, ok = ItemStoneNativeFields(base, plain, magic).Lookup("stoneTooltipMask"); ok {
+		t.Fatal("non-stone published a tooltip mask")
+	}
+}

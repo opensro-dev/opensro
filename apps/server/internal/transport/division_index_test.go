@@ -64,7 +64,7 @@ func newAttachedSession(t *testing.T, hub *Hub, gated bool) (*Session, *fakeConn
 		t.Fatal(err)
 	}
 	fc := newFakeConn(gated)
-	if err := s.attach(fc, false); err != nil {
+	if err := s.attach(fc, false, 0); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { hub.closeSession(s, nil) })
