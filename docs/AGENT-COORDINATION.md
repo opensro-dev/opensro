@@ -90,10 +90,10 @@ links. In addition:
   workflow expects for that change (a scoped job that does not apply). A
   check still running, failed or cancelled blocks the merge. The repository
   allows squash merges only.
-- **An approval reads against completed checks.** An APPROVE counts only
-  against that head's completed checks. An approval posted before CI
-  finishes, or at a head whose checks later fail, does not count: the
-  reviewer acks the green head with a delta before the merge.
+- **An approval reads against completed checks.** An APPROVE counts once
+  that head's checks complete green, whenever the approval was posted. If
+  they fail, the approval does not count: the reviewer acks the green
+  head with a delta before the merge.
 - **Queue merges that touch the same files.** Append-only files
   (`ownership.json`, `execution-contract.json`, size and format ledgers)
   conflict on every merge. Agree the order in the log, and rebase the next PR
