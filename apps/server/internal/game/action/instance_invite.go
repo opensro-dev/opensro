@@ -61,16 +61,19 @@ const instanceInviteShareOptions uint8 = 0x3
 instanceInvite
 
 One outstanding invitation: the lease the member would enter, where,
-and who proposed it. Everything is re-validated at consent time - the
-world may have changed while the prompt was up (the guild arm's
-posture).
+who proposed it, and the world the party stood in when it was
+proposed. The party and world parts are re-validated against those
+anchors at consent time - either may have changed while the prompt
+was up (the guild arm's posture).
 ================
 */
 type instanceInvite struct {
-	leaderName string
-	lease      instance.Lease
-	entry      simulation.Spawn
-	expiresMs  int64
+	leaderName  string
+	leaderGid   uint32
+	originWorld instance.ID
+	lease       instance.Lease
+	entry       simulation.Spawn
+	expiresMs   int64
 }
 
 /*
@@ -324,10 +327,12 @@ func (rt *Runtime) InvitePartyToInstance(req InstanceInviteRequest) InstanceInvi
 			continue
 		}
 		rt.instanceInvites.put(req.Division, member.Name, instanceInvite{
-			leaderName: leader.Name,
-			lease:      lease,
-			entry:      req.Entry,
-			expiresMs:  nowMs + instanceInviteAnswerWindowMs,
+			leaderName:  leader.Name,
+			leaderGid:   leaderGid,
+			originWorld: originWorld,
+			lease:       lease,
+			entry:       req.Entry,
+			expiresMs:   nowMs + instanceInviteAnswerWindowMs,
 		})
 		if rt.PushCharacterFrames != nil {
 			rt.PushCharacterFrames(req.Division, member.Name, []wire.Frame{{Opcode: opInvitationProposal, Payload: prompt}})
@@ -500,12 +505,14 @@ ApplyConsent
 The answer {1, 1} accepts; anything else declines (the client sends
 {1, button} for both box buttons). The answered event fires either
 way (the invitation-answered event); an accept then
-transfers the member in under the division lock, re-validated live -
-a member who no longer fits the transfer's own gates simply does not
-move, and the event stream says so by the missing Enter. Delivery:
-the accept path's lane release delivers the answered/enter pair; a
-decline takes no lane, so it delivers its answered event itself -
-this entry point holds no lock either way (instance_events.go).
+re-checks the party and world parts of eligibility (instanceAcceptEligible)
+and transfers the member in under the division lock, re-validated
+live - a member who no longer fits simply does not move, and the
+event stream says so by the missing Enter. Delivery: the accept
+path's lane release delivers the queued answered/enter/activated
+events in order; a decline takes no lane, so it delivers its
+answered event itself - this entry point holds no lock either way
+(instance_events.go).
 ================
 */
 func (c *InstanceInviteConsent) ApplyConsent(_ *transport.Session, divisionID string, actor *enterworld.Character, first, second uint8) {
@@ -527,8 +534,35 @@ func (c *InstanceInviteConsent) ApplyConsent(_ *transport.Session, divisionID st
 		return
 	}
 	unlock := rt.lockDivision(divisionID)
-	if member := rt.findCharacter(divisionID, actor.Name); member != nil {
+	if member := rt.findCharacter(divisionID, actor.Name); member != nil && rt.instanceAcceptEligible(divisionID, member, invite) {
 		rt.transferCharacterToInstance(divisionID, member, invite.lease, invite.entry)
 	}
 	unlock()
+}
+
+/*
+================
+instanceAcceptEligible
+
+The party and world parts of the invitation-time gates, re-run at
+consent (the prompt has been up for as long as 30 s): the member
+still stands in the world the party was invited from, has not
+entered another programme meanwhile, and still belongs to the
+inviting leader's party. The caller holds the division lock. The
+remaining invitation-time gates (delete-pending, trade transport,
+competing proposals, the programme predicate) are not re-run - the
+issue's scope is the two parts the answer window can silently
+invalidate - and the transfer's own gates still run inside
+transferCharacterToInstance.
+================
+*/
+func (rt *Runtime) instanceAcceptEligible(divisionID string, member *enterworld.Character, invite instanceInvite) bool {
+	if member.World != nil && member.World.InstanceReturn != nil {
+		return false // inside another programme now
+	}
+	if instance.ID(domain.CharacterWorldInstance(member)) != invite.originWorld {
+		return false // no longer standing in the inviting world
+	}
+	party := rt.rewardPartyOf(divisionID, enterworld.ObjectIDForCharacter(member))
+	return party != nil && party.LeaderID == invite.leaderGid
 }

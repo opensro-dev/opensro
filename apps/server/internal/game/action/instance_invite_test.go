@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/instance"
@@ -138,8 +139,8 @@ func TestInstanceInvitePromptsThePartyAndMovesAccepts(t *testing.T) {
 			t.Fatalf("prompt roster %x lacks %s", payload[26:], c.Name)
 		}
 	}
-	if got, want := f.kinds(), []InstanceEventKind{InstanceEventSetup, InstanceEventEnter}; len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
-		t.Fatalf("events = %v, want setup then leader enter", got)
+	if got, want := f.kinds(), []InstanceEventKind{InstanceEventSetup, InstanceEventEnter, InstanceEventActivated}; len(got) != 3 || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
+		t.Fatalf("events = %v, want setup, leader enter, leader activated", got)
 	}
 
 	consent := f.rt.InstanceInviteConsent()
@@ -156,8 +157,8 @@ func TestInstanceInvitePromptsThePartyAndMovesAccepts(t *testing.T) {
 	}
 	got := f.kinds()
 	want := []InstanceEventKind{
-		InstanceEventSetup, InstanceEventEnter,
-		InstanceEventInvitationAnswered, InstanceEventEnter,
+		InstanceEventSetup, InstanceEventEnter, InstanceEventActivated,
+		InstanceEventInvitationAnswered, InstanceEventEnter, InstanceEventActivated,
 		InstanceEventInvitationAnswered,
 	}
 	if len(got) != len(want) {
@@ -168,8 +169,87 @@ func TestInstanceInvitePromptsThePartyAndMovesAccepts(t *testing.T) {
 			t.Fatalf("events = %v, want %v", got, want)
 		}
 	}
-	if !f.events[2].Accepted || f.events[4].Accepted {
+	if !f.events[3].Accepted || f.events[6].Accepted {
 		t.Fatalf("answered events lost their answers: %+v", f.events)
+	}
+}
+
+/*
+================
+TestInstanceActivatedFollowsEnter
+
+Every character who transfers in is activated right after their
+enter, naming the same character: the programme's post-entry
+checkpoint (#1434).
+================
+*/
+func TestInstanceActivatedFollowsEnter(t *testing.T) {
+	f := newInstanceInviteFixture(t, instanceInviteShareOptions)
+	if result := f.invite(t); result.OpenStatus != instance.Success {
+		t.Fatalf("invite = %+v", result)
+	}
+	f.rt.InstanceInviteConsent().ApplyConsent(nil, testDivision, f.members[0], 1, 1)
+
+	// The activation names the character whose enter it follows.
+	leaderGid := enterworld.ObjectIDForCharacter(f.leader)
+	memberGid := enterworld.ObjectIDForCharacter(f.members[0])
+	enterLeader, activatedLeader := f.events[1], f.events[2]
+	if enterLeader.Kind != InstanceEventEnter || enterLeader.Gid != leaderGid {
+		t.Fatalf("leader enter = %+v", enterLeader)
+	}
+	if activatedLeader.Kind != InstanceEventActivated || activatedLeader.Gid != leaderGid || activatedLeader.World != enterLeader.World {
+		t.Fatalf("leader activated = %+v, want the leader in %v", activatedLeader, enterLeader.World)
+	}
+	enterMember, activatedMember := f.events[4], f.events[5]
+	if enterMember.Kind != InstanceEventEnter || enterMember.Gid != memberGid {
+		t.Fatalf("member enter = %+v", enterMember)
+	}
+	if activatedMember.Kind != InstanceEventActivated || activatedMember.Gid != memberGid || activatedMember.World != enterMember.World {
+		t.Fatalf("member activated = %+v, want MemberA in %v", activatedMember, enterMember.World)
+	}
+}
+
+/*
+================
+TestInstanceAcceptRechecksPartyAndWorld
+
+The invitation was earned by standing in the leader's party, in the
+leader's world, at prompt time. Thirty seconds is long enough to
+leave both; an accept re-checks them before the transfer (#1435).
+================
+*/
+func TestInstanceAcceptRechecksPartyAndWorld(t *testing.T) {
+	// MemberA leaves the party while the prompt is up.
+	f := newInstanceInviteFixture(t, instanceInviteShareOptions)
+	if result := f.invite(t); result.OpenStatus != instance.Success {
+		t.Fatalf("invite = %+v", result)
+	}
+	leaderGid := enterworld.ObjectIDForCharacter(f.leader)
+	rest := []uint32{leaderGid}
+	for _, c := range f.members[1:] {
+		rest = append(rest, enterworld.ObjectIDForCharacter(c))
+	}
+	f.rt.RewardParties = func(string) []RewardParty {
+		return []RewardParty{{
+			Order: 1, Options: instanceInviteShareOptions,
+			LeaderID: leaderGid, Members: rest,
+		}}
+	}
+	f.rt.InstanceInviteConsent().ApplyConsent(nil, testDivision, f.members[0], 1, 1)
+	if f.inside(f.members[0]) {
+		t.Fatal("MemberA entered after leaving the party")
+	}
+
+	// MemberA steps into another world while the prompt is up.
+	f = newInstanceInviteFixture(t, instanceInviteShareOptions)
+	if result := f.invite(t); result.OpenStatus != instance.Success {
+		t.Fatalf("invite = %+v", result)
+	}
+	otherWorld := domain.DefaultWorldInstance + 1
+	f.members[0].World.PackedInstance = &otherWorld
+	f.rt.InstanceInviteConsent().ApplyConsent(nil, testDivision, f.members[0], 1, 1)
+	if f.inside(f.members[0]) {
+		t.Fatal("MemberA entered from another world")
 	}
 }
 

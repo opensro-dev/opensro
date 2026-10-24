@@ -208,6 +208,11 @@ func (rt *Runtime) transferCharacterToInstance(division string, c *enterworld.Ch
 		return instance.NotMember
 	}
 	rt.instanceEvent(InstanceEventEnter, division, lease.ID.Definition(), lease.ID, c, false)
+	// The entered character is now fully in - equipment, companions
+	// and quest state loaded - so the post-entry checkpoint follows
+	// the enter at once: a programme validates the entry conditions
+	// there, before any update tick reaches it.
+	rt.instanceEvent(InstanceEventActivated, division, lease.ID.Definition(), lease.ID, c, false)
 	return instance.Success
 }
 

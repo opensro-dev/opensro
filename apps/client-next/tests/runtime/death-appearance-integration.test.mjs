@@ -270,6 +270,7 @@ test("actor-motion drops outgoing live-body locomotion and active installations 
 				active: new Set( [ entity.gid ] ),
 				animationDeltaMs: 16,
 				castByActor: new Map(),
+				drawnPoses: new Map(),
 				entities: [ entity ],
 				entitiesByGid: new Map( [ [ entity.gid, entity ] ] ),
 				gameplay: null,
