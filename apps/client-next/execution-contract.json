@@ -118,6 +118,14 @@
 			]
 		},
 		{
+			"consumer": "src/engine/foundation/gameplay/walk-step.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
+			"functions": [
+				"clip",
+				"surface"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/gameplay/walking-history.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
 			"functions": [
