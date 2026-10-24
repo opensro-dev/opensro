@@ -294,6 +294,32 @@ test( "movement cadence captures live click reversal and authoritative receipts"
 		const movingSpeeds = frames.filter( f => f.moving ).map( f => f.speed ).sort( ( a, b ) => a - b ),
 			walk = movingSpeeds[Math.floor( movingSpeeds.length / 2 )];
 		assert.ok( walk > 10, "the trace really walks (median speed " + walk + ")" );
+		// The 1.05 bar below is relative to this median, so it cannot see a
+		// presenter that runs uniformly fast. Anchor the median to the local
+		// entity's own speed for the gait the trace actually drew (the cycles
+		// rows name it: run is state 7, walk is state 1).
+		const gait = await page.evaluate(
+			( [from, to] ) => {
+				let run = 0, stroll = 0;
+				for ( const row of window.__entry.cycles ) {
+					if ( !row.moving || row.at < from || row.at > to ) continue;
+					if ( row.clip === "run" || /:7$/.test( row.clip ) ) run++;
+					else if ( row.clip === "walk" || /:1$/.test( row.clip ) ) stroll++;
+				}
+				return { run, stroll };
+			},
+			[ frames[0].at, frames[frames.length - 1].at ]
+		);
+		assert.ok( gait.run + gait.stroll > 0, "the manoeuvre's gait is recorded" );
+		const runs = gait.run >= gait.stroll,
+			expectedSpeed = runs ? trace[0].pose.runSpeed : trace[0].pose.walkSpeed;
+		assert.ok( typeof expectedSpeed === "number", "the trace pose carries its own speeds" );
+		assert.ok(
+			Math.abs( walk - expectedSpeed ) <= expectedSpeed * .05,
+			`the median moving speed ${walk.toFixed( 1 )} u/s is the entity's own ${
+				runs ? "run" : "walk"
+			} speed ${expectedSpeed} u/s within 5%`
+		);
 		const worst = frames.reduce( ( m, f ) => f.speed > m.speed ? f : m, frames[0] );
 		assert.ok(
 			worst.speed <= walk * 1.05,
