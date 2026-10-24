@@ -114,7 +114,13 @@ import { containsPoint, topmostControlAt } from "@/engine/foundation/ui/hit-test
 import { minimapZoomTarget, advanceMinimapZoom } from "@/engine/foundation/ui/minimap-zoom";
 import { minimapTiles } from "@/engine/foundation/ui/minimap-tiles";
 import { minimapFloorQueries, minimapPoseKey, minimapSameFloor } from "@/engine/foundation/ui/minimap-floor";
-import { minimapMarkers, minimapOffset, minimapEdge, minimapHunting } from "@/engine/foundation/ui/minimap-markers";
+import {
+	minimapMarkers,
+	minimapOffset,
+	minimapEdge,
+	minimapHunting,
+	questMarkerTargets
+} from "@/engine/foundation/ui/minimap-markers";
 import { createMinimapResources } from "./hud/minimap";
 import { createWorldMapHud } from "./hud/world-map";
 import { createSkillTrainingCache } from "./hud/skill-training";
@@ -8722,9 +8728,17 @@ export function createUi(
 				trackedQuest = 0;
 				dirty = true;
 			}
-			if ( minimapResources.step( trackedQuest !== 0, next.session?.phase === "world" ) ) dirty = true;
+			// Port-only: the quest tracker row needs the NPC catalogue whenever
+			// any quest is active, not only while one quest is tracked (#840).
+			const allQuestMarkers = experimental.state().saved.questTrackerMarkers;
+			if (
+				minimapResources.step(
+					trackedQuest !== 0 || (allQuestMarkers && (next.gameplay?.quests?.length ?? 0) > 0),
+					next.session?.phase === "world"
+				)
+			) dirty = true;
 			if ( mapHud.step( next, panel ) ) dirty = true;
-			const questPositions = (next.gameplay?.quests?.find( q => q.refId === trackedQuest )?.targetIds ?? [])
+			const questPositions = questMarkerTargets( next.gameplay?.quests, trackedQuest, allQuestMarkers )
 				.flatMap( id => {
 					const p = minimapResources.positions()?.get( id );
 					return p ? [ p ] : [];
@@ -12491,7 +12505,13 @@ export function createUi(
 							sprite( [ cx + tile.x, cy + tile.y, minimapZoom, minimapZoom ], tile.path );
 						}
 						const markers = [ ...minimapMarkers( pose, game, next.entities, minimapZoom, inner[2] / 2 ) ];
-						for ( const id of game?.quests?.find( q => q.refId === trackedQuest )?.targetIds ?? [] ) {
+						for (
+							const id of questMarkerTargets(
+								game?.quests,
+								trackedQuest,
+								experimental.state().saved.questTrackerMarkers
+							)
+						) {
 							const target = minimapResources.positions()?.get( id );
 							if ( !target || !minimapSameFloor( pose, target, game ?? null ) ) continue;
 							const offset = minimapOffset( pose, target, minimapZoom );
