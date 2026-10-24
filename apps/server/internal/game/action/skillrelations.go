@@ -143,6 +143,14 @@ func (rt *Runtime) hostilePlayerRelation(division string, caster, target *enterw
 	if caster == nil || target == nil || caster.ID == target.ID || rt.sharePartyObject(division, caster, target) {
 		return false
 	}
+	// The flag war's event-world hostility precedes the normal-world
+	// relation contexts (flagwar_match.go): inside the arena, opposite
+	// teams are enemies regardless of capes, jobs or PK state. Party
+	// protection above still precedes it (port default: the native
+	// party-inside-arena case is unpinned).
+	if rt.flagWarHostile(division, caster, target) {
+		return true
+	}
 	aJob, aCape := rt.playerRelationEquipment(caster)
 	bJob, bCape := rt.playerRelationEquipment(target)
 	if aCape != 0 && bCape != 0 || aJob != 0 && bJob != 0 {
@@ -255,6 +263,10 @@ func (rt *Runtime) playerAttackRefusal(division string, caster, target *enterwor
 		return code
 	}
 	if rt.guildsAtWar(division, caster, target) {
+		return 0
+	}
+	// Flag war opponents are legal targets (flagwar_match.go).
+	if rt.flagWarHostile(division, caster, target) {
 		return 0
 	}
 	// 529521 admits opposing jobs at once: the suit's job byte is written when

@@ -70,10 +70,13 @@ type Runtime struct {
 	// FlagWar is the Capture the Flag schedule (native; flagwar.go):
 	// SRO_FLAGWAR_START_UTC and SRO_FLAGWAR_MIN_PLAYERS, wired from env.
 	FlagWar FlagWarSettings
-	// FlagWarMatchStart is installed by the Capture the Flag match
-	// owner; nil until that lane lands (flagwar.go covers the interim).
+	// FlagWarMatchStart is the Capture the Flag match owner's entry
+	// point, installed by NewRuntime (flagwar_match.go).
 	FlagWarMatchStart func(registrants []FlagWarRegistrant) []simulation.DivisionFrames
 	flagWar           flagWarEvent
+	// flagWarLive is the live Capture the Flag match book, keyed by
+	// division (flagwar_match.go).
+	flagWarLive flagWarMatches
 	// TeamDeathTownRule sends a team death to the town rule (port-only,
 	// SRO_TEAM_DEATH_REVIVE off; the zero value is native, teamdeath.go).
 	TeamDeathTownRule bool
@@ -752,6 +755,10 @@ func NewRuntime(deps Dependencies, monsters *simulation.MonsterState) *Runtime {
 	if monsters != nil {
 		monsters.SetAbnormalContext(monsterAbnormalContext{rt})
 	}
+
+	// The Capture the Flag match owner (flagwar_match.go) consumes
+	// the registration queue at the daily start instant.
+	rt.FlagWarMatchStart = rt.startFlagWarMatch
 
 	return rt
 }
