@@ -21,6 +21,8 @@ sets, and then swallows the line without running it.
 export const DEBUG_COMMAND_PLAYER_COUNT = 0;
 export const DEBUG_COMMAND_DEBUG = 1;
 export const DEBUG_COMMAND_MESSAGE_CLEAR = 2;
+export const DEBUG_COMMAND_POSITION = 3;
+export const DEBUG_COMMAND_GET_POSITION = 4;
 export const DEBUG_COMMAND_NULL = 5;
 // 690C40's 0x190 branch: use the bag slot named by the single argument.
 export const DEBUG_COMMAND_ITEM = 400;
@@ -165,6 +167,61 @@ export function debugFieldOfView( args: readonly string[] ): number | null {
 	}
 	if ( negative && magnitude !== 0 ) return MAX_FIELD_OF_VIEW_DEGREES;
 	return Math.max( MIN_FIELD_OF_VIEW_DEGREES, Math.min( MAX_FIELD_OF_VIEW_DEGREES, magnitude ) );
+}
+
+/*
+================
+debugPositionHex
+
+The /Pos region token: swscanf "%x" - hex digits stop at the first
+non-hex character, no digits (or a missing token) reads 0.
+================
+*/
+function debugPositionHex( token: string | undefined ): number {
+	if ( !token ) return 0;
+	const value = Number.parseInt( token, 16 );
+	return Number.isNaN( value ) ? 0 : value;
+}
+
+/*
+================
+debugPositionFloat
+
+One /Pos coordinate token: CRT_atof - a leading float, no digits (or a
+missing token) reads 0.
+================
+*/
+function debugPositionFloat( token: string | undefined ): number {
+	if ( !token ) return 0;
+	const value = Number.parseFloat( token );
+	return Number.isNaN( value ) ? 0 : value;
+}
+
+/*
+================
+debugPosition
+
+690C40 case 2 (/Pos %s): the single argument word is comma-split into
+four tokens - a hex region, then x, y, z floats - and handed to
+CNavigationController_SetTargetDestination (86D5C0) on the local player
+(or its mount vehicle), which is the ground-click walk destination, not
+a teleport. The native handler runs only when an argument word exists
+(CGInterface_Helper4BDEF0 reports the word count) and reads the first
+word alone. The region lands in the destination's u16 field (86D5C0
+reads it at +8), so it is masked to 16 bits here.
+================
+*/
+export function debugPosition(
+	args: readonly string[]
+): { regionId: number; x: number; y: number; z: number; } | null {
+	if ( args.length < 1 ) return null;
+	const tokens = args[0]!.split( "," );
+	return {
+		regionId: debugPositionHex( tokens[0] ) & 0xffff,
+		x: debugPositionFloat( tokens[1] ),
+		y: debugPositionFloat( tokens[2] ),
+		z: debugPositionFloat( tokens[3] )
+	};
 }
 
 /*

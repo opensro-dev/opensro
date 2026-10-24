@@ -696,13 +696,16 @@ import {
 import {
 	commandInteger,
 	DEBUG_COMMAND_DEBUG,
+	DEBUG_COMMAND_GET_POSITION,
 	DEBUG_COMMAND_ITEM,
 	DEBUG_COMMAND_MESSAGE_CLEAR,
 	DEBUG_COMMAND_NULL,
 	DEBUG_COMMAND_PLAYER_COUNT,
+	DEBUG_COMMAND_POSITION,
 	DEBUG_COMMAND_SET_FIELD_OF_VIEW,
 	debugCommand,
 	debugFieldOfView,
+	debugPosition,
 	type DebugCommand
 } from "@/engine/foundation/ui/debug-commands";
 import { messageBox } from "@/engine/foundation/ui/message-box";
@@ -2552,8 +2555,9 @@ export function createUi(
 	================
 	runDebugCommand
 
-	CGInterface_OnCommandMessage for the console family, bag-slot use and FOV.
-	The remaining command.txt families leave the line as typed.
+	CGInterface_OnCommandMessage for the console family, the position
+	pair, bag-slot use and FOV. The remaining command.txt families leave
+	the line as typed.
 	================
 	*/
 	function runDebugCommand( command: DebugCommand ) {
@@ -2566,6 +2570,19 @@ export function createUi(
 			case DEBUG_COMMAND_MESSAGE_CLEAR:
 				// Case 1 empties the console's lines, the command's echo included.
 				consoleRows = [];
+				break;
+			case DEBUG_COMMAND_POSITION: {
+				// Case 2: "/Pos region,x,y,z" walks the local player (or its
+				// mount) to the destination, the ground-click walk, not a
+				// teleport. The native destination carries no heading.
+				const destination = debugPosition( command.args );
+				if ( destination ) sendGameplay( { kind: "move", destination: { ...destination, angle: 0 } } );
+				break;
+			}
+			case DEBUG_COMMAND_GET_POSITION:
+				// Case 3 flips the +CEAD84 byte and writes it as the local
+				// player's body visual state (85EC00): berserk look on or off.
+				sendGameplay( { kind: "debug-body-visual" } );
 				break;
 			case DEBUG_COMMAND_NULL:
 				// Port-only, not native: case 4 writes through a null pointer to
