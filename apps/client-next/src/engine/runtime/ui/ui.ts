@@ -4950,13 +4950,19 @@ export function createUi(
 			}
 		} else if ( id === "drop-gold" && view.gameplay && (goldDialog === "deposit" || goldDialog === "withdraw") ) {
 			// 59A430 caps warehouse deposits at min(carriedGold, 100_000_000);
-			// 59C510 closes the modal without sending when amount <= 0.
+			// 59C510 closes the modal without sending when amount <= 0, as the
+			// exchange branch above does: an unsendable amount used to leave
+			// the dialog sitting open with no answer (BR-261022-2026-ED06).
 			const amount = Number( goldAmount ),
 				balance = goldDialog === "withdraw" ? view.gameplay.storage?.gold : view.gameplay.progression?.gold,
 				cap = goldDialog === "deposit" ? 100000000 : 0xffffffff;
-			if (
-				!view.gameplay.inventoryPending && /^\d+$/.test( goldAmount ) && Number.isSafeInteger( amount ) &&
-				amount > 0 && amount <= cap && balance !== undefined && BigInt( amount ) <= BigInt( balance )
+			if ( !/^\d+$/.test( goldAmount ) || amount === 0 ) {
+				goldDialog = false;
+				focus = null;
+				goldAmount = "";
+			} else if (
+				!view.gameplay.inventoryPending && Number.isSafeInteger( amount ) &&
+				amount <= cap && balance !== undefined && BigInt( amount ) <= BigInt( balance )
 			) {
 				sendGameplay( {
 					kind: "storage-move",
