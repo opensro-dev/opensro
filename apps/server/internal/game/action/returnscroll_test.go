@@ -208,29 +208,43 @@ func TestReturnDeathCancelsTheCast(t *testing.T) {
 
 /*
 ================
-TestReturnBerserkDefersAndEntryFailureRollsBack
+TestReturnBerserkCompletesAndEntryFailureRollsBack
 
-40614E postpones the channel-11 teleport by a second while the body mode is
-berserk (1); once it ends the cast completes, and a failed world entry
-leaves the actor where it stood.
+Berserk (body mode 1) does not hold a return cast: the teleport completes
+on its cast timer mid-berserk, leaving the body mode itself untouched. A
+failed world entry still leaves the actor where it stood.
 ================
 */
-func TestReturnBerserkDefersAndEntryFailureRollsBack(t *testing.T) {
+func TestReturnBerserkCompletesAndEntryFailureRollsBack(t *testing.T) {
 	rt, c, clock, _ := returnFixture(t, 5000)
+	want := simulation.Spawn{RegionID: 25416, X: 703, Y: 42, Z: 1575, Angle: 12345}
+	c.World.RebirthPoint = worldSpawnFromMission(want)
 	useReturn(rt, c)
 	key := simulation.WorldKey(testDivision, c.Name)
-	c.NativeBodyStatus = berserkBodyMode
+	c.NativeBodyStatus = 1
 	clock.Advance(5 * time.Second)
 	rt.advanceReturnScrolls(clock.NowMs())
-	v, ok := rt.returnCasts.Load(key)
-	if !ok || v.(pendingReturn).due != clock.NowMs()+returnPostponeMs || c.NativeTeleportMode != 1 {
-		t.Fatal("berserk did not defer the teleport")
+	if _, pending := rt.returnCasts.Load(key); pending || c.NativeTeleportMode != 0 {
+		t.Fatal("berserk held the teleport past its cast timer")
 	}
-	c.NativeBodyStatus = 0
+	if got := missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{}); got != want {
+		t.Fatalf("teleport did not complete mid-berserk: %+v", got)
+	}
+	if c.NativeBodyStatus != 1 {
+		t.Fatal("completion cleared the body mode it must leave alone")
+	}
+
+	rt, c, clock, _ = returnFixture(t, 5000)
+	useReturn(rt, c)
+	key = simulation.WorldKey(testDivision, c.Name)
+	c.NativeBodyStatus = 1
 	before := missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{})
 	rt.deps = &failedWarpEntry{rt.deps.(*enterworld.Deps)}
-	clock.Advance(time.Second)
+	clock.Advance(5 * time.Second)
 	rt.advanceReturnScrolls(clock.NowMs())
+	if _, pending := rt.returnCasts.Load(key); pending {
+		t.Fatal("failed entry left the cast pending instead of completing it")
+	}
 	if c.NativeTeleportMode != 0 || missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{}) != before {
 		t.Fatal("failed entry stranded actor")
 	}

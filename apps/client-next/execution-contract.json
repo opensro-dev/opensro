@@ -1661,6 +1661,13 @@
 			]
 		},
 		{
+			"consumer": "src/engine/foundation/ui/item-tooltip-stone.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"lookup"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/ui/item-tooltip.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
