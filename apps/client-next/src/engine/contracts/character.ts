@@ -282,7 +282,7 @@ export interface CharacterAttachment {
 		readonly slot: number;
 		readonly entries: readonly import("@/engine/foundation/animation/equipment-sockets").EquipmentBranch[];
 	};
-	readonly equipment?: { readonly refObjId: number; readonly plus: number; };
+	readonly equipment?: { readonly refObjId: number; readonly plus: number; readonly enhanced?: boolean; };
 	readonly model: string;
 	readonly parts: readonly string[];
 	readonly covers: readonly number[];

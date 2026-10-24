@@ -29,6 +29,9 @@ export interface ModelParticle {
 	readonly offset: readonly [number, number, number];
 	// A one-shot program (atstructeffect loop 0); model particles loop by default.
 	readonly loop?: false;
+	// Port-only, not native: an enchant spark's lowest plus (the later
+	// client's itemoptionefp column), 1..255; absent is ENCHANT_SPARK_PLUS.
+	readonly threshold?: number;
 }
 /*
 ================

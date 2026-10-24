@@ -77,6 +77,8 @@ export function nativeWindowSections( name: string ): readonly string[] | undefi
 			return [ "Create", "SearchInfo", "SlotListButton", "SlotList" ];
 		case "iftaxmanagement":
 			return [ "Create", "TexListSlot", "TexChangeSlot", "TaxLevySlot" ]; // 664DA0.
+		case "iffortressmap":
+			return [ "Create", "StructureInfo" ]; // 65E330.
 		case "ifcos":
 			return [ "Create" ]; // 6A13B0.
 		case "ifcosinventory":

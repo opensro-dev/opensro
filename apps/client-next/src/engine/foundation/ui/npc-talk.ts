@@ -133,6 +133,9 @@ export interface NpcTalkInput {
 	readonly canReverseReturn?: boolean;
 	// 5D8FF0 0x800000: the fortress official's application row.
 	readonly canFortressOfficial?: boolean;
+	// 5D8FF0 0x1000000, 5D7AD0 action 0x32: the battle aide's structure row,
+	// only for the holding guild.
+	readonly canFortressAide?: boolean;
 	// 5D7AD0 action 0x33: the manager's rows, only for the holding guild and
 	// its allies (canFortressManager); canFortressHire is the holder alone.
 	readonly canFortressManager?: boolean;
@@ -249,6 +252,10 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 					// 5D7AD0 action 0x34: the official's one row.
 					...(input.canFortressOfficial ?
 						[ { id: "npc-fortress-war", label: copy( "SN_FORTRESS_OFFICIAL_WARAPPLY" ) } ] :
+						[]),
+					// 5D8FF0 lists the aide's action 0x32 after the official's 0x34.
+					...(input.canFortressAide ?
+						[ { id: "npc-fortress-structure", label: copy( "SN_FORTRESS_BATTLEAIDE_STRUCTURE" ) } ] :
 						[]),
 					...(input.canFortressSmith ?
 						[ { id: "npc-fortress-production:smith", label: copy( "SN_FORTRESS_SMITH_PRODUCT" ) } ] :

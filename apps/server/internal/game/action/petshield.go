@@ -302,7 +302,7 @@ func (rt *Runtime) burstPetShield(s petShield, owner *enterworld.Character, at s
 	var out []simulation.DivisionFrames
 	for _, mob := range rt.Monsters.CombatCandidatesInPopulation(s.key.division, lease, at, petShieldBurstRange, now, false) {
 		formula := combat.Result{Damage: min(damage, wire.MaxSkillActionDamage), ResultFlags: 1}
-		hit, ok := rt.commitCreditedMonsterHit(s.key.division, liveOwner, owner, row, mob, formula, "pet-shield-burst", now)
+		hit, ok := rt.commitCompanionCreditedMonsterHit(s.key.division, liveOwner, owner, row, mob, formula, "pet-shield-burst", now)
 		if !ok {
 			continue
 		}

@@ -195,6 +195,7 @@ func (rt *Runtime) fortressDemolishStructure(division string, c *enterworld.Char
 		return fortressRefusal(request.Action, fortressErrUnknown)
 	}
 	rt.storeStructureRow(division, domain.FortressStructureRecord{FortressID: fortressID, EventStructID: zone, OwnerGuildID: holder})
+	rt.pushStructureRoster(division, fortressID, world)
 	reply := wire.NewWriter(6).U8(request.Action).U8(1).U32(zone)
 	return OpResult{Frames: []wire.Frame{{Opcode: opFortressInteractionResult, Payload: reply.Payload()}}}
 }

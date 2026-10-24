@@ -56,6 +56,9 @@ func (rt *Runtime) fortressServiceQuery(division string, c *enterworld.Character
 	if request.Action == siege.ActionRepair {
 		return rt.fortressStructureRepair(division, c, request)
 	}
+	if request.Action == siege.ActionUpgrade {
+		return rt.fortressStructureUpgrade(division, c, request)
+	}
 	if request.Action == siege.ActionGate {
 		return rt.fortressGatePulley(division, npc, request)
 	}

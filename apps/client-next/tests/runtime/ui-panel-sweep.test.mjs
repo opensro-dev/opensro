@@ -170,6 +170,29 @@ const OPENERS = {
 			service: { action: 0, result: 1, fortress: 1, taxRate: 10, gold: "1234" }
 		};
 	},
+	"Fortress map"( f, step ) {
+		// The aide's structure row asks for the list; its answer opens the map
+		// (754A40 0x18 -> 5D22B0).
+		talkTo( f );
+		Object.assign( f.state.gameplay, {
+			fortress: {
+				...f.state.gameplay.fortress,
+				worldId: 7,
+				worlds: [ { id: 7, code: "FORTRESS_JANGAN" } ],
+				fortresses: [ { id: 1, code: "FORTRESS_JANGAN", nameStrId: "FORTRESS_NAME" } ],
+				wars: [],
+				registered: [],
+				serviceSequence: 0
+			}
+		} );
+		step();
+		f.ui.event( { kind: "activate", id: "npc-fortress-structure" } );
+		f.state.gameplay.fortress = {
+			...f.state.gameplay.fortress,
+			serviceSequence: 1,
+			service: { action: 0x18, result: 1, fortress: 1, structures: [] }
+		};
+	},
 	"Fortress production"( f, step ) {
 		// The trainer's row queries; the answer opens the window (754A40 0x11).
 		talkTo( f );

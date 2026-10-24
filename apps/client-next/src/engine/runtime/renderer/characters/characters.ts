@@ -3121,7 +3121,8 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 						const glow = part.equipment ?
 							selectEquipmentGlow(
 								resource.model.equipmentGlows?.[part.equipment.refObjId],
-								part.equipment.plus
+								part.equipment.plus,
+								part.equipment.enhanced === true
 							) :
 							undefined;
 						primitives.push( {

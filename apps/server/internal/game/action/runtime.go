@@ -199,6 +199,9 @@ type Runtime struct {
 	// gatePulleys maps a gate pulley's RefObjID to its gate's event zone
 	// (ConfigurePortals, fortress_gates.go).
 	gatePulleys map[uint32]uint32
+	// structureUpgrades is the siege structure upgrade table by codename
+	// (ConfigurePortals, fortress_upgrade.go).
+	structureUpgrades structureUpgradeTable
 	// Fortresses is the fortress occupation and war-mode authority
 	// (ConfigurePortals installs it from siegefortress.txt).
 	Fortresses *fortress.Authority
@@ -233,6 +236,9 @@ type Runtime struct {
 	FortressStore     enterworld.FortressStore
 	fortressPersistMu sync.Mutex
 	fortressPersist   fortressPersistence
+	// fortressRoster times the structure rosters (fortress_roster.go).
+	fortressRosterMu sync.Mutex
+	fortressRoster   fortressRosterClock
 
 	// GachaCatalog is the strict v1.150 gachaitemset/gachanpcmap authority.
 	// The composition root installs it before Register admits 0x7338/0x7053.

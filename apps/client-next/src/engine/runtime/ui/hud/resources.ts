@@ -39,6 +39,7 @@ import { decodeMessageTips, type MessageTip } from "@/engine/foundation/ui/messa
 import type { AssetOwner } from "@/engine/contracts/assets";
 import { decodeAuthoredLayout, type AuthoredLayout } from "@/engine/foundation/ui/authored-layout";
 import { decodeCosReferences, type CosReference } from "@/engine/foundation/ui/cos-command";
+import { decodeFortressMap, type FortressMapCatalog } from "@/engine/foundation/gameplay/fortress-map";
 import { decodeCommandTable } from "@/engine/foundation/ui/debug-commands";
 // Skill catalogue rows decoded per HUD step: about 2.5 ms of a frame, so the
 // 27,835-row catalogue settles in under 30 frames.
@@ -66,6 +67,8 @@ interface HudData {
 	readonly stallPricePage: AuthoredLayout;
 	readonly stallTextPage: AuthoredLayout;
 	readonly cosReferences: ReadonlyMap<number, CosReference>;
+	// The battle aide's fortress map; null in a build that publishes none.
+	readonly fortressMap: FortressMapCatalog | null;
 	readonly portals: PortalCatalog;
 	readonly tooltipMasteries: ReadonlyMap<number, TooltipMastery>;
 	readonly masteryCosts: Readonly<Record<number, number>>;
@@ -195,6 +198,8 @@ export function createHudResources(
 		"iffortressbusiness",
 		"iffortressbusinessslot",
 		"iftaxmanagement",
+		"iffortressmap",
+		"ifcheckconfirmwnd",
 		"iffortressmakeitemwnd",
 		"iffortressmakeitemwndslot",
 		"ifchangeplayermodel",
@@ -295,7 +300,8 @@ export function createHudResources(
 			"/assets/data/cosPresentation.json",
 			"/assets/data/mall-notify.json",
 			"/assets/config/command.txt",
-			"/assets/data/worldmap-mapinfo.json"
+			"/assets/data/worldmap-mapinfo.json",
+			"/assets/data/fortressMap.json"
 		],
 		states: Load[] = paths.map( () => ({ kind: "idle" }) );
 	let data: HudData | null = null;
@@ -345,7 +351,10 @@ export function createHudResources(
 					if ( r ) {
 						changed = true;
 						try {
-							if ( i === layouts.length + 17 && r.kind === "error" && r.absent ) {
+							if (
+								(i === layouts.length + 17 || i === layouts.length + 18) && r.kind === "error" &&
+								r.absent
+							) {
 								states[i] = { kind: "ready", value: null };
 								continue;
 							}
@@ -386,7 +395,8 @@ export function createHudResources(
 										warm.add( entry.publicPath );
 									}
 								}
-							} else if ( i === layouts.length + 17 ) value = raw;
+							} else if ( i === layouts.length + 18 ) value = decodeFortressMap( raw );
+							else if ( i === layouts.length + 17 ) value = raw;
 							else if ( i === layouts.length + 16 ) value = decodeCommandTable( r.buffer );
 							else if ( i === layouts.length + 15 ) value = decodeMallNotify( raw );
 							else if ( i === layouts.length + 14 ) value = decodeCosReferences( raw );
@@ -470,6 +480,7 @@ export function createHudResources(
 					jobExpThresholds: jobThresholds,
 					portals: values[layouts.length + 13] as PortalCatalog,
 					cosReferences: values[layouts.length + 14] as HudData["cosReferences"],
+					fortressMap: values[layouts.length + 18] as HudData["fortressMap"],
 					tooltipMasteries: values[layouts.length + 12] as HudData["tooltipMasteries"],
 					masteryCosts: values[layouts.length + 11] as HudData["masteryCosts"],
 					extended: values[layouts.length - 1] as readonly AuthoredLayout[],

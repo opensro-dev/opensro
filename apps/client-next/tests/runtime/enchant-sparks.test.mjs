@@ -16,6 +16,9 @@ import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
 	equipmentEnchantSparks,
 	equipmentParticleCatalog,
@@ -33,6 +36,7 @@ async function load( entry ) {
 const { assembleEquipmentAppearance, ENCHANT_SPARK_PLUS } = await load(
 	"src/engine/foundation/animation/equipment-appearance.ts"
 );
+const { validateEquipmentParticles } = await load( "src/engine/foundation/animation/equipment-particles.ts" );
 const { equipmentSocket, validateEquipmentBranches } = await load(
 	"src/engine/foundation/animation/equipment-sockets.ts"
 );
@@ -42,6 +46,8 @@ const { equipmentSocket, validateEquipmentBranches } = await load(
 const SWORD = 71, SHIELD = 251, BOW = 215, HARP = 10991, BEGINNER_SWORD = 3632, RARE_SWORD = 4014, HAMMER = 19227;
 const WEAPON_SLOT = 6, SHIELD_SLOT = 7;
 const SPARK = "system/system_enchant";
+// A folder with no later-client tables: the itemrare-twin fallback.
+const NO_VSRO = path.join( os.tmpdir(), "opensro-no-vsro-item-glow" );
 
 /*
 ================
@@ -107,13 +113,14 @@ function sparksOf( dress, plus, enchantSparks, weapon = SWORD ) {
 }
 
 test("each weapon class wears its own spark program on its rare twin's bones and scale", () => {
-	const sparks = equipmentEnchantSparks(), glows = equipmentParticleCatalog();
+	const sparks = equipmentEnchantSparks( undefined, NO_VSRO ), glows = equipmentParticleCatalog();
 	assert.deepEqual( sparks[SWORD], [ {
 		effectPath: SPARK + "_a_01.efp",
 		bone: "ai_end",
 		scale: Math.fround( 1.3 ),
 		offset: [ 0, 0, 0 ],
-		root: false
+		root: false,
+		threshold: 8
 	} ] );
 	assert.equal( sparks[SHIELD][0].effectPath, SPARK + "shield_a_01.efp" );
 	assert.equal( sparks[BOW][0].effectPath, SPARK + "bow_a_01.efp" );
@@ -134,7 +141,7 @@ test("each weapon class wears its own spark program on its rare twin's bones and
 
 test("sparks show only with the row on and only at +8 or higher, on real private sockets", async () => {
 	const dress = armamentDress();
-	await publishEquipmentParticleMetadata( dress );
+	await publishEquipmentParticleMetadata( dress, NO_VSRO );
 	// The shield gains the private branch its sparks ride on.
 	const shieldBranches = dress.equipment[SHIELD].bodies.CH_M.branches;
 	validateEquipmentBranches( shieldBranches );
@@ -153,4 +160,83 @@ test("sparks show only with the row on and only at +8 or higher, on real private
 	assert.deepEqual( sparksOf( dress, 10, false ), [] );
 	assert.deepEqual( sparksOf( dress, 10, undefined ), [] );
 	assert.deepEqual( sparksOf( dress, 9, false, RARE_SWORD ), [] );
+});
+
+/*
+================
+official table
+
+Port-only, not native: with the later client's itemoptionefp.txt imported,
+each item takes its authored effect, bone, scale and threshold; a row for
+an item v1.150 lacks is skipped, and a bone the v1.150 model lacks is left
+out at publish rather than failing the build.
+================
+*/
+test("the later client's itemoptionefp rows set each item's effect, bone, scale and threshold", async () => {
+	const root = fs.mkdtempSync( path.join( os.tmpdir(), "opensro-vsro-glow-" ) );
+	try {
+		fs.writeFileSync(
+			path.join( root, "itemoptionefp.txt" ),
+			[
+				[ "//Item Code Name", "Particle", "Scale", "Bone", "Offset", "min", "1.3", "100%" ],
+				[ "ITEM_CH_SWORD_01_A", "system/system_enchant_b_01.efp", "150", "ai_end", "none", "5", "100", "100" ],
+				[
+					"ITEM_CH_SHIELD_01_A",
+					"system/system_enchantshield_a_01.efp",
+					"90",
+					"NoSuchBone",
+					"none",
+					"8",
+					"100",
+					"100"
+				],
+				[
+					"ITEM_LATER_CLIENT_ONLY",
+					"system/system_enchant_a_01.efp",
+					"130",
+					"ai_end",
+					"none",
+					"8",
+					"100",
+					"100"
+				]
+			].map( fields => fields.join( "\t" ) ).join( "\r\n" )
+		);
+		const sparks = equipmentEnchantSparks( undefined, root );
+		assert.deepEqual( sparks[SWORD], [ {
+			effectPath: SPARK + "_b_01.efp",
+			bone: "ai_end",
+			scale: Math.fround( 1.5 ),
+			offset: [ 0, 0, 0 ],
+			root: false,
+			threshold: 5
+		} ] );
+		assert.equal( Object.keys( sparks ).length, 2 );
+		const dress = armamentDress();
+		await publishEquipmentParticleMetadata( dress, root );
+		assert.equal( dress.enchantSparks[SHIELD], undefined );
+		const sword = [ [ SPARK + "_b_01.efp", equipmentSocket( WEAPON_SLOT, "EQ0", "ai_end" ) ] ];
+		assert.deepEqual( sparksOf( dress, 5, true ), sword );
+		assert.deepEqual( sparksOf( dress, 4, true ), [] );
+		assert.deepEqual( sparksOf( dress, 9, false ), [] );
+	} finally {
+		fs.rmSync( root, { recursive: true, force: true } );
+	}
+});
+
+/*
+================
+threshold validation
+
+A published spark's threshold is a whole plus 1..255; anything else fails
+the catalog at the presentation boundary.
+================
+*/
+test("a spark row's threshold must be a whole plus from 1 to 255", () => {
+	const spark = { effectPath: SPARK + "_a_01.efp", bone: "ai_end", scale: 1, offset: [ 0, 0, 0 ], root: false };
+	validateEquipmentParticles( { 1: [ spark ] } );
+	validateEquipmentParticles( { 1: [ { ...spark, threshold: 8 } ] } );
+	for ( const threshold of [ 0, 256, 7.5, "8" ] ) {
+		assert.throws( () => validateEquipmentParticles( { 1: [ { ...spark, threshold } ] } ) );
+	}
 });

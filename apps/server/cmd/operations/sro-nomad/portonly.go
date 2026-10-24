@@ -86,6 +86,8 @@ func (settings portOnlySettings) validate() error {
 			_, err = progression.ParseDropMix(raw)
 		case shardsettings.ValueBetaSilk:
 			_, err = action.ParseBetaSilk(raw)
+		case shardsettings.ValueBetaGrowthBands:
+			_, err = progression.ParseGrowthBands(raw)
 		default:
 			err = fmt.Errorf("unknown validation kind %d", setting.Validation)
 		}

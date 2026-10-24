@@ -54,6 +54,8 @@ const (
 	ValueBetaGrowth
 	ValueBetaDropMix
 	ValueBetaSilk
+	// ValueBetaGrowthBands is progression.ParseGrowthBands's band list.
+	ValueBetaGrowthBands
 )
 
 /*
@@ -80,8 +82,9 @@ var Settings = []Setting{
 	{Env: "SRO_BETA_PLAYER_MAP", NomadVar: "beta_player_map", Default: "on", Validation: ValueSwitch},
 	{Env: "SRO_BETA_MASTERY", NomadVar: "beta_mastery", Default: "on", Catalogue: true, Source: Built,
 		Validation: ValueSwitch},
-	// Port-only, not native: optional expansion; deployments stay at 90.
-	{Env: "SRO_LEVEL_CAP", NomadVar: "level_cap", Default: "off", Catalogue: true},
+	// Port-only, not native: the 110 cap (owner, 2026-10-24: on for the next
+	// release; "off" keeps the native 90).
+	{Env: "SRO_LEVEL_CAP", NomadVar: "level_cap", Default: "110", Catalogue: true},
 	// Port-only, not native: database-authored Alexandria field population.
 	{Env: "SRO_CAP110_MONSTERS", NomadVar: "cap110_monsters", Default: "off", Catalogue: true},
 	// Port-only, not native: the Pharaoh Tomb 1-3 population and gates. Needs
@@ -175,6 +178,10 @@ var Settings = []Setting{
 	{Env: "SRO_ALCHEMY_MAX_PLUS", NomadVar: "alchemy_max_plus", Default: "off", Catalogue: true},
 	{Env: "SRO_TEAM_DEATH_REVIVE", NomadVar: "team_death_revive", Default: "on"},
 	{Env: "SRO_BETA_GROWTH", NomadVar: "beta_growth", Default: "on", Catalogue: true, Validation: ValueSwitch},
+	// Owner, 2026-10-24: 1-59 at the level-1 pace, 60-89 at 20x, 90-110 at
+	// 10x; unset keeps every level at the pace.
+	{Env: "SRO_BETA_GROWTH_BANDS", NomadVar: "beta_growth_bands", Default: "1-59:pace,60-89:20,90-110:10",
+		Catalogue: true, Validation: ValueBetaGrowthBands},
 	{Env: "SRO_BETA_SKILL_EXP_RATE", NomadVar: "beta_skill_exp_rate", Default: "100", Catalogue: true,
 		Validation: ValueBetaGrowth},
 	{Env: "SRO_BETA_DROP_RATE", NomadVar: "beta_drop_rate", Default: "20", Catalogue: true, Validation: ValueBetaGrowth},
@@ -198,8 +205,10 @@ var Settings = []Setting{
 	// deployment default stays native ("off", town gates refuse a transport).
 	{Env: "SRO_JOB_GOODS_TELEPORT", NomadVar: "job_goods_teleport", Default: "off"},
 	{Env: "SRO_ELIXIR_DROPS_OFF", NomadVar: "elixir_drops_off", Default: "on", Catalogue: true},
-	// Owner, 2026-10-14: alchemy materials no longer drop; "off" is native.
-	{Env: "SRO_ALCHEMY_MATERIAL_DROPS_OFF", NomadVar: "alchemy_material_drops_off", Default: "on", Catalogue: true},
+	// Community vote, 2026-10-24: the monster parts drop again, so the
+	// deployment default is native ("off"); "on" restores the 2026-10-14
+	// beta removal.
+	{Env: "SRO_ALCHEMY_MATERIAL_DROPS_OFF", NomadVar: "alchemy_material_drops_off", Default: "off", Catalogue: true},
 	{Env: "SRO_BETA_DROP_CAP", NomadVar: "beta_drop_cap", Default: "16", Catalogue: true, Validation: ValueBetaGrowth},
 	// Owner, 2026-10-19: gold falls at 100 times retail (was 250).
 	{Env: "SRO_BETA_GOLD_RATE", NomadVar: "beta_gold_rate", Default: "100", Catalogue: true, Validation: ValueBetaGrowth},

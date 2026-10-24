@@ -188,8 +188,10 @@ func newGameplayPlane(
 	if items.ElixirDrops.Off() {
 		log.Infof("loot: elixir drops OFF (%s): the shop sells them", progression.EnvElixirDropsOff)
 	}
-	// SRO_ALCHEMY_MATERIAL_DROPS_OFF (port-only, not native): alchemy
-	// materials leave every monster drop. Nothing needs them on the beta.
+	// SRO_ALCHEMY_MATERIAL_DROPS_OFF (port-only, not native): with the
+	// switch on, alchemy materials leave every monster drop. The deployed
+	// default is off (community vote, 2026-10-24): the stone chain uses
+	// them again.
 	items.MaterialDrops = progression.MaterialDropsFromEnv()
 	if items.MaterialDrops.Off() {
 		log.Infof("loot: alchemy material drops OFF (%s)", progression.EnvAlchemyMaterialDropsOff)

@@ -11,6 +11,7 @@ import (
 
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -377,5 +378,42 @@ func TestPetShieldDisconnectCancelsRecipientAndCaster(t *testing.T) {
 		if key.division == "two" && shield.amount != 100 {
 			t.Fatal("cross-division teardown")
 		}
+	}
+}
+
+/*
+================
+TestPetShieldBurstKillCreditsNoQuest
+
+A tier-3 shield's expiry burst that kills a monster is a companion kill:
+the burst goes through its real caller (advancePetShields ->
+burstPetShield) and no quest kill is credited, though the monster dies.
+================
+*/
+func TestPetShieldBurstKillCreditsNoQuest(t *testing.T) {
+	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_BEAR_090", 90)
+	mob := roarField(t, rt, c, clock)
+	c.MissionInventory = nil
+	rt.AttackPetExpansion = true
+	quested := 0
+	rt.UpdateQuestKill = func(*enterworld.Character, string, uint8) ([]wire.Frame, bool) {
+		quested++
+		return nil, true
+	}
+	skill := learnPetBook(t, c, 21)
+	if result := rt.castPetShield(testDivision, c, c, c.ActiveCOS, skill, clock.NowMs()); len(result.Broadcast) < 2 {
+		t.Fatalf("no shields: %+v", result)
+	}
+	if _, ok := rt.Monsters.ApplyDamage(testDivision, mob.Gid, mob.CurrentHP-1); !ok {
+		t.Fatal("could not wound the monster")
+	}
+	rt.advancePetShields(clock.NowMs() + 5000)
+	left, _ := rt.Monsters.Get(testDivision, mob.Gid)
+	if left.CurrentHP != 0 {
+		t.Fatalf("the burst left the monster at %d HP", left.CurrentHP)
+	}
+	if quested != 0 {
+		t.Fatalf("the shield burst kill credited %d quest kills, want 0", quested)
 	}
 }

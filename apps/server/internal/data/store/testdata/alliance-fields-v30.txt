@@ -1,0 +1,6 @@
+# alliance record fields owned by store schema 30 (persisted_shape_test.go).
+# Never edit after it ships: a new persisted field takes schema 31, its upgrade
+# step and alliance-fields-v31.txt.
+allianceId
+crest
+guilds
