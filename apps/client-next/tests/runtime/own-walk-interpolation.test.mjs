@@ -271,6 +271,41 @@ test("a correction while walking never draws a frame faster than the walk (A5's 
 	assert.ok( settledAt !== undefined, "the sideways offset settled" );
 });
 
+test("the main-thread mover's walk is drawn while it predicts and handed back without a jump (#1440)", () => {
+	const { presentation, frame, leg } = straight();
+	let ms = 36, previous = frame( ms );
+	for ( ms += 16; ms < 400; ms += 16 ) previous = frame( ms );
+	// The mover predicts a right-angle walk from the drawn pose.
+	const start = presentation.drawn( GID );
+	assert.deepEqual( start, previous );
+	let mover = start, peakTurn = 0, shownMs = ms - 16;
+	for ( let i = 0; i < 10; i++ ) {
+		mover = { ...mover, z: mover.z + SPEED * .016, angle: 16384 };
+		presentation.ownMover( GID, { kind: "walking", pose: mover } );
+		const drawn = frame( ms += 16 );
+		assert.equal( drawn.x, mover.x );
+		assert.equal( drawn.z, mover.z );
+		const turned = Math.abs( ((drawn.angle - previous.angle + 98304) % 65536) - 32768 );
+		peakTurn = Math.max( peakTurn, turned / ((ms - shownMs) / 1000) );
+		previous = drawn;
+		shownMs = ms;
+	}
+	assert.equal( previous.angle, 16384, "the turn completes" );
+	// The yaw turns toward the mover's heading at the native rate (86CBA0).
+	assert.ok( peakTurn <= 98304 * 1.01, `turned ${peakTurn.toFixed( 0 )} words/s` );
+	// The prediction ends: the presenter recovers from the mover's last pose.
+	presentation.ownMover( GID, { kind: "ended", pose: mover } );
+	let peak = 0;
+	for ( let i = 0; i < 40; i++ ) {
+		const drawn = frame( ms += 16 );
+		peak = Math.max( peak, Math.hypot( drawn.x - previous.x, drawn.z - previous.z ) / .016 );
+		previous = drawn;
+		presentation.ownMover( GID, { kind: "idle" } );
+	}
+	assert.ok( peak <= SPEED * 1.05, `handback peak ${peak.toFixed( 1 )} u/s against ${SPEED}` );
+	assert.ok( Math.abs( previous.x - legAt( leg, 0, Math.floor( (ms - 20) / STEP_MS ) * STEP_MS ).x ) < 30 );
+});
+
 test("a worker stall keeps the walk on its leg at walking speed, with no catch-up after it", () => {
 	const { presentation, frame, leg } = straight();
 	let ms = 36, previous = frame( ms ), peak = 0;
