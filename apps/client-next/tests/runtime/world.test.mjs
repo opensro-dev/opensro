@@ -727,6 +727,84 @@ test("a dropped session keeps retrying through the resume grace, then gives up",
 	world.dispose();
 });
 
+test("a fresh entry retries a stalled admission and enters", async t => {
+	const sockets = socketHarness( t ), mints = [];
+	const world = createWorldSession(
+		async kind => {
+			mints.push( kind );
+			return "ticket";
+		},
+		undefined,
+		ignoreIncident
+	);
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const first = sockets[0];
+	first.onopen();
+	first.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	assert.deepEqual( mints, [ "transport", "enterworld" ] );
+	// The EnterWorld answer never comes: a full admission window of
+	// silence fails the attempt, but the entry itself retries instead
+	// of rejecting back to character select (#1416).
+	world.step( 10004 );
+	assert.equal( world.status().phase, "reconnecting" );
+	assert.equal( world.status().error, "World connection timed out" );
+	world.step( 10254 );
+	await settle();
+	world.step( 10255 );
+	assert.equal( sockets.length, 2 );
+	const second = sockets[1];
+	second.onopen();
+	second.receive( 2, welcome() );
+	world.step( 10256 );
+	await settle();
+	world.step( 10257 );
+	second.receive( 7, entered() );
+	for ( const row of rows ) second.receive( row.opcode, row.payload );
+	world.step( 10258 );
+	flush( world );
+	world.step( 10259 );
+	assert.deepEqual( mints, [ "transport", "enterworld", "transport", "enterworld" ] );
+	assert.equal( world.status().phase, "world" );
+	assert.equal( world.status().error, undefined );
+});
+
+test("a fresh entry gives up after the entry retry grace", async t => {
+	const sockets = socketHarness( t );
+	const world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	sockets[0].onclose();
+	world.step( 2 );
+	assert.equal( world.status().phase, "reconnecting" );
+	// Every later socket dies before the welcome, as while the network
+	// is down: the entry retries inside its grace, then rejects.
+	let clock = 3, failures = 1;
+	while ( clock < 40000 && world.status().phase !== "disconnected" ) {
+		world.step( clock );
+		await settle();
+		world.step( clock );
+		const latest = sockets[sockets.length - 1];
+		if ( sockets.length - 1 >= failures ) {
+			failures++;
+			latest.onclose();
+			world.step( clock );
+		}
+		clock += 50;
+	}
+	assert.ok( failures > 3, `retried ${failures} times, more than one attempt` );
+	assert.equal( world.status().phase, "disconnected" );
+	assert.equal( world.status().error, "Transport connection closed" );
+	assert.ok( clock >= 30000 && clock < 40000, `gave up at ${clock} ms, after the 30 s entry grace` );
+});
+
 // EncodeCosSpawnBand2 and EncodeCosRideState are the server-owned wire authority.
 test("COS spawn, ride state and mount despawn preserve reliable rider lifecycle", () => {
 	const owner = createEntities();

@@ -9,6 +9,9 @@ it by its window, and only a full window of silence fails the attempt, so a
 slow link that keeps delivering enters however long that takes.
 The presentation acknowledgement is a separate barrier: it gates commands,
 never retries a successfully received world.
+A transient failure before the world binds retries the admission inside
+the same grace a bound session resumes in; only an exhausted grace
+rejects the entry.
 
 ===========================================================================
 */
@@ -181,7 +184,7 @@ onNetworkFailure
 		token?: string;
 		error?: string;
 	} | null = null;
-	let boundThisTransport = false, resumedTransport = false;
+	let boundThisTransport = false, resumedTransport = false, entryAttempt = false;
 	let references: { kind: "idle"; } | { kind: "loading"; } | {
 		kind: "ready";
 		bootstrap: unknown;
@@ -460,6 +463,7 @@ enter
 			core.clear();
 			hasWorld = false;
 			resume = undefined;
+			entryAttempt = true;
 			attempt = 0;
 			ready = false;
 			character = name;
@@ -551,6 +555,7 @@ disconnect
 			cancel();
 			departure.reset();
 			completedDeparture = 0;
+			entryAttempt = false;
 			if ( forget ) {
 				diagnosticSession = "";
 				disconnectMessage = "";
@@ -681,6 +686,7 @@ step
 			}
 			if ( phase === "entering-world" && boundThisTransport && core.synchronized() ) {
 				transition( "world" );
+				entryAttempt = false;
 				deadline = 0;
 				attempt = 0;
 			}
@@ -691,24 +697,37 @@ step
 				const error = failure;
 				cancel();
 				deadline = 0;
-				// Only a previously bound, resumable session retries automatically.
-				// Native gameplay commands are never replayed by this owner.
+				// A bound session retries as a resume; an entry that never
+				// bound retries the whole admission (a fresh EnterWorld, no
+				// resume token to present) - but only on a transport-class
+				// failure: an admission refusal is definitive and returns to
+				// character select at once. Native gameplay commands are
+				// never replayed by this owner: a resume re-enters through
+				// its bootstrap, and an unbound attempt has issued none.
 				// A receipt deadline can expire while the host CPU is stalled.
 				// Reuse admission/resume to replace stale prediction with server state.
-				if (
-					hasWorld && resume && (attempt === 0 || now - reconnectSince < RESUME_GRACE_MS) &&
+				const bound = hasWorld && resume &&
 					(lostAnswer( failureCode ) || [
 						"Transport connection closed",
 						"Transport connection failed",
 						"World connection timed out",
 						"Admission request failed"
-					].includes( error ))
+					].includes( error ));
+				const unbound = entryAttempt && !hasWorld &&
+					[
+						"Transport connection closed",
+						"Transport connection failed",
+						"World connection timed out"
+					].includes( error );
+				if (
+					(bound || unbound) && (attempt === 0 || now - reconnectSince < RESUME_GRACE_MS)
 				) {
 					if ( attempt === 0 ) reconnectSince = now;
 					retryAt = now + Math.min( RECONNECT_DELAY_MS * 2 ** attempt++, MAX_RECONNECT_DELAY_MS );
 					transition( "reconnecting" );
 				} else {
 					retryAt = 0;
+					entryAttempt = false;
 					transition( "disconnected" );
 				}
 				failure = null;
