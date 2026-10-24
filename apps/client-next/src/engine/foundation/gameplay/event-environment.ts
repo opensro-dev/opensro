@@ -24,3 +24,10 @@ export function environmentPacket(state:EventEnvironment,opcode:number,p:Uint8Ar
  if(id!==1||(active!==0&&active!==1))return {state:next};
  return {state:{...next,effective:active===1?{mode:3,amount:20}:state.server},notice:active===1?'UIIT_MSG_EVENT_START':'UIIT_MSG_EVENT_END'};
 }
+// The debug console's weather rows (690C40 ids 99/105-107) write the same
+// options a 3BDE writes: the server slot, with the event override still
+// winning while its group is active. A later 3BDE overwrites it back.
+export function debugWeather(state:EventEnvironment,mode:1|2|3|undefined,amount:number):EventEnvironment{
+ const server:WeatherOptions={mode:mode??state.server.mode,amount:Math.min(255,Math.max(0,Math.trunc(amount)))};
+ return {...state,server,effective:((state.groups[1]??0)&1)!==0?{mode:3,amount:20}:server};
+}
