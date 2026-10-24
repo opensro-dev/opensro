@@ -37,7 +37,7 @@ import {
 	validMovementSpeed,
 	movementDuration
 } from "@/engine/foundation/gameplay/native-movement";
-import { createNavigation } from "./navigation/navigation";
+import { createNavigation } from "@/engine/foundation/navigation/clipper";
 import { stepWalk, WALK_NAVIGATION_REJECT, WALK_NAVIGATION_STOP } from "@/engine/foundation/gameplay/walk-step";
 import { minimapPoseKey } from "@/engine/foundation/gameplay/minimap-floor-key";
 import { admitPose, decodeMovementReceipt, receiptWorld } from "@/engine/foundation/gameplay/movement-wire";
