@@ -553,11 +553,13 @@ export function createOwnWalkPresenter( turn: ( from: number, to: number, second
 		enable
 
 		The Experimental "Interpolated own movement" row (read each frame).
+		Disabling keeps the tracks: the pose that leaves interpolation
+		consumes the last drawn pose through take() for its recovery frame
+		(#1499); retain() and clear() own a track's end otherwise.
 		================
 		*/
 		enable( on: boolean ) {
 			enabled = on;
-			if ( !on ) tracks.clear();
 		},
 		/*
 		================

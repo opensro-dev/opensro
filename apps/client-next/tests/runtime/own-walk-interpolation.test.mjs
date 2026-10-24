@@ -326,3 +326,22 @@ test("handing over to a skill displacement and back never jumps", () => {
 	const back = frame( ms += 16 );
 	assert.ok( Math.abs( back.x - before.x ) < 3, `jumped ${(back.x - before.x).toFixed( 2 )} on return` );
 });
+
+test("turning the row off mid-walk hands the drawn pose over instead of snapping", () => {
+	const { presentation, frame } = straight();
+	let ms = 36, previous = frame( ms );
+	for ( ms += 16; ms < 400; ms += 16 ) previous = frame( ms );
+	// The row goes off mid-walk: like the dash, this frame keeps the last
+	// interpolated pose (the carry) rather than jumping to the
+	// dead-reckoned sample a render delay ahead (#1499).
+	presentation.interpolateOwnWalk( false );
+	const handed = frame( ms += 16 );
+	assert.equal( handed.x, previous.x, "the toggle-off frame draws the carried pose" );
+	assert.equal( handed.z, previous.z, "the toggle-off frame draws the carried pose" );
+	// The generic presenter then walks on from the carried pose.
+	const next = frame( ms += 16 );
+	assert.ok(
+		Math.abs( next.x - handed.x ) < 3,
+		`jumped ${(next.x - handed.x).toFixed( 2 )} after the handoff`
+	);
+});
