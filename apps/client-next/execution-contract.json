@@ -1944,8 +1944,20 @@
 			"functions": [
 				"audioListener",
 				"dungeonCharacterPvs",
+				"interpolatedOwnWalk",
 				"presentationCamera",
 				"presentationNight"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/pose-presentation.ts",
+			"provider": "src/engine/runtime/characters/own-walk-interpolation.ts",
+			"functions": [
+				"carry",
+				"createOwnWalkInterpolation",
+				"moving",
+				"pose",
+				"push"
 			]
 		},
 		{

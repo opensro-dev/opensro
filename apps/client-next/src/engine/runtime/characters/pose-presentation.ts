@@ -33,6 +33,7 @@ import { SIMULATION_STEP_MS } from "@/engine/contracts/simulation";
 import { interpolateMovement, poseDistance } from "@/engine/foundation/gameplay/native-movement";
 import { hypot2, hypot3 } from "@/engine/foundation/math/hypot";
 import { displaceRegionXZ, sameCoordinateSpace, worldDelta } from "@/engine/foundation/world/world-space";
+import { createOwnWalkInterpolation } from "./own-walk-interpolation";
 
 const TICK_SECONDS = SIMULATION_STEP_MS / 1000;
 const DISCONTINUITY_DISTANCE = 192;
@@ -114,6 +115,26 @@ interface SampleTrack {
 	relocation: number;
 	last: number;
 	angle: number;
+}
+
+/*
+================
+OwnWalkTrack
+
+The local mover under fixed-tick interpolation: its buffer, the last
+publication it took, and its drawn heading.
+================
+*/
+interface OwnWalkTrack {
+	walk: ReturnType<typeof createOwnWalkInterpolation>;
+	relocation: number;
+	atMs?: number;
+	revision?: number;
+	pose?: Pose;
+	last: number;
+	nowMs?: number;
+	angle: number;
+	displayed?: Pose;
 }
 
 /*
@@ -505,6 +526,64 @@ export function createPosePresentation() {
 	// Frame-clock seconds of the last pose served; the return frame after a
 	// long unseen gap snaps instead of recovering (MAX_UNSEEN_GAP_SECONDS).
 	let lastPoseAt: number | undefined;
+	// Port-only (own-walk-interpolation.ts): the local mover's walk drawn
+	// between its worker ticks instead of extrapolated past the newest one.
+	let interpolateOwn = false;
+	const ownWalks = new Map<number, OwnWalkTrack>();
+
+	/*
+	================
+	ownWalkPose
+
+	The local mover's walk under fixed-tick interpolation. A fresh worker
+	publication enters the buffer; a relocation restarts it. The first
+	frame after the generic presenter drew this character recovers from
+	that frame instead of jumping.
+	================
+	*/
+	function ownWalkPose( gid: number, input: SampleInput, target: Pose, now: number ): Pose {
+		const nowMs = now * 1000 - originMs!;
+		const relocation = input.transition?.relocation ?? 0;
+		let own = ownWalks.get( gid );
+		if ( !own || own.relocation !== relocation || now < own.last ) {
+			own = {
+				walk: createOwnWalkInterpolation(),
+				relocation,
+				last: now,
+				angle: target.angle
+			};
+			ownWalks.set( gid, own );
+		}
+		const fresh = own.atMs !== input.atMs || own.revision !== input.revision || !own.pose ||
+			own.pose.regionId !== target.regionId || own.pose.x !== target.x || own.pose.y !== target.y ||
+			own.pose.z !== target.z;
+		if ( fresh ) {
+			own.walk.push( {
+				atMs: input.atMs,
+				pose: target,
+				moving: input.moving,
+				from: input.from,
+				to: input.to,
+				durationMs: input.durationMs,
+				arrivedAtMs: nowMs
+			} );
+			own.atMs = input.atMs;
+			own.revision = input.revision;
+			own.pose = { ...target };
+		}
+		// A generic track still on file was drawn last frame: hand its pose over.
+		const handoff = tracks.get( gid );
+		if ( handoff ) {
+			own.walk.carry( handoff.displayed, nowMs );
+			tracks.delete( gid );
+		}
+		own.angle = turn( own.angle, target.angle, now - own.last );
+		own.last = now;
+		own.nowMs = nowMs;
+		const drawn = own.walk.pose( nowMs ) ?? target;
+		own.displayed = { ...drawn, angle: Math.round( own.angle ) % 65536 };
+		return { ...own.displayed };
+	}
 
 	/*
 	================
@@ -855,6 +934,18 @@ export function createPosePresentation() {
 		samples( next: ReadonlyMap<number, SampleInput> ) {
 			inputs = next;
 			for ( const gid of tracks.keys() ) if ( !next.has( gid ) ) tracks.delete( gid );
+			for ( const gid of ownWalks.keys() ) if ( !next.has( gid ) ) ownWalks.delete( gid );
+		},
+		/*
+		================
+		interpolateOwnWalk
+
+		The Experimental "Interpolated own movement" row (read each frame).
+		================
+		*/
+		interpolateOwnWalk( enabled: boolean ) {
+			interpolateOwn = enabled;
+			if ( !enabled ) ownWalks.clear();
 		},
 		/*
 		================
@@ -864,13 +955,29 @@ export function createPosePresentation() {
 		pose( gid: number, target: Pose, now: number, settledTranslation = false ): Pose {
 			if ( lastPoseAt !== undefined && now - lastPoseAt > MAX_UNSEEN_GAP_SECONDS ) {
 				tracks.clear();
+				ownWalks.clear();
 				rows.clear();
 			}
 			if ( lastPoseAt === undefined || now > lastPoseAt ) lastPoseAt = now;
 			const input = inputs.get( gid );
 			if ( input && originMs !== null && !settledTranslation ) {
-				return sampledPose( gid, input, target, now );
+				if ( interpolateOwn && input.ownLeg && !input.displacement ) {
+					return ownWalkPose( gid, input, target, now );
+				}
+				// Leaving interpolation (a skill displacement, the row turned off):
+				// the generic presenter recovers from the last drawn frame.
+				const own = ownWalks.get( gid );
+				ownWalks.delete( gid );
+				const pose = sampledPose( gid, input, target, now );
+				const track = tracks.get( gid );
+				if ( !own?.displayed || !track ) return pose;
+				// This frame keeps the last interpolated pose; the generic track
+				// recovers from it on the next (carry).
+				track.displayed = { ...own.displayed };
+				track.carried = true;
+				return { ...own.displayed };
 			}
+			ownWalks.delete( gid );
 			tracks.delete( gid );
 			let row = rows.get( gid );
 			// Death navigation is already settled by the world owner. Do not spend an
@@ -946,6 +1053,11 @@ export function createPosePresentation() {
 		================
 		*/
 		carry( gid: number, displayed: Pose ) {
+			const own = ownWalks.get( gid );
+			if ( own ) {
+				own.walk.carry( displayed, own.nowMs ?? 0 );
+				return;
+			}
 			const track = tracks.get( gid );
 			if ( !track ) return;
 			track.displayed = { ...displayed };
@@ -960,6 +1072,8 @@ export function createPosePresentation() {
 		================
 		*/
 		moving( gid: number ) {
+			const own = ownWalks.get( gid );
+			if ( own ) return own.walk.moving( own.nowMs ?? 0 );
 			const track = tracks.get( gid );
 			if ( track ) return track.moving;
 			return rows.get( gid )?.moving ?? false;
@@ -972,6 +1086,7 @@ export function createPosePresentation() {
 		retain( gids: ReadonlySet<number> ) {
 			for ( const gid of rows.keys() ) if ( !gids.has( gid ) ) rows.delete( gid );
 			for ( const gid of tracks.keys() ) if ( !gids.has( gid ) ) tracks.delete( gid );
+			for ( const gid of ownWalks.keys() ) if ( !gids.has( gid ) ) ownWalks.delete( gid );
 		},
 		/*
 		================
@@ -981,6 +1096,7 @@ export function createPosePresentation() {
 		reset() {
 			rows.clear();
 			tracks.clear();
+			ownWalks.clear();
 			inputs = new Map();
 			lastPoseAt = undefined;
 		}
