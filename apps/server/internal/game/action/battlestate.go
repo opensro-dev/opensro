@@ -14,9 +14,11 @@ zero. A player enters battle by striking (CGObjPC_EnterBattleOnAttack
 (CGObjCOS_ProcessNormalHit 52A1E0). Death leaves battle (529C93) before
 the life change.
 
-The tick behind +0x680 is a scheduled callback whose period was not
-recovered; this port counts the 20 ticks as seconds. The pet arm is
-monsterHitSummonedCOS.
+The tick behind +0x680 is the per-second state callback: each call
+advances the character's timed-action clock by exactly one second, so
+the 20 counts are 20 seconds from the last entry. The entry call
+re-arms the count on every call, not only on the change of value, so
+each hit restarts the wait. The pet arm is monsterHitSummonedCOS.
 
 ===========================================================================
 */
