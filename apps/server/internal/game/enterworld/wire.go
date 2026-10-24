@@ -590,9 +590,11 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 	// per name u16 len + ANSI bytes (stream.readString). The persisted
 	// list is capped at the mutate site (WhisperBlockMaxCount = the
 	// client panel's 0x14); the emission clamp here only guards a
-	// hand-edited store record from overflowing the count byte.
+	// hand-edited store record from overflowing the count byte, and
+	// warns when it trims (the #1459 posture: never silent).
 	blocked := character.BlockedWhisperers
 	if len(blocked) > 0xff {
+		log.Warnf("bootstrap: char-data whisper-block list for %s clamped from %d to 255 rows (u8 count) - the tail is NOT emitted", name, len(blocked))
 		blocked = blocked[:0xff]
 	}
 	writer.U8(uint8(len(blocked)))
@@ -610,6 +612,7 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 	// the same single zero byte as before.
 	eventGroups := character.EnterEventGroupIds
 	if len(eventGroups) > 0xff {
+		log.Warnf("bootstrap: char-data event-group list for %s clamped from %d to 255 ids (u8 count) - the tail is NOT emitted", name, len(eventGroups))
 		eventGroups = eventGroups[:0xff]
 	}
 	writer.U8(uint8(len(eventGroups)))
