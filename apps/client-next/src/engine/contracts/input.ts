@@ -55,6 +55,7 @@ export interface InputOwner {
 	blindHeld(): boolean;
 	altHeld(): boolean;
 	mouseMode( value: 0 | 1 ): void;
+	zoomRail( value: boolean ): void;
 	sight( value: import("@/engine/foundation/rendering/camera-options").SightMode ): void;
 	camera( playerYaw?: number ): CameraInput;
 	accept( event: RawInput ): void;
