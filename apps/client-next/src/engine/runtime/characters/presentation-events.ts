@@ -618,12 +618,11 @@ export function createPresentationEvents() {
 			health?.finishedCasts();
 			const pendingDeaths = feedback.pendingDeaths( gameplay?.casts ?? [], health?.currentResult );
 			// A sound at the local player sits on the body as drawn, like
-			// every drawn anchor (#1442): its presented pose, resolved here
-			// in the frame (pose() is idempotent within one frame time),
-			// not the movement owner's logical one. Other emitters keep
-			// their entity row.
+			// every drawn anchor (#1442): the frame's resolved pose
+			// (presentPoses, #1442c), not the movement owner's logical
+			// one. Other emitters keep their entity row.
 			const localDrawn = gameplay?.pose ?
-				posePresentation.pose( gameplay.localGid, gameplay.pose, seconds ) :
+				drawnPoses.get( gameplay.localGid ) ?? gameplay.pose :
 				undefined;
 			sounds.flush( seconds, gid => {
 				const pose = gid === gameplay?.localGid ? localDrawn : entitiesByGid.get( gid );
