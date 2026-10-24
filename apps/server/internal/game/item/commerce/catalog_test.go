@@ -17,6 +17,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -25,6 +26,7 @@ TestShippedCatalog
 ================
 */
 func TestShippedCatalog(t *testing.T) {
+	tier.Long(t, "the whole shipped shop catalogue loads")
 	dir := licensed.RetailTextdataDir(t)
 	if _, e := os.Stat(dir); e != nil {
 		t.Skip("original media unavailable")

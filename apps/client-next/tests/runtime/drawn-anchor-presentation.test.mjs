@@ -61,7 +61,7 @@ driveEvents
 
 One presentation-events step over a walking local player (gid 1) and a
 second player (gid 2), with one hit from the local player on gid 2. The
-presenter answers every pose with the drawn one. Returns what the effect
+frame's drawn poses trail the logical ones. Returns what the effect
 step received, the damage texts placed and the flush's position resolver.
 ================
 */
@@ -120,8 +120,12 @@ function driveEvents() {
 					{ regionId: row.regionId, x: row.x, y: row.y, z: row.z, angle: row.heading },
 			appearanceRef: row => row.refObjId,
 			soundContext: () => ({}),
-			// Mid-walk, the drawn pose trails the logical one.
-			posePresentation: { pose: ( _gid, native ) => ({ ...native, x: native.x - 3, z: native.z - 4 }) },
+			// Mid-walk, the drawn pose trails the logical one: the frame's
+			// drawn poses, as presentPoses resolved them (#1442c).
+			drawnPoses: new Map( [
+				[ 1, { ...gameplay.pose, x: gameplay.pose.x - 3, z: gameplay.pose.z - 4 } ],
+				[ 2, { regionId: other.regionId, x: other.x - 3, y: other.y, z: other.z - 4, angle: other.heading } ]
+			] ),
 			referenceAppearances: { step() {} },
 			effects,
 			effectDetail: 0,

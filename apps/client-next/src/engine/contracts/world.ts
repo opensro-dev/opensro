@@ -211,9 +211,9 @@ export type WorldEvent =
 	| { readonly kind: "ui-sound"; readonly handle: UiSoundHandle; readonly at: number; }
 	| { readonly kind: "gameplay"; readonly state: GameplayState; }
 	| { readonly kind: "synchronized"; readonly epoch: number; }
-	| { readonly kind: "reset"; readonly epoch: number; }
+	| { readonly kind: "reset"; readonly epoch: number; readonly resync?: boolean; }
 	| { readonly kind: "item-sound"; readonly cue: ItemSoundRequest; readonly at: number; }
-	| { readonly kind: "spawn"; readonly entity: EntityState; }
+	| { readonly kind: "spawn"; readonly entity: EntityState; readonly resync?: boolean; }
 	| { readonly kind: "state"; readonly entity: EntityState; }
 	| { readonly kind: "despawn"; readonly gid: number; }
 	| { readonly kind: "native"; readonly opcode: number; readonly payload: Uint8Array; }
