@@ -56,6 +56,9 @@ type Runtime struct {
 	// InstantInventoryExpansion presents quest bag slots at the turn-in
 	// (port-only, not native; instant_expansion.go).
 	InstantInventoryExpansion bool
+	// instanceHandlers is the instanced-world handler registry
+	// (instance_handlers.go), keyed by instance definition.
+	instanceHandlers instanceHandlerTable
 }
 
 /*
