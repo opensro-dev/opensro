@@ -288,6 +288,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "There is no bounty; a kill moves no gold.",
 				Now:    "A wanted player's bounty comes out of their own gold: the killer takes up to 100,000,000 per wanted level, never more than the wanted player carries. No new gold enters the game.",
 				Why:    "Requested for the beta so a bounty puts the wanted player's own gold at stake; the original returns with one setting."},
+			{Flag: action.EnvMostWantedStreakNotice, On: action.MostWantedFromEnv() && action.MostWantedStreakNoticeFromEnv(),
+				Native: "There is no Most Wanted rule.",
+				Now:    "After every job kill that counts toward Most Wanted, you see your progress to the next wanted level, such as \"Most Wanted: 3/10 to LV 1\". Only you see it.",
+				Why:    "Requested after players could not tell whether their kills counted; the rule without the notice returns with one setting."},
 			{Flag: action.EnvTradeTiers, On: action.TradeTiersFromEnv(),
 				Native: "Every trade good is worth 348 gold, a caravan's stars count its goods against the trader's level, and every route pays its listed price.",
 				Now: "Trade goods are worth 21 times as much (7,308 for a 348 good): buying, selling, stolen goods at the Den and the cargo value all scale, so profit, trader job EXP, hunter shares, the weekly trade pool and the fortress trade tax are 21 times larger too. " +

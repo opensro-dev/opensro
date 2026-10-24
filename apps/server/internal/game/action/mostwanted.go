@@ -353,6 +353,7 @@ func (rt *Runtime) mostWantedKillInDoor(division string, killer, victim *enterwo
 	killer.MostWanted.Streak += rt.mostWantedStreakStep()
 	log.WithFields(log.Fields{"division": division, "killer": killer.Name, "victim": victim.Name,
 		"streak": killer.MostWanted.Streak}).Info("most wanted: kill counted")
+	actor = append(actor, rt.mostWantedStreakNotice(killer)...)
 	if level := mostWantedLevel(killer); level != before {
 		stats, speed := rt.mostWantedRefresh(division, killer, now)
 		actor, public = append(actor, stats...), speed
