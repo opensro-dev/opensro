@@ -3,20 +3,22 @@
 
 instance_handlers.go - quest handlers for instanced worlds
 
-The reference server registers quest programmes on instance lifecycle
-events (CEventHandlers_Register(scope, eventId, handler, receiver)): a
-definition's setup runs on the world event, and enter/leave/update/
-party/invitation handlers hang off the instance it creates. This file
-is the port's table of those registrations, keyed by instance
-definition: one handler per definition, each event kind optional (the
-native registration is per event, so an unregistered kind is never
-called). The action lane reports the events (instance_events.go
-there); quest programmes register here - Rahid 6 is step 5.
+In the reference design a quest programme subscribes to the lifecycle
+of an instanced world: a setup event as the world is created, then
+enter, leave, update, party-change, invitation-answer and death
+events for the instance it creates. This file is the port's table of
+those subscriptions, keyed by instance definition: one handler per
+definition, each event kind optional (subscription is per event, so
+an unsubscribed kind is never called). The action lane reports the
+events (instance_events.go there); quest programmes register here -
+Rahid 6 is step 5.
 
-Kind values are the native event ids step 0 pinned (setup 0x11,
-enter 3, leave 4, update 0x13, party-changed 0x16, answered 0x18).
-The death event's id is registered dynamically natively and unpinned,
-so Dead carries a port-local value with no wire meaning.
+Kind values are port-local: they name the events inside this process
+only - nothing serialises them and no store keeps them. How each kind
+lines up with the reference server's own event registry, including
+the one subscription that is taken out dynamically and could not be
+pinned statically, is recorded in the step-0 research checkpoint
+(InstanceWorldFoundation.md).
 
 Handlers run on the reporting lane's goroutine, most of them under
 that lane's division lock: a handler records or queues, it never calls
@@ -37,22 +39,22 @@ import (
 ================
 InstanceEventKind
 
-One instanced-world lifecycle event. Values are the native event ids
-where step 0 pinned them; see the file banner for the death value.
+One instanced-world lifecycle event. Values are port-local; see the
+file banner.
 ================
 */
 type InstanceEventKind uint8
 
 const (
-	InstanceEventSetup              InstanceEventKind = 0x11
-	InstanceEventEnter              InstanceEventKind = 3
-	InstanceEventLeave              InstanceEventKind = 4
-	InstanceEventUpdate             InstanceEventKind = 0x13
-	InstanceEventPartyChanged       InstanceEventKind = 0x16
-	InstanceEventInvitationAnswered InstanceEventKind = 0x18
-	// InstanceEventDead is port-local: the native death handler is
-	// registered dynamically, so its event id is unpinned (step 0).
-	InstanceEventDead InstanceEventKind = 0xFF
+	InstanceEventSetup              InstanceEventKind = 1
+	InstanceEventEnter              InstanceEventKind = 2
+	InstanceEventLeave              InstanceEventKind = 3
+	InstanceEventUpdate             InstanceEventKind = 4
+	InstanceEventPartyChanged       InstanceEventKind = 5
+	InstanceEventInvitationAnswered InstanceEventKind = 6
+	// The death kind rounds out the set; how its reference-server
+	// counterpart subscribes is in the file banner.
+	InstanceEventDead InstanceEventKind = 7
 )
 
 /*

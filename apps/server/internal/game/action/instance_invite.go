@@ -499,7 +499,7 @@ ApplyConsent
 
 The answer {1, 1} accepts; anything else declines (the client sends
 {1, button} for both box buttons). The answered event fires either
-way (native event 0x18, OnInstanceInvitaionAnswered); an accept then
+way (the invitation-answered event); an accept then
 transfers the member in under the division lock, re-validated live -
 a member who no longer fits the transfer's own gates simply does not
 move, and the event stream says so by the missing Enter.

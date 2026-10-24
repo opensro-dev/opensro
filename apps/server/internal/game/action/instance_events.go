@@ -14,8 +14,8 @@ reports nowhere). Feeds live with their owners: setup/enter/leave/
 update in instance_world.go, the answered event in instance_invite.go,
 death and party-change below.
 
-Kind values mirror the quest registry's (and through it the native
-event ids step 0 pinned); the two enums convert at the wiring seam.
+Kind values mirror the quest registry's one-for-one and are
+port-local in both; the two enums convert at the wiring seam.
 
 ===========================================================================
 */
@@ -38,15 +38,14 @@ One instanced-world lifecycle event, mirroring quest.InstanceEventKind.
 type InstanceEventKind uint8
 
 const (
-	InstanceEventSetup              InstanceEventKind = 0x11
-	InstanceEventEnter              InstanceEventKind = 3
-	InstanceEventLeave              InstanceEventKind = 4
-	InstanceEventUpdate             InstanceEventKind = 0x13
-	InstanceEventPartyChanged       InstanceEventKind = 0x16
-	InstanceEventInvitationAnswered InstanceEventKind = 0x18
-	// InstanceEventDead is port-local (the native death event id is
-	// registered dynamically and unpinned), as in the quest registry.
-	InstanceEventDead InstanceEventKind = 0xFF
+	InstanceEventSetup              InstanceEventKind = 1
+	InstanceEventEnter              InstanceEventKind = 2
+	InstanceEventLeave              InstanceEventKind = 3
+	InstanceEventUpdate             InstanceEventKind = 4
+	InstanceEventPartyChanged       InstanceEventKind = 5
+	InstanceEventInvitationAnswered InstanceEventKind = 6
+	// InstanceEventDead, port-local as in the quest registry.
+	InstanceEventDead InstanceEventKind = 7
 )
 
 /*
@@ -131,7 +130,7 @@ NotePartyChanged
 A character's party membership changed (the party lane reports joins
 and departures through the hook wiring installs). Only a resident's
 change is an instance event; the programme decides what it means for
-its party (native event 0x16, OnPartyStatusChanged).
+its party.
 ================
 */
 func (rt *Runtime) NotePartyChanged(division, name string) {
