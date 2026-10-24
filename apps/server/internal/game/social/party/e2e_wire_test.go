@@ -283,6 +283,7 @@ func nextFrame(t *testing.T, c *websocket.Conn, what string) transport.Frame {
 		if f.Opcode == transport.OpPing || f.Opcode == transport.OpPong {
 			continue
 		}
+		wiretest.NoteRead(c, f)
 		return f
 	}
 }
@@ -333,9 +334,24 @@ The handshake with an optional resume token; returns the WELCOME.
 */
 func helloTokenWS(t *testing.T, c *websocket.Conn, resumeToken []byte) transport.Welcome {
 	t.Helper()
-	sendFrame(t, c, transport.OpHello, transport.EncodeHello(transport.Hello{
-		ResumeToken: resumeToken, AdmissionToken: []byte("test-admission"),
-	}))
+	return helloResumeWS(t, c, resumeToken, nil)
+}
+
+/*
+================
+helloResumeWS
+
+The handshake resuming from old's stream position (the frames that test
+client read); old nil sends a fresh HELLO.
+================
+*/
+func helloResumeWS(t *testing.T, c *websocket.Conn, resumeToken []byte, old *websocket.Conn) transport.Welcome {
+	t.Helper()
+	hello := transport.Hello{ResumeToken: resumeToken, AdmissionToken: []byte("test-admission")}
+	if old != nil {
+		hello.HasPosition, hello.LastApplied = true, wiretest.StreamPosition(old)
+	}
+	sendFrame(t, c, transport.OpHello, transport.EncodeHello(hello))
 	payload := expectFrame(t, c, transport.OpWelcome, "handshake")
 	welcome, err := transport.DecodeWelcome(payload)
 	if err != nil {

@@ -115,7 +115,7 @@ func TestPartyResumeKeepsMembership(t *testing.T) {
 	_ = connB.NetConn().Close()
 	wait.Eventually(t, 5*time.Second, "B's session detach", func() bool { return sessionB.Kind() == "detached" })
 	connB2 := dialWS(t, server.srv)
-	resumed := helloTokenWS(t, connB2, welcomeB.ResumeToken)
+	resumed := helloResumeWS(t, connB2, welcomeB.ResumeToken, connB)
 	if !resumed.Resumed || resumed.SessionID != welcomeB.SessionID {
 		t.Fatalf("second socket did not resume B's session: %+v", resumed)
 	}
