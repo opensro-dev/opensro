@@ -403,17 +403,23 @@ func (rt *Runtime) HandleItemUse(
 				result = itemUseFailure(cosSummonPosture) // 49C0B6: posture admission precedes actor creation.
 				return false
 			}
-			if rt.PlayerAttackLocked(divisionID, character.Name) || rt.objectActionCommitted(divisionID, character.Name) {
-				result = itemUseFailure(cosSummonBusy) // 49BE65 -> 49BCDB: shared motion-change lock.
+			// The refusal sequence mirrors the persistent lane's native
+			// order: posture, teleport, the seated motion busy, battle,
+			// then the casting and motion-change locks.
+			if teleportBlocks(character.NativeTeleportMode) {
+				result = itemUseFailure(0x69) // 49BB2B; v1.150 consumes this byte silently.
+				return false
+			}
+			if rt.playerMotionState(divisionID, character, nowMs) == simulation.MotionSitting {
+				result = itemUseFailure(cosSummonBusy)
 				return false
 			}
 			if inBattleState(character, nowMs) {
 				result = itemUseFailure(cosSummonInBattle) // 49B9F0: riding and transport summons refuse battle.
 				return false
 			}
-			// v1.188 49B9F0 checks teleport mode before creating the companion.
-			if teleportBlocks(character.NativeTeleportMode) {
-				result = itemUseFailure(0x69) // 49BB2B; v1.150 consumes this byte silently.
+			if rt.PlayerAttackLocked(divisionID, character.Name) || rt.objectActionCommitted(divisionID, character.Name) {
+				result = itemUseFailure(cosSummonBusy) // 49BE65 -> 49BCDB: shared motion-change lock.
 				return false
 			}
 			characters, ok := rt.deps.ItemReferences().(enterworld.CharacterRefSource)
