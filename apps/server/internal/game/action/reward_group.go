@@ -36,9 +36,10 @@ the native temporary tree's pointer ordering and is never sent or persisted.
 ================
 */
 type RewardParty struct {
-	Order   uint64
-	Options uint8
-	Members []uint32
+	Order    uint64
+	Options  uint8
+	LeaderID uint32
+	Members  []uint32
 }
 
 /*

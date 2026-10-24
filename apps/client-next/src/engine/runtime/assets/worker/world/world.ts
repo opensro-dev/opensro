@@ -18,6 +18,16 @@ import { decodeSoundTerrain } from "@/engine/foundation/audio/terrain-sounds";
 // The retail terrain normal table: every sample (0,1,0). Shared by all
 // blocks when the relief stage is off.
 const FLAT_BLOCK_NORMALS = new Float32Array( 17 * 17 * 3 );
+// Normal water (block type 0) draws at the product of two native terms. The
+// per-vertex alpha is the cell's depth mask (SWorldCell_BuildWaterMaskTexture
+// 8872B0: (water height - terrain height) * 0.5, truncated, clamped 0..15,
+// over 15); a cell whose mask is all zero is never drawn (the dry-cell skip
+// at 8AE761 in SWorld_RenderWaterWithoutReflection 8AE2D0, which binds the
+// mask at 8AE76E). The mask is modulated by a TEXTUREFACTOR whose alpha byte
+// the pass forces to 0xB4 (or edx, 0xffffb400 at 8AF0BA keeps the factor's
+// RGB and replaces its alpha): 180/255 on top of the mask, written here as
+// the group material colour the renderer multiplies into every vertex.
+const WATER_ALPHA = 0xb4 / 255;
 // Special water (block type 1 with a wave type: Karakoram's ice) draws with
 // TEXTUREFACTOR 0xC8000000 and stage 0 ALPHAOP SELECTARG1(TFACTOR) under
 // SRCALPHA/INVSRCALPHA (SWorld_RenderWaterWithReflection 8BA130, the push at
@@ -824,7 +834,7 @@ noteMaterial
 								center: [ cx * 320 + 160, y, cz * 320 + 160 ],
 								radius: 227,
 								material: {
-									color: [ 1, 1, 1, 1 ],
+									color: block.water.type === 0 ? [ 1, 1, 1, WATER_ALPHA ] : [ 1, 1, 1, 1 ],
 									water: block.water.type === 0,
 									texture: block.water.type === 1 ?
 										b.water.specialTexturePublicPath :
