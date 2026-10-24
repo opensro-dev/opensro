@@ -63,12 +63,15 @@ const CONSISTENT_DISTANCE = .25;
 const CORRECTION_SMOOTH_SECONDS = .1;
 // A correction farther than this snaps (a teleport, a relocation).
 const MAX_SMOOTHED_CORRECTION = 96;
-// While a correction offset decays, a frame's whole drawn step (the walk
-// plus the offset it gives back) is at most this many times walking speed
-// times the frame time. Unreal lets the mesh offset glide faster than the
-// walk; here no drawn frame outruns the walk by more than this margin, so
-// the camera, which follows the drawn body, never surges at a redirect.
-// What does not fit carries to the next frame.
+// A frame's whole drawn step (the buffered walk plus any offset it gives
+// back) is at most this many times walking speed times the frame time,
+// whatever moved the base: a decaying correction, a start or redirect whose
+// first publications arrive before the worker admits the leg, or a frame
+// clock that jumps. Unreal lets the mesh offset glide faster than the walk;
+// here no drawn frame outruns the walk by more than this margin, so the
+// camera, which follows the drawn body, never surges. What does not fit
+// carries to the next frame as offset. Only a deliberate snap (a
+// correction beyond MAX_SMOOTHED_CORRECTION) is exempt.
 const CORRECTION_SPEED_MARGIN = 1.04;
 
 /*
@@ -222,6 +225,11 @@ export function createOwnWalkInterpolation() {
 	// The latest leg's walking speed (units per millisecond): what bounds a
 	// frame's step while an offset decays, also after the walk stopped.
 	let walkSpeed: number | undefined;
+	// restart() snapped this frame (a teleport-sized correction): the next
+	// drawn step is a jump on purpose and is not bounded.
+	let snapped = false;
+	// The frame clock of the last drawn frame (pose clockMs).
+	let lastClockMs: number | undefined;
 
 	/*
 	================
@@ -276,6 +284,7 @@ export function createOwnWalkInterpolation() {
 		// same render time, so the first frame after it shows no jump.
 		const d = delta( poseAt( lastDrawnAtMs ?? sample.atMs ), shown );
 		offset = d && hypot3( ...d ) <= MAX_SMOOTHED_CORRECTION ? d : [ 0, 0, 0 ];
+		snapped = !d || hypot3( ...d ) > MAX_SMOOTHED_CORRECTION;
 	}
 
 	/*
@@ -382,10 +391,12 @@ export function createOwnWalkInterpolation() {
 		pose
 
 		The drawn pose at worker time nowMs: the buffered walk at nowMs -
-		delay, plus the decaying correction offset.
+		delay, plus the decaying correction offset. clockMs is the frame
+		clock: the step bound measures real frame time on it, so a jump of
+		the worker-time origin cannot widen its own budget.
 		================
 		*/
-		pose( nowMs: number ): Pose | undefined {
+		pose( nowMs: number, clockMs = nowMs ): Pose | undefined {
 			if ( !history.length ) return undefined;
 			let renderMs = nowMs - delayMs;
 			if ( lateTurn && lastNowMs !== undefined && renderMs > lateTurn.atMs ) {
@@ -421,9 +432,9 @@ export function createOwnWalkInterpolation() {
 			const base = poseAt( renderMs );
 			if ( leg ) walkSpeed = leg.speed;
 			let drawn = offsetPose( base, offset );
-			const frameMs = lastNowMs === undefined ? 0 : Math.max( 0, nowMs - lastNowMs );
-			if ( (offset[0] || offset[1] || offset[2]) && lastDrawn && walkSpeed && frameMs > 0 ) {
-				// Bound the frame's whole step; keep the rest of the offset.
+			const frameMs = lastClockMs === undefined ? 0 : Math.max( 0, clockMs - lastClockMs );
+			if ( !snapped && lastDrawn && walkSpeed && frameMs > 0 ) {
+				// Bound the frame's whole step; keep the rest as offset.
 				const step = delta( lastDrawn, drawn );
 				const length = step ? hypot3( ...step ) : 0;
 				const budget = walkSpeed * CORRECTION_SPEED_MARGIN * frameMs;
@@ -433,10 +444,12 @@ export function createOwnWalkInterpolation() {
 					offset = delta( base, drawn ) ?? [ 0, 0, 0 ];
 				}
 			}
+			snapped = false;
 			lastBase = base;
 			lastDrawn = drawn;
 			lastDrawnAtMs = renderMs;
 			lastNowMs = nowMs;
+			lastClockMs = clockMs;
 			return drawn;
 		},
 		/*
@@ -493,6 +506,8 @@ export function createOwnWalkInterpolation() {
 			lastNowMs = undefined;
 			lateTurn = undefined;
 			walkSpeed = undefined;
+			snapped = false;
+			lastClockMs = undefined;
 		}
 	};
 }
@@ -609,7 +624,7 @@ export function createOwnWalkPresenter( turn: ( from: number, to: number, second
 			own.angle = turn( own.angle, target.angle, now - own.last );
 			own.last = now;
 			own.nowMs = nowMs;
-			const drawn = own.walk.pose( nowMs ) ?? target;
+			const drawn = own.walk.pose( nowMs, now * 1000 ) ?? target;
 			own.displayed = { ...drawn, angle: Math.round( own.angle ) % 65536 };
 			return { ...own.displayed };
 		},

@@ -62,7 +62,6 @@ apps/client-next/src/engine/foundation/gameplay/chat-feedback.ts
 apps/client-next/src/engine/foundation/gameplay/cos-behavior.ts
 apps/client-next/src/engine/foundation/gameplay/cos-timer.ts
 apps/client-next/src/engine/foundation/gameplay/equipment-drop.ts
-apps/client-next/src/engine/foundation/gameplay/event-environment.ts
 apps/client-next/src/engine/foundation/gameplay/feedback-levels.ts
 apps/client-next/src/engine/foundation/gameplay/game-options.ts
 apps/client-next/src/engine/foundation/gameplay/guide.ts
@@ -242,7 +241,6 @@ apps/client-next/tests/browser/mission-entry.test.mjs
 apps/client-next/tests/browser/mission-input.test.mjs
 apps/client-next/tests/browser/mob-death-motion-live.test.mjs
 apps/client-next/tests/browser/monster-wander-spread-live.test.mjs
-apps/client-next/tests/browser/movement-cadence.test.mjs
 apps/client-next/tests/browser/movement-snap-live.test.mjs
 apps/client-next/tests/browser/music-autoplay.test.mjs
 apps/client-next/tests/browser/native-filtered-alpha.test.mjs

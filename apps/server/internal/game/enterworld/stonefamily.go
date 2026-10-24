@@ -8,7 +8,11 @@ stone references so the browser client's reinforcement binder can refuse a
 stone placement locally, the way SRO_Client.exe 0x0062B6D0
 (CIFAlchemyReinforce_BindItemSlot) does, instead of binding the slot and
 letting the fuse fail later. The server fuse remains the authority; this
-field only feeds the client's local refusal.
+field only feeds the client's local refusal. The same pass publishes the
+stoneTooltipMask field the client's stone tooltip (557C50) prints its
+"Object item" row from; the tooltip searches the same haystacks with its
+own word order and a different repair rule, so the two stay separate
+fields.
 
 ===========================================================================
 */
@@ -59,6 +63,46 @@ var stoneFamilyWords = []struct {
 	{"honor", stoneFamilyHonor},
 }
 
+// Tooltip target word bits, in the order 557C50 tests them. Mirrored by
+// STONE_TARGET_SYMBOLS in the client's item-tooltip-stone.ts; change both
+// together.
+const (
+	stoneTargetWeapon uint32 = 1 << iota
+	stoneTargetArmor
+	stoneTargetShield
+	stoneTargetAccessory
+	stoneTargetHelm
+	stoneTargetShoulderguard
+	stoneTargetMail
+	stoneTargetPants
+	stoneTargetGauntlet
+	stoneTargetBoots
+	stoneTargetEarring
+	stoneTargetNecklace
+	stoneTargetRing
+	stoneTargetHonor
+)
+
+var stoneTooltipWords = []struct {
+	word string
+	bit  uint32
+}{
+	{"weapon", stoneTargetWeapon},
+	{"armor", stoneTargetArmor},
+	{"shield", stoneTargetShield},
+	{"accessory", stoneTargetAccessory},
+	{"helm", stoneTargetHelm},
+	{"shoulderguard", stoneTargetShoulderguard},
+	{"mail", stoneTargetMail},
+	{"pants", stoneTargetPants},
+	{"gauntlet", stoneTargetGauntlet},
+	{"boots", stoneTargetBoots},
+	{"earring", stoneTargetEarring},
+	{"necklace", stoneTargetNecklace},
+	{"ring", stoneTargetRing},
+	{"honor", stoneTargetHonor},
+}
+
 /*
 ================
 stoneFamilyMaskFor
@@ -84,6 +128,27 @@ func stoneFamilyMaskFor(text string) uint32 {
 
 /*
 ================
+stoneTooltipMaskFor
+
+557C50 substring-searches the stone's text once per word in
+stoneTooltipWords order and prints the matching UIIT_STT_* type symbols
+after the "UIIT_STT_TARGET_ITEM: " label. The find is the ordinal
+wide-string one: case-sensitive, and 'ring' matches inside 'earring',
+exactly as the native text holds it.
+================
+*/
+func stoneTooltipMaskFor(text string) uint32 {
+	var mask uint32
+	for _, entry := range stoneTooltipWords {
+		if strings.Contains(text, entry.word) {
+			mask |= entry.bit
+		}
+	}
+	return mask
+}
+
+/*
+================
 ItemStoneNativeFields
 
 Magic stones (3/3/11/1 and 3/3/11/7) take their family words from the
@@ -96,6 +161,17 @@ gate, which is also the pre-field behaviour for older data. A resolved
 stone publishes the mask even when it is zero - presence distinguishes
 "checked, admits nothing" (the native kind gate folded into the mask)
 from "not published".
+
+The tooltip mask follows 557C50 instead of the binder: it searches the
+same haystacks in the tooltip's own word order, and a stone whose first
+parameter description is MATTR_REPAIR searches its fourth description
+(0x557F86 compares the description against the whole 12-char literal),
+never the option's words. 557C50 prints the row even when the option
+does not resolve - its text stays empty - so an unresolved magic stone
+publishes a zero tooltip mask where the binder mask stays unpublished.
+The option's ten authored words ride in Descriptors; the shipped table
+holds no flag-0 word, so the joined text searches exactly like the
+native record's ten strings.
 ================
 */
 func ItemStoneNativeFields(fields NativeFields, ref *ItemRef, magic MagicOptionSource) NativeFields {
@@ -110,7 +186,10 @@ func ItemStoneNativeFields(fields NativeFields, ref *ItemRef, magic MagicOptionS
 		return fields
 	}
 	if ref.TypeIDs[3] == 2 {
-		return fields.With("stoneFamilyMask", float64(stoneFamilyMaskFor(ref.ParamDescriptions[3])))
+		text := ref.ParamDescriptions[3]
+		return fields.
+			With("stoneFamilyMask", float64(stoneFamilyMaskFor(text))).
+			With("stoneTooltipMask", float64(stoneTooltipMaskFor(text)))
 	}
 	source, ok := magic.(interface {
 		MagicOptionByCodenameDegree(string, int64) (*MagicOptionRow, bool)
@@ -120,11 +199,19 @@ func ItemStoneNativeFields(fields NativeFields, ref *ItemRef, magic MagicOptionS
 	}
 	option, found := source.MagicOptionByCodenameDegree(ref.ParamDescriptions[0], int64(degree))
 	if !found {
-		return fields
+		// 557C50 prints the row with an empty text: label only.
+		return fields.With("stoneTooltipMask", 0)
 	}
-	mask := stoneFamilyMaskFor(strings.Join(option.Descriptors, " "))
+	joined := strings.Join(option.Descriptors, " ")
+	mask := stoneFamilyMaskFor(joined)
 	if option.OptionName == "MATTR_REPAIR" {
 		mask |= stoneFamilyHonor
 	}
-	return fields.With("stoneFamilyMask", float64(mask))
+	tooltip := joined
+	if ref.ParamDescriptions[0] == "MATTR_REPAIR" {
+		tooltip = ref.ParamDescriptions[3]
+	}
+	return fields.
+		With("stoneFamilyMask", float64(mask)).
+		With("stoneTooltipMask", float64(stoneTooltipMaskFor(tooltip)))
 }

@@ -131,6 +131,27 @@ export function debugClockHold(
 
 /*
 ================
+debugClockNoteSeed
+
+A clock the sampler sees while a seedless hold waits: the hold lands
+where that clock stands, so later samples stay put instead of riding
+the live seed. Any other state passes through untouched.
+================
+*/
+export function debugClockNoteSeed(
+	state: DebugClock,
+	seed: WorldClockSeed | undefined,
+	now: number
+): DebugClock {
+	if ( !state.held || state.heldAt || !seed ) {
+		return state;
+	}
+	const heldAt = worldClockWallTime( seed, now );
+	return heldAt ? { ...state, heldAt } : state;
+}
+
+/*
+================
 debugClockResume
 
 timeon: the clock runs again from where the hold left it.

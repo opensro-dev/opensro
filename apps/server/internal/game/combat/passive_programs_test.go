@@ -13,6 +13,7 @@ and learnedStatusResistance only while their reqi walk passes (59F0E0).
 package combat
 
 import (
+	"sync"
 	"testing"
 
 	"opensro.online/server/internal/domain"
@@ -29,9 +30,18 @@ shippedPassive
 One authored passive rank by codename, admitted by the production compiler.
 ================
 */
+var shippedPassiveSkillsOnce sync.Once
+var shippedPassiveSkills *enterworld.TextdataSkills
+
 func shippedPassive(t *testing.T, codename string) enterworld.SkillRow {
 	t.Helper()
-	row, ok := enterworld.NewTextdataSkills(gamedatatest.TextdataDir(t)).SkillByCodename(codename)
+	// The directory resolves (and may skip) before the Once: a skip inside
+	// the closure would leave the Once done over a nil table.
+	dir := gamedatatest.TextdataDir(t)
+	shippedPassiveSkillsOnce.Do(func() {
+		shippedPassiveSkills = enterworld.NewTextdataSkills(dir)
+	})
+	row, ok := shippedPassiveSkills.SkillByCodename(codename)
 	if !ok || !row.PassiveParameters.Pinned {
 		t.Fatalf("%s not admitted: %+v", codename, row.PassiveParameters)
 	}
