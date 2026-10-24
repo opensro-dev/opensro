@@ -9,6 +9,7 @@ instance_invite_test.go - the party instance invitation lane
 package action
 
 import (
+	"bytes"
 	"encoding/binary"
 	"testing"
 	"time"
@@ -116,10 +117,26 @@ func TestInstanceInvitePromptsThePartyAndMovesAccepts(t *testing.T) {
 	}
 	payload := prompt[0].Payload
 	leaderGid := enterworld.ObjectIDForCharacter(f.leader)
-	if len(payload) != 42 || payload[0] != instanceInvitePromptType ||
-		binary.LittleEndian.Uint32(payload[1:5]) != leaderGid ||
-		binary.LittleEndian.Uint16(payload[24:26]) != 4 {
-		t.Fatalf("prompt payload = %x, want type 7 for leader %d with the 4 party gids", payload, leaderGid)
+	// The exact composition, pinned to the native literals rather than to
+	// the constants (a typo in instanceInvitePromptType must fail here):
+	// type 7 (0x7644E0's arm), the inviter gid, the 19 zero bytes of the
+	// struct QuestInstanceInvite_Read (0x764380) reads past, the count, then
+	// the whole party's gids.
+	header := []byte{7, 0, 0, 0, 0}
+	binary.LittleEndian.PutUint32(header[1:5], leaderGid)
+	header = append(header, make([]byte, 19)...)
+	header = append(header, 4, 0)
+	if len(payload) != 42 || !bytes.Equal(payload[:26], header) {
+		t.Fatalf("prompt payload = %x, want header %x then 4 party gids", payload, header)
+	}
+	roster := map[uint32]bool{}
+	for i := 26; i < 42; i += 4 {
+		roster[binary.LittleEndian.Uint32(payload[i:i+4])] = true
+	}
+	for _, c := range append([]*enterworld.Character{f.leader}, f.members...) {
+		if !roster[enterworld.ObjectIDForCharacter(c)] {
+			t.Fatalf("prompt roster %x lacks %s", payload[26:], c.Name)
+		}
 	}
 	if got, want := f.kinds(), []InstanceEventKind{InstanceEventSetup, InstanceEventEnter}; len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("events = %v, want setup then leader enter", got)
