@@ -20,7 +20,7 @@ func TestSendBatchCarriesAdmissionBurstPastFormerFrameCap(t *testing.T) {
 		t.Fatal(err)
 	}
 	connection := newFakeConn(true)
-	if err := session.attach(connection, false); err != nil {
+	if err := session.attach(connection, false, 0); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { hub.closeSession(session, nil) })
@@ -72,7 +72,7 @@ func TestSendBatchRejectsServerBurstBeyondBoundWithoutHanging(t *testing.T) {
 		t.Fatal(err)
 	}
 	connection := newFakeConn(true)
-	if err := session.attach(connection, false); err != nil {
+	if err := session.attach(connection, false, 0); err != nil {
 		t.Fatal(err)
 	}
 

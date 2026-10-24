@@ -382,7 +382,7 @@ func (rt *Runtime) continueDirectionWalk(key string, nowMs int64) (simulation.Di
 			return simulation.DivisionFrames{}, false
 		}
 		rt.directions.clear(key)
-		correction := directionCorrectionFrame(enterworld.ObjectIDForCharacter(walk.character), admission.world.Spawn)
+		correction := directionCorrectionFrame(activeMoverGID(walk.character, walk.cosGID), admission.world.Spawn)
 		return simulation.DivisionFrames{
 			DivisionID:      walk.divisionID,
 			OnlyCharacterID: walk.character.ID,
@@ -398,6 +398,28 @@ func (rt *Runtime) continueDirectionWalk(key string, nowMs int64) (simulation.Di
 		log.Debugf("movement: direction walk of %s ended: %s", walk.character.Name, refusal.Reason)
 	}
 	return simulation.DivisionFrames{}, false
+}
+
+/*
+================
+activeMoverGID
+
+The gid a 0xB2F5 for this mover must name. A rider on a live summoned
+mount is moved by the mount: native ignores a correction naming a
+mounted character (OnEntityMoveUpdate0xB2F5 0x775B50 returns early
+while the rider's mounted flag is set), so the stop names the command
+mover when one is known, the live summoned mount when the command came
+without one, and the character itself for any other mover.
+================
+*/
+func activeMoverGID(character *enterworld.Character, cosGID uint32) uint32 {
+	if cosGID != 0 {
+		return cosGID
+	}
+	if cos := character.Snapshot().ActiveCOS; cos != nil && cos.GID != 0 && cos.Mounted && cos.Summoned && cos.CurrentHP != 0 {
+		return cos.GID
+	}
+	return enterworld.ObjectIDForCharacter(character)
 }
 
 /*
