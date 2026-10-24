@@ -414,10 +414,22 @@ test("the item filter reaches the pickup loop through the experimental slice", (
 	gameplay.step( 0, f.frame.local );
 	assert.deepEqual( sent, [ cosPickupRequest( 2, 20 ) ] );
 	gameplay.receive( { opcode: 0xb69e, payload: Uint8Array.of( 1, 8, 2, 0, 0, 0, 20, 0, 0, 0 ) }, 1 );
-	gameplay.experimental( { petPickupKinds: PICKUP_KIND_GOLD } );
+	gameplay.experimental( {
+		predictedRunUp: false,
+		jobKillNotices: true,
+		dropPlusNotices: true,
+		plusSevenNotices: true,
+		petPickupKinds: PICKUP_KIND_GOLD
+	} );
 	gameplay.step( 2, f.frame.local );
 	assert.equal( sent.length, 1 );
-	gameplay.experimental( { petPickupKinds: undefined } );
+	gameplay.experimental( {
+		predictedRunUp: false,
+		jobKillNotices: true,
+		dropPlusNotices: true,
+		plusSevenNotices: true,
+		petPickupKinds: undefined
+	} );
 	gameplay.step( 3, f.frame.local );
 	assert.deepEqual( sent[1], cosPickupRequest( 2, 21 ) );
 	gameplay.dispose();
