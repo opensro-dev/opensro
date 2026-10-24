@@ -259,6 +259,11 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-confirm-guild-ban",
 			label: "Confirm guild ban",
 			description: "Ask before Withdraw bans a guild member."
+		}, {
+			key: "questTrackerMarkers",
+			id: "experimental-quest-tracker-markers",
+			label: "Quest target markers",
+			description: "Show every active quest's target on M and the minimap."
 		} ]
 	},
 	{

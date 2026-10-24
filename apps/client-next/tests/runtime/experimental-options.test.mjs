@@ -90,7 +90,9 @@ const OFF = Object.freeze( {
 	// On by default (owner 2026-10-22, #1243): a touch tap keeps an item or skill tooltip up.
 	touchInspect: true,
 	// Off by default: the M window shows only the five native towns and 28 x 8 overview.
-	expandedWorldMap: false
+	expandedWorldMap: false,
+	// Off by default (#840): the maps mark the tracked quest's targets only.
+	questTrackerMarkers: false
 } );
 
 test("touch inspection defaults on and only an explicit false turns it off", () => {
@@ -652,4 +654,16 @@ test("expanded world map defaults off (native five towns and 28 x 8 overview) an
 	const on = experimentalOptions( { expandedWorldMap: true } );
 	assert.equal( on.expandedWorldMap, true );
 	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "expandedWorldMap" ) ) );
+});
+
+test("quest target markers default off (tracked quest only) and stay out of the worker's slices", () => {
+	for ( const value of [ undefined, null, {}, { questTrackerMarkers: 1 }, { questTrackerMarkers: "true" } ] ) {
+		const options = experimentalOptions( value );
+		assert.equal( options.questTrackerMarkers, false );
+		assert.equal( "questTrackerMarkers" in experimentalGameplay( options ), false );
+		assert.equal( "questTrackerMarkers" in experimentalVideo( options ), false );
+	}
+	const on = experimentalOptions( { questTrackerMarkers: true } );
+	assert.equal( on.questTrackerMarkers, true );
+	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "questTrackerMarkers" ) ) );
 });
