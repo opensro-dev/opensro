@@ -409,6 +409,10 @@ type Runtime struct {
 	// MostWantedBountyTransfer pays the bounty from the victim's gold, not
 	// new gold (mostwanted.go; port-only, not native). False mints it.
 	MostWantedBountyTransfer bool
+	// MostWantedStreakNotice tells the killer its progress after every
+	// counted kill (mostwantednotice.go; port-only, not native). False is
+	// the current rule: nothing until a level.
+	MostWantedStreakNotice bool
 
 	// TraderCargoDrop keeps a loaded transport's goods in the world when
 	// its trader dies riding or disconnects in the field
