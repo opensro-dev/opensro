@@ -10,7 +10,9 @@ focus it and before Windows can hide the native pointer. Keep that owner
 through focused editing/selection; never hand off on keys. The cursor files
 are browser-loaded PNGs decoded from the native DIBs
 (scripts/extract_client_cursors.py): every browser draws a PNG cursor, and
-Safari drew no .cur at all (BUG-068).
+Safari drew no .cur at all (BUG-068). CCursorManager_SetVisible (A15A70)
+owns whether any cursor stands at all - SetCursor(handle) or SetCursor(NULL);
+the /ms console command (690C40 case 0x1E) is its only caller.
 
 ===========================================================================
 */
@@ -18,6 +20,8 @@ import { cursorAssetUrl } from "@/engine/foundation/assets/native-assets";
 import type { WorldCursor } from "@/engine/foundation/ui/world-cursor";
 
 const DEFAULT_CURSOR: WorldCursor = 0x95;
+// SetCursor(NULL): no pointer anywhere, the editing caret included.
+const CURSOR_HIDDEN_RULE = "html,html *{cursor:none!important}";
 const EDITABLE_INPUT_TYPES = [
 	"text",
 	"search",
@@ -90,6 +94,8 @@ export function createCursor() {
 		"position:fixed;left:0;top:0;pointer-events:none;z-index:2147483647;image-rendering:pixelated;will-change:transform";
 	let point: readonly [number, number] | null = null;
 	let worldCursor: WorldCursor = DEFAULT_CURSOR, shownCursor: WorldCursor = DEFAULT_CURSOR, mouseButtons = 0;
+	// The cursor manager's +0x20 byte, standing from construction.
+	let visible = true;
 
 	/*
 	================
@@ -101,7 +107,7 @@ export function createCursor() {
 		if ( value === shownCursor ) return;
 		shownCursor = value;
 		document.documentElement.dataset.sroWorldCursor = value.toString( 16 );
-		style.textContent = cursorRule( value );
+		style.textContent = visible ? cursorRule( value ) : CURSOR_HIDDEN_RULE;
 	}
 
 	/*
@@ -119,7 +125,7 @@ export function createCursor() {
 		// Hit-test the current point rather than retaining a potentially removed UI
 		// element or trusting event.target while an element owns pointer capture.
 		const hovered = hit !== undefined ? hit : point ? document.elementFromPoint( point[0], point[1] ) : null;
-		const editing = !!point && !document.hidden && typing.complete && typing.naturalWidth > 0 &&
+		const editing = visible && !!point && !document.hidden && typing.complete && typing.naturalWidth > 0 &&
 			(editable( target ) || editable( hovered ));
 		if ( editing ) {
 			const transform = `translate(${point![0] - 2}px, ${point![1] - 1}px)`;
@@ -189,6 +195,20 @@ export function createCursor() {
 		world( value: WorldCursor ) {
 			worldCursor = value;
 			world();
+		},
+		/*
+		================
+		setVisible
+
+		A15A70: an unchanged value does nothing; otherwise the stored byte
+		flips and the cursor comes back as the current glyph or goes away.
+		================
+		*/
+		setVisible( value: boolean ) {
+			if ( value === visible ) return;
+			visible = value;
+			style.textContent = visible ? cursorRule( shownCursor ) : CURSOR_HIDDEN_RULE;
+			present();
 		},
 		dispose() {
 			lifetime.abort();

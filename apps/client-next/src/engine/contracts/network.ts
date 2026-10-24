@@ -35,6 +35,9 @@ NetworkOwner
 */
 export interface NetworkOwner {
 	pingMs(): number | null;
+	// Every frame received on the current socket, transport control (pings,
+	// pongs) included: a live link changes it even when no game frame comes.
+	received(): number;
 	connect( url: string, admission: string, resume?: Uint8Array ): void;
 	send( frame: WireFrame ): void;
 	// False retains this frame and its successors while admission awaits data.
@@ -128,3 +131,8 @@ export const INVENTORY_TRANSACTION_TIMEOUT = "inventory_transaction_timeout";
 // The target lane's release (B4B3) carries no identity either: an unanswered
 // one is the same loss, resumed the same way.
 export const TARGET_RELEASE_TIMEOUT = "target_release_timeout";
+// The connection itself stalled: a request has waited TRANSPORT_STALL_MS
+// (world.ts) with no frame of any kind arriving since it left. The lane
+// timeouts above would fire later for the same loss and blame the request;
+// this resumes the session sooner and names the link.
+export const TRANSPORT_STALLED = "transport_stalled";

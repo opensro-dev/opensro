@@ -2286,10 +2286,11 @@ for ( const queuedReceipt of [ true, false ] ) {
 		}
 		assert.equal( world.status().phase, "reconnecting" );
 		assert.equal( incidents.length, 1 );
-		assert.equal( incidents[0].code, "movement_receipt_timeout" );
+		// Nothing at all arrived for 12 s while the move waited: the link
+		// stalled (#1418), so the incident names the link, not the move.
+		assert.equal( incidents[0].code, "transport_stalled" );
 		assert.equal( incidents[0].category, "unknown" );
-		assert.match( incidents[0].message, /command 1, age 12001 ms, pending 1/ );
-		assert.ok( incidents[0].stack );
+		assert.match( incidents[0].message, /Transport stalled: a request waited 12001 ms with no frame arriving/ );
 		assert.throws( () => world.command( { kind: "move", destination } ), /not ready/ );
 		world.step( 12256 );
 		await settle();
@@ -2319,6 +2320,92 @@ for ( const queuedReceipt of [ true, false ] ) {
 		assert.equal( incidents.length, 1 );
 	});
 }
+
+/*
+================
+a live link without a receipt is still the movement lane's loss
+
+Frames keep arriving (a pong each second) while one move goes unanswered:
+the link is alive, so the stall detector stays quiet and the 10 s receipt
+watchdog reports the lost answer, with how recently the last frame came.
+================
+*/
+test("a move unanswered on a live link times out as the movement lane's loss", async t => {
+	const sockets = socketHarness( t ), incidents = [];
+	const world = createWorldSession( async () => "ticket", undefined, incident => incidents.push( incident ) );
+	t.after( () => world.dispose() );
+	const entry = { ...bootstrap, simulationProtocolVersion: 1 };
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const first = sockets[0];
+	first.onopen();
+	first.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	first.receive( 7, entered( entry ) );
+	for ( const row of rows ) first.receive( row.opcode, row.payload );
+	first.receive( 0x32a6, Uint8Array.of( 123, 0, 0, 0, 0, 0, 0, 0 ) );
+	world.step( 4 );
+	flush( world );
+	world.step( 5 );
+	world.ready();
+	world.command( { kind: "move", destination: { ...bootstrap.localPlayerEntry.startProfile, x: 10 } } );
+	for ( let ms = 1005; ms <= 10005; ms += 1000 ) {
+		first.receive( 4, Uint8Array.of( 0, 0, 0, 0 ) );
+		world.step( ms );
+		assert.equal( world.status().phase, "world", `still live at ${ms} ms: frames keep arriving` );
+	}
+	first.receive( 4, Uint8Array.of( 0, 0, 0, 0 ) );
+	world.step( 11006 );
+	assert.equal( world.status().phase, "reconnecting" );
+	assert.equal( incidents.length, 1 );
+	assert.equal( incidents[0].code, "movement_receipt_timeout" );
+	assert.match( incidents[0].message, /command 1, age 11001 ms, pending 1; last inbound 0 ms ago/ );
+});
+
+/*
+================
+a stalled link resumes before the receipt watchdog
+
+Nothing arrives after the move leaves: at 7 s, confirmed one second later,
+the session resumes as a stalled link, three seconds before the movement
+lane's watchdog would have fired.
+================
+*/
+test("a stalled link is named and resumed at 8 s, before the receipt watchdog", async t => {
+	const sockets = socketHarness( t ), incidents = [];
+	const world = createWorldSession( async () => "ticket", undefined, incident => incidents.push( incident ) );
+	t.after( () => world.dispose() );
+	const entry = { ...bootstrap, simulationProtocolVersion: 1 };
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const first = sockets[0];
+	first.onopen();
+	first.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	first.receive( 7, entered( entry ) );
+	for ( const row of rows ) first.receive( row.opcode, row.payload );
+	first.receive( 0x32a6, Uint8Array.of( 123, 0, 0, 0, 0, 0, 0, 0 ) );
+	world.step( 4 );
+	flush( world );
+	world.step( 5 );
+	world.ready();
+	world.command( { kind: "move", destination: { ...bootstrap.localPlayerEntry.startProfile, x: 10 } } );
+	for ( let ms = 505; ms <= 7505; ms += 500 ) {
+		world.step( ms );
+		assert.equal( world.status().phase, "world", `${ms} ms: not yet confirmed` );
+	}
+	world.step( 8005 );
+	assert.equal( world.status().phase, "reconnecting" );
+	assert.equal( incidents.length, 1 );
+	assert.equal( incidents[0].code, "transport_stalled" );
+	assert.match( incidents[0].message, /a request waited 8000 ms with no frame arriving/ );
+});
 
 /*
 ================
