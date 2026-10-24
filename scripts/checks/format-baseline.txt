@@ -224,7 +224,6 @@ apps/client-next/tests/browser/hawk.test.mjs
 apps/client-next/tests/browser/helpers/follow-recorder.mjs
 apps/client-next/tests/browser/helpers/hold-runtime.mjs
 apps/client-next/tests/browser/helpers/native-button-oracle.mjs
-apps/client-next/tests/browser/helpers/pursuit-recorder.mjs
 apps/client-next/tests/browser/helpers/ui-admission-reference.mjs
 apps/client-next/tests/browser/hit-light.test.mjs
 apps/client-next/tests/browser/hud-readouts.test.mjs
