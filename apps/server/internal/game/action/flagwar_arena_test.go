@@ -272,7 +272,7 @@ func TestFlagWarStealCompletionKeepsSingleCarrier(t *testing.T) {
 ================
 TestFlagWarKeyBanksForTheClickersSide
 
-Native (FlagWar_OnMasterKeyNpcClick_646EA0): a key click banks the
+Native (the key-click handler): a key click banks the
 CLICKER's side and the broadcast names the clicker's side, even
 when the corpse was the other side's carrier.
 ================

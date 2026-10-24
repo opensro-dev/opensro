@@ -600,7 +600,7 @@ whole match (the client notices only its own side).
 */
 func (rt *Runtime) flagWarTouchKey(match *flagWarMatch, object *flagWarArenaObject, participant *flagWarParticipant) {
 	object.live = false
-	// Native (FlagWar_OnMasterKeyNpcClick_646EA0, HLIL + MLIL): the
+	// Native (the key-click handler, checked at HLIL and MLIL): the
 	// key banks for the CLICKER's side and the broadcast team byte
 	// is the clicker's side too - the dead carrier's side is never
 	// consulted, so the click is not side-gated. The port despawns
