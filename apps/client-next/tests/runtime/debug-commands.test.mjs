@@ -152,10 +152,11 @@ test("command words read as wcstol reads them", () => {
 ================
 consoleFixture
 
-The GM console open over a fixture whose clock seed is day 10, 06:30.
+The GM console open over a fixture whose clock seed is day 10, 06:30, or
+over no clock at all when worldClock is null.
 ================
 */
-function consoleFixture() {
+function consoleFixture( worldClock ) {
 	/** @type {any[]} */
 	const sent = [];
 	const f = uiFixture( message => {
@@ -163,7 +164,7 @@ function consoleFixture() {
 	} );
 	Object.assign( f.state.gameplay, {
 		eligibility: { gm: true },
-		worldClock: { day: 10, hour: 6, minute: 30, receivedAtMs: 0 }
+		worldClock: worldClock === null ? undefined : { day: 10, hour: 6, minute: 30, receivedAtMs: 0 }
 	} );
 	let now = 0;
 	const step = () => {
@@ -201,6 +202,22 @@ test("the GM console sends the weather rows to the worker", () => {
 		type( "/rain" );
 		type( "/rain 1 2" );
 		assert.equal( sent.length, 4, "a weather row without exactly one word ran" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("timeoff before the first clock lands the hold when the clock arrives", async () => {
+	const { sampleWorldClock } = await import(
+		"../../src/engine/foundation/gameplay/world-clock.ts"
+	);
+	const { f, type } = consoleFixture( null );
+	try {
+		type( "/timeoff" );
+		const seed = { day: 10, hour: 6, minute: 30, receivedAtMs: 0 };
+		const sampled = at => sampleWorldClock( f.ui.debugClockSeed( seed, at ), at );
+		const early = sampled( 100000 );
+		assert.deepEqual( sampled( 900000 ), early, "the hold did not land on the first clock" );
 	} finally {
 		f.dispose();
 	}
