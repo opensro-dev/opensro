@@ -24,7 +24,7 @@ func TestTransportMetricsExposeSessionQueueAndByteGauges(t *testing.T) {
 	}
 
 	connection := newFakeConn(false)
-	if err := session.attach(connection, false); err != nil {
+	if err := session.attach(connection, false, 0); err != nil {
 		t.Fatal(err)
 	}
 	written := waitWritten(t, connection, 2) // WELCOME, then the queued frame.
@@ -73,6 +73,7 @@ func TestTransportMetricsAccountResumeAndDetach(t *testing.T) {
 		Payload: EncodeHello(Hello{
 			ResumeToken:    session.resumeToken[:],
 			AdmissionToken: testHelloAdmissionToken,
+			HasPosition:    true,
 		}),
 	}
 	hub.AcceptConn(second)

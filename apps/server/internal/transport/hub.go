@@ -565,7 +565,14 @@ func (h *Hub) AcceptConn(conn Conn) {
 				_ = conn.Close("resume admission identity mismatch")
 				return
 			}
-			if err := sess.attach(conn, true); err == nil {
+			// No stream position: the frames this client is missing are
+			// unknowable, so the old session ends and a fresh one starts
+			// (#1466) - never a silent gap.
+			attachErr := errResumeGap
+			if hello.HasPosition {
+				attachErr = sess.attach(conn, true, hello.LastApplied)
+			}
+			if attachErr == nil {
 				h.metrics.helloAdmissionAccepted.Add(1)
 				h.metrics.resumeAccepted.Add(1)
 				h.metrics.handshakes.record(time.Since(startedAt))
@@ -574,8 +581,12 @@ func (h *Hub) AcceptConn(conn Conn) {
 				h.fireResumed(sess)
 				return
 			}
-			// The session closed between lookup and attach; fall through to a
-			// fresh session so the client still gets in.
+			if errors.Is(attachErr, errResumeGap) {
+				h.closeSession(sess, attachErr)
+			}
+			// The session closed between lookup and attach, or its stream
+			// could not be resumed; fall through to a fresh session so the
+			// client still gets in.
 		} else {
 			// Detection only: without this line a failed resume and a fresh
 			// token-less connect are indistinguishable in the log. The token
@@ -611,7 +622,7 @@ func (h *Hub) AcceptConn(conn Conn) {
 		return
 	}
 	h.admitAccountSession(admissionIdentity.AccountID, sess)
-	if err := sess.attach(conn, false); err != nil {
+	if err := sess.attach(conn, false, 0); err != nil {
 		h.closeSession(sess, err)
 		_ = conn.Close(err.Error())
 		return
