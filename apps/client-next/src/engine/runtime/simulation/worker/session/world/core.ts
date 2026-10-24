@@ -17,7 +17,7 @@ import {
 	type NameColorContext
 } from "@/engine/foundation/gameplay/name-color";
 import { fortressActive } from "@/engine/foundation/gameplay/fortress";
-import type { EntityState } from "@/engine/contracts/world";
+import type { EntityState, WorldEvent } from "@/engine/contracts/world";
 import { travelMode, resetTravelRegion, gateRequest, isReturnScroll } from "@/engine/foundation/gameplay/travel";
 import { commerceReferences } from "@/engine/foundation/gameplay/commerce";
 import {
@@ -191,7 +191,8 @@ items). Only PvP capes own a team value; keep strict validation for them.
 	let pendingTravel: import("@/engine/contracts/world").WorldTravel | null = null;
 	let awaitingTravelBootstrap = false;
 	// Compactions the entity journal has dropped into a resync, as last seen
-	// by take(): a moved count republishes the gameplay snapshot in full.
+	// by take(): a moved count puts the full gameplay snapshot and the
+	// pending travel inside the resync batch (see take).
 	let seenResyncs = 0;
 	let publishedShop: import("@/engine/contracts/gameplay").GameplayState["shop"];
 	let publishedCatalog: import("@/engine/contracts/gameplay").GameplayState["skillCatalog"],
@@ -213,6 +214,55 @@ fields (shop, skill catalog, GM catalog, social).
 		publishedCatalog = undefined;
 		publishedGmCatalog = undefined;
 		publishedSocial = undefined;
+	}
+	/*
+	================
+	gameplayEvent
+
+	Compose the next gameplay publication against the retained catalogues:
+	the large fields (shop, skill and GM catalogues, social) ride only
+	when they change, unless the projection was invalidated. Consumes the
+	pending state, so a state is published exactly once - by step into
+	the journal queue, or by take into a resync batch.
+	================
+	*/
+	function gameplayEvent(): Extract<WorldEvent, { kind: "gameplay"; }> | null {
+		const state = gameplay.take();
+		if ( !state ) return null;
+		const { skillCatalog, gmCatalog, social, shop, ...dynamic } = state;
+		const catalog = skillCatalog === seenCatalog ?
+			retainedCatalog ?? skillCatalog :
+			retainedCatalog && sameSkillCatalog( skillCatalog, retainedCatalog ) ?
+			retainedCatalog :
+			skillCatalog;
+		seenCatalog = skillCatalog;
+		retainedCatalog = catalog;
+		const catalogChanged = catalog !== publishedCatalog;
+		const gm = !gmCatalog ?
+			undefined :
+			gmCatalog === seenGmCatalog ?
+			retainedGmCatalog ?? gmCatalog :
+			retainedGmCatalog && sameSkillCatalog( gmCatalog, retainedGmCatalog ) ?
+			retainedGmCatalog :
+			gmCatalog;
+		if ( gmCatalog ) seenGmCatalog = gmCatalog;
+		if ( gm ) retainedGmCatalog = gm;
+		const gmChanged = Boolean( gm ) && gm !== publishedGmCatalog;
+		const event: Extract<WorldEvent, { kind: "gameplay"; }> = {
+			kind: "gameplay",
+			state: {
+				...dynamic,
+				...(shop !== publishedShop ? { shop } : {}),
+				...(catalogChanged ? { skillCatalog: catalog } : {}),
+				...(gmChanged && gm ? { gmCatalog: gm } : {}),
+				...(social !== publishedSocial ? { social } : {})
+			}
+		};
+		publishedShop = shop;
+		if ( catalogChanged ) publishedCatalog = catalog;
+		if ( gmChanged ) publishedGmCatalog = gm;
+		publishedSocial = social;
+		return event;
 	}
 	/*
 ================
@@ -550,42 +600,8 @@ Advances entities and gameplay, then publishes the changed gameplay state.
 					gameplay.cancelCast( token, now );
 				}
 			}
-			const state = gameplay.take();
-			if ( state ) {
-				const { skillCatalog, gmCatalog, social, shop, ...dynamic } = state;
-				const catalog = skillCatalog === seenCatalog ?
-					retainedCatalog ?? skillCatalog :
-					retainedCatalog && sameSkillCatalog( skillCatalog, retainedCatalog ) ?
-					retainedCatalog :
-					skillCatalog;
-				seenCatalog = skillCatalog;
-				retainedCatalog = catalog;
-				const catalogChanged = catalog !== publishedCatalog;
-				const gm = !gmCatalog ?
-					undefined :
-					gmCatalog === seenGmCatalog ?
-					retainedGmCatalog ?? gmCatalog :
-					retainedGmCatalog && sameSkillCatalog( gmCatalog, retainedGmCatalog ) ?
-					retainedGmCatalog :
-					gmCatalog;
-				if ( gmCatalog ) seenGmCatalog = gmCatalog;
-				if ( gm ) retainedGmCatalog = gm;
-				const gmChanged = Boolean( gm ) && gm !== publishedGmCatalog;
-				entities.publish( {
-					kind: "gameplay",
-					state: {
-						...dynamic,
-						...(shop !== publishedShop ? { shop } : {}),
-						...(catalogChanged ? { skillCatalog: catalog } : {}),
-						...(gmChanged && gm ? { gmCatalog: gm } : {}),
-						...(social !== publishedSocial ? { social } : {})
-					}
-				} );
-				publishedShop = shop;
-				if ( catalogChanged ) publishedCatalog = catalog;
-				if ( gmChanged ) publishedGmCatalog = gm;
-				publishedSocial = social;
-			}
+			const event = gameplayEvent();
+			if ( event ) entities.publish( event );
 		},
 		// The owners' skipped cosmetic steps, for the world's degraded reports.
 		takeDegradations: () => entities.takeDegradations(),
@@ -656,15 +672,26 @@ take
 ================
 		*/
 		take() {
-			// A compacted journal rebuilt the world publication whole; the
-			// gameplay snapshot must follow in full - its catalogue fields
-			// included - or the presentation's reset leaves it with none.
-			if ( entities.resyncs() !== seenResyncs ) {
-				seenResyncs = entities.resyncs();
-				invalidateProjection();
-				gameplay.invalidate();
-			}
-			return entities.take();
+			const batch = entities.take();
+			if ( !batch || entities.resyncs() === seenResyncs ) return batch;
+			seenResyncs = entities.resyncs();
+			// A compacted journal rebuilt the world publication whole, and
+			// the batch opens with a reset: what the reset nulls must ride
+			// inside this batch, not the next one. The full gameplay
+			// snapshot (invalidateProjection + invalidate force every
+			// field) and the pending travel are appended - on a composed
+			// batch, the taken one is sealed - unless the batch already
+			// carries them from after the drop.
+			invalidateProjection();
+			gameplay.invalidate();
+			const extra: WorldEvent[] = [];
+			const event = gameplayEvent();
+			if ( event ) extra.push( event );
+			if (
+				pendingTravel &&
+				!batch.events.some( e => e.kind === "travel" && e.travel === pendingTravel )
+			) extra.push( { kind: "travel", travel: pendingTravel } );
+			return extra.length ? { ...batch, events: [ ...batch.events, ...extra ] } : batch;
 		},
 		/*
 ================
