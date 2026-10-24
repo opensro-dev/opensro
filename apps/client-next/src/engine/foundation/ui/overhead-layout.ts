@@ -3,8 +3,8 @@
 
 overhead-layout.ts - the rows stacked over a character's name
 
-The guild row, the vitals (quick status), the fortress mark and crest, and
-a stall's title above them all; speech rises above the highest row.
+The guild or companion-owner row, the vitals (quick status), the fortress
+mark and crest, and a stall's title; speech rises above the highest row.
 
 ===========================================================================
 */
@@ -16,6 +16,36 @@ import type { UiQuad } from "@/engine/contracts/ui";
 import { quickStatus } from "./quick-status";
 import { fortressActive, fortressStatus } from "@/engine/foundation/gameplay/fortress";
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
+import { NAME_COLOR_PARTY, NAME_COLOR_WHITE, nameColorRgba, partyName } from "@/engine/foundation/gameplay/name-color";
+import type { SocialState } from "@/engine/foundation/gameplay/social";
+
+// CICCos 855CBC subtracts the double 20.0 at C46198 before drawing the owner.
+const COMPANION_OWNER_Y = -20;
+
+/*
+================
+companionOwnerNameplate
+
+854B54 copies the owner's name color into the COS owner board (+794).
+Use the spawn's owner name even when the owner is outside the visible set.
+The roster fallback is inferred for that case, retaining the party color.
+================
+*/
+export function companionOwnerNameplate(
+	entity: EntityState,
+	owner: EntityState | undefined,
+	social: SocialState | undefined
+) {
+	if ( entity.kind !== "cos" || !entity.ownerName ) return null;
+	const user = owner?.gid === entity.ownerGid && (owner?.kind === "player" || owner?.kind === "local-player");
+	const fallback = social && partyName( social, entity.ownerName ) ? NAME_COLOR_PARTY : NAME_COLOR_WHITE;
+	return {
+		text: entity.ownerName,
+		color: nameColorRgba( user ? owner.nameColor ?? fallback : fallback ),
+		y: COMPANION_OWNER_Y
+	};
+}
+
 /*
 ================
 overheadLayout
@@ -64,7 +94,8 @@ export function overheadLayout(
 		[ 102 / 255, 185 / 255, 1, 1 ];
 	const status = quickStatus( entity, local, game, options ),
 		guildY = guildText ? -20 : 0,
-		statusY = guildY - (status ? 25 : 0);
+		ownerY = entity.kind === "cos" && entity.ownerName ? COMPANION_OWNER_Y : 0,
+		statusY = Math.min( guildY, ownerY ) - (status ? 25 : 0);
 	let fortressMark: { path: string; y: number; } | null = null;
 	const war = game.fortress, team = role, targetGuild = own ? guild?.id : entity.guildId;
 	if ( options.fortressNames && war && fortressActive( war ) && targetGuild && (team === 1 || team === 2) ) {

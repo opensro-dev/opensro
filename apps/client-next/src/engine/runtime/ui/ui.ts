@@ -558,7 +558,7 @@ import {
 	audioLevelText
 } from "@/engine/foundation/audio/volume-control";
 import { chatScrollbar } from "@/engine/foundation/ui/chat-scrollbar";
-import { overheadLayout } from "@/engine/foundation/ui/overhead-layout";
+import { companionOwnerNameplate, overheadLayout } from "@/engine/foundation/ui/overhead-layout";
 import { vitalWarning } from "@/engine/foundation/ui/vital-warning";
 import {
 	beginnerMarkShown,
@@ -19914,6 +19914,35 @@ export function createUi(
 							fontStyle: selected ? 2 : 0
 						} ).map( q => ({ ...q, characterAnchor: entity.gid }) )
 					);
+					const ownerPlate = entity.kind === "cos" ?
+						companionOwnerNameplate(
+							entity,
+							next.entities.find( owner => owner.gid === entity.ownerGid ),
+							game?.social
+						) :
+						null;
+					if ( ownerPlate && height ) {
+						const ownerWidth = text.run( ownerPlate.text ).width,
+							ownerLeft = -(ownerWidth >> 1),
+							ownerTop = ownerPlate.y - (height >> 1);
+						quads.push( {
+							characterAnchor: entity.gid,
+							rect: [ ownerLeft - 1, ownerTop - 1, ownerWidth + 2, height + 2 ],
+							clip: full,
+							uv: [ 0, 0, 1, 1 ],
+							texture: "",
+							color: [ 0, 0, 0, 64 / 255 ]
+						} );
+						quads.push(
+							...text.quads(
+								ownerPlate.text,
+								[ ownerLeft, ownerTop, ownerWidth, height ],
+								full,
+								ownerPlate.color,
+								{ vAlign: 0 }
+							).map( q => ({ ...q, characterAnchor: entity.gid }) )
+						);
+					}
 					if ( hovered && width ) {
 						quads.push( {
 							characterAnchor: entity.gid,
