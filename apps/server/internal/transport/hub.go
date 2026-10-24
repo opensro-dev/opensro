@@ -512,6 +512,7 @@ func (h *Hub) AcceptConn(conn Conn) {
 		_ = conn.Close("no HELLO before deadline")
 		return
 	}
+	helloAt := time.Now()
 	if f.EncodedLen() > MaxInboundFrameBytes {
 		h.metrics.handshakeProtocolRejected.Add(1)
 		_ = conn.WriteFrame(Frame{Opcode: OpBye, Payload: []byte{ByeReasonProtocolErr}})
@@ -547,6 +548,7 @@ func (h *Hub) AcceptConn(conn Conn) {
 		_ = conn.Close("HELLO admission refused")
 		return
 	}
+	verifiedAt := time.Now()
 
 	resumePresented := len(hello.ResumeToken) == ResumeTokenLen
 	if resumePresented {
@@ -568,6 +570,7 @@ func (h *Hub) AcceptConn(conn Conn) {
 				h.metrics.resumeAccepted.Add(1)
 				h.metrics.handshakes.record(time.Since(startedAt))
 				h.countAttach(conn.Kind())
+				h.logSlowHandshake(conn, true, startedAt, helloAt, verifiedAt)
 				h.fireResumed(sess)
 				return
 			}
@@ -616,7 +619,39 @@ func (h *Hub) AcceptConn(conn Conn) {
 	h.metrics.helloAdmissionAccepted.Add(1)
 	h.metrics.handshakes.record(time.Since(startedAt))
 	h.countAttach(conn.Kind())
+	h.logSlowHandshake(conn, false, startedAt, helloAt, verifiedAt)
 	h.fireOpen(sess)
+}
+
+// slowHandshakeLogThreshold is the total HELLO-to-attach time past which
+// the handshake's phases are worth a log line. Healthy handshakes finish
+// in milliseconds; the field reports behind #1453 sat near 8 s.
+const slowHandshakeLogThreshold = time.Second
+
+// logSlowHandshake names which AcceptConn phase ate the time when a
+// handshake (fresh or resume) runs long: waiting for the HELLO frame,
+// admission-ticket verification, or session allocation plus attach. The
+// attach phase includes the zombie path's old-connection close, the one
+// phase that used to wait out a parked write's whole deadline.
+/*
+================
+logSlowHandshake
+================
+*/
+func (h *Hub) logSlowHandshake(conn Conn, resumed bool, startedAt, helloAt, verifiedAt time.Time) {
+	total := time.Since(startedAt)
+	if total < slowHandshakeLogThreshold {
+		return
+	}
+	log.WithFields(log.Fields{
+		"kind":      conn.Kind(),
+		"remote":    conn.RemoteAddr(),
+		"resumed":   resumed,
+		"total_ms":  total.Milliseconds(),
+		"hello_ms":  helloAt.Sub(startedAt).Milliseconds(),
+		"verify_ms": verifiedAt.Sub(helloAt).Milliseconds(),
+		"attach_ms": time.Since(verifiedAt).Milliseconds(),
+	}).Warn("transport: slow HELLO handshake (phase durations in ms)")
 }
 
 // lookupByToken resolves a presented resume token by EXACT map lookup —
