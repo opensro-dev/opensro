@@ -82,7 +82,7 @@ func TestDispatchWaitingReaderSupersededAgain(t *testing.T) {
 	}
 
 	second := &dispatchReadConn{fakeConn: newFakeConn(false), dispatched: make(chan struct{})}
-	if err := session.attach(second, true); err != nil {
+	if err := session.attach(second, true, session.streamPos); err != nil {
 		t.Fatal(err)
 	}
 	session.mu.Lock()
@@ -96,7 +96,7 @@ func TestDispatchWaitingReaderSupersededAgain(t *testing.T) {
 	})
 
 	third := newFakeConn(false)
-	if err := session.attach(third, true); err != nil {
+	if err := session.attach(third, true, session.streamPos); err != nil {
 		t.Fatal(err)
 	}
 	third.inbound <- Frame{Opcode: opcode, Payload: []byte{3}}

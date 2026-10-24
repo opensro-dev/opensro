@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"opensro.online/server/internal/testsupport/tier"
 	"opensro.online/server/internal/transport"
 	"os"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 )
 
 func TestShippedSkillBootstrapFrameBudget(t *testing.T) {
+	tier.Long(t, "the whole shipped skill catalogue fits the entry frame budget")
 	rows := sharedShippedSkills(t).SpawnSkillRows()
 	blob, err := EnterWorldBlob(&BootstrapResult{NativeResult: 1, RefSkillSnapshot: rows})
 	if err != nil {
@@ -44,6 +46,7 @@ func TestSpawnStatusWalkDoesNotInterpretParameterValuesAsTags(t *testing.T) {
 	}
 }
 func TestShippedSpawnSkillReferencesPublishThroughBootstrap(t *testing.T) {
+	tier.Long(t, "every shipped spawn-skill row publishes through the bootstrap")
 	rows := sharedShippedSkills(t).SpawnSkillRows()
 	if len(rows) < 27000 {
 		t.Fatalf("incomplete skill authority: %d", len(rows))

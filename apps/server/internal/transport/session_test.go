@@ -147,7 +147,7 @@ func attachedSession(t *testing.T, gated bool) (*Hub, *Session, *fakeConn) {
 		t.Fatal(err)
 	}
 	fc := newFakeConn(gated)
-	if err := sess.attach(fc, false); err != nil {
+	if err := sess.attach(fc, false, 0); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { hub.closeSession(sess, nil) })
@@ -292,7 +292,7 @@ func TestUnreliableAllowlist(t *testing.T) {
 	}
 	fc := newFakeConn(false)
 	fc.supportsDgram = true
-	if err := sess.attach(fc, false); err != nil {
+	if err := sess.attach(fc, false, 0); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { hub.closeSession(sess, nil) })
@@ -383,7 +383,7 @@ func TestBindExclusiveLifecycle(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := s.attach(newFakeConn(false), false); err != nil {
+		if err := s.attach(newFakeConn(false), false, 0); err != nil {
 			t.Fatal(err)
 		}
 		return s
