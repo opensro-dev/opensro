@@ -607,9 +607,9 @@ func TestPetSummonInBattleAnswersBattleBeforeBusy(t *testing.T) {
 	c.BattleUntilMs = 0
 	assertItemUseRefusedUnchanged(t, rt, c, use, cosSummonBusy)
 
-	// 49315F..493172 tests the seated motion (state 4) before battle: a
-	// player seated in a fight still answers the silent busy code, not
-	// the battle notice.
+	// The reference server tests the seated motion before the battle
+	// state: a player seated in a fight still answers the silent busy
+	// code, not the battle notice.
 	c.BattleUntilMs = 2_000_000
 	key := simulation.WorldKey(testDivision, c.Name)
 	seed := func() simulation.WorldState { return simulation.SeedWorldState(c) }
@@ -621,11 +621,11 @@ func TestPetSummonInBattleAnswersBattleBeforeBusy(t *testing.T) {
 ================
 TestTransportSummonInBattleAnswersBattleBeforeBusy
 
-The transport summoner (49B9F0 family) carries the same refusal order
-as the persistent lane: the battle state is tested before the casting
-and motion-change locks, so a player casting in a fight hears the
-battle notice for a horse scroll too; the open cast answers busy once
-the fight is over.
+The transport summoner carries the same refusal order as the
+persistent lane: the battle state is tested before the casting and
+motion-change locks, so a player casting in a fight hears the battle
+notice for a horse scroll too; the open cast answers busy once the
+fight is over.
 ================
 */
 func TestTransportSummonInBattleAnswersBattleBeforeBusy(t *testing.T) {

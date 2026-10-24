@@ -84,9 +84,9 @@ func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResu
 		*result = itemUseFailure(cosSummonTeleporting)
 		return false
 	}
-	// 49315F..493172: the seated motion (vt+0xFC state 4) answers busy 5
-	// before the battle test, so a player seated in a fight hears silence,
-	// not the battle notice below.
+	// The reference server's summon handler tests the seated motion
+	// before the battle state: a player seated in a fight hears the
+	// silent busy answer, not the battle notice below.
 	if rt.playerMotionState(use.division, c, use.nowMs) == simulation.MotionSitting {
 		*result = itemUseFailure(cosSummonBusy)
 		return false
