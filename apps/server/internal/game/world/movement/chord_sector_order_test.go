@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -30,6 +31,7 @@ carries the answer over.
 ================
 */
 func TestTiedPlacementWinsUnderOneIdentity(t *testing.T) {
+	tier.Long(t, "a tied placement wins under one identity across 12 fresh shipped-nav validators")
 	from := simulation.Spawn{RegionID: 0x694F, X: 20, Z: 260}
 	to := simulation.Spawn{RegionID: 0x694F, X: -40, Z: 260}
 	var first simulation.NavOwner

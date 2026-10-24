@@ -84,6 +84,15 @@ type Session struct {
 	lossyKeys  []lossySlot // FIFO of pending slots, deduped
 	lossyBytes int
 
+	// Exactly-once ordered delivery across a resume (stream_ring.go):
+	// streamPos counts the frames written on the reliable stream above the
+	// transport range; ring keeps the ordered ones until acknowledged;
+	// ringFloor is the newest position the ring has had to drop.
+	streamPos uint32
+	ring      []ringFrame
+	ringBytes int
+	ringFloor uint32
+
 	resumeToken [ResumeTokenLen]byte
 	lastRecv    time.Time
 	readCancel  context.CancelFunc
@@ -98,6 +107,11 @@ type Session struct {
 	evicted atomic.Bool
 
 	done chan struct{} // closed exactly once at final teardown
+
+	// sceneReadyHooks run once, in order, when the current scene finishes
+	// loading (FinishSceneReentry). Owners that hold requests during
+	// loading register one to replay them into the ready scene.
+	sceneReadyHooks []func()
 
 	// limiter is the per-session inbound dispatch budget (ratelimit.go).
 	// Owned by the session so its state dies with the session — churn can
@@ -566,11 +580,18 @@ func (s *Session) pushFront(f Frame) {
 attach
 ================
 */
-func (s *Session) attach(conn Conn, resumed bool) error {
+func (s *Session) attach(conn Conn, resumed bool, lastApplied uint32) error {
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
 		return ErrSessionClosed
+	}
+	// A resume serves exactly the ordered frames past the client's position
+	// (stream_ring.go); one the ring cannot cover is refused, and the hub
+	// issues a fresh session instead of letting a lost frame pass silently.
+	if resumed && !s.resumeFromLocked(lastApplied) {
+		s.mu.Unlock()
+		return errResumeGap
 	}
 	if s.attached {
 		// Zombie replacement: the old transport thinks it is alive (half-open
@@ -825,9 +846,13 @@ func (s *Session) writeLoop() {
 		drainAndEmpty := s.drainClose && len(s.queue) == 0
 		conn := s.conn
 		gen := s.gen
+		pos := s.noteWrittenLocked(f, ordered)
 		s.mu.Unlock()
 
 		if f.Current != nil && !f.Current() {
+			s.mu.Lock()
+			s.unnoteLocked(pos, ordered)
+			s.mu.Unlock()
 			if ordered && drainAndEmpty {
 				s.hub.closeSession(s, nil)
 				return
@@ -836,17 +861,11 @@ func (s *Session) writeLoop() {
 		}
 		if err := conn.WriteFrame(f); err != nil {
 			s.hub.metrics.writeErrors.Add(1)
-			if ordered {
-				s.mu.Lock()
-				// Re-queue only if the attachment didn't change under us;
-				// after a resume the WELCOME must stay first and this frame
-				// belonged to the dead transport's in-flight window.
-				if !s.closed && gen == s.gen {
-					s.queue = append([]Frame{f}, s.queue...)
-					s.queueBytes += f.EncodedLen()
-				}
-				s.mu.Unlock()
-			}
+			// No re-queue: a write can fail after the bytes reached the
+			// client (a deadline on a stalled link), and re-sending it then
+			// applied it twice (#1466). It already holds its position: the
+			// client's resume position says whether it arrived, and the ring
+			// re-sends it only if it did not.
 			s.detachGen(gen, err)
 			continue
 		}
@@ -907,6 +926,18 @@ func (s *Session) readLoop(conn Conn, gen int, ctx context.Context) {
 					continue
 				}
 				// lastRecv already refreshed; nothing else to do.
+			case OpStreamAck:
+				pos, ok := DecodeStreamAck(f.Payload)
+				if !ok {
+					s.hub.closeSession(s, errors.New("transport: malformed stream ACK"))
+					return
+				}
+				if !s.admitFrame(f.Opcode, f.EncodedLen()) {
+					continue
+				}
+				s.mu.Lock()
+				s.ackLocked(pos)
+				s.mu.Unlock()
 			case OpBye:
 				s.hub.closeSession(s, CloseReason{Reason: ByeReasonNormal})
 				return

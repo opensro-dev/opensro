@@ -84,6 +84,13 @@ func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResu
 		*result = itemUseFailure(cosSummonTeleporting)
 		return false
 	}
+	// The reference server's summon handler tests the seated motion
+	// before the battle state: a player seated in a fight hears the
+	// silent busy answer, not the battle notice below.
+	if rt.playerMotionState(use.division, c, use.nowMs) == simulation.MotionSitting {
+		*result = itemUseFailure(cosSummonBusy)
+		return false
+	}
 	// Native for pets too: CGItemCOSSummoner_Use (493100) tests the battle
 	// byte before any family branch and refuses 0x1878 (493183..49318C), and
 	// CGObjPC_TogglePersistentSummoner (4E8FC0) opens with the same test

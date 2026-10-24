@@ -19,6 +19,7 @@ import (
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/testsupport/gamedatatest"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -91,6 +92,7 @@ GameWorld's own unset staying native is the #838 contract, unchanged.
 ================
 */
 func TestStackSizesPublishTheShardsCaps(t *testing.T) {
+	tier.Long(t, "the published stack sizes equal the shipped item caps")
 	dir := gamedatatest.TextdataDir(t)
 	native := enterworld.NewTextdataItems(dir)
 	nativeCap := func(codename string) int64 {
@@ -156,6 +158,7 @@ default deploy sells: the smith's elixir at 1,000,000 is listed.
 ================
 */
 func TestUnsetShopSettingPublishesTheShardsGoods(t *testing.T) {
+	tier.Long(t, "an unset shop setting publishes the shard's shipped goods")
 	dir := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(dir)
 	for _, s := range shardsettings.Settings {
