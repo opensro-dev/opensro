@@ -232,6 +232,94 @@ test("a stalled consumer's backlog compacts into a resync instead of killing the
 	p.dispose();
 });
 
+test("one-shot natives queued before a compaction ride the resync in order", () => {
+	const owner = createEntities();
+	const p = createPresentation();
+	owner.bootstrap( bootstrap );
+	p.apply( flush( owner ) );
+	for ( const row of rows ) owner.receive( row );
+	const entered = flush( owner );
+	p.apply( entered );
+	const spawn = entered.events.find( e => e.kind === "spawn" ).entity;
+	const notice = marker => ({ kind: "native", opcode: 0x300c, payload: Uint8Array.of( marker ) });
+	// The consumer stalls on an unacknowledged batch (which carries one
+	// native of its own) while two more one-shots queue behind it; a
+	// state flood then compacts the queue (#1482). The rebuilt snapshot
+	// supersedes the flood, never the one-shots.
+	owner.publish( notice( 0 ) );
+	const inflight = owner.take();
+	owner.publish( notice( 1 ) );
+	owner.publish( notice( 2 ) );
+	const packet = value => {
+		const payload = Buffer.alloc( 6 );
+		payload.writeUInt32LE( spawn.gid );
+		payload[4] = 4;
+		payload[5] = value;
+		return { opcode: 0x3122, payload };
+	};
+	for ( let i = 0; owner.resyncs() === 0 && i < 2000000; i++ ) owner.receive( packet( i % 2 ? 4 : 0 ) );
+	assert.equal( owner.resyncs(), 1, "the flood compacts instead of throwing" );
+	// A native queued behind the drop is newer than the kept ones.
+	owner.publish( notice( 3 ) );
+	p.apply( inflight );
+	owner.ack( inflight.sequence );
+	const resync = owner.take();
+	assert.deepEqual(
+		resync.events.map( e => e.kind ),
+		[ "reset", "bootstrap", "spawn", "synchronized", "native", "native", "native" ]
+	);
+	assert.equal( p.apply( resync ), true );
+	assert.deepEqual(
+		p.takeNative().map( e => e.payload[0] ),
+		[ 1, 2, 3 ],
+		"the kept one-shots arrive oldest first, ahead of the post-drop native"
+	);
+	owner.ack( resync.sequence );
+	owner.dispose();
+	p.dispose();
+});
+
+test("compaction keeps only the newest one-shot natives past the retention bound", () => {
+	const owner = createEntities();
+	const indexed = index => {
+		const payload = new Uint8Array( 4 );
+		new DataView( payload.buffer ).setUint32( 0, index, true );
+		return { kind: "native", opcode: 0x300c, payload };
+	};
+	for ( let i = 0; i < 1100; i++ ) owner.publish( indexed( i ) );
+	assert.equal( owner.resyncs(), 0 );
+	// One oversized snapshot publish trips the byte budget and compacts.
+	owner.publish( { kind: "gameplay", state: { localGid: 1, error: "z".repeat( 20 << 20 ) } } );
+	assert.equal( owner.resyncs(), 1 );
+	const resync = owner.take();
+	const natives = resync.events.filter( e => e.kind === "native" );
+	assert.equal( natives.length, 1024, "the retention bound caps the kept one-shots" );
+	const indexOf = event =>
+		new DataView( event.payload.buffer, event.payload.byteOffset, event.payload.byteLength ).getUint32( 0, true );
+	assert.equal( indexOf( natives[0] ), 1100 - 1024, "the oldest one-shots are shed first" );
+	assert.equal( indexOf( natives.at( -1 ) ), 1099, "the newest one-shot is kept" );
+	owner.ack( resync.sequence );
+	owner.dispose();
+});
+
+test("an oversized one-shot is shed without shielding the smaller ones around it", () => {
+	const owner = createEntities();
+	const small = marker => ({ kind: "native", opcode: 0x300c, payload: Uint8Array.of( marker ) });
+	owner.publish( small( 1 ) );
+	owner.publish( { kind: "native", opcode: 0x300c, payload: new Uint8Array( (1 << 20) + 1 ) } );
+	owner.publish( small( 2 ) );
+	owner.publish( { kind: "gameplay", state: { localGid: 1, error: "z".repeat( 20 << 20 ) } } );
+	assert.equal( owner.resyncs(), 1 );
+	const resync = owner.take();
+	assert.deepEqual(
+		resync.events.filter( e => e.kind === "native" ).map( e => e.payload[0] ),
+		[ 1, 2 ],
+		"the native past the byte bound is shed; its neighbours are kept in order"
+	);
+	owner.ack( resync.sequence );
+	owner.dispose();
+});
+
 test("reliable journal compacts past 8192 events and teardown never publishes a reset", () => {
 	const owner = createEntities();
 	for ( let i = 0; i < 8192; i++ ) {
