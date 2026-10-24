@@ -343,6 +343,9 @@ export function startRuntime(
 				{
 					bugReport,
 					setWorldFieldOfView: degrees => world.setFieldOfView( degrees ),
+					setCameraZoomRail: capped => input.zoomRail( capped ),
+					setFreeCamera: free => world.setFreeCamera( free ),
+					setCursorVisible: visible => platform.setCursorVisible( visible ),
 					saveExperimental: value => platform.saveExperimentalOptions( value ),
 					saveWindowPositions: value => platform.saveWindowPositions( value )
 				}
