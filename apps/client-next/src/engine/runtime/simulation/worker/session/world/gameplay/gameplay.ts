@@ -1191,6 +1191,17 @@ enterMusic
 		},
 		/*
 ================
+invalidate
+
+The entity journal compacted its queue into a resync: the next take
+republishes the whole state behind it, catalogue included.
+================
+		*/
+		invalidate() {
+			dirty = true;
+		},
+		/*
+================
 notice
 ================
 		*/

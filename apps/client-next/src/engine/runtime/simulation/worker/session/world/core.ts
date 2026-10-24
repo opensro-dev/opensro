@@ -190,6 +190,9 @@ items). Only PvP capes own a team value; keep strict validation for them.
 	let bootstrapRegion: number | undefined;
 	let pendingTravel: import("@/engine/contracts/world").WorldTravel | null = null;
 	let awaitingTravelBootstrap = false;
+	// Compactions the entity journal has dropped into a resync, as last seen
+	// by take(): a moved count republishes the gameplay snapshot in full.
+	let seenResyncs = 0;
 	let publishedShop: import("@/engine/contracts/gameplay").GameplayState["shop"];
 	let publishedCatalog: import("@/engine/contracts/gameplay").GameplayState["skillCatalog"],
 		retainedCatalog: import("@/engine/contracts/gameplay").GameplayState["skillCatalog"],
@@ -653,6 +656,14 @@ take
 ================
 		*/
 		take() {
+			// A compacted journal rebuilt the world publication whole; the
+			// gameplay snapshot must follow in full - its catalogue fields
+			// included - or the presentation's reset leaves it with none.
+			if ( entities.resyncs() !== seenResyncs ) {
+				seenResyncs = entities.resyncs();
+				invalidateProjection();
+				gameplay.invalidate();
+			}
 			return entities.take();
 		},
 		/*
