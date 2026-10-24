@@ -55,17 +55,18 @@ export function createNavigationStream(
 
 	Installs the product the worker is about to receive. The clipper's state
 	is a function of its installs, so a product the worker admits gives the
-	same view here; one this side refuses leaves no view (the worker refuses
-	the same bytes, and reports it as the admission failure).
+	same view here. install() is atomic (only its memo caches reset before a
+	throw), and the worker's movement owner keeps its previous product and
+	request id when it refuses one (movement.ts navigation); a refused
+	product leaves this view on the previous one the same way.
 	================
 	*/
 	function installView( id: number, regionId: number, product: unknown ) {
-		viewRequestId = 0;
 		try {
 			clipper.install( regionId, product );
 			viewRequestId = id;
 		} catch {
-			clipper.clear();
+			// The worker refuses the same bytes and reports the failure.
 		}
 	}
 	/*

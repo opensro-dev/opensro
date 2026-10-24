@@ -98,12 +98,16 @@ test("a clipper fed a structured clone answers exactly as one fed the original",
 ================
 assetsWith
 
-An asset owner that answers the catalog and then the region's product.
+An asset owner that answers the catalog first and then each navigation
+request with the next of results, in order.
 ================
 */
-function assetsWith( navigationResult ) {
+function assetsWith( ...results ) {
 	const catalog = new TextEncoder().encode( JSON.stringify( {
-		regionsById: { "0x61a8": [ { bundlePublicPath: "/assets/world/outdoor/regions/region-61a8.json" } ] }
+		regionsById: {
+			"0x61a8": [ { bundlePublicPath: "/assets/world/outdoor/regions/region-61a8.json" } ],
+			"0x61a9": [ { bundlePublicPath: "/assets/world/outdoor/regions/region-61a9.json" } ]
+		}
 	} ) );
 	const requests = [];
 	// Only the four methods the stream calls; the rest of AssetOwner is unused.
@@ -114,11 +118,22 @@ function assetsWith( navigationResult ) {
 			return requests.length;
 		},
 		take( id ) {
-			return id === 1 ? { kind: "bytes", buffer: catalog.buffer } : navigationResult;
+			return id === 1 ? { kind: "bytes", buffer: catalog.buffer } : results[id - 2];
 		},
 		cancel() {}
 	}));
 	return { requests, owner };
+}
+
+/*
+================
+walkUntil
+
+Steps the stream at pose until it has emitted count commands.
+================
+*/
+function walkUntil( stream, pose, commands, count ) {
+	for ( let i = 0; i < 8 && commands.length < count; i++ ) stream.step( pose, undefined, undefined, undefined, i );
 }
 
 test("the stream installs the product it emits, under the emitted request id", () => {
@@ -126,7 +141,7 @@ test("the stream installs the product it emits, under the emitted request id", (
 	const stream = createNavigationStream( owner, command => commands.push( command ), "http://test.invalid" );
 	const pose = { regionId: JANGAN, x: 1640, y: 0, z: 1390, angle: 0 };
 	assert.equal( stream.view(), null );
-	for ( let i = 0; i < 4 && !commands.length; i++ ) stream.step( pose, undefined, undefined, undefined, i );
+	walkUntil( stream, pose, commands, 1 );
 	const command = defined( commands[0] );
 	const view = defined( stream.view() );
 	assert.equal( view.requestId, command.requestId );
@@ -138,14 +153,22 @@ test("the stream installs the product it emits, under the emitted request id", (
 	assert.equal( stream.view(), null );
 });
 
-test("a product the clipper refuses leaves no view and still reaches the worker", () => {
+test("a refused product keeps the previous view, as the worker keeps its product", () => {
 	const commands = [];
-	const refused = { regionId: JANGAN, objects: [], complete: false, navmesh: { regions: "not a list" } };
-	const { owner } = assetsWith( { kind: "navigation", product: refused } );
+	const refused = { regionId: JANGAN + 1, objects: [], complete: false, navmesh: { regions: "not a list" } };
+	const { owner } = assetsWith( { kind: "navigation", product }, { kind: "navigation", product: refused } );
 	const stream = createNavigationStream( owner, command => commands.push( command ), "http://test.invalid" );
 	const pose = { regionId: JANGAN, x: 1640, y: 0, z: 1390, angle: 0 };
-	for ( let i = 0; i < 4 && !commands.length; i++ ) stream.step( pose, undefined, undefined, undefined, i );
-	// The worker refuses the same bytes and reports the admission failure.
-	assert.equal( defined( commands[0] ).bundle, refused );
-	assert.equal( stream.view(), null );
+	walkUntil( stream, pose, commands, 1 );
+	const first = defined( stream.view() );
+	// The first product admitted, the player crosses into the next region.
+	stream.step( pose, JANGAN, undefined, first.requestId, 10 );
+	walkUntil( stream, { ...pose, regionId: JANGAN + 1 }, commands, 2 );
+	// The worker refuses the same bytes and reports it; until then, and after,
+	// both sides hold the first product under the first id.
+	assert.equal( defined( commands[1] ).bundle, refused );
+	const after = defined( stream.view() );
+	assert.equal( after.requestId, first.requestId );
+	assert.equal( after.navigation, first.navigation );
+	assert.equal( after.navigation.available( pose ), true );
 });
