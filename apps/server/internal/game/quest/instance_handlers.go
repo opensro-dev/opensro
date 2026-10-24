@@ -20,9 +20,13 @@ the one subscription that is taken out dynamically and could not be
 pinned statically, is recorded in the step-0 research checkpoint
 (InstanceWorldFoundation.md).
 
-Handlers run on the reporting lane's goroutine, most of them under
-that lane's division lock: a handler records or queues, it never calls
-back into the lane that reported the event.
+Handlers run with NO division lock held: the action lane queues each
+occurrence and delivers it when the producing operation's lane is
+released, in occurrence order (instance_events.go there). A handler
+may call back into the runtime - InvitePartyToInstance included;
+before this contract, six of the seven kinds were delivered under
+the non-reentrant division lock and only InvitationAnswered without
+it, so the same call deadlocked from every other kind.
 
 ===========================================================================
 */
