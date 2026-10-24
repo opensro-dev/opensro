@@ -174,6 +174,19 @@ test("the roster fills zone records; 0x0B moves a state and the list its minutes
 	assert.equal( zoneOf( state, 91 ).hp, 600, "the list keeps the roster's hit points" );
 });
 
+test("each roster zeroes every zone first: a zone it omits keeps its structure at 0 HP", () => {
+	let state = defined( fortress.fortressPacket( baseState(), roster( [ [ 91, 11, 600, 0 ], [ 85, 20, 500, 0 ] ] ) ) );
+	state = defined( fortress.fortressPacket( state, roster( [ [ 85, 20, 450, 0 ] ] ) ) );
+	const omitted = zoneOf( state, 91 ), named = zoneOf( state, 85 );
+	assert.deepEqual( [ omitted.ref, omitted.hp ], [ 11, 0 ], "the omitted zone keeps its structure at 0 HP" );
+	assert.deepEqual( [ named.ref, named.hp ], [ 20, 450 ], "the named zone takes the new row" );
+	// The status panel then reads the omitted structure as destroyed.
+	assert.equal(
+		defined( map.fortressMapStatus( catalog(), omitted ) ).state,
+		"UIIT_STT_FORT_BATTLEAIDE_STRUCTSTATUS_03"
+	);
+});
+
 test("the panel shows rank, durability and state, and the top rank", () => {
 	const c = catalog();
 	const status = defined(

@@ -282,9 +282,13 @@ export function fortressPacket( state: FortressState, frame: WireFrame, now = 0 
 		next = { ...state, localKills, localDeaths };
 	} else if ( subtype === 0x0f ) {
 		// 76C870 case 0xF: every structure of the fortress world, by zone.
+		// Before the rows, it walks every event-zone record
+		// (GlobalDataManager_GetEventZoneMap 797A00) and zeroes its hit points
+		// (+0xC, the old value kept at +0x10): a zone this roster omits keeps
+		// its structure and shows it destroyed until a roster names it again.
 		u32();
 		const count = u8();
-		let zones = state.zones ?? [];
+		let zones = (state.zones ?? []).map( row => ({ ...row, hp: 0 }) );
 		for ( let i = 0; i < count; i++ ) {
 			const zone = u32(), ref = u32(), hp = u32(), word = u16(), guild = u8() !== 0 ? str() : "";
 			zones = foldZone( zones, zone, { ref, hp, state: word, guild } );
