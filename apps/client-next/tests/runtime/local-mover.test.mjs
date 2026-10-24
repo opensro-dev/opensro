@@ -137,6 +137,33 @@ test("a click the worker refused ends the prediction where the body is drawn", (
 	assert.deepEqual( ended.pose, walking.kind === "walking" ? walking.pose : null );
 });
 
+test("a later click the mover does not predict hands the walk back instead of dropping it", () => {
+	const mover = createLocalMover();
+	mover.click( { seq: 1, query: query( 1300, 1000 ), drawn: START, now: 0 }, world() );
+	const walking = mover.frame( 100, world() );
+	assert.equal( walking.kind, "walking" );
+	// A second click while the worker says a click would not walk now.
+	assert.equal(
+		mover.click(
+			{ seq: 2, query: query( 1000, 1300 ), drawn: walking.pose, now: 110 },
+			world( { walkPredictable: false } )
+		),
+		false
+	);
+	const ended = mover.frame( 116, world() );
+	assert.equal( ended.kind, "ended" );
+	assert.deepEqual( ended.pose, walking.kind === "walking" ? walking.pose : null );
+	assert.equal( mover.frame( 133, world() ).kind, "idle" );
+});
+
+test("a later command the worker took (a run-up, a stop) ends the predicted leg", () => {
+	const mover = createLocalMover();
+	mover.click( { seq: 3, query: query( 1300, 1000 ), drawn: START, now: 0 }, world() );
+	assert.equal( mover.frame( 100, world( { inputSeq: 3, moving: true } ) ).kind, "walking" );
+	// A monster click (seq 4) starts the worker's run-up: it is still moving.
+	assert.equal( mover.frame( 116, world( { inputSeq: 4, moving: true } ) ).kind, "ended" );
+});
+
 test("no prediction without the worker's go-ahead or the worker's navigation", () => {
 	const click = { seq: 1, query: query( 1300, 1000 ), drawn: START, now: 0 };
 	assert.equal( createLocalMover().click( click, world( { walkPredictable: false } ) ), false );

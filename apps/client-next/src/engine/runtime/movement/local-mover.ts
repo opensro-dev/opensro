@@ -19,9 +19,14 @@ worker holds (navigationRequestId). Direction walks, mounted walks,
 selects, pickups and run-ups stay worker-driven for now.
 
 Until reconciliation lands (#1441b) a predicted leg runs to its end and
-then hands the drawn pose back to the presenter (carry); a worker that
-refused the click (it acknowledged the input and is not walking) ends it
-at once. Port-only, not native: off unless the Experimental row is on.
+then hands the drawn pose back to the presenter (carry). It ends at once,
+through the same handback, when the worker refused the click (it took the
+input and is not walking), when the worker took any later command (a
+monster click's run-up, a stop, or anything else the input sequence
+numbers), or when a later click is not predicted. Not yet handled: a
+correction or a speed change in the middle of a predicted leg is not
+replayed; the leg runs at the speed it started with until it ends.
+Port-only, not native: off unless the Experimental row is on.
 
 The mover runs on the main frame clock alone; the worker's clock never
 enters it, and the input sequence (#1441a) is what ties a prediction to
@@ -98,6 +103,9 @@ export function createLocalMover() {
 		cursor: SurfaceCursor;
 		requestId: number;
 	} | null = null;
+	// A prediction a later unpredicted click cut short: its drawn pose is
+	// handed back on the next frame instead of being dropped.
+	let cut: Pose | null = null;
 	/*
 	================
 	viewFor
@@ -122,15 +130,18 @@ export function createLocalMover() {
 		click( input: LocalMoverClick, world: LocalMoverWorld ): boolean {
 			const navigation = viewFor( world );
 			if ( !navigation || !world.walkPredictable || !world.speed || !world.pose ) {
+				if ( walk ) cut = walk.pose;
 				walk = null;
 				return false;
 			}
 			const from = walk?.pose ?? input.drawn;
 			const action = worldPointAction( from, navigation.pick( input.query ), input.query, false );
 			if ( action.kind !== "walk-to" ) {
+				if ( walk ) cut = walk.pose;
 				walk = null;
 				return false;
 			}
+			cut = null;
 			walk = {
 				seq: input.seq,
 				segment: startWalking( walkLeg( from, action.destination, input.now, world.speed ) ),
@@ -150,6 +161,11 @@ export function createLocalMover() {
 		================
 		*/
 		frame( now: number, world: LocalMoverWorld ): LocalMoverFrame {
+			if ( cut ) {
+				const pose = cut;
+				cut = null;
+				return { kind: "ended", pose };
+			}
 			if ( !walk ) return { kind: "idle" };
 			const navigation = viewFor( world );
 			// The worker answered this click and is not walking it (refused,
@@ -157,7 +173,10 @@ export function createLocalMover() {
 			// the prediction ends where it is drawn.
 			const refused = world.inputSeq >= walk.seq && !world.moving && walk.segment !== null &&
 				now > walk.segment.start;
-			if ( !navigation || world.navigationRequestId !== walk.requestId || refused ) {
+			// The worker took a later command than this click: whatever it does
+			// (a run-up, a stop) is no longer the predicted leg.
+			const superseded = world.inputSeq > walk.seq;
+			if ( !navigation || world.navigationRequestId !== walk.requestId || refused || superseded ) {
 				const pose = walk.pose;
 				walk = null;
 				return { kind: "ended", pose };
@@ -198,7 +217,7 @@ export function createLocalMover() {
 		================
 		*/
 		active(): boolean {
-			return walk !== null;
+			return walk !== null || cut !== null;
 		},
 		/*
 		================
@@ -207,6 +226,7 @@ export function createLocalMover() {
 		*/
 		reset() {
 			walk = null;
+			cut = null;
 		}
 	};
 }
