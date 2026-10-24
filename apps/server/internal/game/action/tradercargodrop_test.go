@@ -13,12 +13,14 @@ town, leaves the goods on the ground.
 package action
 
 import (
+	"errors"
 	"testing"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/transport"
 )
 
 // cargoTestUnits is the stack the loaded transport carries.
@@ -140,7 +142,7 @@ func TestFieldDisconnectCargo(t *testing.T) {
 			var published []wire.Frame
 			rt.PushDivisionPeerFrames = func(_, _ string, frames []wire.Frame) { published = append(published, frames...) }
 			pet := character.ActiveCOS
-			rt.DropDisconnectedCargo(testDivision, character.Name, 1)
+			rt.DropDisconnectedCargo(testDivision, character.Name, 1, errFieldDisconnect)
 			if dropped := cargoOnGround(t, rt); dropped != on {
 				t.Fatalf("on=%v mounted=%v: cargo dropped %v", on, mounted, dropped)
 			}
@@ -193,9 +195,50 @@ func TestDisconnectCargoSkips(t *testing.T) {
 			rt.characterAdmissions.Store(simulation.WorldKey(testDivision, character.Name),
 				populationAdmission{session: 2, division: testDivision, name: character.Name})
 		}
-		rt.DropDisconnectedCargo(testDivision, character.Name, 1)
+		rt.DropDisconnectedCargo(testDivision, character.Name, 1, errFieldDisconnect)
 		if character.ActiveCOS != pet || !pet.Summoned || len(rt.Ground.All(testDivision)) != 0 {
 			t.Fatalf("%s: the rule touched the transport: %+v", tc.name, pet)
+		}
+	}
+}
+
+// errFieldDisconnect is a socket that went away and never came back (the
+// resume grace ran out): a real logout.
+var errFieldDisconnect = errors.New("transport: resume grace period expired")
+
+/*
+================
+TestDisconnectCargoFollowsTheCloseCause
+
+With the rule on and a loaded transport in the field: a reload or
+reconnect (the new session replaces the old one, which closes before the
+new one takes the character) keeps the transport and its goods, a server
+shutdown drops nothing, and a socket that never came back drops the goods
+as before. BR-261023-2329-B01C: a reload in the field cost a trader the
+transport and its goods.
+================
+*/
+func TestDisconnectCargoFollowsTheCloseCause(t *testing.T) {
+	_, field := regionsByCombat(t)
+	cases := []struct {
+		name  string
+		cause error
+		drops bool
+	}{
+		{name: "replaced by a reload", cause: transport.CloseReason{Reason: transport.ByeReasonReplaced}},
+		{name: "server shutdown", cause: transport.CloseReason{Reason: transport.ByeReasonShutdown}},
+		{name: "never came back", cause: errFieldDisconnect, drops: true},
+	}
+	for _, tc := range cases {
+		rt, character := newCargoTestRuntime(t, true, field, cosBandTransport, false)
+		pet := character.ActiveCOS
+		rt.DropDisconnectedCargo(testDivision, character.Name, 1, tc.cause)
+		if dropped := cargoOnGround(t, rt); dropped != tc.drops {
+			t.Fatalf("%s: cargo dropped %v, want %v", tc.name, dropped, tc.drops)
+		}
+		kept := character.ActiveCOS == pet && pet.Summoned && len(pet.Container.Rows) == 1
+		if kept == tc.drops {
+			t.Fatalf("%s: transport kept %v with %+v", tc.name, kept, pet)
 		}
 	}
 }

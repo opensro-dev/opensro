@@ -161,9 +161,7 @@ func (game *gameplayPlane) sessionClosed(session *transport.Session, cause error
 		game.items.EndCommerceSession(divisionID, character, session.ID)
 		game.items.AbandonExchange(divisionID, character.Name)
 		game.items.AbandonStall(divisionID, character.Name)
-		if !transport.ShutdownClose(cause) {
-			game.items.DropDisconnectedCargo(divisionID, character.Name, session.ID)
-		}
+		game.items.DropDisconnectedCargo(divisionID, character.Name, session.ID, cause)
 		game.items.ForgetCharacterSession(divisionID, character.Name, session.ID)
 	}
 }
