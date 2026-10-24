@@ -195,6 +195,9 @@ func (rt *Runtime) fortressStructureUpgrade(division string, c *enterworld.Chara
 		record, _ := rt.Fortresses.Get(division, fortressID)
 		rt.storeStructureRow(division, domain.FortressStructureRecord{FortressID: fortressID, EventStructID: zone,
 			RefObjID: target.RefObjID, OwnerGuildID: record.Holder(), HP: built.CurrentHP, MadeAtMs: now})
+		// The fortress world hears the new structure, as after the reference
+		// server's upgrade result (fortress_roster.go).
+		rt.pushStructureRoster(division, fortressID, world)
 		reply := wire.NewWriter(11).U8(siege.ActionUpgrade).U8(1).U32(fortressID).U32(zone).U8(index)
 		return prependOpResult(paid, OpResult{Frames: []wire.Frame{{Opcode: opFortressInteractionResult, Payload: reply.Payload()}}})
 	}

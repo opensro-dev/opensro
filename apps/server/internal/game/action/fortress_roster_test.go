@@ -133,12 +133,14 @@ func TestFortressRosterOnEntryAndEveryThirtySeconds(t *testing.T) {
 	}
 	rosters := captureRosters(t, rt, c.Name)
 	now := rt.Now().UnixMilli()
+	// The period is the reference server's thirty seconds, written out so
+	// a change to fortressRosterPeriodMs fails here.
 	rt.advanceFortressRosters(now)
-	rt.advanceFortressRosters(now + fortressRosterPeriodMs - 1)
+	rt.advanceFortressRosters(now + 29999)
 	if len(*rosters) != 1 {
 		t.Fatalf("rosters within one period = %d, want 1", len(*rosters))
 	}
-	rt.advanceFortressRosters(now + fortressRosterPeriodMs)
+	rt.advanceFortressRosters(now + 30000)
 	if len(*rosters) != 2 {
 		t.Fatalf("rosters after one period = %d, want 2", len(*rosters))
 	}
@@ -186,4 +188,33 @@ func TestStructureChangesResendTheRoster(t *testing.T) {
 			t.Fatalf("the demolished barricade stayed in the roster: %+v", (*rosters)[1])
 		}
 	}
+}
+
+/*
+================
+TestStructureUpgradeResendsTheRoster
+
+An upgrade resends the roster to the fortress world, as the reference
+server does after the upgrade's database result: the zone now names the
+raised structure.
+================
+*/
+func TestStructureUpgradeResendsTheRoster(t *testing.T) {
+	rt, c, _, jangan, _, _ := upgradeFixture(t)
+	rosters := captureRosters(t, rt, c.Name)
+	if got := upgradeAnswer(t, upgradeRequest(rt, c, jangan, testPositionZone, 0)); len(got) < 2 || got[1] != 1 {
+		t.Fatalf("upgrade answered % x", got)
+	}
+	if len(*rosters) != 1 {
+		t.Fatalf("rosters after the upgrade = %d, want 1", len(*rosters))
+	}
+	for _, row := range (*rosters)[0] {
+		if row.zone == testPositionZone {
+			if row.ref != testPositionRef1 {
+				t.Fatalf("roster names %d on zone %d, want the raised %d", row.ref, testPositionZone, testPositionRef1)
+			}
+			return
+		}
+	}
+	t.Fatalf("the upgraded zone is missing from the roster: %+v", (*rosters)[0])
 }
