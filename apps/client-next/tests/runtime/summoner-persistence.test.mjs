@@ -111,3 +111,53 @@ test("unknown summoner states and incompatible character families cannot shift t
 	const payload = Uint8Array.of( 132, 3, 0, 0, 2, 182, 3, 0, 0 );
 	assert.throws( () => decodeInventoryItem( payload, 0, refs, new Map( [ [ 950, 0x11c6 ] ] ) ) );
 });
+
+test("a summoned record naming a reference outside the snapshot still parses by the item subtype", () => {
+	// No objRefs at all: the attack record (subtype 1) carries no rental
+	// clock, the pickup record (subtype 2) carries it, exactly as 492D40
+	// wrote them; the next byte is the record's end either way.
+	const attack = new Uint8Array( 16 ), av = new DataView( attack.buffer );
+	av.setUint32( 0, 900, true );
+	attack[4] = 2;
+	av.setUint32( 5, 4242, true );
+	av.setUint16( 9, 4, true );
+	attack.set( new TextEncoder().encode( "Wolf" ), 11 );
+	const refs = new Map( [ [ 900, 0x8cc ], [ 901, 0x10cc ] ] );
+	const wolf = decodeInventoryItem( attack, 0, refs );
+	assert.equal( wolf.next, attack.length );
+	assert.deepEqual( [ wolf.item?.summon?.refObjId, wolf.item?.summon?.name, wolf.item?.summon?.remainingSeconds ], [
+		4242,
+		"Wolf",
+		undefined
+	] );
+	const pickup = new Uint8Array( 25 ), pv = new DataView( pickup.buffer );
+	pv.setUint32( 0, 901, true );
+	pickup[4] = 3;
+	pv.setUint32( 5, 4243, true );
+	pv.setUint16( 9, 0, true );
+	pv.setInt32( 11, 2401324, true );
+	pickup[15] = 1;
+	pickup[16] = 0;
+	pv.setUint32( 17, 7, true );
+	pv.setInt32( 21, 30, true );
+	const pig = decodeInventoryItem( pickup, 0, refs );
+	assert.equal( pig.next, pickup.length );
+	assert.deepEqual( [ pig.item?.summon?.refObjId, pig.item?.summon?.remainingSeconds ], [ 4243, 2401324 ] );
+	assert.deepEqual( pig.item?.summon?.rentals, [ { kind: 0, id: 7, seconds: 30 } ] );
+	// A known character keeps its own layout whatever the item subtype
+	// says: band 4 carries the clock even inside an attack flute.
+	const known = new Uint8Array( 16 ), kv = new DataView( known.buffer );
+	kv.setUint32( 0, 900, true );
+	known[4] = 2;
+	kv.setUint32( 5, 950, true );
+	kv.setUint16( 9, 0, true );
+	kv.setInt32( 11, 99, true );
+	const clocked = decodeInventoryItem( known, 0, refs, new Map( [ [ 950, 0x21c6 ] ] ) );
+	assert.equal( clocked.next, known.length );
+	assert.equal( clocked.item?.summon?.remainingSeconds, 99 );
+	// A subtype the writer never emits is still a malformed record.
+	assert.throws(
+		() => decodeInventoryItem( Uint8Array.of( 132, 3, 0, 0, 2, 182, 3, 0, 0 ), 0, new Map( [ [ 900, 0x18cc ] ] ) ),
+		/Unsupported summoner subtype/
+	);
+});
