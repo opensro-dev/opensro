@@ -70,12 +70,16 @@ world
 function world( overrides = {} ) {
 	return {
 		pose: START,
+		poseAtMs: undefined,
+		revision: 0,
 		moving: false,
+		goal: undefined,
 		walkPredictable: true,
 		speed: SPEED,
 		inputSeq: 0,
 		navigationRequestId: 1,
 		navigationOwner: undefined,
+		originMs: 0,
 		view: { requestId: 1, navigation: flatView() },
 		...overrides
 	};
@@ -104,10 +108,12 @@ test("a right-angle re-click turns at the click frame from where the body is dra
 	mover.click( { seq: 1, query: query( 1300, 1000 ), drawn: START, now: 0 }, w );
 	const before = mover.frame( 200, w );
 	assert.equal( before.kind, "walking" );
-	mover.click( { seq: 2, query: query( before.pose.x, 1300 ), drawn: before.pose, now: 200 }, w );
+	// A whole-unit x: the 0x7021 destination is truncated to whole units.
+	const turnX = Math.trunc( before.pose.x );
+	mover.click( { seq: 2, query: query( turnX, 1300 ), drawn: before.pose, now: 200 }, w );
 	const after = mover.frame( 300, w );
 	assert.equal( after.kind, "walking" );
-	assert.ok( Math.abs( after.pose.x - before.pose.x ) < .01, "no further travel along the old leg" );
+	assert.ok( Math.abs( after.pose.x - before.pose.x ) < 1, "no further travel along the old leg" );
 	assert.ok( Math.abs( after.pose.z - before.pose.z - SPEED * .1 ) < .05, "the new leg runs from the turn" );
 });
 
@@ -128,13 +134,22 @@ test("arrival lands on the truncated destination and holds until the worker has 
 	assert.equal( mover.active(), false );
 });
 
-test("a click the worker refused ends the prediction where the body is drawn", () => {
+test("a click the worker refused glides back to where the worker stands, within the cap, then ends", () => {
 	const mover = createLocalMover();
 	mover.click( { seq: 4, query: query( 1300, 1000 ), drawn: START, now: 0 }, world() );
-	const walking = mover.frame( 50, world() );
-	const ended = mover.frame( 66, world( { inputSeq: 4, moving: false } ) );
-	assert.equal( ended.kind, "ended" );
-	assert.deepEqual( ended.pose, walking.kind === "walking" ? walking.pose : null );
+	let previous = mover.frame( 50, world() ), now = 50, ended;
+	assert.equal( previous.kind, "walking" );
+	// The worker took the click and refused it: it publishes its standing pose.
+	for ( let i = 0; i < 60 && !ended; i++ ) {
+		now += 16.7;
+		const frame = mover.frame( now, world( { inputSeq: 4, poseAtMs: 40 + i, revision: 1 } ) );
+		const step = Math.hypot( frame.pose.x - previous.pose.x, frame.pose.z - previous.pose.z );
+		assert.ok( step <= SPEED * 1.04 * .0167 + 1e-6, `step ${step}` );
+		if ( frame.kind === "ended" ) ended = frame;
+		previous = frame;
+	}
+	assert.ok( ended, "the prediction ends once it is back" );
+	assert.ok( Math.abs( ended.pose.x - START.x ) < 1e-2, `ended at ${ended.pose.x}` );
 });
 
 test("a later click the mover does not predict hands the walk back instead of dropping it", () => {
@@ -156,12 +171,19 @@ test("a later click the mover does not predict hands the walk back instead of dr
 	assert.equal( mover.frame( 133, world() ).kind, "idle" );
 });
 
-test("a later command the worker took (a run-up, a stop) ends the predicted leg", () => {
-	const mover = createLocalMover();
+test("a later command keeps the prediction while the worker walks a goal, and ends it on a direction walk", () => {
+	const mover = createLocalMover(), goal = { ...START, x: 1300 };
 	mover.click( { seq: 3, query: query( 1300, 1000 ), drawn: START, now: 0 }, world() );
-	assert.equal( mover.frame( 100, world( { inputSeq: 3, moving: true } ) ).kind, "walking" );
-	// A monster click (seq 4) starts the worker's run-up: it is still moving.
-	assert.equal( mover.frame( 116, world( { inputSeq: 4, moving: true } ) ).kind, "ended" );
+	// A potion press (seq 4): the worker still walks the clicked goal.
+	assert.equal(
+		mover.frame( 100, world( { inputSeq: 4, moving: true, goal, poseAtMs: 90, revision: 1 } ) ).kind,
+		"walking"
+	);
+	// The worker now walks a direction (no goal): the mover cannot rebuild it.
+	assert.equal(
+		mover.frame( 116, world( { inputSeq: 5, moving: true, goal: undefined, poseAtMs: 106, revision: 2 } ) ).kind,
+		"ended"
+	);
 });
 
 test("no prediction without the worker's go-ahead or the worker's navigation", () => {

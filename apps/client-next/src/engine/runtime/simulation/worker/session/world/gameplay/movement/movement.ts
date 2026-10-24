@@ -1776,6 +1776,10 @@ state
 				movementRevision,
 				movementInputSeq: inputSeq,
 				movementSpeed: speed,
+				// The goal walk's destination, or undefined for a direction walk, a
+				// skill displacement or no walk (#1441b: the main-thread mover
+				// rebuilds the worker's own leg from it when it reconciles).
+				movementGoal: segment && !segment.fixedTiming && !segment.direction ? { ...segment.to } : undefined,
 				movementTransition: { ...transition, pathEligible: segment?.admitted === true },
 				movementDiagnostics: { total: reanchorReports, recent: recentReanchors.slice() },
 				navigationFloor: navigation.floor( pose, owner ),

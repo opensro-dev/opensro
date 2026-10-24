@@ -894,6 +894,10 @@ export interface GameplayState {
 	// The local walk speed in world units a second that a new walk leg uses
 	// (movement.ts request): the main-thread mover times its legs with it (#1440).
 	readonly movementSpeed?: number;
+	// The destination of the goal walk the worker's movement owner is walking,
+	// if it is one (movement.ts state): the main-thread mover rebuilds the
+	// worker's leg from it when it reconciles (#1441b).
+	readonly movementGoal?: Pose;
 	// A ground click now would start a walk at once (gameplay.ts
 	// groundWalkRefusal): the main-thread mover predicts only then (#1440).
 	readonly walkPredictable?: boolean;
