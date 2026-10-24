@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -23,6 +24,7 @@ TestShippedFireForceWholeProgram
 ================
 */
 func TestShippedFireForceWholeProgram(t *testing.T) {
+	tier.Long(t, "the shipped fire-force program resolves over the whole skill table")
 	licensed.RequireGameData(t)
 	dir := licensed.RetailTextdataDir(t)
 	source := NewTextdataSkills(dir)

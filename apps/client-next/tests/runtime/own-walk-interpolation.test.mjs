@@ -26,6 +26,10 @@ const FRAMES = [ 16.8, 24.9, 33.4, 29.1, 12.6, 29.2, 8.4, 25.1, 33.4, 20.9, 29.3
 const LATENCY = [ 8, 24, 40, 16, 32, 12, 28 ];
 // The worker publishes every second tick (the recording's 32 ms steps).
 const PUBLISH_MS = 32;
+// movement.ts PRESENTATION_LOOKAHEAD_MS: the window a publication's path spans.
+const LOOKAHEAD_MS = 100;
+// How long a new leg's publications stay unadmitted in the windowed run.
+const UNADMITTED_MS = 48;
 const START_MS = 1000, REDIRECT_MS = 1512, ARRIVE_MS = REDIRECT_MS + 1200, SECOND_MS = 4300, END_MS = 6600;
 const P0 = { regionId: REGION, x: 800, y: 60, z: 900, angle: 0 };
 const LEG_A = { from: P0, to: { ...P0, x: P0.x + 300 } };
@@ -96,6 +100,42 @@ function worker( tickMs ) {
 
 /*
 ================
+windowed
+
+The same publication as the worker publishes it (movement.ts
+presentationPath): from the tick's own pose to where the walk will be
+PRESENTATION_LOOKAHEAD_MS later, timed by that window, not by the whole
+leg.
+================
+*/
+function windowed( tickMs ) {
+	const state = worker( tickMs );
+	if ( !state.moving ) return state;
+	const [leg, startMs] = tickMs < REDIRECT_MS ?
+		[ LEG_A, START_MS ] :
+		tickMs < ARRIVE_MS ?
+		[ LEG_B, REDIRECT_MS ] :
+		[ LEG_C, SECOND_MS ];
+	const length = Math.hypot( leg.to.x - leg.from.x, leg.to.z - leg.from.z );
+	const remainingMs = Math.max( 0, startMs + length / SPEED * 1000 - tickMs );
+	const lookahead = Math.min( LOOKAHEAD_MS, remainingMs );
+	// A new leg's first publications come before the worker admits its
+	// segment (movement.ts presentationPath, pathEligible false):
+	// presentation-samples sends them as not moving, with no path start,
+	// although the pose already advances.
+	if ( tickMs - startMs < UNADMITTED_MS ) {
+		return { ...state, moving: false, to: legAt( leg, startMs, tickMs + lookahead ), durationMs: lookahead };
+	}
+	return {
+		...state,
+		from: state.pose,
+		to: legAt( leg, startMs, tickMs + lookahead ),
+		durationMs: lookahead
+	};
+}
+
+/*
+================
 run
 
 Draws the scenario frame by frame; returns [frame seconds, drawn pose].
@@ -103,7 +143,7 @@ skewMs is how far the frame clock runs ahead of the worker clock (the
 recording's is about 2 s; a negative one runs behind).
 ================
 */
-function run( interpolate, skewMs = 0 ) {
+function run( interpolate, skewMs = 0, publish = worker ) {
 	const presentation = createPosePresentation();
 	presentation.origin( skewMs );
 	presentation.interpolateOwnWalk( interpolate );
@@ -112,7 +152,7 @@ function run( interpolate, skewMs = 0 ) {
 	let frame = 0, workerMs = 500;
 	while ( workerMs < END_MS ) {
 		const visible = workerMs - LATENCY[frame % LATENCY.length];
-		const state = worker( Math.floor( visible / PUBLISH_MS ) * PUBLISH_MS );
+		const state = publish( Math.floor( visible / PUBLISH_MS ) * PUBLISH_MS );
 		presentation.samples(
 			new Map( [ [ GID, {
 				ownLeg: true,
@@ -143,6 +183,13 @@ function speeds( drawn ) {
 		return Math.hypot( p.x - q.x, p.z - q.z ) / (t - t0);
 	} );
 }
+
+test("the worker's own 100 ms path windows draw no faster than the walk either", () => {
+	for ( const skew of [ 0, 2037, -30 ] ) {
+		const peak = Math.max( ...speeds( run( true, skew, windowed ) ) );
+		assert.ok( peak <= SPEED * 1.05, `skew ${skew}: peak ${peak.toFixed( 1 )} u/s against ${SPEED}` );
+	}
+});
 
 test("starts, a redirect and a start after a long rest never draw the body faster than it walks", () => {
 	// Clocks in step, the recording's 2 s frame-clock lead, and a worker
@@ -304,6 +351,20 @@ test("the main-thread mover's walk is drawn while it predicts and handed back wi
 	}
 	assert.ok( peak <= SPEED * 1.05, `handback peak ${peak.toFixed( 1 )} u/s against ${SPEED}` );
 	assert.ok( Math.abs( previous.x - legAt( leg, 0, Math.floor( (ms - 20) / STEP_MS ) * STEP_MS ).x ) < 30 );
+});
+
+test("a base walk pushed ahead (a frame-clock jump) is still drawn no faster than the walk", () => {
+	const { presentation, frame } = straight();
+	let ms = 36, previous = frame( ms ), peak = 0;
+	for ( ms += 16; ms < 1200; ms += 16 ) {
+		// The frame clock's origin moves 40 ms mid-walk (a clock resync): the
+		// buffered walk's render time jumps ahead within one frame.
+		if ( ms === 596 ) presentation.origin( -40 );
+		const drawn = frame( ms );
+		peak = Math.max( peak, Math.hypot( drawn.x - previous.x, drawn.z - previous.z ) / .016 );
+		previous = drawn;
+	}
+	assert.ok( peak <= SPEED * 1.05, `peak ${peak.toFixed( 1 )} u/s against ${SPEED}` );
 });
 
 test("a worker stall keeps the walk on its leg at walking speed, with no catch-up after it", () => {
