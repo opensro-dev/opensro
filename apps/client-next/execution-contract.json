@@ -1674,6 +1674,13 @@
 		},
 		{
 			"consumer": "src/engine/runtime/simulation/worker/session/world/world.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/movement.ts",
+			"functions": [
+				"noteInput"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/world.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
 			"functions": [
 				"outstandingSince"
@@ -1971,8 +1978,32 @@
 			"functions": [
 				"audioListener",
 				"dungeonCharacterPvs",
+				"interpolatedOwnWalk",
 				"presentationCamera",
 				"presentationNight"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/own-walk-interpolation.ts",
+			"provider": "src/engine/runtime/characters/pose-presentation.ts",
+			"functions": [
+				"turn"
+			],
+			"reason": "The interpolated presenter turns a body with the generic presenter's native heading turn (86CBA0), injected at creation so both presenters turn alike."
+		},
+		{
+			"consumer": "src/engine/runtime/characters/pose-presentation.ts",
+			"provider": "src/engine/runtime/characters/own-walk-interpolation.ts",
+			"functions": [
+				"carry",
+				"clear",
+				"createOwnWalkPresenter",
+				"enable",
+				"handles",
+				"moving",
+				"pose",
+				"retain",
+				"take"
 			]
 		},
 		{

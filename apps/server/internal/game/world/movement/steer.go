@@ -231,7 +231,7 @@ func (rt *Runtime) stop(divisionID string, character *enterworld.Character, cosG
 	}
 	rt.directions.clear(admission.worldKey)
 
-	correction := directionCorrectionFrame(enterworld.ObjectIDForCharacter(character), rest)
+	correction := directionCorrectionFrame(activeMoverGID(character, cosGID), rest)
 	return HeadingOutcome{Frames: []wire.Frame{correction}, Broadcast: []wire.Frame{correction}}
 }
 

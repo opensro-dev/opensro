@@ -2838,3 +2838,47 @@ test("crow skill cues accept bounded books/kinds and reject malformed positions"
 	p.writeFloatLE( NaN, 8 );
 	assert.throws( () => owner.receive( { opcode: 0x3fbb, payload: p } ) );
 });
+
+/*
+================
+an input dropped before gameplay still advances the input sequence
+
+#1441a: the worker records a gameplay input's sequence where it first takes
+the command, before the readiness gate. A click refused while the world is
+still loading is an input the main thread must never replay, so the
+published movementInputSeq covers it.
+================
+*/
+test("an input refused before the world is ready still advances the published input sequence", async t => {
+	const sockets = socketHarness( t ), world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
+	t.after( () => world.dispose() );
+	const presentation = createPresentation();
+	const drain = () => {
+		let batch;
+		while ( (batch = world.take()) ) {
+			world.ack( batch.sequence );
+			presentation.apply( batch );
+		}
+	};
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const first = sockets[0];
+	first.onopen();
+	first.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	first.receive( 7, entered() );
+	for ( const row of rows ) first.receive( row.opcode, row.payload );
+	world.step( 4 );
+	drain();
+	world.step( 5 );
+	// Bound but still loading: the command is refused, but its sequence is taken.
+	const destination = { ...bootstrap.localPlayerEntry.startProfile, x: 10 };
+	assert.throws( () => world.command( { kind: "move", destination }, 5, 3 ), /not ready/ );
+	world.ready();
+	world.step( 6 );
+	drain();
+	assert.equal( defined( presentation.gameplay() ).movementInputSeq, 3 );
+});

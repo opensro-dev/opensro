@@ -217,6 +217,8 @@ export function createMovement(
 	let surfaceCursor: import("@/engine/contracts/navigation").SurfaceCursor = {};
 	let speed = 50, walkSpeed = 20, runSpeed = 50, mode = 3;
 	let movementRevision = 0;
+	// The last main-thread movement input processed (#1441a, movement-input.ts).
+	let inputSeq = 0;
 	let transitionOwner: NavOwner | undefined;
 	let transition: import("@/engine/contracts/gameplay").MovementTransition = {
 		relocation: 0,
@@ -1749,6 +1751,18 @@ step
 		},
 		/*
 ================
+noteInput
+
+Records a main-thread gameplay input sequence number as taken, whatever
+it resolved to (a walk, a direction walk, a held, refused or dropped
+input). Receipts and corrections never change it.
+================
+		*/
+		noteInput( seq: number ) {
+			if ( seq > inputSeq ) inputSeq = seq;
+		},
+		/*
+================
 state
 ================
 		*/
@@ -1758,6 +1772,7 @@ state
 				navigationFailure,
 				movementPath: presentationPath(),
 				movementRevision,
+				movementInputSeq: inputSeq,
 				movementTransition: { ...transition, pathEligible: segment?.admitted === true },
 				movementDiagnostics: { total: reanchorReports, recent: recentReanchors.slice() },
 				navigationFloor: navigation.floor( pose, owner ),

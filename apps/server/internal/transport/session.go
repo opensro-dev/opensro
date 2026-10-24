@@ -99,6 +99,11 @@ type Session struct {
 
 	done chan struct{} // closed exactly once at final teardown
 
+	// sceneReadyHooks run once, in order, when the current scene finishes
+	// loading (FinishSceneReentry). Owners that hold requests during
+	// loading register one to replay them into the ready scene.
+	sceneReadyHooks []func()
+
 	// limiter is the per-session inbound dispatch budget (ratelimit.go).
 	// Owned by the session so its state dies with the session — churn can
 	// never accumulate limiter state anywhere. nil = limiting disabled.
