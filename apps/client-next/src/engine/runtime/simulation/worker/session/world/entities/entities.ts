@@ -47,6 +47,11 @@ const CHARACTER_KINDS = new Set( [ "player", "local-player", "npc", "monster", "
 const STALL_TITLE_SLOT = 6;
 // Skipped cosmetic steps held between world takes (degrade).
 const MAX_PENDING_DEGRADATIONS = 64;
+// The one-shot natives a compaction keeps for its resync (dropQueuedJournal):
+// bounded on their own so the rebuilt batch stays small next to the
+// presentation's native backlog bound (8 MiB / 8192 events).
+const MAX_RETAINED_NATIVES = 1024;
+const RETAINED_NATIVE_BYTE_LIMIT = 1 << 20;
 
 /*
 ================
@@ -122,6 +127,10 @@ export function createEntities(
 	// world entry does, instead of the journal growing fatal behind a
 	// consumer that stopped acknowledging (a hidden or frozen tab).
 	let resyncPending = false, resyncs = 0;
+	// Queued native events a compaction kept, oldest first, awaiting the
+	// resync publication (dropQueuedJournal); the trim bounds them by
+	// MAX_RETAINED_NATIVES / RETAINED_NATIVE_BYTE_LIMIT.
+	let retainedNatives: Extract<WorldEvent, { kind: "native"; }>[] = [];
 	// The entry publication's protocol word, republished with a resync.
 	let bootstrapProtocol = 0;
 	let events: WorldEvent[] = [], staged: WorldEvent[] | null = null, remaining = 0, stagedBytes = 0;
@@ -204,6 +213,18 @@ export function createEntities(
 	tab, a stalled frame - where the fatal throw killed it (2026-10-24).
 	The census that told a stalled consumer from an unsupported packet
 	stream rides the degradation instead of the failure.
+
+	One class is kept across the drop (#1482): native events. A native is
+	an opcode no owner here models - the worker forwards it raw precisely
+	because nothing decodes it into entity state, a gameplay snapshot or
+	the bootstrap - so the rebuilt snapshot cannot supersede it, and
+	dropping it loses a one-shot (a notice, a sound cue) the player was
+	meant to see or hear. Every modeled kind is state the snapshot
+	rebuilds and stays dropped. Kept natives are bounded on their own,
+	newest first; what the bound sheds is counted in the census, keyed by
+	opcode as before, so an opcode that proves replaceable in the field is
+	visible there and gets a decoder (and stops being native) rather than
+	a drop rule here.
 	================
 	*/
 	function dropQueuedJournal() {
@@ -211,14 +232,32 @@ export function createEntities(
 		for ( const queued of events ) {
 			const key = queued.kind === "native" ? `native:${queued.opcode.toString( 16 )}` : queued.kind;
 			kinds[key] = (kinds[key] ?? 0) + 1;
+			if ( queued.kind === "native" ) retainedNatives.push( queued );
 		}
+		// Trim from the newest back: the oldest one-shots are the ones a
+		// returning consumer can most afford to miss.
+		const kept: typeof retainedNatives = [];
+		let keptBytes = 0, shed = 0;
+		for ( let i = retainedNatives.length - 1; i >= 0; i-- ) {
+			const event = retainedNatives[i]!, size = event.payload.byteLength;
+			if ( kept.length >= MAX_RETAINED_NATIVES || keptBytes + size > RETAINED_NATIVE_BYTE_LIMIT ) {
+				shed++;
+				continue;
+			}
+			kept.push( event );
+			keptBytes += size;
+		}
+		kept.reverse();
+		retainedNatives = kept;
 		degrade( {
 			code: "world-journal-resync",
 			message: `Reliable world journal backlog compacted: ${bytes + stagedBytes} bytes, ${
 				events.length + (staged?.length ?? 0)
 			} events dropped; awaiting batch ${inflight?.sequence ?? "none"}${
 				inflight ? ` for ${Math.round( performance.now() - inflightAt )} ms` : ""
-			}; ${pendingPoses.size} replaceable poses; ${JSON.stringify( kinds )}`
+			}; ${pendingPoses.size} replaceable poses; ${
+				JSON.stringify( kinds )
+			}; ${retainedNatives.length} one-shot natives retained (${shed} shed past the retention bound)`
 		} );
 		events = [];
 		bytes = 0;
@@ -236,10 +275,12 @@ export function createEntities(
 
 	The dropped queue rebuilt whole: a reset on a new epoch, the retained
 	entry bootstrap, one spawn per live entity and the synchronization
-	marker - the entry publication - then whatever queued behind the drop
-	that a snapshot does not supersede. Entity transitions stay behind:
-	the entity map already holds their net effect. Gameplay, native, hp
-	and travel events keep their order after the rebuilt world.
+	marker - the entry publication - then the one-shot natives a
+	compaction kept (dropQueuedJournal), then whatever queued behind the
+	drop that a snapshot does not supersede. Entity transitions stay
+	behind: the entity map already holds their net effect. Gameplay,
+	native, hp and travel events keep their order after the rebuilt
+	world, and the kept natives ahead of them: they are older.
 	================
 	*/
 	function resyncEvents(): WorldEvent[] {
@@ -255,6 +296,8 @@ export function createEntities(
 		}
 		for ( const entity of entities.values() ) rebuilt.push( { kind: "spawn", entity, resync: true } );
 		rebuilt.push( { kind: "synchronized", epoch } );
+		rebuilt.push( ...retainedNatives );
+		retainedNatives = [];
 		for ( const event of events ) {
 			if ( event.kind !== "spawn" && event.kind !== "state" && event.kind !== "despawn" ) {
 				rebuilt.push( event );
@@ -1541,8 +1584,16 @@ export function createEntities(
 				// A rider's position belongs to its active mover, the mount (0x85E000).
 				const entity = source?.mountedOn ? entities.get( source.mountedOn ) ?? source : source;
 				// Source movement is advisory travel; LIFE-dead retires it.
-				// B2F5 remains admissible: present rebirth corrects before LIFE-alive.
 				if ( frame.opcode === 0x30e3 && entity?.appearanceState?.[0] === 2 ) return;
+				// 775B50 (0x775C1A): once the mover is resolved (85E000), a
+				// monster or COS mover whose life state (+0x263) is 2 (dead)
+				// ignores its B2F5 - no halt, no reseed. Players are not
+				// checked: a dead player's B2F5 remains admissible, as
+				// present rebirth corrects before LIFE-alive.
+				if (
+					frame.opcode === 0xb2f5 && entity?.appearanceState?.[0] === 2 &&
+					(entity.kind === "monster" || entity.kind === "cos")
+				) return;
 				if ( entity ) {
 					const corrected = position( v, frame.opcode === 0x30e3 ? 0 : 4 );
 					// The local mover has one navigation owner in gameplay. Its

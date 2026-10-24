@@ -7,6 +7,7 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/tier"
 	"slices"
 	"testing"
 )
@@ -231,6 +232,7 @@ func TestMarkerGoingStateHonorsEquippedStagePrerequisite(t *testing.T) {
 }
 
 func TestEveryQuestMarkerNpcHasAuthoredPlacement(t *testing.T) {
+	tier.Long(t, "every quest-marker NPC has an authored placement in the shipped roster")
 	dir := gamedatatest.TextdataDir(t)
 	defs, err := LoadDefinitions(NewCatalog(dir), enterworld.NewTextdataItems(dir))
 	if err != nil {

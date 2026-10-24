@@ -839,6 +839,7 @@ func TestEnterCorpusContentPins(t *testing.T) {
 // emitter and requires the checked-in artifact to match byte for byte (the
 // TestLocalPlayerEnteredFixturePinned two-sided precedent).
 func TestLocalPlayerEnterCorpusPinned(t *testing.T) {
+	tier.Long(t, "the pinned local-player enter corpus matches the shipped tables")
 	path := filepath.Join("testdata", "local_player_enter_corpus.json")
 	fresh := buildEnterCorpus(t)
 

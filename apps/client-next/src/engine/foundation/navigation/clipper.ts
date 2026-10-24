@@ -397,6 +397,17 @@ export function createNavigation() {
 		/*
 		================
 		registerEvent
+
+		Dormant natively, kept for surface parity (#1498): the v1.150
+		client's region manager records event instances from "event"
+		placements, but never installs the dispatch callback - the
+		dispatcher (CRegionManagerBody_DispatchNavigationEvent) returns 0
+		unconditionally because both of its gating globals are only ever
+		written zero at init. So no event edge ever stops or rejects a
+		walk in the original client, and nothing in the port registers a
+		response either; the gameplay stops the game has arrive through
+		the server's movement authority, not this registry. Registering a
+		response here would make local prediction diverge from native.
 		================
 		*/
 		registerEvent( name: string, response: Readonly<{ enter: number; exit: number; }> ) {

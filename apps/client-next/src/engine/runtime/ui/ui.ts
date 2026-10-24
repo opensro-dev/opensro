@@ -739,6 +739,7 @@ import {
 	createDebugClock,
 	DEBUG_CLOCK_STEP_MINUTES,
 	debugClockHold,
+	debugClockNoteSeed,
 	debugClockResume,
 	debugClockSeed,
 	debugClockSetFraction,
@@ -5413,6 +5414,7 @@ export function createUi(
 			seed: import("@/engine/contracts/gameplay").WorldClockSeed | undefined,
 			nowMs: number
 		) {
+			debugClock = debugClockNoteSeed( debugClock, seed, nowMs );
 			return debugClockSeed( debugClock, seed, nowMs );
 		},
 		/*

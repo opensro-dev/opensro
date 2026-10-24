@@ -2020,8 +2020,9 @@ state here before a command can claim a native wire conversation.
 				}
 			}
 			if ( command.kind === "debug-weather" ) {
-				// The console's weather rows write the worker's weather
-				// slot, behind the same GM gate as the gm-command family.
+				// The console's weather rows drive the console weather
+				// slot (event-environment.ts), behind the same GM gate
+				// as the gm-command family.
 				if ( !eligibility.gm ) return null;
 				environment = debugWeather( environment, command.mode, command.amount );
 				dirty = true;
@@ -4202,14 +4203,11 @@ Packet handling must not depend on which HUD panel is currently open.
 					groundSkillMoveSuppressUntil = 0;
 					movement.castRefused( now );
 				}
-				if ( frame.opcode === 0xb245 && frame.payload.length >= 10 ) {
-					// 776830 (0x7769D8): a cast by an owned pet cancels its
-					// halt countdown (+0xAB30 = -1); the pet keeps its target.
-					petAssistCountdowns = castPetAssistCountdowns(
-						petAssistCountdowns,
-						new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
-							.getUint32( 6, true )
-					);
+				if ( frame.opcode === 0xb245 ) {
+					// 776830 (0x7769D8): an opened cast by an owned pet cancels
+					// its halt countdown (+0xAB30 = -1); the pet keeps its
+					// target. The entry gates live in castPetAssistCountdowns.
+					petAssistCountdowns = castPetAssistCountdowns( petAssistCountdowns, frame.payload );
 				}
 				if ( item && cast ) returnScroll = cast;
 				if ( returnScroll?.skillId && (fight || item && cast) ) {

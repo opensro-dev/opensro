@@ -21,6 +21,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 // fakeItems is an ItemRefSource stand-in resolving exactly the curated
@@ -258,6 +259,7 @@ TestLoadDefinitionsAgainstShippedMedia
 // so the shipped resolution is asserted here. Skips when this checkout
 // has no media.
 func TestLoadDefinitionsAgainstShippedMedia(t *testing.T) {
+	tier.Long(t, "the quest definitions load against the shipped media")
 	t.Parallel()
 	devDefault := licensed.RetailTextdataDir(t)
 	dir := ""
