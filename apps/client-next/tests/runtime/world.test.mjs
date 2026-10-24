@@ -830,7 +830,7 @@ test("a fresh entry gives up after the entry retry grace", async t => {
 	world.enter( "fixture", "shard", "http://localhost:9000" );
 	await settle();
 	world.step( 1 );
-	sockets[0].onclose();
+	sockets[0].onclose( { code: 1006, reason: "", wasClean: false } );
 	world.step( 2 );
 	assert.equal( world.status().phase, "reconnecting" );
 	// Every later socket dies before the welcome, as while the network
@@ -843,7 +843,7 @@ test("a fresh entry gives up after the entry retry grace", async t => {
 		const latest = sockets[sockets.length - 1];
 		if ( sockets.length - 1 >= failures ) {
 			failures++;
-			latest.onclose();
+			latest.onclose( { code: 1006, reason: "", wasClean: false } );
 			world.step( clock );
 		}
 		clock += 50;
