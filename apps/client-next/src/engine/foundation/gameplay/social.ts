@@ -3,8 +3,9 @@
 
 social.ts - party, guild and invitation state and wire
 
-Owns the decoded party roster (the shared 75DB30 member record), guild
-updates and pending invitations. Outgoing commands live in social-request. A frame
+Owns the decoded party roster, guild updates and pending invitations.
+The shared member record it decodes rows with lives in party-member.ts.
+Outgoing commands live in social-request. A frame
 is decoded completely before any state is published.
 
 ===========================================================================
@@ -16,18 +17,7 @@ import { resolveNativeNotice, type NativeNoticeContext } from "./native-notice";
 import { NO_JOB_CLASS } from "./job-guild";
 import type { SocialState, PartyMember, GuildMember, GuildVote, Guild, GuildWar } from "./social-roster";
 export type { SocialState, PartyMember, GuildMember, GuildVote, Guild, GuildWar } from "./social-roster";
-
-/*
-================
-unknownPartyMember
-
-The base a 0x3E58 type-6 row decodes over when the roster does not hold
-its member: the row is consumed and dropped (761870's setters skip it).
-================
-*/
-function unknownPartyMember( id: number ): PartyMember {
-	return { id, name: "", model: 0, level: 0, status: 0, region: 0, x: 0, y: 0, z: 0, war: 0 };
-}
+import { readPartyMember, unknownPartyMember } from "./party-member";
 // The 0x3393 type a resurrection skill proposes to a dead player.
 export const RESURRECTION_PROPOSAL = 4;
 // The 0x3393 type a revival with an rmut skill proposes (7644E0 case 7).
@@ -444,9 +434,22 @@ export function socialPacket(
 			u8();
 			next = { ...next, self: 0, leader: 0, options: 0, members: [] };
 		} else if ( type === 2 ) {
-			const member = partyMember();
-			next = { ...next, members: [ ...next.members, member ] };
-			unique( next.members, 8 );
+			// 761870 appends the row unconditionally, so a JOIN for a
+			// member the roster already holds reaches this client only
+			// as a replay on kept state after a resume. Refresh the held
+			// member from the row instead of doubling it, and drop a
+			// stranger's row when the roster is full, the way type 6
+			// drops a row for a member the roster does not hold.
+			const start = o;
+			const row = partyMember();
+			const old = next.members.find( m => m.id === row.id );
+			if ( old ) {
+				o = start;
+				const member = partyMember( old );
+				next = { ...next, members: next.members.map( m => m.id === old.id ? member : m ) };
+			} else if ( next.members.length < 8 ) {
+				next = { ...next, members: [ ...next.members, row ] };
+			}
 		} else if ( type === 3 ) {
 			const id = u32();
 			u8();
@@ -916,77 +919,4 @@ export function socialPacket(
 	return next;
 }
 
-/*
-================
-readPartyMember
-
-Shared 75DB30 member record: roster and matching approval use the same wire owner.
-================
-*/
-export function readPartyMember( p: Uint8Array, start = 0, old?: PartyMember ): { member: PartyMember; end: number; } {
-	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
-	let at = start;
-	/*
-	================
-	take
-	================
-	*/
-	function take( n: number ) {
-		if ( at + n > p.length ) throw Error( "Truncated party member" );
-		const out = at;
-		at += n;
-		return out;
-	}
-	const u8 = () => v.getUint8( take( 1 ) ),
-		u16 = () => v.getUint16( take( 2 ), true ),
-		u32 = () => v.getUint32( take( 4 ), true ),
-		i16 = () => v.getInt16( take( 2 ), true );
-	const mask = u8();
-	const member: {
-		id: number;
-		name: string;
-		model: number;
-		level: number;
-		status: number;
-		region: number;
-		x: number;
-		y: number;
-		z: number;
-		war: number;
-		guild?: string;
-		native41?: number;
-		primaryMastery?: number;
-		secondaryMastery?: number;
-	} = { id: 0, name: "", model: 0, level: 0, status: 0, region: 0, x: 0, y: 0, z: 0, war: 0, ...old };
-	if ( mask & 16 ) member.id = u32();
-	if ( mask & 1 ) {
-		const n = u16();
-		if ( n > 2048 ) throw Error( "Social string budget" );
-		const offset = take( n );
-		member.name = new TextDecoder( "utf-8", { fatal: true } ).decode( p.subarray( offset, offset + n ) );
-		member.model = u32();
-	}
-	if ( mask & 2 ) member.level = u8();
-	if ( mask & 4 ) member.status = u8();
-	if ( mask & 32 ) {
-		member.region = u16();
-		member.x = i16();
-		member.y = i16();
-		member.z = i16();
-		member.war = u32();
-	}
-	if ( mask & 64 ) {
-		const n = u16();
-		if ( n > 2048 ) throw Error( "Social string budget" );
-		const offset = take( n );
-		member.guild = new TextDecoder( "utf-8", { fatal: true } ).decode( p.subarray( offset, offset + n ) );
-	}
-	if ( mask & 128 ) member.native41 = u8();
-	if ( mask & 8 ) {
-		member.primaryMastery = u32();
-		member.secondaryMastery = u32();
-	}
-	if ( !member.id ) throw Error( "Missing party member identity" );
-	return { member, end: at };
-}
 import { partyNotice } from "./party-notices";
