@@ -42,6 +42,7 @@ import { createFramePacing } from "./frame-pacing";
 import { createRenderer } from "./renderer/renderer";
 import { createViewer } from "./viewer/viewer";
 import { createSimulationHost } from "./simulation/host";
+import { createLocalMover, type LocalMoverWorld } from "./movement/local-mover";
 import type { RuntimeControl } from "@/engine/contracts/runtime";
 import { worldAudioPosition } from "@/engine/foundation/world/world-space";
 
@@ -136,6 +137,10 @@ export function startRuntime(
 		const frameWork = createFrameWork();
 		const framePacing = createFramePacing();
 		const simulation = own( createSimulationHost() );
+		// Port-only (#1440): the local player's ground-click walk stepped on the
+		// main thread, behind the Experimental "Instant own movement" row.
+		const localMover = createLocalMover();
+		let mainThreadOwnWalk = false;
 		const renderer = own(
 			createRenderer( canvas, random, audio.enqueue, diagnostics )
 		);
@@ -193,6 +198,8 @@ export function startRuntime(
 			}
 			if ( event.kind === "camera-preferences" ) input.sight( event.value );
 			if ( event.kind === "experimental-preferences" ) {
+				mainThreadOwnWalk = event.value.mainThreadOwnWalk === true;
+				if ( !mainThreadOwnWalk ) localMover.reset();
 				renderer.experimentalVideo( experimentalVideo( event.value ) );
 				simulation.session( { kind: "experimental-gameplay", value: experimentalGameplay( event.value ) } );
 			}
@@ -452,7 +459,11 @@ export function startRuntime(
 			if ( doubleClick ) return;
 			const query = renderer.pickGround( x, y );
 			if ( query && game.pose ) {
-				simulation.session( { kind: "gameplay", command: { kind: "ground-move", query } } );
+				const seq = simulation.session( { kind: "gameplay", command: { kind: "ground-move", query } } );
+				const drawn = mainThreadOwnWalk && seq !== undefined ?
+					characters.drawnPose( game.localGid ) :
+					undefined;
+				if ( seq !== undefined && drawn ) localMover.click( { seq, query, drawn, now }, moverWorld() );
 			}
 		}
 		let worldPointer: readonly [number, number] | null = null, hoveredEntity: number | null = null;
@@ -467,6 +478,27 @@ export function startRuntime(
 				new URL( "/", import.meta.url ).href
 			)
 		);
+		/*
+		================
+		moverWorld
+
+		What the main-thread mover reads: the worker's latest publication and
+		the main thread's navigation view (#1439).
+		================
+		*/
+		function moverWorld(): LocalMoverWorld {
+			const game = presentation.gameplay();
+			return {
+				pose: game?.pose ?? null,
+				moving: game?.moving ?? false,
+				walkPredictable: game?.walkPredictable === true,
+				speed: game?.movementSpeed,
+				inputSeq: game?.movementInputSeq ?? 0,
+				navigationRequestId: game?.navigationRequestId,
+				navigationOwner: game?.navigationOwner,
+				view: navigation.view()
+			};
+		}
 		const characters = own(
 			createCharacterPresentation(
 				assets,
@@ -623,6 +655,7 @@ export function startRuntime(
 								world.reset();
 								navigation.reset();
 								characters.reset();
+								localMover.reset();
 								audio.reset();
 								readySent = false;
 							} else pendingWorldReset = true;
@@ -696,6 +729,7 @@ export function startRuntime(
 					world.reset();
 					navigation.reset();
 					characters.reset();
+					localMover.reset();
 					audio.reset();
 					readySent = false;
 				}
@@ -770,6 +804,10 @@ export function startRuntime(
 				characters.mallOutfit(
 					worldPresented ? ui.mallPreview() : null,
 					worldPresented ? ui.skinPreview() : null
+				);
+				characters.ownMover(
+					presentation.gameplay()?.localGid ?? 0,
+					mainThreadOwnWalk ? localMover.frame( now, moverWorld() ) : { kind: "idle" }
 				);
 				characters.step(
 					presentation.entities(),

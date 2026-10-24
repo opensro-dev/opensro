@@ -1048,6 +1048,27 @@ export function createCharacterPresentation(
 		},
 		/*
 		================
+		ownMover
+
+		This frame's main-thread mover state for the local player (#1440,
+		port-only): the presenter draws its pose while it predicts.
+		================
+		*/
+		ownMover( gid: number, frame: import("./pose-presentation").OwnMoverFrame ) {
+			posePresentation.ownMover( gid, frame );
+		},
+		/*
+		================
+		drawnPose
+
+		The pose last drawn for a character: where a predicted walk starts.
+		================
+		*/
+		drawnPose( gid: number ) {
+			return posePresentation.drawn( gid );
+		},
+		/*
+		================
 		reset
 		================
 		*/

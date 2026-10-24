@@ -16,7 +16,7 @@ import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readPublishedAssetBytesSync as assetBytes } from "../../../../scripts/lib/publishedAsset.mjs";
-const { createLocalMover } = await import( "../../src/engine/runtime/characters/local-mover.ts" );
+const { createLocalMover } = await import( "../../src/engine/runtime/movement/local-mover.ts" );
 const { createNavigation } = await import( "../../src/engine/foundation/navigation/clipper.ts" );
 const { createNavigationResources } = await import( "../../src/engine/runtime/assets/worker/navigation/navigation.ts" );
 

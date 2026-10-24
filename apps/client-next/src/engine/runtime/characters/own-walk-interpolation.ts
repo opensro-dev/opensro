@@ -465,6 +465,10 @@ export function createOwnWalkInterpolation() {
 			if ( !history.length ) return;
 			const d = delta( poseAt( lastDrawnAtMs ?? nowMs - delayMs ), displayed );
 			if ( d && hypot3( ...d ) <= MAX_SMOOTHED_CORRECTION ) offset = d;
+			// The carried pose is the one on screen: the next frame's step is
+			// bounded from it (CORRECTION_SPEED_MARGIN), not from the last pose
+			// this presenter computed but did not show.
+			lastDrawn = { ...displayed };
 		},
 		/*
 		================

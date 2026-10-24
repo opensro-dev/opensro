@@ -48,6 +48,7 @@ const OFF = Object.freeze( {
 	sharedActorRoom: true,
 	// On by default (owner 2026-10-24): the own walk is drawn between its ticks.
 	interpolatedOwnWalk: true,
+	mainThreadOwnWalk: false,
 	// On by default (owner 2026-10-15): a disabled tab is dimmed.
 	greyDisabledTabs: true,
 	// On by default (owner 2026-10-15): the shard's job-kill notices show.
@@ -683,6 +684,17 @@ test("interpolated own movement is on unless explicitly false, and reaches the r
 	assert.equal( off.interpolatedOwnWalk, false );
 	assert.equal( experimentalVideo( off ).interpolatedOwnWalk, false );
 	assert.equal( experimentalVideo( experimentalOptions( {} ) ).interpolatedOwnWalk, true );
+});
+
+test("main-thread own movement defaults off and stays out of the worker's and renderer's slices", () => {
+	for ( const value of [ undefined, null, {}, { mainThreadOwnWalk: 1 }, { mainThreadOwnWalk: "true" } ] ) {
+		const options = experimentalOptions( value );
+		assert.equal( options.mainThreadOwnWalk, false );
+		assert.equal( "mainThreadOwnWalk" in experimentalGameplay( options ), false );
+		assert.equal( "mainThreadOwnWalk" in experimentalVideo( options ), false );
+	}
+	assert.equal( experimentalOptions( { mainThreadOwnWalk: true } ).mainThreadOwnWalk, true );
+	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "mainThreadOwnWalk" ) ) );
 });
 
 test("quest target markers default off (tracked quest only) and stay out of the worker's slices", () => {

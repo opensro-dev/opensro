@@ -864,6 +864,10 @@ export interface GameplayState {
 	readonly navigationRequestId?: number;
 	readonly navigationFailure?: { readonly region: number; readonly requestId?: number; readonly error: string; };
 	readonly navigationRegion?: number;
+	// The local mover's navigation owner (a deck or dungeon cell), as the
+	// worker's movement owner holds it; the main-thread mover (#1440) starts
+	// its walk from it.
+	readonly navigationOwner?: import("@/engine/foundation/navigation/dungeon-ownership").NavOwner;
 	readonly navigationBlock?: number;
 	readonly activeCos?: {
 		readonly gid: number;
