@@ -102,6 +102,11 @@ type Runtime struct {
 	memberVitals MemberVitals
 	livePose     LivePose
 	updates      memberUpdateState
+	// PartyChanged reports a committed membership change (a join
+	// committed, a member departed) for each affected character: the
+	// instance lane's party-status event (wiring installs it; nil in
+	// detached tests).
+	PartyChanged func(divisionID, name string)
 }
 
 // NewRuntime builds the lane over a fresh in-memory registry. Construct
@@ -853,6 +858,7 @@ func (r *Runtime) dropMember(divisionID, name string, reason uint8, leaverSessio
 				_ = peer.Send(OpPartyUpdate, broken)
 			}
 		}
+		r.notePartyChanged(divisionID, outcome)
 		return true
 	}
 	leaveFrame := EncodePartyLeave3E58(outcome.Leaver.MemberID, reason)
@@ -860,7 +866,27 @@ func (r *Runtime) dropMember(divisionID, name string, reason uint8, leaverSessio
 		_ = leaverSession.Send(OpPartyUpdate, leaveFrame)
 	}
 	r.notifyDeparture(divisionID, outcome, leaveFrame)
+	r.notePartyChanged(divisionID, outcome)
 	return true
+}
+
+/*
+==================
+notePartyChanged
+
+Reports a committed departure to the PartyChanged hook: the leaver
+and every remaining member each hold a changed party now. Called
+after the registry committed and its lock is long released.
+==================
+*/
+func (r *Runtime) notePartyChanged(divisionID string, outcome LeaveOutcome) {
+	if r.PartyChanged == nil {
+		return
+	}
+	r.PartyChanged(divisionID, outcome.Leaver.Name)
+	for _, member := range outcome.Others {
+		r.PartyChanged(divisionID, member.Name)
+	}
 }
 
 /*

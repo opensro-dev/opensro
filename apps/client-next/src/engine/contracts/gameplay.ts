@@ -885,6 +885,8 @@ export interface GameplayState {
 	readonly pose: Pose | null;
 	readonly movementPath?: MovementPath;
 	readonly movementRevision?: number;
+	// The last gameplay input sequence the worker took (movement-input.ts).
+	readonly movementInputSeq?: number;
 	readonly movementTransition?: MovementTransition;
 	readonly movementDiagnostics?: {
 		readonly total: number;
