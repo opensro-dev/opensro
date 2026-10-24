@@ -4,7 +4,9 @@
 inventory-item.ts - reference-directed native item record decoding
 
 Container readers share this boundary so a variable-length companion record
-cannot shift the following item. Unknown states and families fail atomically.
+cannot shift the following item. Unknown states and known wrong families
+fail atomically; a reference the snapshot does not carry is measured by
+the summoner item's subtype, the way the writer laid the record out.
 
 ===========================================================================
 */
@@ -118,21 +120,29 @@ options
 			if ( state === 1 ) summon = { state, rentals };
 			else {
 				const refObjId = u32(), tid = objRefs.get( refObjId );
-				if ( tid === undefined ) throw new Error( "Unknown summoned object reference" );
-				if ( (tid & 0x7fe) !== 0x1c6 || ![ 3, 4 ].includes( tid >>> 11 ) ) {
+				if ( tid !== undefined && ((tid & 0x7fe) !== 0x1c6 || ![ 3, 4 ].includes( tid >>> 11 )) ) {
 					throw Error( "Invalid summoned object family" );
 				}
-				let name: string | undefined, remainingSeconds: number | undefined;
-				if ( (tid & 0x7fe) === 0x1c6 && [ 3, 4 ].includes( tid >>> 11 ) ) {
-					const n = u16(), at = take( n );
-					name = new TextDecoder( "utf-8", { fatal: true } ).decode( p.subarray( at, at + n ) );
-					if ( tid >>> 11 === 4 ) remainingSeconds = v.getInt32( take( 4 ), true );
-					const count = u8();
-					for ( let i = 0; i < count; i++ ) {
-						const kind = u8(), id = u32(), seconds = v.getInt32( take( 4 ), true );
-						if ( kind !== 0 && kind !== 5 ) throw new Error( "Unsupported summon rental variant" );
-						rentals.push( { kind, id, seconds, ...(kind === 5 ? { tag: u32(), flag: u8() } : {}) } );
-					}
+				// A known character's family owns the rental clock (a
+				// pickup companion, band 4); the item's subtype never
+				// classifies the pet. But a reference the snapshot does
+				// not carry cannot end the session inside an unrelated
+				// bag answer: the writer lays a record out by the
+				// summoner item's own subtype (492D40), so measure an
+				// unknown reference the same way.
+				let pickup: boolean;
+				if ( tid !== undefined ) pickup = tid >>> 11 === 4;
+				else if ( sub === 0x800 ) pickup = false;
+				else if ( sub === 0x1000 ) pickup = true;
+				else throw Error( "Unsupported summoner subtype" );
+				const n = u16(), at = take( n );
+				const name = new TextDecoder( "utf-8", { fatal: true } ).decode( p.subarray( at, at + n ) );
+				const remainingSeconds = pickup ? v.getInt32( take( 4 ), true ) : undefined;
+				const count = u8();
+				for ( let i = 0; i < count; i++ ) {
+					const kind = u8(), id = u32(), seconds = v.getInt32( take( 4 ), true );
+					if ( kind !== 0 && kind !== 5 ) throw new Error( "Unsupported summon rental variant" );
+					rentals.push( { kind, id, seconds, ...(kind === 5 ? { tag: u32(), flag: u8() } : {}) } );
 				}
 				summon = { state, refObjId, name, remainingSeconds, rentals };
 			}

@@ -145,9 +145,20 @@ test("a stored pickup pet's summoner lists with its pet (BR-261010-1435-63E3)", 
 	row[16] = 0;
 	const list = Uint8Array.from( [ 150, 1, ...row ] );
 	const itemRefs = new Map( [ [ SUMMONER, 0xcc | (2 << 11) ] ] ), objRefs = new Map( [ [ PET, 0x1c6 | (4 << 11) ] ] );
-	// Before the fix the room decoded without the pet references and threw,
-	// failing every list while the pet stayed stored.
-	assert.throws( () => room.decodeStorageList( list, itemRefs ), /Unknown summoned object reference/ );
+	// A reference the snapshot does not carry cannot fail the list either:
+	// the record is laid out by the summoner item's own subtype (492D40),
+	// so the room decodes the same bytes with no pet references at all.
+	const unlisted = defined( room.decodeStorageList( list, itemRefs ).items[0] );
+	assert.deepEqual( [ unlisted.summon?.state, unlisted.summon?.refObjId, unlisted.summon?.remainingSeconds ], [
+		3,
+		PET,
+		2401324
+	] );
+	// A reference the snapshot does know, in the wrong family, still fails.
+	assert.throws(
+		() => room.decodeStorageList( list, itemRefs, new Map( [ [ PET, 0x1c6 | (1 << 11) ] ] ) ),
+		/Invalid summoned object family/
+	);
 	const listed = defined( room.decodeStorageList( list, itemRefs, objRefs ).items[0] );
 	assert.deepEqual( [ listed.slot, listed.refObjId, listed.summon?.state, listed.summon?.refObjId ], [
 		14,
