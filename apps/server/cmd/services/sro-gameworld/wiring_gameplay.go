@@ -672,6 +672,10 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.TransportFollow {
 		log.Infof("cos: a dismounted trade transport follows its trader (%s)", action.EnvTransportFollow)
 	}
+	game.items.TransportFollowTether = action.TransportFollowTetherFromEnv()
+	if game.items.TransportFollow && game.items.TransportFollowTether {
+		log.Infof("cos: a following transport keeps its trader within 100 m (%s)", action.EnvTransportFollowTether)
+	}
 	// Port-only, not native: town teleports admit a trader's transport.
 	game.items.JobGoodsTeleport = action.JobGoodsTeleportFromEnv()
 	if game.items.JobGoodsTeleport {
