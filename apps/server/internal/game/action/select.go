@@ -268,7 +268,7 @@ func (rt *Runtime) HandleObjectSelect(divisionID string, character *enterworld.C
 		return refusedSelect(err.Error())
 	}
 
-	// Capture the Flag arena objects (flagwar_match.go) live outside
+	// Capture the Flag arena objects (flagwar_arena.go) live outside
 	// every roster; the match owner answers their selects itself.
 	if outcome, handled := rt.flagWarSelect(divisionID, character, gid); handled {
 		return outcome

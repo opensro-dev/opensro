@@ -78,9 +78,22 @@ type flagWarMatchRuntime struct {
 
 func newFlagWarMatchRuntime(t *testing.T, characters ...*enterworld.Character) *flagWarMatchRuntime {
 	t.Helper()
+	return newFlagWarMatchRuntimeWithItems(t, flagWarMatchTestItems(), characters...)
+}
+
+/*
+================
+newFlagWarMatchRuntimeWithItems
+
+The match rig over a chosen item and character reference source: the
+shipped-data test passes the real textdata so arena objects resolve.
+================
+*/
+func newFlagWarMatchRuntimeWithItems(t *testing.T, items enterworld.ItemRefSource, characters ...*enterworld.Character) *flagWarMatchRuntime {
+	t.Helper()
 	deps := &enterworld.Deps{
 		Characters: enterworld.StaticCharacterSource{testDivision: characters},
-		Items:      flagWarMatchTestItems(),
+		Items:      items,
 		NpcSpawns:  enterworld.NpcSpawnConfig{Roster: simulation.DefaultNpcRoster()},
 	}
 	rt := NewRuntime(deps, nil)
@@ -500,6 +513,11 @@ func TestFlagWarCarrierDropsAfterASixtySeconds(t *testing.T) {
 	near := int64(25)
 	players[0].Level = &near
 	rig.rt.recordFlagWarDeath(testDivision, delta, players[0], match.startMs+80000)
+	// The mint is queued on the death lane and drained by the tick.
+	if got := flagWarTrophies(players[0]); got != 0 {
+		t.Fatalf("the killer's mint landed inline on the death lane: %d trophies", got)
+	}
+	rig.rt.advanceFlagWarMatches(match.startMs + 81000)
 	if got := flagWarTrophies(players[0]); got != 1 {
 		t.Fatalf("the carrier's killer holds %d trophies, want exactly 1", got)
 	}

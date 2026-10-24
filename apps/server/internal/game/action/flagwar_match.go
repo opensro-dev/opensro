@@ -6,8 +6,9 @@ flagwar_match.go - the Capture the Flag match owner
 PR 2 of the flag war (#887): the daily match itself. PR 1 shipped the
 registration scheduler; this file is the rt.FlagWarMatchStart hook the
 scheduler fires at the start instant, the match tick (channels, the
-carrier, the elapsed sync, the ending), the arena-object interactions,
-and the reward mints.
+carrier, the elapsed sync, the ending), and the reward mint queue.
+The arena objects, the click/combat interactions and the side
+monsters live in flagwar_arena.go.
 
 Native evidence (research/docs/reverse-engineering/server/
 FlagWarServer.md checkpoints 2-4, client FlagWarClient.md checkpoint
@@ -20,9 +21,14 @@ FlagWarServer.md checkpoints 2-4, client FlagWarClient.md checkpoint
     within 300 of its anchor (side 0 (1314, 0, 255), side 1
     (607, 0, 200)); exactly one per side carries the master key: its
     death spawns the key NPC at the corpse.
-  - The monster codename follows the match level bracket byte 0..6:
-    MOB_EV_BEAR_25 (0,1), MOB_EV_FOX_45 (2), MOB_EV_RAVEN_60 (3),
-    MOB_EV_PENGUIN_75 (4), MOB_EV_KANGAROO_85 (5), MOB_EV_JINN_95 (6).
+  - The monster family follows the match level bracket byte 0..6.
+    The reference server fields seven level-tagged event monsters;
+    the shipped v1.150 characterdata carries the same event family
+    under its own names and levels: MOB_EV_WOLF (level 25, brackets
+    0-1), MOB_EV_RAVEN (45, bracket 2), MOB_EV_PENGUIN (60, bracket
+    3), MOB_EV_KANGAROO (75, bracket 4), MOB_EV_JINN (85, bracket 5).
+    No 95-class event monster ships in v1.150 data, so bracket 6
+    fields the jinn again (PORT CHOICE, recorded here).
     PORT INFERENCE (recorded, not a native fact): the port flies one
     bracket per match from the mean participant level,
     clamp((avg-20)/15, 0, 6).
@@ -32,9 +38,10 @@ FlagWarServer.md checkpoints 2-4, client FlagWarClient.md checkpoint
     0x124F80 ms). The winner is the side whose team pole flies when
     the clock ends; the centre pole alone never wins.
   - Rewards: every winning-team player takes one
-    ITEM_ETC_E070919_TROPHY (owner substitution for the v1.188 ice
-    trophy, which does not exist in v1.150 data); the flag carrier's
-    killer takes one when the two levels are within nine.
+    ITEM_ETC_E070919_TROPHY (owner substitution for the reference
+    server's ice trophy, which does not exist in the shipped data);
+    the flag carrier's killer takes one when the two levels are
+    within nine.
 
 Port choices (labelled, reversible): teams split evenly alternating by
 sign-up order; a match object (pole, dropped flag, master key, door)
@@ -52,8 +59,10 @@ side monsters do not respawn.
 package action
 
 import (
-	"math"
 	"sort"
+	"sync"
+
+	log "github.com/sirupsen/logrus"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
@@ -106,15 +115,19 @@ var flagWarPoleCodenames = [3][2]string{
 // never found; the doors ship as static arena NPCs (faithful-minimal).
 var flagWarDoorCodenames = [2]string{flagWarCodenameDoorRed, flagWarCodenameDoorBlue}
 
-// The monster codename per level bracket 0..6 (native table).
+// The monster codename per level bracket 0..6. These are the event
+// monsters that ship in v1.150 characterdata (see the file header);
+// the reference server's level-tagged names do not exist in the
+// shipped data, and bracket 6 reuses the jinn because no 95-class
+// event monster ships.
 var flagWarBracketCodenames = [7]string{
-	"MOB_EV_BEAR_25",     // 0
-	"MOB_EV_BEAR_25",     // 1
-	"MOB_EV_FOX_45",      // 2
-	"MOB_EV_RAVEN_60",    // 3
-	"MOB_EV_PENGUIN_75",  // 4
-	"MOB_EV_KANGAROO_85", // 5
-	"MOB_EV_JINN_95",     // 6
+	"MOB_EV_WOLF",     // 0 (level 25)
+	"MOB_EV_WOLF",     // 1 (level 25)
+	"MOB_EV_RAVEN",    // 2 (level 45)
+	"MOB_EV_PENGUIN",  // 3 (level 60)
+	"MOB_EV_KANGAROO", // 4 (level 75)
+	"MOB_EV_JINN",     // 5 (level 85)
+	"MOB_EV_JINN",     // 6 (level 85; no 95-class ships)
 }
 
 // Match pacing (native values; see the file header).
@@ -220,6 +233,14 @@ daily, so a second start in the same division is a cancel, not a queue.
 ================
 */
 type flagWarMatch struct {
+	// mu guards every field below: the tick, the request lanes
+	// (select, attack relations) and the death hook all reach the
+	// match book, on different locks of their own. Lock order is the
+	// division lane first, then mu (the request lanes already hold
+	// the lane when they arrive); mu is never held across a call
+	// that takes the division lane (transfers, world closes, trophy
+	// mints all run after it is released).
+	mu           sync.Mutex
 	division     string
 	lease        instance.Lease
 	startMs      int64
@@ -227,6 +248,12 @@ type flagWarMatch struct {
 	closeMs      int64 // 0 until the match ends
 	participants map[int64]*flagWarParticipant
 	order        []int64 // participant ids in entry order (frame fan-out is sorted, deterministic)
+
+	// Trophy mints owed, by character name. The killer's mint is
+	// decided on the death lane, which already holds the division
+	// lock the mint lane takes, so the mint itself is queued here
+	// and drained by the match tick outside every lane.
+	pendingMints []string
 
 	poles    [3]bool // flying per pole index
 	channels [3]*flagWarChannel
@@ -249,7 +276,10 @@ type flagWarMatch struct {
 }
 
 // flagWarMatches is the runtime's live-match book, keyed by division.
+// mu guards the map only (a leaf lock: no other lock is taken under
+// it); each match then guards its own book with its own mu.
 type flagWarMatches struct {
+	mu         sync.Mutex
 	byDivision map[string]*flagWarMatch
 }
 
@@ -333,6 +363,8 @@ The live match in a division, or nil.
 ================
 */
 func (rt *Runtime) flagWarMatchFor(division string) *flagWarMatch {
+	rt.flagWarLive.mu.Lock()
+	defer rt.flagWarLive.mu.Unlock()
 	if rt.flagWarLive.byDivision == nil {
 		return nil
 	}
@@ -390,63 +422,6 @@ func (m *flagWarMatch) teamFrames(team int, opcode uint16, payload []byte) []sim
 		out = append(out, flagWarParticipantFrames(p, opcode, payload))
 	}
 	return out
-}
-
-/*
-================
-flagWarObjectRow
-
-The create row for one arena object, published on the object-list
-chunk (0x3417) exactly the way roster rows enter.
-================
-*/
-func (rt *Runtime) flagWarObjectRow(o *flagWarArenaObject) []byte {
-	def := simulation.NpcDef{
-		RefObjID:      o.refObjID,
-		ObjectID:      o.gid,
-		Codename:      o.codename,
-		Name:          rt.flagWarRefName(o.codename, o.codename),
-		AuthoredSpawn: true,
-		Spawn:         o.spawn,
-	}
-	return simulation.BuildNpcCreateRow(def, o.spawn)
-}
-
-/*
-================
-flagWarObjectDef
-
-The def a despawn for one arena object names.
-================
-*/
-func (rt *Runtime) flagWarObjectDef(o *flagWarArenaObject) simulation.NpcDef {
-	return simulation.NpcDef{
-		RefObjID:      o.refObjID,
-		ObjectID:      o.gid,
-		Codename:      o.codename,
-		Name:          rt.flagWarRefName(o.codename, o.codename),
-		AuthoredSpawn: true,
-		Spawn:         o.spawn,
-	}
-}
-
-/*
-================
-flagWarRefName
-
-The display name for an arena codename from the authored reference
-data. Names are cosmetic on the wire row; the codename stands in when
-no reference row exists.
-================
-*/
-func (rt *Runtime) flagWarRefName(codename, fallback string) string {
-	if rt.Monsters == nil {
-		return fallback
-	}
-	if ref, ok := rt.Monsters.ReferenceByCodename(codename); ok && ref.Name != "" {
-		return ref.Name
-	}
-	return fallback
 }
 
 //============================================================================
@@ -600,129 +575,15 @@ func (rt *Runtime) flagWarStartDivision(division string, registrants []FlagWarRe
 	rt.flagWarSpawnSides(match, levels, nowMs)
 	rt.flagWarBuildObjects(match)
 
+	// Publish last: until this store no other lane can see the match,
+	// so the build above needs no lock of its own.
+	rt.flagWarLive.mu.Lock()
 	if rt.flagWarLive.byDivision == nil {
 		rt.flagWarLive.byDivision = make(map[string]*flagWarMatch)
 	}
 	rt.flagWarLive.byDivision[division] = match
+	rt.flagWarLive.mu.Unlock()
 	return out
-}
-
-/*
-================
-flagWarSpawnSides
-
-Ten monsters per side around the side anchor; one per side carries
-the key. PORT CHOICE: the scatter is a deterministic ring of radius
-60..240 (native scatters randomly within 300), and the key carrier is
-a fixed pick of the ten (native rolls rand%10). Dead side monsters do
-not respawn (native evidence).
-================
-*/
-func (rt *Runtime) flagWarSpawnSides(match *flagWarMatch, levels []int64, nowMs int64) {
-	if rt.Monsters == nil {
-		return
-	}
-	bracket := flagWarBracketFor(levels)
-	ref, ok := rt.Monsters.ReferenceByCodename(flagWarBracketCodenames[bracket])
-	if !ok {
-		return
-	}
-	for side := 0; side < 2; side++ {
-		anchor := flagWarMonsterAnchors[side]
-		gids := make([]uint32, 0, flagWarMonstersPerSide)
-		for index := 0; index < flagWarMonstersPerSide; index++ {
-			// Golden-angle ring: deterministic, inside the native radius.
-			angle := float64(index) * 2.39996
-			radius := 60.0 + float64(index%4)*60.0
-			position := simulation.Spawn{
-				RegionID: anchor.RegionID,
-				X:        anchor.X + radius*math.Sin(angle),
-				Y:        anchor.Y,
-				Z:        anchor.Z + radius*math.Cos(angle),
-			}
-			spawned := rt.Monsters.SpawnGMMonstersTracked(simulation.GMMonsterSpawn{
-				Division:   match.division,
-				Population: match.lease,
-				RefObjID:   ref.RefObjID,
-				Count:      1,
-				Type:       0,
-				Position:   position,
-				NowMs:      nowMs,
-			})
-			gids = append(gids, spawned...)
-		}
-		if len(gids) > 0 {
-			match.keyMonsterGid[side] = gids[len(gids)/2]
-			match.keyLastSpawn[side] = anchor
-		}
-	}
-}
-
-/*
-================
-flagWarBuildObjects
-
-The arena objects: three poles (centre flying) and the two doors.
-The doors stand by their side's spawn (PORT CHOICE for placement; the
-native door positions were not pinned).
-================
-*/
-func (rt *Runtime) flagWarBuildObjects(match *flagWarMatch) {
-	for index := 0; index < 3; index++ {
-		plain := 0
-		if match.poles[index] {
-			plain = 1
-		}
-		codename := flagWarPoleCodenames[index][plain]
-		object := &flagWarArenaObject{
-			gid:       flagWarObjectGID(flagWarSlotPole0 + index),
-			kind:      flagWarObjectPole,
-			poleIndex: index,
-			side:      flagWarPoleSides[index],
-			codename:  codename,
-			spawn:     flagWarPoleSpawns[index],
-			live:      true,
-		}
-		if ref, ok := rt.flagWarReference(codename); ok {
-			object.refObjID = ref
-		}
-		match.objects[object.gid] = object
-	}
-	for side := 0; side < 2; side++ {
-		spawn := flagWarTeamSpawns[side]
-		spawn.X += 24 // beside the spawn, off the landing spot
-		codename := flagWarDoorCodenames[side]
-		object := &flagWarArenaObject{
-			gid:      flagWarObjectGID(flagWarSlotDoor0 + side),
-			kind:     flagWarObjectDoor,
-			side:     side,
-			codename: codename,
-			spawn:    spawn,
-			live:     true,
-		}
-		if ref, ok := rt.flagWarReference(codename); ok {
-			object.refObjID = ref
-		}
-		match.objects[object.gid] = object
-	}
-}
-
-/*
-================
-flagWarReference
-
-The RefObjID for an arena codename.
-================
-*/
-func (rt *Runtime) flagWarReference(codename string) (uint32, bool) {
-	if rt.Monsters == nil {
-		return 0, false
-	}
-	ref, ok := rt.Monsters.ReferenceByCodename(codename)
-	if !ok {
-		return 0, false
-	}
-	return ref.RefObjID, true
 }
 
 //============================================================================
@@ -738,24 +599,43 @@ last; PR 1 learned that once).
 ================
 */
 func (rt *Runtime) advanceFlagWarMatches(nowMs int64) []simulation.DivisionFrames {
-	if len(rt.flagWarLive.byDivision) == 0 {
-		return nil
-	}
+	rt.flagWarLive.mu.Lock()
 	divisions := make([]string, 0, len(rt.flagWarLive.byDivision))
 	for division := range rt.flagWarLive.byDivision {
 		divisions = append(divisions, division)
 	}
 	sort.Strings(divisions)
-	var out []simulation.DivisionFrames
+	matches := make([]*flagWarMatch, 0, len(divisions))
 	for _, division := range divisions {
-		match := rt.flagWarLive.byDivision[division]
-		if match == nil {
-			continue
+		if match := rt.flagWarLive.byDivision[division]; match != nil {
+			matches = append(matches, match)
 		}
+	}
+	rt.flagWarLive.mu.Unlock()
+
+	var out []simulation.DivisionFrames
+	for _, match := range matches {
 		out = append(out, rt.flagWarTickMatch(match, nowMs)...)
-		if match.closeMs != 0 && nowMs >= match.closeMs {
+
+		// Mints and the world close take the division lane: they run
+		// here, after the match lock is released, so a request lane
+		// holding the division lock and waiting on the match can
+		// never meet this tick waiting back.
+		match.mu.Lock()
+		mints := match.pendingMints
+		match.pendingMints = nil
+		closeNow := match.closeMs != 0 && nowMs >= match.closeMs
+		match.mu.Unlock()
+		for _, name := range mints {
+			rt.flagWarGrantTrophy(match.division, name)
+		}
+		if closeNow {
 			rt.CloseInstanceWorld(match.division, match.lease)
-			delete(rt.flagWarLive.byDivision, division)
+			rt.flagWarLive.mu.Lock()
+			if rt.flagWarLive.byDivision[match.division] == match {
+				delete(rt.flagWarLive.byDivision, match.division)
+			}
+			rt.flagWarLive.mu.Unlock()
 		}
 	}
 	return out
@@ -770,6 +650,7 @@ One match, one tick.
 */
 func (rt *Runtime) flagWarTickMatch(match *flagWarMatch, nowMs int64) []simulation.DivisionFrames {
 	var out []simulation.DivisionFrames
+	match.mu.Lock()
 	if !match.announced {
 		match.announced = true
 		match.lastSyncMs = match.startMs
@@ -788,40 +669,30 @@ func (rt *Runtime) flagWarTickMatch(match *flagWarMatch, nowMs int64) []simulati
 			}
 		}
 	}
+	over := match.closeMs != 0
+	match.mu.Unlock()
+	if over {
+		// The clock ended: the play lanes stay quiet until the close.
+		return out
+	}
+
+	// Reconciliation takes the division lane in short bursts, so it
+	// runs between the two locked halves, never under the match lock.
 	out = append(out, rt.flagWarReconcile(match, nowMs)...)
+
+	match.mu.Lock()
 	out = append(out, rt.flagWarTickChannels(match, nowMs)...)
 	out = append(out, rt.flagWarTickCarrier(match, nowMs)...)
 	out = append(out, rt.flagWarTickKeys(match, nowMs)...)
-	if match.closeMs == 0 {
-		if nowMs-match.lastSyncMs >= flagWarElapsedSyncMs && nowMs < match.endsMs {
-			match.lastSyncMs = nowMs
-			out = append(out, match.allFrames(wire.OpFlagWarEvent,
-				wire.EncodeFlagWarElapsed(uint32(nowMs-match.startMs)))...)
-		}
-		if nowMs >= match.endsMs {
-			out = append(out, rt.flagWarEndMatch(match, nowMs)...)
-		}
+	if nowMs-match.lastSyncMs >= flagWarElapsedSyncMs && nowMs < match.endsMs {
+		match.lastSyncMs = nowMs
+		out = append(out, match.allFrames(wire.OpFlagWarEvent,
+			wire.EncodeFlagWarElapsed(uint32(nowMs-match.startMs)))...)
 	}
-	return out
-}
-
-/*
-================
-sortedObjects
-
-The arena objects in gid order: create-row order is deterministic.
-================
-*/
-func (m *flagWarMatch) sortedObjects() []*flagWarArenaObject {
-	gids := make([]uint32, 0, len(m.objects))
-	for gid := range m.objects {
-		gids = append(gids, gid)
+	if nowMs >= match.endsMs {
+		out = append(out, rt.flagWarEndMatch(match, nowMs)...)
 	}
-	sort.Slice(gids, func(i, j int) bool { return gids[i] < gids[j] })
-	out := make([]*flagWarArenaObject, 0, len(gids))
-	for _, gid := range gids {
-		out = append(out, m.objects[gid])
-	}
+	match.mu.Unlock()
 	return out
 }
 
@@ -837,21 +708,37 @@ they now play.
 ================
 */
 func (rt *Runtime) flagWarReconcile(match *flagWarMatch, nowMs int64) []simulation.DivisionFrames {
-	var out []simulation.DivisionFrames
+	// Phase 1 reads world truth under the division lane, exactly as
+	// before - but with the match lock dropped (lock order: lane,
+	// then match). Phase 2 applies the departures to the book.
+	type sighting struct {
+		p         *flagWarParticipant
+		character *enterworld.Character
+		gone      bool
+		pose      simulation.Spawn
+	}
+	match.mu.Lock()
+	entered := make([]*flagWarParticipant, 0, len(match.order))
 	for _, id := range match.order {
-		p := match.participants[id]
-		if p == nil || !p.entered {
-			continue
+		if p := match.participants[id]; p != nil && p.entered {
+			entered = append(entered, p)
 		}
+	}
+	match.mu.Unlock()
+
+	sightings := make([]sighting, 0, len(entered))
+	for _, p := range entered {
+		s := sighting{p: p, gone: true}
 		unlock := rt.lockDivision(match.division)
-		character := rt.findCharacter(match.division, p.registrant.Name)
-		gone := character == nil || instance.ID(domain.CharacterWorldInstance(character)) != match.lease.ID
-		if character != nil && !gone {
-			p.lastSpawn = rt.liveSpawn(simulation.WorldKey(match.division, character.Name), character, nowMs)
-			p.hasPose = true
+		s.character = rt.findCharacter(match.division, p.registrant.Name)
+		if s.character != nil &&
+			instance.ID(domain.CharacterWorldInstance(s.character)) == match.lease.ID {
+			s.gone = false
+			s.pose = rt.liveSpawn(simulation.WorldKey(match.division, s.character.Name), s.character, nowMs)
 		}
 		unlock()
-		if character != nil && gone {
+		if s.character != nil && s.gone {
+			character := s.character
 			rt.deps.Update(character, "flagwar-anchor-clear", func() bool {
 				if character.World != nil {
 					character.World.InstanceReturn = nil
@@ -859,16 +746,29 @@ func (rt *Runtime) flagWarReconcile(match *flagWarMatch, nowMs int64) []simulati
 				return true
 			})
 		}
-		if !gone {
+		sightings = append(sightings, s)
+	}
+
+	var out []simulation.DivisionFrames
+	match.mu.Lock()
+	defer match.mu.Unlock()
+	for _, s := range sightings {
+		p := s.p
+		if !p.entered {
+			continue // another lane settled this departure first
+		}
+		if !s.gone {
+			p.lastSpawn = s.pose
+			p.hasPose = true
 			continue
 		}
 		p.entered = false
 		for pole := 0; pole < 3; pole++ {
-			if ch := match.channels[pole]; ch != nil && ch.characterID == id {
+			if ch := match.channels[pole]; ch != nil && ch.characterID == p.registrant.CharacterID {
 				match.channels[pole] = nil
 			}
 		}
-		if match.carrierID == id {
+		if match.carrierID == p.registrant.CharacterID {
 			at := p.lastSpawn
 			if !p.hasPose {
 				at = flagWarTeamSpawns[p.team]
@@ -930,6 +830,13 @@ func (rt *Runtime) flagWarCompleteChannel(match *flagWarMatch, pole int, ch *fla
 	if ch.mode == 1 {
 		match.poles[pole] = false
 		out = append(out, rt.flagWarSwapPole(match, pole)...)
+		// Single-flag rule: while a carrier carries or the dropped
+		// flag stands, a completing steal only grounds the pole -
+		// nobody becomes a second carrier (the client tracks one
+		// carrier gid; two carriers desync it).
+		if match.carrierID != 0 || match.flagLive {
+			return out
+		}
 		match.carrierID = ch.characterID
 		match.carrierSinceMs = nowMs
 		out = append(out, match.allFrames(wire.OpFlagWarEvent,
@@ -941,167 +848,17 @@ func (rt *Runtime) flagWarCompleteChannel(match *flagWarMatch, pole int, ch *fla
 			wire.EncodeFlagWarEventSubtype(wire.FlagWarPickupTheirs))...)
 		return out
 	}
+	// Score: the channeler must still be the carrier. A fall during
+	// the channel resets the channel set, so this is the second lock
+	// on the same door - never score a flag nobody carries home.
+	if match.carrierID != ch.characterID {
+		return out
+	}
 	match.poles[pole] = true
 	out = append(out, rt.flagWarSwapPole(match, pole)...)
 	match.carrierID = 0
 	out = append(out, match.allFrames(wire.OpFlagWarEvent,
 		wire.EncodeFlagWarMissionResult(uint8(ch.team), ch.name))...)
-	return out
-}
-
-//============================================================================
-
-/*
-================
-flagWarSwapPole
-
-Republish one pole in its new shape: despawn the old row, create the
-new one, for every entered participant.
-================
-*/
-func (rt *Runtime) flagWarSwapPole(match *flagWarMatch, pole int) []simulation.DivisionFrames {
-	object := match.objects[flagWarObjectGID(flagWarSlotPole0+pole)]
-	if object == nil {
-		return nil
-	}
-	oldDef := rt.flagWarObjectDef(object)
-	plain := 0
-	if match.poles[pole] {
-		plain = 1
-	}
-	object.codename = flagWarPoleCodenames[pole][plain]
-	if ref, ok := rt.flagWarReference(object.codename); ok {
-		object.refObjID = ref
-	}
-	var out []simulation.DivisionFrames
-	for _, id := range match.order {
-		p := match.participants[id]
-		if p == nil || !p.entered {
-			continue
-		}
-		for _, frame := range simulation.NpcDespawnFrames([]simulation.NpcDef{oldDef}) {
-			out = append(out, simulation.DivisionFrames{
-				DivisionID:      p.registrant.Division,
-				OnlyCharacterID: p.registrant.CharacterID,
-				Frames:          []simulation.Frame{frame},
-			})
-		}
-		out = append(out, flagWarParticipantFrames(p, wire.OpObjectListChunk, rt.flagWarObjectRow(object)))
-	}
-	return out
-}
-
-/*
-================
-flagWarTickCarrier
-
-Sixty seconds (0xEA60) with the flag and it falls where the carrier
-stands.
-================
-*/
-func (rt *Runtime) flagWarTickCarrier(match *flagWarMatch, nowMs int64) []simulation.DivisionFrames {
-	if match.carrierID == 0 || nowMs-match.carrierSinceMs < flagWarCarrierDropMs {
-		return nil
-	}
-	carrier := match.participants[match.carrierID]
-	if carrier == nil || !carrier.entered {
-		match.carrierID = 0
-		return nil
-	}
-	at := carrier.lastSpawn
-	if !carrier.hasPose {
-		at = flagWarTeamSpawns[carrier.team]
-	}
-	return rt.flagWarDropFlag(match, at)
-}
-
-/*
-================
-flagWarDropFlag
-
-The flag falls: the dropped-flag NPC stands at the spot and the drop
-notice goes to the whole match.
-================
-*/
-func (rt *Runtime) flagWarDropFlag(match *flagWarMatch, at simulation.Spawn) []simulation.DivisionFrames {
-	match.carrierID = 0
-	if match.flagLive {
-		return nil
-	}
-	match.flagLive = true
-	match.flagSpawn = at
-	object := &flagWarArenaObject{
-		gid:      flagWarObjectGID(flagWarSlotFlag),
-		kind:     flagWarObjectFlag,
-		side:     -1,
-		codename: flagWarCodenameFlagNPC,
-		spawn:    at,
-		live:     true,
-	}
-	if ref, ok := rt.flagWarReference(object.codename); ok {
-		object.refObjID = ref
-	}
-	match.objects[object.gid] = object
-	var out []simulation.DivisionFrames
-	for _, id := range match.order {
-		p := match.participants[id]
-		if p == nil || !p.entered {
-			continue
-		}
-		out = append(out, flagWarParticipantFrames(p, wire.OpObjectListChunk, rt.flagWarObjectRow(object)))
-	}
-	out = append(out, match.allFrames(wire.OpFlagWarEvent,
-		wire.EncodeFlagWarEventSubtype(wire.FlagWarFlagDrop))...)
-	return out
-}
-
-/*
-================
-flagWarTickKeys
-
-Watch the two key carriers: a dead carrier's key NPC rises at its
-last live pose, once per side.
-================
-*/
-func (rt *Runtime) flagWarTickKeys(match *flagWarMatch, nowMs int64) []simulation.DivisionFrames {
-	if rt.Monsters == nil {
-		return nil
-	}
-	var out []simulation.DivisionFrames
-	for side := 0; side < 2; side++ {
-		gid := match.keyMonsterGid[side]
-		if gid == 0 || match.keyGone[side] {
-			continue
-		}
-		mover, exists := rt.Monsters.Mover(match.division, gid)
-		if exists {
-			pose := mover.LivePoseAt(nowMs, nil)
-			match.keyLastSpawn[side] = simulation.Spawn{
-				RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z,
-			}
-			continue
-		}
-		match.keyGone[side] = true
-		object := &flagWarArenaObject{
-			gid:      flagWarObjectGID(flagWarSlotKey0 + side),
-			kind:     flagWarObjectKey,
-			side:     side,
-			codename: flagWarCodenameMasterKeyNPC,
-			spawn:    match.keyLastSpawn[side],
-			live:     true,
-		}
-		if ref, ok := rt.flagWarReference(object.codename); ok {
-			object.refObjID = ref
-		}
-		match.objects[object.gid] = object
-		for _, id := range match.order {
-			p := match.participants[id]
-			if p == nil || !p.entered {
-				continue
-			}
-			out = append(out, flagWarParticipantFrames(p, wire.OpObjectListChunk, rt.flagWarObjectRow(object)))
-		}
-	}
 	return out
 }
 
@@ -1135,7 +892,7 @@ func (rt *Runtime) flagWarEndMatch(match *flagWarMatch, nowMs int64) []simulatio
 			if p == nil || !p.entered || p.team != match.winner {
 				continue
 			}
-			rt.flagWarGrantTrophy(match.division, p.registrant.Name)
+			match.pendingMints = append(match.pendingMints, p.registrant.Name)
 		}
 	}
 	return out
@@ -1146,304 +903,18 @@ func (rt *Runtime) flagWarEndMatch(match *flagWarMatch, nowMs int64) []simulatio
 flagWarGrantTrophy
 
 One trophy, through the operator grant lane (the quest-shaped mint:
-refuses mid-bargain, pushes the ordinary item receipts). A failed
-mint is retried never and logged by the caller surface - the match
-test pins the exact mint counts on the success path.
+refuses mid-bargain, pushes the ordinary item receipts). Called only
+from the match tick's drain, with no lane held: the grant lane takes
+the division lock itself, which is exactly why the death hook queues
+its mint instead of granting inline. A failed mint is logged and not
+retried - the match test pins the exact mint counts on the success
+path.
 ================
 */
 func (rt *Runtime) flagWarGrantTrophy(division, name string) {
-	_ = rt.OperatorGrantItems(division, name, []inventory.ItemAmount{
+	if err := rt.OperatorGrantItems(division, name, []inventory.ItemAmount{
 		{Codename: flagWarTrophyCodename, Count: 1},
-	})
-}
-
-//============================================================================
-
-/*
-================
-flagWarObjectFor
-
-The match object a gid names in this division, or nil. The select
-handler consults this BEFORE roster resolution: these gids exist on
-no roster, so nothing else can shadow them in practice.
-================
-*/
-func (rt *Runtime) flagWarObjectFor(division string, gid uint32) (*flagWarMatch, *flagWarArenaObject) {
-	match := rt.flagWarMatchFor(division)
-	if match == nil {
-		return nil, nil
-	}
-	object := match.objects[gid]
-	if object == nil || !object.live {
-		return nil, nil
-	}
-	return match, object
-}
-
-/*
-================
-flagWarSelect
-
-A click on a match object. The answer is the ordinary NPC grant
-(len-11 shape, no capabilities, no event byte: these objects open no
-talk); the match rules run on top. Beyond the interaction range the
-answer is the native too-far refusal, exactly like a roster NPC -
-the client walks in and the next click lands.
-================
-*/
-func (rt *Runtime) flagWarSelect(divisionID string, character *enterworld.Character, gid uint32) (SelectOutcome, bool) {
-	match, object := rt.flagWarObjectFor(divisionID, gid)
-	if match == nil {
-		return SelectOutcome{}, false
-	}
-	nowMs := rt.Now().UnixMilli()
-	pose := rt.liveSpawn(simulation.WorldKey(divisionID, character.Name), character, nowMs)
-	dx := pose.X - object.spawn.X
-	dz := pose.Z - object.spawn.Z
-	if dx*dx+dz*dz > flagWarChannelRange*flagWarChannelRange {
-		return SelectOutcome{
-			Refusal: "flag war object beyond interaction range",
-			Frames: []wire.Frame{{
-				Opcode:  wire.OpObjectSelectResult,
-				Payload: wire.EncodeObjectSelectRefusal(hitRangeTooFar),
-			}},
-		}, true
-	}
-	rt.Selected.Set(divisionID, character.Name, gid)
-	rt.NpcDialogs.Clear(divisionID, character.Name)
-	outcome := SelectOutcome{
-		Selected: gid,
-		Frames: []wire.Frame{{
-			Opcode:  wire.OpObjectSelectResult,
-			Payload: wire.EncodeNpcObjectSelectResult(gid, 0, 0),
-		}},
-	}
-	participant := match.participants[character.ID]
-	if participant == nil || !participant.entered {
-		return outcome, true
-	}
-	switch object.kind {
-	case flagWarObjectPole:
-		outcome.Frames = append(outcome.Frames,
-			rt.flagWarTouchPole(match, object, participant, pose, nowMs)...)
-	case flagWarObjectFlag:
-		rt.flagWarTouchFlag(match, object, participant, nowMs)
-	case flagWarObjectKey:
-		rt.flagWarTouchKey(match, object, participant)
-	}
-	return outcome, true
-}
-
-/*
-================
-flagWarTouchPole
-
-Steal a flying pole the clicker's side may take, or score on the
-clicker's own plain pole while carrying. A busy pole answers the
-busy subtype for the attempted mode; wrong side, wrong state, or
-already carrying answers nothing.
-================
-*/
-func (rt *Runtime) flagWarTouchPole(match *flagWarMatch, object *flagWarArenaObject, participant *flagWarParticipant, pose simulation.Spawn, nowMs int64) []wire.Frame {
-	pole := object.poleIndex
-	busy := func(subtype uint8) []wire.Frame {
-		return []wire.Frame{{
-			Opcode:  wire.OpFlagWarEvent,
-			Payload: wire.EncodeFlagWarEventSubtype(subtype),
-		}}
-	}
-	if match.poles[pole] {
-		// Flying: steal. The centre pole is open to both sides; a team
-		// pole only to the enemy side.
-		if object.side >= 0 && object.side == participant.team {
-			return nil
-		}
-		if match.channels[pole] != nil {
-			return busy(wire.FlagWarStealBusy)
-		}
-		if match.carrierID == participant.registrant.CharacterID {
-			return nil // already carrying
-		}
-		match.channels[pole] = &flagWarChannel{
-			characterID: participant.registrant.CharacterID,
-			gid:         participant.registrant.Gid,
-			name:        participant.registrant.Name,
-			team:        participant.team,
-			mode:        1,
-			deadlineMs:  nowMs + flagWarChannelMs,
-			startX:      pose.X,
-			startZ:      pose.Z,
-		}
-		// At steal start every participant sees the channeler marked.
-		for _, id := range match.order {
-			other := match.participants[id]
-			if other == nil || !other.entered || other == participant {
-				continue
-			}
-			rt.flagWarPush(match.division, other.registrant.Name, simulation.Frame{
-				Opcode:  wire.OpFlagWarEvent,
-				Payload: wire.EncodeFlagWarCarrier(participant.registrant.Gid),
-			})
-		}
-		return []wire.Frame{{
-			Opcode:  wire.OpFlagWarEvent,
-			Payload: wire.EncodeFlagWarCarrier(participant.registrant.Gid),
-		}}
-	}
-	// Plain: score, only the carrier on their own pole.
-	if object.side < 0 || object.side != participant.team {
-		return nil
-	}
-	if match.carrierID != participant.registrant.CharacterID {
-		return nil
-	}
-	if match.channels[pole] != nil {
-		return busy(wire.FlagWarScoreBusy)
-	}
-	match.channels[pole] = &flagWarChannel{
-		characterID: participant.registrant.CharacterID,
-		gid:         participant.registrant.Gid,
-		name:        participant.registrant.Name,
-		team:        participant.team,
-		mode:        0,
-		deadlineMs:  nowMs + flagWarChannelMs,
-		startX:      pose.X,
-		startZ:      pose.Z,
-	}
-	return nil
-}
-
-/*
-================
-flagWarTouchFlag
-
-Clicking the dropped flag makes the clicker the carrier.
-================
-*/
-func (rt *Runtime) flagWarTouchFlag(match *flagWarMatch, object *flagWarArenaObject, participant *flagWarParticipant, nowMs int64) {
-	object.live = false
-	match.flagLive = false
-	match.carrierID = participant.registrant.CharacterID
-	match.carrierSinceMs = nowMs
-	def := rt.flagWarObjectDef(object)
-	for _, id := range match.order {
-		other := match.participants[id]
-		if other == nil || !other.entered {
-			continue
-		}
-		for _, frame := range simulation.NpcDespawnFrames([]simulation.NpcDef{def}) {
-			rt.flagWarPush(match.division, other.registrant.Name, frame)
-		}
-		rt.flagWarPush(match.division, other.registrant.Name, simulation.Frame{
-			Opcode:  wire.OpFlagWarEvent,
-			Payload: wire.EncodeFlagWarCarrier(participant.registrant.Gid),
-		})
-	}
-}
-
-/*
-================
-flagWarTouchKey
-
-Clicking a side's key NPC banks that side's master key and tells the
-whole match (the client notices only its own side).
-================
-*/
-func (rt *Runtime) flagWarTouchKey(match *flagWarMatch, object *flagWarArenaObject, participant *flagWarParticipant) {
-	object.live = false
-	match.keyTaken[object.side] = true
-	def := rt.flagWarObjectDef(object)
-	for _, id := range match.order {
-		other := match.participants[id]
-		if other == nil || !other.entered {
-			continue
-		}
-		for _, frame := range simulation.NpcDespawnFrames([]simulation.NpcDef{def}) {
-			rt.flagWarPush(match.division, other.registrant.Name, frame)
-		}
-		rt.flagWarPush(match.division, other.registrant.Name, simulation.Frame{
-			Opcode:  wire.OpFlagWarEvent,
-			Payload: wire.EncodeFlagWarMasterKey(object.gid, uint8(participant.team), participant.registrant.Name),
-		})
-	}
-}
-
-//============================================================================
-
-/*
-================
-flagWarHostile
-
-The native event-world hostility: two entered participants of the
-same live match on opposite teams are enemies.
-================
-*/
-func (rt *Runtime) flagWarHostile(division string, a, b *enterworld.Character) bool {
-	if a == nil || b == nil {
-		return false
-	}
-	match := rt.flagWarMatchFor(division)
-	if match == nil {
-		return false
-	}
-	pa := match.participants[a.ID]
-	pb := match.participants[b.ID]
-	if pa == nil || pb == nil || !pa.entered || !pb.entered {
-		return false
-	}
-	return pa.team != pb.team
-}
-
-/*
-================
-recordFlagWarDeath
-
-The fatal-blow hook, beside the fortress one. A dying carrier drops
-the flag where they fell and loses their channel; an opposing
-participant who lands the kill within nine levels of the carrier
-takes the killer's trophy.
-================
-*/
-func (rt *Runtime) recordFlagWarDeath(division string, victim, killer *enterworld.Character, nowMs int64) {
-	match := rt.flagWarMatchFor(division)
-	if match == nil || victim == nil {
-		return
-	}
-	dead := match.participants[victim.ID]
-	if dead == nil || !dead.entered {
-		return
-	}
-	for pole := 0; pole < 3; pole++ {
-		if ch := match.channels[pole]; ch != nil && ch.characterID == victim.ID {
-			match.channels[pole] = nil
-		}
-	}
-	if match.carrierID != victim.ID {
-		return
-	}
-	match.carrierID = 0
-	pose := rt.liveSpawn(simulation.WorldKey(division, victim.Name), victim, nowMs)
-	for _, batch := range rt.flagWarDropFlag(match, pose) {
-		p := match.participants[batch.OnlyCharacterID]
-		if p == nil {
-			continue
-		}
-		for _, frame := range batch.Frames {
-			rt.flagWarPush(division, p.registrant.Name, frame)
-		}
-	}
-	if killer == nil {
-		return
-	}
-	hunter := match.participants[killer.ID]
-	if hunter == nil || !hunter.entered || hunter.team == dead.team {
-		return
-	}
-	diff := flagWarLevelOf(killer.Level) - dead.level
-	if diff < 0 {
-		diff = -diff
-	}
-	if diff <= flagWarKeyLevelWindow {
-		rt.flagWarGrantTrophy(division, hunter.registrant.Name)
+	}); err != nil {
+		log.WithError(err).WithField("character", name).Warn("flagwar: trophy mint failed")
 	}
 }

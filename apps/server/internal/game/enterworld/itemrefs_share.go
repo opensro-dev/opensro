@@ -46,6 +46,7 @@ func (t *TextdataItems) load() {
 		return p
 	})
 	t.byCodename, t.byID, t.charactersByCodename = parsed.byCodename, parsed.byID, parsed.charactersByCodename
+	t.characterIDsByCodename = parsed.characterIDsByCodename
 	t.summonableCharacters, t.refusedSummonRows = parsed.summonableCharacters, parsed.refusedSummonRows
 	t.sharedRows = true
 }
