@@ -2480,6 +2480,13 @@
 				"request",
 				"take"
 			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/characters.ts",
+			"provider": "src/engine/runtime/characters/presentation-poses.ts",
+			"functions": [
+				"resolveDrawnPoses"
+			]
 		}
 	],
 	"boundaries": [
@@ -3521,13 +3528,6 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-motion.ts",
-			"expression": "posePresentation.pose",
-			"function": "present",
-			"kind": "callback",
-			"reason": "Characters pose owner lends its synchronous presented-pose reads to the per-actor phase."
-		},
-		{
-			"file": "src/engine/runtime/characters/actor-motion.ts",
 			"expression": "localMover",
 			"function": "present",
 			"kind": "callback",
@@ -3569,9 +3569,44 @@
 			"reason": "Characters pose owner lends its synchronous presented-pose reads to the per-actor phase."
 		},
 		{
-			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"file": "src/engine/runtime/characters/presentation-poses.ts",
+			"expression": "logicalPose",
+			"function": "resolveDrawnPoses",
+			"kind": "callback",
+			"reason": "Current frame pose lookup from presentation-samples, passed by the parent without retaining it."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-poses.ts",
+			"expression": "localMover",
+			"function": "resolveDrawnPoses",
+			"kind": "callback",
+			"reason": "Current frame mover predicate from presentation-samples, passed by the parent without retaining it."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-poses.ts",
+			"expression": "health?.dead",
+			"function": "resolveDrawnPoses",
+			"kind": "callback",
+			"reason": "Effective health owner supplied by the parent; the same synchronous death check as before the move."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-poses.ts",
+			"expression": "statusOwner.view",
+			"function": "resolveDrawnPoses",
+			"kind": "callback",
+			"reason": "Characters status owner lends its synchronous status view to the pose stage."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-poses.ts",
+			"expression": "posePresentation.pose",
+			"function": "resolveDrawnPoses",
+			"kind": "callback",
+			"reason": "Characters pose owner lends its synchronous presented-pose reads to the pose stage; the stage is the only caller."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-poses.ts",
 			"expression": "posePresentation.carry",
-			"function": "present",
+			"function": "resolveDrawnPoses",
 			"kind": "callback",
 			"reason": "Characters pose owner takes back the drawn pose a released WAIT hold showed, so its track recovers from it instead of jumping."
 		},
@@ -3700,13 +3735,6 @@
 			"function": "step",
 			"kind": "callback",
 			"reason": "Current frame presentation-sample owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
-		},
-		{
-			"file": "src/engine/runtime/characters/presentation-events.ts",
-			"expression": "posePresentation.pose",
-			"function": "step",
-			"kind": "callback",
-			"reason": "Character pose presentation owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
 		},
 		{
 			"file": "src/engine/runtime/characters/presentation-events.ts",
@@ -3861,13 +3889,6 @@
 			"function": "callback:map:0",
 			"kind": "callback",
 			"reason": "Current frame presentation-sample owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
-		},
-		{
-			"file": "src/engine/runtime/characters/presentation-events.ts",
-			"expression": "posePresentation.pose",
-			"function": "callback:map:0",
-			"kind": "callback",
-			"reason": "Character pose presentation owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
 		},
 		{
 			"file": "src/engine/runtime/characters/presentation-events.ts",

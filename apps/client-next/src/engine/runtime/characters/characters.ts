@@ -28,6 +28,7 @@ import { createPresentationSamples } from "./presentation-samples";
 import { createPresentationState } from "./presentation-state";
 import { createPresentationActions } from "./presentation-actions";
 import { createPresentationEvents } from "./presentation-events";
+import { resolveDrawnPoses } from "./presentation-poses";
 import { createFootprints } from "./footprints";
 import { createCharacterStateIndex } from "./state-index";
 import { createSkillObjects, SKILL_OBJECT_MANIFESTS } from "./skill-objects";
@@ -538,6 +539,29 @@ export function createCharacterPresentation(
 		);
 		gameplay = actionFrame.gameplay;
 		const { actionLayersByActor, waitingActors, triggers, soundContext } = actionFrame;
+		// The frame's drawn poses resolve here (#1442c): after the action
+		// phase, whose waiting and active casts the navigation-hold
+		// decision reads, and before presentation-events and actor-motion
+		// read them. The presenter advances once per character per frame;
+		// everything drawn reads the same pose.
+		probe?.detailBegin( "present-poses" );
+		const drawnPoses = resolveDrawnPoses( {
+			selected,
+			gameplay,
+			seconds,
+			logicalPose,
+			localMover,
+			states,
+			castByActor,
+			actionLayersByActor,
+			waitingActors,
+			vitalsByGid,
+			health,
+			pendingDeaths: feedback.pendingDeaths( gameplay?.casts ?? [], health?.currentResult ),
+			statusOwner,
+			posePresentation
+		} );
+		probe?.detailEnd( "present-poses" );
 		// Effects run before actor-motion takes this frame's navigation
 		// hold, so they read the hold from the same per-actor state: the
 		// standing hold, or on the burst frame (walk stop and cast in one
@@ -603,7 +627,7 @@ export function createCharacterPresentation(
 				logicalPose,
 				appearanceRef,
 				soundContext,
-				posePresentation,
+				drawnPoses,
 				referenceAppearances,
 				effects,
 				effectDetail,
@@ -624,6 +648,7 @@ export function createCharacterPresentation(
 		return {
 			gameplay,
 			castByActor,
+			drawnPoses,
 			vitalsByGid,
 			entitiesByGid,
 			actionLayersByActor,
@@ -664,6 +689,7 @@ export function createCharacterPresentation(
 		const {
 			gameplay,
 			castByActor,
+			drawnPoses,
 			vitalsByGid,
 			actionLayersByActor,
 			waitingActors,
@@ -704,6 +730,7 @@ export function createCharacterPresentation(
 			active,
 			animationDeltaMs,
 			castByActor,
+			drawnPoses,
 			entities,
 			entitiesByGid,
 			gameplay,

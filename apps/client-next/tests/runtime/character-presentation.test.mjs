@@ -1237,6 +1237,88 @@ test("zero-duration teleport cast while walking snaps body and ground stage inst
 	f.dispose();
 });
 
+test("a cast stage anchors to the drawn pose of the same frame while walking at uneven frame times", () => {
+	// #1442c: presentation-events used to resolve effect anchors by asking
+	// the presenter itself, before actor-motion had drawn the body, so an
+	// effect read the pose the presenter had settled last frame (a teleport
+	// read 11 against the body's 110). presentPoses now resolves the drawn
+	// pose once, before both readers, so the anchor is this frame's body.
+	const ground = {
+		resource: "ground.efp",
+		damageEvent: false,
+		startEvent: 0,
+		phase: "READY",
+		action: "AT_STOP",
+		move: "MOV_NONE",
+		bone: null,
+		offset: [ 0, 0, 0 ],
+		life: 10,
+		sound: null,
+		count: 1,
+		scripts: []
+	};
+	const f = fixture(
+		{ 7: { clips: [ "stand" ], phaseClips: [ [], [ "stand" ], [] ], stages: [ ground ] } },
+		2,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		undefined,
+		{ states: { stand: { durationMs: 1000, loop: true, trackEvents: [] } }, rules: [] }
+	);
+	f.warm();
+	f.presentation.simulationOrigin( 0 );
+	const from = { regionId: 1, x: 10, y: 20, z: 30, angle: 16384 };
+	const cast = { token: 1, caster: 1, target: 0, skill: 7, damage: 0, fatal: false };
+	const frame = ( seconds, casting ) => {
+		// The server pose advances at the path's own speed, ahead of the
+		// drawn pose the presenter is still walking toward it.
+		const x = 10 + (seconds - 1) * 50;
+		const path = { from, to: { ...from, x: 110 }, durationMs: 2000 };
+		const player = entity( 1, {
+			kind: "local-player",
+			x,
+			moving: true,
+			movementMode: 3,
+			movementRevision: 1,
+			movementPath: path,
+			poseAtMs: seconds * 1000
+		} );
+		f.step( [ player ], seconds, {
+			localGid: 1,
+			pose: { ...from, x },
+			moving: true,
+			movementRevision: 1,
+			movementPath: path,
+			poseAtMs: seconds * 1000,
+			inventory: [],
+			vitals: [],
+			casts: casting ? [ cast ] : []
+		} );
+		assert.equal( f.presentation.error(), null );
+		return { pose: { ...f.actors.find( actor => actor.gid === 1 ).pose }, logicalX: x };
+	};
+	// Uneven frame times, cast starting mid-walk.
+	const times = [ 1, 1.017, 1.049, 1.058, 1.09, 1.123, 1.131, 1.16, 1.197, 1.205 ];
+	let anchored = 0;
+	for ( const seconds of times ) {
+		const { pose, logicalX } = frame( seconds, seconds >= 1.049 );
+		const effect = f.actors.find( actor => actor.gid < 0 );
+		if ( !effect ) continue;
+		anchored++;
+		assert.ok( pose.x < logicalX, `the body is mid-walk at ${seconds} (${pose.x} behind ${logicalX})` );
+		assert.equal( effect.pose.x, pose.x, `the ground stage anchors to this frame's body x at ${seconds}` );
+		assert.equal( effect.pose.z, pose.z, `the ground stage anchors to this frame's body z at ${seconds}` );
+	}
+	assert.ok( anchored > 0, "the ground stage is presented during the walk cast" );
+	f.dispose();
+});
+
 test("a WAIT hold released by the next walk recovers continuously instead of jumping", () => {
 	// actor-motion holds the drawn pose when a cast's WAIT leaves the walk
 	// state (native stops the walk there); the logical walk can still move

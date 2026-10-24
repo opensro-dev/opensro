@@ -485,6 +485,8 @@ export interface ActorFrame {
 	readonly active: Set<number>;
 	readonly animationDeltaMs: number;
 	readonly castByActor: ReadonlyMap<number, CastState>;
+	// The frame's drawn poses, resolved once in presentPoses (#1442c).
+	readonly drawnPoses: ReadonlyMap<number, Pose>;
 	readonly entities: readonly EntityState[];
 	readonly entitiesByGid: ReadonlyMap<number, EntityState>;
 	readonly gameplay: GameplayState | null;

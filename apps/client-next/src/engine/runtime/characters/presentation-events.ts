@@ -132,7 +132,8 @@ interface PresentationEventFrame {
 	readonly logicalPose: ( entity: EntityState ) => Pose;
 	readonly appearanceRef: ( entity: EntityState ) => number;
 	readonly soundContext: ( entity: EntityState, skill?: number, critical?: boolean ) => CharacterSoundContext;
-	readonly posePresentation: { pose( gid: number, native: Pose, seconds: number ): Pose; };
+	// The frame's drawn poses, resolved once in presentPoses (#1442c).
+	readonly drawnPoses: ReadonlyMap<number, Pose>;
 	readonly referenceAppearances: Pick<ReturnType<typeof createReferenceAppearances>, "step">;
 	readonly effects: PresentationEventEffects;
 	readonly effectDetail: number;
@@ -218,7 +219,7 @@ export function createPresentationEvents() {
 				logicalPose,
 				appearanceRef,
 				soundContext,
-				posePresentation,
+				drawnPoses,
 				referenceAppearances,
 				effects,
 				effectDetail,
@@ -240,7 +241,7 @@ export function createPresentationEvents() {
 				if ( !target || seconds - at >= 1 ) continue;
 				if ( state.damageTexts.length >= 2048 ) throw Error( "Damage text capacity exceeded" );
 				const native = logicalPose( target );
-				const anchor = posePresentation.pose( target.gid, native, seconds );
+				const anchor = drawnPoses.get( target.gid ) ?? native;
 				// 77A080 -> 8E2840 -> 8D4DD0: environmental feedback is a
 				// victim label, with no attack animation or invented impact sound.
 				state.damageTexts = appendDamageText(
@@ -260,7 +261,7 @@ export function createPresentationEvents() {
 			>();
 			// Effects anchor to what is drawn: a walking character's frame-clock pose,
 			// not the worker's latest sample, or entity-attached effects jitter
-			// against the body. pose() is idempotent within one frame time.
+			// against the body. The map resolved this frame in presentPoses.
 			let drawnLocal: import("@/engine/contracts/gameplay").Pose | null = null;
 			const effectEntities = entities.map( entity => {
 				const local = entity.gid === gameplay?.localGid && !!gameplay.pose;
@@ -287,7 +288,7 @@ export function createPresentationEvents() {
 					!samples.has( entity.gid ) ||
 					!localMover( entity.gid ) && !entity.moving
 				) return entity;
-				const drawn = posePresentation.pose( entity.gid, logicalPose( entity ), seconds );
+				const drawn = drawnPoses.get( entity.gid ) ?? logicalPose( entity );
 				if ( local ) {
 					drawnLocal = { ...gameplay!.pose!, regionId: drawn.regionId, x: drawn.x, y: drawn.y, z: drawn.z };
 				}
@@ -326,10 +327,10 @@ export function createPresentationEvents() {
 						const entity = entitiesByGid.get( actor.gid ),
 							native = entity ? logicalPose( entity ) : undefined;
 						// A held body launches bone projectiles from its held
-						// pose, not the corrected pose posePresentation spent.
+						// pose, not the corrected pose the stage resolved.
 						const held = heldPoses.get( actor.gid );
 						const sampled = !held && native ?
-							posePresentation.pose( actor.gid, native, seconds ) :
+							drawnPoses.get( actor.gid ) ?? native :
 							undefined;
 						const currentPose = held ?
 							{
@@ -468,7 +469,7 @@ export function createPresentationEvents() {
 				const dy = observer ? native.y - observer.y : Infinity;
 				if ( cast.caster === gameplay?.localGid || dx * dx + dy * dy + dz * dz < 40000 ) {
 					if ( state.damageTexts.length >= 2048 ) throw Error( "Damage text capacity exceeded" );
-					const anchor = posePresentation.pose( target.gid, native, seconds );
+					const anchor = drawnPoses.get( target.gid ) ?? native;
 					state.damageTexts = appendDamageText(
 						state.damageTexts,
 						damageText( { ...target, ...anchor }, impact, at, !caster ),
@@ -517,7 +518,7 @@ export function createPresentationEvents() {
 					const shown = [ ...output.displayed.values() ].map( actor => {
 							const entity = entitiesByGid.get( actor.gid );
 							if ( !entity ) return actor;
-							const pose = posePresentation.pose( actor.gid, logicalPose( entity ), seconds );
+							const pose = drawnPoses.get( actor.gid ) ?? logicalPose( entity );
 							return {
 								...actor,
 								pose: {
