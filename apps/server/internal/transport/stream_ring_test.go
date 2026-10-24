@@ -234,3 +234,68 @@ func TestRingCountedOpcodesMatchTheClient(t *testing.T) {
 		}
 	}
 }
+
+func TestRingResumeDuringAnInFlightWriteKeepsTheFrame(t *testing.T) {
+	_, sess, first := attachedSession(t, true)
+	first.openGate()
+	waitWritten(t, first, 1) // WELCOME
+	first.gate = make(chan struct{})
+	if err := sess.Send(ringTestOp, []byte{1}); err != nil {
+		t.Fatal(err)
+	}
+	// The writer has dequeued frame 1 and is inside the old socket's
+	// write when the client resumes with nothing applied.
+	wait.Eventually(t, 3*time.Second, "write in flight", func() bool { return first.inFlight.Load() == 1 })
+	second := newFakeConn(false)
+	if err := sess.attach(second, true, 0); err != nil {
+		t.Fatalf("resume: %v", err)
+	}
+	if err := sess.Send(ringTestOp, []byte{2}); err != nil {
+		t.Fatal(err)
+	}
+	got := dataFrames(waitWritten(t, second, 3))
+	if len(got) != 2 || got[0].Payload[0] != 1 || got[1].Payload[0] != 2 {
+		t.Fatalf("after the resume the client received %v, want frames 1 then 2", got)
+	}
+	sess.mu.Lock()
+	pos := sess.streamPos
+	sess.mu.Unlock()
+	if pos != 2 {
+		t.Fatalf("stream position %d after two frames, want 2", pos)
+	}
+}
+
+func TestRingStaleFrameTakesBackItsPosition(t *testing.T) {
+	_, sess, fc := attachedSession(t, false)
+	stale := Frame{Opcode: ringTestOp, Payload: []byte{1}, Current: func() bool { return false }}
+	sess.mu.Lock()
+	sess.queue = append(sess.queue, stale)
+	sess.queueBytes += stale.EncodedLen()
+	sess.cond.Broadcast()
+	sess.mu.Unlock()
+	if err := sess.Send(ringTestOp, []byte{2}); err != nil {
+		t.Fatal(err)
+	}
+	got := dataFrames(waitWritten(t, fc, 2))
+	sess.mu.Lock()
+	pos, ring := sess.streamPos, len(sess.ring)
+	sess.mu.Unlock()
+	if len(got) != 1 || pos != 1 || ring != 1 {
+		t.Fatalf("written %v, position %d, ring %d; want only frame 2 at position 1", got, pos, ring)
+	}
+}
+
+func TestRingResumeThatWouldOverflowTheQueueIsRefused(t *testing.T) {
+	_, sess, _ := attachedSession(t, false)
+	sess.mu.Lock()
+	defer sess.mu.Unlock()
+	for i := 0; i < sess.hub.cfg.OutboundQueue/2+1; i++ {
+		sess.noteWrittenLocked(Frame{Opcode: ringTestOp, Payload: []byte{1}}, true)
+	}
+	for i := 0; i < sess.hub.cfg.OutboundQueue/2; i++ {
+		sess.queue = append(sess.queue, Frame{Opcode: ringTestOp, Payload: []byte{2}})
+	}
+	if sess.resumeFromLocked(0) {
+		t.Fatal("a re-sent block that overflows the outbound queue was accepted")
+	}
+}

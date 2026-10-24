@@ -846,9 +846,13 @@ func (s *Session) writeLoop() {
 		drainAndEmpty := s.drainClose && len(s.queue) == 0
 		conn := s.conn
 		gen := s.gen
+		pos := s.noteWrittenLocked(f, ordered)
 		s.mu.Unlock()
 
 		if f.Current != nil && !f.Current() {
+			s.mu.Lock()
+			s.unnoteLocked(pos, ordered)
+			s.mu.Unlock()
 			if ordered && drainAndEmpty {
 				s.hub.closeSession(s, nil)
 				return
@@ -859,18 +863,12 @@ func (s *Session) writeLoop() {
 			s.hub.metrics.writeErrors.Add(1)
 			// No re-queue: a write can fail after the bytes reached the
 			// client (a deadline on a stalled link), and re-sending it then
-			// applied it twice (#1466). It is recorded at its position like
-			// a successful write: the client's resume position says whether
-			// it arrived, and the ring re-sends it only if it did not.
-			s.mu.Lock()
-			s.noteWrittenLocked(f, ordered)
-			s.mu.Unlock()
+			// applied it twice (#1466). It already holds its position: the
+			// client's resume position says whether it arrived, and the ring
+			// re-sends it only if it did not.
 			s.detachGen(gen, err)
 			continue
 		}
-		s.mu.Lock()
-		s.noteWrittenLocked(f, ordered)
-		s.mu.Unlock()
 		s.hub.recordFrameOut(f)
 		if ordered && drainAndEmpty {
 			s.hub.closeSession(s, nil)
