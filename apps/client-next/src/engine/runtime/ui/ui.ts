@@ -675,15 +675,38 @@ import {
 	PARTY_OPTION
 } from "@/engine/foundation/ui/party-proposal";
 import {
+	commandFloat,
 	commandInteger,
+	DEBUG_COMMAND_CLEAR,
+	DEBUG_COMMAND_DAY,
 	DEBUG_COMMAND_DEBUG,
 	DEBUG_COMMAND_ITEM,
 	DEBUG_COMMAND_MESSAGE_CLEAR,
+	DEBUG_COMMAND_NIGHT,
 	DEBUG_COMMAND_NULL,
 	DEBUG_COMMAND_PLAYER_COUNT,
+	DEBUG_COMMAND_POWER,
+	DEBUG_COMMAND_RAIN,
+	DEBUG_COMMAND_SNOW,
+	DEBUG_COMMAND_TIME_MINUS,
+	DEBUG_COMMAND_TIME_OFF,
+	DEBUG_COMMAND_TIME_ON,
+	DEBUG_COMMAND_TIME_PLUS,
+	DEBUG_COMMAND_TIME_SET,
 	debugCommand,
 	type DebugCommand
 } from "@/engine/foundation/ui/debug-commands";
+import {
+	createDebugClock,
+	DEBUG_CLOCK_STEP_MINUTES,
+	debugClockHold,
+	debugClockResume,
+	debugClockSeed,
+	debugClockSetFraction,
+	debugClockSetHours,
+	debugClockStep,
+	type DebugClock
+} from "@/engine/foundation/gameplay/debug-clock";
 import { messageBox } from "@/engine/foundation/ui/message-box";
 import { resourceErrorLines } from "@/engine/foundation/ui/resource-error";
 import { disconnectDialog } from "@/engine/foundation/ui/disconnect-dialog";
@@ -911,6 +934,9 @@ export function createUi(
 	let consoleRows: string[] = [], consoleHistory: string[] = [], consoleHistoryIndex = 0;
 	// +0x7BC, the /Debug flag: the native debug-message switch (690C40 case 0).
 	let debugMessages = false;
+	// The interface timer's debug state (690C40 ids 100-109): the sampler
+	// reads it through the handle's debugClockSeed.
+	let debugClock: DebugClock = createDebugClock();
 	let video = defaultVideoOptions(), videoDraft = video, videoScroll = 0, videoCombo = VIDEO_COMBO_CLOSED;
 	let bindings = defaultInputOptions(), bindingDraft = bindings, bindingSelected = -1, bindingScroll = 0;
 	let sight: SightMode = 0, sightDraft: SightMode = 0;
@@ -2477,9 +2503,11 @@ export function createUi(
 	================
 	runDebugCommand
 
-	CGInterface_OnCommandMessage (690C40) for the console family. The other
-	command.txt families (camera, weather, time, render toggles) are not
-	ported yet and leave the line as typed.
+	CGInterface_OnCommandMessage (690C40) for the console family. The
+	weather rows write the worker's weather slot (the sampler's state,
+	not this window's); the time rows drive the local debug clock the
+	sampler reads through debugClockSeed. The camera and render-toggle
+	families are not ported yet and leave the line as typed.
 	================
 	*/
 	function runDebugCommand( command: DebugCommand ) {
@@ -2504,6 +2532,63 @@ export function createUi(
 				// The 0x190 branch: exactly one word, read by wcstol, then
 				// CIFInventory_ExecuteItemAction(slot, -1, -1) as a double click.
 				if ( command.args.length === 1 ) useInventorySlot( commandInteger( command.args[0]! ) );
+				break;
+			case DEBUG_COMMAND_POWER:
+				// 99: one word; the weather intensity alone (mode kept).
+				if ( command.args.length === 1 ) {
+					sendGameplay( { kind: "debug-weather", amount: commandInteger( command.args[0]! ) } );
+				}
+				break;
+			case DEBUG_COMMAND_RAIN:
+				// 105: one word; rain at the word's intensity.
+				if ( command.args.length === 1 ) {
+					sendGameplay( { kind: "debug-weather", mode: 2, amount: commandInteger( command.args[0]! ) } );
+				}
+				break;
+			case DEBUG_COMMAND_SNOW:
+				// 106: one word; snow at the word's intensity.
+				if ( command.args.length === 1 ) {
+					sendGameplay( { kind: "debug-weather", mode: 3, amount: commandInteger( command.args[0]! ) } );
+				}
+				break;
+			case DEBUG_COMMAND_CLEAR:
+				// 107: clear weather at full intensity, no word read.
+				sendGameplay( { kind: "debug-weather", mode: 1, amount: 255 } );
+				break;
+			case DEBUG_COMMAND_TIME_OFF:
+				// 100: hold the interface timer where it stands (+0x7AD).
+				debugClock = debugClockHold( debugClock, view?.gameplay?.worldClock, quickslotTime );
+				break;
+			case DEBUG_COMMAND_TIME_ON:
+				// 101: let the timer run again from the held time.
+				debugClock = debugClockResume( debugClock, quickslotTime );
+				break;
+			case DEBUG_COMMAND_TIME_SET:
+				// 102: one word, an atof hour the timer restarts from.
+				if ( command.args.length === 1 ) {
+					debugClock = debugClockSetHours(
+						debugClock,
+						view?.gameplay?.worldClock,
+						quickslotTime,
+						commandFloat( command.args[0]! )
+					);
+				}
+				break;
+			case DEBUG_COMMAND_DAY:
+				// 103: the day fraction set to 0.5.
+				debugClock = debugClockSetFraction( debugClock, view?.gameplay?.worldClock, quickslotTime, 0.5 );
+				break;
+			case DEBUG_COMMAND_NIGHT:
+				// 104: the day fraction set to 1.0.
+				debugClock = debugClockSetFraction( debugClock, view?.gameplay?.worldClock, quickslotTime, 1.0 );
+				break;
+			case DEBUG_COMMAND_TIME_PLUS:
+				// 108: "/+" steps a held clock BACK (the native sign quirk).
+				debugClock = debugClockStep( debugClock, -DEBUG_CLOCK_STEP_MINUTES );
+				break;
+			case DEBUG_COMMAND_TIME_MINUS:
+				// 109: "/-" steps a held clock forward.
+				debugClock = debugClockStep( debugClock, DEBUG_CLOCK_STEP_MINUTES );
 				break;
 		}
 	}
@@ -5042,6 +5127,21 @@ export function createUi(
 			];
 	}
 	return {
+		/*
+		================
+		debugClockSeed
+
+		The world-clock seed the sampler sees, with the console's time
+		rows (690C40 ids 100-109) applied. Untouched while the clock runs
+		live.
+		================
+		*/
+		debugClockSeed(
+			seed: import("@/engine/contracts/gameplay").WorldClockSeed | undefined,
+			nowMs: number
+		) {
+			return debugClockSeed( debugClock, seed, nowMs );
+		},
 		/*
 		================
 		mallPreview
