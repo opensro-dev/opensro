@@ -2025,7 +2025,6 @@ state here before a command can claim a native wire conversation.
 				// as the gm-command family.
 				if ( !eligibility.gm ) return null;
 				environment = debugWeather( environment, command.mode, command.amount );
-				environment = debugWeather( environment, command.mode, command.amount );
 				dirty = true;
 				return null;
 			}
