@@ -185,6 +185,10 @@ export interface ExperimentalOptions {
 	// instead of the five native town pages and 28 x 8 overview (5758D0). Off
 	// unless turned on.
 	readonly expandedWorldMap: boolean;
+	// Port-only, not native (#840): every active quest's NPC target shows on
+	// the world map and the minimap, not only the one quest the journal
+	// tracks. Off unless turned on; off is the native tracked quest only.
+	readonly questTrackerMarkers: boolean;
 }
 
 /*
@@ -323,7 +327,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		petFilterPotions: record.petFilterPotions !== false,
 		petFilterOther: record.petFilterOther !== false,
 		touchInspect: record.touchInspect !== false,
-		expandedWorldMap: enabled( "expandedWorldMap" )
+		expandedWorldMap: enabled( "expandedWorldMap" ),
+		questTrackerMarkers: enabled( "questTrackerMarkers" )
 	};
 }
 

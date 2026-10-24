@@ -202,6 +202,31 @@ test("server goodbye preserves its reason and drains accepted packets before end
 	network.dispose();
 });
 
+test("a reply raised while applying packets preserved past a goodbye is dropped, not an application failure", t => {
+	const sockets = socketHarness( t ), failures = [], reasons = [], seen = [];
+	const network = createNetwork( ( e, _frame, reason ) => {
+		failures.push( e );
+		reasons.push( reason );
+	} );
+	network.connect( "ws://localhost/transport", "ticket" );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.receive( welcome() );
+	socket.receive( Uint8Array.of( 0, 1, 11 ) );
+	socket.receive( Uint8Array.of( 5, 0, 5 ) );
+	// World code answers a transfer frame while applying it (0x3369 ->
+	// 0x36DD); past the goodbye that answer has nowhere to go.
+	network.drain( f => {
+		seen.push( f.opcode );
+		network.send( { opcode: 512, payload: new Uint8Array() } );
+	} );
+	assert.deepEqual( seen, [ 2, 256 ] );
+	assert.deepEqual( failures, [ "Server ended transport session: shutdown (5)" ] );
+	assert.equal( reasons[0].code, "server_bye_5" );
+	assert.equal( socket.sent.length, 1 );
+	network.dispose();
+});
+
 test("pre-welcome refusal retains the server reason and malformed goodbye fails closed", t => {
 	const sockets = socketHarness( t ), failures = [];
 	const network = createNetwork( e => failures.push( e ) );
