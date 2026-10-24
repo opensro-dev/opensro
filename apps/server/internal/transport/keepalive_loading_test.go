@@ -69,3 +69,31 @@ func TestKeepaliveStaysQuietWhileSceneIsLive(t *testing.T) {
 		return countPings(fc) == 0
 	})
 }
+
+/*
+================
+TestKeepaliveReturnsToIdleCadenceAfterLoading
+
+Once the scene is live the short loading cadence ends with it: the wire
+goes back to the plain idle rule, however chatty it was during the entry.
+One tick may already have read the loading flag when the flip lands, so
+a single extra ping is tolerated; a second one is a leaked cadence.
+================
+*/
+func TestKeepaliveReturnsToIdleCadenceAfterLoading(t *testing.T) {
+	_, sess, fc := attachedSession(t, false)
+	sess.BeginSceneAdmission()
+	wait.Eventually(t, 4*time.Second, "a keepalive PING during scene loading", func() bool {
+		return countPings(fc) >= 1
+	})
+	wait.Eventually(t, 4*time.Second, "a second keepalive PING during scene loading", func() bool {
+		return countPings(fc) >= 2
+	})
+	if !sess.FinishSceneReentry() {
+		t.Fatal("FinishSceneReentry refused a loading session")
+	}
+	before := countPings(fc)
+	wait.Consistently(t, 4*time.Second, "no leaked loading cadence after scene load", func() bool {
+		return countPings(fc) <= before+1
+	})
+}
