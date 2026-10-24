@@ -31,6 +31,7 @@ import (
 	"opensro.online/server/internal/config/shardsettings"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/gamedata"
 	"opensro.online/server/internal/security/auth"
 	"opensro.online/server/internal/transport"
@@ -294,6 +295,11 @@ func resolveDeployment(
 	// The operator's value, else the deployment default (shardsettings).
 	stackSizes, err := enterworld.ParseStackSizes(shardsettings.Lookup(enterworld.EnvStackSizes).Value(os.Getenv))
 	if err != nil {
+		return nil, err
+	}
+	// A bad band list is refused here, before any Nomad mutation, as the
+	// GameWorld refuses it at boot (wiring_levelcap.go).
+	if _, err := progression.ParseGrowthBands(shardsettings.Lookup(progression.EnvBetaGrowthBands).Value(os.Getenv)); err != nil {
 		return nil, err
 	}
 	for _, warning := range warnings {

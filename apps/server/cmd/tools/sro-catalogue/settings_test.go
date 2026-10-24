@@ -42,8 +42,7 @@ func TestCatalogueResolvesOptionalPopulationSetting(t *testing.T) {
 			if err := resolveShardSettings(); err != nil {
 				t.Fatal(err)
 			}
-			// Unset takes the deployment default, on since 2026-10-24.
-			if got := monster.Cap110Enabled(); got != (value != "off") {
+			if got := monster.Cap110Enabled(); got != (value == "on") {
 				t.Fatalf("population flag = %t for %q", got, value)
 			}
 		})

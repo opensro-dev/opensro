@@ -160,14 +160,14 @@ variable "level_cap" {
 # Port-only, not native: optional database-authored Alexandria field content.
 variable "cap110_monsters" {
   type    = string
-  default = "on"
+  default = "off"
 }
 
 # Port-only, not native: the optional Pharaoh Tomb 1-3 population. It needs
 # cap110_monsters on as well; GameWorld refuses to start otherwise.
 variable "pharaoh_tomb" {
   type    = string
-  default = "on"
+  default = "off"
 }
 
 # Port-only, not native: a Pharaoh Tomb elite or unique rolls its equipment

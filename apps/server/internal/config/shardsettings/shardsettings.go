@@ -63,10 +63,10 @@ var Settings = []Setting{
 	// release; "off" keeps the native 90).
 	{Env: "SRO_LEVEL_CAP", NomadVar: "level_cap", Default: "110", Catalogue: true},
 	// Port-only, not native: database-authored Alexandria field population.
-	{Env: "SRO_CAP110_MONSTERS", NomadVar: "cap110_monsters", Default: "on", Catalogue: true},
+	{Env: "SRO_CAP110_MONSTERS", NomadVar: "cap110_monsters", Default: "off", Catalogue: true},
 	// Port-only, not native: the Pharaoh Tomb 1-3 population and gates. Needs
 	// SRO_CAP110_MONSTERS (its equipment drops).
-	{Env: "SRO_PHARAOH_TOMB", NomadVar: "pharaoh_tomb", Default: "on", Catalogue: true},
+	{Env: "SRO_PHARAOH_TOMB", NomadVar: "pharaoh_tomb", Default: "off", Catalogue: true},
 	// Port-only, not native: a Pharaoh Tomb elite or unique rolls equipment this
 	// many times as often (1 is native; 2 to 20). Server only: the site's drop
 	// lists describe the native rule.

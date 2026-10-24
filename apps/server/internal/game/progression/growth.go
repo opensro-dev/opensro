@@ -166,8 +166,8 @@ func BetaGrowthFromEnv() GrowthRates {
 			rates.GoldRate = n
 		}
 	}
-	// An invalid band list keeps the all-pace default; deployment admission
-	// refuses it before the job starts.
+	// An invalid band list keeps the all-pace default here; sro-nomad's
+	// admission and the GameWorld boot (wiring_levelcap.go) refuse it.
 	if bands, err := GrowthBandsFromEnv(); err == nil {
 		rates.Bands = bands
 	}
