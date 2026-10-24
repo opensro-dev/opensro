@@ -2020,9 +2020,11 @@ state here before a command can claim a native wire conversation.
 				}
 			}
 			if ( command.kind === "debug-weather" ) {
-				// The console's weather rows write the worker's weather
-				// slot, behind the same GM gate as the gm-command family.
+				// The console's weather rows drive the console weather
+				// slot (event-environment.ts), behind the same GM gate
+				// as the gm-command family.
 				if ( !eligibility.gm ) return null;
+				environment = debugWeather( environment, command.mode, command.amount );
 				environment = debugWeather( environment, command.mode, command.amount );
 				dirty = true;
 				return null;
