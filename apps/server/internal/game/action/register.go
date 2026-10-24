@@ -145,14 +145,18 @@ Adapts a runtime operation onto the hub: resolve the bound character
 the acting session, and fan the broadcast frames to source observers -
 the origin excluded, it already holds its own burst.
 
-A request that arrives while the session's scene is loading is discarded
-unanswered. Every scene reset (entry, relocation, recall, a return) begins
-loading, and only the client's game-ready (0x3012) ends it; the client
-sends nothing while it loads. Such a request was sent before the client saw
-the reset, so its answer would land in a world that never asked (a mall
-projection after the bootstrap reset the mall: "Unexpected mall
-projection"). A loading PC answers nothing; the client retired the
-request with its bootstrap.
+A request that arrives while the session's scene is loading is never
+executed: its world is being rebuilt, and an answer computed against it
+would land in a world that never asked (a mall projection after the
+bootstrap reset the mall: "Unexpected mall projection"). Every scene
+reset (entry, relocation, recall, a return) begins loading, and only the
+client's game-ready (0x3012) ends it server-side - but the client retires
+its loading screen on its own send, so it can already hold a pending
+answer when the request gets here. The refusal therefore still answers,
+with the opcode's native failure frame (sceneLoadingRefusal), so that
+pending retires the way any refused request retires it; a bootstrap
+later rebuilds the state the refusal left alone. Opcodes with no failure
+conversation hold no pending answer and stay silent.
 ================
 */
 func (rt *Runtime) hubHandler(hub *transport.Hub, op opFunc) transport.HandlerFunc {
@@ -173,7 +177,10 @@ func (rt *Runtime) hubHandler(hub *transport.Hub, op opFunc) transport.HandlerFu
 		// waited on it sees that reset here instead of answering into it.
 		if _, live := s.SceneRevision(); !live {
 			// Info, not debug: a client that sends while loading is a bug to see.
-			log.Infof("action: 0x%04X from %s discarded: the scene is loading", opcode, character.Name)
+			if refusal := sceneLoadingRefusal(opcode); len(refusal) > 0 {
+				sendFrames(s, refusal)
+			}
+			log.Infof("action: 0x%04X from %s refused: the scene is loading", opcode, character.Name)
 			return
 		}
 		result := op(divisionID, character, payload)
@@ -199,6 +206,25 @@ func (rt *Runtime) hubHandler(hub *transport.Hub, op opFunc) transport.HandlerFu
 			}
 		}
 	}
+}
+
+/*
+================
+sceneLoadingRefusal
+
+The native failure answer for a request the loading gate refuses, or nil
+when the opcode has none. The v1.150 client's 0xB06D handler retires its
+item-move pending on any result frame before it parses one, and its
+failure arm reads exactly [2, code] - so the generic invalid-request
+notice ends the client's wait the way every other refused move does.
+================
+*/
+func sceneLoadingRefusal(opcode uint16) []wire.Frame {
+	switch opcode {
+	case wire.OpItemMoveRequest:
+		return failureResult(wire.ErrCodeInvalidRequest).Frames
+	}
+	return nil
 }
 
 /*
