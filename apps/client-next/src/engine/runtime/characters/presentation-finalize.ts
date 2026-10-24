@@ -89,6 +89,8 @@ export function selectCameraTarget( frame: CameraFrame, output: CameraOutput, pu
 					y: riding ? Math.fround( Math.fround( rendered.y + mountHeight! ) - 13 ) : rendered.y,
 					z: rendered.z,
 					// The local mover drives the mount, so its heading is the mount's.
+					// pose.angle is that snapped logical heading by contract: the
+					// camera follows yaw above, the drawn body's (FollowCameraTarget).
 					angle: gameplay.pose.angle
 				}
 			};

@@ -711,7 +711,7 @@ test("unexpected close retries with a new ticket and rejects a lost resume", asy
 	flush( world );
 	world.step( 5 );
 	assert.equal( world.status().phase, "world" );
-	first.onclose();
+	first.onclose( { code: 1006, reason: "", wasClean: false } );
 	world.step( 6 );
 	assert.equal( world.status().phase, "reconnecting" );
 	world.step( 255 );
@@ -729,7 +729,9 @@ test("unexpected close retries with a new ticket and rejects a lost resume", asy
 	// An expired resume is an expected end: the player is told to log in
 	// again, and no game-error incident is filed (only the close itself).
 	assert.match( world.status().disconnectMessage, /log in again/ );
-	assert.deepEqual( incidents.map( incident => incident.message ), [ "Transport connection closed" ] );
+	// The close incident carries why the socket closed (GH #1428).
+	assert.equal( incidents.length, 1 );
+	assert.match( incidents[0].message, /^Transport connection closed \(WebSocket 1006, not clean, / );
 	world.dispose();
 });
 
@@ -751,7 +753,7 @@ test("a dropped session keeps retrying through the resume grace, then gives up",
 	flush( world );
 	world.step( 5 );
 	assert.equal( world.status().phase, "world" );
-	first.onclose();
+	first.onclose( { code: 1006, reason: "", wasClean: false } );
 	world.step( 6 );
 	assert.equal( world.status().phase, "reconnecting" );
 	// Every attempt fails at once, as while the network is down.
@@ -763,7 +765,7 @@ test("a dropped session keeps retrying through the resume grace, then gives up",
 		const latest = sockets[sockets.length - 1];
 		if ( sockets.length - 1 > failures ) {
 			failures++;
-			latest.onclose();
+			latest.onclose( { code: 1006, reason: "", wasClean: false } );
 			world.step( clock );
 		}
 		clock += 50;
@@ -772,6 +774,84 @@ test("a dropped session keeps retrying through the resume grace, then gives up",
 	assert.equal( world.status().phase, "disconnected" );
 	assert.ok( clock >= 30000 && clock < 40000, `gave up at ${clock} ms, after the 30 s resume grace` );
 	world.dispose();
+});
+
+test("a fresh entry retries a stalled admission and enters", async t => {
+	const sockets = socketHarness( t ), mints = [];
+	const world = createWorldSession(
+		async kind => {
+			mints.push( kind );
+			return "ticket";
+		},
+		undefined,
+		ignoreIncident
+	);
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const first = sockets[0];
+	first.onopen();
+	first.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	assert.deepEqual( mints, [ "transport", "enterworld" ] );
+	// The EnterWorld answer never comes: a full admission window of
+	// silence fails the attempt, but the entry itself retries instead
+	// of rejecting back to character select (#1416).
+	world.step( 10004 );
+	assert.equal( world.status().phase, "reconnecting" );
+	assert.equal( world.status().error, "World connection timed out" );
+	world.step( 10254 );
+	await settle();
+	world.step( 10255 );
+	assert.equal( sockets.length, 2 );
+	const second = sockets[1];
+	second.onopen();
+	second.receive( 2, welcome() );
+	world.step( 10256 );
+	await settle();
+	world.step( 10257 );
+	second.receive( 7, entered() );
+	for ( const row of rows ) second.receive( row.opcode, row.payload );
+	world.step( 10258 );
+	flush( world );
+	world.step( 10259 );
+	assert.deepEqual( mints, [ "transport", "enterworld", "transport", "enterworld" ] );
+	assert.equal( world.status().phase, "world" );
+	assert.equal( world.status().error, undefined );
+});
+
+test("a fresh entry gives up after the entry retry grace", async t => {
+	const sockets = socketHarness( t );
+	const world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	sockets[0].onclose( { code: 1006, reason: "", wasClean: false } );
+	world.step( 2 );
+	assert.equal( world.status().phase, "reconnecting" );
+	// Every later socket dies before the welcome, as while the network
+	// is down: the entry retries inside its grace, then rejects.
+	let clock = 3, failures = 1;
+	while ( clock < 40000 && world.status().phase !== "disconnected" ) {
+		world.step( clock );
+		await settle();
+		world.step( clock );
+		const latest = sockets[sockets.length - 1];
+		if ( sockets.length - 1 >= failures ) {
+			failures++;
+			latest.onclose( { code: 1006, reason: "", wasClean: false } );
+			world.step( clock );
+		}
+		clock += 50;
+	}
+	assert.ok( failures > 3, `retried ${failures} times, more than one attempt` );
+	assert.equal( world.status().phase, "disconnected" );
+	assert.equal( world.status().error, "Transport connection closed" );
+	assert.ok( clock >= 30000 && clock < 40000, `gave up at ${clock} ms, after the 30 s entry grace` );
 });
 
 // EncodeCosSpawnBand2 and EncodeCosRideState are the server-owned wire authority.
@@ -2035,6 +2115,85 @@ test("admission survives socket progress past ten seconds and times out after si
 
 /*
 ================
+keepalive pings slide the admission window (#1417)
+
+A slow world entry is silent by design (publication gate, bootstrap
+build), so the server proves the wire with transport pings the network
+owner answers invisibly. Those pings are progress for the stall window;
+only true silence fails the attempt.
+================
+*/
+test("admission survives keepalive-only progress and times out after true silence", async t => {
+	const sockets = socketHarness( t );
+	const world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	socket.receive( 7, entered() );
+	let time = 3;
+	for ( let round = 0; round < 4; round++ ) {
+		socket.receive( 3, Uint8Array.of( 1, 2, 3, 4 ) );
+		time += 9000;
+		world.step( time );
+		assert.equal( world.status().phase, "entering-world" );
+		assert.equal( world.status().error, undefined );
+	}
+	world.step( time + 10001 );
+	assert.equal( world.status().error, "World connection timed out" );
+});
+
+/*
+================
+keepalive-only progress is bounded (#1471 review)
+
+A wire that only proves itself with keepalive pings can still be a
+wedged entry (the server builds nothing while its loading cadence
+pings). Progress slides the window only up to a bounded ceiling from
+the arm, so a wedged attempt still fails into the timeout path.
+================
+*/
+test("keepalive-only progress past the admission ceiling still times out", async t => {
+	const sockets = socketHarness( t );
+	const world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	socket.receive( 7, entered() );
+	// The deadline arms when the EnterWorld result drains (the first
+	// step below, t=9003) and may slide on progress for eighteen windows
+	// (180 s, to t=189003); pings every nine seconds stay admitted that long.
+	let time = 3;
+	for ( let round = 0; round < 20; round++ ) {
+		socket.receive( 3, Uint8Array.of( 1, 2, 3, 4 ) );
+		time += 9000;
+		world.step( time );
+		assert.equal( world.status().phase, "entering-world" );
+		assert.equal( world.status().error, undefined );
+	}
+	// One more ping lands past the ceiling: progress no longer slides,
+	// and the attempt fails on this step instead of waiting forever.
+	socket.receive( 3, Uint8Array.of( 1, 2, 3, 4 ) );
+	time += 9000;
+	world.step( time );
+	assert.equal( world.status().error, "World connection timed out" );
+});
+
+/*
+================
 reference bytes slide their stall window (#1010)
 
 The cold-cache multi-megabyte reference body of a slow link takes longer
@@ -2678,4 +2837,48 @@ test("crow skill cues accept bounded books/kinds and reject malformed positions"
 	}
 	p.writeFloatLE( NaN, 8 );
 	assert.throws( () => owner.receive( { opcode: 0x3fbb, payload: p } ) );
+});
+
+/*
+================
+an input dropped before gameplay still advances the input sequence
+
+#1441a: the worker records a gameplay input's sequence where it first takes
+the command, before the readiness gate. A click refused while the world is
+still loading is an input the main thread must never replay, so the
+published movementInputSeq covers it.
+================
+*/
+test("an input refused before the world is ready still advances the published input sequence", async t => {
+	const sockets = socketHarness( t ), world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
+	t.after( () => world.dispose() );
+	const presentation = createPresentation();
+	const drain = () => {
+		let batch;
+		while ( (batch = world.take()) ) {
+			world.ack( batch.sequence );
+			presentation.apply( batch );
+		}
+	};
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const first = sockets[0];
+	first.onopen();
+	first.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	first.receive( 7, entered() );
+	for ( const row of rows ) first.receive( row.opcode, row.payload );
+	world.step( 4 );
+	drain();
+	world.step( 5 );
+	// Bound but still loading: the command is refused, but its sequence is taken.
+	const destination = { ...bootstrap.localPlayerEntry.startProfile, x: 10 };
+	assert.throws( () => world.command( { kind: "move", destination }, 5, 3 ), /not ready/ );
+	world.ready();
+	world.step( 6 );
+	drain();
+	assert.equal( defined( presentation.gameplay() ).movementInputSeq, 3 );
 });

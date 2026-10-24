@@ -6,9 +6,15 @@ world.ts - transport admission, reconnect and departure for one world session
 The network deadline covers tickets, references and native synchronization.
 It is a stall deadline (#1010): arriving frames and reference bytes extend
 it by its window, and only a full window of silence fails the attempt, so a
-slow link that keeps delivering enters however long that takes.
+slow link that keeps delivering enters. Progress extends the deadline only
+up to a bounded ceiling from the arm (DEADLINE_MAX_WINDOWS windows): a peer
+that proves the wire with keepalive pings while building nothing is wedged,
+not slow, and must still fail into the timeout path (#1471 review).
 The presentation acknowledgement is a separate barrier: it gates commands,
 never retries a successfully received world.
+A transient failure before the world binds retries the admission inside
+the same grace a bound session resumes in; only an exhausted grace
+rejects the entry.
 
 ===========================================================================
 */
@@ -31,6 +37,11 @@ import {
 } from "@/engine/contracts/network";
 const ADMISSION_TIMEOUT_MS = 10000;
 const REFERENCE_TIMEOUT_MS = 30000;
+// Progress may slide a deadline this many windows past its arm, no further:
+// eighteen admission windows is three minutes (nine for references), long
+// enough never to cut a healthy slow entry, finite enough that a wedged
+// one still times out and retries instead of loading forever.
+const DEADLINE_MAX_WINDOWS = 18;
 const RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 4000;
 // A request waiting this long with no frame of any kind arriving since it
@@ -164,7 +175,8 @@ onNetworkFailure
 				reason?.category === "software" ?
 				"runtime" :
 				"transport",
-			message: error.slice( 0, INCIDENT_MESSAGE_LENGTH ),
+			// The detail rides only in the report: the retry rule matches the bare error.
+			message: (reason?.detail ? error + " (" + reason.detail + ")" : error).slice( 0, INCIDENT_MESSAGE_LENGTH ),
 			...(frame ?
 				{
 					opcode: frame.opcode,
@@ -191,7 +203,7 @@ onNetworkFailure
 		token?: string;
 		error?: string;
 	} | null = null;
-	let boundThisTransport = false, resumedTransport = false;
+	let boundThisTransport = false, resumedTransport = false, entryAttempt = false;
 	let references: { kind: "idle"; } | { kind: "loading"; } | {
 		kind: "ready";
 		bootstrap: unknown;
@@ -210,6 +222,8 @@ onNetworkFailure
 	let now = 0,
 		deadline = 0,
 		deadlineWindow = 0,
+		deadlineCeiling = 0,
+		inboundSeen = 0,
 		retryAt = 0,
 		attempt = 0,
 		reconnectSince = 0,
@@ -231,23 +245,28 @@ armDeadline
 
 Arm the admission deadline as a stall window of windowMs: noteProgress
 extends it, and only a full window without progress fails the attempt.
+The arm also fixes the progress ceiling: progress may slide the deadline
+at most DEADLINE_MAX_WINDOWS windows past this moment, never indefinitely.
 ================
 	*/
 	function armDeadline( windowMs: number ) {
 		deadlineWindow = windowMs;
 		deadline = now + windowMs;
+		deadlineCeiling = now + windowMs * DEADLINE_MAX_WINDOWS;
 	}
 	/*
 ================
 noteProgress
 
 A frame on the socket or a chunk of the reference body proves the link is
-still delivering; push the armed deadline out by its window. A cleared
-deadline stays cleared (the presentation barrier owns that wait).
+still delivering; push the armed deadline out by its window, but never past
+the ceiling its arm fixed. A keepalive-only wire therefore still times out
+once the ceiling passes. A cleared deadline stays cleared (the presentation
+barrier owns that wait).
 ================
 	*/
 	function noteProgress() {
-		if ( deadline ) deadline = now + deadlineWindow;
+		if ( deadline ) deadline = Math.min( now + deadlineWindow, deadlineCeiling );
 	}
 	/*
 ================
@@ -517,6 +536,7 @@ enter
 			core.clear();
 			hasWorld = false;
 			resume = undefined;
+			entryAttempt = true;
 			attempt = 0;
 			ready = false;
 			character = name;
@@ -556,7 +576,11 @@ takeDeparture
 command
 ================
 		*/
-		command( command: GameplayCommand, at = now ) {
+		command( command: GameplayCommand, at = now, inputSeq?: number ) {
+			// Record the input as taken before any gate below can drop it
+			// (#1441a): a click refused while loading or reconnecting is still
+			// an input the main thread must not replay.
+			if ( inputSeq !== undefined ) core.noteInput( inputSeq );
 			if ( phase !== "world" || (!ready && command.kind !== "navigation") ) {
 				throw new Error( "World gameplay is not ready" );
 			}
@@ -608,6 +632,7 @@ disconnect
 			cancel();
 			departure.reset();
 			completedDeparture = 0;
+			entryAttempt = false;
 			if ( forget ) {
 				diagnosticSession = "";
 				disconnectMessage = "";
@@ -695,6 +720,18 @@ step
 				references = { kind: "idle" };
 			}
 			if ( !failure ) network.drain( receive );
+			// Transport liveness is progress too. A loading scene is silent by
+			// design (the server is building its entry), so the server pings it
+			// on the keepalive's loading cadence and the network owner answers
+			// without surfacing a frame: the only sign here is the inbound
+			// count moving. A wire that still answers is not stalled, and its
+			// pings slide the window - up to the arm's ceiling, past which the
+			// entry is wedged, not slow, and fails the attempt (#1417, #1471).
+			const activity = network.received();
+			if ( activity !== inboundSeen ) {
+				inboundSeen = activity;
+				noteProgress();
+			}
 			const nextPing = !failure && phase === "world" ? network.pingMs() : null;
 			if ( nextPing !== pingMs ) {
 				pingMs = nextPing;
@@ -746,6 +783,7 @@ step
 			}
 			if ( phase === "entering-world" && boundThisTransport && core.synchronized() ) {
 				transition( "world" );
+				entryAttempt = false;
 				deadline = 0;
 				attempt = 0;
 			}
@@ -756,24 +794,37 @@ step
 				const error = failure;
 				cancel();
 				deadline = 0;
-				// Only a previously bound, resumable session retries automatically.
-				// Native gameplay commands are never replayed by this owner.
+				// A bound session retries as a resume; an entry that never
+				// bound retries the whole admission (a fresh EnterWorld, no
+				// resume token to present) - but only on a transport-class
+				// failure: an admission refusal is definitive and returns to
+				// character select at once. Native gameplay commands are
+				// never replayed by this owner: a resume re-enters through
+				// its bootstrap, and an unbound attempt has issued none.
 				// A receipt deadline can expire while the host CPU is stalled.
 				// Reuse admission/resume to replace stale prediction with server state.
-				if (
-					hasWorld && resume && (attempt === 0 || now - reconnectSince < RESUME_GRACE_MS) &&
+				const bound = hasWorld && resume &&
 					(lostAnswer( failureCode ) || [
 						"Transport connection closed",
 						"Transport connection failed",
 						"World connection timed out",
 						"Admission request failed"
-					].includes( error ))
+					].includes( error ));
+				const unbound = entryAttempt && !hasWorld &&
+					[
+						"Transport connection closed",
+						"Transport connection failed",
+						"World connection timed out"
+					].includes( error );
+				if (
+					(bound || unbound) && (attempt === 0 || now - reconnectSince < RESUME_GRACE_MS)
 				) {
 					if ( attempt === 0 ) reconnectSince = now;
 					retryAt = now + Math.min( RECONNECT_DELAY_MS * 2 ** attempt++, MAX_RECONNECT_DELAY_MS );
 					transition( "reconnecting" );
 				} else {
 					retryAt = 0;
+					entryAttempt = false;
 					transition( "disconnected" );
 				}
 				failure = null;

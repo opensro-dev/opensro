@@ -706,6 +706,13 @@ type Runtime struct {
 	// resurrections holds the unanswered resurrection proposals, one per
 	// dead player (resurrection.go).
 	resurrections resurrectionOffers
+	// instanceInvites holds the unanswered instance invitations, one
+	// per invited party member (instance_invite.go).
+	instanceInvites instanceInviteBook
+	// InstanceEventSink receives instanced-world lifecycle events for
+	// the quest handler registry (instance_events.go); the composition
+	// root points it at the quest runtime's dispatch.
+	InstanceEventSink func(InstanceEvent)
 
 	// nextSweepAtMs rate-limits the TTL sweep to grounditem.SweepInterval:
 	// the simulation tick calls the hook every 100ms, but the peek+sweep only
