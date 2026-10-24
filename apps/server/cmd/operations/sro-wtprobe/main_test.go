@@ -17,7 +17,10 @@ package main
 
 import (
 	"context"
+	"encoding/pem"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -74,6 +77,24 @@ func startProbeServer(t *testing.T) *transport.Server {
 
 /*
 ================
+caCertFile
+
+Write the server's self-signed certificate as the PEM bundle a local
+probe would be handed with -ca-cert.
+================
+*/
+func caCertFile(t *testing.T, srv *transport.Server) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "ca.pem")
+	raw := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Cert.Leaf.Raw})
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+/*
+================
 TestProbeLoopbackWelcome
 
 A fresh ticket earns WELCOME and a non-empty success line over real UDP.
@@ -88,6 +109,7 @@ func TestProbeLoopbackWelcome(t *testing.T) {
 		WTAddr:  srv.WTAddr(),
 		Ticket:  probeTestTicket,
 		Timeout: 10 * time.Second,
+		CACert:  caCertFile(t, srv),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -96,6 +118,45 @@ func TestProbeLoopbackWelcome(t *testing.T) {
 		t.Fatal("probe returned an empty success line")
 	}
 	t.Log(line)
+}
+
+/*
+================
+TestProbeSubstitutedCertFailsPin
+
+Both loopback servers' certificates are trusted, but the probe pins the
+one the TCP endpoint advertised: dialing the other server must fail at
+the dial stage with the pin mismatch named.
+================
+*/
+func TestProbeSubstitutedCertFailsPin(t *testing.T) {
+	advertised := startProbeServer(t)
+	other := startProbeServer(t)
+	bundle := filepath.Join(t.TempDir(), "ca.pem")
+	raw := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: advertised.Cert.Leaf.Raw})
+	raw = append(raw, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: other.Cert.Leaf.Raw})...)
+	if err := os.WriteFile(bundle, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	_, err := probe(ctx, probeConfig{
+		Base:    "http://" + advertised.WSAddr(),
+		WTAddr:  other.WTAddr(),
+		Ticket:  probeTestTicket,
+		Timeout: 10 * time.Second,
+		CACert:  bundle,
+	})
+	if err == nil {
+		t.Fatal("probe with substituted certificate succeeded")
+	}
+	var se *stageError
+	if !errors.As(err, &se) {
+		t.Fatalf("probe error type = %T, want *stageError (%v)", err, err)
+	}
+	if se.stage != "dial" {
+		t.Fatalf("probe error stage = %q, want dial (%v)", se.stage, err)
+	}
 }
 
 /*
@@ -115,6 +176,7 @@ func TestProbeLoopbackBadTicketFailsAtWelcome(t *testing.T) {
 		WTAddr:  srv.WTAddr(),
 		Ticket:  "forged-ticket",
 		Timeout: 10 * time.Second,
+		CACert:  caCertFile(t, srv),
 	})
 	if err == nil {
 		t.Fatal("probe with forged ticket succeeded")

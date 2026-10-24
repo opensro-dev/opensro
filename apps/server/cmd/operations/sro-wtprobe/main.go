@@ -8,9 +8,10 @@ give: fetching /transport/cert-hash proves the TCP edge answers, but only
 a completed QUIC handshake plus a HELLO answered by WELCOME proves the
 UDP listener, the certificate it serves, and transport admission all work
 together. One code path serves local, LAN and cloud targets: the probe
-pins the certificate served on UDP to the hash the TCP endpoint
-advertises, so development self-signed certificates and production
-public certificates pass the same check.
+verifies the certificate served on UDP normally, then additionally
+requires it to be the certificate whose hash the TCP endpoint
+advertises. A development endpoint's self-signed certificate joins the
+trust roots through -ca-cert instead of weakening verification.
 
 The probe never logs in. The caller supplies a fresh one-use admission
 ticket (minted for the release probe account through the Agent, exactly
@@ -118,6 +119,9 @@ type probeConfig struct {
 	WTAddr  string
 	Ticket  string
 	Timeout time.Duration
+	// CACert is a PEM bundle added to the trust roots - the way to probe
+	// a development endpoint whose certificate is self-signed.
+	CACert string
 }
 
 /*
@@ -152,23 +156,53 @@ func fetchCertHash(ctx context.Context, base string) (certHashDoc, error) {
 
 /*
 ================
-pinnedTLS
+trustPool
 
-Accept exactly the certificate the TCP endpoint advertises, whatever its
-issuer: a public production certificate and a development self-signed
-one pass the same pin, and a substituted certificate fails closed.
+The verification roots for one probe: the system pool, plus the
+operator's bundle when one is named (a development endpoint's
+self-signed certificate). A bundle that will not parse fails here,
+before any dial, rather than weakening the dial.
 ================
 */
-func pinnedTLS(serverName string, sha256Hex string) *tls.Config {
+func trustPool(caCertFile string) (*x509.CertPool, error) {
+	pool, err := x509.SystemCertPool()
+	if err != nil || pool == nil {
+		pool = x509.NewCertPool()
+	}
+	if caCertFile == "" {
+		return pool, nil
+	}
+	pem, err := os.ReadFile(caCertFile)
+	if err != nil {
+		return nil, err
+	}
+	if !pool.AppendCertsFromPEM(pem) {
+		return nil, fmt.Errorf("%s holds no PEM certificate", caCertFile)
+	}
+	return pool, nil
+}
+
+/*
+================
+probeTLS
+
+Normal PKI verification against the given roots, plus one additive
+check: the leaf actually served must be the certificate whose hash the
+TCP endpoint advertised. Verification is never skipped - the pin only
+narrows what a verified chain may end in, so a publicly valid but
+substituted certificate fails closed too.
+================
+*/
+func probeTLS(serverName string, sha256Hex string, roots *x509.CertPool) *tls.Config {
 	want, _ := hex.DecodeString(sha256Hex)
 	return &tls.Config{
-		ServerName:         serverName,
-		InsecureSkipVerify: true, // replaced by the explicit pin below
-		VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
-			if len(rawCerts) == 0 {
+		ServerName: serverName,
+		RootCAs:    roots,
+		VerifyConnection: func(state tls.ConnectionState) error {
+			if len(state.PeerCertificates) == 0 {
 				return fmt.Errorf("server presented no certificate")
 			}
-			got := sha256.Sum256(rawCerts[0])
+			got := sha256.Sum256(state.PeerCertificates[0].Raw)
 			if !equalBytes(got[:], want) {
 				return fmt.Errorf("served certificate sha256 %x does not match advertised %x", got, want)
 			}
@@ -224,7 +258,11 @@ func probe(ctx context.Context, cfg probeConfig) (string, error) {
 		serverName = h
 	}
 
-	dialer := webtransport.Transport{TLSClientConfig: pinnedTLS(serverName, doc.SHA256Hex)}
+	roots, err := trustPool(cfg.CACert)
+	if err != nil {
+		return "", &stageError{"trust", err}
+	}
+	dialer := webtransport.Transport{TLSClientConfig: probeTLS(serverName, doc.SHA256Hex, roots)}
 	defer dialer.Close()
 	wtURL := "https://" + hostport + transport.PathWT
 	// A 2xx response body is the session's own stream: the session owns
@@ -282,6 +320,7 @@ func main() {
 	base := flag.String("url", "", "public base URL of the environment, e.g. https://play.example.net")
 	wtAddr := flag.String("wt-addr", "", "WebTransport host:port (default: the base URL host on port 443)")
 	ticketEnv := flag.String("ticket-env", defaultTicketEnv, "environment variable holding a fresh admission ticket")
+	caCert := flag.String("ca-cert", "", "PEM bundle added to the trust roots (a development endpoint's self-signed certificate)")
 	timeout := flag.Duration("timeout", defaultTimeout, "overall probe budget")
 	flag.Parse()
 
@@ -297,7 +336,7 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
-	line, err := probe(ctx, probeConfig{Base: *base, WTAddr: *wtAddr, Ticket: ticket, Timeout: *timeout})
+	line, err := probe(ctx, probeConfig{Base: *base, WTAddr: *wtAddr, Ticket: ticket, Timeout: *timeout, CACert: *caCert})
 	if err != nil {
 		fail(err)
 	}
