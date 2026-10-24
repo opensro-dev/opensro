@@ -13,7 +13,7 @@ game said and how the page was doing:
 	           report keeps only uiControl's prefix and slot number)
 	refusal    the game refused a command the player gave (refusalReason)
 	chat       a chat line the player saw or sent
-	error      a JavaScript or runtime failure
+	error      a JavaScript or runtime failure (message and sanitised stack)
 	long-frame the main thread was blocked (Long Animation Frames or
 	           long tasks, with the scripts the browser blames)
 	sample     once a second: phase, place, vitals, target, heap
@@ -32,6 +32,13 @@ export const JOURNAL_WINDOW_MS = 120000;
 const MAX_EVENTS = 6000;
 const MAX_SCRIPTS = 3;
 const FRAME_GROUP_MS = 1000;
+const MAX_ERROR_MESSAGE = 500;
+const MAX_ERROR_STACK = 1600;
+// An error storm (the same throw inside a per-frame loop) must not evict
+// the input history the report exists for: at most this many error events
+// per rolling window, and never the same failure twice in a row.
+const ERROR_RATE_LIMIT = 10;
+const ERROR_RATE_WINDOW_MS = 60000;
 
 /*
 ================
@@ -102,6 +109,28 @@ export function refusalReason( message: string ): string {
 
 /*
 ================
+errorEventFields
+
+The journal fields for one uncaught failure: its message and, when the
+thrown value carries one, its stack. The stack is the only part that can
+name the failure (a RangeError's message alone never says where), so it
+travels with the report; the page's origin is stripped first, the same
+trim the long-frame script names get, and both fields are sliced.
+================
+*/
+function errorEventFields( error: unknown, fallback: string ): { message: string; stack?: string; } {
+	const thrown = error instanceof Error ? error : null,
+		message = (thrown?.message || fallback || String( error )).slice( 0, MAX_ERROR_MESSAGE ),
+		rawStack = thrown?.stack ?? (error as { stack?: unknown; } | null)?.stack,
+		origin = typeof location !== "undefined" ? location.origin : "",
+		stack = typeof rawStack === "string" && rawStack ?
+			(origin ? rawStack.replaceAll( origin, "" ) : rawStack).slice( 0, MAX_ERROR_STACK ) :
+			undefined;
+	return stack ? { message, stack } : { message };
+}
+
+/*
+================
 Journal
 ================
 */
@@ -122,6 +151,7 @@ export function createJournal( canvas: HTMLCanvasElement ): Journal {
 	const signal = lifetime.signal;
 	let events: JournalEvent[] = [];
 	let next = 0, count = 0, frameSlot = -1;
+	let errorTimes: number[] = [], lastErrorSignature = "";
 
 	/*
 	================
@@ -165,6 +195,32 @@ export function createJournal( canvas: HTMLCanvasElement ): Journal {
 		next = (next + 1) % MAX_EVENTS;
 		count = Math.min( count + 1, MAX_EVENTS );
 	}
+
+	/*
+	================
+	recordError
+
+	One uncaught failure for the timeline, rate-limited: repeats of the
+	same failure and storms past ERROR_RATE_LIMIT in the window are
+	dropped, so a throwing loop cannot evict the player's input history.
+	================
+	*/
+	function recordError( error: unknown, fallback: string ) {
+		const fields = errorEventFields( error, fallback ),
+			signature = fields.message + "\n" + (fields.stack?.split( "\n" )[1] ?? ""),
+			atMs = performance.now();
+		errorTimes = errorTimes.filter( time => atMs - time < ERROR_RATE_WINDOW_MS );
+		if ( signature === lastErrorSignature || errorTimes.length >= ERROR_RATE_LIMIT ) return;
+		lastErrorSignature = signature;
+		errorTimes.push( atMs );
+		record( "error", fields );
+	}
+	window.addEventListener( "error", event => recordError( event.error, event.message ), { signal } );
+	window.addEventListener(
+		"unhandledrejection",
+		event => recordError( event.reason, "Unhandled rejection: " + String( event.reason ) ),
+		{ signal }
+	);
 
 	/*
 	================
@@ -280,6 +336,8 @@ export function createJournal( canvas: HTMLCanvasElement ): Journal {
 			events = [];
 			next = count = 0;
 			frameSlot = -1;
+			errorTimes = [];
+			lastErrorSignature = "";
 		}
 	};
 }
