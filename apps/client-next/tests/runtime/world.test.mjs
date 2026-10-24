@@ -2024,6 +2024,49 @@ test("admission survives keepalive-only progress and times out after true silenc
 
 /*
 ================
+keepalive-only progress is bounded (#1471 review)
+
+A wire that only proves itself with keepalive pings can still be a
+wedged entry (the server builds nothing while its loading cadence
+pings). Progress slides the window only up to a bounded ceiling from
+the arm, so a wedged attempt still fails into the timeout path.
+================
+*/
+test("keepalive-only progress past the admission ceiling still times out", async t => {
+	const sockets = socketHarness( t );
+	const world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	socket.receive( 7, entered() );
+	// The deadline arms when the EnterWorld result drains (the first
+	// step below, t=9003) and may slide on progress for eighteen windows
+	// (180 s, to t=189003); pings every nine seconds stay admitted that long.
+	let time = 3;
+	for ( let round = 0; round < 20; round++ ) {
+		socket.receive( 3, Uint8Array.of( 1, 2, 3, 4 ) );
+		time += 9000;
+		world.step( time );
+		assert.equal( world.status().phase, "entering-world" );
+		assert.equal( world.status().error, undefined );
+	}
+	// One more ping lands past the ceiling: progress no longer slides,
+	// and the attempt fails on this step instead of waiting forever.
+	socket.receive( 3, Uint8Array.of( 1, 2, 3, 4 ) );
+	time += 9000;
+	world.step( time );
+	assert.equal( world.status().error, "World connection timed out" );
+});
+
+/*
+================
 reference bytes slide their stall window (#1010)
 
 The cold-cache multi-megabyte reference body of a slow link takes longer
