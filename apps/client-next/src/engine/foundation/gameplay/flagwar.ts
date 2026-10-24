@@ -34,7 +34,7 @@ export type FlagWarEvent =
 	| { readonly type: "standby5"; }
 	| { readonly type: "standby1"; }
 	| { readonly type: "gameStart"; }
-	| { readonly type: "missionStart"; }
+	| { readonly type: "missionStart"; readonly team: number; }
 	| { readonly type: "timerStop"; }
 	| { readonly type: "carrier"; readonly gid: number; }
 	| { readonly type: "joinResult"; }
@@ -81,25 +81,31 @@ export function decodeFlagWarEvent( p: Uint8Array ): FlagWarEvent | null {
 	if ( !p.length ) throw Error( "Empty flag-war event" );
 	const tag = p[0]!;
 	if ( tag !== 0xff ) {
-		if ( p.length !== (tag === 0x0a ? 5 : 1) ) throw Error( "Invalid flag-war event length" );
+		const view = new DataView( p.buffer, p.byteOffset, p.byteLength );
 		switch ( tag ) {
 			case 0x02:
+				if ( p.length !== 1 ) throw Error( "Invalid flag-war standby length" );
 				return { type: "standby10" };
 			case 0x04:
+				if ( p.length !== 1 ) throw Error( "Invalid flag-war game start length" );
 				return { type: "gameStart" };
 			case 0x05:
 			case 0x09:
+				if ( p.length !== 1 ) throw Error( "Invalid flag-war timer stop length" );
 				return { type: "timerStop" };
+			// The mission start names the receiving player's team (u16);
+			// only that team's clients show the notice and the timer.
 			case 0x08:
-				return { type: "missionStart" };
+				if ( p.length !== 3 ) throw Error( "Invalid flag-war mission start length" );
+				return { type: "missionStart", team: view.getUint16( 1, true ) };
 			case 0x0a:
-				return {
-					type: "carrier",
-					gid: new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 1, true )
-				};
+				if ( p.length !== 5 ) throw Error( "Invalid flag-war carrier length" );
+				return { type: "carrier", gid: view.getUint32( 1, true ) };
 			case 0x0d:
+				if ( p.length !== 1 ) throw Error( "Invalid flag-war standby length" );
 				return { type: "standby5" };
 			case 0x0e:
+				if ( p.length !== 1 ) throw Error( "Invalid flag-war standby length" );
 				return { type: "standby1" };
 			default:
 				return null;
@@ -191,6 +197,7 @@ export function flagWarNotice(
 		case "gameStart":
 			return { key: "UIIT_MSG_FLAGWAR_GAME_START", value: 0 };
 		case "missionStart":
+			if ( ownTeam !== null && event.team !== ownTeam ) return null;
 			return { key: "UIIT_MSG_FLAGWAR_GAME_START_MISSION", value: 0 };
 		case "joinResult":
 			return {
@@ -208,6 +215,8 @@ export function flagWarNotice(
 		case "pickupTheirs":
 			return { key: "UIIT_MSG_FLAGWAR_PICKUP_FLAG_OTHERTEAM", value: 0 };
 		case "masterKey":
+			// The native handler shows the text only on the key's own team.
+			if ( ownTeam !== null && event.team !== ownTeam ) return null;
 			return { key: "UIIT_MSG_FLAGWAR_PICKUP_MASTERKEY", value: 0, arguments: [ event.name ] };
 		case "eventJoin":
 			return { key: "UIIT_MSG_FLAGWAR_EVENT_JOIN", value: 0 };

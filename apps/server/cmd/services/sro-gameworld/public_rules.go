@@ -39,6 +39,10 @@ import (
 var unlistedSettings = map[string]string{
 	action.EnvGMSetSpeed:            "a GM command, not a rule players meet",
 	simulation.EnvBetaUniqueRespawn: "unique monster spawn timing is not published",
+	// Capture the Flag (#887) has sign-up but no match until its second
+	// part; the match's rule text publishes the schedule then.
+	action.EnvFlagWarStartUTC:   "Capture the Flag has no match yet; its rule lands with the match",
+	action.EnvFlagWarMinPlayers: "Capture the Flag has no match yet; its rule lands with the match",
 	// The tunables a rule's own text shows (game/tunables).
 	"SRO_MOST_WANTED_TEST_KILLS":      "shown in the Most Wanted test pacing rule",
 	"SRO_MOST_WANTED_TEST_BOUNTY":     "shown in the Most Wanted test pacing rule",

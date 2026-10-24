@@ -538,6 +538,19 @@ variable "team_death_revive" {
   default = "on"
 }
 
+# flagwar_start_utc / flagwar_min_players: the daily Capture the Flag
+# match (#887, owner 2026-10-24): its UTC start as HH:MM and the house
+# minimum (2-16). Malformed values stop GameWorld at boot.
+variable "flagwar_start_utc" {
+  type    = string
+  default = "20:00"
+}
+
+variable "flagwar_min_players" {
+  type    = string
+  default = "4"
+}
+
 # beta_growth holds every level's EXP and skill EXP to the level-1 kill pace,
 # multiplies skill EXP by beta_skill_exp_rate on top, makes a kill's assigned
 # rewards and ordinary drop passes beta_drop_rate times over (the unique
@@ -988,6 +1001,8 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_ALCHEMY_RATES                       = var.alchemy_rates
         SRO_ALCHEMY_MAX_PLUS                    = var.alchemy_max_plus
         SRO_TEAM_DEATH_REVIVE                   = var.team_death_revive
+        SRO_FLAGWAR_START_UTC                   = var.flagwar_start_utc
+        SRO_FLAGWAR_MIN_PLAYERS                 = var.flagwar_min_players
         SRO_ATTACK_PET_EXPANSION                = var.attack_pet_expansion
         SRO_BETA_GROWTH                         = var.beta_growth
         SRO_BETA_SKILL_EXP_RATE                 = var.beta_skill_exp_rate

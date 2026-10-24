@@ -42,7 +42,10 @@ test("plain event types decode strictly and the timer is the authored 20 minutes
 	assert.deepEqual( decodeFlagWarEvent( new Uint8Array( [ 0x0d ] ) ), { type: "standby5" } );
 	assert.deepEqual( decodeFlagWarEvent( new Uint8Array( [ 0x0e ] ) ), { type: "standby1" } );
 	assert.deepEqual( decodeFlagWarEvent( new Uint8Array( [ 0x04 ] ) ), { type: "gameStart" } );
-	assert.deepEqual( decodeFlagWarEvent( new Uint8Array( [ 0x08 ] ) ), { type: "missionStart" } );
+	// The mission start is three bytes: the type and a u16 team value.
+	assert.deepEqual( decodeFlagWarEvent( new Uint8Array( [ 0x08, 1, 0 ] ) ), { type: "missionStart", team: 1 } );
+	assert.throws( () => decodeFlagWarEvent( new Uint8Array( [ 0x08 ] ) ) );
+	assert.throws( () => decodeFlagWarEvent( new Uint8Array( [ 0x08, 1 ] ) ) );
 	assert.deepEqual( decodeFlagWarEvent( new Uint8Array( [ 0x05 ] ) ), { type: "timerStop" } );
 	assert.deepEqual( decodeFlagWarEvent( new Uint8Array( [ 0x09 ] ) ), { type: "timerStop" } );
 	const carrier = new Uint8Array( 5 );
@@ -102,6 +105,16 @@ test("notices name the native texts; timer and carrier events stay silent", () =
 		"UIIT_MSG_FLAGWAR_FLAG_MISSION_FAIL"
 	);
 	assert.equal( flagWarNotice( { type: "missionScored", team: 1, name: "AB" }, false, null ), null );
+	// Team-addressed notices speak only on the named team.
+	assert.equal(
+		flagWarNotice( { type: "missionStart", team: 1 }, false, 1 )?.key,
+		"UIIT_MSG_FLAGWAR_GAME_START_MISSION"
+	);
+	assert.equal( flagWarNotice( { type: "missionStart", team: 1 }, false, 0 ), null );
+	assert.equal(
+		flagWarNotice( { type: "masterKey", gid: 7, team: 1, name: "AB" }, false, 0 ),
+		null
+	);
 	assert.equal( flagWarNotice( { type: "elapsed", ms: 1 }, false, null ), null );
 	assert.equal( flagWarNotice( { type: "carrier", gid: 1 }, false, null ), null );
 	assert.equal( flagWarNotice( { type: "timerStop" }, false, null ), null );

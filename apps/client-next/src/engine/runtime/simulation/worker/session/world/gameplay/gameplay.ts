@@ -758,6 +758,7 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	// timer's end on the world clock, the flag carrier, and whether the
 	// last 0x7753 toggle was a sign-up (the join answer's text reads it).
 	let flagWarTimerEndsAt = 0, flagWarCarrierGid = 0, flagWarJoinExpected = false;
+	let flagWarTeam: number | null = null;
 	let progression: Progression = { masteries: [] };
 	const skillGroups = new Map<number, { group: number; level: number; }>();
 	let fortress = fortressBootstrap( {} ), musicMode = 0;
@@ -4242,14 +4243,18 @@ Packet handling must not depend on which HUD panel is currently open.
 				if ( frame.opcode === 0x30a9 ) {
 					const event = decodeFlagWarEvent( frame.payload );
 					if ( event ) {
-						if ( event.type === "missionStart" ) flagWarTimerEndsAt = now + FLAG_WAR_MATCH_MS;
-						else if ( event.type === "elapsed" ) {
+						if ( event.type === "missionStart" ) {
+							flagWarTeam = event.team;
+							flagWarTimerEndsAt = now + FLAG_WAR_MATCH_MS;
+						} else if ( event.type === "elapsed" ) {
 							flagWarTimerEndsAt = now + Math.max( 0, FLAG_WAR_MATCH_MS - event.ms );
 						} else if ( event.type === "timerStop" || event.type === "gameStart" ) {
 							flagWarTimerEndsAt = 0;
+							flagWarCarrierGid = 0;
+							if ( event.type === "gameStart" ) flagWarTeam = null;
 						}
 						if ( event.type === "carrier" ) flagWarCarrierGid = event.gid;
-						const notice = flagWarNotice( event, flagWarJoinExpected, null );
+						const notice = flagWarNotice( event, flagWarJoinExpected, flagWarTeam );
 						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 						dirty = true;
 					}
@@ -4706,6 +4711,7 @@ World transfer retires spatial work while retaining character/session data.
 			flagWarTimerEndsAt = 0;
 			flagWarCarrierGid = 0;
 			flagWarJoinExpected = false;
+			flagWarTeam = null;
 			teleportMode = 0;
 			npcConversation.clear();
 			storage.close();
