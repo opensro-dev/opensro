@@ -36,6 +36,7 @@ async function load( entry ) {
 const { assembleEquipmentAppearance, ENCHANT_SPARK_PLUS } = await load(
 	"src/engine/foundation/animation/equipment-appearance.ts"
 );
+const { validateEquipmentParticles } = await load( "src/engine/foundation/animation/equipment-particles.ts" );
 const { equipmentSocket, validateEquipmentBranches } = await load(
 	"src/engine/foundation/animation/equipment-sockets.ts"
 );
@@ -220,5 +221,22 @@ test("the later client's itemoptionefp rows set each item's effect, bone, scale 
 		assert.deepEqual( sparksOf( dress, 9, false ), [] );
 	} finally {
 		fs.rmSync( root, { recursive: true, force: true } );
+	}
+});
+
+/*
+================
+threshold validation
+
+A published spark's threshold is a whole plus 1..255; anything else fails
+the catalog at the presentation boundary.
+================
+*/
+test("a spark row's threshold must be a whole plus from 1 to 255", () => {
+	const spark = { effectPath: SPARK + "_a_01.efp", bone: "ai_end", scale: 1, offset: [ 0, 0, 0 ], root: false };
+	validateEquipmentParticles( { 1: [ spark ] } );
+	validateEquipmentParticles( { 1: [ { ...spark, threshold: 8 } ] } );
+	for ( const threshold of [ 0, 256, 7.5, "8" ] ) {
+		assert.throws( () => validateEquipmentParticles( { 1: [ { ...spark, threshold } ] } ) );
 	}
 });

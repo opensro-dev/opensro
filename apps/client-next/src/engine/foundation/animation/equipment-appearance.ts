@@ -307,7 +307,7 @@ export function assembleEquipmentAppearance( input: AppearanceInput ): Appearanc
 		if ( !armament ) continue;
 		const sparks = input.enchantSparks ?
 			(dress.enchantSparks?.[item.refObjId] ?? []).filter( spark =>
-				item.plus >= ((spark as { threshold?: number; }).threshold ?? ENCHANT_SPARK_PLUS)
+				item.plus >= (spark.threshold ?? ENCHANT_SPARK_PLUS)
 			) :
 			[];
 		for ( const effect of [ ...(dress.specialGlows?.[item.refObjId] ?? []), ...sparks ] ) {
