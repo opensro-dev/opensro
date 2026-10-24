@@ -19,7 +19,7 @@ const { regionMoveAllowed, regionMoveDestination, regionMoveContinuation } = awa
 	"../../src/engine/foundation/navigation/region-move.ts"
 );
 const { createNavigation } = await import(
-	"../../src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts"
+	"../../src/engine/foundation/navigation/clipper.ts"
 );
 const pose = ( x, z = 10, regionId = 257 ) => ({ x, y: 0, z, regionId, angle: 0 });
 /*
