@@ -118,8 +118,16 @@
 			]
 		},
 		{
+			"consumer": "src/engine/foundation/gameplay/walk-step.ts",
+			"provider": "src/engine/foundation/navigation/clipper.ts",
+			"functions": [
+				"clip",
+				"surface"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/gameplay/walking-history.ts",
-			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
+			"provider": "src/engine/foundation/navigation/clipper.ts",
 			"functions": [
 				"clip"
 			]
@@ -463,7 +471,7 @@
 		},
 		{
 			"consumer": "src/engine/foundation/navigation/region-move.ts",
-			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
+			"provider": "src/engine/foundation/navigation/clipper.ts",
 			"functions": [
 				"callback:continueRegionMove:2"
 			]
@@ -1427,7 +1435,7 @@
 		},
 		{
 			"consumer": "src/engine/runtime/simulation/worker/session/world/core.ts",
-			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
+			"provider": "src/engine/foundation/navigation/clipper.ts",
 			"functions": [
 				"surface",
 				"clip",
@@ -1536,7 +1544,7 @@
 		},
 		{
 			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
-			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
+			"provider": "src/engine/foundation/navigation/clipper.ts",
 			"functions": [
 				"pick"
 			]
@@ -1662,6 +1670,13 @@
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
 				"maxHp"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/world.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/movement.ts",
+			"functions": [
+				"noteInput"
 			]
 		},
 		{
@@ -1963,8 +1978,32 @@
 			"functions": [
 				"audioListener",
 				"dungeonCharacterPvs",
+				"interpolatedOwnWalk",
 				"presentationCamera",
 				"presentationNight"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/own-walk-interpolation.ts",
+			"provider": "src/engine/runtime/characters/pose-presentation.ts",
+			"functions": [
+				"turn"
+			],
+			"reason": "The interpolated presenter turns a body with the generic presenter's native heading turn (86CBA0), injected at creation so both presenters turn alike."
+		},
+		{
+			"consumer": "src/engine/runtime/characters/pose-presentation.ts",
+			"provider": "src/engine/runtime/characters/own-walk-interpolation.ts",
+			"functions": [
+				"carry",
+				"clear",
+				"createOwnWalkPresenter",
+				"enable",
+				"handles",
+				"moving",
+				"pose",
+				"retain",
+				"take"
 			]
 		},
 		{

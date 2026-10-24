@@ -2,9 +2,10 @@ package enterworld
 
 // Count-field boundary tests for the u8->u16 object-list start fix: past
 // 255 rows the start packet's count is a proper LE u16 (the encoding
-// monstertick.go's despawn bracket always used). The char-data skill
-// list is the opposite shape - the native reader is marker-terminated
-// and reads no count - so its bodies are never clamped.
+// monstertick.go's despawn bracket always used). The char-data mastery
+// and skill lists are the opposite shape - the native reader is
+// marker-terminated and reads no count - so their bodies are never
+// clamped.
 
 import (
 	"bytes"
@@ -132,5 +133,42 @@ func TestCharDataSkillListEmitsEveryLearnedSkill(t *testing.T) {
 	want.Write([]byte{0x00, 0x00, 0x00}) // empty quest block
 	if !bytes.Contains(payload, want.Bytes()) {
 		t.Fatal("char-data payload does not carry the full 300-body skill list")
+	}
+}
+
+// TestCharDataMasteryListEmitsEveryPersistedMastery: the mastery list is
+// the reader's first loop in the same function (client 0x866e50) - lead
+// byte discarded, marker-framed rows - so it shares the skill list's
+// shape: past 255 persisted masteries every body emits, and the tail the
+// old clamp dropped reaches the client. Real records cap at the racial
+// set (<=7); this pins the grammar, not a reachable population.
+func TestCharDataMasteryListEmitsEveryPersistedMastery(t *testing.T) {
+	masteries := make([]CharacterMastery, 300)
+	for i := range masteries {
+		masteries[i] = CharacterMastery{ID: uint32(1001 + i), Level: 1}
+	}
+	character := &Character{
+		ID:        1,
+		Name:      "masteryhoarder",
+		Masteries: masteries,
+	}
+	entry := &LocalPlayerEntry{StartProfile: StartProfileForRaceProfile()}
+
+	payload := BuildLocalPlayerEntryPayload(character, entry, 0, nil)
+
+	// The expected subsequence: the lead byte (300 in a byte, unread),
+	// then all 300 marker-framed bodies (ids 1001..1300 at level 1), the
+	// end marker, the empty skill framing and the empty quest block.
+	var want bytes.Buffer
+	want.WriteByte(300 & 0xff) // mastery lead byte, wrapped and unread
+	for i := 0; i < 300; i++ {
+		id := uint32(1001 + i)
+		want.Write([]byte{0x01, byte(id), byte(id >> 8), byte(id >> 16), byte(id >> 24), 0x01})
+	}
+	want.Write([]byte{0x02})             // mastery end marker
+	want.Write([]byte{0x00, 0x02})       // skill list: count 0, end marker
+	want.Write([]byte{0x00, 0x00, 0x00}) // empty quest block
+	if !bytes.Contains(payload, want.Bytes()) {
+		t.Fatal("char-data payload does not carry the full 300-body mastery list")
 	}
 }

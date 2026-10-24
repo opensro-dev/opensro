@@ -1,11 +1,17 @@
 /*
 ===========================================================================
 
-navigation.ts - the client's movement clipper over installed navmeshes
+clipper.ts - the client's movement clipper over installed navmeshes
 
 Owns the installed region grids and object placements, and clips every
 predicted move the way the server's movement authority does, so a click
 is walked where the server will accept it.
+
+Two instances run: the simulation worker's movement owner (the authority
+for the wire) and the main thread's navigation stream (the view the
+render-thread mover steps against, GH #1439). Its state is a function of
+its install sequence alone, so both are fed the same products in the
+same order; a consumer checks the request id before trusting the view.
 
 ===========================================================================
 */
@@ -983,3 +989,16 @@ export function createNavigation() {
 		}
 	};
 }
+
+/*
+================
+NavigationView
+
+The read side of a clipper: what a mover steps against. Install and clear
+stay with the instance's owner.
+================
+*/
+export type NavigationView = Pick<
+	ReturnType<typeof createNavigation>,
+	"available" | "block" | "clip" | "floor" | "pick" | "surface"
+>;

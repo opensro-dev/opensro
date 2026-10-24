@@ -29,7 +29,9 @@ async function load( name ) {
 	);
 }
 const { createMovement } = await load( "movement/movement" ),
-	{ createNavigation } = await load( "movement/navigation/navigation" ),
+	{ createNavigation } = await import(
+		sourceFileUrl( path.join( root, "src/engine/foundation/navigation/clipper.ts" ) ).href
+	),
 	{ createInventory } = await load( "inventory/inventory" ),
 	{ createCombat } = await load( "combat/combat" ),
 	{ createTargeting } = await load( "targeting/targeting" );

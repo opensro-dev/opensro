@@ -20,7 +20,7 @@ const { createEntities } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/entities/entities.ts"
 );
 const { createNavigation } = await import(
-	"../../src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts"
+	"../../src/engine/foundation/navigation/clipper.ts"
 );
 const { createNavigationResources } = await import( "../../src/engine/runtime/assets/worker/navigation/navigation.ts" );
 const bytes = p => assetBytes( p, CLIENT_PUBLIC_ROOT );
