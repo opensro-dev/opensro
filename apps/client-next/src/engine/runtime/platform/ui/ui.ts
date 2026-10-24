@@ -841,7 +841,10 @@ export function createUiBridge(
 				const el = slot.element;
 				// Published drags own their touch stream even without secondary use
 				// (skill/action bindings and window handles must not become page pans).
-				const touchAction = control.rightActivate || control.draggable ? "none" : "";
+				// Every other control is "manipulation": a double tap on it (using an
+				// item, a double-click target) must not zoom the page and leave it
+				// stranded scrolled; pinch-zoom stays available (GH #1242).
+				const touchAction = control.rightActivate || control.draggable ? "none" : "manipulation";
 				if ( el.style.touchAction !== touchAction ) el.style.touchAction = touchAction;
 				if (
 					touchHold.press?.element === el &&

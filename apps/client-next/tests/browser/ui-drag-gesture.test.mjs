@@ -4,8 +4,9 @@
 ui-drag-gesture.test.mjs - a running drag owns every touch (GH #1242)
 
 While a touch drag runs, a second finger must land on a touch-action:none
-surface: on a plain control (touch-action auto) the browser can take the
-pair over as a pinch-zoom and cancel the drag. The bridge raises a
+surface: on a plain control (touch-action manipulation: no double-tap
+zoom, pinch still allowed) the browser can take the pair over as a
+pinch-zoom and cancel the drag. The bridge raises a
 full-screen gesture shield for exactly the drag's lifetime. A mouse drag
 cannot pinch and is never shielded, so its chord presses keep reaching
 the controls. Exercised through real browser input over the production
@@ -56,8 +57,9 @@ test(
 			await cdp.send( "Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 } );
 			const send = ( type, touchPoints ) => cdp.send( "Input.dispatchTouchEvent", { type, touchPoints } );
 
-			// At rest the plain button is the hit target and stays gesture-eligible.
-			assert.deepEqual( await hit( 218, 40 ), { tag: "BUTTON", uiId: "plain", touchAction: "auto" } );
+			// At rest the plain button is the hit target: pinch-eligible, but a
+			// double tap on it cannot zoom the page.
+			assert.deepEqual( await hit( 218, 40 ), { tag: "BUTTON", uiId: "plain", touchAction: "manipulation" } );
 
 			// One finger starts the skill drag; the shield owns the screen now.
 			await send( "touchStart", [ { x: 36, y: 36, id: 1 } ] );
@@ -86,7 +88,7 @@ test(
 
 			// The shield lowers the moment the drag ends - no publication in
 			// between - so the very next press (a carry placement, say) lands.
-			assert.deepEqual( await hit( 218, 40 ), { tag: "BUTTON", uiId: "plain", touchAction: "auto" } );
+			assert.deepEqual( await hit( 218, 40 ), { tag: "BUTTON", uiId: "plain", touchAction: "manipulation" } );
 
 			// A mouse drag cannot pinch, so it is never shielded: the plain
 			// button stays the hit target and chords keep landing (the chord
@@ -97,7 +99,7 @@ test(
 			await page.mouse.move( 90, 36, { steps: 3 } );
 			assert.deepEqual(
 				await hit( 218, 40 ),
-				{ tag: "BUTTON", uiId: "plain", touchAction: "auto" },
+				{ tag: "BUTTON", uiId: "plain", touchAction: "manipulation" },
 				"mouse drags are not shielded"
 			);
 			await page.mouse.up();
