@@ -64,6 +64,18 @@ function query( x, z ) {
 
 /*
 ================
+poseOf
+
+The pose a non-idle frame draws.
+================
+*/
+function poseOf( frame ) {
+	assert.ok( frame.kind !== "idle", "the mover draws this frame" );
+	return frame.pose;
+}
+
+/*
+================
 world
 ================
 */
@@ -137,19 +149,21 @@ test("arrival lands on the truncated destination and holds until the worker has 
 test("a click the worker refused glides back to where the worker stands, within the cap, then ends", () => {
 	const mover = createLocalMover();
 	mover.click( { seq: 4, query: query( 1300, 1000 ), drawn: START, now: 0 }, world() );
-	let previous = mover.frame( 50, world() ), now = 50, ended;
-	assert.equal( previous.kind, "walking" );
+	const first = mover.frame( 50, world() );
+	assert.equal( first.kind, "walking" );
+	let previous = poseOf( first ), now = 50, ended;
 	// The worker took the click and refused it: it publishes its standing pose.
 	for ( let i = 0; i < 60 && !ended; i++ ) {
 		now += 16.7;
 		const frame = mover.frame( now, world( { inputSeq: 4, poseAtMs: 40 + i, revision: 1 } ) );
-		const step = Math.hypot( frame.pose.x - previous.pose.x, frame.pose.z - previous.pose.z );
+		const pose = poseOf( frame );
+		const step = Math.hypot( pose.x - previous.x, pose.z - previous.z );
 		assert.ok( step <= SPEED * 1.04 * .0167 + 1e-6, `step ${step}` );
-		if ( frame.kind === "ended" ) ended = frame;
-		previous = frame;
+		if ( frame.kind === "ended" ) ended = pose;
+		previous = pose;
 	}
 	assert.ok( ended, "the prediction ends once it is back" );
-	assert.ok( Math.abs( ended.pose.x - START.x ) < 1e-2, `ended at ${ended.pose.x}` );
+	assert.ok( Math.abs( ended.x - START.x ) < 1e-2, `ended at ${ended.x}` );
 });
 
 test("a later click the mover does not predict hands the walk back instead of dropping it", () => {
