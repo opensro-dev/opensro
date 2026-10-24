@@ -33,7 +33,12 @@ import { castPhase } from "./combat-result";
 
 // The cast broadcast's result byte for an opened cast.
 const CAST_OPENED = 1;
-// The cast header: result, sub-result, skill, caster, token, then the phase.
+// The cast-kind byte: 776830 lets only 0 (a normal cast) and 2 (a
+// continuous one) past its entry; any other kind returns early.
+const CAST_KIND_OFFSET = 1;
+const CAST_KIND_NORMAL = 0;
+const CAST_KIND_CONTINUOUS = 2;
+// The cast header: result, cast kind, skill, caster, token, then the phase.
 const CAST_SKILL_OFFSET = 2;
 const CAST_CASTER_OFFSET = 6;
 const CAST_PHASE_OFFSET = 14;
@@ -125,6 +130,13 @@ haltedPetAssistCountdowns
 775B50 (0x775BDE-0x775BE9): a 0xB2F5 naming an owned COS that holds an
 assist target starts its countdown (+0xAB30 = 3000) when none is running
 (+0xAB30 < 0). The map holds worker-clock deadlines; no entry is -1.
+
+The handler returns earlier still, at 0x775B9A, when the named entity's
++0x434 is nonzero - the mounted flag (CICharactor_SetMountedActionState
+8582E0) - so a mounted entity never arms a countdown. The port needs no
+state for that gate: this arm only fires for gids in `assisting`, which
+holds owned attack pets, and a mounted rider is a character, never one
+of those keys, so both handlers arm on the same halts.
 ================
 */
 export function haltedPetAssistCountdowns(
@@ -144,13 +156,24 @@ export function haltedPetAssistCountdowns(
 castPetAssistCountdowns
 
 776830 (0x7769D8): a cast broadcast whose caster is an owned COS cancels
-its countdown (+0xAB30 = -1), so the pet keeps its assist target.
+its countdown (+0xAB30 = -1), so the pet keeps its assist target. The
+store sits past the handler's two entry gates - the result byte must be
+1 (0x776869; anything else takes the refusal tail) and the cast kind
+must be 0 or 2 - and is itself ungated once they pass, so this reads
+the same two bytes. The port's cast parser refuses every other result
+shape before this runs; the gates keep the cancel honest on its own.
 ================
 */
 export function castPetAssistCountdowns(
 	countdowns: ReadonlyMap<number, number>,
-	caster: number
+	payload: Uint8Array
 ): ReadonlyMap<number, number> {
+	if (
+		payload.length < CAST_CASTER_OFFSET + 4 || payload[0] !== CAST_OPENED ||
+		(payload[CAST_KIND_OFFSET] !== CAST_KIND_NORMAL && payload[CAST_KIND_OFFSET] !== CAST_KIND_CONTINUOUS)
+	) return countdowns;
+	const caster = new DataView( payload.buffer, payload.byteOffset, payload.byteLength )
+		.getUint32( CAST_CASTER_OFFSET, true );
 	if ( !countdowns.has( caster ) ) return countdowns;
 	const next = new Map( countdowns );
 	next.delete( caster );

@@ -20,6 +20,7 @@ import (
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/gamedatatest"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -52,6 +53,7 @@ grocer's degree 9 STR stone at 2,000,000.
 ================
 */
 func TestPublishedShopsAreTheShardsShops(t *testing.T) {
+	tier.Long(t, "the published shops are the shard's shipped shops")
 	dir := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(dir)
 	roster := simulation.LoadNpcWorldRoster(dir)

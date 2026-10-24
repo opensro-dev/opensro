@@ -4247,14 +4247,11 @@ Packet handling must not depend on which HUD panel is currently open.
 					groundSkillMoveSuppressUntil = 0;
 					movement.castRefused( now );
 				}
-				if ( frame.opcode === 0xb245 && frame.payload.length >= 10 ) {
-					// 776830 (0x7769D8): a cast by an owned pet cancels its
-					// halt countdown (+0xAB30 = -1); the pet keeps its target.
-					petAssistCountdowns = castPetAssistCountdowns(
-						petAssistCountdowns,
-						new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
-							.getUint32( 6, true )
-					);
+				if ( frame.opcode === 0xb245 ) {
+					// 776830 (0x7769D8): an opened cast by an owned pet cancels
+					// its halt countdown (+0xAB30 = -1); the pet keeps its
+					// target. The entry gates live in castPetAssistCountdowns.
+					petAssistCountdowns = castPetAssistCountdowns( petAssistCountdowns, frame.payload );
 				}
 				if ( item && cast ) returnScroll = cast;
 				if ( returnScroll?.skillId && (fight || item && cast) ) {
