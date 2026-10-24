@@ -79,6 +79,10 @@ const (
 	// committed WorldState (goal and timed segment). Native clients never opt in.
 	OpPredictedMove       uint16 = 0x0009
 	OpPredictedMoveResult uint16 = 0x000A
+	// OpStreamAck (C->S) [u32 stream position]: the client has applied the
+	// stream's frames up to that position; the server drops them from its
+	// resume ring (stream_ring.go, #1466).
+	OpStreamAck uint16 = 0x000B
 )
 
 // maxReservedOpcode is the top of the session-internal range: opcodes the
@@ -236,11 +240,27 @@ func readStreamFrame(r io.Reader, maxBytes uint32) (Frame, error) {
 type Hello struct {
 	ResumeToken    []byte // empty or ResumeTokenLen bytes
 	AdmissionToken []byte // required one-use Agent-minted admission ticket
+	// HasPosition and LastApplied: the stream position the client last
+	// applied, an optional u32 tail sent with a resume token (#1466). A
+	// resume without it is refused (stream_ring.go).
+	HasPosition bool
+	LastApplied uint32
+}
+
+// DecodeStreamAck parses an OpStreamAck payload.
+func DecodeStreamAck(b []byte) (uint32, bool) {
+	if len(b) != 4 {
+		return 0, false
+	}
+	return binary.LittleEndian.Uint32(b), true
 }
 
 // EncodeHello builds the OpHello payload.
 func EncodeHello(h Hello) []byte {
 	size := 4 + len(h.ResumeToken) + len(h.AdmissionToken)
+	if h.HasPosition {
+		size += 4
+	}
 	buf := make([]byte, size)
 	buf[0] = ProtocolVersion
 	buf[1] = uint8(len(h.ResumeToken))
@@ -248,6 +268,9 @@ func EncodeHello(h Hello) []byte {
 	offset := 2 + len(h.ResumeToken)
 	binary.LittleEndian.PutUint16(buf[offset:offset+2], uint16(len(h.AdmissionToken)))
 	copy(buf[offset+2:], h.AdmissionToken)
+	if h.HasPosition {
+		binary.LittleEndian.PutUint32(buf[size-4:], h.LastApplied)
+	}
 	return buf
 }
 
@@ -278,10 +301,16 @@ func DecodeHello(b []byte) (Hello, error) {
 	if admissionLen == 0 || admissionLen > MaxAdmissionTokenLen {
 		return Hello{}, fmt.Errorf("transport: HELLO admission token length %d, want 1..%d", admissionLen, MaxAdmissionTokenLen)
 	}
-	if len(b) != prefixBytes+2+admissionLen {
-		return Hello{}, fmt.Errorf("transport: HELLO payload %d bytes, want %d", len(b), prefixBytes+2+admissionLen)
+	end := prefixBytes + 2 + admissionLen
+	switch len(b) {
+	case end:
+	case end + 4:
+		h.HasPosition = true
+		h.LastApplied = binary.LittleEndian.Uint32(b[end:])
+	default:
+		return Hello{}, fmt.Errorf("transport: HELLO payload %d bytes, want %d or %d", len(b), end, end+4)
 	}
-	h.AdmissionToken = append([]byte(nil), b[prefixBytes+2:]...)
+	h.AdmissionToken = append([]byte(nil), b[prefixBytes+2:end]...)
 	return h, nil
 }
 
