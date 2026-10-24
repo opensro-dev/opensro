@@ -208,6 +208,10 @@ func cloneCharacterWorld(source *CharacterWorld) *CharacterWorld {
 	clone.LastDeathPoint = cloneWorldPoint(source.LastDeathPoint)
 	clone.DungeonFloorIndex = clonePointer(source.DungeonFloorIndex)
 	clone.PackedInstance = clonePointer(source.PackedInstance)
+	if source.InstanceReturn != nil {
+		value := *source.InstanceReturn
+		clone.InstanceReturn = &value
+	}
 	clone.MoveSegment = cloneSlice(source.MoveSegment)
 	return &clone
 }

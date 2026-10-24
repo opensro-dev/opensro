@@ -12,6 +12,14 @@ options (Water reflection, Metal detail), not experimental ones.
 ===========================================================================
 */
 
+import {
+	PICKUP_KIND_ALCHEMY,
+	PICKUP_KIND_EQUIPMENT,
+	PICKUP_KIND_GOLD,
+	PICKUP_KIND_OTHER,
+	PICKUP_KIND_POTIONS
+} from "@/engine/foundation/gameplay/ground-item";
+
 /*
 ================
 ExperimentalOptions
@@ -142,6 +150,20 @@ export interface ExperimentalOptions {
 	// when on, keep bit 0x80 enabled on full-bag errors and pause non-gold item
 	// pickup until bag space changes so the pet keeps picking up gold. Default on.
 	readonly smartPetPickup: boolean;
+	// Port-only, not native (#841): an item filter for the pickup pet. Off
+	// unless turned on; off, the pet proposes exactly the native categories
+	// and the kind switches below are never read. The filter only ever
+	// narrows the client's own proposals above the server-owned category
+	// byte, so the pet window, its saved setting and other clients see
+	// native behaviour; manual pickup commands are never filtered.
+	readonly petPickupFilter: boolean;
+	// The filter's kinds (ground-item's pickupItemKind): each is collected
+	// unless explicitly turned off, and only while petPickupFilter is on.
+	readonly petFilterGold: boolean;
+	readonly petFilterEquipment: boolean;
+	readonly petFilterAlchemy: boolean;
+	readonly petFilterPotions: boolean;
+	readonly petFilterOther: boolean;
 	// Port-only, not native: a touch tap on an item or skill slot also keeps
 	// its tooltip up until the next touch elsewhere or a scroll (#1243); the
 	// tap's own action is unchanged. Touch only. On by default (the owner's
@@ -233,6 +255,8 @@ Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, greyDisabledTabs, jobKillNotices, dropPlusNotices,
 plusSevenNotices, fitWindowLabels, dropOnBagTab, noticeLinks, shortNotices, confirmGuildBan,
 petClickOpensWindow, smartPetPickup, touchInspect and dungeonCharacterPvs, which only an explicit false turns off.
+The pickup filter's kinds (petFilterGold and its siblings) also only turn off
+explicitly, and are read only while petPickupFilter is on.
 Missing or invalid render scales restore full resolution and missing or
 invalid UI sizes the native 100; legacy Video
 settings cannot enable scaling. Keys of retired rows (terrainRelief and texturedHorizon, removed at the owner's
@@ -279,6 +303,12 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		homingProjectiles: enabled( "homingProjectiles" ),
 		petClickOpensWindow: record.petClickOpensWindow !== false,
 		smartPetPickup: record.smartPetPickup !== false,
+		petPickupFilter: enabled( "petPickupFilter" ),
+		petFilterGold: record.petFilterGold !== false,
+		petFilterEquipment: record.petFilterEquipment !== false,
+		petFilterAlchemy: record.petFilterAlchemy !== false,
+		petFilterPotions: record.petFilterPotions !== false,
+		petFilterOther: record.petFilterOther !== false,
 		touchInspect: record.touchInspect !== false,
 		expandedWorldMap: enabled( "expandedWorldMap" )
 	};
@@ -371,6 +401,9 @@ export interface ExperimentalGameplay {
 	readonly plusSevenNotices: boolean;
 	readonly homingProjectiles?: boolean;
 	readonly smartPetPickup?: boolean;
+	// The pickup pet filter's kind mask (ground-item's PICKUP_KIND bits);
+	// undefined while the filter row is off, which is the native loop.
+	readonly petPickupKinds?: number;
 }
 
 /*
@@ -385,6 +418,13 @@ export function experimentalGameplay( options: ExperimentalOptions ): Experiment
 		dropPlusNotices: options.dropPlusNotices,
 		plusSevenNotices: options.plusSevenNotices,
 		homingProjectiles: options.homingProjectiles,
-		smartPetPickup: options.smartPetPickup
+		smartPetPickup: options.smartPetPickup,
+		petPickupKinds: options.petPickupFilter ?
+			(options.petFilterGold ? PICKUP_KIND_GOLD : 0) |
+			(options.petFilterEquipment ? PICKUP_KIND_EQUIPMENT : 0) |
+			(options.petFilterAlchemy ? PICKUP_KIND_ALCHEMY : 0) |
+			(options.petFilterPotions ? PICKUP_KIND_POTIONS : 0) |
+			(options.petFilterOther ? PICKUP_KIND_OTHER : 0) :
+			undefined
 	};
 }

@@ -3,8 +3,9 @@
 
 stall.go - street stalls: opening, visiting, editing and selling
 
-CGObjPC_HandleStallCreate70B1 (515F10) opens a stall for a standing PC
-outside a job suit; the stall shows nearby (0x30DF) and on the spawn row of
+Opening a stall outside a job suit first stops a walking host (its walk
+settles where it stands and its pending command ends), as the original
+does; the stall shows nearby (0x30DF) and on the spawn row of
 everyone who comes into view (the title block 86A26D reads). A visitor
 within 100 units (516270: Vec3_Length <= 100) sees its greeting, offers and
 visitors; while the stall is open for business (the owner's 0x71A8 kind 5)
@@ -42,6 +43,7 @@ import (
 	"opensro.online/server/internal/game/item/stall"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/instance"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 const (
@@ -103,15 +105,68 @@ func (rt *Runtime) HandleStallCreate(division string, c *enterworld.Character, p
 	if code := rt.stallPlaceRefusal(division, c); code != 0 {
 		return refuse(code)
 	}
-	decoration := c.StallDecorationAt(rt.Now().UnixMilli())
+	now := rt.Now().UnixMilli()
+	// The original admits a walking host and stops it: its pending command
+	// ends and its walk settles at the live point, the stop reaching the
+	// host and everyone around before the stall opens. The client then
+	// refuses ground moves while the stall window is up.
+	rt.ClearCombatIntent(division, c.Name)
+	halted := rt.haltForStall(division, c, now)
+	decoration := c.StallDecorationAt(now)
 	if err := rt.Stalls.Open(division, c.Name, title, decoration); err != nil {
-		return refuse(wire.StallErrHasStall)
+		return prependOpResult(halted, refuse(wire.StallErrHasStall))
 	}
 	// CGObjPC_SetStallState (515EAA) writes the interaction state 4.
 	rt.endStorageInteraction(division, c.Name)
 	opened := wire.Frame{Opcode: wire.OpStallOpened, Payload: wire.EncodeStallOpened(enterworld.ObjectIDForCharacter(c), title, decoration)}
 	rt.PushDivisionPeerFrames(division, c.Name, []wire.Frame{opened})
-	return OpResult{Frames: []wire.Frame{{Opcode: wire.OpStallCreateResult, Payload: wire.EncodeStallResult(0)}, opened}}
+	return prependOpResult(halted,
+		OpResult{Frames: []wire.Frame{{Opcode: wire.OpStallCreateResult, Payload: wire.EncodeStallResult(0)}, opened}})
+}
+
+/*
+================
+haltForStall
+
+Settles a walking host at its live point before its stall opens and
+returns the stop for the host and its viewers. A host already standing
+gets nothing. The caller holds the division door.
+================
+*/
+func (rt *Runtime) haltForStall(division string, c *enterworld.Character, now int64) OpResult {
+	if rt.Worlds == nil {
+		return OpResult{}
+	}
+	key := simulation.WorldKey(division, c.Name)
+	world := rt.Worlds.Snapshot(key, func() simulation.WorldState { return simulation.SeedWorldState(c) })
+	if !world.MovingAt(now) {
+		return OpResult{}
+	}
+	var committed simulation.Spawn
+	halted := false
+	accepted := rt.deps.Update(c, "stall-open-halt", func() bool {
+		if c.DeletePending {
+			return false
+		}
+		state := rt.Worlds.Update(key,
+			func() simulation.WorldState { return simulation.SeedWorldState(c) },
+			func(current *simulation.WorldState) {
+				if !current.MovingAt(now) {
+					return
+				}
+				current.SettleLive(now)
+				committed = current.Spawn
+				halted = true
+			})
+		writeBackWorld(c, state)
+		return true
+	})
+	if !accepted || !halted {
+		return OpResult{}
+	}
+	rt.bindResidentRegion(key, now)
+	stop := sourceCorrectionFrame(c, committed)
+	return OpResult{Frames: []wire.Frame{stop}, Broadcast: []wire.Frame{stop}}
 }
 
 /*

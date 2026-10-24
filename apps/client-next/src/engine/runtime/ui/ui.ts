@@ -292,7 +292,12 @@ import {
 	fortressProductionRemaining,
 	fortressProductionTimeText
 } from "@/engine/foundation/gameplay/fortress-production";
-import { alchemyEffectCell, alchemyEffectTexture, alchemyResultLines } from "@/engine/foundation/ui/alchemy-result";
+import {
+	ALCHEMY_DESTROYED,
+	alchemyEffectCell,
+	alchemyEffectTexture,
+	alchemyResultLines
+} from "@/engine/foundation/ui/alchemy-result";
 import { createUnionHud } from "./hud/union-hud";
 import { createGuildWarHud } from "./hud/guild-war-hud";
 import { guildWarRequest, warScoreLimits, WAR_UNLIMITED } from "@/engine/foundation/gameplay/guild-war";
@@ -1501,6 +1506,28 @@ export function createUi(
 	}
 	/*
 	================
+	extendedCompactOrigin
+
+	The extended bar's origin while the compact layout is active: the dragged
+	position when there is one, held inside the viewport by the header size;
+	otherwise the centred compact spot. The renderer and the drag share it,
+	so a first drag starts from the bar as drawn, not from a desktop spot.
+	================
+	*/
+	function extendedCompactOrigin(
+		width: number,
+		height: number,
+		headerWidth: number,
+		headerHeight: number
+	): readonly [number, number] {
+		if ( !extPosition ) return [ Math.max( 0, (width - headerWidth) / 2 ), 80 ];
+		return [
+			Math.max( 0, Math.min( width - headerWidth, extPosition[0] ) ),
+			Math.max( 0, Math.min( height - headerHeight, extPosition[1] ) )
+		];
+	}
+	/*
+	================
 	persistWindowPositions
 
 	Retire the placement session before UI teardown, including pagehide.
@@ -2117,7 +2144,7 @@ export function createUi(
 			// an inventory activation. A confirmed use already has its target.
 			if (
 				item && armsItemTargetCursor( item.typeFlags ) && command.summonerSlot === undefined &&
-				command.revivalSlot === undefined
+				command.revivalSlot === undefined && command.targetSlot === undefined
 			) {
 				if ( item.slot < 13 || view?.gameplay?.inventoryPending ) return;
 				carriedItem = null;
@@ -6563,10 +6590,21 @@ export function createUi(
 				return;
 			}
 			if ( event.kind === "drag" && event.id === "ext-drag" && view && !extPositionLock ) {
-				const origin = extPosition ?? [ Math.max( 0, view.width - 106 ), 181 ];
+				const extended = hud.data()?.extended[Number( extVertical ) * 2 + Number( extDouble )],
+					header = extended ? Object.values( extended ).find( node => node.id === 10 ) : undefined,
+					compactLayout = compactHudLayout( view.width, view.height ),
+					origin = compactLayout && header ?
+						extendedCompactOrigin( view.width, view.height, header.rect[2], header.rect[3] ) :
+						extPosition ?? [ Math.max( 0, view.width - 106 ), 181 ],
+					// On compact the renderer fits the bar into a band of this
+					// height; storing a lower spot would strand the drag in a
+					// dead zone the fit pulls back from.
+					yLimit = compactLayout ?
+						view.height - Math.max( 1, compactLayout.top - 80 ) :
+						view.height - 44;
 				extPosition = [
 					Math.max( 0, Math.min( view.width - 44, origin[0] + event.dx ) ),
-					Math.max( 0, Math.min( view.height - 44, origin[1] + event.dy ) )
+					Math.max( 0, Math.min( Math.max( 0, yLimit ), origin[1] + event.dy ) )
 				];
 				dirty = true;
 				return;
@@ -8025,6 +8063,11 @@ export function createUi(
 					for ( const line of alchemyResultLines( outcome, hudCopy ) ) hudMessages.append( line );
 					alchemyEffect = { flags: outcome.flags, startedAt: now };
 				}
+				// A destroyed target leaves the window holding its slot, and
+				// every later click reads as a reagent onto that ghost target
+				// (BR-261020-1019-8648), so free the selection: the next item
+				// clicked binds as the new target.
+				if ( outcome.flags & ALCHEMY_DESTROYED ) alchemySlots = [];
 				dirty = true;
 			}
 			if ( alchemyEffect ) {
@@ -8712,7 +8755,7 @@ export function createUi(
 					guideY = Math.trunc( next.height / 2 ) - 226;
 				}
 				const extended = hud.data()?.extended[Number( extVertical ) * 2 + Number( extDouble )];
-				if ( extPosition && extended && !compactHudLayout( next.width, next.height ) ) {
+				if ( extPosition && extended ) {
 					// 548490 sizes the widget root from header ID10, not the protruding slots.
 					const header = Object.values( extended ).find( node => node.id === 10 )!;
 					extPosition = [
@@ -11724,15 +11767,16 @@ export function createUi(
 					const compactMark = beginWindow();
 					const layout = hudData.extended[Number( extVertical ) * 2 + Number( extDouble )]!;
 					const header = Object.values( layout ).find( n => n.id === 10 )!;
-					if ( !extPosition && !compact ) {
+					if ( !extPosition ) {
 						extPosition = windowPlacement.takeRemembered( "extendedQuickslot", w, h, [
 							header.rect[2],
 							header.rect[3]
 						] ) ??
-							[ w - header.rect[2] - 26, 181 ];
+							(compact ? null : [ w - header.rect[2] - 26, 181 ]);
 					}
-					const ex = compact ? Math.max( 0, (w - header.rect[2]) / 2 ) : extPosition![0],
-						ey = compact ? 80 : extPosition![1],
+					const [ex, ey] = compact ?
+							extendedCompactOrigin( w, h, header.rect[2], header.rect[3] ) :
+							[ extPosition![0], extPosition![1] ],
 						alpha = extTransparent ? 110 / 255 : 1;
 					controls.push( {
 						id: "ext-drag",
@@ -11824,12 +11868,17 @@ export function createUi(
 						}
 					}
 					if ( compact ) {
+						// The fit still scales the group to the band height, but a
+						// dragged bar carries its band with it: the band top follows
+						// the stored position instead of pinning the bar at 80.
+						const bandHeight = Math.max( 1, compact.top - 80 ),
+							bandTop = Math.min( ey, Math.max( 0, h - bandHeight ) );
 						fitUiGroup(
 							quads,
 							controls,
 							compactMark[0],
 							compactMark[1],
-							[ 0, 80, w, Math.max( 1, compact.top - 80 ) ],
+							[ 0, bandTop, w, bandHeight ],
 							full,
 							{ blocks, firstBlock: compactMark[2], disableDrag: compactWindowDrag }
 						);
@@ -22362,10 +22411,37 @@ export function createUi(
 			if ( worldVisible && (cosHud.cleanConfirm() !== null || cosHud.targetUse() !== null) ) {
 				// 6A2350 case 5 raises the type 0xD box with the two
 				// UIIT_MSG_COS_CLEAN_CONFIRM lines before a transport is destroyed.
-				const layout = guildProposalLayout( w, h );
+				// CIFMessageBox type 0x1F (52F460) asks with the two CANCLE lines.
+				const layout = guildProposalLayout( w, h ),
+					targeted = cosHud.targetUse() !== null,
+					// 5C82D0 keeps the confirm box 308x148 whatever its text; the
+					// two lines wrap inside that frame. The text board wraps them,
+					// centred, so a long line folds instead of running past the
+					// window frame.
+					message = text.guide(
+						guideTokens(
+							"<center>" +
+								hudCopy(
+									targeted ?
+										"UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_1" :
+										"UIIT_MSG_COS_CLEAN_CONFIRM1"
+								) +
+								"<br>" +
+								hudCopy(
+									targeted ?
+										"UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_2" :
+										"UIIT_MSG_COS_CLEAN_CONFIRM2"
+								) +
+								"</center>"
+						),
+						[ layout.frame[0] + 4, layout.frame[1] + 48, 300, 49 ],
+						full,
+						white,
+						resources.size
+					);
 				controls = [];
 				blocks = [ full ];
-				paths.push( ...partyProposalAssets() );
+				paths.push( ...partyProposalAssets(), ...message.paths );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
 					...frameRing(
@@ -22378,43 +22454,15 @@ export function createUi(
 						hAlign: 1,
 						vAlign: 0
 					} ),
-					...text.quads(
-						// CIFMessageBox type 0x1F (52F460) asks with the two CANCLE lines.
-						hudCopy(
-							cosHud.targetUse() ?
-								"UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_1" :
-								"UIIT_MSG_COS_CLEAN_CONFIRM1"
-						),
-						layout.name,
-						full,
-						white,
-						{
-							hAlign: 1,
-							vAlign: 0
-						}
-					),
-					...text.quads(
-						hudCopy(
-							cosHud.targetUse() ?
-								"UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_2" :
-								"UIIT_MSG_COS_CLEAN_CONFIRM2"
-						),
-						layout.question,
-						full,
-						white,
-						{
-							hAlign: 1,
-							vAlign: 0
-						}
-					)
+					...message.quads
 				);
 				button(
-					cosHud.targetUse() ? cosHud.targetUseBox() + "-confirm" : "cos-clean-confirm",
+					targeted ? cosHud.targetUseBox() + "-confirm" : "cos-clean-confirm",
 					hudCopy( "UIIT_CTL_YES" ),
 					...layout.accept.slice( 0, 3 ) as [number, number, number]
 				);
 				button(
-					cosHud.targetUse() ? cosHud.targetUseBox() + "-cancel" : "cos-clean-cancel",
+					targeted ? cosHud.targetUseBox() + "-cancel" : "cos-clean-cancel",
 					hudCopy( "UIIT_CTL_NO" ),
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);
@@ -22463,10 +22511,25 @@ export function createUi(
 				);
 			}
 			if ( worldVisible && buffDismiss ) {
-				const layout = guildProposalLayout( w, h ), [x, y] = layout.frame;
+				// The same fixed 308x148 confirm frame as the COS box above; its
+				// two CANCLE lines wrap inside it instead of running past it.
+				const layout = guildProposalLayout( w, h ),
+					message = text.guide(
+						guideTokens(
+							"<center>" +
+								hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_1" ) +
+								"<br>" +
+								hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_2" ) +
+								"</center>"
+						),
+						[ layout.frame[0] + 4, layout.frame[1] + 48, 300, 49 ],
+						full,
+						white,
+						resources.size
+					);
 				controls = [];
 				blocks = [ full ];
-				paths.push( ...partyProposalAssets() );
+				paths.push( ...partyProposalAssets(), ...message.paths );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
 					...frameRing(
@@ -22474,29 +22537,12 @@ export function createUi(
 						MESSAGE_FRAME,
 						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
 						full
-					)
-				);
-				quads.push(
+					),
 					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
 						hAlign: 1,
 						vAlign: 0
-					} )
-				);
-				quads.push(
-					...text.quads(
-						hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_1" ),
-						layout.name,
-						full,
-						white,
-						{ hAlign: 1, vAlign: 0 }
-					),
-					...text.quads(
-						hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_2" ),
-						layout.question,
-						full,
-						white,
-						{ hAlign: 1, vAlign: 0 }
-					)
+					} ),
+					...message.quads
 				);
 				button(
 					"buff-dismiss-confirm",

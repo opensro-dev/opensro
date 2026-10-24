@@ -140,6 +140,9 @@ type Config struct {
 	// CharacterCreationValid is the gameplay-owned validator for authored
 	// model, weapon and protector combinations. The API only decodes requests.
 	CharacterCreationValid CharacterCreationValidator
+	// CharacterNameAllowed applies the gameplay-owned immutable name filter.
+	// Creation and its pre-check require the same rule before admission.
+	CharacterNameAllowed CharacterNameValidator
 	// AuthoredAreas is the immutable game-area identity/access catalogue.
 	// Browsers may request a server-owned slug but never coordinates or an
 	// access grade.
@@ -207,6 +210,7 @@ type API struct {
 	store                   *store.Store
 	characterPresentation   CharacterPresentationProjector
 	characterCreationValid  CharacterCreationValidator
+	characterNameAllowed    CharacterNameValidator
 	authoredAreas           *worldarea.Catalog
 	marksDir                string // "" = no crest art hosted
 	benchmarkFixtureControl bool
@@ -245,6 +249,9 @@ func New(config Config) (*API, error) {
 	if config.CharacterCreationValid == nil {
 		return nil, fmt.Errorf("agentapi: character creation validator is required")
 	}
+	if config.CharacterNameAllowed == nil {
+		return nil, fmt.Errorf("agentapi: character name validator is required")
+	}
 	if config.ShardID == "" {
 		return nil, fmt.Errorf("agentapi: GameWorld shard id is required")
 	}
@@ -273,6 +280,7 @@ func New(config Config) (*API, error) {
 		store:                   config.Store,
 		characterPresentation:   config.CharacterPresentation,
 		characterCreationValid:  config.CharacterCreationValid,
+		characterNameAllowed:    config.CharacterNameAllowed,
 		authoredAreas:           config.AuthoredAreas,
 		marksDir:                config.MarksDir,
 		benchmarkFixtureControl: config.BenchmarkFixtureControl,

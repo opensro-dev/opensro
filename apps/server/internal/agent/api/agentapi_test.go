@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+agentapi_test.go - shared authenticated API fixtures and character lifecycle
+
+Owns synthetic store, roster and session fixtures so HTTP contract tests can
+exercise character admission without loading licensed game data.
+
+===========================================================================
+*/
+
 package agentapi
 
 import (
@@ -9,7 +20,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"opensro.online/server/internal/releaseprotocol"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -20,6 +30,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/platform/readiness"
+	"opensro.online/server/internal/releaseprotocol"
 	"opensro.online/server/internal/security/auth"
 )
 
@@ -42,6 +53,11 @@ var (
 	)[:32]
 )
 
+/*
+================
+testAgentSessionVerifier
+================
+*/
 func testAgentSessionVerifier(t *testing.T) *auth.AgentSessionVerifier {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "agent-session-public-keys.json")
@@ -60,6 +76,11 @@ func testAgentSessionVerifier(t *testing.T) *auth.AgentSessionVerifier {
 	return verifier
 }
 
+/*
+================
+agentapiSkillSeeder
+================
+*/
 func agentapiSkillSeeder(
 	raceKey string,
 	learned []uint32,
@@ -81,6 +102,11 @@ func agentapiSkillSeeder(
 	return out, nil
 }
 
+/*
+================
+testCharacterRoster
+================
+*/
 func testCharacterRoster() *enterworld.Roster {
 	return &enterworld.Roster{Models: []enterworld.RosterModel{
 		{Codename: "CHAR_CH_MAN_ADVENTURER", RefObjID: 1907, BodyRadius: 4},
@@ -88,6 +114,11 @@ func testCharacterRoster() *enterworld.Roster {
 	}}
 }
 
+/*
+================
+testCharacterPresentation
+================
+*/
 func testCharacterPresentation(character *domain.Character) CharacterPresentation {
 	entry := enterworld.ResolveLocalPlayerEntry(character, testCharacterRoster())
 	raceIndex := domain.RaceEurope
@@ -113,10 +144,21 @@ func testCharacterPresentation(character *domain.Character) CharacterPresentatio
 	}
 }
 
+/*
+================
+newTestAPI
+================
+*/
 func newTestAPI(t *testing.T) (*API, *store.Store) {
+	t.Helper()
 	return newTestAPIWithSkillSeeder(t, agentapiSkillSeeder)
 }
 
+/*
+================
+newTestAPIWithSkillSeeder
+================
+*/
 func newTestAPIWithSkillSeeder(
 	t *testing.T,
 	seeder func(string, []uint32) ([]uint32, error),
@@ -138,6 +180,7 @@ func newTestAPIWithSkillSeeder(
 		CharacterCreationValid: func(character *domain.Character) bool {
 			return enterworld.CharacterCreationValid(character, testCharacterRoster())
 		},
+		CharacterNameAllowed: testNameFilter(t).Allowed,
 		ShardID:              testDivision,
 		AgentSessionVerifier: testAgentSessionVerifier(t),
 		EnterWorldAuthSecret: []byte(testEnterWorldSecret),
@@ -151,6 +194,11 @@ func newTestAPIWithSkillSeeder(
 	return api, authority
 }
 
+/*
+================
+TestCharacterCreateDoesNotMisclassifyInternalCodenameFailureAsInvalidName
+================
+*/
 func TestCharacterCreateDoesNotMisclassifyInternalCodenameFailureAsInvalidName(t *testing.T) {
 	brokenSkills := func(string, []uint32) ([]uint32, error) {
 		return nil, fmt.Errorf("default skill codename does not resolve")
@@ -168,6 +216,11 @@ func TestCharacterCreateDoesNotMisclassifyInternalCodenameFailureAsInvalidName(t
 	}
 }
 
+/*
+================
+authenticatedHandler
+================
+*/
 func authenticatedHandler(
 	t *testing.T,
 	api *API,
@@ -190,6 +243,11 @@ func authenticatedHandler(
 	return bearerHandler(api.Handler(), token)
 }
 
+/*
+================
+bearerHandler
+================
+*/
 func bearerHandler(next http.Handler, token string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.Header.Set("Authorization", "Bearer "+token)
@@ -198,9 +256,14 @@ func bearerHandler(next http.Handler, token string) http.Handler {
 	})
 }
 
-// TestStartingGameWorldAsksTheClientToRetry: before the gate first opens
-// (the population boot fill, #245), a refusal names the start, not a drain,
-// and carries the retry delay in the header and the body (#246).
+/*
+================
+TestStartingGameWorldAsksTheClientToRetry
+
+Before the population boot fill opens the gate, refusal identifies startup
+and carries the retry delay in both the header and body (#245 / #246).
+================
+*/
 func TestStartingGameWorldAsksTheClientToRetry(t *testing.T) {
 	api, _ := newTestAPI(t)
 	api.readiness = readiness.NewGate()
@@ -218,6 +281,11 @@ func TestStartingGameWorldAsksTheClientToRetry(t *testing.T) {
 	}
 }
 
+/*
+================
+TestReadinessStopsNewGameWorldRequests
+================
+*/
 func TestReadinessStopsNewGameWorldRequests(t *testing.T) {
 	api, _ := newTestAPI(t)
 
@@ -260,6 +328,11 @@ func TestReadinessStopsNewGameWorldRequests(t *testing.T) {
 	}
 }
 
+/*
+================
+postJSON
+================
+*/
 func postJSON(
 	t *testing.T,
 	handler http.Handler,
@@ -285,6 +358,11 @@ func postJSON(
 	return out
 }
 
+/*
+================
+getJSON
+================
+*/
 func getJSON(
 	t *testing.T,
 	handler http.Handler,
@@ -305,6 +383,11 @@ func getJSON(
 	}
 }
 
+/*
+================
+createBody
+================
+*/
 func createBody(name string) map[string]any {
 	return map[string]any{
 		"characterName":  name,
@@ -318,6 +401,11 @@ func createBody(name string) map[string]any {
 	}
 }
 
+/*
+================
+requireCharacterRosterContractVersion
+================
+*/
 func requireCharacterRosterContractVersion(t *testing.T, response map[string]any) {
 	t.Helper()
 	if response["characterRosterContractVersion"] != float64(CharacterRosterContractVersion) {
@@ -329,6 +417,11 @@ func requireCharacterRosterContractVersion(t *testing.T, response map[string]any
 	}
 }
 
+/*
+================
+TestCharacterVisualLoadoutWireCollectionsAreNeverNull
+================
+*/
 func TestCharacterVisualLoadoutWireCollectionsAreNeverNull(t *testing.T) {
 	payload, err := json.Marshal(characterVisualLoadoutForWire(CharacterVisualLoadout{}))
 	if err != nil {
@@ -358,6 +451,11 @@ func characterItemsForTest(items []enterworld.VisualItem) []CharacterItem {
 	return out
 }
 
+/*
+================
+TestCharacterLifecycleUsesOwnedShardAndAccount
+================
+*/
 func TestCharacterLifecycleUsesOwnedShardAndAccount(t *testing.T) {
 	api, authority := newTestAPI(t)
 	handler := authenticatedHandler(t, api, "alice")
@@ -403,6 +501,11 @@ func TestCharacterLifecycleUsesOwnedShardAndAccount(t *testing.T) {
 	}
 }
 
+/*
+================
+TestCharacterListProjectsOneIdentityForAnInconsistentLegacyRecord
+================
+*/
 func TestCharacterListProjectsOneIdentityForAnInconsistentLegacyRecord(t *testing.T) {
 	api, authority := newTestAPI(t)
 	handler := authenticatedHandler(t, api, "alice")
@@ -435,6 +538,11 @@ func TestCharacterListProjectsOneIdentityForAnInconsistentLegacyRecord(t *testin
 	}
 }
 
+/*
+================
+TestConstructionRequiresWorkerIdentityAndSecrets
+================
+*/
 func TestConstructionRequiresWorkerIdentityAndSecrets(t *testing.T) {
 	authority, err := store.Open(t.TempDir(), store.Options{
 		DefaultSkills: agentapiSkillSeeder,

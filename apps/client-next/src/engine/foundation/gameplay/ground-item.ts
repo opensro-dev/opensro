@@ -25,6 +25,51 @@ wire.IsGoldHeap is the same rule.
 export function isGoldHeapType( typeFlags: number ): boolean {
 	return isGoldGroupType( typeFlags ) && (typeFlags & 0xf800) !== 0x800;
 }
+
+/*
+================
+Pickup item kinds
+
+Port-only, not native: the Experimental pickup-pet item filter's kinds
+(#841). The native loop knows only three categories (cos-pickup's
+pickupCategory); these kinds refine them from the same type word, using
+only rules this codebase already documents, so a drop's kind never needs
+the item catalog. Gold is the heap rule above; equipment is the 0x20
+band; the remaining kinds sit in the expendable class
+((typeFlags & 0x1c) === 0xc, the class bits decodeGroundItem and
+autoPotionItemSlot read), split by TID3: 1 and 2 are the potion bands
+(autoPotionItemSlot's consumables), 10 the elixirs and lucky powder and
+11 the stones and tablets (container-transfer's ELIXIR_TYPE 0x0d6c,
+LUCKY_POWDER_TYPE 0x156c, MAGIC_STONE_TYPE 0x0dec, ATTRIBUTE_STONE_TYPE
+0x15ec and the tablet word 0x1dec). Everything else the native loop may
+take is Other; quest-special drops (group 0x400) stay Other here and are
+still refused by the native category gate before any filter is asked.
+================
+*/
+export const PICKUP_KIND_GOLD = 1;
+export const PICKUP_KIND_EQUIPMENT = 2;
+export const PICKUP_KIND_ALCHEMY = 4;
+export const PICKUP_KIND_POTIONS = 8;
+export const PICKUP_KIND_OTHER = 16;
+export const PICKUP_KIND_ALL = 31;
+
+/*
+================
+pickupItemKind
+
+The filter kind of one drop's type word. Exactly one bit per drop.
+================
+*/
+export function pickupItemKind( typeFlags: number ): number {
+	if ( isGoldHeapType( typeFlags ) ) return PICKUP_KIND_GOLD;
+	if ( (typeFlags & 0x60) === 0x20 ) return PICKUP_KIND_EQUIPMENT;
+	if ( (typeFlags & 0x60) === 0x60 && (typeFlags & 0x1c) === 0xc ) {
+		const tid3 = (typeFlags >>> 7) & 15;
+		if ( tid3 === 10 || tid3 === 11 ) return PICKUP_KIND_ALCHEMY;
+		if ( tid3 === 1 || tid3 === 2 ) return PICKUP_KIND_POTIONS;
+	}
+	return PICKUP_KIND_OTHER;
+}
 // CIItem_ParseSpawnPacket 0x86e4e0; server item/wire/grounditemrow.go.
 export function decodeGroundItem( p: Uint8Array, typeFlags: number, appear: boolean, name: string ): EntityState {
 	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
