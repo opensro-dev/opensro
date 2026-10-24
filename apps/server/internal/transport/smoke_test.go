@@ -173,6 +173,9 @@ func helloWT(t *testing.T, str *webtransport.Stream, token []byte) transport.Wel
 		Opcode: transport.OpHello,
 		Payload: transport.EncodeHello(transport.Hello{
 			ResumeToken: token, AdmissionToken: []byte(testAdmissionTicket),
+			// A resume presents the stream position it last applied (#1466);
+			// these helpers have read no data frame before a resume.
+			HasPosition: len(token) > 0,
 		}),
 	})
 	if err != nil {
@@ -264,6 +267,9 @@ func helloWS(t *testing.T, c *websocket.Conn, token []byte) transport.Welcome {
 		Opcode: transport.OpHello,
 		Payload: transport.EncodeHello(transport.Hello{
 			ResumeToken: token, AdmissionToken: []byte(testAdmissionTicket),
+			// A resume presents the stream position it last applied (#1466);
+			// these helpers have read no data frame before a resume.
+			HasPosition: len(token) > 0,
 		}),
 	})
 	f := readWSFrame(t, c)

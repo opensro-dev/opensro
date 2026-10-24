@@ -22,6 +22,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/paramkeeper"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -201,6 +202,7 @@ the element's value.
 ================
 */
 func TestUnlinkedElementMatchesTheGraphRead(t *testing.T) {
+	tier.Long(t, "the unlinked element read equals the graph over 60000 random characters")
 	rng := rand.New(rand.NewSource(20261013))
 	values, refusals, otherFailures := 0, 0, 0
 	for sample := 0; sample < 60000; sample++ {

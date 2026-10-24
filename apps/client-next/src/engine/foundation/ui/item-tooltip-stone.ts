@@ -23,15 +23,40 @@ const ATTRIBUTE_STONE_KIND = 2;
 const MAGIC_STONE_EXTRA_KIND = 7;
 const STONE_ROW_COLOR = 0xffffffff;
 
+// The target words 557C50 tests, in its order; bit i of the published
+// stoneTooltipMask marks word i. Mirrors stoneTooltipWords in the
+// server's enterworld/stonefamily.go; change both together.
+const STONE_TARGET_SYMBOLS = [
+	"UIIT_STT_WEAPON_TYPE",
+	"UIIT_STT_ARMOR_TYPE",
+	"UIIT_STT_SHIELD",
+	"UIIT_STT_ACCESSARY_TYPE",
+	"UIIT_STT_ARMOR_POSITION_HEAD",
+	"UIIT_STT_ARMOR_POSITION_SHOULDER",
+	"UIIT_STT_ARMOR_POSITION_BREAST",
+	"UIIT_STT_ARMOR_POSITION_LEG",
+	"UIIT_STT_ARMOR_POSITION_HAND",
+	"UIIT_STT_ARMOR_POSITION_FOOT",
+	"UIIT_STT_ACCESSARY_EARRING",
+	"UIIT_STT_ACCESSARY_NECKLACE",
+	"UIIT_STT_ACCESSARY_RING",
+	"UIIT_STT_HONOR_TYPE"
+] as const;
+
 /*
 ================
 itemTooltipStone
 
-Rows in native order: the sort line, the target degree from Param1
-(+0x29C, a byte), a blank line, then the assimilation line built from
-"%s%s: %d%%" (5586C0..558719). Native also prints an "Object item" row
-from the item's description strings (+0x2EC, +0x340); the client
-reference rows do not carry those strings, so that row is not drawn.
+Rows in native order: the sort line, the "Object item" row, the target
+degree from Param1 (+0x29C, a byte), a blank line, then the assimilation
+line built from "%s%s: %d%%" (5586C0..558719). The Object item row is
+UIIT_STT_TARGET_ITEM plus the type symbols of every target word the
+stone's text contains, in 557C50's test order, each followed by a space.
+The text itself is item data the client never receives; the server
+searches it (enterworld/stonefamily.go) and publishes the matching bits
+as the stoneTooltipMask field. A stone without the field (an older
+server) draws no row; a published zero draws the label alone, as 557C50
+does when its text holds no word.
 ================
 */
 export function itemTooltipStone(
@@ -47,8 +72,19 @@ export function itemTooltipStone(
 		"UIIT_STT_ITEM_TYPE_ALCHEMY_MAGICSTONE";
 	// 558602 reads Param1 as a byte before formatting "%s: %d%s".
 	const degree = (item.tooltip?.fields["itemParam1_29c"] ?? 0) & 0xff;
-	return [
-		{ value: `${text( "UIIT_STT_ITEM_TYPE" )}: ${text( sort )}`, color: STONE_ROW_COLOR },
+	const rows: TooltipRow[] = [
+		{ value: `${text( "UIIT_STT_ITEM_TYPE" )}: ${text( sort )}`, color: STONE_ROW_COLOR }
+	];
+	const targets = item.tooltip?.fields["stoneTooltipMask"];
+	if ( targets !== undefined ) {
+		// 55800B: "%s: " then each matching symbol and a space, untrimmed.
+		let value = `${text( "UIIT_STT_TARGET_ITEM" )}: `;
+		for ( let bit = 0; bit < STONE_TARGET_SYMBOLS.length; bit++ ) {
+			if ( targets & (1 << bit) ) value += `${text( STONE_TARGET_SYMBOLS[bit]! )} `;
+		}
+		rows.push( { value, color: STONE_ROW_COLOR } );
+	}
+	rows.push(
 		{
 			value: `${text( "UIIT_STT_TARGET_ITEM_CLASS" )}: ${degree}${text( "UIIT_STT_CLASS" )}`,
 			color: STONE_ROW_COLOR
@@ -58,5 +94,6 @@ export function itemTooltipStone(
 			value: `${text( "PARAM_ATTR_ASSIMILATION" )}${text( "UIIT_STT_PROBABILITY" )}: ${(item.plus ?? 0) & 0xff}%`,
 			color: STONE_ROW_COLOR
 		}
-	];
+	);
+	return rows;
 }

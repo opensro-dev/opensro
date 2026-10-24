@@ -253,7 +253,7 @@ func TestRateLimitKeepaliveUnaffected(t *testing.T) {
 		t.Fatal(err)
 	}
 	fc := newFakeConn(false)
-	if err := s.attach(fc, false); err != nil {
+	if err := s.attach(fc, false, 0); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { hub.closeSession(s, nil) })

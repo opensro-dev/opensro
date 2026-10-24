@@ -284,14 +284,17 @@ export function createEntities(
 	================
 	*/
 	function resyncEvents(): WorldEvent[] {
-		const rebuilt: WorldEvent[] = [ { kind: "reset", epoch: ++epoch } ];
+		// The batch is a journal rebuild, not a world entry: its reset and
+		// republished spawns carry resync so the presentation updates the
+		// characters it already holds in place (#1481).
+		const rebuilt: WorldEvent[] = [ { kind: "reset", epoch: ++epoch, resync: true } ];
 		if ( local ) {
 			rebuilt.push( {
 				kind: "bootstrap",
 				value: { protocolVersion: bootstrapProtocol, character: { name: localName }, localPlayerEntry: local }
 			} );
 		}
-		for ( const entity of entities.values() ) rebuilt.push( { kind: "spawn", entity } );
+		for ( const entity of entities.values() ) rebuilt.push( { kind: "spawn", entity, resync: true } );
 		rebuilt.push( { kind: "synchronized", epoch } );
 		rebuilt.push( ...retainedNatives );
 		retainedNatives = [];
@@ -1581,8 +1584,16 @@ export function createEntities(
 				// A rider's position belongs to its active mover, the mount (0x85E000).
 				const entity = source?.mountedOn ? entities.get( source.mountedOn ) ?? source : source;
 				// Source movement is advisory travel; LIFE-dead retires it.
-				// B2F5 remains admissible: present rebirth corrects before LIFE-alive.
 				if ( frame.opcode === 0x30e3 && entity?.appearanceState?.[0] === 2 ) return;
+				// 775B50 (0x775C1A): once the mover is resolved (85E000), a
+				// monster or COS mover whose life state (+0x263) is 2 (dead)
+				// ignores its B2F5 - no halt, no reseed. Players are not
+				// checked: a dead player's B2F5 remains admissible, as
+				// present rebirth corrects before LIFE-alive.
+				if (
+					frame.opcode === 0xb2f5 && entity?.appearanceState?.[0] === 2 &&
+					(entity.kind === "monster" || entity.kind === "cos")
+				) return;
 				if ( entity ) {
 					const corrected = position( v, frame.opcode === 0x30e3 ? 0 : 4 );
 					// The local mover has one navigation owner in gameplay. Its

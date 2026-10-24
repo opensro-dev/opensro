@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/testsupport/gamedatatest"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -27,6 +28,7 @@ NPCs.)
 ================
 */
 func TestStructureRefsCarryRepairAndRevive(t *testing.T) {
+	tier.Long(t, "every shipped structure reference carries its repair and revive data")
 	refs := LoadMonsterRefs(gamedatatest.TextdataDir(t))
 	stone, ok := refs[19553]
 	if !ok || !stone.Structure || stone.CostRepair != 187200 {
