@@ -156,6 +156,13 @@ export function createNetwork(
 	================
 	*/
 	function send( frame: WireFrame ) {
+		// end() keeps admitted frames for their consumer after the socket
+		// is gone, and a closing socket takes no more bytes: a reply one of
+		// them raises (the 0x36DD transfer answer, a storage follow-up)
+		// belongs to the dead session. It is dropped, never thrown back
+		// into the application that is finishing the session, so the end
+		// reason drain() reports stays the server's own.
+		if ( ended || (socket && socket.readyState > WebSocket.OPEN) ) return;
 		if ( !socket || socket.readyState !== WebSocket.OPEN ) {
 			throw new Error( "Transport is not open" );
 		}
