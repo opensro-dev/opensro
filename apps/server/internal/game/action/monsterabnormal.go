@@ -395,6 +395,9 @@ func (rt *Runtime) advanceMonsterAbnormal(division string, gid uint32, nowMs int
 		// handler is 3128 -> 74FE80 (gid, raw damage). The detonation has its
 		// own public presentation below.
 		if source := ctx.rewardOwner(division, hit.SourceGID, hit.SourceName); source != nil && hit.Credited && hit.Reason == abnormalDamageOverTimeReason {
+			if hit.Damage > 0 {
+				public = append(public, rt.tailwindDamage(division, source, gid, nowMs)...)
+			}
 			send(source.ID, abnormalDamageFrame(gid, hit.Damage))
 		}
 	}

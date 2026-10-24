@@ -6,6 +6,8 @@
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/pet-training/pet-training.ts",
 			"functions": [
 				"createPetTraining",
+				"guidance",
+				"tailwind",
 				"clear",
 				"receive",
 				"state"

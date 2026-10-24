@@ -321,7 +321,10 @@ type Character struct {
 	// CapturedCOS is a capture-escort quest's captured monster (TypeID
 	// 1/2/3/6, client 692260): runtime-only, never persisted. The quest
 	// record keeps the capture; a relog either re-summons it or fails it.
-	CapturedCOS     *CharacterCOS    `json:"-"`
+	CapturedCOS *CharacterCOS `json:"-"`
+	// Port-only spell summons have no summoner item and never survive reentry.
+	BroodGeneration uint64           `json:"-"`
+	Brood           []*CharacterCOS  `json:"-"`
 	PetSkillWindows []PetSkillWindow `json:"petSkillWindows,omitempty"`
 	// ParamJobs are the live item parameter jobs (CTJ_CharParamKeeper):
 	// EXP/skill-EXP scroll bonuses with an absolute deadline.
@@ -665,6 +668,14 @@ Owned companion state; its inventory commits with the owning character.
 ================
 */
 type CharacterCOS struct {
+	// Port-only Stormbrood actor: 1 egg, 2 unhealable clone.
+	BroodStage   uint8  `json:"-"`
+	BroodSource  uint32 `json:"-"`
+	BroodUntil   int64  `json:"-"`
+	BroodHatchHP uint32 `json:"-"`
+	BroodMaxHP   uint32 `json:"-"`
+	BroodBook    uint8  `json:"-"`
+	BroodRank    uint8  `json:"-"`
 	// Port-only, not native. Lives on the summoner item, including cooldowns.
 	Training PetTraining `json:"training,omitzero"`
 	// Port-only combat stacks; never restored from a summoner item.
@@ -733,9 +744,13 @@ of Kind ("Attacks", "Hits taken", "Kills", "Spells").
 ================
 */
 type PetRowCooldown struct {
-	ReadyAtMs int64  `json:"readyAtMs,omitempty"`
-	Kind      string `json:"kind,omitempty"`
-	Left      uint16 `json:"left,omitempty"`
+	// Port-only stored casts; ReadyAtMs is the next sequential recharge.
+	Capacity   uint8  `json:"capacity,omitempty"`
+	Charges    uint8  `json:"charges,omitempty"`
+	RechargeMs int64  `json:"rechargeMs,omitempty"`
+	ReadyAtMs  int64  `json:"readyAtMs,omitempty"`
+	Kind       string `json:"kind,omitempty"`
+	Left       uint16 `json:"left,omitempty"`
 }
 
 /*

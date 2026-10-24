@@ -403,7 +403,9 @@ export function decodeMapLabels(
 worldMapPresentation
 
 The window's layers for a page at a pan: background, overlay, markers,
-the icon hit rectangles, the label anchors and the clamped pan.
+the icon hit rectangles, the label anchors and the clamped pan. markerRows
+names the source row of each marker quad (markers.length for the local
+player), so a caller can paint after one marker without re-projecting.
 ================
 */
 export function worldMapPresentation(
@@ -425,6 +427,7 @@ export function worldMapPresentation(
 	const background: UiQuad[] = [],
 		overlay: UiQuad[] = [],
 		markerQuads: UiQuad[] = [],
+		markerRows: number[] = [],
 		white = [ 1, 1, 1, 1 ] as const;
 	const frame = worldMapFrame( pageId, clip, pan, center, layout );
 	const { page, width, height, cx, cy, px, py, ox, oy } = frame;
@@ -447,7 +450,9 @@ export function worldMapPresentation(
 			rect[1] < clip[1] + clip[3]
 		) {
 			layer.push( { texture, rect, uv, color: white, clip, rotation } );
+			return true;
 		}
+		return false;
 	}
 	/*
 	================
@@ -458,6 +463,7 @@ export function worldMapPresentation(
 	================
 	*/
 	function marker(
+		row: number,
 		regionId: number,
 		x: number,
 		z: number,
@@ -465,7 +471,7 @@ export function worldMapPresentation(
 		rotation: number
 	) {
 		const rect = worldMapMarkerRect( frame, { regionId, x, z } );
-		if ( rect ) sprite( markerQuads, texture, rect, [ 0, 0, 1, 1 ], rotation );
+		if ( rect && sprite( markerQuads, texture, rect, [ 0, 0, 1, 1 ], rotation ) ) markerRows.push( row );
 	}
 	if ( page ) {
 		const picture = "picture" in page ? page.picture : page.size;
@@ -503,10 +509,9 @@ export function worldMapPresentation(
 	// Caller-supplied passes first, then the local player, matching 57fe60's
 	// order (quest NPCs, hunting points, apprenticeship, party) and 57ce80's
 	// decision to draw mm_sign_character last.
-	for ( const row of markers ) {
-		marker( row.regionId, row.x, row.z, row.path, row.rotation );
-	}
+	markers.forEach( ( row, index ) => marker( index, row.regionId, row.x, row.z, row.path, row.rotation ) );
 	marker(
+		markers.length,
 		p.regionId,
 		p.x,
 		p.z,
@@ -517,6 +522,7 @@ export function worldMapPresentation(
 		background,
 		overlay,
 		markers: markerQuads,
+		markerRows,
 		hits,
 		labels: labels
 			.filter( ( label ) => label.page === pageId )

@@ -142,6 +142,11 @@ func (rt *Runtime) handlePetTraining(division string, c *enterworld.Character, p
 		return OpResult{Frames: frames}
 	}
 	state := rt.petSessionFor(division, c.Name, gid)
+	if operation == petTrainingUse && len(payload) == petTrainingLength {
+		if skill, ok := companion.PetSkill(snapshot.CompanionByGID(gid), arg); ok && (skill.EffectName() == "Rejuvenating Plume" || skill.EffectName() == companion.BroodSkill) {
+			return rt.manualPetSkill(division, c, snapshot, gid, arg, 0, nowMs)
+		}
+	}
 	if operation == petTrainingUse && len(payload) == petTrainingLength+4 {
 		return rt.manualPetSkill(division, c, snapshot, gid, arg, binary.LittleEndian.Uint32(payload[7:]), nowMs)
 	}
@@ -160,7 +165,7 @@ func (rt *Runtime) handlePetTraining(division string, c *enterworld.Character, p
 	var updated *domain.CharacterCOS
 	if !rt.deps.Update(c, "pet-training", func() bool {
 		pet := c.CompanionByGID(gid)
-		if pet == nil || !pet.Summoned || pet.CurrentHP == 0 {
+		if pet == nil || pet.BroodStage != 0 || !pet.Summoned || pet.CurrentHP == 0 {
 			return false
 		}
 		defer func() {
@@ -227,11 +232,28 @@ func (rt *Runtime) petTrainingStateFrames(pet *domain.CharacterCOS, nowMs int64)
 		GearStats:           [6]uint32{uint32(m.GearStats.PhysicalAttack), uint32(m.GearStats.MagicalAttack), uint32(m.GearStats.PhysicalDefense), uint32(m.GearStats.MagicalDefense), uint32(m.GearStats.HitRatio), uint32(m.GearStats.ParryRatio)},
 		CooldownPercent:     uint16(m.CooldownPct),
 	}
+	for row := companion.ActiveRowCount; row < companion.RowCount; row++ {
+		state.Slotted[row-companion.ActiveRowCount] = 0
+		if active, ok := companion.SlottedPassive(pet, row); ok {
+			state.Slotted[row-companion.ActiveRowCount] = uint8(active.Option)
+		}
+	}
 	if ref, ok := rt.cosReference(pet); ok {
 		state.MaxHP = ref.MaxHP
 	}
 	for row := range t.Rows {
-		r := t.Rows[row]
+		r := companion.AdvanceCharges(t.Rows[row], nowMs)
+		if r.Capacity == 0 {
+			for _, def := range companion.SkillsForPet(pet) {
+				if def.Row == row && def.EffectName() == companion.BroodSkill && companion.Level(pet, def) > 0 {
+					r = companion.BroodRow(r, def, companion.EffectiveLevel(pet, def, m), nowMs, m)
+				}
+			}
+		}
+		if r.Capacity > 0 {
+			r.Left = uint16(r.Charges)
+			r.Kind = companion.ChargeKind
+		}
 		state.Rows[row] = wire.PetRowState{TimerMs: uint32(max(0, r.ReadyAtMs-nowMs)), Left: r.Left, Kind: r.Kind}
 	}
 	for _, s := range companion.SkillsForPet(pet) {
@@ -246,7 +268,7 @@ func (rt *Runtime) petTrainingStateFrames(pet *domain.CharacterCOS, nowMs int64)
 			if t.Queued == s.ID {
 				row.Flags |= wire.PetSkillQueued
 			}
-		} else if lvl > 0 && t.Slotted[s.Row-companion.ActiveRowCount] == uint8(s.Option) {
+		} else if lvl > 0 && state.Slotted[s.Row-companion.ActiveRowCount] == uint8(s.Option) {
 			row.Flags |= wire.PetSkillSlotted
 		}
 		if s.Live() {

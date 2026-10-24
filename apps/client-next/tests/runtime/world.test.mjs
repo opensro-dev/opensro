@@ -2492,3 +2492,56 @@ test("the loading screen sends no request and runs no request clock", async t =>
 	const answers = socket.sent.slice( ready ).filter( bytes => (bytes[0] | bytes[1] << 8) > 0xff );
 	assert.equal( answers.length, 1, "the live world answers the expired join request" );
 });
+
+/*
+================
+Stormbrood position feedback
+================
+*/
+test("wind burst is ordered feedback independent of a despawned clone", () => {
+	const owner = createEntities();
+	const p = Buffer.alloc( 18 );
+	p.writeUInt32LE( 0x08000014 );
+	p.writeUInt16LE( 257, 4 );
+	p.writeFloatLE( 12, 6 );
+	p.writeFloatLE( 3, 10 );
+	p.writeFloatLE( 34, 14 );
+	owner.receive( { opcode: 0x3fba, payload: p } );
+	assert.deepEqual( flush( owner ).events, [ {
+		kind: "pet-crow-effect",
+		source: { regionId: 257, x: 12, y: 3, z: 34 }
+	} ] );
+	assert.throws( () => owner.receive( { opcode: 0x3fba, payload: p.subarray( 1 ) } ) );
+	p.writeFloatLE( NaN, 6 );
+	assert.throws( () => owner.receive( { opcode: 0x3fba, payload: p } ) );
+});
+
+/*
+================
+Crow cue admission
+================
+*/
+test("crow skill cues accept bounded books/kinds and reject malformed positions", () => {
+	const owner = createEntities(), p = Buffer.alloc( 20 );
+	p.writeUInt32LE( 100002 );
+	p[4] = 1;
+	p[5] = 3;
+	p.writeUInt16LE( 257, 6 );
+	p.writeFloatLE( 12, 8 );
+	p.writeFloatLE( 3, 12 );
+	p.writeFloatLE( 34, 16 );
+	owner.receive( { opcode: 0x3fbb, payload: p } );
+	assert.deepEqual( flush( owner ).events, [ {
+		kind: "pet-crow-effect",
+		cue: 1,
+		book: 3,
+		source: { regionId: 257, x: 12, y: 3, z: 34 }
+	} ] );
+	for ( const [offset, bad] of [ [ 4, 0 ], [ 4, 9 ], [ 5, 0 ], [ 5, 4 ] ] ) {
+		const invalid = Buffer.from( p );
+		invalid[offset] = bad;
+		assert.throws( () => owner.receive( { opcode: 0x3fbb, payload: invalid } ) );
+	}
+	p.writeFloatLE( NaN, 8 );
+	assert.throws( () => owner.receive( { opcode: 0x3fbb, payload: p } ) );
+});

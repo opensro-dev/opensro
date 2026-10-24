@@ -56,12 +56,13 @@ func TestWolfBloodHuntMarkLifecycle(t *testing.T) {
 				t.Fatal("expired mark")
 			}
 			rt.wolfHuntAttack(step, 0, []uint32{mob.Gid})
-			c.ActiveCOS.Training.Slotted[2] = 0
+			saved := c.ActiveCOS.Training.Levels
+			c.ActiveCOS.Training.Levels[12], c.ActiveCOS.Training.Levels[13], c.ActiveCOS.Training.Levels[14] = 0, 0, 0
 			rt.advanceWolfKit(step.key, step.nowMs)
 			if step.state.wolf.huntHits != 0 {
-				t.Fatal("unslotted mark")
+				t.Fatal("removed passive retained mark")
 			}
-			c.ActiveCOS.Training.Slotted[2] = tier
+			c.ActiveCOS.Training.Levels = saved
 			rt.wolfHuntAttack(step, 0, []uint32{mob.Gid})
 			rt.AttackPetExpansion = false
 			rt.advanceWolfKit(step.key, step.nowMs)

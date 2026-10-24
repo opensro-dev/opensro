@@ -70,6 +70,10 @@ func cloneCharacter(source *Character) *Character {
 		clone.Mercenaries[i] = CloneCOS(soldier)
 	}
 	clone.CapturedCOS = CloneCOS(source.CapturedCOS)
+	clone.Brood = cloneSlice(source.Brood)
+	for i, pet := range source.Brood {
+		clone.Brood[i] = CloneCOS(pet)
+	}
 	clone.PetSkillWindows = cloneSlice(source.PetSkillWindows)
 	clone.ParamJobs = cloneSlice(source.ParamJobs)
 	clone.CompositeJobs = cloneSlice(source.CompositeJobs)

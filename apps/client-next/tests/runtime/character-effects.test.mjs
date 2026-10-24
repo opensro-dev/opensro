@@ -1981,3 +1981,132 @@ test("Resolve ring remains subtle, follows a stationary bear and expires", () =>
 	);
 	effects.dispose();
 });
+
+/*
+================
+Stormbrood wind survives source retirement
+================
+*/
+test("crow wind bursts retain every fixed origin after clone despawn and reset cleanly", () => {
+	const effects = roarEffects( () => {} );
+	for ( let i = 0; i < 10; i++ ) effects.crowEffect( { regionId: 257, x: i * 10, y: 0, z: 30 } );
+	const step = now => effects.step( [], null, now, () => true, () => 1, [] );
+	step( 0 );
+	const peak = step( .5 ).filter( a => a.model === "/assets/effects/crow-wind-burst" );
+	assert.equal( peak.length, 30 );
+	assert.equal( new Set( peak.map( a => a.pose.x ) ).size, 10 );
+	assert.ok( peak.every( a => defined( a.opacity ) > 0 && a.scale <= 80 && !a.pickable ) );
+	assert.equal( step( 1.3 ).length, 0 );
+	assert.equal( step( 2 ).length, 0, "no replay" );
+	effects.crowEffect( { regionId: 257, x: 0, y: 0, z: 0 } );
+	effects.reset();
+	assert.equal( step( 3 ).length, 0 );
+	effects.dispose();
+});
+
+/*
+================
+Wind ribbon resources
+================
+*/
+test("crow wind uses a rising ribbon with transparent tips and edges", async () => {
+	const { createProceduralEffect } = await import(
+		"../../src/engine/runtime/characters/resources/procedural-effects.ts"
+	);
+	const gust = createProceduralEffect( "/assets/effects/crow-wind-burst" );
+	assert.ok( gust );
+	const texture = gust.images[0];
+	assert.equal( texture.width, 64 );
+	const pixels = texture.levels[0];
+	for ( let y = 0; y < 16; y++ ) {
+		assert.equal( pixels[(y * 64) * 4 + 3], 0 );
+		assert.equal( pixels[(y * 64 + 63) * 4 + 3], 0 );
+	}
+	assert.ok( pixels[(8 * 64 + 32) * 4 + 3] > 200 );
+	const positions = gust.model.primitives[0].geometry.positions;
+	assert.ok( positions[positions.length - 2] > positions[1], "spiral rises above the ground" );
+	assert.equal( defined( createProceduralEffect( "/assets/effects/pet-counter-ripple" ) ).images[0].width, 1 );
+});
+
+/*
+================
+Crow skill cosmetics
+================
+*/
+test("every crow cue and book draws bounded distinct feather cosmetics without gameplay", async () => {
+	const { createProceduralEffect } = await import(
+		"../../src/engine/runtime/characters/resources/procedural-effects.ts"
+	);
+	assert.ok( createProceduralEffect( "/assets/effects/crow-feather" ) );
+	for ( let cue = 1; cue <= 8; cue++ ) {
+		for ( let book = 1; book <= 3; book++ ) {
+			const effects = roarEffects();
+			effects.crowEffect( { regionId: 257, x: 11, y: 0, z: 22 }, cue, book );
+			effects.step( [], null, 0, () => true, () => 1, [] );
+			const actors = effects.step( [], null, .6, () => true, () => 1, [] );
+			assert.equal( actors.length, (3 + book) * (cue === 1 || cue === 4 ? 2 : 1) );
+			assert.ok(
+				actors.every( a =>
+					a.model ===
+						(cue === 1 ?
+							"/assets/effects/crow-heal-wisp" :
+							cue === 4 ?
+							"/assets/effects/crow-mana-wisp" :
+							"/assets/effects/crow-feather") && defined( a.opacity ) > 0 && !a.pickable
+				)
+			);
+			assert.equal( effects.step( [], null, 1.3, () => true, () => 1, [] ).length, 0 );
+			effects.dispose();
+		}
+	}
+});
+
+/*
+================
+Crow recovery effects
+================
+*/
+test("crow recovery uses red rising glow and blue inward wisps, with soft transparent edges", async () => {
+	const { createProceduralEffect } = await import(
+		"../../src/engine/runtime/characters/resources/procedural-effects.ts"
+	);
+	const resource = defined( createProceduralEffect( "/assets/effects/crow-feather" ) );
+	const image = resource.images[0];
+	assert.equal( image.width, 64 );
+	const pixels = image.levels[0];
+	for ( let y = 0; y < 64; y++ ) {
+		assert.equal( pixels[y * 64 * 4 + 3], 0 );
+		assert.equal( pixels[(y * 64 + 63) * 4 + 3], 0 );
+	}
+	const paths = [];
+	for ( const cue of [ 1, 4 ] ) {
+		const effects = roarEffects();
+		effects.crowEffect( { regionId: 257, x: 0, y: 0, z: 0 }, cue, 3 );
+		effects.step( [], null, 0, () => true, () => 1, [] );
+		const actors = effects.step( [], null, .6, () => true, () => 1, [] );
+		assert.equal( actors.length, 12 );
+		const colored = defined( createProceduralEffect( actors[0].model ) ).images[0].levels[0];
+		const at = (32 * 64 + 32) * 4;
+		assert.ok(
+			cue === 1 ? colored[at + 2] > colored[at] * 2 : colored[at] > colored[at + 2] * 2,
+			"unlit BGRA texture carries the recovery color"
+		);
+		assert.ok( actors[1].scale < actors[0].scale / 2 );
+		assert.equal(
+			defined( createProceduralEffect( actors[0].model ) ).model.primitives[0].geometry.material.blendPair
+				.destination,
+			6
+		);
+		assert.ok( actors.every( a => a.scale < 2 ), "recovery no longer draws large flat feathers" );
+		assert.equal(
+			defined( createProceduralEffect( actors[0].model ) ).model.primitives[0].geometry.material.fadeAlphaOnly,
+			false,
+			"soft texture alpha survives instance fading"
+		);
+		assert.ok( actors[1].opacity < actors[0].opacity );
+		paths.push( actors[0].pose );
+		assert.equal( effects.step( [], null, 1.3, () => true, () => 1, [] ).length, 0 );
+		effects.dispose();
+	}
+	assert.notDeepEqual( paths[0], paths[1], "healing rises beside the body; mana draws inward at torso height" );
+});

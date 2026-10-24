@@ -724,3 +724,42 @@ test("older entries without a cooldown projection clear the previous owner's row
 	owner.restore( { protocolVersion: 2 }, [ SKILL ], 2000 );
 	assert.deepEqual( owner.state(), [] );
 });
+
+// Port-only Mana Spring preserves provisional rows and never creates reuse.
+test("Mana Spring shortens confirmed cooldowns and clamps at ready", () => {
+	const c = cooldowns.createSkillCooldowns();
+	c.accepted( SKILL, 1000, 1000 );
+	c.pressed( { ...SKILL, id: 8 }, 1100, 1700, 1000 );
+	c.recover( 500, 1500 );
+	assert.equal( cooldowns.skillCooldown( c.state(), 7, 0, 1500 )?.remainingMs, 1000 );
+	assert.equal( c.state().find( r => r.skill === 8 )?.startedAtMs, 1100 );
+	c.recover( 500, 1500 );
+	c.recover( 500, 1500 );
+	assert.equal( cooldowns.skillCooldown( c.state(), 7, 0, 1500 ), null );
+	assert.equal( c.state().length, 2 );
+});
+
+test("Mana Spring private frame validates before changing cooldowns", () => {
+	const game = createGameplay( () => {} );
+	try {
+		game.bootstrap(
+			{
+				simulationProtocolVersion: 1,
+				character: { skills: [ SLOW ] },
+				refSkillSnapshot: [ skillRef( SLOW, 5000 ) ],
+				skillCooldowns: [ { skill: SLOW, remainingMs: 5000, durationMs: 5000 } ]
+			},
+			false,
+			1000
+		);
+		game.seed( local );
+		assert.throws(
+			() => game.receive( { opcode: 0x3fb8, payload: Uint8Array.of( 0xf4 ) }, 1000 ),
+			/Invalid Mana Spring/
+		);
+		game.receive( { opcode: 0x3fb8, payload: Uint8Array.of( 0xf4, 1 ) }, 1000 );
+		assert.equal( cooldowns.skillCooldown( game.take()?.skillCooldowns ?? [], SLOW, 0, 1000 )?.remainingMs, 4500 );
+	} finally {
+		game.dispose();
+	}
+});

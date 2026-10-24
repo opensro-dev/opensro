@@ -199,7 +199,7 @@ func TestWolfEligibilityAndProgressReset(t *testing.T) {
 				c.World.Spawn.RegionID = testInt64(0x62a8)
 				rt.Worlds.Forget(simulation.WorldKey(testDivision, c.Name))
 			case "book":
-				c.ActiveCOS.Training.Slotted[0] = 2
+				c.ActiveCOS.Training.Levels[8] = 0
 			}
 			rt.resetWolfExecution(petOwnerKey{testDivision, c.Name, c.ActiveCOS.GID}, clock.NowMs())
 			if state.wolfHits != [2]uint8{} {

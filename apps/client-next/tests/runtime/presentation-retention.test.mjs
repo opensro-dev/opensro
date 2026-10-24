@@ -73,6 +73,7 @@ test("a stale batch applies its state but drops one-shot feedback older than its
 		sequence: 2,
 		spanMs: 600000,
 		events: [
+			{ kind: "pet-crow-effect", cue: 1, book: 3, source: entity },
 			{ kind: "item-effect", source: entity, item: 1, typeFlags: 0 },
 			{ kind: "level-up", gid: 1 },
 			{ kind: "system-effect", gid: 1, effect: 5 },
@@ -86,7 +87,14 @@ test("a stale batch applies its state but drops one-shot feedback older than its
 	assert.deepEqual( p.takeFeedback().map( event => event.kind ), [ "orb-gauge" ] );
 	assert.equal( p.read( 1 ).x, 9 );
 	// A live batch still delivers its one-shots.
-	p.apply( { sequence: 3, spanMs: 16, events: [ { kind: "level-up", gid: 1 }, { kind: "orb-gauge", value: 8 } ] } );
-	assert.deepEqual( p.takeFeedback().map( event => event.kind ), [ "level-up", "orb-gauge" ] );
+	p.apply( {
+		sequence: 3,
+		spanMs: 16,
+		events: [ { kind: "pet-crow-effect", cue: 1, book: 3, source: entity }, { kind: "level-up", gid: 1 }, {
+			kind: "orb-gauge",
+			value: 8
+		} ]
+	} );
+	assert.deepEqual( p.takeFeedback().map( event => event.kind ), [ "pet-crow-effect", "level-up", "orb-gauge" ] );
 	p.dispose();
 });

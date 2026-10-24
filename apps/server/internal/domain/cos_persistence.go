@@ -102,6 +102,7 @@ func (c *Character) Companions() []*CharacterCOS {
 	if c.CapturedCOS != nil {
 		pets = append(pets, c.CapturedCOS)
 	}
+	pets = append(pets, c.Brood...)
 	return pets
 }
 

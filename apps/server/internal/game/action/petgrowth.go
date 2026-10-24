@@ -232,6 +232,9 @@ level-up frames.
 ================
 */
 func (rt *Runtime) applyAttackPetExperience(c *enterworld.Character, pet *enterworld.CharacterCOS, ref *enterworld.CharacterRef, delta int64, source uint32) (owner, area []wire.Frame) {
+	if pet.BroodStage != 0 {
+		return nil, nil
+	}
 	levels := rt.deps.LevelData()
 	refs, ok := rt.deps.ItemReferences().(enterworld.CharacterRefSource)
 	if delta <= 0 || levels == nil || !ok {

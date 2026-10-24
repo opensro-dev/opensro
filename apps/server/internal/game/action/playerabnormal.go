@@ -756,6 +756,9 @@ func (rt *Runtime) playerAbnormalPublication(division string, c *enterworld.Char
 		}
 	}
 	for _, hit := range o.hits {
+		if hit.damage > 0 {
+			out.public = append(out.public, rt.tailwindDamage(division, c, hit.source, o.now)...)
+		}
 		// 52A38E/52A3FD also send the victim an echo, even when its source
 		// vanished or died. The source's credit does not gate that packet.
 		if hit.reason != abnormalDamageOverTimeReason {
@@ -767,6 +770,7 @@ func (rt *Runtime) playerAbnormalPublication(division string, c *enterworld.Char
 			continue
 		}
 		if source := rt.findCharacterByGid(division, hit.source); source != nil {
+			out.public = append(out.public, rt.tailwindDamage(division, source, gid, o.now)...)
 			out.sources = append(out.sources, privateFrames{source.ID, []wire.Frame{frame}})
 		}
 	}

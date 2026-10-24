@@ -95,7 +95,9 @@ func isVersionMismatch(err error) bool {
 // (madeAtMs), stamped when an upgrade raises it, so its build minutes hold
 // across a restart. Structures raised earlier have none; the upgrade
 // rewrites no record.
-const CurrentVersion = 30
+// Version 31 adds optional sequential pet cast capacity, charges and recharge period.
+// Existing cooldown deadlines and every saved record survive unchanged.
+const CurrentVersion = 31
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.

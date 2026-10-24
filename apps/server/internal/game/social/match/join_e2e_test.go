@@ -169,6 +169,7 @@ func startJoinServer(t *testing.T, dir string, seeds []*enterworld.Character) jo
 	}
 	// The wiring.go match-JOIN seams, verbatim.
 	runtime.PartyListingAuthority = partyRt.ListingAuthority
+	runtime.PartyListingOwnerFor = partyRt.MatchListingOwner
 	runtime.PartyJoinPrecheck = partyRt.MatchJoinPrecheck
 	runtime.CommitPartyJoin = partyRt.AdmitMatchJoin
 	runtime.PartyMemberInfoFor = partyRt.MaskedMemberInfoFor

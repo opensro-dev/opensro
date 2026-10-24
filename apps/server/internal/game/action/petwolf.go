@@ -52,15 +52,29 @@ Shared port-only PvE eligibility for the wolf and frost caster.
 ================
 */
 func (rt *Runtime) elementalCompanion(division string, owner *enterworld.Character, gid uint32, kind string, now int64) (petCombatStep, bool) {
+	return rt.elementalCompanionEligibility(division, owner, gid, kind, now, false)
+}
+
+/*
+================
+elementalCompanionEligibility
+
+Only travel support may opt into safe zones; combat callers keep the town gate.
+================
+*/
+func (rt *Runtime) elementalCompanionEligibility(division string, owner *enterworld.Character, gid uint32, kind string, now int64, allowTown bool) (petCombatStep, bool) {
 	var step petCombatStep
 	if !rt.AttackPetExpansion || rt.Monsters == nil {
 		return step, false
 	}
 	snapshot := rt.characterSnapshot(division, owner)
-	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) || rt.inTown(division, snapshot) {
+	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) || !allowTown && rt.inTown(division, snapshot) {
 		return step, false
 	}
 	for _, pet := range snapshot.Companions() {
+		if pet.BroodStage != 0 {
+			continue
+		}
 		if gid != 0 && pet.GID != gid || companion.PetKind(pet.Codename) != kind || !pet.Summoned || pet.CurrentHP == 0 || !rt.petExpansionAllowed(snapshot, pet) {
 			continue
 		}
@@ -70,7 +84,7 @@ func (rt *Runtime) elementalCompanion(division string, owner *enterworld.Charact
 		}
 		from := state.follower.Position(now)
 		at := rt.liveSpawn(simulation.WorldKey(division, snapshot.Name), snapshot, now)
-		if !samePlaneAdjacent(from, at) || areaDistance(from, at) > 20*petAreaPerMeter || townRegion(from.RegionID) {
+		if !samePlaneAdjacent(from, at) || areaDistance(from, at) > 20*petAreaPerMeter || !allowTown && townRegion(from.RegionID) {
 			continue
 		}
 		ref, found := rt.cosReference(pet)

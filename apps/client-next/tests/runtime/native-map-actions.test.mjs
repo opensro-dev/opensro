@@ -127,6 +127,10 @@ test("world map paints in 57FE60 order and projects every marker like the player
 		path: sign
 	} ] );
 	assert.equal( below.markers.length, 1 );
+	// Each painted quad names its source row; an unprojected row has none and
+	// the local player is markers.length.
+	assert.deepEqual( q.markerRows, [ 0, 1 ] );
+	assert.deepEqual( below.markerRows, [ 1 ] );
 });
 test("both map surfaces share one roster admission and prefer a live pose", () => {
 	const local = { regionId: 97 * 256 + 168, x: 960, y: 0, z: 960, angle: 0 };
@@ -144,6 +148,7 @@ test("both map surfaces share one roster admission and prefer a live pose", () =
 	};
 	assert.deepEqual( rosterPositions( local, game, [] ), [ {
 		kind: "party",
+		name: "mate",
 		regionId: local.regionId,
 		x: 100,
 		y: 0,
@@ -152,6 +157,7 @@ test("both map surfaces share one roster admission and prefer a live pose", () =
 	const live = [ { gid: 9, kind: "player", name: "mate", regionId: local.regionId, x: 700, y: 1, z: 800 } ];
 	assert.deepEqual( rosterPositions( local, game, live ), [ {
 		kind: "party",
+		name: "mate",
 		regionId: local.regionId,
 		x: 700,
 		y: 1,

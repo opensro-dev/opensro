@@ -11,7 +11,6 @@ import (
 	"encoding/binary"
 	"testing"
 
-	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
@@ -57,89 +56,20 @@ than merely checking that the skill builder contains an abnormal parameter.
 ================
 */
 func TestAdvancedPetPassivesCommitTheirStatuses(t *testing.T) {
-	for _, tc := range []struct {
-		name, code string
-		id         uint8
-		status     abnormal.Status
-	}{
-		{"murder-of-crows-III", "COS_P_RAVEN_040", 60, abnormal.Myopia},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			rt, clock, c, mob := newPetCombatRuntime(t, 100000, attackPetBand)
-			makeTrainedPet(rt, c, tc.code, 90)
-			rt.AttackPetExpansion = true
-			selected := learnPetBook(t, c, tc.id)
-			rt.HandleCosCommand(testDivision, c, petAttackOrder(c.ActiveCOS.GID, mob.Gid))
-			tickPetCombat(t, rt, clock, 2000, func() bool {
-				live, ok := rt.Monsters.Get(testDivision, mob.Gid)
-				return ok && live.Abnormal != nil && live.Abnormal.Slots[tc.status].Active
-			})
-			if companion.Level(c.ActiveCOS, selected) != 1 {
-				t.Fatal("combat changed learned ranks")
-			}
-		})
-	}
-}
-
-/*
-================
-TestAdvancedWolfConditionAndCrowKillHealing
-================
-*/
-func TestAdvancedWolfConditionAndCrowKillHealing(t *testing.T) {
-	t.Run("carrion-heals-only-on-kill", func(t *testing.T) {
-		rt, clock, c, mob := newPetCombatRuntime(t, 100000, attackPetBand)
-		makeTrainedPet(rt, c, "COS_P_RAVEN_040", 90)
-		rt.AttackPetExpansion = true
-		learnPetBook(t, c, 54)
-		c.MissionInventory = nil
-		*c.CurrentHP = 1
-		ref, _ := rt.cosReference(c.ActiveCOS)
-		step := petCombatStep{pet: c.ActiveCOS, snapshot: c, ref: ref, state: rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID), nowMs: clock.NowMs()}
-		_, strike := rt.petTrainedDecide(step, enterworld.SkillRow{}, petCombatTarget{monster: &mob})
-		rt.petTrainedCommit(step, c, c.ActiveCOS, strike, 10, false, false)
-		if *c.CurrentHP != 1 {
-			t.Fatal("nonlethal attack healed owner")
-		}
-		_, strike = rt.petTrainedDecide(step, enterworld.SkillRow{}, petCombatTarget{monster: &mob})
-		rt.petTrainedCommit(step, c, c.ActiveCOS, strike, 10, true, false)
-		if *c.CurrentHP <= 1 {
-			t.Fatal("killing hit did not heal owner")
-		}
+	rt, clock, c, mob, key := tailwindFixture(t, 1)
+	learnPetBook(t, c, 60)
+	rt.HandleCosCommand(testDivision, c, petAttackOrder(c.ActiveCOS.GID, mob.Gid))
+	tickPetCombat(t, rt, clock, 2000, func() bool {
+		return rt.petSessionFor(key.division, key.name, key.gid).crow.precision[enterworld.ObjectIDForCharacter(c)].stacks == 5
 	})
 }
 
 /*
 ================
-TestAdvancedMarkRechargesAndRecastsAfterActualAttacks
+TestGuardianReplacementAndPlumeMagnitude
 ================
 */
-func TestAdvancedMarkRechargesAndRecastsAfterActualAttacks(t *testing.T) {
-	rt, clock, c, mob := newPetCombatRuntime(t, 100000, attackPetBand)
-	makeTrainedPet(rt, c, "COS_P_RAVEN_040", 90)
-	rt.AttackPetExpansion = true
-	skill := learnPetBook(t, c, 50)
-	cast := binary.LittleEndian.AppendUint32(trainingCommand(c.ActiveCOS.GID, petTrainingUse, skill.ID), mob.Gid)
-	rt.HandleCosCommand(testDivision, c, cast)
-	tickPetCombat(t, rt, clock, 200, func() bool { return c.ActiveCOS.Training.Rows[1].Left > 0 })
-	if c.ActiveCOS.Training.Rows[1].Left != 12 {
-		t.Fatal("cast paid part of its own recharge")
-	}
-	tickPetCombat(t, rt, clock, 2000, func() bool { return c.ActiveCOS.Training.Rows[1].Left == 0 })
-	rt.HandleCosCommand(testDivision, c, cast)
-	tickPetCombat(t, rt, clock, 200, func() bool { return c.ActiveCOS.Training.Rows[1].Left > 0 })
-	live, _ := rt.Monsters.Get(testDivision, mob.Gid)
-	if live.Abnormal == nil || !live.Abnormal.Slots[abnormal.Decay].Active {
-		t.Fatal("recharged Mark did not apply")
-	}
-}
-
-/*
-================
-TestGuardianReplacementAndMendMagnitude
-================
-*/
-func TestGuardianReplacementAndMendMagnitude(t *testing.T) {
+func TestGuardianReplacementAndPlumeMagnitude(t *testing.T) {
 	t.Run("guardian-does-not-retain-old-defense-bonus", func(t *testing.T) {
 		rt, _, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
 		makeTrainedPet(rt, c, "COS_P_BEAR_040", 90)
@@ -159,10 +89,11 @@ func TestGuardianReplacementAndMendMagnitude(t *testing.T) {
 			t.Fatal("Guardian changed native-off defense")
 		}
 	})
-	t.Run("mend-II-heals-inherited-extra-half", func(t *testing.T) {
-		rt, _, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	t.Run("plume-II-initial-half", func(t *testing.T) {
+		rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
 		makeTrainedPet(rt, c, "COS_P_RAVEN_040", 90)
 		rt.AttackPetExpansion = true
+		roarField(t, rt, c, clock)
 		skill := learnPetBook(t, c, 47)
 		c.MissionInventory = nil
 		*c.CurrentHP = 1
@@ -171,7 +102,7 @@ func TestGuardianReplacementAndMendMagnitude(t *testing.T) {
 			t.Fatal(err)
 		}
 		maxHP, _, _, _ := keeperVitalsFrom(c, stats, nil)
-		expected := int64(1 + float64(maxHP)*skill.ValueAt(1)*1.5/100)
+		expected := int64(1 + float64(maxHP)*skill.ValueAt(1)*0.5/100)
 		rt.HandleCosCommand(testDivision, c, binary.LittleEndian.AppendUint32(trainingCommand(c.ActiveCOS.GID, petTrainingUse, skill.ID), 0))
 		if *c.CurrentHP != expected {
 			t.Fatalf("healed to%d, want%d", *c.CurrentHP, expected)
@@ -216,8 +147,8 @@ func TestAdvancedPetStatPassivesReachCombat(t *testing.T) {
 					t.Fatal("mastery did not improve actual magical damage")
 				}
 			case "speed":
-				if rt.petAttackSpeed(step) <= 1 {
-					t.Fatal("Swift Wings did not shorten attack intervals")
+				if rt.petAttackSpeed(step) != 1 {
+					t.Fatal("Tailwind changed the crow's attack interval")
 				}
 			}
 		})

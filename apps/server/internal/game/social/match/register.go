@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+register.go - matching transport handlers and live party seams.
+
+===========================================================================
+*/
 package match
 
 import (
@@ -12,6 +19,11 @@ import (
 
 // Runtime owns the match lane's board and the deps it resolves session
 // identity through.
+/*
+================
+Runtime
+================
+*/
 type Runtime struct {
 	deps  Dependencies
 	board *Board
@@ -28,6 +40,9 @@ type Runtime struct {
 	MemberCountFor func(divisionID, name string) int
 	// Party registry owns leadership and options; a listing cannot override them.
 	PartyListingAuthority func(divisionID, name string) (options uint8, partied bool, leader bool)
+	// PartyListingOwnerFor resolves the current party's listing owner for paging
+	// only. Registration, modification and deletion still use session identity.
+	PartyListingOwnerFor func(divisionID, name string) string
 
 	// The party-join seams (the MemberCountFor posture: func fields
 	// assigned by wiring.go so internal/game/social/party stays this lane's dependency
@@ -66,6 +81,11 @@ type Runtime struct {
 
 // NewRuntime builds the lane over a fresh in-memory board and retains the
 // process-owned deps pointer shared by every lane.
+/*
+================
+NewRuntime
+================
+*/
 func NewRuntime(deps Dependencies, presence Presence) *Runtime {
 	return &Runtime{
 		deps:     deps,
@@ -76,10 +96,20 @@ func NewRuntime(deps Dependencies, presence Presence) *Runtime {
 }
 
 // Board exposes the registry for tests.
+/*
+================
+Board
+================
+*/
 func (r *Runtime) Board() *Board {
 	return r.board
 }
 
+/*
+================
+sessionByName
+================
+*/
 func (r *Runtime) sessionByName(divisionID, characterName string) (*transport.Session, bool) {
 	if r.presence == nil {
 		return nil, false
@@ -96,6 +126,11 @@ func (r *Runtime) sessionByName(divisionID, characterName string) (*transport.Se
 // unpinned vs retail and this lane never invents bytes; JOIN refusals
 // answer the PINNED 0xB5BF/0xB592 outer-1 detail arms instead (join.go
 // documents why silence is wrong there).
+/*
+================
+Register
+================
+*/
 func (r *Runtime) Register(hub *transport.Hub) {
 	hub.Handle(OpPartyRegisterRequest, r.handlePartyRegister)
 	hub.Handle(OpPartyModifyRequest, r.handlePartyModify)
@@ -113,12 +148,22 @@ func (r *Runtime) Register(hub *transport.Hub) {
 
 // ownerKey is the board's owner identity: the same division+":"+lowered
 // name shape the hub's exclusive bind uses.
+/*
+================
+ownerKey
+================
+*/
 func ownerKey(divisionID, characterName string) string {
 	return divisionID + ":" + strings.ToLower(characterName)
 }
 
 // sessionIdentity resolves the bound character or reports the silent
 // discard (unbound sessions never reach board state).
+/*
+================
+sessionIdentity
+================
+*/
 func (r *Runtime) sessionIdentity(s *transport.Session, opcode uint16) (*enterworld.Character, string, bool) {
 	character, divisionID, bound := enterworld.SessionCharacter(r.deps, s)
 	if !bound {
@@ -137,6 +182,11 @@ func (r *Runtime) sessionIdentity(s *transport.Session, opcode uint16) (*enterwo
 }
 
 // characterLevel reads the persisted level with the store's >=1 floor.
+/*
+================
+characterLevel
+================
+*/
 func characterLevel(c *enterworld.Character) uint8 {
 	if c == nil || c.Level == nil || *c.Level < 1 {
 		return 1
@@ -152,6 +202,11 @@ func characterLevel(c *enterworld.Character) uint8 {
 // native country byte), and the member count off the party registry seam
 // (1 when the owner is partyless - the client's own ack writer uses the
 // same no-active-party fallback).
+/*
+================
+partyEntryFromRequest
+================
+*/
 func (r *Runtime) partyEntryFromRequest(divisionID string, character *enterworld.Character, request PartyMatchRequest) PartyEntry {
 	return PartyEntry{
 		PartyNumber: request.PartyNumber,
@@ -171,6 +226,11 @@ func (r *Runtime) partyEntryFromRequest(divisionID string, character *enterworld
 // otherwise. The wire field is a u8 and the party roster caps at 8, so
 // the clamp never fires in practice - it only keeps a misbehaving seam
 // from wrapping the byte.
+/*
+================
+partyMemberCount
+================
+*/
 func (r *Runtime) partyMemberCount(divisionID, name string) uint8 {
 	if r.MemberCountFor == nil {
 		return 1
@@ -189,6 +249,11 @@ func (r *Runtime) partyMemberCount(divisionID, name string) uint8 {
 // kind + detail + dword04, the SERVER-derived requester identity (name,
 // model ref for the client-side race resolve, level into the window's
 // level pair), and zeroed camp/honor scalars (no training-camp state).
+/*
+================
+mentorEntryFromRequest
+================
+*/
 func (r *Runtime) mentorEntryFromRequest(character *enterworld.Character, request MentorMatchRequest) MentorEntry {
 	level := characterLevel(character)
 	return MentorEntry{
@@ -204,6 +269,11 @@ func (r *Runtime) mentorEntryFromRequest(character *enterworld.Character, reques
 
 // handlePartyRegister answers 0x76FF with the 0xB6FF success ack. A
 // duplicate registration returns native category-2 unknown error (modify is 0x73DC).
+/*
+================
+handlePartyRegister
+================
+*/
 func (r *Runtime) handlePartyRegister(s *transport.Session, opcode uint16, payload []byte) {
 	character, divisionID, ok := r.sessionIdentity(s, opcode)
 	if !ok {
@@ -232,6 +302,11 @@ func (r *Runtime) handlePartyRegister(s *transport.Session, opcode uint16, paylo
 
 // handlePartyModify answers 0x73DC with the 0xB3DC success ack. A
 // modify without a live registration returns a native error.
+/*
+================
+handlePartyModify
+================
+*/
 func (r *Runtime) handlePartyModify(s *transport.Session, opcode uint16, payload []byte) {
 	character, divisionID, ok := r.sessionIdentity(s, opcode)
 	if !ok {
@@ -260,6 +335,11 @@ func (r *Runtime) handlePartyModify(s *transport.Session, opcode uint16, payload
 
 // handlePartyDelete answers 0x7535 with the 0xB535 success ack. Foreign
 // or unknown ids return a native error - only the owner deletes their row.
+/*
+================
+handlePartyDelete
+================
+*/
 func (r *Runtime) handlePartyDelete(s *transport.Session, opcode uint16, payload []byte) {
 	character, divisionID, ok := r.sessionIdentity(s, opcode)
 	if !ok {
@@ -282,6 +362,11 @@ func (r *Runtime) handlePartyDelete(s *transport.Session, opcode uint16, payload
 
 // handlePartyPage answers 0x7588 with the 0xB588 listing page, each row's
 // member count read live from the party registry.
+/*
+================
+handlePartyPage
+================
+*/
 func (r *Runtime) handlePartyPage(s *transport.Session, opcode uint16, payload []byte) {
 	character, divisionID, ok := r.sessionIdentity(s, opcode)
 	if !ok {
@@ -293,7 +378,11 @@ func (r *Runtime) handlePartyPage(s *transport.Session, opcode uint16, payload [
 		_ = s.Send(opcode+0x4000, []byte{2, 2})
 		return
 	}
-	curPage, pageCount, rows := r.board.PartyPage(divisionID, ownerKey(divisionID, character.Name), page)
+	listingOwner := character.Name
+	if r.PartyListingOwnerFor != nil {
+		listingOwner = r.PartyListingOwnerFor(divisionID, character.Name)
+	}
+	curPage, pageCount, rows := r.board.PartyPage(divisionID, ownerKey(divisionID, listingOwner), page)
 	// A listing names its party (v1.188 CPartyMatch_SubmitShardJob 5BF2A0
 	// stores the party ID, not a count), so the count is the party's size
 	// as each page is asked for. The registration snapshot went stale as
@@ -305,6 +394,11 @@ func (r *Runtime) handlePartyPage(s *transport.Session, opcode uint16, payload [
 }
 
 // handleMentorRegister answers 0x755D with the 0xB55D success ack.
+/*
+================
+handleMentorRegister
+================
+*/
 func (r *Runtime) handleMentorRegister(s *transport.Session, opcode uint16, payload []byte) {
 	character, divisionID, ok := r.sessionIdentity(s, opcode)
 	if !ok {
@@ -325,6 +419,11 @@ func (r *Runtime) handleMentorRegister(s *transport.Session, opcode uint16, payl
 }
 
 // handleMentorModify answers 0x713E with the 0xB13E success ack.
+/*
+================
+handleMentorModify
+================
+*/
 func (r *Runtime) handleMentorModify(s *transport.Session, opcode uint16, payload []byte) {
 	character, divisionID, ok := r.sessionIdentity(s, opcode)
 	if !ok {
@@ -345,6 +444,11 @@ func (r *Runtime) handleMentorModify(s *transport.Session, opcode uint16, payloa
 }
 
 // handleMentorDelete answers 0x770B with the 0xB70B success ack.
+/*
+================
+handleMentorDelete
+================
+*/
 func (r *Runtime) handleMentorDelete(s *transport.Session, opcode uint16, payload []byte) {
 	character, divisionID, ok := r.sessionIdentity(s, opcode)
 	if !ok {
@@ -364,6 +468,11 @@ func (r *Runtime) handleMentorDelete(s *transport.Session, opcode uint16, payloa
 }
 
 // handleMentorPage answers 0x7701 with the 0xB701 listing page.
+/*
+================
+handleMentorPage
+================
+*/
 func (r *Runtime) handleMentorPage(s *transport.Session, opcode uint16, payload []byte) {
 	character, divisionID, ok := r.sessionIdentity(s, opcode)
 	if !ok {
@@ -386,6 +495,11 @@ func (r *Runtime) handleMentorPage(s *transport.Session, opcode uint16, payload 
 // party lane's posture exactly: a session boundary always drops the
 // state, never reseeds it (reseeding would race the bootstrap frame
 // order; in-memory match state does not survive the player's transport).
+/*
+================
+WorldBound
+================
+*/
 func (r *Runtime) WorldBound(divisionID string, character *enterworld.Character) {
 	if character == nil {
 		return
@@ -408,6 +522,11 @@ func (r *Runtime) WorldBound(divisionID string, character *enterworld.Character)
 // rebind winner is live - the character never went offline, and the
 // winner's rows must survive its predecessor's close), then purge the
 // owner's rows from both boards.
+/*
+================
+SessionClosed
+================
+*/
 func (r *Runtime) SessionClosed(s *transport.Session) {
 	character, divisionID, bound := enterworld.SessionCharacter(r.deps, s)
 	if !bound {

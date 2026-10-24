@@ -627,6 +627,18 @@ an empty slot), from the latest server state.
 ================
 */
 export interface PetTraining {
+	readonly guidance?: {
+		readonly gid: number;
+		readonly book: number;
+		readonly stacks: number;
+		readonly hitPercent: number;
+	};
+	readonly tailwind?: {
+		readonly gid: number;
+		readonly book: number;
+		readonly stacks: number;
+		readonly speedPercent: number;
+	};
 	readonly counters?: {
 		readonly attacks: number;
 		readonly wolfExecute?: number;
@@ -707,6 +719,8 @@ export interface GameplayState {
 	readonly betaPlayers?: readonly BetaMapPlayer[];
 	// Port-only wolf skill tree of the pet window's wolf (pet-training.ts).
 	readonly petTraining?: PetTraining;
+	readonly petTailwind?: PetTraining["tailwind"];
+	readonly petGuidance?: PetTraining["guidance"];
 	/** RefObjIDs the server never spends (the beta starter kit), drawn as unlimited. */
 	readonly unlimitedItems?: readonly number[];
 	readonly returnScroll?: import("@/engine/foundation/gameplay/return-scroll").ReturnScrollCast;

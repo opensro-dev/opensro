@@ -401,6 +401,7 @@ func newGameplayPlane(
 		return 1
 	}
 	matches.PartyListingAuthority = parties.ListingAuthority
+	matches.PartyListingOwnerFor = parties.MatchListingOwner
 	matches.PartyJoinPrecheck = parties.MatchJoinPrecheck
 	matches.CommitPartyJoin = parties.AdmitMatchJoin
 	matches.PartyMemberInfoFor = parties.MaskedMemberInfoFor

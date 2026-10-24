@@ -22,6 +22,7 @@ import {
 	parsePackHeader,
 	storedMemberBytes
 } from "../../../../scripts/build/shared/packFormat.mjs";
+import { CROW_EGG_REF } from "../../../../scripts/build/char/crowEgg.mjs";
 import { PORT_PET_DROP_MODEL } from "../../../../scripts/build/shared/portItemRows.mjs";
 import { equipmentModelFiles, hwanModelFiles } from "../../../../scripts/build/assetPackOwnership.mjs";
 import { joinedNpcManifest } from "../../../../scripts/build/shared/npcManifest.mjs";
@@ -108,7 +109,9 @@ test("packed NPC models match their published authority and pass the production 
 
 test("special COS references share authored state-50 models and matching VAT clips", () => {
 	const manifest = joinedNpcManifest( readPublishedAssetJsonSync( "/assets/npc/manifest.json", publicRoot ) );
-	const cos = Object.values( manifest.models ).filter( row => row.kind === "cos" );
+	const cos = Object.values( manifest.models ).filter( row => row.kind === "cos" && row.refObjId !== CROW_EGG_REF );
+	const egg = Object.values( manifest.models ).find( row => row.refObjId === CROW_EGG_REF );
+	assert.ok( egg?.staticPose && egg.clips.length === 0, "owned egg has no retail emote or VAT requirement" );
 	// Reviewed 2026-10-02: every COS band whose BSR ships. Riding mounts,
 	// transports and quest companions author no state-50 emote; 582110's
 	// action-1 route plays one for the growth pets, which all author it.

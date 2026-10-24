@@ -152,6 +152,7 @@ func (rt *Runtime) strikePetTargets(step petCombatStep, primary petCombatTarget,
 		return petStrikeResult{}, false
 	}
 	strikes := []monsterStrike{first.strike}
+	hpDamage := first.hpDamage
 	var wolfTargets []uint32
 	if primary.monster != nil && petStrikeDamaged(first.strike) {
 		wolfTargets = append(wolfTargets, primary.gid)
@@ -164,6 +165,7 @@ func (rt *Runtime) strikePetTargets(step petCombatStep, primary petCombatTarget,
 			continue
 		}
 		strikes = append(strikes, hit.strike)
+		hpDamage += hit.hpDamage
 		if target.monster != nil && petStrikeDamaged(hit.strike) {
 			wolfTargets = append(wolfTargets, target.gid)
 		}
@@ -200,6 +202,10 @@ func (rt *Runtime) strikePetTargets(step petCombatStep, primary petCombatTarget,
 	public := []wire.Frame{frame}
 	for _, hit := range strikes {
 		public = append(public, hit.public...)
+	}
+	rt.crowManaSpring(step, hpDamage)
+	if step.trained != nil {
+		rt.crowAfterAttack(step, wolfTargets)
 	}
 	echoFrames := rt.penguinAfterSpell(step, primary, skill, append([]petCombatTarget{primary}, secondary...), strikes)
 	rt.wolfHuntRend(step, primary, first.strike)

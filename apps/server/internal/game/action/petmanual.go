@@ -28,7 +28,7 @@ manualPetSkill
 */
 func (rt *Runtime) manualPetSkill(division string, owner, snapshot *enterworld.Character, gid uint32, id uint8, target uint32, now int64) OpResult {
 	pet := snapshot.CompanionByGID(gid)
-	if pet == nil || !pet.Summoned || pet.Mounted || pet.CurrentHP == 0 || !enterworld.CharacterAlive(snapshot) || !petAttackBodyAllowed(pet, combatTarget{}) {
+	if pet == nil || pet.BroodStage != 0 || !pet.Summoned || pet.Mounted || pet.CurrentHP == 0 || !enterworld.CharacterAlive(snapshot) || !petAttackBodyAllowed(pet, combatTarget{}) {
 		return petTrainingReceipt("A living, available pet and owner are required.")
 	}
 	validation := *pet
@@ -43,6 +43,8 @@ func (rt *Runtime) manualPetSkill(division string, owner, snapshot *enterworld.C
 		return petTrainingReceipt("The pet is not ready.")
 	}
 	switch skill.EffectName() {
+	case companion.BroodSkill:
+		return rt.castCrowBrood(division, owner, gid, skill, now)
 	case "Challenging Roar":
 		level := companion.EffectiveLevel(pet, skill, companion.ModifiersFor(pet))
 		if rt.inTown(division, snapshot) || townRegion(state.follower.Position(now).RegionID) {
@@ -80,11 +82,13 @@ func (rt *Runtime) manualPetSkill(division string, owner, snapshot *enterworld.C
 			Frames:    append(append([]wire.Frame{}, public...), rt.petTrainingStateFrames(updated, now)...),
 			Broadcast: public,
 		}
+	case "Rejuvenating Plume":
+		return rt.castCrowPlume(division, owner, gid, skill, now)
 	case "Hunting Howl":
 		return rt.castWolfHowl(division, owner, gid, skill, now)
 	case "Iron Hide":
 		return rt.castPetShield(division, owner, snapshot, pet, skill, now)
-	case "Frenzy", "Mend", "Retribution":
+	case "Frenzy", "Retribution":
 		step := petCombatStep{key: petOwnerKey{division: division, name: strings.ToLower(owner.Name), gid: gid}, state: state, snapshot: snapshot, pet: pet, ref: ref, nowMs: now}
 		strike := &petTrainedStrike{mods: companion.ModifiersFor(pet), passive: -1}
 		level := companion.EffectiveLevel(pet, skill, strike.mods)

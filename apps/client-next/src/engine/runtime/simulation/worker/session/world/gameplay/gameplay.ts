@@ -4715,6 +4715,8 @@ The published plane when something changed since the last take, else null.
 				...skillPress.state(),
 				betaPlayers: betaMap.players(),
 				petTraining: petTraining.state(),
+				petTailwind: petTraining.tailwind(),
+				petGuidance: petTraining.guidance(),
 				unlimitedItems,
 				error: m.error ?? i.error ?? c.error ?? targeting.error() ?? progression.error ??
 					training.state().trainingError ?? social.error ?? cosError ?? moveReservation.error() ?? null

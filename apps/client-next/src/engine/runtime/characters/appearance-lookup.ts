@@ -182,7 +182,10 @@ export function createAppearanceLookup( sources: AppearanceSources ) {
 	================
 	*/
 	function resourceFor( entity: EntityState ): Resource | undefined {
-		const resource = published.catalog.get( appearanceRef( entity ) );
+		// Port-only reserved summon namespace; a native pet name cannot change its model.
+		const egg = entity.kind === "cos" && entity.gid >= 0x08000000 && entity.gid < 0x0a800000 &&
+			entity.name === "Stormbrood Egg";
+		const resource = published.catalog.get( egg ? 5000001 : appearanceRef( entity ) );
 		// 8E64F0 reloads the mesh from characterInfo +0x28 (LoadVisualMeshFromBSR,
 		// keeping scale and transform); the record and its sounds stay the body's.
 		const death = resource && deathShown( entity.gid ) ? published.deathModels.get( resource.codename ) : undefined;

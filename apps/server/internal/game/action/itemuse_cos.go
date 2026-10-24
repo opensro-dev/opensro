@@ -114,7 +114,7 @@ livePet
 func (rt *Runtime) livePet(character *enterworld.Character, gid uint32) bool {
 	pet := character.CompanionByGID(gid)
 	ref, valid := rt.cosReference(pet)
-	return valid && ref.TidWord>>11 != domain.PickupPetBand && pet != nil && pet.Summoned && pet.CurrentHP > 0 && pet.GID == gid && pet.GID != 0
+	return valid && ref.TidWord>>11 != domain.PickupPetBand && pet != nil && pet.BroodStage == 0 && pet.Summoned && pet.CurrentHP > 0 && pet.GID == gid && pet.GID != 0
 }
 
 /*

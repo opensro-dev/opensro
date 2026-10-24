@@ -119,6 +119,10 @@ func (rt *Runtime) commitCredited(in creditedHitRequest) (creditedMonsterHit, bo
 		return hit, false
 	}
 	rt.commitSkillHostility(division, enterworld.ObjectIDForCharacter(c), target.Gid, row, hit.impacts, now)
+	if formula.Damage > 0 {
+		frames := rt.tailwindDamage(division, c, target.Gid, now)
+		rt.queueMonsterLegFrames([]simulation.DivisionFrames{{DivisionID: division, SourceGID: target.Gid, Frames: simFrames(frames)}})
+	}
 	return hit, true
 }
 

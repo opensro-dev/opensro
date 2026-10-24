@@ -12,8 +12,11 @@ real transport with the wiring.go seams (startJoinServer).
 package match_test
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
+
+	"github.com/gorilla/websocket"
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/social/match"
@@ -77,4 +80,37 @@ func TestPartyListingPageShowsTheLiveMemberCount(t *testing.T) {
 	sendFrame(t, mira, match.OpPartyPageRequest, []byte{1})
 	expectExactFrame(t, mira, match.OpPartyListingPage,
 		match.EncodePartyListingB588(1, 1, []match.PartyEntry{listing(2)}), "own page after jack joined")
+	// The member must receive the leader's row on every page, not only when
+	// registration order happens to put it in that page's slice.
+	var others []match.PartyEntry
+	for i := 0; i < 24; i++ {
+		name := fmt.Sprintf("Other%02d", i)
+		entry, ok := server.runtime.Board().RegisterParty(e2eDivision, boardOwnerKey(name), match.PartyEntry{
+			MasterName: name, MemberCount: 1, MinLevel: 1, MaxLevel: 90,
+		})
+		if !ok {
+			t.Fatal("could not add another party")
+		}
+		others = append(others, entry)
+	}
+	for page := uint8(1); page <= 3; page++ {
+		lo := int(page-1) * (match.PageRows - 1)
+		hi := min(lo+match.PageRows-1, len(others))
+		want := append([]match.PartyEntry{listing(2)}, others[lo:hi]...)
+		for _, client := range []*websocket.Conn{mira, jack} {
+			sendFrame(t, client, match.OpPartyPageRequest, []byte{page})
+			expectExactFrame(t, client, match.OpPartyListingPage,
+				match.EncodePartyListingB588(page, 3, want), "current party first on every page")
+		}
+	}
+	// Pinning the leader's listing does not give a member ownership.
+	sendFrame(t, jack, match.OpPartyDeleteRequest, u32le(1))
+	expectExactFrame(t, jack, match.OpPartyDeleteAck, []byte{2, 2}, "member cannot delete leader listing")
+	if _, refusal := server.partyRt.Registry().Leave(e2eDivision, e2eJackName); refusal != "" {
+		t.Fatal(refusal)
+	}
+	// A former member returns to ordinary paging immediately.
+	sendFrame(t, jack, match.OpPartyPageRequest, []byte{2})
+	expectExactFrame(t, jack, match.OpPartyListingPage,
+		match.EncodePartyListingB588(2, 3, others[11:23]), "leaving removes the current party pin")
 }
