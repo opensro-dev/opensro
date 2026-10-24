@@ -146,8 +146,9 @@ test("a stored pickup pet's summoner lists with its pet (BR-261010-1435-63E3)", 
 	const list = Uint8Array.from( [ 150, 1, ...row ] );
 	const itemRefs = new Map( [ [ SUMMONER, 0xcc | (2 << 11) ] ] ), objRefs = new Map( [ [ PET, 0x1c6 | (4 << 11) ] ] );
 	// A reference the snapshot does not carry cannot fail the list either:
-	// the record is laid out by the summoner item's own subtype (492D40),
-	// so the room decodes the same bytes with no pet references at all.
+	// the item subtype fixes the class of pet it summons, so the record's
+	// layout is known and the room decodes the same bytes with no pet
+	// references at all.
 	const unlisted = defined( room.decodeStorageList( list, itemRefs ).items[0] );
 	assert.deepEqual( [ unlisted.summon?.state, unlisted.summon?.refObjId, unlisted.summon?.remainingSeconds ], [
 		3,

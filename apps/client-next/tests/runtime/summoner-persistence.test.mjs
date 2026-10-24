@@ -114,8 +114,10 @@ test("unknown summoner states and incompatible character families cannot shift t
 
 test("a summoned record naming a reference outside the snapshot still parses by the item subtype", () => {
 	// No objRefs at all: the attack record (subtype 1) carries no rental
-	// clock, the pickup record (subtype 2) carries it, exactly as 492D40
-	// wrote them; the next byte is the record's end either way.
+	// clock, the pickup record (subtype 2) carries it — the summoned
+	// character's class word fixes that layout, and the item subtype
+	// names the same class here; the next byte is the record's end
+	// either way.
 	const attack = new Uint8Array( 16 ), av = new DataView( attack.buffer );
 	av.setUint32( 0, 900, true );
 	attack[4] = 2;
@@ -155,7 +157,7 @@ test("a summoned record naming a reference outside the snapshot still parses by 
 	const clocked = decodeInventoryItem( known, 0, refs, new Map( [ [ 950, 0x21c6 ] ] ) );
 	assert.equal( clocked.next, known.length );
 	assert.equal( clocked.item?.summon?.remainingSeconds, 99 );
-	// A subtype the writer never emits is still a malformed record.
+	// A subtype that names no summonable pet class is still malformed.
 	assert.throws(
 		() => decodeInventoryItem( Uint8Array.of( 132, 3, 0, 0, 2, 182, 3, 0, 0 ), 0, new Map( [ [ 900, 0x18cc ] ] ) ),
 		/Unsupported summoner subtype/

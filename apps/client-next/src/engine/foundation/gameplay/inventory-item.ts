@@ -125,11 +125,15 @@ options
 				}
 				// A known character's family owns the rental clock (a
 				// pickup companion, band 4); the item's subtype never
-				// classifies the pet. But a reference the snapshot does
-				// not carry cannot end the session inside an unrelated
-				// bag answer: the writer lays a record out by the
-				// summoner item's own subtype (492D40), so measure an
-				// unknown reference the same way.
+				// classifies the pet. The record layout itself follows
+				// the summoned character's class word — an attack pet
+				// is name only, a pickup pet is name plus the clock —
+				// the same discriminator the known-reference path uses.
+				// A reference the snapshot does not carry still cannot
+				// end the session inside an unrelated bag answer: a
+				// summoner item's subtype fixes the class of pet it
+				// summons, so measure an unknown reference by the item
+				// subtype and the record is measured identically.
 				let pickup: boolean;
 				if ( tid !== undefined ) pickup = tid >>> 11 === 4;
 				else if ( sub === 0x800 ) pickup = false;
