@@ -283,6 +283,18 @@ export const runtimeCifImageReferences = [
 	// Shared quick-status windows select their fills in code (85E3F0 / 85F660).
 	"interface/ifcommon/quick_hp.ddj",
 	"interface/ifcommon/quick_mp.ddj",
+	// CIFTimerWnd digits: CIFEventTimer_UpdateDigitTextures (5182C0)
+	// snprintf's one "interface/timer/timer_%d.ddj" per digit; resinfo
+	// names only timer_0, so the other nine are runtime references.
+	"interface/timer/timer_1.ddj",
+	"interface/timer/timer_2.ddj",
+	"interface/timer/timer_3.ddj",
+	"interface/timer/timer_4.ddj",
+	"interface/timer/timer_5.ddj",
+	"interface/timer/timer_6.ddj",
+	"interface/timer/timer_7.ddj",
+	"interface/timer/timer_8.ddj",
+	"interface/timer/timer_9.ddj",
 	...targetStatusRuntimeImageReferences,
 	...damageTextRuntimeImageReferences,
 	...partyMatchRowRuntimeImageReferences,

@@ -103,6 +103,11 @@ import type { BugReportControl } from "@/engine/contracts/bug-report";
 import { equipmentDropSlot } from "@/engine/foundation/gameplay/equipment-drop";
 import { itemEquipmentOverlay, equipmentWarningUv } from "@/engine/foundation/ui/item-equipment-overlay";
 import { itemCountQuads } from "@/engine/foundation/ui/item-count";
+import {
+	flagWarTimerDigitTexture,
+	flagWarTimerReading,
+	flagWarTimerUrgentTint
+} from "@/engine/foundation/ui/flagwar-timer-plate";
 import { returnScrollBar } from "@/engine/foundation/ui/return-scroll";
 import { nameColorRgba } from "@/engine/foundation/gameplay/name-color";
 import { containsPoint, topmostControlAt } from "@/engine/foundation/ui/hit-test";
@@ -11181,6 +11186,49 @@ export function createUi(
 								}
 							}
 						}
+					}
+				}
+				if ( hudData && game?.flagWar?.timerEndsAt ) {
+					const plate = hudData.windows.iftimerwnd;
+					if ( plate ) {
+						// CIFTimerWnd (ginterface GDR_TIMER_WND, iftimerwnd statics):
+						// the flag war timer's digits, red under a minute left.
+						const origin = authoredRect( hudData.root.GDR_TIMER_WND!, 0, 0 ),
+							reading = flagWarTimerReading( game.flagWar.timerEndsAt - quickslotTime ),
+							tint = reading.urgent ? flagWarTimerUrgentTint : white;
+						authoredImage(
+							plate.GDR_TIMER_MIN_0_STA!,
+							origin[0],
+							origin[1],
+							flagWarTimerDigitTexture( reading.minTens ),
+							1,
+							tint
+						);
+						authoredImage(
+							plate.GDR_TIMER_MIN_1_STA!,
+							origin[0],
+							origin[1],
+							flagWarTimerDigitTexture( reading.minOnes ),
+							1,
+							tint
+						);
+						authoredImage( plate.GDR_TIMER_CENTER_STA!, origin[0], origin[1], undefined, 1, tint );
+						authoredImage(
+							plate.GDR_TIMER_SEC_0_STA!,
+							origin[0],
+							origin[1],
+							flagWarTimerDigitTexture( reading.secTens ),
+							1,
+							tint
+						);
+						authoredImage(
+							plate.GDR_TIMER_SEC_1_STA!,
+							origin[0],
+							origin[1],
+							flagWarTimerDigitTexture( reading.secOnes ),
+							1,
+							tint
+						);
 					}
 				}
 				if ( hudData && game?.social?.leader ) {
