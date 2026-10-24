@@ -128,6 +128,15 @@ type AdmissionIdentity struct {
 // HelloAuthFunc verifies and consumes one HELLO admission ticket.
 type HelloAuthFunc func(token []byte) (AdmissionIdentity, error)
 
+// HelloCommitAuthFunc verifies one HELLO admission ticket WITHOUT
+// consuming it and returns the commit that consumes it. The hub runs
+// the commit only once the session's WELCOME frame has been written
+// (Session.writeLoop): a connection that dies before WELCOME never
+// burns its ticket, so the client can present the same ticket on its
+// fallback transport. A commit reporting the ticket already consumed
+// (a concurrent second admission won the race) closes the session.
+type HelloCommitAuthFunc func(token []byte) (AdmissionIdentity, func() error, error)
+
 // SetHelloAuth installs the required HELLO admission verifier.
 /*
 ================
@@ -138,6 +147,17 @@ func (h *Hub) SetHelloAuth(fn HelloAuthFunc) {
 	h.admission.set(fn)
 }
 
+// SetHelloCommitAuth installs the two-phase HELLO admission verifier:
+// authentication at HELLO, consumption deferred to WELCOME.
+/*
+================
+SetHelloCommitAuth
+================
+*/
+func (h *Hub) SetHelloCommitAuth(fn HelloCommitAuthFunc) {
+	h.admission.setCommit(fn)
+}
+
 /*
 ================
 helloAuthFn
@@ -145,6 +165,27 @@ helloAuthFn
 */
 func (h *Hub) helloAuthFn() HelloAuthFunc {
 	return h.admission.current()
+}
+
+/*
+================
+verifyHelloAdmission
+
+Runs the installed HELLO verification. The two-phase form wins when
+both are installed. installed=false means no verifier at all: the
+caller refuses the connection as before.
+================
+*/
+func (h *Hub) verifyHelloAdmission(token []byte) (AdmissionIdentity, func() error, bool, error) {
+	if fn := h.admission.commitCurrent(); fn != nil {
+		identity, commit, err := fn(token)
+		return identity, commit, true, err
+	}
+	if fn := h.admission.current(); fn != nil {
+		identity, err := fn(token)
+		return identity, nil, true, err
+	}
+	return AdmissionIdentity{}, nil, false, nil
 }
 
 /*
@@ -531,14 +572,13 @@ func (h *Hub) AcceptConn(conn Conn) {
 		_ = conn.Close(err.Error())
 		return
 	}
-	verify := h.helloAuthFn()
-	if verify == nil {
+	admissionIdentity, admissionCommit, verifierInstalled, verifyErr := h.verifyHelloAdmission(hello.AdmissionToken)
+	if !verifierInstalled {
 		h.metrics.helloAdmissionRefused.Add(1)
 		_ = conn.WriteFrame(Frame{Opcode: OpBye, Payload: []byte{ByeReasonUnauthorized}})
 		_ = conn.Close("HELLO admission verifier unavailable")
 		return
 	}
-	admissionIdentity, verifyErr := verify(hello.AdmissionToken)
 	if verifyErr != nil || admissionIdentity.AccountID == "" || admissionIdentity.ShardID == "" {
 		h.metrics.helloAdmissionRefused.Add(1)
 		log.WithFields(log.Fields{"kind": conn.Kind(), "remote": conn.RemoteAddr(), "error": verifyErr}).
@@ -563,6 +603,7 @@ func (h *Hub) AcceptConn(conn Conn) {
 				_ = conn.Close("resume admission identity mismatch")
 				return
 			}
+			sess.armAdmissionCommit(admissionCommit)
 			if err := sess.attach(conn, true); err == nil {
 				h.metrics.helloAdmissionAccepted.Add(1)
 				h.metrics.resumeAccepted.Add(1)
@@ -608,6 +649,7 @@ func (h *Hub) AcceptConn(conn Conn) {
 		return
 	}
 	h.admitAccountSession(admissionIdentity.AccountID, sess)
+	sess.armAdmissionCommit(admissionCommit)
 	if err := sess.attach(conn, false); err != nil {
 		h.closeSession(sess, err)
 		_ = conn.Close(err.Error())
