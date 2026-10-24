@@ -947,6 +947,8 @@ reuse gate as manual activation. Recovery completion is server-owned.
 	}
 
 	let localGid = 0, revision = 0, dirty = false, protocol = 0, localCountry: number | undefined;
+	// When the open inventory transaction was first seen pending (step clock).
+	let inventorySince: number | undefined;
 	/*
 ================
 localCastHolds
@@ -4379,6 +4381,20 @@ Packet handling must not depend on which HUD panel is currently open.
 		},
 		/*
 ================
+outstandingSince
+
+When the oldest request still waiting for its answer left (a movement
+command or the open inventory transaction), or undefined. The world
+session reads it to tell a stalled connection from a lost answer.
+================
+		*/
+		outstandingSince(): number | undefined {
+			const moved = movement.oldestPendingSentAt();
+			if ( moved === undefined ) return inventorySince;
+			return inventorySince === undefined ? moved : Math.min( moved, inventorySince );
+		},
+		/*
+================
 step
 
 Advance deadlines on the worker clock after queued packets commit and
@@ -4386,6 +4402,7 @@ before take assembles the presentation snapshot.
 ================
 		*/
 		step( now: number, local?: EntityState ) {
+			inventorySince = inventory.state().inventoryPending ? inventorySince ?? now : undefined;
 			if ( petAssists.size ) {
 				const targets = new Map<number, EntityState>();
 				for ( const target of petAssists.values() ) {
