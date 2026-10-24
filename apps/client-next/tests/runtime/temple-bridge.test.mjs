@@ -18,7 +18,7 @@ const { createMovement } = await import(
 );
 const { navHeight } = await import( "../../src/engine/foundation/navigation/object-navigation.ts" );
 const { createNavigation } = await import(
-	"../../src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts"
+	"../../src/engine/foundation/navigation/clipper.ts"
 );
 
 /*

@@ -3,8 +3,16 @@
 
 navigation.ts - navigation asset demand and admission
 
-Owns requests, cancellation and transient transport recovery. Collision
-state belongs to simulation; admission failures never become network retries.
+Owns requests, cancellation and transient transport recovery. Admission
+failures never become network retries.
+
+Collision authority belongs to simulation. The stream also keeps the main
+thread's own clipper (GH #1439): every product it hands the simulation
+worker is installed here first, under the same request id, so the view
+holds exactly what the worker's movement owner holds once that worker
+reports the id admitted. A consumer trusts the view only while the
+worker's published navigation request id equals view().requestId; a
+worker-side clear or failure then retires it without a guess here.
 
 ===========================================================================
 */
@@ -12,6 +20,7 @@ import type { AssetOwner } from "@/engine/contracts/assets";
 import type { Pose, GameplayCommand } from "@/engine/contracts/gameplay";
 import { assetFailure, createAssetRecovery } from "@/engine/foundation/assets/asset-recovery";
 import { isDungeonRegion } from "@/engine/foundation/world/world-space";
+import { createNavigation, type NavigationView } from "@/engine/foundation/navigation/clipper";
 
 const LOAD_TIMEOUT_MS = 60000;
 const ADMISSION_TIMEOUT_MS = 15000;
@@ -36,6 +45,29 @@ export function createNavigationStream(
 		| { phase: "failed"; region: number; error: string; } = { phase: "idle" };
 	let disposed = false, requestId = 0, deadline = 0, progressBytes = -1;
 	const recovery = createAssetRecovery();
+	// The main thread's clipper and the request id of the product it holds
+	// (0: none). The same product goes to the worker under that id.
+	const clipper = createNavigation();
+	let viewRequestId = 0;
+	/*
+	================
+	installView
+
+	Installs the product the worker is about to receive. The clipper's state
+	is a function of its installs, so a product the worker admits gives the
+	same view here; one this side refuses leaves no view (the worker refuses
+	the same bytes, and reports it as the admission failure).
+	================
+	*/
+	function installView( id: number, regionId: number, product: unknown ) {
+		viewRequestId = 0;
+		try {
+			clipper.install( regionId, product );
+			viewRequestId = id;
+		} catch {
+			clipper.clear();
+		}
+	}
 	/*
 	================
 	loadProgressBytes
@@ -127,9 +159,10 @@ export function createNavigationStream(
 						if ( result.product.regionId !== pose.regionId ) {
 							throw Error( "Navigation product region mismatch" );
 						}
+						installView( ++requestId, result.product.regionId, result.product );
 						emit( {
 							kind: "navigation",
-							requestId: ++requestId,
+							requestId,
 							regionId: result.product.regionId,
 							bundle: result.product
 						} );
@@ -214,6 +247,18 @@ export function createNavigationStream(
 		},
 		/*
 		================
+		view
+
+		The main thread's clipper and the request id of the product it holds,
+		or null before any product was installed. Use it only while the
+		worker's published navigationRequestId equals requestId.
+		================
+		*/
+		view(): { readonly requestId: number; readonly navigation: NavigationView; } | null {
+			return viewRequestId ? { requestId: viewRequestId, navigation: clipper } : null;
+		},
+		/*
+		================
 		reset
 		================
 		*/
@@ -231,6 +276,8 @@ export function createNavigationStream(
 			cancel();
 			recovery.reset();
 			catalog = null;
+			clipper.clear();
+			viewRequestId = 0;
 			disposed = true;
 		}
 	};
