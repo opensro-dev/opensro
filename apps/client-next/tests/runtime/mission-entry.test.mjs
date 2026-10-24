@@ -73,7 +73,7 @@ test("compact loading shows the whole illustration above a footer where every ro
 	for ( const [w, h] of [ [ 360, 858 ], [ 375, 667 ], [ 667, 375 ], [ 320, 568 ], [ 200, 200 ] ] ) {
 		for ( const progress of [ -1, 0, .5, 1, 2 ] ) {
 			const quads = loadingScreenQuads( w, h, "scene.png", progress );
-			const [, backdrop, art] = quads;
+			const [, art] = quads;
 			const frame = byTexture( quads, "loading_form" ),
 				gauge = byTexture( quads, "gauge_loading" ),
 				label = byTexture( quads, "nowloading" );
@@ -86,13 +86,8 @@ test("compact loading shows the whole illustration above a footer where every ro
 			assert.deepEqual( art.uv, [ 0, 0, 1, 1 ] );
 			const fit = Math.min( w / 1600, area / 1200 );
 			assert.deepEqual( art.rect, [ (w - 1600 * fit) / 2, (area - 1200 * fit) / 2, 1600 * fit, 1200 * fit ] );
-			// Behind it, a dimmed cover crop of the same art (GH #1244: no
-			// bare black bars): fills the area, samples the centred window.
-			assert.equal( backdrop.texture, "scene.png" );
-			assert.deepEqual( backdrop.rect, [ 0, 0, w, area ] );
-			assert.ok( backdrop.color[0] < 1 && backdrop.color[3] === 1 );
-			assert.ok( Math.abs( backdrop.uv[0] - (1 - backdrop.uv[2]) / 2 ) < 1e-12 );
-			assert.ok( Math.abs( backdrop.uv[1] - (1 - backdrop.uv[3]) / 2 ) < 1e-12 );
+			// Drawn once: no second copy of the art behind it (owner 2026-10-24).
+			assert.equal( quads.filter( q => q.texture === "scene.png" ).length, 1 );
 			// Footer, top down: gauge frame, Now Loading, then the DOM status
 			// strip loading.css keeps below 80 px from the bottom.
 			assert.ok( area <= frame.rect[1] );

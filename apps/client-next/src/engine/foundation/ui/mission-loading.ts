@@ -17,9 +17,6 @@ const COMPACT_MARGIN = 16;
 const COMPACT_FRAME_WIDTH = 560;
 const COMPACT_FRAME_BOTTOM = 136;
 const COMPACT_LABEL_BOTTOM = 100;
-// The cropped backdrop behind a portrait screen's whole illustration is
-// dimmed to this, so the full art reads as the subject.
-const COMPACT_BACKDROP_SHADE = 0.3;
 const COMPACT_LABEL_WIDTH = 108;
 const COMPACT_LABEL_HEIGHT = 15;
 const root = "/assets/images/Media_extracted/interface/loading/";
@@ -123,18 +120,9 @@ export function loadingScreenQuads( width: number, height: number, background: s
 		// Port-only, owner-approved. The whole 4:3 illustration fits the area
 		// above a readable footer, never stretched and never cropped (owner,
 		// 2026-10-24: a cover crop cut the logo and the figure off on
-		// phones). The remaining strips (GH #1244: no bare black bars) are a
-		// dimmed cover crop of the same art.
+		// phones). The strips around it stay black: a dimmed cover copy behind
+		// it read as the splash drawn twice (owner, 2026-10-24).
 		const areaHeight = Math.max( 0, height - COMPACT_FOOTER );
-		const coverScale = Math.max( width / 1600, areaHeight / 1200 ) || 1;
-		const sampledWidth = width / coverScale, sampledHeight = areaHeight / coverScale;
-		const backdrop: UiRect = [ 0, 0, width, areaHeight ];
-		const backdropUv: UiRect = [
-			(1600 - sampledWidth) / 2 / 1600,
-			(1200 - sampledHeight) / 2 / 1200,
-			sampledWidth / 1600,
-			sampledHeight / 1200
-		];
 		const fitScale = Math.min( width / 1600, areaHeight / 1200 );
 		const art: UiRect = [
 			(width - 1600 * fitScale) / 2,
@@ -158,15 +146,7 @@ export function loadingScreenQuads( width: number, height: number, background: s
 		const fraction = Math.max( 0, Math.min( 1, progress ) );
 		return [
 			{ ...quad( full, "" ), color: [ 0, 0, 0, 1 ] },
-			...(background ?
-				[
-					{
-						...quad( backdrop, background, backdropUv ),
-						color: [ COMPACT_BACKDROP_SHADE, COMPACT_BACKDROP_SHADE, COMPACT_BACKDROP_SHADE, 1 ] as const
-					},
-					quad( art, background )
-				] :
-				[]),
+			...(background ? [ quad( art, background ) ] : []),
 			quad( frame, assets[2]! ),
 			quad( [ gauge[0], gauge[1], gauge[2] * fraction, gauge[3] ], assets[3]!, [ 0, 0, fraction, 1 ] ),
 			quad( [

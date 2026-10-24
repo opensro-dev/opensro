@@ -98,7 +98,7 @@ test(
 							backgroundSource: mode === 6 ? null : textures.get( quads[1].texture ),
 							art: mode === 6 || (width >= 800 && height >= 600) ?
 								null :
-								{ rect: quads[2].rect, uv: quads[2].uv }
+								{ rect: quads[1].rect, uv: quads[1].uv }
 						};
 					}
 				};
@@ -122,14 +122,9 @@ test(
 					assert.ok( Math.abs( row.rect[2] / row.rect[3] - row.source[0] / row.source[1] ) < 1e-10 );
 					assert.ok( row.gold > 10, JSON.stringify( row ) );
 					if ( (width < 800 || height < 600) && row.background ) {
-						const [x, y, w, h] = row.background;
-						// The backdrop: a cover crop filling the area above the
-						// footer, its sampled window keeping the rect's shape.
-						assert.deepEqual( [ x, y, w, h ], [ 0, 0, width, Math.max( 0, height - 150 ) ] );
-						const sampledW = row.backgroundUv[2] * row.backgroundSource[0],
-							sampledH = row.backgroundUv[3] * row.backgroundSource[1];
-						assert.ok( Math.abs( sampledW / sampledH - w / h ) < 1e-9 );
-						// The illustration itself: the whole texture, 4:3, inside the area.
+						const h = Math.max( 0, height - 150 );
+						// The illustration, drawn once: the whole texture, 4:3, inside
+						// the area above the footer.
 						assert.deepEqual( row.art.uv, [ 0, 0, 1, 1 ] );
 						assert.ok( Math.abs( row.art.rect[2] / row.art.rect[3] - 4 / 3 ) < 1e-9 );
 						assert.ok( row.art.rect[0] >= 0 && row.art.rect[0] + row.art.rect[2] <= width + 1e-9 );
