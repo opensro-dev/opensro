@@ -6,7 +6,10 @@ world.ts - transport admission, reconnect and departure for one world session
 The network deadline covers tickets, references and native synchronization.
 It is a stall deadline (#1010): arriving frames and reference bytes extend
 it by its window, and only a full window of silence fails the attempt, so a
-slow link that keeps delivering enters however long that takes.
+slow link that keeps delivering enters. Progress extends the deadline only
+up to a bounded ceiling from the arm (DEADLINE_MAX_WINDOWS windows): a peer
+that proves the wire with keepalive pings while building nothing is wedged,
+not slow, and must still fail into the timeout path (#1471 review).
 The presentation acknowledgement is a separate barrier: it gates commands,
 never retries a successfully received world.
 A transient failure before the world binds retries the admission inside
@@ -34,6 +37,11 @@ import {
 } from "@/engine/contracts/network";
 const ADMISSION_TIMEOUT_MS = 10000;
 const REFERENCE_TIMEOUT_MS = 30000;
+// Progress may slide a deadline this many windows past its arm, no further:
+// eighteen admission windows is three minutes (nine for references), long
+// enough never to cut a healthy slow entry, finite enough that a wedged
+// one still times out and retries instead of loading forever.
+const DEADLINE_MAX_WINDOWS = 18;
 const RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 4000;
 // A request waiting this long with no frame of any kind arriving since it
@@ -214,6 +222,8 @@ onNetworkFailure
 	let now = 0,
 		deadline = 0,
 		deadlineWindow = 0,
+		deadlineCeiling = 0,
+		inboundSeen = 0,
 		retryAt = 0,
 		attempt = 0,
 		reconnectSince = 0,
@@ -235,23 +245,28 @@ armDeadline
 
 Arm the admission deadline as a stall window of windowMs: noteProgress
 extends it, and only a full window without progress fails the attempt.
+The arm also fixes the progress ceiling: progress may slide the deadline
+at most DEADLINE_MAX_WINDOWS windows past this moment, never indefinitely.
 ================
 	*/
 	function armDeadline( windowMs: number ) {
 		deadlineWindow = windowMs;
 		deadline = now + windowMs;
+		deadlineCeiling = now + windowMs * DEADLINE_MAX_WINDOWS;
 	}
 	/*
 ================
 noteProgress
 
 A frame on the socket or a chunk of the reference body proves the link is
-still delivering; push the armed deadline out by its window. A cleared
-deadline stays cleared (the presentation barrier owns that wait).
+still delivering; push the armed deadline out by its window, but never past
+the ceiling its arm fixed. A keepalive-only wire therefore still times out
+once the ceiling passes. A cleared deadline stays cleared (the presentation
+barrier owns that wait).
 ================
 	*/
 	function noteProgress() {
-		if ( deadline ) deadline = now + deadlineWindow;
+		if ( deadline ) deadline = Math.min( now + deadlineWindow, deadlineCeiling );
 	}
 	/*
 ================
@@ -705,6 +720,18 @@ step
 				references = { kind: "idle" };
 			}
 			if ( !failure ) network.drain( receive );
+			// Transport liveness is progress too. A loading scene is silent by
+			// design (the server is building its entry), so the server pings it
+			// on the keepalive's loading cadence and the network owner answers
+			// without surfacing a frame: the only sign here is the inbound
+			// count moving. A wire that still answers is not stalled, and its
+			// pings slide the window - up to the arm's ceiling, past which the
+			// entry is wedged, not slow, and fails the attempt (#1417, #1471).
+			const activity = network.received();
+			if ( activity !== inboundSeen ) {
+				inboundSeen = activity;
+				noteProgress();
+			}
 			const nextPing = !failure && phase === "world" ? network.pingMs() : null;
 			if ( nextPing !== pingMs ) {
 				pingMs = nextPing;
