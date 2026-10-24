@@ -35,7 +35,8 @@ export type { WornItem };
 const WORN_SLOT_COUNT = 9;
 const WEAPON_SLOT = 6;
 const SHIELD_SLOT = 7;
-// Port-only, not native: the lowest plus that wears the enchant sparks.
+// Port-only, not native: the lowest plus that wears the enchant sparks when a
+// row names none (the later client's itemoptionefp rows name their own).
 export const ENCHANT_SPARK_PLUS = 8;
 
 export type SetEntry = {
@@ -287,7 +288,9 @@ export function assembleEquipmentAppearance( input: AppearanceInput ): Appearanc
 			model: entry.glb,
 			parts: entry.parts,
 			...(entry.branches ? { branches: { slot: item.slot, entries: entry.branches } } : {}),
-			...(armament ? { equipment: { refObjId: item.refObjId, plus: item.plus } } : {}),
+			...(armament ?
+				{ equipment: { refObjId: item.refObjId, plus: item.plus, enhanced: input.enchantSparks === true } } :
+				{}),
 			covers: coverIndices( entry, resource )
 		} );
 		// The resource's own ambient set (the shoulder garments' orbs and
@@ -302,8 +305,10 @@ export function assembleEquipmentAppearance( input: AppearanceInput ): Appearanc
 			}
 		}
 		if ( !armament ) continue;
-		const sparks = input.enchantSparks && item.plus >= ENCHANT_SPARK_PLUS ?
-			dress.enchantSparks?.[item.refObjId] ?? [] :
+		const sparks = input.enchantSparks ?
+			(dress.enchantSparks?.[item.refObjId] ?? []).filter( spark =>
+				item.plus >= ((spark as { threshold?: number; }).threshold ?? ENCHANT_SPARK_PLUS)
+			) :
 			[];
 		for ( const effect of [ ...(dress.specialGlows?.[item.refObjId] ?? []), ...sparks ] ) {
 			for ( const part of entry.parts ) {

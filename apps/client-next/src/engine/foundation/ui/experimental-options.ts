@@ -51,9 +51,10 @@ export interface ExperimentalOptions {
 	// (camera-smoothing.ts); native 68F830 snaps both. On by default (owner
 	// 2026-10-15); an explicit false is the native snap.
 	readonly smoothCamera: boolean;
-	// Port-only, not native: the unused enchant sparks on +8 and higher
-	// weapons and shields (equipmentEnchantSparks). On by default (owner
-	// 2026-10-17); an explicit false restores the native v1.150 look.
+	// Port-only, not native: "Enhanced item glow". The later client's glow
+	// tiers (+6/8/10 beside +3/5/7/9) and its per-item enchant sparks
+	// (equipmentGlowCatalog, equipmentEnchantSparks). On by default (owner
+	// 2026-10-17, 2026-10-24); an explicit false restores the native v1.150 look.
 	readonly enchantSparks: boolean;
 	// Port-only wolf skill tree controls; requires the server's matching opt-in.
 	readonly attackPetTraining: boolean;
