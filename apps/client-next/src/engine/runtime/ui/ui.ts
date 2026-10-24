@@ -12293,8 +12293,14 @@ export function createUi(
 				}
 				if ( panel === "System" && hudData ) {
 					const admission = beginWindow();
-					const sx = systemX ?? Math.trunc( (w - 214) / 2 ),
-						sy = systemY ?? Math.trunc( (h - SYSTEM_MENU_HEIGHT) / 2 );
+					// Clamp at render like the drag does: a position stored on a
+					// larger viewport must not strand the menu off screen after
+					// the window shrinks.
+					const sx = Math.max( 0, Math.min( w - 214, systemX ?? Math.trunc( (w - 214) / 2 ) ) ),
+						sy = Math.max(
+							0,
+							Math.min( h - SYSTEM_MENU_HEIGHT, systemY ?? Math.trunc( (h - SYSTEM_MENU_HEIGHT) / 2 ) )
+						);
 					systemX = sx;
 					systemY = sy;
 					const authored = hudData.windows.ifsystemwnd!,

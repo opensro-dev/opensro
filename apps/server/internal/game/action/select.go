@@ -268,6 +268,12 @@ func (rt *Runtime) HandleObjectSelect(divisionID string, character *enterworld.C
 		return refusedSelect(err.Error())
 	}
 
+	// Capture the Flag arena objects (flagwar_arena.go) live outside
+	// every roster; the match owner answers their selects itself.
+	if outcome, handled := rt.flagWarSelect(divisionID, character, gid); handled {
+		return outcome
+	}
+
 	// Capture the pointer list before entering the read door. The source
 	// returns an owned slice; peer fields are inspected only while the door
 	// is held, without recursively acquiring the store read lock.

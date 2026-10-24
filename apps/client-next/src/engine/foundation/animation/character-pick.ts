@@ -5,8 +5,9 @@ character-pick.ts - choosing the character under the pointer's rays
 
 World_PickEntityAtScreenPoint (692680) casts nine rays and keeps the nearest
 aggregate-box hit, preferring the exact-center ray. This module owns that
-choice over precomputed box hits, plus the mesh refinement the renderer
-applies when several candidates compete (see meshUnderRays).
+choice over precomputed box hits. meshUnderRays stays as a tested geometry
+helper; selection itself is the native nearest-box rule and never queries
+meshes.
 
 ===========================================================================
 */

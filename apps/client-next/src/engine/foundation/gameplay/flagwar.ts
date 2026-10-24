@@ -7,8 +7,14 @@ Decodes the server event frames the native client folds in
 CFlagWarClientState_HandleEventPacket (0x4b2530) into typed events and
 the UIIT_MSG_FLAGWAR_* notices. Timer, carrier and sign-up state stay
 with the gameplay worker; this module owns the byte shapes only. The
-on-screen timer plate is drawn by the match work that starts matches;
-PR 1 keeps the timer value honest so the plate has one owner to read.
+worker keeps the timer value honest (mission start arms 0x124f80 ms,
+the elapsed sync re-arms it) and publishes the carrier gid. The drawn
+plate is the native CIFTimerWnd (resinfo/iftimerwnd.txt, armed through
+CGInterface_GetFlagWarTimerControl by the CIFEventTimer calls in the
+0x4B2530 handler): its creation anchor and digit-texture mapping are
+the two pins still owed, so no position is drawn yet, and the
+carrier's interaction-state-5 model waits on the entity lane. Both
+read the one snapshot the worker already publishes.
 
 ===========================================================================
 */
