@@ -215,14 +215,18 @@ sceneLoadingRefusal
 The native failure answer for a request the loading gate refuses, or nil
 when the opcode has none. The v1.150 client's 0xB06D handler retires its
 item-move pending on any result frame before it parses one, and its
-failure arm reads exactly [2, code] - so the generic invalid-request
-notice ends the client's wait the way every other refused move does.
+failure arm reads exactly [2, code]; its 0xB5BD handler likewise reads a
+non-success result byte and one code byte and shows the notice - so the
+generic invalid-request notice ends the client's wait the way every
+other refused request does.
 ================
 */
 func sceneLoadingRefusal(opcode uint16) []wire.Frame {
 	switch opcode {
 	case wire.OpItemMoveRequest:
 		return failureResult(wire.ErrCodeInvalidRequest).Frames
+	case wire.OpItemUseRequest:
+		return itemUseFailure(wire.ErrCodeInvalidRequest).Frames
 	}
 	return nil
 }
