@@ -23,6 +23,7 @@ apps/client-next/tests/runtime/gameplay.test.mjs # test file; split by feature
 apps/client-next/tests/runtime/ui-behavior.test.mjs # test file covering every window; split per window
 apps/client-next/tests/runtime/world-renderer.test.mjs # test file; split by feature
 apps/client-next/tests/runtime/world.test.mjs # test file; split by feature
+apps/server/internal/transport/session.go # one session owner: attach lifecycle, the outbound queue, scene batches and both loops share the one mutex and generation state; batch admission rides the same queue instead of owning a separate one
 scripts/build/shared/cifRuntimeImageCatalog.mjs # not yet analysed; split on its responsibility boundaries when formatted
 
 apps/client-next/src/engine/runtime/renderer/renderer.ts # GPU lifetime and ordered frame closure share one cohesive owner; splitting requires new mutable state plumbing.
