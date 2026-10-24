@@ -185,15 +185,15 @@ export const EXPERIMENTAL_TABS: readonly {
 			label: "Smooth camera",
 			description: "Ease small camera jumps and the return from a wall."
 		}, {
+			key: "interpolatedOwnWalk",
+			id: "experimental-interpolated-own-walk",
+			label: "Interpolated own movement",
+			description: "Your character walks smoothly between server ticks."
+		}, {
 			key: "vHidesCompanions",
 			id: "experimental-v-hides-companions",
 			label: "V hides pets and transports",
 			description: "Holding V also hides other players' pets and transports."
-		}, {
-			key: "smartPetPickup",
-			id: "experimental-smart-pet-pickup",
-			label: "Keep pet gold pickup when full",
-			description: "Keep picking up gold when a full bag refuses an item."
 		}, {
 			key: "touchInspect",
 			id: "experimental-touch-inspect",
@@ -300,6 +300,11 @@ export const EXPERIMENTAL_TABS: readonly {
 		title: "Pickup",
 		section: "Pickup pet filter",
 		rows: [ {
+			key: "smartPetPickup",
+			id: "experimental-smart-pet-pickup",
+			label: "Keep pet gold pickup when full",
+			description: "Keep picking up gold when a full bag refuses an item."
+		}, {
 			key: "petFilterGold",
 			id: "experimental-pet-filter-gold",
 			label: "Gold",

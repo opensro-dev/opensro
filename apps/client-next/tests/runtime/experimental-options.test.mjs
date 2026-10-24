@@ -46,6 +46,8 @@ const OFF = Object.freeze( {
 	compressedTextures: true,
 	// On by default (owner 2026-10-14): near effects outrank far characters.
 	sharedActorRoom: true,
+	// On by default (owner 2026-10-24): the own walk is drawn between its ticks.
+	interpolatedOwnWalk: true,
 	// On by default (owner 2026-10-15): a disabled tab is dimmed.
 	greyDisabledTabs: true,
 	// On by default (owner 2026-10-15): the shard's job-kill notices show.
@@ -187,6 +189,8 @@ test("every video stage defaults off and only an explicit true enables it", () =
 		enchantSparks: true,
 		// The shared actor room is on by default (owner 2026-10-14).
 		sharedActorRoom: true,
+		// Interpolated own movement is on by default (owner 2026-10-24).
+		interpolatedOwnWalk: true,
 		vHidesCompanions: false,
 		dungeonCharacterPvs: true
 	} );
@@ -667,4 +671,14 @@ test("expanded world map defaults off (native five towns and 28 x 8 overview) an
 	const on = experimentalOptions( { expandedWorldMap: true } );
 	assert.equal( on.expandedWorldMap, true );
 	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "expandedWorldMap" ) ) );
+});
+
+test("interpolated own movement is on unless explicitly false, and reaches the renderer's video options", () => {
+	for ( const value of [ undefined, null, {}, { interpolatedOwnWalk: 1 }, { interpolatedOwnWalk: "false" } ] ) {
+		assert.equal( experimentalOptions( value ).interpolatedOwnWalk, true );
+	}
+	const off = experimentalOptions( { interpolatedOwnWalk: false } );
+	assert.equal( off.interpolatedOwnWalk, false );
+	assert.equal( experimentalVideo( off ).interpolatedOwnWalk, false );
+	assert.equal( experimentalVideo( experimentalOptions( {} ) ).interpolatedOwnWalk, true );
 });
