@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/instance"
@@ -205,6 +206,50 @@ func TestInstanceActivatedFollowsEnter(t *testing.T) {
 	}
 	if activatedMember.Kind != InstanceEventActivated || activatedMember.Gid != memberGid || activatedMember.World != enterMember.World {
 		t.Fatalf("member activated = %+v, want MemberA in %v", activatedMember, enterMember.World)
+	}
+}
+
+/*
+================
+TestInstanceAcceptRechecksPartyAndWorld
+
+The invitation was earned by standing in the leader's party, in the
+leader's world, at prompt time. Thirty seconds is long enough to
+leave both; an accept re-checks them before the transfer (#1435).
+================
+*/
+func TestInstanceAcceptRechecksPartyAndWorld(t *testing.T) {
+	// MemberA leaves the party while the prompt is up.
+	f := newInstanceInviteFixture(t, instanceInviteShareOptions)
+	if result := f.invite(t); result.OpenStatus != instance.Success {
+		t.Fatalf("invite = %+v", result)
+	}
+	leaderGid := enterworld.ObjectIDForCharacter(f.leader)
+	rest := []uint32{leaderGid}
+	for _, c := range f.members[1:] {
+		rest = append(rest, enterworld.ObjectIDForCharacter(c))
+	}
+	f.rt.RewardParties = func(string) []RewardParty {
+		return []RewardParty{{
+			Order: 1, Options: instanceInviteShareOptions,
+			LeaderID: leaderGid, Members: rest,
+		}}
+	}
+	f.rt.InstanceInviteConsent().ApplyConsent(nil, testDivision, f.members[0], 1, 1)
+	if f.inside(f.members[0]) {
+		t.Fatal("MemberA entered after leaving the party")
+	}
+
+	// MemberA steps into another world while the prompt is up.
+	f = newInstanceInviteFixture(t, instanceInviteShareOptions)
+	if result := f.invite(t); result.OpenStatus != instance.Success {
+		t.Fatalf("invite = %+v", result)
+	}
+	otherWorld := domain.DefaultWorldInstance + 1
+	f.members[0].World.PackedInstance = &otherWorld
+	f.rt.InstanceInviteConsent().ApplyConsent(nil, testDivision, f.members[0], 1, 1)
+	if f.inside(f.members[0]) {
+		t.Fatal("MemberA entered from another world")
 	}
 }
 

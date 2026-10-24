@@ -104,7 +104,8 @@ export function createNetwork(
 	const recent = new Float64Array( INCIDENT_JOURNAL_ROWS * NET_JOURNAL_FIELDS );
 	let recentNext = 0, recentCount = 0;
 	let ended: string | null = null;
-	// The current socket's open and last-inbound times (performance.now()).
+	// The current socket's open and last-inbound times (performance.now());
+	// receivedAt is the one last-inbound stamp (receivedAt(), #1474).
 	let openedAt = -Infinity, receivedAt = -Infinity;
 	/*
 	================
@@ -258,6 +259,18 @@ export function createNetwork(
 		*/
 		received() {
 			return receivedFrames;
+		},
+		/*
+		================
+		receivedAt
+
+		The last-inbound time on the event clock, stamped in onmessage
+		(#1474): the close detail below and the world session's stall
+		detector both read this one stamp.
+		================
+		*/
+		receivedAt() {
+			return receivedAt;
 		},
 		/*
   ================
