@@ -18,12 +18,15 @@ import { decodeSoundTerrain } from "@/engine/foundation/audio/terrain-sounds";
 // The retail terrain normal table: every sample (0,1,0). Shared by all
 // blocks when the relief stage is off.
 const FLAT_BLOCK_NORMALS = new Float32Array( 17 * 17 * 3 );
-// Normal water (block type 0) draws under a TEXTUREFACTOR whose alpha byte
-// the native pass forces to 0xB4 (SWorld_RenderWaterWithoutReflection
-// 8AE2D0: or edx, 0xffffb400 at 8AF0BA keeps the factor's RGB and replaces
-// its alpha): a constant 180/255 at every vertex, whatever the depth. The
-// sheet is emitted for every block that declares water; vertices below the
-// terrain are depth-hidden, never alpha-culled.
+// Normal water (block type 0) draws at the product of two native terms. The
+// per-vertex alpha is the cell's depth mask (SWorldCell_BuildWaterMaskTexture
+// 8872B0: (water height - terrain height) * 0.5, truncated, clamped 0..15,
+// over 15); a cell whose mask is all zero is never drawn (the dry-cell skip
+// at 8AE761 in SWorld_RenderWaterWithoutReflection 8AE2D0, which binds the
+// mask at 8AE76E). The mask is modulated by a TEXTUREFACTOR whose alpha byte
+// the pass forces to 0xB4 (or edx, 0xffffb400 at 8AF0BA keeps the factor's
+// RGB and replaces its alpha): 180/255 on top of the mask, written here as
+// the group material colour the renderer multiplies into every vertex.
 const WATER_ALPHA = 0xb4 / 255;
 // Special water (block type 1 with a wave type: Karakoram's ice) draws with
 // TEXTUREFACTOR 0xC8000000 and stage 0 ALPHAOP SELECTARG1(TFACTOR) under
@@ -802,55 +805,62 @@ noteMaterial
 							colors: number[] = [],
 							normals: number[] = [],
 							indices: number[] = [];
+						let wet = false;
 						const y = Math.fround( block.water.height );
 						for ( let z = 0; z < axis; z++ ) {
 							for ( let x = 0; x < axis; x++ ) {
-								const alpha = axis === 2 ? SPECIAL_WATER_ALPHA : WATER_ALPHA;
+								const depth = Math.fround( (y - Math.fround( block.heights[z * 17 + x]! )) * 0.5 ),
+									alpha = axis === 2 ?
+										SPECIAL_WATER_ALPHA :
+										Math.max( 0, Math.min( 15, Math.trunc( depth ) ) ) / 15;
+								wet ||= alpha > 0;
 								positions.push( cx * 320 + x / (axis - 1) * 320, y, cz * 320 + z / (axis - 1) * 320 );
 								uvs.push( x / (axis - 1) * 4, z / (axis - 1) * 4 );
 								colors.push( 1, 1, 1, alpha );
 								normals.push( 0, 1, 0 );
 							}
 						}
-						for ( let z = 0; z < axis - 1; z++ ) {
-							for ( let x = 0; x < axis - 1; x++ ) {
-								const a = z * axis + x;
-								indices.push( a, a + axis, a + 1, a + 1, a + axis, a + axis + 1 );
+						if ( wet ) {
+							for ( let z = 0; z < axis - 1; z++ ) {
+								for ( let x = 0; x < axis - 1; x++ ) {
+									const a = z * axis + x;
+									indices.push( a, a + axis, a + 1, a + 1, a + axis, a + axis + 1 );
+								}
 							}
+							reserve( positions.length * 32 + indices.length * 16 );
+							groups.push( {
+								id: `water:${cx}:${cz}`,
+								terrainSector,
+								center: [ cx * 320 + 160, y, cz * 320 + 160 ],
+								radius: 227,
+								material: {
+									color: block.water.type === 0 ? [ 1, 1, 1, WATER_ALPHA ] : [ 1, 1, 1, 1 ],
+									water: block.water.type === 0,
+									texture: block.water.type === 1 ?
+										b.water.specialTexturePublicPath :
+										b.water.normalFramePublicPaths[0],
+									frames: block.water.type === 1 ? undefined : b.water.normalFramePublicPaths,
+									alphaCutoff: 0,
+									blend: true,
+									// Native water draws with ZWRITE on (8B1050 sets it before the
+									// water pass), so what draws later stays behind the ice. Normal
+									// water keeps the blended default until its own pass is ported.
+									depthWrite: block.water.type === 1 ? true : undefined,
+									doubleSided: true,
+									unlit: true
+								},
+								geometry: {
+									world: true,
+									positions: new Float32Array( positions ),
+									normals: new Float32Array( normals ),
+									uvs: new Float32Array( uvs ),
+									colors: new Float32Array( colors ),
+									indices: new Uint32Array( indices ),
+									instances: identity(),
+									transform: identity()
+								}
+							} );
 						}
-						reserve( positions.length * 32 + indices.length * 16 );
-						groups.push( {
-							id: `water:${cx}:${cz}`,
-							terrainSector,
-							center: [ cx * 320 + 160, y, cz * 320 + 160 ],
-							radius: 227,
-							material: {
-								color: [ 1, 1, 1, 1 ],
-								water: block.water.type === 0,
-								texture: block.water.type === 1 ?
-									b.water.specialTexturePublicPath :
-									b.water.normalFramePublicPaths[0],
-								frames: block.water.type === 1 ? undefined : b.water.normalFramePublicPaths,
-								alphaCutoff: 0,
-								blend: true,
-								// Native water draws with ZWRITE on (8B1050 sets it before the
-								// water pass), so what draws later stays behind the ice. Normal
-								// water keeps the blended default until its own pass is ported.
-								depthWrite: block.water.type === 1 ? true : undefined,
-								doubleSided: true,
-								unlit: true
-							},
-							geometry: {
-								world: true,
-								positions: new Float32Array( positions ),
-								normals: new Float32Array( normals ),
-								uvs: new Float32Array( uvs ),
-								colors: new Float32Array( colors ),
-								indices: new Uint32Array( indices ),
-								instances: identity(),
-								transform: identity()
-							}
-						} );
 					}
 				}
 			}

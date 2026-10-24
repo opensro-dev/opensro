@@ -381,7 +381,7 @@ test("terrain decoding refuses expansion beyond its budget before building outpu
 	assert.ok( createWorldDecoder().decode( bytes ).groups.length > 0 );
 });
 
-test("normal water is a constant 180/255 sheet, shallow or submerged; special water is 200/255 opaque", () => {
+test("normal water is the native depth mask times the 180/255 factor; special water is 200/255 opaque", () => {
 	const block = {
 		blockX: 0,
 		blockZ: 0,
@@ -402,17 +402,22 @@ test("normal water is a constant 180/255 sheet, shallow or submerged; special wa
 		);
 	const draw = water();
 	assert.equal( draw.geometry.positions.length, 289 * 3 );
+	// The vertex carries the depth mask alone: (20 - 0) * 0.5 = 10, over 15
+	// (SWorldCell_BuildWaterMaskTexture 8872B0). The 180/255 texture factor
+	// (8AF0BA) rides on the group material colour and multiplies it in the
+	// shader, so the two terms stay separately observable here.
 	for ( let i = 3; i < draw.geometry.colors.length; i += 4 ) {
-		assert.ok( Math.abs( draw.geometry.colors[i] - 180 / 255 ) < 1e-6, `vertex alpha ${draw.geometry.colors[i]}` );
+		assert.ok( Math.abs( draw.geometry.colors[i] - 10 / 15 ) < 1e-6, `vertex alpha ${draw.geometry.colors[i]}` );
 	}
+	assert.deepEqual( draw.material.color, [ 1, 1, 1, 180 / 255 ] );
 	assert.equal( draw.material.depthWrite, undefined );
 	assert.equal( Math.max( ...draw.geometry.uvs ), 4 );
-	// A shallow sheet (the fountain case: water barely above the basin floor)
-	// and even a submerged one still emit at full alpha; depth never gates it.
+	// A sheet at or under the terrain has an all-zero mask: the cell is dry
+	// and emits no sheet at all (the native skip at 8AE761).
 	block.water.height = 0.5;
-	assert.ok( Math.abs( water().geometry.colors[3] - 180 / 255 ) < 1e-6 );
+	assert.equal( water(), undefined );
 	block.water.height = -1;
-	assert.ok( water() );
+	assert.equal( water(), undefined );
 	block.water.type = 1;
 	assert.equal( water(), undefined );
 	block.water.waveType = 1;
@@ -423,6 +428,9 @@ test("normal water is a constant 180/255 sheet, shallow or submerged; special wa
 	assert.equal( special.geometry.positions.length, 12 );
 	assert.equal( special.material.frames, undefined );
 	assert.equal( special.material.water, false );
+	// Special water carries its 200/255 factor in the vertex colour alone;
+	// the material colour stays untinted.
+	assert.deepEqual( special.material.color, [ 1, 1, 1, 1 ] );
 	// The ice is 200/255 opaque (TFACTOR 0xC8000000, 8BADC2), blended over
 	// what lies beneath it, not a solid sheet.
 	assert.equal( special.material.blend, true );
@@ -458,9 +466,7 @@ test("complete mission Constantinople fits unchanged admission with shared cell 
 	assert.ok( worldSceneBytes( scene ) < WORLD_SCENE_BYTES );
 	// Authored cloth needs independent simulation per placement: 44 formerly
 	// instanced draws split without removing scenery or raising admission.
-	// 972 includes the 11 water sheets the invented depth mask used to cull;
-	// native draws every declared water block at the constant factor alpha.
-	assert.equal( scene.groups.length, 972, "All scenery and independent cloth draws fit the budget" );
+	assert.equal( scene.groups.length, 961, "All scenery and independent cloth draws fit the budget" );
 	const cloth = scene.groups.filter( g => g.geometry.cloth );
 	assert.ok( cloth.length );
 	assert.ok( cloth.every( g => g.geometry.instances.length === 16 ) );
