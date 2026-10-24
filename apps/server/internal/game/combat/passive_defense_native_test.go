@@ -20,6 +20,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -28,6 +29,7 @@ TestPassiveDefenseNativeWriterVectors
 ================
 */
 func TestPassiveDefenseNativeWriterVectors(t *testing.T) {
+	tier.Long(t, "the 43 pinned native passive-defense writer vectors")
 	licensed.RequireGameData(t)
 	b, err := os.ReadFile("testdata/native-defp-vectors.json")
 	if err != nil {

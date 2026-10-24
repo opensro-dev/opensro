@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/paramkeeper"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -344,6 +345,7 @@ oracle agree on every parameter, or refuse the same step.
 ================
 */
 func TestPlayerGraphMatchesElementOracleLevels1To140(t *testing.T) {
+	tier.Long(t, "the player graph equals the element oracle at levels 1 to 140")
 	definitions, err := playerParameterDefinitions()
 	if err != nil {
 		t.Fatal(err)
