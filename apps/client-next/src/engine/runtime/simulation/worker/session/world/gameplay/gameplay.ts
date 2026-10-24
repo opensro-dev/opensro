@@ -947,6 +947,8 @@ reuse gate as manual activation. Recovery completion is server-owned.
 	}
 
 	let localGid = 0, revision = 0, dirty = false, protocol = 0, localCountry: number | undefined;
+	// When the open inventory transaction was first seen pending (step clock).
+	let inventorySince: number | undefined;
 	/*
 ================
 localCastHolds
@@ -1187,6 +1189,17 @@ enterMusic
 		*/
 		enterMusic() {
 			musicMode = fortressMusicActive( fortress ) ? 3 : 0;
+			dirty = true;
+		},
+		/*
+================
+invalidate
+
+The entity journal compacted its queue into a resync: the next take
+republishes the whole state behind it, catalogue included.
+================
+		*/
+		invalidate() {
 			dirty = true;
 		},
 		/*
@@ -4368,6 +4381,26 @@ Packet handling must not depend on which HUD panel is currently open.
 		},
 		/*
 ================
+outstandingSince
+
+When the oldest request still waiting for its answer left (a movement
+command, the open inventory transaction or a pending target select or
+release), or undefined. The world
+session reads it to tell a stalled connection from a lost answer.
+================
+		*/
+		noteInput: movement.noteInput,
+		outstandingSince(): number | undefined {
+			// Every lane whose lost answer resumes the session (world.ts
+			// lostAnswer): moves, the inventory transaction (mall purchases
+			// included, inventory busy()), and a pending target select or
+			// release (#1472).
+			const since = [ movement.oldestPendingSentAt(), inventorySince, targeting.waitingSince() ]
+				.filter( ( at ): at is number => at !== undefined );
+			return since.length ? Math.min( ...since ) : undefined;
+		},
+		/*
+================
 step
 
 Advance deadlines on the worker clock after queued packets commit and
@@ -4375,6 +4408,7 @@ before take assembles the presentation snapshot.
 ================
 		*/
 		step( now: number, local?: EntityState ) {
+			inventorySince = inventory.state().inventoryPending ? inventorySince ?? now : undefined;
 			if ( petAssists.size ) {
 				const targets = new Map<number, EntityState>();
 				for ( const target of petAssists.values() ) {

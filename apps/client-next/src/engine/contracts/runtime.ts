@@ -205,6 +205,7 @@ export interface Platform extends Disposable {
 	saveExperimentalOptions( value: import("@/engine/foundation/ui/experimental-options").ExperimentalOptions ): void;
 	saveGameOptions( value: import("@/engine/foundation/gameplay/game-options").GameOptions ): void;
 	presentWorldCursor( cursor: import("@/engine/foundation/ui/world-cursor").WorldCursor ): void;
+	setCursorVisible( visible: boolean ): void;
 	readonly canvas: HTMLCanvasElement;
 	presentLoading(
 		state: { visible: boolean; title: string; progress: import("./assets").AssetProgress | null; }
@@ -379,7 +380,8 @@ export interface SimulationHost extends Disposable {
 	/** Resolves on the next worker message; paces frames while the tab is hidden. */
 	delivery(): Promise<void>;
 	ackWorld( sequence: number ): void;
-	session( command: SessionCommand ): void;
+	/** The input sequence stamped on a gameplay command (#1441a), else undefined. */
+	session( command: SessionCommand ): number | undefined;
 	pollSession(): SessionState | null;
 	sendInput( batch: InputBatch ): void;
 	poll(): SimulationObservation | null;

@@ -39,6 +39,12 @@ export const DEBUG_COMMAND_SNOW = 106;
 export const DEBUG_COMMAND_CLEAR = 107;
 export const DEBUG_COMMAND_TIME_PLUS = 108;
 export const DEBUG_COMMAND_TIME_MINUS = 109;
+// The camera family (690C40 ids 110-135): the interface's zoom byte
+// (+0x3CF), its free-camera byte (+0x3CE), and the cursor manager's
+// visibility byte. The camera-waypoint rows (130-134) are a later slice.
+export const DEBUG_COMMAND_ZOOM = 110;
+export const DEBUG_COMMAND_FREE_CAMERA = 114;
+export const DEBUG_COMMAND_CURSOR = 135;
 export const DEBUG_COMMAND_SET_FIELD_OF_VIEW = 500;
 
 const MIN_FIELD_OF_VIEW_DEGREES = 10;

@@ -64,6 +64,11 @@ export function createWorldStream(
 	// Native UI construction resets App+0x38C (818790 via vtable+0x24).
 	// Asset resets reuse this runtime's UI and keep its committed projection.
 	let fieldOfView = initialCameraFieldOfView();
+	// The interface's free-camera byte (CGInterface +0x3CE): while it
+	// stands, ApplyCameraOrbit (68FAD0) and UpdateCameraOrbitTarget
+	// (68F830) return early, so the world keeps the last applied camera.
+	let freeCamera = false;
+	let lastCamera: import("@/engine/contracts/scene").WorldCamera | null = null;
 	let catalog: Record<string, { area?: string; source?: string; bundlePublicPath: string; }[]> | null = null;
 	/*
 	================
@@ -210,7 +215,7 @@ export function createWorldStream(
 	) {
 		const yaw = camera?.yaw ?? initialCameraYaw(), pitch = camera?.pitch ?? initialCameraPitch();
 		const distance = camera?.distance ?? 80;
-		renderer.setWorldCamera( {
+		const spec: import("@/engine/contracts/scene").WorldCamera = {
 			dungeonBlock,
 			originRegion: pose.regionId,
 			follow: { yaw, pitch, distance, height: target?.height, mounted: target?.mounted, offset },
@@ -223,7 +228,15 @@ export function createWorldStream(
 			fov: fieldOfView,
 			near: 1,
 			far: 3500
-		} );
+		};
+		if ( freeCamera ) {
+			// 68FAD0 applies nothing while +0x3CE stands: the camera keeps
+			// its last eye and target however far the player walks.
+			if ( lastCamera ) renderer.setWorldCamera( lastCamera );
+			return;
+		}
+		lastCamera = spec;
+		renderer.setWorldCamera( spec );
 	}
 	/*
 	================
@@ -409,6 +422,20 @@ export function createWorldStream(
 		*/
 		setFieldOfView( degrees: number ) {
 			if ( !disposed ) fieldOfView = cameraFieldOfViewRadians( degrees );
+		},
+		/*
+		================
+		setFreeCamera
+
+		690C40 case 0x14 (/camera): while the byte stands the camera stays
+		where it was; clearing it re-aims (UpdateCameraOrbitTarget), which
+		the next step's live follow spec does on its own. The native off
+		path also zeroes App+0x378; the port recomputes its eye and target
+		every step, so no such residue exists to clear.
+		================
+		*/
+		setFreeCamera( free: boolean ) {
+			if ( !disposed ) freeCamera = free;
 		},
 		/*
 		================
