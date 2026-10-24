@@ -12,6 +12,7 @@ const {
 	cosItemUseTail,
 	companionItemUseNotice,
 	companionItemTargetCommand,
+	armsItemTargetCursor,
 	autoPotionTarget,
 	autoPotionTargetNotice,
 	createCosSelection
@@ -189,6 +190,97 @@ test("companion drags retain explicit targets even when they are incompatible", 
 			revivalSlot: target.slot
 		} );
 	}
+});
+
+test("pet skill items arm the target cursor and name an attack-pet summoner", () => {
+	assert.equal( armsItemTargetCursor( flags( 13, 15 ) ), true );
+	const source = {
+		slot: 25,
+		refObjId: 999,
+		typeFlags: flags( 13, 15 ),
+		quantity: 1,
+		plus: 0,
+		durability: 0,
+		variance: "0",
+		magic: []
+	};
+	const target = {
+		...source,
+		slot: 14,
+		typeFlags: 0x08cc,
+		summon: { state: 1, rentals: [] }
+	};
+	assert.deepEqual( companionItemTargetCommand( source, target ), {
+		kind: "item-use",
+		slot: 25,
+		summonerSlot: 14
+	} );
+	// An attack-pet summoner (0x19c6) is admitted; a pickup-pet one (0x21c6),
+	// a missing character reference and a non-summoner target all refuse.
+	assert.equal(
+		companionItemUseNotice( flags( 13, 15 ), [ target ], {
+			records: [],
+			summonerSlot: 14,
+			summonedCharacterTypeFlags: 0x19c6
+		} ),
+		null
+	);
+	for (
+		const context of [
+			{ records: [], summonerSlot: 14, summonedCharacterTypeFlags: 0x21c6 },
+			{ records: [], summonerSlot: 14 },
+			{ records: [], summonerSlot: 99, summonedCharacterTypeFlags: 0x19c6 }
+		]
+	) {
+		assert.equal(
+			companionItemUseNotice( flags( 13, 15 ), [ target ], context )?.key,
+			"UIIT_MSG_COSPETERR_CANT_USE_WRONGOBJECT"
+		);
+	}
+	assert.deepEqual(
+		cosItemUseTail( flags( 13, 15 ), [ target ], {
+			records: [],
+			summonerSlot: 14,
+			summonedCharacterTypeFlags: 0x19c6
+		} ),
+		Uint8Array.of( 14 )
+	);
+	assert.throws(
+		() =>
+			cosItemUseTail( flags( 13, 15 ), [ target ], {
+				records: [],
+				summonerSlot: 14,
+				summonedCharacterTypeFlags: 0x21c6
+			} ),
+		/not admitted/
+	);
+});
+
+test("pet skill use sends the summoner slot and refuses a pickup-pet target", t => {
+	const source = flags( 13, 15 );
+	const admitted = companionUseFixture( t, {
+		source,
+		character: 0x19c6,
+		state: 4,
+		item: 0x08cc
+	} );
+	admitted.gameplay.command( { kind: "item-use", slot: 13, summonerSlot: 14 }, 1, undefined );
+	assert.deepEqual( admitted.sent, [ {
+		opcode: 0x75bd,
+		payload: Uint8Array.of( 13, source & 255, source >>> 8, 14 )
+	} ] );
+	const refused = companionUseFixture( t, {
+		source,
+		character: 0x21c6,
+		state: 4,
+		item: 0x10cc
+	} );
+	refused.gameplay.command( { kind: "item-use", slot: 13, summonerSlot: 14 }, 1, undefined );
+	assert.deepEqual( refused.sent, [] );
+	assert.equal(
+		refused.gameplay.take()?.notices?.at( -1 )?.key,
+		"UIIT_MSG_COSPETERR_CANT_USE_WRONGOBJECT"
+	);
 });
 
 /*

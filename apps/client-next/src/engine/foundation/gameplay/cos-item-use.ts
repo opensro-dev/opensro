@@ -45,7 +45,8 @@ export interface CosItemUseContext {
 companionItemUseNotice
 
 696490 and 6968BA..696913 validate Grass/Clock targets before composing the
-slot byte. Expected refusals are category-5 notices, not protocol failures.
+slot byte; the pet skill item shares the clock's summoner-slot shape.
+Expected refusals are category-5 notices, not protocol failures.
 Character reference classifies the pet; the item subtype is not that proof.
 ================
 */
@@ -57,7 +58,8 @@ export function companionItemUseNotice(
 	if ( (flags & 0x7c) !== 0x6c ) return null;
 	const group = flags >>> 7 & 15, subtype = flags >>> 11 & 31;
 	const grass = group === 1 && subtype === 6;
-	if ( !grass && !isCompanionLeaseItem( flags ) ) return null;
+	const petSkill = isPetSkillItem( flags );
+	if ( !grass && !petSkill && !isCompanionLeaseItem( flags ) ) return null;
 	const slot = grass ? context?.revivalSlot : context?.summonerSlot;
 	const unavailable: SystemNotice = { key: "UIIT_MSG_COSPETERR_CANT_USEITEM", value: 0, nativeType: 5 };
 	const wrongObject: SystemNotice = { key: "UIIT_MSG_COSPETERR_CANT_USE_WRONGOBJECT", value: 0, nativeType: 5 };
@@ -69,8 +71,12 @@ export function companionItemUseNotice(
 	if ( !target || (target.typeFlags & 0x7fe) !== 0xcc || !target.summon ) return wrongObject;
 	// Grass's missing-character branch reaches 696311; Clock instead refuses
 	// it. 5500B0/F0 inspect the character's 16-bit family and subtype masks.
+	// Grass and the pet skill name an attack pet (band 3, 0x1800); the clock
+	// names a pickup pet (band 4, 0x2000).
 	if ( character === undefined ) return grass ? null : wrongObject;
-	if ( (character & 0x7fe) !== 0x1c6 || (character & 0xf800) !== (grass ? 0x1800 : 0x2000) ) return wrongObject;
+	if ( (character & 0x7fe) !== 0x1c6 || (character & 0xf800) !== (grass || petSkill ? 0x1800 : 0x2000) ) {
+		return wrongObject;
+	}
 	if ( grass && target.summon.state !== 4 ) return unavailable;
 	return null;
 }
@@ -115,7 +121,7 @@ export function cosItemUseTail(
 		new DataView( tail.buffer ).setUint32( 0, context?.targetGid ?? 0, true );
 		return tail;
 	}
-	if ( group === 1 && subtype === 6 || group === 13 && subtype === 12 ) {
+	if ( group === 1 && subtype === 6 || group === 13 && subtype === 12 || group === 13 && subtype === 15 ) {
 		// The worker publishes expected refusals before reaching this strict
 		// encoder. Never infer a target from a sole inventory candidate.
 		if ( companionItemUseNotice( flags, items, context ) ) throw Error( "Companion target was not admitted" );
@@ -168,6 +174,18 @@ export function isCompanionLeaseItem( flags: number ): boolean {
 
 /*
 ================
+isPetSkillItem
+
+561D50 checks the same inventory-targetable mall family; subtype 15 is the
+pet skill item (6961B0 case 0xF names the summoner it applies to).
+================
+*/
+export function isPetSkillItem( flags: number ): boolean {
+	return (flags & 0x7c) === 0x6c && (flags >>> 7 & 15) === 13 && (flags >>> 11 & 31) === 15;
+}
+
+/*
+================
 isRevivalGrass
 
 Grass of Life: ETC group 1, subtype 6 (550340 tests the group; 696490 case 6).
@@ -182,12 +200,12 @@ export function isRevivalGrass( flags: number ): boolean {
 armsItemTargetCursor
 
 Right-button use of these items arms cursor A6 instead of using them
-(561D50: group 1 subtype 6; group 13 subtypes 8 and 12 at 562140..5621D9).
+(561D50: group 1 subtype 6; group 13 subtypes 8, 12 and 15 at 562140..5621BF).
 The next inventory click names the item they act on.
 ================
 */
 export function armsItemTargetCursor( flags: number ): boolean {
-	return isRevivalGrass( flags ) || isCompanionLeaseItem( flags ) ||
+	return isRevivalGrass( flags ) || isCompanionLeaseItem( flags ) || isPetSkillItem( flags ) ||
 		(flags & 0x7c) === 0x6c && (flags >>> 7 & 15) === 13 && (flags >>> 11 & 31) === 8;
 }
 
@@ -213,7 +231,7 @@ export function companionItemTargetCommand(
 	if ( group === 1 && subtype === 6 ) {
 		return { kind: "item-use", slot: source.slot, revivalSlot: target.slot };
 	}
-	if ( group === 13 && subtype === 12 ) {
+	if ( group === 13 && (subtype === 12 || subtype === 15) ) {
 		return { kind: "item-use", slot: source.slot, summonerSlot: target.slot };
 	}
 	return null;
