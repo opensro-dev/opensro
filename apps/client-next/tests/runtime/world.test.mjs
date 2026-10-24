@@ -40,7 +40,7 @@ const { createSessionHttp } = await load( "src/engine/runtime/simulation/worker/
 const { createPresentation } = await load( "src/engine/runtime/presentation/presentation.ts" );
 const { createSimulationInput } = await load( "src/engine/runtime/simulation/worker/input/input.ts" );
 
-test("journal admits the expanded startup catalogue but still rejects excessive queued bytes atomically", () => {
+test("journal admits the expanded startup catalogue and compacts excessive queued bytes into a resync", () => {
 	const owner = createEntities();
 	const state = {
 		localGid: 1,
@@ -48,17 +48,17 @@ test("journal admits the expanded startup catalogue but still rejects excessive 
 		error: "z".repeat( 10 << 20 )
 	};
 	owner.publish( { kind: "gameplay", state } );
-	assert.throws(
-		() =>
-			// A queued gameplay snapshot is superseded rather than added
-			// (world-journal-gameplay.test.mjs); a bootstrap is never merged.
-			owner.publish( { kind: "bootstrap", value: { name: "y".repeat( 7 << 20 ) } } ),
-		/journal backlog exceeded/
-	);
+	// A queued gameplay snapshot is superseded rather than added
+	// (world-journal-gameplay.test.mjs); a bootstrap is never merged. Past
+	// the byte budget the queue compacts instead of throwing: the take
+	// republishes the world whole on a new epoch, and the events queued
+	// behind the drop ride after it.
+	owner.publish( { kind: "bootstrap", value: { name: "y".repeat( 7 << 20 ) } } );
+	assert.equal( owner.resyncs(), 1 );
 	const batch = owner.take();
-	assert.equal( batch.events.length, 1 );
-	assert.equal( batch.events[0].state, state );
+	assert.deepEqual( batch.events.map( event => event.kind ), [ "reset", "synchronized", "bootstrap" ] );
 	owner.ack( batch.sequence );
+	assert.equal( owner.synchronized(), true );
 	owner.publish( { kind: "gameplay", state: { localGid: 1 } } );
 	assert.equal( owner.take().events.length, 1 );
 });
@@ -184,15 +184,62 @@ test("stalled presentation retains one sampled pose per mover without dropping l
 	owner.dispose();
 });
 
-test("reliable journal still rejects 8193 events and teardown never publishes a reset", () => {
+test("a stalled consumer's backlog compacts into a resync instead of killing the session", () => {
+	const owner = createEntities();
+	const p = createPresentation();
+	owner.bootstrap( bootstrap );
+	p.apply( flush( owner ) );
+	for ( const row of rows ) owner.receive( row );
+	const entered = flush( owner );
+	p.apply( entered );
+	const spawn = entered.events.find( e => e.kind === "spawn" ).entity;
+	assert.equal( owner.synchronized(), true );
+	assert.ok( p.read( spawn.gid ) );
+	// The consumer stalls: one batch is taken and not acknowledged while
+	// the wire keeps producing state behind it - a hidden or frozen tab,
+	// the 2026-10-24 backlog deaths. The queue used to throw at 32 MiB.
+	owner.publish( { kind: "native", opcode: 0x7777, payload: Uint8Array.of( 1 ) } );
+	const inflight = owner.take();
+	const packet = value => {
+		const payload = Buffer.alloc( 6 );
+		payload.writeUInt32LE( spawn.gid );
+		payload[4] = 4;
+		payload[5] = value;
+		return { opcode: 0x3122, payload };
+	};
+	for ( let i = 0; owner.resyncs() === 0 && i < 2000000; i++ ) owner.receive( packet( i % 2 ? 4 : 0 ) );
+	assert.equal( owner.resyncs(), 1, "the flood compacts instead of throwing" );
+	// On its return the consumer applies the stalled batch as offered,
+	// acks it, and the next take is the rebuilt world on a new epoch.
+	p.apply( inflight );
+	owner.ack( inflight.sequence );
+	const resync = owner.take();
+	assert.deepEqual(
+		resync.events.map( e => e.kind ),
+		[ "reset", "bootstrap", "spawn", "synchronized" ]
+	);
+	assert.equal( resync.events[2].entity.gid, spawn.gid );
+	assert.equal( owner.synchronized(), false );
+	assert.equal( p.apply( resync ), true );
+	assert.ok( p.read( spawn.gid ), "the rebuilt world holds the entity" );
+	owner.ack( resync.sequence );
+	assert.equal( owner.synchronized(), true );
+	// Normal journaling resumes behind the resync.
+	owner.receive( packet( 4 ) );
+	owner.receive( packet( 0 ) );
+	assert.equal( flush( owner ).events.at( -1 ).entity.appearanceState[2], 0 );
+	owner.dispose();
+	p.dispose();
+});
+
+test("reliable journal compacts past 8192 events and teardown never publishes a reset", () => {
 	const owner = createEntities();
 	for ( let i = 0; i < 8192; i++ ) {
 		owner.publish( { kind: "native", opcode: 0x7777, payload: Uint8Array.of( i & 255 ) } );
 	}
-	assert.throws(
-		() => owner.publish( { kind: "native", opcode: 0x7777, payload: new Uint8Array() } ),
-		/8192 events queued/
-	);
+	assert.equal( owner.resyncs(), 0 );
+	owner.publish( { kind: "native", opcode: 0x7777, payload: new Uint8Array() } );
+	assert.equal( owner.resyncs(), 1, "the 8193rd event compacts the queue instead of throwing" );
 	assert.doesNotThrow( () => owner.dispose() );
 	assert.equal( owner.take(), null );
 });

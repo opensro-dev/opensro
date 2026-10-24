@@ -23,6 +23,7 @@ import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import path from "node:path";
 import { root } from "../../tools/project.mjs";
 
@@ -116,11 +117,14 @@ test("a batch stamps how long its oldest event waited unpublished", () => {
 	assert.equal( owner.take().spanMs, 0 );
 });
 
-test("distinct paths still count in full and still hit the budget", () => {
+test("distinct paths still count in full and compact past the budget", () => {
 	const owner = createEntities();
-	assert.throws( () => {
-		for ( let i = 0; i < STATES; i++ ) owner.publish( { kind: "state", entity: walker( walkingPath(), i ) } );
-	}, /journal backlog exceeded/ );
+	for ( let i = 0; i < STATES; i++ ) owner.publish( { kind: "state", entity: walker( walkingPath(), i ) } );
+	assert.ok( owner.resyncs() >= 1, "no sharing discount: the budget still bites, as compactions" );
+	const batch = owner.take();
+	assert.equal( batch.events[0].kind, "reset" );
+	owner.ack( batch.sequence );
+	assert.equal( owner.synchronized(), true );
 });
 
 test("journalCost charges a repeated array once only when given the batch's set", () => {
@@ -540,4 +544,62 @@ test("createWorldCore -> createPresentation retains skillCatalog and skillIndex 
 		assert.equal( skillCompares, 3, "repeated post-resume takes must not re-compare skillCatalog" );
 		if ( gm ) assert.equal( gmCompares, 3, "repeated post-resume takes must not re-compare gmCatalog" );
 	}
+});
+
+test("core republishes the gameplay snapshot in full behind a journal resync", () => {
+	const fixture = JSON.parse(
+		fs.readFileSync(
+			path.resolve( root, "../server/internal/game/enterworld/testdata/monster_spawn_fixture.json" ),
+			"utf8"
+		)
+	);
+	const rows = fixture.packets.map( p => ({ opcode: p.opcode, payload: Buffer.from( p.payloadHex, "hex" ) }) );
+	const core = createWorldCore( () => {} );
+	const presentation = createPresentation();
+	// The core fixture's character over the packet fixture's world rows.
+	const blob = { ...worldBootstrapFixture( { gm: false, regionId: 25000 } ), refObjSnapshot: fixture.refObjSnapshot };
+	core.bootstrap( blob, false, 0 );
+	core.step( 0, false );
+	const entry = core.take();
+	presentation.apply( entry );
+	core.ack( entry.sequence );
+	assert.equal( presentation.gameplay()?.skillCatalog?.length, 2 );
+	for ( const row of rows ) core.receive( row, 10 );
+	core.step( 10, false );
+	// The consumer stalls on this batch while the wire keeps producing
+	// state behind it, past the journal's byte budget.
+	const inflight = core.take();
+	assert.ok( inflight );
+	const packet = value => {
+		const payload = Buffer.alloc( 6 );
+		payload.writeUInt32LE( fixture.expect.gid );
+		payload[4] = 4;
+		payload[5] = value;
+		return { opcode: 0x3122, payload };
+	};
+	let compacted = [];
+	for ( let i = 0; i < 2000000 && !compacted.length; i++ ) {
+		core.receive( packet( i % 2 ? 4 : 0 ), 10 );
+		compacted = core.takeDegradations().filter( d => d.code === "world-journal-resync" );
+	}
+	assert.equal( compacted.length, 1, "the flood compacts once instead of throwing" );
+	presentation.apply( inflight );
+	core.ack( inflight.sequence );
+	const resync = core.take();
+	assert.ok( resync );
+	assert.equal( resync.events[0].kind, "reset" );
+	assert.equal( resync.events.at( -1 ).kind, "synchronized" );
+	presentation.apply( resync );
+	core.ack( resync.sequence );
+	assert.equal( presentation.gameplay(), null, "the reset clears the snapshot until it republishes" );
+	// Without the core hook nothing would follow: gameplay has not changed
+	// since entry, so only the invalidation republishes it, in full.
+	core.step( 20, false );
+	const follow = core.take();
+	assert.ok( follow );
+	const snapshot = follow.events.find( event => event.kind === "gameplay" );
+	assert.ok( snapshot, "a full gameplay snapshot follows the resync" );
+	presentation.apply( follow );
+	core.ack( follow.sequence );
+	assert.equal( presentation.gameplay()?.skillCatalog?.length, 2 );
 });
