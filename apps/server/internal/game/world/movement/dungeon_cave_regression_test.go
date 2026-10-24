@@ -211,3 +211,52 @@ func TestDonwhangCaveInBoulderBlocksAsNative(t *testing.T) {
 		t.Fatalf("away from the boulder pile: %v at %+v, want arrived", away.Outcome, away.Rest)
 	}
 }
+
+/*
+================
+TestDonwhangCaveSeamStepStaysOnGroundFloor
+
+BR-261020-1126-03CF: a ground step across x 0 near z -6.5 crosses the
+passage between two ground-floor blocks, where a hairline gap leaves only
+the floors at 140, 280 and 420 under one sample. The step must arrive on
+the ground floor, not climb to 280.
+================
+*/
+func TestDonwhangCaveSeamStepStaysOnGroundFloor(t *testing.T) {
+	v := realAuthorityValidator(t)
+	got := v.clipDungeonPath(donwhangCaveSpawn(2.785, 0, -6.629), donwhangCaveSpawn(-2.212, 0, -6.462))
+	if got.Outcome != ClipArrived || math.Abs(got.Rest.Y) > 0.5 {
+		t.Fatalf("seam step: %s at %+v, want arrived on the ground floor", got.Outcome, got.Rest)
+	}
+}
+
+/*
+================
+TestDonwhangCaveReportedWalkKeepsGroundFloor
+
+The reported walk itself, stepped as the server walker steps it: from
+(87.7, 0, -9.5) to (-76, 0, -4) every step stays on the ground floor.
+================
+*/
+func TestDonwhangCaveReportedWalkKeepsGroundFloor(t *testing.T) {
+	v := realAuthorityValidator(t)
+	clip := &ClientClip{Mode: ClipApply, Validator: v}
+	pose, owner := donwhangCaveSpawn(87.738, 0, -9.463), simulation.NavOwner{}
+	goal := donwhangCaveSpawn(-76, 0, -4)
+	for i := 0; i < 40; i++ {
+		dx, dz := goal.X-pose.X, goal.Z-pose.Z
+		length := math.Hypot(dx, dz)
+		if length < 0.5 {
+			break
+		}
+		scale := math.Min(1, 5/length)
+		next, nextOwner, blocked := clip.processOwnedStep("cave-seam", pose, owner, donwhangCaveSpawn(pose.X+dx*scale, pose.Y, pose.Z+dz*scale))
+		if blocked || math.Abs(next.Y) > 0.5 {
+			t.Fatalf("step %d from %+v -> %+v (blocked %v), want the ground floor", i, pose, next, blocked)
+		}
+		pose, owner = next, nextOwner
+	}
+	if math.Hypot(goal.X-pose.X, goal.Z-pose.Z) > 0.5 {
+		t.Fatalf("walk ends at %+v, want %+v", pose, goal)
+	}
+}

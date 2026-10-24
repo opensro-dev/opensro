@@ -186,3 +186,44 @@ func TestMonsterKillEasesThePenalty(t *testing.T) {
 		t.Fatal("no 0x30F2 for the killer")
 	}
 }
+
+/*
+================
+TestMonsterKillEasesTheRepresentativesPenalty
+
+The original eases the penalty of the kill's reward representative: the
+contributor who dealt 99 of 100 is relieved, the player whose blow landed
+last is not, and the relief reaches the contributor's own session.
+================
+*/
+func TestMonsterKillEasesTheRepresentativesPenalty(t *testing.T) {
+	rt, _, actor, target := newCombatTestRuntime(t, 100)
+	actor.PK = &domain.PKRecord{Penalty: 100}
+	peer := *actor
+	peer.ID, peer.Name = 4, "contributor"
+	peer.PK = &domain.PKRecord{Penalty: 100}
+	deps := rt.deps.(*enterworld.Deps)
+	source := fixtureCharacters(deps.Characters)
+	source[testDivision] = append(source[testDivision], &peer)
+	gid := enterworld.ObjectIDForCharacter(&peer)
+	if hits := rt.Monsters.ApplyDamageSequence(testDivision, target.Gid, 100,
+		[]simulation.MonsterDamagePlan{{GID: target.Gid, Damage: 99, CreditGID: gid}}); len(hits) != 1 || hits[0].Fatal {
+		t.Fatal("preparation failed")
+	}
+	result := rt.HandleTargetInteract(testDivision, actor, wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: target.Gid}.Encode())
+	if actor.PK.Penalty != 100 {
+		t.Fatalf("the killing blow's penalty = %d, want it untouched at 100", actor.PK.Penalty)
+	}
+	if peer.PK.Penalty >= 100 {
+		t.Fatalf("the representative's penalty = %d, want it eased", peer.PK.Penalty)
+	}
+	relieved := false
+	for _, r := range result.Recipients {
+		if r.CharacterID == peer.ID && hasOpcode(r.Frames, wire.OpPKPenalty) {
+			relieved = true
+		}
+	}
+	if !relieved {
+		t.Fatalf("no 0x30F2 reached the representative: %+v", result.Recipients)
+	}
+}

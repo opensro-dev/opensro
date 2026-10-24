@@ -42,7 +42,9 @@ EXPERIMENTAL_TABS
 Port-only, not native. The window's tabs, Options style: Image holds the
 frame-wide stages and scene resolution, World the
 atmosphere stages that deviate from the 2005 look, Lighting the direct-light
-stages, Chat and Developer the earlier additions.
+stages, Chat and Developer the earlier additions. Pickup holds the item
+filter's kinds (#841); it is appended last so the existing tabs keep the
+indices a reopening window relies on.
 ================
 */
 export const EXPERIMENTAL_TABS: readonly {
@@ -273,10 +275,45 @@ export const EXPERIMENTAL_TABS: readonly {
 			label: "Pet panel opens window",
 			description: "Click a pet panel to open its window."
 		}, {
+			key: "petPickupFilter",
+			id: "experimental-pet-pickup-filter",
+			label: "Pickup pet item filter",
+			description: "Choose what the pickup pet collects: Pickup tab."
+		}, {
 			key: "expandedWorldMap",
 			id: "experimental-expanded-world-map",
 			label: "Expanded world map",
 			description: "Show extra town pages and wider overview."
+		} ]
+	},
+	{
+		title: "Pickup",
+		section: "Pickup pet filter",
+		rows: [ {
+			key: "petFilterGold",
+			id: "experimental-pet-filter-gold",
+			label: "Gold",
+			description: "Collect gold; only while the item filter is on."
+		}, {
+			key: "petFilterEquipment",
+			id: "experimental-pet-filter-equipment",
+			label: "Equipment",
+			description: "Collect equipment; only while the filter is on."
+		}, {
+			key: "petFilterAlchemy",
+			id: "experimental-pet-filter-alchemy",
+			label: "Alchemy",
+			description: "Elixirs, stones and tablets; only with the filter."
+		}, {
+			key: "petFilterPotions",
+			id: "experimental-pet-filter-potions",
+			label: "Potions",
+			description: "Collect potions; only while the filter is on."
+		}, {
+			key: "petFilterOther",
+			id: "experimental-pet-filter-other",
+			label: "Other items",
+			description: "Scrolls, arrows and the rest; only with the filter."
 		} ]
 	}
 ];
