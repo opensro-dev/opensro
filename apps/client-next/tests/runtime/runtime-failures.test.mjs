@@ -180,6 +180,9 @@ presentUpdate
 	owners.characters.eventRain = () => false;
 	owners.characters.orbGauge = () => ({ authoritative: 0, displayed: 0, pending: 0 });
 	owners.characters.receiveFeedback = () => {};
+	// The main-thread mover's per-frame state (#1440).
+	owners.characters.ownMover = () => {};
+	owners.characters.drawnPose = () => undefined;
 	owners.characters.step = () => {
 		throw new Error( "injected presentation failure" );
 	};
