@@ -42,17 +42,26 @@ const (
 	// The port grants it to the official of every fortress in
 	// siegefortress.txt.
 	NpcTalkFlagFortressOfficial uint32 = 0x800000
+	// NpcTalkFlagFortressAide is the battle aide's row (option 0x19): client
+	// 5D8FF0 tests 0x1000000 and 5D7AD0 appends action 0x32 (Structure
+	// management) only for a member of the holding guild, so the word is
+	// the NPC's and the holder rule stays the client's. INFERENCE: the
+	// server sends every viewer the same select word, as it does for the
+	// official; the row's 0x71E1 0x18 list answer is fortressServiceQuery's.
+	NpcTalkFlagFortressAide uint32 = 0x1000000
 
 	// NpcTalkImplementedFlags is the subset whose request -> authority ->
 	// response lifecycle exists in this port; a row the client would draw
 	// for any other bit could only be refused. Bits without a row (repair,
 	// stable, thief buy, general) carry nothing to refuse. Still closed:
-	// the fortress staff other than the official, and gate pulleys.
+	// the fortress staff other than the official and the battle aide, and
+	// gate pulleys.
 	NpcTalkImplementedFlags uint32 = NpcTalkFlagShop | NpcTalkFlagTalk | NpcTalkFlagStorage |
 		NpcTalkFlagRepair | NpcTalkFlagRecallPoint | NpcTalkFlagTeleport | NpcTalkFlagStable |
 		NpcTalkFlagSpecialTrade | NpcTalkFlagThiefBuy | NpcTalkFlagGeneral | NpcTalkFlagGachaMachine | NpcTalkFlagGachaOperator |
 		NpcTalkFlagJobTrader | NpcTalkFlagJobThief | NpcTalkFlagJobHunter | NpcTalkFlagReverseReturn |
-		NpcTalkFlagGuild | NpcTalkFlagMagicOption | NpcTalkFlagFortressOfficial
+		NpcTalkFlagGuild | NpcTalkFlagMagicOption | NpcTalkFlagFortressOfficial |
+		NpcTalkFlagFortressAide
 )
 
 // npcGachaMachines are the NPCs the reference data binds a Magic POP to
