@@ -243,7 +243,6 @@ apps/client-next/tests/browser/mission-entry.test.mjs
 apps/client-next/tests/browser/mission-input.test.mjs
 apps/client-next/tests/browser/mob-death-motion-live.test.mjs
 apps/client-next/tests/browser/monster-wander-spread-live.test.mjs
-apps/client-next/tests/browser/movement-cadence.test.mjs
 apps/client-next/tests/browser/movement-snap-live.test.mjs
 apps/client-next/tests/browser/music-autoplay.test.mjs
 apps/client-next/tests/browser/native-filtered-alpha.test.mjs
