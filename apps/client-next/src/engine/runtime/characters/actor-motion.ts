@@ -24,7 +24,7 @@ import { skillMotionResolveAnimation } from "@/engine/foundation/animation/skill
 import { weaponAnimationSet } from "@/engine/foundation/animation/animation-metadata";
 import { characterHeadingYaw } from "@/engine/foundation/math/angles";
 import { movementGait } from "@/engine/foundation/gameplay/native-movement";
-import { castFacing } from "@/engine/foundation/gameplay/cast-facing";
+import { approachHeading, castFacing } from "@/engine/foundation/gameplay/cast-facing";
 import type { CharacterLayer } from "@/engine/contracts/character";
 import { MOVEMENT_MODE_SEATED, type EntityState } from "@/engine/contracts/world";
 import type { ActorAppearance, ActorFrame, ActorOwner, ActorPass } from "./internal/presentation-contract";
@@ -34,6 +34,10 @@ import { worldAudioPosition } from "@/engine/foundation/world/world-space";
 const PROTECTED_ANIMATION_DISTANCE = 300;
 const STALL_ACTION_MASK = 0x8000;
 const STALL_MOTION = 80;
+// 86CBA0's yaw rate in heading words: 3*pi rad/s (turn in
+// pose-presentation.ts), the rate a body turns back at when a cast
+// facing leaves its yaw behind.
+const CAST_YAW_RELEASE_WORDS_PER_SECOND = 98304;
 
 /*
 ================
@@ -186,6 +190,19 @@ export function createActorMotion( owner: ActorOwner ) {
 			let renderPose = drawnPoses.get( entity.gid ) ?? nativePose;
 			if ( state.castFacing ) {
 				renderPose = { ...renderPose, angle: Math.round( state.castFacing.angle ) % 65536 };
+				// 8DC440 wrote this yaw (CICharactor_SetYaw): it outlives
+				// the facing, and the body turns back from it when the
+				// facing ends instead of snapping to the drawn angle.
+				state.castYawRelease = { angle: state.castFacing.angle, at: seconds };
+			} else if ( state.castYawRelease ) {
+				const release = state.castYawRelease, target = renderPose.angle;
+				const turned = approachHeading(
+					release.angle,
+					target,
+					Math.max( 0, seconds - release.at ) * CAST_YAW_RELEASE_WORDS_PER_SECOND
+				);
+				renderPose = { ...renderPose, angle: Math.round( turned ) % 65536 };
+				state.castYawRelease = turned === target ? undefined : { angle: turned, at: seconds };
 			}
 			if ( hit && hit.damage > 0 && state.hitToken !== hit.token ) {
 				state.hitToken = hit.token;

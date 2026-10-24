@@ -1319,6 +1319,69 @@ test("a cast stage anchors to the drawn pose of the same frame while walking at 
 	f.dispose();
 });
 
+test("a caster that tracked a moving target turns back at the native rate when it walks off", () => {
+	// #1516 review (opensro1 (2)): 8DC440 writes the caster's yaw itself
+	// (CICharactor_SetYaw), so when the facing ends the body turns back
+	// from the tracked yaw at 86CBA0's 3*pi rad/s - it does not snap to
+	// the presenter's angle, which tracked the server heading underneath.
+	const f = fixture(
+		{ 7: { clips: [ "stand" ], phaseClips: [ [], [ "stand" ], [] ], stages: [] } },
+		2,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		undefined,
+		{ states: { stand: { durationMs: 1000, loop: true, trackEvents: [] } }, rules: [] }
+	);
+	f.warm();
+	f.presentation.simulationOrigin( 0 );
+	const from = { regionId: 1, x: 10, y: 20, z: 30, angle: 0 };
+	const cast = { token: 1, caster: 1, target: 2, skill: 7, damage: 0, fatal: false };
+	const yaws = [];
+	const frame = ( seconds, walking ) => {
+		const a = Math.min( 1, (seconds - 1) / .5 ) * Math.PI / 4;
+		const target = entity( 2, { kind: "monster", x: 10 + Math.sin( a ) * 60, z: 30 + Math.cos( a ) * 60 } );
+		const pose = walking ? { ...from, x: 10 - (seconds - 1.6) * 50, angle: 49152 } : from;
+		const path = walking ? { from, to: { ...from, x: -90, angle: 49152 }, durationMs: 2000 } : undefined;
+		const player = entity( 1, {
+			kind: "local-player",
+			x: pose.x,
+			heading: pose.angle,
+			moving: walking,
+			movementMode: 3,
+			movementRevision: walking ? 2 : 1,
+			movementPath: path,
+			poseAtMs: seconds * 1000
+		} );
+		f.step( [ player, target ], seconds, {
+			localGid: 1,
+			pose,
+			moving: walking,
+			movementRevision: walking ? 2 : 1,
+			movementPath: path,
+			poseAtMs: seconds * 1000,
+			inventory: [],
+			vitals: [],
+			casts: walking ? [] : [ cast ]
+		} );
+		yaws.push( [ seconds, f.actors.find( actor => actor.gid === 1 ).pose.yaw ] );
+	};
+	for ( let i = 0; i < 72; i++ ) frame( 1 + i / 60, i >= 36 );
+	let worst = 0;
+	for ( let i = 1; i < yaws.length; i++ ) {
+		const [t0, a0] = yaws[i - 1], [t1, a1] = yaws[i];
+		const tau = Math.PI * 2, d = Math.abs( ((((a1 - a0) % tau) + tau * 1.5) % tau) - Math.PI );
+		worst = Math.max( worst, d / (t1 - t0) );
+	}
+	assert.ok( worst <= 10.2, `fastest yaw change ${worst.toFixed( 1 )} rad/s` );
+	f.dispose();
+});
+
 test("a WAIT hold released by the next walk recovers continuously instead of jumping", () => {
 	// actor-motion holds the drawn pose when a cast's WAIT leaves the walk
 	// state (native stops the walk there); the logical walk can still move

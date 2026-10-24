@@ -227,6 +227,11 @@ export interface CharacterPresentationState {
 	dispatch?: ReturnType<typeof createAnimationDispatch>;
 	modelAnimation?: ReturnType<typeof createModelAnimation>;
 	castFacing?: import("@/engine/foundation/gameplay/cast-facing").CastFacing;
+	// The drawn yaw (heading words) a finished cast facing left behind:
+	// 8DC440 wrote it (CICharactor_SetYaw), so the body turns back from it
+	// to the drawn pose's own yaw at 86CBA0's rate until they meet. `at`
+	// is the frame clock the turn last advanced at.
+	castYawRelease?: { angle: number; at: number; };
 	navigationHold?: {
 		revision: number;
 		pose: import("@/engine/contracts/gameplay").Pose;
