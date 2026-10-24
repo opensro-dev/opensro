@@ -444,15 +444,20 @@ func parseCharData(t *testing.T, payload []byte) charData {
 		skipItemBody("avatar item")
 	}
 
-	// Mastery list: u8 count, per row marker 1 + u32 id + u8 level,
-	// terminated by marker 2 (sub_866e50's first loop).
-	masteryCount, err := r.U8()
-	fail("mastery count", err)
-	for i := 0; i < int(masteryCount); i++ {
+	// Mastery list: the lead byte is discarded by the native reader,
+	// which takes marker-1 rows until the marker-2 terminator
+	// (sub_866e50's first loop) - there is no count and no 255 cap, so
+	// past 255 rows the lead byte wraps unread (#1480).
+	_, err = r.U8()
+	fail("mastery lead byte", err)
+	for row := 0; ; row++ {
 		marker, err := r.U8()
 		fail("mastery marker", err)
+		if marker == 2 {
+			break
+		}
 		if marker != 1 {
-			t.Fatalf("0x32B3 mastery row %d marker = %d, want 1", i, marker)
+			t.Fatalf("0x32B3 mastery row %d marker = %d, want 1 or the terminator 2", row, marker)
 		}
 		id, err := r.U32()
 		fail("mastery id", err)
@@ -460,35 +465,29 @@ func parseCharData(t *testing.T, payload []byte) charData {
 		fail("mastery level", err)
 		out.Masteries[id] = level
 	}
-	terminator, err := r.U8()
-	fail("mastery terminator", err)
-	if terminator != 2 {
-		t.Fatalf("0x32B3 mastery terminator = %d, want 2", terminator)
-	}
 
-	// Skill list: u8 count, per row marker 1 + u32 id + u8 value(1),
-	// terminated by marker 2 (sub_866e50's second loop).
-	skillCount, err := r.U8()
-	fail("skill count", err)
-	for i := 0; i < int(skillCount); i++ {
+	// Skill list: the same marker grammar (sub_866e50's second loop):
+	// lead byte discarded, per row marker 1 + u32 id + u8 value(1),
+	// until marker 2.
+	_, err = r.U8()
+	fail("skill lead byte", err)
+	for row := 0; ; row++ {
 		marker, err := r.U8()
 		fail("skill marker", err)
+		if marker == 2 {
+			break
+		}
 		if marker != 1 {
-			t.Fatalf("0x32B3 skill row %d marker = %d, want 1", i, marker)
+			t.Fatalf("0x32B3 skill row %d marker = %d, want 1 or the terminator 2", row, marker)
 		}
 		id, err := r.U32()
 		fail("skill id", err)
 		value, err := r.U8()
 		fail("skill value", err)
 		if value != 1 {
-			t.Fatalf("0x32B3 skill row %d value byte = %d, want the native ctor default 1", i, value)
+			t.Fatalf("0x32B3 skill row %d value byte = %d, want the native ctor default 1", row, value)
 		}
 		out.Skills = append(out.Skills, id)
-	}
-	terminator, err = r.U8()
-	fail("skill terminator", err)
-	if terminator != 2 {
-		t.Fatalf("0x32B3 skill terminator = %d, want 2", terminator)
 	}
 
 	// Quest block (sub_8673d0's three counted sections; the composer
@@ -955,6 +954,52 @@ func TestProgressionPlaneEndToEndOverWire(t *testing.T) {
 	}
 
 	sendFrame(t, conn2, transport.OpBye, []byte{transport.ByeReasonNormal})
+}
+
+/*
+================
+TestCharDataSkillListPast255OverWire
+
+Since #1457 the writer emits EVERY learned skill: the native reader
+discards the list's lead byte and takes marker-1 rows until marker 2,
+so a list past 255 rows has no cap and its lead byte wraps unread. The
+parser above must read the same grammar: a character holding 260 skills
+enters with all 260 on the 0x32B3 chunk, in stored order (#1480).
+================
+*/
+func TestCharDataSkillListPast255OverWire(t *testing.T) {
+	t.Parallel()
+	dir := filepath.Join(t.TempDir(), "authority")
+
+	// 260 learned skills: the lead byte wraps to 4, which the old
+	// count-based reading mistook for the whole list.
+	skills := make([]uint32, 0, 260)
+	for i := 0; i < 260; i++ {
+		skills = append(skills, 20000+uint32(i))
+	}
+	seed := &enterworld.Character{
+		Name:          "e2eManySkill",
+		ModelCodename: "CHAR_CH_MAN_ADVENTURER",
+		RaceIndex:     e2eInt64(enterworld.RaceChina),
+		Gender:        e2eInt64(enterworld.GenderMale),
+		Level:         e2eInt64(40),
+		Skills:        skills,
+	}
+	seed.Masteries = enterworld.DefaultMasteries(enterworld.RaceKeyChina)
+
+	server := startProgressionServer(t, dir, seed)
+	conn := dialProgressionWS(t, server.srv)
+	helloProgressionWS(t, conn)
+
+	parsed, _ := enterWorldAs(t, conn, seed.Name)
+	if !reflect.DeepEqual(parsed.Skills, skills) {
+		t.Fatalf("0x32B3 skill list = %d rows %v..., want the seeded 260 in order", len(parsed.Skills), parsed.Skills[:min(8, len(parsed.Skills))])
+	}
+	if len(parsed.Masteries) != 7 {
+		t.Fatalf("0x32B3 mastery rows = %d, want the 7 CH racial rows", len(parsed.Masteries))
+	}
+
+	sendFrame(t, conn, transport.OpBye, []byte{transport.ByeReasonNormal})
 }
 
 // --- the levelling path (levelup wave, LANE-5) ------------------------------
