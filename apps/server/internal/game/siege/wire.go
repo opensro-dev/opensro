@@ -19,6 +19,7 @@ Subtypes this file writes:
 	8     a fortress changed hands (the conquest notice)
 	0x0A  the last guard tower fell: the stone's countdown starts
 	0x0B  a structure's state changed (destroyed)
+	0x0F  every structure of a fortress world (the zone roster)
 	0x10  the guilds registered for the war (clear and replace)
 	0x31/0x32  tax period on/off          0x33/0x34  request period on/off
 
@@ -47,6 +48,7 @@ const (
 	SubtypeWarEnds1          uint8 = 0x09
 	SubtypeTowersFallen      uint8 = 0x0a
 	SubtypeStructureState    uint8 = 0x0b
+	SubtypeStructureRoster   uint8 = 0x0f
 	SubtypeWarGuildRegistry  uint8 = 0x10
 	SubtypeTaxPeriodBegin    uint8 = 0x31
 	SubtypeTaxPeriodEnd      uint8 = 0x32
@@ -210,6 +212,56 @@ func EncodeStructureState3887(state StructureState) []byte {
 	writer.U32(state.FortressID).U32(state.GID).U32(state.EventStructID).U16(state.State)
 	if state.Headquarters {
 		writeSizedString(writer, state.GuildName)
+	}
+	return writer.Payload()
+}
+
+/*
+================
+StructureRosterRow
+
+One structure of the 0x0F roster, in 61FCE0's write order: its event
+zone (vt+0x648), its reference (vt+0x64C), its hit points (vt+0x108) and
+state word (vt+0x654). GuildName is a headquarters' guild; empty writes
+the has-guild byte 0, as a failed guild lookup does natively.
+================
+*/
+type StructureRosterRow struct {
+	EventStructID uint32
+	RefObjID      uint32
+	HP            uint32
+	State         uint16
+	GuildName     string
+}
+
+// MaxStructureRosterRows is the roster's one-byte count.
+const MaxStructureRosterRows = 255
+
+/*
+================
+EncodeStructureRoster3887
+
+Subtype 0x0F (CSiegeFortress_WriteStructAllInfo385F_0F 61FCE0): u8 0x0F,
+u32 fortress, u8 count, then per structure u32 event zone, u32 reference,
+u32 hit points, u16 state, u8 has-guild and the guild's name. The client
+(76C870 case 0xF) fills each zone's record for the fortress map. Rows past
+the one-byte count are dropped.
+================
+*/
+func EncodeStructureRoster3887(fortressID uint32, rows []StructureRosterRow) []byte {
+	if len(rows) > MaxStructureRosterRows {
+		rows = rows[:MaxStructureRosterRows]
+	}
+	writer := wire.NewWriter(6 + 15*len(rows))
+	writer.U8(SubtypeStructureRoster).U32(fortressID).U8(uint8(len(rows)))
+	for _, row := range rows {
+		writer.U32(row.EventStructID).U32(row.RefObjID).U32(row.HP).U16(row.State)
+		if row.GuildName == "" {
+			writer.U8(0)
+			continue
+		}
+		writer.U8(1)
+		writeSizedString(writer, row.GuildName)
 	}
 	return writer.Payload()
 }

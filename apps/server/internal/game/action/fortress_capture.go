@@ -193,6 +193,7 @@ func (rt *Runtime) captureFortress(division string, record fortress.Record, worl
 	}
 	rt.Monsters.ReinstallStructures(division, world, nowMs)
 	rt.forceFortressSave(division)
+	rt.pushStructureRoster(division, record.ID, world)
 	gate, haveGate := rt.fortressTownGate(record.TownGate)
 	for _, c := range rt.fortressResidents(division, world) {
 		if c.GuildID != nil && *c.GuildID == guild {
