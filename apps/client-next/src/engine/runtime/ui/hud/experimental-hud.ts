@@ -156,7 +156,7 @@ export const EXPERIMENTAL_TABS: readonly {
 				key: "enchantSparks",
 				id: "experimental-enchant-sparks",
 				label: "Enhanced item glow",
-				description: "Later-client glow tiers and enchant sparks on reinforced weapons and shields."
+				description: "Richer glow and sparks on reinforced gear."
 			},
 			{
 				key: "dungeonCharacterPvs",
