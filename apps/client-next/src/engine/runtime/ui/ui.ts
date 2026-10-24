@@ -19918,7 +19918,7 @@ export function createUi(
 						companionOwnerNameplate(
 							entity,
 							next.entities.find( owner => owner.gid === entity.ownerGid ),
-							game?.social
+							options
 						) :
 						null;
 					if ( ownerPlate && height ) {

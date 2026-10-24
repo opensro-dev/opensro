@@ -102,9 +102,9 @@ for ( const band of [ 3, 4 ] ) {
 			state.gameplay = { ...state.gameplay, social: party };
 			fixture.ui.step( state, 200 );
 			assert.equal(
-				petGlyphs( fixture ).filter( q => q.color.every( ( c, i ) => c === partyColor[i] ) ).length,
+				petGlyphs( fixture ).filter( q => q.color.every( c => c === 1 ) ).length,
 				"Owner".length,
-				"the spawn owner name and roster still work without the owner's visible entity"
+				"without the owner's visible entity the spawn owner name stays, white even in a party"
 			);
 		} finally {
 			fixture.dispose();
@@ -128,19 +128,35 @@ test("the owner row follows the pet's range, hover and ridden-name gates", () =>
 	}
 });
 
+test("Monster names off hides the owner row, even on a hovered pet", () => {
+	const { fixture, state, pet } = petFixture( 3 );
+	try {
+		fixture.ui.event( { kind: "preferences", value: { ...defaultGameOptions(), monsterNames: false } } );
+		fixture.ui.step( state, 0 );
+		assert.equal( petGlyphs( fixture ).length, 0 );
+		fixture.ui.step( { ...state, hoveredEntity: pet.gid }, 100 );
+		assert.ok( fixture.hasText( pet.name ) );
+		assert.equal( petGlyphs( fixture ).length, pet.name.length, "the hovered pet shows only its own name" );
+	} finally {
+		fixture.dispose();
+	}
+});
+
 test("owner labels retain live special colors and require a companion with a named owner", () => {
 	const { fixture, pet, owner } = petFixture( 4 );
+	const options = defaultGameOptions();
 	try {
-		assert.deepEqual( companionOwnerNameplate( pet, { ...owner, nameColor: 0xffffd87a }, party )?.color, [
+		assert.deepEqual( companionOwnerNameplate( pet, { ...owner, nameColor: 0xffffd87a }, options )?.color, [
 			1,
 			216 / 255,
 			122 / 255,
 			1
 		] );
-		assert.deepEqual( companionOwnerNameplate( pet, undefined, emptySocial() )?.color, [ 1, 1, 1, 1 ] );
-		assert.deepEqual( companionOwnerNameplate( pet, { ...owner, gid: 99 }, party )?.color, partyColor );
-		assert.equal( companionOwnerNameplate( { ...pet, ownerName: "" }, owner, party ), null );
-		assert.equal( companionOwnerNameplate( { ...pet, kind: "monster" }, owner, party ), null );
+		assert.deepEqual( companionOwnerNameplate( pet, undefined, options )?.color, [ 1, 1, 1, 1 ] );
+		assert.deepEqual( companionOwnerNameplate( pet, { ...owner, gid: 99 }, options )?.color, [ 1, 1, 1, 1 ] );
+		assert.equal( companionOwnerNameplate( pet, owner, { ...options, monsterNames: false } ), null );
+		assert.equal( companionOwnerNameplate( { ...pet, ownerName: "" }, owner, options ), null );
+		assert.equal( companionOwnerNameplate( { ...pet, kind: "monster" }, owner, options ), null );
 	} finally {
 		fixture.dispose();
 	}
@@ -155,6 +171,11 @@ test("an owned attack pet's quick status stays above its owner row", () => {
 		assert.equal( layout.statusY, -45 );
 		assert.equal( layout.speechY, -45 );
 		assert.equal( overheadLayout( { ...ownPet, ownerName: "" }, local, game, defaultGameOptions() ).statusY, -25 );
+		assert.equal(
+			overheadLayout( ownPet, local, game, { ...defaultGameOptions(), monsterNames: false } ).statusY,
+			-25,
+			"855C40 lifts the gauge only when it draws the owner"
+		);
 	} finally {
 		fixture.dispose();
 	}
