@@ -702,8 +702,10 @@ import {
 	commandFloat,
 	commandInteger,
 	DEBUG_COMMAND_CLEAR,
+	DEBUG_COMMAND_CURSOR,
 	DEBUG_COMMAND_DAY,
 	DEBUG_COMMAND_DEBUG,
+	DEBUG_COMMAND_FREE_CAMERA,
 	DEBUG_COMMAND_GET_POSITION,
 	DEBUG_COMMAND_ITEM,
 	DEBUG_COMMAND_MESSAGE_CLEAR,
@@ -719,6 +721,7 @@ import {
 	DEBUG_COMMAND_TIME_ON,
 	DEBUG_COMMAND_TIME_PLUS,
 	DEBUG_COMMAND_TIME_SET,
+	DEBUG_COMMAND_ZOOM,
 	DEBUG_COMMAND_SET_FIELD_OF_VIEW,
 	debugCommand,
 	debugFieldOfView,
@@ -938,6 +941,9 @@ rather than as another createUi parameter.
 export interface UiExtensions {
 	bugReport?: BugReportControl | null;
 	setWorldFieldOfView?: ( degrees: number ) => void;
+	setCameraZoomRail?: ( capped: boolean ) => void;
+	setFreeCamera?: ( free: boolean ) => void;
+	setCursorVisible?: ( visible: boolean ) => void;
 	saveExperimental?: ( value: ExperimentalOptions ) => void;
 	saveWindowPositions?: ( value: WindowPositions ) => void;
 }
@@ -977,6 +983,13 @@ export function createUi(
 	// The interface timer's debug state (690C40 ids 100-109): the sampler
 	// reads it through the handle's debugClockSeed.
 	let debugClock: DebugClock = createDebugClock();
+	// The camera family's debug bytes (690C40 ids 110/114/135): the
+	// interface's zoom rail (+0x3CF, standing from its constructor), its
+	// free-camera byte (+0x3CE) and the cursor manager's visibility
+	// (+0x20). Each owner applies its own through the extensions.
+	let debugZoomRail = true;
+	let debugFreeCamera = false;
+	let debugCursorVisible = true;
 	let video = defaultVideoOptions(), videoDraft = video, videoScroll = 0, videoCombo = VIDEO_COMBO_CLOSED;
 	let bindings = defaultInputOptions(), bindingDraft = bindings, bindingSelected = -1, bindingScroll = 0;
 	let sight: SightMode = 0, sightDraft: SightMode = 0;
@@ -2620,8 +2633,10 @@ export function createUi(
 	CGInterface_OnCommandMessage (690C40) for the console family, the position
 	pair, bag-slot use and FOV. The weather rows write the worker's weather
 	slot (the sampler's state, not this window's); the time rows drive the
-	local debug clock the sampler reads through debugClockSeed. The camera and
-	render-toggle families are not ported yet and leave the line as typed.
+	local debug clock the sampler reads through debugClockSeed. The camera
+	rows flip this window's debug bytes and hand each to its owner; the
+	camera-waypoint and render-toggle families are not ported yet and leave
+	the line as typed.
 	================
 	*/
 	function runDebugCommand( command: DebugCommand ) {
@@ -2716,6 +2731,26 @@ export function createUi(
 			case DEBUG_COMMAND_TIME_MINUS:
 				// 109: "/-" steps a held clock forward.
 				debugClock = debugClockStep( debugClock, DEBUG_CLOCK_STEP_MINUTES );
+				break;
+			case DEBUG_COMMAND_ZOOM:
+				// Case 0x10 flips +0x3CF: the 150-unit wheel rail (67CC3C)
+				// stands or falls. The native prints nothing.
+				debugZoomRail = !debugZoomRail;
+				extensions.setCameraZoomRail?.( debugZoomRail );
+				break;
+			case DEBUG_COMMAND_FREE_CAMERA:
+				// Case 0x14 flips +0x3CE and reports the new state: while it
+				// stands the camera keeps its last eye and target (68FAD0,
+				// 68F830); clearing it re-aims at the player.
+				debugFreeCamera = !debugFreeCamera;
+				extensions.setFreeCamera?.( debugFreeCamera );
+				appendConsoleLine( debugFreeCamera ? "Free Camera On" : "Free Camera Off" );
+				break;
+			case DEBUG_COMMAND_CURSOR:
+				// Case 0x1E: SetVisible(![cursor+0x20]) - the pointer shows
+				// or goes away (A15A70), silently.
+				debugCursorVisible = !debugCursorVisible;
+				extensions.setCursorVisible?.( debugCursorVisible );
 				break;
 			case DEBUG_COMMAND_SET_FIELD_OF_VIEW: {
 				const degrees = debugFieldOfView( command.args );

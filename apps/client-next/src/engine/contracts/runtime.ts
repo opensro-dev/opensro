@@ -205,6 +205,7 @@ export interface Platform extends Disposable {
 	saveExperimentalOptions( value: import("@/engine/foundation/ui/experimental-options").ExperimentalOptions ): void;
 	saveGameOptions( value: import("@/engine/foundation/gameplay/game-options").GameOptions ): void;
 	presentWorldCursor( cursor: import("@/engine/foundation/ui/world-cursor").WorldCursor ): void;
+	setCursorVisible( visible: boolean ): void;
 	readonly canvas: HTMLCanvasElement;
 	presentLoading(
 		state: { visible: boolean; title: string; progress: import("./assets").AssetProgress | null; }
