@@ -59,13 +59,14 @@ var Settings = []Setting{
 	{Env: "SRO_BETA_STARTER_KIT", NomadVar: "beta_starter_kit", Default: "on"},
 	{Env: "SRO_BETA_PLAYER_MAP", NomadVar: "beta_player_map", Default: "on"},
 	{Env: "SRO_BETA_MASTERY", NomadVar: "beta_mastery", Default: "on", Catalogue: true, Source: Built},
-	// Port-only, not native: optional expansion; deployments stay at 90.
-	{Env: "SRO_LEVEL_CAP", NomadVar: "level_cap", Default: "off", Catalogue: true},
+	// Port-only, not native: the 110 cap (owner, 2026-10-24: on for the next
+	// release; "off" keeps the native 90).
+	{Env: "SRO_LEVEL_CAP", NomadVar: "level_cap", Default: "110", Catalogue: true},
 	// Port-only, not native: database-authored Alexandria field population.
-	{Env: "SRO_CAP110_MONSTERS", NomadVar: "cap110_monsters", Default: "off", Catalogue: true},
+	{Env: "SRO_CAP110_MONSTERS", NomadVar: "cap110_monsters", Default: "on", Catalogue: true},
 	// Port-only, not native: the Pharaoh Tomb 1-3 population and gates. Needs
 	// SRO_CAP110_MONSTERS (its equipment drops).
-	{Env: "SRO_PHARAOH_TOMB", NomadVar: "pharaoh_tomb", Default: "off", Catalogue: true},
+	{Env: "SRO_PHARAOH_TOMB", NomadVar: "pharaoh_tomb", Default: "on", Catalogue: true},
 	// Port-only, not native: a Pharaoh Tomb elite or unique rolls equipment this
 	// many times as often (1 is native; 2 to 20). Server only: the site's drop
 	// lists describe the native rule.
@@ -154,6 +155,9 @@ var Settings = []Setting{
 	{Env: "SRO_ALCHEMY_MAX_PLUS", NomadVar: "alchemy_max_plus", Default: "off", Catalogue: true},
 	{Env: "SRO_TEAM_DEATH_REVIVE", NomadVar: "team_death_revive", Default: "on"},
 	{Env: "SRO_BETA_GROWTH", NomadVar: "beta_growth", Default: "on", Catalogue: true},
+	// Owner, 2026-10-24: 1-59 at the level-1 pace, 60-89 at 20x, 90-110 at
+	// 10x; unset keeps every level at the pace.
+	{Env: "SRO_BETA_GROWTH_BANDS", NomadVar: "beta_growth_bands", Default: "1-59:pace,60-89:20,90-110:10", Catalogue: true},
 	{Env: "SRO_BETA_SKILL_EXP_RATE", NomadVar: "beta_skill_exp_rate", Default: "100", Catalogue: true},
 	{Env: "SRO_BETA_DROP_RATE", NomadVar: "beta_drop_rate", Default: "20", Catalogue: true},
 	{Env: "SRO_BETA_DROP_MIX", NomadVar: "beta_drop_mix", Default: "on", Catalogue: true},

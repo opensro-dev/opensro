@@ -151,22 +151,23 @@ variable "beta_mastery" {
 
 # Port-only, not native: 110 raises the stopping level on the installed
 # v1.150 curve. Off keeps cap 90; expansion content is enabled separately.
+# Owner, 2026-10-24: 110 for the next release.
 variable "level_cap" {
   type    = string
-  default = "off"
+  default = "110"
 }
 
 # Port-only, not native: optional database-authored Alexandria field content.
 variable "cap110_monsters" {
   type    = string
-  default = "off"
+  default = "on"
 }
 
 # Port-only, not native: the optional Pharaoh Tomb 1-3 population. It needs
 # cap110_monsters on as well; GameWorld refuses to start otherwise.
 variable "pharaoh_tomb" {
   type    = string
-  default = "off"
+  default = "on"
 }
 
 # Port-only, not native: a Pharaoh Tomb elite or unique rolls its equipment
@@ -554,6 +555,14 @@ variable "attack_pet_expansion" {
 variable "beta_growth" {
   type    = string
   default = "on"
+}
+
+# beta_growth_bands gives level bands their own EXP/SP multiplier: "pace"
+# holds a level to the level-1 pace, a number is that many times native
+# (owner, 2026-10-24). Empty keeps every level at the pace.
+variable "beta_growth_bands" {
+  type    = string
+  default = "1-59:pace,60-89:20,90-110:10"
 }
 
 variable "beta_skill_exp_rate" {
@@ -999,6 +1008,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_TEAM_DEATH_REVIVE                   = var.team_death_revive
         SRO_ATTACK_PET_EXPANSION                = var.attack_pet_expansion
         SRO_BETA_GROWTH                         = var.beta_growth
+        SRO_BETA_GROWTH_BANDS                   = var.beta_growth_bands
         SRO_BETA_SKILL_EXP_RATE                 = var.beta_skill_exp_rate
         SRO_BETA_DROP_RATE                      = var.beta_drop_rate
         SRO_BETA_GOLD_RATE                      = var.beta_gold_rate
