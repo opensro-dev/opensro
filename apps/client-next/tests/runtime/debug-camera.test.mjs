@@ -1,0 +1,318 @@
+/*
+===========================================================================
+
+debug-camera.test.mjs - the GM console's camera rows (/zoom, /camera, /ms)
+
+690C40 cases 0x10, 0x14 and 0x1E: /zoom flips the interface's zoom byte
+(+0x3CF) behind the wheel's 150-unit rail, /camera flips the free-camera
+byte (+0x3CE) and reports it, /ms flips the cursor manager's visibility
+(+0x20). Each byte lives with its owner; the console only flips and
+forwards. Nothing reaches the server.
+
+===========================================================================
+*/
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { uiFixture } from "../helpers/ui-fixture.mjs";
+
+const { cameraWheelDelta, zoomCamera } = await import( "../../src/engine/foundation/rendering/camera-wheel.ts" );
+// One wheel detent each way through the platform adapter (120 units).
+const WHEEL_OUT = cameraWheelDelta( { deltaY: 100, deltaMode: 0 } );
+const WHEEL_IN = cameraWheelDelta( { deltaY: -100, deltaMode: 0 } );
+const { createInput } = await import( "../../src/engine/runtime/input/input.ts" );
+const { createWorldStream } = await import( "../../src/engine/runtime/world/world.ts" );
+const { createPresentationRandom } = await import( "../../src/engine/runtime/random/random.ts" );
+
+/*
+================
+test("the wheel rail is the zoom byte: ceiling only, floor always")
+================
+*/
+test("the wheel rail is the zoom byte: ceiling only, floor always", () => {
+	// +0x3CF stands (constructor default): the 150 ceiling applies.
+	assert.equal( zoomCamera( 149, WHEEL_OUT ), 150 );
+	assert.equal( zoomCamera( 80, WHEEL_OUT ), 86 );
+	// The byte clear: the wheel pulls past 150, the 10 floor still holds.
+	assert.equal( zoomCamera( 149, WHEEL_OUT, false ), 155 );
+	assert.equal( zoomCamera( 11, WHEEL_IN, false ), 10 );
+	assert.equal( zoomCamera( 11, WHEEL_IN ), 10 );
+});
+
+/*
+================
+test("the input owner zooms to the rail until /zoom clears it")
+================
+*/
+test("the input owner zooms to the rail until /zoom clears it", () => {
+	const input = createInput();
+	let now = 0;
+	const wheel = delta => input.accept( { kind: "wheel", delta, timeMs: ++now } );
+	assert.equal( input.camera().distance, 80 );
+	for ( let i = 0; i < 12; i++ ) wheel( 120 );
+	assert.equal( input.camera().distance, 150, "the constructor's rail caps the wheel" );
+	input.zoomRail( false );
+	for ( let i = 0; i < 20; i++ ) wheel( 120 );
+	assert.equal( input.camera().distance, 270, "with the byte clear the wheel pulls past the rail" );
+	input.zoomRail( true );
+	for ( let i = 0; i < 60; i++ ) wheel( -120 );
+	assert.equal( input.camera().distance, 10, "the floor holds in both states" );
+});
+
+/*
+================
+cameraUiFixture
+
+The production HUD with the three camera sinks recorded.
+================
+*/
+function cameraUiFixture( t, gm = true ) {
+	/** @type {any[]} */
+	const sent = [];
+	const rail = [], free = [], cursor = [];
+	const f = uiFixture(
+		message => {
+			if ( message.kind === "gameplay" ) sent.push( message.command );
+		},
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		{
+			setCameraZoomRail: value => rail.push( value ),
+			setFreeCamera: value => free.push( value ),
+			setCursorVisible: value => cursor.push( value )
+		}
+	);
+	t.after( () => f.dispose() );
+	f.state.gameplay.eligibility = { gm };
+	let now = 0;
+	/*
+	================
+	draw
+	================
+	*/
+	function draw() {
+		for ( let frame = 0; frame < 16; frame++ ) f.ui.step( f.state, now += 100 );
+	}
+	/*
+	================
+	typeLine
+	================
+	*/
+	function typeLine( line ) {
+		f.ui.event( {
+			kind: "edit",
+			id: "gm-input",
+			value: line,
+			start: line.length,
+			end: line.length,
+			composing: false
+		} );
+		f.ui.event( { kind: "activate", id: "submit" } );
+		draw();
+	}
+	draw();
+	f.ui.event( { kind: "key", code: "Backquote", shift: true } );
+	draw();
+	return { ...f, sent, rail, free, cursor, typeLine };
+}
+
+/*
+================
+test("the GM console flips the camera bytes and reports only /camera")
+================
+*/
+test("the GM console flips the camera bytes and reports only /camera", t => {
+	const f = cameraUiFixture( t );
+	f.typeLine( "/zoom" );
+	assert.deepEqual( f.rail, [ false ] );
+	assert.ok( !f.hasText( "Free Camera On" ) && !f.hasText( "Free Camera Off" ), "/zoom prints nothing" );
+	f.typeLine( "/zoom" );
+	assert.deepEqual( f.rail, [ false, true ] );
+	f.typeLine( "/camera" );
+	assert.deepEqual( f.free, [ true ] );
+	assert.ok( f.hasText( "Free Camera On" ) );
+	f.typeLine( "/camera" );
+	assert.deepEqual( f.free, [ true, false ] );
+	assert.ok( f.hasText( "Free Camera Off" ) );
+	f.typeLine( "/ms" );
+	assert.deepEqual( f.cursor, [ false ] );
+	f.typeLine( "/ms" );
+	assert.deepEqual( f.cursor, [ false, true ] );
+	assert.deepEqual( f.sent, [], "a camera row reached the server" );
+});
+
+/*
+================
+test("a player without GM eligibility flips no camera byte")
+================
+*/
+test("a player without GM eligibility flips no camera byte", t => {
+	const f = cameraUiFixture( t, false );
+	f.typeLine( "/zoom" );
+	f.typeLine( "/camera" );
+	f.typeLine( "/ms" );
+	assert.deepEqual( f.rail, [] );
+	assert.deepEqual( f.free, [] );
+	assert.deepEqual( f.cursor, [] );
+	assert.deepEqual( f.sent, [] );
+});
+
+/*
+================
+unexpectedCameraWork
+
+Only camera publication and world retirement are expected in this fixture.
+================
+*/
+/** @returns {never} */
+function unexpectedCameraWork() {
+	assert.fail( "the camera fixture must not perform unrelated asset or renderer work" );
+}
+
+/*
+================
+freeCameraWorldFixture
+
+The world camera with a recorded renderer (the debug-field-of-view
+fixture's shape): projection continues while assets are unavailable.
+================
+*/
+function freeCameraWorldFixture( t ) {
+	let camera;
+	/** @type {import("../../src/engine/contracts/assets.ts").AssetOwner} */
+	const assets = {
+		available: () => 0,
+		take: () => null,
+		progress: unexpectedCameraWork,
+		health: unexpectedCameraWork,
+		textureFeatures: unexpectedCameraWork,
+		install: unexpectedCameraWork,
+		dispose: unexpectedCameraWork,
+		request: unexpectedCameraWork,
+		/*
+		================
+		cancel
+		================
+		*/
+		cancel() {}
+	};
+	/** @type {import("../../src/engine/contracts/runtime.ts").Renderer} */
+	const renderer = {
+		dispose: unexpectedCameraWork,
+		scenery: unexpectedCameraWork,
+		gpuTiming: unexpectedCameraWork,
+		adapterFacts: unexpectedCameraWork,
+		videoOptions: unexpectedCameraWork,
+		experimentalVideo: unexpectedCameraWork,
+		setSelectionDecal: unexpectedCameraWork,
+		setFootprints: unexpectedCameraWork,
+		pickGround: unexpectedCameraWork,
+		presentationCamera: unexpectedCameraWork,
+		audioListener: unexpectedCameraWork,
+		pickDestination: unexpectedCameraWork,
+		pickFrontendCharacter: unexpectedCameraWork,
+		pickFrontendRace: unexpectedCameraWork,
+		frontendRaceCenters: unexpectedCameraWork,
+		setCharacterPreview: unexpectedCameraWork,
+		characterParticleSnapshot: unexpectedCameraWork,
+		characterParticleTime: unexpectedCameraWork,
+		presentationNight: unexpectedCameraWork,
+		characterLocalMatrix: unexpectedCameraWork,
+		characterMatrix: unexpectedCameraWork,
+		characterSocket: unexpectedCameraWork,
+		pickEntity: unexpectedCameraWork,
+		setWeather: unexpectedCameraWork,
+		setWorldClock: unexpectedCameraWork,
+		setUi: unexpectedCameraWork,
+		setDamageText: unexpectedCameraWork,
+		setUiTexture: unexpectedCameraWork,
+		retainCharacterModels: unexpectedCameraWork,
+		setCharacterAssembly: unexpectedCameraWork,
+		characterStats: unexpectedCameraWork,
+		setCharacterModel: unexpectedCameraWork,
+		setCharacterAnimation: unexpectedCameraWork,
+		setTeleportGates: unexpectedCameraWork,
+		setCharacterActors: unexpectedCameraWork,
+		characterActors: unexpectedCameraWork,
+		worldView: unexpectedCameraWork,
+		adoptWorld: unexpectedCameraWork,
+		textureFeatures: unexpectedCameraWork,
+		settleWorld: unexpectedCameraWork,
+		setWorldTexture: unexpectedCameraWork,
+		neededWorldTextures: unexpectedCameraWork,
+		worldStats: unexpectedCameraWork,
+		setGeometryInstances: unexpectedCameraWork,
+		setGeometryTransform: unexpectedCameraWork,
+		setGeometry: unexpectedCameraWork,
+		setImage: unexpectedCameraWork,
+		frame: unexpectedCameraWork,
+		phase: unexpectedCameraWork,
+		error: unexpectedCameraWork,
+		/*
+		================
+		cancelWorldUpdate
+		================
+		*/
+		cancelWorldUpdate() {},
+		/*
+		================
+		setWorldCamera
+		================
+		*/
+		setWorldCamera( value ) {
+			camera = value;
+		},
+		/*
+		================
+		setWorld
+		================
+		*/
+		setWorld() {}
+	};
+	const stream = createWorldStream(
+		assets,
+		renderer,
+		"https://fixture.invalid/",
+		createPresentationRandom( 1 )
+	);
+	t.after( () => stream.dispose() );
+	/*
+	================
+	draw
+	================
+	*/
+	function draw( pose ) {
+		stream.step( pose );
+		assert.equal( stream.error(), null );
+		assert.ok( camera );
+		return camera;
+	}
+	return { stream, draw };
+}
+
+/*
+================
+test("the free camera holds its last eye and target until it re-aims")
+================
+*/
+test("the free camera holds its last eye and target until it re-aims", t => {
+	const f = freeCameraWorldFixture( t );
+	const home = { regionId: 1, x: 10, y: 0, z: 20, angle: 0 };
+	const away = { regionId: 1, x: 110, y: 5, z: 220, angle: 0 };
+	const standing = f.draw( home );
+	assert.deepEqual( standing.target, [ 10, 0, 20 ] );
+	f.stream.setFreeCamera( true );
+	// 68FAD0 applies nothing while +0x3CE stands: walking away moves
+	// neither the eye nor the target.
+	const frozen = f.draw( away );
+	assert.deepEqual( frozen.eye, standing.eye );
+	assert.deepEqual( frozen.target, standing.target );
+	assert.deepEqual( frozen.follow, standing.follow );
+	// Clearing the byte re-aims: the next step follows the player again.
+	f.stream.setFreeCamera( false );
+	const reaimed = f.draw( away );
+	assert.deepEqual( reaimed.target, [ 110, 5, 220 ] );
+});
