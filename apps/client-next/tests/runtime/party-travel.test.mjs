@@ -191,6 +191,66 @@ test("a member delta for someone the roster does not hold is dropped, and the ne
 	presentation.dispose();
 });
 
+/*
+================
+joinRow
+
+A 0x3E58 type-2 JOIN frame carrying one full member row (mask 0x37).
+================
+*/
+function joinRow( id, name, level ) {
+	return frame( 0x3e58, [
+		2,
+		0x37,
+		...u32( id ),
+		...str( name ),
+		...u32( 1907 ),
+		level,
+		0x9a,
+		1,
+		1,
+		10,
+		0,
+		0,
+		0,
+		20,
+		0,
+		...u32( 0 )
+	] );
+}
+
+test("a replayed member join refreshes the held member instead of doubling it", () => {
+	const core = partied(), presentation = createPresentation();
+	// The JOIN for a member the roster already holds (its first copy
+	// arrived before a resume and the row is replayed on kept state).
+	core.receive( joinRow( PEER_ID, "Other", 25 ), 1 );
+	let after = social( core, presentation );
+	assert.deepEqual( after.members.map( m => m.id ), [ SELF_ID, PEER_ID ] );
+	assert.equal( after.members[1].level, 25 );
+	core.receive( joinRow( 33, "Third", 30 ), 2 );
+	core.receive( joinRow( PEER_ID, "Other", 26 ), 3 );
+	after = social( core, presentation );
+	assert.deepEqual( after.members.map( m => m.id ), [ SELF_ID, PEER_ID, 33 ] );
+	assert.equal( after.members[1].level, 26 );
+	core.dispose();
+	presentation.dispose();
+});
+
+test("a join for a stranger is dropped when the roster is already full", () => {
+	const core = createWorldCore( () => {} ), presentation = createPresentation();
+	core.bootstrap( entry( "Me" ) );
+	core.receive( frame( 0xb0d5, [ 1, ...u32( SELF_ID ) ] ), 0 );
+	const rows = [];
+	for ( let id = SELF_ID; id < SELF_ID + 8; id++ ) rows.push( ...partyRow( id, "M" + id ) );
+	core.receive( frame( 0x35d6, [ 3, ...u32( SELF_ID ), 0, 8, ...rows ] ), 0 );
+	core.receive( joinRow( 99, "Ninth", 40 ), 1 );
+	const after = social( core, presentation );
+	assert.equal( after.members.length, 8 );
+	assert.ok( !after.members.some( m => m.id === 99 ) );
+	core.dispose();
+	presentation.dispose();
+});
+
 test("a member delta applies only the native fields: the row's own id, name and model are dropped", () => {
 	const core = partied(), presentation = createPresentation();
 	// Mask 0x37: id 99, name "Renamed", model 2000, level 30, status, position.

@@ -444,9 +444,22 @@ export function socialPacket(
 			u8();
 			next = { ...next, self: 0, leader: 0, options: 0, members: [] };
 		} else if ( type === 2 ) {
-			const member = partyMember();
-			next = { ...next, members: [ ...next.members, member ] };
-			unique( next.members, 8 );
+			// 761870 appends the row unconditionally, so a JOIN for a
+			// member the roster already holds reaches this client only
+			// as a replay on kept state after a resume. Refresh the held
+			// member from the row instead of doubling it, and drop a
+			// stranger's row when the roster is full, the way type 6
+			// drops a row for a member the roster does not hold.
+			const start = o;
+			const row = partyMember();
+			const old = next.members.find( m => m.id === row.id );
+			if ( old ) {
+				o = start;
+				const member = partyMember( old );
+				next = { ...next, members: next.members.map( m => m.id === old.id ? member : m ) };
+			} else if ( next.members.length < 8 ) {
+				next = { ...next, members: [ ...next.members, row ] };
+			}
 		} else if ( type === 3 ) {
 			const id = u32();
 			u8();
