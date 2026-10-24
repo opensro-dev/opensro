@@ -118,8 +118,16 @@
 			]
 		},
 		{
+			"consumer": "src/engine/foundation/gameplay/walk-step.ts",
+			"provider": "src/engine/foundation/navigation/clipper.ts",
+			"functions": [
+				"clip",
+				"surface"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/gameplay/walking-history.ts",
-			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
+			"provider": "src/engine/foundation/navigation/clipper.ts",
 			"functions": [
 				"clip"
 			]
@@ -416,6 +424,7 @@
 			"consumer": "src/engine/runtime/runtime.ts",
 			"provider": "src/engine/runtime/platform/ui/cursor.ts",
 			"functions": [
+				"setVisible",
 				"world"
 			]
 		},
@@ -462,7 +471,7 @@
 		},
 		{
 			"consumer": "src/engine/foundation/navigation/region-move.ts",
-			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
+			"provider": "src/engine/foundation/navigation/clipper.ts",
 			"functions": [
 				"callback:continueRegionMove:2"
 			]
@@ -995,6 +1004,9 @@
 				"callback:createUi:16",
 				"saveExperimental",
 				"saveWindowPositions",
+				"setCameraZoomRail",
+				"setCursorVisible",
+				"setFreeCamera",
 				"setWorldFieldOfView"
 			]
 		},
@@ -1423,7 +1435,7 @@
 		},
 		{
 			"consumer": "src/engine/runtime/simulation/worker/session/world/core.ts",
-			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
+			"provider": "src/engine/foundation/navigation/clipper.ts",
 			"functions": [
 				"surface",
 				"clip",
@@ -1532,7 +1544,7 @@
 		},
 		{
 			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
-			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
+			"provider": "src/engine/foundation/navigation/clipper.ts",
 			"functions": [
 				"pick"
 			]
@@ -1652,6 +1664,28 @@
 			"functions": [
 				"lookup"
 			]
+		},
+		{
+			"consumer": "src/engine/foundation/gameplay/transport-auto-potion.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"maxHp"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/world.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/movement.ts",
+			"functions": [
+				"noteInput"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/world.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"functions": [
+				"outstandingSince"
+			],
+			"reason": "The world session's stall detector reads when the oldest unanswered request left (through core), to tell a stalled link from a lost answer (#1418)."
 		},
 		{
 			"consumer": "src/engine/foundation/ui/item-tooltip-recovery.ts",
@@ -4014,7 +4048,7 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "f490e7bf03ae2a1e722e428ce252b63c57243aaec188be4ba6462f8da512b3f3",
+			"sourceSha256": "f927f3138fb400e1021cf5ed7c7340e73423fa71e04d4cfd39bd4eb339017d0b",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. A hidden frame renders only while a world entry awaits game-ready, under the same barrier: native keeps updating while inactive (A0F430 OnUpdate; A11650 skips drawing) and finishes loading in CPSMission_OnUpdate (728E10). A visible window that gets no RAF for STARVED_FRAME_MS runs the same delivery-paced maintenance frames. Device disposal cancels pending mapping. Startup also hands the asset owner the device texture features once (port-only texture variants), outside the frame.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

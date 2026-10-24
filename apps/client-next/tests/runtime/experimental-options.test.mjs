@@ -75,6 +75,8 @@ const OFF = Object.freeze( {
 	confirmGuildBan: true,
 	// Off by default: straight projectiles keep their launch-captured endpoint (8D8580).
 	homingProjectiles: false,
+	// Off by default: the automatic potion watches only the player (70C550).
+	transportAutoPotion: false,
 	// On by default (owner 2026-10-18, BUG-086): clicking CIFPetMiniInfo opens CIFCos;
 	// off restores the native no-op click (6B3760).
 	petClickOpensWindow: true,
@@ -94,7 +96,9 @@ const OFF = Object.freeze( {
 	// On by default (owner 2026-10-22, #1243): a touch tap keeps an item or skill tooltip up.
 	touchInspect: true,
 	// Off by default: the M window shows only the five native towns and 28 x 8 overview.
-	expandedWorldMap: false
+	expandedWorldMap: false,
+	// Off by default (#840): the maps mark the tracked quest's targets only.
+	questTrackerMarkers: false
 } );
 
 test("touch inspection defaults on and only an explicit false turns it off", () => {
@@ -679,4 +683,16 @@ test("interpolated own movement is on unless explicitly false, and reaches the r
 	assert.equal( off.interpolatedOwnWalk, false );
 	assert.equal( experimentalVideo( off ).interpolatedOwnWalk, false );
 	assert.equal( experimentalVideo( experimentalOptions( {} ) ).interpolatedOwnWalk, true );
+});
+
+test("quest target markers default off (tracked quest only) and stay out of the worker's slices", () => {
+	for ( const value of [ undefined, null, {}, { questTrackerMarkers: 1 }, { questTrackerMarkers: "true" } ] ) {
+		const options = experimentalOptions( value );
+		assert.equal( options.questTrackerMarkers, false );
+		assert.equal( "questTrackerMarkers" in experimentalGameplay( options ), false );
+		assert.equal( "questTrackerMarkers" in experimentalVideo( options ), false );
+	}
+	const on = experimentalOptions( { questTrackerMarkers: true } );
+	assert.equal( on.questTrackerMarkers, true );
+	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "questTrackerMarkers" ) ) );
 });

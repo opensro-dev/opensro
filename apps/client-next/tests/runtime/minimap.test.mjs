@@ -16,7 +16,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { defined } from "../helpers/defined.mjs";
-const { minimapEntityIcon, minimapMarkers, minimapEdge, minimapHunting, minimapOffset } = await import(
+const {
+	minimapEntityIcon,
+	minimapMarkers,
+	minimapEdge,
+	minimapHunting,
+	minimapOffset,
+	questMarkerTargets
+} = await import(
 	"../../src/engine/foundation/ui/minimap-markers.ts"
 );
 const { minimapTiles, minimapDungeons, minimapArt } = await import( "../../src/engine/foundation/ui/minimap-tiles.ts" );
@@ -441,4 +448,27 @@ test("minimap catalog commits complete coverage atomically and disposes pending 
 	other.step( false, true );
 	other.dispose();
 	assert.deepEqual( cancelled, [ 2 ] );
+});
+
+/*
+================
+questMarkerTargets
+================
+*/
+test("quest marker targets are the tracked quest's own until the tracker row widens them", () => {
+	const quests = [
+		{ refId: 11, targetIds: [ 101, 102 ] },
+		{ refId: 22, targetIds: [ 102, 201 ] },
+		{ refId: 33, targetIds: [] }
+	];
+	// Off (native): only the tracked quest contributes; an untracked or
+	// absent journal contributes nothing.
+	assert.deepEqual( questMarkerTargets( quests, 22, false ), [ 102, 201 ] );
+	assert.deepEqual( questMarkerTargets( quests, 0, false ), [] );
+	assert.deepEqual( questMarkerTargets( undefined, 22, false ), [] );
+	// On (port-only #840): every active quest contributes, each id once in
+	// journal order, tracked or not.
+	assert.deepEqual( questMarkerTargets( quests, 0, true ), [ 101, 102, 201 ] );
+	assert.deepEqual( questMarkerTargets( quests, 22, true ), [ 101, 102, 201 ] );
+	assert.deepEqual( questMarkerTargets( undefined, 0, true ), [] );
 });

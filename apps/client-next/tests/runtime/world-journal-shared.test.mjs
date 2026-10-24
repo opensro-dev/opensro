@@ -23,6 +23,7 @@ import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import path from "node:path";
 import { root } from "../../tools/project.mjs";
 
@@ -116,11 +117,14 @@ test("a batch stamps how long its oldest event waited unpublished", () => {
 	assert.equal( owner.take().spanMs, 0 );
 });
 
-test("distinct paths still count in full and still hit the budget", () => {
+test("distinct paths still count in full and compact past the budget", () => {
 	const owner = createEntities();
-	assert.throws( () => {
-		for ( let i = 0; i < STATES; i++ ) owner.publish( { kind: "state", entity: walker( walkingPath(), i ) } );
-	}, /journal backlog exceeded/ );
+	for ( let i = 0; i < STATES; i++ ) owner.publish( { kind: "state", entity: walker( walkingPath(), i ) } );
+	assert.ok( owner.resyncs() >= 1, "no sharing discount: the budget still bites, as compactions" );
+	const batch = owner.take();
+	assert.equal( batch.events[0].kind, "reset" );
+	owner.ack( batch.sequence );
+	assert.equal( owner.synchronized(), true );
 });
 
 test("journalCost charges a repeated array once only when given the batch's set", () => {
@@ -540,4 +544,118 @@ test("createWorldCore -> createPresentation retains skillCatalog and skillIndex 
 		assert.equal( skillCompares, 3, "repeated post-resume takes must not re-compare skillCatalog" );
 		if ( gm ) assert.equal( gmCompares, 3, "repeated post-resume takes must not re-compare gmCatalog" );
 	}
+});
+
+test("core republishes the gameplay snapshot in full behind a journal resync", () => {
+	const fixture = JSON.parse(
+		fs.readFileSync(
+			path.resolve( root, "../server/internal/game/enterworld/testdata/monster_spawn_fixture.json" ),
+			"utf8"
+		)
+	);
+	const rows = fixture.packets.map( p => ({ opcode: p.opcode, payload: Buffer.from( p.payloadHex, "hex" ) }) );
+	const core = createWorldCore( () => {} );
+	const presentation = createPresentation();
+	// The core fixture's character over the packet fixture's world rows.
+	const blob = { ...worldBootstrapFixture( { gm: false, regionId: 25000 } ), refObjSnapshot: fixture.refObjSnapshot };
+	core.bootstrap( blob, false, 0 );
+	core.step( 0, false );
+	const entry = core.take();
+	presentation.apply( entry );
+	core.ack( entry.sequence );
+	assert.equal( presentation.gameplay()?.skillCatalog?.length, 2 );
+	for ( const row of rows ) core.receive( row, 10 );
+	core.step( 10, false );
+	// The consumer stalls on this batch while the wire keeps producing
+	// state behind it, past the journal's byte budget.
+	const inflight = core.take();
+	assert.ok( inflight );
+	const packet = value => {
+		const payload = Buffer.alloc( 6 );
+		payload.writeUInt32LE( fixture.expect.gid );
+		payload[4] = 4;
+		payload[5] = value;
+		return { opcode: 0x3122, payload };
+	};
+	let compacted = [];
+	for ( let i = 0; i < 2000000 && !compacted.length; i++ ) {
+		core.receive( packet( i % 2 ? 4 : 0 ), 10 );
+		compacted = core.takeDegradations().filter( d => d.code === "world-journal-resync" );
+	}
+	assert.equal( compacted.length, 1, "the flood compacts once instead of throwing" );
+	presentation.apply( inflight );
+	core.ack( inflight.sequence );
+	const resync = core.take();
+	assert.ok( resync );
+	assert.equal( resync.events[0].kind, "reset" );
+	// The full snapshot rides the resync batch itself: the reset that
+	// opens it nulls the presentation's gameplay, so a snapshot in the
+	// NEXT batch would leave one batch with none (or a delta on null).
+	const snapshot = resync.events.find( event => event.kind === "gameplay" );
+	assert.ok( snapshot, "the full gameplay snapshot rides inside the resync batch" );
+	assert.equal( snapshot.state.skillCatalog?.length, 2 );
+	presentation.apply( resync );
+	core.ack( resync.sequence );
+	assert.equal( presentation.gameplay()?.skillCatalog?.length, 2 );
+	// Nothing is owed afterwards: the snapshot was consumed by the batch.
+	core.step( 20, false );
+	const follow = core.take();
+	assert.equal( follow?.events.some( event => event.kind === "gameplay" ) ?? false, false );
+	if ( follow ) {
+		presentation.apply( follow );
+		core.ack( follow.sequence );
+	}
+	assert.equal( presentation.gameplay()?.skillCatalog?.length, 2 );
+});
+
+test("core republishes the pending travel inside a journal resync", () => {
+	const fixture = JSON.parse(
+		fs.readFileSync(
+			path.resolve( root, "../server/internal/game/enterworld/testdata/monster_spawn_fixture.json" ),
+			"utf8"
+		)
+	);
+	const rows = fixture.packets.map( p => ({ opcode: p.opcode, payload: Buffer.from( p.payloadHex, "hex" ) }) );
+	const core = createWorldCore( () => {} );
+	const presentation = createPresentation();
+	const blob = { ...worldBootstrapFixture( { gm: false, regionId: 25000 } ), refObjSnapshot: fixture.refObjSnapshot };
+	core.bootstrap( blob, false, 0 );
+	core.step( 0, false );
+	const entry = core.take();
+	presentation.apply( entry );
+	core.ack( entry.sequence );
+	for ( const row of rows ) core.receive( row, 10 );
+	core.step( 10, false );
+	const entered = core.take();
+	presentation.apply( entered );
+	core.ack( entered.sequence );
+	// Portal travel begins; its event waits in the journal queue.
+	core.receive( { opcode: 0x3369, payload: new Uint8Array( [ 0x01, 0x80 ] ) }, 20 );
+	assert.equal( core.readyRevision(), 1 );
+	// State floods past the journal budget before the queue is taken:
+	// the queued travel event is dropped with everything else.
+	const packet = value => {
+		const payload = Buffer.alloc( 6 );
+		payload.writeUInt32LE( fixture.expect.gid );
+		payload[4] = 4;
+		payload[5] = value;
+		return { opcode: 0x3122, payload };
+	};
+	let compacted = [];
+	for ( let i = 0; i < 2000000 && !compacted.length; i++ ) {
+		core.receive( packet( i % 2 ? 4 : 0 ), 20 );
+		compacted = core.takeDegradations().filter( d => d.code === "world-journal-resync" );
+	}
+	assert.equal( compacted.length, 1, "the flood compacts once instead of throwing" );
+	const resync = core.take();
+	assert.ok( resync );
+	// Without the republish the reset nulls the presentation's travel and
+	// world-ready carries revision 0 against the core's 1: never ready.
+	const travel = resync.events.find( event => event.kind === "travel" );
+	assert.ok( travel, "the resync batch republishes the pending travel" );
+	assert.equal( travel.travel.revision, core.readyRevision() );
+	assert.equal( travel.travel.region, 0x8001 );
+	presentation.apply( resync );
+	core.ack( resync.sequence );
+	assert.equal( presentation.travel()?.revision, core.readyRevision() );
 });

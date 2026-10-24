@@ -360,10 +360,11 @@ variable "trade_route_constantinople_percent" {
 
 # job_suit_hides_armor makes trader and hunter suits hide the armour worn
 # under them, as thief suits do (port-only, not native; owner decision
-# 2026-10-14). "off" is native.
+# 2026-10-14). "off" is native, and the default again since the owner's
+# 2026-10-24 decision.
 variable "job_suit_hides_armor" {
   type    = string
-  default = "on"
+  default = "off"
 }
 
 # moonlit_thief_suit draws the level-20 thief suits in the Moonlit Ash
