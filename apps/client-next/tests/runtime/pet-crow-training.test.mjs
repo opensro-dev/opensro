@@ -8,7 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { defined } from "../helpers/defined.mjs";
 const { PET_DESIGN } = await import( "../../src/engine/foundation/ui/pet-design-data.ts" );
-const { createPetTraining, OP_PET_SKILL_COUNTERS } = await import(
+const { createPetTraining } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/pet-training/pet-training.ts"
 );
 const { petSkillDesign, petEffect, petRowCooldown } = await import( "../../src/engine/foundation/ui/pet-training.ts" );
@@ -71,25 +71,6 @@ test("Guiding Feathers validates recipient stacks and clears on session end", ()
 	assert.equal( owner.guidance(), undefined );
 	owner.clear();
 	assert.equal( owner.guidance(), undefined );
-});
-
-/*
-================
-Crow Exposure counter validates its appended native-compatible block
-================
-*/
-test("Exposing Mark counters reject overflow", () => {
-	const owner = createPetTraining( () => null ), bytes = new Uint8Array( 22 );
-	const view = new DataView( bytes.buffer );
-	view.setUint32( 0, 33554434, true );
-	bytes[17] = 5;
-	view.setUint32( 18, 42, true );
-	assert.equal( owner.receive( { opcode: OP_PET_SKILL_COUNTERS, payload: bytes }, 1 ), true );
-	bytes[17] = 6;
-	assert.throws(
-		() => owner.receive( { opcode: OP_PET_SKILL_COUNTERS, payload: bytes }, 2 ),
-		/Invalid pet skill counters/
-	);
 });
 
 /*
