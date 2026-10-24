@@ -17,6 +17,7 @@ import { itemTooltipMagic } from "./item-tooltip-magic";
 import { tooltipDescription } from "./tooltip-description";
 import { itemTooltipStats } from "./item-tooltip-stats";
 import { itemTooltipRecovery } from "./item-tooltip-recovery";
+import { itemTooltipStone } from "./item-tooltip-stone";
 import { tooltipFormat, type TooltipRow } from "./tooltip-rows";
 // 56CDA0/56CB80 family dispatch, 564230 name, 558CB0 degree and
 // 568500 requirements. This takes an item instance, never just a ref id.
@@ -101,6 +102,12 @@ export function itemTooltip(
 	const description = petGear ? [] : tooltipDescription( descriptionText );
 	if ( description.length && (!equipment || t === 7 || t === 13) ) {
 		rows.push( ...description );
+		space();
+	}
+	// 56B2E0 runs the stone block after the description and closes it with a blank line.
+	const stone = itemTooltipStone( item, text );
+	if ( stone.length ) {
+		rows.push( ...stone );
 		space();
 	}
 	if ( equipment ) {
