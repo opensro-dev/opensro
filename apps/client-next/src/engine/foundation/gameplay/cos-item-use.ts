@@ -45,9 +45,16 @@ export interface CosItemUseContext {
 companionItemUseNotice
 
 696490 and 6968BA..696913 validate Grass/Clock targets before composing the
-slot byte; the pet skill item shares the clock's summoner-slot shape.
-Expected refusals are category-5 notices, not protocol failures.
+slot byte. Expected refusals are category-5 notices, not protocol failures.
 Character reference classifies the pet; the item subtype is not that proof.
+
+The pet skill item has its own case (696934), not the clock's: a target
+that is no COS summoner, or whose summoned character does not resolve,
+leaves by the generic send with no notice, and only a resolved character
+of neither pet class reaches the wrong-object notice. Its source-item
+compat bits (itemdata +0x2B0) are not in the type word this predicate
+receives; both pet bands are admitted here and the server's live-pet
+admission stays authoritative.
 ================
 */
 export function companionItemUseNotice(
@@ -58,11 +65,23 @@ export function companionItemUseNotice(
 	if ( (flags & 0x7c) !== 0x6c ) return null;
 	const group = flags >>> 7 & 15, subtype = flags >>> 11 & 31;
 	const grass = group === 1 && subtype === 6;
-	const petSkill = isPetSkillItem( flags );
-	if ( !grass && !petSkill && !isCompanionLeaseItem( flags ) ) return null;
+	const wrongObject: SystemNotice = { key: "UIIT_MSG_COSPETERR_CANT_USE_WRONGOBJECT", value: 0, nativeType: 5 };
+	if ( isPetSkillItem( flags ) ) {
+		const slot = context?.summonerSlot;
+		if ( slot === undefined ) return null;
+		if ( !Number.isInteger( slot ) || slot < 0 || slot > 255 ) throw Error( "Invalid companion target slot" );
+		const matches = items.filter( item => item.slot === slot );
+		if ( matches.length > 1 ) throw Error( "Duplicate companion target slot" );
+		const target = matches[0], character = context?.summonedCharacterTypeFlags;
+		if ( !target || (target.typeFlags & 0x7fe) !== 0xcc || !target.summon ) return null;
+		if ( character === undefined ) return null;
+		if ( (character & 0x7fe) !== 0x1c6 ) return wrongObject;
+		const band = character & 0xf800;
+		return band === 0x1800 || band === 0x2000 ? null : wrongObject;
+	}
+	if ( !grass && !isCompanionLeaseItem( flags ) ) return null;
 	const slot = grass ? context?.revivalSlot : context?.summonerSlot;
 	const unavailable: SystemNotice = { key: "UIIT_MSG_COSPETERR_CANT_USEITEM", value: 0, nativeType: 5 };
-	const wrongObject: SystemNotice = { key: "UIIT_MSG_COSPETERR_CANT_USE_WRONGOBJECT", value: 0, nativeType: 5 };
 	if ( slot === undefined ) return wrongObject;
 	if ( !Number.isInteger( slot ) || slot < 0 || slot > 255 ) throw Error( "Invalid companion target slot" );
 	const matches = items.filter( item => item.slot === slot );
@@ -71,12 +90,8 @@ export function companionItemUseNotice(
 	if ( !target || (target.typeFlags & 0x7fe) !== 0xcc || !target.summon ) return wrongObject;
 	// Grass's missing-character branch reaches 696311; Clock instead refuses
 	// it. 5500B0/F0 inspect the character's 16-bit family and subtype masks.
-	// Grass and the pet skill name an attack pet (band 3, 0x1800); the clock
-	// names a pickup pet (band 4, 0x2000).
 	if ( character === undefined ) return grass ? null : wrongObject;
-	if ( (character & 0x7fe) !== 0x1c6 || (character & 0xf800) !== (grass || petSkill ? 0x1800 : 0x2000) ) {
-		return wrongObject;
-	}
+	if ( (character & 0x7fe) !== 0x1c6 || (character & 0xf800) !== (grass ? 0x1800 : 0x2000) ) return wrongObject;
 	if ( grass && target.summon.state !== 4 ) return unavailable;
 	return null;
 }
@@ -121,7 +136,7 @@ export function cosItemUseTail(
 		new DataView( tail.buffer ).setUint32( 0, context?.targetGid ?? 0, true );
 		return tail;
 	}
-	if ( group === 1 && subtype === 6 || group === 13 && subtype === 12 || group === 13 && subtype === 15 ) {
+	if ( group === 1 && subtype === 6 || group === 13 && subtype === 12 ) {
 		// The worker publishes expected refusals before reaching this strict
 		// encoder. Never infer a target from a sole inventory candidate.
 		if ( companionItemUseNotice( flags, items, context ) ) throw Error( "Companion target was not admitted" );
