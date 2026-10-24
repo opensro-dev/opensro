@@ -102,9 +102,9 @@ test("asset loader bounds concurrency and aborts every pending request on dispos
 			}
 		} );
 	for ( let id = 1; id <= 5; id++ ) loader.receive( { kind: "load", id, url: "http://localhost/" + id, limit: 3 } );
+	// The fifth demand waits for an execution slot; it is not refused.
 	assert.equal( signals.length, 4 );
-	assert.equal( results[0].id, 5 );
-	assert.equal( results[0].kind, "error" );
+	assert.deepEqual( results, [] );
 	loader.dispose();
 	assert.ok( signals.every( signal => signal.aborted ) );
 });
@@ -157,8 +157,10 @@ close
 	}
 	assert.equal( peak, 4 );
 	assert.equal( decodes.length, 4 );
-	assert.equal( results.length, 8 );
-	assert.ok( results.every( r => r.kind === "error" ) );
+	// Every cancellation was acknowledged on receipt, while its decode
+	// (or its wait for one) still holds the execution slot.
+	assert.equal( results.length, 12 );
+	assert.ok( results.every( r => r.kind === "released" ) );
 	decodes[0]();
 	await settle();
 	assert.equal( closed, 1 );
@@ -172,10 +174,14 @@ close
 	assert.equal( closed, 5 );
 	assert.equal(
 		results.filter( r => r.kind !== "released" ).length,
-		8,
+		0,
 		"cancelled or disposed work never publishes a payload"
 	);
-	assert.deepEqual( results.filter( r => r.kind === "released" ), [ { kind: "released", id: 1 } ] );
+	assert.deepEqual(
+		results.filter( r => r.kind === "released" ).map( r => r.id ),
+		[ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 ],
+		"every cancellation is acknowledged on receipt"
+	);
 });
 
 test("cancelled downloads retain capacity even when fetch ignores abort, then recover", async t => {
@@ -193,19 +199,72 @@ test("cancelled downloads retain capacity even when fetch ignores abort, then re
 		request( id );
 		loader.receive( { kind: "cancel", id } );
 	}
+	// Demand past the four draining executions waits instead of erroring;
+	// the four cancellations were already acknowledged on receipt.
 	request( 5 );
 	assert.equal( downloads.length, 4 );
-	assert.equal( results[0].kind, "error" );
+	assert.equal( results.filter( r => r.kind === "released" ).length, 4 );
+	assert.equal( results.filter( r => r.kind === "error" ).length, 0 );
 	downloads[0]( new Response( Uint8Array.of( 1 ) ) );
 	await settle();
-	request( 6 );
+	// The first drain settled: the waiting demand took its slot.
 	assert.equal( downloads.length, 5 );
+	request( 6 );
+	assert.equal( downloads.length, 5, "the sixth demand waits behind the running fifth" );
 	downloads[4]( new Response( Uint8Array.of( 2 ) ) );
 	await settle();
-	assert.equal( results.at( -1 ).id, 6 );
+	assert.equal( results.at( -1 ).id, 5 );
 	assert.equal( results.at( -1 ).kind, "bytes" );
+	assert.equal( downloads.length, 6, "the sixth demand starts as the fifth settles" );
 	for ( const resolve of downloads.slice( 1, 4 ) ) resolve( new Response( Uint8Array.of( 1 ) ) );
 	await settle();
-	assert.equal( results.filter( r => r.kind !== "released" ).length, 2 );
+	assert.equal( results.filter( r => r.kind !== "released" ).length, 1 );
 	assert.equal( results.filter( r => r.kind === "released" ).length, 4 );
+});
+
+test("a cancellation is acknowledged on receipt while its decode still drains", async t => {
+	// #1427: the cancelled programs.json load sat inside work AbortSignal
+	// cannot interrupt, so its settlement - the old acknowledgement - ran
+	// past the 30 s window. The acknowledgement now answers the receipt;
+	// only the execution slot still waits for the drain.
+	const png = new Uint8Array( 24 ), view = new DataView( png.buffer );
+	[ 0x89504e47, 0x0d0a1a0a, 13, 0x49484452, 4096, 4096 ].forEach( ( n, i ) => view.setUint32( i * 4, n ) );
+	t.mock.method( globalThis, "fetch", async () => new Response( png ) );
+	const previous = Object.getOwnPropertyDescriptor( globalThis, "createImageBitmap" );
+	t.after( () => {
+		if ( previous ) Object.defineProperty( globalThis, "createImageBitmap", previous );
+		else delete globalThis.createImageBitmap;
+	} );
+	const decodes = [];
+	globalThis.createImageBitmap = () =>
+		new Promise( resolve => decodes.push( () => resolve( { width: 4096, height: 4096, close() {} } ) ) );
+	const results = [],
+		loader = createLoader( result => {
+			if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( result.kind ) ) {
+				results.push( result );
+			}
+		} );
+	t.after( () => loader.dispose() );
+	const request = id =>
+		loader.receive( { kind: "load", id, url: "http://localhost/image", limit: 24, decode: "png" } );
+	for ( let id = 1; id <= 4; id++ ) request( id );
+	await settle();
+	assert.equal( decodes.length, 4, "four decodes are parked inside createImageBitmap" );
+	loader.receive( { kind: "cancel", id: 1 } );
+	// No settle, no decode resolution: the acknowledgement already stands.
+	assert.deepEqual( results, [ { kind: "released", id: 1 } ] );
+	request( 5 );
+	await settle();
+	assert.equal( decodes.length, 4, "the draining decode still holds its execution slot" );
+	decodes[0]();
+	await settle();
+	assert.equal( decodes.length, 5, "the waiting demand starts when the drain settles" );
+	loader.receive( { kind: "cancel", id: 5 } );
+	decodes[4]();
+	await settle();
+	assert.deepEqual(
+		results,
+		[ { kind: "released", id: 1 }, { kind: "released", id: 5 } ],
+		"neither drain publishes a payload or a second acknowledgement"
+	);
 });

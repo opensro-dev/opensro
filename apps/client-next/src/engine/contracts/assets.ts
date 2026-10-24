@@ -34,7 +34,9 @@ export interface AssetProgress {
 ================
 AssetWorkerMessage
 
-Worker replies transfer decoded resources or acknowledge released capacity.
+Worker replies transfer decoded resources or acknowledge a cancellation:
+"released" answers a cancel on receipt - nothing is delivered for the id
+again - while the worker's execution slot frees separately, at settlement.
 ================
 */
 export type AssetWorkerMessage =
