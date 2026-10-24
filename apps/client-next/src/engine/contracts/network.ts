@@ -85,6 +85,9 @@ NetworkFailure
 */
 export interface NetworkFailure {
 	stack?: string;
+	// What the browser said about a lost connection (closeDetail): reported
+	// with the incident, never part of the error text the retry rule matches.
+	readonly detail?: string;
 	readonly category: "expected" | "connection" | "software" | "unknown";
 	readonly code: string;
 	readonly message: string;
