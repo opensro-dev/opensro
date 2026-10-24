@@ -162,9 +162,7 @@ func newGameplayPlane(
 	if err := items.ConfigureStallNetwork(devPaths.TextdataDir); err != nil {
 		return nil, err
 	}
-	if err := items.ConfigureNameFilter(devPaths.TextdataDir); err != nil {
-		return nil, err
-	}
+	items.NameFilter = textdata.NameFilter
 	// SRO_SHOP_EXTRA_GOODS (port-only, not native): operator NPC shop goods;
 	// "off" is the v1.150 stock (commerce/extragoods.go).
 	extraGoods, err := commerce.ExtraGoodsFromEnv()
@@ -190,8 +188,10 @@ func newGameplayPlane(
 	if items.ElixirDrops.Off() {
 		log.Infof("loot: elixir drops OFF (%s): the shop sells them", progression.EnvElixirDropsOff)
 	}
-	// SRO_ALCHEMY_MATERIAL_DROPS_OFF (port-only, not native): alchemy
-	// materials leave every monster drop. Nothing needs them on the beta.
+	// SRO_ALCHEMY_MATERIAL_DROPS_OFF (port-only, not native): with the
+	// switch on, alchemy materials leave every monster drop. The deployed
+	// default is off (community vote, 2026-10-24): the stone chain uses
+	// them again.
 	items.MaterialDrops = progression.MaterialDropsFromEnv()
 	if items.MaterialDrops.Off() {
 		log.Infof("loot: alchemy material drops OFF (%s)", progression.EnvAlchemyMaterialDropsOff)
@@ -680,6 +680,10 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.items.TransportFollow = action.TransportFollowFromEnv()
 	if game.items.TransportFollow {
 		log.Infof("cos: a dismounted trade transport follows its trader (%s)", action.EnvTransportFollow)
+	}
+	game.items.TransportFollowTether = action.TransportFollowTetherFromEnv()
+	if game.items.TransportFollow && game.items.TransportFollowTether {
+		log.Infof("cos: a following transport keeps its trader within 100 m (%s)", action.EnvTransportFollowTether)
 	}
 	// Port-only, not native: town teleports admit a trader's transport.
 	game.items.JobGoodsTeleport = action.JobGoodsTeleportFromEnv()

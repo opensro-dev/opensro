@@ -5,9 +5,10 @@ resourceBuild.mjs - the full browser asset build's orchestration
 
 buildSroResources turns the extracted retail client into
 .generated/client-public. Shared prerequisites (converted source images)
-come first; independent lanes then run concurrently; the pack tail
-(packPublicTree.mjs) runs strictly in order at the end. Every producer is a
-member of one plain steps struct, so tests run this exact orchestration
+come first; independent lanes then run concurrently; dependency packs feed
+the families' production viewer before the final pack tail publishes their
+output (packPublicTree.mjs). Every producer belongs to one plain steps
+struct, so tests run this exact orchestration
 with recording stubs. scripts/build_sro_resources.mjs is the CLI: the
 generated-assets lock, the fingerprint gate, the Python preflight and the
 summary it prints from formatResourceBuildSummary.
@@ -43,6 +44,7 @@ import { buildSkillDataAsset } from "./data/buildSkillDataAsset.mjs";
 import { buildQuestDataAsset } from "./data/buildQuestDataAsset.mjs";
 import { buildCharacterDataCountryAsset } from "./data/buildCharacterDataCountryAsset.mjs";
 import { buildCosPresentationAsset } from "./data/buildCosPresentationAsset.mjs";
+import { buildFortressMapAsset } from "./data/buildFortressMapAsset.mjs";
 import { buildGInterfaceSectionsAsset } from "./data/buildGInterfaceSectionsAsset.mjs";
 import { buildSiegeFortressDataAsset } from "./data/buildSiegeFortressDataAsset.mjs";
 import { buildMissionPresentationAsset } from "./data/buildMissionPresentationAsset.mjs";
@@ -158,6 +160,7 @@ export const RESOURCE_BUILD_STEPS = Object.freeze( {
 	buildQuestDataAsset,
 	buildCharacterDataCountryAsset,
 	buildCosPresentationAsset,
+	buildFortressMapAsset,
 	buildGInterfaceSectionsAsset,
 	buildSiegeFortressDataAsset,
 	buildMissionPresentationAsset,
@@ -496,6 +499,9 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// COS HUD reference fields (icon, max HP, rideable) for the status icon,
 	// command bar and info page.
 	const cosPresentation = await steps.buildCosPresentationAsset();
+	// The battle aide's fortress map: its pages, placed zones and structure
+	// references (fortressMap.json, decoded by foundation/gameplay/fortress-map.ts).
+	const fortressMap = await steps.buildFortressMapAsset();
 	// WIP Toggle*Window plane (ginterface.txt raw section lines ->
 	// ginterface-sections.json, decoded once in sectionWindowPlane.ts and driven
 	// through the REAL sub_783f80 CreateControlsFromSection deserializer).
@@ -512,6 +518,21 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// EnterWorld v2 sends semantic ids only. This client projection is generated
 	// after NPC/item builders settle and owns every presentation resource path.
 	const missionPresentation = steps.buildMissionPresentationAsset();
+	// Portrait families render through the production viewer, which reads
+	// packed assets even on a cold build. Publish the current producer output
+	// through the canonical pack pipeline before starting that consumer. The
+	// families have not claimed their output yet, so this pass must neither
+	// audit incomplete claims nor retire sidecars. The final pass below lists
+	// their new art and rebuilds the changed packs.
+	const viewerUiImagePreload = await timed( "viewerUiImagePreload", () => steps.buildUiImagePreloadManifest() );
+	await steps.packTree( {
+		timed,
+		groupInputs: {
+			uiImagePreloadPaths: viewerUiImagePreload.images.map( ( image ) => image.path ),
+			missionMinimapTilePaths: missionMinimapTiles.map( ( tile ) => tile.publicPath ),
+			includeOutdoorWorld: Boolean( outdoorWorldRegion )
+		}
+	} );
 	// The focused families extend every producer's output (code-selected art,
 	// catalog patches, effect closures, world sky state) and read the data
 	// planes above (effect records and programs, skill and mastery data), so
@@ -522,8 +543,8 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// devices without BC is encoded now, before the packs are listed
 	// (textures/buildTextureVariants.mjs; cached by source digest).
 	const textureVariants = await timed( "textureVariants", () => steps.buildTextureVariants() );
-	// The native-interface preload sweep over assets/images/** runs once every
-	// producer, the families included, has published (their code-selected UI
+	// Refresh the native-interface preload sweep over assets/images/** after
+	// every producer, the families included, has published (their code-selected UI
 	// art belongs in the startup set).
 	const uiImagePreload = await timed( "uiImagePreload", () => steps.buildUiImagePreloadManifest() );
 	// Every producing lane has finished: list what the client installs in the
@@ -588,6 +609,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		questData,
 		characterDataCountry,
 		cosPresentation,
+		fortressMap,
 		ginterfaceSections,
 		siegeFortressData,
 		nameFilter,
@@ -656,6 +678,7 @@ export function formatResourceBuildSummary( results ) {
 		questData,
 		characterDataCountry,
 		cosPresentation,
+		fortressMap,
 		ginterfaceSections,
 		siegeFortressData,
 		nameFilter,

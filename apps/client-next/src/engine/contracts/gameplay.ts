@@ -248,6 +248,16 @@ export type GameplayCommand =
 	| { readonly kind: "fortress-war-status"; readonly gid: number; }
 	| { readonly kind: "fortress-staff"; readonly gid: number; readonly fortress: number; readonly flag?: number; }
 	| { readonly kind: "fortress-schedule"; readonly gid: number; readonly fortress: number; }
+	// The battle aide's fortress map (fortress-map.ts): the structure list
+	// 0x18 that opens it, an upgrade or construction 0x0B and a repair 0x0C.
+	| {
+		readonly kind: "fortress-structure";
+		readonly gid: number;
+		readonly fortress: number;
+		readonly action: number;
+		readonly zone?: number;
+		readonly type?: number;
+	}
 	// 0x71E1 actions 0 (query), 1 (rate) and 2 (collect) from the tax window.
 	| { readonly kind: "fortress-tax"; readonly gid: number; readonly fortress: number; }
 	// The structure target window's delete (517CA0): dismiss 0x16 or demolish 0x17.

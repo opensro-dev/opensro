@@ -69,6 +69,20 @@ func ShutdownClose(cause error) bool {
 
 /*
 ================
+ReplacedClose
+
+Whether a session closed because a newer session of the same character
+replaced it (a reload or reconnect: ByeReasonReplaced). The character
+carries on in the new session; nobody left the game.
+================
+*/
+func ReplacedClose(cause error) bool {
+	var bye CloseReason
+	return errors.As(cause, &bye) && bye.Reason == ByeReasonReplaced
+}
+
+/*
+================
 classifyClose
 ================
 */

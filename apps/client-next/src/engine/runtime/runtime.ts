@@ -342,6 +342,7 @@ export function startRuntime(
 				value => platform.saveQuickslotOptions( value ),
 				{
 					bugReport,
+					setWorldFieldOfView: degrees => world.setFieldOfView( degrees ),
 					saveExperimental: value => platform.saveExperimentalOptions( value ),
 					saveWindowPositions: value => platform.saveWindowPositions( value )
 				}

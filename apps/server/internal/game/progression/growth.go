@@ -8,7 +8,9 @@ closed beta the operator can turn on faster growth with one environment
 variable; unset, every grant is native. Nothing persists the rate: switching
 back is unsetting the variable and restarting the game world.
 
-EXP: every level costs about as many at-level kills as level 1 does. The
+EXP: by default every level costs about as many at-level kills as level 1
+does; SRO_BETA_GROWTH_BANDS gives level bands their own multiplier instead
+(growthbands.go). The
 level table gives both the EXP a level needs (ExpRequired) and the EXP an
 at-level monster yields (MonsterExpBasis, GUST_Mob_Exp), so their ratio is
 the native kill count for that level. A gain at level L is multiplied by
@@ -48,7 +50,6 @@ package progression
 
 import (
 	"os"
-	"strconv"
 	"strings"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -120,6 +121,9 @@ type GrowthRates struct {
 	DropCap      int
 	GoldRate     int
 	RareRate     int
+	// Bands is the per-level-band multiplier (growthbands.go); empty keeps
+	// every level at the level-1 pace.
+	Bands GrowthBands
 }
 
 /*
@@ -142,28 +146,33 @@ func BetaGrowthFromEnv() GrowthRates {
 		RareRate:     betaRareRateDefault,
 	}
 	if text := strings.TrimSpace(os.Getenv(EnvBetaSkillExpRate)); text != "" {
-		if n, err := strconv.ParseInt(text, 10, 64); err == nil && n >= 1 {
+		if n, err := ParseBetaGrowthSetting(EnvBetaSkillExpRate, text); err == nil {
 			rates.SkillExpRate = n
 		}
 	}
 	if text := strings.TrimSpace(os.Getenv(EnvBetaDropRate)); text != "" {
-		if n, err := strconv.Atoi(text); err == nil && n >= 1 && n <= maxBetaDropRate {
-			rates.DropRate = n
+		if n, err := ParseBetaGrowthSetting(EnvBetaDropRate, text); err == nil {
+			rates.DropRate = int(n)
 		}
 	}
 	if text := strings.TrimSpace(os.Getenv(EnvBetaDropCap)); text != "" {
-		if n, err := strconv.Atoi(text); err == nil && n >= 0 && n <= maxBetaDropCap {
-			rates.DropCap = n
+		if n, err := ParseBetaGrowthSetting(EnvBetaDropCap, text); err == nil {
+			rates.DropCap = int(n)
 		}
 	}
 	if text := strings.TrimSpace(os.Getenv(EnvBetaGoldRate)); text != "" {
-		if n, err := strconv.Atoi(text); err == nil && n >= 1 && n <= maxBetaGoldRate {
-			rates.GoldRate = n
+		if n, err := ParseBetaGrowthSetting(EnvBetaGoldRate, text); err == nil {
+			rates.GoldRate = int(n)
 		}
 	}
+	// An invalid band list keeps the all-pace default here; sro-nomad's
+	// admission and the GameWorld boot (wiring_levelcap.go) refuse it.
+	if bands, err := GrowthBandsFromEnv(); err == nil {
+		rates.Bands = bands
+	}
 	if text := strings.TrimSpace(os.Getenv(EnvBetaRareRate)); text != "" {
-		if n, err := strconv.Atoi(text); err == nil && n >= 1 && n <= maxBetaRareRate {
-			rates.RareRate = n
+		if n, err := ParseBetaGrowthSetting(EnvBetaRareRate, text); err == nil {
+			rates.RareRate = int(n)
 		}
 	}
 	return rates
@@ -213,8 +222,8 @@ func levelPace(levels enterworld.LevelDataSource, level int64) float64 {
 ================
 ExpPace
 
-The multiplier a positive EXP gain at this level gets: levelPace with the
-beta on, 1 (native) with it off. The attack pets' beta EXP reads it at the
+The multiplier a positive EXP gain at this level gets: the level band's
+(growthbands.go) with the beta on, 1 (native) with it off. The attack pets' beta EXP reads it at the
 owner's level (action.Runtime.PetExpPace).
 ================
 */
@@ -222,7 +231,7 @@ func (g GrowthRates) ExpPace(levels enterworld.LevelDataSource, level int64) flo
 	if !g.Enabled {
 		return 1
 	}
-	return levelPace(levels, level)
+	return g.Bands.multiplier(levels, level)
 }
 
 /*
@@ -238,7 +247,7 @@ func (g GrowthRates) scale(levels enterworld.LevelDataSource, level, expDelta, s
 	if !g.Enabled {
 		return expDelta, skillExpDelta
 	}
-	pace := levelPace(levels, level)
+	pace := g.Bands.multiplier(levels, level)
 	if expDelta > 0 {
 		expDelta = int64(min(float64(expDelta)*pace, float64(1<<62)))
 	}

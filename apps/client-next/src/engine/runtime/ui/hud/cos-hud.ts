@@ -9,8 +9,8 @@ GID. The HUD owns one command panel, shown for the selected companion (CIFCOSMan
 6F21F0). This module mirrors selection and owns the panel's open/close toggle
 (CIFCOSCommand_OnToggleOpen 6A3750), the transport Clean confirmation
 the executor raises (6A2350 case 5), and the item-target cursor A6 that
-Grass of Life and the clock arm on right-button use. The UI draws from it
-every frame.
+Grass of Life, the clock and the armour gender tool arm on right-button use.
+The UI draws from it every frame.
 
 ===========================================================================
 */
@@ -34,8 +34,8 @@ export function createCosHud() {
 		armItemTarget
 
 		561D50 stores the selected inventory slot (596B50), then sets cursor A6
-		at 5621D4, for Grass of Life and the clock alike (armsItemTargetCursor).
-		Arming never sends item use or chooses a pet automatically.
+		at 5621D4, shared by Grass of Life, the clock and the armour gender tool
+		(armsItemTargetCursor). Arming never sends item use or chooses a target.
 		================
 		*/
 		armItemTarget( item: InventoryItem ) {
@@ -77,12 +77,13 @@ export function createCosHud() {
 		================
 		targetUseBox
 
-		The confirmation's control prefix: a revival and a lease renewal each
-		own their ids, so no two boxes ever publish the same control.
+		Each targeted item's confirmation owns its control ids, so no two
+		boxes ever publish the same control.
 		================
 		*/
-		targetUseBox(): "cos-revive" | "cos-renew" | null {
+		targetUseBox(): "cos-revive" | "cos-renew" | "gender-change" | null {
 			if ( !targetUse || targetUse.kind !== "item-use" ) return null;
+			if ( targetUse.targetSlot !== undefined ) return "gender-change";
 			return targetUse.revivalSlot !== undefined ? "cos-revive" : "cos-renew";
 		},
 		/*

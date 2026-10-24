@@ -154,7 +154,7 @@ test("compact fitting preserves gameplay drags and carries while suppressing win
 		{ id: "hotbar:41", draggable: true, carry: undefined, expected: true },
 		{ id: "hotbar:42", draggable: false, carry: undefined, expected: false },
 		{ id: "main-popup-drag", draggable: true, carry: undefined, expected: false },
-		{ id: "ext-drag", draggable: true, carry: undefined, expected: false },
+		{ id: "ext-drag", draggable: true, carry: undefined, expected: true },
 		{ id: "window-drag:Inventory", draggable: true, carry: undefined, expected: false },
 		{ id: "map-drag", draggable: true, carry: undefined, expected: false },
 		{ id: "map-pan", draggable: true, carry: undefined, expected: false }

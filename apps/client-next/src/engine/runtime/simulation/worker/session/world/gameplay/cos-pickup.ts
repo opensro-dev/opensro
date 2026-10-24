@@ -7,10 +7,15 @@ cos-pickup.ts - native cash-pet pickup selection and acknowledgement lifetime
 and 77DD10 releases pending commands. The server still owns range, inventory,
 reservation and grant validation. Simulation time owns every retry deadline.
 
+Port-only, not native (#841): the Experimental pickup-pet item filter may
+narrow which drops this loop proposes, above the server-owned category
+byte in commandMode. It never widens a proposal, never touches the byte,
+and manual pickup commands do not pass through here.
+
 ===========================================================================
 */
 import type { CosRecord } from "@/engine/contracts/gameplay";
-import { isGoldHeapType } from "@/engine/foundation/gameplay/ground-item";
+import { isGoldHeapType, pickupItemKind } from "@/engine/foundation/gameplay/ground-item";
 import type { WireFrame } from "@/engine/contracts/network";
 import type { EntityState, WorldEvent } from "@/engine/contracts/world";
 import { groundItemDistance } from "@/engine/foundation/gameplay/ground-item";
@@ -38,6 +43,10 @@ interface PickupFrame {
 	readonly sharedOwners: ReadonlySet<number>;
 	readonly read: ( gid: number ) => EntityState | undefined;
 	readonly smartPetPickup?: boolean;
+	// Port-only (#841): the Experimental filter's kind mask
+	// (ground-item's PICKUP_KIND bits). Undefined is the native loop:
+	// every natively admitted drop may be proposed.
+	readonly pickupKinds?: number;
 }
 
 /*
@@ -146,6 +155,12 @@ ordered-map tie break independently of the browser's spawn arrival order.
 					if (
 						!item || !drop || drop.claimantGid || claimed.has( gid ) ||
 						(dropRetry.get( gid ) ?? 0) > frame.now || !(mode & category)
+					) continue;
+					// Port-only (#841): the item filter narrows the native
+					// admission above; it can only ever refuse a proposal.
+					if (
+						frame.pickupKinds !== undefined &&
+						(frame.pickupKinds & pickupItemKind( drop.typeFlags )) === 0
 					) continue;
 					if ( frame.smartPetPickup !== false && bagFull.has( record.gid ) && category !== PICKUP_GOLD ) {
 						continue;

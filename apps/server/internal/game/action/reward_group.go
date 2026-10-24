@@ -62,6 +62,9 @@ type rewardRoster struct {
 	division   string
 	actors     map[uint32]rewardActor
 	characters []*enterworld.Character
+	// companionKill: the fatal hit came from a pet or COS, which the
+	// original's quest kill event never credits (creditQuestKillInsideDoor).
+	companionKill bool
 }
 
 /*
@@ -303,6 +306,35 @@ type monsterSettlement struct {
 
 /*
 ================
+easePenaltyForMonsterKill
+
+The original eases a murder penalty by the level gap for the kill's reward
+representative (the top contributor of the top-damage group, the player
+its death path picks for the drops), not for the player whose blow landed
+last. Frames for a representative who is not the actor go to its own
+session.
+================
+*/
+func (rt *Runtime) easePenaltyForMonsterKill(division string, actor, killer *enterworld.Character, target monster.Instance, out *monsterSettlement) {
+	if killer == nil || killer.PK == nil || killer.PK.Penalty == 0 {
+		return
+	}
+	before := killer.PVPState()
+	relief := pk.MonsterKillRelief(target.Ref.Level, uint8(min(rewardLevel(killer), 0xff)))
+	frames := pkRecordFrames(killer, pk.AddPenalty(killer, relief, rt.Now()))
+	rt.notePKRecord(division, killer)
+	if killer == actor {
+		out.actorFrames = append(out.actorFrames, frames...)
+	} else if len(frames) > 0 {
+		out.others = append(out.others, RecipientFrames{killer.ID, frames})
+	}
+	if before != killer.PVPState() {
+		out.public = append(out.public, playerPVPStateFrame(killer))
+	}
+}
+
+/*
+================
 settleMonsterInsideDoor
 
 Run inside the damage/cost UpdateMany. Native pays every group, then returns
@@ -323,20 +355,10 @@ func (rt *Runtime) settleMonsterInsideDoor(division string, actor *enterworld.Ch
 			out.others = append(out.others, award)
 		}
 	}
-	// CGObjMob_CreditKillerOnDeath (4C42F0) -> 4EB6B0: the player whose
-	// blow killed the monster eases a murder penalty by the level gap.
-	if actor != nil && actor.PK != nil && actor.PK.Penalty > 0 {
-		before := actor.PVPState()
-		relief := pk.MonsterKillRelief(impact.Instance.Ref.Level, uint8(min(rewardLevel(actor), 0xff)))
-		out.actorFrames = append(out.actorFrames, pkRecordFrames(actor, pk.AddPenalty(actor, relief, rt.Now()))...)
-		rt.notePKRecord(division, actor)
-		if before != actor.PVPState() {
-			out.public = append(out.public, playerPVPStateFrame(actor))
-		}
-	}
 	// 4E27C0 -> 4E1F60: the killing blow's job wearer earns job EXP for a
-	// thief or hunter monster (pkreward.go).
-	if actor != nil {
+	// thief or hunter monster (pkreward.go). Only a player's own blow reaches
+	// it in the original; a pet's or COS's fatal hit pays no job EXP.
+	if actor != nil && !roster.companionKill {
 		jobFrames, others := rt.payMonsterJobKillInDoor(division, actor, impact.Instance, pose, now)
 		out.actorFrames = append(out.actorFrames, jobFrames...)
 		out.others = append(out.others, others...)
@@ -349,6 +371,9 @@ func (rt *Runtime) settleMonsterInsideDoor(division string, actor *enterworld.Ch
 			best = g.damage
 			winner = g.representative
 		}
+	}
+	if a, ok := roster.actors[winner]; ok {
+		rt.easePenaltyForMonsterKill(division, actor, a.character, impact.Instance, &out)
 	}
 	origin := simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z}
 	originWorld := uint32(impact.Population.ID)
@@ -415,7 +440,6 @@ func (rt *Runtime) settleMonsterInsideDoor(division string, actor *enterworld.Ch
 		planned := rt.planMonsterKillLoot(a.character, impact.Instance, pose, now)
 		rt.applyMonsterGoldBonus(division, a.character, planned)
 		rt.applyThiefPartyGold(division, a.character, planned, settings)
-		planned = append(planned, rt.planQuestKillDrops(a.character, impact.Instance, pose, now)...)
 		frames, drops, _ := rt.applyMonsterKillInsideDoor(division, a.character, 0, 0, impact.Instance.Gid, planned)
 		out.drops = drops
 		if a.character == actor {
@@ -426,6 +450,11 @@ func (rt *Runtime) settleMonsterInsideDoor(division string, actor *enterworld.Ch
 		if ref, announced := rt.Monsters.RecordUniqueKiller(division, impact.Instance.Gid, a.character.Name); announced && rt.RecordUniqueKill != nil {
 			rt.RecordUniqueKill(division, domain.UniqueKill{AtMs: now, RefObjID: ref, KillerCharID: a.character.ID, KillerName: a.character.Name})
 		}
+	}
+	if !roster.companionKill && actor != nil {
+		frames, drops := rt.creditQuestKillInsideDoor(division, actor, impact.Instance, pose, now)
+		out.actorFrames = append(out.actorFrames, frames...)
+		out.drops = append(out.drops, drops...)
 	}
 	rt.Monsters.ArmNestFromReward(division, impact.Instance.Gid, count)
 	return out

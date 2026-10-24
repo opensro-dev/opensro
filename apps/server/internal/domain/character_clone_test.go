@@ -22,6 +22,7 @@ func TestCharacterSnapshotDetachesMutableRecordGraph(t *testing.T) {
 		}},
 		World: &CharacterWorld{
 			PackedInstance:     &instance,
+			InstanceReturn:     &InstanceReturnAnchor{PackedInstance: 0x20001, RegionID: 25000, X: 12.5, Y: 3, Z: -7, Angle: 90},
 			Spawn:              &WorldSpawn{X: &spawnX},
 			AuthoredAreaReturn: &WorldSpawn{X: &returnX},
 			LastDeathPoint:     &WorldPoint{WorldSpawn: WorldSpawn{X: &deathX}, World: 2},
@@ -62,6 +63,8 @@ func TestCharacterSnapshotDetachesMutableRecordGraph(t *testing.T) {
 	*character.World.LastDeathPoint.X = 41
 	*character.World.DungeonFloorIndex = 4
 	*character.World.PackedInstance = 0x30001
+	character.World.InstanceReturn.PackedInstance = 0x30001
+	character.World.InstanceReturn.X = 99
 	character.World.MoveSegment[5] = '2'
 	character.ActiveQuests[0].Contents[0].ObjectiveValues[0] = 10
 	character.ActiveQuests[0].TargetIds[0] = 11
@@ -87,6 +90,11 @@ func TestCharacterSnapshotDetachesMutableRecordGraph(t *testing.T) {
 	if *snapshot.World.Spawn.X != 20 || *snapshot.World.AuthoredAreaReturn.X != 30 || *snapshot.World.LastDeathPoint.X != 40 ||
 		*snapshot.World.DungeonFloorIndex != 3 || *snapshot.World.PackedInstance != 0x20001 {
 		t.Errorf("snapshot world retained mutable pointers: %+v", snapshot.World)
+	}
+	if snapshot.World.InstanceReturn == nil || snapshot.World.InstanceReturn.PackedInstance != 0x20001 ||
+		snapshot.World.InstanceReturn.RegionID != 25000 || snapshot.World.InstanceReturn.X != 12.5 ||
+		snapshot.World.InstanceReturn.Y != 3 || snapshot.World.InstanceReturn.Z != -7 || snapshot.World.InstanceReturn.Angle != 90 {
+		t.Errorf("snapshot instance return retained mutable pointer: %+v", snapshot.World.InstanceReturn)
 	}
 	if string(snapshot.World.MoveSegment) != `{"x":1}` {
 		t.Errorf(

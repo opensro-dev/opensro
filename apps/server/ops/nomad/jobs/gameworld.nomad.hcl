@@ -151,9 +151,10 @@ variable "beta_mastery" {
 
 # Port-only, not native: 110 raises the stopping level on the installed
 # v1.150 curve. Off keeps cap 90; expansion content is enabled separately.
+# Owner, 2026-10-24: 110 for the next release.
 variable "level_cap" {
   type    = string
-  default = "off"
+  default = "110"
 }
 
 # Port-only, not native: optional database-authored Alexandria field content.
@@ -569,6 +570,14 @@ variable "beta_growth" {
   default = "on"
 }
 
+# beta_growth_bands gives level bands their own EXP/SP multiplier: "pace"
+# holds a level to the level-1 pace, a number is that many times native
+# (owner, 2026-10-24). Empty keeps every level at the pace.
+variable "beta_growth_bands" {
+  type    = string
+  default = "1-59:pace,60-89:20,90-110:10"
+}
+
 variable "beta_skill_exp_rate" {
   type    = string
   default = "100"
@@ -658,6 +667,15 @@ variable "transport_follow" {
   default = "off"
 }
 
+# transport_follow_tether keeps the 100 m tether on a following transport:
+# the trader may not walk more than 100 m from where it walks (port-only,
+# not native; owner decision 2026-10-24). It acts only with transport_follow
+# on; with that off the original parked transport tethers as always.
+variable "transport_follow_tether" {
+  type    = string
+  default = "on"
+}
+
 # job_goods_teleport lets a trader with a transport out use town gates,
 # return scrolls and the reverse return, the transport travelling along
 # (port-only, not native; owner decision 2026-10-18 reversed 2026-10-15).
@@ -687,11 +705,12 @@ variable "elixir_drops_off" {
 
 # alchemy_material_drops_off keeps every alchemy material (type 3/3/11/4,
 # the grey bags of monster parts) out of monster drops (port-only, not
-# native, beta balance; owner 2026-10-14). "off" is the original game's
-# drops.
+# native, beta balance; owner 2026-10-14). A community vote on 2026-10-24
+# brought the parts back, so the default is "off", the original game's
+# drops; "on" restores the beta removal.
 variable "alchemy_material_drops_off" {
   type    = string
-  default = "on"
+  default = "off"
 }
 
 variable "beta_drop_cap" {
@@ -1005,6 +1024,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_FLAGWAR_MIN_PLAYERS                 = var.flagwar_min_players
         SRO_ATTACK_PET_EXPANSION                = var.attack_pet_expansion
         SRO_BETA_GROWTH                         = var.beta_growth
+        SRO_BETA_GROWTH_BANDS                   = var.beta_growth_bands
         SRO_BETA_SKILL_EXP_RATE                 = var.beta_skill_exp_rate
         SRO_BETA_DROP_RATE                      = var.beta_drop_rate
         SRO_BETA_GOLD_RATE                      = var.beta_gold_rate
@@ -1025,6 +1045,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_CARAVAN_STAR_AMBUSH                 = var.caravan_star_ambush
         SRO_JOB_MONSTER_SPEED                   = var.job_monster_speed
         SRO_TRANSPORT_FOLLOW                    = var.transport_follow
+        SRO_TRANSPORT_FOLLOW_TETHER             = var.transport_follow_tether
         SRO_JOB_GOODS_TELEPORT                  = var.job_goods_teleport
         SRO_ELIXIR_DROPS_OFF                    = var.elixir_drops_off
         SRO_ALCHEMY_MATERIAL_DROPS_OFF          = var.alchemy_material_drops_off

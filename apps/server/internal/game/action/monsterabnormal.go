@@ -341,14 +341,18 @@ func (rt *Runtime) advanceMonsterAbnormal(division string, gid uint32, nowMs int
 	// The first credited hit's caster owns the reward roster, as the burn
 	// and bleeding owners did; uncredited ticks settle without a killer.
 	var character *enterworld.Character
+	companion := false
 	for _, hit := range plan.Effects.Hits {
 		if hit.Credited {
 			if character = ctx.rewardOwner(division, hit.SourceGID, hit.SourceName); character != nil {
+				companion = ctx.caster(division, hit.SourceGID, hit.SourceName) == nil
 				break
 			}
 		}
 	}
 	roster := rt.monsterRewardRoster(division, character, nowMs)
+	// A pet's or COS's burn credits its owner's rewards but no quest kill.
+	roster.companionKill = companion
 	var impact simulation.MonsterDamageResult
 	var settlement monsterSettlement
 	commit := func() bool {

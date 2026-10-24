@@ -147,6 +147,12 @@ import {
 } from "@/engine/foundation/gameplay/fortress";
 import { fortressServiceRequest } from "@/engine/foundation/gameplay/fortress-services";
 import {
+	FORTRESS_AIDE_CAPABILITY,
+	FORTRESS_STRUCTURE_LIST,
+	FORTRESS_STRUCTURE_REPAIR,
+	FORTRESS_STRUCTURE_UPGRADE
+} from "@/engine/foundation/gameplay/fortress-map";
+import {
 	type FortressForgeItem,
 	FORTRESS_PRODUCTION_QUERY,
 	fortressProductionAction,
@@ -848,6 +854,10 @@ fails; retry persistence without restoring stale slot occupancy.
 	// The Experimental "Keep pet gold pickup when full" row: on unless turned
 	// off (experimentalGameplay); off is the native 0x0077DD61 disable.
 	let smartPetPickup = true;
+	// The Experimental pickup-pet item filter's kind mask (#841,
+	// experimentalGameplay); undefined while the row is off, which leaves
+	// the native pickup loop untouched.
+	let petPickupKinds: number | undefined;
 	let approach: InteractionApproachState = { phase: "idle" };
 	let returnScroll: ReturnScrollCast | undefined, teleportMode = 0;
 	const cosSelection = createCosSelection();
@@ -1222,6 +1232,7 @@ The Experimental window's gameplay rows (experimentalGameplay).
 			homingProjectiles = value.homingProjectiles === true;
 			smartPetPickup = value.smartPetPickup !== false;
 			if ( !smartPetPickup ) cosPickup.spaceChanged();
+			petPickupKinds = value.petPickupKinds;
 		},
 		/*
 ================
@@ -1773,6 +1784,28 @@ state here before a command can claim a native wire conversation.
 						fortress: command.fortress,
 						word: command.kind === "fortress-tax-rate" ? command.rate : undefined,
 						gold: command.kind === "fortress-tax-collect" ? command.gold : undefined
+					} )
+				);
+			}
+			if ( command.kind === "fortress-structure" ) {
+				// 5D8930 action 0x32 row 2 (the list) and CIFFortressMap_OnConfirmMsgBox
+				// (65CD80): the selected battle aide (function 0x1000000) stages the
+				// fortress, the zone and the tower type.
+				const target = targeting.state();
+				if (
+					!localGid || target.target !== command.gid ||
+					!((target.targetCapabilities ?? 0) & FORTRESS_AIDE_CAPABILITY) ||
+					![ FORTRESS_STRUCTURE_LIST, FORTRESS_STRUCTURE_UPGRADE, FORTRESS_STRUCTURE_REPAIR ].includes(
+						command.action
+					)
+				) throw Error( "Select the fortress battle aide" );
+				return sendFrame(
+					fortressServiceRequest( {
+						target: command.gid,
+						action: command.action,
+						fortress: command.fortress,
+						reference: command.action === FORTRESS_STRUCTURE_LIST ? undefined : command.zone,
+						flag: command.action === FORTRESS_STRUCTURE_UPGRADE ? command.type : undefined
 					} )
 				);
 			}
@@ -4373,7 +4406,8 @@ before take assembles the presentation snapshot.
 					records: cosRecords.values(),
 					sharedOwners,
 					read: readEntity,
-					smartPetPickup
+					smartPetPickup,
+					pickupKinds: petPickupKinds
 				} )
 			) {
 				sendFrame( frame );

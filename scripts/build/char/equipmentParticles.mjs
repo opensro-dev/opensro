@@ -15,6 +15,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { clientV150ResinfoRoot, retailTextdataRoot } from "../world/paths.mjs";
 import { loadEquipmentRecords } from "./equipmentVisualRecords.mjs";
+import { vsroItemGlowRoot } from "./equipmentGlowMetadata.mjs";
 import { dataAssetPath, loadDataAsset } from "../shared/jmxAssetIO.mjs";
 import { parseCharacterBsr, parseBsk } from "./formats.mjs";
 
@@ -31,6 +32,8 @@ const FORTRESS_HAMMER_TYPE = 16;
 const BEGINNER_SUFFIX = "_DEF";
 const RARE_SUFFIX = "_RARE";
 const SPARK_ROOT = "system/system_enchant";
+// The fallback sparks' lowest reinforcement (equipment-appearance.ts ENCHANT_SPARK_PLUS).
+const ENCHANT_SPARK_PLUS = 8;
 // ModDataParticle set kind of the always-on ambient set (model-particles.ts).
 export const AMBIENT_MODIFIER_KIND = 2;
 
@@ -99,22 +102,68 @@ function enchantSparkEffect( record ) {
 
 /*
 ================
+officialEnchantSparks
+
+Port-only, not native: the later client's per-item spark table
+(resinfo/itemoptionefp.txt, imported by scripts/import_vsro_item_glow.py):
+item codename, effect, scale percent, bone, offset ("none"), and the
+lowest reinforcement that draws it. Null when the table is not imported.
+================
+*/
+function officialEnchantSparks( byCode, vsroRoot ) {
+	const file = path.join( vsroRoot, "itemoptionefp.txt" );
+	if ( !fs.existsSync( file ) ) return null;
+	const out = {};
+	for ( const line of fs.readFileSync( file, "latin1" ).split( /\r?\n/ ) ) {
+		if ( !line.trim() || line.trim().startsWith( "//" ) ) continue;
+		const c = line.trim().split( /\t/ ), item = byCode.get( c[0] );
+		// A later-client item the v1.150 data does not have draws nothing.
+		if ( !item || item.slot === null ) continue;
+		const effectPath = c[1].replaceAll( "\\", "/" ).toLowerCase(),
+			scale = Number( c[2] ),
+			threshold = Number( c[5] );
+		if (
+			c.length < 6 || !effectPath.endsWith( ".efp" ) || effectPath.includes( ".." ) ||
+			!Number.isFinite( scale ) || scale <= 0 || !c[3] || c[4] !== "none" ||
+			!Number.isInteger( threshold ) || threshold < 1 || threshold > 255
+		) throw Error( "Unsupported itemoptionefp row " + line );
+		(out[item.id] ??= []).push( {
+			effectPath,
+			bone: c[3],
+			scale: Math.fround( scale / 100 ),
+			offset: [ 0, 0, 0 ],
+			root: false,
+			threshold
+		} );
+	}
+	return out;
+}
+
+/*
+================
 equipmentEnchantSparks
 
 Port-only, not native (owner, 2026-10-13): the enchant sparks the
-Experimental window can show on a +8 or higher weapon or shield. v1.150
-ships system_enchant*_a_01.efp in Particles.pk2/system, but neither
-SRO_Client.exe nor any resinfo or textdata table names them, so the
-original never drew them. Each item wears its class's program on the
-bones and at the scales itemrare.txt authors for its rare twin (the same
-model): its own itemrare row, code_RARE, or for a beginner _DEF item its
-_01_A sibling's twin when the model matches. An item without a twin gets
-none.
+Experimental "Enhanced item glow" row draws on a reinforced weapon or
+shield. v1.150 ships system_enchant*_a_01.efp in Particles.pk2/system, but
+neither SRO_Client.exe nor any v1.150 resinfo or textdata table names
+them, so the original never drew them. With the later client's
+itemoptionefp.txt imported, each item takes its authored effect, bone,
+scale and threshold. Without it, each item wears its class's program on
+the bones and at the scales itemrare.txt authors for its rare twin (the
+same model): its own itemrare row, code_RARE, or for a beginner _DEF item
+its _01_A sibling's twin when the model matches; an item without a twin
+gets none, and the threshold is ENCHANT_SPARK_PLUS.
 ================
 */
-export function equipmentEnchantSparks( records = loadEquipmentRecords( retailTextdataRoot ) ) {
-	const byCode = new Map( [ ...records.values() ].map( r => [ r.code, r ] ) ), rare = itemRareRows( byCode );
-	const out = {};
+export function equipmentEnchantSparks(
+	records = loadEquipmentRecords( retailTextdataRoot ),
+	vsroRoot = vsroItemGlowRoot
+) {
+	const byCode = new Map( [ ...records.values() ].map( r => [ r.code, r ] ) );
+	const official = officialEnchantSparks( byCode, vsroRoot );
+	if ( official ) return official;
+	const rare = itemRareRows( byCode ), out = {};
 	for ( const record of records.values() ) {
 		if ( record.slot === null ) continue;
 		const effectPath = enchantSparkEffect( record );
@@ -132,7 +181,8 @@ export function equipmentEnchantSparks( records = loadEquipmentRecords( retailTe
 			bone,
 			scale,
 			offset: [ 0, 0, 0 ],
-			root: false
+			root: false,
+			threshold: ENCHANT_SPARK_PLUS
 		}) );
 	}
 	return out;
@@ -200,10 +250,10 @@ private nodes of that branch; an animated resource is an auxiliary handle
 instead and carries the set itself.
 ================
 */
-export async function publishEquipmentParticleMetadata( dress ) {
+export async function publishEquipmentParticleMetadata( dress, vsroRoot = vsroItemGlowRoot ) {
 	const records = loadEquipmentRecords( retailTextdataRoot ),
 		particles = equipmentParticleCatalog( records ),
-		sparks = equipmentEnchantSparks( records ),
+		sparks = equipmentEnchantSparks( records, vsroRoot ),
 		ambient = equipmentAmbientParticles( records ),
 		cache = new Map();
 	dress.specialGlows = particles;
@@ -258,10 +308,16 @@ export async function publishEquipmentParticleMetadata( dress ) {
 					}
 					cache.set( source, branch );
 				}
-				for ( const effect of effects ) {
+				for ( const effect of particles[id] ?? [] ) {
 					if ( !branch?.nodes.some( n => n.name === effect.bone ) ) {
 						throw Error( "Missing native special-state socket " + source + ":" + effect.bone );
 					}
+				}
+				// Port-only sparks name the later client's bones; one a v1.150
+				// model lacks is left out rather than failing the build.
+				if ( sparks[id] ) {
+					sparks[id] = sparks[id].filter( effect => branch?.nodes.some( n => n.name === effect.bone ) );
+					if ( !sparks[id].length ) delete sparks[id];
 				}
 				if ( branch ) entry.branches.push( { ...branch, part: entry.parts[i] } );
 			}

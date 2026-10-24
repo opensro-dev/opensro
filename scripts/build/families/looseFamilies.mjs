@@ -34,6 +34,7 @@ import { buildDropModelAssets } from "../char/buildDropModelAssets.mjs";
 import { buildMissionPresentationAsset } from "../data/buildMissionPresentationAsset.mjs";
 import { buildPetItemIcons } from "../shared/petItemIcons.mjs";
 import { buildSkillDataAsset } from "../data/buildSkillDataAsset.mjs";
+import { buildFortressMapAsset } from "../data/buildFortressMapAsset.mjs";
 import { parseWeatherEvents } from "../char/weatherEvents.mjs";
 import { buildEffectProgramsAsset } from "../effects/buildEffectPrograms.mjs";
 import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
@@ -46,6 +47,7 @@ import {
 } from "../shared/audioResources.mjs";
 import {
 	buildGuideImageResources,
+	buildFortressMapIconResources,
 	buildSkillDataIconResources,
 	imagePublicPath,
 	registerSpriteResource
@@ -756,6 +758,19 @@ export const LOOSE_FAMILIES = {
 			const missing = catalog.tilePaths.filter( tile => !packed.has( tile.toLowerCase() ) );
 			if ( missing.length > 0 ) throw new Error( `Retail minimap tile missing from publication: ${missing[0]}` );
 			return output.files;
+		}
+	},
+	// The battle aide's fortress map (CIFFortressMap 65E330): its pages, placed
+	// zones and structure references, and the structure marker images.
+	"fortress-map": {
+		kind: "refresh",
+		label: "fortress map zones, structures and markers",
+		packFolder: "fortress-map",
+		defaultGroup: file => isImageAsset( file ) ? imagePackGroup( file ) : "game-data",
+		async produce() {
+			await buildFortressMapAsset();
+			const icons = await buildFortressMapIconResources();
+			return { files: [ ...await packedJson( [ "/assets/data/fortressMap.json" ] ), ...icons.copiedImages ] };
 		}
 	},
 	// build-skill-ui.py projects the skill window data into assets/data/skillUi.json,

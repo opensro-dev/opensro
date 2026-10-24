@@ -64,18 +64,18 @@ var stoneFamilyWords = []struct {
 stoneFamilyMaskFor
 
 The native binder joins the stone's family words and substring-searches the
-target word in the joined text. Case sensitivity of that compare is
-unverified (Binary Ninja recheck queued); the authored descriptor and
-family words and the searched literals are all lowercase in the shipped
-data, so folding case here is unobservable either way. This function is
-the single flip point if the recheck proves the compare case-sensitive.
+target word in the joined text. The client's compare is case-sensitive
+(0x0062B6D0 reaches the ordinal wide-string find with no case fold; the
+client's separate case-insensitive compare serves MATTR_REPAIR instead),
+so this search runs on the text as authored. The shipped descriptors and
+the searched literals are all lowercase, which keeps the two readings in
+agreement on shipped data; an uppercase descriptor admits nothing.
 ================
 */
 func stoneFamilyMaskFor(text string) uint32 {
-	lowered := strings.ToLower(text)
 	var mask uint32
 	for _, entry := range stoneFamilyWords {
-		if strings.Contains(lowered, entry.word) {
+		if strings.Contains(text, entry.word) {
 			mask |= entry.bit
 		}
 	}
