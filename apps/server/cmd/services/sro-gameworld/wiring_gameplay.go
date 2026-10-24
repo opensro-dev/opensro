@@ -375,7 +375,7 @@ func newGameplayPlane(
 	items.RewardParties = func(division string) []action.RewardParty {
 		var out []action.RewardParty
 		for _, p := range parties.Registry().RewardSnapshots(division) {
-			row := action.RewardParty{Order: p.ObjectOrder, Options: p.OptionBits}
+			row := action.RewardParty{Order: p.ObjectOrder, Options: p.OptionBits, LeaderID: p.LeaderID}
 			for _, m := range p.Members {
 				row.Members = append(row.Members, m.MemberID)
 			}
@@ -493,11 +493,13 @@ func connectInvitationLanes(
 ) {
 	resurrections := items.ResurrectionConsent()
 	exchanges := items.ExchangeConsent()
+	instanceInvites := items.InstanceInviteConsent()
 	parties.AddConsentArm(exchanges)
 	parties.AddConsentArm(guildInvites)
 	parties.AddConsentArm(unions)
 	parties.AddConsentArm(mentorInvites)
 	parties.AddConsentArm(resurrections)
+	parties.AddConsentArm(instanceInvites)
 
 	// A player holds one unanswered proposal at a time, whatever its
 	// lane (TransactionMgr_InsertUnique 46F420): every lane refuses to
@@ -508,29 +510,34 @@ func connectInvitationLanes(
 			unions.HasPendingInvite(divisionID, name) ||
 			mentorInvites.HasPendingInvite(divisionID, name) ||
 			resurrections.HasPendingInvite(divisionID, name) ||
-			exchanges.HasPendingInvite(divisionID, name)
+			exchanges.HasPendingInvite(divisionID, name) ||
+			instanceInvites.HasPendingInvite(divisionID, name)
 	}
 	unions.PeerPending = func(divisionID, name string) bool {
 		return partyPending(divisionID, name) ||
 			guildInvites.HasPendingInvite(divisionID, name) ||
 			mentorInvites.HasPendingInvite(divisionID, name) ||
 			resurrections.HasPendingInvite(divisionID, name) ||
-			exchanges.HasPendingInvite(divisionID, name)
+			exchanges.HasPendingInvite(divisionID, name) ||
+			instanceInvites.HasPendingInvite(divisionID, name)
 	}
 	mentorInvites.PeerPending = func(divisionID, name string) bool {
 		return partyPending(divisionID, name) ||
 			guildInvites.HasPendingInvite(divisionID, name) ||
 			unions.HasPendingInvite(divisionID, name) ||
 			resurrections.HasPendingInvite(divisionID, name) ||
-			exchanges.HasPendingInvite(divisionID, name)
+			exchanges.HasPendingInvite(divisionID, name) ||
+			instanceInvites.HasPendingInvite(divisionID, name)
 	}
 	items.ProposalPending = func(divisionID, name string) bool {
 		return partyPending(divisionID, name) ||
 			guildInvites.HasPendingInvite(divisionID, name) ||
 			unions.HasPendingInvite(divisionID, name) ||
 			mentorInvites.HasPendingInvite(divisionID, name) ||
-			exchanges.HasPendingInvite(divisionID, name)
+			exchanges.HasPendingInvite(divisionID, name) ||
+			instanceInvites.HasPendingInvite(divisionID, name)
 	}
+	parties.PartyChanged = items.NotePartyChanged
 }
 
 /*
@@ -761,6 +768,17 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		return fmt.Errorf("quest runtime: %w", err)
 	}
 	game.quests = quests
+	game.items.InstanceEventSink = func(event action.InstanceEvent) {
+		quests.DispatchInstanceEvent(quest.InstanceEvent{
+			Kind:       quest.InstanceEventKind(event.Kind),
+			Division:   event.Division,
+			Definition: event.Definition,
+			World:      event.World,
+			Name:       event.Name,
+			Gid:        event.Gid,
+			Accepted:   event.Accepted,
+		})
+	}
 	if quests.InstantInventoryExpansion = quest.InstantInventoryExpansionFromEnv(); quests.InstantInventoryExpansion {
 		log.Infof("quest: instant inventory expansion ON (%s, port-only): reward slots are usable at the turn-in", quest.EnvInstantInventoryExpansion)
 	}

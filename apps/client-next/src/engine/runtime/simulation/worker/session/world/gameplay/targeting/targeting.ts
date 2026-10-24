@@ -121,6 +121,18 @@ release
 step
 ================
 		*/
+		/*
+================
+waitingSince
+
+When the pending select or release left (its deadline less the reply
+window), or undefined: the world session's stall detector reads it with
+the other lanes' (#1472).
+================
+		*/
+		waitingSince(): number | undefined {
+			return pending ? pending.deadline - REPLY_TIMEOUT_MS : undefined;
+		},
 		step( now: number ) {
 			if ( !pending || now < pending.deadline ) return false;
 			// B4B3 has no identity. Reusing this channel after a missing release

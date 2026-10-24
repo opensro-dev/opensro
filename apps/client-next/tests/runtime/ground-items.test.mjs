@@ -466,13 +466,20 @@ test("a correction naming the ridden mount stops the rider there, and only the r
 	// Another COS's correction moves that COS only.
 	core.receive( correction( 9, 900, 900 ), 10 );
 	const unrelated = pose();
-	assert.ok( unrelated === undefined || unrelated.x !== 900, "an unridden COS's correction left the rider alone" );
+	// No gameplay correction at all: correcting the rider from its own mount's
+	// row would stop a walk the server never stopped.
+	assert.equal( unrelated, undefined, "an unridden COS's correction left the rider alone" );
 	// cosabnormal StopMove names the transport's own GID (a stunned mount):
 	// 775B50 halts that mover, so the rider stops where the server holds it.
 	core.receive( correction( 8, 500, 600 ), 20 );
 	const stopped = defined( pose() );
 	assert.equal( stopped.x, 500 );
 	assert.equal( stopped.z, 600 );
+	// 775B50 leaves a dead COS's mover alone (+0x263 == 2, 777B60 channel 0).
+	core.receive( { opcode: 0x3122, payload: Buffer.from( [ 8, 0, 0, 0, 0, 2 ] ) }, 30 );
+	flush();
+	core.receive( correction( 8, 700, 700 ), 40 );
+	assert.equal( pose(), undefined, "a dead mount's correction does not move the rider" );
 	core.dispose();
 });
 

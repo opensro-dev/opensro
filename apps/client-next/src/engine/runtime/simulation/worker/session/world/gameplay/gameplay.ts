@@ -4384,14 +4384,20 @@ Packet handling must not depend on which HUD panel is currently open.
 outstandingSince
 
 When the oldest request still waiting for its answer left (a movement
-command or the open inventory transaction), or undefined. The world
+command, the open inventory transaction or a pending target select or
+release), or undefined. The world
 session reads it to tell a stalled connection from a lost answer.
 ================
 		*/
+		noteInput: movement.noteInput,
 		outstandingSince(): number | undefined {
-			const moved = movement.oldestPendingSentAt();
-			if ( moved === undefined ) return inventorySince;
-			return inventorySince === undefined ? moved : Math.min( moved, inventorySince );
+			// Every lane whose lost answer resumes the session (world.ts
+			// lostAnswer): moves, the inventory transaction (mall purchases
+			// included, inventory busy()), and a pending target select or
+			// release (#1472).
+			const since = [ movement.oldestPendingSentAt(), inventorySince, targeting.waitingSince() ]
+				.filter( ( at ): at is number => at !== undefined );
+			return since.length ? Math.min( ...since ) : undefined;
 		},
 		/*
 ================
