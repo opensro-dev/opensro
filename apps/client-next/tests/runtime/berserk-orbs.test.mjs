@@ -148,7 +148,7 @@ test("violet clear and low detail discard launches without an arrival cue", () =
 	assert.deepEqual( o.step( entities, 1, new Set( [ 1 ] ), () => null, () => true, () => 1, 1 ), [] );
 	assert.deepEqual( sounds, [] );
 });
-test("EXP feedback uses the post-level divisor and malformed packets cannot advance authority", () => {
+test("EXP feedback uses the post-level divisor and a truncated fixed part cannot advance authority", () => {
 	const o = createFeedback();
 	o.bootstrap( { character: { level: 1, experience: 110 } } );
 	const p = Buffer.alloc( 15 );
@@ -156,7 +156,7 @@ test("EXP feedback uses the post-level divisor and malformed packets cannot adva
 	p.writeInt32LE( 24, 4 );
 	p.writeInt32LE( 100, 8 );
 	p.writeUInt16LE( 3, 13 );
-	assert.throws( () => o.receive( 0x30d2, p.subarray( 0, 14 ), 2 ) );
+	assert.throws( () => o.receive( 0x30d2, p.subarray( 0, 12 ), 2 ), /Truncated experience update/ );
 	const r = o.receive( 0x30d2, p, 2 );
 	assert.equal( defined( r ).level, 2 );
 	assert.equal( defined( r ).experience, "16" );
@@ -170,6 +170,34 @@ test("EXP feedback uses the post-level divisor and malformed packets cannot adva
 	assert.deepEqual( defined( o.receive( 0x30b3, g, 2 ) ).events, [ { kind: "orb-gauge", value: 2 }, {
 		kind: "orb-clear"
 	} ] );
+});
+
+test("an experience update whose walk disagrees on the stat-point tail still applies", () => {
+	// 779620 never checks the frame length: it reads the tail only when
+	// its own walk crosses. A replayed update on kept state can disagree
+	// either way; the delta still applies and the points stay previous.
+	const crossing = Buffer.alloc( 13 );
+	crossing.writeUInt32LE( 1 );
+	crossing.writeInt32LE( 24, 4 );
+	crossing.writeInt32LE( 100, 8 );
+	for ( const frame of [ crossing, Buffer.concat( [ crossing, Buffer.of( 3 ) ] ) ] ) {
+		const o = createFeedback();
+		o.bootstrap( { character: { level: 1, experience: 110 } } );
+		const r = o.receive( 0x30d2, frame, 2 );
+		assert.equal( defined( r ).level, 2 );
+		assert.equal( defined( r ).experience, "16" );
+		assert.equal( defined( r ).statPoints, undefined );
+	}
+	const o = createFeedback();
+	o.bootstrap( { character: { level: 2, experience: 16 } } );
+	const surplus = Buffer.alloc( 15 );
+	surplus.writeUInt32LE( 1 );
+	surplus.writeInt32LE( 1, 4 );
+	surplus.writeUInt16LE( 9, 13 );
+	const r = o.receive( 0x30d2, surplus, 2 );
+	assert.equal( defined( r ).level, 2 );
+	assert.equal( defined( r ).experience, "17" );
+	assert.equal( defined( r ).statPoints, undefined );
 });
 
 test("rejected indraft assets retire once and cannot repeat or retain arrived voices", () => {
