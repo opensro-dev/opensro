@@ -285,6 +285,7 @@ import { createPetTraining } from "./pet-training/pet-training";
 import type { GameplayCommand, GameplayState } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
 import { nearestPickable } from "@/engine/foundation/gameplay/pickup-nearest";
+import { isMovementInput } from "@/engine/foundation/gameplay/movement-input";
 import {
 	INVENTORY_JOURNAL_ENTRY,
 	INVENTORY_JOURNAL_LOCAL,
@@ -1649,6 +1650,10 @@ state here before a command can claim a native wire conversation.
 			}
 			dirty = true;
 			soundClock = now;
+			// Record the movement input as processed before any gate below can
+			// hold or refuse it (#1441a): the published sequence says which
+			// inputs the worker's pose already reflects.
+			if ( isMovementInput( command ) && command.inputSeq !== undefined ) movement.noteInput( command.inputSeq );
 			if ( command.kind === "local-notice" ) {
 				// A refusal the UI found before sending (guild-names.ts) joins the
 				// notices the server's refusals use, so both show alike.

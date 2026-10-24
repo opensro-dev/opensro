@@ -14,6 +14,7 @@ import { PROTOCOL_VERSION, readSnapshot } from "@/engine/contracts/simulation";
 import type { WorkerMessage, HostMessage } from "@/engine/contracts/simulation";
 import type { SimulationHost, SimulationObservation } from "@/engine/contracts/runtime";
 import { NET_JOURNAL_FIELDS } from "@/engine/contracts/network";
+import { createMovementInputSequence } from "@/engine/foundation/gameplay/movement-input";
 // The bug report's frame journal keeps at least this many recent frames.
 const NET_JOURNAL_KEPT = 8192;
 
@@ -31,6 +32,8 @@ export function createSimulationHost(): SimulationHost {
 	let worldBatch: import("@/engine/contracts/world").WorldBatch | null = null, worldSequence = 0;
 	let sessionState: SessionState | null = null;
 	let lastInputSent = 0, lastInputAccepted = 0;
+	// Movement inputs to the worker carry a sequence number (#1441a).
+	const movementInputs = createMovementInputSequence();
 	let receivedAtMs = 0, clock: import("@/engine/contracts/runtime").ClockSample | undefined;
 	let deliveryWaiters: (() => void)[] = [];
 	// The transport's frame journal (network.ts), oldest first, for bug reports.
@@ -143,7 +146,10 @@ session
 		*/
 		session( command ) {
 			if ( !disposed && !failure ) {
-				send( { kind: "session", command } );
+				const stamped = command.kind === "gameplay" ?
+					{ ...command, command: movementInputs.stamp( command.command ) } :
+					command;
+				send( { kind: "session", command: stamped } );
 			}
 		},
 		/*
