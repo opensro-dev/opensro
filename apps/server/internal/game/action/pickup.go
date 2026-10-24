@@ -10,9 +10,11 @@ package action
 
 import (
 	"math"
-	"opensro.online/server/internal/domain"
 	"time"
 
+	log "github.com/sirupsen/logrus"
+
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
@@ -262,6 +264,15 @@ func (rt *Runtime) grantPickupTo(g pickupGrant) (result OpResult) {
 		var fault *inventory.Fault
 		grant, fault = inv.GrantStack(groundInventoryItem(groundItem, stack), stackCap)
 		if fault != nil {
+			if fault.Code == wire.ErrCodeStorageFull {
+				// B-11: a full-bag refusal is honest only with the bag
+				// state in the log; a repeat then separates "genuinely
+				// full" from a client that lost earlier grant answers.
+				log.WithField("character", character.Name).
+					WithField("occupied", inv.Len()).
+					WithField("capacity", inv.BagEnd()).
+					Warn("pickup: ground item refused, bag full")
+			}
 			result = pickupRefusal(fault.Code)
 			return false
 		}

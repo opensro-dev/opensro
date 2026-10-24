@@ -13,11 +13,14 @@ package action
 
 import (
 	"fmt"
+	"reflect"
+	"sort"
+
+	log "github.com/sirupsen/logrus"
+
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
-	"reflect"
-	"sort"
 )
 
 /*
@@ -136,6 +139,15 @@ func (rt *Runtime) planInventoryItemsGrant(
 		for item.Quantity > 0 {
 			result, fault := inv.GrantStack(item, rt.maxStackFor(item.TypeFlags, item.Codename))
 			if fault != nil {
+				if fault.Code == wire.ErrCodeStorageFull {
+					// B-11: log the bag state behind a full-bag grant
+					// refusal so a repeat separates "genuinely full"
+					// from a client that lost earlier grant answers.
+					log.WithField("character", c.Name).
+						WithField("occupied", inv.Len()).
+						WithField("capacity", inventory.BagEnd(c)).
+						Warn("quest inventory: grant refused, bag full")
+				}
 				return nil, nil, fmt.Errorf("quest reward inventory: %w", fault)
 			}
 			item.Quantity = result.GroundRemainder
