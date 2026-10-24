@@ -40,6 +40,19 @@ test("a refused stone compound shows its category 0x17 reason (0xB16F [2, 9])", 
 
 /*
 ================
+batch compound refusal
+================
+*/
+test("a refused batch compound step shows the same category 0x17 reason (0x3359 [2, 6])", () => {
+	// v1.150 registers 0x3359 on 0xB16F's handler (74FF50), refusal arm included.
+	const batch = alchemyNotice( 0x3359, Uint8Array.of( 2, 6 ) );
+	assert.ok( batch, "a refused batch step must raise a notice" );
+	assert.deepEqual( batch, alchemyNotice( 0xb16f, Uint8Array.of( 2, 6 ) ) );
+	assert.equal( alchemyNotice( 0x3359, Uint8Array.of( 1, 0 ) ), null );
+});
+
+/*
+================
 dissolve refusal
 ================
 */

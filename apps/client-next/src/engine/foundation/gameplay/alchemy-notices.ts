@@ -34,7 +34,8 @@ The answer's own length is checked by its inventory owner.
 ================
 */
 export function alchemyNotice( opcode: number, payload: Uint8Array ): SystemNotice | null {
-	if ( opcode === 0xb16f || opcode === 0xb549 ) {
+	// 0x3359 (a timed batch step's answer) shares 0xB16F's handler 74FF50.
+	if ( opcode === 0xb16f || opcode === 0x3359 || opcode === 0xb549 ) {
 		if ( payload.length !== 2 || payload[0] !== ALCHEMY_REFUSED ) return null;
 		return constantNativeNotice( COMPOUND_NOTICE_CATEGORY, payload[1]! );
 	}
