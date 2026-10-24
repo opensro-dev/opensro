@@ -8,9 +8,10 @@ A 0xB06D success whose type no inventory arm applies means the server
 granted or moved something this client cannot account for; the rendered
 bag would drift from the server's until pickups refuse as full against
 visibly free slots. The inventory declares itself desynchronized (the
-timeout lane's state) so the next bootstrap rebuilds it. A late
-exchange table answer after the window closed is the one benign
-exception: it moves nothing in the bag and stays unclaimed.
+timeout lane's state) so the next bootstrap rebuilds it. Two benign
+exceptions stay unclaimed, neither moving the bag: a late exchange
+table answer after the window closed, and a late warehouse gold answer
+whose amount lived only in the pending that already settled it.
 
 ===========================================================================
 */
@@ -57,6 +58,45 @@ test("a success byte with no result type changes nothing and resyncs nothing", (
 test("a late exchange table answer after the window closed stays unclaimed", () => {
 	const owner = fixture();
 	for ( const type of [ 4, 5, 0x0d ] ) {
+		assert.equal( owner.receive( 0xb06d, Uint8Array.of( 1, type, 0, 0, 0, 0 ) ), false );
+	}
+	// No resync was declared: a send fails only the ordinary way.
+	assert.throws( () => owner.move( 13, 14, 1, 0 ), /Inventory command unavailable/ );
+});
+
+test("a claimed warehouse gold answer settles against its pending", () => {
+	const owner = fixture();
+	/** @type {import("../../src/engine/foundation/gameplay/storage-room.ts").StorageRoom} */
+	const room = { npc: 7, phase: "open", capacity: 45, gold: "1000", items: [] };
+	// STORAGE_GOLD_DEPOSIT (0x0C): storageMove arms the pending the answer
+	// settles against; the moved amount is the pending's, not the frame's.
+	owner.storageMove( room, { type: 0x0c, source: 0, destination: 0, quantity: 0, gold: 250 }, 0, new Map() );
+	const answer = new Uint8Array( 6 );
+	answer[0] = 1;
+	answer[1] = 0x0c;
+	new DataView( answer.buffer ).setUint32( 2, 250, true );
+	assert.equal( owner.storageSettle( room, answer, new Map() )?.gold, "1250" );
+	// The guild warehouse carries the same deposit on wire type 0x20.
+	const guildOwner = fixture();
+	/** @type {import("../../src/engine/foundation/gameplay/storage-room.ts").StorageRoom} */
+	const guildRoom = { npc: 7, guild: true, phase: "open", capacity: 45, gold: "500", items: [] };
+	guildOwner.storageMove(
+		guildRoom,
+		{ type: 0x0c, source: 0, destination: 0, quantity: 0, gold: 100 },
+		0,
+		new Map()
+	);
+	answer[1] = 0x20;
+	new DataView( answer.buffer ).setUint32( 2, 100, true );
+	assert.equal( guildOwner.storageSettle( guildRoom, answer, new Map() )?.gold, "600" );
+});
+
+test("a late warehouse gold answer with no pending stays unclaimed", () => {
+	const owner = fixture();
+	// Personal withdraw/deposit (0x0B/0x0C) and the guild wire pair
+	// (0x20/0x21): with no pending the amount exists nowhere, nothing can
+	// be applied and the bag never moves, so no resync is declared.
+	for ( const type of [ 0x0b, 0x0c, 0x20, 0x21 ] ) {
 		assert.equal( owner.receive( 0xb06d, Uint8Array.of( 1, type, 0, 0, 0, 0 ) ), false );
 	}
 	// No resync was declared: a send fails only the ordinary way.
