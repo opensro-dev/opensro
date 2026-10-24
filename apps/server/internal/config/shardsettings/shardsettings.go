@@ -205,8 +205,10 @@ var Settings = []Setting{
 	// deployment default stays native ("off", town gates refuse a transport).
 	{Env: "SRO_JOB_GOODS_TELEPORT", NomadVar: "job_goods_teleport", Default: "off"},
 	{Env: "SRO_ELIXIR_DROPS_OFF", NomadVar: "elixir_drops_off", Default: "on", Catalogue: true},
-	// Owner, 2026-10-14: alchemy materials no longer drop; "off" is native.
-	{Env: "SRO_ALCHEMY_MATERIAL_DROPS_OFF", NomadVar: "alchemy_material_drops_off", Default: "on", Catalogue: true},
+	// Community vote, 2026-10-24: the monster parts drop again, so the
+	// deployment default is native ("off"); "on" restores the 2026-10-14
+	// beta removal.
+	{Env: "SRO_ALCHEMY_MATERIAL_DROPS_OFF", NomadVar: "alchemy_material_drops_off", Default: "off", Catalogue: true},
 	{Env: "SRO_BETA_DROP_CAP", NomadVar: "beta_drop_cap", Default: "16", Catalogue: true, Validation: ValueBetaGrowth},
 	// Owner, 2026-10-19: gold falls at 100 times retail (was 250).
 	{Env: "SRO_BETA_GOLD_RATE", NomadVar: "beta_gold_rate", Default: "100", Catalogue: true, Validation: ValueBetaGrowth},

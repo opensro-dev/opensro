@@ -128,6 +128,7 @@ func (rt *Runtime) fortressConstructOnZone(division string, c *enterworld.Charac
 		built, _ := rt.structureOnZone(division, world, zone)
 		rt.storeStructureRow(division, domain.FortressStructureRecord{FortressID: fortressID, EventStructID: zone,
 			RefObjID: ref.RefObjID, OwnerGuildID: guild, HP: built.CurrentHP})
+		rt.pushStructureRoster(division, fortressID, world)
 		reply := wire.NewWriter(10).U8(request.Action).U8(1).U32(fortressID).U32(zone)
 		return OpResult{Frames: []wire.Frame{{Opcode: opFortressInteractionResult, Payload: reply.Payload()}}}
 	}

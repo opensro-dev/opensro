@@ -228,13 +228,15 @@ func TestGMSiegeStructureAndPeriodCommands(t *testing.T) {
 		pushed = append(pushed, frames...)
 	}
 
-	// STRUCT_BUILD (0x0A) builds the vacant barricade without a selected aide.
+	// STRUCT_BUILD (0x0A) builds the vacant barricade without a selected aide;
+	// the fortress world (the GM included) hears the roster first, as after
+	// any construction, then the GM gets the answer.
 	if !rt.SiegeStructureGM(testDivision, c.Name, siege.ActionConstruct, jangan, testBarricadeZone, 0) {
 		t.Fatal("GM STRUCT_BUILD failed on vacant barricade zone")
 	}
 	wantBuild := wire.NewWriter(10).U8(siege.ActionConstruct).U8(1).U32(jangan).U32(testBarricadeZone).Payload()
-	if len(pushed) != 1 || !bytes.Equal(pushed[0].Payload, wantBuild) {
-		t.Fatalf("GM STRUCT_BUILD frames = %+v, want % x", pushed, wantBuild)
+	if len(pushed) != 2 || pushed[0].Payload[0] != siege.SubtypeStructureRoster || !bytes.Equal(pushed[1].Payload, wantBuild) {
+		t.Fatalf("GM STRUCT_BUILD frames = %+v, want the roster then % x", pushed, wantBuild)
 	}
 
 	// STRUCT_UPGRADE (0x0B) checks 634350 refusal codes in order:

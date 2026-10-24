@@ -184,7 +184,7 @@ func publicRules() publicstats.RulesResponse {
 			{Flag: progression.EnvAlchemyMaterialDropsOff, On: progression.MaterialDropsFromEnv().Off(),
 				Native: "Monsters drop alchemy materials (claws, hides and other monster parts).",
 				Now:    "Alchemy materials no longer drop.",
-				Why:    "On the beta the stones they once made are bought, so the materials only piled up on the ground."},
+				Why:    "A community vote brought the parts back, so they drop as in the original; this only applies if the removal is switched back on."},
 			{Flag: action.EnvBetaSilk, On: silkRate > 0,
 				Native: "Silk is bought for the account.",
 				Now:    "Every full hour in the world earns silk, up to a cap.",
