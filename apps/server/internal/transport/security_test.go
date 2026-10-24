@@ -111,7 +111,7 @@ func TestInboundFrameLimitsApplyAcrossConnImplementations(t *testing.T) {
 			t.Fatal(err)
 		}
 		conn := newFakeConn(false)
-		if err := session.attach(conn, false); err != nil {
+		if err := session.attach(conn, false, 0); err != nil {
 			t.Fatal(err)
 		}
 		conn.inbound <- Frame{Opcode: 0x727A, Payload: make([]byte, MaxInboundFrameBytes)}
@@ -127,7 +127,7 @@ func TestInboundFrameLimitsApplyAcrossConnImplementations(t *testing.T) {
 			t.Fatal(err)
 		}
 		conn := newFakeConn(false)
-		if err := session.attach(conn, false); err != nil {
+		if err := session.attach(conn, false, 0); err != nil {
 			t.Fatal(err)
 		}
 		conn.inbound <- Frame{Opcode: OpPing, Payload: make([]byte, MaxPingPayloadBytes+1)}

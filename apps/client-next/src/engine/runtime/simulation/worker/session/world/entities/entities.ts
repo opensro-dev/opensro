@@ -243,14 +243,17 @@ export function createEntities(
 	================
 	*/
 	function resyncEvents(): WorldEvent[] {
-		const rebuilt: WorldEvent[] = [ { kind: "reset", epoch: ++epoch } ];
+		// The batch is a journal rebuild, not a world entry: its reset and
+		// republished spawns carry resync so the presentation updates the
+		// characters it already holds in place (#1481).
+		const rebuilt: WorldEvent[] = [ { kind: "reset", epoch: ++epoch, resync: true } ];
 		if ( local ) {
 			rebuilt.push( {
 				kind: "bootstrap",
 				value: { protocolVersion: bootstrapProtocol, character: { name: localName }, localPlayerEntry: local }
 			} );
 		}
-		for ( const entity of entities.values() ) rebuilt.push( { kind: "spawn", entity } );
+		for ( const entity of entities.values() ) rebuilt.push( { kind: "spawn", entity, resync: true } );
 		rebuilt.push( { kind: "synchronized", epoch } );
 		for ( const event of events ) {
 			if ( event.kind !== "spawn" && event.kind !== "state" && event.kind !== "despawn" ) {
