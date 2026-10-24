@@ -161,6 +161,7 @@
     "src/engine/runtime/renderer/weather/weather.ts": "src/engine/runtime/renderer/world/world.ts",
     "src/engine/runtime/ui/guide/resources.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/characters/pose-presentation.ts": "src/engine/runtime/characters/characters.ts",
+    "src/engine/runtime/characters/own-walk-interpolation.ts": "src/engine/runtime/characters/pose-presentation.ts",
     "src/engine/runtime/ui/hud/messages.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/unique-banner.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/quest-banner.ts": "src/engine/runtime/ui/ui.ts",
