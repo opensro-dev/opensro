@@ -183,6 +183,12 @@ import {
 	type SystemNotice
 } from "@/engine/foundation/gameplay/system-notices";
 import {
+	decodeFlagWarEvent,
+	flagWarNotice,
+	FLAG_WAR_LEVEL_MIN,
+	FLAG_WAR_MATCH_MS
+} from "@/engine/foundation/gameplay/flagwar";
+import {
 	ACADEMY_OPEN_FEE,
 	academyBootstrap,
 	academyCompulsoryGraduateRequest,
@@ -748,6 +754,10 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	let tradeStars = 0;
 	let noticeSequence = 0;
 	let notices: readonly SystemNotice[] = [];
+	// The flag-war event state (flagwar.ts owns the wire): the mission
+	// timer's end on the world clock, the flag carrier, and whether the
+	// last 0x7753 toggle was a sign-up (the join answer's text reads it).
+	let flagWarTimerEndsAt = 0, flagWarCarrierGid = 0, flagWarJoinExpected = false;
 	let progression: Progression = { masteries: [] };
 	const skillGroups = new Map<number, { group: number; level: number; }>();
 	let fortress = fortressBootstrap( {} ), musicMode = 0;
@@ -2176,6 +2186,23 @@ state here before a command can claim a native wire conversation.
 			}
 			if ( !localGid ) {
 				throw new Error( "Local player is not initialized" );
+			}
+			if ( command.kind === "flagwar-register" ) {
+				// 5D3630 refuses below level 20 locally and sends nothing;
+				// the refusal is the native level-error notice.
+				if ( (progression.level ?? 0) < FLAG_WAR_LEVEL_MIN ) {
+					notices = [ ...notices.slice( -99 ), {
+						key: "UIIT_MSG_FLAGWAR_GAME_JOIN_LEVEL_ERORR",
+						value: 0,
+						sequence: ++noticeSequence
+					} ];
+					dirty = true;
+					return null;
+				}
+				// The clicked row's mode says whether this toggle signs up
+				// (mode 1) or cancels (mode 2); the join answer reads it.
+				flagWarJoinExpected = targeting.state().targetFlagWarMode !== 2;
+				return sendFrame( { opcode: 0x7753, payload: new Uint8Array( 0 ) } );
 			}
 			if ( command.kind === "cos-shop-buy" || command.kind === "cos-shop-sell" ) {
 				const record = cosRecords.get( command.gid );
@@ -4208,6 +4235,26 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				// The flag-war event (4b2530): notices plus the mission
+				// timer and carrier the snapshot publishes. The own team
+				// arrives with the match work; null keeps scored-mission
+				// notices silent until then.
+				if ( frame.opcode === 0x30a9 ) {
+					const event = decodeFlagWarEvent( frame.payload );
+					if ( event ) {
+						if ( event.type === "missionStart" ) flagWarTimerEndsAt = now + FLAG_WAR_MATCH_MS;
+						else if ( event.type === "elapsed" ) {
+							flagWarTimerEndsAt = now + Math.max( 0, FLAG_WAR_MATCH_MS - event.ms );
+						} else if ( event.type === "timerStop" || event.type === "gameStart" ) {
+							flagWarTimerEndsAt = 0;
+						}
+						if ( event.type === "carrier" ) flagWarCarrierGid = event.gid;
+						const notice = flagWarNotice( event, flagWarJoinExpected, null );
+						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+						dirty = true;
+					}
+					return true;
+				}
 				const refusal = recallAppointmentNotice( frame.opcode, frame.payload ) ??
 					targetNotice( frame.opcode, frame.payload ) ?? portalNotice( frame.opcode, frame.payload ) ??
 					repairNotice( frame.opcode, frame.payload ) ??
@@ -4625,6 +4672,7 @@ The published plane when something changed since the last take, else null.
 				inventoryJournal,
 				...c,
 				...targeting.state(),
+				flagWar: { timerEndsAt: flagWarTimerEndsAt, carrierGid: flagWarCarrierGid },
 				...skillPress.state(),
 				betaPlayers: betaMap.players(),
 				petTraining: petTraining.state(),
@@ -4655,6 +4703,9 @@ World transfer retires spatial work while retaining character/session data.
 			quests.clearGathering();
 			approach = interactionApproachTransition( approach, { kind: "cancel" } );
 			returnScroll = undefined;
+			flagWarTimerEndsAt = 0;
+			flagWarCarrierGid = 0;
+			flagWarJoinExpected = false;
 			teleportMode = 0;
 			npcConversation.clear();
 			storage.close();

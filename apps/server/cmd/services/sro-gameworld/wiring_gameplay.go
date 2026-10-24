@@ -646,6 +646,15 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.GMSetSpeed {
 		log.Infof("gm: /SETSPEED ON (%s)", action.EnvGMSetSpeed)
 	}
+	// Capture the Flag (native): the daily start and the house minimum.
+	flagWar, err := action.FlagWarSettingsFromEnv()
+	if err != nil {
+		return err
+	}
+	game.items.FlagWar = flagWar
+	log.Infof("flag war: daily start %02d:%02d UTC, minimum %d players (%s, %s)",
+		flagWar.StartMinuteOfDay/60, flagWar.StartMinuteOfDay%60, flagWar.MinPlayers,
+		action.EnvFlagWarStartUTC, action.EnvFlagWarMinPlayers)
 	// A team death revives in place natively; "off" is the port-only town rule.
 	teamDeathRevive, err := action.TeamDeathReviveFromEnv()
 	if err != nil {

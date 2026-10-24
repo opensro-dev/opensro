@@ -145,6 +145,9 @@ export interface NpcTalkInput {
 	readonly canFortressTrainer?: boolean;
 	// jobRows are the job guild rows (job-guild.ts jobMenuRows).
 	readonly jobRows?: readonly { readonly id: string; readonly label: string; }[];
+	// flagWarMode is the grant byte the reference server writes for the registration
+	// NPC: 1 offers sign-up, 2 offers cancel (5D3630, action 0x38).
+	readonly flagWarMode?: number;
 }
 
 /*
@@ -263,6 +266,12 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 					// 5D9750 adds row 0x28 straight after row 0x27.
 					...(input.canGachaOperator ?
 						[ { id: "gacha-exchange", label: copy( "SN_TALK_CH_GACHA_OPERATOR_2" ) } ] :
+						[]),
+					// 5D3630 appends the flag-war row after the service menu.
+					...(input.flagWarMode === 1 ?
+						[ { id: "npc-flagwar", label: copy( "UIIT_MSG_FLAGWAR_GAME_JOIN_REQ" ) } ] :
+						input.flagWarMode === 2 ?
+						[ { id: "npc-flagwar", label: copy( "UIIT_MSG_FLAGWAR_GAME_JOIN_REQ_CANCEL" ) } ] :
 						[])
 				]),
 			{ id: "npc-talkend", label: copy( "UIIT_STT_NPC_CHATTING_WND_TALKEND" ) }

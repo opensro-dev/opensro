@@ -170,6 +170,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		step("retireActionSessions", func() { out = append(out, rt.retireActionSessions()...) })
 		// Last, so a notice any step above queued leaves this same tick.
 		frames("drainAnnouncements", rt.drainAnnouncements)
+		frames("advanceFlagWar", rt.advanceFlagWar)
 		return out
 	}
 }

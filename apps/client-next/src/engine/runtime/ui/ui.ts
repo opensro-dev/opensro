@@ -4771,6 +4771,9 @@ export function createUi(
 				focus = null;
 				goldAmount = "";
 			}
+		} else if ( id === "npc-flagwar" ) {
+			// 5D3630 action 0x38: the worker gates the level and sends 0x7753.
+			sendGameplay( { kind: "flagwar-register" } );
 		} else if ( id === "magic-option-open" && view.gameplay?.target ) {
 			// 5DA1B0 case 0x2F; B338 lock 0x80000000 then shows the window.
 			sendGameplay( { kind: "magic-option-open", gid: view.gameplay.target } );
@@ -15062,6 +15065,7 @@ export function createUi(
 									!!(fortressStaffView().flags & Number( flag ))
 							}) ) :
 							null,
+						flagWarMode: game.targetFlagWarMode ?? 0,
 						canMagicOption: !!(capabilities & AVATAR_MAGIC_OPTION_FUNCTION),
 						canGacha: !!(capabilities & GACHA_FUNCTION),
 						canGachaOperator: !!(capabilities & GACHA_OPERATOR_FUNCTION),

@@ -102,6 +102,8 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 	// refusals are silent - the B06D error channel below would be a wrong
 	// conversation for a select.
 	rt.registerObjectSelect(hub)
+	// 0x7753 toggles Capture the Flag registration (flagwar.go).
+	hub.Handle(wire.OpFlagWarRegisterRequest, rt.hubHandler(hub, rt.HandleFlagWarRegister))
 	// 0x74B3 releases only the exact selection recorded by 0x745A and
 	// answers retail's 0xB4B3 mode-1 close sweep.
 	rt.registerTargetRelease(hub)
