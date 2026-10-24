@@ -24,7 +24,7 @@ import { skillMotionResolveAnimation } from "@/engine/foundation/animation/skill
 import { weaponAnimationSet } from "@/engine/foundation/animation/animation-metadata";
 import { characterHeadingYaw } from "@/engine/foundation/math/angles";
 import { movementGait } from "@/engine/foundation/gameplay/native-movement";
-import { castFacing } from "@/engine/foundation/gameplay/cast-facing";
+import { approachHeading, castFacing } from "@/engine/foundation/gameplay/cast-facing";
 import type { CharacterLayer } from "@/engine/contracts/character";
 import { MOVEMENT_MODE_SEATED, type EntityState } from "@/engine/contracts/world";
 import type { ActorAppearance, ActorFrame, ActorOwner, ActorPass } from "./internal/presentation-contract";
@@ -34,6 +34,10 @@ import { worldAudioPosition } from "@/engine/foundation/world/world-space";
 const PROTECTED_ANIMATION_DISTANCE = 300;
 const STALL_ACTION_MASK = 0x8000;
 const STALL_MOTION = 80;
+// 86CBA0's yaw rate in heading words: 3*pi rad/s (turn in
+// pose-presentation.ts), the rate a body turns back at when a cast
+// facing leaves its yaw behind.
+const CAST_YAW_RELEASE_WORDS_PER_SECOND = 98304;
 
 /*
 ================
@@ -96,6 +100,7 @@ export function createActorMotion( owner: ActorOwner ) {
 				actionLayersByActor,
 				animationDeltaMs,
 				castByActor,
+				drawnPoses,
 				entitiesByGid,
 				gameplay,
 				hitByActor,
@@ -179,12 +184,26 @@ export function createActorMotion( owner: ActorOwner ) {
 				revision: (localMover( entity.gid ) ? gameplay!.movementRevision : entity.movementRevision) ?? 0,
 				seconds
 			} );
-			let renderPose = posePresentation.pose(
-				entity.gid,
-				state.castFacing ? { ...nativePose, angle: Math.round( state.castFacing.angle ) % 65536 } : nativePose,
-				seconds,
-				dead && entity.moving === false
-			);
+			// The frame's drawn pose, resolved once in presentPoses
+			// (#1442c); the tracked cast yaw (8DC440) still turns its
+			// angle on top, as it already did over a held pose.
+			let renderPose = drawnPoses.get( entity.gid ) ?? nativePose;
+			if ( state.castFacing ) {
+				renderPose = { ...renderPose, angle: Math.round( state.castFacing.angle ) % 65536 };
+				// 8DC440 wrote this yaw (CICharactor_SetYaw): it outlives
+				// the facing, and the body turns back from it when the
+				// facing ends instead of snapping to the drawn angle.
+				state.castYawRelease = { angle: state.castFacing.angle, at: seconds };
+			} else if ( state.castYawRelease ) {
+				const release = state.castYawRelease, target = renderPose.angle;
+				const turned = approachHeading(
+					release.angle,
+					target,
+					Math.max( 0, seconds - release.at ) * CAST_YAW_RELEASE_WORDS_PER_SECOND
+				);
+				renderPose = { ...renderPose, angle: Math.round( turned ) % 65536 };
+				state.castYawRelease = turned === target ? undefined : { angle: turned, at: seconds };
+			}
 			if ( hit && hit.damage > 0 && state.hitToken !== hit.token ) {
 				state.hitToken = hit.token;
 				state.hitStarted = hit.at;
@@ -250,47 +269,9 @@ export function createActorMotion( owner: ActorOwner ) {
 			const waiting = !dead && waitingActors.has( entity.gid );
 			const activeCast = !!cast && cast.cancelledAtMs === undefined &&
 				(actionLayersByActor.get( entity.gid )?.length ?? 0) > 0;
-			// 8DD550 drives skill travel through 8797C0 and 86D5C0 even
-			// after state 9 exits. Its position owner is not the walk hold.
-			if ( state.navigationHold ) {
-				const hold = state.navigationHold.logical;
-				const samePoint = hold.regionId === nativePose.regionId && hold.x === nativePose.x &&
-					hold.y === nativePose.y && hold.z === nativePose.z;
-				if ( displaced || dead || entity.mountedOn ) {
-					state.navigationHold = undefined;
-				} else if ( state.navigationHold.revision !== movementRevision ) {
-					// A stationary heading correction (0xB2F5 before the next cast in
-					// a chain) bumps movementRevision without moving the settled
-					// server position. Rebind the hold so the body does not decay to
-					// the server pose and leave ground cast VFX behind at the hold.
-					if ( !requestedMoving && (waiting || activeCast || samePoint) ) {
-						state.navigationHold.revision = movementRevision;
-						state.navigationHold.logical = { ...nativePose };
-					} else {
-						// Native stops the walk at WAIT and has one pose; the port's logical
-						// walk may have moved on under the hold. A new walk releases it from
-						// the held pose at walking speed (posePresentation.carry): jumping
-						// there in one frame read as the camera height snapping on a slope.
-						// Skill travel, death and a ride own the position themselves.
-						posePresentation.carry( entity.gid, state.navigationHold.pose );
-						renderPose = posePresentation.pose(
-							entity.gid,
-							state.castFacing ?
-								{ ...nativePose, angle: Math.round( state.castFacing.angle ) % 65536 } :
-								nativePose,
-							seconds,
-							false
-						);
-						state.navigationHold = undefined;
-					}
-				}
-			}
-			if ( state.navigationHold ) {
-				// The hold freezes XYZ; the yaw keeps tracking the cast
-				// target (8DC440 castFacing), as renderPose already does.
-				renderPose = { ...state.navigationHold.pose, angle: renderPose.angle };
-				moving = false;
-			}
+			// The navigation hold itself resolved in presentPoses
+			// (#1442c); a surviving hold still stops the walk's gait.
+			if ( state.navigationHold ) moving = false;
 			const activePosture = presentationState.idleStates.get( entity.gid )?.posture;
 			const derivedMask = dead ?
 				2 :
