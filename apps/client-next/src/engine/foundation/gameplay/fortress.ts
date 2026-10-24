@@ -27,6 +27,7 @@ import {
 	FORTRESS_SERVICE_REPLY,
 	type FortressServiceReply
 } from "./fortress-services";
+import type { FortressZoneRecord } from "./fortress-map";
 
 // Enabled v1.150 siegefortressbattlerank.txt rows, in unsigned threshold
 // order (7E1C60); names are the 7BB8C0 switch, icons are row column 5.
@@ -115,6 +116,30 @@ export interface FortressState {
 	// application answers also reach fortressManagerReply.
 	readonly service?: FortressServiceReply;
 	readonly serviceSequence?: number;
+	// Each event zone's structure (fortress-map.ts): the 0x0F roster fills a
+	// record, 0x0B moves its state word and the 0x18 list its minutes.
+	readonly zones?: readonly FortressZoneRecord[];
+}
+
+/*
+================
+foldZone
+
+Replaces or adds one zone's record, keeping the fields the change does not
+carry.
+================
+*/
+function foldZone(
+	zones: readonly FortressZoneRecord[],
+	zone: number,
+	change: Partial<FortressZoneRecord>
+): FortressZoneRecord[] {
+	const at = zones.findIndex( row => row.zone === zone );
+	const base = at < 0 ? { zone, ref: 0, hp: 0, state: 0, guild: "", minutes: 0 } : zones[at]!;
+	const next = [ ...zones ], row = { ...base, ...change, zone };
+	if ( at < 0 ) next.push( row );
+	else next[at] = row;
+	return next;
 }
 
 /*
@@ -176,9 +201,17 @@ state; null for frames it does not own.
 export function fortressPacket( state: FortressState, frame: WireFrame, now = 0 ): FortressState | null {
 	if ( frame.opcode === FORTRESS_SERVICE_REPLY ) {
 		const service = fortressServiceReply( frame );
+		// 754A40 case 0x18 stores each zone's minutes on its record (+0x1C).
+		let zones = state.zones;
+		if ( service?.result === 1 && service.action === 0x18 ) {
+			for ( const row of service.structures ?? [] ) {
+				zones = foldZone( zones ?? [], row.reference, { minutes: row.remainingMinutes } );
+			}
+		}
 		return service ?
 			{
 				...state,
+				...(zones ? { zones } : {}),
 				service,
 				serviceSequence: (state.serviceSequence ?? 0) + 1,
 				production: fortressProductionSnapshot(
@@ -247,6 +280,22 @@ export function fortressPacket( state: FortressState, frame: WireFrame, now = 0 
 		u32();
 		const localKills = u32(), localDeaths = u32();
 		next = { ...state, localKills, localDeaths };
+	} else if ( subtype === 0x0f ) {
+		// 76C870 case 0xF: every structure of the fortress world, by zone.
+		u32();
+		const count = u8();
+		let zones = state.zones ?? [];
+		for ( let i = 0; i < count; i++ ) {
+			const zone = u32(), ref = u32(), hp = u32(), word = u16(), guild = u8() !== 0 ? str() : "";
+			zones = foldZone( zones, zone, { ref, hp, state: word, guild } );
+		}
+		next = { ...state, zones };
+	} else if ( subtype === 0x0b ) {
+		// 76C870 case 0xB moves the zone record's state word (+0x20) too.
+		const row = fortressStructureState( frame );
+		if ( !row ) return null;
+		o = p.length;
+		next = { ...state, zones: foldZone( state.zones ?? [], row.eventStructId, { state: row.state } ) };
 	} else if ( subtype === 0x12 ) {
 		const staffFortress = u32();
 		next = { ...state, staffFortress, staffFlags: u8() };
