@@ -681,7 +681,9 @@ import {
 	DEBUG_COMMAND_MESSAGE_CLEAR,
 	DEBUG_COMMAND_NULL,
 	DEBUG_COMMAND_PLAYER_COUNT,
+	DEBUG_COMMAND_SET_FIELD_OF_VIEW,
 	debugCommand,
+	debugFieldOfView,
 	type DebugCommand
 } from "@/engine/foundation/ui/debug-commands";
 import { messageBox } from "@/engine/foundation/ui/message-box";
@@ -875,6 +877,7 @@ rather than as another createUi parameter.
 */
 export interface UiExtensions {
 	bugReport?: BugReportControl | null;
+	setWorldFieldOfView?: ( degrees: number ) => void;
 	saveExperimental?: ( value: ExperimentalOptions ) => void;
 	saveWindowPositions?: ( value: WindowPositions ) => void;
 }
@@ -2499,9 +2502,8 @@ export function createUi(
 	================
 	runDebugCommand
 
-	CGInterface_OnCommandMessage (690C40) for the console family. The other
-	command.txt families (camera, weather, time, render toggles) are not
-	ported yet and leave the line as typed.
+	CGInterface_OnCommandMessage for the console family, bag-slot use and FOV.
+	The remaining command.txt families leave the line as typed.
 	================
 	*/
 	function runDebugCommand( command: DebugCommand ) {
@@ -2527,6 +2529,11 @@ export function createUi(
 				// CIFInventory_ExecuteItemAction(slot, -1, -1) as a double click.
 				if ( command.args.length === 1 ) useInventorySlot( commandInteger( command.args[0]! ) );
 				break;
+			case DEBUG_COMMAND_SET_FIELD_OF_VIEW: {
+				const degrees = debugFieldOfView( command.args );
+				if ( degrees !== null ) extensions.setWorldFieldOfView?.( degrees );
+				break;
+			}
 		}
 	}
 	/*

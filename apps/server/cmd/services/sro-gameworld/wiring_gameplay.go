@@ -265,6 +265,7 @@ func newGameplayPlane(
 		return nil, err
 	}
 	water.SetClosedObjectRescue(movement.ClosedObjectRescueFromEnv())
+	water.SetDeepWaterRefusal(movement.DeepWaterRefusalFromEnv())
 	// Native dungeon interest is the 3x3 message-block neighbourhood of each
 	// dungeon's DOF grid (worldgeom dungeon_grid.go). Installed before the
 	// first session so every interest query sees the same table.
@@ -670,6 +671,10 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.items.TransportFollow = action.TransportFollowFromEnv()
 	if game.items.TransportFollow {
 		log.Infof("cos: a dismounted trade transport follows its trader (%s)", action.EnvTransportFollow)
+	}
+	game.items.TransportFollowTether = action.TransportFollowTetherFromEnv()
+	if game.items.TransportFollow && game.items.TransportFollowTether {
+		log.Infof("cos: a following transport keeps its trader within 100 m (%s)", action.EnvTransportFollowTether)
 	}
 	// Port-only, not native: town teleports admit a trader's transport.
 	game.items.JobGoodsTeleport = action.JobGoodsTeleportFromEnv()

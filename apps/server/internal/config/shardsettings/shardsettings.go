@@ -80,6 +80,9 @@ var Settings = []Setting{
 	// Owner, 2026-10-15: a login inside a closed object (a tree trunk) is
 	// rescued to the nearest open ground.
 	{Env: "SRO_CLOSED_OBJECT_RESCUE", NomadVar: "closed_object_rescue", Default: "on"},
+	// Port-only, not native: the deep-water destination refusal. Off, as the
+	// original server; on, a character on a deep seabed was stuck there.
+	{Env: "SRO_DEEP_WATER_REFUSAL", NomadVar: "deep_water_refusal", Default: "off"},
 	// Owner, 2026-10-14: the job-kill streak, its bonuses and bounty.
 	{Env: "SRO_MOST_WANTED", NomadVar: "most_wanted", Default: "on"},
 	// Owner, 2026-10-15: temporary Most Wanted test pacing.
@@ -166,6 +169,9 @@ var Settings = []Setting{
 	// Owner, 2026-10-18: reversed the 2026-10-15 follow setting; the
 	// deployment default stays native ("off", 0x4FD1D0).
 	{Env: "SRO_TRANSPORT_FOLLOW", NomadVar: "transport_follow", Default: "off"},
+	// Owner, 2026-10-24: a following transport keeps the 100 m tether. It
+	// acts only with SRO_TRANSPORT_FOLLOW on.
+	{Env: "SRO_TRANSPORT_FOLLOW_TETHER", NomadVar: "transport_follow_tether", Default: "on"},
 	// Owner, 2026-10-18: reversed the 2026-10-15 testing switch; the
 	// deployment default stays native ("off", town gates refuse a transport).
 	{Env: "SRO_JOB_GOODS_TELEPORT", NomadVar: "job_goods_teleport", Default: "off"},

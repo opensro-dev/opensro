@@ -13,6 +13,13 @@ after its owner, a trader or a thief alike (the rule keys on the transport,
 never on the owner's job) on the same PetFollower path as a captured quest monster
 (advancePet's plain Advance), and no tether holds the trader.
 
+With SRO_TRANSPORT_FOLLOW_TETHER also on (owner, 2026-10-24), the
+following transport keeps the native 100 m tether: the trader may not walk
+more than 1000 units from where the transport walks, refused with the
+same notice as the original parked tether, so a trader cannot outrun a
+transport held back by a fight or a wall. It acts only while the transport
+follows.
+
 Everything else stays native: mounting still needs the trader within
 cosMountRange of the transport, thieves and bandits still target it at its
 own pose (companionTargets reads the follower's presentation), and its
@@ -31,6 +38,10 @@ import (
 // "true").
 const EnvTransportFollow = "SRO_TRANSPORT_FOLLOW"
 
+// EnvTransportFollowTether keeps the 100 m tether on a following transport
+// ("on", "1", "true"). It acts only with EnvTransportFollow on.
+const EnvTransportFollowTether = "SRO_TRANSPORT_FOLLOW_TETHER"
+
 /*
 ================
 TransportFollowFromEnv
@@ -38,6 +49,19 @@ TransportFollowFromEnv
 */
 func TransportFollowFromEnv() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvTransportFollow))) {
+	case "on", "1", "true":
+		return true
+	}
+	return false
+}
+
+/*
+================
+TransportFollowTetherFromEnv
+================
+*/
+func TransportFollowTetherFromEnv() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvTransportFollowTether))) {
 	case "on", "1", "true":
 		return true
 	}

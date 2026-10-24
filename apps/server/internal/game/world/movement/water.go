@@ -37,11 +37,12 @@ const (
 ================
 WaterValidator
 
-WaterValidator is the deep-water movement gate (validateMissionMovementForWorld):
-the ONE server-authority rule that applies to an accepted native move. The
-v1.150 CLIENT nav data leaves sea cells open, so the client gate accepts seabed
-destinations; in retail the AGENT SERVER rejects them, and this validator is
-that server stand-in.
+WaterValidator owns the outdoor movement assets: the optional deep-water
+destination gate (validateMissionMovementForWorld, SRO_DEEP_WATER_REFUSAL),
+terrain heights for spawns, and the nav caches the clips walk. The original
+client sends seabed clicks and the original server's move path has no water
+rule; the depth refusal came from a reference port, so the gate is
+port-only and off by default.
 
 The surface source is the MAPM 320-unit water block table (6x6 per region)
 inside the exported region bundles - the same data the retail server derives
@@ -57,7 +58,10 @@ bundle degrades to ACCEPT (.catch(() => null)), never to a refusal or a fault.
 type WaterValidator struct {
 	// closedObjectRescue: RelocateStrandedSpawn also frees a spawn inside a
 	// closed object (placementguard.go, SRO_CLOSED_OBJECT_RESCUE).
-	closedObjectRescue   bool
+	closedObjectRescue bool
+	// deepWaterRefusal: ValidateMovement refuses submerged destinations
+	// (SRO_DEEP_WATER_REFUSAL). Off is native.
+	deepWaterRefusal     bool
 	root                 string
 	catalogPath          string
 	dungeonResourcesPath string
@@ -288,15 +292,19 @@ var _ simulation.MovementValidator = (*WaterValidator)(nil)
 ================
 ValidateMovement
 
-ValidateMovement refuses a mode-1 destination whose submersion (water surface
-minus destination y) exceeds simulation.MaxWadeDepth. The submersion is of the
-DESTINATION POINT, not the terrain water column: bridge decks above the river
-carry a destination y above the surface and stay legal, while seabed clicks
-keep rejecting.
+While SRO_DEEP_WATER_REFUSAL is on, ValidateMovement refuses a mode-1
+destination whose submersion (water surface minus destination y) exceeds
+simulation.MaxWadeDepth. The submersion is of the DESTINATION POINT, not the
+terrain water column: bridge decks above the river carry a destination y above
+the surface and stay legal, while seabed clicks reject. Port-only, not native:
+off (the default) accepts every destination, as the original server does. Only
+the destination is judged, so with the gate on a walk across deep water to a
+shallow goal still passes, and a character stopped on that seabed could not
+click its way out (BR-261023-2025-B5DA).
 ================
 */
 func (v *WaterValidator) ValidateMovement(m simulation.MovementRequest) *simulation.MoveError {
-	if m.Mode != simulation.MovementAckDestinationMode {
+	if !v.deepWaterRefusal || m.Mode != simulation.MovementAckDestinationMode {
 		return nil
 	}
 	surface := v.surfaceForRegion(m.RegionID)
