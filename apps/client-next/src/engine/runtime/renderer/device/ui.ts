@@ -517,6 +517,19 @@ fs
 		*/
 		prepare( scene: UiScene | null, targetWidth = 0 ): readonly UiDraw[] {
 			if ( !pipeline || !scene ) return [];
+			// Before the cache return: a density change can keep the same scene.
+			// Output pixels per UI unit; 0 when the caller does not say (the
+			// shader then pads every quad, which is correct, only slower).
+			const pixelScale = targetWidth > 0 ? targetWidth / scene.width : 0;
+			if (
+				viewportValues[0] !== scene.width || viewportValues[1] !== scene.height ||
+				viewportValues[2] !== pixelScale
+			) {
+				viewportValues[0] = scene.width;
+				viewportValues[1] = scene.height;
+				viewportValues[2] = pixelScale;
+				device.queue.writeBuffer( viewport, 0, viewportValues );
+			}
 			if ( last === scene && recordedResources === resourceRevision ) return draws;
 			// One GPU record per plain quad and per glyph of a text run.
 			const records = uiRecordCount( scene.quads );
@@ -632,18 +645,6 @@ fs
 				const changed = values.subarray( first, lastChanged + 1 );
 				device.queue.writeBuffer( storage, first * 4, changed );
 				uploaded.set( changed, first );
-			}
-			// Output pixels per UI unit; 0 when the caller does not say (the
-			// shader then pads every quad, which is correct, only slower).
-			const pixelScale = targetWidth > 0 ? targetWidth / scene.width : 0;
-			if (
-				viewportValues[0] !== scene.width || viewportValues[1] !== scene.height ||
-				viewportValues[2] !== pixelScale
-			) {
-				viewportValues[0] = scene.width;
-				viewportValues[1] = scene.height;
-				viewportValues[2] = pixelScale;
-				device.queue.writeBuffer( viewport, 0, viewportValues );
 			}
 			// Equal command topology keeps the existing bundle even when positions/text change.
 			if (
