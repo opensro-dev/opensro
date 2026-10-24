@@ -426,7 +426,7 @@ baseUrl
 			}
 			if ( command.kind === "gameplay" ) {
 				try {
-					world.command( command.command, now );
+					world.command( command.command, now, command.inputSeq );
 				} catch ( error ) {
 					publish( { ...state, error: String( error ) } );
 				}

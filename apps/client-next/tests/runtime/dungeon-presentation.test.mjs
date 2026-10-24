@@ -197,7 +197,7 @@ const { createWorldStream } = await import(
 );
 const { createNavigation } = await import(
 	sourceFileUrl(
-		"src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts"
+		"src/engine/foundation/navigation/clipper.ts"
 	).href
 );
 const { createNavigationResources } = await import(

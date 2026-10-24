@@ -30,7 +30,7 @@ async function load( path ) {
 	return import( sourceFileUrl( "src/engine/" + path ).href );
 }
 const { createNavigation } = await load(
-		"runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts"
+		"foundation/navigation/clipper.ts"
 	),
 	{ createNavigationResources } = await load( "runtime/assets/worker/navigation/navigation.ts" ),
 	{ createNavigationStream } = await load( "runtime/navigation/navigation.ts" ),
