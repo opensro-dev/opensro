@@ -4,7 +4,7 @@
 drag-shield.ts - the drag-lifetime gesture shield (GH #1242)
 
 While a touch drag runs, its surface owns every other touch: a second
-finger landing on a plain control (touch-action auto) is gesture-eligible,
+finger landing on a plain control (touch-action manipulation) is pinch-eligible,
 and the browser can take the pair over as a pinch-zoom, cancelling the
 drag. This owner raises a full-screen touch-action:none shield for
 exactly the drag's lifetime. The drag pointer itself is captured to its

@@ -275,6 +275,11 @@ export const EXPERIMENTAL_TABS: readonly {
 			label: "Attack-pet training",
 			description: "Pet skills and gear; requires server opt-in."
 		}, {
+			key: "transportAutoPotion",
+			id: "experimental-transport-auto-potion",
+			label: "Transport auto-potion",
+			description: "Heal your transport at your auto-potion HP %."
+		}, {
 			key: "petClickOpensWindow",
 			id: "experimental-pet-click-opens-window",
 			label: "Pet panel opens window",

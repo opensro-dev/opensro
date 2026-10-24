@@ -607,6 +607,7 @@ import {
 	defaultAutoPotion,
 	type AutoPotionDraft
 } from "@/engine/foundation/gameplay/auto-potion";
+import { transportAutoPotion, transportPotionBlocked } from "@/engine/foundation/gameplay/transport-auto-potion";
 import { selectChatTab, composeChat, chatTabPrefix, chatFeedbackText } from "@/engine/foundation/ui/chat-presentation";
 import { captionWords, textBoardLines, textBoxLines, textLines } from "@/engine/foundation/ui/text-lines";
 import { bagTabDropSlot } from "@/engine/foundation/ui/bag-tab-drop";
@@ -1508,6 +1509,8 @@ export function createUi(
 	// over the transport sellAllGid, one stack in flight.
 	let sellAllPhase: "confirm" | "selling" | null = null, sellAllGid = 0;
 	let sellAllRun: SellAllRun | null = null;
+	// When the transport auto-potion last sent a use (worker clock).
+	let transportPotionSentMs: number | undefined;
 	// 649C40: the buy-all progress box, up while a purchase past one stack deals.
 	let allBuyProgress = false;
 	let shopPage = 0, shopTab = 0, shopDialog = false, shopChoice: MerchantSelection | null = null, shopQuantity = "1";
@@ -8571,6 +8574,24 @@ export function createUi(
 				storagePanel.reset();
 				setPanel( "Storage" );
 				dirty = true;
+			}
+			// Port-only (transport-auto-potion.ts): the transport's own potion.
+			if ( experimental.state().saved.transportAutoPotion && next.session?.phase === "world" && next.gameplay ) {
+				const game = next.gameplay, references = hud.data()?.cosReferences, clock = next.simulationTimeMs ?? 0;
+				const use = transportAutoPotion( {
+					records: game.cosRecords ?? [],
+					maxHp: refObjId => references?.get( refObjId )?.maxHp ?? 0,
+					items: game.inventory,
+					cooldowns: game.itemCooldowns ?? [],
+					percent: autoPotionEntry( (game.autoPotion ?? defaultAutoPotion()).hp ).percent,
+					now: clock,
+					lastSentMs: transportPotionSentMs,
+					blocked: transportPotionBlocked( game )
+				} );
+				if ( use ) {
+					sendGameplay( { kind: "item-use", slot: use.slot, companionGid: use.companionGid } );
+					transportPotionSentMs = clock;
+				}
 			}
 			if ( sellAllPhase === "selling" ) {
 				// 6A85E0 / 758BD5: one whole stack at a time; leaving the special
