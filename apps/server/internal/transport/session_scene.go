@@ -240,10 +240,32 @@ FinishSceneReentry
 */
 func (s *Session) FinishSceneReentry() bool {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if !s.sceneLoading || s.closed {
+		s.mu.Unlock()
 		return false
 	}
 	s.sceneLoading = false
+	hooks := s.sceneReadyHooks
+	s.sceneReadyHooks = nil
+	s.mu.Unlock()
+	for _, hook := range hooks {
+		hook()
+	}
 	return true
+}
+
+/*
+================
+OnSceneReady
+
+Registers fn to run, in registration order, when the scene currently
+loading finishes (FinishSceneReentry). The hooks are not retained past
+that completion; an owner holding work during later scene loads
+registers again.
+================
+*/
+func (s *Session) OnSceneReady(fn func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sceneReadyHooks = append(s.sceneReadyHooks, fn)
 }

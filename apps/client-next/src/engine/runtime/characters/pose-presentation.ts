@@ -33,6 +33,7 @@ import { SIMULATION_STEP_MS } from "@/engine/contracts/simulation";
 import { interpolateMovement, poseDistance } from "@/engine/foundation/gameplay/native-movement";
 import { hypot2, hypot3 } from "@/engine/foundation/math/hypot";
 import { displaceRegionXZ, sameCoordinateSpace, worldDelta } from "@/engine/foundation/world/world-space";
+import { createOwnWalkPresenter } from "./own-walk-interpolation";
 
 const TICK_SECONDS = SIMULATION_STEP_MS / 1000;
 const DISCONTINUITY_DISTANCE = 192;
@@ -505,6 +506,9 @@ export function createPosePresentation() {
 	// Frame-clock seconds of the last pose served; the return frame after a
 	// long unseen gap snaps instead of recovering (MAX_UNSEEN_GAP_SECONDS).
 	let lastPoseAt: number | undefined;
+	// Port-only (own-walk-interpolation.ts): the local mover's walk drawn
+	// between its worker ticks instead of extrapolated past the newest one.
+	const ownWalks = createOwnWalkPresenter( turn );
 
 	/*
 	================
@@ -855,6 +859,17 @@ export function createPosePresentation() {
 		samples( next: ReadonlyMap<number, SampleInput> ) {
 			inputs = next;
 			for ( const gid of tracks.keys() ) if ( !next.has( gid ) ) tracks.delete( gid );
+			ownWalks.retain( next );
+		},
+		/*
+		================
+		interpolateOwnWalk
+
+		The Experimental "Interpolated own movement" row (read each frame).
+		================
+		*/
+		interpolateOwnWalk( enabled: boolean ) {
+			ownWalks.enable( enabled );
 		},
 		/*
 		================
@@ -864,13 +879,30 @@ export function createPosePresentation() {
 		pose( gid: number, target: Pose, now: number, settledTranslation = false ): Pose {
 			if ( lastPoseAt !== undefined && now - lastPoseAt > MAX_UNSEEN_GAP_SECONDS ) {
 				tracks.clear();
+				ownWalks.clear();
 				rows.clear();
 			}
 			if ( lastPoseAt === undefined || now > lastPoseAt ) lastPoseAt = now;
 			const input = inputs.get( gid );
 			if ( input && originMs !== null && !settledTranslation ) {
-				return sampledPose( gid, input, target, now );
+				if ( ownWalks.handles( input ) ) {
+					// A generic track still on file was drawn last frame: hand it over.
+					const handoff = tracks.get( gid )?.displayed;
+					tracks.delete( gid );
+					return ownWalks.pose( gid, input, target, { now, originMs, handoff } );
+				}
+				// Leaving interpolation (a skill displacement, the row turned off):
+				// this frame keeps the last interpolated pose and the generic track
+				// recovers from it on the next (carry).
+				const last = ownWalks.take( gid );
+				const pose = sampledPose( gid, input, target, now );
+				const track = tracks.get( gid );
+				if ( !last || !track ) return pose;
+				track.displayed = { ...last };
+				track.carried = true;
+				return { ...last };
 			}
+			ownWalks.take( gid );
 			tracks.delete( gid );
 			let row = rows.get( gid );
 			// Death navigation is already settled by the world owner. Do not spend an
@@ -946,6 +978,7 @@ export function createPosePresentation() {
 		================
 		*/
 		carry( gid: number, displayed: Pose ) {
+			if ( ownWalks.carry( gid, displayed ) ) return;
 			const track = tracks.get( gid );
 			if ( !track ) return;
 			track.displayed = { ...displayed };
@@ -960,6 +993,8 @@ export function createPosePresentation() {
 		================
 		*/
 		moving( gid: number ) {
+			const ownMoving = ownWalks.moving( gid );
+			if ( ownMoving !== undefined ) return ownMoving;
 			const track = tracks.get( gid );
 			if ( track ) return track.moving;
 			return rows.get( gid )?.moving ?? false;
@@ -972,6 +1007,7 @@ export function createPosePresentation() {
 		retain( gids: ReadonlySet<number> ) {
 			for ( const gid of rows.keys() ) if ( !gids.has( gid ) ) rows.delete( gid );
 			for ( const gid of tracks.keys() ) if ( !gids.has( gid ) ) tracks.delete( gid );
+			ownWalks.retain( gids );
 		},
 		/*
 		================
@@ -981,6 +1017,7 @@ export function createPosePresentation() {
 		reset() {
 			rows.clear();
 			tracks.clear();
+			ownWalks.clear();
 			inputs = new Map();
 			lastPoseAt = undefined;
 		}
