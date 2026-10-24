@@ -264,7 +264,7 @@ test("copied viewport clips stay on screen for text and its fitted replacement",
 	assert.deepEqual( copiedScreen, [ 0, 0, 200, 150 ] );
 });
 
-test("only shrinking nearest bitmap runs uses linear sampling, including replacement text", () => {
+test("fitting keeps every run's sampling: shrunk bitmap runs stay nearest for the shader's area path", () => {
 	const screen = /** @type {const} */ ([ 0, 0, 400, 300 ]);
 	const glyph = { ...quad( [ 110, 110, 6, 10 ], screen ), sampling: /** @type {const} */ ("nearest") };
 	const run = textRunQuad( [ glyph ] );
@@ -279,7 +279,9 @@ test("only shrinking nearest bitmap runs uses linear sampling, including replace
 		];
 		fitUiGroup( quads, [], 0, 0, [ 0, 0, 200 * scale, 100 * scale ], screen, { sourceBounds } );
 		assert.equal( quads[0].sampling, "nearest", "artwork sampling is unchanged" );
-		assert.equal( quads[1].sampling, scale < 1 ? "linear" : "nearest" );
+		// The ui-quads shader area-averages a nearest run at a fractional ratio;
+		// switching it to linear here made fitted text (the world map) weak.
+		assert.equal( quads[1].sampling, "nearest" );
 		assert.equal( quads[1].textLayout?.fitted?.sampling, quads[1].sampling );
 		assert.equal( quads[2].sampling, "linear" );
 		assert.deepEqual( expandTextRuns( [ quads[1] ] )[0].rect, [ 10 * scale, 10 * scale, 6 * scale, 10 * scale ] );

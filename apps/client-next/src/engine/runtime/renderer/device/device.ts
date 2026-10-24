@@ -672,7 +672,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 		Prepare UI draws only when the device's UI owner exists.
 		================
 		*/
-		ui: scene => ui?.prepare( scene ) ?? [],
+		ui: ( scene, targetWidth ) => ui?.prepare( scene, targetWidth ) ?? [],
 		/*
 		================
 		sky
