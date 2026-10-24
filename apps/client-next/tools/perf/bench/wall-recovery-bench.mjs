@@ -32,7 +32,7 @@ async function certify() {
 				"/src/engine/runtime/assets/worker/navigation/navigation.ts"
 			);
 			const { createNavigation } = await import(
-				"/src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts"
+				"/src/engine/foundation/navigation/clipper.ts"
 			);
 			const region = 0x6e4a;
 			const read = async path => {
