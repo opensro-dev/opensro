@@ -162,6 +162,50 @@ test("owner labels retain live special colors and require a companion with a nam
 	}
 });
 
+test("a guild soldier's owner row takes the owner guild colour and keeps its own when the owner is absent", () => {
+	const { fixture, state, pet, owner } = petFixture( 5 );
+	const options = defaultGameOptions();
+	const label = /** @type { readonly [number, number, number, number] } */ ([ 102 / 255, 185 / 255, 1, 1 ]);
+	try {
+		// With the owner visible the guild label colour wins over the
+		// owner's name colour (854B95..854BC5).
+		assert.deepEqual( companionOwnerNameplate( pet, owner, options, label )?.color, label );
+		assert.deepEqual( companionOwnerNameplate( pet, owner, options )?.color, partyColor );
+		// Without a visible owner the white reset is skipped (854C0C):
+		// the soldier keeps its own spawn colour.
+		assert.deepEqual( companionOwnerNameplate( pet, undefined, options )?.color, [ 1, 1, 85 / 255, 1 ] );
+
+		// Through the production UI the owner row follows the same two
+		// branches (here the owner's label colour is the default guild row
+		// colour, since the local player shares no guild with it).
+		const state2 = {
+			...state,
+			entities: state.entities.map( e => e.gid === 2 ? { ...e, guildName: "Empire" } : e )
+		};
+		fixture.ui.step( state2, 0 );
+		// The label colour covers the owner row (and the "[Empire]" guild
+		// row); the owner's name colour must not appear anywhere on it.
+		assert.ok(
+			petGlyphs( fixture ).filter( q => q.color.every( ( c, i ) => c === label[i] ) ).length >= "Owner".length
+		);
+		assert.equal( petGlyphs( fixture ).filter( q => q.color.every( ( c, i ) => c === partyColor[i] ) ).length, 0 );
+		fixture.ui.step( { ...state2, entities: state2.entities.filter( e => e.gid !== 2 ) }, 100 );
+		// The own-colour set is now the pet's name plus the whole owner
+		// row; no white reset survives.
+		assert.equal(
+			petGlyphs( fixture ).filter( q => q.color[0] === 1 && q.color[1] === 1 && q.color[2] === 85 / 255 ).length,
+			pet.name.length + "Owner".length,
+			"owner gone: the soldier's owner row keeps its own colour, not white"
+		);
+		assert.equal(
+			petGlyphs( fixture ).filter( q => q.color.every( ( c, i ) => c === [ 1, 1, 1, 1 ][i] ) ).length,
+			0
+		);
+	} finally {
+		fixture.dispose();
+	}
+});
+
 test("an owned attack pet's quick status stays above its owner row", () => {
 	const { fixture, state, local, pet } = petFixture( 3 );
 	try {

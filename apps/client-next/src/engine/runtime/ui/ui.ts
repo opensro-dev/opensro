@@ -20628,7 +20628,8 @@ export function createUi(
 						companionOwnerNameplate(
 							entity,
 							next.entities.find( owner => owner.gid === entity.ownerGid ),
-							options
+							options,
+							entity.ownerGid !== undefined ? overheads.get( entity.ownerGid )?.guildColor : undefined
 						) :
 						null;
 					if ( ownerPlate && height ) {
