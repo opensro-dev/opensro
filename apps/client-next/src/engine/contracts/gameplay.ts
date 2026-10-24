@@ -393,6 +393,9 @@ export type GameplayCommand =
 		readonly kind: "move";
 		readonly destination: Pose;
 	}
+	// /GetPos (690C40 case 3): flip the local player's body visual state
+	// (appearanceState[2], the 85EC00 byte) between 0 and 1, locally only.
+	| { readonly kind: "debug-body-visual"; }
 	| {
 		readonly kind: "select";
 		readonly gid: number;

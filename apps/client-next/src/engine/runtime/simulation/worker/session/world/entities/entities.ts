@@ -109,6 +109,10 @@ export function createEntities(
 	// The monster whose LIFE dead frame came last: the drops that follow it
 	// directly are its own (the server's per-victim publication order).
 	let dropSource = 0;
+	// The /GetPos byte (+CEAD84): the handler flips its own byte and writes
+	// it as the local player's body visual state, whatever the server last
+	// set there. It outlives any one entity state write by design.
+	let debugBodyVisualOn = false;
 	let epoch = 0, sequence = 0, inflight: WorldBatch | null = null, bytes = 0;
 	// When the batch awaiting its acknowledgement was taken: a backlog failure
 	// reports the wait, telling a stalled main thread from a burst of events.
@@ -1571,6 +1575,32 @@ export function createEntities(
 			const entity = entities.get( gid );
 			if ( !entity || entity.appearanceState?.[STALL_TITLE_SLOT] !== STALL_TITLE_MODE ) return;
 			apply( { kind: "state", entity: { ...entity, titleText } } );
+		},
+		/*
+		================
+		debugBodyVisual
+
+		/GetPos (690C40 case 3): flip the +CEAD84 byte and write it as the
+		entity's body visual state (85EC00), the channel-4 state byte at
+		appearanceState[2]. The flipped byte is the handler's own, not the
+		entity's standing state, so a server-set berserk visual survives
+		the first flip and falls to the second. A repeated write changes
+		nothing, as 85EC00 returns before side effects for repeated state
+		(the channel-4 handler above keeps the same guard).
+		================
+		*/
+		debugBodyVisual( gid: number ) {
+			debugBodyVisualOn = !debugBodyVisualOn;
+			const entity = entities.get( gid );
+			if ( !entity ) return;
+			const state = debugBodyVisualOn ? 1 : 0;
+			if ( (entity.appearanceState?.[2] ?? 0) === state ) return;
+			const appearanceState = [ ...(entity.appearanceState ?? [ 1, 0, 0 ]) ];
+			appearanceState[2] = state;
+			apply( {
+				kind: "state",
+				entity: Object.freeze( { ...entity, appearanceState: Object.freeze( appearanceState ) } )
+			} );
 		},
 		/*
 		================

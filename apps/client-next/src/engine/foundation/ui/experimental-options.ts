@@ -116,6 +116,11 @@ export interface ExperimentalOptions {
 	// turned off (the owner's choice, 2026-10-15); off is the original,
 	// where a drop on a tab does nothing.
 	readonly dropOnBagTab: boolean;
+	// Port-only, not native: Ctrl+click, right-click or double-click a bag
+	// item stages it into the open exchange, as a drop on the table does;
+	// the original stages by drag and drop only. On unless turned off (the
+	// owner's choice, 2026-10-24); off is the original, drag-only staging.
+	readonly exchangeClickShortcuts: boolean;
 	// Port-only, not native: in the chat log, a drop or plus notice's player
 	// name links to a whisper and its item name shows the item's tooltip
 	// (foundation/gameplay/notice-links.ts). On unless turned off (the
@@ -254,7 +259,7 @@ experimentalOptions
 
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, greyDisabledTabs, jobKillNotices, dropPlusNotices,
-plusSevenNotices, fitWindowLabels, dropOnBagTab, noticeLinks, shortNotices, confirmGuildBan,
+plusSevenNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, shortNotices, confirmGuildBan,
 petClickOpensWindow, smartPetPickup, touchInspect and dungeonCharacterPvs, which only an explicit false turns off.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
 explicitly, and are read only while petPickupFilter is on.
@@ -297,6 +302,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		dungeonCharacterPvs: record.dungeonCharacterPvs !== false,
 		fitWindowLabels: record.fitWindowLabels !== false,
 		dropOnBagTab: record.dropOnBagTab !== false,
+		exchangeClickShortcuts: record.exchangeClickShortcuts !== false,
 		noticeLinks: record.noticeLinks !== false,
 		shortNotices: record.shortNotices !== false,
 		attackPetTraining: enabled( "attackPetTraining" ),

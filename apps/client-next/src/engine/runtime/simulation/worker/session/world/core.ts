@@ -461,6 +461,12 @@ UI and quickslot commands. A skill aims at the newest selection intent
 			) {
 				return;
 			}
+			// /GetPos writes only the entity owner's body visual byte; the
+			// gameplay lane never sees the command.
+			if ( command.kind === "debug-body-visual" ) {
+				entities.debugBodyVisual( gameplay.localIdentity() );
+				return;
+			}
 			const itemType = command.kind === "item-use" ? gameplay.itemUseType( command.slot ) : undefined;
 			// The UI's snapshot target trails a fresh click by one grant round trip.
 			if ( command.kind === "skill" ) {
