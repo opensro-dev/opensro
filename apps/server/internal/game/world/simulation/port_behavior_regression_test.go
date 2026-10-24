@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 )
 
@@ -238,7 +239,7 @@ func TestPortAuditAreaAndChainCannotCrossCoordinatePlane(t *testing.T) {
 	if got := s.CombatCandidatesInSphere("audit", center, 10, s.CurrentTimeMillis()); len(got) != 0 {
 		t.Fatalf("outdoor actor selected from indoor AoE: %+v", got)
 	}
-	if got := s.CombatCandidatesForChain("audit", center, 10, s.CurrentTimeMillis()); len(got) != 0 {
+	if got := s.CombatCandidatesInWorld("audit", instance.Pack(1, 1), center, 10, s.CurrentTimeMillis(), true); len(got) != 0 {
 		t.Fatal("outdoor actor selected from indoor chain")
 	}
 	center.RegionID ^= 0x8000
