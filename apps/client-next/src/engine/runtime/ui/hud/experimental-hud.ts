@@ -255,6 +255,11 @@ export const EXPERIMENTAL_TABS: readonly {
 			label: "Drop on bag tabs",
 			description: "Drop an item on a bag tab to move it to that page."
 		}, {
+			key: "exchangeClickShortcuts",
+			id: "experimental-exchange-click-shortcuts",
+			label: "Exchange click shortcuts",
+			description: "Ctrl+click, right-click or double-click a bag item to offer it."
+		}, {
 			key: "confirmGuildBan",
 			id: "experimental-confirm-guild-ban",
 			label: "Confirm guild ban",
