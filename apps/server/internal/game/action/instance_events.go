@@ -46,6 +46,11 @@ const (
 	InstanceEventInvitationAnswered InstanceEventKind = 6
 	// InstanceEventDead, port-local as in the quest registry.
 	InstanceEventDead InstanceEventKind = 7
+	// InstanceEventActivated follows Enter for the same character:
+	// the entered character finished activating in the instance, the
+	// post-entry checkpoint a programme validates entry conditions
+	// at (transferCharacterToInstance raises it).
+	InstanceEventActivated InstanceEventKind = 8
 )
 
 /*

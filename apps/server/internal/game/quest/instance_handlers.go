@@ -55,6 +55,10 @@ const (
 	// The death kind rounds out the set; how its reference-server
 	// counterpart subscribes is in the file banner.
 	InstanceEventDead InstanceEventKind = 7
+	// Activated follows Enter for the same character: the entered
+	// character finished activating in the instance, the post-entry
+	// checkpoint a programme validates entry conditions at.
+	InstanceEventActivated InstanceEventKind = 8
 )
 
 /*
@@ -92,6 +96,7 @@ type InstanceHandler struct {
 	PartyChanged       func(InstanceEvent)
 	Update             func(InstanceEvent)
 	InvitationAnswered func(InstanceEvent)
+	Activated          func(InstanceEvent)
 }
 
 /*
@@ -156,6 +161,8 @@ func (r *Runtime) DispatchInstanceEvent(event InstanceEvent) {
 		fn = handler.Update
 	case InstanceEventInvitationAnswered:
 		fn = handler.InvitationAnswered
+	case InstanceEventActivated:
+		fn = handler.Activated
 	}
 	if fn != nil {
 		fn(event)
