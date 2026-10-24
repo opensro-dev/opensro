@@ -566,6 +566,53 @@ export function createParticleGraph( graph: readonly ParticleEmitter[], index: n
 
 /*
 ================
+linkElement
+
+AF13D0's links for one element on a tick: keep its origin, turn its
+position about the position ancestor, take the matrix ancestor's turn,
+turn its velocity, and carry it by the follow ancestor's move. motion adds
+the element's own local turn, which only a live element's program runs.
+================
+*/
+function linkElement( element: ParticleElement, def: ParticleEmitter, scratch: ParticleGraphScratch, motion: boolean ) {
+	const state = element.state;
+	if ( def.keepOrigin ) copy3( state.position, element.origin );
+	const positionParent = ancestor( element, def.positionDepth ),
+		matrixParent = ancestor( element, Math.max( 0, def.matrixDepth ) ),
+		velocityParent = ancestor( element, def.velocityDepth ),
+		follow = ancestor( element, def.followDepth );
+	if ( positionParent ) {
+		const origin = positionParent.origin, position = state.position;
+		affineInto(
+			positionParent.delta,
+			position[0]! - origin[0]!,
+			position[1]! - origin[1]!,
+			position[2]! - origin[2]!,
+			position
+		);
+		for ( let i = 0; i < 3; i++ ) position[i] = Math.fround( position[i]! + origin[i]! );
+	}
+	if ( matrixParent ) {
+		multiply( matrixParent.delta, element.matrix, scratch.matrix );
+		element.matrix.set( scratch.matrix );
+	}
+	if ( motion && def.localMotion ) {
+		multiply( element.matrix, element.local, scratch.matrix );
+		element.matrix.set( scratch.matrix );
+	}
+	if ( velocityParent ) {
+		const velocity = state.velocity;
+		affineInto( velocityParent.delta, velocity[0]!, velocity[1]!, velocity[2]!, velocity );
+	}
+	if ( follow ) {
+		for ( let i = 0; i < 3; i++ ) {
+			state.position[i] = Math.fround( state.position[i]! + follow.state.position[i]! - follow.origin[i]! );
+		}
+	}
+}
+
+/*
+================
 advanceParticleGraph
 ================
 */
@@ -787,41 +834,7 @@ export function advanceParticleGraph(
 					}
 				} else if ( age < def.frames ) {
 					const state = element.state;
-					if ( def.keepOrigin ) copy3( state.position, element.origin );
-					const positionParent = ancestor( element, def.positionDepth ),
-						matrixParent = ancestor( element, Math.max( 0, def.matrixDepth ) ),
-						velocityParent = ancestor( element, def.velocityDepth ),
-						follow = ancestor( element, def.followDepth );
-					if ( positionParent ) {
-						const origin = positionParent.origin, position = state.position;
-						affineInto(
-							positionParent.delta,
-							position[0]! - origin[0]!,
-							position[1]! - origin[1]!,
-							position[2]! - origin[2]!,
-							position
-						);
-						for ( let i = 0; i < 3; i++ ) position[i] = Math.fround( position[i]! + origin[i]! );
-					}
-					if ( matrixParent ) {
-						multiply( matrixParent.delta, element.matrix, scratch.matrix );
-						element.matrix.set( scratch.matrix );
-					}
-					if ( def.localMotion ) {
-						multiply( element.matrix, element.local, scratch.matrix );
-						element.matrix.set( scratch.matrix );
-					}
-					if ( velocityParent ) {
-						const velocity = state.velocity;
-						affineInto( velocityParent.delta, velocity[0]!, velocity[1]!, velocity[2]!, velocity );
-					}
-					if ( follow ) {
-						for ( let i = 0; i < 3; i++ ) {
-							state.position[i] = Math.fround(
-								state.position[i]! + follow.state.position[i]! - follow.origin[i]!
-							);
-						}
-					}
+					linkElement( element, def, scratch, true );
 					history.index = advanceParticle(
 						state,
 						motionProgram( history, def ),
@@ -876,6 +889,18 @@ export function advanceParticleGraph(
 					if ( element.born === tick ) {
 						copy3( element.state.position, element.previousPosition );
 						snapshotParticleTick( element.state, element.matrix );
+					}
+				} else if ( element.children > 0 ) {
+					// AF2A40 retires an expired element from its effect's tick
+					// lists but leaves it on the matrix list (+0xB0) that AF13D0
+					// walks until its last child is released (AF2AC0): its links
+					// still carry it, and its children follow it, at the holder.
+					linkElement( element, def, scratch, false );
+					if ( keptMatrix ) {
+						inverseInto( scratch.previous, scratch.inverse );
+						multiply( element.matrix, scratch.inverse, element.delta );
+					} else {
+						setIdentity( element.delta );
 					}
 				} else {
 					copy3( element.state.position, element.origin );

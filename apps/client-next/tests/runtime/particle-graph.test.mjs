@@ -379,3 +379,23 @@ test("a holder turn between ticks reaches the elements linked to it on the next 
 	const z = Array.from( state.elements[0][0].matrix.subarray( 8, 11 ), v => Math.round( v * 1e6 ) / 1e6 + 0 );
 	assert.deepEqual( z, [ 1, 0, 0 ] );
 });
+test("a child keeps following a moving holder after its followed parent expires (AF2A40 keeps it on AF13D0's list)", () => {
+	const graph = [
+		emitter( { frames: 4, followDepth: 1 } ),
+		emitter( { parent: 0, births: [ 1 ], frames: 20, followDepth: 1 } )
+	];
+	const state = createParticleGraph( graph, 0 ), transform = identity();
+	const offsets = [];
+	for ( let tick = 0; tick <= 12; tick++ ) {
+		transform[12] = tick * 10;
+		advanceParticleGraph( state, graph, tick / 20, transform, table );
+		const child = state.elements[1][0];
+		if ( child?.alive ) offsets.push( child.state.position[0] - transform[12] );
+	}
+	assert.equal( state.elements[0][0].alive, false, "the parent expired" );
+	assert.ok( state.elements[1][0].alive, "the child still lives" );
+	assert.ok( offsets.length > 8, "the child was sampled after the parent expired" );
+	for ( const offset of offsets ) {
+		assert.equal( offset, offsets[0], "the child rode the holder: " + offsets.join( "," ) );
+	}
+});

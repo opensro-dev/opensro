@@ -68,6 +68,25 @@ test("global chat renders the authoritative name without an entity lookup", () =
 	);
 });
 
+test("a suited player's global line renders once, under the job alias", () => {
+	const chat = createChat( () => {} );
+	// Entered wearing the trader suit (slot 8, a job item): the server
+	// stamps the alias, and the entry alias board names the player by it.
+	chat.bootstrap( {
+		character: { name: "Local" },
+		localPlayerEntry: { jobAlias: "TraderJo" },
+		equipItems: [ { slot: 8, refObjId: 999 } ],
+		refItemSnapshot: [ { refObjId: 999, typeFlags: 0xbac } ]
+	} );
+	chat.request( 1, "buy low sell high", "", 0 );
+	chat.receive( globalFrame( "TraderJo", "buy low sell high" ), 1 );
+	chat.receive( { opcode: 0xb367, payload: Uint8Array.of( 1, 1, 255 ) }, 1 );
+	assert.equal( chat.state().lines.length, 1, "the suited line rendered twice" );
+	assert.equal( chat.state().lines[0]?.name, "TraderJo", "the alias the server used must own the line" );
+	assert.equal( chat.state().lines[0]?.channel, 6 );
+	assert.equal( chat.state().pending, false );
+});
+
 test("public replay includes the user's earlier messages and retains repeated text", () => {
 	const chat = createChat( () => {} );
 	chat.bootstrap( { character: { name: "Local" } } );

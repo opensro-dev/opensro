@@ -213,6 +213,9 @@ export type GameplayCommand =
 	| { readonly kind: "avatar-move"; readonly equip: boolean; readonly source: number; readonly destination: number; }
 	| import("@/engine/foundation/gameplay/party-matching").PartyMatchCommand
 	| { readonly kind: "gm-command"; readonly line: string; }
+	// The debug console's weather rows: a mode to set (absent keeps the
+	// current one) and the amount, both into the worker's weather slot.
+	| { readonly kind: "debug-weather"; readonly mode?: 1 | 2 | 3; readonly amount: number; }
 	| { readonly kind: "gm-catalog-ack"; }
 	| { readonly kind: "whisper-block"; readonly name: string; readonly blocked: boolean; }
 	| { readonly kind: "cos-name"; readonly gid: number; readonly name: string; }
