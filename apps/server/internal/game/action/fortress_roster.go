@@ -6,13 +6,11 @@ fortress_roster.go - the fortress world's structure roster (0x3887 0x0F)
 Every player in a fortress world hears which structure stands on each event
 zone, with its hit points and state; the v1.150 client keeps one record per
 zone from it for the battle aide's fortress map (76C870 case 0xF). The
-v1.188 server sends it three ways: to a player entering a siege world (the
-world-entry write 4DF9E0 -> CGameWorldMgr_SendSiegeStructAllInfoToPC
-5F88C0), to the whole world every thirty seconds (CGameWorld_Siege_Tick
-timer slot 4 -> CGameWorld_Siege_SendStructAllInfo 601860), and to the whole
-world after a structure is built, demolished or upgraded and after a
-conquest respawns them (CSiegeFortress_HandleDatabaseResult 6232C0 cases
-0x13, 0x15, 0x16, 0x1D/0x1E -> 5F8890).
+reference server's roster writer sends it three ways: to a player entering
+a siege world, with the rest of its world-entry state; to the whole world
+on the thirty-second siege tick; and to the whole world after a database
+result changes the structures (a construction, a demolition, an upgrade, or
+a conquest that stands them up again).
 
 ===========================================================================
 */
@@ -28,7 +26,7 @@ import (
 	"opensro.online/server/internal/game/world/instance"
 )
 
-// fortressRosterPeriodMs is 600F60's slot 4 period (0x7530).
+// fortressRosterPeriodMs is the siege tick's roster period.
 const fortressRosterPeriodMs = 30000
 
 /*
@@ -75,7 +73,7 @@ func (rt *Runtime) structureRoster(division string, fortressID uint32, world ins
 ================
 pushStructureRoster
 
-The roster to every player in the fortress world (601860).
+The roster to every player in the fortress world.
 ================
 */
 func (rt *Runtime) pushStructureRoster(division string, fortressID uint32, world instance.ID) {
@@ -118,8 +116,8 @@ func (rt *Runtime) advanceFortressRosters(nowMs int64) {
 ================
 FortressRosterFrames
 
-The roster a player entering a fortress world starts from (5F88C0 from
-the world-entry write); nothing outside one.
+The roster a player entering a fortress world starts from, sent with the
+rest of the world-entry state; nothing outside one.
 ================
 */
 func (rt *Runtime) FortressRosterFrames(division string, c *enterworld.Character) []wire.Frame {

@@ -89,7 +89,7 @@ func captureRosters(t *testing.T, rt *Runtime, name string) *[][]rosterRow {
 ================
 TestEncodeStructureRoster3887
 
-61FCE0's layout: subtype, fortress, count, then zone, reference, hit
+The roster's layout: subtype, fortress, count, then zone, reference, hit
 points, state and the has-guild byte, with a headquarters' sized name.
 ================
 */
@@ -153,8 +153,8 @@ func TestFortressRosterOnEntryAndEveryThirtySeconds(t *testing.T) {
 ================
 TestStructureChangesResendTheRoster
 
-6232C0 resends the roster after a construction (case 0x13) and a
-demolition (case 0x15): the built barricade joins it, the demolished one
+The reference server resends the roster after the database result of a
+construction and of a demolition: the built barricade joins it, the demolished one
 leaves it.
 ================
 */

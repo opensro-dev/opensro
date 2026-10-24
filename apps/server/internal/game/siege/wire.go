@@ -220,10 +220,10 @@ func EncodeStructureState3887(state StructureState) []byte {
 ================
 StructureRosterRow
 
-One structure of the 0x0F roster, in 61FCE0's write order: its event
-zone (vt+0x648), its reference (vt+0x64C), its hit points (vt+0x108) and
-state word (vt+0x654). GuildName is a headquarters' guild; empty writes
-the has-guild byte 0, as a failed guild lookup does natively.
+One structure of the 0x0F roster, in the reference server's write order:
+its event zone, its reference, its hit points and its state word.
+GuildName is a headquarters' guild; empty writes the has-guild byte 0, as
+the reference server does when the guild is not found.
 ================
 */
 type StructureRosterRow struct {
@@ -241,7 +241,7 @@ const MaxStructureRosterRows = 255
 ================
 EncodeStructureRoster3887
 
-Subtype 0x0F (CSiegeFortress_WriteStructAllInfo385F_0F 61FCE0): u8 0x0F,
+Subtype 0x0F, the reference server's structure roster: u8 0x0F,
 u32 fortress, u8 count, then per structure u32 event zone, u32 reference,
 u32 hit points, u16 state, u8 has-guild and the guild's name. The client
 (76C870 case 0xF) fills each zone's record for the fortress map. Rows past

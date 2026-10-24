@@ -214,8 +214,8 @@ func TestGMSiegeStructureAndPeriodCommands(t *testing.T) {
 	}
 
 	// STRUCT_BUILD (0x0A) builds the vacant barricade without a selected aide;
-	// the fortress world (the GM included) hears the roster first (6232C0
-	// case 0x13), then the GM gets the answer.
+	// the fortress world (the GM included) hears the roster first, as after
+	// any construction, then the GM gets the answer.
 	if !rt.SiegeStructureGM(testDivision, c.Name, siege.ActionConstruct, jangan, testBarricadeZone, 0) {
 		t.Fatal("GM STRUCT_BUILD failed on vacant barricade zone")
 	}
