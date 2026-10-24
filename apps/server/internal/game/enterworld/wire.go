@@ -378,21 +378,18 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 		writer.U8(uint8(mastery.Level))
 	}
 	writer.U8(2)
-	// Skill list (sub_866e50's second loop, same marker framing): per row
+	// Skill list (the reader's second loop, same marker framing): per row
 	// u32 skilldata id + one value byte. Rows come from the persisted
 	// learned skills (schema v5); the value byte is 1, the native entry
 	// ctor's own default (sub_866e50 @0x00866e81 seeds value=1 before the
 	// read) and what the learn ack path inserts (sub_8509f0 @0x00850a35).
 	// A skill-less record emits the same empty [0][2] bytes as before.
-	// The count is a u8 and skill learning has NO cap, so a long-lived
-	// character can genuinely cross 255 learned skills - without the
-	// clamp the wrapped count byte disagrees with the emitted bodies and
-	// the client stream desyncs. Clamp BEFORE both, loudly.
+	// The v1.150 reader (SkillList_DeserializeLearned, client 0x866e50)
+	// discards the lead byte and takes rows until the terminator marker
+	// 2 - it reads no count, so the list has no 255 cap: every learned
+	// skill is emitted, however long the list runs. The lead byte stays
+	// the row count in a byte, as before; past 255 it wraps, unread.
 	skills := character.Skills
-	if len(skills) > 0xff {
-		log.Warnf("bootstrap: char-data skill list for %s clamped from %d to 255 rows (u8 count) - the tail is NOT emitted", name, len(skills))
-		skills = skills[:0xff]
-	}
 	writer.U8(uint8(len(skills)))
 	for _, skillID := range skills {
 		writer.U8(1)

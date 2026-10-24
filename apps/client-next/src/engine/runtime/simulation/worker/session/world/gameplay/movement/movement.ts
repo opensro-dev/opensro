@@ -1679,6 +1679,16 @@ receive
 		},
 		/*
 ================
+oldestPendingSentAt
+
+When the oldest unanswered movement command left, or undefined.
+================
+		*/
+		oldestPendingSentAt(): number | undefined {
+			return pending.values().next().value?.sent;
+		},
+		/*
+================
 step
 ================
 		*/
