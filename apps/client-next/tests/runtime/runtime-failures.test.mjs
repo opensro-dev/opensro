@@ -184,7 +184,11 @@ presentUpdate
 		throw new Error( "injected presentation failure" );
 	};
 	Object.assign( owners.characters, { mallOutfit: () => {}, mallPreviewState: () => ({ wearable: [] }) } );
-	Object.assign( owners.ui, { mallPreview: () => null, mallPreviewState: () => {} } );
+	Object.assign( owners.ui, {
+		mallPreview: () => null,
+		mallPreviewState: () => {},
+		debugClockSeed: seed => seed
+	} );
 	return owners;
 }
 
