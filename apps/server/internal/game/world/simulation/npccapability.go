@@ -49,19 +49,34 @@ const (
 	// server sends every viewer the same select word, as it does for the
 	// official; the row's 0x71E1 0x18 list answer is fortressServiceQuery's.
 	NpcTalkFlagFortressAide uint32 = 0x1000000
+	// NpcTalkFlagFortressManager is the fortress manager's rows (option
+	// 0x17): client 5D8FF0 tests 0x400000 and 5D7AD0 appends action 0x33
+	// (tax, staff and service), drawn for the holding guild and its allies
+	// with the staff row holder-only, so the word is the NPC's and the
+	// holder rules stay the client's, as for the aide. The rows' 0x71E1
+	// answers are fortressServiceQuery's tax and staff services.
+	NpcTalkFlagFortressManager uint32 = 0x400000
+	// NpcTalkFlagFortressSmith is the fortress smith's row (option 0x1A):
+	// client 5D8FF0 tests 0x2000000 and 5D7AD0 appends action 0x36
+	// (production). Its 0x71E1 answers are fortressProductionService's.
+	NpcTalkFlagFortressSmith uint32 = 0x2000000
+	// NpcTalkFlagFortressTrainer is the fortress trainer's row (option
+	// 0x1B): client 5D8FF0 tests 0x4000000 and 5D7AD0 appends action 0x37
+	// (training). Its 0x71E1 answers are fortressProductionService's.
+	NpcTalkFlagFortressTrainer uint32 = 0x4000000
 
 	// NpcTalkImplementedFlags is the subset whose request -> authority ->
 	// response lifecycle exists in this port; a row the client would draw
 	// for any other bit could only be refused. Bits without a row (repair,
 	// stable, thief buy, general) carry nothing to refuse. Still closed:
-	// the fortress staff other than the official and the battle aide, and
-	// gate pulleys.
+	// gate pulleys, whose u16 tail the select answer does not write.
 	NpcTalkImplementedFlags uint32 = NpcTalkFlagShop | NpcTalkFlagTalk | NpcTalkFlagStorage |
 		NpcTalkFlagRepair | NpcTalkFlagRecallPoint | NpcTalkFlagTeleport | NpcTalkFlagStable |
 		NpcTalkFlagSpecialTrade | NpcTalkFlagThiefBuy | NpcTalkFlagGeneral | NpcTalkFlagGachaMachine | NpcTalkFlagGachaOperator |
 		NpcTalkFlagJobTrader | NpcTalkFlagJobThief | NpcTalkFlagJobHunter | NpcTalkFlagReverseReturn |
 		NpcTalkFlagGuild | NpcTalkFlagMagicOption | NpcTalkFlagFortressOfficial |
-		NpcTalkFlagFortressAide
+		NpcTalkFlagFortressAide | NpcTalkFlagFortressManager | NpcTalkFlagFortressSmith |
+		NpcTalkFlagFortressTrainer
 )
 
 // npcGachaMachines are the NPCs the reference data binds a Magic POP to
