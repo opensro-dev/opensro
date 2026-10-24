@@ -300,6 +300,7 @@ func (rt *Runtime) playerStruckFrames(division string, victim *enterworld.Charac
 	if struck.fatal {
 		rt.recordFortressDeath(division, victim, struck.killer, now)
 		rt.recordFlagWarDeath(division, victim, struck.killer, now)
+		rt.recordInstanceDeath(division, victim)
 		rt.publishGuildWarCombat(division, struck.warCombat, now)
 		if rt.PushCharacterFrames != nil && rt.PushDivisionPeerFrames != nil {
 			// Native death retires effects before publishing the life change.
