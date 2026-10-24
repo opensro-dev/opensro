@@ -3,8 +3,9 @@
 
 stall.go - street stalls: opening, visiting, editing and selling
 
-CGObjPC_HandleStallCreate70B1 (515F10) opens a stall for a standing PC
-outside a job suit; the stall shows nearby (0x30DF) and on the spawn row of
+Opening a stall outside a job suit first stops a walking host (its walk
+settles where it stands and its pending command ends), as the original
+does; the stall shows nearby (0x30DF) and on the spawn row of
 everyone who comes into view (the title block 86A26D reads). A visitor
 within 100 units (516270: Vec3_Length <= 100) sees its greeting, offers and
 visitors; while the stall is open for business (the owner's 0x71A8 kind 5)
