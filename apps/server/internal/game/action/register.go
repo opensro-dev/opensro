@@ -11,6 +11,8 @@ calling gameplay handlers and publish complete ordered response batches.
 package action
 
 import (
+	"encoding/json"
+
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
@@ -227,6 +229,21 @@ func sceneLoadingRefusal(opcode uint16) []wire.Frame {
 		return failureResult(wire.ErrCodeInvalidRequest).Frames
 	case wire.OpItemUseRequest:
 		return itemUseFailure(wire.ErrCodeInvalidRequest).Frames
+	case opNpcRepairRequest:
+		// 0x746F waits on 0xB46F; its failure arm reads [2, notice] and
+		// retires the repair pending (689420 parses either arm first).
+		return repairRefusal(wire.ErrCodeInvalidRequest).Frames
+	case 0x77e7:
+		// A retail buyback waits on its own result lane (0xB7E7); answer
+		// with the same [2, code] refusal the buyback itself raises.
+		return []wire.Frame{{Opcode: 0xB7E7, Payload: []byte{2, wire.ErrCodeInvalidRequest}}}
+	case opMallCatalog:
+		// The browser's catalogue request waits on its projection lane
+		// (extension opcode 15); an error projection retires the request
+		// the way a failed native purchase retires its own pending lane.
+		if payload, err := json.Marshal(mallProjection{Version: 1, Error: "mall is unavailable while entering"}); err == nil {
+			return []wire.Frame{{Opcode: opMallCatalog, Payload: payload}}
+		}
 	}
 	return nil
 }
