@@ -102,6 +102,40 @@ func TestCharDataEmitsThePopulatedQuestBlock(t *testing.T) {
 	}
 }
 
+// TestCharDataCompletedQuestClampKeepsCountAlignedWithBodies: unlike the
+// mastery/skill lists, the completed-quest count is the reader's loop
+// bound (sub_8673d0), so past 255 the emission must clamp - 255 bodies
+// under a 255 count, never a wrapped count over fewer bodies - and the
+// sections after it stay aligned.
+func TestCharDataCompletedQuestClampKeepsCountAlignedWithBodies(t *testing.T) {
+	completed := make([]uint32, 300)
+	for i := range completed {
+		completed[i] = uint32(i + 1)
+	}
+	character := &Character{
+		ID:                1,
+		Name:              "questveteran",
+		CompletedQuestIds: completed,
+	}
+	entry := &LocalPlayerEntry{StartProfile: StartProfileForRaceProfile()}
+
+	payload := BuildLocalPlayerEntryPayload(character, entry, 0, nil)
+
+	// The expected subsequence: empty skill framing, the clamped count,
+	// exactly 255 quest ids (1..255), then the empty active and tracked
+	// section counts in their places.
+	var want bytes.Buffer
+	want.Write([]byte{0x00, 0x02}) // skill list: count 0, end marker
+	want.WriteByte(0xff)           // completed count, clamped
+	for i := 1; i <= 255; i++ {
+		want.Write([]byte{byte(i), byte(i >> 8), 0x00, 0x00})
+	}
+	want.Write([]byte{0x00, 0x00}) // active + tracked counts
+	if !bytes.Contains(payload, want.Bytes()) {
+		t.Fatal("char-data payload does not carry the clamped 255-body completed list")
+	}
+}
+
 // A record with no learned skills must emit the exact empty framing the
 // established wire builder emits: byte-frozen protocol continuity.
 func TestCharDataEmptySkillListStaysByteFrozen(t *testing.T) {
