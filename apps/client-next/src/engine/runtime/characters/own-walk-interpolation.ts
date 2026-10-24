@@ -24,13 +24,16 @@ redirect turns its exact corner, and nothing ever runs ahead to come back.
 The delay only grows while walking (a brief slowdown, never a surge) and
 relaxes while standing. A real correction (the server moved the walk
 somewhere its legs do not lead) restarts the buffer and leaves a visual
-offset that decays exponentially, as Unreal's SmoothClientPosition does
-for a simulated proxy (MeshTranslationOffset scaled by
-1 - DeltaSeconds / SmoothNetUpdateTime, default 0.1 s).
+offset that every frame scales by 1 - dt / 0.1 s: a discrete exponential
+decay compounding per frame, exactly as Unreal's SmoothClientPosition
+does for a simulated proxy (MeshTranslationOffset scaled by
+1 - DeltaSeconds / SmoothNetUpdateTime, default 0.1 s), not a linear
+ramp over 0.1 s.
 
 ===========================================================================
 */
 import type { Pose } from "@/engine/contracts/gameplay";
+import type { SampleInput } from "@/engine/contracts/pose-presentation";
 import { SIMULATION_STEP_MS } from "@/engine/contracts/simulation";
 import { interpolateMovement } from "@/engine/foundation/gameplay/native-movement";
 import { hypot2, hypot3 } from "@/engine/foundation/math/hypot";
@@ -466,6 +469,179 @@ export function createOwnWalkInterpolation() {
 			lastBase = undefined;
 			lastNowMs = undefined;
 			lateTurn = undefined;
+		}
+	};
+}
+
+// ============================================================================
+
+/*
+================
+OwnWalkTrack
+
+One character under the interpolated presenter: its buffer, the last
+publication it took, and its drawn heading.
+================
+*/
+interface OwnWalkTrack {
+	walk: ReturnType<typeof createOwnWalkInterpolation>;
+	relocation: number;
+	atMs?: number;
+	revision?: number;
+	pose?: Pose;
+	last: number;
+	nowMs?: number;
+	angle: number;
+	displayed?: Pose;
+}
+
+/*
+================
+OwnWalkFrame
+
+The frame the presenter draws: frame-clock seconds, the frame-clock
+milliseconds of simulation time zero, and the pose the generic presenter
+drew last frame when it hands this character over.
+================
+*/
+export interface OwnWalkFrame {
+	readonly now: number;
+	readonly originMs: number;
+	readonly handoff?: Pose;
+}
+
+/*
+================
+createOwnWalkPresenter
+
+The per-character owner of the interpolated presentation, used by
+pose-presentation.ts for the local mover's own walking legs. turn is the
+presenter's native heading turn (86CBA0), shared so both presenters turn
+a body the same way.
+================
+*/
+export function createOwnWalkPresenter( turn: ( from: number, to: number, seconds: number ) => number ) {
+	const tracks = new Map<number, OwnWalkTrack>();
+	let enabled = false;
+	return {
+		/*
+		================
+		enable
+
+		The Experimental "Interpolated own movement" row (read each frame).
+		================
+		*/
+		enable( on: boolean ) {
+			enabled = on;
+			if ( !on ) tracks.clear();
+		},
+		/*
+		================
+		handles
+
+		Whether a sample is drawn here: the local mover's own leg, never a
+		skill displacement (which keeps its own clock).
+		================
+		*/
+		handles( input: SampleInput ): boolean {
+			return enabled && input.ownLeg === true && !input.displacement;
+		},
+		/*
+		================
+		pose
+
+		A fresh worker publication enters the buffer; a relocation restarts
+		it. A handed-over pose is recovered from instead of jumped over.
+		================
+		*/
+		pose( gid: number, input: SampleInput, target: Pose, frame: OwnWalkFrame ): Pose {
+			const { now } = frame, nowMs = now * 1000 - frame.originMs;
+			const relocation = input.transition?.relocation ?? 0;
+			let own = tracks.get( gid );
+			if ( !own || own.relocation !== relocation || now < own.last ) {
+				own = { walk: createOwnWalkInterpolation(), relocation, last: now, angle: target.angle };
+				tracks.set( gid, own );
+			}
+			const fresh = own.atMs !== input.atMs || own.revision !== input.revision || !own.pose ||
+				own.pose.regionId !== target.regionId || own.pose.x !== target.x || own.pose.y !== target.y ||
+				own.pose.z !== target.z;
+			if ( fresh ) {
+				own.walk.push( {
+					atMs: input.atMs,
+					pose: target,
+					moving: input.moving,
+					from: input.from,
+					to: input.to,
+					durationMs: input.durationMs,
+					arrivedAtMs: nowMs
+				} );
+				own.atMs = input.atMs;
+				own.revision = input.revision;
+				own.pose = { ...target };
+			}
+			if ( frame.handoff ) own.walk.carry( frame.handoff, nowMs );
+			own.angle = turn( own.angle, target.angle, now - own.last );
+			own.last = now;
+			own.nowMs = nowMs;
+			const drawn = own.walk.pose( nowMs ) ?? target;
+			own.displayed = { ...drawn, angle: Math.round( own.angle ) % 65536 };
+			return { ...own.displayed };
+		},
+		/*
+		================
+		take
+
+		Releases a character to the generic presenter, returning the pose it
+		was last drawn at (undefined if it was not drawn here).
+		================
+		*/
+		take( gid: number ): Pose | undefined {
+			const displayed = tracks.get( gid )?.displayed;
+			tracks.delete( gid );
+			return displayed;
+		},
+		/*
+		================
+		carry
+
+		A drawn pose handed back (actor-motion's WAIT hold). Reports whether
+		the character is drawn here.
+		================
+		*/
+		carry( gid: number, displayed: Pose ): boolean {
+			const own = tracks.get( gid );
+			if ( !own ) return false;
+			own.walk.carry( displayed, own.nowMs ?? 0 );
+			return true;
+		},
+		/*
+		================
+		moving
+
+		The drawn body's walking flag, or undefined when not drawn here.
+		================
+		*/
+		moving( gid: number ): boolean | undefined {
+			const own = tracks.get( gid );
+			return own ? own.walk.moving( own.nowMs ?? 0 ) : undefined;
+		},
+		/*
+		================
+		retain
+
+		Keeps only the characters still present.
+		================
+		*/
+		retain( gids: ReadonlySet<number> | ReadonlyMap<number, unknown> ) {
+			for ( const gid of tracks.keys() ) if ( !gids.has( gid ) ) tracks.delete( gid );
+		},
+		/*
+		================
+		clear
+		================
+		*/
+		clear() {
+			tracks.clear();
 		}
 	};
 }
