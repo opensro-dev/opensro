@@ -733,7 +733,12 @@ export function startRuntime(
 						} :
 						null
 				);
-				renderer.setWorldClock( sampleWorldClock( presentation.gameplay()?.worldClock, simulationTimeMs ) );
+				renderer.setWorldClock(
+					sampleWorldClock(
+						ui.debugClockSeed( presentation.gameplay()?.worldClock, simulationTimeMs ),
+						simulationTimeMs
+					)
+				);
 				// World presentation outlives its socket; logout/bootstrap owns teardown.
 				const worldPresented = frontendState.phase === "world" || sessionState?.phase === "world";
 				audio.world(
