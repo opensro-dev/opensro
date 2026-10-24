@@ -15,6 +15,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gorilla/websocket"
+
+	wiretest "opensro.online/server/internal/game/internal"
 	presence "opensro.online/server/internal/game/social"
 	"opensro.online/server/internal/game/social/party"
 	"opensro.online/server/internal/testsupport/wait"
@@ -132,4 +135,27 @@ func TestPartyResumeKeepsMembership(t *testing.T) {
 
 	sendFrame(t, connA, transport.OpBye, []byte{transport.ByeReasonNormal})
 	sendFrame(t, connB2, transport.OpBye, []byte{transport.ByeReasonNormal})
+}
+
+/*
+================
+helloResumeWS
+
+The handshake resuming from old's stream position (the frames that test
+client read); old nil sends a fresh HELLO.
+================
+*/
+func helloResumeWS(t *testing.T, c *websocket.Conn, resumeToken []byte, old *websocket.Conn) transport.Welcome {
+	t.Helper()
+	hello := transport.Hello{ResumeToken: resumeToken, AdmissionToken: []byte("test-admission")}
+	if old != nil {
+		hello.HasPosition, hello.LastApplied = true, wiretest.StreamPosition(old)
+	}
+	sendFrame(t, c, transport.OpHello, transport.EncodeHello(hello))
+	payload := expectFrame(t, c, transport.OpWelcome, "handshake")
+	welcome, err := transport.DecodeWelcome(payload)
+	if err != nil {
+		t.Fatalf("decoding WELCOME: %v", err)
+	}
+	return welcome
 }
