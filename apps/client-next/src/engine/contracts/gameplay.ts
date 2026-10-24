@@ -237,8 +237,6 @@ export type GameplayCommand =
 	| {
 		readonly kind: "ground-move";
 		readonly query: import("./navigation").GroundPickQuery;
-		// The main thread's movement input sequence (movement-input.ts).
-		readonly inputSeq?: number;
 		// Set by the world session while a logout/restart countdown runs.
 		readonly departing?: boolean;
 	}
@@ -394,8 +392,6 @@ export type GameplayCommand =
 	| {
 		readonly kind: "move";
 		readonly destination: Pose;
-		// The main thread's movement input sequence (movement-input.ts).
-		readonly inputSeq?: number;
 	}
 	// /GetPos (690C40 case 3): flip the local player's body visual state
 	// (appearanceState[2], the 85EC00 byte) between 0 and 1, locally only.
@@ -889,7 +885,7 @@ export interface GameplayState {
 	readonly pose: Pose | null;
 	readonly movementPath?: MovementPath;
 	readonly movementRevision?: number;
-	// The last movement input sequence the worker processed (movement-input.ts).
+	// The last gameplay input sequence the worker took (movement-input.ts).
 	readonly movementInputSeq?: number;
 	readonly movementTransition?: MovementTransition;
 	readonly movementDiagnostics?: {

@@ -1751,21 +1751,21 @@ step
 		},
 		/*
 ================
-state
-================
-		*/
-		/*
-================
 noteInput
 
-Records a main-thread movement input sequence number as processed,
-whatever the input resolved to (a walk, a direction walk, a held or a
-refused click). Receipts and corrections never change it.
+Records a main-thread gameplay input sequence number as taken, whatever
+it resolved to (a walk, a direction walk, a held, refused or dropped
+input). Receipts and corrections never change it.
 ================
 		*/
 		noteInput( seq: number ) {
 			if ( seq > inputSeq ) inputSeq = seq;
 		},
+		/*
+================
+state
+================
+		*/
 		state() {
 			return {
 				navigationRequestId,

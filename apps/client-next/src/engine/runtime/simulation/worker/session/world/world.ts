@@ -561,7 +561,11 @@ takeDeparture
 command
 ================
 		*/
-		command( command: GameplayCommand, at = now ) {
+		command( command: GameplayCommand, at = now, inputSeq?: number ) {
+			// Record the input as taken before any gate below can drop it
+			// (#1441a): a click refused while loading or reconnecting is still
+			// an input the main thread must not replay.
+			if ( inputSeq !== undefined ) core.noteInput( inputSeq );
 			if ( phase !== "world" || (!ready && command.kind !== "navigation") ) {
 				throw new Error( "World gameplay is not ready" );
 			}
