@@ -38,6 +38,12 @@ export interface NetworkOwner {
 	// Every frame received on the current socket, transport control (pings,
 	// pongs) included: a live link changes it even when no game frame comes.
 	received(): number;
+	// When the last frame arrived, on the event clock (performance.now()),
+	// or -Infinity before the current socket's first frame. The one owner
+	// of the last-inbound time (#1474): the close detail's silence and the
+	// world session's stall wording both read this stamp, never a second
+	// clock's dating of it.
+	receivedAt(): number;
 	connect( url: string, admission: string, resume?: Uint8Array ): void;
 	send( frame: WireFrame ): void;
 	// False retains this frame and its successors while admission awaits data.

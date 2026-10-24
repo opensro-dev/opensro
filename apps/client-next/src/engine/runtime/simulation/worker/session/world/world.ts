@@ -214,9 +214,15 @@ onNetworkFailure
 		error: string;
 	} = { kind: "idle" };
 	let lastError: string | undefined;
-	// When the last frame of any kind arrived (step clock), and when the
-	// current stall was first seen.
-	let lastInboundAtMs = -Infinity, lastReceived = 0;
+	// The stall watch: the oldest outstanding request's send time (step
+	// clock), the network's last-inbound time (event clock) sampled at the
+	// start of the step before that request was first seen outstanding,
+	// and when the current stall was first seen. The world keeps no
+	// last-inbound time of its own (#1474): a frame proves the link alive
+	// after a request only on the network's clock, never by the step that
+	// happened to sample it, so a frozen tab's backlog is not dated fresh.
+	let stallSince: number | undefined, stallInboundBase = -Infinity;
+	let inboundAtStepStart = -Infinity, inboundAtPriorStepStart = -Infinity;
 	let stallSeenAtMs: number | undefined;
 	let huntingGuide: import("@/engine/contracts/hunting-guide").HuntingGuideSource | undefined;
 	let now = 0,
@@ -272,13 +278,16 @@ barrier owns that wait).
 ================
 inboundAge
 
-How long ago the last frame arrived, for the lost-answer incidents.
+How long ago the last frame arrived, for the lost-answer incidents: the
+network owner's event-clock stamp (receivedAt), so this age and the
+close detail's silence are the same number in two units (#1474).
 ================
 	*/
 	function inboundAge(): string {
-		return lastInboundAtMs === -Infinity ?
-			"no frame received yet" :
-			`last inbound ${Math.round( now - lastInboundAtMs )} ms ago`;
+		const at = network.receivedAt();
+		return Number.isFinite( at ) ?
+			`last inbound ${Math.max( 0, Math.round( performance.now() - at ) )} ms ago` :
+			"no frame received yet";
 	}
 	/*
 ================
@@ -291,8 +300,22 @@ Resume now (the lost-answer path), naming the link instead of the request.
 	*/
 	function stepStall() {
 		const since = core.outstandingSince();
-		// Alive only if a frame arrived after the request left.
-		if ( since === undefined || now - since < TRANSPORT_STALL_MS || lastInboundAtMs > since ) {
+		if ( since === undefined ) {
+			stallSince = undefined;
+			stallSeenAtMs = undefined;
+			return;
+		}
+		// A newly oldest request re-bases the watch on the last-inbound
+		// time sampled at the prior step's start: frames already delivered
+		// by then (entry's setup frames, a frozen tab's backlog) left
+		// before it did, however late a step samples them (#1460, #1474).
+		if ( stallSince !== since ) {
+			stallSince = since;
+			stallInboundBase = inboundAtPriorStepStart;
+		}
+		// Alive only if a frame arrived after the request left (strictly,
+		// on the network's event clock).
+		if ( now - since < TRANSPORT_STALL_MS || network.receivedAt() > stallInboundBase ) {
 			stallSeenAtMs = undefined;
 			return;
 		}
@@ -657,13 +680,11 @@ step
 			// A command may already have advanced this clock while an overdue
 			// fixed tick was queued. Catch-up must never rewind that command.
 			now = Math.max( now, time );
-			// network.ts answers pings and pongs itself; its frame count sees
-			// them. Sampled every step so a frame is dated to the step it came in.
-			const received = network.received();
-			if ( received !== lastReceived ) {
-				lastReceived = received;
-				lastInboundAtMs = now;
-			}
+			// The network's last-inbound time (event clock) at this step's
+			// start, before the drain: stepStall bases a request's watch on
+			// the prior step's sample (#1474).
+			inboundAtPriorStepStart = inboundAtStepStart;
+			inboundAtStepStart = network.receivedAt();
 			if ( disposed ) {
 				return;
 			}
