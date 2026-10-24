@@ -464,6 +464,8 @@ export function createGameplay(
 	// 877230: *(pDeadreckon + 0x48) deadline suppressing ground/angle movement
 	// packets for 500 ms after a ground-targeted skill press sends 0x72CD.
 	let groundSkillMoveSuppressUntil = 0;
+	// groundWalkRefusal() was null at the last step (published, #1440).
+	let walkPredictable = false;
 	const feedback = createFeedback();
 	const pickup = createPickup();
 	const actionSession = createActionSession();
@@ -693,6 +695,53 @@ scroll's kind-0 row does not.
 	function interactionBlocked() {
 		return npcConversation.interactionLocked() || inventory.interactionWindowOpen() ||
 			returnScroll?.skillId !== undefined;
+	}
+	/*
+	================
+	frozen
+
+	85C590 freeze leaves action state 9, which disables navigation. Sleep and
+	stun do not. The mask is the same word 0x36C7 and 0x33A6 write.
+	================
+	*/
+	function frozen(): boolean {
+		return ((combat.state().vitals.find( v => v.gid === localGid )?.abnormal ?? 0) & 1) !== 0;
+	}
+	/*
+	================
+	castLocked
+
+	The local player's cast holds a world click until its action window ends
+	(the click is reserved, not walked).
+	================
+	*/
+	function castLocked( now: number ): boolean {
+		return castMotion.locked( combat.state().casts, localGid, now, !actionSession.released() );
+	}
+	/*
+	================
+	groundWalkRefusal
+
+	Why a ground click now would not start a walk at once, or null when it
+	would. command() asks these same predicates for a ground click, in its own
+	order around its side effects; the published walkPredictable is this
+	answer, so the main-thread mover (#1440) predicts only a click the worker
+	walks. Mounted walks stay with the worker for now.
+	================
+	*/
+	function groundWalkRefusal( now: number, local: EntityState | undefined ): string | null {
+		if ( protocol !== 1 ) return "protocol";
+		if ( !local ) return "absent";
+		if ( local.appearanceState?.[0] === 2 ) return "dead";
+		if ( combat.guidedActive( localGid, now ) ) return "guided";
+		if ( now < groundSkillMoveSuppressUntil ) return "suppressed";
+		if ( teleportMode === 1 ) return "teleport";
+		if ( interactionBlocked() ) return "blocked";
+		if ( frozen() ) return "frozen";
+		if ( local.movementMode === MOVEMENT_SEATED ) return "seated";
+		if ( castLocked( now ) ) return "cast";
+		if ( local.mountedOn ) return "mounted";
+		return null;
 	}
 	/*
 ================
@@ -1102,6 +1151,7 @@ selected entities, cooldowns or world-entry state.
 		journalRows = null;
 		journalBag = new Map();
 		groundSkillMoveSuppressUntil = 0;
+		walkPredictable = false;
 		moveReservation.clear();
 		betaMap.clear();
 		petTraining.clear();
@@ -2044,12 +2094,7 @@ state here before a command can claim a native wire conversation.
 				cancelActionForMovement();
 				if ( command.kind === "ground-move" && command.departing ) sendFrame( logoutCancelRequest() );
 			}
-			// 85C590 freeze leaves action state 9, which disables navigation.
-			// Sleep and stun do not. The mask is the same word 0x36C7 and 0x33A6 write.
-			if (
-				(combat.state().vitals.find( v => v.gid === localGid )?.abnormal ?? 0) & 1 &&
-				[ "move", "ground-move" ].includes( command.kind )
-			) return null;
+			if ( frozen() && [ "move", "ground-move" ].includes( command.kind ) ) return null;
 			// 6933a6 ground click / 692d19 entity click: seated interaction
 			// requests stand and RETURNS. It must not also predict travel.
 			if (
@@ -2664,7 +2709,7 @@ state here before a command can claim a native wire conversation.
 				if ( protocol !== 1 ) {
 					throw new Error( "Server does not support simulation protocol 1" );
 				}
-				if ( castMotion.locked( combat.state().casts, localGid, now, !actionSession.released() ) ) {
+				if ( castLocked( now ) ) {
 					// Resolve the click now, not when the cast releases: its ray belongs
 					// to the camera at click time, and the destination marker appears
 					// when the player clicks. A direction walk keeps its query.
@@ -4404,6 +4449,13 @@ before take assembles the presentation snapshot.
 		*/
 		step( now: number, local?: EntityState ) {
 			inventorySince = inventory.state().inventoryPending ? inventorySince ?? now : undefined;
+			// A gate can open or close with no command or frame (a cast's action
+			// window ends): republish when the answer changes.
+			const predictable = groundWalkRefusal( now, local ) === null;
+			if ( predictable !== walkPredictable ) {
+				walkPredictable = predictable;
+				dirty = true;
+			}
 			if ( petAssists.size ) {
 				const targets = new Map<number, EntityState>();
 				for ( const target of petAssists.values() ) {
@@ -4457,8 +4509,7 @@ before take assembles the presentation snapshot.
 			// action state 2 (the skill's action window ends or it is cancelled);
 			// death forfeits it.
 			if (
-				moveReservation.holding() &&
-				!castMotion.locked( combat.state().casts, localGid, now, !actionSession.released() )
+				moveReservation.holding() && !castLocked( now )
 			) {
 				const held = moveReservation.take()!;
 				if ( !local || local.appearanceState?.[0] === 2 ) {
@@ -4748,6 +4799,7 @@ The published plane when something changed since the last take, else null.
 				revision: ++revision,
 				localGid,
 				...m,
+				walkPredictable,
 				...i,
 				inventoryJournal,
 				...c,
@@ -4781,6 +4833,7 @@ World transfer retires spatial work while retaining character/session data.
 			pickup.clear();
 			cosPickup.clear();
 			groundSkillMoveSuppressUntil = 0;
+			walkPredictable = false;
 			moveReservation.clear();
 			quests.clearGathering();
 			approach = interactionApproachTransition( approach, { kind: "cancel" } );

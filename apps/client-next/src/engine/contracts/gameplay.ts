@@ -887,6 +887,12 @@ export interface GameplayState {
 	readonly movementRevision?: number;
 	// The last gameplay input sequence the worker took (movement-input.ts).
 	readonly movementInputSeq?: number;
+	// The local walk speed in world units a second that a new walk leg uses
+	// (movement.ts request): the main-thread mover times its legs with it (#1440).
+	readonly movementSpeed?: number;
+	// A ground click now would start a walk at once (gameplay.ts
+	// groundWalkRefusal): the main-thread mover predicts only then (#1440).
+	readonly walkPredictable?: boolean;
 	readonly movementTransition?: MovementTransition;
 	readonly movementDiagnostics?: {
 		readonly total: number;
