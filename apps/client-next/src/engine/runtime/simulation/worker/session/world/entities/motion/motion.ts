@@ -98,6 +98,32 @@ function update( gid: number, pose: Pose, moving = false ): MotionUpdate {
 }
 /*
 ================
+MotionSegmentObserver
+
+The pursuit recorder's injected seam: a harness registers an observer and
+every segment motion installs is reported with its entity. Production
+registers nothing and pays one no-op call per install.
+================
+*/
+export type MotionSegmentObserver = ( gid: number, segment: MovementSegment ) => void;
+
+let segmentObserver: MotionSegmentObserver = () => {};
+
+/*
+================
+setMotionSegmentObserver
+
+Registers the harness observer (null restores the production no-op). The
+observer starts as a local no-op rather than null so the install call
+always resolves to a function this program owns.
+================
+*/
+export function setMotionSegmentObserver( observer: MotionSegmentObserver | null ): void {
+	segmentObserver = observer ?? (() => {});
+}
+
+/*
+================
 createEntityMotion
 ================
 */
@@ -117,6 +143,19 @@ resolve
 		return surface( pose, reference, cursor );
 	}
 	const active = new Map<number, RemoteSegment>();
+	/*
+================
+install
+
+Installs the active segment and reports the install to the segment
+observer; every new leg (receive, steer, spawn, displacement, retime)
+funnels through here so the observer never sees a stale segment.
+================
+	*/
+	function install( gid: number, segment: RemoteSegment ) {
+		active.set( gid, segment );
+		segmentObserver( gid, segment );
+	}
 	/*
 ================
 candidate
@@ -341,7 +380,7 @@ Retail 0x775CB0 calls source reseed (0x86D9D0), without the halt
 			}
 			if ( segment && !segment.fixedTiming ) {
 				const durationMs = duration( resolved, segment.to, entity );
-				active.set( entity.gid, {
+				install( entity.gid, {
 					...segment,
 					from: resolved,
 					previous: resolved,
@@ -384,7 +423,7 @@ displace
 					advance( entity.gid, previous, now ) :
 					{ regionId: entity.regionId, x: entity.x, y: entity.y, z: entity.z, angle: entity.heading };
 			const segment = displacementSegment( from, command, now );
-			active.set( entity.gid, {
+			install( entity.gid, {
 				...segment,
 				fixedTiming: true,
 				castToken: command.kind === 8 ? command.token : undefined
@@ -468,7 +507,7 @@ spawn
 			if ( !entity.spawnDestination ) return;
 			const from = { regionId: entity.regionId, x: entity.x, y: entity.y, z: entity.z, angle: entity.heading },
 				to = entity.spawnDestination;
-			active.set( entity.gid, {
+			install( entity.gid, {
 				from,
 				to: { ...to, angle: movementHeading( from, to ) },
 				start: now,
@@ -509,11 +548,11 @@ receive
 			if ( decoded.kind === "direction" ) {
 				const leg = directionLeg( entity, from, decoded.heading!, now );
 				const next = { ...leg, walkingPath };
-				active.set( entity.gid, next );
+				install( entity.gid, next );
 				return presentationPath( entity.gid, next, from );
 			}
 			const to = decoded.to, durationMs = duration( from, to, entity );
-			active.set( entity.gid, {
+			install( entity.gid, {
 				from,
 				to,
 				start: now,
@@ -539,7 +578,7 @@ idle mover turns where it stands. A destination walk keeps its own facing.
 				const pose = advanceCommand( entity.gid, segment, now );
 				const leg = directionLeg( entity, pose, heading, now );
 				const continued = { ...leg, walkingPath: segment.walkingPath };
-				active.set( entity.gid, continued );
+				install( entity.gid, continued );
 				return {
 					...update( entity.gid, pose, true ),
 					heading,
@@ -572,7 +611,7 @@ speeds
 			const pose = advanceCommand( next.gid, segment, now );
 			const retimed = movementSpeedTransition( { ...segment, from: pose, start: now }, before, after, now );
 			if ( retimed.duration && !segment.blocked ) {
-				active.set( next.gid, {
+				install( next.gid, {
 					...segment,
 					...retimed,
 					from: pose,
@@ -625,7 +664,7 @@ mode
 			const pose = advanceCommand( entity.gid, segment, now );
 			const next = movementModeTransition( { ...segment, from: pose, start: now }, mode, speed, now );
 			if ( next.segment && !segment.blocked ) {
-				active.set( entity.gid, {
+				install( entity.gid, {
 					...next.segment,
 					from: pose,
 					previous: pose,
@@ -669,7 +708,7 @@ step
 				if ( segment.direction !== undefined && !segment.blocked ) {
 					const speed = segment.speed ?? 0;
 					const to = directionLegEnd( pose, segment.direction );
-					active.set( gid, {
+					install( gid, {
 						from: pose,
 						to,
 						start: now,
