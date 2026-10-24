@@ -33,6 +33,7 @@ test(
 			const result = await page.evaluate( async () => {
 				const { createUiResources } = await import( "/src/engine/runtime/renderer/device/ui.ts" );
 				const { decodeUiFont, titleText } = await import( "/src/engine/foundation/rendering/ui-glyphs.ts" );
+				const { fitUiGroup } = await import( "/src/engine/foundation/ui/layout.ts" );
 				const font = decodeUiFont( await (await fetch( "/assets/fonts/native-ui-font-atlas.json" )).json() );
 				const fontBitmap = await createImageBitmap( await (await fetch( font.image )).blob() );
 				const adapter = await navigator.gpu.requestAdapter();
@@ -89,7 +90,7 @@ test(
 						width: WIDTH / scale,
 						height: HEIGHT / scale,
 						quads
-					} );
+					}, WIDTH );
 					const encoder = device.createCommandEncoder();
 					const pass = encoder.beginRenderPass( {
 						colorAttachments: [ {
@@ -121,7 +122,8 @@ test(
 					buffer.unmap();
 					const red = new Float64Array( WIDTH * HEIGHT );
 					for ( let i = 0; i < red.length; i++ ) {
-						red[i] = rgba[i * 4] / 255;
+						// Linear light: the shader lifts coverage so it blends to the right light.
+						red[i] = (rgba[i * 4] / 255) ** 2.2;
 					}
 					return red;
 				}
@@ -143,7 +145,7 @@ test(
 						uvTurn
 					};
 				}
-				const out = { errors, dots: {}, glyphs: {}, whole: {}, turn: 0 };
+				const out = { errors, dots: {}, glyphs: {}, fitted: {}, whole: {}, turn: 0 };
 				// Each dot's ink in output pixels at fractional scales and phases.
 				for ( const scale of [ 0.75, 1.25, 1.5, 1.75 ] ) {
 					const inks = [];
@@ -189,6 +191,18 @@ test(
 						scaledRows: rows( scaled ).length
 					};
 				}
+				// A fitted window (the world map on a small screen) shrinks its text at
+				// a whole output scale: the same area path, not a weak linear smear.
+				for ( const fit of [ 0.8, 0.6 ] ) {
+					const fitted = text.map( q => ({ ...q }) );
+					const source = /** @type {[number, number, number, number]} */ ([ 0, 0, 320, 40 ]);
+					fitUiGroup( fitted, [], 0, 0, [ 0, 0, 320 * fit, 40 * fit ], screen, { sourceBounds: source } );
+					const shrunk = await render( fitted, 1 );
+					out.fitted[fit] = {
+						ratio: sum( shrunk ) / (sum( native ) * fit * fit),
+						nearest: fitted.every( q => q.sampling === "nearest" )
+					};
+				}
 				// Whole-number scales: 100% equals linear (aligned texel centres), and
 				// 2x and 3x replicate each texel into a whole block, as nearest did.
 				const plain = await render( text.map( q => ({ ...q, sampling: "linear" }) ), 1 );
@@ -229,6 +243,10 @@ test(
 					glyphs.scaledRows >= Math.floor( glyphs.nativeRows * Number( scale ) ),
 					`scale ${scale}: ${glyphs.scaledRows} inked rows from ${glyphs.nativeRows}`
 				);
+			}
+			for ( const [fit, fitted] of Object.entries( result.fitted ) ) {
+				assert.ok( fitted.nearest, `fit ${fit}: runs kept nearest` );
+				assert.ok( Math.abs( fitted.ratio - 1 ) < 0.03, `fit ${fit}: text ink ratio ${fitted.ratio}` );
 			}
 			assert.deepEqual( result.whole, { 1: true, 2: true, 3: true } );
 			assert.equal( result.turn, 3 );

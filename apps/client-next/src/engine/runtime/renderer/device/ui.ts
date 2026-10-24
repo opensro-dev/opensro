@@ -101,9 +101,11 @@ Footprints wider than AREA_TAPS texels (below half size) are not taken.
 ================
 */
 const AREA_TAPS = 3;
+// The display transfer the 8-bit frame is encoded in (sRGB, as a power).
+const DISPLAY_GAMMA = 2.2;
 // UI units each unrotated quad grows by (vs): one texel's footprint at half size.
 const EDGE_PAD = 2.0;
-const SCALE_EPSILON = 0.001;
+const SCALE_EPSILON = 0.002;
 const TEXEL_EPSILON = 0.01;
 fn areaSample( t: vec2f, d: vec2f, rect: vec4f ) -> vec4f {
 	let size = vec2f( textureDimensions( tex ) );
@@ -123,7 +125,7 @@ fn areaSample( t: vec2f, d: vec2f, rect: vec4f ) -> vec4f {
 			if ( w > 0 ) {
 				let texel = textureLoad( tex, vec2i( clamp( cell, vec2f( 0 ), size - 1 ) ), 0 );
 				// Premultiplied, so a transparent texel adds no colour.
-				sum += vec4f( texel.rgb * texel.a, texel.a ) * w;
+				sum += vec4f( pow( texel.rgb, vec3f( DISPLAY_GAMMA ) ) * texel.a, texel.a ) * w;
 				weight += w;
 			}
 		}
@@ -134,7 +136,28 @@ fn areaSample( t: vec2f, d: vec2f, rect: vec4f ) -> vec4f {
 	// Over the pixel's whole footprint: the part outside the quad is
 	// transparent, so an edge pixel holds only the ink that reaches it.
 	let alpha = sum.a / ( d.x * d.y );
-	return vec4f( select( vec3f( 0 ), sum.rgb / sum.a, sum.a > 0 ), alpha );
+	// Colours average in linear light, so a mixed edge keeps its brightness.
+	let rgb = select( vec3f( 0 ), pow( sum.rgb / sum.a, vec3f( 1 / DISPLAY_GAMMA ) ), sum.a > 0 );
+	return vec4f( rgb, alpha );
+}
+
+/*
+================
+perceivedCoverage
+
+The frame blends gamma-encoded colours, so a half-covered pixel of light
+text on a dark panel would show at a fifth of its brightness and thin
+strokes would look weak. Lift the coverage to the value that blends to the
+right light: light text over the dark panels it sits on, and the mirror
+rule for dark text (shadows, text on light plates). Full and empty
+coverage are unchanged.
+================
+*/
+fn perceivedCoverage( coverage: f32, color: vec3f ) -> f32 {
+	let light = dot( color, vec3f( 0.2126, 0.7152, 0.0722 ) ) >= 0.5;
+	let lifted = pow( coverage, 1 / DISPLAY_GAMMA );
+	let mirrored = 1 - pow( 1 - coverage, 1 / DISPLAY_GAMMA );
+	return select( mirrored, lifted, light );
 }
 
 /*
@@ -152,7 +175,18 @@ vs
 	// An unrotated quad grows by EDGE_PAD UI units on each side, its uv with
 	// it: a fractional scale's edge texels cover pixels whose centres lie
 	// outside the rect. fs discards the pad unless it takes the area average.
-	let padded = angle == 0 && all( q.rect.zw > vec2f( 0 ) );
+	// Pad only a quad whose texels miss whole pixels: at 100% and at whole
+	// enlargements nothing is padded and the default path shades no extra
+	// fragments. viewport.z is pixels per UI unit (0 = unknown: pad).
+	var texels = q.uv.zw * vec2f( textureDimensions( tex ) );
+	if ( q.effects.x % 2 == 1 ) {
+		texels = texels.yx;
+	}
+	let pixelsPerTexel = viewport.z * q.rect.zw / max( texels, vec2f( 1e-6 ) );
+	let onGrid = viewport.z > 0 &&
+		all( abs( pixelsPerTexel - round( pixelsPerTexel ) ) < vec2f( SCALE_EPSILON ) ) &&
+		all( pixelsPerTexel > vec2f( 0.5 ) );
+	let padded = angle == 0 && all( q.rect.zw > vec2f( 0 ) ) && !onGrid;
 	let pad = select( vec2f( 0 ), vec2f( EDGE_PAD ) / q.rect.zw, padded );
 	let c = corners[v] * ( 1 + 2 * pad ) - pad;
 	let local = ( c - 0.5 ) * q.rect.zw;
@@ -200,17 +234,27 @@ fs
 	if ( any( i.point < i.clip.xy ) || any( i.point >= i.clip.xy + i.clip.zw ) ) {
 		discard;
 	}
-	// Whole-number scales keep their sampling unchanged. At a fractional
-	// scale (only the UI size slider makes one), nearest quads and artwork
-	// drawn texel for texel (one texel per UI unit) take the area average;
-	// stretched art keeps its linear filter.
+	// One rule for every path that scales the retail bitmaps (the UI size
+	// slider, a fitted window, the region banner, display density), decided
+	// per quad by its own texels per output pixel. A nearest quad (all text)
+	// at a whole-number magnification keeps nearest sampling and is pixel
+	// for pixel unchanged; at any other ratio it takes the area average with
+	// perceived coverage. Artwork drawn texel for texel takes the area
+	// average at a fractional UI scale; stretched art keeps its linear filter.
+	let magnification = 1 / max( d, vec2f( 1e-6 ) );
+	let aligned = all( abs( magnification - round( magnification ) ) < vec2f( SCALE_EPSILON ) ) &&
+		all( magnification > vec2f( 0.5 ) );
 	let whole = abs( scale - round( scale ) ) < SCALE_EPSILON;
 	let texelForTexel = all( abs( d * scale - 1 ) < vec2f( TEXEL_EPSILON ) );
-	let area = !whole && i.rotated == 0 && all( d <= vec2f( f32( AREA_TAPS - 1 ) ) ) &&
-		( i.nearest == 1 || texelForTexel );
+	let text = i.nearest == 1 && !aligned;
+	let art = i.nearest == 0 && !whole && texelForTexel;
+	let area = i.rotated == 0 && all( d <= vec2f( f32( AREA_TAPS - 1 ) ) ) && ( text || art );
 	var texel = sampled;
 	if ( area ) {
 		texel = areaSample( t, d, i.uvRect );
+		if ( i.nearest == 1 ) {
+			texel.a = perceivedCoverage( texel.a, i.color.rgb );
+		}
 	} else if ( i.rotated == 0 && ( any( i.point < i.rect.xy ) || any( i.point >= i.rect.xy + i.rect.zw ) ) ) {
 		// The vertex pad, outside the quad: the unpadded quad's pixels only.
 		discard;
@@ -227,7 +271,8 @@ fs
 		entries: [
 			{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: "read-only-storage" } },
 			{ binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: "uniform" } },
-			{ binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: {} },
+			// The vertex stage reads the texture's size to decide the edge pad.
+			{ binding: 2, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, texture: {} },
 			{ binding: 3, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
 			{ binding: 4, visibility: GPUShaderStage.FRAGMENT, texture: {} }
 		]
@@ -470,7 +515,7 @@ fs
 		prepare
 		================
 		*/
-		prepare( scene: UiScene | null ): readonly UiDraw[] {
+		prepare( scene: UiScene | null, targetWidth = 0 ): readonly UiDraw[] {
 			if ( !pipeline || !scene ) return [];
 			if ( last === scene && recordedResources === resourceRevision ) return draws;
 			// One GPU record per plain quad and per glyph of a text run.
@@ -588,9 +633,16 @@ fs
 				device.queue.writeBuffer( storage, first * 4, changed );
 				uploaded.set( changed, first );
 			}
-			if ( viewportValues[0] !== scene.width || viewportValues[1] !== scene.height ) {
+			// Output pixels per UI unit; 0 when the caller does not say (the
+			// shader then pads every quad, which is correct, only slower).
+			const pixelScale = targetWidth > 0 ? targetWidth / scene.width : 0;
+			if (
+				viewportValues[0] !== scene.width || viewportValues[1] !== scene.height ||
+				viewportValues[2] !== pixelScale
+			) {
 				viewportValues[0] = scene.width;
 				viewportValues[1] = scene.height;
+				viewportValues[2] = pixelScale;
 				device.queue.writeBuffer( viewport, 0, viewportValues );
 			}
 			// Equal command topology keeps the existing bundle even when positions/text change.
