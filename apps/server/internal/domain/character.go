@@ -110,8 +110,15 @@ type CharacterWorld struct {
 	// PackedInstance is the native world identity: definition in the low
 	// word, instance in the high word. An absent legacy record belongs to
 	// INS_DEFAULT instance 1; explicit values are never inferred from region.
-	PackedInstance *uint32     `json:"packedInstance,omitempty"`
-	Spawn          *WorldSpawn `json:"spawn"`
+	PackedInstance *uint32 `json:"packedInstance,omitempty"`
+	// InstanceReturn is the anchor recorded when a character enters an
+	// instanced world (a quest instance, a match world): the world and pose
+	// the character returns to when the instance ends. The transfer writes
+	// it before the move commits and the return clears it, so a present
+	// anchor means the character is inside an instance programme. Absent
+	// outside one (schema 29).
+	InstanceReturn *InstanceReturnAnchor `json:"instanceReturn,omitempty"`
+	Spawn          *WorldSpawn           `json:"spawn"`
 	// AuthoredAreaReturn is the settled ordinary-world spawn captured before
 	// entering a server-authored area. Authored areas are real world regions,
 	// so movement continues to update Spawn normally; this independent return
@@ -157,6 +164,26 @@ type SavedReturnLocation struct {
 	X          float32 `json:"x"`
 	Y          float32 `json:"y"`
 	Z          float32 `json:"z"`
+}
+
+/*
+================
+InstanceReturnAnchor
+
+The world and pose a character returns to when an instanced world ends.
+PackedInstance carries the full world identity (definition in the low
+word, layer in the high word), unlike SavedReturnLocation's
+definition-only native return point: the layer is what makes the anchor
+an instance address rather than a town address.
+================
+*/
+type InstanceReturnAnchor struct {
+	PackedInstance uint32  `json:"packedInstance"`
+	RegionID       uint16  `json:"regionId"`
+	X              float32 `json:"x"`
+	Y              float32 `json:"y"`
+	Z              float32 `json:"z"`
+	Angle          uint16  `json:"angle"`
 }
 
 /*
@@ -294,7 +321,10 @@ type Character struct {
 	// CapturedCOS is a capture-escort quest's captured monster (TypeID
 	// 1/2/3/6, client 692260): runtime-only, never persisted. The quest
 	// record keeps the capture; a relog either re-summons it or fails it.
-	CapturedCOS     *CharacterCOS    `json:"-"`
+	CapturedCOS *CharacterCOS `json:"-"`
+	// Port-only spell summons have no summoner item and never survive reentry.
+	BroodGeneration uint64           `json:"-"`
+	Brood           []*CharacterCOS  `json:"-"`
 	PetSkillWindows []PetSkillWindow `json:"petSkillWindows,omitempty"`
 	// ParamJobs are the live item parameter jobs (CTJ_CharParamKeeper):
 	// EXP/skill-EXP scroll bonuses with an absolute deadline.
@@ -638,6 +668,14 @@ Owned companion state; its inventory commits with the owning character.
 ================
 */
 type CharacterCOS struct {
+	// Port-only Stormbrood actor: 1 egg, 2 unhealable clone.
+	BroodStage   uint8  `json:"-"`
+	BroodSource  uint32 `json:"-"`
+	BroodUntil   int64  `json:"-"`
+	BroodHatchHP uint32 `json:"-"`
+	BroodMaxHP   uint32 `json:"-"`
+	BroodBook    uint8  `json:"-"`
+	BroodRank    uint8  `json:"-"`
 	// Port-only, not native. Lives on the summoner item, including cooldowns.
 	Training PetTraining `json:"training,omitzero"`
 	// Port-only combat stacks; never restored from a summoner item.
@@ -706,9 +744,13 @@ of Kind ("Attacks", "Hits taken", "Kills", "Spells").
 ================
 */
 type PetRowCooldown struct {
-	ReadyAtMs int64  `json:"readyAtMs,omitempty"`
-	Kind      string `json:"kind,omitempty"`
-	Left      uint16 `json:"left,omitempty"`
+	// Port-only stored casts; ReadyAtMs is the next sequential recharge.
+	Capacity   uint8  `json:"capacity,omitempty"`
+	Charges    uint8  `json:"charges,omitempty"`
+	RechargeMs int64  `json:"rechargeMs,omitempty"`
+	ReadyAtMs  int64  `json:"readyAtMs,omitempty"`
+	Kind       string `json:"kind,omitempty"`
+	Left       uint16 `json:"left,omitempty"`
 }
 
 /*

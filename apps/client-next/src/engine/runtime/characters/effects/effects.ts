@@ -141,6 +141,7 @@ const CAPTURED_MONSTER_TYPE = 6 << 11;
 // (trimToEffectBudget); only a cast arriving with every slot taken by
 // other casts skips its visuals.
 const EFFECT_ACTOR_BUDGET = 2048;
+const CROW_EFFECT_LIMIT = 64;
 // A one-shot whose model is still not resident this long after its spawn is dropped.
 const UNREADY_ONE_SHOT_SECONDS = 15;
 // 8DE74C loads [0xC14E6C], -pi/2 as a float, as the fYaw of every AT_TARGET
@@ -341,6 +342,13 @@ export function createCharacterEffects(
 		}
 	>();
 	let externalSerial = 0;
+	const crowEffects: {
+		pose: CharacterActor["pose"];
+		gids: number[];
+		cue: number;
+		book: number;
+		started?: number;
+	}[] = [];
 	let catalog: EffectCatalog | null = null,
 		models:
 			| Record<string, {
@@ -1015,8 +1023,26 @@ export function createCharacterEffects(
 	return {
 		/*
 		================
+		crowEffect
+		A bounded, fixed-origin gust outlives the despawned clone.
+		================
+		*/
+		crowEffect(
+			source: Extract<import("@/engine/contracts/orb").VisualFeedback, { kind: "pet-crow-effect"; }>["source"],
+			cue = 0,
+			book = 1
+		) {
+			if ( crowEffects.length >= CROW_EFFECT_LIMIT ) return;
+			crowEffects.push( {
+				pose: { ...source, yaw: nativeHeadingYaw( 0 ) },
+				cue,
+				book,
+				gids: Array.from( { length: cue === 1 || cue === 4 ? 12 : 7 }, allocate )
+			} );
+		},
+		/*
+		================
 		item
-		Queues an external item effect (a used item's visual) for the next step.
 		================
 		*/
 		item( event: import("@/engine/contracts/orb").ItemEffectFeedback ) {
@@ -2056,6 +2082,122 @@ export function createCharacterEffects(
 					}
 				}
 				const result: CharacterActor[] = [];
+				for ( let i = crowEffects.length - 1; i >= 0; i-- ) {
+					const burst = crowEffects[i]!;
+					burst.started ??= now;
+					const age = now - burst.started;
+					if ( age >= 1.2 ) {
+						crowEffects.splice( i, 1 );
+						continue;
+					}
+					if ( burst.cue > 0 ) {
+						// Native unlit materials bypass instance tint; recovery colors live in the textures.
+						const model = burst.cue === 1 ?
+							"/assets/effects/crow-heal-wisp" :
+							burst.cue === 4 ?
+							"/assets/effects/crow-mana-wisp" :
+							"/assets/effects/crow-feather";
+						if ( !ready( model ) ) continue;
+						const tint: readonly [number, number, number] = burst.cue === 2 ?
+							[ .8, .65, .4 ] :
+							burst.cue >= 6 && burst.cue <= 7 ?
+							[ 1, .83, .4 ] :
+							[ .8, .9, .83 ];
+						const recovery = burst.cue === 1 || burst.cue === 4;
+						const u = age / 1.2, count = (3 + burst.book) * (recovery ? 2 : 1);
+						for ( let feather = 0; feather < count; feather++ ) {
+							const mote = recovery && feather % 2 === 1;
+							if ( recovery ) {
+								const phase = (u + feather * .61803398875) % 1;
+								const mana = burst.cue === 4, angle = feather * 2.39996323 + phase * (mana ? 2.4 : .8);
+								const radius = mana ? 1 + 9 * (1 - phase) : 3 + Math.sin( feather * 1.7 ) * 1.4;
+								result.push( {
+									gid: burst.gids[feather]!,
+									model,
+									clip: "effect",
+									time: age,
+									loop: false,
+									scale: mote ? .6 : 1.1 + burst.book * .1,
+									absoluteEffectScale: true,
+									effectEntity: true,
+									pickable: false,
+									opacity: Math.sin( Math.PI * u ) * Math.sin( Math.PI * phase ) * (mote ? .3 : .55),
+									pose: {
+										...burst.pose,
+										x: burst.pose.x + Math.cos( angle ) * radius,
+										y: burst.pose.y + (mana ? 7 + phase * 7 : 2 + phase * 23),
+										z: burst.pose.z + Math.sin( angle ) * radius,
+										yaw: radians( -angle )
+									}
+								} );
+								continue;
+							}
+							const angle = age * (burst.cue === 5 ? 7 : 4) + feather * Math.PI * 2 / count;
+							const radius = burst.cue === 2 ?
+								8 + 2 * u :
+								burst.cue === 6 ?
+								10 :
+								burst.cue === 8 ?
+								8 + 30 * u :
+								burst.cue === 3 ?
+								6 + 22 * u :
+								5 + 11 * u;
+							const height = burst.cue === 2 ?
+								1 + Math.sin( u * Math.PI ) * 2 :
+								burst.cue === 5 ?
+								2 + Math.sin( u * Math.PI ) * 5 :
+								burst.cue === 6 ?
+								24 + Math.sin( u * Math.PI ) * 3 :
+								burst.cue === 8 ?
+								5 :
+								5 + u * 22;
+							result.push( {
+								gid: burst.gids[feather]!,
+								model,
+								clip: "effect",
+								time: age,
+								loop: false,
+								scale: burst.cue === 7 ? 4 : 2.2 + burst.book * .3,
+								absoluteEffectScale: true,
+								effectEntity: true,
+								pickable: false,
+								opacity: .65 * Math.sin( Math.PI * u ),
+								materialTint: tint,
+								pose: {
+									...burst.pose,
+									x: burst.pose.x + Math.cos( angle ) * radius,
+									y: burst.pose.y + height,
+									z: burst.pose.z + Math.sin( angle ) * radius,
+									yaw: radians( -angle )
+								}
+							} );
+						}
+						continue;
+					}
+					if ( !ready( "/assets/effects/crow-wind-burst" ) ) continue;
+					for ( let band = 0; band < 3; band++ ) {
+						const u = (age - band * .1) / .9;
+						if ( u < 0 || u >= 1 ) continue;
+						result.push( {
+							gid: burst.gids[band]!,
+							model: "/assets/effects/crow-wind-burst",
+							clip: "effect",
+							time: age,
+							loop: false,
+							scale: 8 + 72 * u,
+							absoluteEffectScale: true,
+							effectEntity: true,
+							pickable: false,
+							opacity: .24 * Math.sin( Math.PI * u ),
+							materialTint: [ .8, .9, .86 ],
+							pose: {
+								...burst.pose,
+								y: burst.pose.y + 1 + band * 2,
+								yaw: radians( age * 5 + band * 2 )
+							}
+						} );
+					}
+				}
 				const penguin = gameplay?.petTraining?.skills.some( skill => skill.id >= 31 && skill.id <= 45 ) ?
 					gameplay.petTraining.gid :
 					0;
@@ -4034,6 +4176,7 @@ export function createCharacterEffects(
 		*/
 		reset() {
 			external.clear();
+			crowEffects.length = 0;
 			externalSerial = 0;
 			hitLights.reset();
 			activations.length = 0;
@@ -4081,6 +4224,7 @@ export function createCharacterEffects(
 		*/
 		dispose() {
 			external.clear();
+			crowEffects.length = 0;
 			hitLights.reset();
 			activations.length = 0;
 			hawkImpacts.length = 0;

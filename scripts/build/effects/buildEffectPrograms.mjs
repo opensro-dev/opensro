@@ -53,6 +53,7 @@ import { collectJmxEffectTexturePaths, parseJmxVisualEffect } from "./parseJmxVi
 import { buildEffectRecordTable } from "../char/parseSkillEffect.mjs";
 import { loadCharacterDataRows } from "../char/resolveCharRoster.mjs";
 import { parseStructureEffects } from "../char/structureEffects.mjs";
+import { CROW_EGG_BSR } from "../char/crowEgg.mjs";
 import { PORT_PET_DROP_MODEL } from "../shared/portItemRows.mjs";
 
 const particlesRoot = path.join( extractedRoot, "Particles_extracted" );
@@ -257,7 +258,9 @@ export function collectEntityParticleReferences(
 		for ( const modelPath of [ ...models.keys() ].sort() ) {
 			// Owned GLB, not a retail BSR: buildDropModelAssets writes the
 			// modifiers it borrows from the armor chest into its row.
-			const modifiers = domain === "itemdrop" && modelPath === `res/${PORT_PET_DROP_MODEL}` ?
+			const modifiers = domain === "npc" && modelPath === CROW_EGG_BSR ?
+				[] :
+				domain === "itemdrop" && modelPath === `res/${PORT_PET_DROP_MODEL}` ?
 				models.get( modelPath ).particleModifiers :
 				readModel( modelPath ).particleModifiers;
 			for (

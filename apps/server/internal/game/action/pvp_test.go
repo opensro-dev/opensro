@@ -290,6 +290,43 @@ func TestThiefMonsterKillPaysHunterJobExp(t *testing.T) {
 
 /*
 ================
+TestCompanionKillOfAThiefMonsterPaysNoJobExp
+
+The original pays monster job EXP only through a player's own blow: the
+same hunter earns it for its own fatal hit and nothing when its pet or
+COS lands the blow.
+================
+*/
+func TestCompanionKillOfAThiefMonsterPaysNoJobExp(t *testing.T) {
+	rt, clock, c, mob := newCombatTestRuntime(t, 100)
+	mob.Ref.TidWord, mob.Ref.TypeID4 = 0x00c6, 2 // 1/2/1/2: a thief monster
+	suit := &enterworld.ItemRef{RefObjID: 13, Codename: "ITEM_CH_HUNTER_SUIT", TypeIDs: [4]int64{3, 1, 7, 3}}
+	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: int64(enterworld.JobSuitSlot),
+		RefObjID: suit.RefObjID, Codename: suit.Codename, TypeFlags: suit.TypeFlags(), VarianceBits: "0", StackCount: 1})
+	rt.deps.(*enterworld.Deps).Levels = jobKillLevels{LevelDataSource: rt.deps.LevelData(), gold: map[int64]int64{1: 80}}
+	var paid int64
+	rt.UpdateJobExperience = func(member *enterworld.Character, delta int64) ([]wire.Frame, bool) {
+		if member == c {
+			paid += delta
+		}
+		return nil, true
+	}
+	impact := simulation.MonsterDamageResult{Fatal: true, Instance: mob}
+	roster := rt.monsterRewardRoster(testDivision, c, clock.NowMs())
+	roster.companionKill = true
+	rt.settleMonsterInsideDoor(testDivision, c, roster, impact, monster.Pose{}, clock.NowMs())
+	if paid != 0 {
+		t.Fatalf("a companion's kill paid %d job EXP, want none", paid)
+	}
+	roster.companionKill = false
+	rt.settleMonsterInsideDoor(testDivision, c, roster, impact, monster.Pose{}, clock.NowMs())
+	if paid != 100 {
+		t.Fatalf("the hunter's own kill paid %d job EXP, want 100", paid)
+	}
+}
+
+/*
+================
 TestPlayerAttackPKLimitsApplyOnlyToNeutrals
 
 5293A0: a neutral target is refused at the attacker's daily limit

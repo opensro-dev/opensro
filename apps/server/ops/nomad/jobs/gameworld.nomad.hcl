@@ -151,9 +151,10 @@ variable "beta_mastery" {
 
 # Port-only, not native: 110 raises the stopping level on the installed
 # v1.150 curve. Off keeps cap 90; expansion content is enabled separately.
+# Owner, 2026-10-24: 110 for the next release.
 variable "level_cap" {
   type    = string
-  default = "off"
+  default = "110"
 }
 
 # Port-only, not native: optional database-authored Alexandria field content.
@@ -315,6 +316,14 @@ variable "chat_ack_timeout_ms" {
 variable "most_wanted_bounty_transfer" {
   type    = string
   default = "on"
+}
+
+# most_wanted_streak_notice tells the killer "Most Wanted: N/10 to LV L"
+# after every counted kill (port-only, not native; owner decision
+# 2026-10-24). "off" says nothing until a new wanted level.
+variable "most_wanted_streak_notice" {
+  type    = string
+  default = "off"
 }
 
 # trade_tiers rates a caravan's stars by its cargo's gold value (5M, 10M,
@@ -538,6 +547,19 @@ variable "team_death_revive" {
   default = "on"
 }
 
+# flagwar_start_utc / flagwar_min_players: the daily Capture the Flag
+# match (#887, owner 2026-10-24): its UTC start as HH:MM and the house
+# minimum (2-16). Malformed values stop GameWorld at boot.
+variable "flagwar_start_utc" {
+  type    = string
+  default = "20:00"
+}
+
+variable "flagwar_min_players" {
+  type    = string
+  default = "4"
+}
+
 # beta_growth holds every level's EXP and skill EXP to the level-1 kill pace,
 # multiplies skill EXP by beta_skill_exp_rate on top, makes a kill's assigned
 # rewards and ordinary drop passes beta_drop_rate times over (the unique
@@ -554,6 +576,14 @@ variable "attack_pet_expansion" {
 variable "beta_growth" {
   type    = string
   default = "on"
+}
+
+# beta_growth_bands gives level bands their own EXP/SP multiplier: "pace"
+# holds a level to the level-1 pace, a number is that many times native
+# (owner, 2026-10-24). Empty keeps every level at the pace.
+variable "beta_growth_bands" {
+  type    = string
+  default = "1-59:pace,60-89:20,90-110:10"
 }
 
 variable "beta_skill_exp_rate" {
@@ -683,11 +713,12 @@ variable "elixir_drops_off" {
 
 # alchemy_material_drops_off keeps every alchemy material (type 3/3/11/4,
 # the grey bags of monster parts) out of monster drops (port-only, not
-# native, beta balance; owner 2026-10-14). "off" is the original game's
-# drops.
+# native, beta balance; owner 2026-10-14). A community vote on 2026-10-24
+# brought the parts back, so the default is "off", the original game's
+# drops; "on" restores the beta removal.
 variable "alchemy_material_drops_off" {
   type    = string
-  default = "on"
+  default = "off"
 }
 
 variable "beta_drop_cap" {
@@ -960,6 +991,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_MOST_WANTED_TEST_KILLS              = var.most_wanted_test_kills
         SRO_MOST_WANTED_TEST_BOUNTY             = var.most_wanted_test_bounty
         SRO_MOST_WANTED_BOUNTY_TRANSFER         = var.most_wanted_bounty_transfer
+        SRO_MOST_WANTED_STREAK_NOTICE           = var.most_wanted_streak_notice
         SRO_TRADE_TIERS                         = var.trade_tiers
         SRO_TRADE_ROUTE_DONWHANG_PERCENT        = var.trade_route_donwhang_percent
         SRO_TRADE_ROUTE_HOTAN_PERCENT           = var.trade_route_hotan_percent
@@ -997,8 +1029,11 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_ALCHEMY_RATES                       = var.alchemy_rates
         SRO_ALCHEMY_MAX_PLUS                    = var.alchemy_max_plus
         SRO_TEAM_DEATH_REVIVE                   = var.team_death_revive
+        SRO_FLAGWAR_START_UTC                   = var.flagwar_start_utc
+        SRO_FLAGWAR_MIN_PLAYERS                 = var.flagwar_min_players
         SRO_ATTACK_PET_EXPANSION                = var.attack_pet_expansion
         SRO_BETA_GROWTH                         = var.beta_growth
+        SRO_BETA_GROWTH_BANDS                   = var.beta_growth_bands
         SRO_BETA_SKILL_EXP_RATE                 = var.beta_skill_exp_rate
         SRO_BETA_DROP_RATE                      = var.beta_drop_rate
         SRO_BETA_GOLD_RATE                      = var.beta_gold_rate

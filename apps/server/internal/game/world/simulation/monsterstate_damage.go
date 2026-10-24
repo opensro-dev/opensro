@@ -30,20 +30,6 @@ func (s *MonsterState) CombatCandidatesInSphere(divisionID string, center Spawn,
 }
 
 /*
-==================
-CombatCandidatesForChain
-
-CombatCandidatesForChain uses center-to-center distance and nearest-first
-order. Native 58C8DC..58C97A does not add body radii as sphere areas do.
-The primary remains the center for a targeted chain; candidates are not
-admitted merely because they are near a previously selected secondary.
-==================
-*/
-func (s *MonsterState) CombatCandidatesForChain(divisionID string, center Spawn, reach float64, nowMs int64) []monster.Instance {
-	return s.combatCandidates(divisionID, instance.Pack(1, 1), center, reach, nowMs, true)
-}
-
-/*
 ================
 CombatCandidatesInWorld
 ================

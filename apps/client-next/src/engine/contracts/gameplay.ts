@@ -204,6 +204,8 @@ export type GameplayCommand =
 		readonly notice: import("@/engine/foundation/gameplay/system-notices").SystemNotice;
 	}
 	| { readonly kind: "recall-appoint"; readonly gid: number; }
+	// The flag-war talk row (5D3630 action 0x38): one 0x7753 toggle send.
+	| { readonly kind: "flagwar-register"; }
 	| { readonly kind: "return-cancel"; }
 	| { readonly kind: "gathering-cancel"; }
 	| { readonly kind: "effect-cancel"; readonly skillId: number; readonly token: number; }
@@ -246,6 +248,16 @@ export type GameplayCommand =
 	| { readonly kind: "fortress-war-status"; readonly gid: number; }
 	| { readonly kind: "fortress-staff"; readonly gid: number; readonly fortress: number; readonly flag?: number; }
 	| { readonly kind: "fortress-schedule"; readonly gid: number; readonly fortress: number; }
+	// The battle aide's fortress map (fortress-map.ts): the structure list
+	// 0x18 that opens it, an upgrade or construction 0x0B and a repair 0x0C.
+	| {
+		readonly kind: "fortress-structure";
+		readonly gid: number;
+		readonly fortress: number;
+		readonly action: number;
+		readonly zone?: number;
+		readonly type?: number;
+	}
 	// 0x71E1 actions 0 (query), 1 (rate) and 2 (collect) from the tax window.
 	| { readonly kind: "fortress-tax"; readonly gid: number; readonly fortress: number; }
 	// The structure target window's delete (517CA0): dismiss 0x16 or demolish 0x17.
@@ -615,6 +627,18 @@ an empty slot), from the latest server state.
 ================
 */
 export interface PetTraining {
+	readonly guidance?: {
+		readonly gid: number;
+		readonly book: number;
+		readonly stacks: number;
+		readonly hitPercent: number;
+	};
+	readonly tailwind?: {
+		readonly gid: number;
+		readonly book: number;
+		readonly stacks: number;
+		readonly speedPercent: number;
+	};
 	readonly counters?: {
 		readonly attacks: number;
 		readonly wolfExecute?: number;
@@ -695,6 +719,8 @@ export interface GameplayState {
 	readonly betaPlayers?: readonly BetaMapPlayer[];
 	// Port-only wolf skill tree of the pet window's wolf (pet-training.ts).
 	readonly petTraining?: PetTraining;
+	readonly petTailwind?: PetTraining["tailwind"];
+	readonly petGuidance?: PetTraining["guidance"];
 	/** RefObjIDs the server never spends (the beta starter kit), drawn as unlimited. */
 	readonly unlimitedItems?: readonly number[];
 	readonly returnScroll?: import("@/engine/foundation/gameplay/return-scroll").ReturnScrollCast;
@@ -773,6 +799,10 @@ export interface GameplayState {
 	readonly stall?: import("@/engine/foundation/gameplay/stall").StallState;
 	readonly magicOption?: import("./item-process").MagicOptionGrantState;
 	readonly targetCapabilities?: number;
+	// The selected NPC's flag-war row mode (1 sign-up, 2 cancel).
+	readonly targetFlagWarMode?: number;
+	// The flag-war timer and carrier, owned by the gameplay worker.
+	readonly flagWar?: { readonly timerEndsAt: number; readonly carrierGid: number; };
 	readonly targetTaxRate?: number;
 	readonly shopCompletionRevision?: number;
 	readonly shop?: import("@/engine/foundation/gameplay/commerce").ShopState;

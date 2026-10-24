@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/companion"
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 )
 
@@ -55,12 +56,13 @@ func TestWolfBloodHuntMarkLifecycle(t *testing.T) {
 				t.Fatal("expired mark")
 			}
 			rt.wolfHuntAttack(step, 0, []uint32{mob.Gid})
-			c.ActiveCOS.Training.Slotted[2] = 0
+			saved := c.ActiveCOS.Training.Levels
+			c.ActiveCOS.Training.Levels[12], c.ActiveCOS.Training.Levels[13], c.ActiveCOS.Training.Levels[14] = 0, 0, 0
 			rt.advanceWolfKit(step.key, step.nowMs)
 			if step.state.wolf.huntHits != 0 {
-				t.Fatal("unslotted mark")
+				t.Fatal("removed passive retained mark")
 			}
-			c.ActiveCOS.Training.Slotted[2] = tier
+			c.ActiveCOS.Training.Levels = saved
 			rt.wolfHuntAttack(step, 0, []uint32{mob.Gid})
 			rt.AttackPetExpansion = false
 			rt.advanceWolfKit(step.key, step.nowMs)
@@ -158,5 +160,54 @@ func TestWolfBloodHuntRendGuardsAndBurst(t *testing.T) {
 	twice, _ := rt.Monsters.Get(testDivision, near.Gid)
 	if twice.CurrentHP != after.CurrentHP {
 		t.Fatal("mark consumed twice")
+	}
+}
+
+/*
+================
+TestWolfBloodHuntBurstKillCreditsNoQuest
+
+The Blood Hunt burst that kills a bleeding neighbour is a companion kill:
+the burst goes through its real caller (wolfHuntRend -> wolfBonusHit) and
+no quest kill is credited, though the neighbour dies.
+================
+*/
+func TestWolfBloodHuntBurstKillCreditsNoQuest(t *testing.T) {
+	rt, clock, c, mob := wolfFieldFixture(t, 1)
+	learnPetBook(t, c, 6)
+	learnPetBook(t, c, 15)
+	quested := 0
+	rt.UpdateQuestKill = func(*enterworld.Character, string, uint8) ([]wire.Frame, bool) {
+		quested++
+		return nil, true
+	}
+	at := rt.LiveSpawnFor(testDivision, c)
+	at.X += 35
+	near := wolfSpawnAt(t, rt, c, at, clock.NowMs())
+	rt.HandleCosCommand(testDivision, c, binary.LittleEndian.AppendUint32(trainingCommand(c.ActiveCOS.GID, petTrainingUse, 6), mob.Gid))
+	tickPetCombat(t, rt, clock, 100, func() bool { return !companion.RowReady(&c.ActiveCOS.Training, 1, clock.NowMs()) })
+	rt.HandleCosCommand(testDivision, c, wire.NewWriter(5).U32(c.ActiveCOS.GID).U8(wire.CosCommandFollowTag).Payload())
+	step, _ := rt.wolfCompanion(testDivision, c, c.ActiveCOS.GID, clock.NowMs())
+	for range 4 {
+		rt.wolfHuntAttack(step, 0, []uint32{mob.Gid})
+	}
+	target, _ := rt.resolvePetCombatTarget(step, mob.Gid)
+	step.trained = &petTrainedStrike{rend: true}
+	hit := monsterStrike{impacts: []wire.SkillCastTargetImpact{{Damage: 100}}}
+	bleeding, _ := rt.Monsters.Get(testDivision, near.Gid)
+	if !petTargetBleeds(bleeding) {
+		t.Fatal("real Rend did not bleed the neighbour")
+	}
+	quested = 0
+	if _, ok := rt.Monsters.ApplyDamage(testDivision, near.Gid, bleeding.CurrentHP-1); !ok {
+		t.Fatal("could not wound the neighbour")
+	}
+	rt.wolfHuntRend(step, target, hit)
+	after, _ := rt.Monsters.Get(testDivision, near.Gid)
+	if after.CurrentHP != 0 {
+		t.Fatalf("the burst left the neighbour at %d HP", after.CurrentHP)
+	}
+	if quested != 0 {
+		t.Fatalf("the Blood Hunt burst kill credited %d quest kills, want 0", quested)
 	}
 }

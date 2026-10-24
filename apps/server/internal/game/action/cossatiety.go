@@ -35,6 +35,9 @@ func (rt *Runtime) advancePetSatiety(key petOwnerKey, nowMs int64) []simulation.
 	rt.deps.UpdateDeferred(state.character, "cos-satiety", func() bool {
 		c := state.character
 		pet := c.CompanionByGID(key.gid)
+		if pet != nil && pet.BroodStage != 0 {
+			return false
+		}
 		ref, valid := rt.cosReference(pet)
 		if valid && (ref.TidWord>>11 == 4 || ref.TidWord>>11 == 5) && pet.RentalExpiresAtUnix != 0 && pet.RentalExpiresAtUnix <= nowMs/1000 {
 			if ref.TidWord>>11 == 5 {

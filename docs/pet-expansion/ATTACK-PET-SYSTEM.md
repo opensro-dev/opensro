@@ -119,10 +119,11 @@ Drag learned active skills to normal numbered quickslots. The currently
 summoned pet must know the skill; offensive commands need a valid target.
 All books in a row share recharge, while the two active rows are independent.
 Timed recharge uses countdowns/sweeps. Event recharge needs attacks, hits,
-kills or spells rather than waiting. One passive book is selected per row;
-old books do not stack as separate passive effects.
+kills or spells rather than waiting. The highest learned passive book in each
+row is always active automatically; older books are replaced and cannot be
+manually selected. Their effects do not stack.
 
-Skills, selections, gear and recharge persist with the pet's summon item.
+Skills, gear and recharge persist with the pet's summon item.
 Recall the pet and leave combat before changing gear/training if refused.
 Low HGP affects performance; a pet above its owner's level cannot normally
 be summoned. Preserve those rules when testing.

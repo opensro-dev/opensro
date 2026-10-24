@@ -1,0 +1,10 @@
+# fortress-structure record fields owned by store schema 30 (persisted_shape_test.go).
+# Never edit after it ships: a new persisted field takes schema 31, its upgrade
+# step and fortress-structure-fields-v31.txt.
+eventStructId
+fortressId
+hp
+madeAtMs
+ownerGuildId
+refObjId
+state

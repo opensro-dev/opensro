@@ -114,7 +114,7 @@ Content is a dated implementation snapshot; operator settings live in ../ATTACK-
 </tbody></table></div>
 <p style="margin-top:14px">Each book has ten learnable ranks. Its next rank may need a higher pet level even when that book is already unlocked. The tooltip shows the exact requirement.</p>
 <p>A pet starts with one training point and earns another every two pet levels. Points are shared across all five rows: you must choose where to invest. Special test pets may have extra points; those are not normal progression.</p>
-<p>Only one book contributes from each passive row at a time. Learning a higher passive book selects it automatically; earlier books do not add a second copy of the same bonus.</p>
+<p>The highest learned book in each passive row is always active automatically. Earlier books are replaced, cannot be manually selected, and do not add another copy of the bonus.</p>
 </div></section>
 <section class="panel" id="cooldowns"><h2>Commands, quickslots &amp; cooldowns</h2><div class="body">
 <ul>
@@ -155,7 +155,7 @@ Content is a dated implementation snapshot; operator settings live in ../ATTACK-
 <p>Each modifier group can appear only once on an item. A blue must also match the slot and degree. Higher percentages are deliberately rarer; the server controls each tier's limits and roll bias. Saved item rolls do not change when future drop settings change.</p>
 </div></section>
 <section class="panel" id="care"><h2>Care for your companion</h2><div class="body">
-<ul><li>Watch <strong>HP and HGP</strong>. Low satiety can lower combat performance, so feed the pet before comparing equipment or skill damage.</li><li>A pet above its owner's level cannot be summoned normally. Keep the owner eligible while training.</li><li>Gear, learned ranks and passive selections are saved with the pet's summon item. Relogging does not grant a fresh build.</li><li>Recharge state is saved too. Timers can expire as time passes; event counters still need their specified actions.</li><li>Use weak enemies when trying a new build. A skill icon working does not make an underfed or poorly equipped pet safe against high-level monsters.</li></ul>
+<ul><li>Watch <strong>HP and HGP</strong>. Low satiety can lower combat performance, so feed the pet before comparing equipment or skill damage.</li><li>A pet above its owner's level cannot be summoned normally. Keep the owner eligible while training.</li><li>Gear and learned ranks are saved with the pet's summon item. Relogging does not grant a fresh build.</li><li>Recharge state is saved too. Timers can expire as time passes; event counters still need their specified actions.</li><li>Use weak enemies when trying a new build. A skill icon working does not make an underfed or poorly equipped pet safe against high-level monsters.</li></ul>
 </div></section>
 <section class="panel" id="questions"><h2>Common questions</h2><div class="body faq">
 <details><summary>Why can I not learn the next skill?</summary><p>Check pet level, free points, previous-book rank and combat state. Book II needs Book I maxed; Book III needs Book II maxed. Unmet tooltip requirements are red, even on unlearned skills.</p></details>

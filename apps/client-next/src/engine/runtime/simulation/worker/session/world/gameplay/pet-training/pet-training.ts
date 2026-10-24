@@ -40,6 +40,8 @@ export function createPetTraining(
 	item: ( refObjId: number, slot: number, magic: readonly string[] ) => InventoryItem | null
 ) {
 	let state: PetTraining | undefined;
+	let tailwind: PetTraining["tailwind"];
+	let guidance: PetTraining["guidance"];
 	const text = new TextDecoder( "utf-8", { fatal: true } );
 	return {
 		/*
@@ -51,6 +53,36 @@ a protocol error, never a partial one.
 ================
 		*/
 		receive( frame: WireFrame, now: number ): boolean {
+			if ( frame.opcode === 0x3fb9 ) {
+				const p = frame.payload;
+				if ( p.length !== 8 ) throw Error( "Invalid Guiding Feathers length" );
+				const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+				const gid = v.getUint32( 0, true ),
+					book = p[4]!,
+					stacks = p[5]!,
+					hitPercent = v.getUint16( 6, true ) / 10;
+				if (
+					!gid || (book !== 0 && (book < 58 || book > 60)) || stacks > 5 ||
+					(book === 0 && (stacks !== 0 || hitPercent !== 0)) || (stacks === 0 && hitPercent !== 0)
+				) throw Error( "Invalid Guiding Feathers state" );
+				guidance = book ? { gid, book, stacks, hitPercent } : undefined;
+				return true;
+			}
+			if ( frame.opcode === 0x3fb7 ) {
+				const p = frame.payload;
+				if ( p.length !== 8 ) throw Error( "Invalid Tailwind state length" );
+				const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+				const gid = v.getUint32( 0, true ),
+					book = p[4]!,
+					stacks = p[5]!,
+					speedPercent = v.getUint16( 6, true ) / 10;
+				if (
+					!gid || (book !== 0 && (book < 55 || book > 57)) || stacks > 10 ||
+					(book === 0 && (stacks !== 0 || speedPercent !== 0)) || (stacks === 0 && speedPercent !== 0)
+				) throw Error( "Invalid Tailwind state" );
+				tailwind = book ? { gid, book, stacks, speedPercent } : undefined;
+				return true;
+			}
 			if ( frame.opcode === OP_PET_SKILL_COUNTERS ) {
 				const p = frame.payload;
 				if (
@@ -173,7 +205,9 @@ a protocol error, never a partial one.
 			};
 			return true;
 		},
-		state: () => state,
+		state: () => state && (tailwind || guidance) ? { ...state, tailwind, guidance } : state,
+		guidance: () => guidance,
+		tailwind: () => tailwind,
 		/*
 ================
 clear
@@ -181,6 +215,8 @@ clear
 		*/
 		clear() {
 			state = undefined;
+			tailwind = undefined;
+			guidance = undefined;
 		}
 	};
 }

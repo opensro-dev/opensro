@@ -92,6 +92,9 @@ func (rt *Runtime) refreshMovementEffects(division string, c *enterworld.Charact
 	// Port-only, not native: a wanted streak's +1% per level, likewise last.
 	wanted := rt.mostWantedSpeedFactor(c)
 	walk, run = walk*wanted, run*wanted
+	// Port-only: the crow's strongest eligible travel grant preserves roots and slows.
+	tailwind := rt.tailwindSpeedFactor(division, c, now)
+	walk, run = walk*tailwind, run*tailwind
 	changed := false
 	rt.Worlds.Update(simulation.WorldKey(division, c.Name), func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(world *simulation.WorldState) { changed = world.UpdateMovementSpeeds(walk, run, now) })
 	if !changed {

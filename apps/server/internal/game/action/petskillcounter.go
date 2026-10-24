@@ -28,7 +28,7 @@ func petSkillCounterFrame(state *petSession, gid uint32) wire.Frame {
 		return wire.Frame{}
 	}
 	pet := state.character.CompanionByGID(gid)
-	if pet == nil || companion.PetKind(pet.Codename) == "" {
+	if pet == nil || pet.BroodStage != 0 || companion.PetKind(pet.Codename) == "" {
 		return wire.Frame{}
 	}
 	attacks, bear, owner, resolve := 0, 0, 0, uint8(0)

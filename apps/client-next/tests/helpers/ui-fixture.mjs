@@ -30,7 +30,10 @@ export function uiFixture(
 	saveBindings = () => {},
 	saveVideo = () => {},
 	saveOptions = () => {},
-	extensions = {}
+	extensions = {},
+	// published is path -> bytes served in place of the generated tree's file,
+	// for a catalog the shared tree has not published yet.
+	published = {}
 ) {
 	const scenes = [], products = [], textures = [], sounds = [], requested = [], pending = new Map();
 	let nextId = 0;
@@ -57,7 +60,7 @@ export function uiFixture(
 				const id = ++nextId, path = decodeURIComponent( new URL( url ).pathname );
 				requested.push( path );
 				try {
-					const bytes = readFileSync( CLIENT_PUBLIC_ROOT + path );
+					const bytes = published[path] ?? readFileSync( CLIENT_PUBLIC_ROOT + path );
 					// A native .texture is container bytes the UI decodes itself (#414).
 					if ( path.endsWith( ".json" ) || path.endsWith( ".txt" ) || path.endsWith( ".texture" ) ) {
 						pending.set( id, bytes );

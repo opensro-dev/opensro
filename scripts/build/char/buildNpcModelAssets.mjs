@@ -41,6 +41,7 @@ Textures: .ddj under prim/mtrl are converted by scripts/convert_images.py
 ===========================================================================
 */
 
+import { publishCrowEgg } from "./crowEgg.mjs";
 import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
 import { loadBoothModelRoster } from "./boothModelRoster.mjs";
 import { bakeNpcSecondaryResources } from "./npcSecondaryResources.mjs";
@@ -908,6 +909,9 @@ export async function buildNpcModelAssets( options = {} ) {
 		entry.structureDamageEffects = effects.levels;
 	}
 
+	models.push( publishCrowEgg( publicAssets ) );
+	builtResources++;
+	coveredModels++;
 	const preservedVat = preserveFreshNpcVatReferences( models, previousManifest, { publicAssetsRoot: publicAssets } );
 	const { models: referenceRows, resources, boothModels } = splitNpcManifestModels( models );
 	const manifest = {

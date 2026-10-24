@@ -380,10 +380,11 @@ petStrikeResult
 ================
 */
 type petStrikeResult struct {
-	strike monsterStrike
-	actor  []wire.Frame
-	frames []simulation.Frame
-	fatal  bool
+	strike   monsterStrike
+	hpDamage uint64 // HP actually removed; native impact damage may include overkill.
+	actor    []wire.Frame
+	frames   []simulation.Frame
+	fatal    bool
 }
 
 /*
@@ -450,6 +451,7 @@ func (rt *Runtime) petStrike(step petCombatStep, target monster.Instance, skill 
 	var committed []simulation.MonsterDamageResult
 	var settlement monsterSettlement
 	var trainedFrames []wire.Frame
+	var hpDamage uint64
 	if !rt.deps.UpdateManyDeferred(roster.characters, "pet-attack", func() bool {
 		// The live summoner owns the trained rows and counters (pettrained.go):
 		// a row spent meanwhile refuses the hit, a refused commit spends nothing.
@@ -464,9 +466,12 @@ func (rt *Runtime) petStrike(step petCombatStep, target monster.Instance, skill 
 		dealt := uint32(0)
 		for _, applied := range committed {
 			dealt += applied.Damage
+			hpDamage += uint64(applied.Damage)
 		}
+		hpDamage = min(hpDamage, uint64(target.CurrentHP))
 		trainedFrames, _ = rt.petTrainedCommit(step, owner, livePet, step.trained, dealt, committed[len(committed)-1].Fatal, false)
 		if committed[len(committed)-1].Fatal {
+			roster.companionKill = true
 			settlement = rt.settleMonsterInsideDoor(division, owner, roster, committed[len(committed)-1], monsterPose, step.nowMs)
 		}
 		return true
@@ -508,7 +513,7 @@ func (rt *Runtime) petStrike(step petCombatStep, target monster.Instance, skill 
 		actorFrames = append(actorFrames, settlement.otherPublic...)
 		step.state.others = append(step.state.others, settlement.others...)
 	}
-	return petStrikeResult{strike: monsterStrike{gid: target.Gid, pose: targetAt, impacts: impacts, public: public, fatal: fatal}, actor: actorFrames, fatal: fatal}, true
+	return petStrikeResult{strike: monsterStrike{gid: target.Gid, pose: targetAt, impacts: impacts, public: public, fatal: fatal}, actor: actorFrames, hpDamage: hpDamage, fatal: fatal}, true
 }
 
 /*

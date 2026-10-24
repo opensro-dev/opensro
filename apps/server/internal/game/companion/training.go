@@ -9,7 +9,7 @@ docs/pet-expansion/pet-design.json is the design. Each of the four pets
 A pet earns a skill point at level 1 and one more every PointsPerPetLevels
 levels; a skill level costs one point and needs its pet level. All learned
 actives of a row share one cooldown (timer, attacks, hits taken, kills or
-spells); one learned passive per passive row is slotted at a time. Gear is
+spells); sequential trees always use the highest learned passive in each row. Gear is
 three slots of real items with blue options (gear.go). Zero state is native.
 
 All state is fixed arrays, so a CharacterCOS snapshot copy never aliases
@@ -175,7 +175,7 @@ func LearnRefusal(p *domain.CharacterCOS, id uint8) string {
 ================
 Learn
 
-Raises one skill a level; a first passive of a row is slotted at once.
+Raises one skill a level; sequential passives activate their newest learned book.
 Caller owns the transaction and combat admission.
 ================
 */
@@ -223,6 +223,9 @@ Makes a learned passive its row's active passive.
 ================
 */
 func Slot(p *domain.CharacterCOS, id uint8) string {
+	if p.Training.TreeVersion >= 2 {
+		return "Passive tiers activate automatically; the highest learned tier is always active."
+	}
 	s, ok := PetSkill(p, id)
 	if !ok || s.Active || Level(p, s) == 0 {
 		return "Only a learned passive can be slotted."
@@ -253,15 +256,14 @@ The active passive of a passive row; false when the row has none.
 */
 func SlottedPassive(p *domain.CharacterCOS, row int) (SkillDef, bool) {
 	option := p.Training.Slotted[row-ActiveRowCount]
-	if option == 0 {
-		return SkillDef{}, false
-	}
+	var selected SkillDef
 	for _, s := range SkillsForPet(p) {
-		if s.Row == row && s.Option == int(option) && Level(p, s) > 0 && s.Live() {
-			return s, true
+		if s.Row == row && (p.Training.TreeVersion >= 2 || s.Option == int(option)) &&
+			Level(p, s) > 0 && s.Live() && s.Option > selected.Option {
+			selected = s
 		}
 	}
-	return SkillDef{}, false
+	return selected, selected.ID != 0
 }
 
 /*
@@ -293,6 +295,9 @@ run out.
 */
 func RowReady(t *domain.PetTraining, row int, nowMs int64) bool {
 	r := t.Rows[row]
+	if r.Capacity > 0 {
+		return AdvanceCharges(r, nowMs).Charges > 0
+	}
 	return r.ReadyAtMs <= nowMs && r.Left == 0
 }
 
@@ -305,6 +310,17 @@ blue options and Arcane Haste (Modifiers.CooldownPct).
 ================
 */
 func StartRow(t *domain.PetTraining, row int, s SkillDef, level uint8, nowMs int64, m Modifiers) {
+	if s.EffectName() == BroodSkill {
+		r := BroodRow(t.Rows[row], s, level, nowMs, m)
+		if r.Charges > 0 {
+			r.Charges--
+		}
+		if r.ReadyAtMs == 0 {
+			r.ReadyAtMs = nowMs + r.RechargeMs
+		}
+		t.Rows[row] = r
+		return
+	}
 	value := s.CooldownAt(level) * max(0, 100-m.CooldownPct) / 100
 	if s.Trigger == TriggerTimer {
 		t.Rows[row] = domain.PetRowCooldown{ReadyAtMs: nowMs + int64(value*1000)}

@@ -162,9 +162,7 @@ func newGameplayPlane(
 	if err := items.ConfigureStallNetwork(devPaths.TextdataDir); err != nil {
 		return nil, err
 	}
-	if err := items.ConfigureNameFilter(devPaths.TextdataDir); err != nil {
-		return nil, err
-	}
+	items.NameFilter = textdata.NameFilter
 	// SRO_SHOP_EXTRA_GOODS (port-only, not native): operator NPC shop goods;
 	// "off" is the v1.150 stock (commerce/extragoods.go).
 	extraGoods, err := commerce.ExtraGoodsFromEnv()
@@ -190,8 +188,10 @@ func newGameplayPlane(
 	if items.ElixirDrops.Off() {
 		log.Infof("loot: elixir drops OFF (%s): the shop sells them", progression.EnvElixirDropsOff)
 	}
-	// SRO_ALCHEMY_MATERIAL_DROPS_OFF (port-only, not native): alchemy
-	// materials leave every monster drop. Nothing needs them on the beta.
+	// SRO_ALCHEMY_MATERIAL_DROPS_OFF (port-only, not native): with the
+	// switch on, alchemy materials leave every monster drop. The deployed
+	// default is off (community vote, 2026-10-24): the stone chain uses
+	// them again.
 	items.MaterialDrops = progression.MaterialDropsFromEnv()
 	if items.MaterialDrops.Off() {
 		log.Infof("loot: alchemy material drops OFF (%s)", progression.EnvAlchemyMaterialDropsOff)
@@ -401,6 +401,7 @@ func newGameplayPlane(
 		return 1
 	}
 	matches.PartyListingAuthority = parties.ListingAuthority
+	matches.PartyListingOwnerFor = parties.MatchListingOwner
 	matches.PartyJoinPrecheck = parties.MatchJoinPrecheck
 	matches.CommitPartyJoin = parties.AdmitMatchJoin
 	matches.PartyMemberInfoFor = parties.MaskedMemberInfoFor
@@ -592,6 +593,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.MostWantedBountyTransfer {
 		log.Infof("job: most wanted bounties paid from the victim's gold (%s)", action.EnvMostWantedBountyTransfer)
 	}
+	// Port-only, not native: the killer hears its progress per counted kill.
+	game.items.MostWantedStreakNotice = action.MostWantedStreakNoticeFromEnv()
+	if game.items.MostWantedStreakNotice {
+		log.Infof("job: most wanted progress notice per counted kill ON (%s)", action.EnvMostWantedStreakNotice)
+	}
 	// Port-only, not native: a trader's goods stay in the world when the
 	// trader dies riding or disconnects in the field.
 	game.items.TraderCargoDrop = action.TraderCargoDropFromEnv()
@@ -646,6 +652,15 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.GMSetSpeed {
 		log.Infof("gm: /SETSPEED ON (%s)", action.EnvGMSetSpeed)
 	}
+	// Capture the Flag (native): the daily start and the house minimum.
+	flagWar, err := action.FlagWarSettingsFromEnv()
+	if err != nil {
+		return err
+	}
+	game.items.FlagWar = flagWar
+	log.Infof("flag war: daily start %02d:%02d UTC, minimum %d players (%s, %s)",
+		flagWar.StartMinuteOfDay/60, flagWar.StartMinuteOfDay%60, flagWar.MinPlayers,
+		action.EnvFlagWarStartUTC, action.EnvFlagWarMinPlayers)
 	// A team death revives in place natively; "off" is the port-only town rule.
 	teamDeathRevive, err := action.TeamDeathReviveFromEnv()
 	if err != nil {

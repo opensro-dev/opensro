@@ -53,6 +53,11 @@ func (rt *Runtime) cosReference(pet *enterworld.CharacterCOS) (*enterworld.Chara
 	}
 	ref, exists := source.CharacterRefByCodename(pet.Codename)
 	valid := exists && ref != nil && ref.RefObjID == pet.RefObjID
+	if valid && pet.BroodStage > 0 {
+		copy := *ref
+		copy.MaxHP = pet.BroodMaxHP
+		ref = &copy
+	}
 	if valid && rt.AttackPetExpansion && pet.ResolveStacks > 0 {
 		copy := *ref
 		copy.MaxHP = uint32(float64(ref.MaxHP) * (1 + companion.SpiritHPPercent(pet)/100))

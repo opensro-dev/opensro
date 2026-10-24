@@ -276,6 +276,20 @@ import {
 	FORTRESS_SCHEDULE_ROWS
 } from "./hud/fortress-war-hud";
 import { createFortressTaxHud, FORTRESS_TAX_MAX, FORTRESS_TAX_MIN } from "./hud/fortress-tax-hud";
+import { createFortressMapHud, fortressMapLayout, fortressMarkerAt } from "./hud/fortress-map-hud";
+import {
+	FORTRESS_AIDE_CAPABILITY,
+	FORTRESS_STRUCTURE_LIST,
+	FORTRESS_STRUCTURE_REPAIR,
+	FORTRESS_STRUCTURE_UPGRADE,
+	fortressMapButtons,
+	fortressMapPageFor,
+	fortressMapStatus,
+	fortressMarker,
+	fortressNeedsTowerType,
+	fortressRepairPrice,
+	fortressTowerTypes
+} from "@/engine/foundation/gameplay/fortress-map";
 import { createFortressProductionHud, FORTRESS_PRODUCTION_ROWS } from "./hud/fortress-production-hud";
 import {
 	FORTRESS_PRODUCTION_CANCEL,
@@ -292,7 +306,12 @@ import {
 	fortressProductionRemaining,
 	fortressProductionTimeText
 } from "@/engine/foundation/gameplay/fortress-production";
-import { alchemyEffectCell, alchemyEffectTexture, alchemyResultLines } from "@/engine/foundation/ui/alchemy-result";
+import {
+	ALCHEMY_DESTROYED,
+	alchemyEffectCell,
+	alchemyEffectTexture,
+	alchemyResultLines
+} from "@/engine/foundation/ui/alchemy-result";
 import { createUnionHud } from "./hud/union-hud";
 import { createGuildWarHud } from "./hud/guild-war-hud";
 import { guildWarRequest, warScoreLimits, WAR_UNLIMITED } from "@/engine/foundation/gameplay/guild-war";
@@ -553,7 +572,7 @@ import {
 	audioLevelText
 } from "@/engine/foundation/audio/volume-control";
 import { chatScrollbar } from "@/engine/foundation/ui/chat-scrollbar";
-import { overheadLayout } from "@/engine/foundation/ui/overhead-layout";
+import { companionOwnerNameplate, overheadLayout } from "@/engine/foundation/ui/overhead-layout";
 import { vitalWarning } from "@/engine/foundation/ui/vital-warning";
 import {
 	beginnerMarkShown,
@@ -604,7 +623,7 @@ import { comboBoxChrome } from "@/engine/foundation/ui/combo-box";
 import { verticalSpinChrome } from "@/engine/foundation/ui/vertical-spin";
 import { stretchRing } from "@/engine/foundation/ui/stretch-ring";
 import { chatLayout } from "@/engine/foundation/ui/chat-layout";
-import { worldMapImagePaths } from "@/engine/foundation/ui/world-map";
+import { worldMapFrame, worldMapImagePaths, worldMapQuads } from "@/engine/foundation/ui/world-map";
 import {
 	experienceReadout,
 	minimapCoordinates,
@@ -738,6 +757,11 @@ const FRAME = ROOT + "interface/frame/mframe_wnd_";
 // squares (ifletterread / ifletterwrite ids 1-6) fill them.
 const LETTER_CHILD_FRAME = ROOT + "interface/messagebox/msgbox2_window_";
 const PARTY_MATCH_RANGE_SEPARATOR_ID = 43;
+const PARTY_MATCH_VISIBLE_ROWS = 12;
+// 63D500 tints all eight slot children (ids 10-17, the MARK icon included)
+// 0xFF87E9FF for the own listing. Port-only, not native: members get the tint
+// on their leader's listing too.
+const PARTY_MATCH_CURRENT_COLOR: UiQuad["color"] = [ 135 / 255, 233 / 255, 1, 1 ];
 // The bug reporter (issue #90): its chat command and its Option window row.
 const BUG_COMMAND = /^\/bug(?:\s+|$)/i;
 const BUG_REPORTS_DISABLED = "Bug reports are disabled on this server.";
@@ -755,6 +779,11 @@ const FORTRESS_WAR_PANEL = "Fortress war application";
 const FORTRESS_SCHEDULE_PANEL = "Fortress war schedule";
 // CIFTaxManagement, the fortress manager's first row (fortress-tax-hud.ts).
 const FORTRESS_TAX_PANEL = "Fortress tax";
+const FORTRESS_MAP_PANEL = "Fortress map";
+// 65E660: the fortress map's page view, inset (3, 2) in its frame control.
+const FORTRESS_MAP_VIEW = [ 3, 2, 0x260, 0x182 ] as const;
+// 64F3B0: each type popup row past the second adds 0x1E pixels.
+const FORTRESS_TYPE_ROW = 0x1e;
 const FORTRESS_TAX_RATE = "fortress-tax-rate";
 // CIFButton_SetEnabledWithFaceAlpha (541640): a disabled face draws at alpha 0x80.
 const DISABLED_FACE_TINT = [ 1, 1, 1, 0x80 / 255 ] as const;
@@ -782,7 +811,7 @@ const FORTRESS_TAX_TRAVEL = 234;
 // CIFJobRank and CIFJobContributionRank share one panel (job-hud.ts).
 const JOB_RANK_PANEL = "Job ranking";
 // The guild window's command button 102 and the notice the window's ban
-// raises for the master or oneself (5E4C30 → 703DD0: 0x10/0x1F).
+// raises for the master or oneself (5E4C30 â†’ 703DD0: 0x10/0x1F).
 const GUILD_AUTHORITY_BUTTON = 102;
 
 /*
@@ -791,7 +820,7 @@ authorityLabel
 
 CIFGuildMember_RefreshButtons (5E1E80) relabels the authority button: the
 master gives authority (UIIT_CTL_GUILD_UNION_CHAT_GRANT), a member checks
-it (…_CONFIRM); the layout's UIIT_CTL_AUTHORITY_GRANT never shows.
+it (â€¦_CONFIRM); the layout's UIIT_CTL_AUTHORITY_GRANT never shows.
 ================
 */
 function authorityLabel( master: boolean ): string {
@@ -1159,6 +1188,7 @@ export function createUi(
 	const fortressWarHud = createFortressWarHud();
 	const fortressScheduleHud = createFortressScheduleHud();
 	const fortressTaxHud = createFortressTaxHud();
+	const fortressMapHud = createFortressMapHud();
 	const fortressProductionHud = createFortressProductionHud();
 	// The step clock the production window counts down on, and the second it
 	// last drew (65A5E0 runs on a 1000 ms timer).
@@ -1501,6 +1531,28 @@ export function createUi(
 	}
 	/*
 	================
+	extendedCompactOrigin
+
+	The extended bar's origin while the compact layout is active: the dragged
+	position when there is one, held inside the viewport by the header size;
+	otherwise the centred compact spot. The renderer and the drag share it,
+	so a first drag starts from the bar as drawn, not from a desktop spot.
+	================
+	*/
+	function extendedCompactOrigin(
+		width: number,
+		height: number,
+		headerWidth: number,
+		headerHeight: number
+	): readonly [number, number] {
+		if ( !extPosition ) return [ Math.max( 0, (width - headerWidth) / 2 ), 80 ];
+		return [
+			Math.max( 0, Math.min( width - headerWidth, extPosition[0] ) ),
+			Math.max( 0, Math.min( height - headerHeight, extPosition[1] ) )
+		];
+	}
+	/*
+	================
 	persistWindowPositions
 
 	Retire the placement session before UI teardown, including pagehide.
@@ -1738,6 +1790,25 @@ export function createUi(
 
 	/*
 	================
+	fortressMapSelection
+
+	The catalog, the selected zone and its roster record, for the fortress
+	map's panel and buttons; null while the catalog is not loaded.
+	================
+	*/
+	function fortressMapSelection() {
+		const catalog = hud.data()?.fortressMap;
+		if ( !catalog ) return null;
+		const id = fortressMapHud.zone();
+		return {
+			catalog,
+			zone: catalog.zones.find( row => row.id === id ),
+			record: view?.gameplay?.fortress?.zones?.find( row => row.zone === id )
+		};
+	}
+
+	/*
+	================
 	structureRemoveAction
 
 	The 0x71E1 action the target's delete button sends, or 0 when 516BC0
@@ -1832,6 +1903,7 @@ export function createUi(
 		if ( next !== FORTRESS_WAR_PANEL ) fortressWarHud.close();
 		if ( next !== FORTRESS_SCHEDULE_PANEL ) fortressScheduleHud.close();
 		if ( next !== FORTRESS_TAX_PANEL ) fortressTaxHud.close();
+		if ( next !== FORTRESS_MAP_PANEL ) fortressMapHud.close();
 		if ( next !== FORTRESS_PRODUCTION_PANEL ) fortressProductionHud.close();
 		if ( next !== JOB_RANK_PANEL ) jobHud.closeRank();
 		if ( next !== ACADEMY_HONOR_PANEL ) academyHud.closeHonor();
@@ -2117,7 +2189,7 @@ export function createUi(
 			// an inventory activation. A confirmed use already has its target.
 			if (
 				item && armsItemTargetCursor( item.typeFlags ) && command.summonerSlot === undefined &&
-				command.revivalSlot === undefined
+				command.revivalSlot === undefined && command.targetSlot === undefined
 			) {
 				if ( item.slot < 13 || view?.gameplay?.inventoryPending ) return;
 				carriedItem = null;
@@ -2831,11 +2903,11 @@ export function createUi(
 		}
 		if ( id.startsWith( "pet-skill:" ) && experimental.state().saved.attackPetTraining ) {
 			const skill = view?.gameplay?.petTraining?.skills.find( entry => entry.id === Number( id.slice( 10 ) ) );
-			if ( skill && skill.level > 0 && (skill.action || !skill.slotted) ) {
+			if ( skill?.action && skill.level > 0 ) {
 				sendGameplay( {
 					kind: "cos-training",
 					gid: cosGid,
-					operation: skill.action ? PET_TRAINING_OP.use : PET_TRAINING_OP.slot,
+					operation: PET_TRAINING_OP.use,
 					arg: skill.id,
 					target: view?.gameplay?.target ?? 0
 				} );
@@ -3661,7 +3733,7 @@ export function createUi(
 			// The social window's leave asks nothing, as the party window's does.
 			sendGameplay( { kind: id } );
 		} else if ( id === "guild-kick" ) {
-			// 5E4C30 slot 2 → 703DD0 sends the ban on the click. With no member
+			// 5E4C30 slot 2 â†’ 703DD0 sends the ban on the click. With no member
 			// selected nothing happens; the worker refuses the master or oneself
 			// (guildBanRefused) with its 0x10 notice, before any question.
 			// Port-only, not native: the Experimental "Confirm guild ban" row
@@ -4591,6 +4663,53 @@ export function createUi(
 					stackLimit: item?.maxStack ?? 1
 				} );
 			}
+		} else if ( id === "npc-fortress-structure" ) {
+			// 5D8930 action 0x32 row 2: 0x71E1 action 0x18; its answer opens the map.
+			const conversation = view?.gameplay?.npcConversation, staff = fortressStaffView();
+			if ( conversation?.phase === "menu" && staff.fortress !== undefined ) {
+				fortressMapHud.request(
+					conversation.gid,
+					staff.fortress,
+					view?.gameplay?.fortress?.serviceSequence ?? 0
+				);
+				sendGameplay( {
+					kind: "fortress-structure",
+					gid: conversation.gid,
+					fortress: staff.fortress,
+					action: FORTRESS_STRUCTURE_LIST
+				} );
+			}
+		} else if ( id === "fortress-map-close" ) {
+			setPanel( "" );
+		} else if ( id.startsWith( "fortress-map-zone:" ) ) {
+			fortressMapHud.select( Number( id.slice( "fortress-map-zone:".length ) ) );
+		} else if (
+			id === "fortress-map-construct" || id === "fortress-map-repair" || id === "fortress-map-upgrade"
+		) {
+			// 65D1C0 / 65D340 / 65D560, each behind its button's enable rule (65CF40).
+			const selected = fortressMapSelection();
+			if ( selected?.zone && selected.record ) {
+				const buttons = fortressMapButtons(
+					selected.catalog,
+					selected.zone,
+					selected.record,
+					fortressStaffView().member?.role ?? 0
+				);
+				if ( id === "fortress-map-construct" && buttons.construct ) fortressMapHud.ask( "construct" );
+				else if ( id === "fortress-map-repair" && buttons.repair ) fortressMapHud.ask( "repair" );
+				else if ( id === "fortress-map-upgrade" && buttons.upgrade ) {
+					if ( fortressNeedsTowerType( selected.catalog, selected.zone, selected.record ) ) {
+						fortressMapHud.askType();
+					} else fortressMapHud.ask( "upgrade" );
+				}
+			}
+		} else if ( id.startsWith( "fortress-map-type:" ) ) {
+			fortressMapHud.tick( Number( id.slice( "fortress-map-type:".length ) ) );
+		} else if (
+			id === "fortress-map-type-ok" || id === "fortress-map-type-close" || id === "fortress-map-type-cancel"
+		) {
+			// 0x8073 -> 65D7A0 with the ticked row; cancel closes the popup (69ED30).
+			fortressMapHud.takeType( id === "fortress-map-type-ok" );
 		} else if ( id === "npc-fortress-tax" ) {
 			// 5D8930 action 0x33 row 1: 0x71E1 action 0; the window shows at once.
 			const conversation = view?.gameplay?.npcConversation, staff = fortressStaffView();
@@ -4778,6 +4897,9 @@ export function createUi(
 				focus = null;
 				goldAmount = "";
 			}
+		} else if ( id === "npc-flagwar" ) {
+			// 5D3630 action 0x38: the worker gates the level and sends 0x7753.
+			sendGameplay( { kind: "flagwar-register" } );
 		} else if ( id === "magic-option-open" && view.gameplay?.target ) {
 			// 5DA1B0 case 0x2F; B338 lock 0x80000000 then shows the window.
 			sendGameplay( { kind: "magic-option-open", gid: view.gameplay.target } );
@@ -5370,6 +5492,42 @@ export function createUi(
 					return;
 				}
 				if ( event.kind === "activate" ) return;
+			}
+			if ( fortressMapHud.question() !== null ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "fortress-map-no"
+				) {
+					fortressMapHud.takeQuestion();
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "fortress-map-yes"
+				) {
+					// CIFFortressMap_OnConfirmMsgBox (65CD80): kinds 0x27..0x29 send the
+					// staged action (0x0B for construction and upgrade, 0x0C for repair).
+					const asked = fortressMapHud.takeQuestion(), gid = fortressMapHud.npc();
+					dirty = true;
+					if ( !asked || gid === null || view?.session?.phase !== "world" ) return;
+					if ( view.gameplay?.target !== gid ) return;
+					sendGameplay( {
+						kind: "fortress-structure",
+						gid,
+						fortress: fortressMapHud.fortress(),
+						action: asked.kind === "repair" ? FORTRESS_STRUCTURE_REPAIR : FORTRESS_STRUCTURE_UPGRADE,
+						zone: asked.zone,
+						type: asked.kind === "repair" ? undefined : asked.type
+					} );
+					return;
+				}
+				if ( event.kind === "activate" ) return;
+			}
+			if ( fortressMapHud.popup() !== null && event.kind === "key" && event.code === "Escape" ) {
+				fortressMapHud.takeType( false );
+				dirty = true;
+				return;
 			}
 			if ( fortressTaxHud.question() !== null ) {
 				if (
@@ -6563,10 +6721,21 @@ export function createUi(
 				return;
 			}
 			if ( event.kind === "drag" && event.id === "ext-drag" && view && !extPositionLock ) {
-				const origin = extPosition ?? [ Math.max( 0, view.width - 106 ), 181 ];
+				const extended = hud.data()?.extended[Number( extVertical ) * 2 + Number( extDouble )],
+					header = extended ? Object.values( extended ).find( node => node.id === 10 ) : undefined,
+					compactLayout = compactHudLayout( view.width, view.height ),
+					origin = compactLayout && header ?
+						extendedCompactOrigin( view.width, view.height, header.rect[2], header.rect[3] ) :
+						extPosition ?? [ Math.max( 0, view.width - 106 ), 181 ],
+					// On compact the renderer fits the bar into a band of this
+					// height; storing a lower spot would strand the drag in a
+					// dead zone the fit pulls back from.
+					yLimit = compactLayout ?
+						view.height - Math.max( 1, compactLayout.top - 80 ) :
+						view.height - 44;
 				extPosition = [
 					Math.max( 0, Math.min( view.width - 44, origin[0] + event.dx ) ),
-					Math.max( 0, Math.min( view.height - 44, origin[1] + event.dy ) )
+					Math.max( 0, Math.min( Math.max( 0, yLimit ), origin[1] + event.dy ) )
 				];
 				dirty = true;
 				return;
@@ -7284,6 +7453,11 @@ export function createUi(
 				}
 				return;
 			}
+			if ( event.kind === "drag" && event.id === "fortress-map-pan" && panel === FORTRESS_MAP_PANEL ) {
+				fortressMapHud.drag( event.dx, event.dy );
+				dirty = true;
+				return;
+			}
 			if ( event.kind === "drag" ) {
 				if ( panel === "Map" ) {
 					mapHud.drag( event );
@@ -7996,6 +8170,19 @@ export function createUi(
 				setPanel( "" );
 				dirty = true;
 			}
+			fortressMapHud.observe(
+				next.gameplay?.fortress,
+				next.gameplay?.target ?? undefined,
+				next.session?.phase === "world" && next.gameplay?.npcConversation?.phase === "menu"
+			);
+			if ( fortressMapHud.npc() !== null && panel !== FORTRESS_MAP_PANEL && canLeavePanel() ) {
+				setPanel( FORTRESS_MAP_PANEL );
+				dirty = true;
+			}
+			if ( panel === FORTRESS_MAP_PANEL && fortressMapHud.npc() === null ) {
+				setPanel( "" );
+				dirty = true;
+			}
 			productionClock = next.simulationTimeMs ?? now;
 			fortressProductionHud.observe(
 				next.gameplay?.fortress,
@@ -8025,6 +8212,11 @@ export function createUi(
 					for ( const line of alchemyResultLines( outcome, hudCopy ) ) hudMessages.append( line );
 					alchemyEffect = { flags: outcome.flags, startedAt: now };
 				}
+				// A destroyed target leaves the window holding its slot, and
+				// every later click reads as a reagent onto that ghost target
+				// (BR-261020-1019-8648), so free the selection: the next item
+				// clicked binds as the new target.
+				if ( outcome.flags & ALCHEMY_DESTROYED ) alchemySlots = [];
 				dirty = true;
 			}
 			if ( alchemyEffect ) {
@@ -8712,7 +8904,7 @@ export function createUi(
 					guideY = Math.trunc( next.height / 2 ) - 226;
 				}
 				const extended = hud.data()?.extended[Number( extVertical ) * 2 + Number( extDouble )];
-				if ( extPosition && extended && !compactHudLayout( next.width, next.height ) ) {
+				if ( extPosition && extended ) {
 					// 548490 sizes the widget root from header ID10, not the protruding slots.
 					const header = Object.values( extended ).find( node => node.id === 10 )!;
 					extPosition = [
@@ -10784,7 +10976,15 @@ export function createUi(
 							game.cosRecords?.some( pet => pet.gid === game.petTraining?.gid && pet.hp > 0 ) ?
 						game.petTraining :
 						undefined;
-					for ( const icon of buffBoard( game, next.simulationTimeMs ?? 0, boardSuppressed, ownerPet ) ) {
+					for (
+						const icon of buffBoard(
+							game,
+							next.simulationTimeMs ?? 0,
+							boardSuppressed,
+							ownerPet,
+							experimental.state().saved.attackPetTraining
+						)
+					) {
 						if ( !icon.path ) continue;
 						const r: UiRect = [ origin[0] + icon.x, origin[1] + icon.y, 20, 20 ];
 						paths.push( icon.path );
@@ -11724,15 +11924,16 @@ export function createUi(
 					const compactMark = beginWindow();
 					const layout = hudData.extended[Number( extVertical ) * 2 + Number( extDouble )]!;
 					const header = Object.values( layout ).find( n => n.id === 10 )!;
-					if ( !extPosition && !compact ) {
+					if ( !extPosition ) {
 						extPosition = windowPlacement.takeRemembered( "extendedQuickslot", w, h, [
 							header.rect[2],
 							header.rect[3]
 						] ) ??
-							[ w - header.rect[2] - 26, 181 ];
+							(compact ? null : [ w - header.rect[2] - 26, 181 ]);
 					}
-					const ex = compact ? Math.max( 0, (w - header.rect[2]) / 2 ) : extPosition![0],
-						ey = compact ? 80 : extPosition![1],
+					const [ex, ey] = compact ?
+							extendedCompactOrigin( w, h, header.rect[2], header.rect[3] ) :
+							[ extPosition![0], extPosition![1] ],
 						alpha = extTransparent ? 110 / 255 : 1;
 					controls.push( {
 						id: "ext-drag",
@@ -11824,12 +12025,17 @@ export function createUi(
 						}
 					}
 					if ( compact ) {
+						// The fit still scales the group to the band height, but a
+						// dragged bar carries its band with it: the band top follows
+						// the stored position instead of pinning the bar at 80.
+						const bandHeight = Math.max( 1, compact.top - 80 ),
+							bandTop = Math.min( ey, Math.max( 0, h - bandHeight ) );
 						fitUiGroup(
 							quads,
 							controls,
 							compactMark[0],
 							compactMark[1],
-							[ 0, 80, w, Math.max( 1, compact.top - 80 ) ],
+							[ 0, bandTop, w, bandHeight ],
 							full,
 							{ blocks, firstBlock: compactMark[2], disableDrag: compactWindowDrag }
 						);
@@ -14815,6 +15021,9 @@ export function createUi(
 						slot = hudData.windows.ifpartymatchslot!,
 						social = game?.social,
 						localName = social?.localName ?? next.session?.character ?? "",
+						currentPartyName = social?.leader ?
+							social.members.find( member => member.id === social.leader )?.name ?? "" :
+							localName,
 						buttons = partyMatchButtons( {
 							own: match?.own ?? null,
 							ownName: match?.own ? localName : "",
@@ -14864,14 +15073,22 @@ export function createUi(
 						match?.rows ?? [],
 						partySearch,
 						partyMatchSort,
-						partyMatchDescending
+						partyMatchDescending,
+						currentPartyName
 					);
-					partyMatchOffset = Math.min( partyMatchOffset, Math.max( 0, filtered.length - 12 ) );
+					partyMatchOffset = Math.min(
+						partyMatchOffset,
+						Math.max( 0, filtered.length - PARTY_MATCH_VISIBLE_ROWS )
+					);
+					const pinned = filtered[0]?.name === currentPartyName ? filtered[0] : undefined,
+						visible = pinned ?
+							[ pinned, ...filtered.slice( partyMatchOffset + 1 ) ] :
+							filtered.slice( partyMatchOffset );
 					for (
 						const { row, rect: r } of matchingSlots(
 							page,
 							"CIFPartyMatchSlot",
-							filtered.slice( partyMatchOffset ),
+							visible.slice( 0, PARTY_MATCH_VISIBLE_ROWS ),
 							px,
 							py
 						)
@@ -14883,8 +15100,7 @@ export function createUi(
 						paths.push( ...bar.paths );
 						quads.push( ...bar.quads );
 						if ( !row ) continue;
-						const own = row.name === next.session?.character,
-							color: UiQuad["color"] = own ? [ 135 / 255, 233 / 255, 1, 1 ] : white;
+						const color = row === pinned ? PARTY_MATCH_CURRENT_COLOR : white;
 						const values: Record<string, string> = {
 							ID: String( row.id ),
 							NAME: row.name,
@@ -15039,6 +15255,7 @@ export function createUi(
 						canAcademyOpen: !!(capabilities & 4) && !game.academy?.member &&
 							(game.progression?.level ?? 0) >= ACADEMY_OPEN_LEVEL,
 						canFortressOfficial: !!(capabilities & 0x800000),
+						canFortressAide: !!(capabilities & FORTRESS_AIDE_CAPABILITY) && fortressStaffView().holder,
 						canFortressManager: !!(capabilities & 0x400000) &&
 							(fortressStaffView().holder || fortressStaffView().ally),
 						canFortressHire: !!(capabilities & 0x400000) && fortressStaffView().holder,
@@ -15069,6 +15286,7 @@ export function createUi(
 									!!(fortressStaffView().flags & Number( flag ))
 							}) ) :
 							null,
+						flagWarMode: game.targetFlagWarMode ?? 0,
 						canMagicOption: !!(capabilities & AVATAR_MAGIC_OPTION_FUNCTION),
 						canGacha: !!(capabilities & GACHA_FUNCTION),
 						canGachaOperator: !!(capabilities & GACHA_OPERATOR_FUNCTION),
@@ -15730,6 +15948,150 @@ export function createUi(
 						}
 					}
 					endWindow( admission, "service:" + FORTRESS_TAX_PANEL );
+				}
+				if (
+					panel === FORTRESS_MAP_PANEL && fortressMapHud.npc() !== null && hudData?.windows.iffortressmap &&
+					hudData.root.GDR_FORTRESS_MAP
+				) {
+					// CIFFortressMap: OnCreate 65E330 lays it out, 65D970 fills the panel.
+					const admission = beginWindow(), root = hudData.root.GDR_FORTRESS_MAP;
+					const layout = hudData.windows.iffortressmap, catalog = hudData.fortressMap;
+					const node = ( id: number ) => Object.values( layout ).find( row => row.id === id );
+					const [px, py] = windowOrigin( FORTRESS_MAP_PANEL, [
+						Math.max( 0, (w - root.rect[2]) / 2 ),
+						Math.max( 0, (h - root.rect[3]) / 2 ),
+						root.rect[2],
+						root.rect[3]
+					] );
+					nativeFrame( root, px, py, hudCopy( root.text ), "fortress-map-close" );
+					const records = view?.gameplay?.fortress?.zones ?? [];
+					const frameNode = node( 100 ), pose = view?.gameplay?.pose;
+					const page = catalog ? fortressMapPageFor( catalog, records ) : undefined;
+					if ( frameNode && catalog && page && pose ) {
+						// CIFFortressMapFrame is a CIFWorldMap on the fortress page.
+						const r = authoredRect( frameNode, px, py );
+						const clip: UiRect = [
+							r[0] + FORTRESS_MAP_VIEW[0],
+							r[1] + FORTRESS_MAP_VIEW[1],
+							FORTRESS_MAP_VIEW[2],
+							FORTRESS_MAP_VIEW[3]
+						];
+						// The page and its markers stream in like item icons (content, not
+						// chrome): a missing one never withholds the window.
+						const drawnMap = paths.length;
+						const mapLayout = fortressMapLayout( page ), center = fortressMapHud.anchor( pose );
+						const frame = worldMapFrame( page.id, clip, fortressMapHud.pan(), center, mapLayout );
+						fortressMapHud.clampPan( [ frame.px - frame.cx, frame.py - frame.cy ] );
+						for (
+							const quad of worldMapQuads( pose, page.id, clip, fortressMapHud.pan(), center, mapLayout )
+						) {
+							if ( quad.texture ) paths.push( quad.texture );
+							quads.push( quad );
+						}
+						controls.push( {
+							id: "fortress-map-pan",
+							label: hudCopy( root.text ),
+							kind: "region",
+							draggable: true,
+							rect: clip
+						} );
+						// 57BE10 then 57C6D0: the markers, then the selected one again.
+						const selected = fortressMapHud.zone();
+						let highlight: { image: string; rect: UiRect; } | null = null;
+						for ( const zone of catalog.zones ) {
+							if ( zone.world !== page.world ) continue;
+							const marker = fortressMarker( catalog, zone, records.find( row => row.zone === zone.id ) );
+							if ( !marker ) continue;
+							const [mx, my] = fortressMarkerAt( zone, frame ), half = marker.size / 2;
+							const box: UiRect = [
+								Math.trunc( mx - half ),
+								Math.trunc( my - half ),
+								marker.size,
+								marker.size
+							];
+							image( box, marker.image, white, [ 0, 0, 1, 1 ], clip );
+							if ( zone.id === selected ) highlight = { image: marker.image, rect: box };
+							const x0 = Math.max( box[0], clip[0] ), y0 = Math.max( box[1], clip[1] );
+							const x1 = Math.min( box[0] + box[2], clip[0] + clip[2] ),
+								y1 = Math.min( box[1] + box[3], clip[1] + clip[3] );
+							if ( x1 > x0 && y1 > y0 ) {
+								controls.push( {
+									id: "fortress-map-zone:" + zone.id,
+									label: zone.codeName,
+									kind: "button",
+									rect: [ x0, y0, x1 - x0, y1 - y0 ]
+								} );
+							}
+						}
+						if ( highlight ) image( highlight.rect, highlight.image, white, [ 0, 0, 1, 1 ], clip );
+						for ( const content of paths.slice( drawnMap ) ) contentImages.add( content );
+						paths.push( ...PARTS.map( part => frameNode.texture + part + ".png" ) );
+						quads.push(
+							...frameRing(
+								r,
+								frameNode.texture,
+								PARTS.map( part => resources.size( frameNode.texture + part + ".png" ) ),
+								full
+							)
+						);
+					}
+					// The panel's values, buttons and feature row are drawn below.
+					nativePage( layout, px, py, [ 50, 52, 54, 56, 58, 59, 60, 61, 62, 63, 100 ] );
+					const selection = fortressMapSelection();
+					const status = selection ? fortressMapStatus( selection.catalog, selection.record ) : null;
+					const skill = status?.feature ? hudData.tooltipSkills.get( status.feature ) : undefined;
+					const feature = skill ? hudCopy( skill.nameSymbol ) : "";
+					for (
+						const [id, value] of [
+							[
+								50,
+								status ?
+									hudCopy( status.name ) +
+									(status.topRank ? hudCopy( "UIIT_STT_FORT_BATTLEAIDE_UPGRADE_MAX" ) : "") :
+									""
+							],
+							[ 52, status?.state ? hudCopy( status.state ) : "" ],
+							[ 54, status ? fortressWarFormat( hudCopy( "UIIT_STT_RANK" ), [ status.rank ] ) : "" ],
+							[ 56, status ? String( status.defence ) : "" ],
+							[ 58, status ? status.hp + "/" + status.maxHp : "" ],
+							[ 60, feature ]
+						] as const
+					) {
+						const line = node( id );
+						if ( line ) authoredText( line, px, py, value );
+					}
+					// 65D970 hides the feature row when the structure has none.
+					const caption = node( 59 );
+					if ( caption && (!status || feature) ) authoredText( caption, px, py, hudCopy( caption.text ) );
+					const buttons = selection ?
+						fortressMapButtons(
+							selection.catalog,
+							selection.zone,
+							selection.record,
+							fortressStaffView().member?.role ?? 0
+						) :
+						{ construct: false, repair: false, upgrade: false };
+					const asking = fortressMapHud.question() !== null || fortressMapHud.popup() !== null;
+					for (
+						const [id, control, enabled] of [
+							[ 61, "fortress-map-construct", buttons.construct ],
+							[ 62, "fortress-map-repair", buttons.repair ],
+							[ 63, "fortress-map-upgrade", buttons.upgrade ]
+						] as const
+					) {
+						const button = node( id );
+						if ( button ) {
+							authoredLabeledButton(
+								button,
+								px,
+								py,
+								control,
+								hudCopy( button.text ),
+								!enabled || asking
+							);
+						}
+					}
+					endWindow( admission, "service:" + FORTRESS_MAP_PANEL );
 				}
 				const fortressWar = panel === FORTRESS_WAR_PANEL ? fortressWarView() : null;
 				if (
@@ -16815,7 +17177,7 @@ export function createUi(
 										),
 										rect: r,
 										kind: "button",
-										disabled: busy || !skill.live || skill.level === 0 ||
+										disabled: busy || !action || !skill.live || skill.level === 0 ||
 											(action && !skill.queued && !!petRowCooldown( state!, i, quickslotTime )),
 										selected: skill.queued || skill.slotted,
 										draggable: skill.action && skill.live && skill.level > 0
@@ -19865,6 +20227,35 @@ export function createUi(
 							fontStyle: selected ? 2 : 0
 						} ).map( q => ({ ...q, characterAnchor: entity.gid }) )
 					);
+					const ownerPlate = entity.kind === "cos" ?
+						companionOwnerNameplate(
+							entity,
+							next.entities.find( owner => owner.gid === entity.ownerGid ),
+							options
+						) :
+						null;
+					if ( ownerPlate && height ) {
+						const ownerWidth = text.run( ownerPlate.text ).width,
+							ownerLeft = -(ownerWidth >> 1),
+							ownerTop = ownerPlate.y - (height >> 1);
+						quads.push( {
+							characterAnchor: entity.gid,
+							rect: [ ownerLeft - 1, ownerTop - 1, ownerWidth + 2, height + 2 ],
+							clip: full,
+							uv: [ 0, 0, 1, 1 ],
+							texture: "",
+							color: [ 0, 0, 0, 64 / 255 ]
+						} );
+						quads.push(
+							...text.quads(
+								ownerPlate.text,
+								[ ownerLeft, ownerTop, ownerWidth, height ],
+								full,
+								ownerPlate.color,
+								{ vAlign: 0 }
+							).map( q => ({ ...q, characterAnchor: entity.gid }) )
+						);
+					}
 					if ( hovered && width ) {
 						quads.push( {
 							characterAnchor: entity.gid,
@@ -22322,6 +22713,135 @@ export function createUi(
 				);
 			}
 			if ( structureRemoval && view?.gameplay?.target !== structureRemoval.gid ) structureRemoval = null;
+			const mapPopup = fortressMapHud.popup(),
+				typeRoot = hud.data()?.root.GDR_CHECK_CONFIRM_WND,
+				typePage = hud.data()?.windows.ifcheckconfirmwnd;
+			if ( worldVisible && mapPopup && typeRoot && typePage ) {
+				// CheckConfirmWnd (69ED30, filled by 64F3B0): one radio row per tower
+				// type; each row past the second grows the window by 0x1E.
+				const types = fortressTowerTypes(), grow = (types.length - 2) * FORTRESS_TYPE_ROW;
+				const at = ( id: number ) => Object.values( typePage ).find( row => row.id === id );
+				const height = typeRoot.rect[3] + grow;
+				const px = Math.max( 0, (w - typeRoot.rect[2]) / 2 ), py = Math.max( 0, (h - height) / 2 );
+				controls = [];
+				blocks = [ full ];
+				nativeFrame(
+					{ ...typeRoot, rect: [ typeRoot.rect[0], typeRoot.rect[1], typeRoot.rect[2], height ] },
+					px,
+					py,
+					hudCopy( "UIIT_PAG_FORT_BATTLEAIDE_UPGRADETYPE" ),
+					"fortress-map-type-close"
+				);
+				for ( const id of [ 701, 702, 703 ] ) {
+					const part = at( id );
+					if ( part ) {
+						authoredChrome(
+							{ ...part, rect: [ part.rect[0], part.rect[1], part.rect[2], part.rect[3] + grow ] },
+							px,
+							py
+						);
+					}
+				}
+				const box = at( 720 ), label = at( 711 );
+				types.forEach( ( key, i ) => {
+					if ( !box || !label ) return;
+					const dy = i * FORTRESS_TYPE_ROW;
+					const radio = { ...box, rect: [ box.rect[0], box.rect[1] + dy, 16, 16 ] as const };
+					authoredImage(
+						radio,
+						px,
+						py,
+						box.texture.replace( "_off", i === mapPopup.choice ? "_on" : "_off" )
+					);
+					const row = authoredRect( radio, px, py );
+					controls.push( {
+						id: "fortress-map-type:" + i,
+						label: hudCopy( key ),
+						kind: "button",
+						rect: [ row[0], row[1], 140, 16 ]
+					} );
+					authoredText(
+						{ ...label, rect: [ label.rect[0], label.rect[1] + dy, label.rect[2], label.rect[3] ] },
+						px,
+						py,
+						hudCopy( key )
+					);
+				} );
+				for (
+					const [id, control] of [ [ 704, "fortress-map-type-ok" ], [
+						705,
+						"fortress-map-type-cancel"
+					] ] as const
+				) {
+					const node = at( id );
+					if ( node ) {
+						authoredLabeledButton(
+							{ ...node, rect: [ node.rect[0], node.rect[1] + grow, 76, 24 ] },
+							px,
+							py,
+							control,
+							hudCopy( node.text )
+						);
+					}
+				}
+			}
+			const mapAsk = fortressMapHud.question(), mapCatalog = hud.data()?.fortressMap;
+			if ( worldVisible && mapAsk && mapCatalog ) {
+				// 527420 fills CONSTRUCTION_WINDOW / UPGRADE_WINDOW with the standing
+				// structure's name, gold and guild points (+0x264, +0x268), and
+				// REPAIR_WINDOW with the 65D340 price.
+				const record = view?.gameplay?.fortress?.zones?.find( row => row.zone === mapAsk.zone );
+				const structure = record ? mapCatalog.structures.get( record.ref ) : undefined;
+				const name = structure ? hudCopy( structure.name ) : "";
+				const body = mapAsk.kind === "repair" ?
+					fortressWarFormat( hudCopy( "UIIT_MSG_FORT_BATTLEAIDE_REPAIR_WINDOW" ), [
+						name,
+						structure && record ? fortressRepairPrice( structure, record.hp ) : 0
+					] ) :
+					fortressWarFormat(
+						hudCopy(
+							mapAsk.kind === "construct" ?
+								"UIIT_MSG_FORT_BATTLEAIDE_CONSTRUCTION_WINDOW" :
+								"UIIT_MSG_FORT_BATTLEAIDE_UPGRADE_WINDOW"
+						),
+						[ name, structure?.upgradeGold ?? 0, structure?.upgradeGuildPoints ?? 0 ]
+					);
+				const layout = guildProposalLayout( w, h ),
+					message = text.guide(
+						guideTokens( "<center>" + body + "</center>" ),
+						[ layout.frame[0] + 4, layout.frame[1] + 48, 300, 49 ],
+						full,
+						white,
+						resources.size
+					);
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...partyProposalAssets(), ...message.paths );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} ),
+					...message.quads
+				);
+				button(
+					"fortress-map-yes",
+					hudCopy( "UIIT_CTL_YES" ),
+					...layout.accept.slice( 0, 3 ) as [number, number, number]
+				);
+				button(
+					"fortress-map-no",
+					hudCopy( "UIIT_CTL_NO" ),
+					...layout.refuse.slice( 0, 3 ) as [number, number, number]
+				);
+			}
 			if ( worldVisible && structureRemoval ) {
 				// 517750 raises UIIT_MSG_FORT_STRUCTURE_DELETE_WINDOW naming the target.
 				const layout = guildProposalLayout( w, h );
@@ -22362,10 +22882,37 @@ export function createUi(
 			if ( worldVisible && (cosHud.cleanConfirm() !== null || cosHud.targetUse() !== null) ) {
 				// 6A2350 case 5 raises the type 0xD box with the two
 				// UIIT_MSG_COS_CLEAN_CONFIRM lines before a transport is destroyed.
-				const layout = guildProposalLayout( w, h );
+				// CIFMessageBox type 0x1F (52F460) asks with the two CANCLE lines.
+				const layout = guildProposalLayout( w, h ),
+					targeted = cosHud.targetUse() !== null,
+					// 5C82D0 keeps the confirm box 308x148 whatever its text; the
+					// two lines wrap inside that frame. The text board wraps them,
+					// centred, so a long line folds instead of running past the
+					// window frame.
+					message = text.guide(
+						guideTokens(
+							"<center>" +
+								hudCopy(
+									targeted ?
+										"UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_1" :
+										"UIIT_MSG_COS_CLEAN_CONFIRM1"
+								) +
+								"<br>" +
+								hudCopy(
+									targeted ?
+										"UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_2" :
+										"UIIT_MSG_COS_CLEAN_CONFIRM2"
+								) +
+								"</center>"
+						),
+						[ layout.frame[0] + 4, layout.frame[1] + 48, 300, 49 ],
+						full,
+						white,
+						resources.size
+					);
 				controls = [];
 				blocks = [ full ];
-				paths.push( ...partyProposalAssets() );
+				paths.push( ...partyProposalAssets(), ...message.paths );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
 					...frameRing(
@@ -22378,43 +22925,15 @@ export function createUi(
 						hAlign: 1,
 						vAlign: 0
 					} ),
-					...text.quads(
-						// CIFMessageBox type 0x1F (52F460) asks with the two CANCLE lines.
-						hudCopy(
-							cosHud.targetUse() ?
-								"UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_1" :
-								"UIIT_MSG_COS_CLEAN_CONFIRM1"
-						),
-						layout.name,
-						full,
-						white,
-						{
-							hAlign: 1,
-							vAlign: 0
-						}
-					),
-					...text.quads(
-						hudCopy(
-							cosHud.targetUse() ?
-								"UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_2" :
-								"UIIT_MSG_COS_CLEAN_CONFIRM2"
-						),
-						layout.question,
-						full,
-						white,
-						{
-							hAlign: 1,
-							vAlign: 0
-						}
-					)
+					...message.quads
 				);
 				button(
-					cosHud.targetUse() ? cosHud.targetUseBox() + "-confirm" : "cos-clean-confirm",
+					targeted ? cosHud.targetUseBox() + "-confirm" : "cos-clean-confirm",
 					hudCopy( "UIIT_CTL_YES" ),
 					...layout.accept.slice( 0, 3 ) as [number, number, number]
 				);
 				button(
-					cosHud.targetUse() ? cosHud.targetUseBox() + "-cancel" : "cos-clean-cancel",
+					targeted ? cosHud.targetUseBox() + "-cancel" : "cos-clean-cancel",
 					hudCopy( "UIIT_CTL_NO" ),
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);
@@ -22463,10 +22982,25 @@ export function createUi(
 				);
 			}
 			if ( worldVisible && buffDismiss ) {
-				const layout = guildProposalLayout( w, h ), [x, y] = layout.frame;
+				// The same fixed 308x148 confirm frame as the COS box above; its
+				// two CANCLE lines wrap inside it instead of running past it.
+				const layout = guildProposalLayout( w, h ),
+					message = text.guide(
+						guideTokens(
+							"<center>" +
+								hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_1" ) +
+								"<br>" +
+								hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_2" ) +
+								"</center>"
+						),
+						[ layout.frame[0] + 4, layout.frame[1] + 48, 300, 49 ],
+						full,
+						white,
+						resources.size
+					);
 				controls = [];
 				blocks = [ full ];
-				paths.push( ...partyProposalAssets() );
+				paths.push( ...partyProposalAssets(), ...message.paths );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
 					...frameRing(
@@ -22474,29 +23008,12 @@ export function createUi(
 						MESSAGE_FRAME,
 						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
 						full
-					)
-				);
-				quads.push(
+					),
 					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
 						hAlign: 1,
 						vAlign: 0
-					} )
-				);
-				quads.push(
-					...text.quads(
-						hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_1" ),
-						layout.name,
-						full,
-						white,
-						{ hAlign: 1, vAlign: 0 }
-					),
-					...text.quads(
-						hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_2" ),
-						layout.question,
-						full,
-						white,
-						{ hAlign: 1, vAlign: 0 }
-					)
+					} ),
+					...message.quads
 				);
 				button(
 					"buff-dismiss-confirm",
@@ -23424,7 +23941,7 @@ export function createUi(
 							mallText( price, [ dx, dy + 36, dw, 40 ] );
 							mallButton(
 								"item-mall-quantity-down",
-								"−",
+								"âˆ’",
 								[ dx, dy + 80, touch, touch ],
 								busy || state.quantity <= 1
 							);

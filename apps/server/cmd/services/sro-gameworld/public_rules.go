@@ -39,6 +39,10 @@ import (
 var unlistedSettings = map[string]string{
 	action.EnvGMSetSpeed:            "a GM command, not a rule players meet",
 	simulation.EnvBetaUniqueRespawn: "unique monster spawn timing is not published",
+	// Capture the Flag (#887) has sign-up but no match until its second
+	// part; the match's rule text publishes the schedule then.
+	action.EnvFlagWarStartUTC:   "Capture the Flag has no match yet; its rule lands with the match",
+	action.EnvFlagWarMinPlayers: "Capture the Flag has no match yet; its rule lands with the match",
 	// The tunables a rule's own text shows (game/tunables).
 	"SRO_MOST_WANTED_TEST_KILLS":      "shown in the Most Wanted test pacing rule",
 	"SRO_MOST_WANTED_TEST_BOUNTY":     "shown in the Most Wanted test pacing rule",
@@ -121,6 +125,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Retail experience, skill point and drop rates.",
 				Now:    "Raised beta rates for experience, skill points and drops.",
 				Why:    "A beta lasts weeks, not years; testers need to reach the content."},
+			{Flag: progression.EnvBetaGrowthBands, On: growth.Enabled && growth.Bands.Count > 0,
+				Native: "Every level earns experience and skill points at the retail rate.",
+				Now:    growth.Bands.Describe(),
+				Why:    "Fast early levels, then a steadier climb through the cap-110 levels."},
 			{Flag: progression.EnvBetaDropMix, On: progression.BetaGrowthFromEnv().Enabled && dropMix != nil,
 				Native: "Every kind of item drops at the retail rate.",
 				Now:    "Each item kind has its own beta drop rate; by default equipment keeps the raised rate while potions, pills, scrolls, arrows and alchemy materials drop at the retail rate.",
@@ -180,7 +188,7 @@ func publicRules() publicstats.RulesResponse {
 			{Flag: progression.EnvAlchemyMaterialDropsOff, On: progression.MaterialDropsFromEnv().Off(),
 				Native: "Monsters drop alchemy materials (claws, hides and other monster parts).",
 				Now:    "Alchemy materials no longer drop.",
-				Why:    "On the beta the stones they once made are bought, so the materials only piled up on the ground."},
+				Why:    "A community vote brought the parts back, so they drop as in the original; this only applies if the removal is switched back on."},
 			{Flag: action.EnvBetaSilk, On: silkRate > 0,
 				Native: "Silk is bought for the account.",
 				Now:    "Every full hour in the world earns silk, up to a cap.",
@@ -280,6 +288,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "There is no bounty; a kill moves no gold.",
 				Now:    "A wanted player's bounty comes out of their own gold: the killer takes up to 100,000,000 per wanted level, never more than the wanted player carries. No new gold enters the game.",
 				Why:    "Requested for the beta so a bounty puts the wanted player's own gold at stake; the original returns with one setting."},
+			{Flag: action.EnvMostWantedStreakNotice, On: action.MostWantedFromEnv() && action.MostWantedStreakNoticeFromEnv(),
+				Native: "There is no Most Wanted rule.",
+				Now:    "After every job kill that counts toward Most Wanted, you see your progress to the next wanted level, such as \"Most Wanted: 3/10 to LV 1\". Only you see it.",
+				Why:    "Requested after players could not tell whether their kills counted; the rule without the notice returns with one setting."},
 			{Flag: action.EnvTradeTiers, On: action.TradeTiersFromEnv(),
 				Native: "Every trade good is worth 348 gold, a caravan's stars count its goods against the trader's level, and every route pays its listed price.",
 				Now: "Trade goods are worth 21 times as much (7,308 for a 348 good): buying, selling, stolen goods at the Den and the cargo value all scale, so profit, trader job EXP, hunter shares, the weekly trade pool and the fortress trade tax are 21 times larger too. " +

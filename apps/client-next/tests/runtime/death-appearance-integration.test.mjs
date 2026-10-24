@@ -363,3 +363,45 @@ test("actor-motion drops outgoing live-body locomotion and active installations 
 		corpsePose.evaluate( deadActor.clip, deadActor.time, deadActor.loop, deadActor.layers )
 	);
 });
+
+/*
+================
+owned egg admission
+================
+*/
+test("Stormbrood egg appearance requires both its reserved identity and server name", () => {
+	const crow = { refObjId: 1, codename: "COS_P_RAVEN", glb: "/assets/npc/crow.glb", clips: [ "stand" ] };
+	const egg = {
+		refObjId: 5000001,
+		codename: "PORT_STORMBROOD_EGG",
+		glb: "/assets/npc/port/stormbrood/egg.glb",
+		clips: []
+	};
+	const lookup = createAppearanceLookup( {
+		published: {
+			deathModels: new Map(),
+			tradeSkinPools: { china: [], europe: [] },
+			tradeBandits: new Map(),
+			itemIds: new Map(),
+			dress: {},
+			catalog: new Map( [ [ 1, crow ], [ 5000001, egg ] ] )
+		},
+		referenceAppearances: { skin: () => undefined, get: () => undefined },
+		structureVisuals: { appearance: () => undefined },
+		deathShown: () => false
+	} );
+	const entity = {
+		gid: 0x08000006,
+		name: "Stormbrood Egg",
+		refObjId: 1,
+		kind: /** @type {const} */ ("cos"),
+		regionId: 257,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0
+	};
+	assert.equal( lookup.resourceFor( entity ), egg );
+	assert.equal( lookup.resourceFor( { ...entity, name: "Stormbrood Crow" } ), crow );
+	assert.equal( lookup.resourceFor( { ...entity, gid: 0x02000001 } ), crow );
+});

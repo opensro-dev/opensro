@@ -99,9 +99,10 @@ exactly this shape. Deliberate omissions, all pinned by the fold:
     authority value to encode for roster NPCs (the caller's table
     guarantees the bit stays clear).
   - npcExtra 0 appends no menu row; a nonzero value forces the 0x38
-    talkbox row (sub_5d3630). DECISION: the roster emits 0 - no roster
-    NPC has evidence for the 0x38 row, and forcing it would put a menu
-    action on screen that retail never granted these NPCs.
+    talkbox row (sub_5d3630). The roster emits it only for the Capture
+    the Flag registration NPC while sign-up is open (reference server event writer;
+    action/flagwar.go owns the value), so no menu action appears that
+    retail never granted.
 
 ================
 */

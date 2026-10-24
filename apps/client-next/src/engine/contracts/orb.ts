@@ -1,3 +1,10 @@
+/*
+===========================================================================
+orb.ts - ordered visual feedback shared by world admission and presentation.
+
+Port-only wind bursts retain a position independently of a retiring summon.
+===========================================================================
+*/
 export interface BerserkGauge {
 	readonly authoritative: number;
 	readonly displayed: number;
@@ -10,6 +17,12 @@ export interface ItemEffectFeedback {
 	readonly typeFlags: number;
 }
 export type VisualFeedback =
+	| {
+		readonly kind: "pet-crow-effect";
+		readonly cue?: number;
+		readonly book?: number;
+		readonly source: { readonly regionId: number; readonly x: number; readonly y: number; readonly z: number; };
+	}
 	| ItemEffectFeedback
 	| OrbFeedback
 	| { readonly kind: "level-up"; readonly gid: number; }

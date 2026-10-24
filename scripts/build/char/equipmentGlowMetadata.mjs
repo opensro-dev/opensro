@@ -7,26 +7,27 @@ equipmentGlowMetadata.mjs - native equipment glow catalog and texture binding
 */
 import fs from "node:fs";
 import path from "node:path";
-import { clientV150ResinfoRoot, retailTextdataRoot } from "../world/paths.mjs";
+import { clientV150ResinfoRoot, extractedRoot, retailTextdataRoot } from "../world/paths.mjs";
 import { listTextDataShardNamesSync, readTextDataLinesSync, splitTextDataRow } from "../shared/textDataIo.mjs";
 import { readCharacterTexture } from "../shared/nativeCharacterTextures.mjs";
 
 // 915490 consumes itemoption's group, then the ordered itemtypenumber vector.
 
+// Port-only, not native: the later client's tables (scripts/import_vsro_item_glow.py)
+// feed the Experimental "Enhanced item glow" row; absent, only native rows publish.
+export const vsroItemGlowRoot = path.join( extractedRoot, "VsroItemGlow_extracted", "resinfo" );
+
 /*
 ================
-equipmentGlowCatalog
+glowTierGroups
 
-Join authored item groups and thresholds to their active reference item IDs.
+itemtypenumber.txt's rows by group: threshold, UV rate, option texture,
+stage-0 gain (4 MODULATE, 5 MODULATE2X), colours, period, alpha test.
 ================
 */
-export function equipmentGlowCatalog() {
-	const groups = new Map(), items = new Map(), codes = new Map();
-	for (
-		const line of fs.readFileSync( path.join( clientV150ResinfoRoot, "itemtypenumber.txt" ), "utf8" ).split(
-			/\r?\n/
-		)
-	) {
+function glowTierGroups( file ) {
+	const groups = new Map();
+	for ( const line of fs.readFileSync( file, "latin1" ).split( /\r?\n/ ) ) {
 		if ( !line.trim() || line.trim().startsWith( "//" ) ) continue;
 		const c = line.trim().split( /\s+/ ), group = Number( c[0] );
 		if ( c.length !== 10 || ![ 4, 5 ].includes( Number( c[4] ) ) || Number( c[5] ) !== 7 ) {
@@ -45,20 +46,56 @@ export function equipmentGlowCatalog() {
 		if ( !groups.has( group ) ) groups.set( group, [] );
 		groups.get( group ).push( row );
 	}
-	for (
-		const line of fs.readFileSync( path.join( clientV150ResinfoRoot, "itemoption.txt" ), "utf8" ).split( /\r?\n/ )
-	) {
+	return groups;
+}
+
+/*
+================
+glowItemGroups
+
+itemoption.txt: item codename to its itemtypenumber group.
+================
+*/
+function glowItemGroups( file, groups ) {
+	const codes = new Map();
+	for ( const line of fs.readFileSync( file, "latin1" ).split( /\r?\n/ ) ) {
 		const c = line.trim().split( /\s+/ );
 		if ( !c[0] || c[0].startsWith( "//" ) ) continue;
 		if ( c.length !== 2 || !groups.has( Number( c[1] ) ) ) throw Error( "Invalid equipment glow group: " + line );
 		codes.set( c[0], Number( c[1] ) );
 	}
+	return codes;
+}
+
+/*
+================
+equipmentGlowCatalog
+
+Join authored item groups and thresholds to their active reference item IDs.
+Native rows come from the v1.150 tables; when the later client's tables are
+imported, an item also carries their rows marked enhanced (port-only).
+================
+*/
+export function equipmentGlowCatalog( vsroRoot = vsroItemGlowRoot ) {
+	const nativeGroups = glowTierGroups( path.join( clientV150ResinfoRoot, "itemtypenumber.txt" ) );
+	const nativeCodes = glowItemGroups( path.join( clientV150ResinfoRoot, "itemoption.txt" ), nativeGroups );
+	let enhancedGroups = new Map(), enhancedCodes = new Map();
+	if ( fs.existsSync( path.join( vsroRoot, "itemtypenumber.txt" ) ) ) {
+		enhancedGroups = glowTierGroups( path.join( vsroRoot, "itemtypenumber.txt" ) );
+		enhancedCodes = glowItemGroups( path.join( vsroRoot, "itemoption.txt" ), enhancedGroups );
+	}
+	const items = new Map();
 	for ( const file of listTextDataShardNamesSync( retailTextdataRoot, /^itemdata.*\.txt$/i ) ) {
 		for ( const line of readTextDataLinesSync( path.join( retailTextdataRoot, file ) ) ) {
 			const c = splitTextDataRow( line );
-			if ( c[0] === "1" && codes.has( c[2] ) ) {
-				items.set( Number( c[1] ), groups.get( codes.get( c[2] ) ) );
-			}
+			if ( c[0] !== "1" ) continue;
+			const native = nativeCodes.has( c[2] ) ? nativeGroups.get( nativeCodes.get( c[2] ) ) : [];
+			const enhanced = enhancedCodes.has( c[2] ) ? enhancedGroups.get( enhancedCodes.get( c[2] ) ) : [];
+			if ( !native.length && !enhanced.length ) continue;
+			items.set( Number( c[1] ), [
+				...native.map( row => ({ ...row, enhanced: false }) ),
+				...enhanced.map( row => ({ ...row, enhanced: true }) )
+			] );
 		}
 	}
 	return items;

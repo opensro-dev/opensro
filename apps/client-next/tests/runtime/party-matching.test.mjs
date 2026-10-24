@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-party-matching.test.mjs - tests for gameplay.ts
+party-matching.test.mjs - matching wire state, filters and current-party order
 
 Loads the TypeScript sources directly through the shared native loader
 (tests/helpers/native-source-loader.mjs), so the tests exercise the same
@@ -57,6 +57,11 @@ test("party list atomically replaces populated and empty pages with native strin
 });
 
 const reg = { party: 0, type: 3, purpose: 0, min: 1, max: 90, title: "Party \u4e2d" };
+/*
+================
+ack
+================
+*/
 function ack( op, id = 42, r = reg ) {
 	const p = Buffer.alloc( 15 + r.title.length * 2 );
 	p[0] = 1;
@@ -99,6 +104,11 @@ test("matching registration, modification and deletion commit only complete nati
 	const removed = partyMatchPacket( deletion.state, { opcode: 0xb535, payload: Uint8Array.of( 1, 42, 0, 0, 0 ) } );
 	assert.equal( removed.own, null );
 });
+/*
+================
+notify
+================
+*/
 function notify() {
 	const p = Buffer.alloc( 21 + 1 + 4 + 2 + 4 + 4 + 1 );
 	p.writeUInt32LE( 123 );
@@ -283,4 +293,25 @@ test("matching buttons follow CIFPartyMatch_RefreshButtons", () => {
 		"an own listing: modify and delete only"
 	);
 	assert.deepEqual( on( { rows: 0 } ), [ 18 ], "an empty board offers only form" );
+});
+
+test("current party stays ahead of sorting and search without changing other rows", () => {
+	const rows = [
+		{ ...reg, id: 1, name: "Other", members: 1, race: 0 },
+		{ ...reg, id: 20, name: "Leader", members: 3, race: 1, purpose: 1, min: 70 },
+		{ ...reg, id: 3, name: "Other", members: 1, race: 0 }
+	];
+	const search = { name: "", purpose: 4, min: 1, max: 90 };
+	for ( const key of [ "id", "name", "members", "min", "title" ] ) {
+		for ( const descending of [ false, true ] ) {
+			const sorted = partyMatchRows( rows, search, key, descending, "Leader" );
+			assert.equal( sorted[0].id, 20 );
+			assert.equal( sorted.length, 3 );
+		}
+	}
+	const filtered = { name: "Other", purpose: 0, min: 1, max: 20 };
+	assert.deepEqual( partyMatchRows( rows, filtered, "id", false, "Leader" ).map( row => row.id ), [ 20, 1, 3 ] );
+	assert.deepEqual( partyMatchRows( rows, filtered ).map( row => row.id ), [ 1, 3 ] );
+	assert.deepEqual( partyMatchRows( rows, search, "id", true, "Missing" ).map( row => row.id ), [ 20, 3, 1 ] );
+	assert.deepEqual( rows.map( row => row.id ), [ 1, 20, 3 ] );
 });

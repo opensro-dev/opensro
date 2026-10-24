@@ -1,29 +1,48 @@
+/*
+===========================================================================
+
+textdata_catalogs.go - immutable textdata shared by creation and gameplay
+
+Loads authoritative gameplay tables and the native name filter before
+network admission, so request handlers never discover missing media.
+
+===========================================================================
+*/
 package enterworld
 
 import (
 	"fmt"
 	"strings"
+
+	"opensro.online/server/internal/game/namefilter"
 )
 
-// TextdataCatalogs is the immutable, server-authoritative view of the
-// extracted gameplay tables consumed by EnterWorld and later gameplay lanes.
-// It deliberately excludes browser presentation paths: the browser resolves
-// models, audio, minimaps, and preload products from its own asset manifests.
-//
-// Construct this through LoadTextdataCatalogs. That readiness boundary keeps
-// filesystem parsing out of the first authenticated request and gives every
-// gameplay owner the same in-memory tables.
+/*
+================
+TextdataCatalogs
+
+The immutable, server-authoritative tables shared by character creation,
+EnterWorld and gameplay. Browser presentation paths belong to its manifests.
+Construct through LoadTextdataCatalogs before admitting network requests.
+================
+*/
 type TextdataCatalogs struct {
 	Items        *TextdataItems
 	Levels       *TextdataLevels
 	Skills       *TextdataSkills
 	MagicOptions *TextdataMagicOptions
+	NameFilter   *namefilter.Filter
 }
 
-// LoadTextdataCatalogs materializes all gameplay tables needed by the live
-// authority plane before network admission opens. Individual table types stay
-// lazy-capable for small unit fixtures, but production composition must fail
-// closed here instead of discovering absent media during EnterWorld.
+/*
+================
+LoadTextdataCatalogs
+
+Materializes live authority tables before network admission. Individual
+table types remain lazy-capable for small unit fixtures; production fails
+closed here instead of discovering absent media during a request.
+================
+*/
 func LoadTextdataCatalogs(dir string) (*TextdataCatalogs, error) {
 	if strings.TrimSpace(dir) == "" {
 		return nil, fmt.Errorf("textdata readiness: directory is required")
@@ -47,5 +66,10 @@ func LoadTextdataCatalogs(dir string) (*TextdataCatalogs, error) {
 	if catalogs.MagicOptions.Len() == 0 {
 		return nil, fmt.Errorf("textdata readiness: no magicoption rows loaded from %s", dir)
 	}
+	filter, err := namefilter.Load(dir)
+	if err != nil {
+		return nil, fmt.Errorf("textdata readiness: %w", err)
+	}
+	catalogs.NameFilter = filter
 	return catalogs, nil
 }

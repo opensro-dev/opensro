@@ -30,11 +30,9 @@ func TestManualPetStatusAbilitiesAndSharedCooldown(t *testing.T) {
 		{"bite", "COS_P_WOLF_040", 4, abnormal.Bleeding},
 		{"nova", "COS_P_PENGUIN_040", 31, abnormal.Frostbite},
 		{"storm-II", "COS_P_PENGUIN_040", 35, abnormal.Frostbite},
-		{"mark", "COS_P_RAVEN_040", 49, abnormal.Decay},
 		{"bite-III", "COS_P_WOLF_040", 6, abnormal.Bleeding},
 		{"nova-III", "COS_P_PENGUIN_040", 33, abnormal.Frostbite},
 		{"storm-III", "COS_P_PENGUIN_040", 36, abnormal.Frostbite},
-		{"mark-III", "COS_P_RAVEN_040", 51, abnormal.Decay},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rt, clock, c, mob := newPetCombatRuntime(t, 100000, attackPetBand)
@@ -66,13 +64,14 @@ func TestManualPetStatusAbilitiesAndSharedCooldown(t *testing.T) {
 
 /*
 ================
-TestManualCrowMendHealsWithoutEnemy
+TestManualCrowPlumeHealsWithoutEnemy
 ================
 */
-func TestManualCrowMendHealsWithoutEnemy(t *testing.T) {
+func TestManualCrowPlumeHealsWithoutEnemy(t *testing.T) {
 	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
 	makeTrainedPet(rt, c, "COS_P_RAVEN_040", 40)
 	rt.AttackPetExpansion = true
+	roarField(t, rt, c, clock)
 	companion.UpgradeTree(c.ActiveCOS)
 	if msg := companion.Learn(c.ActiveCOS, 46); msg != "" {
 		t.Fatal(msg)

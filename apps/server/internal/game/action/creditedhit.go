@@ -45,12 +45,56 @@ door transaction a kill runs in.
 ================
 */
 func (rt *Runtime) commitCreditedMonsterHit(division string, c, snapshot *enterworld.Character, row enterworld.SkillRow, target monster.Instance, formula combat.Result, reason string, now int64) (creditedMonsterHit, bool) {
+	return rt.commitCredited(creditedHitRequest{division: division, c: c, snapshot: snapshot, row: row, target: target,
+		formula: formula, reason: reason, now: now})
+}
+
+/*
+================
+commitCompanionCreditedMonsterHit
+
+commitCreditedMonsterHit for a hit a pet or COS landed in its owner's name
+(the port-only pet shield and wolf hunt bursts): the owner keeps the
+rewards, but a fatal one is a companion kill, which credits no quest and
+no job EXP (reward_group.go).
+================
+*/
+func (rt *Runtime) commitCompanionCreditedMonsterHit(division string, c, snapshot *enterworld.Character, row enterworld.SkillRow, target monster.Instance, formula combat.Result, reason string, now int64) (creditedMonsterHit, bool) {
+	return rt.commitCredited(creditedHitRequest{division: division, c: c, snapshot: snapshot, row: row, target: target,
+		formula: formula, reason: reason, now: now, companion: true})
+}
+
+/*
+================
+creditedHitRequest
+================
+*/
+type creditedHitRequest struct {
+	division    string
+	c, snapshot *enterworld.Character
+	row         enterworld.SkillRow
+	target      monster.Instance
+	formula     combat.Result
+	reason      string
+	now         int64
+	// companion: a pet or COS landed the hit in c's name.
+	companion bool
+}
+
+/*
+================
+commitCredited
+================
+*/
+func (rt *Runtime) commitCredited(in creditedHitRequest) (creditedMonsterHit, bool) {
+	division, c, snapshot, row, target, formula, reason, now := in.division, in.c, in.snapshot, in.row, in.target, in.formula, in.reason, in.now
 	var hit creditedMonsterHit
 	plans, ok := rt.planMonsterImpacts(division, snapshot, row, target, []combat.Result{formula}, now)
 	if !ok {
 		return hit, false
 	}
 	roster := rt.monsterRewardRoster(division, c, now)
+	roster.companionKill = in.companion
 	commit := func() bool {
 		hit.impacts = rt.Monsters.ApplyDamageSequence(division, target.Gid, target.CurrentHP, plans)
 		if len(hit.impacts) == 0 {
@@ -75,6 +119,10 @@ func (rt *Runtime) commitCreditedMonsterHit(division string, c, snapshot *enterw
 		return hit, false
 	}
 	rt.commitSkillHostility(division, enterworld.ObjectIDForCharacter(c), target.Gid, row, hit.impacts, now)
+	if formula.Damage > 0 {
+		frames := rt.tailwindDamage(division, c, target.Gid, now)
+		rt.queueMonsterLegFrames([]simulation.DivisionFrames{{DivisionID: division, SourceGID: target.Gid, Frames: simFrames(frames)}})
+	}
 	return hit, true
 }
 

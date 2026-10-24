@@ -222,9 +222,15 @@ func TestPetSpiritShieldAndRoarAdmission(t *testing.T) {
 				t.Fatal("full Resolve admitted a new slow")
 			}
 			rt.HandleCosCommand(testDivision, c, trainingCommand(pet.GID, petTrainingSlot, 22))
+			if pet.ResolveStacks != 10 {
+				t.Fatal("rejected passive selection changed Resolve")
+			}
+			c.BattleUntilMs = 0
+			rt.petSessionFor(testDivision, c.Name, pet.GID).combat = nil
+			rt.HandleCosCommand(testDivision, c, trainingCommand(pet.GID, petTrainingRefund, 0))
 			ref, _ := rt.cosReference(pet)
 			if pet.ResolveStacks != 0 || pet.CurrentHP > ref.MaxHP {
-				t.Fatal("slot change retained stacks or HP above the new maximum")
+				t.Fatal("refund retained stacks or HP above the new maximum")
 			}
 
 		})

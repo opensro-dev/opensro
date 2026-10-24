@@ -932,7 +932,8 @@ export function createCharacterPresentation(
 			entities: readonly EntityState[]
 		) {
 			for ( const event of events ) {
-				if ( event.kind === "item-effect" ) effects.item( event );
+				if ( event.kind === "pet-crow-effect" ) effects.crowEffect( event.source, event.cue, event.book );
+				else if ( event.kind === "item-effect" ) effects.item( event );
 				else if ( event.kind === "level-up" ) {
 					const entity = entities.find( e => e.gid === event.gid );
 					if ( entity ) effects.system( event.gid, entity.kind === "cos" ? -2147483614 : -2147483642 );

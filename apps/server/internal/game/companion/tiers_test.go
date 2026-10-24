@@ -74,3 +74,44 @@ func TestUpgradeRetainsPointBudgetGearAndCooldown(t *testing.T) {
 		t.Fatal("migration was not idempotent")
 	}
 }
+
+/*
+================
+TestSequentialPassivesAlwaysUseHighestLearnedBook
+================
+*/
+func TestSequentialPassivesAlwaysUseHighestLearnedBook(t *testing.T) {
+	for _, kind := range []string{"COS_P_BEAR_090", "COS_P_WOLF_090", "COS_P_PENGUIN_090", "COS_P_RAVEN_090"} {
+		p := &domain.CharacterCOS{Codename: kind, Level: 140, Training: domain.PetTraining{TreeVersion: 2}}
+		for row := ActiveRowCount; row < RowCount; row++ {
+			for tier := 1; tier <= 3; tier++ {
+				var learned SkillDef
+				for _, s := range SkillsForPet(p) {
+					if s.Row == row && s.Option == tier {
+						p.Training.Levels[s.Index()] = 1
+						learned = s
+					}
+				}
+				if learned.ID == 0 {
+					t.Fatalf("missing %s row %d tier %d", kind, row, tier)
+				}
+				for _, stale := range []uint8{0, 1, 2, 3, 255} {
+					p.Training.Slotted[row-ActiveRowCount] = stale
+					got, ok := SlottedPassive(p, row)
+					if !ok || got.ID != learned.ID {
+						t.Fatalf("%s row%d: stale slot %d selected %d instead of %d", kind, row, stale, got.ID, learned.ID)
+					}
+					if Slot(p, learned.ID) == "" {
+						t.Fatal("sequential passive still manually selectable")
+					}
+				}
+			}
+		}
+		Refund(p)
+		for row := ActiveRowCount; row < RowCount; row++ {
+			if _, ok := SlottedPassive(p, row); ok {
+				t.Fatal("refund retained passive")
+			}
+		}
+	}
+}

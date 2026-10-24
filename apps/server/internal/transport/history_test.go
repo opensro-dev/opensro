@@ -86,3 +86,30 @@ func TestShutdownClose(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestReplacedClose
+
+Only a replacing session's goodbye is a replacement: a logout, a
+shutdown, a dropped socket and a wrapped goodbye are told apart.
+================
+*/
+func TestReplacedClose(t *testing.T) {
+	cases := []struct {
+		cause error
+		want  bool
+	}{
+		{CloseReason{Reason: ByeReasonReplaced}, true},
+		{fmt.Errorf("closing: %w", CloseReason{Reason: ByeReasonReplaced}), true},
+		{CloseReason{Reason: ByeReasonNormal}, false},
+		{CloseReason{Reason: ByeReasonShutdown}, false},
+		{errors.New("read: connection reset"), false},
+		{nil, false},
+	}
+	for _, tc := range cases {
+		if got := ReplacedClose(tc.cause); got != tc.want {
+			t.Fatalf("ReplacedClose(%v) = %v", tc.cause, got)
+		}
+	}
+}

@@ -99,7 +99,7 @@ type BetaRates struct {
 	// (progression.ShopOnlyDegree9).
 	// MaterialDropsOff removes every alchemy material from every drop
 	// (progression.MaterialDrops).
-	MaterialDropsOff bool `json:"materialDropsOff,omitempty" doc:"Port-only beta balance: no monster drops an alchemy material (type 3/3/11/4, monster parts). Their chances in these tables then drop nothing."`
+	MaterialDropsOff bool `json:"materialDropsOff,omitempty" doc:"Port-only beta balance: no monster drops an alchemy material (type 3/3/11/4, monster parts). Their chances in these tables then drop nothing. Only present when the removal is switched on; a community vote (2026-10-24) brought the parts back, so the deployed default drops them."`
 	ShopOnlyDegree9  bool `json:"shopOnlyDegree9,omitempty" doc:"Port-only beta balance: degree-9 Lucky Powder (type 3/3/10/2), stat magic stones (3/3/11/1), attribute stones (3/3/11/2) and Luck, Steady, Astral, Athanasia and Repair stones (3/3/11/7), degree being the item's ItemClass, no longer drop; every town's grocer sells the Lucky Powder and Jangan's smith and grocer sell the stones (SRO_SHOP_EXTRA_GOODS). Their chances in these tables then drop nothing."`
 	// SunDropRate is the degree-9 Sun class rate (progression.SunRate);
 	// while it runs, Rare's named tables carry the widened Sun class.

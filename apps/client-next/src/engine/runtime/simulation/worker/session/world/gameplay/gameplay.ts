@@ -147,6 +147,12 @@ import {
 } from "@/engine/foundation/gameplay/fortress";
 import { fortressServiceRequest } from "@/engine/foundation/gameplay/fortress-services";
 import {
+	FORTRESS_AIDE_CAPABILITY,
+	FORTRESS_STRUCTURE_LIST,
+	FORTRESS_STRUCTURE_REPAIR,
+	FORTRESS_STRUCTURE_UPGRADE
+} from "@/engine/foundation/gameplay/fortress-map";
+import {
 	type FortressForgeItem,
 	FORTRESS_PRODUCTION_QUERY,
 	fortressProductionAction,
@@ -182,6 +188,12 @@ import {
 	restrictionNotice,
 	type SystemNotice
 } from "@/engine/foundation/gameplay/system-notices";
+import {
+	decodeFlagWarEvent,
+	flagWarNotice,
+	FLAG_WAR_LEVEL_MIN,
+	FLAG_WAR_MATCH_MS
+} from "@/engine/foundation/gameplay/flagwar";
 import {
 	ACADEMY_OPEN_FEE,
 	academyBootstrap,
@@ -748,6 +760,11 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	let tradeStars = 0;
 	let noticeSequence = 0;
 	let notices: readonly SystemNotice[] = [];
+	// The flag-war event state (flagwar.ts owns the wire): the mission
+	// timer's end on the world clock, the flag carrier, and whether the
+	// last 0x7753 toggle was a sign-up (the join answer's text reads it).
+	let flagWarTimerEndsAt = 0, flagWarCarrierGid = 0, flagWarJoinExpected = false;
+	let flagWarTeam: number | null = null;
 	let progression: Progression = { masteries: [] };
 	const skillGroups = new Map<number, { group: number; level: number; }>();
 	let fortress = fortressBootstrap( {} ), musicMode = 0;
@@ -837,6 +854,10 @@ fails; retry persistence without restoring stale slot occupancy.
 	// The Experimental "Keep pet gold pickup when full" row: on unless turned
 	// off (experimentalGameplay); off is the native 0x0077DD61 disable.
 	let smartPetPickup = true;
+	// The Experimental pickup-pet item filter's kind mask (#841,
+	// experimentalGameplay); undefined while the row is off, which leaves
+	// the native pickup loop untouched.
+	let petPickupKinds: number | undefined;
 	let approach: InteractionApproachState = { phase: "idle" };
 	let returnScroll: ReturnScrollCast | undefined, teleportMode = 0;
 	const cosSelection = createCosSelection();
@@ -1211,6 +1232,7 @@ The Experimental window's gameplay rows (experimentalGameplay).
 			homingProjectiles = value.homingProjectiles === true;
 			smartPetPickup = value.smartPetPickup !== false;
 			if ( !smartPetPickup ) cosPickup.spaceChanged();
+			petPickupKinds = value.petPickupKinds;
 		},
 		/*
 ================
@@ -1765,6 +1787,28 @@ state here before a command can claim a native wire conversation.
 					} )
 				);
 			}
+			if ( command.kind === "fortress-structure" ) {
+				// 5D8930 action 0x32 row 2 (the list) and CIFFortressMap_OnConfirmMsgBox
+				// (65CD80): the selected battle aide (function 0x1000000) stages the
+				// fortress, the zone and the tower type.
+				const target = targeting.state();
+				if (
+					!localGid || target.target !== command.gid ||
+					!((target.targetCapabilities ?? 0) & FORTRESS_AIDE_CAPABILITY) ||
+					![ FORTRESS_STRUCTURE_LIST, FORTRESS_STRUCTURE_UPGRADE, FORTRESS_STRUCTURE_REPAIR ].includes(
+						command.action
+					)
+				) throw Error( "Select the fortress battle aide" );
+				return sendFrame(
+					fortressServiceRequest( {
+						target: command.gid,
+						action: command.action,
+						fortress: command.fortress,
+						reference: command.action === FORTRESS_STRUCTURE_LIST ? undefined : command.zone,
+						flag: command.action === FORTRESS_STRUCTURE_UPGRADE ? command.type : undefined
+					} )
+				);
+			}
 			if ( command.kind === "fortress-dismantle" ) {
 				// CIFTargetWindowFortressStructure_OnMsgBoxResult (517CA0) sends
 				// {target, 0x16 or 0x17, fortress} for the selected object.
@@ -2176,6 +2220,23 @@ state here before a command can claim a native wire conversation.
 			}
 			if ( !localGid ) {
 				throw new Error( "Local player is not initialized" );
+			}
+			if ( command.kind === "flagwar-register" ) {
+				// 5D3630 refuses below level 20 locally and sends nothing;
+				// the refusal is the native level-error notice.
+				if ( (progression.level ?? 0) < FLAG_WAR_LEVEL_MIN ) {
+					notices = [ ...notices.slice( -99 ), {
+						key: "UIIT_MSG_FLAGWAR_GAME_JOIN_LEVEL_ERORR",
+						value: 0,
+						sequence: ++noticeSequence
+					} ];
+					dirty = true;
+					return null;
+				}
+				// The clicked row's mode says whether this toggle signs up
+				// (mode 1) or cancels (mode 2); the join answer reads it.
+				flagWarJoinExpected = targeting.state().targetFlagWarMode !== 2;
+				return sendFrame( { opcode: 0x7753, payload: new Uint8Array( 0 ) } );
 			}
 			if ( command.kind === "cos-shop-buy" || command.kind === "cos-shop-sell" ) {
 				const record = cosRecords.get( command.gid );
@@ -4208,6 +4269,30 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				// The flag-war event (4b2530): notices plus the mission
+				// timer and carrier the snapshot publishes. The own team
+				// arrives with the match work; null keeps scored-mission
+				// notices silent until then.
+				if ( frame.opcode === 0x30a9 ) {
+					const event = decodeFlagWarEvent( frame.payload );
+					if ( event ) {
+						if ( event.type === "missionStart" ) {
+							flagWarTeam = event.team;
+							flagWarTimerEndsAt = now + FLAG_WAR_MATCH_MS;
+						} else if ( event.type === "elapsed" ) {
+							flagWarTimerEndsAt = now + Math.max( 0, FLAG_WAR_MATCH_MS - event.ms );
+						} else if ( event.type === "timerStop" || event.type === "gameStart" ) {
+							flagWarTimerEndsAt = 0;
+							flagWarCarrierGid = 0;
+							if ( event.type === "gameStart" ) flagWarTeam = null;
+						}
+						if ( event.type === "carrier" ) flagWarCarrierGid = event.gid;
+						const notice = flagWarNotice( event, flagWarJoinExpected, flagWarTeam );
+						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+						dirty = true;
+					}
+					return true;
+				}
 				const refusal = recallAppointmentNotice( frame.opcode, frame.payload ) ??
 					targetNotice( frame.opcode, frame.payload ) ?? portalNotice( frame.opcode, frame.payload ) ??
 					repairNotice( frame.opcode, frame.payload ) ??
@@ -4321,7 +4406,8 @@ before take assembles the presentation snapshot.
 					records: cosRecords.values(),
 					sharedOwners,
 					read: readEntity,
-					smartPetPickup
+					smartPetPickup,
+					pickupKinds: petPickupKinds
 				} )
 			) {
 				sendFrame( frame );
@@ -4625,9 +4711,12 @@ The published plane when something changed since the last take, else null.
 				inventoryJournal,
 				...c,
 				...targeting.state(),
+				flagWar: { timerEndsAt: flagWarTimerEndsAt, carrierGid: flagWarCarrierGid },
 				...skillPress.state(),
 				betaPlayers: betaMap.players(),
 				petTraining: petTraining.state(),
+				petTailwind: petTraining.tailwind(),
+				petGuidance: petTraining.guidance(),
 				unlimitedItems,
 				error: m.error ?? i.error ?? c.error ?? targeting.error() ?? progression.error ??
 					training.state().trainingError ?? social.error ?? cosError ?? moveReservation.error() ?? null
@@ -4655,6 +4744,10 @@ World transfer retires spatial work while retaining character/session data.
 			quests.clearGathering();
 			approach = interactionApproachTransition( approach, { kind: "cancel" } );
 			returnScroll = undefined;
+			flagWarTimerEndsAt = 0;
+			flagWarCarrierGid = 0;
+			flagWarJoinExpected = false;
+			flagWarTeam = null;
 			teleportMode = 0;
 			npcConversation.clear();
 			storage.close();

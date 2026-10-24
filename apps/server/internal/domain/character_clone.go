@@ -70,6 +70,10 @@ func cloneCharacter(source *Character) *Character {
 		clone.Mercenaries[i] = CloneCOS(soldier)
 	}
 	clone.CapturedCOS = CloneCOS(source.CapturedCOS)
+	clone.Brood = cloneSlice(source.Brood)
+	for i, pet := range source.Brood {
+		clone.Brood[i] = CloneCOS(pet)
+	}
 	clone.PetSkillWindows = cloneSlice(source.PetSkillWindows)
 	clone.ParamJobs = cloneSlice(source.ParamJobs)
 	clone.CompositeJobs = cloneSlice(source.CompositeJobs)
@@ -208,6 +212,10 @@ func cloneCharacterWorld(source *CharacterWorld) *CharacterWorld {
 	clone.LastDeathPoint = cloneWorldPoint(source.LastDeathPoint)
 	clone.DungeonFloorIndex = clonePointer(source.DungeonFloorIndex)
 	clone.PackedInstance = clonePointer(source.PackedInstance)
+	if source.InstanceReturn != nil {
+		value := *source.InstanceReturn
+		clone.InstanceReturn = &value
+	}
 	clone.MoveSegment = cloneSlice(source.MoveSegment)
 	return &clone
 }
