@@ -25,6 +25,13 @@ import { dockSlot } from "@/engine/foundation/rendering/dock-slots";
 import { screenPoint } from "@/engine/foundation/rendering/screen-point";
 import type { TitleNode, TitleInteraction } from "./internal/title-contract";
 import { skillPointReadouts } from "@/engine/foundation/ui/hud-readouts";
+
+// The authored width of the title's top and bottom bars (pstitle
+// GDR_STA_SCREENUP / GDR_STA_SCREENDOWN, 1600 x 172).
+const SCREEN_BAR_WIDTH = 1600;
+// Port-only: on a narrow screen the version sits this far above the bottom,
+// on the project credit's row, clear of the copyright line.
+const NARROW_VERSION_BOTTOM = 45;
 /*
 ================
 createTitleUi
@@ -338,9 +345,22 @@ export function createTitleUi( assets: Pick<AssetOwner, "available" | "request" 
 			fill( [ 0, bottom, w, h - bottom ] );
 			// 0x727720 scales authored bars by width/1600 and height/1200. Splitting fixed-width
 			// halves left uncovered black regions at widescreen aspect ratios.
+			// Port-only, not native: narrower than 4:3 (a phone), the native
+			// stretch squeezed the bars' art and the copyright line to a
+			// fraction of their height's scale. There the bars keep one
+			// uniform scale and show their centred window (the copyright sits
+			// centred), drawn through the area-sampled path so the shrunk text
+			// stays sharp. 4:3 and wider keep the native stretch exactly.
 			const up = nodes?.GDR_STA_SCREENUP?.ddj?.publicPath, down = nodes?.GDR_STA_SCREENDOWN?.ddj?.publicPath;
-			if ( up ) image( up, [ 0, 0, w, top ] );
-			if ( down ) image( down, [ 0, bottom, w, top ] );
+			const barTexels = w / scale, narrow = barTexels < SCREEN_BAR_WIDTH;
+			const barUv: UiRect = narrow ?
+				[ (SCREEN_BAR_WIDTH - barTexels) / 2 / SCREEN_BAR_WIDTH, 0, barTexels / SCREEN_BAR_WIDTH, 1 ] :
+				[ 0, 0, 1, 1 ];
+			for ( const [path, rect] of [ [ up, [ 0, 0, w, top ] ], [ down, [ 0, bottom, w, top ] ] ] as const ) {
+				if ( !path ) continue;
+				image( path, rect, 1, barUv );
+				if ( narrow ) quads[quads.length - 1] = { ...quads[quads.length - 1]!, sampling: "nearest" };
+			}
 			const phase = state.phase;
 			if ( custom ) {
 				for ( let i = 0; i < quads.length; i++ ) quads[i] = { ...quads[i]!, layer: "background" };
@@ -696,7 +716,14 @@ export function createTitleUi( assets: Pick<AssetOwner, "available" | "request" 
 					alpha: 1
 				} );
 			} else {
-				text( "Ver 1.150", [ 5, h - 25, 80, 20 ], 1, 1, [ 1, 128 / 255, 128 / 255, 1 ] );
+				// On a narrow screen the copyright line spans the bottom row, so
+				// the version moves up beside the project credit (port-only).
+				text( "Ver 1.150", [ 5, h - (narrow ? NARROW_VERSION_BOTTOM : 25), 80, 20 ], 1, 1, [
+					1,
+					128 / 255,
+					128 / 255,
+					1
+				] );
 				if ( phase === "intro" ) {
 					controls.push( { id: "frontend:reveal", kind: "button", label: "Continue to login", rect: full } );
 				} else {

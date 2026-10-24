@@ -16,6 +16,19 @@ const { pickDestination } = await import( "../../src/engine/foundation/rendering
 const { missionLoadingQuads, regionLoadingBackground, loadingScreenQuads, travelLoadingQuads } = await import(
 	"../../src/engine/foundation/ui/mission-loading.ts"
 );
+/*
+================
+byTexture
+
+The loading quad that draws the named chrome asset.
+================
+*/
+function byTexture( quads, name ) {
+	const quad = quads.find( q => q.texture.endsWith( "/" + name + ".png" ) );
+	if ( !quad ) throw Error( "no " + name + " quad" );
+	return quad;
+}
+
 test("ground picks normalize outdoor sector crossings and retain dungeon coordinates", () => {
 	assert.deepEqual( pickDestination( { start: [ 1910, 40, 10 ], delta: [ 40, -40, -40 ] }, .5, 0x60a8 ), {
 		regionId: 0x5fa9,
@@ -41,9 +54,9 @@ test("entry artwork and loading control group preserve their aspect ratios on re
 	assert.deepEqual( q[3].uv, [ 0, 0, .5, 1 ] );
 	for ( const [w, h] of [ [ 1600, 1200 ], [ 1920, 1080 ], [ 3440, 1440 ], [ 582, 723 ], [ 320, 720 ] ] ) {
 		const quads = missionLoadingQuads( w, h, 1, .5 ),
-			frame = quads[2].rect,
-			gauge = quads[3].rect,
-			label = quads[4].rect;
+			frame = byTexture( quads, "loading_form" ).rect,
+			gauge = byTexture( quads, "gauge_loading" ).rect,
+			label = byTexture( quads, "nowloading" ).rect;
 		assert.ok( Math.abs( label[2] / label[3] - 144 / 20 ) < 1e-10 );
 		assert.ok( Math.abs( frame[2] / frame[3] - 1121 / 64 ) < 1e-10 );
 		if ( w >= 800 && h >= 600 ) assert.equal( label[0], gauge[0] );
@@ -56,32 +69,43 @@ test("entry artwork and loading control group preserve their aspect ratios on re
 	assert.equal( missionLoadingQuads( 1024, 768, 1, 2 )[3].uv[2], 1 );
 });
 
-test("compact loading covers the area above the footer and reserves readable progress below it", () => {
+test("compact loading shows the whole illustration above a footer where every row keeps its strip", () => {
 	for ( const [w, h] of [ [ 360, 858 ], [ 375, 667 ], [ 667, 375 ], [ 320, 568 ], [ 200, 200 ] ] ) {
 		for ( const progress of [ -1, 0, .5, 1, 2 ] ) {
 			const quads = loadingScreenQuads( w, h, "scene.png", progress );
-			const [, art, frame, gauge, label] = quads;
+			const [, backdrop, art] = quads;
+			const frame = byTexture( quads, "loading_form" ),
+				gauge = byTexture( quads, "gauge_loading" ),
+				label = byTexture( quads, "nowloading" );
 			for ( const { rect: [x, y, width, height] } of quads ) {
 				assert.ok( x >= 0 && y >= 0 && x + width <= w + 1e-9 && y + height <= h + 1e-9 );
 			}
-			// Cover (GH #1244): the quad fills the whole area above the
-			// footer and samples the centered window of the 1600x1200
-			// texture that matches its shape - never stretched, and one
-			// axis always samples the full texture.
-			assert.deepEqual( art.rect, [ 0, 0, w, Math.max( 0, h - 120 ) ] );
-			assert.ok( Math.abs( art.uv[0] - (1 - art.uv[2]) / 2 ) < 1e-12 );
-			assert.ok( Math.abs( art.uv[1] - (1 - art.uv[3]) / 2 ) < 1e-12 );
-			assert.ok( art.uv[2] > 0 && art.uv[2] <= 1 && art.uv[3] > 0 && art.uv[3] <= 1 );
-			assert.ok( Math.abs( art.uv[2] - 1 ) < 1e-12 || Math.abs( art.uv[3] - 1 ) < 1e-12 );
-			assert.ok( Math.abs( art.uv[2] * 1600 / (art.uv[3] * 1200) - w / Math.max( 1, h - 120 ) ) < 1e-9 );
-			assert.ok( art.rect[1] + art.rect[3] <= frame.rect[1] );
+			const area = Math.max( 0, h - 150 );
+			// The whole 4:3 illustration, never cropped (owner 2026-10-24):
+			// full uv, 4:3 rect, centred in the area above the footer.
+			assert.deepEqual( art.uv, [ 0, 0, 1, 1 ] );
+			const fit = Math.min( w / 1600, area / 1200 );
+			assert.deepEqual( art.rect, [ (w - 1600 * fit) / 2, (area - 1200 * fit) / 2, 1600 * fit, 1200 * fit ] );
+			// Behind it, a dimmed cover crop of the same art (GH #1244: no
+			// bare black bars): fills the area, samples the centred window.
+			assert.equal( backdrop.texture, "scene.png" );
+			assert.deepEqual( backdrop.rect, [ 0, 0, w, area ] );
+			assert.ok( backdrop.color[0] < 1 && backdrop.color[3] === 1 );
+			assert.ok( Math.abs( backdrop.uv[0] - (1 - backdrop.uv[2]) / 2 ) < 1e-12 );
+			assert.ok( Math.abs( backdrop.uv[1] - (1 - backdrop.uv[3]) / 2 ) < 1e-12 );
+			// Footer, top down: gauge frame, Now Loading, then the DOM status
+			// strip loading.css keeps below 80 px from the bottom.
+			assert.ok( area <= frame.rect[1] );
 			assert.ok( frame.rect[1] + frame.rect[3] <= label.rect[1] );
-			assert.deepEqual( label.rect, [ (w - 108) / 2, h - 64, 108, 15 ] );
+			assert.deepEqual( label.rect, [ (w - 108) / 2, h - 100, 108, 15 ] );
+			assert.ok( label.rect[1] + label.rect[3] <= h - 80 );
 			assert.equal( gauge.uv[2], Math.max( 0, Math.min( 1, progress ) ) );
+			// Travel mode 6 draws the chrome alone.
 			assert.deepEqual(
 				travelLoadingQuads( w, h, { mode: 6, region: 0x61a8, revision: 1 }, 1, progress ),
-				quads.filter( ( _, i ) => i !== 1 )
+				loadingScreenQuads( w, h, "", progress )
 			);
+			assert.ok( !loadingScreenQuads( w, h, "", progress ).some( q => q.texture === "scene.png" ) );
 		}
 	}
 });

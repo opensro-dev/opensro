@@ -9225,7 +9225,14 @@ export function createUi(
 			endWindow
 			================
 			*/
-			function endWindow( mark: readonly [number, number, number, number], owner = "primary" ) {
+			function endWindow(
+				mark: readonly [number, number, number, number],
+				owner = "primary",
+				// The window's own rect, when its quads paint past it through a
+				// clip (the world map's page tiles): the fit measures this
+				// instead of every quad's raw extent.
+				source?: UiRect
+			) {
 				const admittedWindow = admittedWindows.get( owner );
 				// Everything still loading is reported (tests wait on it before a raster);
 				// only the window's own art holds its admission.
@@ -9262,7 +9269,8 @@ export function createUi(
 						fitUiGroup( quads, controls, mark[0], mark[1], windowBounds, full, {
 							blocks,
 							firstBlock: mark[2],
-							disableDrag: compactWindowDrag
+							disableDrag: compactWindowDrag,
+							...(source ? { sourceBounds: source } : {})
 						} );
 						for ( let i = mark[1]; i < controls.length; i++ ) {
 							controls[i] = compactCloseControl( controls[i]!, windowBounds );
@@ -10584,10 +10592,7 @@ export function createUi(
 					paths.push( ...output.paths );
 				}
 				if ( !loading.startup ) {
-					const output = loadingScreenQuads( w, h, loading.background ?? "", loading.progress ).filter( (
-						_,
-						i
-					) => i !== 1 || loading!.background !== null );
+					const output = loadingScreenQuads( w, h, loading.background ?? "", loading.progress );
 					quads.push( ...output );
 					paths.push( ...output.map( q => q.texture ).filter( Boolean ) );
 				}
@@ -12167,6 +12172,7 @@ export function createUi(
 					w,
 					h,
 					full,
+					bounds: compact && compact.top >= 200 ? compact.bounds : undefined,
 					hover,
 					hudData,
 					trackedQuest,

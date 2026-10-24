@@ -30,7 +30,7 @@ function galleryServer() {
 			server.middlewares.use( ( request, response, next ) => {
 				response.setHeader(
 					"Content-Security-Policy",
-					"default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws://127.0.0.1:*; worker-src 'self' blob:; object-src 'none'; frame-ancestors 'self'"
+					"default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' ws://127.0.0.1:*; worker-src 'self' blob:; object-src 'none'; frame-ancestors 'self'"
 				);
 				if ( request.url === "/" ) {
 					response.writeHead( 302, { Location: "/tools/ui-gallery/index.html" } );
