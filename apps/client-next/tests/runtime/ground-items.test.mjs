@@ -419,6 +419,63 @@ test("a mounted rider's position correction moves the local pose to the mount, n
 	core.dispose();
 });
 
+test("a correction naming the ridden mount stops the rider there, and only the ridden one", () => {
+	const core = createWorldCore( () => {} );
+	const flush = () => {
+		core.step( 0, false );
+		const b = core.take();
+		if ( b ) core.ack( b.sequence );
+		return b;
+	};
+	core.bootstrap( {
+		protocolVersion: 2,
+		nativeResult: 1,
+		refObjSnapshot: [ { refObjId: 3914, tidWord: 0x11c6, kind: "cos" } ],
+		refItemSnapshot: [],
+		localPlayerEntry: { modelRef: 1933, startProfile: { regionId: 257, x: 1, y: 2, z: 3, angle: 0 } }
+	} );
+	flush();
+	core.receive( { opcode: 0x3369, payload: Buffer.from( [ 1, 1 ] ) }, 0 );
+	core.receive( { opcode: 0x32a6, payload: Buffer.from( [ 7, 0, 0, 0, 0, 0, 0, 0 ] ) }, 0 );
+	for ( const gid of [ 8, 9 ] ) {
+		const spawn = Buffer.alloc( 57 );
+		spawn.writeUInt32LE( 3914 );
+		spawn.writeUInt32LE( gid, 4 );
+		spawn.writeUInt16LE( 257, 8 );
+		spawn[25] = 1;
+		spawn[45] = 1;
+		spawn.writeFloatLE( 100, 40 );
+		spawn.writeUInt32LE( 7, 52 );
+		core.receive( { opcode: 0x30d7, payload: spawn }, 0 );
+	}
+	core.receive( { opcode: 0xb4b5, payload: Buffer.from( [ 1, 7, 0, 0, 0, 1, 8, 0, 0, 0 ] ) }, 0 );
+	flush();
+	const correction = ( gid, x, z ) => {
+		const position = Buffer.alloc( 20 );
+		position.writeUInt32LE( gid );
+		position.writeUInt16LE( 257, 4 );
+		position.writeFloatLE( x, 6 );
+		position.writeFloatLE( 2, 10 );
+		position.writeFloatLE( z, 14 );
+		return { opcode: 0xb2f5, payload: position };
+	};
+	const pose = () => {
+		const events = flush()?.events.filter( e => e.kind === "gameplay" ) ?? [];
+		return events.length ? events[events.length - 1].state.pose : undefined;
+	};
+	// Another COS's correction moves that COS only.
+	core.receive( correction( 9, 900, 900 ), 10 );
+	const unrelated = pose();
+	assert.ok( unrelated === undefined || unrelated.x !== 900, "an unridden COS's correction left the rider alone" );
+	// cosabnormal StopMove names the transport's own GID (a stunned mount):
+	// 775B50 halts that mover, so the rider stops where the server holds it.
+	core.receive( correction( 8, 500, 600 ), 20 );
+	const stopped = defined( pose() );
+	assert.equal( stopped.x, 500 );
+	assert.equal( stopped.z, 600 );
+	core.dispose();
+});
+
 test("all ground spawn tail branches consume claimant bytes; special names append without replacing the item name", () => {
 	const base = gold.subarray( 0, -1 );
 	for ( const state of [ 0, 1, 2, 3, 4, 5, 6, 7 ] ) {

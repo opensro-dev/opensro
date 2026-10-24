@@ -12,7 +12,7 @@ DOF floor.
 import { minimapSameFloor } from "./minimap-floor";
 import { REGION_SIZE, worldDelta } from "@/engine/foundation/world/world-space";
 import type { EntityState } from "@/engine/contracts/world";
-import type { GameplayState, Pose } from "@/engine/contracts/gameplay";
+import type { GameplayState, Pose, QuestRecord } from "@/engine/contracts/gameplay";
 
 /*
 ================
@@ -85,6 +85,30 @@ export function minimapEdge(
 		rotation: outside ? -(angle + Math.PI) : 0,
 		path: root + kind + (outside ? "arrow" : kind === "quest" ? "npc" : "") + ".png"
 	};
+}
+
+/*
+================
+questMarkerTargets
+
+The quest target ids the marker passes draw: the journal-tracked quest's
+own, and - port-only, the quest tracker row (#840) - every active quest's,
+each id once, in journal order. Callers resolve them against the NPC
+position catalogue; a target with no NPC position draws nothing, exactly
+as the tracked quest's unresolved targets do natively.
+================
+*/
+export function questMarkerTargets(
+	quests: readonly QuestRecord[] | undefined,
+	trackedQuest: number,
+	allQuests: boolean
+): readonly number[] {
+	const ids = new Set<number>();
+	for ( const quest of quests ?? [] ) {
+		if ( !allQuests && quest.refId !== trackedQuest ) continue;
+		for ( const id of quest.targetIds ) ids.add( id );
+	}
+	return [ ...ids ];
 }
 
 /*

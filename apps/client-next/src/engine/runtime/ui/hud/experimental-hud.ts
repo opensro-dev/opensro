@@ -229,6 +229,11 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-short-notices",
 			label: "Short notices",
 			description: "Show notices for up to the original 7 seconds."
+		}, {
+			key: "questTrackerMarkers",
+			id: "experimental-quest-tracker-markers",
+			label: "Quest target markers",
+			description: "Show every active quest's target on M and the minimap."
 		} ]
 	},
 	{
@@ -274,6 +279,11 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-attack-pet-training",
 			label: "Attack-pet training",
 			description: "Pet skills and gear; requires server opt-in."
+		}, {
+			key: "transportAutoPotion",
+			id: "experimental-transport-auto-potion",
+			label: "Transport auto-potion",
+			description: "Heal your transport at your auto-potion HP %."
 		}, {
 			key: "petClickOpensWindow",
 			id: "experimental-pet-click-opens-window",

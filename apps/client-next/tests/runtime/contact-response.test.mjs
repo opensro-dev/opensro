@@ -20,7 +20,7 @@ const sha = p => createHash( "sha256" ).update( fs.readFileSync( p ) ).digest( "
 assert.equal( oracle.generatorSha256, sha( "tools/native-contact-reference.py" ) );
 const { cellEntry, edgeResponse } = await import( "../../src/engine/foundation/navigation/contact-response.ts" );
 const { createNavigation } = await import(
-	"../../src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts"
+	"../../src/engine/foundation/navigation/clipper.ts"
 );
 test("cell-entry stores agree exactly with complete native 45c1b0 execution", () => {
 	for ( const row of oracle.snap ) {

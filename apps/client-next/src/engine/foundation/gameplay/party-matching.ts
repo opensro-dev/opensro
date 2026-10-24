@@ -9,7 +9,7 @@ responses cannot disagree about which request is still answerable.
 ===========================================================================
 */
 import type { WireFrame } from "@/engine/contracts/network";
-import { readPartyMember, type PartyMember } from "./social";
+import { readPartyMember, type PartyMember } from "./party-member";
 import { NO_JOB_CLASS } from "./job-guild";
 const PARTY_JOIN_TIMEOUT_MS = 10000;
 const PARTY_JOIN_NO_REPLY = 2;

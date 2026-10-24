@@ -2139,6 +2139,15 @@ receive
 				// exchange swap on the success opcode is the only bag mutation
 				// - so it stays unclaimed rather than forcing a resync.
 				return false;
+			} else if ( p[1] === 0x0b || p[1] === 0x0c || p[1] === 0x20 || p[1] === 0x21 ) {
+				// The warehouse gold answers (STORAGE_GOLD_WITHDRAW/DEPOSIT,
+				// 0x20/0x21 on the guild wire): the moved amount lives only
+				// in the armed pending, which storageSettle claims. A late
+				// one with no pending carries nothing this client can apply
+				// and never touches the bag - the room gold is read again
+				// when the warehouse re-opens - so it stays unclaimed
+				// rather than forcing a resync.
+				return false;
 			} else if ( p[1] === undefined ) {
 				// A success byte with no result type is not a complete
 				// result; like every other truncated frame it changes

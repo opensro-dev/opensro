@@ -142,6 +142,11 @@ export interface ExperimentalOptions {
 	// vectors without re-reading the target (CProjectileTrace_Process 8D8580,
 	// CProjectile_Bezier_Process 879650). Off unless turned on.
 	readonly homingProjectiles: boolean;
+	// Port-only, not native (owner 2026-10-24): the summoned trade transport
+	// drinks a transport HP potion at the auto-potion HP percentage
+	// (transport-auto-potion.ts). The original watches only the player
+	// (70C550). Off unless turned on.
+	readonly transportAutoPotion: boolean;
 	// Port-only, not native: left-clicking the attack pet's mini panel
 	// (CIFPetMiniInfo 6B3460 / 6B3760) or a companion's status portrait
 	// (CIFCOSStatus 6A9BC0) selects the companion and toggles its window
@@ -180,6 +185,10 @@ export interface ExperimentalOptions {
 	// instead of the five native town pages and 28 x 8 overview (5758D0). Off
 	// unless turned on.
 	readonly expandedWorldMap: boolean;
+	// Port-only, not native (#840): every active quest's NPC target shows on
+	// the world map and the minimap, not only the one quest the journal
+	// tracks. Off unless turned on; off is the native tracked quest only.
+	readonly questTrackerMarkers: boolean;
 }
 
 /*
@@ -308,6 +317,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		attackPetTraining: enabled( "attackPetTraining" ),
 		confirmGuildBan: record.confirmGuildBan !== false,
 		homingProjectiles: enabled( "homingProjectiles" ),
+		transportAutoPotion: enabled( "transportAutoPotion" ),
 		petClickOpensWindow: record.petClickOpensWindow !== false,
 		smartPetPickup: record.smartPetPickup !== false,
 		petPickupFilter: enabled( "petPickupFilter" ),
@@ -317,7 +327,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		petFilterPotions: record.petFilterPotions !== false,
 		petFilterOther: record.petFilterOther !== false,
 		touchInspect: record.touchInspect !== false,
-		expandedWorldMap: enabled( "expandedWorldMap" )
+		expandedWorldMap: enabled( "expandedWorldMap" ),
+		questTrackerMarkers: enabled( "questTrackerMarkers" )
 	};
 }
 

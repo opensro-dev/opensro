@@ -784,6 +784,7 @@ export function createPlatform(
 		},
 		canvas,
 		presentWorldCursor: cursor.world,
+		setCursorVisible: cursor.setVisible,
 		/*
 		================
 		presentTelemetry
