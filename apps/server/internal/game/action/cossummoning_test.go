@@ -569,3 +569,41 @@ func TestSummonedPetScrollMovesWithinBagAndUpdatesStateSlot(t *testing.T) {
 		t.Fatalf("attack pet at slot 24 was not dismissed: %+v", row24)
 	}
 }
+
+/*
+================
+TestPetSummonInBattleAnswersBattleBeforeBusy
+
+CGItemCOSSummoner_Use (493100) tests the battle byte (493183, answer
+0x1878) before the motion-change lock (4931C4) and the standing-wall slot
+(4931D6), both of which answer 5. A player casting in a fight must hear
+the battle notice (UIIT_MSG_COS_CAN_NOT_CREATE_BATTLE), not the silent
+busy code; with the battle state gone, the open cast still answers busy.
+================
+*/
+func TestPetSummonInBattleAnswersBattleBeforeBusy(t *testing.T) {
+	rt, _, c, target := newCombatTestRuntime(t, 100000)
+	items := cosTestItemSource{staticItemSource: rt.deps.ItemReferences().(staticItemSource),
+		characters: map[string]*enterworld.CharacterRef{}}
+	flute := &enterworld.ItemRef{Codename: "SUMMON_ATTACK", RefObjID: 900, TypeIDs: [4]int64{3, 2, 1, 1}, Country: 3,
+		AssociatedCharacterCodename: "ATTACK", NativeFields: enterworld.NewNativeFields(map[string]float64{"canUse": 1})}
+	items.staticItemSource[flute.Codename] = flute
+	items.characters["ATTACK"] = &enterworld.CharacterRef{Codename: "ATTACK", RefObjID: 950, TidWord: 0x1c6 | 3<<11,
+		Level: 1, MaxHP: 100, RunSpeed: 60, WalkSpeed: 20, Scale: 100}
+	rt.deps.(*enterworld.Deps).Items = items
+	const fluteSlot = 23
+	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: fluteSlot, RefObjID: flute.RefObjID,
+		Codename: flute.Codename, TypeFlags: flute.TypeFlags(), StackCount: 1})
+	skill := shippedOffense(t, "SKILL_CH_SWORD_SMASH_A_01")
+	rt.deps.SkillData().(staticSkillSource)[skill.ID] = skill
+	c.Skills = append(c.Skills, skill.ID)
+	c.CurrentMP = testInt64(10000)
+	started := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target.Gid}.Encode())
+	if !rt.PlayerAttackLocked(testDivision, c.Name) || c.BattleUntilMs == 0 {
+		t.Fatal("fixture did not open a casting instance in battle", started)
+	}
+	use := wire.NewWriter(3).U8(fluteSlot).U16(flute.TypeFlags()).Payload()
+	assertItemUseRefusedUnchanged(t, rt, c, use, cosSummonInBattle)
+	c.BattleUntilMs = 0
+	assertItemUseRefusedUnchanged(t, rt, c, use, cosSummonBusy)
+}

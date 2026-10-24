@@ -75,7 +75,7 @@ record and 4E8FC0 toggles the existing actor. Family admission is 4FCEF0.
 */
 func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResult) bool {
 	c, row := use.character, &use.character.MissionInventory[use.row]
-	if row.StackCount != 1 || rt.PlayerAttackLocked(use.division, c.Name) || rt.objectActionCommitted(use.division, c.Name) {
+	if row.StackCount != 1 {
 		return false
 	}
 	// 493140..49314C: only teleport mode 1 refuses. A free countdown (mode 2,
@@ -91,6 +91,14 @@ func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResu
 	// but the server sends it for attack and pickup pets as well.
 	if inBattleState(c, use.nowMs) {
 		*result = itemUseFailure(cosSummonInBattle)
+		return false
+	}
+	// Only then the busy tests, which answer 5 (silent in the client): the
+	// casting motion states 0x11/0xF (4931A6/4931BA), the motion-change lock
+	// (vt+0x5A0 at 4931C4) and the standing-wall slot (+0xC0C at 4931D6). A
+	// player casting in a fight therefore hears the battle notice above.
+	if rt.PlayerAttackLocked(use.division, c.Name) || rt.objectActionCommitted(use.division, c.Name) {
+		*result = itemUseFailure(cosSummonBusy)
 		return false
 	}
 	refs, ok := rt.deps.ItemReferences().(enterworld.CharacterRefSource)
