@@ -154,7 +154,8 @@ onNetworkFailure
 				reason?.category === "software" ?
 				"runtime" :
 				"transport",
-			message: error.slice( 0, INCIDENT_MESSAGE_LENGTH ),
+			// The detail rides only in the report: the retry rule matches the bare error.
+			message: (reason?.detail ? error + " (" + reason.detail + ")" : error).slice( 0, INCIDENT_MESSAGE_LENGTH ),
 			...(frame ?
 				{
 					opcode: frame.opcode,

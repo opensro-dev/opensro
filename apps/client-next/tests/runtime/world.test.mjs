@@ -664,7 +664,7 @@ test("unexpected close retries with a new ticket and rejects a lost resume", asy
 	flush( world );
 	world.step( 5 );
 	assert.equal( world.status().phase, "world" );
-	first.onclose();
+	first.onclose( { code: 1006, reason: "", wasClean: false } );
 	world.step( 6 );
 	assert.equal( world.status().phase, "reconnecting" );
 	world.step( 255 );
@@ -682,7 +682,9 @@ test("unexpected close retries with a new ticket and rejects a lost resume", asy
 	// An expired resume is an expected end: the player is told to log in
 	// again, and no game-error incident is filed (only the close itself).
 	assert.match( world.status().disconnectMessage, /log in again/ );
-	assert.deepEqual( incidents.map( incident => incident.message ), [ "Transport connection closed" ] );
+	// The close incident carries why the socket closed (GH #1428).
+	assert.equal( incidents.length, 1 );
+	assert.match( incidents[0].message, /^Transport connection closed \(WebSocket 1006, not clean, / );
 	world.dispose();
 });
 
@@ -704,7 +706,7 @@ test("a dropped session keeps retrying through the resume grace, then gives up",
 	flush( world );
 	world.step( 5 );
 	assert.equal( world.status().phase, "world" );
-	first.onclose();
+	first.onclose( { code: 1006, reason: "", wasClean: false } );
 	world.step( 6 );
 	assert.equal( world.status().phase, "reconnecting" );
 	// Every attempt fails at once, as while the network is down.
@@ -716,7 +718,7 @@ test("a dropped session keeps retrying through the resume grace, then gives up",
 		const latest = sockets[sockets.length - 1];
 		if ( sockets.length - 1 > failures ) {
 			failures++;
-			latest.onclose();
+			latest.onclose( { code: 1006, reason: "", wasClean: false } );
 			world.step( clock );
 		}
 		clock += 50;
