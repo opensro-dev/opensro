@@ -140,8 +140,9 @@ func (w *wsConn) WriteUnreliable(Frame) error {
 // WriteControl methods can be called concurrently with all other
 // methods") and aborts the parked write at once, so take that path
 // instead: a peer that is not reading will not read a close frame
-// either. A write aborted this way errors and the write loop re-queues
-// the frame when the attachment is unchanged - nothing is lost.
+// either. A write aborted this way errors and the write loop detaches;
+// the frame keeps its stream position, and a resume re-sends it only
+// if the client's position says it never arrived (stream_ring.go).
 func (w *wsConn) Close(reason string) error {
 	var err error
 	w.closeOnce.Do(func() {

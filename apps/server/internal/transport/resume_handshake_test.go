@@ -75,7 +75,18 @@ func TestResumeWelcomeNotBlockedByParkedOldWrite(t *testing.T) {
 		return true
 	})
 
-	resume := helloConn(sess.resumeToken[:], testHelloAdmissionToken)
+	// The resume names the token and the stream position the client
+	// last applied - nothing: its WELCOME is the parked write (#1466).
+	resume := newFakeConn(false)
+	resume.inbound <- Frame{
+		Opcode: OpHello,
+		Payload: EncodeHello(Hello{
+			ResumeToken:    sess.resumeToken[:],
+			AdmissionToken: testHelloAdmissionToken,
+			HasPosition:    true,
+			LastApplied:    0,
+		}),
+	}
 	attached := make(chan struct{})
 	go func() {
 		hub.AcceptConn(resume)
