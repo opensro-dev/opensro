@@ -57,6 +57,9 @@ type Runtime struct {
 	berserkActors    sync.Map // derived expiry index; character store owns state
 	battleActors     sync.Map // battle-state expiry index (battlestate.go)
 	aggressionActors sync.Map // scheduled counters; character owns aggression entries
+	// instanceWorlds tracks the instanced layers opened on demand
+	// (instance_world.go): the owning lease and deadline per layer.
+	instanceWorlds sync.Map // instanceWorldKey -> trackedInstanceWorld
 	// jobWeeks holds, per division, the last week JobWeekTick handed to the
 	// store (jobrank.go).
 	jobWeeks sync.Map
@@ -677,7 +680,7 @@ type Runtime struct {
 	Stalls          *stall.Registry
 	StallCategories map[[4]int64]uint32
 	// NameFilter is the native name filter (AbuseFilter.txt) player-chosen
-	// names pass (namefilter.go); ConfigureNameFilter loads it.
+	// names pass (namefilter.go), shared with character creation at startup.
 	NameFilter *namefilter.Filter
 	// resurrections holds the unanswered resurrection proposals, one per
 	// dead player (resurrection.go).

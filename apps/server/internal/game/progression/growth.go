@@ -48,7 +48,6 @@ package progression
 
 import (
 	"os"
-	"strconv"
 	"strings"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -142,28 +141,28 @@ func BetaGrowthFromEnv() GrowthRates {
 		RareRate:     betaRareRateDefault,
 	}
 	if text := strings.TrimSpace(os.Getenv(EnvBetaSkillExpRate)); text != "" {
-		if n, err := strconv.ParseInt(text, 10, 64); err == nil && n >= 1 {
+		if n, err := ParseBetaGrowthSetting(EnvBetaSkillExpRate, text); err == nil {
 			rates.SkillExpRate = n
 		}
 	}
 	if text := strings.TrimSpace(os.Getenv(EnvBetaDropRate)); text != "" {
-		if n, err := strconv.Atoi(text); err == nil && n >= 1 && n <= maxBetaDropRate {
-			rates.DropRate = n
+		if n, err := ParseBetaGrowthSetting(EnvBetaDropRate, text); err == nil {
+			rates.DropRate = int(n)
 		}
 	}
 	if text := strings.TrimSpace(os.Getenv(EnvBetaDropCap)); text != "" {
-		if n, err := strconv.Atoi(text); err == nil && n >= 0 && n <= maxBetaDropCap {
-			rates.DropCap = n
+		if n, err := ParseBetaGrowthSetting(EnvBetaDropCap, text); err == nil {
+			rates.DropCap = int(n)
 		}
 	}
 	if text := strings.TrimSpace(os.Getenv(EnvBetaGoldRate)); text != "" {
-		if n, err := strconv.Atoi(text); err == nil && n >= 1 && n <= maxBetaGoldRate {
-			rates.GoldRate = n
+		if n, err := ParseBetaGrowthSetting(EnvBetaGoldRate, text); err == nil {
+			rates.GoldRate = int(n)
 		}
 	}
 	if text := strings.TrimSpace(os.Getenv(EnvBetaRareRate)); text != "" {
-		if n, err := strconv.Atoi(text); err == nil && n >= 1 && n <= maxBetaRareRate {
-			rates.RareRate = n
+		if n, err := ParseBetaGrowthSetting(EnvBetaRareRate, text); err == nil {
+			rates.RareRate = int(n)
 		}
 	}
 	return rates

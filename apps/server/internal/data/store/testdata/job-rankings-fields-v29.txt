@@ -1,0 +1,8 @@
+# job-rankings record fields owned by store schema 29 (persisted_shape_test.go).
+# Never edit after it ships: a new persisted field takes schema 30, its upgrade
+# step and job-rankings-fields-v30.txt.
+lists
+lists[][][].alias
+lists[][][].grade
+lists[][][].value
+week

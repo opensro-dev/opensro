@@ -24,9 +24,12 @@ Masks 0x02 and 0x20 are applied by the action owners, not here.
 package action
 
 import (
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/world/instance"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -496,9 +499,14 @@ func (rt *Runtime) qestRefusal(division string, c *enterworld.Character, radius 
 		return 0
 	}
 	limit := float64(radius * 5)
-	candidates := rt.Monsters.CombatCandidatesForChain(division, from, limit, now)
+	var candidates []monster.Instance
 	if admitted {
 		candidates = rt.Monsters.CombatCandidatesInPopulation(division, lease, from, limit, now, true)
+	} else {
+		// The caster is not admitted to a live population (a fixture, or a
+		// session on its way out): the caster's own persisted world bounds
+		// the chain, never the default world.
+		candidates = rt.Monsters.CombatCandidatesInWorld(division, instance.ID(domain.CharacterWorldInstance(c)), from, limit, now, true)
 	}
 	for _, candidate := range candidates {
 		mover, ok := rt.Monsters.Mover(division, candidate.Gid)

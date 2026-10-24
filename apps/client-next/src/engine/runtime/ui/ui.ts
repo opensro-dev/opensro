@@ -292,7 +292,12 @@ import {
 	fortressProductionRemaining,
 	fortressProductionTimeText
 } from "@/engine/foundation/gameplay/fortress-production";
-import { alchemyEffectCell, alchemyEffectTexture, alchemyResultLines } from "@/engine/foundation/ui/alchemy-result";
+import {
+	ALCHEMY_DESTROYED,
+	alchemyEffectCell,
+	alchemyEffectTexture,
+	alchemyResultLines
+} from "@/engine/foundation/ui/alchemy-result";
 import { createUnionHud } from "./hud/union-hud";
 import { createGuildWarHud } from "./hud/guild-war-hud";
 import { guildWarRequest, warScoreLimits, WAR_UNLIMITED } from "@/engine/foundation/gameplay/guild-war";
@@ -2139,7 +2144,7 @@ export function createUi(
 			// an inventory activation. A confirmed use already has its target.
 			if (
 				item && armsItemTargetCursor( item.typeFlags ) && command.summonerSlot === undefined &&
-				command.revivalSlot === undefined
+				command.revivalSlot === undefined && command.targetSlot === undefined
 			) {
 				if ( item.slot < 13 || view?.gameplay?.inventoryPending ) return;
 				carriedItem = null;
@@ -8058,6 +8063,11 @@ export function createUi(
 					for ( const line of alchemyResultLines( outcome, hudCopy ) ) hudMessages.append( line );
 					alchemyEffect = { flags: outcome.flags, startedAt: now };
 				}
+				// A destroyed target leaves the window holding its slot, and
+				// every later click reads as a reagent onto that ghost target
+				// (BR-261020-1019-8648), so free the selection: the next item
+				// clicked binds as the new target.
+				if ( outcome.flags & ALCHEMY_DESTROYED ) alchemySlots = [];
 				dirty = true;
 			}
 			if ( alchemyEffect ) {

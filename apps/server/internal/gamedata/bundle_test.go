@@ -1,17 +1,34 @@
+/*
+===========================================================================
+
+bundle_test.go - server projection identity and file contract checks
+
+Synthetic bundles exercise manifest validation without licensed game data.
+Every fixture describes and hashes the files it writes, so each test can
+isolate the contract it expects Open to enforce.
+
+===========================================================================
+*/
 package gamedata
 
 import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"opensro.online/server/internal/testsupport/licensed"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
+
+	"opensro.online/server/internal/testsupport/licensed"
 )
 
+/*
+================
+TestOpenValidatesCompletePinnedBundle
+================
+*/
 func TestOpenValidatesCompletePinnedBundle(t *testing.T) {
 	licensed.RequireGameData(t)
 	root, manifestDigest := writeTestBundle(t, nil)
@@ -31,6 +48,11 @@ func TestOpenValidatesCompletePinnedBundle(t *testing.T) {
 	}
 }
 
+/*
+================
+TestOpenRefusesTamperedFile
+================
+*/
 func TestOpenRefusesTamperedFile(t *testing.T) {
 	root, _ := writeTestBundle(t, nil)
 	path := filepath.Join(root, "textdata", "skilldata.txt")
@@ -44,6 +66,11 @@ func TestOpenRefusesTamperedFile(t *testing.T) {
 	}
 }
 
+/*
+================
+TestOpenRefusesUndescribedFile
+================
+*/
 func TestOpenRefusesUndescribedFile(t *testing.T) {
 	root, _ := writeTestBundle(t, nil)
 	if err := os.WriteFile(filepath.Join(root, "surprise.txt"), []byte("no"), 0o600); err != nil {
@@ -56,6 +83,41 @@ func TestOpenRefusesUndescribedFile(t *testing.T) {
 	}
 }
 
+/*
+================
+TestOpenRefusesMissingNameFilter
+
+The manifest and deployment pin agree with the reduced file set. Refusal
+must come from the required-file contract rather than a stale digest.
+================
+*/
+func TestOpenRefusesMissingNameFilter(t *testing.T) {
+	const filterPath = "textdata/abusefilter.txt"
+	root, manifestDigest := writeTestBundle(t, func(manifest *Manifest) {
+		files := manifest.Files[:0]
+		for _, descriptor := range manifest.Files {
+			if descriptor.Path != filterPath {
+				files = append(files, descriptor)
+			}
+		}
+		manifest.Files = files
+		manifest.ContentDigest = ContentDigest(files)
+	})
+	if err := os.RemoveAll(filepath.Join(root, filepath.FromSlash(filterPath))); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Open(root, manifestDigest)
+	if err == nil || !strings.Contains(err.Error(), "required server projection file "+filterPath+" is absent") {
+		t.Fatalf("missing name-filter error = %v", err)
+	}
+}
+
+/*
+================
+TestOpenRefusesWrongDeploymentPin
+================
+*/
 func TestOpenRefusesWrongDeploymentPin(t *testing.T) {
 	root, _ := writeTestBundle(t, nil)
 	wrong := "sha256:" + strings.Repeat("0", 64)
@@ -66,6 +128,11 @@ func TestOpenRefusesWrongDeploymentPin(t *testing.T) {
 	}
 }
 
+/*
+================
+TestOpenRefusesIncompatibleIdentity
+================
+*/
 func TestOpenRefusesIncompatibleIdentity(t *testing.T) {
 	root, _ := writeTestBundle(t, func(manifest *Manifest) {
 		manifest.GameVersion = "1.188"
@@ -77,6 +144,11 @@ func TestOpenRefusesIncompatibleIdentity(t *testing.T) {
 	}
 }
 
+/*
+================
+TestOpenRefusesUnsafeDescriptorPath
+================
+*/
 func TestOpenRefusesUnsafeDescriptorPath(t *testing.T) {
 	root, _ := writeTestBundle(t, func(manifest *Manifest) {
 		manifest.Files[0].Path = "../escape.txt"
@@ -106,6 +178,11 @@ func realTempDir(t *testing.T) string {
 	return dir
 }
 
+/*
+================
+writeTestBundle
+================
+*/
 func writeTestBundle(t *testing.T, mutate func(*Manifest)) (string, string) {
 	t.Helper()
 	root := realTempDir(t)
@@ -156,6 +233,11 @@ func writeTestBundle(t *testing.T, mutate func(*Manifest)) (string, string) {
 	return root, "sha256:" + hex.EncodeToString(sum[:])
 }
 
+/*
+================
+mediaTypeForTestPath
+================
+*/
 func mediaTypeForTestPath(path string) string {
 	if strings.HasSuffix(path, ".json") {
 		return "application/json"
