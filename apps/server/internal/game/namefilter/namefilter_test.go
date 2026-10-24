@@ -13,7 +13,7 @@ listed words.
 package namefilter
 
 import (
-	"opensro.online/server/internal/testsupport/tier"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,6 +21,7 @@ import (
 	"unicode/utf16"
 
 	"opensro.online/server/internal/testsupport/gamedatatest"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -101,6 +102,63 @@ func TestParseRefusesAFileWithoutAnAllowTable(t *testing.T) {
 	}
 	if _, err := Parse([]byte{0xff, 0xfe, 0x41}); err == nil {
 		t.Fatal("an odd-length file parsed")
+	}
+}
+
+/*
+================
+TestLoad
+================
+*/
+func TestLoad(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	data := utf16File(
+		"#ALLOW_ID_TABLE\t0x0061\t0x007A",
+		"badword\t2",
+	)
+	if err := os.WriteFile(filepath.Join(dir, File), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	filter, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !filter.Allowed("Hero") {
+		t.Fatal("loaded filter refused an ordinary name")
+	}
+	if filter.Allowed("MyBadWordX") {
+		t.Fatal("loaded filter admitted a listed substring")
+	}
+}
+
+/*
+================
+TestLoadRefusesMissingFilter
+================
+*/
+func TestLoadRefusesMissingFilter(t *testing.T) {
+	t.Parallel()
+	filter, err := Load(t.TempDir())
+	if filter != nil || !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("Load missing filter = %v, %v; want no filter and a missing-file error", filter, err)
+	}
+}
+
+/*
+================
+TestLoadRefusesMalformedFilter
+================
+*/
+func TestLoadRefusesMalformedFilter(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, File), []byte{0xff, 0xfe, 0x41}, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	filter, err := Load(dir)
+	if filter != nil || err == nil {
+		t.Fatalf("Load malformed filter = %v, %v; want no filter and an error", filter, err)
 	}
 }
 

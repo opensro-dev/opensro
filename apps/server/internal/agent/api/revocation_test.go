@@ -270,6 +270,7 @@ func TestAccountRevocationFloorSurvivesRestart(t *testing.T) {
 		CharacterCreationValid: func(character *domain.Character) bool {
 			return enterworld.CharacterCreationValid(character, testCharacterRoster())
 		},
+		CharacterNameAllowed: testNameFilter(t).Allowed,
 		ShardID:              testDivision,
 		AgentSessionVerifier: verifier,
 		EnterWorldAuthSecret: []byte(testEnterWorldSecret),
@@ -310,6 +311,7 @@ func TestAccountRevocationFloorSurvivesRestart(t *testing.T) {
 		CharacterCreationValid: func(character *domain.Character) bool {
 			return enterworld.CharacterCreationValid(character, testCharacterRoster())
 		},
+		CharacterNameAllowed: testNameFilter(t).Allowed,
 		ShardID:              testDivision,
 		AgentSessionVerifier: verifier,
 		EnterWorldAuthSecret: []byte(testEnterWorldSecret),

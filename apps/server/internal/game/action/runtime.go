@@ -680,7 +680,7 @@ type Runtime struct {
 	Stalls          *stall.Registry
 	StallCategories map[[4]int64]uint32
 	// NameFilter is the native name filter (AbuseFilter.txt) player-chosen
-	// names pass (namefilter.go); ConfigureNameFilter loads it.
+	// names pass (namefilter.go), shared with character creation at startup.
 	NameFilter *namefilter.Filter
 	// resurrections holds the unanswered resurrection proposals, one per
 	// dead player (resurrection.go).

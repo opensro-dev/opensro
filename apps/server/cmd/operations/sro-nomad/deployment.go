@@ -140,6 +140,10 @@ func resolveDeployment(
 	options commandOptions,
 	requirePrerequisites bool,
 ) (*deployment, error) {
+	portOnly := portOnlySettingsFromEnv()
+	if err := portOnly.validate(); err != nil {
+		return nil, err
+	}
 	taskUID, taskGID, err := resolveTaskOwner(options.TaskUser)
 	if err != nil {
 		return nil, err
@@ -407,7 +411,7 @@ func resolveDeployment(
 		GMCharacters:          gmCharacters,
 		BetaMastery:           betaMastery,
 		StackSizes:            stackSizes.String(),
-		PortOnly:              portOnlySettingsFromEnv(),
+		PortOnly:              portOnly,
 		TransportCert:         transportCert,
 		TransportKey:          transportKey,
 		TransportTLSID:        transportTLSID,

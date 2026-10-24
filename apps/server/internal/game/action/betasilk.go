@@ -89,7 +89,19 @@ silently changing the mall's currency.
 ================
 */
 func BetaSilkFromEnv() (uint32, error) {
-	value := strings.ToLower(strings.TrimSpace(os.Getenv(EnvBetaSilk)))
+	return ParseBetaSilk(os.Getenv(EnvBetaSilk))
+}
+
+/*
+================
+ParseBetaSilk
+
+The runtime and deployer share the same earn-rate rule without changing
+the process environment. Empty or off keeps the native wallet behaviour.
+================
+*/
+func ParseBetaSilk(raw string) (uint32, error) {
+	value := strings.ToLower(strings.TrimSpace(raw))
 	switch value {
 	case "", "off", "0", "false":
 		return 0, nil
