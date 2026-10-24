@@ -35,8 +35,11 @@ var shippedPassiveSkills *enterworld.TextdataSkills
 
 func shippedPassive(t *testing.T, codename string) enterworld.SkillRow {
 	t.Helper()
+	// The directory resolves (and may skip) before the Once: a skip inside
+	// the closure would leave the Once done over a nil table.
+	dir := gamedatatest.TextdataDir(t)
 	shippedPassiveSkillsOnce.Do(func() {
-		shippedPassiveSkills = enterworld.NewTextdataSkills(gamedatatest.TextdataDir(t))
+		shippedPassiveSkills = enterworld.NewTextdataSkills(dir)
 	})
 	row, ok := shippedPassiveSkills.SkillByCodename(codename)
 	if !ok || !row.PassiveParameters.Pinned {
