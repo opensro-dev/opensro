@@ -381,7 +381,7 @@ test("terrain decoding refuses expansion beyond its budget before building outpu
 	assert.ok( createWorldDecoder().decode( bytes ).groups.length > 0 );
 });
 
-test("normal water follows native block admission, depth mask and authored UVs; special water is 200/255 opaque", () => {
+test("normal water is a constant 180/255 sheet, shallow or submerged; special water is 200/255 opaque", () => {
 	const block = {
 		blockX: 0,
 		blockZ: 0,
@@ -402,11 +402,17 @@ test("normal water follows native block admission, depth mask and authored UVs; 
 		);
 	const draw = water();
 	assert.equal( draw.geometry.positions.length, 289 * 3 );
-	assert.ok( Math.abs( draw.geometry.colors[3] - 10 / 15 ) < 1e-6 );
+	for ( let i = 3; i < draw.geometry.colors.length; i += 4 ) {
+		assert.ok( Math.abs( draw.geometry.colors[i] - 180 / 255 ) < 1e-6, `vertex alpha ${draw.geometry.colors[i]}` );
+	}
 	assert.equal( draw.material.depthWrite, undefined );
 	assert.equal( Math.max( ...draw.geometry.uvs ), 4 );
+	// A shallow sheet (the fountain case: water barely above the basin floor)
+	// and even a submerged one still emit at full alpha; depth never gates it.
+	block.water.height = 0.5;
+	assert.ok( Math.abs( water().geometry.colors[3] - 180 / 255 ) < 1e-6 );
 	block.water.height = -1;
-	assert.equal( water(), undefined );
+	assert.ok( water() );
 	block.water.type = 1;
 	assert.equal( water(), undefined );
 	block.water.waveType = 1;
@@ -452,7 +458,9 @@ test("complete mission Constantinople fits unchanged admission with shared cell 
 	assert.ok( worldSceneBytes( scene ) < WORLD_SCENE_BYTES );
 	// Authored cloth needs independent simulation per placement: 44 formerly
 	// instanced draws split without removing scenery or raising admission.
-	assert.equal( scene.groups.length, 961, "All scenery and independent cloth draws fit the budget" );
+	// 972 includes the 11 water sheets the invented depth mask used to cull;
+	// native draws every declared water block at the constant factor alpha.
+	assert.equal( scene.groups.length, 972, "All scenery and independent cloth draws fit the budget" );
 	const cloth = scene.groups.filter( g => g.geometry.cloth );
 	assert.ok( cloth.length );
 	assert.ok( cloth.every( g => g.geometry.instances.length === 16 ) );
