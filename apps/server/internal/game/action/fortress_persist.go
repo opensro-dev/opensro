@@ -160,6 +160,8 @@ func (rt *Runtime) saveFortressStructures(division string) {
 				OwnerGuildID: record.Holder(), HP: row.CurrentHP, State: row.StructureState,
 			}
 			previous, saved := rt.fortressPersist.saved[key]
+			// The made time is the upgrade's, not the tick's: keep it.
+			next.MadeAtMs = previous.MadeAtMs
 			if saved && previous.RefObjID == next.RefObjID && previous.State == next.State &&
 				previous.OwnerGuildID == next.OwnerGuildID && hpDelta(previous.HP, next.HP) < structureHPSaveDelta {
 				continue

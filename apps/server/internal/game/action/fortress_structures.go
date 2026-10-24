@@ -75,20 +75,27 @@ func (rt *Runtime) fortressStructureList(division string, c *enterworld.Characte
 	})
 	w := wire.NewWriter(8 + 8*len(structures)).U8(request.Action).U8(1).U32(request.Fortress).U8(uint8(len(structures)))
 	for _, row := range structures {
-		w.U32(row.Nest.EventStructID).U32(structureConstructionMinutesLeft(row))
+		w.U32(row.Nest.EventStructID).U32(rt.structureMinutesLeft(division, request.Fortress, row))
 	}
 	return OpResult{Frames: []wire.Frame{{Opcode: opFortressInteractionResult, Payload: w.Payload()}}}
 }
 
 /*
 ================
-structureConstructionMinutesLeft
+structureMinutesLeft
 
-61E000's per-structure timer. A structure the port spawned is built.
+The structure list's timer: the structure's build minutes less the
+minutes since it was made, floored at zero. A structure never raised was
+made long ago.
 ================
 */
-func structureConstructionMinutesLeft(monster.Instance) uint32 {
-	return 0
+func (rt *Runtime) structureMinutesLeft(division string, fortressID uint32, row monster.Instance) uint32 {
+	made := rt.structureMadeAtMs(division, fortressID, row.Nest.EventStructID)
+	elapsed := (rt.Now().UnixMilli() - made) / msPerMinute
+	if made == 0 || elapsed >= int64(row.Ref.BuildMinutes) {
+		return 0
+	}
+	return row.Ref.BuildMinutes - uint32(elapsed)
 }
 
 /*

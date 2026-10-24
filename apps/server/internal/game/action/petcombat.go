@@ -467,6 +467,7 @@ func (rt *Runtime) petStrike(step petCombatStep, target monster.Instance, skill 
 		}
 		trainedFrames, _ = rt.petTrainedCommit(step, owner, livePet, step.trained, dealt, committed[len(committed)-1].Fatal, false)
 		if committed[len(committed)-1].Fatal {
+			roster.companionKill = true
 			settlement = rt.settleMonsterInsideDoor(division, owner, roster, committed[len(committed)-1], monsterPose, step.nowMs)
 		}
 		return true

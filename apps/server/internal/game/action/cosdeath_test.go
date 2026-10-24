@@ -189,3 +189,40 @@ func TestTransportDeathDropsCargoAndDeletesRecord(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestMonsterKillOfATransportDropsItsCargo
+
+A thief or any monster striking a loaded transport dead: its goods drop
+unowned on the ground and its record goes (the same death a burn takes).
+A second player's report said a dead transport dropped nothing; this pins
+the monster lane.
+================
+*/
+func TestMonsterKillOfATransportDropsItsCargo(t *testing.T) {
+	rt, _, c, instance := newCombatTestRuntime(t, 100)
+	instance.Ref.DefaultSkillIDs[0] = 2
+	rt.CombatRoll = func() (uint32, error) { return 0, nil }
+	skills := rt.deps.SkillData().(staticSkillSource)
+	strike := skills[2]
+	strike.Attack.Min, strike.Attack.Max, strike.Attack.Percent = 1000, 1000, 100
+	skills[2] = strike
+	equipCombatTestPet(t, rt, c, cosBandTransport)
+	pet := c.ActiveCOS
+	potion := testItems()["ITEM_ETC_HP_POTION_01"]
+	pet.Container = &domain.COSContainer{Capacity: 4, Rows: []enterworld.InventoryRow{{
+		Slot: 0, RefObjID: potion.RefObjID, Codename: potion.Codename, TypeFlags: potion.TypeFlags(), StackCount: 7}}}
+	pet.CurrentHP = 1
+	result := rt.MonsterBasicAttack(testDivision, instance, pet.GID, 2, rt.Now().UnixMilli())
+	if !result.Accepted {
+		t.Fatalf("the strike on the transport was refused: %+v", result)
+	}
+	ground := rt.Ground.All(testDivision)
+	if len(ground) != 1 || ground[0].Codename != potion.Codename || ground[0].StackCount != 7 || ground[0].DroppedBy != "" {
+		t.Fatalf("a transport killed by a monster left %+v on the ground, want the 7 potions unowned", ground)
+	}
+	if c.ActiveCOS != nil {
+		t.Fatal("the dead transport kept its record")
+	}
+}

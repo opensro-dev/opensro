@@ -34,11 +34,6 @@ const (
 	fortressErrConstructNoReference uint8 = 0x1e // 0x281E
 	fortressErrConstructKind        uint8 = 0x1f // 0x281F
 	fortressErrConstructFortress    uint8 = 0x20 // 0x2820
-	fortressErrUpgradeNoReference   uint8 = 0x21 // 0x2821
-	fortressErrUpgradeKind          uint8 = 0x22 // 0x2822
-	fortressErrUpgradeFortress      uint8 = 0x23 // 0x2823
-	fortressErrUpgradeIndex         uint8 = 0x24 // 0x2824
-	fortressErrUpgradeDamaged       uint8 = 0x39 // 0x2839 (UIIT_MSG_FORT_BATTLEAIDE_UPGRADE_FAIL4)
 	// structureKindBarricade is TypeID4 6 of a structure (TypeID3 5).
 	structureKindBarricade uint8 = 6
 )
@@ -142,51 +137,6 @@ func (rt *Runtime) fortressConstructOnZone(division string, c *enterworld.Charac
 
 /*
 ================
-fortressStructureUpgrade
-
-CSiegeFortressMgr_HandleStructureUpgrade (634350): checks the zone in native
-refusal order: missing zone (3), no base structure reference (0x2821),
-barricade structure (0x2822), war active on a non-headquarters structure
-(0x2818), upgrade index > 3 (0x2824), wrong fortress (0x2823), no live
-standing structure on the zone (3), standing structure not at full HP
-(0x2839, UIIT_MSG_FORT_BATTLEAIDE_UPGRADE_FAIL4), and _RefSiegeStructUpgrade
-target codename "xxx" (3; every v1.150 structure has Upgradable == 0).
-================
-*/
-func (rt *Runtime) fortressStructureUpgrade(division string, fortressID, eventStructID uint32, param uint8) OpResult {
-	for foundFortress, world := range rt.fortressWorlds() {
-		ref, occupied, found := rt.Monsters.StructureZone(division, world, eventStructID)
-		if !found {
-			continue
-		}
-		switch {
-		case ref.RefObjID == 0:
-			return fortressRefusal(siege.ActionUpgrade, fortressErrUpgradeNoReference)
-		case ref.TypeID4 == structureKindBarricade:
-			return fortressRefusal(siege.ActionUpgrade, fortressErrUpgradeKind)
-		case ref.TypeID4 != structureKindHeadquarters && rt.Fortresses.WarActive(division):
-			return fortressRefusal(siege.ActionUpgrade, fortressErrWarActive)
-		case param > 3:
-			return fortressRefusal(siege.ActionUpgrade, fortressErrUpgradeIndex)
-		case foundFortress != fortressID:
-			return fortressRefusal(siege.ActionUpgrade, fortressErrUpgradeFortress)
-		case !occupied:
-			return fortressRefusal(siege.ActionUpgrade, fortressErrInvalid)
-		}
-		row, ok := rt.structureOnZone(division, world, eventStructID)
-		if !ok || row.Gid == 0 || row.CurrentHP == 0 || row.StructureState&structureDestroyedMask != 0 {
-			return fortressRefusal(siege.ActionUpgrade, fortressErrInvalid)
-		}
-		if row.CurrentHP != row.Ref.MaxHP {
-			return fortressRefusal(siege.ActionUpgrade, fortressErrUpgradeDamaged)
-		}
-		return fortressRefusal(siege.ActionUpgrade, fortressErrInvalid)
-	}
-	return fortressRefusal(siege.ActionUpgrade, fortressErrInvalid)
-}
-
-/*
-================
 SiegeStructureGM
 
 /SIEGE STRUCT_BUILD|STRUCT_UPGRADE|STRUCT_REPAIR|GATE (sub 0x20, 51DE90
@@ -220,8 +170,14 @@ func (rt *Runtime) SiegeStructureGM(division, name string, action uint8, fortres
 		pushGM(res.Frames)
 		return len(res.Frames) == 1 && len(res.Frames[0].Payload) >= 2 && res.Frames[0].Payload[1] == 1
 	case siege.ActionUpgrade:
-		pushGM(rt.fortressStructureUpgrade(division, fortressID, eventStructID, param).Frames)
-		return false
+		res := rt.fortressStructureUpgrade(division, gm, siege.Interaction{
+			Action:    siege.ActionUpgrade,
+			Fortress:  fortressID,
+			Reference: eventStructID,
+			Value8:    param,
+		})
+		pushGM(res.Frames)
+		return upgradeSucceeded(res)
 	case siege.ActionRepair:
 		res := rt.fortressStructureRepair(division, gm, siege.Interaction{
 			Action:    siege.ActionRepair,

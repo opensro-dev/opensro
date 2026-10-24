@@ -39,19 +39,34 @@ The capture fixture's Jangan world plus a vacant barricade site on zone
 */
 func constructionFixture(t *testing.T) (*Runtime, *enterworld.Character, *structureRowStore, uint32) {
 	t.Helper()
-	template := monster.TemplateFromParts(
-		map[uint32]monster.MonsterRef{
-			19553:            {RefObjID: 19553, MaxHP: 900, ScaleDenom: 100, Structure: true, TypeID4: structureKindFortStone},
-			19536:            {RefObjID: 19536, MaxHP: 500, ScaleDenom: 100, Structure: true, TypeID4: structureKindGuardTower},
-			testBarricadeRef: {RefObjID: testBarricadeRef, MaxHP: 80000, ScaleDenom: 100, Structure: true, TypeID4: structureKindBarricade},
-		},
-		[]monster.NestRow{
-			{WorldCode: "INS_FORT_JA", SpawnPoint: monster.SpawnPoint{RefObjID: 19553, RegionID: 0x62aa, X: 100, Y: 20, Z: 100}, PolicyPinned: true, MaxCount: 1, EventStructID: 84},
-			{WorldCode: "INS_FORT_JA", SpawnPoint: monster.SpawnPoint{RefObjID: 19536, RegionID: 0x62aa, X: 140, Y: 20, Z: 100}, PolicyPinned: true, MaxCount: 1, EventStructID: 85},
-			{WorldCode: "INS_FORT_JA", SpawnPoint: monster.SpawnPoint{RefObjID: testBarricadeRef, RegionID: 0x62aa, X: 180, Y: 20, Z: 100}, PolicyPinned: true, MaxCount: 1, EventStructID: testBarricadeZone, StartVacant: true},
-			{WorldCode: "INS_FORT_JA", SpawnPoint: monster.SpawnPoint{RefObjID: testUnknownRef, RegionID: 0x62aa, X: 220, Y: 20, Z: 100}, PolicyPinned: true, MaxCount: 1, EventStructID: testUnknownZone, StartVacant: true},
-		},
-	)
+	rt, c, store, jangan, _ := constructionFixtureWith(t, nil, nil)
+	return rt, c, store, jangan
+}
+
+/*
+================
+constructionFixtureWith
+
+constructionFixture with more structure references and nests in the
+Jangan world, and its clock.
+================
+*/
+func constructionFixtureWith(t *testing.T, refs map[uint32]monster.MonsterRef, nests []monster.NestRow) (*Runtime, *enterworld.Character, *structureRowStore, uint32, *fakeClock) {
+	t.Helper()
+	allRefs := map[uint32]monster.MonsterRef{
+		19553:            {RefObjID: 19553, MaxHP: 900, ScaleDenom: 100, Structure: true, TypeID4: structureKindFortStone},
+		19536:            {RefObjID: 19536, MaxHP: 500, ScaleDenom: 100, Structure: true, TypeID4: structureKindGuardTower},
+		testBarricadeRef: {RefObjID: testBarricadeRef, MaxHP: 80000, ScaleDenom: 100, Structure: true, TypeID4: structureKindBarricade},
+	}
+	for id, ref := range refs {
+		allRefs[id] = ref
+	}
+	template := monster.TemplateFromParts(allRefs, append([]monster.NestRow{
+		{WorldCode: "INS_FORT_JA", SpawnPoint: monster.SpawnPoint{RefObjID: 19553, RegionID: 0x62aa, X: 100, Y: 20, Z: 100}, PolicyPinned: true, MaxCount: 1, EventStructID: 84},
+		{WorldCode: "INS_FORT_JA", SpawnPoint: monster.SpawnPoint{RefObjID: 19536, RegionID: 0x62aa, X: 140, Y: 20, Z: 100}, PolicyPinned: true, MaxCount: 1, EventStructID: 85},
+		{WorldCode: "INS_FORT_JA", SpawnPoint: monster.SpawnPoint{RefObjID: testBarricadeRef, RegionID: 0x62aa, X: 180, Y: 20, Z: 100}, PolicyPinned: true, MaxCount: 1, EventStructID: testBarricadeZone, StartVacant: true},
+		{WorldCode: "INS_FORT_JA", SpawnPoint: monster.SpawnPoint{RefObjID: testUnknownRef, RegionID: 0x62aa, X: 220, Y: 20, Z: 100}, PolicyPinned: true, MaxCount: 1, EventStructID: testUnknownZone, StartVacant: true},
+	}, nests...))
 	rt, c, clock := fortressFixtureWithPopulation(t, testFieldFortGate, template)
 	rt.PushCharacterFrames = func(_, _ string, _ []wire.Frame) {}
 	rt.PushDivisionPeerFrames = func(_, _ string, _ []wire.Frame) {}
@@ -73,7 +88,7 @@ func constructionFixture(t *testing.T) (*Runtime, *enterworld.Character, *struct
 	live := rt.Worlds.Snapshot(simulation.WorldKey(testDivision, c.Name), func() simulation.WorldState { return simulation.SeedWorldState(c) })
 	rt.NpcRoster[0].Spawn = live.LiveSpawnAt(clock.NowMs())
 	rt.Selected.Set(testDivision, c.Name, rt.NpcRoster[0].ObjectID)
-	return rt, c, store, jangan
+	return rt, c, store, jangan, clock
 }
 
 /*
