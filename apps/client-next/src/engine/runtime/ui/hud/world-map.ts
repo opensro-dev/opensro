@@ -21,7 +21,7 @@ import type { ExperimentalOptions } from "@/engine/foundation/ui/experimental-op
 import { frameParts, frameRing } from "@/engine/foundation/ui/frame-ring";
 import { panelCloseId } from "@/engine/foundation/ui/panels";
 import { minimapSameFloor } from "@/engine/foundation/ui/minimap-floor";
-import { rosterPositions } from "@/engine/foundation/ui/minimap-markers";
+import { questMarkerTargets, rosterPositions } from "@/engine/foundation/ui/minimap-markers";
 import {
 	worldMapDemand,
 	MAP_LOCAL_MARKER,
@@ -399,11 +399,19 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			// 16x16 quad centred on the projected world position; the world map has no
 			// 47px ring, so unlike the minimap there is no edge clamp and no arrow
 			// sprite swap, and off-page members are simply clipped by the window.
+			// The quest pass draws the tracked quest's targets; port-only, the
+			// quest tracker row widens it to every active quest (#840).
 			const mapMarkers: MapMarker[] = [];
 			const roster = pose ? rosterPositions( pose, game ?? null, next.entities ) : [];
 			let rosterStart = 0;
 			if ( pose ) {
-				for ( const id of game?.quests?.find( q => q.refId === trackedQuest )?.targetIds ?? [] ) {
+				for (
+					const id of questMarkerTargets(
+						game?.quests,
+						trackedQuest,
+						experimental.state().saved.questTrackerMarkers
+					)
+				) {
 					const target = minimapResources.positions()?.get( id );
 					if ( target && minimapSameFloor( pose, target, game ?? null ) ) {
 						mapMarkers.push( {
