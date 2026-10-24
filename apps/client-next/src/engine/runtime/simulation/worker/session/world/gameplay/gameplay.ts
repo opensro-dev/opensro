@@ -230,7 +230,14 @@ import {
 	cosGroundRequest,
 	cosGroundResult
 } from "@/engine/foundation/gameplay/cos-container";
-import { ownCastTarget, petAssistOrders, retainedPetAssists } from "@/engine/foundation/gameplay/pet-assist";
+import {
+	advancedPetAssistCountdowns,
+	castPetAssistCountdowns,
+	haltedPetAssistCountdowns,
+	ownCastTarget,
+	petAssistOrders,
+	retainedPetAssists
+} from "@/engine/foundation/gameplay/pet-assist";
 import { cosBehaviorResult, applyCosBehavior, cosBehaviorRequest } from "@/engine/foundation/gameplay/cos-behavior";
 import { createFeedback } from "./feedback/feedback";
 import { saleResult, soldInventory, commerceJson, commerceInteger } from "@/engine/foundation/gameplay/commerce";
@@ -749,6 +756,9 @@ attack can arrive in the same batch as the previous close and starve the walk.
 		cosRecords = new Map<number, import("@/engine/contracts/gameplay").CosRecord>();
 	// Each owned attack pet's assist target (+0xAB2C, pet-assist.ts).
 	let petAssists: ReadonlyMap<number, number> = new Map();
+	// Each halted pet's assist countdown deadline (+0xAB30, pet-assist.ts);
+	// no entry while no countdown runs.
+	let petAssistCountdowns: ReadonlyMap<number, number> = new Map();
 	let uniqueRefs = uniqueReferences( {} );
 	let gmReplies: readonly (GmReply & { sequence: number; })[] = [];
 	let gmSequence = 0;
@@ -1165,6 +1175,7 @@ selected entities, cooldowns or world-entry state.
 		jobAliasChecked = null;
 		cosRecords.clear();
 		petAssists = new Map();
+		petAssistCountdowns = new Map();
 		cosSelection.reset();
 		cosRefs.clear();
 		cosItemRefs.clear();
@@ -1393,6 +1404,7 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 			cosError = null;
 			cosRecords.clear();
 			petAssists = new Map();
+			petAssistCountdowns = new Map();
 			cosSelection.reset();
 			cosRefs.clear();
 			cosItemRefs.clear();
@@ -4134,6 +4146,17 @@ Packet handling must not depend on which HUD panel is currently open.
 					target = targeting.receive( frame.opcode, frame.payload ),
 					fight = combat.receive( frame.opcode, frame.payload, now );
 				if ( item ) cosPickup.spaceChanged();
+				if ( frame.opcode === 0xb2f5 && frame.payload.length >= 4 ) {
+					// 775B50 (0x775BDE): a halt naming an owned pet that holds
+					// an assist target starts its countdown (+0xAB30).
+					petAssistCountdowns = haltedPetAssistCountdowns(
+						petAssistCountdowns,
+						new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
+							.getUint32( 0, true ),
+						petAssists,
+						now
+					);
+				}
 				if ( fight && frame.opcode === 0xb245 ) {
 					// 776830: the local player's own cast of a skill that assists,
 					// at a target in the world, sends its attack pets in.
@@ -4178,6 +4201,15 @@ Packet handling must not depend on which HUD panel is currently open.
 				if ( frame.opcode === 0xb245 && frame.payload[0] === 2 ) {
 					groundSkillMoveSuppressUntil = 0;
 					movement.castRefused( now );
+				}
+				if ( frame.opcode === 0xb245 && frame.payload.length >= 10 ) {
+					// 776830 (0x7769D8): a cast by an owned pet cancels its
+					// halt countdown (+0xAB30 = -1); the pet keeps its target.
+					petAssistCountdowns = castPetAssistCountdowns(
+						petAssistCountdowns,
+						new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
+							.getUint32( 6, true )
+					);
 				}
 				if ( item && cast ) returnScroll = cast;
 				if ( returnScroll?.skillId && (fight || item && cast) ) {
@@ -4408,13 +4440,18 @@ before take assembles the presentation snapshot.
 		*/
 		step( now: number, local?: EntityState ) {
 			inventorySince = inventory.state().inventoryPending ? inventorySince ?? now : undefined;
-			if ( petAssists.size ) {
+			if ( petAssists.size || petAssistCountdowns.size ) {
 				const targets = new Map<number, EntityState>();
 				for ( const target of petAssists.values() ) {
 					const row = readEntity( target );
 					if ( row ) targets.set( target, row );
 				}
 				petAssists = retainedPetAssists( petAssists, new Set( cosRecords.keys() ), targets );
+				// 77DFA0: a halt countdown that reaches zero forgets the
+				// pet's assist target; one whose target is gone resets.
+				const advanced = advancedPetAssistCountdowns( petAssists, petAssistCountdowns, now );
+				petAssists = advanced.assisting;
+				petAssistCountdowns = advanced.countdowns;
 			}
 			const warNext = advanceGuildWarClock( social, now );
 			if ( warNext !== social ) {
@@ -4828,6 +4865,7 @@ World transfer retires spatial work while retaining character/session data.
 			cosError = null;
 			cosRecords.clear();
 			petAssists = new Map();
+			petAssistCountdowns = new Map();
 			cosSelection.reset();
 			dirty = true;
 		},
