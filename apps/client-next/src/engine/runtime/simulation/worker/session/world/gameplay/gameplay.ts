@@ -4388,6 +4388,7 @@ command or the open inventory transaction), or undefined. The world
 session reads it to tell a stalled connection from a lost answer.
 ================
 		*/
+		noteInput: movement.noteInput,
 		outstandingSince(): number | undefined {
 			const moved = movement.oldestPendingSentAt();
 			if ( moved === undefined ) return inventorySince;
