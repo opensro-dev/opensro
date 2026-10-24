@@ -891,14 +891,17 @@ export function createCharacterPresentation(
 					groundClocks.clear();
 					retiring.clear();
 					disappearing.clear();
-					spawnFades.reset();
+					// A journal resync rebuilds the same world (#1481): the
+					// held characters keep their spawn ramps.
+					if ( !event.resync ) spawnFades.reset();
 					next.length = 0;
 					next.push( { kind: "reset" } );
 				} else if ( event.kind === "spawn" || event.kind === "state" ) {
 					if ( event.kind === "spawn" ) {
 						presentationState.forgetStance( event.entity.gid );
 						// A respawn under a live gid is a new CICharactor: fade it again.
-						spawnFades.respawn( event.entity.gid );
+						// A journal resync republishes the held character instead (#1481).
+						if ( !event.resync ) spawnFades.respawn( event.entity.gid );
 					}
 					next.push( { kind: event.kind, gid: event.entity.gid, refObjId: event.entity.refObjId } );
 				} else if ( event.kind === "despawn" ) {

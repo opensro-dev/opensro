@@ -155,6 +155,35 @@ test("spawned characters fade in over two seconds and NPCs appear at once", () =
 	f.dispose();
 });
 
+test("a journal resync updates a held character in place without the spawn fade", () => {
+	// #1481: when the world journal compacts behind a stalled consumer it
+	// republishes one spawn per live entity. Those spawns are the same
+	// characters the presentation already holds, so the CIDecoAppear ramp
+	// must not run again; a genuine respawn under the live gid still fades.
+	const f = fixture();
+	f.warm();
+	const alpha = at => {
+		f.step( [ entity( 1, { kind: "monster" } ) ], at );
+		const actor = f.actors.find( a => a.gid === 1 );
+		assert.ok( actor, "the monster is presented" );
+		return actor.opacity ?? 1;
+	};
+	assert.equal( alpha( 1 ), 0 );
+	assert.equal( alpha( 3 ), 1 );
+	// The resync batch: a reset on a new epoch, then the held entity's
+	// spawn republished (entities.ts resyncEvents marks both).
+	f.presentation.receiveLifecycle( [
+		{ kind: "reset", epoch: 2, resync: true },
+		{ kind: "spawn", entity: entity( 1, { kind: "monster" } ), resync: true }
+	] );
+	assert.equal( alpha( 4 ), 1, "the held character does not fade in again after a resync" );
+	// The control: an unmarked spawn is a new CICharactor and fades again.
+	f.presentation.receiveLifecycle( [ { kind: "spawn", entity: entity( 1, { kind: "monster" } ) } ] );
+	assert.equal( alpha( 5 ), 0, "a genuine respawn under the live gid fades again" );
+	assert.equal( alpha( 7 ), 1 );
+	f.dispose();
+});
+
 test("another character keeps full alpha through every body status without a hide buff", () => {
 	// 85EC00 writes body 4's 0x50, but 85D890 (CICUser_OnUpdate, every update,
 	// every character but the local player) restores 0xFF when no hide buff
