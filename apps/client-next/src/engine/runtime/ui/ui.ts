@@ -704,11 +704,13 @@ import {
 	DEBUG_COMMAND_CLEAR,
 	DEBUG_COMMAND_DAY,
 	DEBUG_COMMAND_DEBUG,
+	DEBUG_COMMAND_GET_POSITION,
 	DEBUG_COMMAND_ITEM,
 	DEBUG_COMMAND_MESSAGE_CLEAR,
 	DEBUG_COMMAND_NIGHT,
 	DEBUG_COMMAND_NULL,
 	DEBUG_COMMAND_PLAYER_COUNT,
+	DEBUG_COMMAND_POSITION,
 	DEBUG_COMMAND_POWER,
 	DEBUG_COMMAND_RAIN,
 	DEBUG_COMMAND_SNOW,
@@ -720,6 +722,7 @@ import {
 	DEBUG_COMMAND_SET_FIELD_OF_VIEW,
 	debugCommand,
 	debugFieldOfView,
+	debugPosition,
 	type DebugCommand
 } from "@/engine/foundation/ui/debug-commands";
 import {
@@ -2614,10 +2617,10 @@ export function createUi(
 	================
 	runDebugCommand
 
-	CGInterface_OnCommandMessage (690C40) for the console family, bag-slot
-	use and FOV. The weather rows write the worker's weather slot (the
-	sampler's state, not this window's); the time rows drive the local debug
-	clock the sampler reads through debugClockSeed. The camera and
+	CGInterface_OnCommandMessage (690C40) for the console family, the position
+	pair, bag-slot use and FOV. The weather rows write the worker's weather
+	slot (the sampler's state, not this window's); the time rows drive the
+	local debug clock the sampler reads through debugClockSeed. The camera and
 	render-toggle families are not ported yet and leave the line as typed.
 	================
 	*/
@@ -2631,6 +2634,19 @@ export function createUi(
 			case DEBUG_COMMAND_MESSAGE_CLEAR:
 				// Case 1 empties the console's lines, the command's echo included.
 				consoleRows = [];
+				break;
+			case DEBUG_COMMAND_POSITION: {
+				// Case 2: "/Pos region,x,y,z" walks the local player (or its
+				// mount) to the destination, the ground-click walk, not a
+				// teleport. The native destination carries no heading.
+				const destination = debugPosition( command.args );
+				if ( destination ) sendGameplay( { kind: "move", destination: { ...destination, angle: 0 } } );
+				break;
+			}
+			case DEBUG_COMMAND_GET_POSITION:
+				// Case 3 flips the +CEAD84 byte and writes it as the local
+				// player's body visual state (85EC00): berserk look on or off.
+				sendGameplay( { kind: "debug-body-visual" } );
 				break;
 			case DEBUG_COMMAND_NULL:
 				// Port-only, not native: case 4 writes through a null pointer to
@@ -9368,7 +9384,14 @@ export function createUi(
 			endWindow
 			================
 			*/
-			function endWindow( mark: readonly [number, number, number, number], owner = "primary" ) {
+			function endWindow(
+				mark: readonly [number, number, number, number],
+				owner = "primary",
+				// The window's own rect, when its quads paint past it through a
+				// clip (the world map's page tiles): the fit measures this
+				// instead of every quad's raw extent.
+				source?: UiRect
+			) {
 				const admittedWindow = admittedWindows.get( owner );
 				// Everything still loading is reported (tests wait on it before a raster);
 				// only the window's own art holds its admission.
@@ -9405,7 +9428,8 @@ export function createUi(
 						fitUiGroup( quads, controls, mark[0], mark[1], windowBounds, full, {
 							blocks,
 							firstBlock: mark[2],
-							disableDrag: compactWindowDrag
+							disableDrag: compactWindowDrag,
+							...(source ? { sourceBounds: source } : {})
 						} );
 						for ( let i = mark[1]; i < controls.length; i++ ) {
 							controls[i] = compactCloseControl( controls[i]!, windowBounds );
@@ -10727,10 +10751,7 @@ export function createUi(
 					paths.push( ...output.paths );
 				}
 				if ( !loading.startup ) {
-					const output = loadingScreenQuads( w, h, loading.background ?? "", loading.progress ).filter( (
-						_,
-						i
-					) => i !== 1 || loading!.background !== null );
+					const output = loadingScreenQuads( w, h, loading.background ?? "", loading.progress );
 					quads.push( ...output );
 					paths.push( ...output.map( q => q.texture ).filter( Boolean ) );
 				}
@@ -12353,6 +12374,7 @@ export function createUi(
 					w,
 					h,
 					full,
+					bounds: compact && compact.top >= 200 ? compact.bounds : undefined,
 					hover,
 					hudData,
 					trackedQuest,
