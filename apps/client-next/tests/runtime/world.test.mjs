@@ -1988,6 +1988,42 @@ test("admission survives socket progress past ten seconds and times out after si
 
 /*
 ================
+keepalive pings slide the admission window (#1417)
+
+A slow world entry is silent by design (publication gate, bootstrap
+build), so the server proves the wire with transport pings the network
+owner answers invisibly. Those pings are progress for the stall window;
+only true silence fails the attempt.
+================
+*/
+test("admission survives keepalive-only progress and times out after true silence", async t => {
+	const sockets = socketHarness( t );
+	const world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	socket.receive( 7, entered() );
+	let time = 3;
+	for ( let round = 0; round < 4; round++ ) {
+		socket.receive( 3, Uint8Array.of( 1, 2, 3, 4 ) );
+		time += 9000;
+		world.step( time );
+		assert.equal( world.status().phase, "entering-world" );
+		assert.equal( world.status().error, undefined );
+	}
+	world.step( time + 10001 );
+	assert.equal( world.status().error, "World connection timed out" );
+});
+
+/*
+================
 reference bytes slide their stall window (#1010)
 
 The cold-cache multi-megabyte reference body of a slow link takes longer

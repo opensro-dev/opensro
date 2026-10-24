@@ -39,7 +39,7 @@ export function createNetwork(
 ): NetworkOwner {
 	const codec = createCodec();
 	let socket: WebSocket | null = null, epoch = 0, disposed = false, welcomed = false;
-	let bytes = 0;
+	let bytes = 0, inboundFrames = 0;
 	let pingToken = 0, pendingPing = false, pingSentAt = -Infinity, pingReceivedAt = -Infinity;
 	let measuredPing: number | null = null;
 	const inbox: WireFrame[] = [];
@@ -174,6 +174,18 @@ export function createNetwork(
 	return {
 		disconnect,
 		/*
+	================
+	inboundActivity
+
+	Every inbound frame decoded since this owner was created, keepalives
+	included. Monotonic across reconnects: the world session only ever
+	asks whether the count moved, never what it is (#1417).
+	================
+	*/
+		inboundActivity() {
+			return inboundFrames;
+		},
+		/*
   ================
   pingMs
 
@@ -231,6 +243,7 @@ export function createNetwork(
 						throw new Error( "Non-binary transport frame" );
 					}
 					const frame = codec.decode( new Uint8Array( event.data ) );
+					inboundFrames++;
 					note( NET_JOURNAL_IN, frame.opcode, event.data.byteLength );
 					if ( frame.opcode === 5 ) {
 						if ( frame.payload.length !== 1 ) throw new Error( "Invalid transport goodbye" );

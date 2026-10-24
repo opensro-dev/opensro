@@ -196,6 +196,7 @@ onNetworkFailure
 	let now = 0,
 		deadline = 0,
 		deadlineWindow = 0,
+		inboundSeen = 0,
 		retryAt = 0,
 		attempt = 0,
 		reconnectSince = 0,
@@ -631,6 +632,17 @@ step
 				references = { kind: "idle" };
 			}
 			if ( !failure ) network.drain( receive );
+			// Transport liveness is progress too. A loading scene is silent by
+			// design (the server is building its entry), so the server pings it
+			// on the keepalive's loading cadence and the network owner answers
+			// without surfacing a frame: the only sign here is the inbound
+			// count moving. A wire that still answers is not stalled, however
+			// long the entry takes; only true silence fails the attempt (#1417).
+			const activity = network.inboundActivity();
+			if ( activity !== inboundSeen ) {
+				inboundSeen = activity;
+				noteProgress();
+			}
 			const nextPing = !failure && phase === "world" ? network.pingMs() : null;
 			if ( nextPing !== pingMs ) {
 				pingMs = nextPing;

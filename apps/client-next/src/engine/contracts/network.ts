@@ -35,6 +35,12 @@ NetworkOwner
 */
 export interface NetworkOwner {
 	pingMs(): number | null;
+	// Inbound frames decoded so far, any opcode, keepalives included: a
+	// count, never a clock, so the admission stall window can compare it
+	// against its own step timebase. The server pings a loading scene
+	// whose entry is silent by design; that ping is liveness, and this
+	// count is how the session learns of it (#1417).
+	inboundActivity(): number;
 	connect( url: string, admission: string, resume?: Uint8Array ): void;
 	send( frame: WireFrame ): void;
 	// False retains this frame and its successors while admission awaits data.
