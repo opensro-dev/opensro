@@ -39,6 +39,18 @@ func (rt *Runtime) registerNpcAction(hub *transport.Hub) {
 			log.Debugf("npcaction: malformed 0x7338 from %s: %v", character.Name, err)
 			return
 		}
+		// While the scene loads the request cannot execute (its first state
+		// op retires the player's hide), and the client still holds the
+		// function request pending: answer with the native 0xB338 kind-2
+		// refusal the way every refused function request retires it.
+		if _, live := session.SceneRevision(); !live {
+			sendFrames(session, []wire.Frame{{
+				Opcode:  wire.OpNpcInteractionAck,
+				Payload: wire.EncodeNpcInteractionRefusal(wire.ErrCodeInvalidRequest),
+			}})
+			log.Infof("npcaction: 0x7338 mask 0x%X from %s refused: the scene is loading", mask, character.Name)
+			return
+		}
 		var frames []wire.Frame
 		var refusal string
 		if mask == gacha.InteractionFlagGacha {
