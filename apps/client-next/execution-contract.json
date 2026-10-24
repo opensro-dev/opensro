@@ -1661,6 +1661,14 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/world.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"functions": [
+				"outstandingSince"
+			],
+			"reason": "The world session's stall detector reads when the oldest unanswered request left (through core), to tell a stalled link from a lost answer (#1418)."
+		},
+		{
 			"consumer": "src/engine/foundation/ui/item-tooltip-recovery.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
