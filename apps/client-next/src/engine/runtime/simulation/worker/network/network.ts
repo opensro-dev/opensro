@@ -10,7 +10,7 @@ failure names that frame so it can be reported (session.ts).
 
 ===========================================================================
 */
-import { createCodec } from "./codec/codec";
+import { createCodec, MAX_RESERVED_OPCODE } from "./codec/codec";
 import {
 	INCIDENT_JOURNAL_AGE_MS,
 	INCIDENT_JOURNAL_ROWS,
@@ -28,6 +28,9 @@ const PING_BACKLOG_LIMIT = 65536;
 // The frame journal for bug reports (takeJournal) holds at most this many
 // frames between takes. Opcodes and sizes only: no payload ever enters it.
 const NET_JOURNAL_RECORDS = 4096;
+// The stream position is acknowledged at most this often (#1466): the
+// server keeps every unacknowledged ordered frame for a resume.
+const STREAM_ACK_INTERVAL_MS = 1000;
 // A server close reason is free text; the report keeps a short, plain copy.
 const CLOSE_REASON_LENGTH = 64;
 
@@ -89,6 +92,11 @@ export function createNetwork(
 	let measuredPing: number | null = null;
 	// Frames received on any socket (received()); pings and pongs included.
 	let receivedFrames = 0;
+	// The stream position (#1466): frames above the session-internal range
+	// the consumer has applied, counted at drain - never at receipt, so a
+	// frame lost with a dying socket's inbox is re-sent on resume. It
+	// survives a resume and restarts on a fresh WELCOME.
+	let streamPosition = 0, ackedPosition = 0, ackSentAt = -Infinity;
 	const inbox: WireFrame[] = [];
 	let journal = new Float64Array( NET_JOURNAL_RECORDS * NET_JOURNAL_FIELDS ), journalCount = 0;
 	// The incident ring: the bug-report journal above is drained every second,
@@ -145,6 +153,8 @@ export function createNetwork(
 		inbox.length = 0;
 		ended = null;
 		endReason = undefined;
+		ackedPosition = 0;
+		ackSentAt = -Infinity;
 		const previous = socket;
 		socket = null;
 		if ( previous ) {
@@ -155,6 +165,22 @@ export function createNetwork(
 					null;
 			previous.close();
 		}
+	}
+	/*
+	================
+	acknowledge
+
+	Tells the server how far the stream has been applied, about once a
+	second and only when it moved.
+	================
+	*/
+	function acknowledge() {
+		if ( !welcomed || !socket || socket.readyState !== WebSocket.OPEN ) return;
+		const now = performance.now();
+		if ( streamPosition === ackedPosition || now - ackSentAt < STREAM_ACK_INTERVAL_MS ) return;
+		ackedPosition = streamPosition;
+		ackSentAt = now;
+		send( codec.streamAck( streamPosition ) );
 	}
 	/*
 	================
@@ -266,7 +292,9 @@ export function createNetwork(
 			if ( endpoint.protocol !== "ws:" && endpoint.protocol !== "wss:" ) {
 				throw new Error( "Invalid transport URL" );
 			}
-			const hello = codec.hello( admission, resume );
+			// Without a resume token the server starts a fresh stream.
+			if ( !resume?.length ) streamPosition = 0;
+			const hello = codec.hello( admission, resume, streamPosition );
 			disconnect();
 			const generation = epoch;
 			const current = new WebSocket( endpoint );
@@ -331,7 +359,7 @@ export function createNetwork(
 						if ( frame.opcode !== 2 ) {
 							throw new Error( "Expected transport welcome" );
 						}
-						codec.welcome( frame.payload );
+						if ( !codec.welcome( frame.payload ).resumed ) streamPosition = 0;
 						welcomed = true;
 					} else if ( frame.opcode === 1 || frame.opcode === 2 ) {
 						throw new Error( "Unexpected transport handshake" );
@@ -438,6 +466,7 @@ export function createNetwork(
 					current = inbox[index]!;
 					if ( consume( current ) === false ) break;
 					consumed++;
+					if ( current.opcode > MAX_RESERVED_OPCODE ) streamPosition = (streamPosition + 1) >>> 0;
 					if ( epoch !== generation ) {
 						return;
 					}
@@ -455,6 +484,14 @@ export function createNetwork(
 						"A game error interrupted your session.",
 					stack: error instanceof Error ? error.stack?.slice( 0, 8192 ) : undefined
 				} );
+				return;
+			}
+			// Outside the consume try: a full outbound buffer is a transport
+			// failure, not a packet the game could not apply.
+			try {
+				if ( epoch === generation ) acknowledge();
+			} catch ( error ) {
+				fail( String( error ) );
 			}
 		},
 		dispose() {

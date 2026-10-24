@@ -1,0 +1,182 @@
+/*
+===========================================================================
+
+stream_ring.go - exactly-once ordered delivery across a resume (#1466)
+
+Every frame the session writes on the reliable stream above the transport
+range (opcode > maxReservedOpcode) advances the stream position; the client
+counts the same frames as it drains them, so neither side needs a marker on
+the wire. Ordered frames are kept in a bounded ring after their write until
+the client acknowledges them (OpStreamAck) or resumes with the position it
+last applied (Hello.LastApplied). On a resume the server re-sends exactly
+the ring frames past that position, then the frames queued while detached.
+Coalesced lossy frames advance the position but are never kept: a
+superseded position is not re-sent.
+
+A resume whose position the ring can no longer cover (an overflow, or a
+client that presents no position) is refused, and the hub issues a fresh
+session: a lost ordered frame must never pass silently.
+
+Positions are compared plainly, never wrap-aware (#1515 review): a session
+would need four billion counted frames to reach the 2^32 wrap, so a
+wrapped position can never meet itself. Revisit here only if per-session
+frame volumes grow by orders of magnitude.
+
+===========================================================================
+*/
+package transport
+
+import "errors"
+
+// errResumeGap refuses a resume whose stream position the ring cannot serve.
+var errResumeGap = errors.New("transport: resume position not covered")
+
+const (
+	// streamRingMaxFrames and streamRingMaxBytes bound the unacknowledged
+	// window. The client acknowledges about once a second, so a live link
+	// never comes close; a detached session keeps at most this much.
+	streamRingMaxFrames = 8192
+	streamRingMaxBytes  = 4 << 20
+)
+
+/*
+================
+ringFrame
+
+An ordered frame already written, at its stream position.
+================
+*/
+type ringFrame struct {
+	pos uint32
+	f   Frame
+}
+
+/*
+================
+CountsOnStream
+
+Exported for the wire tests of other packages, whose fake clients present
+the position they read on a resume. Whether a written frame advances the stream position. The client's network
+owner consumes the transport range (WELCOME, PING, PONG, BYE) itself and
+drains everything else, so both sides count exactly the frames above it.
+================
+*/
+func CountsOnStream(opcode uint16) bool {
+	return opcode > maxReservedOpcode
+}
+
+/*
+================
+noteWrittenLocked
+
+Gives a frame the writer has just dequeued its stream position (and an
+ordered one its ring slot) before it is written, under the lock that
+dequeued it: a resume landing while the write is in flight then re-sends
+it from the ring unless the client's position shows it arrived, and the
+old write can never number it on the new stream. Returns the position, 0
+when the frame does not count. Caller holds s.mu.
+================
+*/
+func (s *Session) noteWrittenLocked(f Frame, ordered bool) uint32 {
+	if !CountsOnStream(f.Opcode) {
+		return 0
+	}
+	s.streamPos++
+	pos := s.streamPos
+	if !ordered {
+		return pos
+	}
+	s.ring = append(s.ring, ringFrame{pos: s.streamPos, f: f})
+	s.ringBytes += f.EncodedLen()
+	for len(s.ring) > streamRingMaxFrames || s.ringBytes > streamRingMaxBytes {
+		// The oldest unacknowledged frame falls out: a resume that still
+		// needs it is refused instead of silently skipping it.
+		s.ringFloor = s.ring[0].pos
+		s.ringBytes -= s.ring[0].f.EncodedLen()
+		s.ring[0] = ringFrame{}
+		s.ring = s.ring[1:]
+	}
+	return pos
+}
+
+/*
+================
+unnoteLocked
+
+Takes back the position a dequeued frame was given when it turns out not
+to be written (its Current check says it went stale). Only the newest
+position can be taken back; after a resume the frame is back in the queue
+from the ring and is judged again when it is dequeued. Caller holds s.mu.
+================
+*/
+func (s *Session) unnoteLocked(pos uint32, ordered bool) {
+	if pos == 0 || pos != s.streamPos {
+		return
+	}
+	s.streamPos--
+	if ordered && len(s.ring) > 0 && s.ring[len(s.ring)-1].pos == pos {
+		last := len(s.ring) - 1
+		s.ringBytes -= s.ring[last].f.EncodedLen()
+		s.ring[last] = ringFrame{}
+		s.ring = s.ring[:last]
+	}
+}
+
+/*
+================
+ackLocked
+
+Drops the ring frames the client has applied. Caller holds s.mu.
+================
+*/
+func (s *Session) ackLocked(pos uint32) {
+	if pos > s.streamPos {
+		pos = s.streamPos
+	}
+	n := 0
+	for n < len(s.ring) && s.ring[n].pos <= pos {
+		s.ringBytes -= s.ring[n].f.EncodedLen()
+		s.ring[n] = ringFrame{}
+		n++
+	}
+	s.ring = s.ring[n:]
+}
+
+/*
+================
+resumeFromLocked
+
+Prepares a resume from the client's last applied position: the ring frames
+past it are re-queued ahead of the frames queued while detached, and the
+position restarts there (they are counted again as they are rewritten).
+False when the position cannot be served - beyond what was written, or
+older than a frame the ring has already dropped, or a re-sent block that
+with the frames queued while detached would overflow the outbound queue
+(the next Send would then close the session as a slow consumer). Caller
+holds s.mu.
+================
+*/
+func (s *Session) resumeFromLocked(lastApplied uint32) bool {
+	if lastApplied > s.streamPos || lastApplied < s.ringFloor {
+		return false
+	}
+	s.ackLocked(lastApplied)
+	resendBytes := 0
+	for _, r := range s.ring {
+		resendBytes += r.f.EncodedLen()
+	}
+	if len(s.ring)+len(s.queue) >= s.hub.cfg.OutboundQueue ||
+		resendBytes+s.queueBytes+s.lossyBytes > s.hub.cfg.OutboundQueueBytes {
+		return false
+	}
+	resend := make([]Frame, 0, len(s.ring)+len(s.queue))
+	for _, r := range s.ring {
+		resend = append(resend, r.f)
+		s.queueBytes += r.f.EncodedLen()
+	}
+	s.queue = append(resend, s.queue...)
+	s.ring = nil
+	s.ringBytes = 0
+	s.streamPos = lastApplied
+	return true
+}

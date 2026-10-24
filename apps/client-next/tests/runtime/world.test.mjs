@@ -219,6 +219,11 @@ test("a stalled consumer's backlog compacts into a resync instead of killing the
 		[ "reset", "bootstrap", "spawn", "synchronized" ]
 	);
 	assert.equal( resync.events[2].entity.gid, spawn.gid );
+	// #1481: the rebuilt batch is marked as a journal resync, so the
+	// presentation updates held characters in place instead of fading
+	// them in again; an entry publication stays unmarked.
+	assert.equal( resync.events[0].resync, true );
+	assert.equal( resync.events[2].resync, true );
 	assert.equal( owner.synchronized(), false );
 	assert.equal( p.apply( resync ), true );
 	assert.ok( p.read( spawn.gid ), "the rebuilt world holds the entity" );
