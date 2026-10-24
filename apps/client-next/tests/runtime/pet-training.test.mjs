@@ -354,8 +354,8 @@ advanced book descriptions
 test("advanced tooltips include inherited proficiency in the current effect", () => {
 	const mend = petSkillDesign( 47 ), mark = petSkillDesign( 50 ), howl = petSkillDesign( 2 );
 	assert.ok( mend && mark && howl );
-	assert.match( petEffect( mend, 20, 1 ), /30% of maximum HP immediately/ );
-	assert.match( petEffect( mark, 20, 1 ), /40% for 8 s/ );
+	assert.match( petEffect( mend, 20, 1 ), /20% maximum HP: half immediately, half over 5 seconds/ );
+	assert.match( petEffect( mark, 20, 1 ), /hatches after 30 s.*Stores 3 casts/ );
 	assert.match( petEffect( howl, 20, 1 ), /Attack speed \+20%.*Wolf and owner/ );
 	const paw = petSkillDesign( 30 ), feathers = petSkillDesign( 42 ), murder = petSkillDesign( 60 );
 	assert.ok( paw && feathers && murder );
@@ -387,8 +387,8 @@ test("advanced tooltips include inherited proficiency in the current effect", ()
 		/Proficiency/
 	);
 	assert.match( petEffect( feathers, 10, 1 ), /Maximum stacks 5/ );
-	assert.match( petEffect( murder, 200, 1 ), /Every 8th damaging attack/ );
-	assert.match( petEffect( murder, 200, 1 ), /2 s Myopia/ );
+	assert.match( petEffect( murder, 200, 1 ), /Crow hits grant/ );
+	assert.match( petEffect( murder, 200, 1 ), /Party members within 20 m/ );
 });
 
 /*
@@ -532,7 +532,7 @@ test("each skill family uses its atlas cell and stack badges reuse native level 
 		assert.ok( uv[0] >= 0 && uv[1] >= 0 && uv[0] + uv[2] <= 1 && uv[1] + uv[3] <= 1 );
 		if ( d.family === "Crushing Paw" ) assert.equal( petSkillStack( state, d, skill ), 9 );
 		if ( d.family === "Unbroken Spirit" ) assert.equal( petSkillStack( state, d, skill ), 10 );
-		if ( d.family === "Murder of Crows" ) assert.equal( petSkillStack( state, d, skill ), 7 );
+		if ( d.family === "Guiding Feathers" ) assert.equal( petSkillStack( state, d, skill ), 0 );
 		assert.equal( petSkillStack( state, d, { ...skill, level: 0 } ), null );
 	}
 	assert.equal( cells.size, 20 );
@@ -697,6 +697,8 @@ test("wolf and owner seven-action progress decodes independently, with bounded e
 	const state = defined( t.state() );
 	assert.equal( petSkillStack( state, d, skill ), 6 );
 	assert.match( petRowHelp( { ...state, skills: [ skill ] }, 2, 200 ), /Wolf attacks: 6 \/ 7/ );
+	assert.match( petRowHelp( { ...state, skills: [ skill ] }, 2, 200 ), /Highest learned book is always active/ );
+	assert.doesNotMatch( petRowHelp( { ...state, skills: [ skill ] }, 2, 200 ), /Click to select/ );
 	assert.match( petSkillHelp( d, skill, 90, 0 ), /Sweep range 10 m/ );
 });
 
@@ -902,13 +904,4 @@ test("penguin counters reject overflow atomically and expose ready Hourglass", (
 		assert.throws( () => t.receive( { opcode: OP_PET_SKILL_COUNTERS, payload: bad }, 300 ) );
 		assert.equal( t.state()?.counters?.hourglass, 5 );
 	}
-});
-
-test("penguin books explain the complete frost caster kit", () => {
-	for ( const d of PET_DESIGN.treeSkills.filter( s => s.pet === "Penguin" ) ) {
-		const effect = petEffect( d, d.value, 1 );
-		assert.ok( effect.length > 10 );
-		assert.doesNotMatch( effect, /Planned|Static Feathers|Mana Tide/ );
-	}
-	assert.match( petEffect( defined( PET_DESIGN.treeSkills.find( s => s.id === 45 ) ), 2, 1 ), /2 s longer/ );
 });

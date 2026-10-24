@@ -69,6 +69,14 @@ func TestStoneFamilyMaskFor(t *testing.T) {
 	if got := stoneFamilyMaskFor(""); got != 0 {
 		t.Fatalf("empty mask = %d", got)
 	}
+	// The native compare is case-sensitive: an uppercase descriptor admits
+	// nothing, where the old fold admitted every word.
+	if got := stoneFamilyMaskFor("Weapon ARMOR"); got != 0 {
+		t.Fatalf("uppercase mask = %d", got)
+	}
+	if got := stoneFamilyMaskFor("weapon ARMOR"); got != stoneFamilyWeapon {
+		t.Fatalf("mixed-case mask = %d", got)
+	}
 }
 
 /*

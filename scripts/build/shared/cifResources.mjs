@@ -42,6 +42,11 @@ import { loadQinShiTombSkillRows, qinshiTombEnabled } from "./qinshiTomb.mjs";
 import { collectGuideImageReferences } from "./guideImageReferences.mjs";
 import { mapWithConcurrency } from "./asyncUtils.mjs";
 import { buildPetItemIcons } from "./petItemIcons.mjs";
+import {
+	fortressMapImageReferences,
+	fortressStructures,
+	readFortressMapSources
+} from "../data/buildFortressMapAsset.mjs";
 
 // Icon copies in flight at once; each is a stat, a compare and rarely a copy.
 const ICON_COPY_CONCURRENCY = 32;
@@ -104,7 +109,8 @@ export async function buildCifResources() {
 			collectItemDataIconDdjReferences,
 			collectActionWndDataIconDdjReferences,
 			collectSkillDataIconDdjReferences,
-			collectCosCharacterIconDdjReferences
+			collectCosCharacterIconDdjReferences,
+			collectFortressMapImageDdjReferences
 		]
 	) {
 		await copyItemDataIconImages( await collect(), copiedImages );
@@ -331,6 +337,34 @@ export async function buildSkillDataIconResources() {
 	const copiedImages = new Set();
 	await copyItemDataIconImages( await collectSkillDataIconDdjReferences(), copiedImages );
 	return { copiedImages };
+}
+
+/*
+================
+buildFortressMapIconResources
+
+The fortress map's images on their own, for the focused fortress-map
+refresh; the full CIF build copies the same closure.
+================
+*/
+export async function buildFortressMapIconResources() {
+	const copiedImages = new Set();
+	await copyItemDataIconImages( await collectFortressMapImageDdjReferences(), copiedImages );
+	return { copiedImages };
+}
+
+/*
+================
+collectFortressMapImageDdjReferences
+
+The fortress map's structure markers (CIFWorldMap_RefreshFortressOverlays
+57E250): every structure icon with its "_d" and "_r" variants, resolved
+under icon\ at refresh time, and the barricade zones' gate.ddj.
+================
+*/
+async function collectFortressMapImageDdjReferences() {
+	const sources = readFortressMapSources();
+	return fortressMapImageReferences( fortressStructures( sources.characterRows, sources.upgradeRows ) );
 }
 
 /*

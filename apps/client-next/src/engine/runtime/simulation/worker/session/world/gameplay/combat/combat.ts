@@ -3,8 +3,7 @@
 
 combat.ts - worker combat state and native result publication
 
-Owns cast identities, effect lifetimes and received vitals. Presentation events
-leave this owner after complete packet validation; animation never owns HP.
+Owns casts and vitals; validated presentation events and animation never own HP.
 
 ===========================================================================
 */
@@ -474,6 +473,7 @@ export function createCombat(
 		================
 		*/
 		receive( op: number, p: Uint8Array, now = 0 ) {
+			if ( cooldowns.receiveRecovery( op, p, now ) ) return true;
 			if ( op === 0xb3c6 ) {
 				const pulse = skillPulse( p, gid => {
 					const object = readEntity( gid );

@@ -343,12 +343,19 @@ export function partyMatchRows(
 	rows: readonly PartyListing[],
 	filter: { name: string; purpose: number; min: number; max: number; },
 	sort: keyof PartyListing = "id",
-	descending = false
+	descending = false,
+	currentPartyName = ""
 ): PartyListing[] {
+	// 636CE0 fills slot 0 from the own registration (PartyMatchManager +0x08)
+	// on every refresh, whatever the page or search, and skips it below.
+	// Port-only, not native: a party member passes their leader's name too.
 	return rows.filter( r =>
+		(!!currentPartyName && r.name === currentPartyName) ||
 		(!filter.name || r.name === filter.name) && (filter.purpose === 4 || r.purpose === filter.purpose) &&
-		r.min <= filter.max && r.max >= filter.min
+			r.min <= filter.max && r.max >= filter.min
 	).sort( ( a, b ) => {
+		const pinned = Number( b.name === currentPartyName ) - Number( a.name === currentPartyName );
+		if ( currentPartyName && pinned ) return pinned;
 		const x = a[sort], y = b[sort];
 		return (x < y ? -1 : x > y ? 1 : 0) * (descending ? -1 : 1);
 	} );

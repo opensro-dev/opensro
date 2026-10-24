@@ -59,6 +59,31 @@ test("all enhancement boundaries, stable ties, invalid data and absent table", (
 	assert.throws( () => validateEquipmentGlows( { 1: [ { ...row, image: 1 } ] }, 1 ) );
 	assert.throws( () => validateEquipmentGlows( { 1: [ { ...row, period: -1 } ] }, 1 ) );
 });
+/*
+================
+enhanced tiers
+
+Port-only, not native: an item that carries the later client's rows draws
+them only with the Experimental "Enhanced item glow" row on; off, and for
+an item without them, the native v1.150 rows decide exactly as before.
+================
+*/
+test("enhanced rows replace the native tiers only with the row on, and only for items that have them", () => {
+	const native = [ 3, 5, 7, 9 ].map( threshold => ({ ...row, threshold, enhanced: false }) );
+	const enhanced = [ 3, 5, 6, 7, 8, 9, 10 ].map( threshold => ({ ...row, threshold, enhanced: true }) );
+	const both = [ ...native, ...enhanced ];
+	for ( let plus = 0; plus <= 12; plus++ ) {
+		assert.equal( selectEquipmentGlow( both, plus, false ), selectEquipmentGlow( native, plus ) );
+	}
+	assert.equal( selectEquipmentGlow( both, 6, true ), enhanced[2] );
+	assert.equal( selectEquipmentGlow( both, 6, false ), native[1] );
+	assert.equal( selectEquipmentGlow( both, 12, true ), enhanced[6] );
+	assert.equal( selectEquipmentGlow( both, 2, true ), undefined );
+	// An item the later client does not list keeps its native rows with the row on.
+	assert.equal( selectEquipmentGlow( native, 8, true ), native[2] );
+	assert.throws( () => validateEquipmentGlows( { 1: [ { ...row, enhanced: "yes" } ] }, 1 ) );
+	validateEquipmentGlows( { 1: both }, 1 );
+});
 test("native glow ping-pong discards overshoot, packs color, scrolls signed UV, and pauses at LOD/opacity", () => {
 	const c = createEquipmentGlowClock( row );
 	assert.deepEqual( [ ...c.color ], [ 1, 0, 0 ] );

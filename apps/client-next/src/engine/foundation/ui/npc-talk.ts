@@ -133,6 +133,9 @@ export interface NpcTalkInput {
 	readonly canReverseReturn?: boolean;
 	// 5D8FF0 0x800000: the fortress official's application row.
 	readonly canFortressOfficial?: boolean;
+	// 5D8FF0 0x1000000, 5D7AD0 action 0x32: the battle aide's structure row,
+	// only for the holding guild.
+	readonly canFortressAide?: boolean;
 	// 5D7AD0 action 0x33: the manager's rows, only for the holding guild and
 	// its allies (canFortressManager); canFortressHire is the holder alone.
 	readonly canFortressManager?: boolean;
@@ -145,6 +148,9 @@ export interface NpcTalkInput {
 	readonly canFortressTrainer?: boolean;
 	// jobRows are the job guild rows (job-guild.ts jobMenuRows).
 	readonly jobRows?: readonly { readonly id: string; readonly label: string; }[];
+	// flagWarMode is the grant byte the reference server writes for the registration
+	// NPC: 1 offers sign-up, 2 offers cancel (5D3630, action 0x38).
+	readonly flagWarMode?: number;
 }
 
 /*
@@ -250,6 +256,10 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 					...(input.canFortressOfficial ?
 						[ { id: "npc-fortress-war", label: copy( "SN_FORTRESS_OFFICIAL_WARAPPLY" ) } ] :
 						[]),
+					// 5D8FF0 lists the aide's action 0x32 after the official's 0x34.
+					...(input.canFortressAide ?
+						[ { id: "npc-fortress-structure", label: copy( "SN_FORTRESS_BATTLEAIDE_STRUCTURE" ) } ] :
+						[]),
 					...(input.canFortressSmith ?
 						[ { id: "npc-fortress-production:smith", label: copy( "SN_FORTRESS_SMITH_PRODUCT" ) } ] :
 						[]),
@@ -263,6 +273,12 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 					// 5D9750 adds row 0x28 straight after row 0x27.
 					...(input.canGachaOperator ?
 						[ { id: "gacha-exchange", label: copy( "SN_TALK_CH_GACHA_OPERATOR_2" ) } ] :
+						[]),
+					// 5D3630 appends the flag-war row after the service menu.
+					...(input.flagWarMode === 1 ?
+						[ { id: "npc-flagwar", label: copy( "UIIT_MSG_FLAGWAR_GAME_JOIN_REQ" ) } ] :
+						input.flagWarMode === 2 ?
+						[ { id: "npc-flagwar", label: copy( "UIIT_MSG_FLAGWAR_GAME_JOIN_REQ_CANCEL" ) } ] :
 						[])
 				]),
 			{ id: "npc-talkend", label: copy( "UIIT_STT_NPC_CHATTING_WND_TALKEND" ) }

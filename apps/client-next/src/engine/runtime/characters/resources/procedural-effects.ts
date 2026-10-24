@@ -438,27 +438,35 @@ createPetCounterRippleResource
 A soft, unit-radius ground annulus without the roar's walls or bright spokes.
 ================
 */
-function createPetCounterRippleResource(): { model: CharacterModel; images: NativeTexture[]; } {
+function createPetCounterRippleResource( wind = false ): { model: CharacterModel; images: NativeTexture[]; } {
 	const positions: number[] = [], normals: number[] = [], uvs: number[] = [], indices: number[] = [];
 	for ( let i = 0; i <= 64; i++ ) {
-		const angle = i / 64 * Math.PI * 2;
-		for ( const radius of [ .96, 1 ] ) {
-			positions.push( Math.cos( angle ) * radius, .025, Math.sin( angle ) * radius );
+		const angle = i / 64 * Math.PI * (wind ? 3 : 2);
+		for ( const edge of [ 0, 1 ] ) {
+			const radius = wind ? .2 + .7 * i / 64 + edge * .025 : .96 + edge * .04;
+			positions.push( Math.cos( angle ) * radius, wind ? .02 + .18 * i / 64 : .025, Math.sin( angle ) * radius );
 			normals.push( 0, 1, 0 );
-			uvs.push( .5, radius === 1 ? 1 : 0 );
+			uvs.push( wind ? i / 64 : .5, edge );
 		}
 		if ( i < 64 ) {
 			const a = i * 2;
 			indices.push( a, a + 2, a + 1, a + 1, a + 2, a + 3 );
 		}
 	}
-	const pixels = new Uint8Array( 16 * 4 );
-	for ( let i = 0; i < 16; i++ ) {
-		pixels.set( [ 220, 220, 220, Math.round( Math.sin( i / 15 * Math.PI ) * 255 ) ], i * 4 );
+	const width = wind ? 64 : 1;
+	const pixels = new Uint8Array( width * 16 * 4 );
+	for ( let y = 0; y < 16; y++ ) {
+		for ( let x = 0; x < width; x++ ) {
+			const tipFade = wind ? Math.sin( x / (width - 1) * Math.PI ) : 1;
+			pixels.set(
+				[ 220, 220, 220, Math.round( Math.sin( y / 15 * Math.PI ) * tipFade * 255 ) ],
+				(y * width + x) * 4
+			);
+		}
 	}
 	return buildProceduralEffectModel( positions, normals, uvs, indices, {
 		kind: "native-texture",
-		width: 1,
+		width,
 		height: 16,
 		format: "bgra8unorm",
 		levels: [ pixels ]
@@ -551,6 +559,110 @@ function createPenguinIceResource(
 
 /*
 ================
+createCrowFeatherResource
+
+An owned curved feather silhouette; tapered vanes and a bright central shaft.
+================
+*/
+function createCrowFeatherResource(): { model: CharacterModel; images: NativeTexture[]; } {
+	const positions: number[] = [], normals: number[] = [], uvs: number[] = [], indices: number[] = [];
+	for ( let i = 0; i <= 16; i++ ) {
+		const t = i / 16, width = Math.sin( Math.PI * t ) * .6;
+		for ( const edge of [ -1, 1 ] ) {
+			positions.push( edge * width, Math.sin( t * Math.PI ) * .15, (t - .5) * 3 );
+			normals.push( 0, 1, 0 );
+			uvs.push( edge < 0 ? 0 : 1, t );
+		}
+		if ( i < 16 ) {
+			const v = i * 2;
+			indices.push( v, v + 2, v + 1, v + 1, v + 2, v + 3 );
+		}
+	}
+	const size = 64, pixels = new Uint8Array( size * size * 4 );
+	for ( let y = 0; y < size; y++ ) {
+		for ( let x = 0; x < size; x++ ) {
+			const u = x / (size - 1), t = y / (size - 1), shaft = Math.exp( -Math.pow( (u - .5) * 20, 2 ) );
+			const vane = Math.abs( u - .5 );
+			const barbs = .48 + .22 * Math.cos( t * 135 + vane * 46 ) + .3 * shaft;
+			const glint = Math.pow( Math.max( 0, Math.cos( t * 71 - vane * 25 ) ), 12 ) * .15;
+			const alpha = Math.sin( u * Math.PI ) * Math.sin( t * Math.PI );
+			const light = Math.min( 1, barbs + glint );
+			pixels.set(
+				[ light * 235, light * 245, light * 250, alpha * 255 ],
+				(y * size + x) * 4
+			);
+		}
+	}
+	return buildProceduralEffectModel( positions, normals, uvs, indices, {
+		kind: "native-texture",
+		width: size,
+		height: size,
+		format: "bgra8unorm",
+		levels: [ pixels ]
+	} );
+}
+
+/*
+================
+createCrowRecoveryResource
+
+Crossed soft sprites keep recovery wisps visible from every camera angle.
+================
+*/
+function createCrowRecoveryResource( mana: boolean ): { model: CharacterModel; images: NativeTexture[]; } {
+	const positions: number[] = [], normals: number[] = [], uvs: number[] = [], indices: number[] = [];
+	for ( let plane = 0; plane < 3; plane++ ) {
+		const angle = plane * Math.PI / 3, base = positions.length / 3;
+		for ( const [x, y, u, v] of [ [ -1, -1, 0, 1 ], [ 1, -1, 1, 1 ], [ 1, 1, 1, 0 ], [ -1, 1, 0, 0 ] ] as const ) {
+			const width = mana ? .3 : .65;
+			positions.push( Math.cos( angle ) * x * width, y * (mana ? 1.8 : .9), Math.sin( angle ) * x * width );
+			normals.push( -Math.sin( angle ), 0, Math.cos( angle ) );
+			uvs.push( u, v );
+		}
+		indices.push( base, base + 1, base + 2, base, base + 2, base + 3 );
+	}
+	const size = 64, pixels = new Uint8Array( size * size * 4 );
+	for ( let y = 0; y < size; y++ ) {
+		for ( let x = 0; x < size; x++ ) {
+			const u = x / (size - 1) * 2 - 1, v = y / (size - 1) * 2 - 1;
+			const edge = Math.max( 0, (1 - u * u) * (1 - v * v) );
+			const glow = Math.exp( -u * u * 5 - v * v * 3 ) * edge * edge;
+			const core = Math.exp( -u * u * 30 - v * v * 18 );
+			const rgb: readonly [number, number, number] = mana ?
+				[ 40 + core * 65, 115 + core * 65, 245 ] :
+				[ 235, 35 + core * 75, 65 + core * 45 ];
+			pixels.set( [ rgb[2], rgb[1], rgb[0], Math.round( glow * 210 ) ], (y * size + x) * 4 );
+		}
+	}
+	const resource = buildProceduralEffectModel( positions, normals, uvs, indices, {
+		kind: "native-texture",
+		width: size,
+		height: size,
+		format: "bgra8unorm",
+		levels: [ pixels ]
+	} );
+	// Straight alpha keeps red/blue legible over bright terrain instead of washing them to gold.
+	return {
+		...resource,
+		model: {
+			...resource.model,
+			primitives: resource.model.primitives.map( p => ({
+				...p,
+				geometry: {
+					...p.geometry,
+					material: {
+						...p.geometry.material!,
+						fadeAlphaOnly: false,
+						blendPair: { source: 5, destination: 6 } as const
+					}
+				}
+			}) )
+		}
+	};
+}
+
+/*
+================
 createProceduralEffect
 
 Explicit calls keep effect execution visible to the capability contract.
@@ -558,12 +670,20 @@ Explicit calls keep effect execution visible to the capability contract.
 */
 export function createProceduralEffect( path: string ) {
 	switch ( path ) {
+		case "/assets/effects/crow-heal-wisp":
+			return createCrowRecoveryResource( false );
+		case "/assets/effects/crow-mana-wisp":
+			return createCrowRecoveryResource( true );
+		case "/assets/effects/crow-feather":
+			return createCrowFeatherResource();
 		case PENGUIN_ICE_SHARD:
 			return createPenguinIceResource( false );
 		case PENGUIN_ICE_LANCE:
 			return createPenguinIceResource( false, true );
 		case PENGUIN_FROST_SIGIL:
 			return createPenguinIceResource( true );
+		case "/assets/effects/crow-wind-burst":
+			return createPetCounterRippleResource( true );
 		case "/assets/effects/pet-counter-ripple":
 			return createPetCounterRippleResource();
 		case "/assets/effects/iron-hide-shield":

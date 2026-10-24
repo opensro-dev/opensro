@@ -22,7 +22,12 @@ import { createTerrainParts } from "./terrain-parts";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import type { CameraScript } from "@/engine/contracts/camera-script";
 import { assetFailure, createAssetRecovery } from "@/engine/foundation/assets/asset-recovery";
-import { initialCameraPitch, initialCameraYaw } from "@/engine/foundation/rendering/camera-options";
+import {
+	cameraFieldOfViewRadians,
+	initialCameraFieldOfView,
+	initialCameraPitch,
+	initialCameraYaw
+} from "@/engine/foundation/rendering/camera-options";
 import { isDungeonRegion, sectorX, sectorY } from "@/engine/foundation/world/world-space";
 
 type Transaction =
@@ -56,6 +61,9 @@ export function createWorldStream(
 ) {
 	const scripts = createCameraScripts( random );
 	const recovery = createAssetRecovery();
+	// Native UI construction resets App+0x38C (818790 via vtable+0x24).
+	// Asset resets reuse this runtime's UI and keep its committed projection.
+	let fieldOfView = initialCameraFieldOfView();
 	let catalog: Record<string, { area?: string; source?: string; bundlePublicPath: string; }[]> | null = null;
 	/*
 	================
@@ -212,7 +220,7 @@ export function createWorldStream(
 				pose.z + Math.cos( yaw ) * Math.cos( pitch ) * distance
 			],
 			target: [ pose.x, pose.y, pose.z ],
-			fov: Math.PI / 3,
+			fov: fieldOfView,
 			near: 1,
 			far: 3500
 		} );
@@ -391,6 +399,17 @@ export function createWorldStream(
 		}
 	}
 	return {
+		/*
+		================
+		setFieldOfView
+
+		The GM console supplies the native command's bounded degree value.
+		The world camera owns its projection; no setting is sent to the server.
+		================
+		*/
+		setFieldOfView( degrees: number ) {
+			if ( !disposed ) fieldOfView = cameraFieldOfViewRadians( degrees );
+		},
 		/*
 		================
 		pumpCameraScripts

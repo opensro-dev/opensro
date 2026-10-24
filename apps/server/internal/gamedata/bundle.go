@@ -1,7 +1,14 @@
-// Package gamedata validates the immutable, generated data projection used by
-// GameWorld. It deliberately knows nothing about source checkouts or browser
-// publish directories: build tooling may create a bundle from lawful source
-// material, but runtime code consumes only this projection contract.
+/*
+===========================================================================
+
+bundle.go - verify the immutable server game-data projection
+
+Package gamedata validates the generated data GameWorld reads. Build tooling
+creates the projection from lawful source material; runtime code consumes its
+manifest and files without knowing source checkouts or browser publish paths.
+
+===========================================================================
+*/
 package gamedata
 
 import (
@@ -35,6 +42,7 @@ const (
 
 var requiredServerFiles = []string{
 	"character-authority/catalog.json",
+	"textdata/abusefilter.txt",
 	"textdata/characterdata.txt",
 	"textdata/gachaitemset.txt",
 	"textdata/gachanpcmap.txt",
@@ -48,9 +56,14 @@ var requiredServerFiles = []string{
 	"world-authority/movement/catalog.json",
 }
 
-// Descriptor identifies one exact file in a projection. Its shape follows
-// the OCI descriptor properties that matter for a filesystem bundle: media
-// type, content digest, and byte size.
+/*
+================
+Descriptor
+
+One exact projection file: the media type, content digest and byte size are
+the OCI descriptor properties relevant to a filesystem bundle.
+================
+*/
 type Descriptor struct {
 	Path      string `json:"path"`
 	MediaType string `json:"mediaType"`
@@ -58,9 +71,15 @@ type Descriptor struct {
 	Digest    string `json:"digest"`
 }
 
-// Manifest is the version and compatibility boundary for one projection.
-// ContentDigest commits to the ordered descriptor set; ManifestDigest (on
-// Bundle) commits to the exact manifest bytes and is what deployment pins.
+/*
+================
+Manifest
+
+The version and compatibility boundary. ContentDigest commits to the ordered
+descriptor set; Bundle.ManifestDigest commits to the exact manifest bytes
+that deployment pins.
+================
+*/
 type Manifest struct {
 	Format          string       `json:"format"`
 	SchemaVersion   int          `json:"schemaVersion"`
@@ -73,8 +92,14 @@ type Manifest struct {
 	Files           []Descriptor `json:"files"`
 }
 
-// Bundle is a fully verified server projection. Callers receive only paths
-// inside the verified root; they never reconstruct sibling-workspace paths.
+/*
+================
+Bundle
+
+A verified server projection. Callers receive paths inside its root rather
+than reconstructing paths to sibling workspaces.
+================
+*/
 type Bundle struct {
 	Root                  string
 	Manifest              Manifest
@@ -84,10 +109,15 @@ type Bundle struct {
 	WorldAuthorityDir     string
 }
 
-// Open validates identity, compatibility, the exact file set, every file
-// size/digest, and the projection tree digest. expectedManifestDigest may be
-// empty for a local inspection; deployments pass a sha256 digest pinned by
-// their desired state.
+/*
+================
+Open
+
+Validates identity, compatibility, the exact file set, every size and digest,
+and the projection tree digest. Local inspection may omit the manifest pin;
+deployments pass the sha256 digest from their desired state.
+================
+*/
 func Open(root, expectedManifestDigest string) (Bundle, error) {
 	absoluteRoot, err := filepath.Abs(strings.TrimSpace(root))
 	if err != nil {
@@ -168,6 +198,11 @@ func Open(root, expectedManifestDigest string) (Bundle, error) {
 	}, nil
 }
 
+/*
+================
+validateManifest
+================
+*/
 func validateManifest(manifest Manifest) error {
 	if manifest.Format != ManifestFormat {
 		return fmt.Errorf("unsupported manifest format %q", manifest.Format)
@@ -237,6 +272,11 @@ func validateManifest(manifest Manifest) error {
 	return nil
 }
 
+/*
+================
+validateLabel
+================
+*/
 func validateLabel(name, value string) error {
 	if value == "" || len(value) > 128 || strings.TrimSpace(value) != value {
 		return fmt.Errorf("%s is invalid", name)
@@ -249,6 +289,11 @@ func validateLabel(name, value string) error {
 	return nil
 }
 
+/*
+================
+validateSHA256Digest
+================
+*/
 func validateSHA256Digest(value string) error {
 	const prefix = "sha256:"
 	if !strings.HasPrefix(value, prefix) || len(value) != len(prefix)+sha256.Size*2 {
@@ -264,9 +309,14 @@ func validateSHA256Digest(value string) error {
 	return nil
 }
 
-// ContentDigest returns the deterministic digest of an already path-sorted
-// descriptor set. Length-prefixed fields avoid depending on JSON map order or
-// a language-specific canonical JSON implementation.
+/*
+================
+ContentDigest
+
+Digests an already path-sorted descriptor set. Length-prefixed fields avoid
+depending on JSON map order or a language-specific canonical JSON format.
+================
+*/
 func ContentDigest(files []Descriptor) string {
 	digest := sha256.New()
 	var length [8]byte
@@ -280,17 +330,32 @@ func ContentDigest(files []Descriptor) string {
 	return "sha256:" + hex.EncodeToString(digest.Sum(nil))
 }
 
+/*
+================
+writeFramedString
+================
+*/
 func writeFramedString(writer io.Writer, scratch []byte, value string) {
 	binary.BigEndian.PutUint64(scratch, uint64(len(value)))
 	_, _ = writer.Write(scratch)
 	_, _ = io.WriteString(writer, value)
 }
 
+/*
+================
+digestBytes
+================
+*/
 func digestBytes(contents []byte) string {
 	sum := sha256.Sum256(contents)
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
+/*
+================
+digestRegularFile
+================
+*/
 func digestRegularFile(root *os.Root, filename string, expectedSize int64) (string, int64, error) {
 	file, err := openVerifiedRegularFile(root, filename)
 	if err != nil {
@@ -312,6 +377,11 @@ func digestRegularFile(root *os.Root, filename string, expectedSize int64) (stri
 	return "sha256:" + hex.EncodeToString(digest.Sum(nil)), read, nil
 }
 
+/*
+================
+readBoundedRegularFile
+================
+*/
 func readBoundedRegularFile(root *os.Root, filename string, limit int64) ([]byte, error) {
 	file, err := openVerifiedRegularFile(root, filename)
 	if err != nil {
@@ -335,8 +405,14 @@ func readBoundedRegularFile(root *os.Root, filename string, limit int64) ([]byte
 	return contents, nil
 }
 
-// openVerifiedRegularFile opens a root-relative regular file. os.Root
-// rejects any path, symlinked or not, that resolves outside the root.
+/*
+================
+openVerifiedRegularFile
+
+Opens a regular file relative to the root. os.Root rejects any path,
+symlinked or not, that resolves outside the root.
+================
+*/
 func openVerifiedRegularFile(root *os.Root, filename string) (*os.File, error) {
 	file, err := root.Open(filename)
 	if err != nil {
@@ -354,8 +430,13 @@ func openVerifiedRegularFile(root *os.Root, filename string) (*os.File, error) {
 	return file, nil
 }
 
-// validateExactFileSet walks the root and requires exactly the described
-// files: no symlink, no other file type, nothing undescribed.
+/*
+================
+validateExactFileSet
+
+Requires exactly the described regular files, without links or extra files.
+================
+*/
 func validateExactFileSet(root *os.Root, described map[string]Descriptor) error {
 	actual := make([]string, 0, len(described))
 	err := fs.WalkDir(root.FS(), ".", func(relative string, entry fs.DirEntry, walkErr error) error {
@@ -394,6 +475,11 @@ func validateExactFileSet(root *os.Root, described map[string]Descriptor) error 
 	return nil
 }
 
+/*
+================
+requireJSONEOF
+================
+*/
 func requireJSONEOF(decoder *json.Decoder) error {
 	var trailing any
 	if err := decoder.Decode(&trailing); err == io.EOF {

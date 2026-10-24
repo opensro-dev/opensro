@@ -90,6 +90,21 @@ export function createSkillCooldowns() {
 			...(provisionalUntilMs === undefined ? {} : { provisionalUntilMs })
 		} ];
 	}
+	/*
+ ================
+ recover
+
+ Port-only: shorten confirmed reuse, preserving duration and pending presses.
+ ================
+ */
+	function recover( milliseconds: number, now: number ) {
+		rows = rows.map( row =>
+			row.provisionalUntilMs === undefined && row.startedAtMs + row.durationMs > now ?
+				{ ...row, startedAtMs: Math.max( now - row.durationMs, row.startedAtMs - milliseconds ) } :
+				row
+		);
+	}
+
 	return {
 		/*
 		================
@@ -167,6 +182,20 @@ export function createSkillCooldowns() {
 			rows = next;
 			return changed;
 		},
+		/*
+        ================
+        receiveRecovery
+
+        Port-only Mana Spring recovery is validated before any cooldown changes.
+        ================
+        */
+		receiveRecovery( op: number, p: Uint8Array, now: number ) {
+			if ( op !== 0x3fb8 ) return false;
+			if ( p.length !== 2 || p[0] !== 0xf4 || p[1] !== 1 ) throw Error( "Invalid Mana Spring recovery" );
+			recover( 500, now );
+			return true;
+		},
+		recover,
 		state: () => rows,
 		/*
 		================

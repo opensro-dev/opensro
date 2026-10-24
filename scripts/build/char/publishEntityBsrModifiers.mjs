@@ -9,6 +9,7 @@ including secondary stall booth resources owned by the NPC publisher.
 ===========================================================================
 */
 
+import { CROW_EGG_BSR } from "./crowEgg.mjs";
 import { entityMaterialMetadata } from "./entityMaterialMetadata.mjs";
 import fs from "node:fs";
 import path from "node:path";
@@ -42,7 +43,10 @@ export async function publishEntityBsrModifiers() {
 			Object.entries( manifest.models ).map( ( [key, row] ) => [ key, row, row.bsr ?? `res/${key}` ] );
 		for ( const [, row, bsr] of rows ) {
 			// Owned GLB, not a retail BSR: its builder owns the borrowed chest glow.
-			if ( domain === "itemdrop" && bsr === `res/${PORT_PET_DROP_MODEL}` ) continue;
+			if (
+				domain === "itemdrop" && bsr === `res/${PORT_PET_DROP_MODEL}` ||
+				domain === "npc" && bsr === CROW_EGG_BSR
+			) continue;
 			if ( !cache.has( bsr ) ) {
 				cache.set( bsr, parseCharacterBsr( fs.readFileSync( dataAssetPath( bsr ) ), bsr ) );
 			}

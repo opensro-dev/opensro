@@ -116,9 +116,9 @@ export function fitUiGroup(
 			// The text owner freezes a copy of its clip; viewport identity is geometric.
 			clip: q.clip.every( ( value, axis ) => value === screen[axis] ) ? screen : transform( q.clip ),
 			...(q.run ? { run: scaleTextRun( q.run, scale ) } : {}),
-			// Fractional shrinking drops bitmap strokes with nearest sampling.
-			// Keep native-size glyphs and artwork on their existing sampling path.
-			...(q.run && q.sampling === "nearest" && scale < 1 ? { sampling: "linear" as const } : {}),
+			// Glyphs stay nearest when shrunk: the ui-quads shader area-averages a
+			// nearest quad at any ratio but a whole one, so no stroke drops and
+			// none blurs to a weak linear smear.
 			...(q.mask ? { mask: { ...q.mask, rect: transform( q.mask.rect ) } } : {}),
 			...(textLayout ? { textLayout } : {})
 		};

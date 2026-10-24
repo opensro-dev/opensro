@@ -768,6 +768,34 @@ export function createEntities(
 		*/
 		receive( frame: WireFrame, now = 0 ) {
 			journalNow = now;
+			// Port-only position feedback is journaled independently of the retiring clone.
+			if ( frame.opcode === 0x3fba ) {
+				const p = frame.payload;
+				if ( p.length !== 18 ) throw Error( "Invalid brood wind length" );
+				const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+				const gid = v.getUint32( 0, true ), regionId = v.getUint16( 4, true );
+				const x = v.getFloat32( 6, true ), y = v.getFloat32( 10, true ), z = v.getFloat32( 14, true );
+				if ( gid < 0x08000000 || gid >= 0x0a800000 || !regionId || ![ x, y, z ].every( Number.isFinite ) ) {
+					throw Error( "Invalid brood wind position" );
+				}
+				append( { kind: "pet-crow-effect", source: { regionId, x, y, z } } );
+				return;
+			}
+			if ( frame.opcode === 0x3fbb ) {
+				const p = frame.payload;
+				if ( p.length !== 20 ) throw Error( "Invalid crow effect length" );
+				const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+				const gid = v.getUint32( 0, true ), cue = p[4]!, book = p[5]!, regionId = v.getUint16( 6, true );
+				const x = v.getFloat32( 8, true ), y = v.getFloat32( 12, true ), z = v.getFloat32( 16, true );
+				if (
+					!gid || cue < 1 || cue > 8 || book < 1 || book > 3 || !regionId ||
+					![ x, y, z ].every( Number.isFinite )
+				) {
+					throw Error( "Invalid crow effect position or kind" );
+				}
+				append( { kind: "pet-crow-effect", cue, book, source: { regionId, x, y, z } } );
+				return;
+			}
 			// Port-only Resolve state; exact, bounded packet independent of native animations.
 			if ( frame.opcode === 0x3fb5 ) {
 				const p = frame.payload;

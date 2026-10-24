@@ -8,10 +8,11 @@ Port-only, not native, beta balance (owner 2026-10-14, #bug-reports
 SRO_ALCHEMY_MATERIAL_DROPS_OFF on, no monster drops an alchemy material:
 the grey bags of monster parts (claws, hides) that the beta's raised drop
 rolls spread over every hunting ground. Their native use is the old stone
-chain (break them with a rondo into elements, apply elements to tablets);
-on the beta the stones are bought (SRO_SHOP_EXTRA_GOODS), so a material
-is only shop junk. Quest rewards are not drops and are unchanged. Off,
-every drop rolls exactly as before.
+chain (break them with a rondo into elements, apply elements to tablets).
+A community vote on 2026-10-24 brought the parts back, so the deployment
+default is off (native) and the switch remains for a future balance pass.
+Quest rewards are not drops and are unchanged. Off, every drop rolls
+exactly as before.
 
 An alchemy material is the alchemy family of type IDs 3/3/11/4. v1.150's
 itemdata holds 651 items of it (ITEM_ETC_ARCHEMY_MATERIAL_*). Tablets

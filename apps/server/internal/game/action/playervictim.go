@@ -69,6 +69,7 @@ What the commit did.
 ================
 */
 type playerStruck struct {
+	attacker        uint32
 	impacts, absorb []wire.SkillCastTargetImpact
 	// before is the victim's HP ahead of each impact (a drain's cap).
 	before        []uint32
@@ -156,6 +157,12 @@ landed hits wear its armour and its blocks its shield (593C9F/593CB1).
 func (rt *Runtime) strikePlayerInDoor(s playerStrike) playerStruck {
 	c := s.victim
 	out := playerStruck{owner: s.owner, killer: s.killer.player}
+	if s.killer.monster != nil {
+		out.attacker = s.killer.monster.Gid
+	}
+	if s.killer.player != nil {
+		out.attacker = enterworld.ObjectIDForCharacter(s.killer.player)
+	}
 	hit := abnormal.HitContext{Attack: s.skill.ReplacementPinned && s.skill.Replacement.MatchesExecutionSelector}
 	_, _, remaining, remainingMP := rt.playerKeeperVitals(s.division, c)
 	redirect := rt.effects.DamageToMPPercent(s.division, c.Name)
@@ -269,6 +276,16 @@ observer, victim to the victim alone.
 ================
 */
 func (rt *Runtime) playerStruckFrames(division string, victim *enterworld.Character, struck playerStruck, now int64) (public, private []wire.Frame) {
+	for _, impact := range struck.impacts {
+		if impact.Damage == 0 {
+			continue
+		}
+		public = append(public, rt.tailwindDamage(division, victim, struck.attacker, now)...)
+		if struck.killer != nil {
+			public = append(public, rt.tailwindDamage(division, struck.killer, enterworld.ObjectIDForCharacter(victim), now)...)
+		}
+		break
+	}
 	if struck.mpSpent != 0 {
 		// The redirected MP reaches its owner alone, as a combat-sourced 0x3057.
 		private = append(private, wire.Frame{Opcode: simulation.OpVitalsUpdate,

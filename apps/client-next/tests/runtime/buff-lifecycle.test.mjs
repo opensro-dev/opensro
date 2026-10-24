@@ -20,6 +20,34 @@ const { createCombat } = await import(
 const { buffBoard } = await import( "../../src/engine/foundation/ui/buff-board.ts" );
 const { createPresentation } = await import( "../../src/engine/runtime/presentation/presentation.ts" );
 const u32 = n => [ n & 255, n >>> 8 & 255, n >>> 16 & 255, n >>> 24 ];
+
+test("Tailwind shows independent recipient charges and full-stack readiness", () => {
+	const game = {
+		...fixture().c.state(),
+		localGid: 10,
+		petTailwind: { gid: 10, book: 57, stacks: 10, speedPercent: 30 }
+	};
+	const row = buffBoard( game, 0 ).find( entry => entry.id === "pet-tailwind" );
+	assert.equal(
+		buffBoard( game, 0, new Set(), undefined, false ).some( entry => entry.id === "pet-tailwind" ),
+		false
+	);
+	assert.equal( row?.stack, 10 );
+	assert.equal( row?.ready, true );
+	assert.match( row?.helpText ?? "", /Movement speed \+30%/ );
+	assert.equal(
+		buffBoard( { ...game, petTailwind: { ...game.petTailwind, gid: 11 } }, 0 ).some( entry =>
+			entry.id === "pet-tailwind"
+		),
+		false
+	);
+	assert.equal(
+		buffBoard( { ...game, petTailwind: { ...game.petTailwind, book: 55 } }, 0 ).find( entry =>
+			entry.id === "pet-tailwind"
+		)?.ready,
+		false
+	);
+});
 function fixture() {
 	const events = [], c = createCombat( () => undefined, e => events.push( e ) );
 	const catalog = [ 1, 2, 3 ].map( id => ({

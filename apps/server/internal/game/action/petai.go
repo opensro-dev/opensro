@@ -70,18 +70,21 @@ type petSession struct {
 	public         []wire.Frame
 	// trained is the attack-pet expansion's unsaved combat memory
 	// (pettrained.go): attack counter and running self buffs.
-	counterView [20]byte
+	counterView [22]byte
 	counterSent bool
 	wolf        wolfKitState
 	penguin     penguinRuntime
+	crow        crowKit
 	wolfBook    uint8
 	wolfHits    [2]uint8
 	trained     petTrainedRuntime
 	// bond's spent budget is read by planPetBond and written by
 	// commitPetBond under rt.petMu: concurrent victim hits in one
 	// division share the bear's budget (checklist item 5).
-	bond petBondRuntime
-	roar *petRoarCast
+	bond    petBondRuntime
+	broodAt simulation.Spawn
+	plume   *crowPlumeCast
+	roar    *petRoarCast
 	// combat is the attack pet's BATTLE state (petcombat.go); nil follows.
 	combat *petCombatIntent
 	// others holds kill-settlement frames for other characters (a party's
@@ -164,6 +167,19 @@ func (rt *Runtime) forgetPetSession(division, name string) {
 	}
 	rt.petMu.Unlock()
 	for key, state := range retired {
+		if key.gid == 0 {
+			rt.deps.Update(state.character, "crow-brood-logout", func() bool {
+				if len(state.character.Brood) == 0 {
+					return false
+				}
+				state.character.Brood = nil
+				return true
+			})
+		}
+		rt.clearTailwindSource(key, rt.Now().UnixMilli())
+		for gid := range state.crow.views {
+			rt.publishCrowPrecision(key.division, gid, rt.Now().UnixMilli())
+		}
 		rt.cancelPetCombat(key, state, rt.Now().UnixMilli())
 		rt.wolfHowls.Lock()
 		howl, found := rt.wolfHowls.rows[key]
@@ -239,7 +255,11 @@ advancePetInDivision
 func (rt *Runtime) advancePetInDivision(key petOwnerKey, nowMs int64) (int64, []simulation.Frame, []wire.Frame, []RecipientFrames, []simulation.DivisionFrames, string, *simulation.Tether) {
 	unlock := rt.lockDivision(key.division)
 	defer unlock()
-	frames := rt.advancePenguin(key, nowMs)
+	frames := rt.advanceCrowBrood(key, nowMs)
+	frames = append(frames, rt.advancePenguin(key, nowMs)...)
+	rt.advanceTailwind(key, nowMs)
+	rt.advanceCrowKit(key, nowMs)
+	rt.advanceCrowPlume(key, nowMs)
 	rt.resetWolfExecution(key, nowMs)
 	frames = append(frames, rt.advanceWolfKit(key, nowMs)...)
 	frames = append(frames, rt.advancePetSpirit(key, nowMs)...)
@@ -256,7 +276,7 @@ func (rt *Runtime) advancePetInDivision(key petOwnerKey, nowMs int64) (int64, []
 		var counter wire.Frame
 		rt.deps.Read(key.division, func() { counter = petSkillCounterFrame(state, key.gid) })
 		if len(counter.Payload) > 0 {
-			var view [20]byte
+			var view [22]byte
 			copy(view[:], counter.Payload)
 			if !state.counterSent || view != state.counterView {
 				frames = append(frames, simFrames([]wire.Frame{counter})...)
@@ -405,6 +425,16 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 	// Relocation and summons build new followers; every tick installs the one
 	// planner they all route with.
 	state.follower.SetRoutePlanner(rt.PlanCompanionRoute)
+	if cos.BroodStage == 1 {
+		rt.cancelPetCombat(key, state, nowMs)
+		return state.follower.Stop(nowMs)
+	}
+	if rt.TransportFollowTether && isVehicleCOS(ref.TidWord) {
+		// Port-only (transportfollow.go): the following transport holds
+		// its trader as a parked one does, from where it walks now.
+		state.tether = &simulation.Tether{Anchor: state.follower.Position(nowMs),
+			Range: simulation.TradeTransportTetherRange, Reason: simulation.TetherTradeTransport}
+	}
 	answerStuck = func() []simulation.Frame {
 		return rt.answerPetStuck(key, state, snapshot, cos, ref.TidWord, nowMs)
 	}
@@ -748,6 +778,7 @@ func (rt *Runtime) relocateReturningPet(division string, c *enterworld.Character
 		rt.releasePetFormation(key, state)
 		expireCosPickup(state)
 		state.public = nil
+		state.crow = crowKit{views: state.crow.views}
 		state.generation++
 		state.follower = nil
 		if cos := c.CompanionByGID(key.gid); cos != nil {

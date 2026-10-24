@@ -42,6 +42,7 @@ export const REFRESH_FAMILIES = [
 	"effect",
 	"entity-bsr",
 	"footprint",
+	"fortress-map",
 	"guide",
 	"item-mall",
 	"native-audio",

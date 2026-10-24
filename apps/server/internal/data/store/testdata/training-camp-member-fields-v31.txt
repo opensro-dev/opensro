@@ -1,0 +1,8 @@
+# training-camp-member-fields record fields owned by store schema 31 (persisted_shape_test.go).
+# Never edit after it ships: a new persisted field takes schema 32, its upgrade
+# step and training-camp-member-fields-fields-v32.txt.
+charId
+honorPoints
+joinLevel
+joinedAtMs
+kind

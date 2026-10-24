@@ -14,6 +14,11 @@ import { REGION_SIZE, worldDelta } from "@/engine/foundation/world/world-space";
 import type { EntityState } from "@/engine/contracts/world";
 import type { GameplayState, Pose } from "@/engine/contracts/gameplay";
 
+/*
+================
+MinimapMarker
+================
+*/
 export interface MinimapMarker {
 	readonly x: number;
 	readonly y: number;
@@ -82,7 +87,13 @@ export function minimapEdge(
 	};
 }
 
+/*
+================
+RosterPosition
+================
+*/
 export interface RosterPosition {
+	readonly name: string;
 	readonly kind: "apprenticeship" | "party";
 	readonly regionId: number;
 	readonly x: number;
@@ -108,9 +119,14 @@ export function rosterPositions(
 	entities: readonly EntityState[]
 ): readonly RosterPosition[] {
 	const result: RosterPosition[] = [], war = game?.fortress?.worldId ?? 0x10001;
+	/*
+	================
+	live
+	================
+	*/
 	const live = ( name: string, fallback: RosterPosition ): RosterPosition => {
 		const row = entities.find( e => e.name === name && (e.kind === "player" || e.kind === "local-player") );
-		return row ? { kind: fallback.kind, regionId: row.regionId, x: row.x, y: row.y, z: row.z } : fallback;
+		return row ? { ...fallback, regionId: row.regionId, x: row.x, y: row.y, z: row.z } : fallback;
 	};
 	if ( game?.academy?.member ) {
 		for ( const row of [ ...(game.academy.members ?? []) ].sort( ( a, b ) => a.id - b.id ) ) {
@@ -123,6 +139,7 @@ export function rosterPositions(
 			result.push(
 				live( row.name, {
 					kind: "apprenticeship",
+					name: row.name,
 					regionId: roster.regionId,
 					x: roster.x,
 					y: roster.y,
@@ -136,7 +153,14 @@ export function rosterPositions(
 		const roster = { regionId: row.region, x: row.x, y: row.y, z: row.z, angle: 0 };
 		if ( !minimapSameFloor( local, roster, game ) ) continue;
 		result.push(
-			live( row.name, { kind: "party", regionId: roster.regionId, x: roster.x, y: roster.y, z: roster.z } )
+			live( row.name, {
+				kind: "party",
+				name: row.name,
+				regionId: roster.regionId,
+				x: roster.x,
+				y: roster.y,
+				z: roster.z
+			} )
 		);
 	}
 	return result;

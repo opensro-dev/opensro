@@ -100,6 +100,11 @@ func TestAttackPetKillsOrderedMonsterForItsOwner(t *testing.T) {
 		credited = append(credited, recipient.Name)
 		return nil, true
 	}
+	quested := 0
+	rt.UpdateQuestKill = func(*enterworld.Character, string, uint8) ([]wire.Frame, bool) {
+		quested++
+		return nil, true
+	}
 	if result := rt.HandleCosCommand(testDivision, c, petAttackOrder(petGID, m.Gid)); len(result.Frames) != 0 {
 		t.Fatalf("the order itself answers nothing: %+v", result.Frames)
 	}
@@ -119,6 +124,11 @@ func TestAttackPetKillsOrderedMonsterForItsOwner(t *testing.T) {
 	}
 	if len(credited) != 1 || credited[0] != c.Name {
 		t.Fatalf("the kill credited %v, want the owner %q", credited, c.Name)
+	}
+	// The original raises the quest kill event only for a player's blow: a
+	// pet's fatal hit pays its owner but counts for no quest.
+	if quested != 0 {
+		t.Fatalf("a pet's kill credited %d quest kills, want none", quested)
 	}
 	state := rt.petSessionFor(testDivision, c.Name, petGID)
 	if state == nil || state.combat != nil {

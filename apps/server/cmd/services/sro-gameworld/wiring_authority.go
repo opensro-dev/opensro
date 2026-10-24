@@ -236,6 +236,7 @@ func openAuthorityPlane(
 		CharacterCreationValid: func(character *domain.Character) bool {
 			return enterworld.CharacterCreationValid(character, characterRoster)
 		},
+		CharacterNameAllowed:    textdata.NameFilter.Allowed,
 		ShardID:                 ownedShard.ID,
 		AgentSessionVerifier:    sessionVerifier,
 		PrivateNetwork:          os.Getenv("SRO_GAMEWORLD_PRIVATE_NETWORK") == "1",

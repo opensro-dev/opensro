@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+board.go - in-memory party and mentor matching registries and pagination.
+
+===========================================================================
+*/
 package match
 
 import "sync"
@@ -17,6 +24,11 @@ const PageRows = 12
 // client's own ack writer uses the same no-active-party fallback,
 // sub_80e6b0). The stored count is only the registration's; every page
 // re-reads it live (handlePartyPage).
+/*
+================
+PartyEntry
+================
+*/
 type PartyEntry struct {
 	EntryID     uint32
 	PartyNumber uint32
@@ -37,6 +49,11 @@ type PartyEntry struct {
 // here), dword14 as the student count, dword18+dword1c+1 as the member
 // count "x/8" and dword20 as the honor grade - the camp/honor scalars
 // stay 0 until a training-camp lane holds real state.
+/*
+================
+MentorEntry
+================
+*/
 type MentorEntry struct {
 	EntryID   uint32
 	Kind      uint8
@@ -55,6 +72,11 @@ type MentorEntry struct {
 // boardEntry pairs a registration with its owner key and division so the
 // listing can scope to the requester's division and put the own row
 // first.
+/*
+================
+boardEntry
+================
+*/
 type boardEntry[E any] struct {
 	ownerKey string
 	division string
@@ -65,6 +87,11 @@ type boardEntry[E any] struct {
 // Session-scoped by design - a process reboot clears it, and the e2e
 // asserts exactly that. One registration per character per system
 // (ownerKey = division + ":" + lowercased name, the hub bind-key shape).
+/*
+================
+Board
+================
+*/
 type Board struct {
 	mu     sync.Mutex
 	nextID uint32
@@ -75,11 +102,21 @@ type Board struct {
 // NewBoard returns an empty board. Entry ids are board-unique across
 // both systems and start at 1 (0 is the client's "no registration"
 // snapshot state).
+/*
+================
+NewBoard
+================
+*/
 func NewBoard() *Board {
 	return &Board{nextID: 1}
 }
 
 // allocID hands out the next entry id. Caller holds b.mu.
+/*
+================
+allocID
+================
+*/
 func (b *Board) allocID() uint32 {
 	id := b.nextID
 	b.nextID++
@@ -90,6 +127,11 @@ func (b *Board) allocID() uint32 {
 // assigning the entry id. It refuses (ok=false) when the owner already
 // holds one - the client modifies through 0x73DC instead, and the
 // refusal stays silent because the flag-2 error codes are unpinned.
+/*
+================
+RegisterParty
+================
+*/
 func (b *Board) RegisterParty(division, ownerKey string, entry PartyEntry) (PartyEntry, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -105,6 +147,11 @@ func (b *Board) RegisterParty(division, ownerKey string, entry PartyEntry) (Part
 
 // ModifyParty overwrites the owner's registration in place, keeping its
 // entry id. Refuses when the owner holds none.
+/*
+================
+ModifyParty
+================
+*/
 func (b *Board) ModifyParty(ownerKey string, entry PartyEntry) (PartyEntry, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -120,6 +167,11 @@ func (b *Board) ModifyParty(ownerKey string, entry PartyEntry) (PartyEntry, bool
 
 // DeleteParty removes the owner's registration when entryID names it.
 // Refuses on a miss or a foreign id - only the owner deletes their row.
+/*
+================
+DeleteParty
+================
+*/
 func (b *Board) DeleteParty(ownerKey string, entryID uint32) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -137,6 +189,11 @@ func (b *Board) DeleteParty(ownerKey string, entryID uint32) bool {
 // division's id must NOT resolve, mirroring the page scoping). The
 // owner's exact name is the entry's own MasterName (SERVER-derived at
 // registration, never client-supplied).
+/*
+================
+PartyEntryByID
+================
+*/
 func (b *Board) PartyEntryByID(division string, entryID uint32) (PartyEntry, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -151,6 +208,11 @@ func (b *Board) PartyEntryByID(division string, entryID uint32) (PartyEntry, boo
 // MentorEntryByID resolves one mentor listing by entry id within the
 // requester's division (PartyEntryByID's twin; the owner's exact name
 // is the entry's Requester).
+/*
+================
+MentorEntryByID
+================
+*/
 func (b *Board) MentorEntryByID(division string, entryID uint32) (MentorEntry, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -162,31 +224,54 @@ func (b *Board) MentorEntryByID(division string, entryID uint32) (MentorEntry, b
 	return MentorEntry{}, false
 }
 
-// PartyPage composes one listing page for the requester: the own row
-// first (the client's row-0 own split turns it into the own snapshot),
-// then the division's other rows in registration order, sliced into
-// PageRows pages. page is 1-based; 0 and out-of-range clamp.
+/*
+================
+PartyPage
+
+Puts the requester's current party listing in row 0 of every page. The
+native client shows its own registration in slot 0 on every refresh
+(636CE0), so the row rides each page. Inference: the native server's paging
+is not in hand, so the row's slot is reserved before paging and no other
+listing is lost. Port-only, not native: ownerKey may name the requester's
+party leader (MatchListingOwner); it grants no edit rights.
+================
+*/
 func (b *Board) PartyPage(division, ownerKey string, page uint8) (curPage, pageCount uint8, rows []PartyEntry) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	ordered := make([]PartyEntry, 0, len(b.party))
+	var pinned *PartyEntry
+	others := make([]PartyEntry, 0, len(b.party))
 	for _, existing := range b.party {
-		if existing.division == division && existing.ownerKey == ownerKey {
-			ordered = append(ordered, existing.entry)
-			break
+		if existing.division != division {
+			continue
 		}
-	}
-	for _, existing := range b.party {
-		if existing.division == division && existing.ownerKey != ownerKey {
-			ordered = append(ordered, existing.entry)
+		if existing.ownerKey == ownerKey {
+			entry := existing.entry
+			pinned = &entry
+			continue
 		}
+		others = append(others, existing.entry)
 	}
-	curPage, pageCount, lo, hi := pageBounds(len(ordered), page)
-	return curPage, pageCount, ordered[lo:hi]
+	capacity := PageRows
+	if pinned != nil {
+		capacity--
+	}
+	curPage, pageCount, lo, hi := pageBounds(len(others), page, capacity)
+	rows = make([]PartyEntry, 0, PageRows)
+	if pinned != nil {
+		rows = append(rows, *pinned)
+	}
+	rows = append(rows, others[lo:hi]...)
+	return curPage, pageCount, rows
 }
 
 // RegisterMentor inserts a mentor-match registration for ownerKey,
 // assigning the entry id. Refuses when the owner already holds one.
+/*
+================
+RegisterMentor
+================
+*/
 func (b *Board) RegisterMentor(division, ownerKey string, entry MentorEntry) (MentorEntry, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -202,6 +287,11 @@ func (b *Board) RegisterMentor(division, ownerKey string, entry MentorEntry) (Me
 
 // ModifyMentor overwrites the owner's registration in place, keeping its
 // entry id. Refuses when the owner holds none.
+/*
+================
+ModifyMentor
+================
+*/
 func (b *Board) ModifyMentor(ownerKey string, entry MentorEntry) (MentorEntry, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -216,6 +306,11 @@ func (b *Board) ModifyMentor(ownerKey string, entry MentorEntry) (MentorEntry, b
 }
 
 // DeleteMentor removes the owner's registration when entryID names it.
+/*
+================
+DeleteMentor
+================
+*/
 func (b *Board) DeleteMentor(ownerKey string, entryID uint32) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -233,6 +328,11 @@ func (b *Board) DeleteMentor(ownerKey string, entryID uint32) bool {
 // Leave twin). No frames ride a purge: other clients see the row gone on
 // their next page request, and no removal push is pinned. Reports
 // whether anything was removed.
+/*
+================
+PurgeOwner
+================
+*/
 func (b *Board) PurgeOwner(ownerKey string) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -254,9 +354,13 @@ func (b *Board) PurgeOwner(ownerKey string) bool {
 	return removed
 }
 
-// MentorPage composes one mentor listing page for the requester - the
-// same own-row-first policy as PartyPage (the client's row-0 own split
-// compares the requester name).
+// MentorPage puts the requester's own row first in registration order,
+// then slices that order. Only party matching pins a row on every page.
+/*
+================
+MentorPage
+================
+*/
 func (b *Board) MentorPage(division, ownerKey string, page uint8) (curPage, pageCount uint8, rows []MentorEntry) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -272,15 +376,20 @@ func (b *Board) MentorPage(division, ownerKey string, page uint8) (curPage, page
 			ordered = append(ordered, existing.entry)
 		}
 	}
-	curPage, pageCount, lo, hi := pageBounds(len(ordered), page)
+	curPage, pageCount, lo, hi := pageBounds(len(ordered), page, PageRows)
 	return curPage, pageCount, ordered[lo:hi]
 }
 
 // pageBounds clamps a 1-based page request against total rows and
 // returns the slice window. An empty board answers page 1 of 1 with no
-// rows (the client's empty install clears rows AND the own snapshot).
-func pageBounds(total int, page uint8) (curPage, pageCount uint8, lo, hi int) {
-	pages := (total + PageRows - 1) / PageRows
+// rows. The client keeps any separately owned registration snapshot.
+/*
+================
+pageBounds
+================
+*/
+func pageBounds(total int, page uint8, capacity int) (curPage, pageCount uint8, lo, hi int) {
+	pages := (total + capacity - 1) / capacity
 	if pages < 1 {
 		pages = 1
 	}
@@ -291,8 +400,8 @@ func pageBounds(total int, page uint8) (curPage, pageCount uint8, lo, hi int) {
 	if requested > pages {
 		requested = pages
 	}
-	lo = (requested - 1) * PageRows
-	hi = lo + PageRows
+	lo = (requested - 1) * capacity
+	hi = lo + capacity
 	if hi > total {
 		hi = total
 	}

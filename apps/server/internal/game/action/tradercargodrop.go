@@ -26,6 +26,10 @@ its own death, and its record is deleted (kind-1 release, as on death).
 Inside a town (a region that forbids player combat) the native dismiss
 applies and the goods go offline with the trader.
 
+A reload or reconnect is not a logout: the new session evicts the old
+one and the character carries on, so a replaced close keeps the transport
+and its goods, as a server shutdown does.
+
 Each trader is judged alone: a party member's transport is untouched by
 another member's death or logout. An empty transport is native in every
 case. A server shutdown closes every session, but it is not a player
@@ -46,6 +50,7 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/transport"
 )
 
 // EnvTraderCargoDrop turns the rule on ("on", "1", "true").
@@ -101,15 +106,17 @@ func (rt *Runtime) dropRiddenCargoInDoor(division string, c *enterworld.Characte
 DropDisconnectedCargo
 
 The disconnect case, called by the session-close hook before
-ForgetCharacterSession and never for a server shutdown. A summoned,
-loaded transport outside a town dies where it stands: its goods scatter
-unowned and its record is deleted. Like ForgetCharacterSession, it
-ignores a close from a session that no longer owns the character (a
-relog that replaced it keeps the transport).
+ForgetCharacterSession with the close's cause. A summoned, loaded
+transport outside a town dies where it stands: its goods scatter unowned
+and its record is deleted. A server shutdown and a replaced close (a
+reload or reconnect: the new session evicts the old one before it takes
+the character's admission, so the ownership test below cannot see it)
+drop nothing. Like ForgetCharacterSession, it also ignores a close from
+a session that no longer owns the character.
 ================
 */
-func (rt *Runtime) DropDisconnectedCargo(division, name string, session uint64) {
-	if !rt.TraderCargoDrop {
+func (rt *Runtime) DropDisconnectedCargo(division, name string, session uint64, cause error) {
+	if !rt.TraderCargoDrop || transport.ShutdownClose(cause) || transport.ReplacedClose(cause) {
 		return
 	}
 	unlock := rt.lockDivision(division)

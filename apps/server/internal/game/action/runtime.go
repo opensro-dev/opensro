@@ -57,6 +57,9 @@ type Runtime struct {
 	berserkActors    sync.Map // derived expiry index; character store owns state
 	battleActors     sync.Map // battle-state expiry index (battlestate.go)
 	aggressionActors sync.Map // scheduled counters; character owns aggression entries
+	// instanceWorlds tracks the instanced layers opened on demand
+	// (instance_world.go): the owning lease and deadline per layer.
+	instanceWorlds sync.Map // instanceWorldKey -> trackedInstanceWorld
 	// jobWeeks holds, per division, the last week JobWeekTick handed to the
 	// store (jobrank.go).
 	jobWeeks sync.Map
@@ -64,6 +67,13 @@ type Runtime struct {
 	gmSpeeds sync.Map
 	// GMSetSpeed admits /SETSPEED (port-only, SRO_GM_SETSPEED; off is native).
 	GMSetSpeed bool
+	// FlagWar is the Capture the Flag schedule (native; flagwar.go):
+	// SRO_FLAGWAR_START_UTC and SRO_FLAGWAR_MIN_PLAYERS, wired from env.
+	FlagWar FlagWarSettings
+	// FlagWarMatchStart is installed by the Capture the Flag match
+	// owner; nil until that lane lands (flagwar.go covers the interim).
+	FlagWarMatchStart func(registrants []FlagWarRegistrant) []simulation.DivisionFrames
+	flagWar           flagWarEvent
 	// TeamDeathTownRule sends a team death to the town rule (port-only,
 	// SRO_TEAM_DEATH_REVIVE off; the zero value is native, teamdeath.go).
 	TeamDeathTownRule bool
@@ -77,6 +87,10 @@ type Runtime struct {
 	// instead of tethering it (port-only, SRO_TRANSPORT_FOLLOW; false is
 	// native, transportfollow.go).
 	TransportFollow bool
+	// TransportFollowTether keeps the 100 m tether on a following
+	// transport (port-only, SRO_TRANSPORT_FOLLOW_TETHER; acts only with
+	// TransportFollow on, transportfollow.go).
+	TransportFollowTether bool
 	// JobGoodsTeleport lets a trader with a transport out use town gates,
 	// return scrolls and the reverse return (port-only,
 	// SRO_JOB_GOODS_TELEPORT; false is native, goodsteleport.go).
@@ -192,6 +206,9 @@ type Runtime struct {
 	// gatePulleys maps a gate pulley's RefObjID to its gate's event zone
 	// (ConfigurePortals, fortress_gates.go).
 	gatePulleys map[uint32]uint32
+	// structureUpgrades is the siege structure upgrade table by codename
+	// (ConfigurePortals, fortress_upgrade.go).
+	structureUpgrades structureUpgradeTable
 	// Fortresses is the fortress occupation and war-mode authority
 	// (ConfigurePortals installs it from siegefortress.txt).
 	Fortresses *fortress.Authority
@@ -226,6 +243,9 @@ type Runtime struct {
 	FortressStore     enterworld.FortressStore
 	fortressPersistMu sync.Mutex
 	fortressPersist   fortressPersistence
+	// fortressRoster times the structure rosters (fortress_roster.go).
+	fortressRosterMu sync.Mutex
+	fortressRoster   fortressRosterClock
 
 	// GachaCatalog is the strict v1.150 gachaitemset/gachanpcmap authority.
 	// The composition root installs it before Register admits 0x7338/0x7053.
@@ -251,6 +271,7 @@ type Runtime struct {
 	petSessions map[petOwnerKey]*petSession
 	petShields  petShieldStore
 	wolfHowls   wolfHowlStore
+	tailwinds   tailwindStore
 
 	// Admission precedes game-ready/pet binding; teardown follows this owner.
 	characterAdmissions sync.Map // simulation.WorldKey -> populationAdmission
@@ -388,6 +409,10 @@ type Runtime struct {
 	// MostWantedBountyTransfer pays the bounty from the victim's gold, not
 	// new gold (mostwanted.go; port-only, not native). False mints it.
 	MostWantedBountyTransfer bool
+	// MostWantedStreakNotice tells the killer its progress after every
+	// counted kill (mostwantednotice.go; port-only, not native). False is
+	// the current rule: nothing until a level.
+	MostWantedStreakNotice bool
 
 	// TraderCargoDrop keeps a loaded transport's goods in the world when
 	// its trader dies riding or disconnects in the field
@@ -673,7 +698,7 @@ type Runtime struct {
 	Stalls          *stall.Registry
 	StallCategories map[[4]int64]uint32
 	// NameFilter is the native name filter (AbuseFilter.txt) player-chosen
-	// names pass (namefilter.go); ConfigureNameFilter loads it.
+	// names pass (namefilter.go), shared with character creation at startup.
 	NameFilter *namefilter.Filter
 	// resurrections holds the unanswered resurrection proposals, one per
 	// dead player (resurrection.go).

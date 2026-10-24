@@ -176,3 +176,69 @@ func TestJobMonstersTargetAFollowingTransport(t *testing.T) {
 	}
 	t.Fatal("the following transport is not a companion target")
 }
+
+/*
+================
+TestFollowingTransportKeepsTheTether
+
+With SRO_TRANSPORT_FOLLOW_TETHER on, the following transport tethers its
+trader at the transport's own walking position, 1000 units with the
+native trade-transport reason: past it, a step away is refused and a
+step back is allowed.
+================
+*/
+func TestFollowingTransportKeepsTheTether(t *testing.T) {
+	rt, clock, c := caravanFixture(t)
+	rt.TransportFollow, rt.TransportFollowTether = true, true
+	dismountedTransportApart(rt, c)
+	advanceTransportTicks(rt, clock, 4)
+	tether, held := rt.Worlds.TetherOf(simulation.WorldKey(testDivision, c.Name))
+	if !held || tether.Range != simulation.TradeTransportTetherRange || tether.Reason != simulation.TetherTradeTransport {
+		t.Fatalf("following transport tether = %+v held %v, want the 1000-unit trade tether", tether, held)
+	}
+	// One tick later the anchor is where the transport walked to then.
+	at := rt.cosLiveSpawn(testDivision, c, clock.NowMs())
+	if simulation.WorldDistance2D(tether.Anchor, at) > 10 {
+		t.Fatalf("tether anchor %+v, want the walking transport near %+v", tether.Anchor, at)
+	}
+	far := simulation.Spawn{RegionID: tether.Anchor.RegionID, X: tether.Anchor.X + 1001, Y: tether.Anchor.Y, Z: tether.Anchor.Z}
+	farther, back := far, far
+	farther.X += 5
+	back.X -= 5
+	if !tether.Refuses(far, farther) || tether.Refuses(far, back) {
+		t.Fatal("past 1000 units a step away must be refused and a step back allowed")
+	}
+}
+
+/*
+================
+TestFollowTetherNeedsFollowing
+
+The tether switch alone changes nothing: with following off the transport
+parks and tethers at the parked spot, as natively.
+================
+*/
+func TestFollowTetherNeedsFollowing(t *testing.T) {
+	rt, clock, c := caravanFixture(t)
+	rt.TransportFollowTether = true
+	parked, _ := dismountedTransportApart(rt, c)
+	advanceTransportTicks(rt, clock, 4)
+	tether, held := rt.Worlds.TetherOf(simulation.WorldKey(testDivision, c.Name))
+	if !held || simulation.WorldDistance2D(tether.Anchor, parked) > 0.01 {
+		t.Fatalf("tether = %+v held %v, want the native tether at the parked transport %+v", tether, held, parked)
+	}
+}
+
+/*
+================
+TestTransportFollowTetherFromEnv
+================
+*/
+func TestTransportFollowTetherFromEnv(t *testing.T) {
+	for value, want := range map[string]bool{"": false, "off": false, "on": true, "TRUE": true, "1": true} {
+		t.Setenv(EnvTransportFollowTether, value)
+		if got := TransportFollowTetherFromEnv(); got != want {
+			t.Fatalf("%q: %v, want %v", value, got, want)
+		}
+	}
+}

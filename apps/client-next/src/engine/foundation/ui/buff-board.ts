@@ -15,6 +15,7 @@ import { abnormalBarFraction } from "@/engine/foundation/gameplay/abnormal-snaps
 import type { GameplayState, PetTraining } from "@/engine/contracts/gameplay";
 import type { UiRect } from "@/engine/contracts/ui";
 import { petOwnerStacks, petSkillIcon, petSkillIconUV } from "./pet-skill-icons";
+import { PET_DESIGN } from "./pet-design-data";
 import { effectRemainingMs } from "@/engine/foundation/gameplay/attached-effects";
 import { cosTimerBars } from "@/engine/foundation/gameplay/cos-timer";
 import { paramJobFraction } from "@/engine/foundation/gameplay/param-job";
@@ -32,10 +33,26 @@ suppressed holds board slot serials flagged by the 1 s refresh (6E64A0).
 ================
 */
 export function buffBoard(
-	game: GameplayState,
+	game: Pick<
+		GameplayState,
+		| "localGid"
+		| "buffSlots"
+		| "cosWindows"
+		| "paramJobs"
+		| "countJobs"
+		| "vitals"
+		| "abnormalRecords"
+		| "petTailwind"
+		| "petGuidance"
+		| "petGuidance"
+		| "petTraining"
+		| "skillCatalog"
+		| "skillIndex"
+	>,
 	timeMs: number,
 	suppressed: ReadonlySet<number> = new Set(),
-	ownerPet?: PetTraining
+	ownerPet?: PetTraining,
+	showPetTraining = true
 ) {
 	const primary: Entry[] = [], secondary: Entry[] = [];
 	for ( const slot of game.buffSlots ?? [] ) {
@@ -134,6 +151,51 @@ export function buffBoard(
 			ready: row.ready,
 			fraction: Math.min( 1, row.count / row.maximum )
 		} );
+	}
+	const guidance = game.petGuidance;
+	if ( showPetTraining && guidance && guidance.gid === game.localGid ) {
+		const design = PET_DESIGN.treeSkills.find( row => row.id === guidance.book );
+		if ( design ) {
+			primary.push( {
+				id: "pet-guidance",
+				path: petSkillIcon( design ),
+				uv: petSkillIconUV( design ),
+				label: `Precision: ${guidance.stacks}/5${
+					guidance.stacks === 5 && guidance.book >= 59 ? " - Skill ready" : ""
+				}`,
+				helpText:
+					`Guiding Feathers\nHit ratio +${guidance.hitPercent}%\n${guidance.stacks}/5 stacks\nCrow hits refresh 10 s duration.\n` +
+					(guidance.book >= 59 ?
+						"At 5 stacks, your next successful damaging skill is empowered and consumes Precision." :
+						""),
+				stack: guidance.stacks,
+				ready: guidance.stacks === 5 && guidance.book >= 59,
+				fraction: guidance.stacks / 5
+			} );
+		}
+	}
+	const tailwind = game.petTailwind;
+	if ( showPetTraining && tailwind && tailwind.gid === game.localGid ) {
+		const design = PET_DESIGN.treeSkills.find( row => row.id === tailwind.book );
+		if ( design ) {
+			primary.push( {
+				id: "pet-tailwind",
+				path: petSkillIcon( design ),
+				uv: petSkillIconUV( design ),
+				label: `Tailwind: ${tailwind.stacks}/10${
+					tailwind.stacks === 10 && tailwind.book >= 56 ? " â€” Stun ready" : ""
+				}`,
+				helpText:
+					`Tailwind\nMovement speed +${tailwind.speedPercent}%\n${tailwind.stacks} / 10 stacks\nOne stack every 5 s without dealing or taking damage.\n` +
+					(tailwind.book >= 56 ?
+						"At 10 stacks: your next hit dealt or taken stuns that enemy for 2 s.\n" :
+						"") +
+					"Damage removes all stacks.",
+				stack: tailwind.stacks,
+				ready: tailwind.stacks === 10 && tailwind.book >= 56,
+				fraction: tailwind.stacks / 10
+			} );
+		}
 	}
 	for ( const row of abnormalBuffIcons( game.vitals?.find( v => v.gid === game.localGid )?.abnormal ?? 0 ) ) {
 		const record = game.abnormalRecords?.find( item => item.bit === Number( row.id.slice( 9 ) ) );
