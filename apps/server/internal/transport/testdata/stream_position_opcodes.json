@@ -1,0 +1,5 @@
+{
+	"comment": "Opcodes the stream position counts (#1466). The server counts them as written (stream_ring.go CountsOnStream), the client as drained (network.ts); both tests read this file so the two sets cannot drift.",
+	"uncounted": [0, 1, 2, 3, 4, 5],
+	"counted": [6, 7, 8, 9, 10, 11, 255, 256, 12326, 28781, 65535]
+}
