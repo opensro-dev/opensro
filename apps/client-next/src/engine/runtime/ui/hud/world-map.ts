@@ -41,6 +41,11 @@ import {
 import { createHuntingGuideHud } from "./hunting-guide";
 
 const WORLD_MAP_WIDTH = 652, WORLD_MAP_HEIGHT = 424;
+// Port-only, not native (screens below the native 800x600 minimum): the map
+// window shrinks to the screen, less this margin per side, and keeps the map
+// at native scale for panning; the generic window fit would otherwise draw
+// the whole window, labels included, at a fraction of their size.
+const COMPACT_MAP_MARGIN = 4;
 const ROOT = "/assets/images/Media_extracted/";
 const FRAME = ROOT + "interface/frame/mframe_wnd_", PARTS = frameParts();
 const white = [ 1, 1, 1, 1 ] as const;
@@ -91,6 +96,9 @@ interface MapPaint {
 	w: number;
 	h: number;
 	full: UiRect;
+	// The compact layout's window area (above the quickslots), when that
+	// layout fits windows into it; undefined on the desktop layout.
+	bounds?: UiRect;
 	hover: string | null;
 	hudData:
 		| {
@@ -116,7 +124,7 @@ interface MapPaint {
 	controls: UiControl[];
 	hudCopy: ( key: string ) => string;
 	beginWindow: () => readonly [number, number, number, number];
-	endWindow: ( mark: readonly [number, number, number, number] ) => void;
+	endWindow: ( mark: readonly [number, number, number, number], owner?: string, source?: UiRect ) => void;
 	windowBox: ( title: string, x: number, y: number, width: number, height: number ) => void;
 	authoredButton: ( node: AuthoredControl, x: number, y: number, id: string, label: string ) => void;
 	authoredLabeledButton: MapPaint["authoredButton"];
@@ -364,9 +372,17 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				mapPan = [ 0, 0 ];
 				mapCenter = null;
 			}
-			const mapWidth = mapSmall ? 268 : WORLD_MAP_WIDTH, mapHeight = mapSmall ? 296 : WORLD_MAP_HEIGHT;
-			const mapLeft = Math.min( mapX, Math.max( 0, w - mapWidth ) ),
-				mapTop = Math.min( mapY, Math.max( 0, h - mapHeight ) );
+			const area: UiRect = input.bounds ?? [ 0, 0, w, h ];
+			const mapWidth = Math.min(
+					mapSmall ? 268 : WORLD_MAP_WIDTH,
+					Math.max( 0, area[2] - COMPACT_MAP_MARGIN * 2 )
+				),
+				mapHeight = Math.min(
+					mapSmall ? 296 : WORLD_MAP_HEIGHT,
+					Math.max( 0, area[3] - COMPACT_MAP_MARGIN * 2 )
+				);
+			const mapLeft = Math.max( area[0], Math.min( mapX, area[0] + area[2] - mapWidth ) ),
+				mapTop = Math.max( area[1], Math.min( mapY, area[1] + area[3] - mapHeight ) );
 			mapX = mapLeft;
 			mapY = mapTop;
 			if ( mapPage !== 0 && hover?.startsWith( HUNTING_AREA_PREFIX ) ) hover = null;
@@ -698,14 +714,29 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					);
 				}
 				if ( !mapSmall ) {
-					const node = nodes.GDR_WM_BTN_AUTO_MOVE!,
+					// Anchored to the window's right edge: a compact window is narrower
+					// than the authored 652 and the button must stay inside it.
+					const authored = nodes.GDR_WM_BTN_AUTO_MOVE!,
+						node = mw < WORLD_MAP_WIDTH ?
+							{
+								...authored,
+								rect: [
+									authored.rect[0] - (WORLD_MAP_WIDTH - mw),
+									authored.rect[1],
+									authored.rect[2],
+									authored.rect[3]
+								] as UiRect
+							} :
+							authored,
 						caption = hudCopy(
 							mapFollow ? "UIIT_STT_WORLDMAP_AUTO_MOVE" : "UIIT_STT_WORLDMAP_MANUAL_MOVE"
 						);
 					authoredLabeledButton( node, mx, my, "map-follow", caption );
 				}
 				closeButton( mx + mw - 25, my + 10, panelCloseId( "Map" ) );
-				endWindow( admission );
+				// The page tiles reach past the window through mapClip; the
+				// window rect is what the compact fit must measure.
+				endWindow( admission, "primary", [ mx, my, mw, mh ] );
 			}
 			return hover;
 		},

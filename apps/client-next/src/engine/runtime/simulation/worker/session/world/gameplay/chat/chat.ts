@@ -18,6 +18,8 @@ import { STALL_CHAT_CHANNEL } from "@/engine/foundation/gameplay/stall";
 import { DROP_PLUS_NOTICE_CHANNEL, isServerNoticeChannel } from "@/engine/foundation/gameplay/system-notices";
 import { decodeNoticeLinks, type NoticeLinks } from "@/engine/foundation/gameplay/notice-links";
 import { CHAT_HISTORY_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
+import { NO_JOB_CLASS } from "@/engine/foundation/gameplay/job-guild";
+import { partyActiveJob } from "@/engine/foundation/gameplay/party-matching";
 import { CHAT_ACK_TIMEOUT_MS, uiTuningFrom } from "@/engine/foundation/ui/ui-tuning";
 const CHAT_LINE_LIMIT = 128;
 const CHAT_FEEDBACK_LIMIT = 100;
@@ -132,6 +134,40 @@ export function decodeChatHistory(
 
 /*
 ================
+ownDisplayName
+
+The name this client's own lines arrive under: the job alias while the
+entry's suit is a job suit, the character name otherwise - the same rule
+the entry alias board applies (8675F0: entry suit classify + jobAlias).
+The native broadcast handler (753760) compares a frame's sender name
+with the local player's display name (+0x804, the alias while dressed)
+to recognise its own line; the server stamps that same alias into the
+broadcast, so a suited player's copy only compares equal against it.
+================
+*/
+function ownDisplayName( value: unknown, name: string ): string {
+	const b = value as {
+		localPlayerEntry?: { jobAlias?: unknown; };
+		equipItems?: readonly { slot: number; refObjId: number; }[];
+		refItemSnapshot?: readonly { refObjId: number; typeFlags: number; }[];
+	};
+	const alias = typeof b.localPlayerEntry?.jobAlias === "string" ? b.localPlayerEntry.jobAlias : "";
+	if ( !name || !alias ) return name;
+	const flags = new Map<number, number>();
+	for ( const row of b.refItemSnapshot ?? [] ) {
+		if ( Number.isInteger( row?.refObjId ) && Number.isInteger( row?.typeFlags ) ) {
+			flags.set( row.refObjId, row.typeFlags );
+		}
+	}
+	const job = partyActiveJob( (b.equipItems ?? []).map( row => ({
+		slot: row.slot,
+		typeFlags: flags.get( row.refObjId ) ?? 0
+	}) ) );
+	return job !== NO_JOB_CLASS ? alias : name;
+}
+
+/*
+================
 createChat
 ================
 */
@@ -144,7 +180,8 @@ export function createChat(
 	let lines: readonly ChatLine[] = [],
 		pending: PendingChat | null = null,
 		error: string | null = null,
-		name = "";
+		name = "",
+		displayName = "";
 	let localBlocks: readonly string[] = [];
 	let blocked: readonly string[] = [];
 	let blockPending = false;
@@ -203,6 +240,7 @@ bootstrap
 				error = null;
 			}
 			name = nextName;
+			displayName = ownDisplayName( value, nextName );
 		},
 		/*
 ================
@@ -332,10 +370,11 @@ receive
 			const line = decodeChatBroadcast( p );
 			if ( !line ) return false;
 			const { channel, sender, gid, text, links } = line;
-			if ( channel === CHAT_GLOBAL_CHANNEL && sender === name ) {
+			if ( channel === CHAT_GLOBAL_CHANNEL && sender === displayName ) {
 				// Native receipts retain the request's channel. The beta server
-				// sends this authoritative echo first, so the receipt must not
-				// invent a second, differently colored line.
+				// sends this authoritative echo first (under the display name -
+				// the alias while suited, which 753760 compares at +0x804), so
+				// the receipt must not invent a second, differently colored line.
 				const outgoing = pending !== null && [ 1, 3 ].includes( pending.channel ) && pending.text === text;
 				if ( outgoing ) {
 					if ( pending!.echoed ) return true;
@@ -347,7 +386,7 @@ receive
 			// 752800 filters named incoming channels 1..5 and 11 before any presentation.
 			if (
 				!chatIsBlocked( localBlocks, channel, sender || senderName ) && (channel !== 2 || whispers) &&
-				gid !== localGid && (!sender || sender !== name)
+				gid !== localGid && (!sender || sender !== displayName)
 			) {
 				// Port-only: a drop/plus notice's player and item (notice-links.ts).
 				const item = links?.body ? noticeItem( links.body ) : undefined,
@@ -403,6 +442,7 @@ clear
 			pending = null;
 			error = null;
 			name = "";
+			displayName = "";
 		}
 	};
 }

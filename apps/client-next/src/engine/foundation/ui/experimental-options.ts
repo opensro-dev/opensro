@@ -116,6 +116,11 @@ export interface ExperimentalOptions {
 	// turned off (the owner's choice, 2026-10-15); off is the original,
 	// where a drop on a tab does nothing.
 	readonly dropOnBagTab: boolean;
+	// Port-only, not native: Ctrl+click, right-click or double-click a bag
+	// item stages it into the open exchange, as a drop on the table does;
+	// the original stages by drag and drop only. On unless turned off (the
+	// owner's choice, 2026-10-24); off is the original, drag-only staging.
+	readonly exchangeClickShortcuts: boolean;
 	// Port-only, not native: in the chat log, a drop or plus notice's player
 	// name links to a whisper and its item name shows the item's tooltip
 	// (foundation/gameplay/notice-links.ts). On unless turned off (the
@@ -137,6 +142,11 @@ export interface ExperimentalOptions {
 	// vectors without re-reading the target (CProjectileTrace_Process 8D8580,
 	// CProjectile_Bezier_Process 879650). Off unless turned on.
 	readonly homingProjectiles: boolean;
+	// Port-only, not native (owner 2026-10-24): the summoned trade transport
+	// drinks a transport HP potion at the auto-potion HP percentage
+	// (transport-auto-potion.ts). The original watches only the player
+	// (70C550). Off unless turned on.
+	readonly transportAutoPotion: boolean;
 	// Port-only, not native: left-clicking the attack pet's mini panel
 	// (CIFPetMiniInfo 6B3460 / 6B3760) or a companion's status portrait
 	// (CIFCOSStatus 6A9BC0) selects the companion and toggles its window
@@ -258,7 +268,7 @@ experimentalOptions
 
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, greyDisabledTabs, jobKillNotices, dropPlusNotices,
-plusSevenNotices, fitWindowLabels, dropOnBagTab, noticeLinks, shortNotices, confirmGuildBan,
+plusSevenNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, shortNotices, confirmGuildBan,
 petClickOpensWindow, smartPetPickup, touchInspect and dungeonCharacterPvs, which only an explicit false turns off.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
 explicitly, and are read only while petPickupFilter is on.
@@ -301,11 +311,13 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		dungeonCharacterPvs: record.dungeonCharacterPvs !== false,
 		fitWindowLabels: record.fitWindowLabels !== false,
 		dropOnBagTab: record.dropOnBagTab !== false,
+		exchangeClickShortcuts: record.exchangeClickShortcuts !== false,
 		noticeLinks: record.noticeLinks !== false,
 		shortNotices: record.shortNotices !== false,
 		attackPetTraining: enabled( "attackPetTraining" ),
 		confirmGuildBan: record.confirmGuildBan !== false,
 		homingProjectiles: enabled( "homingProjectiles" ),
+		transportAutoPotion: enabled( "transportAutoPotion" ),
 		petClickOpensWindow: record.petClickOpensWindow !== false,
 		smartPetPickup: record.smartPetPickup !== false,
 		petPickupFilter: enabled( "petPickupFilter" ),

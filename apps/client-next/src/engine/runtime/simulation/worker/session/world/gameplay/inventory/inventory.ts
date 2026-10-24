@@ -2132,8 +2132,40 @@ receive
 				if ( p.length !== 6 || v.getUint32( 2, true ) < 1 || v.getUint32( 2, true ) > 100000000 ) {
 					throw Error( "Invalid gold drop result" );
 				}
-			} else {
+			} else if ( p[1] === 4 || p[1] === 5 || p[1] === 0x0d ) {
+				// 759A30 types 4, 5 and 0xD are the exchange table's answers;
+				// exchangeReceive folds them while the window is open. A late
+				// one after the window closed moves nothing in the bag - the
+				// exchange swap on the success opcode is the only bag mutation
+				// - so it stays unclaimed rather than forcing a resync.
 				return false;
+			} else if ( p[1] === 0x0b || p[1] === 0x0c || p[1] === 0x20 || p[1] === 0x21 ) {
+				// The warehouse gold answers (STORAGE_GOLD_WITHDRAW/DEPOSIT,
+				// 0x20/0x21 on the guild wire): the moved amount lives only
+				// in the armed pending, which storageSettle claims. A late
+				// one with no pending carries nothing this client can apply
+				// and never touches the bag - the room gold is read again
+				// when the warehouse re-opens - so it stays unclaimed
+				// rather than forcing a resync.
+				return false;
+			} else if ( p[1] === undefined ) {
+				// A success byte with no result type is not a complete
+				// result; like every other truncated frame it changes
+				// nothing and claims nothing.
+				return false;
+			} else {
+				// A success result no arm can apply: the server granted or
+				// moved something this client cannot account for, so the bag
+				// it renders no longer provably matches the server's (B-11:
+				// the slot stays occupied server-side, invisible here, and
+				// later pickups refuse as full against visibly free slots).
+				// Never let it evaporate: declare the inventory desynced,
+				// the state the timeout lane already uses - frames are set
+				// aside and sends refuse until the bootstrap that rebuilds
+				// the bag resynchronizes it.
+				timedOut = true;
+				timedOutRequest = "unappliable 0xB06D result type " + p[1];
+				return true;
 			}
 			slots = next;
 			bindingMoves.push( ...committedMoves );

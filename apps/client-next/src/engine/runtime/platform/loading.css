@@ -547,8 +547,10 @@ The same uniform scale as loadingScreenQuads keeps both owners aligned.
 
 /*
 Port-only, owner-approved compact loading footer. mission-loading.ts reserves
-120 UI pixels and places Now Loading 64 pixels above the bottom. The status
-occupies its own full-width row below it instead of shrinking beside it.
+150 UI pixels: the gauge frame, then Now Loading ending 85 pixels above the
+bottom. The status takes the strip below it (12..80 pixels from the bottom,
+at most one label row and three detail rows), so wrapped detail can never
+climb into the Now Loading art.
 */
 @media (width < 800px), (height < 600px) {
 	.sro-boot-loading[data-native="true"] {
@@ -581,6 +583,8 @@ occupies its own full-width row below it instead of shrinking beside it.
 	   second and must not make the panel jump. */
 	.sro-boot-loading__detail {
 		min-height: 2.8em;
+		max-height: 3.6em;
+		overflow: hidden;
 		overflow-wrap: anywhere;
 		white-space: normal;
 	}

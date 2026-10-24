@@ -62,6 +62,8 @@ const OFF = Object.freeze( {
 	fitWindowLabels: true,
 	// On by default (owner 2026-10-15): a drop on a bag tab moves the item there.
 	dropOnBagTab: true,
+	// On by default (owner 2026-10-24): click shortcuts stage into an exchange.
+	exchangeClickShortcuts: true,
 	// On by default (owner 2026-10-15): a notice's player and item are links.
 	noticeLinks: true,
 	// On by default (owner 2026-10-15): the notice banner shows for 5 s.
@@ -71,6 +73,8 @@ const OFF = Object.freeze( {
 	confirmGuildBan: true,
 	// Off by default: straight projectiles keep their launch-captured endpoint (8D8580).
 	homingProjectiles: false,
+	// Off by default: the automatic potion watches only the player (70C550).
+	transportAutoPotion: false,
 	// On by default (owner 2026-10-18, BUG-086): clicking CIFPetMiniInfo opens CIFCos;
 	// off restores the native no-op click (6B3760).
 	petClickOpensWindow: true,
@@ -584,6 +588,17 @@ test("drop on bag tabs is on unless explicitly false and stays out of the worker
 	assert.equal( experimentalOptions( { dropOnBagTab: false } ).dropOnBagTab, false );
 	assert.equal( "dropOnBagTab" in experimentalVideo( experimentalOptions( {} ) ), false );
 	assert.equal( "dropOnBagTab" in experimentalGameplay( experimentalOptions( {} ) ), false );
+});
+
+test("exchange click shortcuts are on unless explicitly false and stay out of the worker's slices", () => {
+	for (
+		const value of [ undefined, null, {}, { exchangeClickShortcuts: 1 }, { exchangeClickShortcuts: "false" } ]
+	) {
+		assert.equal( experimentalOptions( value ).exchangeClickShortcuts, true );
+	}
+	assert.equal( experimentalOptions( { exchangeClickShortcuts: false } ).exchangeClickShortcuts, false );
+	assert.equal( "exchangeClickShortcuts" in experimentalVideo( experimentalOptions( {} ) ), false );
+	assert.equal( "exchangeClickShortcuts" in experimentalGameplay( experimentalOptions( {} ) ), false );
 });
 
 test("smooth camera is on unless explicitly false and reaches the renderer's slice", () => {

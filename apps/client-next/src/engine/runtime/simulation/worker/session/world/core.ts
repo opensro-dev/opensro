@@ -37,6 +37,9 @@ import type { GameplayCommand } from "@/engine/contracts/gameplay";
 
 // PLAYER_ATTACK_LEVEL_NOTICE is 693F1A's ShowSystemNotification(4, 0x16).
 const PLAYER_ATTACK_LEVEL_NOTICE = 0x16;
+// MOUNT_LIFE_DEAD is the life-state byte (+0x263) of a dead object; 775B50
+// leaves a dead COS's mover alone.
+const MOUNT_LIFE_DEAD = 2;
 /*
 ================
 createWorldCore
@@ -343,16 +346,31 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 		if ( selectedMode !== null ) loadingMode = selectedMode;
 		if ( frame.opcode === 0x30e3 || frame.opcode === 0xb2f5 ) {
 			const v = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength );
-			const e = entities.read( v.getUint32( frame.opcode === 0x30e3 ? 16 : 0, true ) );
-			if ( e?.kind === "local-player" ) {
+			const gid = v.getUint32( frame.opcode === 0x30e3 ? 16 : 0, true ), e = entities.read( gid );
+			// 775B50 halts the named object's active mover, so a correction
+			// naming the mount the local player rides (a stunned transport,
+			// cosabnormal StopMove) stops the rider as surely as one naming
+			// the rider. A dead mount (+0x263 == 2, 777B60 case 0) is skipped.
+			const local = e?.kind === "local-player" ? e : entities.read( localGid );
+			const ridden = e !== undefined && e !== local && local?.kind === "local-player" &&
+				local.mountedOn === gid && e.appearanceState?.[0] !== MOUNT_LIFE_DEAD;
+			if ( e?.kind === "local-player" || ridden ) {
+				const rider = local!;
 				// A rider's position belongs to its mount (0x85E000): entities
 				// applied the correction to the mount's row, and the rider's own
 				// row still holds where it mounted. Correct from the mover.
-				const mover = e.mountedOn ? entities.read( e.mountedOn ) : undefined;
+				const mover = rider.mountedOn ? entities.read( rider.mountedOn ) : undefined;
 				gameplay.correct(
 					mover ?
-						{ ...e, regionId: mover.regionId, x: mover.x, y: mover.y, z: mover.z, heading: mover.heading } :
-						e,
+						{
+							...rider,
+							regionId: mover.regionId,
+							x: mover.x,
+							y: mover.y,
+							z: mover.z,
+							heading: mover.heading
+						} :
+						rider,
 					now
 				);
 			}
@@ -459,6 +477,12 @@ UI and quickslot commands. A skill aims at the newest selection intent
 				(entities.read( command.gid )?.kind === "player" || entities.read( command.gid )?.kind === "cos") &&
 				!petAttackAdmitted( command.gid, command.alt ?? false )
 			) {
+				return;
+			}
+			// /GetPos writes only the entity owner's body visual byte; the
+			// gameplay lane never sees the command.
+			if ( command.kind === "debug-body-visual" ) {
+				entities.debugBodyVisual( gameplay.localIdentity() );
 				return;
 			}
 			const itemType = command.kind === "item-use" ? gameplay.itemUseType( command.slot ) : undefined;

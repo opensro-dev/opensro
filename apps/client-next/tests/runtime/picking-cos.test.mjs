@@ -121,6 +121,50 @@ test("renderer picking selects nearest submitted entity and invalidates on remov
 	assert.equal( c.pick( [ ray ], 0 ), null );
 	c.dispose( gpu, null );
 });
+test("the nearest box wins even when its mesh is off the ray and a farther mesh is on it", () => {
+	// Thread 1562057167144493107 item 7: a thief in melee with a transport
+	// could not be clicked - the transport took the target. 692680 keeps
+	// the nearest aggregate-box hit; it has no mesh test. Two overlapping
+	// models, both boxes on the center ray: the front one's triangles sit
+	// at its box edge (a swing pose), the farther one's body is centered.
+	const c = createCharacters();
+	const model = ( name, minX ) =>
+		c.model( name, {
+			nodes: [],
+			clips: [],
+			images: [],
+			aggregateBox: [ -1, -1, 0, 1, 1, 1 ],
+			primitives: [ {
+				name: "p",
+				node: 0,
+				joints: [],
+				inverseBind: new Float32Array(),
+				image: -1,
+				geometry: {
+					positions: Float32Array.of( minX, -.2, .5, minX + .4, -.2, .5, minX + .2, .2, .5 ),
+					indices: Uint32Array.of( 0, 1, 2 ),
+					transform: identity()
+				}
+			} ]
+		}, [] );
+	model( "front", .6 );
+	model( "back", -.2 );
+	const actor = ( gid, modelName, z ) => ({
+		gid,
+		model: modelName,
+		pose: { regionId: 257, x: 0, y: 0, z, yaw: 0 },
+		clip: "",
+		time: 0,
+		loop: false,
+		scale: 1
+	});
+	const gpu = { upload: () => ({}), updateInstances: draw => draw, updateBones() {}, release() {} };
+	c.actors( [ actor( 2, "front", 0 ), actor( 9, "back", .2 ) ] );
+	c.prepare( gpu, { upload: () => ({}), release() {} }, 257 );
+	const ray = pickRay( identity(), .5, .5 );
+	assert.equal( defined( c.pick( [ ray ], 0 ) ).gid, 2, "the front box keeps the click (692680 has no mesh test)" );
+	c.dispose( gpu, null );
+});
 function record( band, status = 0 ) {
 	const parts = [],
 		u8 = n => parts.push( Buffer.from( [ n ] ) ),
@@ -205,10 +249,12 @@ test("dock selection uses the aggregate box in roster order, including empty sil
 		2,
 		"retail world picking accepts the model box outside triangle silhouettes"
 	);
-	// A box-only winner yields to a confirmed rival: here a drop sharing the spot.
+	// Native 692680 has no mesh test: the nearest box stands even where the
+	// posed triangles are off the ray, so an empty character box hides a drop
+	// sharing the spot (thread 1562057167144493107 item 7).
 	c.actors( [ actor( 2 ), { ...actor( 4 ), groundItem: true } ] );
 	c.prepare( gpu, { upload: () => ({}), release() {} }, 257 );
-	assert.equal( defined( c.pick( [ near ], 0 ) ).gid, 4, "an empty character box does not hide a drop" );
+	assert.equal( defined( c.pick( [ near ], 0 ) ).gid, 2, "the nearest box wins natively, mesh or not" );
 	c.actors( [ actor( 2 ), actor( 3 ) ] );
 	c.prepare( gpu, { upload: () => ({}), release() {} }, 257 );
 	assert.equal( c.pickFrontend( near, [ 3, 2 ] ), 3 );

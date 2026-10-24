@@ -24,7 +24,7 @@ test( "compact native loading status fits below the artwork and restores desktop
 <div id="root"><div class="sro-boot-loading" data-native="true" data-active="true">
 <div class="sro-boot-loading__inner"><div class="sro-boot-loading__copy">
 <div class="sro-boot-loading__label">Loading world assets</div>
-<div class="sro-boot-loading__detail">Loading a very long scene resource path that must not increase the grid's intrinsic width or push status outside the screen</div>
+<div class="sro-boot-loading__detail">Loading world assets · images · 538.7 MB read · 4106 files ready · waiting for server · a very long scene resource path that must not increase the grid's intrinsic width or push status outside the screen</div>
 </div></div></div></div>`
 		} ) );
 	await page.goto( CLIENT_NEXT_BASE_URL );
@@ -53,7 +53,9 @@ test( "compact native loading status fits below the artwork and restores desktop
 			return {
 				rows,
 				width: document.documentElement.scrollWidth,
-				art: loadingScreenQuads( innerWidth, innerHeight, "scene.png", .5 ).map( q => q.rect )
+				label: loadingScreenQuads( innerWidth, innerHeight, "scene.png", .5 ).find( q =>
+					q.texture.endsWith( "/nowloading.png" )
+				)?.rect
 			};
 		} );
 		if ( width === 1024 ) {
@@ -65,7 +67,7 @@ test( "compact native loading status fits below the artwork and restores desktop
 		assert.ok( result.rows[0].font >= 13 && result.rows[1].font >= 12 );
 		for ( const { rect: [x, y, w, h] } of result.rows ) {
 			assert.ok( x >= 0 && x + w <= width );
-			assert.ok( y >= result.art[4][1] + result.art[4][3] && y + h <= height );
+			assert.ok( y >= result.label[1] + result.label[3] && y + h <= height );
 		}
 	}
 } );

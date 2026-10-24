@@ -10,7 +10,7 @@ Revoking takes two clicks on the same button. Nothing here sees the
 console's secret: the page talks to /api/invites on this console.
 ===========================================================================
 */
-import { madeStatus } from "./invite-made.js";
+import { createRequest, madeStatus } from "./invite-made.js";
 import { escape } from "./model.js";
 import { postJSON, requestJSON } from "./request.js";
 
@@ -131,13 +131,17 @@ byID( "create" ).addEventListener( "submit", async event => {
 	button.disabled = true;
 	setStatus( "Making keys..." );
 	try {
-		const result = await postJSON( "/api/invites", {
-			count: Number( byID( "count" ).value ),
-			maxUses: Number( byID( "uses" ).value ),
-			expiresInDays: Number( byID( "days" ).value ),
-			note: byID( "note" ).value.trim(),
-			...(member ? { discordUserId: member, discordName: byID( "discord-name" ).value.trim() } : {})
-		} );
+		const result = await postJSON(
+			"/api/invites",
+			createRequest( {
+				count: byID( "count" ).value,
+				maxUses: byID( "uses" ).value,
+				expiresInDays: byID( "days" ).value,
+				note: byID( "note" ).value,
+				discordUserId: member,
+				discordName: byID( "discord-name" ).value
+			} )
+		);
 		showMade( result, member );
 		setStatus( madeStatus( result ) );
 		await load();
@@ -146,6 +150,13 @@ byID( "create" ).addEventListener( "submit", async event => {
 	} finally {
 		button.disabled = false;
 	}
+} );
+
+// A grant is one key: How many is locked at 1 while a member is named.
+byID( "discord-id" ).addEventListener( "input", () => {
+	const count = byID( "count" ), granting = byID( "discord-id" ).value.trim() !== "";
+	count.disabled = granting;
+	if ( granting ) count.value = "1";
 } );
 
 byID( "made" ).addEventListener( "click", async event => {
