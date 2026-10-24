@@ -44,6 +44,12 @@ function socketHarness( t ) {
 		readyState = 1;
 		bufferedAmount = 0;
 		sent = [];
+		/** @type {any} */
+		onmessage = null;
+		/** @type {any} */
+		onclose = null;
+		/** @type {any} */
+		onerror = null;
 		constructor() {
 			sockets.push( this );
 		}
@@ -57,7 +63,13 @@ function socketHarness( t ) {
 	}
 	const original = Object.getOwnPropertyDescriptor( globalThis, "WebSocket" );
 	Object.defineProperty( globalThis, "WebSocket", { value: Socket, configurable: true, writable: true } );
-	t.after( () => Object.defineProperty( globalThis, "WebSocket", original ) );
+	t.after( () => {
+		if ( original ) {
+			Object.defineProperty( globalThis, "WebSocket", original );
+		} else {
+			Reflect.deleteProperty( globalThis, "WebSocket" );
+		}
+	} );
 	return sockets;
 }
 
