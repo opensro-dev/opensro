@@ -68,6 +68,11 @@ type MonsterRef struct {
 	// (4CECF0).
 	CostRepair, CostRevive uint32
 	CanRevive              bool
+	// UpgradeGold, UpgradeGuildPoints and BuildMinutes are a structure's
+	// characterdata columns 110 to 112: what upgrading it costs the guild
+	// member and the guild, and how long after it was made it must stand
+	// before it may be upgraded again (the fortress structure upgrade).
+	UpgradeGold, UpgradeGuildPoints, BuildMinutes uint32
 	// TypeID4 is characterdata column 12. The client classification gates
 	// ignore it, but the GameServer spawn routine reads the full TypeID word:
 	// monster TID4 4 (the MOB_QT_* quest monsters) never becomes a party
@@ -202,6 +207,11 @@ const (
 	colCanRevive  = 23
 	colCostRepair = 27
 	colCostRevive = 28
+
+	// A structure's upgrade gold, guild points and build minutes.
+	colUpgradeGold        = 110
+	colUpgradeGuildPoints = 111
+	colBuildMinutes       = 112
 )
 
 /*
@@ -407,12 +417,17 @@ func parseMonsterRefTables(textdataDir string, tables [][][]string) map[uint32]M
 				displayName = strings.TrimSpace(cols[colCodename])
 			}
 			codename := strings.TrimSpace(cols[colCodename])
-			var costRepair, costRevive uint32
+			var costRepair, costRevive, upgradeGold, upgradeGuildPoints, buildMinutes uint32
 			var canRevive bool
 			if structure && len(cols) > colCostRevive {
 				costRepair, _ = columnUint32(cols, colCostRepair)
 				costRevive, _ = columnUint32(cols, colCostRevive)
 				canRevive = strings.TrimSpace(cols[colCanRevive]) == "1"
+			}
+			if structure && len(cols) > colBuildMinutes {
+				upgradeGold, _ = columnUint32(cols, colUpgradeGold)
+				upgradeGuildPoints, _ = columnUint32(cols, colUpgradeGuildPoints)
+				buildMinutes, _ = columnUint32(cols, colBuildMinutes)
 			}
 			refs[refObjID] = MonsterRef{
 				RefObjID:           refObjID,
@@ -421,6 +436,9 @@ func parseMonsterRefTables(textdataDir string, tables [][][]string) map[uint32]M
 				CostRepair:         costRepair,
 				CostRevive:         costRevive,
 				CanRevive:          canRevive,
+				UpgradeGold:        upgradeGold,
+				UpgradeGuildPoints: upgradeGuildPoints,
+				BuildMinutes:       buildMinutes,
 				TypeID4:            uint8(tid4),
 				Codename:           codename,
 				OriginalCodename:   strings.TrimSpace(cols[4]),

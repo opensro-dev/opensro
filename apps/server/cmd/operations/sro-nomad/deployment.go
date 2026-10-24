@@ -31,7 +31,6 @@ import (
 	"opensro.online/server/internal/config/shardsettings"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/gamedata"
 	"opensro.online/server/internal/security/auth"
 	"opensro.online/server/internal/transport"
@@ -141,6 +140,10 @@ func resolveDeployment(
 	options commandOptions,
 	requirePrerequisites bool,
 ) (*deployment, error) {
+	portOnly := portOnlySettingsFromEnv()
+	if err := portOnly.validate(); err != nil {
+		return nil, err
+	}
 	taskUID, taskGID, err := resolveTaskOwner(options.TaskUser)
 	if err != nil {
 		return nil, err
@@ -297,11 +300,6 @@ func resolveDeployment(
 	if err != nil {
 		return nil, err
 	}
-	// A bad band list is refused here, before any Nomad mutation, as the
-	// GameWorld refuses it at boot (wiring_levelcap.go).
-	if _, err := progression.ParseGrowthBands(shardsettings.Lookup(progression.EnvBetaGrowthBands).Value(os.Getenv)); err != nil {
-		return nil, err
-	}
 	for _, warning := range warnings {
 		fmt.Printf("Bug reports: %s\n", warning)
 	}
@@ -413,7 +411,7 @@ func resolveDeployment(
 		GMCharacters:          gmCharacters,
 		BetaMastery:           betaMastery,
 		StackSizes:            stackSizes.String(),
-		PortOnly:              portOnlySettingsFromEnv(),
+		PortOnly:              portOnly,
 		TransportCert:         transportCert,
 		TransportKey:          transportKey,
 		TransportTLSID:        transportTLSID,

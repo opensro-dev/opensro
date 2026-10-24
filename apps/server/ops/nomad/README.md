@@ -122,6 +122,25 @@ never writable by a gameplay request. This prevents an ordinary redeploy from
 silently dropping locally configured GM grants. GM prefixes remain actual
 character names; the prefix alone grants no permissions.
 
+### Beta settings
+
+`sro-nomad` captures the deployment's `SRO_BETA_*` environment values and
+passes them as GameWorld job variables. Unset or blank values use the
+[central setting table](../../internal/config/shardsettings/shardsettings.go)'s
+deployment defaults. Deployment resolution rejects invalid beta values before
+loading prerequisites or changing Nomad state, and reports all invalid values
+together. Growth rates are validated even when `SRO_BETA_GROWTH=off`.
+
+Switches accept `on`, `off`, `1`, `0`, `true` and `false`, ignoring case and
+surrounding whitespace. Growth rates and drop mixes use the gameplay parsers'
+bounds and syntax. `SRO_BETA_SILK=1` means one silk per hour; `on` uses the
+existing default hourly amount. Forwarded values retain their spelling after
+surrounding whitespace is removed.
+
+Beta mastery remains a separate persistent policy: `<state-dir>/beta-mastery.txt`
+contains `on` or `off`; an absent file uses the existing deployment default.
+The `SRO_BETA_MASTERY` environment variable does not override this file.
+
 ### Bug reports
 
 In-game bug reports (the bug button and `/bug` in chat) are off unless the

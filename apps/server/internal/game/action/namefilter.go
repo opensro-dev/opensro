@@ -5,41 +5,13 @@ namefilter.go - the GameWorld's copy of the native name filter
 
 Player-chosen names (the job alias, and pet names) pass
 CGame_IsValidCharacterName (v1.188 4184A0), whose list is AbuseFilter.txt
-(game/namefilter). The GameWorld loads the projection's copy at boot.
+(game/namefilter). The GameWorld shares its loaded textdata filter with
+character creation before admitting requests.
 
 ===========================================================================
 */
 
 package action
-
-import (
-	"fmt"
-	"os"
-	"path/filepath"
-
-	"opensro.online/server/internal/game/namefilter"
-)
-
-/*
-================
-ConfigureNameFilter
-
-A missing or malformed filter fails construction: names would otherwise
-pass unchecked.
-================
-*/
-func (rt *Runtime) ConfigureNameFilter(textdataDir string) error {
-	data, err := os.ReadFile(filepath.Join(textdataDir, namefilter.File))
-	if err != nil {
-		return fmt.Errorf("name filter: %w", err)
-	}
-	filter, err := namefilter.Parse(data)
-	if err != nil {
-		return fmt.Errorf("name filter: %w", err)
-	}
-	rt.NameFilter = filter
-	return nil
-}
 
 /*
 ================

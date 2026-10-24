@@ -62,6 +62,10 @@ type FortressStructureRecord struct {
 	OwnerGuildID  int64  `json:"ownerGuildId,omitempty"`
 	HP            uint32 `json:"hp"`
 	State         uint16 `json:"state,omitempty"`
+	// MadeAtMs is when the structure on the zone was made by an upgrade (or
+	// a construction), so its build minutes hold across a restart. Zero is
+	// a structure never raised, made long ago.
+	MadeAtMs int64 `json:"madeAtMs,omitempty"`
 }
 
 /*

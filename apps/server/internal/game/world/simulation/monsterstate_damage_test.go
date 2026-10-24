@@ -228,6 +228,76 @@ func TestAreaCandidatesSkipStructures(t *testing.T) {
 
 /*
 ================
+TestCombatCandidatesStayInTheirWorld
+
+A world-keyed candidate scan reads only its own layer's population: the
+same pose in the default world, in layer 1 and in layer 2 of one
+instanced definition answers three different single-candidate scans,
+and the sphere convenience scan stays the default world. This is the
+property a caster-world fallback relies on; before it, a chain query
+issued outside the default world silently scanned the default world.
+================
+*/
+func TestCombatCandidatesStayInTheirWorld(t *testing.T) {
+	s := NewMonsterState(monster.Template{})
+	s.StartDivision("iso")
+	defaultLease, ok := s.PopulationLease("iso", instance.Pack(1, 1))
+	if !ok {
+		t.Fatal("the default world has no population")
+	}
+	layerOne, openedOne := s.OpenInstanceLayer("iso", 10)
+	layerTwo, openedTwo := s.OpenInstanceLayer("iso", 10)
+	if !openedOne || !openedTwo || layerOne.ID == layerTwo.ID {
+		t.Fatalf("instance layers did not open: %v %v", layerOne, layerTwo)
+	}
+	center := Spawn{RegionID: 0x62AA, X: 100, Y: 20, Z: 100}
+	place := func(lease instance.Lease, gid uint32) *divisionMonsterState {
+		div := &divisionMonsterState{
+			lease:     lease,
+			instances: newMonsterStorage(nil),
+			movers:    newMoverStorage(nil),
+			byRegion:  make(map[uint16][]uint32),
+		}
+		div.instances.archive = s.archive
+		div.instances.set(gid, monster.Instance{
+			Gid:       gid,
+			CurrentHP: 100,
+			Ref:       monster.MonsterRef{RefObjID: 1933, MaxHP: 100},
+			Spawn:     monster.SpawnPoint{RegionID: center.RegionID, X: center.X, Y: center.Y, Z: center.Z},
+		})
+		div.movers.set(gid, monster.MoverState{Pose: monster.Pose{RegionID: center.RegionID, X: center.X, Y: center.Y, Z: center.Z}})
+		s.worldPopulations[populationKey{division: "iso", lease: lease}] = div
+		return div
+	}
+	// populationForLease prefers the division's own state for the default
+	// lease, so the hand-built default population must be installed there
+	// too (the construction combatCandidateBenchmarkState uses).
+	s.divs["iso"] = place(defaultLease, monster.GidBase+1)
+	place(layerOne, monster.GidBase+2)
+	place(layerTwo, monster.GidBase+3)
+
+	now := s.CurrentTimeMillis()
+	for _, tc := range []struct {
+		name  string
+		world instance.ID
+		want  uint32
+	}{
+		{"default world", defaultLease.ID, monster.GidBase + 1},
+		{"layer 1", layerOne.ID, monster.GidBase + 2},
+		{"layer 2", layerTwo.ID, monster.GidBase + 3},
+	} {
+		got := s.CombatCandidatesInWorld("iso", tc.world, center, 20, now, true)
+		if len(got) != 1 || got[0].Gid != tc.want {
+			t.Fatalf("%s candidates %+v, want only gid %d", tc.name, got, tc.want)
+		}
+	}
+	if got := s.CombatCandidatesInSphere("iso", center, 20, now); len(got) != 1 || got[0].Gid != monster.GidBase+1 {
+		t.Fatalf("sphere candidates %+v, want only the default world's gid", got)
+	}
+}
+
+/*
+================
 combatCandidateBenchmarkState
 
 Builds a realistic continent population of count monsters spread across 20x20

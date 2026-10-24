@@ -11,7 +11,9 @@ package action
 import (
 	"math"
 	"opensro.online/server/internal/game/abnormal"
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
@@ -82,6 +84,47 @@ func TestFatalActorDoesNotStealRewardOrDropOwnership(t *testing.T) {
 	}
 	if len(result.Recipients) != 1 || result.Recipients[0].CharacterID != peer.ID {
 		t.Fatalf("missing private contributor delivery: %+v", result.Recipients)
+	}
+}
+
+/*
+================
+TestQuestKillCreditsTheFatalHitPlayer
+
+The original raises the quest kill event for the player whose blow killed
+the monster. The contributor who dealt 99 of 100 keeps the loot, but the
+quest kill and the quest drop roll belong to the killing blow.
+================
+*/
+func TestQuestKillCreditsTheFatalHitPlayer(t *testing.T) {
+	rt, _, actor, target := newCombatTestRuntime(t, 100)
+	peer := *actor
+	peer.ID, peer.Name = 4, "contributor"
+	deps := rt.deps.(*enterworld.Deps)
+	source := fixtureCharacters(deps.Characters)
+	source[testDivision] = append(source[testDivision], &peer)
+	gid := enterworld.ObjectIDForCharacter(&peer)
+	if hits := rt.Monsters.ApplyDamageSequence(testDivision, target.Gid, 100,
+		[]simulation.MonsterDamagePlan{{GID: target.Gid, Damage: 99, CreditGID: gid}}); len(hits) != 1 || hits[0].Fatal {
+		t.Fatal("preparation failed")
+	}
+	installSmallGoldRef(rt)
+	rt.DropRoll = goldOnlyMonsterDropRoll(0, 0)
+	var quested, rolled []string
+	rt.UpdateQuestKill = func(c *enterworld.Character, _ string, _ uint8) ([]wire.Frame, bool) {
+		quested = append(quested, c.Name)
+		return nil, true
+	}
+	rt.QuestMonsterDrops = func(c *enterworld.Character, _ string, _ uint8, _ func() (uint32, error)) []inventory.ItemAmount {
+		rolled = append(rolled, c.Name)
+		return nil
+	}
+	rt.HandleTargetInteract(testDivision, actor, wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: target.Gid}.Encode())
+	if len(quested) != 1 || quested[0] != actor.Name || len(rolled) != 1 || rolled[0] != actor.Name {
+		t.Fatalf("quest kill %v, quest drop roll %v, want only the killing blow %q", quested, rolled, actor.Name)
+	}
+	if drops := rt.Ground.All(testDivision); len(drops) != 1 || drops[0].OwnerJID != gid {
+		t.Fatalf("the loot left the top contributor: %+v", drops)
 	}
 }
 
@@ -181,5 +224,38 @@ func TestPartyShareFloor(t *testing.T) {
 	}
 	if math.Abs(float64(floored[0])-bonus/2) > 1e-6 || floored[1] != native[1] {
 		t.Fatalf("floored factors %v, native %v", floored, native)
+	}
+}
+
+/*
+================
+TestPetBurstKillCreditsNoQuest
+
+The port-only pet bursts (pet shield, wolf hunt) land their hit in the
+owner's name through the credited-hit lane. Their fatal hit is still a
+companion kill: no quest kill, where the owner's own blow credits one.
+================
+*/
+func TestPetBurstKillCreditsNoQuest(t *testing.T) {
+	for _, companion := range []bool{false, true} {
+		rt, clock, c, mob := newCombatTestRuntime(t, 1)
+		quested := 0
+		rt.UpdateQuestKill = func(*enterworld.Character, string, uint8) ([]wire.Frame, bool) {
+			quested++
+			return nil, true
+		}
+		row := rt.deps.SkillData().(staticSkillSource)[2]
+		snapshot := rt.characterSnapshot(testDivision, c)
+		commit := rt.commitCreditedMonsterHit
+		if companion {
+			commit = rt.commitCompanionCreditedMonsterHit
+		}
+		hit, ok := commit(testDivision, c, snapshot, row, mob, combat.Result{Damage: 50, ResultFlags: 1}, "test-kill", clock.NowMs())
+		if !ok || !hit.impacts[0].Fatal {
+			t.Fatalf("companion=%v: the kill did not commit", companion)
+		}
+		if want := map[bool]int{false: 1, true: 0}[companion]; quested != want {
+			t.Fatalf("companion=%v: %d quest kills, want %d", companion, quested, want)
+		}
 	}
 }

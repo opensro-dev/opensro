@@ -265,8 +265,9 @@ func monsterRelativeLevelBonus(playerLevel, monsterLevel int64) float32 {
 ==================
 applyMonsterKillInsideDoor
 
-Applies one recipient's kill products - progression, quest kill credit and
-the planned ground drops - without opening a door of its own. The caller,
+Applies one recipient's kill products - progression and the planned ground
+drops - without opening a door of its own. Quest credit has its own owner
+(creditQuestKillInsideDoor). The caller,
 settleMonsterInsideDoor, already holds the fatal hit's single UpdateMany
 door, so bow/crossbow debit, progression and the ground rows land in the
 same character+ground transaction and no later tick owns the reward.
@@ -287,13 +288,6 @@ func (rt *Runtime) applyMonsterKillInsideDoor(
 		frames, progressionChanged = rt.UpdateExperience(character, exp, skillExp, defeatGid)
 		changed = progressionChanged
 	}
-	if rt.UpdateQuestKill != nil && rt.Monsters != nil {
-		if target, ok := rt.Monsters.Get(divisionID, defeatGid); ok && target.CurrentHP == 0 {
-			questFrames, questChanged := rt.UpdateQuestKill(character, target.Ref.Codename, target.Rarity())
-			frames = append(frames, questFrames...)
-			changed = changed || questChanged
-		}
-	}
 	for _, plannedDrop := range plannedDrops {
 		spawned := rt.addMonsterGround(divisionID, defeatGid, plannedDrop)
 		if spawned.Gid == 0 {
@@ -303,6 +297,40 @@ func (rt *Runtime) applyMonsterKillInsideDoor(
 		changed = true
 	}
 	return frames, added, changed
+}
+
+/*
+==================
+creditQuestKillInsideDoor
+
+The original raises the quest kill event for the player whose blow killed
+the monster, not for the reward representative: that player's kill
+missions count it and its gather missions roll their quest drops, owned by
+it. The caller holds the fatal hit's door, as for applyMonsterKillInsideDoor.
+==================
+*/
+func (rt *Runtime) creditQuestKillInsideDoor(
+	divisionID string,
+	killer *enterworld.Character,
+	target monster.Instance,
+	pose monster.Pose,
+	now int64,
+) (frames []wire.Frame, added []grounditem.Item) {
+	if killer == nil || killer.DeletePending {
+		return nil, nil
+	}
+	if rt.UpdateQuestKill != nil && rt.Monsters != nil {
+		if live, ok := rt.Monsters.Get(divisionID, target.Gid); ok && live.CurrentHP == 0 {
+			questFrames, _ := rt.UpdateQuestKill(killer, live.Ref.Codename, live.Rarity())
+			frames = append(frames, questFrames...)
+		}
+	}
+	for _, plannedDrop := range rt.planQuestKillDrops(killer, target, pose, now) {
+		if spawned := rt.addMonsterGround(divisionID, target.Gid, plannedDrop); spawned.Gid != 0 {
+			added = append(added, spawned)
+		}
+	}
+	return frames, added
 }
 
 func (rt *Runtime) queueMonsterDefeat(divisionID string, gid uint32, dueAtMs int64) {

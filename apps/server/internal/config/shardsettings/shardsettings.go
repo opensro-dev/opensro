@@ -39,6 +39,27 @@ const (
 
 /*
 ================
+ValueValidation
+
+The gameplay-owned parser the deployer applies to an effective job value.
+These beta controls are port-only, not native. Validation never chooses a
+default or changes the setting's value.
+================
+*/
+type ValueValidation int
+
+const (
+	ValueUnchecked ValueValidation = iota
+	ValueSwitch
+	ValueBetaGrowth
+	ValueBetaDropMix
+	ValueBetaSilk
+	// ValueBetaGrowthBands is progression.ParseGrowthBands's band list.
+	ValueBetaGrowthBands
+)
+
+/*
+================
 Setting
 
 One shard setting. Catalogue marks the settings sro-catalogue reads (what
@@ -46,19 +67,21 @@ the site publishes depends on them); the rest are server only.
 ================
 */
 type Setting struct {
-	Env       string
-	NomadVar  string
-	Default   string
-	Catalogue bool
-	Source    Source
+	Env        string
+	NomadVar   string
+	Default    string
+	Catalogue  bool
+	Source     Source
+	Validation ValueValidation
 }
 
 // Settings is the table, in the job file's order.
 var Settings = []Setting{
 	{Env: "SRO_ATTACK_PET_EXPANSION", NomadVar: "attack_pet_expansion", Default: "off"},
-	{Env: "SRO_BETA_STARTER_KIT", NomadVar: "beta_starter_kit", Default: "on"},
-	{Env: "SRO_BETA_PLAYER_MAP", NomadVar: "beta_player_map", Default: "on"},
-	{Env: "SRO_BETA_MASTERY", NomadVar: "beta_mastery", Default: "on", Catalogue: true, Source: Built},
+	{Env: "SRO_BETA_STARTER_KIT", NomadVar: "beta_starter_kit", Default: "on", Validation: ValueSwitch},
+	{Env: "SRO_BETA_PLAYER_MAP", NomadVar: "beta_player_map", Default: "on", Validation: ValueSwitch},
+	{Env: "SRO_BETA_MASTERY", NomadVar: "beta_mastery", Default: "on", Catalogue: true, Source: Built,
+		Validation: ValueSwitch},
 	// Port-only, not native: the 110 cap (owner, 2026-10-24: on for the next
 	// release; "off" keeps the native 90).
 	{Env: "SRO_LEVEL_CAP", NomadVar: "level_cap", Default: "110", Catalogue: true},
@@ -71,7 +94,7 @@ var Settings = []Setting{
 	// many times as often (1 is native; 2 to 20). Server only: the site's drop
 	// lists describe the native rule.
 	{Env: "SRO_PHARAOH_TOMB_GEAR_RATE", NomadVar: "pharaoh_tomb_gear_rate", Default: "1"},
-	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "50"},
+	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "50", Validation: ValueBetaSilk},
 	// Grab and growth pets at four fifths of their run speed (#320): never
 	// deployed, so the deployment default stays native.
 	{Env: "SRO_PET_PACING", NomadVar: "pet_pacing", Default: "off"},
@@ -154,13 +177,15 @@ var Settings = []Setting{
 	// default stays native ("off", ceiling 250).
 	{Env: "SRO_ALCHEMY_MAX_PLUS", NomadVar: "alchemy_max_plus", Default: "off", Catalogue: true},
 	{Env: "SRO_TEAM_DEATH_REVIVE", NomadVar: "team_death_revive", Default: "on"},
-	{Env: "SRO_BETA_GROWTH", NomadVar: "beta_growth", Default: "on", Catalogue: true},
+	{Env: "SRO_BETA_GROWTH", NomadVar: "beta_growth", Default: "on", Catalogue: true, Validation: ValueSwitch},
 	// Owner, 2026-10-24: 1-59 at the level-1 pace, 60-89 at 20x, 90-110 at
 	// 10x; unset keeps every level at the pace.
-	{Env: "SRO_BETA_GROWTH_BANDS", NomadVar: "beta_growth_bands", Default: "1-59:pace,60-89:20,90-110:10", Catalogue: true},
-	{Env: "SRO_BETA_SKILL_EXP_RATE", NomadVar: "beta_skill_exp_rate", Default: "100", Catalogue: true},
-	{Env: "SRO_BETA_DROP_RATE", NomadVar: "beta_drop_rate", Default: "20", Catalogue: true},
-	{Env: "SRO_BETA_DROP_MIX", NomadVar: "beta_drop_mix", Default: "on", Catalogue: true},
+	{Env: "SRO_BETA_GROWTH_BANDS", NomadVar: "beta_growth_bands", Default: "1-59:pace,60-89:20,90-110:10",
+		Catalogue: true, Validation: ValueBetaGrowthBands},
+	{Env: "SRO_BETA_SKILL_EXP_RATE", NomadVar: "beta_skill_exp_rate", Default: "100", Catalogue: true,
+		Validation: ValueBetaGrowth},
+	{Env: "SRO_BETA_DROP_RATE", NomadVar: "beta_drop_rate", Default: "20", Catalogue: true, Validation: ValueBetaGrowth},
+	{Env: "SRO_BETA_DROP_MIX", NomadVar: "beta_drop_mix", Default: "on", Catalogue: true, Validation: ValueBetaDropMix},
 	{Env: "SRO_SHOP_EXTRA_GOODS", NomadVar: "shop_extra_goods", Default: "on", Catalogue: true},
 	{Env: "SRO_MALL_EXTRA_GOODS", NomadVar: "mall_extra_goods", Default: "on"},
 	{Env: "SRO_ALCHEMY_NO_ASSIMILATION", NomadVar: "alchemy_no_assimilation", Default: "on"},
@@ -182,13 +207,14 @@ var Settings = []Setting{
 	{Env: "SRO_ELIXIR_DROPS_OFF", NomadVar: "elixir_drops_off", Default: "on", Catalogue: true},
 	// Owner, 2026-10-14: alchemy materials no longer drop; "off" is native.
 	{Env: "SRO_ALCHEMY_MATERIAL_DROPS_OFF", NomadVar: "alchemy_material_drops_off", Default: "on", Catalogue: true},
-	{Env: "SRO_BETA_DROP_CAP", NomadVar: "beta_drop_cap", Default: "16", Catalogue: true},
+	{Env: "SRO_BETA_DROP_CAP", NomadVar: "beta_drop_cap", Default: "16", Catalogue: true, Validation: ValueBetaGrowth},
 	// Owner, 2026-10-19: gold falls at 100 times retail (was 250).
-	{Env: "SRO_BETA_GOLD_RATE", NomadVar: "beta_gold_rate", Default: "100", Catalogue: true},
+	{Env: "SRO_BETA_GOLD_RATE", NomadVar: "beta_gold_rate", Default: "100", Catalogue: true, Validation: ValueBetaGrowth},
 	{Env: "SRO_INSTANT_INVENTORY_EXPANSION", NomadVar: "instant_inventory_expansion", Default: "on"},
-	{Env: "SRO_BETA_RARE_RATE", NomadVar: "beta_rare_rate", Default: "5", Catalogue: true},
-	{Env: "SRO_BETA_SHOP_ONLY_DEGREE9", NomadVar: "beta_shop_only_degree9", Default: "on", Catalogue: true},
-	{Env: "SRO_BETA_SEAL_RATES", NomadVar: "beta_seal_rates", Default: "on", Catalogue: true},
+	{Env: "SRO_BETA_RARE_RATE", NomadVar: "beta_rare_rate", Default: "5", Catalogue: true, Validation: ValueBetaGrowth},
+	{Env: "SRO_BETA_SHOP_ONLY_DEGREE9", NomadVar: "beta_shop_only_degree9", Default: "on", Catalogue: true,
+		Validation: ValueSwitch},
+	{Env: "SRO_BETA_SEAL_RATES", NomadVar: "beta_seal_rates", Default: "on", Catalogue: true, Validation: ValueSwitch},
 	// Owner, 2026-10-14 (narrowed 2026-10-18): degree-9 Sun gear only from
 	// unique monsters; superseded 2026-10-20 for drops (Sun drops at the
 	// rate below; this gate now defaults off and only an operator's explicit
@@ -205,7 +231,7 @@ var Settings = []Setting{
 	// Owner, 2026-10-18: respawning unique nests draw over 45-90 minutes
 	// instead of the operator backup's 20-36 minute rows. "off" keeps the
 	// authored row.
-	{Env: "SRO_BETA_UNIQUE_RESPAWN", NomadVar: "beta_unique_respawn", Default: "on"},
+	{Env: "SRO_BETA_UNIQUE_RESPAWN", NomadVar: "beta_unique_respawn", Default: "on", Validation: ValueSwitch},
 	// Owner, 2026-10-13 (F7): Lucky Powder stacks to 500; 2026-10-14:
 	// arrows and bolts stack to 2500. "off" is native. The catalogue
 	// publishes the caps the shard runs, so it reads the setting too.

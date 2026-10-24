@@ -39,6 +39,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"unicode/utf16"
@@ -56,11 +58,37 @@ const (
 	typeSubstring = "2"
 )
 
-// Filter is one parsed name filter.
+/*
+================
+Filter
+
+One immutable parsed name filter, shared by character creation and gameplay.
+================
+*/
 type Filter struct {
 	allowed    map[rune]bool
 	substrings []string
 	wholeWords map[string]bool
+}
+
+/*
+================
+Load
+
+A missing or malformed projection filter fails construction before any
+player-chosen name can pass unchecked.
+================
+*/
+func Load(textdataDir string) (*Filter, error) {
+	data, err := os.ReadFile(filepath.Join(textdataDir, File))
+	if err != nil {
+		return nil, fmt.Errorf("name filter: %w", err)
+	}
+	filter, err := Parse(data)
+	if err != nil {
+		return nil, fmt.Errorf("name filter: %w", err)
+	}
+	return filter, nil
 }
 
 /*
