@@ -290,6 +290,37 @@ func TestGrantStackSkipsRowsAtTheCap(t *testing.T) {
 	}
 }
 
+// The B-11 report shape: capacity 45, seven equipment rows, bag slots
+// 13..44 occupied except the holes {19, 29, 30, 36}. A fresh-slot grant
+// must land in the lowest hole and never refuse as full while a hole
+// remains; only the genuinely full bag earns ErrCodeStorageFull.
+func TestGrantStackFindsTheHolesInAReportShapedBag(t *testing.T) {
+	holes := map[uint8]bool{19: true, 29: true, 30: true, 36: true}
+	rows := make([]Item, 0, 35)
+	for slot := uint8(0); slot < 7; slot++ {
+		rows = append(rows, sword(slot))
+	}
+	for slot := uint8(13); slot < 45; slot++ {
+		if !holes[slot] {
+			rows = append(rows, sword(slot))
+		}
+	}
+	inv := New(rows, 45)
+
+	for _, want := range []uint8{19, 29, 30, 36} {
+		grant, fault := inv.GrantStack(sword(0), 1)
+		if fault != nil {
+			t.Fatalf("grant refused with holes open: %v", fault)
+		}
+		if grant.DestSlot != want {
+			t.Fatalf("dest slot = %d, want the lowest hole %d", grant.DestSlot, want)
+		}
+	}
+	if _, fault := inv.GrantStack(sword(0), 1); fault == nil || fault.Code != wire.ErrCodeStorageFull {
+		t.Fatalf("full bag grant = %v, want ErrCodeStorageFull", fault)
+	}
+}
+
 func TestGrantStackOverCapMergeLeavesTheGroundRemainder(t *testing.T) {
 	inv := New([]Item{potionWithCount(14, 45)}, domain.DefaultInventorySize)
 
