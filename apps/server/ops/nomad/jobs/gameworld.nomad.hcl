@@ -683,11 +683,12 @@ variable "elixir_drops_off" {
 
 # alchemy_material_drops_off keeps every alchemy material (type 3/3/11/4,
 # the grey bags of monster parts) out of monster drops (port-only, not
-# native, beta balance; owner 2026-10-14). "off" is the original game's
-# drops.
+# native, beta balance; owner 2026-10-14). A community vote on 2026-10-24
+# brought the parts back, so the default is "off", the original game's
+# drops; "on" restores the beta removal.
 variable "alchemy_material_drops_off" {
   type    = string
-  default = "on"
+  default = "off"
 }
 
 variable "beta_drop_cap" {

@@ -18,6 +18,7 @@ import (
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
 	"reflect"
+	"sort"
 	"sync"
 	"testing"
 )
@@ -145,5 +146,144 @@ func TestAlchemyCompoundConcurrentCommitAddsNewRowsOnce(t *testing.T) {
 	rt.HandleAlchemyProcess(testDivision, c, alchemy.OpCompound, []byte{1})
 	if len(c.MissionInventory) != len(before.MissionInventory) {
 		t.Fatal("cancel rolled back committed rows")
+	}
+}
+
+/*
+================
+TestAlchemyPartsLoopThroughHandler
+
+The shipped tables, the whole parts loop through the action handler: a
+monster part breaks into its four elements (compound mode 1 with the
+void rondo), then a degree-eight-or-nine tablet fuses its four required
+elements into its stone (compound mode 2). This is the loop the
+community vote of 2026-10-24 brought back.
+================
+*/
+func TestAlchemyPartsLoopThroughHandler(t *testing.T) {
+	// As above: a clean checkout skips, the full check runs it.
+	licensed.RequireGameData(t)
+	dir := gamedatatest.TextdataDir(t)
+	catalog, err := alchemy.LoadCatalog(dir, enterworld.NewTextdataItems(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt, c := alchemyRuntime()
+	rt.Alchemy = catalog
+
+	names := make([]string, 0, len(catalog.Items))
+	for name := range catalog.Items {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	// Step 1: pick a published material whose four authored outputs
+	// all resolve to published elements.
+	var material alchemy.Reference
+	for _, name := range names {
+		ref := catalog.Items[name]
+		if ref.Flags&0xfffe != 0x25ec {
+			continue
+		}
+		ok := true
+		for k := 0; k < 4; k++ {
+			product, known := catalog.Items[ref.Descriptions[k]]
+			if !known || product.Flags&0xfffe != 0x2dec || ref.Params[k] == 0 {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			material = ref
+			break
+		}
+	}
+	if material.ID == 0 {
+		t.Fatal("no published material breaks into four elements")
+	}
+	rondo := catalog.Items["ITEM_ETC_ARCHEMY_RONDO_01"]
+	if rondo.ID == 0 {
+		t.Fatal("missing ITEM_ETC_ARCHEMY_RONDO_01")
+	}
+	c.MissionInventory = []enterworld.InventoryRow{
+		{Slot: 13, RefObjID: material.ID, Codename: material.Name, TypeFlags: material.Flags, StackCount: 10},
+		{Slot: 14, RefObjID: rondo.ID, Codename: rondo.Name, TypeFlags: rondo.Flags, StackCount: 5000},
+	}
+	frames := rt.HandleAlchemyProcess(testDivision, c, alchemy.OpCompound, []byte{2, 1, 10, 0, 0, 0, 1, 13})
+	last := frames[len(frames)-1]
+	if last.Opcode != alchemy.OpCompoundResult || last.Payload[0] != 1 {
+		t.Fatal("material break refused", last)
+	}
+	rows := map[string]int64{}
+	for _, row := range c.MissionInventory {
+		rows[row.Codename] = row.StackCount
+	}
+	for k := 0; k < 4; k++ {
+		if rows[material.Descriptions[k]] != int64(material.Params[k])*10 {
+			t.Fatal("element missing", material.Descriptions[k], rows)
+		}
+	}
+	if rows[material.Name] != 0 {
+		t.Fatal("material survived", rows)
+	}
+	if want := int64(5000 - (material.Price/1000+1)*10); rows[rondo.Name] != want {
+		t.Fatal("rondo residue", rows[rondo.Name], want)
+	}
+
+	// Step 2: pick a degree-eight-or-nine tablet whose four required
+	// elements and stone product are all published.
+	var tablet alchemy.Reference
+	for _, name := range names {
+		ref := catalog.Items[name]
+		if ref.Flags&0xfffe != 0x1dec || (ref.Degree() != 8 && ref.Degree() != 9) {
+			continue
+		}
+		ok := true
+		for k := 0; k < 4; k++ {
+			element, known := catalog.Items[ref.Descriptions[k]]
+			if !known || element.Flags&0xfffe != 0x2dec || ref.Params[k] == 0 {
+				ok = false
+				break
+			}
+		}
+		stone, known := catalog.Items[ref.Descriptions[4]]
+		if !ok || !known || (stone.Flags&0xfffe != 0x0dec && stone.Flags&0xfffe != 0x15ec && stone.Flags&0xfffe != 0x3dec) {
+			continue
+		}
+		tablet = ref
+		break
+	}
+	if tablet.ID == 0 {
+		t.Fatal("no degree-eight-or-nine tablet fuses into a stone")
+	}
+	c.MissionInventory = []enterworld.InventoryRow{
+		{Slot: 13, RefObjID: tablet.ID, Codename: tablet.Name, TypeFlags: tablet.Flags, StackCount: 1},
+	}
+	for k := 0; k < 4; k++ {
+		element := catalog.Items[tablet.Descriptions[k]]
+		c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{
+			Slot: int64(14 + k), RefObjID: element.ID, Codename: element.Name,
+			TypeFlags: element.Flags, StackCount: int64(tablet.Params[k]),
+		})
+	}
+	frames = rt.HandleAlchemyProcess(testDivision, c, alchemy.OpCompound, []byte{2, 2, 1, 0, 0, 0, 5, 13, 14, 15, 16, 17})
+	last = frames[len(frames)-1]
+	if last.Opcode != alchemy.OpCompoundResult || last.Payload[0] != 1 {
+		t.Fatal("tablet fuse refused", tablet.Name, last)
+	}
+	rows = map[string]int64{}
+	for _, row := range c.MissionInventory {
+		rows[row.Codename] = row.StackCount
+	}
+	if rows[tablet.Descriptions[4]] != 1 {
+		t.Fatal("stone missing", tablet.Descriptions[4], rows)
+	}
+	if rows[tablet.Name] != 0 {
+		t.Fatal("tablet survived", rows)
+	}
+	for k := 0; k < 4; k++ {
+		if rows[tablet.Descriptions[k]] != 0 {
+			t.Fatal("element survived", tablet.Descriptions[k], rows)
+		}
 	}
 }
