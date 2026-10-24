@@ -1481,6 +1481,9 @@ export function createUi(
 		goldDialog: false | "drop" | "deposit" | "withdraw" | "exchange" = false;
 	let groundDrop: { slot: number; refObjId: number; } | null = null;
 	let splitStack: { slot: number; refObjId: number; quantity: number; } | null = null, splitAmount = "1";
+	// Port-only, not native: the exchange count box, the divide box's twin
+	// for how much of a stack goes on the table (stageExchangeItem).
+	let exchangeCount: { slot: number; refObjId: number; quantity: number; } | null = null, exchangeAmount = "1";
 	let shopOpenRequest: { gid: number; tab: number; revision: number; } | null = null;
 	let shopWarning: { selection: MerchantSelection; name: string; quick: boolean; } | null = null;
 	// CIFCosBag's sell-all (cos-trade-info.ts): the confirm box, then the run
@@ -2340,6 +2343,34 @@ export function createUi(
 		if ( !command ) return false;
 		sendGameplay( command );
 		inventorySlot = -1;
+		return true;
+	}
+	/*
+	================
+	stageExchangeItem
+
+	Port-only, not native: the one path every staging gesture takes, the
+	native drop included, so the refusals the server and the worker apply
+	to a drop (exchangeRequest, the server's offerable checks) apply to all
+	of them. A single item goes on the table at once; a stack first asks
+	how much, in the divide box's twin, and a partial offer moves the
+	rest to the bag's first free slot before the put, the put naming only
+	a slot (0x706D [4][slot]) as the native register does. Returns whether
+	the gesture was consumed.
+	================
+	*/
+	function stageExchangeItem( item: NonNullable<UiView["gameplay"]>["inventory"][number] ): boolean {
+		const game = view?.gameplay;
+		if ( !game?.exchange?.open || game.exchange.ownLocked || game.inventoryPending ) return false;
+		if ( splitStack || exchangeCount ) return false;
+		if ( item.quantity <= 1 ) {
+			sendGameplay( { kind: "exchange-put", slot: item.slot } );
+			return true;
+		}
+		exchangeCount = { slot: item.slot, refObjId: item.refObjId, quantity: item.quantity };
+		exchangeAmount = String( item.quantity );
+		focusAndSelect( "exchange-count", 0, exchangeAmount.length );
+		dirty = true;
 		return true;
 	}
 	/*
@@ -3380,6 +3411,47 @@ export function createUi(
 				) sendGameplay( { kind: "inventory-move", source: item.slot, destination, quantity } );
 			}
 			splitStack = null;
+			focus = null;
+			dirty = true;
+			return;
+		}
+		if ( exchangeCount ) {
+			if ( id === "submit" ) id = "exchange-count-confirm";
+			if ( ![ "exchange-count-confirm", "exchange-count-cancel" ].includes( id ) ) return;
+			if ( id === "exchange-count-confirm" ) {
+				const game = view.gameplay,
+					item = game?.inventory.find( i => i.slot === exchangeCount!.slot ),
+					quantity = Math.max(
+						1,
+						Math.min( exchangeCount.quantity, Math.trunc( Number( exchangeAmount ) || 1 ) )
+					);
+				if (
+					game && !game.inventoryPending && item?.refObjId === exchangeCount.refObjId &&
+					item.quantity === exchangeCount.quantity && game.exchange?.open && !game.exchange.ownLocked
+				) {
+					if ( quantity === item.quantity ) {
+						sendGameplay( { kind: "exchange-put", slot: item.slot } );
+					} else {
+						// The put names only a slot, so the un-offered rest first
+						// moves off the stack; no free slot moves nothing.
+						const destination = firstFreeSlot(
+							game.inventory,
+							game.equipmentSlotCount ?? 13,
+							game.inventorySlotCount ?? 13
+						);
+						if ( destination !== null ) {
+							sendGameplay( {
+								kind: "inventory-move",
+								source: item.slot,
+								destination,
+								quantity: item.quantity - quantity
+							} );
+							sendGameplay( { kind: "exchange-put", slot: item.slot } );
+						}
+					}
+				}
+			}
+			exchangeCount = null;
 			focus = null;
 			dirty = true;
 			return;
@@ -6480,6 +6552,22 @@ export function createUi(
 					![ "split-confirm", "split-cancel", "split-amount", "submit" ].includes( event.id )
 				) return;
 			}
+			if ( exchangeCount ) {
+				if ( event.kind === "key" ) {
+					if ( event.code === "Escape" ) activate( "exchange-count-cancel" );
+					else if ( event.code === "Enter" && !composing ) activate( "exchange-count-confirm" );
+					return;
+				}
+				if (
+					event.kind === "scroll" || event.kind === "drag" || event.kind === "drag-end" ||
+					event.kind === "double-activate"
+				) return;
+				if (
+					"id" in event && event.id !== null &&
+					![ "exchange-count-confirm", "exchange-count-cancel", "exchange-count", "submit" ]
+						.includes( event.id )
+				) return;
+			}
 			if ( goldDialog ) {
 				if ( event.kind === "key" ) {
 					if ( event.code === "Escape" ) activate( "gold-cancel" );
@@ -7093,7 +7181,7 @@ export function createUi(
 					}
 					// CIFExchange: a bag item dropped on the own side goes on the table.
 					if ( item && target && !target.disabled && target.id.startsWith( "exchange-my:" ) ) {
-						sendGameplay( { kind: "exchange-put", slot: item.slot } );
+						stageExchangeItem( item );
 						return;
 					}
 					// CIFStall_OnInventorySlotDrop 5A11C0: a bag item dropped on an
@@ -7267,6 +7355,20 @@ export function createUi(
 			}
 			if ( event.kind === "double-activate" && (event.ctrl || event.shift || event.alt) ) return;
 			if ( event.kind === "double-activate" && view?.gameplay && !view.gameplay.inventoryPending ) {
+				// Port-only, not native (owner decision 2026-10-24): double-click
+				// stages a bag item into the open exchange, as a drop does.
+				if (
+					experimental.state().saved.exchangeClickShortcuts && view.gameplay.exchange?.open &&
+					event.id.startsWith( "slot:" )
+				) {
+					const item = view.gameplay.inventory.find( i => i.slot === Number( event.id.slice( 5 ) ) );
+					if (
+						item && item.slot >= (view.gameplay.equipmentSlotCount ?? 13) && stageExchangeItem( item )
+					) {
+						dirty = true;
+						return;
+					}
+				}
 				if ( panel === "Shop" && event.id.startsWith( view.gameplay.shop?.cosGid ? "cos-slot:" : "slot:" ) ) {
 					const item = merchantRows( view.gameplay ).find( r =>
 						r.slot === Number( event.id.slice( event.id.indexOf( ":" ) + 1 ) )
@@ -7752,6 +7854,23 @@ export function createUi(
 					dirty = true;
 					return;
 				}
+				// Ctrl+click stages a bag item into the open exchange, as a drop
+				// on the table does: port-only, not native (owner decision
+				// 2026-10-24); the original stages by drag and drop only.
+				if (
+					event.ctrl && experimental.state().saved.exchangeClickShortcuts && view?.gameplay &&
+					view.gameplay.exchange?.open && event.id.startsWith( "slot:" )
+				) {
+					const item = view.gameplay.inventory.find( i => i.slot === Number( event.id.slice( 5 ) ) );
+					if (
+						item && item.slot >= (view.gameplay.equipmentSlotCount ?? 13) && stageExchangeItem( item )
+					) {
+						carriedItem = null;
+						inventorySlot = -1;
+						dirty = true;
+						return;
+					}
+				}
 				// Ctrl+click moves an item across the open warehouse as right-click
 				// does: port-only, not native (owner decision 2026-10-10).
 				if (
@@ -7815,7 +7934,8 @@ export function createUi(
 						item = game?.inventory.find( i => i.slot === Number( event.id.slice( 5 ) ) );
 					// 567A83 -> 59C050: Shift-click etc stacks; never split timed services.
 					if (
-						item && !game?.inventoryPending && item.slot >= (game?.equipmentSlotCount ?? 13) &&
+						item && !game?.inventoryPending && !exchangeCount &&
+						item.slot >= (game?.equipmentSlotCount ?? 13) &&
 						(item.typeFlags & 0x7e) === 0x6c && item.quantity > 1 &&
 						!((item.typeFlags & 0xfffe) === 0x7eec && ((item.tooltip?.fields.itemParam6_2b0 ?? 0) & 2))
 					) {
@@ -7916,6 +8036,16 @@ export function createUi(
 				}
 				if ( event.id.startsWith( "slot:" ) ) {
 					const item = view.gameplay.inventory.find( row => row.slot === Number( event.id.slice( 5 ) ) );
+					// Port-only, not native (owner decision 2026-10-24): right-click
+					// stages a bag item into the open exchange, as a drop does.
+					if (
+						item && experimental.state().saved.exchangeClickShortcuts &&
+						view.gameplay.exchange?.open && item.slot >= (view.gameplay.equipmentSlotCount ?? 13) &&
+						stageExchangeItem( item )
+					) {
+						dirty = true;
+						return;
+					}
 					if ( item && (item.typeFlags & 0x7fe) === 0x6ac ) moveAvatar( true, item.slot );
 					else if ( item && useInventorySlot( item.slot ) ) dirty = true;
 					return;
@@ -8039,6 +8169,9 @@ export function createUi(
 				} else if ( event.id === "split-amount" && splitStack ) {
 					const raw = event.value.replace( /[^0-9]/g, "" ).slice( 0, 5 );
 					splitAmount = raw ? String( Math.min( splitStack.quantity - 1, Number( raw ) ) ) : "";
+				} else if ( event.id === "exchange-count" && exchangeCount ) {
+					const raw = event.value.replace( /[^0-9]/g, "" ).slice( 0, 5 );
+					exchangeAmount = raw ? String( Math.min( exchangeCount.quantity, Number( raw ) ) ) : "";
 				} else if ( event.id === "gold-amount" ) {
 					// A withdrawal draws on the warehouse, so its draft clamps to the
 					// room's gold; the drop, exchange and deposit spend the bag's
@@ -8575,6 +8708,10 @@ export function createUi(
 				setPanel( "Inventory" );
 				dirty = true;
 			}
+			if ( exchangeCount && !next.gameplay?.exchange?.open ) {
+				exchangeCount = null;
+				dirty = true;
+			}
 			if ( stallCategories.step( !!stallState?.network.open ) ) dirty = true;
 			if ( localization.step( now, next.session?.phase === "world" ) ) {
 				dirty = true;
@@ -8808,6 +8945,7 @@ export function createUi(
 			const retainedWorld = (phase === "disconnected" || phase === "reconnecting") && !!next.gameplay?.localGid;
 			if ( phase !== "world" ) {
 				splitStack = null;
+				exchangeCount = null;
 				groundDrop = null;
 			}
 			if (
@@ -23256,11 +23394,21 @@ export function createUi(
 				}
 				quads.push( ...text.quads( delay.name, bar.name, full, white, { hAlign: 1, vAlign: 0 } ) );
 			}
-			if ( worldVisible && splitStack && [ "Inventory", "Shop", "COS inventory", "Storage" ].includes( panel ) ) {
+			if (
+				worldVisible && (splitStack || exchangeCount) &&
+				[ "Inventory", "Shop", "COS inventory", "Storage" ].includes( panel )
+			) {
 				// Native 529E90, MsgBoxDivideCount authored 300x183; edit stays 42x24.
-				const layout = messageBox( w, h, 300, 183 ),
+				// The exchange count box (stageExchangeItem) is the same box with
+				// its own ids and the full quantity as the cap.
+				const promptStack = splitStack ?? exchangeCount!,
+					promptAmount = splitStack ? splitAmount : exchangeAmount,
+					promptEdit = splitStack ? "split-amount" : "exchange-count",
+					promptConfirm = splitStack ? "split-confirm" : "exchange-count-confirm",
+					promptCancel = splitStack ? "split-cancel" : "exchange-count-cancel",
+					layout = messageBox( w, h, 300, 183 ),
 					[x, y] = layout.frame,
-					item = game?.inventory.find( i => i.slot === splitStack!.slot );
+					item = game?.inventory.find( i => i.slot === promptStack.slot );
 				controls = [];
 				blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
@@ -23310,7 +23458,7 @@ export function createUi(
 				) quads.push( ...text.quads( value, r, full, color, { hAlign: 1, vAlign } ) );
 				quads.push(
 					...text.quads(
-						String( splitStack.quantity ),
+						String( promptStack.quantity ),
 						[ x + 105, y + 106, 41, 19 ],
 						[ x + 105, y + 106, 41, 19 ],
 						white,
@@ -23319,22 +23467,22 @@ export function createUi(
 				);
 				const edit: UiRect = [ x + 230, y + 107, 28, 14 ];
 				controls.push( {
-					id: "split-amount",
+					id: promptEdit,
 					label: hudCopy( "UIIT_MSG_MSGBOX_DIVIDE_COUNT" ),
 					kind: "text",
-					value: splitAmount,
+					value: promptAmount,
 					rect: edit,
 					maxLength: 5
 				} );
 				quads.push(
-					...text.quads( splitAmount, edit, edit, white, { hAlign: 1, vAlign: 1, overflow: "clip" } )
+					...text.quads( promptAmount, edit, edit, white, { hAlign: 1, vAlign: 1, overflow: "clip" } )
 				);
-				if ( focus === "split-amount" ) {
-					const left = edit[0] + (edit[2] - text.run( splitAmount ).width) / 2,
-						start = Math.min( ...selection, splitAmount.length ),
-						end = Math.min( Math.max( ...selection ), splitAmount.length ),
-						before = text.run( splitAmount.slice( 0, start ) ).width,
-						through = text.run( splitAmount.slice( 0, end ) ).width;
+				if ( focus === promptEdit ) {
+					const left = edit[0] + (edit[2] - text.run( promptAmount ).width) / 2,
+						start = Math.min( ...selection, promptAmount.length ),
+						end = Math.min( Math.max( ...selection ), promptAmount.length ),
+						before = text.run( promptAmount.slice( 0, start ) ).width,
+						through = text.run( promptAmount.slice( 0, end ) ).width;
 					if ( end > start ) {
 						rect(
 							[ left + before, edit[1], through - before, 14 ],
@@ -23347,7 +23495,7 @@ export function createUi(
 					if ( caretVisible ) rect( [ left + through, edit[1], 2, 14 ], white, "", [ 0, 0, 1, 1 ], edit );
 				}
 				button(
-					"split-confirm",
+					promptConfirm,
 					hudCopy( "UIIT_CTL_CONFIRM" ),
 					x + 71,
 					y + 143,
@@ -23356,7 +23504,7 @@ export function createUi(
 					false,
 					6
 				);
-				button( "split-cancel", hudCopy( "UIIT_CTL_CANCEL" ), x + 151, y + 143, 76, false, false, 6 );
+				button( promptCancel, hudCopy( "UIIT_CTL_CANCEL" ), x + 151, y + 143, 76, false, false, 6 );
 			}
 			if (
 				worldVisible &&
