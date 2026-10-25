@@ -7,9 +7,10 @@ config path
 The transport package tests its own server against hand-built Config
 structs. This file proves the assembled thing a real process boots:
 shard catalog plus TRANSPORT_* environment plus the public switch,
-through loadOwnedShard and the same lines of main() that build the
-server, all the way to a WELCOME over the UDP listener bound on a
-non-loopback address. It also proves the refusals hold at this level:
+through loadOwnedShard and gameWorldTransportServer - the one assembly
+main() boots with - all the way to a WELCOME over the UDP listener
+bound on a non-loopback address. It also proves the refusals hold at
+this level:
 a bind change without the switch, the switch without a key file, and
 the switch without allowed origins each build nothing, and a forged
 admission ticket never reaches WELCOME.
@@ -47,7 +48,6 @@ import (
 	"time"
 
 	"github.com/quic-go/webtransport-go"
-	"github.com/spf13/viper"
 
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/transport"
@@ -134,10 +134,10 @@ func setWtPublicEnv(t *testing.T, certFile, keyFile, allowedOrigins string, publ
 ================
 assembleGameWorldTransport
 
-main()'s transport assembly verbatim - the catalog load, the viper
-read, the owned shard's defaults, the two posture switches, the
-capacity ceiling - minus the logging setup around it and the game
-boot after it.
+The production assembly itself: the catalog load, then the same
+gameWorldTransportServer call main() makes. No transport line is
+reproduced here, so a posture line lost in server.go fails these
+tests instead of passing against a copy.
 ================
 */
 func assembleGameWorldTransport(t *testing.T) (*transport.Server, error) {
@@ -146,23 +146,7 @@ func assembleGameWorldTransport(t *testing.T) (*transport.Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	transport.RegisterViperDefaults()
-	transportConfig := transport.ConfigFromViper()
-	if err := applyOwnedShardTransportDefaults(
-		ownedShard,
-		&transportConfig,
-		os.Getenv("TRANSPORT_WT_ADDR") != "" ||
-			viper.InConfig(transport.KeyWTAddr),
-		os.Getenv("TRANSPORT_WS_ADDR") != "" ||
-			viper.InConfig(transport.KeyWSAddr),
-	); err != nil {
-		return nil, err
-	}
-	transportConfig.PrivateNetwork =
-		os.Getenv("SRO_GAMEWORLD_PRIVATE_NETWORK") == "1"
-	transportConfig.WebTransportPublic = transport.WebTransportPublicEnabled()
-	transportConfig.MaxSessions = ownedShard.Capacity
-	return transport.NewServer(transportConfig)
+	return gameWorldTransportServer(ownedShard)
 }
 
 /*
