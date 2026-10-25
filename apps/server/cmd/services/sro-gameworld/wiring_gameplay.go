@@ -232,6 +232,7 @@ func newGameplayPlane(
 	if err := items.ConfigureMall(devPaths.TextdataDir, mallAuthority, mallExtra); err != nil {
 		return nil, fmt.Errorf("mall catalogue: %w", err)
 	}
+	items.StatRecallWindows = commerce.StatRecallListed(mallExtra)
 	deps.SceneReferenceFrames = items.CommerceReferenceSeed
 	deps.ReconcileSceneObjects = items.ReconcileScene
 	deps.ExtraRefItemCodenames = items.GroundRefItemCodenames

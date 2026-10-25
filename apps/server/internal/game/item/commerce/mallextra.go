@@ -76,15 +76,16 @@ var mallExtraGoodsDefault = strings.Join([]string{
 }, ",")
 
 // mallStatRecallPreset is "statrecall" (#1609): the recall scroll's six
-// level tiers (itemdata 9253-9258, usable 1-40 ... 81-90) for silk, priced
-// by tier.
+// level tiers (itemdata 9253-9258) for silk, priced by tier (owner,
+// 2026-10-26): 30/60/90/120/160 for 1-80, and one price, 250, for the top
+// scroll, which the preset makes usable at 81-110 (StatRecallListed).
 var mallStatRecallPreset = strings.Join([]string{
 	"MALL_CONSUME_SCROLL:PACKAGE_ITEM_MALL_STATS_POINT_RECALL:ITEM_MALL_STATS_POINT_RECALL:30",
 	"MALL_CONSUME_SCROLL:PACKAGE_ITEM_MALL_STATS_POINT_RECALL_50LV:ITEM_MALL_STATS_POINT_RECALL_50LV:60",
 	"MALL_CONSUME_SCROLL:PACKAGE_ITEM_MALL_STATS_POINT_RECALL_60LV:ITEM_MALL_STATS_POINT_RECALL_60LV:90",
 	"MALL_CONSUME_SCROLL:PACKAGE_ITEM_MALL_STATS_POINT_RECALL_70LV:ITEM_MALL_STATS_POINT_RECALL_70LV:120",
 	"MALL_CONSUME_SCROLL:PACKAGE_ITEM_MALL_STATS_POINT_RECALL_80LV:ITEM_MALL_STATS_POINT_RECALL_80LV:160",
-	"MALL_CONSUME_SCROLL:PACKAGE_ITEM_MALL_STATS_POINT_RECALL_81LV:ITEM_MALL_STATS_POINT_RECALL_81LV:200",
+	"MALL_CONSUME_SCROLL:PACKAGE_ITEM_MALL_STATS_POINT_RECALL_81LV:ITEM_MALL_STATS_POINT_RECALL_81LV:250",
 }, ",")
 
 // maxAuthoredSilk bounds an authored price: the 1500-silk bank cap many
@@ -158,6 +159,26 @@ func ParseMallExtraGoods(text string) ([]MallExtraGood, error) {
 		}
 	}
 	return goods, nil
+}
+
+/*
+================
+StatRecallListed
+
+Whether goods sell the recall scrolls (the "statrecall" preset). Port-only,
+not native: while they are sold, each scroll is usable only inside its
+tier's level window, and the top one (9258) up to level 110 (action
+itemuse.go statRecallWindow), so a cheap low tier never stands in for a
+dear high one. v1.150 sells none, and with the preset off use is as today.
+================
+*/
+func StatRecallListed(goods []MallExtraGood) bool {
+	for _, good := range goods {
+		if strings.HasPrefix(good.Item, "ITEM_MALL_STATS_POINT_RECALL") {
+			return true
+		}
+	}
+	return false
 }
 
 /*

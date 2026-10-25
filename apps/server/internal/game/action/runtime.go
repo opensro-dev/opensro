@@ -576,6 +576,12 @@ type Runtime struct {
 	// refuses the recall scroll.
 	RecallStatPoints func(character *enterworld.Character) ([]wire.Frame, bool)
 
+	// StatRecallWindows holds each recall scroll to its tier's level window
+	// (statRecallWindow), set while the mall sells the scrolls
+	// (commerce.StatRecallListed). Port-only, not native; false is today's
+	// use, gated by the minimum level alone.
+	StatRecallWindows bool
+
 	// ApplyDeathPenalty is progression's door-free death updater: the EXP
 	// and SP a death costs (pkdeath.go resolves which). Combat invokes it
 	// from inside the fatal-HP character transaction.

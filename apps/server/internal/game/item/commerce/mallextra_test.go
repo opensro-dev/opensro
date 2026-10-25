@@ -130,7 +130,7 @@ var statRecallSilk = map[string]uint32{
 	"PACKAGE_ITEM_MALL_STATS_POINT_RECALL_60LV": 90,
 	"PACKAGE_ITEM_MALL_STATS_POINT_RECALL_70LV": 120,
 	"PACKAGE_ITEM_MALL_STATS_POINT_RECALL_80LV": 160,
-	"PACKAGE_ITEM_MALL_STATS_POINT_RECALL_81LV": 200,
+	"PACKAGE_ITEM_MALL_STATS_POINT_RECALL_81LV": 250,
 }
 
 /*
@@ -178,6 +178,9 @@ func TestMallExtraGoodsStatRecallPreset(t *testing.T) {
 		want := 0
 		if strings.Contains(setting, "statrecall") {
 			want = len(statRecallSilk)
+		}
+		if StatRecallListed(goods) != (want > 0) {
+			t.Fatalf("%q: StatRecallListed = %t", setting, !(want > 0))
 		}
 		if len(recalls) != want || len(catalog.Offers) != 81+22+want {
 			t.Fatalf("%q: %d recall offers of %d, want %d of %d", setting, len(recalls), len(catalog.Offers),
