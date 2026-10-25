@@ -193,6 +193,9 @@ test("the local walk sends the angular envelope and keeps walking past its first
 	assert.deepEqual( [ ...frame.payload ], [ 1, 1, 0, 0, 0, 0, 1, 0, 0 ] );
 	assert.equal( frames.length, 1 );
 	assert.equal( m.state().directionWalk, EAST );
+	// The main-thread mover rebuilds the walk from this aim (#1563).
+	assert.deepEqual( m.state().movementAim, { kind: "direction", heading: EAST } );
+	assert.equal( m.state().movementSpeedFactor, 1 );
 
 	const legEnd = { ...pose, x: 1100 };
 	m.receive( receipt( 1, legEnd, { from: pose, startedAtMs: 0, arrivesAtMs: 20000 } ), 0, GID );
@@ -204,6 +207,7 @@ test("the local walk sends the angular envelope and keeps walking past its first
 
 	m.correct( { ...walked, angle: EAST } );
 	assert.equal( m.state().directionWalk, undefined );
+	assert.equal( m.state().movementAim, undefined );
 	m.step( 31000 );
 	assert.equal( defined( m.state().pose ).x, walked.x, "a correction ends the walk" );
 });
@@ -222,6 +226,18 @@ test("a blocked server leg ends the local walk at the contact", () => {
 	assert.equal( defined( m.state().pose ).x, 400 );
 	assert.equal( m.state().directionWalk, undefined );
 	assert.equal( m.state().moving, false );
+	assert.equal( m.state().movementAim, undefined, "a blocked walk publishes nothing to rebuild" );
+});
+
+test("a goal walk publishes its destination as the aim the main-thread mover rebuilds", () => {
+	const m = createMovement( () => {} );
+	m.seed( pose );
+	const navigation = product( pose.regionId );
+	navigation.objects = [];
+	m.navigation( pose.regionId, navigation );
+	m.request( { ...pose, x: 300 }, 0 );
+	assert.deepEqual( m.state().movementAim, { kind: "goal", destination: { ...pose, x: 300, angle: EAST } } );
+	assert.equal( m.state().movementSpeedFactor, 1 );
 });
 
 test("a local mode-0 acknowledgement with a source starts the walk; without one it keeps the path", () => {
