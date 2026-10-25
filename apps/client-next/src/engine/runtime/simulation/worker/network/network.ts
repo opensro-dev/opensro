@@ -743,8 +743,7 @@ export function createNetwork(
 				wtFailed = true;
 				// The establish deadline is a timeout (reason 2); any
 				// other refusal of the session or stream is refused (3).
-				wtFailReason =
-					error instanceof Error && error.message === "Transport connect deadline" ? 2 : 3;
+				wtFailReason = error instanceof Error && error.message === "Transport connect deadline" ? 2 : 3;
 			}
 			return false;
 		}
