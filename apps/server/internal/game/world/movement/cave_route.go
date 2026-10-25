@@ -297,11 +297,11 @@ func (v *WaterValidator) planCaveRoute(from, goal monster.Pose) *monster.Navigat
 		if !found {
 			return monster.UnresolvedNavigationRoute(goal, monster.NavigationRouteBlocked).WithProbes(used)
 		}
-		points, probes := v.pullCaveRoute(surface, from, goal, goal, path)
+		points, probes, steps := v.pullCaveRoute(surface, from, goal, goal, path)
 		if len(points) == 0 {
-			return monster.UnresolvedNavigationRoute(goal, monster.NavigationRouteBlocked).WithProbes(used + probes)
+			return monster.UnresolvedNavigationRoute(goal, monster.NavigationRouteBlocked).WithProbes(used + probes + steps)
 		}
-		return monster.NewNavigationRoute(goal, points).WithProbes(used + probes)
+		return monster.NewNavigationRoute(goal, points).WithProbes(used + probes + steps)
 	}
 	hop, ok := surface.nextHop(start.block, target.block)
 	if !ok {
@@ -315,11 +315,11 @@ func (v *WaterValidator) planCaveRoute(from, goal monster.Pose) *monster.Navigat
 	// the next block, where the mover's next plan takes over.
 	path = append(path, hop.land)
 	terminal := surface.cellPose(from.RegionID, goal.Heading, hop.land)
-	points, probes := v.pullCaveRoute(surface, from, goal, terminal, path)
+	points, probes, steps := v.pullCaveRoute(surface, from, goal, terminal, path)
 	if len(points) == 0 {
-		return monster.UnresolvedNavigationRoute(goal, monster.NavigationRouteBlocked).WithProbes(used + probes)
+		return monster.UnresolvedNavigationRoute(goal, monster.NavigationRouteBlocked).WithProbes(used + probes + steps)
 	}
-	return monster.NewNavigationRoute(goal, points).WithProbes(used + probes)
+	return monster.NewNavigationRoute(goal, points).WithProbes(used + probes + steps)
 }
 
 /*
@@ -674,15 +674,21 @@ The one thing the strip does not encode is a block's obstacle
 circles: should a finished leg cross one, the whole plan is
 handed to the proving pull, whose chords can end short of a
 circle and resume past it.
+
+Returns the legs, the oracle probes the proving pull spent, and
+the strip steps the geometric validation walked (legWalksStrip):
+the plan's work is both, so a slow geometric pull shows in the
+route's work as plainly as a slow proving one (#1663).
 ================
 */
-func (v *WaterValidator) pullCaveRoute(surface *dungeonSpawnSurface, from, goal, terminal monster.Pose, path []caveCell) ([]monster.Pose, int) {
+func (v *WaterValidator) pullCaveRoute(surface *dungeonSpawnSurface, from, goal, terminal monster.Pose, path []caveCell) ([]monster.Pose, int, int) {
 	edges := make([][4]float64, len(path)-1)
 	for k := 0; k+1 < len(path); k++ {
 		head, tail, ok := surface.stripEdge(path[k], path[k+1])
 		if !ok {
 			// No shared edge to reason over: prove it the slow way.
-			return v.proveCaveRoute(surface, from, goal, terminal, path)
+			points, probes := v.proveCaveRoute(surface, from, goal, terminal, path)
+			return points, probes, 0
 		}
 		edges[k] = [4]float64{head[0], head[2], tail[0], tail[2]}
 	}
@@ -690,6 +696,12 @@ func (v *WaterValidator) pullCaveRoute(surface *dungeonSpawnSurface, from, goal,
 	cells := make([]caveCell, 0, 16)
 	current := from
 	currentCell := 0 // the path cell current stands in
+	steps := 0
+	walks := func(to monster.Pose, toCell int) bool {
+		ok, walked := surface.legWalksStrip(path, edges, current, currentCell, to, toCell)
+		steps += walked
+		return ok
+	}
 	emit := func(pose monster.Pose, cell caveCell) {
 		points = append(points, pose)
 		cells = append(cells, cell)
@@ -700,7 +712,7 @@ func (v *WaterValidator) pullCaveRoute(surface *dungeonSpawnSurface, from, goal,
 		// at grain; a longer same-room step is the plan head's
 		// direct chord, already tried.
 		if routeDistance(current, terminal) <= maxCaveLegUnits &&
-			surface.legWalksStrip(path, edges, current, currentCell, terminal, len(path)-1) {
+			walks(terminal, len(path)-1) {
 			emit(terminal, path[len(path)-1])
 			break
 		}
@@ -713,7 +725,7 @@ func (v *WaterValidator) pullCaveRoute(surface *dungeonSpawnSurface, from, goal,
 			if routeDistance(current, cand) > maxCaveLegUnits {
 				continue
 			}
-			if surface.legWalksStrip(path, edges, current, currentCell, cand, j) {
+			if walks(cand, j) {
 				best = j
 				break
 			}
@@ -736,9 +748,10 @@ func (v *WaterValidator) pullCaveRoute(surface *dungeonSpawnSurface, from, goal,
 		emit(terminal, path[len(path)-1])
 	}
 	if legsCrossObstacle(surface, from, path[0], points, cells) {
-		return v.proveCaveRoute(surface, from, goal, terminal, path)
+		proved, probes := v.proveCaveRoute(surface, from, goal, terminal, path)
+		return proved, probes, steps
 	}
-	return points, 0
+	return points, 0, steps
 }
 
 /*
@@ -802,23 +815,30 @@ the walked height - must never step more than
 maxDungeonFloorStep at a sample, except at the doorway seam
 between blocks, where the clip's passage covers the gap instead.
 Endpoints standing outside their own cell refuse.
+
+Also returns the steps it walked: each shared edge tested plus
+each cell-plane height read, refused legs included, which is the
+work the pull's route reports (#1663).
 ================
 */
-func (s *dungeonSpawnSurface) legWalksStrip(path []caveCell, edges [][4]float64, from monster.Pose, fromCell int, to monster.Pose, toCell int) bool {
+func (s *dungeonSpawnSurface) legWalksStrip(path []caveCell, edges [][4]float64, from monster.Pose, fromCell int, to monster.Pose, toCell int) (bool, int) {
+	steps := 0
 	crossings := make([]float64, 0, toCell-fromCell)
 	for k := fromCell; k < toCell; k++ {
+		steps++
 		t, ok := chordCrossing(from, to, edges[k])
 		if !ok {
-			return false
+			return false, steps
 		}
 		if len(crossings) > 0 && t <= crossings[len(crossings)-1] {
-			return false
+			return false, steps
 		}
 		crossings = append(crossings, t)
 	}
+	steps++
 	curY, ok := s.cellPlaneHeight(path[fromCell], from.X, from.Z)
 	if !ok {
-		return false
+		return false, steps
 	}
 	chordLength := routeDistance(from, to)
 	bounds := make([]float64, 0, len(crossings)+2)
@@ -831,9 +851,10 @@ func (s *dungeonSpawnSurface) legWalksStrip(path []caveCell, edges [][4]float64,
 		samples := max(1, int(math.Ceil((t1-t0)*chordLength/maxDungeonFloorSampleSpacing)))
 		for j := 0; j < samples; j++ {
 			tm := t0 + (t1-t0)*(float64(j)+0.5)/float64(samples)
+			steps++
 			h, inside := s.cellPlaneHeight(path[cellIndex], from.X+(to.X-from.X)*tm, from.Z+(to.Z-from.Z)*tm)
 			if !inside {
-				return false
+				return false, steps
 			}
 			if math.Abs(h-curY) <= maxDungeonFloorStep {
 				curY = h
@@ -842,18 +863,19 @@ func (s *dungeonSpawnSurface) legWalksStrip(path []caveCell, edges [][4]float64,
 			// Off the walked floor away from the doorway seam:
 			// the clip blocks here.
 			if !seamInterval(path, fromCell, i) {
-				return false
+				return false, steps
 			}
 		}
 	}
+	steps++
 	endY, ok := s.cellPlaneHeight(path[toCell], to.X, to.Z)
 	if !ok {
-		return false
+		return false, steps
 	}
 	if math.Abs(endY-curY) > maxDungeonFloorStep && path[toCell].block == path[toCell-1].block {
-		return false
+		return false, steps
 	}
-	return true
+	return true, steps
 }
 
 /*
