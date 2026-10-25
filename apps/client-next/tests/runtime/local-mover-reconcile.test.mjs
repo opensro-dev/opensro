@@ -184,6 +184,7 @@ function play( { clicks, events = [], origin = () => 0, endMs = 8000, outLatency
 			speedFactor: 1,
 			walkPredictable: true,
 			walkHeld: false,
+			holding: false,
 			speed: p?.speed ?? SPEED,
 			inputSeq: p?.inputSeq ?? 0,
 			navigationRequestId: 1,

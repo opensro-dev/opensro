@@ -1646,7 +1646,7 @@ test("a ground click during the local cast walks once the cast releases", async 
 	game.dispose();
 });
 
-test("a seated ground click stands at once and walks when the stand finishes", async () => {
+test("a seated ground click stands and drops the click (native: no goal is stored)", async () => {
 	const { createGameplay } = await load( "gameplay" ),
 		sent = [],
 		game = createGameplay( f => sent.push( f ) ),
@@ -1660,13 +1660,15 @@ test("a seated ground click stands at once and walks when the stand finishes", a
 	game.step( 500, seated );
 	assert.equal( sent.length, 1, "no walk while still seated" );
 	assert.equal( game.take()?.pose?.x, pose.x );
+	// 0x6933bd returns before the goal store: standing up walks nowhere.
 	game.step( 600, standing );
 	game.step( 1600, standing );
-	assert.ok( (game.take()?.pose?.x ?? 0) > pose.x, "the held click walks once standing finishes" );
+	assert.equal( sent.length, 1, "no walk after standing either: the click was dropped" );
+	assert.equal( game.take()?.pose?.x, pose.x );
 	game.dispose();
 });
 
-test("a fresh click after standing supersedes the seated hold", async () => {
+test("a fresh click after standing walks; the dropped seated click never fires", async () => {
 	const { createGameplay } = await load( "gameplay" ),
 		sent = [],
 		game = createGameplay( f => sent.push( f ) ),
@@ -1681,7 +1683,7 @@ test("a fresh click after standing supersedes the seated hold", async () => {
 	game.step( 6000, standing );
 	assert.ok(
 		Math.abs( (game.take()?.pose?.x ?? 0) - 80 ) < 1,
-		"the fresh click's walk stands; the held one never fires"
+		"the fresh click's walk stands; the dropped one never fires"
 	);
 	game.dispose();
 });
@@ -1704,6 +1706,7 @@ test("a ground click inside the ground-skill suppress window walks when the wind
 				spCost: 1,
 				targetRequired: true,
 				groundTarget: true,
+				actionMs: 200,
 				cooldownMs: 5000,
 				cooldownGroup: 59,
 				masteries: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ],
@@ -1718,6 +1721,14 @@ test("a ground click inside the ground-skill suppress window walks when the wind
 	assert.ok( afterPress > 0, "the ground skill press went out" );
 	game.command( { kind: "move", destination: { ...pose, x: 300 } }, 200, undefined, local );
 	assert.equal( sent.length, afterPress, "the click inside the window is held, not sent" );
+	game.step( 250, local );
+	assert.equal( game.take()?.moveHeld, true, "the click sits in the reservation" );
+	// The press's action window (200 ms) is over by now; only the 500 ms
+	// suppress window still holds the click, so the release must not
+	// fire here: no walk frame, and no release churn republishes.
+	game.step( 400, local );
+	assert.equal( sent.length, afterPress, "no walk after the cast ends, inside the suppress window" );
+	assert.ok( !game.take(), "the release does not fire inside the suppress window" );
 	game.step( 599, local );
 	assert.equal( sent.length, afterPress, "no walk inside the window" );
 	game.step( 601, local );

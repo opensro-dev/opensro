@@ -475,9 +475,9 @@ export function createGameplay(
 	let groundSkillMoveSuppressUntil = 0;
 	// groundWalkRefusal() was null at the last step (published, #1440).
 	let walkPredictable = false;
-	// The last step's refusal was a holding gate (cast, seated, suppress):
-	// a click now is held and walks at release, not refused (published,
-	// #1570, so the mover can record the click's aim for adoption).
+	// The last step's refusal was a holding gate (cast, suppress): a click
+	// now is held and walks at release, not refused (published, #1570, so
+	// the mover can record the click's aim for adoption).
 	let walkHeld = false;
 	const feedback = createFeedback();
 	const pickup = createPickup();
@@ -2164,16 +2164,14 @@ state here before a command can claim a native wire conversation.
 				if ( command.kind === "ground-move" && command.departing ) sendFrame( logoutCancelRequest() );
 			}
 			if ( frozen() && [ "move", "ground-move" ].includes( command.kind ) ) return null;
-			// 6933a6 ground click / 692d19 entity click: seated interaction
-			// requests stand and RETURNS; it must not also predict travel.
-			// A walk click is held and walks when the stand finishes
-			// (step's release); select, attack and pickup stand and drop,
-			// as they always have.
+			// 693392..6933bd ground click / 692d07..692d1e entity click:
+			// seated interaction requests stand and RETURNS before any
+			// goal is stored, so the click is dropped, not walked later;
+			// it must not also predict travel.
 			if (
 				local?.movementMode === MOVEMENT_SEATED &&
 				[ "move", "ground-move", "select", "attack", "pickup" ].includes( command.kind )
 			) {
-				if ( command.kind === "move" || command.kind === "ground-move" ) holdGroundClick( command );
 				return sendFrame( { opcode: 0x7017, payload: Uint8Array.of( 4 ) } );
 			}
 
@@ -4542,7 +4540,7 @@ before take assembles the presentation snapshot.
 			// window ends): republish when the answer changes.
 			const refusal = groundWalkRefusal( now, local );
 			const predictable = refusal === null;
-			const held = refusal === "cast" || refusal === "seated" || refusal === "suppressed";
+			const held = refusal === "cast" || refusal === "suppressed";
 			if ( predictable !== walkPredictable || held !== walkHeld ) {
 				walkPredictable = predictable;
 				walkHeld = held;
@@ -4604,11 +4602,10 @@ before take assembles the presentation snapshot.
 			}
 			// A held click walks as soon as every gate that held it clears:
 			// the caster leaves action state 2 (the skill's action window
-			// ends or it is cancelled), the stand finishes, the ground-skill
-			// suppress window runs out. Death forfeits it.
+			// ends or it is cancelled) and the ground-skill suppress window
+			// runs out. Death forfeits it.
 			if (
 				moveReservation.holding() && !castLocked( now ) &&
-				local?.movementMode !== MOVEMENT_SEATED &&
 				now >= groundSkillMoveSuppressUntil
 			) {
 				const held = moveReservation.take()!;
@@ -4902,6 +4899,7 @@ The published plane when something changed since the last take, else null.
 				...m,
 				walkPredictable,
 				walkHeld,
+				moveHeld: moveReservation.holding(),
 				...i,
 				inventoryJournal,
 				...c,

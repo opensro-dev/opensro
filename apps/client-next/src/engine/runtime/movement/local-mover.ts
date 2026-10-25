@@ -20,11 +20,11 @@ caller: it resolves to a walk-to, or for a miss to a direction walk
 would walk at once (walkPredictable for the ground click) while the main
 view holds the product the worker holds (navigationRequestId). Mounted
 walks, selects, pickups and run-ups join through the same seam (#1566 to
-#1571). A click a gate holds - a cast, seated, the ground-skill suppress
-window - cannot predict at once: the mover records its aim, as the worker
-records the click, and adopts the walk from the first publication that
-took the input and walks an aim, so the release steps on the frame it
-lands (#1570).
+#1571). A click a gate holds - a cast, the ground-skill suppress window -
+cannot predict at once: the mover records its aim, as the worker records
+the click, and adopts the walk from the first publication after the
+worker stops holding it that walks an aim, so the release steps on the
+frame it lands (#1570).
 
 Reconciliation (#1441b, Unreal's ClientAdjustPosition then
 ClientUpdatePosition): every newer worker publication rebuilds the
@@ -107,6 +107,11 @@ export interface LocalMoverWorld {
 	// (gameplay.ts walkHeld): the mover records its aim and adopts the
 	// walk when the worker publishes it (#1570).
 	readonly walkHeld: boolean;
+	// The worker still holds a click in its move reservation
+	// (gameplay.ts moveHeld): a recorded click is consumed only once
+	// this clears, because the worker notes an input's sequence before
+	// any gate, so its own publication is taken-but-not-walking.
+	readonly holding: boolean;
 	readonly speed: number | undefined;
 	readonly inputSeq: number;
 	readonly navigationRequestId: number | undefined;
@@ -183,9 +188,10 @@ interface SavedInput {
 HeldClick
 
 A click a gate held (#1570): its aim resolved at click time, as the
-worker resolves it, waiting for the publication that walks it. Adopted
-from the worker's own aim when that publication lands; dropped with no
-trace when the worker took the input but does not walk.
+worker resolves it, waiting for the publication that walks it. The aim
+is bookkeeping only - a direction pick re-resolves at release in the
+worker, so adoption always walks the worker's published aim. Dropped
+with no trace when the worker took the input but does not walk.
 ================
 */
 interface HeldClick {
@@ -454,11 +460,14 @@ export function createLocalMover() {
 				cut = null;
 				return { kind: "ended", pose };
 			}
-			// A held click whose gate released: the first publication that
-			// took the input and walks an aim adopts it, predicted from
-			// where the body was drawn at click time and reconciled like
-			// any prediction (#1570). Taken but not walking: no trace.
-			if ( heldClick && world.inputSeq >= heldClick.seq ) {
+			// A held click whose gate released: the worker notes the
+			// input's sequence before any gate, so the click's own
+			// publication is taken-but-not-walking and must not consume
+			// the record; the first publication after the reservation
+			// clears adopts it when it walks an aim, predicted from where
+			// the body was drawn at click time and reconciled like any
+			// prediction (#1570). Taken but not walking: no trace.
+			if ( heldClick && world.inputSeq >= heldClick.seq && !world.holding ) {
 				const held = heldClick;
 				heldClick = null;
 				if ( world.moving && world.aim ) {
