@@ -185,10 +185,6 @@ func (rt *Runtime) hubHandler(hub *transport.Hub, op opFunc) transport.HandlerFu
 			log.Infof("action: 0x%04X from %s refused: the scene is loading", opcode, character.Name)
 			return
 		}
-		// Port-only (SRO_BETA_SILK_ACTIVE_ONLY): an admitted action-lane
-		// command counts as play for the silk hour. Ground clicks and chat
-		// ride other lanes, so walking alone does not keep the hour going.
-		rt.BetaSilkActivity.NoteActivity(character.AccountID)
 		result := op(divisionID, character, payload)
 		if result.DiagnosticRefusal != "" {
 			log.Debugf(
