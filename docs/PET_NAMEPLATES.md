@@ -32,9 +32,10 @@ read with `objdump -s`.
 | The owner row is 20 pixels above the name | `855CBC–855CDA` subtracts the double at `C46198`; bytes `00000000 00003440` encode 20.0 | disassembly read | verified |
 | The owner row inherits the owner's name color | `854B3F–854B68` resolves owner GID at `+0x774`, loads owner color at `+0x134`, and calls `781780` on the board at `+0x794`; `781780–781793` writes that color to its color fields | disassembly read | verified |
 | With no visible owner the owner row is white | `854B52` jumps to `854BD1` when the owner lookup fails; `854C0E–854C16` pushes `0xFFFFFFFF` to `781780` | disassembly read | verified |
-| Guild soldiers (TID 1/2/3/5) take the owner's guild label color and keep their color when the owner is absent | `854B95–854BC5` reads `[[owner+0x788]+0x20]+0x10` (`8687E0`); `854C0C` skips the white | disassembly read | open: not ported, guild soldiers use the rules above |
+| Guild soldiers take the owner's guild label color and keep their color when the owner is absent | `854B95–854C02` gates the tid word to low byte `0xC6` in band 5 (the server's `MercenaryBand`; every reference carries `0x29C6`), `854B54..854BC5` reads `[[owner+0x788]+0x20]+0x10` (`8687E0`); `854C0C` skips the white | disassembly read | ported (#1502): owner row takes the owner's guild row colour, absent owner keeps the soldier's own spawn colour |
 
 `tests/runtime/pet-owner-nameplate.test.mjs` checks the published glyphs for
 attack and loot pets, independent centering, owner colors, party changes,
-an absent owner, the "Monster names" gate, range/hover/riding gates, and
-status-row spacing.
+an absent owner, the guild soldier's guild label colour (owner visible) and
+own colour (owner absent), the "Monster names" gate, range/hover/riding
+gates, and status-row spacing.

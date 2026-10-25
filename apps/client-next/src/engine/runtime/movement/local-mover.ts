@@ -3,60 +3,107 @@
 
 local-mover.ts - the local player's walk, stepped on the main thread
 
-Render-thread movement (epic #1437, part #1440). Unreal's locally
-controlled character moves in its own frame tick from the input frame
-on; ours was simulated in the worker and drawn one or two publications
-late. This owner walks a ground click's leg on the main thread from the
-click frame, every frame, by that frame's elapsed time, with the same
-step (walk-step.ts) against the same navigation (navigation.ts view())
-the worker's movement owner uses. The worker stays the authority for the
-wire.
+Render-thread movement (epic #1437, parts #1440 and #1441b). Unreal's
+locally controlled character moves in its own frame tick from the input
+frame on; ours was simulated in the worker and drawn one or two
+publications late. This owner walks a ground click's leg on the main
+thread from the click frame, every frame, by that frame's elapsed time,
+with the same step (walk-step.ts) against the same navigation
+(navigation.ts view()) the worker's movement owner uses. The worker stays
+the authority for the wire.
 
-It predicts only what the worker would walk at once: a ground click that
-resolves to a walk-to while the worker's latest publication says a click
-would walk (walkPredictable) and the main view holds the product the
-worker holds (navigationRequestId). Direction walks, mounted walks,
-selects, pickups and run-ups stay worker-driven for now.
+Every predicted input enters through one seam, predict: an aim (a goal,
+a heading walked until blocked, or an absolute timed segment), the speed
+it walks at and the input's sequence number. A ground click is its first
+caller: it resolves to a walk-to, or for a miss to a direction walk
+(direction-movement.ts, #1563). Each caller predicts only what the worker
+would walk at once (walkPredictable for the ground click) while the main
+view holds the product the worker holds (navigationRequestId). Mounted
+walks, selects, pickups and run-ups join through the same seam (#1566 to
+#1571).
 
-Until reconciliation lands (#1441b) a predicted leg runs to its end and
-then hands the drawn pose back to the presenter (carry). It ends at once,
-through the same handback, when the worker refused the click (it took the
-input and is not walking), when the worker took any later command (a
-monster click's run-up, a stop, or anything else the input sequence
-numbers), or when a later click is not predicted. Not yet handled: a
-correction or a speed change in the middle of a predicted leg is not
-replayed; the leg runs at the speed it started with until it ends.
+Reconciliation (#1441b, Unreal's ClientAdjustPosition then
+ClientUpdatePosition): every newer worker publication rebuilds the
+prediction from the worker's own pose at that publication's time, walking
+the worker's own aim, then replays each input the worker has not taken
+yet from that input's time at the speed it was predicted at. An input the
+worker took but refused leaves no trace, because the rebuild starts from
+the worker's pose and aim, not from the inputs. Whatever the rebuild
+moved becomes a visual offset given back within the step cap both local
+presenters share (drawn-step.ts); a teleport-sized one snaps. That is a
+port-only presentation choice where Unreal differs: its autonomous proxy
+does not smooth the residual after a replay (SmoothCorrection runs only
+for simulated and remote autonomous proxies), so the body jumps by it;
+here it drains within 1.04x walking speed and the camera never jumps. A worker
+walking something it publishes no aim for ends the prediction through the
+presenter's carry.
 Port-only, not native: off unless the Experimental row is on.
 
-The mover runs on the main frame clock alone; the worker's clock never
-enters it, and the input sequence (#1441a) is what ties a prediction to
-the worker's answer.
+Clocks: the mover steps on the main frame clock. The worker's clock enters
+only through the simulation origin the runtime receives with every
+snapshot (originMs), to place a publication's pose on that clock; the
+input sequence (#1441a) ties each click to the worker's answer.
 
 ===========================================================================
 */
-import type { Pose } from "@/engine/contracts/gameplay";
+import type { MovementAim, Pose } from "@/engine/contracts/gameplay";
 import type { GroundPickQuery, SurfaceCursor } from "@/engine/contracts/navigation";
+import { SIMULATION_STEP_MS } from "@/engine/contracts/simulation";
 import type { NavOwner } from "@/engine/foundation/navigation/dungeon-ownership";
 import type { NavigationView } from "@/engine/foundation/navigation/clipper";
-import { worldPointAction } from "@/engine/foundation/gameplay/direction-movement";
+import { directionLegEnd, worldPointAction } from "@/engine/foundation/gameplay/direction-movement";
+import { movementDuration, poseDistance } from "@/engine/foundation/gameplay/native-movement";
 import { startWalking, stepWalk, walkLeg, type WalkStepSegment } from "@/engine/foundation/gameplay/walk-step";
+import { boundDrawnStep, MAX_SMOOTHED_CORRECTION, poseDelta } from "@/engine/foundation/gameplay/drawn-step";
+import { hypot3 } from "@/engine/foundation/math/hypot";
+
+// Replay advances in the worker's own fixed steps, so a replayed leg clips
+// against walls as the worker's ticks do.
+const REPLAY_STEP_MS = SIMULATION_STEP_MS;
+// At most this many unacknowledged clicks are kept for replay; one more ends
+// the prediction (a worker that stopped answering).
+const MAX_SAVED_INPUTS = 32;
+// A residual offset below this is settled.
+const SETTLED_OFFSET = 1e-3;
+
+/*
+================
+MoverAim
+
+What a predicted input walks. The mover builds the segment from the pose
+the input starts at (leg), because a replay re-bases every input the
+worker has not taken on the worker's newer pose; only a fixed segment is
+absolute and replays as it is.
+================
+*/
+export type MoverAim = MovementAim | { readonly kind: "fixed"; readonly segment: WalkStepSegment; };
 
 /*
 ================
 LocalMoverWorld
 
 What the mover reads of the worker's latest publication and the main
-thread's navigation view.
+thread's navigation view. originMs is simulation time zero on the main
+frame clock, re-derived from every snapshot, so a drifting origin is
+followed.
 ================
 */
 export interface LocalMoverWorld {
 	readonly pose: Pose | null;
+	readonly poseAtMs: number | undefined;
+	readonly revision: number;
 	readonly moving: boolean;
+	// What the worker walks, if it walks something the mover can rebuild
+	// (movement.ts movementAim), and the speed factor of a direction walk's
+	// 500 ms drift (driftWalk; 1 otherwise).
+	readonly aim: MoverAim | undefined;
+	readonly speedFactor: number;
 	readonly walkPredictable: boolean;
 	readonly speed: number | undefined;
 	readonly inputSeq: number;
 	readonly navigationRequestId: number | undefined;
 	readonly navigationOwner: NavOwner | undefined;
+	readonly originMs: number | undefined;
 	readonly view: { readonly requestId: number; readonly navigation: NavigationView; } | null;
 }
 
@@ -77,9 +124,28 @@ export interface LocalMoverClick {
 
 /*
 ================
+MoverInput
+
+One predicted input, whatever command made it. mount names the ridden
+COS that moves (#1566); undefined is the player.
+================
+*/
+export interface MoverInput {
+	readonly seq: number;
+	readonly aim: MoverAim;
+	// Units a second this input walks at.
+	readonly speed: number;
+	// The body as drawn this frame: a prediction from rest starts here.
+	readonly drawn: Pose;
+	readonly now: number;
+	readonly mount?: number;
+}
+
+/*
+================
 LocalMoverFrame
 
-The predicted pose this frame, or the pose to hand back to the presenter
+The pose to draw this frame, or the pose to hand back to the presenter
 (ended) on the frame a prediction stops.
 ================
 */
@@ -90,18 +156,113 @@ export type LocalMoverFrame =
 
 /*
 ================
+SavedInput
+
+A predicted input the worker has not taken yet: its resolved aim (a
+replay never re-picks), when it was made on the main clock, and the speed
+it was predicted at.
+================
+*/
+interface SavedInput {
+	readonly seq: number;
+	readonly aim: MoverAim;
+	readonly atMs: number;
+	readonly speed: number;
+}
+
+/*
+================
+Walker
+
+A pose walking a segment through the navigation view, as stepWalk advances
+it.
+================
+*/
+interface Walker {
+	pose: Pose;
+	atMs: number;
+	segment: WalkStepSegment | null;
+	owner: NavOwner | undefined;
+	cursor: SurfaceCursor;
+}
+
+/*
+================
+advance
+
+Steps a walker to toMs in the worker's fixed steps.
+================
+*/
+function advance( walker: Walker, toMs: number, navigation: NavigationView ) {
+	while ( walker.segment && walker.atMs < toMs ) {
+		const now = Math.min( toMs, walker.atMs + REPLAY_STEP_MS );
+		const result = stepWalk( {
+			pose: walker.pose,
+			poseAtMs: walker.atMs,
+			segment: walker.segment,
+			owner: walker.owner,
+			cursor: walker.cursor,
+			now,
+			clip: navigation.clip,
+			surface: navigation.surface
+		} );
+		if ( result.kind === "stepped" ) {
+			walker.pose = result.pose;
+			walker.owner = result.owner;
+			walker.segment = result.segment;
+		} else if ( result.kind === "uncovered" ) {
+			walker.segment = result.segment;
+		} else if ( result.kind === "rejected" ) {
+			walker.segment = null;
+		}
+		walker.atMs = now;
+	}
+	walker.atMs = Math.max( walker.atMs, toMs );
+}
+
+/*
+================
+leg
+
+The segment of an aim walked from from, as the worker's movement owner
+starts it: a goal leg (walk-step.ts walkLeg); one DIRECTION_LEG_UNITS leg
+along the heading (movement.ts directionSegment), which stepWalk walks
+past its end until the navigation stops it; or the fixed segment itself.
+================
+*/
+function leg( from: Pose, aim: MoverAim, start: number, speed: number ): WalkStepSegment {
+	if ( aim.kind === "fixed" ) return aim.segment;
+	if ( aim.kind === "goal" ) return startWalking( walkLeg( from, aim.destination, start, speed ) );
+	const to = directionLegEnd( from, aim.heading );
+	return startWalking( {
+		from,
+		to: { ...to, angle: aim.heading },
+		start,
+		duration: movementDuration( poseDistance( from, to ), speed ),
+		direction: { heading: aim.heading, blocked: false }
+	} );
+}
+
+/*
+================
 createLocalMover
 ================
 */
 export function createLocalMover() {
 	let walk: {
-		seq: number;
-		segment: WalkStepSegment | null;
-		pose: Pose;
-		poseAtMs: number;
-		owner: NavOwner | undefined;
-		cursor: SurfaceCursor;
+		// The prediction, and how far the drawn body still is from it: what a
+		// rebuild moved that the cap has not given back yet.
+		walker: Walker;
+		offset: [number, number, number];
+		drawn: Pose;
+		drawnAtMs: number;
+		inputs: SavedInput[];
+		// The last click predicted, and the publication last rebuilt from.
+		lastSeq: number;
+		reconciled: { atMs: number | undefined; revision: number; };
 		requestId: number;
+		// Walking speed (units a second) the cap holds the drawn body to.
+		speed: number;
 	} | null = null;
 	// A prediction a later unpredicted click cut short: its drawn pose is
 	// handed back on the next frame instead of being dropped.
@@ -117,47 +278,125 @@ export function createLocalMover() {
 		const view = world.view;
 		return view && view.requestId === world.navigationRequestId ? view.navigation : null;
 	}
+	/*
+	================
+	end
+
+	Hands the drawn pose back to the presenter.
+	================
+	*/
+	function end(): LocalMoverFrame {
+		const pose = walk!.drawn;
+		walk = null;
+		return { kind: "ended", pose };
+	}
+	/*
+	================
+	replay
+
+	The worker's answer rebuilt to now: its pose at the publication's own
+	time, walking its own goal, then every click it has not taken yet from
+	that input's time (or the publication's, if the input came first) at the
+	speed it was predicted at. Null when the worker walks something it
+	publishes no aim for.
+	================
+	*/
+	function replay( world: LocalMoverWorld, now: number, navigation: NavigationView ): Walker | null {
+		if ( world.moving && !world.aim ) return null;
+		const atMs = world.poseAtMs! + world.originMs!;
+		const walker: Walker = {
+			pose: world.pose!,
+			atMs,
+			segment: world.moving && world.aim && world.speed ?
+				leg( world.pose!, world.aim, atMs, world.speed * world.speedFactor ) :
+				null,
+			owner: world.navigationOwner,
+			cursor: {}
+		};
+		for ( const input of walk!.inputs ) {
+			const inputMs = Math.max( input.atMs, walker.atMs );
+			advance( walker, inputMs, navigation );
+			walker.segment = leg( walker.pose, input.aim, inputMs, input.speed );
+		}
+		advance( walker, now, navigation );
+		return walker;
+	}
+	/*
+	================
+	predict
+
+	The one entry every predicted input takes: starts or redirects the
+	prediction from the prediction's pose (or the drawn pose from rest)
+	on the input's frame and saves the input for replay. Returns whether
+	it predicts; the command goes to the worker either way, and a caller
+	predicts only what the worker's own gate admits now.
+	================
+	*/
+	function predict( input: MoverInput, world: LocalMoverWorld ): boolean {
+		if ( !viewFor( world ) || !world.pose || !input.speed || (walk?.inputs.length ?? 0) >= MAX_SAVED_INPUTS ) {
+			if ( walk ) cut = walk.drawn;
+			walk = null;
+			return false;
+		}
+		cut = null;
+		const from = walk?.walker.pose ?? input.drawn;
+		const saved = { seq: input.seq, aim: input.aim, atMs: input.now, speed: input.speed };
+		walk = {
+			walker: {
+				pose: from,
+				atMs: input.now,
+				segment: leg( from, input.aim, input.now, input.speed ),
+				owner: walk?.walker.owner ?? world.navigationOwner,
+				cursor: walk?.walker.cursor ?? {}
+			},
+			offset: walk?.offset ?? [ 0, 0, 0 ],
+			drawn: walk?.drawn ?? input.drawn,
+			drawnAtMs: walk?.drawnAtMs ?? input.now,
+			inputs: [ ...(walk?.inputs ?? []), saved ],
+			lastSeq: input.seq,
+			reconciled: walk?.reconciled ?? { atMs: world.poseAtMs, revision: world.revision },
+			requestId: world.view!.requestId,
+			speed: input.speed
+		};
+		return true;
+	}
 	return {
+		predict,
 		/*
 		================
 		click
 
-		Starts a predicted walk for a ground click, from the drawn pose on the
-		click frame. Returns whether it predicts; the click is sent to the
-		worker either way.
+		A ground click (CGInterface_MoveToWorldPoint 0x6932A0): a hit walks to
+		the point, a miss walks the ray's heading until blocked, and a miss
+		within 5 degrees of the direction already walked changes nothing, as
+		the worker drops it (0x693519).
 		================
 		*/
 		click( input: LocalMoverClick, world: LocalMoverWorld ): boolean {
 			const navigation = viewFor( world );
 			if ( !navigation || !world.walkPredictable || !world.speed || !world.pose ) {
-				if ( walk ) cut = walk.pose;
+				if ( walk ) cut = walk.drawn;
 				walk = null;
 				return false;
 			}
-			const from = walk?.pose ?? input.drawn;
-			const action = worldPointAction( from, navigation.pick( input.query ), input.query, false );
-			if ( action.kind !== "walk-to" ) {
-				if ( walk ) cut = walk.pose;
-				walk = null;
-				return false;
-			}
-			cut = null;
-			walk = {
-				seq: input.seq,
-				segment: startWalking( walkLeg( from, action.destination, input.now, world.speed ) ),
-				pose: from,
-				poseAtMs: input.now,
-				owner: walk?.owner ?? world.navigationOwner,
-				cursor: walk?.cursor ?? {},
-				requestId: world.view!.requestId
-			};
-			return true;
+			const from = walk?.walker.pose ?? input.drawn;
+			// The worker tests the walk it walks: a direction walk in progress.
+			const walkingDirection = walk ?
+				!!walk.walker.segment?.direction :
+				world.moving && world.aim?.kind === "direction";
+			const action = worldPointAction( from, navigation.pick( input.query ), input.query, walkingDirection );
+			if ( action.kind === "none" ) return walk !== null;
+			const aim: MoverAim = action.kind === "walk-to" ?
+				{ kind: "goal", destination: action.destination } :
+				{ kind: "direction", heading: action.heading };
+			return predict( { seq: input.seq, aim, speed: world.speed, drawn: input.drawn, now: input.now }, world );
 		},
 		/*
 		================
 		frame
 
-		Steps the predicted walk to now.
+		Steps the prediction to now, rebuilds it from every newer worker
+		publication, and draws it within the shared step cap.
 		================
 		*/
 		frame( now: number, world: LocalMoverWorld ): LocalMoverFrame {
@@ -168,48 +407,45 @@ export function createLocalMover() {
 			}
 			if ( !walk ) return { kind: "idle" };
 			const navigation = viewFor( world );
-			// The worker answered this click and is not walking it (refused,
-			// held, or stopped at once), or the navigation it walks has changed:
-			// the prediction ends where it is drawn.
-			const refused = world.inputSeq >= walk.seq && !world.moving && walk.segment !== null &&
-				now > walk.segment.start;
-			// The worker took a later command than this click: whatever it does
-			// (a run-up, a stop) is no longer the predicted leg.
-			const superseded = world.inputSeq > walk.seq;
-			if ( !navigation || world.navigationRequestId !== walk.requestId || refused || superseded ) {
-				const pose = walk.pose;
-				walk = null;
-				return { kind: "ended", pose };
-			}
-			if ( walk.segment ) {
-				const result = stepWalk( {
-					pose: walk.pose,
-					poseAtMs: walk.poseAtMs,
-					segment: walk.segment,
-					owner: walk.owner,
-					cursor: walk.cursor,
-					now,
-					clip: navigation.clip,
-					surface: navigation.surface
-				} );
-				if ( result.kind === "stepped" ) {
-					walk.pose = result.pose;
-					walk.owner = result.owner;
-					walk.segment = result.segment;
-				} else if ( result.kind === "uncovered" ) {
-					walk.segment = result.segment;
-				} else if ( result.kind === "rejected" ) {
-					walk.segment = null;
+			if ( !navigation || world.navigationRequestId !== walk.requestId ) return end();
+			walk.inputs = walk.inputs.filter( input => input.seq > world.inputSeq );
+			// The cap follows the speed the worker walks at, a direction walk's
+			// drift factor included, or the body falls behind a faster drift.
+			if ( world.speed ) walk.speed = world.speed * world.speedFactor;
+			advance( walk.walker, now, navigation );
+			let snapped = false;
+			const fresh = world.poseAtMs !== walk.reconciled.atMs || world.revision !== walk.reconciled.revision;
+			if ( fresh && world.pose && world.poseAtMs !== undefined && world.originMs !== undefined ) {
+				walk.reconciled = { atMs: world.poseAtMs, revision: world.revision };
+				let rebuilt = replay( world, now, navigation );
+				if ( !rebuilt ) return end();
+				// A teleport-sized rebuild is a jump on purpose. The clicks still in
+				// flight were aimed from the old place: drop them, so the body does
+				// not walk a click's leg from the new place before the worker
+				// answers it (the worker decides what they mean there).
+				const gap = poseDelta( walk.drawn, rebuilt.pose );
+				snapped = !gap || hypot3( ...gap ) > MAX_SMOOTHED_CORRECTION;
+				if ( snapped && walk.inputs.length ) {
+					walk.inputs = [];
+					rebuilt = replay( world, now, navigation )!;
 				}
-				if ( result.kind !== "idle" ) walk.poseAtMs = now;
+				walk.walker = rebuilt;
 			}
-			if ( walk.segment ) return { kind: "walking", pose: walk.pose };
-			// The leg has ended. Hold the drawn pose until the worker has
-			// answered the click and finished its own leg, then hand it back.
-			if ( world.inputSeq < walk.seq || world.moving ) return { kind: "walking", pose: walk.pose };
-			const pose = walk.pose;
-			walk = null;
-			return { kind: "ended", pose };
+			// The drawn body heads for the prediction; the shared cap
+			// (drawn-step.ts) limits how far it moves this frame, so what a
+			// rebuild moved is given back within the margin, never in a jump.
+			const drawn = snapped ?
+				walk.walker.pose :
+				boundDrawnStep( walk.drawn, walk.walker.pose, walk.speed / 1000, now - walk.drawnAtMs );
+			walk.offset = poseDelta( walk.walker.pose, drawn ) ?? [ 0, 0, 0 ];
+			walk.drawn = drawn;
+			walk.drawnAtMs = now;
+			// Settled: nothing left to walk, no click in flight, the worker is
+			// standing and the offset is given back.
+			const settled = !walk.walker.segment && !walk.inputs.length && !world.moving &&
+				world.inputSeq >= walk.lastSeq && hypot3( ...walk.offset ) < SETTLED_OFFSET;
+			if ( settled ) return end();
+			return { kind: "walking", pose: drawn };
 		},
 		/*
 		================

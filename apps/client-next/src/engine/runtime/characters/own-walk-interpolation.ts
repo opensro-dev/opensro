@@ -37,7 +37,12 @@ import type { SampleInput } from "@/engine/contracts/pose-presentation";
 import { SIMULATION_STEP_MS } from "@/engine/contracts/simulation";
 import { interpolateMovement } from "@/engine/foundation/gameplay/native-movement";
 import { hypot2, hypot3 } from "@/engine/foundation/math/hypot";
-import { displaceRegionXZ, sameCoordinateSpace, worldDelta } from "@/engine/foundation/world/world-space";
+import {
+	boundDrawnStep,
+	MAX_SMOOTHED_CORRECTION,
+	offsetPose,
+	poseDelta as delta
+} from "@/engine/foundation/gameplay/drawn-step";
 
 // The delay never drops below one fixed step: the fixed-tick blend sits at
 // most one step behind the newest tick.
@@ -61,18 +66,6 @@ const MAX_HISTORY = 48;
 const CONSISTENT_DISTANCE = .25;
 // Unreal's default NetworkSimulatedSmoothLocationTime; halved when stopped.
 const CORRECTION_SMOOTH_SECONDS = .1;
-// A correction farther than this snaps (a teleport, a relocation).
-const MAX_SMOOTHED_CORRECTION = 96;
-// A frame's whole drawn step (the buffered walk plus any offset it gives
-// back) is at most this many times walking speed times the frame time,
-// whatever moved the base: a decaying correction, a start or redirect whose
-// first publications arrive before the worker admits the leg, or a frame
-// clock that jumps. Unreal lets the mesh offset glide faster than the walk;
-// here no drawn frame outruns the walk by more than this margin, so the
-// camera, which follows the drawn body, never surges. What does not fit
-// carries to the next frame as offset. Only a deliberate snap (a
-// correction beyond MAX_SMOOTHED_CORRECTION) is exempt.
-const CORRECTION_SPEED_MARGIN = 1.04;
 
 /*
 ================
@@ -120,36 +113,12 @@ interface Leg {
 
 /*
 ================
-delta
-
-World XZ (and Y) from a to b, or null across coordinate spaces.
-================
-*/
-function delta( a: Pose, b: Pose ): [number, number, number] | null {
-	if ( !sameCoordinateSpace( a.regionId, b.regionId ) ) return null;
-	const [dx, dz] = worldDelta( a, b );
-	return [ dx, b.y - a.y, dz ];
-}
-
-/*
-================
 planar
 ================
 */
 function planar( a: Pose, b: Pose ): number {
 	const d = delta( a, b );
 	return d ? hypot2( d[0], d[2] ) : Infinity;
-}
-
-/*
-================
-offsetPose
-================
-*/
-function offsetPose( pose: Pose, v: readonly [number, number, number] ): Pose {
-	if ( v[0] === 0 && v[1] === 0 && v[2] === 0 ) return pose;
-	const next = displaceRegionXZ( pose, v[0], v[2] );
-	return { ...pose, regionId: next.regionId, x: next.x, y: pose.y + v[1], z: next.z };
 }
 
 /*
@@ -433,14 +402,12 @@ export function createOwnWalkInterpolation() {
 			if ( leg ) walkSpeed = leg.speed;
 			let drawn = offsetPose( base, offset );
 			const frameMs = lastClockMs === undefined ? 0 : Math.max( 0, clockMs - lastClockMs );
-			if ( !snapped && lastDrawn && walkSpeed && frameMs > 0 ) {
-				// Bound the frame's whole step; keep the rest as offset.
-				const step = delta( lastDrawn, drawn );
-				const length = step ? hypot3( ...step ) : 0;
-				const budget = walkSpeed * CORRECTION_SPEED_MARGIN * frameMs;
-				if ( step && length > budget ) {
-					const k = budget / length;
-					drawn = offsetPose( lastDrawn, [ step[0] * k, step[1] * k, step[2] * k ] );
+			if ( !snapped ) {
+				// Bound the frame's whole step (drawn-step.ts); keep the rest
+				// as offset.
+				const bounded = boundDrawnStep( lastDrawn, drawn, walkSpeed, frameMs );
+				if ( bounded !== drawn ) {
+					drawn = bounded;
 					offset = delta( base, drawn ) ?? [ 0, 0, 0 ];
 				}
 			}
@@ -479,7 +446,7 @@ export function createOwnWalkInterpolation() {
 			const d = delta( poseAt( lastDrawnAtMs ?? nowMs - delayMs ), displayed );
 			if ( d && hypot3( ...d ) <= MAX_SMOOTHED_CORRECTION ) offset = d;
 			// The carried pose is the one on screen: the next frame's step is
-			// bounded from it (CORRECTION_SPEED_MARGIN), not from the last pose
+			// bounded from it (drawn-step.ts), not from the last pose
 			// this presenter computed but did not show.
 			lastDrawn = { ...displayed };
 		},
@@ -571,7 +538,7 @@ export function createOwnWalkPresenter( turn: ( from: number, to: number, second
 		================
 		enable
 
-		The Experimental "Interpolated own movement" row (read each frame).
+		Always on since 2026-10-25 (it was the Experimental "Interpolated own movement" row); read each frame.
 		Disabling keeps the tracks: the pose that leaves interpolation
 		consumes the last drawn pose through take() for its recovery frame
 		(#1499); retain() and clear() own a track's end otherwise.

@@ -667,6 +667,18 @@ The separate presentation corridor bounds cosmetic extrapolation.
 
 	/*
 ================
+movementAim
+
+The published aim of the walk in progress (state).
+================
+	*/
+	function movementAim(): import("@/engine/contracts/gameplay").MovementAim | undefined {
+		if ( !segment || segment.fixedTiming ) return undefined;
+		if ( !segment.direction ) return { kind: "goal", destination: { ...segment.to } };
+		return segment.direction.blocked ? undefined : { kind: "direction", heading: segment.direction.heading };
+	}
+	/*
+================
 referenceAt
 ================
 	*/
@@ -1776,6 +1788,11 @@ state
 				movementRevision,
 				movementInputSeq: inputSeq,
 				movementSpeed: speed,
+				// The walk the main-thread mover can rebuild (#1441b, #1563): a goal
+				// walk's destination or a direction walk's live heading; undefined
+				// for a blocked leg, a skill displacement or no walk.
+				movementAim: movementAim(),
+				movementSpeedFactor: segment?.direction && walk ? walk.factor : 1,
 				movementTransition: { ...transition, pathEligible: segment?.admitted === true },
 				movementDiagnostics: { total: reanchorReports, recent: recentReanchors.slice() },
 				navigationFloor: navigation.floor( pose, owner ),
