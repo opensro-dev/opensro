@@ -27,16 +27,19 @@ yieldCpu
 
 Lowers this process to below-normal priority unless the environment opts
 out. Returns the priority now in force, or null when the platform refused
-(a check never fails over its own priority).
+(a check never fails over its own priority). priority is node:os's
+getPriority/setPriority/constants, a parameter so the decision is tested
+apart from the live process, whose priority other actors on a shared
+machine can change (#1651).
 ================
 */
-export function yieldCpu( env = process.env ) {
+export function yieldCpu( env = process.env, priority = os ) {
 	if ( (env[PRIORITY_ENV] ?? "").trim().toLowerCase() === "normal" ) return null;
 	try {
-		if ( os.getPriority() < os.constants.priority.PRIORITY_BELOW_NORMAL ) {
-			os.setPriority( os.constants.priority.PRIORITY_BELOW_NORMAL );
+		if ( priority.getPriority() < priority.constants.priority.PRIORITY_BELOW_NORMAL ) {
+			priority.setPriority( priority.constants.priority.PRIORITY_BELOW_NORMAL );
 		}
-		return os.getPriority();
+		return priority.getPriority();
 	} catch {
 		return null;
 	}

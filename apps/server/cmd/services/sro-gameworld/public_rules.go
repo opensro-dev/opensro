@@ -366,7 +366,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Requested for the beta; the original speed returns with one setting."},
 			{Flag: action.EnvAnnounceSoxDrop, On: action.AnnouncementsFromEnv().SoxDrop,
 				Native: "A Seal of Star, Moon or Sun drop is not announced.",
-				Now: fmt.Sprintf("Everyone sees \"<player> has dropped <item> (<seal>) from <monster>\" for degree %d and above.",
+				Now: fmt.Sprintf("Everyone sees a seal drop notice for degree %d and above; a Sun's leads with SEAL OF SUN and its line is coloured, as the Star's and Moon's are by their tiers.",
 					settings.Int(tunables.SoxNoticeMinDegree)),
 				Why: "Requested for the beta; the original quiet drop returns with one setting."},
 			{Flag: action.EnvAnnouncePlus, On: action.AnnouncementsFromEnv().Plus,

@@ -448,3 +448,23 @@ func TestMonsterStuckPreservesMaturedSettleFrameWhenNotYetStuck(t *testing.T) {
 		t.Fatalf("settled pose = %+v, want %+v", next.Pose, to)
 	}
 }
+
+// A stuck relocation may move an actor anywhere on its own plane and out
+// of a cave, but never carries an outdoor actor into a cave (#1646 keeps
+// the rule; #1658 changed how often cave actors reach the stuck counter).
+func TestStuckRelocationNeverEntersACaveFromOutdoors(t *testing.T) {
+	const outdoor, otherOutdoor, cave, otherCave uint16 = 0x62a8, 0x62a9, 0x8001, 0x8003
+	for _, test := range []struct {
+		from, to uint16
+		enters   bool
+	}{
+		{outdoor, otherOutdoor, false},
+		{outdoor, cave, true},
+		{cave, outdoor, false},
+		{cave, otherCave, false},
+	} {
+		if got := relocationEntersCave(test.from, test.to); got != test.enters {
+			t.Errorf("%#x -> %#x: enters cave %t, want %t", test.from, test.to, got, test.enters)
+		}
+	}
+}

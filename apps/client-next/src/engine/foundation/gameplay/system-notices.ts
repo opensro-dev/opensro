@@ -95,6 +95,55 @@ export function isServerNoticeChannel( channel: number | undefined ): boolean {
 
 /*
 ================
+isSunDropNoticeText
+
+Whether a drop notice's text announces a Seal of Sun drop (#1640). The
+tiered wording leads with "SEAL OF SUN:"; a server without it writes
+the seal in parentheses, and the parenthesis alone also appears in
+plus notices, which stay unhighlighted - those never say "has dropped".
+================
+*/
+export function isSunDropNoticeText( text: string ): boolean {
+	return text.startsWith( "SEAL OF SUN: " ) ||
+		(text.includes( "(Seal Of Sun)" ) && text.includes( " has dropped " ));
+}
+
+/*
+================
+Seal notice colours
+
+Port-only, not native (#1640, owner decision 2026-10-26: "Colour by
+tier + Sun prefix"): a drop or plus notice line colours by the linked
+item's seal tier - the Star in the rare gold the item tooltip names it
+with (item-tooltip.ts), the Moon in pale silver-blue, the Sun in
+bright orange-red. Unsealed items keep the channel's own colour. The
+colours ride the "Drop & plus notices" Experimental row: row off, the
+channel never reaches the log at all.
+================
+*/
+export const SEAL_NOTICE_COLOR_STAR = 0xffffd953;
+export const SEAL_NOTICE_COLOR_MOON = 0xffc9d9f2;
+export const SEAL_NOTICE_COLOR_SUN = 0xffff4517;
+
+/*
+================
+sealNoticeColorArgb
+
+The notice colour for an item's seal fields (rarity 2 and the
+itemClass whose (itemClass - 1) % 3 is Star, Moon, Sun), or undefined
+when the item carries no seal.
+================
+*/
+export function sealNoticeColorArgb(
+	rarity: number | undefined,
+	itemClass: number | undefined
+): number | undefined {
+	if ( rarity !== 2 || !itemClass ) return undefined;
+	return [ SEAL_NOTICE_COLOR_STAR, SEAL_NOTICE_COLOR_MOON, SEAL_NOTICE_COLOR_SUN ][(itemClass - 1) % 3];
+}
+
+/*
+================
 serverNotification
 
 753A6F -> 752ABD -> 67A140/6B3180: the native type-7 server notification,
@@ -120,9 +169,7 @@ export function serverNotification( opcode: number, p: Uint8Array ): SystemNotic
 		if ( links && announcedPlusSeven( p, 3 + 2 * n ) ) return { ...notice, plusSeven: true };
 		// Port-only, not native: Seal of Sun drop announcements highlight in
 		// gold on the top banner and chat log; Star/Moon and plus notices stay unchanged.
-		const sun = text.includes( "(Seal Of Sun)" ) && text.includes( " has dropped " ) ?
-			({ sunDrop: true } as const) :
-			{};
+		const sun = isSunDropNoticeText( text ) ? ({ sunDrop: true } as const) : {};
 		return { ...notice, dropPlus: true, ...sun };
 	}
 	return notice;

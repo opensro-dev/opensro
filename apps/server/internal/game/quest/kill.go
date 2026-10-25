@@ -23,6 +23,7 @@ func (rt *Runtime) KillUpdater() func(*enterworld.Character, string, uint8) ([]w
 			return nil, false
 		}
 		rt.noteRahid6Kill(character, codename)
+		rt.noteEasteu21Kill(character, codename)
 		var frames []wire.Frame
 		for i, record := range character.ActiveQuests {
 			def, ok := rt.Defs.ByRefID(record.RefID)

@@ -493,7 +493,10 @@ the entry continues it like the one after a world transfer.
 		notice: gameplay.notice,
 		chatBlocks: gameplay.chatBlocks,
 		options: gameplay.options,
-		experimental: gameplay.experimental,
+		experimental( value: import("@/engine/foundation/ui/experimental-options").ExperimentalGameplay ) {
+			gameplay.experimental( value );
+			entities.sunDropMarker( value.sunDropMarker === true );
+		},
 		/*
 ================
 command

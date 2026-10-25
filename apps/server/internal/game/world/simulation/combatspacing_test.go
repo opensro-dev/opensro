@@ -62,3 +62,27 @@ func TestCombatSpacingSeparatesInnerAndOuterActionRadii(t *testing.T) {
 		}
 	}
 }
+
+// An actor and a target on different planes are never in reach and never
+// approached, even at coordinates that would admit them on one plane: the
+// outdoor sector grid and a cave floor share no space (#1646).
+func TestCombatSpacingRefusesAcrossPlanes(t *testing.T) {
+	spacing := CombatSpacing{
+		ActorBodyRadius:  BodyRadius(4),
+		TargetBodyRadius: BodyRadius(6),
+		ActionReach:      ActionReach(6),
+	}
+	outdoor := Spawn{RegionID: 0x62a8, X: 990, Y: 20, Z: 458}
+	cave := Spawn{RegionID: 0x8001, X: 1000, Y: 20, Z: 458}
+	if spacing.Contains(outdoor, cave) || spacing.Contains(cave, outdoor) {
+		t.Fatal("a pair across the outdoor/cave boundary was admitted")
+	}
+	if _, disposition := spacing.ApproachGoal(outdoor, cave); disposition != CombatApproachInvalid {
+		t.Fatalf("approach across planes = %v, want invalid", disposition)
+	}
+	sameCave := cave
+	sameCave.X -= 10
+	if !spacing.Contains(sameCave, cave) {
+		t.Fatal("the same distance inside one cave was refused")
+	}
+}
