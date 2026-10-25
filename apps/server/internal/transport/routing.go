@@ -8,6 +8,7 @@ import (
 type helloAdmissionGate struct {
 	mu     sync.RWMutex
 	verify HelloAuthFunc
+	commit HelloCommitAuthFunc
 }
 
 func (gate *helloAdmissionGate) set(verify HelloAuthFunc) {
@@ -16,10 +17,22 @@ func (gate *helloAdmissionGate) set(verify HelloAuthFunc) {
 	gate.mu.Unlock()
 }
 
+func (gate *helloAdmissionGate) setCommit(verify HelloCommitAuthFunc) {
+	gate.mu.Lock()
+	gate.commit = verify
+	gate.mu.Unlock()
+}
+
 func (gate *helloAdmissionGate) current() HelloAuthFunc {
 	gate.mu.RLock()
 	defer gate.mu.RUnlock()
 	return gate.verify
+}
+
+func (gate *helloAdmissionGate) commitCurrent() HelloCommitAuthFunc {
+	gate.mu.RLock()
+	defer gate.mu.RUnlock()
+	return gate.commit
 }
 
 // enterWorldGate owns the replaceable pre-dispatch identity verifier.

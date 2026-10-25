@@ -11,6 +11,7 @@
     "src/engine/runtime/characters/mall-preview.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/ui/hud/withdrawal.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/beta-map/beta-map.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+    "src/engine/runtime/simulation/worker/session/world/gameplay/unique-rank/unique-rank.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/ui/warm/window-warm.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/pickup.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/presentation/effective-hp.ts": "src/engine/runtime/presentation/presentation.ts",
@@ -29,6 +30,7 @@
     "src/engine/runtime/ui/hud/fortress-production-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/union-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/guild-war-hud.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/unique-rank-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/exchange-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/gacha-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/stall-hud.ts": "src/engine/runtime/ui/ui.ts",
@@ -192,6 +194,7 @@
   "internals": {
     "src/engine/runtime/characters/resources/procedural-effects.ts": "src/engine/runtime/characters/resources/resources.ts",
     "src/engine/runtime/platform/telemetry.ts": "src/engine/runtime/platform/platform.ts",
+    "src/engine/runtime/platform/keep-awake.ts": "src/engine/runtime/platform/platform.ts",
     "src/engine/runtime/platform/ui/credential-hints.ts": "src/engine/runtime/platform/ui/ui.ts",
     "src/engine/runtime/platform/ui/drag-shield.ts": "src/engine/runtime/platform/ui/ui.ts",
     "src/engine/runtime/platform/ui/touch-inspect.ts": "src/engine/runtime/platform/ui/ui.ts",

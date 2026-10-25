@@ -119,11 +119,14 @@ function officialEnchantSparks( byCode, vsroRoot ) {
 		const c = line.trim().split( /\t/ ), item = byCode.get( c[0] );
 		// A later-client item the v1.150 data does not have draws nothing.
 		if ( !item || item.slot === null ) continue;
+		// The field count is checked before any field is read, so a short
+		// row fails with this error instead of a TypeError on a missing one.
+		if ( c.length < 6 ) throw Error( "Unsupported itemoptionefp row " + line );
 		const effectPath = c[1].replaceAll( "\\", "/" ).toLowerCase(),
 			scale = Number( c[2] ),
 			threshold = Number( c[5] );
 		if (
-			c.length < 6 || !effectPath.endsWith( ".efp" ) || effectPath.includes( ".." ) ||
+			!effectPath.endsWith( ".efp" ) || effectPath.includes( ".." ) ||
 			!Number.isFinite( scale ) || scale <= 0 || !c[3] || c[4] !== "none" ||
 			!Number.isInteger( threshold ) || threshold < 1 || threshold > 255
 		) throw Error( "Unsupported itemoptionefp row " + line );
