@@ -225,6 +225,19 @@ const siegeRebirthRefusalMs = 15 * 1000
 
 /*
 ================
+inSiegeWorld
+
+CGameWorldMgr_CallGameWorldSlot31's answer for the character's world:
+a fortress siege world.
+================
+*/
+func inSiegeWorld(c *enterworld.Character) bool {
+	world, found := instance.Lookup(instance.ID(domain.CharacterWorldInstance(c)).Definition())
+	return found && world.Siege()
+}
+
+/*
+================
 siegeRebirthRefused
 
 50FEE0 before the death-kind check (510086..5100D6): while a siege war
@@ -238,19 +251,6 @@ Definition.Siege is slot 31's answer, the same pair worldPlayerEnemy
 consults.
 ================
 */
-/*
-================
-inSiegeWorld
-
-CGameWorldMgr_CallGameWorldSlot31's answer for the character's world:
-a fortress siege world.
-================
-*/
-func inSiegeWorld(c *enterworld.Character) bool {
-	world, found := instance.Lookup(instance.ID(domain.CharacterWorldInstance(c)).Definition())
-	return found && world.Siege()
-}
-
 func (rt *Runtime) siegeRebirthRefused(divisionID string, c *enterworld.Character) bool {
 	if c == nil || c.SiegeDeathAtMs == 0 || rt.Fortresses == nil || !rt.Fortresses.WarActive(divisionID) {
 		return false
@@ -330,7 +330,23 @@ func (rt *Runtime) handleRebirthInDoor(
 	// it fell at any level, whatever the choice; otherwise the present point
 	// is a beginner's (level 10 or below, 51017F). The shard may set the town
 	// rule for team deaths too (teamdeath.go).
-	inPlace := rt.revivesInPlace(before.DeathKind)
+	var camp *flagWarMatch
+	var arrival travelPoint
+	matchRebirth := false
+	if !forceTown {
+		if match := rt.flagWarResidentMatch(divisionID, before); match != nil {
+			matchRebirth = true
+			choice = wire.RebirthAtSpecifiedPoint
+			if !rt.instanceWorldRetiring(divisionID, match.lease) {
+				if point, ok := match.campRebirthPoint(before.ID, rt.Now().UnixMilli()); ok {
+					arrival, camp = point, match
+				}
+			}
+		}
+	}
+	// The finished match returns to town; a team-death or beginner choice
+	// must not revive inside a layer whose evacuation is already underway.
+	inPlace := !matchRebirth && rt.revivesInPlace(before.DeathKind)
 	if inPlace && !forceTown {
 		choice = wire.RebirthAtPresentPoint
 	}
@@ -361,7 +377,9 @@ func (rt *Runtime) handleRebirthInDoor(
 		}
 	}()
 	if choice == wire.RebirthAtSpecifiedPoint {
-		arrival := rt.appointedRebirth(divisionID, before)
+		if camp == nil {
+			arrival = rt.appointedRebirth(divisionID, before)
+		}
 		destination = arrival.spawn
 		preview := corpse
 		preview.Spawn = destination
@@ -388,6 +406,13 @@ func (rt *Runtime) handleRebirthInDoor(
 		// never roll back over a concurrent character mutation.
 		if !reflect.DeepEqual(character.Snapshot(), before) || !reflect.DeepEqual(current, corpse) {
 			return false
+		}
+		if camp != nil {
+			point, ok := camp.campRebirthPoint(before.ID, rt.Now().UnixMilli())
+			if !ok || point != arrival || rt.flagWarResidentMatch(divisionID, before) != camp ||
+				rt.instanceWorldRetiring(divisionID, camp.lease) {
+				return false
+			}
 		}
 		state := rt.Worlds.Update(worldKey, func() simulation.WorldState { return corpse }, func(world *simulation.WorldState) {
 			world.Spawn = destination
@@ -437,6 +462,11 @@ func (rt *Runtime) handleRebirthInDoor(
 		frames = append(frames, bodyStatusFrame(gid, snapshot.NativeBodyStatus))
 	}
 	frames = append(frames, life)
+	if camp != nil {
+		camp.mu.Lock()
+		frames = append(frames, rt.flagWarSceneFrames(camp, camp.participants[character.ID], rt.Now().UnixMilli())...)
+		camp.mu.Unlock()
+	}
 	return OpResult{
 		Frames:    frames,
 		Broadcast: append(append([]wire.Frame{correction, life}, untouchable...), corpseDespawns...),

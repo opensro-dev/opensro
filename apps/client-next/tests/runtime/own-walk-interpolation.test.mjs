@@ -143,10 +143,9 @@ skewMs is how far the frame clock runs ahead of the worker clock (the
 recording's is about 2 s; a negative one runs behind).
 ================
 */
-function run( interpolate, skewMs = 0, publish = worker ) {
+function run( skewMs = 0, publish = worker ) {
 	const presentation = createPosePresentation();
 	presentation.origin( skewMs );
-	presentation.interpolateOwnWalk( interpolate );
 	/** @type {[number, import("../../src/engine/contracts/gameplay").Pose][]} */
 	const drawn = [];
 	let frame = 0, workerMs = 500;
@@ -186,7 +185,7 @@ function speeds( drawn ) {
 
 test("the worker's own 100 ms path windows draw no faster than the walk either", () => {
 	for ( const skew of [ 0, 2037, -30 ] ) {
-		const peak = Math.max( ...speeds( run( true, skew, windowed ) ) );
+		const peak = Math.max( ...speeds( run( skew, windowed ) ) );
 		assert.ok( peak <= SPEED * 1.05, `skew ${skew}: peak ${peak.toFixed( 1 )} u/s against ${SPEED}` );
 	}
 });
@@ -195,7 +194,7 @@ test("starts, a redirect and a start after a long rest never draw the body faste
 	// Clocks in step, the recording's 2 s frame-clock lead, and a worker
 	// clock running ahead.
 	for ( const skew of [ 0, 2037, -30 ] ) {
-		const fast = speeds( run( true, skew ) ).filter( speed => speed > SPEED * (1 + 1e-6) );
+		const fast = speeds( run( skew ) ).filter( speed => speed > SPEED * (1 + 1e-6) );
 		assert.deepEqual(
 			fast,
 			[],
@@ -204,13 +203,8 @@ test("starts, a redirect and a start after a long rest never draw the body faste
 	}
 });
 
-test("the old dead-reckoned presenter is what surged (the test reproduces the report)", () => {
-	const peak = Math.max( ...speeds( run( false ) ) );
-	assert.ok( peak > SPEED * 1.2, `previous presenter peaked at ${peak.toFixed( 1 )} u/s` );
-});
-
 test("the drawn walk turns the redirect's own corner and stops where the worker stopped", () => {
-	const drawn = run( true );
+	const drawn = run();
 	// A publication later than any the delay has yet seen can let the body
 	// pass a corner before the turn exists. It never passes by more than one
 	// publication step of walking, and the late-turn rule (speed test above)
@@ -224,7 +218,7 @@ test("the drawn walk turns the redirect's own corner and stops where the worker 
 });
 
 test("each walk leaves rest within one delay of its click", () => {
-	const drawn = run( true );
+	const drawn = run();
 	for ( const [startMs, rest] of [ [ START_MS, P0 ], [ SECOND_MS, LEG_C.from ] ] ) {
 		const left = drawn.find( ( [t, p] ) => t * 1000 >= startMs && Math.hypot( p.x - rest.x, p.z - rest.z ) > 1e-6 );
 		assert.ok( left, "the body left rest" );
@@ -246,7 +240,6 @@ fixed 20 ms latency; returns a frame function drawing at worker ms.
 function straight() {
 	const presentation = createPosePresentation();
 	presentation.origin( 0 );
-	presentation.interpolateOwnWalk( true );
 	const leg = { from: P0, to: { ...P0, x: P0.x + 1000 } };
 	/*
 	================
@@ -359,7 +352,6 @@ test("a rider's predicted walk moves the mount it rides, and both are handed bac
 	const MOUNT = 9;
 	const presentation = createPosePresentation();
 	presentation.origin( 0 );
-	presentation.interpolateOwnWalk( true );
 	const leg = { from: P0, to: { ...P0, x: P0.x + 1000 } };
 	const both = ms => {
 		const tick = Math.floor( (ms - 20) / STEP_MS ) * STEP_MS;
@@ -465,25 +457,6 @@ test("handing over to a skill displacement and back never jumps", () => {
 	assert.ok( Math.abs( back.x - before.x ) < 3, `jumped ${(back.x - before.x).toFixed( 2 )} on return` );
 });
 
-test("turning the row off mid-walk hands the drawn pose over instead of snapping", () => {
-	const { presentation, frame } = straight();
-	let ms = 36, previous = frame( ms );
-	for ( ms += 16; ms < 400; ms += 16 ) previous = frame( ms );
-	// The row goes off mid-walk: like the dash, this frame keeps the last
-	// interpolated pose (the carry) rather than jumping to the
-	// dead-reckoned sample a render delay ahead (#1499).
-	presentation.interpolateOwnWalk( false );
-	const handed = frame( ms += 16 );
-	assert.equal( handed.x, previous.x, "the toggle-off frame draws the carried pose" );
-	assert.equal( handed.z, previous.z, "the toggle-off frame draws the carried pose" );
-	// The generic presenter then walks on from the carried pose.
-	const next = frame( ms += 16 );
-	assert.ok(
-		Math.abs( next.x - handed.x ) < 3,
-		`jumped ${(next.x - handed.x).toFixed( 2 )} after the handoff`
-	);
-});
-
 test("a second pose() in the frame the prediction ends hands rider and mount back only once (#1566)", () => {
 	const MOUNT = 9;
 	/*
@@ -497,7 +470,6 @@ test("a second pose() in the frame the prediction ends hands rider and mount bac
 	const handback = twice => {
 		const presentation = createPosePresentation();
 		presentation.origin( 0 );
-		presentation.interpolateOwnWalk( true );
 		const leg = { from: P0, to: { ...P0, x: P0.x + 1000 } };
 		const both = ( ms, repeat = false ) => {
 			const tick = Math.floor( (ms - 20) / STEP_MS ) * STEP_MS;

@@ -541,6 +541,11 @@ export interface CastDisplacement {
 	readonly token: number;
 	readonly kind: 2 | 4 | 5 | 8;
 	readonly destination: Omit<Pose, "angle">;
+	// The caster's own motion (its travel, its landing correction, or an
+	// impact it struck onto itself): the one displacement the main-thread
+	// mover steps (#1569). A knockback struck onto another entity - or
+	// onto the player by someone else - never carries it.
+	readonly self?: boolean;
 }
 /*
 ================

@@ -21,6 +21,13 @@ The v1.150 client walks with Up and turns with Left and Right (#1574):
     (SendAngleUpdatePacket 0x8777B0).
   - Down is not a movement key (its press is the default case, its
     release a no-op mask); auto-repeat never reaches here.
+  - A press during a cast (#1589): CGInterface_CancelSkillForKeyboardMove
+    (0x693190) sends 0x72CD [u8 2], at most once per 2000 ms
+    (g_dwLastKeyboardMoveCancelMs) and only with fewer than two commands
+    queued (0x67D140); locomotion stays refused, so the key's latch stays
+    0 and CGInterface_PollArrowKeyMovement (0x67C960) retries it every
+    frame while it is held: the walk or turn starts the moment the cast
+    lets go.
 
 A rider sends the vehicle's twins, 0x769E [u32 gid] tag 4 (steer) and
 tag 3 (stop). The server already answers all four (world/movement
@@ -36,6 +43,7 @@ walk already carries.
 import type { Pose } from "@/engine/contracts/gameplay";
 import type { WireFrame } from "@/engine/contracts/network";
 import { HEADING_SCALE } from "@/engine/foundation/gameplay/native-movement";
+import { ARROW_TURN_WORDS_PER_MS } from "@/engine/foundation/gameplay/direction-movement";
 
 // 0x72CF: SendSteeringUpdate's player form.
 export const OP_STEER = 0x72cf;
@@ -45,16 +53,29 @@ export const OP_DIRECTION_STOP = 0x72f5;
 export const OP_COS_COMMAND = 0x769e;
 export const COS_STOP_TAG = 3;
 export const COS_STEER_TAG = 4;
-// pi radians a second (0x86D480): half a turn of heading words a second.
-const TURN_WORDS_PER_MS = HEADING_SCALE / 2 / 1000;
+// pi radians a second (0x86D480), shared with the main-thread mover.
+const TURN_WORDS_PER_MS = ARROW_TURN_WORDS_PER_MS;
 // SendSteeringUpdate's pi/4 (0x877540, flag 0): a turn under way reaches the
 // server every eighth of a turn.
 const STEER_SEND_WORDS = HEADING_SCALE / 8;
 // SendSteeringUpdate's one degree (flag 1): the release sends only a heading a
 // degree or more off.
+// 0x6931D9: one keyboard cancel per 2000 ms (cmp 0x7D0 / jb).
+const KEYBOARD_CANCEL_THROTTLE_MS = 2000;
 const RELEASE_SEND_WORDS = HEADING_SCALE / 360;
 
 export type ArrowKey = "up" | "left" | "right";
+
+/*
+================
+ArrowGate
+
+Whether a press may act now: open; held by a cast (CanPerformLocomotion
+refuses, the press cancels and the key waits latched open); or closed (the
+press guards of 0x680A30 return before anything happens).
+================
+*/
+export type ArrowGate = "open" | "cast" | "closed";
 
 /*
 ================
@@ -71,6 +92,9 @@ export interface ArrowKeyMover {
 	readonly steer: ( heading: number, now: number ) => void;
 	readonly stop: ( now: number ) => void;
 	readonly vehicle: () => number | undefined;
+	// 0x693190's request, when fewer than two commands are queued; returns
+	// whether it went out.
+	readonly cancelCast: () => boolean;
 }
 
 /*
@@ -112,7 +136,12 @@ createArrowKeys
 ================
 */
 export function createArrowKeys( send: ( frame: WireFrame ) => void ) {
+	// The keys down, and those whose press has acted (0x7C8..0x7D0): a held
+	// key that is not latched is retried every step (0x67C960).
 	const held = { up: false, left: false, right: false };
+	const latched = { up: false, left: false, right: false };
+	// When the last keyboard cancel went out (g_dwLastKeyboardMoveCancelMs).
+	let lastCancelMs = -Infinity;
 	// The turn in progress: its unrounded heading, when it was last stepped,
 	// and the heading last sent to the server.
 	let turn: { heading: number; atMs: number; sent: number; } | null = null;
@@ -125,9 +154,36 @@ export function createArrowKeys( send: ( frame: WireFrame ) => void ) {
 	================
 	*/
 	function turnRate(): number {
-		if ( held.left ) return TURN_WORDS_PER_MS;
-		if ( held.right ) return -TURN_WORDS_PER_MS;
+		if ( latched.left ) return TURN_WORDS_PER_MS;
+		if ( latched.right ) return -TURN_WORDS_PER_MS;
 		return 0;
+	}
+	/*
+	================
+	act
+
+	A held key's press takes effect: Up walks the facing unless a direction
+	walk is under way (0x877F30, bFlag 0); Left and Right start the turn.
+	================
+	*/
+	function act( key: ArrowKey, now: number, mover: ArrowKeyMover ): WireFrame | null {
+		const pose = mover.pose();
+		if ( !pose ) return null;
+		latched[key] = true;
+		if ( key === "up" ) return mover.walkingDirection() ? null : mover.direct( pose.angle, now );
+		turn ??= { heading: pose.angle, atMs: now, sent: pose.angle };
+		return null;
+	}
+	/*
+	================
+	cancelCast
+
+	0x693190: the cast in the way is asked to end, once per 2000 ms.
+	================
+	*/
+	function cancelCast( now: number, mover: ArrowKeyMover ) {
+		if ( now - lastCancelMs < KEYBOARD_CANCEL_THROTTLE_MS ) return;
+		if ( mover.cancelCast() ) lastCancelMs = now;
 	}
 	/*
 	================
@@ -155,23 +211,27 @@ export function createArrowKeys( send: ( frame: WireFrame ) => void ) {
 		================
 		key
 
-		A press or release. admitted is the walk gate (a refused press
-		changes nothing, as 0x680A30's guards return before latching); a
-		release always runs.
+		A press or release. gate is the walk gate: a closed press changes
+		nothing (0x680A30's guards return before latching); a press held by a
+		cast cancels it and waits; a release always runs.
 		================
 		*/
-		key( key: ArrowKey, down: boolean, now: number, mover: ArrowKeyMover, admitted: boolean ): WireFrame | null {
+		key( key: ArrowKey, down: boolean, now: number, mover: ArrowKeyMover, gate: ArrowGate ): WireFrame | null {
 			advance( now, mover );
 			const pose = mover.pose();
 			if ( down ) {
-				if ( !admitted || !pose || held[key] ) return null;
+				if ( gate === "closed" || !pose || held[key] ) return null;
 				held[key] = true;
-				if ( key === "up" ) return mover.walkingDirection() ? null : mover.direct( pose.angle, now );
-				turn ??= { heading: pose.angle, atMs: now, sent: pose.angle };
-				return null;
+				if ( gate === "cast" ) {
+					cancelCast( now, mover );
+					return null;
+				}
+				return act( key, now, mover );
 			}
 			if ( !held[key] ) return null;
 			held[key] = false;
+			if ( !latched[key] ) return null;
+			latched[key] = false;
 			if ( key === "up" ) {
 				if ( !pose ) return null;
 				const frame = headingFrame( "stop", pose.angle, mover.vehicle() );
@@ -179,7 +239,7 @@ export function createArrowKeys( send: ( frame: WireFrame ) => void ) {
 				mover.stop( now );
 				return frame;
 			}
-			if ( turn && !held.left && !held.right ) {
+			if ( turn && !latched.left && !latched.right ) {
 				const heading = Math.round( turn.heading ) % HEADING_SCALE;
 				if ( headingGap( heading, turn.sent ) >= RELEASE_SEND_WORDS ) {
 					send( headingFrame( "steer", heading, mover.vehicle() ) );
@@ -191,10 +251,30 @@ export function createArrowKeys( send: ( frame: WireFrame ) => void ) {
 		/*
 		================
 		step
+
+		Turns the facing, and retries every held key the gate held back
+		(0x67C960): one the gate now admits acts at once.
 		================
 		*/
-		step( now: number, mover: ArrowKeyMover ) {
+		step( now: number, mover: ArrowKeyMover, gateOpen: boolean ): WireFrame | null {
 			advance( now, mover );
+			if ( !gateOpen ) return null;
+			let frame: WireFrame | null = null;
+			for ( const key of [ "up", "left", "right" ] as const ) {
+				if ( held[key] && !latched[key] ) frame = act( key, now, mover ) ?? frame;
+			}
+			return frame;
+		},
+		/*
+		================
+		rate
+
+		The turn under way in words a millisecond (Left positive), published
+		so the main-thread mover keeps turning past a publication (#1574).
+		================
+		*/
+		rate(): number {
+			return turn ? turnRate() : 0;
 		},
 		/*
 		================
@@ -205,6 +285,7 @@ export function createArrowKeys( send: ( frame: WireFrame ) => void ) {
 		*/
 		clear() {
 			held.up = held.left = held.right = false;
+			latched.up = latched.left = latched.right = false;
 			turn = null;
 		}
 	};
