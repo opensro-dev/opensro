@@ -413,16 +413,15 @@ func (rt *Runtime) tickInstanceWorlds(nowMs int64) {
 instanceWorldRetiring
 
 Whether the population's retirement has begun (BeginPopulationRetirement
-ran, by this lane or by the programme that owns the layer).
+ran, by this lane or by the programme that owns the layer). This read does
+not start retirement or change a programme's deadline: it only lets the
+cleanup tick retry an evacuation that is already underway, including while
+residents remain. The final-release inbox becomes pending later, at empty.
 ================
 */
 func (rt *Runtime) instanceWorldRetiring(division string, lease instance.Lease) bool {
-	for _, retiring := range rt.Monsters.PendingPopulationRetirements(division) {
-		if retiring == lease {
-			return true
-		}
-	}
-	return false
+	retiring, _ := rt.Monsters.PopulationRetiring(division, lease)
+	return retiring
 }
 
 /*

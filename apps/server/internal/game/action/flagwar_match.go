@@ -47,9 +47,7 @@ Port choices (labelled, reversible): teams split evenly alternating by
 sign-up order; a match object (pole, dropped flag, master key, door)
 is a match-owned NPC-band object whose clicks are intercepted before
 roster resolution, because a click must arrive as an NPC interaction,
-not a monster attack; dead participants leave through the normal town
-rebirth (native revives at the team spawn - follow-up, no per-world
-rebirth override exists in the port yet); the arena monsters scatter
+not a monster attack; the arena monsters scatter
 on a deterministic ring instead of the native random scatter; dead
 side monsters do not respawn.
 
@@ -275,9 +273,15 @@ type flagWarMatch struct {
 	winner     int  // -1 undecided/draw, else the winning side
 }
 
-// flagWarMatches is the runtime's live-match book, keyed by division.
-// mu guards the map only (a leaf lock: no other lock is taken under
-// it); each match then guards its own book with its own mu.
+/*
+================
+flagWarMatches
+
+The runtime's live-match book, keyed by division. mu guards the map
+only (a leaf lock: no other lock is taken under it); each match then
+guards its own book with its own mu.
+================
+*/
 type flagWarMatches struct {
 	mu         sync.Mutex
 	byDivision map[string]*flagWarMatch
@@ -631,6 +635,11 @@ func (rt *Runtime) advanceFlagWarMatches(nowMs int64) []simulation.DivisionFrame
 		}
 		if closeNow {
 			rt.CloseInstanceWorld(match.division, match.lease)
+			// A fallible evacuation leaves the layer retiring. Keep its match
+			// policy until the instance owner has actually released that lease.
+			if live, open := rt.Monsters.PopulationLease(match.division, match.lease.ID); open && live == match.lease {
+				continue
+			}
 			rt.flagWarLive.mu.Lock()
 			if rt.flagWarLive.byDivision[match.division] == match {
 				delete(rt.flagWarLive.byDivision, match.division)
@@ -659,13 +668,8 @@ func (rt *Runtime) flagWarTickMatch(match *flagWarMatch, nowMs int64) []simulati
 			if p == nil || !p.entered {
 				continue
 			}
-			out = append(out, flagWarParticipantFrames(p, wire.OpFlagWarEvent,
-				wire.EncodeFlagWarMissionStart(uint16(p.team))))
-			for _, object := range match.sortedObjects() {
-				if !object.live {
-					continue
-				}
-				out = append(out, flagWarParticipantFrames(p, wire.OpObjectListChunk, rt.flagWarObjectRow(object)))
+			for _, frame := range rt.flagWarSceneFrames(match, p, nowMs) {
+				out = append(out, flagWarParticipantFrames(p, frame.Opcode, frame.Payload))
 			}
 		}
 	}

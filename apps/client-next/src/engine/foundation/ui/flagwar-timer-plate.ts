@@ -13,27 +13,23 @@ The flag war handler (0x4B2530) arms the control through
 CIFEventTimer_SetDurationAndDelay (0x517F30) and CIFEventTimer_Start
 (0x518660); CIFEventTimer_UpdateDigitTextures (0x5182C0) then paints
 the remaining time as MM:SS, one "interface\timer\timer_<d>.ddj"
-texture per digit, and under a minute left paints all five statics
-red and sounds the countdown cue. This module owns the reading: the
-digits, their textures and the urgent tint. The runtime draws them
+texture per digit. The painter's red urgent tint and countdown cue
+live behind the timer's mode byte (the block at 0x5184DD runs only
+when +0x37D == 2), and the flag war never arms that mode: the byte
+keeps its constructor default of 1 (0x517E99), and only other timed
+events call the mode setter (0x517FA0) with 2. So the flag-war
+plate is plain digits at every remainder. This module owns the
+reading: the digits and their textures. The runtime draws them
 with the authored layout rects; the worker owns the clock.
 
 ===========================================================================
 */
 
-// Below this remainder the native painter turns the digits red
-// (0x5182C0 compares the remainder against 0xEA60 milliseconds).
-export const FLAG_WAR_TIMER_URGENT_MS = 0xea60;
-
-// The native urgent tint: the painter writes 0xFFFF0000 into each
-// static's color field (+0x120).
-export const flagWarTimerUrgentTint = [ 1, 0, 0, 1 ] as const;
-
 /*
 ================
 FlagWarTimerReading
 
-The four plate digits and the urgent flag for one remainder.
+The four plate digits for one remainder.
 ================
 */
 export interface FlagWarTimerReading {
@@ -41,7 +37,6 @@ export interface FlagWarTimerReading {
 	readonly minOnes: number;
 	readonly secTens: number;
 	readonly secOnes: number;
-	readonly urgent: boolean;
 }
 
 /*
@@ -49,10 +44,9 @@ export interface FlagWarTimerReading {
 flagWarTimerReading
 
 The painter's arithmetic: the remainder in whole seconds, minutes
-and seconds out of that, one digit per static. A remainder of zero
-restores the normal color (the painter's expiry branch), so urgent
-needs time actually left; minutes clamp at 99 because the plate has
-two minute statics (the native match duration is 20 minutes).
+and seconds out of that, one digit per static; minutes clamp at 99
+because the plate has two minute statics (the native match duration
+is 20 minutes). Negative remainders floor to zero.
 ================
 */
 export function flagWarTimerReading( remainingMs: number ): FlagWarTimerReading {
@@ -64,8 +58,7 @@ export function flagWarTimerReading( remainingMs: number ): FlagWarTimerReading 
 		minTens: Math.floor( minutes / 10 ),
 		minOnes: minutes % 10,
 		secTens: Math.floor( seconds / 10 ),
-		secOnes: seconds % 10,
-		urgent: remaining > 0 && remaining < FLAG_WAR_TIMER_URGENT_MS
+		secOnes: seconds % 10
 	};
 }
 

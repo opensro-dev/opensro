@@ -982,7 +982,15 @@ for ( const local of [ false, true ] ) {
 					durationMs: travelling ? 200 : 2000,
 					displacement: travelling && (displacement === true ||
 						displacement === "after-WAIT" && seconds >= 1.1 ||
-						displacement === "at-arrival" && seconds >= 1.3)
+						displacement === "at-arrival" && seconds >= 1.3),
+					// Production displacement paths carry their start on the
+					// skill clock (presentation-samples forwards it); the
+					// anchor math has no leg to time without it.
+					...(travelling && displacement ?
+						{
+							startedAtMs: displacement === true ? 1000 : displacement === "after-WAIT" ? 1100 : 1300
+						} :
+						{})
 				};
 				const player = entity( 1, {
 					kind: local ? "local-player" : "player",
@@ -1010,6 +1018,10 @@ for ( const local of [ false, true ] ) {
 			frame( 10, 1, false, true );
 			const entered = frame( 20, 1.02, true, true );
 			frame( 60, 1.1, true, true );
+			// The leg's arrival frame: at production frame rates the drawn
+			// body rides the displacement clock to its end before the stop
+			// sample lands; skipping it would park a whole leg of lag.
+			frame( 110, 1.2, true, true );
 			const settled = frame( 110, 1.3, false, false );
 			const later = frame( 110, 3, false, false );
 			if ( displacement ) {
@@ -1414,8 +1426,10 @@ test("a caster that tracked a moving target turns back at the native rate when i
 test("a WAIT hold released by the next walk recovers continuously instead of jumping", () => {
 	// actor-motion holds the drawn pose when a cast's WAIT leaves the walk
 	// state (native stops the walk there); the logical walk can still move
-	// on. The next revision released the hold in one frame, and on a slope
-	// that step read as the camera height snapping (owner, F4).
+	// on - by the worker-publication lead, the scale of gap the interpolated
+	// presenter recovers from (own-walk-interpolation.ts carry). The next
+	// revision released the hold in one frame, and on a slope that step
+	// read as the camera height snapping (owner, F4).
 	const f = fixture(
 		{ 7: { clips: [ "stand" ], phaseClips: [ [], [ "stand" ], [] ], stages: [] } },
 		2,
@@ -1439,10 +1453,12 @@ test("a WAIT hold released by the next walk recovers continuously instead of jum
 	const cast = { token: 1, caster: 1, target: 0, skill: 7, damage: 0, fatal: false };
 	let travelling = true;
 	const frame = ( x, seconds, casting, moving ) => {
+		// The release walk is one stable leg, as the worker publishes it:
+		// from the cast point at NEXT_SPEED, not a leg rebuilt per frame.
 		const path = {
-			from: travelling ? from : { ...to, x },
-			to: travelling ? to : { ...to, x: 210 },
-			durationMs: travelling ? 200 : (210 - x) / NEXT_SPEED * 1000
+			from: travelling ? from : { ...from, x: 20 },
+			to: travelling ? to : { ...from, x: 320 },
+			durationMs: travelling ? 200 : 300 / NEXT_SPEED * 1000
 		};
 		const player = entity( 1, {
 			kind: "local-player",
@@ -1469,13 +1485,13 @@ test("a WAIT hold released by the next walk recovers continuously instead of jum
 	};
 	frame( 10, 1, false, true );
 	const held = frame( 20, 1.02, true, true );
-	frame( 60, 1.1, true, true );
-	frame( 110, 1.3, false, false );
-	assert.equal( frame( 110, 3, false, false ).x, held.x, "the WAIT hold stands until the next walk" );
+	frame( 20, 1.1, true, true );
+	frame( 20, 1.3, false, false );
+	assert.equal( frame( 20, 3, false, false ).x, held.x, "the WAIT hold stands until the next walk" );
 	travelling = false;
 	let previous = held, at = 3, steady = 0;
 	for ( let step = 1; step <= 300; step++ ) {
-		const seconds = 3 + step / 60, x = 110 + (seconds - 3) * NEXT_SPEED;
+		const seconds = 3 + step / 60, x = 20 + (seconds - 3) * NEXT_SPEED;
 		const shown = frame( x, seconds, false, true );
 		const budget = 1.5 * NEXT_SPEED * (seconds - at) + 1e-6;
 		assert.ok(
@@ -1489,10 +1505,10 @@ test("a WAIT hold released by the next walk recovers continuously instead of jum
 		at = seconds;
 	}
 	// Recovered: the last half second walks at exactly the walk's speed, at
-	// the fixture's own presentation lag behind the logical walk (3.75 units,
-	// the same without any hold).
+	// the presenter's own render-delay lag behind the logical walk (the
+	// same without any hold).
 	assert.ok( steady < 1e-6, `walks at the walk's speed after recovery (${steady})` );
-	const logical = 110 + 5 * NEXT_SPEED;
+	const logical = 20 + 5 * NEXT_SPEED;
 	assert.ok(
 		logical - previous.x >= 0 && logical - previous.x < 4,
 		`converges to the walk (${previous.x} vs ${logical})`
@@ -1531,9 +1547,9 @@ test("a WAIT hold released while standing decays instead of jumping", () => {
 	let travelling = true;
 	const frame = ( x, seconds, casting, moving ) => {
 		const path = {
-			from: travelling ? from : { ...to, x },
-			to: travelling ? to : { ...to, x: 210 },
-			durationMs: travelling ? 200 : (210 - x) / NEXT_SPEED * 1000
+			from: travelling ? from : { ...from, x: 20 },
+			to: travelling ? to : { ...from, x: 320 },
+			durationMs: travelling ? 200 : 300 / NEXT_SPEED * 1000
 		};
 		const player = entity( 1, {
 			kind: "local-player",
@@ -1560,15 +1576,20 @@ test("a WAIT hold released while standing decays instead of jumping", () => {
 	};
 	frame( 10, 1, false, true );
 	const held = frame( 20, 1.02, true, true );
-	frame( 60, 1.1, true, true );
-	frame( 110, 1.3, false, false );
-	assert.equal( frame( 110, 3, false, false ).x, held.x, "the WAIT hold stands until the next walk" );
+	frame( 20, 1.1, true, true );
+	frame( 20, 1.3, false, false );
+	assert.equal( frame( 20, 3, false, false ).x, held.x, "the WAIT hold stands until the next walk" );
 	travelling = false;
-	// CORRECTION_FREQUENCY (30/s) over a 60 fps frame: the most one frame closes.
+	// The old CORRECTION_FREQUENCY (30/s) cap over a 60 fps frame stays as
+	// the outer bound: the interpolated presenter's correction decay
+	// (own-walk-interpolation.ts) closes less per frame and settles over
+	// about a second of standing. The release revision is a correction:
+	// the standing logical pose sits at 28, not at the hold's own point
+	// (a revision there would only rebind the hold, as a heading fix does).
 	const perFrame = 1 - Math.exp( -30 / 60 );
-	let previous = held, gap = 110 - held.x;
-	for ( let step = 1; step <= 30; step++ ) {
-		const shown = frame( 110, 3 + step / 60, false, false );
+	let previous = held, gap = 28 - held.x;
+	for ( let step = 1; step <= 60; step++ ) {
+		const shown = frame( 28, 3 + step / 60, false, false );
 		const closed = shown.x - previous.x;
 		assert.ok( closed >= -1e-9, `no step back at frame ${step}` );
 		// The last hundredth of a unit (MIN_CORRECTION_DISTANCE) is closed at once.
@@ -1576,10 +1597,10 @@ test("a WAIT hold released while standing decays instead of jumping", () => {
 			closed <= perFrame * gap + 0.01,
 			`frame ${step} closes ${closed.toFixed( 2 )} of ${gap.toFixed( 2 )}`
 		);
-		gap = 110 - shown.x;
+		gap = 28 - shown.x;
 		previous = shown;
 	}
-	assert.ok( Math.abs( previous.x - 110 ) < 0.01, `settles on the standing pose (${previous.x})` );
+	assert.ok( Math.abs( previous.x - 28 ) < 0.01, `settles on the standing pose (${previous.x})` );
 	f.dispose();
 });
 

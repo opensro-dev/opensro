@@ -298,6 +298,8 @@ func newGameWorldApplication(
 	}
 	gameplay.deps.BrowserReferences = references
 	ts.SetPublicReferences(references)
+	// Port-only, not native (SRO_PREMIUM_UPGRADE): wiring_premium.go.
+	gameplay.wirePremiumUpgrade()
 	if err := gameplay.register(ts.Hub, authority.loadQuests); err != nil {
 		return nil, fmt.Errorf("gameplay wiring: %w", err)
 	}

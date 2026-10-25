@@ -16,6 +16,7 @@ import {
 import { retireBuffSlots, buffDepartureDurationMs, type BuffSlot } from "@/engine/foundation/gameplay/buff-slots";
 import { createSkillCooldowns } from "@/engine/foundation/gameplay/skill-cooldowns";
 import { createCastPrediction } from "@/engine/foundation/gameplay/cast-prediction";
+import { createDisplacementQueue } from "@/engine/foundation/gameplay/displacement-queue";
 import { detectionEffect, huntingMovement, type HuntingPoint } from "@/engine/foundation/gameplay/hunting";
 import type { SkillMetadata } from "@/engine/foundation/gameplay/skill-catalog";
 import { vitalsUpdate } from "@/engine/foundation/gameplay/vitals";
@@ -98,7 +99,7 @@ export function createCombat(
 		buffSlots = result.slots;
 		if ( result.sounded ) publishHp( { kind: "buff-ended", gid: localGid, at: now } );
 	}
-	const displacements: import("@/engine/contracts/gameplay").CastDisplacement[] = [];
+	const displacements = createDisplacementQueue();
 	const cancellations: number[] = [];
 	const guidedArrivals = new Map<number, number | null>();
 	/*
@@ -133,12 +134,7 @@ export function createCombat(
 			}
 			for ( const impact of row.impacts ) {
 				if ( impact.displacement ) {
-					displacements.push( {
-						gid: row.target,
-						token,
-						kind: impact.type as 4 | 5,
-						destination: impact.displacement
-					} );
+					displacements.impact( token, caster, row.target, impact.type as 4 | 5, impact.displacement );
 					// CIDecoDamageEffect_Initialize (8D5440): a type-5 knockback is
 					// carried by a SYSTEM_KNOCKBACK decoration on the struck
 					// character, whose guided trajectory is the 250/s travel.
@@ -148,10 +144,8 @@ export function createCombat(
 				}
 			}
 		}
-		if ( phase.travel ) {
-			displacements.push( { gid: caster, token, kind: 8, destination: phase.travel } );
-		}
-		if ( phase.correction ) displacements.push( { gid: caster, token, kind: 2, destination: phase.correction } );
+		if ( phase.travel ) displacements.own( token, caster, 8, phase.travel );
+		if ( phase.correction ) displacements.own( token, caster, 2, phase.correction );
 	}
 	const casts = new Map<number, CastState>(),
 		vitals = new Map<number, import("@/engine/contracts/gameplay").VitalState>();
@@ -840,7 +834,7 @@ export function createCombat(
 		================
 		*/
 		takeDisplacements() {
-			return displacements.splice( 0 );
+			return displacements.take();
 		},
 		/*
 		================
@@ -990,7 +984,7 @@ export function createCombat(
 			environmentalDamage = [];
 			wireHp.clear();
 			cancellations.length = 0;
-			displacements.length = 0;
+			displacements.clear();
 			publishedCasts = publishedVitals = null;
 			casts.clear();
 			vitals.clear();

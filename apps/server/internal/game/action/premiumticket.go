@@ -25,10 +25,32 @@ a third param job.
 package action
 
 import (
+	"os"
+	"strings"
+
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 )
+
+// EnvPremiumUpgrade turns the port-only premium upgrade on ("on", "1",
+// "true"): using a strictly higher-grade premium of the same family
+// replaces the running lower one instead of the native 0x1894 refusal.
+// Default off is native (#1624, owner-requested gameplay tuning).
+const EnvPremiumUpgrade = "SRO_PREMIUM_UPGRADE"
+
+/*
+================
+PremiumUpgradeFromEnv
+================
+*/
+func PremiumUpgradeFromEnv() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvPremiumUpgrade))) {
+	case "on", "1", "true":
+		return true
+	}
+	return false
+}
 
 // errCodePremiumActive is the low byte of 49C65E's 0x1894.
 const errCodePremiumActive uint8 = 0x94
@@ -89,13 +111,139 @@ func premiumRunning(c *enterworld.Character, nowMs int64) bool {
 
 /*
 ================
-installParamJobs
+premiumGrade
 
-Places a plan's jobs on the character; false when one does not fit.
+A premium ticket's grade (port-only upgrade, SRO_PREMIUM_UPGRADE):
+every shipped ticket authors the same 100% rates, so the authored
+quality axes are the daily allotment (Param3), then the duration
+(Param1). A bigger allotment outranks any duration; between equals the
+longer course wins (#1624, from the shipped rows: Gold Time 1D/4W/8W/
+12W/16W at 3 h a day, the Plus ticket at 5 h a day for 4 weeks, the
+skill tickets at 3 h for 1 day and 4 weeks).
 ================
 */
-func installParamJobs(c *enterworld.Character, jobs []domain.ParamJob) bool {
+type premiumGrade struct {
+	dailyMs, seconds int64
+}
+
+/*
+================
+premiumGradeOf
+================
+*/
+func premiumGradeOf(ref *enterworld.ItemRef) (premiumGrade, bool) {
+	seconds, okSeconds := ref.NativeFields.Lookup("itemParam1_29c")
+	dailyMs, okDaily := ref.NativeFields.Lookup("itemParam3_2a4")
+	if !okSeconds || !okDaily || seconds <= 0 || dailyMs <= 0 {
+		return premiumGrade{}, false
+	}
+	return premiumGrade{dailyMs: int64(dailyMs), seconds: int64(seconds)}, true
+}
+
+/*
+================
+premiumGradeHigher
+
+Strictly higher within one family; equal grades never replace.
+================
+*/
+func premiumGradeHigher(next, running premiumGrade) bool {
+	if next.dailyMs != running.dailyMs {
+		return next.dailyMs > running.dailyMs
+	}
+	return next.seconds > running.seconds
+}
+
+/*
+================
+runningPremium
+
+The premium now running, if any: its ticket reference and whether it is
+the skill-only family (no EXP keeper among its live jobs).
+================
+*/
+func (rt *Runtime) runningPremium(c *enterworld.Character, nowMs int64) (*enterworld.ItemRef, bool, bool) {
+	var ref *enterworld.ItemRef
+	skillOnly := true
+	for _, job := range c.ParamJobs {
+		if job.EndUnixMs <= nowMs {
+			continue
+		}
+		switch job.Param {
+		case paramPremiumExpRate:
+			skillOnly = false
+		case paramPremiumSkillExpRate:
+		default:
+			continue
+		}
+		if ref == nil {
+			found, ok := rt.deps.ItemReferences().ItemRefByCodename(job.Codename)
+			if !ok {
+				return nil, false, false
+			}
+			ref = found
+		}
+	}
+	return ref, skillOnly, ref != nil
+}
+
+/*
+================
+premiumUpgradePlan
+
+With the port-only upgrade on, whether using next retires the running
+premium: the running ticket it replaces, or nil when the native refusal
+stands (flag off, another family, or no strictly higher grade).
+================
+*/
+func (rt *Runtime) premiumUpgradePlan(c *enterworld.Character, nowMs int64, next *enterworld.ItemRef, nextSkillOnly bool) *enterworld.ItemRef {
+	if !rt.PremiumUpgrade {
+		return nil
+	}
+	runningRef, runningSkillOnly, running := rt.runningPremium(c, nowMs)
+	if !running || runningSkillOnly != nextSkillOnly {
+		return nil
+	}
+	nextGrade, okNext := premiumGradeOf(next)
+	runningGrade, okRunning := premiumGradeOf(runningRef)
+	if !okNext || !okRunning || !premiumGradeHigher(nextGrade, runningGrade) {
+		return nil
+	}
+	return runningRef
+}
+
+/*
+================
+withoutPremiumJobs
+================
+*/
+func withoutPremiumJobs(jobs []domain.ParamJob, ticket *enterworld.ItemRef) []domain.ParamJob {
+	kept := make([]domain.ParamJob, 0, len(jobs))
+	for _, job := range jobs {
+		if job.ItemRefObjID == ticket.RefObjID {
+			switch job.Param {
+			case paramPremiumExpRate, paramPremiumSkillExpRate, paramDeathExpKept:
+				continue
+			}
+		}
+		kept = append(kept, job)
+	}
+	return kept
+}
+
+/*
+================
+installPremiumSwap
+
+Retires the replaced ticket and installs the new plan's jobs as one
+step: a plan that does not fit changes nothing.
+================
+*/
+func installPremiumSwap(c *enterworld.Character, replaced *enterworld.ItemRef, jobs []domain.ParamJob) bool {
 	next := append([]domain.ParamJob(nil), c.ParamJobs...)
+	if replaced != nil {
+		next = withoutPremiumJobs(next, replaced)
+	}
 	for _, job := range jobs {
 		var placed bool
 		if next, placed = upsertParamJob(next, job); !placed {
@@ -117,21 +265,37 @@ func (rt *Runtime) usePremiumTicket(use skillItemUse, c *enterworld.Character, t
 	if len(tail) != 0 {
 		return false
 	}
+	// Port-only, not native (SRO_PREMIUM_UPGRADE): a strictly higher
+	// grade of the same family replaces the running premium; its
+	// remaining time is lost. Off: any running premium refuses (0x1894).
+	var replaced *enterworld.ItemRef
 	if premiumRunning(c, use.nowMs) {
-		*result = itemUseFailure(errCodePremiumActive)
-		return false
+		replaced = rt.premiumUpgradePlan(c, use.nowMs, use.ref, skillOnly)
+		if replaced == nil {
+			*result = itemUseFailure(errCodePremiumActive)
+			return false
+		}
 	}
 	jobs, clock, ok := premiumTicketPlan(use.ref, use.nowMs, skillOnly)
-	if !ok || !installParamJobs(c, jobs) {
+	if !ok {
+		return false
+	}
+	if !installPremiumSwap(c, replaced, jobs) {
 		return false
 	}
 	c.PremiumClock = clock
 	remaining := rt.consumeItemUseRow(c, use.row)
 	// One board row per ticket: every keeper shares its reference.
-	*result = OpResult{Frames: []wire.Frame{
+	frames := []wire.Frame{
 		{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(use.request.Slot, remaining, use.request.TypeWord)},
-		{Opcode: wire.OpParamJobStart, Payload: wire.EncodeParamJobRow(enterworld.ObjectIDForCharacter(c), paramJobRemaining(jobs[0], use.nowMs), use.ref.RefObjID)},
-	}}
+	}
+	if replaced != nil {
+		frames = append(frames, wire.Frame{Opcode: wire.OpParamJobEnd,
+			Payload: wire.EncodeParamJobEnd(enterworld.ObjectIDForCharacter(c), replaced.RefObjID)})
+	}
+	frames = append(frames, wire.Frame{Opcode: wire.OpParamJobStart,
+		Payload: wire.EncodeParamJobRow(enterworld.ObjectIDForCharacter(c), paramJobRemaining(jobs[0], use.nowMs), use.ref.RefObjID)})
+	*result = OpResult{Frames: frames}
 	result.Frames = append(result.Frames, rt.updateQuestInventory(c)...)
 	rt.paramJobOwners.track(use.division, c.Name)
 	return true

@@ -15,6 +15,9 @@ the vehicle's 0x769E tags 3 and 4 instead.
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { root } from "../../tools/project.mjs";
 import { product } from "../helpers/navigation-fixture.mjs";
 const { createArrowKeys, OP_STEER, OP_DIRECTION_STOP, OP_COS_COMMAND } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/arrow-keys/arrow-keys.ts"
@@ -39,8 +42,8 @@ A mover that records what the arrow keys asked of it.
  * @param {{ walking?: boolean, vehicle?: number }} [options]
  */
 function fakeMover( { walking = false, vehicle = undefined } = {} ) {
-	/** @type {{ direct: number[], steer: number[], stop: number }} */
-	const calls = { direct: [], steer: [], stop: 0 };
+	/** @type {{ direct: number[], steer: number[], stop: number, cancel: number }} */
+	const calls = { direct: [], steer: [], stop: 0, cancel: 0 };
 	let pose = { ...POSE };
 	return {
 		calls,
@@ -60,7 +63,11 @@ function fakeMover( { walking = false, vehicle = undefined } = {} ) {
 				calls.stop++;
 				walking = false;
 			},
-			vehicle: () => vehicle
+			vehicle: () => vehicle,
+			cancelCast: () => {
+				calls.cancel++;
+				return true;
+			}
 		}
 	};
 }
@@ -78,12 +85,12 @@ function heading16( frame, offset = 0 ) {
 
 test("Up walks the facing once, and its release stops with 0x72F5 at the heading", () => {
 	const sent = [], keys = createArrowKeys( f => sent.push( f ) ), { mover, calls } = fakeMover();
-	assert.ok( keys.key( "up", true, 0, mover, true ) );
+	assert.ok( keys.key( "up", true, 0, mover, "open" ) );
 	assert.deepEqual( calls.direct, [ POSE.angle ] );
 	// A second press while held changes nothing.
-	assert.equal( keys.key( "up", true, 10, mover, true ), null );
+	assert.equal( keys.key( "up", true, 10, mover, "open" ), null );
 	assert.deepEqual( calls.direct, [ POSE.angle ] );
-	const stop = keys.key( "up", false, 500, mover, true );
+	const stop = keys.key( "up", false, 500, mover, "open" );
 	assert.equal( stop?.opcode, OP_DIRECTION_STOP );
 	assert.equal( heading16( stop ), POSE.angle );
 	assert.deepEqual( sent.map( f => f.opcode ), [ OP_DIRECTION_STOP ] );
@@ -92,25 +99,25 @@ test("Up walks the facing once, and its release stops with 0x72F5 at the heading
 
 test("Up does not resend while a direction walk is already under way (0x877F30 bFlag 0)", () => {
 	const keys = createArrowKeys( () => {} ), { mover, calls } = fakeMover( { walking: true } );
-	assert.equal( keys.key( "up", true, 0, mover, true ), null );
+	assert.equal( keys.key( "up", true, 0, mover, "open" ), null );
 	assert.deepEqual( calls.direct, [] );
 });
 
 test("a refused press latches nothing, so its release sends nothing", () => {
 	const sent = [], keys = createArrowKeys( f => sent.push( f ) ), { mover, calls } = fakeMover();
-	assert.equal( keys.key( "up", true, 0, mover, false ), null );
-	assert.equal( keys.key( "up", false, 100, mover, true ), null );
-	assert.equal( keys.key( "left", true, 0, mover, false ), null );
-	keys.step( 400, mover );
-	assert.equal( keys.key( "left", false, 500, mover, true ), null );
+	assert.equal( keys.key( "up", true, 0, mover, "closed" ), null );
+	assert.equal( keys.key( "up", false, 100, mover, "open" ), null );
+	assert.equal( keys.key( "left", true, 0, mover, "closed" ), null );
+	keys.step( 400, mover, true );
+	assert.equal( keys.key( "left", false, 500, mover, "open" ), null );
 	assert.deepEqual( sent, [] );
-	assert.deepEqual( calls, { direct: [], steer: [], stop: 0 } );
+	assert.deepEqual( calls, { direct: [], steer: [], stop: 0, cancel: 0 } );
 });
 
 test("Left turns at half a turn a second and steers the server every eighth of a turn", () => {
 	const sent = [], keys = createArrowKeys( f => sent.push( f ) ), { mover, calls } = fakeMover();
-	keys.key( "left", true, 0, mover, true );
-	for ( let now = 16; now <= 512; now += 16 ) keys.step( now, mover );
+	keys.key( "left", true, 0, mover, "open" );
+	for ( let now = 16; now <= 512; now += 16 ) keys.step( now, mover, true );
 	// 512 ms at pi rad/s: a quarter turn and a bit, from heading 1000.
 	const expected = Math.round( POSE.angle + 512 * WORDS_PER_MS );
 	assert.equal( calls.steer.at( -1 ), expected );
@@ -123,11 +130,11 @@ test("Left turns at half a turn a second and steers the server every eighth of a
 
 test("Right turns the other way and wraps below zero; Left wins when both are held", () => {
 	const keys = createArrowKeys( () => {} ), { mover, calls } = fakeMover();
-	keys.key( "right", true, 0, mover, true );
-	keys.step( 100, mover );
+	keys.key( "right", true, 0, mover, "open" );
+	keys.step( 100, mover, true );
 	assert.equal( calls.steer.at( -1 ), Math.round( 65535 + POSE.angle - 100 * WORDS_PER_MS ) % 65535 );
-	keys.key( "left", true, 100, mover, true );
-	keys.step( 200, mover );
+	keys.key( "left", true, 100, mover, "open" );
+	keys.step( 200, mover, true );
 	// Left wins over Right (0x86D480 tests 0x10 first): 100 ms back the
 	// other way returns to the start, across the wrap.
 	assert.equal( calls.steer.at( -1 ), POSE.angle );
@@ -135,25 +142,25 @@ test("Right turns the other way and wraps below zero; Left wins when both are he
 
 test("a release sends the heading once if it is a degree or more off, and not under a degree", () => {
 	const sent = [], keys = createArrowKeys( f => sent.push( f ) ), { mover } = fakeMover();
-	keys.key( "left", true, 0, mover, true );
+	keys.key( "left", true, 0, mover, "open" );
 	// 20 ms: about 655 words, over a degree (182) and under an eighth.
-	keys.step( 20, mover );
-	keys.key( "left", false, 20, mover, true );
+	keys.step( 20, mover, true );
+	keys.key( "left", false, 20, mover, "open" );
 	assert.deepEqual( sent.map( f => f.opcode ), [ OP_STEER ] );
 	sent.length = 0;
-	keys.key( "right", true, 100, mover, true );
+	keys.key( "right", true, 100, mover, "open" );
 	// 4 ms: about 131 words, under a degree.
-	keys.key( "right", false, 104, mover, true );
+	keys.key( "right", false, 104, mover, "open" );
 	assert.deepEqual( sent, [] );
 });
 
 test("a rider steers and stops the vehicle with 0x769E tags 4 and 3", () => {
 	const sent = [], keys = createArrowKeys( f => sent.push( f ) ), { mover } = fakeMover( { vehicle: 0x01020304 } );
-	keys.key( "up", true, 0, mover, true );
-	keys.key( "left", true, 0, mover, true );
-	keys.step( 300, mover );
-	keys.key( "left", false, 300, mover, true );
-	keys.key( "up", false, 300, mover, true );
+	keys.key( "up", true, 0, mover, "open" );
+	keys.key( "left", true, 0, mover, "open" );
+	keys.step( 300, mover, true );
+	keys.key( "left", false, 300, mover, "open" );
+	keys.key( "up", false, 300, mover, "open" );
 	assert.ok( sent.length >= 2 );
 	for ( const frame of sent ) {
 		assert.equal( frame.opcode, OP_COS_COMMAND );
@@ -325,4 +332,113 @@ test("an Up press during a predicted direction walk keeps that walk, drawn exact
 		return drawn;
 	};
 	assert.deepEqual( walk( true ), walk( false ) );
+});
+
+test("a press during a cast asks it to end at most once per 2 s, and waits held (0x693190)", () => {
+	const sent = [], keys = createArrowKeys( f => sent.push( f ) ), { mover, calls } = fakeMover();
+	assert.equal( keys.key( "up", true, 0, mover, "cast" ), null );
+	assert.equal( calls.cancel, 1, "the press asks the cast to end" );
+	assert.deepEqual( calls.direct, [], "and does not walk yet" );
+	// Released and pressed again inside 2 s: no second request.
+	keys.key( "up", false, 500, mover, "cast" );
+	keys.key( "up", true, 1999, mover, "cast" );
+	assert.equal( calls.cancel, 1, "0x6931D9: one request per 2000 ms" );
+	keys.key( "up", false, 2000, mover, "cast" );
+	keys.key( "up", true, 2000, mover, "cast" );
+	assert.equal( calls.cancel, 2, "2000 ms later it asks again" );
+	assert.deepEqual( sent, [], "a key that never walked sends no stop" );
+});
+
+test("a key held through a cast acts the moment the gate opens, and its release then stops (0x67C960)", () => {
+	const sent = [], keys = createArrowKeys( f => sent.push( f ) ), { mover, calls } = fakeMover();
+	keys.key( "up", true, 0, mover, "cast" );
+	keys.key( "left", true, 0, mover, "cast" );
+	keys.step( 200, mover, false );
+	assert.deepEqual( calls.direct, [], "still held back" );
+	assert.deepEqual( calls.steer, [] );
+	keys.step( 400, mover, true );
+	assert.deepEqual( calls.direct, [ POSE.angle ], "Up walks once the cast lets go" );
+	keys.step( 600, mover, true );
+	assert.ok( calls.steer.length > 0, "Left turns once the cast lets go" );
+	keys.key( "up", false, 700, mover, "open" );
+	assert.equal( sent.at( -1 )?.opcode, OP_DIRECTION_STOP );
+});
+
+test("a key released before the cast lets go never walks and sends no stop", () => {
+	const sent = [], keys = createArrowKeys( f => sent.push( f ) ), { mover, calls } = fakeMover();
+	keys.key( "up", true, 0, mover, "cast" );
+	keys.key( "up", false, 100, mover, "cast" );
+	keys.step( 400, mover, true );
+	assert.deepEqual( calls.direct, [] );
+	assert.deepEqual( sent, [] );
+});
+
+test("through gameplay, Up during the server's cast sends 0x72CD [2] and walks once the cast lets go", () => {
+	const fixture = JSON.parse(
+		readFileSync(
+			path.resolve( root, "../server/internal/game/item/wire/testdata/skill_action_result_fixture.json" ),
+			"utf8"
+		)
+	);
+	const sent = [], game = createGameplay( f => sent.push( f ) );
+	const local = {
+		...POSE,
+		gid: fixture.expect.casterGid,
+		refObjId: 1907,
+		kind: "local-player",
+		name: "caster",
+		heading: POSE.angle,
+		appearanceState: [ 1, 0, 0 ]
+	};
+	game.bootstrap( { simulationProtocolVersion: 1 } );
+	game.seed( local );
+	const bundle = product( REGION );
+	bundle.objects = [];
+	game.command( { kind: "navigation", regionId: REGION, bundle }, 0, undefined, local );
+	// The server's own cast, and its one accepted command (B2CD count 1).
+	const row = fixture.scenarios[0];
+	game.receive( { opcode: row.opcode, payload: Buffer.from( row.payloadHex, "hex" ) }, 10 );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 1 ) }, 10 );
+	sent.length = 0;
+	game.command( { kind: "arrow-key", key: "up", down: true }, 11, undefined, local );
+	assert.deepEqual( sent.map( f => [ f.opcode, ...f.payload ] ), [ [ 0x72cd, 2 ] ], "asks the cast to end, no walk" );
+	// The cast releases (B505) with Up still held: the walk starts by itself.
+	game.receive( { opcode: 0xb505, payload: Uint8Array.of( 2, 0, 1, 0, 0, 0 ) }, 13 );
+	for ( let now = 14; now < 3000 && !sent.some( f => f.opcode === 9 ); now += 16 ) game.step( now, local );
+	assert.ok( sent.some( f => f.opcode === 9 ), "walks once the cast lets go" );
+	game.dispose();
+});
+
+test("with two commands queued the press sends no cancel (0x67D140), yet still walks once the cast lets go", () => {
+	const fixture = JSON.parse(
+		readFileSync(
+			path.resolve( root, "../server/internal/game/item/wire/testdata/skill_action_result_fixture.json" ),
+			"utf8"
+		)
+	);
+	const sent = [], game = createGameplay( f => sent.push( f ) );
+	const local = {
+		...POSE,
+		gid: fixture.expect.casterGid,
+		refObjId: 1907,
+		kind: "local-player",
+		name: "caster",
+		heading: POSE.angle,
+		appearanceState: [ 1, 0, 0 ]
+	};
+	game.bootstrap( { simulationProtocolVersion: 1 } );
+	game.seed( local );
+	const bundle = product( REGION );
+	bundle.objects = [];
+	game.command( { kind: "navigation", regionId: REGION, bundle }, 0, undefined, local );
+	const row = fixture.scenarios[0];
+	game.receive( { opcode: row.opcode, payload: Buffer.from( row.payloadHex, "hex" ) }, 10 );
+	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 2 ) }, 10 );
+	sent.length = 0;
+	game.command( { kind: "arrow-key", key: "up", down: true }, 11, undefined, local );
+	assert.deepEqual( sent.map( f => f.opcode ), [], "two queued commands hold the request back" );
+	game.receive( { opcode: 0xb505, payload: Uint8Array.of( 2, 0, 1, 0, 0, 0 ) }, 13 );
+	for ( let now = 14; now < 3000 && !sent.some( f => f.opcode === 9 ); now += 16 ) game.step( now, local );
+	assert.ok( sent.some( f => f.opcode === 9 ), "walks once the cast lets go" );
+	game.dispose();
 });
