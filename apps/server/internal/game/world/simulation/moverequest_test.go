@@ -250,6 +250,7 @@ func TestMovementAckKeepsNegativeCaveDestination(t *testing.T) {
 	}{
 		{"ramp rest", MovementRequest{Mode: MovementAckDestinationMode, RegionID: 0x8001, X: 777, Y: -5.01, Z: -40}, 777, -5, -40},
 		{"corridor rest", MovementRequest{Mode: MovementAckDestinationMode, RegionID: 0x8001, X: 671, Y: 0.07, Z: -35}, 671, 0, -35},
+		{"negative x", MovementRequest{Mode: MovementAckDestinationMode, RegionID: 0x8001, X: -2000, Y: -5.01, Z: -40}, -2000, -5, -40},
 	} {
 		payload := BuildMovementAckPayload(416154, tc.movement, nil)
 		x, y, z := ackDestination(t, payload)
@@ -270,13 +271,22 @@ stood at z=-86.43).
 ================
 */
 func TestMovementAckKeepsNegativeCaveSource(t *testing.T) {
-	source := MovementSource{RegionID: 0x8001, X: 839.51, Y: 0.04, Z: -86.43}
-	payload := BuildMovementAckPayload(416154, MovementRequest{
-		Mode: MovementAckDestinationMode, RegionID: 0x8001, X: 851, Y: 0.04, Z: 0,
-	}, &source)
-	x, z := ackSource(t, payload)
-	if math.Abs(x-839.5) > 0.051 || math.Abs(z-(-86.4)) > 0.051 {
-		t.Errorf("ack source = (%v, %v), want (839.5, -86.4)", x, z)
+	for _, tc := range []struct {
+		name   string
+		source MovementSource
+		wantX  float64
+		wantZ  float64
+	}{
+		{"corridor departure", MovementSource{RegionID: 0x8001, X: 839.51, Y: 0.04, Z: -86.43}, 839.5, -86.4},
+		{"negative x departure", MovementSource{RegionID: 0x8001, X: -2000, Y: 0.04, Z: -35}, -2000, -35},
+	} {
+		payload := BuildMovementAckPayload(416154, MovementRequest{
+			Mode: MovementAckDestinationMode, RegionID: 0x8001, X: 851, Y: 0.04, Z: 0,
+		}, &tc.source)
+		x, z := ackSource(t, payload)
+		if math.Abs(x-tc.wantX) > 0.051 || math.Abs(z-tc.wantZ) > 0.051 {
+			t.Errorf("%s: ack source = (%v, %v), want (%v, %v)", tc.name, x, z, tc.wantX, tc.wantZ)
+		}
 	}
 }
 
