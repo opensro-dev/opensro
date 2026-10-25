@@ -278,10 +278,10 @@ A plan runs inside the tick and is re-asked as the target moves
 (#1658), so the most expensive plans the floors offer - the
 doorway plan across their farthest pair, and the longest pull
 inside their biggest block - must stay tick-cheap. The pinned
-bound is the plan's deterministic work: cell expansions plus
-oracle probes, which no machine load can inflate (the floor-wide
-plans this replaced spent 2667-4000). Wall clock is only a loose
-20 ms guard on top, and skipped under the race detector, whose
+bound is the plan's deterministic work: cell expansions, oracle
+probes and the geometric pull's strip steps (#1663), which no
+machine load can inflate. Wall clock is only a loose 20 ms guard
+on top, and skipped under the race detector, whose
 instrumentation prices nothing like the tick does.
 ================
 */
@@ -324,12 +324,18 @@ func TestCaveRoutePlanCostStaysTickCheap(t *testing.T) {
 			goal: surface.cellPose(region, 0, b),
 		})
 	}
-	// planWorkBudget bounds one plan's deterministic work (cell
-	// expansions plus oracle probes). The worst subject below -
-	// the biggest-block pull on the tomb floor - spends about
-	// 1700; the floor-wide plans this design replaced spent
-	// 2667-4000 on the same pairs, so the budget sits between.
-	const planWorkBudget = 2048
+	// planWorkBudget bounds one plan's deterministic work. The
+	// worst subject below - the biggest-block pull on the tomb
+	// floor - spends 5258 (1724 expansions, 3534 strip steps), so
+	// the budget leaves it about half again as headroom and fails a
+	// plan whose search or walk grows by that much. The oracle
+	// route this design replaced is not on the same scale: it
+	// spends its whole 256-probe budget on these pairs and gives
+	// up, each probe a floor scan (13-53 ms a plan), where a strip
+	// step is one plane read. The plan head's one direct-chord
+	// probe still counts 1 while costing most of the tomb doorway
+	// plan's time; weighting it is a separate change.
+	const planWorkBudget = 8192
 	planned := 0
 	for _, s := range subjects {
 		for i := 0; i < 3; i++ {
@@ -353,7 +359,7 @@ func TestCaveRoutePlanCostStaysTickCheap(t *testing.T) {
 		median := samples[len(samples)/2]
 		t.Logf("%s (0x%04X): work %d, average plan %v (median sample %v)", s.name, s.from.RegionID, route.Probes(), average, median)
 		if route.Probes() > planWorkBudget {
-			t.Fatalf("%s (0x%04X): plan work %d (expansions plus probes) exceeds the %d budget; a plan must stay inside one block",
+			t.Fatalf("%s (0x%04X): plan work %d (expansions, probes and strip steps) exceeds the %d budget; a plan must stay inside one block",
 				s.name, s.from.RegionID, route.Probes(), planWorkBudget)
 		}
 		if !raceDetectorOn && average > 20*time.Millisecond {
@@ -497,12 +503,25 @@ func TestCaveRouteLegCapSplitsLongHalls(t *testing.T) {
 	if !routed {
 		t.Fatal("no corridor path across the hall's block")
 	}
-	points, probes := v.pullCaveRoute(surface, from, terminal, terminal, path)
+	points, probes, steps := v.pullCaveRoute(surface, from, terminal, terminal, path)
 	if probes != 0 {
 		t.Fatalf("the hall pull spent %d oracle probes; the geometric pull should need none here", probes)
 	}
 	if len(points) < 2 {
 		t.Fatalf("the pull kept the %0.0f-unit hall in %d point(s); the leg cap is not binding", routeDistance(from, terminal), len(points))
+	}
+	// The pull's work is its strip walk (#1663): every leg it kept
+	// was walked, reading its start and end heights and a profile
+	// sample at least every maxDungeonFloorSampleSpacing, so the
+	// kept legs alone set a floor under the steps however many
+	// refused candidates the walk also tried.
+	walked, prev := 0, from
+	for _, point := range points {
+		walked += 2 + int(math.Ceil(routeDistance(prev, point)/maxDungeonFloorSampleSpacing))
+		prev = point
+	}
+	if steps < walked {
+		t.Fatalf("the hall pull reports %d strip steps; its %d kept legs alone walk %d", steps, len(points), walked)
 	}
 	current := from
 	for i, point := range points {
