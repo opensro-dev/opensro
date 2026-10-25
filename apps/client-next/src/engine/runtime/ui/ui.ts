@@ -568,6 +568,14 @@ import {
 } from "@/engine/foundation/ui/input-options";
 import { sightMode, type SightMode } from "@/engine/foundation/rendering/camera-options";
 import {
+	GRAPHIC_OPTION_CHARACTERS,
+	GRAPHIC_OPTION_GROUND,
+	GRAPHIC_OPTION_LEVEL_OF_DETAIL,
+	GRAPHIC_OPTION_MAP_OBJECTS,
+	GRAPHIC_OPTION_SKY,
+	GRAPHIC_OPTION_WIRE_FRAME
+} from "@/engine/foundation/rendering/graphic-options";
+import {
 	initialAudioOptions,
 	defaultAudioOptions,
 	audioOptions,
@@ -734,6 +742,12 @@ import {
 	DEBUG_COMMAND_UI_OFF,
 	DEBUG_COMMAND_UI_ON,
 	DEBUG_COMMAND_ZOOM,
+	DEBUG_COMMAND_WIRE_FRAME,
+	DEBUG_COMMAND_GROUND,
+	DEBUG_COMMAND_SKY,
+	DEBUG_COMMAND_MAP_OBJECTS,
+	DEBUG_COMMAND_CHARACTERS,
+	DEBUG_COMMAND_LEVEL_OF_DETAIL,
 	DEBUG_COMMAND_SET_FIELD_OF_VIEW,
 	debugCommand,
 	debugFieldOfView,
@@ -953,6 +967,7 @@ rather than as another createUi parameter.
 */
 export interface UiExtensions {
 	bugReport?: BugReportControl | null;
+	setRenderMode?: ( mode: number, enabled: boolean ) => void;
 	setWorldFieldOfView?: ( degrees: number ) => void;
 	setCameraZoomRail?: ( capped: boolean ) => void;
 	setFreeCamera?: ( free: boolean ) => void;
@@ -1005,6 +1020,17 @@ export function createUi(
 	let debugZoomRail = true;
 	let debugFreeCamera = false;
 	let debugCursorVisible = true;
+	// The render family's SWorld graphic options (690C40 ids 150-155):
+	// SWorld_Construct seeds wireframe clear and the five others standing,
+	// each command negates one, and the renderer applies the result. The
+	// copies here are the interface's negation state, as with the zoom
+	// rail; the applied state lives with the renderer.
+	let debugWireFrame = false;
+	let debugGround = true;
+	let debugSky = true;
+	let debugMapObjects = true;
+	let debugCharacters = true;
+	let debugLevelOfDetail = true;
 	// The mission window's visible flag (CIFWnd +0x6D, written through
 	// CIFWnd_SetVisibleFlag 9FCD70 by 690C40 cases 115/116): while it is
 	// down the frame carries only the console's own quads and controls -
@@ -2050,6 +2076,7 @@ export function createUi(
 		}
 		if ( next === "COS inventory" ) {
 			petTrainingAskedRef = 0;
+			petStateAsked = { ref: 0, asks: 0, atMs: 0 };
 			cosSlot = -1;
 			cosPage = 0;
 			cosPlayerPage = 0;
@@ -2814,6 +2841,45 @@ export function createUi(
 				// or goes away (A15A70), silently.
 				debugCursorVisible = !debugCursorVisible;
 				extensions.setCursorVisible?.( debugCursorVisible );
+				break;
+			case DEBUG_COMMAND_WIRE_FRAME:
+				// 150 (691686) negates graphic option 0x12: while it stands
+				// SWorld_Render fills wireframe (8B9C28). The port's device
+				// has no line topology, so the byte is carried unapplied.
+				// The native prints nothing.
+				debugWireFrame = !debugWireFrame;
+				extensions.setRenderMode?.( GRAPHIC_OPTION_WIRE_FRAME, debugWireFrame );
+				break;
+			case DEBUG_COMMAND_GROUND:
+				// 151 (6916BF) negates option 0x13: cleared, the terrain
+				// and ground-decal pass returns whole (8ABFDE).
+				debugGround = !debugGround;
+				extensions.setRenderMode?.( GRAPHIC_OPTION_GROUND, debugGround );
+				break;
+			case DEBUG_COMMAND_SKY:
+				// 152 (6916F8) negates option 0x14: cleared, the sky pass
+				// in CWorld_RenderScenePasses is skipped (8B32F9, 8B3489).
+				debugSky = !debugSky;
+				extensions.setRenderMode?.( GRAPHIC_OPTION_SKY, debugSky );
+				break;
+			case DEBUG_COMMAND_MAP_OBJECTS:
+				// 153 (691731) negates option 0x15: cleared, the model
+				// pass returns whole (SWorld_RenderPostModelPass_8AA750).
+				debugMapObjects = !debugMapObjects;
+				extensions.setRenderMode?.( GRAPHIC_OPTION_MAP_OBJECTS, debugMapObjects );
+				break;
+			case DEBUG_COMMAND_CHARACTERS:
+				// 154 (69176A) negates option 0x16: its proven readers are
+				// the character shadow and dungeon passes (8B130B,
+				// 8B1B4E); the port clears every character draw with it.
+				debugCharacters = !debugCharacters;
+				extensions.setRenderMode?.( GRAPHIC_OPTION_CHARACTERS, debugCharacters );
+				break;
+			case DEBUG_COMMAND_LEVEL_OF_DETAIL:
+				// 155 (6917A3) negates option 0x17: cleared, every cell
+				// takes LOD 0 in place of its distance band (8B7F1D).
+				debugLevelOfDetail = !debugLevelOfDetail;
+				extensions.setRenderMode?.( GRAPHIC_OPTION_LEVEL_OF_DETAIL, debugLevelOfDetail );
 				break;
 			case DEBUG_COMMAND_SET_FIELD_OF_VIEW: {
 				const degrees = debugFieldOfView( command.args );
@@ -8513,6 +8579,9 @@ export function createUi(
 			const sessionPhase = next.session?.phase;
 			if ( sessionPhase !== "world" && sessionPhase !== "disconnected" && sessionPhase !== "reconnecting" ) {
 				mallNotice = "pending";
+				// A restarted server may now provide pet stats after earlier requests were refused.
+				petStateAsked = { ref: 0, asks: 0, atMs: 0 };
+				petTrainingAskedRef = 0;
 			} else if ( sessionPhase === "world" && !next.travel && mallNotice === "pending" && hud.data() ) {
 				mallNotice = hud.data()!.mallNotify.open ? "open" : "closed";
 				dirty = true;
@@ -9694,7 +9763,8 @@ export function createUi(
 						data.cosReferences.get( record.refObjId ),
 						game?.petTraining?.gid === record.gid ? game.petTraining : undefined,
 						next.entities.find( e => e.gid === record.gid )?.petResolve,
-						next.simulationTimeMs ?? 0
+						next.simulationTimeMs ?? 0,
+						record.level
 					);
 					const nativeRect = cosStatusRect( w, i, cls, cosStatusDesktopTop() );
 					const r: UiRect = compact ?
@@ -11820,7 +11890,8 @@ export function createUi(
 								hudData.cosReferences.get( target.refObjId ),
 								game?.petTraining?.gid === target.gid ? game.petTraining : undefined,
 								target.petResolve,
-								next.simulationTimeMs ?? 0
+								next.simulationTimeMs ?? 0,
+								record?.level
 							)?.maxHp :
 							undefined);
 					// The local character, selected from its portrait, wears the
@@ -17410,7 +17481,8 @@ export function createUi(
 							hudData.cosReferences.get( record.refObjId ),
 							publishedTraining,
 							next.entities.find( e => e.gid === record.gid )?.petResolve,
-							next.simulationTimeMs ?? 0
+							next.simulationTimeMs ?? 0,
+							record.level
 						);
 						const node = ( id: number ) => Object.values( page ).find( n => n.id === id );
 						const texts: [number, string][] = [
@@ -17587,6 +17659,7 @@ export function createUi(
 								if ( icon && item ) {
 									image( r, icon );
 									equipmentOverlay( item, r );
+									itemEffects( "pet-gear:" + i, item, r );
 								}
 								quads.push(
 									...text.quads( gear.name, [ r[0] - 12, r[1] + 38, 56, 12 ], full, white, {

@@ -125,6 +125,7 @@ function fieldOfViewWorldFixture( t ) {
 		videoOptions: unexpectedCameraWork,
 		experimentalVideo: unexpectedCameraWork,
 		setSelectionDecal: unexpectedCameraWork,
+		setWorldRenderMode: unexpectedCameraWork,
 		setFootprints: unexpectedCameraWork,
 		pickGround: unexpectedCameraWork,
 		presentationCamera: unexpectedCameraWork,

@@ -267,6 +267,10 @@ export interface Renderer extends Disposable {
 	setSelectionDecal(
 		value: { readonly pose: import("./gameplay").Pose; readonly slot: 0 | 1 | 2 | 3; } | null
 	): void;
+	// One SWorld graphic option (foundation/rendering/graphic-options.ts)
+	// as negated by the console's render family: the world renderer and
+	// the character renderer each apply the options they own.
+	setWorldRenderMode( mode: number, enabled: boolean ): void;
 	setFootprints( value: readonly import("./footprint").Footprint[] ): void;
 	pickGround( x: number, y: number ): import("./navigation").GroundPickQuery | null;
 	presentationCamera(): import("@/engine/foundation/animation/entity-lod").LodPoint | null;

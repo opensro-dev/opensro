@@ -432,6 +432,16 @@ export function gmRequest(
 		v.setUint16( 15, heading, true );
 		return { opcode: OP_GM_COMMAND, payload };
 	}
+	// Port-only: dedicated dummy references exist only with SRO_GM_TRAINING_DUMMY on.
+	if ( name?.toUpperCase() === "/TRAININGDUMMY" && tokens.length <= 2 ) {
+		const level = tokens.length === 1 ? 1 : /^\d+$/.test( arg ?? "" ) ? Number( arg ) : 0;
+		if ( !Number.isInteger( level ) || level < 1 || level > 140 ) return null;
+		const ref = context.monster?.( `MOB_GM_TRAINING_DUMMY_${String( level ).padStart( 3, "0" )}` );
+		if ( !ref ) return null;
+		const payload = Uint8Array.of( 6, 0, 0, 0, 0, 1, 0 );
+		new DataView( payload.buffer ).setUint32( 1, ref.refObjId, true );
+		return { opcode: OP_GM_COMMAND, payload };
+	}
 	// ChatInput_HandleGmCommand matches with CRT_wcsicmp (0x50A77A).
 	if ( name?.toUpperCase() === "/MAKEITEM" && tokens.length === 3 ) {
 		const ref = items.get( arg );

@@ -123,7 +123,7 @@ test("basic casts fly small ice bolts, echoes have separate IDs, and canceled/di
 	assert.deepEqual( step( [ cast ], 3 ), [] );
 });
 
-test("queued Ice Lance latches a spear and trail through queue clearing and its echo", () => {
+test("level-19 Ice Lance I latches a spear and trail through queue clearing and its echo", () => {
 	let serial = 0;
 	const owner = createPenguinBolts( () => ++serial );
 	/** @type {Map<number, import("../../src/engine/contracts/world").EntityState>} */
@@ -131,8 +131,8 @@ test("queued Ice Lance latches a spear and trail through queue clearing and its 
 		[ 1, { gid: 1, name: "Penguin", kind: "cos", refObjId: 23028, ...pose, heading: 0 } ],
 		[ 2, { gid: 2, name: "Target", kind: "monster", refObjId: 1956, ...pose, x: 120, heading: 0 } ]
 	] );
-	const cast = { token: 1, caster: 1, target: 2, skill: 25303, damage: 0, fatal: false };
-	owner.step( [ cast ], 1, entities, new Map(), 0, 33 );
+	const cast = { token: 1, caster: 1, target: 2, skill: 25232, damage: 0, fatal: false };
+	owner.step( [ cast ], 1, entities, new Map(), 0, 31 );
 	const actors = owner.step( [ cast ], 1, entities, new Map(), .35 );
 	assert.equal( actors[0].model, PENGUIN_ICE_LANCE );
 	assert.equal( actors.length, 4 );

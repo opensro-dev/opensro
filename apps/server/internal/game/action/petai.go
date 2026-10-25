@@ -257,6 +257,8 @@ func (rt *Runtime) advancePetInDivision(key petOwnerKey, nowMs int64) (int64, []
 	defer unlock()
 	frames := rt.advanceCrowBrood(key, nowMs)
 	frames = append(frames, rt.advancePenguin(key, nowMs)...)
+	rt.advancePetGearFields(key, nowMs)
+	rt.advancePetGearPoison(key, nowMs)
 	rt.advanceTailwind(key, nowMs)
 	rt.advanceCrowKit(key, nowMs)
 	rt.advanceCrowPlume(key, nowMs)

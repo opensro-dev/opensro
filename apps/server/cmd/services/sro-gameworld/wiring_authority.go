@@ -20,7 +20,6 @@ import (
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/action"
-	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/loot"
 	"opensro.online/server/internal/game/progression"
@@ -134,9 +133,7 @@ func openAuthorityPlane(
 	if err := loot.InitCap110(textdataDir, monster.Cap110Enabled()); err != nil {
 		return authorityPlane{}, err
 	}
-	if companion.AttackPetExpansionEnabled() {
-		textdata.Items.ApplyAttackPetProfiles()
-	}
+	textdata.Items.ApplyAttackPetExpansion()
 	// Port-only, not native: raise configured stack caps before any owner
 	// reads a reference row. Unset keeps every itemdata cap.
 	stackSizes, err := enterworld.StackSizesFromEnv()

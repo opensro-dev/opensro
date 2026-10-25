@@ -38,6 +38,7 @@ import (
 // with the reason; every other setting is a rule (public_rules_test.go).
 var unlistedSettings = map[string]string{
 	action.EnvGMSetSpeed:            "a GM command, not a rule players meet",
+	monster.EnvTrainingDummy:        "GM-only training targets",
 	simulation.EnvBetaUniqueRespawn: "unique monster spawn timing is not published",
 	// The tunables a rule's own text shows (game/tunables).
 	"SRO_MOST_WANTED_TEST_KILLS":      "shown in the Most Wanted test pacing rule",
