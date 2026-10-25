@@ -140,6 +140,11 @@ RETAIL WIRE PARITY: the native 0xB738 handler (sub_776200 at
 so the server PREMULTIPLIES them by 10 (the middle Y dword stays a raw
 float). The active-probe's unscaled source block is the known-wrong shape
 (REV-1 finding 4); do not copy it.
+
+A source the i16 x10 words cannot carry (past +-3276.7 units) is left out
+rather than clamped (sourceFitsWire, #1684): the client then walks from
+the pose it already holds, where a clamped source would re-anchor it to
+the edge of the range.
 ================
 */
 func BuildMovementAckPayload(objectID uint32, movement MovementRequest, source *MovementSource) []byte {
@@ -155,7 +160,7 @@ func BuildMovementAckPayload(objectID uint32, movement MovementRequest, source *
 			U16(roundI16Word(movement.Z))
 	}
 
-	if source != nil {
+	if source != nil && sourceFitsWire(*source) {
 		w.U8(1).
 			U16(source.RegionID).
 			U16(roundI16Word(source.X * 10)).
@@ -349,4 +354,23 @@ func applyTurn(world *WorldState, objectID uint32, movement MovementRequest, now
 		SourceIncluded: source != nil,
 		MovementMode:   world.MovementMode,
 	}
+}
+
+/*
+================
+sourceFitsWire
+
+Whether a source block's x/z fit its i16 x10 words (+-3276.7 units). Port
+artifact: the port puts a whole cave floor in one region frame, so a
+tomb-floor mover (0x8005, 0x8006) can stand far past that, where the
+reference's per-sector frame never does (#1686 is that native-shaped fix).
+Omitting the block is wire-legal - the client parser takes [u8 0] after
+either mode and walks from its own pose - and the next 0xB2F5 settle
+carries the true position. A direction walk sent without its source
+starts nothing for viewers until that settle: the one cost, and only past
+the range.
+================
+*/
+func sourceFitsWire(source MovementSource) bool {
+	return i16WordFits(source.X*10) && i16WordFits(source.Z*10)
 }

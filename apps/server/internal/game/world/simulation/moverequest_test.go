@@ -362,3 +362,56 @@ func TestMovementAckOutdoorBytesUnchanged(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestMovementAckOmitsAnOverflowingSource
+
+A tomb-floor mover stands past the source block's +-3276.7 range (the
+port's one-frame floor, #1684): the ack must leave the block out, not
+clamp it, so no client is re-anchored to the edge of the range. The
+destination words, +-32767 whole units, still carry the signed goal.
+================
+*/
+func TestMovementAckOmitsAnOverflowingSource(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		source MovementSource
+	}{
+		{"0x8005 floor", MovementSource{RegionID: 0x8005, X: -9276.4, Y: 69, Z: 10405.8}},
+		{"0x8006 floor", MovementSource{RegionID: 0x8006, X: -5091.3, Y: 21, Z: -6710.1}},
+		{"x just past the range", MovementSource{RegionID: 0x8005, X: 3276.8, Y: 0, Z: 0}},
+		{"z just past the range", MovementSource{RegionID: 0x8005, X: 0, Y: 0, Z: -3276.9}},
+	} {
+		movement := MovementRequest{Mode: MovementAckDestinationMode, RegionID: tc.source.RegionID, X: -5085, Y: 21, Z: -6700}
+		payload := BuildMovementAckPayload(416154, movement, &tc.source)
+		if len(payload) != 14 || payload[13] != 0 {
+			t.Fatalf("%s: ack carries a source block it cannot express: % X", tc.name, payload)
+		}
+		if x, y, z := ackDestination(t, payload); x != -5085 || y != 21 || z != -6700 {
+			t.Errorf("%s: ack destination = (%d, %d, %d), want (-5085, 21, -6700)", tc.name, x, y, z)
+		}
+	}
+	angular := BuildMovementAckPayload(416154, MovementRequest{Mode: MovementAckAngularMode, AngularMode: AngularFlagGo, HeadingWord: 0x4000},
+		&MovementSource{RegionID: 0x8005, X: -9276.4, Y: 69, Z: 10405.8})
+	if len(angular) != 9 || angular[8] != 0 {
+		t.Fatalf("angular ack carries a source block it cannot express: % X", angular)
+	}
+}
+
+/*
+================
+TestMovementAckKeepsASourceAtTheRangeEdge
+
+The edge itself still fits: 3276.7 and -3276.8 are the i16 words 32767
+and -32768, so a mover there keeps its source block exactly.
+================
+*/
+func TestMovementAckKeepsASourceAtTheRangeEdge(t *testing.T) {
+	source := MovementSource{RegionID: 0x8005, X: 3276.7, Y: 5, Z: -3276.8}
+	payload := BuildMovementAckPayload(416154, MovementRequest{Mode: MovementAckDestinationMode, RegionID: 0x8005, X: 3270, Y: 5, Z: -3270}, &source)
+	x, z := ackSource(t, payload)
+	if math.Abs(x-3276.7) > 0.051 || math.Abs(z-(-3276.8)) > 0.051 {
+		t.Errorf("edge source = (%v, %v), want (3276.7, -3276.8)", x, z)
+	}
+}

@@ -160,3 +160,15 @@ in one step (#1679).
 func roundI16Word(v float64) uint16 {
 	return uint16(int16(math.Round(clampFloat(v, -0x8000, 0x7fff))))
 }
+
+/*
+================
+i16WordFits
+
+Whether v rounds into roundI16Word's range without clamping.
+================
+*/
+func i16WordFits(v float64) bool {
+	rounded := math.Round(v)
+	return rounded >= -0x8000 && rounded <= 0x7fff
+}
