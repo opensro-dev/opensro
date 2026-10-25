@@ -32,7 +32,7 @@ the admitted origin; the native diagnostic dump is not a gameplay effect.
 ================
 */
 func ClampGeneratedSpawnRegion(origin, generated Spawn, available func(uint16) bool) Spawn {
-	if IsDungeonRegion(origin.RegionID) != IsDungeonRegion(generated.RegionID) {
+	if !worldgeom.SamePlane(origin.RegionID, generated.RegionID) {
 		return origin
 	}
 	if available == nil || available(generated.RegionID) {

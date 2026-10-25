@@ -2,6 +2,8 @@ package simulation
 
 import (
 	"math"
+
+	worldgeom "opensro.online/server/internal/game/world"
 )
 
 // BodyRadius is the RefObjChar BCRadius contribution to actor contact
@@ -83,7 +85,7 @@ func (spacing CombatSpacing) StandOffRadius() float64 {
 // complete center-to-center radius.
 func (spacing CombatSpacing) Contains(actor, target Spawn) bool {
 	return spacing.Valid() &&
-		IsDungeonRegion(actor.RegionID) == IsDungeonRegion(target.RegionID) &&
+		worldgeom.SamePlane(actor.RegionID, target.RegionID) &&
 		WorldDistance2D(actor, target) <= spacing.AdmissionRadius()
 }
 
@@ -91,7 +93,7 @@ func (spacing CombatSpacing) Contains(actor, target Spawn) bool {
 // approach. It consumes the same CombatSpacing value as Contains, preventing
 // admission and pursuit from drifting into independent formulas.
 func (spacing CombatSpacing) ApproachGoal(actor, target Spawn) (Spawn, CombatApproachDisposition) {
-	if !spacing.Valid() || IsDungeonRegion(actor.RegionID) != IsDungeonRegion(target.RegionID) {
+	if !spacing.Valid() || !worldgeom.SamePlane(actor.RegionID, target.RegionID) {
 		return actor, CombatApproachInvalid
 	}
 
