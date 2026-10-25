@@ -630,8 +630,10 @@ spacing's admission radius (combat-spacing.ts), both bodies plus the
 reach, so the cast's settle finds the caster already standing there and
 nothing pulls back. While the snapshot carries no body radius for the
 caster or the target, the goal keeps the authored-range aim and its
-margin. The server's own walk is adopted when it arrives. Only from rest,
-on foot, alive, with no cast in flight, and within one region.
+margin. A row that asks for a caster range parameter returns no goal at
+all (its reach can outgrow every aim computed here). The server's own
+walk is adopted when it arrives. Only from rest, on foot, alive, with no
+cast in flight, and within one region.
 ================
 	*/
 	function skillRunUpGoal(
@@ -646,15 +648,18 @@ on foot, alive, with no cast in flight, and within one region.
 			local.appearanceState?.[0] === 2 || localCastHolds( now ) || target.regionId !== pose.regionId ||
 			target.kind === "monster" && target.appearanceState?.[0] === 2
 		) return null;
+		// A row that asks for a caster range parameter starts no prediction:
+		// the server adds the caster's value to the reach, so its boundary
+		// can sit beyond every aim the client can compute from the authored
+		// range - the spacing stop and the margin aim alike - and any walk
+		// aimed short of it is overrun exactly as before. The press stays
+		// server-led, as natively. (A reach cut only shortens the server's
+		// boundary, so it cannot cause an overrun and needs no gate.)
+		if ( metadata.rangeBonus ) return null;
 		const dx = target.x - pose.x, dz = target.z - pose.z, distance = Math.hypot( dx, dz );
 		const casterRadius = refBodyRadius( local.kind, bodyRadii.get( local.refObjId ), 0 );
 		const targetRadius = refBodyRadius( target.kind, bodyRadii.get( target.refObjId ), target.rarity ?? 0 );
-		// A row that asks for a caster range parameter keeps the margin aim:
-		// the server adds the caster's value to the reach, so its boundary
-		// can sit beyond the spacing computed here, and a stop aimed at this
-		// boundary would be overrun exactly as before. (A reach cut only
-		// shortens the server's boundary, so it cannot cause an overrun.)
-		const admission = metadata.rangeBonus || casterRadius === undefined || targetRadius === undefined ?
+		const admission = casterRadius === undefined || targetRadius === undefined ?
 			undefined :
 			combatAdmissionRadius( casterRadius, targetRadius, metadata.range );
 		if ( admission !== undefined ) {

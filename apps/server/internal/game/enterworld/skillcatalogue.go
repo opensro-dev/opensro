@@ -72,10 +72,10 @@ type SkillUiRow struct {
 	// RangeBonus marks a row that asks for one of the caster's range
 	// parameters (the crossbow-range and wizard-range slots): the server
 	// adds the caster's value to the row's reach, so the reach can exceed
-	// Range by an amount the client cannot see. A predicted run-up for
-	// such a row keeps its authored-range aim rather than stop at a
-	// spacing boundary it would overrun. Omitted when the row asks for
-	// neither parameter.
+	// Range by an amount the client cannot see. Such a row starts no
+	// predicted run-up at all: every aim computed from Range would stop
+	// short of the server's boundary and be overrun. Omitted when the
+	// row asks for neither parameter.
 	RangeBonus bool `json:"rangeBonus,omitempty"`
 	// MP and MPPercent are the cast's authored MP cost (flat plus percent of
 	// maximum MP), before the caster's consumption rate (parameter 0x8D):
