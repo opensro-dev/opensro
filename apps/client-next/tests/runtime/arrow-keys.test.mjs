@@ -273,11 +273,11 @@ test("through gameplay, a press the walk gate refuses sends nothing, and its rel
 		sent.length = 0;
 		// Seated (0x7017 posture 4) or dead: 0x680A30's guards return before
 		// latching, so nothing walks and nothing stops.
-		for ( const key of [ "up", "left" ] ) {
+		for ( const key of /** @type {const} */ ([ "up", "left" ]) ) {
 			game.command( { kind: "arrow-key", key, down: true }, 0, undefined, local );
 		}
 		for ( let now = 16; now <= 500; now += 16 ) game.step( now, local );
-		for ( const key of [ "up", "left" ] ) {
+		for ( const key of /** @type {const} */ ([ "up", "left" ]) ) {
 			game.command( { kind: "arrow-key", key, down: false }, 500, undefined, local );
 		}
 		assert.deepEqual( sent.map( f => f.opcode ), [], JSON.stringify( refused ) );
@@ -436,7 +436,7 @@ test("with two commands queued the press sends no cancel (0x67D140), yet still w
 	game.receive( { opcode: 0xb2cd, payload: Uint8Array.of( 1, 2 ) }, 10 );
 	sent.length = 0;
 	game.command( { kind: "arrow-key", key: "up", down: true }, 11, undefined, local );
-	assert.deepEqual( sent, [], "two queued commands hold the request back" );
+	assert.deepEqual( sent.map( f => f.opcode ), [], "two queued commands hold the request back" );
 	game.receive( { opcode: 0xb505, payload: Uint8Array.of( 2, 0, 1, 0, 0, 0 ) }, 13 );
 	for ( let now = 14; now < 3000 && !sent.some( f => f.opcode === 9 ); now += 16 ) game.step( now, local );
 	assert.ok( sent.some( f => f.opcode === 9 ), "walks once the cast lets go" );
