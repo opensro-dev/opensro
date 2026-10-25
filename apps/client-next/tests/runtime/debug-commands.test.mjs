@@ -207,6 +207,23 @@ test("the GM console sends the weather rows to the worker", () => {
 	}
 });
 
+test("the GM console sends /Pos as one move and /GetPos as the body-visual flip", () => {
+	const { f, sent, type } = consoleFixture();
+	try {
+		type( "/Pos 61A8,1,2,3" );
+		assert.deepEqual( sent, [
+			{ kind: "move", destination: { regionId: 0x61a8, x: 1, y: 2, z: 3, angle: 0 } }
+		] );
+		type( "/Pos" );
+		assert.equal( sent.length, 1, "/Pos without its word sent a move" );
+		type( "/GetPos" );
+		assert.deepEqual( sent[1], { kind: "debug-body-visual" } );
+		assert.equal( sent.length, 2, "an extra line reached the worker" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("timeoff before the first clock lands the hold when the clock arrives", async () => {
 	const { sampleWorldClock } = await import(
 		"../../src/engine/foundation/gameplay/world-clock.ts"
