@@ -74,6 +74,17 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 		s.serveMeta(w)
 		return
 	}
+	// Kill stats read the history rollup, not a snapshot, so they
+	// answer before the snapshot gate; uncounted shards (SRO_KILL_STATS
+	// off) refuse the route outright (#1639).
+	if route == "killstats" {
+		if !s.killStats {
+			http.NotFound(w, r)
+			return
+		}
+		s.serveKillStats(w, r.URL.Query())
+		return
+	}
 	s.mu.Lock()
 	at, blocks := s.snapshotAt, s.distribution
 	s.mu.Unlock()

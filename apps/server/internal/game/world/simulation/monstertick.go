@@ -629,16 +629,17 @@ planDirectSegment
 func (ops *MonsterMoverOps) planDirectSegment(instance monster.Instance, mover monster.MoverState, dest monster.Pose, speed float64, channel uint8, nowMs int64) (monster.MoverState, []Frame) {
 	// Quantise the destination to the grid the WIRE can express, before
 	// anything derives from it. The 0xB738 goal is the only destination the
-	// client ever learns and it carries x/y/z as ROUNDED u16
+	// client ever learns and it carries x/y/z as ROUNDED i16 words
 	// (BuildMovementAckPayload, move.go) - so the client can only ever walk
 	// to an INTEGER position. Keeping a fractional destination as server
 	// truth means the 0xB2F5 settle, which encodes f32, hands the client the
 	// UNROUNDED pose AFTER it has already stopped on the rounded one, and it
 	// slides the residual (up to 0.5u per axis) off after halting - BUG-12,
 	// "they always slide a 1cm after stop". Quantise the truth rather than
-	// widening the wire: the u16 destination is the native contract, and the
+	// widening the wire: the i16 destination is the native contract, and the
 	// deliberate precision split is visible in move.go, where the SOURCE
-	// block carries roundU16(x*10) for 0.1u while the DESTINATION is raw u16.
+	// block carries roundI16Word(x*10) for 0.1u while the DESTINATION is
+	// whole units.
 	//
 	// Y is deliberately NOT quantised. The client re-resolves ground height
 	// per integrated step, so its true arrival height is the terrain under

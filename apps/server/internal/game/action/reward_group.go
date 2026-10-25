@@ -433,6 +433,9 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 			if rt.UpdateExperience != nil && (exp != 0 || sexp != 0) {
 				frames, _ = rt.UpdateExperience(a.character, exp, sexp, impact.Instance.Gid)
 			}
+			// Port-only, not native (killstats.go): the award counts in
+			// the recipient's band whether or not a sink is wired.
+			rt.countKillStatAward(a.character, exp, sexp, now)
 			out.public = append(out.public, wire.ProgressionBroadcastFrames(frames)...)
 			if a.character != actor {
 				out.otherPublic = append(out.otherPublic, wire.ProgressionBroadcastFrames(frames)...)
@@ -482,6 +485,16 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 		out.actorFrames = append(out.actorFrames, frames...)
 		out.drops = append(out.drops, drops...)
 	}
+	// Port-only, not native (killstats.go): the kill counts once, in
+	// the fatal actor's band - or the winning representative's when a
+	// companion landed the blow (actor is nil there).
+	killer := actor
+	if killer == nil {
+		if a, ok := roster.actors[winner]; ok {
+			killer = a.character
+		}
+	}
+	rt.countKillStatKill(killer, now)
 	rt.Monsters.ArmNestFromReward(division, impact.Instance.Gid, count)
 	return out
 }

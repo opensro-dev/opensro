@@ -71,7 +71,10 @@ type gameWorldApplication struct {
 	// economy is the staff economy view's aggregates (port-only); nil off.
 	economy *economy.Service
 	// sealBoard is the weekly seal-drop counter (port-only); nil off.
-	sealBoard       *sealboard.Service
+	sealBoard *sealboard.Service
+	// killStatsFlush writes the final kill-stat rollup at shutdown
+	// (port-only, #1639); nil while SRO_KILL_STATS is off.
+	killStatsFlush  func() error
 	settings        *settingsapi.SQLiteStore
 	skillCache      io.Closer
 	itemCache       io.Closer
@@ -306,6 +309,8 @@ func newGameWorldApplication(
 	ts.SetPublicReferences(references)
 	// Port-only, not native (SRO_PREMIUM_UPGRADE): wiring_premium.go.
 	gameplay.wirePremiumUpgrade()
+	// Port-only, not native (SRO_KILL_STATS): wiring_killstats.go.
+	gameplay.wireKillStats(application)
 	if err := gameplay.register(ts.Hub, authority.loadQuests); err != nil {
 		return nil, fmt.Errorf("gameplay wiring: %w", err)
 	}
@@ -584,6 +589,13 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 	log.Info("shutdown: complete")
 	if application.history != nil {
 		drainErr = errors.Join(drainErr, application.history.Close())
+	}
+	// The tick has stopped, so the rollup is final: write it before the
+	// economy history closes (#1639).
+	if application.killStatsFlush != nil {
+		if err := application.killStatsFlush(); err != nil {
+			log.WithError(err).Warn("kill stats: final flush failed")
+		}
 	}
 	if application.economy != nil {
 		drainErr = errors.Join(drainErr, application.economy.Close())

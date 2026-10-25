@@ -131,6 +131,10 @@ var Settings = []Setting{
 	// the new ticket's end later (#1624, port-only, not native; "off"
 	// refuses a second ticket while one runs).
 	{Env: "SRO_PREMIUM_UPGRADE", NomadVar: "premium_upgrade", Default: "off"},
+	// Owner, 2026-10-25: count kills and EXP per online hour by level
+	// band for the staff console (#1639, port-only, not native; "off"
+	// counts nothing and the economy route answers 404).
+	{Env: "SRO_KILL_STATS", NomadVar: "kill_stats", Default: "off"},
 	// F10 trade group (game/tunables): the Jangan route profit percents. The
 	// site's trade quotes read them, so the catalogue does too.
 	{Env: "SRO_TRADE_ROUTE_DONWHANG_PERCENT", NomadVar: "trade_route_donwhang_percent", Default: "50", Catalogue: true},

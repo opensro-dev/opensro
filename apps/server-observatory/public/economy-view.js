@@ -425,3 +425,63 @@ share
 export function share( value ) {
 	return Number.isFinite( value ) ? (value * 100).toFixed( 1 ) + "%" : "—";
 }
+
+/*
+================
+dayLabel
+
+A whole UTC day (unix seconds at its opening) as its ISO date.
+================
+*/
+export function dayLabel( daySeconds ) {
+	return new Date( daySeconds * 1000 ).toISOString().slice( 0, 10 );
+}
+
+/*
+================
+rateText
+
+A per-hour rate with its digits grouped and at most two decimals;
+a value that is not a finite number reads as a dash.
+================
+*/
+export function rateText( value ) {
+	const n = Number( value );
+	if ( !Number.isFinite( n ) ) return "—";
+	const rounded = Math.round( n * 100 ) / 100;
+	const [whole, fraction] = Math.abs( rounded ).toFixed( 2 ).split( "." );
+	const tail = fraction.replace( /0+$/, "" );
+	return (rounded < 0 ? "-" : "") + groupDigits( BigInt( whole ) ) + (tail ? "." + tail : "");
+}
+
+/*
+================
+killStatRows
+
+The killstats answer flattened for the Rates table: one row per
+(day, band), newest day first, bands low to high inside a day. A
+malformed answer yields no rows rather than a thrown page.
+================
+*/
+export function killStatRows( body ) {
+	const days = Array.isArray( body?.days ) ? body.days : [];
+	const rows = [];
+	for ( const day of days ) {
+		const bands = Array.isArray( day?.bands ) ? day.bands : [];
+		for ( const band of bands ) {
+			rows.push( {
+				day: Number( day.day ),
+				dayText: dayLabel( Number( day.day ) ),
+				band: Number( band.band ),
+				label: String( band.label ?? "" ),
+				characters: band.characters,
+				kills: band.kills,
+				killsPerHour: band.killsPerOnlineHour,
+				expPerHour: band.expPerOnlineHour,
+				skillExpPerHour: band.skillExpPerOnlineHour,
+				onlineHours: band.onlineHours
+			} );
+		}
+	}
+	return rows.sort( ( a, b ) => b.day - a.day || a.band - b.band );
+}
