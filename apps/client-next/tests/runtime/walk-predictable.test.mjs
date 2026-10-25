@@ -24,11 +24,16 @@ const POSE = { regionId: 0x6b4f, x: 60, y: 10, z: 100, angle: 0 };
 // movement.ts OP_PREDICTED_MOVE: the internal frame a walk request sends.
 const PREDICTED_MOVE = 9;
 const STANDING = { ...POSE, gid: 7, heading: 0, appearanceState: [ 1, 0, 0 ] };
+// The riding mount's COS reference and gid (a band 1 vehicle).
+const MOUNT = { gid: 9, refObjId: 90, tidWord: 0x09c6 };
 const STATES = {
-	standing: STANDING,
-	seated: { ...STANDING, movementMode: 4 },
-	dead: { ...STANDING, appearanceState: [ 2, 0, 0 ] },
-	mounted: { ...STANDING, mountedOn: 9 }
+	standing: { local: STANDING },
+	seated: { local: { ...STANDING, movementMode: 4 } },
+	dead: { local: { ...STANDING, appearanceState: [ 2, 0, 0 ] } },
+	// Riding a mount the worker holds no live COS record for: no authority.
+	mounted: { local: { ...STANDING, mountedOn: MOUNT.gid } },
+	// Riding the live active mount: the click walks the mount (#1566).
+	riding: { local: { ...STANDING, mountedOn: MOUNT.gid }, cos: MOUNT }
 };
 
 /*
@@ -39,10 +44,21 @@ A fresh gameplay owner in the given local state: the flag it publishes,
 and whether a click then sent a walk request.
 ================
 */
-function started( local ) {
+function started( { local, cos } ) {
 	const sent = [], game = createGameplay( f => sent.push( f ) );
-	game.bootstrap( { simulationProtocolVersion: 1 } );
+	game.bootstrap( {
+		simulationProtocolVersion: 1,
+		refObjSnapshot: [ { kind: "cos", refObjId: MOUNT.refObjId, tidWord: MOUNT.tidWord } ]
+	} );
 	game.seed( local );
+	if ( cos ) {
+		// 0x3158 for a band 1 mount (830EC0): gid, ref, hp.
+		const record = new Uint8Array( 17 ), view = new DataView( record.buffer );
+		view.setUint32( 0, cos.gid, true );
+		view.setUint32( 4, cos.refObjId, true );
+		view.setUint32( 8, 100, true );
+		game.receive( { opcode: 0x3158, payload: record }, 0 );
+	}
 	game.step( 50, local );
 	const flag = game.take()?.walkPredictable;
 	try {
@@ -55,12 +71,11 @@ function started( local ) {
 }
 
 test("walkPredictable is true exactly in the states where a click walks at once", () => {
-	for ( const [name, local] of Object.entries( STATES ) ) {
-		const { flag, walked } = started( local );
-		assert.equal( flag, name === "standing", name + ": published flag" );
-		// Mounted walks are left to the worker on purpose (the flag is false
-		// although the worker may walk the COS), every other state agrees.
-		if ( name !== "mounted" ) assert.equal( walked, flag, name + ": the command path agrees" );
+	for ( const [name, state] of Object.entries( STATES ) ) {
+		const { flag, walked } = started( state );
+		assert.equal( flag, name === "standing" || name === "riding", name + ": published flag" );
+		// Every state agrees with the command path, riding included (#1566).
+		assert.equal( walked, flag, name + ": the command path agrees" );
 	}
 });
 
@@ -71,7 +86,7 @@ test("a gate that closes with no command republishes the flag on the next step",
 	game.step( 50, STANDING );
 	assert.equal( game.take()?.walkPredictable, true );
 	assert.equal( game.take(), null, "nothing changed" );
-	game.step( 66, STATES.seated );
+	game.step( 66, STATES.seated.local );
 	assert.equal( game.take()?.walkPredictable, false );
 	game.step( 83, STANDING );
 	assert.equal( game.take()?.walkPredictable, true );
