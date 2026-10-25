@@ -185,6 +185,9 @@ func NewServer(cfg Config) (*Server, error) {
 	if cfg.MaxPendingHandshakes <= 0 {
 		return nil, fmt.Errorf("transport: max_pending_handshakes must be positive")
 	}
+	if cfg.UDPBufferBytes <= 0 {
+		return nil, fmt.Errorf("transport: udp_buffer_bytes must be positive")
+	}
 	wsLoopback := isLoopbackHostPort(cfg.WSAddr)
 	if cfg.EnablePprof && !wsLoopback {
 		return nil, fmt.Errorf("transport: pprof requires a loopback ws_addr")
@@ -500,6 +503,12 @@ func (s *Server) Start() error {
 	if err != nil {
 		return fail(fmt.Errorf("transport: binding UDP %s: %w", s.cfg.WTAddr, err))
 	}
+	if err := sizeUDPBuffers(udpConn, s.cfg.UDPBufferBytes); err != nil {
+		// The kernel grants what its ceilings allow; a shortfall is
+		// the host tuning's side of the bargain, so serve on and say
+		// so rather than refusing to start.
+		log.WithError(err).Warn("transport: UDP socket buffers below the requested size; QUIC throughput may be limited by the host's buffer ceilings")
+	}
 	s.tcpLn = tcpLn
 	s.udpConn = udpConn
 	s.started = true
@@ -535,6 +544,26 @@ func (s *Server) Start() error {
 		"websocket":    "ws://" + wsAddr + PathWS + " (TCP)",
 		"certHash":     "http://" + wsAddr + PathCertHash,
 	}).Info("transport: listening")
+	return nil
+}
+
+/*
+================
+sizeUDPBuffers
+
+Asks the kernel for size bytes of receive and send buffer on the
+WebTransport socket. The kernel clamps to its own ceilings, so this
+never oversizes anything; it only lifts the socket off the small
+stock default where the host allows it.
+================
+*/
+func sizeUDPBuffers(conn *net.UDPConn, size int) error {
+	if err := conn.SetReadBuffer(size); err != nil {
+		return fmt.Errorf("receive buffer: %w", err)
+	}
+	if err := conn.SetWriteBuffer(size); err != nil {
+		return fmt.Errorf("send buffer: %w", err)
+	}
 	return nil
 }
 

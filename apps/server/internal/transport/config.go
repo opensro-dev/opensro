@@ -21,6 +21,7 @@ const (
 	KeyAllowedOrigins  = "transport.allowed_origins"
 	KeyOutboundQueue   = "transport.outbound_queue"
 	KeyOutboundBytes   = "transport.outbound_queue_bytes"
+	KeyUDPBufferBytes  = "transport.udp_buffer_bytes"
 	KeyRateLimitPerSec = "transport.rate_limit_per_sec"
 	KeyRateLimitBurst  = "transport.rate_limit_burst"
 	KeyMaxSessions     = "transport.max_sessions"
@@ -81,6 +82,16 @@ type Config struct {
 	OutboundQueue      int
 	OutboundQueueBytes int
 
+	// UDPBufferBytes is the requested size of the WebTransport UDP
+	// socket's receive and send buffers. The stock kernel ceilings
+	// (about 208 KB) throttle QUIC long before the CPU does; the
+	// socket layer grants only what the host allows, so a host that
+	// serves public WebTransport also raises its UDP buffer ceilings
+	// (the host-tuning half of #1447). The server asks at bind time
+	// and serves on with what it got. 0 takes the default; negative
+	// is invalid.
+	UDPBufferBytes int
+
 	// RateLimitPerSec is the per-session inbound dispatch budget in
 	// frames/second (token-bucket refill), sized from the legit-traffic
 	// inventory in ratelimit.go. 0 takes the default; negative is invalid.
@@ -140,6 +151,11 @@ func WebTransportPublicEnabled() bool {
 // a reload leaves in resume grace; a player needs one.
 const DefaultMaxSessionsPerAccount = 4
 
+// DefaultUDPBufferBytes is the requested WebTransport socket buffer
+// size: 25 MB, the value the #1447 host proposal pairs with the host's
+// raised UDP ceilings. The kernel may grant less.
+const DefaultUDPBufferBytes = 25_000_000
+
 // DefaultConfig is the library/test baseline. The GameWorld composition
 // replaces unconfigured listener addresses with its owned shard's catalog
 // transport URL before constructing the server.
@@ -154,6 +170,7 @@ func DefaultConfig() Config {
 		IdleTimeout:           60 * time.Second,
 		OutboundQueue:         8192,
 		OutboundQueueBytes:    32 << 20,
+		UDPBufferBytes:        DefaultUDPBufferBytes,
 		RateLimitPerSec:       25,
 		RateLimitBurst:        75,
 		MaxSessions:           5000,
@@ -191,6 +208,9 @@ func (c *Config) applyDefaults() {
 	if c.OutboundQueueBytes == 0 {
 		c.OutboundQueueBytes = d.OutboundQueueBytes
 	}
+	if c.UDPBufferBytes == 0 {
+		c.UDPBufferBytes = d.UDPBufferBytes
+	}
 	if c.RateLimitPerSec == 0 {
 		c.RateLimitPerSec = d.RateLimitPerSec
 	}
@@ -221,6 +241,7 @@ func RegisterViperDefaults() {
 	viper.SetDefault(KeyAllowedOrigins, []string{})
 	viper.SetDefault(KeyOutboundQueue, d.OutboundQueue)
 	viper.SetDefault(KeyOutboundBytes, d.OutboundQueueBytes)
+	viper.SetDefault(KeyUDPBufferBytes, d.UDPBufferBytes)
 	viper.SetDefault(KeyRateLimitPerSec, d.RateLimitPerSec)
 	viper.SetDefault(KeyRateLimitBurst, d.RateLimitBurst)
 	viper.SetDefault(KeyMaxSessions, d.MaxSessions)
@@ -238,6 +259,7 @@ func RegisterViperDefaults() {
 	_ = viper.BindEnv(KeyAllowedOrigins, "TRANSPORT_ALLOWED_ORIGINS")
 	_ = viper.BindEnv(KeyOutboundQueue, "TRANSPORT_OUTBOUND_QUEUE")
 	_ = viper.BindEnv(KeyOutboundBytes, "TRANSPORT_OUTBOUND_QUEUE_BYTES")
+	_ = viper.BindEnv(KeyUDPBufferBytes, "TRANSPORT_UDP_BUFFER_BYTES")
 	_ = viper.BindEnv(KeyRateLimitPerSec, "TRANSPORT_RATE_LIMIT_PER_SEC")
 	_ = viper.BindEnv(KeyRateLimitBurst, "TRANSPORT_RATE_LIMIT_BURST")
 	_ = viper.BindEnv(KeyMaxSessions, "TRANSPORT_MAX_SESSIONS")
@@ -260,6 +282,7 @@ func ConfigFromViper() Config {
 	)
 	cfg.OutboundQueue = viper.GetInt(KeyOutboundQueue)
 	cfg.OutboundQueueBytes = viper.GetInt(KeyOutboundBytes)
+	cfg.UDPBufferBytes = viper.GetInt(KeyUDPBufferBytes)
 	cfg.RateLimitPerSec = viper.GetInt(KeyRateLimitPerSec)
 	cfg.RateLimitBurst = viper.GetInt(KeyRateLimitBurst)
 	cfg.MaxSessions = viper.GetInt(KeyMaxSessions)
