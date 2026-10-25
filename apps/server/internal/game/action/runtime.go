@@ -94,6 +94,10 @@ type Runtime struct {
 	// transport (port-only, SRO_TRANSPORT_FOLLOW_TETHER; acts only with
 	// TransportFollow on, transportfollow.go).
 	TransportFollowTether bool
+	// BetaSilkActivity notes player commands for the beta silk hour
+	// (port-only, SRO_BETA_SILK_ACTIVE_ONLY; nil or inactive is the
+	// shipped rule, betasilk.go).
+	BetaSilkActivity *BetaSilk
 	// JobGoodsTeleport lets a trader with a transport out use town gates,
 	// return scrolls and the reverse return (port-only,
 	// SRO_JOB_GOODS_TELEPORT; false is native, goodsteleport.go).

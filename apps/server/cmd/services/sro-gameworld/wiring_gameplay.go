@@ -226,6 +226,17 @@ func newGameplayPlane(
 	betaSilk := action.NewBetaSilk(authorityStore, betaSilkRate)
 	var mallAuthority domain.MallAuthority = authorityStore
 	if betaSilk != nil {
+		// SRO_BETA_SILK_ACTIVE_ONLY (port-only, not native): credit only
+		// active play. Off is the shipped rule.
+		activeOnly, err := action.BetaSilkActiveOnlyFromEnv()
+		if err != nil {
+			return nil, err
+		}
+		betaSilk.ActiveOnly = activeOnly
+		if activeOnly {
+			log.Infof("item mall: beta silk credits active play only (%s)", action.EnvBetaSilkActiveOnly)
+		}
+		items.BetaSilkActivity = betaSilk
 		mallAuthority = betaSilk
 		deps.EntryBetaSilk = betaSilk.Starter
 		log.Infof("item mall: beta silk ON (%s): %d silk per in-world hour", action.EnvBetaSilk, betaSilkRate)

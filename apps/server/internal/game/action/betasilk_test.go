@@ -308,3 +308,136 @@ func TestBetaSilkForgetsAccountsAwayForADay(t *testing.T) {
 		t.Fatalf("a returning account kept earlier time: %+v", clock)
 	}
 }
+
+/*
+================
+activeOnlyFixture
+
+One online character on a 50-silk owner with ActiveOnly set as given, and
+a tick that advances the clock one minute.
+================
+*/
+type activeOnlyFixture struct {
+	wallet *fakeSilkWallet
+	beta   *BetaSilk
+	now    int64
+	online []simulation.SessionView
+	lookup func(string, int64) *domain.Character
+}
+
+func newActiveOnlyFixture(activeOnly bool) *activeOnlyFixture {
+	character := &domain.Character{ID: 7, Name: "Tester", AccountID: "acct"}
+	f := &activeOnlyFixture{
+		wallet: &fakeSilkWallet{exists: true},
+		online: []simulation.SessionView{{DivisionID: "d", CharacterID: character.ID}},
+		lookup: func(_ string, id int64) *domain.Character {
+			if id == character.ID {
+				return character
+			}
+			return nil
+		},
+	}
+	f.beta = NewBetaSilk(f.wallet, 50)
+	f.beta.ActiveOnly = activeOnly
+	f.beta.Tick(f.now, f.online, f.lookup)
+	return f
+}
+
+func (f *activeOnlyFixture) minute() {
+	f.now += 60 * 1000
+	f.beta.Tick(f.now, f.online, f.lookup)
+}
+
+/*
+================
+TestBetaSilkActiveOnlyParksAnIdleAccount
+
+Under SRO_BETA_SILK_ACTIVE_ONLY a world-ready character that never acts
+earns nothing; acting every minute earns the hour.
+================
+*/
+func TestBetaSilkActiveOnlyParksAnIdleAccount(t *testing.T) {
+	f := newActiveOnlyFixture(true)
+	for range 120 {
+		f.minute()
+	}
+	if f.wallet.silk != 0 || f.beta.clocks["acct"].earnedMs != 0 {
+		t.Fatalf("idle under active-only: silk %d, clock %+v", f.wallet.silk, f.beta.clocks["acct"])
+	}
+	for range 60 {
+		f.beta.NoteActivity("acct")
+		f.minute()
+	}
+	if f.wallet.silk != 50 {
+		t.Fatalf("an hour of play: silk %d, want 50", f.wallet.silk)
+	}
+}
+
+/*
+================
+TestBetaSilkActiveOnlyWindowExpires
+
+One action keeps the hour going for betaSilkActivityWindowMs after the tick
+that saw it, plus the step that tick closes, and no longer. A clock that
+starts at 0 must still honour the window (the stamp is the tick's clock,
+never the wall clock).
+================
+*/
+func TestBetaSilkActiveOnlyWindowExpires(t *testing.T) {
+	f := newActiveOnlyFixture(true)
+	f.beta.NoteActivity("acct")
+	for range 30 {
+		f.minute()
+	}
+	want := int64(betaSilkActivityWindowMs + 60*1000)
+	if got := f.beta.clocks["acct"].earnedMs; got != want {
+		t.Fatalf("one action accrued %d ms, want %d", got, want)
+	}
+	if len(f.beta.noted) != 0 {
+		t.Fatalf("notes outlived the tick: %v", f.beta.noted)
+	}
+}
+
+/*
+================
+TestBetaSilkActiveOnlyOffIsShipped
+
+With the flag off a note is ignored and two idle hours earn two credits.
+================
+*/
+func TestBetaSilkActiveOnlyOffIsShipped(t *testing.T) {
+	f := newActiveOnlyFixture(false)
+	f.beta.NoteActivity("acct")
+	if f.beta.noted != nil {
+		t.Fatal("off recorded activity")
+	}
+	for range 120 {
+		f.minute()
+	}
+	if f.wallet.silk != 100 {
+		t.Fatalf("off: silk %d, want 100 for two hours", f.wallet.silk)
+	}
+}
+
+/*
+================
+TestParseBetaSilkActiveOnly
+================
+*/
+func TestParseBetaSilkActiveOnly(t *testing.T) {
+	t.Parallel()
+	for _, value := range []struct {
+		raw  string
+		want bool
+		bad  bool
+	}{
+		{raw: ""}, {raw: "off"}, {raw: "OFF"}, {raw: "0"}, {raw: "false"},
+		{raw: "on", want: true}, {raw: " ON ", want: true}, {raw: "1", want: true}, {raw: "true", want: true},
+		{raw: "yes", bad: true}, {raw: "2", bad: true}, {raw: "active", bad: true},
+	} {
+		got, err := ParseBetaSilkActiveOnly(value.raw)
+		if (err != nil) != value.bad || got != value.want {
+			t.Errorf("ParseBetaSilkActiveOnly(%q) = %t, %v; want %t", value.raw, got, err, value.want)
+		}
+	}
+}

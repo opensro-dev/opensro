@@ -54,6 +54,12 @@ import (
 // BetaSilkHourlyDefault, or silk per in-world hour.
 const EnvBetaSilk = "SRO_BETA_SILK"
 
+// EnvBetaSilkActiveOnly restricts earning to active play (port-only, not
+// native): with it on, an account's hour accrues only while its character
+// has acted within the last betaSilkActivityWindowMs. Off (or unset) is the
+// shipped rule: world-ready time accrues.
+const EnvBetaSilkActiveOnly = "SRO_BETA_SILK_ACTIVE_ONLY"
+
 // BetaSilkHourlyDefault is the silk one in-world hour earns.
 const BetaSilkHourlyDefault = 50
 
@@ -72,6 +78,10 @@ const betaSilkForgetMs = 24 * 60 * 60 * 1000
 // betaSilkMaxStepMs bounds the time one tick can add, so a stalled tick or a
 // clock jump never credits idle time at once.
 const betaSilkMaxStepMs = 60 * 1000
+
+// betaSilkActivityWindowMs is how long one player action keeps an account's
+// silk clock accruing under EnvBetaSilkActiveOnly.
+const betaSilkActivityWindowMs = 10 * 60 * 1000
 
 // opMallBalance pushes an account's mall balance to its session; the client
 // updates an open mall (commerce-controls.ts MALL_BALANCE_CONTROL).
@@ -117,6 +127,36 @@ func ParseBetaSilk(raw string) (uint32, error) {
 
 /*
 ================
+BetaSilkActiveOnlyFromEnv
+
+Composition reads this once, beside BetaSilkFromEnv.
+================
+*/
+func BetaSilkActiveOnlyFromEnv() (bool, error) {
+	return ParseBetaSilkActiveOnly(os.Getenv(EnvBetaSilkActiveOnly))
+}
+
+/*
+================
+ParseBetaSilkActiveOnly
+
+Only an explicit on spelling turns the rule on; empty and the off spellings
+are the shipped rule. Anything else is refused at startup, as a mistyped
+rate is.
+================
+*/
+func ParseBetaSilkActiveOnly(raw string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "off", "0", "false":
+		return false, nil
+	case "on", "1", "true":
+		return true, nil
+	}
+	return false, fmt.Errorf("%s must be off or on", EnvBetaSilkActiveOnly)
+}
+
+/*
+================
 BetaSilkWallet
 
 The persisted wallet the credits land in (store/betasilk.go).
@@ -143,6 +183,10 @@ type betaSilkClock struct {
 	capped     bool
 	ready      bool
 	retryAtMs  int64
+	// activeMs is the tick that last saw a noted action (ActiveOnly);
+	// acted says activeMs is set, since 0 is a valid clock reading.
+	activeMs int64
+	acted    bool
 }
 
 /*
@@ -150,14 +194,22 @@ type betaSilkClock struct {
 BetaSilk
 
 The beta silk owner: the starter at world entry and the hourly credits.
+ActiveOnly (EnvBetaSilkActiveOnly) gates the hourly accrual on recent player
+action (NoteActivity); the starter and the credits themselves are unchanged.
 ================
 */
 type BetaSilk struct {
-	wallet     BetaSilkWallet
-	rate       uint32
+	wallet BetaSilkWallet
+	rate   uint32
+	// ActiveOnly accrues the hour only for recently active accounts. Memory
+	// only: a restart forgets activity as it forgets uncredited time.
+	ActiveOnly bool
 	mu         sync.Mutex
 	generation uint64
 	clocks     map[string]*betaSilkClock
+	// noted holds accounts that acted since the last Tick. The hub has no
+	// world clock, so Tick stamps each note with its own nowMs: one clock.
+	noted map[string]bool
 }
 
 /*
@@ -317,7 +369,14 @@ func (b *BetaSilk) Tick(nowMs int64, sessions []simulation.SessionView, lookup f
 		if clock.generation == b.generation {
 			continue // a second session of one account counts once
 		}
-		if !clock.capped && clock.generation != 0 && clock.generation == b.generation-1 && nowMs > clock.lastMs {
+		if b.noted[character.AccountID] {
+			clock.activeMs, clock.acted = nowMs, true
+			delete(b.noted, character.AccountID)
+		}
+		// Under ActiveOnly the step accrues only within the window after a
+		// noted action; otherwise the hour stands still, as absence pauses it.
+		active := !b.ActiveOnly || clock.acted && nowMs-clock.activeMs <= betaSilkActivityWindowMs
+		if active && !clock.capped && clock.generation != 0 && clock.generation == b.generation-1 && nowMs > clock.lastMs {
 			clock.earnedMs += min(nowMs-clock.lastMs, betaSilkMaxStepMs)
 		}
 		clock.lastMs, clock.generation = nowMs, b.generation
@@ -351,6 +410,9 @@ func (b *BetaSilk) Tick(nowMs int64, sessions []simulation.SessionView, lookup f
 			delete(b.clocks, account)
 		}
 	}
+	// A note from an account this tick did not see (left before the tick)
+	// is stale by the next one.
+	clear(b.noted)
 	var out []simulation.DivisionFrames
 	for i, session := range sessions {
 		if payload, ok := updates[accounts[i]]; ok {
@@ -359,4 +421,24 @@ func (b *BetaSilk) Tick(nowMs int64, sessions []simulation.SessionView, lookup f
 		}
 	}
 	return out
+}
+
+/*
+================
+NoteActivity
+
+Records that an account acted. Called by the action hub for every admitted
+player command; inert unless ActiveOnly is on.
+================
+*/
+func (b *BetaSilk) NoteActivity(accountID string) {
+	if b == nil || !b.ActiveOnly || accountID == "" {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.noted == nil {
+		b.noted = make(map[string]bool)
+	}
+	b.noted[accountID] = true
 }
