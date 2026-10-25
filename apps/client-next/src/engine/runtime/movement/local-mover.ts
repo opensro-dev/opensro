@@ -20,7 +20,11 @@ caller: it resolves to a walk-to, or for a miss to a direction walk
 would walk at once (walkPredictable for the ground click) while the main
 view holds the product the worker holds (navigationRequestId). Mounted
 walks, selects, pickups and run-ups join through the same seam (#1566 to
-#1571).
+#1571). A click a gate holds - a cast, the ground-skill suppress window -
+cannot predict at once: the mover records its aim, as the worker records
+the click, and adopts the walk from the first publication after the
+worker stops holding it that walks an aim, so the release steps on the
+frame it lands (#1570).
 
 Reconciliation (#1441b, Unreal's ClientAdjustPosition then
 ClientUpdatePosition): every newer worker publication rebuilds the
@@ -104,6 +108,15 @@ export interface LocalMoverWorld {
 	readonly aim: MoverAim | undefined;
 	readonly speedFactor: number;
 	readonly walkPredictable: boolean;
+	// A click now would be held by a gate that releases into the walk
+	// (gameplay.ts walkHeld): the mover records its aim and adopts the
+	// walk when the worker publishes it (#1570).
+	readonly walkHeld: boolean;
+	// The worker still holds a click in its move reservation
+	// (gameplay.ts moveHeld): a recorded click is consumed only once
+	// this clears, because the worker notes an input's sequence before
+	// any gate, so its own publication is taken-but-not-walking.
+	readonly holding: boolean;
 	readonly speed: number | undefined;
 	readonly inputSeq: number;
 	readonly navigationRequestId: number | undefined;
@@ -173,6 +186,25 @@ interface SavedInput {
 	readonly aim: MoverAim;
 	readonly atMs: number;
 	readonly speed: number;
+}
+
+/*
+================
+HeldClick
+
+A click a gate held (#1570): its aim resolved at click time, as the
+worker resolves it, waiting for the publication that walks it. The aim
+is bookkeeping only - a direction pick re-resolves at release in the
+worker, so adoption always walks the worker's published aim. Dropped
+with no trace when the worker took the input but does not walk.
+================
+*/
+interface HeldClick {
+	readonly seq: number;
+	readonly aim: MoverAim;
+	readonly speed: number;
+	readonly drawn: Pose;
+	readonly now: number;
 }
 
 /*
@@ -274,6 +306,8 @@ export function createLocalMover() {
 	// A prediction a later unpredicted click cut short: its drawn pose is
 	// handed back on the next frame instead of being dropped.
 	let cut: Pose | null = null;
+	// The newest click a gate held, waiting for its walk (#1570).
+	let heldClick: HeldClick | null = null;
 	/*
 	================
 	viewFor
@@ -340,6 +374,8 @@ export function createLocalMover() {
 	================
 	*/
 	function predict( input: MoverInput, world: LocalMoverWorld ): boolean {
+		// An admitted newer input supersedes a held click (#1570).
+		if ( heldClick && input.seq > heldClick.seq ) heldClick = null;
 		if ( !viewFor( world ) || !world.pose || !input.speed || (walk?.inputs.length ?? 0) >= MAX_SAVED_INPUTS ) {
 			if ( walk ) cut = walk.drawn;
 			walk = null;
@@ -402,7 +438,7 @@ export function createLocalMover() {
 		*/
 		click( input: LocalMoverClick, world: LocalMoverWorld ): boolean {
 			const navigation = viewFor( world );
-			if ( !navigation || !world.walkPredictable || !world.speed || !world.pose ) {
+			if ( !navigation || !world.speed || !world.pose ) {
 				if ( walk ) cut = walk.drawn;
 				walk = null;
 				return false;
@@ -417,6 +453,25 @@ export function createLocalMover() {
 			const aim: MoverAim = action.kind === "walk-to" ?
 				{ kind: "goal", destination: action.destination } :
 				{ kind: "direction", heading: action.heading };
+			if ( !world.walkPredictable ) {
+				// A holding gate keeps the click for its release (#1570):
+				// record the aim and leave any prediction walking; an
+				// outright refusal cuts the prediction as before.
+				if ( world.walkHeld ) {
+					heldClick = {
+						seq: input.seq,
+						aim,
+						speed: world.speed,
+						drawn: input.drawn,
+						now: input.now
+					};
+					return false;
+				}
+				if ( walk ) cut = walk.drawn;
+				walk = null;
+				return false;
+			}
+			heldClick = null;
 			return predict( { seq: input.seq, aim, speed: world.speed, drawn: input.drawn, now: input.now }, world );
 		},
 		/*
@@ -432,6 +487,23 @@ export function createLocalMover() {
 				const pose = cut;
 				cut = null;
 				return { kind: "ended", pose };
+			}
+			// A held click whose gate released: the worker notes the
+			// input's sequence before any gate, so the click's own
+			// publication is taken-but-not-walking and must not consume
+			// the record; the first publication after the reservation
+			// clears adopts it when it walks an aim, predicted from where
+			// the body was drawn at click time and reconciled like any
+			// prediction (#1570). Taken but not walking: no trace.
+			if ( heldClick && world.inputSeq >= heldClick.seq && !world.holding ) {
+				const held = heldClick;
+				heldClick = null;
+				if ( world.moving && world.aim ) {
+					predict(
+						{ seq: held.seq, aim: world.aim, speed: world.speed ?? held.speed, drawn: held.drawn, now },
+						world
+					);
+				}
 			}
 			if ( !walk ) return { kind: "idle" };
 			const navigation = viewFor( world );
@@ -491,6 +563,7 @@ export function createLocalMover() {
 		reset() {
 			walk = null;
 			cut = null;
+			heldClick = null;
 		}
 	};
 }

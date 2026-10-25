@@ -221,6 +221,8 @@ export interface Platform extends Disposable {
 	presentUpdate( newer: boolean ): void;
 	presentTelemetry( sample: FrameTelemetry ): void;
 	diagnosticsActive(): boolean;
+	/** Holds the tab awake (no background freeze) while a world session is live. */
+	setKeepAwake( active: boolean ): void;
 	/** The canvas CSS size, observed rather than read (no forced layout). */
 	canvasSize(): { readonly width: number; readonly height: number; };
 	readViewport(): Viewport;
