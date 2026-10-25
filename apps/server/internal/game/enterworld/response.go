@@ -44,6 +44,13 @@ type RefObjRow struct {
 	Name      string                         `json:"name,omitempty"`
 	Level     uint8                          `json:"level,omitempty"`
 	MaxHP     uint32                         `json:"maxHp,omitempty"`
+	// BodyRadius is the row's RefObjChar BCRadius: the body combat spacing
+	// adds around the action's reach. A monster's instance grades it (the
+	// client applies the grade from the live spawn's rarity byte); a
+	// character's body is this value ungraded. Absent where no spacing
+	// reads the row (NPCs, teleports), which keeps the client's predicted
+	// run-up on its unpinned aim there.
+	BodyRadius float64 `json:"bodyRadius,omitempty"`
 	// MonsterType is a monster row's static type byte (client record +0xA0):
 	// /LOADMONSTER sends it when no type token is typed (50A4A6).
 	MonsterType uint8 `json:"monsterType,omitempty"`

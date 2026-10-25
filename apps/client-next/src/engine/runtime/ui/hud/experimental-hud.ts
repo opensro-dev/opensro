@@ -184,17 +184,12 @@ export const EXPERIMENTAL_TABS: readonly {
 			key: "predictedRunUp",
 			id: "experimental-predicted-run-up",
 			label: "Predicted run-up",
-			description: "Walk to a far target on press; may jump at the cast."
+			description: "Walk to a far target on press; stop at the cast."
 		}, {
 			key: "smoothCamera",
 			id: "experimental-smooth-camera",
 			label: "Smooth camera",
 			description: "Ease small camera jumps and the return from a wall."
-		}, {
-			key: "interpolatedOwnWalk",
-			id: "experimental-interpolated-own-walk",
-			label: "Interpolated own movement",
-			description: "Your character walks smoothly between server ticks."
 		}, {
 			key: "mainThreadOwnWalk",
 			id: "experimental-main-thread-own-walk",

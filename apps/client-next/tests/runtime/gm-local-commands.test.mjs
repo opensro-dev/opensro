@@ -118,7 +118,8 @@ function fixture( gmPrivilege = true ) {
 		country: () => undefined,
 		playerModels: () => [],
 		item: () => undefined,
-		monster: () => undefined
+		monster: () => undefined,
+		npcs: () => []
 	} );
 	return { game, sent, local };
 }

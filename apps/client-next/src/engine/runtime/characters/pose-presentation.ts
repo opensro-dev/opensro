@@ -520,10 +520,12 @@ export function createPosePresentation() {
 	// Port-only (own-walk-interpolation.ts): the local mover's walk drawn
 	// between its worker ticks instead of extrapolated past the newest one.
 	const ownWalks = createOwnWalkPresenter( turn );
-	// Port-only (#1440): the main-thread mover's frame for the local player,
-	// set each frame before poses are asked, and the pose last shown per
-	// character with the frame clock it was shown at.
-	let ownMover: { gid: number; frame: OwnMoverFrame; } | null = null;
+	// Port-only (#1440): the main-thread mover's frame, set each frame before
+	// poses are asked, for the local player and, while it rides, its mount
+	// (0x85E000: the mount is the mover, the rider sits on it; #1566); the
+	// characters it already handed back this frame; and the pose last shown
+	// per character with the frame clock it was shown at.
+	let ownMover: { gids: readonly number[]; frame: OwnMoverFrame; carried: Set<number>; } | null = null;
 	const shown = new Map<number, { pose: Pose; at: number; }>();
 
 	/*
@@ -993,7 +995,7 @@ export function createPosePresentation() {
 		================
 		interpolateOwnWalk
 
-		The Experimental "Interpolated own movement" row (read each frame).
+		Always on since 2026-10-25 (it was the Experimental "Interpolated own movement" row); read each frame.
 		================
 		*/
 		interpolateOwnWalk( enabled: boolean ) {
@@ -1011,10 +1013,12 @@ export function createPosePresentation() {
 		================
 		*/
 		pose( gid: number, target: Pose, now: number, settledTranslation = false ): Pose {
-			const mover = ownMover?.gid === gid ? ownMover.frame : undefined;
+			let mover = ownMover?.gids.includes( gid ) ? ownMover.frame : undefined;
 			if ( mover?.kind === "ended" ) {
-				carryPose( gid, mover.pose );
-				ownMover = null;
+				// Each mover character hands its drawn pose back once.
+				if ( !ownMover!.carried.has( gid ) ) carryPose( gid, mover.pose );
+				ownMover!.carried.add( gid );
+				mover = undefined;
 			}
 			const presented = presentedPose( gid, target, now, settledTranslation );
 			const last = shown.get( gid );
@@ -1032,11 +1036,14 @@ export function createPosePresentation() {
 		================
 		ownMover
 
-		This frame's main-thread mover state for the local player (#1440).
+		This frame's main-thread mover state for the local player (#1440) and
+		the mount it rides, if it rides (#1566).
 		================
 		*/
-		ownMover( gid: number, frame: OwnMoverFrame ) {
-			ownMover = frame.kind === "idle" ? null : { gid, frame };
+		ownMover( gid: number, frame: OwnMoverFrame, mount?: number ) {
+			ownMover = frame.kind === "idle" ?
+				null :
+				{ gids: mount === undefined ? [ gid ] : [ gid, mount ], frame, carried: new Set() };
 		},
 		/*
 		================
