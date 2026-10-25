@@ -219,7 +219,10 @@ func TestSealDropNoticeFollowsTheMinDegreeTunable(t *testing.T) {
 TestSealDropNoticeNamesTheSeal
 
 With the shipped items, a drop notice names the item's seal with the
-client's own words (PARAM_RARE_*): A Star, B Moon, C Sun.
+client's own words (PARAM_RARE_*): A Star, B Moon, C Sun. Star and
+Moon keep the notice's original sentence; only the Sun is worded
+apart (#1640, owner decision 2026-10-26): it leads with its name in
+capitals and drops the parenthesis.
 ================
 */
 func TestSealDropNoticeNamesTheSeal(t *testing.T) {
@@ -237,9 +240,68 @@ func TestSealDropNoticeNamesTheSeal(t *testing.T) {
 		rt, _ := newTestRuntime(testCharacter(), items)
 		rt.Announce.SoxDrop = true
 		rt.announceSealDrops(testDivision, "Tiger Girl", []grounditem.Item{{Codename: codename, DroppedBy: "Looter"}}, 0)
-		want := "Looter has dropped " + ref.Name + " (" + seal + ") from Tiger Girl"
+		var want string
+		switch seal {
+		case "Seal Of Sun":
+			want = "SEAL OF SUN: Looter has dropped " + ref.Name + " from Tiger Girl"
+		default:
+			want = "Looter has dropped " + ref.Name + " (" + seal + ") from Tiger Girl"
+		}
 		if got := drainedNotices(t, rt); len(got) != 1 || got[0] != want {
 			t.Fatalf("%s: %q, want %q", codename, got, want)
+		}
+	}
+}
+
+/*
+================
+TestSealDropNoticeWordingFollowsTheTier
+
+#1640: Star and Moon keep the original sentence and only the Sun
+reads differently, leading with its name in capitals; an item whose
+seal cannot be read keeps the plain sentence.
+================
+*/
+func TestSealDropNoticeWordingFollowsTheTier(t *testing.T) {
+	items := staticItemSource{
+		"ITEM_CH_BLADE_06_A_RARE": {
+			RefObjID: 6001, Codename: "ITEM_CH_BLADE_06_A_RARE", Name: "D6 Star Blade",
+			TypeIDs:      [4]int64{3, 1, 6, 3},
+			NativeFields: enterworld.NewNativeFields(map[string]float64{"itemClass": 16, "rarity": 2}),
+		},
+		"ITEM_CH_BLADE_06_B_RARE": {
+			RefObjID: 6002, Codename: "ITEM_CH_BLADE_06_B_RARE", Name: "D6 Moon Blade",
+			TypeIDs:      [4]int64{3, 1, 6, 3},
+			NativeFields: enterworld.NewNativeFields(map[string]float64{"itemClass": 17, "rarity": 2}),
+		},
+		"ITEM_CH_BLADE_06_C_RARE": {
+			RefObjID: 6003, Codename: "ITEM_CH_BLADE_06_C_RARE", Name: "D6 Sun Blade",
+			TypeIDs:      [4]int64{3, 1, 6, 3},
+			NativeFields: enterworld.NewNativeFields(map[string]float64{"itemClass": 18, "rarity": 2}),
+		},
+	}
+	drops := []grounditem.Item{
+		{Codename: "ITEM_CH_BLADE_06_A_RARE", DroppedBy: "Looter"},
+		{Codename: "ITEM_CH_BLADE_06_B_RARE", DroppedBy: "Looter"},
+		{Codename: "ITEM_CH_BLADE_06_C_RARE", DroppedBy: "Looter"},
+		{Codename: "ITEM_CH_BLADE_06_D_RARE", DroppedBy: "Looter"},
+	}
+	rt, _ := newTestRuntime(testCharacter(), items)
+	rt.Announce.SoxDrop = true
+	rt.announceSealDrops(testDivision, "Tiger Girl", drops, 0)
+	want := []string{
+		"Looter has dropped D6 Star Blade (Seal Of Star) from Tiger Girl",
+		"Looter has dropped D6 Moon Blade (Seal Of Moon) from Tiger Girl",
+		"SEAL OF SUN: Looter has dropped D6 Sun Blade from Tiger Girl",
+		"Looter has dropped ITEM_CH_BLADE_06_D_RARE from Tiger Girl",
+	}
+	got := drainedNotices(t, rt)
+	if len(got) != len(want) {
+		t.Fatalf("posted %q, want %q", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("notice %d = %q, want %q", i, got[i], want[i])
 		}
 	}
 }

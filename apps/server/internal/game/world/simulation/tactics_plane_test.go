@@ -23,14 +23,17 @@ func TestPursuitRoutinePerPlane(t *testing.T) {
 		region  uint16
 		routine PursuitRoutine
 		extends bool
+		indoors bool
 	}{
-		{0x61A7, PursuitDirectionGate, true}, // Jangan
-		{0x8001, PursuitRegionRoute, false},  // the Donwhang cave
+		{0x61A7, PursuitDirectionGate, true, false}, // Jangan
+		{0x8001, PursuitRegionRoute, false, true},   // the Donwhang cave
 	} {
 		routine := pursuitAt(test.region)
-		if routine != test.routine || routine.ExtendsTowardMovingTarget() != test.extends {
-			t.Errorf("region %#x: routine %d extends %t, want %d extends %t",
-				test.region, routine, routine.ExtendsTowardMovingTarget(), test.routine, test.extends)
+		if routine != test.routine || routine.ExtendsTowardMovingTarget() != test.extends ||
+			routine.TracesIndoors() != test.indoors {
+			t.Errorf("region %#x: routine %d extends %t indoors %t, want %d extends %t indoors %t",
+				test.region, routine, routine.ExtendsTowardMovingTarget(), routine.TracesIndoors(),
+				test.routine, test.extends, test.indoors)
 		}
 	}
 }
