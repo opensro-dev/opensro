@@ -216,6 +216,14 @@ variable "fast_den_return" {
   default = "on"
 }
 
+# unique_damage_rank shows everyone who damaged a unique the twelve players
+# who did the most damage when it dies (port-only, not native). "off", the
+# default, keeps the native killer notice alone.
+variable "unique_damage_rank" {
+  type    = string
+  default = "off"
+}
+
 # closed_object_rescue moves a character that logs in inside a closed object
 # (a tree trunk or rock no walk can leave) to the nearest open ground
 # (port-only, not native; owner decision 2026-10-15). "off" keeps the login
@@ -322,6 +330,14 @@ variable "most_wanted_bounty_transfer" {
 # after every counted kill (port-only, not native; owner decision
 # 2026-10-24). "off" says nothing until a new wanted level.
 variable "most_wanted_streak_notice" {
+  type    = string
+  default = "off"
+}
+
+# teleport_grace makes a teleport arrival (scroll, gate, relocation)
+# untouchable for the revival's grace from game-ready (port-only, not
+# native; owner decision 2026-10-25). "off" is native.
+variable "teleport_grace" {
   type    = string
   default = "off"
 }
@@ -985,6 +1001,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_PET_PACING                          = var.pet_pacing
         SRO_STORAGE_AUTO_STACK                  = var.storage_auto_stack
         SRO_FAST_DEN_RETURN                     = var.fast_den_return
+        SRO_UNIQUE_DAMAGE_RANK                  = var.unique_damage_rank
         SRO_CLOSED_OBJECT_RESCUE                = var.closed_object_rescue
         SRO_DEEP_WATER_REFUSAL                  = var.deep_water_refusal
         SRO_MOST_WANTED                         = var.most_wanted
@@ -994,6 +1011,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_MOST_WANTED_BOUNTY_TRANSFER         = var.most_wanted_bounty_transfer
         SRO_MOST_WANTED_STREAK_NOTICE           = var.most_wanted_streak_notice
         SRO_TRADE_TIERS                         = var.trade_tiers
+        SRO_TELEPORT_GRACE                      = var.teleport_grace
         SRO_TRADE_ROUTE_DONWHANG_PERCENT        = var.trade_route_donwhang_percent
         SRO_TRADE_ROUTE_HOTAN_PERCENT           = var.trade_route_hotan_percent
         SRO_TRADE_ROUTE_SAMARKAND_PERCENT       = var.trade_route_samarkand_percent

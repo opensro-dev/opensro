@@ -221,6 +221,11 @@ export const EXPERIMENTAL_TABS: readonly {
 			label: "Plus +7 notices",
 			description: "Show the shard's +7 alchemy announcements."
 		}, {
+			key: "uniqueDamageRank",
+			id: "experimental-unique-damage-rank",
+			label: "Unique damage ranking",
+			description: "When a unique you hit dies, show who did the most."
+		}, {
 			key: "noticeLinks",
 			id: "experimental-notice-links",
 			label: "Links in notices",
