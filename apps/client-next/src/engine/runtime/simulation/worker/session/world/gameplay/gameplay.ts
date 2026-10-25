@@ -266,7 +266,7 @@ import {
 import { createCastMotionLock } from "@/engine/foundation/gameplay/cast-motion-lock";
 import { createSkillPressQueue, decidePress } from "@/engine/foundation/gameplay/skill-queue";
 import { combatAdmissionRadius, combatStopPoint, refBodyRadius } from "@/engine/foundation/gameplay/combat-spacing";
-import { pressAdmission } from "@/engine/foundation/gameplay/press-admission";
+import { equippedWeaponKind, pressAdmission } from "@/engine/foundation/gameplay/press-admission";
 import { movementHeading } from "@/engine/foundation/gameplay/native-movement";
 import {
 	bootstrapProgression,
@@ -356,6 +356,12 @@ const SKILL_ANSWER_SLACK_MS = 500;
 // target nearer than that may be in its reach already. With both radii the
 // stop is combat spacing's exact boundary and needs no margin.
 const SKILL_RUN_UP_MARGIN = 20;
+// The inventory socket the equipped weapon sits in. Its row's published
+// native field for action range carries the same reach the server fights
+// with (the item tooltip renders it as metres; the fight reads it raw).
+const WEAPON_SOCKET = 6;
+// Bare-handed, the server's reach is 6.
+const UNARMED_REACH = 6;
 // Movement mode 4 is seated (motion 4, which 58E0BF refuses ao/pw from).
 const MOVEMENT_SEATED = 4;
 // B2CD kind 1 admits a command (75BAA0); count 2 queues it behind an open one.
@@ -705,6 +711,129 @@ cast in flight, and within one region.
 	}
 	/*
 ================
+basicAttackRow
+
+The basic-attack row the server resolves this click to: the first learned
+row marked a pinned base attack whose weapon kinds admit the equipped
+weapon, the same scan resolveBasicAttack makes over the character's
+skills. Undefined while no learned row matches - the server then refuses
+or transforms the attack, and the click stays server-led.
+================
+	*/
+	function basicAttackRow(): SkillMetadata | undefined {
+		const kind = equippedWeaponKind( inventory.state().inventory );
+		for ( const id of bindings.skills ) {
+			const row = catalog.find( candidate => candidate.id === id );
+			if ( !row?.basicAttack || !row.admit ) continue;
+			const [first, second] = row.admit.weaponKinds;
+			if ( first === 0xff && second === 0xff || first === kind || second === kind ) return row;
+		}
+		return undefined;
+	}
+	/*
+================
+rangeUpActive
+
+Whether a range-up effect stands on the local player: its buff feeds the
+attack-range keeper, which then replaces the weapon's range for every
+basic attack (skillActionReach) by an amount the client cannot compute.
+The chase proves its reach only while none stands.
+================
+	*/
+	function rangeUpActive(): boolean {
+		return combat.state().attachedEffects.some( effect =>
+			effect.gid === localGid && catalog.find( row => row.id === effect.skill )?.rangeUp
+		);
+	}
+	/*
+================
+equippedReach
+
+The reach the server allows the local player's basic attack: the equipped
+weapon's published action range, or the bare-hand reach with no weapon
+equipped. A weapon row that carries no range resolves nothing - the server
+may be fighting with data the client does not hold, and the click stays
+server-led.
+================
+	*/
+	function equippedReach(): number | undefined {
+		const row = inventory.state().inventory.find( item => item.slot === WEAPON_SOCKET );
+		if ( !row ) return UNARMED_REACH;
+		const reach = row.tooltip?.fields.actionRange23c;
+		return typeof reach === "number" && Number.isFinite( reach ) && reach >= 0 ? reach : undefined;
+	}
+	/*
+================
+chaseAttack
+
+Port-only, not native; the Predicted run-up row (predictedRunUp, on by
+default) is its switch. Where an attack click's chase begins, and whether
+the click is prediction-owned (true) or settles as it does today (false).
+The native click sends the command and the server walks the player to the
+target, one round trip after the click; the prediction starts that walk at
+the click instead, aimed at combat spacing's admission boundary, and the
+server's own walk is adopted when it arrives. Only where the spacing fully
+resolves (both bodies and the weapon's reach); anything else stays
+server-led exactly as today. A click while a chase is already predicted
+re-aims the leg at the new target, as the server's follow switches; a
+click on a target already inside the spacing settles the leg here, where
+the server attacks in place.
+
+The reach is claimed only where the client can prove it equals the
+server's (skillActionReach): the resolved basic row's authored range when
+it carries one, else the weapon's published range. A basic row that asks
+for a caster range parameter, one carrying range-up of its own, or any
+range-up effect standing on the caster lets the server cast from beyond
+every aim computed here, so those clicks start no chase - the same
+discipline as the run-up's rangeBonus gate. (A reach cut, Myopia, only
+shortens the server's boundary: the adoption glides forward, never back.)
+================
+	*/
+	function chaseAttack(
+		target: EntityState,
+		local: EntityState | undefined,
+		now: number
+	): boolean {
+		const pose = movement.state().pose;
+		if (
+			!predictedRunUp || !pose || !local || local.mountedOn ||
+			local.appearanceState?.[0] === 2 || target.regionId !== pose.regionId ||
+			target.kind === "monster" && target.appearanceState?.[0] === 2
+		) return false;
+		const open = movement.approachPredictedSince() !== undefined;
+		if ( !open && (movement.state().moving || localCastHolds( now )) ) return false;
+		const basic = basicAttackRow();
+		if ( !basic || basic.rangeBonus || basic.rangeUp || rangeUpActive() ) return false;
+		const reach = basic.range ?? equippedReach();
+		if ( reach === undefined ) return false;
+		const casterRadius = refBodyRadius( local.kind, bodyRadii.get( local.refObjId ), 0 );
+		const targetRadius = refBodyRadius( target.kind, bodyRadii.get( target.refObjId ), target.rarity ?? 0 );
+		const admission = casterRadius === undefined || targetRadius === undefined ?
+			undefined :
+			combatAdmissionRadius( casterRadius, targetRadius, reach );
+		if ( admission === undefined ) return false;
+		if ( planarDistance( pose, target ) <= admission ) {
+			if ( !open ) return false;
+			movement.settlePrediction( now );
+			chase = undefined;
+			return true;
+		}
+		const stop = combatStopPoint( pose.x, pose.z, target.x, target.z, admission );
+		const goal: import("@/engine/contracts/gameplay").Pose = {
+			regionId: pose.regionId,
+			x: stop.x,
+			y: target.y,
+			z: stop.z,
+			angle: pose.angle
+		};
+		if ( open ? !movement.retargetPrediction( goal, now ) : !movement.predictApproach( goal, now, true ) ) {
+			return false;
+		}
+		chase = { gid: target.gid, admission, stopX: stop.x, stopZ: stop.z };
+		return true;
+	}
+	/*
+================
 predictCast
 
 Start the press's cast animation now when the server will all but surely
@@ -959,6 +1088,11 @@ fails; retry persistence without restoring stale slot occupancy.
 	// The skill a predicted run-up was pressed for (skillRunUpGoal), and
 	// whether the Experimental row predicts run-ups at all.
 	let runUpSkill = 0, predictedRunUp = false;
+	// The target a predicted attack chase (chaseAttack) was clicked for, the
+	// admission radius it walks to, and the stop it last aimed at; undefined
+	// while no chase prediction is open. The step re-aims it as the target
+	// moves and clears it when the prediction closes.
+	let chase: { gid: number; admission: number; stopX: number; stopZ: number; } | undefined;
 	// The Experimental "Job kill notices" row: on unless the window turns it
 	// off (experimentalGameplay).
 	let jobKillNotices = true;
@@ -3186,7 +3320,10 @@ state here before a command can claim a native wire conversation.
 			// local walk at the same point (movement.holdForCast).
 			if ( command.kind === "attack" ) {
 				const frame = combat.attack( entity.gid );
-				movement.holdForCast( now );
+				// The chase the server is about to walk is predicted from the
+				// click (chaseAttack); where it cannot be, the click settles
+				// the local walk as it always has.
+				if ( !chaseAttack( entity, local, now ) ) movement.holdForCast( now );
 				markTarget( entity );
 				return sendFrame( frame );
 			}
@@ -4777,15 +4914,48 @@ before take assembles the presentation snapshot.
 			}
 			for ( const kind of [ 0, 1, 2 ] as const ) checkAutomaticPotion( kind, now, "timer" );
 
+			// A predicted attack chase follows its target: while the target
+			// moves, the leg re-aims at its new boundary, as the server's
+			// follow re-aims its own walk. A target gone, dead, or in another
+			// region ends the follow where the walker stands. The chase
+			// clears itself when the prediction closes (adopted or answered).
+			if ( chase !== undefined ) {
+				if ( movement.approachPredictedSince() === undefined ) chase = undefined;
+				else {
+					const target = readEntity( chase.gid ), pose = movement.state().pose;
+					if (
+						!target || !pose || target.regionId !== pose.regionId ||
+						target.kind === "monster" && target.appearanceState?.[0] === 2
+					) {
+						movement.settlePrediction( now );
+						chase = undefined;
+					} else {
+						const stop = combatStopPoint( pose.x, pose.z, target.x, target.z, chase.admission );
+						if (
+							Math.hypot( stop.x - chase.stopX, stop.z - chase.stopZ ) >= 1 &&
+							movement.retargetPrediction(
+								{ regionId: pose.regionId, x: stop.x, y: target.y, z: stop.z, angle: pose.angle },
+								now
+							)
+						) {
+							chase.stopX = stop.x;
+							chase.stopZ = stop.z;
+						}
+					}
+				}
+			}
+
 			// A predicted skill run-up the server did not walk: it cast the
 			// pressed skill where the caster stood (the target was within its
 			// reach after all), or never answered. Walk back to the start the
 			// server kept. Another cast meanwhile (an imbue) is not that answer.
+			// A predicted attack chase answers the same way: its attack cast.
 			const runUpSince = movement.approachPredictedSince();
 			if (
 				runUpSince !== undefined &&
 				(combat.state().casts.some( c =>
-					c.caster === localGid && c.skill === runUpSkill && c.receivedAtMs !== undefined &&
+					c.caster === localGid && c.receivedAtMs !== undefined &&
+					(c.skill === runUpSkill || chase !== undefined && c.target === chase.gid) &&
 					c.receivedAtMs >= runUpSince && c.cancelledAtMs === undefined
 				) || now - runUpSince > 4 * skillPress.oneWayMs() + SKILL_ANSWER_SLACK_MS)
 			) movement.endPrediction( now );
