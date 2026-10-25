@@ -47,9 +47,24 @@ export interface MoverPublication {
 	// The direction walk's 500 ms drift factor (movement.ts driftWalk); 1
 	// for any other walk.
 	readonly movementSpeedFactor?: number;
+	// The arrow keys' turn under way, heading words a millisecond (Left
+	// positive; 0 when not turning): the main-thread mover keeps turning
+	// past the publication (#1574, gameplay arrow-keys.ts).
+	readonly movementTurnRate?: number;
 	// A ground click now would start a walk at once (gameplay.ts
 	// groundWalkRefusal): the main-thread mover predicts only then (#1440).
 	readonly walkPredictable?: boolean;
+	// The local player's own cast displacement in progress (a dash or
+	// leap), published so the main-thread mover steps the segment on its
+	// own clock; absent for any other walk and for a knockback struck
+	// onto the player, which stays on the interpolated presenter (#1569).
+	// Times are on the simulation clock (movement.ts state).
+	readonly movementDisplacement?: {
+		readonly from: Pose;
+		readonly to: Pose;
+		readonly startedAtMs: number;
+		readonly durationMs: number;
+	};
 	// A ground click now would be held by a gate that releases into the
 	// walk (a cast, the ground-skill suppress window) rather than refused:
 	// the mover records the click's aim and adopts the walk when the

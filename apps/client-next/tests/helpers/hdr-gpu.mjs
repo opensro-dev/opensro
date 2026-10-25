@@ -49,7 +49,6 @@ export async function captureLightingStages( { startup = false, recover = false,
 		smoothCamera: false,
 		enchantSparks: false,
 		sharedActorRoom: false,
-		interpolatedOwnWalk: false,
 		vHidesCompanions: false,
 		dungeonCharacterPvs: false
 	};

@@ -51,9 +51,9 @@ database.
 
 ## Code and tuning
 
-- Canonical values/descriptions: `docs/pet-expansion/pet-design.json`. Run
-  `python scripts/tools/pet_design_export.py` after editing it; generated
-  server/client/build copies must stay matched.
+- Canonical values/descriptions: `apps/server/internal/game/companion/petdesign.json`.
+  Run `python scripts/tools/pet_design_export.py` after editing it; it
+  regenerates the client module, and `pnpm task check:pet-design` keeps it matched.
 - `apps/server/internal/game/action/pettailwind.go` owns grants, timing,
   range, damage consumption, native stun resolution and movement publication.
   Constants: five-second period, ten-stack cap; stun duration2 seconds; party

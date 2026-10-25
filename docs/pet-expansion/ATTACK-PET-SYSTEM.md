@@ -306,17 +306,15 @@ requirements. Do not change saved identities or raise the six-option wire/save
 ceiling casually. Never roll back to a five-option server after issuing six-blue
 items: it can discard the sixth option.
 
-From the repo root, using Python with openpyxl:
+After editing `apps/server/internal/game/companion/petdesign.json`, from the repo root:
 
 ```powershell
 python scripts/tools/pet_design_export.py
 ```
 
-This regenerates:
-
-- `apps/server/internal/game/companion/petdesign.json`
-- `scripts/build/shared/pet-design.json`
-- `apps/client-next/src/engine/foundation/ui/pet-design-data.ts`
+This rewrites the design in its canonical layout and regenerates
+`apps/client-next/src/engine/foundation/ui/pet-design-data.ts`. The server embeds
+the design and the asset build reads it in place; there is no other copy.
 
 Never hand-edit generated data. Rebuild/deploy matched client and server.
 For skill balancing, `Skills` holds effect templates and `Skill families`

@@ -11,7 +11,7 @@ normal generated tree. Nothing is injected into a PK2 archive.
 | Collar atlas | `scripts/build/char/petLootAtlas.mjs` | Original procedural teal leather/brass/turquoise recipe; no external art |
 | 27 degree icons | `docs/pet-expansion/assets/pet-gear-*.png` and `scripts/build/shared/pet_item_icons.py` | Original AI-painted collar/harness/charm artwork; native character gear style references, deterministic32px export |
 | 60 pet skill icons | `docs/pet-expansion/assets/pet-skills*.png` | Original AI-generated painted atlases; simple/intermediate/full variants, native character skill style |
-| Skill/equipment balance | `docs/pet-expansion/pet-design.json` | Original port-only design, JSON exporter publishes all consumers |
+| Skill/equipment balance | `apps/server/internal/game/companion/petdesign.json` | Original port-only design; one source, the exporter generates the client module |
 | Bear standing roar | `apps/client-next/src/engine/foundation/animation/bear-roar.ts` | Original animation adjustment on licensed native bear rig; see recipe for bone operations |
 | Shield, roar aura, retaliation ripple and Guardian recovery | Client `characters/resources/resources.ts` | Original procedural geometry/textures; standard renderer |
 | Pet bodies/rigs, native drop glow and audio | Operator-supplied v1.150 client | Native dependencies remain outside Git; hashes below |

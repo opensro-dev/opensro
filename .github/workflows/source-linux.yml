@@ -103,6 +103,10 @@ jobs:
       - name: Loot catalog
         if: ${{ !cancelled() }}
         run: node scripts/task.mjs check:loot-catalog
+      # The client's pet design module against the server's design JSON.
+      - name: Pet design
+        if: ${{ !cancelled() }}
+        run: node scripts/task.mjs check:pet-design
       # ops/release's receivers and compatibility.json are server files; on
       # Linux this also runs the POSIX-only tests Windows skips.
       - name: Release
