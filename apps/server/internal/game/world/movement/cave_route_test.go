@@ -277,9 +277,12 @@ TestCaveRoutePlanCostStaysTickCheap
 A plan runs inside the tick and is re-asked as the target moves
 (#1658), so the most expensive plans the floors offer - the
 doorway plan across their farthest pair, and the longest pull
-inside their biggest block - must cost a small fraction of the
-100 ms tick. Each subject is timed warm; the average of 21 plans
-must stay under 2 ms.
+inside their biggest block - must stay tick-cheap. The pinned
+bound is the plan's deterministic work: cell expansions plus
+oracle probes, which no machine load can inflate (the floor-wide
+plans this replaced spent 2667-4000). Wall clock is only a loose
+20 ms guard on top, and skipped under the race detector, whose
+instrumentation prices nothing like the tick does.
 ================
 */
 func TestCaveRoutePlanCostStaysTickCheap(t *testing.T) {
@@ -321,6 +324,12 @@ func TestCaveRoutePlanCostStaysTickCheap(t *testing.T) {
 			goal: surface.cellPose(region, 0, b),
 		})
 	}
+	// planWorkBudget bounds one plan's deterministic work (cell
+	// expansions plus oracle probes). The worst subject below -
+	// the biggest-block pull on the tomb floor - spends about
+	// 1700; the floor-wide plans this design replaced spent
+	// 2667-4000 on the same pairs, so the budget sits between.
+	const planWorkBudget = 2048
 	planned := 0
 	for _, s := range subjects {
 		for i := 0; i < 3; i++ {
@@ -329,22 +338,26 @@ func TestCaveRoutePlanCostStaysTickCheap(t *testing.T) {
 		// The average of 21 warm plans, not a median of single
 		// samples: a coarse system clock (some Windows hosts tick
 		// at ~1 ms) makes any one plan read 0 or a whole tick,
-		// while the total over the loop still resolves well
-		// under the bound.
+		// while the total over the loop still resolves.
 		samples := make([]time.Duration, 21)
+		var route *monster.NavigationRoute
 		started := time.Now()
 		for i := range samples {
 			one := time.Now()
-			route := v.planCaveRoute(s.from, s.goal)
+			route = v.planCaveRoute(s.from, s.goal)
 			samples[i] = time.Since(one)
 			planned += route.Len()
 		}
 		average := time.Since(started) / time.Duration(len(samples))
 		sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
 		median := samples[len(samples)/2]
-		t.Logf("%s (0x%04X): average plan %v (median sample %v)", s.name, s.from.RegionID, average, median)
-		if average > 2*time.Millisecond {
-			t.Fatalf("%s (0x%04X): average plan %v exceeds 2 ms of the 100 ms tick", s.name, s.from.RegionID, average)
+		t.Logf("%s (0x%04X): work %d, average plan %v (median sample %v)", s.name, s.from.RegionID, route.Probes(), average, median)
+		if route.Probes() > planWorkBudget {
+			t.Fatalf("%s (0x%04X): plan work %d (expansions plus probes) exceeds the %d budget; a plan must stay inside one block",
+				s.name, s.from.RegionID, route.Probes(), planWorkBudget)
+		}
+		if !raceDetectorOn && average > 20*time.Millisecond {
+			t.Fatalf("%s (0x%04X): average plan %v exceeds the loose 20 ms wall-clock guard", s.name, s.from.RegionID, average)
 		}
 	}
 	if planned == 0 {
