@@ -2,12 +2,15 @@
 ===========================================================================
 
 plane_test.go - the plane owner picks a plane by region, and each plane
-wraps today's navigation unchanged (#1646 step 1)
+wraps today's navigation (#1646 step 1), except the cave's route
 
 The parity tests call every Plane method and the code it wraps on the same
 real inputs (the Jangan veranda outdoors, the Donwhang cave anchors) and
 require identical answers, so moving callers onto the planes cannot change
-what they get.
+what they get. One deliberate exception: #1645 replaced the cave's
+NextWaypoint with the floor's region route, so the cave test pins the new
+route's contract (cave_route_test.go proves the corridor itself) while
+every other method keeps the wrap.
 
 ===========================================================================
 */
@@ -147,10 +150,6 @@ func planeParity(
 		if !samePath(poseOf(from), path, v.PlanMonsterPathFrom(poseOf(from), simulation.NavOwner{}, poseOf(to))) {
 			t.Fatalf("%+v -> %+v PlanPath differs from the wrapped plan", from, to)
 		}
-		route := plane.NextWaypoint(poseOf(from), poseOf(to))
-		if want := v.PlanMonsterRoute(poseOf(from), poseOf(to)); !reflect.DeepEqual(route, want) {
-			t.Fatalf("%+v -> %+v NextWaypoint differs from the wrapped route", from, to)
-		}
 		a := worldgeom.RegionXZ{RegionID: from.RegionID, X: from.X, Z: from.Z}
 		b := worldgeom.RegionXZ{RegionID: to.RegionID, X: to.X, Z: to.Z}
 		gotX, gotZ := plane.Relative(a, b)
@@ -177,7 +176,15 @@ func TestOutdoorPlaneWrapsTodaysNavigation(t *testing.T) {
 		{RegionID: planeOutdoorRegion, X: 623, Y: 3.04, Z: 1271},
 		{RegionID: planeOutdoorRegion, X: 680, Y: 3.04, Z: 1271}, // at the veranda rail
 	}
-	planeParity(t, plane, rt, v, planeProbes(anchors))
+	probes := planeProbes(anchors)
+	planeParity(t, plane, rt, v, probes)
+	// The outdoor route still wraps the open-terrain search exactly.
+	for _, probe := range probes {
+		route := plane.NextWaypoint(poseOf(probe[0]), poseOf(probe[1]))
+		if want := v.PlanMonsterRoute(poseOf(probe[0]), poseOf(probe[1])); !reflect.DeepEqual(route, want) {
+			t.Fatalf("%+v -> %+v NextWaypoint differs from the wrapped route", probe[0], probe[1])
+		}
+	}
 }
 
 /*
@@ -200,5 +207,34 @@ func TestCavePlaneWrapsTodaysNavigation(t *testing.T) {
 			t.Fatalf("no cave floor under %+v", anchor)
 		}
 	}
-	planeParity(t, plane, rt, v, planeProbes(anchors))
+	probes := planeProbes(anchors)
+	planeParity(t, plane, rt, v, probes)
+	// NextWaypoint is the one deliberate break with the wrap (#1645):
+	// the cave answers with its region route. Around an anchor a ready
+	// route must end at the goal and every leg of it must arrive.
+	for _, probe := range probes {
+		from, goal := poseOf(probe[0]), poseOf(probe[1])
+		if _, ok := v.dungeonSpawnHeightAt(goal.RegionID, goal.X, goal.Y, goal.Z); !ok {
+			// No floor under the destination: not a cave walk at
+			// all, and the route contract does not apply.
+			continue
+		}
+		route := plane.NextWaypoint(from, goal)
+		if route == nil || route.Goal() != goal {
+			t.Fatalf("%+v -> %+v route %+v", from, goal, route)
+		}
+		if route.Status() != monster.NavigationRouteReady {
+			continue
+		}
+		if route.Len() == 0 || route.Point(route.Len()-1) != goal {
+			t.Fatalf("%+v -> %+v route does not end at the goal", from, goal)
+		}
+		current := from
+		for i := 0; i < route.Len(); i++ {
+			if !routeClear(v.PlanMonsterPath(current, route.Point(i)), route.Point(i)) {
+				t.Fatalf("%+v -> %+v leg %d of the cave route does not arrive", from, goal, i)
+			}
+			current = route.Point(i)
+		}
+	}
 }
