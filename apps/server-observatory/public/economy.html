@@ -51,6 +51,7 @@
 <button role="tab" id="tab-overview" aria-controls="panel-overview" data-tab="overview" aria-selected="true">Overview</button>
 <button role="tab" id="tab-flows" aria-controls="panel-flows" data-tab="flows" aria-selected="false">Flows</button>
 <button role="tab" id="tab-trade" aria-controls="panel-trade" data-tab="trade" aria-selected="false">Trade</button>
+<button role="tab" id="tab-rates" aria-controls="panel-rates" data-tab="rates" aria-selected="false">Rates</button>
 <button role="tab" id="tab-flags" aria-controls="panel-flags" data-tab="flags" aria-selected="false">Flags <span id="flag-count" class="economy-count" hidden></span></button>
 </div>
 
@@ -92,6 +93,15 @@
 <section class="panel economy-section">
 <div class="panel-heading"><div><div class="eyebrow">CARAVANS</div><h2>Trade</h2></div></div>
 <div id="trade" class="economy-table"></div>
+</section>
+</section>
+
+<section id="panel-rates" role="tabpanel" aria-labelledby="tab-rates" class="economy-panel" hidden>
+<section class="panel economy-section">
+<div class="panel-heading"><div><div class="eyebrow">GRINDING, PER ONLINE HOUR</div><h2>Kills and EXP by level band</h2></div></div>
+<p class="economy-note">Monster kills, character EXP and skill EXP per online hour, by UTC day and level band. Counted only while the shard counts kill stats.</p>
+<p id="rates-note" class="economy-note"></p>
+<div id="rates" class="economy-table"></div>
 </section>
 </section>
 
