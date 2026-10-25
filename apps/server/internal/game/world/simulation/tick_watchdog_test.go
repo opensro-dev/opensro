@@ -9,6 +9,7 @@ tick_watchdog_test.go - a stalled tick is reported once, by phase and hook
 package simulation
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/testsupport/wait"
 )
 
@@ -161,6 +163,141 @@ func TestTickWatchdogExitNeedsAStuckTick(t *testing.T) {
 		if ticker.stallExpired(now) || exited {
 			t.Fatal("exited without a tick stuck past StallExit")
 		}
+	}
+}
+
+/*
+================
+TestTickWatchdogSparesAProgressingTick
+
+A starved tick that still finishes steps outlives StallExit; once its steps
+stop for StallExit it is exited like a deadlock.
+================
+*/
+func TestTickWatchdogSparesAProgressingTick(t *testing.T) {
+	code := -1
+	ticker := &Ticker{StallExit: time.Second, StallDumpDir: t.TempDir(), exit: func(c int) { code = c }}
+	start := time.Now()
+	ticker.watch.begin(start)
+	at := func(d time.Duration) bool { return ticker.stallExpired(start.Add(d)) }
+	for d := 500 * time.Millisecond; d <= 3*time.Second; d += 500 * time.Millisecond {
+		ticker.watch.step()
+		if at(d) {
+			t.Fatalf("progressing tick exited at %v", d)
+		}
+	}
+	if at(3*time.Second + 900*time.Millisecond) {
+		t.Fatal("exited within StallExit of the last step")
+	}
+	if !at(4*time.Second+100*time.Millisecond) || code != tickStallExitCode {
+		t.Fatalf("tick with no step for StallExit: code %d, want %d", code, tickStallExitCode)
+	}
+}
+
+/*
+================
+TestTickWatchdogExitsARunawayAtTheCeiling
+
+Steps that never stop cannot hold a tick past stallCeilingFactor periods.
+================
+*/
+func TestTickWatchdogExitsARunawayAtTheCeiling(t *testing.T) {
+	code := -1
+	ticker := &Ticker{StallExit: time.Second, StallDumpDir: t.TempDir(), exit: func(c int) { code = c }}
+	start := time.Now()
+	ticker.watch.begin(start)
+	ceiling := stallCeilingFactor * ticker.StallExit
+	for d := 250 * time.Millisecond; d < ceiling; d += 250 * time.Millisecond {
+		ticker.watch.step()
+		if ticker.stallExpired(start.Add(d)) {
+			t.Fatalf("runaway exited at %v, before the ceiling %v", d, ceiling)
+		}
+	}
+	ticker.watch.step()
+	if !ticker.stallExpired(start.Add(ceiling)) || code != tickStallExitCode {
+		t.Fatalf("runaway at the ceiling: code %d, want %d", code, tickStallExitCode)
+	}
+}
+
+/*
+================
+TestTickWatchdogStepsBeforeTheFirstLookDoNotRestartTheClock
+
+The first look at a tick counts from its start, so a tick that parked
+before the watchdog saw it is not granted a fresh StallExit.
+================
+*/
+func TestTickWatchdogStepsBeforeTheFirstLookDoNotRestartTheClock(t *testing.T) {
+	code := -1
+	ticker := &Ticker{StallExit: time.Second, StallDumpDir: t.TempDir(), exit: func(c int) { code = c }}
+	start := time.Now()
+	ticker.watch.begin(start)
+	ticker.watch.step()
+	if !ticker.stallExpired(start.Add(1500*time.Millisecond)) || code != tickStallExitCode {
+		t.Fatalf("parked tick first seen past StallExit: code %d, want %d", code, tickStallExitCode)
+	}
+}
+
+/*
+================
+TestSchedLatencyReadsThePollPeriod
+
+The quantile comes from the counts added since the previous sample, not
+from the process lifetime, and a sample pair that does not line up says
+nothing.
+================
+*/
+func TestSchedLatencyReadsThePollPeriod(t *testing.T) {
+	buckets := []float64{math.Inf(-1), 0, 0.001, 0.1, 1, math.Inf(1)}
+	prev := schedSample{counts: []uint64{0, 1000, 0, 0, 0}, buckets: buckets}
+	starved := schedSample{counts: []uint64{0, 1010, 0, 0, 990}, buckets: buckets}
+	if latency, wakeups := schedLatency(prev, starved); latency != time.Second || wakeups != 1000 {
+		t.Fatalf("starved period: %v over %d, want 1s over 1000", latency, wakeups)
+	}
+	idle := schedSample{counts: []uint64{0, 2000, 0, 0, 0}, buckets: buckets}
+	if latency, _ := schedLatency(prev, idle); latency != 0 {
+		t.Fatalf("an unstarved period read %v", latency)
+	}
+	if _, wakeups := schedLatency(schedSample{}, starved); wakeups != 0 {
+		t.Fatal("mismatched samples reported wake-ups")
+	}
+	if !strings.Contains(new(tickWatch).schedReport(), "scheduler") {
+		t.Fatal("no scheduler line")
+	}
+}
+
+/*
+================
+TestMonsterLegStepsTheWatch
+
+A monster leg steps the stall watch every monsterLegStepActors behaviours,
+so a long leg on a starved host shows progress.
+================
+*/
+func TestMonsterLegStepsTheWatch(t *testing.T) {
+	const actors = 3*monsterLegStepActors + 1
+	refs := map[uint32]monster.MonsterRef{
+		1933: {RefObjID: 1933, TidWord: 0x00C6, Codename: "MOB_CH_MANGNYANG", WalkSpeed: 8, RunSpeed: 22, ScaleDenom: 100, BodyRadius: 6, MaxHP: 54},
+	}
+	rows := make([]monster.NestRow, actors)
+	for i := range rows {
+		rows[i] = monster.NestRow{SpawnPoint: monster.SpawnPoint{RefObjID: 1933, RegionID: monsterTestRegion,
+			X: 100 + float64(i%32)*50, Y: 20, Z: 100 + float64(i/32)*50}}
+	}
+	registry := NewMonsterState(monster.TemplateFromParts(refs, rows))
+	registry.StartDivision(monsterTestDivision)
+	now := time.Now().UnixMilli()
+	registry.AdvancePopulation(now)
+	ops := &MonsterMoverOps{
+		Monsters:   registry,
+		TacticsFor: fixedTactics(passiveTactics()),
+		Rand:       func() float64 { return 0.5 },
+		divisionID: monsterTestDivision,
+		watch:      new(tickWatch),
+	}
+	ops.RunMonsterLeg(now+60_000, nil, &fakePusher{})
+	if got := ops.watch.steps.Load(); got < 1 || got > actors/monsterLegStepActors {
+		t.Fatalf("%d actors stepped the watch %d times, want 1..%d", actors, got, actors/monsterLegStepActors)
 	}
 }
 
