@@ -76,6 +76,7 @@ import {
 	keepsStall,
 	type InteractionApproachState
 } from "@/engine/foundation/gameplay/interaction-approach";
+import { PICKUP_EXECUTE_RANGE } from "@/engine/foundation/gameplay/approach-goal";
 import { targetNotice } from "@/engine/foundation/gameplay/target-notices";
 import { constantNativeNotice, resolveNativeNotice } from "@/engine/foundation/gameplay/native-notice";
 import {
@@ -339,9 +340,7 @@ interface WorldReferences {
 // A dress answer may trail its bar by a server tick and the round trip.
 const JOB_DRESS_ANSWER_GRACE_MS = 5000;
 
-// grounditem.ExecuteRange: a pickup closer than this is granted in place;
-// farther away the server walks the player to the item first.
-const PICKUP_EXECUTE_RANGE = 10;
+// PICKUP_EXECUTE_RANGE lives in approach-goal.ts, its one owner.
 // The payload of a journal row no frame carried (a world entry, the tick).
 const NO_PAYLOAD = new Uint8Array( 0 );
 // How long past two round trips a sent skill press's cooldown stand-in waits
