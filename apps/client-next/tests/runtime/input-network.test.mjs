@@ -627,6 +627,10 @@ function wtHarness( t, fetchDoc = null ) {
 }
 
 test("webtransport carries the handshake and frames on its control stream when enabled", async t => {
+	// The connect deadline is a real timer and this path never resolves
+	// it: freeze the clock so a loaded machine cannot fire it mid-test
+	// (the silence test below drives the same deadlines by hand).
+	t.mock.timers.enable( { apis: [ "setTimeout" ] } );
 	const sockets = socketHarness( t ), transports = wtHarness( t ), failures = [], frames = [];
 	const network = createNetwork( e => failures.push( e ) );
 	network.webTransport( true );
@@ -664,6 +668,7 @@ test("webtransport carries the handshake and frames on its control stream when e
 });
 
 test("a failed webtransport attempt falls back to the socket with the same admission", async t => {
+	t.mock.timers.enable( { apis: [ "setTimeout" ] } );
 	const sockets = socketHarness( t ), transports = wtHarness( t ), failures = [];
 	const network = createNetwork( e => failures.push( e ) );
 	network.webTransport( true );
@@ -718,6 +723,7 @@ test("webtransport silence before the welcome hands the connect to the socket", 
 });
 
 test("a webtransport session that closes before the welcome hands the connect to the socket", async t => {
+	t.mock.timers.enable( { apis: [ "setTimeout" ] } );
 	const sockets = socketHarness( t ), transports = wtHarness( t ), failures = [];
 	const network = createNetwork( e => failures.push( e ) );
 	network.webTransport( true );
@@ -750,8 +756,12 @@ test("when the socket fallback also dies before the welcome, the failure is repo
 	assert.equal( sockets.length, 1 );
 	// The rung below the fallback (a ticket consumed under a lost
 	// WELCOME is refused here): the standard failure, reported once,
-	// and the admission is never presented a third time.
+	// and the admission is never presented a third time. A socket error
+	// event alone reports nothing (#1428): the close that always
+	// follows it carries the code and reports the failure.
 	sockets[0].onerror();
+	assert.deepEqual( failures, [] );
+	sockets[0].onclose( { code: 1006, reason: "", wasClean: false } );
 	assert.deepEqual( failures, [ "Transport connection failed" ] );
 	assert.equal( transports.length, 1 );
 	assert.equal( sockets.length, 1 );
