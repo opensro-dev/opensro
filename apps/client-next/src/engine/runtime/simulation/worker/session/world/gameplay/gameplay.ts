@@ -1030,12 +1030,14 @@ selectEntity
 
 Request selection in reach or after approach. A coalesced click has no reply
 coming, so retain its menu, dialogue and lock until a new request.
+692BC8 skips the same NPC only while its window (+0x6D) is visible; after a
+storage action hid it, the click selects again and shows the menu.
 ================
 	*/
 	function selectEntity( entity: EntityState, now: number ) {
 		const frame = targeting.select( entity.gid, now, entity.kind, {
 			fortress: !!entity.teleport?.fortressId,
-			reopen: npcConversation.state().phase === "closed"
+			reopen: npcConversation.state().phase === "closed" || npcConversation.window().hidden
 		} );
 		if ( frame ) npcConversation.clear();
 		markTarget( entity );
@@ -1897,8 +1899,9 @@ state here before a command can claim a native wire conversation.
 				if ( !localGid || target.target !== command.gid || !((target.targetCapabilities ?? 0) & 4) ) {
 					throw Error( "Select a warehouse NPC" );
 				}
-				storage.open( command.gid );
+				npcConversation.hideWindow();
 				dirty = true;
+				storage.open( command.gid );
 				return null;
 			}
 			if ( command.kind === "storage-open-guild" ) {
@@ -1907,8 +1910,9 @@ state here before a command can claim a native wire conversation.
 				if ( !localGid || target.target !== command.gid || !((target.targetCapabilities ?? 0) & 0x4000) ) {
 					throw Error( "Select a guild manager" );
 				}
-				storage.openGuild( command.gid );
+				npcConversation.hideWindow();
 				dirty = true;
+				storage.openGuild( command.gid );
 				return null;
 			}
 			if ( command.kind === "compensation-dismiss" ) {
@@ -2020,8 +2024,9 @@ state here before a command can claim a native wire conversation.
 				}
 			}
 			if ( command.kind === "debug-weather" ) {
-				// The console's weather rows write the worker's weather
-				// slot, behind the same GM gate as the gm-command family.
+				// The console's weather rows drive the console weather
+				// slot (event-environment.ts), behind the same GM gate
+				// as the gm-command family.
 				if ( !eligibility.gm ) return null;
 				environment = debugWeather( environment, command.mode, command.amount );
 				dirty = true;
@@ -4202,14 +4207,11 @@ Packet handling must not depend on which HUD panel is currently open.
 					groundSkillMoveSuppressUntil = 0;
 					movement.castRefused( now );
 				}
-				if ( frame.opcode === 0xb245 && frame.payload.length >= 10 ) {
-					// 776830 (0x7769D8): a cast by an owned pet cancels its
-					// halt countdown (+0xAB30 = -1); the pet keeps its target.
-					petAssistCountdowns = castPetAssistCountdowns(
-						petAssistCountdowns,
-						new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
-							.getUint32( 6, true )
-					);
+				if ( frame.opcode === 0xb245 ) {
+					// 776830 (0x7769D8): an opened cast by an owned pet cancels
+					// its halt countdown (+0xAB30 = -1); the pet keeps its
+					// target. The entry gates live in castPetAssistCountdowns.
+					petAssistCountdowns = castPetAssistCountdowns( petAssistCountdowns, frame.payload );
 				}
 				if ( item && cast ) returnScroll = cast;
 				if ( returnScroll?.skillId && (fight || item && cast) ) {
@@ -4709,6 +4711,7 @@ The published plane when something changed since the last take, else null.
 			const m = movement.state(), i = inventory.state(), c = combat.state();
 			const npcState = {
 				npcConversation: npcConversation.state(),
+				npcWindow: npcConversation.window(),
 				restorationRevision: npcConversation.restorationRevision()
 			};
 			const cosVital = activeCos ? c.vitals.find( v => v.gid === activeCos!.gid ) : undefined;

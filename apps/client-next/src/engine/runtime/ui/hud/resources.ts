@@ -547,6 +547,11 @@ export function createHudResources(
 						...[ "", "_focus", "_press" ].map( state =>
 							"/assets/images/Media_extracted/interface/skill/skl_button_up" + state + ".png"
 						),
+						// The reverse return box's buttons (52F460 types 0x21 and
+						// 0x24); no layout names them, so their states are listed.
+						...[ "", "_focus", "_press" ].map( state =>
+							"/assets/images/Media_extracted/interface/ifcommon/com_return_button" + state + ".png"
+						),
 						...[ "h", "v" ].flatMap( axis =>
 							[ "", "_focus", "_press" ].map( state =>
 								"/assets/images/Media_extracted/interface/quick_slot/qsl_" + axis + "close_button" +

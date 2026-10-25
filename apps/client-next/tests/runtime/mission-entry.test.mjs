@@ -101,6 +101,13 @@ test("compact loading shows the whole illustration above a footer where every ro
 				loadingScreenQuads( w, h, "", progress )
 			);
 			assert.ok( !loadingScreenQuads( w, h, "", progress ).some( q => q.texture === "scene.png" ) );
+			// An empty background emits no art quad at all: the chrome is
+			// one quad shorter, and its black flood fill is the only
+			// empty-texture quad (emitting the art with an empty texture
+			// instead would add a second one at the art's rect).
+			const chrome = loadingScreenQuads( w, h, "", progress );
+			assert.equal( chrome.length, quads.length - 1 );
+			assert.deepEqual( chrome.filter( q => q.texture === "" ).map( q => q.rect ), [ [ 0, 0, w, h ] ] );
 		}
 	}
 });

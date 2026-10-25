@@ -21,6 +21,7 @@ const { loadingArtDemand, travelLoadingBackground } = await import(
 	"../../src/engine/foundation/ui/mission-loading.ts"
 );
 const { createUi } = await import( "../../src/engine/runtime/ui/ui.ts" );
+const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
 
 const ROOT = "/assets/images/Media_extracted/interface/loading/";
 const CHROME = [ "loading_form", "gauge_loading", "nowloading" ];
@@ -35,7 +36,7 @@ The production UI with an asset owner that records every request and
 never delivers, so loading art stays pending.
 ================
 */
-function fixture() {
+function fixture( loadingVariant = () => 1 ) {
 	let scene;
 	const requested = new Set();
 	const ui = createUi(
@@ -54,7 +55,10 @@ function fixture() {
 		},
 		() => {},
 		"https://fixture.invalid",
-		"https://fixture.invalid"
+		"https://fixture.invalid",
+		() => {},
+		() => {},
+		loadingVariant
 	);
 	const loadingRequested = () =>
 		[ ...requested ].filter( path => path.startsWith( ROOT ) ).map( path =>
@@ -63,6 +67,86 @@ function fixture() {
 			.sort();
 	return { ui, scene: () => scene, loadingRequested };
 }
+
+for ( const safeLoadingScreen of [ false, true ] ) {
+	test(`safe loading ${safeLoadingScreen} controls repeated entry artwork and preloading`, () => {
+		let variant = 0;
+		const f = fixture( () => variant++ % 2 + 1 );
+		const seen = new Set();
+		try {
+			if ( safeLoadingScreen ) {
+				f.ui.event( { kind: "experimental-preferences", value: experimentalOptions( { safeLoadingScreen } ) } );
+			}
+			for ( let generation = 1; generation <= 8; generation++ ) {
+				const frontend = {
+					phase: /** @type {const} */ ("loading-world"),
+					generation,
+					elapsed: 0,
+					alpha: 0,
+					logoAlpha: 0,
+					error: null
+				};
+				const state = {
+					frontend,
+					session: { phase: /** @type {const} */ ("entering-world"), revision: generation },
+					gameplay: null,
+					entities: [],
+					width: 1024,
+					height: 768,
+					worldReady: false,
+					loadingProgress: .4
+				};
+				const now = generation * 1000;
+				f.ui.step( state, now );
+				const background = f.scene().quads.find( q => q.texture.startsWith( ROOT + "loading_europe_" ) );
+				assert.ok( background );
+				seen.add( background.texture );
+				const ready = {
+					...state,
+					frontend: { ...frontend, phase: /** @type {const} */ ("world") },
+					session: { phase: /** @type {const} */ ("world"), revision: generation },
+					worldReady: true
+				};
+				f.ui.step( ready, now + 1 );
+				f.ui.step( ready, now + 102 );
+			}
+			assert.deepEqual(
+				[ ...seen ].sort(),
+				safeLoadingScreen ?
+					[ ROOT + "loading_europe_1.png" ] :
+					[ ROOT + "loading_europe_1.png", ROOT + "loading_europe_2.png" ]
+			);
+			assert.equal( f.loadingRequested().includes( "loading_europe_2" ), !safeLoadingScreen );
+		} finally {
+			f.ui.dispose();
+		}
+	});
+}
+
+test("changing the saved safe-loading preference affects the next load without a reload", () => {
+	const f = fixture( () => 2 );
+	const world = {
+		session: { phase: /** @type {const} */ ("world"), revision: 1 },
+		gameplay: null,
+		entities: [],
+		width: 1024,
+		height: 768,
+		worldReady: true
+	};
+	try {
+		f.ui.event( { kind: "experimental-preferences", value: experimentalOptions( { safeLoadingScreen: true } ) } );
+		f.ui.step( world, 0 );
+		assert.ok( f.loadingRequested().includes( "loading_europe_1" ) );
+		assert.ok( !f.loadingRequested().includes( "loading_europe_2" ) );
+		f.ui.event( { kind: "experimental-preferences", value: experimentalOptions( { safeLoadingScreen: false } ) } );
+		f.ui.step( world, 1000 );
+		assert.ok( f.loadingRequested().includes( "loading_europe_2" ) );
+		f.ui.step( { ...world, worldReady: false }, 1010 );
+		assert.ok( f.scene().quads.some( q => q.texture === ROOT + "loading_europe_2.png" ) );
+	} finally {
+		f.ui.dispose();
+	}
+});
 
 test("alive in the world, only the chrome and the next variant stay decoded", () => {
 	assert.deepEqual( names( loadingArtDemand( ALIVE ) ), [ ...CHROME, "loading_europe_1" ].sort() );
