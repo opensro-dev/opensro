@@ -9624,14 +9624,12 @@ export function createUi(
 				let statusBottom = targetBottom;
 				shown.forEach( ( record, i ) => {
 					const cls = cosClass( record.band )!, chrome = cosStatusChrome( cls );
+					// The server's pool, whatever the display row (#1548): it publishes
+					// training and spirit only while the expansion is on.
 					const reference = petReference(
 						data.cosReferences.get( record.refObjId ),
-						experimental.state().saved.attackPetTraining && game?.petTraining?.gid === record.gid ?
-							game.petTraining :
-							undefined,
-						experimental.state().saved.attackPetTraining ?
-							next.entities.find( e => e.gid === record.gid )?.petResolve :
-							undefined,
+						game?.petTraining?.gid === record.gid ? game.petTraining : undefined,
+						next.entities.find( e => e.gid === record.gid )?.petResolve,
 						next.simulationTimeMs ?? 0
 					);
 					const nativeRect = cosStatusRect( w, i, cls, cosStatusDesktopTop() );
@@ -11188,8 +11186,8 @@ export function createUi(
 					petMiniInfo(
 						game.cosRecords,
 						hudData.cosReferences,
-						experimental.state().saved.attackPetTraining ? game.petTraining : undefined,
-						experimental.state().saved.attackPetTraining && attackCosGid !== undefined ?
+						game.petTraining,
+						attackCosGid !== undefined ?
 							next.entities.find( e => e.gid === attackCosGid )?.petResolve :
 							undefined,
 						next.simulationTimeMs ?? 0
@@ -11755,10 +11753,8 @@ export function createUi(
 						(target.kind === "cos" ?
 							petReference(
 								hudData.cosReferences.get( target.refObjId ),
-								experimental.state().saved.attackPetTraining && game?.petTraining?.gid === target.gid ?
-									game.petTraining :
-									undefined,
-								experimental.state().saved.attackPetTraining ? target.petResolve : undefined,
+								game?.petTraining?.gid === target.gid ? game.petTraining : undefined,
+								target.petResolve,
 								next.simulationTimeMs ?? 0
 							)?.maxHp :
 							undefined);
@@ -17273,16 +17269,16 @@ export function createUi(
 							}
 						}
 					} else if ( cosTab === 0 && record ) {
-						const trainingState =
-							experimental.state().saved.attackPetTraining && game?.petTraining?.gid === record.gid ?
-								game.petTraining :
-								undefined;
+						// Every number is the server's (#1548): the published training
+						// whatever the row; the row gates only the training UI.
+						const publishedTraining = game?.petTraining?.gid === record.gid ? game.petTraining : undefined;
+						const trainingState = experimental.state().saved.attackPetTraining ?
+							publishedTraining :
+							undefined;
 						const reference = petReference(
 							hudData.cosReferences.get( record.refObjId ),
-							trainingState,
-							experimental.state().saved.attackPetTraining ?
-								next.entities.find( e => e.gid === record.gid )?.petResolve :
-								undefined,
+							publishedTraining,
+							next.entities.find( e => e.gid === record.gid )?.petResolve,
 							next.simulationTimeMs ?? 0
 						);
 						const node = ( id: number ) => Object.values( page ).find( n => n.id === id );
@@ -17383,7 +17379,7 @@ export function createUi(
 											return attack?.present ? attack : undefined;
 										} )
 									),
-									trainingState
+									publishedTraining
 								);
 								const values: [number, string][] = [
 									[ 66, String( ability.hit ) ],

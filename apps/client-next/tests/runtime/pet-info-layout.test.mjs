@@ -52,3 +52,36 @@ test("pet mini shield stays inside the native three-pixel HP fill", t => {
 	);
 	assert.equal( f.ui.stats().error, null );
 });
+
+test("with the training row off, the pet's HP still uses the server's pool (#1548)", t => {
+	const f = uiFixture();
+	t.after( () => f.dispose() );
+	// The expansion is on at the server: it publishes the pet's training and
+	// with it the pool its curve and gear give (4321). The player's display
+	// row is off (the default).
+	Object.assign( f.state.gameplay, {
+		// 2183's native reference holds 3933 HP (cosPresentation.json).
+		cosRecords: [ { gid: 7, refObjId: 2183, band: 3, hp: 1000, mp: 0, status: 0, dead: false } ],
+		petTraining: {
+			gid: 7,
+			points: 0,
+			attackPercent: 0,
+			defensePercent: 0,
+			rows: [],
+			slotted: [],
+			skills: [],
+			gear: [],
+			receivedAtMs: 0,
+			stats: { maxHp: 4321, magicPercent: 0, magicDefensePercent: 0, magicPrimary: false }
+		}
+	} );
+	f.ui.step( f.state, 0 );
+	f.ui.event( { kind: "activate", id: "open-window:COS inventory" } );
+	f.ui.step( f.state, 0 );
+	f.ui.event( { kind: "activate", id: "cos-tab:0" } );
+	for ( let i = 1; i <= 4; i++ ) f.ui.step( f.state, i * 100 );
+	assert.equal( f.ui.stats().error, null );
+	// CIFCosInfo draws the HP value (control 41) in font 1.
+	assert.ok( f.hasText( "1000/4321 (23%)", "1" ), "the HP shown is the server's pool" );
+	assert.ok( !f.hasText( "1000/3933", "1" ), "not the native reference's" );
+});
