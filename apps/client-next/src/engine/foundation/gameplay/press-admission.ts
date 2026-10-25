@@ -388,7 +388,7 @@ function equipmentRefusal( admit: PressAdmit, equipped: Equipped ): number {
 	if ( admit.reqi ) return reqiRefusal( admit.reqi, equipped );
 	const [first, second] = admit.weaponKinds;
 	if ( first === ANY_WEAPON && second === ANY_WEAPON ) return 0;
-	const tid4 = weaponTid( equipped, PRIMARY_SOCKET ) >> 11 & 0x1f || BARE_HAND;
+	const tid4 = equippedWeaponKind( equipped );
 	let code = 0;
 	if ( tid4 !== first && tid4 !== second ) code = WRONG_WEAPON;
 	else if ( tid4 === FORTRESS_WEAPON ) code = FORTRESS_ONLY;
@@ -536,6 +536,20 @@ itemIn
 */
 function itemIn( equipped: Equipped, socket: number ): EquippedItem | undefined {
 	return equipped.find( item => item.slot === socket );
+}
+
+/*
+================
+equippedWeaponKind
+
+The primary weapon's kind as a row's weaponKinds names it: the TID4 of
+the weapon socket, or the bare-hand kind while it is empty or broken.
+The attack chase resolves the loadout's basic-attack row with it, the
+same match loadoutMatchesSkill makes server-side.
+================
+*/
+export function equippedWeaponKind( equipped: Equipped ): number {
+	return weaponTid( equipped, PRIMARY_SOCKET ) >> 11 & 0x1f || BARE_HAND;
 }
 
 /*

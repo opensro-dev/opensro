@@ -265,7 +265,7 @@ import {
 import { createCastMotionLock } from "@/engine/foundation/gameplay/cast-motion-lock";
 import { createSkillPressQueue, decidePress } from "@/engine/foundation/gameplay/skill-queue";
 import { combatAdmissionRadius, combatStopPoint, refBodyRadius } from "@/engine/foundation/gameplay/combat-spacing";
-import { pressAdmission } from "@/engine/foundation/gameplay/press-admission";
+import { equippedWeaponKind, pressAdmission } from "@/engine/foundation/gameplay/press-admission";
 import { movementHeading } from "@/engine/foundation/gameplay/native-movement";
 import {
 	bootstrapProgression,
@@ -685,6 +685,42 @@ cast in flight, and within one region.
 	}
 	/*
 ================
+basicAttackRow
+
+The basic-attack row the server resolves this click to: the first learned
+row marked a pinned base attack whose weapon kinds admit the equipped
+weapon, the same scan resolveBasicAttack makes over the character's
+skills. Undefined while no learned row matches - the server then refuses
+or transforms the attack, and the click stays server-led.
+================
+	*/
+	function basicAttackRow(): SkillMetadata | undefined {
+		const kind = equippedWeaponKind( inventory.state().inventory );
+		for ( const id of bindings.skills ) {
+			const row = catalog.find( candidate => candidate.id === id );
+			if ( !row?.basicAttack || !row.admit ) continue;
+			const [first, second] = row.admit.weaponKinds;
+			if ( first === 0xff && second === 0xff || first === kind || second === kind ) return row;
+		}
+		return undefined;
+	}
+	/*
+================
+rangeUpActive
+
+Whether a range-up effect stands on the local player: its buff feeds the
+attack-range keeper, which then replaces the weapon's range for every
+basic attack (skillActionReach) by an amount the client cannot compute.
+The chase proves its reach only while none stands.
+================
+	*/
+	function rangeUpActive(): boolean {
+		return combat.state().attachedEffects.some( effect =>
+			effect.gid === localGid && catalog.find( row => row.id === effect.skill )?.rangeUp
+		);
+	}
+	/*
+================
 equippedReach
 
 The reach the server allows the local player's basic attack: the equipped
@@ -716,6 +752,15 @@ server-led exactly as today. A click while a chase is already predicted
 re-aims the leg at the new target, as the server's follow switches; a
 click on a target already inside the spacing settles the leg here, where
 the server attacks in place.
+
+The reach is claimed only where the client can prove it equals the
+server's (skillActionReach): the resolved basic row's authored range when
+it carries one, else the weapon's published range. A basic row that asks
+for a caster range parameter, one carrying range-up of its own, or any
+range-up effect standing on the caster lets the server cast from beyond
+every aim computed here, so those clicks start no chase - the same
+discipline as the run-up's rangeBonus gate. (A reach cut, Myopia, only
+shortens the server's boundary: the adoption glides forward, never back.)
 ================
 	*/
 	function chaseAttack(
@@ -731,7 +776,9 @@ the server attacks in place.
 		) return false;
 		const open = movement.approachPredictedSince() !== undefined;
 		if ( !open && (movement.state().moving || localCastHolds( now )) ) return false;
-		const reach = equippedReach();
+		const basic = basicAttackRow();
+		if ( !basic || basic.rangeBonus || basic.rangeUp || rangeUpActive() ) return false;
+		const reach = basic.range ?? equippedReach();
 		if ( reach === undefined ) return false;
 		const casterRadius = refBodyRadius( local.kind, bodyRadii.get( local.refObjId ), 0 );
 		const targetRadius = refBodyRadius( target.kind, bodyRadii.get( target.refObjId ), target.rarity ?? 0 );

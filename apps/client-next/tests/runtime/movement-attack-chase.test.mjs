@@ -127,15 +127,50 @@ function weaponBody( id ) {
 
 /*
 ================
+basicRow
+
+One learned basic-attack catalogue row: a pinned base attack for the
+given weapon kinds, with any reach marks the variant carries.
+================
+*/
+function basicRow( id, weaponKinds, marks = {} ) {
+	return {
+		id,
+		group: 1,
+		level: 1,
+		status: false,
+		effectRider: false,
+		ui: {
+			name: "SKILL_TEST_BASE_" + id,
+			trainable: true,
+			targetRequired: true,
+			spCost: 0,
+			cooldownMs: 1000,
+			masteries: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ],
+			prerequisites: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ],
+			basicAttack: true,
+			admit: { weaponKinds },
+			...marks
+		}
+	};
+}
+
+/*
+================
 attackPress
 
 A caster at rest (bodies: caster 2, monster 2) with a sword whose reach
 is 20 clicking attack on a monster `distance` east: the server's spacing
 admits the attack at 2 + 2 + 20 = 24 from the monster. predicted turns on
 the Experimental window's Predicted run-up row, which gates the chase.
+The caster has learned the fist and sword base attacks, as a character
+does; `basic` swaps the sword row's reach marks, `buff` stands a
+range-up effect on the caster before the click.
 ================
 */
-function attackPress( { predicted = true, distance = 40, weapon = true, ranged = true } = {} ) {
+function attackPress(
+	{ predicted = true, distance = 40, weapon = true, ranged = true, basic = {}, buff = false } = {}
+) {
 	const local = {
 		gid: GID,
 		refObjId: 1907,
@@ -152,9 +187,30 @@ function attackPress( { predicted = true, distance = 40, weapon = true, ranged =
 	const game = createGameplay( () => {}, () => {}, () => {}, gid => world.get( gid ) );
 	game.bootstrap( {
 		simulationProtocolVersion: 1,
-		character: { skills: [] },
+		character: { skills: [ 9901, 9902 ] },
 		inventorySlotCount: 45,
 		equipmentSlotCount: 13,
+		refSkillSnapshot: [
+			basicRow( 9901, [ 1, 255 ] ),
+			basicRow( 9902, [ 2, 255 ], basic ),
+			{
+				id: 9903,
+				group: 1,
+				level: 1,
+				status: false,
+				effectRider: false,
+				ui: {
+					name: "SKILL_TEST_RANGE_UP",
+					trainable: true,
+					targetRequired: false,
+					spCost: 0,
+					cooldownMs: 1000,
+					masteries: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ],
+					prerequisites: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ],
+					rangeUp: true
+				}
+			}
+		],
 		refObjSnapshot: [ {
 			refObjId: 1907,
 			kind: "player",
@@ -186,6 +242,13 @@ function attackPress( { predicted = true, distance = 40, weapon = true, ranged =
 	const navigation = product();
 	navigation.objects = [];
 	game.command( { kind: "navigation", regionId: 257, bundle: navigation }, 0, undefined );
+	if ( buff ) {
+		const effect = Buffer.alloc( 12 );
+		effect.writeUInt32LE( GID, 0 );
+		effect.writeUInt32LE( 9903, 4 );
+		effect.writeUInt32LE( 1, 8 );
+		game.receive( { opcode: 0xb419, payload: new Uint8Array( effect ) }, 0 );
+	}
 	game.command( { kind: "attack", gid: 9 }, 0, monster, local );
 	return { game, local, monster, world };
 }
@@ -249,6 +312,32 @@ test("without the weapon's reach on its row the click stays server-led", () => {
 	const { game, local } = attackPress( { ranged: false } );
 	const pose = restedPose( game, local );
 	assert.ok( Math.abs( pose.x - local.x ) < 0.01, `stands at the click (x ${pose.x})` );
+});
+
+test("a basic row that asks for a caster range parameter starts no chase", () => {
+	// The server adds the caster's crossbow/wizard parameter to such a
+	// row's reach, beyond the boundary the client can compute: the click
+	// stays server-led, as the run-up's rangeBonus gate keeps a press.
+	const { game, local } = attackPress( { basic: { rangeBonus: true } } );
+	const pose = restedPose( game, local );
+	assert.ok( Math.abs( pose.x - local.x ) < 0.01, `stands at the click (x ${pose.x})` );
+});
+
+test("a range-up buff standing on the caster starts no chase", () => {
+	// The buff feeds the attack-range keeper, which replaces the weapon's
+	// range with an amount the client cannot see: no proven reach, no chase.
+	const { game, local } = attackPress( { buff: true } );
+	const pose = restedPose( game, local );
+	assert.ok( Math.abs( pose.x - local.x ) < 0.01, `stands at the click (x ${pose.x})` );
+});
+
+test("a basic row with an authored range bounds the chase by it, not the weapon", () => {
+	// The row authors 30 where the weapon publishes 20: the server's
+	// boundary is the row's (admission 2 + 2 + 30 = 34), so the chase
+	// rests at 140 - 34 = 106, not the weapon's 116.
+	const { game, local } = attackPress( { basic: { range: 30 } } );
+	const pose = restedPose( game, local );
+	assert.ok( Math.abs( pose.x - 106 ) <= 1, `rests at the authored-range stop (x ${pose.x})` );
 });
 
 test("unarmed, the bare-hand reach bounds the chase", () => {
