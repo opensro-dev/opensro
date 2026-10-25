@@ -32,7 +32,7 @@ func TestMallExtraGoodsOffKeepsTheShippedMall(t *testing.T) {
 			t.Fatalf("%q = %v, %v; want the shipped mall", setting, goods, err)
 		}
 	}
-	catalog, err := LoadMall(gamedatatest.TextdataDir(t), nil)
+	catalog, err := LoadMall(gamedatatest.TextdataDir(t), nil, nil)
 	if err != nil || len(catalog.Offers) != 81 {
 		t.Fatalf("shipped mall: %v offers, %v", len(catalog.Offers), err)
 	}
@@ -54,7 +54,7 @@ func TestMallExtraGoodsListTheAvatarOutfits(t *testing.T) {
 	if err != nil || len(goods) != 22 {
 		t.Fatalf("on = %d goods, %v", len(goods), err)
 	}
-	catalog, err := LoadMall(dir, goods)
+	catalog, err := LoadMall(dir, goods, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestMallExtraGoodsRefuseBadEntries(t *testing.T) {
 	} {
 		goods, err := ParseMallExtraGoods(setting)
 		if err == nil {
-			_, err = LoadMall(dir, goods)
+			_, err = LoadMall(dir, goods, enterworld.NewTextdataItems(dir))
 		}
 		if err == nil || !strings.Contains(err.Error(), EnvMallExtraGoods) {
 			t.Errorf("%q: err = %v, want a refusal naming %s", setting, err, EnvMallExtraGoods)
