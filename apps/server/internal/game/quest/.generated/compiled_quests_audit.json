@@ -39,6 +39,5 @@
 	"QNO_CA_GORIA_3": "prerequisite QNO_CA_GORIA_2 pending",
 	"QNO_CA_WAREHOUSE_4": "prerequisite QNO_CA_WAREHOUSE_3 pending",
 	"QNO_EU_EASTEU_17": "prerequisite QNO_EU_EASTEU_16 pending",
-	"QNO_EU_WITCH_1_1": "prerequisite QNO_EU_WITCH_1 pending",
-	"QNO_RM_OLDWOMAN_7": "prerequisite QNO_RM_OLDWOMAN_6 pending"
+	"QNO_EU_WITCH_1_1": "prerequisite QNO_EU_WITCH_1 pending"
 }

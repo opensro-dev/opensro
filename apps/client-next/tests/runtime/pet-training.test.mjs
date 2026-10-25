@@ -658,6 +658,9 @@ test("petReference scales maxHp from active Resolve stacks and reverts on expiry
 	const preScaled = { ...training, stats: { ...training.stats, maxHp: 3080 } };
 	assert.equal( petReference( baseRef, preScaled, { stacks: 10, tier: 3, untilMs: 5000 }, 1000 )?.maxHp, 3080 );
 	assert.equal( petReference( baseRef, preScaled, { stacks: 10, tier: 3, untilMs: 5000 }, 6000 )?.maxHp, 2200 );
+	const balanced = { ...training, stats: { ...training.stats, maxHp: 15400 } };
+	assert.equal( petReference( baseRef, balanced, { stacks: 10, tier: 3, untilMs: 5000 }, 1000, 90 )?.maxHp, 15400 );
+	assert.equal( petReference( baseRef, balanced, { stacks: 10, tier: 3, untilMs: 5000 }, 6000, 90 )?.maxHp, 11000 );
 });
 
 /*
@@ -903,5 +906,15 @@ test("penguin counters reject overflow atomically and expose ready Hourglass", (
 		bad[offset] = 6;
 		assert.throws( () => t.receive( { opcode: OP_PET_SKILL_COUNTERS, payload: bad }, 300 ) );
 		assert.equal( t.state()?.counters?.hourglass, 5 );
+	}
+});
+
+test("individual pet skill blues name the skill rather than a generic skill bonus", () => {
+	const affixes = PET_DESIGN.affixes.filter( a => "skillId" in a );
+	assert.equal( affixes.length, 20 );
+	for ( const a of affixes ) {
+		const encoded = (5n << 32n) | BigInt( 0x8000 + a.code );
+		assert.equal( petAffixLine( encoded.toString() ), a.effect.replaceAll( "{v}", "5" ) );
+		assert.deepEqual( a.slots, [ "Collar", "Harness", "Charm" ] );
 	}
 });

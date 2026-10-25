@@ -214,6 +214,55 @@ func (rt *Runtime) premiumUpgradePlan(c *enterworld.Character, nowMs int64, next
 
 /*
 ================
+premiumRemainingMs
+
+The time left on the premium being replaced: its keepers share one
+end, so the latest end among them minus now (never negative).
+================
+*/
+func premiumRemainingMs(c *enterworld.Character, nowMs int64, replaced *enterworld.ItemRef) int64 {
+	var end int64
+	for _, job := range c.ParamJobs {
+		if job.ItemRefObjID != replaced.RefObjID {
+			continue
+		}
+		switch job.Param {
+		case paramPremiumExpRate, paramPremiumSkillExpRate, paramDeathExpKept:
+			if job.EndUnixMs > end {
+				end = job.EndUnixMs
+			}
+		}
+	}
+	if end <= nowMs {
+		return 0
+	}
+	return end - nowMs
+}
+
+/*
+================
+creditPremiumPlan
+
+Port-only (#1624, owner decision): the replaced ticket's unused time
+moves the new ticket's end later - every keeper and the daily clock
+end creditMs after the fresh plan's own end. The clock otherwise
+restarts exactly as a fresh ticket's (full grant, no carry).
+================
+*/
+func creditPremiumPlan(jobs []domain.ParamJob, clock *domain.PremiumClock, creditMs int64) {
+	if creditMs <= 0 {
+		return
+	}
+	for i := range jobs {
+		jobs[i].EndUnixMs += creditMs
+	}
+	if clock != nil {
+		clock.EndUnixMs += creditMs
+	}
+}
+
+/*
+================
 withoutPremiumJobs
 ================
 */
@@ -266,8 +315,10 @@ func (rt *Runtime) usePremiumTicket(use skillItemUse, c *enterworld.Character, t
 		return false
 	}
 	// Port-only, not native (SRO_PREMIUM_UPGRADE): a strictly higher
-	// grade of the same family replaces the running premium; its
-	// remaining time is lost. Off: any running premium refuses (0x1894).
+	// grade of the same family replaces the running premium and the
+	// replaced ticket's remaining time moves the new end later
+	// (#1624, owner decision). Off: any running premium refuses
+	// (0x1894).
 	var replaced *enterworld.ItemRef
 	if premiumRunning(c, use.nowMs) {
 		replaced = rt.premiumUpgradePlan(c, use.nowMs, use.ref, skillOnly)
@@ -279,6 +330,9 @@ func (rt *Runtime) usePremiumTicket(use skillItemUse, c *enterworld.Character, t
 	jobs, clock, ok := premiumTicketPlan(use.ref, use.nowMs, skillOnly)
 	if !ok {
 		return false
+	}
+	if replaced != nil {
+		creditPremiumPlan(jobs, clock, premiumRemainingMs(c, use.nowMs, replaced))
 	}
 	if !installPremiumSwap(c, replaced, jobs) {
 		return false

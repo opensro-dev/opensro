@@ -33,6 +33,7 @@ import { buildQuestDataAsset } from "../data/buildQuestDataAsset.mjs";
 import { buildDropModelAssets } from "../char/buildDropModelAssets.mjs";
 import { buildMissionPresentationAsset } from "../data/buildMissionPresentationAsset.mjs";
 import { buildPetItemIcons } from "../shared/petItemIcons.mjs";
+import { completeItemText } from "../shared/itemTextCompletions.mjs";
 import { buildSkillDataAsset } from "../data/buildSkillDataAsset.mjs";
 import { buildFortressMapAsset } from "../data/buildFortressMapAsset.mjs";
 import { parseWeatherEvents } from "../char/weatherEvents.mjs";
@@ -429,8 +430,16 @@ export const LOOSE_FAMILIES = {
 			await buildDropModelAssets( { skipTextures: true } );
 			const icons = await buildPetItemIcons();
 			buildMissionPresentationAsset();
+			const names = "/assets/text/textdataname.en.json";
+			const catalog = await readPublicJson( names );
+			completeItemText( catalog.entries );
+			await writeJsonIfChanged( publicFile( names ), catalog );
 			const manifest = "/assets/itemdrop/manifest.json", presentation = "/assets/data/missionPresentation.json";
-			await refreshPrecompressedSidecars( [ publicFile( manifest ), publicFile( presentation ) ] );
+			await refreshPrecompressedSidecars( [
+				publicFile( manifest ),
+				publicFile( presentation ),
+				publicFile( names )
+			] );
 			const drops = await readPublicJson( manifest );
 			return {
 				files: [
@@ -439,6 +448,8 @@ export const LOOSE_FAMILIES = {
 					manifest + ".gz",
 					presentation,
 					presentation + ".gz",
+					names,
+					names + ".gz",
 					...Object.values( drops.models ).map( row => row.glb )
 				]
 			};
