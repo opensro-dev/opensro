@@ -252,7 +252,7 @@ export interface Renderer extends Disposable {
 	// nearest-first actor room (Experimental; the original has no cap).
 	sharedActorRoom?(): boolean;
 	// Port-only, not native: whether the local mover's walk is drawn between
-	// its worker ticks (Experimental "Interpolated own movement", on by default).
+	// its worker ticks (always on since 2026-10-25; it was the Experimental "Interpolated own movement" row).
 	interpolatedOwnWalk?(): boolean;
 	// Port-only, not native: whether holding V also hides other players'
 	// companions (Experimental, off by default).

@@ -5,7 +5,9 @@ npc-storage-window.test.mjs - warehouse actions hide the NPC window itself
 
 Exercise the shipped dispatcher and HUD: v1.150 hides the parent before the
 storage request, keeps the NPC selected, and does not restore the menu when
-another panel opens. Selecting the NPC again owns showing its menu.
+another panel opens. Selecting the NPC again owns showing its menu. A
+storage command the worker refuses owes the HUD a restorative receipt, or
+the hide from its click is never lifted.
 
 ===========================================================================
 */
@@ -228,6 +230,72 @@ test("hiding a window preserves the NPC lock and clear or selection resets its v
 	assert.equal( npc.window().hidden, false );
 	assert.equal( npc.interactionLocked(), false );
 	assert.equal( npc.state().phase, "closed" );
+});
+
+test("a storage command refused after the NPC left view restores the menu the click hid", () => {
+	const f = storageFixture(), pending = [], hud = uiFixture( message => pending.push( message.command ) );
+	let semantics, now = 0;
+	hud.state.entities.push( { ...hud.state.entities[0], ...NPC } );
+	/*
+	================
+	draw
+	================
+	*/
+	function draw() {
+		const view = { ...hud.state, gameplay: f.read() };
+		for ( let i = 0; i < 50; i++ ) semantics = hud.ui.step( view, ++now ) ?? semantics;
+		return defined( semantics ).controls;
+	}
+	const selectRequests = () => f.frames.filter( frame => frame.opcode === TARGET_REQUEST ).length;
+	try {
+		assert.ok( draw().some( control => control.id === "storage-open" ) );
+		hud.ui.event( { kind: "activate", id: "storage-open" } );
+		assert.ok( !draw().some( control => control.id === "npc-close" ), "the click hides the menu at once" );
+		// The NPC leaves view in the worker after the snapshot the player
+		// clicked on: its selection is gone when the queued click is processed,
+		// but its conversation is still in the menu phase.
+		const removed = new Uint8Array( 4 );
+		new DataView( removed.buffer ).setUint32( 0, NPC.gid, true );
+		f.game.receive( { opcode: 0x36ab, payload: removed }, ++now );
+		const before = selectRequests();
+		assert.throws( () => f.command( pending.shift() ), /Select a warehouse NPC/ );
+		assert.equal( f.requests.length, 0, "a refused command sends no storage request" );
+		assert.equal( f.read().npcConversation.phase, "menu", "the refusal leaves the conversation open" );
+		assert.equal( f.read().npcWindow.hidden, false );
+		assert.ok(
+			draw().some( control => control.id === "npc-close" ),
+			"the refusal receipt makes the menu drawable again"
+		);
+		assert.equal( selectRequests(), before, "no reselection was needed" );
+	} finally {
+		hud.dispose();
+		f.game.dispose();
+	}
+});
+
+test("a refused guild storage command restores the window receipt the click hid", () => {
+	const f = storageFixture( true ), panel = createNpcPanel();
+	let now = 0;
+	try {
+		const shown = f.read();
+		panel.observe( shown.npcConversation, shown.npcWindow );
+		assert.equal( panel.hidden(), false );
+		panel.hide();
+		const removed = new Uint8Array( 4 );
+		new DataView( removed.buffer ).setUint32( 0, NPC.gid, true );
+		f.game.receive( { opcode: 0x36ab, payload: removed }, ++now );
+		const revision = f.read().npcWindow.revision;
+		assert.throws( () => f.command( { kind: "storage-open-guild", gid: NPC.gid } ), /Select a guild manager/ );
+		assert.equal( f.requests.length, 0, "a refused command sends no storage request" );
+		const refused = f.read();
+		assert.equal( refused.npcConversation.phase, "menu" );
+		assert.equal( refused.npcWindow.hidden, false );
+		assert.ok( refused.npcWindow.revision > revision, "the refusal publishes a newer receipt" );
+		assert.equal( panel.observe( refused.npcConversation, refused.npcWindow ), true );
+		assert.equal( panel.hidden(), false, "the panel lifts the click's hide from the refusal receipt" );
+	} finally {
+		f.game.dispose();
+	}
 });
 
 test("stale window receipts cannot undo a click or let a hidden NPC consume scroll input", () => {

@@ -292,6 +292,7 @@ import { createPetTraining } from "./pet-training/pet-training";
 import type { GameplayCommand, GameplayState } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
 import { nearestPickable } from "@/engine/foundation/gameplay/pickup-nearest";
+import { npcRefusesWalk } from "@/engine/foundation/gameplay/npc-click-refusal";
 import {
 	INVENTORY_JOURNAL_ENTRY,
 	INVENTORY_JOURNAL_LOCAL,
@@ -322,9 +323,9 @@ function unlimitedItemIds( value: unknown ): readonly number[] {
 ================
 WorldReferences
 
-The world catalog lookups gameplay reads but does not own (entities owns
-the catalog): a character reference's country, a country's player models
-and an item reference.
+The world lookups gameplay reads but does not own (entities owns the
+catalog and the entity table): a character reference's country, a country's
+player models, an item reference and the NPCs a ground click must clear.
 ================
 */
 interface WorldReferences {
@@ -334,6 +335,7 @@ interface WorldReferences {
 	readonly monster: (
 		codename: string
 	) => import("@/engine/foundation/gameplay/gm-command").GmMonsterReference | undefined;
+	readonly npcs: () => readonly EntityState[];
 }
 
 // A dress answer may trail its bar by a server tick and the round trip.
@@ -843,7 +845,8 @@ attack can arrive in the same batch as the previous close and starve the walk.
 		country: () => undefined,
 		playerModels: () => [],
 		item: () => undefined,
-		monster: () => undefined
+		monster: () => undefined,
+		npcs: () => []
 	};
 	// The session's catalog is fixed; one list per country keeps the
 	// published state's identity stable.
@@ -1949,6 +1952,9 @@ state here before a command can claim a native wire conversation.
 				const target = targeting.state();
 				// The storage row exists only on a selected warehouse NPC (0x4).
 				if ( !localGid || target.target !== command.gid || !((target.targetCapabilities ?? 0) & 4) ) {
+					// The HUD hid the window on the click; a refusal owes it a
+					// newer receipt marked shown, or that hide is never lifted.
+					npcConversation.showWindow();
 					throw Error( "Select a warehouse NPC" );
 				}
 				npcConversation.hideWindow();
@@ -1960,6 +1966,9 @@ state here before a command can claim a native wire conversation.
 				const target = targeting.state();
 				// The warehouse row exists only on a selected guild manager (0x4000).
 				if ( !localGid || target.target !== command.gid || !((target.targetCapabilities ?? 0) & 0x4000) ) {
+					// The HUD hid the window on the click; a refusal owes it a
+					// newer receipt marked shown, or that hide is never lifted.
+					npcConversation.showWindow();
 					throw Error( "Select a guild manager" );
 				}
 				npcConversation.hideWindow();
@@ -2745,6 +2754,11 @@ state here before a command can claim a native wire conversation.
 						if ( action.kind === "none" ) return null;
 						if ( action.kind === "walk-to" ) held = { kind: "move", destination: action.destination };
 					}
+					// The release replays the click through StartGroundMove's NPC test
+					// (below); one it refuses now holds nothing and draws no marker.
+					if ( held.kind === "move" && npcRefusesWalk( held.destination, worldReferences.npcs() ) ) {
+						return null;
+					}
 					moveReservation.hold( held );
 					selectionDecal = held.kind === "move" ? { kind: "ground", pose: { ...held.destination } } : null;
 					dirty = true;
@@ -2776,6 +2790,8 @@ state here before a command can claim a native wire conversation.
 					destination = action.destination;
 				}
 				if ( !destination ) return null;
+				// 878600: a point within 20 units of an NPC or guard starts no walk.
+				if ( npcRefusesWalk( destination, worldReferences.npcs() ) ) return null;
 				const frame = movement.request( destination, now, cosGid );
 				pickup.clear();
 				selectionDecal = { kind: "ground", pose: { ...destination } };

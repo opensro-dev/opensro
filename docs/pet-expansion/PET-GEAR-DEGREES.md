@@ -57,5 +57,5 @@ shows actual options and the new per-degree cap.
 - Six blues survive actual equip/remove commands and client state decoding.
 - All27 exported icons are distinct32x32 RGBA images.
 
-See the latest Claude handoff for deployment status. These checks are not a
+These checks are not a
 claim that every random affix combination has been tested in live combat.

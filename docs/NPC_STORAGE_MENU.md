@@ -24,12 +24,16 @@ owner. The HUD hides immediately on the click; the worker also hides before
 issuing either storage request. Receipts distinguish a fresh selection of the
 same NPC from an old snapshot, including when close and reselection occur
 between two HUD frames. Changing Inventory, Character or another primary
-panel has no authority to show the NPC window.
+panel has no authority to show the NPC window. A storage command the worker
+refuses (its target changed after the HUD snapshot the player clicked on)
+publishes a newer receipt marked shown before it throws, so the refusal
+itself lifts the hide its click caused; the conversation stays open.
 
 `npc-storage-window.test.mjs` exercises request ordering, personal storage's
 cached and uncached paths, guild storage, preserved target and interaction
 lock, delayed worker receipts, panel changes, scroll rejection while hidden,
-reselection of the same NPC without an intermediate closed snapshot, and
-clicking the same NPC again after storage hid its window.
+reselection of the same NPC without an intermediate closed snapshot,
+clicking the same NPC again after storage hid its window, and storage
+commands refused after the NPC left view.
 These tests execute the shipped port; the native evidence is static analysis,
 not a full client emulation.
