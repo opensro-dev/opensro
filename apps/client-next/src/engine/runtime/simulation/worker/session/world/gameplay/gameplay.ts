@@ -283,7 +283,11 @@ import { createFriends } from "./friends/friends";
 import { createLetters } from "./letters/letters";
 import { createMovement } from "./movement/movement";
 import { createArrowKeys, type ArrowGate, type ArrowKeyMover } from "./arrow-keys/arrow-keys";
-import { logoutCancelRequest, worldPointAction } from "@/engine/foundation/gameplay/direction-movement";
+import {
+	logoutCancelRequest,
+	targetActionCancel,
+	worldPointAction
+} from "@/engine/foundation/gameplay/direction-movement";
 import { createInventory } from "./inventory/inventory";
 import { createCombat } from "./combat/combat";
 import { createTargeting } from "./targeting/targeting";
@@ -501,16 +505,16 @@ sendFrame
 	const arrowKeys = createArrowKeys( frame => sendFrame( frame ) );
 	/*
 	================
-	arrowMover
+	arrowGate
 
-	What the arrow keys move: the movement owner, or for a rider the ridden
-	vehicle's commands (0x85E000).
+	The arrow keys' gate (arrow-keys.ts ArrowGate): the ground click's own,
+	where a cast's hold ([player+0x644] bit 2, action state 2) is told
+	apart: its press cancels the cast and waits held (0x693190, #1589).
 	================
 	*/
 	function arrowGate( now: number, local: EntityState | undefined ): ArrowGate {
 		const refusal = groundWalkRefusal( now, local );
 		if ( refusal === null ) return "open";
-		// [player+0x644] bit 2 (action state 2): the press cancels and waits.
 		return refusal === "cast" ? "cast" : "closed";
 	}
 	/*
@@ -2784,7 +2788,13 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "arrow-key" ) {
 				// 0x680A30: a press walks only where a click would (the same
 				// gates); a release always ends what its press started.
-				const frame = arrowKeys.key( command.key, command.down, now, arrowMover( local ), arrowGate( now, local ) );
+				const frame = arrowKeys.key(
+					command.key,
+					command.down,
+					now,
+					arrowMover( local ),
+					arrowGate( now, local )
+				);
 				if ( frame ) {
 					pickup.clear();
 					selectionDecal = null;
