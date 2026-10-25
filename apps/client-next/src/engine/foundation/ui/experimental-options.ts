@@ -313,7 +313,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		hdrToneMap: enabled( "hdrToneMap" ),
 		sunShadow: enabled( "sunShadow" ),
 		perPixelLighting: enabled( "perPixelLighting" ),
-		predictedRunUp: enabled( "predictedRunUp" ),
+		predictedRunUp: record.predictedRunUp !== false,
 		smoothCamera: record.smoothCamera !== false,
 		enchantSparks: record.enchantSparks !== false,
 		compressedTextures: record.compressedTextures !== false,
