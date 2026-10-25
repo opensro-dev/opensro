@@ -787,80 +787,9 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if err := game.validateQuestMarkerRoster(); err != nil {
 		return err
 	}
-	quests.PlanInventory = game.items.PlanQuestInventory
-	quests.SpawnQuestMonster = func(character *enterworld.Character, request simulation.QuestMonsterSpawn) bool {
-		return game.items.SpawnQuestMonster(game.divisionID, character, request)
-	}
-	// The quest programmes' instanced-world doors live with the quest
-	// composition (wiring_quests.go).
-	game.wireQuestProgrammes(quests)
-	game.items.CanPlaceQuestTrap = quests.CanPlaceTrap
-	game.items.CaptureQuestTrap = quests.CaptureQuestTrap
-	game.items.UpdateQuestInventory = quests.InventoryUpdater()
-	game.items.UpdateQuestKill = quests.KillUpdater()
-	game.items.QuestTravelBlocks = quests.TravelBlocks
-	game.items.AdvanceQuestMinute = quests.AdvanceMinute
-	game.items.AdvanceQuestItem = quests.AdvanceItemUse
-	game.items.ForgetQuestItem = quests.ForgetItemUse
-	game.items.UseQuestItem = quests.BeginItemUse
-	game.items.ReleaseQuestCapturesOnDeath = quests.ReleaseCapturesOnDeath
-	game.items.AdvanceQuestCalendar = quests.AdvanceCalendar
-	game.items.QuestMonsterDrops = quests.MonsterDrops
-	game.items.NpcQuests = action.NpcQuestHooks{
-		Prepare: quests.PrepareNpcQuest,
-		Options: func(divisionID string, character *enterworld.Character, npcCodename string) []action.NpcQuestOption {
-			var rows []quest.NpcOption
-			var resuscitation bool
-			game.deps.Read(divisionID, func() {
-				rows = quests.OptionsForNpc(character, npcCodename)
-				resuscitation = quest.ResuscitationAvailable(character, npcCodename)
-			})
-			out := make([]action.NpcQuestOption, 0, len(rows))
-			for _, row := range rows {
-				pages := make([]action.NpcDialogPage, 0, len(row.Pages))
-				for _, page := range row.Pages {
-					pages = append(pages, action.NpcDialogPage{PromptSymbol: page.PromptSymbol, ReplySymbol: page.ReplySymbol,
-						RefuseSymbol: page.RefuseSymbol, RefuseResponseSymbol: page.RefuseResponseSymbol})
-				}
-				branches := make([]action.NpcDialogBranch, 0, len(row.Branches))
-				for _, branch := range row.Branches {
-					branches = append(branches, action.NpcDialogBranch{Codename: branch.Codename, ReplySymbol: branch.ReplySymbol,
-						AcceptResponseSymbol: branch.AcceptResponseSymbol})
-				}
-				out = append(out, action.NpcQuestOption{
-					Codename: row.Codename, TitleSymbol: row.TitleSymbol,
-					PromptSymbol: row.PromptSymbol, Complete: row.Complete,
-					AcceptResponseSymbol: row.AcceptResponseSymbol, DenyResponseSymbol: row.DenyResponseSymbol,
-					Pages: pages, Branches: branches, Informational: row.Informational, SideTalk: row.SideTalk,
-					AcceptRowSymbol: row.AcceptRowSymbol,
-				})
-			}
-			if resuscitation {
-				out = append(out, action.NpcQuestOption{
-					Codename: quest.ResuscitationService, TitleSymbol: "SN_TALK_QSP_ALL_POTION_1_07",
-					PromptSymbol: "SN_TALK_QSP_ALL_POTION_1_00", Immediate: true,
-				})
-			}
-			return out
-		},
-		Accept: func(character *enterworld.Character, codename string) ([]wire.Frame, error) {
-			result, err := quests.StartQuest(character, codename)
-			return result.Frames, err
-		},
-		Finish: func(character *enterworld.Character, codename, npcCodename string) ([]wire.Frame, error) {
-			if codename == quest.ResuscitationService {
-				result, err := quests.OpenResuscitation(character, npcCodename)
-				return result.Frames, err
-			}
-			result, err := quests.AdvanceNpcQuest(character, codename, npcCodename)
-			return result.Frames, err
-		},
-		Refuse: func(character *enterworld.Character, codename string) ([]wire.Frame, error) {
-			result, err := quests.RefuseQuestOffer(character, codename)
-			return result.Frames, err
-		},
-	}
-	game.items.GMQuests = gmQuestHooks(quests)
+	// The quest runtime's doors and the item lane's quest hooks live
+	// with the quest composition (wiring_quests.go).
+	game.wireQuestDoors(quests)
 	game.items.UpdateExperience = stats.ExperienceUpdater()
 	game.items.RefundExperience = stats.ExperienceRefundUpdater()
 	game.items.RecallStatPoints = stats.StatRecallUpdater()

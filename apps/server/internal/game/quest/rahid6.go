@@ -16,9 +16,9 @@ Inside, the programme owns the encounter clock: Tahomet appears 30 s
 after the world opens, speaks the five-line confrontation at 5 s steps,
 then the battle runs on the native timer - a warning with 10 minutes
 left, one with 5, and at the end Shaitan takes his leave and the party
-is returned. The layer itself carries the generic timed-world hard end
-(1,208,490 ms from the invitation), so a party that somehow outlasts
-the programme is still evacuated by the lane.
+is returned. The layer's own deadline is set just past the programme's
+end, so a party that somehow outlasts the programme is still evacuated
+by the lane.
 
 The kill is party business: when Tahomet falls, every resident doing
 the quest who still holds the bundle trades all bundles for the Silver
@@ -70,15 +70,27 @@ const (
 	// the capture-supply token shape (AdvanceNpcQuest routes it).
 	rahid6TravelPrefix = "rahid6:"
 
-	// Encounter timing, read off the native programme: the summon at
-	// 30 s, one confrontation line every 5 s, the battle timer at
-	// 600,000 ms with 300,000 ms warning steps, and the generic
-	// timed-world hard end of 1,208,490 ms as the layer deadline.
-	rahid6SpawnDelayMs    = 30_000
-	rahid6ConvoStepMs     = 5_000
-	rahid6BattleMs        = 600_000
-	rahid6WarningStepMs   = 300_000
-	rahid6LayerLifetimeMs = 1_208_490
+	// Encounter timing, read off the native encounter update: the
+	// summon at 30 s, one confrontation line every 5 s (five lines),
+	// then the battle clock - the first warning 600,000 ms in with
+	// 10 minutes left, two 300,000 ms steps to the 5-minutes-left
+	// warning and the farewell that ends the meeting.
+	rahid6SpawnDelayMs  = 30_000
+	rahid6ConvoStepMs   = 5_000
+	rahid6BattleMs      = 600_000
+	rahid6WarningStepMs = 300_000
+
+	// The layer deadline is the programme's own end plus this slack:
+	// spawn, the five confrontation steps and the full battle clock.
+	// No native layer lifetime for the meeting exists in either
+	// binary; the 1,208,490 ms once claimed here as a generic native
+	// hard end was an inference, and it fell 47 s short of the
+	// programme's own end, so the farewell could never arrive.
+	// Authored, not native: the deadline is only the lane's backstop;
+	// the programme ends the layer itself, on the kill or the farewell.
+	rahid6LayerEndSlackMs = 8_490
+	rahid6LayerLifetimeMs = rahid6SpawnDelayMs + 5*rahid6ConvoStepMs +
+		rahid6BattleMs + 2*rahid6WarningStepMs + rahid6LayerEndSlackMs
 
 	// Tahomet appears 20 to 100 from the party: the native polar
 	// random placement, the quest-spawn radius pair.
@@ -181,17 +193,17 @@ type InstanceInviteCall struct {
 InstanceInviteOutcome
 
 What an invitation did: whether the layer opened and the leader
-landed, whether the opening failed for want of a free layer, and the
-lease the programme spawns into and closes.
+landed, and the lease the programme spawns into and closes. A layer
+that would not open and a leader who never landed answer the same
+busy line, so the outcome carries no finer failure shape.
 ================
 */
 type InstanceInviteOutcome struct {
-	Opened         bool
-	LeaderIn       bool
-	AllocationFull bool
-	Lease          instance.Lease
-	Prompted       []string
-	Skipped        []string
+	Opened   bool
+	LeaderIn bool
+	Lease    instance.Lease
+	Prompted []string
+	Skipped  []string
 }
 
 /*
@@ -229,10 +241,11 @@ Process-local, like the leases themselves.
 ================
 */
 type rahid6Programme struct {
-	mu       sync.Mutex
-	layers   map[instance.ID]*rahid6Layer
-	leases   map[instance.ID]instance.Lease
-	summoner map[string]instance.ID
+	mu          sync.Mutex
+	layers      map[instance.ID]*rahid6Layer
+	leases      map[instance.ID]instance.Lease
+	summoner    map[string]instance.ID
+	summonedDay map[string]uint16
 }
 
 /*
@@ -340,8 +353,11 @@ never read this quest's entry - it has no supply row).
 ================
 */
 func (rt *Runtime) rahid6SummonedToday(c *enterworld.Character, def *Definition) bool {
-	state, exists := c.QuestSupplies[def.RefID]
-	return exists && state.Day == rt.CalendarNow().Day
+	today := rt.CalendarNow().Day
+	if state, exists := c.QuestSupplies[def.RefID]; exists && state.Day == today {
+		return true
+	}
+	return rt.rahid6.summonedOn(c.Name, today)
 }
 
 /*
@@ -398,13 +414,20 @@ func (rt *Runtime) advanceRahid6Travel(c *enterworld.Character, npc string) (OpR
 	}
 	rt.rahid6.rememberLease(outcome.Lease, c.Name)
 	day := rt.CalendarNow().Day
-	rt.deps.Update(c, "rahid6-summon", func() bool {
+	if rt.deps.Update(c, "rahid6-summon", func() bool {
 		if c == nil || c.DeletePending {
 			return false
 		}
 		setCaptureSupply(c, def.RefID, day, false)
 		return true
-	})
+	}) {
+		return OpResult{}, nil
+	}
+	// The character door refused the stamp - the leader stopped being
+	// authoritative between the invitation and the write. The meeting
+	// stands, so keep the day in the programme's own record: the
+	// once-a-day gate still answers once the meeting ends.
+	rt.rahid6.rememberSummonedDay(c.Name, day)
 	return OpResult{}, nil
 }
 
@@ -458,6 +481,38 @@ func (p *rahid6Programme) summonedBy(name string) bool {
 	defer p.mu.Unlock()
 	_, open := p.summoner[name]
 	return open
+}
+
+/*
+================
+rememberSummonedDay
+
+The once-a-day gate's process-local fallback, written when the
+persisted stamp's character door refuses the write. Forgotten on
+restart with the leases; the persisted stamp covers relogs.
+================
+*/
+func (p *rahid6Programme) rememberSummonedDay(name string, day uint16) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.summonedDay == nil {
+		p.summonedDay = make(map[string]uint16)
+	}
+	p.summonedDay[name] = day
+}
+
+/*
+================
+summonedOn
+
+Whether the process-local record holds this leader's summon day.
+================
+*/
+func (p *rahid6Programme) summonedOn(name string, day uint16) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	held, recorded := p.summonedDay[name]
+	return recorded && held == day
 }
 
 /*

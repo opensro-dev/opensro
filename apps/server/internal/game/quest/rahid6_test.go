@@ -42,6 +42,7 @@ const rahid6TestDivision = "rahid6-test"
 type rahid6World struct {
 	rt       *Runtime
 	def      *Definition
+	deps     *enterworld.Deps
 	day      *uint16
 	nowMs    *int64
 	lease    instance.Lease
@@ -77,7 +78,7 @@ func newRahid6World(t *testing.T) *rahid6World {
 		t.Fatal(err)
 	}
 	rt.PlanInventory = action.NewRuntime(deps, nil).PlanQuestInventory
-	w := &rahid6World{rt: rt, division: division, pushed: make(map[string][]wire.Frame)}
+	w := &rahid6World{rt: rt, deps: deps, division: division, pushed: make(map[string][]wire.Frame)}
 	w.day = new(uint16)
 	w.nowMs = new(int64)
 	*w.nowMs = 1_000_000
@@ -319,6 +320,50 @@ func TestRahid6TravelGatesInNativeOrder(t *testing.T) {
 
 /*
 ================
+TestRahid6SummonStampsTheDayWhenTheDoorRefuses
+
+The daily stamp rides one character write; if that door refuses (the
+leader stopped being authoritative mid-invitation), the day is held
+in the programme's own record instead, and the once-a-day gate still
+answers after the meeting ends.
+================
+*/
+func TestRahid6SummonStampsTheDayWhenTheDoorRefuses(t *testing.T) {
+	licensed.RequireGameData(t)
+	w := newRahid6World(t)
+	leader := rahid6Accept(t, w, "RahidLeader")
+	member := rahid6Accept(t, w, "RahidMember")
+	w.deps.UpdateCharacter = func(_ *enterworld.Character, label string, update func() bool) bool {
+		if label == "rahid6-summon" {
+			return false
+		}
+		return update()
+	}
+	w.facts = InstancePartyFacts{Found: true, InParty: true, Leader: true, Shared: true}
+	code := rahid6TravelPrefix + rahid6QuestCodename
+	if _, err := w.rt.AdvanceNpcQuest(leader, code, rahid6ShiphrCodename); err != nil {
+		t.Fatal(err)
+	}
+	if _, stamped := leader.QuestSupplies[w.def.RefID]; stamped {
+		t.Fatal("the refused stamp still landed in the persisted supplies")
+	}
+	w.openLayer(leader, member)
+	for _, name := range []string{"RahidLeader", "RahidMember"} {
+		w.rt.DispatchInstanceEvent(InstanceEvent{Kind: InstanceEventLeave, Division: rahid6TestDivision, Definition: rahid6Definition, World: w.lease.ID, Name: name})
+	}
+	if len(w.closed) != 1 {
+		t.Fatalf("closed %v, want the meeting's layer", w.closed)
+	}
+	if _, err := w.rt.AdvanceNpcQuest(leader, code, rahid6ShiphrCodename); refusalSymbol(err) != rahid6SymSummonedToday {
+		t.Fatalf("same-day err %v, want %s", err, rahid6SymSummonedToday)
+	}
+	if len(w.invites) != 1 {
+		t.Fatalf("invites %d, want 1", len(w.invites))
+	}
+}
+
+/*
+================
 TestRahid6TravelRegrantsALostBundle
 
 A leader who lost the bundle is handed another before departing; a
@@ -423,6 +468,47 @@ func TestRahid6Timeline(t *testing.T) {
 	}
 	if w.rt.rahid6.summonedBy("RahidLeader") {
 		t.Fatal("the ended meeting still answers the busy gate")
+	}
+}
+
+/*
+================
+TestRahid6TimelineEndsInsideItsOwnDeadline
+
+The timeline composed with the deadline the invitation stamps: the
+farewell lands and the programme closes the layer itself before the
+lane's hard end can evacuate anyone. (The clock and the deadline were
+once composed blind: the farewell sat past the hard end and the lane
+evacuated the party without it.)
+================
+*/
+func TestRahid6TimelineEndsInsideItsOwnDeadline(t *testing.T) {
+	licensed.RequireGameData(t)
+	w := newRahid6World(t)
+	leader := rahid6Accept(t, w, "RahidLeader")
+	member := rahid6Accept(t, w, "RahidMember")
+	w.facts = InstancePartyFacts{Found: true, InParty: true, Leader: true, Shared: true}
+	code := rahid6TravelPrefix + rahid6QuestCodename
+	if _, err := w.rt.AdvanceNpcQuest(leader, code, rahid6ShiphrCodename); err != nil {
+		t.Fatal(err)
+	}
+	if len(w.invites) != 1 {
+		t.Fatalf("invites %v", w.invites)
+	}
+	deadline := w.invites[0].DeadlineMs
+	w.openLayer(leader, member)
+	for *w.nowMs < deadline && len(w.closed) == 0 {
+		*w.nowMs += rahid6ConvoStepMs
+		w.update()
+	}
+	if !hasNotice(w.pushed["RahidLeader"], rahid6SymFarewell) {
+		t.Fatal("the farewell never arrived before the layer deadline")
+	}
+	if len(w.closed) != 1 || w.closed[0] != w.lease {
+		t.Fatalf("closed %v, want the programme to end its own layer before the deadline", w.closed)
+	}
+	if *w.nowMs >= deadline {
+		t.Fatalf("the layer ended at %d, deadline %d", *w.nowMs, deadline)
 	}
 }
 
