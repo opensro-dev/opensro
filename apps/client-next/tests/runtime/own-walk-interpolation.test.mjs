@@ -483,3 +483,47 @@ test("turning the row off mid-walk hands the drawn pose over instead of snapping
 		`jumped ${(next.x - handed.x).toFixed( 2 )} after the handoff`
 	);
 });
+
+test("a second pose() in the frame the prediction ends hands rider and mount back only once (#1566)", () => {
+	const MOUNT = 9;
+	/*
+	================
+	handback
+
+	Rider and mount across the end of a prediction, asking each pose once
+	or twice in the ended frame.
+	================
+	*/
+	const handback = twice => {
+		const presentation = createPosePresentation();
+		presentation.origin( 0 );
+		presentation.interpolateOwnWalk( true );
+		const leg = { from: P0, to: { ...P0, x: P0.x + 1000 } };
+		const both = ( ms, repeat = false ) => {
+			const tick = Math.floor( (ms - 20) / STEP_MS ) * STEP_MS;
+			const input = { ownLeg: true, atMs: tick, revision: 1, moving: true, ...leg, durationMs: 10_000 };
+			presentation.samples( new Map( [ [ GID, input ], [ MOUNT, input ] ] ) );
+			const target = legAt( leg, 0, tick );
+			const poses = [
+				presentation.pose( GID, target, ms / 1000 ),
+				presentation.pose( MOUNT, target, ms / 1000 )
+			];
+			if ( repeat ) {
+				presentation.pose( GID, target, ms / 1000 );
+				presentation.pose( MOUNT, target, ms / 1000 );
+			}
+			return poses.map( pose => [ pose.x, pose.z ] );
+		};
+		let ms = 36;
+		for ( ; ms < 400; ms += 16 ) both( ms );
+		const mover = { ...defined( presentation.drawn( GID ) ), z: P0.z + 30 };
+		presentation.ownMover( GID, { kind: "walking", pose: mover }, MOUNT );
+		both( ms += 16 );
+		presentation.ownMover( GID, { kind: "ended", pose: mover }, MOUNT );
+		const frames = [ both( ms += 16, twice ) ];
+		presentation.ownMover( GID, { kind: "idle" } );
+		for ( let i = 0; i < 5; i++ ) frames.push( both( ms += 16 ) );
+		return frames;
+	};
+	assert.deepEqual( handback( true ), handback( false ) );
+});

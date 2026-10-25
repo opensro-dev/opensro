@@ -25,7 +25,9 @@ const POSE = { regionId: 0x6b4f, x: 60, y: 10, z: 100, angle: 0 };
 const PREDICTED_MOVE = 9;
 const STANDING = { ...POSE, gid: 7, heading: 0, appearanceState: [ 1, 0, 0 ] };
 // The riding mount's COS reference and gid (a band 1 vehicle).
-const MOUNT = { gid: 9, refObjId: 90, tidWord: 0x09c6 };
+const MOUNT = { gid: 9, refObjId: 90, tidWord: 0x09c6, band: 1 };
+// A ridden transport (band 2), whose record carries a dead flag.
+const TRANSPORT = { gid: 11, refObjId: 91, tidWord: 0x11c6, band: 2 };
 const STATES = {
 	standing: { local: STANDING },
 	seated: { local: { ...STANDING, movementMode: 4 } },
@@ -33,7 +35,9 @@ const STATES = {
 	// Riding a mount the worker holds no live COS record for: no authority.
 	mounted: { local: { ...STANDING, mountedOn: MOUNT.gid } },
 	// Riding the live active mount: the click walks the mount (#1566).
-	riding: { local: { ...STANDING, mountedOn: MOUNT.gid }, cos: MOUNT }
+	riding: { local: { ...STANDING, mountedOn: MOUNT.gid }, cos: MOUNT },
+	// Riding a transport whose record says it is dead: no authority.
+	"dead transport": { local: { ...STANDING, mountedOn: TRANSPORT.gid }, cos: { ...TRANSPORT, dead: true } }
 };
 
 /*
@@ -45,21 +49,27 @@ and whether a click then sent a walk request.
 ================
 */
 /**
- * @param {{ local: any, cos?: { gid: number, refObjId: number } }} state
+ * @param {{ local: any, cos?: { gid: number, refObjId: number, band: number, dead?: boolean } }} state
  */
 function started( { local, cos } ) {
 	const sent = [], game = createGameplay( f => sent.push( f ) );
 	game.bootstrap( {
 		simulationProtocolVersion: 1,
-		refObjSnapshot: [ { kind: "cos", refObjId: MOUNT.refObjId, tidWord: MOUNT.tidWord } ]
+		refObjSnapshot: [ MOUNT, TRANSPORT ].map( cos => ({
+			kind: "cos",
+			refObjId: cos.refObjId,
+			tidWord: cos.tidWord
+		}) )
 	} );
 	game.seed( local );
 	if ( cos ) {
-		// 0x3158 for a band 1 mount (830EC0): gid, ref, hp.
-		const record = new Uint8Array( 17 ), view = new DataView( record.buffer );
+		// 0x3158 (830EC0): gid, ref, hp, mp, status; a transport (band 2)
+		// then carries its dead flag (cos-record.ts).
+		const record = new Uint8Array( cos.band === 2 ? 21 : 17 ), view = new DataView( record.buffer );
 		view.setUint32( 0, cos.gid, true );
 		view.setUint32( 4, cos.refObjId, true );
 		view.setUint32( 8, 100, true );
+		if ( cos.band === 2 ) view.setUint32( 17, cos.dead ? 1 : 0, true );
 		game.receive( { opcode: 0x3158, payload: record }, 0 );
 	}
 	game.step( 50, local );
