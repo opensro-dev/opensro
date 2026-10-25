@@ -90,6 +90,15 @@ test("a far NPC, gate or stall is approached to its native reach point", () => {
 		z: 100,
 		angle: 0
 	} );
+	// movement.request truncates the walk's end: the named goal is the
+	// worker's integer destination, not the fractional point on the line.
+	assert.deepEqual( approachGoal( POSE, { ...standing( "npc", 360, 100 ), x: 360.7 } ), {
+		regionId: REGION,
+		x: 120,
+		y: 10,
+		z: 100,
+		angle: 0
+	} );
 	assert.equal( approachGoal( POSE, standing( "npc", 300, 100 ) ), null, "exactly 240 is already in reach" );
 	assert.equal( approachGoal( POSE, standing( "npc", 299, 100 ) ), null );
 	// The reach is 3D: 144 across and 192 up is exactly 240.
@@ -136,12 +145,12 @@ test("a far ground item is walked onto; one in execute range is not", () => {
 test("the worker's select walks where approachGoal says, and only then", () => {
 	const far = started();
 	far.game.command( { kind: "navigation", regionId: REGION, bundle: product( REGION ) }, 0, undefined, STANDING );
-	far.game.command( { kind: "select", gid: 460 }, 100, standing( "npc", 360, 100 ), STANDING );
+	far.game.command( { kind: "select", gid: 460 }, 100, { ...standing( "npc", 360, 100 ), x: 360.7 }, STANDING );
 	far.game.step( 116, STANDING );
 	assert.equal( far.sent.some( f => f.opcode === PREDICTED_MOVE ), true, "the select started a walk" );
 	assert.deepEqual(
-		goal4( far.game.take()?.movementGoal ),
-		goal4( approachGoal( POSE, standing( "npc", 360, 100 ) ) )
+		goal4( far.game.take()?.movementAim?.destination ),
+		goal4( approachGoal( POSE, { ...standing( "npc", 360, 100 ), x: 360.7 } ) )
 	);
 	far.game.dispose();
 
@@ -150,7 +159,7 @@ test("the worker's select walks where approachGoal says, and only then", () => {
 	near.game.command( { kind: "select", gid: 399 }, 100, standing( "npc", 299, 100 ), STANDING );
 	near.game.step( 116, STANDING );
 	assert.equal( near.sent.some( f => f.opcode === PREDICTED_MOVE ), false, "an in-reach select walks nowhere" );
-	assert.equal( near.game.take()?.movementGoal, undefined );
+	assert.equal( near.game.take()?.movementAim, undefined );
 	near.game.dispose();
 });
 
@@ -161,7 +170,7 @@ test("the worker's pickup run-up walks where approachGoal says, and only then", 
 	far.game.step( 116, STANDING );
 	assert.equal( far.sent.some( f => f.opcode === 0x72cd ), true, "the pickup went on the wire" );
 	assert.deepEqual(
-		goal4( far.game.take()?.movementGoal ),
+		goal4( far.game.take()?.movementAim?.destination ),
 		goal4( approachGoal( POSE, { ...standing( "ground-item", 90, 90 ), y: 12 } ) )
 	);
 	far.game.dispose();
@@ -171,6 +180,6 @@ test("the worker's pickup run-up walks where approachGoal says, and only then", 
 	near.game.command( { kind: "pickup", gid: 168 }, 100, standing( "ground-item", 68, 100 ), STANDING );
 	near.game.step( 116, STANDING );
 	assert.equal( near.sent.some( f => f.opcode === 0x72cd ), true );
-	assert.equal( near.game.take()?.movementGoal, undefined, "an in-range pickup walks nowhere" );
+	assert.equal( near.game.take()?.movementAim, undefined, "an in-range pickup walks nowhere" );
 	near.game.dispose();
 });

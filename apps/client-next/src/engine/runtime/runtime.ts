@@ -43,6 +43,9 @@ import { createRenderer } from "./renderer/renderer";
 import { createViewer } from "./viewer/viewer";
 import { createSimulationHost } from "./simulation/host";
 import { createLocalMover, type LocalMoverWorld } from "./movement/local-mover";
+import { approachGoal } from "@/engine/foundation/gameplay/approach-goal";
+import type { Pose } from "@/engine/contracts/gameplay";
+import type { EntityState } from "@/engine/contracts/world";
 import type { RuntimeControl } from "@/engine/contracts/runtime";
 import { worldAudioPosition } from "@/engine/foundation/world/world-space";
 
@@ -438,7 +441,14 @@ export function startRuntime(
 				// Native 67AA60 reactivates the shared decal even for the same GID.
 				// The targeting owner deduplicates the wire request, not the click.
 				if ( entity.kind !== "ground-item" && !game.targetPending ) {
-					simulation.session( { kind: "gameplay", command: { kind: "select", gid: entity.gid } } );
+					const seq = simulation.session( {
+						kind: "gameplay",
+						command: { kind: "select", gid: entity.gid }
+					} );
+					const drawn = mainThreadOwnWalk && seq !== undefined ?
+						characters.drawnPose( game.localGid ) :
+						undefined;
+					if ( seq !== undefined && drawn ) predictApproachWalk( seq, entity, drawn, now );
 				}
 				// 67CCA0 -> 6935F0: a double click on another player's pet may
 				// attack it; the worker applies the pet's admission (player-attack.ts).
@@ -456,7 +466,14 @@ export function startRuntime(
 						} );
 					}
 				} else if ( entity.kind === "ground-item" ) {
-					simulation.session( { kind: "gameplay", command: { kind: "pickup", gid: entity.gid } } );
+					const seq = simulation.session( {
+						kind: "gameplay",
+						command: { kind: "pickup", gid: entity.gid }
+					} );
+					const drawn = mainThreadOwnWalk && seq !== undefined ?
+						characters.drawnPose( game.localGid ) :
+						undefined;
+					if ( seq !== undefined && drawn ) predictApproachWalk( seq, entity, drawn, now );
 				}
 				return;
 			}
@@ -507,6 +524,31 @@ export function startRuntime(
 				originMs: simulationOriginMs,
 				view: navigation.view()
 			};
+		}
+		/*
+		================
+		predictApproachWalk
+
+		An entity click the worker answers with a walk first (#1567): a far
+		select approaches its NPC, gate or stall keeper, a far pickup walks
+		onto the item. Predict that leg from this frame, the way a ground
+		click predicts (localMover.click): approachGoal names the worker's
+		own destination from its latest pose, and the gate is the ground
+		click's (walkPredictable), so a state the worker would not walk in
+		at once - mounted, seated, mid-cast - predicts nothing and keeps
+		the presenter, as before. Arrival hands back through the mover's
+		own settle: the worker's interaction owns what happens there.
+		================
+		*/
+		function predictApproachWalk( seq: number, entity: EntityState, drawn: Pose, now: number ): void {
+			const world = moverWorld();
+			if ( !world.walkPredictable || !world.pose || !world.speed ) return;
+			const destination = approachGoal( world.pose, entity );
+			if ( !destination ) return;
+			localMover.predict(
+				{ seq, aim: { kind: "goal", destination }, speed: world.speed, drawn, now },
+				world
+			);
 		}
 		const characters = own(
 			createCharacterPresentation(
