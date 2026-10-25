@@ -63,6 +63,7 @@ rate.
 ================
 */
 func TestDefaultGrowthBandsKeepASmoothCurve(t *testing.T) {
+	licensed.RequireGameData(t)
 	levels := enterworld.NewTextdataLevels(licensed.RetailTextdataDir(t))
 	bands, err := ParseGrowthBands(shardsettings.Lookup(EnvBetaGrowthBands).Default)
 	if err != nil {
