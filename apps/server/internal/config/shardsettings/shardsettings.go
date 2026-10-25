@@ -95,12 +95,15 @@ var Settings = []Setting{
 	// lists describe the native rule.
 	{Env: "SRO_PHARAOH_TOMB_GEAR_RATE", NomadVar: "pharaoh_tomb_gear_rate", Default: "1"},
 	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "50", Validation: ValueBetaSilk},
+	{Env: "SRO_BETA_SILK_ACTIVE_ONLY", NomadVar: "beta_silk_active_only", Default: "off", Validation: ValueSwitch},
 	// Grab and growth pets at four fifths of their run speed (#320): never
 	// deployed, so the deployment default stays native.
 	{Env: "SRO_PET_PACING", NomadVar: "pet_pacing", Default: "off"},
 	{Env: "SRO_STORAGE_AUTO_STACK", NomadVar: "storage_auto_stack", Default: "on"},
 	// Owner, 2026-10-14: the Bandit Den scroll counts down half as long.
 	{Env: "SRO_FAST_DEN_RETURN", NomadVar: "fast_den_return", Default: "on"},
+	// Port-only, off by default: a unique's attackers see its damage ranking.
+	{Env: "SRO_UNIQUE_DAMAGE_RANK", NomadVar: "unique_damage_rank", Default: "off"},
 	// Owner, 2026-10-15: a login inside a closed object (a tree trunk) is
 	// rescued to the nearest open ground.
 	{Env: "SRO_CLOSED_OBJECT_RESCUE", NomadVar: "closed_object_rescue", Default: "on"},
@@ -120,6 +123,9 @@ var Settings = []Setting{
 	{Env: "SRO_MOST_WANTED_STREAK_NOTICE", NomadVar: "most_wanted_streak_notice", Default: "off"},
 	// Owner, 2026-10-14: trade stars by cargo gold, Jangan route profit.
 	{Env: "SRO_TRADE_TIERS", NomadVar: "trade_tiers", Default: "on", Catalogue: true},
+	// Owner, 2026-10-25: the revival's grace after a teleport arrival
+	// (port-only, not native; off is native, #1518).
+	{Env: "SRO_TELEPORT_GRACE", NomadVar: "teleport_grace", Default: "off", Catalogue: true},
 	// F10 trade group (game/tunables): the Jangan route profit percents. The
 	// site's trade quotes read them, so the catalogue does too.
 	{Env: "SRO_TRADE_ROUTE_DONWHANG_PERCENT", NomadVar: "trade_route_donwhang_percent", Default: "50", Catalogue: true},
@@ -255,6 +261,12 @@ var Settings = []Setting{
 	// alexandria). "off" is native and hides them from a variant's data;
 	// the catalogue's NPC list follows it.
 	{Env: "SRO_ALEXANDRIA", NomadVar: "alexandria", Default: "off", Catalogue: true},
+	// Port-only, not native: WebTransport as a public endpoint (epic
+	// #1451). "off" keeps the loopback/development transport; "on" lets
+	// the GameWorld serve WT publicly under its explicit TLS pair and
+	// origin list. Server only: clients learn endpoints from the shard
+	// catalogue, never from this switch.
+	{Env: "SRO_WEBTRANSPORT_PUBLIC", NomadVar: "webtransport_public", Default: "off"},
 }
 
 // NotSettings are the job's other SRO_ variables: what a deployment

@@ -59,20 +59,145 @@ delayedPipe
 
 Copies from into to, each chunk released delayMs (plus up to jitterMs)
 after it arrived and never before the chunk ahead of it, so the stream
-keeps its order.
+keeps its order. The source's end, close or error is passed on only once
+every chunk it sent has been released: a server that answers and closes
+at once must not lose the answer still held for the delay (a browser's
+keep-alive request then saw "socket hang up").
 ================
 */
 function delayedPipe( from, to, delayMs, jitterMs ) {
-	let releaseAt = 0;
+	let releaseAt = 0, pending = 0, closing = false;
+	const finish = () => {
+		if ( closing && pending === 0 && !to.destroyed ) to.end();
+	};
 	from.on( "data", chunk => {
 		const now = Date.now();
 		releaseAt = Math.max( releaseAt, now + delayMs + Math.random() * jitterMs );
+		pending++;
 		setTimeout( () => {
+			pending--;
 			if ( !to.destroyed ) to.write( chunk );
+			finish();
 		}, releaseAt - now );
 	} );
-	from.on( "end", () => setTimeout( () => to.end(), Math.max( 0, releaseAt - Date.now() ) ) );
-	from.on( "error", () => to.destroy() );
+	const close = () => {
+		closing = true;
+		finish();
+	};
+	from.on( "end", close );
+	from.on( "close", close );
+	from.on( "error", close );
+}
+
+/*
+================
+mirrorConnection
+
+One downstream to one upstream, dialled on connect: the shard
+transports' mode. The two delayedPipes make the pair one connection for
+close purposes as well as for bytes - an upstream close (a GameWorld
+bye, kick or restart) reaches the browser once the held bytes are out,
+and a browser close ends the upstream. A pooled next request can never
+dial a fresh upstream and write mid-stream frames into it. A downstream
+that closes outright (its reader is gone) destroys the upstream at
+once; an upstream error surfaces as its close, which the pipe passes
+on the same way.
+================
+*/
+function mirrorConnection( client, url, delayMs, jitterMs ) {
+	const upstream = net.connect( Number( url.port ), url.hostname );
+	upstream.setNoDelay( true );
+	delayedPipe( client, upstream, delayMs, jitterMs );
+	delayedPipe( upstream, client, delayMs, jitterMs );
+	client.on( "error", () => {} );
+	upstream.on( "error", () => {} );
+	client.on( "close", () => upstream.destroy() );
+}
+
+/*
+================
+redialConnection
+
+One downstream and the upstream connections it maps to: the Agent's
+mode ({ redial: true }). Chunks cross in arrival order, each held
+delayMs (plus up to jitterMs).
+
+The Agent closes its side after a response (its protocol gate answers
+Connection: close) while the client of this edge - vite's proxy hop -
+pools its connections and writes the next request the moment an answer
+completes. The two closings therefore cannot be tied together: an
+upstream end only retires that upstream, and the next request byte
+dials a fresh one. Ending the downstream socket with the answer ate
+exactly those pooled requests - vite read a socket hang up and
+answered 502, one request in four at 300 ms - and a graceful end
+scheduled "after the drain" loses the same race, because the drain
+finishing is what releases the client's next request. The downstream
+socket ends only when its own client does: a client that half-closes
+after its request gets its end once the in-flight answer has drained.
+
+Never use this for a shard transport: a server-side close mid-stream
+would be hidden and the next frame would dial a fresh connection and
+write into it as if it were the same one (mirrorConnection's mode).
+================
+*/
+function redialConnection( client, url, delayMs, jitterMs ) {
+	let upstream = null,
+		upstreamLive = false,
+		requestReleaseAt = 0,
+		answerReleaseAt = 0;
+
+	/*
+	================
+	connectUpstream
+
+	Dial the upstream and wire its answers into the delay line back to
+	the client. A dead upstream refuses the client at once rather than
+	hanging it.
+	================
+	*/
+	const connectUpstream = () => {
+		upstream = net.connect( Number( url.port ), url.hostname );
+		upstreamLive = true;
+		upstream.setNoDelay( true );
+		upstream.on( "data", chunk => {
+			const now = Date.now();
+			answerReleaseAt = Math.max( answerReleaseAt, now + delayMs + Math.random() * jitterMs );
+			setTimeout( () => {
+				if ( !client.destroyed ) client.write( chunk );
+			}, answerReleaseAt - now );
+		} );
+		upstream.on( "end", () => {
+			upstreamLive = false;
+		} );
+		upstream.on( "error", () => {
+			upstreamLive = false;
+			client.destroy();
+		} );
+		upstream.on( "close", () => {
+			upstreamLive = false;
+		} );
+	};
+
+	client.on( "data", chunk => {
+		const now = Date.now();
+		requestReleaseAt = Math.max( requestReleaseAt, now + delayMs + Math.random() * jitterMs );
+		setTimeout( () => {
+			if ( client.destroyed ) return;
+			if ( !upstreamLive ) connectUpstream();
+			upstream.write( chunk );
+		}, requestReleaseAt - now );
+	} );
+	// The client half-closed after its request: it still reads, so end
+	// this side once the in-flight answer has crossed the delay line.
+	client.on( "end", () => {
+		setTimeout( () => client.end(), Math.max( 0, answerReleaseAt - Date.now() ) );
+	} );
+	client.on( "error", () => {
+		if ( upstream ) upstream.destroy();
+	} );
+	client.on( "close", () => {
+		if ( upstream ) upstream.destroy();
+	} );
 }
 
 /*
@@ -80,20 +205,22 @@ function delayedPipe( from, to, delayMs, jitterMs ) {
 delayProxy
 
 A loopback TCP proxy on listenPort to target that adds delayMs each way.
-Resolves once it listens.
+Resolves once it listens. Two modes, because the two upstreams close
+their connections for different meanings: the default mirrors closes
+for the shard transports, and { redial: true } re-dials per request
+for the Agent (see mirrorConnection and redialConnection). Half-open
+sockets: a client that closes its write side after a request must not
+end the socket before the delayed bytes are written back; the pipes
+own every ending instead.
 ================
 */
-function delayProxy( listenPort, target, delayMs, jitterMs ) {
+export function delayProxy( listenPort, target, delayMs, jitterMs, mode = {} ) {
 	const url = new URL( target );
 	return new Promise( ( resolve, reject ) => {
-		const server = net.createServer( client => {
-			const upstream = net.connect( Number( url.port ), url.hostname );
+		const server = net.createServer( { allowHalfOpen: true }, client => {
 			client.setNoDelay( true );
-			upstream.setNoDelay( true );
-			delayedPipe( client, upstream, delayMs, jitterMs );
-			delayedPipe( upstream, client, delayMs, jitterMs );
-			upstream.on( "close", () => client.destroy() );
-			client.on( "close", () => upstream.destroy() );
+			if ( mode.redial === true ) redialConnection( client, url, delayMs, jitterMs );
+			else mirrorConnection( client, url, delayMs, jitterMs );
 		} );
 		server.on( "error", reject );
 		server.listen( listenPort, "127.0.0.1", () => resolve( server ) );
@@ -116,7 +243,8 @@ async function main() {
 	// (different --port) never collide.
 	let next = PROXY_PORT_BASE + (port % 100) * 10;
 	const agentPort = next++;
-	await delayProxy( agentPort, agentTarget, delayMs, jitterMs );
+	// The Agent answers Connection: close; its proxy re-dials per request.
+	await delayProxy( agentPort, agentTarget, delayMs, jitterMs, { redial: true } );
 	for ( const shard of catalog.shards ) {
 		if ( !shard.publicTransportUrl?.startsWith( "/" ) ) continue;
 		const shardPort = next++;
@@ -155,7 +283,10 @@ async function main() {
 	vite.on( "exit", code => process.exit( code ?? 0 ) );
 }
 
-main().catch( error => {
-	console.error( error );
-	process.exit( 1 );
-} );
+// Imported by its test for delayProxy alone; run, it starts the server.
+if ( process.argv[1] && path.resolve( process.argv[1] ) === fileURLToPath( import.meta.url ) ) {
+	main().catch( error => {
+		console.error( error );
+		process.exit( 1 );
+	} );
+}

@@ -94,6 +94,7 @@ func (rt *Runtime) relocateCharacter(division string, c *enterworld.Character, l
 		rollback()
 		return false
 	}
+	rt.noteTeleportArrival(division, c)
 	rt.bindResidentRegion(key, rt.Now().UnixMilli())
 	rt.retireReturnForReentry(division, c)
 	corpses, _ := rt.retireCompanionCorpses(division, c)

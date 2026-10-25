@@ -354,6 +354,8 @@ import { STALL_CHAT_CHANNEL, STALL_SLOTS, type StallListing } from "@/engine/fou
 import { textAllowed } from "@/engine/foundation/ui/character-create";
 import { createGrantPowerHud, GRANT_RIGHTS } from "./hud/grant-power-hud";
 import { compositeItemCaption, compositeItemLayout, createCompositeItemHud } from "./hud/composite-item-hud";
+import { createUniqueRankHud } from "./hud/unique-rank-hud";
+import { uniqueRankLines } from "@/engine/foundation/gameplay/unique-rank";
 import {
 	allianceButtons,
 	allianceGuildCountText,
@@ -715,6 +717,7 @@ import {
 	DEBUG_COMMAND_DEBUG,
 	DEBUG_COMMAND_FREE_CAMERA,
 	DEBUG_COMMAND_GET_POSITION,
+	DEBUG_COMMAND_HIDE_ME,
 	DEBUG_COMMAND_ITEM,
 	DEBUG_COMMAND_MESSAGE_CLEAR,
 	DEBUG_COMMAND_NIGHT,
@@ -723,12 +726,15 @@ import {
 	DEBUG_COMMAND_POSITION,
 	DEBUG_COMMAND_POWER,
 	DEBUG_COMMAND_RAIN,
+	DEBUG_COMMAND_SHOW_ME,
 	DEBUG_COMMAND_SNOW,
 	DEBUG_COMMAND_TIME_MINUS,
 	DEBUG_COMMAND_TIME_OFF,
 	DEBUG_COMMAND_TIME_ON,
 	DEBUG_COMMAND_TIME_PLUS,
 	DEBUG_COMMAND_TIME_SET,
+	DEBUG_COMMAND_UI_OFF,
+	DEBUG_COMMAND_UI_ON,
 	DEBUG_COMMAND_ZOOM,
 	DEBUG_COMMAND_SET_FIELD_OF_VIEW,
 	debugCommand,
@@ -999,6 +1005,12 @@ export function createUi(
 	let debugZoomRail = true;
 	let debugFreeCamera = false;
 	let debugCursorVisible = true;
+	// The mission window's visible flag (CIFWnd +0x6D, written through
+	// CIFWnd_SetVisibleFlag 9FCD70 by 690C40 cases 115/116): while it is
+	// down the frame carries only the console's own quads and controls -
+	// the console belongs to the interface, not the hidden window tree,
+	// exactly as the native stays able to read /uion.
+	let debugUiVisible = true;
 	let video = defaultVideoOptions(), videoDraft = video, videoScroll = 0, videoCombo = VIDEO_COMBO_CLOSED;
 	let bindings = defaultInputOptions(), bindingDraft = bindings, bindingSelected = -1, bindingScroll = 0;
 	let sight: SightMode = 0, sightDraft: SightMode = 0;
@@ -1262,6 +1274,8 @@ export function createUi(
 	const stallHud = createStallHud();
 	const grantPowerHud = createGrantPowerHud();
 	const compositeItemHud = createCompositeItemHud();
+	// Port-only, not native: a unique kill's damage ranking (SRO_UNIQUE_DAMAGE_RANK).
+	const uniqueRankHud = createUniqueRankHud();
 	const guildManagerHud = createGuildManagerHud();
 	const guildNoticeHud = createGuildNoticeHud();
 	const magicOptionHud = createMagicOptionHud();
@@ -2647,8 +2661,10 @@ export function createUi(
 	slot (the sampler's state, not this window's); the time rows drive the
 	local debug clock the sampler reads through debugClockSeed. The camera
 	rows flip this window's debug bytes and hand each to its owner; the
-	camera-waypoint and render-toggle families are not ported yet and leave
-	the line as typed.
+	shown byte (112/113) rides the gameplay lane to the entity owner, and
+	the mission window's visible flag (115/116) is this window's own. The
+	camera-waypoint rows (130-134) and ids 111/117-119 are not ported yet
+	and leave the line as typed.
 	================
 	*/
 	function runDebugCommand( command: DebugCommand ) {
@@ -2750,6 +2766,17 @@ export function createUi(
 				debugZoomRail = !debugZoomRail;
 				extensions.setCameraZoomRail?.( debugZoomRail );
 				break;
+			case DEBUG_COMMAND_SHOW_ME:
+				// Case 0x12 writes the local player's shown byte
+				// (CICPlayer +0xB8) to 1. The native prints nothing.
+				sendGameplay( { kind: "debug-local-visible", visible: true } );
+				break;
+			case DEBUG_COMMAND_HIDE_ME:
+				// Case 0x13 writes the shown byte to 0: the local
+				// presentation (body and name board) is skipped. The
+				// native prints nothing.
+				sendGameplay( { kind: "debug-local-visible", visible: false } );
+				break;
 			case DEBUG_COMMAND_FREE_CAMERA:
 				// Case 0x14 flips +0x3CE and reports the new state: while it
 				// stands the camera keeps its last eye and target (68FAD0,
@@ -2757,6 +2784,18 @@ export function createUi(
 				debugFreeCamera = !debugFreeCamera;
 				extensions.setFreeCamera?.( debugFreeCamera );
 				appendConsoleLine( debugFreeCamera ? "Free Camera On" : "Free Camera Off" );
+				break;
+			case DEBUG_COMMAND_UI_OFF:
+				// Case 0x15 writes the mission window's visible flag
+				// (CIFWnd +0x6D) to 0 through 9FCD70: the HUD tree
+				// hides and the hovered window is released; the console
+				// stays, so /uion can be typed. The native prints nothing.
+				debugUiVisible = false;
+				break;
+			case DEBUG_COMMAND_UI_ON:
+				// Case 0x16 writes the flag back to 1. The native
+				// prints nothing.
+				debugUiVisible = true;
 				break;
 			case DEBUG_COMMAND_CURSOR:
 				// Case 0x1E: SetVisible(![cursor+0x20]) - the pointer shows
@@ -4646,6 +4685,9 @@ export function createUi(
 			}
 		} else if ( id === "composite-item-cancel" || id === "composite-item-close" ) {
 			compositeItemHud.close();
+			dirty = true;
+		} else if ( id === "unique-rank-ok" || id === "unique-rank-close" ) {
+			uniqueRankHud.close();
 			dirty = true;
 		} else if ( id === "chat-send" && !view.gameplay?.chat?.pending ) {
 			const draft = composeChat(
@@ -6919,6 +6961,11 @@ export function createUi(
 				dirty = true;
 				return;
 			}
+			if ( event.kind === "key" && event.code === "Escape" && uniqueRankHud.state() ) {
+				uniqueRankHud.close();
+				dirty = true;
+				return;
+			}
 			if ( questDetails && event.kind === "drag" && event.id === "quest-detail-drag" && view ) {
 				questPosition = [
 					Math.max( 0, Math.min( Math.max( 0, view.width - 376 ), questPosition[0] + event.dx ) ),
@@ -9128,6 +9175,10 @@ export function createUi(
 				compositePackage !== null &&
 				!(phase === "world" && next.gameplay?.countJobs?.some( r => r.packageRefObjId === compositePackage ))
 			) compositeItemHud.close();
+			if (
+				phase === "world" &&
+				uniqueRankHud.reconcile( next.gameplay, experimental.state().saved.uniqueDamageRank )
+			) dirty = true;
 			if ( phase !== "world" ) cosHud.reset();
 			else if (
 				cosHud.reconcile(
@@ -9178,6 +9229,7 @@ export function createUi(
 					// 6A01B0: logout writes them back before the session's windows go.
 					persistWindowPositions();
 					guildWarHud.reset( true );
+					uniqueRankHud.reset();
 					windowPlacement.reset();
 					itemMall.reset();
 					carriedShortcut = null;
@@ -15087,6 +15139,72 @@ export function createUi(
 					);
 					endWindow( admission, "composite-item" );
 				}
+				const uniqueRank = uniqueRankHud.state();
+				if ( uniqueRank && game ) {
+					// Port-only, not native (unique-rank-hud.ts): place, name, damage,
+					// share and party place, the viewer's row tinted, and the
+					// viewer's own row under a rule when it placed below the list.
+					const lines = uniqueRankLines(
+						uniqueRank,
+						game.social?.localName ?? next.session?.character ?? ""
+					);
+					const width = 424, rowPitch = 20, listTop = 64, ownGap = 10;
+					const listHeight = (lines.top.length + (lines.own ? 1 : 0)) * rowPitch + (lines.own ? ownGap : 0);
+					const height = listTop + listHeight + 56;
+					const admission = beginWindow();
+					const [px, py] = windowOrigin( "UniqueRank", [
+						(w - width) / 2,
+						Math.max( 0, (h - height) / 3 ),
+						width,
+						height
+					] );
+					windowBox( `${uniqueRank.uniqueName || "Unique"} defeated`, px, py, width, height );
+					closeButton( px + width - 26, py + 10, "unique-rank-close" );
+					// [left, width, hAlign] of the rank, name, damage, share and party columns.
+					const columns = [
+						[ 14, 36, 1 ],
+						[ 56, 160, 0 ],
+						[ 220, 90, 2 ],
+						[ 316, 52, 2 ],
+						[ 374, 36, 1 ]
+					] as const;
+					const headerColor = [ 180 / 255, 180 / 255, 180 / 255, 1 ] as const;
+					const cells = (
+						values: readonly string[],
+						top: number,
+						color: readonly [number, number, number, number]
+					) => {
+						values.forEach( ( value, i ) => {
+							const [left, cellWidth, hAlign] = columns[i]!,
+								cell: UiRect = [ px + left, top, cellWidth, rowPitch ];
+							quads.push(
+								...text.quads( value, cell, cell, color, { hAlign, vAlign: 1, overflow: "ellipsis" } )
+							);
+						} );
+					};
+					cells( [ "Rank", "Name", "Damage", "%", "Party" ], py + 40, headerColor );
+					rect( [ px + 10, py + listTop - 3, width - 20, 1 ], headerColor );
+					lines.top.forEach( ( line, i ) => {
+						const top = py + listTop + i * rowPitch;
+						if ( line.self ) {
+							rect( [ px + 10, top, width - 20, rowPitch ], [ gold[0], gold[1], gold[2], .16 ] );
+						}
+						cells(
+							[ line.rank, line.name, line.damage, line.share, line.party ],
+							top,
+							line.self ? gold : white
+						);
+					} );
+					if ( lines.own ) {
+						const top = py + listTop + lines.top.length * rowPitch + ownGap;
+						rect( [ px + 10, top - ownGap / 2, width - 20, 1 ], headerColor );
+						rect( [ px + 10, top, width - 20, rowPitch ], [ gold[0], gold[1], gold[2], .16 ] );
+						const own = lines.own;
+						cells( [ own.rank, own.name, own.damage, own.share, own.party ], top, gold );
+					}
+					button( "unique-rank-ok", hudCopy( "UIIT_CTL_CONFIRM" ), px + (width - 120) / 2, py + height - 40 );
+					endWindow( admission, "unique-rank" );
+				}
 				// The bag scroll's box (561D50 opens type 0x21 at 562251) and
 				// 6AD990's type 0x24 box are one box: 52F460 runs 53259C for both,
 				// the reverse return's two points and Cancel.
@@ -20357,6 +20475,7 @@ export function createUi(
 				if ( game && hud.data() ) {
 					for ( const entity of next.entities ) {
 						if (
+							entity.debugHidden ||
 							hiddenSilkCos( entity, options.hideSilkCos ) ||
 							next.blindHeld && (blindableCharacter( entity, game?.localGid ) ||
 									experimental.state().saved.vHidesCompanions &&
@@ -20548,7 +20667,7 @@ export function createUi(
 					const hovered = entity.gid === next.hoveredEntity, selected = entity.gid === game?.target;
 					// One decision for the name and every overhead icon: an icon never
 					// shows without its name (name-visibility.ts header).
-					const named = !hiddenSilkCos( entity, options.hideSilkCos ) &&
+					const named = !entity.debugHidden && !hiddenSilkCos( entity, options.hideSilkCos ) &&
 						overheadBoardVisible(
 							boardAt( entity ),
 							local,
@@ -25638,6 +25757,9 @@ export function createUi(
 				}
 			}
 			mapHud.details( { worldVisible, panel, pressed, hover, full, paths, quads, text, resources, rect } );
+			const preConsoleQuads = quads.length,
+				preConsoleControls = controls.length,
+				preConsoleBlocks = blocks.length;
 			if ( worldVisible && consolePhase !== 0 && game?.eligibility?.gm ) {
 				// The catalogue list grows the native 600x112 panel downward.
 				// It is port-only, so it uses a solid panel behind its two
@@ -25773,6 +25895,14 @@ export function createUi(
 					rect: [ px, inputY, 600 - px, 16 ],
 					maxLength: 255
 				} );
+			}
+			if ( !debugUiVisible ) {
+				// /uioff (690C40 case 115): the frame keeps only what the
+				// console block above contributed; everything built
+				// before it is the hidden window tree's.
+				quads.splice( 0, preConsoleQuads );
+				controls.splice( 0, preConsoleControls );
+				blocks.splice( 0, preConsoleBlocks );
 			}
 			probe?.detailEnd( "ui-assembly" );
 			probe?.detailBegin( "ui-finalize" );

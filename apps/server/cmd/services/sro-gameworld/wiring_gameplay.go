@@ -19,7 +19,6 @@ import (
 
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/data/store"
-	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/caravan"
 	"opensro.online/server/internal/game/companion"
@@ -217,18 +216,9 @@ func newGameplayPlane(
 		return nil, fmt.Errorf("commerce catalogue: %w", err)
 	}
 	items.ConfigureStorage(authorityStore)
-	// SRO_BETA_SILK (port-only, not native): silk earned per in-world hour,
-	// credited into the account's real wallet (action/betasilk.go).
-	betaSilkRate, err := action.BetaSilkFromEnv()
+	betaSilk, mallAuthority, err := composeBetaSilk(authorityStore, items, deps)
 	if err != nil {
 		return nil, err
-	}
-	betaSilk := action.NewBetaSilk(authorityStore, betaSilkRate)
-	var mallAuthority domain.MallAuthority = authorityStore
-	if betaSilk != nil {
-		mallAuthority = betaSilk
-		deps.EntryBetaSilk = betaSilk.Starter
-		log.Infof("item mall: beta silk ON (%s): %d silk per in-world hour", action.EnvBetaSilk, betaSilkRate)
 	}
 	// SRO_MALL_EXTRA_GOODS (port-only, not native): authored packages the
 	// v1.150 mall does not list; "off" is the shipped mall (commerce/mallextra.go).
@@ -613,6 +603,12 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	}
 	// Port-only, not native: caravans rated by cargo gold, Jangan route profit.
 	game.deps.TradeTiers = game.items.TradeTiers
+	// SRO_TELEPORT_GRACE (port-only, not native): teleport arrivals get the
+	// revival's untouchable grace from game-ready.
+	game.items.TeleportGrace = action.TeleportGraceFromEnv()
+	if game.items.TeleportGrace {
+		log.Infof("action: teleport arrivals are untouchable for the revival's grace (%s, port-only, not native)", action.EnvTeleportGrace)
+	}
 	if game.items.TradeTiers {
 		log.Infof("trade: stars by cargo gold and Jangan route profit (%s)", action.EnvTradeTiers)
 	}
@@ -632,6 +628,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.deps.FastDenReturn = game.items.FastDenReturn
 	if game.items.FastDenReturn {
 		log.Infof("return: Bandit Den scroll countdown halved (%s)", action.EnvFastDenReturn)
+	}
+	// Port-only, not native: a unique's attackers see its damage ranking.
+	game.items.UniqueDamageRank = action.UniqueDamageRankFromEnv()
+	if game.items.UniqueDamageRank {
+		log.Infof("unique: damage ranking shown at each unique kill (%s)", action.EnvUniqueDamageRank)
 	}
 	// Port-only, not native: shard notices for seal drops, high plus and job
 	// kills (announce.go).
