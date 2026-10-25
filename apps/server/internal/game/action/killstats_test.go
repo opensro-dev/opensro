@@ -15,6 +15,7 @@ memory and a past day's cell is dropped at its last flush.
 package action
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -133,6 +134,119 @@ func TestKillStatsOffCountsNothing(t *testing.T) {
 	rt.advanceKillStats(killStatNow + killStatMsPerDay)
 	if len(rt.killStats.cells) != 0 {
 		t.Fatalf("flag off created cells: %+v", rt.killStats.cells)
+	}
+}
+
+/*
+================
+blockingKillStatSink
+
+A sink whose first write waits for release; every written row is
+recorded, so a test can total what reached the store.
+================
+*/
+type blockingKillStatSink struct {
+	mu      sync.Mutex
+	rows    []KillStatRow
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func newBlockingKillStatSink() *blockingKillStatSink {
+	return &blockingKillStatSink{entered: make(chan struct{}), release: make(chan struct{})}
+}
+
+func (s *blockingKillStatSink) write(rows []KillStatRow) error {
+	s.mu.Lock()
+	s.rows = append(s.rows, rows...)
+	s.mu.Unlock()
+	s.once.Do(func() {
+		close(s.entered)
+		<-s.release
+	})
+	return nil
+}
+
+func (s *blockingKillStatSink) kills() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var total int64
+	for _, row := range s.rows {
+		total += row.Kills
+	}
+	return total
+}
+
+/*
+================
+TestKillStatsConcurrentFlushesWriteEachDeltaOnce
+
+The cadence write is in flight (blocked in the sink) while a shutdown
+flush runs: the shutdown waits it out, then writes only what accrued
+meanwhile. Two counted kills reach the sink as two, never three.
+================
+*/
+func TestKillStatsConcurrentFlushesWriteEachDeltaOnce(t *testing.T) {
+	rt := &Runtime{KillStats: true}
+	rt.Now = func() time.Time { return time.UnixMilli(killStatNow) }
+	sink := newBlockingKillStatSink()
+	rt.KillStatsFlush = sink.write
+	killer := killStatCharacter(7, 85)
+	rt.countKillStatKill(killer, killStatNow)
+	rt.flushKillStatsAsync()
+	<-sink.entered
+	rt.countKillStatKill(killer, killStatNow)
+	flushed := make(chan error, 1)
+	go func() { flushed <- rt.FlushKillStats() }()
+	close(sink.release)
+	if err := <-flushed; err != nil {
+		t.Fatal(err)
+	}
+	if got := sink.kills(); got != 2 {
+		t.Fatalf("the sink received %d kills, want the counted 2 exactly once", got)
+	}
+	if err := rt.FlushKillStats(); err != nil {
+		t.Fatal(err)
+	}
+	if got := sink.kills(); got != 2 {
+		t.Fatalf("a later flush rewrote deltas: %d kills", got)
+	}
+}
+
+/*
+================
+TestKillStatsTickFlushNeverCallsTheSinkOnTheTick
+
+The cadence path hands the write to a goroutine: advanceKillStats
+returns while the sink is still blocked, and the write lands once
+afterwards.
+================
+*/
+func TestKillStatsTickFlushNeverCallsTheSinkOnTheTick(t *testing.T) {
+	rt := &Runtime{KillStats: true}
+	rt.Now = func() time.Time { return time.UnixMilli(killStatNow) }
+	sink := newBlockingKillStatSink()
+	rt.KillStatsFlush = sink.write
+	rt.advanceKillStats(killStatNow)
+	rt.countKillStatKill(killStatCharacter(7, 85), killStatNow)
+	returned := make(chan struct{})
+	go func() {
+		rt.advanceKillStats(killStatNow + killStatFlushEveryMs + 1000)
+		close(returned)
+	}()
+	select {
+	case <-returned:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the tick blocked on the sink")
+	}
+	<-sink.entered
+	close(sink.release)
+	if err := rt.FlushKillStats(); err != nil {
+		t.Fatal(err)
+	}
+	if got := sink.kills(); got != 1 {
+		t.Fatalf("the sink received %d kills, want the counted 1", got)
 	}
 }
 

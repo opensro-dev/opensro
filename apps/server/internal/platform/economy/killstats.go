@@ -103,7 +103,7 @@ func (s *Service) RecordKillStats(rows []KillStatRow) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	stmt, err := tx.Prepare(`INSERT INTO kill_stats (day_s, band, kills, exp, skill_exp, online_ms, chars)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (day_s, band) DO UPDATE SET

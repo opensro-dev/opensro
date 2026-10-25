@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/enterworld"
 )
 
@@ -119,8 +120,8 @@ type killStatCell struct {
 killStatTracker
 
 The rollup. Counting runs inside character doors on request and tick
-goroutines, so every entry takes mu; the accrual and flush run on the
-tick only.
+goroutines, so every entry takes mu; accrual runs on the tick, and the
+tick only drains the flush - its write runs on its own goroutine.
 ================
 */
 type killStatTracker struct {
@@ -128,6 +129,11 @@ type killStatTracker struct {
 	cells         map[killStatKey]*killStatCell
 	lastAccrualMs int64
 	lastFlushMs   int64
+	// flushing marks the one write in flight; flushDone closes when
+	// it settles. A delta lives in exactly one place at a time: the
+	// cells, or the in-flight rows, never both.
+	flushing  bool
+	flushDone chan struct{}
 }
 
 /*
@@ -247,47 +253,61 @@ func (rt *Runtime) advanceKillStats(nowMs int64) {
 	}
 	if nowMs-rt.killStats.lastFlushMs >= killStatFlushEveryMs {
 		rt.killStats.lastFlushMs = nowMs
-		if err := rt.FlushKillStats(); err != nil {
-			// The deltas survive (FlushKillStats only clears what the
-			// sink accepted), so the next cadence retries.
-		}
+		// Off the tick: the sink is a SQLite write that may wait out a
+		// snapshot's busy timeout, so the tick only hands the drained
+		// rows to a goroutine (flushKillStatsAsync).
+		rt.flushKillStatsAsync()
 	}
 }
 
 /*
 ================
-FlushKillStats
+drainKillStats
 
-Drains the rollup to the wiring's sink (KillStatsFlush); a no-op when
-unwired or empty. Only what the sink accepts is cleared: the additive
-columns zero, and a past day's cells - character sets included - are
-dropped once their final numbers are written.
+Swaps the pending deltas out of the cells and marks the one write in
+flight, or nil when a write already flies or nothing is pending.
+Past-day cells whose counters never moved are dropped here (their
+character sets were flushed with an earlier row; dropping only ever
+hides a band, never exposes one). Caller holds no lock.
 ================
 */
-func (rt *Runtime) FlushKillStats() error {
-	if rt.KillStatsFlush == nil {
+func (rt *Runtime) drainKillStats(todayS int64) []KillStatRow {
+	rt.killStats.mu.Lock()
+	defer rt.killStats.mu.Unlock()
+	if rt.killStats.flushing {
 		return nil
 	}
-	rt.killStats.mu.Lock()
 	rows := make([]KillStatRow, 0, len(rt.killStats.cells))
 	for key, cell := range rt.killStats.cells {
 		if cell.kills == 0 && cell.exp == 0 && cell.skillExp == 0 && cell.onlineMs == 0 {
+			if key.dayS < todayS {
+				delete(rt.killStats.cells, key)
+			}
 			continue
 		}
 		rows = append(rows, KillStatRow{DayS: key.dayS, Band: key.band, Kills: cell.kills,
 			Exp: cell.exp, SkillExp: cell.skillExp, OnlineMs: cell.onlineMs, Characters: len(cell.chars)})
+		cell.kills, cell.exp, cell.skillExp, cell.onlineMs = 0, 0, 0, 0
 	}
-	rt.killStats.mu.Unlock()
 	if len(rows) == 0 {
 		return nil
 	}
-	if err := rt.KillStatsFlush(rows); err != nil {
-		return err
-	}
-	todayS := killStatDayOf(time.Now().UnixMilli())
-	if rt.Now != nil {
-		todayS = killStatDayOf(rt.Now().UnixMilli())
-	}
+	rt.killStats.flushing = true
+	rt.killStats.flushDone = make(chan struct{})
+	return rows
+}
+
+/*
+================
+settleKillStats
+
+The in-flight write settled: on success a past day's cells (character
+sets included) are dropped now that their final numbers are written;
+on failure the deltas go back into the cells, merging with whatever
+accrued meanwhile, and the next cadence retries.
+================
+*/
+func (rt *Runtime) settleKillStats(rows []KillStatRow, err error, todayS int64) {
 	rt.killStats.mu.Lock()
 	for _, row := range rows {
 		key := killStatKey{dayS: row.DayS, band: row.Band}
@@ -295,14 +315,86 @@ func (rt *Runtime) FlushKillStats() error {
 		if !ok {
 			continue
 		}
-		cell.kills -= row.Kills
-		cell.exp -= row.Exp
-		cell.skillExp -= row.SkillExp
-		cell.onlineMs -= row.OnlineMs
-		if row.DayS < todayS {
+		if err != nil {
+			cell.kills += row.Kills
+			cell.exp += row.Exp
+			cell.skillExp += row.SkillExp
+			cell.onlineMs += row.OnlineMs
+		} else if row.DayS < todayS {
 			delete(rt.killStats.cells, key)
 		}
 	}
+	rt.killStats.flushing = false
+	close(rt.killStats.flushDone)
 	rt.killStats.mu.Unlock()
-	return nil
+}
+
+/*
+================
+killStatTodayS
+================
+*/
+func (rt *Runtime) killStatTodayS() int64 {
+	if rt.Now != nil {
+		return killStatDayOf(rt.Now().UnixMilli())
+	}
+	return killStatDayOf(time.Now().UnixMilli())
+}
+
+/*
+================
+flushKillStatsAsync
+
+The tick's flush: drain and hand the write to a goroutine, so the
+tick never waits on the sink (a SQLite transaction behind a snapshot
+can hold for seconds). A write already in flight keeps the new deltas
+for the next cadence.
+================
+*/
+func (rt *Runtime) flushKillStatsAsync() {
+	if rt.KillStatsFlush == nil {
+		return
+	}
+	rows := rt.drainKillStats(rt.killStatTodayS())
+	if rows == nil {
+		return
+	}
+	go func() {
+		err := rt.KillStatsFlush(rows)
+		rt.settleKillStats(rows, err, rt.killStatTodayS())
+		if err != nil {
+			log.WithError(err).Warn("kill stats: flush failed; the deltas return for the next cadence")
+		}
+	}()
+}
+
+/*
+================
+FlushKillStats
+
+The shutdown flush: waits out any in-flight write, then drains and
+writes synchronously, so when it returns every counted delta is with
+the sink (or the error says why not). A no-op when unwired.
+================
+*/
+func (rt *Runtime) FlushKillStats() error {
+	if rt.KillStatsFlush == nil {
+		return nil
+	}
+	for {
+		rt.killStats.mu.Lock()
+		flying, done := rt.killStats.flushing, rt.killStats.flushDone
+		rt.killStats.mu.Unlock()
+		if !flying {
+			break
+		}
+		<-done
+	}
+	rows := rt.drainKillStats(rt.killStatTodayS())
+	if rows == nil {
+		return nil
+	}
+	err := rt.KillStatsFlush(rows)
+	rt.settleKillStats(rows, err, rt.killStatTodayS())
+	return err
 }
