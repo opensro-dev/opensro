@@ -191,11 +191,6 @@ export const EXPERIMENTAL_TABS: readonly {
 			label: "Smooth camera",
 			description: "Ease small camera jumps and the return from a wall."
 		}, {
-			key: "vHidesCompanions",
-			id: "experimental-v-hides-companions",
-			label: "V hides pets and transports",
-			description: "Holding V also hides other players' pets and transports."
-		}, {
 			key: "mainThreadOwnWalk",
 			id: "experimental-main-thread-own-walk",
 			label: "Instant own movement",
@@ -305,11 +300,6 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-pet-click-opens-window",
 			label: "Pet panel opens window",
 			description: "Click a pet panel to open its window."
-		}, {
-			key: "smartPetPickup",
-			id: "experimental-smart-pet-pickup",
-			label: "Keep pet gold pickup when full",
-			description: "Keep picking up gold when a full bag refuses an item."
 		}, {
 			key: "petPickupFilter",
 			id: "experimental-pet-pickup-filter",
