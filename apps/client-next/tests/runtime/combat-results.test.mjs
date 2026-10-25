@@ -222,6 +222,73 @@ test("local and remote forced movement cancel only cast-owned travel and keep in
 	assert.equal( m.step( 2000 ), false );
 });
 
+test("a cast's own travel is marked self; a struck target's knockback is not", () => {
+	// Own travel and correction (the steering packet of the earlier test).
+	const c = createCombat(),
+		p = header().u8( 10 ).u16( 0x5c87 ).u16( 100 ).u16( 0 ).u16( 200 ).u16( 0x5c87 ).u16( 150 ).u16( 0 ).u16( 200 )
+			.bytes();
+	c.receive( 0xb245, p );
+	const own = c.takeDisplacements();
+	assert.deepEqual( own.map( row => row.kind ), [ 8, 2 ] );
+	assert.ok( own.every( row => row.self === true ) );
+	// A displacement struck onto another target (the truncation packet of
+	// the earlier test): the caster is 1, the struck target is 3.
+	const c2 = createCombat(),
+		p2 = header().u8( 1 ).u8( 1 ).u8( 1 ).u32( 3 ).u8( 4 ).u32( 8 << 8 ).u32( 0 ).u16( 0x5c87 ).u16( 100 ).u16(
+			-2
+		).u16( 200 ).bytes();
+	hp( c2, 3, 99 );
+	c2.receive( 0xb245, p2 );
+	c2.receive(
+		0xb505,
+		writer().u8( 1 ).u32( 9 ).u32( 2 ).u8( 1 ).u8( 1 ).u8( 1 ).u32( 3 ).u8( 7 ).u32( 10 << 8 ).u16( 4 ).u16( 5 )
+			.bytes(),
+		50
+	);
+	const struck = c2.takeDisplacements();
+	assert.equal( struck.length, 1 );
+	assert.equal( struck[0].gid, 3 );
+	assert.notEqual( struck[0].self, true );
+});
+
+test("the worker publishes its own cast displacement for the mover, and no knockback", () => {
+	const m = createMovement( () => {} ), pose = { regionId: 0x5c87, x: 100, y: 0, z: 100, angle: 0 };
+	m.seed( pose );
+	m.displace(
+		{ gid: 1, token: 9, kind: 8, self: true, destination: { regionId: 0x5c87, x: 300, y: 0, z: 100 } },
+		0
+	);
+	const published = defined( m.state().movementDisplacement );
+	assert.equal( published.startedAtMs, 0 );
+	// Kind 8 travel runs at 500 units a second: 200 units take 400 ms.
+	assert.equal( published.durationMs, 400 );
+	assert.equal( published.from.x, 100 );
+	assert.equal( published.to.x, 300 );
+	m.step( 1000 );
+	assert.equal( m.state().movementDisplacement, undefined );
+	// A knockback (not the player's own cast) publishes nothing to step.
+	const struck = createMovement( () => {} );
+	struck.seed( pose );
+	struck.displace( { gid: 1, token: 9, kind: 5, destination: { regionId: 0x5c87, x: 300, y: 0, z: 100 } }, 0 );
+	assert.equal( struck.state().movementDisplacement, undefined );
+});
+
+test("a kind-2 cast correction lands at once and publishes no displacement", () => {
+	// The mover steps authored motion on its own clock; a correction
+	// (cast-displacement kind 2) has no duration to step, so state()
+	// publishes nothing for it and the body is simply there.
+	const m = createMovement( () => {} ), pose = { regionId: 0x5c87, x: 100, y: 0, z: 100, angle: 0 };
+	m.seed( pose );
+	m.displace(
+		{ gid: 1, token: 9, kind: 2, self: true, destination: { regionId: 0x5c87, x: 300, y: 0, z: 100 } },
+		0
+	);
+	assert.equal( m.state().movementDisplacement, undefined );
+	m.step( 0 );
+	assert.equal( m.state().movementDisplacement, undefined );
+	assert.equal( m.state().pose?.x, 300 );
+});
+
 test("only accepted local casts start cooldowns; duplicates, refusals and cast retirement cannot restart or erase them", () => {
 	const c = createCombat();
 	c.cooldownReferences( 1, [ { id: 7, cooldownMs: 5000, cooldownGroup: 3 } ] );

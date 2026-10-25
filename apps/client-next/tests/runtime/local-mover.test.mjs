@@ -386,6 +386,75 @@ test("no prediction without the worker's go-ahead or the worker's navigation", (
 	);
 });
 
+// A dash's authored segment (cast-displacement.ts kind 5/8 travel): 100
+// units at 250 units a second, on the frame clock (local-mover's fixed aim).
+const DASH = { from: START, to: { ...START, x: 1100 }, start: 0, duration: 400, fixedTiming: true };
+const DASH_RATE = 250;
+
+test("a fixed segment is drawn on its own clock from the prediction frame", () => {
+	const mover = createLocalMover(), w = world();
+	assert.equal(
+		mover.predict( { seq: 0, aim: { kind: "fixed", segment: DASH }, speed: DASH_RATE, drawn: START, now: 0 }, w ),
+		true
+	);
+	let now = 0, last = START;
+	for ( const dt of FRAMES ) {
+		now += dt;
+		const frame = mover.frame( now, w );
+		assert.equal( frame.kind, "walking" );
+		const step = Math.hypot( frame.pose.x - last.x, frame.pose.z - last.z );
+		// The cap follows the segment's authored rate, not walking speed.
+		assert.ok( step <= DASH_RATE * 1.04 * dt / 1000 + .01, `step ${step} in ${dt} ms` );
+		assert.ok( step > 0, "it moves every frame" );
+		last = frame.pose;
+	}
+	// On the segment's clock, not on publication arrivals.
+	assert.ok( Math.abs( last.x - (START.x + DASH_RATE * now / 1000) ) < 2, `at ${last.x} after ${now} ms` );
+});
+
+test("a fixed segment hands its destination back when it ends", () => {
+	const mover = createLocalMover(), w = world();
+	mover.predict( { seq: 0, aim: { kind: "fixed", segment: DASH }, speed: DASH_RATE, drawn: START, now: 0 }, w );
+	let now = 0, frame;
+	do {
+		now += 16.7;
+		frame = mover.frame( now, w );
+	} while ( frame.kind === "walking" && now < 1000 );
+	assert.equal( frame.kind, "ended" );
+	assert.equal( frame.pose.x, DASH.to.x );
+	assert.equal( frame.pose.z, DASH.to.z );
+	assert.equal( mover.active(), false );
+	assert.equal( mover.frame( now + 16.7, w ).kind, "idle" );
+});
+
+test("a rebuild mid-dash replays the same absolute segment, and a knockback ends it", () => {
+	const mover = createLocalMover();
+	mover.predict( { seq: 0, aim: { kind: "fixed", segment: DASH }, speed: DASH_RATE, drawn: START, now: 0 }, world() );
+	const first = mover.frame( 100, world() );
+	assert.equal( first.kind, "walking" );
+	assert.ok( Math.abs( first.pose.x - 1025 ) < .5, `at ${first.pose.x}` );
+	// The worker's answer: its pose sampled on the same segment at 90 ms.
+	const rebuilt = mover.frame(
+		200,
+		world( {
+			moving: true,
+			aim: { kind: "fixed", segment: DASH },
+			pose: { ...START, x: 1022.5 },
+			poseAtMs: 90,
+			revision: 1
+		} )
+	);
+	assert.equal( rebuilt.kind, "walking" );
+	// Still the segment's clock (1050 at 200 ms), never re-based.
+	assert.ok( Math.abs( rebuilt.pose.x - 1050 ) < .5, `at ${rebuilt.pose.x}` );
+	// A knockback lands: the worker walks something it publishes no aim
+	// for, so the prediction ends through the presenter's carry.
+	assert.equal(
+		mover.frame( 216, world( { moving: true, aim: undefined, poseAtMs: 210, revision: 2 } ) ).kind,
+		"ended"
+	);
+});
+
 test("on the published Jangan navigation the predicted walk is the worker's clip", async () => {
 	const bytes = path => assetBytes( path, CLIENT_PUBLIC_ROOT );
 	const product = await createNavigationResources().resolve(

@@ -195,6 +195,14 @@ variable "beta_silk" {
   default = "50"
 }
 
+# beta_silk_active_only credits the beta silk hour only while the character
+# has acted within ten minutes (port-only, not native). "off" is the shipped
+# rule: world-ready time earns.
+variable "beta_silk_active_only" {
+  type    = string
+  default = "off"
+}
+
 # maintenance_gate_path is the maintenance release gate (ops/release
 # deploy.py): while the file exists, EnterWorld tokens go only to the
 # accounts it lists. Empty disables the gate.
@@ -1006,6 +1014,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_PHARAOH_TOMB                   = var.pharaoh_tomb
         SRO_PHARAOH_TOMB_GEAR_RATE         = var.pharaoh_tomb_gear_rate
         SRO_BETA_SILK                           = var.beta_silk
+        SRO_BETA_SILK_ACTIVE_ONLY               = var.beta_silk_active_only
         SRO_MAINTENANCE_GATE_PATH               = var.maintenance_gate_path
         SRO_PET_PACING                          = var.pet_pacing
         SRO_STORAGE_AUTO_STACK                  = var.storage_auto_stack

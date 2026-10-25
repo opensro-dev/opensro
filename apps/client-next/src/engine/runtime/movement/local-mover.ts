@@ -261,6 +261,13 @@ function advance( walker: Walker, toMs: number, navigation: NavigationView ) {
 			walker.pose = result.pose;
 			walker.owner = result.owner;
 			walker.segment = result.segment;
+		} else if ( result.kind === "sampled" ) {
+			// A fixed segment is sampled on its own clock; it retires at
+			// its authored end, where the sampled pose is its destination.
+			walker.pose = result.pose;
+			walker.owner = result.owner;
+			// Only a segment samples (a turn alone steps "idle"), so this holds one.
+			if ( walker.segment && now >= walker.segment.start + walker.segment.duration ) walker.segment = null;
 		} else if ( result.kind === "uncovered" ) {
 			walker.segment = result.segment;
 		} else if ( result.kind === "rejected" ) {
@@ -583,7 +590,10 @@ export function createLocalMover() {
 			walk.inputs = walk.inputs.filter( input => input.seq > world.inputSeq );
 			// The cap follows the speed the worker walks at, a direction walk's
 			// drift factor included, or the body falls behind a faster drift.
-			if ( world.speed ) walk.speed = world.speed * world.speedFactor;
+			// A fixed segment is exempt: it is drawn at its authored rate (a
+			// dash is not a correction to throttle to walking speed), so the
+			// speed the prediction started with stands while it runs.
+			if ( world.speed && !walk.walker.segment?.fixedTiming ) walk.speed = world.speed * world.speedFactor;
 			advance( walk.walker, now, navigation );
 			let snapped = false;
 			const fresh = world.poseAtMs !== walk.reconciled.atMs || world.revision !== walk.reconciled.revision;
