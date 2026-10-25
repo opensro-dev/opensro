@@ -268,6 +268,9 @@ export interface Renderer extends Disposable {
 		value: { readonly pose: import("./gameplay").Pose; readonly slot: 0 | 1 | 2 | 3; } | null
 	): void;
 	setFootprints( value: readonly import("./footprint").Footprint[] ): void;
+	// Port-only, not native (#1640): the ground rings under the player's
+	// own admitted Seal of Sun drops (runtime/characters/sun-drop-markers.ts).
+	setSunDropMarkers( value: readonly import("./sun-drop-marker").SunDropMarker[] ): void;
 	pickGround( x: number, y: number ): import("./navigation").GroundPickQuery | null;
 	presentationCamera(): import("@/engine/foundation/animation/entity-lod").LodPoint | null;
 	audioListener(): import("./audio").SoundListener | null;

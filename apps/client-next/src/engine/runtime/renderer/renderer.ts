@@ -257,6 +257,7 @@ export function createRenderer(
 			frame = null;
 		},
 		setFootprints: world.footprints,
+		setSunDropMarkers: world.sunDropMarkers,
 		setSelectionDecal: world.selectionDecal,
 		/*
 		================
@@ -895,6 +896,7 @@ export function createRenderer(
 					[
 						...terrainDraws,
 						...staleDraws.live( "ground-decals", scene.groundDecalDraws ?? [] ),
+						...staleDraws.live( "sun-markers", scene.sunMarkerDraws ?? [] ),
 						...liveShadows,
 						...opaqueDraws,
 						...(preview ? [] : liveCharacters.filter( draw => !draw.blended )),

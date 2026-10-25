@@ -18,7 +18,7 @@ import { decodeMovementSpeeds } from "@/engine/foundation/gameplay/native-moveme
 import { spawnSkillReferences, entrySpawnSkills } from "@/engine/foundation/gameplay/spawn-skills";
 import { merchantBranches } from "@/engine/foundation/gameplay/merchant-branches";
 import { decodeCharacterSpawn } from "@/engine/foundation/gameplay/character-spawn";
-import { decodeGroundItem } from "@/engine/foundation/gameplay/ground-item";
+import { decodeGroundItem, sunSealDrop } from "@/engine/foundation/gameplay/ground-item";
 import { fortressStructureState } from "@/engine/foundation/gameplay/fortress";
 import {
 	decodeSkillObject,
@@ -91,9 +91,15 @@ export function createEntities(
 	let skillRefs = spawnSkillReferences( [] );
 	const motion = createEntityMotion( surface, clip );
 	const itemRefs = new Map<number, number>(), itemNames = new Map<number, string>();
+	// Item codenames by ref: the Sun drop marker's admission derives the
+	// seal from the name (ground-item's sunSealDrop), as /LOADMONSTER does.
+	const itemCodenames = new Map<number, string>();
 	// /LOADMONSTER resolves a typed codename here, as the native client reads
 	// its own character data (GlobalDataManager_GetItemRecordByCodeName).
 	const monsterCodenames = new Map<string, { readonly refObjId: number; readonly monsterType: number; }>();
+	// Port-only (#1640): the Experimental Sun drop marker's admission state:
+	// the row's byte and the local player's gid (its drops are the marked).
+	let sunMarkerOn = false, ownGid = 0;
 	const entities = new Map<number, EntityState>(),
 		refs = new Map<number, {
 			teleport?: EntityState["teleport"];
@@ -415,6 +421,39 @@ export function createEntities(
 	}
 	/*
 	================
+	withSunMarker
+
+	Port-only (#1640): stamp the drops the Experimental marker admits -
+	the local player's own degree-9+ Seal of Sun, while the row is on.
+	Recomputed at every apply, so an ownership expiry (0x31e2) unmarks.
+	================
+	*/
+	function withSunMarker( entity: EntityState ): EntityState {
+		if ( !entity.groundItem ) return entity;
+		const marked = sunMarkerOn && ownGid !== 0 && entity.groundItem.ownerJid === ownGid &&
+			sunSealDrop( itemCodenames.get( entity.refObjId ) ?? "" );
+		const sunMarker = marked ? true : undefined;
+		return sunMarker === entity.groundItem.sunMarker ?
+			entity :
+			Object.freeze( { ...entity, groundItem: { ...entity.groundItem, sunMarker } } );
+	}
+	/*
+	================
+	restampSunMarkers
+
+	The row flipped or the local player arrived: re-admit every drop on
+	the ground through apply, which recomputes the stamp.
+	================
+	*/
+	function restampSunMarkers() {
+		for ( const entity of entities.values() ) {
+			if ( entity.groundItem && withSunMarker( entity ) !== entity ) {
+				apply( { kind: "state", entity } );
+			}
+		}
+	}
+	/*
+	================
 	groundedSpawn
 	================
 	*/
@@ -456,7 +495,11 @@ export function createEntities(
 			if ( c && refresh ) event = { ...event, entity: { ...e, nameColor: refreshNameColor( e, c ) } };
 			// groundedSpawn stamps only the kinds it grounds; stamp the rest
 			// here so every dungeon spawn carries its room.
-			event = { ...event, entity: withBlock( event.entity ) };
+			event = { ...event, entity: withSunMarker( withBlock( event.entity ) ) };
+			if ( event.entity.kind === "local-player" && ownGid !== event.entity.gid ) {
+				ownGid = event.entity.gid;
+				restampSunMarkers();
+			}
 			// CIGIDObject_RegisterGid (852CA0) only debug-asserts a gid it
 			// already holds, then g_sHashGID keeps the newer object: a second
 			// spawn replaces the first and never ends the session. The old
@@ -469,7 +512,7 @@ export function createEntities(
 			entities.set( event.entity.gid, event.entity );
 			motion.spawn( event.entity, receivedAt );
 		} else if ( event.kind === "state" ) {
-			event = { ...event, entity: withBlock( event.entity ) };
+			event = { ...event, entity: withSunMarker( withBlock( event.entity ) ) };
 			entities.set( event.entity.gid, event.entity );
 		} else if ( event.kind === "despawn" ) {
 			entities.delete( event.gid );
@@ -827,6 +870,7 @@ export function createEntities(
 				) throw new Error( "Invalid peer item catalog" );
 				itemRefs.set( row.refObjId, row.typeFlags );
 				itemNames.set( row.refObjId, row.name ?? row.codename ?? String( row.refObjId ) );
+				if ( row.codename ) itemCodenames.set( row.refObjId, row.codename );
 			}
 			local = b.localPlayerEntry as Record<string, unknown>;
 			if ( local.countryByte9c !== undefined && (local.countryByte9c !== 0 && local.countryByte9c !== 1) ) {
@@ -1868,6 +1912,13 @@ export function createEntities(
 		// How many queues compaction dropped into a resync (dropQueuedJournal):
 		// the world core republishes the gameplay catalogue when this moves.
 		resyncs: () => resyncs,
+		// Port-only (#1640): the Experimental Sun drop marker row, applied
+		// to the drops already on the ground and to every later one.
+		sunDropMarker( enabled: boolean ) {
+			if ( sunMarkerOn === enabled ) return;
+			sunMarkerOn = enabled;
+			restampSunMarkers();
+		},
 		count: () => entities.size
 	};
 }

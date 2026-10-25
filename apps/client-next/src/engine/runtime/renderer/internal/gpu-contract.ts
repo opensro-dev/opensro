@@ -458,6 +458,8 @@ export interface PreparedWorld {
 	readonly reflectionMatrix?: Float32Array;
 	readonly camera: import("@/engine/contracts/scene").WorldCamera;
 	readonly groundDecalDraws?: readonly GeometryDraw[];
+	/** Port-only (#1640): the admitted Seal of Sun drop rings. */
+	readonly sunMarkerDraws?: readonly GeometryDraw[];
 	readonly terrainEnd?: number;
 	readonly decalDraws?: readonly GeometryDraw[];
 	readonly weatherDraws?: readonly GeometryDraw[];
