@@ -227,6 +227,40 @@ test("a guild soldier with a guildless visible owner takes the owner's name colo
 	}
 });
 
+test("the local player's own guild soldier takes the guild colour through social.guild", () => {
+	const { fixture, state, local, pet } = petFixture( 5 );
+	// The local player's row carries no guild name: its guild comes from
+	// social.guild alone. With no guild the row keeps the name colour
+	// (854BB8); with one, the label colour replaces it.
+	const ownSoldier = { ...pet, ownerGid: local.gid, ownerName: local.name };
+	const guild = { id: 9, name: "Empire", level: 3, gp: 0, subject: "", contents: "", crest: 0, members: [] };
+	const ownerRow = social => {
+		fixture.ui.step(
+			{
+				...state,
+				entities: [ { ...local, guildName: undefined }, ownSoldier ],
+				gameplay: { ...state.gameplay, social: { ...emptySocial( local.name ), guild }, ...social }
+			},
+			0
+		);
+		// The owner row is drawn after the soldier's own name.
+		return petGlyphs( fixture ).slice( -local.name.length ).map( q => q.color.join( "," ) );
+	};
+	try {
+		const guilded = ownerRow( {} );
+		const guildless = ownerRow( { social: emptySocial( local.name ) } );
+		assert.equal( guilded.length, local.name.length );
+		assert.deepEqual(
+			guildless,
+			Array( local.name.length ).fill( "1,1,1,1" ),
+			"guildless: the owner's name colour"
+		);
+		assert.notDeepEqual( guilded, guildless, "the local owner's guild must reach the soldier's owner row" );
+	} finally {
+		fixture.dispose();
+	}
+});
+
 test("an owned attack pet's quick status stays above its owner row", () => {
 	const { fixture, state, local, pet } = petFixture( 3 );
 	try {
