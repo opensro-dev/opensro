@@ -715,6 +715,17 @@ export interface BetaMapPlayer {
 }
 /*
 ================
+MovementAim
+
+A rebuildable walk as the worker publishes it (#1563): to a point, or
+along a heading until the navigation stops it.
+================
+*/
+export type MovementAim =
+	| { readonly kind: "goal"; readonly destination: Pose; }
+	| { readonly kind: "direction"; readonly heading: number; };
+/*
+================
 GameplayState
 
 Worker publications may omit unchanged catalog, social and shop values.
@@ -897,10 +908,14 @@ export interface GameplayState {
 	// The local walk speed in world units a second that a new walk leg uses
 	// (movement.ts request): the main-thread mover times its legs with it (#1440).
 	readonly movementSpeed?: number;
-	// The destination of the goal walk the worker's movement owner is walking,
-	// if it is one (movement.ts state): the main-thread mover rebuilds the
-	// worker's leg from it when it reconciles (#1441b).
-	readonly movementGoal?: Pose;
+	// What the worker's movement owner is walking, when it is a walk the
+	// main-thread mover can rebuild (movement.ts state): a goal walk's
+	// destination or a direction walk's live heading. The mover rebuilds the
+	// worker's leg from it when it reconciles (#1441b, #1563).
+	readonly movementAim?: MovementAim;
+	// The direction walk's 500 ms drift factor (movement.ts driftWalk); 1
+	// for any other walk.
+	readonly movementSpeedFactor?: number;
 	// A ground click now would start a walk at once (gameplay.ts
 	// groundWalkRefusal): the main-thread mover predicts only then (#1440).
 	readonly walkPredictable?: boolean;

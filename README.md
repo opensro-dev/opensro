@@ -2,7 +2,6 @@
 
 [![Discord](https://img.shields.io/discord/1521398829260210337?label=Discord&logo=discord&logoColor=white&color=5865F2)](https://discord.gg/RUua9HY657)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
-[![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-support-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/opensro)
 
 **Silkroad Online v1.150 (Legend III), rebuilt end to end as open-source software for the browser.**
 
@@ -83,24 +82,10 @@ New here? Start with **[CONTRIBUTING.md](CONTRIBUTING.md)**: setup, the native-f
 
 ---
 
-## ❤️ Support the project
-
-**OpenSRO is open-source software and will always stay open source, so anyone can learn from it and build on it.** If the code is useful to you, you can support its development on **[Ko-fi](https://ko-fi.com/opensro)**.
-
-No one makes money from OpenSRO. It's built by volunteers who put in their own time and money because they love the game, and every donation goes back into development.
-
-- 💸 **Where it goes:** development of this repository: dev tools, CI and documentation.
-- 🎁 **A thank-you, nothing more:** a donation buys no access, items, perks or advantages of any kind.
-- 🙅 **Never required:** the code is the same for everyone, under the [AGPL](LICENSE).
-
-The full promise is in [SUPPORT.md](SUPPORT.md).
-
----
-
 ## 📚 More
 
 - 📖 [docs/README.md](docs/README.md): the documentation index (architecture, asset pipeline, profiling, design notes)
 - 🚢 [RELEASE.md](RELEASE.md): the release checklist
 - 🔒 [SECURITY.md](SECURITY.md): how to report a vulnerability
-- ❤️ [SUPPORT.md](SUPPORT.md): getting help, and supporting development
+- 💬 [SUPPORT.md](SUPPORT.md): getting help
 - ⚖️ [AGPL-3.0-or-later](LICENSE); origin, trademark and asset scope are in [NOTICE.md](NOTICE.md)
