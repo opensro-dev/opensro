@@ -245,3 +245,84 @@ test("the main-thread mover starts the Up walk on the press frame and ends it on
 	const after = mover.frame( 600, world );
 	assert.ok( after.kind !== "idle" && Math.abs( after.pose.x - walking.pose.x ) < .5, "stops where released" );
 });
+
+test("through gameplay, a press the walk gate refuses sends nothing, and its release sends no stop", () => {
+	for ( const refused of [ { movementMode: 4 }, { appearanceState: [ 2, 0, 0 ] } ] ) {
+		const sent = [], game = createGameplay( f => sent.push( f ) );
+		const local = {
+			...POSE,
+			gid: 7,
+			refObjId: 1907,
+			kind: "local-player",
+			name: "walker",
+			heading: POSE.angle,
+			...refused
+		};
+		game.bootstrap( { simulationProtocolVersion: 1 } );
+		game.seed( local );
+		const bundle = product( REGION );
+		bundle.objects = [];
+		game.command( { kind: "navigation", regionId: REGION, bundle }, 0, undefined, local );
+		sent.length = 0;
+		// Seated (0x7017 posture 4) or dead: 0x680A30's guards return before
+		// latching, so nothing walks and nothing stops.
+		for ( const key of [ "up", "left" ] ) {
+			game.command( { kind: "arrow-key", key, down: true }, 0, undefined, local );
+		}
+		for ( let now = 16; now <= 500; now += 16 ) game.step( now, local );
+		for ( const key of [ "up", "left" ] ) {
+			game.command( { kind: "arrow-key", key, down: false }, 500, undefined, local );
+		}
+		assert.deepEqual( sent.map( f => f.opcode ), [], JSON.stringify( refused ) );
+		game.dispose();
+	}
+});
+
+test("an Up press during a predicted direction walk keeps that walk, drawn exactly as without it", async () => {
+	const { createLocalMover } = await import( "../../src/engine/runtime/movement/local-mover.ts" );
+	const view = {
+		available: () => true,
+		block: () => 0,
+		floor: () => undefined,
+		pick: () => null,
+		clip: ( _from, to, query ) => {
+			if ( query ) query.status = 0;
+			return to;
+		},
+		surface: pose => pose
+	};
+	const world = /** @type {any} */ ({
+		pose: { ...POSE, angle: 0 },
+		poseAtMs: 0,
+		revision: 0,
+		moving: false,
+		aim: undefined,
+		speedFactor: 1,
+		walkPredictable: true,
+		speed: 50,
+		inputSeq: 0,
+		navigationRequestId: 1,
+		navigationOwner: undefined,
+		originMs: 0,
+		view: { requestId: 1, navigation: view }
+	});
+	/*
+	================
+	walk
+
+	Up at 0, frames every 16 ms; again mid-frame at 104 ms when repeat is set
+	(0x877F30 with bFlag 0 does not resend a direction walk under way).
+	================
+	*/
+	const walk = repeat => {
+		const mover = createLocalMover(), drawn = [];
+		mover.arrow( 1, true, { ...POSE, angle: 0 }, 0, world );
+		for ( let now = 16; now <= 400; now += 16 ) {
+			if ( repeat && now === 112 ) mover.arrow( 2, true, { ...POSE, angle: 0 }, 104, world );
+			const frame = mover.frame( now, world );
+			if ( frame.kind !== "idle" ) drawn.push( [ frame.pose.x, frame.pose.z ] );
+		}
+		return drawn;
+	};
+	assert.deepEqual( walk( true ), walk( false ) );
+});
