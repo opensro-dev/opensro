@@ -90,6 +90,10 @@ links. In addition:
   workflow expects for that change (a scoped job that does not apply). A
   check still running, failed or cancelled blocks the merge. The repository
   allows squash merges only.
+- **An approval reads against completed checks.** An APPROVE counts once
+  that head's checks complete green, whenever the approval was posted. If
+  they fail, the approval does not count: the reviewer acks the green
+  head with a delta before the merge.
 - **Queue merges that touch the same files.** Append-only files
   (`ownership.json`, `execution-contract.json`, size and format ledgers)
   conflict on every merge. Agree the order in the log, and rebase the next PR
@@ -100,6 +104,38 @@ links. In addition:
   named test, not against a function name, and an approval lists any row it
   could not check. A missing table, or an unchecked row presented as
   verified, blocks the merge.
+- **A review hunts bugs; it does not restate the PR.** After the verdict line
+  (`Review by <session>: APPROVE|CHANGES at <sha8>`) every review has these
+  five sections, and an approval without them does not count:
+  1. **Blast radius.** ripgrep output, pasted: every caller of each changed
+     function, every implementer of each changed contract (test fakes
+     included), and every consumer of each new or changed code, string,
+     opcode, enum value or flag across client, server and console (labels,
+     client-server allowlists, incident codes), plus the tests that name it.
+     Say why each hit is safe.
+  2. **Native trace.** What the v1.150 client does in this exact situation,
+     read at MLIL or assembly with the address, not taken from a function
+     name. Re-check every native-claims row and list any you could not
+     check. When native has no counterpart, say so, and confirm a behaviour
+     change is flagged port-only.
+  3. **Edge cases**, enumerated with what the code does for each: a hidden,
+     frozen or throttled tab resuming; a reconnect or resume mid-operation;
+     death, teleport, mount or transfer mid-operation; empty, zero, maximum
+     and overflow sizes; clock jumps; duplicated or reordered messages; slow
+     server ticks; an old open tab.
+  4. **Unimplemented branches.** Every arm of each switch, kind, enum or flag
+     the change touches: handled or not, and whether that is right. Both
+     flag states, both transports, server and client symmetric. A missing
+     Player-note, doc, console label or allowlist entry is a finding.
+  5. **What ran.** Test counts at the exact head, at least one mutation the
+     new tests catch, and the full gate when a contract changes. Unsure
+     findings are listed as questions, not dropped.
+
+  A real gap in any section means CHANGES. A non-blocking finding is filed
+  as an issue, not left in a comment.
+- **A merged PR is re-reviewed at the merge commit.** The verdict line is
+  `Review by <session>: POST-MERGE at <merge sha8>`, the sha of the merge
+  commit, not the PR head, with the same five sections.
 - **PR text states what was checked on which head.** Replace "checks are
   running" with the results before publishing, and never describe a commit
   that is not the one being merged.

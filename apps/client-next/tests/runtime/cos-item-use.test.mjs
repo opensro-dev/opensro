@@ -12,6 +12,7 @@ const {
 	cosItemUseTail,
 	companionItemUseNotice,
 	companionItemTargetCommand,
+	armsItemTargetCursor,
 	autoPotionTarget,
 	autoPotionTargetNotice,
 	createCosSelection
@@ -188,6 +189,80 @@ test("companion drags retain explicit targets even when they are incompatible", 
 			slot: 25,
 			revivalSlot: target.slot
 		} );
+	}
+});
+
+test("pet skill items arm the target cursor and follow case 0xF's own exits", () => {
+	assert.equal( armsItemTargetCursor( flags( 13, 15 ) ), true );
+	const source = {
+		slot: 25,
+		refObjId: 999,
+		typeFlags: flags( 13, 15 ),
+		quantity: 1,
+		plus: 0,
+		durability: 0,
+		variance: "0",
+		magic: []
+	};
+	const target = {
+		...source,
+		slot: 14,
+		typeFlags: 0x08cc,
+		summon: { state: 1, rentals: [] }
+	};
+	assert.deepEqual( companionItemTargetCommand( source, target ), {
+		kind: "item-use",
+		slot: 25,
+		summonerSlot: 14
+	} );
+	// 696934: attack (0x19c6) and pickup (0x21c6) summoners both pass the
+	// client (the source compat bits are not in the type word; the server
+	// decides). A non-summoner target and an unresolved character leave by
+	// the generic send with no notice at all.
+	for (
+		const context of [
+			{ records: [], summonerSlot: 14, summonedCharacterTypeFlags: 0x19c6 },
+			{ records: [], summonerSlot: 14, summonedCharacterTypeFlags: 0x21c6 },
+			{ records: [], summonerSlot: 14 },
+			{ records: [], summonerSlot: 99, summonedCharacterTypeFlags: 0x19c6 }
+		]
+	) {
+		assert.equal( companionItemUseNotice( flags( 13, 15 ), [ target ], context ), null );
+	}
+	// Only a resolved character of neither pet class refuses wrong-object.
+	assert.equal(
+		companionItemUseNotice( flags( 13, 15 ), [ target ], {
+			records: [],
+			summonerSlot: 14,
+			summonedCharacterTypeFlags: 0x11c6
+		} )?.key,
+		"UIIT_MSG_COSPETERR_CANT_USE_WRONGOBJECT"
+	);
+	// Case 0xF sets no tail flag: the use goes out bare.
+	assert.deepEqual(
+		cosItemUseTail( flags( 13, 15 ), [ target ], {
+			records: [],
+			summonerSlot: 14,
+			summonedCharacterTypeFlags: 0x19c6
+		} ),
+		new Uint8Array()
+	);
+});
+
+test("pet skill use sends bare for either pet band", t => {
+	const source = flags( 13, 15 );
+	for ( const character of [ 0x19c6, 0x21c6 ] ) {
+		const sent = companionUseFixture( t, {
+			source,
+			character,
+			state: 4,
+			item: character === 0x19c6 ? 0x08cc : 0x10cc
+		} );
+		sent.gameplay.command( { kind: "item-use", slot: 13, summonerSlot: 14 }, 1, undefined );
+		assert.deepEqual( sent.sent, [ {
+			opcode: 0x75bd,
+			payload: Uint8Array.of( 13, source & 255, source >>> 8 )
+		} ], `character ${character.toString( 16 )}` );
 	}
 });
 

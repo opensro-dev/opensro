@@ -213,8 +213,9 @@ export type GameplayCommand =
 	| { readonly kind: "avatar-move"; readonly equip: boolean; readonly source: number; readonly destination: number; }
 	| import("@/engine/foundation/gameplay/party-matching").PartyMatchCommand
 	| { readonly kind: "gm-command"; readonly line: string; }
-	// The debug console's weather rows: a mode to set (absent keeps the
-	// current one) and the amount, both into the worker's weather slot.
+	// The debug console's weather rows: a mode to set (mode 1 releases the
+	// console hold; absent only tunes the live amount) and the amount,
+	// into the worker's console weather slot (event-environment.ts).
 	| { readonly kind: "debug-weather"; readonly mode?: 1 | 2 | 3; readonly amount: number; }
 	| { readonly kind: "gm-catalog-ack"; }
 	| { readonly kind: "whisper-block"; readonly name: string; readonly blocked: boolean; }
@@ -732,6 +733,8 @@ export interface GameplayState {
 	readonly returnScroll?: import("@/engine/foundation/gameplay/return-scroll").ReturnScrollCast;
 	readonly huntingPoints?: readonly import("@/engine/foundation/gameplay/hunting").HuntingPoint[];
 	readonly npcConversation?: import("@/engine/foundation/gameplay/npc-dialogue").NpcConversation;
+	// Hiding CIFNpcWindow does not release the selected NPC or its service lock.
+	readonly npcWindow?: { readonly hidden: boolean; readonly revision: number; };
 	readonly restorationRevision?: number;
 	readonly buffSlots?: readonly import("@/engine/foundation/gameplay/buff-slots").BuffSlot[];
 	readonly attachedEffects?: readonly import("@/engine/foundation/gameplay/attached-effects").AttachedEffect[];
@@ -864,6 +867,10 @@ export interface GameplayState {
 	readonly navigationRequestId?: number;
 	readonly navigationFailure?: { readonly region: number; readonly requestId?: number; readonly error: string; };
 	readonly navigationRegion?: number;
+	// The local mover's navigation owner (a deck or dungeon cell), as the
+	// worker's movement owner holds it; the main-thread mover (#1440) starts
+	// its walk from it.
+	readonly navigationOwner?: import("@/engine/foundation/navigation/dungeon-ownership").NavOwner;
 	readonly navigationBlock?: number;
 	readonly activeCos?: {
 		readonly gid: number;
@@ -885,6 +892,18 @@ export interface GameplayState {
 	readonly pose: Pose | null;
 	readonly movementPath?: MovementPath;
 	readonly movementRevision?: number;
+	// The last gameplay input sequence the worker took (movement-input.ts).
+	readonly movementInputSeq?: number;
+	// The local walk speed in world units a second that a new walk leg uses
+	// (movement.ts request): the main-thread mover times its legs with it (#1440).
+	readonly movementSpeed?: number;
+	// The destination of the goal walk the worker's movement owner is walking,
+	// if it is one (movement.ts state): the main-thread mover rebuilds the
+	// worker's leg from it when it reconciles (#1441b).
+	readonly movementGoal?: Pose;
+	// A ground click now would start a walk at once (gameplay.ts
+	// groundWalkRefusal): the main-thread mover predicts only then (#1440).
+	readonly walkPredictable?: boolean;
 	readonly movementTransition?: MovementTransition;
 	readonly movementDiagnostics?: {
 		readonly total: number;

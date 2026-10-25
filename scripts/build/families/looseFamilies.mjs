@@ -635,7 +635,8 @@ export const LOOSE_FAMILIES = {
 			return { files: await packedJson( [ "/assets/text/textuisystem.en.json" ] ) };
 		}
 	},
-	// The return-scroll casting gauge and its cancel button in every state.
+	// The return-scroll casting gauge and its cancel button, and the reverse
+	// return box's buttons, in every state.
 	"return-scroll": {
 		kind: "refresh",
 		label: "native return-scroll textures",
@@ -645,7 +646,8 @@ export const LOOSE_FAMILIES = {
 			return {
 				files: await publishImages( [
 					...returnScrollRuntimeImageReferences,
-					...buttonStates( "interface/ifcommon/com_casting_cancel" )
+					...buttonStates( "interface/ifcommon/com_casting_cancel" ),
+					...buttonStates( "interface/ifcommon/com_return_button" )
 				] )
 			};
 		}

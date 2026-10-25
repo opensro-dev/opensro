@@ -28,6 +28,7 @@ import { createPresentationSamples } from "./presentation-samples";
 import { createPresentationState } from "./presentation-state";
 import { createPresentationActions } from "./presentation-actions";
 import { createPresentationEvents } from "./presentation-events";
+import { resolveDrawnPoses } from "./presentation-poses";
 import { createFootprints } from "./footprints";
 import { createCharacterStateIndex } from "./state-index";
 import { createSkillObjects, SKILL_OBJECT_MANIFESTS } from "./skill-objects";
@@ -328,6 +329,8 @@ export function createCharacterPresentation(
 		// The local player (and the mount it rides) is where its movement owner
 		// put it; its entity row can still hold the spawn point, and a LOD
 		// measured from that drifts while running (equipment glow, effects).
+		// Detail tiers are selection logic (#1442): the origin stays the
+		// logical pose, not the presented one.
 		entityLod.step(
 			entities,
 			gameplay?.localGid,
@@ -341,6 +344,7 @@ export function createCharacterPresentation(
 		resources.begin( seconds );
 		output.failure = null;
 		const { localMover, logicalPose, samples } = createPresentationSamples( entities, gameplay );
+		posePresentation.interpolateOwnWalk( renderer.interpolatedOwnWalk?.() === true );
 		posePresentation.samples( samples );
 		const result = resources.poll();
 		const skillObjectResult = result && SKILL_OBJECT_MANIFESTS.some( path => path === result.path );
@@ -432,6 +436,8 @@ export function createCharacterPresentation(
 		// and its mount, then nearest entities with a stable identity tie-break.
 		const sampleActorDetails = probe?.sampleDetails();
 		probe?.detailBegin( "presentation-selection" );
+		// Which entities earn resident models and dungeon admission is budget
+		// logic (#1442): the anchor is the logical pose, not the presented one.
 		const anchor = gameplay?.pose;
 		const local = entities.find( entity => entity.gid === gameplay?.localGid );
 		const priority = ( entity: EntityState ) =>
@@ -538,6 +544,29 @@ export function createCharacterPresentation(
 		);
 		gameplay = actionFrame.gameplay;
 		const { actionLayersByActor, waitingActors, triggers, soundContext } = actionFrame;
+		// The frame's drawn poses resolve here (#1442c): after the action
+		// phase, whose waiting and active casts the navigation-hold
+		// decision reads, and before presentation-events and actor-motion
+		// read them. The presenter advances once per character per frame;
+		// everything drawn reads the same pose.
+		probe?.detailBegin( "present-poses" );
+		const drawnPoses = resolveDrawnPoses( {
+			selected,
+			gameplay,
+			seconds,
+			logicalPose,
+			localMover,
+			states,
+			castByActor,
+			actionLayersByActor,
+			waitingActors,
+			vitalsByGid,
+			health,
+			pendingDeaths: feedback.pendingDeaths( gameplay?.casts ?? [], health?.currentResult ),
+			statusOwner,
+			posePresentation
+		} );
+		probe?.detailEnd( "present-poses" );
 		// Effects run before actor-motion takes this frame's navigation
 		// hold, so they read the hold from the same per-actor state: the
 		// standing hold, or on the burst frame (walk stop and cast in one
@@ -603,7 +632,7 @@ export function createCharacterPresentation(
 				logicalPose,
 				appearanceRef,
 				soundContext,
-				posePresentation,
+				drawnPoses,
 				referenceAppearances,
 				effects,
 				effectDetail,
@@ -624,6 +653,7 @@ export function createCharacterPresentation(
 		return {
 			gameplay,
 			castByActor,
+			drawnPoses,
 			vitalsByGid,
 			entitiesByGid,
 			actionLayersByActor,
@@ -664,6 +694,7 @@ export function createCharacterPresentation(
 		const {
 			gameplay,
 			castByActor,
+			drawnPoses,
 			vitalsByGid,
 			actionLayersByActor,
 			waitingActors,
@@ -704,6 +735,7 @@ export function createCharacterPresentation(
 			active,
 			animationDeltaMs,
 			castByActor,
+			drawnPoses,
 			entities,
 			entitiesByGid,
 			gameplay,
@@ -780,6 +812,8 @@ export function createCharacterPresentation(
 			ORB_DETAIL_FULL,
 			resources.failed
 		);
+		// The stage budget ranks effect actors by distance to the player: budget
+		// logic (#1442), so the anchor is the logical pose, not the drawn one.
 		auxiliary.presentStages(
 			{ orbActors, effectActors, next, seconds, animationHolders, player: gameplay?.pose ?? undefined },
 			{ renderer, resources, effects, probe }
@@ -885,14 +919,17 @@ export function createCharacterPresentation(
 					groundClocks.clear();
 					retiring.clear();
 					disappearing.clear();
-					spawnFades.reset();
+					// A journal resync rebuilds the same world (#1481): the
+					// held characters keep their spawn ramps.
+					if ( !event.resync ) spawnFades.reset();
 					next.length = 0;
 					next.push( { kind: "reset" } );
 				} else if ( event.kind === "spawn" || event.kind === "state" ) {
 					if ( event.kind === "spawn" ) {
 						presentationState.forgetStance( event.entity.gid );
 						// A respawn under a live gid is a new CICharactor: fade it again.
-						spawnFades.respawn( event.entity.gid );
+						// A journal resync republishes the held character instead (#1481).
+						if ( !event.resync ) spawnFades.respawn( event.entity.gid );
 					}
 					next.push( { kind: event.kind, gid: event.entity.gid, refObjId: event.entity.refObjId } );
 				} else if ( event.kind === "despawn" ) {
@@ -1038,6 +1075,27 @@ export function createCharacterPresentation(
 		*/
 		simulationOrigin( ms: number ) {
 			posePresentation.origin( ms );
+		},
+		/*
+		================
+		ownMover
+
+		This frame's main-thread mover state for the local player (#1440,
+		port-only): the presenter draws its pose while it predicts.
+		================
+		*/
+		ownMover( gid: number, frame: import("./pose-presentation").OwnMoverFrame ) {
+			posePresentation.ownMover( gid, frame );
+		},
+		/*
+		================
+		drawnPose
+
+		The pose last drawn for a character: where a predicted walk starts.
+		================
+		*/
+		drawnPose( gid: number ) {
+			return posePresentation.drawn( gid );
 		},
 		/*
 		================

@@ -1230,6 +1230,10 @@ export const runtimeCifButtonImageReferences = [
 	"interface/quick_slot/qsl_hclose_button.ddj",
 	"interface/quick_slot/qsl_vclose_button.ddj",
 	"interface/messagebox/msgbox_rebirth_button.ddj",
+	// CIFMessageBox_ConfigureByType 52F460 types 0x21 and 0x24 (5326E7..53274D)
+	// give the reverse return box's three MsgBoxINIF buttons this art; the
+	// layout names only com_button.
+	"interface/ifcommon/com_return_button.ddj",
 	// CPSCharacterCreate swaps both sex controls between *_on and *_off at
 	// runtime. The layouts expose only the initial pair, so all four normal
 	// paths must enter the button-state publication pass with their focus and

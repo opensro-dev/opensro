@@ -26,7 +26,7 @@ func evictedPair(t *testing.T) (*Hub, *Session, *fakeConn, *Session, *fakeConn) 
 		}
 		fc := newFakeConn(gated)
 		fc.supportsDgram = dgram
-		if err := s.attach(fc, false); err != nil {
+		if err := s.attach(fc, false, 0); err != nil {
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { hub.closeSession(s, nil) })
@@ -205,7 +205,7 @@ func TestBindingControlLeaseEvictsOldBindingAndBlocksNewBind(t *testing.T) {
 		t.Fatal(err)
 	}
 	oldConnection := newFakeConn(false)
-	if err := oldSession.attach(oldConnection, false); err != nil {
+	if err := oldSession.attach(oldConnection, false, 0); err != nil {
 		t.Fatal(err)
 	}
 	if _, replaced := hub.BindExclusive("d1:cg", oldSession); replaced {
@@ -289,7 +289,7 @@ func TestSingleBindEvictionStressRace(t *testing.T) {
 					return
 				}
 				fc := newFakeConn(false)
-				if err := s.attach(fc, false); err != nil {
+				if err := s.attach(fc, false, 0); err != nil {
 					t.Error(err)
 					return
 				}

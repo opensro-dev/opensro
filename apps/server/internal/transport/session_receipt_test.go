@@ -54,7 +54,7 @@ func TestSceneReceiptLoadingKeepsVisibilityFence(t *testing.T) {
 		t.Fatal(err)
 	}
 	conn := newFakeConn(false)
-	if err := session.attach(conn, false); err != nil {
+	if err := session.attach(conn, false, 0); err != nil {
 		t.Fatal(err)
 	}
 	frames := waitWritten(t, conn, 4)
@@ -97,7 +97,7 @@ func TestSceneReceiptRejectsReplacementAndClosure(t *testing.T) {
 		t.Fatal(err)
 	}
 	conn := newFakeConn(false)
-	if err := session.attach(conn, false); err != nil {
+	if err := session.attach(conn, false, 0); err != nil {
 		t.Fatal(err)
 	}
 	frames := waitWritten(t, conn, 3)

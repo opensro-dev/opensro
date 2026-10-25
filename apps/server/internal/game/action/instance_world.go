@@ -121,6 +121,7 @@ func (rt *Runtime) OpenInstanceWorld(req InstanceOpenRequest) (instance.Lease, i
 	}
 	rt.instanceWorlds.Store(instanceWorldKey{division: req.Division, id: lease.ID},
 		trackedInstanceWorld{lease: lease, deadlineMs: req.DeadlineMs})
+	rt.instanceEvent(InstanceEventSetup, req.Division, req.Definition, lease.ID, nil, false)
 	return lease, instance.Success
 }
 
@@ -206,6 +207,12 @@ func (rt *Runtime) transferCharacterToInstance(division string, c *enterworld.Ch
 		})
 		return instance.NotMember
 	}
+	rt.instanceEvent(InstanceEventEnter, division, lease.ID.Definition(), lease.ID, c, false)
+	// The entered character is now fully in - equipment, companions
+	// and quest state loaded - so the post-entry checkpoint follows
+	// the enter at once: a programme validates the entry conditions
+	// there, before any update tick reaches it.
+	rt.instanceEvent(InstanceEventActivated, division, lease.ID.Definition(), lease.ID, c, false)
 	return instance.Success
 }
 
@@ -237,6 +244,7 @@ func (rt *Runtime) returnCharacterFromInstance(division string, c *enterworld.Ch
 	if c == nil || c.World == nil || c.World.InstanceReturn == nil {
 		return instance.NotMember
 	}
+	leaving := instance.ID(domain.CharacterWorldInstance(c))
 	anchor := *c.World.InstanceReturn
 	world := instance.ID(anchor.PackedInstance)
 	if world == 0 {
@@ -260,6 +268,7 @@ func (rt *Runtime) returnCharacterFromInstance(division string, c *enterworld.Ch
 		}
 		return true
 	})
+	rt.instanceEvent(InstanceEventLeave, division, leaving.Definition(), leaving, c, false)
 	return instance.Success
 }
 
@@ -366,6 +375,7 @@ func (rt *Runtime) tickInstanceWorlds(nowMs int64) {
 	if rt.Monsters == nil {
 		return
 	}
+	rt.expireInstanceInvites(nowMs)
 	type trackedRef struct {
 		key     instanceWorldKey
 		tracked trackedInstanceWorld
@@ -389,6 +399,7 @@ func (rt *Runtime) tickInstanceWorlds(nowMs int64) {
 			unlock()
 			continue
 		}
+		rt.instanceEvent(InstanceEventUpdate, ref.key.division, ref.key.id.Definition(), ref.key.id, nil, false)
 		deadlinePassed := ref.tracked.deadlineMs != 0 && nowMs >= ref.tracked.deadlineMs
 		if deadlinePassed || rt.instanceWorldRetiring(ref.key.division, ref.tracked.lease) {
 			rt.closeInstanceWorld(ref.key.division, ref.tracked.lease)

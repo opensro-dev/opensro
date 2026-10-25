@@ -22,11 +22,17 @@ type hubMetrics struct {
 	resumeAttempted           atomic.Uint64
 	resumeAccepted            atomic.Uint64
 	resumeFresh               atomic.Uint64
-	helloAdmissionAccepted    atomic.Uint64
-	helloAdmissionRefused     atomic.Uint64
-	detaches                  atomic.Uint64
-	detachesIdle              atomic.Uint64
-	detachesOther             atomic.Uint64
+	// resumeNoPosition and resumeGap count resumes refused into a fresh
+	// session (#1466, #1519): a HELLO with no stream position, and a
+	// position the resume ring cannot serve (dropped past its floor,
+	// beyond what was written, or too large for the outbound queue).
+	resumeNoPosition       atomic.Uint64
+	resumeGap              atomic.Uint64
+	helloAdmissionAccepted atomic.Uint64
+	helloAdmissionRefused  atomic.Uint64
+	detaches               atomic.Uint64
+	detachesIdle           atomic.Uint64
+	detachesOther          atomic.Uint64
 
 	sessOpened            atomic.Uint64
 	sessClosed            atomic.Uint64
@@ -92,6 +98,8 @@ type Metrics struct {
 	ResumeAttempted           uint64  `json:"resume_attempted"`
 	ResumeAccepted            uint64  `json:"resume_accepted"`
 	ResumeFresh               uint64  `json:"resume_fresh"`
+	ResumeNoPosition          uint64  `json:"resume_no_position"`
+	ResumeGap                 uint64  `json:"resume_gap"`
 	HelloAdmissionAccepted    uint64  `json:"hello_admission_accepted"`
 	HelloAdmissionRefused     uint64  `json:"hello_admission_refused"`
 	Detaches                  uint64  `json:"detaches"`
@@ -261,6 +269,8 @@ func (h *Hub) Metrics() Metrics {
 		ResumeAttempted:           h.metrics.resumeAttempted.Load(),
 		ResumeAccepted:            h.metrics.resumeAccepted.Load(),
 		ResumeFresh:               h.metrics.resumeFresh.Load(),
+		ResumeNoPosition:          h.metrics.resumeNoPosition.Load(),
+		ResumeGap:                 h.metrics.resumeGap.Load(),
 		HelloAdmissionAccepted:    h.metrics.helloAdmissionAccepted.Load(),
 		HelloAdmissionRefused:     h.metrics.helloAdmissionRefused.Load(),
 		Detaches:                  h.metrics.detaches.Load(),

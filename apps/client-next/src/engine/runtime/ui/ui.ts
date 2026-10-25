@@ -701,6 +701,7 @@ import {
 	guildQuestionLayout,
 	reverseReturnLayout,
 	proposalLayout,
+	reverseReturnButton,
 	MESSAGE_FRAME,
 	MESSAGE_TILE,
 	PARTY_OPTION
@@ -709,8 +710,10 @@ import {
 	commandFloat,
 	commandInteger,
 	DEBUG_COMMAND_CLEAR,
+	DEBUG_COMMAND_CURSOR,
 	DEBUG_COMMAND_DAY,
 	DEBUG_COMMAND_DEBUG,
+	DEBUG_COMMAND_FREE_CAMERA,
 	DEBUG_COMMAND_GET_POSITION,
 	DEBUG_COMMAND_ITEM,
 	DEBUG_COMMAND_MESSAGE_CLEAR,
@@ -726,6 +729,7 @@ import {
 	DEBUG_COMMAND_TIME_ON,
 	DEBUG_COMMAND_TIME_PLUS,
 	DEBUG_COMMAND_TIME_SET,
+	DEBUG_COMMAND_ZOOM,
 	DEBUG_COMMAND_SET_FIELD_OF_VIEW,
 	debugCommand,
 	debugFieldOfView,
@@ -736,6 +740,7 @@ import {
 	createDebugClock,
 	DEBUG_CLOCK_STEP_MINUTES,
 	debugClockHold,
+	debugClockNoteSeed,
 	debugClockResume,
 	debugClockSeed,
 	debugClockSetFraction,
@@ -945,6 +950,9 @@ rather than as another createUi parameter.
 export interface UiExtensions {
 	bugReport?: BugReportControl | null;
 	setWorldFieldOfView?: ( degrees: number ) => void;
+	setCameraZoomRail?: ( capped: boolean ) => void;
+	setFreeCamera?: ( free: boolean ) => void;
+	setCursorVisible?: ( visible: boolean ) => void;
 	saveExperimental?: ( value: ExperimentalOptions ) => void;
 	saveWindowPositions?: ( value: WindowPositions ) => void;
 }
@@ -984,6 +992,13 @@ export function createUi(
 	// The interface timer's debug state (690C40 ids 100-109): the sampler
 	// reads it through the handle's debugClockSeed.
 	let debugClock: DebugClock = createDebugClock();
+	// The camera family's debug bytes (690C40 ids 110/114/135): the
+	// interface's zoom rail (+0x3CF, standing from its constructor), its
+	// free-camera byte (+0x3CE) and the cursor manager's visibility
+	// (+0x20). Each owner applies its own through the extensions.
+	let debugZoomRail = true;
+	let debugFreeCamera = false;
+	let debugCursorVisible = true;
 	let video = defaultVideoOptions(), videoDraft = video, videoScroll = 0, videoCombo = VIDEO_COMBO_CLOSED;
 	let bindings = defaultInputOptions(), bindingDraft = bindings, bindingSelected = -1, bindingScroll = 0;
 	let sight: SightMode = 0, sightDraft: SightMode = 0;
@@ -1208,7 +1223,8 @@ export function createUi(
 	================
 	*/
 	const takeLoadingVariant = () => {
-		const variant = nextLoadingVariant;
+		// Port-only, not native: the saved preference filters this load's artwork.
+		const variant = experimental.state().saved.safeLoadingScreen ? 1 : nextLoadingVariant;
 		nextLoadingVariant = loadingVariant();
 		return variant;
 	};
@@ -2629,8 +2645,10 @@ export function createUi(
 	CGInterface_OnCommandMessage (690C40) for the console family, the position
 	pair, bag-slot use and FOV. The weather rows write the worker's weather
 	slot (the sampler's state, not this window's); the time rows drive the
-	local debug clock the sampler reads through debugClockSeed. The camera and
-	render-toggle families are not ported yet and leave the line as typed.
+	local debug clock the sampler reads through debugClockSeed. The camera
+	rows flip this window's debug bytes and hand each to its owner; the
+	camera-waypoint and render-toggle families are not ported yet and leave
+	the line as typed.
 	================
 	*/
 	function runDebugCommand( command: DebugCommand ) {
@@ -2725,6 +2743,26 @@ export function createUi(
 			case DEBUG_COMMAND_TIME_MINUS:
 				// 109: "/-" steps a held clock forward.
 				debugClock = debugClockStep( debugClock, DEBUG_CLOCK_STEP_MINUTES );
+				break;
+			case DEBUG_COMMAND_ZOOM:
+				// Case 0x10 flips +0x3CF: the 150-unit wheel rail (67CC3C)
+				// stands or falls. The native prints nothing.
+				debugZoomRail = !debugZoomRail;
+				extensions.setCameraZoomRail?.( debugZoomRail );
+				break;
+			case DEBUG_COMMAND_FREE_CAMERA:
+				// Case 0x14 flips +0x3CE and reports the new state: while it
+				// stands the camera keeps its last eye and target (68FAD0,
+				// 68F830); clearing it re-aims at the player.
+				debugFreeCamera = !debugFreeCamera;
+				extensions.setFreeCamera?.( debugFreeCamera );
+				appendConsoleLine( debugFreeCamera ? "Free Camera On" : "Free Camera Off" );
+				break;
+			case DEBUG_COMMAND_CURSOR:
+				// Case 0x1E: SetVisible(![cursor+0x20]) - the pointer shows
+				// or goes away (A15A70), silently.
+				debugCursorVisible = !debugCursorVisible;
+				extensions.setCursorVisible?.( debugCursorVisible );
 				break;
 			case DEBUG_COMMAND_SET_FIELD_OF_VIEW: {
 				const degrees = debugFieldOfView( command.args );
@@ -3297,6 +3335,7 @@ export function createUi(
 				}
 			} else if ( row === "warehouse" ) {
 				if ( !canLeavePanel() ) return;
+				npcPanel.hide();
 				sendGameplay( { kind: "storage-open-guild", gid: npc } );
 				storagePanel.reset();
 				setPanel( "Storage" );
@@ -5112,6 +5151,7 @@ export function createUi(
 		} else if ( id === "magic-option-cancel" || id === "magic-option-close" ) setPanel( "" );
 		else if ( id === "storage-open" && view.gameplay?.target ) {
 			if ( !canLeavePanel() ) return;
+			npcPanel.hide();
 			sendGameplay( { kind: "storage-open", gid: view.gameplay.target } );
 			storagePanel.reset();
 			setPanel( "Storage" );
@@ -5378,6 +5418,7 @@ export function createUi(
 			seed: import("@/engine/contracts/gameplay").WorldClockSeed | undefined,
 			nowMs: number
 		) {
+			debugClock = debugClockNoteSeed( debugClock, seed, nowMs );
 			return debugClockSeed( debugClock, seed, nowMs );
 		},
 		/*
@@ -5551,16 +5592,23 @@ export function createUi(
 			}
 			if ( reverseScrollHud.reconcile( view ) ) dirty = true;
 			if ( reverseScrollHud.active() ) {
+				const boxControl = ( id: string | null ) =>
+					id !== null &&
+					[ "reverse-scroll:2", "reverse-scroll:3", "reverse-scroll-map", "reverse-scroll-cancel" ].includes(
+						id
+					);
 				if ( event.kind === "key" && event.code === "Escape" ) {
 					reverseScrollHud.close();
 					dirty = true;
-				} else if (
-					event.kind === "activate" &&
-					[ "reverse-scroll:2", "reverse-scroll:3", "reverse-scroll-map", "reverse-scroll-cancel" ].includes(
-						event.id
-					)
-				) {
+				} else if ( event.kind === "activate" && boxControl( event.id ) ) {
 					activate( event.id );
+				} else if ( event.kind === "hover" || event.kind === "press" ) {
+					// The pointer still reaches the box's own controls (their focus
+					// art and the rows' hover color); nothing behind it lights up.
+					const id = boxControl( event.id ) ? event.id : null;
+					if ( event.kind === "hover" ) hover = id;
+					else pressed = id;
+					dirty = true;
 				}
 				// Message box 0x1E owns input until a destination or Cancel wins.
 				return;
@@ -8683,7 +8731,12 @@ export function createUi(
 					undefined,
 				next.gameplay?.social?.soldierAttributeSequence ?? 0
 			);
-			if ( npcPanel.observe( next.session?.phase === "world" ? next.gameplay?.npcConversation : undefined ) ) {
+			if (
+				npcPanel.observe(
+					next.session?.phase === "world" ? next.gameplay?.npcConversation : undefined,
+					next.gameplay?.npcWindow
+				)
+			) {
 				dirty = true;
 			}
 			if ( withdrawal.observe( next.session?.phase === "world" ? next.gameplay?.restorationRevision ?? 0 : 0 ) ) {
@@ -15038,20 +15091,13 @@ export function createUi(
 					);
 					endWindow( admission, "composite-item" );
 				}
-				// 6AD990's type 0x24 confirm box and the scroll's box 0x1E (6971B0)
-				// share the layout: the reverse return's two points and Cancel.
+				// The bag scroll's box (561D50 opens type 0x21 at 562251) and
+				// 6AD990's type 0x24 box are one box: 52F460 runs 53259C for both,
+				// the reverse return's two points and Cancel.
 				const reverseBox = game?.reverseReturnChoice ?
-					{
-						title: "UIIT_CTL_PREMIUM_REVERSE_RETURN",
-						prefix: "premium-reverse:",
-						cancel: "premium-reverse-cancel"
-					} :
+					{ prefix: "premium-reverse:", cancel: "premium-reverse-cancel" } :
 					reverseScrollHud.active() ?
-					{
-						title: "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_REVERSE_PORTAL",
-						prefix: "reverse-scroll:",
-						cancel: "reverse-scroll-cancel"
-					} :
+					{ prefix: "reverse-scroll:", cancel: "reverse-scroll-cancel" } :
 					null;
 				if ( reverseBox ) {
 					controls = [];
@@ -15069,41 +15115,54 @@ export function createUi(
 						)
 					);
 					quads.push( ...normalTile( box.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ) );
+					// 53259C titles the box UIIT_STT_CONFIRM_BOX; 532611 puts the
+					// question in id 1.
 					quads.push(
-						...text.quads( hudCopy( reverseBox.title ), box.title, full, white, {
+						...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), box.title, full, white, {
 							hAlign: 1,
 							vAlign: 0
 						} )
 					);
-					for (
-						const [index, choice, key] of [
-							[ 0, REVERSE_RETURN_LAST_RECALL, "UIIT_MSG_ITEM_USE_REVERSE_PORTAL_RETRUN_TO_LAST_RETURN" ],
-							[ 1, REVERSE_RETURN_LAST_DEATH, "UIIT_MSG_ITEM_USE_REVERSE_PORTAL_RETRUN_TO_LAST_DEATH" ]
-						] as const
-					) {
-						button(
-							reverseBox.prefix + choice,
-							hudCopy( key ),
-							box.frame[0] + 16,
-							box.frame[1] + 44 + index * 26,
-							box.frame[2] - 32
-						);
-					}
+					quads.push(
+						...text.quads(
+							hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_REVERSE_PORTAL" ),
+							box.question,
+							full,
+							white,
+							{ hAlign: 1, vAlign: 0 }
+						)
+					);
+					authoredLabeledButton(
+						reverseReturnButton( box.points[0]! ),
+						0,
+						0,
+						reverseBox.prefix + REVERSE_RETURN_LAST_RECALL,
+						hudCopy( "UIIT_MSG_ITEM_USE_REVERSE_PORTAL_RETRUN_TO_LAST_RETURN" )
+					);
+					authoredLabeledButton(
+						reverseReturnButton( box.points[1]! ),
+						0,
+						0,
+						reverseBox.prefix + REVERSE_RETURN_LAST_DEATH,
+						hudCopy( "UIIT_MSG_ITEM_USE_REVERSE_PORTAL_RETRUN_TO_LAST_DEATH" )
+					);
 					if ( mapRow ) {
-						button(
+						authoredLabeledButton(
+							reverseReturnButton( box.points[2]! ),
+							0,
+							0,
 							"reverse-scroll-map",
-							"Move to a location on the map.",
-							box.frame[0] + 16,
-							box.frame[1] + 44 + 2 * 26,
-							box.frame[2] - 32
+							"Move to a location on the map."
 						);
 					}
-					button(
+					// 5327AE captions id 201 UIO_COMMON_CTL_CANCEL; the port's text
+					// tables carry its English twin, UIIT_CTL_CANCEL ("Cancel").
+					authoredLabeledButton(
+						reverseReturnButton( box.refuse ),
+						0,
+						0,
 						reverseBox.cancel,
-						hudCopy( "UIIT_CTL_CANCEL" ),
-						box.refuse[0],
-						box.refuse[1],
-						box.refuse[2]
+						hudCopy( "UIIT_CTL_CANCEL" )
 					);
 					endWindow( admission, "premium-reverse-return" );
 				}
@@ -15538,7 +15597,8 @@ export function createUi(
 
 				if (
 					game?.npcConversation && game.npcConversation.phase !== "closed" && hudData &&
-					guideResources.data() && !(panel === "Shop" && game.shop?.npc === game.npcConversation.gid)
+					guideResources.data() && !npcPanel.hidden() &&
+					!(panel === "Shop" && game.shop?.npc === game.npcConversation.gid)
 				) {
 					const mark = beginWindow(),
 						root = hudData.root.GDR_NPCWINDOW!,
@@ -25756,7 +25816,7 @@ export function createUi(
 				inWorld: phase === "world",
 				dead: !!game?.vitals.find( v => v.gid === game.localGid )?.deathState,
 				leaving: leaveRequested,
-				nextVariant: nextLoadingVariant
+				nextVariant: experimental.state().saved.safeLoadingScreen ? 1 : nextLoadingVariant
 			} ) );
 			// Prewarm decoded authored artwork so hotkeys/sidebar changes stay immediate.
 			// Renderer now derives GPU residency from committed quads; this catalogue

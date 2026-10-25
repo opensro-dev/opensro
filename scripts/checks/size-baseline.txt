@@ -1,10 +1,13 @@
 # Files over 1000 lines once formatted to dprint.json, each as `path # reason`: debt waiting for a split,
 # or an exemption whose reason says why no responsibility boundary exists. This ledger may only shrink:
 # split a file (or let it fall under the limit), then delete its line. See scripts/checks/check_source_file_size.mjs.
+apps/client-next/src/engine/foundation/navigation/clipper.ts # one movement-clipper owner: installed region grids, object placements, the event registry and every clip query read the same install-sequence state, and the worker and main-thread instances must answer identically, so the algorithm stays in one file
 apps/client-next/src/engine/foundation/ui/pet-design-data.ts # generated workbook snapshot; skill, gear and affix IDs form one matched client/server design contract, maintained in pet-design.xlsx via pet_design_export.py
 apps/client-next/src/engine/foundation/ui/skill-tooltip-params.ts # not yet analysed; split on its responsibility boundaries when formatted
 apps/client-next/src/engine/runtime/characters/characters.ts # one frame coordinator: the state index, action/event lanes and actor pass share one ordered frame; the lanes it calls are separate owners
+apps/client-next/src/engine/runtime/characters/pose-presentation.ts # one sampled-pose owner: the frame clock, origin offset, sampled and untimed tracks and their recovery geometry share each frame's state; the interpolated own walk is already its own owner (own-walk-interpolation.ts), leaving only the dispatch here
 apps/client-next/src/engine/runtime/characters/effects/effects.ts # formatted 2026-10-01; step() still owns cast stages, attached buffs, status, item and system effects and flights: split along those owners
+apps/client-next/src/engine/runtime/platform/platform.ts # platform composition root: the returned handle carries one row per platform owner (canvas, cursor, telemetry, display); rows join and leave with their owners and no responsibility boundary runs inside the table
 apps/client-next/src/engine/runtime/platform/ui/ui.ts # one DOM bridge owner: control lifetime, pointer/touch routing, focus and IME share each control's element and its per-frame publication; the drag shield and cursor are already separate owners
 apps/client-next/src/engine/runtime/renderer/device/geometry.ts # cohesive draw-resource and binding lifetime owner; upload snapshots have a separate owner
 apps/client-next/src/engine/runtime/renderer/characters/characters.ts # synchronous model, pose and draw-batch lifetime owner; shared admission and retirement must stay ordered

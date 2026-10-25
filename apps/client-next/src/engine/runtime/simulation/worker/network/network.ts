@@ -10,7 +10,7 @@ failure names that frame so it can be reported (session.ts).
 
 ===========================================================================
 */
-import { createCodec } from "./codec/codec";
+import { createCodec, MAX_RESERVED_OPCODE } from "./codec/codec";
 import {
 	INCIDENT_JOURNAL_AGE_MS,
 	INCIDENT_JOURNAL_ROWS,
@@ -28,6 +28,54 @@ const PING_BACKLOG_LIMIT = 65536;
 // The frame journal for bug reports (takeJournal) holds at most this many
 // frames between takes. Opcodes and sizes only: no payload ever enters it.
 const NET_JOURNAL_RECORDS = 4096;
+// The stream position is acknowledged at most this often (#1466): the
+// server keeps every unacknowledged ordered frame for a resume.
+const STREAM_ACK_INTERVAL_MS = 1000;
+// A server close reason is free text; the report keeps a short, plain copy.
+const CLOSE_REASON_LENGTH = 64;
+
+/*
+================
+CloseFacts
+
+What the browser knows when a socket goes away (GH #1428).
+================
+*/
+export interface CloseFacts {
+	readonly code: number;
+	readonly reason: string;
+	readonly wasClean: boolean;
+	readonly errored: boolean;
+	readonly sinceLastFrameMs: number | null;
+	readonly openForMs: number | null;
+	readonly online: boolean;
+}
+
+/*
+================
+closeDetail
+
+One line for the incident report: the WebSocket close code and reason,
+whether the close was clean, whether an error event preceded it, how long
+since the last inbound frame and how long the socket was open, and the
+browser's online flag. 1006 with a long silence reads as a network drop;
+a clean server code with a reason reads as a server close.
+================
+*/
+export function closeDetail( facts: CloseFacts ): string {
+	const seconds = ( ms: number ) => (ms / 1000).toFixed( 1 ) + " s";
+	const reason = facts.reason.replace( /[^\x20-\x7e]/g, "?" ).slice( 0, CLOSE_REASON_LENGTH );
+	return [
+		"WebSocket " + facts.code + (reason ? ' "' + reason + '"' : ""),
+		facts.wasClean ? "clean" : "not clean",
+		...(facts.errored ? [ "after an error event" ] : []),
+		facts.sinceLastFrameMs === null ?
+			"no frame received" :
+			"last frame " + seconds( facts.sinceLastFrameMs ) + " ago",
+		facts.openForMs === null ? "never opened" : "open " + seconds( facts.openForMs ),
+		facts.online ? "online" : "offline"
+	].join( ", " );
+}
 
 /*
 ================
@@ -42,6 +90,13 @@ export function createNetwork(
 	let bytes = 0;
 	let pingToken = 0, pendingPing = false, pingSentAt = -Infinity, pingReceivedAt = -Infinity;
 	let measuredPing: number | null = null;
+	// Frames received on any socket (received()); pings and pongs included.
+	let receivedFrames = 0;
+	// The stream position (#1466): frames above the session-internal range
+	// the consumer has applied, counted at drain - never at receipt, so a
+	// frame lost with a dying socket's inbox is re-sent on resume. It
+	// survives a resume and restarts on a fresh WELCOME.
+	let streamPosition = 0, ackedPosition = 0, ackSentAt = -Infinity;
 	const inbox: WireFrame[] = [];
 	let journal = new Float64Array( NET_JOURNAL_RECORDS * NET_JOURNAL_FIELDS ), journalCount = 0;
 	// The incident ring: the bug-report journal above is drained every second,
@@ -49,6 +104,9 @@ export function createNetwork(
 	const recent = new Float64Array( INCIDENT_JOURNAL_ROWS * NET_JOURNAL_FIELDS );
 	let recentNext = 0, recentCount = 0;
 	let ended: string | null = null;
+	// The current socket's open and last-inbound times (performance.now());
+	// receivedAt is the one last-inbound stamp (receivedAt(), #1474).
+	let openedAt = -Infinity, receivedAt = -Infinity;
 	/*
 	================
 	note
@@ -96,6 +154,8 @@ export function createNetwork(
 		inbox.length = 0;
 		ended = null;
 		endReason = undefined;
+		ackedPosition = 0;
+		ackSentAt = -Infinity;
 		const previous = socket;
 		socket = null;
 		if ( previous ) {
@@ -106,6 +166,22 @@ export function createNetwork(
 					null;
 			previous.close();
 		}
+	}
+	/*
+	================
+	acknowledge
+
+	Tells the server how far the stream has been applied, about once a
+	second and only when it moved.
+	================
+	*/
+	function acknowledge() {
+		if ( !welcomed || !socket || socket.readyState !== WebSocket.OPEN ) return;
+		const now = performance.now();
+		if ( streamPosition === ackedPosition || now - ackSentAt < STREAM_ACK_INTERVAL_MS ) return;
+		ackedPosition = streamPosition;
+		ackSentAt = now;
+		send( codec.streamAck( streamPosition ) );
 	}
 	/*
 	================
@@ -174,6 +250,29 @@ export function createNetwork(
 	return {
 		disconnect,
 		/*
+		================
+		received
+
+		Every frame received so far, transport pings and pongs included: the
+		world session's stall detector reads a live link from its change.
+		================
+		*/
+		received() {
+			return receivedFrames;
+		},
+		/*
+		================
+		receivedAt
+
+		The last-inbound time on the event clock, stamped in onmessage
+		(#1474): the close detail below and the world session's stall
+		detector both read this one stamp.
+		================
+		*/
+		receivedAt() {
+			return receivedAt;
+		},
+		/*
   ================
   pingMs
 
@@ -206,15 +305,22 @@ export function createNetwork(
 			if ( endpoint.protocol !== "ws:" && endpoint.protocol !== "wss:" ) {
 				throw new Error( "Invalid transport URL" );
 			}
-			const hello = codec.hello( admission, resume );
+			// Without a resume token the server starts a fresh stream.
+			if ( !resume?.length ) streamPosition = 0;
+			const hello = codec.hello( admission, resume, streamPosition );
 			disconnect();
 			const generation = epoch;
 			const current = new WebSocket( endpoint );
 			socket = current;
 			current.binaryType = "arraybuffer";
 			const active = () => !disposed && generation === epoch && socket === current;
+			// An error event is always followed by a close event (WebSocket
+			// close steps), which alone carries the code: report at the close.
+			let errored = false;
+			openedAt = receivedAt = -Infinity;
 			current.onopen = () => {
 				if ( active() ) {
+					openedAt = performance.now();
 					try {
 						send( hello );
 					} catch ( error ) {
@@ -230,7 +336,9 @@ export function createNetwork(
 					if ( !(event.data instanceof ArrayBuffer) ) {
 						throw new Error( "Non-binary transport frame" );
 					}
+					receivedAt = performance.now();
 					const frame = codec.decode( new Uint8Array( event.data ) );
+					receivedFrames++;
 					note( NET_JOURNAL_IN, frame.opcode, event.data.byteLength );
 					if ( frame.opcode === 5 ) {
 						if ( frame.payload.length !== 1 ) throw new Error( "Invalid transport goodbye" );
@@ -264,7 +372,7 @@ export function createNetwork(
 						if ( frame.opcode !== 2 ) {
 							throw new Error( "Expected transport welcome" );
 						}
-						codec.welcome( frame.payload );
+						if ( !codec.welcome( frame.payload ).resumed ) streamPosition = 0;
 						welcomed = true;
 					} else if ( frame.opcode === 1 || frame.opcode === 2 ) {
 						throw new Error( "Unexpected transport handshake" );
@@ -301,22 +409,35 @@ export function createNetwork(
 				}
 			};
 			current.onerror = () => {
-				if ( active() ) {
+				if ( active() ) errored = true;
+			};
+			current.onclose = event => {
+				if ( !active() ) return;
+				const now = performance.now();
+				const detail = closeDetail( {
+					code: event.code,
+					reason: event.reason,
+					wasClean: event.wasClean,
+					errored,
+					sinceLastFrameMs: Number.isFinite( receivedAt ) ? now - receivedAt : null,
+					openForMs: Number.isFinite( openedAt ) ? now - openedAt : null,
+					online: globalThis.navigator?.onLine ?? true
+				} );
+				if ( errored ) {
 					fail( "Transport connection failed", undefined, {
 						category: "connection",
 						code: "connection_failed",
-						message: "Connection lost. Please reconnect."
+						message: "Connection lost. Please reconnect.",
+						detail
 					} );
+					return;
 				}
-			};
-			current.onclose = () => {
-				if ( active() ) {
-					end( "Transport connection closed", {
-						category: "unknown",
-						code: "connection_closed",
-						message: "Connection lost. The cause is unknown."
-					} );
-				}
+				end( "Transport connection closed", {
+					category: "unknown",
+					code: "connection_closed",
+					message: "Connection lost. The cause is unknown.",
+					detail
+				} );
 			};
 		},
 		send( frame ) {
@@ -358,6 +479,7 @@ export function createNetwork(
 					current = inbox[index]!;
 					if ( consume( current ) === false ) break;
 					consumed++;
+					if ( current.opcode > MAX_RESERVED_OPCODE ) streamPosition = (streamPosition + 1) >>> 0;
 					if ( epoch !== generation ) {
 						return;
 					}
@@ -375,6 +497,14 @@ export function createNetwork(
 						"A game error interrupted your session.",
 					stack: error instanceof Error ? error.stack?.slice( 0, 8192 ) : undefined
 				} );
+				return;
+			}
+			// Outside the consume try: a full outbound buffer is a transport
+			// failure, not a packet the game could not apply.
+			try {
+				if ( epoch === generation ) acknowledge();
+			} catch ( error ) {
+				fail( String( error ) );
 			}
 		},
 		dispose() {

@@ -180,6 +180,9 @@ presentUpdate
 	owners.characters.eventRain = () => false;
 	owners.characters.orbGauge = () => ({ authoritative: 0, displayed: 0, pending: 0 });
 	owners.characters.receiveFeedback = () => {};
+	// The main-thread mover's per-frame state (#1440).
+	owners.characters.ownMover = () => {};
+	owners.characters.drawnPose = () => undefined;
 	owners.characters.step = () => {
 		throw new Error( "injected presentation failure" );
 	};
@@ -235,7 +238,14 @@ test("runtime reports idle asset death and frame exceptions, then disposes every
 });
 
 test("a hidden tab runs frames from worker deliveries; a visible one waits for its RAF until starved", async t => {
-	const keys = [ "__runtimeOwners", "requestAnimationFrame", "cancelAnimationFrame", "location", "document" ];
+	const keys = [
+		"__runtimeOwners",
+		"requestAnimationFrame",
+		"cancelAnimationFrame",
+		"location",
+		"document",
+		"performance"
+	];
 	const previous = new Map( keys.map( key => [ key, Object.getOwnPropertyDescriptor( globalThis, key ) ] ) );
 	t.after( () => {
 		for ( const [key, value] of previous ) {
@@ -246,8 +256,17 @@ test("a hidden tab runs frames from worker deliveries; a visible one waits for i
 	for ( const visibilityState of [ "visible", "hidden" ] ) {
 		const closed = [], reports = [], sounds = [];
 		const owners = frameOwners( "characters", closed, reports, sounds );
-		// Deliveries arrive on the worker's own clock, never from a RAF.
-		owners.simulation.delivery = () => new Promise( resolve => setTimeout( resolve, 20 ) );
+		// The frame clock and the deliveries are the test's own. The runtime
+		// reads performance.now() for every pace and starvation decision
+		// (runtime.ts hiddenFrame), so holding `now` holds them all; a
+		// delivery settles only when the test settles it. No wall time: a
+		// loaded machine used to stretch this test's real 150 ms wait past
+		// the 250 ms starvation line and run the visible branch's frame
+		// early (issue #1445).
+		let now = 1000;
+		const deliveries = [];
+		globalThis.performance = { now: () => now };
+		owners.simulation.delivery = () => new Promise( resolve => deliveries.push( resolve ) );
 		let rafs = 0, cancelled = 0;
 		globalThis.document = { visibilityState };
 		globalThis.location = { search: "", origin: "http://localhost" };
@@ -257,15 +276,24 @@ test("a hidden tab runs frames from worker deliveries; a visible one waits for i
 		const runtime = startRuntime( {}, {} );
 		// A failed assertion must not leak a running runtime: it keeps node alive.
 		try {
-			// Past the hidden pace (100 ms), short of starvation (250 ms).
-			await new Promise( resolve => setTimeout( resolve, 150 ) );
-			if ( visibilityState === "visible" ) {
-				assert.equal( reports.length, 0, "a visible tab waits for its RAF" );
-			}
-			// A visible window that never gets its RAF is starved: it frames off a
-			// delivery too, as a window the browser stopped drawing must.
-			await new Promise( resolve => setTimeout( resolve, 250 ) );
-			// The frame ran (and hit the injected failure) with no RAF callback.
+			// Settle the delivery the frame loop is waiting on, then let the
+			// loop's promise chain run out (microtasks only, no timers).
+			const deliver = async () => {
+				defined( deliveries.shift() )();
+				for ( let i = 0; i < 32; i++ ) await Promise.resolve();
+			};
+			await deliver();
+			assert.equal( reports.length, 0, `${visibilityState} frames only when its pace is due` );
+			// Visible: due only 250 ms after the last frame finished (the
+			// starvation line). Hidden: due at the 100 ms pace after the
+			// last frame. One millisecond short of either, still no frame.
+			now += visibilityState === "visible" ? 249 : 99;
+			await deliver();
+			assert.equal( reports.length, 0, `${visibilityState} still waits short of its line` );
+			// On the line the delivery runs the frame, as a window the
+			// browser stopped drawing must.
+			now += 1;
+			await deliver();
 			assert.equal( reports.length, 1, `${visibilityState} frames off a delivery` );
 			assert.match( reports[0], /injected presentation failure/ );
 			assert.equal( cancelled >= 1, true, "the pending RAF is retired" );
