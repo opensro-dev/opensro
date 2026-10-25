@@ -41,6 +41,31 @@ class DeployTests(unittest.TestCase):
 				{"SRO_BUG_REPORT_DISCORD_WEBHOOK": "https://discord.com/api/webhooks/1/abc"})
 
 	# ================
+	# test_shard_settings_refuse_a_malformed_profile
+	#
+	# The deployment's beta values come only from shard-settings.json (#606):
+	# anything but an object of SRO_ names to strings is refused, a name the
+	# deployer derives itself included, and a missing file refuses the
+	# release before any token is issued rather than deploy native values.
+	# ================
+	def test_shard_settings_refuse_a_malformed_profile(self):
+		with tempfile.TemporaryDirectory() as directory:
+			path = Path(directory) / "shard-settings.json"
+			for text in ("[]", '{"beta_drop_rate": "20"}', '{"SRO_BETA_DROP_RATE": 20}',
+				'{"SRO_STACK_SIZES": "arrow=2500"}', '{"SRO_beta": "on"}'):
+				with self.subTest(text=text):
+					path.write_text(text)
+					with self.assertRaises(ValueError):
+						deploy.shard_settings(path)
+			path.write_text('{"SRO_BETA_DROP_RATE": "20"}')
+			self.assertEqual(deploy.shard_settings(path), {"SRO_BETA_DROP_RATE": "20"})
+			missing = Path(directory) / "absent.json"
+			with patch.object(deploy, "SHARD_SETTINGS", missing), patch.object(deploy, "run") as run:
+				with self.assertRaises(FileNotFoundError):
+					deploy.deployer({"nomad_bootstrap": str(path)}, "")
+				run.assert_not_called()
+
+	# ================
 	# test_preflight_and_token_lifecycle
 	# ================
 	def test_preflight_and_token_lifecycle(self):
@@ -80,6 +105,8 @@ class DeployTests(unittest.TestCase):
 					if arguments[0].endswith("sro-nomad"):
 						self.assertEqual(options["env"]["NOMAD_TOKEN"], "scoped-fixture")
 						self.assertEqual(options["env"]["SRO_STACK_SIZES"], stack_sizes or "")
+						for name, value in deploy.shard_settings().items():
+							self.assertEqual(options["env"][name], value)
 						if arguments[1] == failure:
 							raise subprocess.CalledProcessError(1, arguments)
 					return SimpleNamespace(stdout="")

@@ -367,6 +367,15 @@ variable. Changes take effect on server restart; they do not update a running
 server. Removing the override preserves existing quantities and permits moving
 or splitting retained oversized stacks without adding to them above the new cap.
 
+This shard's beta economy (growth, drop, gold and rare rates, silk, the
+starter kit and the other `SRO_BETA_*` rules) is named in
+[`shard-settings.json`](shard-settings.json), a control file installed and
+hashed with the others. The public job file and settings table default to
+native (#606), so each server release passes these values to `sro-nomad` as
+its environment; a missing or malformed file refuses the release before any
+token, backup or stop. Change the shard's beta values there, through a
+reviewed pull request and a controls install, never on the host.
+
 The in-game bug reporter (`/bug`) is on when root-only
 `/etc/opensro-release/bug-report-webhook` holds one line, a Discord webhook URL
 (a forum channel works: each report opens its own post). Each release passes

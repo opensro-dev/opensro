@@ -143,12 +143,12 @@ variable "move_client_clip" {
 # entry); beta_player_map shows every online player on the world map (M).
 variable "beta_starter_kit" {
   type    = string
-  default = "on"
+  default = "off"
 }
 
 variable "beta_player_map" {
   type    = string
-  default = "on"
+  default = "off"
 }
 
 # Beta builds share the 5000 total mastery budget. Set off for native
@@ -192,7 +192,7 @@ variable "pharaoh_tomb_gear_rate" {
 # new credits; a launch wipes or zeroes it. "on" is 50.
 variable "beta_silk" {
   type    = string
-  default = "50"
+  default = "off"
 }
 
 # beta_silk_active_only credits the beta silk hour only while the character
@@ -609,7 +609,7 @@ variable "attack_pet_expansion" {
 
 variable "beta_growth" {
   type    = string
-  default = "on"
+  default = "off"
 }
 
 # beta_growth_bands gives level bands their own EXP/SP multiplier: "pace"
@@ -617,17 +617,17 @@ variable "beta_growth" {
 # (owner, 2026-10-24). Empty keeps every level at the pace.
 variable "beta_growth_bands" {
   type    = string
-  default = "1-59:pace,60-89:20,90-110:10"
+  default = ""
 }
 
 variable "beta_skill_exp_rate" {
   type    = string
-  default = "100"
+  default = "1"
 }
 
 variable "beta_drop_rate" {
   type    = string
-  default = "20"
+  default = "1"
 }
 
 # beta_drop_mix gives item families their own beta drop rate (port-only, not
@@ -639,7 +639,7 @@ variable "beta_drop_rate" {
 # GameWorld at boot.
 variable "beta_drop_mix" {
   type    = string
-  default = "on"
+  default = "off"
 }
 
 # shop_extra_goods adds NPC shop goods beyond the v1.150 stock (port-only,
@@ -733,7 +733,7 @@ variable "job_goods_teleport" {
 # keeps today's drops.
 variable "beta_shop_only_degree9" {
   type    = string
-  default = "on"
+  default = "off"
 }
 
 # elixir_drops_off keeps every elixir out of monster drops (port-only, not
@@ -757,7 +757,7 @@ variable "alchemy_material_drops_off" {
 
 variable "beta_drop_cap" {
   type    = string
-  default = "16"
+  default = "0"
 }
 
 # 100 keeps gold per kill near its level before #463 stopped multiplying the
@@ -765,7 +765,7 @@ variable "beta_drop_cap" {
 # owner 2026-10-19).
 variable "beta_gold_rate" {
   type    = string
-  default = "100"
+  default = "1"
 }
 
 # instant_inventory_expansion makes quest bag slots usable at the turn-in
@@ -778,7 +778,7 @@ variable "instant_inventory_expansion" {
 
 variable "beta_rare_rate" {
   type    = string
-  default = "5"
+  default = "1"
 }
 
 # beta_seal_rates multiplies each rare seal's chance on top of beta_rare_rate
@@ -787,7 +787,7 @@ variable "beta_rare_rate" {
 # Moon twice, Sun as it is. "off" keeps every seal at beta_rare_rate.
 variable "beta_seal_rates" {
   type    = string
-  default = "on"
+  default = "off"
 }
 
 # sun_event_only keeps degree-9 Seal of Sun gear out of non-unique monster
@@ -830,7 +830,7 @@ variable "unique_pop_ticket" {
 # owner decision 2026-10-18). "off" keeps the authored row.
 variable "beta_unique_respawn" {
   type    = string
-  default = "on"
+  default = "off"
 }
 
 # stack_sizes raises item stack caps per group (port-only, not native), e.g.

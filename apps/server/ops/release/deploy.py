@@ -64,6 +64,11 @@ BUG_REPORT_WEBHOOK = "/etc/opensro-release/bug-report-webhook"
 MAINTENANCE_GATE = ".state/cluster/maintenance-gate.json"
 # sro-authority-upgrade -commit names the backup it kept on this line.
 UPGRADE_BACKUP_PREFIX = "Upgrade backup path: "
+# This deployment's shard settings (shard_settings), installed beside this file.
+SHARD_SETTINGS = Path(__file__).with_name("shard-settings.json")
+SHARD_SETTING_NAME = re.compile(r"SRO_[A-Z0-9_]+")
+# The SRO_ variables deployer derives itself; a shard setting never names one.
+DEPLOYMENT_VARIABLES = frozenset({"SRO_SERVER_GAME_DATA_ROOT", "SRO_STACK_SIZES", "SRO_BUG_REPORT_DISCORD_WEBHOOK"})
 AUTHORITY_DB = "state.db"
 
 
@@ -119,6 +124,29 @@ def bug_report_environment(config):
 	except FileNotFoundError:
 		return {}
 	return {"SRO_BUG_REPORT_DISCORD_WEBHOOK": value} if value else {}
+
+
+# ================
+# shard_settings
+#
+# This deployment's own shard settings (#606). The public job file and the
+# settings table (internal/config/shardsettings) default to native, so the
+# beta values this shard runs are named here, shipped and hashed with the
+# controls, and reach sro-nomad as its environment, which it validates
+# against the table. A missing or malformed file refuses the release before
+# any token, backup or stop: a silent native fallback would change the live
+# economy.
+# ================
+def shard_settings(path=None):
+	settings = json.loads(Path(path or SHARD_SETTINGS).read_text(encoding="utf-8"))
+	if not isinstance(settings, dict):
+		raise ValueError("shard settings must be a JSON object")
+	for name, value in settings.items():
+		if not SHARD_SETTING_NAME.fullmatch(name) or not isinstance(value, str):
+			raise ValueError("shard setting " + repr(name) + " must be an SRO_ name with a string value")
+		if name in DEPLOYMENT_VARIABLES:
+			raise ValueError("shard setting " + name + " is derived by the deployment")
+	return settings
 
 
 # ================
@@ -489,6 +517,7 @@ def check_nomad_version(config):
 # token (revoke) whatever happens.
 # ================
 def deployer(config, stack_sizes):
+	settings = shard_settings()
 	management = dict(CLEAN_ENV, NOMAD_ADDR="http://127.0.0.1:4646",
 		NOMAD_TOKEN=json.loads(Path(config["nomad_bootstrap"]).read_text())["SecretID"])
 	issued = run(["nomad", "acl", "token", "create", "-name", "github-server-release", "-type", "client",
@@ -498,6 +527,7 @@ def deployer(config, stack_sizes):
 		NOMAD_TOKEN=token["SecretID"], SRO_SERVER_GAME_DATA_ROOT=config["game_data"],
 		SRO_STACK_SIZES=stack_sizes,
 		**bug_report_environment(config))
+	environment.update(settings)
 	arguments = ["-namespace", "sro", "-task-user", "sro", "-allowed-origins", config["origin"],
 		"-agent-memory-mb", str(config["agent_memory_mb"]), "-gameworld-memory-mb", str(config["gameworld_memory_mb"])]
 	return management, token, environment, arguments
