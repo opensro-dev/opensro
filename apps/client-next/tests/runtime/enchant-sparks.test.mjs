@@ -224,6 +224,20 @@ test("the later client's itemoptionefp rows set each item's effect, bone, scale 
 	}
 });
 
+test("a short itemoptionefp row fails with the build's error, not a TypeError", () => {
+	const root = fs.mkdtempSync( path.join( os.tmpdir(), "opensro-vsro-glow-short-" ) );
+	try {
+		// A known item, but the row ends after its codename.
+		fs.writeFileSync( path.join( root, "itemoptionefp.txt" ), "ITEM_CH_SWORD_01_A" );
+		assert.throws(
+			() => equipmentEnchantSparks( undefined, root ),
+			/Unsupported itemoptionefp row/
+		);
+	} finally {
+		fs.rmSync( root, { recursive: true, force: true } );
+	}
+});
+
 /*
 ================
 threshold validation
