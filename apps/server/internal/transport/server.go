@@ -455,7 +455,7 @@ func (s *Server) Start() error {
 	if s.started {
 		return fmt.Errorf("transport: server already started")
 	}
-	if s.Hub.helloAuthFn() == nil {
+	if s.Hub.helloAuthFn() == nil && s.Hub.admission.commitCurrent() == nil {
 		return fmt.Errorf("transport: HELLO admission verifier is not installed")
 	}
 	if s.Hub.enterWorldAuthFn() == nil {

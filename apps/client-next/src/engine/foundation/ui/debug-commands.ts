@@ -54,6 +54,15 @@ export const DEBUG_COMMAND_HIDE_ME = 113;
 export const DEBUG_COMMAND_FREE_CAMERA = 114;
 export const DEBUG_COMMAND_UI_OFF = 115;
 export const DEBUG_COMMAND_UI_ON = 116;
+// 118/119 write the interface's camera-collision byte (+0x3CC), which
+// the constructor sets: ApplyCameraOrbit (68FAD0) is the only
+// consumer - set, it casts the eye-to-target segment and pulls the
+// camera in on a hit; clear, it takes the same no-hit arm as a miss
+// and the camera keeps the requested distance. The follow
+// (UpdateCameraOrbitTarget 68F830) never reads the byte, so the
+// camera keeps tracking the player either way. "col" is collision.
+export const DEBUG_COMMAND_COLON = 118;
+export const DEBUG_COMMAND_COLON_OFF = 119;
 export const DEBUG_COMMAND_CURSOR = 135;
 export const DEBUG_COMMAND_SET_FIELD_OF_VIEW = 500;
 
