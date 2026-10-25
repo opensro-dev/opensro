@@ -80,7 +80,12 @@ worker has not taken on the worker's newer pose; only a fixed segment is
 absolute and replays as it is.
 ================
 */
-export type MoverAim = MovementAim | { readonly kind: "fixed"; readonly segment: WalkStepSegment; };
+export type MoverAim =
+	| MovementAim
+	| { readonly kind: "fixed"; readonly segment: WalkStepSegment; }
+	// Ends the walk where the walker is when the input is replayed (the Up
+	// arrow's release, #1574).
+	| { readonly kind: "stop"; };
 
 /*
 ================
@@ -259,10 +264,12 @@ leg
 The segment of an aim walked from from, as the worker's movement owner
 starts it: a goal leg (walk-step.ts walkLeg); one DIRECTION_LEG_UNITS leg
 along the heading (movement.ts directionSegment), which stepWalk walks
-past its end until the navigation stops it; or the fixed segment itself.
+past its end until the navigation stops it; the fixed segment itself; or
+none for a stop.
 ================
 */
-function leg( from: Pose, aim: MoverAim, start: number, speed: number ): WalkStepSegment {
+function leg( from: Pose, aim: MoverAim, start: number, speed: number ): WalkStepSegment | null {
+	if ( aim.kind === "stop" ) return null;
 	if ( aim.kind === "fixed" ) return aim.segment;
 	if ( aim.kind === "goal" ) return startWalking( walkLeg( from, aim.destination, start, speed ) );
 	const to = directionLegEnd( from, aim.heading );
@@ -398,6 +405,27 @@ export function createLocalMover() {
 	}
 	return {
 		predict,
+		/*
+		================
+		arrow
+
+		The Up arrow (#1574, arrow-keys.ts): its press walks the facing unless
+		a direction walk is already predicted (0x877F30 with bFlag 0 does not
+		resend); its release ends a predicted direction walk where the walker
+		is. Left and Right turn on the worker; each publication rebuilds the
+		walk on the heading the turn has reached.
+		================
+		*/
+		arrow( seq: number, down: boolean, drawn: Pose, now: number, world: LocalMoverWorld ): boolean {
+			if ( down ) {
+				if ( walk?.walker.segment?.direction ) return true;
+				if ( !world.walkPredictable || !world.speed || !world.pose ) return false;
+				const heading = (walk?.walker.pose ?? world.pose).angle;
+				return predict( { seq, aim: { kind: "direction", heading }, speed: world.speed, drawn, now }, world );
+			}
+			if ( !walk?.walker.segment?.direction ) return false;
+			return predict( { seq, aim: { kind: "stop" }, speed: walk.speed, drawn, now }, world );
+		},
 		/*
 		================
 		click

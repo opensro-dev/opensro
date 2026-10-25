@@ -118,6 +118,69 @@ test("the body leaves rest on the click frame and never outruns walking speed at
 	assert.ok( last.x > START.x + SPEED * now / 1000 - .1 );
 });
 
+test("a move prediction starts on its frame and walks its goal", () => {
+	const mover = createLocalMover(), w = world();
+	const destination = { ...START, x: 1300 };
+	assert.equal(
+		mover.predict( { seq: 1, aim: { kind: "goal", destination }, speed: SPEED, drawn: START, now: 0 }, w ),
+		true
+	);
+	let now = 0, last = START;
+	for ( const dt of FRAMES ) {
+		now += dt;
+		const frame = mover.frame( now, w );
+		assert.equal( frame.kind, "walking" );
+		const step = Math.hypot( frame.pose.x - last.x, frame.pose.z - last.z );
+		assert.ok( step <= SPEED * dt / 1000 + .01, `step ${step} in ${dt} ms` );
+		assert.ok( step > 0, "it moves every frame" );
+		last = frame.pose;
+	}
+	assert.ok( last.x > START.x + SPEED * now / 1000 - .1, "no frame of rest after the move" );
+	// No speed to walk at, or no navigation view: nothing is predicted and
+	// the presenter keeps the walk (the command still went to the worker).
+	assert.equal(
+		createLocalMover().predict(
+			{ seq: 1, aim: { kind: "goal", destination }, speed: 0, drawn: START, now: 0 },
+			w
+		),
+		false
+	);
+	assert.equal(
+		createLocalMover().predict(
+			{ seq: 1, aim: { kind: "goal", destination }, speed: SPEED, drawn: START, now: 0 },
+			world( { view: null } )
+		),
+		false
+	);
+});
+
+test("a second move prediction redirects the walk from where the body is drawn", () => {
+	const mover = createLocalMover(), w = world();
+	mover.predict(
+		{ seq: 1, aim: { kind: "goal", destination: { ...START, x: 1300 } }, speed: SPEED, drawn: START, now: 0 },
+		w
+	);
+	const before = mover.frame( 200, w );
+	assert.equal( before.kind, "walking" );
+	assert.equal(
+		mover.predict(
+			{
+				seq: 2,
+				aim: { kind: "goal", destination: { ...START, x: 1000, z: 1300 } },
+				speed: SPEED,
+				drawn: before.pose,
+				now: 200
+			},
+			w
+		),
+		true
+	);
+	const after = mover.frame( 300, w );
+	assert.equal( after.kind, "walking" );
+	assert.ok( Math.abs( after.pose.x - before.pose.x ) < 1, "no further travel along the old leg" );
+	assert.ok( after.pose.z > before.pose.z, "the new leg runs from the turn" );
+});
+
 test("a right-angle re-click turns at the click frame from where the body is drawn", () => {
 	const mover = createLocalMover(), w = world();
 	mover.click( { seq: 1, query: query( 1300, 1000 ), drawn: START, now: 0 }, w );

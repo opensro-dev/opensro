@@ -19,7 +19,7 @@ import { worldCursor } from "@/engine/foundation/ui/world-cursor";
 import { experimentalGameplay, experimentalVideo } from "@/engine/foundation/ui/experimental-options";
 import { sampleWorldClock } from "@/engine/foundation/gameplay/world-clock";
 import { createWorldDoubleClick } from "@/engine/foundation/gameplay/world-double-click";
-import type { WorldClickInput } from "@/engine/contracts/input";
+import type { RawInput, WorldClickInput } from "@/engine/contracts/input";
 import { createNavigationStream } from "./navigation/navigation";
 import { createFrontend } from "./frontend/frontend";
 import { createUi } from "./ui/ui";
@@ -43,6 +43,9 @@ import { createRenderer } from "./renderer/renderer";
 import { createViewer } from "./viewer/viewer";
 import { createSimulationHost } from "./simulation/host";
 import { createLocalMover, type LocalMoverWorld } from "./movement/local-mover";
+import { approachGoal } from "@/engine/foundation/gameplay/approach-goal";
+import type { Pose } from "@/engine/contracts/gameplay";
+import type { EntityState } from "@/engine/contracts/world";
 import type { RuntimeControl } from "@/engine/contracts/runtime";
 import { worldAudioPosition } from "@/engine/foundation/world/world-space";
 
@@ -133,7 +136,7 @@ export function startRuntime(
 		const audio = own(
 			createAudio( assets, new URL( "/", import.meta.url ).href, random, Math.trunc( performance.now() ) >>> 0 )
 		);
-		const input = createInput();
+		const input = createInput( event => arrowInput( event ) );
 		const frameWork = createFrameWork();
 		const framePacing = createFramePacing();
 		const simulation = own( createSimulationHost() );
@@ -181,7 +184,33 @@ export function startRuntime(
 			) {
 				command = { ...command, command: { ...command.command, alt: true } };
 			}
-			simulation.session( command );
+			const seq = simulation.session( command );
+			// A move with a known destination (the GM /Pos walk; map
+			// auto-move sends the same kind) goes through the main-thread
+			// mover like a ground click (#1571): from the drawn pose,
+			// under the worker's own ground-walk gate. A foreign-region
+			// goal keeps the presenter: the mover's navigation view covers
+			// one region, and the worker walks those exactly as today.
+			if (
+				seq !== undefined && mainThreadOwnWalk &&
+				command.kind === "gameplay" && command.command.kind === "move"
+			) {
+				const game = presentation.gameplay();
+				const drawn = game ? characters.drawnPose( game.localGid ) : undefined;
+				const world = moverWorld();
+				if (
+					drawn && world.walkPredictable && world.speed !== undefined &&
+					command.command.destination.regionId === drawn.regionId
+				) {
+					localMover.predict( {
+						seq,
+						aim: { kind: "goal", destination: command.command.destination },
+						speed: world.speed,
+						drawn,
+						now: performance.now()
+					}, world );
+				}
+			}
 		}
 		/*
 		================
@@ -377,6 +406,64 @@ export function startRuntime(
 		function chooseRace( race: 0 | 1 ) {
 			frontend.race( race, creationProtectorFloor( characters.uncensored( sessionState?.nativeServerName ) ) );
 		}
+		// The arrow keys held now (#1574): a press is sent once, a release only
+		// for a key whose press was sent, and losing focus releases them all.
+		const ARROW_KEYS: Readonly<Record<string, "up" | "left" | "right">> = {
+			ArrowUp: "up",
+			ArrowLeft: "left",
+			ArrowRight: "right"
+		};
+		const arrowsHeld = new Set<"up" | "left" | "right">();
+		/*
+		================
+		arrowInput
+
+		Game_OnKeyDown 0x680A30 / Game_OnKeyUp 0x688290: Up walks the facing,
+		Left and Right turn it; Down is not a movement key. A press typed into
+		a text field is the field's. The worker owns the walk and the wire
+		(arrow-keys.ts); the main-thread mover predicts the Up arrow's start
+		and stop.
+		================
+		*/
+		function arrowInput( event: RawInput ) {
+			const release = ( key: "up" | "left" | "right" ) => {
+				arrowsHeld.delete( key );
+				const seq = simulation.session( {
+					kind: "gameplay",
+					command: { kind: "arrow-key", key, down: false }
+				} );
+				const drawn = mainThreadOwnWalk && seq !== undefined ?
+					characters.drawnPose( presentation.gameplay()?.localGid ?? 0 ) :
+					undefined;
+				if ( key === "up" && seq !== undefined && drawn ) {
+					localMover.arrow( seq, false, drawn, performance.now(), moverWorld() );
+				}
+			};
+			if ( event.kind === "release" ) {
+				for ( const key of [ ...arrowsHeld ] ) release( key );
+				return;
+			}
+			if ( event.kind !== "key" ) return;
+			const key = ARROW_KEYS[event.code];
+			if ( !key ) return;
+			if ( !event.down ) {
+				if ( arrowsHeld.has( key ) ) release( key );
+				return;
+			}
+			const game = presentation.gameplay();
+			if ( arrowsHeld.has( key ) || frontend.snapshot().phase !== "world" || sessionState?.phase !== "world" ) {
+				return;
+			}
+			if ( !game?.localGid || !game.pose ) return;
+			const focus = document.activeElement;
+			if ( focus instanceof HTMLInputElement || focus instanceof HTMLTextAreaElement ) return;
+			arrowsHeld.add( key );
+			const seq = simulation.session( { kind: "gameplay", command: { kind: "arrow-key", key, down: true } } );
+			const drawn = mainThreadOwnWalk && seq !== undefined ? characters.drawnPose( game.localGid ) : undefined;
+			if ( key === "up" && seq !== undefined && drawn ) {
+				localMover.arrow( seq, true, drawn, performance.now(), moverWorld() );
+			}
+		}
 		/*
 		================
 		worldClick
@@ -438,7 +525,16 @@ export function startRuntime(
 				// Native 67AA60 reactivates the shared decal even for the same GID.
 				// The targeting owner deduplicates the wire request, not the click.
 				if ( entity.kind !== "ground-item" && !game.targetPending ) {
-					simulation.session( { kind: "gameplay", command: { kind: "select", gid: entity.gid } } );
+					const seq = simulation.session( {
+						kind: "gameplay",
+						command: { kind: "select", gid: entity.gid }
+					} );
+					const drawn = mainThreadOwnWalk && seq !== undefined ?
+						characters.drawnPose( game.localGid ) :
+						undefined;
+					if ( seq !== undefined && drawn ) {
+						predictApproachWalk( seq, entity, drawn, now, game.walkPredictable === true );
+					}
 				}
 				// 67CCA0 -> 6935F0: a double click on another player's pet may
 				// attack it; the worker applies the pet's admission (player-attack.ts).
@@ -456,7 +552,16 @@ export function startRuntime(
 						} );
 					}
 				} else if ( entity.kind === "ground-item" ) {
-					simulation.session( { kind: "gameplay", command: { kind: "pickup", gid: entity.gid } } );
+					const seq = simulation.session( {
+						kind: "gameplay",
+						command: { kind: "pickup", gid: entity.gid }
+					} );
+					const drawn = mainThreadOwnWalk && seq !== undefined ?
+						characters.drawnPose( game.localGid ) :
+						undefined;
+					if ( seq !== undefined && drawn ) {
+						predictApproachWalk( seq, entity, drawn, now, game.pickupPredictable === true );
+					}
 				}
 				return;
 			}
@@ -509,6 +614,40 @@ export function startRuntime(
 				originMs: simulationOriginMs,
 				view: navigation.view()
 			};
+		}
+		/*
+		================
+		predictApproachWalk
+
+		An entity click the worker answers with a walk first (#1567): a far
+		select approaches its NPC, gate or stall keeper, a far pickup walks
+		onto the item. Predict that leg from this frame, the way a ground
+		click predicts (localMover.click): approachGoal names the worker's
+		own destination from its latest pose. Each arm asks the worker's
+		own gate for its walk - a select the ground click's
+		(walkPredictable), a pickup the run-up's (pickupPredictable: a
+		live cast incl. a held wall or chain root, or any mount, closes it
+		where the ground gate may not) - so a state the worker would not
+		walk in at once predicts nothing and keeps the presenter, as
+		before. Arrival hands back through the mover's own settle: the
+		worker's interaction owns what happens there.
+		================
+		*/
+		function predictApproachWalk(
+			seq: number,
+			entity: EntityState,
+			drawn: Pose,
+			now: number,
+			gateOpen: boolean
+		): void {
+			const world = moverWorld();
+			if ( !gateOpen || !world.pose || !world.speed ) return;
+			const destination = approachGoal( world.pose, entity );
+			if ( !destination ) return;
+			localMover.predict(
+				{ seq, aim: { kind: "goal", destination }, speed: world.speed, drawn, now },
+				world
+			);
 		}
 		const characters = own(
 			createCharacterPresentation(
@@ -817,9 +956,11 @@ export function startRuntime(
 					worldPresented ? ui.mallPreview() : null,
 					worldPresented ? ui.skinPreview() : null
 				);
+				const moverGid = presentation.gameplay()?.localGid ?? 0;
 				characters.ownMover(
-					presentation.gameplay()?.localGid ?? 0,
-					mainThreadOwnWalk ? localMover.frame( now, moverWorld() ) : { kind: "idle" }
+					moverGid,
+					mainThreadOwnWalk ? localMover.frame( now, moverWorld() ) : { kind: "idle" },
+					presentation.entities().find( entity => entity.gid === moverGid )?.mountedOn || undefined
 				);
 				characters.step(
 					presentation.entities(),

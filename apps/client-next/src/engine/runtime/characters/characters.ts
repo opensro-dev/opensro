@@ -1081,11 +1081,12 @@ export function createCharacterPresentation(
 		ownMover
 
 		This frame's main-thread mover state for the local player (#1440,
-		port-only): the presenter draws its pose while it predicts.
+		port-only) and the mount it rides (#1566): the presenter draws their
+		pose while it predicts.
 		================
 		*/
-		ownMover( gid: number, frame: import("./pose-presentation").OwnMoverFrame ) {
-			posePresentation.ownMover( gid, frame );
+		ownMover( gid: number, frame: import("./pose-presentation").OwnMoverFrame, mount?: number ) {
+			posePresentation.ownMover( gid, frame, mount );
 		},
 		/*
 		================
