@@ -119,8 +119,7 @@ func samePath(from monster.Pose, a, b *monster.NavigationPath) bool {
 ================
 planeParity
 
-Every method of plane against the code it wraps, on probes. heightAt is
-the wrapped height rule for this plane.
+Every method of plane against the code it wraps, on probes.
 ================
 */
 func planeParity(
@@ -129,16 +128,10 @@ func planeParity(
 	rt *Runtime,
 	v *WaterValidator,
 	probes [][2]simulation.Spawn,
-	heightAt func(regionID uint16, x, y, z float64) (float64, bool),
 ) {
 	t.Helper()
 	for _, probe := range probes {
 		from, to := probe[0], probe[1]
-		gotY, gotOK := plane.HeightAt(to.RegionID, to.X, to.Y, to.Z)
-		wantY, wantOK := heightAt(to.RegionID, to.X, to.Y, to.Z)
-		if gotY != wantY || gotOK != wantOK {
-			t.Fatalf("%+v HeightAt (%v, %t), wrapped (%v, %t)", to, gotY, gotOK, wantY, wantOK)
-		}
 		gotSpawn, gotWalk, gotErr := plane.Clip("PlaneParity", from, simulation.NavOwner{}, to)
 		wantSpawn, wantWalk, wantErr := rt.ConstrainMovementFrom("PlaneParity", from, simulation.NavOwner{}, to)
 		if gotSpawn != wantSpawn || !reflect.DeepEqual(gotWalk, wantWalk) || !reflect.DeepEqual(gotErr, wantErr) {
@@ -181,9 +174,7 @@ func TestOutdoorPlaneWrapsTodaysNavigation(t *testing.T) {
 		{RegionID: planeOutdoorRegion, X: 623, Y: 3.04, Z: 1271},
 		{RegionID: planeOutdoorRegion, X: 680, Y: 3.04, Z: 1271}, // at the veranda rail
 	}
-	planeParity(t, plane, rt, v, planeProbes(anchors), func(regionID uint16, x, _, z float64) (float64, bool) {
-		return v.TerrainHeightAt(regionID, x, z)
-	})
+	planeParity(t, plane, rt, v, planeProbes(anchors))
 }
 
 /*
@@ -199,12 +190,12 @@ func TestCavePlaneWrapsTodaysNavigation(t *testing.T) {
 		{RegionID: planeCaveRegion, X: 993.197, Y: 0.00034, Z: -307.099},
 		{RegionID: planeCaveRegion, X: 629, Y: -2.22, Z: 74},
 	}
-	planeParity(t, plane, rt, v, planeProbes(anchors), v.dungeonSpawnHeightAt)
 	// The cave floors exist under the anchors, so the probes compare real
-	// answers rather than two misses.
+	// walks rather than two misses.
 	for _, anchor := range anchors {
-		if _, ok := plane.HeightAt(anchor.RegionID, anchor.X, anchor.Y, anchor.Z); !ok {
+		if _, ok := v.dungeonSpawnHeightAt(anchor.RegionID, anchor.X, anchor.Y, anchor.Z); !ok {
 			t.Fatalf("no cave floor under %+v", anchor)
 		}
 	}
+	planeParity(t, plane, rt, v, planeProbes(anchors))
 }

@@ -107,17 +107,6 @@ func (outdoorPlane) Kind() simulation.PlaneKind { return simulation.PlaneOutdoor
 
 /*
 ================
-outdoorPlane.HeightAt
-
-The terrain under (x, z); one floor, so y is unused.
-================
-*/
-func (o outdoorPlane) HeightAt(regionID uint16, x, _, z float64) (float64, bool) {
-	return o.water.TerrainHeightAt(regionID, x, z)
-}
-
-/*
-================
 outdoorPlane.Clip
 ================
 */
@@ -190,18 +179,6 @@ cavePlane.Kind
 ================
 */
 func (cavePlane) Kind() simulation.PlaneKind { return simulation.PlaneCave }
-
-/*
-================
-cavePlane.HeightAt
-
-The cave floor under (x, z) nearest y: caves stack floors, so the caller's
-height picks one (the dungeon arm of monsterPathHeightAt).
-================
-*/
-func (c cavePlane) HeightAt(regionID uint16, x, y, z float64) (float64, bool) {
-	return c.water.dungeonSpawnHeightAt(regionID, x, y, z)
-}
 
 /*
 ================

@@ -15,7 +15,10 @@ movement package that implements them imports this one (the
 MovementValidator precedent). Two things are deliberately not a plane
 service: the tactics choice (which pursuit routine an actor runs is an AI
 decision taken once from the plane's kind, 53FD04) and the interest
-buckets (pure position arithmetic, mover_interest_index.go).
+buckets (pure position arithmetic, mover_interest_index.go). The ground
+height joins with its first migrated caller: outdoors it must be the
+walkable surface nearest the caller (a deck or a bridge), not bare terrain,
+and that needs its own deck parity probe (#1649 review).
 
 ===========================================================================
 */
@@ -66,9 +69,6 @@ Planes.Between refuses a pair that spans two.
 type Plane interface {
 	// Kind names the plane, for the AI choices keyed by it.
 	Kind() PlaneKind
-	// HeightAt is the ground height under (x, z); y is the caller's current
-	// height, which a multi-floor cave needs to pick its floor.
-	HeightAt(regionID uint16, x, y, z float64) (float64, bool)
 	// Clip walks from (with its retained surface owner) toward to and stops
 	// where the plane blocks it; a refusal carries the native error.
 	Clip(characterName string, from Spawn, fromOwner NavOwner, to Spawn) (Spawn, NavWalk, *MoveError)
