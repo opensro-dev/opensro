@@ -178,6 +178,33 @@ test("a pet that casts within three seconds of its halt keeps its target", () =>
 	assert.equal( orders( sent ).length, 1, "the cancelled countdown never expires the target" );
 });
 
+test("a cast kind outside 0 and 2 does not cancel the pet's halt countdown", () => {
+	const { gameplay, sent } = withPet( 1 );
+	gameplay.receive( cast( ATTACK_SKILL, LOCAL.gid, MONSTER, 100 ), 1 );
+	gameplay.receive( halt( PET ), 10 );
+	// 776830 lets only cast kinds 0 and 2 past its entry; a kind-1
+	// broadcast returns before the cancel store (0x7769D8), so the
+	// countdown runs out and the target is forgotten.
+	const stray = cast( ATTACK_SKILL, PET, MONSTER, 200 );
+	stray.payload[1] = 1;
+	gameplay.receive( stray, 20 );
+	gameplay.step( 5000, LOCAL );
+	gameplay.receive( cast( ATTACK_SKILL, LOCAL.gid, MONSTER, 101 ), 5001 );
+	assert.deepEqual( orders( sent ), [ ATTACK_ORDER, ATTACK_ORDER ], "the countdown expired the target" );
+});
+
+test("a continuous cast (kind 2) by the pet still cancels the countdown", () => {
+	const { gameplay, sent } = withPet( 1 );
+	gameplay.receive( cast( ATTACK_SKILL, LOCAL.gid, MONSTER, 100 ), 1 );
+	gameplay.receive( halt( PET ), 10 );
+	const channel = cast( ATTACK_SKILL, PET, MONSTER, 200 );
+	channel.payload[1] = 2;
+	gameplay.receive( channel, 20 );
+	gameplay.step( 5000, LOCAL );
+	gameplay.receive( cast( ATTACK_SKILL, LOCAL.gid, MONSTER, 101 ), 5001 );
+	assert.equal( orders( sent ).length, 1, "kind 2 reaches the cancel store" );
+});
+
 test("a halt naming a pet with no assist target starts no countdown", () => {
 	const { gameplay, sent } = withPet( 1 );
 	gameplay.receive( halt( PET ), 10 );

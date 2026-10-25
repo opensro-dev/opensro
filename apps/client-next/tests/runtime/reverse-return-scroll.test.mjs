@@ -13,6 +13,7 @@ production HUD and the worker's gameplay owner.
 import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { defined } from "../helpers/defined.mjs";
 import { uiFixture } from "../helpers/ui-fixture.mjs";
 const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
@@ -90,6 +91,51 @@ test("cancel and Escape close the box without a use", () => {
 		f.ui.event( { kind: "key", code: "Escape" } );
 		assert.deepEqual( boxIds( f.ui.step( f.state, 1600 ) ), [] );
 		assert.equal( sent.filter( row => row.kind === "gameplay" && row.command.kind === "item-use" ).length, 0 );
+	} finally {
+		f.dispose();
+	}
+});
+
+/*
+================
+buttonArt
+
+The return button art painted over a control's whole rect: "", "_focus"
+or "_press", or null when another image is there.
+================
+*/
+function buttonArt( f, result, id ) {
+	const rect = result.controls.find( c => c.id === id ).rect.join( "," );
+	const quad = f.scenes.at( -1 ).quads.find( q =>
+		q.rect.join( "," ) === rect && q.texture?.includes( "/interface/ifcommon/com_return_button" )
+	);
+	return quad ? defined( /com_return_button(_focus|_press)?\.png/.exec( quad.texture ) )[1] ?? "" : null;
+}
+
+test("the box stacks three return buttons; the one under the pointer shows its focus art", () => {
+	const sent = [], f = open( sent );
+	try {
+		f.ui.event( { kind: "double-activate", id: "slot:13" } );
+		const idle = defined( f.ui.step( f.state, 1300 ) );
+		// 52F460 types 0x21/0x24: 252 x 24 buttons at x 25, y 76, 107, 138.
+		const frame = defined( idle.controls.find( c => c.id === "reverse-scroll:2" ) ).rect;
+		assert.deepEqual(
+			boxIds( idle ).map( id => defined( idle.controls.find( c => c.id === id ) ).rect ),
+			[ 0, 31, 62 ].map( dy => [ frame[0], frame[1] + dy, 252, 24 ] )
+		);
+		for ( const id of boxIds( idle ) ) assert.equal( buttonArt( f, idle, id ), "", id + " at rest" );
+		f.ui.event( { kind: "hover", id: "reverse-scroll:3" } );
+		const hovered = f.ui.step( f.state, 1400 );
+		assert.equal( buttonArt( f, hovered, "reverse-scroll:3" ), "_focus" );
+		assert.equal( buttonArt( f, hovered, "reverse-scroll:2" ), "" );
+		f.ui.event( { kind: "press", id: "reverse-scroll:3" } );
+		assert.equal( buttonArt( f, f.ui.step( f.state, 1500 ), "reverse-scroll:3" ), "_press" );
+		f.ui.event( { kind: "press", id: null } );
+		f.ui.event( { kind: "hover", id: "reverse-scroll-cancel" } );
+		const cancel = f.ui.step( f.state, 1600 );
+		assert.equal( buttonArt( f, cancel, "reverse-scroll-cancel" ), "_focus" );
+		assert.equal( buttonArt( f, cancel, "reverse-scroll:3" ), "", "the focus stayed after the pointer left" );
+		assert.equal( sent.filter( row => row.kind === "gameplay" ).length, 0 );
 	} finally {
 		f.dispose();
 	}

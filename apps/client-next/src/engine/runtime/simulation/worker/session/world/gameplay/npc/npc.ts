@@ -31,6 +31,7 @@ createNpcConversation
 export function createNpcConversation( send: ( frame: WireFrame ) => void ) {
 	let state: NpcConversation = { phase: "closed" };
 	let interactionMask = 0, restorationRevision = 0;
+	let window = { hidden: false, revision: 0 };
 	return {
 		/*
 		================
@@ -39,6 +40,26 @@ export function createNpcConversation( send: ( frame: WireFrame ) => void ) {
 		*/
 		select( gid: number ) {
 			state = npcConversationTransition( state, { type: "select", gid: npcGid( gid ) } );
+			window = { hidden: false, revision: window.revision + 1 };
+		},
+		/*
+		================
+		hideWindow
+
+		5DA7D6 (personal storage) and 5DAFA9 (guild storage) hide the parent
+		window before sending, without clearing its conversation or NPC lock.
+		================
+		*/
+		hideWindow() {
+			window = { hidden: true, revision: window.revision + 1 };
+		},
+		/*
+		================
+		window
+		================
+		*/
+		window() {
+			return window;
 		},
 		/*
 		================
@@ -141,6 +162,7 @@ export function createNpcConversation( send: ( frame: WireFrame ) => void ) {
 		clear() {
 			state = npcConversationTransition( state, { type: "close" } );
 			interactionMask = 0;
+			window = { hidden: false, revision: window.revision + 1 };
 			restorationRevision = 0;
 		}
 	};

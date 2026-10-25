@@ -919,14 +919,17 @@ export function createCharacterPresentation(
 					groundClocks.clear();
 					retiring.clear();
 					disappearing.clear();
-					spawnFades.reset();
+					// A journal resync rebuilds the same world (#1481): the
+					// held characters keep their spawn ramps.
+					if ( !event.resync ) spawnFades.reset();
 					next.length = 0;
 					next.push( { kind: "reset" } );
 				} else if ( event.kind === "spawn" || event.kind === "state" ) {
 					if ( event.kind === "spawn" ) {
 						presentationState.forgetStance( event.entity.gid );
 						// A respawn under a live gid is a new CICharactor: fade it again.
-						spawnFades.respawn( event.entity.gid );
+						// A journal resync republishes the held character instead (#1481).
+						if ( !event.resync ) spawnFades.respawn( event.entity.gid );
 					}
 					next.push( { kind: event.kind, gid: event.entity.gid, refObjId: event.entity.refObjId } );
 				} else if ( event.kind === "despawn" ) {
@@ -1072,6 +1075,27 @@ export function createCharacterPresentation(
 		*/
 		simulationOrigin( ms: number ) {
 			posePresentation.origin( ms );
+		},
+		/*
+		================
+		ownMover
+
+		This frame's main-thread mover state for the local player (#1440,
+		port-only): the presenter draws its pose while it predicts.
+		================
+		*/
+		ownMover( gid: number, frame: import("./pose-presentation").OwnMoverFrame ) {
+			posePresentation.ownMover( gid, frame );
+		},
+		/*
+		================
+		drawnPose
+
+		The pose last drawn for a character: where a predicted walk starts.
+		================
+		*/
+		drawnPose( gid: number ) {
+			return posePresentation.drawn( gid );
 		},
 		/*
 		================

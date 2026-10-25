@@ -46,12 +46,16 @@ type divisionLane struct {
 divisionOperationLocks
 
 The short map lock owns lane discovery only; gameplay runs under the
-returned lane.
+returned lane. onRelease, set once by NewRuntime, runs after every
+lane release with nothing held: instance lifecycle delivery hangs off
+it (instance_events.go), so queued occurrences reach their handlers
+with no division lock held, whatever lock context produced them.
 ================
 */
 type divisionOperationLocks struct {
-	mu       sync.Mutex
-	division map[string]*divisionLane
+	mu        sync.Mutex
+	division  map[string]*divisionLane
+	onRelease func()
 }
 
 /*
@@ -75,6 +79,9 @@ func (locks *divisionOperationLocks) lane(divisionID string, maintenance *sync.R
 		lane.release = func() {
 			lane.Unlock()
 			maintenance.RUnlock()
+			if locks.onRelease != nil {
+				locks.onRelease()
+			}
 		}
 		locks.division[divisionID] = lane
 	}

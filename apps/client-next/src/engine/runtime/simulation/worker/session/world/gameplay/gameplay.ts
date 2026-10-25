@@ -471,6 +471,8 @@ export function createGameplay(
 	// 877230: *(pDeadreckon + 0x48) deadline suppressing ground/angle movement
 	// packets for 500 ms after a ground-targeted skill press sends 0x72CD.
 	let groundSkillMoveSuppressUntil = 0;
+	// groundWalkRefusal() was null at the last step (published, #1440).
+	let walkPredictable = false;
 	const feedback = createFeedback();
 	const pickup = createPickup();
 	const actionSession = createActionSession();
@@ -700,6 +702,53 @@ scroll's kind-0 row does not.
 	function interactionBlocked() {
 		return npcConversation.interactionLocked() || inventory.interactionWindowOpen() ||
 			returnScroll?.skillId !== undefined;
+	}
+	/*
+	================
+	frozen
+
+	85C590 freeze leaves action state 9, which disables navigation. Sleep and
+	stun do not. The mask is the same word 0x36C7 and 0x33A6 write.
+	================
+	*/
+	function frozen(): boolean {
+		return ((combat.state().vitals.find( v => v.gid === localGid )?.abnormal ?? 0) & 1) !== 0;
+	}
+	/*
+	================
+	castLocked
+
+	The local player's cast holds a world click until its action window ends
+	(the click is reserved, not walked).
+	================
+	*/
+	function castLocked( now: number ): boolean {
+		return castMotion.locked( combat.state().casts, localGid, now, !actionSession.released() );
+	}
+	/*
+	================
+	groundWalkRefusal
+
+	Why a ground click now would not start a walk at once, or null when it
+	would. command() asks these same predicates for a ground click, in its own
+	order around its side effects; the published walkPredictable is this
+	answer, so the main-thread mover (#1440) predicts only a click the worker
+	walks. Mounted walks stay with the worker for now.
+	================
+	*/
+	function groundWalkRefusal( now: number, local: EntityState | undefined ): string | null {
+		if ( protocol !== 1 ) return "protocol";
+		if ( !local ) return "absent";
+		if ( local.appearanceState?.[0] === 2 ) return "dead";
+		if ( combat.guidedActive( localGid, now ) ) return "guided";
+		if ( now < groundSkillMoveSuppressUntil ) return "suppressed";
+		if ( teleportMode === 1 ) return "teleport";
+		if ( interactionBlocked() ) return "blocked";
+		if ( frozen() ) return "frozen";
+		if ( local.movementMode === MOVEMENT_SEATED ) return "seated";
+		if ( castLocked( now ) ) return "cast";
+		if ( local.mountedOn ) return "mounted";
+		return null;
 	}
 	/*
 ================
@@ -1030,12 +1079,14 @@ selectEntity
 
 Request selection in reach or after approach. A coalesced click has no reply
 coming, so retain its menu, dialogue and lock until a new request.
+692BC8 skips the same NPC only while its window (+0x6D) is visible; after a
+storage action hid it, the click selects again and shows the menu.
 ================
 	*/
 	function selectEntity( entity: EntityState, now: number ) {
 		const frame = targeting.select( entity.gid, now, entity.kind, {
 			fortress: !!entity.teleport?.fortressId,
-			reopen: npcConversation.state().phase === "closed"
+			reopen: npcConversation.state().phase === "closed" || npcConversation.window().hidden
 		} );
 		if ( frame ) npcConversation.clear();
 		markTarget( entity );
@@ -1112,6 +1163,7 @@ selected entities, cooldowns or world-entry state.
 		journalRows = null;
 		journalBag = new Map();
 		groundSkillMoveSuppressUntil = 0;
+		walkPredictable = false;
 		moveReservation.clear();
 		betaMap.clear();
 		petTraining.clear();
@@ -1897,8 +1949,9 @@ state here before a command can claim a native wire conversation.
 				if ( !localGid || target.target !== command.gid || !((target.targetCapabilities ?? 0) & 4) ) {
 					throw Error( "Select a warehouse NPC" );
 				}
-				storage.open( command.gid );
+				npcConversation.hideWindow();
 				dirty = true;
+				storage.open( command.gid );
 				return null;
 			}
 			if ( command.kind === "storage-open-guild" ) {
@@ -1907,8 +1960,9 @@ state here before a command can claim a native wire conversation.
 				if ( !localGid || target.target !== command.gid || !((target.targetCapabilities ?? 0) & 0x4000) ) {
 					throw Error( "Select a guild manager" );
 				}
-				storage.openGuild( command.gid );
+				npcConversation.hideWindow();
 				dirty = true;
+				storage.openGuild( command.gid );
 				return null;
 			}
 			if ( command.kind === "compensation-dismiss" ) {
@@ -2020,8 +2074,9 @@ state here before a command can claim a native wire conversation.
 				}
 			}
 			if ( command.kind === "debug-weather" ) {
-				// The console's weather rows write the worker's weather
-				// slot, behind the same GM gate as the gm-command family.
+				// The console's weather rows drive the console weather
+				// slot (event-environment.ts), behind the same GM gate
+				// as the gm-command family.
 				if ( !eligibility.gm ) return null;
 				environment = debugWeather( environment, command.mode, command.amount );
 				dirty = true;
@@ -2056,12 +2111,7 @@ state here before a command can claim a native wire conversation.
 				cancelActionForMovement();
 				if ( command.kind === "ground-move" && command.departing ) sendFrame( logoutCancelRequest() );
 			}
-			// 85C590 freeze leaves action state 9, which disables navigation.
-			// Sleep and stun do not. The mask is the same word 0x36C7 and 0x33A6 write.
-			if (
-				(combat.state().vitals.find( v => v.gid === localGid )?.abnormal ?? 0) & 1 &&
-				[ "move", "ground-move" ].includes( command.kind )
-			) return null;
+			if ( frozen() && [ "move", "ground-move" ].includes( command.kind ) ) return null;
 			// 6933a6 ground click / 692d19 entity click: seated interaction
 			// requests stand and RETURNS. It must not also predict travel.
 			if (
@@ -2676,7 +2726,7 @@ state here before a command can claim a native wire conversation.
 				if ( protocol !== 1 ) {
 					throw new Error( "Server does not support simulation protocol 1" );
 				}
-				if ( castMotion.locked( combat.state().casts, localGid, now, !actionSession.released() ) ) {
+				if ( castLocked( now ) ) {
 					// Resolve the click now, not when the cast releases: its ray belongs
 					// to the camera at click time, and the destination marker appears
 					// when the player clicks. A direction walk keeps its query.
@@ -4202,14 +4252,11 @@ Packet handling must not depend on which HUD panel is currently open.
 					groundSkillMoveSuppressUntil = 0;
 					movement.castRefused( now );
 				}
-				if ( frame.opcode === 0xb245 && frame.payload.length >= 10 ) {
-					// 776830 (0x7769D8): a cast by an owned pet cancels its
-					// halt countdown (+0xAB30 = -1); the pet keeps its target.
-					petAssistCountdowns = castPetAssistCountdowns(
-						petAssistCountdowns,
-						new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
-							.getUint32( 6, true )
-					);
+				if ( frame.opcode === 0xb245 ) {
+					// 776830 (0x7769D8): an opened cast by an owned pet cancels
+					// its halt countdown (+0xAB30 = -1); the pet keeps its
+					// target. The entry gates live in castPetAssistCountdowns.
+					petAssistCountdowns = castPetAssistCountdowns( petAssistCountdowns, frame.payload );
 				}
 				if ( item && cast ) returnScroll = cast;
 				if ( returnScroll?.skillId && (fight || item && cast) ) {
@@ -4441,6 +4488,13 @@ before take assembles the presentation snapshot.
 		*/
 		step( now: number, local?: EntityState ) {
 			inventorySince = inventory.state().inventoryPending ? inventorySince ?? now : undefined;
+			// A gate can open or close with no command or frame (a cast's action
+			// window ends): republish when the answer changes.
+			const predictable = groundWalkRefusal( now, local ) === null;
+			if ( predictable !== walkPredictable ) {
+				walkPredictable = predictable;
+				dirty = true;
+			}
 			if ( petAssists.size || petAssistCountdowns.size ) {
 				const targets = new Map<number, EntityState>();
 				for ( const target of petAssists.values() ) {
@@ -4499,8 +4553,7 @@ before take assembles the presentation snapshot.
 			// action state 2 (the skill's action window ends or it is cancelled);
 			// death forfeits it.
 			if (
-				moveReservation.holding() &&
-				!castMotion.locked( combat.state().casts, localGid, now, !actionSession.released() )
+				moveReservation.holding() && !castLocked( now )
 			) {
 				const held = moveReservation.take()!;
 				if ( !local || local.appearanceState?.[0] === 2 ) {
@@ -4709,6 +4762,7 @@ The published plane when something changed since the last take, else null.
 			const m = movement.state(), i = inventory.state(), c = combat.state();
 			const npcState = {
 				npcConversation: npcConversation.state(),
+				npcWindow: npcConversation.window(),
 				restorationRevision: npcConversation.restorationRevision()
 			};
 			const cosVital = activeCos ? c.vitals.find( v => v.gid === activeCos!.gid ) : undefined;
@@ -4790,6 +4844,7 @@ The published plane when something changed since the last take, else null.
 				revision: ++revision,
 				localGid,
 				...m,
+				walkPredictable,
 				...i,
 				inventoryJournal,
 				...c,
@@ -4823,6 +4878,7 @@ World transfer retires spatial work while retaining character/session data.
 			pickup.clear();
 			cosPickup.clear();
 			groundSkillMoveSuppressUntil = 0;
+			walkPredictable = false;
 			moveReservation.clear();
 			quests.clearGathering();
 			approach = interactionApproachTransition( approach, { kind: "cancel" } );

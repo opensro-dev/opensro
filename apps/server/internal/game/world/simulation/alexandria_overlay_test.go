@@ -18,6 +18,7 @@ import (
 	"opensro.online/server/internal/game/world/alexandria"
 	"opensro.online/server/internal/testsupport/alexandriatest"
 	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -61,6 +62,7 @@ TestAlexandriaOffKeepsTheNativeNpcWorld
 ================
 */
 func TestAlexandriaOffKeepsTheNativeNpcWorld(t *testing.T) {
+	tier.Long(t, "the native NPC world is unchanged with Alexandria off, over the whole shipped roster")
 	variant, native := alexandriaFixture(t)
 	for _, value := range []string{"", "off", "0", "false", "typo"} {
 		t.Setenv(alexandria.EnvAlexandria, value)

@@ -713,6 +713,10 @@ type Runtime struct {
 	// the quest handler registry (instance_events.go); the composition
 	// root points it at the quest runtime's dispatch.
 	InstanceEventSink func(InstanceEvent)
+	// instanceEvents queues lifecycle occurrences for delivery at the
+	// next division-lock release: handlers never run under the lock
+	// (instance_events.go).
+	instanceEvents instanceEventQueue
 
 	// nextSweepAtMs rate-limits the TTL sweep to grounditem.SweepInterval:
 	// the simulation tick calls the hook every 100ms, but the peek+sweep only
@@ -766,6 +770,10 @@ func NewRuntime(deps Dependencies, monsters *simulation.MonsterState) *Runtime {
 	if monsters != nil {
 		monsters.SetAbnormalContext(monsterAbnormalContext{rt})
 	}
+
+	// Instance lifecycle occurrences are delivered when a division
+	// lane is released, with no lock held (instance_events.go).
+	rt.operations.onRelease = rt.flushInstanceEvents
 
 	// The Capture the Flag match owner (flagwar_match.go) consumes
 	// the registration queue at the daily start instant.

@@ -25,11 +25,12 @@ func TestInstanceHandlerDispatchReplaysEveryKind(t *testing.T) {
 	record := func(event InstanceEvent) { got = append(got, event) }
 	rt.RegisterInstanceHandler(instance.DefinitionID(10), InstanceHandler{
 		Setup: record, Enter: record, Leave: record, Dead: record,
-		PartyChanged: record, Update: record, InvitationAnswered: record,
+		PartyChanged: record, Update: record, InvitationAnswered: record, Activated: record,
 	})
 	kinds := []InstanceEventKind{
 		InstanceEventSetup, InstanceEventEnter, InstanceEventLeave, InstanceEventDead,
 		InstanceEventPartyChanged, InstanceEventUpdate, InstanceEventInvitationAnswered,
+		InstanceEventActivated,
 	}
 	for _, kind := range kinds {
 		rt.DispatchInstanceEvent(InstanceEvent{
@@ -45,7 +46,7 @@ func TestInstanceHandlerDispatchReplaysEveryKind(t *testing.T) {
 			t.Fatalf("event %d = %+v, want kind %d for Member", i, got[i], kind)
 		}
 	}
-	if !got[len(got)-1].Accepted {
+	if !got[6].Accepted {
 		t.Fatal("the answered event lost its answer")
 	}
 }

@@ -30,6 +30,8 @@ import {
 	clientWalkingStep,
 	clientWalkingVector,
 	interpolateMovement,
+	movementDuration,
+	movementHeading,
 	type MovementSegment,
 	poseDistance,
 	sampleMovement
@@ -121,6 +123,32 @@ export type WalkStepResult<S extends WalkStepSegment> =
 		readonly owner: NavOwner | undefined;
 		readonly segment: S | null;
 	};
+
+/*
+================
+walkLeg
+
+A new ground walk's leg as the worker's movement owner predicts it
+(movement.ts request): from the accepted pose to the destination
+truncated to the whole units the 0x7021 request carries, facing along the
+leg, timed at speed. The main-thread mover (#1440) builds its leg here
+too, so both walk the same leg from the same click.
+================
+*/
+export function walkLeg( from: Pose, destination: Pose, start: number, speed: number ) {
+	const to = {
+		...destination,
+		x: Math.trunc( destination.x ),
+		y: Math.trunc( destination.y ),
+		z: Math.trunc( destination.z )
+	};
+	return {
+		from,
+		to: { ...to, angle: movementHeading( from, to ) },
+		start,
+		duration: movementDuration( poseDistance( from, to ), speed )
+	};
+}
 
 /*
 ================

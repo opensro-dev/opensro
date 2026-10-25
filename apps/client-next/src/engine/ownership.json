@@ -139,6 +139,7 @@
     "src/engine/runtime/ui/localization/localization.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/assets/worker/navigation/navigation.ts": "src/engine/runtime/assets/worker/loader.ts",
     "src/engine/runtime/navigation/navigation.ts": "src/engine/runtime/runtime.ts",
+    "src/engine/runtime/movement/local-mover.ts": "src/engine/runtime/runtime.ts",
     "src/engine/runtime/audio/music/music.ts": "src/engine/runtime/audio/audio.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/chat/chat.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/friends/friends.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",

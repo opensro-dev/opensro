@@ -38,7 +38,12 @@ import {
 	movementDuration
 } from "@/engine/foundation/gameplay/native-movement";
 import { createNavigation } from "@/engine/foundation/navigation/clipper";
-import { stepWalk, WALK_NAVIGATION_REJECT, WALK_NAVIGATION_STOP } from "@/engine/foundation/gameplay/walk-step";
+import {
+	stepWalk,
+	walkLeg,
+	WALK_NAVIGATION_REJECT,
+	WALK_NAVIGATION_STOP
+} from "@/engine/foundation/gameplay/walk-step";
 import { minimapPoseKey } from "@/engine/foundation/gameplay/minimap-floor-key";
 import { admitPose, decodeMovementReceipt, receiptWorld } from "@/engine/foundation/gameplay/movement-wire";
 import type { Pose } from "@/engine/contracts/gameplay";
@@ -1343,12 +1348,9 @@ request
 			predicted = null;
 			if ( clipped ) {
 				segment = {
-					from: pose,
-					to: { ...clipped, angle: movementHeading( pose, clipped ) },
-					start: now,
+					...walkLeg( pose, clipped, now, speed ),
 					timing: "speed",
 					lead: "client",
-					duration: movementDuration( poseDistance( pose, clipped ), speed ),
 					owners: query.owners,
 					admitted: true,
 					history: incomingHistory
@@ -1773,6 +1775,7 @@ state
 				movementPath: presentationPath(),
 				movementRevision,
 				movementInputSeq: inputSeq,
+				movementSpeed: speed,
 				movementTransition: { ...transition, pathEligible: segment?.admitted === true },
 				movementDiagnostics: { total: reanchorReports, recent: recentReanchors.slice() },
 				navigationFloor: navigation.floor( pose, owner ),
