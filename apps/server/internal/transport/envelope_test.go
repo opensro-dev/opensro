@@ -427,3 +427,39 @@ func TestStructuredSidecarGolden(t *testing.T) {
 		t.Fatal("no error on impossible blob length")
 	}
 }
+
+/*
+================
+TestTransportReportDecoding
+
+The report the client sends after WELCOME (#1449): every defined reason
+decodes to its history name, and anything this build cannot read - no
+fallback, a newer version, an unknown reason, a wrong size - is not a
+fact and must not decode.
+================
+*/
+func TestTransportReportDecoding(t *testing.T) {
+	for reason, want := range map[uint8]string{
+		FallbackUnsupported: "unsupported",
+		FallbackTimeout:     "timeout",
+		FallbackRefused:     "refused",
+		FallbackClosedEarly: "closed-early",
+	} {
+		name, ok := DecodeTransportReport(EncodeTransportReport(reason))
+		if !ok || name != want {
+			t.Fatalf("reason %d decoded as %q/%v, want %q", reason, name, ok, want)
+		}
+	}
+	for name, payload := range map[string][]byte{
+		"no fallback":    EncodeTransportReport(FallbackNone),
+		"newer version":  {transportReportVersion + 1, FallbackTimeout},
+		"unknown reason": {transportReportVersion, 99},
+		"empty":          {},
+		"short":          {transportReportVersion},
+		"long":           {transportReportVersion, FallbackTimeout, 0},
+	} {
+		if got, ok := DecodeTransportReport(payload); ok {
+			t.Fatalf("%s decoded as %q, want not-ok", name, got)
+		}
+	}
+}

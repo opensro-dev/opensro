@@ -995,7 +995,7 @@ export function createPosePresentation() {
 		================
 		interpolateOwnWalk
 
-		The Experimental "Interpolated own movement" row (read each frame).
+		Always on since 2026-10-25 (it was the Experimental "Interpolated own movement" row); read each frame.
 		================
 		*/
 		interpolateOwnWalk( enabled: boolean ) {

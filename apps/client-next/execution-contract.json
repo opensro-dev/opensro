@@ -2129,6 +2129,7 @@
 			"provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
 			"functions": [
 				"country",
+				"npcs",
 				"playerModels"
 			]
 		},

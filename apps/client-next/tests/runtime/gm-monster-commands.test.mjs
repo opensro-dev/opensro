@@ -49,7 +49,8 @@ function fixture( gmPrivilege = true ) {
 		country: () => undefined,
 		playerModels: () => [],
 		item: () => undefined,
-		monster: name => name === "MOB_CH_TIGERWOMAN" ? { refObjId: 1954, monsterType: 3 } : undefined
+		monster: name => name === "MOB_CH_TIGERWOMAN" ? { refObjId: 1954, monsterType: 3 } : undefined,
+		npcs: () => []
 	} );
 	return { game, sent, local };
 }
