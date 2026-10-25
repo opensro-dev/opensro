@@ -78,6 +78,8 @@ type Runtime struct {
 	NowMs               func() int64
 	// rahid6 is the Rahid 6 programme's state (rahid6.go).
 	rahid6 rahid6Programme
+	// easteu21 is the EASTEU 21 programme's state (easteu21.go).
+	easteu21 easteu21Programme
 }
 
 /*
@@ -362,6 +364,7 @@ func (rt *Runtime) StartQuest(character *enterworld.Character, codename string) 
 		var acceptanceItems []inventory.ItemAmount
 		acceptanceItems = acceptanceGrants(def)
 		acceptanceItems = append(acceptanceItems, rahid6AcceptanceItems(def)...)
+		acceptanceItems = append(acceptanceItems, easteu21AcceptanceItems(def)...)
 		supply, suppliesTraps := captureSupplyForQuest(def.Codename)
 		suppliesTraps = suppliesTraps && !supply.afterCompletion
 		if suppliesTraps {
@@ -396,6 +399,9 @@ func (rt *Runtime) StartQuest(character *enterworld.Character, codename string) 
 			progress = heldCollectCount(character, def)
 		}
 		record = BuildActiveQuestRecord(def, progress)
+		if def.Codename == easteu21QuestCodename {
+			rt.stampEasteu21Acceptance(character, def)
+		}
 		if branched {
 			record.Branch = uint8(branch)
 			if wait := def.OfferBranches[branch].WaitMinutes; wait > 0 {
@@ -529,6 +535,12 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 			})
 			continue
 		}
+		if !active {
+			if option, offered := rt.easteu21NoPartyOption(character, def, npcCodename, level); offered {
+				completes = append(completes, option)
+				continue
+			}
+		}
 		// The level gates taking a quest, never reporting one already taken:
 		// a character that lost a level keeps its turn-in (as MarkerStates).
 		if !active && admissionLevel(def) <= level && canAcceptAgain(character, def) && prerequisitesMet(character, def) && rt.calendarAvailable(def, false) && questNpcMatches(def, def.StartNpcCodename, npcCodename) {
@@ -554,6 +566,10 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 		if active && questNpcMatches(def, def.EndNpcCodename, npcCodename) && def.NotAchievedSymbol != "" {
 			if travel, offered := rt.rahid6TravelOption(character, def, npcCodename); offered {
 				completes = append(completes, travel)
+				continue
+			}
+			if grant, offered := rt.easteu21GrantOption(character, def, npcCodename); offered {
+				completes = append(completes, grant)
 				continue
 			}
 			if supply, available := rt.captureSupplyOption(character, def, npcCodename); available {

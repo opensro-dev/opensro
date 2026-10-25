@@ -7,8 +7,8 @@ simulation.Plane's two implementations. Step 1 of #1646 wraps today's code
 unchanged, so each method calls exactly what callers reach now; later steps
 move the remaining region-bit forks inside these two types, one area at a
 time, and #1645 gives the cave its native region-route waypoint as
-cavePlane.NextWaypoint. Callers hold a simulation.Planes and never test
-the region bit themselves (check_plane_branches).
+cavePlane.NextWaypoint (cave_route.go). Callers hold a simulation.Planes
+and never test the region bit themselves (check_plane_branches).
 
 ===========================================================================
 */
@@ -220,12 +220,14 @@ func (c cavePlane) PlanPath(
 ================
 cavePlane.NextWaypoint
 
-Today the open-terrain search, as every caller reaches it; #1645 replaces
-it with the cave's native region route.
+The cave's region route (cave_route.go): straight at the goal inside
+the room it stands in, across the floor's portal cells toward any
+other room - the native two-stage steering, at the port's floor
+grain.
 ================
 */
 func (c cavePlane) NextWaypoint(from, goal monster.Pose) *monster.NavigationRoute {
-	return c.water.PlanMonsterRoute(from, goal)
+	return c.water.planCaveRoute(from, goal)
 }
 
 /*

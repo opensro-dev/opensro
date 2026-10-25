@@ -60,27 +60,7 @@ func main() {
 	}()
 	log.Infof("startup: shard %q local process guard acquired", ownedShard.ID)
 
-	// A GameWorld process owns exactly one shard. Its catalog capacity is the
-	// hard live-session ceiling; an environment override cannot quietly let
-	// this worker advertise one capacity while admitting another.
-	transport.RegisterViperDefaults()
-	transportConfig := transport.ConfigFromViper()
-	if err := applyOwnedShardTransportDefaults(
-		ownedShard,
-		&transportConfig,
-		os.Getenv("TRANSPORT_WT_ADDR") != "" ||
-			viper.InConfig(transport.KeyWTAddr),
-		os.Getenv("TRANSPORT_WS_ADDR") != "" ||
-			viper.InConfig(transport.KeyWSAddr),
-	); err != nil {
-		log.Fatalf("transport: %v", err)
-	}
-	transportConfig.PrivateNetwork =
-		os.Getenv("SRO_GAMEWORLD_PRIVATE_NETWORK") == "1"
-	transportConfig.WebTransportPublic = transport.WebTransportPublicEnabled()
-	transportConfig.MaxSessions = ownedShard.Capacity
-	warnTransportCatalogMismatch(ownedShard, transportConfig)
-	ts, err := transport.NewServer(transportConfig)
+	ts, err := gameWorldTransportServer(ownedShard)
 	if err != nil {
 		log.Fatalf("transport: %v", err)
 	}
@@ -96,6 +76,42 @@ func main() {
 		log.Errorf("shutdown: %v", err)
 		os.Exit(1)
 	}
+}
+
+/*
+================
+gameWorldTransportServer
+
+Build this process's transport server for the shard it owns: the viper
+read, the catalog's transport defaults, the private-network and
+public-WebTransport posture switches, and the capacity ceiling. One
+assembly, called by main() and by the posture tests (wtpublic_test.go) -
+a copy in a test would keep passing if this one lost a line.
+
+A GameWorld process owns exactly one shard. Its catalog capacity is the
+hard live-session ceiling; an environment override cannot quietly let
+this worker advertise one capacity while admitting another.
+================
+*/
+func gameWorldTransportServer(ownedShard shard.Definition) (*transport.Server, error) {
+	transport.RegisterViperDefaults()
+	transportConfig := transport.ConfigFromViper()
+	if err := applyOwnedShardTransportDefaults(
+		ownedShard,
+		&transportConfig,
+		os.Getenv("TRANSPORT_WT_ADDR") != "" ||
+			viper.InConfig(transport.KeyWTAddr),
+		os.Getenv("TRANSPORT_WS_ADDR") != "" ||
+			viper.InConfig(transport.KeyWSAddr),
+	); err != nil {
+		return nil, err
+	}
+	transportConfig.PrivateNetwork =
+		os.Getenv("SRO_GAMEWORLD_PRIVATE_NETWORK") == "1"
+	transportConfig.WebTransportPublic = transport.WebTransportPublicEnabled()
+	transportConfig.MaxSessions = ownedShard.Capacity
+	warnTransportCatalogMismatch(ownedShard, transportConfig)
+	return transport.NewServer(transportConfig)
 }
 
 func applyOwnedShardTransportDefaults(
