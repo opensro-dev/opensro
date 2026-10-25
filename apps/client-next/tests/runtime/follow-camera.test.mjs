@@ -495,6 +495,35 @@ test("nearest transformed object pulls camera five units forward; miss restores 
 	wall.geometry.instances[12] = 1000;
 	assert.equal( resolveFollowCamera( camera, parts( [ wall ] ), null ).collision, null );
 });
+test("collision off keeps the requested distance through the same wall (/coloff)", () => {
+	const wall = group( [ -100, -100, 0, 100, -100, 0, 0, 100, 0 ] );
+	wall.geometry.instances[14] = 30;
+	const camera = {
+		eye: [ 0, 0, 80 ],
+		target: [ 0, 0, 0 ],
+		follow: { yaw: 0, pitch: 0, distance: 80 },
+		fov: 1,
+		near: 1,
+		far: 3500
+	};
+	// 68FAD0 with +0x3CC clear takes the no-hit arm: no cast, so the
+	// wall changes nothing and the target still tracks the player.
+	const off = resolveFollowCamera( camera, parts( [ wall ] ), null, undefined, false );
+	assert.equal( off.collision, null );
+	assert.equal( off.camera.eye[2], 80 );
+	const moved = resolveFollowCamera(
+		{ ...camera, target: [ 40, 0, 0 ] },
+		parts( [ wall ] ),
+		null,
+		undefined,
+		false
+	);
+	assert.equal( moved.camera.target[0], 40 );
+	// /colon restores the cast against the same wall.
+	const on = resolveFollowCamera( camera, parts( [ wall ] ), null, undefined, true );
+	assert.equal( on.collision, 25 );
+	assert.equal( on.camera.eye[2], 25 );
+});
 test("terrain collision retains full heights across rendering seam mutations", () => {
 	const terrain = group( [ 0, 0, 0, 20, 0, 0, 0, 0, 20 ] );
 	terrain.material.terrain = true;
