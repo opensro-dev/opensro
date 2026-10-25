@@ -77,13 +77,17 @@ export interface ExperimentalOptions {
 	// Port-only, not native: the local mover's walk is drawn between its
 	// worker ticks, a little behind them, instead of extrapolated past the
 	// newest one (own-walk-interpolation.ts; Unreal's fixed-tick smoothing).
-	// On unless turned off (the owner's choice, 2026-10-24); off is the
-	// previous dead-reckoned presentation.
+	// No longer a row of its own (owner, 2026-10-25): always on. It presents
+	// every own walk the main-thread mover does not predict, and its step
+	// cap (drawn-step.ts) bounds the mover's corrections too. A stored false
+	// from the old row is ignored.
 	readonly interpolatedOwnWalk: boolean;
 	// Port-only, not native: the local player's ground-click walk is stepped
 	// on the main thread from the click frame (runtime/movement/local-mover.ts,
-	// Unreal's locally controlled character, epic #1437). Off unless turned
-	// on until reconciliation (#1441b) lands; off is the worker-driven walk.
+	// Unreal's locally controlled character, epic #1437, with
+	// reconciliation #1441b). The original client predicts its own walk the
+	// same way (0x6932A0 -> StartGroundMove 0x878600). On unless turned off
+	// (the owner's choice, 2026-10-25); off is the worker-driven walk.
 	readonly mainThreadOwnWalk: boolean;
 	// Port-only, not native: a disabled tab is dimmed with a grey label (the
 	// original draws it like an unselected tab, 5376A0). On unless turned
@@ -318,8 +322,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		enchantSparks: record.enchantSparks !== false,
 		compressedTextures: record.compressedTextures !== false,
 		sharedActorRoom: record.sharedActorRoom !== false,
-		interpolatedOwnWalk: record.interpolatedOwnWalk !== false,
-		mainThreadOwnWalk: enabled( "mainThreadOwnWalk" ),
+		interpolatedOwnWalk: true,
+		mainThreadOwnWalk: record.mainThreadOwnWalk !== false,
 		greyDisabledTabs: record.greyDisabledTabs !== false,
 		jobKillNotices: record.jobKillNotices !== false,
 		dropPlusNotices: record.dropPlusNotices !== false,

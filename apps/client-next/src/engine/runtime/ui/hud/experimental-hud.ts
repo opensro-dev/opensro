@@ -191,11 +191,6 @@ export const EXPERIMENTAL_TABS: readonly {
 			label: "Smooth camera",
 			description: "Ease small camera jumps and the return from a wall."
 		}, {
-			key: "interpolatedOwnWalk",
-			id: "experimental-interpolated-own-walk",
-			label: "Interpolated own movement",
-			description: "Your character walks smoothly between server ticks."
-		}, {
 			key: "mainThreadOwnWalk",
 			id: "experimental-main-thread-own-walk",
 			label: "Instant own movement",
