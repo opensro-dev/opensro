@@ -717,6 +717,7 @@ import {
 	DEBUG_COMMAND_DEBUG,
 	DEBUG_COMMAND_FREE_CAMERA,
 	DEBUG_COMMAND_GET_POSITION,
+	DEBUG_COMMAND_HIDE_ME,
 	DEBUG_COMMAND_ITEM,
 	DEBUG_COMMAND_MESSAGE_CLEAR,
 	DEBUG_COMMAND_NIGHT,
@@ -725,12 +726,15 @@ import {
 	DEBUG_COMMAND_POSITION,
 	DEBUG_COMMAND_POWER,
 	DEBUG_COMMAND_RAIN,
+	DEBUG_COMMAND_SHOW_ME,
 	DEBUG_COMMAND_SNOW,
 	DEBUG_COMMAND_TIME_MINUS,
 	DEBUG_COMMAND_TIME_OFF,
 	DEBUG_COMMAND_TIME_ON,
 	DEBUG_COMMAND_TIME_PLUS,
 	DEBUG_COMMAND_TIME_SET,
+	DEBUG_COMMAND_UI_OFF,
+	DEBUG_COMMAND_UI_ON,
 	DEBUG_COMMAND_ZOOM,
 	DEBUG_COMMAND_SET_FIELD_OF_VIEW,
 	debugCommand,
@@ -1001,6 +1005,12 @@ export function createUi(
 	let debugZoomRail = true;
 	let debugFreeCamera = false;
 	let debugCursorVisible = true;
+	// The mission window's visible flag (CIFWnd +0x6D, written through
+	// CIFWnd_SetVisibleFlag 9FCD70 by 690C40 cases 115/116): while it is
+	// down the frame carries only the console's own quads and controls -
+	// the console belongs to the interface, not the hidden window tree,
+	// exactly as the native stays able to read /uion.
+	let debugUiVisible = true;
 	let video = defaultVideoOptions(), videoDraft = video, videoScroll = 0, videoCombo = VIDEO_COMBO_CLOSED;
 	let bindings = defaultInputOptions(), bindingDraft = bindings, bindingSelected = -1, bindingScroll = 0;
 	let sight: SightMode = 0, sightDraft: SightMode = 0;
@@ -2651,8 +2661,10 @@ export function createUi(
 	slot (the sampler's state, not this window's); the time rows drive the
 	local debug clock the sampler reads through debugClockSeed. The camera
 	rows flip this window's debug bytes and hand each to its owner; the
-	camera-waypoint and render-toggle families are not ported yet and leave
-	the line as typed.
+	shown byte (112/113) rides the gameplay lane to the entity owner, and
+	the mission window's visible flag (115/116) is this window's own. The
+	camera-waypoint rows (130-134) and ids 111/117-119 are not ported yet
+	and leave the line as typed.
 	================
 	*/
 	function runDebugCommand( command: DebugCommand ) {
@@ -2754,6 +2766,17 @@ export function createUi(
 				debugZoomRail = !debugZoomRail;
 				extensions.setCameraZoomRail?.( debugZoomRail );
 				break;
+			case DEBUG_COMMAND_SHOW_ME:
+				// Case 0x12 writes the local player's shown byte
+				// (CICPlayer +0xB8) to 1. The native prints nothing.
+				sendGameplay( { kind: "debug-local-visible", visible: true } );
+				break;
+			case DEBUG_COMMAND_HIDE_ME:
+				// Case 0x13 writes the shown byte to 0: the local
+				// presentation (body and name board) is skipped. The
+				// native prints nothing.
+				sendGameplay( { kind: "debug-local-visible", visible: false } );
+				break;
 			case DEBUG_COMMAND_FREE_CAMERA:
 				// Case 0x14 flips +0x3CE and reports the new state: while it
 				// stands the camera keeps its last eye and target (68FAD0,
@@ -2761,6 +2784,18 @@ export function createUi(
 				debugFreeCamera = !debugFreeCamera;
 				extensions.setFreeCamera?.( debugFreeCamera );
 				appendConsoleLine( debugFreeCamera ? "Free Camera On" : "Free Camera Off" );
+				break;
+			case DEBUG_COMMAND_UI_OFF:
+				// Case 0x15 writes the mission window's visible flag
+				// (CIFWnd +0x6D) to 0 through 9FCD70: the HUD tree
+				// hides and the hovered window is released; the console
+				// stays, so /uion can be typed. The native prints nothing.
+				debugUiVisible = false;
+				break;
+			case DEBUG_COMMAND_UI_ON:
+				// Case 0x16 writes the flag back to 1. The native
+				// prints nothing.
+				debugUiVisible = true;
 				break;
 			case DEBUG_COMMAND_CURSOR:
 				// Case 0x1E: SetVisible(![cursor+0x20]) - the pointer shows
@@ -20440,6 +20475,7 @@ export function createUi(
 				if ( game && hud.data() ) {
 					for ( const entity of next.entities ) {
 						if (
+							entity.debugHidden ||
 							hiddenSilkCos( entity, options.hideSilkCos ) ||
 							next.blindHeld && (blindableCharacter( entity, game?.localGid ) ||
 									experimental.state().saved.vHidesCompanions &&
@@ -20631,7 +20667,7 @@ export function createUi(
 					const hovered = entity.gid === next.hoveredEntity, selected = entity.gid === game?.target;
 					// One decision for the name and every overhead icon: an icon never
 					// shows without its name (name-visibility.ts header).
-					const named = !hiddenSilkCos( entity, options.hideSilkCos ) &&
+					const named = !entity.debugHidden && !hiddenSilkCos( entity, options.hideSilkCos ) &&
 						overheadBoardVisible(
 							boardAt( entity ),
 							local,
@@ -25721,6 +25757,9 @@ export function createUi(
 				}
 			}
 			mapHud.details( { worldVisible, panel, pressed, hover, full, paths, quads, text, resources, rect } );
+			const preConsoleQuads = quads.length,
+				preConsoleControls = controls.length,
+				preConsoleBlocks = blocks.length;
 			if ( worldVisible && consolePhase !== 0 && game?.eligibility?.gm ) {
 				// The catalogue list grows the native 600x112 panel downward.
 				// It is port-only, so it uses a solid panel behind its two
@@ -25856,6 +25895,14 @@ export function createUi(
 					rect: [ px, inputY, 600 - px, 16 ],
 					maxLength: 255
 				} );
+			}
+			if ( !debugUiVisible ) {
+				// /uioff (690C40 case 115): the frame keeps only what the
+				// console block above contributed; everything built
+				// before it is the hidden window tree's.
+				quads.splice( 0, preConsoleQuads );
+				controls.splice( 0, preConsoleControls );
+				blocks.splice( 0, preConsoleBlocks );
 			}
 			probe?.detailEnd( "ui-assembly" );
 			probe?.detailBegin( "ui-finalize" );
