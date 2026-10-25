@@ -76,6 +76,7 @@ import {
 	keepsStall,
 	type InteractionApproachState
 } from "@/engine/foundation/gameplay/interaction-approach";
+import { PICKUP_EXECUTE_RANGE } from "@/engine/foundation/gameplay/approach-goal";
 import { targetNotice } from "@/engine/foundation/gameplay/target-notices";
 import { constantNativeNotice, resolveNativeNotice } from "@/engine/foundation/gameplay/native-notice";
 import {
@@ -343,9 +344,7 @@ interface WorldReferences {
 // A dress answer may trail its bar by a server tick and the round trip.
 const JOB_DRESS_ANSWER_GRACE_MS = 5000;
 
-// grounditem.ExecuteRange: a pickup closer than this is granted in place;
-// farther away the server walks the player to the item first.
-const PICKUP_EXECUTE_RANGE = 10;
+// PICKUP_EXECUTE_RANGE lives in approach-goal.ts, its one owner.
 // The payload of a journal row no frame carried (a world entry, the tick).
 const NO_PAYLOAD = new Uint8Array( 0 );
 // How long past two round trips a sent skill press's cooldown stand-in waits
@@ -479,6 +478,8 @@ export function createGameplay(
 	let groundSkillMoveSuppressUntil = 0;
 	// groundWalkRefusal() was null at the last step (published, #1440).
 	let walkPredictable = false;
+	// pickupPredictableNow() held at the last step (published, #1567).
+	let pickupPredictable = false;
 	const feedback = createFeedback();
 	const pickup = createPickup();
 	const actionSession = createActionSession();
@@ -1113,6 +1114,25 @@ so the race marks never depend on the member being in view.
 	}
 	/*
 ================
+pickupPredictableNow
+
+The state half of predictPickupRunUp's gate, shared with the snapshot's
+pickupPredictable: a pickup click now would reach the run-up and start
+it. The dispatch gates that intercept a pickup first (teleport mode,
+seated) and the run-up's own holds (a live cast incl. a held wall or
+chain root, any mount, death) all close it; it differs from the ground
+click's gate (groundWalkRefusal) exactly there, so the main-thread
+mover predicts a pickup leg only when the worker walks one (#1567).
+The item's space and range are per-click and stay with the callers.
+================
+	*/
+	function pickupPredictableNow( now: number, local: EntityState | undefined ): boolean {
+		return protocol === 1 && teleportMode !== 1 &&
+			local?.movementMode !== MOVEMENT_SEATED && !local?.mountedOn &&
+			local?.appearanceState?.[0] !== 2 && !localCastHolds( now );
+	}
+	/*
+================
 predictPickupRunUp
 
 A pickup beyond reach is a walk the server drives: it answers 0x72CD with
@@ -1123,7 +1143,7 @@ and a refusal walks it back (movement.predictApproach).
 	*/
 	function predictPickupRunUp( entity: EntityState, local: EntityState | undefined, now: number ) {
 		const pose = movement.state().pose;
-		if ( !pose || localCastHolds( now ) || local?.mountedOn || local?.appearanceState?.[0] === 2 ) return;
+		if ( !pose || !pickupPredictableNow( now, local ) ) return;
 		if ( !sameCoordinateSpace( entity.regionId, pose.regionId ) ) return;
 		if ( planarDistance( pose, entity ) <= PICKUP_EXECUTE_RANGE ) return;
 		movement.predictApproach(
@@ -4594,6 +4614,11 @@ before take assembles the presentation snapshot.
 				walkPredictable = predictable;
 				dirty = true;
 			}
+			const pickupOpen = !!local && pickupPredictableNow( now, local );
+			if ( pickupOpen !== pickupPredictable ) {
+				pickupPredictable = pickupOpen;
+				dirty = true;
+			}
 			if ( petAssists.size || petAssistCountdowns.size ) {
 				const targets = new Map<number, EntityState>();
 				for ( const target of petAssists.values() ) {
@@ -4945,6 +4970,7 @@ The published plane when something changed since the last take, else null.
 				...m,
 				movementTurnRate: arrowKeys.rate(),
 				walkPredictable,
+				pickupPredictable,
 				...i,
 				inventoryJournal,
 				...c,
