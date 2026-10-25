@@ -1950,6 +1950,9 @@ state here before a command can claim a native wire conversation.
 				const target = targeting.state();
 				// The storage row exists only on a selected warehouse NPC (0x4).
 				if ( !localGid || target.target !== command.gid || !((target.targetCapabilities ?? 0) & 4) ) {
+					// The HUD hid the window on the click; a refusal owes it a
+					// newer receipt marked shown, or that hide is never lifted.
+					npcConversation.showWindow();
 					throw Error( "Select a warehouse NPC" );
 				}
 				npcConversation.hideWindow();
@@ -1961,6 +1964,9 @@ state here before a command can claim a native wire conversation.
 				const target = targeting.state();
 				// The warehouse row exists only on a selected guild manager (0x4000).
 				if ( !localGid || target.target !== command.gid || !((target.targetCapabilities ?? 0) & 0x4000) ) {
+					// The HUD hid the window on the click; a refusal owes it a
+					// newer receipt marked shown, or that hide is never lifted.
+					npcConversation.showWindow();
 					throw Error( "Select a guild manager" );
 				}
 				npcConversation.hideWindow();
