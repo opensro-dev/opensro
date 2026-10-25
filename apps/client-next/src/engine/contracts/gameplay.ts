@@ -919,6 +919,10 @@ export interface GameplayState {
 	// A ground click now would start a walk at once (gameplay.ts
 	// groundWalkRefusal): the main-thread mover predicts only then (#1440).
 	readonly walkPredictable?: boolean;
+	// A ground pickup now would start the worker's own run-up at once
+	// (gameplay.ts pickupPredictableNow): the main-thread mover predicts
+	// the pickup leg only then (#1567).
+	readonly pickupPredictable?: boolean;
 	readonly movementTransition?: MovementTransition;
 	readonly movementDiagnostics?: {
 		readonly total: number;

@@ -4,7 +4,9 @@
 runtime-failures.test.mjs - runtime owner failure and teardown contracts
 
 Injects owners through the synthetic build boundary and verifies failures
-reach the player while each owned lifetime is disposed exactly once.
+reach the player while each owned lifetime is disposed exactly once. The
+boundary also records every factory call, so the wiring the composition
+hands from one owner to another is itself testable.
 
 ===========================================================================
 */
@@ -62,9 +64,9 @@ setup
 			build.onLoad(
 				{ filter: /.*/, namespace: "owner" },
 				args => ({
-					contents: `export function ${factories[args.path]}(){return globalThis.__runtimeOwners[${
-						JSON.stringify( args.path )
-					}];}`
+					contents: `export function ${factories[args.path]}( ...args ) {
+( globalThis.__runtimeCalls ??= [] ).push( { owner: ${JSON.stringify( args.path )}, args } );
+return globalThis.__runtimeOwners[${JSON.stringify( args.path )}];}`
 				})
 			);
 		}
@@ -411,4 +413,208 @@ dispose
 	const count = closed.length;
 	runtime.dispose();
 	assert.equal( closed.length, count );
+});
+
+test("an entity click predicts its approach leg only through the worker's own gates (#1567)", async t => {
+	const keys = [
+		"__runtimeOwners",
+		"__runtimeCalls",
+		"requestAnimationFrame",
+		"cancelAnimationFrame",
+		"location",
+		"document"
+	];
+	const previous = new Map( keys.map( key => [ key, Object.getOwnPropertyDescriptor( globalThis, key ) ] ) );
+	t.after( () => {
+		for ( const [key, value] of previous ) {
+			if ( value ) Object.defineProperty( globalThis, key, value );
+			else delete globalThis[key];
+		}
+	} );
+	const start = { regionId: 0x61a8, x: 1000, y: 0, z: 1000, angle: 0 };
+	const entities = new Map( [
+		[ 1, { gid: 1, kind: "player", ...start, appearanceState: [ 1, 0, 0 ] } ],
+		[ 41, { gid: 41, kind: "npc", regionId: 0x61a8, x: 1300, y: 0, z: 1000, angle: 0 } ],
+		[ 42, { gid: 42, kind: "ground-item", regionId: 0x61a8, x: 1100, y: 0, z: 1000, angle: 0 } ],
+		[ 43, { gid: 43, kind: "ground-item", regionId: 0x61a8, x: 1005, y: 0, z: 1000, angle: 0 } ]
+	] );
+	/*
+================
+attempt
+
+One booted runtime, one click on the picked entity under the given
+published gates: the mover frames the click produced and the commands
+that reached the worker.
+================
+	*/
+	async function attempt( picked, gates ) {
+		const gameState = {
+			localGid: 1,
+			pose: { ...start },
+			poseAtMs: undefined,
+			movementRevision: 0,
+			moving: false,
+			movementAim: undefined,
+			movementSpeedFactor: 1,
+			walkPredictable: gates.walk,
+			pickupPredictable: gates.pickup,
+			movementSpeed: 50,
+			movementInputSeq: 0,
+			navigationRequestId: 1,
+			targetPending: false
+		};
+		const moverFrames = [], sessionCommands = [];
+		let lastSeq = 0, callback;
+		const owners = frameOwners( "characters", [], [], [] );
+		owners.ui.event = () => {};
+		owners.characters.step = () => {};
+		owners.characters.cameraTarget = () => null;
+		owners.characters.drawnPose = () => ({ ...start });
+		owners.characters.ownMover = ( gid, frame ) => moverFrames.push( frame );
+		owners.characters.ready = () => false;
+		owners.characters.error = () => null;
+		owners.characters.damageText = () => [];
+		owners.characters.takeCameraScripts = () => [];
+		owners.presentation.gameplay = () => gameState;
+		owners.presentation.read = gid => entities.get( gid );
+		owners.frontend.snapshot = () => ({ phase: "world" });
+		owners.frontend.isRace = () => false;
+		owners.frontend.isDock = () => false;
+		owners.frontend.pointer = () => {};
+		owners.frontend.select = () => {};
+		owners.navigation.view = () => ({
+			requestId: 1,
+			navigation: {
+				available: () => true,
+				block: () => 0,
+				floor: () => undefined,
+				pick: query => ({ ...query.ray.target }),
+				clip: ( _from, to, query ) => {
+					if ( query ) query.status = 0;
+					return to;
+				},
+				surface: pose => pose
+			}
+		});
+		owners.simulation.session = command => {
+			sessionCommands.push( command );
+			return ++lastSeq;
+		};
+		owners.simulation.pollSession = () => ({ phase: "world", characters: [] });
+		owners.renderer.experimentalVideo = () => {};
+		owners.renderer.characterStats = () => ({});
+		owners.renderer.worldStats = () => ({ visibleGroups: 0, pendingGroups: 0, pendingTextures: 0 });
+		owners.renderer.phase = () => "running";
+		owners.renderer.error = () => null;
+		owners.renderer.gpuTiming = () => null;
+		owners.renderer.frame = () => undefined;
+		owners.renderer.audioListener = () => null;
+		owners.renderer.setDamageText = () => {};
+		owners.renderer.setTeleportGates = () => {};
+		owners.renderer.pickEntity = () => picked;
+		owners.renderer.pickGround = () => null;
+		owners.world.ready = () => false;
+		owners.world.error = () => null;
+		owners.world.reconnecting = () => false;
+		owners.world.loadingRegion = () => null;
+		owners.world.progress = () => 0;
+		owners.world.retryTransient = () => {};
+		owners.navigation.phase = () => "pending";
+		owners.navigation.error = () => null;
+		owners.navigation.reconnecting = () => false;
+		owners.navigation.retryTransient = () => {};
+		owners.audio.music = () => {};
+		owners.audio.prepareUi = () => {};
+		owners.audio.prepareCombat = () => {};
+		owners.audio.ready = () => false;
+		owners.audio.error = () => null;
+		owners.audio.musicStatus = () => "idle";
+		owners.ui.cursor = () => null;
+		owners.ui.stats = () => ({ pending: 0, failed: [] });
+		owners.ui.resourceError = () => null;
+		owners.ui.skinPreview = () => null;
+		owners.platform.readUiViewport = () => ({ width: 1280, height: 720 });
+		owners.platform.readViewport = () => ({ width: 1280, height: 720 });
+		owners.platform.presentUi = () => {};
+		owners.platform.presentLoading = () => {};
+		owners.platform.presentWorldCursor = () => {};
+		owners.platform.presentTelemetry = () => {};
+		owners.platform.diagnosticsActive = () => false;
+		owners.presentation.travel = () => null;
+		owners.presentation.count = () => 0;
+		owners["build-info"].readout = () => "";
+		owners.input.dropNamesHeld = () => false;
+		owners.input.blindHeld = () => false;
+		owners.input.altHeld = () => false;
+		owners.assets.progress = () => 0;
+		owners["bug-report"].movement = () => {};
+		globalThis.__runtimeOwners = owners;
+		globalThis.__runtimeCalls = [];
+		globalThis.location = { search: "", origin: "http://localhost" };
+		globalThis.document = { visibilityState: "visible" };
+		globalThis.requestAnimationFrame = fn => {
+			callback = fn;
+			return 1;
+		};
+		globalThis.cancelAnimationFrame = () => {};
+		const runtime = startRuntime( {}, {} );
+		try {
+			const calls = globalThis.__runtimeCalls ?? [];
+			const platformArgs = defined( calls.find( call => call.owner === "platform" ) ).args;
+			const uiEvent = defined( platformArgs[5] ), worldClick = defined( platformArgs[7] );
+			const drive = async now => {
+				defined( callback )( now );
+				for ( let i = 0; i < 32; i++ ) await Promise.resolve();
+			};
+			let now = performance.now();
+			await drive( now );
+			uiEvent( { kind: "experimental-preferences", value: { mainThreadOwnWalk: true } } );
+			worldClick( 10, 10 );
+			for ( let i = 0; i < 30; i++ ) await drive( now += 16.7 );
+			return { moverFrames, sessionCommands };
+		} finally {
+			runtime.dispose();
+		}
+	}
+	const walked = frames => frames.filter( f => f.kind === "walking" ).map( f => f.pose );
+
+	// A far select predicts its approach leg.
+	{
+		const { moverFrames, sessionCommands } = await attempt( 41, { walk: true, pickup: true } );
+		assert.ok(
+			sessionCommands.some( c => c.command?.kind === "select" && c.command.gid === 41 ),
+			"the select never reached the worker"
+		);
+		const poses = walked( moverFrames );
+		assert.ok( poses.length > 0, "the far select started no prediction" );
+		assert.ok( defined( poses.at( -1 ) ).x > start.x + 5, "the body barely moved" );
+		assert.ok( poses.every( p => p.x <= 1060 ), "the walk ran past the NPC's reach point" );
+	}
+	// A far pickup predicts its run-up under the pickup gate alone.
+	for ( const gates of [ { walk: true, pickup: true }, { walk: false, pickup: true } ] ) {
+		const { moverFrames, sessionCommands } = await attempt( 42, gates );
+		assert.ok(
+			sessionCommands.some( c => c.command?.kind === "pickup" && c.command.gid === 42 ),
+			"the pickup never reached the worker"
+		);
+		const poses = walked( moverFrames );
+		assert.ok( poses.length > 0, `the far pickup started no prediction (gates ${JSON.stringify( gates )})` );
+		assert.ok( defined( poses.at( -1 ) ).x > start.x + 5, "the body barely moved" );
+	}
+	// An in-reach pickup is granted in place: no leg to predict.
+	{
+		const { moverFrames } = await attempt( 43, { walk: true, pickup: true } );
+		assert.equal( walked( moverFrames ).length, 0, "an in-reach pickup was predicted" );
+	}
+	// The pickup gate closed (a held cast, any mount): the ground gate
+	// being open must not predict a run-up the worker never makes.
+	{
+		const { moverFrames } = await attempt( 42, { walk: true, pickup: false } );
+		assert.equal( walked( moverFrames ).length, 0, "a gated pickup was predicted" );
+	}
+	// The ground gate closed: a select predicts nothing.
+	{
+		const { moverFrames } = await attempt( 41, { walk: false, pickup: true } );
+		assert.equal( walked( moverFrames ).length, 0, "a gated select was predicted" );
+	}
 });

@@ -64,6 +64,33 @@ test("walkPredictable is true exactly in the states where a click walks at once"
 	}
 });
 
+/*
+================
+pickupFlag
+
+A fresh gameplay owner in the given local state: the pickupPredictable
+flag it publishes (#1567). The mover predicts a pickup leg only under
+this flag, whose gate is the worker's run-up gate (pickupPredictableNow),
+not the ground click's: any mount closes it even where a rider's ground
+walk is predictable.
+================
+*/
+function pickupFlag( local ) {
+	const game = createGameplay( () => {} );
+	game.bootstrap( { simulationProtocolVersion: 1 } );
+	game.seed( local );
+	game.step( 50, local );
+	const flag = game.take()?.pickupPredictable;
+	game.dispose();
+	return flag;
+}
+
+test("pickupPredictable is the run-up's own gate, state by state", () => {
+	for ( const [name, local] of Object.entries( STATES ) ) {
+		assert.equal( pickupFlag( local ), name === "standing", name + ": published flag" );
+	}
+});
+
 test("a gate that closes with no command republishes the flag on the next step", () => {
 	const game = createGameplay( () => {} );
 	game.bootstrap( { simulationProtocolVersion: 1 } );

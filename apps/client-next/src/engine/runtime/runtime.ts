@@ -448,7 +448,9 @@ export function startRuntime(
 					const drawn = mainThreadOwnWalk && seq !== undefined ?
 						characters.drawnPose( game.localGid ) :
 						undefined;
-					if ( seq !== undefined && drawn ) predictApproachWalk( seq, entity, drawn, now );
+					if ( seq !== undefined && drawn ) {
+						predictApproachWalk( seq, entity, drawn, now, game.walkPredictable === true );
+					}
 				}
 				// 67CCA0 -> 6935F0: a double click on another player's pet may
 				// attack it; the worker applies the pet's admission (player-attack.ts).
@@ -473,7 +475,9 @@ export function startRuntime(
 					const drawn = mainThreadOwnWalk && seq !== undefined ?
 						characters.drawnPose( game.localGid ) :
 						undefined;
-					if ( seq !== undefined && drawn ) predictApproachWalk( seq, entity, drawn, now );
+					if ( seq !== undefined && drawn ) {
+						predictApproachWalk( seq, entity, drawn, now, game.pickupPredictable === true );
+					}
 				}
 				return;
 			}
@@ -533,16 +537,25 @@ export function startRuntime(
 		select approaches its NPC, gate or stall keeper, a far pickup walks
 		onto the item. Predict that leg from this frame, the way a ground
 		click predicts (localMover.click): approachGoal names the worker's
-		own destination from its latest pose, and the gate is the ground
-		click's (walkPredictable), so a state the worker would not walk in
-		at once - mounted, seated, mid-cast - predicts nothing and keeps
-		the presenter, as before. Arrival hands back through the mover's
-		own settle: the worker's interaction owns what happens there.
+		own destination from its latest pose. Each arm asks the worker's
+		own gate for its walk - a select the ground click's
+		(walkPredictable), a pickup the run-up's (pickupPredictable: a
+		live cast incl. a held wall or chain root, or any mount, closes it
+		where the ground gate may not) - so a state the worker would not
+		walk in at once predicts nothing and keeps the presenter, as
+		before. Arrival hands back through the mover's own settle: the
+		worker's interaction owns what happens there.
 		================
 		*/
-		function predictApproachWalk( seq: number, entity: EntityState, drawn: Pose, now: number ): void {
+		function predictApproachWalk(
+			seq: number,
+			entity: EntityState,
+			drawn: Pose,
+			now: number,
+			gateOpen: boolean
+		): void {
 			const world = moverWorld();
-			if ( !world.walkPredictable || !world.pose || !world.speed ) return;
+			if ( !gateOpen || !world.pose || !world.speed ) return;
 			const destination = approachGoal( world.pose, entity );
 			if ( !destination ) return;
 			localMover.predict(
