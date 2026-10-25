@@ -115,6 +115,35 @@ publish, or nil.
 ================
 */
 func (rt *Runtime) grantReviveUntouchable(division string, character *enterworld.Character, nowMs int64) []wire.Frame {
+	return rt.grantUntouchable(division, character, nowMs, reviveGraceMs(character))
+}
+
+/*
+================
+reviveGraceMs
+
+The body-mode-2 grace for the world the character stands in: 6.0 s,
+11.0 s in a siege world (the slot-31 read inside 4DF484).
+================
+*/
+func reviveGraceMs(character *enterworld.Character) int64 {
+	if definition, ok := instance.Lookup(instance.ID(domain.CharacterWorldInstance(character)).Definition()); ok && definition.Siege() {
+		return siegeReviveUntouchableMs
+	}
+	return reviveUntouchableMs
+}
+
+/*
+================
+grantUntouchable
+
+The grant itself, for a grace the caller measured: set body mode 2
+with a fresh owner token and schedule its restore. A GM invincible
+or invisible mode (3, 4) is the stronger state and is left alone.
+Returns the body-mode frame to publish, or nil.
+================
+*/
+func (rt *Runtime) grantUntouchable(division string, character *enterworld.Character, nowMs int64, grace int64) []wire.Frame {
 	if character.NativeBodyStatus == 3 || character.NativeBodyStatus == 4 {
 		return nil
 	}
@@ -123,10 +152,6 @@ func (rt *Runtime) grantReviveUntouchable(division string, character *enterworld
 		character.BodyStatusOwner != owner {
 		return nil
 	}
-	grace := int64(reviveUntouchableMs)
-	if definition, ok := instance.Lookup(instance.ID(domain.CharacterWorldInstance(character)).Definition()); ok && definition.Siege() {
-		grace = siegeReviveUntouchableMs
-	}
 	rt.bodyRestores.schedule(bodyRestore{
 		division: division,
 		name:     character.Name,
@@ -134,6 +159,39 @@ func (rt *Runtime) grantReviveUntouchable(division string, character *enterworld
 		dueMs:    nowMs + grace,
 	})
 	return []wire.Frame{bodyStatusFrame(enterworld.ObjectIDForCharacter(character), untouchableBodyStatus)}
+}
+
+/*
+================
+grantTimedReturnUntouchable
+
+#1582: the timed-event return's grace. The timed-event return queue
+calls the same town-teleport routine as revival with the granting
+flag set (#1518 re-verify), so a player a timed world sends home -
+an instance world closing, a fortress war expulsion - stands
+untouchable for the revival grace of the world they left (from,
+read before the relocation moved them): 6.0 s, 11.0 s out of a
+siege world. The GM move calls the routine with the flag clear,
+and scrolls, gates and instance transfers never call it at all.
+A corpse takes no grant here; its own town rebirth grants as usual.
+Publication matches the revival's: the player and their peers see
+the 0x30BF body-mode refresh.
+================
+*/
+func (rt *Runtime) grantTimedReturnUntouchable(division string, c *enterworld.Character, from instance.ID, nowMs int64) {
+	if c == nil || !enterworld.CharacterAlive(c) {
+		return
+	}
+	grace := int64(reviveUntouchableMs)
+	if definition, ok := instance.Lookup(from.Definition()); ok && definition.Siege() {
+		grace = siegeReviveUntouchableMs
+	}
+	var frames []wire.Frame
+	rt.deps.Update(c, "timed-return-untouchable", func() bool {
+		frames = rt.grantUntouchable(division, c, nowMs, grace)
+		return true
+	})
+	rt.publishBodyStatus(division, c.Name, frames)
 }
 
 /*

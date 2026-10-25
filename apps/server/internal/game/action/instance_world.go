@@ -269,6 +269,9 @@ func (rt *Runtime) returnCharacterFromInstance(division string, c *enterworld.Ch
 		return true
 	})
 	rt.instanceEvent(InstanceEventLeave, division, leaving.Definition(), leaving, c, false)
+	// #1582: the timed-event return grants the revival grace of the
+	// world left (grantTimedReturnUntouchable).
+	rt.grantTimedReturnUntouchable(division, c, leaving, rt.Now().UnixMilli())
 	return instance.Success
 }
 

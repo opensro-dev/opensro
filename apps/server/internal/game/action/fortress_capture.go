@@ -203,7 +203,11 @@ func (rt *Runtime) captureFortress(division string, record fortress.Record, worl
 			continue
 		}
 		if haveGate {
-			rt.relocateCharacter(division, c, "fortress-capture-expel", func() (travelPoint, bool) { return gate, true })
+			// #1582: the capture expulsion is the timed-event
+			// return; it grants the siege world's revival grace.
+			if rt.relocateCharacter(division, c, "fortress-capture-expel", func() (travelPoint, bool) { return gate, true }) {
+				rt.grantTimedReturnUntouchable(division, c, world, rt.Now().UnixMilli())
+			}
 		}
 	}
 	return rt.conquestFrames(division, record.ID, guild)

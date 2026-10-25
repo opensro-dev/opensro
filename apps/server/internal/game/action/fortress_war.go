@@ -134,7 +134,11 @@ func (rt *Runtime) runFortressPhase(phase fortressPhase) {
 				}
 				continue
 			}
-			rt.relocateCharacter(phase.division, c, "fortress-war-expel", func() (travelPoint, bool) { return gate, true })
+			// #1582: the war expulsion is the timed-event return;
+			// it grants the siege world's revival grace.
+			if rt.relocateCharacter(phase.division, c, "fortress-war-expel", func() (travelPoint, bool) { return gate, true }) {
+				rt.grantTimedReturnUntouchable(phase.division, c, world, rt.Now().UnixMilli())
+			}
 		}
 		if phase.mode == fortressPhaseEnd {
 			rt.Fortresses.ReleaseBattleRecords(phase.division, fortressID)
