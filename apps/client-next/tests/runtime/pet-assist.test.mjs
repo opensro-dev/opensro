@@ -205,6 +205,25 @@ test("a continuous cast (kind 2) by the pet still cancels the countdown", () => 
 	assert.equal( orders( sent ).length, 1, "kind 2 reaches the cancel store" );
 });
 
+test("only an opened cast (result byte 1) cancels the countdown, whatever its kind", async () => {
+	// 776830's first entry gate (0x776869): any other result byte takes the
+	// refusal tail before the store. The gameplay path cannot admit such a
+	// full-length payload (the cast parser refuses it first), so the gate is
+	// pinned on the function itself (#1529).
+	const { castPetAssistCountdowns } = await import( "../../src/engine/foundation/gameplay/pet-assist.ts" );
+	const countdowns = new Map( [ [ PET, 5000 ] ] );
+	for ( const kind of [ 0, 2 ] ) {
+		for ( const result of [ 0, 1, 2, 3 ] ) {
+			const payload = new Uint8Array( 19 );
+			payload[0] = result;
+			payload[1] = kind;
+			new DataView( payload.buffer ).setUint32( 6, PET, true );
+			const next = castPetAssistCountdowns( countdowns, payload );
+			assert.equal( next.has( PET ), result !== 1, `result ${result}, kind ${kind}` );
+		}
+	}
+});
+
 test("a halt naming a pet with no assist target starts no countdown", () => {
 	const { gameplay, sent } = withPet( 1 );
 	gameplay.receive( halt( PET ), 10 );
