@@ -266,7 +266,8 @@ function advance( walker: Walker, toMs: number, navigation: NavigationView ) {
 			// its authored end, where the sampled pose is its destination.
 			walker.pose = result.pose;
 			walker.owner = result.owner;
-			if ( now >= walker.segment.start + walker.segment.duration ) walker.segment = null;
+			// Only a segment samples (a turn alone steps "idle"), so this holds one.
+			if ( walker.segment && now >= walker.segment.start + walker.segment.duration ) walker.segment = null;
 		} else if ( result.kind === "uncovered" ) {
 			walker.segment = result.segment;
 		} else if ( result.kind === "rejected" ) {
