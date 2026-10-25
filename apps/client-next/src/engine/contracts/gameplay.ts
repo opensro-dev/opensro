@@ -235,6 +235,9 @@ export type GameplayCommand =
 		readonly settings: import("@/engine/foundation/gameplay/auto-potion").AutoPotionSettings;
 	}
 	| { readonly kind: "rebirth"; readonly choice: 1 | 2; }
+	// An arrow key's press or release (#1574): Up walks the facing, Left and
+	// Right turn it (arrow-keys.ts).
+	| { readonly kind: "arrow-key"; readonly key: "up" | "left" | "right"; readonly down: boolean; }
 	| {
 		readonly kind: "ground-move";
 		readonly query: import("./navigation").GroundPickQuery;

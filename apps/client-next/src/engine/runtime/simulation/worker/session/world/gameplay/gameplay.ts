@@ -282,6 +282,7 @@ import { createChat } from "./chat/chat";
 import { createFriends } from "./friends/friends";
 import { createLetters } from "./letters/letters";
 import { createMovement } from "./movement/movement";
+import { createArrowKeys, type ArrowKeyMover } from "./arrow-keys/arrow-keys";
 import { logoutCancelRequest, worldPointAction } from "@/engine/foundation/gameplay/direction-movement";
 import { createInventory } from "./inventory/inventory";
 import { createCombat } from "./combat/combat";
@@ -494,6 +495,30 @@ export function createGameplay(
 sendFrame
 ================
 	*/
+	// The arrow keys' walk and turn (#1574).
+	const arrowKeys = createArrowKeys( frame => sendFrame( frame ) );
+	/*
+	================
+	arrowMover
+
+	What the arrow keys move: the movement owner, or for a rider the ridden
+	vehicle's commands (0x85E000).
+	================
+	*/
+	function arrowMover( local: EntityState | undefined ): ArrowKeyMover {
+		const vehicle = local?.mountedOn || undefined;
+		return {
+			pose: () => movement.state().pose ?? null,
+			walkingDirection: () => {
+				const state = movement.state();
+				return state.moving && state.directionWalk !== undefined;
+			},
+			direct: ( heading, now ) => movement.direct( heading, now, vehicle ),
+			steer: ( heading, now ) => movement.steer( heading, now ),
+			stop: now => movement.stopDirection( now ),
+			vehicle: () => vehicle
+		};
+	}
 	function sendFrame( frame: WireFrame ): WireFrame {
 		send( frame );
 		pickup.sent( frame );
@@ -1499,6 +1524,7 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 				simulationProtocolVersion?: number;
 			}).simulationProtocolVersion ?? 0;
 			movement.clear();
+			arrowKeys.clear();
 			movement.mode(
 				(value as {
 					character?: {
@@ -2723,6 +2749,18 @@ state here before a command can claim a native wire conversation.
 				const emote = actionEmote( command.id );
 				if ( emote === null ) throw Error( "Action is unavailable" );
 				return sendFrame( { opcode: 0x324b, payload: Uint8Array.of( emote ) } );
+			}
+			if ( command.kind === "arrow-key" ) {
+				// 0x680A30: a press walks only where a click would (the same
+				// gates); a release always ends what its press started.
+				const admitted = !command.down || groundWalkRefusal( now, local ) === null;
+				const frame = arrowKeys.key( command.key, command.down, now, arrowMover( local ), admitted );
+				if ( frame ) {
+					pickup.clear();
+					selectionDecal = null;
+				}
+				dirty = true;
+				return frame;
 			}
 			if ( command.kind === "ground-move" || command.kind === "move" ) {
 				if ( protocol !== 1 ) {
@@ -4495,6 +4533,7 @@ before take assembles the presentation snapshot.
 		*/
 		step( now: number, local?: EntityState ) {
 			inventorySince = inventory.state().inventoryPending ? inventorySince ?? now : undefined;
+			arrowKeys.step( now, arrowMover( local ) );
 			// A gate can open or close with no command or frame (a cast's action
 			// window ends): republish when the answer changes.
 			const predictable = groundWalkRefusal( now, local ) === null;
@@ -4918,6 +4957,7 @@ World transfer retires spatial work while retaining character/session data.
 			selectionDecal = null;
 			social = withoutResurrection( { ...social, invitation: null } );
 			movement.clear();
+			arrowKeys.clear();
 			targeting.clear();
 			combat.clear( true );
 			skillPress.clear();
