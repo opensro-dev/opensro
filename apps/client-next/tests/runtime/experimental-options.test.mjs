@@ -38,7 +38,9 @@ const OFF = Object.freeze( {
 	hdrToneMap: false,
 	sunShadow: false,
 	perPixelLighting: false,
-	predictedRunUp: false,
+	// On by default (owner 2026-10-25): a press walks at once and stops
+	// where the server casts.
+	predictedRunUp: true,
 	// On by default (owner 2026-10-15): the camera eases its height and release.
 	smoothCamera: true,
 	// On by default (owner 2026-10-17): +8 and higher weapons and shields wear enchant sparks.
@@ -59,6 +61,8 @@ const OFF = Object.freeze( {
 	dropPlusNotices: true,
 	// On by default (owner 2026-10-19): the shard's +7 notices show.
 	plusSevenNotices: true,
+	// Off by default: each player opts in to the unique damage ranking.
+	uniqueDamageRank: false,
 	// Off by default: V hides only monsters and players, as the original does.
 	vHidesCompanions: false,
 	// On by default (port-only, not native): hides characters in dungeon blocks the active block does not draw.
@@ -456,10 +460,11 @@ test("render scale selections remain drafts until Confirm and reject unsupported
 Gameplay rows
 ================
 */
-test("the predicted run-up defaults off and reaches only the worker's slice", () => {
-	// The native press (6FCD50) never walks before the server answers.
+test("the predicted run-up defaults on and reaches only the worker's slice", () => {
+	// Owner 2026-10-25: on by default. The native press (6FCD50) never
+	// walks before the server answers, so the row remains the off switch.
 	assert.deepEqual( experimentalGameplay( experimentalOptions() ), {
-		predictedRunUp: false,
+		predictedRunUp: true,
 		jobKillNotices: true,
 		dropPlusNotices: true,
 		plusSevenNotices: true,
@@ -468,8 +473,9 @@ test("the predicted run-up defaults off and reaches only the worker's slice", ()
 		petPickupKinds: undefined
 	} );
 	for ( const value of [ 1, "true", null, {} ] ) {
-		assert.equal( experimentalOptions( { predictedRunUp: value } ).predictedRunUp, false );
+		assert.equal( experimentalOptions( { predictedRunUp: value } ).predictedRunUp, true );
 	}
+	assert.equal( experimentalOptions( { predictedRunUp: false } ).predictedRunUp, false );
 	const on = experimentalOptions( { predictedRunUp: true } );
 	assert.deepEqual( experimentalGameplay( on ), {
 		predictedRunUp: true,

@@ -1,13 +1,34 @@
 package enterworld
 
 import (
+	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
+
+// The monster snapshot row carries the ref's BCRadius so the browser's
+// predicted run-up can stop at the server's combat spacing.
+func TestMonsterRefObjRowCarriesBodyRadius(t *testing.T) {
+	row := monsterRefObjRow(monster.MonsterRef{
+		RefObjID: 1933, Codename: "MOB_CH_MANGNYANG", NameStrID: "SN_MOB_CH_MANGNYANG",
+		Name: "Mangyang", Level: 1, MaxHP: 54, BodyRadius: 2,
+	})
+	if row.BodyRadius != 2 {
+		t.Fatalf("monster row body radius = %v, want the ref's 2: %+v", row.BodyRadius, row)
+	}
+	encoded, err := json.Marshal(row)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encoded), `"bodyRadius":2`) {
+		t.Errorf("monster row JSON %s lacks the body radius", encoded)
+	}
+}
 
 func admitMonsterFixture(registry *simulation.MonsterState, entry *LocalPlayerEntry) {
 	registry.StartDivision("global-official")

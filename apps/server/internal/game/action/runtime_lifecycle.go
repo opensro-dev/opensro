@@ -526,6 +526,7 @@ Release actor-owned runtime state while the division operation lock is held.
 func (rt *Runtime) forgetCharacterLocked(divisionID, characterName string) {
 	rt.periodicEffects.StopSource(divisionID, characterName)
 	rt.returnCasts.Delete(simulation.WorldKey(divisionID, characterName))
+	rt.teleportArrivals.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.playerDisplacements.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.jobDresses.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.jobActivations.Delete(simulation.WorldKey(divisionID, characterName))

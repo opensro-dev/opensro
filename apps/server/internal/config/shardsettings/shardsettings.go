@@ -101,6 +101,8 @@ var Settings = []Setting{
 	{Env: "SRO_STORAGE_AUTO_STACK", NomadVar: "storage_auto_stack", Default: "on"},
 	// Owner, 2026-10-14: the Bandit Den scroll counts down half as long.
 	{Env: "SRO_FAST_DEN_RETURN", NomadVar: "fast_den_return", Default: "on"},
+	// Port-only, off by default: a unique's attackers see its damage ranking.
+	{Env: "SRO_UNIQUE_DAMAGE_RANK", NomadVar: "unique_damage_rank", Default: "off"},
 	// Owner, 2026-10-15: a login inside a closed object (a tree trunk) is
 	// rescued to the nearest open ground.
 	{Env: "SRO_CLOSED_OBJECT_RESCUE", NomadVar: "closed_object_rescue", Default: "on"},
@@ -120,6 +122,9 @@ var Settings = []Setting{
 	{Env: "SRO_MOST_WANTED_STREAK_NOTICE", NomadVar: "most_wanted_streak_notice", Default: "off"},
 	// Owner, 2026-10-14: trade stars by cargo gold, Jangan route profit.
 	{Env: "SRO_TRADE_TIERS", NomadVar: "trade_tiers", Default: "on", Catalogue: true},
+	// Owner, 2026-10-25: the revival's grace after a teleport arrival
+	// (port-only, not native; off is native, #1518).
+	{Env: "SRO_TELEPORT_GRACE", NomadVar: "teleport_grace", Default: "off", Catalogue: true},
 	// F10 trade group (game/tunables): the Jangan route profit percents. The
 	// site's trade quotes read them, so the catalogue does too.
 	{Env: "SRO_TRADE_ROUTE_DONWHANG_PERCENT", NomadVar: "trade_route_donwhang_percent", Default: "50", Catalogue: true},

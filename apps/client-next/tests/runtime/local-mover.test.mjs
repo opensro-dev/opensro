@@ -88,6 +88,8 @@ function world( overrides = {} ) {
 		aim: undefined,
 		speedFactor: 1,
 		walkPredictable: true,
+		walkHeld: false,
+		holding: false,
 		speed: SPEED,
 		inputSeq: 0,
 		navigationRequestId: 1,
@@ -114,6 +116,69 @@ test("the body leaves rest on the click frame and never outruns walking speed at
 	}
 	// The first frame already moved: no frame of rest after the click.
 	assert.ok( last.x > START.x + SPEED * now / 1000 - .1 );
+});
+
+test("a move prediction starts on its frame and walks its goal", () => {
+	const mover = createLocalMover(), w = world();
+	const destination = { ...START, x: 1300 };
+	assert.equal(
+		mover.predict( { seq: 1, aim: { kind: "goal", destination }, speed: SPEED, drawn: START, now: 0 }, w ),
+		true
+	);
+	let now = 0, last = START;
+	for ( const dt of FRAMES ) {
+		now += dt;
+		const frame = mover.frame( now, w );
+		assert.equal( frame.kind, "walking" );
+		const step = Math.hypot( frame.pose.x - last.x, frame.pose.z - last.z );
+		assert.ok( step <= SPEED * dt / 1000 + .01, `step ${step} in ${dt} ms` );
+		assert.ok( step > 0, "it moves every frame" );
+		last = frame.pose;
+	}
+	assert.ok( last.x > START.x + SPEED * now / 1000 - .1, "no frame of rest after the move" );
+	// No speed to walk at, or no navigation view: nothing is predicted and
+	// the presenter keeps the walk (the command still went to the worker).
+	assert.equal(
+		createLocalMover().predict(
+			{ seq: 1, aim: { kind: "goal", destination }, speed: 0, drawn: START, now: 0 },
+			w
+		),
+		false
+	);
+	assert.equal(
+		createLocalMover().predict(
+			{ seq: 1, aim: { kind: "goal", destination }, speed: SPEED, drawn: START, now: 0 },
+			world( { view: null } )
+		),
+		false
+	);
+});
+
+test("a second move prediction redirects the walk from where the body is drawn", () => {
+	const mover = createLocalMover(), w = world();
+	mover.predict(
+		{ seq: 1, aim: { kind: "goal", destination: { ...START, x: 1300 } }, speed: SPEED, drawn: START, now: 0 },
+		w
+	);
+	const before = mover.frame( 200, w );
+	assert.equal( before.kind, "walking" );
+	assert.equal(
+		mover.predict(
+			{
+				seq: 2,
+				aim: { kind: "goal", destination: { ...START, x: 1000, z: 1300 } },
+				speed: SPEED,
+				drawn: before.pose,
+				now: 200
+			},
+			w
+		),
+		true
+	);
+	const after = mover.frame( 300, w );
+	assert.equal( after.kind, "walking" );
+	assert.ok( Math.abs( after.pose.x - before.pose.x ) < 1, "no further travel along the old leg" );
+	assert.ok( after.pose.z > before.pose.z, "the new leg runs from the turn" );
 });
 
 test("a right-angle re-click turns at the click frame from where the body is drawn", () => {
@@ -165,6 +230,105 @@ test("a click the worker refused glides back to where the worker stands, within 
 	}
 	assert.ok( ended, "the prediction ends once it is back" );
 	assert.ok( Math.abs( ended.x - START.x ) < 1e-2, `ended at ${ended.x}` );
+});
+
+test("a click behind a holding gate stays drawn in place, then walks on the release frame (#1570)", () => {
+	const mover = createLocalMover(), goal = { ...START, x: 1300 };
+	const gated = world( { walkPredictable: false, walkHeld: true, holding: true } );
+	assert.equal( mover.click( { seq: 7, query: query( 1300, 1000 ), drawn: START, now: 0 }, gated ), false );
+	// The gate holds: no prediction, the body is not the mover's to draw.
+	assert.equal( mover.active(), false );
+	assert.equal( mover.frame( 100, gated ).kind, "idle" );
+	// Production cadence: the worker notes the sequence before the gate,
+	// so the click's own publication is taken-but-not-walking while still
+	// held; it must not consume the record.
+	const taken = world( {
+		walkPredictable: false,
+		walkHeld: true,
+		holding: true,
+		inputSeq: 7,
+		poseAtMs: 95,
+		revision: 1
+	} );
+	assert.equal( mover.frame( 110, taken ).kind, "idle" );
+	// The worker stopped holding and walks it: adoption steps from where
+	// the body was drawn at click time.
+	const released = world( {
+		inputSeq: 7,
+		moving: true,
+		aim: { kind: "goal", destination: goal },
+		poseAtMs: 190,
+		revision: 2
+	} );
+	const first = mover.frame( 200, released );
+	assert.equal( first.kind, "walking" );
+	assert.deepEqual( poseOf( first ), START );
+	const later = mover.frame( 400, released );
+	assert.equal( later.kind, "walking" );
+	assert.ok( Math.abs( poseOf( later ).x - (START.x + SPEED * .2) ) < .05, `x ${poseOf( later ).x}` );
+	assert.equal( poseOf( later ).z, START.z );
+});
+
+test("an adopted walk hands its pose back when the worker's leg ends (#1570)", () => {
+	const mover = createLocalMover(), goal = { ...START, x: 1010 };
+	assert.equal(
+		mover.click(
+			{ seq: 7, query: query( 1010, 1000 ), drawn: START, now: 0 },
+			world( { walkPredictable: false, walkHeld: true, holding: true } )
+		),
+		false
+	);
+	const released = world( {
+		inputSeq: 7,
+		moving: true,
+		aim: { kind: "goal", destination: goal },
+		poseAtMs: 190,
+		revision: 1
+	} );
+	assert.equal( mover.frame( 200, released ).kind, "walking" );
+	assert.equal( mover.frame( 300, released ).kind, "walking" );
+	// The worker's leg is over: the drawn pose hands back at the goal.
+	const standing = world( { inputSeq: 7, moving: false, pose: goal, poseAtMs: 280, revision: 2 } );
+	mover.frame( 320, standing );
+	const ended = mover.frame( 500, standing );
+	assert.equal( ended.kind, "ended" );
+	assert.ok( Math.abs( poseOf( ended ).x - 1010 ) < .05, `x ${poseOf( ended ).x}` );
+	assert.equal( mover.active(), false );
+});
+
+test("a held click the worker took but does not walk leaves no trace (#1570)", () => {
+	const mover = createLocalMover(), goal = { ...START, x: 1300 };
+	mover.click(
+		{ seq: 9, query: query( 1300, 1000 ), drawn: START, now: 0 },
+		world( { walkPredictable: false, walkHeld: true, holding: true } )
+	);
+	// The gate resolves without a walk (refused at release): the record
+	// is consumed with no trace.
+	mover.frame( 100, world( { inputSeq: 9, moving: false, holding: false } ) );
+	// A later walk for another input must not adopt the stale record.
+	const frame = mover.frame(
+		200,
+		world( { inputSeq: 10, moving: true, aim: { kind: "goal", destination: goal }, poseAtMs: 190, revision: 1 } )
+	);
+	assert.equal( frame.kind, "idle" );
+	assert.equal( mover.active(), false );
+});
+
+test("a fresh admitted click supersedes a held one (#1570)", () => {
+	const mover = createLocalMover(), goal = { ...START, z: 1300 };
+	mover.click(
+		{ seq: 3, query: query( 1300, 1000 ), drawn: START, now: 0 },
+		world( { walkPredictable: false, walkHeld: true, holding: true } )
+	);
+	// The gate cleared before the worker ever walked seq 3: seq 4 predicts.
+	assert.equal( mover.click( { seq: 4, query: query( 1000, 1300 ), drawn: START, now: 50 }, world() ), true );
+	const frame = mover.frame(
+		150,
+		world( { inputSeq: 4, moving: true, aim: { kind: "goal", destination: goal }, poseAtMs: 140, revision: 1 } )
+	);
+	assert.equal( frame.kind, "walking" );
+	assert.equal( poseOf( frame ).x, START.x );
+	assert.ok( poseOf( frame ).z > START.z, "walks the fresh click, not the held one" );
 });
 
 test("a later click the mover does not predict hands the walk back instead of dropping it", () => {

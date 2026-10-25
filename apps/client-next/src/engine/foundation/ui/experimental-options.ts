@@ -108,6 +108,11 @@ export interface ExperimentalOptions {
 	// widens that one. On unless turned off (the owner's choice,
 	// 2026-10-19); off hides them from the banner and the chat log.
 	readonly plusSevenNotices: boolean;
+	// Port-only, not native: when a unique the player damaged dies, the
+	// shard's damage ranking (0x3FBC, server SRO_UNIQUE_DAMAGE_RANK) opens
+	// in a window (unique-rank-hud.ts). Off unless turned on, so each
+	// player opts in.
+	readonly uniqueDamageRank: boolean;
 	// Port-only, not native: holding V (UIIT_STT_USER_MOSTER_BLIND) also
 	// hides other players' pets and transports. The original hides only
 	// monsters and players (8602C0, 85E550): a COS draws through its owner
@@ -318,7 +323,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		hdrToneMap: enabled( "hdrToneMap" ),
 		sunShadow: enabled( "sunShadow" ),
 		perPixelLighting: enabled( "perPixelLighting" ),
-		predictedRunUp: enabled( "predictedRunUp" ),
+		predictedRunUp: record.predictedRunUp !== false,
 		smoothCamera: record.smoothCamera !== false,
 		enchantSparks: record.enchantSparks !== false,
 		compressedTextures: record.compressedTextures !== false,
@@ -329,6 +334,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		jobKillNotices: record.jobKillNotices !== false,
 		dropPlusNotices: record.dropPlusNotices !== false,
 		plusSevenNotices: record.plusSevenNotices !== false,
+		uniqueDamageRank: enabled( "uniqueDamageRank" ),
 		vHidesCompanions: enabled( "vHidesCompanions" ),
 		dungeonCharacterPvs: record.dungeonCharacterPvs !== false,
 		fitWindowLabels: record.fitWindowLabels !== false,

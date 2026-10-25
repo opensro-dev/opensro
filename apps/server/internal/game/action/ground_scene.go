@@ -60,13 +60,15 @@ func (rt *Runtime) ReconcileGroundScope(s *transport.Session, divisionID string,
 ReconcileScene
 
 The game-ready hook (enterworld.Deps.ReconcileSceneObjects): settle the
-ground drops, then repeat the transport's trade level (0x352D) when goods
-are aboard. Without goods the new player's 0 is already right. c is the
+ground drops, start a teleport arrival's untouchable grace
+(teleportprotection.go), then repeat the transport's trade level (0x352D)
+when goods are aboard. Without goods the new player's 0 is already right. c is the
 detached snapshot enterworld takes for game-ready, so no lock is needed.
 ================
 */
 func (rt *Runtime) ReconcileScene(s *transport.Session, divisionID string, c *enterworld.Character) {
 	rt.ReconcileGroundScope(s, divisionID, c)
+	rt.startTeleportGrace(divisionID, c.Name)
 	frame, loaded := rt.sceneTradeStars(c)
 	if !loaded {
 		return
