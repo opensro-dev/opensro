@@ -75,6 +75,15 @@ variable "transport_tls_id" {
   type = string
 }
 
+# "on" serves WebTransport as a public endpoint (SRO_WEBTRANSPORT_PUBLIC):
+# the GameWorld then requires the explicit TLS pair above and the allowed
+# origins, and the WT listener may bind beyond loopback. "off" (default)
+# keeps WebTransport a loopback/development transport.
+variable "webtransport_public" {
+  type    = string
+  default = "off"
+}
+
 variable "host_network" {
   type    = string
   default = "loopback"
@@ -1072,6 +1081,7 @@ job "sro-gameworld-__SHARD_ID__" {
         TRANSPORT_KEY_FILE                      = var.transport_key_file
         TRANSPORT_ALLOWED_ORIGINS               = var.allowed_origins
         SRO_TRANSPORT_TLS_ID                    = var.transport_tls_id
+        SRO_WEBTRANSPORT_PUBLIC                 = var.webtransport_public
         TRANSPORT_PPROF                         = var.transport_pprof
         TRANSPORT_PPROF_ADDR                    = var.pprof_addr
         SRO_RELEASE_ID                          = var.release_id

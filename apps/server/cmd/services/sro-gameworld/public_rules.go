@@ -62,6 +62,10 @@ var unlistedSettings = map[string]string{
 	"SRO_TRADE_JOB_TRADER_PERCENT_CAP":        "shown in the trade job bonus rule",
 	"SRO_TRADE_JOB_HUNTER_PERCENT_PER_TRADER": "shown in the trade job bonus rule",
 	"SRO_TRADE_JOB_HUNTER_PERCENT_CAP":        "shown in the trade job bonus rule",
+	// Deployment plumbing: how the shard's transport is served, not a
+	// rule players meet (their client is offered the same world either
+	// way).
+	"SRO_WEBTRANSPORT_PUBLIC": "operator transport serving switch, not a gameplay rule",
 }
 
 /*
