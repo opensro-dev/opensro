@@ -11,6 +11,8 @@ undefined shop closes it; other fields belong to the newest snapshot.
 
 ===========================================================================
 */
+import type { MoverPublication } from "./mover-publication";
+export type { MovementAim } from "./mover-publication";
 
 /*
 ================
@@ -715,24 +717,13 @@ export interface BetaMapPlayer {
 }
 /*
 ================
-MovementAim
-
-A rebuildable walk as the worker publishes it (#1563): to a point, or
-along a heading until the navigation stops it.
-================
-*/
-export type MovementAim =
-	| { readonly kind: "goal"; readonly destination: Pose; }
-	| { readonly kind: "direction"; readonly heading: number; };
-/*
-================
 GameplayState
 
 Worker publications may omit unchanged catalog, social and shop values.
 Presentation owns the derived skillIndex; it never travels back to simulation.
 ================
 */
-export interface GameplayState {
+export interface GameplayState extends MoverPublication {
 	readonly itemMall?: import("./item-mall").MallState;
 	readonly betaPlayers?: readonly BetaMapPlayer[];
 	// Port-only wolf skill tree of the pet window's wolf (pet-training.ts).
@@ -903,26 +894,6 @@ export interface GameplayState {
 	readonly pose: Pose | null;
 	readonly movementPath?: MovementPath;
 	readonly movementRevision?: number;
-	// The last gameplay input sequence the worker took (movement-input.ts).
-	readonly movementInputSeq?: number;
-	// The local walk speed in world units a second that a new walk leg uses
-	// (movement.ts request): the main-thread mover times its legs with it (#1440).
-	readonly movementSpeed?: number;
-	// What the worker's movement owner is walking, when it is a walk the
-	// main-thread mover can rebuild (movement.ts state): a goal walk's
-	// destination or a direction walk's live heading. The mover rebuilds the
-	// worker's leg from it when it reconciles (#1441b, #1563).
-	readonly movementAim?: MovementAim;
-	// The direction walk's 500 ms drift factor (movement.ts driftWalk); 1
-	// for any other walk.
-	readonly movementSpeedFactor?: number;
-	// A ground click now would start a walk at once (gameplay.ts
-	// groundWalkRefusal): the main-thread mover predicts only then (#1440).
-	readonly walkPredictable?: boolean;
-	// A ground pickup now would start the worker's own run-up at once
-	// (gameplay.ts pickupPredictableNow): the main-thread mover predicts
-	// the pickup leg only then (#1567).
-	readonly pickupPredictable?: boolean;
 	readonly movementTransition?: MovementTransition;
 	readonly movementDiagnostics?: {
 		readonly total: number;

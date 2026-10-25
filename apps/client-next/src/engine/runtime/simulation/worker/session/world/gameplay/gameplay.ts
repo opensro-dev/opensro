@@ -736,7 +736,9 @@ scroll's kind-0 row does not.
 	would. command() asks these same predicates for a ground click, in its own
 	order around its side effects; the published walkPredictable is this
 	answer, so the main-thread mover (#1440) predicts only a click the worker
-	walks. Mounted walks stay with the worker for now.
+	walks. A rider's click walks the mount (CCharactor_GetActiveMoverEntity
+	0x85E000) only while the ridden COS is the live active one, as command()
+	requires (#1566).
 	================
 	*/
 	function groundWalkRefusal( now: number, local: EntityState | undefined ): string | null {
@@ -750,7 +752,7 @@ scroll's kind-0 row does not.
 		if ( frozen() ) return "frozen";
 		if ( local.movementMode === MOVEMENT_SEATED ) return "seated";
 		if ( castLocked( now ) ) return "cast";
-		if ( local.mountedOn ) return "mounted";
+		if ( local.mountedOn && (!activeCos || activeCos.gid !== local.mountedOn || activeCos.dead) ) return "mounted";
 		return null;
 	}
 	/*

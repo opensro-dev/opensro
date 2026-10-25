@@ -184,7 +184,33 @@ export function startRuntime(
 			) {
 				command = { ...command, command: { ...command.command, alt: true } };
 			}
-			simulation.session( command );
+			const seq = simulation.session( command );
+			// A move with a known destination (the GM /Pos walk; map
+			// auto-move sends the same kind) goes through the main-thread
+			// mover like a ground click (#1571): from the drawn pose,
+			// under the worker's own ground-walk gate. A foreign-region
+			// goal keeps the presenter: the mover's navigation view covers
+			// one region, and the worker walks those exactly as today.
+			if (
+				seq !== undefined && mainThreadOwnWalk &&
+				command.kind === "gameplay" && command.command.kind === "move"
+			) {
+				const game = presentation.gameplay();
+				const drawn = game ? characters.drawnPose( game.localGid ) : undefined;
+				const world = moverWorld();
+				if (
+					drawn && world.walkPredictable && world.speed !== undefined &&
+					command.command.destination.regionId === drawn.regionId
+				) {
+					localMover.predict( {
+						seq,
+						aim: { kind: "goal", destination: command.command.destination },
+						speed: world.speed,
+						drawn,
+						now: performance.now()
+					}, world );
+				}
+			}
 		}
 		/*
 		================
@@ -870,9 +896,11 @@ export function startRuntime(
 					worldPresented ? ui.mallPreview() : null,
 					worldPresented ? ui.skinPreview() : null
 				);
+				const moverGid = presentation.gameplay()?.localGid ?? 0;
 				characters.ownMover(
-					presentation.gameplay()?.localGid ?? 0,
-					mainThreadOwnWalk ? localMover.frame( now, moverWorld() ) : { kind: "idle" }
+					moverGid,
+					mainThreadOwnWalk ? localMover.frame( now, moverWorld() ) : { kind: "idle" },
+					presentation.entities().find( entity => entity.gid === moverGid )?.mountedOn || undefined
 				);
 				characters.step(
 					presentation.entities(),
