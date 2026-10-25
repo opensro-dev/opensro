@@ -8,9 +8,19 @@ sunrate.go). Inside the rare class table's rows for levels 76-90, the
 degree-9 Seal of Sun class (the *_09_C_RARE bucket's class) is mass
 multiplier times as wide; every other class keeps its native width and
 only shifts by the Sun class's growth, so Star and Moon attempts are
-bit-identical. The class is derived from the catalogue's own *_09_C_RARE
-bucket references, never named here. A row whose scaled end would leave
-the million-roll is returned native instead.
+bit-identical. The classes are derived from the catalogue's own bucket
+references, never named here. A row whose scaled end would leave the
+million-roll is returned native instead.
+
+Owner decision (#1605 P1, 2026-10-25): the widened Sun class is never
+wider than the degree-9 Moon class (the *_09_B_RARE bucket's class) in
+the same row, so with the keep factors (Star x3, Moon x2, Sun x1 over
+the widening 3) a Sun expects about twice a Moon's kills at every
+level. The coupling is deliberate: widen the Moon class later and the
+Sun class's ceiling moves with it. A row that rolls no Moon class of
+its own (levels 86-90 without the seal band) caps at the Moon class's
+last native width; a catalogue with no derivable Moon class gets no
+widening at all, since the ladder could not be proven there.
 
 The roll path composes this after the seal-band row (sealband.go): the
 band first, this scaling second, so levels 86-90 roll band-extended Star
@@ -30,6 +40,14 @@ const (
 
 // sunClassGroup is the rare table's degree-9 Sun class, derived at build.
 var sunClassGroup = deriveSunClassGroup(equipment)
+
+// moonClassGroup is the rare table's degree-9 Moon class, derived at
+// build: the ceiling the widened Sun class answers to (#1605 P1).
+var moonClassGroup = deriveMoonClassGroup(equipment)
+
+// moonCapFallback is the Moon class's width in the last native row
+// that rolls it: the ceiling for rows with no Moon class of their own.
+var moonCapFallback = deriveMoonCapFallback(equipment)
 
 /*
 ================
@@ -52,13 +70,37 @@ holds none or they disagree.
 ================
 */
 func deriveSunClassGroup(c equipmentCatalog) int {
+	return deriveDegree9Class(c, "_09_C_RARE")
+}
+
+/*
+================
+deriveMoonClassGroup
+
+The equipment class of the *_09_B_RARE items, derived the same way.
+================
+*/
+func deriveMoonClassGroup(c equipmentCatalog) int {
+	return deriveDegree9Class(c, "_09_B_RARE")
+}
+
+/*
+================
+deriveDegree9Class
+
+The one class every degree-9 bucket reference with this suffix (both
+countries) agrees on, or -1 when the catalogue holds none or they
+disagree.
+================
+*/
+func deriveDegree9Class(c equipmentCatalog, suffix string) int {
 	group := -1
 	for key, bucket := range c.buckets {
 		if !key.rare {
 			continue
 		}
 		for _, ref := range bucket.refs {
-			if !strings.HasSuffix(ref.Codename, "_09_C_RARE") {
+			if !strings.HasSuffix(ref.Codename, suffix) {
 				continue
 			}
 			if group >= 0 && group != key.group {
@@ -72,11 +114,71 @@ func deriveSunClassGroup(c equipmentCatalog) int {
 
 /*
 ================
+deriveMoonCapFallback
+
+The Moon class's width in the last native rare row that rolls it
+(level 85 in the shipped catalogue): the Sun cap for rows that roll
+no Moon class of their own. 0 when the catalogue holds no Moon class.
+================
+*/
+func deriveMoonCapFallback(c equipmentCatalog) uint32 {
+	if moonClassGroup < 0 || len(c.classes) < 2 {
+		return 0
+	}
+	for level := len(c.classes[1]); level >= 1; level-- {
+		if width := classWidth(c.classes[1][level-1], moonClassGroup); width > 0 {
+			return width
+		}
+	}
+	return 0
+}
+
+/*
+================
+classWidth
+
+A class's total width in a row (its entries' threshold steps).
+================
+*/
+func classWidth(row []classThreshold, group int) uint32 {
+	var below, width uint32
+	for _, class := range row {
+		if class.group == group {
+			width += class.threshold - below
+		}
+		below = class.threshold
+	}
+	return width
+}
+
+/*
+================
+moonCap
+
+The widest the Sun class may grow in row: the Moon class's own width,
+or its last native width when the row rolls none. False when no cap
+is derivable, in which case the row stays native.
+================
+*/
+func moonCap(row []classThreshold) (uint32, bool) {
+	if moonClassGroup < 0 {
+		return 0, false
+	}
+	if width := classWidth(row, moonClassGroup); width > 0 {
+		return width, true
+	}
+	return moonCapFallback, moonCapFallback > 0
+}
+
+/*
+================
 scaleSunClass
 
-row with its Sun class mass times as wide. A multiplier of 1, a level
-outside the scaling scope or a catalogue without a Sun class returns
-the row untouched (shared, not copied), so the native path is exact.
+row with its Sun class mass times as wide, but never wider than the
+Moon class (moonCap, #1605 P1). A multiplier of 1, a level outside
+the scaling scope, a catalogue without a Sun class or one whose Moon
+cap cannot be derived returns the row untouched (shared, not copied),
+so the native path is exact.
 ================
 */
 func scaleSunClass(row []classThreshold, level uint8, multiplier int) []classThreshold {
@@ -94,11 +196,19 @@ func scaleSunClass(row []classThreshold, level uint8, multiplier int) []classThr
 	if at < 0 {
 		return row
 	}
-	var below uint32
-	if at > 0 {
-		below = row[at-1].threshold
+	capMass, capped := moonCap(row)
+	if !capped {
+		return row
 	}
-	growth := (row[at].threshold - below) * uint32(multiplier-1)
+	sunWidth := classWidth(row, sunClassGroup)
+	target := sunWidth * uint32(multiplier)
+	if target > capMass {
+		target = capMass
+	}
+	growth := target - sunWidth
+	if growth == 0 {
+		return row
+	}
 	if len(row) > 0 && row[len(row)-1].threshold+growth > 1_000_000 {
 		return row
 	}

@@ -431,6 +431,9 @@ export function createWorldRenderer(
 		collisionParts: ReturnType<typeof cameraCollisionParts> = [],
 		collisionDistance: number | null = null;
 	let collisionCamera: WorldCamera | null = null;
+	// The /colon byte (+0x3CC), native default on: while clear the
+	// clamp takes its no-hit arm (resolveFollowCamera).
+	let cameraCollision = true;
 	// Port-only, not native: the Experimental "Smooth camera" row eases the
 	// follow target's height and the collision release (camera-smoothing.ts).
 	const cameraSmoothing = createCameraSmoothing();
@@ -1438,6 +1441,20 @@ export function createWorldRenderer(
 		},
 		/*
 		================
+		setCameraCollision
+
+		The GM /colon byte (+0x3CC): while clear, 68FAD0 takes its
+		no-hit arm and the camera keeps the requested distance; the
+		follow (68F830) runs either way. Either flip re-resolves.
+		================
+		*/
+		setCameraCollision( enabled: boolean ) {
+			if ( enabled === cameraCollision ) return;
+			cameraCollision = enabled;
+			collisionInputValid = false;
+		},
+		/*
+		================
 		neededTextures
 		================
 		*/
@@ -1712,7 +1729,8 @@ export function createWorldRenderer(
 						localCamera,
 						collisionParts,
 						liftDistance,
-						collisionQuery
+						collisionQuery,
+						cameraCollision
 					);
 					probe?.worldCount?.( "camera-queries", 1 );
 					probe?.worldCount?.( "camera-query-reused", collisionQuery.reused ? 1 : 0 );

@@ -439,6 +439,21 @@ export function createWorldStream(
 		},
 		/*
 		================
+		setCameraCollision
+
+		690C40 ids 118/119 (/colon, /coloff) write the interface byte
+		+0x3CC. Only the clamp consults it (68FAD0): set, the
+		eye-to-target segment is cast and a hit pulls the camera in;
+		clear, the clamp takes its no-hit arm. The follow (68F830)
+		never reads the byte, so this only forwards to the renderer,
+		which owns the clamp.
+		================
+		*/
+		setCameraCollision( collision: boolean ) {
+			if ( !disposed ) renderer.setWorldCameraCollision( collision );
+		},
+		/*
+		================
 		pumpCameraScripts
 
 		A0F567 pumps state timers before the process update (+2C), hence

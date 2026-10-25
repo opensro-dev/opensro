@@ -169,7 +169,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Requested for the beta, to keep the top seal rare; the original returns with one setting."},
 			{Flag: progression.EnvSunDropRate, On: progression.SunRateFromEnv().Active(),
 				Native: "Degree-9 Seal of Sun gear almost never drops from monsters.",
-				Now:    fmt.Sprintf("It drops from monsters of level 76 to 90 at %d times its original chance.", progression.SunRateFromEnv().MassMultiplier()),
+				Now:    fmt.Sprintf("It drops from monsters of level 76 to 90 at up to %d times its original chance, but never wider than the Moon class, so a Sun stays about twice as rare as a Moon.", progression.SunRateFromEnv().MassMultiplier()),
 				Why:    "Owner-approved for the beta so the top seal enters the economy from hunting; shops never sell it, and the original chance returns with one setting."},
 			{Flag: progression.EnvUniqueGapExempt, On: progression.UniqueRulesFromEnv().GapExempt,
 				Native: "A monster's drops thin out once you are more than six levels above it and stop entirely far above it, uniques included.",
