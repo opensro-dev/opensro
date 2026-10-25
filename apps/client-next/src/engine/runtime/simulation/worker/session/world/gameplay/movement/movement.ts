@@ -614,6 +614,24 @@ it: it never left the start, so walk back there.
 	}
 	/*
 ================
+settlePrediction
+
+End an open prediction where the walker stands. The walk it predicted did
+run, but it is over and the server will send no walk of its own: a chase
+whose target died or left mid-leg, where the server halts the caster
+wherever its follow had carried it. There is no start to walk back to (that
+is endPrediction); the next server walk reconciles from here.
+================
+	*/
+	function settlePrediction( now: number ) {
+		if ( !predicted || !pose ) return;
+		advanceTo( now );
+		predicted = null;
+		beginTransition( "cast" );
+		segment = null;
+	}
+	/*
+================
 bindOwners
 ================
 	*/
@@ -1415,6 +1433,44 @@ walk (native); a refusal ends it (endPrediction).
 		},
 		/*
 ================
+retargetPrediction
+
+Re-aim an open prediction at a new goal: the leg rebuilds from the live
+pose while the prediction keeps its start pose and its clock, so the
+server walk still adopts it (native) and the unanswered walk-back still
+times from the original request. The chase re-aims this way while its
+target moves, as the server's follow does. Refused off navigation
+coverage, like predictApproach; the caller then keeps the old leg.
+================
+		*/
+		retargetPrediction( value: Pose, now: number ): boolean {
+			if ( !pose || life === "dead" || walk || pending.size || !predicted ) return false;
+			advanceTo( now );
+			const current = pose,
+				to = admitPose( value ),
+				query: { slide: boolean; sourceOwner?: NavOwner; owners?: readonly NavOwnerSpan[]; } = {
+					slide: false,
+					sourceOwner: owner
+				};
+			const clipped = navigation.available( current ) ? to : null;
+			if ( !clipped || poseDistance( clipped, to ) >= ENDPOINT_EPSILON ) return false;
+			beginTransition( "input" );
+			predicted = { ...predicted, to };
+			pose = current;
+			segment = {
+				from: current,
+				to: { ...clipped, angle: movementHeading( current, clipped ) },
+				start: now,
+				timing: "speed",
+				lead: "client",
+				duration: movementDuration( poseDistance( current, clipped ), speed ),
+				owners: query.owners,
+				admitted: true
+			};
+			return true;
+		},
+		/*
+================
 endPrediction
 
 The server refused the walk it was predicted to drive: it never left the
@@ -1423,6 +1479,14 @@ start, so walk back there.
 		*/
 		endPrediction( now: number ) {
 			endPrediction( now );
+		},
+		/*
+================
+settlePrediction
+================
+		*/
+		settlePrediction( now: number ) {
+			settlePrediction( now );
 		},
 		/*
 ================
