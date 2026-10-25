@@ -59,6 +59,13 @@ test("a monster's body is its graded, truncated radius", () => {
 	}
 });
 
+test("the grade multiplies the radius at float32 precision, as the server stores it", () => {
+	// The server grades a float32 body: float32(4.6666667) * 3 lands just
+	// under 14, so the giant's body truncates to 13. At double precision
+	// the same product crosses 14.
+	assert.equal( monsterBodyRadius( 4.6666667, 4 ), 13 );
+});
+
 test("a ref row's body grades only for monsters", () => {
 	assert.equal( refBodyRadius( "monster", 2, 4 ), 6 );
 	assert.equal( refBodyRadius( "monster", 2, 0 ), 2 );
