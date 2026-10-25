@@ -8,7 +8,7 @@ import (
 
 func TestCharacterModelRefObjSnapshotCarriesPlayerAdmissionFields(t *testing.T) {
 	roster := &Roster{Models: []RosterModel{
-		{Codename: "CHAR_CH_MAN_SCHOLAR", RefObjID: 1917},
+		{Codename: "CHAR_CH_MAN_SCHOLAR", RefObjID: 1917, BodyRadius: 4},
 		{Codename: "CHAR_EU_WOMAN_ADVENTURER", RefObjID: 14738},
 		{Codename: "DUPLICATE", RefObjID: 1917},
 		{Codename: "MISSING_REF"},
@@ -22,6 +22,9 @@ func TestCharacterModelRefObjSnapshotCarriesPlayerAdmissionFields(t *testing.T) 
 		chinaMan.Kind != "player" || chinaMan.CountryByte9C == nil || *chinaMan.CountryByte9C != 0 ||
 		chinaMan.SexSelector1AC == nil || *chinaMan.SexSelector1AC != 1 {
 		t.Fatalf("China man row lacks CICUser admission fields: %+v", chinaMan)
+	}
+	if chinaMan.BodyRadius != 4 {
+		t.Fatalf("China man row body radius = %v, want the model's 4: %+v", chinaMan.BodyRadius, chinaMan)
 	}
 	europeWoman := rows[1]
 	if europeWoman.CountryByte9C == nil || *europeWoman.CountryByte9C != 1 ||
@@ -37,6 +40,9 @@ func TestCharacterModelRefObjSnapshotCarriesPlayerAdmissionFields(t *testing.T) 
 		if !strings.Contains(text, field) {
 			t.Errorf("player row JSON %s lacks %s", text, field)
 		}
+	}
+	if strings.Contains(text, "bodyRadius") {
+		t.Errorf("player row JSON %s carries a body radius its model never set", text)
 	}
 }
 

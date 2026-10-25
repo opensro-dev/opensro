@@ -353,6 +353,48 @@ test("the main-thread mover's walk is drawn while it predicts and handed back wi
 	assert.ok( Math.abs( previous.x - legAt( leg, 0, Math.floor( (ms - 20) / STEP_MS ) * STEP_MS ).x ) < 30 );
 });
 
+test("a rider's predicted walk moves the mount it rides, and both are handed back without a jump (#1566)", () => {
+	// 0x85E000: while riding, the mount is the mover; both are sampled from
+	// the local movement owner's walk (presentation-samples.ts).
+	const MOUNT = 9;
+	const presentation = createPosePresentation();
+	presentation.origin( 0 );
+	presentation.interpolateOwnWalk( true );
+	const leg = { from: P0, to: { ...P0, x: P0.x + 1000 } };
+	const both = ms => {
+		const tick = Math.floor( (ms - 20) / STEP_MS ) * STEP_MS;
+		const input = { ownLeg: true, atMs: tick, revision: 1, moving: true, ...leg, durationMs: 10_000 };
+		presentation.samples( new Map( [ [ GID, input ], [ MOUNT, input ] ] ) );
+		const target = legAt( leg, 0, tick );
+		return {
+			rider: presentation.pose( GID, target, ms / 1000 ),
+			mount: presentation.pose( MOUNT, target, ms / 1000 )
+		};
+	};
+	let ms = 36, previous = both( ms );
+	for ( ms += 16; ms < 400; ms += 16 ) previous = both( ms );
+	let mover = defined( presentation.drawn( GID ) );
+	for ( let i = 0; i < 10; i++ ) {
+		mover = { ...mover, z: mover.z + SPEED * .016 };
+		presentation.ownMover( GID, { kind: "walking", pose: mover }, MOUNT );
+		previous = both( ms += 16 );
+		assert.equal( previous.mount.z, mover.z, "the mount walks the prediction" );
+		assert.equal( previous.rider.z, mover.z );
+	}
+	presentation.ownMover( GID, { kind: "ended", pose: mover }, MOUNT );
+	let peak = 0;
+	for ( let i = 0; i < 40; i++ ) {
+		const drawn = both( ms += 16 );
+		for ( const key of [ "rider", "mount" ] ) {
+			const a = previous[key], b = drawn[key];
+			peak = Math.max( peak, Math.hypot( b.x - a.x, b.z - a.z ) / .016 );
+		}
+		previous = drawn;
+		presentation.ownMover( GID, { kind: "idle" } );
+	}
+	assert.ok( peak <= SPEED * 1.05, `handback peak ${peak.toFixed( 1 )} u/s against ${SPEED}` );
+});
+
 test("a base walk pushed ahead (a frame-clock jump) is still drawn no faster than the walk", () => {
 	const { presentation, frame } = straight();
 	let ms = 36, previous = frame( ms ), peak = 0;
@@ -440,4 +482,48 @@ test("turning the row off mid-walk hands the drawn pose over instead of snapping
 		Math.abs( next.x - handed.x ) < 3,
 		`jumped ${(next.x - handed.x).toFixed( 2 )} after the handoff`
 	);
+});
+
+test("a second pose() in the frame the prediction ends hands rider and mount back only once (#1566)", () => {
+	const MOUNT = 9;
+	/*
+	================
+	handback
+
+	Rider and mount across the end of a prediction, asking each pose once
+	or twice in the ended frame.
+	================
+	*/
+	const handback = twice => {
+		const presentation = createPosePresentation();
+		presentation.origin( 0 );
+		presentation.interpolateOwnWalk( true );
+		const leg = { from: P0, to: { ...P0, x: P0.x + 1000 } };
+		const both = ( ms, repeat = false ) => {
+			const tick = Math.floor( (ms - 20) / STEP_MS ) * STEP_MS;
+			const input = { ownLeg: true, atMs: tick, revision: 1, moving: true, ...leg, durationMs: 10_000 };
+			presentation.samples( new Map( [ [ GID, input ], [ MOUNT, input ] ] ) );
+			const target = legAt( leg, 0, tick );
+			const poses = [
+				presentation.pose( GID, target, ms / 1000 ),
+				presentation.pose( MOUNT, target, ms / 1000 )
+			];
+			if ( repeat ) {
+				presentation.pose( GID, target, ms / 1000 );
+				presentation.pose( MOUNT, target, ms / 1000 );
+			}
+			return poses.map( pose => [ pose.x, pose.z ] );
+		};
+		let ms = 36;
+		for ( ; ms < 400; ms += 16 ) both( ms );
+		const mover = { ...defined( presentation.drawn( GID ) ), z: P0.z + 30 };
+		presentation.ownMover( GID, { kind: "walking", pose: mover }, MOUNT );
+		both( ms += 16 );
+		presentation.ownMover( GID, { kind: "ended", pose: mover }, MOUNT );
+		const frames = [ both( ms += 16, twice ) ];
+		presentation.ownMover( GID, { kind: "idle" } );
+		for ( let i = 0; i < 5; i++ ) frames.push( both( ms += 16 ) );
+		return frames;
+	};
+	assert.deepEqual( handback( true ), handback( false ) );
 });

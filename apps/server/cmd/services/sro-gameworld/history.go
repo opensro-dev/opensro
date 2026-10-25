@@ -26,8 +26,20 @@ RecordLifecycle
 ================
 */
 func (observer historyObserver) RecordLifecycle(e transport.LifecycleEvent) {
-	observer.Record(history.Event{Session: e.Session, Account: e.Account, Shard: e.Shard, Character: e.Character,
-		Kind: e.Kind, Category: e.Category, Code: e.Code, Message: e.Message, Lifecycle: true, Attached: e.Attached, InWorld: e.InWorld})
+	event := history.Event{Session: e.Session, Account: e.Account, Shard: e.Shard, Character: e.Character,
+		Kind: e.Kind, Category: e.Category, Code: e.Code, Message: e.Message, Lifecycle: true, Attached: e.Attached, InWorld: e.InWorld}
+	// How the session connected (#1449): the journal's session row picks
+	// these two fields up; everything else about the event is unchanged.
+	if e.Transport != "" || e.Fallback != "" {
+		event.Fields = map[string]string{}
+		if e.Transport != "" {
+			event.Fields["transport"] = e.Transport
+		}
+		if e.Fallback != "" {
+			event.Fields["fallback"] = e.Fallback
+		}
+	}
+	observer.Record(event)
 }
 
 /*

@@ -4,7 +4,9 @@
 runtime-failures.test.mjs - runtime owner failure and teardown contracts
 
 Injects owners through the synthetic build boundary and verifies failures
-reach the player while each owned lifetime is disposed exactly once.
+reach the player while each owned lifetime is disposed exactly once. The
+boundary also records every factory call, so the wiring the composition
+hands from one owner to another is itself testable.
 
 ===========================================================================
 */
@@ -62,9 +64,9 @@ setup
 			build.onLoad(
 				{ filter: /.*/, namespace: "owner" },
 				args => ({
-					contents: `export function ${factories[args.path]}(){return globalThis.__runtimeOwners[${
-						JSON.stringify( args.path )
-					}];}`
+					contents: `export function ${factories[args.path]}( ...args ) {
+( globalThis.__runtimeCalls ??= [] ).push( { owner: ${JSON.stringify( args.path )}, args } );
+return globalThis.__runtimeOwners[${JSON.stringify( args.path )}];}`
 				})
 			);
 		}
@@ -411,4 +413,239 @@ dispose
 	const count = closed.length;
 	runtime.dispose();
 	assert.equal( closed.length, count );
+});
+
+test("a move command starts a mover prediction while the row is on, and only then", async t => {
+	const keys = [
+		"__runtimeOwners",
+		"__runtimeCalls",
+		"requestAnimationFrame",
+		"cancelAnimationFrame",
+		"location",
+		"document"
+	];
+	const previous = new Map( keys.map( key => [ key, Object.getOwnPropertyDescriptor( globalThis, key ) ] ) );
+	t.after( () => {
+		for ( const [key, value] of previous ) {
+			if ( value ) Object.defineProperty( globalThis, key, value );
+			else delete globalThis[key];
+		}
+	} );
+	const start = { regionId: 0x61a8, x: 1000, y: 0, z: 1000, angle: 0 };
+	const gameState = {
+		localGid: 1,
+		pose: { ...start },
+		poseAtMs: undefined,
+		movementRevision: 0,
+		moving: false,
+		movementAim: undefined,
+		movementSpeedFactor: 1,
+		walkPredictable: true,
+		movementSpeed: 50,
+		movementInputSeq: 0,
+		navigationRequestId: 1
+	};
+	const moverFrames = [], sessionCommands = [];
+	let lastSeq = 0;
+	const owners = frameOwners( "characters", [], [], [] );
+	owners.ui.event = () => {};
+	owners.characters.step = () => {};
+	owners.characters.cameraTarget = () => null;
+	owners.characters.drawnPose = () => ({ ...start });
+	owners.characters.ownMover = ( gid, frame ) => moverFrames.push( frame );
+	owners.presentation.gameplay = () => gameState;
+	owners.navigation.view = () => ({
+		requestId: 1,
+		navigation: {
+			available: () => true,
+			block: () => 0,
+			floor: () => undefined,
+			pick: query => ({ ...query.ray.target }),
+			clip: ( _from, to, query ) => {
+				if ( query ) query.status = 0;
+				return to;
+			},
+			surface: pose => pose
+		}
+	});
+	owners.simulation.session = command => {
+		sessionCommands.push( command );
+		return ++lastSeq;
+	};
+	owners.renderer.experimentalVideo = () => {};
+	owners.renderer.characterStats = () => ({});
+	owners.characters.ready = () => false;
+	owners.characters.error = () => null;
+	owners.characters.damageText = () => [];
+	owners.characters.takeCameraScripts = () => [];
+	owners.renderer.worldStats = () => ({ visibleGroups: 0, pendingGroups: 0, pendingTextures: 0 });
+	owners.renderer.phase = () => "running";
+	owners.renderer.error = () => null;
+	owners.renderer.gpuTiming = () => null;
+	owners.renderer.frame = () => undefined;
+	owners.renderer.audioListener = () => null;
+	owners.renderer.setDamageText = () => {};
+	owners.renderer.setTeleportGates = () => {};
+	owners.renderer.pickEntity = () => null;
+	owners.world.ready = () => false;
+	owners.world.error = () => null;
+	owners.world.reconnecting = () => false;
+	owners.world.loadingRegion = () => null;
+	owners.world.progress = () => 0;
+	owners.world.retryTransient = () => {};
+	owners.navigation.phase = () => "pending";
+	owners.navigation.error = () => null;
+	owners.navigation.reconnecting = () => false;
+	owners.navigation.retryTransient = () => {};
+	owners.audio.music = () => {};
+	owners.audio.prepareUi = () => {};
+	owners.audio.prepareCombat = () => {};
+	owners.audio.ready = () => false;
+	owners.audio.error = () => null;
+	owners.audio.musicStatus = () => "idle";
+	owners.ui.cursor = () => null;
+	owners.ui.stats = () => ({ pending: 0, failed: [] });
+	owners.ui.resourceError = () => null;
+	owners.platform.readUiViewport = () => ({ width: 1280, height: 720 });
+	owners.platform.readViewport = () => ({ width: 1280, height: 720 });
+	owners.platform.presentUi = () => {};
+	owners.platform.presentLoading = () => {};
+	owners.platform.presentWorldCursor = () => {};
+	owners.platform.presentTelemetry = () => {};
+	owners.platform.diagnosticsActive = () => false;
+	owners.presentation.travel = () => null;
+	owners.presentation.count = () => 0;
+	owners.presentation.read = () => undefined;
+	owners["build-info"].readout = () => "";
+	owners.input.dropNamesHeld = () => false;
+	owners.input.blindHeld = () => false;
+	owners.input.altHeld = () => false;
+	owners.assets.progress = () => 0;
+	owners["bug-report"].movement = () => {};
+	globalThis.__runtimeOwners = owners;
+	globalThis.__runtimeCalls = [];
+	globalThis.location = { search: "", origin: "http://localhost" };
+	globalThis.document = { visibilityState: "visible" };
+	let callback;
+	globalThis.requestAnimationFrame = fn => {
+		callback = fn;
+		return 1;
+	};
+	globalThis.cancelAnimationFrame = () => {};
+	const runtime = startRuntime( {}, {} );
+	try {
+		const calls = globalThis.__runtimeCalls ?? [];
+		const sessionCommand = defined( calls.find( call => call.owner === "ui" ) ).args[1];
+		const uiEvent = defined( calls.find( call => call.owner === "platform" ) ).args[5];
+		const drive = async now => {
+			defined( callback )( now );
+			for ( let i = 0; i < 32; i++ ) await Promise.resolve();
+		};
+		const t0 = performance.now();
+		await drive( t0 );
+		const move = {
+			kind: "gameplay",
+			command: {
+				kind: "move",
+				destination: { regionId: 0x61a8, x: 1300, y: 0, z: 1000, angle: 0 }
+			}
+		};
+		// Row off: the command reaches the worker and no frame walks.
+		sessionCommand( move );
+		await drive( t0 + 100 );
+		assert.ok(
+			sessionCommands.some( c => c.kind === "gameplay" && c.command.kind === "move" ),
+			"the move never reached the worker"
+		);
+		assert.ok( !moverFrames.some( f => f.kind === "walking" ), "the presenter lost the walk with the row off" );
+		// Row on but the worker's ground-walk gate closed: still nothing.
+		uiEvent( { kind: "experimental-preferences", value: { mainThreadOwnWalk: true } } );
+		gameState.walkPredictable = false;
+		sessionCommand( move );
+		await drive( t0 + 200 );
+		assert.ok( !moverFrames.some( f => f.kind === "walking" ), "a gated move was predicted" );
+		// Row on, gate open: the body walks toward the destination.
+		gameState.walkPredictable = true;
+		sessionCommand( move );
+		let now = t0 + 200;
+		for ( let i = 0; i < 30; i++ ) await drive( now += 16.7 );
+		const poses = moverFrames.filter( f => f.kind === "walking" ).map( f => f.pose );
+		assert.ok( poses.length > 0, "the move never started a prediction" );
+		for ( let i = 1; i < poses.length; i++ ) {
+			assert.ok( poses[i].x >= poses[i - 1].x, "the walk stalled or reversed" );
+			const step = Math.hypot( poses[i].x - poses[i - 1].x, poses[i].z - poses[i - 1].z );
+			assert.ok( step <= 50 * 1.04 * .0167 + .05, `drawn step ${step}` );
+		}
+		assert.ok( defined( poses.at( -1 ) ).x > start.x + 5, "the body barely moved" );
+		// A foreign-region goal starts no prediction of its own: the walk in
+		// flight keeps heading for the goal it was predicted with.
+		moverFrames.length = 0;
+		sessionCommand( {
+			kind: "gameplay",
+			command: { kind: "move", destination: { regionId: 0x61a9, x: 10, y: 0, z: 10, angle: 0 } }
+		} );
+		for ( let i = 0; i < 5; i++ ) await drive( now += 16.7 );
+		const after = moverFrames.filter( f => f.kind === "walking" ).map( f => f.pose );
+		assert.ok( after.length > 0, "the walk in flight stopped on a foreign-region move" );
+		for ( const pose of after ) {
+			assert.equal( pose.z, start.z, "the walk bent toward the foreign goal" );
+			assert.ok( pose.x > start.x && pose.x < 1300, "the walk bent toward the foreign goal" );
+		}
+	} finally {
+		runtime.dispose();
+	}
+});
+
+test("the runtime hands the UI a field-of-view extension that reaches the world owner", t => {
+	const keys = [
+		"__runtimeOwners",
+		"__runtimeCalls",
+		"requestAnimationFrame",
+		"cancelAnimationFrame",
+		"location"
+	];
+	const previous = new Map( keys.map( key => [ key, Object.getOwnPropertyDescriptor( globalThis, key ) ] ) );
+	t.after( () => {
+		for ( const [key, value] of previous ) {
+			if ( value ) Object.defineProperty( globalThis, key, value );
+			else delete globalThis[key];
+		}
+	} );
+	const fov = [];
+	const owners = Object.fromEntries(
+		Object.keys( factories ).map( name => [ name, {
+			textureFeatures: noTextureFeatures,
+			/*
+================
+dispose
+================
+			*/
+			dispose() {}
+		} ] )
+	);
+	owners.platform.runningEntry = () => null;
+	owners.platform.setMovementDump = () => {};
+	owners.platform.setAssetDump = () => {};
+	owners.simulation.delivery = () => new Promise( () => {} );
+	owners.world.setFieldOfView = degrees => fov.push( degrees );
+	globalThis.__runtimeOwners = owners;
+	globalThis.__runtimeCalls = [];
+	globalThis.location = { search: "", origin: "http://localhost" };
+	globalThis.requestAnimationFrame = () => 1;
+	globalThis.cancelAnimationFrame = () => {};
+	const runtime = startRuntime( {}, {} );
+	try {
+		const call = (globalThis.__runtimeCalls ?? []).find( recorded => recorded.owner === "ui" );
+		const extensions = defined( call ).args.at( -1 );
+		assert.equal(
+			typeof extensions.setWorldFieldOfView,
+			"function",
+			"the UI never received the field-of-view extension"
+		);
+		extensions.setWorldFieldOfView( 90 );
+		extensions.setWorldFieldOfView( 45 );
+		assert.deepEqual( fov, [ 90, 45 ], "the degrees never reached the world owner" );
+	} finally {
+		runtime.dispose();
+	}
 });

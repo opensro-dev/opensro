@@ -147,7 +147,8 @@ CREATE INDEX IF NOT EXISTS events_session_time ON events(session,at);
 CREATE INDEX IF NOT EXISTS events_time ON events(at);
 CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, account TEXT NOT NULL, character TEXT NOT NULL,
  shard TEXT NOT NULL, started INTEGER NOT NULL, seen INTEGER NOT NULL, transitioned INTEGER NOT NULL, ended INTEGER NOT NULL DEFAULT 0,
- attached INTEGER NOT NULL, category TEXT NOT NULL DEFAULT '', code TEXT NOT NULL DEFAULT '', estimated INTEGER NOT NULL DEFAULT 0);
+ attached INTEGER NOT NULL, category TEXT NOT NULL DEFAULT '', code TEXT NOT NULL DEFAULT '', estimated INTEGER NOT NULL DEFAULT 0,
+ transport TEXT NOT NULL DEFAULT '', fallback TEXT NOT NULL DEFAULT '');
 CREATE INDEX IF NOT EXISTS sessions_account ON sessions(account);
 CREATE INDEX IF NOT EXISTS sessions_character ON sessions(character);
 CREATE TABLE IF NOT EXISTS intervals (id INTEGER PRIMARY KEY, session TEXT NOT NULL, account TEXT NOT NULL,
@@ -164,7 +165,51 @@ INSERT INTO events(id,at,account,character,session,kind,category,level,fingerpri
  'evidence','recovered','service','gameworld','build','unknown') FROM sessions WHERE ended=0;
 UPDATE sessions SET ended=seen, attached=0, estimated=1, category='unknown', code='process_interrupted' WHERE ended=0;
 UPDATE intervals SET active=0 WHERE active=1;`)
-	return err
+	if err != nil {
+		return err
+	}
+	return j.ensureSessionTransportColumns()
+}
+
+/*
+================
+ensureSessionTransportColumns
+
+The #1449 schema step: session rows gain the transport and fallback
+columns. A journal written before them keeps its rows; the columns
+arrive empty and fill from the next lifecycle event. SQLite has no
+ADD COLUMN IF NOT EXISTS, so the table shape is probed first.
+================
+*/
+func (j *Journal) ensureSessionTransportColumns() error {
+	rows, err := j.db.Query(`PRAGMA table_info(sessions)`)
+	if err != nil {
+		return err
+	}
+	have := map[string]bool{}
+	for rows.Next() {
+		var cid int
+		var name, kind string
+		var notNull, pk int
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &kind, &notNull, &defaultValue, &pk); err != nil {
+			rows.Close()
+			return err
+		}
+		have[name] = true
+	}
+	if err := firstError(rows.Err(), rows.Close()); err != nil {
+		return err
+	}
+	for _, column := range []string{"transport", "fallback"} {
+		if have[column] {
+			continue
+		}
+		if _, err := j.db.Exec(`ALTER TABLE sessions ADD COLUMN ` + column + ` TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 /*
@@ -383,9 +428,12 @@ func updateSession(tx *sql.Tx, e Event) error {
 	if e.Kind != "ended" || wasAttached || lastSeen == 0 {
 		lastSeen = e.At
 	}
-	if _, err := tx.Exec(`INSERT INTO sessions(id,account,character,shard,started,seen,transitioned,attached) VALUES(?,?,?,?,?,?,?,?)
-ON CONFLICT(id) DO UPDATE SET account=excluded.account, character=excluded.character, seen=excluded.seen, transitioned=excluded.transitioned, attached=excluded.attached`,
-		e.Session, e.Account, e.Character, e.Shard, e.At, lastSeen, e.At, e.Attached); err != nil {
+	// How the session connected (#1449): every lifecycle event carries
+	// the session's current facts, so the newest event wins outright -
+	// a resume over another transport replaces, and clears, them.
+	if _, err := tx.Exec(`INSERT INTO sessions(id,account,character,shard,started,seen,transitioned,attached,transport,fallback) VALUES(?,?,?,?,?,?,?,?,?,?)
+ON CONFLICT(id) DO UPDATE SET account=excluded.account, character=excluded.character, seen=excluded.seen, transitioned=excluded.transitioned, attached=excluded.attached, transport=excluded.transport, fallback=excluded.fallback`,
+		e.Session, e.Account, e.Character, e.Shard, e.At, lastSeen, e.At, e.Attached, e.Fields["transport"], e.Fields["fallback"]); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`UPDATE intervals SET finish=MAX(start,?),active=0 WHERE session=? AND active=1`, e.At, e.Session); err != nil {

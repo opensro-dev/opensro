@@ -180,7 +180,8 @@ function play( { clicks, events = [], origin = () => 0, endMs = 8000, outLatency
 			poseAtMs: p?.poseAtMs,
 			revision: p?.revision ?? 0,
 			moving: p?.moving ?? false,
-			goal: p?.goal,
+			aim: p?.goal && { kind: "goal", destination: p.goal },
+			speedFactor: 1,
 			walkPredictable: true,
 			speed: p?.speed ?? SPEED,
 			inputSeq: p?.inputSeq ?? 0,
@@ -415,4 +416,107 @@ test("a teleport drops the clicks still in flight instead of walking them from t
 	for ( const frame of after ) {
 		assert.ok( Math.abs( frame.pose.x - after[0].pose.x ) < 1e-6, `walked ${frame.pose.x - after[0].pose.x}` );
 	}
+});
+
+/*
+================
+playMoves
+
+play, for a command that already carries its destination (a GM /Pos or
+map auto-move): the runtime predicts a goal aim at the command's frame,
+and the worker takes the same input after its inbound latency.
+================
+*/
+/**
+ * @param {{
+ *   moves: { atMs: number, to: Pose, refuse?: boolean }[],
+ *   endMs?: number
+ * }} scenario
+ */
+function playMoves( { moves, endMs = 8000 } ) {
+	const worker = createWorker( () => 0 ), mover = createLocalMover(), view = flatView();
+	const drawn = [];
+	const base = 0;
+	let now = base, frame = 0, last = { ...START }, seq = 0;
+	const pending = moves.map( move => ({ ...move, atMs: base + move.atMs }) );
+	const worldAt = ms => {
+		const p = worker.visible( ms );
+		return {
+			pose: p ? p.pose : { ...START },
+			poseAtMs: p?.poseAtMs,
+			revision: p?.revision ?? 0,
+			moving: p?.moving ?? false,
+			aim: p?.goal && { kind: "goal", destination: p.goal },
+			speedFactor: 1,
+			walkPredictable: true,
+			speed: p?.speed ?? SPEED,
+			inputSeq: p?.inputSeq ?? 0,
+			navigationRequestId: 1,
+			navigationOwner: undefined,
+			originMs: p ? p.originAtPublish : 0,
+			view: { requestId: 1, navigation: view }
+		};
+	};
+	while ( now < base + endMs ) {
+		now += FRAMES[frame++ % FRAMES.length];
+		worker.run( now, [] );
+		while ( pending.length && pending[0].atMs <= now ) {
+			const move = defined( pending.shift() );
+			seq++;
+			worker.send( seq, move.to, now, move.refuse );
+			mover.predict(
+				{ seq, aim: { kind: "goal", destination: move.to }, speed: SPEED, drawn: last, now },
+				worldAt( now )
+			);
+		}
+		const result = mover.frame( now, worldAt( now ) );
+		if ( result.kind !== "idle" ) last = result.pose;
+		drawn.push( {
+			now,
+			pose: { ...last },
+			kind: result.kind,
+			speed: worker.state.speed,
+			truth: { ...worker.state.pose }
+		} );
+	}
+	return { drawn, worker: worker.state };
+}
+
+test("a move the worker agrees with is drawn without residual and ends where the worker ends", () => {
+	const result = playMoves( { moves: [ { atMs: 100, to: { ...START, x: 1060 } } ] } );
+	assert.ok( peakRatio( result.drawn ) <= CAP + 1e-6, `peak ${peakRatio( result.drawn )}` );
+	const walking = result.drawn.filter( f => f.now >= 100 && f.pose.x < 1059 );
+	for ( let i = 1; i < walking.length; i++ ) {
+		assert.ok( walking[i].pose.x > walking[i - 1].pose.x, `stalled at ${walking[i].now}` );
+	}
+	for ( let i = 1; i < result.drawn.length; i++ ) {
+		assert.ok(
+			result.drawn[i].pose.x >= result.drawn[i - 1].pose.x - 1e-4,
+			`pulled back at ${result.drawn[i].now}`
+		);
+	}
+	assert.ok( endsAt( result ) < 1e-2, `ends ${endsAt( result )} from the worker` );
+	assert.equal( defined( result.drawn.at( -1 ) ).kind, "idle", "the prediction handed back" );
+});
+
+test("a refused move hands the drawn pose back within the cap and ends where the worker stands", () => {
+	const result = playMoves( { moves: [ { atMs: 100, to: { ...START, x: 1200 }, refuse: true } ] } );
+	assert.ok( peakRatio( result.drawn ) <= CAP + 1e-6, `peak ${peakRatio( result.drawn )}` );
+	assert.ok(
+		result.drawn.some( f => f.kind === "ended" ),
+		"the prediction never handed back"
+	);
+	// The worker never walked: the body returns to its pose and rests there.
+	assert.ok( endsAt( result ) < 1e-2, `ends ${endsAt( result )} from the worker` );
+	assert.equal( defined( result.drawn.at( -1 ) ).kind, "idle" );
+});
+
+test("a second move redirects the prediction and both bodies end at the new goal", () => {
+	const result = playMoves( {
+		moves: [ { atMs: 100, to: { ...START, x: 1100 } }, { atMs: 400, to: { ...START, x: 1013, z: 1080 } } ]
+	} );
+	assert.ok( peakRatio( result.drawn ) <= CAP + 1e-6, `peak ${peakRatio( result.drawn )}` );
+	assert.ok( endsAt( result ) < 1e-2, `ends ${endsAt( result )} from the worker` );
+	const last = defined( result.drawn.at( -1 ) ).pose;
+	assert.ok( Math.hypot( last.x - 1013, last.z - 1080 ) < 1e-2, "the body did not end at the new goal" );
 });

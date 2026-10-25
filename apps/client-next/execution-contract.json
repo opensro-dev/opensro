@@ -2,6 +2,36 @@
 	"version": 1,
 	"capabilities": [
 		{
+			"consumer": "src/engine/runtime/input/input.ts",
+			"provider": "src/engine/runtime/runtime.ts",
+			"functions": [
+				"callback:createInput:0"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/arrow-keys/arrow-keys.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"functions": [
+				"callback:createArrowKeys:0",
+				"direct",
+				"pose",
+				"steer",
+				"stop",
+				"vehicle",
+				"walkingDirection"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/arrow-keys/arrow-keys.ts",
+			"functions": [
+				"clear",
+				"createArrowKeys",
+				"key",
+				"step"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/pet-training/pet-training.ts",
 			"functions": [
@@ -2099,6 +2129,7 @@
 			"provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
 			"functions": [
 				"country",
+				"npcs",
 				"playerModels"
 			]
 		},
@@ -4069,7 +4100,7 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "53ba2476305a0bbc4ab7c560c2b7aca1ab464775fd1ca81059709324266042df",
+			"sourceSha256": "8f5b433124a57236aa656c58283d10ca2db3498ad45d0cb4498cd2d7c7ada12f",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. A hidden frame renders only while a world entry awaits game-ready, under the same barrier: native keeps updating while inactive (A0F430 OnUpdate; A11650 skips drawing) and finishes loading in CPSMission_OnUpdate (728E10). A visible window that gets no RAF for STARVED_FRAME_MS runs the same delivery-paced maintenance frames. Device disposal cancels pending mapping. Startup also hands the asset owner the device texture features once (port-only texture variants), outside the frame.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

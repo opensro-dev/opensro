@@ -11,6 +11,8 @@ undefined shop closes it; other fields belong to the newest snapshot.
 
 ===========================================================================
 */
+import type { MoverPublication } from "./mover-publication";
+export type { MovementAim } from "./mover-publication";
 
 /*
 ================
@@ -235,6 +237,9 @@ export type GameplayCommand =
 		readonly settings: import("@/engine/foundation/gameplay/auto-potion").AutoPotionSettings;
 	}
 	| { readonly kind: "rebirth"; readonly choice: 1 | 2; }
+	// An arrow key's press or release (#1574): Up walks the facing, Left and
+	// Right turn it (arrow-keys.ts).
+	| { readonly kind: "arrow-key"; readonly key: "up" | "left" | "right"; readonly down: boolean; }
 	| {
 		readonly kind: "ground-move";
 		readonly query: import("./navigation").GroundPickQuery;
@@ -721,7 +726,7 @@ Worker publications may omit unchanged catalog, social and shop values.
 Presentation owns the derived skillIndex; it never travels back to simulation.
 ================
 */
-export interface GameplayState {
+export interface GameplayState extends MoverPublication {
 	readonly itemMall?: import("./item-mall").MallState;
 	readonly betaPlayers?: readonly BetaMapPlayer[];
 	// Port-only wolf skill tree of the pet window's wolf (pet-training.ts).
@@ -892,18 +897,6 @@ export interface GameplayState {
 	readonly pose: Pose | null;
 	readonly movementPath?: MovementPath;
 	readonly movementRevision?: number;
-	// The last gameplay input sequence the worker took (movement-input.ts).
-	readonly movementInputSeq?: number;
-	// The local walk speed in world units a second that a new walk leg uses
-	// (movement.ts request): the main-thread mover times its legs with it (#1440).
-	readonly movementSpeed?: number;
-	// The destination of the goal walk the worker's movement owner is walking,
-	// if it is one (movement.ts state): the main-thread mover rebuilds the
-	// worker's leg from it when it reconciles (#1441b).
-	readonly movementGoal?: Pose;
-	// A ground click now would start a walk at once (gameplay.ts
-	// groundWalkRefusal): the main-thread mover predicts only then (#1440).
-	readonly walkPredictable?: boolean;
 	readonly movementTransition?: MovementTransition;
 	readonly movementDiagnostics?: {
 		readonly total: number;

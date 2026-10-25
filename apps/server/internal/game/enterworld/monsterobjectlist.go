@@ -173,6 +173,7 @@ func monsterRefObjRow(ref monster.MonsterRef) RefObjRow {
 		Name:        ref.DisplayName(),
 		Level:       ref.Level,
 		MaxHP:       ref.MaxHP,
+		BodyRadius:  ref.BodyRadius,
 		MonsterType: ref.MonsterType,
 		Kind:        refObjKind(ref),
 	}

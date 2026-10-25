@@ -1780,6 +1780,17 @@ export function createEntities(
 		},
 		/*
 		================
+		npcs
+
+		The NPCs and guards in the table now (the non-user list StartGroundMove
+		walks, 878600, narrowed to its CICNPC kinds by npc-click-refusal.ts).
+		================
+		*/
+		npcs(): EntityState[] {
+			return [ ...entities.values() ].filter( entity => entity.kind === "npc" );
+		},
+		/*
+		================
 		die
 		================
 		*/
