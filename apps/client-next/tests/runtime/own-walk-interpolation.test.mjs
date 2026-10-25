@@ -373,7 +373,7 @@ test("a rider's predicted walk moves the mount it rides, and both are handed bac
 	};
 	let ms = 36, previous = both( ms );
 	for ( ms += 16; ms < 400; ms += 16 ) previous = both( ms );
-	let mover = presentation.drawn( GID );
+	let mover = defined( presentation.drawn( GID ) );
 	for ( let i = 0; i < 10; i++ ) {
 		mover = { ...mover, z: mover.z + SPEED * .016 };
 		presentation.ownMover( GID, { kind: "walking", pose: mover }, MOUNT );

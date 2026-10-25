@@ -44,6 +44,9 @@ A fresh gameplay owner in the given local state: the flag it publishes,
 and whether a click then sent a walk request.
 ================
 */
+/**
+ * @param {{ local: any, cos?: { gid: number, refObjId: number } }} state
+ */
 function started( { local, cos } ) {
 	const sent = [], game = createGameplay( f => sent.push( f ) );
 	game.bootstrap( {
