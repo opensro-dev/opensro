@@ -7,7 +7,8 @@ Port-only, not native (owner decision 2026-10-14, for the balance advisor).
 Each kind has its own flag, off by default here (native: no notice); the
 GameWorld's Nomad job turns them on:
 
-	SRO_ANNOUNCE_SOX_DROP  "<player> has dropped <item> (<seal>) from <monster>"
+	SRO_ANNOUNCE_SOX_DROP  a seal drop notice, worded by its tier (#1640;
+	                       sealDropText: the Sun's line is the loudest)
 	SRO_ANNOUNCE_PLUS      "<player> advanced <item> to +N" (N >= 7)
 	SRO_ANNOUNCE_JOB_KILL  "[<killer alias>] killed [<victim alias>]" (job aliases, never character names)
 	SRO_ANNOUNCE_MOST_WANTED  "[<alias>] is MOST WANTED LV <N>" on a new wanted level, and
@@ -300,6 +301,7 @@ func (rt *Runtime) announceSealDrops(division, monsterName string, drops []groun
 			continue
 		}
 		name := drop.Codename
+		tier, sealed := 0, false
 		if items != nil {
 			if ref, found := items.ItemRefByCodename(drop.Codename); found {
 				if degree := enterworld.EquipmentDegree(ref); degree > 0 && degree < minDegree {
@@ -307,15 +309,36 @@ func (rt *Runtime) announceSealDrops(division, monsterName string, drops []groun
 				}
 				if ref.Name != "" {
 					name = ref.Name
-					if tier, sealed := enterworld.EquipmentSeal(ref); sealed {
-						name += " (" + sealNoticeNames[tier] + ")"
-					}
 				}
+				tier, sealed = enterworld.EquipmentSeal(ref)
 			}
 		}
 		link := wire.NoticeLink{Player: drop.DroppedBy, Body: groundInventoryItem(drop, groundStack(drop)).Body().Encode()}
-		rt.announce(division, announceSoxDrop, drop.DroppedBy+" has dropped "+name+" from "+monsterName, link, drop.RefObjID, nowMs)
+		rt.announce(division, announceSoxDrop, sealDropText(drop.DroppedBy, name, tier, sealed, monsterName), link, drop.RefObjID, nowMs)
 	}
+}
+
+/*
+================
+sealDropText
+
+#1640 (P4, owner decision 2026-10-26: "Colour by tier + Sun prefix"):
+Star and Moon keep the notice's original sentence; only the Sun is
+worded apart, leading with its name in capitals, the loudest line,
+and dropping the parenthesis. The client colours the line by tier
+and reads this lead (and the old parenthesis, on lines from a server
+without this change) for its Sun highlight. An item whose seal cannot
+be read keeps the plain sentence. Same flag, same cap, no place named.
+================
+*/
+func sealDropText(player, itemName string, tier int, sealed bool, monster string) string {
+	if !sealed {
+		return player + " has dropped " + itemName + " from " + monster
+	}
+	if tier == enterworld.SealSun {
+		return strings.ToUpper(sealNoticeNames[tier]) + ": " + player + " has dropped " + itemName + " from " + monster
+	}
+	return player + " has dropped " + itemName + " (" + sealNoticeNames[tier] + ") from " + monster
 }
 
 /*
