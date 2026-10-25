@@ -28,6 +28,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { findPass, fingerprint, recordPass } from "./checkStamps.mjs";
+import { yieldCpu } from "../lib/processPriority.mjs";
 
 const rebuildRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "..", ".." );
 
@@ -55,6 +56,9 @@ async function main() {
 		return;
 	}
 
+	// The gate and everything it spawns run below normal priority, so the
+	// local game servers keep their CPU (processPriority.mjs).
+	yieldCpu();
 	const child = spawn( command, args, {
 		windowsHide: true,
 		cwd: rebuildRoot,
