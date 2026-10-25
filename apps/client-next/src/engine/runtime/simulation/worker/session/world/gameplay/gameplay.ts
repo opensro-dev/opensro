@@ -647,7 +647,12 @@ on foot, alive, with no cast in flight, and within one region.
 		const dx = target.x - pose.x, dz = target.z - pose.z, distance = Math.hypot( dx, dz );
 		const casterRadius = refBodyRadius( local.kind, bodyRadii.get( local.refObjId ), 0 );
 		const targetRadius = refBodyRadius( target.kind, bodyRadii.get( target.refObjId ), target.rarity ?? 0 );
-		const admission = casterRadius === undefined || targetRadius === undefined ?
+		// A row that asks for a caster range parameter keeps the margin aim:
+		// the server adds the caster's value to the reach, so its boundary
+		// can sit beyond the spacing computed here, and a stop aimed at this
+		// boundary would be overrun exactly as before. (A reach cut only
+		// shortens the server's boundary, so it cannot cause an overrun.)
+		const admission = metadata.rangeBonus || casterRadius === undefined || targetRadius === undefined ?
 			undefined :
 			combatAdmissionRadius( casterRadius, targetRadius, metadata.range );
 		if ( admission !== undefined ) {

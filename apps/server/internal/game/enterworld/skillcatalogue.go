@@ -69,6 +69,14 @@ type SkillUiRow struct {
 	// bodies to it, so a target within Range is always in reach: the
 	// client starts a cast's animation at the press only then.
 	Range float64 `json:"range,omitempty"`
+	// RangeBonus marks a row that asks for one of the caster's range
+	// parameters (the crossbow-range and wizard-range slots): the server
+	// adds the caster's value to the row's reach, so the reach can exceed
+	// Range by an amount the client cannot see. A predicted run-up for
+	// such a row keeps its authored-range aim rather than stop at a
+	// spacing boundary it would overrun. Omitted when the row asks for
+	// neither parameter.
+	RangeBonus bool `json:"rangeBonus,omitempty"`
 	// MP and MPPercent are the cast's authored MP cost (flat plus percent of
 	// maximum MP), before the caster's consumption rate (parameter 0x8D):
 	// the client does not stand a cooldown in for a press the caster cannot
@@ -348,6 +356,9 @@ func (t *TextdataSkills) SpawnSkillRows() []SpawnSkillRow {
 			projection.UI.NeedsFooting = row.CastGate.Ao || row.CastGate.Pw
 			if row.ActionRangePinned && row.ActionRange > 0 {
 				projection.UI.Range = row.ActionRange
+			}
+			if row.Attack.Parameters.Has(ParameterCrossbowRange) || row.Attack.Parameters.Has(ParameterWizardRange) {
+				projection.UI.RangeBonus = true
 			}
 			// Only a player's own skill is pressed from a shortcut slot; a
 			// monster row's cost would only grow the catalogue every client loads.

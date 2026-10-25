@@ -254,7 +254,7 @@ goal before that. The server casts where both bodies plus the authored
 range meet (60 + 2 + 2 = 64 from the target): its stop is x 120.
 ================
 */
-function gameplayPressSpaced( rarity = 0, distance = 84 ) {
+function gameplayPressSpaced( rarity = 0, distance = 84, rangeBonus = false ) {
 	const local = {
 		gid: GID,
 		refObjId: 1907,
@@ -298,6 +298,7 @@ function gameplayPressSpaced( rarity = 0, distance = 84 ) {
 				cooldownMs: 0,
 				actionMs: 1000,
 				range: 60,
+				...(rangeBonus ? { rangeBonus: true } : {}),
 				admit: { weaponKinds: [ 255, 255 ] },
 				masteries: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ],
 				prerequisites: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ]
@@ -356,4 +357,27 @@ test("a target already inside the server's spacing starts no run-up", () => {
 	const { game, local } = gameplayPressSpaced( 0, 63 );
 	const pose = restedPose( game, local );
 	assert.ok( Math.abs( pose.x - local.x ) < 0.01, `stands at the press (x ${pose.x})` );
+});
+
+test("a press inside the spacing leaves no prediction for the next press to hide behind", () => {
+	// The in-spacing press must open nothing: a phantom walk to the
+	// caster's own position would make this far press look like a repeat
+	// press during a run-up and swallow the run-up it should start.
+	const { game, local, monster } = gameplayPressSpaced( 0, 63 );
+	const far = { ...monster, x: local.x + 300 };
+	game.command( { kind: "skill", skillId: 30, gid: 9 }, 16, far, local );
+	game.step( 200, local );
+	const pose = defined( game.take()?.pose );
+	game.dispose();
+	assert.ok( pose.x > local.x + 1, `the far press starts its own run-up (x ${pose.x})` );
+});
+
+test("a row that asks for a caster range parameter keeps the authored-range aim", () => {
+	// The server adds the caster's crossbow/wizard parameter to such a
+	// row's reach, beyond the boundary the client can compute: the stop
+	// stays the authored-range aim (x 122, for a target 82 east) instead
+	// of the spacing stop (x 118), so the prediction is never overrun.
+	const { game, local } = gameplayPressSpaced( 0, 82, true );
+	const pose = restedPose( game, local );
+	assert.ok( Math.abs( pose.x - 122 ) <= 1, `rests at the authored-range aim (x ${pose.x})` );
 });
