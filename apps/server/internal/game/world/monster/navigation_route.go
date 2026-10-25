@@ -9,6 +9,10 @@ type NavigationRoute struct {
 	points []Pose
 	// probes is the path queries the search spent (for metrics only).
 	probes int
+	// work is the planner's deterministic work in its own units, for
+	// planners that count more than path queries (the cave route,
+	// #1678); zero for planners that report probes only.
+	work int
 }
 
 type NavigationRouteStatus uint8
@@ -37,7 +41,13 @@ func (r *NavigationRoute) Goal() Pose { return r.goal }
 func (r *NavigationRoute) WithProbes(n int) *NavigationRoute { r.probes = n; return r }
 
 // Probes is the path queries the search spent.
-func (r *NavigationRoute) Probes() int          { return r.probes }
+func (r *NavigationRoute) Probes() int { return r.probes }
+
+// WithWork records the planner's deterministic work; cost tests read it.
+func (r *NavigationRoute) WithWork(n int) *NavigationRoute { r.work = n; return r }
+
+// Work is the planner's deterministic work (zero when it counts probes only).
+func (r *NavigationRoute) Work() int            { return r.work }
 func (r *NavigationRoute) Len() int             { return len(r.points) }
 func (r *NavigationRoute) Point(index int) Pose { return r.points[index] }
 

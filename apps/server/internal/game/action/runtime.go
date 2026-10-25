@@ -437,6 +437,13 @@ type Runtime struct {
 	// same family replace the running lower one (premiumticket.go;
 	// port-only, not native). False is native: 0x1894 while one runs.
 	PremiumUpgrade bool
+	// KillStats counts kills and EXP per online hour by level band
+	// (killstats.go; port-only, not native). False counts nothing.
+	KillStats bool
+	// KillStatsFlush receives the drained rollup (the economy history
+	// in the cmd wiring); nil keeps the rows in memory.
+	KillStatsFlush func(rows []KillStatRow) error
+	killStats      killStatTracker
 	// tradeOrigins is each trade good's home town, from the shops.
 	tradeOrigins map[uint32]tradeTown
 
