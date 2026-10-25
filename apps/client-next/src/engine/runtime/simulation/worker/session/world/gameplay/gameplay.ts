@@ -473,6 +473,10 @@ export function createGameplay(
 	let groundSkillMoveSuppressUntil = 0;
 	// groundWalkRefusal() was null at the last step (published, #1440).
 	let walkPredictable = false;
+	// The last step's refusal was a holding gate (cast, seated, suppress):
+	// a click now is held and walks at release, not refused (published,
+	// #1570, so the mover can record the click's aim for adoption).
+	let walkHeld = false;
 	const feedback = createFeedback();
 	const pickup = createPickup();
 	const actionSession = createActionSession();
@@ -1193,6 +1197,7 @@ selected entities, cooldowns or world-entry state.
 		journalBag = new Map();
 		groundSkillMoveSuppressUntil = 0;
 		walkPredictable = false;
+		walkHeld = false;
 		moveReservation.clear();
 		betaMap.clear();
 		petTraining.clear();
@@ -4521,9 +4526,12 @@ before take assembles the presentation snapshot.
 			inventorySince = inventory.state().inventoryPending ? inventorySince ?? now : undefined;
 			// A gate can open or close with no command or frame (a cast's action
 			// window ends): republish when the answer changes.
-			const predictable = groundWalkRefusal( now, local ) === null;
-			if ( predictable !== walkPredictable ) {
+			const refusal = groundWalkRefusal( now, local );
+			const predictable = refusal === null;
+			const held = refusal === "cast" || refusal === "seated" || refusal === "suppressed";
+			if ( predictable !== walkPredictable || held !== walkHeld ) {
 				walkPredictable = predictable;
+				walkHeld = held;
 				dirty = true;
 			}
 			if ( petAssists.size || petAssistCountdowns.size ) {
@@ -4879,6 +4887,7 @@ The published plane when something changed since the last take, else null.
 				localGid,
 				...m,
 				walkPredictable,
+				walkHeld,
 				...i,
 				inventoryJournal,
 				...c,
@@ -4913,6 +4922,7 @@ World transfer retires spatial work while retaining character/session data.
 			cosPickup.clear();
 			groundSkillMoveSuppressUntil = 0;
 			walkPredictable = false;
+			walkHeld = false;
 			moveReservation.clear();
 			quests.clearGathering();
 			approach = interactionApproachTransition( approach, { kind: "cancel" } );

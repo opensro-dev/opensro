@@ -919,6 +919,11 @@ export interface GameplayState {
 	// A ground click now would start a walk at once (gameplay.ts
 	// groundWalkRefusal): the main-thread mover predicts only then (#1440).
 	readonly walkPredictable?: boolean;
+	// A ground click now would be held by a gate that releases into the
+	// walk (a cast, seated, the ground-skill suppress window) rather than
+	// refused: the mover records the click's aim and adopts the walk when
+	// the worker publishes it (#1570).
+	readonly walkHeld?: boolean;
 	readonly movementTransition?: MovementTransition;
 	readonly movementDiagnostics?: {
 		readonly total: number;
