@@ -442,9 +442,15 @@ func TestCaveRouteProbeBudgetEndsThePull(t *testing.T) {
 		at = end
 		terminal = surface.cellPose(tomb, 0, end)
 	}
-	points, probes, _ := v.proveCaveRoute(surface, from, terminal, terminal, path)
+	points, probes, work := v.proveCaveRoute(surface, from, terminal, terminal, path)
 	if probes != 256 {
 		t.Fatalf("the proving pull spent %d probes over a %d-cell path, want the 256 budget spent exactly", probes, len(path))
+	}
+	// Each probe is a floor scan that visits at least the cell its
+	// chord starts in (#1678), so the pull's work can never trail
+	// its probe count.
+	if work < probes {
+		t.Fatalf("the proving pull reports %d work for %d floor-scan probes", work, probes)
 	}
 	if len(points) == 0 || points[len(points)-1] != terminal {
 		t.Fatalf("the exhausted pull ends at %+v, want the terminal %+v", points, terminal)
@@ -573,17 +579,19 @@ func TestCaveRouteSameRoomStaysDirect(t *testing.T) {
 		t.Fatalf("same-room route = status %v, %d points; want the goal alone", route.Status(), route.Len())
 	}
 	// A direct plan is its head probe alone (#1678): one path query,
-	// whose work is the floor scan the clip made, and that scan reads
-	// the floor at least once every maxDungeonFloorSampleSpacing.
-	clip := v.clipDungeonPath(
-		simulation.Spawn{RegionID: from.RegionID, X: from.X, Y: from.Y, Z: from.Z},
-		simulation.Spawn{RegionID: goal.RegionID, X: goal.X, Y: goal.Y, Z: goal.Z},
-	)
+	// whose work is the floor scan the clip made. An arriving scan
+	// visits every cell in the chord's reach and then reads the floor
+	// at least once every maxDungeonFloorSampleSpacing.
+	fromSpawn := simulation.Spawn{RegionID: from.RegionID, X: from.X, Y: from.Y, Z: from.Z}
+	goalSpawn := simulation.Spawn{RegionID: goal.RegionID, X: goal.X, Y: goal.Y, Z: goal.Z}
+	clip := v.clipDungeonPath(fromSpawn, goalSpawn)
 	if route.Probes() != 1 || route.Work() != clip.Work {
 		t.Fatalf("direct route reports %d probes and %d work; want 1 probe and the clip's %d", route.Probes(), route.Work(), clip.Work)
 	}
-	if samples := int(math.Ceil(routeDistance(from, goal) / maxDungeonFloorSampleSpacing)); clip.Work < samples {
-		t.Fatalf("the clip reports %d work for a chord it samples at least %d times", clip.Work, samples)
+	visits := dungeonClipCellVisits(surface, fromSpawn, goalSpawn)
+	samples := int(math.Ceil(routeDistance(from, goal) / maxDungeonFloorSampleSpacing))
+	if clip.Work < visits+samples {
+		t.Fatalf("the clip reports %d work for a chord past %d cell visits and %d floor samples", clip.Work, visits, samples)
 	}
 }
 
