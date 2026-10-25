@@ -131,6 +131,7 @@ setMovementDump
 		*/
 		setMovementDump() {},
 		setAssetDump() {},
+		setKeepAwake() {},
 		visibilityReturned: () => false,
 		connectionReturned: () => false,
 		/*
