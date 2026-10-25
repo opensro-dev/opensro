@@ -347,3 +347,105 @@ func TestFirstLifecycleEventOfASessionIsKept(t *testing.T) {
 		t.Fatalf("stored %d events and %d sessions, want 1 and 1", events, sessions)
 	}
 }
+
+/*
+================
+TestSessionRowRecordsTransportAndFallback
+
+A session row shows how its latest attachment connected (#1449): the
+transport from the attach event, the fallback from the later report,
+and a resume over the other transport replaces both.
+================
+*/
+func TestSessionRowRecordsTransportAndFallback(t *testing.T) {
+	j := testJournal(t)
+	put(t, j, Event{Session: "one", Account: "player", Character: "Wizard", Kind: "connected", At: 1000, Attached: true, Lifecycle: true,
+		Fields: map[string]string{"transport": "websocket"}})
+	put(t, j, Event{Session: "one", Account: "player", Character: "Wizard", Kind: "transport_reported", At: 2000, Attached: true, Lifecycle: true,
+		Fields: map[string]string{"transport": "websocket", "fallback": "timeout"}})
+	rows, err := j.sessions(Filter{Account: "player"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].Transport != "websocket" || rows[0].Fallback != "timeout" {
+		t.Fatalf("session row after report: %+v", rows)
+	}
+	put(t, j, Event{Session: "one", Account: "player", Character: "Wizard", Kind: "resumed", At: 3000, Attached: true, Lifecycle: true,
+		Fields: map[string]string{"transport": "webtransport"}})
+	rows, err = j.sessions(Filter{Account: "player"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].Transport != "webtransport" || rows[0].Fallback != "" {
+		t.Fatalf("session row after resume: %+v", rows)
+	}
+}
+
+/*
+================
+TestSessionTransportColumnsMigrate
+
+A journal written before the transport/fallback columns (#1449) opens
+cleanly: its session rows survive, read empty, and take the facts from
+the next lifecycle event.
+================
+*/
+func TestSessionTransportColumnsMigrate(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.sqlite")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The pre-#1449 schema, exactly as the old CREATE TABLE wrote it.
+	if _, err := db.Exec(`CREATE TABLE sessions (id TEXT PRIMARY KEY, account TEXT NOT NULL, character TEXT NOT NULL,
+ shard TEXT NOT NULL, started INTEGER NOT NULL, seen INTEGER NOT NULL, transitioned INTEGER NOT NULL, ended INTEGER NOT NULL DEFAULT 0,
+ attached INTEGER NOT NULL, category TEXT NOT NULL DEFAULT '', code TEXT NOT NULL DEFAULT '', estimated INTEGER NOT NULL DEFAULT 0);
+INSERT INTO sessions(id,account,character,shard,started,seen,transitioned,attached) VALUES('old','player','Wizard','shard',1000,2000,2000,1)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	j := &Journal{db: mustOpenJournalDB(t, path)}
+	if err := j.initialize(); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := j.sessions(Filter{Account: "player"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].ID != "old" || rows[0].Transport != "" || rows[0].Fallback != "" {
+		t.Fatalf("migrated session row: %+v", rows)
+	}
+	// The migrated table still records: a new session on it takes the
+	// facts from its first lifecycle event.
+	put(t, j, Event{Session: "new", Account: "player", Character: "Wizard", Kind: "connected", At: 3000, Attached: true, Lifecycle: true,
+		Fields: map[string]string{"transport": "websocket", "fallback": "refused"}})
+	rows, err = j.sessions(Filter{Account: "player"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]SessionRow{}
+	for _, row := range rows {
+		byID[row.ID] = row
+	}
+	if byID["new"].Transport != "websocket" || byID["new"].Fallback != "refused" {
+		t.Fatalf("session row on migrated table: %+v", rows)
+	}
+}
+
+/*
+================
+mustOpenJournalDB
+================
+*/
+func mustOpenJournalDB(t *testing.T, path string) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	t.Cleanup(func() { db.Close() })
+	return db
+}
