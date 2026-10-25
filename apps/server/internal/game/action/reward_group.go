@@ -463,8 +463,9 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 		out.drops = drops
 		// The weekly seal board (sealboard.go) counts the committed loot
 		// here, before quest-supply drops join out.drops below: those
-		// never count.
-		if countSeals {
+		// never count. A GM-spawned monster's loot is conjured, not
+		// hunted, so it never counts either, however it died.
+		if countSeals && !impact.Instance.GMSpawned {
 			rt.countSealDrops(a.character, drops, now)
 		}
 		if a.character == actor {

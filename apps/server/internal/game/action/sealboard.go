@@ -11,8 +11,9 @@ notice flag and its per-minute cap: the board reads the settlement, not
 the announcement.
 
 What never counts: manual drops, trades, alchemy outcomes, quest-supply
-rewards (appended after this hook in settleMonsterInsideDoor) and the GM
-kill path, which settles with counting off.
+rewards (appended after this hook in settleMonsterInsideDoor), the GM kill
+path (settles with counting off) and any GM-spawned monster, however it
+died, because a conjured monster's loot is not hunted.
 
 ===========================================================================
 */

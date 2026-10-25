@@ -14,6 +14,15 @@ Counts live in memory and flush to seal-board.db beside the shard's
 authority state every few minutes and at shutdown; a crash loses only the
 unflushed increments. Retention is twelve weeks.
 
+Locking is the point of the shape: NoteSealDrop runs inside the loot
+settlement, which runs inside an authority store door, so it may only
+touch the in-memory rollup. The flush swaps the pending map out under
+that same short lock, does its SQLite work with the lock released, and
+merges the batch back if the write fails; flushMu single-flights the
+flushes and the Counts reads, so a read can never miss increments a
+flush has swapped out but not yet written. A stuck database therefore
+stalls only the flush goroutine, never a settlement (#1680 review).
+
 ===========================================================================
 */
 package sealboard
@@ -25,6 +34,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -52,6 +63,8 @@ const (
 	retainedWeeks = 12
 	// flushInterval is how often Run writes the pending counts.
 	flushInterval = 5 * time.Minute
+	// countingPrefix keys a week's counting-since stamp in the meta table.
+	countingPrefix = "counting_since:"
 )
 
 /*
@@ -79,10 +92,10 @@ type countKey struct {
 ================
 Service
 
-The counter and its store. NoteSealDrop is one map increment after a loot
-commit: no IO and no store door on the tick path. Flush holds the same
-mutex across its transaction, so a Count read can never miss increments
-swapped out from under it.
+The counter and its store. mu guards only the in-memory rollup (pending,
+counting, closed) and is never held across IO; flushMu single-flights
+the flush path and Counts, which must observe the rollup and the store
+as one.
 ================
 */
 type Service struct {
@@ -90,6 +103,7 @@ type Service struct {
 	now      func() time.Time
 	openedAt time.Time
 
+	flushMu  sync.Mutex
 	mu       sync.Mutex
 	pending  map[countKey]int64
 	counting map[int64]int64
@@ -115,8 +129,8 @@ func WeekStart(t time.Time) time.Time {
 ================
 Open
 
-Opens (creating on first use) seal-board.db in dir and loads the current
-week's counting-since stamp. now is the clock, injected for tests.
+Opens (creating on first use) seal-board.db in dir and loads the
+counting-since stamps. now is the clock, injected for tests.
 ================
 */
 func Open(dir string, now func() time.Time) (*Service, error) {
@@ -160,11 +174,48 @@ CREATE TABLE IF NOT EXISTS seal_board_meta (
 		_ = db.Close()
 		return nil, fmt.Errorf("sealboard: %w", err)
 	}
+	if err := service.loadCounting(); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	// The current week's stamp starts in memory; the first flush persists
+	// it (CountingSince never does IO after Open).
 	if _, err := service.CountingSince(WeekStart(service.openedAt)); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
 	return service, nil
+}
+
+/*
+================
+loadCounting
+
+Reads every persisted counting-since stamp into memory, once at Open.
+================
+*/
+func (s *Service) loadCounting() error {
+	rows, err := s.db.Query(`SELECT key, value FROM seal_board_meta WHERE key LIKE ?`, countingPrefix+"%")
+	if err != nil {
+		return fmt.Errorf("sealboard: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var key string
+		var value int64
+		if err := rows.Scan(&key, &value); err != nil {
+			return fmt.Errorf("sealboard: %w", err)
+		}
+		week, err := strconv.ParseInt(strings.TrimPrefix(key, countingPrefix), 10, 64)
+		if err != nil {
+			continue
+		}
+		s.counting[week] = value
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("sealboard: %w", err)
+	}
+	return nil
 }
 
 /*
@@ -188,8 +239,9 @@ func (s *Service) countingCandidateLocked(weekStart int64) int64 {
 ================
 CountingSince
 
-When counting for the week opening at weekStart began, persisted so a
-restart inside the week keeps the first open's stamp.
+When counting for the week opening at weekStart began. Memory only: the
+stamp is persisted by the next flush (and at Close), so a restart inside
+the week keeps the first open's stamp.
 ================
 */
 func (s *Service) CountingSince(weekStart time.Time) (time.Time, error) {
@@ -199,20 +251,7 @@ func (s *Service) CountingSince(weekStart time.Time) (time.Time, error) {
 	if value, ok := s.counting[week]; ok {
 		return time.Unix(value, 0).UTC(), nil
 	}
-	key := fmt.Sprintf("counting_since:%d", week)
-	var stored int64
-	err := s.db.QueryRow(`SELECT value FROM seal_board_meta WHERE key = ?`, key).Scan(&stored)
-	switch {
-	case err == nil:
-		s.counting[week] = stored
-		return time.Unix(stored, 0).UTC(), nil
-	case err != sql.ErrNoRows:
-		return time.Time{}, fmt.Errorf("sealboard: %w", err)
-	}
 	value := s.countingCandidateLocked(week)
-	if _, err := s.db.Exec(`INSERT OR IGNORE INTO seal_board_meta (key, value) VALUES (?, ?)`, key, value); err != nil {
-		return time.Time{}, fmt.Errorf("sealboard: %w", err)
-	}
 	s.counting[week] = value
 	return time.Unix(value, 0).UTC(), nil
 }
@@ -223,6 +262,7 @@ NoteSealDrop
 
 Counts one sealed drop for a character. Invalid identities and tiers are
 refused silently: the settlement path must never fail over a board count.
+Memory only - it runs inside the loot settlement's store door.
 ================
 */
 func (s *Service) NoteSealDrop(characterID int64, tier int, at time.Time) {
@@ -250,13 +290,21 @@ Counts
 
 One week's counts, flushed rows and pending increments merged, ordered by
 character then tier. The caller joins aliases; IDs stay internal.
+flushMu is held so an in-flight flush cannot swap increments out from
+under the read; mu is released before the store is read.
 ================
 */
 func (s *Service) Counts(weekStart time.Time) ([]Count, error) {
 	week := weekStart.UTC().Unix()
+	s.flushMu.Lock()
+	defer s.flushMu.Unlock()
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	merged := make(map[countKey]int64)
+	pending := make(map[countKey]int64, len(s.pending))
+	for key, drops := range s.pending {
+		pending[key] = drops
+	}
+	s.mu.Unlock()
+	merged := pending
 	rows, err := s.db.Query(`SELECT character_id, tier, drops FROM seal_board_counts WHERE week_start_s = ?`, week)
 	if err != nil {
 		return nil, fmt.Errorf("sealboard: %w", err)
@@ -276,14 +324,11 @@ func (s *Service) Counts(weekStart time.Time) ([]Count, error) {
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("sealboard: %w", err)
 	}
-	for key, drops := range s.pending {
-		if key.week == week {
-			merged[key] += drops
-		}
-	}
 	counts := make([]Count, 0, len(merged))
 	for key, drops := range merged {
-		counts = append(counts, Count{CharacterID: key.character, Tier: key.tier, Drops: drops})
+		if key.week == week {
+			counts = append(counts, Count{CharacterID: key.character, Tier: key.tier, Drops: drops})
+		}
 	}
 	sort.Slice(counts, func(i, j int) bool {
 		if counts[i].CharacterID != counts[j].CharacterID {
@@ -298,34 +343,81 @@ func (s *Service) Counts(weekStart time.Time) ([]Count, error) {
 ================
 Flush
 
-Writes the pending increments and any new counting-since stamps in one
-transaction, then prunes weeks older than the retained window.
+Writes the pending increments and any new counting-since stamps, then
+prunes weeks older than the retained window. Safe to call concurrently.
 ================
 */
 func (s *Service) Flush() error {
 	if s == nil {
 		return nil
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.flushLocked()
+	s.flushMu.Lock()
+	defer s.flushMu.Unlock()
+	return s.flush()
 }
 
 /*
 ================
-flushLocked
+flush
+
+One flush; the caller holds flushMu. The batch is swapped out under mu
+and written with mu released; on failure it merges back, so no count is
+lost and no settlement ever waits on the store.
 ================
 */
-func (s *Service) flushLocked() error {
-	if s.closed && s.db == nil {
+func (s *Service) flush() error {
+	batch, stamps, closed := s.swap()
+	if closed {
 		return nil
 	}
+	if err := s.write(batch, stamps); err != nil {
+		s.mu.Lock()
+		for key, drops := range batch {
+			s.pending[key] += drops
+		}
+		s.mu.Unlock()
+		return err
+	}
+	return nil
+}
+
+/*
+================
+swap
+
+Takes the pending batch and the counting stamps out of the rollup.
+================
+*/
+func (s *Service) swap() (batch map[countKey]int64, stamps map[int64]int64, closed bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return nil, nil, true
+	}
+	batch = s.pending
+	s.pending = make(map[countKey]int64)
+	stamps = make(map[int64]int64, len(s.counting))
+	for week, since := range s.counting {
+		stamps[week] = since
+	}
+	return batch, stamps, false
+}
+
+/*
+================
+write
+
+One transaction: the batch upserts, the stamps, and the retention prune.
+Runs with no service lock held.
+================
+*/
+func (s *Service) write(batch map[countKey]int64, stamps map[int64]int64) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return fmt.Errorf("sealboard: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	for key, drops := range s.pending {
+	for key, drops := range batch {
 		if _, err := tx.Exec(`
 INSERT INTO seal_board_counts (week_start_s, character_id, tier, drops)
 VALUES (?, ?, ?, ?)
@@ -334,9 +426,9 @@ DO UPDATE SET drops = drops + excluded.drops`, key.week, key.character, key.tier
 			return fmt.Errorf("sealboard: %w", err)
 		}
 	}
-	for week, since := range s.counting {
-		key := fmt.Sprintf("counting_since:%d", week)
-		if _, err := tx.Exec(`INSERT OR IGNORE INTO seal_board_meta (key, value) VALUES (?, ?)`, key, since); err != nil {
+	for week, since := range stamps {
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO seal_board_meta (key, value) VALUES (?, ?)`,
+			countingPrefix+strconv.FormatInt(week, 10), since); err != nil {
 			return fmt.Errorf("sealboard: %w", err)
 		}
 	}
@@ -345,13 +437,13 @@ DO UPDATE SET drops = drops + excluded.drops`, key.week, key.character, key.tier
 	if _, err := tx.Exec(`DELETE FROM seal_board_counts WHERE week_start_s < ?`, oldestKept); err != nil {
 		return fmt.Errorf("sealboard: %w", err)
 	}
-	if _, err := tx.Exec(`DELETE FROM seal_board_meta WHERE key LIKE 'counting_since:%' AND CAST(substr(key, 16) AS INTEGER) < ?`, oldestKept); err != nil {
+	if _, err := tx.Exec(`DELETE FROM seal_board_meta WHERE key LIKE ? AND CAST(substr(key, ?) AS INTEGER) < ?`,
+		countingPrefix+"%", len(countingPrefix)+1, oldestKept); err != nil {
 		return fmt.Errorf("sealboard: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("sealboard: %w", err)
 	}
-	s.pending = make(map[countKey]int64)
 	return nil
 }
 
@@ -387,20 +479,29 @@ func (s *Service) Run(ctx context.Context) {
 ================
 Close
 
-Flushes and closes the store. Safe to call twice.
+Writes what is left and closes the store. Safe to call twice.
 ================
 */
 func (s *Service) Close() error {
 	if s == nil {
 		return nil
 	}
+	s.flushMu.Lock()
+	defer s.flushMu.Unlock()
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.closed {
+		s.mu.Unlock()
 		return nil
 	}
 	s.closed = true
-	err := s.flushLocked()
+	batch := s.pending
+	s.pending = make(map[countKey]int64)
+	stamps := make(map[int64]int64, len(s.counting))
+	for week, since := range s.counting {
+		stamps[week] = since
+	}
+	s.mu.Unlock()
+	err := s.write(batch, stamps)
 	if closeErr := s.db.Close(); err == nil {
 		err = closeErr
 	}

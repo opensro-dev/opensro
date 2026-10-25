@@ -152,7 +152,7 @@ run). Returns the sink, every drop the settlements produced, and whether
 a sealed drop appeared at all.
 ================
 */
-func settleSealKills(t *testing.T, counted bool) (*recordingSealSink, []grounditem.Item, bool) {
+func settleSealKills(t *testing.T, counted bool, gmSpawned bool) (*recordingSealSink, []grounditem.Item, bool) {
 	t.Helper()
 	rt, clock, killer, mob := newCombatTestRuntimeAtLevel(t, 100, 85)
 	*killer.Level = 85
@@ -172,6 +172,7 @@ func settleSealKills(t *testing.T, counted bool) (*recordingSealSink, []groundit
 			{CreditGID: gid, Damage: mob.EffectiveMaxHP()},
 		},
 	}
+	impact.Instance.GMSpawned = gmSpawned
 	roster := rt.monsterRewardRoster(testDivision, killer, clock.NowMs())
 	var produced []grounditem.Item
 	sealedSeen := false
@@ -199,7 +200,7 @@ leaves this at zero while the seal notices stay green.
 ================
 */
 func TestSettlementCountsSealDrops(t *testing.T) {
-	sink, produced, sealedSeen := settleSealKills(t, true)
+	sink, produced, sealedSeen := settleSealKills(t, true, false)
 	if !sealedSeen {
 		t.Fatalf("no sealed drop in %d seeded settlements; the fixture cannot prove the hook", sealSettlementKills)
 	}
@@ -228,11 +229,30 @@ items still never reach the board.
 ================
 */
 func TestGMSettlementCountsNothing(t *testing.T) {
-	sink, _, sealedSeen := settleSealKills(t, false)
+	sink, _, sealedSeen := settleSealKills(t, false, false)
 	if !sealedSeen {
 		t.Fatalf("no sealed drop in %d seeded settlements; the fixture cannot prove the exclusion", sealSettlementKills)
 	}
 	if sink.total != 0 {
 		t.Fatalf("GM settlements counted %d seal drops", sink.total)
+	}
+}
+
+/*
+================
+TestGMSpawnedMonsterSealDropIsNotCounted
+
+A GM-spawned monster killed through the ordinary counted path pays its
+loot as usual, but the board counts none of it: the loot is conjured,
+not hunted.
+================
+*/
+func TestGMSpawnedMonsterSealDropIsNotCounted(t *testing.T) {
+	sink, _, sealedSeen := settleSealKills(t, true, true)
+	if !sealedSeen {
+		t.Fatalf("no sealed drop in %d seeded settlements; the fixture cannot prove the exclusion", sealSettlementKills)
+	}
+	if sink.total != 0 {
+		t.Fatalf("a GM-spawned monster's seal drops counted %d through a normal kill", sink.total)
 	}
 }
