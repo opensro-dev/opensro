@@ -15,6 +15,7 @@ const SERVER_LIMIT = 16 << 20, CLIENT_LIMIT = 64 << 10;
 // WELCOME, PING, PONG, BYE. Frames above it count on the stream position.
 export const MAX_RESERVED_OPCODE = 5;
 export const OP_STREAM_ACK = 0x000b;
+export const OP_TRANSPORT_REPORT = 0x000c;
 /*
 ================
 createCodec
@@ -67,6 +68,16 @@ export function createCodec() {
 			const payload = new Uint8Array( 4 );
 			new DataView( payload.buffer ).setUint32( 0, position >>> 0, true );
 			return { opcode: OP_STREAM_ACK, payload };
+		},
+		// The transport report (#1449): [version u8][reason u8], sent once
+		// after WELCOME on each attach. Reason 0 = no fallback on this
+		// connect; 1 unsupported, 2 timeout, 3 refused, 4 closed early
+		// (envelope.go owns the numbers).
+		transportReport( reason: number ): WireFrame {
+			if ( !Number.isInteger( reason ) || reason < 0 || reason > 4 ) {
+				throw new Error( "Invalid transport fallback reason" );
+			}
+			return { opcode: OP_TRANSPORT_REPORT, payload: new Uint8Array( [ 1, reason ] ) };
 		},
 		welcome( payload: Uint8Array ) {
 			if ( payload.length !== 27 || payload[0] !== 2 || payload[1]! > 1 || payload[10] !== 16 ) {
