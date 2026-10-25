@@ -71,7 +71,7 @@ func (ops *MonsterMoverOps) advancePursuitControls(division string, instance mon
 		last = opponents[0].LastHitMs
 	}
 	if decision != monster.TraceAbandon {
-		decision = instance.Nest.Controls.EvaluateTrace(distance, target.chaseGuidance().TargetMoving(), IsDungeonRegion(live.RegionID), uint32(now), last)
+		decision = instance.Nest.Controls.EvaluateTrace(distance, target.chaseGuidance().TargetMoving(), pursuitAt(live.RegionID).TracesIndoors(), uint32(now), last)
 	}
 	next := mover
 	var frames []Frame

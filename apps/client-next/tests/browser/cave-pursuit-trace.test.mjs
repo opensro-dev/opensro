@@ -86,44 +86,59 @@ test( "cave pursuit trace: a cave monster chases around two legs", { timeout: 24
 			return monsters[0] ?? null;
 		} );
 		assert.ok( target, "a cave monster must be near the fixture point" );
-		// Close to engagement range first (the pursuit pattern): a chase
-		// that starts 150+ units out through corridors measures the
-		// interest boundary, not the chase.
-		if ( target.distance > 45 ) {
-			await page.evaluate( t => {
-				const p = __playableRuntime.gameplay().pose;
-				const d = Math.hypot( t.x - p.x, t.z - p.z );
-				__playableRuntime.session( {
-					kind: "gameplay",
-					command: {
-						kind: "move",
-						destination: {
-							regionId: p.regionId,
-							x: t.x + (p.x - t.x) * 40 / d,
-							y: p.y,
-							z: t.z + (p.z - t.z) * 40 / d,
-							angle: p.angle
-						}
+		// Close to melee range first (the pursuit pattern): a chase that
+		// starts 150+ units out through corridors measures the interest
+		// boundary, not the chase. Early runs showed a kite issued from
+		// 40+ units loses the monster before it ever closes, so walk to
+		// 12 units, stop, and only then attack.
+		await page.evaluate( t => {
+			const p = __playableRuntime.gameplay().pose;
+			const d = Math.hypot( t.x - p.x, t.z - p.z ) || 1;
+			__playableRuntime.session( {
+				kind: "gameplay",
+				command: {
+					kind: "move",
+					destination: {
+						regionId: p.regionId,
+						x: t.x + (p.x - t.x) * 12 / d,
+						y: p.y,
+						z: t.z + (p.z - t.z) * 12 / d,
+						angle: p.angle
 					}
-				} );
-			}, target );
-			await page.waitForFunction(
-				gid => {
-					const g = __playableRuntime.gameplay();
-					if ( g.error ) throw Error( g.error );
-					const e = __pursuit.entities[gid], p = g.pose;
-					return !p || !e || Math.hypot( e.x - p.x, e.z - p.z ) <= 48 && !g.pendingMoves && !g.moving;
-				},
-				target.gid,
-				{ timeout: 30000 }
-			).catch( () => console.log( "[cave] approach did not settle; engaging anyway" ) );
-		}
+				}
+			} );
+		}, target );
+		await page.waitForFunction(
+			gid => {
+				const g = __playableRuntime.gameplay();
+				if ( g.error ) throw Error( g.error );
+				const e = __pursuit.entities[gid], p = g.pose;
+				return !p || !e || Math.hypot( e.x - p.x, e.z - p.z ) <= 18 && !g.pendingMoves && !g.moving;
+			},
+			target.gid,
+			{ timeout: 45000 }
+		).catch( () => console.log( "[cave] approach did not settle; engaging anyway" ) );
 		console.log( "[cave] engaging", JSON.stringify( target ) );
 		await page.evaluate( gid => {
 			__pursuit.traceTarget = gid;
 			__pursuit.traceStarted = performance.now();
 			__playableRuntime.session( { kind: "gameplay", command: { kind: "attack", gid } } );
 		}, target.gid );
+		// A trace of a monster that never closes is not a chase: wait
+		// until it is moving in on the player before the kite starts,
+		// and say so in the capture when it never does.
+		const chaseConfirmed = await page.waitForFunction(
+			gid => {
+				const g = __playableRuntime.gameplay();
+				const e = __pursuit.entities[gid], p = g.pose;
+				if ( !p || !e ) return false;
+				const d = Math.hypot( e.x - p.x, e.z - p.z );
+				return d <= 14 || e.moving && d <= 30;
+			},
+			target.gid,
+			{ timeout: 15000 }
+		).then( () => true ).catch( () => false );
+		console.log( "[cave] chase confirmed:", chaseConfirmed );
 
 		// Kite: two legs away from the monster with a hard turn between
 		// them, reissued as the player advances; sample throughout.
@@ -150,10 +165,15 @@ test( "cave pursuit trace: a cave monster chases around two legs", { timeout: 24
 					}
 				} );
 			};
-			// Leg 1 directly away from the monster; leg 2 at a right angle.
+			// Kite adaptively: flee along the kite direction whenever the
+			// monster closes under 14 units, keep fleeing while it is in
+			// chase range, and hold still while it is too far to be
+			// chasing (early runs lost the monster entirely by running
+			// a fixed blind leg). The direction turns a right angle at
+			// the halfway mark, the corridor-corner case in miniature.
 			const e0 = entity(), p0 = pose();
-			leg( p0.x - e0.x, p0.z - e0.z );
-			let turned = false;
+			let kite = { x: p0.x - e0.x, z: p0.z - e0.z };
+			let turned = false, lastLeg = 0;
 			while ( performance.now() - start < chaseMs ) {
 				const now = performance.now(), p = pose(), e = entity();
 				const visible = globalThis.__pursuitVisible;
@@ -166,10 +186,16 @@ test( "cave pursuit trace: a cave monster chases around two legs", { timeout: 24
 					segment: r.segments[gid] ? structuredClone( r.segments[gid] ) : null,
 					anchored: !!(visible && visible.anchors[gid] && now - visible.at < 300)
 				} );
-				if ( !turned && now - start > chaseMs * 0.45 && p && e ) {
-					turned = true;
-					const dx = p.x - e.x, dz = p.z - e.z;
-					leg( -dz, dx );
+				if ( p && e ) {
+					const dist = Math.hypot( e.x - p.x, e.z - p.z );
+					if ( !turned && now - start > chaseMs * 0.45 ) {
+						turned = true;
+						kite = { x: -kite.z, z: kite.x };
+					}
+					if ( dist <= 14 || dist <= 40 && now - lastLeg > 2000 ) {
+						leg( kite.x, kite.z );
+						lastLeg = now;
+					}
 				}
 				await new Promise( resolve => setTimeout( resolve, 45 ) );
 			}
@@ -180,6 +206,7 @@ test( "cave pursuit trace: a cave monster chases around two legs", { timeout: 24
 			JSON.stringify(
 				{
 					target,
+					chaseConfirmed,
 					samples: trace,
 					events: await page.evaluate( () => __pursuit.events.slice( -1500 ) )
 				},

@@ -34,6 +34,10 @@ type dungeonSpawnSurface struct {
 	// ordinalIndex maps a block ordinal to its index in objects, built once
 	// for the passage resolve every chord runs.
 	ordinalIndex map[int]int
+	// blockNextHop is the cave route's per-floor portal table (cave_route.go):
+	// for each (from block, destination block) the doorway to leave by and
+	// the cell it lands on, built once here because the floors are static.
+	blockNextHop []caveNextHop
 }
 
 type dungeonObstacle struct{ x, y, z, radiusSquared float64 }
@@ -69,6 +73,7 @@ func newDungeonSpawnSurface(grid worldgeom.DungeonMessageGrid, blocks []dungeonS
 	for i := range surface.objects {
 		surface.ordinalIndex[surface.objects[i].placement.ordinal] = i
 	}
+	surface.blockNextHop = surface.buildBlockNextHop()
 	for i := range blocks {
 		for _, mesh := range blocks[i].meshes {
 			mesh.buildCellBoxes()

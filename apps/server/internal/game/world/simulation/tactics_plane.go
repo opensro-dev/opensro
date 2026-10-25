@@ -67,3 +67,16 @@ moves.
 func (r PursuitRoutine) ExtendsTowardMovingTarget() bool {
 	return r == PursuitDirectionGate
 }
+
+/*
+================
+PursuitRoutine.TracesIndoors
+
+Whether the routine's trace runs with the indoor extension: the server's
+indoor dispatch, installed with the cave routine at spawn, adds 100 to the
+trace boundary and to the run/walk threshold (monster.EvaluateTrace).
+================
+*/
+func (r PursuitRoutine) TracesIndoors() bool {
+	return r == PursuitRegionRoute
+}

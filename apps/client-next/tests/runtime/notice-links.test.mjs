@@ -22,7 +22,7 @@ const { decodeNoticeLinks, noticeRowLinks, noticeWrappedLinks } = await import(
 	"../../src/engine/foundation/gameplay/notice-links.ts"
 );
 const { decodeInventoryItem } = await import( "../../src/engine/foundation/gameplay/inventory-item.ts" );
-const { chatLayout, sunDropChatColor, isSunDropChatLine } = await import(
+const { chatLayout, isSunDropChatLine } = await import(
 	"../../src/engine/foundation/ui/chat-layout.ts"
 );
 const { tooltipItems } = await import( "../../src/engine/foundation/ui/tooltip-target.ts" );
@@ -245,7 +245,7 @@ test("links in notices are on unless explicitly false", () => {
 	assert.equal( experimentalOptions( { noticeLinks: false } ).noticeLinks, false );
 });
 
-test("Seal of Sun drop chat lines render in bold gold while Star, Moon and plus lines stay pink and regular", () => {
+test("seal drop chat lines render in their tier colours (#1640): Sun bold orange-red, Star gold, Moon silver-blue", () => {
 	const withRarity = ( rarity, itemClass ) => ({
 		...POTION,
 		tooltip: { descriptionSymbol: "", fields: { rarity, itemClass } }
@@ -308,16 +308,16 @@ test("Seal of Sun drop chat lines render in bold gold while Star, Moon and plus 
 			return [];
 		}
 	} );
-	const sunCalls = calls.filter( c => c.value.includes( "(Seal Of Sun)" ) || c.color[1] === sunDropChatColor()[1] );
-	const starCalls = calls.filter( c => c.color[1] !== sunDropChatColor()[1] );
+	const sunCalls = calls.filter( c => c.value.includes( "(Seal Of Sun)" ) || c.color[1] === 0x45 / 255 );
+	const starCalls = calls.filter( c => c.color[1] !== 0x45 / 255 );
 	assert.ok( sunCalls.length > 0 );
 	for ( const call of sunCalls ) {
-		assert.deepEqual( call.color, [ 1, 215 / 255, 80 / 255, 1 ] );
+		assert.deepEqual( call.color, [ 1, 0x45 / 255, 0x17 / 255, 1 ] );
 		assert.deepEqual( call.style, { fontStyle: 2 } );
 	}
 	assert.ok( starCalls.length > 0 );
 	for ( const call of starCalls ) {
-		assert.deepEqual( call.color, [ 1, 174 / 255, 195 / 255, 1 ] );
+		assert.deepEqual( call.color, [ 1, 0xd9 / 255, 0x53 / 255, 1 ] );
 		assert.equal( call.style, undefined );
 	}
 	assert.ok( measuredStyles.includes( 2 ) );
