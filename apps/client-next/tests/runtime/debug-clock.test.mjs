@@ -26,6 +26,7 @@ const { sampleWorldClock, worldClockWallTime } = await load( "foundation/gamepla
 const {
 	createDebugClock,
 	debugClockHold,
+	debugClockNoteSeed,
 	debugClockResume,
 	debugClockSeed,
 	debugClockSetFraction,
@@ -138,26 +139,75 @@ test("the step rows move a held clock and leave a running one alone", () => {
 	assert.equal( debugClockStep( running, DEBUG_CLOCK_STEP_MINUTES ), running );
 });
 
-test("debug weather writes the server slot and clamps the amount", () => {
+test("debug weather holds its own slot and clamps the amount", () => {
 	let state = entryEnvironment( {} ).state;
 	state = debugWeather( state, 2, 200 );
-	assert.deepEqual( state.server, { mode: 2, amount: 200 } );
+	assert.deepEqual( state.server, { mode: 1, amount: 0 }, "the console write touched the server slot" );
 	assert.deepEqual( state.effective, { mode: 2, amount: 200 } );
 	state = debugWeather( state, undefined, 999 );
-	assert.deepEqual( state.server, { mode: 2, amount: 255 }, "the amount is a byte" );
+	assert.deepEqual( state.effective, { mode: 2, amount: 255 }, "the amount is a byte" );
+	assert.deepEqual( state.server, { mode: 1, amount: 0 }, "power under a hold tuned the server slot" );
 	state = debugWeather( state, 3, -5 );
-	assert.deepEqual( state.server, { mode: 3, amount: 0 } );
+	assert.deepEqual( state.effective, { mode: 3, amount: 0 } );
 });
 
-test("an event override still wins over the debug weather until it ends", () => {
-	let state = entryEnvironment( { character: { enterEventGroupIds: [ 1 ] } } ).state;
+// 7775A0 opens with the interface byte the rain and snow rows set: while it
+// stands the packet is discarded whole, so neither port slot may move. Only
+// /clear clears the byte, writing clear (1, 255) as it does.
+test("console rain and snow hold off server weather until /clear", () => {
+	let state = entryEnvironment( {} ).state;
 	state = debugWeather( state, 2, 200 );
-	assert.deepEqual( state.effective, { mode: 3, amount: 20 }, "the event weather was overwritten" );
-	// A later server weather replaces the debug write in the server slot.
-	state = environmentPacket( state, 0x3bde, Uint8Array.of( 1, 7 ) ).state;
-	assert.deepEqual( state.server, { mode: 1, amount: 7 } );
+	state = environmentPacket( state, 0x3bde, Uint8Array.of( 3, 7 ) ).state;
+	assert.deepEqual( state.server, { mode: 1, amount: 0 }, "a held 3BDE rewrote the server slot" );
+	assert.deepEqual( state.effective, { mode: 2, amount: 200 }, "a held 3BDE displaced the console weather" );
+	state = debugWeather( state, 1, 255 );
+	assert.deepEqual( state.server, { mode: 1, amount: 255 } );
+	assert.deepEqual( state.effective, { mode: 1, amount: 255 } );
+	state = environmentPacket( state, 0x3bde, Uint8Array.of( 3, 7 ) ).state;
+	assert.deepEqual( state.server, { mode: 3, amount: 7 }, "packets did not land again after /clear" );
+	assert.deepEqual( state.effective, { mode: 3, amount: 7 } );
+});
+
+test("/power tunes the live amount and never sets the hold", () => {
+	let state = entryEnvironment( {} ).state;
+	state = debugWeather( state, undefined, 40 );
+	assert.deepEqual( state.server, { mode: 1, amount: 40 } );
+	state = environmentPacket( state, 0x3bde, Uint8Array.of( 3, 7 ) ).state;
+	assert.deepEqual( state.effective, { mode: 3, amount: 7 }, "power held off a later packet" );
+	// Under a hold the live weather is the held one, so power tunes it.
+	state = debugWeather( state, 2, 200 );
+	state = debugWeather( state, undefined, 40 );
+	assert.deepEqual( state.effective, { mode: 2, amount: 40 } );
+	assert.deepEqual( state.server, { mode: 3, amount: 7 }, "power under a hold tuned the server slot" );
+});
+
+// The event weather is a derivation over the server slot (a packet with the
+// group on lands as (3, 20)); the held console weather is the live one, so
+// it stands over the derivation until /clear, and the group end moving
+// underneath it changes nothing either.
+test("the console hold stands over the event slot until /clear", () => {
+	let state = entryEnvironment( { character: { enterEventGroupIds: [ 1 ] } } ).state;
+	assert.deepEqual( state.effective, { mode: 3, amount: 20 } );
+	state = debugWeather( state, 2, 200 );
+	assert.deepEqual( state.effective, { mode: 2, amount: 200 }, "the event slot overwrote the console weather" );
 	const off = new Uint8Array( 5 );
 	new DataView( off.buffer ).setUint32( 0, 1, true );
 	state = environmentPacket( state, 0x3347, off ).state;
-	assert.deepEqual( state.effective, { mode: 1, amount: 7 } );
+	assert.deepEqual( state.effective, { mode: 2, amount: 200 }, "the event end displaced the held weather" );
+	state = debugWeather( state, 1, 255 );
+	assert.deepEqual( state.effective, { mode: 1, amount: 255 } );
+});
+
+test("timeoff before the first clock lands the hold when the clock arrives", () => {
+	const seed = { day: 3, hour: 6, minute: 30, receivedAtMs: 5000 };
+	let state = debugClockHold( createDebugClock(), undefined, 1000 );
+	assert.equal( state.heldAt, null, "a hold with no clock froze a time" );
+	assert.equal( debugClockNoteSeed( state, undefined, 2000 ), state, "a note with no clock landed" );
+	assert.equal( debugClockNoteSeed( createDebugClock(), seed, 2000 ).heldAt, null, "a note without a hold landed" );
+	state = debugClockNoteSeed( state, seed, 5000 + 45 * SECOND );
+	assert.deepEqual( state.heldAt, { day: 3, hour: 6, minute: 30, second: 45 } );
+	const early = sampleWorldClock( debugClockSeed( state, seed, 100000 ), 100000 );
+	const late = sampleWorldClock( debugClockSeed( state, seed, 900000 ), 900000 );
+	assert.deepEqual( late, early, "the landed hold ran" );
+	assert.equal( debugClockNoteSeed( state, seed, 7000 ), state, "a second clock re-landed the hold" );
 });
