@@ -8,8 +8,8 @@ plane owner (simulation.Plane, implemented in movement/plane.go). Callers
 ask Planes.For(region) instead of testing the dungeon region bit, so the
 outdoor and cave versions of a job cannot drift apart.
 
-In the server's Go sources (tests excluded), an `IsDungeonRegion(` call or a
-`DungeonRegionBit` reference is refused outside the owners below unless the
+In the server's Go sources (tests excluded), a reference to `IsDungeonRegion`
+or `DungeonRegionBit` is refused outside the owners below unless the
 file's count is at or below its entry in plane-branches-baseline.txt, a
 shrinking ledger (ledgerRatchet.mjs owns its rules). Each migration PR lowers
 the ledger with `--update`.
@@ -53,14 +53,15 @@ const RATCHET_WORDS = {
 
 const GO_SOURCE = /^apps\/server\/.*\.go$/;
 const GO_TEST = /_test\.go$/;
-const PLANE_BRANCH = /\bIsDungeonRegion\s*\(|\bDungeonRegionBit\b/g;
+// A reference, not only a call: a predicate stored as a value branches too.
+const PLANE_BRANCH = /\bIsDungeonRegion\b|\bDungeonRegionBit\b/g;
 
 /*
 ================
 countPlaneBranches
 
-Counts region-bit branches on the non-comment lines of a Go file: calls of
-IsDungeonRegion and references to DungeonRegionBit. Owners count zero.
+Counts region-bit branches on the non-comment lines of a Go file: every
+reference to IsDungeonRegion or DungeonRegionBit. Owners count zero.
 ================
 */
 export function countPlaneBranches( text, relativePath = "" ) {

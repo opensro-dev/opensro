@@ -26,6 +26,9 @@ import (
 const (
 	planeOutdoorRegion uint16 = 0x61A7 // Jangan
 	planeCaveRegion    uint16 = 0x8001 // the Donwhang cave
+	// planeOtherCaveRegion is a second cave region, so Between's cave pair
+	// spans two regions.
+	planeOtherCaveRegion uint16 = 0x8003
 	// planeProbeReach is how far each parity probe walks from its anchor.
 	planeProbeReach = 8.0
 	// planeProbeDirections is how many headings each anchor is probed in.
@@ -48,7 +51,7 @@ func TestPlanesPickThePlaneByRegion(t *testing.T) {
 	if _, ok := planes.Between(planeOutdoorRegion, planeCaveRegion); ok {
 		t.Fatal("a pair across the outdoor/cave boundary was given a plane")
 	}
-	if plane, ok := planes.Between(planeCaveRegion, planeCaveRegion|1); !ok || plane.Kind() != simulation.PlaneCave {
+	if plane, ok := planes.Between(planeCaveRegion, planeOtherCaveRegion); !ok || plane.Kind() != simulation.PlaneCave {
 		t.Fatalf("two cave regions: %v, %t", plane, ok)
 	}
 }

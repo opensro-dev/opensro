@@ -21,10 +21,11 @@ test("countPlaneBranches counts region-bit branches outside comments and exempts
 		"/* DungeonRegionBit in a block comment is ignored */",
 		"if simulation.IsDungeonRegion(from.RegionID) != IsDungeonRegion(to.RegionID) {",
 		"\treturn r&worldgeom.DungeonRegionBit != 0 // IsDungeonRegion( trailing comment",
-		"isDungeonRegionCache := 1 // a different name"
+		"isDungeonRegionCache := 1 // a different name",
+		"test := simulation.IsDungeonRegion // a stored predicate branches too"
 	].join( "\n" );
 
-	assert.equal( countPlaneBranches( sample, "apps/server/internal/game/world/simulation/monsterchase.go" ), 3 );
+	assert.equal( countPlaneBranches( sample, "apps/server/internal/game/world/simulation/monsterchase.go" ), 4 );
 	assert.equal( countPlaneBranches( sample, "apps/server/internal/game/world/movement/plane.go" ), 0 );
 	assert.equal( countPlaneBranches( sample, "apps/server/internal/game/world/geometry.go" ), 0 );
 });
