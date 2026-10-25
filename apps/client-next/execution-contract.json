@@ -13,6 +13,7 @@
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
 			"functions": [
 				"callback:createArrowKeys:0",
+				"cancelCast",
 				"direct",
 				"pose",
 				"steer",
