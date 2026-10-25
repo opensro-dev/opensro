@@ -681,25 +681,7 @@ The published aim of the walk in progress (state).
 		return segment.direction.blocked ? undefined : { kind: "direction", heading: segment.direction.heading };
 	}
 	/*
-	================
-	movementDisplacement
-
-	The displacement the main-thread mover steps: the local player's own
-	cast travel on its authored clock. A knockback struck onto the player
-	publishes nothing here and stays on the interpolated presenter.
-	================
-	*/
-	function movementDisplacement() {
-		if ( !segment?.fixedTiming || !segment.ownCast || !(segment.duration > 0) ) return undefined;
-		return {
-			from: segment.from,
-			to: segment.to,
-			startedAtMs: segment.start,
-			durationMs: segment.duration
-		};
-	}
-	/*
-================
+	=========================
 referenceAt
 ================
 	*/
