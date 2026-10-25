@@ -273,6 +273,22 @@ test("the worker publishes its own cast displacement for the mover, and no knock
 	assert.equal( struck.state().movementDisplacement, undefined );
 });
 
+test("a kind-2 cast correction lands at once and publishes no displacement", () => {
+	// The mover steps authored motion on its own clock; a correction
+	// (cast-displacement kind 2) has no duration to step, so state()
+	// publishes nothing for it and the body is simply there.
+	const m = createMovement( () => {} ), pose = { regionId: 0x5c87, x: 100, y: 0, z: 100, angle: 0 };
+	m.seed( pose );
+	m.displace(
+		{ gid: 1, token: 9, kind: 2, self: true, destination: { regionId: 0x5c87, x: 300, y: 0, z: 100 } },
+		0
+	);
+	assert.equal( m.state().movementDisplacement, undefined );
+	m.step( 0 );
+	assert.equal( m.state().movementDisplacement, undefined );
+	assert.equal( m.state().pose?.x, 300 );
+});
+
 test("only accepted local casts start cooldowns; duplicates, refusals and cast retirement cannot restart or erase them", () => {
 	const c = createCombat();
 	c.cooldownReferences( 1, [ { id: 7, cooldownMs: 5000, cooldownGroup: 3 } ] );
