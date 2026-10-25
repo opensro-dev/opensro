@@ -150,6 +150,7 @@ function play( clicks, endMs = 5000 ) {
 			moving: p?.moving ?? false,
 			aim: p?.aim,
 			speedFactor: 1,
+			turnRate: 0,
 			walkPredictable: true,
 			speed: SPEED,
 			inputSeq: p?.inputSeq ?? 0,
