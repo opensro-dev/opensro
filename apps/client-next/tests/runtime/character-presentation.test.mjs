@@ -155,6 +155,35 @@ test("spawned characters fade in over two seconds and NPCs appear at once", () =
 	f.dispose();
 });
 
+test("a journal resync updates a held character in place without the spawn fade", () => {
+	// #1481: when the world journal compacts behind a stalled consumer it
+	// republishes one spawn per live entity. Those spawns are the same
+	// characters the presentation already holds, so the CIDecoAppear ramp
+	// must not run again; a genuine respawn under the live gid still fades.
+	const f = fixture();
+	f.warm();
+	const alpha = at => {
+		f.step( [ entity( 1, { kind: "monster" } ) ], at );
+		const actor = f.actors.find( a => a.gid === 1 );
+		assert.ok( actor, "the monster is presented" );
+		return actor.opacity ?? 1;
+	};
+	assert.equal( alpha( 1 ), 0 );
+	assert.equal( alpha( 3 ), 1 );
+	// The resync batch: a reset on a new epoch, then the held entity's
+	// spawn republished (entities.ts resyncEvents marks both).
+	f.presentation.receiveLifecycle( [
+		{ kind: "reset", epoch: 2, resync: true },
+		{ kind: "spawn", entity: entity( 1, { kind: "monster" } ), resync: true }
+	] );
+	assert.equal( alpha( 4 ), 1, "the held character does not fade in again after a resync" );
+	// The control: an unmarked spawn is a new CICharactor and fades again.
+	f.presentation.receiveLifecycle( [ { kind: "spawn", entity: entity( 1, { kind: "monster" } ) } ] );
+	assert.equal( alpha( 5 ), 0, "a genuine respawn under the live gid fades again" );
+	assert.equal( alpha( 7 ), 1 );
+	f.dispose();
+});
+
 test("another character keeps full alpha through every body status without a hide buff", () => {
 	// 85EC00 writes body 4's 0x50, but 85D890 (CICUser_OnUpdate, every update,
 	// every character but the local player) restores 0xFF when no hide buff
@@ -953,7 +982,15 @@ for ( const local of [ false, true ] ) {
 					durationMs: travelling ? 200 : 2000,
 					displacement: travelling && (displacement === true ||
 						displacement === "after-WAIT" && seconds >= 1.1 ||
-						displacement === "at-arrival" && seconds >= 1.3)
+						displacement === "at-arrival" && seconds >= 1.3),
+					// Production displacement paths carry their start on the
+					// skill clock (presentation-samples forwards it); the
+					// anchor math has no leg to time without it.
+					...(travelling && displacement ?
+						{
+							startedAtMs: displacement === true ? 1000 : displacement === "after-WAIT" ? 1100 : 1300
+						} :
+						{})
 				};
 				const player = entity( 1, {
 					kind: local ? "local-player" : "player",
@@ -981,6 +1018,10 @@ for ( const local of [ false, true ] ) {
 			frame( 10, 1, false, true );
 			const entered = frame( 20, 1.02, true, true );
 			frame( 60, 1.1, true, true );
+			// The leg's arrival frame: at production frame rates the drawn
+			// body rides the displacement clock to its end before the stop
+			// sample lands; skipping it would park a whole leg of lag.
+			frame( 110, 1.2, true, true );
 			const settled = frame( 110, 1.3, false, false );
 			const later = frame( 110, 3, false, false );
 			if ( displacement ) {
@@ -1237,11 +1278,158 @@ test("zero-duration teleport cast while walking snaps body and ground stage inst
 	f.dispose();
 });
 
+test("a cast stage anchors to the drawn pose of the same frame while walking at uneven frame times", () => {
+	// #1442c: presentation-events used to resolve effect anchors by asking
+	// the presenter itself, before actor-motion had drawn the body, so an
+	// effect read the pose the presenter had settled last frame (a teleport
+	// read 11 against the body's 110). presentPoses now resolves the drawn
+	// pose once, before both readers, so the anchor is this frame's body.
+	const ground = {
+		resource: "ground.efp",
+		damageEvent: false,
+		startEvent: 0,
+		phase: "READY",
+		action: "AT_STOP",
+		move: "MOV_NONE",
+		bone: null,
+		offset: [ 0, 0, 0 ],
+		life: 10,
+		sound: null,
+		count: 1,
+		scripts: []
+	};
+	const f = fixture(
+		{ 7: { clips: [ "stand" ], phaseClips: [ [], [ "stand" ], [] ], stages: [ ground ] } },
+		2,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		undefined,
+		{ states: { stand: { durationMs: 1000, loop: true, trackEvents: [] } }, rules: [] }
+	);
+	f.warm();
+	f.presentation.simulationOrigin( 0 );
+	const from = { regionId: 1, x: 10, y: 20, z: 30, angle: 16384 };
+	const cast = { token: 1, caster: 1, target: 0, skill: 7, damage: 0, fatal: false };
+	const frame = ( seconds, casting ) => {
+		// The server pose advances at the path's own speed, ahead of the
+		// drawn pose the presenter is still walking toward it.
+		const x = 10 + (seconds - 1) * 50;
+		const path = { from, to: { ...from, x: 110 }, durationMs: 2000 };
+		const player = entity( 1, {
+			kind: "local-player",
+			x,
+			moving: true,
+			movementMode: 3,
+			movementRevision: 1,
+			movementPath: path,
+			poseAtMs: seconds * 1000
+		} );
+		f.step( [ player ], seconds, {
+			localGid: 1,
+			pose: { ...from, x },
+			moving: true,
+			movementRevision: 1,
+			movementPath: path,
+			poseAtMs: seconds * 1000,
+			inventory: [],
+			vitals: [],
+			casts: casting ? [ cast ] : []
+		} );
+		assert.equal( f.presentation.error(), null );
+		return { pose: { ...f.actors.find( actor => actor.gid === 1 ).pose }, logicalX: x };
+	};
+	// Uneven frame times, cast starting mid-walk.
+	const times = [ 1, 1.017, 1.049, 1.058, 1.09, 1.123, 1.131, 1.16, 1.197, 1.205 ];
+	let anchored = 0;
+	for ( const seconds of times ) {
+		const { pose, logicalX } = frame( seconds, seconds >= 1.049 );
+		const effect = f.actors.find( actor => actor.gid < 0 );
+		if ( !effect ) continue;
+		anchored++;
+		assert.ok( pose.x < logicalX, `the body is mid-walk at ${seconds} (${pose.x} behind ${logicalX})` );
+		assert.equal( effect.pose.x, pose.x, `the ground stage anchors to this frame's body x at ${seconds}` );
+		assert.equal( effect.pose.z, pose.z, `the ground stage anchors to this frame's body z at ${seconds}` );
+	}
+	assert.ok( anchored > 0, "the ground stage is presented during the walk cast" );
+	f.dispose();
+});
+
+test("a caster that tracked a moving target turns back at the native rate when it walks off", () => {
+	// #1516 review (opensro1 (2)): 8DC440 writes the caster's yaw itself
+	// (CICharactor_SetYaw), so when the facing ends the body turns back
+	// from the tracked yaw at 86CBA0's 3*pi rad/s - it does not snap to
+	// the presenter's angle, which tracked the server heading underneath.
+	const f = fixture(
+		{ 7: { clips: [ "stand" ], phaseClips: [ [], [ "stand" ], [] ], stages: [] } },
+		2,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		undefined,
+		{ states: { stand: { durationMs: 1000, loop: true, trackEvents: [] } }, rules: [] }
+	);
+	f.warm();
+	f.presentation.simulationOrigin( 0 );
+	const from = { regionId: 1, x: 10, y: 20, z: 30, angle: 0 };
+	const cast = { token: 1, caster: 1, target: 2, skill: 7, damage: 0, fatal: false };
+	const yaws = [];
+	const frame = ( seconds, walking ) => {
+		const a = Math.min( 1, (seconds - 1) / .5 ) * Math.PI / 4;
+		const target = entity( 2, { kind: "monster", x: 10 + Math.sin( a ) * 60, z: 30 + Math.cos( a ) * 60 } );
+		const pose = walking ? { ...from, x: 10 - (seconds - 1.6) * 50, angle: 49152 } : from;
+		const path = walking ? { from, to: { ...from, x: -90, angle: 49152 }, durationMs: 2000 } : undefined;
+		const player = entity( 1, {
+			kind: "local-player",
+			x: pose.x,
+			heading: pose.angle,
+			moving: walking,
+			movementMode: 3,
+			movementRevision: walking ? 2 : 1,
+			movementPath: path,
+			poseAtMs: seconds * 1000
+		} );
+		f.step( [ player, target ], seconds, {
+			localGid: 1,
+			pose,
+			moving: walking,
+			movementRevision: walking ? 2 : 1,
+			movementPath: path,
+			poseAtMs: seconds * 1000,
+			inventory: [],
+			vitals: [],
+			casts: walking ? [] : [ cast ]
+		} );
+		yaws.push( [ seconds, f.actors.find( actor => actor.gid === 1 ).pose.yaw ] );
+	};
+	for ( let i = 0; i < 72; i++ ) frame( 1 + i / 60, i >= 36 );
+	let worst = 0;
+	for ( let i = 1; i < yaws.length; i++ ) {
+		const [t0, a0] = yaws[i - 1], [t1, a1] = yaws[i];
+		const tau = Math.PI * 2, d = Math.abs( ((((a1 - a0) % tau) + tau * 1.5) % tau) - Math.PI );
+		worst = Math.max( worst, d / (t1 - t0) );
+	}
+	assert.ok( worst <= 10.2, `fastest yaw change ${worst.toFixed( 1 )} rad/s` );
+	f.dispose();
+});
+
 test("a WAIT hold released by the next walk recovers continuously instead of jumping", () => {
 	// actor-motion holds the drawn pose when a cast's WAIT leaves the walk
 	// state (native stops the walk there); the logical walk can still move
-	// on. The next revision released the hold in one frame, and on a slope
-	// that step read as the camera height snapping (owner, F4).
+	// on - by the worker-publication lead, the scale of gap the interpolated
+	// presenter recovers from (own-walk-interpolation.ts carry). The next
+	// revision released the hold in one frame, and on a slope that step
+	// read as the camera height snapping (owner, F4).
 	const f = fixture(
 		{ 7: { clips: [ "stand" ], phaseClips: [ [], [ "stand" ], [] ], stages: [] } },
 		2,
@@ -1265,10 +1453,12 @@ test("a WAIT hold released by the next walk recovers continuously instead of jum
 	const cast = { token: 1, caster: 1, target: 0, skill: 7, damage: 0, fatal: false };
 	let travelling = true;
 	const frame = ( x, seconds, casting, moving ) => {
+		// The release walk is one stable leg, as the worker publishes it:
+		// from the cast point at NEXT_SPEED, not a leg rebuilt per frame.
 		const path = {
-			from: travelling ? from : { ...to, x },
-			to: travelling ? to : { ...to, x: 210 },
-			durationMs: travelling ? 200 : (210 - x) / NEXT_SPEED * 1000
+			from: travelling ? from : { ...from, x: 20 },
+			to: travelling ? to : { ...from, x: 320 },
+			durationMs: travelling ? 200 : 300 / NEXT_SPEED * 1000
 		};
 		const player = entity( 1, {
 			kind: "local-player",
@@ -1295,13 +1485,13 @@ test("a WAIT hold released by the next walk recovers continuously instead of jum
 	};
 	frame( 10, 1, false, true );
 	const held = frame( 20, 1.02, true, true );
-	frame( 60, 1.1, true, true );
-	frame( 110, 1.3, false, false );
-	assert.equal( frame( 110, 3, false, false ).x, held.x, "the WAIT hold stands until the next walk" );
+	frame( 20, 1.1, true, true );
+	frame( 20, 1.3, false, false );
+	assert.equal( frame( 20, 3, false, false ).x, held.x, "the WAIT hold stands until the next walk" );
 	travelling = false;
 	let previous = held, at = 3, steady = 0;
 	for ( let step = 1; step <= 300; step++ ) {
-		const seconds = 3 + step / 60, x = 110 + (seconds - 3) * NEXT_SPEED;
+		const seconds = 3 + step / 60, x = 20 + (seconds - 3) * NEXT_SPEED;
 		const shown = frame( x, seconds, false, true );
 		const budget = 1.5 * NEXT_SPEED * (seconds - at) + 1e-6;
 		assert.ok(
@@ -1315,10 +1505,10 @@ test("a WAIT hold released by the next walk recovers continuously instead of jum
 		at = seconds;
 	}
 	// Recovered: the last half second walks at exactly the walk's speed, at
-	// the fixture's own presentation lag behind the logical walk (3.75 units,
-	// the same without any hold).
+	// the presenter's own render-delay lag behind the logical walk (the
+	// same without any hold).
 	assert.ok( steady < 1e-6, `walks at the walk's speed after recovery (${steady})` );
-	const logical = 110 + 5 * NEXT_SPEED;
+	const logical = 20 + 5 * NEXT_SPEED;
 	assert.ok(
 		logical - previous.x >= 0 && logical - previous.x < 4,
 		`converges to the walk (${previous.x} vs ${logical})`
@@ -1357,9 +1547,9 @@ test("a WAIT hold released while standing decays instead of jumping", () => {
 	let travelling = true;
 	const frame = ( x, seconds, casting, moving ) => {
 		const path = {
-			from: travelling ? from : { ...to, x },
-			to: travelling ? to : { ...to, x: 210 },
-			durationMs: travelling ? 200 : (210 - x) / NEXT_SPEED * 1000
+			from: travelling ? from : { ...from, x: 20 },
+			to: travelling ? to : { ...from, x: 320 },
+			durationMs: travelling ? 200 : 300 / NEXT_SPEED * 1000
 		};
 		const player = entity( 1, {
 			kind: "local-player",
@@ -1386,15 +1576,20 @@ test("a WAIT hold released while standing decays instead of jumping", () => {
 	};
 	frame( 10, 1, false, true );
 	const held = frame( 20, 1.02, true, true );
-	frame( 60, 1.1, true, true );
-	frame( 110, 1.3, false, false );
-	assert.equal( frame( 110, 3, false, false ).x, held.x, "the WAIT hold stands until the next walk" );
+	frame( 20, 1.1, true, true );
+	frame( 20, 1.3, false, false );
+	assert.equal( frame( 20, 3, false, false ).x, held.x, "the WAIT hold stands until the next walk" );
 	travelling = false;
-	// CORRECTION_FREQUENCY (30/s) over a 60 fps frame: the most one frame closes.
+	// The old CORRECTION_FREQUENCY (30/s) cap over a 60 fps frame stays as
+	// the outer bound: the interpolated presenter's correction decay
+	// (own-walk-interpolation.ts) closes less per frame and settles over
+	// about a second of standing. The release revision is a correction:
+	// the standing logical pose sits at 28, not at the hold's own point
+	// (a revision there would only rebind the hold, as a heading fix does).
 	const perFrame = 1 - Math.exp( -30 / 60 );
-	let previous = held, gap = 110 - held.x;
-	for ( let step = 1; step <= 30; step++ ) {
-		const shown = frame( 110, 3 + step / 60, false, false );
+	let previous = held, gap = 28 - held.x;
+	for ( let step = 1; step <= 60; step++ ) {
+		const shown = frame( 28, 3 + step / 60, false, false );
 		const closed = shown.x - previous.x;
 		assert.ok( closed >= -1e-9, `no step back at frame ${step}` );
 		// The last hundredth of a unit (MIN_CORRECTION_DISTANCE) is closed at once.
@@ -1402,10 +1597,10 @@ test("a WAIT hold released while standing decays instead of jumping", () => {
 			closed <= perFrame * gap + 0.01,
 			`frame ${step} closes ${closed.toFixed( 2 )} of ${gap.toFixed( 2 )}`
 		);
-		gap = 110 - shown.x;
+		gap = 28 - shown.x;
 		previous = shown;
 	}
-	assert.ok( Math.abs( previous.x - 110 ) < 0.01, `settles on the standing pose (${previous.x})` );
+	assert.ok( Math.abs( previous.x - 28 ) < 0.01, `settles on the standing pose (${previous.x})` );
 	f.dispose();
 });
 

@@ -3,6 +3,8 @@ package enterworld
 import (
 	"strconv"
 	"testing"
+
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 func TestMinimapSkillTagsAndDurationBranches(t *testing.T) {
@@ -31,6 +33,7 @@ func TestMinimapSkillTagsAndDurationBranches(t *testing.T) {
 	}
 }
 func TestMinimapSkillMetadataPublication(t *testing.T) {
+	tier.Long(t, "every shipped spawn-skill row keeps its minimap metadata")
 	skills := sharedShippedSkills(t)
 	hunting := 0
 	for _, row := range skills.SpawnSkillRows() {

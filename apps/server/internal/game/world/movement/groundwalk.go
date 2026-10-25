@@ -153,9 +153,12 @@ func (rt *Runtime) advanceGroundUpdateForCharacter(division string, character *e
 		if update.Stopped {
 			rt.directions.clear(update.Key)
 		}
-		frame := directionCorrectionFrame(enterworld.ObjectIDForCharacter(character), state.PersistedSpawn())
+		// The stop names the entity that travels: a mounted rider's
+		// correction names its mount, not the rider (see activeMoverGID).
+		moverGID := activeMoverGID(character, 0)
+		frame := directionCorrectionFrame(moverGID, state.PersistedSpawn())
 		key, revision := update.Key, update.Revision
-		frames = append(frames, simulation.DivisionFrames{DivisionID: division, SourceGID: enterworld.ObjectIDForCharacter(character),
+		frames = append(frames, simulation.DivisionFrames{DivisionID: division, SourceGID: moverGID,
 			Frames: []simulation.Frame{{Opcode: frame.Opcode, Payload: frame.Payload,
 				Current: func() bool { return rt.Worlds.GroundRevisionCurrent(key, revision) }}},
 		})

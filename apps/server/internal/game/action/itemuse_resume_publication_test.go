@@ -50,6 +50,9 @@ type publicationConn struct {
 	out    chan transport.Frame
 	closed chan struct{}
 	once   sync.Once
+	// streamed counts the stream-position frames written: the fake
+	// client applies every frame it is handed, so a resume presents it.
+	streamed atomic.Uint32
 }
 
 /*
@@ -91,6 +94,9 @@ func (c *publicationConn) WriteFrame(f transport.Frame) error {
 	f.Payload = append([]byte(nil), f.Payload...)
 	select {
 	case c.out <- f:
+		if transport.CountsOnStream(f.Opcode) {
+			c.streamed.Add(1)
+		}
 		return nil
 	case <-c.closed:
 		return io.ErrClosedPipe
@@ -170,6 +176,9 @@ type publicationHarness struct {
 	server    *transport.Server
 	auth      *entryauth.SessionFixture
 	request   []byte
+	// conns maps each WELCOME's resume token to its connection, whose
+	// position a resume with that token presents.
+	conns map[string]*publicationConn
 }
 
 /*
@@ -264,13 +273,21 @@ connect
 func (h *publicationHarness) connect(t *testing.T, resume []byte) (*publicationConn, transport.Welcome) {
 	t.Helper()
 	c := newPublicationConn()
-	c.in <- transport.Frame{Opcode: transport.OpHello, Payload: transport.EncodeHello(transport.Hello{ResumeToken: resume, AdmissionToken: []byte("publication-test")})}
+	hello := transport.Hello{ResumeToken: resume, AdmissionToken: []byte("publication-test")}
+	if old := h.conns[string(resume)]; len(resume) > 0 && old != nil {
+		hello.HasPosition, hello.LastApplied = true, old.streamed.Load()
+	}
+	c.in <- transport.Frame{Opcode: transport.OpHello, Payload: transport.EncodeHello(hello)}
 	go h.server.Hub.AcceptConn(c)
 	f := publicationThrough(t, c, transport.OpWelcome)
 	welcome, err := transport.DecodeWelcome(f[len(f)-1].Payload)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if h.conns == nil {
+		h.conns = map[string]*publicationConn{}
+	}
+	h.conns[string(welcome.ResumeToken)] = c
 	return c, welcome
 }
 

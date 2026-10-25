@@ -89,6 +89,8 @@ export function selectCameraTarget( frame: CameraFrame, output: CameraOutput, pu
 					y: riding ? Math.fround( Math.fround( rendered.y + mountHeight! ) - 13 ) : rendered.y,
 					z: rendered.z,
 					// The local mover drives the mount, so its heading is the mount's.
+					// pose.angle is that snapped logical heading by contract: the
+					// camera follows yaw above, the drawn body's (FollowCameraTarget).
 					angle: gameplay.pose.angle
 				}
 			};
@@ -466,8 +468,12 @@ export function publishCharacters(
 	// same order the spread-and-map version produced, without temporaries.
 	const presentedActors: CharacterActor[] = [], wanted: string[] = [];
 	const companionsBlind = blindHeld && renderer.vHidesCompanions?.() === true;
+	// /hideme (690C40 case 113): the shown byte (CICPlayer +0xB8) cleared
+	// on the local player's record drops its body like a blinded actor's.
+	const localHiddenGid = local?.debugHidden ? local.gid : -1;
 	for ( const actor of next.values() ) {
-		const hidden = blindHeld && actor.blindable || companionsBlind && actor.blindableCompanion;
+		const hidden = blindHeld && actor.blindable || companionsBlind && actor.blindableCompanion ||
+			actor.gid === localHiddenGid;
 		presentedActors.push( hidden ? { ...actor, opacity: 0, pickable: false } : actor );
 		wanted.push( actor.model );
 	}

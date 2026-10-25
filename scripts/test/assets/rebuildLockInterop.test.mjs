@@ -61,7 +61,8 @@ const OWNER_FIELDS = [
   "command",
   "lockDir",
   "startedAt",
-  "heartbeatAt"
+  "heartbeatAt",
+  "mode"
 ];
 
 // The Node in-process acquisitions below would otherwise short-circuit through the

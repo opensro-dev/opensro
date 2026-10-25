@@ -63,7 +63,8 @@ interface PresentationEventEffects {
 		presented: readonly CharacterActor[],
 		effectDetail: number,
 		bloodEnabled: boolean,
-		banditTable: ReadonlyMap<number, { readonly imbue: number; }>
+		banditTable: ReadonlyMap<number, { readonly imbue: number; }>,
+		drawnPoses: ReadonlyMap<number, Pose>
 	): CharacterActor[];
 	attachedInstances(): readonly { key: string; gid: number; skill: number; stopped: boolean; }[];
 	takeActivations(): readonly { gid: number; skill: number; at: number; }[];
@@ -132,7 +133,8 @@ interface PresentationEventFrame {
 	readonly logicalPose: ( entity: EntityState ) => Pose;
 	readonly appearanceRef: ( entity: EntityState ) => number;
 	readonly soundContext: ( entity: EntityState, skill?: number, critical?: boolean ) => CharacterSoundContext;
-	readonly posePresentation: { pose( gid: number, native: Pose, seconds: number ): Pose; };
+	// The frame's drawn poses, resolved once in presentPoses (#1442c).
+	readonly drawnPoses: ReadonlyMap<number, Pose>;
 	readonly referenceAppearances: Pick<ReturnType<typeof createReferenceAppearances>, "step">;
 	readonly effects: PresentationEventEffects;
 	readonly effectDetail: number;
@@ -218,7 +220,7 @@ export function createPresentationEvents() {
 				logicalPose,
 				appearanceRef,
 				soundContext,
-				posePresentation,
+				drawnPoses,
 				referenceAppearances,
 				effects,
 				effectDetail,
@@ -240,7 +242,7 @@ export function createPresentationEvents() {
 				if ( !target || seconds - at >= 1 ) continue;
 				if ( state.damageTexts.length >= 2048 ) throw Error( "Damage text capacity exceeded" );
 				const native = logicalPose( target );
-				const anchor = posePresentation.pose( target.gid, native, seconds );
+				const anchor = drawnPoses.get( target.gid ) ?? native;
 				// 77A080 -> 8E2840 -> 8D4DD0: environmental feedback is a
 				// victim label, with no attack animation or invented impact sound.
 				state.damageTexts = appendDamageText(
@@ -260,8 +262,12 @@ export function createPresentationEvents() {
 			>();
 			// Effects anchor to what is drawn: a walking character's frame-clock pose,
 			// not the worker's latest sample, or entity-attached effects jitter
-			// against the body. pose() is idempotent within one frame time.
-			let drawnLocal: import("@/engine/contracts/gameplay").Pose | null = null;
+			// against the body. The rows carry the drawn (or held) pose, and
+			// the local player's own anchor (drawnLocal) is laid over the
+			// drawn map handed to the effect step below: on a cast-burst
+			// frame actor-motion takes the hold later this step, so the
+			// map resolved in presentPoses cannot see the held pose yet.
+			let drawnLocal: Pose | null = null;
 			const effectEntities = entities.map( entity => {
 				const local = entity.gid === gameplay?.localGid && !!gameplay.pose;
 				// A held body (a cast's navigation hold, including the burst
@@ -287,19 +293,22 @@ export function createPresentationEvents() {
 					!samples.has( entity.gid ) ||
 					!localMover( entity.gid ) && !entity.moving
 				) return entity;
-				const drawn = posePresentation.pose( entity.gid, logicalPose( entity ), seconds );
+				const drawn = drawnPoses.get( entity.gid ) ?? logicalPose( entity );
 				if ( local ) {
 					drawnLocal = { ...gameplay!.pose!, regionId: drawn.regionId, x: drawn.x, y: drawn.y, z: drawn.z };
 				}
 				return { ...entity, regionId: drawn.regionId, x: drawn.x, y: drawn.y, z: drawn.z };
 			} );
+			const effectPoses = drawnLocal && gameplay ?
+				new Map( drawnPoses ).set( gameplay.localGid, drawnLocal ) :
+				drawnPoses;
 			// Sample sockets from the admitted models at the current mechanical pose
 			// and authored callback cursor; flight ownership precedes hit feedback.
 			// The press's prediction is a cast of its own until the server adopts it.
-			const effectGameplay = gameplay && (drawnLocal || gameplay.castPrediction) ?
+			const effectGameplay = gameplay?.castPrediction ?
 				{
 					localGid: gameplay.localGid,
-					pose: drawnLocal ?? gameplay.pose,
+					pose: gameplay.pose,
 					casts: gameplay.castPrediction ? [ ...gameplay.casts, gameplay.castPrediction ] : gameplay.casts,
 					vitals: gameplay.vitals,
 					questMarkers: gameplay.questMarkers,
@@ -326,10 +335,10 @@ export function createPresentationEvents() {
 						const entity = entitiesByGid.get( actor.gid ),
 							native = entity ? logicalPose( entity ) : undefined;
 						// A held body launches bone projectiles from its held
-						// pose, not the corrected pose posePresentation spent.
+						// pose, not the corrected pose the stage resolved.
 						const held = heldPoses.get( actor.gid );
 						const sampled = !held && native ?
-							posePresentation.pose( actor.gid, native, seconds ) :
+							drawnPoses.get( actor.gid ) ?? native :
 							undefined;
 						const currentPose = held ?
 							{
@@ -376,7 +385,8 @@ export function createPresentationEvents() {
 				[ ...output.displayed.values() ],
 				effectDetail,
 				bloodEnabled,
-				published.tradeBandits
+				published.tradeBandits,
+				effectPoses
 			);
 			// 008DD6F0 calls snd_activate once after constructing the effect,
 			// including restored instances and immediate-stop instances.
@@ -462,13 +472,16 @@ export function createPresentationEvents() {
 				const observer = gameplay?.pose;
 				// Local movement owns gameplay.pose; the entity row can still
 				// contain the spawn position. Admission and text placement must
-				// use the same current victim position.
+				// use the same current victim position. Admission is a distance
+				// cull, not an anchor (logic, #1442): both sides stay on the
+				// logical poses here; the text itself is placed at the
+				// presented pose below.
 				const native = logicalPose( target );
 				const [dx, dz] = observer ? worldDelta( observer, native ) : [ Infinity, Infinity ];
 				const dy = observer ? native.y - observer.y : Infinity;
 				if ( cast.caster === gameplay?.localGid || dx * dx + dy * dy + dz * dz < 40000 ) {
 					if ( state.damageTexts.length >= 2048 ) throw Error( "Damage text capacity exceeded" );
-					const anchor = posePresentation.pose( target.gid, native, seconds );
+					const anchor = drawnPoses.get( target.gid ) ?? native;
 					state.damageTexts = appendDamageText(
 						state.damageTexts,
 						damageText( { ...target, ...anchor }, impact, at, !caster ),
@@ -517,7 +530,7 @@ export function createPresentationEvents() {
 					const shown = [ ...output.displayed.values() ].map( actor => {
 							const entity = entitiesByGid.get( actor.gid );
 							if ( !entity ) return actor;
-							const pose = posePresentation.pose( actor.gid, logicalPose( entity ), seconds );
+							const pose = drawnPoses.get( actor.gid ) ?? logicalPose( entity );
 							return {
 								...actor,
 								pose: {
@@ -613,8 +626,15 @@ export function createPresentationEvents() {
 			}
 			health?.finishedCasts();
 			const pendingDeaths = feedback.pendingDeaths( gameplay?.casts ?? [], health?.currentResult );
+			// A sound at the local player sits on the body as drawn, like
+			// every drawn anchor (#1442): the frame's resolved pose
+			// (presentPoses, #1442c), not the movement owner's logical
+			// one. Other emitters keep their entity row.
+			const localDrawn = gameplay?.pose ?
+				drawnPoses.get( gameplay.localGid ) ?? gameplay.pose :
+				undefined;
 			sounds.flush( seconds, gid => {
-				const pose = gid === gameplay?.localGid ? gameplay.pose : entitiesByGid.get( gid );
+				const pose = gid === gameplay?.localGid ? localDrawn : entitiesByGid.get( gid );
 				return pose ? worldAudioPosition( pose ) : undefined;
 			} );
 			return { hitByActor, effectActors, pendingDeaths };

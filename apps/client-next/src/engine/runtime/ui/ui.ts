@@ -103,11 +103,7 @@ import type { BugReportControl } from "@/engine/contracts/bug-report";
 import { equipmentDropSlot } from "@/engine/foundation/gameplay/equipment-drop";
 import { itemEquipmentOverlay, equipmentWarningUv } from "@/engine/foundation/ui/item-equipment-overlay";
 import { itemCountQuads } from "@/engine/foundation/ui/item-count";
-import {
-	flagWarTimerDigitTexture,
-	flagWarTimerReading,
-	flagWarTimerUrgentTint
-} from "@/engine/foundation/ui/flagwar-timer-plate";
+import { flagWarTimerDigitTexture, flagWarTimerReading } from "@/engine/foundation/ui/flagwar-timer-plate";
 import { returnScrollBar } from "@/engine/foundation/ui/return-scroll";
 import { nameColorRgba } from "@/engine/foundation/gameplay/name-color";
 import { containsPoint, topmostControlAt } from "@/engine/foundation/ui/hit-test";
@@ -354,6 +350,8 @@ import { STALL_CHAT_CHANNEL, STALL_SLOTS, type StallListing } from "@/engine/fou
 import { textAllowed } from "@/engine/foundation/ui/character-create";
 import { createGrantPowerHud, GRANT_RIGHTS } from "./hud/grant-power-hud";
 import { compositeItemCaption, compositeItemLayout, createCompositeItemHud } from "./hud/composite-item-hud";
+import { createUniqueRankHud } from "./hud/unique-rank-hud";
+import { uniqueRankLines } from "@/engine/foundation/gameplay/unique-rank";
 import {
 	allianceButtons,
 	allianceGuildCountText,
@@ -701,6 +699,7 @@ import {
 	guildQuestionLayout,
 	reverseReturnLayout,
 	proposalLayout,
+	reverseReturnButton,
 	MESSAGE_FRAME,
 	MESSAGE_TILE,
 	PARTY_OPTION
@@ -709,9 +708,12 @@ import {
 	commandFloat,
 	commandInteger,
 	DEBUG_COMMAND_CLEAR,
+	DEBUG_COMMAND_CURSOR,
 	DEBUG_COMMAND_DAY,
 	DEBUG_COMMAND_DEBUG,
+	DEBUG_COMMAND_FREE_CAMERA,
 	DEBUG_COMMAND_GET_POSITION,
+	DEBUG_COMMAND_HIDE_ME,
 	DEBUG_COMMAND_ITEM,
 	DEBUG_COMMAND_MESSAGE_CLEAR,
 	DEBUG_COMMAND_NIGHT,
@@ -720,12 +722,16 @@ import {
 	DEBUG_COMMAND_POSITION,
 	DEBUG_COMMAND_POWER,
 	DEBUG_COMMAND_RAIN,
+	DEBUG_COMMAND_SHOW_ME,
 	DEBUG_COMMAND_SNOW,
 	DEBUG_COMMAND_TIME_MINUS,
 	DEBUG_COMMAND_TIME_OFF,
 	DEBUG_COMMAND_TIME_ON,
 	DEBUG_COMMAND_TIME_PLUS,
 	DEBUG_COMMAND_TIME_SET,
+	DEBUG_COMMAND_UI_OFF,
+	DEBUG_COMMAND_UI_ON,
+	DEBUG_COMMAND_ZOOM,
 	DEBUG_COMMAND_SET_FIELD_OF_VIEW,
 	debugCommand,
 	debugFieldOfView,
@@ -736,6 +742,7 @@ import {
 	createDebugClock,
 	DEBUG_CLOCK_STEP_MINUTES,
 	debugClockHold,
+	debugClockNoteSeed,
 	debugClockResume,
 	debugClockSeed,
 	debugClockSetFraction,
@@ -945,6 +952,9 @@ rather than as another createUi parameter.
 export interface UiExtensions {
 	bugReport?: BugReportControl | null;
 	setWorldFieldOfView?: ( degrees: number ) => void;
+	setCameraZoomRail?: ( capped: boolean ) => void;
+	setFreeCamera?: ( free: boolean ) => void;
+	setCursorVisible?: ( visible: boolean ) => void;
 	saveExperimental?: ( value: ExperimentalOptions ) => void;
 	saveWindowPositions?: ( value: WindowPositions ) => void;
 }
@@ -984,6 +994,19 @@ export function createUi(
 	// The interface timer's debug state (690C40 ids 100-109): the sampler
 	// reads it through the handle's debugClockSeed.
 	let debugClock: DebugClock = createDebugClock();
+	// The camera family's debug bytes (690C40 ids 110/114/135): the
+	// interface's zoom rail (+0x3CF, standing from its constructor), its
+	// free-camera byte (+0x3CE) and the cursor manager's visibility
+	// (+0x20). Each owner applies its own through the extensions.
+	let debugZoomRail = true;
+	let debugFreeCamera = false;
+	let debugCursorVisible = true;
+	// The mission window's visible flag (CIFWnd +0x6D, written through
+	// CIFWnd_SetVisibleFlag 9FCD70 by 690C40 cases 115/116): while it is
+	// down the frame carries only the console's own quads and controls -
+	// the console belongs to the interface, not the hidden window tree,
+	// exactly as the native stays able to read /uion.
+	let debugUiVisible = true;
 	let video = defaultVideoOptions(), videoDraft = video, videoScroll = 0, videoCombo = VIDEO_COMBO_CLOSED;
 	let bindings = defaultInputOptions(), bindingDraft = bindings, bindingSelected = -1, bindingScroll = 0;
 	let sight: SightMode = 0, sightDraft: SightMode = 0;
@@ -1208,7 +1231,8 @@ export function createUi(
 	================
 	*/
 	const takeLoadingVariant = () => {
-		const variant = nextLoadingVariant;
+		// Port-only, not native: the saved preference filters this load's artwork.
+		const variant = experimental.state().saved.safeLoadingScreen ? 1 : nextLoadingVariant;
 		nextLoadingVariant = loadingVariant();
 		return variant;
 	};
@@ -1246,6 +1270,8 @@ export function createUi(
 	const stallHud = createStallHud();
 	const grantPowerHud = createGrantPowerHud();
 	const compositeItemHud = createCompositeItemHud();
+	// Port-only, not native: a unique kill's damage ranking (SRO_UNIQUE_DAMAGE_RANK).
+	const uniqueRankHud = createUniqueRankHud();
 	const guildManagerHud = createGuildManagerHud();
 	const guildNoticeHud = createGuildNoticeHud();
 	const magicOptionHud = createMagicOptionHud();
@@ -2629,8 +2655,12 @@ export function createUi(
 	CGInterface_OnCommandMessage (690C40) for the console family, the position
 	pair, bag-slot use and FOV. The weather rows write the worker's weather
 	slot (the sampler's state, not this window's); the time rows drive the
-	local debug clock the sampler reads through debugClockSeed. The camera and
-	render-toggle families are not ported yet and leave the line as typed.
+	local debug clock the sampler reads through debugClockSeed. The camera
+	rows flip this window's debug bytes and hand each to its owner; the
+	shown byte (112/113) rides the gameplay lane to the entity owner, and
+	the mission window's visible flag (115/116) is this window's own. The
+	camera-waypoint rows (130-134) and ids 111/117-119 are not ported yet
+	and leave the line as typed.
 	================
 	*/
 	function runDebugCommand( command: DebugCommand ) {
@@ -2725,6 +2755,49 @@ export function createUi(
 			case DEBUG_COMMAND_TIME_MINUS:
 				// 109: "/-" steps a held clock forward.
 				debugClock = debugClockStep( debugClock, DEBUG_CLOCK_STEP_MINUTES );
+				break;
+			case DEBUG_COMMAND_ZOOM:
+				// Case 0x10 flips +0x3CF: the 150-unit wheel rail (67CC3C)
+				// stands or falls. The native prints nothing.
+				debugZoomRail = !debugZoomRail;
+				extensions.setCameraZoomRail?.( debugZoomRail );
+				break;
+			case DEBUG_COMMAND_SHOW_ME:
+				// Case 0x12 writes the local player's shown byte
+				// (CICPlayer +0xB8) to 1. The native prints nothing.
+				sendGameplay( { kind: "debug-local-visible", visible: true } );
+				break;
+			case DEBUG_COMMAND_HIDE_ME:
+				// Case 0x13 writes the shown byte to 0: the local
+				// presentation (body and name board) is skipped. The
+				// native prints nothing.
+				sendGameplay( { kind: "debug-local-visible", visible: false } );
+				break;
+			case DEBUG_COMMAND_FREE_CAMERA:
+				// Case 0x14 flips +0x3CE and reports the new state: while it
+				// stands the camera keeps its last eye and target (68FAD0,
+				// 68F830); clearing it re-aims at the player.
+				debugFreeCamera = !debugFreeCamera;
+				extensions.setFreeCamera?.( debugFreeCamera );
+				appendConsoleLine( debugFreeCamera ? "Free Camera On" : "Free Camera Off" );
+				break;
+			case DEBUG_COMMAND_UI_OFF:
+				// Case 0x15 writes the mission window's visible flag
+				// (CIFWnd +0x6D) to 0 through 9FCD70: the HUD tree
+				// hides and the hovered window is released; the console
+				// stays, so /uion can be typed. The native prints nothing.
+				debugUiVisible = false;
+				break;
+			case DEBUG_COMMAND_UI_ON:
+				// Case 0x16 writes the flag back to 1. The native
+				// prints nothing.
+				debugUiVisible = true;
+				break;
+			case DEBUG_COMMAND_CURSOR:
+				// Case 0x1E: SetVisible(![cursor+0x20]) - the pointer shows
+				// or goes away (A15A70), silently.
+				debugCursorVisible = !debugCursorVisible;
+				extensions.setCursorVisible?.( debugCursorVisible );
 				break;
 			case DEBUG_COMMAND_SET_FIELD_OF_VIEW: {
 				const degrees = debugFieldOfView( command.args );
@@ -3297,6 +3370,7 @@ export function createUi(
 				}
 			} else if ( row === "warehouse" ) {
 				if ( !canLeavePanel() ) return;
+				npcPanel.hide();
 				sendGameplay( { kind: "storage-open-guild", gid: npc } );
 				storagePanel.reset();
 				setPanel( "Storage" );
@@ -4608,6 +4682,9 @@ export function createUi(
 		} else if ( id === "composite-item-cancel" || id === "composite-item-close" ) {
 			compositeItemHud.close();
 			dirty = true;
+		} else if ( id === "unique-rank-ok" || id === "unique-rank-close" ) {
+			uniqueRankHud.close();
+			dirty = true;
 		} else if ( id === "chat-send" && !view.gameplay?.chat?.pending ) {
 			const draft = composeChat(
 				panel === "Chat" ?
@@ -5112,6 +5189,7 @@ export function createUi(
 		} else if ( id === "magic-option-cancel" || id === "magic-option-close" ) setPanel( "" );
 		else if ( id === "storage-open" && view.gameplay?.target ) {
 			if ( !canLeavePanel() ) return;
+			npcPanel.hide();
 			sendGameplay( { kind: "storage-open", gid: view.gameplay.target } );
 			storagePanel.reset();
 			setPanel( "Storage" );
@@ -5378,6 +5456,7 @@ export function createUi(
 			seed: import("@/engine/contracts/gameplay").WorldClockSeed | undefined,
 			nowMs: number
 		) {
+			debugClock = debugClockNoteSeed( debugClock, seed, nowMs );
 			return debugClockSeed( debugClock, seed, nowMs );
 		},
 		/*
@@ -5551,16 +5630,23 @@ export function createUi(
 			}
 			if ( reverseScrollHud.reconcile( view ) ) dirty = true;
 			if ( reverseScrollHud.active() ) {
+				const boxControl = ( id: string | null ) =>
+					id !== null &&
+					[ "reverse-scroll:2", "reverse-scroll:3", "reverse-scroll-map", "reverse-scroll-cancel" ].includes(
+						id
+					);
 				if ( event.kind === "key" && event.code === "Escape" ) {
 					reverseScrollHud.close();
 					dirty = true;
-				} else if (
-					event.kind === "activate" &&
-					[ "reverse-scroll:2", "reverse-scroll:3", "reverse-scroll-map", "reverse-scroll-cancel" ].includes(
-						event.id
-					)
-				) {
+				} else if ( event.kind === "activate" && boxControl( event.id ) ) {
 					activate( event.id );
+				} else if ( event.kind === "hover" || event.kind === "press" ) {
+					// The pointer still reaches the box's own controls (their focus
+					// art and the rows' hover color); nothing behind it lights up.
+					const id = boxControl( event.id ) ? event.id : null;
+					if ( event.kind === "hover" ) hover = id;
+					else pressed = id;
+					dirty = true;
 				}
 				// Message box 0x1E owns input until a destination or Cancel wins.
 				return;
@@ -6868,6 +6954,11 @@ export function createUi(
 			if ( event.kind === "key" && event.code === "Escape" && compositeItemHud.packageId() !== null ) {
 				// 69F450: Escape closes the package window.
 				compositeItemHud.close();
+				dirty = true;
+				return;
+			}
+			if ( event.kind === "key" && event.code === "Escape" && uniqueRankHud.state() ) {
+				uniqueRankHud.close();
 				dirty = true;
 				return;
 			}
@@ -8683,7 +8774,12 @@ export function createUi(
 					undefined,
 				next.gameplay?.social?.soldierAttributeSequence ?? 0
 			);
-			if ( npcPanel.observe( next.session?.phase === "world" ? next.gameplay?.npcConversation : undefined ) ) {
+			if (
+				npcPanel.observe(
+					next.session?.phase === "world" ? next.gameplay?.npcConversation : undefined,
+					next.gameplay?.npcWindow
+				)
+			) {
 				dirty = true;
 			}
 			if ( withdrawal.observe( next.session?.phase === "world" ? next.gameplay?.restorationRevision ?? 0 : 0 ) ) {
@@ -9075,6 +9171,10 @@ export function createUi(
 				compositePackage !== null &&
 				!(phase === "world" && next.gameplay?.countJobs?.some( r => r.packageRefObjId === compositePackage ))
 			) compositeItemHud.close();
+			if (
+				phase === "world" &&
+				uniqueRankHud.reconcile( next.gameplay, experimental.state().saved.uniqueDamageRank )
+			) dirty = true;
 			if ( phase !== "world" ) cosHud.reset();
 			else if (
 				cosHud.reconcile(
@@ -9125,6 +9225,7 @@ export function createUi(
 					// 6A01B0: logout writes them back before the session's windows go.
 					persistWindowPositions();
 					guildWarHud.reset( true );
+					uniqueRankHud.reset();
 					windowPlacement.reset();
 					itemMall.reset();
 					carriedShortcut = null;
@@ -9571,14 +9672,12 @@ export function createUi(
 				let statusBottom = targetBottom;
 				shown.forEach( ( record, i ) => {
 					const cls = cosClass( record.band )!, chrome = cosStatusChrome( cls );
+					// The server's pool, whatever the display row (#1548): it publishes
+					// training and spirit only while the expansion is on.
 					const reference = petReference(
 						data.cosReferences.get( record.refObjId ),
-						experimental.state().saved.attackPetTraining && game?.petTraining?.gid === record.gid ?
-							game.petTraining :
-							undefined,
-						experimental.state().saved.attackPetTraining ?
-							next.entities.find( e => e.gid === record.gid )?.petResolve :
-							undefined,
+						game?.petTraining?.gid === record.gid ? game.petTraining : undefined,
+						next.entities.find( e => e.gid === record.gid )?.petResolve,
 						next.simulationTimeMs ?? 0
 					);
 					const nativeRect = cosStatusRect( w, i, cls, cosStatusDesktopTop() );
@@ -11135,8 +11234,8 @@ export function createUi(
 					petMiniInfo(
 						game.cosRecords,
 						hudData.cosReferences,
-						experimental.state().saved.attackPetTraining ? game.petTraining : undefined,
-						experimental.state().saved.attackPetTraining && attackCosGid !== undefined ?
+						game.petTraining,
+						attackCosGid !== undefined ?
 							next.entities.find( e => e.gid === attackCosGid )?.petResolve :
 							undefined,
 						next.simulationTimeMs ?? 0
@@ -11386,17 +11485,18 @@ export function createUi(
 					const plate = hudData.windows.iftimerwnd;
 					if ( plate ) {
 						// CIFTimerWnd (ginterface GDR_TIMER_WND, iftimerwnd statics):
-						// the flag war timer's digits, red under a minute left.
+						// the flag war timer's digits. The native red tint under a
+						// minute is mode-2 only (0x5184DD); the flag war arms
+						// mode 1, so the digits stay plain at every remainder.
 						const origin = authoredRect( hudData.root.GDR_TIMER_WND!, 0, 0 ),
-							reading = flagWarTimerReading( game.flagWar.timerEndsAt - quickslotTime ),
-							tint = reading.urgent ? flagWarTimerUrgentTint : white;
+							reading = flagWarTimerReading( game.flagWar.timerEndsAt - quickslotTime );
 						authoredImage(
 							plate.GDR_TIMER_MIN_0_STA!,
 							origin[0],
 							origin[1],
 							flagWarTimerDigitTexture( reading.minTens ),
 							1,
-							tint
+							white
 						);
 						authoredImage(
 							plate.GDR_TIMER_MIN_1_STA!,
@@ -11404,16 +11504,16 @@ export function createUi(
 							origin[1],
 							flagWarTimerDigitTexture( reading.minOnes ),
 							1,
-							tint
+							white
 						);
-						authoredImage( plate.GDR_TIMER_CENTER_STA!, origin[0], origin[1], undefined, 1, tint );
+						authoredImage( plate.GDR_TIMER_CENTER_STA!, origin[0], origin[1], undefined, 1, white );
 						authoredImage(
 							plate.GDR_TIMER_SEC_0_STA!,
 							origin[0],
 							origin[1],
 							flagWarTimerDigitTexture( reading.secTens ),
 							1,
-							tint
+							white
 						);
 						authoredImage(
 							plate.GDR_TIMER_SEC_1_STA!,
@@ -11421,7 +11521,7 @@ export function createUi(
 							origin[1],
 							flagWarTimerDigitTexture( reading.secOnes ),
 							1,
-							tint
+							white
 						);
 					}
 				}
@@ -11702,10 +11802,8 @@ export function createUi(
 						(target.kind === "cos" ?
 							petReference(
 								hudData.cosReferences.get( target.refObjId ),
-								experimental.state().saved.attackPetTraining && game?.petTraining?.gid === target.gid ?
-									game.petTraining :
-									undefined,
-								experimental.state().saved.attackPetTraining ? target.petResolve : undefined,
+								game?.petTraining?.gid === target.gid ? game.petTraining : undefined,
+								target.petResolve,
 								next.simulationTimeMs ?? 0
 							)?.maxHp :
 							undefined);
@@ -15038,20 +15136,79 @@ export function createUi(
 					);
 					endWindow( admission, "composite-item" );
 				}
-				// 6AD990's type 0x24 confirm box and the scroll's box 0x1E (6971B0)
-				// share the layout: the reverse return's two points and Cancel.
+				const uniqueRank = uniqueRankHud.state();
+				if ( uniqueRank && game ) {
+					// Port-only, not native (unique-rank-hud.ts): place, name, damage,
+					// share and party place, the viewer's row tinted, and the
+					// viewer's own row under a rule when it placed below the list.
+					const lines = uniqueRankLines(
+						uniqueRank,
+						game.social?.localName ?? next.session?.character ?? ""
+					);
+					const width = 424, rowPitch = 20, listTop = 64, ownGap = 10;
+					const listHeight = (lines.top.length + (lines.own ? 1 : 0)) * rowPitch + (lines.own ? ownGap : 0);
+					const height = listTop + listHeight + 56;
+					const admission = beginWindow();
+					const [px, py] = windowOrigin( "UniqueRank", [
+						(w - width) / 2,
+						Math.max( 0, (h - height) / 3 ),
+						width,
+						height
+					] );
+					windowBox( `${uniqueRank.uniqueName || "Unique"} defeated`, px, py, width, height );
+					closeButton( px + width - 26, py + 10, "unique-rank-close" );
+					// [left, width, hAlign] of the rank, name, damage, share and party columns.
+					const columns = [
+						[ 14, 36, 1 ],
+						[ 56, 160, 0 ],
+						[ 220, 90, 2 ],
+						[ 316, 52, 2 ],
+						[ 374, 36, 1 ]
+					] as const;
+					const headerColor = [ 180 / 255, 180 / 255, 180 / 255, 1 ] as const;
+					const cells = (
+						values: readonly string[],
+						top: number,
+						color: readonly [number, number, number, number]
+					) => {
+						values.forEach( ( value, i ) => {
+							const [left, cellWidth, hAlign] = columns[i]!,
+								cell: UiRect = [ px + left, top, cellWidth, rowPitch ];
+							quads.push(
+								...text.quads( value, cell, cell, color, { hAlign, vAlign: 1, overflow: "ellipsis" } )
+							);
+						} );
+					};
+					cells( [ "Rank", "Name", "Damage", "%", "Party" ], py + 40, headerColor );
+					rect( [ px + 10, py + listTop - 3, width - 20, 1 ], headerColor );
+					lines.top.forEach( ( line, i ) => {
+						const top = py + listTop + i * rowPitch;
+						if ( line.self ) {
+							rect( [ px + 10, top, width - 20, rowPitch ], [ gold[0], gold[1], gold[2], .16 ] );
+						}
+						cells(
+							[ line.rank, line.name, line.damage, line.share, line.party ],
+							top,
+							line.self ? gold : white
+						);
+					} );
+					if ( lines.own ) {
+						const top = py + listTop + lines.top.length * rowPitch + ownGap;
+						rect( [ px + 10, top - ownGap / 2, width - 20, 1 ], headerColor );
+						rect( [ px + 10, top, width - 20, rowPitch ], [ gold[0], gold[1], gold[2], .16 ] );
+						const own = lines.own;
+						cells( [ own.rank, own.name, own.damage, own.share, own.party ], top, gold );
+					}
+					button( "unique-rank-ok", hudCopy( "UIIT_CTL_CONFIRM" ), px + (width - 120) / 2, py + height - 40 );
+					endWindow( admission, "unique-rank" );
+				}
+				// The bag scroll's box (561D50 opens type 0x21 at 562251) and
+				// 6AD990's type 0x24 box are one box: 52F460 runs 53259C for both,
+				// the reverse return's two points and Cancel.
 				const reverseBox = game?.reverseReturnChoice ?
-					{
-						title: "UIIT_CTL_PREMIUM_REVERSE_RETURN",
-						prefix: "premium-reverse:",
-						cancel: "premium-reverse-cancel"
-					} :
+					{ prefix: "premium-reverse:", cancel: "premium-reverse-cancel" } :
 					reverseScrollHud.active() ?
-					{
-						title: "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_REVERSE_PORTAL",
-						prefix: "reverse-scroll:",
-						cancel: "reverse-scroll-cancel"
-					} :
+					{ prefix: "reverse-scroll:", cancel: "reverse-scroll-cancel" } :
 					null;
 				if ( reverseBox ) {
 					controls = [];
@@ -15069,41 +15226,54 @@ export function createUi(
 						)
 					);
 					quads.push( ...normalTile( box.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ) );
+					// 53259C titles the box UIIT_STT_CONFIRM_BOX; 532611 puts the
+					// question in id 1.
 					quads.push(
-						...text.quads( hudCopy( reverseBox.title ), box.title, full, white, {
+						...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), box.title, full, white, {
 							hAlign: 1,
 							vAlign: 0
 						} )
 					);
-					for (
-						const [index, choice, key] of [
-							[ 0, REVERSE_RETURN_LAST_RECALL, "UIIT_MSG_ITEM_USE_REVERSE_PORTAL_RETRUN_TO_LAST_RETURN" ],
-							[ 1, REVERSE_RETURN_LAST_DEATH, "UIIT_MSG_ITEM_USE_REVERSE_PORTAL_RETRUN_TO_LAST_DEATH" ]
-						] as const
-					) {
-						button(
-							reverseBox.prefix + choice,
-							hudCopy( key ),
-							box.frame[0] + 16,
-							box.frame[1] + 44 + index * 26,
-							box.frame[2] - 32
-						);
-					}
+					quads.push(
+						...text.quads(
+							hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_REVERSE_PORTAL" ),
+							box.question,
+							full,
+							white,
+							{ hAlign: 1, vAlign: 0 }
+						)
+					);
+					authoredLabeledButton(
+						reverseReturnButton( box.points[0]! ),
+						0,
+						0,
+						reverseBox.prefix + REVERSE_RETURN_LAST_RECALL,
+						hudCopy( "UIIT_MSG_ITEM_USE_REVERSE_PORTAL_RETRUN_TO_LAST_RETURN" )
+					);
+					authoredLabeledButton(
+						reverseReturnButton( box.points[1]! ),
+						0,
+						0,
+						reverseBox.prefix + REVERSE_RETURN_LAST_DEATH,
+						hudCopy( "UIIT_MSG_ITEM_USE_REVERSE_PORTAL_RETRUN_TO_LAST_DEATH" )
+					);
 					if ( mapRow ) {
-						button(
+						authoredLabeledButton(
+							reverseReturnButton( box.points[2]! ),
+							0,
+							0,
 							"reverse-scroll-map",
-							"Move to a location on the map.",
-							box.frame[0] + 16,
-							box.frame[1] + 44 + 2 * 26,
-							box.frame[2] - 32
+							"Move to a location on the map."
 						);
 					}
-					button(
+					// 5327AE captions id 201 UIO_COMMON_CTL_CANCEL; the port's text
+					// tables carry its English twin, UIIT_CTL_CANCEL ("Cancel").
+					authoredLabeledButton(
+						reverseReturnButton( box.refuse ),
+						0,
+						0,
 						reverseBox.cancel,
-						hudCopy( "UIIT_CTL_CANCEL" ),
-						box.refuse[0],
-						box.refuse[1],
-						box.refuse[2]
+						hudCopy( "UIIT_CTL_CANCEL" )
 					);
 					endWindow( admission, "premium-reverse-return" );
 				}
@@ -15538,7 +15708,8 @@ export function createUi(
 
 				if (
 					game?.npcConversation && game.npcConversation.phase !== "closed" && hudData &&
-					guideResources.data() && !(panel === "Shop" && game.shop?.npc === game.npcConversation.gid)
+					guideResources.data() && !npcPanel.hidden() &&
+					!(panel === "Shop" && game.shop?.npc === game.npcConversation.gid)
 				) {
 					const mark = beginWindow(),
 						root = hudData.root.GDR_NPCWINDOW!,
@@ -17213,16 +17384,16 @@ export function createUi(
 							}
 						}
 					} else if ( cosTab === 0 && record ) {
-						const trainingState =
-							experimental.state().saved.attackPetTraining && game?.petTraining?.gid === record.gid ?
-								game.petTraining :
-								undefined;
+						// Every number is the server's (#1548): the published training
+						// whatever the row; the row gates only the training UI.
+						const publishedTraining = game?.petTraining?.gid === record.gid ? game.petTraining : undefined;
+						const trainingState = experimental.state().saved.attackPetTraining ?
+							publishedTraining :
+							undefined;
 						const reference = petReference(
 							hudData.cosReferences.get( record.refObjId ),
-							trainingState,
-							experimental.state().saved.attackPetTraining ?
-								next.entities.find( e => e.gid === record.gid )?.petResolve :
-								undefined,
+							publishedTraining,
+							next.entities.find( e => e.gid === record.gid )?.petResolve,
 							next.simulationTimeMs ?? 0
 						);
 						const node = ( id: number ) => Object.values( page ).find( n => n.id === id );
@@ -17323,7 +17494,7 @@ export function createUi(
 											return attack?.present ? attack : undefined;
 										} )
 									),
-									trainingState
+									publishedTraining
 								);
 								const values: [number, string][] = [
 									[ 66, String( ability.hit ) ],
@@ -20301,6 +20472,7 @@ export function createUi(
 				if ( game && hud.data() ) {
 					for ( const entity of next.entities ) {
 						if (
+							entity.debugHidden ||
 							hiddenSilkCos( entity, options.hideSilkCos ) ||
 							next.blindHeld && (blindableCharacter( entity, game?.localGid ) ||
 									experimental.state().saved.vHidesCompanions &&
@@ -20492,7 +20664,7 @@ export function createUi(
 					const hovered = entity.gid === next.hoveredEntity, selected = entity.gid === game?.target;
 					// One decision for the name and every overhead icon: an icon never
 					// shows without its name (name-visibility.ts header).
-					const named = !hiddenSilkCos( entity, options.hideSilkCos ) &&
+					const named = !entity.debugHidden && !hiddenSilkCos( entity, options.hideSilkCos ) &&
 						overheadBoardVisible(
 							boardAt( entity ),
 							local,
@@ -20589,11 +20761,22 @@ export function createUi(
 							fontStyle: selected ? 2 : 0
 						} ).map( q => ({ ...q, characterAnchor: entity.gid }) )
 					);
+					const ownerEntity = next.entities.find( owner => owner.gid === entity.ownerGid );
+					// 854BB8: with no guild record the soldier's row keeps the
+					// owner's name colour, so the label colour is passed only
+					// when the owner actually has a guild (another player by
+					// its guild name, the local player through social.guild);
+					// overheadLayout's row colour alone is unconditional and
+					// would hand a guildless owner the default blue.
+					const ownerGuildName = ownerEntity?.gid === game?.localGid ?
+						game?.social?.guild?.name :
+						ownerEntity?.guildName;
 					const ownerPlate = entity.kind === "cos" ?
 						companionOwnerNameplate(
 							entity,
-							next.entities.find( owner => owner.gid === entity.ownerGid ),
-							options
+							ownerEntity,
+							options,
+							ownerGuildName && ownerEntity ? overheads.get( ownerEntity.gid )?.guildColor : undefined
 						) :
 						null;
 					if ( ownerPlate && height ) {
@@ -25571,6 +25754,9 @@ export function createUi(
 				}
 			}
 			mapHud.details( { worldVisible, panel, pressed, hover, full, paths, quads, text, resources, rect } );
+			const preConsoleQuads = quads.length,
+				preConsoleControls = controls.length,
+				preConsoleBlocks = blocks.length;
 			if ( worldVisible && consolePhase !== 0 && game?.eligibility?.gm ) {
 				// The catalogue list grows the native 600x112 panel downward.
 				// It is port-only, so it uses a solid panel behind its two
@@ -25707,6 +25893,14 @@ export function createUi(
 					maxLength: 255
 				} );
 			}
+			if ( !debugUiVisible ) {
+				// /uioff (690C40 case 115): the frame keeps only what the
+				// console block above contributed; everything built
+				// before it is the hidden window tree's.
+				quads.splice( 0, preConsoleQuads );
+				controls.splice( 0, preConsoleControls );
+				blocks.splice( 0, preConsoleBlocks );
+			}
 			probe?.detailEnd( "ui-assembly" );
 			probe?.detailBegin( "ui-finalize" );
 			const semantics = {
@@ -25756,7 +25950,7 @@ export function createUi(
 				inWorld: phase === "world",
 				dead: !!game?.vitals.find( v => v.gid === game.localGid )?.deathState,
 				leaving: leaveRequested,
-				nextVariant: nextLoadingVariant
+				nextVariant: experimental.state().saved.safeLoadingScreen ? 1 : nextLoadingVariant
 			} ) );
 			// Prewarm decoded authored artwork so hotkeys/sidebar changes stay immediate.
 			// Renderer now derives GPU residency from committed quads; this catalogue

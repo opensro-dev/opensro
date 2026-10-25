@@ -33,6 +33,7 @@ import { SIMULATION_STEP_MS } from "@/engine/contracts/simulation";
 import { interpolateMovement, poseDistance } from "@/engine/foundation/gameplay/native-movement";
 import { hypot2, hypot3 } from "@/engine/foundation/math/hypot";
 import { displaceRegionXZ, sameCoordinateSpace, worldDelta } from "@/engine/foundation/world/world-space";
+import { createOwnWalkPresenter } from "./own-walk-interpolation";
 
 const TICK_SECONDS = SIMULATION_STEP_MS / 1000;
 const DISCONTINUITY_DISTANCE = 192;
@@ -92,8 +93,6 @@ A character drawn on the frame clock from its timed samples.
 ================
 */
 interface SampleTrack {
-	// The local mover's own leg (SampleInput.ownLeg, walksLeg).
-	ownLeg: boolean;
 	// A drawn pose handed back by its owner (carry): recovered toward the
 	// model at walking speed instead of in one frame.
 	carried?: boolean;
@@ -385,43 +384,22 @@ function sampledModel( row: SampleTrack, now: number, confirmedAt = row.latest.a
 
 /*
 ================
-walksLeg
-
-Whether the track walks the local mover's own admitted ground leg: one
-with its end and its velocity, not a skill displacement (which keeps its
-own clock). A peer's leg is the server's, which a stop or a knockback can
-cut, so a peer keeps the bounded extrapolation.
-================
-*/
-function walksLeg( row: SampleTrack ): boolean {
-	return row.ownLeg && !!row.to && !!row.pathVelocity && row.displacementAtMs === undefined;
-}
-
-/*
-================
 sampledLinearModel
 
 Native time and the checked endpoint bound horizontal extrapolation. The
 wrapper resolves its height on certified walking samples when available.
 
-A walk on its admitted leg (a ground walk, not a skill displacement, which
-keeps its own clock) is advanced every frame, as native dead reckoning
-(CNavigationDeadreckon) advances it, and the leg's end bounds it. A worker
-or main-thread stall used to park it MAX_EXTRAPOLATION_SECONDS past the
-last sample, and the display then caught up at 1.5 times walking speed:
-under a 4x CPU throttle the bench drew 29 frames at 1.47 times speed after
-one stall (2026-10-12). Without a leg the bound stays.
+Every track extrapolates at most MAX_EXTRAPOLATION_SECONDS past its newest
+sample: the local mover's own legs are drawn by the interpolated presenter
+(own-walk-interpolation.ts), never by this dead reckoning, since #1564
+deleted the old fallback that advanced an own leg without bound.
 ================
 */
 function sampledLinearModel( row: SampleTrack, now: number, confirmedAt: number ): Pose {
 	const latest = row.latest, previous = row.previous;
-	const legged = walksLeg( row );
-	const maximumAhead = legged ? Infinity : MAX_EXTRAPOLATION_SECONDS + Math.max( 0, confirmedAt - latest.at );
+	const maximumAhead = MAX_EXTRAPOLATION_SECONDS + Math.max( 0, confirmedAt - latest.at );
 	if ( !row.moving ) return latest.pose;
-	// Two samples further apart than MAX_SAMPLE_GAP_SECONDS define no
-	// velocity; the admitted leg still does.
-	const sampledGap = previous ? latest.at - previous.at : 0;
-	if ( row.pathVelocity && (!previous || legged && (sampledGap <= 0 || sampledGap > MAX_SAMPLE_GAP_SECONDS)) ) {
+	if ( row.pathVelocity && !previous ) {
 		const [vx, vz] = row.pathVelocity, speed = hypot2( vx, vz );
 		if ( !speed ) return latest.pose;
 		let ahead = Math.min( maximumAhead, Math.max( 0, now - latest.at ) );
@@ -490,6 +468,17 @@ function displacementAnchor( input: SampleInput, atMs: number ): Pose | undefine
 
 /*
 ================
+OwnMoverFrame
+
+The main-thread mover's state for a frame (runtime/movement/local-mover.ts).
+================
+*/
+export type OwnMoverFrame =
+	| { readonly kind: "idle"; }
+	| { readonly kind: "walking" | "ended"; readonly pose: Pose; };
+
+/*
+================
 createPosePresentation
 
 The worker journal is backpressured and can deliver several fixed steps in
@@ -505,6 +494,16 @@ export function createPosePresentation() {
 	// Frame-clock seconds of the last pose served; the return frame after a
 	// long unseen gap snaps instead of recovering (MAX_UNSEEN_GAP_SECONDS).
 	let lastPoseAt: number | undefined;
+	// Port-only (own-walk-interpolation.ts): the local mover's walk drawn
+	// between its worker ticks instead of extrapolated past the newest one.
+	const ownWalks = createOwnWalkPresenter( turn );
+	// Port-only (#1440): the main-thread mover's frame, set each frame before
+	// poses are asked, for the local player and, while it rides, its mount
+	// (0x85E000: the mount is the mover, the rider sits on it; #1566); the
+	// characters it already handed back this frame; and the pose last shown
+	// per character with the frame clock it was shown at.
+	let ownMover: { gids: readonly number[]; frame: OwnMoverFrame; carried: Set<number>; } | null = null;
+	const shown = new Map<number, { pose: Pose; at: number; }>();
 
 	/*
 	================
@@ -568,7 +567,6 @@ export function createPosePresentation() {
 				moving: input.moving,
 				to: input.to,
 				pathVelocity: pathVelocity( input ),
-				ownLeg: input.ownLeg === true,
 				recoverySpeed: 0,
 				durationMs: input.durationMs,
 				displacementAtMs: input.displacement ? input.startedAtMs : undefined,
@@ -644,10 +642,10 @@ export function createPosePresentation() {
 			// the preceding display creates a correction that never happened.
 			const retainedWalk = row.moving && input.moving && input.transition?.reason === "receipt" &&
 				input.transition.logicalDistance === 0 && input.transition.pathEligible === true;
-			// A stalled frame of a walk on its admitted leg draws where the leg
-			// puts it now, as native dead reckoning does after a hitch; holding
-			// the frozen display made it sprint to catch up afterwards.
-			const preserveDisplay = stalled && !walksLeg( row ) ||
+			// A stalled frame holds the display: the local mover's own legs
+			// are the interpolated presenter's business (own-walk-
+			// interpolation.ts), and every other track parks at its bound.
+			const preserveDisplay = stalled ||
 				revisionChanged && input.transition?.reason !== "input" && !retainedWalk;
 			// A fresh publication after a main-frame gap confirms the intervening
 			// leg. Do not manufacture a parked interval inside that unseen gap.
@@ -693,7 +691,6 @@ export function createPosePresentation() {
 			row.durationMs = input.durationMs;
 			row.displacementAtMs = displacementAtMs;
 			row.pathVelocity = pathVelocity( input );
-			row.ownLeg = input.ownLeg === true;
 			// A stop may omit its leg, but outstanding display recovery still
 			// belongs to the speed of the admitted walk that reached it.
 			const walkSpeed = !input.displacement && row.pathVelocity ? hypot2( ...row.pathVelocity ) : 0;
@@ -835,6 +832,118 @@ export function createPosePresentation() {
 		return { ...row.displayed };
 	}
 
+	/*
+	================
+	presentedPose
+
+	The presenter's own pose for a character this frame.
+	================
+	*/
+	function presentedPose( gid: number, target: Pose, now: number, settledTranslation: boolean ): Pose {
+		if ( lastPoseAt !== undefined && now - lastPoseAt > MAX_UNSEEN_GAP_SECONDS ) {
+			tracks.clear();
+			ownWalks.clear();
+			rows.clear();
+		}
+		if ( lastPoseAt === undefined || now > lastPoseAt ) lastPoseAt = now;
+		const input = inputs.get( gid );
+		if ( input && originMs !== null && !settledTranslation ) {
+			if ( ownWalks.handles( input ) ) {
+				// A generic track still on file was drawn last frame: hand it over.
+				const handoff = tracks.get( gid )?.displayed;
+				tracks.delete( gid );
+				return ownWalks.pose( gid, input, target, { now, originMs, handoff } );
+			}
+			// Leaving interpolation (a skill displacement): this frame keeps
+			// the last interpolated pose and the generic track recovers from
+			// it on the next (carry).
+			const last = ownWalks.take( gid );
+			const pose = sampledPose( gid, input, target, now );
+			const track = tracks.get( gid );
+			if ( !last || !track ) return pose;
+			track.displayed = { ...last };
+			track.carried = true;
+			return { ...last };
+		}
+		ownWalks.take( gid );
+		tracks.delete( gid );
+		let row = rows.get( gid );
+		// Death navigation is already settled by the world owner. Do not spend an
+		// additional delivery interpolation interval sliding a falling corpse.
+		// Keep accepting authoritative corrections; this is not a cached death pose.
+		if ( settledTranslation && row ) {
+			row.from = { ...target };
+			row.target = { ...target };
+			row.at = now - TICK_SECONDS;
+			row.duration = TICK_SECONDS;
+			row.settled = undefined;
+		}
+
+		// Settled world transforms have no remaining interpolation or body turn.
+		// Retain the already-normalized result, not the raw region-local target;
+		// this preserves the original floating-point conversion at sector edges.
+		if (
+			row?.settled && now >= row.last && now - row.last <= .25 && row.target.regionId === target.regionId &&
+			row.target.x === target.x && row.target.y === target.y && row.target.z === target.z &&
+			row.target.angle === target.angle
+		) {
+			row.last = now;
+			return { ...row.settled };
+		}
+		if ( row ) row.settled = undefined;
+		if ( !row || now < row.last || discontinuity( row.target, target ) ) {
+			row = {
+				from: { ...target },
+				target: { ...target },
+				at: now,
+				duration: TICK_SECONDS,
+				last: now,
+				angle: target.angle,
+				moving: false
+			};
+			rows.set( gid, row );
+		} else {
+			if ( now - row.last > MAX_SAMPLE_GAP_SECONDS && row.displayed && !settledTranslation ) {
+				row.from = row.displayed;
+				row.at = now;
+			}
+			row.angle = turn( row.angle, target.angle, now - row.last );
+			row.last = now;
+			if (
+				row.target.regionId !== target.regionId || row.target.x !== target.x || row.target.y !== target.y ||
+				row.target.z !== target.z || row.target.angle !== target.angle
+			) {
+				const from = position( row, now ), interval = now - row.at;
+				row.duration = interval > .25 ?
+					TICK_SECONDS :
+					Math.min( .1, Math.max( TICK_SECONDS, interval, row.duration * .75 ) );
+				row.from = from;
+				row.target = { ...target };
+				row.at = now;
+			}
+		}
+		const result = position( row, now );
+		row.moving = poseDistance( result, row.target ) > 1e-5;
+		// Pose carries a native heading word. Keep sub-word precision internally,
+		// but do not pass fractional words to the model's strict angle decoder.
+		const output = { ...result, angle: Math.round( row.angle ) % 65536 };
+		row.displayed = { ...output };
+		if ( now - row.at >= row.duration && row.angle === target.angle ) row.settled = { ...output };
+		return output;
+	}
+	/*
+	================
+	carryPose
+	================
+	*/
+	function carryPose( gid: number, displayed: Pose ) {
+		if ( ownWalks.carry( gid, displayed ) ) return;
+		const track = tracks.get( gid );
+		if ( !track ) return;
+		track.displayed = { ...displayed };
+		track.carried = true;
+	}
+
 	return {
 		/*
 		================
@@ -855,86 +964,63 @@ export function createPosePresentation() {
 		samples( next: ReadonlyMap<number, SampleInput> ) {
 			inputs = next;
 			for ( const gid of tracks.keys() ) if ( !next.has( gid ) ) tracks.delete( gid );
+			ownWalks.retain( next );
 		},
 		/*
 		================
 		pose
+
+		The presented pose, unless the main-thread mover (#1440, port-only)
+		predicts the local player's walk this frame: then its pose, turned
+		toward its heading at the native rate (86CBA0). The presenter keeps
+		advancing underneath, and the frame the prediction ends hands the
+		drawn pose back to it (carry), so neither handover jumps.
 		================
 		*/
 		pose( gid: number, target: Pose, now: number, settledTranslation = false ): Pose {
-			if ( lastPoseAt !== undefined && now - lastPoseAt > MAX_UNSEEN_GAP_SECONDS ) {
-				tracks.clear();
-				rows.clear();
+			let mover = ownMover?.gids.includes( gid ) ? ownMover.frame : undefined;
+			if ( mover?.kind === "ended" ) {
+				// Each mover character hands its drawn pose back once.
+				if ( !ownMover!.carried.has( gid ) ) carryPose( gid, mover.pose );
+				ownMover!.carried.add( gid );
+				mover = undefined;
 			}
-			if ( lastPoseAt === undefined || now > lastPoseAt ) lastPoseAt = now;
-			const input = inputs.get( gid );
-			if ( input && originMs !== null && !settledTranslation ) {
-				return sampledPose( gid, input, target, now );
+			const presented = presentedPose( gid, target, now, settledTranslation );
+			const last = shown.get( gid );
+			let result = presented;
+			if ( mover?.kind === "walking" ) {
+				const angle = last ?
+					turn( last.pose.angle, mover.pose.angle, Math.max( 0, now - last.at ) ) :
+					mover.pose.angle;
+				result = { ...mover.pose, angle: Math.round( angle ) % 65536 };
 			}
-			tracks.delete( gid );
-			let row = rows.get( gid );
-			// Death navigation is already settled by the world owner. Do not spend an
-			// additional delivery interpolation interval sliding a falling corpse.
-			// Keep accepting authoritative corrections; this is not a cached death pose.
-			if ( settledTranslation && row ) {
-				row.from = { ...target };
-				row.target = { ...target };
-				row.at = now - TICK_SECONDS;
-				row.duration = TICK_SECONDS;
-				row.settled = undefined;
-			}
+			shown.set( gid, { pose: result, at: now } );
+			return { ...result };
+		},
+		/*
+		================
+		ownMover
 
-			// Settled world transforms have no remaining interpolation or body turn.
-			// Retain the already-normalized result, not the raw region-local target;
-			// this preserves the original floating-point conversion at sector edges.
-			if (
-				row?.settled && now >= row.last && now - row.last <= .25 && row.target.regionId === target.regionId &&
-				row.target.x === target.x && row.target.y === target.y && row.target.z === target.z &&
-				row.target.angle === target.angle
-			) {
-				row.last = now;
-				return { ...row.settled };
-			}
-			if ( row ) row.settled = undefined;
-			if ( !row || now < row.last || discontinuity( row.target, target ) ) {
-				row = {
-					from: { ...target },
-					target: { ...target },
-					at: now,
-					duration: TICK_SECONDS,
-					last: now,
-					angle: target.angle,
-					moving: false
-				};
-				rows.set( gid, row );
-			} else {
-				if ( now - row.last > MAX_SAMPLE_GAP_SECONDS && row.displayed && !settledTranslation ) {
-					row.from = row.displayed;
-					row.at = now;
-				}
-				row.angle = turn( row.angle, target.angle, now - row.last );
-				row.last = now;
-				if (
-					row.target.regionId !== target.regionId || row.target.x !== target.x || row.target.y !== target.y ||
-					row.target.z !== target.z || row.target.angle !== target.angle
-				) {
-					const from = position( row, now ), interval = now - row.at;
-					row.duration = interval > .25 ?
-						TICK_SECONDS :
-						Math.min( .1, Math.max( TICK_SECONDS, interval, row.duration * .75 ) );
-					row.from = from;
-					row.target = { ...target };
-					row.at = now;
-				}
-			}
-			const result = position( row, now );
-			row.moving = poseDistance( result, row.target ) > 1e-5;
-			// Pose carries a native heading word. Keep sub-word precision internally,
-			// but do not pass fractional words to the model's strict angle decoder.
-			const output = { ...result, angle: Math.round( row.angle ) % 65536 };
-			row.displayed = { ...output };
-			if ( now - row.at >= row.duration && row.angle === target.angle ) row.settled = { ...output };
-			return output;
+		This frame's main-thread mover state for the local player (#1440) and
+		the mount it rides, if it rides (#1566).
+		================
+		*/
+		ownMover( gid: number, frame: OwnMoverFrame, mount?: number ) {
+			ownMover = frame.kind === "idle" ?
+				null :
+				{ gids: mount === undefined ? [ gid ] : [ gid, mount ], frame, carried: new Set() };
+		},
+		/*
+		================
+		drawn
+
+		The pose last shown for a character: where a ground click's predicted
+		walk starts.
+		================
+		*/
+		drawn( gid: number ): Pose | undefined {
+			const last = shown.get( gid );
+			return last && { ...last.pose };
 		},
 		/*
 		================
@@ -946,10 +1032,7 @@ export function createPosePresentation() {
 		================
 		*/
 		carry( gid: number, displayed: Pose ) {
-			const track = tracks.get( gid );
-			if ( !track ) return;
-			track.displayed = { ...displayed };
-			track.carried = true;
+			carryPose( gid, displayed );
 		},
 		/*
 		================
@@ -960,6 +1043,8 @@ export function createPosePresentation() {
 		================
 		*/
 		moving( gid: number ) {
+			const ownMoving = ownWalks.moving( gid );
+			if ( ownMoving !== undefined ) return ownMoving;
 			const track = tracks.get( gid );
 			if ( track ) return track.moving;
 			return rows.get( gid )?.moving ?? false;
@@ -972,6 +1057,8 @@ export function createPosePresentation() {
 		retain( gids: ReadonlySet<number> ) {
 			for ( const gid of rows.keys() ) if ( !gids.has( gid ) ) rows.delete( gid );
 			for ( const gid of tracks.keys() ) if ( !gids.has( gid ) ) tracks.delete( gid );
+			for ( const gid of shown.keys() ) if ( !gids.has( gid ) ) shown.delete( gid );
+			ownWalks.retain( gids );
 		},
 		/*
 		================
@@ -981,8 +1068,11 @@ export function createPosePresentation() {
 		reset() {
 			rows.clear();
 			tracks.clear();
+			ownWalks.clear();
 			inputs = new Map();
 			lastPoseAt = undefined;
+			ownMover = null;
+			shown.clear();
 		}
 	};
 }

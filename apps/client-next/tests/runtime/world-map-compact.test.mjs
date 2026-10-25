@@ -124,3 +124,17 @@ test("the desktop keeps the authored 652 x 424 window", () => {
 	assert.deepEqual( [ box[2], box[3] ], [ 652, 424 ] );
 	assert.equal( auto[0] - box[0], AUTO_MOVE_RECT[0] );
 });
+
+test("a compact area away from the origin clamps the window to the area, not the screen", () => {
+	// Above the quickslots the compact window area starts below the
+	// phone's status rows: its origin is not the screen's origin.
+	const { box, pan, auto, source } = present( 375, 667, [ 16, 200, 340, 300 ] );
+	// 340 - 2 x 4 wide, 300 - 8 high; the resting 100,100 is clamped
+	// into the area on both axes (the far side measures from the
+	// area's origin too).
+	assert.deepEqual( box, [ 24, 200, 332, 292 ] );
+	assert.deepEqual( pan, [ box[0] + 6, box[1] + 34, box[2] - 12, box[3] - 40 ] );
+	assert.ok( auto[0] + auto[2] <= box[0] + box[2] );
+	assert.equal( box[0] + box[2] - auto[0], 652 - AUTO_MOVE_RECT[0] );
+	assert.deepEqual( source, box );
+});

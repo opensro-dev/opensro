@@ -19,6 +19,7 @@ import (
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/calendar"
+	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -56,6 +57,27 @@ type Runtime struct {
 	// InstantInventoryExpansion presents quest bag slots at the turn-in
 	// (port-only, not native; instant_expansion.go).
 	InstantInventoryExpansion bool
+	// instanceHandlers is the instanced-world handler registry
+	// (instance_handlers.go), keyed by instance definition.
+	instanceHandlers instanceHandlerTable
+	// The instanced-world doors below serve the quest programmes
+	// (rahid6.go is the first). The action lane owns parties, layers and
+	// transfers; the composition root wires these to it, binding the
+	// division there - quest code is division-agnostic, like the
+	// SpawnQuestMonster door above. All are nil in detached tests.
+	// InstanceInvite opens a layer, moves the leader in and prompts the
+	// eligible members; InstancePartyFacts answers the talk gates;
+	// InstanceReturn returns one character to its transfer anchor and
+	// InstanceClose ends a layer; PushCharacterFrames delivers frames
+	// to one character by name; NowMs is the runtime clock.
+	InstanceInvite      func(leader *enterworld.Character, call InstanceInviteCall) InstanceInviteOutcome
+	InstancePartyFacts  func(c *enterworld.Character) InstancePartyFacts
+	InstanceReturn      func(c *enterworld.Character) bool
+	InstanceClose       func(lease instance.Lease)
+	PushCharacterFrames func(name string, frames []wire.Frame)
+	NowMs               func() int64
+	// rahid6 is the Rahid 6 programme's state (rahid6.go).
+	rahid6 rahid6Programme
 }
 
 /*
@@ -339,6 +361,7 @@ func (rt *Runtime) StartQuest(character *enterworld.Character, codename string) 
 		}
 		var acceptanceItems []inventory.ItemAmount
 		acceptanceItems = acceptanceGrants(def)
+		acceptanceItems = append(acceptanceItems, rahid6AcceptanceItems(def)...)
 		supply, suppliesTraps := captureSupplyForQuest(def.Codename)
 		suppliesTraps = suppliesTraps && !supply.afterCompletion
 		if suppliesTraps {
@@ -529,6 +552,10 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 			})
 		}
 		if active && questNpcMatches(def, def.EndNpcCodename, npcCodename) && def.NotAchievedSymbol != "" {
+			if travel, offered := rt.rahid6TravelOption(character, def, npcCodename); offered {
+				completes = append(completes, travel)
+				continue
+			}
 			if supply, available := rt.captureSupplyOption(character, def, npcCodename); available {
 				completes = append(completes, supply)
 				continue

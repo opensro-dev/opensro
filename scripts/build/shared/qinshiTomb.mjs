@@ -17,7 +17,7 @@ way the flag-on server spawns them, and a flag-off bake never sees them.
 import fs from "node:fs";
 import path from "node:path";
 import { splitTextDataRow } from "./textDataIo.mjs";
-import { rebuildRoot } from "../world/paths.mjs";
+import { serverSourceRoot } from "../world/paths.mjs";
 
 /*
 ================
@@ -42,7 +42,7 @@ apps/server.
 ================
 */
 export function qinshiTombServerRoot() {
-	return path.resolve( process.env.SRO_SERVER_SOURCE_ROOT ?? path.join( rebuildRoot, "apps", "server" ) );
+	return serverSourceRoot();
 }
 
 /*

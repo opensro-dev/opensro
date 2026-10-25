@@ -151,6 +151,16 @@ func (w *wtConn) ReadFrame(ctx context.Context) (Frame, error) {
 	}
 }
 
+// wtWriteTimeout bounds one stream write, the WebSocket bound
+// (wsWriteTimeout) applied to WebTransport: WriteFrame had no deadline
+// at all, so a session's write loop could park forever on a peer that
+// stopped reading - and a resume's WELCOME queues behind that loop
+// (#1453). An expired write errors and follows the normal write-error
+// path the WebSocket shape already takes: the write loop detaches, the
+// frame keeps its stream position, and a resume re-sends it only if
+// the client's position says it never arrived (stream_ring.go).
+const wtWriteTimeout = 10 * time.Second
+
 func (w *wtConn) WriteFrame(f Frame) error {
 	select {
 	case <-w.strReady:
@@ -159,6 +169,7 @@ func (w *wtConn) WriteFrame(f Frame) error {
 	case <-w.readDone:
 		return w.getReadErr()
 	}
+	_ = w.str.SetWriteDeadline(time.Now().Add(wtWriteTimeout))
 	return WriteStreamFrame(w.str, f)
 }
 

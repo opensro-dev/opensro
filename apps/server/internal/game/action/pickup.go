@@ -174,7 +174,7 @@ func (rt *Runtime) grantPickupTo(g pickupGrant) (result OpResult) {
 	divisionID, worldKey, groundItem, characterSnapshot := g.division, g.worldKey, g.item, g.snapshot
 	picker, character := g.picker, g.recipient
 	defer func() {
-		result = routeSharedPickup(result, picker, character, g.actor == nil)
+		result = rt.routeSharedPickup(result, g)
 		// A granted pickup publishes its scoop; only then does the party learn of it.
 		if len(result.Broadcast) > 0 {
 			result.Recipients = append(result.Recipients, rt.partyLootNotice(divisionID, picker, character, groundItem, rt.Now().UnixMilli())...)

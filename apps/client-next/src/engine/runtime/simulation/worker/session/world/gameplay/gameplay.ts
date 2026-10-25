@@ -76,6 +76,7 @@ import {
 	keepsStall,
 	type InteractionApproachState
 } from "@/engine/foundation/gameplay/interaction-approach";
+import { PICKUP_EXECUTE_RANGE } from "@/engine/foundation/gameplay/approach-goal";
 import { targetNotice } from "@/engine/foundation/gameplay/target-notices";
 import { constantNativeNotice, resolveNativeNotice } from "@/engine/foundation/gameplay/native-notice";
 import {
@@ -230,7 +231,14 @@ import {
 	cosGroundRequest,
 	cosGroundResult
 } from "@/engine/foundation/gameplay/cos-container";
-import { ownCastTarget, petAssistOrders, retainedPetAssists } from "@/engine/foundation/gameplay/pet-assist";
+import {
+	advancedPetAssistCountdowns,
+	castPetAssistCountdowns,
+	haltedPetAssistCountdowns,
+	ownCastTarget,
+	petAssistOrders,
+	retainedPetAssists
+} from "@/engine/foundation/gameplay/pet-assist";
 import { cosBehaviorResult, applyCosBehavior, cosBehaviorRequest } from "@/engine/foundation/gameplay/cos-behavior";
 import { createFeedback } from "./feedback/feedback";
 import { saleResult, soldInventory, commerceJson, commerceInteger } from "@/engine/foundation/gameplay/commerce";
@@ -257,7 +265,8 @@ import {
 } from "@/engine/foundation/gameplay/skill-catalog";
 import { createCastMotionLock } from "@/engine/foundation/gameplay/cast-motion-lock";
 import { createSkillPressQueue, decidePress } from "@/engine/foundation/gameplay/skill-queue";
-import { pressAdmission } from "@/engine/foundation/gameplay/press-admission";
+import { combatAdmissionRadius, combatStopPoint, refBodyRadius } from "@/engine/foundation/gameplay/combat-spacing";
+import { equippedWeaponKind, pressAdmission } from "@/engine/foundation/gameplay/press-admission";
 import { movementHeading } from "@/engine/foundation/gameplay/native-movement";
 import {
 	bootstrapProgression,
@@ -275,16 +284,23 @@ import { createChat } from "./chat/chat";
 import { createFriends } from "./friends/friends";
 import { createLetters } from "./letters/letters";
 import { createMovement } from "./movement/movement";
-import { logoutCancelRequest, worldPointAction } from "@/engine/foundation/gameplay/direction-movement";
+import { createArrowKeys, type ArrowGate, type ArrowKeyMover } from "./arrow-keys/arrow-keys";
+import {
+	logoutCancelRequest,
+	targetActionCancel,
+	worldPointAction
+} from "@/engine/foundation/gameplay/direction-movement";
 import { createInventory } from "./inventory/inventory";
 import { createCombat } from "./combat/combat";
 import { createTargeting } from "./targeting/targeting";
-import { createMoveReservation } from "./reservation/reservation";
+import { createMoveReservation, type GroundCommand } from "./reservation/reservation";
 import { createBetaPlayerMap } from "./beta-map/beta-map";
+import { createUniqueDamageRank } from "./unique-rank/unique-rank";
 import { createPetTraining } from "./pet-training/pet-training";
 import type { GameplayCommand, GameplayState } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
 import { nearestPickable } from "@/engine/foundation/gameplay/pickup-nearest";
+import { npcRefusesWalk } from "@/engine/foundation/gameplay/npc-click-refusal";
 import {
 	INVENTORY_JOURNAL_ENTRY,
 	INVENTORY_JOURNAL_LOCAL,
@@ -315,9 +331,9 @@ function unlimitedItemIds( value: unknown ): readonly number[] {
 ================
 WorldReferences
 
-The world catalog lookups gameplay reads but does not own (entities owns
-the catalog): a character reference's country, a country's player models
-and an item reference.
+The world lookups gameplay reads but does not own (entities owns the
+catalog and the entity table): a character reference's country, a country's
+player models, an item reference and the NPCs a ground click must clear.
 ================
 */
 interface WorldReferences {
@@ -327,23 +343,30 @@ interface WorldReferences {
 	readonly monster: (
 		codename: string
 	) => import("@/engine/foundation/gameplay/gm-command").GmMonsterReference | undefined;
+	readonly npcs: () => readonly EntityState[];
 }
 
 // A dress answer may trail its bar by a server tick and the round trip.
 const JOB_DRESS_ANSWER_GRACE_MS = 5000;
 
-// grounditem.ExecuteRange: a pickup closer than this is granted in place;
-// farther away the server walks the player to the item first.
-const PICKUP_EXECUTE_RANGE = 10;
+// PICKUP_EXECUTE_RANGE lives in approach-goal.ts, its one owner.
 // The payload of a journal row no frame carried (a world entry, the tick).
 const NO_PAYLOAD = new Uint8Array( 0 );
 // How long past two round trips a sent skill press's cooldown stand-in waits
 // for its answer.
 const SKILL_ANSWER_SLACK_MS = 500;
-// A skill run-up is predicted only this far beyond the authored range: the
-// server's reach adds both bodies to it, so a target nearer than that may be
-// in its reach already and the server casts without walking.
+// The fallback aim's margin: while the snapshot carries no body radius for
+// the caster or the target, a run-up is predicted only this far beyond the
+// authored range, because the server's reach adds both bodies to it and a
+// target nearer than that may be in its reach already. With both radii the
+// stop is combat spacing's exact boundary and needs no margin.
 const SKILL_RUN_UP_MARGIN = 20;
+// The inventory socket the equipped weapon sits in. Its row's published
+// native field for action range carries the same reach the server fights
+// with (the item tooltip renders it as metres; the fight reads it raw).
+const WEAPON_SOCKET = 6;
+// Bare-handed, the server's reach is 6.
+const UNARMED_REACH = 6;
 // Movement mode 4 is seated (motion 4, which 58E0BF refuses ao/pw from).
 const MOVEMENT_SEATED = 4;
 // B2CD kind 1 admits a command (75BAA0); count 2 queues it behind an open one.
@@ -464,6 +487,14 @@ export function createGameplay(
 	// 877230: *(pDeadreckon + 0x48) deadline suppressing ground/angle movement
 	// packets for 500 ms after a ground-targeted skill press sends 0x72CD.
 	let groundSkillMoveSuppressUntil = 0;
+	// groundWalkRefusal() was null at the last step (published, #1440).
+	let walkPredictable = false;
+	// The last step's refusal was a holding gate (cast, suppress): a click
+	// now is held and walks at release, not refused (published, #1570, so
+	// the mover can record the click's aim for adoption).
+	let walkHeld = false;
+	// pickupPredictableNow() held at the last step (published, #1567).
+	let pickupPredictable = false;
 	const feedback = createFeedback();
 	const pickup = createPickup();
 	const actionSession = createActionSession();
@@ -478,6 +509,7 @@ export function createGameplay(
 		targeting = createTargeting( send ),
 		moveReservation = createMoveReservation(),
 		betaMap = createBetaPlayerMap(),
+		uniqueRank = createUniqueDamageRank(),
 		// The wolf tree's worn gear resolves through the bag's references.
 		petTraining = createPetTraining( ( ref, slot, magic ) => inventory.petGearItem( ref, slot, magic ) );
 	/*
@@ -485,6 +517,52 @@ export function createGameplay(
 sendFrame
 ================
 	*/
+	// The arrow keys' walk and turn (#1574).
+	const arrowKeys = createArrowKeys( frame => sendFrame( frame ) );
+	/*
+	================
+	arrowGate
+
+	The arrow keys' gate (arrow-keys.ts ArrowGate): the ground click's own,
+	where a cast's hold ([player+0x644] bit 2, action state 2) is told
+	apart: its press cancels the cast and waits held (0x693190, #1589).
+	================
+	*/
+	function arrowGate( now: number, local: EntityState | undefined ): ArrowGate {
+		const refusal = groundWalkRefusal( now, local );
+		if ( refusal === null ) return "open";
+		return refusal === "cast" ? "cast" : "closed";
+	}
+	/*
+	================
+	arrowMover
+
+	What the arrow keys move: the movement owner, or for a rider the ridden
+	vehicle's commands (0x85E000).
+	================
+	*/
+	function arrowMover( local: EntityState | undefined ): ArrowKeyMover {
+		const vehicle = local?.mountedOn || undefined;
+		return {
+			pose: () => movement.state().pose ?? null,
+			walkingDirection: () => {
+				const state = movement.state();
+				return state.moving && state.directionWalk !== undefined;
+			},
+			direct: ( heading, now ) => movement.direct( heading, now, vehicle ),
+			steer: ( heading, now ) => movement.steer( heading, now ),
+			stop: now => movement.stopDirection( now ),
+			// 0x693190: 0x67D140 holds the request back with two or more
+			// commands queued.
+			cancelCast: () => {
+				if ( actionSession.queued() >= 2 ) return false;
+				sendFrame( targetActionCancel() );
+				actionSession.sentCancellation();
+				return true;
+			},
+			vehicle: () => vehicle
+		};
+	}
 	function sendFrame( frame: WireFrame ): WireFrame {
 		send( frame );
 		pickup.sent( frame );
@@ -605,17 +683,21 @@ range: unknown, so not within.
 ================
 skillRunUpGoal
 
-Port-only, not native, and off by default (the Experimental window's
-Predicted run-up row). Where an admitted press on a target beyond reach
-walks the caster before its cast. The native press (6FCD50) reads no
-range: it sends the command and the server's movement acknowledgement
-walks the caster into reach (58D8F0), one round trip after the press,
-which never jumps. The prediction starts the walk at the press instead,
-but the server casts where it enters its combat spacing (both bodies plus
-the reach) while the predicted walk runs on, so the cast pulls the caster
-back. The goal stands at the authored range on the line to the target;
-the server's own walk is adopted when it arrives. Only from rest, on foot,
-alive, with no cast in flight, and within one region.
+Port-only, not native; on by default (owner 2026-10-25), and the
+Experimental window's Predicted run-up row turns it off. Where an admitted
+press on a target beyond reach walks the caster before its cast. The
+native press (6FCD50) reads no range: it sends the command and the
+server's movement acknowledgement walks the caster into reach (58D8F0),
+one round trip after the press, which never jumps. The prediction starts
+the walk at the press instead and stops it where the server casts: combat
+spacing's admission radius (combat-spacing.ts), both bodies plus the
+reach, so the cast's settle finds the caster already standing there and
+nothing pulls back. While the snapshot carries no body radius for the
+caster or the target, the goal keeps the authored-range aim and its
+margin. A row that asks for a caster range parameter returns no goal at
+all (its reach can outgrow every aim computed here). The server's own
+walk is adopted when it arrives. Only from rest, on foot, alive, with no
+cast in flight, and within one region.
 ================
 	*/
 	function skillRunUpGoal(
@@ -630,7 +712,25 @@ alive, with no cast in flight, and within one region.
 			local.appearanceState?.[0] === 2 || localCastHolds( now ) || target.regionId !== pose.regionId ||
 			target.kind === "monster" && target.appearanceState?.[0] === 2
 		) return null;
+		// A row that asks for a caster range parameter starts no prediction:
+		// the server adds the caster's value to the reach, so its boundary
+		// can sit beyond every aim the client can compute from the authored
+		// range - the spacing stop and the margin aim alike - and any walk
+		// aimed short of it is overrun exactly as before. The press stays
+		// server-led, as natively. (A reach cut only shortens the server's
+		// boundary, so it cannot cause an overrun and needs no gate.)
+		if ( metadata.rangeBonus ) return null;
 		const dx = target.x - pose.x, dz = target.z - pose.z, distance = Math.hypot( dx, dz );
+		const casterRadius = refBodyRadius( local.kind, bodyRadii.get( local.refObjId ), 0 );
+		const targetRadius = refBodyRadius( target.kind, bodyRadii.get( target.refObjId ), target.rarity ?? 0 );
+		const admission = casterRadius === undefined || targetRadius === undefined ?
+			undefined :
+			combatAdmissionRadius( casterRadius, targetRadius, metadata.range );
+		if ( admission !== undefined ) {
+			if ( distance <= admission ) return null;
+			const stop = combatStopPoint( pose.x, pose.z, target.x, target.z, admission );
+			return { regionId: pose.regionId, x: stop.x, y: target.y, z: stop.z, angle: pose.angle };
+		}
 		if ( distance <= metadata.range + SKILL_RUN_UP_MARGIN ) return null;
 		const walk = (distance - metadata.range) / distance;
 		return {
@@ -640,6 +740,129 @@ alive, with no cast in flight, and within one region.
 			z: pose.z + dz * walk,
 			angle: pose.angle
 		};
+	}
+	/*
+================
+basicAttackRow
+
+The basic-attack row the server resolves this click to: the first learned
+row marked a pinned base attack whose weapon kinds admit the equipped
+weapon, the same scan resolveBasicAttack makes over the character's
+skills. Undefined while no learned row matches - the server then refuses
+or transforms the attack, and the click stays server-led.
+================
+	*/
+	function basicAttackRow(): SkillMetadata | undefined {
+		const kind = equippedWeaponKind( inventory.state().inventory );
+		for ( const id of bindings.skills ) {
+			const row = catalog.find( candidate => candidate.id === id );
+			if ( !row?.basicAttack || !row.admit ) continue;
+			const [first, second] = row.admit.weaponKinds;
+			if ( first === 0xff && second === 0xff || first === kind || second === kind ) return row;
+		}
+		return undefined;
+	}
+	/*
+================
+rangeUpActive
+
+Whether a range-up effect stands on the local player: its buff feeds the
+attack-range keeper, which then replaces the weapon's range for every
+basic attack (skillActionReach) by an amount the client cannot compute.
+The chase proves its reach only while none stands.
+================
+	*/
+	function rangeUpActive(): boolean {
+		return combat.state().attachedEffects.some( effect =>
+			effect.gid === localGid && catalog.find( row => row.id === effect.skill )?.rangeUp
+		);
+	}
+	/*
+================
+equippedReach
+
+The reach the server allows the local player's basic attack: the equipped
+weapon's published action range, or the bare-hand reach with no weapon
+equipped. A weapon row that carries no range resolves nothing - the server
+may be fighting with data the client does not hold, and the click stays
+server-led.
+================
+	*/
+	function equippedReach(): number | undefined {
+		const row = inventory.state().inventory.find( item => item.slot === WEAPON_SOCKET );
+		if ( !row ) return UNARMED_REACH;
+		const reach = row.tooltip?.fields.actionRange23c;
+		return typeof reach === "number" && Number.isFinite( reach ) && reach >= 0 ? reach : undefined;
+	}
+	/*
+================
+chaseAttack
+
+Port-only, not native; the Predicted run-up row (predictedRunUp, on by
+default) is its switch. Where an attack click's chase begins, and whether
+the click is prediction-owned (true) or settles as it does today (false).
+The native click sends the command and the server walks the player to the
+target, one round trip after the click; the prediction starts that walk at
+the click instead, aimed at combat spacing's admission boundary, and the
+server's own walk is adopted when it arrives. Only where the spacing fully
+resolves (both bodies and the weapon's reach); anything else stays
+server-led exactly as today. A click while a chase is already predicted
+re-aims the leg at the new target, as the server's follow switches; a
+click on a target already inside the spacing settles the leg here, where
+the server attacks in place.
+
+The reach is claimed only where the client can prove it equals the
+server's (skillActionReach): the resolved basic row's authored range when
+it carries one, else the weapon's published range. A basic row that asks
+for a caster range parameter, one carrying range-up of its own, or any
+range-up effect standing on the caster lets the server cast from beyond
+every aim computed here, so those clicks start no chase - the same
+discipline as the run-up's rangeBonus gate. (A reach cut, Myopia, only
+shortens the server's boundary: the adoption glides forward, never back.)
+================
+	*/
+	function chaseAttack(
+		target: EntityState,
+		local: EntityState | undefined,
+		now: number
+	): boolean {
+		const pose = movement.state().pose;
+		if (
+			!predictedRunUp || !pose || !local || local.mountedOn ||
+			local.appearanceState?.[0] === 2 || target.regionId !== pose.regionId ||
+			target.kind === "monster" && target.appearanceState?.[0] === 2
+		) return false;
+		const open = movement.approachPredictedSince() !== undefined;
+		if ( !open && (movement.state().moving || localCastHolds( now )) ) return false;
+		const basic = basicAttackRow();
+		if ( !basic || basic.rangeBonus || basic.rangeUp || rangeUpActive() ) return false;
+		const reach = basic.range ?? equippedReach();
+		if ( reach === undefined ) return false;
+		const casterRadius = refBodyRadius( local.kind, bodyRadii.get( local.refObjId ), 0 );
+		const targetRadius = refBodyRadius( target.kind, bodyRadii.get( target.refObjId ), target.rarity ?? 0 );
+		const admission = casterRadius === undefined || targetRadius === undefined ?
+			undefined :
+			combatAdmissionRadius( casterRadius, targetRadius, reach );
+		if ( admission === undefined ) return false;
+		if ( planarDistance( pose, target ) <= admission ) {
+			if ( !open ) return false;
+			movement.settlePrediction( now );
+			chase = undefined;
+			return true;
+		}
+		const stop = combatStopPoint( pose.x, pose.z, target.x, target.z, admission );
+		const goal: import("@/engine/contracts/gameplay").Pose = {
+			regionId: pose.regionId,
+			x: stop.x,
+			y: target.y,
+			z: stop.z,
+			angle: pose.angle
+		};
+		if ( open ? !movement.retargetPrediction( goal, now ) : !movement.predictApproach( goal, now, true ) ) {
+			return false;
+		}
+		chase = { gid: target.gid, admission, stopX: stop.x, stopZ: stop.z };
+		return true;
 	}
 	/*
 ================
@@ -695,6 +918,90 @@ scroll's kind-0 row does not.
 			returnScroll?.skillId !== undefined;
 	}
 	/*
+	================
+	frozen
+
+	85C590 freeze leaves action state 9, which disables navigation. Sleep and
+	stun do not. The mask is the same word 0x36C7 and 0x33A6 write.
+	================
+	*/
+	function frozen(): boolean {
+		return ((combat.state().vitals.find( v => v.gid === localGid )?.abnormal ?? 0) & 1) !== 0;
+	}
+	/*
+	================
+	castLocked
+
+	The local player's cast holds a world click until its action window ends
+	(the click is reserved, not walked).
+	================
+	*/
+	function castLocked( now: number ): boolean {
+		return castMotion.locked( combat.state().casts, localGid, now, !actionSession.released() );
+	}
+	/*
+	================
+	groundWalkRefusal
+
+	Why a ground click now would not start a walk at once, or null when it
+	would. command() asks these same predicates for a ground click, in its own
+	order around its side effects; the published walkPredictable is this
+	answer, so the main-thread mover (#1440) predicts only a click the worker
+	walks. A rider's click walks the mount (CCharactor_GetActiveMoverEntity
+	0x85E000) only while the ridden COS is the live active one, as command()
+	requires (#1566).
+	================
+	*/
+	function groundWalkRefusal( now: number, local: EntityState | undefined ): string | null {
+		if ( protocol !== 1 ) return "protocol";
+		if ( !local ) return "absent";
+		if ( local.appearanceState?.[0] === 2 ) return "dead";
+		if ( combat.guidedActive( localGid, now ) ) return "guided";
+		// Seated outranks the suppress window: the native handler stands
+		// before any goal is stored, so a seated click is never the held
+		// kind the mover records (#1570).
+		if ( local.movementMode === MOVEMENT_SEATED ) return "seated";
+		if ( now < groundSkillMoveSuppressUntil ) return "suppressed";
+		if ( teleportMode === 1 ) return "teleport";
+		if ( interactionBlocked() ) return "blocked";
+		if ( frozen() ) return "frozen";
+		if ( castLocked( now ) ) return "cast";
+		if ( local.mountedOn && (!activeCos || activeCos.gid !== local.mountedOn || activeCos.dead) ) return "mounted";
+		return null;
+	}
+	/*
+	================
+	holdGroundClick
+
+Resolves a ground click at click time and holds it in the move
+reservation until every gate that held it clears (step's release): its
+ray belongs to the camera at click time, and the destination marker
+appears when the player clicks. A direction pick holds the raw command,
+re-resolved at release from wherever the player then stands.
+	================
+	*/
+	function holdGroundClick( command: GameplayCommand ): void {
+		if ( command.kind !== "move" && command.kind !== "ground-move" ) return;
+		let held: GroundCommand = command;
+		let decalPose = command.kind === "move" ? { ...command.destination } : null;
+		if ( command.kind === "ground-move" ) {
+			const state = movement.state();
+			if ( !state.pose ) return;
+			const action = worldPointAction( state.pose, movement.pick( command.query ), command.query, false );
+			if ( action.kind === "none" ) return;
+			if ( action.kind === "walk-to" ) {
+				held = { kind: "move", destination: action.destination };
+				decalPose = { ...action.destination };
+			}
+		}
+		// The release replays the click through StartGroundMove's NPC test
+		// (878600); one it refuses now holds nothing and draws no marker.
+		if ( held.kind === "move" && npcRefusesWalk( held.destination, worldReferences.npcs() ) ) return;
+		moveReservation.hold( held );
+		selectionDecal = decalPose ? { kind: "ground", pose: decalPose } : null;
+		dirty = true;
+	}
+	/*
 ================
 presentedStorage
 
@@ -747,8 +1054,14 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	const cosItemRefs = new Map<number, number>(), cosItemCaps = new Map<number, number>();
 	const cosRefs = new Map<number, number>(),
 		cosRecords = new Map<number, import("@/engine/contracts/gameplay").CosRecord>();
+	// Each ref row's body radius (the bootstrap's bodyRadius): the spacing a
+	// predicted run-up stops at (combat-spacing.ts).
+	const bodyRadii = new Map<number, number>();
 	// Each owned attack pet's assist target (+0xAB2C, pet-assist.ts).
 	let petAssists: ReadonlyMap<number, number> = new Map();
+	// Each halted pet's assist countdown deadline (+0xAB30, pet-assist.ts);
+	// no entry while no countdown runs.
+	let petAssistCountdowns: ReadonlyMap<number, number> = new Map();
 	let uniqueRefs = uniqueReferences( {} );
 	let gmReplies: readonly (GmReply & { sequence: number; })[] = [];
 	let gmSequence = 0;
@@ -782,7 +1095,8 @@ attack can arrive in the same batch as the previous close and starve the walk.
 		country: () => undefined,
 		playerModels: () => [],
 		item: () => undefined,
-		monster: () => undefined
+		monster: () => undefined,
+		npcs: () => []
 	};
 	// The session's catalog is fixed; one list per country keeps the
 	// published state's identity stable.
@@ -841,6 +1155,11 @@ fails; retry persistence without restoring stale slot occupancy.
 	// The skill a predicted run-up was pressed for (skillRunUpGoal), and
 	// whether the Experimental row predicts run-ups at all.
 	let runUpSkill = 0, predictedRunUp = false;
+	// The target a predicted attack chase (chaseAttack) was clicked for, the
+	// admission radius it walks to, and the stop it last aimed at; undefined
+	// while no chase prediction is open. The step re-aims it as the target
+	// moves and clears it when the prediction closes.
+	let chase: { gid: number; admission: number; stopX: number; stopZ: number; } | undefined;
 	// The Experimental "Job kill notices" row: on unless the window turns it
 	// off (experimentalGameplay).
 	let jobKillNotices = true;
@@ -947,6 +1266,8 @@ reuse gate as manual activation. Recovery completion is server-owned.
 	}
 
 	let localGid = 0, revision = 0, dirty = false, protocol = 0, localCountry: number | undefined;
+	// When the open inventory transaction was first seen pending (step clock).
+	let inventorySince: number | undefined;
 	/*
 ================
 localCastHolds
@@ -994,6 +1315,25 @@ so the race marks never depend on the member being in view.
 	}
 	/*
 ================
+pickupPredictableNow
+
+The state half of predictPickupRunUp's gate, shared with the snapshot's
+pickupPredictable: a pickup click now would reach the run-up and start
+it. The dispatch gates that intercept a pickup first (teleport mode,
+seated) and the run-up's own holds (a live cast incl. a held wall or
+chain root, any mount, death) all close it; it differs from the ground
+click's gate (groundWalkRefusal) exactly there, so the main-thread
+mover predicts a pickup leg only when the worker walks one (#1567).
+The item's space and range are per-click and stay with the callers.
+================
+	*/
+	function pickupPredictableNow( now: number, local: EntityState | undefined ): boolean {
+		return protocol === 1 && teleportMode !== 1 &&
+			local?.movementMode !== MOVEMENT_SEATED && !local?.mountedOn &&
+			local?.appearanceState?.[0] !== 2 && !localCastHolds( now );
+	}
+	/*
+================
 predictPickupRunUp
 
 A pickup beyond reach is a walk the server drives: it answers 0x72CD with
@@ -1004,7 +1344,7 @@ and a refusal walks it back (movement.predictApproach).
 	*/
 	function predictPickupRunUp( entity: EntityState, local: EntityState | undefined, now: number ) {
 		const pose = movement.state().pose;
-		if ( !pose || localCastHolds( now ) || local?.mountedOn || local?.appearanceState?.[0] === 2 ) return;
+		if ( !pose || !pickupPredictableNow( now, local ) ) return;
 		if ( !sameCoordinateSpace( entity.regionId, pose.regionId ) ) return;
 		if ( planarDistance( pose, entity ) <= PICKUP_EXECUTE_RANGE ) return;
 		movement.predictApproach(
@@ -1018,12 +1358,14 @@ selectEntity
 
 Request selection in reach or after approach. A coalesced click has no reply
 coming, so retain its menu, dialogue and lock until a new request.
+692BC8 skips the same NPC only while its window (+0x6D) is visible; after a
+storage action hid it, the click selects again and shows the menu.
 ================
 	*/
 	function selectEntity( entity: EntityState, now: number ) {
 		const frame = targeting.select( entity.gid, now, entity.kind, {
 			fortress: !!entity.teleport?.fortressId,
-			reopen: npcConversation.state().phase === "closed"
+			reopen: npcConversation.state().phase === "closed" || npcConversation.window().hidden
 		} );
 		if ( frame ) npcConversation.clear();
 		markTarget( entity );
@@ -1100,8 +1442,11 @@ selected entities, cooldowns or world-entry state.
 		journalRows = null;
 		journalBag = new Map();
 		groundSkillMoveSuppressUntil = 0;
+		walkPredictable = false;
+		walkHeld = false;
 		moveReservation.clear();
 		betaMap.clear();
+		uniqueRank.clear();
 		petTraining.clear();
 		partyMatching = emptyPartyMatching();
 		entryVitals = {};
@@ -1163,8 +1508,10 @@ selected entities, cooldowns or world-entry state.
 		jobAliasChecked = null;
 		cosRecords.clear();
 		petAssists = new Map();
+		petAssistCountdowns = new Map();
 		cosSelection.reset();
 		cosRefs.clear();
+		bodyRadii.clear();
 		cosItemRefs.clear();
 		cosItemCaps.clear();
 		cosItemRefs2.clear();
@@ -1187,6 +1534,17 @@ enterMusic
 		*/
 		enterMusic() {
 			musicMode = fortressMusicActive( fortress ) ? 3 : 0;
+			dirty = true;
+		},
+		/*
+================
+invalidate
+
+The entity journal compacted its queue into a resync: the next take
+republishes the whole state behind it, catalogue included.
+================
+		*/
+		invalidate() {
 			dirty = true;
 		},
 		/*
@@ -1380,8 +1738,10 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 			cosError = null;
 			cosRecords.clear();
 			petAssists = new Map();
+			petAssistCountdowns = new Map();
 			cosSelection.reset();
 			cosRefs.clear();
+			bodyRadii.clear();
 			cosItemRefs.clear();
 			cosItemCaps.clear();
 			for (
@@ -1393,6 +1753,10 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 				const row of (value as { refObjSnapshot?: { refObjId: number; kind: string; tidWord: number; }[]; })
 					.refObjSnapshot ?? []
 			) if ( row.kind === "cos" ) cosRefs.set( row.refObjId, row.tidWord );
+			for (
+				const row of (value as { refObjSnapshot?: { refObjId: number; bodyRadius?: number; }[]; })
+					.refObjSnapshot ?? []
+			) if ( row.bodyRadius !== undefined ) bodyRadii.set( row.refObjId, row.bodyRadius );
 			for (
 				const row
 					of (value as { refItemSnapshot?: { refObjId: number; nativeFields?: { maxStack?: number; }; }[]; })
@@ -1420,6 +1784,7 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 				simulationProtocolVersion?: number;
 			}).simulationProtocolVersion ?? 0;
 			movement.clear();
+			arrowKeys.clear();
 			movement.mode(
 				(value as {
 					character?: {
@@ -1696,8 +2061,17 @@ state here before a command can claim a native wire conversation.
 			) return null;
 			if (
 				now < groundSkillMoveSuppressUntil &&
-				(command.kind === "move" || command.kind === "ground-move")
-			) return null;
+				(command.kind === "move" || command.kind === "ground-move") &&
+				local?.movementMode !== MOVEMENT_SEATED
+			) {
+				// The 500 ms send cooldown (+0x48) holds the click's goal,
+				// as the native controller holds it: the click walks at
+				// the window's end instead of dying here. A seated click
+				// falls through: the native handler stands before any goal
+				// is stored (0x6933bd), window or not.
+				holdGroundClick( command );
+				return null;
+			}
 			if (
 				teleportMode === 1 && [ "move", "ground-move", "attack", "skill", "pickup" ].includes( command.kind )
 			) return null;
@@ -1870,20 +2244,28 @@ state here before a command can claim a native wire conversation.
 				const target = targeting.state();
 				// The storage row exists only on a selected warehouse NPC (0x4).
 				if ( !localGid || target.target !== command.gid || !((target.targetCapabilities ?? 0) & 4) ) {
+					// The HUD hid the window on the click; a refusal owes it a
+					// newer receipt marked shown, or that hide is never lifted.
+					npcConversation.showWindow();
 					throw Error( "Select a warehouse NPC" );
 				}
-				storage.open( command.gid );
+				npcConversation.hideWindow();
 				dirty = true;
+				storage.open( command.gid );
 				return null;
 			}
 			if ( command.kind === "storage-open-guild" ) {
 				const target = targeting.state();
 				// The warehouse row exists only on a selected guild manager (0x4000).
 				if ( !localGid || target.target !== command.gid || !((target.targetCapabilities ?? 0) & 0x4000) ) {
+					// The HUD hid the window on the click; a refusal owes it a
+					// newer receipt marked shown, or that hide is never lifted.
+					npcConversation.showWindow();
 					throw Error( "Select a guild manager" );
 				}
-				storage.openGuild( command.gid );
+				npcConversation.hideWindow();
 				dirty = true;
+				storage.openGuild( command.gid );
 				return null;
 			}
 			if ( command.kind === "compensation-dismiss" ) {
@@ -1995,8 +2377,9 @@ state here before a command can claim a native wire conversation.
 				}
 			}
 			if ( command.kind === "debug-weather" ) {
-				// The console's weather rows write the worker's weather
-				// slot, behind the same GM gate as the gm-command family.
+				// The console's weather rows drive the console weather
+				// slot (event-environment.ts), behind the same GM gate
+				// as the gm-command family.
 				if ( !eligibility.gm ) return null;
 				environment = debugWeather( environment, command.mode, command.amount );
 				dirty = true;
@@ -2031,18 +2414,17 @@ state here before a command can claim a native wire conversation.
 				cancelActionForMovement();
 				if ( command.kind === "ground-move" && command.departing ) sendFrame( logoutCancelRequest() );
 			}
-			// 85C590 freeze leaves action state 9, which disables navigation.
-			// Sleep and stun do not. The mask is the same word 0x36C7 and 0x33A6 write.
-			if (
-				(combat.state().vitals.find( v => v.gid === localGid )?.abnormal ?? 0) & 1 &&
-				[ "move", "ground-move" ].includes( command.kind )
-			) return null;
-			// 6933a6 ground click / 692d19 entity click: seated interaction
-			// requests stand and RETURNS. It must not also predict travel.
+			if ( frozen() && [ "move", "ground-move" ].includes( command.kind ) ) return null;
+			// 693392..6933bd ground click / 692d07..692d1e entity click:
+			// seated interaction requests stand and RETURNS before any
+			// goal is stored, so the click is dropped, not walked later;
+			// it must not also predict travel.
 			if (
 				local?.movementMode === MOVEMENT_SEATED &&
 				[ "move", "ground-move", "select", "attack", "pickup" ].includes( command.kind )
-			) return sendFrame( { opcode: 0x7017, payload: Uint8Array.of( 4 ) } );
+			) {
+				return sendFrame( { opcode: 0x7017, payload: Uint8Array.of( 4 ) } );
+			}
 
 			if (
 				command.kind === "party-match-page" || command.kind === "party-match-join" ||
@@ -2647,30 +3029,29 @@ state here before a command can claim a native wire conversation.
 				if ( emote === null ) throw Error( "Action is unavailable" );
 				return sendFrame( { opcode: 0x324b, payload: Uint8Array.of( emote ) } );
 			}
+			if ( command.kind === "arrow-key" ) {
+				// 0x680A30: a press walks only where a click would (the same
+				// gates); a release always ends what its press started.
+				const frame = arrowKeys.key(
+					command.key,
+					command.down,
+					now,
+					arrowMover( local ),
+					arrowGate( now, local )
+				);
+				if ( frame ) {
+					pickup.clear();
+					selectionDecal = null;
+				}
+				dirty = true;
+				return frame;
+			}
 			if ( command.kind === "ground-move" || command.kind === "move" ) {
 				if ( protocol !== 1 ) {
 					throw new Error( "Server does not support simulation protocol 1" );
 				}
-				if ( castMotion.locked( combat.state().casts, localGid, now, !actionSession.released() ) ) {
-					// Resolve the click now, not when the cast releases: its ray belongs
-					// to the camera at click time, and the destination marker appears
-					// when the player clicks. A direction walk keeps its query.
-					let held: typeof command = command;
-					if ( command.kind === "ground-move" ) {
-						const state = movement.state();
-						if ( !state.pose ) return null;
-						const action = worldPointAction(
-							state.pose,
-							movement.pick( command.query ),
-							command.query,
-							false
-						);
-						if ( action.kind === "none" ) return null;
-						if ( action.kind === "walk-to" ) held = { kind: "move", destination: action.destination };
-					}
-					moveReservation.hold( held );
-					selectionDecal = held.kind === "move" ? { kind: "ground", pose: { ...held.destination } } : null;
-					dirty = true;
+				if ( castLocked( now ) ) {
+					holdGroundClick( command );
 					return null;
 				}
 				if ( local?.mountedOn && (!activeCos || activeCos.gid !== local.mountedOn || activeCos.dead) ) {
@@ -2692,6 +3073,8 @@ state here before a command can claim a native wire conversation.
 					if ( action.kind === "none" ) return null;
 					if ( action.kind === "walk-direction" ) {
 						const frame = movement.direct( action.heading, now, cosGid );
+						// A walk that starts now supersedes any held click.
+						moveReservation.clear();
 						pickup.clear();
 						selectionDecal = null;
 						return frame;
@@ -2699,6 +3082,9 @@ state here before a command can claim a native wire conversation.
 					destination = action.destination;
 				}
 				if ( !destination ) return null;
+				// 878600: a point within 20 units of an NPC or guard starts no walk.
+				if ( npcRefusesWalk( destination, worldReferences.npcs() ) ) return null;
+				moveReservation.clear();
 				const frame = movement.request( destination, now, cosGid );
 				pickup.clear();
 				selectionDecal = { kind: "ground", pose: { ...destination } };
@@ -3001,7 +3387,10 @@ state here before a command can claim a native wire conversation.
 			// local walk at the same point (movement.holdForCast).
 			if ( command.kind === "attack" ) {
 				const frame = combat.attack( entity.gid );
-				movement.holdForCast( now );
+				// The chase the server is about to walk is predicted from the
+				// click (chaseAttack); where it cannot be, the click settles
+				// the local walk as it always has.
+				if ( !chaseAttack( entity, local, now ) ) movement.holdForCast( now );
 				markTarget( entity );
 				return sendFrame( frame );
 			}
@@ -3110,6 +3499,10 @@ Packet handling must not depend on which HUD panel is currently open.
 					);
 				}
 				if ( betaMap.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
+				if ( uniqueRank.receive( frame, uniqueRefs ) ) {
 					dirty = true;
 					return true;
 				}
@@ -4120,7 +4513,23 @@ Packet handling must not depend on which HUD panel is currently open.
 					} ),
 					target = targeting.receive( frame.opcode, frame.payload ),
 					fight = combat.receive( frame.opcode, frame.payload, now );
-				if ( item ) cosPickup.spaceChanged();
+				if ( item ) {
+					cosPickup.spaceChanged();
+					// A settled move can change the suit the server stamps
+					// own chat lines with; the dedupe name follows it.
+					chat.equipment( inventory.state().inventory );
+				}
+				if ( frame.opcode === 0xb2f5 && frame.payload.length >= 4 ) {
+					// 775B50 (0x775BDE): a halt naming an owned pet that holds
+					// an assist target starts its countdown (+0xAB30).
+					petAssistCountdowns = haltedPetAssistCountdowns(
+						petAssistCountdowns,
+						new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
+							.getUint32( 0, true ),
+						petAssists,
+						now
+					);
+				}
 				if ( fight && frame.opcode === 0xb245 ) {
 					// 776830: the local player's own cast of a skill that assists,
 					// at a target in the world, sends its attack pets in.
@@ -4165,6 +4574,12 @@ Packet handling must not depend on which HUD panel is currently open.
 				if ( frame.opcode === 0xb245 && frame.payload[0] === 2 ) {
 					groundSkillMoveSuppressUntil = 0;
 					movement.castRefused( now );
+				}
+				if ( frame.opcode === 0xb245 ) {
+					// 776830 (0x7769D8): an opened cast by an owned pet cancels
+					// its halt countdown (+0xAB30 = -1); the pet keeps its
+					// target. The entry gates live in castPetAssistCountdowns.
+					petAssistCountdowns = castPetAssistCountdowns( petAssistCountdowns, frame.payload );
 				}
 				if ( item && cast ) returnScroll = cast;
 				if ( returnScroll?.skillId && (fight || item && cast) ) {
@@ -4368,6 +4783,26 @@ Packet handling must not depend on which HUD panel is currently open.
 		},
 		/*
 ================
+outstandingSince
+
+When the oldest request still waiting for its answer left (a movement
+command, the open inventory transaction or a pending target select or
+release), or undefined. The world
+session reads it to tell a stalled connection from a lost answer.
+================
+		*/
+		noteInput: movement.noteInput,
+		outstandingSince(): number | undefined {
+			// Every lane whose lost answer resumes the session (world.ts
+			// lostAnswer): moves, the inventory transaction (mall purchases
+			// included, inventory busy()), and a pending target select or
+			// release (#1472).
+			const since = [ movement.oldestPendingSentAt(), inventorySince, targeting.waitingSince() ]
+				.filter( ( at ): at is number => at !== undefined );
+			return since.length ? Math.min( ...since ) : undefined;
+		},
+		/*
+================
 step
 
 Advance deadlines on the worker clock after queued packets commit and
@@ -4375,13 +4810,41 @@ before take assembles the presentation snapshot.
 ================
 		*/
 		step( now: number, local?: EntityState ) {
-			if ( petAssists.size ) {
+			inventorySince = inventory.state().inventoryPending ? inventorySince ?? now : undefined;
+			if ( arrowKeys.step( now, arrowMover( local ), arrowGate( now, local ) === "open" ) ) {
+				pickup.clear();
+				selectionDecal = null;
+			}
+			// A turn changes the facing every tick, walking or standing: publish
+			// it (a standing turn moves nothing else that would).
+			if ( arrowKeys.rate() ) dirty = true;
+			// A gate can open or close with no command or frame (a cast's action
+			// window ends): republish when the answer changes.
+			const refusal = groundWalkRefusal( now, local );
+			const predictable = refusal === null;
+			const held = refusal === "cast" || refusal === "suppressed";
+			if ( predictable !== walkPredictable || held !== walkHeld ) {
+				walkPredictable = predictable;
+				walkHeld = held;
+				dirty = true;
+			}
+			const pickupOpen = !!local && pickupPredictableNow( now, local );
+			if ( pickupOpen !== pickupPredictable ) {
+				pickupPredictable = pickupOpen;
+				dirty = true;
+			}
+			if ( petAssists.size || petAssistCountdowns.size ) {
 				const targets = new Map<number, EntityState>();
 				for ( const target of petAssists.values() ) {
 					const row = readEntity( target );
 					if ( row ) targets.set( target, row );
 				}
 				petAssists = retainedPetAssists( petAssists, new Set( cosRecords.keys() ), targets );
+				// 77DFA0: a halt countdown that reaches zero forgets the
+				// pet's assist target; one whose target is gone resets.
+				const advanced = advancedPetAssistCountdowns( petAssists, petAssistCountdowns, now );
+				petAssists = advanced.assisting;
+				petAssistCountdowns = advanced.countdowns;
 			}
 			const warNext = advanceGuildWarClock( social, now );
 			if ( warNext !== social ) {
@@ -4424,12 +4887,13 @@ before take assembles the presentation snapshot.
 			) {
 				sendFrame( frame );
 			}
-			// A click held through the cast walks as soon as the caster leaves
-			// action state 2 (the skill's action window ends or it is cancelled);
-			// death forfeits it.
+			// A held click walks as soon as every gate that held it clears:
+			// the caster leaves action state 2 (the skill's action window
+			// ends or it is cancelled) and the ground-skill suppress window
+			// runs out. Death forfeits it.
 			if (
-				moveReservation.holding() &&
-				!castMotion.locked( combat.state().casts, localGid, now, !actionSession.released() )
+				moveReservation.holding() && !castLocked( now ) &&
+				now >= groundSkillMoveSuppressUntil
 			) {
 				const held = moveReservation.take()!;
 				if ( !local || local.appearanceState?.[0] === 2 ) {
@@ -4529,15 +4993,48 @@ before take assembles the presentation snapshot.
 			}
 			for ( const kind of [ 0, 1, 2 ] as const ) checkAutomaticPotion( kind, now, "timer" );
 
+			// A predicted attack chase follows its target: while the target
+			// moves, the leg re-aims at its new boundary, as the server's
+			// follow re-aims its own walk. A target gone, dead, or in another
+			// region ends the follow where the walker stands. The chase
+			// clears itself when the prediction closes (adopted or answered).
+			if ( chase !== undefined ) {
+				if ( movement.approachPredictedSince() === undefined ) chase = undefined;
+				else {
+					const target = readEntity( chase.gid ), pose = movement.state().pose;
+					if (
+						!target || !pose || target.regionId !== pose.regionId ||
+						target.kind === "monster" && target.appearanceState?.[0] === 2
+					) {
+						movement.settlePrediction( now );
+						chase = undefined;
+					} else {
+						const stop = combatStopPoint( pose.x, pose.z, target.x, target.z, chase.admission );
+						if (
+							Math.hypot( stop.x - chase.stopX, stop.z - chase.stopZ ) >= 1 &&
+							movement.retargetPrediction(
+								{ regionId: pose.regionId, x: stop.x, y: target.y, z: stop.z, angle: pose.angle },
+								now
+							)
+						) {
+							chase.stopX = stop.x;
+							chase.stopZ = stop.z;
+						}
+					}
+				}
+			}
+
 			// A predicted skill run-up the server did not walk: it cast the
 			// pressed skill where the caster stood (the target was within its
 			// reach after all), or never answered. Walk back to the start the
 			// server kept. Another cast meanwhile (an imbue) is not that answer.
+			// A predicted attack chase answers the same way: its attack cast.
 			const runUpSince = movement.approachPredictedSince();
 			if (
 				runUpSince !== undefined &&
 				(combat.state().casts.some( c =>
-					c.caster === localGid && c.skill === runUpSkill && c.receivedAtMs !== undefined &&
+					c.caster === localGid && c.receivedAtMs !== undefined &&
+					(c.skill === runUpSkill || chase !== undefined && c.target === chase.gid) &&
 					c.receivedAtMs >= runUpSince && c.cancelledAtMs === undefined
 				) || now - runUpSince > 4 * skillPress.oneWayMs() + SKILL_ANSWER_SLACK_MS)
 			) movement.endPrediction( now );
@@ -4638,6 +5135,7 @@ The published plane when something changed since the last take, else null.
 			const m = movement.state(), i = inventory.state(), c = combat.state();
 			const npcState = {
 				npcConversation: npcConversation.state(),
+				npcWindow: npcConversation.window(),
 				restorationRevision: npcConversation.restorationRevision()
 			};
 			const cosVital = activeCos ? c.vitals.find( v => v.gid === activeCos!.gid ) : undefined;
@@ -4719,6 +5217,11 @@ The published plane when something changed since the last take, else null.
 				revision: ++revision,
 				localGid,
 				...m,
+				movementTurnRate: arrowKeys.rate(),
+				walkPredictable,
+				walkHeld,
+				moveHeld: moveReservation.holding(),
+				pickupPredictable,
 				...i,
 				inventoryJournal,
 				...c,
@@ -4726,6 +5229,7 @@ The published plane when something changed since the last take, else null.
 				flagWar: { timerEndsAt: flagWarTimerEndsAt, carrierGid: flagWarCarrierGid },
 				...skillPress.state(),
 				betaPlayers: betaMap.players(),
+				uniqueDamageRank: uniqueRank.current(),
 				petTraining: petTraining.state(),
 				petTailwind: petTraining.tailwind(),
 				petGuidance: petTraining.guidance(),
@@ -4752,6 +5256,8 @@ World transfer retires spatial work while retaining character/session data.
 			pickup.clear();
 			cosPickup.clear();
 			groundSkillMoveSuppressUntil = 0;
+			walkPredictable = false;
+			walkHeld = false;
 			moveReservation.clear();
 			quests.clearGathering();
 			approach = interactionApproachTransition( approach, { kind: "cancel" } );
@@ -4784,6 +5290,7 @@ World transfer retires spatial work while retaining character/session data.
 			selectionDecal = null;
 			social = withoutResurrection( { ...social, invitation: null } );
 			movement.clear();
+			arrowKeys.clear();
 			targeting.clear();
 			combat.clear( true );
 			skillPress.clear();
@@ -4795,6 +5302,7 @@ World transfer retires spatial work while retaining character/session data.
 			cosError = null;
 			cosRecords.clear();
 			petAssists = new Map();
+			petAssistCountdowns = new Map();
 			cosSelection.reset();
 			dirty = true;
 		},
@@ -4832,6 +5340,7 @@ dispose
 			clearState();
 			training.dispose();
 			cosRefs.clear();
+			bodyRadii.clear();
 			dirty = false;
 		}
 	};

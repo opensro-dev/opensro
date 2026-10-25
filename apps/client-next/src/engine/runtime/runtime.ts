@@ -19,7 +19,7 @@ import { worldCursor } from "@/engine/foundation/ui/world-cursor";
 import { experimentalGameplay, experimentalVideo } from "@/engine/foundation/ui/experimental-options";
 import { sampleWorldClock } from "@/engine/foundation/gameplay/world-clock";
 import { createWorldDoubleClick } from "@/engine/foundation/gameplay/world-double-click";
-import type { WorldClickInput } from "@/engine/contracts/input";
+import type { RawInput, WorldClickInput } from "@/engine/contracts/input";
 import { createNavigationStream } from "./navigation/navigation";
 import { createFrontend } from "./frontend/frontend";
 import { createUi } from "./ui/ui";
@@ -42,6 +42,12 @@ import { createFramePacing } from "./frame-pacing";
 import { createRenderer } from "./renderer/renderer";
 import { createViewer } from "./viewer/viewer";
 import { createSimulationHost } from "./simulation/host";
+import { ARROW_TURN_WORDS_PER_MS } from "@/engine/foundation/gameplay/direction-movement";
+import { createLocalMover, type LocalMoverFrame, type LocalMoverWorld } from "./movement/local-mover";
+import { poseDistance } from "@/engine/foundation/gameplay/native-movement";
+import { approachGoal } from "@/engine/foundation/gameplay/approach-goal";
+import type { Pose } from "@/engine/contracts/gameplay";
+import type { EntityState } from "@/engine/contracts/world";
 import type { RuntimeControl } from "@/engine/contracts/runtime";
 import { worldAudioPosition } from "@/engine/foundation/world/world-space";
 
@@ -132,10 +138,18 @@ export function startRuntime(
 		const audio = own(
 			createAudio( assets, new URL( "/", import.meta.url ).href, random, Math.trunc( performance.now() ) >>> 0 )
 		);
-		const input = createInput();
+		const input = createInput( event => arrowInput( event ) );
 		const frameWork = createFrameWork();
 		const framePacing = createFramePacing();
 		const simulation = own( createSimulationHost() );
+		// Port-only (#1440): the local player's ground-click walk stepped on the
+		// main thread, behind the Experimental "Instant own movement" row.
+		const localMover = createLocalMover();
+		let mainThreadOwnWalk = false;
+		// Simulation time zero on the frame clock, from the latest snapshot:
+		// the mover places a worker publication's pose on the frame clock with
+		// it (#1441b).
+		let simulationOriginMs: number | undefined;
 		const renderer = own(
 			createRenderer( canvas, random, audio.enqueue, diagnostics )
 		);
@@ -172,7 +186,33 @@ export function startRuntime(
 			) {
 				command = { ...command, command: { ...command.command, alt: true } };
 			}
-			simulation.session( command );
+			const seq = simulation.session( command );
+			// A move with a known destination (the GM /Pos walk; map
+			// auto-move sends the same kind) goes through the main-thread
+			// mover like a ground click (#1571): from the drawn pose,
+			// under the worker's own ground-walk gate. A foreign-region
+			// goal keeps the presenter: the mover's navigation view covers
+			// one region, and the worker walks those exactly as today.
+			if (
+				seq !== undefined && mainThreadOwnWalk &&
+				command.kind === "gameplay" && command.command.kind === "move"
+			) {
+				const game = presentation.gameplay();
+				const drawn = game ? characters.drawnPose( game.localGid ) : undefined;
+				const world = moverWorld();
+				if (
+					drawn && world.walkPredictable && world.speed !== undefined &&
+					command.command.destination.regionId === drawn.regionId
+				) {
+					localMover.predict( {
+						seq,
+						aim: { kind: "goal", destination: command.command.destination },
+						speed: world.speed,
+						drawn,
+						now: performance.now()
+					}, world );
+				}
+			}
 		}
 		/*
 		================
@@ -193,6 +233,8 @@ export function startRuntime(
 			}
 			if ( event.kind === "camera-preferences" ) input.sight( event.value );
 			if ( event.kind === "experimental-preferences" ) {
+				mainThreadOwnWalk = event.value.mainThreadOwnWalk === true;
+				if ( !mainThreadOwnWalk ) localMover.reset();
 				renderer.experimentalVideo( experimentalVideo( event.value ) );
 				simulation.session( { kind: "experimental-gameplay", value: experimentalGameplay( event.value ) } );
 			}
@@ -343,6 +385,9 @@ export function startRuntime(
 				{
 					bugReport,
 					setWorldFieldOfView: degrees => world.setFieldOfView( degrees ),
+					setCameraZoomRail: capped => input.zoomRail( capped ),
+					setFreeCamera: free => world.setFreeCamera( free ),
+					setCursorVisible: visible => platform.setCursorVisible( visible ),
 					saveExperimental: value => platform.saveExperimentalOptions( value ),
 					saveWindowPositions: value => platform.saveWindowPositions( value )
 				}
@@ -362,6 +407,74 @@ export function startRuntime(
 		*/
 		function chooseRace( race: 0 | 1 ) {
 			frontend.race( race, creationProtectorFloor( characters.uncensored( sessionState?.nativeServerName ) ) );
+		}
+		// The arrow keys held now (#1574): a press is sent once, a release only
+		// for a key whose press was sent, and losing focus releases them all.
+		const ARROW_KEYS: Readonly<Record<string, "up" | "left" | "right">> = {
+			ArrowUp: "up",
+			ArrowLeft: "left",
+			ArrowRight: "right"
+		};
+		const arrowsHeld = new Set<"up" | "left" | "right">();
+		/*
+		================
+		arrowInput
+
+		Game_OnKeyDown 0x680A30 / Game_OnKeyUp 0x688290: Up walks the facing,
+		Left and Right turn it; Down is not a movement key. A press typed into
+		a text field is the field's. The worker owns the walk and the wire
+		(arrow-keys.ts); the main-thread mover predicts the Up arrow's start
+		and stop.
+		================
+		*/
+		function arrowInput( event: RawInput ) {
+			// 0x86D480: Left turns positive and wins over Right.
+			const turnRate = () =>
+				arrowsHeld.has( "left" ) ?
+					ARROW_TURN_WORDS_PER_MS :
+					arrowsHeld.has( "right" ) ?
+					-ARROW_TURN_WORDS_PER_MS :
+					0;
+			const predicted = ( key: "up" | "left" | "right", down: boolean, seq: number | undefined ) => {
+				const drawn = mainThreadOwnWalk && seq !== undefined ?
+					characters.drawnPose( presentation.gameplay()?.localGid ?? 0 ) :
+					undefined;
+				if ( seq === undefined || !drawn ) return;
+				if ( key === "up" ) localMover.arrow( seq, down, drawn, performance.now(), moverWorld() );
+				else localMover.turn( seq, turnRate(), drawn, performance.now(), moverWorld() );
+			};
+			const release = ( key: "up" | "left" | "right" ) => {
+				arrowsHeld.delete( key );
+				predicted(
+					key,
+					false,
+					simulation.session( { kind: "gameplay", command: { kind: "arrow-key", key, down: false } } )
+				);
+			};
+			if ( event.kind === "release" ) {
+				for ( const key of [ ...arrowsHeld ] ) release( key );
+				return;
+			}
+			if ( event.kind !== "key" ) return;
+			const key = ARROW_KEYS[event.code];
+			if ( !key ) return;
+			if ( !event.down ) {
+				if ( arrowsHeld.has( key ) ) release( key );
+				return;
+			}
+			const game = presentation.gameplay();
+			if ( arrowsHeld.has( key ) || frontend.snapshot().phase !== "world" || sessionState?.phase !== "world" ) {
+				return;
+			}
+			if ( !game?.localGid || !game.pose ) return;
+			const focus = document.activeElement;
+			if ( focus instanceof HTMLInputElement || focus instanceof HTMLTextAreaElement ) return;
+			arrowsHeld.add( key );
+			predicted(
+				key,
+				true,
+				simulation.session( { kind: "gameplay", command: { kind: "arrow-key", key, down: true } } )
+			);
 		}
 		/*
 		================
@@ -424,7 +537,16 @@ export function startRuntime(
 				// Native 67AA60 reactivates the shared decal even for the same GID.
 				// The targeting owner deduplicates the wire request, not the click.
 				if ( entity.kind !== "ground-item" && !game.targetPending ) {
-					simulation.session( { kind: "gameplay", command: { kind: "select", gid: entity.gid } } );
+					const seq = simulation.session( {
+						kind: "gameplay",
+						command: { kind: "select", gid: entity.gid }
+					} );
+					const drawn = mainThreadOwnWalk && seq !== undefined ?
+						characters.drawnPose( game.localGid ) :
+						undefined;
+					if ( seq !== undefined && drawn ) {
+						predictApproachWalk( seq, entity, drawn, now, game.walkPredictable === true );
+					}
 				}
 				// 67CCA0 -> 6935F0: a double click on another player's pet may
 				// attack it; the worker applies the pet's admission (player-attack.ts).
@@ -442,14 +564,27 @@ export function startRuntime(
 						} );
 					}
 				} else if ( entity.kind === "ground-item" ) {
-					simulation.session( { kind: "gameplay", command: { kind: "pickup", gid: entity.gid } } );
+					const seq = simulation.session( {
+						kind: "gameplay",
+						command: { kind: "pickup", gid: entity.gid }
+					} );
+					const drawn = mainThreadOwnWalk && seq !== undefined ?
+						characters.drawnPose( game.localGid ) :
+						undefined;
+					if ( seq !== undefined && drawn ) {
+						predictApproachWalk( seq, entity, drawn, now, game.pickupPredictable === true );
+					}
 				}
 				return;
 			}
 			if ( doubleClick ) return;
 			const query = renderer.pickGround( x, y );
 			if ( query && game.pose ) {
-				simulation.session( { kind: "gameplay", command: { kind: "ground-move", query } } );
+				const seq = simulation.session( { kind: "gameplay", command: { kind: "ground-move", query } } );
+				const drawn = mainThreadOwnWalk && seq !== undefined ?
+					characters.drawnPose( game.localGid ) :
+					undefined;
+				if ( seq !== undefined && drawn ) localMover.click( { seq, query, drawn, now }, moverWorld() );
 			}
 		}
 		let worldPointer: readonly [number, number] | null = null, hoveredEntity: number | null = null;
@@ -464,6 +599,118 @@ export function startRuntime(
 				new URL( "/", import.meta.url ).href
 			)
 		);
+		/*
+		================
+		moverWorld
+
+		What the main-thread mover reads: the worker's latest publication and
+		the main thread's navigation view (#1439).
+		================
+		*/
+		function moverWorld(): LocalMoverWorld {
+			const game = presentation.gameplay();
+			// The worker's own cast displacement reaches the mover as a fixed
+			// aim on the frame clock (#1569): the publication's start is on the
+			// simulation clock, so place it by the same origin as poseAtMs.
+			const displacement = game?.movementDisplacement;
+			const aim: LocalMoverWorld["aim"] = displacement && simulationOriginMs !== undefined ?
+				{
+					kind: "fixed",
+					segment: {
+						from: displacement.from,
+						to: displacement.to,
+						start: displacement.startedAtMs + simulationOriginMs,
+						duration: displacement.durationMs,
+						fixedTiming: true
+					}
+				} :
+				game?.movementAim;
+			return {
+				pose: game?.pose ?? null,
+				poseAtMs: game?.poseAtMs,
+				revision: game?.movementRevision ?? 0,
+				moving: game?.moving ?? false,
+				aim,
+				speedFactor: game?.movementSpeedFactor ?? 1,
+				turnRate: game?.movementTurnRate ?? 0,
+				walkPredictable: game?.walkPredictable === true,
+				walkHeld: game?.walkHeld === true,
+				holding: game?.moveHeld === true,
+				speed: game?.movementSpeed,
+				inputSeq: game?.movementInputSeq ?? 0,
+				navigationRequestId: game?.navigationRequestId,
+				navigationOwner: game?.navigationOwner,
+				originMs: simulationOriginMs,
+				view: navigation.view()
+			};
+		}
+		/*
+	================
+	moverFrame
+
+	The mover's frame, starting the prediction on the worker's own cast
+	displacement when one is published: the cast's segment is known only
+	once the worker walks it, so the mover adopts it from the publication
+	and steps it on its own clock. The saved copy carries the
+	publication's own sequence, so it drops at once; rebuilds take the
+	segment from the publication again. A live segment only: one the lag
+	already finished stays with the presenter (#1569).
+	================
+	*/
+		function moverFrame( now: number ): LocalMoverFrame {
+			const world = moverWorld();
+			if (
+				!localMover.active() && world.aim?.kind === "fixed" &&
+				now < world.aim.segment.start + world.aim.segment.duration
+			) {
+				const drawn = characters.drawnPose( presentation.gameplay()?.localGid ?? 0 ),
+					segment = world.aim.segment;
+				if ( drawn ) {
+					localMover.predict( {
+						seq: world.inputSeq,
+						aim: world.aim,
+						speed: poseDistance( segment.from, segment.to ) / segment.duration * 1000,
+						drawn,
+						now
+					}, world );
+				}
+			}
+			return localMover.frame( now, world );
+		}
+		/*
+		================
+		predictApproachWalk
+
+		An entity click the worker answers with a walk first (#1567): a far
+		select approaches its NPC, gate or stall keeper, a far pickup walks
+		onto the item. Predict that leg from this frame, the way a ground
+		click predicts (localMover.click): approachGoal names the worker's
+		own destination from its latest pose. Each arm asks the worker's
+		own gate for its walk - a select the ground click's
+		(walkPredictable), a pickup the run-up's (pickupPredictable: a
+		live cast incl. a held wall or chain root, or any mount, closes it
+		where the ground gate may not) - so a state the worker would not
+		walk in at once predicts nothing and keeps the presenter, as
+		before. Arrival hands back through the mover's own settle: the
+		worker's interaction owns what happens there.
+		================
+		*/
+		function predictApproachWalk(
+			seq: number,
+			entity: EntityState,
+			drawn: Pose,
+			now: number,
+			gateOpen: boolean
+		): void {
+			const world = moverWorld();
+			if ( !gateOpen || !world.pose || !world.speed ) return;
+			const destination = approachGoal( world.pose, entity );
+			if ( !destination ) return;
+			localMover.predict(
+				{ seq, aim: { kind: "goal", destination }, speed: world.speed, drawn, now },
+				world
+			);
+		}
 		const characters = own(
 			createCharacterPresentation(
 				assets,
@@ -620,6 +867,7 @@ export function startRuntime(
 								world.reset();
 								navigation.reset();
 								characters.reset();
+								localMover.reset();
 								audio.reset();
 								readySent = false;
 							} else pendingWorldReset = true;
@@ -657,7 +905,8 @@ export function startRuntime(
 					// simulation time, and presentation needs it on the frame clock.
 					if ( snapshot.clock?.originMs ) {
 						bugReport.movementClock( snapshot.clock.originMs );
-						characters.simulationOrigin( snapshot.clock.originMs - performance.timeOrigin );
+						simulationOriginMs = snapshot.clock.originMs - performance.timeOrigin;
+						characters.simulationOrigin( simulationOriginMs );
 					}
 				}
 				const simulationError = simulation.error();
@@ -693,6 +942,7 @@ export function startRuntime(
 					world.reset();
 					navigation.reset();
 					characters.reset();
+					localMover.reset();
 					audio.reset();
 					readySent = false;
 				}
@@ -767,6 +1017,12 @@ export function startRuntime(
 				characters.mallOutfit(
 					worldPresented ? ui.mallPreview() : null,
 					worldPresented ? ui.skinPreview() : null
+				);
+				const moverGid = presentation.gameplay()?.localGid ?? 0;
+				characters.ownMover(
+					moverGid,
+					mainThreadOwnWalk ? moverFrame( now ) : { kind: "idle" },
+					presentation.entities().find( entity => entity.gid === moverGid )?.mountedOn || undefined
 				);
 				characters.step(
 					presentation.entities(),
@@ -925,6 +1181,12 @@ export function startRuntime(
 				const phase = sessionState?.phase ?? "signed-out";
 				const phaseTrigger = phase !== releasePhase && (phase === "signed-out" || phase === "disconnected");
 				releasePhase = phase;
+				// The server holds a world session only while it hears from this
+				// tab; a frozen background tab would let it expire (keep-awake.ts).
+				platform.setKeepAwake(
+					phase === "connecting" || phase === "entering-world" || phase === "world" ||
+						phase === "reconnecting"
+				);
 				const visibleAgain = platform.visibilityReturned(), onlineAgain = platform.connectionReturned();
 				if ( visibleAgain || onlineAgain ) {
 					world.retryTransient();

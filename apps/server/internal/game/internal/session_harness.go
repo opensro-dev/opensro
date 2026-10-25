@@ -3,6 +3,7 @@ package gametest
 
 import (
 	"bytes"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -14,6 +15,33 @@ import (
 )
 
 var barrierSequence atomic.Uint64
+
+// streamed counts the stream-position frames each test client has read,
+// across every reader: a resume presents that position, as the browser
+// client does (#1466).
+var (
+	streamedMu sync.Mutex
+	streamed   = map[*websocket.Conn]uint32{}
+)
+
+// NoteRead records a frame a test client read from conn. Readers outside
+// this package call it for every frame they decode.
+func NoteRead(conn *websocket.Conn, frame transport.Frame) {
+	if !transport.CountsOnStream(frame.Opcode) {
+		return
+	}
+	streamedMu.Lock()
+	streamed[conn]++
+	streamedMu.Unlock()
+}
+
+// StreamPosition is the stream position conn's test client has applied:
+// the LastApplied a resume from it presents.
+func StreamPosition(conn *websocket.Conn) uint32 {
+	streamedMu.Lock()
+	defer streamedMu.Unlock()
+	return streamed[conn]
+}
 
 // ActivateWorld crosses the production character-bound -> world-ready edge
 // and consumes its fixed core burst (clock, base stats, vitals). E2E
@@ -97,6 +125,7 @@ func readFrame(t *testing.T, conn *websocket.Conn, label string) transport.Frame
 	if err != nil {
 		t.Fatalf("%s: decoding ws frame: %v", label, err)
 	}
+	NoteRead(conn, frame)
 	return frame
 }
 

@@ -19,7 +19,6 @@ import (
 
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/data/store"
-	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/caravan"
 	"opensro.online/server/internal/game/companion"
@@ -217,18 +216,9 @@ func newGameplayPlane(
 		return nil, fmt.Errorf("commerce catalogue: %w", err)
 	}
 	items.ConfigureStorage(authorityStore)
-	// SRO_BETA_SILK (port-only, not native): silk earned per in-world hour,
-	// credited into the account's real wallet (action/betasilk.go).
-	betaSilkRate, err := action.BetaSilkFromEnv()
+	betaSilk, mallAuthority, err := composeBetaSilk(authorityStore, items, deps)
 	if err != nil {
 		return nil, err
-	}
-	betaSilk := action.NewBetaSilk(authorityStore, betaSilkRate)
-	var mallAuthority domain.MallAuthority = authorityStore
-	if betaSilk != nil {
-		mallAuthority = betaSilk
-		deps.EntryBetaSilk = betaSilk.Starter
-		log.Infof("item mall: beta silk ON (%s): %d silk per in-world hour", action.EnvBetaSilk, betaSilkRate)
 	}
 	// SRO_MALL_EXTRA_GOODS (port-only, not native): authored packages the
 	// v1.150 mall does not list; "off" is the shipped mall (commerce/mallextra.go).
@@ -375,7 +365,7 @@ func newGameplayPlane(
 	items.RewardParties = func(division string) []action.RewardParty {
 		var out []action.RewardParty
 		for _, p := range parties.Registry().RewardSnapshots(division) {
-			row := action.RewardParty{Order: p.ObjectOrder, Options: p.OptionBits}
+			row := action.RewardParty{Order: p.ObjectOrder, Options: p.OptionBits, LeaderID: p.LeaderID}
 			for _, m := range p.Members {
 				row.Members = append(row.Members, m.MemberID)
 			}
@@ -493,11 +483,13 @@ func connectInvitationLanes(
 ) {
 	resurrections := items.ResurrectionConsent()
 	exchanges := items.ExchangeConsent()
+	instanceInvites := items.InstanceInviteConsent()
 	parties.AddConsentArm(exchanges)
 	parties.AddConsentArm(guildInvites)
 	parties.AddConsentArm(unions)
 	parties.AddConsentArm(mentorInvites)
 	parties.AddConsentArm(resurrections)
+	parties.AddConsentArm(instanceInvites)
 
 	// A player holds one unanswered proposal at a time, whatever its
 	// lane (TransactionMgr_InsertUnique 46F420): every lane refuses to
@@ -508,29 +500,34 @@ func connectInvitationLanes(
 			unions.HasPendingInvite(divisionID, name) ||
 			mentorInvites.HasPendingInvite(divisionID, name) ||
 			resurrections.HasPendingInvite(divisionID, name) ||
-			exchanges.HasPendingInvite(divisionID, name)
+			exchanges.HasPendingInvite(divisionID, name) ||
+			instanceInvites.HasPendingInvite(divisionID, name)
 	}
 	unions.PeerPending = func(divisionID, name string) bool {
 		return partyPending(divisionID, name) ||
 			guildInvites.HasPendingInvite(divisionID, name) ||
 			mentorInvites.HasPendingInvite(divisionID, name) ||
 			resurrections.HasPendingInvite(divisionID, name) ||
-			exchanges.HasPendingInvite(divisionID, name)
+			exchanges.HasPendingInvite(divisionID, name) ||
+			instanceInvites.HasPendingInvite(divisionID, name)
 	}
 	mentorInvites.PeerPending = func(divisionID, name string) bool {
 		return partyPending(divisionID, name) ||
 			guildInvites.HasPendingInvite(divisionID, name) ||
 			unions.HasPendingInvite(divisionID, name) ||
 			resurrections.HasPendingInvite(divisionID, name) ||
-			exchanges.HasPendingInvite(divisionID, name)
+			exchanges.HasPendingInvite(divisionID, name) ||
+			instanceInvites.HasPendingInvite(divisionID, name)
 	}
 	items.ProposalPending = func(divisionID, name string) bool {
 		return partyPending(divisionID, name) ||
 			guildInvites.HasPendingInvite(divisionID, name) ||
 			unions.HasPendingInvite(divisionID, name) ||
 			mentorInvites.HasPendingInvite(divisionID, name) ||
-			exchanges.HasPendingInvite(divisionID, name)
+			exchanges.HasPendingInvite(divisionID, name) ||
+			instanceInvites.HasPendingInvite(divisionID, name)
 	}
+	parties.PartyChanged = items.NotePartyChanged
 }
 
 /*
@@ -606,6 +603,12 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	}
 	// Port-only, not native: caravans rated by cargo gold, Jangan route profit.
 	game.deps.TradeTiers = game.items.TradeTiers
+	// SRO_TELEPORT_GRACE (port-only, not native): teleport arrivals get the
+	// revival's untouchable grace from game-ready.
+	game.items.TeleportGrace = action.TeleportGraceFromEnv()
+	if game.items.TeleportGrace {
+		log.Infof("action: teleport arrivals are untouchable for the revival's grace (%s, port-only, not native)", action.EnvTeleportGrace)
+	}
 	if game.items.TradeTiers {
 		log.Infof("trade: stars by cargo gold and Jangan route profit (%s)", action.EnvTradeTiers)
 	}
@@ -625,6 +628,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.deps.FastDenReturn = game.items.FastDenReturn
 	if game.items.FastDenReturn {
 		log.Infof("return: Bandit Den scroll countdown halved (%s)", action.EnvFastDenReturn)
+	}
+	// Port-only, not native: a unique's attackers see its damage ranking.
+	game.items.UniqueDamageRank = action.UniqueDamageRankFromEnv()
+	if game.items.UniqueDamageRank {
+		log.Infof("unique: damage ranking shown at each unique kill (%s)", action.EnvUniqueDamageRank)
 	}
 	// Port-only, not native: shard notices for seal drops, high plus and job
 	// kills (announce.go).
@@ -761,6 +769,17 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		return fmt.Errorf("quest runtime: %w", err)
 	}
 	game.quests = quests
+	game.items.InstanceEventSink = func(event action.InstanceEvent) {
+		quests.DispatchInstanceEvent(quest.InstanceEvent{
+			Kind:       quest.InstanceEventKind(event.Kind),
+			Division:   event.Division,
+			Definition: event.Definition,
+			World:      event.World,
+			Name:       event.Name,
+			Gid:        event.Gid,
+			Accepted:   event.Accepted,
+		})
+	}
 	if quests.InstantInventoryExpansion = quest.InstantInventoryExpansionFromEnv(); quests.InstantInventoryExpansion {
 		log.Infof("quest: instant inventory expansion ON (%s, port-only): reward slots are usable at the turn-in", quest.EnvInstantInventoryExpansion)
 	}
@@ -768,77 +787,9 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if err := game.validateQuestMarkerRoster(); err != nil {
 		return err
 	}
-	quests.PlanInventory = game.items.PlanQuestInventory
-	quests.SpawnQuestMonster = func(character *enterworld.Character, request simulation.QuestMonsterSpawn) bool {
-		return game.items.SpawnQuestMonster(game.divisionID, character, request)
-	}
-	game.items.CanPlaceQuestTrap = quests.CanPlaceTrap
-	game.items.CaptureQuestTrap = quests.CaptureQuestTrap
-	game.items.UpdateQuestInventory = quests.InventoryUpdater()
-	game.items.UpdateQuestKill = quests.KillUpdater()
-	game.items.QuestTravelBlocks = quests.TravelBlocks
-	game.items.AdvanceQuestMinute = quests.AdvanceMinute
-	game.items.AdvanceQuestItem = quests.AdvanceItemUse
-	game.items.ForgetQuestItem = quests.ForgetItemUse
-	game.items.UseQuestItem = quests.BeginItemUse
-	game.items.ReleaseQuestCapturesOnDeath = quests.ReleaseCapturesOnDeath
-	game.items.AdvanceQuestCalendar = quests.AdvanceCalendar
-	game.items.QuestMonsterDrops = quests.MonsterDrops
-	game.items.NpcQuests = action.NpcQuestHooks{
-		Prepare: quests.PrepareNpcQuest,
-		Options: func(divisionID string, character *enterworld.Character, npcCodename string) []action.NpcQuestOption {
-			var rows []quest.NpcOption
-			var resuscitation bool
-			game.deps.Read(divisionID, func() {
-				rows = quests.OptionsForNpc(character, npcCodename)
-				resuscitation = quest.ResuscitationAvailable(character, npcCodename)
-			})
-			out := make([]action.NpcQuestOption, 0, len(rows))
-			for _, row := range rows {
-				pages := make([]action.NpcDialogPage, 0, len(row.Pages))
-				for _, page := range row.Pages {
-					pages = append(pages, action.NpcDialogPage{PromptSymbol: page.PromptSymbol, ReplySymbol: page.ReplySymbol,
-						RefuseSymbol: page.RefuseSymbol, RefuseResponseSymbol: page.RefuseResponseSymbol})
-				}
-				branches := make([]action.NpcDialogBranch, 0, len(row.Branches))
-				for _, branch := range row.Branches {
-					branches = append(branches, action.NpcDialogBranch{Codename: branch.Codename, ReplySymbol: branch.ReplySymbol,
-						AcceptResponseSymbol: branch.AcceptResponseSymbol})
-				}
-				out = append(out, action.NpcQuestOption{
-					Codename: row.Codename, TitleSymbol: row.TitleSymbol,
-					PromptSymbol: row.PromptSymbol, Complete: row.Complete,
-					AcceptResponseSymbol: row.AcceptResponseSymbol, DenyResponseSymbol: row.DenyResponseSymbol,
-					Pages: pages, Branches: branches, Informational: row.Informational, SideTalk: row.SideTalk,
-					AcceptRowSymbol: row.AcceptRowSymbol,
-				})
-			}
-			if resuscitation {
-				out = append(out, action.NpcQuestOption{
-					Codename: quest.ResuscitationService, TitleSymbol: "SN_TALK_QSP_ALL_POTION_1_07",
-					PromptSymbol: "SN_TALK_QSP_ALL_POTION_1_00", Immediate: true,
-				})
-			}
-			return out
-		},
-		Accept: func(character *enterworld.Character, codename string) ([]wire.Frame, error) {
-			result, err := quests.StartQuest(character, codename)
-			return result.Frames, err
-		},
-		Finish: func(character *enterworld.Character, codename, npcCodename string) ([]wire.Frame, error) {
-			if codename == quest.ResuscitationService {
-				result, err := quests.OpenResuscitation(character, npcCodename)
-				return result.Frames, err
-			}
-			result, err := quests.AdvanceNpcQuest(character, codename, npcCodename)
-			return result.Frames, err
-		},
-		Refuse: func(character *enterworld.Character, codename string) ([]wire.Frame, error) {
-			result, err := quests.RefuseQuestOffer(character, codename)
-			return result.Frames, err
-		},
-	}
-	game.items.GMQuests = gmQuestHooks(quests)
+	// The quest runtime's doors and the item lane's quest hooks live
+	// with the quest composition (wiring_quests.go).
+	game.wireQuestDoors(quests)
 	game.items.UpdateExperience = stats.ExperienceUpdater()
 	game.items.RefundExperience = stats.ExperienceRefundUpdater()
 	game.items.RecallStatPoints = stats.StatRecallUpdater()

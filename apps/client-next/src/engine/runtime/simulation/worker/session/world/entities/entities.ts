@@ -47,6 +47,11 @@ const CHARACTER_KINDS = new Set( [ "player", "local-player", "npc", "monster", "
 const STALL_TITLE_SLOT = 6;
 // Skipped cosmetic steps held between world takes (degrade).
 const MAX_PENDING_DEGRADATIONS = 64;
+// The one-shot natives a compaction keeps for its resync (dropQueuedJournal):
+// bounded on their own so the rebuilt batch stays small next to the
+// presentation's native backlog bound (8 MiB / 8192 events).
+const MAX_RETAINED_NATIVES = 1024;
+const RETAINED_NATIVE_BYTE_LIMIT = 1 << 20;
 
 /*
 ================
@@ -114,9 +119,20 @@ export function createEntities(
 	// set there. It outlives any one entity state write by design.
 	let debugBodyVisualOn = false;
 	let epoch = 0, sequence = 0, inflight: WorldBatch | null = null, bytes = 0;
-	// When the batch awaiting its acknowledgement was taken: a backlog failure
-	// reports the wait, telling a stalled main thread from a burst of events.
+	// When the batch awaiting its acknowledgement was taken: a compaction
+	// report gives the wait, telling a stalled main thread from a burst.
 	let inflightAt = 0;
+	// A dropped queue awaiting its rebuilt publication (dropQueuedJournal):
+	// take() republishes the world from the entity map on a new epoch, as
+	// world entry does, instead of the journal growing fatal behind a
+	// consumer that stopped acknowledging (a hidden or frozen tab).
+	let resyncPending = false, resyncs = 0;
+	// Queued native events a compaction kept, oldest first, awaiting the
+	// resync publication (dropQueuedJournal); the trim bounds them by
+	// MAX_RETAINED_NATIVES / RETAINED_NATIVE_BYTE_LIMIT.
+	let retainedNatives: Extract<WorldEvent, { kind: "native"; }>[] = [];
+	// The entry publication's protocol word, republished with a resync.
+	let bootstrapProtocol = 0;
 	let events: WorldEvent[] = [], staged: WorldEvent[] | null = null, remaining = 0, stagedBytes = 0;
 	// Cosmetic steps skipped since the world owner last took them (Degradation).
 	let degradations: Degradation[] = [];
@@ -175,11 +191,6 @@ export function createEntities(
 	}
 	/*
 	================
-	append
-	================
-	*/
-	/*
-	================
 	degrade
 
 	Records a skipped cosmetic step; the queue is bounded so an undrained
@@ -189,26 +200,125 @@ export function createEntities(
 	function degrade( degradation: Degradation ) {
 		if ( degradations.length < MAX_PENDING_DEGRADATIONS ) degradations.push( degradation );
 	}
+	/*
+	================
+	dropQueuedJournal
+
+	The bound on the reliable journal: when the queued events behind an
+	unacknowledged batch would pass the byte or count budget, the queue is
+	dropped instead of throwing. Every entity transition is already in the
+	entity map (apply sets it before it appends), so take() can republish
+	the world whole on a new epoch, as world entry does, and the session
+	survives a consumer that stopped acknowledging - a hidden or frozen
+	tab, a stalled frame - where the fatal throw killed it (2026-10-24).
+	The census that told a stalled consumer from an unsupported packet
+	stream rides the degradation instead of the failure.
+
+	One class is kept across the drop (#1482): native events. A native is
+	an opcode no owner here models - the worker forwards it raw precisely
+	because nothing decodes it into entity state, a gameplay snapshot or
+	the bootstrap - so the rebuilt snapshot cannot supersede it, and
+	dropping it loses a one-shot (a notice, a sound cue) the player was
+	meant to see or hear. Every modeled kind is state the snapshot
+	rebuilds and stays dropped. Kept natives are bounded on their own,
+	newest first; what the bound sheds is counted in the census, keyed by
+	opcode as before, so an opcode that proves replaceable in the field is
+	visible there and gets a decoder (and stops being native) rather than
+	a drop rule here.
+	================
+	*/
+	function dropQueuedJournal() {
+		const kinds: Record<string, number> = {};
+		for ( const queued of events ) {
+			const key = queued.kind === "native" ? `native:${queued.opcode.toString( 16 )}` : queued.kind;
+			kinds[key] = (kinds[key] ?? 0) + 1;
+			if ( queued.kind === "native" ) retainedNatives.push( queued );
+		}
+		// Trim from the newest back: the oldest one-shots are the ones a
+		// returning consumer can most afford to miss.
+		const kept: typeof retainedNatives = [];
+		let keptBytes = 0, shed = 0;
+		for ( let i = retainedNatives.length - 1; i >= 0; i-- ) {
+			const event = retainedNatives[i]!, size = event.payload.byteLength;
+			if ( kept.length >= MAX_RETAINED_NATIVES || keptBytes + size > RETAINED_NATIVE_BYTE_LIMIT ) {
+				shed++;
+				continue;
+			}
+			kept.push( event );
+			keptBytes += size;
+		}
+		kept.reverse();
+		retainedNatives = kept;
+		degrade( {
+			code: "world-journal-resync",
+			message: `Reliable world journal backlog compacted: ${bytes + stagedBytes} bytes, ${
+				events.length + (staged?.length ?? 0)
+			} events dropped; awaiting batch ${inflight?.sequence ?? "none"}${
+				inflight ? ` for ${Math.round( performance.now() - inflightAt )} ms` : ""
+			}; ${pendingPoses.size} replaceable poses; ${
+				JSON.stringify( kinds )
+			}; ${retainedNatives.length} one-shot natives retained (${shed} shed past the retention bound)`
+		} );
+		events = [];
+		bytes = 0;
+		pendingPoses.clear();
+		pendingGameplay = undefined;
+		sharedArrays = new WeakSet();
+		queueStamped = false;
+		synchronized = false;
+		resyncPending = true;
+		resyncs++;
+	}
+	/*
+	================
+	resyncEvents
+
+	The dropped queue rebuilt whole: a reset on a new epoch, the retained
+	entry bootstrap, one spawn per live entity and the synchronization
+	marker - the entry publication - then the one-shot natives a
+	compaction kept (dropQueuedJournal), then whatever queued behind the
+	drop that a snapshot does not supersede. Entity transitions stay
+	behind: the entity map already holds their net effect. Gameplay,
+	native, hp and travel events keep their order after the rebuilt
+	world, and the kept natives ahead of them: they are older.
+	================
+	*/
+	function resyncEvents(): WorldEvent[] {
+		// The batch is a journal rebuild, not a world entry: its reset and
+		// republished spawns carry resync so the presentation updates the
+		// characters it already holds in place (#1481).
+		const rebuilt: WorldEvent[] = [ { kind: "reset", epoch: ++epoch, resync: true } ];
+		if ( local ) {
+			rebuilt.push( {
+				kind: "bootstrap",
+				value: { protocolVersion: bootstrapProtocol, character: { name: localName }, localPlayerEntry: local }
+			} );
+		}
+		for ( const entity of entities.values() ) rebuilt.push( { kind: "spawn", entity, resync: true } );
+		rebuilt.push( { kind: "synchronized", epoch } );
+		rebuilt.push( ...retainedNatives );
+		retainedNatives = [];
+		for ( const event of events ) {
+			if ( event.kind !== "spawn" && event.kind !== "state" && event.kind !== "despawn" ) {
+				rebuilt.push( event );
+			}
+		}
+		return rebuilt;
+	}
+	/*
+	================
+	append
+	================
+	*/
 	function append( event: WorldEvent, size = batchCost( event ) ) {
+		if ( events.length + (staged?.length ?? 0) >= 8192 || bytes + stagedBytes + size > journalByteLimit ) {
+			// A stalled consumer must not kill the session: the queue
+			// compacts into the resync the next take publishes.
+			dropQueuedJournal();
+		}
 		if ( !queueStamped ) {
 			queuedAt = journalNow;
 			queueStamped = true;
-		}
-		if ( events.length + (staged?.length ?? 0) >= 8192 || bytes + stagedBytes + size > journalByteLimit ) {
-			// Failure-only census distinguishes a stalled consumer from an
-			// unsupported packet stream without adding a per-frame telemetry walk.
-			const kinds: Record<string, number> = {};
-			for ( const queued of events ) {
-				const key = queued.kind === "native" ? `native:${queued.opcode.toString( 16 )}` : queued.kind;
-				kinds[key] = (kinds[key] ?? 0) + 1;
-			}
-			throw new Error(
-				`Reliable world journal backlog exceeded: ${event.kind} adds ${size} bytes to ${bytes + stagedBytes}; ${
-					events.length + (staged?.length ?? 0)
-				} events queued; awaiting batch ${inflight?.sequence ?? "none"}${
-					inflight ? ` for ${Math.round( performance.now() - inflightAt )} ms` : ""
-				}; ${pendingPoses.size} replaceable poses; ${JSON.stringify( kinds )}`
-			);
 		}
 		bytes += size;
 		events.push( event );
@@ -242,7 +352,13 @@ export function createEntities(
 		const merged: WorldEvent = { kind: "gameplay", state }, size = snapshotCost( merged );
 		const nextBytes = bytes - pendingGameplay.size + size;
 		if ( nextBytes + stagedBytes > journalByteLimit ) {
-			throw Error( "Reliable world journal gameplay byte capacity exceeded" );
+			// The merged snapshot alone outgrows the queue behind a stalled
+			// consumer: compact, then queue this snapshot on its own.
+			dropQueuedJournal();
+			const own = snapshotCost( event );
+			append( event, own );
+			pendingGameplay = { index: events.length - 1, size: own };
+			return;
 		}
 		events[pendingGameplay.index] = merged;
 		bytes = nextBytes;
@@ -264,11 +380,17 @@ export function createEntities(
 		} else {
 			const nextBytes = bytes - pending.size + size;
 			if ( nextBytes + stagedBytes > journalByteLimit ) {
-				throw Error( "Reliable world journal pose byte capacity exceeded" );
+				// The pose replaces a queued one, but the queue behind a
+				// stalled consumer is already past its budget: compact,
+				// then queue this pose on its own.
+				dropQueuedJournal();
+				append( event, size );
+				pendingPoses.set( entity.gid, { index: events.length - 1, size } );
+			} else {
+				events[pending.index] = event;
+				bytes = nextBytes;
+				pending.size = size;
 			}
-			events[pending.index] = event;
-			bytes = nextBytes;
-			pending.size = size;
 		}
 		entities.set( entity.gid, entity );
 	}
@@ -577,6 +699,8 @@ export function createEntities(
 			stagedBytes = 0;
 			remaining = 0;
 			synchronized = false;
+			// A fresh entry publication supersedes a pending resync.
+			resyncPending = false;
 			append( { kind: "reset", epoch: ++epoch } );
 		},
 		/*
@@ -603,6 +727,7 @@ export function createEntities(
 			sharedArrays = new WeakSet();
 			inflight = null;
 			bytes = 0;
+			resyncPending = false;
 		},
 		/*
 		================
@@ -753,6 +878,10 @@ export function createEntities(
 			stagedBytes = 0;
 			remaining = 0;
 			synchronized = false;
+			// A re-entry publication supersedes a pending resync, and the
+			// resync republishes this bootstrap's protocol word.
+			resyncPending = false;
+			bootstrapProtocol = Number( b.protocolVersion );
 			// A re-entry reset has already revoked the old scene. Its delayed
 			// reference/bootstrap completion belongs to that same transaction.
 			if ( !resetAlreadyPublished ) append( { kind: "reset", epoch: ++epoch } );
@@ -1455,8 +1584,16 @@ export function createEntities(
 				// A rider's position belongs to its active mover, the mount (0x85E000).
 				const entity = source?.mountedOn ? entities.get( source.mountedOn ) ?? source : source;
 				// Source movement is advisory travel; LIFE-dead retires it.
-				// B2F5 remains admissible: present rebirth corrects before LIFE-alive.
 				if ( frame.opcode === 0x30e3 && entity?.appearanceState?.[0] === 2 ) return;
+				// 775B50 (0x775C1A): once the mover is resolved (85E000), a
+				// monster or COS mover whose life state (+0x263) is 2 (dead)
+				// ignores its B2F5 - no halt, no reseed. Players are not
+				// checked: a dead player's B2F5 remains admissible, as
+				// present rebirth corrects before LIFE-alive.
+				if (
+					frame.opcode === 0xb2f5 && entity?.appearanceState?.[0] === 2 &&
+					(entity.kind === "monster" || entity.kind === "cos")
+				) return;
 				if ( entity ) {
 					const corrected = position( v, frame.opcode === 0x30e3 ? 0 : 4 );
 					// The local mover has one navigation owner in gameplay. Its
@@ -1505,8 +1642,12 @@ export function createEntities(
 		================
 		*/
 		take(): WorldBatch | null {
-			if ( inflight || !events.length ) {
+			if ( inflight || (!events.length && !resyncPending) ) {
 				return null;
+			}
+			if ( resyncPending ) {
+				events = resyncEvents();
+				resyncPending = false;
 			}
 			inflight = {
 				sequence: ++sequence,
@@ -1604,6 +1745,27 @@ export function createEntities(
 		},
 		/*
 		================
+		debugLocalVisible
+
+		/showme and /hideme (690C40 cases 112/113): write the shown byte
+		(CICPlayer +0xB8) on the local player's record. The byte lives on
+		the record, not in a handler-side flag like debugBodyVisualOn:
+		the native byte is the character's own, read by its animation
+		advance (853600) and its peace-state predicate, and the record is
+		its only carrier here. A repeated write changes nothing.
+		================
+		*/
+		debugLocalVisible( gid: number, visible: boolean ) {
+			const entity = entities.get( gid );
+			if ( !entity ) return;
+			if ( (entity.debugHidden ?? false) === !visible ) return;
+			apply( {
+				kind: "state",
+				entity: Object.freeze( { ...entity, debugHidden: !visible } )
+			} );
+		},
+		/*
+		================
 		rider
 
 		The entity riding the horse `gid` (CICharactor_GetMountedHorseOrVehicle).
@@ -1636,6 +1798,17 @@ export function createEntities(
 		*/
 		groundItems(): EntityState[] {
 			return [ ...entities.values() ].filter( entity => entity.kind === "ground-item" );
+		},
+		/*
+		================
+		npcs
+
+		The NPCs and guards in the table now (the non-user list StartGroundMove
+		walks, 878600, narrowed to its CICNPC kinds by npc-click-refusal.ts).
+		================
+		*/
+		npcs(): EntityState[] {
+			return [ ...entities.values() ].filter( entity => entity.kind === "npc" );
 		},
 		/*
 		================
@@ -1692,6 +1865,9 @@ export function createEntities(
 			if ( event.kind === "gameplay" ) supersedeGameplay( event );
 			else append( event );
 		},
+		// How many queues compaction dropped into a resync (dropQueuedJournal):
+		// the world core republishes the gameplay catalogue when this moves.
+		resyncs: () => resyncs,
 		count: () => entities.size
 	};
 }

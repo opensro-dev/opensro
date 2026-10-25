@@ -99,6 +99,10 @@ export interface EntityState {
 	// Port-only, not native: the dungeon room the navmesh puts this entity in (navigation.block),
 	// read by the Experimental dungeon room culling. Absent outdoors or before ownership resolves.
 	readonly dungeonBlock?: number;
+	// /hideme (690C40 case 113): the local player's shown byte (CICPlayer
+	// +0xB8) cleared. Only ever set on the local player's record, by the
+	// debug console; presentation drops the record's body and name board.
+	readonly debugHidden?: boolean;
 	readonly x: number;
 	readonly y: number;
 	readonly z: number;
@@ -211,9 +215,9 @@ export type WorldEvent =
 	| { readonly kind: "ui-sound"; readonly handle: UiSoundHandle; readonly at: number; }
 	| { readonly kind: "gameplay"; readonly state: GameplayState; }
 	| { readonly kind: "synchronized"; readonly epoch: number; }
-	| { readonly kind: "reset"; readonly epoch: number; }
+	| { readonly kind: "reset"; readonly epoch: number; readonly resync?: boolean; }
 	| { readonly kind: "item-sound"; readonly cue: ItemSoundRequest; readonly at: number; }
-	| { readonly kind: "spawn"; readonly entity: EntityState; }
+	| { readonly kind: "spawn"; readonly entity: EntityState; readonly resync?: boolean; }
 	| { readonly kind: "state"; readonly entity: EntityState; }
 	| { readonly kind: "despawn"; readonly gid: number; }
 	| { readonly kind: "native"; readonly opcode: number; readonly payload: Uint8Array; }

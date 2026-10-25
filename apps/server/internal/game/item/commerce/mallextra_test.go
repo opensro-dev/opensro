@@ -16,6 +16,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/testsupport/gamedatatest"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -24,6 +25,7 @@ TestMallExtraGoodsOffKeepsTheShippedMall
 ================
 */
 func TestMallExtraGoodsOffKeepsTheShippedMall(t *testing.T) {
+	tier.Long(t, "the shipped mall is unchanged with extra goods off")
 	for _, setting := range []string{"", "off"} {
 		goods, err := ParseMallExtraGoods(setting)
 		if err != nil || goods != nil {
@@ -46,6 +48,7 @@ European wedding set's tier (dress 130, hat 30) and the attachment's 15.
 ================
 */
 func TestMallExtraGoodsListTheAvatarOutfits(t *testing.T) {
+	tier.Long(t, "the shipped mall lists the avatar outfits with extra goods on")
 	dir := gamedatatest.TextdataDir(t)
 	goods, err := ParseMallExtraGoods("on")
 	if err != nil || len(goods) != 22 {

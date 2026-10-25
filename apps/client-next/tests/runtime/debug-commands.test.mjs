@@ -152,10 +152,11 @@ test("command words read as wcstol reads them", () => {
 ================
 consoleFixture
 
-The GM console open over a fixture whose clock seed is day 10, 06:30.
+The GM console open over a fixture whose clock seed is day 10, 06:30, or
+over no clock at all when worldClock is null.
 ================
 */
-function consoleFixture() {
+function consoleFixture( worldClock ) {
 	/** @type {any[]} */
 	const sent = [];
 	const f = uiFixture( message => {
@@ -163,7 +164,7 @@ function consoleFixture() {
 	} );
 	Object.assign( f.state.gameplay, {
 		eligibility: { gm: true },
-		worldClock: { day: 10, hour: 6, minute: 30, receivedAtMs: 0 }
+		worldClock: worldClock === null ? undefined : { day: 10, hour: 6, minute: 30, receivedAtMs: 0 }
 	} );
 	let now = 0;
 	const step = () => {
@@ -201,6 +202,73 @@ test("the GM console sends the weather rows to the worker", () => {
 		type( "/rain" );
 		type( "/rain 1 2" );
 		assert.equal( sent.length, 4, "a weather row without exactly one word ran" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("the GM console sends /Pos as one move and /GetPos as the body-visual flip", () => {
+	const { f, sent, type } = consoleFixture();
+	try {
+		type( "/Pos 61A8,1,2,3" );
+		assert.deepEqual( sent, [
+			{ kind: "move", destination: { regionId: 0x61a8, x: 1, y: 2, z: 3, angle: 0 } }
+		] );
+		type( "/Pos" );
+		assert.equal( sent.length, 1, "/Pos without its word sent a move" );
+		type( "/GetPos" );
+		assert.deepEqual( sent[1], { kind: "debug-body-visual" } );
+		assert.equal( sent.length, 2, "an extra line reached the worker" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("the GM console runs /hideme, /showme, /uioff and /uion", () => {
+	const { f, sent, type, now } = consoleFixture();
+	try {
+		type( "/hideme" );
+		assert.deepEqual( sent, [ { kind: "debug-local-visible", visible: false } ] );
+		type( "/showme" );
+		assert.deepEqual( sent[1], { kind: "debug-local-visible", visible: true } );
+		type( "/Debug" );
+		assert.ok( f.hasText( "DebugMsg On" ) );
+		const hudResult = f.ui.step( f.state, now() + 100 );
+		assert.ok( hudResult, "the HUD step produced nothing" );
+		const hudQuads = f.scenes.at( -1 ).quads.length,
+			hudControls = hudResult.controls.map( c => c.id );
+		assert.ok(
+			hudControls.some( id => !id.startsWith( "gm-" ) ),
+			"the fixture HUD never came up: " + hudControls.join( "," )
+		);
+		type( "/uioff" );
+		assert.equal( sent.length, 2, "a UI row reached the worker" );
+		assert.ok( f.hasText( "DebugMsg On" ), "the console hid with the UI" );
+		const offResult = f.ui.step( f.state, now() + 100 );
+		assert.ok( offResult, "the /uioff step produced nothing" );
+		assert.ok( f.scenes.at( -1 ).quads.length < hudQuads, "the HUD stayed up under /uioff" );
+		assert.ok(
+			offResult.controls.length > 0 && offResult.controls.every( c => c.id.startsWith( "gm-" ) ),
+			"controls besides the console's survived /uioff: " + offResult.controls.map( c => c.id ).join( "," )
+		);
+		type( "/uion" );
+		assert.ok( f.scenes.at( -1 ).quads.length >= hudQuads, "the HUD did not return under /uion" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("timeoff before the first clock lands the hold when the clock arrives", async () => {
+	const { sampleWorldClock } = await import(
+		"../../src/engine/foundation/gameplay/world-clock.ts"
+	);
+	const { f, type } = consoleFixture( null );
+	try {
+		type( "/timeoff" );
+		const seed = { day: 10, hour: 6, minute: 30, receivedAtMs: 0 };
+		const sampled = at => sampleWorldClock( f.ui.debugClockSeed( seed, at ), at );
+		const early = sampled( 100000 );
+		assert.deepEqual( sampled( 900000 ), early, "the hold did not land on the first clock" );
 	} finally {
 		f.dispose();
 	}

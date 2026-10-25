@@ -20,6 +20,7 @@ package movement
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -120,6 +121,13 @@ type Runtime struct {
 	npcsEnabled  bool
 	npcsAtPlayer bool
 
+	// loadingQueues holds movement commands sent while the session's scene
+	// loads (loadingqueue.go): executed in arrival order when the scene
+	// finishes, so their receipts still answer the client's pending lane.
+	loadingMu     sync.Mutex
+	loadingQueues map[uint64][]loadingMove
+	predictLedger *predictionLedger
+
 	operations characterOperationLocks
 	// directions is the registry of direction walks (direction.go).
 	directions directionWalks
@@ -188,38 +196,69 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 	rt.registerPredictedMovement(hub)
 	rt.registerMotionState(hub)
 	rt.registerDirectionCommands(hub)
+	hub.OnSessionOpen(func(s *transport.Session) {
+		// Held movement commands replay when the scene finishes loading,
+		// in arrival order (loadingqueue.go). Re-arm after every scene:
+		// the hook is consumed at scene-ready.
+		var rearm func()
+		rearm = func() {
+			rt.drainLoadingQueue(s)
+			s.OnSceneReady(rearm)
+		}
+		s.OnSceneReady(rearm)
+	})
+	hub.OnSessionClose(func(s *transport.Session, _ error) { rt.forgetLoadingQueue(s.ID) })
 	hub.Handle(simulation.OpClientMovementRequest, func(s *transport.Session, _ uint16, payload []byte) {
-		character, divisionID, bound := enterworld.SessionCharacter(rt.deps, s)
-		if !bound {
-			// No enter-world bind. The reference move failure ships no
-			// packets (missionMoveFailure -> packets: []), so the wire
-			// stays silent; the refusal reason lives in the log.
-			log.Debug("movement: 0x7738 before enter-world bind ignored")
+		if _, live := s.SceneRevision(); !live {
+			// Scene still loading: hold the command for scene-ready so
+			// its 0xB738 acknowledgement answers inside the live scene.
+			rt.queueLoadingMove(s, false, payload)
 			return
 		}
-		if rt.AdvanceResidentRegion != nil {
-			rt.AdvanceResidentRegion(divisionID, character.Name, rt.Now().UnixMilli())
-		}
-		unlock := rt.lockCharacter(divisionID, character.Name)
-		defer unlock()
-		outcome := rt.handleMoveLocked(divisionID, character, payload, 0)
-		if outcome.Refusal != nil {
-			// Retail keeps movement refusals silent on the wire. Keep the
-			// authority verdict observable here, at the one live transport
-			// boundary, so every early return in HandleMove is covered without
-			// teaching the pure handler about sessions or duplicating logs in
-			// individual gates.
-			log.WithFields(log.Fields{
-				"character": character.Name,
-				"reason":    outcome.Refusal.Reason,
-			}).Info("movement: 0x7738 refused")
-		}
-		for _, frame := range outcome.Frames {
-			if err := s.SendBatch([]transport.Frame{{Opcode: frame.Opcode, Payload: frame.Payload, Current: frame.Current, Scope: transport.ScopeChanges(frame.Scope)}}); err != nil {
-				return
-			}
-		}
+		rt.handleNativeMove(s, payload)
 	})
+}
+
+/*
+=================
+handleNativeMove
+
+One live 0x7738 dispatch, and the body a held loading command runs at
+scene-ready (loadingqueue.go): the two take the same path, so a command
+held during loading settles exactly as one sent into a live scene does.
+=================
+*/
+func (rt *Runtime) handleNativeMove(s *transport.Session, payload []byte) {
+	character, divisionID, bound := enterworld.SessionCharacter(rt.deps, s)
+	if !bound {
+		// No enter-world bind. The reference move failure ships no
+		// packets (missionMoveFailure -> packets: []), so the wire
+		// stays silent; the refusal reason lives in the log.
+		log.Debug("movement: 0x7738 before enter-world bind ignored")
+		return
+	}
+	if rt.AdvanceResidentRegion != nil {
+		rt.AdvanceResidentRegion(divisionID, character.Name, rt.Now().UnixMilli())
+	}
+	unlock := rt.lockCharacter(divisionID, character.Name)
+	defer unlock()
+	outcome := rt.handleMoveLocked(divisionID, character, payload, 0)
+	if outcome.Refusal != nil {
+		// Retail keeps movement refusals silent on the wire. Keep the
+		// authority verdict observable here, at the one live transport
+		// boundary, so every early return in HandleMove is covered without
+		// teaching the pure handler about sessions or duplicating logs in
+		// individual gates.
+		log.WithFields(log.Fields{
+			"character": character.Name,
+			"reason":    outcome.Refusal.Reason,
+		}).Info("movement: 0x7738 refused")
+	}
+	for _, frame := range outcome.Frames {
+		if err := s.SendBatch([]transport.Frame{{Opcode: frame.Opcode, Payload: frame.Payload, Current: frame.Current, Scope: transport.ScopeChanges(frame.Scope)}}); err != nil {
+			return
+		}
+	}
 }
 
 /*

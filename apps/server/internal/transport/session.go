@@ -84,9 +84,31 @@ type Session struct {
 	lossyKeys  []lossySlot // FIFO of pending slots, deduped
 	lossyBytes int
 
+	// Exactly-once ordered delivery across a resume (stream_ring.go):
+	// streamPos counts the frames written on the reliable stream above the
+	// transport range; ring keeps the ordered ones until acknowledged;
+	// ringFloor is the newest position the ring has had to drop.
+	streamPos uint32
+	ring      []ringFrame
+	ringBytes int
+	ringFloor uint32
+
 	resumeToken [ResumeTokenLen]byte
-	lastRecv    time.Time
-	readCancel  context.CancelFunc
+	// admissionCommit consumes the HELLO ticket this attachment was
+	// admitted with. The write loop runs it after the WELCOME frame is
+	// written and clears it under mu first, so it runs at most once
+	// per arming; nil means the ticket was already consumed upstream
+	// (the legacy HELLO-time verifier) or none is pending.
+	admissionCommit func() error
+	lastRecv        time.Time
+	readCancel      context.CancelFunc
+
+	// Telemetry of the current attachment (#1449): the transport kind of
+	// the latest attach and the fallback reason the client reported for
+	// it ("" until an OpTransportReport arrives). History reads both;
+	// they describe how the session got here, never how it behaves.
+	transport   string
+	fallback    string
 	expireTimer *time.Timer
 	drainTimer  *time.Timer // CloseWhenDrained's cap; stopped once the session closes
 
@@ -98,6 +120,11 @@ type Session struct {
 	evicted atomic.Bool
 
 	done chan struct{} // closed exactly once at final teardown
+
+	// sceneReadyHooks run once, in order, when the current scene finishes
+	// loading (FinishSceneReentry). Owners that hold requests during
+	// loading register one to replay them into the ready scene.
+	sceneReadyHooks []func()
 
 	// limiter is the per-session inbound dispatch budget (ratelimit.go).
 	// Owned by the session so its state dies with the session — churn can
@@ -157,6 +184,27 @@ func (s *Session) Kind() string {
 		return "detached"
 	}
 	return s.conn.Kind()
+}
+
+/*
+================
+noteTransportReport
+
+Records the fallback reason the client reported for this attachment
+(OpTransportReport, #1449) and journals it as its own lifecycle row, so
+the session history shows how the session got here. A report about a
+stale attachment never lands: the read loop only runs for the current
+generation, and a closed session keeps its final record.
+================
+*/
+func (s *Session) noteTransportReport(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return
+	}
+	s.fallback = name
+	s.recordHistoryLocked("transport_reported", nil)
 }
 
 // RemoteAddr is the peer of the current connection, or "" while detached.
@@ -256,163 +304,6 @@ func (s *Session) Send(opcode uint16, payload []byte) error {
 	return nil
 }
 
-// SendBatch atomically queues one reliable application transaction. No other
-// producer can interleave with the batch and the client can never receive a
-// successful prefix followed by a queue-overflow disconnect. This is the
-// admission path for the EnterWorld result and its native bootstrap stream.
-//
-// The batch remains bounded by both configured frame and byte limits. Payloads
-// are copied before publication, exactly as in Send.
-/*
-================
-SendBatch
-================
-*/
-func (s *Session) SendBatch(frames []Frame) error { return s.sendSceneBatch(frames, nil, false) }
-
-/*
-================
-sendSceneBatch
-================
-*/
-func (s *Session) sendSceneBatch(frames []Frame, revision *uint64, reset bool) error {
-	return s.sendSceneObjectBatch(frames, sceneBatchOptions{revision: revision, reset: reset})
-}
-
-/*
-================
-sceneBatchOptions
-
-Private receipts may follow an already queued bootstrap while its scene is
-loading. Visibility producers retain the active-scene requirement.
-================
-*/
-type sceneBatchOptions struct {
-	revision    *uint64
-	reset       bool
-	observedGID uint32
-	// unobservedGID is the converse: send only while the scene does not
-	// show that object yet.
-	unobservedGID uint32
-	changes       []ObjectScopeChange
-	allowLoading  bool
-}
-
-/*
-================
-sendSceneObjectBatch
-================
-*/
-func (s *Session) sendSceneObjectBatch(frames []Frame, options sceneBatchOptions) error {
-	// Copy before appending: callers retain ownership of their metadata.
-	changes := append([]ObjectScopeChange(nil), options.changes...)
-	for _, frame := range frames {
-		changes = append(changes, frame.Scope...)
-	}
-	// An empty frame's scope change still applies; only its bytes are
-	// refused (emptyframe.go).
-	frames = s.withoutEmptyFrames(frames)
-	if len(frames) == 0 {
-		return nil
-	}
-	if len(frames) > s.hub.cfg.OutboundQueue {
-		s.hub.closeSessionFromSend(s, errOutboundBurstTooLarge)
-		return errOutboundBurstTooLarge
-	}
-	batchBytes := 0
-	for _, frame := range frames {
-		if frame.Opcode > maxReservedOpcode && s.evicted.Load() {
-			return ErrSessionEvicted
-		}
-		frameBytes := frame.EncodedLen()
-		if frameBytes > MaxFrameBytes {
-			s.hub.closeSessionFromSend(s, ErrFrameTooLarge)
-			return ErrFrameTooLarge
-		}
-		if batchBytes > s.hub.cfg.OutboundQueueBytes-frameBytes {
-			s.hub.closeSessionFromSend(s, errOutboundBurstTooLarge)
-			return errOutboundBurstTooLarge
-		}
-		batchBytes += frameBytes
-	}
-	s.mu.Lock()
-	if options.observedGID != 0 {
-		if _, observed := s.observedObjects[options.observedGID]; !observed || s.sceneLoading {
-			s.mu.Unlock()
-			return nil
-		}
-	}
-	if options.unobservedGID != 0 {
-		if _, observed := s.observedObjects[options.unobservedGID]; observed || s.sceneLoading {
-			s.mu.Unlock()
-			return nil
-		}
-	}
-	if options.revision != nil && ((!options.allowLoading && s.sceneLoading) || s.sceneRevision != *options.revision) {
-		s.mu.Unlock()
-		return nil
-	}
-	if s.closed {
-		s.mu.Unlock()
-		return ErrSessionClosed
-	}
-	if len(s.queue) > s.hub.cfg.OutboundQueue-len(frames) ||
-		s.queueBytes+s.lossyBytes > s.hub.cfg.OutboundQueueBytes-batchBytes {
-		s.mu.Unlock()
-		s.hub.closeSessionFromSend(s, errSlowConsumer)
-		return errSlowConsumer
-	}
-	for _, frame := range frames {
-		if frame.Opcode > maxReservedOpcode && s.evicted.Load() {
-			s.mu.Unlock()
-			return ErrSessionEvicted
-		}
-	}
-	if options.reset {
-		s.sceneRevision++
-		s.sceneLoading = true
-		s.clearObservedLocked()
-		clear(s.lossy)
-		s.lossyKeys = nil
-		s.lossyBytes = 0
-	}
-	for _, frame := range frames {
-		s.queue = append(s.queue, Frame{Opcode: frame.Opcode, Payload: append([]byte(nil), frame.Payload...), Current: frame.Current})
-	}
-	for _, change := range changes {
-		if change.GID == 0 {
-			continue
-		}
-		if change.Visible {
-			if s.observedObjects == nil {
-				s.observedObjects = make(map[uint32]struct{})
-			}
-			s.observedObjects[change.GID] = struct{}{}
-			s.publishedStale = true
-		} else {
-			delete(s.observedObjects, change.GID)
-			s.publishedStale = true
-			// Reliable removal takes priority over queued loss-tolerant motion.
-			// Retire that motion here so it cannot follow the despawn on WS.
-			kept := s.lossyKeys[:0]
-			for _, slot := range s.lossyKeys {
-				if slot.Key == uint64(change.GID) && (slot.Opcode == OpObjectSourceMove || slot.Opcode == OpObjectSourceCorrection) {
-					s.lossyBytes -= s.lossy[slot].EncodedLen()
-					delete(s.lossy, slot)
-				} else {
-					kept = append(kept, slot)
-				}
-			}
-			s.lossyKeys = kept
-		}
-	}
-	s.queueBytes += batchBytes
-	s.hub.observeQueueDepth(len(s.queue)+len(s.lossyKeys), s.queueBytes+s.lossyBytes)
-	s.cond.Broadcast()
-	s.mu.Unlock()
-	return nil
-}
-
 // SendUnreliable pushes a frame on the unreliable channel when the client
 // is on WebTransport (QUIC datagram, safe from any goroutine) and falls
 // back to the reliable queue on WebSocket. Use for per-tick superseded
@@ -472,79 +363,6 @@ func (s *Session) SendUnreliableKeyed(opcode uint16, key uint64, payload []byte)
 	return s.sendSceneUnreliableKeyed(opcode, key, payload, nil)
 }
 
-/*
-================
-sendSceneUnreliableKeyed
-================
-*/
-func (s *Session) sendSceneUnreliableKeyed(opcode uint16, key uint64, payload []byte, revision *uint64) error {
-	if opcode > maxReservedOpcode && s.evicted.Load() {
-		return ErrSessionEvicted // lame duck: no ticks on any lane
-	}
-	if !IsLossTolerantOpcode(opcode) {
-		return s.sendSceneBatch([]Frame{{Opcode: opcode, Payload: payload}}, revision, false)
-	}
-	s.mu.Lock()
-	if revision != nil && (s.sceneLoading || s.sceneRevision != *revision) {
-		s.mu.Unlock()
-		return nil
-	}
-	if s.closed {
-		s.mu.Unlock()
-		return ErrSessionClosed
-	}
-	conn := s.conn
-	s.mu.Unlock()
-	if conn != nil && conn.SupportsUnreliable() {
-		if err := conn.WriteUnreliable(Frame{Opcode: opcode, Payload: payload}); err == nil {
-			s.hub.metrics.datagramsOut.Add(1)
-			s.hub.metrics.datagramBytesOut.Add(uint64(2 + len(payload)))
-			return nil
-		}
-	}
-
-	owned := append([]byte(nil), payload...)
-	slot := lossySlot{Opcode: opcode, Key: key}
-	s.mu.Lock()
-	if revision != nil && (s.sceneLoading || s.sceneRevision != *revision) {
-		s.mu.Unlock()
-		return nil
-	}
-	if s.closed {
-		s.mu.Unlock()
-		return ErrSessionClosed
-	}
-	previous, pending := s.lossy[slot]
-	previousBytes := 0
-	if pending {
-		previousBytes = previous.EncodedLen()
-	}
-	frameBytes := 2 + len(owned)
-	if !pending {
-		if len(s.lossyKeys) >= s.hub.cfg.OutboundQueue {
-			// Loss-tolerant by contract: shed the new frame instead of
-			// killing the session.
-			s.mu.Unlock()
-			return nil
-		}
-	}
-	if s.queueBytes+s.lossyBytes-previousBytes > s.hub.cfg.OutboundQueueBytes-frameBytes {
-		// Preserve an existing coalesced value when its replacement is too
-		// large; this lane may shed by contract but must stay byte-bounded.
-		s.mu.Unlock()
-		return nil
-	}
-	if !pending {
-		s.lossyKeys = append(s.lossyKeys, slot)
-	}
-	s.lossy[slot] = Frame{Opcode: opcode, Payload: owned}
-	s.lossyBytes += frameBytes - previousBytes
-	s.hub.observeQueueDepth(len(s.queue)+len(s.lossyKeys), s.queueBytes+s.lossyBytes)
-	s.cond.Broadcast()
-	s.mu.Unlock()
-	return nil
-}
-
 // pushFront queues a frame ahead of everything pending; only the WELCOME
 // uses it so a resuming client always hears WELCOME first.
 /*
@@ -559,6 +377,21 @@ func (s *Session) pushFront(f Frame) {
 	s.cond.Broadcast()
 }
 
+/*
+================
+armAdmissionCommit
+
+Arms the one-use HELLO ticket consumption for the WELCOME the coming
+attach writes (nil disarms). The hub calls it before attach, so the
+commit can never be missed by a fast writer.
+================
+*/
+func (s *Session) armAdmissionCommit(commit func() error) {
+	s.mu.Lock()
+	s.admissionCommit = commit
+	s.mu.Unlock()
+}
+
 // attach binds a new connection to the session and starts its read loop.
 // Caller must NOT hold s.mu.
 /*
@@ -566,11 +399,18 @@ func (s *Session) pushFront(f Frame) {
 attach
 ================
 */
-func (s *Session) attach(conn Conn, resumed bool) error {
+func (s *Session) attach(conn Conn, resumed bool, lastApplied uint32) error {
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
 		return ErrSessionClosed
+	}
+	// A resume serves exactly the ordered frames past the client's position
+	// (stream_ring.go); one the ring cannot cover is refused, and the hub
+	// issues a fresh session instead of letting a lost frame pass silently.
+	if resumed && !s.resumeFromLocked(lastApplied) {
+		s.mu.Unlock()
+		return errResumeGap
 	}
 	if s.attached {
 		// Zombie replacement: the old transport thinks it is alive (half-open
@@ -599,6 +439,10 @@ func (s *Session) attach(conn Conn, resumed bool) error {
 	gen := s.gen
 	s.conn = conn
 	s.attached = true
+	// A new attachment replaces the old one's telemetry: the fallback a
+	// previous connection reported says nothing about this one (#1449).
+	s.transport = conn.Kind()
+	s.fallback = ""
 	s.lastRecv = time.Now()
 	ctx, cancel := context.WithCancel(context.Background())
 	s.readCancel = cancel
@@ -825,9 +669,13 @@ func (s *Session) writeLoop() {
 		drainAndEmpty := s.drainClose && len(s.queue) == 0
 		conn := s.conn
 		gen := s.gen
+		pos := s.noteWrittenLocked(f, ordered)
 		s.mu.Unlock()
 
 		if f.Current != nil && !f.Current() {
+			s.mu.Lock()
+			s.unnoteLocked(pos, ordered)
+			s.mu.Unlock()
 			if ordered && drainAndEmpty {
 				s.hub.closeSession(s, nil)
 				return
@@ -836,21 +684,33 @@ func (s *Session) writeLoop() {
 		}
 		if err := conn.WriteFrame(f); err != nil {
 			s.hub.metrics.writeErrors.Add(1)
-			if ordered {
-				s.mu.Lock()
-				// Re-queue only if the attachment didn't change under us;
-				// after a resume the WELCOME must stay first and this frame
-				// belonged to the dead transport's in-flight window.
-				if !s.closed && gen == s.gen {
-					s.queue = append([]Frame{f}, s.queue...)
-					s.queueBytes += f.EncodedLen()
-				}
-				s.mu.Unlock()
-			}
+			// No re-queue: a write can fail after the bytes reached the
+			// client (a deadline on a stalled link), and re-sending it then
+			// applied it twice (#1466). It already holds its position: the
+			// client's resume position says whether it arrived, and the ring
+			// re-sends it only if it did not.
 			s.detachGen(gen, err)
 			continue
 		}
 		s.hub.recordFrameOut(f)
+		if f.Opcode == OpWelcome {
+			s.mu.Lock()
+			commit := s.admissionCommit
+			s.admissionCommit = nil
+			s.mu.Unlock()
+			if commit != nil {
+				if err := commit(); err != nil {
+					// The ticket this session was admitted with was
+					// consumed by a concurrent admission: this session
+					// must not outlive its WELCOME.
+					log.WithFields(log.Fields{
+						"session": s.ID, "error": err,
+					}).Warn("transport: admission consumption failed after WELCOME; closing session")
+					s.hub.closeSession(s, err)
+					return
+				}
+			}
+		}
 		if ordered && drainAndEmpty {
 			s.hub.closeSession(s, nil)
 			return
@@ -907,6 +767,27 @@ func (s *Session) readLoop(conn Conn, gen int, ctx context.Context) {
 					continue
 				}
 				// lastRecv already refreshed; nothing else to do.
+			case OpStreamAck:
+				pos, ok := DecodeStreamAck(f.Payload)
+				if !ok {
+					s.hub.closeSession(s, errors.New("transport: malformed stream ACK"))
+					return
+				}
+				if !s.admitFrame(f.Opcode, f.EncodedLen()) {
+					continue
+				}
+				s.mu.Lock()
+				s.ackLocked(pos)
+				s.mu.Unlock()
+			case OpTransportReport:
+				if !s.admitFrame(f.Opcode, f.EncodedLen()) {
+					continue
+				}
+				// Telemetry only (#1449): a report this build cannot
+				// decode is dropped, never a protocol fault.
+				if name, ok := DecodeTransportReport(f.Payload); ok {
+					s.noteTransportReport(name)
+				}
 			case OpBye:
 				s.hub.closeSession(s, CloseReason{Reason: ByeReasonNormal})
 				return
@@ -943,44 +824,5 @@ func (s *Session) dispatchGeneration(gen int, f Frame) {
 	s.mu.Unlock()
 	if current {
 		s.hub.dispatch(s, f)
-	}
-}
-
-// keepaliveLoop pings an attached-but-quiet client and detaches one that
-// has gone silent past the idle timeout, giving it the resume grace window.
-/*
-================
-keepaliveLoop
-================
-*/
-func (s *Session) keepaliveLoop() {
-	interval := s.hub.cfg.KeepaliveInterval
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-s.done:
-			return
-		case <-ticker.C:
-			s.mu.Lock()
-			if s.closed {
-				s.mu.Unlock()
-				return
-			}
-			if !s.attached {
-				s.mu.Unlock()
-				continue
-			}
-			idle := time.Since(s.lastRecv)
-			gen := s.gen
-			s.mu.Unlock()
-			if idle > s.hub.cfg.IdleTimeout {
-				s.detachGen(gen, errIdle)
-				continue
-			}
-			if idle >= interval {
-				_ = s.Send(OpPing, nil)
-			}
-		}
 	}
 }

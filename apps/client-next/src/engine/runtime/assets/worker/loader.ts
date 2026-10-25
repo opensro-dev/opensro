@@ -9,6 +9,14 @@ requested kind (image, model, character, world, effects, navigation) and
 transfers the result back. Foreground loads hold one of four capacity
 slots; the background installer runs only while none is held.
 
+Demand and execution are separate counts. A cancellation is acknowledged
+("released") when it is received: nothing is delivered for the id again
+and the main thread may reuse its slot at once. The execution keeps its
+capacity slot until its promise settles - a native decode AbortSignal
+cannot stop still owns its buffers - and demand that arrives while every
+execution slot is held waits, so a load submitted behind a draining
+cancellation is admitted as the drain settles, never refused.
+
 ===========================================================================
 */
 
@@ -87,8 +95,16 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	>();
 	// Demand can be cancelled immediately; execution holds capacity until its
 	// promise settles, including native decodes that AbortSignal cannot stop.
+	// pending maps every live demand (waiting or executing) to its controller;
+	// active counts only the executions holding a capacity slot.
 	const pending = new Map<number, AbortController>();
 	const active = new Set<AbortController>();
+	// Demand admitted while every execution slot is held. A waiting entry
+	// owns nothing but its controller; it starts as an execution settles.
+	const waiting: {
+		request: Extract<AssetRequest, { kind: "load"; }>;
+		controller: AbortController;
+	}[] = [];
 	// The effect program catalog is parsed once and kept parsed (program.ts);
 	// its 40 MB of source bytes are needed only for that first parse.
 	let disposed = false, effectCatalogParsed = false;
@@ -425,6 +441,23 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		read: ( url, limit, signal ) => download( url.href, limit, signal ),
 		install: packs.install
 	}, foregroundIdle );
+	/*
+	================
+	pump
+
+	Start waiting demand while an execution slot is free. Called when
+	demand arrives and whenever an execution settles; a cancelled waiter
+	is skipped (its demand already left with the acknowledgement).
+	================
+	*/
+	function pump() {
+		while ( !disposed && waiting.length && active.size < 4 ) {
+			const next = waiting.shift()!;
+			if ( next.controller.signal.aborted ) continue;
+			active.add( next.controller );
+			void load( next.request, next.controller );
+		}
+	}
 	/*
 	================
 	load
@@ -782,8 +815,11 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			jobProgress.delete( request.id );
 			active.delete( controller );
 			if ( active.size === 0 ) wakeIdleWaiters();
-			if ( !disposed && controller.signal.aborted ) send( { kind: "released", id: request.id }, [] );
 			if ( pending.get( request.id ) === controller ) pending.delete( request.id );
+			// The execution slot frees only here. A cancelled execution was
+			// already acknowledged when its cancel arrived and sends
+			// nothing more; the freed slot admits the next waiting demand.
+			pump();
 		}
 	}
 	return {
@@ -799,8 +835,17 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 				return;
 			}
 			if ( request.kind === "cancel" ) {
-				pending.get( request.id )?.abort();
+				const controller = pending.get( request.id );
+				if ( !controller ) return;
+				controller.abort();
 				pending.delete( request.id );
+				const queued = waiting.findIndex( entry => entry.request.id === request.id );
+				if ( queued >= 0 ) waiting.splice( queued, 1 );
+				// Acknowledged on receipt, not on settlement: an execution
+				// AbortSignal cannot stop (a native decode) may drain long
+				// past the caller's acknowledgement window, but it delivers
+				// nothing more for this id; its slot frees when it settles.
+				send( { kind: "released", id: request.id }, [] );
 				return;
 			}
 			if ( request.kind === "install" ) {
@@ -812,7 +857,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 				return;
 			}
 			if (
-				pending.has( request.id ) || active.size >= 4 || !Number.isSafeInteger( request.limit ) ||
+				pending.has( request.id ) || !Number.isSafeInteger( request.limit ) ||
 				request.limit < 1 || request.limit > assetRequestBudget( request.decode )
 			) {
 				send( { kind: "error", id: request.id, error: "Asset request exceeds budget" }, [] );
@@ -820,8 +865,8 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			}
 			const controller = new AbortController();
 			pending.set( request.id, controller );
-			active.add( controller );
-			void load( request, controller );
+			waiting.push( { request, controller } );
+			pump();
 		},
 		/*
 		================
@@ -847,6 +892,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 				controller.abort();
 			}
 			pending.clear();
+			waiting.length = 0;
 		}
 	};
 }

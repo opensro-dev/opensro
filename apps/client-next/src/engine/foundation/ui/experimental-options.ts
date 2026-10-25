@@ -33,6 +33,9 @@ export interface ExperimentalOptions {
 	// size; a missing or invalid stored value restores it.
 	readonly uiScale: number;
 	readonly chatTimestamps: boolean;
+	// Port-only, not native: use only the male warrior loading artwork.
+	// Off by default so both original loading backgrounds remain available.
+	readonly safeLoadingScreen: boolean;
 	// Port-only, not native: beginner atlas on M, explicitly enabled.
 	readonly monsterGuide: boolean;
 	readonly developerDiagnostics: boolean;
@@ -71,6 +74,13 @@ export interface ExperimentalOptions {
 	// On unless turned off (the owner's choice, 2026-10-14); off is the
 	// previous rule, characters first.
 	readonly sharedActorRoom: boolean;
+	// Port-only, not native: the local player's ground-click walk is stepped
+	// on the main thread from the click frame (runtime/movement/local-mover.ts,
+	// Unreal's locally controlled character, epic #1437, with
+	// reconciliation #1441b). The original client predicts its own walk the
+	// same way (0x6932A0 -> StartGroundMove 0x878600). On unless turned off
+	// (the owner's choice, 2026-10-25); off is the worker-driven walk.
+	readonly mainThreadOwnWalk: boolean;
 	// Port-only, not native: a disabled tab is dimmed with a grey label (the
 	// original draws it like an unselected tab, 5376A0). On unless turned
 	// off (the owner's choice, 2026-10-15); off is the original look.
@@ -90,6 +100,11 @@ export interface ExperimentalOptions {
 	// widens that one. On unless turned off (the owner's choice,
 	// 2026-10-19); off hides them from the banner and the chat log.
 	readonly plusSevenNotices: boolean;
+	// Port-only, not native: when a unique the player damaged dies, the
+	// shard's damage ranking (0x3FBC, server SRO_UNIQUE_DAMAGE_RANK) opens
+	// in a window (unique-rank-hud.ts). Off unless turned on, so each
+	// player opts in.
+	readonly uniqueDamageRank: boolean;
 	// Port-only, not native: holding V (UIIT_STT_USER_MOSTER_BLIND) also
 	// hides other players' pets and transports. The original hides only
 	// monsters and players (8602C0, 85E550): a COS draws through its owner
@@ -272,7 +287,7 @@ export function uiScaleFactor( options: ExperimentalOptions ): number {
 experimentalOptions
 
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
-compressedTextures, sharedActorRoom, greyDisabledTabs, jobKillNotices, dropPlusNotices,
+compressedTextures, sharedActorRoom, mainThreadOwnWalk, greyDisabledTabs, jobKillNotices, dropPlusNotices,
 plusSevenNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, shortNotices, confirmGuildBan,
 petClickOpensWindow, smartPetPickup, touchInspect and dungeonCharacterPvs, which only an explicit false turns off.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
@@ -293,6 +308,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		renderScale: record.renderScale === 75 || record.renderScale === 50 ? record.renderScale : DEFAULT_RENDER_SCALE,
 		uiScale: uiScaleStop( record.uiScale ) ?? UI_SCALE_DEFAULT,
 		chatTimestamps: enabled( "chatTimestamps" ),
+		safeLoadingScreen: enabled( "safeLoadingScreen" ),
 		monsterGuide: enabled( "monsterGuide" ),
 		developerDiagnostics: enabled( "developerDiagnostics" ),
 		postProcessing: enabled( "postProcessing" ),
@@ -303,15 +319,17 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		hdrToneMap: enabled( "hdrToneMap" ),
 		sunShadow: enabled( "sunShadow" ),
 		perPixelLighting: enabled( "perPixelLighting" ),
-		predictedRunUp: enabled( "predictedRunUp" ),
+		predictedRunUp: record.predictedRunUp !== false,
 		smoothCamera: record.smoothCamera !== false,
 		enchantSparks: record.enchantSparks !== false,
 		compressedTextures: record.compressedTextures !== false,
 		sharedActorRoom: record.sharedActorRoom !== false,
+		mainThreadOwnWalk: record.mainThreadOwnWalk !== false,
 		greyDisabledTabs: record.greyDisabledTabs !== false,
 		jobKillNotices: record.jobKillNotices !== false,
 		dropPlusNotices: record.dropPlusNotices !== false,
 		plusSevenNotices: record.plusSevenNotices !== false,
+		uniqueDamageRank: enabled( "uniqueDamageRank" ),
 		vHidesCompanions: enabled( "vHidesCompanions" ),
 		dungeonCharacterPvs: record.dungeonCharacterPvs !== false,
 		fitWindowLabels: record.fitWindowLabels !== false,

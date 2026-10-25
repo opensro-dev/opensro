@@ -20,7 +20,7 @@ const { navigationEventDirection, navigationEvents } = await load( "foundation/n
 const { dungeonOwnerPath } = await load( "foundation/navigation/dungeon-ownership.ts" );
 const { objectNavigation } = await load( "foundation/navigation/object-navigation.ts" );
 const { createNavigation } = await load(
-	"runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts"
+	"foundation/navigation/clipper.ts"
 );
 const room = ( y = 0 ) => ({
 	x: 0,
@@ -104,6 +104,24 @@ test("event response registration is copied, replaced and cleared by the navigat
 	nav.install( regionId, { regionId, complete: true, objects } );
 	assert.ok( nav.clip( from, to, output ) );
 	assert.throws( () => nav.registerEvent( "edge", { enter: NaN, exit: 0 } ), /Invalid/ );
+	nav.clear();
+});
+test("with no registered response an event edge neither stops nor rejects (the native dispatch is uninstalled)", () => {
+	// #1498: the v1.150 client's navigation-event dispatcher never has a
+	// callback installed, so crossing an event edge is free natively. The
+	// port registers nothing either; this pins that dormancy so a future
+	// change cannot invent stops the original never had.
+	const nav = createNavigation(), objects = [ room() ], regionId = 0x8001;
+	nav.install( regionId, { regionId, complete: true, objects } );
+	const from = { regionId, x: 75, y: 0, z: 25, angle: 0 },
+		to = { ...from, x: 25, z: 75 },
+		output = { slide: false, context: 7 };
+	const point = nav.clip( from, to, output );
+	// The crossed events are still reported on output; what dormancy
+	// means is the walk itself is untouched by them.
+	assert.deepEqual( output.events.map( e => e.name ), [ "edge", "source", "destination" ] );
+	assert.equal( point.x, 25 );
+	assert.equal( point.z, 75 );
 	nav.clear();
 });
 test("BMS decoding preserves cell words, both event columns and registry strings", () => {

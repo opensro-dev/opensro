@@ -223,7 +223,9 @@ test("a reply raised while applying packets preserved past a goodbye is dropped,
 	assert.deepEqual( seen, [ 2, 256 ] );
 	assert.deepEqual( failures, [ "Server ended transport session: shutdown (5)" ] );
 	assert.equal( reasons[0].code, "server_bye_5" );
-	assert.equal( socket.sent.length, 1 );
+	// HELLO and the transport report that follows WELCOME; the dropped
+	// answer adds nothing.
+	assert.equal( socket.sent.length, 2 );
 	network.dispose();
 });
 
@@ -449,8 +451,15 @@ test("the transport journals each frame's direction, opcode and size, never its 
 	assert.ok( records );
 	const rows = [];
 	for ( let at = 0; at < records.length; at += 4 ) rows.push( [ records[at + 1], records[at + 2], records[at + 3] ] );
-	// hello (out), welcome (in), 0xB070 (in), 0x7074 (out).
-	assert.deepEqual( rows, [ [ 1, 1, socket.sent[0].byteLength ], [ 0, 2, 29 ], [ 0, 0xb070, 5 ], [ 1, 0x7074, 4 ] ] );
+	// hello (out), welcome (in), transport report (out), 0xB070 (in),
+	// 0x7074 (out).
+	assert.deepEqual( rows, [
+		[ 1, 1, socket.sent[0].byteLength ],
+		[ 0, 2, 29 ],
+		[ 1, 0x000c, 4 ],
+		[ 0, 0xb070, 5 ],
+		[ 1, 0x7074, 4 ]
+	] );
 	for ( let at = 0; at < records.length; at += 4 ) assert.ok( records[at] > 0, "epoch milliseconds" );
 	assert.equal( network.takeJournal(), null, "a take empties the journal" );
 	network.dispose();
@@ -485,7 +494,8 @@ test("a journal overflow leaves a gap row that counts every dropped frame", t =>
 	const socket = sockets[0];
 	socket.onopen();
 	socket.receive( welcome() );
-	// hello and welcome, then enough sends to overflow the ring twice.
+	// hello, welcome and the transport report, then enough sends to
+	// overflow the ring twice.
 	const sends = 9000;
 	for ( let i = 0; i < sends; i++ ) network.send( { opcode: 0x7021, payload: Uint8Array.of( 1 ) } );
 	const records = network.takeJournal();
@@ -497,7 +507,7 @@ test("a journal overflow leaves a gap row that counts every dropped frame", t =>
 		else frames++;
 	}
 	assert.equal( gaps, 0, "one gap row carries every drop" );
-	assert.equal( frames, sends + 2, "kept frames plus the gap count account for every frame" );
+	assert.equal( frames, sends + 3, "kept frames plus the gap count account for every frame" );
 	network.dispose();
 });
 

@@ -3,7 +3,11 @@ package transport
 import (
 	"bytes"
 	"errors"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	"opensro.online/server/internal/testsupport/wait"
 )
 
 var testHelloAdmissionToken = []byte("test-hello-admission-ticket")
@@ -62,6 +66,115 @@ func TestHelloBindsIdentityBeforeSessionAdmission(t *testing.T) {
 	metrics := hub.Metrics()
 	if metrics.HelloAdmissionAccepted != 1 || metrics.HelloAdmissionRefused != 0 {
 		t.Fatalf("HELLO admission metrics = %+v", metrics)
+	}
+}
+
+func TestHelloCommitRunsOnlyAfterWelcomeIsWritten(t *testing.T) {
+	hub := newHub(testCfg())
+	ticket := []byte("two-phase-ticket")
+	var commits atomic.Int32
+	hub.SetHelloCommitAuth(func(got []byte) (AdmissionIdentity, func() error, error) {
+		if !bytes.Equal(got, ticket) {
+			return AdmissionIdentity{}, nil, errors.New("unexpected ticket")
+		}
+		return AdmissionIdentity{AccountID: "alice", ShardID: "global-official"}, func() error {
+			commits.Add(1)
+			return nil
+		}, nil
+	})
+	// The gated writer cannot deliver WELCOME until the test opens the
+	// gate, so the commit cannot have run early no matter how goroutines
+	// interleave - asserting "not yet" against a blocked write is
+	// deterministic where asserting it after AcceptConn returns is not.
+	connection := newFakeConn(true)
+	connection.inbound <- Frame{
+		Opcode:  OpHello,
+		Payload: EncodeHello(Hello{AdmissionToken: ticket}),
+	}
+	hub.AcceptConn(connection)
+	wait.Consistently(t, 300*time.Millisecond, "no commit before WELCOME", func() bool {
+		return commits.Load() == 0
+	})
+	connection.openGate()
+	_ = waitWritten(t, connection, 1)
+	waitUntil(t, "admission commit after WELCOME", func() bool { return commits.Load() == 1 })
+	sessions := hub.Sessions()
+	if len(sessions) != 1 {
+		t.Fatalf("sessions = %d, want 1", len(sessions))
+	}
+	t.Cleanup(func() { hub.closeSession(sessions[0], nil) })
+}
+
+func TestHelloTicketSurvivesConnectionDyingBeforeWelcome(t *testing.T) {
+	hub := newHub(testCfg())
+	ticket := []byte("fallback-ticket")
+	var verifies, commits atomic.Int32
+	hub.SetHelloCommitAuth(func(got []byte) (AdmissionIdentity, func() error, error) {
+		if !bytes.Equal(got, ticket) {
+			return AdmissionIdentity{}, nil, errors.New("unexpected ticket")
+		}
+		verifies.Add(1)
+		return AdmissionIdentity{AccountID: "alice", ShardID: "global-official"}, func() error {
+			commits.Add(1)
+			return nil
+		}, nil
+	})
+	// The first attempt's writer never delivers WELCOME (gated) and the
+	// connection dies first: the ticket must stay unconsumed.
+	first := newFakeConn(true)
+	first.inbound <- Frame{
+		Opcode:  OpHello,
+		Payload: EncodeHello(Hello{AdmissionToken: ticket}),
+	}
+	hub.AcceptConn(first)
+	wait.Consistently(t, 300*time.Millisecond, "no commit before WELCOME", func() bool {
+		return commits.Load() == 0
+	})
+	_ = first.Close("test: connection died before WELCOME")
+	// The fallback presents the same ticket and is admitted; only its
+	// WELCOME consumes.
+	second := helloConn(nil, ticket)
+	hub.AcceptConn(second)
+	_ = waitWritten(t, second, 1)
+	waitUntil(t, "fallback admission commit", func() bool { return commits.Load() == 1 })
+	if got := verifies.Load(); got != 2 {
+		t.Fatalf("verifies = %d, want 2 (verify never consumes)", got)
+	}
+	for _, session := range hub.Sessions() {
+		t.Cleanup(func() { hub.closeSession(session, nil) })
+	}
+}
+
+func TestHelloCommitReplayClosesTheSecondSession(t *testing.T) {
+	hub := newHub(testCfg())
+	ticket := []byte("raced-ticket")
+	var commits atomic.Int32
+	hub.SetHelloCommitAuth(func(got []byte) (AdmissionIdentity, func() error, error) {
+		if !bytes.Equal(got, ticket) {
+			return AdmissionIdentity{}, nil, errors.New("unexpected ticket")
+		}
+		return AdmissionIdentity{AccountID: "alice", ShardID: "global-official"}, func() error {
+			if commits.Add(1) > 1 {
+				return errors.New("auth: transport admission token already used")
+			}
+			return nil
+		}, nil
+	})
+	first := helloConn(nil, ticket)
+	hub.AcceptConn(first)
+	_ = waitWritten(t, first, 1)
+	waitUntil(t, "first admission commit", func() bool { return commits.Load() == 1 })
+
+	second := helloConn(nil, ticket)
+	hub.AcceptConn(second)
+	_ = waitWritten(t, second, 1)
+	// The second WELCOME went out, but its consumption reports the
+	// ticket already used: the session must not survive it.
+	waitUntil(t, "replayed session closed", func() bool {
+		return len(hub.Sessions()) == 1
+	})
+	for _, session := range hub.Sessions() {
+		t.Cleanup(func() { hub.closeSession(session, nil) })
 	}
 }
 

@@ -73,20 +73,25 @@ equipmentGlowCatalog
 
 Join authored item groups and thresholds to their active reference item IDs.
 Native rows come from the v1.150 tables; when the later client's tables are
-imported, an item also carries their rows marked enhanced (port-only).
+imported, an item also carries their rows marked enhanced (port-only). The
+three roots default to the real tables; tests pass fixture roots.
 ================
 */
-export function equipmentGlowCatalog( vsroRoot = vsroItemGlowRoot ) {
-	const nativeGroups = glowTierGroups( path.join( clientV150ResinfoRoot, "itemtypenumber.txt" ) );
-	const nativeCodes = glowItemGroups( path.join( clientV150ResinfoRoot, "itemoption.txt" ), nativeGroups );
+export function equipmentGlowCatalog(
+	vsroRoot = vsroItemGlowRoot,
+	nativeResinfoRoot = clientV150ResinfoRoot,
+	textdataRoot = retailTextdataRoot
+) {
+	const nativeGroups = glowTierGroups( path.join( nativeResinfoRoot, "itemtypenumber.txt" ) );
+	const nativeCodes = glowItemGroups( path.join( nativeResinfoRoot, "itemoption.txt" ), nativeGroups );
 	let enhancedGroups = new Map(), enhancedCodes = new Map();
 	if ( fs.existsSync( path.join( vsroRoot, "itemtypenumber.txt" ) ) ) {
 		enhancedGroups = glowTierGroups( path.join( vsroRoot, "itemtypenumber.txt" ) );
 		enhancedCodes = glowItemGroups( path.join( vsroRoot, "itemoption.txt" ), enhancedGroups );
 	}
 	const items = new Map();
-	for ( const file of listTextDataShardNamesSync( retailTextdataRoot, /^itemdata.*\.txt$/i ) ) {
-		for ( const line of readTextDataLinesSync( path.join( retailTextdataRoot, file ) ) ) {
+	for ( const file of listTextDataShardNamesSync( textdataRoot, /^itemdata.*\.txt$/i ) ) {
+		for ( const line of readTextDataLinesSync( path.join( textdataRoot, file ) ) ) {
 			const c = splitTextDataRow( line );
 			if ( c[0] !== "1" ) continue;
 			const native = nativeCodes.has( c[2] ) ? nativeGroups.get( nativeCodes.get( c[2] ) ) : [];

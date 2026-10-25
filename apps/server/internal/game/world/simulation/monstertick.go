@@ -50,6 +50,9 @@ whenever the monster population is enabled - which is the DEFAULT
 */
 type MonsterMoverOps struct {
 	divisionID string // set by the owning ticker shard; empty only in direct fixtures
+	// watch is the owning ticker's stall watch; the leg steps it every
+	// monsterLegStepActors actors. Nil in direct fixtures.
+	watch *tickWatch
 	// Navigation counts route plans and path clips (navigation_metrics.go);
 	// nil counts nothing.
 	Navigation     *NavigationMetrics
@@ -364,6 +367,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 		owned.BasicAttack = attack
 		owned.advanceAndPublish(dispatch.division, dispatch.instance, dispatch.players, nowMs, sessions, push)
 	}
+	stepped := 0
 	for _, batch := range ops.Monsters.behaviorBatchesForDivision(nowMs, ops.divisionID) {
 		divisionID := batch.key.division
 		divisionSet[divisionID] = true
@@ -387,6 +391,9 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 			instance, exists := ops.Monsters.behaviorActor(batch.key, gid)
 			if !exists {
 				continue
+			}
+			if stepped++; stepped%monsterLegStepActors == 0 {
+				ops.watch.step()
 			}
 			if ops.RunAction != nil {
 				dispatch.division, dispatch.instance, dispatch.players = divisionID, instance, players

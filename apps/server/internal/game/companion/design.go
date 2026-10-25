@@ -3,9 +3,9 @@
 
 design.go - the attack-pet design JSON, embedded
 
-Port-only, not native. petdesign.json is written by
-scripts/tools/pet_design_export.py from docs/pet-expansion/pet-design.json
-(the owner's single source: rules, skills, gear, degrees, affixes). It is
+Port-only, not native. petdesign.json is the owner's single source (rules,
+skills, gear, degrees, affixes; #1631): the asset build reads it in place
+and scripts/tools/pet_design_export.py generates the client's copy. It is
 compiled into the binary, so a malformed export is a build defect and
 panics at package init (the go:embed rule in apps/server/AGENTS.md).
 

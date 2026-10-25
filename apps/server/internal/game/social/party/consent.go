@@ -101,6 +101,15 @@ func (r *Runtime) applyPartyConsent(session *transport.Session, divisionID strin
 	}
 	if code != 0 {
 		r.notifyInvitationFailure(invite, code)
+		return
+	}
+	// A committed join changed the party for everyone in it now.
+	if r.PartyChanged != nil {
+		if snapshot, ok := r.registry.PartyOf(divisionID, actor.Name); ok {
+			for _, member := range snapshot.Members {
+				r.PartyChanged(divisionID, member.Name)
+			}
+		}
 	}
 }
 

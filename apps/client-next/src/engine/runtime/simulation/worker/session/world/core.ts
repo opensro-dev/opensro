@@ -17,7 +17,7 @@ import {
 	type NameColorContext
 } from "@/engine/foundation/gameplay/name-color";
 import { fortressActive } from "@/engine/foundation/gameplay/fortress";
-import type { EntityState } from "@/engine/contracts/world";
+import type { EntityState, WorldEvent } from "@/engine/contracts/world";
 import { travelMode, resetTravelRegion, gateRequest, isReturnScroll } from "@/engine/foundation/gameplay/travel";
 import { commerceReferences } from "@/engine/foundation/gameplay/commerce";
 import {
@@ -64,7 +64,8 @@ export function createWorldCore( send: ( frame: WireFrame ) => void ) {
 		country: refObjId => entities.characterCountry( refObjId ),
 		playerModels: country => entities.playerModels( country ),
 		item: refObjId => entities.itemReference( refObjId ),
-		monster: codename => entities.monsterReference( codename )
+		monster: codename => entities.monsterReference( codename ),
+		npcs: () => entities.npcs()
 	} );
 
 	const capeTeams = new Map<number, number>();
@@ -190,6 +191,10 @@ items). Only PvP capes own a team value; keep strict validation for them.
 	let bootstrapRegion: number | undefined;
 	let pendingTravel: import("@/engine/contracts/world").WorldTravel | null = null;
 	let awaitingTravelBootstrap = false;
+	// Compactions the entity journal has dropped into a resync, as last seen
+	// by take(): a moved count puts the full gameplay snapshot and the
+	// pending travel inside the resync batch (see take).
+	let seenResyncs = 0;
 	let publishedShop: import("@/engine/contracts/gameplay").GameplayState["shop"];
 	let publishedCatalog: import("@/engine/contracts/gameplay").GameplayState["skillCatalog"],
 		retainedCatalog: import("@/engine/contracts/gameplay").GameplayState["skillCatalog"],
@@ -210,6 +215,55 @@ fields (shop, skill catalog, GM catalog, social).
 		publishedCatalog = undefined;
 		publishedGmCatalog = undefined;
 		publishedSocial = undefined;
+	}
+	/*
+	================
+	gameplayEvent
+
+	Compose the next gameplay publication against the retained catalogues:
+	the large fields (shop, skill and GM catalogues, social) ride only
+	when they change, unless the projection was invalidated. Consumes the
+	pending state, so a state is published exactly once - by step into
+	the journal queue, or by take into a resync batch.
+	================
+	*/
+	function gameplayEvent(): Extract<WorldEvent, { kind: "gameplay"; }> | null {
+		const state = gameplay.take();
+		if ( !state ) return null;
+		const { skillCatalog, gmCatalog, social, shop, ...dynamic } = state;
+		const catalog = skillCatalog === seenCatalog ?
+			retainedCatalog ?? skillCatalog :
+			retainedCatalog && sameSkillCatalog( skillCatalog, retainedCatalog ) ?
+			retainedCatalog :
+			skillCatalog;
+		seenCatalog = skillCatalog;
+		retainedCatalog = catalog;
+		const catalogChanged = catalog !== publishedCatalog;
+		const gm = !gmCatalog ?
+			undefined :
+			gmCatalog === seenGmCatalog ?
+			retainedGmCatalog ?? gmCatalog :
+			retainedGmCatalog && sameSkillCatalog( gmCatalog, retainedGmCatalog ) ?
+			retainedGmCatalog :
+			gmCatalog;
+		if ( gmCatalog ) seenGmCatalog = gmCatalog;
+		if ( gm ) retainedGmCatalog = gm;
+		const gmChanged = Boolean( gm ) && gm !== publishedGmCatalog;
+		const event: Extract<WorldEvent, { kind: "gameplay"; }> = {
+			kind: "gameplay",
+			state: {
+				...dynamic,
+				...(shop !== publishedShop ? { shop } : {}),
+				...(catalogChanged ? { skillCatalog: catalog } : {}),
+				...(gmChanged && gm ? { gmCatalog: gm } : {}),
+				...(social !== publishedSocial ? { social } : {})
+			}
+		};
+		publishedShop = shop;
+		if ( catalogChanged ) publishedCatalog = catalog;
+		if ( gmChanged ) publishedGmCatalog = gm;
+		publishedSocial = social;
+		return event;
 	}
 	/*
 ================
@@ -434,6 +488,8 @@ the entry continues it like the one after a world transfer.
 			if ( pendingTravel ) entities.publish( { kind: "travel", travel: pendingTravel } );
 		},
 		receive,
+		outstandingSince: gameplay.outstandingSince,
+		noteInput: gameplay.noteInput,
 		notice: gameplay.notice,
 		chatBlocks: gameplay.chatBlocks,
 		options: gameplay.options,
@@ -483,6 +539,12 @@ UI and quickslot commands. A skill aims at the newest selection intent
 			// gameplay lane never sees the command.
 			if ( command.kind === "debug-body-visual" ) {
 				entities.debugBodyVisual( gameplay.localIdentity() );
+				return;
+			}
+			// /showme and /hideme write only the entity owner's shown byte;
+			// the gameplay lane never sees the command.
+			if ( command.kind === "debug-local-visible" ) {
+				entities.debugLocalVisible( gameplay.localIdentity(), command.visible );
 				return;
 			}
 			const itemType = command.kind === "item-use" ? gameplay.itemUseType( command.slot ) : undefined;
@@ -547,42 +609,8 @@ Advances entities and gameplay, then publishes the changed gameplay state.
 					gameplay.cancelCast( token, now );
 				}
 			}
-			const state = gameplay.take();
-			if ( state ) {
-				const { skillCatalog, gmCatalog, social, shop, ...dynamic } = state;
-				const catalog = skillCatalog === seenCatalog ?
-					retainedCatalog ?? skillCatalog :
-					retainedCatalog && sameSkillCatalog( skillCatalog, retainedCatalog ) ?
-					retainedCatalog :
-					skillCatalog;
-				seenCatalog = skillCatalog;
-				retainedCatalog = catalog;
-				const catalogChanged = catalog !== publishedCatalog;
-				const gm = !gmCatalog ?
-					undefined :
-					gmCatalog === seenGmCatalog ?
-					retainedGmCatalog ?? gmCatalog :
-					retainedGmCatalog && sameSkillCatalog( gmCatalog, retainedGmCatalog ) ?
-					retainedGmCatalog :
-					gmCatalog;
-				if ( gmCatalog ) seenGmCatalog = gmCatalog;
-				if ( gm ) retainedGmCatalog = gm;
-				const gmChanged = Boolean( gm ) && gm !== publishedGmCatalog;
-				entities.publish( {
-					kind: "gameplay",
-					state: {
-						...dynamic,
-						...(shop !== publishedShop ? { shop } : {}),
-						...(catalogChanged ? { skillCatalog: catalog } : {}),
-						...(gmChanged && gm ? { gmCatalog: gm } : {}),
-						...(social !== publishedSocial ? { social } : {})
-					}
-				} );
-				publishedShop = shop;
-				if ( catalogChanged ) publishedCatalog = catalog;
-				if ( gmChanged ) publishedGmCatalog = gm;
-				publishedSocial = social;
-			}
+			const event = gameplayEvent();
+			if ( event ) entities.publish( event );
 		},
 		// The owners' skipped cosmetic steps, for the world's degraded reports.
 		takeDegradations: () => entities.takeDegradations(),
@@ -653,7 +681,26 @@ take
 ================
 		*/
 		take() {
-			return entities.take();
+			const batch = entities.take();
+			if ( !batch || entities.resyncs() === seenResyncs ) return batch;
+			seenResyncs = entities.resyncs();
+			// A compacted journal rebuilt the world publication whole, and
+			// the batch opens with a reset: what the reset nulls must ride
+			// inside this batch, not the next one. The full gameplay
+			// snapshot (invalidateProjection + invalidate force every
+			// field) and the pending travel are appended - on a composed
+			// batch, the taken one is sealed - unless the batch already
+			// carries them from after the drop.
+			invalidateProjection();
+			gameplay.invalidate();
+			const extra: WorldEvent[] = [];
+			const event = gameplayEvent();
+			if ( event ) extra.push( event );
+			if (
+				pendingTravel &&
+				!batch.events.some( e => e.kind === "travel" && e.travel === pendingTravel )
+			) extra.push( { kind: "travel", travel: pendingTravel } );
+			return extra.length ? { ...batch, events: [ ...batch.events, ...extra ] } : batch;
 		},
 		/*
 ================

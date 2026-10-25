@@ -61,7 +61,7 @@ approachHeading
 Math_ApproachAngle on heading words: the shortest arc, at most limit words.
 ================
 */
-function approachHeading( from: number, to: number, limit: number ) {
+export function approachHeading( from: number, to: number, limit: number ) {
 	const half = HEADING_WORDS / 2;
 	const delta = ((to - from + HEADING_WORDS + half) % HEADING_WORDS) - half;
 	return (from + Math.max( -limit, Math.min( limit, delta ) ) + HEADING_WORDS) % HEADING_WORDS;

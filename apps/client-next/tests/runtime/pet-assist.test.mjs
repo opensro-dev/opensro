@@ -136,6 +136,106 @@ test("a dead target is forgotten, so the next attack orders the pet again", () =
 	assert.deepEqual( orders( sent ), [ ATTACK_ORDER, ATTACK_ORDER ] );
 });
 
+/*
+================
+halt
+
+A 0xB2F5 position correction (the halt) naming one gid.
+================
+*/
+function halt( gid ) {
+	const p = new Uint8Array( 20 ), v = new DataView( p.buffer );
+	v.setUint32( 0, gid, true );
+	v.setUint16( 4, 0x6b4f, true );
+	return { opcode: 0xb2f5, payload: p };
+}
+
+test("a halted pet that never casts forgets its target after three seconds and is re-ordered", () => {
+	const { gameplay, sent } = withPet( 1 );
+	gameplay.receive( cast( ATTACK_SKILL, LOCAL.gid, MONSTER, 100 ), 1 );
+	assert.deepEqual( orders( sent ), [ ATTACK_ORDER ] );
+	// 775B50: the halt starts the pet's countdown (+0xAB30 = 3000). A
+	// second halt while it runs does not restart it (775BE7: only
+	// from -1).
+	gameplay.receive( halt( PET ), 10 );
+	gameplay.receive( halt( PET ), 2000 );
+	gameplay.step( 3009, LOCAL );
+	gameplay.receive( cast( ATTACK_SKILL, LOCAL.gid, MONSTER, 101 ), 3010 );
+	assert.equal( orders( sent ).length, 1, "inside three seconds the target stands" );
+	gameplay.step( 3011, LOCAL );
+	gameplay.receive( cast( ATTACK_SKILL, LOCAL.gid, MONSTER, 102 ), 3012 );
+	assert.deepEqual( orders( sent ), [ ATTACK_ORDER, ATTACK_ORDER ], "at three seconds the pet is re-ordered" );
+});
+
+test("a pet that casts within three seconds of its halt keeps its target", () => {
+	const { gameplay, sent } = withPet( 1 );
+	gameplay.receive( cast( ATTACK_SKILL, LOCAL.gid, MONSTER, 100 ), 1 );
+	gameplay.receive( halt( PET ), 10 );
+	// 776830 (0x7769D8): the pet's own cast cancels the countdown.
+	gameplay.receive( cast( ATTACK_SKILL, PET, MONSTER, 200 ), 20 );
+	gameplay.step( 5000, LOCAL );
+	gameplay.receive( cast( ATTACK_SKILL, LOCAL.gid, MONSTER, 101 ), 5001 );
+	assert.equal( orders( sent ).length, 1, "the cancelled countdown never expires the target" );
+});
+
+test("a cast kind outside 0 and 2 does not cancel the pet's halt countdown", () => {
+	const { gameplay, sent } = withPet( 1 );
+	gameplay.receive( cast( ATTACK_SKILL, LOCAL.gid, MONSTER, 100 ), 1 );
+	gameplay.receive( halt( PET ), 10 );
+	// 776830 lets only cast kinds 0 and 2 past its entry; a kind-1
+	// broadcast returns before the cancel store (0x7769D8), so the
+	// countdown runs out and the target is forgotten.
+	const stray = cast( ATTACK_SKILL, PET, MONSTER, 200 );
+	stray.payload[1] = 1;
+	gameplay.receive( stray, 20 );
+	gameplay.step( 5000, LOCAL );
+	gameplay.receive( cast( ATTACK_SKILL, LOCAL.gid, MONSTER, 101 ), 5001 );
+	assert.deepEqual( orders( sent ), [ ATTACK_ORDER, ATTACK_ORDER ], "the countdown expired the target" );
+});
+
+test("a continuous cast (kind 2) by the pet still cancels the countdown", () => {
+	const { gameplay, sent } = withPet( 1 );
+	gameplay.receive( cast( ATTACK_SKILL, LOCAL.gid, MONSTER, 100 ), 1 );
+	gameplay.receive( halt( PET ), 10 );
+	const channel = cast( ATTACK_SKILL, PET, MONSTER, 200 );
+	channel.payload[1] = 2;
+	gameplay.receive( channel, 20 );
+	gameplay.step( 5000, LOCAL );
+	gameplay.receive( cast( ATTACK_SKILL, LOCAL.gid, MONSTER, 101 ), 5001 );
+	assert.equal( orders( sent ).length, 1, "kind 2 reaches the cancel store" );
+});
+
+test("only an opened cast (result byte 1) cancels the countdown, whatever its kind", async () => {
+	// 776830's first entry gate (0x776869): any other result byte takes the
+	// refusal tail before the store. The gameplay path cannot admit such a
+	// full-length payload (the cast parser refuses it first), so the gate is
+	// pinned on the function itself (#1529).
+	const { castPetAssistCountdowns } = await import( "../../src/engine/foundation/gameplay/pet-assist.ts" );
+	const countdowns = new Map( [ [ PET, 5000 ] ] );
+	for ( const kind of [ 0, 2 ] ) {
+		for ( const result of [ 0, 1, 2, 3 ] ) {
+			const payload = new Uint8Array( 19 );
+			payload[0] = result;
+			payload[1] = kind;
+			new DataView( payload.buffer ).setUint32( 6, PET, true );
+			const next = castPetAssistCountdowns( countdowns, payload );
+			assert.equal( next.has( PET ), result !== 1, `result ${result}, kind ${kind}` );
+		}
+	}
+});
+
+test("a halt naming a pet with no assist target starts no countdown", () => {
+	const { gameplay, sent } = withPet( 1 );
+	gameplay.receive( halt( PET ), 10 );
+	gameplay.receive( cast( ATTACK_SKILL, LOCAL.gid, MONSTER, 100 ), 20 );
+	assert.deepEqual( orders( sent ), [ ATTACK_ORDER ] );
+	// No countdown was armed before the order, so the fresh target is
+	// not expired by a stale one ticking underneath it.
+	gameplay.step( 4000, LOCAL );
+	gameplay.receive( cast( ATTACK_SKILL, LOCAL.gid, MONSTER, 101 ), 4001 );
+	assert.equal( orders( sent ).length, 1, "the fresh target stands" );
+});
+
 test("the command bar's follow clears the assist target", () => {
 	const { gameplay, sent, entities } = withPet( 1 );
 	gameplay.receive( cast( ATTACK_SKILL, LOCAL.gid, MONSTER, 100 ), 1 );

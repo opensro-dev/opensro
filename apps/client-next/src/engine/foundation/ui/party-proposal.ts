@@ -10,6 +10,7 @@ question lines and the two answer buttons.
 ===========================================================================
 */
 import type { UiRect } from "@/engine/contracts/ui";
+import type { AuthoredControl } from "./authored-layout";
 import { frameParts } from "./frame-ring";
 import { messageBox } from "./message-box";
 
@@ -124,22 +125,73 @@ export function guildQuestionLayout( width: number, height: number, messageHeigh
 	};
 }
 
-// REVERSE_RETURN_ROW is the reverse return box's row pitch (26 px).
-const REVERSE_RETURN_ROW = 26;
+// 52F460 types 0x21 and 0x24 (53259C..5327AE) give the MsgBoxINIF box
+// three stacked buttons in this art: ids 200 and 202 the two points, 201
+// Cancel. CIFButton's texture setter (541100, slot 0x34 of its +0x84
+// vtable) derives the _focus, _press and _disable siblings.
+export const REVERSE_RETURN_BUTTON = "/assets/images/Media_extracted/interface/ifcommon/com_return_button.png";
+// The box (5325CF), the question line (id 1, 5325EF and 532608) and the
+// buttons (53264A..5326DA): 252 x 24 at x 25, from y 76 at a 31 px pitch.
+const REVERSE_RETURN_WIDTH = 300;
+const REVERSE_RETURN_HEIGHT = 180;
+const REVERSE_RETURN_BUTTON_X = 25;
+const REVERSE_RETURN_BUTTON_Y = 76;
+const REVERSE_RETURN_BUTTON_WIDTH = 252;
+const REVERSE_RETURN_BUTTON_HEIGHT = 24;
+const REVERSE_RETURN_ROW = 31;
 
 /*
 ================
 reverseReturnLayout
 
-The reverse return box: guildProposalLayout's 308 x 148 box for its two
-native rows. A port-only third row (the map, reverse-return-map.ts) grows
-the box and moves Cancel down by one row pitch.
+The reverse return box: the question, then one button per point and
+Cancel under them. A port-only third point (the map, reverse-return-map.ts)
+takes Cancel's place, and Cancel and the box move down by one row pitch.
 ================
 */
 export function reverseReturnLayout( width: number, height: number, rows: 2 | 3 ) {
 	const extra = (rows - 2) * REVERSE_RETURN_ROW;
-	const box = messageBox( width, height, 308, 148 + extra ), [x, y] = box.frame;
-	return { ...box, refuse: [ x + 152, y + 99 + extra, 76, 24 ] as UiRect };
+	const box = messageBox( width, height, REVERSE_RETURN_WIDTH, REVERSE_RETURN_HEIGHT + extra ),
+		[x, y] = box.frame;
+	const row = ( index: number ): UiRect => [
+		x + REVERSE_RETURN_BUTTON_X,
+		y + REVERSE_RETURN_BUTTON_Y + index * REVERSE_RETURN_ROW,
+		REVERSE_RETURN_BUTTON_WIDTH,
+		REVERSE_RETURN_BUTTON_HEIGHT
+	];
+	return {
+		...box,
+		question: [ x + 27, y + 48, 246, 20 ] as UiRect,
+		points: Array.from( { length: rows }, ( _, index ) => row( index ) ),
+		refuse: row( rows )
+	};
+}
+
+/*
+================
+reverseReturnButton
+
+One of the box's buttons at r: a MsgBoxINIF button (GDR_MBIN_BTN_OK,
+_CERTIFY or _CANCEL, all authored alike: font 0, colour 254,251,216,
+client inset 0,6,0,0, centred, top-aligned) wearing the return art.
+================
+*/
+export function reverseReturnButton( r: UiRect ): AuthoredControl {
+	return {
+		name: "",
+		id: 0,
+		type: "CIFButton",
+		rect: r,
+		client: [ 0, 6, 0, 0 ],
+		uv: [ 0, 0, 1, 1 ],
+		texture: REVERSE_RETURN_BUTTON,
+		size: [ REVERSE_RETURN_BUTTON_WIDTH, REVERSE_RETURN_BUTTON_HEIGHT ],
+		text: "",
+		color: [ 254 / 255, 251 / 255, 216 / 255, 1 ],
+		fontIndex: 0,
+		hAlign: 1,
+		vAlign: 0
+	};
 }
 
 /*

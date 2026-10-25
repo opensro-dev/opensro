@@ -79,7 +79,31 @@ const (
 	// committed WorldState (goal and timed segment). Native clients never opt in.
 	OpPredictedMove       uint16 = 0x0009
 	OpPredictedMoveResult uint16 = 0x000A
+	// OpStreamAck (C->S) [u32 stream position]: the client has applied the
+	// stream's frames up to that position; the server drops them from its
+	// resume ring (stream_ring.go, #1466).
+	OpStreamAck uint16 = 0x000B
+	// OpTransportReport (C->S) [version u8][reason u8]: which transport the
+	// session connected with and, when the fastest one failed first, why
+	// the client fell back (#1449). Sent once after WELCOME on each attach.
+	// Telemetry only: the transport never requires it, and a report it
+	// cannot decode is dropped, never fatal.
+	OpTransportReport uint16 = 0x000C
 )
+
+// Transport fallback reasons for OpTransportReport. The client reports
+// why the connection that reached WELCOME was not its first choice;
+// FallbackNone means no fallback happened on this connect.
+const (
+	FallbackNone        uint8 = 0 // connected on the first transport tried
+	FallbackUnsupported uint8 = 1 // fastest transport unsupported here
+	FallbackTimeout     uint8 = 2 // fastest transport attempt timed out
+	FallbackRefused     uint8 = 3 // fastest transport attempt was refused
+	FallbackClosedEarly uint8 = 4 // fastest transport closed before WELCOME
+)
+
+// transportReportVersion is the only OpTransportReport layout today.
+const transportReportVersion uint8 = 1
 
 // maxReservedOpcode is the top of the session-internal range: opcodes the
 // transport consumes itself and game code cannot register.
@@ -236,11 +260,65 @@ func readStreamFrame(r io.Reader, maxBytes uint32) (Frame, error) {
 type Hello struct {
 	ResumeToken    []byte // empty or ResumeTokenLen bytes
 	AdmissionToken []byte // required one-use Agent-minted admission ticket
+	// HasPosition and LastApplied: the stream position the client last
+	// applied, an optional u32 tail sent with a resume token (#1466). A
+	// resume without it is refused (stream_ring.go).
+	HasPosition bool
+	LastApplied uint32
+}
+
+// DecodeStreamAck parses an OpStreamAck payload.
+func DecodeStreamAck(b []byte) (uint32, bool) {
+	if len(b) != 4 {
+		return 0, false
+	}
+	return binary.LittleEndian.Uint32(b), true
+}
+
+/*
+================
+EncodeTransportReport
+
+Builds the OpTransportReport payload the client sends after WELCOME.
+================
+*/
+func EncodeTransportReport(reason uint8) []byte {
+	return []byte{transportReportVersion, reason}
+}
+
+/*
+================
+DecodeTransportReport
+
+Parses an OpTransportReport payload into the fallback's history name.
+FallbackNone (and any report this build cannot read: wrong size, newer
+version, unknown reason) reports ok=false, because telemetry from a
+client we do not understand must not be recorded as a fact (#1449).
+================
+*/
+func DecodeTransportReport(b []byte) (name string, ok bool) {
+	if len(b) != 2 || b[0] != transportReportVersion {
+		return "", false
+	}
+	switch b[1] {
+	case FallbackUnsupported:
+		return "unsupported", true
+	case FallbackTimeout:
+		return "timeout", true
+	case FallbackRefused:
+		return "refused", true
+	case FallbackClosedEarly:
+		return "closed-early", true
+	}
+	return "", false
 }
 
 // EncodeHello builds the OpHello payload.
 func EncodeHello(h Hello) []byte {
 	size := 4 + len(h.ResumeToken) + len(h.AdmissionToken)
+	if h.HasPosition {
+		size += 4
+	}
 	buf := make([]byte, size)
 	buf[0] = ProtocolVersion
 	buf[1] = uint8(len(h.ResumeToken))
@@ -248,6 +326,9 @@ func EncodeHello(h Hello) []byte {
 	offset := 2 + len(h.ResumeToken)
 	binary.LittleEndian.PutUint16(buf[offset:offset+2], uint16(len(h.AdmissionToken)))
 	copy(buf[offset+2:], h.AdmissionToken)
+	if h.HasPosition {
+		binary.LittleEndian.PutUint32(buf[size-4:], h.LastApplied)
+	}
 	return buf
 }
 
@@ -278,10 +359,16 @@ func DecodeHello(b []byte) (Hello, error) {
 	if admissionLen == 0 || admissionLen > MaxAdmissionTokenLen {
 		return Hello{}, fmt.Errorf("transport: HELLO admission token length %d, want 1..%d", admissionLen, MaxAdmissionTokenLen)
 	}
-	if len(b) != prefixBytes+2+admissionLen {
-		return Hello{}, fmt.Errorf("transport: HELLO payload %d bytes, want %d", len(b), prefixBytes+2+admissionLen)
+	end := prefixBytes + 2 + admissionLen
+	switch len(b) {
+	case end:
+	case end + 4:
+		h.HasPosition = true
+		h.LastApplied = binary.LittleEndian.Uint32(b[end:])
+	default:
+		return Hello{}, fmt.Errorf("transport: HELLO payload %d bytes, want %d or %d", len(b), end, end+4)
 	}
-	h.AdmissionToken = append([]byte(nil), b[prefixBytes+2:]...)
+	h.AdmissionToken = append([]byte(nil), b[prefixBytes+2:end]...)
 	return h, nil
 }
 

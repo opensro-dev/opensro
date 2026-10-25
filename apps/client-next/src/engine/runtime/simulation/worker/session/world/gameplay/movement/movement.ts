@@ -29,10 +29,6 @@ import {
 	movementHeading,
 	decodeNativeMovement,
 	poseDistance,
-	clientWalkingStep,
-	clientPlanarDistance,
-	clientWalkingDirection,
-	clientWalkingVector,
 	sampleMovement,
 	interpolateMovement as interpolate,
 	REGION_SIZE,
@@ -41,7 +37,13 @@ import {
 	validMovementSpeed,
 	movementDuration
 } from "@/engine/foundation/gameplay/native-movement";
-import { createNavigation } from "./navigation/navigation";
+import { createNavigation } from "@/engine/foundation/navigation/clipper";
+import {
+	stepWalk,
+	walkLeg,
+	WALK_NAVIGATION_REJECT,
+	WALK_NAVIGATION_STOP
+} from "@/engine/foundation/gameplay/walk-step";
 import { minimapPoseKey } from "@/engine/foundation/gameplay/minimap-floor-key";
 import { admitPose, decodeMovementReceipt, receiptWorld } from "@/engine/foundation/gameplay/movement-wire";
 import type { Pose } from "@/engine/contracts/gameplay";
@@ -52,13 +54,13 @@ import {
 	directionLegBlocked,
 	directionLegEnd,
 	directionMoveBody,
-	directionPoint,
-	modelYaw
+	directionPoint
 } from "@/engine/foundation/gameplay/direction-movement";
 const ENDPOINT_EPSILON = .01;
 const PRESENTATION_LOOKAHEAD_MS = 100;
-const NAVIGATION_STOP = 1;
-const NAVIGATION_REJECT = 0x10000000;
+// The navigation step's status bits live with the step (walk-step.ts).
+const NAVIGATION_STOP = WALK_NAVIGATION_STOP;
+const NAVIGATION_REJECT = WALK_NAVIGATION_REJECT;
 // A skill run-up's server goal lies within this heading of the predicted
 // one, seen from the predicted start (sameApproachWalk).
 const APPROACH_HEADING_TOLERANCE = Math.PI / 8;
@@ -200,6 +202,9 @@ export function createMovement(
 				owners?: readonly NavOwnerSpan[];
 				castToken?: number;
 				fixedTiming?: boolean;
+				// The local player's own cast travel, which the main-thread
+				// mover steps (#1569); a struck knockback never sets it.
+				ownCast?: boolean;
 				admitted?: boolean;
 				admittedFrom?: Pose;
 				admittedTo?: Pose;
@@ -220,6 +225,8 @@ export function createMovement(
 	let surfaceCursor: import("@/engine/contracts/navigation").SurfaceCursor = {};
 	let speed = 50, walkSpeed = 20, runSpeed = 50, mode = 3;
 	let movementRevision = 0;
+	// The last main-thread movement input processed (#1441a, movement-input.ts).
+	let inputSeq = 0;
 	let transitionOwner: NavOwner | undefined;
 	let transition: import("@/engine/contracts/gameplay").MovementTransition = {
 		relocation: 0,
@@ -610,6 +617,24 @@ it: it never left the start, so walk back there.
 	}
 	/*
 ================
+settlePrediction
+
+End an open prediction where the walker stands. The walk it predicted did
+run, but it is over and the server will send no walk of its own: a chase
+whose target died or left mid-leg, where the server halts the caster
+wherever its follow had carried it. There is no start to walk back to (that
+is endPrediction); the next server walk reconciles from here.
+================
+	*/
+	function settlePrediction( now: number ) {
+		if ( !predicted || !pose ) return;
+		advanceTo( now );
+		predicted = null;
+		beginTransition( "cast" );
+		segment = null;
+	}
+	/*
+================
 bindOwners
 ================
 	*/
@@ -663,6 +688,36 @@ The separate presentation corridor bounds cosmetic extrapolation.
 
 	/*
 ================
+movementAim
+
+The published aim of the walk in progress (state).
+================
+	*/
+	function movementAim(): import("@/engine/contracts/gameplay").MovementAim | undefined {
+		if ( !segment || segment.fixedTiming ) return undefined;
+		if ( !segment.direction ) return { kind: "goal", destination: { ...segment.to } };
+		return segment.direction.blocked ? undefined : { kind: "direction", heading: segment.direction.heading };
+	}
+	/*
+	================
+	movementDisplacement
+
+	The displacement the main-thread mover steps: the local player's own
+	cast travel on its authored clock. A knockback struck onto the player
+	publishes nothing here and stays on the interpolated presenter.
+	================
+	*/
+	function movementDisplacement() {
+		if ( !segment?.fixedTiming || !segment.ownCast || !(segment.duration > 0) ) return undefined;
+		return {
+			from: segment.from,
+			to: segment.to,
+			startedAtMs: segment.start,
+			durationMs: segment.duration
+		};
+	}
+	/*
+================
 referenceAt
 ================
 	*/
@@ -709,113 +764,54 @@ every high-latency acknowledgement and skill press.
 	function advanceTo( now: number ) {
 		if ( !pose || now < poseAtMs ) return;
 		if ( segment ) {
-			const elapsed = Math.max( 0, now - Math.max( poseAtMs, segment.start ) );
-			if ( !elapsed ) return;
-			if ( segment.fixedTiming ) {
-				owner = liveOwner( now );
-				pose = navigation.surface( sampleMovement( segment, now ), pose, owner, surfaceCursor );
-				owner = surfaceCursor.owner ?? owner;
+			const result = stepWalk( {
+				pose,
+				poseAtMs,
+				segment,
+				// A fixed-timing leg surfaces at the live owner (a deck that moved).
+				owner: segment.fixedTiming ? liveOwner( now ) : owner,
+				cursor: surfaceCursor,
+				now,
+				clip: navigation.clip,
+				surface: navigation.surface
+			} );
+			if ( result.kind === "idle" ) return;
+			if ( result.kind === "sampled" ) {
+				pose = result.pose;
+				owner = result.owner;
+			} else if ( result.kind === "rejected" ) {
+				// Native 86D6D0 retires a rejected move without accepting the
+				// collision candidate, even when its coordinates are unchanged.
+				segment = null;
+				walk = null;
+			} else if ( result.kind === "uncovered" ) {
+				// Intent is not proof of a traversable step. Keep the accepted
+				// pose until coverage arrives; the step consumed the elapsed time
+				// so a late product cannot release a backlog through geometry.
+				segment = result.segment;
 			} else {
-				// Native walking consumes a finite elapsed step from the accepted
-				// position. The client scalar step is uncapped; each accepted
-				// query consumes elapsed time exactly once.
-				if ( !segment.walking ) {
-					const walkingSpeed = segment.duration > 0 ?
-						poseDistance( segment.from, segment.to ) / segment.duration * 1000 :
-						0;
-					// Native destination vectors are stored floats, including a
-					// destination copied from a higher-precision receipt envelope.
-					segment.to = interpolate( segment.to, {
-						...segment.to,
-						x: Math.fround( segment.to.x ),
-						y: Math.fround( segment.to.y ),
-						z: Math.fround( segment.to.z )
-					}, 1 );
-					const direction = planarOffset( segment.from, segment.to );
-					segment.walking = {
-						direction: segment.direction ?
-							clientWalkingVector( modelYaw( segment.direction.heading ) ) :
-							clientWalkingDirection( direction ),
-						speed: walkingSpeed
-					};
-				}
-				// Native navigation stores its direction when the leg starts.
-				// Re-normalizing rounded accepted positions changes the leg on every frame.
-				const rate = segment.walking.speed / 1000;
-				const delta = planarOffset( pose, segment.to );
-				const forward = delta[0] * segment.walking.direction[0] + delta[1] * segment.walking.direction[1];
-				const goalBounded = !(segment.direction && !segment.direction.blocked);
-				const { step, arrived } = clientWalkingStep(
-					segment.walking.speed,
-					elapsed / 1000,
-					segment.walking.direction,
-					goalBounded ? (forward <= 0 ? 0 : clientPlanarDistance( delta )) : Infinity
-				);
-				const desired = interpolate( pose, {
-					...pose,
-					x: Math.fround( Math.fround( pose.x ) + step[0] ),
-					y: Math.fround( pose.y ),
-					z: Math.fround( Math.fround( pose.z ) + step[1] ),
-					angle: segment.to.angle
-				}, 1 );
-				const query: { slide: boolean; sourceOwner?: NavOwner; owner?: NavOwner; status: number; } = {
-					slide: false,
+				const admittedFrom = segment.admittedFrom ?? result.from;
+				const history = extendWalkingHistory( {
+					points: segment.history,
+					from: result.from,
+					to: result.pose,
 					sourceOwner: owner,
-					status: 0
+					clip: navigation.clip
+				} );
+				pose = result.pose;
+				const walkingPath = { from: admittedFrom, to: pose };
+				transition = {
+					...transition,
+					walkingPath: history,
+					turn: transition.turn ? { ...transition.turn, outgoing: walkingPath } : undefined
 				};
-				const resolved = navigation.clip( pose, desired, query );
-				if ( query.status & NAVIGATION_REJECT ) {
-					// Native 86D6D0 retires a rejected move without accepting the
-					// collision candidate, even when its coordinates are unchanged.
+				owner = result.owner;
+				surfaceCursor = {};
+				if ( result.segment ) {
+					segment = { ...result.segment, admittedFrom, history, presentationHistory: undefined };
+				} else {
 					segment = null;
 					walk = null;
-				} else if ( !resolved ) {
-					// Intent is not proof of a traversable step. Keep the accepted
-					// pose until coverage arrives; consume the elapsed time so a
-					// late product cannot release a backlog through geometry.
-					segment = {
-						...segment,
-						from: pose,
-						start: now,
-						duration: rate ? poseDistance( pose, segment.to ) / rate : Infinity,
-						admitted: false
-					};
-				} else {
-					segment.admittedFrom ??= pose;
-					segment.history = extendWalkingHistory( {
-						points: segment.history,
-						from: pose,
-						to: resolved,
-						sourceOwner: owner,
-						clip: navigation.clip
-					} );
-					segment.presentationHistory = undefined;
-					pose = resolved;
-					const walkingPath = { from: segment.admittedFrom, to: pose };
-					transition = {
-						...transition,
-						walkingPath: segment.history,
-						turn: transition.turn ? { ...transition.turn, outgoing: walkingPath } : undefined
-					};
-					owner = query.owner;
-					surfaceCursor = {};
-					const afterDelta = planarOffset( pose, segment.to );
-					const reachedPlane = goalBounded &&
-						afterDelta[0] * segment.walking.direction[0] +
-									afterDelta[1] * segment.walking.direction[1] <= 0;
-					const blocked = !!(query.status & NAVIGATION_STOP);
-					if ( blocked || arrived || reachedPlane ) {
-						segment = null;
-						walk = null;
-					} else {
-						segment = {
-							...segment,
-							from: pose,
-							start: now,
-							duration: rate ? poseDistance( pose, segment.to ) / rate : Infinity,
-							owners: undefined
-						};
-					}
 				}
 			}
 		}
@@ -950,6 +946,7 @@ displace
 					timing: "server",
 					lead: "server",
 					fixedTiming: true,
+					ownCast: command.self === true,
 					castToken: command.kind === 8 ? command.token : undefined
 				} ) :
 				null;
@@ -1073,6 +1070,50 @@ heading
 			if ( pose ) pose = { ...pose, angle };
 			if ( authoritative ) authoritative = { ...authoritative, angle };
 			if ( segment ) segment = { ...segment, from: { ...segment.from, angle }, to: { ...segment.to, angle } };
+		},
+		/*
+================
+steer
+
+The arrow keys' turn (arrow-keys.ts, 0x86D480): a direction walk under way
+takes the new heading from the live pose, as driftWalk re-aims it; a
+standing character turns where it stands.
+================
+		*/
+		steer( angle: number, now: number ) {
+			if ( !Number.isInteger( angle ) || angle < 0 || angle > 65535 ) throw new Error( "Invalid heading" );
+			advanceTo( now );
+			if ( !walk || !segment?.direction || segment.direction.blocked || !pose ) {
+				if ( pose ) pose = { ...pose, angle };
+				if ( authoritative ) authoritative = { ...authoritative, angle };
+				return;
+			}
+			walk.heading = angle;
+			// The server turns its walker only when a steer arrives (every
+			// eighth of a turn), so its line no longer predicts this walk: drop
+			// the drift reference rather than pull the turn back onto it.
+			walk.reference = null;
+			owner = liveOwner( now );
+			pose = navigation.surface( pose, pose, owner, surfaceCursor );
+			poseAtMs = now;
+			segment = directionSegment( pose, angle, now, segment.lead, walk.factor );
+		},
+		/*
+================
+stopDirection
+
+The Up arrow's release (0x72F5, arrow-keys.ts): the direction walk ends
+where the walker is now. The server stops its own walker when the stop
+arrives and corrects to that point (0xB2F5).
+================
+		*/
+		stopDirection( now: number ) {
+			advanceTo( now );
+			if ( !segment?.direction ) return;
+			beginTransition( "input" );
+			authoritative = pose;
+			segment = null;
+			walk = null;
 		},
 		/*
 ================
@@ -1403,12 +1444,9 @@ request
 			predicted = null;
 			if ( clipped ) {
 				segment = {
-					from: pose,
-					to: { ...clipped, angle: movementHeading( pose, clipped ) },
-					start: now,
+					...walkLeg( pose, clipped, now, speed ),
 					timing: "speed",
 					lead: "client",
-					duration: movementDuration( poseDistance( pose, clipped ), speed ),
 					owners: query.owners,
 					admitted: true,
 					history: incomingHistory
@@ -1461,6 +1499,44 @@ walk (native); a refusal ends it (endPrediction).
 		},
 		/*
 ================
+retargetPrediction
+
+Re-aim an open prediction at a new goal: the leg rebuilds from the live
+pose while the prediction keeps its start pose and its clock, so the
+server walk still adopts it (native) and the unanswered walk-back still
+times from the original request. The chase re-aims this way while its
+target moves, as the server's follow does. Refused off navigation
+coverage, like predictApproach; the caller then keeps the old leg.
+================
+		*/
+		retargetPrediction( value: Pose, now: number ): boolean {
+			if ( !pose || life === "dead" || walk || pending.size || !predicted ) return false;
+			advanceTo( now );
+			const current = pose,
+				to = admitPose( value ),
+				query: { slide: boolean; sourceOwner?: NavOwner; owners?: readonly NavOwnerSpan[]; } = {
+					slide: false,
+					sourceOwner: owner
+				};
+			const clipped = navigation.available( current ) ? to : null;
+			if ( !clipped || poseDistance( clipped, to ) >= ENDPOINT_EPSILON ) return false;
+			beginTransition( "input" );
+			predicted = { ...predicted, to };
+			pose = current;
+			segment = {
+				from: current,
+				to: { ...clipped, angle: movementHeading( current, clipped ) },
+				start: now,
+				timing: "speed",
+				lead: "client",
+				duration: movementDuration( poseDistance( current, clipped ), speed ),
+				owners: query.owners,
+				admitted: true
+			};
+			return true;
+		},
+		/*
+================
 endPrediction
 
 The server refused the walk it was predicted to drive: it never left the
@@ -1469,6 +1545,14 @@ start, so walk back there.
 		*/
 		endPrediction( now: number ) {
 			endPrediction( now );
+		},
+		/*
+================
+settlePrediction
+================
+		*/
+		settlePrediction( now: number ) {
+			settlePrediction( now );
 		},
 		/*
 ================
@@ -1741,6 +1825,16 @@ receive
 		},
 		/*
 ================
+oldestPendingSentAt
+
+When the oldest unanswered movement command left, or undefined.
+================
+		*/
+		oldestPendingSentAt(): number | undefined {
+			return pending.values().next().value?.sent;
+		},
+		/*
+================
 step
 ================
 		*/
@@ -1801,6 +1895,18 @@ step
 		},
 		/*
 ================
+noteInput
+
+Records a main-thread gameplay input sequence number as taken, whatever
+it resolved to (a walk, a direction walk, a held, refused or dropped
+input). Receipts and corrections never change it.
+================
+		*/
+		noteInput( seq: number ) {
+			if ( seq > inputSeq ) inputSeq = seq;
+		},
+		/*
+================
 state
 ================
 		*/
@@ -1810,6 +1916,16 @@ state
 				navigationFailure,
 				movementPath: presentationPath(),
 				movementRevision,
+				movementInputSeq: inputSeq,
+				movementSpeed: speed,
+				// The walk the main-thread mover can rebuild (#1441b, #1563): a goal
+				// walk's destination or a direction walk's live heading; undefined
+				// for a blocked leg, a skill displacement or no walk.
+				movementAim: movementAim(),
+				// The own cast displacement the mover steps (#1569); undefined
+				// for a knockback or any other walk.
+				movementDisplacement: movementDisplacement(),
+				movementSpeedFactor: segment?.direction && walk ? walk.factor : 1,
 				movementTransition: { ...transition, pathEligible: segment?.admitted === true },
 				movementDiagnostics: { total: reanchorReports, recent: recentReanchors.slice() },
 				navigationFloor: navigation.floor( pose, owner ),

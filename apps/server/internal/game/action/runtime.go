@@ -94,6 +94,10 @@ type Runtime struct {
 	// transport (port-only, SRO_TRANSPORT_FOLLOW_TETHER; acts only with
 	// TransportFollow on, transportfollow.go).
 	TransportFollowTether bool
+	// BetaSilkActivity notes player commands for the beta silk hour
+	// (port-only, SRO_BETA_SILK_ACTIVE_ONLY; nil or inactive is the
+	// shipped rule, betasilk.go).
+	BetaSilkActivity *BetaSilk
 	// JobGoodsTeleport lets a trader with a transport out use town gates,
 	// return scrolls and the reverse return (port-only,
 	// SRO_JOB_GOODS_TELEPORT; false is native, goodsteleport.go).
@@ -112,6 +116,7 @@ type Runtime struct {
 	PetPolicies         companion.Policies
 	returnGeneration    atomic.Uint64
 	returnCasts         sync.Map // simulation.WorldKey -> pendingReturn; division lock owns changes
+	teleportArrivals    sync.Map // simulation.WorldKey -> struct{}: arrivals awaiting game-ready (teleportprotection.go)
 	playerDisplacements sync.Map // simulation.WorldKey -> playerDisplacement; a struck player's hold
 	jobDresses          sync.Map // simulation.WorldKey -> jobDress (jobdress.go)
 	jobActivations      sync.Map // simulation.WorldKey -> int64 end ms (jobdress.go)
@@ -384,6 +389,11 @@ type Runtime struct {
 	// countdown (denreturn.go; port-only, not native). False is native.
 	DenNoTransportSummon bool
 
+	// UniqueDamageRank shows a unique's damage ranking to everyone who
+	// damaged it (uniquedamagerank.go; port-only, not native). False, the
+	// default, is native.
+	UniqueDamageRank bool
+
 	// Announce selects the port-only shard notices (announce.go); the zero
 	// value is native: none.
 	Announce  Announcements
@@ -424,6 +434,13 @@ type Runtime struct {
 	// TradeTiers rates caravans by cargo gold and raises Jangan route profit
 	// (tradetiers.go; port-only, not native). False is native.
 	TradeTiers bool
+	// TeleportGrace makes a teleport arrival untouchable for the revival's
+	// grace (teleportprotection.go; port-only, not native). False is native.
+	TeleportGrace bool
+	// PremiumUpgrade lets a strictly higher-grade premium ticket of the
+	// same family replace the running lower one (premiumticket.go;
+	// port-only, not native). False is native: 0x1894 while one runs.
+	PremiumUpgrade bool
 	// tradeOrigins is each trade good's home town, from the shops.
 	tradeOrigins map[uint32]tradeTown
 
@@ -706,6 +723,17 @@ type Runtime struct {
 	// resurrections holds the unanswered resurrection proposals, one per
 	// dead player (resurrection.go).
 	resurrections resurrectionOffers
+	// instanceInvites holds the unanswered instance invitations, one
+	// per invited party member (instance_invite.go).
+	instanceInvites instanceInviteBook
+	// InstanceEventSink receives instanced-world lifecycle events for
+	// the quest handler registry (instance_events.go); the composition
+	// root points it at the quest runtime's dispatch.
+	InstanceEventSink func(InstanceEvent)
+	// instanceEvents queues lifecycle occurrences for delivery at the
+	// next division-lock release: handlers never run under the lock
+	// (instance_events.go).
+	instanceEvents instanceEventQueue
 
 	// nextSweepAtMs rate-limits the TTL sweep to grounditem.SweepInterval:
 	// the simulation tick calls the hook every 100ms, but the peek+sweep only
@@ -759,6 +787,10 @@ func NewRuntime(deps Dependencies, monsters *simulation.MonsterState) *Runtime {
 	if monsters != nil {
 		monsters.SetAbnormalContext(monsterAbnormalContext{rt})
 	}
+
+	// Instance lifecycle occurrences are delivered when a division
+	// lane is released, with no lock held (instance_events.go).
+	rt.operations.onRelease = rt.flushInstanceEvents
 
 	// The Capture the Flag match owner (flagwar_match.go) consumes
 	// the registration queue at the daily start instant.

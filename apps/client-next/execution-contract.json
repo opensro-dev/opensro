@@ -2,6 +2,37 @@
 	"version": 1,
 	"capabilities": [
 		{
+			"consumer": "src/engine/runtime/input/input.ts",
+			"provider": "src/engine/runtime/runtime.ts",
+			"functions": [
+				"callback:createInput:0"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/arrow-keys/arrow-keys.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"functions": [
+				"callback:createArrowKeys:0",
+				"cancelCast",
+				"direct",
+				"pose",
+				"steer",
+				"stop",
+				"vehicle",
+				"walkingDirection"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/arrow-keys/arrow-keys.ts",
+			"functions": [
+				"clear",
+				"createArrowKeys",
+				"key",
+				"step"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/pet-training/pet-training.ts",
 			"functions": [
@@ -118,8 +149,16 @@
 			]
 		},
 		{
+			"consumer": "src/engine/foundation/gameplay/walk-step.ts",
+			"provider": "src/engine/foundation/navigation/clipper.ts",
+			"functions": [
+				"clip",
+				"surface"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/gameplay/walking-history.ts",
-			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
+			"provider": "src/engine/foundation/navigation/clipper.ts",
 			"functions": [
 				"clip"
 			]
@@ -416,6 +455,7 @@
 			"consumer": "src/engine/runtime/runtime.ts",
 			"provider": "src/engine/runtime/platform/ui/cursor.ts",
 			"functions": [
+				"setVisible",
 				"world"
 			]
 		},
@@ -462,7 +502,7 @@
 		},
 		{
 			"consumer": "src/engine/foundation/navigation/region-move.ts",
-			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
+			"provider": "src/engine/foundation/navigation/clipper.ts",
 			"functions": [
 				"callback:continueRegionMove:2"
 			]
@@ -1002,6 +1042,9 @@
 				"callback:createUi:16",
 				"saveExperimental",
 				"saveWindowPositions",
+				"setCameraZoomRail",
+				"setCursorVisible",
+				"setFreeCamera",
 				"setWorldFieldOfView"
 			]
 		},
@@ -1430,7 +1473,7 @@
 		},
 		{
 			"consumer": "src/engine/runtime/simulation/worker/session/world/core.ts",
-			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
+			"provider": "src/engine/foundation/navigation/clipper.ts",
 			"functions": [
 				"surface",
 				"clip",
@@ -1539,7 +1582,7 @@
 		},
 		{
 			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
-			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
+			"provider": "src/engine/foundation/navigation/clipper.ts",
 			"functions": [
 				"pick"
 			]
@@ -1666,6 +1709,21 @@
 			"functions": [
 				"maxHp"
 			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/world.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/movement.ts",
+			"functions": [
+				"noteInput"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/world.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"functions": [
+				"outstandingSince"
+			],
+			"reason": "The world session's stall detector reads when the oldest unanswered request left (through core), to tell a stalled link from a lost answer (#1418)."
 		},
 		{
 			"consumer": "src/engine/foundation/ui/item-tooltip-recovery.ts",
@@ -1963,6 +2021,28 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/characters/own-walk-interpolation.ts",
+			"provider": "src/engine/runtime/characters/pose-presentation.ts",
+			"functions": [
+				"turn"
+			],
+			"reason": "The interpolated presenter turns a body with the generic presenter's native heading turn (86CBA0), injected at creation so both presenters turn alike."
+		},
+		{
+			"consumer": "src/engine/runtime/characters/pose-presentation.ts",
+			"provider": "src/engine/runtime/characters/own-walk-interpolation.ts",
+			"functions": [
+				"carry",
+				"clear",
+				"createOwnWalkPresenter",
+				"handles",
+				"moving",
+				"pose",
+				"retain",
+				"take"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/animation/animation-emission.ts",
 			"provider": "src/engine/runtime/characters/resources/resources.ts",
 			"functions": [
@@ -2055,6 +2135,7 @@
 			"provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
 			"functions": [
 				"country",
+				"npcs",
 				"playerModels"
 			]
 		},
@@ -2161,6 +2242,13 @@
 				"active",
 				"setMovementDump",
 				"setAssetDump"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/runtime.ts",
+			"provider": "src/engine/runtime/platform/keep-awake.ts",
+			"functions": [
+				"set"
 			]
 		},
 		{
@@ -2467,6 +2555,13 @@
 				"request",
 				"take"
 			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/characters.ts",
+			"provider": "src/engine/runtime/characters/presentation-poses.ts",
+			"functions": [
+				"resolveDrawnPoses"
+			]
 		}
 	],
 	"boundaries": [
@@ -2560,6 +2655,20 @@
 			"function": "wakeIdleWaiters",
 			"kind": "callback",
 			"reason": "Promise resolvers of background-install waiters (worker/install.ts): settled when the last foreground load releases capacity."
+		},
+		{
+			"file": "src/engine/runtime/platform/keep-awake.ts",
+			"expression": "release",
+			"function": "set",
+			"kind": "callback",
+			"reason": "Promise resolver of the held Web Lock: settling it releases the tab's keep-awake lock when the world session ends."
+		},
+		{
+			"file": "src/engine/runtime/platform/keep-awake.ts",
+			"expression": "release",
+			"function": "dispose",
+			"kind": "callback",
+			"reason": "Promise resolver of the held Web Lock: settling it releases the tab's keep-awake lock when the platform is disposed."
 		},
 		{
 			"file": "src/engine/runtime/runtime.ts",
@@ -3508,13 +3617,6 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-motion.ts",
-			"expression": "posePresentation.pose",
-			"function": "present",
-			"kind": "callback",
-			"reason": "Characters pose owner lends its synchronous presented-pose reads to the per-actor phase."
-		},
-		{
-			"file": "src/engine/runtime/characters/actor-motion.ts",
 			"expression": "localMover",
 			"function": "present",
 			"kind": "callback",
@@ -3556,9 +3658,44 @@
 			"reason": "Characters pose owner lends its synchronous presented-pose reads to the per-actor phase."
 		},
 		{
-			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"file": "src/engine/runtime/characters/presentation-poses.ts",
+			"expression": "logicalPose",
+			"function": "resolveDrawnPoses",
+			"kind": "callback",
+			"reason": "Current frame pose lookup from presentation-samples, passed by the parent without retaining it."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-poses.ts",
+			"expression": "localMover",
+			"function": "resolveDrawnPoses",
+			"kind": "callback",
+			"reason": "Current frame mover predicate from presentation-samples, passed by the parent without retaining it."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-poses.ts",
+			"expression": "health?.dead",
+			"function": "resolveDrawnPoses",
+			"kind": "callback",
+			"reason": "Effective health owner supplied by the parent; the same synchronous death check as before the move."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-poses.ts",
+			"expression": "statusOwner.view",
+			"function": "resolveDrawnPoses",
+			"kind": "callback",
+			"reason": "Characters status owner lends its synchronous status view to the pose stage."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-poses.ts",
+			"expression": "posePresentation.pose",
+			"function": "resolveDrawnPoses",
+			"kind": "callback",
+			"reason": "Characters pose owner lends its synchronous presented-pose reads to the pose stage; the stage is the only caller."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-poses.ts",
 			"expression": "posePresentation.carry",
-			"function": "present",
+			"function": "resolveDrawnPoses",
 			"kind": "callback",
 			"reason": "Characters pose owner takes back the drawn pose a released WAIT hold showed, so its track recovers from it instead of jumping."
 		},
@@ -3687,13 +3824,6 @@
 			"function": "step",
 			"kind": "callback",
 			"reason": "Current frame presentation-sample owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
-		},
-		{
-			"file": "src/engine/runtime/characters/presentation-events.ts",
-			"expression": "posePresentation.pose",
-			"function": "step",
-			"kind": "callback",
-			"reason": "Character pose presentation owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
 		},
 		{
 			"file": "src/engine/runtime/characters/presentation-events.ts",
@@ -3851,13 +3981,6 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/presentation-events.ts",
-			"expression": "posePresentation.pose",
-			"function": "callback:map:0",
-			"kind": "callback",
-			"reason": "Character pose presentation owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
-		},
-		{
-			"file": "src/engine/runtime/characters/presentation-events.ts",
 			"expression": "renderer.characterSocket",
 			"function": "callback:step:6",
 			"kind": "callback",
@@ -4004,8 +4127,8 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "f490e7bf03ae2a1e722e428ce252b63c57243aaec188be4ba6462f8da512b3f3",
-			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. A hidden frame renders only while a world entry awaits game-ready, under the same barrier: native keeps updating while inactive (A0F430 OnUpdate; A11650 skips drawing) and finishes loading in CPSMission_OnUpdate (728E10). A visible window that gets no RAF for STARVED_FRAME_MS runs the same delivery-paced maintenance frames. Device disposal cancels pending mapping. Startup also hands the asset owner the device texture features once (port-only texture variants), outside the frame.",
+			"sourceSha256": "4d8a8853c5f45d9069b72c0d7479a4539d01d352c75c96c8bc8efc66cee04d1c",
+			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. A hidden frame renders only while a world entry awaits game-ready, under the same barrier: native keeps updating while inactive (A0F430 OnUpdate; A11650 skips drawing) and finishes loading in CPSMission_OnUpdate (728E10). A visible window that gets no RAF for STARVED_FRAME_MS runs the same delivery-paced maintenance frames. Device disposal cancels pending mapping. Startup also hands the asset owner the device texture features once (port-only texture variants), outside the frame. The frame also derives the own-mover step at its existing call site (the local mover's next frame, or the published own cast displacement adopted as a fixed segment, #1569); the readback ordering above is unchanged by it.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,
 			"tests": [

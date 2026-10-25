@@ -4,7 +4,7 @@
 training.go - the attack-pet skill trees (design.go data)
 
 Port-only, not native. The owner approved this PvE expansion on 2026-10-14;
-docs/pet-expansion/pet-design.json is the design. Each of the four pets
+petdesign.json is the design. Each of the four pets
 (bear, wolf, penguin, crow) has 2 active and 3 passive rows of 3 skills.
 A pet earns a skill point at level 1 and one more every PointsPerPetLevels
 levels; a skill level costs one point and needs its pet level. All learned

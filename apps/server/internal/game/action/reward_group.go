@@ -36,9 +36,10 @@ the native temporary tree's pointer ordering and is never sent or persisted.
 ================
 */
 type RewardParty struct {
-	Order   uint64
-	Options uint8
-	Members []uint32
+	Order    uint64
+	Options  uint8
+	LeaderID uint32
+	Members  []uint32
 }
 
 /*
@@ -363,6 +364,11 @@ func (rt *Runtime) settleMonsterInsideDoor(division string, actor *enterworld.Ch
 		out.actorFrames = append(out.actorFrames, jobFrames...)
 		out.others = append(out.others, others...)
 	}
+	// Port-only, not native (uniquedamagerank.go): every ranked contributor
+	// sees the unique's damage ranking, whoever owns the loot.
+	rankFrames, rankOthers := rt.uniqueDamageRankFrames(actor, roster, impact)
+	out.actorFrames = append(out.actorFrames, rankFrames...)
+	out.others = append(out.others, rankOthers...)
 	groups := monsterRewardGroups(impact.Contributions, roster.actors)
 	var winner uint32
 	var best uint32

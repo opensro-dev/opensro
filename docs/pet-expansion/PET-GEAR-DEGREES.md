@@ -33,11 +33,12 @@ tier; D9 does not guarantee six blues or perfect rolls.
 
 ## Source and compatibility
 
-Edit `pet-design.json` here: `gear` owns equipment requirements, maximum blues,
+Edit [`petdesign.json`](../../apps/server/internal/game/companion/petdesign.json): `gear` owns equipment requirements, maximum blues,
 six-blue weights and roll floors; `rules` owns the global six-blue ceiling.
 Legacy design drop chances/rank multipliers no longer control runtime drops.
-Run `python scripts/tools/pet_design_export.py` to regenerate the server,
-client and asset-pipeline projections. Do not hand-edit generated files.
+Run `python scripts/tools/pet_design_export.py` to regenerate the client
+module; the server and the asset pipeline read the file itself. Do not hand-edit
+generated files.
 
 Worn gear now stores six options. Existing five-option saves load with an
 empty sixth slot; existing items retain their options and are not rerolled.
@@ -57,5 +58,5 @@ shows actual options and the new per-degree cap.
 - Six blues survive actual equip/remove commands and client state decoding.
 - All27 exported icons are distinct32x32 RGBA images.
 
-See the latest Claude handoff for deployment status. These checks are not a
+These checks are not a
 claim that every random affix combination has been tested in live combat.

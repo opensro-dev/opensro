@@ -2,7 +2,12 @@ package enterworld
 
 import (
 	"bytes"
+	"fmt"
+	"os"
+	"strings"
 	"testing"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // The 0x32B3 skill list rides sub_866e50's second marker-framed loop:
@@ -99,6 +104,95 @@ func TestCharDataEmitsThePopulatedQuestBlock(t *testing.T) {
 	}
 	if !bytes.Contains(payload, want) {
 		t.Fatalf("char-data payload does not carry the populated quest block\nwant subsequence % X", want)
+	}
+}
+
+// TestCharDataCompletedQuestClampKeepsCountAlignedWithBodies: unlike the
+// mastery/skill lists, the completed-quest count is the reader's loop
+// bound (sub_8673d0), so past 255 the emission must clamp - 255 bodies
+// under a 255 count, never a wrapped count over fewer bodies - and the
+// sections after it stay aligned.
+func TestCharDataCompletedQuestClampKeepsCountAlignedWithBodies(t *testing.T) {
+	completed := make([]uint32, 300)
+	for i := range completed {
+		completed[i] = uint32(i + 1)
+	}
+	character := &Character{
+		ID:                1,
+		Name:              "questveteran",
+		CompletedQuestIds: completed,
+	}
+	entry := &LocalPlayerEntry{StartProfile: StartProfileForRaceProfile()}
+
+	payload := BuildLocalPlayerEntryPayload(character, entry, 0, nil)
+
+	// The expected subsequence: empty skill framing, the clamped count,
+	// exactly 255 quest ids (1..255), then the empty active and tracked
+	// section counts in their places.
+	var want bytes.Buffer
+	want.Write([]byte{0x00, 0x02}) // skill list: count 0, end marker
+	want.WriteByte(0xff)           // completed count, clamped
+	for i := 1; i <= 255; i++ {
+		want.Write([]byte{byte(i), byte(i >> 8), 0x00, 0x00})
+	}
+	want.Write([]byte{0x00, 0x00}) // active + tracked counts
+	if !bytes.Contains(payload, want.Bytes()) {
+		t.Fatal("char-data payload does not carry the clamped 255-body completed list")
+	}
+}
+
+// TestCharDataWhisperAndEventClampsLogAndStayAligned: both chunk-C lists
+// are read by counted client folds (the whisper fold reads a u8 count then
+// that many u16-length names; the entered handler then reads the fortress
+// u32 and a u8 count of u32 event ids), so past 255 the emission clamps -
+// 255 bodies under a 255 count. The #1459 posture applies: the clamp is
+// loud, naming both lists, and the stream stays aligned through the
+// fortress sentinel and the mission byte.
+func TestCharDataWhisperAndEventClampsLogAndStayAligned(t *testing.T) {
+	var logged bytes.Buffer
+	log.SetOutput(&logged)
+	defer log.SetOutput(os.Stderr)
+
+	blocked := make([]string, 300)
+	for i := range blocked {
+		blocked[i] = fmt.Sprintf("blocked%03d", i)
+	}
+	groups := make([]uint32, 300)
+	for i := range groups {
+		groups[i] = 1000 + uint32(i)
+	}
+	character := &Character{
+		ID:                 1,
+		Name:               "loudclamps",
+		BlockedWhisperers:  blocked,
+		EnterEventGroupIds: groups,
+	}
+	entry := &LocalPlayerEntry{StartProfile: StartProfileForRaceProfile()}
+
+	payload := BuildLocalPlayerEntryPayload(character, entry, 0, nil)
+
+	if out := logged.String(); !strings.Contains(out, "whisper-block") || !strings.Contains(out, "event-group") {
+		t.Errorf("over-cap whisper/event lists clamped silently; log output: %q", out)
+	}
+
+	// The clamped stream: 255 names, the fortress sentinel, 255 group ids,
+	// the mission byte - the counts equal the bodies on both lists.
+	var want bytes.Buffer
+	want.WriteByte(0xff) // whisper-block count, clamped
+	for i := 0; i < 255; i++ {
+		name := blocked[i]
+		want.Write([]byte{byte(len(name)), 0x00})
+		want.WriteString(name)
+	}
+	want.Write([]byte{0x01, 0x00, 0x01, 0x00}) // fortress "no war" sentinel 0x10001
+	want.WriteByte(0xff)                       // event-group count, clamped
+	for i := 0; i < 255; i++ {
+		id := groups[i]
+		want.Write([]byte{byte(id), byte(id >> 8), byte(id >> 16), byte(id >> 24)})
+	}
+	want.WriteByte(0x00) // mission-mode byte
+	if !bytes.Contains(payload, want.Bytes()) {
+		t.Fatal("char-data payload does not carry the two clamped 255-body chunk-C lists")
 	}
 }
 
