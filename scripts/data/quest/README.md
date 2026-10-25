@@ -7,6 +7,21 @@ Ninety-one v1.150 quests are hand-written C++ classes in the v1.188
 `apps/server/internal/game/quest/.generated/`; the server embeds the result.
 `pnpm task check:compiled-quests` checks byte-for-byte regeneration.
 
+Non-compiled prerequisites come from the actual Go catalog composition,
+not from searching source text for codename literals. The read-only
+`quest-authored` tool derives `.generated/authored_quests.json` from that
+same owner, including constant- and function-built definitions. The loader
+and its tests reject metadata that adds, omits or duplicates a registration.
+Refresh it whenever an authored table is registered (from `apps/server/`):
+
+```text
+go run ./cmd/tools/quest-authored --output internal/game/quest/.generated/authored_quests.json
+```
+
+Then run the Python compiler from the repository root. Its check remains
+standard-library-only; the committed metadata has no runtime dependency on
+the Go exporter or a research checkout.
+
 ## Inputs and reproduction
 
 - `compiled-quests-source.json`: each class's initializer (vtable +0xDC),
@@ -70,7 +85,9 @@ A class that overrides vtable slots has custom behaviour (NPC talk at +0x58,
 dialogue at +0x90, the capture escort's +0x80/+0x9C/+0xA8 timers and events).
 The generator projects it only once `CLASS_BEHAVIOUR` states that override in
 QuestSpec fields (`QSP_KT_EXINVENTORY_3`'s +0x58 is a 10,000 gold turn-in fee),
-and a quest waits while a prerequisite is unprojected. `compiled_quests_audit.json`
+and a quest waits while a prerequisite is neither projected nor actually
+registered in the non-compiled catalog. This does not make unsupported
+custom classes projectable. `compiled_quests_audit.json`
 names every class still pending and why.
 
 Mission field notes: +9 kind (1 gather from monster, 2 kill, 3 deliver, 4

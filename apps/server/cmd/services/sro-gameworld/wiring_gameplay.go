@@ -754,7 +754,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	// wins over it - Sun then drops nothing, which must not be silent.
 	game.items.SunRate = progression.SunRateFromEnv()
 	if game.items.SunRate.Active() {
-		log.Infof("loot: degree-9 Seal of Sun drops at class mass x%d on levels 76-90 (%s=%d)", game.items.SunRate.MassMultiplier(), progression.EnvSunDropRate, game.items.SunRate.Rate())
+		log.Infof("loot: degree-9 Seal of Sun drops at class mass up to x%d on levels 76-90, capped at the Moon class (#1605 P1) (%s=%d)", game.items.SunRate.MassMultiplier(), progression.EnvSunDropRate, game.items.SunRate.Rate())
 		if game.items.SunEventOnly.Enabled() {
 			log.Warnf("loot: %s is on while %s=%d: the event rule excludes every degree-9 Sun drop, so the rate widens a class that drops nothing; turn one of them off", progression.EnvSunEventOnly, progression.EnvSunDropRate, game.items.SunRate.Rate())
 		}

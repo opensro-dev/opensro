@@ -78,23 +78,133 @@ func TestSunScaleDerivesTheCRAREClass(t *testing.T) {
 
 /*
 ================
-TestSunScaleM60WidensSunSixtyfoldOnly
+moonClassGroupForTest
+
+The *_09_B_RARE class, derived from the catalogue's bucket references
+the same way deriveSunClassGroup derives the Sun class.
 ================
 */
-func TestSunScaleM60WidensSunSixtyfoldOnly(t *testing.T) {
-	for _, level := range []uint8{76, 80, 85, 86, 90} {
-		native := equipment.classes[1][level-1]
-		scaled := scaleSunClass(native, level, 60)
-		sun := sweepMass(scaled, sunClassGroup)
-		if want := sweepMass(native, sunClassGroup) * 60; sun != want {
-			t.Fatalf("level %d Sun mass %d, want %d (native %d x60)", level, sun, want, sweepMass(native, sunClassGroup))
+func moonClassGroupForTest(t *testing.T) int {
+	t.Helper()
+	group := -1
+	for key, bucket := range equipment.buckets {
+		if !key.rare {
+			continue
 		}
-		for group := 0; group < equipment.widths[1]; group++ {
-			if group == sunClassGroup {
+		for _, ref := range bucket.refs {
+			if !strings.Contains(ref.Codename, "_09_") || !strings.HasSuffix(ref.Codename, "_B_RARE") {
 				continue
 			}
-			if got, want := sweepMass(scaled, group), sweepMass(native, group); got != want {
-				t.Fatalf("level %d class %d mass %d, want native %d", level, group, got, want)
+			if group >= 0 && group != key.group {
+				t.Fatal("the *_09_B_RARE buckets disagree on their class")
+			}
+			group = key.group
+		}
+	}
+	if group < 0 {
+		t.Fatal("the catalogue holds no *_09_B_RARE class")
+	}
+	return group
+}
+
+/*
+================
+moonCapMass
+
+The cap the Sun class answers to in row: the Moon class's own width,
+or its last native width (level 85's row) when the row rolls no Moon
+class (levels 86-90 without the seal band).
+================
+*/
+func moonCapMass(row []classThreshold, moon int) uint32 {
+	if mass := sweepMass(row, moon); mass > 0 {
+		return mass
+	}
+	return sweepMass(equipment.classes[1][sealMoonEdge-1], moon)
+}
+
+/*
+================
+TestSunScaleCapsTheSunClassAtTheMoonClass
+
+Owner decision (#1605 P1): the widened Sun class is never wider than
+the Moon class, so with the degree-9 keep factors (Star x3, Moon x2,
+Sun x1 over the widening 3) a Sun expects about twice a Moon's kills.
+Below the cap the multiplier is exact; every other class keeps its
+native width.
+================
+*/
+func TestSunScaleCapsTheSunClassAtTheMoonClass(t *testing.T) {
+	moon := moonClassGroupForTest(t)
+	for level := uint8(76); level <= 90; level++ {
+		native := equipment.classes[1][level-1]
+		capMass := moonCapMass(native, moon)
+		if capMass == 0 {
+			t.Fatalf("level %d: no Moon cap derivable", level)
+		}
+		for _, multiplier := range []int{2, 60} {
+			scaled := scaleSunClass(native, level, multiplier)
+			sun := sweepMass(scaled, sunClassGroup)
+			want := sweepMass(native, sunClassGroup) * uint32(multiplier)
+			if want > capMass {
+				want = capMass
+			}
+			if sun != want {
+				t.Fatalf("level %d x%d Sun mass %d, want %d (native %d, Moon cap %d)",
+					level, multiplier, sun, want, sweepMass(native, sunClassGroup), capMass)
+			}
+			for group := 0; group < equipment.widths[1]; group++ {
+				if group == sunClassGroup {
+					continue
+				}
+				if got, want := sweepMass(scaled, group), sweepMass(native, group); got != want {
+					t.Fatalf("level %d class %d mass %d, want native %d", level, group, got, want)
+				}
+			}
+		}
+	}
+}
+
+/*
+================
+TestSunCapKeepsTheSealLadder
+
+Per-kill degree-9 chances under the shipped defaults (seal band on,
+the Sun rate at its default x60, 20 drop passes, the seal-widened rare
+window 495/32768, keep factors Star 1, Moon 2/3, Sun 1/3): Star is
+more common than Moon, Moon more common than Sun, and a Sun expects
+about twice a Moon's kills at every level.
+================
+*/
+func TestSunCapKeepsTheSealLadder(t *testing.T) {
+	keep := map[byte]float64{'A': 1, 'B': 2.0 / 3, 'C': 1.0 / 3}
+	const window = 495.0 / 32768.0
+	for _, level := range []uint8{76, 80, 85, 90} {
+		for _, country := range []uint8{0, 1} {
+			tier := map[byte]float64{}
+			for _, chance := range ComposedRareChances(level, country, true, 60) {
+				if !strings.Contains(chance.Codename, "_09_") {
+					continue
+				}
+				switch {
+				case strings.HasSuffix(chance.Codename, "_A_RARE"):
+					tier['A'] += chance.Chance
+				case strings.HasSuffix(chance.Codename, "_B_RARE"):
+					tier['B'] += chance.Chance
+				case strings.HasSuffix(chance.Codename, "_C_RARE"):
+					tier['C'] += chance.Chance
+				}
+			}
+			perKill := func(seal byte) float64 {
+				return 1 - math.Pow(1-window*tier[seal]*keep[seal], 20)
+			}
+			star, moon, sun := perKill('A'), perKill('B'), perKill('C')
+			if !(star > moon && moon > sun && sun > 0) {
+				t.Fatalf("level %d country %d: per-kill Star %g Moon %g Sun %g, want Star > Moon > Sun > 0",
+					level, country, star, moon, sun)
+			}
+			if ratio := sun / moon; ratio < 0.35 || ratio > 0.65 {
+				t.Fatalf("level %d country %d: Sun/Moon per-kill ratio %g, want about 1/2", level, country, ratio)
 			}
 		}
 	}
@@ -127,17 +237,19 @@ TestSunScaleComposedChancesMatchTheRow
 */
 func TestSunScaleComposedChancesMatchTheRow(t *testing.T) {
 	// The odds publication and the roll must agree. Exactness lives in
-	// the integer sweep above (TestSunScaleM60WidensSunSixtyfoldOnly):
+	// the integer sweep above (TestSunScaleCapsTheSunClassAtTheMoonClass):
 	// the published chance folds each class mass through the combined
 	// roll's modulo acceptance grid, which inflates the degenerate
 	// high-level rows (at 85 the native row ends at threshold 890 of a
 	// million) identically with this port on or off. So: at 76, whose
 	// row is wide enough for the grid to be faithful, every level-76
-	// degree-9 Sun item's published chance is sixty times its native one
+	// degree-9 Sun item's published chance is the capped multiplier
+	// (the Moon class's 64 over the native 3) times its native one
 	// and every Star/Moon item stays at its native number (while G26
 	// items with ref.Level > 76 step 26-3=23 into G23 degree-8 Sun per
 	// native 0x00724120); at 81, where all 51 G26 items satisfy
-	// ref.Level <= 81, every degree-9 Sun item is 60x and every other
+	// ref.Level <= 81, every degree-9 Sun item is at the capped
+	// multiplier (320 over the native 6) and every other
 	// item (including degree-8 Sun) stays at 1x; and a multiplier of 1
 	// reproduces the native publication exactly, at any level.
 	for _, level := range []uint8{76, 81, 85} {
@@ -169,7 +281,7 @@ func TestSunScaleComposedChancesMatchTheRow(t *testing.T) {
 		}
 		want, tol := base, 0.10
 		if isSunCodename(c.Codename) {
-			want, tol = base*60, 0.06
+			want, tol = base*sunChanceMultiplier(t, 76), 0.06
 			checked76++
 		}
 		if math.Abs(c.Chance-want) > want*tol+1e-12 {
@@ -188,7 +300,7 @@ func TestSunScaleComposedChancesMatchTheRow(t *testing.T) {
 		}
 		want, tol := base, 0.10
 		if isSunCodename(c.Codename) {
-			want, tol = base*60, 0.06
+			want, tol = base*sunChanceMultiplier(t, 81), 0.06
 			checked81++
 		}
 		if math.Abs(c.Chance-want) > want*tol+1e-12 {
@@ -198,6 +310,25 @@ func TestSunScaleComposedChancesMatchTheRow(t *testing.T) {
 	if checked81 != 51 {
 		t.Fatalf("level 81 checked %d Sun items, want all 51", checked81)
 	}
+}
+
+/*
+================
+sunChanceMultiplier
+
+The multiplier a degree-9 Sun item's published chance grows by at
+x60: the capped Sun class mass over its native mass.
+================
+*/
+func sunChanceMultiplier(t *testing.T, level uint8) float64 {
+	t.Helper()
+	native := equipment.classes[1][level-1]
+	sun := sweepMass(native, sunClassGroup)
+	want := sun * 60
+	if capMass := moonCapMass(native, moonClassGroupForTest(t)); want > capMass {
+		want = capMass
+	}
+	return float64(want) / float64(sun)
 }
 
 /*

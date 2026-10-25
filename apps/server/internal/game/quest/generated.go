@@ -16,6 +16,8 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"slices"
+	"sort"
 )
 
 //go:embed catalog_generated.json
@@ -34,6 +36,12 @@ var achievedNowCatalog []byte
 //go:embed .generated/compiled_quests.json
 var compiledCatalog []byte
 
+// The registration owner exports this build-time prerequisite snapshot.
+// Its semantic contents must match the same tables the loader uses below.
+//
+//go:embed .generated/authored_quests.json
+var authoredCatalogMetadata string
+
 /*
 ================
 catalogSpecs
@@ -43,20 +51,17 @@ complete media catalog admits every corresponding compiled contract.
 ================
 */
 func catalogSpecs(catalog *Catalog) ([]QuestSpec, error) {
-	specs := append([]QuestSpec(nil), curatedQuestSpecs...)
-	generated, err := decodeSpecs("generated quest catalog", generatedCatalog)
+	specs, additional, err := authoredQuestSpecs()
 	if err != nil {
+		return nil, err
+	}
+	if err := validateAuthoredQuestMetadata(authoredCatalogMetadata, specs, additional); err != nil {
 		return nil, err
 	}
 	compiled, err := decodeSpecs("compiled quest catalog", compiledCatalog)
 	if err != nil {
 		return nil, err
 	}
-	additional := append([]QuestSpec(nil), europeanTutorialSpecs...)
-	additional = append(additional, captureQuestSpecs...)
-	additional = append(additional, rahidChainSpecs...)
-	additional = append(additional, rahid6Specs...)
-	additional = append(additional, generated...)
 	authored := map[string]bool{}
 	for _, spec := range append(specs, additional...) {
 		authored[spec.Codename] = true
@@ -79,6 +84,100 @@ func catalogSpecs(catalog *Catalog) ([]QuestSpec, error) {
 		return nil, err
 	}
 	return specs, nil
+}
+
+/*
+================
+authoredQuestSpecs
+
+One composition owns registered, non-compiled definitions and the metadata
+used to resolve their compiled successors. Required curated rows remain
+separate: filtering them for a small catalog would hide missing references.
+================
+*/
+func authoredQuestSpecs() ([]QuestSpec, []QuestSpec, error) {
+	specs := append([]QuestSpec(nil), curatedQuestSpecs...)
+	generated, err := decodeSpecs("generated quest catalog", generatedCatalog)
+	if err != nil {
+		return nil, nil, err
+	}
+	additional := append([]QuestSpec(nil), europeanTutorialSpecs...)
+	additional = append(additional, captureQuestSpecs...)
+	additional = append(additional, rahidChainSpecs...)
+	additional = append(additional, rahid6Specs...)
+	additional = append(additional, generated...)
+	return specs, additional, nil
+}
+
+/*
+================
+AuthoredQuestCodenames
+
+Export the definitions actually registered above, including codenames built
+from Go constants or functions. Source tokens and unregistered literals are
+not an availability contract. The build tool saves this sorted snapshot;
+the catalog's tests require it to match the registration owner exactly.
+================
+*/
+func AuthoredQuestCodenames() ([]string, error) {
+	required, additional, err := authoredQuestSpecs()
+	if err != nil {
+		return nil, err
+	}
+	return authoredQuestCodenames(required, additional)
+}
+
+/*
+================
+authoredQuestCodenames
+
+Read registered definitions, not the exported snapshot: the exporter must
+be able to repair metadata after a new hand-authored table is registered.
+================
+*/
+func authoredQuestCodenames(required, additional []QuestSpec) ([]string, error) {
+	seen := make(map[string]bool)
+	for _, table := range [][]QuestSpec{required, additional} {
+		for _, spec := range table {
+			if spec.Codename == "" {
+				return nil, fmt.Errorf("registered authored quest has no codename")
+			}
+			if seen[spec.Codename] {
+				return nil, fmt.Errorf("registered authored quest has duplicate codename %s", spec.Codename)
+			}
+			seen[spec.Codename] = true
+		}
+	}
+	codes := make([]string, 0, len(seen))
+	for code := range seen {
+		codes = append(codes, code)
+	}
+	sort.Strings(codes)
+	return codes, nil
+}
+
+/*
+================
+validateAuthoredQuestMetadata
+
+The compiler cannot unlock a successor using an unregistered prerequisite.
+Validate against the actual composition before compiled rows are admitted;
+an empty, duplicate, missing or invented name is an authoring defect.
+================
+*/
+func validateAuthoredQuestMetadata(raw string, required, additional []QuestSpec) error {
+	var codes []string
+	if err := json.Unmarshal([]byte(raw), &codes); err != nil {
+		return fmt.Errorf("authored quest metadata: %w", err)
+	}
+	want, err := authoredQuestCodenames(required, additional)
+	if err != nil {
+		return err
+	}
+	if len(codes) == 0 || !slices.Equal(codes, want) {
+		return fmt.Errorf("authored quest metadata is stale: regenerate with cmd/tools/quest-authored")
+	}
+	return nil
 }
 
 /*
