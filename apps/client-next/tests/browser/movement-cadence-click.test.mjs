@@ -1,3 +1,16 @@
+/*
+===========================================================================
+
+movement-cadence-click.test.mjs - A5 by real ground clicks, mover on and off
+
+The #1530 acceptance (movement-cadence.test.mjs) driven by real mouse
+ground clicks, so the measured walk starts where a player's click starts
+it (#1443, epic #1437). It runs once with the Experimental "Instant own
+movement" row on (the main-thread mover, #1541) and once with it off (the
+worker-driven presenter). Browser test: needs the local stack.
+
+===========================================================================
+*/
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -18,6 +31,15 @@ import { bindPlayableRuntime } from "./helpers/playable-session.mjs";
 // own walk/run speed within 5%), a real turn of at least a radian across
 // the redirect, and a stop that settles.
 
+/*
+================
+clickAcceptance
+
+One acceptance run with the row on or off: a warp to flat ground, a leg,
+a reversing click and a settle, every drawn frame read at the final
+presented pose and held to the bars above.
+================
+*/
 async function clickAcceptance( rowOn ) {
 	const character = assertCharacterAllowed( "asd2", { context: "client-next mission entry" } );
 	const { browser, page } = await launchProbeBrowser( { viewport: { width: 1024, height: 768 } } ),
