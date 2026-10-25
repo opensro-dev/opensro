@@ -467,6 +467,7 @@ export function createRenderer(
 		},
 		adoptWorld: ( lease, detail, terrain ) => world.adopt( lease, detail, terrain ),
 		setWorldCamera: camera => world.camera( camera ),
+		setWorldCameraCollision: enabled => world.setCameraCollision( enabled ),
 		setWorldTexture: ( path, image, alpha ) => world.texture( path, image, alpha ),
 		neededWorldTextures: () => world.neededTextures(),
 		worldStats: () => world.stats(),

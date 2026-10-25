@@ -183,6 +183,7 @@ function fieldOfViewWorldFixture( t ) {
 		setWorldCamera( value ) {
 			camera = value;
 		},
+		setWorldCameraCollision: unexpectedCameraWork,
 		/*
 		================
 		setWorld

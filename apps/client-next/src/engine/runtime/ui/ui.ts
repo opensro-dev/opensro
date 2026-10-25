@@ -716,6 +716,8 @@ import {
 	commandFloat,
 	commandInteger,
 	DEBUG_COMMAND_CLEAR,
+	DEBUG_COMMAND_COLON,
+	DEBUG_COMMAND_COLON_OFF,
 	DEBUG_COMMAND_CURSOR,
 	DEBUG_COMMAND_DAY,
 	DEBUG_COMMAND_DEBUG,
@@ -969,6 +971,7 @@ export interface UiExtensions {
 	setWorldFieldOfView?: ( degrees: number ) => void;
 	setCameraZoomRail?: ( capped: boolean ) => void;
 	setFreeCamera?: ( free: boolean ) => void;
+	setCameraCollision?: ( collision: boolean ) => void;
 	setCursorVisible?: ( visible: boolean ) => void;
 	saveExperimental?: ( value: ExperimentalOptions ) => void;
 	saveWindowPositions?: ( value: WindowPositions ) => void;
@@ -1009,9 +1012,10 @@ export function createUi(
 	// The interface timer's debug state (690C40 ids 100-109): the sampler
 	// reads it through the handle's debugClockSeed.
 	let debugClock: DebugClock = createDebugClock();
-	// The camera family's debug bytes (690C40 ids 110/114/135): the
+	// The camera family's debug bytes (690C40 ids 110-135): the
 	// interface's zoom rail (+0x3CF, standing from its constructor), its
-	// free-camera byte (+0x3CE) and the cursor manager's visibility
+	// free-camera byte (+0x3CE), its camera-apply byte (+0x3CC, also
+	// standing from its constructor) and the cursor manager's visibility
 	// (+0x20). Each owner applies its own through the extensions.
 	let debugZoomRail = true;
 	let debugFreeCamera = false;
@@ -2818,6 +2822,18 @@ export function createUi(
 				// Case 0x16 writes the flag back to 1. The native
 				// prints nothing.
 				debugUiVisible = true;
+				break;
+			case DEBUG_COMMAND_COLON:
+				// Case 0x76 writes +0x3CC back to 1: the clamp casts
+				// the eye-to-target segment again (68FAD0). The native
+				// prints nothing.
+				extensions.setCameraCollision?.( true );
+				break;
+			case DEBUG_COMMAND_COLON_OFF:
+				// Case 0x77 writes +0x3CC to 0: the clamp takes its
+				// no-hit arm and the camera keeps the requested
+				// distance; the follow still tracks. Prints nothing.
+				extensions.setCameraCollision?.( false );
 				break;
 			case DEBUG_COMMAND_CURSOR:
 				// Case 0x1E: SetVisible(![cursor+0x20]) - the pointer shows

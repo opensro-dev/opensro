@@ -344,6 +344,9 @@ export interface Renderer extends Disposable {
 	// is not the drawn scene or not at full terrain detail.
 	settleWorld( sceneId: string ): boolean;
 	setWorldCamera( camera: import("./scene").WorldCamera ): void;
+	// The GM /colon byte (+0x3CC): false keeps the requested camera
+	// distance (68FAD0's no-hit arm); the follow runs either way.
+	setWorldCameraCollision( enabled: boolean ): void;
 	setWorldTexture(
 		path: string,
 		image: import("./texture").WorldTexture,
