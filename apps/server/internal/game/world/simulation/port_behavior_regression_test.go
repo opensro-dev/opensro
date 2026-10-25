@@ -236,14 +236,14 @@ func TestPortAuditAreaAndChainCannotCrossCoordinatePlane(t *testing.T) {
 	// A matching low 15-bit region word currently aliases to distance zero.
 	center := poseToSpawn(m.Pose)
 	center.RegionID ^= 0x8000
-	if got := s.CombatCandidatesInSphere("audit", center, 10, s.CurrentTimeMillis()); len(got) != 0 {
+	if got := s.CombatCandidatesInWorld("audit", instance.Pack(1, 1), center, 10, s.CurrentTimeMillis(), false); len(got) != 0 {
 		t.Fatalf("outdoor actor selected from indoor AoE: %+v", got)
 	}
 	if got := s.CombatCandidatesInWorld("audit", instance.Pack(1, 1), center, 10, s.CurrentTimeMillis(), true); len(got) != 0 {
 		t.Fatal("outdoor actor selected from indoor chain")
 	}
 	center.RegionID ^= 0x8000
-	if len(s.CombatCandidatesInSphere("audit", center, 10, s.CurrentTimeMillis())) != 1 {
+	if len(s.CombatCandidatesInWorld("audit", instance.Pack(1, 1), center, 10, s.CurrentTimeMillis(), false)) != 1 {
 		t.Fatal("same-plane control lost its actor")
 	}
 }

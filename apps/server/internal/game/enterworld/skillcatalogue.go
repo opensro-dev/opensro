@@ -69,6 +69,25 @@ type SkillUiRow struct {
 	// bodies to it, so a target within Range is always in reach: the
 	// client starts a cast's animation at the press only then.
 	Range float64 `json:"range,omitempty"`
+	// RangeBonus marks a row that asks for one of the caster's range
+	// parameters (the crossbow-range and wizard-range slots): the server
+	// adds the caster's value to the row's reach, so the reach can exceed
+	// Range by an amount the client cannot see. Such a row starts no
+	// predicted run-up at all: every aim computed from Range would stop
+	// short of the server's boundary and be overrun. Omitted when the
+	// row asks for neither parameter.
+	RangeBonus bool `json:"rangeBonus,omitempty"`
+	// RangeUp marks a row whose buff adds ru to the attack-range keeper
+	// while it runs (BuffModifiers.Ru): the keeper then replaces the
+	// weapon's range for every basic attack, an amount the client cannot
+	// compute from the weapon row. A predicted attack chase starts only
+	// while no rangeUp effect stands on the caster. Omitted otherwise.
+	RangeUp bool `json:"rangeUp,omitempty"`
+	// BasicAttack marks one of the pinned racial base attacks (the
+	// DefaultSkillCodenames seeds): the row a plain attack click resolves
+	// to, once its weapon kinds match the loadout. The client resolves the
+	// same row to claim the chase's reach. Omitted for every other row.
+	BasicAttack bool `json:"basicAttack,omitempty"`
 	// MP and MPPercent are the cast's authored MP cost (flat plus percent of
 	// maximum MP), before the caster's consumption rate (parameter 0x8D):
 	// the client does not stand a cooldown in for a press the caster cannot
@@ -327,6 +346,12 @@ SpawnSkillRows
 */
 func (t *TextdataSkills) SpawnSkillRows() []SpawnSkillRow {
 	t.once.Do(t.load)
+	basicAttacks := map[string]bool{}
+	for _, raceKey := range []string{RaceKeyChina, RaceKeyEurope} {
+		for _, codename := range DefaultSkillCodenames(raceKey) {
+			basicAttacks[codename] = true
+		}
+	}
 	rows := make([]SpawnSkillRow, 0, t.rows.len())
 	for _, row := range t.rows.values() {
 		projection := SpawnSkillRow{LinkedSkillID: row.LinkedSkillID, CancellationDeferred: row.CancellationDeferred, NameAttackContent: row.NameAttackContent, Level: uint8(row.Level), Group: row.Group, ID: row.ID, Token: row.SpawnToken, Status: row.SpawnStatus, EffectRider: row.EffectRider, EffectDurationMs: row.EffectDurationMs, ZeroEffectDuration: row.EffectDurationPresent && row.EffectDurationMs == 0, HideDetectionBuff: row.HideDetectionBuff, IndefiniteBuffTimer: row.IndefiniteBuffTimer}
@@ -349,6 +374,11 @@ func (t *TextdataSkills) SpawnSkillRows() []SpawnSkillRow {
 			if row.ActionRangePinned && row.ActionRange > 0 {
 				projection.UI.Range = row.ActionRange
 			}
+			if row.Attack.Parameters.Has(ParameterCrossbowRange) || row.Attack.Parameters.Has(ParameterWizardRange) {
+				projection.UI.RangeBonus = true
+			}
+			projection.UI.RangeUp = row.BuffModifiers.Ru
+			projection.UI.BasicAttack = basicAttacks[row.Codename]
 			// Only a player's own skill is pressed from a shortcut slot; a
 			// monster row's cost would only grow the catalogue every client loads.
 			if row.Consumption.Pinned && playerSkillCodename(row.Codename) {

@@ -221,13 +221,17 @@ test("a refused request is not stale", async t => {
 ================
 packedAsset
 
-A real SROPACK2 pack holding one gzip-stored member, padded past the 4 MiB
-whole-pack limit so the loader reads the member by range: the pack header
-first, then the member's own block. serve() answers both as a host would.
+A real SROPACK2 pack holding one member, padded past the 4 MiB whole-pack
+limit so the loader reads the member by range: the pack header first, then
+the member's own block. serve() answers both as a host would. The member is
+gzip-stored unless compressed is false: a stored-plain member skips
+DecompressionStream, so a test about the transport waits on no real
+stream work (#1595).
 ================
 */
-function packedAsset() {
-	const bytes = new Uint8Array( Buffer.alloc( 4096, 7 ) ), stored = gzipSync( bytes, { level: 9 } );
+function packedAsset( compressed = true ) {
+	const bytes = new Uint8Array( Buffer.alloc( 4096, 7 ) ),
+		stored = compressed ? gzipSync( bytes, { level: 9 } ) : Buffer.from( bytes );
 	const hash = value => createHash( "sha256" ).update( value ).digest( "hex" );
 	const path = "/assets/test.bin", packPath = "/assets/packs/test-001-000000000000.bin";
 	const row = {
@@ -236,7 +240,7 @@ function packedAsset() {
 		length: bytes.length,
 		mime: "application/octet-stream",
 		sha256: hash( bytes ),
-		stored: { length: stored.length, encoding: "gzip" }
+		...(compressed ? { stored: { length: stored.length, encoding: "gzip" } } : {})
 	};
 	const header = Buffer.from( JSON.stringify( { format: "sro-asset-pack", version: 2, files: [ row ] } ) );
 	const prefix = Buffer.alloc( 12 );
@@ -281,7 +285,9 @@ for ( const dispose of [ false, true ] ) {
 		timeout: 10000
 	}, async t => {
 		t.mock.timers.enable( { apis: [ "setTimeout" ] } );
-		const asset = packedAsset(), messages = [];
+		// Backoff and cancellation are the subject: a plain member keeps the
+		// delivery free of real decompression work (#1595).
+		const asset = packedAsset( false ), messages = [];
 		let deliver = () => {};
 		/** @type {Promise<void>} */
 		const deliveredResult = new Promise( resolve => {
@@ -315,8 +321,8 @@ for ( const dispose of [ false, true ] ) {
 		// the backoff, which the attempt count below proves.
 		assert.ok( transport.signal );
 		t.mock.timers.tick( 250 );
-		// Decompression runs through DecompressionStream. Counted event-loop turns
-		// can finish first under the full test load; wait for the actual result.
+		// The plain member decodes with no stream work; only its 4 KiB SHA-256
+		// remains asynchronous, so the result follows within a few turns.
 		if ( !dispose ) await deliveredResult;
 		else await settle();
 		if ( dispose ) {
