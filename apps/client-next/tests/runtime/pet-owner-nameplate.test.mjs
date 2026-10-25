@@ -206,6 +206,27 @@ test("a guild soldier's owner row takes the owner guild colour and keeps its own
 	}
 });
 
+test("a guild soldier with a guildless visible owner takes the owner's name colour through the production UI", () => {
+	const { fixture, state } = petFixture( 5 );
+	try {
+		// The owner stands visible with no guild name: natively there is
+		// no guild record (854BB8), so the row keeps the owner's name
+		// colour - the default guild row colour must not leak into it.
+		fixture.ui.step( state, 0 );
+		assert.equal(
+			petGlyphs( fixture ).filter( q => q.color.every( ( c, i ) => c === partyColor[i] ) ).length,
+			"Owner".length
+		);
+		assert.equal(
+			petGlyphs( fixture ).filter( q => q.color.every( ( c, i ) => c === [ 102 / 255, 185 / 255, 1, 1 ][i] ) )
+				.length,
+			0
+		);
+	} finally {
+		fixture.dispose();
+	}
+});
+
 test("an owned attack pet's quick status stays above its owner row", () => {
 	const { fixture, state, local, pet } = petFixture( 3 );
 	try {

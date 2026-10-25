@@ -20624,12 +20624,22 @@ export function createUi(
 							fontStyle: selected ? 2 : 0
 						} ).map( q => ({ ...q, characterAnchor: entity.gid }) )
 					);
+					const ownerEntity = next.entities.find( owner => owner.gid === entity.ownerGid );
+					// 854BB8: with no guild record the soldier's row keeps the
+					// owner's name colour, so the label colour is passed only
+					// when the owner actually has a guild (another player by
+					// its guild name, the local player through social.guild);
+					// overheadLayout's row colour alone is unconditional and
+					// would hand a guildless owner the default blue.
+					const ownerGuildName = ownerEntity?.gid === game?.localGid ?
+						game?.social?.guild?.name :
+						ownerEntity?.guildName;
 					const ownerPlate = entity.kind === "cos" ?
 						companionOwnerNameplate(
 							entity,
-							next.entities.find( owner => owner.gid === entity.ownerGid ),
+							ownerEntity,
 							options,
-							entity.ownerGid !== undefined ? overheads.get( entity.ownerGid )?.guildColor : undefined
+							ownerGuildName && ownerEntity ? overheads.get( ownerEntity.gid )?.guildColor : undefined
 						) :
 						null;
 					if ( ownerPlate && height ) {
