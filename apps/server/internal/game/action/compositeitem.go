@@ -133,8 +133,12 @@ Everything one composite installs, built before any state changes.
 type compositePlan struct {
 	paramJobs []domain.ParamJob
 	clock     *domain.PremiumClock
-	skills    []enterworld.SkillRow
-	works     []domain.CompositeJob
+	// retirePremium is the running premium this package's ticket
+	// replaces (port-only upgrade, SRO_PREMIUM_UPGRADE); nil keeps the
+	// native 0x1894 refusal.
+	retirePremium *enterworld.ItemRef
+	skills        []enterworld.SkillRow
+	works         []domain.CompositeJob
 	// refs reach the browser with the use: internal and limited items are
 	// never carried, so their references may be unknown to it.
 	refs []inventory.Item
@@ -203,8 +207,18 @@ func (rt *Runtime) planComposite(character *enterworld.Character, ref *enterworl
 			if family != itemUsePremiumTicket && family != itemUseSkillTimeTicket {
 				return plan, 0, "composite internal item " + entry.args[0] + " is neither a param item nor a ticket"
 			}
-			if premiumRunning(character, nowMs) || plan.clock != nil {
+			if plan.clock != nil {
 				return plan, errCodePremiumActive, ""
+			}
+			if premiumRunning(character, nowMs) {
+				// Port-only, not native (SRO_PREMIUM_UPGRADE): the
+				// package's ticket replaces a strictly lower grade of
+				// its family, or the refusal stands.
+				retired := rt.premiumUpgradePlan(character, nowMs, internal, family == itemUseSkillTimeTicket)
+				if retired == nil {
+					return plan, errCodePremiumActive, ""
+				}
+				plan.retirePremium = retired
 			}
 			jobs, clock, valid := premiumTicketPlan(internal, nowMs, family == itemUseSkillTimeTicket)
 			if !valid {
@@ -298,7 +312,7 @@ func (rt *Runtime) useCompositeScroll(divisionID string, character *enterworld.C
 			return false
 		}
 	}
-	if !installParamJobs(character, plan.paramJobs) {
+	if !installPremiumSwap(character, plan.retirePremium, plan.paramJobs) {
 		return false
 	}
 	var effectFrames []wire.Frame
@@ -328,6 +342,10 @@ func (rt *Runtime) useCompositeScroll(divisionID string, character *enterworld.C
 	owner := enterworld.ObjectIDForCharacter(character)
 	frames := []wire.Frame{
 		{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)},
+	}
+	if plan.retirePremium != nil {
+		frames = append(frames, wire.Frame{Opcode: wire.OpParamJobEnd,
+			Payload: wire.EncodeParamJobEnd(owner, plan.retirePremium.RefObjID)})
 	}
 	if len(plan.refs) > 0 {
 		frames = append(frames, rt.commerceReferences(plan.refs, nil))
