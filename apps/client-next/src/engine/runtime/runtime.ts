@@ -133,7 +133,7 @@ export function startRuntime(
 		const audio = own(
 			createAudio( assets, new URL( "/", import.meta.url ).href, random, Math.trunc( performance.now() ) >>> 0 )
 		);
-		const input = createInput();
+		const input = createInput( event => arrowInput( event ) );
 		const frameWork = createFrameWork();
 		const framePacing = createFramePacing();
 		const simulation = own( createSimulationHost() );
@@ -585,10 +585,7 @@ export function startRuntime(
 				canvas,
 				status,
 				dispose,
-				event => {
-					input.accept( event );
-					arrowInput( event );
-				},
+				input.accept,
 				audio.unlock,
 				uiEvent,
 				ui.blocks,

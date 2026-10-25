@@ -35,7 +35,11 @@ fakeMover
 A mover that records what the arrow keys asked of it.
 ================
 */
+/**
+ * @param {{ walking?: boolean, vehicle?: number }} [options]
+ */
 function fakeMover( { walking = false, vehicle = undefined } = {} ) {
+	/** @type {{ direct: number[], steer: number[], stop: number }} */
 	const calls = { direct: [], steer: [], stop: 0 };
 	let pose = { ...POSE };
 	return {
