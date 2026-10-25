@@ -122,3 +122,55 @@ func TestTransportMetricsAccountUnknownResumeAsFresh(t *testing.T) {
 		t.Fatalf("handshake count = %d, want 1", metrics.HandshakeCount)
 	}
 }
+
+/*
+================
+TestTransportMetricsCountRefusedResumes
+
+A resume HELLO with no stream position, and one whose position the ring
+cannot serve, each end the old session and start a fresh one (#1466); each
+is counted under its own reason (#1519).
+================
+*/
+func TestTransportMetricsCountRefusedResumes(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		hasPosition bool
+		lastApplied uint32
+	}{
+		{"no position", false, 0},
+		{"beyond what was written", true, 99},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			hub := newHub(testCfg())
+			allowTestHelloAdmission(hub)
+			first := newFakeConn(false)
+			first.inbound <- Frame{Opcode: OpHello, Payload: EncodeHello(Hello{AdmissionToken: testHelloAdmissionToken})}
+			hub.AcceptConn(first)
+			session := hub.Sessions()[0]
+			_ = first.Close("test disconnect")
+			waitUntil(t, "session detach", func() bool { return hub.Metrics().DetachedSessions == 1 })
+
+			second := newFakeConn(false)
+			second.inbound <- Frame{Opcode: OpHello, Payload: EncodeHello(Hello{
+				ResumeToken:    session.resumeToken[:],
+				AdmissionToken: testHelloAdmissionToken,
+				HasPosition:    tc.hasPosition,
+				LastApplied:    tc.lastApplied,
+			})}
+			hub.AcceptConn(second)
+			for _, s := range hub.Sessions() {
+				defer hub.closeSession(s, nil)
+			}
+			metrics := hub.Metrics()
+			wantNoPosition, wantGap := uint64(1), uint64(0)
+			if tc.hasPosition {
+				wantNoPosition, wantGap = 0, 1
+			}
+			if metrics.ResumeNoPosition != wantNoPosition || metrics.ResumeGap != wantGap || metrics.ResumeFresh != 1 {
+				t.Fatalf("no-position %d gap %d fresh %d, want %d/%d/1",
+					metrics.ResumeNoPosition, metrics.ResumeGap, metrics.ResumeFresh, wantNoPosition, wantGap)
+			}
+		})
+	}
+}

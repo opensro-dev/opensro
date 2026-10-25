@@ -582,6 +582,11 @@ func (h *Hub) AcceptConn(conn Conn) {
 				return
 			}
 			if errors.Is(attachErr, errResumeGap) {
+				if hello.HasPosition {
+					h.metrics.resumeGap.Add(1)
+				} else {
+					h.metrics.resumeNoPosition.Add(1)
+				}
 				h.closeSession(sess, attachErr)
 			}
 			// The session closed between lookup and attach, or its stream
