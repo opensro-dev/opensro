@@ -98,7 +98,7 @@ func (ops *MonsterMoverOps) resolveStuck(
 		if target, alive := eligiblePlayerByGid(current, divisionPlayers, mover.TargetGID()); alive {
 			dest := spawnToPose(target.Pose)
 			// 0x00541110 refuses outdoor -> dungeon relocation.
-			if IsDungeonRegion(live.RegionID) || !IsDungeonRegion(dest.RegionID) {
+			if !relocationEntersCave(live.RegionID, dest.RegionID) {
 				relocated := ops.resolveRelocationPose(live, dest)
 				next.Pose = relocated
 				next.From, next.To = monster.Pose{}, monster.Pose{}
@@ -135,7 +135,7 @@ func (ops *MonsterMoverOps) resolveStuck(
 		warped := false
 		if ctrlPose, found := ops.resolveControllerPose(divisionID, mover.ControllerGID(), divisionPlayers, nowMs); found {
 			// 0x00541110 refuses outdoor -> dungeon relocation.
-			if IsDungeonRegion(live.RegionID) || !IsDungeonRegion(ctrlPose.RegionID) {
+			if !relocationEntersCave(live.RegionID, ctrlPose.RegionID) {
 				relocated = ops.resolveRelocationPose(live, ctrlPose)
 				warped = true
 			}
@@ -295,4 +295,17 @@ know is not one, as 52943E refuses unknown regions separately.
 func SafeZoneRegion(region uint16) bool {
 	allowed, known := worldgeom.RegionPlayerCombat(region)
 	return known && !allowed
+}
+
+/*
+================
+relocationEntersCave
+
+Whether a stuck relocation from one region to another would carry an
+outdoor actor into a cave, which the server refuses. A relocation stays
+allowed on its own plane and out of a cave.
+================
+*/
+func relocationEntersCave(from, to uint16) bool {
+	return PlaneKindOf(from) == PlaneOutdoor && PlaneKindOf(to) == PlaneCave
 }

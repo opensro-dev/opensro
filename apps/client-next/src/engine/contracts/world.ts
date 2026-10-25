@@ -163,6 +163,11 @@ export interface EntityState {
 		readonly typeFlags: number;
 		readonly goldAmount: number;
 		readonly ownerJid?: number;
+		// Port-only (#1640): this drop is the local player's own degree-9+
+		// Seal of Sun while the Experimental marker row is on; the name
+		// plate and the ground ring read it. The simulation's admission
+		// stamps it (entities.ts); absent means unmarked.
+		readonly sunMarker?: boolean;
 		readonly tint: number;
 		readonly appear?: number;
 		readonly claimantGid?: number;

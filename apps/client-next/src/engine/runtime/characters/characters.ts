@@ -30,6 +30,7 @@ import { createPresentationActions } from "./presentation-actions";
 import { createPresentationEvents } from "./presentation-events";
 import { resolveDrawnPoses } from "./presentation-poses";
 import { createFootprints } from "./footprints";
+import { createSunDropMarkers } from "./sun-drop-markers";
 import { createCharacterStateIndex } from "./state-index";
 import { createSkillObjects, SKILL_OBJECT_MANIFESTS } from "./skill-objects";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
@@ -148,6 +149,7 @@ export function createCharacterPresentation(
 	const mallPreview = createMallPreview();
 	let animationDelta = createModifierDelta();
 	const footprints = createFootprints( renderer, soundSurface );
+	const sunDropMarkers = createSunDropMarkers( renderer );
 	const groundClocks = new Map<number, GroundVisualClock & { duration: number; modifierId: number; }>();
 	const referenceAppearances = createReferenceAppearances( () => random.range( 0, 32768 ) );
 	const presentationState = createPresentationState();
@@ -265,6 +267,7 @@ export function createCharacterPresentation(
 		if ( mode === "reset" ) skillObjects.reset();
 		else skillObjects.dispose();
 		footprints.clearFootprints();
+		sunDropMarkers.clear();
 		if ( mode === "reset" ) animationDelta = createModifierDelta();
 		presentationActions.resetWarm();
 		if ( mode === "reset" ) output.commonReady = false;
@@ -785,6 +788,7 @@ export function createCharacterPresentation(
 			}
 		}
 		footprints.step( seconds );
+		sunDropMarkers.step( entities );
 		const settled = new Set<number>();
 		for ( const entity of entities ) {
 			const state = states.get( entity.gid ), resource = published.catalog.get( appearanceRef( entity ) );
