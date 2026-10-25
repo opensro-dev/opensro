@@ -9,14 +9,21 @@ import (
 
 func pursuitControlsFixture(t *testing.T) (*MonsterMoverOps, monster.Instance, monster.MoverState, playerPose) {
 	t.Helper()
-	ops, instance := monsterLegFixture(t, aggressiveTactics())
+	return pursuitControlsFixtureIn(t, monsterTestRegion)
+}
+
+// pursuitControlsFixtureIn is pursuitControlsFixture with the actor, its nest
+// and its target in region.
+func pursuitControlsFixtureIn(t *testing.T, region uint16) (*MonsterMoverOps, monster.Instance, monster.MoverState, playerPose) {
+	t.Helper()
+	ops, instance := monsterLegFixtureIn(t, aggressiveTactics(), region)
 	ops.Monsters.clock = func() time.Time { return time.UnixMilli(10000) }
 	ops.TacticsFor = nil
 	instance.Nest.HasControls = true
 	instance.Nest.PolicyPinned = true
 	instance.Nest.Radius = 20
 	instance.Nest.Controls = monster.TacticsControls{TraceBoundary: 1, TraceData: 500}
-	target := playerPose{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: monsterTestRegion, X: 1100, Y: 20, Z: 1000}, BodyRadius: 4}
+	target := playerPose{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: region, X: 1100, Y: 20, Z: 1000}, BodyRadius: 4}
 	s := ops.Monsters
 	s.mu.Lock()
 	s.division(monsterTestDivision).instances.set(instance.Gid, instance)
@@ -217,5 +224,27 @@ func TestIdleHomeAdmissionRunsOnEntryNotEveryTick(t *testing.T) {
 	after, frames := ops.planIdleEntry(actor, after, 15000)
 	if after.Mode() != monster.MoverReturning || len(frames) == 0 {
 		t.Fatal("new idle entry failed to run homing")
+	}
+}
+
+/*
+================
+TestCavePursuitTraceIsExtendedIndoors
+
+The cave twin of the exact boundary above: a cave actor's trace runs with
+the indoor extension (+100, tactics_plane.go TracesIndoors), so a target at
+the outdoor boundary (500) is still inside the cave trace (600): the
+pursuit keeps its target (a speed change may still be handled).
+================
+*/
+func TestCavePursuitTraceIsExtendedIndoors(t *testing.T) {
+	const cave uint16 = 0x8001 // the Donwhang cave
+	ops, instance, mover, target := pursuitControlsFixtureIn(t, cave)
+	live := mover.Pose
+	target.Pose.X = live.X + 500
+	ops.advancePursuitControls(monsterTestDivision, instance, mover, target, live, 11500)
+	after, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+	if after.Mode() == monster.MoverIdle || after.TargetGID() != target.Gid {
+		t.Fatalf("a cave target at the outdoor boundary ended the pursuit: %v, target %d", after.Mode(), after.TargetGID())
 	}
 }

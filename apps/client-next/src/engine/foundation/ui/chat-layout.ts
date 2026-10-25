@@ -17,6 +17,13 @@ import { chatScrollbar } from "./chat-scrollbar";
 import { textLines } from "./text-lines";
 import { STALL_CHAT_CHANNEL } from "@/engine/foundation/gameplay/stall";
 import { type NoticeRowLink, noticeWrappedLinks } from "@/engine/foundation/gameplay/notice-links";
+import {
+	isSunDropNoticeText,
+	SEAL_NOTICE_COLOR_MOON,
+	SEAL_NOTICE_COLOR_STAR,
+	SEAL_NOTICE_COLOR_SUN,
+	sealNoticeColorArgb
+} from "@/engine/foundation/gameplay/system-notices";
 // 6aeaa0 seeds two 56px rows; 6acd30 cycles 0..6. The bottom anchor is 52px.
 
 /*
@@ -46,7 +53,45 @@ export function isSunDropChatLine( line: Pick<ChatLine, "channel" | "text" | "no
 		const itemClass = fields.itemClass ?? 0;
 		return fields.rarity === 2 && itemClass > 0 && (itemClass - 1) % 3 === 2;
 	}
-	return line.text.includes( "(Seal Of Sun)" );
+	return isSunDropNoticeText( line.text );
+}
+
+/*
+================
+noticeColorQuad
+
+An ARGB notice colour as a glyph colour.
+================
+*/
+function noticeColorQuad( argb: number ): UiQuad["color"] {
+	return [ ((argb >>> 16) & 255) / 255, ((argb >>> 8) & 255) / 255, (argb & 255) / 255, (argb >>> 24) / 255 ];
+}
+
+/*
+================
+sealNoticeChatColor
+
+Port-only, not native (#1640): a drop or plus notice line's colour by
+its item's seal tier (system-notices' seal colours). The decoded item
+link's fields decide when present - plus lines colour the same - and
+a drop line without them reads its tier off the text. Undefined keeps
+the channel's own colour.
+================
+*/
+export function sealNoticeChatColor(
+	line: Pick<ChatLine, "channel" | "text" | "notice">
+): UiQuad["color"] | undefined {
+	if ( line.channel !== 7 ) return undefined;
+	const fields = line.notice?.item?.tooltip?.fields;
+	if ( fields ) {
+		const argb = sealNoticeColorArgb( fields.rarity, fields.itemClass );
+		if ( argb !== undefined ) return noticeColorQuad( argb );
+	}
+	if ( !line.text.includes( " has dropped " ) ) return undefined;
+	if ( isSunDropNoticeText( line.text ) ) return noticeColorQuad( SEAL_NOTICE_COLOR_SUN );
+	if ( line.text.includes( "(Seal Of Moon)" ) ) return noticeColorQuad( SEAL_NOTICE_COLOR_MOON );
+	if ( line.text.includes( "(Seal Of Star)" ) ) return noticeColorQuad( SEAL_NOTICE_COLOR_STAR );
+	return undefined;
 }
 /*
 ================
@@ -227,7 +272,7 @@ button
 			...lines.filter( l => l.channel !== STALL_CHAT_CHANNEL && (tab === 0 || l.channel === channel) ).flatMap(
 				l => {
 					const sun = isSunDropChatLine( l ),
-						color = sun ? sunDropChatColor() : chatLineColor( l.channel ),
+						color = sealNoticeChatColor( l ) ?? chatLineColor( l.channel ),
 						style: GlyphStyle | undefined = sun ? { fontStyle: 2 } : undefined,
 						full = chatLineText( l, copy ),
 						wrapped = textLines( full, textWidth, value => measure( value, style ), true ),

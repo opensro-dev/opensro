@@ -157,3 +157,20 @@ export function groundItemDistance(
 		dy = Math.fround( entity.y - origin.y );
 	return Math.fround( Math.sqrt( Math.fround( dx * dx + dy * dy + dz * dz ) ) );
 }
+
+/*
+================
+sunSealDrop
+
+Port-only, not native (#1640): whether an item codename is a degree-9
+or higher Seal of Sun equipment piece. The codename carries the seal
+the way the catalogue writes it: _<degree>_<tier letter>_RARE, with
+armor slot letters in between (ITEM_CH_M_CLOTHES_09_AA_C_RARE). Degree
+and tier agree with the itemClass fields (the server reads those); the
+ground spawn carries no fields, so the name is the derivation here.
+================
+*/
+export function sunSealDrop( codename: string ): boolean {
+	const match = /_(\d+)_(?:[A-Z]+_)?([ABC])_RARE$/.exec( codename );
+	return match !== null && Number( match[1] ) >= 9 && match[2] === "C";
+}

@@ -105,7 +105,9 @@ const OFF = Object.freeze( {
 	// Off by default: the M window shows only the five native towns and 28 x 8 overview.
 	expandedWorldMap: false,
 	// Off by default (#840): the maps mark the tracked quest's targets only.
-	questTrackerMarkers: false
+	questTrackerMarkers: false,
+	// Off by default (#1640): only the native plate and no ground ring.
+	sunDropMarker: false
 } );
 
 test("touch inspection defaults on and only an explicit false turns it off", () => {
@@ -469,6 +471,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		plusSevenNotices: true,
 		homingProjectiles: false,
 		smartPetPickup: true,
+		sunDropMarker: false,
 		petPickupKinds: undefined
 	} );
 	for ( const value of [ 1, "true", null, {} ] ) {
@@ -484,6 +487,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		plusSevenNotices: true,
 		homingProjectiles: false,
 		smartPetPickup: true,
+		sunDropMarker: false,
 		petPickupKinds: undefined
 	} );
 	assert.equal( "predictedRunUp" in experimentalVideo( on ), false );
