@@ -26,6 +26,20 @@ export const rebuildRoot = path.resolve( scriptDir, "..", "..", ".." );
 
 /*
 ================
+serverSourceRoot
+
+The Go server's source tree: SRO_SERVER_SOURCE_ROOT when set (the roster
+export's override), else this checkout's apps/server. Committed server
+data the asset build also reads (the Qin-Shi tomb overlays, the pet
+design) resolves through it.
+================
+*/
+export function serverSourceRoot() {
+	return path.resolve( process.env.SRO_SERVER_SOURCE_ROOT ?? path.join( rebuildRoot, "apps", "server" ) );
+}
+
+/*
+================
 resolveGameRoot
 
 The directory holding extracted/: SRO_GAME_ROOT when the operator sets it,

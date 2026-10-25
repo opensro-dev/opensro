@@ -3,7 +3,7 @@
 This branch replaces the penguin's five skill rows. It preserves IDs 31–45,
 learned ranks, gear and the three passive slots. It uses the existing
 `SRO_ATTACK_PET_EXPANSION=on` gate; off retains native companion behavior. The
-canonical tuning source is [pet-design.json](pet-design.json), `treeSkills`.
+canonical tuning source is [petdesign.json](../../apps/server/internal/game/companion/petdesign.json), `treeSkills`.
 The older `skills` array is historical, not the live three-book tree.
 
 ## Books
