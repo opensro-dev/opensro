@@ -17,21 +17,14 @@ import (
 )
 
 /*
-==================
-CombatCandidatesInSphere
-
-CombatCandidatesInSphere reads only already-materialized populations and
-samples all movers at one instant under one lock. It scans linearly, then
-sorts the nearby result, avoiding a full-world copy/sort and N lock crossings.
-==================
-*/
-func (s *MonsterState) CombatCandidatesInSphere(divisionID string, center Spawn, reach float64, nowMs int64) []monster.Instance {
-	return s.combatCandidates(divisionID, instance.Pack(1, 1), center, reach, nowMs, false)
-}
-
-/*
 ================
 CombatCandidatesInWorld
+
+The candidates around center in the caller's world. It reads only
+already-materialized populations and samples all movers at one instant
+under one lock: a linear scan, then a sort of the nearby result, avoiding
+a full-world copy/sort and N lock crossings. The world is always the
+caller's; no variant assumes the default world (#1552).
 ================
 */
 func (s *MonsterState) CombatCandidatesInWorld(divisionID string, world instance.ID, center Spawn, reach float64, nowMs int64, nearest bool) []monster.Instance {
