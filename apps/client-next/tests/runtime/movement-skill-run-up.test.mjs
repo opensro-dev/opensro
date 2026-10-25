@@ -237,3 +237,123 @@ test("a repeated press during the run-up keeps it walking", () => {
 	game.dispose();
 	assert.ok( after > before + 1, `still walking after the second press (${before} -> ${after})` );
 });
+
+// ============================================================================
+// gameplay: the predicted stop is the server's stop (its combat spacing)
+
+/*
+================
+gameplayPressSpaced
+
+gameplayPress with the server's body radii on the bootstrap's
+refObjSnapshot rows: the caster's body is 2 (refObjId 1907), the monster's
+is 2 (refObjId 2001). The monster stands `distance` east (84 by default),
+inside the walk-back an
+unanswered press earns after 500 ms, so the predicted walk rests at its
+goal before that. The server casts where both bodies plus the authored
+range meet (60 + 2 + 2 = 64 from the target): its stop is x 120.
+================
+*/
+function gameplayPressSpaced( rarity = 0, distance = 84 ) {
+	const local = {
+		gid: GID,
+		refObjId: 1907,
+		kind: "local-player",
+		name: "caster",
+		regionId: 257,
+		x: 100,
+		y: 0,
+		z: 100,
+		heading: 0
+	};
+	const game = createGameplay( () => {} );
+	game.bootstrap( {
+		simulationProtocolVersion: 1,
+		character: { skills: [ 30 ] },
+		refObjSnapshot: [ {
+			refObjId: 1907,
+			kind: "player",
+			tidWord: 0,
+			bodyRadius: 2
+		}, {
+			refObjId: 2001,
+			kind: "monster",
+			tidWord: 0,
+			nameStrId: "SN_MOB_TEST",
+			name: "mob",
+			bodyRadius: 2
+		} ],
+		refSkillSnapshot: [ {
+			id: 30,
+			group: 30,
+			level: 1,
+			status: false,
+			effectRider: false,
+			ui: {
+				name: "SKILL_30",
+				trainable: true,
+				spCost: 1,
+				targetRequired: true,
+				targets: 6,
+				cooldownMs: 0,
+				actionMs: 1000,
+				range: 60,
+				admit: { weaponKinds: [ 255, 255 ] },
+				masteries: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ],
+				prerequisites: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ]
+			}
+		} ]
+	} );
+	game.seed( local );
+	game.experimental( {
+		predictedRunUp: true,
+		jobKillNotices: true,
+		dropPlusNotices: true,
+		plusSevenNotices: true
+	} );
+	const navigation = product();
+	navigation.objects = [];
+	game.command( { kind: "navigation", regionId: 257, bundle: navigation }, 0, undefined );
+	const monster = { ...local, gid: 9, refObjId: 2001, kind: "monster", name: "mob", x: local.x + distance, rarity };
+	game.command( { kind: "skill", skillId: 30, gid: 9 }, 0, monster, local );
+	return { game, local, monster };
+}
+
+/*
+================
+restedPose
+
+Step the spaced press until the predicted walk rests (well inside the
+unanswered walk-back), and return the published pose.
+================
+*/
+function restedPose( game, local ) {
+	for ( let now = 16; now <= 480; now += 16 ) game.step( now, local );
+	const pose = defined( game.take()?.pose );
+	game.dispose();
+	return pose;
+}
+
+test("the predicted run-up rests at the server's stop, not the authored range", () => {
+	// The jump: aiming at the authored range rests the caster at x 124
+	// while the server casts from x 120, so the cast pulls it back 4.
+	const { game, local } = gameplayPressSpaced();
+	const pose = restedPose( game, local );
+	assert.ok( Math.abs( pose.x - 120 ) <= 1, `rests at the server's stop (x ${pose.x})` );
+});
+
+test("a giant target's graded body moves the predicted stop out", () => {
+	// Grade 4 (giant): the target's body is trunc(2 * 3) = 6, so the
+	// server casts 60 + 2 + 6 = 68 from the target: its stop is x 116.
+	const { game, local } = gameplayPressSpaced( 4 );
+	const pose = restedPose( game, local );
+	assert.ok( Math.abs( pose.x - 116 ) <= 1, `rests at the giant's stop (x ${pose.x})` );
+});
+
+test("a target already inside the server's spacing starts no run-up", () => {
+	// 63 east is beyond the authored range (60) but inside the spacing
+	// (64): the server casts where the caster stands, so nothing walks.
+	const { game, local } = gameplayPressSpaced( 0, 63 );
+	const pose = restedPose( game, local );
+	assert.ok( Math.abs( pose.x - local.x ) < 0.01, `stands at the press (x ${pose.x})` );
+});
