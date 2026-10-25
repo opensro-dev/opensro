@@ -34,9 +34,15 @@ const ALT_VIRTUAL_KEY = 18;
 /*
 ================
 createInput
+
+onKey sees every accepted key and focus release as it arrives, before the
+worker does: the arrow keys' walk (runtime.ts arrowInput, #1574) starts on
+the press, not on the next batch.
 ================
 */
-export function createInput(): InputOwner {
+export function createInput(
+	onKey: ( event: Extract<RawInput, { kind: "key" | "release"; }> ) => void = () => {}
+): InputOwner {
 	let queue: InputCommand[] = [], sequence = 0, failure: string | null = null;
 	let dropKey = DEFAULT_DROP_KEY, dropHeld = false, blindKey = DEFAULT_BLIND_KEY, blindHeld = false;
 	// Either Alt key, as GetKeyState(VK_MENU) reads it (6FCD50).
@@ -125,6 +131,7 @@ export function createInput(): InputOwner {
 				failure = "Invalid camera/input event";
 				return;
 			}
+			if ( event.kind === "key" || event.kind === "release" ) onKey( event );
 			// Platform capture has already filtered UI-owned events. Camera
 			// response belongs to this display-thread owner, not worker ticks.
 			if ( event.kind === "pointer" ) {

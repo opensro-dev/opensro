@@ -13,6 +13,7 @@ package enterworld
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -181,5 +182,109 @@ func TestSkillUiProjectionMarksSelfTargets(t *testing.T) {
 		if !seen[code] {
 			t.Errorf("%s has no UI row", code)
 		}
+	}
+}
+
+/*
+================
+TestSkillUiRangeBonusFollowsTheRowsParameters
+
+The server adds the caster's crossbow-range and wizard-range parameters to
+a cast's reach when the row asks for them, so the UI projection must mark
+exactly the asking rows (rangeBonus) and keep the mark off the wire for
+every other row, whose published JSON does not change.
+================
+*/
+func TestSkillUiRangeBonusFollowsTheRowsParameters(t *testing.T) {
+	source := sharedShippedSkills(t)
+	marked := 0
+	for _, ref := range source.SpawnSkillRows() {
+		row, ok := source.SkillByID(ref.ID)
+		if !ok || ref.UI == nil {
+			continue
+		}
+		asks := row.Attack.Parameters.Has(ParameterCrossbowRange) || row.Attack.Parameters.Has(ParameterWizardRange)
+		if ref.UI.RangeBonus != asks {
+			t.Errorf("%s: rangeBonus %v, want %v", row.Codename, ref.UI.RangeBonus, asks)
+		}
+		if !asks {
+			continue
+		}
+		marked++
+		data, err := json.Marshal(ref.UI)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(data), `"rangeBonus":true`) {
+			t.Errorf("%s: UI JSON lost the mark: %s", row.Codename, data)
+		}
+	}
+	if marked == 0 {
+		t.Fatal("no shipped row carries the rangeBonus mark")
+	}
+	for _, ref := range source.SpawnSkillRows() {
+		if ref.UI == nil || ref.UI.RangeBonus {
+			continue
+		}
+		data, err := json.Marshal(ref.UI)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(data), "rangeBonus") {
+			row, _ := source.SkillByID(ref.ID)
+			t.Errorf("%s: UI JSON carries an unmarked row's field: %s", row.Codename, data)
+		}
+	}
+}
+
+/*
+================
+TestSkillUiChaseMarksFollowTheRows
+
+The predicted attack chase claims its reach from the resolved basic row
+and refuses while a range-up effect stands on the caster, so the UI
+projection must mark exactly the pinned base attacks (basicAttack) and
+the rows whose buff feeds the attack-range keeper (rangeUp), and keep
+both marks off the wire for every other row.
+================
+*/
+func TestSkillUiChaseMarksFollowTheRows(t *testing.T) {
+	source := sharedShippedSkills(t)
+	basicAttacks := map[string]bool{}
+	for _, raceKey := range []string{RaceKeyChina, RaceKeyEurope} {
+		for _, codename := range DefaultSkillCodenames(raceKey) {
+			basicAttacks[codename] = true
+		}
+	}
+	basicMarked := 0
+	for _, ref := range source.SpawnSkillRows() {
+		row, ok := source.SkillByID(ref.ID)
+		if !ok || ref.UI == nil {
+			continue
+		}
+		if ref.UI.BasicAttack != basicAttacks[row.Codename] {
+			t.Errorf("%s: basicAttack %v, want %v", row.Codename, ref.UI.BasicAttack, basicAttacks[row.Codename])
+		}
+		if ref.UI.RangeUp != row.BuffModifiers.Ru {
+			t.Errorf("%s: rangeUp %v, want %v", row.Codename, ref.UI.RangeUp, row.BuffModifiers.Ru)
+		}
+		data, err := json.Marshal(ref.UI)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for field, marked := range map[string]bool{"basicAttack": ref.UI.BasicAttack, "rangeUp": ref.UI.RangeUp} {
+			if marked && !strings.Contains(string(data), `"`+field+`":true`) {
+				t.Errorf("%s: UI JSON lost the %s mark: %s", row.Codename, field, data)
+			}
+			if !marked && strings.Contains(string(data), field) {
+				t.Errorf("%s: UI JSON carries an unmarked row's %s field: %s", row.Codename, field, data)
+			}
+		}
+		if ref.UI.BasicAttack {
+			basicMarked++
+		}
+	}
+	if basicMarked == 0 {
+		t.Fatal("no shipped row carries the basicAttack mark")
 	}
 }
