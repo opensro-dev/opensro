@@ -442,9 +442,11 @@ func (rt *Runtime) grantPeerCosPickup(division string, picker, recipient *enterw
 		result = OpResult{
 			Frames:    public,
 			Broadcast: public,
+			// The peer may never have seen the drop: its reference first (#1612).
 			Recipients: []RecipientFrames{{
 				CharacterID: recipient.ID,
-				Frames:      []wire.Frame{{Opcode: wire.OpItemMoveResponse, Payload: receipt}},
+				Frames: append(rt.groundReferences([]grounditem.Item{current}),
+					wire.Frame{Opcode: wire.OpItemMoveResponse, Payload: receipt}),
 			}},
 		}
 		return true
