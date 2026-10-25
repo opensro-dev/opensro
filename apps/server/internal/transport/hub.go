@@ -40,6 +40,10 @@ type Hub struct {
 	History HistoryObserver
 	cfg     Config
 
+	// activity is the one subscriber told about every dispatched game frame
+	// (OnSessionActivity); an atomic pointer, so the hot path takes no lock.
+	activity atomic.Pointer[func(account string)]
+
 	// emptyFrames throttles the opcode-0 refusal warning (emptyframe.go).
 	emptyFrames emptyFrameLog
 
@@ -355,6 +359,19 @@ OnSessionClose
 */
 func (h *Hub) OnSessionClose(fn func(*Session, error)) {
 	h.hooks.addClose(fn)
+}
+
+// OnSessionActivity installs the one function told the account behind every
+// game frame dispatch admits to a handler: any player-sent command. PING,
+// PONG and BYE are handled in readLoop and never reach it, so a heartbeat is
+// never activity. A second call replaces the first.
+/*
+================
+OnSessionActivity
+================
+*/
+func (h *Hub) OnSessionActivity(fn func(account string)) {
+	h.activity.Store(&fn)
 }
 
 // Session returns a live session by ID.
@@ -801,6 +818,7 @@ func (h *Hub) admitAccountSession(account string, s *Session) {
 	}
 	owned[s.ID] = s
 	h.sessionAccount[s.ID] = account
+	s.account.Store(&account)
 	// Sessions already evicted stay indexed until their drain finishes; only
 	// the ones still live count against the limit.
 	live := 0

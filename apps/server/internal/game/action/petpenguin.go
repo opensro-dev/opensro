@@ -410,6 +410,12 @@ func (rt *Runtime) advancePenguin(key petOwnerKey, now int64) (output []simulati
 				state.public = append(state.public, public...)
 				output = append(output, simFrames(public)...)
 				output = append(output, simFrames(hit.actor)...)
+				// Periodic damage uses native yellow text without replaying the spell cast.
+				for _, impact := range hit.strike.impacts {
+					if impact.Damage > 0 {
+						output = append(output, simFrames([]wire.Frame{abnormalDamageFrame(target.gid, impact.Damage)})...)
+					}
+				}
 				if hit.fatal {
 					var dmg uint32
 					for _, i := range hit.strike.impacts {

@@ -55,6 +55,83 @@ func TestMonsterPetGearAllDegreesAndSlots(t *testing.T) {
 
 /*
 ================
+TestPetGearInheritsNativeSealRoll
+================
+*/
+func TestPetGearInheritsNativeSealRoll(t *testing.T) {
+	for tier := 1; tier <= 3; tier++ {
+		rt, clock, c, _ := newCombatTestRuntime(t, 1)
+		rt.AttackPetExpansion, rt.PetGearDropFactor = true, 1
+		refs := rt.deps.ItemReferences().(staticItemSource)
+		parent := &enterworld.ItemRef{RefObjID: 50000, Codename: "SEALED_PARENT", TypeIDs: [4]int64{3, 1, 6, 2}, NativeFields: enterworld.NewNativeFields(map[string]float64{"itemClass": float64(24 + tier), "rarity": 2})}
+		refs[parent.Codename] = parent
+		d, _, _ := companion.GearByID(30109 + uint32(tier*10))
+		piece := d.Items[0]
+		refs[piece.Codename] = &enterworld.ItemRef{RefObjID: piece.ID, Codename: piece.Codename, TypeIDs: [4]int64{3, 3, 9, 0}}
+		rt.DropRoll = func() (uint32, error) { return 0, nil }
+		rt.PetGearAffixes = []companion.AffixDef{{Code: 12, Group: "Fire", Status: "Implemented", Slots: []string{"Collar"}, Weight: 1, Min: 100, Max: 100}}
+		drop, ok := rt.preparePetGearDrop(c, grounditem.Item{RefObjID: parent.RefObjID}, simulation.Spawn{RegionID: 1}, clock.Now())
+		if !ok || drop.RefObjID != piece.ID || len(drop.MagicOptions) != 1 {
+			t.Fatal("missing seal drop", tier, drop)
+		}
+		_, value, ok := companion.DecodeAffix(drop.MagicOptions[0])
+		if !ok || value != uint32(100+tier*50) {
+			t.Fatal("seal blue scaling", tier, value)
+		}
+	}
+}
+
+/*
+================
+TestPetGearSealLookupMissSkipsDrop
+
+The workbook can carry a gear piece whose ID sits outside the seal family
+(30100-30399); its sealed lookup then misses. The drop must skip, not
+index the empty lookup result inside monster-loot handling.
+================
+*/
+func TestPetGearSealLookupMissSkipsDrop(t *testing.T) {
+	original := companion.D.Gear[8].Items[0].ID
+	companion.D.Gear[8].Items[0].ID = 40209 // off the seal family: GearByID misses
+	defer func() { companion.D.Gear[8].Items[0].ID = original }()
+
+	rt, clock, c, _ := newCombatTestRuntime(t, 1)
+	rt.AttackPetExpansion, rt.PetGearDropFactor = true, 1
+	refs := rt.deps.ItemReferences().(staticItemSource)
+	parent := &enterworld.ItemRef{RefObjID: 50000, Codename: "SEALED_PARENT_OFF_FAMILY", TypeIDs: [4]int64{3, 1, 6, 2}, NativeFields: enterworld.NewNativeFields(map[string]float64{"itemClass": 25, "rarity": 2})}
+	refs[parent.Codename] = parent
+	rt.DropRoll = constantDropRoll(0)
+	if _, ok := rt.preparePetGearDrop(c, grounditem.Item{RefObjID: parent.RefObjID}, simulation.Spawn{RegionID: 1}, clock.Now()); ok {
+		t.Fatal("off-family sealed piece dropped gear instead of skipping")
+	}
+}
+
+/*
+================
+TestPetGearEmptyDegreeSkipsDrop
+
+A degree row with no pieces has nothing to index: the slot computation
+must not turn negative and panic the loot path.
+================
+*/
+func TestPetGearEmptyDegreeSkipsDrop(t *testing.T) {
+	items := companion.D.Gear[8].Items
+	companion.D.Gear[8].Items = nil
+	defer func() { companion.D.Gear[8].Items = items }()
+
+	rt, clock, c, _ := newCombatTestRuntime(t, 1)
+	rt.AttackPetExpansion, rt.PetGearDropFactor = true, 1
+	refs := rt.deps.ItemReferences().(staticItemSource)
+	parent := &enterworld.ItemRef{RefObjID: 50000, Codename: "PARENT_EMPTY_DEGREE", TypeIDs: [4]int64{3, 1, 6, 2}, NativeFields: enterworld.NewNativeFields(map[string]float64{"itemClass": 25})}
+	refs[parent.Codename] = parent
+	rt.DropRoll = constantDropRoll(0)
+	if _, ok := rt.preparePetGearDrop(c, grounditem.Item{RefObjID: parent.RefObjID}, simulation.Spawn{RegionID: 1}, clock.Now()); ok {
+		t.Fatal("empty degree dropped gear instead of skipping")
+	}
+}
+
+/*
+================
 TestPetGearFactorAndNativeParentRestrictions
 ================
 */

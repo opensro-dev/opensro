@@ -20,6 +20,8 @@ const runtime = "src/engine/runtime/";
 // inside the frame or its owner's step.
 const ASYNC_OWNERS = [
 	runtime + "simulation/worker/session/http/http.ts",
+	// The WebTransport attempt (#1448): connect, stream pump and cert fetch.
+	runtime + "simulation/worker/network/network.ts",
 	runtime + "assets/worker/loader.ts",
 	"src/engine/foundation/assets/read-bytes.ts",
 	runtime + "assets/worker/packs/packs.ts",
@@ -124,17 +126,21 @@ export const rules = {
 	requestAnimationFrame: [ runtime + "runtime.ts" ],
 	cancelAnimationFrame: [ runtime + "runtime.ts" ],
 	// The asset loader owns progress/retry timers; persistent storage owns bounded
-	// optional-cache deadlines, cleared on settlement or owner timeout.
+	// optional-cache deadlines, cleared on settlement or owner timeout. The
+	// network owner arms the WebTransport connect and WELCOME deadlines (#1448),
+	// cleared on establishment, welcome, disconnect or disposal.
 	setTimeout: [
 		runtime + "simulation/worker/clock/clock.ts",
 		runtime + "assets/worker/loader.ts",
 		runtime + "assets/worker/packs/persistent.ts",
+		runtime + "simulation/worker/network/network.ts",
 		uiBridge
 	],
 	clearTimeout: [
 		runtime + "simulation/worker/clock/clock.ts",
 		runtime + "assets/worker/loader.ts",
 		runtime + "assets/worker/packs/persistent.ts",
+		runtime + "simulation/worker/network/network.ts",
 		uiBridge
 	],
 	setInterval: [],
@@ -205,12 +211,14 @@ export const rules = {
 	fetch: [
 		runtime + "simulation/worker/session/http/http.ts",
 		runtime + "assets/worker/loader.ts",
+		// The transport's cert-hash document before a WebTransport attempt (#1448).
+		runtime + "simulation/worker/network/network.ts",
 		bugReport,
 		// The Agent's one GET /title/build for the FPS chip.
 		buildInfo
 	],
 	WebSocket: [ runtime + "simulation/worker/network/network.ts" ],
-	WebTransport: [],
+	WebTransport: [ runtime + "simulation/worker/network/network.ts" ],
 	Worker: [ runtime + "simulation/host.ts", runtime + "assets/assets.ts" ]
 };
 // A geometry pipeline for a native state no scene precompiles is compiled

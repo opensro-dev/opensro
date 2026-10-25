@@ -1,13 +1,16 @@
 /*
 ===========================================================================
 
-debug-camera.test.mjs - the GM console's camera rows (/zoom, /camera, /ms)
+debug-camera.test.mjs - the GM console's camera rows (/zoom, /camera, /ms, /colon)
 
-690C40 cases 0x10, 0x14 and 0x1E: /zoom flips the interface's zoom byte
-(+0x3CF) behind the wheel's 150-unit rail, /camera flips the free-camera
-byte (+0x3CE) and reports it, /ms flips the cursor manager's visibility
-(+0x20). Each byte lives with its owner; the console only flips and
-forwards. Nothing reaches the server.
+690C40 cases 0x10, 0x14 and 0x1E, ids 118/119: /zoom flips the
+interface's zoom byte (+0x3CF) behind the wheel's 150-unit rail,
+/camera flips the free-camera byte (+0x3CE) and reports it, /ms flips
+the cursor manager's visibility (+0x20), /colon and /coloff write the
+camera-collision byte (+0x3CC) that gates the clamp in
+ApplyCameraOrbit (68FAD0); the follow never reads it. Each byte
+lives with its owner; the console only flips and forwards.
+Nothing reaches the server.
 
 ===========================================================================
 */
@@ -68,7 +71,7 @@ The production HUD with the three camera sinks recorded.
 function cameraUiFixture( t, gm = true ) {
 	/** @type {any[]} */
 	const sent = [];
-	const rail = [], free = [], cursor = [];
+	const rail = [], free = [], cursor = [], modes = [], collision = [];
 	const f = uiFixture(
 		message => {
 			if ( message.kind === "gameplay" ) sent.push( message.command );
@@ -82,7 +85,9 @@ function cameraUiFixture( t, gm = true ) {
 		{
 			setCameraZoomRail: value => rail.push( value ),
 			setFreeCamera: value => free.push( value ),
-			setCursorVisible: value => cursor.push( value )
+			setCameraCollision: value => collision.push( value ),
+			setCursorVisible: value => cursor.push( value ),
+			setRenderMode: ( mode, enabled ) => modes.push( [ mode, enabled ] )
 		}
 	);
 	t.after( () => f.dispose() );
@@ -116,7 +121,7 @@ function cameraUiFixture( t, gm = true ) {
 	draw();
 	f.ui.event( { kind: "key", code: "Backquote", shift: true } );
 	draw();
-	return { ...f, sent, rail, free, cursor, typeLine };
+	return { ...f, sent, rail, free, cursor, modes, collision, typeLine };
 }
 
 /*
@@ -141,7 +146,62 @@ test("the GM console flips the camera bytes and reports only /camera", t => {
 	assert.deepEqual( f.cursor, [ false ] );
 	f.typeLine( "/ms" );
 	assert.deepEqual( f.cursor, [ false, true ] );
+	// /colon and /coloff are silent, like /zoom: the collision byte
+	// flips and nothing is printed.
+	f.typeLine( "/coloff" );
+	assert.deepEqual( f.collision, [ false ] );
+	f.typeLine( "/colon" );
+	assert.deepEqual( f.collision, [ false, true ] );
 	assert.deepEqual( f.sent, [], "a camera row reached the server" );
+});
+
+/*
+================
+test("the GM console negates the render family's graphic options")
+================
+*/
+test("the GM console negates the render family's graphic options", t => {
+	const f = cameraUiFixture( t );
+	// SWorld_Construct seeds wireframe clear and the five others standing:
+	// the first press turns /wire on and everything else off. The native
+	// prints nothing for any of the six.
+	f.typeLine( "/wire" );
+	f.typeLine( "/ground" );
+	f.typeLine( "/sky" );
+	f.typeLine( "/mobj" );
+	f.typeLine( "/char" );
+	f.typeLine( "/lod" );
+	assert.deepEqual( f.modes, [
+		[ 0x12, true ],
+		[ 0x13, false ],
+		[ 0x14, false ],
+		[ 0x15, false ],
+		[ 0x16, false ],
+		[ 0x17, false ]
+	] );
+	f.typeLine( "/wire" );
+	f.typeLine( "/ground" );
+	f.typeLine( "/lod" );
+	assert.deepEqual( f.modes.slice( 6 ), [
+		[ 0x12, false ],
+		[ 0x13, true ],
+		[ 0x17, true ]
+	] );
+	assert.deepEqual( f.sent, [], "a render row reached the server" );
+});
+
+/*
+================
+test("a player without GM eligibility flips no render option")
+================
+*/
+test("a player without GM eligibility flips no render option", t => {
+	const f = cameraUiFixture( t, false );
+	f.typeLine( "/wire" );
+	f.typeLine( "/ground" );
+	f.typeLine( "/char" );
+	assert.deepEqual( f.modes, [] );
+	assert.deepEqual( f.sent, [] );
 });
 
 /*
@@ -154,9 +214,12 @@ test("a player without GM eligibility flips no camera byte", t => {
 	f.typeLine( "/zoom" );
 	f.typeLine( "/camera" );
 	f.typeLine( "/ms" );
+	f.typeLine( "/coloff" );
+	f.typeLine( "/colon" );
 	assert.deepEqual( f.rail, [] );
 	assert.deepEqual( f.free, [] );
 	assert.deepEqual( f.cursor, [] );
+	assert.deepEqual( f.collision, [] );
 	assert.deepEqual( f.sent, [] );
 });
 
@@ -174,14 +237,15 @@ function unexpectedCameraWork() {
 
 /*
 ================
-freeCameraWorldFixture
+cameraWorldFixture
 
 The world camera with a recorded renderer (the debug-field-of-view
 fixture's shape): projection continues while assets are unavailable.
 ================
 */
-function freeCameraWorldFixture( t ) {
+function cameraWorldFixture( t ) {
 	let camera;
+	const collisionFlags = [];
 	/** @type {import("../../src/engine/contracts/assets.ts").AssetOwner} */
 	const assets = {
 		available: () => 0,
@@ -208,6 +272,7 @@ function freeCameraWorldFixture( t ) {
 		videoOptions: unexpectedCameraWork,
 		experimentalVideo: unexpectedCameraWork,
 		setSelectionDecal: unexpectedCameraWork,
+		setWorldRenderMode: unexpectedCameraWork,
 		setFootprints: unexpectedCameraWork,
 		pickGround: unexpectedCameraWork,
 		presentationCamera: unexpectedCameraWork,
@@ -267,6 +332,14 @@ function freeCameraWorldFixture( t ) {
 		},
 		/*
 		================
+		setWorldCameraCollision
+		================
+		*/
+		setWorldCameraCollision( value ) {
+			collisionFlags.push( value );
+		},
+		/*
+		================
 		setWorld
 		================
 		*/
@@ -290,7 +363,7 @@ function freeCameraWorldFixture( t ) {
 		assert.ok( camera );
 		return camera;
 	}
-	return { stream, draw };
+	return { stream, draw, collisionFlags };
 }
 
 /*
@@ -299,7 +372,7 @@ test("the free camera holds its last eye and target until it re-aims")
 ================
 */
 test("the free camera holds its last eye and target until it re-aims", t => {
-	const f = freeCameraWorldFixture( t );
+	const f = cameraWorldFixture( t );
 	const home = { regionId: 1, x: 10, y: 0, z: 20, angle: 0 };
 	const away = { regionId: 1, x: 110, y: 5, z: 220, angle: 0 };
 	const standing = f.draw( home );
@@ -315,4 +388,29 @@ test("the free camera holds its last eye and target until it re-aims", t => {
 	f.stream.setFreeCamera( false );
 	const reaimed = f.draw( away );
 	assert.deepEqual( reaimed.target, [ 110, 5, 220 ] );
+});
+
+/*
+================
+test("the collision byte forwards to the renderer and the follow keeps tracking")
+================
+*/
+test("the collision byte forwards to the renderer and the follow keeps tracking", t => {
+	const f = cameraWorldFixture( t );
+	const home = { regionId: 1, x: 10, y: 0, z: 20, angle: 0 };
+	const away = { regionId: 1, x: 110, y: 5, z: 220, angle: 0 };
+	const standing = f.draw( home );
+	assert.deepEqual( standing.target, [ 10, 0, 20 ] );
+	f.stream.setCameraCollision( false );
+	assert.deepEqual( f.collisionFlags, [ false ] );
+	// 68F830 never reads +0x3CC: walking away still moves the target.
+	// Only the renderer's clamp is off (the follow-camera tests pin
+	// its requested-distance arm against a wall).
+	const moved = f.draw( away );
+	assert.deepEqual( moved.target, [ 110, 5, 220 ] );
+	assert.notDeepEqual( moved.eye, standing.eye );
+	f.stream.setCameraCollision( true );
+	assert.deepEqual( f.collisionFlags, [ false, true ] );
+	const still = f.draw( away );
+	assert.deepEqual( still.target, [ 110, 5, 220 ] );
 });

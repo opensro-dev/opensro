@@ -427,8 +427,9 @@ func (b *BetaSilk) Tick(nowMs int64, sessions []simulation.SessionView, lookup f
 ================
 NoteActivity
 
-Records that an account acted. Called by the action hub for every admitted
-player command; inert unless ActiveOnly is on.
+Records that an account acted. The transport hub calls it for every
+dispatched game frame, so any player-sent command counts (#1604 P5) and a
+heartbeat never does; inert unless ActiveOnly is on.
 ================
 */
 func (b *BetaSilk) NoteActivity(accountID string) {
