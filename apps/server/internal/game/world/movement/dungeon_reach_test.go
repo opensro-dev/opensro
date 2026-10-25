@@ -190,6 +190,20 @@ func dungeonReachChunk(t *testing.T, v, every *WaterValidator, region uint16, ch
 		to := simulation.Spawn{RegionID: region, X: x + math.Cos(angle)*length, Y: y + (random.Float64()-.5)*20,
 			Z: z + math.Sin(angle)*length}
 		skipped, scanned := v.clipDungeonPath(from, to), every.clipDungeonPath(from, to)
+		// The skip exists to save work (#1678 counts it), so the work
+		// may only shrink; everything the clip answers must match.
+		if skipped.Work > scanned.Work {
+			t.Fatalf("region %#x chord %+v -> %+v: the skip spent %d work, the every-block scan %d", region, from, to, skipped.Work, scanned.Work)
+		}
+		// Past its start check the clip visits every cell of every block
+		// in the chord's reach, arriving or not, so that alone floors the
+		// work it reports.
+		if _, standing := surface.heightAt(from.X, from.Y, from.Z); standing {
+			if visits := dungeonClipCellVisits(surface, from, to); skipped.Work < visits {
+				t.Fatalf("region %#x chord %+v -> %+v: the clip reports %d work past %d cell visits", region, from, to, skipped.Work, visits)
+			}
+		}
+		skipped.Work, scanned.Work = 0, 0
 		if fmt.Sprintf("%+v", skipped) != fmt.Sprintf("%+v", scanned) {
 			t.Fatalf("region %#x chord %+v -> %+v:\n skipped %+v\n every   %+v", region, from, to, skipped, scanned)
 		}
@@ -240,4 +254,27 @@ func BenchmarkClipDungeonPath(b *testing.B) {
 			}
 		})
 	}
+}
+
+/*
+================
+dungeonClipCellVisits
+
+The cells a dungeon clip of from -> to visits: every cell of every block
+whose reach the chord does not miss, the scan's own loop bound, computed
+apart from the clip so a dropped work count shows (#1678).
+================
+*/
+func dungeonClipCellVisits(surface *dungeonSpawnSurface, from, to simulation.Spawn) int {
+	visits := 0
+	for i := range surface.objects {
+		obj := &surface.objects[i]
+		if obj.reach.missedBy(from.X, from.Z, to.X, to.Z) {
+			continue
+		}
+		for _, m := range obj.meshes {
+			visits += m.cellCount()
+		}
+	}
+	return visits
 }

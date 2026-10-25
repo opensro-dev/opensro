@@ -67,6 +67,9 @@ var unlistedSettings = map[string]string{
 	// rule players meet (their client is offered the same world either
 	// way).
 	"SRO_WEBTRANSPORT_PUBLIC": "operator transport serving switch, not a gameplay rule",
+	// Staff telemetry (#1639): name-free kill and EXP rates for the
+	// staff console; players never meet it.
+	action.EnvKillStats: "staff kill and EXP rate telemetry, not a rule players meet",
 }
 
 /*
