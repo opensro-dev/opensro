@@ -556,6 +556,12 @@ variable "hunting_guide" {
   default = ""
 }
 
+# Optional GM-only target references; off leaves the native roster unchanged.
+variable "gm_training_dummy" {
+  type    = string
+  default = "off"
+}
+
 # gm_setspeed admits a GM's /SETSPEED (port-only, not native; owner decision
 # 2026-10-12). Anything but "on" refuses it, as v1.150 has no such command.
 variable "gm_setspeed" {
@@ -1072,6 +1078,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_TRADE_JOB_HUNTER_PERCENT_CAP        = var.trade_job_hunter_percent_cap
         SRO_REVERSE_RETURN_MAP                  = var.reverse_return_map
         SRO_GM_SETSPEED                         = var.gm_setspeed
+        SRO_GM_TRAINING_DUMMY                   = var.gm_training_dummy
         SRO_ALCHEMY_RATES                       = var.alchemy_rates
         SRO_ALCHEMY_MAX_PLUS                    = var.alchemy_max_plus
         SRO_TEAM_DEATH_REVIVE                   = var.team_death_revive

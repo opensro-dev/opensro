@@ -198,11 +198,7 @@ func (rt *Runtime) applyPetRevival(
 		*result = itemUseFailure(wire.ErrCodeCosRefused)
 		return false
 	}
-	chars, ok := rt.deps.ItemReferences().(enterworld.CharacterRefSource)
-	if !ok {
-		return false
-	}
-	cosRef, exists := chars.CharacterRefByCodename(pet.Codename)
+	cosRef, exists := rt.cosReference(pet)
 	if !exists || cosRef == nil || cosRef.RefObjID != pet.RefObjID {
 		return false
 	}

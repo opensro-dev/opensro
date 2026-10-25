@@ -185,6 +185,9 @@ func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResu
 	pet.ResolveStacks = 0
 	pet.ArcaneMagicPercent = 0
 	if rt.AttackPetExpansion && ref.TidWord>>11 == attackPetBand {
+		if effective, valid := rt.cosReference(pet); valid {
+			ref = effective
+		}
 		pet.CurrentHP = min(pet.CurrentHP, ref.MaxHP)
 	}
 	pet.GID, pet.InventorySlot = gid, use.request.Slot

@@ -39,10 +39,6 @@ const (
 	petBleedPulseMs = 2000
 	// petStatusGrade is the native grade every trained status rolls with.
 	petStatusGrade = 3
-	// Elemental blues add a status with this chance (percent).
-	petElementChance = 5
-	// A pet's Mend proc heals the owner this share of max HP.
-	petProcMendPercent = 5
 )
 
 /*
@@ -66,6 +62,8 @@ type petTrainedRuntime struct {
 	retribPercent float64
 	retribStun    bool
 	procReadyAt   int64
+	gearFields    []petGearField
+	poison        map[uint32]petGearPoison
 }
 
 /*
@@ -94,7 +92,6 @@ type petTrainedStrike struct {
 	// ownerState is the owner's 0x3FB1 push after a row was spent.
 	ownerState  []wire.Frame
 	reserved    bool
-	procUsed    bool
 	execute     float64 // kill non-bosses below this share of max HP
 	execBleed   float64 // extra execute share against bleeding targets
 	executed    bool    // this strike's Execute raised the last hit to a kill
@@ -238,35 +235,6 @@ func (rt *Runtime) petTrainedDecide(step petCombatStep, skill enterworld.SkillRo
 		ts.critBonus += crit
 	}
 	m := ts.mods
-	for _, e := range []struct {
-		add float64
-		tag uint32
-	}{{m.FireAdd, tagBurn}, {m.ColdAdd, tagFrostbite}, {m.ShockAdd, tagShock}, {m.PoisonAdd, tagPoison}} {
-		if e.add <= 0 {
-			continue
-		}
-		args := [6]uint32{level, petElementChance}
-		if e.tag == tagBurn || e.tag == tagPoison {
-			args[2] = uint32(e.add)
-		} else if e.tag == tagShock {
-			args[2] = 50
-		}
-		setPetStatus(&skill, e.tag, args)
-	}
-	if step.nowMs >= run.procReadyAt && rt.petChance(m.ProcChain) {
-		ts.procUsed = true
-		setPetArea(&skill, petAreaAroundTarget, 8, 3+int(level)/20, 20)
-		setPetStatus(&skill, tagShock, [6]uint32{level, 100, 50})
-	}
-	if step.nowMs >= run.procReadyAt && !ts.procUsed && rt.petChance(m.ProcFire) {
-		ts.procUsed = true
-		setPetArea(&skill, petAreaAroundTarget, 3, 5, 0)
-		setPetStatus(&skill, tagBurn, [6]uint32{level, 100, level})
-	}
-	if step.nowMs >= run.procReadyAt && !ts.procUsed && rt.petChance(m.ProcMend) {
-		ts.procUsed = true
-		ts.ownerHeal += petProcMendPercent
-	}
 	// Native COS damage lives mainly in the attack block, not the actor's
 	// base attack. Scaling only combat.Stats left equipment almost inert.
 	physical, magical := companion.AttackScales(pet.Codename, m)
@@ -500,18 +468,17 @@ func (rt *Runtime) petAttackSpeed(step petCombatStep) float64 {
 ================
 petTrainedStats
 
-The attacker and defender projections of one target: attack and flat
-elemental damage, critical chance, and pierce against the defender.
+The attacker and defender projections of one target: attack, critical
+chance and pierce. Elemental gear riders commit separately after the hit.
 ================
 */
 func petTrainedStats(ts *petTrainedStrike, target monster.Instance, attacker, defender combat.Stats) (combat.Stats, combat.Stats) {
 	m := ts.mods
 	attack, magic := companion.AttackScales(ts.codename, m)
-	flat := m.FireAdd + m.ColdAdd + m.ShockAdd + m.PoisonAdd
-	attacker.PhysicalAttackMin = (attacker.PhysicalAttackMin+m.GearStats.PhysicalAttack)*attack + flat
-	attacker.PhysicalAttackMax = (attacker.PhysicalAttackMax+m.GearStats.PhysicalAttack)*attack + flat
-	attacker.MagicalAttackMin = (attacker.MagicalAttackMin+m.GearStats.MagicalAttack)*magic + flat
-	attacker.MagicalAttackMax = (attacker.MagicalAttackMax+m.GearStats.MagicalAttack)*magic + flat
+	attacker.PhysicalAttackMin = (attacker.PhysicalAttackMin + m.GearStats.PhysicalAttack) * attack
+	attacker.PhysicalAttackMax = (attacker.PhysicalAttackMax + m.GearStats.PhysicalAttack) * attack
+	attacker.MagicalAttackMin = (attacker.MagicalAttackMin + m.GearStats.MagicalAttack) * magic
+	attacker.MagicalAttackMax = (attacker.MagicalAttackMax + m.GearStats.MagicalAttack) * magic
 	attacker.HitRate += m.GearStats.HitRatio
 	attacker.CriticalRate += m.CritPct + ts.critBonus
 	if ts.critWound > 0 && (petTargetBleeds(target) || uint64(target.CurrentHP)*2 < uint64(target.Ref.MaxHP)) {
@@ -625,10 +592,6 @@ func (rt *Runtime) petTrainedCommit(step petCombatStep, owner *enterworld.Charac
 	if damage > 0 {
 		step.state.trained.attacks++
 		companion.CountEvent(&live.Training, companion.TriggerAttacks)
-	}
-	// A committed healing proc also spends its recovery when the hit is blocked.
-	if ts.procUsed {
-		step.state.trained.procReadyAt = step.nowMs + companion.D.Rules.ProcInternalCooldownMs
 	}
 	if fatal {
 		companion.CountEvent(&live.Training, companion.TriggerKills)

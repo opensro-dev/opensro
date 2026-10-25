@@ -12,7 +12,7 @@ its heading by requested presentation policy (referencesox.png); v1.150's
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 import type { Progression } from "../gameplay/progression";
 import { isPetGearRef } from "../gameplay/inventory-item";
-import { PET_DESIGN } from "./pet-design-data";
+import { petGear as petGearDefinition } from "./pet-gear";
 import { itemTooltipMagic } from "./item-tooltip-magic";
 import { tooltipDescription } from "./tooltip-description";
 import { itemTooltipStats } from "./item-tooltip-stats";
@@ -40,10 +40,9 @@ export function itemTooltip(
 	const repaired = item.magicReferences?.some( r => r.optionName === "MATTR_REPAIR" ), rare = f?.rarity === 2;
 	const nameColor = rare ? (repaired ? 0xff6ce675 : 0xffffd953) : item.magic.length ? 0xff72bfff : 0xffffffff;
 	const petGear = item.refObjId !== undefined && isPetGearRef( item.refObjId );
-	const petDegree = petGear ?
-		PET_DESIGN.gear.find( degree => degree.items.some( gear => gear.id === item.refObjId ) ) :
-		undefined;
-	const petItem = petDegree?.items.find( gear => gear.id === item.refObjId );
+	const petDefinition = petGear ? petGearDefinition( item.refObjId ) : undefined;
+	const petDegree = petDefinition?.degree;
+	const petItem = petDefinition?.item;
 	const rows: TooltipRow[] = item.name ?
 		[ {
 			value: (petItem?.name ?? item.name) +
@@ -94,7 +93,10 @@ export function itemTooltip(
 				[ "PARAM_ER", petItem.baseStats.parryRatio ]
 			] as const
 		) {
-			if ( value ) add( `${text( key )} ${value}`, 0xffffffff );
+			if ( value ) add( `${text( key )} ${Number( value.toFixed( 1 ) )}`, 0xffffffff );
+		}
+		if ( petItem.baseStats.maxHPPercent ) {
+			add( `Maximum HP +${Number( petItem.baseStats.maxHPPercent.toFixed( 1 ) )}%`, 0xffffffff );
 		}
 	}
 	const descriptionText = text( item.tooltip?.descriptionSymbol ?? "" );

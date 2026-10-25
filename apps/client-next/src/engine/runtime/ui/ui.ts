@@ -708,6 +708,8 @@ import {
 	commandFloat,
 	commandInteger,
 	DEBUG_COMMAND_CLEAR,
+	DEBUG_COMMAND_COLON,
+	DEBUG_COMMAND_COLON_OFF,
 	DEBUG_COMMAND_CURSOR,
 	DEBUG_COMMAND_DAY,
 	DEBUG_COMMAND_DEBUG,
@@ -954,6 +956,7 @@ export interface UiExtensions {
 	setWorldFieldOfView?: ( degrees: number ) => void;
 	setCameraZoomRail?: ( capped: boolean ) => void;
 	setFreeCamera?: ( free: boolean ) => void;
+	setCameraCollision?: ( collision: boolean ) => void;
 	setCursorVisible?: ( visible: boolean ) => void;
 	saveExperimental?: ( value: ExperimentalOptions ) => void;
 	saveWindowPositions?: ( value: WindowPositions ) => void;
@@ -994,9 +997,10 @@ export function createUi(
 	// The interface timer's debug state (690C40 ids 100-109): the sampler
 	// reads it through the handle's debugClockSeed.
 	let debugClock: DebugClock = createDebugClock();
-	// The camera family's debug bytes (690C40 ids 110/114/135): the
+	// The camera family's debug bytes (690C40 ids 110-135): the
 	// interface's zoom rail (+0x3CF, standing from its constructor), its
-	// free-camera byte (+0x3CE) and the cursor manager's visibility
+	// free-camera byte (+0x3CE), its camera-apply byte (+0x3CC, also
+	// standing from its constructor) and the cursor manager's visibility
 	// (+0x20). Each owner applies its own through the extensions.
 	let debugZoomRail = true;
 	let debugFreeCamera = false;
@@ -2046,6 +2050,7 @@ export function createUi(
 		}
 		if ( next === "COS inventory" ) {
 			petTrainingAskedRef = 0;
+			petStateAsked = { ref: 0, asks: 0, atMs: 0 };
 			cosSlot = -1;
 			cosPage = 0;
 			cosPlayerPage = 0;
@@ -2792,6 +2797,18 @@ export function createUi(
 				// Case 0x16 writes the flag back to 1. The native
 				// prints nothing.
 				debugUiVisible = true;
+				break;
+			case DEBUG_COMMAND_COLON:
+				// Case 0x76 writes +0x3CC back to 1: the clamp casts
+				// the eye-to-target segment again (68FAD0). The native
+				// prints nothing.
+				extensions.setCameraCollision?.( true );
+				break;
+			case DEBUG_COMMAND_COLON_OFF:
+				// Case 0x77 writes +0x3CC to 0: the clamp takes its
+				// no-hit arm and the camera keeps the requested
+				// distance; the follow still tracks. Prints nothing.
+				extensions.setCameraCollision?.( false );
 				break;
 			case DEBUG_COMMAND_CURSOR:
 				// Case 0x1E: SetVisible(![cursor+0x20]) - the pointer shows
@@ -8497,6 +8514,9 @@ export function createUi(
 			const sessionPhase = next.session?.phase;
 			if ( sessionPhase !== "world" && sessionPhase !== "disconnected" && sessionPhase !== "reconnecting" ) {
 				mallNotice = "pending";
+				// A restarted server may now provide pet stats after earlier requests were refused.
+				petStateAsked = { ref: 0, asks: 0, atMs: 0 };
+				petTrainingAskedRef = 0;
 			} else if ( sessionPhase === "world" && !next.travel && mallNotice === "pending" && hud.data() ) {
 				mallNotice = hud.data()!.mallNotify.open ? "open" : "closed";
 				dirty = true;
@@ -9678,7 +9698,8 @@ export function createUi(
 						data.cosReferences.get( record.refObjId ),
 						game?.petTraining?.gid === record.gid ? game.petTraining : undefined,
 						next.entities.find( e => e.gid === record.gid )?.petResolve,
-						next.simulationTimeMs ?? 0
+						next.simulationTimeMs ?? 0,
+						record.level
 					);
 					const nativeRect = cosStatusRect( w, i, cls, cosStatusDesktopTop() );
 					const r: UiRect = compact ?
@@ -11804,7 +11825,8 @@ export function createUi(
 								hudData.cosReferences.get( target.refObjId ),
 								game?.petTraining?.gid === target.gid ? game.petTraining : undefined,
 								target.petResolve,
-								next.simulationTimeMs ?? 0
+								next.simulationTimeMs ?? 0,
+								record?.level
 							)?.maxHp :
 							undefined);
 					// The local character, selected from its portrait, wears the
@@ -17394,7 +17416,8 @@ export function createUi(
 							hudData.cosReferences.get( record.refObjId ),
 							publishedTraining,
 							next.entities.find( e => e.gid === record.gid )?.petResolve,
-							next.simulationTimeMs ?? 0
+							next.simulationTimeMs ?? 0,
+							record.level
 						);
 						const node = ( id: number ) => Object.values( page ).find( n => n.id === id );
 						const texts: [number, string][] = [
@@ -17571,6 +17594,7 @@ export function createUi(
 								if ( icon && item ) {
 									image( r, icon );
 									equipmentOverlay( item, r );
+									itemEffects( "pet-gear:" + i, item, r );
 								}
 								quads.push(
 									...text.quads( gear.name, [ r[0] - 12, r[1] + 38, 56, 12 ], full, white, {

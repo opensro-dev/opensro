@@ -224,6 +224,11 @@ func (rt *Runtime) planComposite(character *enterworld.Character, ref *enterworl
 			if !valid {
 				return plan, 0, "composite ticket " + entry.args[0] + " is malformed"
 			}
+			if plan.retirePremium != nil {
+				// The replaced ticket's remaining time moves the
+				// package ticket's end later (#1624, owner decision).
+				creditPremiumPlan(jobs, clock, premiumRemainingMs(character, nowMs, plan.retirePremium))
+			}
 			plan.paramJobs = append(plan.paramJobs, jobs...)
 			plan.clock = clock
 		case compositeUseSkill:

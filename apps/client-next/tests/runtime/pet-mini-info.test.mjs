@@ -44,13 +44,14 @@ test("gauges follow 6B34C0", () => {
 	assert.equal( info?.hgp, 0.5 );
 	assert.equal( petMiniInfo( [ pet ], new Map() )?.hp, null, "no reference, no HP authority" );
 	const resolved = petMiniInfo(
-		[ { ...pet, hp: 1430 } ],
+		[ { ...pet, hp: 128 } ],
 		references,
 		undefined,
 		{ stacks: 10, tier: 3, untilMs: 5000 },
 		1000
 	);
-	assert.equal( resolved?.hp, Math.fround( 1430 / 2860 ) );
+	// A level-12 bear has 197 base HP; ten Resolve stacks project 256 HP.
+	assert.equal( resolved?.hp, Math.fround( 128 / 256 ) );
 });
 
 test("the HP caution blinks while 0 < HP <= 30%", () => {
