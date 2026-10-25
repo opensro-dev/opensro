@@ -26,7 +26,11 @@ yet from that click's time at the speed it was predicted at. A click the
 worker took but refused leaves no trace, because the rebuild starts from
 the worker's pose and goal, not from the clicks. Whatever the rebuild
 moved becomes a visual offset given back within the step cap both local
-presenters share (drawn-step.ts); a teleport-sized one snaps. A worker
+presenters share (drawn-step.ts); a teleport-sized one snaps. That is a
+port-only presentation choice where Unreal differs: its autonomous proxy
+does not smooth the residual after a replay (SmoothCorrection runs only
+for simulated and remote autonomous proxies), so the body jumps by it;
+here it drains within 1.04x walking speed and the camera never jumps. A worker
 walking something the mover cannot rebuild (a direction walk, a skill
 displacement) ends the prediction through the presenter's carry.
 Port-only, not native: off unless the Experimental row is on.
