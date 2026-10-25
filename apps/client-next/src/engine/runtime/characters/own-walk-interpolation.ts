@@ -4,9 +4,9 @@
 own-walk-interpolation.ts - the local mover's walk drawn between its ticks
 
 Port-only, not native (owner, 2026-10-24: the "start of a walk lurches"
-report; any smoother solution allowed): the Experimental row "Interpolated
-own movement", on by default. The worker simulates the local mover on a
-fixed 16 ms tick and publishes to the main thread a frame or two later.
+report; any smoother solution allowed): always on — the Experimental row
+that once switched it was deleted (#1564). The worker simulates the local
+mover on a fixed 16 ms tick and publishes to the main thread a frame or two later.
 Drawing that walk at frame time means extrapolating past the newest tick,
 which overshoots every redirect and then has to catch up.
 
@@ -532,21 +532,7 @@ a body the same way.
 */
 export function createOwnWalkPresenter( turn: ( from: number, to: number, seconds: number ) => number ) {
 	const tracks = new Map<number, OwnWalkTrack>();
-	let enabled = false;
 	return {
-		/*
-		================
-		enable
-
-		Always on since 2026-10-25 (it was the Experimental "Interpolated own movement" row); read each frame.
-		Disabling keeps the tracks: the pose that leaves interpolation
-		consumes the last drawn pose through take() for its recovery frame
-		(#1499); retain() and clear() own a track's end otherwise.
-		================
-		*/
-		enable( on: boolean ) {
-			enabled = on;
-		},
 		/*
 		================
 		handles
@@ -556,7 +542,7 @@ export function createOwnWalkPresenter( turn: ( from: number, to: number, second
 		================
 		*/
 		handles( input: SampleInput ): boolean {
-			return enabled && input.ownLeg === true && !input.displacement;
+			return input.ownLeg === true && !input.displacement;
 		},
 		/*
 		================
