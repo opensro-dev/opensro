@@ -13,8 +13,9 @@ import "testing"
 ================
 TestPursuitRoutinePerPlane
 
-53FD04 installs 548BE0 outdoors and 549460 in a cave; only the outdoor
-routine carries its goal on toward a moving target.
+The server installs the direction-gate pursuit outdoors and the
+region-route pursuit in a cave; only the outdoor routine carries its goal
+on toward a moving target.
 ================
 */
 func TestPursuitRoutinePerPlane(t *testing.T) {
