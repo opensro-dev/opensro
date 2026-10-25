@@ -1051,6 +1051,50 @@ heading
 		},
 		/*
 ================
+steer
+
+The arrow keys' turn (arrow-keys.ts, 0x86D480): a direction walk under way
+takes the new heading from the live pose, as driftWalk re-aims it; a
+standing character turns where it stands.
+================
+		*/
+		steer( angle: number, now: number ) {
+			if ( !Number.isInteger( angle ) || angle < 0 || angle > 65535 ) throw new Error( "Invalid heading" );
+			advanceTo( now );
+			if ( !walk || !segment?.direction || segment.direction.blocked || !pose ) {
+				if ( pose ) pose = { ...pose, angle };
+				if ( authoritative ) authoritative = { ...authoritative, angle };
+				return;
+			}
+			walk.heading = angle;
+			// The server turns its walker only when a steer arrives (every
+			// eighth of a turn), so its line no longer predicts this walk: drop
+			// the drift reference rather than pull the turn back onto it.
+			walk.reference = null;
+			owner = liveOwner( now );
+			pose = navigation.surface( pose, pose, owner, surfaceCursor );
+			poseAtMs = now;
+			segment = directionSegment( pose, angle, now, segment.lead, walk.factor );
+		},
+		/*
+================
+stopDirection
+
+The Up arrow's release (0x72F5, arrow-keys.ts): the direction walk ends
+where the walker is now. The server stops its own walker when the stop
+arrives and corrects to that point (0xB2F5).
+================
+		*/
+		stopDirection( now: number ) {
+			advanceTo( now );
+			if ( !segment?.direction ) return;
+			beginTransition( "input" );
+			authoritative = pose;
+			segment = null;
+			walk = null;
+		},
+		/*
+================
 mode
 ================
 		*/

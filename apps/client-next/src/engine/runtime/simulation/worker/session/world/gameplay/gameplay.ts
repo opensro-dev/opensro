@@ -76,6 +76,7 @@ import {
 	keepsStall,
 	type InteractionApproachState
 } from "@/engine/foundation/gameplay/interaction-approach";
+import { PICKUP_EXECUTE_RANGE } from "@/engine/foundation/gameplay/approach-goal";
 import { targetNotice } from "@/engine/foundation/gameplay/target-notices";
 import { constantNativeNotice, resolveNativeNotice } from "@/engine/foundation/gameplay/native-notice";
 import {
@@ -283,6 +284,7 @@ import { createChat } from "./chat/chat";
 import { createFriends } from "./friends/friends";
 import { createLetters } from "./letters/letters";
 import { createMovement } from "./movement/movement";
+import { createArrowKeys, type ArrowKeyMover } from "./arrow-keys/arrow-keys";
 import { logoutCancelRequest, worldPointAction } from "@/engine/foundation/gameplay/direction-movement";
 import { createInventory } from "./inventory/inventory";
 import { createCombat } from "./combat/combat";
@@ -342,9 +344,7 @@ interface WorldReferences {
 // A dress answer may trail its bar by a server tick and the round trip.
 const JOB_DRESS_ANSWER_GRACE_MS = 5000;
 
-// grounditem.ExecuteRange: a pickup closer than this is granted in place;
-// farther away the server walks the player to the item first.
-const PICKUP_EXECUTE_RANGE = 10;
+// PICKUP_EXECUTE_RANGE lives in approach-goal.ts, its one owner.
 // The payload of a journal row no frame carried (a world entry, the tick).
 const NO_PAYLOAD = new Uint8Array( 0 );
 // How long past two round trips a sent skill press's cooldown stand-in waits
@@ -484,6 +484,8 @@ export function createGameplay(
 	let groundSkillMoveSuppressUntil = 0;
 	// groundWalkRefusal() was null at the last step (published, #1440).
 	let walkPredictable = false;
+	// pickupPredictableNow() held at the last step (published, #1567).
+	let pickupPredictable = false;
 	const feedback = createFeedback();
 	const pickup = createPickup();
 	const actionSession = createActionSession();
@@ -505,6 +507,30 @@ export function createGameplay(
 sendFrame
 ================
 	*/
+	// The arrow keys' walk and turn (#1574).
+	const arrowKeys = createArrowKeys( frame => sendFrame( frame ) );
+	/*
+	================
+	arrowMover
+
+	What the arrow keys move: the movement owner, or for a rider the ridden
+	vehicle's commands (0x85E000).
+	================
+	*/
+	function arrowMover( local: EntityState | undefined ): ArrowKeyMover {
+		const vehicle = local?.mountedOn || undefined;
+		return {
+			pose: () => movement.state().pose ?? null,
+			walkingDirection: () => {
+				const state = movement.state();
+				return state.moving && state.directionWalk !== undefined;
+			},
+			direct: ( heading, now ) => movement.direct( heading, now, vehicle ),
+			steer: ( heading, now ) => movement.steer( heading, now ),
+			stop: now => movement.stopDirection( now ),
+			vehicle: () => vehicle
+		};
+	}
 	function sendFrame( frame: WireFrame ): WireFrame {
 		send( frame );
 		pickup.sent( frame );
@@ -1222,6 +1248,25 @@ so the race marks never depend on the member being in view.
 	}
 	/*
 ================
+pickupPredictableNow
+
+The state half of predictPickupRunUp's gate, shared with the snapshot's
+pickupPredictable: a pickup click now would reach the run-up and start
+it. The dispatch gates that intercept a pickup first (teleport mode,
+seated) and the run-up's own holds (a live cast incl. a held wall or
+chain root, any mount, death) all close it; it differs from the ground
+click's gate (groundWalkRefusal) exactly there, so the main-thread
+mover predicts a pickup leg only when the worker walks one (#1567).
+The item's space and range are per-click and stay with the callers.
+================
+	*/
+	function pickupPredictableNow( now: number, local: EntityState | undefined ): boolean {
+		return protocol === 1 && teleportMode !== 1 &&
+			local?.movementMode !== MOVEMENT_SEATED && !local?.mountedOn &&
+			local?.appearanceState?.[0] !== 2 && !localCastHolds( now );
+	}
+	/*
+================
 predictPickupRunUp
 
 A pickup beyond reach is a walk the server drives: it answers 0x72CD with
@@ -1232,7 +1277,7 @@ and a refusal walks it back (movement.predictApproach).
 	*/
 	function predictPickupRunUp( entity: EntityState, local: EntityState | undefined, now: number ) {
 		const pose = movement.state().pose;
-		if ( !pose || localCastHolds( now ) || local?.mountedOn || local?.appearanceState?.[0] === 2 ) return;
+		if ( !pose || !pickupPredictableNow( now, local ) ) return;
 		if ( !sameCoordinateSpace( entity.regionId, pose.regionId ) ) return;
 		if ( planarDistance( pose, entity ) <= PICKUP_EXECUTE_RANGE ) return;
 		movement.predictApproach(
@@ -1670,6 +1715,7 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 				simulationProtocolVersion?: number;
 			}).simulationProtocolVersion ?? 0;
 			movement.clear();
+			arrowKeys.clear();
 			movement.mode(
 				(value as {
 					character?: {
@@ -2900,6 +2946,18 @@ state here before a command can claim a native wire conversation.
 				const emote = actionEmote( command.id );
 				if ( emote === null ) throw Error( "Action is unavailable" );
 				return sendFrame( { opcode: 0x324b, payload: Uint8Array.of( emote ) } );
+			}
+			if ( command.kind === "arrow-key" ) {
+				// 0x680A30: a press walks only where a click would (the same
+				// gates); a release always ends what its press started.
+				const admitted = !command.down || groundWalkRefusal( now, local ) === null;
+				const frame = arrowKeys.key( command.key, command.down, now, arrowMover( local ), admitted );
+				if ( frame ) {
+					pickup.clear();
+					selectionDecal = null;
+				}
+				dirty = true;
+				return frame;
 			}
 			if ( command.kind === "ground-move" || command.kind === "move" ) {
 				if ( protocol !== 1 ) {
@@ -4682,11 +4740,17 @@ before take assembles the presentation snapshot.
 		*/
 		step( now: number, local?: EntityState ) {
 			inventorySince = inventory.state().inventoryPending ? inventorySince ?? now : undefined;
+			arrowKeys.step( now, arrowMover( local ) );
 			// A gate can open or close with no command or frame (a cast's action
 			// window ends): republish when the answer changes.
 			const predictable = groundWalkRefusal( now, local ) === null;
 			if ( predictable !== walkPredictable ) {
 				walkPredictable = predictable;
+				dirty = true;
+			}
+			const pickupOpen = !!local && pickupPredictableNow( now, local );
+			if ( pickupOpen !== pickupPredictable ) {
+				pickupPredictable = pickupOpen;
 				dirty = true;
 			}
 			if ( petAssists.size || petAssistCountdowns.size ) {
@@ -5072,6 +5136,7 @@ The published plane when something changed since the last take, else null.
 				localGid,
 				...m,
 				walkPredictable,
+				pickupPredictable,
 				...i,
 				inventoryJournal,
 				...c,
@@ -5138,6 +5203,7 @@ World transfer retires spatial work while retaining character/session data.
 			selectionDecal = null;
 			social = withoutResurrection( { ...social, invitation: null } );
 			movement.clear();
+			arrowKeys.clear();
 			targeting.clear();
 			combat.clear( true );
 			skillPress.clear();
