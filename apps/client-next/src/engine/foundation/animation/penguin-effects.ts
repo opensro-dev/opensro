@@ -114,8 +114,10 @@ export function createPenguinBolts( allocate: () => number ) {
 			for ( const token of rows.keys() ) if ( !current.has( token ) ) rows.delete( token );
 			const result: CharacterActor[] = [];
 			for ( const cast of casts ) {
-				// Native 25303 is the penguin attack row, also used by its authored actives.
-				if ( cast.caster !== pet || cast.skill !== 25303 || cast.cancelledAtMs !== undefined ) continue;
+				// Penguin attacks have one native row per level (25214 = level 1).
+				if (
+					cast.caster !== pet || cast.skill < 25214 || cast.skill > 25353 || cast.cancelledAtMs !== undefined
+				) continue;
 				let row = rows.get( cast.token );
 				if ( !row ) {
 					const source = entities.get( cast.caster ), target = entities.get( cast.target );

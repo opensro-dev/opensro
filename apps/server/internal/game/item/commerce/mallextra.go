@@ -19,6 +19,15 @@ unsupported policy, unique slots) also holds for it. A malformed entry, an
 unknown tab, a package without data or one the mall already lists stops the
 boot naming the setting.
 
+An authored entry, "tab : package : item : silk", lists an item v1.150 has
+no mall package for: the package row (its name, description and icon are
+the item's own), one plain scrap and a silk price are written as the
+shipped data would carry them, under a package ID past the shipped ones.
+The list may name presets: "on" (the avatar outfits) and "statrecall" (the
+stat point recall scroll's six level tiers, owner 2026-10-25, #1609), so
+"on,statrecall" adds the scrolls to today's mall and "on" alone is today's
+mall exactly.
+
 ===========================================================================
 */
 package commerce
@@ -29,6 +38,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"opensro.online/server/internal/game/enterworld"
 )
 
 // EnvMallExtraGoods names the setting: "on", "off" or "tab:package,...".
@@ -64,24 +75,46 @@ var mallExtraGoodsDefault = strings.Join([]string{
 	"MALL_AVATAR_HAT:PACKAGE_ITEM_MALL_AVATAR_W_HALLOWEEN_ATTACH",
 }, ",")
 
+// mallStatRecallPreset is "statrecall" (#1609): the recall scroll's six
+// level tiers (itemdata 9253-9258) for silk, priced by tier (owner,
+// 2026-10-26): 30/60/90/120/160 for 1-80, and one price, 250, for the top
+// scroll, which the preset makes usable at 81-110 (StatRecallListed).
+var mallStatRecallPreset = strings.Join([]string{
+	"MALL_CONSUME_SCROLL:PACKAGE_ITEM_MALL_STATS_POINT_RECALL:ITEM_MALL_STATS_POINT_RECALL:30",
+	"MALL_CONSUME_SCROLL:PACKAGE_ITEM_MALL_STATS_POINT_RECALL_50LV:ITEM_MALL_STATS_POINT_RECALL_50LV:60",
+	"MALL_CONSUME_SCROLL:PACKAGE_ITEM_MALL_STATS_POINT_RECALL_60LV:ITEM_MALL_STATS_POINT_RECALL_60LV:90",
+	"MALL_CONSUME_SCROLL:PACKAGE_ITEM_MALL_STATS_POINT_RECALL_70LV:ITEM_MALL_STATS_POINT_RECALL_70LV:120",
+	"MALL_CONSUME_SCROLL:PACKAGE_ITEM_MALL_STATS_POINT_RECALL_80LV:ITEM_MALL_STATS_POINT_RECALL_80LV:160",
+	"MALL_CONSUME_SCROLL:PACKAGE_ITEM_MALL_STATS_POINT_RECALL_81LV:ITEM_MALL_STATS_POINT_RECALL_81LV:250",
+}, ",")
+
+// maxAuthoredSilk bounds an authored price: the 1500-silk bank cap many
+// times over, far below the wire's u32.
+const maxAuthoredSilk = 100000
+
 /*
 ================
 MallExtraGood
 
-One configured listing: the mall tab and the package it lists.
+One configured listing: the mall tab and the package it lists. Item and
+Silk are set only for an authored package (one the shipped data lacks).
 ================
 */
 type MallExtraGood struct {
 	Tab     string
 	Package string
+	Item    string
+	Silk    uint32
 }
 
 /*
 ================
 ParseMallExtraGoods
 
-"" and "off" are the shipped mall (nil); "on" is mallExtraGoodsDefault;
-otherwise comma-separated tab:package entries.
+"" and "off" are the shipped mall (nil); "on", "1" and "true" are
+mallExtraGoodsDefault. Otherwise a comma list of tab:package listings,
+tab:package:item:silk authored packages and the presets "on" and
+"statrecall".
 ================
 */
 func ParseMallExtraGoods(text string) ([]MallExtraGood, error) {
@@ -89,18 +122,63 @@ func ParseMallExtraGoods(text string) ([]MallExtraGood, error) {
 	switch strings.ToLower(text) {
 	case "", "off", "0", "false":
 		return nil, nil
-	case "on", "1", "true":
-		text = mallExtraGoodsDefault
+	case "1", "true":
+		text = "on"
+	}
+	var fields []string
+	for _, field := range strings.Split(text, ",") {
+		switch strings.ToLower(strings.TrimSpace(field)) {
+		case "on":
+			fields = append(fields, strings.Split(mallExtraGoodsDefault, ",")...)
+		case "statrecall":
+			fields = append(fields, strings.Split(mallStatRecallPreset, ",")...)
+		default:
+			fields = append(fields, field)
+		}
 	}
 	var goods []MallExtraGood
-	for _, field := range strings.Split(text, ",") {
+	for _, field := range fields {
 		parts := strings.Split(strings.TrimSpace(field), ":")
-		if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
-			return nil, fmt.Errorf("%s: %q is not tab:package", EnvMallExtraGoods, field)
+		for i := range parts {
+			parts[i] = strings.TrimSpace(parts[i])
+			if parts[i] == "" {
+				return nil, fmt.Errorf("%s: %q has an empty field", EnvMallExtraGoods, field)
+			}
 		}
-		goods = append(goods, MallExtraGood{Tab: strings.TrimSpace(parts[0]), Package: strings.TrimSpace(parts[1])})
+		switch len(parts) {
+		case 2:
+			goods = append(goods, MallExtraGood{Tab: parts[0], Package: parts[1]})
+		case 4:
+			silk, err := strconv.ParseUint(parts[3], 10, 32)
+			if err != nil || silk == 0 || silk > maxAuthoredSilk {
+				return nil, fmt.Errorf("%s: %q needs a silk price from 1 to %d", EnvMallExtraGoods, field, maxAuthoredSilk)
+			}
+			goods = append(goods, MallExtraGood{Tab: parts[0], Package: parts[1], Item: parts[2], Silk: uint32(silk)})
+		default:
+			return nil, fmt.Errorf("%s: %q is not tab:package or tab:package:item:silk", EnvMallExtraGoods, field)
+		}
 	}
 	return goods, nil
+}
+
+/*
+================
+StatRecallListed
+
+Whether goods sell the recall scrolls (the "statrecall" preset). Port-only,
+not native: while they are sold, each scroll is usable only inside its
+tier's level window, and the top one (9258) up to level 110 (action
+itemuse.go statRecallWindow), so a cheap low tier never stands in for a
+dear high one. v1.150 sells none, and with the preset off use is as today.
+================
+*/
+func StatRecallListed(goods []MallExtraGood) bool {
+	for _, good := range goods {
+		if strings.HasPrefix(good.Item, "ITEM_MALL_STATS_POINT_RECALL") {
+			return true
+		}
+	}
+	return false
 }
 
 /*
@@ -117,12 +195,13 @@ func MallExtraGoodsFromEnv() ([]MallExtraGood, error) {
 addMallExtraRows
 
 Writes each listing into the reference tables as the shipped data would
-carry it: a goods row at the tab's next free slot. The package's own data
-(refpackageitem, its price policy, its scraps) must already be authored;
-the catalogue build checks the rest.
+carry it: a goods row at the tab's next free slot. A plain listing's
+package data (refpackageitem, its price policy, its scraps) must already be
+authored; an authored entry writes them first (authorMallPackage). The
+catalogue build checks the rest.
 ================
 */
-func addMallExtraRows(tables map[string][][]string, goods []MallExtraGood) error {
+func addMallExtraRows(tables map[string][][]string, goods []MallExtraGood, refs enterworld.ItemRefSource) error {
 	if len(goods) == 0 {
 		return nil
 	}
@@ -149,7 +228,25 @@ func addMallExtraRows(tables map[string][][]string, goods []MallExtraGood) error
 			authored[row[3]] = true
 		}
 	}
+	nextPackageID := uint64(0)
+	for _, row := range tables["refpackageitem"] {
+		if len(row) >= 3 {
+			if id, err := strconv.ParseUint(row[2], 10, 32); err == nil && id >= nextPackageID {
+				nextPackageID = id + 1
+			}
+		}
+	}
 	for _, good := range goods {
+		if good.Item != "" {
+			if authored[good.Package] {
+				return fmt.Errorf("%s: %s already has package data; list it as tab:package", EnvMallExtraGoods, good.Package)
+			}
+			if err := authorMallPackage(tables, good, refs, uint32(nextPackageID)); err != nil {
+				return err
+			}
+			authored[good.Package] = true
+			nextPackageID++
+		}
 		switch {
 		case !mallTab[good.Tab]:
 			return fmt.Errorf("%s: unknown mall tab %s", EnvMallExtraGoods, good.Tab)
@@ -165,5 +262,38 @@ func addMallExtraRows(tables map[string][][]string, goods []MallExtraGood) error
 			[]string{"1", "11", good.Tab, good.Package, strconv.Itoa(next[good.Tab])})
 		next[good.Tab]++
 	}
+	return nil
+}
+
+/*
+================
+authorMallPackage
+
+The rows v1.150 would carry for a one-item silk package it never shipped:
+the package (named, described and drawn as the item itself), one plain
+scrap of the item (extraTemplate: no plus, variance or options) and the
+silk price. No gift-silk or point row: the authored package is silk only.
+================
+*/
+func authorMallPackage(tables map[string][][]string, good MallExtraGood, refs enterworld.ItemRefSource, id uint32) error {
+	if refs == nil {
+		return fmt.Errorf("%s: %s needs the item table to author its package", EnvMallExtraGoods, good.Package)
+	}
+	ref, ok := refs.ItemRefByCodename(good.Item)
+	if !ok || ref == nil {
+		return fmt.Errorf("%s: %s names no item %s", EnvMallExtraGoods, good.Package, good.Item)
+	}
+	tables["refpackageitem"] = append(tables["refpackageitem"], []string{
+		"1", "11", strconv.FormatUint(uint64(id), 10), good.Package, "0", "EXPAND_TERM_ALL",
+		ref.NameStrID, ref.DescriptionSymbol, ref.Icon,
+		"-1", "xxx", "-1", "xxx", "-1", "xxx", "-1", "xxx",
+	})
+	scrap := extraTemplate(good.Item)
+	scrap[1], scrap[2] = "11", good.Package
+	tables["refscrapofpackageitem"] = append(tables["refscrapofpackageitem"], scrap)
+	tables["refpricepolicyofitem"] = append(tables["refpricepolicyofitem"], []string{
+		"1", "11", good.Package, "2", strconv.FormatUint(uint64(good.Silk), 10),
+		"0", "xxx", "0", "xxx", "0", "xxx", "0", "xxx",
+	})
 	return nil
 }

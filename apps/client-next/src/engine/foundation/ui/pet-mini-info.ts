@@ -59,7 +59,8 @@ export function petMiniInfo(
 		references?.get( record.refObjId ),
 		training?.gid === record.gid ? training : undefined,
 		resolve,
-		nowMs
+		nowMs,
+		record.level
 	);
 	// 6B34C0 stores the HP ratio through a float: compare in float32.
 	const hp = reference && reference.maxHp > 0 ? Math.min( 1, Math.fround( record.hp / reference.maxHp ) ) : null;

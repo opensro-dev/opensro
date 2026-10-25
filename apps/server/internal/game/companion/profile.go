@@ -21,6 +21,28 @@ func Profile(codename string) PetDef {
 
 /*
 ================
+BaseHealth
+
+Port-only survival curve; native HP remains the fallback for unconfigured rows.
+================
+*/
+func BaseHealth(codename string, level uint8, native uint32) uint32 {
+	p := Profile(codename)
+	if level == 0 || len(p.HealthByLevel) == 0 {
+		return uint32(float64(native) * p.HPPercent / 100)
+	}
+	previous := p.HealthByLevel[0]
+	for _, point := range p.HealthByLevel[1:] {
+		if level <= point.Level {
+			return previous.HP + uint32(uint64(point.HP-previous.HP)*uint64(level-previous.Level)/uint64(point.Level-previous.Level))
+		}
+		previous = point
+	}
+	return previous.HP
+}
+
+/*
+================
 AttackScales
 
 Species and equipment/passive percentages multiply, rather than letting a

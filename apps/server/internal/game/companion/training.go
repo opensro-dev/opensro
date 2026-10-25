@@ -104,7 +104,11 @@ func EffectiveLevel(p *domain.CharacterCOS, s SkillDef, m Modifiers) uint8 {
 	if l == 0 {
 		return 0
 	}
-	return uint8(min(255, int(l)+m.SkillBonus))
+	bonus := m.SkillBonus
+	if p.Training.TreeVersion >= 2 {
+		bonus += m.RowSkillBonus[s.Row]
+	}
+	return uint8(min(255, int(l)+bonus))
 }
 
 /*

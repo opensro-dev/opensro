@@ -2076,6 +2076,7 @@ export function createUi(
 		}
 		if ( next === "COS inventory" ) {
 			petTrainingAskedRef = 0;
+			petStateAsked = { ref: 0, asks: 0, atMs: 0 };
 			cosSlot = -1;
 			cosPage = 0;
 			cosPlayerPage = 0;
@@ -8578,6 +8579,9 @@ export function createUi(
 			const sessionPhase = next.session?.phase;
 			if ( sessionPhase !== "world" && sessionPhase !== "disconnected" && sessionPhase !== "reconnecting" ) {
 				mallNotice = "pending";
+				// A restarted server may now provide pet stats after earlier requests were refused.
+				petStateAsked = { ref: 0, asks: 0, atMs: 0 };
+				petTrainingAskedRef = 0;
 			} else if ( sessionPhase === "world" && !next.travel && mallNotice === "pending" && hud.data() ) {
 				mallNotice = hud.data()!.mallNotify.open ? "open" : "closed";
 				dirty = true;
@@ -9759,7 +9763,8 @@ export function createUi(
 						data.cosReferences.get( record.refObjId ),
 						game?.petTraining?.gid === record.gid ? game.petTraining : undefined,
 						next.entities.find( e => e.gid === record.gid )?.petResolve,
-						next.simulationTimeMs ?? 0
+						next.simulationTimeMs ?? 0,
+						record.level
 					);
 					const nativeRect = cosStatusRect( w, i, cls, cosStatusDesktopTop() );
 					const r: UiRect = compact ?
@@ -11885,7 +11890,8 @@ export function createUi(
 								hudData.cosReferences.get( target.refObjId ),
 								game?.petTraining?.gid === target.gid ? game.petTraining : undefined,
 								target.petResolve,
-								next.simulationTimeMs ?? 0
+								next.simulationTimeMs ?? 0,
+								record?.level
 							)?.maxHp :
 							undefined);
 					// The local character, selected from its portrait, wears the
@@ -17475,7 +17481,8 @@ export function createUi(
 							hudData.cosReferences.get( record.refObjId ),
 							publishedTraining,
 							next.entities.find( e => e.gid === record.gid )?.petResolve,
-							next.simulationTimeMs ?? 0
+							next.simulationTimeMs ?? 0,
+							record.level
 						);
 						const node = ( id: number ) => Object.values( page ).find( n => n.id === id );
 						const texts: [number, string][] = [
@@ -17652,6 +17659,7 @@ export function createUi(
 								if ( icon && item ) {
 									image( r, icon );
 									equipmentOverlay( item, r );
+									itemEffects( "pet-gear:" + i, item, r );
 								}
 								quads.push(
 									...text.quads( gear.name, [ r[0] - 12, r[1] + 38, 56, 12 ], full, white, {
