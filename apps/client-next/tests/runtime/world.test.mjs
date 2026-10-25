@@ -2706,6 +2706,98 @@ test("a stalled link is named and resumed at 8 s, before the receipt watchdog", 
 
 /*
 ================
+a frozen tab's backlog ages on the event clock
+
+The tab froze and its socket backlog (a pong) is delivered in one go
+before the next step; a move leaves after it and nothing more arrives.
+The stall incident must age that backlog on the network's event clock
+(#1474): the last frame really arrived moments ago, however far the
+step clock has since run - the same age the close detail would report.
+Dating the frame to the step that sampled it (the old second owner)
+would report the whole 8 s wait as the frame's age.
+================
+*/
+test("a frozen tab's backlog ages on the event clock in the stall incident", async t => {
+	const sockets = socketHarness( t ), incidents = [];
+	const world = createWorldSession( async () => "ticket", undefined, incident => incidents.push( incident ) );
+	t.after( () => world.dispose() );
+	const entry = { ...bootstrap, simulationProtocolVersion: 1 };
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const first = sockets[0];
+	first.onopen();
+	first.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	first.receive( 7, entered( entry ) );
+	for ( const row of rows ) first.receive( row.opcode, row.payload );
+	first.receive( 0x32a6, Uint8Array.of( 123, 0, 0, 0, 0, 0, 0, 0 ) );
+	world.step( 4 );
+	flush( world );
+	world.step( 5 );
+	world.ready();
+	// The backlog lands before one step; the move leaves after it.
+	first.receive( 4, Uint8Array.of( 0, 0, 0, 0 ) );
+	world.step( 500 );
+	world.command( { kind: "move", destination: { ...bootstrap.localPlayerEntry.startProfile, x: 10 } } );
+	for ( let ms = 1005; ms <= 8005; ms += 500 ) {
+		world.step( ms );
+		assert.equal( world.status().phase, "world", `${ms} ms: not yet confirmed` );
+	}
+	world.step( 8505 );
+	assert.equal( world.status().phase, "reconnecting" );
+	assert.equal( incidents.length, 1 );
+	assert.equal( incidents[0].code, "transport_stalled" );
+	assert.match( incidents[0].message, /a request waited 8005 ms with no frame arriving/ );
+	const age = /last inbound (\d+) ms ago/.exec( incidents[0].message );
+	assert.ok( age, "the incident ages the last frame" );
+	assert.ok(
+		Number( age[1] ) < 5000,
+		`the backlog's age is its event-clock age, not the step clock's: ${age[1]} ms`
+	);
+});
+
+test("a frame landing in the request's own step does not prove the link alive", async t => {
+	const sockets = socketHarness( t ), incidents = [];
+	const world = createWorldSession( async () => "ticket", undefined, incident => incidents.push( incident ) );
+	t.after( () => world.dispose() );
+	const entry = { ...bootstrap, simulationProtocolVersion: 1 };
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const first = sockets[0];
+	first.onopen();
+	first.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	first.receive( 7, entered( entry ) );
+	for ( const row of rows ) first.receive( row.opcode, row.payload );
+	first.receive( 0x32a6, Uint8Array.of( 123, 0, 0, 0, 0, 0, 0, 0 ) );
+	world.step( 4 );
+	flush( world );
+	world.step( 5 );
+	world.ready();
+	// The frame lands after the step, before the move leaves: it is the
+	// request's own step-mate, not an answer to it, and nothing follows.
+	world.step( 500 );
+	first.receive( 4, Uint8Array.of( 0, 0, 0, 0 ) );
+	world.command( { kind: "move", destination: { ...bootstrap.localPlayerEntry.startProfile, x: 10 } } );
+	for ( let ms = 1005; ms <= 8005; ms += 500 ) {
+		world.step( ms );
+		assert.equal( world.status().phase, "world", `${ms} ms: not yet confirmed` );
+	}
+	world.step( 8505 );
+	assert.equal( world.status().phase, "reconnecting" );
+	assert.equal( incidents.length, 1 );
+	assert.equal( incidents[0].code, "transport_stalled" );
+	assert.match( incidents[0].message, /a request waited 8005 ms with no frame arriving/ );
+});
+
+/*
+================
 an unanswered inventory transaction resumes the session
 
 The transport keeps no frame already written to a dying socket, so an item

@@ -90,6 +90,10 @@ links. In addition:
   workflow expects for that change (a scoped job that does not apply). A
   check still running, failed or cancelled blocks the merge. The repository
   allows squash merges only.
+- **An approval reads against completed checks.** An APPROVE counts once
+  that head's checks complete green, whenever the approval was posted. If
+  they fail, the approval does not count: the reviewer acks the green
+  head with a delta before the merge.
 - **Queue merges that touch the same files.** Append-only files
   (`ownership.json`, `execution-contract.json`, size and format ledgers)
   conflict on every merge. Agree the order in the log, and rebase the next PR
@@ -129,6 +133,9 @@ links. In addition:
 
   A real gap in any section means CHANGES. A non-blocking finding is filed
   as an issue, not left in a comment.
+- **A merged PR is re-reviewed at the merge commit.** The verdict line is
+  `Review by <session>: POST-MERGE at <merge sha8>`, the sha of the merge
+  commit, not the PR head, with the same five sections.
 - **PR text states what was checked on which head.** Replace "checks are
   running" with the results before publishing, and never describe a commit
   that is not the one being merged.

@@ -22,9 +22,10 @@ type wsConn struct {
 	frames chan Frame
 	closed chan struct{}
 
-	// writeMu serializes WriteFrame with the close-frame write: gorilla
-	// panics on concurrent writers, and Close can race the session's write
-	// loop during detach.
+	// writeMu serializes WriteFrame with Close's graceful close-frame
+	// write: gorilla panics on concurrent writers. Close takes it only
+	// when free (TryLock); a parked write means the socket is closed
+	// directly instead (see Close).
 	writeMu sync.Mutex
 
 	readErrMu sync.Mutex
@@ -130,16 +131,31 @@ func (w *wsConn) WriteUnreliable(Frame) error {
 	return errors.New("transport: websocket has no unreliable channel")
 }
 
+// Close tears the connection down. When no write is in flight it sends
+// the graceful close frame first, as before. When the session's write
+// loop is parked inside WriteFrame on a peer that stopped reading, that
+// write holds writeMu until its 10 s deadline; queueing behind it made a
+// resume's WELCOME wait out the remainder (~8 s observed, #1453). The
+// underlying socket close is concurrency-safe (gorilla: "The Close and
+// WriteControl methods can be called concurrently with all other
+// methods") and aborts the parked write at once, so take that path
+// instead: a peer that is not reading will not read a close frame
+// either. A write aborted this way errors and the write loop detaches;
+// the frame keeps its stream position, and a resume re-sends it only
+// if the client's position says it never arrived (stream_ring.go).
 func (w *wsConn) Close(reason string) error {
 	var err error
 	w.closeOnce.Do(func() {
 		close(w.closed)
-		w.writeMu.Lock()
-		msg := websocket.FormatCloseMessage(websocket.CloseNormalClosure, reason)
-		_ = w.c.SetWriteDeadline(time.Now().Add(2 * time.Second))
-		_ = w.c.WriteMessage(websocket.CloseMessage, msg)
+		if w.writeMu.TryLock() {
+			msg := websocket.FormatCloseMessage(websocket.CloseNormalClosure, reason)
+			_ = w.c.SetWriteDeadline(time.Now().Add(2 * time.Second))
+			_ = w.c.WriteMessage(websocket.CloseMessage, msg)
+			err = w.c.Close()
+			w.writeMu.Unlock()
+			return
+		}
 		err = w.c.Close()
-		w.writeMu.Unlock()
 	})
 	return err
 }
