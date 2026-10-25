@@ -482,6 +482,7 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 		})
 		return []wire.Frame{clear}, []wire.Frame{clear}
 	}
+	rt.noteTeleportArrival(job.division, c)
 	rt.bindResidentRegion(key, now)
 	rt.Selected.Clear(job.division, job.name)
 	rt.closeStorageSession(job.division, job.name)

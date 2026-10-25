@@ -48,6 +48,40 @@ func TestTransportAdmissionVerifierConsumesOnce(t *testing.T) {
 	}
 }
 
+func TestTransportAdmissionLedgerDefersConsumption(t *testing.T) {
+	secret := []byte("transport-admission-test-secret-32-bytes")
+	now := time.Unix(1_800_000_000, 0)
+	token, err := MintTransportAdmission(secret, "alice", "global-official", now.Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger := NewTransportAdmissionLedger(secret, func() time.Time { return now })
+	// Authentication alone never consumes: a connection that dies
+	// before WELCOME leaves the ticket presentable on the fallback.
+	for attempt := 0; attempt < 2; attempt++ {
+		claims, err := ledger.Verify(token)
+		if err != nil {
+			t.Fatalf("verify %d: %v", attempt, err)
+		}
+		if claims.AccountID != "alice" || claims.ShardID != "global-official" {
+			t.Fatalf("claims = %+v", claims)
+		}
+	}
+	if err := ledger.Consume(token); err != nil {
+		t.Fatalf("consume: %v", err)
+	}
+	if err := ledger.Consume(token); !errors.Is(err, ErrTransportAdmissionReplay) {
+		t.Fatalf("second consume = %v, want replay", err)
+	}
+	other, err := MintTransportAdmission(secret, "alice", "global-official", now.Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ledger.Consume(other); err != nil {
+		t.Fatalf("a different ticket must still consume: %v", err)
+	}
+}
+
 func TestTransportAdmissionRejectsExcessLifetime(t *testing.T) {
 	secret := []byte("transport-admission-test-secret-32-bytes")
 	now := time.Unix(1_800_000_000, 0)

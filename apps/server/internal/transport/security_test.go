@@ -192,10 +192,12 @@ func TestPublicTransportRequiresSecureBoundaries(t *testing.T) {
 			t.Fatal(err)
 		}
 		server, err := NewServer(Config{
-			WTAddr:   "0.0.0.0:0",
-			WSAddr:   "127.0.0.1:0",
-			CertFile: certificate.CertPath,
-			KeyFile:  certificate.KeyPath,
+			WTAddr:             "0.0.0.0:0",
+			WSAddr:             "127.0.0.1:0",
+			CertFile:           certificate.CertPath,
+			KeyFile:            certificate.KeyPath,
+			WebTransportPublic: true,
+			AllowedOrigins:     []string{"https://play.example.test"},
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -205,6 +207,58 @@ func TestPublicTransportRequiresSecureBoundaries(t *testing.T) {
 		})
 		if err := server.Start(); err == nil {
 			t.Fatal("public WebTransport started without EnterWorld authentication")
+		}
+	})
+}
+
+func TestWebTransportPublicSwitch(t *testing.T) {
+	certificate, err := LoadCertificate("", "", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	origins := []string{"https://play.example.test"}
+
+	t.Run("public bind without the switch is refused", func(t *testing.T) {
+		_, err := NewServer(Config{
+			WTAddr: "0.0.0.0:0", WSAddr: "127.0.0.1:0",
+			CertFile: certificate.CertPath, KeyFile: certificate.KeyPath,
+			AllowedOrigins: origins,
+		})
+		if err == nil {
+			t.Fatal("public WebTransport bind accepted without the public switch")
+		}
+	})
+
+	t.Run("the switch refuses the managed development certificate", func(t *testing.T) {
+		_, err := NewServer(Config{
+			WTAddr: "127.0.0.1:0", WSAddr: "127.0.0.1:0", CertDir: t.TempDir(),
+			WebTransportPublic: true,
+			AllowedOrigins:     origins,
+		})
+		if err == nil {
+			t.Fatal("public WebTransport accepted the managed development certificate")
+		}
+	})
+
+	t.Run("the switch refuses an empty origin list", func(t *testing.T) {
+		_, err := NewServer(Config{
+			WTAddr: "127.0.0.1:0", WSAddr: "127.0.0.1:0",
+			CertFile: certificate.CertPath, KeyFile: certificate.KeyPath,
+			WebTransportPublic: true,
+		})
+		if err == nil {
+			t.Fatal("public WebTransport accepted the loopback-only origin posture")
+		}
+	})
+
+	t.Run("the switch admits a public bind with the full posture", func(t *testing.T) {
+		if _, err := NewServer(Config{
+			WTAddr: "0.0.0.0:0", WSAddr: "127.0.0.1:0",
+			CertFile: certificate.CertPath, KeyFile: certificate.KeyPath,
+			WebTransportPublic: true,
+			AllowedOrigins:     origins,
+		}); err != nil {
+			t.Fatalf("public WebTransport posture refused: %v", err)
 		}
 	})
 }

@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -55,6 +56,13 @@ type Config struct {
 	// listener is reachable only by a private TLS edge. It never permits
 	// pprof on that listener and does not relax Origin or identity checks.
 	PrivateNetwork bool
+	// WebTransportPublic is the operator's switch for serving WebTransport
+	// as a public endpoint (SRO_WEBTRANSPORT_PUBLIC, shard setting
+	// webtransport_public; port-only, not native, default off). On demands
+	// the explicit TLS pair and a non-empty AllowedOrigins and permits a
+	// non-loopback WTAddr; off refuses a non-loopback WTAddr, so no bind
+	// change alone can expose the UDP listener.
+	WebTransportPublic bool
 
 	// HelloTimeout is how long a fresh connection may sit without HELLO.
 	HelloTimeout time.Duration
@@ -104,6 +112,28 @@ type Config struct {
 	// TRANSPORT_PPROF=1); PprofAddr must be a loopback host:port.
 	EnablePprof bool
 	PprofAddr   string
+}
+
+// EnvWebTransportPublic is the shard switch that permits the public
+// WebTransport posture; see Config.WebTransportPublic.
+const EnvWebTransportPublic = "SRO_WEBTRANSPORT_PUBLIC"
+
+/*
+================
+WebTransportPublicEnabled
+
+The composition's read of EnvWebTransportPublic: on/1/true (any case)
+enable, everything else - unset included - is off, the native posture:
+WebTransport stays a loopback/development transport. An unrecognised
+value fails closed rather than half-enabling a public endpoint.
+================
+*/
+func WebTransportPublicEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvWebTransportPublic))) {
+	case "on", "1", "true":
+		return true
+	}
+	return false
 }
 
 // DefaultMaxSessionsPerAccount allows a few browser tabs plus the sessions

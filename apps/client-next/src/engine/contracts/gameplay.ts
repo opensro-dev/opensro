@@ -237,6 +237,9 @@ export type GameplayCommand =
 		readonly settings: import("@/engine/foundation/gameplay/auto-potion").AutoPotionSettings;
 	}
 	| { readonly kind: "rebirth"; readonly choice: 1 | 2; }
+	// An arrow key's press or release (#1574): Up walks the facing, Left and
+	// Right turn it (arrow-keys.ts).
+	| { readonly kind: "arrow-key"; readonly key: "up" | "left" | "right"; readonly down: boolean; }
 	| {
 		readonly kind: "ground-move";
 		readonly query: import("./navigation").GroundPickQuery;
@@ -726,6 +729,8 @@ Presentation owns the derived skillIndex; it never travels back to simulation.
 export interface GameplayState extends MoverPublication {
 	readonly itemMall?: import("./item-mall").MallState;
 	readonly betaPlayers?: readonly BetaMapPlayer[];
+	// Port-only damage ranking of the latest unique kill (unique-rank.ts).
+	readonly uniqueDamageRank?: import("./unique-rank").UniqueDamageRank | null;
 	// Port-only wolf skill tree of the pet window's wolf (pet-training.ts).
 	readonly petTraining?: PetTraining;
 	readonly petTailwind?: PetTraining["tailwind"];
