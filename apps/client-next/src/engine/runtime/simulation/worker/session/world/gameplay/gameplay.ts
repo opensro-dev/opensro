@@ -4205,7 +4205,12 @@ Packet handling must not depend on which HUD panel is currently open.
 					} ),
 					target = targeting.receive( frame.opcode, frame.payload ),
 					fight = combat.receive( frame.opcode, frame.payload, now );
-				if ( item ) cosPickup.spaceChanged();
+				if ( item ) {
+					cosPickup.spaceChanged();
+					// A settled move can change the suit the server stamps
+					// own chat lines with; the dedupe name follows it.
+					chat.equipment( inventory.state().inventory );
+				}
 				if ( frame.opcode === 0xb2f5 && frame.payload.length >= 4 ) {
 					// 775B50 (0x775BDE): a halt naming an owned pet that holds
 					// an assist target starts its countdown (+0xAB30).
