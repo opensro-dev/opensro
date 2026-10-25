@@ -202,6 +202,9 @@ export function createMovement(
 				owners?: readonly NavOwnerSpan[];
 				castToken?: number;
 				fixedTiming?: boolean;
+				// The local player's own cast travel, which the main-thread
+				// mover steps (#1569); a struck knockback never sets it.
+				ownCast?: boolean;
 				admitted?: boolean;
 				admittedFrom?: Pose;
 				admittedTo?: Pose;
@@ -678,6 +681,24 @@ The published aim of the walk in progress (state).
 		return segment.direction.blocked ? undefined : { kind: "direction", heading: segment.direction.heading };
 	}
 	/*
+	================
+	movementDisplacement
+
+	The displacement the main-thread mover steps: the local player's own
+	cast travel on its authored clock. A knockback struck onto the player
+	publishes nothing here and stays on the interpolated presenter.
+	================
+	*/
+	function movementDisplacement() {
+		if ( !segment?.fixedTiming || !segment.ownCast || !(segment.duration > 0) ) return undefined;
+		return {
+			from: segment.from,
+			to: segment.to,
+			startedAtMs: segment.start,
+			durationMs: segment.duration
+		};
+	}
+	/*
 ================
 referenceAt
 ================
@@ -907,6 +928,7 @@ displace
 					timing: "server",
 					lead: "server",
 					fixedTiming: true,
+					ownCast: command.self === true,
 					castToken: command.kind === 8 ? command.token : undefined
 				} ) :
 				null;
@@ -1792,6 +1814,9 @@ state
 				// walk's destination or a direction walk's live heading; undefined
 				// for a blocked leg, a skill displacement or no walk.
 				movementAim: movementAim(),
+				// The own cast displacement the mover steps (#1569); undefined
+				// for a knockback or any other walk.
+				movementDisplacement: movementDisplacement(),
 				movementSpeedFactor: segment?.direction && walk ? walk.factor : 1,
 				movementTransition: { ...transition, pathEligible: segment?.admitted === true },
 				movementDiagnostics: { total: reanchorReports, recent: recentReanchors.slice() },

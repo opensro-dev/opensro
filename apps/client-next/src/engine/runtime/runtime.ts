@@ -42,7 +42,8 @@ import { createFramePacing } from "./frame-pacing";
 import { createRenderer } from "./renderer/renderer";
 import { createViewer } from "./viewer/viewer";
 import { createSimulationHost } from "./simulation/host";
-import { createLocalMover, type LocalMoverWorld } from "./movement/local-mover";
+import { createLocalMover, type LocalMoverFrame, type LocalMoverWorld } from "./movement/local-mover";
+import { poseDistance } from "@/engine/foundation/gameplay/native-movement";
 import type { RuntimeControl } from "@/engine/contracts/runtime";
 import { worldAudioPosition } from "@/engine/foundation/world/world-space";
 
@@ -492,12 +493,28 @@ export function startRuntime(
 		*/
 		function moverWorld(): LocalMoverWorld {
 			const game = presentation.gameplay();
+			// The worker's own cast displacement reaches the mover as a fixed
+			// aim on the frame clock (#1569): the publication's start is on the
+			// simulation clock, so place it by the same origin as poseAtMs.
+			const displacement = game?.movementDisplacement;
+			const aim: LocalMoverWorld["aim"] = displacement && simulationOriginMs !== undefined ?
+				{
+					kind: "fixed",
+					segment: {
+						from: displacement.from,
+						to: displacement.to,
+						start: displacement.startedAtMs + simulationOriginMs,
+						duration: displacement.durationMs,
+						fixedTiming: true
+					}
+				} :
+				game?.movementAim;
 			return {
 				pose: game?.pose ?? null,
 				poseAtMs: game?.poseAtMs,
 				revision: game?.movementRevision ?? 0,
 				moving: game?.moving ?? false,
-				aim: game?.movementAim,
+				aim,
 				speedFactor: game?.movementSpeedFactor ?? 1,
 				walkPredictable: game?.walkPredictable === true,
 				speed: game?.movementSpeed,
@@ -507,6 +524,39 @@ export function startRuntime(
 				originMs: simulationOriginMs,
 				view: navigation.view()
 			};
+		}
+		/*
+	================
+	moverFrame
+
+	The mover's frame, starting the prediction on the worker's own cast
+	displacement when one is published: the cast's segment is known only
+	once the worker walks it, so the mover adopts it from the publication
+	and steps it on its own clock. The saved copy carries the
+	publication's own sequence, so it drops at once; rebuilds take the
+	segment from the publication again. A live segment only: one the lag
+	already finished stays with the presenter (#1569).
+	================
+	*/
+		function moverFrame( now: number ): LocalMoverFrame {
+			const world = moverWorld();
+			if (
+				!localMover.active() && world.aim?.kind === "fixed" &&
+				now < world.aim.segment.start + world.aim.segment.duration
+			) {
+				const drawn = characters.drawnPose( presentation.gameplay()?.localGid ?? 0 ),
+					segment = world.aim.segment;
+				if ( drawn ) {
+					localMover.predict( {
+						seq: world.inputSeq,
+						aim: world.aim,
+						speed: poseDistance( segment.from, segment.to ) / segment.duration * 1000,
+						drawn,
+						now
+					}, world );
+				}
+			}
+			return localMover.frame( now, world );
 		}
 		const characters = own(
 			createCharacterPresentation(
@@ -817,7 +867,7 @@ export function startRuntime(
 				);
 				characters.ownMover(
 					presentation.gameplay()?.localGid ?? 0,
-					mainThreadOwnWalk ? localMover.frame( now, moverWorld() ) : { kind: "idle" }
+					mainThreadOwnWalk ? moverFrame( now ) : { kind: "idle" }
 				);
 				characters.step(
 					presentation.entities(),

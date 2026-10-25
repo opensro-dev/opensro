@@ -137,7 +137,8 @@ export function createCombat(
 						gid: row.target,
 						token,
 						kind: impact.type as 4 | 5,
-						destination: impact.displacement
+						destination: impact.displacement,
+						self: row.target === caster
 					} );
 					// CIDecoDamageEffect_Initialize (8D5440): a type-5 knockback is
 					// carried by a SYSTEM_KNOCKBACK decoration on the struck
@@ -149,9 +150,11 @@ export function createCombat(
 			}
 		}
 		if ( phase.travel ) {
-			displacements.push( { gid: caster, token, kind: 8, destination: phase.travel } );
+			displacements.push( { gid: caster, token, kind: 8, destination: phase.travel, self: true } );
 		}
-		if ( phase.correction ) displacements.push( { gid: caster, token, kind: 2, destination: phase.correction } );
+		if ( phase.correction ) {
+			displacements.push( { gid: caster, token, kind: 2, destination: phase.correction, self: true } );
+		}
 	}
 	const casts = new Map<number, CastState>(),
 		vitals = new Map<number, import("@/engine/contracts/gameplay").VitalState>();
