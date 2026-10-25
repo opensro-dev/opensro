@@ -285,9 +285,10 @@ export function uiScaleFactor( options: ExperimentalOptions ): number {
 experimentalOptions
 
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
-compressedTextures, sharedActorRoom, interpolatedOwnWalk, greyDisabledTabs, jobKillNotices, dropPlusNotices,
+compressedTextures, sharedActorRoom, mainThreadOwnWalk, greyDisabledTabs, jobKillNotices, dropPlusNotices,
 plusSevenNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, shortNotices, confirmGuildBan,
 petClickOpensWindow, smartPetPickup, touchInspect and dungeonCharacterPvs, which only an explicit false turns off.
+interpolatedOwnWalk is always on: it has no row, and a stored value is ignored.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
 explicitly, and are read only while petPickupFilter is on.
 Missing or invalid render scales restore full resolution and missing or
