@@ -190,6 +190,12 @@ func dungeonReachChunk(t *testing.T, v, every *WaterValidator, region uint16, ch
 		to := simulation.Spawn{RegionID: region, X: x + math.Cos(angle)*length, Y: y + (random.Float64()-.5)*20,
 			Z: z + math.Sin(angle)*length}
 		skipped, scanned := v.clipDungeonPath(from, to), every.clipDungeonPath(from, to)
+		// The skip exists to save work (#1678 counts it), so the work
+		// may only shrink; everything the clip answers must match.
+		if skipped.Work > scanned.Work {
+			t.Fatalf("region %#x chord %+v -> %+v: the skip spent %d work, the every-block scan %d", region, from, to, skipped.Work, scanned.Work)
+		}
+		skipped.Work, scanned.Work = 0, 0
 		if fmt.Sprintf("%+v", skipped) != fmt.Sprintf("%+v", scanned) {
 			t.Fatalf("region %#x chord %+v -> %+v:\n skipped %+v\n every   %+v", region, from, to, skipped, scanned)
 		}

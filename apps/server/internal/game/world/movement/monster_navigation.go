@@ -57,11 +57,24 @@ The returned path carries the walked owners so the next plan can do the same.
 ================
 */
 func (v *WaterValidator) PlanMonsterPathFrom(from monster.Pose, fromOwner simulation.NavOwner, goal monster.Pose) *monster.NavigationPath {
+	path, _ := v.planMonsterPathFrom(from, fromOwner, goal)
+	return path
+}
+
+/*
+================
+planMonsterPathFrom
+
+PlanMonsterPathFrom, plus the clip's deterministic work (ClipReport.Work),
+for the cave planner, which prices each probe by its scan (#1678).
+================
+*/
+func (v *WaterValidator) planMonsterPathFrom(from monster.Pose, fromOwner simulation.NavOwner, goal monster.Pose) (*monster.NavigationPath, int) {
 	fromSpawn := simulation.Spawn{RegionID: from.RegionID, X: from.X, Y: from.Y, Z: from.Z, Angle: from.Heading}
 	goalSpawn := simulation.Spawn{RegionID: goal.RegionID, X: goal.X, Y: goal.Y, Z: goal.Z, Angle: goal.Heading}
 	report, walk := v.clipMovementPathFromWithWalk(fromSpawn, fromOwner, goalSpawn)
 	if report.Truncated || report.TilesUncovered != 0 || report.Outcome == ClipNoCoverage || report.Outcome == ClipDungeonExempt || report.Outcome == ClipStartBlocked {
-		return nil
+		return nil, report.Work
 	}
 	rest := monster.Pose{RegionID: report.Rest.RegionID, X: report.Rest.X, Y: report.Rest.Y, Z: report.Rest.Z, Heading: goal.Heading}
 	if walk == nil || rest.RegionID != goal.RegionID || rest.X != goal.X || rest.Z != goal.Z {
@@ -69,7 +82,7 @@ func (v *WaterValidator) PlanMonsterPathFrom(from monster.Pose, fromOwner simula
 	}
 	y, ok := v.monsterPathHeightAt(1, rest, walk)
 	if !ok {
-		return nil
+		return nil, report.Work
 	}
 	rest.Y = y
 	height := func(t float64, p monster.Pose) (float64, bool) {
@@ -78,7 +91,7 @@ func (v *WaterValidator) PlanMonsterPathFrom(from monster.Pose, fromOwner simula
 		}
 		return p.Y, true
 	}
-	return monster.NewNavigationPath(from, goal, rest, report.NativeResult, height).WithOwners(walk.spans())
+	return monster.NewNavigationPath(from, goal, rest, report.NativeResult, height).WithOwners(walk.spans()), report.Work
 }
 
 /*

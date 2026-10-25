@@ -50,6 +50,9 @@ func (v *WaterValidator) clipDungeonPath(from, to simulation.Spawn) ClipReport {
 	best := math.Inf(1)
 	result := uint32(monster.NavResultBlocked)
 	var rest objectContactPoint
+	// work counts what the scan costs, for the planners that pay
+	// for a cave probe by its size rather than as one call (#1678).
+	work := 0
 	var cutsBuf [32]float64
 	cuts := cutsBuf[:2]
 	cuts[0], cuts[1] = 0, 1
@@ -82,6 +85,7 @@ func (v *WaterValidator) clipDungeonPath(from, to simulation.Spawn) ClipReport {
 				best = t
 			}
 			for cell := 0; cell < m.cellCount(); cell++ {
+				work++
 				// A cell whose box the chord's misses has no edge it crosses.
 				if m.cellMissedBy(cell, min(x0, x1), max(x0, x1), min(z0, z1), max(z0, z1)) {
 					continue
@@ -99,6 +103,7 @@ func (v *WaterValidator) clipDungeonPath(from, to simulation.Spawn) ClipReport {
 					t, u := ((ax-x0)*sz-(az-z0)*sx)/den, ((ax-x0)*rz-(az-z0)*rx)/den
 					if t > 0 && t < 1 && u >= 0 && u <= 1 {
 						if len(cuts) >= 65536 {
+							report.Work = work
 							return report
 						}
 						cuts = append(cuts, t)
@@ -110,6 +115,7 @@ func (v *WaterValidator) clipDungeonPath(from, to simulation.Spawn) ClipReport {
 	for i := range surface.blocks {
 		block := &surface.blocks[i]
 		for _, o := range block.obstacles {
+			work++
 			a := dx*dx + dz*dz
 			if a == 0 {
 				break
@@ -170,6 +176,7 @@ floorWalk:
 		samples := max(1, int(math.Ceil((cuts[i]-cuts[i-1])*chordLength/maxDungeonFloorSampleSpacing)))
 		for s := 0; s < samples; s++ {
 			t := cuts[i-1] + (cuts[i]-cuts[i-1])*(float64(s)+0.5)/float64(samples)
+			work++
 			h, ok := surface.heightAt(from.X+dx*t, curY, from.Z+dz*t)
 			sameFloor := ok && math.Abs(h-curY) <= maxDungeonFloorStep
 			if !sameFloor && !passages.covers(t) {
@@ -192,6 +199,7 @@ floorWalk:
 			}
 		}
 	}
+	report.Work = work
 	if best <= 1 {
 		report.NativeResult = result
 		if rest.valid {
@@ -228,5 +236,5 @@ floorWalk:
 		h = curY
 	}
 	to.Y = h
-	return ClipReport{Outcome: ClipArrived, Rest: to}
+	return ClipReport{Outcome: ClipArrived, Rest: to, Work: work}
 }
