@@ -63,7 +63,8 @@ interface PresentationEventEffects {
 		presented: readonly CharacterActor[],
 		effectDetail: number,
 		bloodEnabled: boolean,
-		banditTable: ReadonlyMap<number, { readonly imbue: number; }>
+		banditTable: ReadonlyMap<number, { readonly imbue: number; }>,
+		drawnPoses: ReadonlyMap<number, Pose>
 	): CharacterActor[];
 	attachedInstances(): readonly { key: string; gid: number; skill: number; stopped: boolean; }[];
 	takeActivations(): readonly { gid: number; skill: number; at: number; }[];
@@ -261,8 +262,12 @@ export function createPresentationEvents() {
 			>();
 			// Effects anchor to what is drawn: a walking character's frame-clock pose,
 			// not the worker's latest sample, or entity-attached effects jitter
-			// against the body. The map resolved this frame in presentPoses.
-			let drawnLocal: import("@/engine/contracts/gameplay").Pose | null = null;
+			// against the body. The rows carry the drawn (or held) pose, and
+			// the local player's own anchor (drawnLocal) is laid over the
+			// drawn map handed to the effect step below: on a cast-burst
+			// frame actor-motion takes the hold later this step, so the
+			// map resolved in presentPoses cannot see the held pose yet.
+			let drawnLocal: Pose | null = null;
 			const effectEntities = entities.map( entity => {
 				const local = entity.gid === gameplay?.localGid && !!gameplay.pose;
 				// A held body (a cast's navigation hold, including the burst
@@ -294,13 +299,16 @@ export function createPresentationEvents() {
 				}
 				return { ...entity, regionId: drawn.regionId, x: drawn.x, y: drawn.y, z: drawn.z };
 			} );
+			const effectPoses = drawnLocal && gameplay ?
+				new Map( drawnPoses ).set( gameplay.localGid, drawnLocal ) :
+				drawnPoses;
 			// Sample sockets from the admitted models at the current mechanical pose
 			// and authored callback cursor; flight ownership precedes hit feedback.
 			// The press's prediction is a cast of its own until the server adopts it.
-			const effectGameplay = gameplay && (drawnLocal || gameplay.castPrediction) ?
+			const effectGameplay = gameplay?.castPrediction ?
 				{
 					localGid: gameplay.localGid,
-					pose: drawnLocal ?? gameplay.pose,
+					pose: gameplay.pose,
 					casts: gameplay.castPrediction ? [ ...gameplay.casts, gameplay.castPrediction ] : gameplay.casts,
 					vitals: gameplay.vitals,
 					questMarkers: gameplay.questMarkers,
@@ -377,7 +385,8 @@ export function createPresentationEvents() {
 				[ ...output.displayed.values() ],
 				effectDetail,
 				bloodEnabled,
-				published.tradeBandits
+				published.tradeBandits,
+				effectPoses
 			);
 			// 008DD6F0 calls snd_activate once after constructing the effect,
 			// including restored instances and immediate-stop instances.
