@@ -11,6 +11,11 @@ a cave later gains is a one-field change. The cave column is today's
 behaviour; where the reason is the port's reading rather than native
 evidence, the field says so (the AGENTS.md scope rule).
 
+While every cave field is false and every outdoor one true, a door that
+read the wrong field would still behave the same, so the table test is
+the whole pin today. The change that first turns a cave field on also
+adds that door's own cave-and-outdoor behaviour test.
+
 ===========================================================================
 */
 package simulation
