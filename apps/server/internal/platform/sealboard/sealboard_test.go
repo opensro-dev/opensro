@@ -260,6 +260,59 @@ func TestNoteSealDropNeverWaitsOnFlush(t *testing.T) {
 
 /*
 ================
+TestFlushFailureKeepsCounts
+
+A failed flush merges its batch back: the next flush writes the same
+increments, so a transiently locked database loses nothing (#1680
+review).
+================
+*/
+func TestFlushFailureKeepsCounts(t *testing.T) {
+	dir := t.TempDir()
+	service, err := Open(dir, fixedClock(monday.Add(time.Hour)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = service.Close() }()
+	if _, err := service.db.Exec(`PRAGMA busy_timeout=250`); err != nil {
+		t.Fatal(err)
+	}
+	service.NoteSealDrop(9, TierSun, monday.Add(2*time.Hour))
+
+	other, err := sql.Open("sqlite", filepath.Join(dir, FileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = other.Close() }()
+	ctx := context.Background()
+	conn, err := other.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+	if _, err := conn.ExecContext(ctx, `BEGIN EXCLUSIVE`); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Flush(); err == nil {
+		t.Fatal("the flush wrote through an exclusive lock")
+	}
+	if _, err := conn.ExecContext(ctx, `ROLLBACK`); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	counts, err := service.Counts(monday)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(counts) != 1 || counts[0] != (Count{CharacterID: 9, Tier: TierSun, Drops: 1}) {
+		t.Fatalf("counts after the failed flush: %+v", counts)
+	}
+}
+
+/*
+================
 TestFlushPrunesOldWeeks
 ================
 */
