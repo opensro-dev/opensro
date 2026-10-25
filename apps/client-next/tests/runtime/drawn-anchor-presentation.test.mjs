@@ -77,12 +77,14 @@ function driveEvents() {
 		inventory: [],
 		attachedEffects: []
 	};
-	/** @type {{ effectsPose: any, effectsEntities: any, resolve: any }} */
-	const seen = { effectsPose: null, effectsEntities: null, resolve: null };
+	/** @type {{ effectsPose: any, effectsEntities: any, effectsDrawn: any, resolve: any }} */
+	const seen = { effectsPose: null, effectsEntities: null, effectsDrawn: null, resolve: null };
 	const effects = {
-		step( rows, effectGameplay ) {
+		step( rows, effectGameplay, ...rest ) {
 			seen.effectsEntities = rows;
 			seen.effectsPose = effectGameplay?.pose;
+			// The step's last argument is the frame's drawn poses (#1545).
+			seen.effectsDrawn = rest.at( -1 );
 			return [];
 		},
 		attachedInstances: () => [],
@@ -160,10 +162,12 @@ function driveEvents() {
 
 test("effect anchors sit on the walking local player's presented pose", () => {
 	const { seen, texts } = driveEvents();
-	// The gameplay the effect step reads localizes at the drawn pose.
-	assert.equal( seen.effectsPose.x, DRAWN.x );
-	assert.equal( seen.effectsPose.z, DRAWN.z );
-	assert.notEqual( seen.effectsPose.x, LOGICAL.x );
+	// The effect step reads the local player's anchor from the frame's
+	// drawn poses (#1545); the gameplay view keeps the logical pose.
+	assert.equal( seen.effectsDrawn.get( 1 ).x, DRAWN.x );
+	assert.equal( seen.effectsDrawn.get( 1 ).z, DRAWN.z );
+	assert.notEqual( seen.effectsDrawn.get( 1 ).x, LOGICAL.x );
+	assert.equal( seen.effectsPose.x, LOGICAL.x );
 	// So does the local player's row among the effect entities.
 	const local = seen.effectsEntities.find( row => row.gid === 1 );
 	assert.equal( local.x, DRAWN.x );
