@@ -334,10 +334,25 @@ func (rt *Runtime) handleRebirthInDoor(
 	if inPlace && !forceTown {
 		choice = wire.RebirthAtPresentPoint
 	}
-	if choice == wire.RebirthAtPresentPoint && !inPlace && before.Level != nil && *before.Level > 10 {
+	// Flag war (#1558): a dead participant revives at their team spawn
+	// with the reduced present-point recovery, still in the match
+	// (FlagWarServer.md, "Return map entries": the dead participant is
+	// given reduced HP/MP recovery and placed at the team spawn; the
+	// insertion sites and the revive delay are unpinned, so the
+	// player's own rebirth request is the trigger - PORT CHOICE).
+	// The destination replaces both choices: the arena world's own
+	// rebirth point, not the corpse spot and not the town point.
+	arenaSpawn, arenaRevival := rt.flagWarRevivalPoint(divisionID, before)
+	if arenaRevival && !forceTown {
+		choice = wire.RebirthAtPresentPoint
+	}
+	if choice == wire.RebirthAtPresentPoint && !inPlace && !arenaRevival && before.Level != nil && *before.Level > 10 {
 		return OpResult{}
 	}
 	destination := corpse.Spawn
+	if arenaRevival && !forceTown {
+		destination = arenaSpawn
+	}
 	candidate := before.Snapshot()
 	var restoredHP, restoredMP int64
 	if choice == wire.RebirthAtPresentPoint {

@@ -47,9 +47,10 @@ Port choices (labelled, reversible): teams split evenly alternating by
 sign-up order; a match object (pole, dropped flag, master key, door)
 is a match-owned NPC-band object whose clicks are intercepted before
 roster resolution, because a click must arrive as an NPC interaction,
-not a monster attack; dead participants leave through the normal town
-rebirth (native revives at the team spawn - follow-up, no per-world
-rebirth override exists in the port yet); the arena monsters scatter
+not a monster attack; dead participants revive at their team spawn
+and stay in the match (#1558, flagWarRevivalPoint; the reconcile
+below then keeps them instead of ejecting a town-rebirthed player);
+the arena monsters scatter
 on a deterministic ring instead of the native random scatter; dead
 side monsters do not respawn.
 
@@ -694,6 +695,39 @@ func (rt *Runtime) flagWarTickMatch(match *flagWarMatch, nowMs int64) []simulati
 	}
 	match.mu.Unlock()
 	return out
+}
+
+/*
+================
+flagWarRevivalPoint
+
+#1558: where a dead participant revives - their team spawn, inside
+the arena world, so the reconcile below keeps them in the match.
+Answers only for an entered participant of the division's live match
+whose body still lies in that match's instance world; everyone else
+takes the ordinary rebirth rules. Called from the rebirth lane with
+the division door held; the match lock nests inside it, the same
+order recordFlagWarDeath documents.
+================
+*/
+func (rt *Runtime) flagWarRevivalPoint(division string, c *enterworld.Character) (simulation.Spawn, bool) {
+	if c == nil {
+		return simulation.Spawn{}, false
+	}
+	match := rt.flagWarMatchFor(division)
+	if match == nil {
+		return simulation.Spawn{}, false
+	}
+	if instance.ID(domain.CharacterWorldInstance(c)) != match.lease.ID {
+		return simulation.Spawn{}, false
+	}
+	match.mu.Lock()
+	defer match.mu.Unlock()
+	p := match.participants[c.ID]
+	if p == nil || !p.entered {
+		return simulation.Spawn{}, false
+	}
+	return flagWarTeamSpawns[p.team], true
 }
 
 /*
