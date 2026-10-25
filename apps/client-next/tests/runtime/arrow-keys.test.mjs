@@ -266,11 +266,11 @@ test("through gameplay, a press the walk gate refuses sends nothing, and its rel
 		sent.length = 0;
 		// Seated (0x7017 posture 4) or dead: 0x680A30's guards return before
 		// latching, so nothing walks and nothing stops.
-		for ( const key of [ "up", "left" ] ) {
+		for ( const key of /** @type {const} */ ([ "up", "left" ]) ) {
 			game.command( { kind: "arrow-key", key, down: true }, 0, undefined, local );
 		}
 		for ( let now = 16; now <= 500; now += 16 ) game.step( now, local );
-		for ( const key of [ "up", "left" ] ) {
+		for ( const key of /** @type {const} */ ([ "up", "left" ]) ) {
 			game.command( { kind: "arrow-key", key, down: false }, 500, undefined, local );
 		}
 		assert.deepEqual( sent.map( f => f.opcode ), [], JSON.stringify( refused ) );

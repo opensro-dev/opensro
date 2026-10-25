@@ -449,6 +449,7 @@ function playMoves( { moves, endMs = 8000 } ) {
 			moving: p?.moving ?? false,
 			aim: p?.goal && { kind: "goal", destination: p.goal },
 			speedFactor: 1,
+			turnRate: 0,
 			walkPredictable: true,
 			speed: p?.speed ?? SPEED,
 			inputSeq: p?.inputSeq ?? 0,
