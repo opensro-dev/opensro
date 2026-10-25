@@ -5,8 +5,12 @@ growthbands.go - the beta EXP and SP multiplier by level band (port-only,
 not native)
 
 Owner, 2026-10-24, with the 110 cap: levels 1-59 keep the level-1 pace
-(levelPace, growth.go), levels 60-89 earn 20 times the native gain and
-90-110 ten times. SRO_BETA_GROWTH_BANDS names the bands as a comma list of
+(levelPace, growth.go) and higher levels earn a fixed multiple of the
+native gain. The default (shardsettings, #1606) derives each band's
+multiple from one smooth target kills-per-level curve, so no level costs
+more than twice the one before it (growthbands_curve_test.go); the first
+bands, 60-89 at 20 and 90-110 at 10, made 59 -> 60 an 84x step and
+90 -> 110 about 2,600 h of play. SRO_BETA_GROWTH_BANDS names the bands as a comma list of
 "<first>-<last>:<rule>", the rule being "pace" or a whole multiplier, for
 example "1-59:pace,60-89:20,90-110:10". Unset, every level keeps the pace,
 which is the beta before this change. A level no band covers earns the

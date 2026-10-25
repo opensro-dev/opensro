@@ -49,8 +49,6 @@ const OFF = Object.freeze( {
 	compressedTextures: true,
 	// On by default (owner 2026-10-14): near effects outrank far characters.
 	sharedActorRoom: true,
-	// Always on, no row (owner 2026-10-25): the fallback own-walk presenter.
-	interpolatedOwnWalk: true,
 	// On by default (owner 2026-10-25): the own walk is stepped on the main thread.
 	mainThreadOwnWalk: true,
 	// On by default (owner 2026-10-15): a disabled tab is dimmed.
@@ -219,8 +217,6 @@ test("every video stage defaults off and only an explicit true enables it", () =
 		enchantSparks: true,
 		// The shared actor room is on by default (owner 2026-10-14).
 		sharedActorRoom: true,
-		// Interpolated own movement is always on, no row (owner 2026-10-25).
-		interpolatedOwnWalk: true,
 		vHidesCompanions: false,
 		dungeonCharacterPvs: true
 	} );
@@ -306,8 +302,8 @@ test("the window's tabs cover every preference once and Open returns to Image", 
 	);
 	for ( const tab of EXPERIMENTAL_TABS ) assert.ok( tab.rows.length <= 7, "At most seven rows a tab" );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.key ) ).sort();
-	// interpolatedOwnWalk is always on and has no row (owner 2026-10-25).
-	assert.deepEqual( keys, Object.keys( OFF ).filter( key => key !== "interpolatedOwnWalk" ).sort() );
+	// Every option has a row; the own-walk presenter has none (owner 2026-10-25).
+	assert.deepEqual( keys, Object.keys( OFF ).sort() );
 	const ids = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.id ) );
 	assert.equal( new Set( ids ).size, ids.length );
 	const hud = createExperimentalHud();
@@ -706,15 +702,13 @@ test("expanded world map defaults off (native five towns and 28 x 8 overview) an
 	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "expandedWorldMap" ) ) );
 });
 
-test("interpolated own movement is always on, has no row, and reaches the renderer's video options", () => {
+test("interpolated own movement has no option, no row, and no video slice (#1564)", () => {
 	for ( const value of [ undefined, null, {}, { interpolatedOwnWalk: false }, { interpolatedOwnWalk: "false" } ] ) {
-		assert.equal( experimentalOptions( value ).interpolatedOwnWalk, true );
+		const options = experimentalOptions( value );
+		assert.equal( "interpolatedOwnWalk" in options, false );
+		assert.equal( "interpolatedOwnWalk" in experimentalVideo( options ), false );
 	}
-	assert.equal(
-		experimentalVideo( experimentalOptions( { interpolatedOwnWalk: false } ) ).interpolatedOwnWalk,
-		true
-	);
-	assert.ok( !EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "interpolatedOwnWalk" ) ) );
+	assert.ok( !EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => String( row.key ) === "interpolatedOwnWalk" ) ) );
 });
 
 test("main-thread own movement defaults on, turns off only on an explicit false, and stays out of the worker's and renderer's slices", () => {

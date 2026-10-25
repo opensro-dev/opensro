@@ -31,6 +31,10 @@ export const DIRECTION_LEG_UNITS = 1000;
 export const ANGULAR_FLAG_GO = 1;
 // 0x7738 mode byte of the angular form.
 export const ANGULAR_MODE = 0;
+// The arrow keys' turn (CNavigationController_UpdateSteeringTurn 0x86D480):
+// pi radians a second: half a turn of the 65535 heading words a second,
+// 65535 / 2 / 1000 words a millisecond; Left adds (#1574).
+export const ARROW_TURN_WORDS_PER_MS = 32.7675;
 // dword 0xBF9120: a miss within 5 degrees of a direction already walked is
 // not resent (0x693552..0x69355D).
 export const DIRECTION_TURN_EPSILON = 0.0872664600610733;

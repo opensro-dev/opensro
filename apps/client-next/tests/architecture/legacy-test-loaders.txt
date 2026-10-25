@@ -1,11 +1,11 @@
 # Test files that bundle sources with esbuild instead of loading the shipped modules. Entries are
 # `path` (legacy, waiting to migrate) or `path # reason`. This ledger only shrinks; see test-loaders.test.mjs.
 tests/browser/helpers/ui-admission-reference.mjs # bundles a module for the browser page, which cannot load TypeScript itself
+tests/helpers/runtime-boundary.mjs # builds through an esbuild plugin (the synthetic owner swap), which a plain import cannot do
 tests/runtime/asset-handles.test.mjs # compiles with build-time defines that change the module
 tests/runtime/pose-dirty.test.mjs # compiles a frozen copy of a source module from tests/fixtures, which the shared loader does not serve
 tests/runtime/published-characters.test.mjs # builds through an esbuild plugin (source instrumentation or mutation), which a plain import cannot do
 tests/runtime/renderer-diagnostics.test.mjs # builds through an esbuild plugin (source instrumentation or mutation), which a plain import cannot do
-tests/runtime/runtime-failures.test.mjs # compiles with build-time defines that change the module
 tests/runtime/snapshot-age.test.mjs # compiles with build-time defines that change the module
 tests/runtime/ui-cleanup.test.mjs # builds through an esbuild plugin (source instrumentation or mutation), which a plain import cannot do
 tests/runtime/world-admission.test.mjs # builds through an esbuild plugin (source instrumentation or mutation), which a plain import cannot do

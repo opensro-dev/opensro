@@ -78,6 +78,7 @@ so the list cannot change while the GameWorld runs.
 */
 func publicRules() publicstats.RulesResponse {
 	silkRate, _ := action.BetaSilkFromEnv()
+	silkActiveOnly, _ := action.BetaSilkActiveOnlyFromEnv()
 	stackSizes, _ := enterworld.StackSizesFromEnv()
 	alchemyRates, _ := alchemy.ReinforceRatesFromEnv()
 	alchemyMaxPlus, _ := alchemy.ReinforceMaxPlusFromEnv()
@@ -194,6 +195,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Silk is bought for the account.",
 				Now:    "Every full hour in the world earns silk, up to a cap.",
 				Why:    "Lets testers try the Item Mall; beta silk never reaches the launch shard."},
+			{Flag: action.EnvBetaSilkActiveOnly, On: silkRate > 0 && silkActiveOnly,
+				Native: "Silk is bought for the account.",
+				Now:    "The hourly silk counts only while you play: each action keeps it going for ten minutes.",
+				Why:    "A character left idle in town earned as much as one playing."},
 			{Flag: enterworld.EnvBetaStarterKit, On: enterworld.BetaStarterKitEnabled(),
 				Native: "Characters start with the retail creation items only.",
 				Now:    "Every character also holds a return scroll and a speed scroll that are never used up.",
