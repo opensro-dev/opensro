@@ -62,8 +62,8 @@ export interface SkillMetadata {
 	// The row asks for one of the caster's range parameters (the
 	// crossbow-range / wizard-range slots): the server adds the caster's
 	// value to the reach, so the reach can exceed `range` by an amount the
-	// client cannot see. A predicted run-up for such a row keeps its
-	// authored-range aim (gameplay.ts skillRunUpGoal).
+	// client cannot see. Such a row starts no predicted run-up at all
+	// (gameplay.ts skillRunUpGoal).
 	readonly rangeBonus?: boolean;
 	// The authored MP cost: flat plus percent of maximum MP (skillMpCost).
 	readonly mp?: number;

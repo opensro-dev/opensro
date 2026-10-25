@@ -372,12 +372,13 @@ test("a press inside the spacing leaves no prediction for the next press to hide
 	assert.ok( pose.x > local.x + 1, `the far press starts its own run-up (x ${pose.x})` );
 });
 
-test("a row that asks for a caster range parameter keeps the authored-range aim", () => {
+test("a row that asks for a caster range parameter starts no run-up", () => {
 	// The server adds the caster's crossbow/wizard parameter to such a
-	// row's reach, beyond the boundary the client can compute: the stop
-	// stays the authored-range aim (x 122, for a target 82 east) instead
-	// of the spacing stop (x 118), so the prediction is never overrun.
+	// row's reach, beyond every aim the client can compute from the
+	// authored range (the spacing stop x 118 and the margin aim x 122,
+	// for a target 82 east, are both short of its boundary): the press
+	// stays server-led, as natively, and nothing walks.
 	const { game, local } = gameplayPressSpaced( 0, 82, true );
 	const pose = restedPose( game, local );
-	assert.ok( Math.abs( pose.x - 122 ) <= 1, `rests at the authored-range aim (x ${pose.x})` );
+	assert.ok( Math.abs( pose.x - local.x ) < 0.01, `stands at the press (x ${pose.x})` );
 });
