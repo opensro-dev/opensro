@@ -90,7 +90,7 @@ async function clickAcceptance( rowOn ) {
 					return super.postMessage( data, ...args );
 				}
 				constructor( ...args ) {
-					super( ...args );
+					super( .../** @type {[any, any]} */ (args) );
 					this.addEventListener( "message", ( { data } ) => {
 						const r = window.__entry;
 						if ( data.kind === "probe-timing" ) r.timings.push( data );
@@ -179,7 +179,7 @@ async function clickAcceptance( rowOn ) {
 		await page.goto( CLIENT_NEXT_BASE_URL + "?diagnostics" );
 		await control( "frontend:reveal" ).click( { timeout: 30000 } );
 		await page.waitForFunction( () =>
-			!document.querySelector( '[data-ui-id="login"]' )?.disabled &&
+			!(/** @type {HTMLButtonElement | null} */ (document.querySelector( '[data-ui-id="login"]' )))?.disabled &&
 			document.querySelector( '[data-ui-id="login"]' )
 		);
 		await control( "native:servers" ).click();
@@ -192,10 +192,12 @@ async function clickAcceptance( rowOn ) {
 		await control( "frontend:create" ).waitFor( { timeout: 30000 } );
 		await page.mouse.click( 505, 430 );
 		await control( "enter" ).waitFor();
-		await page.waitForFunction( () => !document.querySelector( '[data-ui-id="enter"]' )?.disabled );
+		await page.waitForFunction( () =>
+			!(/** @type {HTMLButtonElement | null} */ (document.querySelector( '[data-ui-id="enter"]' )))?.disabled
+		);
 		await control( "enter" ).click();
 		await page.waitForFunction(
-			() => /Frontend: world\n/.test( document.querySelector( "output" )?.textContent ),
+			() => /Frontend: world\n/.test( document.querySelector( "output" )?.textContent ?? "" ),
 			null,
 			{ timeout: 60000 }
 		);
@@ -441,7 +443,7 @@ async function clickAcceptance( rowOn ) {
 		await page.screenshot( { path: artifactDir + "/world-after.png" } );
 	} finally {
 		await page.screenshot( { path: artifactDir + "/final.png" } ).catch( () => {} );
-		await writeFile( artifactDir + "/diagnostic.txt", await page.locator( "output" ).textContent() ).catch(
+		await writeFile( artifactDir + "/diagnostic.txt", (await page.locator( "output" ).textContent()) ?? "" ).catch(
 			() => {}
 		);
 		await writeFile(
