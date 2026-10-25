@@ -50,7 +50,8 @@ measurement must not share the machine (an FPS benchmark, a profile, a
 timedemo), say so in the log before you start and again when you finish.
 
 The generated-assets lock (`scripts/rebuildLock.mjs`) stays: it serialises
-writers of `.generated`, which is about correctness, not CPU.
+writers of `.generated` (checks hold it as concurrent readers), which is
+about correctness, not CPU.
 
 - **Clean up your own processes.** On Windows, stopping a task can leave
   orphaned children. Stop a server you spawned as a process tree

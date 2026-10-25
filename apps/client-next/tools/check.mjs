@@ -157,5 +157,5 @@ async function main() {
 if ( process.argv.includes( SOURCE_FLAG ) ) {
 	await main();
 } else {
-	await withGeneratedAssetsLock( "client verification", main );
+	await withGeneratedAssetsLock( "client verification", main, { mode: "read" } );
 }
