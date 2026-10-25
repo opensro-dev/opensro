@@ -12,6 +12,7 @@ import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { defined } from "../helpers/defined.mjs";
 const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
 );
@@ -109,6 +110,44 @@ test("movement cancels repetition before waiting for batched cast closure, then 
 	const decal = game.take()?.selectionDecal;
 	assert.equal( decal?.kind, "ground" );
 	assert.equal( decal?.kind === "ground" ? decal.pose.x : null, 140 );
+	game.dispose();
+});
+
+test("a move command sends the predicted-move goal the mover will aim at", () => {
+	const { game, local, sent } = movementFixture();
+	game.command(
+		{ kind: "move", destination: { ...local, x: 140.7, z: 160.2, angle: 0 } },
+		11,
+		undefined,
+		local
+	);
+	// The worker walks a move through the same predicted-move request as a
+	// resolved ground click: envelope, request id, the destination region
+	// and its whole-unit coordinates (payload offsets in movement.request).
+	const frame = defined( sent.at( -1 ) );
+	assert.equal( frame.opcode, OP_PREDICTED_MOVE );
+	const view = new DataView( frame.payload.buffer, frame.payload.byteOffset );
+	assert.equal( view.getUint16( 6, true ), local.regionId );
+	assert.equal( view.getInt16( 8, true ), 140 );
+	assert.equal( view.getInt16( 12, true ), 160 );
+	// The published gate the mover predicts under (groundWalkRefusal) and
+	// the destination marker ride the same snapshot (the gate is recomputed
+	// on step, as the worker publishes it).
+	game.step( 12, local );
+	const state = game.take();
+	assert.equal( state?.walkPredictable, true );
+	assert.equal( state?.selectionDecal?.kind, "ground" );
+	assert.equal( state?.selectionDecal?.kind === "ground" ? state.selectionDecal.pose.x : null, 140.7 );
+	game.command(
+		{ kind: "move", destination: { ...local, x: 120, z: 130, angle: 0 } },
+		13,
+		undefined,
+		local
+	);
+	const last = defined( sent.at( -1 ) );
+	const redirected = new DataView( last.payload.buffer, last.payload.byteOffset );
+	assert.equal( redirected.getInt16( 8, true ), 120, "a second move did not redirect the goal" );
+	assert.equal( redirected.getInt16( 12, true ), 130 );
 	game.dispose();
 });
 
