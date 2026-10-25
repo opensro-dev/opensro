@@ -119,8 +119,8 @@ function officialEnchantSparks( byCode, vsroRoot ) {
 		const c = line.trim().split( /\t/ ), item = byCode.get( c[0] );
 		// A later-client item the v1.150 data does not have draws nothing.
 		if ( !item || item.slot === null ) continue;
-		// Shape first: the field reads below index columns a short row
-		// does not have, and the build error must name the row, not them.
+		// The field count is checked before any field is read, so a short
+		// row fails with this error instead of a TypeError on a missing one.
 		if ( c.length < 6 ) throw Error( "Unsupported itemoptionefp row " + line );
 		const effectPath = c[1].replaceAll( "\\", "/" ).toLowerCase(),
 			scale = Number( c[2] ),

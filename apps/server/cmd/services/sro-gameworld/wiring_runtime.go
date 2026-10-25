@@ -204,28 +204,37 @@ func installTransportAdmissionVerifier(
 	if err := auth.ValidateSecret(secret); err != nil {
 		return fmt.Errorf("transport admission: %w", err)
 	}
-	verify := auth.TransportAdmissionVerifier(secret, time.Now)
+	ledger := auth.NewTransportAdmissionLedger(secret, time.Now)
+	verify := ledger.Verify
 	if api != nil {
 		verify = api.WrapTransportAdmissionVerifier(verify)
 	}
-	hub.SetHelloAuth(func(token []byte) (transport.AdmissionIdentity, error) {
+	hub.SetHelloCommitAuth(func(token []byte) (transport.AdmissionIdentity, func() error, error) {
 		claims, err := verify(string(token))
 		if err != nil {
-			return transport.AdmissionIdentity{}, err
+			return transport.AdmissionIdentity{}, nil, err
 		}
 		if claims.ShardID != ownedShardID {
-			return transport.AdmissionIdentity{}, fmt.Errorf(
+			return transport.AdmissionIdentity{}, nil, fmt.Errorf(
 				"transport admission shard %q does not match worker %q",
 				claims.ShardID,
 				ownedShardID,
 			)
 		}
+		commit := func() error {
+			// A revocation landing between HELLO and WELCOME still
+			// refuses: the check rides the commit, not only the verify.
+			if api != nil && api.TicketRevoked(string(token)) {
+				return auth.ErrTransportAdmissionExpired
+			}
+			return ledger.Consume(string(token))
+		}
 		return transport.AdmissionIdentity{
 			AccountID: claims.AccountID,
 			ShardID:   claims.ShardID,
-		}, nil
+		}, commit, nil
 	})
-	log.Info("transport: authenticated HELLO verifier uses a process-local one-use key")
+	log.Info("transport: authenticated HELLO verifier uses a process-local one-use key, consumed at WELCOME")
 	return nil
 }
 

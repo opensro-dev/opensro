@@ -605,6 +605,8 @@ export function startRuntime(
 				aim: game?.movementAim,
 				speedFactor: game?.movementSpeedFactor ?? 1,
 				walkPredictable: game?.walkPredictable === true,
+				walkHeld: game?.walkHeld === true,
+				holding: game?.moveHeld === true,
 				speed: game?.movementSpeed,
 				inputSeq: game?.movementInputSeq ?? 0,
 				navigationRequestId: game?.navigationRequestId,

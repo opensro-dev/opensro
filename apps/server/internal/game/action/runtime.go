@@ -385,6 +385,11 @@ type Runtime struct {
 	// countdown (denreturn.go; port-only, not native). False is native.
 	DenNoTransportSummon bool
 
+	// UniqueDamageRank shows a unique's damage ranking to everyone who
+	// damaged it (uniquedamagerank.go; port-only, not native). False, the
+	// default, is native.
+	UniqueDamageRank bool
+
 	// Announce selects the port-only shard notices (announce.go); the zero
 	// value is native: none.
 	Announce  Announcements

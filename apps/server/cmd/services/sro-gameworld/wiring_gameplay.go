@@ -639,6 +639,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.FastDenReturn {
 		log.Infof("return: Bandit Den scroll countdown halved (%s)", action.EnvFastDenReturn)
 	}
+	// Port-only, not native: a unique's attackers see its damage ranking.
+	game.items.UniqueDamageRank = action.UniqueDamageRankFromEnv()
+	if game.items.UniqueDamageRank {
+		log.Infof("unique: damage ranking shown at each unique kill (%s)", action.EnvUniqueDamageRank)
+	}
 	// Port-only, not native: shard notices for seal drops, high plus and job
 	// kills (announce.go).
 	game.items.Announce = action.AnnouncementsFromEnv()
