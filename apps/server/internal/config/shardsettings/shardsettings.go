@@ -156,6 +156,9 @@ var Settings = []Setting{
 	{Env: "SRO_MALL_RIDE_SPEED", NomadVar: "mall_ride_speed", Default: "on"},
 	// Owner, 2026-10-14: shard notices for seal drops, +7 and above, and job kills.
 	{Env: "SRO_ANNOUNCE_SOX_DROP", NomadVar: "announce_sox_drop", Default: "on"},
+	// Owner, 2026-10-25 (#1604 P9): the weekly seal board counts Star,
+	// Moon and Sun drops per job alias. Off is native: nothing counts.
+	{Env: "SRO_SEAL_BOARD", NomadVar: "seal_board", Default: "off"},
 	{Env: "SRO_ANNOUNCE_PLUS", NomadVar: "announce_plus", Default: "on"},
 	{Env: "SRO_ANNOUNCE_JOB_KILL", NomadVar: "announce_job_kill", Default: "on"},
 	// Owner, 2026-10-15: every job kill of a pair is announced (no window).

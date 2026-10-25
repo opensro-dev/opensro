@@ -395,6 +395,11 @@ type Runtime struct {
 	Announce  Announcements
 	announcer announcer
 
+	// SealDrops counts sealed drops for the weekly board (sealboard.go;
+	// port-only, not native). Nil, the default, counts nothing; the
+	// composition root installs the counter only when EnvSealBoard is on.
+	SealDrops SealDropSink
+
 	// ThiefPartyBonus raises a party's monster EXP and gold for each thief
 	// in it (thiefparty.go; port-only, not native). False is native.
 	ThiefPartyBonus bool

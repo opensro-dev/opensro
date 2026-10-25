@@ -464,6 +464,14 @@ variable "announce_sox_drop" {
   default = "on"
 }
 
+# seal_board counts sealed drops for the site's weekly seal board, by job
+# alias with Star, Moon and Sun apart (port-only, not native; owner
+# decision 2026-10-25, #1604 P9). "off" is native: nothing counts.
+variable "seal_board" {
+  type    = string
+  default = "off"
+}
+
 variable "announce_plus" {
   type    = string
   default = "on"
@@ -1057,6 +1065,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_MALL_TRANSPORT_SPEED                = var.mall_transport_speed
         SRO_MALL_RIDE_SPEED                     = var.mall_ride_speed
         SRO_ANNOUNCE_SOX_DROP                   = var.announce_sox_drop
+        SRO_SEAL_BOARD                          = var.seal_board
         SRO_ANNOUNCE_PLUS                       = var.announce_plus
         SRO_ANNOUNCE_JOB_KILL                   = var.announce_job_kill
         SRO_JOB_KILL_NOTICE_REPEAT              = var.job_kill_notice_repeat
