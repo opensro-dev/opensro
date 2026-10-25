@@ -57,6 +57,12 @@ import { createWeather } from "../weather/weather";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import type { WorldSceneLease } from "@/engine/contracts/world-admission";
 import { skyGroups } from "@/engine/foundation/rendering/sky-geometry";
+import {
+	GRAPHIC_OPTION_GROUND,
+	GRAPHIC_OPTION_LEVEL_OF_DETAIL,
+	GRAPHIC_OPTION_MAP_OBJECTS,
+	GRAPHIC_OPTION_SKY
+} from "@/engine/foundation/rendering/graphic-options";
 import { flareUniforms } from "@/engine/foundation/rendering/flares";
 import {
 	pickGeometry,
@@ -698,6 +704,15 @@ export function createWorldRenderer(
 		retainedTargetX = NaN,
 		selectedLayerRevision = -1,
 		retainedTargetZ = NaN;
+	// The SWorld graphic options this renderer owns (graphic-options.ts),
+	// seeded as SWorld_Construct seeds them: the console's render family
+	// negates one at a time through setRenderMode. Wireframe (0x12) has
+	// no line topology to apply to and characters (0x16) belong to the
+	// character renderer; neither is stored here. A change bumps
+	// renderModeRevision so a stationary frame re-composes once instead
+	// of serving the draws selected under the old options.
+	const renderModes = { ground: true, sky: true, mapObjects: true, levelOfDetail: true };
+	let renderModeRevision = 0, composedRenderModeRevision = -1;
 	const poses = new Map<
 		string,
 		{ pose: ReturnType<typeof createCharacterPose>; revision: number; seconds: number | null; }
@@ -1797,7 +1812,9 @@ export function createWorldRenderer(
 					environmentState,
 					dungeonAmbient
 				),
-				sky = !!current?.environment;
+				// Graphic option 0x14 clear skips the sky pass whole: no
+				// device sky behind the frame, as no sky group is drawn.
+				sky = !!current?.environment && renderModes.sky;
 			if ( !current?.environment ) {
 				environmentState = null;
 				environmentSeconds = null;
@@ -1875,7 +1892,7 @@ export function createWorldRenderer(
 				targetCellZ = Math.floor( localCamera.target[2] / 320 );
 			if (
 				!viewChanged && !fadesChanging && targetCellX === retainedTargetX && targetCellZ === retainedTargetZ &&
-				layers.revision() === selectedLayerRevision
+				layers.revision() === selectedLayerRevision && renderModeRevision === composedRenderModeRevision
 			) {
 				// Every resident object would receive this frame stamp without changing
 				// selection or opacity. Materialize those stamps only on the next walk.
@@ -1915,8 +1932,17 @@ export function createWorldRenderer(
 			// The fade range of scenery objects follows the background distance.
 			const sceneryRange = Math.min( 2500, Math.fround( (backgroundDistance ?? 3500) * Math.fround( .8 ) ) ) -
 				480;
+			// Graphic option 0x17 clear forces LOD 0 for every cell, the
+			// distance bands aside (8B7F1D), as the "full" detail does.
 			const selectTerrainLod = ( distanceSquared: number ) =>
-				current?.terrainDetail === "full" ? 0 : terrainLod( distanceSquared );
+				current?.terrainDetail === "full" || !renderModes.levelOfDetail ?
+					0 :
+					terrainLod( distanceSquared );
+			// Whether the negated options keep a group out of the frame:
+			// the sky / terrain / the-rest split compileWalkTable walks
+			// by. The walk itself is never gated (see setRenderMode).
+			const renderModeHides = ( group: WorldGroup ) =>
+				group.material.sky ? !renderModes.sky : group.ranges ? !renderModes.ground : !renderModes.mapObjects;
 			const walkGroups = walk.groups, stamp = ++walkStamp;
 			for ( let walked = 0; walked < walkGroups.length; walked++ ) {
 				const group = walkGroups[walked]!, kind = walk.kind[walked]!;
@@ -2270,6 +2296,7 @@ export function createWorldRenderer(
 			// scene's admission can grow (replace) a layer the current one shares
 			// while the camera stands still; that must reopen this walk.
 			selectedLayerRevision = layers.revision();
+			composedRenderModeRevision = renderModeRevision;
 			shadowSurfaces.commit();
 			selectedFadeFrame = fadeFrame;
 			probe?.worldMark?.( "world-selection" );
@@ -2318,7 +2345,10 @@ export function createWorldRenderer(
 			for ( let i = 0; i < visibleCount; i++ ) {
 				const index = orderVisible[i]!, layer = orderLayers[index];
 				const draw = layer ? layers.drawInPass( layer, pass ) : orderDraws[index]!;
-				if ( draw === null ) {
+				// A group a negated graphic option hides leaves the frame
+				// here, at submission, like a draw that never resolved:
+				// the phase boundaries shift over it the same way.
+				if ( draw === null || renderModeHides( orderedGroups[index]! ) ) {
 					if ( i < terrainEnd ) shifted++;
 					continue;
 				}
@@ -2352,6 +2382,50 @@ export function createWorldRenderer(
 				sky,
 				originRegion: current?.originRegion ?? 0
 			};
+		},
+		/*
+		================
+		setRenderMode
+
+		One graphic option negated by the console's render family. The
+		options gate the composed draws only: the walk still selects,
+		uploads and caches every group, so picking (which rides the
+		selections and pickGroups) never notices, exactly as the native
+		options gate render passes and nothing else. A level-of-detail
+		change re-chooses every terrain cell at once - native recomputes
+		the per-cell LOD byte on each update (8B7F1D) - so the terrain
+		selections and their eye-cell stamps are dropped and the next
+		frame is made to count as view-changed (lastEye, as invalidate
+		does): a stationary walk only replays the visibility it chose
+		last frame and would never re-choose. Options this renderer
+		does not own are ignored.
+		================
+		*/
+		setRenderMode( mode: number, enabled: boolean ) {
+			switch ( mode ) {
+				case GRAPHIC_OPTION_GROUND:
+					if ( renderModes.ground === enabled ) return;
+					renderModes.ground = enabled;
+					break;
+				case GRAPHIC_OPTION_SKY:
+					if ( renderModes.sky === enabled ) return;
+					renderModes.sky = enabled;
+					break;
+				case GRAPHIC_OPTION_MAP_OBJECTS:
+					if ( renderModes.mapObjects === enabled ) return;
+					renderModes.mapObjects = enabled;
+					break;
+				case GRAPHIC_OPTION_LEVEL_OF_DETAIL:
+					if ( renderModes.levelOfDetail === enabled ) return;
+					renderModes.levelOfDetail = enabled;
+					selections.clear();
+					walk.cell.fill( NaN );
+					lastEye = null;
+					break;
+				default:
+					return;
+			}
+			renderModeRevision++;
 		},
 		/*
 		================

@@ -12,6 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { yieldCpu } from "../../lib/processPriority.mjs";
 
 const helper = fileURLToPath( new URL( "../../lib/processPriority.mjs", import.meta.url ) );
 const repository = fileURLToPath( new URL( "../../../", import.meta.url ) );
@@ -54,21 +55,49 @@ test("a check lowers its priority and its children inherit it", () => {
 	assert.ok( child >= os.constants.priority.PRIORITY_BELOW_NORMAL, `child ${child}` );
 });
 
-test("SRO_CHECK_PRIORITY=normal leaves the inherited priority alone", () => {
-	// Opting out must leave the child where it started. That is normal
-	// unless the runner is itself below normal and refuses the raise to
-	// normal (a check run under the pipeline's own yield), so compare with
-	// the priority the child actually had before yieldCpu.
-	const { start, self } = childPriority( { SRO_CHECK_PRIORITY: "normal" } );
-	assert.equal( self, start );
+/*
+================
+fakePriority
+
+A process priority the test owns (#1651): the live one can be lowered by
+other actors on a shared machine mid-test, so the decision tests use this.
+================
+*/
+function fakePriority( start, refuse = false ) {
+	const calls = [];
+	let current = start;
+	return {
+		calls,
+		constants: os.constants,
+		getPriority: () => current,
+		setPriority: value => {
+			if ( refuse ) throw new Error( "EACCES" );
+			calls.push( value );
+			current = value;
+		}
+	};
+}
+
+test("SRO_CHECK_PRIORITY=normal leaves the priority alone", () => {
+	const priority = fakePriority( os.constants.priority.PRIORITY_NORMAL );
+	assert.equal( yieldCpu( { SRO_CHECK_PRIORITY: " Normal " }, priority ), null );
+	assert.deepEqual( priority.calls, [] );
+});
+
+test("a check at normal lowers itself to below normal", () => {
+	const priority = fakePriority( os.constants.priority.PRIORITY_NORMAL );
+	assert.equal( yieldCpu( {}, priority ), os.constants.priority.PRIORITY_BELOW_NORMAL );
+	assert.deepEqual( priority.calls, [ os.constants.priority.PRIORITY_BELOW_NORMAL ] );
 });
 
 test("a check already below normal is never raised", () => {
-	const { self } = childPriority(
-		{ SRO_CHECK_PRIORITY: "" },
-		"os.setPriority( os.constants.priority.PRIORITY_LOW );"
-	);
-	assert.equal( self, os.constants.priority.PRIORITY_LOW );
+	const priority = fakePriority( os.constants.priority.PRIORITY_LOW );
+	assert.equal( yieldCpu( {}, priority ), os.constants.priority.PRIORITY_LOW );
+	assert.deepEqual( priority.calls, [] );
+});
+
+test("a platform that refuses the change never fails the check", () => {
+	assert.equal( yieldCpu( {}, fakePriority( os.constants.priority.PRIORITY_NORMAL, true ) ), null );
 });
 
 test("run_if_changed starts its gate below normal", t => {
