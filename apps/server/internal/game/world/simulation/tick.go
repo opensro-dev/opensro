@@ -649,6 +649,7 @@ func (t *Ticker) prepareTick() (int64, []divisionTickWork) {
 		}
 		if state.monsters != nil {
 			state.monsters.divisionID = divisionID
+			state.monsters.watch = &t.watch
 		}
 		work = append(work, divisionTickWork{
 			divisionID: divisionID,
@@ -671,6 +672,7 @@ func (t *Ticker) prepareTick() (int64, []divisionTickWork) {
 				t.states[divisionID] = state
 			}
 			state.monsters.divisionID = divisionID
+			state.monsters.watch = &t.watch
 			work = append(work, divisionTickWork{divisionID: divisionID, state: state})
 		}
 	}
