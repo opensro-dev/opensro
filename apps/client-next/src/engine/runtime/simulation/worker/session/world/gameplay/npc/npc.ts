@@ -55,6 +55,19 @@ export function createNpcConversation( send: ( frame: WireFrame ) => void ) {
 		},
 		/*
 		================
+		showWindow
+
+		The restorative receipt for a refused storage command: the HUD hid
+		on the click, but this owner never hid, so only a newer receipt
+		marked shown lets its observe() lift that local hide. The
+		conversation, its target and its interaction lock are untouched.
+		================
+		*/
+		showWindow() {
+			window = { hidden: false, revision: window.revision + 1 };
+		},
+		/*
+		================
 		window
 		================
 		*/

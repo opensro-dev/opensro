@@ -85,7 +85,8 @@ function world( overrides = {} ) {
 		poseAtMs: undefined,
 		revision: 0,
 		moving: false,
-		goal: undefined,
+		aim: undefined,
+		speedFactor: 1,
 		walkPredictable: true,
 		speed: SPEED,
 		inputSeq: 0,
@@ -185,17 +186,22 @@ test("a later click the mover does not predict hands the walk back instead of dr
 	assert.equal( mover.frame( 133, world() ).kind, "idle" );
 });
 
-test("a later command keeps the prediction while the worker walks a goal, and ends it on a direction walk", () => {
+test("a later command keeps the prediction while the worker walks a goal, and ends it on a walk with no aim", () => {
 	const mover = createLocalMover(), goal = { ...START, x: 1300 };
 	mover.click( { seq: 3, query: query( 1300, 1000 ), drawn: START, now: 0 }, world() );
 	// A potion press (seq 4): the worker still walks the clicked goal.
 	assert.equal(
-		mover.frame( 100, world( { inputSeq: 4, moving: true, goal, poseAtMs: 90, revision: 1 } ) ).kind,
+		mover.frame(
+			100,
+			world( { inputSeq: 4, moving: true, aim: { kind: "goal", destination: goal }, poseAtMs: 90, revision: 1 } )
+		)
+			.kind,
 		"walking"
 	);
-	// The worker now walks a direction (no goal): the mover cannot rebuild it.
+	// The worker now walks something it publishes no aim for (a skill
+	// displacement): the mover cannot rebuild it.
 	assert.equal(
-		mover.frame( 116, world( { inputSeq: 5, moving: true, goal: undefined, poseAtMs: 106, revision: 2 } ) ).kind,
+		mover.frame( 116, world( { inputSeq: 5, moving: true, aim: undefined, poseAtMs: 106, revision: 2 } ) ).kind,
 		"ended"
 	);
 });

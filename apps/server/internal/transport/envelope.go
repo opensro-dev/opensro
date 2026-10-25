@@ -83,7 +83,27 @@ const (
 	// stream's frames up to that position; the server drops them from its
 	// resume ring (stream_ring.go, #1466).
 	OpStreamAck uint16 = 0x000B
+	// OpTransportReport (C->S) [version u8][reason u8]: which transport the
+	// session connected with and, when the fastest one failed first, why
+	// the client fell back (#1449). Sent once after WELCOME on each attach.
+	// Telemetry only: the transport never requires it, and a report it
+	// cannot decode is dropped, never fatal.
+	OpTransportReport uint16 = 0x000C
 )
+
+// Transport fallback reasons for OpTransportReport. The client reports
+// why the connection that reached WELCOME was not its first choice;
+// FallbackNone means no fallback happened on this connect.
+const (
+	FallbackNone        uint8 = 0 // connected on the first transport tried
+	FallbackUnsupported uint8 = 1 // fastest transport unsupported here
+	FallbackTimeout     uint8 = 2 // fastest transport attempt timed out
+	FallbackRefused     uint8 = 3 // fastest transport attempt was refused
+	FallbackClosedEarly uint8 = 4 // fastest transport closed before WELCOME
+)
+
+// transportReportVersion is the only OpTransportReport layout today.
+const transportReportVersion uint8 = 1
 
 // maxReservedOpcode is the top of the session-internal range: opcodes the
 // transport consumes itself and game code cannot register.
@@ -253,6 +273,44 @@ func DecodeStreamAck(b []byte) (uint32, bool) {
 		return 0, false
 	}
 	return binary.LittleEndian.Uint32(b), true
+}
+
+/*
+================
+EncodeTransportReport
+
+Builds the OpTransportReport payload the client sends after WELCOME.
+================
+*/
+func EncodeTransportReport(reason uint8) []byte {
+	return []byte{transportReportVersion, reason}
+}
+
+/*
+================
+DecodeTransportReport
+
+Parses an OpTransportReport payload into the fallback's history name.
+FallbackNone (and any report this build cannot read: wrong size, newer
+version, unknown reason) reports ok=false, because telemetry from a
+client we do not understand must not be recorded as a fact (#1449).
+================
+*/
+func DecodeTransportReport(b []byte) (name string, ok bool) {
+	if len(b) != 2 || b[0] != transportReportVersion {
+		return "", false
+	}
+	switch b[1] {
+	case FallbackUnsupported:
+		return "unsupported", true
+	case FallbackTimeout:
+		return "timeout", true
+	case FallbackRefused:
+		return "refused", true
+	case FallbackClosedEarly:
+		return "closed-early", true
+	}
+	return "", false
 }
 
 // EncodeHello builds the OpHello payload.
