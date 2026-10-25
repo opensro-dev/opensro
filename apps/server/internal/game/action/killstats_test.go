@@ -15,6 +15,7 @@ memory and a past day's cell is dropped at its last flush.
 package action
 
 import (
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -216,6 +217,73 @@ func TestKillStatsConcurrentFlushesWriteEachDeltaOnce(t *testing.T) {
 
 /*
 ================
+TestKillStatsCadenceFlushWhileOneFliesWaitsItsTurn
+
+A second cadence flush while the first write is still in the sink
+finds the write in flight and keeps its deltas for later: the
+in-flight write settles once (a second settle would close its done
+channel twice), and the shutdown flush then writes the rest. Two
+counted kills reach the sink as two.
+================
+*/
+func TestKillStatsCadenceFlushWhileOneFliesWaitsItsTurn(t *testing.T) {
+	rt := &Runtime{KillStats: true}
+	rt.Now = func() time.Time { return time.UnixMilli(killStatNow) }
+	sink := newBlockingKillStatSink()
+	rt.KillStatsFlush = sink.write
+	killer := killStatCharacter(7, 85)
+	rt.countKillStatKill(killer, killStatNow)
+	rt.flushKillStatsAsync()
+	<-sink.entered
+	rt.countKillStatKill(killer, killStatNow)
+	rt.flushKillStatsAsync()
+	close(sink.release)
+	if err := rt.FlushKillStats(); err != nil {
+		t.Fatal(err)
+	}
+	if got := sink.kills(); got != 2 {
+		t.Fatalf("the sink received %d kills, want the counted 2 exactly once", got)
+	}
+}
+
+/*
+================
+TestKillStatsFailedWriteReturnsItsDeltas
+
+A write the sink refuses hands its deltas back to the cells, so the
+next flush writes them: one counted kill, one failed write, one good
+write, and the store holds the one kill.
+================
+*/
+func TestKillStatsFailedWriteReturnsItsDeltas(t *testing.T) {
+	rt := &Runtime{KillStats: true}
+	rt.Now = func() time.Time { return time.UnixMilli(killStatNow) }
+	var stored int64
+	refuse := true
+	rt.KillStatsFlush = func(rows []KillStatRow) error {
+		if refuse {
+			refuse = false
+			return errors.New("database is locked")
+		}
+		for _, row := range rows {
+			stored += row.Kills
+		}
+		return nil
+	}
+	rt.countKillStatKill(killStatCharacter(7, 85), killStatNow)
+	if err := rt.FlushKillStats(); err == nil {
+		t.Fatal("the refused write reported no error")
+	}
+	if err := rt.FlushKillStats(); err != nil {
+		t.Fatal(err)
+	}
+	if stored != 1 {
+		t.Fatalf("after a refused then a good write the store holds %d kills, want 1", stored)
+	}
+}
+
+/*
+================
 TestKillStatsTickFlushNeverCallsTheSinkOnTheTick
 
 The cadence path hands the write to a goroutine: advanceKillStats
@@ -237,7 +305,7 @@ func TestKillStatsTickFlushNeverCallsTheSinkOnTheTick(t *testing.T) {
 	}()
 	select {
 	case <-returned:
-	case <-time.After(10 * time.Second):
+	case <-time.After(2 * time.Second):
 		t.Fatal("the tick blocked on the sink")
 	}
 	<-sink.entered
