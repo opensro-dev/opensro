@@ -535,14 +535,11 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 			})
 			continue
 		}
-		// The Witch's own offer gate: EASTEU 21 is only ever offered to
-		// a shared party; anyone else hears the come-back line in the
-		// offer's place (the class's offer condition).
-		if !active && def.Codename == easteu21QuestCodename && admissionLevel(def) <= level &&
-			canAcceptAgain(character, def) && prerequisitesMet(character, def) && rt.calendarAvailable(def, false) &&
-			questNpcMatches(def, def.StartNpcCodename, npcCodename) && !rt.easteu21SharedParty(character) {
-			completes = append(completes, NpcOption{Codename: def.Codename, TitleSymbol: def.TitleSymbol, PromptSymbol: easteu21SymNoPartyMode, Informational: true})
-			continue
+		if !active {
+			if option, offered := rt.easteu21NoPartyOption(character, def, npcCodename, level); offered {
+				completes = append(completes, option)
+				continue
+			}
 		}
 		// The level gates taking a quest, never reporting one already taken:
 		// a character that lost a level keeps its turn-in (as MarkerStates).

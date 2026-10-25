@@ -309,6 +309,14 @@ func TestEasteu21CallUseGatesAndInvitation(t *testing.T) {
 /*
 ================
 TestEasteu21BattleClockAndTimeout
+
+The stage marks are stated as literals on purpose: they are the
+native reading (the encounter updater's own stores), not values
+derived from the constants under test, so a wrong constant fails
+here instead of drifting with the test. Spawn at t, two silent
+seconds, the challenge at t+2,000, the battle at t+7,000, then
+battle-clock marks of 600,000 / 900,000 / 1,200,000 / 1,210,000
+counted from the challenge.
 ================
 */
 func TestEasteu21BattleClockAndTimeout(t *testing.T) {
@@ -321,32 +329,42 @@ func TestEasteu21BattleClockAndTimeout(t *testing.T) {
 	if len(w.spawned) != 1 || w.spawned[0].Codename != easteu21BossCodename {
 		t.Fatalf("spawned = %v", w.spawned)
 	}
+	if hasNotice(w.pushed[leader.Name], easteu21SymBossShout) {
+		t.Fatal("Kerberos spoke during its silent beat")
+	}
+	*w.nowMs = start + 1_999
+	w.update()
+	if hasNotice(w.pushed[leader.Name], easteu21SymBossShout) {
+		t.Fatal("Kerberos spoke during its silent beat")
+	}
+	*w.nowMs = start + 2_000
+	w.update()
 	if !hasNotice(w.pushed[leader.Name], easteu21SymBossShout) {
 		t.Fatal("Kerberos never spoke its challenge")
 	}
-	// Five seconds of shout before the battle opens.
-	*w.nowMs = start + easteu21ActivateDelayMs - 1
+	// Five seconds of challenge before the battle opens.
+	*w.nowMs = start + 7_000 - 1
 	w.update()
 	if hasNotice(w.pushed[leader.Name], easteu21SymBattleBegun) {
-		t.Fatal("the battle opened during the shout")
+		t.Fatal("the battle opened during the challenge")
 	}
-	*w.nowMs = start + easteu21ActivateDelayMs
+	*w.nowMs = start + 7_000
 	w.update()
 	if !hasNotice(w.pushed[leader.Name], easteu21SymBattleBegun) {
 		t.Fatal("the battle never opened")
 	}
-	battle := *w.nowMs
-	*w.nowMs = battle + easteu21BattleMs
+	challenge := start + 2_000
+	*w.nowMs = challenge + 600_000
 	w.update()
 	if !hasNotice(w.pushed[member.Name], easteu21SymWarn10) {
 		t.Fatal("the ten-minute warning never landed")
 	}
-	*w.nowMs = battle + easteu21BattleMs + easteu21WarningStepMs
+	*w.nowMs = challenge + 900_000
 	w.update()
 	if !hasNotice(w.pushed[member.Name], easteu21SymWarn5) {
 		t.Fatal("the five-minute warning never landed")
 	}
-	*w.nowMs = battle + easteu21BossLeavesMs
+	*w.nowMs = challenge + 1_200_000
 	w.update()
 	if !hasNotice(w.pushed[member.Name], easteu21SymBossLeaves) {
 		t.Fatal("Kerberos never left")
@@ -354,15 +372,16 @@ func TestEasteu21BattleClockAndTimeout(t *testing.T) {
 	if len(w.closed) != 0 {
 		t.Fatal("the layer closed when the boss left")
 	}
-	// Halfway through the tail the room still stands: the end is the
-	// layer's own mark, not the boss's leaving.
-	*w.nowMs = battle + (easteu21BossLeavesMs+easteu21LayerEndMs)/2
+	// One millisecond before the layer's own mark the room still
+	// stands: the end is the layer's own mark, not the boss's
+	// leaving, and not a millisecond earlier.
+	*w.nowMs = challenge + 1_209_999
 	w.update()
 	if len(w.closed) != 0 {
 		t.Fatal("the layer ended before its own clock ran out")
 	}
 	// The layer's own end returns everyone and closes behind them.
-	*w.nowMs = battle + easteu21LayerEndMs
+	*w.nowMs = challenge + 1_210_000
 	w.update()
 	if len(w.closed) != 1 || len(w.returned) != 2 {
 		t.Fatalf("closed %d returned %d, want 1 and 2", len(w.closed), len(w.returned))
@@ -373,6 +392,39 @@ func TestEasteu21BattleClockAndTimeout(t *testing.T) {
 	w.rt.noteEasteu21Kill(leader, easteu21BossCodename)
 	if at := activeQuestIndex(leader, w.def.RefID); at < 0 || objectiveMet(leader, w.def, leader.ActiveQuests[at]) {
 		t.Fatal("a late kill credited the quest")
+	}
+}
+
+/*
+================
+TestEasteu21PartyChangedExpels
+
+A resident whose party standing breaks mid-summon hears the
+instance-condition line and is sent out; anyone else in the room
+is untouched, and a name that is not inside changes nothing.
+================
+*/
+func TestEasteu21PartyChangedExpels(t *testing.T) {
+	w := newEasteu21World(t)
+	leader := easteu21Accept(t, w, "PartyLeader")
+	member := easteu21Accept(t, w, "PartyMember")
+	w.openLayer(leader.Name, member.Name)
+	changed := func(name string) {
+		w.rt.DispatchInstanceEvent(InstanceEvent{Kind: InstanceEventPartyChanged, Division: easteu21TestDivision, Definition: easteu21Definition, World: w.lease.ID, Name: name})
+	}
+	changed("Stranger")
+	if len(w.returned) != 0 {
+		t.Fatalf("returned = %v, want none", w.returned)
+	}
+	changed(member.Name)
+	if !hasNotice(w.pushed[member.Name], easteu21SymCondition) {
+		t.Fatal("the member never heard the instance-condition line")
+	}
+	if len(w.returned) != 1 || w.returned[0] != member.Name {
+		t.Fatalf("returned = %v, want the member", w.returned)
+	}
+	if hasNotice(w.pushed[leader.Name], easteu21SymCondition) {
+		t.Fatal("the leader heard the condition line")
 	}
 }
 

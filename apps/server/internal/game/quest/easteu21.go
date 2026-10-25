@@ -18,14 +18,16 @@ party leader uses the Call at the Jupiter Temple plaza: the use gates,
 in native order, are the place itself (within 600 of the plaza point),
 a shared party, and leadership, with a summoned trade transport
 refusing its holder. The invitation then opens instance definition 11
-for the members doing or having finished the quest (or holding a Call),
-with the native lifetime of 1,258,208 ms from the invitation.
+for the members doing or having finished the quest (or holding a Call).
+The invitation itself carries no native lifetime (none exists in
+either binary); the port composes one long enough for the whole
+encounter below.
 
-Inside, Kerberos appears at once, 20 to 100 from the party, speaks its
-challenge, and the battle starts five seconds later on the same clock
-Rahid's programme runs: warnings with ten and five minutes left, at
-twenty minutes the boss laughs and is gone, and at 1,208,490 ms the
-layer returns everyone. The kill is party business: every eligible
+Inside, Kerberos appears at once, 20 to 100 from the party, stands
+silent for two seconds, speaks its challenge, and the battle starts
+five seconds after that, on the same clock Rahid's programme runs:
+warnings with ten and five minutes left, at twenty minutes the boss
+laughs and is gone, and ten seconds later the layer returns everyone. The kill is party business: every eligible
 resident in the world is credited, the Call is spent, and the room
 keeps a sixty-second grace before returning the party. A member whose
 party standing breaks mid-fight (leaving, or a leadership change that
@@ -77,19 +79,30 @@ const (
 	// re-grant row (AdvanceNpcQuest routes it).
 	easteu21GrantPrefix = "easteu21:"
 
-	// Encounter timing, read off the native programme: the boss is
-	// named at the summon and the battle opens 5,000 ms later; the
-	// battle timer runs 600,000 ms to the first warning with 300,000 ms
-	// steps, the boss leaves at 1,200,000 ms, and the layer's own end
-	// is 1,208,490 ms on the same clock. The kill leaves a 60,000 ms
-	// grace. The invitation carries the native 1,258,208 ms lifetime.
-	easteu21ActivateDelayMs = 5_000
-	easteu21BattleMs        = 600_000
-	easteu21WarningStepMs   = 300_000
-	easteu21BossLeavesMs    = 1_200_000
-	easteu21LayerEndMs      = 1_208_490
-	easteu21KillGraceMs     = 60_000
-	easteu21InviteLifeMs    = 1_258_208
+	// Encounter timing, read off the native programme: Kerberos is
+	// named at the summon, stands silent for 2,000 ms, then speaks
+	// its challenge; the battle clock runs from the challenge -
+	// 5,000 ms to the battle, 600,000 ms to the first warning with
+	// 300,000 ms steps, the boss leaves at 1,200,000 ms, and the
+	// layer's own end is 1,210,000 ms on the same clock (a 10,000 ms
+	// tail). The kill leaves a 60,000 ms grace.
+	easteu21ChallengeDelayMs = 2_000
+	easteu21ActivateDelayMs  = 5_000
+	easteu21BattleMs         = 600_000
+	easteu21WarningStepMs    = 300_000
+	easteu21BossLeavesMs     = 1_200_000
+	easteu21LayerEndMs       = 1_210_000
+	easteu21KillGraceMs      = 60_000
+
+	// No native invitation lifetime exists in either binary for
+	// this summon (the definition row carries none and the entry
+	// handlers show no timing arithmetic). Authored, not native:
+	// the challenge beat plus the encounter's own span plus one
+	// authored minute for slow answers and re-entries; the
+	// deadline is only the lane's backstop, the programme ends
+	// the layer itself on the kill or the clock.
+	easteu21InviteSlackMs = 60_000
+	easteu21InviteLifeMs  = easteu21ChallengeDelayMs + easteu21LayerEndMs + easteu21InviteSlackMs
 
 	// The plaza reach: the native use validates its plaza point
 	// through the world search with a 600 budget.
@@ -166,19 +179,21 @@ grace deadline instead of closing at once.
 ================
 */
 type easteu21Layer struct {
-	division  string
-	summoner  string
-	residents map[string]bool
-	lease     instance.Lease
-	openedMs  int64
-	spawnedMs int64
-	battleMs  int64
-	warnings  int
-	bossGone  bool
-	killed    bool
-	credited  bool
-	graceEnd  int64
-	ended     bool
+	division    string
+	summoner    string
+	residents   map[string]bool
+	lease       instance.Lease
+	openedMs    int64
+	spawnedMs   int64
+	shouted     bool
+	battleMs    int64
+	battleBegun bool
+	warnings    int
+	bossGone    bool
+	killed      bool
+	credited    bool
+	graceEnd    int64
+	ended       bool
 }
 
 /*
@@ -280,6 +295,25 @@ func (rt *Runtime) easteu21SharedParty(c *enterworld.Character) bool {
 	}
 	facts := rt.InstancePartyFacts(c)
 	return facts.Found && facts.InParty && facts.Shared
+}
+
+/*
+================
+easteu21NoPartyOption
+
+The Witch's offer gate: EASTEU 21 is only ever offered to a shared
+party; anyone else hears the come-back-with-a-party line in the
+offer's place (the class's offer condition).
+================
+*/
+func (rt *Runtime) easteu21NoPartyOption(c *enterworld.Character, def *Definition, npcCodename string, level int64) (NpcOption, bool) {
+	if def.Codename != easteu21QuestCodename || admissionLevel(def) > level ||
+		!canAcceptAgain(c, def) || !prerequisitesMet(c, def) ||
+		!rt.calendarAvailable(def, false) || !questNpcMatches(def, def.StartNpcCodename, npcCodename) ||
+		rt.easteu21SharedParty(c) {
+		return NpcOption{}, false
+	}
+	return NpcOption{Codename: def.Codename, TitleSymbol: def.TitleSymbol, PromptSymbol: easteu21SymNoPartyMode, Informational: true}, true
 }
 
 /*
@@ -446,7 +480,10 @@ func (rt *Runtime) useEasteu21Call(c *enterworld.Character, def *Definition, at 
 		Eligible:   rt.Easteu21MemberEligible,
 	})
 	if !outcome.Opened || !outcome.LeaderIn {
-		// A layer that would not open: the native use is silent.
+		// A layer that would not open: the native use is silent. A
+		// layer that opened without the leader landing remembers no
+		// lease here; it lives on the framework's deadline handling
+		// alone, and no second summon is held against the leader.
 		return nil, false
 	}
 	rt.easteu21.rememberLease(outcome.Lease, c.Name)
@@ -736,11 +773,13 @@ func (rt *Runtime) noteEasteu21Kill(c *enterworld.Character, codename string) {
 easteu21Update
 
 The encounter clock. One pass per layer tick; elapsed time comes
-from the runtime clock, never from counting ticks. The boss is named
-at the summon, the battle opens five seconds later, warnings land
-with ten and five minutes left, the boss leaves at twenty minutes,
-and the layer's own end returns the room; a kill instead leaves a
-sixty-second grace after its credit.
+from the runtime clock, never from counting ticks. Kerberos is
+named at the summon and stands silent for two seconds before its
+challenge; the battle clock runs from the challenge, the battle
+opens five seconds in, warnings land with ten and five minutes
+left, the boss leaves at twenty minutes, and the layer's own end
+returns the room; a kill instead leaves a sixty-second grace
+after its credit.
 ================
 */
 func (rt *Runtime) easteu21Update(event InstanceEvent) {
@@ -772,12 +811,21 @@ func (rt *Runtime) easteu21Update(event InstanceEvent) {
 	if layer.spawnedMs == 0 {
 		layer.spawnedMs = now
 		rt.easteu21SpawnKerberos(event.Division, layer)
-		rt.easteu21Push(layer, easteu21SymBossShout)
 		return
 	}
-	if layer.battleMs == 0 {
-		if now-layer.spawnedMs >= easteu21ActivateDelayMs {
-			layer.battleMs = now
+	if !layer.shouted {
+		if now-layer.spawnedMs >= easteu21ChallengeDelayMs {
+			// The battle clock is anchored at the challenge itself,
+			// not at the tick that noticed it.
+			layer.shouted = true
+			layer.battleMs = layer.spawnedMs + easteu21ChallengeDelayMs
+			rt.easteu21Push(layer, easteu21SymBossShout)
+		}
+		return
+	}
+	if !layer.battleBegun {
+		if now-layer.battleMs >= easteu21ActivateDelayMs {
+			layer.battleBegun = true
 			rt.easteu21Push(layer, easteu21SymBattleBegun)
 		}
 		return
