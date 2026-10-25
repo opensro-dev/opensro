@@ -57,6 +57,10 @@ type SessionRow struct {
 	Code             string  `json:"code"`
 	Estimated        bool    `json:"estimated"`
 	ConnectedSeconds float64 `json:"connectedSeconds"`
+	// How the session connected (#1449): the latest attachment's
+	// transport and the fallback reason the client reported for it.
+	Transport string `json:"transport"`
+	Fallback  string `json:"fallback"`
 }
 
 /*
@@ -288,7 +292,7 @@ sessions
 */
 func (j *Journal) sessions(f Filter) ([]SessionRow, error) {
 	rows, err := j.db.Query(`SELECT s.id,s.account,s.character,s.shard,s.started,s.seen,s.ended,s.attached,s.category,s.code,s.estimated,
- COALESCE((SELECT SUM(finish-start)/1000.0 FROM intervals WHERE session=s.id),0)
+ COALESCE((SELECT SUM(finish-start)/1000.0 FROM intervals WHERE session=s.id),0), s.transport, s.fallback
  FROM sessions s WHERE (?='' OR account=? COLLATE NOCASE) AND (?='' OR character=? COLLATE NOCASE)
  AND (?='' OR id=?) ORDER BY started DESC LIMIT 100`, f.Account, f.Account, f.Character, f.Character, f.Session, f.Session)
 	if err != nil {
@@ -298,7 +302,7 @@ func (j *Journal) sessions(f Filter) ([]SessionRow, error) {
 	result := []SessionRow{}
 	for rows.Next() {
 		var row SessionRow
-		if err := rows.Scan(&row.ID, &row.Account, &row.Character, &row.Shard, &row.Started, &row.Seen, &row.Ended, &row.Attached, &row.Category, &row.Code, &row.Estimated, &row.ConnectedSeconds); err != nil {
+		if err := rows.Scan(&row.ID, &row.Account, &row.Character, &row.Shard, &row.Started, &row.Seen, &row.Ended, &row.Attached, &row.Category, &row.Code, &row.Estimated, &row.ConnectedSeconds, &row.Transport, &row.Fallback); err != nil {
 			return nil, err
 		}
 		result = append(result, row)
