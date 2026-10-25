@@ -140,30 +140,64 @@ The name this client's own lines arrive under: the job alias while the
 entry's suit is a job suit, the character name otherwise - the same rule
 the entry alias board applies (8675F0: entry suit classify + jobAlias).
 The native broadcast handler (753760) compares a frame's sender name
-with the local player's display name (+0x804, the alias while dressed)
-to recognise its own line; the server stamps that same alias into the
-broadcast, so a suited player's copy only compares equal against it.
+with the local player's live display name (the wstring at +0x108, the
+alias while dressed; compared at 753BF4 and 753D7B, the global case
+through its accessor at 753CA4) to recognise its own line; the server
+stamps that same alias into the broadcast, so a suited player's copy
+only compares equal against it.
 ================
 */
 function ownDisplayName( value: unknown, name: string ): string {
 	const b = value as {
-		localPlayerEntry?: { jobAlias?: unknown; };
 		equipItems?: readonly { slot: number; refObjId: number; }[];
 		refItemSnapshot?: readonly { refObjId: number; typeFlags: number; }[];
 	};
-	const alias = typeof b.localPlayerEntry?.jobAlias === "string" ? b.localPlayerEntry.jobAlias : "";
-	if ( !name || !alias ) return name;
 	const flags = new Map<number, number>();
 	for ( const row of b.refItemSnapshot ?? [] ) {
 		if ( Number.isInteger( row?.refObjId ) && Number.isInteger( row?.typeFlags ) ) {
 			flags.set( row.refObjId, row.typeFlags );
 		}
 	}
-	const job = partyActiveJob( (b.equipItems ?? []).map( row => ({
-		slot: row.slot,
-		typeFlags: flags.get( row.refObjId ) ?? 0
-	}) ) );
-	return job !== NO_JOB_CLASS ? alias : name;
+	return suitedName(
+		entryJobAlias( value ),
+		name,
+		(b.equipItems ?? []).map( row => ({
+			slot: row.slot,
+			typeFlags: flags.get( row.refObjId ) ?? 0
+		}) )
+	);
+}
+
+/*
+================
+entryJobAlias
+
+The alias the world entry recorded for this character, or "" when it
+carries none.
+================
+*/
+function entryJobAlias( value: unknown ): string {
+	const alias = (value as { localPlayerEntry?: { jobAlias?: unknown; }; }).localPlayerEntry?.jobAlias;
+	return typeof alias === "string" ? alias : "";
+}
+
+/*
+================
+suitedName
+
+The name own lines arrive under for one suit state: the job alias while
+a row set wears a job suit in the suit slot, the character name
+otherwise. The entry snapshot classifies the suit worn at entry; live
+equipment rows (equipment()) classify the suit worn now.
+================
+*/
+function suitedName(
+	alias: string,
+	name: string,
+	rows: readonly { slot: number; typeFlags: number; }[]
+): string {
+	if ( !name || !alias ) return name;
+	return partyActiveJob( rows ) !== NO_JOB_CLASS ? alias : name;
 }
 
 /*
@@ -181,6 +215,7 @@ export function createChat(
 		pending: PendingChat | null = null,
 		error: string | null = null,
 		name = "",
+		alias = "",
 		displayName = "";
 	let localBlocks: readonly string[] = [];
 	let blocked: readonly string[] = [];
@@ -240,7 +275,22 @@ bootstrap
 				error = null;
 			}
 			name = nextName;
+			alias = entryJobAlias( value );
 			displayName = ownDisplayName( value, nextName );
+		},
+		/*
+		================
+		equipment
+
+		Live equipment rows replace the entry snapshot's suit
+		classification: the server stamps a line's sender from the suit
+		worn at send time, so the name own lines are recognised by
+		follows the suit slot as it is equipped and removed mid-session,
+		the way the native client's live display name does.
+		================
+		*/
+		equipment( rows: readonly { slot: number; typeFlags: number; }[] ) {
+			displayName = suitedName( alias, name, rows );
 		},
 		/*
 ================
@@ -373,7 +423,7 @@ receive
 			if ( channel === CHAT_GLOBAL_CHANNEL && sender === displayName ) {
 				// Native receipts retain the request's channel. The beta server
 				// sends this authoritative echo first (under the display name -
-				// the alias while suited, which 753760 compares at +0x804), so
+				// the alias while suited, which 753760 compares at +0x108), so
 				// the receipt must not invent a second, differently colored line.
 				const outgoing = pending !== null && [ 1, 3 ].includes( pending.channel ) && pending.text === text;
 				if ( outgoing ) {
@@ -442,6 +492,7 @@ clear
 			pending = null;
 			error = null;
 			name = "";
+			alias = "";
 			displayName = "";
 		}
 	};
