@@ -48,7 +48,7 @@ func (rt *Runtime) ConfigureMall(dir string, authority domain.MallAuthority, ext
 	if authority == nil {
 		return fmt.Errorf("mall: missing durable currency authority")
 	}
-	catalog, err := commerce.LoadMall(dir, extra)
+	catalog, err := commerce.LoadMall(dir, extra, rt.deps.ItemReferences())
 	if err != nil {
 		return err
 	}

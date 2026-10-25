@@ -30,6 +30,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { evaluateLedgerRatchet, formatLedger, parseLedger } from "./ledgerRatchet.mjs";
 
 const rebuildRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "..", ".." );
 const baselinePath = path.join( rebuildRoot, "scripts", "checks", "world-space-baseline.txt" );
@@ -105,30 +106,20 @@ export function countWorldSpaceLiterals( text, relativePath = "" ) {
 	return count;
 }
 
+// What the shared ledger ratchet reports for this gate.
+const RATCHET_WORDS = {
+	introduce: "raw * 1920 / 0x8000 outside world-space.ts",
+	ledger: "world-space-baseline.txt",
+	updateCommand: "node scripts/checks/check_world_space.mjs --update"
+};
+
 /*
 ================
 parseBaseline
 ================
 */
 export function parseBaseline( text ) {
-	const entries = new Map();
-	for ( const raw of text.split( /\r?\n/ ) ) {
-		const line = raw.trim();
-		if ( line.length === 0 || line.startsWith( "#" ) ) {
-			continue;
-		}
-		const match = /^(\S+)\s+(\d+)$/.exec( line );
-		if ( !match ) {
-			throw new Error( `Malformed world-space-baseline.txt line: ${line}` );
-		}
-		const file = match[1];
-		const count = Number( match[2] );
-		if ( count <= 0 || entries.has( file ) ) {
-			throw new Error( `Invalid or duplicate world-space-baseline.txt entry: ${line}` );
-		}
-		entries.set( file, count );
-	}
-	return entries;
+	return parseLedger( text, "world-space-baseline.txt" );
 }
 
 /*
@@ -137,102 +128,18 @@ formatBaseline
 ================
 */
 export function formatBaseline( entries ) {
-	const sorted = [ ...entries.entries() ]
-		.filter( ( [, count] ) => count > 0 )
-		.sort( ( [a], [b] ) => (a < b ? -1 : a > b ? 1 : 0) )
-		.map( ( [file, count] ) => `${file} ${count}` );
-	return `${[ ...BASELINE_HEADER, ...sorted ].join( "\n" )}\n`;
+	return formatLedger( BASELINE_HEADER, entries );
 }
 
 /*
 ================
 evaluateWorldSpaceRatchet
 
-Compares measured per-file counts (`actual` Map<file, count>) and file
-existence (`exists` predicate) against `baseline` Map<file, count>. Returns
-`{ problems, nextBaseline, loweredCount, removedCount }`.
+The shared ledger ratchet (ledgerRatchet.mjs) with this gate's words.
 ================
 */
 export function evaluateWorldSpaceRatchet( actual, baseline, exists, update = false ) {
-	const problems = [];
-	const unlisted = [];
-	const increased = [];
-	const decreased = [];
-	const missing = [];
-	const nextBaseline = new Map();
-	let loweredCount = 0;
-	let removedCount = 0;
-
-	for ( const [file, count] of actual.entries() ) {
-		if ( count <= 0 ) {
-			continue;
-		}
-		if ( !baseline.has( file ) ) {
-			unlisted.push( `\t${file} (${count})` );
-			continue;
-		}
-		const limit = baseline.get( file );
-		if ( count > limit ) {
-			increased.push( `\t${file} (${count} > baseline ${limit})` );
-		}
-	}
-
-	for ( const [file, limit] of baseline.entries() ) {
-		if ( !exists( file ) ) {
-			if ( update ) {
-				removedCount++;
-			} else {
-				missing.push( `\t${file}` );
-			}
-			continue;
-		}
-		const count = actual.get( file ) ?? 0;
-		if ( count === 0 ) {
-			if ( update ) {
-				removedCount++;
-			} else {
-				decreased.push( `\t${file} (0 < baseline ${limit})` );
-			}
-			continue;
-		}
-		if ( count < limit ) {
-			if ( update ) {
-				nextBaseline.set( file, count );
-				loweredCount++;
-			} else {
-				decreased.push( `\t${file} (${count} < baseline ${limit})` );
-			}
-			continue;
-		}
-		nextBaseline.set( file, limit );
-	}
-
-	if ( unlisted.length > 0 ) {
-		problems.push(
-			`${unlisted.length} file(s) introduce raw * 1920 / 0x8000 outside world-space.ts:\n${unlisted.join( "\n" )}`
-		);
-	}
-	if ( increased.length > 0 ) {
-		problems.push(
-			`${increased.length} file(s) exceed their world-space-baseline.txt count:\n${increased.join( "\n" )}`
-		);
-	}
-	if ( decreased.length > 0 ) {
-		problems.push(
-			`${decreased.length} baseline entr(ies) have fewer occurrences; run \`node scripts/checks/check_world_space.mjs --update\`:\n${
-				decreased.join( "\n" )
-			}`
-		);
-	}
-	if ( missing.length > 0 ) {
-		problems.push(
-			`${missing.length} baseline entr(ies) name missing files; run \`node scripts/checks/check_world_space.mjs --update\`:\n${
-				missing.join( "\n" )
-			}`
-		);
-	}
-
-	return { problems, nextBaseline, loweredCount, removedCount };
+	return evaluateLedgerRatchet( actual, baseline, exists, update, RATCHET_WORDS );
 }
 
 /*

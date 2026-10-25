@@ -18,6 +18,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { readLocalizedTextDataRowsSync } from "../../../../scripts/build/shared/textDataIo.mjs";
 import { retailTextdataRoot, serverGameDataRoot } from "../../../../scripts/build/world/paths.mjs";
+import { PORT_ITEMS } from "../../../../scripts/build/shared/portItemRows.mjs";
 import {
 	ITEM_TEXT_COMPLETIONS,
 	completeItemText,
@@ -490,8 +491,12 @@ test( "item localization is shared by published descriptions and server inventor
 	assertSameBytes( again, projected, "rebuilding must be idempotent" );
 	const before = source.toString( "utf16le" ).split( /\r\n?/ ),
 		after = projected.toString( "utf16le" ).split( /\r\n?/ );
-	// 17 retail-absent names plus the 27 pet gear names and tooltips (portItemRows.mjs).
-	assert.equal( after.length - before.length, 71, "only the absent name records are appended" );
+	// 17 retail-absent names plus every pet gear name and tooltip.
+	assert.equal(
+		after.length - before.length,
+		17 + PORT_ITEMS.length * 2,
+		"only the absent name records are appended"
+	);
 	let changed = 0;
 	for ( let i = 0; i < before.length - 1; i++ ) {
 		if ( before[i] !== after[i] ) {
@@ -527,8 +532,8 @@ test( "item localization is shared by published descriptions and server inventor
 	}
 	assert.deepEqual( assertItemNameCoverage( retailTextdataRoot, published ), {
 		activeItems: 8439,
-		// 7394 retail titles plus the 27 pet gear names (portItemRows.mjs).
-		itemTitles: 7421
+		// Retail titles plus every ordinary/sealed pet gear name.
+		itemTitles: 7394 + PORT_ITEMS.length
 	} );
 	const broken = { ...published, SN_ITEM_ETC_DETECT_01: "-" };
 	assert.throws( () => assertItemNameCoverage( retailTextdataRoot, broken ), /SN_ITEM_ETC_DETECT_01/ );

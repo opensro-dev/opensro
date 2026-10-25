@@ -185,7 +185,9 @@ export function createAppearanceLookup( sources: AppearanceSources ) {
 		// Port-only reserved summon namespace; a native pet name cannot change its model.
 		const egg = entity.kind === "cos" && entity.gid >= 0x08000000 && entity.gid < 0x0a800000 &&
 			entity.name === "Stormbrood Egg";
-		const resource = published.catalog.get( egg ? 5000001 : appearanceRef( entity ) );
+		// Port-only GM dummy levels share the published wooden Mangnyang body.
+		const dummy = entity.kind === "monster" && entity.refObjId >= 5000101 && entity.refObjId <= 5000240;
+		const resource = published.catalog.get( egg ? 5000001 : dummy ? 1933 : appearanceRef( entity ) );
 		// 8E64F0 reloads the mesh from characterInfo +0x28 (LoadVisualMeshFromBSR,
 		// keeping scale and transform); the record and its sounds stay the body's.
 		const death = resource && deathShown( entity.gid ) ? published.deathModels.get( resource.codename ) : undefined;
