@@ -539,6 +539,8 @@ that reached the worker.
 		owners.platform.presentLoading = () => {};
 		owners.platform.presentWorldCursor = () => {};
 		owners.platform.presentTelemetry = () => {};
+		// #1593: the frame keeps a world-session tab awake.
+		owners.platform.setKeepAwake = () => {};
 		owners.platform.diagnosticsActive = () => false;
 		owners.presentation.travel = () => null;
 		owners.presentation.count = () => 0;
@@ -716,6 +718,8 @@ test("a move command starts a mover prediction while the row is on, and only the
 	owners.platform.presentLoading = () => {};
 	owners.platform.presentWorldCursor = () => {};
 	owners.platform.presentTelemetry = () => {};
+	// #1593: the frame keeps a world-session tab awake.
+	owners.platform.setKeepAwake = () => {};
 	owners.platform.diagnosticsActive = () => false;
 	owners.presentation.travel = () => null;
 	owners.presentation.count = () => 0;

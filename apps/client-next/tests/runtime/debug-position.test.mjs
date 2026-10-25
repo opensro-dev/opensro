@@ -162,6 +162,23 @@ test("a server-set body visual byte survives the first /GetPos flip", () => {
 	}
 });
 
+test("/hideme and /showme write the local player's shown byte", () => {
+	const owner = localOwner();
+	try {
+		assert.equal( defined( owner.read( 7 ) ).debugHidden ?? false, false );
+		owner.debugLocalVisible( 7, false );
+		assert.equal( defined( owner.read( 7 ) ).debugHidden, true );
+		owner.debugLocalVisible( 7, false );
+		assert.equal( defined( owner.read( 7 ) ).debugHidden, true, "a repeated hide rewrote the record" );
+		owner.debugLocalVisible( 7, true );
+		assert.equal( defined( owner.read( 7 ) ).debugHidden, false );
+		owner.debugLocalVisible( 999, false );
+		assert.equal( owner.read( 999 ), undefined, "an unknown gid gained a record" );
+	} finally {
+		owner.dispose();
+	}
+});
+
 test("the worker core routes the body-visual command to the entity owner", () => {
 	const core = createWorldCore( () => {} );
 	try {
@@ -193,6 +210,40 @@ test("the worker core routes the body-visual command to the entity owner", () =>
 		const off = bodyVisualRows( second );
 		assert.equal( off.length, 1 );
 		assert.equal( off[0]?.[2], 0 );
+	} finally {
+		core.dispose();
+	}
+});
+
+test("the worker core routes the local-visible command to the entity owner", () => {
+	const core = createWorldCore( () => {} );
+	try {
+		core.bootstrap( {
+			protocolVersion: 2,
+			nativeResult: 1,
+			refObjSnapshot: [],
+			refItemSnapshot: [],
+			localPlayerEntry: {
+				modelRef: 1933,
+				startProfile: { regionId: 257, x: 1, y: 2, z: 3, angle: 0 }
+			}
+		} );
+		core.receive( { opcode: 0x32a6, payload: Buffer.from( [ 7, 0, 0, 0, 0, 0, 0, 0 ] ) }, 0 );
+		core.step( 0, false );
+		const boot = core.take();
+		if ( boot ) core.ack( boot.sequence );
+		core.command( { kind: "debug-local-visible", visible: false }, 1 );
+		core.step( 1, false );
+		const batch = core.take();
+		if ( batch ) core.ack( batch.sequence );
+		/** @type {(boolean | undefined)[]} */
+		const writes = [];
+		for ( const event of batch?.events ?? [] ) {
+			if ( event.kind === "state" && "entity" in event && event.entity.gid === 7 ) {
+				writes.push( event.entity.debugHidden );
+			}
+		}
+		assert.deepEqual( writes, [ true ], "the command never reached the entity owner" );
 	} finally {
 		core.dispose();
 	}

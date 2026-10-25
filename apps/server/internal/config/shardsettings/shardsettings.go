@@ -95,6 +95,7 @@ var Settings = []Setting{
 	// lists describe the native rule.
 	{Env: "SRO_PHARAOH_TOMB_GEAR_RATE", NomadVar: "pharaoh_tomb_gear_rate", Default: "1"},
 	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "50", Validation: ValueBetaSilk},
+	{Env: "SRO_BETA_SILK_ACTIVE_ONLY", NomadVar: "beta_silk_active_only", Default: "off", Validation: ValueSwitch},
 	// Grab and growth pets at four fifths of their run speed (#320): never
 	// deployed, so the deployment default stays native.
 	{Env: "SRO_PET_PACING", NomadVar: "pet_pacing", Default: "off"},
