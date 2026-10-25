@@ -626,6 +626,24 @@ function wtHarness( t, fetchDoc = null ) {
 	return transports;
 }
 
+test("with the Experimental row off, an available WebTransport is never touched", async t => {
+	// Port-only, default off (#1448): the flag-off connect is today's socket
+	// path even where the browser offers WebTransport - no cert-hash fetch,
+	// no session, the hello on the socket.
+	t.mock.timers.enable( { apis: [ "setTimeout" ] } );
+	const sockets = socketHarness( t ), transports = wtHarness( t ), failures = [];
+	const network = createNetwork( e => failures.push( e ) );
+	network.connect( "wss://localhost/transport/ws", "abc" );
+	await flush();
+	assert.equal( transports.length, 0, "no WebTransport session with the row off" );
+	assert.equal( globalThis.fetch.mock.callCount(), 0, "no cert-hash fetch with the row off" );
+	assert.equal( sockets.length, 1 );
+	sockets[0].onopen();
+	assert.deepEqual( [ ...sockets[0].sent[0] ], [ 1, 0, 2, 0, 3, 0, 97, 98, 99 ] );
+	assert.deepEqual( failures, [] );
+	network.dispose();
+});
+
 test("webtransport carries the handshake and frames on its control stream when enabled", async t => {
 	// The connect deadline is a real timer and this path never resolves
 	// it: freeze the clock so a loaded machine cannot fire it mid-test
