@@ -224,6 +224,40 @@ test("the GM console sends /Pos as one move and /GetPos as the body-visual flip"
 	}
 });
 
+test("the GM console runs /hideme, /showme, /uioff and /uion", () => {
+	const { f, sent, type, now } = consoleFixture();
+	try {
+		type( "/hideme" );
+		assert.deepEqual( sent, [ { kind: "debug-local-visible", visible: false } ] );
+		type( "/showme" );
+		assert.deepEqual( sent[1], { kind: "debug-local-visible", visible: true } );
+		type( "/Debug" );
+		assert.ok( f.hasText( "DebugMsg On" ) );
+		const hudResult = f.ui.step( f.state, now() + 100 );
+		assert.ok( hudResult, "the HUD step produced nothing" );
+		const hudQuads = f.scenes.at( -1 ).quads.length,
+			hudControls = hudResult.controls.map( c => c.id );
+		assert.ok(
+			hudControls.some( id => !id.startsWith( "gm-" ) ),
+			"the fixture HUD never came up: " + hudControls.join( "," )
+		);
+		type( "/uioff" );
+		assert.equal( sent.length, 2, "a UI row reached the worker" );
+		assert.ok( f.hasText( "DebugMsg On" ), "the console hid with the UI" );
+		const offResult = f.ui.step( f.state, now() + 100 );
+		assert.ok( offResult, "the /uioff step produced nothing" );
+		assert.ok( f.scenes.at( -1 ).quads.length < hudQuads, "the HUD stayed up under /uioff" );
+		assert.ok(
+			offResult.controls.length > 0 && offResult.controls.every( c => c.id.startsWith( "gm-" ) ),
+			"controls besides the console's survived /uioff: " + offResult.controls.map( c => c.id ).join( "," )
+		);
+		type( "/uion" );
+		assert.ok( f.scenes.at( -1 ).quads.length >= hudQuads, "the HUD did not return under /uion" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("timeoff before the first clock lands the hold when the clock arrives", async () => {
 	const { sampleWorldClock } = await import(
 		"../../src/engine/foundation/gameplay/world-clock.ts"
