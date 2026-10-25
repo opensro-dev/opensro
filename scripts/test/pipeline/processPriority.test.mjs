@@ -35,9 +35,10 @@ function childPriority( env, before = FROM_NORMAL ) {
 		const { spawnSync } = await import( "node:child_process" );
 		const os = await import( "node:os" );
 		${before}
+		const start = os.getPriority();
 		yieldCpu();
 		const grandchild = spawnSync( process.execPath, [ "-e", "process.stdout.write( String( require( 'node:os' ).getPriority() ) )" ], { encoding: "utf8" } );
-		process.stdout.write( JSON.stringify( { self: os.getPriority(), child: Number( grandchild.stdout ) } ) );
+		process.stdout.write( JSON.stringify( { start, self: os.getPriority(), child: Number( grandchild.stdout ) } ) );
 	`;
 	const run = spawnSync( process.execPath, [ "--input-type=module", "-e", script ], {
 		encoding: "utf8",
@@ -54,9 +55,12 @@ test("a check lowers its priority and its children inherit it", () => {
 });
 
 test("SRO_CHECK_PRIORITY=normal leaves the inherited priority alone", () => {
-	// Opting out must leave the child where it started (normal).
-	const { self } = childPriority( { SRO_CHECK_PRIORITY: "normal" } );
-	assert.equal( self, os.constants.priority.PRIORITY_NORMAL );
+	// Opting out must leave the child where it started. That is normal
+	// unless the runner is itself below normal and refuses the raise to
+	// normal (a check run under the pipeline's own yield), so compare with
+	// the priority the child actually had before yieldCpu.
+	const { start, self } = childPriority( { SRO_CHECK_PRIORITY: "normal" } );
+	assert.equal( self, start );
 });
 
 test("a check already below normal is never raised", () => {

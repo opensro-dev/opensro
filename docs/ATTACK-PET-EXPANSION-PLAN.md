@@ -5,17 +5,18 @@ Server flag `SRO_ATTACK_PET_EXPANSION=on`; deployment default is **off** (native
 
 ## The design lives in one JSON source
 
-[`docs/pet-expansion/pet-design.json`](pet-expansion/pet-design.json) is the source
-of every number: pets, skills, rows, cooldowns, gear degrees, affixes (blues),
+[`apps/server/internal/game/companion/petdesign.json`](../apps/server/internal/game/companion/petdesign.json)
+is the one source of every number: pets, skills, rows, cooldowns, gear degrees, affixes (blues),
 procs. Edit it, then run
 
 ```
 py scripts/tools/pet_design_export.py
 ```
 
-which validates it and writes the server JSON (`companion/petdesign.json`), the
-build JSON (`scripts/build/shared/pet-design.json`) and the client module
-(`apps/client-next/src/engine/foundation/ui/pet-design-data.ts`). Only rows whose
+which validates it, rewrites it in its canonical layout and generates the client
+module (`apps/client-next/src/engine/foundation/ui/pet-design-data.ts`). The server
+embeds the file and the asset build reads it in place; `pnpm task check:pet-design`
+fails when the client module no longer matches. Only rows whose
 **Status** is `Implemented` can be learned or rolled; the engine notes column says
 what each rank does in code. Rebuild game data after changing gear rows.
 
@@ -114,7 +115,7 @@ speed, hunger, pet EXP, +one skill, thorns, steady (no knockdown), phoenix
 
 ## Source owners
 
-- `docs/pet-expansion/pet-design.json` + `scripts/tools/pet_design_export.py`: design and its exports.
+- `apps/server/internal/game/companion/petdesign.json` + `scripts/tools/pet_design_export.py`: design and its client export.
 - `apps/server/internal/game/companion/`: `design.go` (embedded design),
   `training.go` (points, rows, slots), `gear.go` (rolls, affix encoding, modifiers).
 - `apps/server/internal/domain/character.go`: persisted `PetTraining`.

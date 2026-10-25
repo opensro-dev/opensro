@@ -11,7 +11,10 @@ comment on the opcode block below carries the native provenance.
 */
 package wire
 
-import "fmt"
+import (
+	"encoding/binary"
+	"fmt"
+)
 
 // COS (internal/transport/pet) command plane, C->S opcode 0x769E.
 //
@@ -264,6 +267,9 @@ func DecodeCosMountRequest(payload []byte) (CosMountRequest, error) {
 	return out, nil
 }
 
+// cosRideStateApplyLen is the mode-1 B4B5 body: [1][rider u32][flag][mount u32].
+const cosRideStateApplyLen = 10
+
 /*
 ================
 EncodeCosRideState
@@ -276,7 +282,22 @@ func EncodeCosRideState(riderGid uint32, mounted bool, vehicleGid uint32) []byte
 	if mounted {
 		rideState = 1
 	}
-	return NewWriter(10).U8(1).U32(riderGid).U8(rideState).U32(vehicleGid).Payload()
+	return NewWriter(cosRideStateApplyLen).U8(1).U32(riderGid).U8(rideState).U32(vehicleGid).Payload()
+}
+
+/*
+================
+CosRideStateRider
+
+The rider a mode-1 B4B5 body names; false for a refusal ([2][code]) or a
+malformed body.
+================
+*/
+func CosRideStateRider(payload []byte) (uint32, bool) {
+	if len(payload) != cosRideStateApplyLen || payload[0] != 1 {
+		return 0, false
+	}
+	return binary.LittleEndian.Uint32(payload[1:]), true
 }
 
 /*

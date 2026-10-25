@@ -3,7 +3,7 @@
 
 gear.go - pet equipment: blue options, drop rolls and the modifier sum
 
-Port-only, not native (docs/pet-expansion/pet-design.json: Gear, Degrees,
+Port-only, not native (petdesign.json: Gear, Degrees,
 Affixes). One gear family is worn by every pet in three slots (collar,
 harness, charm), degrees 1-9, dropped by monsters only. Rolls follow
 Diablo 2: normal (no blue), magic (1-2) or rare (3-6), capped by degree.

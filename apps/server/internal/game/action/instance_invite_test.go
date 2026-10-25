@@ -305,6 +305,33 @@ func TestInstanceInviteSkipsBusyAndIneligibleMembers(t *testing.T) {
 
 /*
 ================
+TestInstancePartyFactsAnswerTheTalkGates
+
+The facts the quest talk gates read: a leader in a shared party, a plain
+member, an unknown name (not found), and an unshared party's leader.
+================
+*/
+func TestInstancePartyFactsAnswerTheTalkGates(t *testing.T) {
+	f := newInstanceInviteFixture(t, instanceInviteShareOptions)
+	leader := f.rt.InstancePartyFacts(testDivision, "Leader")
+	if !leader.Found || !leader.InParty || !leader.Leader || !leader.Shared || leader.Transported {
+		t.Fatalf("leader facts %+v", leader)
+	}
+	member := f.rt.InstancePartyFacts(testDivision, "MemberA")
+	if !member.Found || !member.InParty || member.Leader || !member.Shared {
+		t.Fatalf("member facts %+v", member)
+	}
+	if got := f.rt.InstancePartyFacts(testDivision, "Nobody"); got.Found {
+		t.Fatalf("an unknown name answered found: %+v", got)
+	}
+	f = newInstanceInviteFixture(t, 0)
+	if facts := f.rt.InstancePartyFacts(testDivision, "Leader"); !facts.InParty || !facts.Leader || facts.Shared {
+		t.Fatalf("unshared leader facts %+v", facts)
+	}
+}
+
+/*
+================
 TestInstanceInviteTimeoutClosesTheEmptyLayer
 ================
 */
