@@ -361,7 +361,7 @@ test("a direction walk runs on past its first leg until something stops it", () 
 
 test("a miss within 5 degrees of the worker's own direction walk starts no prediction from rest", () => {
 	const mover = createLocalMover(), view = wallView( WALL_X );
-	const world = {
+	const world = /** @type {any} */ ({
 		pose: { ...START },
 		poseAtMs: 0,
 		revision: 1,
@@ -375,7 +375,7 @@ test("a miss within 5 degrees of the worker's own direction walk starts no predi
 		navigationOwner: undefined,
 		originMs: 0,
 		view: { requestId: 1, navigation: view }
-	};
+	});
 	// The worker drops this miss (0x693519): nothing to predict.
 	assert.equal( mover.click( { seq: 1, query: missQuery( 1, .02 ), drawn: START, now: 10 }, world ), false );
 	assert.equal( mover.frame( 20, world ).kind, "idle" );
