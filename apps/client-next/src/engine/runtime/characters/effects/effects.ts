@@ -82,7 +82,7 @@ import type { EffectCatalog, EffectStage, EffectVisual, EffectTrigger } from "@/
 import { importedModelBasis, nativeRootOffset } from "@/engine/foundation/rendering/world-math";
 import { SPINE_AIM_BONE } from "@/engine/foundation/animation/spine-aim";
 import { createSpineAims } from "./spine-aims";
-import type { GameplayState } from "@/engine/contracts/gameplay";
+import type { GameplayState, Pose } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
 import { characterHeadingYaw, nativeHeadingYaw, radians, type Radians } from "@/engine/foundation/math/angles";
 import { hawkInitial, hawkEvent, hawkAnimation, stepHawk, type HawkState } from "@/engine/foundation/animation/hawk";
@@ -1098,7 +1098,11 @@ export function createCharacterEffects(
 			effectDetail = 2,
 			bloodEnabled = true,
 			// The trade bandits' published dress by RefObjID (861720).
-			banditTable: ReadonlyMap<number, { readonly imbue: number; }> = new Map()
+			banditTable: ReadonlyMap<number, { readonly imbue: number; }> = new Map(),
+			// The frame's drawn poses (presentation-poses.ts). The local
+			// player's anchors sit on the body as drawn; absent in direct
+			// test drives, which keep anchoring on gameplay.pose as before.
+			drawnPoses?: ReadonlyMap<number, Pose>
 		) {
 			/*
 			================
@@ -1182,13 +1186,28 @@ export function createCharacterEffects(
 				const castStates = new Map( gameplay?.casts.map( cast => [ cast.token, cast ] ) ?? [] );
 				const current = new Set( castStates.keys() );
 				const byGid = new Map( entities.map( entity => [ entity.gid, entity ] ) );
+				// All effect anchors sit on the body as drawn (#1442): the local
+				// player's anchor is the frame's drawn pose when the frame
+				// resolved one, else the movement owner's logical pose. The map
+				// supplies only the position: the heading stays the movement
+				// owner's, as the composed map's local row is built the same
+				// way (presentation-events' drawnLocal). The hawk's mechanical
+				// holder below is the one exception: it is game logic, not a
+				// drawn anchor, and keeps the logical pose.
+				const localLogical = gameplay?.localGid !== undefined ? gameplay.pose ?? undefined : undefined;
+				const localDrawn = gameplay?.localGid !== undefined ?
+					drawnPoses?.get( gameplay.localGid ) :
+					undefined;
+				const localPose = localDrawn && localLogical ?
+					{ ...localDrawn, angle: localLogical.angle } :
+					localDrawn ?? localLogical;
 				// The local movement owner advances gameplay.pose; the entity row
 				// retains its wire/spawn position. All effect anchors (including
 				// bone-less victims, returns and chain hops) need the live pose.
 				const local = gameplay?.localGid ? byGid.get( gameplay.localGid ) : undefined;
-				if ( local && gameplay?.pose ) {
+				if ( local && localPose ) {
 					// The movement snapshot may retain old entity metadata; only its coordinates own this anchor.
-					const pose = gameplay.pose;
+					const pose = localPose;
 					byGid.set( local.gid, {
 						...local,
 						regionId: pose.regionId,
@@ -1546,8 +1565,8 @@ export function createCharacterEffects(
 								if ( !entity ) {
 									continue;
 								}
-								const pose = entity.gid === gameplay?.localGid && gameplay.pose ?
-									gameplay.pose :
+								const pose = entity.gid === gameplay?.localGid && localPose ?
+									localPose :
 									{
 										regionId: entity.regionId,
 										x: entity.x,
@@ -1572,8 +1591,8 @@ export function createCharacterEffects(
 								// caster's model matrix (+0x98 vfunc +0x18) at that moment; the victim
 								// only places it, so the victim's heading never turns the effect.
 								const casterAngle = caster ?
-									(caster.gid === gameplay?.localGid && gameplay?.pose ?
-										gameplay.pose.angle :
+									(caster.gid === gameplay?.localGid && localPose ?
+										localPose.angle :
 										caster.heading) :
 									undefined;
 								const victimFacing = !returning && !targetLocal && !flying && stage.damageEvent &&
@@ -2983,6 +3002,9 @@ export function createCharacterEffects(
 										position: point( { ...hawk.state.position, regionId: hawk.region } )
 									};
 									hawk.region = region;
+									// The hawk steers by its mechanical holder: game
+									// logic, so it keeps the movement owner's logical
+									// pose; only its visual rides the drawn holder.
 									const mechanical = holder.gid === gameplay?.localGid && gameplay.pose ?
 										gameplay.pose :
 										holder;
@@ -3045,7 +3067,7 @@ export function createCharacterEffects(
 					budgetGaveWay += trimToEffectBudget(
 						result,
 						EFFECT_ACTOR_BUDGET - active.size,
-						gameplay?.pose ?? undefined
+						localPose
 					);
 				}
 				for ( const [gid, original] of active ) {
@@ -3428,8 +3450,8 @@ export function createCharacterEffects(
 					}
 					let pose = flightPose ?? visual.actor.pose;
 					if ( visual.attachment.kind === "entity" && entity ) {
-						const anchor = entity.gid === gameplay?.localGid && gameplay.pose ?
-							gameplay.pose :
+						const anchor = entity.gid === gameplay?.localGid && localPose ?
+							localPose :
 							{ regionId: entity.regionId, x: entity.x, y: entity.y, z: entity.z, angle: entity.heading };
 						const offset = nativeRootOffset(
 							characterHeadingYaw( anchor.angle ),
