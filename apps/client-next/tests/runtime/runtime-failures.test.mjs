@@ -799,3 +799,57 @@ test("a move command starts a mover prediction while the row is on, and only the
 		runtime.dispose();
 	}
 });
+
+test("the runtime hands the UI a field-of-view extension that reaches the world owner", t => {
+	const keys = [
+		"__runtimeOwners",
+		"__runtimeCalls",
+		"requestAnimationFrame",
+		"cancelAnimationFrame",
+		"location"
+	];
+	const previous = new Map( keys.map( key => [ key, Object.getOwnPropertyDescriptor( globalThis, key ) ] ) );
+	t.after( () => {
+		for ( const [key, value] of previous ) {
+			if ( value ) Object.defineProperty( globalThis, key, value );
+			else delete globalThis[key];
+		}
+	} );
+	const fov = [];
+	const owners = Object.fromEntries(
+		Object.keys( factories ).map( name => [ name, {
+			textureFeatures: noTextureFeatures,
+			/*
+================
+dispose
+================
+			*/
+			dispose() {}
+		} ] )
+	);
+	owners.platform.runningEntry = () => null;
+	owners.platform.setMovementDump = () => {};
+	owners.platform.setAssetDump = () => {};
+	owners.simulation.delivery = () => new Promise( () => {} );
+	owners.world.setFieldOfView = degrees => fov.push( degrees );
+	globalThis.__runtimeOwners = owners;
+	globalThis.__runtimeCalls = [];
+	globalThis.location = { search: "", origin: "http://localhost" };
+	globalThis.requestAnimationFrame = () => 1;
+	globalThis.cancelAnimationFrame = () => {};
+	const runtime = startRuntime( {}, {} );
+	try {
+		const call = (globalThis.__runtimeCalls ?? []).find( recorded => recorded.owner === "ui" );
+		const extensions = defined( call ).args.at( -1 );
+		assert.equal(
+			typeof extensions.setWorldFieldOfView,
+			"function",
+			"the UI never received the field-of-view extension"
+		);
+		extensions.setWorldFieldOfView( 90 );
+		extensions.setWorldFieldOfView( 45 );
+		assert.deepEqual( fov, [ 90, 45 ], "the degrees never reached the world owner" );
+	} finally {
+		runtime.dispose();
+	}
+});
