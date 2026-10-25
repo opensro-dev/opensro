@@ -7,8 +7,9 @@ debug-camera.test.mjs - the GM console's camera rows (/zoom, /camera, /ms, /colo
 interface's zoom byte (+0x3CF) behind the wheel's 150-unit rail,
 /camera flips the free-camera byte (+0x3CE) and reports it, /ms flips
 the cursor manager's visibility (+0x20), /colon and /coloff write the
-camera-apply byte (+0x3CC) that gates ApplyCameraOrbit (68FAD0). Each
-byte lives with its owner; the console only flips and forwards.
+camera-collision byte (+0x3CC) that gates the clamp in
+ApplyCameraOrbit (68FAD0); the follow never reads it. Each byte
+lives with its owner; the console only flips and forwards.
 Nothing reaches the server.
 
 ===========================================================================
@@ -70,7 +71,7 @@ The production HUD with the three camera sinks recorded.
 function cameraUiFixture( t, gm = true ) {
 	/** @type {any[]} */
 	const sent = [];
-	const rail = [], free = [], cursor = [], colon = [];
+	const rail = [], free = [], cursor = [], collision = [];
 	const f = uiFixture(
 		message => {
 			if ( message.kind === "gameplay" ) sent.push( message.command );
@@ -84,7 +85,7 @@ function cameraUiFixture( t, gm = true ) {
 		{
 			setCameraZoomRail: value => rail.push( value ),
 			setFreeCamera: value => free.push( value ),
-			setCameraApply: value => colon.push( value ),
+			setCameraCollision: value => collision.push( value ),
 			setCursorVisible: value => cursor.push( value )
 		}
 	);
@@ -119,7 +120,7 @@ function cameraUiFixture( t, gm = true ) {
 	draw();
 	f.ui.event( { kind: "key", code: "Backquote", shift: true } );
 	draw();
-	return { ...f, sent, rail, free, cursor, colon, typeLine };
+	return { ...f, sent, rail, free, cursor, collision, typeLine };
 }
 
 /*
@@ -144,12 +145,12 @@ test("the GM console flips the camera bytes and reports only /camera", t => {
 	assert.deepEqual( f.cursor, [ false ] );
 	f.typeLine( "/ms" );
 	assert.deepEqual( f.cursor, [ false, true ] );
-	// /colon and /coloff are silent, like /zoom: the apply byte flips
-	// and nothing is printed.
+	// /colon and /coloff are silent, like /zoom: the collision byte
+	// flips and nothing is printed.
 	f.typeLine( "/coloff" );
-	assert.deepEqual( f.colon, [ false ] );
+	assert.deepEqual( f.collision, [ false ] );
 	f.typeLine( "/colon" );
-	assert.deepEqual( f.colon, [ false, true ] );
+	assert.deepEqual( f.collision, [ false, true ] );
 	assert.deepEqual( f.sent, [], "a camera row reached the server" );
 });
 
@@ -168,7 +169,7 @@ test("a player without GM eligibility flips no camera byte", t => {
 	assert.deepEqual( f.rail, [] );
 	assert.deepEqual( f.free, [] );
 	assert.deepEqual( f.cursor, [] );
-	assert.deepEqual( f.colon, [] );
+	assert.deepEqual( f.collision, [] );
 	assert.deepEqual( f.sent, [] );
 });
 
@@ -194,6 +195,7 @@ fixture's shape): projection continues while assets are unavailable.
 */
 function cameraWorldFixture( t ) {
 	let camera;
+	const collisionFlags = [];
 	/** @type {import("../../src/engine/contracts/assets.ts").AssetOwner} */
 	const assets = {
 		available: () => 0,
@@ -279,6 +281,14 @@ function cameraWorldFixture( t ) {
 		},
 		/*
 		================
+		setWorldCameraCollision
+		================
+		*/
+		setWorldCameraCollision( value ) {
+			collisionFlags.push( value );
+		},
+		/*
+		================
 		setWorld
 		================
 		*/
@@ -302,7 +312,7 @@ function cameraWorldFixture( t ) {
 		assert.ok( camera );
 		return camera;
 	}
-	return { stream, draw };
+	return { stream, draw, collisionFlags };
 }
 
 /*
@@ -331,25 +341,25 @@ test("the free camera holds its last eye and target until it re-aims", t => {
 
 /*
 ================
-test("the camera-apply byte holds the last applied camera until /colon")
+test("the collision byte forwards to the renderer and the follow keeps tracking")
 ================
 */
-test("the camera-apply byte holds the last applied camera until /colon", t => {
+test("the collision byte forwards to the renderer and the follow keeps tracking", t => {
 	const f = cameraWorldFixture( t );
 	const home = { regionId: 1, x: 10, y: 0, z: 20, angle: 0 };
 	const away = { regionId: 1, x: 110, y: 5, z: 220, angle: 0 };
 	const standing = f.draw( home );
 	assert.deepEqual( standing.target, [ 10, 0, 20 ] );
-	f.stream.setCameraApply( false );
-	// 68FAD0 applies nothing while +0x3CC is clear: walking away moves
-	// neither the eye nor the target.
-	const frozen = f.draw( away );
-	assert.deepEqual( frozen.eye, standing.eye );
-	assert.deepEqual( frozen.target, standing.target );
-	assert.deepEqual( frozen.follow, standing.follow );
-	// Setting the byte again resumes the apply onto the tracked orbit:
-	// the next step follows the player again.
-	f.stream.setCameraApply( true );
-	const resumed = f.draw( away );
-	assert.deepEqual( resumed.target, [ 110, 5, 220 ] );
+	f.stream.setCameraCollision( false );
+	assert.deepEqual( f.collisionFlags, [ false ] );
+	// 68F830 never reads +0x3CC: walking away still moves the target.
+	// Only the renderer's clamp is off (the follow-camera tests pin
+	// its requested-distance arm against a wall).
+	const moved = f.draw( away );
+	assert.deepEqual( moved.target, [ 110, 5, 220 ] );
+	assert.notDeepEqual( moved.eye, standing.eye );
+	f.stream.setCameraCollision( true );
+	assert.deepEqual( f.collisionFlags, [ false, true ] );
+	const still = f.draw( away );
+	assert.deepEqual( still.target, [ 110, 5, 220 ] );
 });

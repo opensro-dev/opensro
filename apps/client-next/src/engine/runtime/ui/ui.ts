@@ -960,7 +960,7 @@ export interface UiExtensions {
 	setWorldFieldOfView?: ( degrees: number ) => void;
 	setCameraZoomRail?: ( capped: boolean ) => void;
 	setFreeCamera?: ( free: boolean ) => void;
-	setCameraApply?: ( apply: boolean ) => void;
+	setCameraCollision?: ( collision: boolean ) => void;
 	setCursorVisible?: ( visible: boolean ) => void;
 	saveExperimental?: ( value: ExperimentalOptions ) => void;
 	saveWindowPositions?: ( value: WindowPositions ) => void;
@@ -1008,7 +1008,6 @@ export function createUi(
 	// (+0x20). Each owner applies its own through the extensions.
 	let debugZoomRail = true;
 	let debugFreeCamera = false;
-	let debugColon = true;
 	let debugCursorVisible = true;
 	// The mission window's visible flag (CIFWnd +0x6D, written through
 	// CIFWnd_SetVisibleFlag 9FCD70 by 690C40 cases 115/116): while it is
@@ -2803,18 +2802,16 @@ export function createUi(
 				debugUiVisible = true;
 				break;
 			case DEBUG_COMMAND_COLON:
-				// Case 0x76 writes +0x3CC back to 1: the orbit apply
-				// resumes onto the tracked orbit (68FAD0). The native
+				// Case 0x76 writes +0x3CC back to 1: the clamp casts
+				// the eye-to-target segment again (68FAD0). The native
 				// prints nothing.
-				debugColon = true;
-				extensions.setCameraApply?.( true );
+				extensions.setCameraCollision?.( true );
 				break;
 			case DEBUG_COMMAND_COLON_OFF:
-				// Case 0x77 writes +0x3CC to 0: the camera keeps its
-				// last eye and target, however the orbit is dragged.
-				// The native prints nothing.
-				debugColon = false;
-				extensions.setCameraApply?.( false );
+				// Case 0x77 writes +0x3CC to 0: the clamp takes its
+				// no-hit arm and the camera keeps the requested
+				// distance; the follow still tracks. Prints nothing.
+				extensions.setCameraCollision?.( false );
 				break;
 			case DEBUG_COMMAND_CURSOR:
 				// Case 0x1E: SetVisible(![cursor+0x20]) - the pointer shows
