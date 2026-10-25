@@ -92,7 +92,9 @@ test("only IsNPC types and guard types are CICNPC kinds", () => {
 	// IsNPC tests bit 1; the guard test does not.
 	assert.equal( isNpcClass( NPC_TID & ~2 ), false );
 	assert.equal( isNpcClass( GUARD_TID | 2 ), true );
-	for ( const tid of [ MONSTER_TID, COS_TID, PLAYER_TID, 0x2c6, 0 ] ) assert.equal( isNpcClass( tid ), false, String( tid ) );
+	for ( const tid of [ MONSTER_TID, COS_TID, PLAYER_TID, 0x2c6, 0 ] ) {
+		assert.equal( isNpcClass( tid ), false, String( tid ) );
+	}
 });
 
 test("the refusal is strictly below 20 units, in 3D", () => {
