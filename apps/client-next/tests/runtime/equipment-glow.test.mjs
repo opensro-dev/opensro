@@ -193,6 +193,93 @@ test("real assembly applies both handles, owns clocks, replaces enhancement and 
 	assert.ok( released >= 10 );
 	owner.dispose( gpu, imageOwner );
 });
+test("the assembly's enhanced flag reaches the glow selection", () => {
+	// equipment-appearance.ts puts the Experimental row on the part as
+	// equipment.enhanced; characters.ts forwards it into the selection.
+	// The foundation seam (selectEquipmentGlow) is pinned above; this
+	// observes the flag arriving (a forced-off read at the assembly site
+	// leaves every foundation test green and this one red).
+	const root = { name: "root", parent: -1, translation: [ 0, 0, 0 ], rotation: [ 0, 0, 0, 1 ], scale: [ 1, 1, 1 ] },
+		primitive = name => ({
+			name,
+			node: 0,
+			joints: [ 0 ],
+			inverseBind: identity(),
+			image: -1,
+			environmentImage: 1,
+			geometry: {
+				positions: Float32Array.of( 0, 0, 0, 1, 0, 0, 0, 1, 0 ),
+				indices: Uint32Array.of( 0, 1, 2 ),
+				transform: identity(),
+				material: { color: [ 1, 1, 1, 1 ], environmentReflection: true }
+			}
+		});
+	const owner = createCharacters(), images = [ 0 ].map( id => ({ id, width: 1, height: 1, close() {} }) );
+	owner.model( "body", {
+		nodes: [ root ],
+		images: [],
+		clips: [ { name: "stand", duration: 1, channels: [] } ],
+		primitives: []
+	}, [] );
+	owner.model( "weapon", {
+		nodes: [ root ],
+		images: images.map( ( { width, height } ) => ({ width, height }) ),
+		clips: [],
+		primitives: [ primitive( "part:WA" ) ],
+		equipmentGlows: {
+			1: [
+				{ ...row, threshold: 5, gain: 1, enhanced: false },
+				{ ...row, threshold: 5, gain: 2, enhanced: true },
+				{ ...row, threshold: 7, gain: 3, enhanced: true }
+			]
+		}
+	}, images );
+	const arm = ( id, equipment ) =>
+		owner.assembly( id, "body", [ {
+			model: "weapon",
+			parts: [ "WA" ],
+			covers: [],
+			equipment
+		} ] );
+	arm( "on8", { refObjId: 1, plus: 8, enhanced: true } );
+	arm( "on6", { refObjId: 1, plus: 6, enhanced: true } );
+	arm( "off8", { refObjId: 1, plus: 8 } );
+	arm( "flag8", { refObjId: 1, plus: 8, enhanced: false } );
+	const gpu = {
+		upload( data, image, offsets, secondary ) {
+			return { secondary, data };
+		},
+		release() {},
+		updateInstances: d => d,
+		updateBones() {},
+		updateMaterialColors() {},
+		updateTextureTransform() {},
+		updateEquipmentGlow( d, color, uv, gain, alpha, enabled ) {
+			d.glow = { gain, enabled };
+		}
+	};
+	const imageOwner = { upload: image => image, release() {} };
+	const gain = model => {
+		owner.actors( [ {
+			gid: 1,
+			modifierId: 1,
+			model,
+			pose: { regionId: 257, x: 0, y: 0, z: 0, yaw: 0 },
+			scale: 1,
+			clip: "stand",
+			time: 0,
+			loop: true
+		} ] );
+		const draws = owner.prepare( gpu, imageOwner, 257, undefined, false, 0 );
+		assert.equal( draws.length, 1 );
+		return draws[0].glow?.gain;
+	};
+	assert.equal( gain( "on8" ), 3, "the enhanced tiers decide at +8 with the row on" );
+	assert.equal( gain( "on6" ), 2, "the enhanced row wins its threshold at +6" );
+	assert.equal( gain( "off8" ), 1, "no flag: the native tiers decide" );
+	assert.equal( gain( "flag8" ), 1, "flag off: the native tiers decide" );
+	owner.dispose( gpu, imageOwner );
+});
 test("a missing attachment bone stays on the owner root and only a missing owner is omitted", () => {
 	const root = { name: "root", parent: -1, translation: [ 0, 0, 0 ], rotation: [ 0, 0, 0, 1 ], scale: [ 1, 1, 1 ] },
 		hand = { name: "Bip01", parent: 0, translation: [ 4, 0, 0 ], rotation: [ 0, 0, 0, 1 ], scale: [ 1, 1, 1 ] },

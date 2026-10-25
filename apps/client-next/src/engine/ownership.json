@@ -194,6 +194,7 @@
   "internals": {
     "src/engine/runtime/characters/resources/procedural-effects.ts": "src/engine/runtime/characters/resources/resources.ts",
     "src/engine/runtime/platform/telemetry.ts": "src/engine/runtime/platform/platform.ts",
+    "src/engine/runtime/platform/keep-awake.ts": "src/engine/runtime/platform/platform.ts",
     "src/engine/runtime/platform/ui/credential-hints.ts": "src/engine/runtime/platform/ui/ui.ts",
     "src/engine/runtime/platform/ui/drag-shield.ts": "src/engine/runtime/platform/ui/ui.ts",
     "src/engine/runtime/platform/ui/touch-inspect.ts": "src/engine/runtime/platform/ui/ui.ts",
