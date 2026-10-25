@@ -209,6 +209,11 @@ export interface ExperimentalOptions {
 	// the world map and the minimap, not only the one quest the journal
 	// tracks. Off unless turned on; off is the native tracked quest only.
 	readonly questTrackerMarkers: boolean;
+	// Port-only, not native (#1640): the player's own degree-9-or-higher
+	// Seal of Sun drops get a gold name plate and a soft ground ring, so
+	// the top seal reads differently the moment it lands. Other players'
+	// drops are never marked. Off unless turned on.
+	readonly sunDropMarker: boolean;
 }
 
 /*
@@ -352,7 +357,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		petFilterOther: record.petFilterOther !== false,
 		touchInspect: record.touchInspect !== false,
 		expandedWorldMap: enabled( "expandedWorldMap" ),
-		questTrackerMarkers: enabled( "questTrackerMarkers" )
+		questTrackerMarkers: enabled( "questTrackerMarkers" ),
+		sunDropMarker: enabled( "sunDropMarker" )
 	};
 }
 
@@ -444,6 +450,7 @@ export interface ExperimentalGameplay {
 	readonly webTransport: boolean;
 	readonly homingProjectiles?: boolean;
 	readonly smartPetPickup?: boolean;
+	readonly sunDropMarker?: boolean;
 	// The pickup pet filter's kind mask (ground-item's PICKUP_KIND bits);
 	// undefined while the filter row is off, which is the native loop.
 	readonly petPickupKinds?: number;
@@ -463,6 +470,7 @@ export function experimentalGameplay( options: ExperimentalOptions ): Experiment
 		plusSevenNotices: options.plusSevenNotices,
 		homingProjectiles: options.homingProjectiles,
 		smartPetPickup: options.smartPetPickup,
+		sunDropMarker: options.sunDropMarker,
 		petPickupKinds: options.petPickupFilter ?
 			(options.petFilterGold ? PICKUP_KIND_GOLD : 0) |
 			(options.petFilterEquipment ? PICKUP_KIND_EQUIPMENT : 0) |

@@ -154,4 +154,5 @@ func (game *gameplayPlane) wireQuestProgrammes(quests *quest.Runtime) {
 		game.items.CloseInstanceWorld(game.divisionID, lease)
 	}
 	quests.RegisterRahid6Programme()
+	quests.RegisterEasteu21Programme()
 }
