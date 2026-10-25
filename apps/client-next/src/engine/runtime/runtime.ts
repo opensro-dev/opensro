@@ -141,6 +141,10 @@ export function startRuntime(
 		// main thread, behind the Experimental "Instant own movement" row.
 		const localMover = createLocalMover();
 		let mainThreadOwnWalk = false;
+		// Simulation time zero on the frame clock, from the latest snapshot:
+		// the mover places a worker publication's pose on the frame clock with
+		// it (#1441b).
+		let simulationOriginMs: number | undefined;
 		const renderer = own(
 			createRenderer( canvas, random, audio.enqueue, diagnostics )
 		);
@@ -490,12 +494,16 @@ export function startRuntime(
 			const game = presentation.gameplay();
 			return {
 				pose: game?.pose ?? null,
+				poseAtMs: game?.poseAtMs,
+				revision: game?.movementRevision ?? 0,
 				moving: game?.moving ?? false,
+				goal: game?.movementGoal,
 				walkPredictable: game?.walkPredictable === true,
 				speed: game?.movementSpeed,
 				inputSeq: game?.movementInputSeq ?? 0,
 				navigationRequestId: game?.navigationRequestId,
 				navigationOwner: game?.navigationOwner,
+				originMs: simulationOriginMs,
 				view: navigation.view()
 			};
 		}
@@ -693,7 +701,8 @@ export function startRuntime(
 					// simulation time, and presentation needs it on the frame clock.
 					if ( snapshot.clock?.originMs ) {
 						bugReport.movementClock( snapshot.clock.originMs );
-						characters.simulationOrigin( snapshot.clock.originMs - performance.timeOrigin );
+						simulationOriginMs = snapshot.clock.originMs - performance.timeOrigin;
+						characters.simulationOrigin( simulationOriginMs );
 					}
 				}
 				const simulationError = simulation.error();
