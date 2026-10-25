@@ -17,6 +17,7 @@ import (
 	"fmt"
 
 	"opensro.online/server/internal/game/item/wire"
+	worldgeom "opensro.online/server/internal/game/world"
 )
 
 // Native agent-result codes shared by movement parsing and validation.
@@ -79,10 +80,7 @@ func NormalizeMovementRequest(m MovementRequest) MovementRequest {
 	if m.Mode < 1 {
 		m.Mode = MovementAckDestinationMode
 	}
-	low := 0.0
-	if IsDungeonRegion(m.RegionID) {
-		low = -0x8000
-	}
+	low := worldgeom.LocalCoordinateFloor(m.RegionID)
 	m.X = clampFloat(m.X, low, 0xffff)
 	m.Y = clampFloat(m.Y, -0x8000, 0x7fff)
 	m.Z = clampFloat(m.Z, low, 0xffff)

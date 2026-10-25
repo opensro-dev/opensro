@@ -181,17 +181,7 @@ to exactly themselves: ring math over the dungeon bit is meaningless.
 ==================
 */
 func RegionScopeRing(regionID uint16) []uint16 {
-	if IsDungeonRegion(regionID) {
-		return []uint16{regionID}
-	}
-	sx, sy := SectorX(regionID), SectorY(regionID)
-	ring := make([]uint16, 0, 9)
-	for dy := -1; dy <= 1; dy++ {
-		for dx := -1; dx <= 1; dx++ {
-			ring = append(ring, RegionIDForSectors(sx+dx, sy+dy))
-		}
-	}
-	return ring
+	return worldgeom.ScopeRing(regionID)
 }
 
 /*

@@ -46,10 +46,7 @@ apps/server/internal/game/world/simulation/monsterhelp.go 1
 apps/server/internal/game/world/simulation/monsterpursuit_controls.go 1
 apps/server/internal/game/world/simulation/monsterstate.go 1
 apps/server/internal/game/world/simulation/monsterstate_damage.go 2
-apps/server/internal/game/world/simulation/monsterstate_density.go 1
 apps/server/internal/game/world/simulation/monsterstuck.go 4
-apps/server/internal/game/world/simulation/monstertick.go 1
-apps/server/internal/game/world/simulation/move.go 1
 apps/server/internal/game/world/simulation/petfollow.go 1
 apps/server/internal/game/world/simulation/questmonster.go 1
 apps/server/internal/game/world/simulation/simulation.go 1
