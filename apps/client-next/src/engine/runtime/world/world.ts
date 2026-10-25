@@ -68,6 +68,11 @@ export function createWorldStream(
 	// stands, ApplyCameraOrbit (68FAD0) and UpdateCameraOrbitTarget
 	// (68F830) return early, so the world keeps the last applied camera.
 	let freeCamera = false;
+	// The interface's camera-apply byte (CGInterface +0x3CC), which the
+	// constructor sets: while it is clear, ApplyCameraOrbit (68FAD0)
+	// returns before the orbit is applied, so the world likewise keeps
+	// the last applied camera.
+	let cameraApply = true;
 	let lastCamera: import("@/engine/contracts/scene").WorldCamera | null = null;
 	let catalog: Record<string, { area?: string; source?: string; bundlePublicPath: string; }[]> | null = null;
 	/*
@@ -232,6 +237,12 @@ export function createWorldStream(
 		if ( freeCamera ) {
 			// 68FAD0 applies nothing while +0x3CE stands: the camera keeps
 			// its last eye and target however far the player walks.
+			if ( lastCamera ) renderer.setWorldCamera( lastCamera );
+			return;
+		}
+		if ( !cameraApply ) {
+			// The same 68FAD0 early-out, one check later: while +0x3CC
+			// is clear (/coloff) the orbit is tracked but never applied.
 			if ( lastCamera ) renderer.setWorldCamera( lastCamera );
 			return;
 		}
@@ -436,6 +447,19 @@ export function createWorldStream(
 		*/
 		setFreeCamera( free: boolean ) {
 			if ( !disposed ) freeCamera = free;
+		},
+		/*
+		================
+		setCameraApply
+
+		690C40 ids 118/119 (/colon, /coloff) write the interface's
+		camera-apply byte (+0x3CC): clearing it keeps the last applied
+		camera (68FAD0); setting it resumes the orbit apply onto the
+		tracked orbit, which the next step's live follow spec does.
+		================
+		*/
+		setCameraApply( apply: boolean ) {
+			if ( !disposed ) cameraApply = apply;
 		},
 		/*
 		================

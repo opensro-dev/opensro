@@ -386,6 +386,7 @@ export function startRuntime(
 					setWorldFieldOfView: degrees => world.setFieldOfView( degrees ),
 					setCameraZoomRail: capped => input.zoomRail( capped ),
 					setFreeCamera: free => world.setFreeCamera( free ),
+					setCameraApply: apply => world.setCameraApply( apply ),
 					setCursorVisible: visible => platform.setCursorVisible( visible ),
 					saveExperimental: value => platform.saveExperimentalOptions( value ),
 					saveWindowPositions: value => platform.saveWindowPositions( value )
