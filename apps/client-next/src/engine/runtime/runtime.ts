@@ -1131,6 +1131,12 @@ export function startRuntime(
 				const phase = sessionState?.phase ?? "signed-out";
 				const phaseTrigger = phase !== releasePhase && (phase === "signed-out" || phase === "disconnected");
 				releasePhase = phase;
+				// The server holds a world session only while it hears from this
+				// tab; a frozen background tab would let it expire (keep-awake.ts).
+				platform.setKeepAwake(
+					phase === "connecting" || phase === "entering-world" || phase === "world" ||
+						phase === "reconnecting"
+				);
 				const visibleAgain = platform.visibilityReturned(), onlineAgain = platform.connectionReturned();
 				if ( visibleAgain || onlineAgain ) {
 					world.retryTransient();
