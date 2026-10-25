@@ -277,3 +277,52 @@ test("through gameplay, a press the walk gate refuses sends nothing, and its rel
 		game.dispose();
 	}
 });
+
+test("an Up press during a predicted direction walk keeps that walk, drawn exactly as without it", async () => {
+	const { createLocalMover } = await import( "../../src/engine/runtime/movement/local-mover.ts" );
+	const view = {
+		available: () => true,
+		block: () => 0,
+		floor: () => undefined,
+		pick: () => null,
+		clip: ( _from, to, query ) => {
+			if ( query ) query.status = 0;
+			return to;
+		},
+		surface: pose => pose
+	};
+	const world = /** @type {any} */ ({
+		pose: { ...POSE, angle: 0 },
+		poseAtMs: 0,
+		revision: 0,
+		moving: false,
+		aim: undefined,
+		speedFactor: 1,
+		walkPredictable: true,
+		speed: 50,
+		inputSeq: 0,
+		navigationRequestId: 1,
+		navigationOwner: undefined,
+		originMs: 0,
+		view: { requestId: 1, navigation: view }
+	});
+	/*
+	================
+	walk
+
+	Up at 0, frames every 16 ms; again mid-frame at 104 ms when repeat is set
+	(0x877F30 with bFlag 0 does not resend a direction walk under way).
+	================
+	*/
+	const walk = repeat => {
+		const mover = createLocalMover(), drawn = [];
+		mover.arrow( 1, true, { ...POSE, angle: 0 }, 0, world );
+		for ( let now = 16; now <= 400; now += 16 ) {
+			if ( repeat && now === 112 ) mover.arrow( 2, true, { ...POSE, angle: 0 }, 104, world );
+			const frame = mover.frame( now, world );
+			if ( frame.kind !== "idle" ) drawn.push( [ frame.pose.x, frame.pose.z ] );
+		}
+		return drawn;
+	};
+	assert.deepEqual( walk( true ), walk( false ) );
+});
