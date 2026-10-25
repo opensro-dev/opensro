@@ -124,7 +124,14 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			PlanPath:      game.water.PlanMonsterPath,
 			PlanPathFrom:  game.water.PlanMonsterPathFrom,
 			PlanRoute: func(from, goal monster.Pose) *monster.NavigationRoute {
-				return planes.For(from.RegionID).NextWaypoint(from, goal)
+				plane, ok := planes.Between(from.RegionID, goal.RegionID)
+				if !ok {
+					// No plane owns a route across the outdoor/cave
+					// boundary: the mover waits and replans, as it
+					// does for any unresolved route.
+					return monster.UnresolvedNavigationRoute(goal, monster.NavigationRouteBlocked)
+				}
+				return plane.NextWaypoint(from, goal)
 			},
 			MessageBlockAt: game.water.MessageBlockAt,
 			Rand:           rand.Float64,

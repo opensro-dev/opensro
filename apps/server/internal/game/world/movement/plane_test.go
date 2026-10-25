@@ -211,7 +211,8 @@ func TestCavePlaneWrapsTodaysNavigation(t *testing.T) {
 	planeParity(t, plane, rt, v, probes)
 	// NextWaypoint is the one deliberate break with the wrap (#1645):
 	// the cave answers with its region route. Around an anchor a ready
-	// route must end at the goal and every leg of it must arrive.
+	// route ends at the goal, or - when a doorway intervenes - at the
+	// next landing standing on the floor; every leg of it must arrive.
 	for _, probe := range probes {
 		from, goal := poseOf(probe[0]), poseOf(probe[1])
 		if _, ok := v.dungeonSpawnHeightAt(goal.RegionID, goal.X, goal.Y, goal.Z); !ok {
@@ -226,8 +227,13 @@ func TestCavePlaneWrapsTodaysNavigation(t *testing.T) {
 		if route.Status() != monster.NavigationRouteReady {
 			continue
 		}
-		if route.Len() == 0 || route.Point(route.Len()-1) != goal {
-			t.Fatalf("%+v -> %+v route does not end at the goal", from, goal)
+		if route.Len() == 0 {
+			t.Fatalf("%+v -> %+v route has no points", from, goal)
+		}
+		if last := route.Point(route.Len() - 1); last != goal {
+			if _, ok := v.dungeonSpawnHeightAt(last.RegionID, last.X, last.Y, last.Z); !ok {
+				t.Fatalf("%+v -> %+v route ends at %+v, neither the goal nor a floor standing", from, goal, last)
+			}
 		}
 		current := from
 		for i := 0; i < route.Len(); i++ {
