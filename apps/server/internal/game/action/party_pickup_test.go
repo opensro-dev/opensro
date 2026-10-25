@@ -8,6 +8,9 @@ party_pickup_test.go - shared loot keeps economy and receipt ownership aligned
 package action
 
 import (
+	"encoding/binary"
+	"encoding/json"
+	"slices"
 	"testing"
 	"time"
 
@@ -752,5 +755,118 @@ func TestGrantPeerCosPickupRechecksReservationUnderRecipientUpdate(t *testing.T)
 	})
 	if len(res.Broadcast) != 0 || len(peer.ActiveCOS.Container.Rows) != 0 || len(rt.Ground.All(testDivision)) != 1 {
 		t.Fatalf("grantPeerCosPickup bypassed OwnerJID recheck: res=%+v rows=%+v", res, peer.ActiveCOS.Container.Rows)
+	}
+}
+
+/*
+================
+TestSharedPickupRecipientGetsTheReferenceBeforeTheGrant
+
+#1612: when the item-share rotation awards a ground item to another member,
+that member receives the 0xB06D [1][6][slot][item] grant without ever having
+seen the drop, so it holds no reference row for the item. The browser has
+no item table, and an unknown reference in the grant ends its session
+("Unknown inventory reference"). The 0x000E reference must reach the
+recipient before the grant, not with the loot notice after it.
+================
+*/
+func TestSharedPickupRecipientGetsTheReferenceBeforeTheGrant(t *testing.T) {
+	rt, _, picker, peer, registry := sharedPickupFixture(t)
+	registry.NextLootMember(testDivision, picker.Name) // peer is next
+	peer.MissionInventory = nil
+
+	// A weapon, not a starter-seed potion: the seed is in every browser's
+	// static references, so only loot outside it needs a row.
+	pose := rt.liveSpawn(simulation.WorldKey(testDivision, picker.Name), picker.Snapshot(), rt.Now().UnixMilli())
+	drop := rt.Ground.Add(testDivision, grounditem.Item{
+		RefObjID: 11460, Codename: "ITEM_CH_SWORD_02_A_RARE", TypeFlags: wire.PackTypeFlags(3, 1, 6, 2), StackCount: 1,
+		Position: grounditem.Point{RegionID: pose.RegionID, X: float32(pose.X), Z: float32(pose.Z)}, Y: float32(pose.Y),
+	})
+	if slices.Contains(rt.StaticRefItemCodenames(), drop.Codename) {
+		t.Fatalf("%s is a static reference; the test needs loot outside it", drop.Codename)
+	}
+	res := rt.HandleTargetInteract(testDivision, picker, wire.TargetInteract{Gid: drop.Gid}.Encode())
+
+	assertRecipientReferenceLeads(t, res, peer.ID, drop.RefObjID, 6, 3)
+}
+
+/*
+================
+TestSharedPetPickupSpillGivesThePeerTheReferenceFirst
+
+#1612, pet path: CCOS_ExecuteGroundPickup spills a shared pickup into the
+rotated member's pickup pet (0xB06D [1][0x11][pet gid][slot][item]). That
+member may never have seen the drop either, so its reference row leads.
+================
+*/
+func TestSharedPetPickupSpillGivesThePeerTheReferenceFirst(t *testing.T) {
+	rt, picker, peer, pickerPetGID, heap := sharedPetFixture(t)
+	peer.MissionInventory = nil
+	for slot := int64(13); slot < 45; slot++ {
+		peer.MissionInventory = append(peer.MissionInventory, domain.InventoryRow{
+			Slot: slot, RefObjID: 11459, Codename: "ITEM_CH_SWORD_01_A_RARE",
+			TypeFlags: wire.PackTypeFlags(3, 1, 6, 2), VarianceBits: "0", StackCount: 1,
+		})
+	}
+	peerPetGID, _ := enterworld.CosObjectIDForCharacter(peer)
+	peer.ActiveCOS = &enterworld.CharacterCOS{GID: peerPetGID, RefObjID: 9, Codename: "PET", CurrentHP: 100, Summoned: true,
+		Container: &domain.COSContainer{Capacity: 1}}
+	rt.BindPetSession(testDivision, peer, 1)
+	drop := heap(grounditem.Item{RefObjID: 11460, Codename: "ITEM_CH_SWORD_02_A_RARE",
+		TypeFlags: wire.PackTypeFlags(3, 1, 6, 2), StackCount: 1})
+	if slices.Contains(rt.StaticRefItemCodenames(), drop.Codename) {
+		t.Fatalf("%s is a static reference; the test needs loot outside it", drop.Codename)
+	}
+	rt.NextPartyLootMember(testDivision, picker.Name) // peer is next
+	res := rt.HandleCosCommand(testDivision, picker,
+		wire.NewWriter(9).U32(pickerPetGID).U8(wire.CosCommandPickupTag).U32(drop.Gid).Payload())
+	assertRecipientReferenceLeads(t, res, peer.ID, drop.RefObjID, wire.MoveTypeCosPickup, 7)
+}
+
+/*
+================
+assertRecipientReferenceLeads
+
+In everything recipient receives, in delivery order, the 0xB06D [1][move]
+grant naming item (its refObjId at refAt) must follow a 0x000E reference
+row for that item.
+================
+*/
+func assertRecipientReferenceLeads(t *testing.T, res OpResult, recipient int64, item uint32, move uint8, refAt int) {
+	t.Helper()
+	var received []wire.Frame
+	for _, r := range res.Recipients {
+		if r.CharacterID == recipient {
+			received = append(received, r.Frames...)
+		}
+	}
+	referenced, granted := false, false
+	for index, frame := range received {
+		switch {
+		case frame.Opcode == opCommerceItemReferences:
+			var delta struct {
+				Items []struct {
+					ID uint32 `json:"refObjId"`
+				} `json:"items"`
+			}
+			if err := json.Unmarshal(frame.Payload, &delta); err != nil {
+				t.Fatalf("recipient frame %d: reference payload: %v", index, err)
+			}
+			for _, row := range delta.Items {
+				referenced = referenced || row.ID == item
+			}
+		case frame.Opcode == wire.OpItemMoveResponse && len(frame.Payload) >= refAt+4 &&
+			frame.Payload[0] == 1 && frame.Payload[1] == move:
+			if ref := binary.LittleEndian.Uint32(frame.Payload[refAt:]); ref != item {
+				t.Fatalf("recipient grant names item %d, want %d", ref, item)
+			}
+			if !referenced {
+				t.Fatalf("recipient frame %d is the 0xB06D grant before a 0x000E reference row for item %d: %+v", index, item, received)
+			}
+			granted = true
+		}
+	}
+	if !granted {
+		t.Fatalf("recipient got no 0xB06D [1][0x%02X] grant: %+v", move, received)
 	}
 }
