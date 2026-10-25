@@ -47,6 +47,10 @@ export interface MoverPublication {
 	// The direction walk's 500 ms drift factor (movement.ts driftWalk); 1
 	// for any other walk.
 	readonly movementSpeedFactor?: number;
+	// The arrow keys' turn under way, heading words a millisecond (Left
+	// positive; 0 when not turning): the main-thread mover keeps turning
+	// past the publication (#1574, gameplay arrow-keys.ts).
+	readonly movementTurnRate?: number;
 	// A ground click now would start a walk at once (gameplay.ts
 	// groundWalkRefusal): the main-thread mover predicts only then (#1440).
 	readonly walkPredictable?: boolean;
