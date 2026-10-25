@@ -62,6 +62,10 @@ var unlistedSettings = map[string]string{
 	"SRO_TRADE_JOB_TRADER_PERCENT_CAP":        "shown in the trade job bonus rule",
 	"SRO_TRADE_JOB_HUNTER_PERCENT_PER_TRADER": "shown in the trade job bonus rule",
 	"SRO_TRADE_JOB_HUNTER_PERCENT_CAP":        "shown in the trade job bonus rule",
+	// Deployment plumbing: how the shard's transport is served, not a
+	// rule players meet (their client is offered the same world either
+	// way).
+	"SRO_WEBTRANSPORT_PUBLIC": "operator transport serving switch, not a gameplay rule",
 }
 
 /*
@@ -74,6 +78,7 @@ so the list cannot change while the GameWorld runs.
 */
 func publicRules() publicstats.RulesResponse {
 	silkRate, _ := action.BetaSilkFromEnv()
+	silkActiveOnly, _ := action.BetaSilkActiveOnlyFromEnv()
 	stackSizes, _ := enterworld.StackSizesFromEnv()
 	alchemyRates, _ := alchemy.ReinforceRatesFromEnv()
 	alchemyMaxPlus, _ := alchemy.ReinforceMaxPlusFromEnv()
@@ -190,6 +195,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Silk is bought for the account.",
 				Now:    "Every full hour in the world earns silk, up to a cap.",
 				Why:    "Lets testers try the Item Mall; beta silk never reaches the launch shard."},
+			{Flag: action.EnvBetaSilkActiveOnly, On: silkRate > 0 && silkActiveOnly,
+				Native: "Silk is bought for the account.",
+				Now:    "The hourly silk counts only while you play: each action keeps it going for ten minutes.",
+				Why:    "A character left idle in town earned as much as one playing."},
 			{Flag: enterworld.EnvBetaStarterKit, On: enterworld.BetaStarterKitEnabled(),
 				Native: "Characters start with the retail creation items only.",
 				Now:    "Every character also holds a return scroll and a speed scroll that are never used up.",
@@ -313,6 +322,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "The Bandit Den Return Scroll counts down 5 minutes before the thief arrives.",
 				Now:    "It counts down 2 minutes 30 seconds.",
 				Why:    "Owner-approved for the beta; the original countdown returns with one setting."},
+			{Flag: action.EnvUniqueDamageRank, On: action.UniqueDamageRankFromEnv(),
+				Native: "When a unique dies, the shard is told only who killed it.",
+				Now:    "Everyone who damaged it also sees the twelve players who did the most damage, with each one's share and party place, and their own place.",
+				Why:    "So every attacker sees what their part was. Off by default; the original notice alone is the native setting."},
 			{Flag: movement.EnvClosedObjectRescue, On: movement.ClosedObjectRescueFromEnv(),
 				Native: "A character that logs in inside a tree trunk or a rock stays there and cannot walk out.",
 				Now:    "Logging in inside one moves the character to the nearest open ground.",

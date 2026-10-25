@@ -541,6 +541,12 @@ UI and quickslot commands. A skill aims at the newest selection intent
 				entities.debugBodyVisual( gameplay.localIdentity() );
 				return;
 			}
+			// /showme and /hideme write only the entity owner's shown byte;
+			// the gameplay lane never sees the command.
+			if ( command.kind === "debug-local-visible" ) {
+				entities.debugLocalVisible( gameplay.localIdentity(), command.visible );
+				return;
+			}
 			const itemType = command.kind === "item-use" ? gameplay.itemUseType( command.slot ) : undefined;
 			// The UI's snapshot target trails a fresh click by one grant round trip.
 			if ( command.kind === "skill" ) {

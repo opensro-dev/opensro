@@ -1745,6 +1745,27 @@ export function createEntities(
 		},
 		/*
 		================
+		debugLocalVisible
+
+		/showme and /hideme (690C40 cases 112/113): write the shown byte
+		(CICPlayer +0xB8) on the local player's record. The byte lives on
+		the record, not in a handler-side flag like debugBodyVisualOn:
+		the native byte is the character's own, read by its animation
+		advance (853600) and its peace-state predicate, and the record is
+		its only carrier here. A repeated write changes nothing.
+		================
+		*/
+		debugLocalVisible( gid: number, visible: boolean ) {
+			const entity = entities.get( gid );
+			if ( !entity ) return;
+			if ( (entity.debugHidden ?? false) === !visible ) return;
+			apply( {
+				kind: "state",
+				entity: Object.freeze( { ...entity, debugHidden: !visible } )
+			} );
+		},
+		/*
+		================
 		rider
 
 		The entity riding the horse `gid` (CICharactor_GetMountedHorseOrVehicle).

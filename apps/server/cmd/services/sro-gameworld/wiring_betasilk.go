@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-wiring_betasilk.go - publish earned silk inside the mall publication gate
+wiring_betasilk.go - compose the beta silk owner and publish earned silk
 
 Port-only, not native: the optional beta clock shares the request adapter's
 outer publication gate so catalog/purchase replies cannot overtake a credit.
@@ -10,7 +10,49 @@ outer publication gate so catalog/purchase replies cannot overtake a credit.
 */
 package main
 
-import "opensro.online/server/internal/game/world/simulation"
+import (
+	log "github.com/sirupsen/logrus"
+
+	"opensro.online/server/internal/data/store"
+	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/action"
+	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/world/simulation"
+)
+
+/*
+================
+composeBetaSilk
+
+SRO_BETA_SILK (port-only, not native): silk earned per in-world hour,
+credited into the account's real wallet (action/betasilk.go). Returns nil
+and the store itself as the mall authority when the rate is off.
+SRO_BETA_SILK_ACTIVE_ONLY (port-only) narrows earning to active play; off
+is the shipped rule.
+================
+*/
+func composeBetaSilk(authorityStore *store.Store, items *action.Runtime, deps *enterworld.Deps) (*action.BetaSilk, domain.MallAuthority, error) {
+	rate, err := action.BetaSilkFromEnv()
+	if err != nil {
+		return nil, nil, err
+	}
+	betaSilk := action.NewBetaSilk(authorityStore, rate)
+	if betaSilk == nil {
+		return nil, authorityStore, nil
+	}
+	activeOnly, err := action.BetaSilkActiveOnlyFromEnv()
+	if err != nil {
+		return nil, nil, err
+	}
+	betaSilk.ActiveOnly = activeOnly
+	if activeOnly {
+		log.Infof("item mall: beta silk credits active play only (%s)", action.EnvBetaSilkActiveOnly)
+	}
+	items.BetaSilkActivity = betaSilk
+	deps.EntryBetaSilk = betaSilk.Starter
+	log.Infof("item mall: beta silk ON (%s): %d silk per in-world hour", action.EnvBetaSilk, rate)
+	return betaSilk, betaSilk, nil
+}
 
 /*
 ================

@@ -27,6 +27,7 @@ func TestBetaSettingValidationKinds(t *testing.T) {
 		"SRO_BETA_PLAYER_MAP":        ValueSwitch,
 		"SRO_BETA_MASTERY":           ValueSwitch,
 		"SRO_BETA_SILK":              ValueBetaSilk,
+		"SRO_BETA_SILK_ACTIVE_ONLY":  ValueSwitch,
 		"SRO_BETA_GROWTH_BANDS":      ValueBetaGrowthBands,
 		"SRO_BETA_GROWTH":            ValueSwitch,
 		"SRO_BETA_SKILL_EXP_RATE":    ValueBetaGrowth,

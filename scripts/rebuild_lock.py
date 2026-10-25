@@ -1,7 +1,11 @@
 # ===========================================================================
 # rebuild_lock.py - shared generated asset ownership for Python publishers
 #
-# Uses the same physical-tree directory and owner protocol as rebuildLock.mjs.
+# Uses the same physical-tree directory and reader/writer protocol as
+# rebuildLock.mjs: checks read the generated tree under a shared read hold,
+# publishers hold it alone, and a waiting writer blocks new readers so a
+# stream of checks cannot starve a build. See rebuildLock.mjs for the full
+# protocol description; the on-disk shapes are identical.
 # ===========================================================================
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
+
 from sro_paths import GENERATED_ROOT
 
 
@@ -28,98 +33,372 @@ GENERATED_ASSETS_LOCK_NAME = "generated-assets"
 LOCK_NAME_ENV = "SRO_REBUILD_LOCK_NAME"
 LOCK_TOKEN_ENV = "SRO_REBUILD_LOCK_TOKEN"
 LOCK_DIR_ENV = "SRO_REBUILD_LOCK_DIR"
+LOCK_MODE_ENV = "SRO_REBUILD_LOCK_MODE"
 DEFAULT_POLL_MS = 5000
 DEFAULT_STALE_MS = 12 * 60 * 60 * 1000
 HEARTBEAT_MS = 10000
 OWNER_PUBLICATION_GRACE_MS = 60000
+# The state mutex is held for a handful of file operations, never across a
+# wait, so a live holder older than this is stopped, not slow.
+MUTEX_STALE_MS = 60000
+MUTEX_SPIN_MS = 10000
+MUTEX_SPIN_SLEEP_S = 0.015
 
 
 # ================
 # generated_assets_lock
 # ================
 @contextmanager
-def generated_assets_lock(label: str) -> Iterator[None]:
-	with rebuild_lock(GENERATED_ASSETS_LOCK_NAME, label):
+def generated_assets_lock(label: str, mode: str = "write") -> Iterator[None]:
+	with rebuild_lock(GENERATED_ASSETS_LOCK_NAME, label, mode=mode):
 		yield
 
 
 # ================
 # rebuild_lock
+#
+# Modes: "write" (the default) excludes everyone, as the lock always did;
+# "read" shares with other readers. A nested acquisition (the
+# SRO_REBUILD_LOCK_* env a lock wrapper hands its children) is a no-op,
+# except a write inside a read hold, which fails loudly: the ancestor
+# excludes nobody, so the nested writer could neither safely proceed nor
+# safely wait for its own ancestor.
 # ================
 @contextmanager
-def rebuild_lock(name: str, label: str) -> Iterator[None]:
+def rebuild_lock(name: str, label: str, mode: str = "write") -> Iterator[None]:
+	mode = normalize_mode(mode)
 	normalized_name = normalize_lock_name(name)
 	lock_dir = rebuild_lock_directory(normalized_name)
 	if (os.environ.get(LOCK_NAME_ENV) == normalized_name and os.environ.get(LOCK_TOKEN_ENV)
 			and os.environ.get(LOCK_DIR_ENV) == str(lock_dir)):
-		yield
-		return
+		held_mode = os.environ.get(LOCK_MODE_ENV, "write")
+		if held_mode == "write" or mode == "read":
+			yield
+			return
+		raise RuntimeError(
+			f"[rebuild-lock] {label}: a write lock cannot be taken inside the read lock "
+			"this process already holds; run it as its own top-level command."
+		)
 
 	poll_ms = max(250, int_from_env("SRO_REBUILD_LOCK_POLL_MS", DEFAULT_POLL_MS))
 	stale_ms = max(60000, int_from_env("SRO_REBUILD_LOCK_STALE_MS", DEFAULT_STALE_MS))
 	timeout_ms = int_from_env("SRO_REBUILD_LOCK_TIMEOUT_MS", 0)
-	owner_path = lock_dir / "owner.json"
-	token = f"{os.getpid()}-{int(time.time() * 1000)}"
-	started_at_ms = int(time.time() * 1000)
-	next_notice_at_ms = 0
-
-	lock_dir.parent.mkdir(parents=True, exist_ok=True)
-
-	while True:
-		try:
-			lock_dir.mkdir()
-			break
-		except FileExistsError:
-			owner = read_owner(owner_path)
-			if remove_stale_lock_if_needed(lock_dir, owner, stale_ms, label):
-				continue
-
-			now_ms = int(time.time() * 1000)
-			if now_ms >= next_notice_at_ms:
-				print(
-					f"[rebuild-lock] {label}: waiting for {format_owner(owner)} "
-					f"({relative_lock_path(lock_dir)}).",
-					file=sys.stderr,
-					flush=True,
-				)
-				next_notice_at_ms = now_ms + max(poll_ms, 30000)
-
-			if timeout_ms > 0 and now_ms - started_at_ms >= timeout_ms:
-				raise TimeoutError(f"[rebuild-lock] {label}: timed out waiting for {format_owner(owner)}.")
-
-			time.sleep(poll_ms / 1000)
-
-	owner = owner_record(normalized_name, label, token, lock_dir)
-	write_owner(owner_path, owner)
-	stop_heartbeat = threading.Event()
-	heartbeat = threading.Thread(
-		target=heartbeat_owner,
-		args=(owner_path, owner, stop_heartbeat),
-		daemon=True,
-	)
-	heartbeat.start()
+	hold = acquire_rebuild_lock(normalized_name, label, mode, lock_dir, poll_ms, stale_ms, timeout_ms)
 
 	os.environ[LOCK_NAME_ENV] = normalized_name
-	os.environ[LOCK_TOKEN_ENV] = token
+	os.environ[LOCK_TOKEN_ENV] = hold["token"]
 	os.environ[LOCK_DIR_ENV] = str(lock_dir)
-	print(f"[rebuild-lock] {label}: acquired {relative_lock_path(lock_dir)} (pid {os.getpid()}).", file=sys.stderr)
+	os.environ[LOCK_MODE_ENV] = mode
+	print(f"[rebuild-lock] {label}: acquired {relative_lock_path(lock_dir)} (pid {os.getpid()}, {mode}).", file=sys.stderr)
 
 	try:
 		yield
 	finally:
-		stop_heartbeat.set()
-		if os.environ.get(LOCK_TOKEN_ENV) == token:
+		hold["stop_heartbeat"].set()
+		release_rebuild_lock(hold, stale_ms)
+		if os.environ.get(LOCK_TOKEN_ENV) == hold["token"]:
 			os.environ.pop(LOCK_NAME_ENV, None)
 			os.environ.pop(LOCK_TOKEN_ENV, None)
 			os.environ.pop(LOCK_DIR_ENV, None)
-		shutil.rmtree(lock_dir, ignore_errors=True)
+			os.environ.pop(LOCK_MODE_ENV, None)
 		print(f"[rebuild-lock] {label}: released {relative_lock_path(lock_dir)}.", file=sys.stderr)
+
+
+# ================
+# acquire_rebuild_lock
+# ================
+def acquire_rebuild_lock(name: str, label: str, mode: str, lock_dir: Path,
+		poll_ms: int, stale_ms: int, timeout_ms: int) -> dict:
+	owner_path = lock_dir / "owner.json"
+	writer_path = lock_dir / "writer.json"
+	token = f"{os.getpid()}-{int(time.time() * 1000)}"
+	record = owner_record(name, label, token, lock_dir, mode)
+	my_reader_path = lock_dir / "readers" / f"{token}.json"
+	my_waiting_path = lock_dir / "waiting" / f"{token}.json"
+	started_at_ms = int(time.time() * 1000)
+	deadline_ms = started_at_ms + timeout_ms if timeout_ms > 0 else None
+	next_notice_at_ms = 0
+	waiting_published = False
+
+	lock_dir.parent.mkdir(parents=True, exist_ok=True)
+
+	while True:
+		decision: dict = {}
+
+		def decide(state: dict) -> None:
+			nonlocal waiting_published
+			if mode == "read":
+				blocker = state["writer"] or (state["waiting"][0] if state["waiting"] else None)
+				if blocker:
+					decision["blocker"] = blocker
+					return
+				write_state_file(my_reader_path, {**record, "mode": "read"})
+				write_state_file(owner_path, {**record, "mode": "read"})
+				decision["acquired"] = True
+				return
+			# A writer publishes its intent before it waits, so readers that
+			# arrive from this moment on queue behind it (writer preference).
+			if not waiting_published:
+				write_state_file(my_waiting_path, {**record, "mode": "waiting"})
+				waiting_published = True
+			blocker = state["writer"] or (state["readers"][0] if state["readers"] else None)
+			if blocker:
+				decision["blocker"] = blocker
+				return
+			my_waiting_path.unlink(missing_ok=True)
+			write_state_file(writer_path, {**record, "mode": "write"})
+			write_state_file(owner_path, {**record, "mode": "write"})
+			decision["acquired"] = True
+
+		inspected = inspect_under_mutex(lock_dir, stale_ms, deadline_ms, decide)
+		if inspected and decision.get("acquired"):
+			stop_heartbeat = threading.Event()
+			targets = [my_reader_path] if mode == "read" else [writer_path, owner_path]
+			heartbeat = threading.Thread(
+				target=heartbeat_claims,
+				args=(targets, record, mode, owner_path, token, stop_heartbeat),
+				daemon=True,
+			)
+			heartbeat.start()
+			return {"token": token, "mode": mode, "lock_dir": lock_dir, "record": record,
+					"my_reader_path": my_reader_path, "writer_path": writer_path,
+					"owner_path": owner_path, "stop_heartbeat": stop_heartbeat}
+
+		# A waiting writer keeps its intent fresh so contenders never reap it
+		# as stale while it legitimately queues behind long readers.
+		if mode == "write" and waiting_published:
+			try:
+				write_state_file(my_waiting_path, {**record, "mode": "waiting"})
+			except OSError:
+				pass
+
+		now_ms = int(time.time() * 1000)
+		if now_ms >= next_notice_at_ms:
+			detail = format_owner(decision.get("blocker")) if inspected else "lock state to settle"
+			print(
+				f"[rebuild-lock] {label}: waiting for {detail} "
+				f"({relative_lock_path(lock_dir)}).",
+				file=sys.stderr,
+				flush=True,
+			)
+			next_notice_at_ms = now_ms + max(poll_ms, 30000)
+
+		if deadline_ms is not None and now_ms >= deadline_ms:
+			if waiting_published:
+				my_waiting_path.unlink(missing_ok=True)
+			blocker = decision.get("blocker")
+			raise TimeoutError(f"[rebuild-lock] {label}: timed out waiting for {format_owner(blocker)}.")
+
+		time.sleep(poll_ms / 1000)
+
+
+# ================
+# release_rebuild_lock
+# ================
+def release_rebuild_lock(hold: dict, stale_ms: int) -> None:
+	lock_dir: Path = hold["lock_dir"]
+	# Releasing must not give up: an unreleased claim with a live pid behind
+	# it blocks writers until its heartbeat goes stale hours later. The
+	# mutex always frees, so retry until it is taken.
+	mutex_token = None
+	while mutex_token is None:
+		mutex_token = acquire_state_mutex(lock_dir, None)
+		if mutex_token is None:
+			time.sleep(MUTEX_SPIN_SLEEP_S)
+	try:
+		if hold["mode"] == "read":
+			hold["my_reader_path"].unlink(missing_ok=True)
+		else:
+			_, writer = read_state_file(hold["writer_path"])
+			if writer is not None and writer.get("token") == hold["token"]:
+				hold["writer_path"].unlink(missing_ok=True)
+			# The mirror goes before the inspection below: inspect_state
+			# treats a mirror without its claim file as a writer (the
+			# crashed-mid-release case), which would otherwise turn this
+			# live release into a phantom hold.
+			_, owner = read_state_file(hold["owner_path"])
+			if owner is not None and owner.get("token") == hold["token"]:
+				hold["owner_path"].unlink(missing_ok=True)
+		state = inspect_state(lock_dir, stale_ms)
+		if not state["writer"] and state["readers"]:
+			write_state_file(hold["owner_path"], {**state["readers"][0], "mode": "read"})
+		elif not state["writer"]:
+			hold["owner_path"].unlink(missing_ok=True)
+		if not state["writer"] and not state["readers"] and not state["waiting"]:
+			# Fully idle: remove the state directory itself, the
+			# pre-reader/writer observable. Contenders re-create it on
+			# demand; this release's own mutex claim goes with it.
+			shutil.rmtree(lock_dir, ignore_errors=True)
+			mutex_token = None
+	finally:
+		if mutex_token is not None:
+			release_state_mutex(lock_dir, mutex_token)
+
+
+# ================
+# inspect_under_mutex
+#
+# Runs decide(state) with a freshly inspected state while the transition
+# mutex is held. Returns False when the mutex stayed busy past its spin
+# budget and the caller should treat the round as a wait.
+# ================
+def inspect_under_mutex(lock_dir: Path, stale_ms: int, deadline_ms: int | None, decide) -> bool:
+	mutex_token = acquire_state_mutex(lock_dir, deadline_ms)
+	if mutex_token is None:
+		return False
+	try:
+		state = inspect_state(lock_dir, stale_ms)
+		decide(state)
+		return True
+	finally:
+		release_state_mutex(lock_dir, mutex_token)
+
+
+# ================
+# inspect_state
+#
+# Reads every claim in the state directory and reaps stale ones (unless
+# reap is off). A record is stale when its pid is gone or its heartbeat is
+# older than stale_ms; an unreadable record is stale only once it is older
+# than the publication grace, so a claim whose metadata is mid-publish is
+# never stolen. An owner.json without a mode is a legacy exclusive holder
+# and is reported as the writer.
+# ================
+def inspect_state(lock_dir: Path, stale_ms: int, reap: bool = True) -> dict:
+	lock_dir.mkdir(parents=True, exist_ok=True)
+	state: dict = {"writer": None, "readers": [], "waiting": []}
+
+	writer_path = lock_dir / "writer.json"
+	mtime_ms, writer = read_state_file(writer_path)
+	if mtime_ms is not None:
+		if is_stale_record(writer, mtime_ms, stale_ms):
+			if reap:
+				writer_path.unlink(missing_ok=True)
+		elif writer is not None:
+			state["writer"] = writer
+
+	state["readers"] = inspect_claim_dir(lock_dir / "readers", stale_ms, reap)
+	state["waiting"] = inspect_claim_dir(lock_dir / "waiting", stale_ms, reap)
+
+	owner_path = lock_dir / "owner.json"
+	mtime_ms, owner = read_state_file(owner_path)
+	if mtime_ms is not None:
+		mode = owner.get("mode") if owner else None
+		if owner is None or mode is None or (mode == "write" and not state["writer"]):
+			# A legacy holder (no mode), or a writer mirror whose claim
+			# file is gone: either way it excludes everyone while live.
+			if is_stale_record(owner, mtime_ms, stale_ms):
+				if reap:
+					owner_path.unlink(missing_ok=True)
+			elif owner is not None:
+				state["writer"] = owner
+	return state
+
+
+# ================
+# inspect_claim_dir
+# ================
+def inspect_claim_dir(directory: Path, stale_ms: int, reap: bool) -> list:
+	try:
+		names = sorted(entry.name for entry in directory.iterdir())
+	except (FileNotFoundError, NotADirectoryError):
+		return []
+	live = []
+	for name in names:
+		if not name.endswith(".json"):
+			continue
+		mtime_ms, record = read_state_file(directory / name)
+		if mtime_ms is None:
+			continue
+		if is_stale_record(record, mtime_ms, stale_ms):
+			if reap:
+				(directory / name).unlink(missing_ok=True)
+		elif record is not None:
+			live.append(record)
+	return live
+
+
+# ================
+# is_stale_record
+# ================
+def is_stale_record(record: dict | None, mtime_ms: int | None, stale_ms: int) -> bool:
+	if record is None:
+		if mtime_ms is None:
+			return True
+		return int(time.time() * 1000) - mtime_ms > OWNER_PUBLICATION_GRACE_MS
+	pid_value = record.get("pid")
+	try:
+		pid = int(pid_value) if pid_value is not None else 0
+	except (TypeError, ValueError):
+		pid = 0
+	if pid > 0 and not process_alive(pid):
+		return True
+	heartbeat_at = str(record.get("heartbeatAt") or record.get("startedAt") or "")
+	heartbeat_age_ms = int(time.time() * 1000) - parse_iso_ms(heartbeat_at)
+	return heartbeat_age_ms > stale_ms
+
+
+# ================
+# acquire_state_mutex
+#
+# os.mkdir is the claim; the owner record only publishes who holds it, for
+# stale reaping. Returns the claim token, or None when the mutex stayed
+# busy past its spin budget and the caller should treat the round as a
+# wait. deadline_ms bounds the spin by the caller's overall deadline.
+# ================
+def acquire_state_mutex(lock_dir: Path, deadline_ms: int | None) -> str | None:
+	mutex_dir = lock_dir / "mutex"
+	mutex_owner_path = mutex_dir / "owner.json"
+	token = f"{os.getpid()}-{int(time.time() * 1000)}-mutex"
+	spin_until_ms = int(time.time() * 1000) + MUTEX_SPIN_MS
+	if deadline_ms is not None:
+		spin_until_ms = min(spin_until_ms, deadline_ms)
+
+	while True:
+		lock_dir.mkdir(parents=True, exist_ok=True)
+		try:
+			mutex_dir.mkdir()
+		except FileExistsError:
+			mtime_ms, owner = read_state_file(mutex_owner_path)
+			if owner is not None and is_stale_record(owner, mtime_ms, MUTEX_STALE_MS):
+				shutil.rmtree(mutex_dir, ignore_errors=True)
+				continue
+			if owner is None and mtime_ms is None:
+				# A claim whose record is not yet published gets only a
+				# brief grace: the record follows the mkdir immediately.
+				try:
+					if int(time.time() * 1000) - int(mutex_dir.stat().st_mtime * 1000) > 5000:
+						shutil.rmtree(mutex_dir, ignore_errors=True)
+						continue
+				except FileNotFoundError:
+					continue
+			elif owner is None and is_stale_record(owner, mtime_ms, MUTEX_STALE_MS):
+				shutil.rmtree(mutex_dir, ignore_errors=True)
+				continue
+			if int(time.time() * 1000) >= spin_until_ms:
+				return None
+			time.sleep(MUTEX_SPIN_SLEEP_S)
+			continue
+
+		record = owner_record("state mutex", "state mutex", token, lock_dir, "mutex")
+		write_state_file(mutex_owner_path, record)
+		return token
+
+
+# ================
+# release_state_mutex
+# ================
+def release_state_mutex(lock_dir: Path, token: str) -> None:
+	mutex_dir = lock_dir / "mutex"
+	_, owner = read_state_file(mutex_dir / "owner.json")
+	if owner is not None and owner.get("token") == token:
+		shutil.rmtree(mutex_dir, ignore_errors=True)
 
 
 # ================
 # owner_record
 # ================
-def owner_record(name: str, label: str, token: str, lock_dir: Path) -> dict[str, object]:
+def owner_record(name: str, label: str, token: str, lock_dir: Path, mode: str) -> dict[str, object]:
 	now = iso_now()
 	return {
 		"name": name,
@@ -134,68 +413,72 @@ def owner_record(name: str, label: str, token: str, lock_dir: Path) -> dict[str,
 		"lockDir": str(lock_dir),
 		"startedAt": now,
 		"heartbeatAt": now,
+		"mode": mode,
 	}
 
 
 # ================
-# heartbeat_owner
+# heartbeat_claims
 # ================
-def heartbeat_owner(owner_path: Path, owner: dict[str, object], stop_event: threading.Event) -> None:
+def heartbeat_claims(targets: list, record: dict, mode: str, owner_path: Path, token: str,
+		stop_event: threading.Event) -> None:
 	while not stop_event.wait(HEARTBEAT_MS / 1000):
-		updated = {**owner, "heartbeatAt": iso_now()}
-		try:
-			write_owner(owner_path, updated)
-		except OSError:
-			return
+		for target in targets:
+			try:
+				write_state_file(target, {**record, "mode": mode, "heartbeatAt": iso_now()})
+			except OSError:
+				return
+		if mode == "read":
+			# Keep the owner.json summary fresh while it names this reader;
+			# another reader's summary is theirs to maintain.
+			try:
+				_, summary = read_state_file(owner_path)
+				if summary is not None and summary.get("token") == token and summary.get("mode") == "read":
+					write_state_file(owner_path, {**summary, "heartbeatAt": iso_now()})
+			except OSError:
+				return
 
 
 # ================
-# write_owner
+# write_state_file
+#
+# Atomic publish (write-temp-then-replace) so contenders never read a
+# partial record, exactly as the single-owner protocol published
+# owner.json.
 # ================
-def write_owner(owner_path: Path, owner: dict[str, object]) -> None:
-	# Publish complete metadata so contenders never read a partial heartbeat.
-	temporary = owner_path.with_name(f"{owner_path.name}.{owner['token']}.{time.time_ns()}.tmp")
+def write_state_file(file_path: Path, record: dict) -> None:
+	file_path.parent.mkdir(parents=True, exist_ok=True)
+	temporary = file_path.with_name(f"{file_path.name}.{record['token']}.{time.time_ns()}.tmp")
 	try:
-		temporary.write_text(json.dumps(owner, indent=2) + "\n", encoding="utf-8")
-		os.replace(temporary, owner_path)
+		temporary.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+		os.replace(temporary, file_path)
 	finally:
 		temporary.unlink(missing_ok=True)
+
+
+# ================
+# read_state_file
+#
+# Returns (mtime_ms, record); mtime_ms is None when the file is absent and
+# record is None when the file is absent or unparseable.
+# ================
+def read_state_file(file_path: Path) -> tuple[int | None, dict | None]:
+	try:
+		mtime_ms = int(file_path.stat().st_mtime * 1000)
+	except (FileNotFoundError, NotADirectoryError):
+		return None, None
+	try:
+		return mtime_ms, json.loads(file_path.read_text(encoding="utf-8"))
+	except (OSError, json.JSONDecodeError):
+		return mtime_ms, None
 
 
 # ================
 # read_owner
 # ================
 def read_owner(owner_path: Path) -> dict[str, object] | None:
-	try:
-		return json.loads(owner_path.read_text(encoding="utf-8"))
-	except (OSError, json.JSONDecodeError):
-		return None
-
-
-# ================
-# remove_stale_lock_if_needed
-# ================
-def remove_stale_lock_if_needed(lock_dir: Path, owner: dict[str, object] | None, stale_ms: int, label: str) -> bool:
-	# Directory creation claims the lock before owner.json is published.
-	# A fresh directory with unreadable metadata is not an abandoned owner.
-	if owner is None:
-		try:
-			if time.time() * 1000 - lock_dir.stat().st_mtime * 1000 < OWNER_PUBLICATION_GRACE_MS:
-				return False
-		except FileNotFoundError:
-			return True
-	pid = int(owner.get("pid", 0)) if owner and str(owner.get("pid", "")).isdigit() else 0
-	heartbeat_at = str(owner.get("heartbeatAt") or owner.get("startedAt") or "") if owner else ""
-	heartbeat_age_ms = int(time.time() * 1000) - parse_iso_ms(heartbeat_at)
-	alive = process_alive(pid) if pid > 0 else False
-
-	if alive and heartbeat_age_ms <= stale_ms:
-		return False
-
-	reason = f"stale heartbeat from pid {pid}" if alive else f"exited pid {pid or '(unknown)'}"
-	print(f"[rebuild-lock] {label}: removing stale lock ({reason}).", file=sys.stderr, flush=True)
-	shutil.rmtree(lock_dir, ignore_errors=True)
-	return True
+	_, record = read_state_file(owner_path)
+	return record
 
 
 # ================
@@ -249,6 +532,7 @@ def format_owner(owner: dict[str, object] | None) -> str:
 	pieces = [
 		str(owner.get("label") or owner.get("name") or "another rebuild"),
 		f"pid {owner['pid']}" if owner.get("pid") else "",
+		str(owner.get("mode") or ""),
 		f"{owner.get('user')}@{owner.get('host')}" if owner.get("user") and owner.get("host") else "",
 		f"started {owner.get('startedAt')}" if owner.get("startedAt") else "",
 	]
@@ -265,6 +549,15 @@ def normalize_lock_name(name: str) -> str:
 	for char in name.strip().lower():
 		allowed.append(char if char.isalnum() or char in "._-" else "-")
 	return "".join(allowed).strip("-") or "default"
+
+
+# ================
+# normalize_mode
+# ================
+def normalize_mode(mode: str) -> str:
+	if mode in ("read", "write"):
+		return mode
+	raise RuntimeError(f'[rebuild-lock] unknown lock mode "{mode}" (expected "read" or "write").')
 
 
 # ================

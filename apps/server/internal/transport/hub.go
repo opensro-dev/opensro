@@ -112,41 +112,6 @@ type Hub struct {
 	placementMetrics atomic.Pointer[func() map[string]uint64]
 }
 
-// AdmissionIdentity is the authenticated account/shard identity carried by a
-// HELLO admission ticket. It is intentionally smaller than gameplay identity: the
-// character still requires a separate one-use EnterWorld authorization.
-/*
-================
-AdmissionIdentity
-================
-*/
-type AdmissionIdentity struct {
-	AccountID string
-	ShardID   string
-}
-
-// HelloAuthFunc verifies and consumes one HELLO admission ticket.
-type HelloAuthFunc func(token []byte) (AdmissionIdentity, error)
-
-// SetHelloAuth installs the required HELLO admission verifier.
-/*
-================
-SetHelloAuth
-================
-*/
-func (h *Hub) SetHelloAuth(fn HelloAuthFunc) {
-	h.admission.set(fn)
-}
-
-/*
-================
-helloAuthFn
-================
-*/
-func (h *Hub) helloAuthFn() HelloAuthFunc {
-	return h.admission.current()
-}
-
 /*
 ================
 newHub
@@ -168,32 +133,6 @@ func newHub(cfg Config) *Hub {
 		handlers:        newHandlerRegistry(),
 		handshakeSlots:  make(chan struct{}, cfg.MaxPendingHandshakes),
 	}
-}
-
-// EnterWorldAuthFunc vets an OpEnterWorld bind BEFORE the game handler
-// runs. Return ok=false with a native error code to refuse: the transport
-// answers OpEnterWorldResult{OK:false, NativeErrorCode:denyCode} itself and
-// the handler never sees the frame. Installed via SetEnterWorldAuth;
-// production wires launcher-token verification here.
-type EnterWorldAuthFunc func(s *Session, ew EnterWorld) (ok bool, denyCode uint32)
-
-// SetEnterWorldAuth installs the required post-WELCOME identity gate.
-/*
-================
-SetEnterWorldAuth
-================
-*/
-func (h *Hub) SetEnterWorldAuth(fn EnterWorldAuthFunc) {
-	h.auth.set(fn)
-}
-
-/*
-================
-enterWorldAuthFn
-================
-*/
-func (h *Hub) enterWorldAuthFn() EnterWorldAuthFunc {
-	return h.auth.current()
 }
 
 // BindExclusive claims a bind key (division:character) for a session. If a
@@ -532,14 +471,13 @@ func (h *Hub) AcceptConn(conn Conn) {
 		_ = conn.Close(err.Error())
 		return
 	}
-	verify := h.helloAuthFn()
-	if verify == nil {
+	admissionIdentity, admissionCommit, verifierInstalled, verifyErr := h.verifyHelloAdmission(hello.AdmissionToken)
+	if !verifierInstalled {
 		h.metrics.helloAdmissionRefused.Add(1)
 		_ = conn.WriteFrame(Frame{Opcode: OpBye, Payload: []byte{ByeReasonUnauthorized}})
 		_ = conn.Close("HELLO admission verifier unavailable")
 		return
 	}
-	admissionIdentity, verifyErr := verify(hello.AdmissionToken)
 	if verifyErr != nil || admissionIdentity.AccountID == "" || admissionIdentity.ShardID == "" {
 		h.metrics.helloAdmissionRefused.Add(1)
 		log.WithFields(log.Fields{"kind": conn.Kind(), "remote": conn.RemoteAddr(), "error": verifyErr}).
@@ -567,9 +505,12 @@ func (h *Hub) AcceptConn(conn Conn) {
 			}
 			// No stream position: the frames this client is missing are
 			// unknowable, so the old session ends and a fresh one starts
-			// (#1466) - never a silent gap.
+			// (#1466) - never a silent gap. The admission commit is armed
+			// only on a session that attaches; a refused resume's fresh
+			// session below arms its own.
 			attachErr := errResumeGap
 			if hello.HasPosition {
+				sess.armAdmissionCommit(admissionCommit)
 				attachErr = sess.attach(conn, true, hello.LastApplied)
 			}
 			if attachErr == nil {
@@ -627,6 +568,7 @@ func (h *Hub) AcceptConn(conn Conn) {
 		return
 	}
 	h.admitAccountSession(admissionIdentity.AccountID, sess)
+	sess.armAdmissionCommit(admissionCommit)
 	if err := sess.attach(conn, false, 0); err != nil {
 		h.closeSession(sess, err)
 		_ = conn.Close(err.Error())

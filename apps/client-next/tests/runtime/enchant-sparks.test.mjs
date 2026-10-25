@@ -224,6 +224,20 @@ test("the later client's itemoptionefp rows set each item's effect, bone, scale 
 	}
 });
 
+test("a short itemoptionefp row fails with the build's error, not a TypeError", () => {
+	const root = fs.mkdtempSync( path.join( os.tmpdir(), "opensro-vsro-glow-short-" ) );
+	try {
+		// A known item, but the row ends after its codename.
+		fs.writeFileSync( path.join( root, "itemoptionefp.txt" ), "ITEM_CH_SWORD_01_A" );
+		assert.throws(
+			() => equipmentEnchantSparks( undefined, root ),
+			/Unsupported itemoptionefp row/
+		);
+	} finally {
+		fs.rmSync( root, { recursive: true, force: true } );
+	}
+});
+
 /*
 ================
 threshold validation
@@ -238,5 +252,43 @@ test("a spark row's threshold must be a whole plus from 1 to 255", () => {
 	validateEquipmentParticles( { 1: [ { ...spark, threshold: 8 } ] } );
 	for ( const threshold of [ 0, 256, 7.5, "8" ] ) {
 		assert.throws( () => validateEquipmentParticles( { 1: [ { ...spark, threshold } ] } ) );
+	}
+});
+
+/*
+================
+enhanced flag wiring
+
+Port-only, not native: the Experimental "Enhanced item glow" row state
+reaches the renderer as each armament part's equipment.enhanced, which is
+what lets characters select the enhanced glow tiers. Pin the part field
+itself, not only the spark particles it also gates (#1536).
+================
+*/
+test("the appearance assembly carries the enhanced-glow row state on armament parts", () => {
+	const assemblyOf = ( enchantSparks ) =>
+		assembleEquipmentAppearance( {
+			resource: { codename: "CHAR_CH_MAN_ADVENTURER" },
+			dress: armamentDress(),
+			equipment: [
+				{ slot: WEAPON_SLOT, refObjId: SWORD, plus: 9 },
+				{ slot: SHIELD_SLOT, refObjId: SHIELD, plus: 9 }
+			],
+			avatars: [],
+			hwanHair: false,
+			mounted: false,
+			weaponHidden: false,
+			attachmentsHidden: false,
+			fortressIndex: -1,
+			player: true,
+			ownerless: false,
+			committedWear: [],
+			freezeWear: true,
+			enchantSparks
+		} );
+	for ( const on of [ true, false ] ) {
+		const armaments = assemblyOf( on ).parts.filter( p => p.equipment );
+		assert.equal( armaments.length, 2 );
+		assert.ok( armaments.every( p => p.equipment.enhanced === on ) );
 	}
 });
