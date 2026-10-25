@@ -58,7 +58,14 @@ test("seated ground and entity clicks stand without issuing or predicting travel
 	for (
 		const command of [
 			{ kind: "move", destination: { ...pose, x: 300 } },
-			{ kind: "ground-move", query: {} },
+			{
+				kind: "ground-move",
+				query: {
+					originRegion: pose.regionId,
+					ray: { start: [ 0, 50, 0 ], delta: [ 1000, 0, 0 ] },
+					terrainDepth: null
+				}
+			},
 			{ kind: "select", gid: 8 },
 			{ kind: "attack", gid: 8 },
 			{ kind: "pickup", gid: 8 }
@@ -1636,6 +1643,87 @@ test("a ground click during the local cast walks once the cast releases", async 
 	game.receive( { opcode: 0xb505, payload: Uint8Array.of( 2, 0, 1, 0, 0, 0 ) }, 13 );
 	for ( let now = 14; now < 2000 && sent.length < 2; now += 50 ) game.step( now, local );
 	assert.equal( sent.length, 2, "the newest held click walks after the release" );
+	game.dispose();
+});
+
+test("a seated ground click stands at once and walks when the stand finishes", async () => {
+	const { createGameplay } = await load( "gameplay" ),
+		sent = [],
+		game = createGameplay( f => sent.push( f ) ),
+		seated = { ...pose, gid: 7, heading: 0, movementMode: 4, appearanceState: [ 1, 0, 0 ] },
+		standing = { ...seated, movementMode: 0 };
+	game.bootstrap( { simulationProtocolVersion: 1 } );
+	game.seed( seated );
+	game.command( { kind: "navigation", regionId: pose.regionId, bundle: bundle() }, 90 );
+	game.command( { kind: "move", destination: { ...pose, x: 300 } }, 100, undefined, seated );
+	assert.deepEqual( sent, [ { opcode: 0x7017, payload: Uint8Array.of( 4 ) } ], "the click only stands at once" );
+	game.step( 500, seated );
+	assert.equal( sent.length, 1, "no walk while still seated" );
+	assert.equal( game.take()?.pose?.x, pose.x );
+	game.step( 600, standing );
+	game.step( 1600, standing );
+	assert.ok( (game.take()?.pose?.x ?? 0) > pose.x, "the held click walks once standing finishes" );
+	game.dispose();
+});
+
+test("a fresh click after standing supersedes the seated hold", async () => {
+	const { createGameplay } = await load( "gameplay" ),
+		sent = [],
+		game = createGameplay( f => sent.push( f ) ),
+		seated = { ...pose, gid: 7, heading: 0, movementMode: 4, appearanceState: [ 1, 0, 0 ] },
+		standing = { ...seated, movementMode: 0 };
+	game.bootstrap( { simulationProtocolVersion: 1 } );
+	game.seed( seated );
+	game.command( { kind: "navigation", regionId: pose.regionId, bundle: bundle() }, 90 );
+	game.command( { kind: "move", destination: { ...pose, x: 300 } }, 100, undefined, seated );
+	assert.equal( sent.length, 1, "the seated click only stands" );
+	game.command( { kind: "move", destination: { ...pose, x: 80 } }, 200, undefined, standing );
+	game.step( 6000, standing );
+	assert.ok(
+		Math.abs( (game.take()?.pose?.x ?? 0) - 80 ) < 1,
+		"the fresh click's walk stands; the held one never fires"
+	);
+	game.dispose();
+});
+
+test("a ground click inside the ground-skill suppress window walks when the window ends", async () => {
+	const { createGameplay } = await load( "gameplay" ),
+		sent = [],
+		game = createGameplay( f => sent.push( f ) ),
+		local = { ...pose, gid: 1, heading: 0, appearanceState: [ 1, 0, 0 ] },
+		query = { originRegion: pose.regionId, ray: { start: [ 0, 100, 0 ], delta: [ 3, 0, 4 ] }, terrainDepth: null },
+		ref = {
+			id: 19636,
+			group: 768,
+			level: 1,
+			status: false,
+			effectRider: false,
+			ui: {
+				name: "Ghost Walk - Shadow",
+				trainable: true,
+				spCost: 1,
+				targetRequired: true,
+				groundTarget: true,
+				cooldownMs: 5000,
+				cooldownGroup: 59,
+				masteries: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ],
+				prerequisites: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ]
+			}
+		};
+	game.bootstrap( { simulationProtocolVersion: 1, character: { skills: [ 19636 ] }, refSkillSnapshot: [ ref ] } );
+	game.seed( local );
+	game.command( { kind: "navigation", regionId: pose.regionId, bundle: bundle() }, 90 );
+	game.command( { kind: "skill", skillId: 19636, gid: 999, query }, 100 );
+	const afterPress = sent.length;
+	assert.ok( afterPress > 0, "the ground skill press went out" );
+	game.command( { kind: "move", destination: { ...pose, x: 300 } }, 200, undefined, local );
+	assert.equal( sent.length, afterPress, "the click inside the window is held, not sent" );
+	game.step( 599, local );
+	assert.equal( sent.length, afterPress, "no walk inside the window" );
+	game.step( 601, local );
+	assert.ok( sent.length > afterPress, "the held click walks at the window's end" );
+	game.step( 1601, local );
+	assert.ok( (game.take()?.pose?.x ?? 0) > pose.x, "the walk is under way" );
 	game.dispose();
 });
 
