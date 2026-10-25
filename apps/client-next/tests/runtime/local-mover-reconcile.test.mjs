@@ -75,7 +75,7 @@ The simulation worker, reduced to its walk: a pose, a goal, a speed, and
 the publications it makes.
 ================
 */
-function createWorker( origin ) {
+function createWorker( origin, outLatencyMs = OUT_LATENCY_MS ) {
 	/** @type {{ pose: Pose, goal: Pose | undefined, speed: number, inputSeq: number, revision: number, atMs: number }} */
 	const state = {
 		pose: { ...START },
@@ -123,7 +123,7 @@ function createWorker( origin ) {
 				}
 				if ( state.atMs % PUBLISH_MS === 0 ) {
 					published.push( {
-						visibleAtMain: state.atMs + origin( state.atMs ) + OUT_LATENCY_MS,
+						visibleAtMain: state.atMs + origin( state.atMs ) + outLatencyMs,
 						world: {
 							pose: { ...state.pose, angle: HEADING },
 							poseAtMs: state.atMs,
@@ -161,11 +161,12 @@ the worker's final state.
  *   clicks: { atMs: number, to: Pose, refuse?: boolean }[],
  *   events?: { atMs: number, apply: ( state: any ) => unknown }[],
  *   origin?: ( ms: number ) => number,
- *   endMs?: number
+ *   endMs?: number,
+ *   outLatencyMs?: number
  * }} scenario
  */
-function play( { clicks, events = [], origin = () => 0, endMs = 8000 } ) {
-	const worker = createWorker( origin ), mover = createLocalMover(), view = flatView();
+function play( { clicks, events = [], origin = () => 0, endMs = 8000, outLatencyMs = OUT_LATENCY_MS } ) {
+	const worker = createWorker( origin, outLatencyMs ), mover = createLocalMover(), view = flatView();
 	const drawn = [];
 	// The scenario starts when the worker's clock reads zero; click times are
 	// main-clock times from then.
@@ -361,5 +362,57 @@ test("a skewed and drifting worker clock origin is followed", () => {
 		assert.ok( peakRatio( result.drawn ) <= CAP + 1e-6, `peak ${peakRatio( result.drawn )}` );
 		assert.ok( maxLead( result.drawn ) < 3, `strays ${maxLead( result.drawn ).toFixed( 2 )} from the worker` );
 		assert.ok( endsAt( result ) < 1e-2 );
+	}
+});
+
+test("a publication from well before a click, arriving after it, does not replay the click early", () => {
+	// A slow link: every publication arrives 150 ms after its tick, so the
+	// first ones the mover rebuilds from after the click predate it. The
+	// click must be replayed from its own time, not the publication's.
+	const result = play( { clicks: [ { atMs: 100, to: { ...START, x: 1100 } } ], outLatencyMs: 150 } );
+	assert.ok( peakRatio( result.drawn ) <= CAP + 1e-6, `peak ${peakRatio( result.drawn )}` );
+	// The body is never further along than the walk could carry it since the
+	// click: a click replayed from an older publication's time would be.
+	// Clicks are made on the first frame at or after their time.
+	const clickNow = defined( result.drawn.find( f => f.now >= 100 ) ).now;
+	for ( const frame of result.drawn ) {
+		const walked = frame.pose.x - START.x, allowed = SPEED * Math.max( 0, frame.now - clickNow ) / 1000;
+		assert.ok( walked <= allowed + .05, `${walked.toFixed( 2 )} walked by ${frame.now.toFixed( 1 )} ms` );
+	}
+	assert.ok( maxLead( result.drawn ) < 3, `strays ${maxLead( result.drawn ).toFixed( 2 )} from the worker` );
+	assert.ok( endsAt( result ) < 1e-2 );
+});
+
+test("after a slowdown the cap holds the drawn body to the new walking speed through a correction", () => {
+	const result = play( {
+		clicks: [ { atMs: 100, to: { ...START, x: 1300 } } ],
+		events: [
+			{ atMs: 640, apply: s => (s.speed = 20, s.revision++) },
+			// Then a knockback under the new speed: the residual drains at 1.04x 20 u/s.
+			{ atMs: 1600, apply: s => (s.pose = { ...s.pose, x: s.pose.x - 8 }, s.revision++) }
+		],
+		endMs: 20000
+	} );
+	assert.ok( peakRatio( result.drawn ) <= CAP + 1e-6, `peak ${peakRatio( result.drawn )}` );
+	assert.ok( endsAt( result ) < 1e-2 );
+});
+
+test("a teleport drops the clicks still in flight instead of walking them from the new place", () => {
+	// A click made just before a teleport the worker has already done: the
+	// rebuild that lands the body far away must not walk that click's leg.
+	const result = play( {
+		clicks: [ { atMs: 100, to: { ...START, x: 1200 } }, { atMs: 650, to: { ...START, x: 900 } } ],
+		events: [ {
+			atMs: 640,
+			apply: s => (s.pose = { ...s.pose, x: s.pose.x + 500 }, s.goal = undefined, s.revision++)
+		} ]
+	} );
+	const landed = result.drawn.findIndex( f => f.pose.x > 1300 );
+	assert.ok( landed > 0, "the body lands at the teleport" );
+	// From the landing frame until the worker answers the click, the body
+	// stands where it landed rather than walking the stale leg.
+	const after = result.drawn.slice( landed, landed + 3 );
+	for ( const frame of after ) {
+		assert.ok( Math.abs( frame.pose.x - after[0].pose.x ) < 1e-6, `walked ${frame.pose.x - after[0].pose.x}` );
 	}
 });

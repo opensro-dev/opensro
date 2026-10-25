@@ -329,12 +329,19 @@ export function createLocalMover() {
 			const fresh = world.poseAtMs !== walk.reconciled.atMs || world.revision !== walk.reconciled.revision;
 			if ( fresh && world.pose && world.poseAtMs !== undefined && world.originMs !== undefined ) {
 				walk.reconciled = { atMs: world.poseAtMs, revision: world.revision };
-				const rebuilt = replay( world, now, navigation );
+				let rebuilt = replay( world, now, navigation );
 				if ( !rebuilt ) return end();
-				walk.walker = rebuilt;
-				// A teleport-sized rebuild is a jump on purpose.
+				// A teleport-sized rebuild is a jump on purpose. The clicks still in
+				// flight were aimed from the old place: drop them, so the body does
+				// not walk a click's leg from the new place before the worker
+				// answers it (the worker decides what they mean there).
 				const gap = poseDelta( walk.drawn, rebuilt.pose );
 				snapped = !gap || hypot3( ...gap ) > MAX_SMOOTHED_CORRECTION;
+				if ( snapped && walk.inputs.length ) {
+					walk.inputs = [];
+					rebuilt = replay( world, now, navigation )!;
+				}
+				walk.walker = rebuilt;
 			}
 			// The drawn body heads for the prediction; the shared cap
 			// (drawn-step.ts) limits how far it moves this frame, so what a
