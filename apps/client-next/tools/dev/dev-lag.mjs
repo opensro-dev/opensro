@@ -59,20 +59,34 @@ delayedPipe
 
 Copies from into to, each chunk released delayMs (plus up to jitterMs)
 after it arrived and never before the chunk ahead of it, so the stream
-keeps its order.
+keeps its order. The source's end, close or error is passed on only once
+every chunk it sent has been released: a server that answers and closes
+at once must not lose the answer still held for the delay (a browser's
+keep-alive request then saw "socket hang up").
 ================
 */
 function delayedPipe( from, to, delayMs, jitterMs ) {
-	let releaseAt = 0;
+	let releaseAt = 0, pending = 0, closing = false;
+	const finish = () => {
+		if ( closing && pending === 0 && !to.destroyed ) to.end();
+	};
 	from.on( "data", chunk => {
 		const now = Date.now();
 		releaseAt = Math.max( releaseAt, now + delayMs + Math.random() * jitterMs );
+		pending++;
 		setTimeout( () => {
+			pending--;
 			if ( !to.destroyed ) to.write( chunk );
+			finish();
 		}, releaseAt - now );
 	} );
-	from.on( "end", () => setTimeout( () => to.end(), Math.max( 0, releaseAt - Date.now() ) ) );
-	from.on( "error", () => to.destroy() );
+	const close = () => {
+		closing = true;
+		finish();
+	};
+	from.on( "end", close );
+	from.on( "close", close );
+	from.on( "error", close );
 }
 
 /*
@@ -83,7 +97,7 @@ A loopback TCP proxy on listenPort to target that adds delayMs each way.
 Resolves once it listens.
 ================
 */
-function delayProxy( listenPort, target, delayMs, jitterMs ) {
+export function delayProxy( listenPort, target, delayMs, jitterMs ) {
 	const url = new URL( target );
 	return new Promise( ( resolve, reject ) => {
 		const server = net.createServer( client => {
@@ -92,8 +106,10 @@ function delayProxy( listenPort, target, delayMs, jitterMs ) {
 			upstream.setNoDelay( true );
 			delayedPipe( client, upstream, delayMs, jitterMs );
 			delayedPipe( upstream, client, delayMs, jitterMs );
-			upstream.on( "close", () => client.destroy() );
-			client.on( "close", () => upstream.destroy() );
+			// Each side ends the other through delayedPipe once its held
+			// chunks are out; nothing is destroyed early.
+			client.on( "error", () => {} );
+			upstream.on( "error", () => {} );
 		} );
 		server.on( "error", reject );
 		server.listen( listenPort, "127.0.0.1", () => resolve( server ) );
@@ -155,7 +171,10 @@ async function main() {
 	vite.on( "exit", code => process.exit( code ?? 0 ) );
 }
 
-main().catch( error => {
-	console.error( error );
-	process.exit( 1 );
-} );
+// Imported by its test for delayProxy alone; run, it starts the server.
+if ( process.argv[1] && path.resolve( process.argv[1] ) === fileURLToPath( import.meta.url ) ) {
+	main().catch( error => {
+		console.error( error );
+		process.exit( 1 );
+	} );
+}
