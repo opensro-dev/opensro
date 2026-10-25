@@ -353,6 +353,33 @@ test("publishCharacters publishes selected actors without a second room-culling 
 	assert.equal( byGid.get( 2 ).pickable, false );
 });
 
+test("publishCharacters drops the /hideme local player's body", () => {
+	const published = [];
+	const frame = /** @type {any} */ ({
+		local: { gid: 1, refObjId: 9, debugHidden: true },
+		gameplay: undefined,
+		next: new Map( [ 1, 2 ].map( gid => [ gid, { gid, model: "m" + gid } ] ) ),
+		seconds: 0,
+		blindHeld: false
+	});
+	const bindings = /** @type {any} */ ({
+		renderer: {
+			setCharacterAssembly() {},
+			setCharacterActors( actors ) {
+				published.push( ...actors );
+			}
+		},
+		resources: { retainWanted() {} },
+		mallPreview: { skin: () => null, step: () => [] }
+	});
+	const catalog = /** @type {any} */ ({ catalog: new Map(), dress: null, manifest: 0 });
+	publishCharacters( frame, { displayed: new Map() }, catalog, bindings );
+	const byGid = new Map( published.map( a => [ a.gid, a ] ) );
+	assert.equal( byGid.get( 1 ).opacity, 0 );
+	assert.equal( byGid.get( 1 ).pickable, false );
+	assert.equal( byGid.get( 2 ).opacity, undefined );
+});
+
 test("dungeon character PVS is on unless explicitly false", () => {
 	for ( const value of [ undefined, null, {}, { dungeonCharacterPvs: 1 }, { dungeonCharacterPvs: "true" } ] ) {
 		assert.equal( experimentalOptions( value ).dungeonCharacterPvs, true );

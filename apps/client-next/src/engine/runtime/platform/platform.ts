@@ -42,6 +42,7 @@ import { gameOptions, initialGameOptions, type GameOptions } from "@/engine/foun
 import { windowPositions, type WindowPositions } from "@/engine/foundation/ui/window-positions";
 import { createUiBridge } from "./ui/ui";
 import { createTelemetry } from "./telemetry";
+import { createKeepAwake } from "./keep-awake";
 import { createCursor } from "./ui/cursor";
 import type { UiEvent, UiSemantics } from "@/engine/contracts/ui";
 import type { RawInput, WorldClickInput } from "@/engine/contracts/input";
@@ -415,6 +416,7 @@ export function createPlatform(
 	// The login screen's project credit (index.html #title-credit), hidden
 	// everywhere else.
 	const titleCredit = document.getElementById( "title-credit" );
+	const keepAwake = createKeepAwake();
 	const telemetry = createTelemetry( {
 		enabled: experimental.developerDiagnostics,
 		onChange: enabled => saveExperimentalOptions( { ...experimental, developerDiagnostics: enabled } )
@@ -794,6 +796,7 @@ export function createPlatform(
 		setMovementDump: telemetry.setMovementDump,
 		setAssetDump: telemetry.setAssetDump,
 		diagnosticsActive: telemetry.active,
+		setKeepAwake: keepAwake.set,
 		/*
 		================
 		presentUi
@@ -996,6 +999,7 @@ export function createPlatform(
 			bridge.dispose();
 			cursor.dispose();
 			telemetry.dispose();
+			keepAwake.dispose();
 		}
 	};
 }

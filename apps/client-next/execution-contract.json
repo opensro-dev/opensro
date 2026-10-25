@@ -2239,6 +2239,13 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/runtime.ts",
+			"provider": "src/engine/runtime/platform/keep-awake.ts",
+			"functions": [
+				"set"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
 			"provider": "src/engine/runtime/renderer/device/geometry.ts",
 			"functions": [
@@ -2642,6 +2649,20 @@
 			"function": "wakeIdleWaiters",
 			"kind": "callback",
 			"reason": "Promise resolvers of background-install waiters (worker/install.ts): settled when the last foreground load releases capacity."
+		},
+		{
+			"file": "src/engine/runtime/platform/keep-awake.ts",
+			"expression": "release",
+			"function": "set",
+			"kind": "callback",
+			"reason": "Promise resolver of the held Web Lock: settling it releases the tab's keep-awake lock when the world session ends."
+		},
+		{
+			"file": "src/engine/runtime/platform/keep-awake.ts",
+			"expression": "release",
+			"function": "dispose",
+			"kind": "callback",
+			"reason": "Promise resolver of the held Web Lock: settling it releases the tab's keep-awake lock when the platform is disposed."
 		},
 		{
 			"file": "src/engine/runtime/runtime.ts",
@@ -4100,7 +4121,7 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "1c0e6e86a242621979b0b371248262f0fa89c4647409cf32152f2df5458542c4",
+			"sourceSha256": "168480a29470dc8cb808e2a4bbce39c38f75feaff84b62eed3d75a44c61fb38a",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. A hidden frame renders only while a world entry awaits game-ready, under the same barrier: native keeps updating while inactive (A0F430 OnUpdate; A11650 skips drawing) and finishes loading in CPSMission_OnUpdate (728E10). A visible window that gets no RAF for STARVED_FRAME_MS runs the same delivery-paced maintenance frames. Device disposal cancels pending mapping. Startup also hands the asset owner the device texture features once (port-only texture variants), outside the frame. The frame also derives the own-mover step at its existing call site (the local mover's next frame, or the published own cast displacement adopted as a fixed segment, #1569); the readback ordering above is unchanged by it.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

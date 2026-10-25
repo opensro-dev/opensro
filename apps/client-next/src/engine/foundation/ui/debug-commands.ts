@@ -43,7 +43,17 @@ export const DEBUG_COMMAND_TIME_MINUS = 109;
 // (+0x3CF), its free-camera byte (+0x3CE), and the cursor manager's
 // visibility byte. The camera-waypoint rows (130-134) are a later slice.
 export const DEBUG_COMMAND_ZOOM = 110;
+// 112/113 write the local player's shown byte (CICPlayer +0xB8): while
+// it stands the character's own animation advance submits its body
+// (853600); cleared, the whole local presentation is skipped. 115/116
+// write the mission window's visible flag (CIFWnd +0x6D through
+// CIFWnd_SetVisibleFlag 9FCD70): the HUD tree shows or hides, and
+// hiding releases the hovered window.
+export const DEBUG_COMMAND_SHOW_ME = 112;
+export const DEBUG_COMMAND_HIDE_ME = 113;
 export const DEBUG_COMMAND_FREE_CAMERA = 114;
+export const DEBUG_COMMAND_UI_OFF = 115;
+export const DEBUG_COMMAND_UI_ON = 116;
 export const DEBUG_COMMAND_CURSOR = 135;
 export const DEBUG_COMMAND_SET_FIELD_OF_VIEW = 500;
 

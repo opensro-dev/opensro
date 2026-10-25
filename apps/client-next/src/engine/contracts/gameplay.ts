@@ -402,6 +402,9 @@ export type GameplayCommand =
 	// /GetPos (690C40 case 3): flip the local player's body visual state
 	// (appearanceState[2], the 85EC00 byte) between 0 and 1, locally only.
 	| { readonly kind: "debug-body-visual"; }
+	// /showme and /hideme (690C40 cases 112/113): write the local player's
+	// shown byte (CICPlayer +0xB8), locally only; no server frame either way.
+	| { readonly kind: "debug-local-visible"; readonly visible: boolean; }
 	| {
 		readonly kind: "select";
 		readonly gid: number;
