@@ -79,13 +79,15 @@ const (
 	// re-grant row (AdvanceNpcQuest routes it).
 	easteu21GrantPrefix = "easteu21:"
 
-	// Encounter timing, read off the native programme: Kerberos is
-	// named at the summon, stands silent for 2,000 ms, then speaks
-	// its challenge; the battle clock runs from the challenge -
-	// 5,000 ms to the battle, 600,000 ms to the first warning with
-	// 300,000 ms steps, the boss leaves at 1,200,000 ms, and the
-	// layer's own end is 1,210,000 ms on the same clock (a 10,000 ms
-	// tail). The kill leaves a 60,000 ms grace.
+	// Encounter timing, read off the native programme: the layer
+	// stands empty for 30,000 ms after it opens, then Kerberos is
+	// named at the summon, stands silent for 2,000 ms, and speaks
+	// its challenge; the battle clock runs from the battle's
+	// opening 5,000 ms later - 600,000 ms to the first warning
+	// with 300,000 ms steps, the boss leaves at 1,200,000 ms, and
+	// the layer's own end is 1,210,000 ms on the same clock (a
+	// 10,000 ms tail). The kill leaves a 60,000 ms grace.
+	easteu21SpawnDelayMs     = 30_000
 	easteu21ChallengeDelayMs = 2_000
 	easteu21ActivateDelayMs  = 5_000
 	easteu21BattleMs         = 600_000
@@ -99,6 +101,8 @@ const (
 	// handlers show no timing arithmetic). Authored, not native:
 	// the challenge beat plus the encounter's own span plus one
 	// authored minute for slow answers and re-entries; the
+	// 30,000 ms summon phase draws on that same minute, which
+	// still leaves the deadline past the layer's own end. The
 	// deadline is only the lane's backstop, the programme ends
 	// the layer itself on the kill or the clock.
 	easteu21InviteSlackMs = 60_000
@@ -809,22 +813,28 @@ func (rt *Runtime) easteu21Update(event InstanceEvent) {
 		return
 	}
 	if layer.spawnedMs == 0 {
-		layer.spawnedMs = now
+		if now-layer.openedMs < easteu21SpawnDelayMs {
+			return
+		}
+		// Anchored at the phase's exact end, not at the tick that
+		// noticed it, like every clock below.
+		layer.spawnedMs = layer.openedMs + easteu21SpawnDelayMs
 		rt.easteu21SpawnKerberos(event.Division, layer)
 		return
 	}
 	if !layer.shouted {
 		if now-layer.spawnedMs >= easteu21ChallengeDelayMs {
-			// The battle clock is anchored at the challenge itself,
-			// not at the tick that noticed it.
+			// The battle clock is anchored at the battle's opening
+			// (the challenge plus its 5,000 ms), not at the challenge
+			// itself and not at the tick that noticed it.
 			layer.shouted = true
-			layer.battleMs = layer.spawnedMs + easteu21ChallengeDelayMs
+			layer.battleMs = layer.spawnedMs + easteu21ChallengeDelayMs + easteu21ActivateDelayMs
 			rt.easteu21Push(layer, easteu21SymBossShout)
 		}
 		return
 	}
 	if !layer.battleBegun {
-		if now-layer.battleMs >= easteu21ActivateDelayMs {
+		if now >= layer.battleMs {
 			layer.battleBegun = true
 			rt.easteu21Push(layer, easteu21SymBattleBegun)
 		}
