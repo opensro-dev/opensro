@@ -78,7 +78,8 @@ client together as a data release.
 
 Every publisher and focused family is a row of
 `scripts/build/families/looseFamilies.mjs`, and `assets build` runs them all.
-Client source changes never need an asset build. Builds take an exclusive lock
+Client source changes never need an asset build. Builds take the lock
+exclusively while checks hold it as concurrent readers
 (`scripts/rebuildLock.mjs`), so concurrent builds refuse rather than corrupt
 output.
 

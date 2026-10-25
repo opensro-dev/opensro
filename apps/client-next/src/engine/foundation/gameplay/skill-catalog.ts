@@ -65,6 +65,16 @@ export interface SkillMetadata {
 	// client cannot see. Such a row starts no predicted run-up at all
 	// (gameplay.ts skillRunUpGoal).
 	readonly rangeBonus?: boolean;
+	// The row's buff adds ru to the attack-range keeper while it runs: the
+	// keeper then replaces the weapon's range for every basic attack, an
+	// amount the client cannot compute from the weapon row. A predicted
+	// attack chase starts only while no rangeUp effect stands on the
+	// caster (gameplay.ts chaseAttack).
+	readonly rangeUp?: boolean;
+	// One of the pinned racial base attacks: the row a plain attack click
+	// resolves to once its weapon kinds match the loadout. The chase
+	// resolves the same row to claim its reach (gameplay.ts chaseAttack).
+	readonly basicAttack?: boolean;
 	// The authored MP cost: flat plus percent of maximum MP (skillMpCost).
 	readonly mp?: number;
 	readonly mpPercent?: number;
@@ -194,6 +204,8 @@ export function skillCatalog( value: unknown ): readonly SkillMetadata[] {
 			ui.groundTarget !== undefined && typeof ui.groundTarget !== "boolean" ||
 			ui.targetSelf !== undefined && typeof ui.targetSelf !== "boolean" ||
 			ui.rangeBonus !== undefined && typeof ui.rangeBonus !== "boolean" ||
+			ui.rangeUp !== undefined && typeof ui.rangeUp !== "boolean" ||
+			ui.basicAttack !== undefined && typeof ui.basicAttack !== "boolean" ||
 			ui.haltsWalk !== undefined && typeof ui.haltsWalk !== "boolean" ||
 			ui.needsFooting !== undefined && typeof ui.needsFooting !== "boolean" ||
 			ui.range !== undefined && (typeof ui.range !== "number" || !Number.isFinite( ui.range ) || ui.range < 0)
@@ -237,6 +249,8 @@ export function skillCatalog( value: unknown ): readonly SkillMetadata[] {
 			...(ui.needsFooting ? { needsFooting: true } : {}),
 			...(ui.range ? { range: ui.range } : {}),
 			...(ui.rangeBonus ? { rangeBonus: true } : {}),
+			...(ui.rangeUp ? { rangeUp: true } : {}),
+			...(ui.basicAttack ? { basicAttack: true } : {}),
 			...(ui.mp ? { mp: uint( ui.mp ) } : {}),
 			...(ui.mpPercent ? { mpPercent: uint( ui.mpPercent, 65535 ) } : {}),
 			...(ui.targets ? { targets: uint( ui.targets, 0xffff ) } : {}),

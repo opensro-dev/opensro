@@ -596,6 +596,7 @@ func (rt *Runtime) commitGateTravel(travel gateTravel, admit func() (int64, OpRe
 		})
 		return portalFailure(2)
 	}
+	rt.noteTeleportArrival(division, c)
 	rt.bindResidentRegion(key, rt.Now().UnixMilli())
 	if rt.WalkInZoneAt != nil {
 		rt.walkInZones.Store(key, rt.walkInZoneAt(destination))

@@ -44,6 +44,9 @@ import { createViewer } from "./viewer/viewer";
 import { createSimulationHost } from "./simulation/host";
 import { ARROW_TURN_WORDS_PER_MS } from "@/engine/foundation/gameplay/direction-movement";
 import { createLocalMover, type LocalMoverWorld } from "./movement/local-mover";
+import { approachGoal } from "@/engine/foundation/gameplay/approach-goal";
+import type { Pose } from "@/engine/contracts/gameplay";
+import type { EntityState } from "@/engine/contracts/world";
 import type { RuntimeControl } from "@/engine/contracts/runtime";
 import { worldAudioPosition } from "@/engine/foundation/world/world-space";
 
@@ -533,7 +536,16 @@ export function startRuntime(
 				// Native 67AA60 reactivates the shared decal even for the same GID.
 				// The targeting owner deduplicates the wire request, not the click.
 				if ( entity.kind !== "ground-item" && !game.targetPending ) {
-					simulation.session( { kind: "gameplay", command: { kind: "select", gid: entity.gid } } );
+					const seq = simulation.session( {
+						kind: "gameplay",
+						command: { kind: "select", gid: entity.gid }
+					} );
+					const drawn = mainThreadOwnWalk && seq !== undefined ?
+						characters.drawnPose( game.localGid ) :
+						undefined;
+					if ( seq !== undefined && drawn ) {
+						predictApproachWalk( seq, entity, drawn, now, game.walkPredictable === true );
+					}
 				}
 				// 67CCA0 -> 6935F0: a double click on another player's pet may
 				// attack it; the worker applies the pet's admission (player-attack.ts).
@@ -551,7 +563,16 @@ export function startRuntime(
 						} );
 					}
 				} else if ( entity.kind === "ground-item" ) {
-					simulation.session( { kind: "gameplay", command: { kind: "pickup", gid: entity.gid } } );
+					const seq = simulation.session( {
+						kind: "gameplay",
+						command: { kind: "pickup", gid: entity.gid }
+					} );
+					const drawn = mainThreadOwnWalk && seq !== undefined ?
+						characters.drawnPose( game.localGid ) :
+						undefined;
+					if ( seq !== undefined && drawn ) {
+						predictApproachWalk( seq, entity, drawn, now, game.pickupPredictable === true );
+					}
 				}
 				return;
 			}
@@ -596,6 +617,8 @@ export function startRuntime(
 				speedFactor: game?.movementSpeedFactor ?? 1,
 				turnRate: game?.movementTurnRate ?? 0,
 				walkPredictable: game?.walkPredictable === true,
+				walkHeld: game?.walkHeld === true,
+				holding: game?.moveHeld === true,
 				speed: game?.movementSpeed,
 				inputSeq: game?.movementInputSeq ?? 0,
 				navigationRequestId: game?.navigationRequestId,
@@ -603,6 +626,40 @@ export function startRuntime(
 				originMs: simulationOriginMs,
 				view: navigation.view()
 			};
+		}
+		/*
+		================
+		predictApproachWalk
+
+		An entity click the worker answers with a walk first (#1567): a far
+		select approaches its NPC, gate or stall keeper, a far pickup walks
+		onto the item. Predict that leg from this frame, the way a ground
+		click predicts (localMover.click): approachGoal names the worker's
+		own destination from its latest pose. Each arm asks the worker's
+		own gate for its walk - a select the ground click's
+		(walkPredictable), a pickup the run-up's (pickupPredictable: a
+		live cast incl. a held wall or chain root, or any mount, closes it
+		where the ground gate may not) - so a state the worker would not
+		walk in at once predicts nothing and keeps the presenter, as
+		before. Arrival hands back through the mover's own settle: the
+		worker's interaction owns what happens there.
+		================
+		*/
+		function predictApproachWalk(
+			seq: number,
+			entity: EntityState,
+			drawn: Pose,
+			now: number,
+			gateOpen: boolean
+		): void {
+			const world = moverWorld();
+			if ( !gateOpen || !world.pose || !world.speed ) return;
+			const destination = approachGoal( world.pose, entity );
+			if ( !destination ) return;
+			localMover.predict(
+				{ seq, aim: { kind: "goal", destination }, speed: world.speed, drawn, now },
+				world
+			);
 		}
 		const characters = own(
 			createCharacterPresentation(
