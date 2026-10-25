@@ -166,6 +166,78 @@ func TestTickWatchdogExitNeedsAStuckTick(t *testing.T) {
 
 /*
 ================
+TestTickWatchdogSparesAProgressingTick
+
+A starved tick that still finishes steps outlives StallExit; once its steps
+stop for StallExit it is exited like a deadlock.
+================
+*/
+func TestTickWatchdogSparesAProgressingTick(t *testing.T) {
+	code := -1
+	ticker := &Ticker{StallExit: time.Second, StallDumpDir: t.TempDir(), exit: func(c int) { code = c }}
+	start := time.Now()
+	ticker.watch.begin(start)
+	at := func(d time.Duration) bool { return ticker.stallExpired(start.Add(d)) }
+	for d := 500 * time.Millisecond; d <= 3*time.Second; d += 500 * time.Millisecond {
+		ticker.watch.step()
+		if at(d) {
+			t.Fatalf("progressing tick exited at %v", d)
+		}
+	}
+	if at(3*time.Second + 900*time.Millisecond) {
+		t.Fatal("exited within StallExit of the last step")
+	}
+	if !at(4*time.Second+100*time.Millisecond) || code != tickStallExitCode {
+		t.Fatalf("tick with no step for StallExit: code %d, want %d", code, tickStallExitCode)
+	}
+}
+
+/*
+================
+TestTickWatchdogExitsARunawayAtTheCeiling
+
+Steps that never stop cannot hold a tick past stallCeilingFactor periods.
+================
+*/
+func TestTickWatchdogExitsARunawayAtTheCeiling(t *testing.T) {
+	code := -1
+	ticker := &Ticker{StallExit: time.Second, StallDumpDir: t.TempDir(), exit: func(c int) { code = c }}
+	start := time.Now()
+	ticker.watch.begin(start)
+	ceiling := stallCeilingFactor * ticker.StallExit
+	for d := 250 * time.Millisecond; d < ceiling; d += 250 * time.Millisecond {
+		ticker.watch.step()
+		if ticker.stallExpired(start.Add(d)) {
+			t.Fatalf("runaway exited at %v, before the ceiling %v", d, ceiling)
+		}
+	}
+	ticker.watch.step()
+	if !ticker.stallExpired(start.Add(ceiling)) || code != tickStallExitCode {
+		t.Fatalf("runaway at the ceiling: code %d, want %d", code, tickStallExitCode)
+	}
+}
+
+/*
+================
+TestTickWatchdogStepsBeforeTheFirstLookDoNotRestartTheClock
+
+The first look at a tick counts from its start, so a tick that parked
+before the watchdog saw it is not granted a fresh StallExit.
+================
+*/
+func TestTickWatchdogStepsBeforeTheFirstLookDoNotRestartTheClock(t *testing.T) {
+	code := -1
+	ticker := &Ticker{StallExit: time.Second, StallDumpDir: t.TempDir(), exit: func(c int) { code = c }}
+	start := time.Now()
+	ticker.watch.begin(start)
+	ticker.watch.step()
+	if !ticker.stallExpired(start.Add(1500*time.Millisecond)) || code != tickStallExitCode {
+		t.Fatalf("parked tick first seen past StallExit: code %d, want %d", code, tickStallExitCode)
+	}
+}
+
+/*
+================
 TestTickStallExitFromEnv
 ================
 */

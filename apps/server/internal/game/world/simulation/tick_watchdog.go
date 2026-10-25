@@ -10,9 +10,14 @@ the hook it is running; a watchdog goroutine reports a tick that outlives
 the stall threshold exactly once, with every goroutine's stack, so the lock
 or I/O holding the tick is in the log the first time it happens.
 
-A tick still stuck after StallExit is a deadlock: Go locks have no timeout
-and a parked goroutine cannot be killed, so nothing inside the process can
-recover. The watchdog then writes a dump file (the stalled phase and hook,
+A tick that has made no progress for StallExit is a deadlock: Go locks
+have no timeout and a parked goroutine cannot be killed, so nothing inside
+the process can recover. Progress is a step counter the coordinator and
+the division workers bump per division leg and per hook; a tick that is
+merely slow (a host starved of CPU runs every worker late, and its stack
+dump shows no lock waiters) keeps bumping it and is left to finish, up to
+stallCeilingFactor times StallExit, so a runaway loop that still bumps a
+counter cannot hold the world forever either. The watchdog then writes a dump file (the stalled phase and hook,
 the goroutines waiting on locks, every stack) to StallDumpDir and exits
 non-zero; the supervisor restarts the process. Every store operation
 commits on its own, so the restart loses no committed state. This is an
@@ -56,6 +61,9 @@ const (
 	tickStallDumpMaxBytes = 64 << 20
 	// tickStallExitCode is the process status after a stall dump.
 	tickStallExitCode = 3
+	// stallCeilingFactor bounds a tick that keeps progressing: past this
+	// many StallExit periods it is dumped and exited like a deadlock.
+	stallCeilingFactor = 4
 )
 
 // EnvTickStallExit is the seconds one tick may stay stuck before the
@@ -95,6 +103,16 @@ type tickWatch struct {
 	reported atomic.Int64
 	// endNs is when the last tick finished; zero until the first one has.
 	endNs atomic.Int64
+	// steps counts finished units of tick work (division legs, hooks).
+	steps atomic.Int64
+
+	// Owned by the watchdog goroutine: the tick it last looked at, the
+	// step count it saw, when that count last changed, and the tick it
+	// already logged as slow.
+	seenStart int64
+	seenSteps int64
+	seenAt    int64
+	slowStart int64
 }
 
 /*
@@ -129,6 +147,7 @@ enclosing constructor (for example action.(*Runtime).TickHook.func1).
 ================
 */
 func (w *tickWatch) enterHook(hook TickHook) {
+	w.steps.Add(1)
 	w.hook.Store(reflect.ValueOf(hook).Pointer())
 }
 
@@ -139,6 +158,39 @@ tickWatch.leaveHook
 */
 func (w *tickWatch) leaveHook() {
 	w.hook.Store(0)
+	w.steps.Add(1)
+}
+
+/*
+================
+tickWatch.step
+
+One unit of tick work finished. Safe from any shard worker.
+================
+*/
+func (w *tickWatch) step() {
+	w.steps.Add(1)
+}
+
+/*
+================
+tickWatch.stuckFor
+
+How long the tick started at start has gone without a step at now. The
+first look at a tick counts from its start, so a tick parked before the
+watchdog first saw it is not given a fresh StallExit. Watchdog goroutine
+only.
+================
+*/
+func (w *tickWatch) stuckFor(start int64, now time.Time) time.Duration {
+	steps := w.steps.Load()
+	switch {
+	case w.seenStart != start:
+		w.seenStart, w.seenSteps, w.seenAt = start, steps, start
+	case w.seenSteps != steps:
+		w.seenSteps, w.seenAt = steps, now.UnixNano()
+	}
+	return time.Duration(now.UnixNano() - w.seenAt)
 }
 
 /*
@@ -357,7 +409,8 @@ func (t *Ticker) watchStalls(ctx context.Context) {
 ================
 stallExpired
 
-Dumps and exits once the current tick has been stuck for StallExit.
+Dumps and exits once the current tick has made no progress for StallExit,
+or has run for stallCeilingFactor times StallExit however it progresses.
 Returns true after the exit, which only returns when exit is stubbed.
 ================
 */
@@ -367,12 +420,25 @@ func (t *Ticker) stallExpired(now time.Time) bool {
 		return false
 	}
 	elapsed, phase, hook := t.watch.stalled(start, now)
-	if elapsed < t.StallExit {
+	stuck := t.watch.stuckFor(start, now)
+	cause := ""
+	switch {
+	case stuck >= t.StallExit:
+		cause = "no progress, deadlock assumed"
+	case elapsed >= stallCeilingFactor*t.StallExit:
+		cause = "still progressing past the ceiling, runaway assumed"
+	}
+	if cause == "" {
+		if elapsed >= t.StallExit && t.watch.slowStart != start {
+			t.watch.slowStart = start
+			log.Warnf("simulation: tick slow %v in %s (hook %s) but progressing; not restarting before %v",
+				elapsed.Round(time.Millisecond), phase, hook, stallCeilingFactor*t.StallExit)
+		}
 		return false
 	}
 	path := writeStallDump(t.StallDumpDir, now, elapsed, phase, hook)
-	log.Errorf("simulation: tick stuck %v in %s (hook %s): deadlock assumed; dump %s; exiting for restart",
-		elapsed.Round(time.Millisecond), phase, hook, path)
+	log.Errorf("simulation: tick stuck %v in %s (hook %s): %s; dump %s; exiting for restart",
+		elapsed.Round(time.Millisecond), phase, hook, cause, path)
 	exit := t.exit
 	if exit == nil {
 		exit = os.Exit

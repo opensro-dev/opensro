@@ -729,11 +729,17 @@ func (t *Ticker) runDivision(work divisionTickWork, tick, nowMs int64) {
 	for _, session := range work.sessions {
 		live[session.SessionID] = true
 	}
+	// Each leg is a watchdog step: a starved tick that still finishes legs
+	// is slow, not stuck (tick_watchdog.go).
 	t.runPeerVisibility(work.state, nowMs, work.sessions, live)
+	t.watch.step()
 	t.runPeerCOSVisibility(work.state, nowMs, work.sessions, live)
+	t.watch.step()
 	t.runPlayerMap(work.state, nowMs, work.sessions)
+	t.watch.step()
 	for _, session := range work.sessions {
 		t.runSessionLegs(work.state, session, tick, nowMs)
+		t.watch.step()
 	}
 	for sessionID := range work.state.settled {
 		if !live[sessionID] {
@@ -741,6 +747,7 @@ func (t *Ticker) runDivision(work divisionTickWork, tick, nowMs int64) {
 		}
 	}
 	work.state.monsters.RunMonsterLeg(nowMs, work.sessions, t.Push)
+	t.watch.step()
 }
 
 /*
