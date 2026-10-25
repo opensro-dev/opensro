@@ -44,6 +44,8 @@ wander mover need.
 */
 type MonsterRef struct {
 	RefObjID uint32
+	// TrainingDummy is a port-only GM target, never a native monster or reward source.
+	TrainingDummy bool
 	// TidWord is the packed RefObj TypeID word the client's sub_851420
 	// cascade classifies on. ARBITER-CLOSED (RZ seq42 gate + seq234
 	// column ruling): the binary selects CLASS_CICMONSTER iff

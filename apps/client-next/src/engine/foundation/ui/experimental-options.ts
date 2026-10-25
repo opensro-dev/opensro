@@ -162,6 +162,11 @@ export interface ExperimentalOptions {
 	// (transport-auto-potion.ts). The original watches only the player
 	// (70C550). Off unless turned on.
 	readonly transportAutoPotion: boolean;
+	// Port-only, not native (#1448): connect over WebTransport (QUIC/UDP)
+	// first and fall back to the WebSocket when the path fails. Off unless
+	// turned on: the WebSocket stays the default until #1450's
+	// measurements say otherwise. Applies from the next connect.
+	readonly webTransport: boolean;
 	// Port-only, not native: left-clicking the attack pet's mini panel
 	// (CIFPetMiniInfo 6B3460 / 6B3760) or a companion's status portrait
 	// (CIFCOSStatus 6A9BC0) selects the companion and toggles its window
@@ -336,6 +341,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		confirmGuildBan: record.confirmGuildBan !== false,
 		homingProjectiles: enabled( "homingProjectiles" ),
 		transportAutoPotion: enabled( "transportAutoPotion" ),
+		webTransport: enabled( "webTransport" ),
 		petClickOpensWindow: record.petClickOpensWindow !== false,
 		smartPetPickup: record.smartPetPickup !== false,
 		petPickupFilter: enabled( "petPickupFilter" ),
@@ -435,6 +441,7 @@ export interface ExperimentalGameplay {
 	readonly jobKillNotices: boolean;
 	readonly dropPlusNotices: boolean;
 	readonly plusSevenNotices: boolean;
+	readonly webTransport: boolean;
 	readonly homingProjectiles?: boolean;
 	readonly smartPetPickup?: boolean;
 	// The pickup pet filter's kind mask (ground-item's PICKUP_KIND bits);
@@ -450,6 +457,7 @@ experimentalGameplay
 export function experimentalGameplay( options: ExperimentalOptions ): ExperimentalGameplay {
 	return {
 		predictedRunUp: options.predictedRunUp,
+		webTransport: options.webTransport,
 		jobKillNotices: options.jobKillNotices,
 		dropPlusNotices: options.dropPlusNotices,
 		plusSevenNotices: options.plusSevenNotices,

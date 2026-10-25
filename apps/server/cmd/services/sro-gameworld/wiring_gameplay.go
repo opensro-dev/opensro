@@ -216,7 +216,7 @@ func newGameplayPlane(
 		return nil, fmt.Errorf("commerce catalogue: %w", err)
 	}
 	items.ConfigureStorage(authorityStore)
-	betaSilk, mallAuthority, err := composeBetaSilk(authorityStore, items, deps)
+	betaSilk, mallAuthority, err := composeBetaSilk(authorityStore, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -232,6 +232,7 @@ func newGameplayPlane(
 	if err := items.ConfigureMall(devPaths.TextdataDir, mallAuthority, mallExtra); err != nil {
 		return nil, fmt.Errorf("mall catalogue: %w", err)
 	}
+	items.StatRecallWindows = commerce.StatRecallListed(mallExtra)
 	deps.SceneReferenceFrames = items.CommerceReferenceSeed
 	deps.ReconcileSceneObjects = items.ReconcileScene
 	deps.ExtraRefItemCodenames = items.GroundRefItemCodenames
@@ -540,6 +541,12 @@ never acquire another character transaction.
 ================
 */
 func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefinitionLoader) error {
+	if game.betaSilk != nil {
+		// SRO_BETA_SILK_ACTIVE_ONLY (port-only): any player-sent command
+		// counts as play (#1604 P5), so the transport hub reports every
+		// dispatched game frame; NoteActivity is inert with the flag off.
+		hub.OnSessionActivity(game.betaSilk.NoteActivity)
+	}
 	if err := game.deps.Validate(); err != nil {
 		return fmt.Errorf("bootstrap dependencies: %w", err)
 	}

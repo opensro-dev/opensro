@@ -51,18 +51,23 @@ Every pet gear row: ID, codename, English name and description, icon and
 gold price (sell price a tenth).
 ================
 */
-export const PORT_ITEMS = Object.freeze( design.gear.flatMap( degree =>
-	degree.items.map( item => ({
-		id: item.id,
-		slot: item.slot,
-		degree: degree.degree,
-		codename: item.codename,
-		icon: `item\\pet\\${item.slot.toLowerCase()}_${String( degree.degree ).padStart( 2, "0" )}.ddj`,
-		price: 5000 * degree.degree * degree.degree,
-		name: `${item.name} (Degree ${degree.degree})`,
-		description: `Attack-pet gear (${item.slot}). Up to ${degree.maxBlues} blues.`
-	}) )
-) );
+export const PORT_ITEMS = Object.freeze(
+	design.gear.flatMap( degree =>
+		degree.items.flatMap( item =>
+			[ 0, 1, 2, 3 ].map( seal => ({
+				id: item.id + seal * 10,
+				seal,
+				slot: item.slot,
+				degree: degree.degree,
+				codename: item.codename + [ "", "_STAR", "_MOON", "_SUN" ][seal],
+				icon: `item\\pet\\${item.slot.toLowerCase()}_${String( degree.degree ).padStart( 2, "0" )}.ddj`,
+				price: 5000 * degree.degree * degree.degree,
+				name: `${item.name} (Degree ${degree.degree})`,
+				description: `Attack-pet gear (${item.slot}). Up to ${degree.maxBlues} blues.`
+			}) )
+		)
+	)
+);
 
 /*
 ================
@@ -97,6 +102,8 @@ export function portItemColumns( template ) {
 		columns[COL_ICON] = item.icon;
 		columns[COL_DROP_MODEL] = PORT_PET_DROP_MODEL;
 		columns[COL_MAX_STACK] = "1";
+		columns[15] = item.seal ? "2" : "0";
+		columns[61] = String( (item.degree - 1) * 3 + (item.seal || 1) );
 		return columns;
 	} );
 }

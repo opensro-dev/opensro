@@ -127,8 +127,9 @@ var Settings = []Setting{
 	// (port-only, not native; off is native, #1518).
 	{Env: "SRO_TELEPORT_GRACE", NomadVar: "teleport_grace", Default: "off", Catalogue: true},
 	// Owner, 2026-10-25: a strictly higher-grade premium ticket replaces
-	// the running lower one and its remaining time is lost (#1624,
-	// port-only, not native; "off" refuses a second ticket while one runs).
+	// the running lower one; the replaced ticket's remaining time moves
+	// the new ticket's end later (#1624, port-only, not native; "off"
+	// refuses a second ticket while one runs).
 	{Env: "SRO_PREMIUM_UPGRADE", NomadVar: "premium_upgrade", Default: "off"},
 	// Owner, 2026-10-25: count kills and EXP per online hour by level
 	// band for the staff console (#1639, port-only, not native; "off"
@@ -189,6 +190,7 @@ var Settings = []Setting{
 	{Env: "SRO_REVERSE_RETURN_MAP", NomadVar: "reverse_return_map", Default: ""},
 	{Env: "SRO_HUNTING_GUIDE", NomadVar: "hunting_guide", Default: ""},
 	{Env: "SRO_GM_SETSPEED", NomadVar: "gm_setspeed", Default: "on"},
+	{Env: "SRO_GM_TRAINING_DUMMY", NomadVar: "gm_training_dummy", Default: "off"},
 	{Env: "SRO_ALCHEMY_RATES", NomadVar: "alchemy_rates", Default: "on", Catalogue: true},
 	// Owner, 2026-10-18: reversed the 2026-10-13 +11 cap; the deployment
 	// default stays native ("off", ceiling 250).

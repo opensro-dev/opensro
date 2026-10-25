@@ -344,7 +344,7 @@ the representative of the greatest unsigned damage group for loot ownership.
 */
 func (rt *Runtime) settleMonsterInsideDoor(division string, actor *enterworld.Character, roster rewardRoster, impact simulation.MonsterDamageResult, pose monster.Pose, now int64) monsterSettlement {
 	var out monsterSettlement
-	if !impact.Fatal {
+	if !impact.Fatal || impact.Instance.Ref.TrainingDummy {
 		return out
 	}
 	// One snapshot of the live tunables for the whole kill (thiefparty.go).

@@ -82,6 +82,45 @@ func itemUseFailure(errorCode uint8) OpResult {
 	}}}
 }
 
+// statRecallTopItem and statRecallTopLevel: under the statrecall preset the
+// top recall scroll serves 81-110 (owner, 2026-10-26, #1609), since v1.150
+// ships no tier past 90.
+const (
+	statRecallTopItem  = "ITEM_MALL_STATS_POINT_RECALL_81LV"
+	statRecallTopLevel = 110
+)
+
+/*
+================
+statRecallWindow
+
+Port-only, not native (#1609). A recall scroll's itemdata carries its tier
+as two level requirements, the first and last level (9258: 81 and 90);
+the native any-of walk (itemUseRequirements) admits from the first and
+never stops at the last, so while the mall sells the scrolls this holds
+the character to the last too: a level-85 cannot spend the 30-silk 1-40
+scroll. The top scroll's last level is statRecallTopLevel.
+================
+*/
+func statRecallWindow(character *enterworld.Character, ref *enterworld.ItemRef) bool {
+	levels, last := 0, int64(0)
+	for slot := 0; slot < 4; slot++ {
+		if ref.ReqQuadTypes[slot] == 1 {
+			levels++
+			last = max(last, ref.ReqQuadValues[slot])
+		}
+	}
+	if ref.Codename == statRecallTopItem {
+		levels, last = 2, statRecallTopLevel
+	}
+	// One level requirement names no last level.
+	if levels < 2 {
+		return true
+	}
+	requirements := characterEquipRequirements{character: character}
+	return requirements.characterLevel() <= last
+}
+
 /*
 ================
 potionType
@@ -325,6 +364,10 @@ func (rt *Runtime) HandleItemUse(
 		if family == itemUseStatRecall {
 			// The scroll is spent only when a point came back.
 			if len(tail) != 0 || rt.RecallStatPoints == nil {
+				return false
+			}
+			if rt.StatRecallWindows && !statRecallWindow(character, ref) {
+				result = itemUseFailure(wire.ErrCodeItemUseLevelRequired)
 				return false
 			}
 			recalled, ok := rt.RecallStatPoints(character)

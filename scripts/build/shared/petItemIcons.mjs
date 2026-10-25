@@ -24,9 +24,10 @@ export async function buildPetItemIcons() {
 	const script = fileURLToPath( new URL( "./pet_item_icons.py", import.meta.url ) );
 	const { stdout } = await runPython( [ script ], { task: "Pet gear icon export" } );
 	const icons = JSON.parse( stdout );
-	if ( icons.length !== PORT_ITEMS.length ) throw Error( "Incomplete pet icon export" );
+	const items = PORT_ITEMS.filter( item => item.seal === 0 );
+	if ( icons.length !== items.length ) throw Error( "Incomplete pet icon export" );
 	const files = [];
-	for ( const item of PORT_ITEMS ) {
+	for ( const item of items ) {
 		const icon = icons.find( row => row.slot === item.slot.toLowerCase() && row.degree === item.degree );
 		if ( !icon ) throw Error( `Missing pet icon ${item.codename}` );
 		const publicPath = "/assets/images/Media_extracted/icon/" +
