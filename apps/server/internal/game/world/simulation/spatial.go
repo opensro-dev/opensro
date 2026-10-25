@@ -141,9 +141,22 @@ func clampFloat(v, min, max float64) float64 {
 	return v
 }
 
-// roundU16 mirrors the reference offsetU16: clamp into [0, 0xffff] first,
-// then Math.round. JS Math.round and Go math.Round agree on the non-negative
-// range this clamps into.
-func roundU16(v float64) uint16 {
-	return uint16(math.Round(clampFloat(v, 0, 0xffff)))
+/*
+================
+roundI16Word
+
+The signed word the movement wire carries for a region-local coordinate:
+clamp into [-0x8000, 0x7fff], round, and return the int16 bit pattern for
+the u16 slot. The client reads these words signed on both directions of
+the movement contract - the 0x7738 request (DecodeClientMovementRequest)
+and the 0xB738 destination/source blocks (the client parser's i16 reads) -
+so a cave-local coordinate north of the region origin (negative z, or a
+height below zero) must keep its sign here. Clamping it to zero instead
+walks every viewer to the origin edge while the mover's own book keeps
+the signed pose: the two disagree until the next f32 settle corrects it
+in one step (#1679).
+================
+*/
+func roundI16Word(v float64) uint16 {
+	return uint16(int16(math.Round(clampFloat(v, -0x8000, 0x7fff))))
 }

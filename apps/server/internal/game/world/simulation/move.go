@@ -126,9 +126,9 @@ Encodes the 0xB738 payload exactly as the client parser consumes it
 (sub_776200 -> sub_776170):
 
 	[u32 objectId][u8 mode]
-	then mode!=0: [u16 region][u16 x][u16 y][u16 z]
+	then mode!=0: [u16 region][i16 x][i16 y][i16 z]
 	or   mode=0:  [u8 angularMode][u16 headingWord]
-	then [u8 1][u16 srcRegion][u16 srcX*10][f32 srcY][u16 srcZ*10]
+	then [u8 1][u16 srcRegion][i16 srcX*10][f32 srcY][i16 srcZ*10]
 	or   [u8 0]
 
 The angular arm mirrors sub_776170's mode-0 read ([u8 angularFlag]
@@ -150,17 +150,17 @@ func BuildMovementAckPayload(objectID uint32, movement MovementRequest, source *
 		w.U8(movement.AngularMode).U16(movement.HeadingWord)
 	} else {
 		w.U16(movement.RegionID).
-			U16(roundU16(movement.X)).
-			U16(roundU16(movement.Y)).
-			U16(roundU16(movement.Z))
+			U16(roundI16Word(movement.X)).
+			U16(roundI16Word(movement.Y)).
+			U16(roundI16Word(movement.Z))
 	}
 
 	if source != nil {
 		w.U8(1).
 			U16(source.RegionID).
-			U16(roundU16(source.X * 10)).
+			U16(roundI16Word(source.X * 10)).
 			F32(float32(source.Y)).
-			U16(roundU16(source.Z * 10))
+			U16(roundI16Word(source.Z * 10))
 	} else {
 		w.U8(0)
 	}
