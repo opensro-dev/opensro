@@ -747,11 +747,14 @@ scroll's kind-0 row does not.
 		if ( !local ) return "absent";
 		if ( local.appearanceState?.[0] === 2 ) return "dead";
 		if ( combat.guidedActive( localGid, now ) ) return "guided";
+		// Seated outranks the suppress window: the native handler stands
+		// before any goal is stored, so a seated click is never the held
+		// kind the mover records (#1570).
+		if ( local.movementMode === MOVEMENT_SEATED ) return "seated";
 		if ( now < groundSkillMoveSuppressUntil ) return "suppressed";
 		if ( teleportMode === 1 ) return "teleport";
 		if ( interactionBlocked() ) return "blocked";
 		if ( frozen() ) return "frozen";
-		if ( local.movementMode === MOVEMENT_SEATED ) return "seated";
 		if ( castLocked( now ) ) return "cast";
 		if ( local.mountedOn ) return "mounted";
 		return null;
@@ -1813,11 +1816,14 @@ state here before a command can claim a native wire conversation.
 			) return null;
 			if (
 				now < groundSkillMoveSuppressUntil &&
-				(command.kind === "move" || command.kind === "ground-move")
+				(command.kind === "move" || command.kind === "ground-move") &&
+				local?.movementMode !== MOVEMENT_SEATED
 			) {
 				// The 500 ms send cooldown (+0x48) holds the click's goal,
 				// as the native controller holds it: the click walks at
-				// the window's end instead of dying here.
+				// the window's end instead of dying here. A seated click
+				// falls through: the native handler stands before any goal
+				// is stored (0x6933bd), window or not.
 				holdGroundClick( command );
 				return null;
 			}

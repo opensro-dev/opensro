@@ -1738,6 +1738,55 @@ test("a ground click inside the ground-skill suppress window walks when the wind
 	game.dispose();
 });
 
+test("a seated click inside the suppress window stands at once and is never held", async () => {
+	const { createGameplay } = await load( "gameplay" ),
+		sent = [],
+		game = createGameplay( f => sent.push( f ) ),
+		local = { ...pose, gid: 1, heading: 0, appearanceState: [ 1, 0, 0 ] },
+		seated = { ...local, movementMode: 4 },
+		query = { originRegion: pose.regionId, ray: { start: [ 0, 100, 0 ], delta: [ 3, 0, 4 ] }, terrainDepth: null },
+		ref = {
+			id: 19636,
+			group: 768,
+			level: 1,
+			status: false,
+			effectRider: false,
+			ui: {
+				name: "Ghost Walk - Shadow",
+				trainable: true,
+				spCost: 1,
+				targetRequired: true,
+				groundTarget: true,
+				actionMs: 200,
+				cooldownMs: 5000,
+				cooldownGroup: 59,
+				masteries: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ],
+				prerequisites: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ]
+			}
+		};
+	game.bootstrap( { simulationProtocolVersion: 1, character: { skills: [ 19636 ] }, refSkillSnapshot: [ ref ] } );
+	game.seed( local );
+	game.command( { kind: "navigation", regionId: pose.regionId, bundle: bundle() }, 90 );
+	game.command( { kind: "skill", skillId: 19636, gid: 999, query }, 100 );
+	const afterPress = sent.length;
+	// Native order: the seated test precedes the goal store, so the stand
+	// goes out at click time even inside the 500 ms window, and nothing
+	// is held for the window's end.
+	game.command( { kind: "move", destination: { ...pose, x: 300 } }, 200, undefined, seated );
+	assert.deepEqual(
+		sent.slice( afterPress ),
+		[ { opcode: 0x7017, payload: Uint8Array.of( 4 ) } ],
+		"the click only stands"
+	);
+	game.step( 250, seated );
+	assert.equal( game.take()?.moveHeld ?? false, false, "no click sits in the reservation" );
+	game.step( 601, local );
+	game.step( 1601, local );
+	assert.equal( sent.length, afterPress + 1, "no walk at the window's end either" );
+	assert.equal( game.take()?.pose?.x, pose.x );
+	game.dispose();
+});
+
 test("a ground click during a self skill waits for its action window, not the server count", async () => {
 	const { createGameplay } = await load( "gameplay" ),
 		sent = [],
