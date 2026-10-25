@@ -36,6 +36,7 @@ walk already carries.
 import type { Pose } from "@/engine/contracts/gameplay";
 import type { WireFrame } from "@/engine/contracts/network";
 import { HEADING_SCALE } from "@/engine/foundation/gameplay/native-movement";
+import { ARROW_TURN_WORDS_PER_MS } from "@/engine/foundation/gameplay/direction-movement";
 
 // 0x72CF: SendSteeringUpdate's player form.
 export const OP_STEER = 0x72cf;
@@ -45,8 +46,8 @@ export const OP_DIRECTION_STOP = 0x72f5;
 export const OP_COS_COMMAND = 0x769e;
 export const COS_STOP_TAG = 3;
 export const COS_STEER_TAG = 4;
-// pi radians a second (0x86D480): half a turn of heading words a second.
-const TURN_WORDS_PER_MS = HEADING_SCALE / 2 / 1000;
+// pi radians a second (0x86D480), shared with the main-thread mover.
+const TURN_WORDS_PER_MS = ARROW_TURN_WORDS_PER_MS;
 // SendSteeringUpdate's pi/4 (0x877540, flag 0): a turn under way reaches the
 // server every eighth of a turn.
 const STEER_SEND_WORDS = HEADING_SCALE / 8;
@@ -195,6 +196,17 @@ export function createArrowKeys( send: ( frame: WireFrame ) => void ) {
 		*/
 		step( now: number, mover: ArrowKeyMover ) {
 			advance( now, mover );
+		},
+		/*
+		================
+		rate
+
+		The turn under way in words a millisecond (Left positive), published
+		so the main-thread mover keeps turning past a publication (#1574).
+		================
+		*/
+		rate(): number {
+			return turn ? turnRate() : 0;
 		},
 		/*
 		================

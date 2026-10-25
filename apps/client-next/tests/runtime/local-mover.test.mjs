@@ -87,6 +87,7 @@ function world( overrides = {} ) {
 		moving: false,
 		aim: undefined,
 		speedFactor: 1,
+		turnRate: 0,
 		walkPredictable: true,
 		speed: SPEED,
 		inputSeq: 0,

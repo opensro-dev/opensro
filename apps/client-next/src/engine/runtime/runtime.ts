@@ -42,6 +42,7 @@ import { createFramePacing } from "./frame-pacing";
 import { createRenderer } from "./renderer/renderer";
 import { createViewer } from "./viewer/viewer";
 import { createSimulationHost } from "./simulation/host";
+import { ARROW_TURN_WORDS_PER_MS } from "@/engine/foundation/gameplay/direction-movement";
 import { createLocalMover, type LocalMoverWorld } from "./movement/local-mover";
 import type { RuntimeControl } from "@/engine/contracts/runtime";
 import { worldAudioPosition } from "@/engine/foundation/world/world-space";
@@ -397,18 +398,28 @@ export function startRuntime(
 		================
 		*/
 		function arrowInput( event: RawInput ) {
-			const release = ( key: "up" | "left" | "right" ) => {
-				arrowsHeld.delete( key );
-				const seq = simulation.session( {
-					kind: "gameplay",
-					command: { kind: "arrow-key", key, down: false }
-				} );
+			// 0x86D480: Left turns positive and wins over Right.
+			const turnRate = () =>
+				arrowsHeld.has( "left" ) ?
+					ARROW_TURN_WORDS_PER_MS :
+					arrowsHeld.has( "right" ) ?
+					-ARROW_TURN_WORDS_PER_MS :
+					0;
+			const predicted = ( key: "up" | "left" | "right", down: boolean, seq: number | undefined ) => {
 				const drawn = mainThreadOwnWalk && seq !== undefined ?
 					characters.drawnPose( presentation.gameplay()?.localGid ?? 0 ) :
 					undefined;
-				if ( key === "up" && seq !== undefined && drawn ) {
-					localMover.arrow( seq, false, drawn, performance.now(), moverWorld() );
-				}
+				if ( seq === undefined || !drawn ) return;
+				if ( key === "up" ) localMover.arrow( seq, down, drawn, performance.now(), moverWorld() );
+				else localMover.turn( seq, turnRate(), drawn, performance.now(), moverWorld() );
+			};
+			const release = ( key: "up" | "left" | "right" ) => {
+				arrowsHeld.delete( key );
+				predicted(
+					key,
+					false,
+					simulation.session( { kind: "gameplay", command: { kind: "arrow-key", key, down: false } } )
+				);
 			};
 			if ( event.kind === "release" ) {
 				for ( const key of [ ...arrowsHeld ] ) release( key );
@@ -429,11 +440,11 @@ export function startRuntime(
 			const focus = document.activeElement;
 			if ( focus instanceof HTMLInputElement || focus instanceof HTMLTextAreaElement ) return;
 			arrowsHeld.add( key );
-			const seq = simulation.session( { kind: "gameplay", command: { kind: "arrow-key", key, down: true } } );
-			const drawn = mainThreadOwnWalk && seq !== undefined ? characters.drawnPose( game.localGid ) : undefined;
-			if ( key === "up" && seq !== undefined && drawn ) {
-				localMover.arrow( seq, true, drawn, performance.now(), moverWorld() );
-			}
+			predicted(
+				key,
+				true,
+				simulation.session( { kind: "gameplay", command: { kind: "arrow-key", key, down: true } } )
+			);
 		}
 		/*
 		================
@@ -557,6 +568,7 @@ export function startRuntime(
 				moving: game?.moving ?? false,
 				aim: game?.movementAim,
 				speedFactor: game?.movementSpeedFactor ?? 1,
+				turnRate: game?.movementTurnRate ?? 0,
 				walkPredictable: game?.walkPredictable === true,
 				speed: game?.movementSpeed,
 				inputSeq: game?.movementInputSeq ?? 0,

@@ -52,6 +52,7 @@ import { SIMULATION_STEP_MS } from "@/engine/contracts/simulation";
 import type { NavOwner } from "@/engine/foundation/navigation/dungeon-ownership";
 import type { NavigationView } from "@/engine/foundation/navigation/clipper";
 import { directionLegEnd, worldPointAction } from "@/engine/foundation/gameplay/direction-movement";
+import { HEADING_SCALE } from "@/engine/foundation/gameplay/native-movement";
 import { movementDuration, poseDistance } from "@/engine/foundation/gameplay/native-movement";
 import { startWalking, stepWalk, walkLeg, type WalkStepSegment } from "@/engine/foundation/gameplay/walk-step";
 import { boundDrawnStep, MAX_SMOOTHED_CORRECTION, poseDelta } from "@/engine/foundation/gameplay/drawn-step";
@@ -81,7 +82,10 @@ export type MoverAim =
 	| { readonly kind: "fixed"; readonly segment: WalkStepSegment; }
 	// Ends the walk where the walker is when the input is replayed (the Up
 	// arrow's release, #1574).
-	| { readonly kind: "stop"; };
+	| { readonly kind: "stop"; }
+	// Turns the facing at rate heading words a millisecond from the input on
+	// (Left and Right, #1574); 0 ends the turn. The walk keeps its segment.
+	| { readonly kind: "turn"; readonly rate: number; };
 
 /*
 ================
@@ -103,6 +107,9 @@ export interface LocalMoverWorld {
 	// 500 ms drift (driftWalk; 1 otherwise).
 	readonly aim: MoverAim | undefined;
 	readonly speedFactor: number;
+	// The arrow keys' turn the worker is making, heading words a millisecond
+	// (gameplay arrow-keys.ts rate); 0 when it is not turning.
+	readonly turnRate: number;
 	readonly walkPredictable: boolean;
 	readonly speed: number | undefined;
 	readonly inputSeq: number;
@@ -189,19 +196,26 @@ interface Walker {
 	segment: WalkStepSegment | null;
 	owner: NavOwner | undefined;
 	cursor: SurfaceCursor;
+	// The arrow keys' turn: words a millisecond, and the unrounded facing it
+	// has reached (the worker rounds only what it applies, as here).
+	turn: number;
+	heading: number;
 }
 
 /*
 ================
 advance
 
-Steps a walker to toMs in the worker's fixed steps.
+Steps a walker to toMs in the worker's fixed steps. A turn under way is
+applied after each step's walk, as the worker's tick steers after its
+move (gameplay arrow-keys.ts, movement.ts steer): the facing turns and a
+direction walk is re-aimed from where it stands.
 ================
 */
 function advance( walker: Walker, toMs: number, navigation: NavigationView ) {
-	while ( walker.segment && walker.atMs < toMs ) {
+	while ( (walker.segment || walker.turn) && walker.atMs < toMs ) {
 		const now = Math.min( toMs, walker.atMs + REPLAY_STEP_MS );
-		const result = stepWalk( {
+		const result = !walker.segment ? { kind: "idle" as const } : stepWalk( {
 			pose: walker.pose,
 			poseAtMs: walker.atMs,
 			segment: walker.segment,
@@ -220,9 +234,33 @@ function advance( walker: Walker, toMs: number, navigation: NavigationView ) {
 		} else if ( result.kind === "rejected" ) {
 			walker.segment = null;
 		}
+		if ( walker.turn ) turnWalker( walker, now - walker.atMs );
 		walker.atMs = now;
 	}
 	walker.atMs = Math.max( walker.atMs, toMs );
+}
+
+/*
+================
+turnWalker
+
+Turns the walker's facing by elapsed milliseconds of its turn and re-aims a
+direction walk on the new heading at its own speed.
+================
+*/
+function turnWalker( walker: Walker, elapsed: number ) {
+	walker.heading = ((walker.heading + walker.turn * elapsed) % HEADING_SCALE + HEADING_SCALE) % HEADING_SCALE;
+	const angle = Math.round( walker.heading ) % HEADING_SCALE;
+	walker.pose = { ...walker.pose, angle };
+	const segment = walker.segment;
+	if ( segment?.direction && !segment.direction.blocked && segment.walking ) {
+		walker.segment = leg(
+			walker.pose,
+			{ kind: "direction", heading: angle },
+			walker.atMs + elapsed,
+			segment.walking.speed
+		);
+	}
 }
 
 /*
@@ -236,7 +274,12 @@ past its end until the navigation stops it; the fixed segment itself; or
 none for a stop.
 ================
 */
-function leg( from: Pose, aim: MoverAim, start: number, speed: number ): WalkStepSegment | null {
+function leg(
+	from: Pose,
+	aim: Exclude<MoverAim, { kind: "turn"; }>,
+	start: number,
+	speed: number
+): WalkStepSegment | null {
 	if ( aim.kind === "stop" ) return null;
 	if ( aim.kind === "fixed" ) return aim.segment;
 	if ( aim.kind === "goal" ) return startWalking( walkLeg( from, aim.destination, start, speed ) );
@@ -314,16 +357,24 @@ export function createLocalMover() {
 		const walker: Walker = {
 			pose: world.pose!,
 			atMs,
-			segment: world.moving && world.aim && world.speed ?
+			segment: world.moving && world.aim && world.aim.kind !== "turn" && world.speed ?
 				leg( world.pose!, world.aim, atMs, world.speed * world.speedFactor ) :
 				null,
 			owner: world.navigationOwner,
-			cursor: {}
+			cursor: {},
+			// The worker's own turn carries on past its publication.
+			turn: world.turnRate,
+			heading: world.pose!.angle
 		};
 		for ( const input of walk!.inputs ) {
 			const inputMs = Math.max( input.atMs, walker.atMs );
 			advance( walker, inputMs, navigation );
-			walker.segment = leg( walker.pose, input.aim, inputMs, input.speed );
+			if ( input.aim.kind === "turn" ) {
+				walker.turn = input.aim.rate;
+				walker.heading = walker.pose.angle;
+			} else {
+				walker.segment = leg( walker.pose, input.aim, inputMs, input.speed );
+			}
 		}
 		advance( walker, now, navigation );
 		return walker;
@@ -348,13 +399,17 @@ export function createLocalMover() {
 		cut = null;
 		const from = walk?.walker.pose ?? input.drawn;
 		const saved = { seq: input.seq, aim: input.aim, atMs: input.now, speed: input.speed };
+		const aim = input.aim;
 		walk = {
 			walker: {
 				pose: from,
 				atMs: input.now,
-				segment: leg( from, input.aim, input.now, input.speed ),
+				// A turn keeps the walk it turns; any other aim starts its own.
+				segment: aim.kind === "turn" ? walk?.walker.segment ?? null : leg( from, aim, input.now, input.speed ),
 				owner: walk?.walker.owner ?? world.navigationOwner,
-				cursor: walk?.walker.cursor ?? {}
+				cursor: walk?.walker.cursor ?? {},
+				turn: aim.kind === "turn" ? aim.rate : walk?.walker.turn ?? 0,
+				heading: aim.kind === "turn" || !walk ? from.angle : walk.walker.heading
 			},
 			offset: walk?.offset ?? [ 0, 0, 0 ],
 			drawn: walk?.drawn ?? input.drawn,
@@ -389,6 +444,23 @@ export function createLocalMover() {
 			}
 			if ( !walk?.walker.segment?.direction ) return false;
 			return predict( { seq, aim: { kind: "stop" }, speed: walk.speed, drawn, now }, world );
+		},
+		/*
+		================
+		turn
+
+		Left and Right (#1574): the facing turns at rate heading words a
+		millisecond from this frame (0 ends it), walking or standing; a
+		direction walk under way follows the turn as the worker's does.
+		================
+		*/
+		turn( seq: number, rate: number, drawn: Pose, now: number, world: LocalMoverWorld ): boolean {
+			if ( !walk && (!rate || !world.walkPredictable) ) return false;
+			if ( !world.speed || !world.pose ) return false;
+			return predict(
+				{ seq, aim: { kind: "turn", rate }, speed: walk?.speed ?? world.speed, drawn, now },
+				world
+			);
 		},
 		/*
 		================
@@ -471,7 +543,7 @@ export function createLocalMover() {
 			// Settled: nothing left to walk, no click in flight, the worker is
 			// standing and the offset is given back.
 			const settled = !walk.walker.segment && !walk.inputs.length && !world.moving &&
-				world.inputSeq >= walk.lastSeq && hypot3( ...walk.offset ) < SETTLED_OFFSET;
+				!world.turnRate && world.inputSeq >= walk.lastSeq && hypot3( ...walk.offset ) < SETTLED_OFFSET;
 			if ( settled ) return end();
 			return { kind: "walking", pose: drawn };
 		},

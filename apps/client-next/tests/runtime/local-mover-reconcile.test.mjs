@@ -182,6 +182,7 @@ function play( { clicks, events = [], origin = () => 0, endMs = 8000, outLatency
 			moving: p?.moving ?? false,
 			aim: p?.goal && { kind: "goal", destination: p.goal },
 			speedFactor: 1,
+			turnRate: 0,
 			walkPredictable: true,
 			speed: p?.speed ?? SPEED,
 			inputSeq: p?.inputSeq ?? 0,
