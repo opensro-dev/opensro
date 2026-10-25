@@ -84,6 +84,7 @@
     "src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/targeting/targeting.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/reservation/reservation.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+    "src/engine/runtime/simulation/worker/session/world/gameplay/arrow-keys/arrow-keys.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/simulation/worker/session/world/entities/motion/motion.ts": "src/engine/runtime/simulation/worker/session/world/entities/entities.ts",
     "src/engine/runtime/renderer/world/world.ts": "src/engine/runtime/renderer/renderer.ts",
     "src/engine/runtime/assets/worker/world/world.ts": "src/engine/runtime/assets/worker/loader.ts",

@@ -61,4 +61,8 @@ export interface MoverPublication {
 		readonly startedAtMs: number;
 		readonly durationMs: number;
 	};
+	// A ground pickup now would start the worker's own run-up at once
+	// (gameplay.ts pickupPredictableNow): the main-thread mover predicts
+	// the pickup leg only then (#1567).
+	readonly pickupPredictable?: boolean;
 }
