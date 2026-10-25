@@ -20,6 +20,9 @@ import { NAME_COLOR_WHITE, nameColorRgba } from "@/engine/foundation/gameplay/na
 
 // CICCos 855CBC subtracts the double 20.0 at C46198 before drawing the owner.
 const COMPANION_OWNER_Y = -20;
+// 854B95..854C02's tid-word gates: low byte 0xC6 and band 5 (server's
+// MercenaryBand): every guild soldier reference carries this one word.
+const GUILD_SOLDIER_TID_WORD = 0x29c6;
 
 /*
 ================
@@ -46,10 +49,27 @@ name stays either way.
 export function companionOwnerNameplate(
 	entity: EntityState,
 	owner: EntityState | undefined,
-	options: GameOptions
+	options: GameOptions,
+	ownerGuildColour?: UiQuad["color"]
 ) {
 	if ( !companionOwnerShown( entity, options ) ) return null;
 	const user = owner?.gid === entity.ownerGid && (owner?.kind === "player" || owner?.kind === "local-player");
+	// 854B95..854C21: a guild soldier's owner board deviates. With the
+	// owner visible it takes the owner guild label colour (the guild row
+	// colour above, computed by the caller for the owner entity), and
+	// 854C0C skips the white reset when the owner is absent, so it keeps
+	// its own name colour instead of painting white.
+	if ( entity.tidWord === GUILD_SOLDIER_TID_WORD ) {
+		return {
+			text: entity.ownerName ?? "",
+			color: user && ownerGuildColour ?
+				ownerGuildColour :
+				user ?
+				nameColorRgba( owner.nameColor ?? NAME_COLOR_WHITE ) :
+				nameColorRgba( entity.nameColor ?? NAME_COLOR_WHITE ),
+			y: COMPANION_OWNER_Y
+		};
+	}
 	return {
 		text: entity.ownerName ?? "",
 		color: nameColorRgba( user ? owner.nameColor ?? NAME_COLOR_WHITE : NAME_COLOR_WHITE ),
