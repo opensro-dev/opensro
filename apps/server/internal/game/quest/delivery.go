@@ -102,6 +102,9 @@ func (rt *Runtime) AdvanceNpcQuest(c *enterworld.Character, code, npc string) (O
 	if strings.HasPrefix(code, captureSupplyPrefix) {
 		return rt.finishCaptureSupply(c, code, npc)
 	}
+	if strings.HasPrefix(code, rahid6TravelPrefix) {
+		return rt.advanceRahid6Travel(c, npc)
+	}
 	if strings.HasPrefix(code, sideTalkPrefix) {
 		return rt.hearSideTalk(c, code, npc)
 	}

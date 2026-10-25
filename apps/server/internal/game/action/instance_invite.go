@@ -248,6 +248,48 @@ type InstanceInviteResult struct {
 
 /*
 ================
+InstancePartyFacts
+
+The party facts a quest programme's talk gates read, answered under
+the division lock: whether the named character was found, stands in
+a party, leads it, runs the shared options this lane requires, and
+has a trade transport summoned. The invitation itself re-checks what
+it needs when it acts; these facts only choose the refusal line.
+================
+*/
+type InstancePartyFacts struct {
+	Found       bool
+	InParty     bool
+	Leader      bool
+	Shared      bool
+	Transported bool
+}
+
+/*
+================
+InstancePartyFacts
+
+Answers InstancePartyFacts for one character.
+================
+*/
+func (rt *Runtime) InstancePartyFacts(division, name string) InstancePartyFacts {
+	unlock := rt.lockDivision(division)
+	defer unlock()
+	character := rt.findCharacter(division, name)
+	if character == nil {
+		return InstancePartyFacts{}
+	}
+	facts := InstancePartyFacts{Found: true, Transported: rt.transportSummoned(character)}
+	if party := rt.rewardPartyOf(division, enterworld.ObjectIDForCharacter(character)); party != nil {
+		facts.InParty = true
+		facts.Leader = party.LeaderID == enterworld.ObjectIDForCharacter(character)
+		facts.Shared = party.Options&instanceInviteShareOptions == instanceInviteShareOptions
+	}
+	return facts
+}
+
+/*
+================
 instanceInvitePrompt
 
 The S->C 0x3393 type-7 prompt: the inviter's gid, then the struct

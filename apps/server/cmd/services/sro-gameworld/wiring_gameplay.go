@@ -790,6 +790,9 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	quests.SpawnQuestMonster = func(character *enterworld.Character, request simulation.QuestMonsterSpawn) bool {
 		return game.items.SpawnQuestMonster(game.divisionID, character, request)
 	}
+	// The quest programmes' instanced-world doors live with the quest
+	// composition (wiring_quests.go).
+	game.wireQuestProgrammes(quests)
 	game.items.CanPlaceQuestTrap = quests.CanPlaceTrap
 	game.items.CaptureQuestTrap = quests.CaptureQuestTrap
 	game.items.UpdateQuestInventory = quests.InventoryUpdater()
