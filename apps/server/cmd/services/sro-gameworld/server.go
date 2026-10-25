@@ -77,6 +77,7 @@ func main() {
 	}
 	transportConfig.PrivateNetwork =
 		os.Getenv("SRO_GAMEWORLD_PRIVATE_NETWORK") == "1"
+	transportConfig.WebTransportPublic = transport.WebTransportPublicEnabled()
 	transportConfig.MaxSessions = ownedShard.Capacity
 	warnTransportCatalogMismatch(ownedShard, transportConfig)
 	ts, err := transport.NewServer(transportConfig)
