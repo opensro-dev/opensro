@@ -244,7 +244,9 @@ var Settings = []Setting{
 	// is permanent and does not read this setting (action/commerce.go).
 	{Env: "SRO_SUN_EVENT_ONLY", NomadVar: "sun_event_only", Default: "off", Catalogue: true},
 	// Owner, 2026-10-20: the degree-9 Sun drop rate (class mass 30 x rate
-	// on levels 76-90); 2 targets roughly eleven Sun drops a week.
+	// on levels 76-90). Owner, 2026-10-25 (#1605 P1): the widened class
+	// is capped at the Moon class's width, so a Sun expects about twice
+	// a Moon's kills; the cap supersedes the eleven-a-week calibration.
 	{Env: "SRO_SUN_DROP_RATE", NomadVar: "sun_drop_rate", Default: "2", Catalogue: true},
 	// Owner, 2026-10-20: uniques ignore the level-gap drop admission and
 	// always leave exactly one Magic Pop ticket; "off" is native 4C1840.
