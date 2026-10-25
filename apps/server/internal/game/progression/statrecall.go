@@ -21,7 +21,8 @@ recalls nothing and keeps the scroll.
 package progression
 
 import (
-	"opensro.online/server/internal/domain"
+	"math"
+
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 )
@@ -41,21 +42,55 @@ func (rt *Runtime) StatRecallUpdater() func(*enterworld.Character) ([]wire.Frame
 
 /*
 ================
-automaticStat
+StatReset
 
-STR or INT a character has without spending a point: the creation value
-plus one per level above 1, up to the highest level reached.
+What a full stat reset leaves: STR and INT at their automatic value for the
+highest level reached, every point above it in the free pool.
 ================
 */
-func automaticStat(character *enterworld.Character) int64 {
-	level := characterLevel(character)
-	if character.MaxLevel != nil && *character.MaxLevel > level {
+type StatReset struct {
+	Strength, Intellect, Points int64
+}
+
+/*
+================
+ResetStats
+
+The one stat-reset rule, shared by the recall scroll and the console's
+reset-stats (#1609): STR = INT = BaseStatAtLevel(highest level reached),
+i.e. MaxLevel + 19, and the free pool gains every point spent above it, so
+at a never-spent build the pool is 3 x (MaxLevel - 1). The automatic +1
+STR/+1 INT come only with a new maximum level (levelup.go), so a character
+below its highest level keeps them in STR and INT. A record the reset
+cannot represent is refused rather than normalised: a missing or negative
+field, a level outside the wire byte, a stat below its automatic value, or
+a pool wider than the stat-point word. Refusing never invents or loses a
+point.
+================
+*/
+func ResetStats(character *enterworld.Character) (StatReset, bool) {
+	if character == nil || character.Level == nil || *character.Level < 1 || *character.Level > math.MaxUint8 ||
+		character.Strength == nil || character.Intellect == nil {
+		return StatReset{}, false
+	}
+	level := *character.Level
+	if character.MaxLevel != nil && *character.MaxLevel > level && *character.MaxLevel <= math.MaxUint8 {
 		level = *character.MaxLevel
 	}
-	if level < 1 {
-		level = 1
+	base := BaseStatAtLevel(level)
+	strength, intellect, points := *character.Strength, *character.Intellect, int64(0)
+	if character.StatPoints != nil {
+		points = *character.StatPoints
 	}
-	return domain.BaseStat + autoStatPerLevel*(level-1)
+	if strength < base || intellect < base || strength > statPointWordMax || intellect > statPointWordMax ||
+		points < 0 || points > statPointWordMax {
+		return StatReset{}, false
+	}
+	free := (strength - base) + (intellect - base) + points
+	if free > statPointWordMax {
+		return StatReset{}, false
+	}
+	return StatReset{Strength: base, Intellect: base, Points: free}, true
 }
 
 /*
@@ -68,15 +103,12 @@ func (rt *Runtime) recallStatPoints(character *enterworld.Character) ([]wire.Fra
 		return nil, false
 	}
 	next := character.Snapshot()
-	automatic := automaticStat(next)
-	spentStr := max(0, enterworld.CharacterStrength(next)-automatic)
-	spentInt := max(0, enterworld.CharacterIntellect(next)-automatic)
-	if spentStr+spentInt == 0 {
+	reset, ok := ResetStats(next)
+	// Nothing spent (or a record the reset refuses): the scroll is kept.
+	if !ok || reset.Strength == *next.Strength && reset.Intellect == *next.Intellect {
 		return nil, false
 	}
-	points := min(coercePoints(next.StatPoints)+spentStr+spentInt, statPointWordMax)
-	strength := enterworld.CharacterStrength(next) - spentStr
-	intellect := enterworld.CharacterIntellect(next) - spentInt
+	strength, intellect, points := reset.Strength, reset.Intellect, reset.Points
 	next.Strength, next.Intellect, next.StatPoints = &strength, &intellect, &points
 	// Lower maxima never heal; an absent current pins at the old maximum first.
 	if next.CurrentHP == nil {

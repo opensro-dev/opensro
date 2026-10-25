@@ -71,7 +71,7 @@ The production HUD with the three camera sinks recorded.
 function cameraUiFixture( t, gm = true ) {
 	/** @type {any[]} */
 	const sent = [];
-	const rail = [], free = [], cursor = [], collision = [];
+	const rail = [], free = [], cursor = [], modes = [], collision = [];
 	const f = uiFixture(
 		message => {
 			if ( message.kind === "gameplay" ) sent.push( message.command );
@@ -86,7 +86,8 @@ function cameraUiFixture( t, gm = true ) {
 			setCameraZoomRail: value => rail.push( value ),
 			setFreeCamera: value => free.push( value ),
 			setCameraCollision: value => collision.push( value ),
-			setCursorVisible: value => cursor.push( value )
+			setCursorVisible: value => cursor.push( value ),
+			setRenderMode: ( mode, enabled ) => modes.push( [ mode, enabled ] )
 		}
 	);
 	t.after( () => f.dispose() );
@@ -120,7 +121,7 @@ function cameraUiFixture( t, gm = true ) {
 	draw();
 	f.ui.event( { kind: "key", code: "Backquote", shift: true } );
 	draw();
-	return { ...f, sent, rail, free, cursor, collision, typeLine };
+	return { ...f, sent, rail, free, cursor, modes, collision, typeLine };
 }
 
 /*
@@ -152,6 +153,55 @@ test("the GM console flips the camera bytes and reports only /camera", t => {
 	f.typeLine( "/colon" );
 	assert.deepEqual( f.collision, [ false, true ] );
 	assert.deepEqual( f.sent, [], "a camera row reached the server" );
+});
+
+/*
+================
+test("the GM console negates the render family's graphic options")
+================
+*/
+test("the GM console negates the render family's graphic options", t => {
+	const f = cameraUiFixture( t );
+	// SWorld_Construct seeds wireframe clear and the five others standing:
+	// the first press turns /wire on and everything else off. The native
+	// prints nothing for any of the six.
+	f.typeLine( "/wire" );
+	f.typeLine( "/ground" );
+	f.typeLine( "/sky" );
+	f.typeLine( "/mobj" );
+	f.typeLine( "/char" );
+	f.typeLine( "/lod" );
+	assert.deepEqual( f.modes, [
+		[ 0x12, true ],
+		[ 0x13, false ],
+		[ 0x14, false ],
+		[ 0x15, false ],
+		[ 0x16, false ],
+		[ 0x17, false ]
+	] );
+	f.typeLine( "/wire" );
+	f.typeLine( "/ground" );
+	f.typeLine( "/lod" );
+	assert.deepEqual( f.modes.slice( 6 ), [
+		[ 0x12, false ],
+		[ 0x13, true ],
+		[ 0x17, true ]
+	] );
+	assert.deepEqual( f.sent, [], "a render row reached the server" );
+});
+
+/*
+================
+test("a player without GM eligibility flips no render option")
+================
+*/
+test("a player without GM eligibility flips no render option", t => {
+	const f = cameraUiFixture( t, false );
+	f.typeLine( "/wire" );
+	f.typeLine( "/ground" );
+	f.typeLine( "/char" );
+	assert.deepEqual( f.modes, [] );
+	assert.deepEqual( f.sent, [] );
 });
 
 /*
@@ -222,6 +272,7 @@ function cameraWorldFixture( t ) {
 		videoOptions: unexpectedCameraWork,
 		experimentalVideo: unexpectedCameraWork,
 		setSelectionDecal: unexpectedCameraWork,
+		setWorldRenderMode: unexpectedCameraWork,
 		setFootprints: unexpectedCameraWork,
 		pickGround: unexpectedCameraWork,
 		presentationCamera: unexpectedCameraWork,

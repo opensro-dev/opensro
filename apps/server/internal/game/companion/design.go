@@ -56,15 +56,28 @@ PetDef
 ================
 */
 type PetDef struct {
-	Name                string  `json:"name"`
-	Role                string  `json:"role"`
-	CodenamePrefix      string  `json:"codenamePrefix"`
-	HPPercent           float64 `json:"hpPercent"`
-	PhysicalPercent     float64 `json:"physicalPercent"`
-	MagicalPercent      float64 `json:"magicalPercent"`
-	DefensePercent      float64 `json:"defensePercent"`
-	MagicDefensePercent float64 `json:"magicDefensePercent"`
-	MagicPrimary        bool    `json:"magicPrimary"`
+	HealthByLevel       []PetHealth `json:"healthByLevel"`
+	Name                string      `json:"name"`
+	Role                string      `json:"role"`
+	CodenamePrefix      string      `json:"codenamePrefix"`
+	HPPercent           float64     `json:"hpPercent"`
+	PhysicalPercent     float64     `json:"physicalPercent"`
+	MagicalPercent      float64     `json:"magicalPercent"`
+	DefensePercent      float64     `json:"defensePercent"`
+	MagicDefensePercent float64     `json:"magicDefensePercent"`
+	MagicPrimary        bool        `json:"magicPrimary"`
+}
+
+/*
+================
+PetHealth
+
+An authored survival benchmark; intermediate levels interpolate.
+================
+*/
+type PetHealth struct {
+	Level uint8  `json:"level"`
+	HP    uint32 `json:"hp"`
 }
 
 /*
@@ -108,6 +121,7 @@ type GearItem struct {
 }
 
 type GearDegree struct {
+	ProcDamage  uint32     `json:"procDamage"`
 	Degree      int        `json:"degree"`
 	MinPetLevel uint8      `json:"minPetLevel"`
 	DropChance  float64    `json:"dropChance"`
@@ -128,6 +142,7 @@ id is AffixParamBase + Code).
 ================
 */
 type AffixDef struct {
+	SkillID   uint8    `json:"skillId,omitempty"`
 	RollPower float64  `json:"rollPower,omitempty"`
 	ID        string   `json:"id"`
 	Code      uint16   `json:"code"`
@@ -190,6 +205,17 @@ func mustDesign(raw []byte) Design {
 	for _, a := range d.Affixes {
 		if a.Code == 0 || codes[a.Code] || a.Max < a.Min {
 			panic(fmt.Sprintf("companion: petdesign.json affix %q is invalid", a.ID))
+		}
+		if a.SkillID != 0 {
+			valid := false
+			for _, skill := range d.TreeSkills {
+				if skill.ID == a.SkillID && skill.Pet == a.Pets && skill.Option == 1 && skill.Row >= 0 && skill.Row < RowCount {
+					valid = a.Group == "OneSkill" && a.Min >= 1 && a.Max <= 5
+				}
+			}
+			if !valid {
+				panic(fmt.Sprintf("companion: affix %q has an invalid skill bonus", a.ID))
+			}
 		}
 		codes[a.Code] = true
 	}
@@ -324,10 +350,12 @@ The degree and slot index of a pet gear item.
 ================
 */
 func GearByID(id uint32) (GearDegree, int, bool) {
+	tier := SealTier(id)
+	id -= uint32(tier * 10)
 	for _, d := range D.Gear {
 		for slot, item := range d.Items {
 			if item.ID == id {
-				return d, slot, true
+				return sealedDegree(d, slot, tier), slot, true
 			}
 		}
 	}
@@ -335,10 +363,11 @@ func GearByID(id uint32) (GearDegree, int, bool) {
 }
 
 func GearByCodename(codename string) (GearDegree, int, bool) {
+	codename, tier := sealCodename(codename)
 	for _, d := range D.Gear {
 		for slot, item := range d.Items {
 			if item.Codename == codename {
-				return d, slot, true
+				return sealedDegree(d, slot, tier), slot, true
 			}
 		}
 	}

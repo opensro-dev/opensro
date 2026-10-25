@@ -216,7 +216,7 @@ func newGameplayPlane(
 		return nil, fmt.Errorf("commerce catalogue: %w", err)
 	}
 	items.ConfigureStorage(authorityStore)
-	betaSilk, mallAuthority, err := composeBetaSilk(authorityStore, items, deps)
+	betaSilk, mallAuthority, err := composeBetaSilk(authorityStore, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -232,6 +232,7 @@ func newGameplayPlane(
 	if err := items.ConfigureMall(devPaths.TextdataDir, mallAuthority, mallExtra); err != nil {
 		return nil, fmt.Errorf("mall catalogue: %w", err)
 	}
+	items.StatRecallWindows = commerce.StatRecallListed(mallExtra)
 	deps.SceneReferenceFrames = items.CommerceReferenceSeed
 	deps.ReconcileSceneObjects = items.ReconcileScene
 	deps.ExtraRefItemCodenames = items.GroundRefItemCodenames
@@ -540,6 +541,12 @@ never acquire another character transaction.
 ================
 */
 func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefinitionLoader) error {
+	if game.betaSilk != nil {
+		// SRO_BETA_SILK_ACTIVE_ONLY (port-only): any player-sent command
+		// counts as play (#1604 P5), so the transport hub reports every
+		// dispatched game frame; NoteActivity is inert with the flag off.
+		hub.OnSessionActivity(game.betaSilk.NoteActivity)
+	}
 	if err := game.deps.Validate(); err != nil {
 		return fmt.Errorf("bootstrap dependencies: %w", err)
 	}
@@ -754,7 +761,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	// wins over it - Sun then drops nothing, which must not be silent.
 	game.items.SunRate = progression.SunRateFromEnv()
 	if game.items.SunRate.Active() {
-		log.Infof("loot: degree-9 Seal of Sun drops at class mass x%d on levels 76-90 (%s=%d)", game.items.SunRate.MassMultiplier(), progression.EnvSunDropRate, game.items.SunRate.Rate())
+		log.Infof("loot: degree-9 Seal of Sun drops at class mass up to x%d on levels 76-90, capped at the Moon class (#1605 P1) (%s=%d)", game.items.SunRate.MassMultiplier(), progression.EnvSunDropRate, game.items.SunRate.Rate())
 		if game.items.SunEventOnly.Enabled() {
 			log.Warnf("loot: %s is on while %s=%d: the event rule excludes every degree-9 Sun drop, so the rate widens a class that drops nothing; turn one of them off", progression.EnvSunEventOnly, progression.EnvSunDropRate, game.items.SunRate.Rate())
 		}

@@ -20,6 +20,9 @@ out (the CloneWorldState discipline).
 ==================
 */
 func (ops *MonsterMoverOps) advanceInstance(divisionID string, instance monster.Instance, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
+	if instance.Ref.TrainingDummy {
+		return nil, nil
+	}
 	frames, targeted := ops.advanceInstanceStep(divisionID, instance, divisionPlayers, nowMs)
 	frames = ops.resolveStuck(divisionID, instance.Gid, divisionPlayers, nowMs, frames)
 	return frames, targeted

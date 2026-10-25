@@ -610,6 +610,13 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/world.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"functions": [
+				"experimental"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/simulation/worker/session/http/http.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/world.ts",
 			"functions": [
@@ -1040,6 +1047,7 @@
 				"setCameraZoomRail",
 				"setCursorVisible",
 				"setFreeCamera",
+				"setRenderMode",
 				"setWorldFieldOfView"
 			]
 		},
@@ -4122,7 +4130,7 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "2dc534612f8621abcacf8e40f5e6e493da0d397694a0cbedb289701b07e8e5ef",
+			"sourceSha256": "28e5bc5cedcda7b99f677420268bb7bdd7df4b2283f6f0fe54c5cedff86c1531",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. A hidden frame renders only while a world entry awaits game-ready, under the same barrier: native keeps updating while inactive (A0F430 OnUpdate; A11650 skips drawing) and finishes loading in CPSMission_OnUpdate (728E10). A visible window that gets no RAF for STARVED_FRAME_MS runs the same delivery-paced maintenance frames. Device disposal cancels pending mapping. Startup also hands the asset owner the device texture features once (port-only texture variants), outside the frame. The frame also derives the own-mover step at its existing call site (the local mover's next frame, or the published own cast displacement adopted as a fixed segment, #1569); the readback ordering above is unchanged by it.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

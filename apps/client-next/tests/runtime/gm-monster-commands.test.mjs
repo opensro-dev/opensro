@@ -49,7 +49,12 @@ function fixture( gmPrivilege = true ) {
 		country: () => undefined,
 		playerModels: () => [],
 		item: () => undefined,
-		monster: name => name === "MOB_CH_TIGERWOMAN" ? { refObjId: 1954, monsterType: 3 } : undefined,
+		monster: name =>
+			name === "MOB_CH_TIGERWOMAN" ?
+				{ refObjId: 1954, monsterType: 3 } :
+				name === "MOB_GM_TRAINING_DUMMY_021" ?
+				{ refObjId: 5000121, monsterType: 0 } :
+				undefined,
 		npcs: () => []
 	} );
 	return { game, sent, local };
@@ -138,12 +143,12 @@ test("MOBKILL never reuses a released, removed or reset selection", () => {
 	}
 });
 
-test("non-GMs cannot send either monster command through gameplay", () => {
+test("non-GMs cannot send monster commands through gameplay", () => {
 	const f = fixture( false );
 	try {
 		selectMonster( f, MONSTER_A );
 		const before = f.sent.length;
-		for ( const line of [ "/MOBKILL 0", "/MOBKILL 1", "/ZOE MOB_CH_TIGERWOMAN 2" ] ) {
+		for ( const line of [ "/MOBKILL 0", "/MOBKILL 1", "/ZOE MOB_CH_TIGERWOMAN 2", "/TRAININGDUMMY 21" ] ) {
 			assert.equal( f.game.command( { kind: "gm-command", line }, 3, undefined, f.local ), null );
 		}
 		assert.equal( f.sent.length, before );
