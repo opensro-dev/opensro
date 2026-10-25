@@ -10,9 +10,14 @@ the hook it is running; a watchdog goroutine reports a tick that outlives
 the stall threshold exactly once, with every goroutine's stack, so the lock
 or I/O holding the tick is in the log the first time it happens.
 
-A tick still stuck after StallExit is a deadlock: Go locks have no timeout
-and a parked goroutine cannot be killed, so nothing inside the process can
-recover. The watchdog then writes a dump file (the stalled phase and hook,
+A tick that has made no progress for StallExit is a deadlock: Go locks
+have no timeout and a parked goroutine cannot be killed, so nothing inside
+the process can recover. Progress is a step counter the coordinator and
+the division workers bump per division leg and per hook; a tick that is
+merely slow (a host starved of CPU runs every worker late, and its stack
+dump shows no lock waiters) keeps bumping it and is left to finish, up to
+stallCeilingFactor times StallExit, so a runaway loop that still bumps a
+counter cannot hold the world forever either. The watchdog then writes a dump file (the stalled phase and hook,
 the goroutines waiting on locks, every stack) to StallDumpDir and exits
 non-zero; the supervisor restarts the process. Every store operation
 commits on its own, so the restart loses no committed state. This is an
@@ -29,10 +34,12 @@ package simulation
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"runtime/metrics"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -56,6 +63,18 @@ const (
 	tickStallDumpMaxBytes = 64 << 20
 	// tickStallExitCode is the process status after a stall dump.
 	tickStallExitCode = 3
+	// stallCeilingFactor bounds a tick that keeps progressing: past this
+	// many StallExit periods it is dumped and exited like a deadlock.
+	stallCeilingFactor = 4
+	// monsterLegStepActors is how many monster behaviours the monster leg
+	// runs per watchdog step: often enough that a starved leg shows
+	// progress, rare enough that shard workers do not contend on it.
+	monsterLegStepActors = 64
+	// schedLatencyMetric is the Go scheduler's histogram of how long
+	// runnable goroutines waited for a thread: high while the host starves
+	// the process of CPU, near zero in a deadlock.
+	schedLatencyMetric   = "/sched/latencies:seconds"
+	schedLatencyQuantile = 0.99
 )
 
 // EnvTickStallExit is the seconds one tick may stay stuck before the
@@ -95,6 +114,100 @@ type tickWatch struct {
 	reported atomic.Int64
 	// endNs is when the last tick finished; zero until the first one has.
 	endNs atomic.Int64
+	// steps counts finished units of tick work (division legs, hooks).
+	steps atomic.Int64
+
+	// Owned by the watchdog goroutine: the tick it last looked at, the
+	// step count it saw, when that count last changed, and the tick it
+	// already logged as slow.
+	seenStart int64
+	seenSteps int64
+	seenAt    int64
+	slowStart int64
+	// sched is the scheduler histogram at the previous poll, so a report
+	// shows the latency of the last poll period, not since boot.
+	sched schedSample
+}
+
+/*
+================
+schedSample
+
+One reading of schedLatencyMetric. A zero sample (no counts) means the
+runtime does not offer the metric.
+================
+*/
+type schedSample struct {
+	counts  []uint64
+	buckets []float64
+}
+
+/*
+================
+readSched
+================
+*/
+func readSched() schedSample {
+	sample := []metrics.Sample{{Name: schedLatencyMetric}}
+	metrics.Read(sample)
+	if sample[0].Value.Kind() != metrics.KindFloat64Histogram {
+		return schedSample{}
+	}
+	h := sample[0].Value.Float64Histogram()
+	return schedSample{counts: append([]uint64(nil), h.Counts...), buckets: h.Buckets}
+}
+
+/*
+================
+schedLatency
+
+The schedLatencyQuantile scheduler wait between two samples, as a lower
+bound (the bucket's low edge), and how many goroutine wake-ups it covers.
+Zero when the samples do not line up or nothing was scheduled.
+================
+*/
+func schedLatency(prev, cur schedSample) (time.Duration, uint64) {
+	if len(cur.counts) == 0 || len(prev.counts) != len(cur.counts) {
+		return 0, 0
+	}
+	var total uint64
+	for i := range cur.counts {
+		total += cur.counts[i] - prev.counts[i]
+	}
+	if total == 0 {
+		return 0, 0
+	}
+	want := uint64(math.Ceil(float64(total) * schedLatencyQuantile))
+	var seen uint64
+	for i := range cur.counts {
+		seen += cur.counts[i] - prev.counts[i]
+		if seen >= want {
+			low := cur.buckets[i]
+			if math.IsInf(low, -1) || low < 0 {
+				low = 0
+			}
+			return time.Duration(low * float64(time.Second)), total
+		}
+	}
+	return 0, total
+}
+
+/*
+================
+tickWatch.schedReport
+
+The scheduler latency since the previous poll, for a stall message, and
+the sample that becomes the next poll's baseline. Watchdog goroutine only.
+================
+*/
+func (w *tickWatch) schedReport() string {
+	cur := readSched()
+	latency, wakeups := schedLatency(w.sched, cur)
+	w.sched = cur
+	if wakeups == 0 {
+		return "scheduler latency unknown"
+	}
+	return fmt.Sprintf("scheduler p99 wait >= %v over %d wake-ups", latency.Round(time.Microsecond), wakeups)
 }
 
 /*
@@ -129,6 +242,7 @@ enclosing constructor (for example action.(*Runtime).TickHook.func1).
 ================
 */
 func (w *tickWatch) enterHook(hook TickHook) {
+	w.steps.Add(1)
 	w.hook.Store(reflect.ValueOf(hook).Pointer())
 }
 
@@ -139,6 +253,42 @@ tickWatch.leaveHook
 */
 func (w *tickWatch) leaveHook() {
 	w.hook.Store(0)
+	w.steps.Add(1)
+}
+
+/*
+================
+tickWatch.step
+
+One unit of tick work finished. Safe from any shard worker.
+================
+*/
+func (w *tickWatch) step() {
+	if w == nil {
+		return
+	}
+	w.steps.Add(1)
+}
+
+/*
+================
+tickWatch.stuckFor
+
+How long the tick started at start has gone without a step at now. The
+first look at a tick counts from its start, so a tick parked before the
+watchdog first saw it is not given a fresh StallExit. Watchdog goroutine
+only.
+================
+*/
+func (w *tickWatch) stuckFor(start int64, now time.Time) time.Duration {
+	steps := w.steps.Load()
+	switch {
+	case w.seenStart != start:
+		w.seenStart, w.seenSteps, w.seenAt = start, steps, start
+	case w.seenSteps != steps:
+		w.seenSteps, w.seenAt = steps, now.UnixNano()
+	}
+	return time.Duration(now.UnixNano() - w.seenAt)
 }
 
 /*
@@ -241,18 +391,33 @@ func lockWaiters(stacks []byte) string {
 
 /*
 ================
-writeStallDump
+stallDump
 
-The dump an operator or agent reads to fix the deadlock. It never blocks
-the exit: a dump that cannot be written goes to the log instead.
+What a stall dump says about the stalled tick, ahead of the stacks.
 ================
 */
-func writeStallDump(dir string, now time.Time, elapsed time.Duration, phase, hook string) string {
+type stallDump struct {
+	elapsed            time.Duration
+	phase, hook, sched string
+}
+
+/*
+================
+writeStallDump
+
+The dump an operator or agent reads to fix the deadlock: the stalled
+phase and hook, the scheduler latency (high when the host starved the
+process, near zero in a deadlock), the lock waiters and every stack. It
+never blocks the exit: a dump that cannot be written goes to the log
+instead.
+================
+*/
+func writeStallDump(dir string, now time.Time, stall stallDump) string {
 	stacks := allStacks()
-	body := fmt.Sprintf("tick stall dump\nat:      %s\nstalled: %v\nphase:   %s\nhook:    %s\npid:     %d\n\n"+
+	body := fmt.Sprintf("tick stall dump\nat:      %s\nstalled: %v\nphase:   %s\nhook:    %s\nsched:   %s\npid:     %d\n\n"+
 		"== goroutines waiting on locks ==\n%s\n== all goroutines ==\n%s",
-		now.UTC().Format(time.RFC3339Nano), elapsed.Round(time.Millisecond), phase, hook, os.Getpid(),
-		lockWaiters(stacks), stacks)
+		now.UTC().Format(time.RFC3339Nano), stall.elapsed.Round(time.Millisecond), stall.phase, stall.hook,
+		stall.sched, os.Getpid(), lockWaiters(stacks), stacks)
 	path := filepath.Join(dir, "tick-stall-"+now.UTC().Format("20060102T150405Z")+".txt")
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		log.Errorf("simulation: stall dump directory %s: %v\n%s", dir, err, body)
@@ -349,6 +514,8 @@ func (t *Ticker) watchStalls(ctx context.Context) {
 			if t.stallExpired(now) {
 				return
 			}
+			// Each poll's histogram is the next report's baseline.
+			t.watch.sched = readSched()
 		}
 	}
 }
@@ -357,7 +524,8 @@ func (t *Ticker) watchStalls(ctx context.Context) {
 ================
 stallExpired
 
-Dumps and exits once the current tick has been stuck for StallExit.
+Dumps and exits once the current tick has made no progress for StallExit,
+or has run for stallCeilingFactor times StallExit however it progresses.
 Returns true after the exit, which only returns when exit is stubbed.
 ================
 */
@@ -367,12 +535,26 @@ func (t *Ticker) stallExpired(now time.Time) bool {
 		return false
 	}
 	elapsed, phase, hook := t.watch.stalled(start, now)
-	if elapsed < t.StallExit {
+	stuck := t.watch.stuckFor(start, now)
+	cause := ""
+	switch {
+	case stuck >= t.StallExit:
+		cause = "no progress, deadlock assumed"
+	case elapsed >= stallCeilingFactor*t.StallExit:
+		cause = "still progressing past the ceiling, runaway assumed"
+	}
+	if cause == "" {
+		if elapsed >= t.StallExit && t.watch.slowStart != start {
+			t.watch.slowStart = start
+			log.Warnf("simulation: tick slow %v in %s (hook %s) but progressing (%s); not restarting before %v",
+				elapsed.Round(time.Millisecond), phase, hook, t.watch.schedReport(), stallCeilingFactor*t.StallExit)
+		}
 		return false
 	}
-	path := writeStallDump(t.StallDumpDir, now, elapsed, phase, hook)
-	log.Errorf("simulation: tick stuck %v in %s (hook %s): deadlock assumed; dump %s; exiting for restart",
-		elapsed.Round(time.Millisecond), phase, hook, path)
+	sched := t.watch.schedReport()
+	path := writeStallDump(t.StallDumpDir, now, stallDump{elapsed: elapsed, phase: phase, hook: hook, sched: sched})
+	log.Errorf("simulation: tick stuck %v in %s (hook %s): %s (%s); dump %s; exiting for restart",
+		elapsed.Round(time.Millisecond), phase, hook, cause, sched, path)
 	exit := t.exit
 	if exit == nil {
 		exit = os.Exit
