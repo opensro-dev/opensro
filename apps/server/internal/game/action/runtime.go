@@ -437,6 +437,10 @@ type Runtime struct {
 	// TeleportGrace makes a teleport arrival untouchable for the revival's
 	// grace (teleportprotection.go; port-only, not native). False is native.
 	TeleportGrace bool
+	// PremiumUpgrade lets a strictly higher-grade premium ticket of the
+	// same family replace the running lower one (premiumticket.go;
+	// port-only, not native). False is native: 0x1894 while one runs.
+	PremiumUpgrade bool
 	// tradeOrigins is each trade good's home town, from the shops.
 	tradeOrigins map[uint32]tradeTown
 

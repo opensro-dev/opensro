@@ -359,6 +359,14 @@ variable "teleport_grace" {
   default = "off"
 }
 
+# premium_upgrade lets a strictly higher-grade premium ticket replace the
+# running lower one (owner decision 2026-10-25, #1624). Port-only, not
+# native; "off" refuses a second ticket while one runs.
+variable "premium_upgrade" {
+  type    = string
+  default = "off"
+}
+
 # trade_tiers rates a caravan's stars by its cargo's gold value (5M, 10M,
 # 20M, 35M, 50M) and raises trade profit between Jangan and Donwhang +50%,
 # Hotan +100%, Samarkand +200%, Constantinople +300% (port-only, not
@@ -1030,6 +1038,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_MOST_WANTED_STREAK_NOTICE           = var.most_wanted_streak_notice
         SRO_TRADE_TIERS                         = var.trade_tiers
         SRO_TELEPORT_GRACE                      = var.teleport_grace
+        SRO_PREMIUM_UPGRADE                     = var.premium_upgrade
         SRO_TRADE_ROUTE_DONWHANG_PERCENT        = var.trade_route_donwhang_percent
         SRO_TRADE_ROUTE_HOTAN_PERCENT           = var.trade_route_hotan_percent
         SRO_TRADE_ROUTE_SAMARKAND_PERCENT       = var.trade_route_samarkand_percent

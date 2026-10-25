@@ -259,9 +259,19 @@ frameSourceGID
 A ground-item despawn (0x36AB) must reach every session that published the
 drop (including via the 0x3417 bootstrap before any movement tick), even if
 that viewer has not published the picking character or grab pet.
+
+A ride-state apply (0xB4B5 [1][rider u32][flag][mount u32]) goes to its
+rider's observers, whoever's action caused it: the v1.150 client resolves
+the rider with no null test (777FB2..777FC3) and faults on one it does not
+hold (#1613: an attacker's observer got a killed rider's dismount).
 ================
 */
 func frameSourceGID(defaultSourceGID uint32, f wire.Frame) uint32 {
+	if f.Opcode == wire.OpCosRideState {
+		if rider, ok := wire.CosRideStateRider(f.Payload); ok {
+			return rider
+		}
+	}
 	if f.Opcode == wire.OpObjectDespawn && len(f.Scope) == 1 && !f.Scope[0].Visible {
 		gid := f.Scope[0].GID
 		if gid > domain.GroundItemGIDBase && gid <= domain.GroundItemGIDLimit {

@@ -130,6 +130,10 @@ var Settings = []Setting{
 	// Owner, 2026-10-25: the revival's grace after a teleport arrival
 	// (port-only, not native; off is native, #1518).
 	{Env: "SRO_TELEPORT_GRACE", NomadVar: "teleport_grace", Default: "off", Catalogue: true},
+	// Owner, 2026-10-25: a strictly higher-grade premium ticket replaces
+	// the running lower one and its remaining time is lost (#1624,
+	// port-only, not native; "off" refuses a second ticket while one runs).
+	{Env: "SRO_PREMIUM_UPGRADE", NomadVar: "premium_upgrade", Default: "off"},
 	// F10 trade group (game/tunables): the Jangan route profit percents. The
 	// site's trade quotes read them, so the catalogue does too.
 	{Env: "SRO_TRADE_ROUTE_DONWHANG_PERCENT", NomadVar: "trade_route_donwhang_percent", Default: "50", Catalogue: true},
@@ -196,7 +200,8 @@ var Settings = []Setting{
 	{Env: "SRO_FLAGWAR_MIN_PLAYERS", NomadVar: "flagwar_min_players", Default: "4"},
 	{Env: "SRO_BETA_GROWTH", NomadVar: "beta_growth", Default: "off", Catalogue: true, Validation: ValueSwitch},
 	// Unset keeps every level at the level-1 pace; our deployment's bands
-	// (owner, 2026-10-24) are in ops/release/shard-settings.json.
+	// (#1606: 1-59 at the pace, 60-110 on one smooth curve) are in
+	// ops/release/shard-settings.json.
 	{Env: "SRO_BETA_GROWTH_BANDS", NomadVar: "beta_growth_bands", Default: "",
 		Catalogue: true, Validation: ValueBetaGrowthBands},
 	{Env: "SRO_BETA_SKILL_EXP_RATE", NomadVar: "beta_skill_exp_rate", Default: "1", Catalogue: true,

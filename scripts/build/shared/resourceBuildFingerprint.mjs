@@ -40,9 +40,10 @@ const serverSourceRoot = path.resolve(
 );
 const statePath = path.join( rebuildRoot, ".state", "resource-build-fingerprint.json" );
 
+// v9: the pet design joined; it moved from scripts/build into the server (#1631).
 // v8: the Qin-Shi tomb overlay knob and the enterworld roots joined.
 // v7: the code closure and the pack-layout baseline joined the roots.
-const FINGERPRINT_VERSION = 8;
+const FINGERPRINT_VERSION = 9;
 const DIRECTORY_CONCURRENCY = 32;
 
 /** Env vars that alter the build's outputs; a change must invalidate the skip. */
@@ -91,6 +92,11 @@ const FINGERPRINT_ROOTS = [
 		// The teleportlink overlay TSV the teleport bake reads with SRO_QINSHI_TOMB on.
 		label: "server-action-data",
 		absolutePath: path.join( serverSourceRoot, "internal", "game", "action", "data" )
+	},
+	{
+		// The pet design the pet gear rows read (portItemRows.mjs).
+		label: "server-pet-design",
+		absolutePath: path.join( serverSourceRoot, "internal", "game", "companion", "petdesign.json" )
 	},
 	{ label: "rebuild-assets", absolutePath: path.join( generatedRoot, "intermediate" ) },
 	{ label: "build-scripts", absolutePath: path.join( rebuildRoot, "scripts", "build" ) },

@@ -39,6 +39,16 @@ export const CHECK_TASKS = [
 		args: [ "-B", "scripts/build/generate_compiled_quests.py", "--check" ]
 	} ),
 	commandTask( {
+		name: "check:pet-design",
+		description: "Verify the client's pet design module matches the server's design JSON",
+		kind: "check",
+		ci: true,
+		requires: [],
+		timeoutClass: "short",
+		command: "python",
+		args: [ "-B", "scripts/tools/pet_design_export.py", "--check" ]
+	} ),
+	commandTask( {
 		name: "check:client-preparation",
 		description: "Test the PK2 reader and the client preparation tool on synthetic archives",
 		kind: "check",
@@ -283,6 +293,7 @@ const sourceTasks = [
 	"check:console",
 	"check:loot-catalog",
 	"check:compiled-quests",
+	"check:pet-design",
 	"check:client-preparation",
 	"check:pipeline-contracts",
 	"check:source-size",
