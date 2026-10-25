@@ -66,6 +66,16 @@ Advance only after transport accepts the request, so backpressure can retry.
 		},
 		/*
 ================
+queued
+
+How many commands the object action holds (the last 0xB074 count).
+================
+		*/
+		queued(): number {
+			return count;
+		},
+		/*
+================
 released
 
 The server reports no queued command: a cancelled basic attack is over even

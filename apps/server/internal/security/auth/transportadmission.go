@@ -161,39 +161,84 @@ func VerifyTransportAdmission(
 	}, nil
 }
 
-// TransportAdmissionVerifier verifies and consumes each ticket once.
+// TransportAdmissionVerifyFunc verifies a ticket; whether it also
+// consumes the ticket is the constructor's contract (see below).
 type TransportAdmissionVerifyFunc func(token string) (TransportAdmissionClaims, error)
 
+// TransportAdmissionLedger is the one-use replay cache behind the
+// verifiers. Authentication (Verify) and consumption (Consume) are
+// separate on purpose: the transport verifies a HELLO ticket when it
+// arrives but consumes it only once the session's WELCOME frame has
+// been written, so a connection that dies before WELCOME - a blocked
+// UDP path, an aborted attempt - never burns the ticket and the client
+// can present the same ticket on its fallback transport.
+type TransportAdmissionLedger struct {
+	secret []byte
+	now    func() time.Time
+
+	mu   sync.Mutex
+	used map[[sha256.Size]byte]int64
+}
+
+func NewTransportAdmissionLedger(
+	secret []byte,
+	now func() time.Time,
+) *TransportAdmissionLedger {
+	if now == nil {
+		now = time.Now
+	}
+	return &TransportAdmissionLedger{
+		secret: append([]byte(nil), secret...),
+		now:    now,
+		used:   make(map[[sha256.Size]byte]int64),
+	}
+}
+
+// Verify authenticates a ticket without consuming it.
+func (ledger *TransportAdmissionLedger) Verify(
+	token string,
+) (TransportAdmissionClaims, error) {
+	return VerifyTransportAdmission(ledger.secret, token, ledger.now())
+}
+
+// Consume marks a ticket used. Re-consuming a consumed ticket (or one
+// whose consumption raced this call) is ErrTransportAdmissionReplay.
+func (ledger *TransportAdmissionLedger) Consume(token string) error {
+	at := ledger.now()
+	claims, err := VerifyTransportAdmission(ledger.secret, token, at)
+	if err != nil {
+		return err
+	}
+	digest := sha256.Sum256([]byte(token))
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	for prior, expiry := range ledger.used {
+		if at.Unix() > expiry {
+			delete(ledger.used, prior)
+		}
+	}
+	if _, replayed := ledger.used[digest]; replayed {
+		return ErrTransportAdmissionReplay
+	}
+	ledger.used[digest] = claims.ExpiresAt.Unix()
+	return nil
+}
+
+// TransportAdmissionVerifier verifies and consumes each ticket once:
+// the HELLO-time form for callers with no later commit point.
 func TransportAdmissionVerifier(
 	secret []byte,
 	now func() time.Time,
 ) TransportAdmissionVerifyFunc {
-	if now == nil {
-		now = time.Now
-	}
-	key := append([]byte(nil), secret...)
-	var (
-		mu   sync.Mutex
-		used = make(map[[sha256.Size]byte]int64)
-	)
+	ledger := NewTransportAdmissionLedger(secret, now)
 	return func(token string) (TransportAdmissionClaims, error) {
-		at := now()
-		claims, err := VerifyTransportAdmission(key, token, at)
+		claims, err := ledger.Verify(token)
 		if err != nil {
 			return TransportAdmissionClaims{}, err
 		}
-		digest := sha256.Sum256([]byte(token))
-		mu.Lock()
-		defer mu.Unlock()
-		for prior, expiry := range used {
-			if at.Unix() > expiry {
-				delete(used, prior)
-			}
+		if err := ledger.Consume(token); err != nil {
+			return TransportAdmissionClaims{}, err
 		}
-		if _, replayed := used[digest]; replayed {
-			return TransportAdmissionClaims{}, ErrTransportAdmissionReplay
-		}
-		used[digest] = claims.ExpiresAt.Unix()
 		return claims, nil
 	}
 }

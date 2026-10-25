@@ -95,6 +95,7 @@ var Settings = []Setting{
 	// lists describe the native rule.
 	{Env: "SRO_PHARAOH_TOMB_GEAR_RATE", NomadVar: "pharaoh_tomb_gear_rate", Default: "1"},
 	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "50", Validation: ValueBetaSilk},
+	{Env: "SRO_BETA_SILK_ACTIVE_ONLY", NomadVar: "beta_silk_active_only", Default: "off", Validation: ValueSwitch},
 	// Grab and growth pets at four fifths of their run speed (#320): never
 	// deployed, so the deployment default stays native.
 	{Env: "SRO_PET_PACING", NomadVar: "pet_pacing", Default: "off"},
@@ -125,6 +126,10 @@ var Settings = []Setting{
 	// Owner, 2026-10-25: the revival's grace after a teleport arrival
 	// (port-only, not native; off is native, #1518).
 	{Env: "SRO_TELEPORT_GRACE", NomadVar: "teleport_grace", Default: "off", Catalogue: true},
+	// Owner, 2026-10-25: a strictly higher-grade premium ticket replaces
+	// the running lower one and its remaining time is lost (#1624,
+	// port-only, not native; "off" refuses a second ticket while one runs).
+	{Env: "SRO_PREMIUM_UPGRADE", NomadVar: "premium_upgrade", Default: "off"},
 	// F10 trade group (game/tunables): the Jangan route profit percents. The
 	// site's trade quotes read them, so the catalogue does too.
 	{Env: "SRO_TRADE_ROUTE_DONWHANG_PERCENT", NomadVar: "trade_route_donwhang_percent", Default: "50", Catalogue: true},
@@ -190,9 +195,12 @@ var Settings = []Setting{
 	{Env: "SRO_FLAGWAR_START_UTC", NomadVar: "flagwar_start_utc", Default: "20:00"},
 	{Env: "SRO_FLAGWAR_MIN_PLAYERS", NomadVar: "flagwar_min_players", Default: "4"},
 	{Env: "SRO_BETA_GROWTH", NomadVar: "beta_growth", Default: "on", Catalogue: true, Validation: ValueSwitch},
-	// Owner, 2026-10-24: 1-59 at the level-1 pace, 60-89 at 20x, 90-110 at
-	// 10x; unset keeps every level at the pace.
-	{Env: "SRO_BETA_GROWTH_BANDS", NomadVar: "beta_growth_bands", Default: "1-59:pace,60-89:20,90-110:10",
+	// #1606 (supersedes the owner's 2026-10-24 bands, which cost about
+	// 2,600 h for 90->110 with an 84x step at 59->60): 1-59 keep the
+	// level-1 pace, 60-110 follow one smooth target curve, no adjacent
+	// level over 2x the one before (growthbands_curve_test.go); unset
+	// keeps every level at the pace.
+	{Env: "SRO_BETA_GROWTH_BANDS", NomadVar: "beta_growth_bands", Default: "1-59:pace,60-69:1639,70-79:1215,80-89:748,90-94:532,95-99:431,100-104:351,105-110:289",
 		Catalogue: true, Validation: ValueBetaGrowthBands},
 	{Env: "SRO_BETA_SKILL_EXP_RATE", NomadVar: "beta_skill_exp_rate", Default: "100", Catalogue: true,
 		Validation: ValueBetaGrowth},
@@ -260,6 +268,12 @@ var Settings = []Setting{
 	// alexandria). "off" is native and hides them from a variant's data;
 	// the catalogue's NPC list follows it.
 	{Env: "SRO_ALEXANDRIA", NomadVar: "alexandria", Default: "off", Catalogue: true},
+	// Port-only, not native: WebTransport as a public endpoint (epic
+	// #1451). "off" keeps the loopback/development transport; "on" lets
+	// the GameWorld serve WT publicly under its explicit TLS pair and
+	// origin list. Server only: clients learn endpoints from the shard
+	// catalogue, never from this switch.
+	{Env: "SRO_WEBTRANSPORT_PUBLIC", NomadVar: "webtransport_public", Default: "off"},
 }
 
 // NotSettings are the job's other SRO_ variables: what a deployment

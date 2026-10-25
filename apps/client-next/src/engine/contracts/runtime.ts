@@ -221,6 +221,8 @@ export interface Platform extends Disposable {
 	presentUpdate( newer: boolean ): void;
 	presentTelemetry( sample: FrameTelemetry ): void;
 	diagnosticsActive(): boolean;
+	/** Holds the tab awake (no background freeze) while a world session is live. */
+	setKeepAwake( active: boolean ): void;
 	/** The canvas CSS size, observed rather than read (no forced layout). */
 	canvasSize(): { readonly width: number; readonly height: number; };
 	readViewport(): Viewport;
@@ -251,9 +253,6 @@ export interface Renderer extends Disposable {
 	// Port-only, not native: whether characters and effects share one
 	// nearest-first actor room (Experimental; the original has no cap).
 	sharedActorRoom?(): boolean;
-	// Port-only, not native: whether the local mover's walk is drawn between
-	// its worker ticks (always on since 2026-10-25; it was the Experimental "Interpolated own movement" row).
-	interpolatedOwnWalk?(): boolean;
 	// Port-only, not native: whether holding V also hides other players'
 	// companions (Experimental, off by default).
 	vHidesCompanions?(): boolean;

@@ -4,44 +4,55 @@
 flagwar-timer-plate.test.mjs - the flag war timer's digit reading
 
 The native painter (CIFEventTimer_UpdateDigitTextures 0x5182C0) reads
-the remainder as MM:SS, one timer_<d> texture per digit, and turns
-all five statics red under a minute left. These tests pin that
-arithmetic at its boundaries: the full match, the urgent edge, the
-expiry instant and a remainder past the plate's two minute digits.
+the remainder as MM:SS, one timer_<d> texture per digit. Its red
+urgent tint under a minute is behind the timer's mode byte
+(0x5184DD: the block runs only when +0x37D == 2), and the flag war
+arms mode 1, so these tests pin plain digits at every remainder:
+the full match, the last minute, the expiry instant and a remainder
+past the plate's two minute digits.
 
 ===========================================================================
 */
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-const { flagWarTimerReading, flagWarTimerDigitTexture, FLAG_WAR_TIMER_URGENT_MS } = await import(
+const { flagWarTimerReading, flagWarTimerDigitTexture } = await import(
 	"../../src/engine/foundation/ui/flagwar-timer-plate.ts"
 );
 
-test("a fresh match reads 20:00 and is not urgent", () => {
+test("a fresh match reads 20:00", () => {
 	assert.deepEqual( flagWarTimerReading( 0x124f80 ), {
 		minTens: 2,
 		minOnes: 0,
 		secTens: 0,
-		secOnes: 0,
-		urgent: false
+		secOnes: 0
 	} );
 	// Sub-second remainders floor into the running second.
 	assert.equal( flagWarTimerReading( 0x124f80 - 1 ).secOnes, 9 );
 });
 
-test("the urgent edge is a strict minute, and expiry restores the color", () => {
-	assert.equal( FLAG_WAR_TIMER_URGENT_MS, 60000 );
-	assert.equal( flagWarTimerReading( 60000 ).urgent, false );
+test("the last minute reads plain digits down to expiry", () => {
+	assert.deepEqual( flagWarTimerReading( 60000 ), {
+		minTens: 0,
+		minOnes: 1,
+		secTens: 0,
+		secOnes: 0
+	} );
+	// Under a minute nothing changes but the digits: the painter's
+	// red block is mode-2 only and the flag war arms mode 1.
 	assert.deepEqual( flagWarTimerReading( 59999 ), {
 		minTens: 0,
 		minOnes: 0,
 		secTens: 5,
-		secOnes: 9,
-		urgent: true
+		secOnes: 9
 	} );
-	// At zero the painter's expiry branch restores the normal color.
-	assert.equal( flagWarTimerReading( 0 ).urgent, false );
+	assert.deepEqual( flagWarTimerReading( 5000 ), {
+		minTens: 0,
+		minOnes: 0,
+		secTens: 0,
+		secOnes: 5
+	} );
+	assert.equal( flagWarTimerReading( 0 ).secOnes, 0 );
 	assert.equal( flagWarTimerReading( -5000 ).secOnes, 0 );
 });
 

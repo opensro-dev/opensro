@@ -62,6 +62,10 @@ var unlistedSettings = map[string]string{
 	"SRO_TRADE_JOB_TRADER_PERCENT_CAP":        "shown in the trade job bonus rule",
 	"SRO_TRADE_JOB_HUNTER_PERCENT_PER_TRADER": "shown in the trade job bonus rule",
 	"SRO_TRADE_JOB_HUNTER_PERCENT_CAP":        "shown in the trade job bonus rule",
+	// Deployment plumbing: how the shard's transport is served, not a
+	// rule players meet (their client is offered the same world either
+	// way).
+	"SRO_WEBTRANSPORT_PUBLIC": "operator transport serving switch, not a gameplay rule",
 }
 
 /*
@@ -74,6 +78,7 @@ so the list cannot change while the GameWorld runs.
 */
 func publicRules() publicstats.RulesResponse {
 	silkRate, _ := action.BetaSilkFromEnv()
+	silkActiveOnly, _ := action.BetaSilkActiveOnlyFromEnv()
 	stackSizes, _ := enterworld.StackSizesFromEnv()
 	alchemyRates, _ := alchemy.ReinforceRatesFromEnv()
 	alchemyMaxPlus, _ := alchemy.ReinforceMaxPlusFromEnv()
@@ -190,6 +195,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Silk is bought for the account.",
 				Now:    "Every full hour in the world earns silk, up to a cap.",
 				Why:    "Lets testers try the Item Mall; beta silk never reaches the launch shard."},
+			{Flag: action.EnvBetaSilkActiveOnly, On: silkRate > 0 && silkActiveOnly,
+				Native: "Silk is bought for the account.",
+				Now:    "The hourly silk counts only while you play: each action keeps it going for ten minutes.",
+				Why:    "A character left idle in town earned as much as one playing."},
 			{Flag: enterworld.EnvBetaStarterKit, On: enterworld.BetaStarterKitEnabled(),
 				Native: "Characters start with the retail creation items only.",
 				Now:    "Every character also holds a return scroll and a speed scroll that are never used up.",
@@ -338,6 +347,11 @@ func publicRules() publicstats.RulesResponse {
 				Now: "A trader killed while riding drops the goods around the transport. Logging out outside a town kills a loaded transport where it stands and drops " +
 					"its goods; in town the transport is dismissed as before. A parked transport stays when its trader dies, and a server restart drops nothing.",
 				Why: "Traders made goods vanish by dying on the transport or logging out when thieves or hunters caught them; the original rule returns with one setting."},
+			{Flag: action.EnvPremiumUpgrade, On: action.PremiumUpgradeFromEnv(),
+				Native: "A premium time ticket refuses while any premium already runs; the running one must expire first.",
+				Now: "Using a strictly higher-grade premium of the same family (a bigger daily allowance first, then a longer period) replaces the running lower one. " +
+					"The replaced ticket's remaining time is lost and the daily allowance restarts with the new ticket; lower or equal grades still refuse.",
+				Why: "Owner request (#1624): a better premium bought with silk could not be used until a four-week ticket expired."},
 			{Flag: enterworld.EnvMallTransportSpeed, On: enterworld.MallTransportSpeedFromEnv(),
 				Native: "Item Mall transports (buffalo, rhinoceros, white elephant) move at their listed speed.",
 				Now:    "They move 50% faster.",

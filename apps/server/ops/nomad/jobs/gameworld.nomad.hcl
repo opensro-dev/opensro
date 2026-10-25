@@ -75,6 +75,15 @@ variable "transport_tls_id" {
   type = string
 }
 
+# "on" serves WebTransport as a public endpoint (SRO_WEBTRANSPORT_PUBLIC):
+# the GameWorld then requires the explicit TLS pair above and the allowed
+# origins, and the WT listener may bind beyond loopback. "off" (default)
+# keeps WebTransport a loopback/development transport.
+variable "webtransport_public" {
+  type    = string
+  default = "off"
+}
+
 variable "host_network" {
   type    = string
   default = "loopback"
@@ -184,6 +193,14 @@ variable "pharaoh_tomb_gear_rate" {
 variable "beta_silk" {
   type    = string
   default = "50"
+}
+
+# beta_silk_active_only credits the beta silk hour only while the character
+# has acted within ten minutes (port-only, not native). "off" is the shipped
+# rule: world-ready time earns.
+variable "beta_silk_active_only" {
+  type    = string
+  default = "off"
 }
 
 # maintenance_gate_path is the maintenance release gate (ops/release
@@ -338,6 +355,14 @@ variable "most_wanted_streak_notice" {
 # untouchable for the revival's grace from game-ready (port-only, not
 # native; owner decision 2026-10-25). "off" is native.
 variable "teleport_grace" {
+  type    = string
+  default = "off"
+}
+
+# premium_upgrade lets a strictly higher-grade premium ticket replace the
+# running lower one (owner decision 2026-10-25, #1624). Port-only, not
+# native; "off" refuses a second ticket while one runs.
+variable "premium_upgrade" {
   type    = string
   default = "off"
 }
@@ -600,7 +625,7 @@ variable "beta_growth" {
 # (owner, 2026-10-24). Empty keeps every level at the pace.
 variable "beta_growth_bands" {
   type    = string
-  default = "1-59:pace,60-89:20,90-110:10"
+  default = "1-59:pace,60-69:1639,70-79:1215,80-89:748,90-94:532,95-99:431,100-104:351,105-110:289"
 }
 
 variable "beta_skill_exp_rate" {
@@ -997,6 +1022,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_PHARAOH_TOMB                   = var.pharaoh_tomb
         SRO_PHARAOH_TOMB_GEAR_RATE         = var.pharaoh_tomb_gear_rate
         SRO_BETA_SILK                           = var.beta_silk
+        SRO_BETA_SILK_ACTIVE_ONLY               = var.beta_silk_active_only
         SRO_MAINTENANCE_GATE_PATH               = var.maintenance_gate_path
         SRO_PET_PACING                          = var.pet_pacing
         SRO_STORAGE_AUTO_STACK                  = var.storage_auto_stack
@@ -1012,6 +1038,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_MOST_WANTED_STREAK_NOTICE           = var.most_wanted_streak_notice
         SRO_TRADE_TIERS                         = var.trade_tiers
         SRO_TELEPORT_GRACE                      = var.teleport_grace
+        SRO_PREMIUM_UPGRADE                     = var.premium_upgrade
         SRO_TRADE_ROUTE_DONWHANG_PERCENT        = var.trade_route_donwhang_percent
         SRO_TRADE_ROUTE_HOTAN_PERCENT           = var.trade_route_hotan_percent
         SRO_TRADE_ROUTE_SAMARKAND_PERCENT       = var.trade_route_samarkand_percent
@@ -1090,6 +1117,7 @@ job "sro-gameworld-__SHARD_ID__" {
         TRANSPORT_KEY_FILE                      = var.transport_key_file
         TRANSPORT_ALLOWED_ORIGINS               = var.allowed_origins
         SRO_TRANSPORT_TLS_ID                    = var.transport_tls_id
+        SRO_WEBTRANSPORT_PUBLIC                 = var.webtransport_public
         TRANSPORT_PPROF                         = var.transport_pprof
         TRANSPORT_PPROF_ADDR                    = var.pprof_addr
         SRO_RELEASE_ID                          = var.release_id

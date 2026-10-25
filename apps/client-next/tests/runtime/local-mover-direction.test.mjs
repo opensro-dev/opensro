@@ -210,6 +210,7 @@ function play( { clicks, factor = 1, endMs = 6000, wallX = WALL_X } ) {
 				{ kind: "goal", destination: p.goal } :
 				p?.direction && { kind: "direction", heading: p.direction.heading },
 			speedFactor: p?.direction?.factor ?? 1,
+			turnRate: 0,
 			walkPredictable: true,
 			walkHeld: false,
 			holding: false,
@@ -370,6 +371,7 @@ test("a miss within 5 degrees of the worker's own direction walk starts no predi
 		moving: true,
 		aim: { kind: "direction", heading: 0 },
 		speedFactor: 1,
+		turnRate: 0,
 		walkPredictable: true,
 		walkHeld: false,
 		holding: false,

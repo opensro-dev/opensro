@@ -94,6 +94,10 @@ type Runtime struct {
 	// transport (port-only, SRO_TRANSPORT_FOLLOW_TETHER; acts only with
 	// TransportFollow on, transportfollow.go).
 	TransportFollowTether bool
+	// BetaSilkActivity notes player commands for the beta silk hour
+	// (port-only, SRO_BETA_SILK_ACTIVE_ONLY; nil or inactive is the
+	// shipped rule, betasilk.go).
+	BetaSilkActivity *BetaSilk
 	// JobGoodsTeleport lets a trader with a transport out use town gates,
 	// return scrolls and the reverse return (port-only,
 	// SRO_JOB_GOODS_TELEPORT; false is native, goodsteleport.go).
@@ -433,6 +437,10 @@ type Runtime struct {
 	// TeleportGrace makes a teleport arrival untouchable for the revival's
 	// grace (teleportprotection.go; port-only, not native). False is native.
 	TeleportGrace bool
+	// PremiumUpgrade lets a strictly higher-grade premium ticket of the
+	// same family replace the running lower one (premiumticket.go;
+	// port-only, not native). False is native: 0x1894 while one runs.
+	PremiumUpgrade bool
 	// tradeOrigins is each trade good's home town, from the shops.
 	tradeOrigins map[uint32]tradeTown
 

@@ -202,6 +202,17 @@ func NewServer(cfg Config) (*Server, error) {
 	if !wtLoopback && cfg.CertFile == "" {
 		return nil, fmt.Errorf("transport: a non-loopback wt_addr requires an explicit production certificate and key")
 	}
+	if !wtLoopback && !cfg.WebTransportPublic {
+		return nil, fmt.Errorf("transport: a non-loopback wt_addr requires the public WebTransport switch (%s), so a bind change alone cannot expose the UDP listener", EnvWebTransportPublic)
+	}
+	if cfg.WebTransportPublic {
+		if cfg.CertFile == "" || cfg.KeyFile == "" {
+			return nil, fmt.Errorf("transport: public WebTransport requires an explicit certificate and key file; the managed development certificate is never served publicly")
+		}
+		if len(cfg.AllowedOrigins) == 0 {
+			return nil, fmt.Errorf("transport: public WebTransport requires allowed origins; the empty-list loopback-only posture is a development default")
+		}
+	}
 
 	cert, err := LoadCertificate(cfg.CertFile, cfg.KeyFile, cfg.CertDir)
 	if err != nil {

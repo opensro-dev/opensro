@@ -207,9 +207,15 @@ quest receipts belong to the awarded member. Public scoop/despawn is shared.
 When a player pickup's rotated recipient has a full bag, CPlayer_ExecuteGroundPickup
 (526343..5263B2) sends 0x1807 (ErrCodeStorageFull) to the recipient and
 returns 0x18DA (ErrCodePartyInventoryFull) to the picker.
+
+The awarded member may never have seen the drop, so its receipts lead with
+the item's reference rows (#1612): the browser has no item table, and a
+grant naming an unknown reference ends its session. Port-only; the native
+client reads its own table.
 ================
 */
-func routeSharedPickup(result OpResult, picker, recipient *enterworld.Character, playerPickup bool) OpResult {
+func (rt *Runtime) routeSharedPickup(result OpResult, g pickupGrant) OpResult {
+	picker, recipient, playerPickup := g.picker, g.recipient, g.actor == nil
 	if picker == recipient {
 		return result
 	}
@@ -235,6 +241,7 @@ func routeSharedPickup(result OpResult, picker, recipient *enterworld.Character,
 	}
 	result.Frames = local
 	if len(private) > 0 {
+		private = append(rt.groundReferences([]grounditem.Item{g.item}), private...)
 		result.Recipients = append(result.Recipients, RecipientFrames{CharacterID: recipient.ID, Frames: private})
 	}
 	return result
