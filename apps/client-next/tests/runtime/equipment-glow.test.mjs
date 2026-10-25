@@ -394,3 +394,92 @@ test("published CH/EU enhancement catalog reaches the real model decoder for eve
 	assert.ok( cases > 1000 );
 	assert.ok( models.size > 100 );
 });
+
+/*
+================
+enhanced flag wiring
+
+Port-only, not native: an assembly part's equipment.enhanced (the
+Experimental row state, carried by the appearance assembly) is what makes
+characters select an item's enhanced glow tiers; without it the native
+tiers decide. Pin the flag's arrival at the renderer, not only the
+partition logic at the foundation seam (#1536).
+================
+*/
+test("an assembly part's enhanced flag selects the enhanced glow tier, and only then", () => {
+	const root = { name: "root", parent: -1, translation: [ 0, 0, 0 ], rotation: [ 0, 0, 0, 1 ], scale: [ 1, 1, 1 ] },
+		primitive = name => ({
+			name,
+			node: 0,
+			joints: [ 0 ],
+			inverseBind: identity(),
+			image: -1,
+			environmentImage: 1,
+			geometry: {
+				positions: Float32Array.of( 0, 0, 0, 1, 0, 0, 0, 1, 0 ),
+				indices: Uint32Array.of( 0, 1, 2 ),
+				transform: identity(),
+				material: { color: [ 1, 1, 1, 1 ], environmentReflection: true }
+			}
+		});
+	const owner = createCharacters(), images = [ 0, 1 ].map( id => ({ id, width: 1, height: 1, close() {} }) );
+	owner.model( "body", {
+		nodes: [ root ],
+		images: [],
+		clips: [ { name: "stand", duration: 1, channels: [] } ],
+		primitives: []
+	}, [] );
+	owner.model( "weapon", {
+		nodes: [ root ],
+		images: images.map( ( { width, height } ) => ({ width, height }) ),
+		clips: [],
+		primitives: [ primitive( "part:WA" ), primitive( "part:WL" ) ],
+		equipmentGlows: {
+			1: [ { ...row, threshold: 5, gain: 1, enhanced: false }, { ...row, threshold: 6, gain: 2, enhanced: true } ]
+		}
+	}, images );
+	owner.assembly( "glowOn", "body", [ {
+		model: "weapon",
+		parts: [ "WA", "WL" ],
+		covers: [],
+		equipment: { refObjId: 1, plus: 6, enhanced: true }
+	} ] );
+	owner.assembly( "glowOff", "body", [ {
+		model: "weapon",
+		parts: [ "WA", "WL" ],
+		covers: [],
+		equipment: { refObjId: 1, plus: 6 }
+	} ] );
+	const gpu = {
+			upload( data, image, offsets, secondary ) {
+				return { secondary, data };
+			},
+			release() {},
+			updateInstances: d => d,
+			updateBones() {},
+			updateMaterialColors() {},
+			updateTextureTransform() {},
+			updateEquipmentGlow( d, color, uv, gain, alpha, enabled ) {
+				d.glow = { color: [ ...color ], uv: [ ...uv ], gain, alpha, enabled };
+			}
+		},
+		imageOwner = { upload: image => image, release() {} },
+		step = ( model ) => {
+			owner.actors( [ {
+				gid: 1,
+				modifierId: 1,
+				model,
+				pose: { regionId: 257, x: 0, y: 0, z: 0, yaw: 0 },
+				scale: 1,
+				clip: "stand",
+				time: 0,
+				loop: true
+			} ] );
+			return owner.prepare( gpu, imageOwner, 257, undefined, false, 0 );
+		};
+	// Plus 6 reaches the native tier (5) and the enhanced tier (6) alike;
+	// the flag alone decides which one draws.
+	assert.ok( step( "glowOn" ).every( d => d.glow.gain === 2 ) );
+	assert.ok( step( "glowOff" ).every( d => d.glow.gain === 1 ) );
+	owner.dispose( gpu, imageOwner );
+});
