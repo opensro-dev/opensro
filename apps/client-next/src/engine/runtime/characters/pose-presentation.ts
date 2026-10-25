@@ -93,8 +93,6 @@ A character drawn on the frame clock from its timed samples.
 ================
 */
 interface SampleTrack {
-	// The local mover's own leg (SampleInput.ownLeg, walksLeg).
-	ownLeg: boolean;
 	// A drawn pose handed back by its owner (carry): recovered toward the
 	// model at walking speed instead of in one frame.
 	carried?: boolean;
@@ -386,43 +384,22 @@ function sampledModel( row: SampleTrack, now: number, confirmedAt = row.latest.a
 
 /*
 ================
-walksLeg
-
-Whether the track walks the local mover's own admitted ground leg: one
-with its end and its velocity, not a skill displacement (which keeps its
-own clock). A peer's leg is the server's, which a stop or a knockback can
-cut, so a peer keeps the bounded extrapolation.
-================
-*/
-function walksLeg( row: SampleTrack ): boolean {
-	return row.ownLeg && !!row.to && !!row.pathVelocity && row.displacementAtMs === undefined;
-}
-
-/*
-================
 sampledLinearModel
 
 Native time and the checked endpoint bound horizontal extrapolation. The
 wrapper resolves its height on certified walking samples when available.
 
-A walk on its admitted leg (a ground walk, not a skill displacement, which
-keeps its own clock) is advanced every frame, as native dead reckoning
-(CNavigationDeadreckon) advances it, and the leg's end bounds it. A worker
-or main-thread stall used to park it MAX_EXTRAPOLATION_SECONDS past the
-last sample, and the display then caught up at 1.5 times walking speed:
-under a 4x CPU throttle the bench drew 29 frames at 1.47 times speed after
-one stall (2026-10-12). Without a leg the bound stays.
+Every track extrapolates at most MAX_EXTRAPOLATION_SECONDS past its newest
+sample: the local mover's own legs are drawn by the interpolated presenter
+(own-walk-interpolation.ts), never by this dead reckoning, since #1564
+deleted the old fallback that advanced an own leg without bound.
 ================
 */
 function sampledLinearModel( row: SampleTrack, now: number, confirmedAt: number ): Pose {
 	const latest = row.latest, previous = row.previous;
-	const legged = walksLeg( row );
-	const maximumAhead = legged ? Infinity : MAX_EXTRAPOLATION_SECONDS + Math.max( 0, confirmedAt - latest.at );
+	const maximumAhead = MAX_EXTRAPOLATION_SECONDS + Math.max( 0, confirmedAt - latest.at );
 	if ( !row.moving ) return latest.pose;
-	// Two samples further apart than MAX_SAMPLE_GAP_SECONDS define no
-	// velocity; the admitted leg still does.
-	const sampledGap = previous ? latest.at - previous.at : 0;
-	if ( row.pathVelocity && (!previous || legged && (sampledGap <= 0 || sampledGap > MAX_SAMPLE_GAP_SECONDS)) ) {
+	if ( row.pathVelocity && !previous ) {
 		const [vx, vz] = row.pathVelocity, speed = hypot2( vx, vz );
 		if ( !speed ) return latest.pose;
 		let ahead = Math.min( maximumAhead, Math.max( 0, now - latest.at ) );
@@ -590,7 +567,6 @@ export function createPosePresentation() {
 				moving: input.moving,
 				to: input.to,
 				pathVelocity: pathVelocity( input ),
-				ownLeg: input.ownLeg === true,
 				recoverySpeed: 0,
 				durationMs: input.durationMs,
 				displacementAtMs: input.displacement ? input.startedAtMs : undefined,
@@ -666,10 +642,10 @@ export function createPosePresentation() {
 			// the preceding display creates a correction that never happened.
 			const retainedWalk = row.moving && input.moving && input.transition?.reason === "receipt" &&
 				input.transition.logicalDistance === 0 && input.transition.pathEligible === true;
-			// A stalled frame of a walk on its admitted leg draws where the leg
-			// puts it now, as native dead reckoning does after a hitch; holding
-			// the frozen display made it sprint to catch up afterwards.
-			const preserveDisplay = stalled && !walksLeg( row ) ||
+			// A stalled frame holds the display: the local mover's own legs
+			// are the interpolated presenter's business (own-walk-
+			// interpolation.ts), and every other track parks at its bound.
+			const preserveDisplay = stalled ||
 				revisionChanged && input.transition?.reason !== "input" && !retainedWalk;
 			// A fresh publication after a main-frame gap confirms the intervening
 			// leg. Do not manufacture a parked interval inside that unseen gap.
@@ -715,7 +691,6 @@ export function createPosePresentation() {
 			row.durationMs = input.durationMs;
 			row.displacementAtMs = displacementAtMs;
 			row.pathVelocity = pathVelocity( input );
-			row.ownLeg = input.ownLeg === true;
 			// A stop may omit its leg, but outstanding display recovery still
 			// belongs to the speed of the admitted walk that reached it.
 			const walkSpeed = !input.displacement && row.pathVelocity ? hypot2( ...row.pathVelocity ) : 0;
@@ -879,9 +854,9 @@ export function createPosePresentation() {
 				tracks.delete( gid );
 				return ownWalks.pose( gid, input, target, { now, originMs, handoff } );
 			}
-			// Leaving interpolation (a skill displacement, the row turned off):
-			// this frame keeps the last interpolated pose and the generic track
-			// recovers from it on the next (carry).
+			// Leaving interpolation (a skill displacement): this frame keeps
+			// the last interpolated pose and the generic track recovers from
+			// it on the next (carry).
 			const last = ownWalks.take( gid );
 			const pose = sampledPose( gid, input, target, now );
 			const track = tracks.get( gid );
@@ -990,16 +965,6 @@ export function createPosePresentation() {
 			inputs = next;
 			for ( const gid of tracks.keys() ) if ( !next.has( gid ) ) tracks.delete( gid );
 			ownWalks.retain( next );
-		},
-		/*
-		================
-		interpolateOwnWalk
-
-		Always on since 2026-10-25 (it was the Experimental "Interpolated own movement" row); read each frame.
-		================
-		*/
-		interpolateOwnWalk( enabled: boolean ) {
-			ownWalks.enable( enabled );
 		},
 		/*
 		================

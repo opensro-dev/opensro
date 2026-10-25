@@ -169,31 +169,34 @@ function sample( presentation, atMs, nowMs, durationMs = 2000, ownLeg = true ) {
 }
 
 test("a fresh sample bridges an unseen main-frame gap without manufacturing a worker pause", () => {
+	// A peer leg on the sampled presenter (the local mover's own legs are
+	// drawn by the interpolated presenter since #1564).
 	const p = createPosePresentation();
 	p.origin( 0 );
-	sample( p, 0, 0 );
-	sample( p, 16, 90 );
-	const drawn = sample( p, 112, 150 );
+	sample( p, 0, 0, 2000, false );
+	sample( p, 16, 90, 2000, false );
+	const drawn = sample( p, 112, 150, 2000, false );
 	assert.ok( Math.abs( drawn.x - 107.5 ) < 1e-9 );
 });
 
-test("a worker pause keeps the walker on its admitted leg at walking speed", () => {
-	// Native dead reckoning advances a walk every frame; the leg's end, not
-	// the last worker sample, bounds it. Parking it 0.1 s past the sample
-	// made the display sprint at 1.5x speed when the worker resumed.
+test("a worker pause parks a peer walker at the prediction bound and resumes without catch-up", () => {
+	// The sampled presenter bounds every track MAX_EXTRAPOLATION_SECONDS
+	// past its newest sample; only the local mover's own legs advance
+	// through a pause, drawn by the interpolated presenter (#1564).
 	const p = createPosePresentation();
 	p.origin( 0 );
-	sample( p, 0, 0 );
-	sample( p, 16, 90 );
-	const paused = sample( p, 16, 130 );
+	sample( p, 0, 0, 2000, false );
+	sample( p, 16, 90, 2000, false );
+	const paused = sample( p, 16, 130, 2000, false );
+	assert.ok( Math.abs( paused.x - 105.8 ) < 1e-9, `parked through the pause (x ${paused.x})` );
+	const resumed = sample( p, 112, 150, 2000, false );
+	assert.ok( Math.abs( resumed.x - paused.x ) < 1e-9, "the fresh sample does not snap the parked display" );
+	const next = sample( p, 128, 166, 2000, false );
+	assert.ok( next.x > resumed.x, "recovery moves again" );
 	assert.ok(
-		Math.abs( paused.x - (START.x + 130 * SPEED / 1000) ) < 1e-9,
-		`walking through the pause (x ${paused.x})`
+		next.x - resumed.x <= 1.5 * 16 * SPEED / 1000 + 1e-9,
+		`no catch-up beyond the recovery cap (${(next.x - resumed.x).toFixed( 2 )})`
 	);
-	const resumed = sample( p, 112, 150 );
-	assert.ok( Math.abs( resumed.x - (START.x + 150 * SPEED / 1000) ) < 1e-9 );
-	const next = sample( p, 128, 166 );
-	assert.ok( Math.abs( next.x - resumed.x - 16 * SPEED / 1000 ) < 1e-9, "no catch-up after it" );
 });
 
 test("a peer's pause still parks at the prediction bound", () => {
@@ -255,11 +258,11 @@ for ( const durationMs of [ 1000, 4000, Infinity ] ) {
 	test(`a duration-only change to ${durationMs} ms retires stale sampled velocity`, () => {
 		const p = createPosePresentation();
 		p.origin( 0 );
-		sample( p, 0, 0 );
-		sample( p, 16, 16 );
-		const before = sample( p, 16, 16, durationMs );
+		sample( p, 0, 0, 2000, false );
+		sample( p, 16, 16, 2000, false );
+		const before = sample( p, 16, 16, durationMs, false );
 		assert.ok( Math.abs( before.x - 100.8 ) < 1e-9 );
-		const after = sample( p, 16, 80, durationMs );
+		const after = sample( p, 16, 80, durationMs, false );
 		assert.ok( Math.abs( after.x - before.x - 100 * 64 / durationMs ) < 1e-9 );
 	});
 }
@@ -268,8 +271,8 @@ for ( const frameMs of [ 4, 1000 / 60, 37.6 ] ) {
 	test(`a receipt that keeps the logical walk cannot park a ${frameMs} ms display interval`, () => {
 		const p = createPosePresentation();
 		p.origin( 0 );
-		sample( p, 0, 0 );
-		sample( p, 16, 20 );
+		sample( p, 0, 0, 2000, false );
+		sample( p, 16, 20, 2000, false );
 		const receiptAt = 20 + frameMs;
 		const from = { ...START, x: START.x + receiptAt * SPEED / 1000 };
 		const durationMs = (END.x - from.x) / SPEED * 1000;

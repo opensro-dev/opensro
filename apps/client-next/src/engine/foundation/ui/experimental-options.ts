@@ -74,14 +74,6 @@ export interface ExperimentalOptions {
 	// On unless turned off (the owner's choice, 2026-10-14); off is the
 	// previous rule, characters first.
 	readonly sharedActorRoom: boolean;
-	// Port-only, not native: the local mover's walk is drawn between its
-	// worker ticks, a little behind them, instead of extrapolated past the
-	// newest one (own-walk-interpolation.ts; Unreal's fixed-tick smoothing).
-	// No longer a row of its own (owner, 2026-10-25): always on. It presents
-	// every own walk the main-thread mover does not predict, and its step
-	// cap (drawn-step.ts) bounds the mover's corrections too. A stored false
-	// from the old row is ignored.
-	readonly interpolatedOwnWalk: boolean;
 	// Port-only, not native: the local player's ground-click walk is stepped
 	// on the main thread from the click frame (runtime/movement/local-mover.ts,
 	// Unreal's locally controlled character, epic #1437, with
@@ -293,7 +285,6 @@ Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, mainThreadOwnWalk, greyDisabledTabs, jobKillNotices, dropPlusNotices,
 plusSevenNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, shortNotices, confirmGuildBan,
 petClickOpensWindow, smartPetPickup, touchInspect and dungeonCharacterPvs, which only an explicit false turns off.
-interpolatedOwnWalk is always on: it has no row, and a stored value is ignored.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
 explicitly, and are read only while petPickupFilter is on.
 Missing or invalid render scales restore full resolution and missing or
@@ -328,7 +319,6 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		enchantSparks: record.enchantSparks !== false,
 		compressedTextures: record.compressedTextures !== false,
 		sharedActorRoom: record.sharedActorRoom !== false,
-		interpolatedOwnWalk: true,
 		mainThreadOwnWalk: record.mainThreadOwnWalk !== false,
 		greyDisabledTabs: record.greyDisabledTabs !== false,
 		jobKillNotices: record.jobKillNotices !== false,
@@ -404,7 +394,6 @@ export interface ExperimentalVideo {
 	readonly smoothCamera: boolean;
 	readonly enchantSparks: boolean;
 	readonly sharedActorRoom: boolean;
-	readonly interpolatedOwnWalk: boolean;
 	readonly vHidesCompanions: boolean;
 	readonly dungeonCharacterPvs: boolean;
 }
@@ -428,7 +417,6 @@ export function experimentalVideo( options: ExperimentalOptions ): ExperimentalV
 		smoothCamera: options.smoothCamera,
 		enchantSparks: options.enchantSparks,
 		sharedActorRoom: options.sharedActorRoom,
-		interpolatedOwnWalk: options.interpolatedOwnWalk,
 		vHidesCompanions: options.vHidesCompanions,
 		dungeonCharacterPvs: options.dungeonCharacterPvs
 	};

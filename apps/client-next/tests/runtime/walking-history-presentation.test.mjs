@@ -270,7 +270,7 @@ test("a candidate past the certified path's end never draws behind the previous 
 		to: pose( 200, 4 ),
 		durationMs: 2000,
 		walkingPath: path,
-		ownLeg: true
+		ownLeg: false
 	});
 	publish( presentation, input( 0 ) );
 	presentation.pose( 7, pose( 100, 0 ), 0 );

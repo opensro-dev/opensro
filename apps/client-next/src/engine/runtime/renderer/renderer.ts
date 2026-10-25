@@ -208,16 +208,6 @@ export function createRenderer(
 		},
 		/*
 		================
-		interpolatedOwnWalk
-
-		Read by the character presenter each frame.
-		================
-		*/
-		interpolatedOwnWalk() {
-			return experimental.interpolatedOwnWalk;
-		},
-		/*
-		================
 		vHidesCompanions
 
 		Read by the character presenter when V is held.

@@ -2008,7 +2008,6 @@
 			"functions": [
 				"audioListener",
 				"dungeonCharacterPvs",
-				"interpolatedOwnWalk",
 				"presentationCamera",
 				"presentationNight"
 			]
@@ -2028,7 +2027,6 @@
 				"carry",
 				"clear",
 				"createOwnWalkPresenter",
-				"enable",
 				"handles",
 				"moving",
 				"pose",
