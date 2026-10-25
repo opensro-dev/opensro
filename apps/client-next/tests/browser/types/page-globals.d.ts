@@ -30,6 +30,7 @@ declare var __deathRenderer: any;
 declare var __deathSamples: any;
 declare var __dropActors: any;
 declare var __dropRenderer: any;
+declare var __entry: any;
 declare var __equipmentActors: any;
 declare var __equipmentError: any;
 declare var __equipmentGlowWrites: any;

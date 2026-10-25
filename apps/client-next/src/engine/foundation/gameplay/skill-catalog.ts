@@ -59,6 +59,12 @@ export interface SkillMetadata {
 	// reach. A target within it is always in the server's reach, which adds
 	// both bodies (cast-prediction.ts).
 	readonly range?: number;
+	// The row asks for one of the caster's range parameters (the
+	// crossbow-range / wizard-range slots): the server adds the caster's
+	// value to the reach, so the reach can exceed `range` by an amount the
+	// client cannot see. Such a row starts no predicted run-up at all
+	// (gameplay.ts skillRunUpGoal).
+	readonly rangeBonus?: boolean;
 	// The authored MP cost: flat plus percent of maximum MP (skillMpCost).
 	readonly mp?: number;
 	readonly mpPercent?: number;
@@ -187,6 +193,7 @@ export function skillCatalog( value: unknown ): readonly SkillMetadata[] {
 		if (
 			ui.groundTarget !== undefined && typeof ui.groundTarget !== "boolean" ||
 			ui.targetSelf !== undefined && typeof ui.targetSelf !== "boolean" ||
+			ui.rangeBonus !== undefined && typeof ui.rangeBonus !== "boolean" ||
 			ui.haltsWalk !== undefined && typeof ui.haltsWalk !== "boolean" ||
 			ui.needsFooting !== undefined && typeof ui.needsFooting !== "boolean" ||
 			ui.range !== undefined && (typeof ui.range !== "number" || !Number.isFinite( ui.range ) || ui.range < 0)
@@ -229,6 +236,7 @@ export function skillCatalog( value: unknown ): readonly SkillMetadata[] {
 			haltsWalk: ui.haltsWalk ?? false,
 			...(ui.needsFooting ? { needsFooting: true } : {}),
 			...(ui.range ? { range: ui.range } : {}),
+			...(ui.rangeBonus ? { rangeBonus: true } : {}),
 			...(ui.mp ? { mp: uint( ui.mp ) } : {}),
 			...(ui.mpPercent ? { mpPercent: uint( ui.mpPercent, 65535 ) } : {}),
 			...(ui.targets ? { targets: uint( ui.targets, 0xffff ) } : {}),

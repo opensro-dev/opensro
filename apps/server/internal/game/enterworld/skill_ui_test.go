@@ -13,6 +13,7 @@ package enterworld
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -180,6 +181,58 @@ func TestSkillUiProjectionMarksSelfTargets(t *testing.T) {
 	for code := range want {
 		if !seen[code] {
 			t.Errorf("%s has no UI row", code)
+		}
+	}
+}
+
+/*
+================
+TestSkillUiRangeBonusFollowsTheRowsParameters
+
+The server adds the caster's crossbow-range and wizard-range parameters to
+a cast's reach when the row asks for them, so the UI projection must mark
+exactly the asking rows (rangeBonus) and keep the mark off the wire for
+every other row, whose published JSON does not change.
+================
+*/
+func TestSkillUiRangeBonusFollowsTheRowsParameters(t *testing.T) {
+	source := sharedShippedSkills(t)
+	marked := 0
+	for _, ref := range source.SpawnSkillRows() {
+		row, ok := source.SkillByID(ref.ID)
+		if !ok || ref.UI == nil {
+			continue
+		}
+		asks := row.Attack.Parameters.Has(ParameterCrossbowRange) || row.Attack.Parameters.Has(ParameterWizardRange)
+		if ref.UI.RangeBonus != asks {
+			t.Errorf("%s: rangeBonus %v, want %v", row.Codename, ref.UI.RangeBonus, asks)
+		}
+		if !asks {
+			continue
+		}
+		marked++
+		data, err := json.Marshal(ref.UI)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(data), `"rangeBonus":true`) {
+			t.Errorf("%s: UI JSON lost the mark: %s", row.Codename, data)
+		}
+	}
+	if marked == 0 {
+		t.Fatal("no shipped row carries the rangeBonus mark")
+	}
+	for _, ref := range source.SpawnSkillRows() {
+		if ref.UI == nil || ref.UI.RangeBonus {
+			continue
+		}
+		data, err := json.Marshal(ref.UI)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(data), "rangeBonus") {
+			row, _ := source.SkillByID(ref.ID)
+			t.Errorf("%s: UI JSON carries an unmarked row's field: %s", row.Codename, data)
 		}
 	}
 }

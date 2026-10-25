@@ -27,6 +27,7 @@ func CharacterModelRefObjSnapshot(roster *Roster) []RefObjRow {
 			TidWord:        PlayerRefObjTIDWord,
 			Codename:       model.Codename,
 			Kind:           "player",
+			BodyRadius:     model.BodyRadius,
 			CountryByte9C:  bytePointer(country),
 			SexSelector1AC: bytePointer(sex),
 		})
