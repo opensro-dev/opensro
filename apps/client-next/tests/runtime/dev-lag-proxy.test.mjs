@@ -44,10 +44,10 @@ Close a server, tolerating one already closed.
 ================
 */
 function closeServer( server ) {
-	return new Promise( resolve => {
+	return /** @type {Promise<void>} */ (new Promise( resolve => {
 		if ( !server.listening ) return resolve();
 		server.close( () => resolve() );
-	} );
+	} ));
 }
 
 /*
