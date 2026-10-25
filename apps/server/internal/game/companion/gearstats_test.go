@@ -24,6 +24,9 @@ func TestFlatPetEquipmentAndBiasedBlue(t *testing.T) {
 		p.Training.Gear[i] = domain.PetGear{RefObjID: g.ID}
 	}
 	m := ModifiersFor(&p)
+	if m.GearStats.MaxHPPercent != 900 {
+		t.Fatalf("full D9 maximum-HP bonus = %v, want 900%%", m.GearStats.MaxHPPercent)
+	}
 	if m.AttackPct != 0 || m.DefensePct != 0 || m.CooldownPct != 0 || m.GearStats.PhysicalAttack <= 0 || m.GearStats.MagicalAttack <= 0 || m.GearStats.PhysicalDefense <= 0 || m.GearStats.MagicalDefense <= 0 || m.GearStats.HitRatio <= 0 || m.GearStats.ParryRatio <= 0 {
 		t.Fatalf("flat equipment: %+v", m)
 	}

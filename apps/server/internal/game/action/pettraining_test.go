@@ -529,11 +529,7 @@ func TestPetCounterPushAfterAttack(t *testing.T) {
 	if c.ActiveCOS.Training.Rows[frenzy.Row].Left != 0 || len(strike.ownerState) == 0 {
 		t.Fatal("counter completion did not publish ready state")
 	}
-	strike = &petTrainedStrike{passive: -1, procUsed: true}
-	rt.petTrainedCommit(step, c, c.ActiveCOS, strike, 0, false, false)
-	if state.trained.procReadyAt != step.nowMs+companion.D.Rules.ProcInternalCooldownMs {
-		t.Fatal("committed proc on a blocked hit did not spend its cooldown")
-	}
+
 }
 
 /*

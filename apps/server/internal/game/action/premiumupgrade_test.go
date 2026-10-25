@@ -4,10 +4,10 @@
 premiumupgrade_test.go - the port-only premium upgrade (SRO_PREMIUM_UPGRADE)
 
 With the flag on, a strictly higher-grade premium of the same family
-replaces the running lower one; the old ticket's remaining time is
-lost, its board row ends, the new clock restarts today's grant. Off
-(default), equal and lower grades, and the other family keep the
-native 0x1894 refusal.
+replaces the running lower one; the old ticket's remaining time moves
+the new ticket's end later (#1624, owner decision), its board row
+ends, the new clock restarts today's grant. Off (default), equal and
+lower grades, and the other family keep the native 0x1894 refusal.
 
 ===========================================================================
 */
@@ -17,6 +17,7 @@ package action
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -155,8 +156,8 @@ func TestPremiumUpgradeReplacesWithAHigherGrade(t *testing.T) {
 		if job.ItemRefObjID != gold8W.RefObjID {
 			t.Fatalf("job after upgrade = %+v, want only the 8-week ticket's", job)
 		}
-		if job.EndUnixMs != now+4838400*1000 {
-			t.Fatalf("job end = %d, want %d (the new full course)", job.EndUnixMs, now+4838400*1000)
+		if job.EndUnixMs != now+(4838400+2419200)*1000 {
+			t.Fatalf("job end = %d, want %d (the new course plus the replaced ticket's full remaining course, credited at the same instant)", job.EndUnixMs, now+(4838400+2419200)*1000)
 		}
 	}
 	if c.PremiumClock == nil || c.PremiumClock.ItemRefObjID != gold8W.RefObjID ||
@@ -323,5 +324,92 @@ func TestPremiumUpgradePersistsThroughRelog(t *testing.T) {
 	}
 	if !premiumRunning(back, clock.NowMs()) {
 		t.Fatal("the reloaded premium no longer runs")
+	}
+}
+
+/*
+================
+TestPremiumUpgradeCreditsTheReplacedTicketsRemainingTime
+
+Owner decision (#1624): the replaced ticket's unused time is not
+lost - a 4-week ticket upgraded with 3 weeks left moves the new
+ticket's end to now + its own course + 3 weeks. The daily clock
+still restarts fresh (full grant, no carry).
+================
+*/
+func TestPremiumUpgradeCreditsTheReplacedTicketsRemainingTime(t *testing.T) {
+	rt, c, clock := premiumUpgradeRuntime(t, true, gold4W, gold8W)
+	holdTicket(c, 25, gold4W)
+	holdTicket(c, 26, gold8W)
+	if out := useTicket(t, rt, c, 25, gold4W); out.Frames[0].Payload[0] != wire.ResultSuccess {
+		t.Fatalf("first ticket = %+v", out.Frames)
+	}
+	// One week of the 4-week course spent: 3 weeks remain.
+	clock.Advance(7 * 24 * time.Hour)
+	if out := useTicket(t, rt, c, 26, gold8W); out.Frames[0].Payload[0] != wire.ResultSuccess {
+		t.Fatalf("upgrade = %+v / %q", out.Frames, out.DiagnosticRefusal)
+	}
+	now := clock.NowMs()
+	wantEnd := now + (4838400+1814400)*1000
+	for _, job := range c.ParamJobs {
+		if job.ItemRefObjID != gold8W.RefObjID {
+			t.Fatalf("job after upgrade = %+v, want only the 8-week ticket's", job)
+		}
+		if job.EndUnixMs != wantEnd {
+			t.Fatalf("job end = %d, want %d (new course plus the 3 credited weeks)", job.EndUnixMs, wantEnd)
+		}
+	}
+	if c.PremiumClock == nil || c.PremiumClock.ItemRefObjID != gold8W.RefObjID ||
+		c.PremiumClock.StartUnixMs != now || c.PremiumClock.EndUnixMs != wantEnd ||
+		c.PremiumClock.TodayMs != c.PremiumClock.DailyAllotmentMs || c.PremiumClock.CarriedMs != 0 {
+		t.Fatalf("clock after upgrade = %+v, want a fresh clock ending at %d", c.PremiumClock, wantEnd)
+	}
+}
+
+/*
+================
+TestPremiumUpgradePackageCreditsTheReplacedTicketsRemainingTime
+
+The package path credits too: a 1-day Gold Time ticket with 12 hours
+left, replaced by the Gold Time package's embedded 4-week ticket,
+runs until now + 4 weeks + 12 hours.
+================
+*/
+func TestPremiumUpgradePackageCreditsTheReplacedTicketsRemainingTime(t *testing.T) {
+	rt, c, clock, pack := goldTimeRuntime(t)
+	rt.PremiumUpgrade = true
+	oneDay, found := rt.deps.ItemReferences().ItemRefByCodename("ITEM_MALL_GOLD_TIME_SERVICE_TICKET_1D")
+	if !found {
+		t.Fatal("shipped 1-day Gold Time ticket missing")
+	}
+	inner, found := rt.deps.ItemReferences().ItemRefByCodename("ITEM_PRE_GOLTAM_4W")
+	if !found {
+		t.Fatal("shipped embedded 4-week Gold Time ticket missing")
+	}
+	holdTicket(c, 42, oneDay)
+	if out := useTicket(t, rt, c, 42, oneDay); out.Frames[0].Payload[0] != wire.ResultSuccess {
+		t.Fatalf("1-day ticket = %+v / %q", out.Frames, out.DiagnosticRefusal)
+	}
+	clock.Advance(12 * time.Hour)
+	if out := useTicket(t, rt, c, 40, pack); out.Frames[0].Payload[0] != wire.ResultSuccess {
+		t.Fatalf("package upgrade = %+v / %q", out.Frames, out.DiagnosticRefusal)
+	}
+	now := clock.NowMs()
+	wantEnd := now + (2419200+43200)*1000
+	sawInner := false
+	for _, job := range c.ParamJobs {
+		if job.ItemRefObjID != inner.RefObjID {
+			continue
+		}
+		sawInner = true
+		if job.EndUnixMs != wantEnd {
+			t.Fatalf("package job end = %d, want %d (4 weeks plus the credited 12 hours)", job.EndUnixMs, wantEnd)
+		}
+	}
+	if !sawInner {
+		t.Fatalf("no jobs under the embedded ticket after the package upgrade: %+v", c.ParamJobs)
+	}
+	if c.PremiumClock == nil || c.PremiumClock.ItemRefObjID != inner.RefObjID || c.PremiumClock.EndUnixMs != wantEnd {
+		t.Fatalf("clock after package upgrade = %+v, want the embedded ticket ending at %d", c.PremiumClock, wantEnd)
 	}
 }

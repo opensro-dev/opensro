@@ -22,7 +22,7 @@ TestShippedMallCatalog
 */
 func TestShippedMallCatalog(t *testing.T) {
 	tier.Long(t, "the whole shipped mall catalogue loads")
-	catalog, err := LoadMall(gamedatatest.TextdataDir(t), nil)
+	catalog, err := LoadMall(gamedatatest.TextdataDir(t), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ TestMallCatalogRequiresReferenceFiles
 ================
 */
 func TestMallCatalogRequiresReferenceFiles(t *testing.T) {
-	if _, err := LoadMall(t.TempDir(), nil); err == nil {
+	if _, err := LoadMall(t.TempDir(), nil, nil); err == nil {
 		t.Fatal("accepted missing reference data")
 	}
 }

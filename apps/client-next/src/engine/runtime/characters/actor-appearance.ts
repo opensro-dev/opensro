@@ -156,10 +156,15 @@ export function createActorAppearance( owner: ActorOwner ) {
 					}
 				} );
 				displayedDependencies.set( entity.gid, paths );
-				if ( model.ambientParticles?.length ) {
+				// Port-only sealed pet gear keeps its collar mesh and uses the native rare chest glow.
+				const glow = /^ITEM_COS_PET_.*_(STAR|MOON|SUN)$/.test( item?.codename ?? "" ) ?
+					published.dropModels["item/etc/drop_ch_equip_rare.bsr"] :
+					model;
+				if ( !glow ) throw Error( "Missing native sealed pet drop glow" );
+				if ( glow.ambientParticles?.length ) {
 					particleHolders.push( {
 						actor: next.get( entity.gid )!,
-						particles: model.ambientParticles
+						particles: glow.ambientParticles
 					} );
 				}
 				return null;

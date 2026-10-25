@@ -751,37 +751,43 @@ def project(code, quest, text, sql):
 
 
 # ================
-# authored_elsewhere
+# parse_authored_codenames
 #
-# The quests the server already authors: the script-backed catalog and
-# the curated Go specs. A compiled row may require them.
+# Reject a broken registration snapshot rather than silently treating
+# missing or malformed metadata as an empty set of authored prerequisites.
 # ================
-def authored_elsewhere():
-	codes = {row["Codename"] for row in json.loads((QUEST_PACKAGE / "catalog_generated.json").read_text(encoding="utf-8"))}
-	for source in sorted(QUEST_PACKAGE.glob("*.go")):
-		if source.name.endswith("_test.go"):
-			continue
-		codes.update(re.findall(r'Codename:\s*"(Q[A-Z0-9_]+)"', source.read_text(encoding="utf-8")))
+def parse_authored_codenames(value):
+	if not isinstance(value, list) or not value:
+		raise ValueError("authored quest metadata must be a nonempty list")
+	codes = set()
+	for code in value:
+		if not isinstance(code, str) or re.fullmatch(r"Q[A-Z0-9_]+", code) is None:
+			raise ValueError("authored quest metadata has an invalid codename")
+		if code in codes:
+			raise ValueError("authored quest metadata has a duplicate codename: " + code)
+		codes.add(code)
 	return codes
 
 
 # ================
-# build
+# authored_elsewhere
 #
-# Project every class, then hold back a row whose prerequisite neither
-# this catalog nor the server authors, until none is left unresolved.
+# The Go registration owner exports this snapshot. Its freshness is checked
+# against the real catalog composition; no source-text guesses or extra
+# hand-maintained prerequisite list can admit an unregistered definition.
 # ================
-def build():
-	compiled = read("compiled-quests-source.json")["quests"]
-	text = read("v150-text-source.json")["quests"]
-	sql = read("sql-rewards-source.json")["quests"]
-	specs, audit = {}, {}
-	for code in sorted(compiled):
-		try:
-			specs[code] = project(code, compiled[code], text[code], sql)
-		except Unsupported as err:
-			audit[code] = str(err)
-	elsewhere = authored_elsewhere()
+def authored_elsewhere():
+	return parse_authored_codenames(json.loads((OUTPUT / "authored_quests.json").read_text(encoding="utf-8")))
+
+
+# ================
+# resolve_prerequisites
+#
+# A compiled row waits until every dependency can load. Repeated pruning
+# preserves transitive refusals when an otherwise valid parent is removed.
+# ================
+def resolve_prerequisites(projected, elsewhere):
+	specs, audit = dict(projected), {}
 	changed = True
 	while changed:
 		changed = False
@@ -798,6 +804,27 @@ def build():
 				audit[code] = "prerequisite " + ",".join(missing) + " pending"
 				del specs[code]
 				changed = True
+	return specs, audit
+
+
+# ================
+# build
+#
+# Project only supported behaviour, then resolve prerequisites against the
+# registered authored definitions and the surviving compiled definitions.
+# ================
+def build():
+	compiled = read("compiled-quests-source.json")["quests"]
+	text = read("v150-text-source.json")["quests"]
+	sql = read("sql-rewards-source.json")["quests"]
+	specs, audit = {}, {}
+	for code in sorted(compiled):
+		try:
+			specs[code] = project(code, compiled[code], text[code], sql)
+		except Unsupported as err:
+			audit[code] = str(err)
+	specs, pending = resolve_prerequisites(specs, authored_elsewhere())
+	audit.update(pending)
 	return [specs[code] for code in sorted(specs)], audit
 
 
