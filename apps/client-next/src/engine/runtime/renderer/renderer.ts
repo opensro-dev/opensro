@@ -461,6 +461,10 @@ export function createRenderer(
 		textureFeatures: () => textureFeatures,
 		settleWorld: sceneId => world.settle( sceneId ),
 		setWorld: scene => world.scene( scene ),
+		setWorldRenderMode: ( mode, enabled ) => {
+			world.setRenderMode( mode, enabled );
+			characters.setRenderMode( mode, enabled );
+		},
 		adoptWorld: ( lease, detail, terrain ) => world.adopt( lease, detail, terrain ),
 		setWorldCamera: camera => world.camera( camera ),
 		setWorldCameraCollision: enabled => world.setCameraCollision( enabled ),

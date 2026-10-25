@@ -300,8 +300,9 @@ func squadApproachGoal(live monster.Pose, target playerPose, spacing CombatSpaci
 	goal.Z = float64(float32(float32(goal.Z) + z))
 	goal = NormalizeSpawnFrame(goal)
 	// Dungeon actors run 549460 (installed at 53FD04), which steers to the slot
-	// point whether or not the target moves; only outdoor 548BE0 extends.
-	if IsDungeonRegion(live.RegionID) || !target.chaseGuidance().TargetMoving() {
+	// point whether or not the target moves; only outdoor 548BE0 extends
+	// (tactics_plane.go).
+	if !pursuitAt(live.RegionID).ExtendsTowardMovingTarget() || !target.chaseGuidance().TargetMoving() {
 		return goal
 	}
 	// 548CF6 uses actor-to-target center distance, not distance to the slot.
