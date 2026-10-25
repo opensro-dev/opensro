@@ -27,6 +27,7 @@ const OFF = Object.freeze( {
 	// Native 1:1 interface size.
 	uiScale: 100,
 	chatTimestamps: false,
+	safeLoadingScreen: false,
 	monsterGuide: false,
 	developerDiagnostics: false,
 	postProcessing: false,
@@ -115,6 +116,27 @@ test("only an explicit boolean enables chat timestamps", () => {
 		assert.equal( experimentalOptions( value ).chatTimestamps, false );
 	}
 	assert.equal( experimentalOptions( { chatTimestamps: true, developerDiagnostics: false } ).chatTimestamps, true );
+});
+
+test("safe loading defaults off and persists only after Confirm", () => {
+	for ( const value of [ undefined, null, {}, { safeLoadingScreen: "true" }, { safeLoadingScreen: 1 } ] ) {
+		assert.equal( experimentalOptions( value ).safeLoadingScreen, false );
+	}
+	assert.equal( experimentalOptions( { safeLoadingScreen: true } ).safeLoadingScreen, true );
+	const hud = createExperimentalHud();
+	hud.open();
+	hud.toggle( "safeLoadingScreen" );
+	assert.equal( hud.state().saved.safeLoadingScreen, false );
+	hud.open();
+	assert.equal( hud.state().draft.safeLoadingScreen, false, "closing discards the unconfirmed toggle" );
+	hud.toggle( "safeLoadingScreen" );
+	const saved = hud.confirm();
+	const restored = createExperimentalHud();
+	restored.restore( experimentalOptions( JSON.parse( JSON.stringify( saved ) ) ) );
+	assert.equal( restored.state().saved.safeLoadingScreen, true );
+	restored.reset();
+	assert.equal( restored.state().saved.safeLoadingScreen, true, "Default only changes the draft" );
+	assert.equal( restored.confirm().safeLoadingScreen, false );
 });
 
 test("experimental drafts require Confirm and Default only changes the draft", () => {
@@ -276,7 +298,7 @@ test("the window's tabs cover every preference once and Open returns to Image", 
 		EXPERIMENTAL_TABS[2].rows.map( row => row.key ),
 		[ "sunShadow", "perPixelLighting", "enchantSparks", "dungeonCharacterPvs" ]
 	);
-	for ( const tab of EXPERIMENTAL_TABS ) assert.ok( tab.rows.length <= 6, "At most six rows a tab" );
+	for ( const tab of EXPERIMENTAL_TABS ) assert.ok( tab.rows.length <= 7, "At most seven rows a tab" );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.key ) ).sort();
 	assert.deepEqual( keys, Object.keys( OFF ).sort() );
 	const ids = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.id ) );

@@ -104,6 +104,30 @@ test("Experimental renders all numeric choices and only Confirm persists selecti
 	}
 });
 
+test("the Safe loading screen checkbox defaults off, cancels and persists on Confirm", () => {
+	const selected = view =>
+		defined( view.controls.find( control => control.id === "experimental-safe-loading-screen" ) )
+			.selected;
+	const f = fixture();
+	try {
+		assert.equal( selected( f.activate( "open-window:Experimental" ) ), false );
+		assert.ok( f.hasText( "Safe loading screen" ) );
+		assert.equal( selected( f.activate( "experimental-safe-loading-screen" ) ), true );
+		assert.equal( f.saved.length, 0 );
+		f.activate( "experimental-cancel" );
+		assert.equal( selected( f.activate( "open-window:Experimental" ) ), false );
+		f.activate( "experimental-safe-loading-screen" );
+		f.activate( "experimental-confirm" );
+		assert.deepEqual( f.saved, [ experimentalOptions( { safeLoadingScreen: true } ) ] );
+		assert.equal( selected( f.activate( "open-window:Experimental" ) ), true );
+		f.activate( "experimental-safe-loading-screen" );
+		f.activate( "experimental-confirm" );
+		assert.equal( f.saved[1].safeLoadingScreen, false );
+	} finally {
+		f.dispose();
+	}
+});
+
 /*
 ================
 UI size slider

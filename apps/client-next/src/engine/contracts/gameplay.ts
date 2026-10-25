@@ -733,6 +733,8 @@ export interface GameplayState {
 	readonly returnScroll?: import("@/engine/foundation/gameplay/return-scroll").ReturnScrollCast;
 	readonly huntingPoints?: readonly import("@/engine/foundation/gameplay/hunting").HuntingPoint[];
 	readonly npcConversation?: import("@/engine/foundation/gameplay/npc-dialogue").NpcConversation;
+	// Hiding CIFNpcWindow does not release the selected NPC or its service lock.
+	readonly npcWindow?: { readonly hidden: boolean; readonly revision: number; };
 	readonly restorationRevision?: number;
 	readonly buffSlots?: readonly import("@/engine/foundation/gameplay/buff-slots").BuffSlot[];
 	readonly attachedEffects?: readonly import("@/engine/foundation/gameplay/attached-effects").AttachedEffect[];

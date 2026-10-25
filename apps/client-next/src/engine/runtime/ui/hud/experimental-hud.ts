@@ -91,6 +91,12 @@ export const EXPERIMENTAL_TABS: readonly {
 				id: "experimental-hdr-tone-map",
 				label: "HDR tone map",
 				description: "Float frame with filmic highlight roll-off."
+			},
+			{
+				key: "safeLoadingScreen",
+				id: "experimental-safe-loading-screen",
+				label: "Safe loading screen",
+				description: "Hide inappropriate loading images."
 			}
 		]
 	},

@@ -169,7 +169,6 @@ apps/client-next/src/engine/runtime/simulation/worker/entry.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/feedback/feedback.ts
 apps/client-next/src/engine/runtime/ui/hud/messages.ts
 apps/client-next/src/engine/runtime/ui/hud/minimap.ts
-apps/client-next/src/engine/runtime/ui/hud/npc-panel.ts
 apps/client-next/src/engine/runtime/ui/hud/progression-bars.ts
 apps/client-next/src/engine/runtime/ui/hud/quest-banner.ts
 apps/client-next/src/engine/runtime/ui/hud/quest-timers.ts
