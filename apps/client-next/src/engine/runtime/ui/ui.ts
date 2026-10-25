@@ -354,6 +354,8 @@ import { STALL_CHAT_CHANNEL, STALL_SLOTS, type StallListing } from "@/engine/fou
 import { textAllowed } from "@/engine/foundation/ui/character-create";
 import { createGrantPowerHud, GRANT_RIGHTS } from "./hud/grant-power-hud";
 import { compositeItemCaption, compositeItemLayout, createCompositeItemHud } from "./hud/composite-item-hud";
+import { createUniqueRankHud } from "./hud/unique-rank-hud";
+import { uniqueRankLines } from "@/engine/foundation/gameplay/unique-rank";
 import {
 	allianceButtons,
 	allianceGuildCountText,
@@ -1262,6 +1264,8 @@ export function createUi(
 	const stallHud = createStallHud();
 	const grantPowerHud = createGrantPowerHud();
 	const compositeItemHud = createCompositeItemHud();
+	// Port-only, not native: a unique kill's damage ranking (SRO_UNIQUE_DAMAGE_RANK).
+	const uniqueRankHud = createUniqueRankHud();
 	const guildManagerHud = createGuildManagerHud();
 	const guildNoticeHud = createGuildNoticeHud();
 	const magicOptionHud = createMagicOptionHud();
@@ -4647,6 +4651,9 @@ export function createUi(
 		} else if ( id === "composite-item-cancel" || id === "composite-item-close" ) {
 			compositeItemHud.close();
 			dirty = true;
+		} else if ( id === "unique-rank-ok" || id === "unique-rank-close" ) {
+			uniqueRankHud.close();
+			dirty = true;
 		} else if ( id === "chat-send" && !view.gameplay?.chat?.pending ) {
 			const draft = composeChat(
 				panel === "Chat" ?
@@ -6919,6 +6926,11 @@ export function createUi(
 				dirty = true;
 				return;
 			}
+			if ( event.kind === "key" && event.code === "Escape" && uniqueRankHud.state() ) {
+				uniqueRankHud.close();
+				dirty = true;
+				return;
+			}
 			if ( questDetails && event.kind === "drag" && event.id === "quest-detail-drag" && view ) {
 				questPosition = [
 					Math.max( 0, Math.min( Math.max( 0, view.width - 376 ), questPosition[0] + event.dx ) ),
@@ -9128,6 +9140,10 @@ export function createUi(
 				compositePackage !== null &&
 				!(phase === "world" && next.gameplay?.countJobs?.some( r => r.packageRefObjId === compositePackage ))
 			) compositeItemHud.close();
+			if (
+				phase === "world" &&
+				uniqueRankHud.reconcile( next.gameplay, experimental.state().saved.uniqueDamageRank )
+			) dirty = true;
 			if ( phase !== "world" ) cosHud.reset();
 			else if (
 				cosHud.reconcile(
@@ -9178,6 +9194,7 @@ export function createUi(
 					// 6A01B0: logout writes them back before the session's windows go.
 					persistWindowPositions();
 					guildWarHud.reset( true );
+					uniqueRankHud.reset();
 					windowPlacement.reset();
 					itemMall.reset();
 					carriedShortcut = null;
@@ -15086,6 +15103,72 @@ export function createUi(
 						hudCopy( "UIIT_CTL_CANCEL" )
 					);
 					endWindow( admission, "composite-item" );
+				}
+				const uniqueRank = uniqueRankHud.state();
+				if ( uniqueRank && game ) {
+					// Port-only, not native (unique-rank-hud.ts): place, name, damage,
+					// share and party place, the viewer's row tinted, and the
+					// viewer's own row under a rule when it placed below the list.
+					const lines = uniqueRankLines(
+						uniqueRank,
+						game.social?.localName ?? next.session?.character ?? ""
+					);
+					const width = 424, rowPitch = 20, listTop = 64, ownGap = 10;
+					const listHeight = (lines.top.length + (lines.own ? 1 : 0)) * rowPitch + (lines.own ? ownGap : 0);
+					const height = listTop + listHeight + 56;
+					const admission = beginWindow();
+					const [px, py] = windowOrigin( "UniqueRank", [
+						(w - width) / 2,
+						Math.max( 0, (h - height) / 3 ),
+						width,
+						height
+					] );
+					windowBox( `${uniqueRank.uniqueName || "Unique"} defeated`, px, py, width, height );
+					closeButton( px + width - 26, py + 10, "unique-rank-close" );
+					// [left, width, hAlign] of the rank, name, damage, share and party columns.
+					const columns = [
+						[ 14, 36, 1 ],
+						[ 56, 160, 0 ],
+						[ 220, 90, 2 ],
+						[ 316, 52, 2 ],
+						[ 374, 36, 1 ]
+					] as const;
+					const headerColor = [ 180 / 255, 180 / 255, 180 / 255, 1 ] as const;
+					const cells = (
+						values: readonly string[],
+						top: number,
+						color: readonly [number, number, number, number]
+					) => {
+						values.forEach( ( value, i ) => {
+							const [left, cellWidth, hAlign] = columns[i]!,
+								cell: UiRect = [ px + left, top, cellWidth, rowPitch ];
+							quads.push(
+								...text.quads( value, cell, cell, color, { hAlign, vAlign: 1, overflow: "ellipsis" } )
+							);
+						} );
+					};
+					cells( [ "Rank", "Name", "Damage", "%", "Party" ], py + 40, headerColor );
+					rect( [ px + 10, py + listTop - 3, width - 20, 1 ], headerColor );
+					lines.top.forEach( ( line, i ) => {
+						const top = py + listTop + i * rowPitch;
+						if ( line.self ) {
+							rect( [ px + 10, top, width - 20, rowPitch ], [ gold[0], gold[1], gold[2], .16 ] );
+						}
+						cells(
+							[ line.rank, line.name, line.damage, line.share, line.party ],
+							top,
+							line.self ? gold : white
+						);
+					} );
+					if ( lines.own ) {
+						const top = py + listTop + lines.top.length * rowPitch + ownGap;
+						rect( [ px + 10, top - ownGap / 2, width - 20, 1 ], headerColor );
+						rect( [ px + 10, top, width - 20, rowPitch ], [ gold[0], gold[1], gold[2], .16 ] );
+						const own = lines.own;
+						cells( [ own.rank, own.name, own.damage, own.share, own.party ], top, gold );
+					}
+					button( "unique-rank-ok", hudCopy( "UIIT_CTL_CONFIRM" ), px + (width - 120) / 2, py + height - 40 );
+					endWindow( admission, "unique-rank" );
 				}
 				// The bag scroll's box (561D50 opens type 0x21 at 562251) and
 				// 6AD990's type 0x24 box are one box: 52F460 runs 53259C for both,

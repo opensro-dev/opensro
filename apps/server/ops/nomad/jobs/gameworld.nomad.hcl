@@ -216,6 +216,14 @@ variable "fast_den_return" {
   default = "on"
 }
 
+# unique_damage_rank shows everyone who damaged a unique the twelve players
+# who did the most damage when it dies (port-only, not native). "off", the
+# default, keeps the native killer notice alone.
+variable "unique_damage_rank" {
+  type    = string
+  default = "off"
+}
+
 # closed_object_rescue moves a character that logs in inside a closed object
 # (a tree trunk or rock no walk can leave) to the nearest open ground
 # (port-only, not native; owner decision 2026-10-15). "off" keeps the login
@@ -993,6 +1001,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_PET_PACING                          = var.pet_pacing
         SRO_STORAGE_AUTO_STACK                  = var.storage_auto_stack
         SRO_FAST_DEN_RETURN                     = var.fast_den_return
+        SRO_UNIQUE_DAMAGE_RANK                  = var.unique_damage_rank
         SRO_CLOSED_OBJECT_RESCUE                = var.closed_object_rescue
         SRO_DEEP_WATER_REFUSAL                  = var.deep_water_refusal
         SRO_MOST_WANTED                         = var.most_wanted
