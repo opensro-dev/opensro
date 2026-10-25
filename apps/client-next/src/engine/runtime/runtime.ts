@@ -384,6 +384,7 @@ export function startRuntime(
 				value => platform.saveQuickslotOptions( value ),
 				{
 					bugReport,
+					setRenderMode: ( mode, enabled ) => renderer.setWorldRenderMode( mode, enabled ),
 					setWorldFieldOfView: degrees => world.setFieldOfView( degrees ),
 					setCameraZoomRail: capped => input.zoomRail( capped ),
 					setFreeCamera: free => world.setFreeCamera( free ),
