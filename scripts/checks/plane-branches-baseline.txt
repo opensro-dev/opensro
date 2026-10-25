@@ -36,16 +36,12 @@ apps/server/internal/game/world/movement/pathguard.go 2
 apps/server/internal/game/world/movement/preload.go 1
 apps/server/internal/game/world/movement/spawnregion.go 1
 apps/server/internal/game/world/movement/water.go 1
-apps/server/internal/game/world/simulation/caravanbandit.go 1
 apps/server/internal/game/world/simulation/monster.go 1
-apps/server/internal/game/world/simulation/monster_dormancy.go 1
 apps/server/internal/game/world/simulation/monsteracquisition.go 1
 apps/server/internal/game/world/simulation/monsterhelp.go 1
-apps/server/internal/game/world/simulation/monsterstate.go 1
 apps/server/internal/game/world/simulation/monsterstate_density.go 1
 apps/server/internal/game/world/simulation/monstertick.go 1
 apps/server/internal/game/world/simulation/move.go 1
 apps/server/internal/game/world/simulation/petfollow.go 1
-apps/server/internal/game/world/simulation/questmonster.go 1
 apps/server/internal/game/world/simulation/simulation.go 1
 apps/server/internal/game/world/simulation/spatial.go 2
