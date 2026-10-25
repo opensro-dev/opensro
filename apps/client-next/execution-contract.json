@@ -2511,6 +2511,13 @@
 				"request",
 				"take"
 			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/characters.ts",
+			"provider": "src/engine/runtime/characters/presentation-poses.ts",
+			"functions": [
+				"resolveDrawnPoses"
+			]
 		}
 	],
 	"boundaries": [
@@ -3552,13 +3559,6 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-motion.ts",
-			"expression": "posePresentation.pose",
-			"function": "present",
-			"kind": "callback",
-			"reason": "Characters pose owner lends its synchronous presented-pose reads to the per-actor phase."
-		},
-		{
-			"file": "src/engine/runtime/characters/actor-motion.ts",
 			"expression": "localMover",
 			"function": "present",
 			"kind": "callback",
@@ -3600,9 +3600,44 @@
 			"reason": "Characters pose owner lends its synchronous presented-pose reads to the per-actor phase."
 		},
 		{
-			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"file": "src/engine/runtime/characters/presentation-poses.ts",
+			"expression": "logicalPose",
+			"function": "resolveDrawnPoses",
+			"kind": "callback",
+			"reason": "Current frame pose lookup from presentation-samples, passed by the parent without retaining it."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-poses.ts",
+			"expression": "localMover",
+			"function": "resolveDrawnPoses",
+			"kind": "callback",
+			"reason": "Current frame mover predicate from presentation-samples, passed by the parent without retaining it."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-poses.ts",
+			"expression": "health?.dead",
+			"function": "resolveDrawnPoses",
+			"kind": "callback",
+			"reason": "Effective health owner supplied by the parent; the same synchronous death check as before the move."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-poses.ts",
+			"expression": "statusOwner.view",
+			"function": "resolveDrawnPoses",
+			"kind": "callback",
+			"reason": "Characters status owner lends its synchronous status view to the pose stage."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-poses.ts",
+			"expression": "posePresentation.pose",
+			"function": "resolveDrawnPoses",
+			"kind": "callback",
+			"reason": "Characters pose owner lends its synchronous presented-pose reads to the pose stage; the stage is the only caller."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-poses.ts",
 			"expression": "posePresentation.carry",
-			"function": "present",
+			"function": "resolveDrawnPoses",
 			"kind": "callback",
 			"reason": "Characters pose owner takes back the drawn pose a released WAIT hold showed, so its track recovers from it instead of jumping."
 		},
@@ -3731,13 +3766,6 @@
 			"function": "step",
 			"kind": "callback",
 			"reason": "Current frame presentation-sample owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
-		},
-		{
-			"file": "src/engine/runtime/characters/presentation-events.ts",
-			"expression": "posePresentation.pose",
-			"function": "step",
-			"kind": "callback",
-			"reason": "Character pose presentation owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
 		},
 		{
 			"file": "src/engine/runtime/characters/presentation-events.ts",
@@ -3895,13 +3923,6 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/presentation-events.ts",
-			"expression": "posePresentation.pose",
-			"function": "callback:map:0",
-			"kind": "callback",
-			"reason": "Character pose presentation owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
-		},
-		{
-			"file": "src/engine/runtime/characters/presentation-events.ts",
 			"expression": "renderer.characterSocket",
 			"function": "callback:step:6",
 			"kind": "callback",
@@ -4048,7 +4069,7 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "f927f3138fb400e1021cf5ed7c7340e73423fa71e04d4cfd39bd4eb339017d0b",
+			"sourceSha256": "53ba2476305a0bbc4ab7c560c2b7aca1ab464775fd1ca81059709324266042df",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. A hidden frame renders only while a world entry awaits game-ready, under the same barrier: native keeps updating while inactive (A0F430 OnUpdate; A11650 skips drawing) and finishes loading in CPSMission_OnUpdate (728E10). A visible window that gets no RAF for STARVED_FRAME_MS runs the same delivery-paced maintenance frames. Device disposal cancels pending mapping. Startup also hands the asset owner the device texture features once (port-only texture variants), outside the frame.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

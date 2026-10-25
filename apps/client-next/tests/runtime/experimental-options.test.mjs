@@ -27,6 +27,7 @@ const OFF = Object.freeze( {
 	// Native 1:1 interface size.
 	uiScale: 100,
 	chatTimestamps: false,
+	safeLoadingScreen: false,
 	monsterGuide: false,
 	developerDiagnostics: false,
 	postProcessing: false,
@@ -48,6 +49,7 @@ const OFF = Object.freeze( {
 	sharedActorRoom: true,
 	// On by default (owner 2026-10-24): the own walk is drawn between its ticks.
 	interpolatedOwnWalk: true,
+	mainThreadOwnWalk: false,
 	// On by default (owner 2026-10-15): a disabled tab is dimmed.
 	greyDisabledTabs: true,
 	// On by default (owner 2026-10-15): the shard's job-kill notices show.
@@ -115,6 +117,27 @@ test("only an explicit boolean enables chat timestamps", () => {
 		assert.equal( experimentalOptions( value ).chatTimestamps, false );
 	}
 	assert.equal( experimentalOptions( { chatTimestamps: true, developerDiagnostics: false } ).chatTimestamps, true );
+});
+
+test("safe loading defaults off and persists only after Confirm", () => {
+	for ( const value of [ undefined, null, {}, { safeLoadingScreen: "true" }, { safeLoadingScreen: 1 } ] ) {
+		assert.equal( experimentalOptions( value ).safeLoadingScreen, false );
+	}
+	assert.equal( experimentalOptions( { safeLoadingScreen: true } ).safeLoadingScreen, true );
+	const hud = createExperimentalHud();
+	hud.open();
+	hud.toggle( "safeLoadingScreen" );
+	assert.equal( hud.state().saved.safeLoadingScreen, false );
+	hud.open();
+	assert.equal( hud.state().draft.safeLoadingScreen, false, "closing discards the unconfirmed toggle" );
+	hud.toggle( "safeLoadingScreen" );
+	const saved = hud.confirm();
+	const restored = createExperimentalHud();
+	restored.restore( experimentalOptions( JSON.parse( JSON.stringify( saved ) ) ) );
+	assert.equal( restored.state().saved.safeLoadingScreen, true );
+	restored.reset();
+	assert.equal( restored.state().saved.safeLoadingScreen, true, "Default only changes the draft" );
+	assert.equal( restored.confirm().safeLoadingScreen, false );
 });
 
 test("experimental drafts require Confirm and Default only changes the draft", () => {
@@ -276,7 +299,7 @@ test("the window's tabs cover every preference once and Open returns to Image", 
 		EXPERIMENTAL_TABS[2].rows.map( row => row.key ),
 		[ "sunShadow", "perPixelLighting", "enchantSparks", "dungeonCharacterPvs" ]
 	);
-	for ( const tab of EXPERIMENTAL_TABS ) assert.ok( tab.rows.length <= 6, "At most six rows a tab" );
+	for ( const tab of EXPERIMENTAL_TABS ) assert.ok( tab.rows.length <= 7, "At most seven rows a tab" );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.key ) ).sort();
 	assert.deepEqual( keys, Object.keys( OFF ).sort() );
 	const ids = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.id ) );
@@ -683,6 +706,17 @@ test("interpolated own movement is on unless explicitly false, and reaches the r
 	assert.equal( off.interpolatedOwnWalk, false );
 	assert.equal( experimentalVideo( off ).interpolatedOwnWalk, false );
 	assert.equal( experimentalVideo( experimentalOptions( {} ) ).interpolatedOwnWalk, true );
+});
+
+test("main-thread own movement defaults off and stays out of the worker's and renderer's slices", () => {
+	for ( const value of [ undefined, null, {}, { mainThreadOwnWalk: 1 }, { mainThreadOwnWalk: "true" } ] ) {
+		const options = experimentalOptions( value );
+		assert.equal( options.mainThreadOwnWalk, false );
+		assert.equal( "mainThreadOwnWalk" in experimentalGameplay( options ), false );
+		assert.equal( "mainThreadOwnWalk" in experimentalVideo( options ), false );
+	}
+	assert.equal( experimentalOptions( { mainThreadOwnWalk: true } ).mainThreadOwnWalk, true );
+	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "mainThreadOwnWalk" ) ) );
 });
 
 test("quest target markers default off (tracked quest only) and stay out of the worker's slices", () => {

@@ -48,6 +48,20 @@ test("clock targeting confirms any occupied slot exactly once", () => {
 	}
 });
 
+test("pet skill targeting confirms an occupied slot exactly once", () => {
+	const petSkill = { ...clockItem(), refObjId: 999, typeFlags: 0x7eec };
+	const hud = createCosHud();
+	hud.armItemTarget( petSkill );
+	assert.equal( hud.itemTargetCursor(), 0xa6 );
+	assert.equal( hud.chooseItemTarget( { ...petSkill, slot: 14 } ), true );
+	assert.equal( hud.itemTargetCursor(), null );
+	// The shared type-0x1F box: like the clock, a summoner-slot command with
+	// no revival/target slot lands on the cos-renew confirmation ids.
+	assert.equal( hud.targetUseBox(), "cos-renew" );
+	assert.deepEqual( hud.takeTargetUse(), { kind: "item-use", slot: 13, summonerSlot: 14 } );
+	assert.equal( hud.takeTargetUse(), null );
+});
+
 test("clock cancellation and world/source changes clear both cursor and confirmation", () => {
 	const clock = clockItem();
 	for ( const confirmed of [ false, true ] ) {

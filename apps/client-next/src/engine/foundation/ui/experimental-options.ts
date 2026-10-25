@@ -33,6 +33,9 @@ export interface ExperimentalOptions {
 	// size; a missing or invalid stored value restores it.
 	readonly uiScale: number;
 	readonly chatTimestamps: boolean;
+	// Port-only, not native: use only the male warrior loading artwork.
+	// Off by default so both original loading backgrounds remain available.
+	readonly safeLoadingScreen: boolean;
 	// Port-only, not native: beginner atlas on M, explicitly enabled.
 	readonly monsterGuide: boolean;
 	readonly developerDiagnostics: boolean;
@@ -77,6 +80,11 @@ export interface ExperimentalOptions {
 	// On unless turned off (the owner's choice, 2026-10-24); off is the
 	// previous dead-reckoned presentation.
 	readonly interpolatedOwnWalk: boolean;
+	// Port-only, not native: the local player's ground-click walk is stepped
+	// on the main thread from the click frame (runtime/movement/local-mover.ts,
+	// Unreal's locally controlled character, epic #1437). Off unless turned
+	// on until reconciliation (#1441b) lands; off is the worker-driven walk.
+	readonly mainThreadOwnWalk: boolean;
 	// Port-only, not native: a disabled tab is dimmed with a grey label (the
 	// original draws it like an unselected tab, 5376A0). On unless turned
 	// off (the owner's choice, 2026-10-15); off is the original look.
@@ -294,6 +302,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		renderScale: record.renderScale === 75 || record.renderScale === 50 ? record.renderScale : DEFAULT_RENDER_SCALE,
 		uiScale: uiScaleStop( record.uiScale ) ?? UI_SCALE_DEFAULT,
 		chatTimestamps: enabled( "chatTimestamps" ),
+		safeLoadingScreen: enabled( "safeLoadingScreen" ),
 		monsterGuide: enabled( "monsterGuide" ),
 		developerDiagnostics: enabled( "developerDiagnostics" ),
 		postProcessing: enabled( "postProcessing" ),
@@ -310,6 +319,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		compressedTextures: record.compressedTextures !== false,
 		sharedActorRoom: record.sharedActorRoom !== false,
 		interpolatedOwnWalk: record.interpolatedOwnWalk !== false,
+		mainThreadOwnWalk: enabled( "mainThreadOwnWalk" ),
 		greyDisabledTabs: record.greyDisabledTabs !== false,
 		jobKillNotices: record.jobKillNotices !== false,
 		dropPlusNotices: record.dropPlusNotices !== false,

@@ -283,6 +283,7 @@ func nextFrame(t *testing.T, c *websocket.Conn, what string) transport.Frame {
 		if f.Opcode == transport.OpPing || f.Opcode == transport.OpPong {
 			continue
 		}
+		wiretest.NoteRead(c, f)
 		return f
 	}
 }
@@ -333,15 +334,7 @@ The handshake with an optional resume token; returns the WELCOME.
 */
 func helloTokenWS(t *testing.T, c *websocket.Conn, resumeToken []byte) transport.Welcome {
 	t.Helper()
-	sendFrame(t, c, transport.OpHello, transport.EncodeHello(transport.Hello{
-		ResumeToken: resumeToken, AdmissionToken: []byte("test-admission"),
-	}))
-	payload := expectFrame(t, c, transport.OpWelcome, "handshake")
-	welcome, err := transport.DecodeWelcome(payload)
-	if err != nil {
-		t.Fatalf("decoding WELCOME: %v", err)
-	}
-	return welcome
+	return helloResumeWS(t, c, resumeToken, nil)
 }
 
 // enterWorld performs the 0x0006 bind and consumes the frozen bootstrap

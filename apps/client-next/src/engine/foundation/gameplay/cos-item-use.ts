@@ -47,6 +47,14 @@ companionItemUseNotice
 696490 and 6968BA..696913 validate Grass/Clock targets before composing the
 slot byte. Expected refusals are category-5 notices, not protocol failures.
 Character reference classifies the pet; the item subtype is not that proof.
+
+The pet skill item has its own case (696934), not the clock's: a target
+that is no COS summoner, or whose summoned character does not resolve,
+leaves by the generic send with no notice, and only a resolved character
+of neither pet class reaches the wrong-object notice. Its source-item
+compat bits (itemdata +0x2B0) are not in the type word this predicate
+receives; both pet bands are admitted here and the server's live-pet
+admission stays authoritative.
 ================
 */
 export function companionItemUseNotice(
@@ -57,10 +65,23 @@ export function companionItemUseNotice(
 	if ( (flags & 0x7c) !== 0x6c ) return null;
 	const group = flags >>> 7 & 15, subtype = flags >>> 11 & 31;
 	const grass = group === 1 && subtype === 6;
+	const wrongObject: SystemNotice = { key: "UIIT_MSG_COSPETERR_CANT_USE_WRONGOBJECT", value: 0, nativeType: 5 };
+	if ( isPetSkillItem( flags ) ) {
+		const slot = context?.summonerSlot;
+		if ( slot === undefined ) return null;
+		if ( !Number.isInteger( slot ) || slot < 0 || slot > 255 ) throw Error( "Invalid companion target slot" );
+		const matches = items.filter( item => item.slot === slot );
+		if ( matches.length > 1 ) throw Error( "Duplicate companion target slot" );
+		const target = matches[0], character = context?.summonedCharacterTypeFlags;
+		if ( !target || (target.typeFlags & 0x7fe) !== 0xcc || !target.summon ) return null;
+		if ( character === undefined ) return null;
+		if ( (character & 0x7fe) !== 0x1c6 ) return wrongObject;
+		const band = character & 0xf800;
+		return band === 0x1800 || band === 0x2000 ? null : wrongObject;
+	}
 	if ( !grass && !isCompanionLeaseItem( flags ) ) return null;
 	const slot = grass ? context?.revivalSlot : context?.summonerSlot;
 	const unavailable: SystemNotice = { key: "UIIT_MSG_COSPETERR_CANT_USEITEM", value: 0, nativeType: 5 };
-	const wrongObject: SystemNotice = { key: "UIIT_MSG_COSPETERR_CANT_USE_WRONGOBJECT", value: 0, nativeType: 5 };
 	if ( slot === undefined ) return wrongObject;
 	if ( !Number.isInteger( slot ) || slot < 0 || slot > 255 ) throw Error( "Invalid companion target slot" );
 	const matches = items.filter( item => item.slot === slot );
@@ -168,6 +189,18 @@ export function isCompanionLeaseItem( flags: number ): boolean {
 
 /*
 ================
+isPetSkillItem
+
+561D50 checks the same inventory-targetable mall family; subtype 15 is the
+pet skill item (6961B0 case 0xF names the summoner it applies to).
+================
+*/
+export function isPetSkillItem( flags: number ): boolean {
+	return (flags & 0x7c) === 0x6c && (flags >>> 7 & 15) === 13 && (flags >>> 11 & 31) === 15;
+}
+
+/*
+================
 isRevivalGrass
 
 Grass of Life: ETC group 1, subtype 6 (550340 tests the group; 696490 case 6).
@@ -182,12 +215,12 @@ export function isRevivalGrass( flags: number ): boolean {
 armsItemTargetCursor
 
 Right-button use of these items arms cursor A6 instead of using them
-(561D50: group 1 subtype 6; group 13 subtypes 8 and 12 at 562140..5621D9).
+(561D50: group 1 subtype 6; group 13 subtypes 8, 12 and 15 at 562140..5621BF).
 The next inventory click names the item they act on.
 ================
 */
 export function armsItemTargetCursor( flags: number ): boolean {
-	return isRevivalGrass( flags ) || isCompanionLeaseItem( flags ) ||
+	return isRevivalGrass( flags ) || isCompanionLeaseItem( flags ) || isPetSkillItem( flags ) ||
 		(flags & 0x7c) === 0x6c && (flags >>> 7 & 15) === 13 && (flags >>> 11 & 31) === 8;
 }
 
@@ -213,7 +246,7 @@ export function companionItemTargetCommand(
 	if ( group === 1 && subtype === 6 ) {
 		return { kind: "item-use", slot: source.slot, revivalSlot: target.slot };
 	}
-	if ( group === 13 && subtype === 12 ) {
+	if ( group === 13 && (subtype === 12 || subtype === 15) ) {
 		return { kind: "item-use", slot: source.slot, summonerSlot: target.slot };
 	}
 	return null;
