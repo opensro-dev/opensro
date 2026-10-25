@@ -282,7 +282,7 @@ import { createChat } from "./chat/chat";
 import { createFriends } from "./friends/friends";
 import { createLetters } from "./letters/letters";
 import { createMovement } from "./movement/movement";
-import { createArrowKeys, type ArrowKeyMover } from "./arrow-keys/arrow-keys";
+import { createArrowKeys, type ArrowGate, type ArrowKeyMover } from "./arrow-keys/arrow-keys";
 import { logoutCancelRequest, worldPointAction } from "@/engine/foundation/gameplay/direction-movement";
 import { createInventory } from "./inventory/inventory";
 import { createCombat } from "./combat/combat";
@@ -507,6 +507,20 @@ sendFrame
 	vehicle's commands (0x85E000).
 	================
 	*/
+	function arrowGate( now: number, local: EntityState | undefined ): ArrowGate {
+		const refusal = groundWalkRefusal( now, local );
+		if ( refusal === null ) return "open";
+		// [player+0x644] bit 2 (action state 2): the press cancels and waits.
+		return refusal === "cast" ? "cast" : "closed";
+	}
+	/*
+	================
+	arrowMover
+
+	What the arrow keys move: the movement owner, or for a rider the ridden
+	vehicle's commands (0x85E000).
+	================
+	*/
 	function arrowMover( local: EntityState | undefined ): ArrowKeyMover {
 		const vehicle = local?.mountedOn || undefined;
 		return {
@@ -518,6 +532,14 @@ sendFrame
 			direct: ( heading, now ) => movement.direct( heading, now, vehicle ),
 			steer: ( heading, now ) => movement.steer( heading, now ),
 			stop: now => movement.stopDirection( now ),
+			// 0x693190: 0x67D140 holds the request back with two or more
+			// commands queued.
+			cancelCast: () => {
+				if ( actionSession.queued() >= 2 ) return false;
+				sendFrame( targetActionCancel() );
+				actionSession.sentCancellation();
+				return true;
+			},
 			vehicle: () => vehicle
 		};
 	}
@@ -2762,8 +2784,7 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "arrow-key" ) {
 				// 0x680A30: a press walks only where a click would (the same
 				// gates); a release always ends what its press started.
-				const admitted = !command.down || groundWalkRefusal( now, local ) === null;
-				const frame = arrowKeys.key( command.key, command.down, now, arrowMover( local ), admitted );
+				const frame = arrowKeys.key( command.key, command.down, now, arrowMover( local ), arrowGate( now, local ) );
 				if ( frame ) {
 					pickup.clear();
 					selectionDecal = null;
@@ -4549,7 +4570,10 @@ before take assembles the presentation snapshot.
 		*/
 		step( now: number, local?: EntityState ) {
 			inventorySince = inventory.state().inventoryPending ? inventorySince ?? now : undefined;
-			arrowKeys.step( now, arrowMover( local ) );
+			if ( arrowKeys.step( now, arrowMover( local ), arrowGate( now, local ) === "open" ) ) {
+				pickup.clear();
+				selectionDecal = null;
+			}
 			// A turn changes the facing every tick, walking or standing: publish
 			// it (a standing turn moves nothing else that would).
 			if ( arrowKeys.rate() ) dirty = true;
