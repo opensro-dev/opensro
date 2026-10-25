@@ -245,3 +245,35 @@ test("the main-thread mover starts the Up walk on the press frame and ends it on
 	const after = mover.frame( 600, world );
 	assert.ok( after.kind !== "idle" && Math.abs( after.pose.x - walking.pose.x ) < .5, "stops where released" );
 });
+
+test("through gameplay, a press the walk gate refuses sends nothing, and its release sends no stop", () => {
+	for ( const refused of [ { movementMode: 4 }, { appearanceState: [ 2, 0, 0 ] } ] ) {
+		const sent = [], game = createGameplay( f => sent.push( f ) );
+		const local = {
+			...POSE,
+			gid: 7,
+			refObjId: 1907,
+			kind: "local-player",
+			name: "walker",
+			heading: POSE.angle,
+			...refused
+		};
+		game.bootstrap( { simulationProtocolVersion: 1 } );
+		game.seed( local );
+		const bundle = product( REGION );
+		bundle.objects = [];
+		game.command( { kind: "navigation", regionId: REGION, bundle }, 0, undefined, local );
+		sent.length = 0;
+		// Seated (0x7017 posture 4) or dead: 0x680A30's guards return before
+		// latching, so nothing walks and nothing stops.
+		for ( const key of [ "up", "left" ] ) {
+			game.command( { kind: "arrow-key", key, down: true }, 0, undefined, local );
+		}
+		for ( let now = 16; now <= 500; now += 16 ) game.step( now, local );
+		for ( const key of [ "up", "left" ] ) {
+			game.command( { kind: "arrow-key", key, down: false }, 500, undefined, local );
+		}
+		assert.deepEqual( sent.map( f => f.opcode ), [], JSON.stringify( refused ) );
+		game.dispose();
+	}
+});
