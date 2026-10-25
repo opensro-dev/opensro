@@ -640,7 +640,7 @@ import { systemMessageLayout } from "@/engine/foundation/ui/system-message-layou
 import { comboBoxChrome } from "@/engine/foundation/ui/combo-box";
 import { verticalSpinChrome } from "@/engine/foundation/ui/vertical-spin";
 import { stretchRing } from "@/engine/foundation/ui/stretch-ring";
-import { chatLayout } from "@/engine/foundation/ui/chat-layout";
+import { chatLayout, sunDropChatColor } from "@/engine/foundation/ui/chat-layout";
 import { worldMapFrame, worldMapImagePaths, worldMapQuads } from "@/engine/foundation/ui/world-map";
 import {
 	experienceReadout,
@@ -20707,7 +20707,11 @@ export function createUi(
 							height = text.boardHeight();
 						// 86E8FD -> 7827A0 sets backing ARGB 40000000 after construction.
 						// 7832C0 draws a one-pixel margin; 86E8EB sets tint 1.
-						const color: UiQuad["color"] = entity.groundItem.tint === 1 ?
+						// Port-only (#1640): an admitted Seal of Sun drop's plate
+						// is gold (the Sun notice colour), over the native tint.
+						const color: UiQuad["color"] = entity.groundItem.sunMarker ?
+							sunDropChatColor() :
+							entity.groundItem.tint === 1 ?
 							[ 114 / 255, 191 / 255, 1, 1 ] :
 							white;
 						if ( name && height ) {

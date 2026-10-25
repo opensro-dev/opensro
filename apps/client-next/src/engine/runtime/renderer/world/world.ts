@@ -262,6 +262,11 @@ export function createWorldRenderer(
 	const selectionPaths = () => selectionDemand;
 	let footprints: readonly import("@/engine/contracts/footprint").Footprint[] = [];
 	const footprintDraws = new Map<number, { draw: GeometryDraw; scene: WorldScene; image: ImageDraw; }>();
+	// Port-only (#1640): the admitted Seal of Sun drop rings (selection
+	// ring texture in gold, breathing slowly).
+	let sunDropMarkerList: readonly import("@/engine/contracts/sun-drop-marker").SunDropMarker[] = [];
+	const sunMarkerDraws = new Map<number, { draw: GeometryDraw; scene: WorldScene; }>();
+	const SUN_MARKER_COLOR = new Float32Array( [ 1, 215 / 255, 80 / 255 ] );
 	/*
 	================
 	prepareFootprints
@@ -314,6 +319,54 @@ export function createWorldRenderer(
 				),
 				2
 			);
+			row.draw = geometry.updateInstances(
+				row.draw,
+				new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] ),
+				new Float32Array( [ alpha ] )
+			);
+			result.push( row.draw );
+		}
+		return result;
+	}
+	/*
+	================
+	prepareSunMarkers
+
+	One soft gold ring under each admitted Seal of Sun drop, conformed
+	to the terrain like the selection decal and breathing slowly. A
+	marker that leaves the published list releases its draw.
+	================
+	*/
+	function prepareSunMarkers( geometry: GeometryCommands, textures: ImageCommands, seconds: number ): GeometryDraw[] {
+		const live = new Set( sunDropMarkerList.map( marker => marker.gid ) );
+		for ( const [gid, row] of sunMarkerDraws ) {
+			if ( !live.has( gid ) || row.scene !== current ) {
+				geometry.release( row.draw );
+				sunMarkerDraws.delete( gid );
+			}
+		}
+		if ( !current || current.residency === "frontend" || !sunDropMarkerList.length ) return [];
+		updateInteractionCells();
+		const path = selectionTextures()[0]!, source = images.get( path )?.source;
+		if ( !source ) return [];
+		let image = imageDraws.get( path );
+		if ( !image ) {
+			image = textures.upload( source, [ source ], false );
+			imageDraws.set( path, image );
+		}
+		const alpha = 0.55 + 0.2 * (0.5 + 0.5 * Math.sin( seconds * 2.2 )),
+			result: GeometryDraw[] = [];
+		for ( const marker of sunDropMarkerList ) {
+			if ( !sameCoordinateSpace( marker.pose.regionId, current.originRegion ) ) continue;
+			let row = sunMarkerDraws.get( marker.gid );
+			if ( !row ) {
+				const [px, pz] = regionRelativeXZ( current.originRegion, marker.pose );
+				const data = selectionDecalGeometry( interactionCells, [ px, marker.pose.y, pz ] );
+				if ( !data ) continue;
+				row = { draw: geometry.upload( data, image ), scene: current };
+				sunMarkerDraws.set( marker.gid, row );
+			}
+			geometry.updateMaterialColors( row.draw, SUN_MARKER_COLOR, 2 );
 			row.draw = geometry.updateInstances(
 				row.draw,
 				new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] ),
@@ -1274,6 +1327,14 @@ export function createWorldRenderer(
 		},
 		/*
 		================
+		sunDropMarkers
+		================
+		*/
+		sunDropMarkers( value: readonly import("@/engine/contracts/sun-drop-marker").SunDropMarker[] ) {
+			sunDropMarkerList = value;
+		},
+		/*
+		================
 		selectionDecal
 		================
 		*/
@@ -1885,7 +1946,8 @@ export function createWorldRenderer(
 				weatherImages.set( path, draw );
 			}
 			const decalDraws = prepareDecal( geometry, textures ),
-				groundDecalDraws = prepareFootprints( geometry, textures, seconds );
+				groundDecalDraws = prepareFootprints( geometry, textures, seconds ),
+				sunRingDraws = prepareSunMarkers( geometry, textures, seconds );
 			const weatherDraws = weather.prepare( geometry, weatherImages, localCamera, matrix );
 			probe?.worldMark?.( "world-environment" );
 			const targetCellX = Math.floor( localCamera.target[0] / 320 ),
@@ -1905,6 +1967,7 @@ export function createWorldRenderer(
 					reflectionMatrix,
 					terrainEnd,
 					groundDecalDraws,
+					sunMarkerDraws: sunRingDraws,
 					decalDraws,
 					thunder: weather.overlay(),
 					weatherDraws,
@@ -2371,6 +2434,7 @@ export function createWorldRenderer(
 				reflectionMatrix,
 				terrainEnd,
 				groundDecalDraws,
+				sunMarkerDraws: sunRingDraws,
 				decalDraws,
 				thunder: weather.overlay(),
 				weatherDraws,
