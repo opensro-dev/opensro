@@ -97,6 +97,11 @@ export function createNetwork(
 	// frame lost with a dying socket's inbox is re-sent on resume. It
 	// survives a resume and restarts on a fresh WELCOME.
 	let streamPosition = 0, ackedPosition = 0, ackSentAt = -Infinity;
+	// Why this connect is not on the fastest transport (#1449), reported
+	// once after each WELCOME (codec.transportReport). 0 = no fallback on
+	// this connect. The WebTransport-first connect path sets it before
+	// the socket takes over, so the reason names that failed attempt.
+	let transportFallback = 0;
 	const inbox: WireFrame[] = [];
 	let journal = new Float64Array( NET_JOURNAL_RECORDS * NET_JOURNAL_FIELDS ), journalCount = 0;
 	// The incident ring: the bug-report journal above is drained every second,
@@ -374,6 +379,7 @@ export function createNetwork(
 						}
 						if ( !codec.welcome( frame.payload ).resumed ) streamPosition = 0;
 						welcomed = true;
+						send( codec.transportReport( transportFallback ) );
 					} else if ( frame.opcode === 1 || frame.opcode === 2 ) {
 						throw new Error( "Unexpected transport handshake" );
 					}

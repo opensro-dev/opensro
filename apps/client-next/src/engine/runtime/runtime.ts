@@ -497,7 +497,8 @@ export function startRuntime(
 				poseAtMs: game?.poseAtMs,
 				revision: game?.movementRevision ?? 0,
 				moving: game?.moving ?? false,
-				goal: game?.movementGoal,
+				aim: game?.movementAim,
+				speedFactor: game?.movementSpeedFactor ?? 1,
 				walkPredictable: game?.walkPredictable === true,
 				speed: game?.movementSpeed,
 				inputSeq: game?.movementInputSeq ?? 0,
@@ -814,9 +815,11 @@ export function startRuntime(
 					worldPresented ? ui.mallPreview() : null,
 					worldPresented ? ui.skinPreview() : null
 				);
+				const moverGid = presentation.gameplay()?.localGid ?? 0;
 				characters.ownMover(
-					presentation.gameplay()?.localGid ?? 0,
-					mainThreadOwnWalk ? localMover.frame( now, moverWorld() ) : { kind: "idle" }
+					moverGid,
+					mainThreadOwnWalk ? localMover.frame( now, moverWorld() ) : { kind: "idle" },
+					presentation.entities().find( entity => entity.gid === moverGid )?.mountedOn || undefined
 				);
 				characters.step(
 					presentation.entities(),

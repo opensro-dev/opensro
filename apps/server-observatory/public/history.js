@@ -236,7 +236,9 @@ function renderSessions( rows ) {
 		const meta = element(
 			"div",
 			"Started " + ago( row.started ) + " · played " + duration( row.connectedSeconds ) +
-				(row.ended ? " · ended " + ago( row.ended ) : "")
+				(row.ended ? " · ended " + ago( row.ended ) : "") +
+				(row.transport ? " · " + row.transport : "") +
+				(row.fallback ? " · fell back (" + row.fallback + ")" : "")
 		);
 		meta.className = "session-meta";
 		meta.title = "Started " + date( row.started ) + " · last observed " + date( row.seen ) + " · ended " +
