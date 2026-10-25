@@ -184,7 +184,11 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 	var monsters *simulation.MonsterState
 	if monsterSpawns.Enabled {
 		template := monster.LoadTemplate(textdataDir)
-		template, err := monster.AppendCap110(template, textdataDir, monster.Cap110Enabled())
+		template, err := monster.AppendTrainingDummies(template, monster.TrainingDummyEnabled())
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
+		template, err = monster.AppendCap110(template, textdataDir, monster.Cap110Enabled())
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}

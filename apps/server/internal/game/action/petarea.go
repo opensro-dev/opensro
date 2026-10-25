@@ -208,6 +208,12 @@ func (rt *Runtime) strikePetTargets(step petCombatStep, primary petCombatTarget,
 		rt.crowAfterAttack(step, wolfTargets)
 	}
 	echoFrames := rt.penguinAfterSpell(step, primary, skill, append([]petCombatTarget{primary}, secondary...), strikes)
+	if len(wolfTargets) > 0 && step.trained != nil && !step.trained.penguinRepeat {
+		for _, gid := range wolfTargets {
+			rt.petGearElements(step, gid)
+		}
+		rt.petGearProcs(step.key.division, step.state.character, step.pet.GID, primary.gid, primary.at, false, step.nowMs)
+	}
 	rt.wolfHuntRend(step, primary, first.strike)
 	rt.wolfExecuteAttack(step.key.division, step.state.character, step.pet.GID, 0, wolfTargets, step.nowMs)
 	step.state.public = append(step.state.public, public...)

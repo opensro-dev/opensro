@@ -289,6 +289,9 @@ func (rt *Runtime) applyAttackPetExperience(c *enterworld.Character, pet *enterw
 	pet.Experience = uint64(exp)
 	if form != ref {
 		pet.RefObjID, pet.Codename, pet.Level = form.RefObjID, form.Codename, form.Level
+		if effective, valid := rt.cosReference(pet); valid {
+			form = effective
+		}
 		pet.CurrentHP, pet.CurrentMP, pet.Satiety = form.MaxHP, form.MaxMP, petLevelUpSatiety
 		area = append(area,
 			wire.Frame{Opcode: opCosInfoUpdate, Payload: wire.NewWriter(9).U32(pet.GID).U8(cosInfoReference).U32(form.RefObjID).Payload()},

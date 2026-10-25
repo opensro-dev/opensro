@@ -14,6 +14,23 @@ import "opensro.online/server/internal/game/companion"
 
 /*
 ================
+ApplyAttackPetExpansion
+
+The startup gate: rewrites the pet references only when
+SRO_ATTACK_PET_EXPANSION is on, so the default catalog stays native.
+Reports whether it applied.
+================
+*/
+func (t *TextdataItems) ApplyAttackPetExpansion() bool {
+	if !companion.AttackPetExpansionEnabled() {
+		return false
+	}
+	t.ApplyAttackPetProfiles()
+	return true
+}
+
+/*
+================
 ApplyAttackPetProfiles
 ================
 */
@@ -24,7 +41,7 @@ func (t *TextdataItems) ApplyAttackPetProfiles() {
 			continue
 		}
 		p := companion.Profile(ref.Codename)
-		ref.MaxHP = uint32(float64(ref.MaxHP) * p.HPPercent / 100)
+		ref.MaxHP = companion.BaseHealth(ref.Codename, ref.Level, ref.MaxHP)
 		ref.Parameters.MaxHP = ref.MaxHP
 		ref.Parameters.PhysicalDefense *= p.DefensePercent / 100
 		ref.Parameters.MagicalDefense *= p.MagicDefensePercent / 100

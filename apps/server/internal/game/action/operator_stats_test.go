@@ -45,7 +45,9 @@ func TestOperatorResetStatsReturnsSpentPointsAtTheLevelBase(t *testing.T) {
 		{1, 20, 20, 0, 20, 0},
 		{1, 21, 20, 65534, 20, 65535}, // largest representable refund
 		{30, 49, 80, 56, 49, 87},
-		{30, 60, 60, 40, 49, 62}, // points kept through a level-down stay earned
+		// Level 30 below a level-40 high: the automatic STR/INT of levels 31-40
+		// stay in STR and INT, the scroll's rule (progression.ResetStats, #1609).
+		{30, 60, 60, 40, 59, 42},
 	} {
 		c := statCharacter(row.level, row.strength, row.intellect, row.points)
 		if row.level == 30 && row.strength == 60 {
@@ -63,8 +65,8 @@ func TestOperatorResetStatsReturnsSpentPointsAtTheLevelBase(t *testing.T) {
 		if *c.Strength != row.base || *c.Intellect != row.base || *c.StatPoints != row.free {
 			t.Fatalf("%+v: got STR %d INT %d free %d", row, *c.Strength, *c.Intellect, *c.StatPoints)
 		}
-		if row.base != progression.BaseStatAtLevel(row.level) {
-			t.Fatalf("%+v: base %d", row, progression.BaseStatAtLevel(row.level))
+		if row.base != progression.BaseStatAtLevel(max(row.level, *c.MaxLevel)) {
+			t.Fatalf("%+v: base %d", row, progression.BaseStatAtLevel(max(row.level, *c.MaxLevel)))
 		}
 		// Nothing else moves except a current gauge trimmed to a lower maximum.
 		after := c.Snapshot()

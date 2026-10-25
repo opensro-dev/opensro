@@ -31,7 +31,7 @@ SRO_BETA_SILK_ACTIVE_ONLY (port-only) narrows earning to active play; off
 is the shipped rule.
 ================
 */
-func composeBetaSilk(authorityStore *store.Store, items *action.Runtime, deps *enterworld.Deps) (*action.BetaSilk, domain.MallAuthority, error) {
+func composeBetaSilk(authorityStore *store.Store, deps *enterworld.Deps) (*action.BetaSilk, domain.MallAuthority, error) {
 	rate, err := action.BetaSilkFromEnv()
 	if err != nil {
 		return nil, nil, err
@@ -48,7 +48,6 @@ func composeBetaSilk(authorityStore *store.Store, items *action.Runtime, deps *e
 	if activeOnly {
 		log.Infof("item mall: beta silk credits active play only (%s)", action.EnvBetaSilkActiveOnly)
 	}
-	items.BetaSilkActivity = betaSilk
 	deps.EntryBetaSilk = betaSilk.Starter
 	log.Infof("item mall: beta silk ON (%s): %d silk per in-world hour", action.EnvBetaSilk, rate)
 	return betaSilk, betaSilk, nil
