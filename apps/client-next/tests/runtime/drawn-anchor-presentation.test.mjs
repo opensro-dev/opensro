@@ -65,7 +65,7 @@ frame's drawn poses trail the logical ones. Returns what the effect
 step received, the damage texts placed and the flush's position resolver.
 ================
 */
-function driveEvents() {
+function driveEvents( heldPoses = new Map() ) {
 	const local = entity( 1, 40, 440 ), other = entity( 2, 120, 520 );
 	const entities = [ local, other ];
 	const gameplay = {
@@ -114,7 +114,7 @@ function driveEvents() {
 			combatStanceEnds: new Map(),
 			triggers: [],
 			samples: new Map( [ [ 1, {} ], [ 2, {} ] ] ),
-			heldPoses: new Map(),
+			heldPoses,
 			localMover: gid => gid === 1,
 			logicalPose: row =>
 				row.gid === 1 ?
@@ -177,6 +177,22 @@ test("effect anchors sit on the walking local player's presented pose", () => {
 	assert.equal( texts.length, 1 );
 	assert.equal( texts[0].anchor.x, 120 - 3 );
 	assert.equal( texts[0].anchor.z, 520 - 4 );
+});
+
+test("a held pose moves the effect step's local anchor, keeping the mover's heading", () => {
+	const HELD = { regionId: REGION, x: 85, y: 10, z: 470, angle: 0.25 };
+	const { seen } = driveEvents( new Map( [ [ 1, HELD ] ] ) );
+	const pose = seen.effectsDrawn.get( 1 );
+	// On a cast-burst frame actor-motion takes the hold later this step,
+	// so the composed map lays the held pose over the frame's drawn
+	// poses: the effect step anchors at the held body, not the drawn one.
+	assert.equal( pose.x, HELD.x );
+	assert.equal( pose.z, HELD.z );
+	assert.notEqual( pose.x, DRAWN.x );
+	// The hold moves the body, it does not turn it: the heading stays
+	// the movement owner's, not the held row's own angle.
+	assert.equal( pose.angle, LOGICAL.angle );
+	assert.notEqual( pose.angle, HELD.angle );
 });
 
 test("sounds at the walking local player sit on its presented pose", () => {

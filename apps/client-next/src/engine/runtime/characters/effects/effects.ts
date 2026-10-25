@@ -1188,12 +1188,19 @@ export function createCharacterEffects(
 				const byGid = new Map( entities.map( entity => [ entity.gid, entity ] ) );
 				// All effect anchors sit on the body as drawn (#1442): the local
 				// player's anchor is the frame's drawn pose when the frame
-				// resolved one, else the movement owner's logical pose. The
-				// hawk's mechanical holder below is the one exception: it is
-				// game logic, not a drawn anchor, and keeps the logical pose.
-				const localPose = gameplay?.localGid !== undefined ?
-					drawnPoses?.get( gameplay.localGid ) ?? gameplay?.pose ?? undefined :
+				// resolved one, else the movement owner's logical pose. The map
+				// supplies only the position: the heading stays the movement
+				// owner's, as the composed map's local row is built the same
+				// way (presentation-events' drawnLocal). The hawk's mechanical
+				// holder below is the one exception: it is game logic, not a
+				// drawn anchor, and keeps the logical pose.
+				const localLogical = gameplay?.localGid !== undefined ? gameplay.pose ?? undefined : undefined;
+				const localDrawn = gameplay?.localGid !== undefined ?
+					drawnPoses?.get( gameplay.localGid ) :
 					undefined;
+				const localPose = localDrawn && localLogical ?
+					{ ...localDrawn, angle: localLogical.angle } :
+					localDrawn ?? localLogical;
 				// The local movement owner advances gameplay.pose; the entity row
 				// retains its wire/spawn position. All effect anchors (including
 				// bone-less victims, returns and chain hops) need the live pose.

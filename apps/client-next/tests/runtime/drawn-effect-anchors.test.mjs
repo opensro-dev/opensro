@@ -32,6 +32,9 @@ const { createPresentationRandom } = await import(
 const { worldAudioPosition } = await import(
 	sourceFileUrl( "src/engine/foundation/world/world-space.ts" ).href
 );
+const { nativeHeadingYaw } = await import(
+	sourceFileUrl( "src/engine/foundation/math/angles.ts" ).href
+);
 
 const REGION = 257;
 // The local player's entity row still holds its wire position; the
@@ -367,6 +370,144 @@ test("the hawk's mechanical holder stays on the logical pose", () => {
 	rows = step( attack + 8 );
 	assert.ok( rows[0].pose.x > 30, `hawk x ${rows[0].pose.x} steered to the drawn holder` );
 	assert.equal( rows[0].pose.y, 21 );
+	assert.equal( effects.error(), null );
+	effects.dispose();
+});
+
+test("an attached follow visual turns with the mover's heading, not the presenter's", () => {
+	const catalog = {
+		"3": {
+			clips: [ "attack1" ],
+			stages: [ {
+				resource: "hit.efp",
+				startEvent: 1,
+				action: "AT_ONE_FOLLOW",
+				move: "MOV_NONE",
+				bone: null,
+				offset: [ 0, 10, 0 ],
+				life: 0,
+				count: 1,
+				scripts: []
+			} ]
+		}
+	};
+	const sounds = [];
+	const effects = makeEffects( catalog, sounds );
+	const cast = { token: 1, caster: 1, target: 2, skill: 3 };
+	const { entities, gameplay, drawnPoses } = frame( { casts: [ cast ] } );
+	// The presenter drew the body mid-turn (heading word 16384, a
+	// quarter turn); the mover's snapped heading is 0. The drawn map
+	// supplies the position only.
+	drawnPoses.set( 1, { ...DRAWN, angle: 16384 } );
+	const step = ( now ) =>
+		effects.step(
+			entities,
+			gameplay,
+			now,
+			() => true,
+			() => 0.5,
+			gameplay.casts.map( row => ({ cast: row, phase: "SHOT", event: 1, at: now }) ),
+			undefined,
+			[],
+			2,
+			true,
+			new Map(),
+			drawnPoses
+		);
+	step( 0 );
+	step( .1 );
+	step( .2 );
+	const actors = step( .3 );
+	assert.equal( actors.length, 1 );
+	assert.equal( actors[0].pose.x, DRAWN.x );
+	assert.equal( actors[0].pose.z, DRAWN.z );
+	assert.equal( actors[0].pose.yaw, nativeHeadingYaw( LOGICAL.angle ) );
+	assert.notEqual( actors[0].pose.yaw, nativeHeadingYaw( 16384 ) );
+	assert.equal( effects.error(), null );
+	effects.dispose();
+});
+
+test("the actor budget trims around the drawn body, not the logical pose", () => {
+	const catalog = {
+		"7": {
+			clips: [],
+			stages: [ {
+				phase: "ACT_L",
+				resource: "hit.efp",
+				startEvent: 0,
+				action: "AT_LOOP",
+				move: "MOV_NONE",
+				bone: null,
+				offset: [ 0, 0, 0 ],
+				count: 1,
+				scripts: []
+			} ]
+		}
+	};
+	const sounds = [];
+	const effects = makeEffects( catalog, sounds );
+	const entities = [];
+	const presented = [];
+	const attachedEffects = [];
+	for ( let gid = 1; gid <= 2100; gid++ ) {
+		const x = gid <= 2050 ? 10 : 990;
+		entities.push( {
+			gid,
+			kind: gid === 1 ? "local-player" : "player",
+			regionId: REGION,
+			x,
+			y: 0,
+			z: 0,
+			heading: 0
+		} );
+		presented.push( {
+			gid,
+			model: "/assets/actor.glb",
+			clip: "stand",
+			time: 0,
+			loop: true,
+			scale: 1,
+			heightFactor: 1,
+			pose: { regionId: REGION, x, y: 0, z: 0, yaw: Math.PI }
+		} );
+		attachedEffects.push( { gid, skill: 7, token: gid, phase: 0 } );
+	}
+	const gameplay = {
+		localGid: 1,
+		// The movement owner's logical pose sits by the far crowd; the
+		// drawn body stands at x=0. The budget keeps what is near the
+		// body as drawn.
+		pose: { regionId: REGION, x: 1000, y: 0, z: 0, angle: 0 },
+		casts: [],
+		attachedEffects
+	};
+	const drawnPoses = new Map( [ [ 1, { regionId: REGION, x: 0, y: 0, z: 0, angle: 0 } ] ] );
+	const step = now =>
+		effects.step(
+			entities,
+			gameplay,
+			now,
+			() => true,
+			() => 0.5,
+			[],
+			undefined,
+			presented,
+			2,
+			true,
+			new Map(),
+			drawnPoses
+		);
+	step( 0 );
+	step( .05 );
+	step( .1 );
+	const rows = step( .15 );
+	// 2100 attached visuals, 2048 slots: the 52 farthest from the drawn
+	// body give way - the whole far crowd at x=990 and two at x=10.
+	// Around the logical pose the far crowd would be the nearest and
+	// the near crowd would give way instead.
+	assert.equal( rows.length, 2048 );
+	assert.equal( rows.filter( row => row.pose.x === 990 ).length, 0 );
+	assert.equal( rows.filter( row => row.pose.x === 10 ).length, 2048 );
 	assert.equal( effects.error(), null );
 	effects.dispose();
 });
