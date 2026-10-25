@@ -11,6 +11,7 @@ package simulation
 import (
 	"math"
 	"opensro.online/server/internal/game/abnormal"
+	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 	"sort"
@@ -65,13 +66,12 @@ func (s *MonsterState) CombatCandidatesInPopulation(divisionID string, lease ins
 	if !nearest {
 		maxLimit += state.instances.maxRadiusBound() * float64(monster.GradeScale(4))
 	}
-	centerDungeon := IsDungeonRegion(center.RegionID)
 	// Query only the outdoor sector window that can intersect maxLimit;
 	// dungeons and unbounded queries fall back to the full mover table.
 	for gid, pose := range state.movers.livePosesWithinOutdoorReach(center, maxLimit, nowMs, nil) {
 		// Region arithmetic masks the dungeon bit. Do not let matching low
 		// bits alias indoor and outdoor coordinates into a valid area target.
-		if centerDungeon != IsDungeonRegion(pose.RegionID) {
+		if !worldgeom.SamePlane(center.RegionID, pose.RegionID) {
 			continue
 		}
 		dy := pose.Y - center.Y
