@@ -120,6 +120,9 @@ var Settings = []Setting{
 	{Env: "SRO_MOST_WANTED_STREAK_NOTICE", NomadVar: "most_wanted_streak_notice", Default: "off"},
 	// Owner, 2026-10-14: trade stars by cargo gold, Jangan route profit.
 	{Env: "SRO_TRADE_TIERS", NomadVar: "trade_tiers", Default: "on", Catalogue: true},
+	// Owner, 2026-10-25: the revival's grace after a teleport arrival
+	// (port-only, not native; off is native, #1518).
+	{Env: "SRO_TELEPORT_GRACE", NomadVar: "teleport_grace", Default: "off", Catalogue: true},
 	// F10 trade group (game/tunables): the Jangan route profit percents. The
 	// site's trade quotes read them, so the catalogue does too.
 	{Env: "SRO_TRADE_ROUTE_DONWHANG_PERCENT", NomadVar: "trade_route_donwhang_percent", Default: "50", Catalogue: true},

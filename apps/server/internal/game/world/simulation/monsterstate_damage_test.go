@@ -220,7 +220,7 @@ func TestAreaCandidatesSkipStructures(t *testing.T) {
 		t.Fatalf("fixture materialized %d instances, want the monster and the structure", n)
 	}
 	center := Spawn{RegionID: 0x62AA, X: 101, Y: 20, Z: 100}
-	got := s.CombatCandidatesInSphere("area", center, 20, s.CurrentTimeMillis())
+	got := s.CombatCandidatesInWorld("area", instance.Pack(1, 1), center, 20, s.CurrentTimeMillis(), false)
 	if len(got) != 1 || got[0].Ref.Structure {
 		t.Fatalf("area candidates %+v, want only the monster", got)
 	}
@@ -290,9 +290,6 @@ func TestCombatCandidatesStayInTheirWorld(t *testing.T) {
 		if len(got) != 1 || got[0].Gid != tc.want {
 			t.Fatalf("%s candidates %+v, want only gid %d", tc.name, got, tc.want)
 		}
-	}
-	if got := s.CombatCandidatesInSphere("iso", center, 20, now); len(got) != 1 || got[0].Gid != monster.GidBase+1 {
-		t.Fatalf("sphere candidates %+v, want only the default world's gid", got)
 	}
 }
 

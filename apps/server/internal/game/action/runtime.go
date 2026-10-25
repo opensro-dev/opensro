@@ -112,6 +112,7 @@ type Runtime struct {
 	PetPolicies         companion.Policies
 	returnGeneration    atomic.Uint64
 	returnCasts         sync.Map // simulation.WorldKey -> pendingReturn; division lock owns changes
+	teleportArrivals    sync.Map // simulation.WorldKey -> struct{}: arrivals awaiting game-ready (teleportprotection.go)
 	playerDisplacements sync.Map // simulation.WorldKey -> playerDisplacement; a struck player's hold
 	jobDresses          sync.Map // simulation.WorldKey -> jobDress (jobdress.go)
 	jobActivations      sync.Map // simulation.WorldKey -> int64 end ms (jobdress.go)
@@ -424,6 +425,9 @@ type Runtime struct {
 	// TradeTiers rates caravans by cargo gold and raises Jangan route profit
 	// (tradetiers.go; port-only, not native). False is native.
 	TradeTiers bool
+	// TeleportGrace makes a teleport arrival untouchable for the revival's
+	// grace (teleportprotection.go; port-only, not native). False is native.
+	TeleportGrace bool
 	// tradeOrigins is each trade good's home town, from the shops.
 	tradeOrigins map[uint32]tradeTown
 

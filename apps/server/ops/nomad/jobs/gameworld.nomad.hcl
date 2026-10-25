@@ -326,6 +326,14 @@ variable "most_wanted_streak_notice" {
   default = "off"
 }
 
+# teleport_grace makes a teleport arrival (scroll, gate, relocation)
+# untouchable for the revival's grace from game-ready (port-only, not
+# native; owner decision 2026-10-25). "off" is native.
+variable "teleport_grace" {
+  type    = string
+  default = "off"
+}
+
 # trade_tiers rates a caravan's stars by its cargo's gold value (5M, 10M,
 # 20M, 35M, 50M) and raises trade profit between Jangan and Donwhang +50%,
 # Hotan +100%, Samarkand +200%, Constantinople +300% (port-only, not
@@ -994,6 +1002,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_MOST_WANTED_BOUNTY_TRANSFER         = var.most_wanted_bounty_transfer
         SRO_MOST_WANTED_STREAK_NOTICE           = var.most_wanted_streak_notice
         SRO_TRADE_TIERS                         = var.trade_tiers
+        SRO_TELEPORT_GRACE                      = var.teleport_grace
         SRO_TRADE_ROUTE_DONWHANG_PERCENT        = var.trade_route_donwhang_percent
         SRO_TRADE_ROUTE_HOTAN_PERCENT           = var.trade_route_hotan_percent
         SRO_TRADE_ROUTE_SAMARKAND_PERCENT       = var.trade_route_samarkand_percent
