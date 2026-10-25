@@ -36,6 +36,87 @@ func TestCloseClassificationRequiresEvidence(t *testing.T) {
 
 /*
 ================
+recordingHistory
+
+A HistoryObserver that keeps every lifecycle event for inspection.
+================
+*/
+type recordingHistory struct{ events []LifecycleEvent }
+
+/*
+================
+SessionID
+================
+*/
+func (r *recordingHistory) SessionID(id string) string { return "test:" + id }
+
+/*
+================
+RecordLifecycle
+================
+*/
+func (r *recordingHistory) RecordLifecycle(e LifecycleEvent) { r.events = append(r.events, e) }
+
+/*
+================
+byKind
+================
+*/
+func (r *recordingHistory) byKind(kind string) (LifecycleEvent, bool) {
+	for _, e := range r.events {
+		if e.Kind == kind {
+			return e, true
+		}
+	}
+	return LifecycleEvent{}, false
+}
+
+/*
+================
+TestLifecycleRecordsTransportAndFallback
+
+An attach records the connection's transport, a client report adds the
+fallback reason as its own row, and a later attach replaces both: the
+history describes how the session is attached now, not how it once
+arrived (#1449).
+================
+*/
+func TestLifecycleRecordsTransportAndFallback(t *testing.T) {
+	h := newHub(testCfg())
+	history := &recordingHistory{}
+	h.History = history
+	s, err := h.createSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc := newFakeConn(false)
+	fc.kind = "websocket"
+	if err := s.attach(fc, false, 0); err != nil {
+		t.Fatal(err)
+	}
+	connected, ok := history.byKind("connected")
+	if !ok || connected.Transport != "websocket" || connected.Fallback != "" {
+		t.Fatalf("connected event = %+v", connected)
+	}
+	s.noteTransportReport("timeout")
+	reported, ok := history.byKind("transport_reported")
+	if !ok || reported.Transport != "websocket" || reported.Fallback != "timeout" {
+		t.Fatalf("transport_reported event = %+v", reported)
+	}
+	second := newFakeConn(false)
+	second.kind = "webtransport"
+	if err := s.attach(second, true, 0); err != nil {
+		t.Fatal(err)
+	}
+	resumed, ok := history.byKind("resumed")
+	if !ok || resumed.Transport != "webtransport" || resumed.Fallback != "" {
+		t.Fatalf("resumed event = %+v", resumed)
+	}
+	h.closeSession(s, nil)
+}
+
+/*
+================
 TestDrainClosePreservesReasonForHooksAndMetrics
 ================
 */
