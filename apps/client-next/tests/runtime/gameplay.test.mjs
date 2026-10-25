@@ -58,7 +58,14 @@ test("seated ground and entity clicks stand without issuing or predicting travel
 	for (
 		const command of [
 			{ kind: "move", destination: { ...pose, x: 300 } },
-			{ kind: "ground-move", query: {} },
+			{
+				kind: "ground-move",
+				query: {
+					originRegion: pose.regionId,
+					ray: { start: [ 0, 50, 0 ], delta: [ 1000, 0, 0 ] },
+					terrainDepth: null
+				}
+			},
 			{ kind: "select", gid: 8 },
 			{ kind: "attack", gid: 8 },
 			{ kind: "pickup", gid: 8 }
@@ -1636,6 +1643,147 @@ test("a ground click during the local cast walks once the cast releases", async 
 	game.receive( { opcode: 0xb505, payload: Uint8Array.of( 2, 0, 1, 0, 0, 0 ) }, 13 );
 	for ( let now = 14; now < 2000 && sent.length < 2; now += 50 ) game.step( now, local );
 	assert.equal( sent.length, 2, "the newest held click walks after the release" );
+	game.dispose();
+});
+
+test("a seated ground click stands and drops the click (native: no goal is stored)", async () => {
+	const { createGameplay } = await load( "gameplay" ),
+		sent = [],
+		game = createGameplay( f => sent.push( f ) ),
+		seated = { ...pose, gid: 7, heading: 0, movementMode: 4, appearanceState: [ 1, 0, 0 ] },
+		standing = { ...seated, movementMode: 0 };
+	game.bootstrap( { simulationProtocolVersion: 1 } );
+	game.seed( seated );
+	game.command( { kind: "navigation", regionId: pose.regionId, bundle: bundle() }, 90 );
+	game.command( { kind: "move", destination: { ...pose, x: 300 } }, 100, undefined, seated );
+	assert.deepEqual( sent, [ { opcode: 0x7017, payload: Uint8Array.of( 4 ) } ], "the click only stands at once" );
+	game.step( 500, seated );
+	assert.equal( sent.length, 1, "no walk while still seated" );
+	assert.equal( game.take()?.pose?.x, pose.x );
+	// 0x6933bd returns before the goal store: standing up walks nowhere.
+	game.step( 600, standing );
+	game.step( 1600, standing );
+	assert.equal( sent.length, 1, "no walk after standing either: the click was dropped" );
+	assert.equal( game.take()?.pose?.x, pose.x );
+	game.dispose();
+});
+
+test("a fresh click after standing walks; the dropped seated click never fires", async () => {
+	const { createGameplay } = await load( "gameplay" ),
+		sent = [],
+		game = createGameplay( f => sent.push( f ) ),
+		seated = { ...pose, gid: 7, heading: 0, movementMode: 4, appearanceState: [ 1, 0, 0 ] },
+		standing = { ...seated, movementMode: 0 };
+	game.bootstrap( { simulationProtocolVersion: 1 } );
+	game.seed( seated );
+	game.command( { kind: "navigation", regionId: pose.regionId, bundle: bundle() }, 90 );
+	game.command( { kind: "move", destination: { ...pose, x: 300 } }, 100, undefined, seated );
+	assert.equal( sent.length, 1, "the seated click only stands" );
+	game.command( { kind: "move", destination: { ...pose, x: 80 } }, 200, undefined, standing );
+	game.step( 6000, standing );
+	assert.ok(
+		Math.abs( (game.take()?.pose?.x ?? 0) - 80 ) < 1,
+		"the fresh click's walk stands; the dropped one never fires"
+	);
+	game.dispose();
+});
+
+test("a ground click inside the ground-skill suppress window walks when the window ends", async () => {
+	const { createGameplay } = await load( "gameplay" ),
+		sent = [],
+		game = createGameplay( f => sent.push( f ) ),
+		local = { ...pose, gid: 1, heading: 0, appearanceState: [ 1, 0, 0 ] },
+		query = { originRegion: pose.regionId, ray: { start: [ 0, 100, 0 ], delta: [ 3, 0, 4 ] }, terrainDepth: null },
+		ref = {
+			id: 19636,
+			group: 768,
+			level: 1,
+			status: false,
+			effectRider: false,
+			ui: {
+				name: "Ghost Walk - Shadow",
+				trainable: true,
+				spCost: 1,
+				targetRequired: true,
+				groundTarget: true,
+				actionMs: 200,
+				cooldownMs: 5000,
+				cooldownGroup: 59,
+				masteries: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ],
+				prerequisites: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ]
+			}
+		};
+	game.bootstrap( { simulationProtocolVersion: 1, character: { skills: [ 19636 ] }, refSkillSnapshot: [ ref ] } );
+	game.seed( local );
+	game.command( { kind: "navigation", regionId: pose.regionId, bundle: bundle() }, 90 );
+	game.command( { kind: "skill", skillId: 19636, gid: 999, query }, 100 );
+	const afterPress = sent.length;
+	assert.ok( afterPress > 0, "the ground skill press went out" );
+	game.command( { kind: "move", destination: { ...pose, x: 300 } }, 200, undefined, local );
+	assert.equal( sent.length, afterPress, "the click inside the window is held, not sent" );
+	game.step( 250, local );
+	assert.equal( game.take()?.moveHeld, true, "the click sits in the reservation" );
+	// The press's action window (200 ms) is over by now; only the 500 ms
+	// suppress window still holds the click, so the release must not
+	// fire here: no walk frame, and no release churn republishes.
+	game.step( 400, local );
+	assert.equal( sent.length, afterPress, "no walk after the cast ends, inside the suppress window" );
+	assert.ok( !game.take(), "the release does not fire inside the suppress window" );
+	game.step( 599, local );
+	assert.equal( sent.length, afterPress, "no walk inside the window" );
+	game.step( 601, local );
+	assert.ok( sent.length > afterPress, "the held click walks at the window's end" );
+	game.step( 1601, local );
+	assert.ok( (game.take()?.pose?.x ?? 0) > pose.x, "the walk is under way" );
+	game.dispose();
+});
+
+test("a seated click inside the suppress window stands at once and is never held", async () => {
+	const { createGameplay } = await load( "gameplay" ),
+		sent = [],
+		game = createGameplay( f => sent.push( f ) ),
+		local = { ...pose, gid: 1, heading: 0, appearanceState: [ 1, 0, 0 ] },
+		seated = { ...local, movementMode: 4 },
+		query = { originRegion: pose.regionId, ray: { start: [ 0, 100, 0 ], delta: [ 3, 0, 4 ] }, terrainDepth: null },
+		ref = {
+			id: 19636,
+			group: 768,
+			level: 1,
+			status: false,
+			effectRider: false,
+			ui: {
+				name: "Ghost Walk - Shadow",
+				trainable: true,
+				spCost: 1,
+				targetRequired: true,
+				groundTarget: true,
+				actionMs: 200,
+				cooldownMs: 5000,
+				cooldownGroup: 59,
+				masteries: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ],
+				prerequisites: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ]
+			}
+		};
+	game.bootstrap( { simulationProtocolVersion: 1, character: { skills: [ 19636 ] }, refSkillSnapshot: [ ref ] } );
+	game.seed( local );
+	game.command( { kind: "navigation", regionId: pose.regionId, bundle: bundle() }, 90 );
+	game.command( { kind: "skill", skillId: 19636, gid: 999, query }, 100 );
+	const afterPress = sent.length;
+	// Native order: the seated test precedes the goal store, so the stand
+	// goes out at click time even inside the 500 ms window, and nothing
+	// is held for the window's end.
+	game.command( { kind: "move", destination: { ...pose, x: 300 } }, 200, undefined, seated );
+	assert.deepEqual(
+		sent.slice( afterPress ),
+		[ { opcode: 0x7017, payload: Uint8Array.of( 4 ) } ],
+		"the click only stands"
+	);
+	game.step( 250, seated );
+	assert.equal( game.take()?.moveHeld ?? false, false, "no click sits in the reservation" );
+	game.step( 601, local );
+	game.step( 1601, local );
+	assert.equal( sent.length, afterPress + 1, "no walk at the window's end either" );
+	assert.equal( game.take()?.pose?.x, pose.x );
 	game.dispose();
 });
 

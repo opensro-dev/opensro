@@ -54,6 +54,15 @@ export interface MoverPublication {
 	// A ground click now would start a walk at once (gameplay.ts
 	// groundWalkRefusal): the main-thread mover predicts only then (#1440).
 	readonly walkPredictable?: boolean;
+	// A ground click now would be held by a gate that releases into the
+	// walk (a cast, the ground-skill suppress window) rather than refused:
+	// the mover records the click's aim and adopts the walk when the
+	// worker publishes it (#1570).
+	readonly walkHeld?: boolean;
+	// A held click is still in the worker's move reservation: the mover
+	// keeps its record while this holds and consumes it on the first
+	// publication after it clears (#1570).
+	readonly moveHeld?: boolean;
 	// A ground pickup now would start the worker's own run-up at once
 	// (gameplay.ts pickupPredictableNow): the main-thread mover predicts
 	// the pickup leg only then (#1567).

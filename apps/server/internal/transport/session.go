@@ -94,8 +94,14 @@ type Session struct {
 	ringFloor uint32
 
 	resumeToken [ResumeTokenLen]byte
-	lastRecv    time.Time
-	readCancel  context.CancelFunc
+	// admissionCommit consumes the HELLO ticket this attachment was
+	// admitted with. The write loop runs it after the WELCOME frame is
+	// written and clears it under mu first, so it runs at most once
+	// per arming; nil means the ticket was already consumed upstream
+	// (the legacy HELLO-time verifier) or none is pending.
+	admissionCommit func() error
+	lastRecv        time.Time
+	readCancel      context.CancelFunc
 
 	// Telemetry of the current attachment (#1449): the transport kind of
 	// the latest attach and the fallback reason the client reported for
@@ -369,6 +375,21 @@ func (s *Session) pushFront(f Frame) {
 	s.queueBytes += f.EncodedLen()
 	s.hub.observeQueueDepth(len(s.queue)+len(s.lossyKeys), s.queueBytes+s.lossyBytes)
 	s.cond.Broadcast()
+}
+
+/*
+================
+armAdmissionCommit
+
+Arms the one-use HELLO ticket consumption for the WELCOME the coming
+attach writes (nil disarms). The hub calls it before attach, so the
+commit can never be missed by a fast writer.
+================
+*/
+func (s *Session) armAdmissionCommit(commit func() error) {
+	s.mu.Lock()
+	s.admissionCommit = commit
+	s.mu.Unlock()
 }
 
 // attach binds a new connection to the session and starts its read loop.
@@ -672,6 +693,24 @@ func (s *Session) writeLoop() {
 			continue
 		}
 		s.hub.recordFrameOut(f)
+		if f.Opcode == OpWelcome {
+			s.mu.Lock()
+			commit := s.admissionCommit
+			s.admissionCommit = nil
+			s.mu.Unlock()
+			if commit != nil {
+				if err := commit(); err != nil {
+					// The ticket this session was admitted with was
+					// consumed by a concurrent admission: this session
+					// must not outlive its WELCOME.
+					log.WithFields(log.Fields{
+						"session": s.ID, "error": err,
+					}).Warn("transport: admission consumption failed after WELCOME; closing session")
+					s.hub.closeSession(s, err)
+					return
+				}
+			}
+		}
 		if ordered && drainAndEmpty {
 			s.hub.closeSession(s, nil)
 			return

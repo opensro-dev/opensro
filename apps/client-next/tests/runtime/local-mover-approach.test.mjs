@@ -152,6 +152,8 @@ function play( clicks, endMs = 5000 ) {
 			speedFactor: 1,
 			turnRate: 0,
 			walkPredictable: true,
+			walkHeld: false,
+			holding: false,
 			speed: SPEED,
 			inputSeq: p?.inputSeq ?? 0,
 			navigationRequestId: 1,
