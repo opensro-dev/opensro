@@ -188,9 +188,12 @@ var Settings = []Setting{
 	{Env: "SRO_FLAGWAR_START_UTC", NomadVar: "flagwar_start_utc", Default: "20:00"},
 	{Env: "SRO_FLAGWAR_MIN_PLAYERS", NomadVar: "flagwar_min_players", Default: "4"},
 	{Env: "SRO_BETA_GROWTH", NomadVar: "beta_growth", Default: "on", Catalogue: true, Validation: ValueSwitch},
-	// Owner, 2026-10-24: 1-59 at the level-1 pace, 60-89 at 20x, 90-110 at
-	// 10x; unset keeps every level at the pace.
-	{Env: "SRO_BETA_GROWTH_BANDS", NomadVar: "beta_growth_bands", Default: "1-59:pace,60-89:20,90-110:10",
+	// #1606 (supersedes the owner's 2026-10-24 bands, which cost about
+	// 2,600 h for 90->110 with an 84x step at 59->60): 1-59 keep the
+	// level-1 pace, 60-110 follow one smooth target curve, no adjacent
+	// level over 2x the one before (growthbands_curve_test.go); unset
+	// keeps every level at the pace.
+	{Env: "SRO_BETA_GROWTH_BANDS", NomadVar: "beta_growth_bands", Default: "1-59:pace,60-69:1639,70-79:1215,80-89:748,90-94:532,95-99:431,100-104:351,105-110:289",
 		Catalogue: true, Validation: ValueBetaGrowthBands},
 	{Env: "SRO_BETA_SKILL_EXP_RATE", NomadVar: "beta_skill_exp_rate", Default: "100", Catalogue: true,
 		Validation: ValueBetaGrowth},
