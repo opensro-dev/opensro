@@ -77,7 +77,7 @@ func drainedNoticeLines(t *testing.T, rt *Runtime) []noticeLine {
 				continue
 			}
 			p := frame.Payload
-			if frame.Opcode != 0x3667 || len(p) < 3 || (p[0] != wire.DropPlusNoticeChannel && p[0] != wire.JobKillNoticeChannel) {
+			if frame.Opcode != 0x3667 || len(p) < 3 || (p[0] != wire.DropPlusNoticeChannel && p[0] != wire.JobKillNoticeChannel && p[0] != wire.BreakNoticeChannel) {
 				t.Fatalf("not a notification frame: %#x % x", frame.Opcode, p)
 			}
 			n := int(p[1]) | int(p[2])<<8
@@ -100,7 +100,8 @@ func TestAnnouncementsFromEnv(t *testing.T) {
 	t.Setenv(EnvAnnounceSoxDrop, "on")
 	t.Setenv(EnvAnnouncePlus, "")
 	t.Setenv(EnvAnnounceJobKill, "TRUE")
-	if got := AnnouncementsFromEnv(); got != (Announcements{SoxDrop: true, JobKill: true}) {
+	t.Setenv(EnvAlchemyBreakNotice, "on")
+	if got := AnnouncementsFromEnv(); got != (Announcements{SoxDrop: true, JobKill: true, Break: true}) {
 		t.Fatalf("flags %+v", got)
 	}
 }
