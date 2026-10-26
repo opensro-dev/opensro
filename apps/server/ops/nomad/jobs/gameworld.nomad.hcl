@@ -84,6 +84,14 @@ variable "webtransport_public" {
   default = "off"
 }
 
+# The public UDP host:port the WT listener binds when webtransport_public
+# is on. Empty (default) keeps the Nomad-allocated loopback bind; the
+# deployer refuses the public switch without it.
+variable "transport_wt_addr" {
+  type    = string
+  default = ""
+}
+
 variable "host_network" {
   type    = string
   default = "loopback"
@@ -519,6 +527,14 @@ variable "seal_census" {
 variable "announce_plus" {
   type    = string
   default = "on"
+}
+
+# announce_plus_tiers leads a +10 plus notice with "Great success!" and
+# a +11 or higher one with "LEGENDARY!" (port-only, not native; owner
+# decision 2026-10-26, #1739). "off" is the plain plus line.
+variable "announce_plus_tiers" {
+  type    = string
+  default = "off"
 }
 
 variable "announce_job_kill" {
@@ -1127,6 +1143,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_SEAL_BOARD                          = var.seal_board
         SRO_SEAL_CENSUS                         = var.seal_census
         SRO_ANNOUNCE_PLUS                       = var.announce_plus
+        SRO_ANNOUNCE_PLUS_TIERS                 = var.announce_plus_tiers
         SRO_ANNOUNCE_JOB_KILL                   = var.announce_job_kill
         SRO_JOB_KILL_NOTICE_REPEAT              = var.job_kill_notice_repeat
         SRO_JOB_KILL_NOTICES_PER_MINUTE         = var.job_kill_notices_per_minute
@@ -1186,7 +1203,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_ALEXANDRIA                          = var.alexandria
         SRO_PUBLIC_API_ADDR                     = var.public_api_addr
         SRO_PUBLIC_API_TOKEN_PATH               = "${NOMAD_SECRETS_DIR}/public-api-token"
-        TRANSPORT_WT_ADDR                       = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
+        TRANSPORT_WT_ADDR                       = var.transport_wt_addr != "" ? var.transport_wt_addr : "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_WS_ADDR                       = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_CERT_DIR                      = var.cert_dir
         TRANSPORT_CERT_FILE                     = var.transport_cert_file

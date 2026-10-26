@@ -1,7 +1,5 @@
 package world
 
-import "math"
-
 // Native outdoor interest area. The v1.150 client never culls server objects,
 // so the interest radius is reference-server evidence,
 // machine-verified:
@@ -49,32 +47,6 @@ type InterestBlock struct {
 	// X and Z are continuous outdoor block-grid coordinates, or a dungeon
 	// grid cell.
 	X, Z int
-}
-
-/*
-================
-InterestBlockAt
-
-The message block containing position.
-================
-*/
-func InterestBlockAt(position RegionXZ) InterestBlock {
-	if IsDungeonRegion(position.RegionID) {
-		grid, ok := dungeonMessageGridFor(position.RegionID)
-		if !ok {
-			return InterestBlock{Dungeon: position.RegionID, Whole: true}
-		}
-		x, z, inside := grid.planarBlock(position.X, position.Z)
-		if !inside {
-			return InterestBlock{Dungeon: position.RegionID, Whole: true}
-		}
-		return InterestBlock{Dungeon: position.RegionID, X: x, Z: z}
-	}
-	grid := ExpandGrid(position)
-	return InterestBlock{
-		X: int(math.Floor(grid.X / InterestBlockSize)),
-		Z: int(math.Floor(grid.Z / InterestBlockSize)),
-	}
 }
 
 /*
