@@ -41,28 +41,30 @@ func BetaUniqueRespawnEnabled() bool {
 	return false
 }
 
-// Native nest population lifecycle. Each world's CAIHive owns one timer entry
-// per nest; CNest owns the party-monster flag.
+// Native nest population lifecycle. Each world's hive owns one timer
+// entry per nest; the nest owns the party-monster flag.
 //
-//	55E910  hive callback: runs the hive's mode at most once per 1000 ms.
-//	55EA90  ordinary hive: every enabled nest whose interval elapsed and whose
-//	        live count is below dwMaxTotalCount gets one 5607B0 attempt.
-//	55EC10  overwrite hive (dwOverwriteMaxTotalCount > 0): while the shared
-//	        live count is below the limit, only the selected alternate nest,
-//	        or else each member in hive order, gets one attempt until full.
-//	5607B0  success: live+1, last=now, interval re-rolled (560DC0/560E40) and
-//	        a party grade clears CNest +30. A clipped creation halves the
-//	        interval (560E10); any other failure retries next callback.
-//	560D00  death: a nest dying from full restarts its timer (last=now); an
-//	        overwrite hive dying from full picks the next location and restarts
-//	        every member (55EEC0); then live-1 (560DF0).
-//	54BD2D  world init: last=0, interval rolled, enabled=!btFlag,
-//	        respawn=btRespawn, remaining=dwMaxTotalCount.
+//	hive callback: runs the hive's mode at most once per 1000 ms.
+//	ordinary hive: every enabled nest whose interval elapsed and whose
+//	live count is below its authored maximum gets one spawn attempt.
+//	overwrite hive (an authored overwrite maximum above zero): while
+//	the shared live count is below the limit, only the selected
+//	alternate nest, or else each member in hive order, gets one
+//	attempt until full.
+//	spawn success: live+1, last=now, the interval is re-rolled and a
+//	party grade clears the nest's party-monster flag. A clipped
+//	creation halves the interval; any other failure retries on the
+//	next callback.
+//	death: a nest dying from full restarts its timer (last=now); an
+//	overwrite hive dying from full picks the next location and
+//	restarts every member; then live-1.
+//	world init: last=0, interval rolled, enabled and respawn from
+//	the authored flags, remaining=the authored maximum.
 //
 // World creation initializes every nest timer. Only elapsed hive callbacks
 // create monsters; observing a region never fast-forwards or retries spawns.
 
-// nestRuntime is one nest's CAIHive +1C timer entry plus CNest +30.
+// nestRuntime is one nest's hive timer entry plus its party flag.
 /*
 ================
 nestRuntime
@@ -77,7 +79,7 @@ type nestRuntime struct {
 	enabled    bool    // +14 !btFlag
 	respawn    bool    // +18 btRespawn
 	remaining  int     // +1C spawns left for a non-respawning nest
-	partyArmed bool    // CNest +30
+	partyArmed bool    // the nest's party-monster flag
 	// tickMs is the hive callback phase of a nest outside an overwrite hive.
 	tickMs    int64
 	scheduled int64
@@ -97,7 +99,7 @@ func (n *nestRuntime) elapsed(nowMs int64) bool {
 	return nowMs >= n.lastMs+int64(n.intervalMs)
 }
 
-// ordinaryEligible is 55EB0F..55EB43 without the elapsed-timer test.
+// ordinaryEligible is the native eligibility test without its timer.
 /*
 ================
 bool
@@ -481,8 +483,9 @@ func (s *MonsterState) runDueHiveTicks(state *divisionMonsterState, nowMs int64)
 	}
 }
 
-// 55EA90 visits ordinary hive members in the same authored vector order as
-// overwrite hives. A single callback phase owns every member's admission.
+// The native ordinary hive visits members in the same authored order
+// as overwrite hives. A single callback phase owns every member's
+// admission.
 /*
 ================
 tickOrdinaryHive
@@ -502,7 +505,7 @@ func (s *MonsterState) tickOrdinaryHive(state *divisionMonsterState, key string,
 	s.scheduleHive(state, key)
 }
 
-// tickNest is 55EA90 for a nest outside an overwrite hive.
+// tickNest is the ordinary-hive tick for one nest.
 /*
 ================
 tickNest
@@ -519,7 +522,7 @@ func (s *MonsterState) tickNest(state *divisionMonsterState, index int, nowMs in
 	s.scheduleNest(state, index)
 }
 
-// tickOverwriteHive is 55EC10.
+// tickOverwriteHive ticks an overwrite hive.
 /*
 ================
 tickOverwriteHive
@@ -529,7 +532,7 @@ func (s *MonsterState) tickOverwriteHive(state *divisionMonsterState, key string
 	h := state.hives[key]
 	members := s.template.HiveNestIndexes(key)
 	limit := s.template.Nests[members[0]].HiveMaxCount
-	// 55EC26: a full hive neither ticks nor advances its callback phase.
+	// Native: a full hive neither ticks nor advances its callback phase.
 	if h.live < limit && nowMs-h.tickMs >= monster.NestHiveTickMs {
 		h.tickMs = nowMs
 		if h.selected >= 0 {
@@ -555,11 +558,11 @@ const (
 	spawnPlaced spawnPlacement = iota
 	// spawnPlacementRejected: creation returned zero; retry next callback.
 	spawnPlacementRejected
-	// spawnPlacementClipped: the 5F7126 out flag; 560E10 halves the interval.
+	// spawnPlacementClipped: the native clipped flag; the interval halves.
 	spawnPlacementClipped
 )
 
-// attemptNestSpawn is one 5607B0 call for a materialized nest.
+// attemptNestSpawn is one native spawn attempt for a materialized nest.
 /*
 ================
 bool
@@ -597,7 +600,7 @@ func (s *MonsterState) attemptNestSpawn(state *divisionMonsterState, index int, 
 		Spawn:        spawn,
 		SpawnHeading: HeadingWordFromRadians(float64(roll.HeadingRadians)),
 	}
-	// INFERENCE: 4C1030 draws the variant for every mob, but no other mob
+	// INFERENCE: native parameter init draws the variant for every mob,
 	// reads it, and this server's draws do not replay the CRT rand stream;
 	// only the thief and hunter draw, so ordinary spawn rolls keep their
 	// sequence.
@@ -621,22 +624,23 @@ func (s *MonsterState) attemptNestSpawn(state *divisionMonsterState, index int, 
 	state.behavior.set(gid, 0)
 	state.byRegion[spawn.RegionID] = append(state.byRegion[spawn.RegionID], gid)
 	state.gidNests[gid] = index
-	// 560C91..560CB3.
+	// Native bookkeeping: count the spawn before re-rolling the delay.
 	n.live++
 	n.lastMs = nowMs
 	n.intervalMs, n.reduceMs = s.nestDelay(nest, n.ratePct)
 	if roll.Grade()&0xf0 == 0x10 {
 		n.partyArmed = false
 	}
-	// 55EB77..55EBCC: a non-respawning nest spends one of its spawns.
+	// A non-respawning nest spends one of its spawns.
 	if !n.respawn && n.remaining > 0 {
 		n.remaining--
 	}
 	return true
 }
 
-// placeNativeSpawn is 5F6EB0's position stage: 531240 offsets the float32
-// centre, the navmesh move test from the centre admits the candidate, and a
+// placeNativeSpawn is the native spawn position stage: a banded
+// random offset from the float32 centre, the navmesh move test from
+// the centre admits the candidate, and a
 // blocked candidate falls back to the centre for promoted grades.
 /*
 ================
@@ -648,13 +652,13 @@ func (s *MonsterState) placeNativeSpawn(nest monster.NestRow, ref monster.Monste
 	candidate := centre
 	// The authored centre is grounded at its authored height. An admitted
 	// candidate keeps the height its walk from the centre came to rest at:
-	// 5F6EB0 spawns at the move test's written position, so a monster can
+	// The native spawn uses the move test's written position, so a
 	// only stand where walking reaches (never a bridge parapet above a gorge
 	// that nearest-height arbitration from the nest's Y would pick).
 	surfaceY := nest.Y
 	cx, cz := float32(nest.X), float32(nest.Z)
 	x, z, moved := monster.NativeSpawnPosition(cx, cz, float32(nest.GenerateRadius), s.randomWord)
-	// 98B320: a zero-length move test returns zero.
+	// A zero-length move test returns zero.
 	if moved && (x != cx || z != cz) {
 		candidate = normalizeGeneratedMonsterSpawn(monster.SpawnPoint{
 			RefObjID: nest.RefObjID,
@@ -698,8 +702,8 @@ func spawnPointFrame(point monster.SpawnPoint) Spawn {
 	return Spawn{RegionID: point.RegionID, X: point.X, Y: point.Y, Z: point.Z}
 }
 
-// Defeat removes one live monster and runs the native nest death path
-// (560D00). A later spawn receives a new gid and a freshly generated
+// Defeat removes one live monster and runs the native nest death
+// path. A later spawn receives a new gid and a freshly generated
 // position, matching entity lifecycle rather than resurrecting a stale wire
 // identity. Non-population/dev gids are not accepted.
 /*
@@ -740,7 +744,7 @@ func (s *MonsterState) Defeat(divisionID string, gid uint32, at time.Time) bool 
 	return true
 }
 
-// nestDeath is 560D00.
+// nestDeath is the native nest death path.
 /*
 ================
 nestDeath
@@ -765,7 +769,7 @@ func (s *MonsterState) nestDeath(state *divisionMonsterState, index int, nowMs i
 	}
 }
 
-// overwriteHiveDeath is 55EEC0: a hive losing a member while full draws the
+// overwriteHiveDeath: a hive losing a member while full draws the
 // next location (single-occupant hives only) and restarts every member.
 /*
 ================
@@ -783,7 +787,7 @@ func (s *MonsterState) overwriteHiveDeath(state *divisionMonsterState, key strin
 			nest := s.template.Nests[index]
 			if i == selected && limit == 1 {
 				h.selected = index
-				// 55EF7A: rolled into the selected nest, then re-rolled by 560E50.
+				// Rolled into the selected nest, then re-rolled afresh.
 				n.intervalMs, n.reduceMs = s.nestDelay(nest, n.ratePct)
 			}
 			n.lastMs = nowMs
