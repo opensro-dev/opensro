@@ -60,7 +60,7 @@ func TestTaxRatePersistenceAndFailure(t *testing.T) {
 ================
 TestTreasuryAccumulatesAndFlushesInSteps
 
-486330/62A550/6201A0: only a positive amount counts; the treasury is
+The native accumulation: only a positive amount counts; the treasury is
 written once it has grown by more than 10000 since its last write, and a
 failed write keeps the unsaved gold for the next attempt.
 ================
