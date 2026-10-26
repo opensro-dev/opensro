@@ -17,4 +17,3 @@ apps/client-next/src/engine/runtime/renderer/world/world.ts 5
 apps/client-next/src/engine/runtime/simulation/worker/session/world/entities/entities.ts 2
 apps/client-next/src/engine/runtime/ui/hud/hunting-guide.ts 2
 apps/client-next/src/engine/runtime/world/world.ts 5
-apps/server/internal/game/world/movement/object_surface_path.go 2

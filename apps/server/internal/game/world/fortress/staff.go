@@ -3,8 +3,8 @@
 
 staff.go - the hired staff byte and its durable purchase
 
-632100 admits a hire; 623DF9 applies its flags and charges both owners.
-The authority lock keeps flags, capture and the war period ordered.
+Natively, a hire is admitted first; applying its flags then charges both
+owners. The authority lock keeps flags, capture and the war period ordered.
 
 ===========================================================================
 */
