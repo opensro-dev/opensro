@@ -297,6 +297,12 @@ func (v *WaterValidator) planCaveRoute(from, goal monster.Pose) *monster.Navigat
 	if start == target {
 		return monster.NewNavigationRoute(goal, []monster.Pose{goal}).WithProbes(1).WithWork(work)
 	}
+	// A dungeon whose native route file loaded takes the native region
+	// route (cave_native_route.go); the search below is the port's route
+	// for the rest.
+	if route, ok := v.nativeCaveWaypoint(surface, from, goal, start, target); ok {
+		return route.WithProbes(1 + route.Probes()).WithWork(work + route.Work())
+	}
 	if start.block == target.block {
 		path, used, found := surface.astarCells(start, target)
 		if !found {

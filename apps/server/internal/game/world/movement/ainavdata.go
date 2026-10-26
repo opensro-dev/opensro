@@ -319,7 +319,7 @@ func validateAINavData(table *caveRouteTable, surface *dungeonSpawnSurface) erro
 	// the diagonal is never read (Donwhang's holds 0, and 376 at [0]).
 	for k, cell := range table.fastest {
 		cur, dest := k%n, k/n
-		if cur != dest && !table.blocks[cur].hasPortal(uint32(cell)) {
+		if _, ok := table.blocks[cur].portal(uint32(cell)); cur != dest && !ok {
 			return fmt.Errorf("fastest[%d] = %d is no portal of block %d", k, cell, cur)
 		}
 	}
@@ -328,16 +328,18 @@ func validateAINavData(table *caveRouteTable, surface *dungeonSpawnSurface) erro
 
 /*
 ================
-caveRouteBlock.hasPortal
+caveRouteBlock.portal
+
+The block's portal under a fastest-table key.
 ================
 */
-func (block *caveRouteBlock) hasPortal(key uint32) bool {
+func (block *caveRouteBlock) portal(key uint32) (caveRoutePortal, bool) {
 	for _, portal := range block.portals {
 		if portal.key == key {
-			return true
+			return portal, true
 		}
 	}
-	return false
+	return caveRoutePortal{}, false
 }
 
 /*
