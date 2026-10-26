@@ -127,6 +127,10 @@ scheduler p99 in the GameWorld's log lines. The reserved run keeps the
 tick within budget and prints no "tick slow" line. Record both numbers
 in the release notes.
 
+The release path passes no CPU flags, so the job defaults are what a
+release deploys; the flags in the examples above are for hand-run
+deploys that deliberately size a smaller host.
+
 Keep catalog control/transport URLs on loopback and advertise
 `/shards/global-official` publicly. Caddy strips `/api` before proxying to
 `127.0.0.1:8787`, and strips `/shards/global-official` before proxying transport
