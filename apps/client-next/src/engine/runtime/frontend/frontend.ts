@@ -287,6 +287,12 @@ export function createFrontend(
 				if ( entryPending ) {
 					entryPending = false;
 					flow.start();
+				} else if ( ![ "departing", "failed" ].includes( flow.snapshot().phase ) ) {
+					// The session owns world entry: an enter-world this dock did not
+					// start (a launcher, a script) still binds a world. Left on the
+					// dock, the runtime never resets the world for it, and the
+					// loading screen waits forever on a scene it never streams.
+					flow.resumeWorld();
 				}
 			}
 			let state = flow.snapshot();

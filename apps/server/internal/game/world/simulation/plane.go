@@ -29,6 +29,24 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 )
 
+// DungeonSectorBit marks dungeon-plane region ids (moved from
+// simulation.go, #1764: the plane owner is the one place outside worldgeom
+// that names the bit).
+const DungeonSectorBit uint16 = worldgeom.DungeonRegionBit
+
+/*
+================
+IsDungeonRegion
+
+Whether the region id carries the dungeon plane bit, server.mjs
+isMissionDungeonRegion. Kept for the callers outside the simulation that
+still test it; inside, PlaneKindOf names the plane.
+================
+*/
+func IsDungeonRegion(regionID uint16) bool {
+	return worldgeom.IsDungeonRegion(regionID)
+}
+
 /*
 ================
 PlaneKind
@@ -76,9 +94,10 @@ type Plane interface {
 	LineOfSight(from Spawn, fromOwner NavOwner, to Spawn) bool
 	// PlanPath is the walked path from the retained owner toward goal.
 	PlanPath(from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationPath
-	// NextWaypoint is the AI route toward goal: outdoors the direction-gate
-	// detour, in a cave the native region route (#1645).
-	NextWaypoint(from, goal monster.Pose) *monster.NavigationRoute
+	// NextWaypoint is the AI route toward goal from the mover's retained
+	// owner: outdoors the direction-gate detour, in a cave the native
+	// region route from the retained cell (#1645, #1732).
+	NextWaypoint(from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationRoute
 	// HeightAt is the walkable surface height at p on this plane,
 	// nearest the caller's own height: outdoors a deck or bridge over
 	// the bare terrain when the caller stands at its height, in a cave

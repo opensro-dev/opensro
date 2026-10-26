@@ -8,11 +8,14 @@ type MessageBlock struct {
 	X, Y, Z int
 }
 
+// OutdoorMessageBlock is the message block containing an outdoor
+// position, ok=false for dungeon positions (the dungeon branch is
+// InterestBlockAt's own, in the plane owner geometry.go, #1646).
 func OutdoorMessageBlock(position RegionXZ) (MessageBlock, bool) {
-	if IsDungeonRegion(position.RegionID) {
+	b := InterestBlockAt(position)
+	if b.Dungeon != 0 {
 		return MessageBlock{}, false
 	}
-	b := InterestBlockAt(position)
 	return MessageBlock{X: b.X, Z: b.Z}, true
 }
 

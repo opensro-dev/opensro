@@ -165,6 +165,36 @@ func planeParity(
 
 /*
 ================
+TestPlaneSameNeighbourhood
+
+The neighbourhood each plane reports: the reference server's broadphase
+rule, where the whole dungeon plane is one neighbourhood and the outdoor
+plane keeps its 3x3 sector ring. Interest gathering is ring-owned and does
+not follow this rule (the observatory pins a dungeon focus to its own
+region); the neighbourhood only admits a pair to the callers' own finer
+checks.
+================
+*/
+func TestPlaneSameNeighbourhood(t *testing.T) {
+	planes := NewPlanes(nil, nil)
+	cave := planes.For(planeCaveRegion)
+	if !cave.SameNeighbourhood(planeCaveRegion, planeOtherCaveRegion) {
+		t.Errorf("cave neighbourhood %x/%x = false, want the whole dungeon plane", planeCaveRegion, planeOtherCaveRegion)
+	}
+	if cave.SameNeighbourhood(planeCaveRegion, planeOutdoorRegion) {
+		t.Errorf("cave/outdoor neighbourhood %x/%x = true, want different planes apart", planeCaveRegion, planeOutdoorRegion)
+	}
+	outdoor := planes.For(planeOutdoorRegion)
+	if !outdoor.SameNeighbourhood(planeOutdoorRegion, planeOutdoorRegion+1) {
+		t.Errorf("outdoor neighbourhood %x/%x = false, want the adjacent sector", planeOutdoorRegion, planeOutdoorRegion+1)
+	}
+	if outdoor.SameNeighbourhood(planeOutdoorRegion, planeOutdoorRegion+2) {
+		t.Errorf("outdoor neighbourhood %x/%x = true, want two sectors away excluded", planeOutdoorRegion, planeOutdoorRegion+2)
+	}
+}
+
+/*
+================
 TestOutdoorPlaneWrapsTodaysNavigation
 ================
 */
@@ -180,7 +210,7 @@ func TestOutdoorPlaneWrapsTodaysNavigation(t *testing.T) {
 	planeParity(t, plane, rt, v, probes)
 	// The outdoor route still wraps the open-terrain search exactly.
 	for _, probe := range probes {
-		route := plane.NextWaypoint(poseOf(probe[0]), poseOf(probe[1]))
+		route := plane.NextWaypoint(poseOf(probe[0]), simulation.NavOwner{}, poseOf(probe[1]))
 		if want := v.PlanMonsterRoute(poseOf(probe[0]), poseOf(probe[1])); !reflect.DeepEqual(route, want) {
 			t.Fatalf("%+v -> %+v NextWaypoint differs from the wrapped route", probe[0], probe[1])
 		}
@@ -220,7 +250,7 @@ func TestCavePlaneWrapsTodaysNavigation(t *testing.T) {
 			// all, and the route contract does not apply.
 			continue
 		}
-		route := plane.NextWaypoint(from, goal)
+		route := plane.NextWaypoint(from, simulation.NavOwner{}, goal)
 		if route == nil || route.Goal() != goal {
 			t.Fatalf("%+v -> %+v route %+v", from, goal, route)
 		}

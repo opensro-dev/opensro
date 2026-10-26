@@ -100,6 +100,25 @@ func (settings portOnlySettings) validate() error {
 
 /*
 ================
+webTransportPublic
+
+Whether the captured settings switch WebTransport public, read with
+the GameWorld's own spellings (transport.WebTransportPublicEnabled):
+on/1/true, anything else - an unset value sits at its off default -
+keeps the loopback posture.
+================
+*/
+func (settings portOnlySettings) webTransportPublic() bool {
+	raw, _ := settings["webtransport_public"].(string)
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "on", "1", "true":
+		return true
+	}
+	return false
+}
+
+/*
+================
 jobVariables
 
 Adds the settings to the GameWorld job's variables.

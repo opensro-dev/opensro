@@ -155,6 +155,30 @@ test("a resident image list stops reading resident once one of its images is evi
 	assert.equal( f.resources.residentAll( baseline ), false );
 	f.resources.dispose();
 });
+/*
+================
+residentListAbsent
+
+World entry waits on the HUD and Help baselines. An image the published
+manifest lacks is never loaded, so counting it as unloaded held the loading
+screen open forever; it draws nothing, and the baseline settles without it.
+A failure that is still retrying keeps the baseline open.
+================
+*/
+test("a baseline settles over an image the manifest lacks, but not over one still retrying", () => {
+	const f = assetFixture(), baseline = [ "/a.png", "/absent.png" ];
+	f.resources.step( baseline, 0 );
+	f.results.set( 1, { kind: "image", image: { width: 4, height: 4 } } );
+	f.results.set( 2, { kind: "error", error: "network", absent: false } );
+	f.resources.step( baseline, 1 );
+	assert.equal( f.resources.residentAll( baseline ), false, "a retrying image keeps the baseline open" );
+	f.resources.step( baseline, 60_000 );
+	f.results.set( 3, { kind: "error", error: "AssetAbsentError", absent: true } );
+	f.resources.step( baseline, 60_001 );
+	assert.equal( f.resources.has( "/absent.png" ), false );
+	assert.equal( f.resources.residentAll( baseline ), true );
+	f.resources.dispose();
+});
 test("UI request exceptions are recoverable and released failures do not poison re-entry", () => {
 	const f = assetFixture();
 	const request = f.assets.request;

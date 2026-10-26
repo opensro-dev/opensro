@@ -42,6 +42,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/platform/sealboard"
 	"opensro.online/server/internal/transport"
 )
 
@@ -147,6 +148,12 @@ type Sources struct {
 	// Chat returns the shard's public chat transcript, oldest first, with
 	// muted authors already left out (chat.go); nil serves no lines.
 	Chat func() []chatfeed.Line
+	// SealCounts and SealCountingSince read the weekly seal board's
+	// counter (platform/sealboard, #1641): per-character tier counts and
+	// when the week's counting began. Nil leaves the seals board
+	// unserved (404): SRO_SEAL_BOARD off, the native default.
+	SealCounts        func(weekStart time.Time) ([]sealboard.Count, error)
+	SealCountingSince func(weekStart time.Time) (time.Time, error)
 }
 
 /*
@@ -238,6 +245,12 @@ func (s *Service) Handler() http.Handler {
 	mux.HandleFunc("GET /public/v1/uniques", s.cached(uniquesMaxAge, s.uniques))
 	mux.HandleFunc("GET /public/v1/uniques/kills", s.cached(uniquesMaxAge, s.kills))
 	mux.HandleFunc("GET /public/v1/leaderboards/uniques", s.cached(boardsMaxAge, s.leaderboard))
+	// The seal board's route exists only while its counter is wired
+	// (SRO_SEAL_BOARD): off must answer 404 like any unknown route, so
+	// the flag's state leaves no fingerprint (the census' own rule).
+	if s.src.SealCounts != nil {
+		mux.HandleFunc("GET /public/v1/leaderboards/seals", s.cached(boardsMaxAge, s.sealBoard))
+	}
 	mux.HandleFunc("GET /public/v1/firsts", s.cached(boardsMaxAge, s.firsts))
 	mux.HandleFunc("GET /public/v1/characters", s.cached(charactersMaxAge, s.search))
 	mux.HandleFunc("GET /public/v1/characters/{name}", s.cached(charactersMaxAge, s.profile))

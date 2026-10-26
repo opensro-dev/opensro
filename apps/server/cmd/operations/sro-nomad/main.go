@@ -237,6 +237,7 @@ type commandOptions struct {
 	GMCharacters    string
 	TransportCert   string
 	TransportKey    string
+	TransportWTAddr string
 	IdentityIssuer  string
 	IdentityJWKSURL string
 	AgentURL        string
@@ -328,6 +329,12 @@ func parseOptions(name string, arguments []string) (commandOptions, error) {
 		"transport-key-file",
 		"",
 		"production WebTransport TLS private key readable on every GameWorld node",
+	)
+	flags.StringVar(
+		&options.TransportWTAddr,
+		"transport-wt-addr",
+		"",
+		"public UDP host:port the GameWorld binds for WebTransport (required with SRO_WEBTRANSPORT_PUBLIC)",
 	)
 	flags.IntVar(&options.AgentPort, "agent-port", stack.agentPort(), "Agent HTTP port")
 	flags.IntVar(
