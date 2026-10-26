@@ -929,10 +929,11 @@ export function createCharacterEffects(
 							y: owner.pose.y + turned[1],
 							z: owner.pose.z + turned[2]
 						};
-					const state = hawkInitial( position, Math.fround( Math.PI - owner.pose.yaw ) );
+					const state = hawkInitial( position, Math.fround( Math.PI - owner.pose.yaw ) ),
+						hawkGid = allocate();
 					result.push( {
 						actor: {
-							gid: allocate(),
+							gid: hawkGid,
 							model: model.glb,
 							pose: { ...owner.pose, ...position },
 							clip: states[0]!.clip,
@@ -954,6 +955,32 @@ export function createCharacterEffects(
 							states
 						}
 					} );
+					// The hawk's own ambient effects ride on it: the Lightning and
+					// Frost Hawks are the Black and White Hawks' mesh and material
+					// with wing effects on Bip01 L/R Hand (lighthawk.bsr,
+					// coldhawk.bsr), so without them each looks like its base hawk.
+					if ( "particleModifiers" in model ) {
+						for ( const particle of ambientModelParticles( model.particleModifiers ) ) {
+							result.push( {
+								actor: {
+									gid: allocate(),
+									model: "/assets/effects/programs.json#" + encodeURIComponent( particle.effectPath ),
+									pose: owner.pose,
+									clip: "effect",
+									time: 0,
+									loop: true,
+									scale: 1,
+									pickable: false,
+									attachment: modelParticleAttachment( hawkGid, particle, particle.scale ?? 1 )
+								},
+								life: 0,
+								keep: true,
+								started: now,
+								slot: stage.native?.slot ?? 0,
+								fade: 0
+							} );
+						}
+					}
 					continue;
 				}
 				// A loop stage, and an active-phase stage with no authored life (the

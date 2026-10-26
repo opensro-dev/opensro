@@ -4,12 +4,14 @@
 economy.mjs - read-only reads of each GameWorld's economy aggregates
 
 The Economy page's server half. GameWorld serves pre-bucketed aggregates
-(contract v1: meta, series, flows, distribution, flags, trade, killstats) on its
-loopback control listener under /economy/v1/; it reads its own rollup
-tables and latest snapshot copy, never the live store per request. This
-owner forwards only those routes and only their validated parameters, adds
-the bearer token server-side (the browser never sees it), and bounds the
-answer. Phase 1 is read-only: there is no write route here.
+(contract v1: meta, series, flows, distribution, flags, trade, killstats,
+sealcensus) on its loopback control listener under /economy/v1/; it reads
+its own rollup tables and latest snapshot copy, never the live store per
+request. This owner forwards only those routes and only their validated
+parameters, adds the bearer token server-side (the browser never sees it),
+and bounds the answer. The reads change nothing anywhere; the one POST,
+sealcensus, runs the shard's staff seal census over a fresh store copy
+(platform/economy census.go) and persists nothing here or there.
 
 ===========================================================================
 */
@@ -17,6 +19,9 @@ import { boundedText } from "./bounded-body.mjs";
 
 const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 10000;
+// A census copies the whole store before counting; it gets minutes, not
+// the reads' seconds.
+const CENSUS_TIMEOUT_MS = 300000;
 // Contract v1 refuses more than this many buckets (range_too_wide); the
 // console checks first so a bad range never costs a GameWorld round trip.
 export const MAX_BUCKETS = 720;
@@ -30,7 +35,8 @@ const ROUTES = Object.freeze( {
 	distribution: [ "division" ],
 	flags: [ "from", "to" ],
 	trade: [ "bucket", "from", "to" ],
-	killstats: [ "from", "to" ]
+	killstats: [ "from", "to" ],
+	sealcensus: []
 } );
 
 // Kill stats are whole UTC days; the contract refuses a range holding
@@ -106,11 +112,18 @@ export function createEconomy( shards, token, fetcher = fetch ) {
 		/*
 		================
 		request
+
+		method is GET except for the census run, the only POST this owner
+		will ever forward; a write named at any other route is refused
+		here, before any GameWorld sees it.
 		================
 		*/
-		async request( pathname, params ) {
+		async request( pathname, params, method = "GET" ) {
 			const route = economyRoute( pathname );
 			if ( !route ) return { status: 404, body: { error: "Unknown economy route" } };
+			if ( method !== "GET" && !(method === "POST" && route === "sealcensus") ) {
+				return { status: 405, body: { error: "Only the seal census run may write" } };
+			}
 			const shard = shards.find( row => row.id === params.get( "shard" ) );
 			if ( !shard ) return { status: 404, body: { error: "Unknown server" } };
 			if ( !token ) return { status: 503, body: { error: "Economy reads are not configured on this console" } };
@@ -120,8 +133,9 @@ export function createEconomy( shards, token, fetcher = fetch ) {
 			url.search = checked.query.toString();
 			try {
 				const response = await fetcher( url, {
+					method,
 					headers: { Authorization: "Bearer " + token, "X-SRO-Local-Diagnostics": "1" },
-					signal: AbortSignal.timeout( REQUEST_TIMEOUT_MS ),
+					signal: AbortSignal.timeout( method === "POST" ? CENSUS_TIMEOUT_MS : REQUEST_TIMEOUT_MS ),
 					redirect: "error"
 				} );
 				const text = await boundedText( response, MAX_RESPONSE_BYTES );

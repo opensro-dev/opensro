@@ -32,6 +32,7 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/platform/economy"
 )
 
 // unlistedSettings are the shard settings the rules page leaves out, each
@@ -70,6 +71,9 @@ var unlistedSettings = map[string]string{
 	// Staff telemetry (#1639): name-free kill and EXP rates for the
 	// staff console; players never meet it.
 	action.EnvKillStats: "staff kill and EXP rate telemetry, not a rule players meet",
+	// Staff telemetry (#1691): name-free seal counts by degree and tier
+	// for the staff console; players never meet it.
+	economy.EnvSealCensus: "staff seal census telemetry, not a rule players meet",
 }
 
 /*

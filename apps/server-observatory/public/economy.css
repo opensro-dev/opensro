@@ -80,6 +80,23 @@ can triage from a phone.
 	color: var(--text);
 }
 
+/* The census tab's one action, in its section heading. */
+#census-run {
+	padding: 9px 16px;
+	border: 1px solid var(--gold-soft);
+	border-radius: 4px;
+	background: linear-gradient(180deg, var(--gold-bright), var(--roof));
+	color: var(--text);
+	font: 600 14px var(--serif);
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+#census-run:disabled {
+	opacity: 0.55;
+	cursor: wait;
+}
+
 .economy-count {
 	display: inline-block;
 	min-width: 20px;

@@ -311,6 +311,8 @@ func newGameWorldApplication(
 	gameplay.wirePremiumUpgrade()
 	// Port-only, not native (SRO_KILL_STATS): wiring_killstats.go.
 	gameplay.wireKillStats(application)
+	// Port-only, not native (SRO_SEAL_CENSUS): wiring_sealcensus.go.
+	gameplay.wireSealCensus(application)
 	if err := gameplay.register(ts.Hub, authority.loadQuests); err != nil {
 		return nil, fmt.Errorf("gameplay wiring: %w", err)
 	}

@@ -282,6 +282,8 @@ func (rt *Runtime) BeginItemUse(c *enterworld.Character, code string, at simulat
 		quest = rahidQuest
 	case easteu21CallCodename:
 		quest = easteu21QuestCodename
+	case ivy3HornCodename, ivy3BloodCodename, ivy3KeyCodename:
+		quest = ivy3QuestCodename
 	case treasureKey:
 		quest = treasureQuest
 	case adventurerMoss:
@@ -306,6 +308,12 @@ func (rt *Runtime) BeginItemUse(c *enterworld.Character, code string, at simulat
 		return rt.beginRahidEssence(c, def, at, nowMs)
 	case easteu21CallCodename:
 		return rt.useEasteu21Call(c, def, at)
+	case ivy3HornCodename:
+		return rt.useIvy3Horn(c, def, at)
+	case ivy3BloodCodename:
+		return rt.useIvy3Blood(c, def)
+	case ivy3KeyCodename:
+		return rt.useIvy3Key(c, def, at)
 	case treasureKey:
 		return rt.useTreasureKey(c, def, at)
 	case adventurerMoss:
