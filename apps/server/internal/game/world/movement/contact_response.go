@@ -23,6 +23,9 @@ type objectContactPoint struct {
 	// failing leg returns 0x10000000 (403FB0). Internal side-block contacts
 	// commit the clipped point instead (428930 bit 0).
 	outline bool
+	// edgeFlags are the contacted edge's flags. The dungeon clip reads
+	// them to tell a wall from a doorway (dungeonOutlineResult).
+	edgeFlags byte
 }
 
 /*
