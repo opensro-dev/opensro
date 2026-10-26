@@ -99,7 +99,7 @@ type Runtime struct {
 	// released, keeping the action -> character lock order. Nil skips.
 	RetireMoveEffects func(divisionID, characterName string, nowMs int64)
 	// AttackLocked is the attack lock in the same gate: while a skill
-	// action holds the casting instance (char+C08) the command is dropped,
+	// action holds the casting instance the command is dropped,
 	// not queued. Nil admits.
 	AttackLocked func(divisionID, characterName string) bool
 	// MotionLocked is the move handler's motion gate: a knocked-down player (motion 8)
