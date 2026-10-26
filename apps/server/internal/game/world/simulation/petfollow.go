@@ -33,7 +33,8 @@ type PetFollower struct {
 	revision     uint64
 	planRoute    PetRoutePlanner
 	detour       petDetour
-	// progress is the native stuck count (CTactics +184/+19C/+148): each
+	// progress is the native stuck count (the tactics record's
+	// +184/+19C/+148): each
 	// stop that left the pet within 20 of where its move began counts, and
 	// from the tenth the stuck event is raised.
 	// stopCounted marks the current segment's stop as already counted; stuck
@@ -96,7 +97,8 @@ func NewPetFollower(gid uint32, spawn Spawn) *PetFollower {
 ================
 SetRoutePlanner
 
-INFERENCE: native COS movement runs the same CTactics mover as monsters, so
+INFERENCE: native COS movement runs the same tactics mover as
+monsters, so
 a pet whose straight path is blocked (a raised room's doorway, a wall) takes
 the detour the monster AI takes (PlanMonsterRoute) instead of standing at
 the wall. A nil planner keeps the straight, clipped segment.

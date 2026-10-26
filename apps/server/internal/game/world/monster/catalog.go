@@ -261,7 +261,7 @@ nothing while the live count is not below its authored maximum.
 A second shipped server build's active nest table keeps the
 same nests, by region and anchor, with live caps (isror_zero_cap_caps.tsv,
 scripts/build/import_isror_zero_caps.py); the dungeon layer matches by its
-own region id. A hive member (dwOverwriteMaxTotalCount above zero) is left
+own region id. A hive member (an overwrite cap above zero) is left
 alone: the overwrite hive caps it with the hive's own limit.
 ==================
 */
@@ -497,7 +497,7 @@ type Instance struct {
 	// particular instance's generated home point inside Nest.GenerateRadius.
 	Nest  NestRow
 	Spawn SpawnPoint
-	// NestDetached records removal of the live CNest attachment. The authored
+	// NestDetached records removal of the live nest attachment. The authored
 	// row and its creation-time home remain intact; simulation owns this flag
 	// together with population capacity, independently of actor lifetime.
 	NestDetached bool
