@@ -1,7 +1,6 @@
 # Server Go files that branch on the dungeon region bit outside the plane
 # owner (#1646). Format: `<path> <count>`. This ledger may only shrink; run
 # `node scripts/checks/check_plane_branches.mjs --update` after migrating a file.
-apps/server/cmd/tools/sro-evidence/performance_ring.go 6
 apps/server/internal/game/action/areacandidates.go 4
 apps/server/internal/game/action/cosabnormal.go 2
 apps/server/internal/game/action/goodsteleport.go 1
@@ -10,19 +9,6 @@ apps/server/internal/game/action/monstercombat.go 2
 apps/server/internal/game/action/operator.go 1
 apps/server/internal/game/action/petarea.go 2
 apps/server/internal/game/action/playerstrike_cos.go 2
-apps/server/internal/game/enterworld/entry.go 2
-apps/server/internal/game/enterworld/gmwarp.go 1
-apps/server/internal/game/item/grounditem/approach.go 1
-apps/server/internal/game/quest/gather.go 1
-apps/server/internal/game/world/interest.go 1
-apps/server/internal/game/world/messageblock.go 1
-apps/server/internal/game/world/monster/wander_motion.go 2
 apps/server/internal/game/world/movement/groundwalk.go 3
 apps/server/internal/game/world/movement/object_surface_path.go 2
 apps/server/internal/game/world/movement/owned_start.go 1
-apps/server/internal/game/world/simulation/monster.go 1
-apps/server/internal/game/world/simulation/monsteracquisition.go 1
-apps/server/internal/game/world/simulation/monsterhelp.go 1
-apps/server/internal/game/world/simulation/petfollow.go 1
-apps/server/internal/game/world/simulation/simulation.go 1
-apps/server/internal/game/world/simulation/spatial.go 2

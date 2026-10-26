@@ -87,12 +87,6 @@ func WorldDistance2D(a, b Spawn) float64 {
 	)
 }
 
-// IsDungeonRegion reports whether the region id carries the dungeon plane
-// bit, server.mjs isMissionDungeonRegion.
-func IsDungeonRegion(regionID uint16) bool {
-	return worldgeom.IsDungeonRegion(regionID)
-}
-
 // headingWordFromDelta is THE single travel-direction -> wire-heading encoder
 // for this package. Every plane that faces an entity along its own movement
 // goes through here: the player plane (HeadingFromMovement below), the monster
@@ -149,7 +143,8 @@ The signed word the movement wire carries for a region-local coordinate:
 clamp into [-0x8000, 0x7fff], round, and return the int16 bit pattern for
 the u16 slot. The client reads these words signed on both directions of
 the movement contract - the 0x7738 request (DecodeClientMovementRequest)
-and the 0xB738 destination/source blocks (the client parser's i16 reads) -
+and the 0xB738 destination block (the client parser's i16 reads; the
+source block is f32 since protocol 11, #1744) -
 so a cave-local coordinate north of the region origin (negative z, or a
 height below zero) must keep its sign here. Clamping it to zero instead
 walks every viewer to the origin edge while the mover's own book keeps
@@ -159,16 +154,4 @@ in one step (#1679).
 */
 func roundI16Word(v float64) uint16 {
 	return uint16(int16(math.Round(clampFloat(v, -0x8000, 0x7fff))))
-}
-
-/*
-================
-i16WordFits
-
-Whether v rounds into roundI16Word's range without clamping.
-================
-*/
-func i16WordFits(v float64) bool {
-	rounded := math.Round(v)
-	return rounded >= -0x8000 && rounded <= 0x7fff
 }

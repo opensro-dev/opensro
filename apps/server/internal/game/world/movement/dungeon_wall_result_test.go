@@ -93,8 +93,9 @@ func TestDungeonWallReportsClippedAndDeadDoorwayBlocked(t *testing.T) {
 				}
 			case flags&8 != 0:
 				// Most dead doorways sit behind a wall or an obstacle
-				// circle the chord meets first (bit 0); none may let it
-				// through.
+				// circle the chord meets first; a chord starting inside
+				// the circle heading in reports the blocked result
+				// instead (#1719). None may let it through.
 				doorways++
 				if report.NativeResult == 0 {
 					t.Errorf("block %d dead doorway %d: the chord passed", object.placement.ordinal, edge)

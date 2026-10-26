@@ -99,8 +99,6 @@ const MovementAckAngularMode uint8 = 0
 const (
 	// NativeRegionSize is the native region edge length in world units.
 	NativeRegionSize = worldgeom.OutdoorRegionSize
-	// DungeonSectorBit marks dungeon-plane region ids.
-	DungeonSectorBit uint16 = worldgeom.DungeonRegionBit
 )
 
 // PlayerObjectIDBase offsets character ids into the object-id space.

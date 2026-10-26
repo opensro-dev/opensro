@@ -174,6 +174,9 @@ var Settings = []Setting{
 	// Off is native: the route does not exist.
 	{Env: "SRO_SEAL_CENSUS", NomadVar: "seal_census", Default: "off"},
 	{Env: "SRO_ANNOUNCE_PLUS", NomadVar: "announce_plus", Default: "on"},
+	// Owner, 2026-10-26 (#1739): the plus notice leads louder at +10 and
+	// +11 and above. Off is the plain line, byte for byte.
+	{Env: "SRO_ANNOUNCE_PLUS_TIERS", NomadVar: "announce_plus_tiers", Default: "off"},
 	{Env: "SRO_ANNOUNCE_JOB_KILL", NomadVar: "announce_job_kill", Default: "on"},
 	// Owner, 2026-10-15: every job kill of a pair is announced (no window).
 	{Env: "SRO_JOB_KILL_NOTICE_REPEAT", NomadVar: "job_kill_notice_repeat", Default: "on"},

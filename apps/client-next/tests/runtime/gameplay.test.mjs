@@ -1220,14 +1220,14 @@ test("native movement derives all cardinal headings; an angular heading applies 
 	keep.writeUInt16LE( 54321, 6 );
 	m.receive( keep, entity, 0 );
 	assert.equal( m.step( 10 )[0].heading, 32767, "the path in progress keeps its heading" );
-	const walk = Buffer.alloc( 19 );
+	const walk = Buffer.alloc( 23 );
 	walk.writeUInt32LE( 7 );
 	walk.writeUInt16LE( 54321, 6 );
 	walk[8] = 1;
 	walk.writeUInt16LE( pose.regionId, 9 );
-	walk.writeInt16LE( pose.x * 10, 11 );
-	walk.writeFloatLE( pose.y, 13 );
-	walk.writeInt16LE( pose.z * 10, 17 );
+	walk.writeFloatLE( pose.x, 11 );
+	walk.writeFloatLE( pose.y, 15 );
+	walk.writeFloatLE( pose.z, 19 );
 	m.receive( walk, entity, 0 );
 	const row = m.step( 10 )[0];
 	assert.equal( row.heading, 54321 );

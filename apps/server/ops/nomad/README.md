@@ -348,6 +348,84 @@ assumes Agent is on its own loopback. A transiently empty discovery snapshot
 renders no route; GameWorld's required-route gate refuses startup until Nomad
 publishes one, and the template then restarts the task with that route.
 
+### Public WebTransport
+
+WebTransport becomes the public game transport by advertising one absolute
+URL and switching one setting on; everything below is inert until then, and
+the switch is the owner's decision, never a deploy default.
+
+Clients learn the endpoint from the shard catalogue, so the catalogue moves
+first conceptually: the shard's `publicTransportUrl` becomes
+`https://play.opensro.online/transport/ws`. Both arms live at that host and
+port - WebTransport on UDP 443 terminated by the GameWorld itself,
+WebSocket on TCP 443 terminated by Caddy and proxied to the loopback
+listener (which also keeps serving `/transport/cert-hash`). The client
+derives the WT endpoint from the advertised WS route; no client change is
+involved.
+
+The release controls carry the posture in `/etc/opensro-release/config.json`:
+
+```json
+"webtransport_public": "on",
+"transport_wt_addr": "203.0.113.7:443",
+"transport_cert_file": "/etc/opensro-tls/fullchain.pem",
+"transport_key_file": "/etc/opensro-tls/privkey.pem"
+```
+
+`deploy.py` passes the switch through the deployer environment (it becomes
+the `webtransport_public` job variable and the GameWorld's
+`SRO_WEBTRANSPORT_PUBLIC`) and the bind and pair as deployer arguments, and
+refuses every half-posture before the deployer runs. `sro-nomad` refuses it
+again: on requires the pair, an explicit `host:port` bind, an advertised
+absolute HTTPS `/transport/ws` URL whose port matches the bind, and a
+certificate covering the advertised host; a bind named while the switch is
+off is refused too. The GameWorld refuses the same shapes at boot. The
+rehearsal validates the whole posture from the staged release before any
+window.
+
+The certificate is a publicly trusted pair for `play.opensro.online` at the
+configured paths (an ACME client such as certbot renews it there); renewal
+takes effect on the next deploy, because the leaf fingerprint is part of the
+jobspec and a new fingerprint rolls the GameWorld. The transport metrics
+expose `certificate_seconds_remaining` for renewal alerting. The UDP socket
+buffers QUIC performs with are installed by `install.py` as the
+`/etc/sysctl.d/60-opensro-quic.conf` drop-in, so the flip needs no separate
+host step for them.
+
+The flip itself, inside one owner-approved window:
+
+1. Point `play.opensro.online` at the host and provision its certificate.
+2. Open UDP 443 inbound in the host firewall (operator-owned), and confirm
+   the GameWorld task user can bind the privileged UDP port. A bind
+   failure surfaces as the GameWorld refusing to start, before any client
+   is told the endpoint exists.
+3. Keep Caddy off UDP 443: the play site is the game's host, and Caddy's
+   own HTTP/3 would claim the same socket. Serve the site with
+   `protocols h1 h2` (see `config/Caddyfile.example`); the website loses
+   nothing, the game is the only HTTP/3 consumer and it terminates its own.
+   If the edge must keep HTTP/3, advertise `https://play.opensro.online:8443/transport/ws`
+   instead and bind and open 8443 for both arms - every check is
+   port-agnostic because it compares the advertised port to the bind.
+4. Add the `publicTransportUrl` and the four posture keys, install the
+   release controls, and deploy. Revert is the same path backwards: remove
+   the posture (or set `"off"`) and deploy; the catalogue then advertises
+   the loopback-derived route again.
+
+Prove it from outside the host, credential-free first:
+
+```sh
+go -C apps/server run ./cmd/operations/sro-wtprobe -health -url https://play.opensro.online
+```
+
+The health mode completes the verified QUIC handshake and passes only when
+a stranger's HELLO is refused; run it on a schedule. The welcoming proof
+stays the ticketed smoke: an operator mints a fresh admission ticket for
+the designated probe account through the Agent, places it in
+`SRO_WT_PROBE_TICKET`, and runs the default probe (a successful WELCOME
+consumes the ticket). `play.opensro.online` terminates on the same single
+host as the rest of the public edge; the measurement arms (#1450) compare
+transports against this production endpoint.
+
 ### Stateful placement
 
 Client metadata is an authority grant:

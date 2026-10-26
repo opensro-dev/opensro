@@ -461,7 +461,7 @@ petSamePlane
 ================
 */
 func petSamePlane(a, b uint16) bool {
-	return worldgeom.SamePlane(a, b) && (!worldgeom.IsDungeonRegion(a) || a == b)
+	return worldgeom.SameFloor(a, b)
 }
 
 /*

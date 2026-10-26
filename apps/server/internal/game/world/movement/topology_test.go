@@ -208,6 +208,21 @@ func TestLinkedLaneRescueAndDungeonObjects(t *testing.T) {
 	if r.Rest != from {
 		t.Fatal("Moved deeper into circle")
 	}
+	// Starting inside and heading in is refused where it stands with
+	// the blocked result (#1719), not clipped at the start point.
+	if r.Outcome != ClipBlocked || r.NativeResult&monster.NavResultBlocked == 0 {
+		t.Fatal("Start inside heading in must refuse with the blocked result")
+	}
+	// A chord with no x-extent in the block's frame is never
+	// circle-tested: the original's line form has no such line, so
+	// the disc does not stop it (#1719).
+	vertical := simulation.Spawn{RegionID: 0x8001, X: 60, Y: 10, Z: 10}
+	up := vertical
+	up.Z = 90
+	r = v.ClipMovementPath(vertical, up)
+	if r.Outcome != ClipArrived || r.Rest != up {
+		t.Fatalf("Vertical chord through the disc %+v", r)
+	}
 }
 
 /*

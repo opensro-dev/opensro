@@ -42,7 +42,7 @@ A 0xB738 for GID: mode 0 along heading, or mode 1 to x; optional source.
  */
 function ack( { heading, x = 0, source } ) {
 	const angular = heading !== undefined, offset = angular ? 8 : 13;
-	const p = Buffer.alloc( offset + 1 + (source ? 10 : 0) );
+	const p = Buffer.alloc( offset + 1 + (source ? 14 : 0) );
 	p.writeUInt32LE( GID );
 	if ( angular ) {
 		p[5] = direction.ANGULAR_FLAG_GO;
@@ -57,9 +57,9 @@ function ack( { heading, x = 0, source } ) {
 	if ( source ) {
 		p[offset] = 1;
 		p.writeUInt16LE( source.regionId, offset + 1 );
-		p.writeInt16LE( source.x * 10, offset + 3 );
-		p.writeFloatLE( source.y, offset + 5 );
-		p.writeInt16LE( source.z * 10, offset + 9 );
+		p.writeFloatLE( source.x, offset + 3 );
+		p.writeFloatLE( source.y, offset + 7 );
+		p.writeFloatLE( source.z, offset + 11 );
 	}
 	return new Uint8Array( p );
 }
@@ -128,6 +128,20 @@ test("0xB738 mode 0 walks a direction only with a source block", () => {
 	assert.equal( keep.kind, "keep" );
 	assert.equal( keep.to.x, 5, "a keep changes nothing" );
 	assert.equal( decodeNativeMovement( ack( { x: 300 } ), pose ).kind, "destination" );
+});
+
+test("a direction ack far from the floor centre starts a walk (#1744)", () => {
+	// Tomb floor 0x8005: the departure sits past the retail i16 x10
+	// range (+-3276.7), where the source block used to be omitted and a
+	// viewer saw the walker frozen until the settle. The floated block
+	// carries it, so the decode starts the direction walk there.
+	const far = { regionId: 0x8005, x: -9276.4, y: 69, z: 10405.8, angle: 0 };
+	const walk = decodeNativeMovement( ack( { heading: SOUTH, source: far } ), pose );
+	assert.equal( walk.kind, "direction" );
+	assert.equal( walk.from.regionId, 0x8005 );
+	assert.equal( walk.from.x, Math.fround( -9276.4 ) );
+	assert.equal( walk.from.y, 69 );
+	assert.equal( walk.from.z, Math.fround( 10405.8 ) );
 });
 
 test("the pick-miss heading drops the ray's height; a vertical ray keeps the heading", () => {

@@ -217,14 +217,14 @@ func ackDestination(t *testing.T, payload []byte) (x, y, z int16) {
 }
 
 // ackSource reads the optional 0xB738 source block the way the client
-// parser does: x/z are signed i16 scaled by 10, y is a raw f32.
-func ackSource(t *testing.T, payload []byte) (x, z float64) {
+// parser does (protocol 11, #1744): region, then x/y/z as raw f32.
+func ackSource(t *testing.T, payload []byte) (x, y, z float64) {
 	t.Helper()
-	if len(payload) != 24 || payload[13] != 1 {
+	if len(payload) != 28 || payload[13] != 1 {
 		t.Fatalf("ack payload has no source block: %d bytes, flag %d", len(payload), payload[13])
 	}
-	word := func(off int) int16 { return int16(binary.LittleEndian.Uint16(payload[off:])) }
-	return float64(word(16)) / 10, float64(word(22)) / 10
+	word := func(off int) float64 { return float64(math.Float32frombits(binary.LittleEndian.Uint32(payload[off:]))) }
+	return word(16), word(20), word(24)
 }
 
 /*
@@ -264,28 +264,28 @@ func TestMovementAckKeepsNegativeCaveDestination(t *testing.T) {
 ================
 TestMovementAckKeepsNegativeCaveSource
 
-The source block is the same signed contract at 0.1u scale: a departure
-at (839.51, -86.43) must reach the client as (839.5, -86.4), not with
-its z clamped to 0 (#1679: the 41328 source read z=0.0 while the mover
-stood at z=-86.43).
+The source block is the same signed contract in f32 (protocol 11,
+#1744): a departure at (839.51, -86.43) must reach the client as
+itself, not with its z clamped to 0 (#1679: the 41328 source read z=0.0
+while the mover stood at z=-86.43) - and not rounded to the old 0.1u
+grid either.
 ================
 */
 func TestMovementAckKeepsNegativeCaveSource(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		source MovementSource
-		wantX  float64
-		wantZ  float64
 	}{
-		{"corridor departure", MovementSource{RegionID: 0x8001, X: 839.51, Y: 0.04, Z: -86.43}, 839.5, -86.4},
-		{"negative x departure", MovementSource{RegionID: 0x8001, X: -2000, Y: 0.04, Z: -35}, -2000, -35},
+		{"corridor departure", MovementSource{RegionID: 0x8001, X: 839.51, Y: 0.04, Z: -86.43}},
+		{"negative x departure", MovementSource{RegionID: 0x8001, X: -2000, Y: 0.04, Z: -35}},
 	} {
 		payload := BuildMovementAckPayload(416154, MovementRequest{
 			Mode: MovementAckDestinationMode, RegionID: 0x8001, X: 851, Y: 0.04, Z: 0,
 		}, &tc.source)
-		x, z := ackSource(t, payload)
-		if math.Abs(x-tc.wantX) > 0.051 || math.Abs(z-tc.wantZ) > 0.051 {
-			t.Errorf("%s: ack source = (%v, %v), want (%v, %v)", tc.name, x, z, tc.wantX, tc.wantZ)
+		x, y, z := ackSource(t, payload)
+		if x != float64(float32(tc.source.X)) || y != float64(float32(tc.source.Y)) || z != float64(float32(tc.source.Z)) {
+			t.Errorf("%s: ack source = (%v, %v, %v), want the f32 departure (%v, %v, %v)",
+				tc.name, x, y, z, float64(float32(tc.source.X)), float64(float32(tc.source.Y)), float64(float32(tc.source.Z)))
 		}
 	}
 }
@@ -309,23 +309,25 @@ func TestMovementAckCavePlayerMoveKeepsNegativeWords(t *testing.T) {
 	if x != 777 || y != -5 || z != -40 {
 		t.Errorf("cave player ack destination = (%d, %d, %d), want (777, -5, -40)", x, y, z)
 	}
-	sx, sz := ackSource(t, result.AckPayload)
-	if math.Abs(sx-671) > 0.051 || math.Abs(sz-(-35)) > 0.051 {
-		t.Errorf("cave player ack source = (%v, %v), want (671, -35)", sx, sz)
+	sx, sy, sz := ackSource(t, result.AckPayload)
+	if sx != 671 || sy != float64(float32(0.07)) || sz != -35 {
+		t.Errorf("cave player ack source = (%v, %v, %v), want (671, 0.07, -35)", sx, sy, sz)
 	}
 }
 
 /*
 ================
-TestMovementAckOutdoorBytesUnchanged
+TestMovementAckModeArmBytesUnchanged
 
-Outdoor region-local values sit in [0, 0x7fff] (x/z up to 1920, the
-source at 0.1u scale up to 19200), where the signed and unsigned words
-are the same bytes: the encoder change must leave the outdoor wire
-byte-identical to the unsigned form it replaces.
+Widening the source block (#1744) is the only byte the ack changes:
+outdoor values sit in [0, 0x7fff], where the mode arm's signed words
+are the bytes the unsigned form used before #1679, and the unsourced
+ack is byte-identical to today's. A sourced ack differs only inside
+the source block (f32 f32 f32 after the region word); the first 14
+bytes must not move.
 ================
 */
-func TestMovementAckOutdoorBytesUnchanged(t *testing.T) {
+func TestMovementAckModeArmBytesUnchanged(t *testing.T) {
 	cases := []struct {
 		name     string
 		movement MovementRequest
@@ -338,8 +340,6 @@ func TestMovementAckOutdoorBytesUnchanged(t *testing.T) {
 			&MovementSource{RegionID: 0x6B4F, X: 695.4, Y: 3, Z: 105.6}},
 	}
 	for _, tc := range cases {
-		// The unsigned form the encoder used before #1679: for values in
-		// [0, 0x7fff] its words are the bytes the signed words must keep.
 		buf := new(bytes.Buffer)
 		_ = binary.Write(buf, binary.LittleEndian, uint32(77))
 		buf.WriteByte(tc.movement.Mode)
@@ -352,66 +352,80 @@ func TestMovementAckOutdoorBytesUnchanged(t *testing.T) {
 		} else {
 			buf.WriteByte(1)
 			_ = binary.Write(buf, binary.LittleEndian, tc.source.RegionID)
-			_ = binary.Write(buf, binary.LittleEndian, uint16(math.Round(tc.source.X*10)))
+			_ = binary.Write(buf, binary.LittleEndian, float32(tc.source.X))
 			_ = binary.Write(buf, binary.LittleEndian, float32(tc.source.Y))
-			_ = binary.Write(buf, binary.LittleEndian, uint16(math.Round(tc.source.Z*10)))
+			_ = binary.Write(buf, binary.LittleEndian, float32(tc.source.Z))
 		}
 		got := BuildMovementAckPayload(77, tc.movement, tc.source)
 		if !bytes.Equal(got, buf.Bytes()) {
-			t.Errorf("%s: outdoor ack bytes changed\n got % X\nwant % X", tc.name, got, buf.Bytes())
+			t.Errorf("%s: ack bytes changed outside the source block\n got % X\nwant % X", tc.name, got, buf.Bytes())
 		}
 	}
 }
 
 /*
 ================
-TestMovementAckOmitsAnOverflowingSource
+TestMovementAckCarriesAnOutOfRangeSource
 
-A tomb-floor mover stands past the source block's +-3276.7 range (the
-port's one-frame floor, #1684): the ack must leave the block out, not
-clamp it, so no client is re-anchored to the edge of the range. The
-destination words, +-32767 whole units, still carry the signed goal.
+A tomb-floor mover stands far past the old source range (the port's
+one-frame floors, 0x8005/0x8006) where the i16 block had to be omitted
+(#1684): the f32 block carries the departure anywhere (protocol 11,
+#1744), in destination form and in the direction (angular) form that
+starts a viewer's walk, at the old edge and beyond it. Nothing is
+clamped, and the destination words never moved.
 ================
 */
-func TestMovementAckOmitsAnOverflowingSource(t *testing.T) {
+func TestMovementAckCarriesAnOutOfRangeSource(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		source MovementSource
 	}{
 		{"0x8005 floor", MovementSource{RegionID: 0x8005, X: -9276.4, Y: 69, Z: 10405.8}},
 		{"0x8006 floor", MovementSource{RegionID: 0x8006, X: -5091.3, Y: 21, Z: -6710.1}},
-		{"x just past the range", MovementSource{RegionID: 0x8005, X: 3276.8, Y: 0, Z: 0}},
-		{"z just past the range", MovementSource{RegionID: 0x8005, X: 0, Y: 0, Z: -3276.9}},
+		{"x just past the old range", MovementSource{RegionID: 0x8005, X: 3276.8, Y: 0, Z: 0}},
+		{"z just past the old range", MovementSource{RegionID: 0x8005, X: 0, Y: 0, Z: -3276.9}},
+		{"the old edge itself", MovementSource{RegionID: 0x8005, X: 3276.7, Y: 5, Z: -3276.8}},
 	} {
 		movement := MovementRequest{Mode: MovementAckDestinationMode, RegionID: tc.source.RegionID, X: -5085, Y: 21, Z: -6700}
 		payload := BuildMovementAckPayload(416154, movement, &tc.source)
-		if len(payload) != 14 || payload[13] != 0 {
-			t.Fatalf("%s: ack carries a source block it cannot express: % X", tc.name, payload)
+		if len(payload) != 28 || payload[13] != 1 {
+			t.Fatalf("%s: ack lost its source block: % X", tc.name, payload)
 		}
 		if x, y, z := ackDestination(t, payload); x != -5085 || y != 21 || z != -6700 {
 			t.Errorf("%s: ack destination = (%d, %d, %d), want (-5085, 21, -6700)", tc.name, x, y, z)
 		}
+		assertAckSource(t, tc.name, payload, 13, tc.source)
 	}
-	angular := BuildMovementAckPayload(416154, MovementRequest{Mode: MovementAckAngularMode, AngularMode: AngularFlagGo, HeadingWord: 0x4000},
-		&MovementSource{RegionID: 0x8005, X: -9276.4, Y: 69, Z: 10405.8})
-	if len(angular) != 9 || angular[8] != 0 {
-		t.Fatalf("angular ack carries a source block it cannot express: % X", angular)
+
+	// A direction walk started past the old range is the reported
+	// defect (#1744): its acknowledgement must carry the source, or a
+	// viewer starts no walk and the mover freezes until the settle.
+	for _, regionID := range []uint16{0x8005, 0x8006} {
+		source := MovementSource{RegionID: regionID, X: -9276.4, Y: 69, Z: 10405.8}
+		angular := BuildMovementAckPayload(416154, MovementRequest{Mode: MovementAckAngularMode, AngularMode: AngularFlagGo, HeadingWord: 0x4000}, &source)
+		if len(angular) != 23 || angular[8] != 1 {
+			t.Fatalf("region 0x%04X: angular ack lost its source block: % X", regionID, angular)
+		}
+		assertAckSource(t, "angular", angular, 8, source)
 	}
 }
 
 /*
 ================
-TestMovementAckKeepsASourceAtTheRangeEdge
+assertAckSource
 
-The edge itself still fits: 3276.7 and -3276.8 are the i16 words 32767
-and -32768, so a mover there keeps its source block exactly.
+The source block of an ack whose flag byte sits at flagOffset carries
+exactly the f32 departure: region word first, then x/y/z.
 ================
 */
-func TestMovementAckKeepsASourceAtTheRangeEdge(t *testing.T) {
-	source := MovementSource{RegionID: 0x8005, X: 3276.7, Y: 5, Z: -3276.8}
-	payload := BuildMovementAckPayload(416154, MovementRequest{Mode: MovementAckDestinationMode, RegionID: 0x8005, X: 3270, Y: 5, Z: -3270}, &source)
-	x, z := ackSource(t, payload)
-	if math.Abs(x-3276.7) > 0.051 || math.Abs(z-(-3276.8)) > 0.051 {
-		t.Errorf("edge source = (%v, %v), want (3276.7, -3276.8)", x, z)
+func assertAckSource(t *testing.T, name string, payload []byte, flagOffset int, want MovementSource) {
+	t.Helper()
+	if got := binary.LittleEndian.Uint16(payload[flagOffset+1:]); got != want.RegionID {
+		t.Errorf("%s: ack source region = 0x%04X, want 0x%04X", name, got, want.RegionID)
+	}
+	word := func(off int) float64 { return float64(math.Float32frombits(binary.LittleEndian.Uint32(payload[off:]))) }
+	if x, y, z := word(flagOffset+3), word(flagOffset+7), word(flagOffset+11); x != float64(float32(want.X)) || y != float64(float32(want.Y)) || z != float64(float32(want.Z)) {
+		t.Errorf("%s: ack source = (%v, %v, %v), want the f32 departure (%v, %v, %v)", name, x, y, z,
+			float64(float32(want.X)), float64(float32(want.Y)), float64(float32(want.Z)))
 	}
 }
