@@ -19,10 +19,9 @@ import (
 	"io"
 	"math"
 	"os"
+	"log"
 	"path/filepath"
 	"strings"
-
-	log "github.com/sirupsen/logrus"
 
 	"opensro.online/server/internal/game/world/alexandria"
 )
@@ -227,7 +226,7 @@ func appendNests(template Template, data []byte, label string, admit func(Monste
 		nests = append(nests, nest)
 	}
 	if skipped > 0 {
-		log.Infof("%s: %d authored nest(s) held back by their admission flag (port-only)", label, skipped)
+		log.Printf("%s: %d authored nest(s) held back by their admission flag (port-only)", label, skipped)
 	}
 	result := TemplateFromParts(template.Refs, nests)
 	result.SummonRefs = append([]uint32(nil), template.SummonRefs...)
