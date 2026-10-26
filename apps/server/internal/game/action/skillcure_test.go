@@ -77,6 +77,36 @@ func seedPlayerStatus(rt *Runtime, c *enterworld.Character, status abnormal.Stat
 
 /*
 ================
+TestPartyAreaReachAcrossDungeonRegions
+
+The cure's area reach after the neighbourhood widening: every dungeon
+pair now passes the broadphase gate, but the reach is still bounded by
+the shared sector-frame distance, which counts a region step as a whole
+sector, so an area effect stays on its own floor. Same-region reach
+keeps its radius behaviour.
+================
+*/
+func TestPartyAreaReachAcrossDungeonRegions(t *testing.T) {
+	from := simulation.Spawn{RegionID: 0x8001, X: 100, Y: 0, Z: 100}
+	across := simulation.Spawn{RegionID: 0x8002, X: 100, Y: 0, Z: 100}
+	if !samePlaneAdjacent(from, across) {
+		t.Fatal("samePlaneAdjacent(0x8001, 0x8002) = false, want the whole dungeon plane in one neighbourhood")
+	}
+	if partyAreaReach(from, across, 30) {
+		t.Fatal("partyAreaReach across dungeon regions = true at coincident local coordinates, want the area bounded to its floor")
+	}
+	near := simulation.Spawn{RegionID: 0x8001, X: 110, Y: 0, Z: 100}
+	if !partyAreaReach(from, near, 30) {
+		t.Fatal("partyAreaReach same region at 10 units = false, want inside the radius")
+	}
+	far := simulation.Spawn{RegionID: 0x8001, X: 140, Y: 0, Z: 100}
+	if partyAreaReach(from, far, 30) {
+		t.Fatal("partyAreaReach same region at 40 units = true, want outside the radius")
+	}
+}
+
+/*
+================
 TestShippedInnocentCureArms
 
 Verify the shipped cure's admission, effect timing and status publications.
