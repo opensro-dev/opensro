@@ -97,7 +97,9 @@ func isVersionMismatch(err error) bool {
 // rewrites no record.
 // Version 31 adds optional sequential pet cast capacity, charges and recharge period.
 // Existing cooldown deadlines and every saved record survive unchanged.
-const CurrentVersion = 31
+// Version 32 adds the optional item-break notice opt-in (domain.Character
+// BreakNotice, #1738); every saved record survives unchanged.
+const CurrentVersion = 32
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.
