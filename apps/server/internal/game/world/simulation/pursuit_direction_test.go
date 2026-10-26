@@ -155,6 +155,32 @@ func TestPursuitGateDivergenceBoundary(t *testing.T) {
 
 /*
 ================
+TestPursuitGateDivergenceExactBoundary
+
+The divergence comparison is inclusive: a heading step whose projected
+point lands exactly 100 from the straight point still runs along the
+facing. Word 608's own vector puts the chord-critical distance at an
+ordinary steering range, and at that distance the computed divergence
+is exactly 100, so an exclusive comparison fails this case.
+================
+*/
+func TestPursuitGateDivergenceExactBoundary(t *testing.T) {
+	const word = 608
+	live := pursuitTestLive(word)
+	headX, headZ := pursuitHeadingVector(word)
+	chord := math.Hypot(headX-1, headZ)
+	goal := pursuitPointAlong(live, 1, 0, pursuitGateDivergence/chord)
+	got, step := decidePursuitStep(live, goal, false, monster.Pose{}, false, nil)
+	if !step {
+		t.Fatal("no step issued")
+	}
+	if got == goal {
+		t.Errorf("got the straight goal %+v, want a heading step at divergence exactly %v", goal, pursuitGateDivergence)
+	}
+}
+
+/*
+================
 TestPursuitGateGuardVeto
 
 A moving actor may not take a heading step once it has travelled more
