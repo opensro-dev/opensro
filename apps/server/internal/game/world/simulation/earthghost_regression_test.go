@@ -38,6 +38,17 @@ func earthGhostFixture(t *testing.T) (*MonsterMoverOps, monster.Instance, player
 	actor.CurrentHP = data.Ref.MaxHP
 	actor.Spawn = data.Nest.SpawnPoint
 	m := monster.NewSpawnMover(actor, 10000)
+	// The nest spawn facing is drawn from the population's unseeded
+	// source, and the clone in secondEarthGhost inherits the same
+	// facing. The outdoor pursuit direction gate steps a far pursuer
+	// along its current facing when that facing nearly matches the
+	// steering direction, so an aligned draw (about 2% of runs)
+	// replaced both pursuers' distinct slot goals with one shared
+	// point and made the two-pursuer separation premise random.
+	// Pin the fixture facing off-axis, the monsterLegFixture
+	// convention this fixture's rebuilt mover had dropped; every
+	// assertion below keeps its strength.
+	m.Pose.Heading = 49151 // fixture faces -Z; raw wire zero faces +X
 	mustMoverTransition(&m, monster.MoverEventSpawnHoldElapsed, 0)
 	m.BehaviorDeadlineMs = 100000
 	s := ops.Monsters
@@ -195,6 +206,9 @@ func secondEarthGhost(t *testing.T, ops *MonsterMoverOps, actor monster.Instance
 	t.Helper()
 	actor.Gid++
 	m := monster.NewSpawnMover(actor, 10000)
+	// Same pinned fixture facing as earthGhostFixture: the clone must
+	// not re-enter the direction gate's aligned window at random.
+	m.Pose.Heading = 49151 // fixture faces -Z; raw wire zero faces +X
 	mustMoverTransition(&m, monster.MoverEventSpawnHoldElapsed, 0)
 	m.BehaviorDeadlineMs = 100000
 	s := ops.Monsters

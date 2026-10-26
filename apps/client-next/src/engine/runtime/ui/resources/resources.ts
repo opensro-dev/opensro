@@ -279,14 +279,16 @@ export function createUiAssets(
 		================
 		residentAll
 
-		True when every path of an immutable list is resident. A list found
-		resident is remembered until the next eviction, so a baseline checked
-		every frame is walked only while it loads.
+		True when every path of an immutable list is resident or known absent.
+		An absent image draws nothing and no load will ever deliver it, so it
+		must not hold a baseline (world entry waits on one) open forever. A list
+		found resident is remembered until the next eviction, so a baseline
+		checked every frame is walked only while it loads.
 		================
 		*/
 		residentAll( paths: readonly string[] ): boolean {
 			if ( residentLists.get( paths ) === evictions ) return true;
-			for ( const path of paths ) if ( !loaded.has( path ) ) return false;
+			for ( const path of paths ) if ( !loaded.has( path ) && !missing.has( path ) ) return false;
 			residentLists.set( paths, evictions );
 			return true;
 		},

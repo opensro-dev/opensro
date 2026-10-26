@@ -108,6 +108,12 @@ func (rt *Runtime) AdvanceNpcQuest(c *enterworld.Character, code, npc string) (O
 	if strings.HasPrefix(code, easteu21GrantPrefix) {
 		return rt.advanceEasteu21Grant(c, npc)
 	}
+	if strings.HasPrefix(code, ivy3GrantPrefix) {
+		return rt.advanceIvy3Grant(c, npc)
+	}
+	if strings.HasPrefix(code, goria7EntryPrefix) {
+		return rt.advanceGoria7Entry(c, npc)
+	}
 	if strings.HasPrefix(code, sideTalkPrefix) {
 		return rt.hearSideTalk(c, code, npc)
 	}

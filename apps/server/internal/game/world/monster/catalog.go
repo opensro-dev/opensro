@@ -59,17 +59,18 @@ type NestRow struct {
 	// authored. RetailEvidence is provenance; resource-authored game areas set
 	// PolicyPinned without pretending their rows came from the v1.188 tables.
 	PolicyPinned bool
-	// RarityOverride is an instance's full spawn byte: the grade 5607B0 rolled
+	// RarityOverride is an instance's full spawn byte: the grade the
+	// native hatch rolled
 	// (or a summon wave's authored grade). Template nests never carry one;
 	// an instance without it inherits MonsterRef.MonsterType.
 	RarityOverride    uint8
 	HasRarityOverride bool
 	// Radius is the Tab_RefNest nRadius containment radius.
 	Radius float64
-	// GenerateRadius is passed by CNest to the native spawn routine.
+	// GenerateRadius is passed by the nest to the native spawn routine.
 	GenerateRadius float64
 	// ChampionGenPercentage is Tab_RefNest.nChampionGenPercentage.
-	// The GameServer rolls it when activating an ordinary monster slot,
+	// The reference server rolls it when activating an ordinary monster slot,
 	// then splits a successful promotion between champion and giant.
 	ChampionGenPercentage int
 	// MaxCount is the native dwMaxTotalCount live-instance cap.
@@ -82,7 +83,8 @@ type NestRow struct {
 	HiveMaxCount int
 	HiveOrder    int
 	HiveDensity  HiveDensityPolicy
-	// Seconds are converted to milliseconds before 560380 samples its CRT
+	// Seconds are converted to milliseconds before the native delay
+	// roll samples its CRT
 	// fraction. This is a millisecond interval, not an integer-second roll.
 	RespawnDelayMinSec int
 	RespawnDelayMaxSec int
@@ -94,11 +96,11 @@ type NestRow struct {
 	// never synthesize detection or acquisition cadence from that boolean.
 	NativeTacticsFlags uint32
 	// Champion is the tactics row named by this nest tactics' ChampionTacticsID
-	// (runtime +8C). Without one, GameServer 5607B0 never promotes the slot.
+	// Without one, the native hatch never promotes the slot.
 	HasChampionTactics bool
 	ChampionTactics    ChampionTactics
 	// InitialDir is Tab_RefNest.wInitialDir: the authored heading word used
-	// for uniques and non-monster classes (5609BF / 560A1B).
+	// for uniques and non-monster classes.
 	InitialDir uint16
 }
 
@@ -109,7 +111,8 @@ ChampionTactics
 ChampionTactics includes the complete numeric row in Controls when sourced.
 Storage coverage and runtime branch coverage are separate contracts.
 A promoted champion or giant is created with this row instead of the nest's
-ordinary tactics (5607B0 560968 -> 5F6EB0; ISRO-R 593470 -> 593488).
+ordinary tactics (the native hatch hands a promoted row to
+creation instead of the nest's ordinary one).
 ==================
 */
 type ChampionTactics struct {
@@ -253,12 +256,13 @@ disables everywhere (laterDisabledCodenames), it zeroes single nests of
 monsters that keep live nests right beside them: the Bandit Stronghold
 building's bandits and archers (regions 0x5BA0, 0x5CA0), the Stone Cave's
 Nachal and Work Earth Ghost (0x8001), three KT Ong. The v1.150 client still
-places every one of them, and native 55EA90 spawns nothing while the live
-count is not below dwMaxTotalCount. ISRO-R's active Tab_RefNest keeps the
+places every one of them, and the native ordinary hive spawns
+nothing while the live count is not below its authored maximum.
+A second shipped server build's active nest table keeps the
 same nests, by region and anchor, with live caps (isror_zero_cap_caps.tsv,
 scripts/build/import_isror_zero_caps.py); the dungeon layer matches by its
-own region id. A hive member (dwOverwriteMaxTotalCount above zero) is left
-alone: 55EC10 caps it with the hive's own limit.
+own region id. A hive member (an overwrite cap above zero) is left
+alone: the overwrite hive caps it with the hive's own limit.
 ==================
 */
 func restoreZeroCapNests(refs map[uint32]MonsterRef, nests []NestRow, caps map[populationEvidenceKey]int) {
@@ -289,7 +293,7 @@ func TemplateFromParts(refs map[uint32]MonsterRef, nests []NestRow) Template {
 	template := Template{Refs: refs, Nests: make([]NestRow, 0, len(nests)), nestsByRegion: make(map[uint16][]int), nestsByHive: make(map[string][]int)}
 	for _, nest := range nests {
 		if nest.HasRarityOverride {
-			panic("monster: template nests carry no spawn grade; 5607B0 rolls it per spawn")
+			panic("monster: template nests carry no spawn grade; the native hatch rolls it per spawn")
 		}
 		template.Nests = append(template.Nests, nest)
 		index := len(template.Nests) - 1
@@ -493,7 +497,7 @@ type Instance struct {
 	// particular instance's generated home point inside Nest.GenerateRadius.
 	Nest  NestRow
 	Spawn SpawnPoint
-	// NestDetached records removal of the live CNest attachment. The authored
+	// NestDetached records removal of the live nest attachment. The authored
 	// row and its creation-time home remain intact; simulation owns this flag
 	// together with population capacity, independently of actor lifetime.
 	NestDetached bool
@@ -503,23 +507,24 @@ type Instance struct {
 	// its seal drops (#1641).
 	GMSpawned bool
 	// SpawnHeading is the wire heading word of the native creation heading
-	// (5607B0: random for monsters, wInitialDir for uniques).
+	// (native: random for monsters, wInitialDir for uniques).
 	SpawnHeading uint16
 	// TradeVariant picks a thief or hunter trade NPC's equipment
-	// (TradeNpcMonster): CGObjMob_ResetRuntimeState (4C1030) draws it as
-	// rand() & 0xFF, CGObjMob_WriteSpawnData (4C1930) sends it after the
-	// spawn grade, and CICMonster_InitializeTradeEquipmentAndSkill (client
+	// (TradeNpcMonster): native mob reset draws it as rand() & 0xFF,
+	// the spawn-data writer sends it after the spawn grade, and
+	// CICMonster_InitializeTradeEquipmentAndSkill (client
 	// 861720) indexes the trade equipment table with it.
 	TradeVariant uint8
 	// StructureState is a fortress structure's state word (+0x764 on the
-	// client, CGObjSiegeStruct_GetStateWord 4CED50): bit 0 destroyed.
+	// client; the reference server's structure state word): bit 0
+	// destroyed.
 	StructureState uint16
 	// CurrentHP is mutable instance state. Ref.MaxHP is only the static
 	// RefObjChar base; EffectiveMaxHP applies the client-pinned rarity and
 	// party-monster multipliers used by the target-status plane.
 	CurrentHP uint32
 	// AI +B0 accumulator; reset when the selected ssou command completes,
-	// including command error (562540), before any delayed cast release.
+	// including command error, before any delayed cast release.
 	DamageSinceSummon   uint32
 	LastSummonCommandMs uint32
 	// Identity projection of native AI target records +BC/+D0. Simulation owns

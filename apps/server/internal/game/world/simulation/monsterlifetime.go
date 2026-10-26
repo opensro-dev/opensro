@@ -3,19 +3,20 @@
 
 monsterlifetime.go - monsters that leave the world on a timer
 
-CGObjMob_SpawnBase (4C10C0) arms three timers that CGObjMob's tick (4C1700)
-counts down on every living monster, each ending in life state 3 (gone):
+The native spawn base arms three timers that the mob tick counts
+down on every living monster, each ending in life state 3 (gone):
 
-  - +0x1CE0: a thief or hunter monster leaves 20 s after its spawn or its
-    last attack (vtable +0x508, 4C1C30, rearms it on every hit it deals);
+  - +0x1CE0: a thief or hunter monster leaves 20 s after its spawn or
+    its last attack (rearmed on every hit it deals);
   - +0x1CE8: the quest clones MOB_QT_01_WINGTRIBE and
     MOB_QT_02_PUNISHER_CLON live 180 s and 300 s;
   - +0x1CF0: a grade-7 monster lives 300 s.
 
-INFERENCE: 4C10C0 arms the grade-7 timer only where the world's slot 0x1E
+INFERENCE: the spawn base arms the grade-7 timer only where the
+world's slot 0x1E
 answers 0; the port opens ordinary field worlds only, where it is armed.
-The unique class's 60 s variant of +0x1CE0 (vtable +4 against the class at
-C82628) names no v1.150 monster the port spawns.
+The unique class's 60 s variant of +0x1CE0 names no v1.150
+monster the port spawns.
 
 ===========================================================================
 */
@@ -30,10 +31,10 @@ import (
 )
 
 const (
-	jobMonsterIdleMs      = 20000  // 4C10D9 / 4C1C30: 0x4E20
-	wingTribeLifetimeMs   = 180000 // 4C1158: 0x2BF20
-	punisherCloneLifetime = 300000 // 4C1198: 0x493E0
-	gradeSevenLifetimeMs  = 300000 // 4C11D9: 0x493E0
+	jobMonsterIdleMs      = 20000  // 0x4E20
+	wingTribeLifetimeMs   = 180000 // 0x2BF20
+	punisherCloneLifetime = 300000 // 0x493E0
+	gradeSevenLifetimeMs  = 300000 // 0x493E0
 	gradeSeven            = 7
 )
 
@@ -53,7 +54,7 @@ type monsterLifetime struct {
 ================
 spawnLifetime
 
-4C10C0's timers for a monster entering the world at now. ok is false for a
+The spawn base's timers for a monster entering the world at now. ok is false for a
 monster with none.
 ================
 */
@@ -93,8 +94,8 @@ func armLifetimeLocked(state *divisionMonsterState, instance monster.Instance, n
 ================
 RefreshJobMonster
 
-4C1C30 (vtable +0x508 from CGObjChar_ProcessNormalHit): a job monster's
-own attack rearms its idle timer.
+The native attack rearm (from the normal-hit processing): a job
+monster's own attack rearms its idle timer.
 ================
 */
 func (s *MonsterState) RefreshJobMonster(division string, gid uint32, now int64) {
@@ -110,7 +111,8 @@ func (s *MonsterState) RefreshJobMonster(division string, gid uint32, now int64)
 ================
 ExpireMonsterLifetimes
 
-4C1700's countdowns: every living monster past its deadline leaves through
+The mob tick's countdowns: every living monster past its deadline
+leaves through
 the nest death path (Defeat), as life state 3 does. Returns how many left.
 ================
 */

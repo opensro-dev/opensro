@@ -41,6 +41,7 @@ import { decodeAuthoredLayout, type AuthoredLayout } from "@/engine/foundation/u
 import { decodeCosReferences, type CosReference } from "@/engine/foundation/ui/cos-command";
 import { decodeFortressMap, type FortressMapCatalog } from "@/engine/foundation/gameplay/fortress-map";
 import { decodeCommandTable } from "@/engine/foundation/ui/debug-commands";
+import { decodeCameraDataRows, type CameraDataRow } from "@/engine/foundation/ui/camera-waypoints";
 // Skill catalogue rows decoded per HUD step: about 2.5 ms of a frame, so the
 // 27,835-row catalogue settles in under 30 frames.
 const TOOLTIP_ROWS_PER_STEP = 1024;
@@ -78,6 +79,8 @@ interface HudData {
 	readonly mallNotify: MallNotify;
 	// config\command.txt: the debug console's command names by id (68D9C0).
 	readonly commandTable: ReadonlyMap<string, number>;
+	// config\cameradata.txt rows: the /cw* waypoint store's keyframes (#1716).
+	readonly cameraDataRows: readonly CameraDataRow[];
 	readonly jobExpThresholds: JobExpThresholds;
 	readonly extended: readonly AuthoredLayout[];
 	readonly countries: Readonly<Record<number, number>>;
@@ -302,7 +305,8 @@ export function createHudResources(
 			"/assets/data/mall-notify.json",
 			"/assets/config/command.txt",
 			"/assets/data/worldmap-mapinfo.json",
-			"/assets/data/fortressMap.json"
+			"/assets/data/fortressMap.json",
+			"/assets/config/cameradata.json"
 		],
 		states: Load[] = paths.map( () => ({ kind: "idle" }) );
 	let data: HudData | null = null;
@@ -396,7 +400,8 @@ export function createHudResources(
 										warm.add( entry.publicPath );
 									}
 								}
-							} else if ( i === layouts.length + 18 ) value = decodeFortressMap( raw );
+							} else if ( i === layouts.length + 19 ) value = decodeCameraDataRows( raw );
+							else if ( i === layouts.length + 18 ) value = decodeFortressMap( raw );
 							else if ( i === layouts.length + 17 ) value = raw;
 							else if ( i === layouts.length + 16 ) value = decodeCommandTable( r.buffer );
 							else if ( i === layouts.length + 15 ) value = decodeMallNotify( raw );
@@ -510,6 +515,7 @@ export function createHudResources(
 					tips: values[layouts.length + 2] as readonly MessageTip[],
 					mallNotify: values[layouts.length + 15] as MallNotify,
 					commandTable: values[layouts.length + 16] as ReadonlyMap<string, number>,
+					cameraDataRows: values[layouts.length + 19] as HudData["cameraDataRows"],
 					targets: Object.fromEntries(
 						targetNames.map( ( name, i ) => [ name, values[7 + i] as AuthoredLayout ] )
 					),

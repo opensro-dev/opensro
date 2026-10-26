@@ -41,6 +41,22 @@ class InstallTests(unittest.TestCase):
 			(self.source / name).write_text("fixture " + name, encoding="utf-8")
 
 	# ================
+	# test_quic_sysctls_install_the_udp_buffers
+	#
+	# The public WebTransport listener's socket buffers land as a sysctl
+	# drop-in and are applied; the exact values are the contract.
+	# ================
+	def test_quic_sysctls_install_the_udp_buffers(self):
+		with patch.object(install, "install_file") as installed, patch("install.subprocess.run") as applied:
+			install.quic_sysctls()
+		path, body = installed.call_args.args
+		self.assertEqual(path, install.QUIC_SYSCTL_PATH)
+		self.assertEqual(body.decode(), install.QUIC_SYSCTL_BODY)
+		self.assertIn("net.core.rmem_max = 7500000", install.QUIC_SYSCTL_BODY)
+		self.assertIn("net.core.wmem_max = 7500000", install.QUIC_SYSCTL_BODY)
+		applied.assert_called_once_with(["sysctl", "--system"], check=True)
+
+	# ================
 	# test_complete_version_and_identical_reinstall
 	# ================
 	def test_complete_version_and_identical_reinstall(self):

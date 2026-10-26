@@ -45,8 +45,7 @@ func (rt *Runtime) AdmitGroundWalk(name string, from simulation.Spawn, owner sim
 	if !rt.groundEnabled {
 		return rt.ConstrainMovementFrom(name, from, owner, to)
 	}
-	if simulation.IsDungeonRegion(from.RegionID) != simulation.IsDungeonRegion(to.RegionID) ||
-		simulation.IsDungeonRegion(from.RegionID) && from.RegionID != to.RegionID {
+	if !groundWalkAdmittedOnPlane(from, to) {
 		return from, simulation.NavWalk{}, &simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest,
 			Reason: "ground movement cannot cross disconnected navigation spaces"}
 	}
@@ -145,7 +144,8 @@ func (rt *Runtime) advanceGroundUpdateForCharacter(division string, character *e
 	continuing := directional && !walk.blocked && walk.current(state)
 	var frames []simulation.DivisionFrames
 	if committed && update.Tether != 0 {
-		// 4F1230 answers the refused step before it stops the player.
+		// The server's COS-tether validation answers the refused step
+		// before it stops the player.
 		frames = append(frames, simulation.DivisionFrames{DivisionID: division, OnlyCharacterID: character.ID,
 			Frames: []simulation.Frame{{Opcode: wire.OpCosDistanceError, Payload: []byte{update.Tether}}}})
 	}

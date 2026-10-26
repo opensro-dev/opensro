@@ -34,8 +34,8 @@ import (
 ================
 SpawnMoveTest
 
-SpawnMoveTest is the move test population creation (5F6EB0) runs for a
-candidate generated around a nest centre: the result bits it acts on and
+SpawnMoveTest is the move test the server's population creation runs for
+a candidate generated around a nest centre: the result bits it acts on and
 the walked resting point, whose height names the surface the walk reached.
 Both outdoor and dungeon blocking contacts retain their result bits.
 ================
@@ -126,8 +126,9 @@ type ClipReport struct {
 	// contact corresponds to: monster.NavResultClipped for a blocked terrain
 	// edge (404510 returns 1) or a side-blocked internal object edge (428930),
 	// monster.NavResultBlocked for a failing object outline leg (403FB0) or
-	// the six-call continuation limit (98B636). Dungeon mesh and circle
-	// contacts propagate the same bits through 999CF0. Zero for clear moves.
+	// the six-call continuation limit in the server's movement query.
+	// Dungeon mesh and circle contacts propagate the same bits through the
+	// server's dungeon move. Zero for clear moves.
 	NativeResult uint32
 	// RestOwner is the surface the walk reached at Rest (navowner.go), and
 	// Rest.Y is that surface's height there - never the request's int16 Y.
@@ -167,7 +168,7 @@ func (v *WaterValidator) ClipMovementPath(from, to simulation.Spawn) ClipReport 
 ClipMovementPathFrom
 
 ClipMovementPathFrom walks from the retained source owner (the native
-source pNavCell, QueryMovement 0x98B300). Every continuation leg inherits
+source cell the server's movement query starts from). Every continuation leg inherits
 the owner the previous leg reached; ownership is never re-guessed from Y.
 ================
 */
@@ -226,7 +227,7 @@ ClipMovementSegmentFrom
 ClipMovementSegmentFrom is one leg of ClipMovementPathFrom: a single
 chord whose report says where the walk reached and whether it continues
 (a linked transfer or an outline exit the next leg resumes from).
-CRegionManagerBody_CheckLineOfSight (98D880) drives exactly this seam
+The server's line-of-sight test drives exactly this seam
 leg by leg; callers that want the whole walk use ClipMovementPathFrom.
 ================
 */
@@ -238,7 +239,7 @@ func (v *WaterValidator) ClipMovementSegmentFrom(from simulation.Spawn, fromOwne
 ================
 continuedReport
 
-QueryMovement (98B300) ends a continuation run once the leg's start is
+The server's movement query ends a continuation run once the leg's start is
 within 5 units of the destination: it breaks with the leg's own result,
 which carries a continuation bit (0x14) and no failure bit (0x10000001 broke
 earlier), and the position the leg reached. That is a completed step, not a
@@ -348,15 +349,27 @@ func (v *WaterValidator) clipMovementSegment(from simulation.Spawn, fromOwner si
 /*
 ================
 clipMovementSegmentWithWalk
+
+One segment: the start is owned first, then the plane the endpoints
+are on clips it (clipSegmentOnPlane, plane.go).
 ================
 */
 func (v *WaterValidator) clipMovementSegmentWithWalk(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) (ClipReport, *navWalk) {
 	from = v.ownedStart(from, fromOwner)
-	report := ClipReport{Outcome: ClipArrived, Rest: to}
+	return clipSegmentOnPlane(v, from, fromOwner, to)
+}
 
-	if simulation.IsDungeonRegion(from.RegionID) || simulation.IsDungeonRegion(to.RegionID) {
-		return v.clipDungeonPath(from, to), nil
-	}
+/*
+================
+clipOutdoorSegment
+
+The outdoor plane's segment clip (outdoorPlane.clipSegment): the world
+tile grid walk, then the owned object surfaces and their contacts. The
+start is already owned.
+================
+*/
+func (v *WaterValidator) clipOutdoorSegment(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) (ClipReport, *navWalk) {
+	report := ClipReport{Outcome: ClipArrived, Rest: to}
 
 	tilesPerAxis, tileSize, ok := v.gridParamsForRegion(from.RegionID)
 	if !ok {

@@ -76,6 +76,29 @@ type LeaderboardResponse struct {
 	Rows   []LeaderboardRow `json:"rows"`
 }
 
+// SealBoardRow is one weekly seal board row: a job alias and the week's
+// Star, Moon and Sun drops counted for it. Aliases only (#1641): no
+// character name and no character id ever reach this shape.
+type SealBoardRow struct {
+	Rank  int    `json:"rank"`
+	Alias string `json:"alias"`
+	Sun   int64  `json:"sun"`
+	Moon  int64  `json:"moon"`
+	Star  int64  `json:"star"`
+}
+
+// SealBoardResponse is GET /public/v1/leaderboards/seals: the week's
+// seal drops by job alias, Sun first. The week opens Monday 00:00 UTC;
+// CountingSince is when this week's counting began (a mid-week enable
+// counts from then, never backfilled), so a partial week reads as one.
+type SealBoardResponse struct {
+	WeekStart     string         `json:"weekStart"`
+	WeekEnd       string         `json:"weekEnd"`
+	CountingSince string         `json:"countingSince"`
+	GeneratedAt   string         `json:"generatedAt"`
+	Rows          []SealBoardRow `json:"rows"`
+}
+
 // LevelFirst is one P4 level milestone.
 type LevelFirst struct {
 	Level uint8  `json:"level"`
@@ -106,13 +129,15 @@ type CharacterSummary struct {
 	Guild string `json:"guild,omitempty"`
 }
 
-// OwnCharacter is one of an account's characters with its privacy flag.
+// OwnCharacter is one of an account's characters with its privacy flag
+// and its item-break notice opt-in (#1738).
 type OwnCharacter struct {
-	Name       string `json:"name"`
-	Level      int64  `json:"level"`
-	Race       string `json:"race"`
-	Hidden     bool   `json:"hidden"`
-	GearHidden bool   `json:"gearHidden"`
+	Name        string `json:"name"`
+	Level       int64  `json:"level"`
+	Race        string `json:"race"`
+	Hidden      bool   `json:"hidden"`
+	GearHidden  bool   `json:"gearHidden"`
+	BreakNotice bool   `json:"breakNotice"`
 }
 
 // OwnCharactersResponse is the website's authenticated

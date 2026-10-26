@@ -19,10 +19,10 @@ import (
 )
 
 // ordinaryPlayerAcquisition is the player and companion projection of selector
-// 2 (5464E0) in the v1.188 research server across outdoor and dungeon regions
-// (5405B0 -> 531180 -> 538B30/53AE20). When the winning target is a COS whose
-// owner is mounted on a COS (4DDCA0), 5478F0/547AD0/547C70 swap the combat
-// target to the owner before SetCombatTarget.
+// 2 in the reference server across outdoor and dungeon regions
+// When the winning target is a COS whose owner is mounted on a COS,
+// the native acquire routines swap the combat target to the owner
+// before setting it.
 /*
 ================
 ordinaryPlayerAcquisition
@@ -45,13 +45,14 @@ func ordinaryPlayerAcquisition(actor monster.Instance, from monster.Pose, player
 	ordered := make([]candidate, 0, len(players))
 	for _, player := range players {
 		if player.OwnerGid != 0 {
-			continue // a companion is weighed with its owner (5464E0)
+			continue // a companion is weighed with its owner
 		}
 		block := worldgeom.InterestBlockAt(worldgeom.RegionXZ{
 			RegionID: player.Pose.RegionID, X: float64(float32(player.Pose.X)), Z: float64(float32(player.Pose.Z)),
 		})
 		// A job monster's own side is skipped with its companions (a COS
-		// answers with its owner's job): 529110 refuses every strike on them.
+		// answers with its owner's job): native target validation refuses
+		// every strike on them.
 		// Inference, not a native branch: native acquisition has no job test,
 		// but a monster that kept choosing a target it may never strike would
 		// stand at it forever; passing it over is the visible native result.
@@ -62,8 +63,8 @@ func ordinaryPlayerAcquisition(actor monster.Instance, from monster.Pose, player
 			ordered = append(ordered, candidate{player: player, block: order})
 		}
 	}
-	// 53AE20 visits rows, then columns. 534740/5405B0 traverse each block's
-	// player tree; 534118 passes object+8 (GID) to its insertion at 41BBA0.
+	// The native terrain query visits rows, then columns; its block walk
+	// traverses each block's player tree and passes the object GID on.
 	// Sort a detached projection; never reorder the shared session snapshot.
 	sort.Slice(ordered, func(i, j int) bool {
 		if ordered[i].block != ordered[j].block {
@@ -89,11 +90,8 @@ func ordinaryPlayerAcquisition(actor monster.Instance, from monster.Pose, player
 ================
 mountedOwnerRedirect
 
-5478F0 (547A2C..547A57), 547AD0 (547BD5..547C00) and 547C70
-(547EAA..547F02): when the chosen target is a COS (vtable +0x2C
-CGObj_IsCOS == 1) and its owner (+0x1CD8) answers
-CGObjPC_IsMountedOnCOS (vtable +0x540, 4DDCA0) == 1, the combat target
-becomes the owner.
+When the chosen target is a companion whose owner is mounted on a
+COS, the combat target becomes the owner.
 ================
 */
 func mountedOwnerRedirect(target playerPose, players []playerPose) playerPose {
@@ -115,9 +113,9 @@ func mountedOwnerRedirect(target playerPose, players []playerPose) playerPose {
 ================
 nearestOwnerOrCompanion
 
-CAITactics_SelectNearestOwnerOrCompanion (5464E0): a candidate player
+The native nearest-owner-or-companion selection: a candidate player
 stands for itself and each companion it owns that the monster may strike
-(status and hostility, 5298C0 with the COS's own identity); the nearest
+(status and hostility, judged with the COS's own identity); the nearest
 wins, a tie keeping the earlier (the player first, then container order).
 ================
 */
@@ -140,15 +138,15 @@ func nearestOwnerOrCompanion(actor monster.Instance, from monster.Pose, owner pl
 ================
 ordinaryCompanionHostility
 
-5298C0 for a COS target: 5299E0 reads the companion's own identity and
-body status (a Fear exclusion names the companion), the fellow band (5,
-CGObj_IsFellowCOS 483980) is never hostile, and the first-attack
-protection is its owner's (COS+0x1CD8).
+For a COS target, the native hostility judge reads the companion's
+own identity and body status (a Fear exclusion names the companion),
+the fellow band (5) is never hostile, and the first-attack
+protection is its owner's.
 ================
 */
 func ordinaryCompanionHostility(actor monster.Instance, companion playerPose) bool {
-	// 5299E0 returns 0 first for a grab pet: its target's slot 0x43C is
-	// CGObj_IsPickPetCOS (483930). Remembered targets are refused the same way.
+	// The native judge refuses a grab pet first; remembered targets are
+	// refused the same way.
 	if companion.Band == domain.PickupPetBand {
 		return false
 	}
@@ -168,14 +166,14 @@ func ordinaryCompanionHostility(actor monster.Instance, companion playerPose) bo
 ================
 ordinaryPlayerHostility
 
-5299E0 checks detection before Fear's source exclusion. Project the live
-abnormal slot into the existing hostility owner instead of filtering the
-candidate first. Remembered-opponent lookup only calls 540DE0 (547E04).
+The native judge checks detection before Fear's source exclusion.
+Project the live abnormal slot into the existing hostility owner
+instead of filtering the candidate first.
 
-The observer carries the monster's full type word, level and grade, and
-the player its first-attack protection (the Bard's Noise), so 5299E0's
-last branch decides the protection. The type word used to be the client
-TID alone, which never matched that branch's 0x8C6.
+The observer carries the monster's full type word, level and grade,
+and the player its first-attack protection (the Bard's Noise), so the
+judge's last branch decides the protection. The type word used to be
+the client TID alone, which never matched that branch's test value.
 ================
 */
 func ordinaryPlayerHostility(actor monster.Instance, player playerPose) bool {
@@ -191,7 +189,7 @@ func ordinaryPlayerHostility(actor monster.Instance, player playerPose) bool {
 	}))
 }
 
-// 546687..546758: comparisons use the exact integer, not float32(integer).
+// Native ranking compares the exact integer, not float32(integer).
 // Finite world positions are the adapter's input domain. A zero accumulator
 // intentionally allows replacement even by a farther in-range candidate.
 /*
@@ -205,8 +203,9 @@ func acquisitionRankAccepts(target, best uint32, distance float32, sight uint32)
 		(target == 0 || best == 0 || d < float64(best))
 }
 
-// 531180 clamps query extent to 1..320; CRgnTerrain::query (53AE20)
-// further clamps to 1..310 and samples (x-r,x,x+r) in each of three z rows.
+// The native radius query clamps its extent to 1..320; the terrain
+// query further clamps to 1..310 and samples (x-r,x,x+r) in each of
+// three z rows.
 // Repeated blocks are omitted. This is broad-phase selection, not the sight
 // predicate: a player elsewhere in a sampled block still reaches ranking.
 /*
@@ -238,13 +237,14 @@ func (s acquisitionBlockSet) order(block worldgeom.InterestBlock) (int, bool) {
 
 /*
 ================
-acquisitionBlocks
+outdoorAcquisitionBlocks
+
+The outdoor plane's acquisition blocks: the sight square, clamped to
+[1, 310], over the sector grid. The cave plane's arm is
+dungeonAcquisitionBlocks; acquisitionBlocks (plane_monster.go) picks.
 ================
 */
-func acquisitionBlocks(from monster.Pose, sight uint32) acquisitionBlockSet {
-	if worldgeom.IsDungeonRegion(from.RegionID) {
-		return dungeonAcquisitionBlocks(from)
-	}
+func outdoorAcquisitionBlocks(from monster.Pose, sight uint32) acquisitionBlockSet {
 	radius := float32(sight)
 	if radius < 1 {
 		radius = 1
@@ -270,8 +270,9 @@ func acquisitionBlocks(from monster.Pose, sight uint32) acquisitionBlockSet {
 	return blocks
 }
 
-// 430BA0 stores each region-relative displacement as float32. 53D7A0
-// squares those values, rounds their sum to float32, then takes its square root.
+// The native distance stores each region-relative displacement as
+// float32, squares those values, rounds their sum to float32, then
+// takes its square root.
 /*
 ================
 acquisitionDistance
@@ -297,9 +298,8 @@ nearestEligiblePlayer
 */
 func nearestEligiblePlayer(actor monster.Instance, from monster.Pose, divisionPlayers []playerPose, sightRange float64) (playerPose, bool) {
 	flags := actor.Nest.NativeTacticsFlags
-	// 5478F0/547AD0/547C70 pick the selector by flags in both outdoor and
-	// dungeon regions (5405B0 -> 531180 -> 538B30/53AE20): 4 first, then
-	// 0x80, then 0x100.
+	// The native acquire routines pick the selector by flags in both
+	// outdoor and dungeon regions: 4 first, then 0x80, then 0x100.
 	switch {
 	case flags&0x4 != 0:
 		return jobQueryAcquisition(actor, from, divisionPlayers, sightRange, jobQuery{})
@@ -308,7 +308,7 @@ func nearestEligiblePlayer(actor monster.Instance, from monster.Pose, divisionPl
 	case flags&0x100 == 0:
 		return ordinaryPlayerAcquisition(actor, from, divisionPlayers, sightRange)
 	}
-	// Selector 5 (flag 0x100, 547070) queries fortress gates, towers and
+	// Selector 5 (flag 0x100) queries fortress gates, towers and
 	// camps beside players; keep this player projection until the fortress
 	// war structure query lands.
 	best := playerPose{}
@@ -354,7 +354,7 @@ func eligiblePlayerByGid(actor monster.Instance, players []playerPose, gid uint3
 		monster.AllowsTargetStatus(actor.Ref.TidWord, actor.Nest.NativeTacticsFlags, player.NativeBodyStatus)
 }
 
-// fellowCOSBand is CGObj_IsFellowCOS's band (TypeID 4 = 5, 483980).
+// fellowCOSBand is the fellow companion's band (TypeID 4 = 5).
 const fellowCOSBand = 5
 
 /*
@@ -393,13 +393,11 @@ func appendCompanionTargets(players []playerPose, companions []CompanionTarget) 
 ================
 dungeonAcquisitionBlocks
 
-A dungeon monster ranks the players of its own message block and then of
-that block's linked neighbours (CRgnDungeon_Query 538B30 ->
-CRgnDungeon_AppendNeighborRoomCells 5375D0), not the outdoor 3x3 sight
-sample of 53AE20. The neighbour list is in link order: CRgnObject 538670
-visits blocks by ascending linear index ((dimY*x + y)*dimZ + z) and links
-both ways once (CMsgBlock_LinkNeighbor 537CB0, CMsgBlock_HasNeighbor
-538270), so each block's list ascends by x, then z (inference from that
+A dungeon monster ranks the players of its own message block and then
+of that block's linked neighbours, not the outdoor 3x3 sight sample.
+The neighbour list is in link order: the native linker visits blocks
+by ascending linear index ((dimY*x + y)*dimZ + z) and links both ways
+once, so each block's list ascends by x, then z (inference from that
 loop; one layer, so y never varies). A position the grid cannot place
 keeps its Whole block alone.
 ================

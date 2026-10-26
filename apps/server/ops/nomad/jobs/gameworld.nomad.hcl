@@ -84,6 +84,14 @@ variable "webtransport_public" {
   default = "off"
 }
 
+# The public UDP host:port the WT listener binds when webtransport_public
+# is on. Empty (default) keeps the Nomad-allocated loopback bind; the
+# deployer refuses the public switch without it.
+variable "transport_wt_addr" {
+  type    = string
+  default = ""
+}
+
 variable "host_network" {
   type    = string
   default = "loopback"
@@ -172,6 +180,20 @@ variable "cap110_monsters" {
   default = "off"
 }
 
+# Port-only, not native: the level-100 slice of that population, admitted
+# for hunting separately (#1741); switches on with the cap-110 catalogue.
+variable "cap110_level100" {
+  type    = string
+  default = "off"
+}
+
+# Port-only, not native: degree-10/11 equipment set bonuses (#1747). The
+# v1.150 client ships no set rows, so off is the native state.
+variable "cap110_set_bonuses" {
+  type    = string
+  default = "off"
+}
+
 # Port-only, not native: the optional Pharaoh Tomb 1-3 population. It needs
 # cap110_monsters on as well; GameWorld refuses to start otherwise.
 variable "pharaoh_tomb" {
@@ -239,6 +261,33 @@ variable "fast_den_return" {
 variable "unique_damage_rank" {
   type    = string
   default = "off"
+}
+
+# cave_seam_step lets a monster on the native cave route step through a
+# doorway whose landing point a whole-unit step would stop short of
+# (port-only, not native; owner decision 2026-10-26). "off" is the
+# original step, which can leave the monster pacing at such a doorway.
+variable "cave_seam_step" {
+  type    = string
+  default = "on"
+}
+
+# cave_modern_chase sends a monster chasing through a cave along the port's
+# planner (A* over the cells, string-pulled) instead of the original's
+# region route (port-only, not native; owner decision 2026-10-26). "off" is
+# the original route, which can leave a monster pacing on a cell line.
+variable "cave_modern_chase" {
+  type    = string
+  default = "on"
+}
+
+# cave_obstacle_escape lets a mover whose step starts inside a cave
+# obstacle circle walk out of it (port-only, not native; owner decision
+# 2026-10-26). "off" is the original circle test, which stops every step
+# deeper into a circle that covers a ramp doorway.
+variable "cave_obstacle_escape" {
+  type    = string
+  default = "on"
 }
 
 # closed_object_rescue moves a character that logs in inside a closed object
@@ -480,9 +529,26 @@ variable "seal_board" {
   default = "off"
 }
 
+# seal_census opens the staff-only seal census route (the console's
+# sealcensus tab counts seal items by degree and tier, name-free; port-only,
+# not native; owner decision 2026-10-26, #1604 P13 / #1691). "off" is
+# native: the route does not exist.
+variable "seal_census" {
+  type    = string
+  default = "off"
+}
+
 variable "announce_plus" {
   type    = string
   default = "on"
+}
+
+# announce_plus_tiers leads a +10 plus notice with "Great success!" and
+# a +11 or higher one with "LEGENDARY!" (port-only, not native; owner
+# decision 2026-10-26, #1739). "off" is the plain plus line.
+variable "announce_plus_tiers" {
+  type    = string
+  default = "off"
 }
 
 variable "announce_job_kill" {
@@ -504,6 +570,15 @@ variable "job_kill_notice_repeat" {
 variable "announce_most_wanted" {
   type    = string
   default = "on"
+}
+
+# alchemy_break_notice announces the destroyed reinforcement item of a
+# character who opted in on the account page, by job alias or "a player",
+# never a character name (port-only, not native; owner-approved vote
+# 2026-10-26, #1604 P7.2 / #1738). "off" is native: no notice.
+variable "alchemy_break_notice" {
+  type    = string
+  default = "off"
 }
 
 # thief_party_bonus gives a party +10% monster EXP and gold per member
@@ -560,6 +635,9 @@ variable "trade_job_hunter_percent_cap" {
 
 # reverse_return_map adds map destinations to the reverse return scroll
 # (port-only, not native). Anything but "on" keeps the native two points.
+# On, the destinations are the VSRO client's refoptionalteleport table when
+# the game data was built after scripts/import_vsro_optional_teleport.py,
+# else the inferred town gates and unique monster areas.
 variable "reverse_return_map" {
   type    = string
   default = ""
@@ -902,9 +980,17 @@ variable "public_api_addr" {
   default = "127.0.0.1:8790"
 }
 
+# The GameWorld's tick must never wait behind another job's burst.
+# Nomad turns a task's cpu (MHz) into its cgroup CPU weight, so under
+# contention each task's share is its own reservation over the sum of
+# the contending reservations; weights cost nothing on an idle host.
+# The default therefore outweighs the Agent's reservation (500) by
+# more than ten to one. An operator value (-gameworld-cpu) replaces
+# it: keep it at least ten times the largest other reservation on the
+# host, and below the node's total compute, or the job cannot place.
 variable "cpu" {
   type    = number
-  default = 2000
+  default = 6000
 }
 
 variable "memory_mb" {
@@ -1041,6 +1127,8 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_MASTERY                        = var.beta_mastery
         SRO_LEVEL_CAP                      = var.level_cap
         SRO_CAP110_MONSTERS                = var.cap110_monsters
+        SRO_CAP110_LEVEL100                = var.cap110_level100
+        SRO_CAP110_SET_BONUSES             = var.cap110_set_bonuses
         SRO_PHARAOH_TOMB                   = var.pharaoh_tomb
         SRO_PHARAOH_TOMB_GEAR_RATE         = var.pharaoh_tomb_gear_rate
         SRO_BETA_SILK                           = var.beta_silk
@@ -1051,6 +1139,9 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_FAST_DEN_RETURN                     = var.fast_den_return
         SRO_UNIQUE_DAMAGE_RANK                  = var.unique_damage_rank
         SRO_CLOSED_OBJECT_RESCUE                = var.closed_object_rescue
+        SRO_CAVE_SEAM_STEP                      = var.cave_seam_step
+        SRO_CAVE_MODERN_CHASE                   = var.cave_modern_chase
+        SRO_CAVE_OBSTACLE_ESCAPE                = var.cave_obstacle_escape
         SRO_DEEP_WATER_REFUSAL                  = var.deep_water_refusal
         SRO_MOST_WANTED                         = var.most_wanted
         SRO_MOST_WANTED_TEST                    = var.most_wanted_test
@@ -1075,7 +1166,9 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_MALL_RIDE_SPEED                     = var.mall_ride_speed
         SRO_ANNOUNCE_SOX_DROP                   = var.announce_sox_drop
         SRO_SEAL_BOARD                          = var.seal_board
+        SRO_SEAL_CENSUS                         = var.seal_census
         SRO_ANNOUNCE_PLUS                       = var.announce_plus
+        SRO_ANNOUNCE_PLUS_TIERS                 = var.announce_plus_tiers
         SRO_ANNOUNCE_JOB_KILL                   = var.announce_job_kill
         SRO_JOB_KILL_NOTICE_REPEAT              = var.job_kill_notice_repeat
         SRO_JOB_KILL_NOTICES_PER_MINUTE         = var.job_kill_notices_per_minute
@@ -1086,6 +1179,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_SHORT_NOTICE_FADE_MS                = var.short_notice_fade_ms
         SRO_CHAT_ACK_TIMEOUT_MS                 = var.chat_ack_timeout_ms
         SRO_ANNOUNCE_MOST_WANTED                = var.announce_most_wanted
+        SRO_ALCHEMY_BREAK_NOTICE                = var.alchemy_break_notice
         SRO_THIEF_PARTY_BONUS                   = var.thief_party_bonus
         SRO_THIEF_PARTY_PERCENT_EACH            = var.thief_party_percent_each
         SRO_THIEF_PARTY_PERCENT_CAP             = var.thief_party_percent_cap
@@ -1135,7 +1229,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_ALEXANDRIA                          = var.alexandria
         SRO_PUBLIC_API_ADDR                     = var.public_api_addr
         SRO_PUBLIC_API_TOKEN_PATH               = "${NOMAD_SECRETS_DIR}/public-api-token"
-        TRANSPORT_WT_ADDR                       = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
+        TRANSPORT_WT_ADDR                       = var.transport_wt_addr != "" ? var.transport_wt_addr : "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_WS_ADDR                       = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_CERT_DIR                      = var.cert_dir
         TRANSPORT_CERT_FILE                     = var.transport_cert_file

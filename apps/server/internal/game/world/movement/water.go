@@ -65,6 +65,15 @@ type WaterValidator struct {
 	root                 string
 	catalogPath          string
 	dungeonResourcesPath string
+	// aiNavDataPath packs the dungeons' native route tables (ainavdata.go);
+	// empty over a client public root, which ships none.
+	aiNavDataPath string
+	// caveSeamStep is the port-only cave seam step (cave_native_route.go).
+	caveSeamStep bool
+	// caveModernChase and caveObstacleEscape are the port-only cave chase
+	// planner and obstacle escape (cave_chase.go); zero is native.
+	caveModernChase    bool
+	caveObstacleEscape bool
 	// readFile is the asset reader (os.ReadFile in production; tests inject
 	// it to prove the load-lock discipline below).
 	readFile func(name string) ([]byte, error)
@@ -156,11 +165,13 @@ browser client's publish layout.
 ================
 */
 func NewAuthorityValidator(worldAuthorityDir string) *WaterValidator {
-	return newWaterValidator(
+	v := newWaterValidator(
 		filepath.Join(worldAuthorityDir, "movement"),
 		"catalog.json",
 		filepath.Join("dungeon", "dungeon-resources.json"),
 	)
+	v.aiNavDataPath = filepath.Join("dungeon", "ainav-data.json")
+	return v
 }
 
 /*
@@ -385,45 +396,14 @@ nav tile is walkable; a containing object-nav cell may win the same nearest-Y
 arbitration used by sub_403d20 even when the terrain below it is blocked
 (bridges, platforms, and elevated quest arenas).
 
-Dungeon sectors deliberately remain outside this outdoor surface owner. Their
-generated positions require the resident dungeon-nav host, not outdoor sector
-math.
+The plane that owns the region answers (plane_lookups.go): the outdoor
+arm is this surface owner, the cave arm is the resident dungeon-nav host,
+not outdoor sector math.
 ================
 */
 func (v *WaterValidator) WalkableSpawnHeightAt(
 	regionID uint16,
 	x, authoredY, z float64,
 ) (float64, bool) {
-	if simulation.IsDungeonRegion(regionID) {
-		return v.dungeonSpawnHeightAt(regionID, x, authoredY, z)
-	}
-	surface := v.surfaceForRegion(regionID)
-	if surface == nil {
-		return 0, false
-	}
-	tilesPerAxis, tileSize, ok := v.gridParamsForRegion(regionID)
-	if !ok || x < 0 || z < 0 ||
-		x >= float64(tilesPerAxis)*tileSize ||
-		z >= float64(tilesPerAxis)*tileSize {
-		return 0, false
-	}
-
-	baseX := x + float64(simulation.SectorX(regionID)-simulation.SectorX(surface.seedRegionID))*surface.regionSize
-	baseZ := z + float64(simulation.SectorY(regionID)-simulation.SectorY(surface.seedRegionID))*surface.regionSize
-	terrainY, terrainCovered := surface.terrainHeightAt(baseX, baseZ)
-	if !terrainCovered {
-		return 0, false
-	}
-	if stand := v.spawnObjectDeckStand(surface, baseX, baseZ, authoredY, terrainY); stand != nil {
-		return stand.planeY, true
-	}
-
-	tile := globalTile{
-		x: simulation.SectorX(regionID)*tilesPerAxis + int(math.Floor(x/tileSize)),
-		z: simulation.SectorY(regionID)*tilesPerAxis + int(math.Floor(z/tileSize)),
-	}
-	if walkable, covered := v.globalTileWalkable(tile, tilesPerAxis); !covered || !walkable {
-		return 0, false
-	}
-	return terrainY, true
+	return v.validatorPlanes().walkableSpawnHeightAt(regionID, x, authoredY, z)
 }

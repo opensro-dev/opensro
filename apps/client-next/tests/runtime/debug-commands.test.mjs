@@ -33,7 +33,15 @@ test("the published table keys each row by its pattern's first word", () => {
 	assert.equal( table.get( "/PlayerCount" ), 0 );
 	assert.equal( table.get( "/Debug" ), 1 );
 	assert.equal( table.get( "/Pos" ), 3 );
+	assert.equal( table.get( "/fast" ), 111 );
+	assert.equal( table.get( "/frame" ), 117 );
+	assert.equal( table.get( "/cwgo" ), 132 );
+	assert.equal( table.get( "/cs" ), 136 );
+	assert.equal( table.get( "/id" ), 137 );
 	assert.equal( table.get( "/setfov" ), 500 );
+	assert.equal( table.get( "/setspeed" ), 600 );
+	assert.equal( table.get( "/equip" ), 601 );
+	assert.equal( table.get( "/makeobj" ), 602 );
 	assert.equal( table.get( "/snd" ), 603 );
 	assert.equal( table.size, 47 );
 });
@@ -140,12 +148,88 @@ test("/Item uses the named bag slot as a double click does", () => {
 	}
 });
 
+test("the GM console plays /snd by name and stays silent without a word", () => {
+	/** @type {string[]} */
+	const played = [];
+	/** @type {any[]} */
+	const sent = [];
+	const f = uiFixture(
+		message => {
+			if ( message.kind === "gameplay" ) sent.push( message.command );
+		},
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		{ playSoundByName: name => played.push( name ) }
+	);
+	try {
+		f.state.gameplay.eligibility = { gm: true };
+		let now = 0;
+		const step = () => {
+			for ( let i = 0; i < 16; i++ ) f.ui.step( f.state, now += 100 );
+		};
+		const type = line => {
+			f.ui.event( {
+				kind: "edit",
+				id: "gm-input",
+				value: line,
+				start: line.length,
+				end: line.length,
+				composing: false
+			} );
+			f.ui.event( { kind: "activate", id: "submit" } );
+			step();
+		};
+		step();
+		f.ui.event( { kind: "key", code: "Backquote", shift: true } );
+		step();
+		type( "/snd SND_BUTTON_CLICK" );
+		assert.deepEqual( played, [ "SND_BUTTON_CLICK" ] );
+		type( "/snd SND_ERROR ignored" );
+		assert.deepEqual( played, [ "SND_BUTTON_CLICK", "SND_ERROR" ], "only the first word is read" );
+		type( "/snd" );
+		assert.equal( played.length, 2, "a wordless /snd played a sound" );
+		assert.deepEqual( sent, [], "a table command reached the server" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("command words read as wcstol reads them", () => {
 	assert.equal( commands.commandInteger( "13" ), 13 );
 	assert.equal( commands.commandInteger( "-4x" ), -4 );
 	assert.equal( commands.commandInteger( "slot" ), 0 );
 	assert.equal( commands.commandFloat( "18.5" ), 18.5 );
 	assert.equal( commands.commandFloat( "hour" ), 0 );
+});
+
+test("the bounded integer rows read their words as 9C3720 reads them", () => {
+	// /cs (690C40 case 136): exactly one word, clamped to 1..500; the
+	// handler's unsigned compares put a negative word on the top rail.
+	assert.equal( commands.debugCameraSpeedValue( [ "250" ] ), 250 );
+	assert.equal( commands.debugCameraSpeedValue( [ "1" ] ), 1 );
+	assert.equal( commands.debugCameraSpeedValue( [ "0" ] ), 1 );
+	assert.equal( commands.debugCameraSpeedValue( [ "99999" ] ), 500 );
+	assert.equal( commands.debugCameraSpeedValue( [ "-3" ] ), 500 );
+	assert.equal( commands.debugCameraSpeedValue( [ "abc" ] ), 1 );
+	assert.equal( commands.debugCameraSpeedValue( [] ), null );
+	assert.equal( commands.debugCameraSpeedValue( [ "1", "2" ] ), null );
+	// /setspeed (case 600): the first word alone (a missing word reads
+	// as zero), times ten, clamped to 10..500 the same unsigned way.
+	assert.equal( commands.debugSetSpeedValue( [] ), 10 );
+	assert.equal( commands.debugSetSpeedValue( [ "10" ] ), 100 );
+	assert.equal( commands.debugSetSpeedValue( [ "3" ] ), 30 );
+	assert.equal( commands.debugSetSpeedValue( [ "100" ] ), 500 );
+	assert.equal( commands.debugSetSpeedValue( [ "-1" ] ), 500 );
+	assert.equal( commands.debugSetSpeedValue( [ "7", "9" ] ), 70 );
+	// /fast (case 111): the 50/240 snap against the double 50.
+	assert.equal( commands.debugFastSpeedValue( 50 ), 240 );
+	assert.equal( commands.debugFastSpeedValue( 240 ), 50 );
+	assert.equal( commands.debugFastSpeedValue( 100 ), 50 );
+	assert.equal( commands.debugFastSpeedValue( 30 ), 240 );
 });
 
 /*
@@ -313,6 +397,40 @@ test("the GM console drives the local clock", async () => {
 		assert.equal( wallNow().hour, 12 );
 		type( "/night" );
 		assert.equal( wallNow().hour, 0 );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("the GM console consumes the remaining table rows without sending", () => {
+	const { f, sent, type } = consoleFixture();
+	try {
+		// The slow camera rows, the 600 family and the camera-waypoint
+		// rows: every row the table names is consumed by the dispatch,
+		// so none of these lines may reach the server (or the chat).
+		for (
+			const line of [
+				"/fast",
+				"/frame",
+				"/cs 250",
+				"/cs",
+				"/cs 1 2",
+				"/id",
+				"/setspeed 30",
+				"/setspeed",
+				"/equip 1234",
+				"/equip",
+				"/makeobj 1234",
+				"/snd hello",
+				"/snd",
+				"/cwclear",
+				"/cwpop",
+				"/cwgo",
+				"/cwstop",
+				"/cwsave"
+			]
+		) type( line );
+		assert.deepEqual( sent, [], "a remaining table row reached the server" );
 	} finally {
 		f.dispose();
 	}

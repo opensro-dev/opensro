@@ -33,3 +33,26 @@ func TestApplyLevelCapRefusesMalformedBands(t *testing.T) {
 		t.Fatal("a descending band list booted")
 	}
 }
+
+/*
+================
+TestPublishedLevelCap
+
+Only the expansion cap reaches the world-entry blob; the native cap and
+an unset limit publish nothing, so the native blob stays byte-identical.
+================
+*/
+func TestPublishedLevelCap(t *testing.T) {
+	for _, tc := range []struct {
+		limit int64
+		want  int64
+	}{
+		{0, 0},
+		{progression.LevelCap, 0},
+		{progression.ExpansionLevelCap, progression.ExpansionLevelCap},
+	} {
+		if got := publishedLevelCap(tc.limit); got != tc.want {
+			t.Fatalf("limit %d: published %d, want %d", tc.limit, got, tc.want)
+		}
+	}
+}

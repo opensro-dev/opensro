@@ -487,6 +487,7 @@ import {
 	partyDefaultPurpose,
 	type PartyListing
 } from "@/engine/foundation/gameplay/party-matching";
+import { NATIVE_LEVEL_CAP } from "@/engine/foundation/gameplay/level-cap";
 import { createSkillGauge, createGaugePresentation } from "./hud/progression-bars";
 import { experienceBar, EXPERIENCE_BAR, gaugeFill } from "@/engine/foundation/ui/progression-bars";
 import { shieldGauge, shieldGaugeFill } from "@/engine/foundation/ui/shield-gauge";
@@ -713,18 +714,30 @@ import {
 	PARTY_OPTION
 } from "@/engine/foundation/ui/party-proposal";
 import {
+	cameraWaypointSaveText,
+	createCameraWaypointStore,
+	loadCameraDataKeyframes,
+	resetCameraWaypoints
+} from "@/engine/foundation/ui/camera-waypoints";
+import {
 	commandFloat,
 	commandInteger,
+	DEBUG_COMMAND_CAMERA_SPEED,
 	DEBUG_COMMAND_CLEAR,
 	DEBUG_COMMAND_COLON,
 	DEBUG_COMMAND_COLON_OFF,
 	DEBUG_COMMAND_CURSOR,
 	DEBUG_COMMAND_DAY,
 	DEBUG_COMMAND_DEBUG,
+	DEBUG_COMMAND_EQUIP,
+	DEBUG_COMMAND_FAST,
+	DEBUG_COMMAND_FRAME,
 	DEBUG_COMMAND_FREE_CAMERA,
 	DEBUG_COMMAND_GET_POSITION,
 	DEBUG_COMMAND_HIDE_ME,
+	DEBUG_COMMAND_ID,
 	DEBUG_COMMAND_ITEM,
+	DEBUG_COMMAND_MAKE_OBJECT,
 	DEBUG_COMMAND_MESSAGE_CLEAR,
 	DEBUG_COMMAND_NIGHT,
 	DEBUG_COMMAND_NULL,
@@ -734,6 +747,7 @@ import {
 	DEBUG_COMMAND_RAIN,
 	DEBUG_COMMAND_SHOW_ME,
 	DEBUG_COMMAND_SNOW,
+	DEBUG_COMMAND_SOUND,
 	DEBUG_COMMAND_TIME_MINUS,
 	DEBUG_COMMAND_TIME_OFF,
 	DEBUG_COMMAND_TIME_ON,
@@ -741,6 +755,11 @@ import {
 	DEBUG_COMMAND_TIME_SET,
 	DEBUG_COMMAND_UI_OFF,
 	DEBUG_COMMAND_UI_ON,
+	DEBUG_COMMAND_WAYPOINT_CLEAR,
+	DEBUG_COMMAND_WAYPOINT_GO,
+	DEBUG_COMMAND_WAYPOINT_POP,
+	DEBUG_COMMAND_WAYPOINT_SAVE,
+	DEBUG_COMMAND_WAYPOINT_STOP,
 	DEBUG_COMMAND_ZOOM,
 	DEBUG_COMMAND_WIRE_FRAME,
 	DEBUG_COMMAND_GROUND,
@@ -749,9 +768,13 @@ import {
 	DEBUG_COMMAND_CHARACTERS,
 	DEBUG_COMMAND_LEVEL_OF_DETAIL,
 	DEBUG_COMMAND_SET_FIELD_OF_VIEW,
+	DEBUG_COMMAND_SET_SPEED,
+	debugCameraSpeedValue,
 	debugCommand,
+	debugFastSpeedValue,
 	debugFieldOfView,
 	debugPosition,
+	debugSetSpeedValue,
 	type DebugCommand
 } from "@/engine/foundation/ui/debug-commands";
 import {
@@ -972,7 +995,13 @@ export interface UiExtensions {
 	setCameraZoomRail?: ( capped: boolean ) => void;
 	setFreeCamera?: ( free: boolean ) => void;
 	setCameraCollision?: ( collision: boolean ) => void;
+	setCameraWaypoints?: (
+		keyframes: readonly import("@/engine/foundation/ui/camera-waypoints").CameraWaypoint[]
+	) => void;
+	setCameraPlaying?: ( playing: boolean ) => void;
 	setCursorVisible?: ( visible: boolean ) => void;
+	saveCameraWaypoints?: ( text: string ) => void;
+	playSoundByName?: ( name: string ) => void;
 	saveExperimental?: ( value: ExperimentalOptions ) => void;
 	saveWindowPositions?: ( value: WindowPositions ) => void;
 }
@@ -1020,6 +1049,31 @@ export function createUi(
 	let debugZoomRail = true;
 	let debugFreeCamera = false;
 	let debugCursorVisible = true;
+	// The camera-waypoint family (690C40 ids 130-134, #1716): the
+	// interface's keyframe track (+0x3FC) and its play byte (+0x3CD).
+	// The store is this window's, as natively; the camera owner gets a
+	// copy of the records and the byte through the extensions, and the
+	// playback stepping is its own. The records arrive with the HUD's
+	// cameradata asset (cameraWaypointsLoaded below): nothing native
+	// ever loads the track, so the published rows are the port's
+	// content source (issue #1716).
+	const cameraWaypoints = createCameraWaypointStore();
+	let cameraWaypointsLoaded = false;
+	// The camera family's kept values: the free-camera move speed
+	// (+0x7B0, seeded 100, case 136), the snapped second speed (+0x7C0,
+	// seeded 50, case 111), the frame byte (engine global +0x4A, seeded
+	// clear, case 117), the id-plate byte (0xCCB5D8, seeded standing,
+	// case 137) and the local
+	// player's written speed (+0x658, case 600; 100 is the scale's
+	// neutral point, the value the word 10 writes). The port's camera
+	// does not translate freely, its boards take no id line and its
+	// movement is the server's, so these are kept as written for the
+	// consumers in #1717.
+	let debugCameraSpeed = 100;
+	let debugFast = 50;
+	let debugFrameStats = false;
+	let debugShowIds = true;
+	let debugMoveSpeed = 100;
 	// The render family's SWorld graphic options (690C40 ids 150-155):
 	// SWorld_Construct seeds wireframe clear and the five others standing,
 	// each command negates one, and the renderer applies the result. The
@@ -2690,8 +2744,13 @@ export function createUi(
 	rows flip this window's debug bytes and hand each to its owner; the
 	shown byte (112/113) rides the gameplay lane to the entity owner, and
 	the mission window's visible flag (115/116) is this window's own. The
-	camera-waypoint rows (130-134) and ids 111/117-119 are not ported yet
-	and leave the line as typed.
+	remaining camera rows (111/117/136/137) and the 600 family keep their
+	values on this window for consumers the port does not have yet (#1717);
+	601 frames the named item as a packet the client hands itself (see
+	the case); the port builds nothing. 602 is the native table's shared exit.
+	The camera-waypoint rows (130-134) drive this window's waypoint store
+	and forward the play byte to the camera owner (#1716). Every row the
+	table names is consumed here, as natively.
 	================
 	*/
 	function runDebugCommand( command: DebugCommand ) {
@@ -2793,6 +2852,12 @@ export function createUi(
 				debugZoomRail = !debugZoomRail;
 				extensions.setCameraZoomRail?.( debugZoomRail );
 				break;
+			case DEBUG_COMMAND_FAST:
+				// Case 17 (0x691367): snap +0x7C0 between its 50 and 240
+				// presets. Nothing native reads the field; the value is
+				// kept as the handler leaves it. The native prints nothing.
+				debugFast = debugFastSpeedValue( debugFast );
+				break;
 			case DEBUG_COMMAND_SHOW_ME:
 				// Case 0x12 writes the local player's shown byte
 				// (CICPlayer +0xB8) to 1. The native prints nothing.
@@ -2824,6 +2889,13 @@ export function createUi(
 				// prints nothing.
 				debugUiVisible = true;
 				break;
+			case DEBUG_COMMAND_FRAME:
+				// Case 23 flips the engine global's frame byte (+0x4A),
+				// the frame-statistics switch; a GM string arm flips the
+				// same byte. The port has no readout for it to gate yet
+				// (#1717); the byte is kept. The native prints nothing.
+				debugFrameStats = !debugFrameStats;
+				break;
 			case DEBUG_COMMAND_COLON:
 				// Case 0x76 writes +0x3CC back to 1: the clamp casts
 				// the eye-to-target segment again (68FAD0). The native
@@ -2836,11 +2908,62 @@ export function createUi(
 				// distance; the follow still tracks. Prints nothing.
 				extensions.setCameraCollision?.( false );
 				break;
+			case DEBUG_COMMAND_WAYPOINT_CLEAR:
+				// Case 130: the store reset (CRenderContext_Reset on
+				// the +0x3FC track), and the same block's next write
+				// clears the play byte (+0x3CD): the stop row (133)
+				// enters at that write, so clear and stop share it.
+				// The records, the clock and the byte all go. The
+				// native prints nothing.
+				resetCameraWaypoints( cameraWaypoints );
+				extensions.setCameraWaypoints?.( cameraWaypoints.keyframes );
+				extensions.setCameraPlaying?.( false );
+				break;
+			case DEBUG_COMMAND_WAYPOINT_POP:
+			case DEBUG_COMMAND_WAYPOINT_GO:
+				// Cases 131/132 are one native block: the free-camera
+				// byte (+0x3CE) must stand and the store be non-empty;
+				// then the play byte (+0x3CD) is written and the track
+				// clock zeroed. Either gate failing leaves the byte
+				// clear. The camera owner holds the byte's copy. The
+				// native prints nothing.
+				if ( debugFreeCamera && cameraWaypoints.keyframes.length > 0 ) {
+					cameraWaypoints.clockSeconds = 0;
+					extensions.setCameraPlaying?.( true );
+				}
+				break;
+			case DEBUG_COMMAND_WAYPOINT_STOP:
+				// Case 133: the play byte is cleared; the camera stays
+				// where playback left it until the free-camera byte
+				// also falls. The native prints nothing.
+				extensions.setCameraPlaying?.( false );
+				break;
+			case DEBUG_COMMAND_WAYPOINT_SAVE:
+				// Case 134: the whole store written in the native line
+				// form - natively to c:\cw.txt, here the downloaded
+				// cw.txt the platform writes (#1716). Prints nothing.
+				extensions.saveCameraWaypoints?.( cameraWaypointSaveText( cameraWaypoints ) );
+				break;
 			case DEBUG_COMMAND_CURSOR:
 				// Case 0x1E: SetVisible(![cursor+0x20]) - the pointer shows
 				// or goes away (A15A70), silently.
 				debugCursorVisible = !debugCursorVisible;
 				extensions.setCursorVisible?.( debugCursorVisible );
+				break;
+			case DEBUG_COMMAND_CAMERA_SPEED: {
+				// Case 136 writes +0x7B0 from one word clamped to
+				// 1..500: the free-camera move speed, kept for the
+				// camera (the port's free camera holds its pose and has
+				// no translation to scale; see #1717). No print.
+				const speed = debugCameraSpeedValue( command.args );
+				if ( speed !== null ) debugCameraSpeed = speed;
+				break;
+			}
+			case DEBUG_COMMAND_ID:
+				// Case 137 flips the id-plate byte (0xCCB5D8): kept for
+				// the name boards, which take no id line yet (#1717).
+				// The native prints nothing.
+				debugShowIds = !debugShowIds;
 				break;
 			case DEBUG_COMMAND_WIRE_FRAME:
 				// 150 (691686) negates graphic option 0x12: while it stands
@@ -2886,6 +3009,42 @@ export function createUi(
 				if ( degrees !== null ) extensions.setWorldFieldOfView?.( degrees );
 				break;
 			}
+			case DEBUG_COMMAND_SET_SPEED:
+				// Case 600 writes the local player's (or its mount's)
+				// speed field (+0x658) as the word times ten, clamped
+				// to 10..500. The port's movement is the server's, so
+				// the value is kept, not applied (#1717); the GM
+				// family's /SETSPEED stays the server-side speed lever.
+				// The native prints nothing.
+				debugMoveSpeed = debugSetSpeedValue( command.args );
+				break;
+			case DEBUG_COMMAND_EQUIP:
+				// Case 601 builds the named item's descriptor, frames
+				// it as a packet stream headed by opcode 0x3314 and
+				// self-dispatches it through the client's own packet
+				// handler (690BD0); the stream is destroyed after and
+				// nothing is transmitted. The port's inventory is the
+				// server's snapshot, so there is nothing for the
+				// crafted packet to land on; the line is consumed and
+				// nothing is built (#1717).
+				break;
+			case DEBUG_COMMAND_MAKE_OBJECT:
+				// 602 has no native case: the over-400 table sends it
+				// to the shared exit, so the handler does nothing at
+				// all. The line is consumed the same way here.
+				break;
+			case DEBUG_COMMAND_SOUND:
+				// Case 603 hands its first word to the sound manager's
+				// play-by-name; the audio owner answers the name (a
+				// name with no authored row stays silent, as a native
+				// label-map miss does). Further words are not read.
+				// With no word the native still calls through, with an
+				// unset argument - whatever the stack held becomes the
+				// name - so there is no defined sound to reproduce;
+				// the port deliberately plays nothing for a wordless
+				// line instead of inventing one.
+				if ( command.args.length >= 1 ) extensions.playSoundByName?.( command.args[0]! );
+				break;
 		}
 	}
 	/*
@@ -4337,7 +4496,12 @@ export function createUi(
 			const job = partyActiveJob( view.gameplay?.inventory ?? [] );
 			partyForm = own ?
 				{ purpose: own.purpose, min: String( own.min ), max: String( own.max ), title: own.title } :
-				{ purpose: partyDefaultPurpose( job ), min: "1", max: "90", title: "" };
+				{
+					purpose: partyDefaultPurpose( job ),
+					min: "1",
+					max: String( view.gameplay?.levelCap ?? NATIVE_LEVEL_CAP ),
+					title: ""
+				};
 		} else if ( id === "party-match:20" ) partyDialog = "delete";
 		else if ( id === "party-match:17" ) partyDialog = "auto";
 		else if ( id === "party-auto-stop" ) sendGameplay( { kind: "party-match-auto-stop" } );
@@ -4382,7 +4546,10 @@ export function createUi(
 					!partyPurposeAllowed( partyActiveJob( view.gameplay?.inventory ?? [] ), partyForm.purpose )
 				) return;
 				const min = Number( partyForm.min ), max = Number( partyForm.max );
-				if ( min >= 1 && max <= 90 && min <= max && partyForm.title.length ) {
+				if (
+					min >= 1 && max <= (view.gameplay?.levelCap ?? NATIVE_LEVEL_CAP) && min <= max &&
+					partyForm.title.length
+				) {
 					sendGameplay( {
 						kind: partyDialog === "modify" ? "party-match-modify" : "party-match-register",
 						registration: {
@@ -8852,7 +9019,7 @@ export function createUi(
 				layoutResourcesRevision++;
 			}
 			const guideNeeded = next.session?.phase === "world";
-			if ( guideResources.step( guideNeeded ) ) dirty = true;
+			if ( guideResources.step( guideNeeded, next.gameplay?.levelCap ) ) dirty = true;
 			guildManagerHud.observeSoldiers(
 				next.session?.phase === "world" && next.gameplay?.npcConversation?.phase === "menu" ?
 					next.gameplay.npcConversation.gid :
@@ -8898,6 +9065,18 @@ export function createUi(
 			if ( hud.step( next.session?.phase === "world" || next.frontend?.phase === "dock" ) ) {
 				dirty = true;
 				layoutResourcesRevision++;
+			}
+			// The waypoint store's keyframes ride the HUD's cameradata
+			// asset: load them once, when the catalogue first settles
+			// (#1716). A /cwclear afterwards is permanent, as the native
+			// reset is: nothing reloads the track.
+			if ( !cameraWaypointsLoaded ) {
+				const cameraRows = hud.data()?.cameraDataRows;
+				if ( cameraRows ) {
+					cameraWaypointsLoaded = true;
+					loadCameraDataKeyframes( cameraWaypoints, cameraRows );
+					extensions.setCameraWaypoints?.( cameraWaypoints.keyframes );
+				}
 			}
 			// The stall prompts follow the stall: naming opens the title entry
 			// with the default title (5A1DF0 mode 1); a stall that moved on

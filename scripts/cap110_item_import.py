@@ -97,10 +97,15 @@ def copy_asset_closure(equipment, native, output, archives, worn=True):
 	pending, seen, records = set(items.direct_assets(equipment)), set(), []
 	# worn is false for rows that are carried, not worn (alchemy materials,
 	# tokens): they have an icon and a drop model but no worn mesh.
+	# Degree-11 set armour authors its worn model as a comma pair: the
+	# normal resource and its full-set variant. Both are verified and
+	# copied; which one a wearer shows belongs to the later display port,
+	# so the authored cell itself is imported untouched.
 	worn_models = resource_dependencies([{"weapon": {
-		"resolvedModel": "res/" + normalized_path(row[items.MODEL]),
+		"resolvedModel": "res/" + normalized_path(model),
 		"tid": list(map(int, row[items.TYPE_FIRST:items.TYPE_FOURTH + 1]))
-	}} for row in equipment if row[items.MODEL] not in ("", items.UNUSED)]) if worn else []
+	}} for row in equipment if row[items.MODEL] not in ("", items.UNUSED)
+		for model in row[items.MODEL].split(",")]) if worn else []
 	for row in equipment if worn else ():
 		# Authored circlet rows (armor head kind 1) and jewelry have no worn
 		# mesh. Keep that absence, as the native equipment resolver does.
@@ -170,6 +175,10 @@ def add_items(vsro_root, native, output):
 		if marker.exists():
 			if shard.exists():
 				shard.unlink()
+			for name in (items.SET_GROUP_TABLE, items.MAGIC_GROUP_TABLE):
+				catalogue = safe_target(output / TEXT_ROOT, name)
+				if catalogue.exists():
+					catalogue.unlink()
 			write_atomically(manifest, (native / TEXT_ROOT / "itemdata.txt").read_bytes())
 			marker.unlink()
 		return {"enabled": False, "added": 0}
@@ -204,6 +213,12 @@ def add_items(vsro_root, native, output):
 			for row in tables.table_rows(path.read_bytes()) if len(row) > 1
 		}
 		equipment, summary = items.merge_equipment(native_rows, later_rows, reserved, prior.get("idMap"))
+		set_groups, set_magic, catalogue = items.set_catalogue(
+			tables.table_rows(read_later(items.SET_GROUP_TABLE)),
+			tables.table_rows(read_later(items.MAGIC_GROUP_TABLE)),
+			tables.table_rows(read_later(items.MAGIC_OPTION_TABLE)),
+			equipment,
+		)
 		text_path = safe_target(output / TEXT_ROOT, "textdataname.txt")
 		base_text = text_path.read_bytes() if text_path.exists() else read_native("textdataname.txt")
 		later_texts = [
@@ -223,6 +238,14 @@ def add_items(vsro_root, native, output):
 		if items.OUTPUT_SHARD in sro_pk2.fold_ascii(base_manifest):
 			raise ValueError("native item manifest already owns the import shard")
 		write_atomically(shard, raw_shard)
+		write_atomically(
+			safe_target(output / TEXT_ROOT, items.SET_GROUP_TABLE),
+			b"\xff\xfe" + text_tables.table_text(set_groups).encode("utf-16-le"),
+		)
+		write_atomically(
+			safe_target(output / TEXT_ROOT, items.MAGIC_GROUP_TABLE),
+			b"\xff\xfe" + text_tables.table_text(set_magic).encode("utf-16-le"),
+		)
 		write_atomically(text_path, merged_text)
 		write_atomically(manifest, b"\xff\xfe" + (base_manifest + "\r\n" + items.OUTPUT_SHARD + "\r\n").encode("utf-16-le"))
 		summary.update({
@@ -232,8 +255,9 @@ def add_items(vsro_root, native, output):
 			"absentAuthoredDescriptions": missing_descriptions,
 			"assets": assets, "shopsImported": False,
 			"shopDependencies": shops,
+			"setCatalogue": catalogue,
 			"limits": [
-				"No set effects, shop stock or drops are added.",
+				"Set rows and their group catalogue are dormant: no set bonuses, shop stock or drops are added.",
 				"Render resource closure is verified; unchanged native particle/audio modifiers retain their existing owners.",
 				"Ambient equipment particles are imported through the shared EFP parser; new sound modifiers are refused.",
 				"Rendered appearance and combat require playtesting."
@@ -252,11 +276,13 @@ def main():
 	parser.add_argument("--native-extracted", type=Path, default=EXTRACTED_ROOT)
 	parser.add_argument("--output-extracted", type=Path, default=REPO_ROOT / ".state" / "cap110-weapons" / "extracted")
 	args = parser.parse_args()
+	if enabled():
+		tables.require_vsro_pin(args.vsro_root, tuple(FOLDERS))
 	summary = add_items(args.vsro_root, args.native_extracted, args.output_extracted)
 	print(f"Equipment: {summary['added']}; enabled: {summary['enabled']}")
 	if summary["enabled"]:
 		print(f"Categories: {summary['categories']}")
-		print(f"Deferred set items: {len(summary['deferred'])}; verified resources: {len(summary['assets'])}")
+		print(f"Set items: {summary['setCatalogue']['setItems']}; set groups: {summary['setCatalogue']['groups']}; verified resources: {len(summary['assets'])}")
 		print(f"Report: {args.output_extracted / REPORT_NAME}")
 
 

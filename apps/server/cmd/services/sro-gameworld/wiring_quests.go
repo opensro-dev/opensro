@@ -155,4 +155,6 @@ func (game *gameplayPlane) wireQuestProgrammes(quests *quest.Runtime) {
 	}
 	quests.RegisterRahid6Programme()
 	quests.RegisterEasteu21Programme()
+	quests.RegisterIvy3Programme()
+	quests.RegisterGoria7Programme()
 }

@@ -33,8 +33,9 @@ func (ops *MonsterMoverOps) advancePursuitControls(division string, instance mon
 	if mover.LastEvent() == monster.MoverEventAggroAcquired {
 		return nil, false
 	}
-	// 55A090 -> 542670: the strategy's Timer 5 blocks battle decisions while
-	// its accepted action owns the interval. Never cancel a released projectile.
+	// The battle tick's skill-timer latch: the strategy's Timer 5
+	// blocks battle decisions while its accepted action owns the
+	// interval. Never cancel a released projectile.
 	if mover.Mode() == monster.MoverAttacking && now < mover.NextAttackMs {
 		return nil, false
 	}
@@ -51,13 +52,16 @@ func (ops *MonsterMoverOps) advancePursuitControls(division string, instance mon
 	opponents := current.Opponents
 	s.mu.Unlock()
 	timers := timersBefore
-	// BATTLE calls 548120 -> 545E50 BEFORE Timer 6's speed/trace policy.
+	// BATTLE runs the flee-type target check, then the home-distance
+	// test, BEFORE Timer 6's speed/trace policy.
 	// This independent home-distance predicate was present for HELP only.
-	// FleeType selects other 548120 branches; do not apply ordinary pursuit to them.
+	// FleeType selects other branches of that check; do not apply
+	// ordinary pursuit to them.
 	distance := tacticsDistance3D(live, monster.Pose{RegionID: target.Pose.RegionID, X: target.Pose.X, Y: target.Pose.Y, Z: target.Pose.Z})
 	decision := monster.TraceContinue
-	// The fixed-query uniques and the flag rows run 548340, 5481A0 or 548270
-	// in 548120's place (monstersquad.go).
+	// The fixed-query uniques and the flag rows run the
+	// secondary-opponent and vehicle-redirect checks in its place
+	// (monstersquad.go).
 	if instance.Nest.Controls.FleeType == 0 && instance.Nest.Controls.OrdinaryTargetCheck() {
 		if !monsterWithinHomeTrace(instance, live, distance) {
 			decision = monster.TraceAbandon
@@ -130,7 +134,7 @@ func (ops *MonsterMoverOps) advancePursuitControls(division string, instance mon
 ==================
 monsterWithinHomeTrace
 
-545E50: HELP and BATTLE use the retained CNest center, not the actor's
+HELP and BATTLE use the retained nest center, not the actor's
 randomized initial spawn or HOMING's current destination. Summoned actors
 and explicitly detached actors have no live nest; that branch is strict.
 ==================
@@ -152,25 +156,27 @@ func needsHoming(instance monster.Instance, pose monster.Pose) bool {
 	if !instance.Nest.HasControls || instance.Ref.RunSpeed <= 0 {
 		return false
 	}
-	// 545FDB: after CNest removal, the retained home is consulted only
+	// After nest removal, the retained home is consulted only
 	// when the tactics row enables HomingData. Do not erase that row.
 	if instance.NestDetached && instance.Nest.Controls.HomingData <= 0 {
 		return false
 	}
 	anchor := anchorPose(instance)
-	// 545F70 calls 430AD0, whose +4 output is FLDZ (430B63/430B80).
-	// Reusing combat's 3D delta makes actors above/below a nest return early.
+	// The boundary test reads the planar relative helper, whose
+	// height output is always zero. Reusing combat's 3D delta
+	// makes actors above/below a nest return early.
 	return !instance.Nest.Controls.InsideHome(tacticsHomeDistance(pose, anchor), float32(instance.Nest.Radius))
 }
 
-// Both 545E50 and 545F70 use 430AD0's planar, float32 home displacement.
+// Both home tests use the planar, float32 home displacement.
 func tacticsHomeDistance(pose, anchor monster.Pose) float32 {
 	x, y, z := monster.NativeTacticsRelative(pose, anchor)
 	return float32(math.Sqrt(float64(float32(float64(x)*float64(x) + float64(y)*float64(y) + float64(z)*float64(z)))))
 }
 
-// 53D7A0 stores the relative vector and squared length as float32 before
-// sqrt, then its caller spills the result. Retain Y and those rounding seams.
+// The native actor distance stores the relative vector and
+// squared length as float32 before sqrt, then its caller spills
+// the result. Retain Y and those rounding seams.
 func tacticsDistance3D(a, b monster.Pose) float32 {
 	return monster.NativeActorDistance(a, b)
 }

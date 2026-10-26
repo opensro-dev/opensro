@@ -1,15 +1,32 @@
+/*
+===========================================================================
+
+owned_start.go - the owned start of a mover's first step
+
+ownedCellStart computes the cell-edge entry a start outside its
+retained cell is replaced by; WaterValidator.ownedStart dispatches
+that adjustment through the planes (#1674, plane_ownedstart.go),
+picking the plane by region kind so the clip, the owner walk and the
+path guard never test the region bit to start a mover.
+
+===========================================================================
+*/
 package movement
 
-import (
-	"math"
-	worldgeom "opensro.online/server/internal/game/world"
-	"opensro.online/server/internal/game/world/simulation"
-)
+import "opensro.online/server/internal/game/world/simulation"
 
-// Native 9B5A80 / client 428F40: an outside retained-cell start is replaced
-// by the proper intersection of start->centroid with a cell edge, THEN nudged
-// inward by 9C0270 / 45C1B0. The intersection output aliases the temporary
-// start. Extending ownership over an unmodified outside chord is incorrect.
+/*
+================
+ownedCellStart
+
+Native (client 428F40; the server's owned-start routine does the same):
+an outside retained-cell start is replaced by the proper intersection of
+start->centroid with a cell edge, THEN nudged inward by the nav-cell
+centroid nudge (client 45C1B0). The intersection output aliases the
+temporary start. Extending ownership over an unmodified outside chord is
+incorrect.
+================
+*/
 func ownedCellStart(mesh *objectNavMesh, cell int, x, z float64) (float64, float64) {
 	f := contactF32
 	ids := [3]uint16{mesh.cellA[cell], mesh.cellB[cell], mesh.cellC[cell]}
@@ -48,25 +65,18 @@ func ownedCellStart(mesh *objectNavMesh, cell int, x, z float64) (float64, float
 	return x, z
 }
 
+/*
+================
+ownedStart
+
+The start's plane owns the owned-start adjustment (#1674): picked by
+region kind here, so no caller tests the region bit.
+================
+*/
 func (v *WaterValidator) ownedStart(from simulation.Spawn, owner simulation.NavOwner) simulation.Spawn {
-	if simulation.IsDungeonRegion(from.RegionID) {
-		return from
+	services := planeServices{water: v}
+	if simulation.PlaneKindOf(from.RegionID) == simulation.PlaneCave {
+		return cavePlane{services}.ownedStart(from, owner)
 	}
-	if !owner.Resolved() {
-		owner, _, _ = v.ResolveNavOwner(from, simulation.NavOwner{})
-	}
-	stand := v.standForOwner(owner)
-	if stand == nil {
-		return from
-	}
-	grid := worldgeom.ExpandGrid(worldgeom.RegionXZ{RegionID: from.RegionID, X: from.X, Z: from.Z})
-	x, z := stand.local(grid.X, grid.Z)
-	nx, nz := ownedCellStart(stand.mesh, stand.cellIndex, x, z)
-	if nx == x && nz == z {
-		return from
-	}
-	c, s := math.Cos(stand.placement.yaw), math.Sin(stand.placement.yaw)
-	from.X += c*(nx-x) - s*(nz-z)
-	from.Z += s*(nx-x) + c*(nz-z)
-	return from
+	return outdoorPlane{services}.ownedStart(from, owner)
 }

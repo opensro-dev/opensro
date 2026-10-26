@@ -34,16 +34,13 @@ func (v *WaterValidator) PlanMonsterPath(from, goal monster.Pose) *monster.Navig
 /*
 ================
 monsterPathHeightAt
+
+The height of a monster path's sample at chord parameter t, by the
+plane the sample is on (pathHeightOnPlane, plane_height.go).
 ================
 */
 func (v *WaterValidator) monsterPathHeightAt(t float64, p monster.Pose, walk *navWalk) (float64, bool) {
-	if simulation.IsDungeonRegion(p.RegionID) {
-		return v.dungeonSpawnHeightAt(p.RegionID, p.X, p.Y, p.Z)
-	}
-	if y, ok := walk.heightAt(t); ok {
-		return y, true
-	}
-	return v.TerrainHeightAt(p.RegionID, p.X, p.Z)
+	return pathHeightOnPlane(v, t, p, walk)
 }
 
 /*
@@ -52,7 +49,8 @@ PlanMonsterPathFrom
 
 PlanMonsterPathFrom plans from the monster's retained surface owner
 (monster.MoverState.LiveNavOwner): the native mover walks from its stored
-source cell (QueryMovement 0x98B300) and never re-guesses it from height.
+source cell (the native movement query) and never re-guesses it from
+height.
 The returned path carries the walked owners so the next plan can do the same.
 ================
 */
@@ -91,7 +89,24 @@ func (v *WaterValidator) planMonsterPathFrom(from monster.Pose, fromOwner simula
 		}
 		return p.Y, true
 	}
-	return monster.NewNavigationPath(from, goal, rest, report.NativeResult, height).WithOwners(walk.spans()), report.Work
+	return monster.NewNavigationPath(from, goal, rest, report.NativeResult, height).WithOwners(pathOwnerSpans(walk, report)), report.Work
+}
+
+/*
+================
+pathOwnerSpans
+
+The owner spans a monster path carries: the owner walk's, and on the cave
+plane, which walks no surface owners, the rest's dungeon owner over the
+whole chord (#1727). The cell-by-cell spans arrive with the native
+dungeon walk (#1728).
+================
+*/
+func pathOwnerSpans(walk *navWalk, report ClipReport) []simulation.NavOwnerSpan {
+	if spans := walk.spans(); len(spans) > 0 || report.RestOwner.Kind != simulation.NavOwnerDungeon {
+		return spans
+	}
+	return []simulation.NavOwnerSpan{{From: 0, To: 1, Owner: report.RestOwner}}
 }
 
 /*

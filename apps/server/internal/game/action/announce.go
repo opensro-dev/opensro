@@ -10,9 +10,16 @@ GameWorld's Nomad job turns them on:
 	SRO_ANNOUNCE_SOX_DROP  a seal drop notice, worded by its tier (#1640;
 	                       sealDropText: the Sun's line is the loudest)
 	SRO_ANNOUNCE_PLUS      "<player> advanced <item> to +N" (N >= 7)
+	SRO_ANNOUNCE_PLUS_TIERS  the plus line leads "Great success!" at +10
+	                       and "LEGENDARY!" at +11 and above (#1739)
 	SRO_ANNOUNCE_JOB_KILL  "[<killer alias>] killed [<victim alias>]" (job aliases, never character names)
 	SRO_ANNOUNCE_MOST_WANTED  "[<alias>] is MOST WANTED LV <N>" on a new wanted level, and
 	                          "[<killer alias>] claimed bounty of [<victim alias>] MOST WANTED LV <N>"
+	SRO_ALCHEMY_BREAK_NOTICE  "<alias> broke <item>" when a reinforcement destroys the
+	                          item of a character who opted in on the account page
+	                          (#1738, #1604 P7.2); no alias shows "a player",
+	                          never a character name, and one character is
+	                          rate-capped on top of the per-minute shard cap.
 
 A notice is the native notification packet the operator notices use
 (wire.NotificationFrame), sent to every session of the division and kept
@@ -51,12 +58,18 @@ import (
 const (
 	EnvAnnounceSoxDrop = "SRO_ANNOUNCE_SOX_DROP"
 	EnvAnnouncePlus    = "SRO_ANNOUNCE_PLUS"
-	EnvAnnounceJobKill = "SRO_ANNOUNCE_JOB_KILL"
+	// EnvAnnouncePlusTiers tiers the plus notice's lead word (#1739).
+	EnvAnnouncePlusTiers = "SRO_ANNOUNCE_PLUS_TIERS"
+	EnvAnnounceJobKill   = "SRO_ANNOUNCE_JOB_KILL"
 	// EnvJobKillNoticeRepeat announces every kill of a pair (no window).
 	EnvJobKillNoticeRepeat = "SRO_JOB_KILL_NOTICE_REPEAT"
 	// EnvAnnounceMostWanted announces wanted levels and claimed bounties
 	// (owner decision 2026-10-15, for the balance advisor).
 	EnvAnnounceMostWanted = "SRO_ANNOUNCE_MOST_WANTED"
+	// EnvAlchemyBreakNotice announces an opted-in character's destroyed
+	// reinforcement item by job alias (owner-approved vote 2026-10-26,
+	// #1604 P7.2 / #1738).
+	EnvAlchemyBreakNotice = "SRO_ALCHEMY_BREAK_NOTICE"
 )
 
 const (
@@ -70,6 +83,15 @@ const (
 	// announcePlusMin is the lowest plus a reinforcement notice announces
 	// (owner decision 2026-10-18: +7 and above, with no upper ceiling).
 	announcePlusMin = 7
+	// breakNoticePerCharacterMs is #1738's per-character window on top of
+	// the break kind's per-minute shard cap: one character's repeated
+	// breaks show at most one notice per ten minutes.
+	breakNoticePerCharacterMs = 10 * 60_000
+	// announcePlusGreatAt is the plus whose tiered notice leads
+	// "Great success!"; from announcePlusLegendaryAt it leads
+	// "LEGENDARY!" (#1739, owner decision 2026-10-26).
+	announcePlusGreatAt     = 10
+	announcePlusLegendaryAt = 11
 )
 
 // sealCodenameSuffix marks a v1.150 rare (Seal of Star/Moon/Sun) item.
@@ -95,6 +117,9 @@ const (
 	// announceMostWanted has its own per-minute bucket, so a run of wanted
 	// notices never starves the kill notices; it shares their channel.
 	announceMostWanted
+	// announceBreak has its own per-minute bucket and its own channel, so
+	// a run of breaks never starves the other notices.
+	announceBreak
 	announceKinds
 )
 
@@ -108,8 +133,11 @@ JobKillRepeat drops the pair window (EnvJobKillNoticeRepeat).
 */
 type Announcements struct {
 	SoxDrop, Plus, JobKill bool
+	PlusTiers              bool
 	JobKillRepeat          bool
 	MostWanted             bool
+	// Break announces an opted-in character's destroyed item (#1738).
+	Break bool
 }
 
 /*
@@ -125,8 +153,9 @@ func AnnouncementsFromEnv() Announcements {
 		}
 		return false
 	}
-	return Announcements{SoxDrop: on(EnvAnnounceSoxDrop), Plus: on(EnvAnnouncePlus), JobKill: on(EnvAnnounceJobKill),
-		JobKillRepeat: on(EnvJobKillNoticeRepeat), MostWanted: on(EnvAnnounceMostWanted)}
+	return Announcements{SoxDrop: on(EnvAnnounceSoxDrop), Plus: on(EnvAnnouncePlus), PlusTiers: on(EnvAnnouncePlusTiers),
+		JobKill: on(EnvAnnounceJobKill), JobKillRepeat: on(EnvJobKillNoticeRepeat), MostWanted: on(EnvAnnounceMostWanted),
+		Break: on(EnvAlchemyBreakNotice)}
 }
 
 /*
@@ -142,6 +171,10 @@ type announcer struct {
 	feed    []announcedLine
 	windows map[announceWindowKey][]int64
 	pairs   map[string]int64
+	// breaks is #1738's per-character window: division and character name
+	// to the last break notice's time. The name keys the window only; it
+	// never leaves the server (the notice names the alias or "a player").
+	breaks map[string]int64
 }
 
 type announceWindowKey struct {
@@ -189,10 +222,14 @@ func (rt *Runtime) announce(division string, kind announceKind, text string, lin
 	a.windows[key] = append(recent, nowMs)
 	text = clampNotice(text)
 	// Port-only: each kind has its own channel, so a player can hide it
-	// (wire.JobKillNoticeChannel, wire.DropPlusNoticeChannel).
+	// (wire.JobKillNoticeChannel, wire.DropPlusNoticeChannel,
+	// wire.BreakNoticeChannel).
 	frame := wire.DropPlusNotificationFrame(text, link)
-	if kind == announceJobKill || kind == announceMostWanted {
+	switch kind {
+	case announceJobKill, announceMostWanted:
 		frame = wire.JobKillNotificationFrame(text)
+	case announceBreak:
+		frame = wire.BreakNotificationFrame(text)
 	}
 	frames := make([]simulation.Frame, 0, 2)
 	for _, ref := range rt.itemReferencesByID([]uint32{refObjID}) {
@@ -343,10 +380,35 @@ func sealDropText(player, itemName string, tier int, sealed bool, monster string
 
 /*
 ================
+plusNoticeLead
+
+The louder lead a tiered plus notice opens with (#1739, owner decision
+2026-10-26): "Great success!" at +10, "LEGENDARY!" at +11 and above.
+Below +10, or with the tiers off, there is no lead, so the plain line
+stays byte for byte. Port-only, not native.
+================
+*/
+func plusNoticeLead(plus uint8, tiers bool) string {
+	if !tiers {
+		return ""
+	}
+	switch {
+	case plus >= announcePlusLegendaryAt:
+		return "LEGENDARY! "
+	case plus >= announcePlusGreatAt:
+		return "Great success! "
+	}
+	return ""
+}
+
+/*
+================
 Runtime.announcePlus
 
 Item 2: a reinforcement that succeeded into +7 or above, after its commit,
-naming a sealed item's seal as the drop notice does.
+naming a sealed item's seal as the drop notice does. With the plus tiers
+on, +10 and above lead louder (plusNoticeLead); the line's seal colour
+rides the item link as before, tiers or not.
 ================
 */
 func (rt *Runtime) announcePlus(division, player string, outcome alchemy.Outcome, nowMs int64) {
@@ -366,15 +428,99 @@ func (rt *Runtime) announcePlus(division, player string, outcome alchemy.Outcome
 				}
 			}
 		}
-		text := fmt.Sprintf("%s advanced %s%s to +%d", player, name, seal, item.Plus)
+		lead := plusNoticeLead(item.Plus, rt.Announce.PlusTiers)
+		text := lead + fmt.Sprintf("%s advanced %s%s to +%d", player, name, seal, item.Plus)
 		// The seal is the part to give up: clamping would cut the plus off
-		// the end instead.
+		// the end instead. A tier lead is given up next, for the same reason.
 		if len(utf16.Encode([]rune(text))) > noticeMaxUnits {
+			text = lead + fmt.Sprintf("%s advanced %s to +%d", player, name, item.Plus)
+		}
+		if lead != "" && len(utf16.Encode([]rune(text))) > noticeMaxUnits {
 			text = fmt.Sprintf("%s advanced %s to +%d", player, name, item.Plus)
 		}
 		rt.announce(division, announcePlus, text, wire.NoticeLink{Player: player, Body: item.Body().Encode()}, item.RefObjID, nowMs)
 		return
 	}
+}
+
+/*
+================
+Runtime.breakNoticeQuiet
+
+Whether this character's last break notice is at least
+breakNoticePerCharacterMs old, recording it when so (#1738: the
+per-character cap under the break kind's per-minute shard cap).
+================
+*/
+func (rt *Runtime) breakNoticeQuiet(division, name string, nowMs int64) bool {
+	a := &rt.announcer
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.breaks == nil {
+		a.breaks = map[string]int64{}
+	}
+	key := division + "\x00" + name
+	if at, seen := a.breaks[key]; seen && nowMs-at < breakNoticePerCharacterMs {
+		return false
+	}
+	if len(a.breaks) >= jobKillPairPrune {
+		for key, at := range a.breaks {
+			if nowMs-at >= breakNoticePerCharacterMs {
+				delete(a.breaks, key)
+			}
+		}
+	}
+	a.breaks[key] = nowMs
+	return true
+}
+
+/*
+================
+Runtime.announceBreak
+
+#1738 (port-only, not native; owner-approved vote 2026-10-26, #1604
+P7.2): a reinforcement that destroyed the item, after its commit, when
+the shard flag is on AND the character opted in on the account page
+(character.BreakNotice). The notice names the character's job alias -
+set or not, worn or not; alchemy happens in town, out of the suit - or
+"a player" when they set none, never the character name, and links
+nothing, so the alias cannot lead to a character (the job-kill notice's
+rule). The destroyed item is named by its reference name and seal, as
+the plus notice names it; codename is the item the outcome destroyed,
+read from the bag before the commit because a destroyed item is not in
+outcome.Items. A notice only: the break's odds and outcome are the
+reinforcement's own, untouched.
+================
+*/
+func (rt *Runtime) announceBreak(division string, character *enterworld.Character, codename string, outcome alchemy.Outcome, nowMs int64) {
+	if !rt.Announce.Break || character == nil || !character.BreakNotice {
+		return
+	}
+	if outcome.Success || !outcome.Destroyed {
+		return
+	}
+	if !rt.breakNoticeQuiet(division, character.Name, nowMs) {
+		return
+	}
+	name, seal := codename, ""
+	if items := rt.deps.ItemReferences(); items != nil {
+		if ref, found := items.ItemRefByCodename(codename); found && ref.Name != "" {
+			name = ref.Name
+			if tier, sealed := enterworld.EquipmentSeal(ref); sealed {
+				seal = " (" + sealNoticeNames[tier] + ")"
+			}
+		}
+	}
+	who := strings.TrimSpace(character.Job.Alias)
+	if who == "" {
+		who = "a player"
+	}
+	text := fmt.Sprintf("%s broke %s%s", who, name, seal)
+	// The seal is the part to give up, as in the plus notice.
+	if len(utf16.Encode([]rune(text))) > noticeMaxUnits {
+		text = fmt.Sprintf("%s broke %s", who, name)
+	}
+	rt.announce(division, announceBreak, text, wire.NoticeLink{}, 0, nowMs)
 }
 
 // jobNames are the dressed jobs' names (domain.JobTrader/Thief/Hunter).

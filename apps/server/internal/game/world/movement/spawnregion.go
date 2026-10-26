@@ -22,22 +22,16 @@ SpawnRegionAvailable
 ================
 */
 func (v *WaterValidator) SpawnRegionAvailable(regionID uint16) bool {
-	if simulation.IsDungeonRegion(regionID) {
-		v.dungeonSpawnOnce.Do(func() {
-			v.dungeonSpawnSurfaces = v.loadDungeonSpawnSurfaces()
-		})
-		return v.dungeonSpawnSurfaces[regionID] != nil
-	}
-	_, _, available := v.gridParamsForRegion(regionID)
-	return available
+	return v.validatorPlanes().spawnRegionAvailable(regionID)
 }
 
 /*
 ================
 ConstrainCompanionSpawn
 
-4FBC34 supplies no clipped-result output to 5F6EB0. A clipped move therefore
-keeps the navigation endpoint; a blocked move returns to the owner (5F70FF).
+The companion-creation path supplies no clipped-result output to the
+monster spawn. A clipped move therefore keeps the navigation endpoint;
+a blocked move returns to the owner.
 Player-request endpoint refusal is a different contract and must not replace
 this creation policy. Missing port assets fail closed at the admitted owner.
 ================

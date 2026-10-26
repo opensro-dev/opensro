@@ -1,5 +1,6 @@
 import type {GuideArticle} from './guide-catalog';
 import {guideTokens} from './guide-content';
+import {NATIVE_LEVEL_CAP} from '../gameplay/level-cap';
 import type {UiQuad} from '@/engine/contracts/ui';
 
 interface QuestRecord {readonly id:number;readonly symbol:string;readonly level:number;readonly contentKey:string;readonly prerequisites:readonly number[];}
@@ -9,11 +10,11 @@ export interface QuestGuideRow extends GuideArticle {readonly color:UiQuad['colo
 function record(v:unknown):v is Record<string,unknown>{return typeof v==='object'&&v!==null&&!Array.isArray(v);}
 function id(v:unknown):v is number{return typeof v==='number'&&Number.isSafeInteger(v)&&v>0;}
 
-export function decodeQuestGuide(guide:unknown,quests:unknown):QuestGuideCatalog{
+export function decodeQuestGuide(guide:unknown,quests:unknown,levelCap:number=NATIVE_LEVEL_CAP):QuestGuideCatalog{
  if(!record(guide)||!Array.isArray(guide.rows)||!record(quests)||!Array.isArray(quests.guideRecords)||!record(quests.guideTextEntries))throw Error('Missing quest guide metadata');
  const records:QuestRecord[]=[],articles:QuestArticle[]=[],ids=new Set<number>();
  for(const row of quests.guideRecords){
-  if(!record(row)||!id(row.id)||ids.has(row.id)||typeof row.symbol!=='string'||!row.symbol||typeof row.contentKey!=='string'||typeof row.level!=='number'||!Number.isInteger(row.level)||row.level<0||row.level>90||!Array.isArray(row.prerequisites)||!row.prerequisites.every(id))throw Error('Invalid quest guide record');
+  if(!record(row)||!id(row.id)||ids.has(row.id)||typeof row.symbol!=='string'||!row.symbol||typeof row.contentKey!=='string'||typeof row.level!=='number'||!Number.isInteger(row.level)||row.level<0||row.level>levelCap||!Array.isArray(row.prerequisites)||!row.prerequisites.every(id))throw Error('Invalid quest guide record');
   records.push({id:row.id,symbol:row.symbol,contentKey:row.contentKey,level:row.level,prerequisites:[...row.prerequisites]});ids.add(row.id);
  }
  for(const row of records)if(row.prerequisites.some(p=>!ids.has(p)))throw Error('Missing prerequisite quest record');

@@ -25,7 +25,7 @@ func (ops *MonsterMoverOps) planSegment(instance monster.Instance, mover monster
 	}
 	goal.X, goal.Z = math.Round(goal.X), math.Round(goal.Z)
 	goal = normalizeMonsterPose(goal)
-	live := mover.LivePoseAt(now, ops.TerrainHeight)
+	live := mover.LivePoseAt(now, ops.GroundHeight)
 	if planarDistance(live, goal) < .01 {
 		mover.CancelNavigation()
 		next, frames := ops.planDirectSegment(instance, mover, goal, speed, channel, now)
@@ -59,7 +59,7 @@ func (ops *MonsterMoverOps) planSegment(instance monster.Instance, mover monster
 		return mover, nil // same validated leg; no packet or geometry refresh
 	}
 	if !ready {
-		route := ops.PlanRoute(live, goal)
+		route := ops.PlanRoute(live, mover.LiveNavOwner(now), goal)
 		ops.Navigation.plan(callerForMode(mover.Mode()), route)
 		if route == nil || route.Status() != monster.NavigationRouteReady || route.Len() == 0 {
 			return ops.waitForNavigation(instance.Gid, mover, live, goal, speed, settledFrames, now)

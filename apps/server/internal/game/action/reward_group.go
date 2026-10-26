@@ -177,7 +177,7 @@ func withinPartyRewardRange(a, b simulation.Spawn) bool {
 		return false
 	}
 	dx, dz := float64(float32(b.X))-float64(float32(a.X)), float64(float32(b.Z))-float64(float32(a.Z))
-	if !worldgeom.IsDungeonRegion(a.RegionID) {
+	if simulation.PlaneKindOf(a.RegionID) == simulation.PlaneOutdoor {
 		dx += float64(worldgeom.SectorX(b.RegionID)-worldgeom.SectorX(a.RegionID)) * 1920
 		dz += float64(worldgeom.SectorY(b.RegionID)-worldgeom.SectorY(a.RegionID)) * 1920
 	}

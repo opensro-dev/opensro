@@ -16,9 +16,9 @@ MovementValidator precedent). Two things are deliberately not a plane
 service: the tactics choice (which pursuit routine an actor runs is an AI
 decision the server takes once, at spawn, from the plane's kind) and the interest
 buckets (pure position arithmetic, mover_interest_index.go). The ground
-height joins with its first migrated caller: outdoors it must be the
-walkable surface nearest the caller (a deck or a bridge), not bare terrain,
-and that needs its own deck parity probe (#1649 review).
+height joined as HeightAt with the monster tick's live poses (#1695): the
+walkable surface nearest the caller (a deck or a bridge outdoors, the
+caller's own cave floor inside), never the bare terrain under a deck.
 
 ===========================================================================
 */
@@ -28,6 +28,24 @@ import (
 	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/monster"
 )
+
+// DungeonSectorBit marks dungeon-plane region ids (moved from
+// simulation.go, #1764: the plane owner is the one place outside worldgeom
+// that names the bit).
+const DungeonSectorBit uint16 = worldgeom.DungeonRegionBit
+
+/*
+================
+IsDungeonRegion
+
+Whether the region id carries the dungeon plane bit, server.mjs
+isMissionDungeonRegion. Kept for the callers outside the simulation that
+still test it; inside, PlaneKindOf names the plane.
+================
+*/
+func IsDungeonRegion(regionID uint16) bool {
+	return worldgeom.IsDungeonRegion(regionID)
+}
 
 /*
 ================
@@ -76,9 +94,16 @@ type Plane interface {
 	LineOfSight(from Spawn, fromOwner NavOwner, to Spawn) bool
 	// PlanPath is the walked path from the retained owner toward goal.
 	PlanPath(from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationPath
-	// NextWaypoint is the AI route toward goal: outdoors the direction-gate
-	// detour, in a cave the native region route (#1645).
-	NextWaypoint(from, goal monster.Pose) *monster.NavigationRoute
+	// NextWaypoint is the AI route toward goal from the mover's retained
+	// owner: outdoors the direction-gate detour, in a cave the native
+	// region route from the retained cell (#1645, #1732).
+	NextWaypoint(from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationRoute
+	// HeightAt is the walkable surface height at p on this plane,
+	// nearest the caller's own height: outdoors a deck or bridge over
+	// the bare terrain when the caller stands at its height, in a cave
+	// the floor nearest p's own height. ok is false when no surface
+	// data covers p; the caller keeps its previous height.
+	HeightAt(p Spawn) (float64, bool)
 	// Relative is the planar vector from -> to.
 	Relative(from, to worldgeom.RegionXZ) (dx, dz float64)
 	// SameNeighbourhood reports whether two regions are the same or adjacent

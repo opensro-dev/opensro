@@ -91,6 +91,13 @@ var Settings = []Setting{
 	{Env: "SRO_LEVEL_CAP", NomadVar: "level_cap", Default: "110", Catalogue: true},
 	// Port-only, not native: database-authored Alexandria field population.
 	{Env: "SRO_CAP110_MONSTERS", NomadVar: "cap110_monsters", Default: "off", Catalogue: true},
+	// Port-only, not native: the level-100 slice of that population,
+	// admitted for hunting separately (#1741); switches on with the
+	// cap-110 catalogue (#1607).
+	{Env: "SRO_CAP110_LEVEL100", NomadVar: "cap110_level100", Default: "off", Catalogue: true},
+	// Port-only, not native: degree-10/11 equipment set bonuses (#1747);
+	// the v1.150 client ships no set rows, so off is the native state.
+	{Env: "SRO_CAP110_SET_BONUSES", NomadVar: "cap110_set_bonuses", Default: "off", Catalogue: true},
 	// Port-only, not native: the Pharaoh Tomb 1-3 population and gates. Needs
 	// SRO_CAP110_MONSTERS (its equipment drops).
 	{Env: "SRO_PHARAOH_TOMB", NomadVar: "pharaoh_tomb", Default: "off", Catalogue: true},
@@ -111,6 +118,12 @@ var Settings = []Setting{
 	// Owner, 2026-10-15: a login inside a closed object (a tree trunk) is
 	// rescued to the nearest open ground.
 	{Env: "SRO_CLOSED_OBJECT_RESCUE", NomadVar: "closed_object_rescue", Default: "on"},
+	// Owner, 2026-10-26: the native cave route's doorway seam step (#1698):
+	// a short landing step that would stay short of the doorway rounds on
+	// toward it. Off is the native step.
+	{Env: "SRO_CAVE_SEAM_STEP", NomadVar: "cave_seam_step", Default: "on"},
+	{Env: "SRO_CAVE_MODERN_CHASE", NomadVar: "cave_modern_chase", Default: "on"},
+	{Env: "SRO_CAVE_OBSTACLE_ESCAPE", NomadVar: "cave_obstacle_escape", Default: "on"},
 	// Port-only, not native: the deep-water destination refusal. Off, as the
 	// original server; on, a character on a deep seabed was stuck there.
 	{Env: "SRO_DEEP_WATER_REFUSAL", NomadVar: "deep_water_refusal", Default: "off"},
@@ -167,7 +180,14 @@ var Settings = []Setting{
 	// Owner, 2026-10-25 (#1604 P9): the weekly seal board counts Star,
 	// Moon and Sun drops per job alias. Off is native: nothing counts.
 	{Env: "SRO_SEAL_BOARD", NomadVar: "seal_board", Default: "off"},
+	// Owner, 2026-10-26 (#1604 P13, #1691): the staff seal census counts
+	// seal items on the shard by degree and tier, name-free, staff-only.
+	// Off is native: the route does not exist.
+	{Env: "SRO_SEAL_CENSUS", NomadVar: "seal_census", Default: "off"},
 	{Env: "SRO_ANNOUNCE_PLUS", NomadVar: "announce_plus", Default: "on"},
+	// Owner, 2026-10-26 (#1739): the plus notice leads louder at +10 and
+	// +11 and above. Off is the plain line, byte for byte.
+	{Env: "SRO_ANNOUNCE_PLUS_TIERS", NomadVar: "announce_plus_tiers", Default: "off"},
 	{Env: "SRO_ANNOUNCE_JOB_KILL", NomadVar: "announce_job_kill", Default: "on"},
 	// Owner, 2026-10-15: every job kill of a pair is announced (no window).
 	{Env: "SRO_JOB_KILL_NOTICE_REPEAT", NomadVar: "job_kill_notice_repeat", Default: "on"},
@@ -182,6 +202,10 @@ var Settings = []Setting{
 	{Env: "SRO_CHAT_ACK_TIMEOUT_MS", NomadVar: "chat_ack_timeout_ms", Default: "10000"},
 	// Owner, 2026-10-15: Most Wanted levels and claimed bounties are announced.
 	{Env: "SRO_ANNOUNCE_MOST_WANTED", NomadVar: "announce_most_wanted", Default: "on"},
+	// Owner-approved vote, 2026-10-26 (#1604 P7.2 / #1738): an opted-in
+	// player's destroyed reinforcement item is announced by job alias.
+	// Off is native, in code and in the deployed default alike.
+	{Env: "SRO_ALCHEMY_BREAK_NOTICE", NomadVar: "alchemy_break_notice", Default: "off"},
 	// Owner, 2026-10-14: +10% party EXP and gold per thief (cap 50%).
 	{Env: "SRO_THIEF_PARTY_BONUS", NomadVar: "thief_party_bonus", Default: "on"},
 	// F10 trade group (game/tunables): the per-thief percent and its cap.

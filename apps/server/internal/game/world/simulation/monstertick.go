@@ -60,10 +60,13 @@ type MonsterMoverOps struct {
 	activity       *monsterActivitySnapshot
 	Monsters       *MonsterState
 	TacticsFor     monster.TacticsResolver
-	// TerrainHeight resolves the navmesh ground height for a candidate
-	// destination (movement TerrainHeightAt; nil = keep the anchor Y).
+	// GroundHeight resolves the walkable surface height at one pose on
+	// the mover's plane (Plane.HeightAt via wiring; #1695). The pose
+	// carries the caller height the plane's nearest-surface rule reads.
+	// Nil = keep the pose's own Y (the chord or anchor height), exactly
+	// the pre-wiring behaviour.
 	// Must be non-blocking: it reads preloaded region bundles.
-	TerrainHeight func(regionID uint16, x, z float64) (float64, bool)
+	GroundHeight func(pose monster.Pose) (float64, bool)
 	// Production supplies the same navigation owner for ALL monster legs.
 	// nil is reserved for geometry-free unit fixtures; an unavailable region
 	// is a nil RESULT and never authorizes a straight-line fallback.
@@ -73,7 +76,7 @@ type MonsterMoverOps struct {
 	// departs from the monster's own live pose uses it (planPath below).
 	PlanPathFrom func(from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationPath
 	// AI route policy, separate from raw clipping used by sight/help probes.
-	PlanRoute func(from, goal monster.Pose) *monster.NavigationRoute
+	PlanRoute func(from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationRoute
 	// Rand returns a uniform [0,1) sample (seam for deterministic tests).
 	Rand func() float64
 	// AttackPlan resolves one of RefObjChar's ten default-skill ids against
@@ -81,7 +84,8 @@ type MonsterMoverOps struct {
 	// while the mover approaches; zero chooses from the valid authored set.
 	// Retained-ID resolution receives a zero pick and must not reselect based
 	// on changed health/damage. New selections alone consume choice entropy,
-	// and they carry the target the weighted choice (561B00) measures.
+	// and they carry the target the native conditional-then-weighted
+	// choice measures.
 	AttackPlan func(instance monster.Instance, requestedSkillID uint32, pick AttackPick) (MonsterAttackPlan, bool)
 	// BasicAttack commits one monster->player hit and returns the same B245
 	// action bracket the browser already uses for player attacks.
@@ -143,11 +147,11 @@ func (ops *MonsterMoverOps) logScopeBudgetBreach(divisionID string, count int) {
 
 const (
 	// monsterMovementSourceTurnThreshold is the retail server's optional
-	// source-block gate for an already-moving entity. The v1.188
-	// EntityMovement_UpdateAndBroadcastB021 body normalizes the old and new
-	// directions, converts their dot product to an angular delta, and writes
-	// the source only when the delta is GREATER than qword[0x00b460e0]:
-	// 0.785398185253143 radians (Rizin 0x004b1109..0x004b118f).
+	// source-block gate for an already-moving entity. The reference
+	// server's movement broadcast normalizes the old and new
+	// directions, converts their dot product to an angular delta, and
+	// writes the source only when the delta is GREATER than
+	// 0.785398185253143 radians.
 	//
 	// This is version-adjacent server evidence applied to the byte-identical
 	// v1.150 client source block. It replaces the incorrect player-plane
@@ -181,17 +185,7 @@ to exactly themselves: ring math over the dungeon bit is meaningless.
 ==================
 */
 func RegionScopeRing(regionID uint16) []uint16 {
-	if IsDungeonRegion(regionID) {
-		return []uint16{regionID}
-	}
-	sx, sy := SectorX(regionID), SectorY(regionID)
-	ring := make([]uint16, 0, 9)
-	for dy := -1; dy <= 1; dy++ {
-		for dx := -1; dx <= 1; dx++ {
-			ring = append(ring, RegionIDForSectors(sx+dx, sy+dy))
-		}
-	}
-	return ring
+	return worldgeom.ScopeRing(regionID)
 }
 
 /*
@@ -268,11 +262,11 @@ type playerPose struct {
 	OwnerGid uint32
 	// Band is a companion's COS band (TypeID 4).
 	Band uint8
-	// JobState is a player's job state (CGObjPC_GetJobState 4DDC80, +0x30
-	// +0xF): the dressed job, 4 outside job mode (4E1120).
+	// JobState is a player's job state: the dressed job, 4 outside
+	// job mode.
 	JobState uint8
-	// Mounted is CGObjPC_IsMountedOnCOS (4DDCA0): whether the player is
-	// mounted on a COS when acquisition chooses a companion (547A46/547BEF/547EEF).
+	// Mounted: whether the player is mounted on a COS when
+	// acquisition chooses a companion.
 	Mounted bool
 }
 
@@ -501,11 +495,11 @@ func (ops *MonsterMoverOps) startWanderLeg(divisionID string, instance monster.I
 		return ops.Monsters.commitNavigation(divisionID, before, mover, frames)
 	}
 	// Nest containment, probe origin and movement goal are separate inputs.
-	live := mover.LivePoseAt(nowMs, ops.TerrainHeight)
+	live := mover.LivePoseAt(nowMs, ops.GroundHeight)
 	motion := monster.NativeWanderMotion(live.Heading, func() uint32 { return monster.SummonRandomWord(ops.rand()) })
 	if mover.ControllerGID() != 0 {
 		if controller, ok := ops.Monsters.Mover(divisionID, mover.ControllerGID()); ok {
-			motion = motion.TowardController(live, controller.LivePoseAt(nowMs, ops.TerrainHeight))
+			motion = motion.TowardController(live, controller.LivePoseAt(nowMs, ops.GroundHeight))
 		}
 	}
 	if ops.hasPlanner() {
@@ -524,69 +518,6 @@ func (ops *MonsterMoverOps) startWanderLeg(divisionID string, instance monster.I
 	mover.BehaviorDeadlineMs = nowMs + monster.NativeWanderDelayMs(func() uint32 { return monster.SummonRandomWord(ops.rand()) })
 	mover, frames := ops.planSegment(instance, mover, dest, instance.WalkSpeed(), wire.MoveStateWalk, nowMs)
 	return ops.Monsters.commitNavigation(divisionID, before, mover, frames)
-}
-
-// startReturnLeg uses the native movement-channel consumer (5489B0), not
-// the unrelated obstacle rotation sign at CTactics+164.
-/*
-================
-startReturnLeg
-================
-*/
-func (ops *MonsterMoverOps) startReturnLeg(divisionID string, instance monster.Instance, tactics monster.Tactics, mover monster.MoverState, event monster.MoverEvent, nowMs int64) []Frame {
-	before := ops.Monsters.prepareNavigation(divisionID, instance.Gid)
-	mover, frames := ops.planReturnLeg(instance, mover, event, nowMs)
-	return ops.Monsters.commitNavigation(divisionID, before, mover, frames)
-}
-
-/*
-================
-planReturnLeg
-================
-*/
-func (ops *MonsterMoverOps) planReturnLeg(instance monster.Instance, mover monster.MoverState, event monster.MoverEvent, nowMs int64) (monster.MoverState, []Frame) {
-	speed := instance.WalkSpeed()
-	channel := wire.MoveStateWalk
-	if instance.Nest.HasControls && monster.HomingRuns(instance.Ref.RunSpeed) {
-		speed, channel = instance.RunSpeed(), wire.MoveStateRun
-	}
-	live := mover.LivePoseAt(nowMs, ops.TerrainHeight)
-	mover.Pose = live
-	mustMoverTransition(&mover, event, 0)
-	mover.BehaviorDeadlineMs = 0
-	if instance.Nest.HasControls {
-		mover.HomingStartedMs = uint32(nowMs)
-		// 55A60E..55A63E: (effective sight / run speed) * 1000, truncate.
-		// A stationary actor cannot complete this travel-dependent gate.
-		mover.HomingAcquireAfterMs = ^uint32(0)
-		if monster.HomingRuns(instance.Ref.RunSpeed) {
-			mover.HomingAcquireAfterMs = uint32(float64(float32(instance.Nest.SightRange+instance.BodyRadius())) / float64(float32(instance.RunSpeed())) * 1000)
-		}
-	}
-	dest := anchorPose(instance)
-	if instance.Nest.HasControls {
-		dest = normalizeMonsterPose(monster.HomingCandidate(dest, live, float32(instance.Nest.Radius), instance.Ref, func() uint32 { return monster.SummonRandomWord(ops.rand()) }))
-		if ops.hasPlanner() {
-			// 545E14: clip from HOME, not the actor's current position. The
-			// anchor has no walked cell: the teleport rule resolves it.
-			path := ops.planPath(navReturn, anchorPose(instance), NavOwner{}, dest)
-			if path == nil {
-				if ops.PlanRoute != nil {
-					mover.SetNavigationMotion(speed, channel)
-					return ops.waitForNavigation(instance.Gid, mover, live, dest, speed, nil, nowMs)
-				}
-				if speed > 0 && planarDistance(live, dest) >= 0.01 {
-					mover.NoteMoveIssued(live, mover.InFlight(nowMs))
-					if mover.ArriveMs <= mover.DepartMs {
-						mover.NoteMoveStopped(live)
-					}
-				}
-				return ops.holdNavigation(instance.Gid, mover, live, nowMs)
-			}
-			dest = path.Rest()
-		}
-	}
-	return ops.planSegment(instance, mover, dest, speed, channel, nowMs)
 }
 
 /*
@@ -642,7 +573,7 @@ func (ops *MonsterMoverOps) planDirectSegment(instance monster.Instance, mover m
 	// whole units.
 	//
 	// Y is deliberately NOT quantised. The client re-resolves ground height
-	// per integrated step, so its true arrival height is the terrain under
+	// per integrated step, so its true arrival height is the surface under
 	// the arrival XZ rather than the goal's y; an integer y here would put
 	// the settle in a fight with that resolver. Re-sample at the quantised
 	// XZ instead - the ground under a rounded destination is not the ground
@@ -650,14 +581,15 @@ func (ops *MonsterMoverOps) planDirectSegment(instance monster.Instance, mover m
 	dest.X = math.Round(dest.X)
 	dest.Z = math.Round(dest.Z)
 	dest = normalizeMonsterPose(dest)
-	if !ops.hasPlanner() && ops.TerrainHeight != nil {
-		if y, ok := ops.TerrainHeight(dest.RegionID, dest.X, dest.Z); ok {
+	if !ops.hasPlanner() && ops.GroundHeight != nil {
+		if y, ok := ops.GroundHeight(dest); ok {
 			dest.Y = y
 		}
 	}
 
-	// Capture the old leg before replacing it. The v1.188 server's movement
-	// writer includes the live source only for a >45-degree discontinuity.
+	// Capture the old leg before replacing it. The reference server's
+	// movement writer includes the live source only for a >45-degree
+	// discontinuity.
 	// Shallow chase re-aims therefore preserve the client's PATH source cursor;
 	// reversals and hard cuts re-anchor that logical cursor at this live pose.
 	// This says nothing about animation playback: v1.150 sub_776200 re-enters
@@ -673,7 +605,7 @@ func (ops *MonsterMoverOps) planDirectSegment(instance monster.Instance, mover m
 	// Segment departure: `from` becomes mover.From - the interpolation BASE
 	// of the whole next segment - so a chord height here would propagate
 	// into every later scope-enter read (BUG-8 second injection path).
-	from := mover.LivePoseAt(nowMs, ops.TerrainHeight)
+	from := mover.LivePoseAt(nowMs, ops.GroundHeight)
 	goal := dest
 	moveIssued := planarDistance(from, goal) >= 0.01 && speed > 0
 	if moveIssued {
@@ -775,8 +707,8 @@ func (ops *MonsterMoverOps) holdNavigation(gid uint32, mover monster.MoverState,
 ==================
 monsterMovementSourceRequired
 
-monsterMovementSourceRequired mirrors the v1.188 GameServer's positional
-movement source gate at 0x004b1109..0x004b118f. A settled entity's current
+monsterMovementSourceRequired mirrors the reference server's
+positional movement source gate. A settled entity's current
 facing is its last committed heading; an in-flight entity's facing is the
 old segment direction. Degenerate vectors source defensively because they
 cannot establish continuous steering.
@@ -849,7 +781,8 @@ planPath
 
 planPath plans from `from` walking from fromOwner. Legs departing from the
 monster's live pose pass mover.LiveNavOwner; a leg from the nest anchor
-passes the zero owner (native teleport rule, 545E14 clips from HOME).
+passes the zero owner (native teleport rule: the homing
+destination selection clips from HOME).
 ==================
 */
 func (ops *MonsterMoverOps) planPath(caller navCaller, from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationPath {
@@ -881,7 +814,8 @@ anchorPose
 */
 func anchorPose(instance monster.Instance) monster.Pose {
 	if instance.Nest.HasControls {
-		// 545F70/545C50 use CNest+10, not the randomized spawn candidate.
+		// The native home tests use the nest anchor, not the randomized
+		// spawn candidate.
 		// Using Spawn shifts the home boundary separately for every sibling.
 		return monster.Pose{RegionID: instance.Nest.RegionID, X: instance.Nest.X, Y: instance.Nest.Y, Z: instance.Nest.Z}
 	}
@@ -974,8 +908,9 @@ func (ops *MonsterMoverOps) idleDelayMs() int64 {
 sessionPlayerPose
 
 One combat-eligible session as the monster tick weighs it. Its job state
-is the native one (CGObjPC_GetJobState 4DDC80): the worn suit's job, else
-4, the state CGObjPC_InitPvpAndJobStateOnLoad (4E1120) sets first.
+is the native one (the job-state getter): the worn suit's job,
+else 4, the state the load-time job-state initializer sets
+first.
 ================
 */
 func sessionPlayerPose(session SessionSnapshot, nowMs int64) playerPose {

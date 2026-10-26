@@ -104,6 +104,10 @@ type Catalogs struct {
 	Items        enterworld.ItemRefSource
 	Skills       enterworld.SkillDataSource
 	MagicOptions enterworld.MagicOptionSource
+	// Sets is the port-only equipment set catalogue (setbonus.go). It
+	// is nil while SRO_CAP110_SET_BONUSES is off, and a nil source
+	// skips every set path so the off snapshot stays byte-identical.
+	Sets enterworld.SetCatalogueSource
 }
 
 // AttackRangeParameter is the attack-range keeper (CGObjChar_GetAttackRangeParam
@@ -189,6 +193,14 @@ func PlayerStatsWithModifiers(
 	if items == nil {
 		return Stats{}, Loadout{}, fmt.Errorf("combat: item reference source is unavailable")
 	}
+	// Set pre-pass: worn counts and active tiers are resolved before
+	// the stat loop because a broken piece counts toward its tier yet
+	// derives nothing itself (setbonus.go). Nil under the off flag.
+	var setByID map[int64]setGroupEffect
+	var setEffects []setGroupEffect
+	if catalogs.Sets != nil {
+		setByID, setEffects = activeSetEffects(character, items, catalogs.Sets)
+	}
 	var passiveWeaponKind uint8
 	var seenSlots [inventory.EquipmentSlotEnd]bool
 	for _, row := range character.MissionInventory {
@@ -252,10 +264,17 @@ func PlayerStatsWithModifiers(
 				parseErr,
 			)
 		}
+		// Option 389: the active tier's value joins this piece's own plus
+		// as one total opt level before derivation, so the piece's
+		// derived ranges scale with it (setbonus.go).
+		plus := uint8(clampInt64(row.Plus, 0, math.MaxUint8))
+		if effect, worn := setByID[ref.SetID]; worn && effect.reinforce > 0 {
+			plus = uint8(clampInt64(row.Plus+int64(effect.reinforce), 0, math.MaxUint8))
+		}
 		contribution, weapon, deriveErr := deriveItemStats(
 			ref,
 			varianceBits,
-			uint8(clampInt64(row.Plus, 0, math.MaxUint8)),
+			plus,
 		)
 		if deriveErr != nil {
 			return Stats{}, Loadout{}, deriveErr
@@ -301,6 +320,11 @@ func PlayerStatsWithModifiers(
 		return Stats{}, Loadout{}, err
 	}
 	writes = append(writes, avatarWrites...)
+	// Option 390's flat half rides the keeper like any other owner's
+	// writes, under each group's own source (setbonus.go).
+	for _, effect := range setEffects {
+		writes = append(writes, setResistWrites(effect)...)
+	}
 	// One rank selection feeds all three passive projections (learnedRankRows).
 	// Without learned skills or skill references the wrappers answer their
 	// empty or error results exactly as before.
@@ -324,6 +348,9 @@ func PlayerStatsWithModifiers(
 			return Stats{}, Loadout{}, err
 		}
 	}
+	// Option 390's percent half lands in the same buckets the learned
+	// real projection filed, after both rank branches converge.
+	applySetStatusResistance(&out.StatusResistance, setEffects)
 	out.SkillParameters = power
 	writes = append(writes, passives...)
 	// Source identity belongs to an application, not a parameter number. A

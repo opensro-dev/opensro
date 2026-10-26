@@ -44,7 +44,11 @@ func topologyMesh(west bool) *objectNavMesh {
 	if west {
 		a, b, cell = 3, 0, 1
 	}
-	return &objectNavMesh{vertices: []float32{0, 10, 0, 100, 10, 0, 100, 10, 100, 0, 10, 100}, cellA: []uint16{0, 0}, cellB: []uint16{1, 2}, cellC: []uint16{2, 3}, minX: 0, maxX: 100, minY: 10, maxY: 10, minZ: 0, maxZ: 100, outline: objectNavEdges{vertA: []uint16{a}, vertB: []uint16{b}, srcCell: []uint16{cell}, dstCell: []uint16{65535}, flags: []byte{8}}}
+	return &objectNavMesh{vertices: []float32{0, 10, 0, 100, 10, 0, 100, 10, 100, 0, 10, 100}, cellA: []uint16{0, 0}, cellB: []uint16{1, 2}, cellC: []uint16{2, 3}, minX: 0, maxX: 100, minY: 10, maxY: 10, minZ: 0, maxZ: 100, outline: objectNavEdges{vertA: []uint16{a}, vertB: []uint16{b}, srcCell: []uint16{cell}, dstCell: []uint16{65535}, flags: []byte{8}},
+		// The two triangles share the 0-2 diagonal as a passable
+		// internal edge, as every real mesh records its cell adjacency:
+		// the cell walk crosses between cells only through one (#1728).
+		internal: objectNavEdges{vertA: []uint16{0}, vertB: []uint16{2}, srcCell: []uint16{0}, dstCell: []uint16{1}, flags: []byte{4}}}
 }
 
 /*
@@ -78,7 +82,12 @@ func TestDungeonTopologyClipsAndTraverses(t *testing.T) {
 	if got := v.SpawnMoveTest(a, b).Result; got != monster.NavResultBlocked {
 		t.Fatalf("Unlinked spawn path admitted: %x", got)
 	}
-	if r := v.ClipMovementPath(a, b); r.Outcome != ClipBlocked || r.Rest.X != 99.82111358642578 || r.Rest.Z != 49.91055679321289 {
+	// The dead doorway stops the walk just inside the source block (the
+	// native contact rest, nudged into the approached cell). The start
+	// lies on the mesh's diagonal, which the native start handling moves
+	// toward its cell's centre first, so the rest is not on z 50 exactly.
+	if r := v.ClipMovementPath(a, b); r.Outcome != ClipBlocked || r.NativeResult != monster.NavResultBlocked ||
+		r.Rest.X < 99.5 || r.Rest.X >= 100 || math.Abs(r.Rest.Z-50) > .5 {
 		t.Fatalf("Unlinked crossing %+v", r)
 	}
 	b.RegionID = 0x8002
@@ -199,6 +208,21 @@ func TestLinkedLaneRescueAndDungeonObjects(t *testing.T) {
 	if r.Rest != from {
 		t.Fatal("Moved deeper into circle")
 	}
+	// Starting inside and heading in is refused where it stands with
+	// the blocked result (#1719), not clipped at the start point.
+	if r.Outcome != ClipBlocked || r.NativeResult&monster.NavResultBlocked == 0 {
+		t.Fatal("Start inside heading in must refuse with the blocked result")
+	}
+	// A chord with no x-extent in the block's frame is never
+	// circle-tested: the original's line form has no such line, so
+	// the disc does not stop it (#1719).
+	vertical := simulation.Spawn{RegionID: 0x8001, X: 60, Y: 10, Z: 10}
+	up := vertical
+	up.Z = 90
+	r = v.ClipMovementPath(vertical, up)
+	if r.Outcome != ClipArrived || r.Rest != up {
+		t.Fatalf("Vertical chord through the disc %+v", r)
+	}
 }
 
 /*
@@ -206,7 +230,11 @@ func TestLinkedLaneRescueAndDungeonObjects(t *testing.T) {
 TestPublishedDungeonPortalTraversal
 
 Verifies that every resolved room-to-room portal link across all published
-dungeon nav surfaces traverses cleanly with ClipArrived.
+dungeon nav surfaces traverses: each step (half a unit either side of the
+doorway) arrives, owned by the target room. A step shorter than five
+units settles at the doorway itself, as the original's query loop does
+(and the browser client's region-move continuation): the next step walks
+on from the landing cell (#1728).
 ================
 */
 func TestPublishedDungeonPortalTraversal(t *testing.T) {
@@ -243,8 +271,19 @@ func TestPublishedDungeonPortalTraversal(t *testing.T) {
 				a, b := point(p.placement, p.meshes[0], link.edge, region), point(target.placement, target.meshes[0], link.targetEdge, region)
 				r := v.ClipMovementPath(a, b)
 				total++
-				if r.Outcome != ClipArrived || math.Hypot(r.Rest.X-b.X, r.Rest.Z-b.Z) > .1 {
+				if r.Outcome != ClipArrived || r.NativeResult&0x10000001 != 0 {
 					t.Errorf("Portal %x/%d/%d failed: %+v", region, i, link.edge, r)
+				}
+				// Where the source room's mesh also covers b (overlapping
+				// rooms at the doorway) the step arrives without a hand-over.
+				if math.Hypot(r.Rest.X-b.X, r.Rest.Z-b.Z) <= .1 {
+					continue
+				}
+				if r.RestOwner.Kind != simulation.NavOwnerDungeon || int(r.RestOwner.Object.Object) != link.target {
+					t.Errorf("Portal %x/%d/%d settled outside the target room: %+v", region, i, link.edge, r)
+				}
+				if again := v.ClipMovementPathFrom(r.Rest, r.RestOwner, b); again.Outcome != ClipArrived || math.Hypot(again.Rest.X-b.X, again.Rest.Z-b.Z) > .1 {
+					t.Errorf("Portal %x/%d/%d: the step on from the doorway %+v", region, i, link.edge, again)
 				}
 			}
 		}

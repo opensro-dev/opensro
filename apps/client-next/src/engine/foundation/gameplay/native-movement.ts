@@ -10,8 +10,8 @@ sample, so predicted and received movement share one set of transitions.
 ===========================================================================
 */
 import type { Pose } from "@/engine/contracts/gameplay";
+import { planeKindOf } from "@/engine/foundation/world/plane";
 import {
-	isDungeonRegion,
 	planarDistance,
 	REGION_SIZE,
 	sameCoordinateSpace,
@@ -24,9 +24,12 @@ import {
 export { REGION_SIZE };
 // Heading words per full turn on the movement wire.
 export const HEADING_SCALE = 65535;
-// CPSMission_OnSkillNavResponse0xB738 (0x776200) divides the source-block
-// X/Z words by 10.0.
-const SOURCE_SCALE = 10;
+// Protocol 11 (#1744): the source block carries x/y/z as f32 after the
+// region word - SOURCE_WORD_BYTES is the whole block past its flag byte.
+// The retail parser (CPSMission_OnSkillNavResponse0xB738, 0x776200) read
+// x/z as i16 words divided by 10.0, a +-3276.7 range the tomb floors
+// overflow; the port's wire widened instead of omitting the block.
+const SOURCE_WORD_BYTES = 14;
 const DESTINATION_MODE = 1;
 const ANGULAR_MODE = 0;
 
@@ -127,14 +130,18 @@ export interface NativeMovement {
 ================
 decodeNativeMovement
 
-v1.150 0xB738, shared by remote motion and local server-driven movement.
+The 0xB738 acknowledgement, shared by remote motion and local
+server-driven movement. The mode arms are the v1.150 parser's; the
+source block is the protocol-11 form ([u16 region][f32 x][f32 y][f32 z],
+#1744), longer than the retail i16 x10 block - a protocol-10 tab fails
+the length check below and is refused at the door instead.
 ================
 */
 export function decodeNativeMovement( p: Uint8Array, current: Pose ): NativeMovement {
 	const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
 	if ( p.length < 9 || p[4]! > DESTINATION_MODE ) throw new Error( "Invalid movement broadcast" );
 	const angular = p[4] === ANGULAR_MODE, offset = angular ? 8 : 13;
-	if ( p.length <= offset || p[offset]! > 1 || p.length !== offset + 1 + (p[offset] ? 10 : 0) ) {
+	if ( p.length <= offset || p[offset]! > 1 || p.length !== offset + 1 + (p[offset] ? SOURCE_WORD_BYTES : 0) ) {
 		throw new Error( "Invalid movement source block" );
 	}
 	const sourced = p[offset] === 1;
@@ -142,9 +149,9 @@ export function decodeNativeMovement( p: Uint8Array, current: Pose ): NativeMove
 		{
 			...current,
 			regionId: v.getUint16( offset + 1, true ),
-			x: v.getInt16( offset + 3, true ) / SOURCE_SCALE,
-			y: v.getFloat32( offset + 5, true ),
-			z: v.getInt16( offset + 9, true ) / SOURCE_SCALE
+			x: v.getFloat32( offset + 3, true ),
+			y: v.getFloat32( offset + 7, true ),
+			z: v.getFloat32( offset + 11, true )
 		} :
 		current;
 	if ( !Number.isFinite( from.y ) ) throw new Error( "Invalid movement height" );
@@ -286,7 +293,7 @@ interpolateMovement
 */
 export function interpolateMovement( from: Pose, to: Pose, t: number ): Pose {
 	if ( !sameCoordinateSpace( from.regionId, to.regionId ) ) return from;
-	if ( isDungeonRegion( from.regionId ) ) {
+	if ( planeKindOf( from.regionId ) === "cave" ) {
 		return {
 			...to,
 			x: from.x + (to.x - from.x) * t,

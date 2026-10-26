@@ -32,6 +32,7 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/platform/economy"
 )
 
 // unlistedSettings are the shard settings the rules page leaves out, each
@@ -70,6 +71,9 @@ var unlistedSettings = map[string]string{
 	// Staff telemetry (#1639): name-free kill and EXP rates for the
 	// staff console; players never meet it.
 	action.EnvKillStats: "staff kill and EXP rate telemetry, not a rule players meet",
+	// Staff telemetry (#1691): name-free seal counts by degree and tier
+	// for the staff console; players never meet it.
+	economy.EnvSealCensus: "staff seal census telemetry, not a rule players meet",
 }
 
 /*
@@ -111,6 +115,14 @@ func publicRules() publicstats.RulesResponse {
 				Native: "The v1.150 monster population and equipment drop catalog.",
 				Now:    "Alexandria field monsters at levels 100-110 and database equipment drops through level 110.",
 				Why:    "An outdoor leveling route for the optional cap-110 expansion."},
+			{Flag: monster.EnvCap110Level100, On: monster.Cap110Level100Enabled(),
+				Native: "The expansion field population stands or falls as one switch.",
+				Now:    "Alexandria's level-100 field monsters are admitted for hunting; levels 101-110 follow the population switch.",
+				Why:    "Levels 95-99 gain a hunting ground at the level-100 monsters ahead of the full expansion."},
+			{Flag: enterworld.EnvCap110SetBonuses, On: enterworld.SetBonusesEnabled(),
+				Native: "The v1.150 client has no degree-10/11 equipment sets; a worn piece grants its own stats only.",
+				Now:    "Wearing 2, 4 or 6 pieces of one degree-11 set activates that tier - the highest met replaces the lower - reinforcing each worn piece and raising abnormal resistance.",
+				Why:    "Completes the optional cap-110 expansion's equipment sets."},
 			{Flag: monster.EnvPharaohTomb, On: monster.PharaohTombEnabled(),
 				Native: "There is no Pharaoh Tomb.",
 				Now:    "The Pharaoh Tombs open from Kings Valley, each a shared area of level 100-110 monsters and bosses.",
@@ -221,7 +233,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Owner decision: storage fills less with split stacks."},
 			{Flag: action.EnvReverseReturnMap, On: action.ReverseReturnMapFromEnv(),
 				Native: "The reverse return scroll offers the last recall point and the last death point.",
-				Now:    "It also offers town gates and unique monster areas on the map.",
+				Now:    "It also offers places on the map: the later client's own list when the server imported it, else town gates and unique monster areas.",
 				Why:    "Later clients offer a map choice; the destinations are places the original already sends players to."},
 			{Flag: enterworld.EnvHuntingGuide, On: enterworld.HuntingGuideFromEnv(),
 				Native: "The world map shows no monster information.",
@@ -330,6 +342,18 @@ func publicRules() publicstats.RulesResponse {
 				Native: "When a unique dies, the shard is told only who killed it.",
 				Now:    "Everyone who damaged it also sees the twelve players who did the most damage, with each one's share and party place, and their own place.",
 				Why:    "So every attacker sees what their part was. Off by default; the original notice alone is the native setting."},
+			{Flag: movement.EnvCaveSeamStep, On: movement.CaveSeamStepFromEnv(),
+				Native: "A monster chasing you through a cave can get stuck pacing at a few doorways.",
+				Now:    "It steps through those doorways and keeps following.",
+				Why:    "The original's whole-unit steps stop just short of a few doorways; the original step returns with one setting."},
+			{Flag: movement.EnvCaveModernChase, On: movement.CaveModernChaseFromEnv(),
+				Native: "A monster chasing you through a cave follows the original's room-by-room route, which can leave it pacing back and forth in some rooms.",
+				Now:    "It follows a modern path planner that finds the way through the rooms and corridors to you.",
+				Why:    "Owner-approved for gameplay: in tests the original route lost more chases; the original route returns with one setting."},
+			{Flag: movement.EnvCaveObstacleEscape, On: movement.CaveObstacleEscapeFromEnv(),
+				Native: "A monster standing inside the space of a cave pillar cannot step further in, which blocks two ramps in the Donwhang cave for chasing monsters.",
+				Now:    "A monster can walk out of a pillar's space in any direction; walking into one from outside is still blocked. Players' own walking is unchanged.",
+				Why:    "Owner-approved for gameplay: those ramps trapped chasing monsters; the original pillar test returns with one setting."},
 			{Flag: movement.EnvClosedObjectRescue, On: movement.ClosedObjectRescueFromEnv(),
 				Native: "A character that logs in inside a tree trunk or a rock stays there and cannot walk out.",
 				Now:    "Logging in inside one moves the character to the nearest open ground.",
@@ -377,6 +401,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Reinforcement results are private.",
 				Now:    "Everyone sees \"<player> advanced <item> (<seal>) to +N\" for +7 and above.",
 				Why:    "Requested for the beta; the original returns with one setting."},
+			{Flag: action.EnvAnnouncePlusTiers, On: action.AnnouncementsFromEnv().PlusTiers,
+				Native: "A +10 or +11 success reads like any other.",
+				Now:    "A +10 plus notice leads with \"Great success!\" and one of +11 or above with \"LEGENDARY!\"; +7 to +9 read as before.",
+				Why:    "Owner-approved (#1739); the plain lines return with one setting."},
 			{Flag: action.EnvAnnounceJobKill, On: action.AnnouncementsFromEnv().JobKill,
 				Native: "Job kills are not announced.",
 				Now:    "Everyone sees which job killed which (\"Thief killed Trader\"), no names.",
@@ -385,6 +413,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Most Wanted levels and bounties are not announced.",
 				Now:    "Everyone sees a player's new Most Wanted level and each claimed bounty, by job alias, no names.",
 				Why:    "Requested for the beta; the original returns with one setting."},
+			{Flag: action.EnvAlchemyBreakNotice, On: action.AnnouncementsFromEnv().Break,
+				Native: "An item destroyed by reinforcement is not announced.",
+				Now:    "Everyone sees the destroyed item of a player who opted in on the account page, named by job alias (\"a player\" when they set none), never by character name.",
+				Why:    "Owner-approved vote (#1604 P7.2); the original silence returns with one setting, and the opt-in stays off until a player turns it on."},
 			{Flag: action.EnvJobKillNoticeRepeat, On: action.AnnouncementsFromEnv().JobKillRepeat,
 				Native: fmt.Sprintf("The same two players' job kills are announced at most once every %d minutes.",
 					settings.Int(tunables.JobKillRepeatMinutes)),

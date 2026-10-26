@@ -117,13 +117,20 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 		// region route inside a dungeon floor (#1645/#1646).
 		planes := movement.NewPlanes(game.movement, game.water)
 		ticker.Monsters = &simulation.MonsterMoverOps{
-			Navigation:    navigation,
-			Monsters:      game.deps.MonsterState,
-			TacticsFor:    monster.ResolveTactics,
-			TerrainHeight: game.water.TerrainHeightAt,
-			PlanPath:      game.water.PlanMonsterPath,
-			PlanPathFrom:  game.water.PlanMonsterPathFrom,
-			PlanRoute: func(from, goal monster.Pose) *monster.NavigationRoute {
+			Navigation: navigation,
+			Monsters:   game.deps.MonsterState,
+			TacticsFor: monster.ResolveTactics,
+			// #1695: live heights come from the plane that owns the
+			// region (the deck/cave-floor surface nearest the caller),
+			// not the bare terrain sampler.
+			GroundHeight: func(pose monster.Pose) (float64, bool) {
+				return planes.For(pose.RegionID).HeightAt(simulation.Spawn{
+					RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z,
+				})
+			},
+			PlanPath:     game.water.PlanMonsterPath,
+			PlanPathFrom: game.water.PlanMonsterPathFrom,
+			PlanRoute: func(from monster.Pose, fromOwner simulation.NavOwner, goal monster.Pose) *monster.NavigationRoute {
 				plane, ok := planes.Between(from.RegionID, goal.RegionID)
 				if !ok {
 					// No plane owns a route across the outdoor/cave
@@ -131,7 +138,7 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 					// does for any unresolved route.
 					return monster.UnresolvedNavigationRoute(goal, monster.NavigationRouteBlocked)
 				}
-				return plane.NextWaypoint(from, goal)
+				return plane.NextWaypoint(from, fromOwner, goal)
 			},
 			MessageBlockAt: game.water.MessageBlockAt,
 			Rand:           rand.Float64,

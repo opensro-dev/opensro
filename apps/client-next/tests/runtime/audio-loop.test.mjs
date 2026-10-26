@@ -139,3 +139,73 @@ test("audio owner bounds ambient and spatial loops, leaves one-shots alone, and 
 	audio.dispose();
 	assert.ok( sources[3].stopped );
 });
+
+test("playByName resolves an authored label and stays silent on a miss", async t => {
+	const requests = new Map(), requestedPaths = [];
+	let id = 0;
+	const node = () => ({ connect() {}, disconnect() {} });
+	class Context {
+		state = "running";
+		destination = {};
+		listener = { positionX: {}, positionY: {}, positionZ: {} };
+		resume() {
+			return Promise.resolve();
+		}
+		close() {
+			return Promise.resolve();
+		}
+		decodeAudioData() {
+			return Promise.resolve( { length: 1, sampleRate: 48000, numberOfChannels: 1 } );
+		}
+		createBufferSource() {
+			return {
+				...node(),
+				start() {},
+				stop() {}
+			};
+		}
+		createGain() {
+			return { ...node(), gain: {} };
+		}
+		createPanner() {
+			return { ...node(), positionX: {}, positionY: {}, positionZ: {} };
+		}
+	}
+	const originalContext = globalThis.AudioContext;
+	globalThis.AudioContext = Context;
+	t.after( () => {
+		if ( originalContext ) globalThis.AudioContext = originalContext;
+		else delete globalThis.AudioContext;
+	} );
+	const assets = {
+		available: () => 4,
+		request( path ) {
+			requests.set( ++id, path );
+			requestedPaths.push( path );
+			return id;
+		},
+		take( takeId ) {
+			if ( !requests.delete( takeId ) ) return null;
+			return { kind: "bytes", buffer: new ArrayBuffer( 1 ) };
+		},
+		cancel( takeId ) {
+			requests.delete( takeId );
+		}
+	};
+	const audio = createAudio( assets, "http://fixture.invalid", createPresentationRandom( 1 ) );
+	t.after( () => audio.dispose() );
+	audio.unlock();
+	audio.playByName( "SND_BUTTON_CLICK" );
+	audio.playByName( "SND_NO_SUCH_LABEL" );
+	// An item label's files are chosen per item type; the name alone
+	// cannot choose one, so it stays silent too.
+	audio.playByName( "SND_EQUIP" );
+	audio.step( 0, [ 0, 0, 0 ] );
+	await new Promise( setImmediate );
+	audio.step( .01, [ 0, 0, 0 ] );
+	assert.equal( requestedPaths.length, 1, "exactly the named label was requested: " + requestedPaths.join( "," ) );
+	assert.ok(
+		requestedPaths[0].endsWith( "/uibutton_a.wav" ) || requestedPaths[0].endsWith( "/uibutton_b.wav" ),
+		"the button label resolved to a button file: " + requestedPaths[0]
+	);
+});

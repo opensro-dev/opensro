@@ -34,7 +34,7 @@ func TestNavigationMetricsCountPlansAndClipsByCaller(t *testing.T) {
 			corner := mover.Pose
 			corner.X += 60
 			corner.Z += 32
-			ops.PlanRoute = func(from, to monster.Pose) *monster.NavigationRoute {
+			ops.PlanRoute = func(from monster.Pose, _ NavOwner, to monster.Pose) *monster.NavigationRoute {
 				return monster.NewNavigationRoute(to, []monster.Pose{corner, to}).WithProbes(17)
 			}
 			if _, frames := ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, 10000); len(frames) == 0 {

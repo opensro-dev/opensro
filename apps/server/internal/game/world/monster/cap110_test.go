@@ -81,6 +81,74 @@ func TestCap110PopulationJoinsInstalledReferences(t *testing.T) {
 
 /*
 ================
+TestCap110Level100SliceFollowsItsFlag
+
+#1741: with SRO_CAP110_LEVEL100 off, the level-100 rows are held back
+(validated, not joined) while the rest of the population loads; on,
+they join. A reference outside the 100-110 window is a bad row in
+both settings, and duplicate nest ids fail across the held-back slice.
+================
+*/
+func TestCap110Level100SliceFollowsItsFlag(t *testing.T) {
+	at100 := MonsterRef{RefObjID: 2001, Codename: "MOB_SD_AT100", Level: 100}
+	at105 := MonsterRef{RefObjID: 2002, Codename: "MOB_SD_AT105", Level: 105}
+	template := TemplateFromParts(map[uint32]MonsterRef{at100.RefObjID: at100, at105.RefObjID: at105}, nil)
+	row := func(ref MonsterRef, nestID uint32) cap110Nest {
+		return cap110Nest{Codename: ref.Codename, NestID: nestID, RegionID: 0x534b, X: 100, Y: 25, Z: 200,
+			Radius: 350, GenerateRadius: 300, MaxCount: 4, RespawnDelayMinSec: 8, RespawnDelayMaxSec: 10, Respawn: true,
+			Controls: TacticsControls{ObjectID: 9999, ID: 77, ChangeTarget: 2, SightRange: 130}}
+	}
+	marshal := func(rows []cap110Nest) []byte {
+		data, err := json.Marshal(struct {
+			Version int
+			Rows    []cap110Nest
+		}{1, rows})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
+	pair := marshal([]cap110Nest{row(at100, 9), row(at105, 10)})
+
+	t.Setenv(EnvCap110Level100, "")
+	got, err := appendCap110Data(template, pair)
+	if err != nil {
+		t.Fatalf("off: %v", err)
+	}
+	if len(got.Nests) != 1 || got.Nests[0].RefObjID != at105.RefObjID {
+		t.Fatalf("off joined %+v, want only the level-105 nest", got.Nests)
+	}
+
+	t.Setenv(EnvCap110Level100, "on")
+	got, err = appendCap110Data(template, pair)
+	if err != nil {
+		t.Fatalf("on: %v", err)
+	}
+	if len(got.Nests) != 2 {
+		t.Fatalf("on joined %d nests, want both", len(got.Nests))
+	}
+
+	// A reference outside the window is a bad row in both settings.
+	at99 := MonsterRef{RefObjID: 2003, Codename: "MOB_SD_AT99", Level: 99}
+	below := TemplateFromParts(map[uint32]MonsterRef{at99.RefObjID: at99}, nil)
+	bad := marshal([]cap110Nest{row(at99, 11)})
+	if _, err := appendCap110Data(below, bad); err == nil {
+		t.Fatal("level-99 row admitted with the flag on")
+	}
+	t.Setenv(EnvCap110Level100, "")
+	if _, err := appendCap110Data(below, bad); err == nil {
+		t.Fatal("level-99 row admitted with the flag off")
+	}
+
+	// Duplicate nest ids fail even across the held-back slice.
+	dup := marshal([]cap110Nest{row(at100, 9), row(at105, 9)})
+	if _, err := appendCap110Data(template, dup); err == nil {
+		t.Fatal("duplicate nest id admitted across the held-back level-100 row")
+	}
+}
+
+/*
+================
 TestCap110PopulationRejectsMalformedData
 ================
 */

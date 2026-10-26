@@ -263,6 +263,11 @@ type BootstrapResult struct {
 	// the client can show them as unlimited rather than a stack of one.
 	UnlimitedItems       []uint32
 	MasteryTotalOverride int64
+	// LevelCap is the shard's configured character level cap, published
+	// so the client's party-matching and quest-guide windows follow it
+	// (port-only plumbing for the expansion; zero is the native cap and
+	// is not published).
+	LevelCap int64
 	// StorageAutoStack tells the client's storage quick move to prefer a
 	// matching stack (port-only, not native; false is native).
 	StorageAutoStack bool
@@ -331,6 +336,7 @@ type bootstrapSuccessView struct {
 	Packets                   []Packet                 `json:"packets"`
 	UnlimitedItems            []uint32                 `json:"unlimitedItems,omitempty"`
 	MasteryTotalOverride      int64                    `json:"masteryTotalOverride,omitempty"`
+	LevelCap                  int64                    `json:"levelCap,omitempty"`
 	StorageAutoStack          bool                     `json:"storageAutoStack,omitempty"`
 	FastDenReturn             bool                     `json:"fastDenReturn,omitempty"`
 	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
@@ -414,6 +420,7 @@ type bootstrapBlobSuccessView struct {
 	SystemMessages            interface{}              `json:"systemMessages"`
 	UnlimitedItems            []uint32                 `json:"unlimitedItems,omitempty"`
 	MasteryTotalOverride      int64                    `json:"masteryTotalOverride,omitempty"`
+	LevelCap                  int64                    `json:"levelCap,omitempty"`
 	StorageAutoStack          bool                     `json:"storageAutoStack,omitempty"`
 	FastDenReturn             bool                     `json:"fastDenReturn,omitempty"`
 	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
@@ -455,6 +462,7 @@ type bootstrapReferenceBlobSuccessView struct {
 	SystemMessages            interface{}              `json:"systemMessages"`
 	UnlimitedItems            []uint32                 `json:"unlimitedItems,omitempty"`
 	MasteryTotalOverride      int64                    `json:"masteryTotalOverride,omitempty"`
+	LevelCap                  int64                    `json:"levelCap,omitempty"`
 	StorageAutoStack          bool                     `json:"storageAutoStack,omitempty"`
 	FastDenReturn             bool                     `json:"fastDenReturn,omitempty"`
 	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
@@ -528,6 +536,7 @@ func (r *BootstrapResult) blobView() any {
 		SystemMessages:            r.SystemMessages,
 		UnlimitedItems:            r.UnlimitedItems,
 		MasteryTotalOverride:      r.MasteryTotalOverride,
+		LevelCap:                  r.LevelCap,
 		StorageAutoStack:          r.StorageAutoStack,
 		FastDenReturn:             r.FastDenReturn,
 		TradeTiers:                r.TradeTiers,
@@ -583,6 +592,7 @@ func (r *BootstrapResult) referenceBlobView() any {
 		SystemMessages:            r.SystemMessages,
 		UnlimitedItems:            r.UnlimitedItems,
 		MasteryTotalOverride:      r.MasteryTotalOverride,
+		LevelCap:                  r.LevelCap,
 		StorageAutoStack:          r.StorageAutoStack,
 		FastDenReturn:             r.FastDenReturn,
 		TradeTiers:                r.TradeTiers,
@@ -652,6 +662,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		Packets:                   r.Packets,
 		UnlimitedItems:            r.UnlimitedItems,
 		MasteryTotalOverride:      r.MasteryTotalOverride,
+		LevelCap:                  r.LevelCap,
 		StorageAutoStack:          r.StorageAutoStack,
 		FastDenReturn:             r.FastDenReturn,
 		TradeTiers:                r.TradeTiers,

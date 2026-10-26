@@ -115,8 +115,8 @@ func (v *WaterValidator) spawnObjectDeckStand(surface *groundSurface, baseX, bas
 ================
 rebindStandToSector
 
-Native 0x009A0485 (SNavMeshPos::NormalizeSector, 0x0099FFB0) + 0x009A04AE
-(CRTNavMeshTerrain::FindObjectInstByUID, 0x0099FBB0): a multi-sector object is
+The native sector rebinding (the position's sector normalization plus
+the terrain's object-by-UID lookup): a multi-sector object is
 duplicated into each overlapping sector's NVM with the same world transform and
 assetID, while each sector's NVM resolves only the LinkEdges whose target object
 is also present in that sector. Rebinding the stand to (sectorX, sectorZ)

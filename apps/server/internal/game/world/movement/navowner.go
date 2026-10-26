@@ -17,15 +17,15 @@ import (
 )
 
 // Surface ownership for the movement authority. See simulation/navowner.go
-// for the native contract (HLIL-verified, v1.188 SR_GameServer):
+// for the native contract, as the server walks it:
 //
-//   - a move walks from the RETAINED source cell (QueryMovement 0x98B300);
+//   - a move walks from the RETAINED source cell (the movement query's
+//     starting cell);
 //   - terrain enters a placed object only by walking into it: the terrain
 //     walker transforms the chord into the placement frame and runs the
-//     object's own Move (CRTNavMeshTerrain_StepPlacedObject 0x9A0030 ->
-//     vtable+8, 0x9B5A80); the reached cell becomes the owner;
-//   - nearest-|deltaY| (CRTNavMeshTerrain_FindNavCell 0x99FD90, terrain wins
-//     ties) is ONLY the teleport/entry rule (CheckPointValid 0x98B1D0).
+//     object's own move step; the reached cell becomes the owner;
+//   - nearest-|deltaY| (terrain wins ties) is ONLY the teleport/entry rule
+//     (the point-validity check).
 //
 // Do not reintroduce "is this chord point near a deck height?" tests: the
 // chord Y of a move is the client's int16-truncated destination height, and
@@ -170,17 +170,29 @@ func seedFrame(surface *groundSurface, p simulation.Spawn) (float64, float64) {
 // A still-valid hint is retained (the owned cell, or an edge neighbour after a
 // sub-unit relocation such as wire truncation of X/Z). An unresolved or stale
 // hint takes the native FindNavCell rule: nearest |deltaY|, terrain wins ties.
-// ok is false only when no surface data covers p; dungeons keep their own
-// navigation plane and return the input unchanged with ok=false.
+// ok is false only when no surface covers p; a dungeon point resolves to its
+// cell owner with the input height unchanged, and ok is false where no cell
+// lies under it.
 /*
 ================
 ResolveNavOwner
+
+Resolved by the plane p is on (resolveNavOwnerOnPlane, plane_navowner.go).
 ================
 */
 func (v *WaterValidator) ResolveNavOwner(p simulation.Spawn, hint simulation.NavOwner) (simulation.NavOwner, float64, bool) {
-	if simulation.IsDungeonRegion(p.RegionID) {
-		return simulation.NavOwner{}, p.Y, false
-	}
+	return resolveNavOwnerOnPlane(v, p, hint)
+}
+
+/*
+================
+resolveOutdoorNavOwner
+
+The outdoor plane's owner resolution (outdoorPlane.resolveNavOwner):
+the terrain and the object surfaces of the point's region.
+================
+*/
+func (v *WaterValidator) resolveOutdoorNavOwner(p simulation.Spawn, hint simulation.NavOwner) (simulation.NavOwner, float64, bool) {
 	surface := v.surfaceForRegion(p.RegionID)
 	if surface == nil {
 		return simulation.NavOwner{}, p.Y, false
@@ -426,13 +438,25 @@ const navWalkLegLimit = 7
 /*
 ================
 ownerWalk
+
+The start is owned first, then the pair's plane walks it
+(ownerWalkOnPlane, plane_navowner.go).
 ================
 */
 func (v *WaterValidator) ownerWalk(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) *navWalk {
 	from = v.ownedStart(from, fromOwner)
-	if simulation.IsDungeonRegion(from.RegionID) || simulation.IsDungeonRegion(to.RegionID) {
-		return nil
-	}
+	return ownerWalkOnPlane(v, from, fromOwner, to)
+}
+
+/*
+================
+outdoorOwnerWalk
+
+The outdoor plane's owner walk (outdoorPlane.ownerWalk): surface
+ownership along the chord, from an already-owned start.
+================
+*/
+func (v *WaterValidator) outdoorOwnerWalk(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) *navWalk {
 	owner := fromOwner
 	if !owner.Resolved() {
 		var ok bool
@@ -772,7 +796,7 @@ type ownerClipValidator interface {
 ================
 segmentClipValidator
 
-segmentClipValidator is the per-leg clip LineOfSight drives (98D880):
+segmentClipValidator is the per-leg clip LineOfSight drives:
 one chord per call, the report's continuation marking a leg the test
 resumes from its rest point. Validators without the seam keep the
 single-query answer.

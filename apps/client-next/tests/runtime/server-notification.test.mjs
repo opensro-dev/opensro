@@ -80,7 +80,8 @@ test("a job-kill notice (port-only channel 0x80) shows like channel 7 unless the
 		predictedRunUp: false,
 		jobKillNotices: false,
 		dropPlusNotices: true,
-		plusSevenNotices: true
+		plusSevenNotices: true,
+		breakNotices: true
 	} );
 	hidden.receive( { opcode: 0x3667, payload }, 100 );
 	const quiet = hidden.take();
@@ -111,7 +112,8 @@ test("a drop or plus notice (port-only channel 0x81) shows like channel 7 unless
 		predictedRunUp: false,
 		jobKillNotices: true,
 		dropPlusNotices: false,
-		plusSevenNotices: true
+		plusSevenNotices: true,
+		breakNotices: true
 	} );
 	hidden.receive( { opcode: 0x3667, payload }, 100 );
 	const quiet = hidden.take();
@@ -160,7 +162,8 @@ test("a plus notice for a +7 item (channel 0x81, the body's plus byte) answers t
 		predictedRunUp: false,
 		jobKillNotices: true,
 		dropPlusNotices: true,
-		plusSevenNotices: false
+		plusSevenNotices: false,
+		breakNotices: true
 	} );
 	hidden.receive( { opcode: 0x3667, payload }, 100 );
 	const quiet = hidden.take();
@@ -172,7 +175,8 @@ test("a plus notice for a +7 item (channel 0x81, the body's plus byte) answers t
 		predictedRunUp: false,
 		jobKillNotices: true,
 		dropPlusNotices: false,
-		plusSevenNotices: true
+		plusSevenNotices: true,
+		breakNotices: true
 	} );
 	stillShown.receive( { opcode: 0x3667, payload }, 100 );
 	assert.equal( defined( defined( stillShown.take() ).notices ).at( -1 )?.text, text );
@@ -184,14 +188,55 @@ test("a plus notice for a +7 item (channel 0x81, the body's plus byte) answers t
 	const short = defined( serverNotification( 0x3667, linked( text, body( 7, 10 ) ) ) );
 	assert.equal( short.dropPlus, true );
 	assert.equal( short.plusSeven, undefined );
-	// No new channel was introduced: an 0x82 frame is not a notice.
+	// No further channel was introduced: an 0x83 frame is not a notice
+	// (0x82 is the item-break channel, #1738).
 	assert.equal(
 		serverNotification(
 			0x3667,
-			Buffer.concat( [ Buffer.from( [ 0x82, 5, 0 ] ), Buffer.from( "Hello", "utf16le" ) ] )
+			Buffer.concat( [ Buffer.from( [ 0x83, 5, 0 ] ), Buffer.from( "Hello", "utf16le" ) ] )
 		),
 		null
 	);
+});
+
+test("an item break notice (port-only channel 0x82) shows like channel 7 unless the Experimental row is off", () => {
+	const text = "leChiffre broke Blade (Seal Of Sun)",
+		payload = Buffer.concat( [ Buffer.from( [ 0x82, text.length, 0 ] ), Buffer.from( text, "utf16le" ) ] );
+	const notice = defined( serverNotification( 0x3667, payload ) );
+	assert.equal( notice.itemBreak, true );
+	assert.equal( notice.jobKill, undefined );
+	assert.equal( notice.dropPlus, undefined );
+	assert.equal( notice.text, text );
+	// On by default: the banner notice and a (Notify): chat line, colored as channel 7.
+	const shown = createGameplay( () => {} );
+	shown.receive( { opcode: 0x3667, payload }, 100 );
+	const state = defined( shown.take() );
+	assert.equal( defined( defined( state.notices ).at( -1 ) ).text, text );
+	assert.equal( defined( defined( state.chat ).lines.at( -1 ) ).text, text );
+	// Off: neither the banner nor the chat log sees it; the other notice rows are untouched.
+	const hidden = createGameplay( () => {} );
+	hidden.experimental( {
+		predictedRunUp: false,
+		jobKillNotices: true,
+		dropPlusNotices: true,
+		plusSevenNotices: true,
+		breakNotices: false
+	} );
+	hidden.receive( { opcode: 0x3667, payload }, 100 );
+	const quiet = hidden.take();
+	assert.equal( quiet?.notices?.some( n => n.text === text ) ?? false, false );
+	assert.equal( quiet?.chat?.lines.some( l => l.text === text ) ?? false, false );
+	// The job-kill row off never widens or narrows this one.
+	const stillShown = createGameplay( () => {} );
+	stillShown.experimental( {
+		predictedRunUp: false,
+		jobKillNotices: false,
+		dropPlusNotices: true,
+		plusSevenNotices: true,
+		breakNotices: true
+	} );
+	stillShown.receive( { opcode: 0x3667, payload }, 100 );
+	assert.equal( defined( defined( stillShown.take() ).notices ).at( -1 )?.text, text );
 });
 
 test("a plus notice above +11 (channel 0x81) renders its text verbatim; the client caps no plus", () => {
@@ -203,6 +248,50 @@ test("a plus notice above +11 (channel 0x81) renders its text verbatim; the clie
 	const state = defined( shown.take() );
 	assert.equal( defined( defined( state.notices ).at( -1 ) ).text, text );
 	assert.equal( defined( defined( state.chat ).lines.at( -1 ) ).text, text );
+});
+
+test("a tiered plus notice (channel 0x81, #1739) keeps the plain drop/plus rendering and the 100-unit budget", () => {
+	// The announced item's body as ItemBody.Encode writes it: RefObjID,
+	// the plus byte, then the rest of the fixed 18-byte header.
+	const body = plus => {
+			const b = Buffer.alloc( 18 );
+			b.writeUInt32LE( 1234, 0 );
+			b[4] = plus;
+			return b;
+		},
+		linked = ( text, plus ) =>
+			Buffer.concat( [
+				Buffer.from( [ 0x81, text.length, 0 ] ),
+				Buffer.from( text, "utf16le" ),
+				Buffer.from( [ 2, 0 ] ),
+				Buffer.from( "Ab", "ascii" ),
+				Buffer.from( [ 18, 0 ] ),
+				body( plus )
+			] );
+	// The tier is wording only: the line answers to the drop/plus row,
+	// its colour still rides the linked item's seal tier, and no Sun
+	// highlight is claimed (the text never says "has dropped").
+	for (
+		const [text, plus] of [
+			[ "Great success! Looter advanced Blade (Seal Of Sun) to +10", 10 ],
+			[ "LEGENDARY! Looter advanced Blade (Seal Of Sun) to +11", 11 ]
+		]
+	) {
+		const notice = defined( serverNotification( 0x3667, linked( text, plus ) ) );
+		assert.equal( notice.dropPlus, true );
+		assert.equal( notice.plusSeven, undefined );
+		assert.equal( notice.sunDrop, undefined );
+		assert.equal( notice.text, text );
+	}
+	const shown = createGameplay( () => {} ),
+		text = "LEGENDARY! Looter advanced Blade to +11";
+	shown.receive( { opcode: 0x3667, payload: linked( text, 11 ) }, 100 );
+	assert.equal( defined( defined( shown.take() ).notices ).at( -1 )?.text, text );
+	// The banner's budget is the wire's: a tiered line at exactly 100
+	// UTF-16 units decodes whole.
+	const longest = "LEGENDARY! " + "A".repeat( 89 );
+	assert.equal( longest.length, 100 );
+	assert.equal( defined( serverNotification( 0x3667, linked( longest, 11 ) ) ).text, longest );
 });
 
 test("a Seal of Sun drop notice (channel 0x81) flags sunDrop on the banner while Star, Moon and plus stay unchanged", () => {

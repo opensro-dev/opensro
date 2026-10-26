@@ -180,10 +180,44 @@ class GateTests(unittest.TestCase):
 		leave = next(row for row in added if row[1:3] == ["175", "1"])
 		self.assertEqual(leave[6:9], ["1", "0", "999"])
 
-	def test_a_condition_kind_the_native_server_lacks_is_dropped_and_the_others_stay(self):
-		row = ["1", "3", "4", "5000", "0", "0", "1", "95", "999", "2", "0", "0", "7", "5", "6"] + ["0"] * 6
+	def test_a_condition_kind_the_server_does_not_evaluate_is_dropped_and_the_others_stay(self):
+		row = ["1", "3", "4", "5000", "0", "0", "1", "95", "999", "2", "0", "0", "4", "9", "9"] + ["0"] * 6
 		columns = variant.translate_link(row, {"3": "3", "4": "4"}, 90)
 		self.assertEqual(columns[6:15], ["1", "90", "999", "2", "0", "0", "0", "0", "0"])
+
+	def test_a_dropped_condition_is_reported_with_its_link_and_operands(self):
+		row = ["1", "3", "4", "5000", "0", "0", "1", "95", "999", "2", "0", "0", "4", "5", "6"] + ["0"] * 6
+		dropped = []
+		variant.translate_link(row, {"3": "3", "4": "4"}, 90, dropped)
+		self.assertEqual(dropped, [{"from": "3", "to": "4", "kind": 4, "operands": ["5", "6"]}])
+
+	def test_the_thief_suit_condition_kind_survives_unreported(self):
+		row = ["1", "3", "4", "5000", "0", "0", "1", "95", "999", "2", "0", "0", "7", "0", "0"] + ["0"] * 6
+		dropped = []
+		columns = variant.translate_link(row, {"3": "3", "4": "4"}, 90, dropped)
+		self.assertEqual(columns[6:15], ["1", "90", "999", "2", "0", "0", "7", "0", "0"])
+		self.assertEqual(dropped, [])
+
+	def test_the_gate_summary_reports_every_dropped_condition(self):
+		native, vsro = self.tables()
+		conditional = link("175", "176", "0")
+		conditional[12:15] = ["3", "42", "7"]
+		vsro["teleportlink.txt"] = table([conditional])
+		merged, summary = variant.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
+		self.assertEqual(summary["droppedConditions"],
+			[{"from": "175", "to": "176", "kind": 3, "operands": ["42", "7"]}])
+		added = [row for row in stage1.table_rows(merged["teleportlink.txt"])][1:]
+		self.assertEqual(added[0][12:15], ["0", "0", "0"])
+
+	def test_the_gate_summary_keeps_a_kind_7_condition(self):
+		native, vsro = self.tables()
+		conditional = link("175", "176", "0")
+		conditional[12:15] = ["7", "0", "0"]
+		vsro["teleportlink.txt"] = table([conditional])
+		merged, summary = variant.merge_gate_tables(native, vsro, codes=SYNTHETIC_GATES)
+		self.assertNotIn("droppedConditions", summary)
+		added = [row for row in stage1.table_rows(merged["teleportlink.txt"])][1:]
+		self.assertEqual(added[0][12:15], ["7", "0", "0"])
 
 	def test_texts_use_the_native_column_layout_and_never_replace_a_native_key(self):
 		native, vsro = self.tables()

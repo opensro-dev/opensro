@@ -319,8 +319,8 @@ func objectEdgeGroupChordContactDetail(
 		fromSrcSide := originSide*srcSide > 0
 		inNudgeMargin := false
 		if !owned && opts.walk != nil && outline && fromSrcSide {
-			// Native CRTNavMeshObj_Move (428F40 / 9B5A80) dispatches an unowned
-			// terrain walker to CRTNavMeshObj_EnterFromOutside (428300 / 9B4D30),
+			// Native CRTNavMeshObj_Move (428F40) dispatches an unowned
+			// terrain walker to CRTNavMeshObj_EnterFromOutside (428300),
 			// never to the owned-cell stepper. When a prior blocked outline hit
 			// nudged the terrain walker 0.01u inward via an inward-authored
 			// vertexDirection (outsideEdgeStart, 4287A8..4288A6), its next step
@@ -347,6 +347,7 @@ func objectEdgeGroupChordContactDetail(
 			sourceSide := fromSrcSide && !inNudgeMargin
 			*response = nativeObjectContact(mesh, edges, i, sourceSide, ox, oz, y0, x1, z1, reflection)
 			response.outline = outline
+			response.edgeFlags = flags
 		}
 	}
 	return bestT, found

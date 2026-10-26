@@ -21,6 +21,7 @@ import (
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/linkedpulse"
+	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -318,7 +319,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	// The approach radius admits a new cast. An already-owned release uses
 	// the native 585CD1 -> 58D8D0 target validation, not another range test.
 	// Keep this symmetric with monsterAttackStage; fleeing is not cast cancel.
-	if !spacingOK || simulation.IsDungeonRegion(playerPose.RegionID) != simulation.IsDungeonRegion(monsterPose.RegionID) {
+	if !spacingOK || !worldgeom.SamePlane(playerPose.RegionID, monsterPose.RegionID) {
 		return OpResult{}, skillCastDeferred
 	}
 	targetAt := simulation.Spawn{RegionID: monsterPose.RegionID, X: monsterPose.X, Y: monsterPose.Y, Z: monsterPose.Z}

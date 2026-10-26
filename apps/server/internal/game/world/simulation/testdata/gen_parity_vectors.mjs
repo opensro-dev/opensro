@@ -302,13 +302,16 @@ function buildV150MovementAckPayload( objectId, movement, source ) {
 		.u16( i16Word( movement.y ) )
 		.u16( i16Word( movement.z ) );
 
+	// Protocol 11 (#1744): the source block is [f32 x][f32 y][f32 z]
+	// after the region word, on every floor - the i16 x10 words the
+	// retail parser read (+-3276.7) survive only in the mode arms.
 	if ( source ) {
 		writer
 			.u8( 1 )
 			.u16( source.regionId )
-			.u16( i16Word( source.x * 10 ) )
+			.f32( source.x )
 			.f32( source.y )
-			.u16( i16Word( source.z * 10 ) );
+			.f32( source.z );
 	} else {
 		writer.u8( 0 );
 	}

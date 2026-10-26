@@ -311,6 +311,8 @@ func newGameWorldApplication(
 	gameplay.wirePremiumUpgrade()
 	// Port-only, not native (SRO_KILL_STATS): wiring_killstats.go.
 	gameplay.wireKillStats(application)
+	// Port-only, not native (SRO_SEAL_CENSUS): wiring_sealcensus.go.
+	gameplay.wireSealCensus(application)
 	if err := gameplay.register(ts.Hub, authority.loadQuests); err != nil {
 		return nil, fmt.Errorf("gameplay wiring: %w", err)
 	}
@@ -357,7 +359,7 @@ func newGameWorldApplication(
 	if err := installPlayerOperations(authority.agentAPI, gameplay, ts.Hub, authority.store, ownedShard.ID); err != nil {
 		return nil, fmt.Errorf("player operations: %w", err)
 	}
-	application.publicAPI = installPublicAPI(gameplay, ts.Hub, authority.store, ownedShard.ID)
+	application.publicAPI = installPublicAPI(gameplay, ts.Hub, authority.store, ownedShard.ID, application.sealBoard)
 	application.controlErrors, err = authority.agentAPI.Start(controlAddr)
 	if err != nil {
 		return nil, fmt.Errorf("GameWorld control API: %w", err)

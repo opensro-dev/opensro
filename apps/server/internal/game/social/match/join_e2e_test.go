@@ -58,6 +58,7 @@ import (
 	"github.com/gorilla/websocket"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/progression"
 	presence "opensro.online/server/internal/game/social"
 	"opensro.online/server/internal/game/social/match"
 	"opensro.online/server/internal/game/social/mentor"
@@ -547,4 +548,46 @@ func TestPartyApprovalRevalidatesDeletedAndModifiedListing(t *testing.T) {
 	if server.runtime.PendingJoinCount() != 0 {
 		t.Fatal("refused approvals retained pending joins")
 	}
+}
+
+/*
+================
+TestPartyWindowFollowsTheConfiguredCapEndToEnd
+
+The refusal for a window past the native cap is byte-identical while the
+cap is off; with the expansion cap assigned, a listing may name 110 and
+a level-105 joiner enters it (#1749).
+================
+*/
+func TestPartyWindowFollowsTheConfiguredCapEndToEnd(t *testing.T) {
+	seeds := []*enterworld.Character{
+		{Name: e2eMiraName, ModelCodename: "CHAR_CH_MAN_ADVENTURER", RaceIndex: e2eInt64(enterworld.RaceChina), Gender: e2eInt64(enterworld.GenderMale), Level: e2eInt64(105)},
+		{Name: e2eJackName, ModelCodename: "CHAR_CH_MAN_ADVENTURER", RaceIndex: e2eInt64(enterworld.RaceChina), Gender: e2eInt64(enterworld.GenderMale), Level: e2eInt64(105)},
+	}
+	server := startJoinServer(t, filepath.Join(t.TempDir(), "authority"), seeds)
+	owner := dialWS(t, server.srv)
+	helloWS(t, owner)
+	enterWorld(t, owner, e2eMiraName)
+
+	sendFrame(t, owner, match.OpPartyRegisterRequest, partyRequest(0, 0, 3, 0, 1, 110, "Late"))
+	expectExactFrame(t, owner, match.OpPartyRegisterAck, []byte{2, 2}, "window past the native cap refused")
+
+	server.runtime.LevelLimit = progression.ExpansionLevelCap
+	sendFrame(t, owner, match.OpPartyRegisterRequest, partyRequest(0, 0, 3, 0, 1, 110, "Late"))
+	expectExactFrame(t, owner, match.OpPartyRegisterAck,
+		concat([]byte{1}, u32le(1), u32le(0), []byte{3, 0, 1, 110}, wideStr("Late")),
+		"window at the expansion cap")
+
+	joiner := dialWS(t, server.srv)
+	helloWS(t, joiner)
+	enterWorld(t, joiner, e2eJackName)
+	member := party.EncodeMaskedMemberRow(chinaRow(gidJack, e2eJackName, 105))
+	sendFrame(t, joiner, match.OpPartyJoinRequest, u32le(1))
+	expectExactFrame(t, owner, match.OpPartyJoinRequest,
+		match.EncodePartyJoinNotify75BF(1, 1, match.PartyApplicant{JobClass: 4}, member), "owner notify for the 105 joiner")
+	sendFrame(t, owner, match.OpPartyJoinAnswer, joinAnswer(1, 1, 1))
+	formed := []party.MemberRow{chinaRow(gidMira, e2eMiraName, 105), chinaRow(gidJack, e2eJackName, 105)}
+	expectJoinSeed(t, owner, gidMira, gidMira, 3, formed, "owner formed seed")
+	expectJoinSeed(t, joiner, gidJack, gidMira, 3, formed, "joiner formed seed")
+	expectExactFrame(t, joiner, match.OpPartyJoinAck, []byte{1, 1}, "join complete")
 }

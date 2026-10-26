@@ -13,7 +13,6 @@ import (
 	"math"
 	"sort"
 
-	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -38,47 +37,21 @@ type objectOwnedPath struct {
 	spans          []objectCellSpan
 }
 
-// 403D20 chooses the initial surface by nearest |delta Y|. 428930 then
-// retains connected cells; it does NOT resolve ownership from chord Y at
-// each terrain tile. That chord cuts below a stair even with legal endpoints.
-// This is a source-owner walk, not the outside-object probe in 428300.
-// Collision remains responsible for edge flags. Ownership ends at an outline
-// or an unconnected cell; it cannot jump onto an overlapping deck.
 /*
 ================
 objectSurfacePath
+
+The pair's plane owns the object-surface path (#1673,
+plane_surfacepath.go): picked by the pair's plane here, so no caller
+tests the region bit.
 ================
 */
 func (v *WaterValidator) objectSurfacePath(from, to simulation.Spawn) *objectOwnedPath {
-	if simulation.IsDungeonRegion(from.RegionID) || simulation.IsDungeonRegion(to.RegionID) {
-		return nil
+	services := planeServices{water: v}
+	if pairIsOutdoor(from.RegionID, to.RegionID) {
+		return outdoorPlane{services}.objectSurfacePath(from, to)
 	}
-	surface := v.surfaceForRegion(from.RegionID)
-	if surface == nil {
-		return nil
-	}
-	bx := from.X + float64(simulation.SectorX(from.RegionID)-simulation.SectorX(surface.seedRegionID))*surface.regionSize
-	bz := from.Z + float64(simulation.SectorY(from.RegionID)-simulation.SectorY(surface.seedRegionID))*surface.regionSize
-	terrain, ok := surface.terrainHeightAt(bx, bz)
-	if !ok {
-		return nil
-	}
-	stand := v.spawnObjectDeckStand(surface, bx, bz, from.Y, terrain)
-	if stand == nil {
-		return nil
-	}
-	a := worldgeom.ExpandGrid(worldgeom.RegionXZ{RegionID: from.RegionID, X: from.X, Z: from.Z})
-	b := worldgeom.ExpandGrid(worldgeom.RegionXZ{RegionID: to.RegionID, X: to.X, Z: to.Z})
-	p := stand.placement
-	c, s := math.Cos(p.yaw), math.Sin(p.yaw)
-	local := func(x, z float64) (float64, float64) {
-		x -= stand.anchorX + p.x
-		z -= stand.anchorZ + p.z
-		return c*x + s*z, -s*x + c*z
-	}
-	x0, z0 := local(a.X, a.Z)
-	x1, z1 := local(b.X, b.Z)
-	return traceObjectCells(stand, x0, z0, x1, z1)
+	return cavePlane{services}.objectSurfacePath(from, to)
 }
 
 // Pure geometry owner shared by terrain clipping and pathguard. Partition at
@@ -109,7 +82,25 @@ func traceObjectCellsFrom(stand *objectDeckStand, x0, z0, x1, z1, tStart float64
 		z0 += (nz - z) / (1 - tStart)
 	}
 	path := &objectOwnedPath{stand: stand, x0: x0, z0: z0, x1: x1, z1: z1}
-	m := stand.mesh
+	path.spans = traceMeshCells(stand.mesh, stand.cellIndex, x0, z0, x1, z1, tStart, nil)
+	return path
+}
+
+/*
+================
+traceMeshCells
+
+The cell-by-cell ownership walk over one mesh (native 428930 / its server
+twin): from startCell, the chord's spans between triangle-edge cuts, each
+owned by the cell that holds its midpoint, moving only to a neighbour
+across an internal edge. It stops where no neighbour holds the next span -
+the chord left the mesh through an outline edge - or where crosses (when
+set) refuses a crossing from one cell to the next (a one-sided edge). Spans
+keep the chord parameter. No height enters the walk.
+================
+*/
+func traceMeshCells(m *objectNavMesh, startCell int, x0, z0, x1, z1, tStart float64, crosses func(from, to int) bool) []objectCellSpan {
+	var spans []objectCellSpan
 	neighbors := m.cellNeighbors
 	if neighbors == nil {
 		// Hand-built geometry can omit decoded metadata. Keep it local so
@@ -135,7 +126,7 @@ func traceObjectCellsFrom(stand *objectDeckStand, x0, z0, x1, z1, tStart float64
 		}
 	}
 	sort.Float64s(cuts)
-	owner := stand.cellIndex
+	owner := startCell
 	// Span midpoints sit between consecutive triangle-edge cuts. When a chord
 	// passes ~0.002u from a shared vertex across a narrow fan of internal and
 	// outline edges (region 23661 localUid 3073), objectCellPlaneYAt's -1e-4
@@ -172,19 +163,19 @@ func traceObjectCellsFrom(stand *objectDeckStand, x0, z0, x1, z1, tStart float64
 					break
 				}
 			}
-			if next < 0 {
+			if next < 0 || (crosses != nil && !crosses(owner, next)) {
 				break
 			}
 			owner = next
 		}
-		n := len(path.spans)
-		if n > 0 && path.spans[n-1].cell == owner {
-			path.spans[n-1].to = hi
+		n := len(spans)
+		if n > 0 && spans[n-1].cell == owner {
+			spans[n-1].to = hi
 		} else {
-			path.spans = append(path.spans, objectCellSpan{lo, hi, owner})
+			spans = append(spans, objectCellSpan{lo, hi, owner})
 		}
 	}
-	return path
+	return spans
 }
 
 /*

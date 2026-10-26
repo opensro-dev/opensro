@@ -241,6 +241,7 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		Levels:            levels,
 		Skills:            skills,
 		MagicOptions:      magicOptions,
+		SetGroups:         textdata.SetGroups,
 		EquipItemsEnabled: paths.EquipItemsEnabled,
 		NpcSpawns:         npcSpawns,
 		ResolveDivisionID: DevResolveDivisionIDFromCatalog(source),
@@ -285,12 +286,20 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		rows := npcSpawns.NpcObjectListRows(entry)
 		instances := monsterSpawns.MonsterObjectListInstances(monsters, divisionID, entry)
 		RecordMonsterObjectList(monsters, divisionID, character, instances)
+		// The bootstrap rows still sample the bare terrain here: the
+		// tick's live poses read the plane surface (#1695), but this
+		// seam sits behind the movement-agnostic deps contract, so
+		// plane-wiring it is a separate, named decision (#1695
+		// follow-up) - the adapter keeps today's reading byte-identical.
+		ground := monster.GroundResolver(func(pose monster.Pose) (float64, bool) {
+			return deps.SpawnTerrainHeight(pose.RegionID, pose.X, pose.Z)
+		})
 		return append(rows, MonsterObjectListRows(
 			monsters,
 			divisionID,
 			instances,
 			time.Now().UnixMilli(),
-			deps.SpawnTerrainHeight,
+			ground,
 		)...)
 	}
 	// The server wiring hands the SAME registry to the tick's mover leg
