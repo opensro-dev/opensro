@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"opensro.online/server/internal/game/world/monster"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 /*
@@ -278,11 +279,12 @@ A plan runs inside the tick and is re-asked as the target moves
 (#1658), so the most expensive plans the floors offer - the
 doorway plan across their farthest pair, and the longest pull
 inside their biggest block - must stay tick-cheap. The pinned
-bound is the plan's deterministic work: cell expansions plus
-oracle probes, which no machine load can inflate (the floor-wide
-plans this replaced spent 2667-4000). Wall clock is only a loose
-20 ms guard on top, and skipped under the race detector, whose
-instrumentation prices nothing like the tick does.
+bound is the plan's deterministic work (route.Work): the cells and
+samples its oracle scans read (#1678), its cell expansions and the
+geometric pull's strip steps (#1663), which no machine load can
+inflate. Wall clock is only a loose 20 ms guard on top, and skipped
+under the race detector, whose instrumentation prices nothing like
+the tick does.
 ================
 */
 func TestCaveRoutePlanCostStaysTickCheap(t *testing.T) {
@@ -324,12 +326,19 @@ func TestCaveRoutePlanCostStaysTickCheap(t *testing.T) {
 			goal: surface.cellPose(region, 0, b),
 		})
 	}
-	// planWorkBudget bounds one plan's deterministic work (cell
-	// expansions plus oracle probes). The worst subject below -
-	// the biggest-block pull on the tomb floor - spends about
-	// 1700; the floor-wide plans this design replaced spent
-	// 2667-4000 on the same pairs, so the budget sits between.
-	const planWorkBudget = 2048
+	// planWorkBudget bounds one plan's deterministic work. The
+	// worst subject below - the farthest doorway plan on the tomb
+	// floor - spends 41505, nearly all of it the head's direct-chord
+	// scan over the floor's cells; the biggest-block pull there
+	// spends 8548. The budget leaves the worst about half again as
+	// headroom, and a plan that pays a second scan of that size (a
+	// proving pull on every plan, say) fails it. The oracle route
+	// this design replaced spends its whole 256-probe budget on
+	// these pairs, each probe such a scan. The units are not equal
+	// in time (a strip step reads a cell plane, a scanned cell is a
+	// box test, about a third of the cost), so this pins growth, not
+	// microseconds; the wall-clock guard below covers those.
+	const planWorkBudget = 65536
 	planned := 0
 	for _, s := range subjects {
 		for i := 0; i < 3; i++ {
@@ -351,10 +360,10 @@ func TestCaveRoutePlanCostStaysTickCheap(t *testing.T) {
 		average := time.Since(started) / time.Duration(len(samples))
 		sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
 		median := samples[len(samples)/2]
-		t.Logf("%s (0x%04X): work %d, average plan %v (median sample %v)", s.name, s.from.RegionID, route.Probes(), average, median)
-		if route.Probes() > planWorkBudget {
-			t.Fatalf("%s (0x%04X): plan work %d (expansions plus probes) exceeds the %d budget; a plan must stay inside one block",
-				s.name, s.from.RegionID, route.Probes(), planWorkBudget)
+		t.Logf("%s (0x%04X): work %d (%d probes), average plan %v (median sample %v)", s.name, s.from.RegionID, route.Work(), route.Probes(), average, median)
+		if route.Work() > planWorkBudget {
+			t.Fatalf("%s (0x%04X): plan work %d (scans, expansions and strip steps) exceeds the %d budget; a plan must stay inside one block",
+				s.name, s.from.RegionID, route.Work(), planWorkBudget)
 		}
 		if !raceDetectorOn && average > 20*time.Millisecond {
 			t.Fatalf("%s (0x%04X): average plan %v exceeds the loose 20 ms wall-clock guard", s.name, s.from.RegionID, average)
@@ -433,9 +442,15 @@ func TestCaveRouteProbeBudgetEndsThePull(t *testing.T) {
 		at = end
 		terminal = surface.cellPose(tomb, 0, end)
 	}
-	points, probes := v.proveCaveRoute(surface, from, terminal, terminal, path)
+	points, probes, work := v.proveCaveRoute(surface, from, terminal, terminal, path)
 	if probes != 256 {
 		t.Fatalf("the proving pull spent %d probes over a %d-cell path, want the 256 budget spent exactly", probes, len(path))
+	}
+	// Each probe is a floor scan that visits at least the cell its
+	// chord starts in (#1678), so the pull's work can never trail
+	// its probe count.
+	if work < probes {
+		t.Fatalf("the proving pull reports %d work for %d floor-scan probes", work, probes)
 	}
 	if len(points) == 0 || points[len(points)-1] != terminal {
 		t.Fatalf("the exhausted pull ends at %+v, want the terminal %+v", points, terminal)
@@ -497,12 +512,25 @@ func TestCaveRouteLegCapSplitsLongHalls(t *testing.T) {
 	if !routed {
 		t.Fatal("no corridor path across the hall's block")
 	}
-	points, probes := v.pullCaveRoute(surface, from, terminal, terminal, path)
+	points, probes, steps := v.pullCaveRoute(surface, from, terminal, terminal, path)
 	if probes != 0 {
 		t.Fatalf("the hall pull spent %d oracle probes; the geometric pull should need none here", probes)
 	}
 	if len(points) < 2 {
 		t.Fatalf("the pull kept the %0.0f-unit hall in %d point(s); the leg cap is not binding", routeDistance(from, terminal), len(points))
+	}
+	// The pull's work is its strip walk (#1663): every leg it kept
+	// was walked, reading its start and end heights and a profile
+	// sample at least every maxDungeonFloorSampleSpacing, so the
+	// kept legs alone set a floor under the steps however many
+	// refused candidates the walk also tried.
+	walked, prev := 0, from
+	for _, point := range points {
+		walked += 2 + int(math.Ceil(routeDistance(prev, point)/maxDungeonFloorSampleSpacing))
+		prev = point
+	}
+	if steps < walked {
+		t.Fatalf("the hall pull reports %d strip steps; its %d kept legs alone walk %d", steps, len(points), walked)
 	}
 	current := from
 	for i, point := range points {
@@ -549,6 +577,21 @@ func TestCaveRouteSameRoomStaysDirect(t *testing.T) {
 	route := v.planCaveRoute(from, goal)
 	if route.Status() != monster.NavigationRouteReady || route.Len() != 1 || route.Point(0) != goal {
 		t.Fatalf("same-room route = status %v, %d points; want the goal alone", route.Status(), route.Len())
+	}
+	// A direct plan is its head probe alone (#1678): one path query,
+	// whose work is the floor scan the clip made. An arriving scan
+	// visits every cell in the chord's reach and then reads the floor
+	// at least once every maxDungeonFloorSampleSpacing.
+	fromSpawn := simulation.Spawn{RegionID: from.RegionID, X: from.X, Y: from.Y, Z: from.Z}
+	goalSpawn := simulation.Spawn{RegionID: goal.RegionID, X: goal.X, Y: goal.Y, Z: goal.Z}
+	clip := v.clipDungeonPath(fromSpawn, goalSpawn)
+	if route.Probes() != 1 || route.Work() != clip.Work {
+		t.Fatalf("direct route reports %d probes and %d work; want 1 probe and the clip's %d", route.Probes(), route.Work(), clip.Work)
+	}
+	visits := dungeonClipCellVisits(surface, fromSpawn, goalSpawn)
+	samples := int(math.Ceil(routeDistance(from, goal) / maxDungeonFloorSampleSpacing))
+	if clip.Work < visits+samples {
+		t.Fatalf("the clip reports %d work for a chord past %d cell visits and %d floor samples", clip.Work, visits, samples)
 	}
 }
 

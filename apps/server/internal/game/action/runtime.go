@@ -395,6 +395,11 @@ type Runtime struct {
 	Announce  Announcements
 	announcer announcer
 
+	// SealDrops counts sealed drops for the weekly board (sealboard.go;
+	// port-only, not native). Nil, the default, counts nothing; the
+	// composition root installs the counter only when EnvSealBoard is on.
+	SealDrops SealDropSink
+
 	// ThiefPartyBonus raises a party's monster EXP and gold for each thief
 	// in it (thiefparty.go; port-only, not native). False is native.
 	ThiefPartyBonus bool
@@ -437,6 +442,13 @@ type Runtime struct {
 	// same family replace the running lower one (premiumticket.go;
 	// port-only, not native). False is native: 0x1894 while one runs.
 	PremiumUpgrade bool
+	// KillStats counts kills and EXP per online hour by level band
+	// (killstats.go; port-only, not native). False counts nothing.
+	KillStats bool
+	// KillStatsFlush receives the drained rollup (the economy history
+	// in the cmd wiring); nil keeps the rows in memory.
+	KillStatsFlush func(rows []KillStatRow) error
+	killStats      killStatTracker
 	// tradeOrigins is each trade good's home town, from the shops.
 	tradeOrigins map[uint32]tradeTown
 

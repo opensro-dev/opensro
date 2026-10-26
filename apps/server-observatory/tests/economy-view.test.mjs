@@ -8,12 +8,15 @@ import assert from "node:assert/strict";
 import {
 	alignSeries,
 	compactGold,
+	dayLabel,
 	flagLabel,
 	flowRows,
 	groupDigits,
+	killStatRows,
 	lineChart,
 	plusBars,
 	rangeWindow,
+	rateText,
 	reasonLabel,
 	recoveryLink,
 	seriesTotal
@@ -113,6 +116,86 @@ test("charts escape server text, keep one hit column per bucket and name two ser
 		lineChart( [ { name: "x", tone: "mint", points: [] } ], { label: "x", step: 3600 } ),
 		/economy-empty/
 	);
+});
+
+test("kill stat rows flatten newest day first with bands low to high", () => {
+	const rows = killStatRows( {
+		contract: 1,
+		minCharacters: 3,
+		suppressed: 1,
+		days: [
+			{
+				day: 0,
+				bands: [
+					{
+						band: 8,
+						label: "81-90",
+						characters: 4,
+						kills: 60,
+						exp: 10000,
+						skillExp: 3500,
+						onlineHours: 3,
+						killsPerOnlineHour: 20,
+						expPerOnlineHour: 3333.33,
+						skillExpPerOnlineHour: 1166.67
+					},
+					{
+						band: 0,
+						label: "1-10",
+						characters: 3,
+						kills: 9,
+						exp: 90,
+						skillExp: 30,
+						onlineHours: 1.5,
+						killsPerOnlineHour: 6,
+						expPerOnlineHour: 60,
+						skillExpPerOnlineHour: 20
+					}
+				]
+			},
+			{
+				day: 86400,
+				bands: [
+					{
+						band: 9,
+						label: "91+",
+						characters: 5,
+						kills: 10,
+						exp: 500,
+						skillExp: 100,
+						onlineHours: 2,
+						killsPerOnlineHour: 5,
+						expPerOnlineHour: 250,
+						skillExpPerOnlineHour: 50
+					}
+				]
+			}
+		]
+	} );
+	assert.deepEqual( rows.map( row => [ row.dayText, row.label ] ), [
+		[ "1970-01-02", "91+" ],
+		[ "1970-01-01", "1-10" ],
+		[ "1970-01-01", "81-90" ]
+	] );
+	assert.equal( rows[2].killsPerHour, 20 );
+	assert.equal( rows[2].skillExpPerHour, 1166.67 );
+	assert.deepEqual( killStatRows( null ), [] );
+	assert.deepEqual( killStatRows( { days: "nope" } ), [] );
+	assert.deepEqual( killStatRows( { days: [ { day: 0, bands: null } ] } ), [] );
+});
+
+test("rates print grouped with at most two decimals and dashes for gaps", () => {
+	assert.equal( rateText( 20 ), "20" );
+	assert.equal( rateText( 1166.67 ), "1,166.67" );
+	assert.equal( rateText( 3333.333 ), "3,333.33" );
+	assert.equal( rateText( 1234567.891 ), "1,234,567.89" );
+	assert.equal( rateText( 0.5 ), "0.5" );
+	assert.equal( rateText( 2.5 ), "2.5" );
+	assert.equal( rateText( 0 ), "0" );
+	assert.equal( rateText( undefined ), "—" );
+	assert.equal( rateText( NaN ), "—" );
+	assert.equal( dayLabel( 0 ), "1970-01-01" );
+	assert.equal( dayLabel( 86400 ), "1970-01-02" );
 });
 
 test("plus levels sort numerically and flag links only prefill Player recovery", () => {

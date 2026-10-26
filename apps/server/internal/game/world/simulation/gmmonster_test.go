@@ -54,7 +54,7 @@ func TestGMMonstersSpawnAtTheGMWithNativeClamps(t *testing.T) {
 		t.Fatalf("population %d, want 5", len(actors))
 	}
 	for _, actor := range actors {
-		if !actor.NestDetached || actor.CurrentHP != 100 || actor.Spawn.X != 253 || actor.Spawn.Z != 449 {
+		if !actor.NestDetached || !actor.GMSpawned || actor.CurrentHP != 100 || actor.Spawn.X != 253 || actor.Spawn.Z != 449 {
 			t.Fatalf("GM monster left the GM point, gained a nest or lost its HP: %+v", actor)
 		}
 	}
