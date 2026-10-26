@@ -109,17 +109,24 @@ test("the Safe loading screen checkbox defaults off, cancels and persists on Con
 		defined( view.controls.find( control => control.id === "experimental-safe-loading-screen" ) )
 			.selected;
 	const f = fixture();
+	// The row lives on the Other tab (#1806 gave its Image slot to Phone
+	// resolution), and opening the window returns to Image.
+	const OTHER_TAB = "experimental-tab:5";
+	const open = () => {
+		f.activate( "open-window:Experimental" );
+		return f.activate( OTHER_TAB );
+	};
 	try {
-		assert.equal( selected( f.activate( "open-window:Experimental" ) ), false );
+		assert.equal( selected( open() ), false );
 		assert.ok( f.hasText( "Safe loading screen" ) );
 		assert.equal( selected( f.activate( "experimental-safe-loading-screen" ) ), true );
 		assert.equal( f.saved.length, 0 );
 		f.activate( "experimental-cancel" );
-		assert.equal( selected( f.activate( "open-window:Experimental" ) ), false );
+		assert.equal( selected( open() ), false );
 		f.activate( "experimental-safe-loading-screen" );
 		f.activate( "experimental-confirm" );
 		assert.deepEqual( f.saved, [ experimentalOptions( { safeLoadingScreen: true } ) ] );
-		assert.equal( selected( f.activate( "open-window:Experimental" ) ), true );
+		assert.equal( selected( open() ), true );
 		f.activate( "experimental-safe-loading-screen" );
 		f.activate( "experimental-confirm" );
 		assert.equal( f.saved[1].safeLoadingScreen, false );
