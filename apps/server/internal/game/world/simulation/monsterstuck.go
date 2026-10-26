@@ -38,7 +38,7 @@ settleMaturedSegment
 The port's movement segment matures by wall clock without an explicit per-tick
 mover callback. When a planner path observes a matured segment before
 monsterbehavior.go's end-of-tick settle, count that stop at To first so every
-finished leg feeds 0x00559010 before a successor command is issued.
+finished leg feeds the move-stopped counter before a successor command is issued.
 ================
 */
 func settleMaturedSegment(gid uint32, mover *monster.MoverState, nowMs int64) ([]Frame, bool) {
@@ -98,7 +98,7 @@ func (ops *MonsterMoverOps) resolveStuck(
 		warped := false
 		if target, alive := eligiblePlayerByGid(current, divisionPlayers, mover.TargetGID()); alive {
 			dest := spawnToPose(target.Pose)
-			// 0x00541110 refuses outdoor -> dungeon relocation.
+			// The server refuses outdoor -> dungeon relocation.
 			if !relocationEntersCave(live.RegionID, dest.RegionID) {
 				relocated := ops.resolveRelocationPose(live, dest)
 				next.Pose = relocated
@@ -135,7 +135,7 @@ func (ops *MonsterMoverOps) resolveStuck(
 		relocated := live
 		warped := false
 		if ctrlPose, found := ops.resolveControllerPose(divisionID, mover.ControllerGID(), divisionPlayers, nowMs); found {
-			// 0x00541110 refuses outdoor -> dungeon relocation.
+			// The server refuses outdoor -> dungeon relocation.
 			if !relocationEntersCave(live.RegionID, ctrlPose.RegionID) {
 				relocated = ops.resolveRelocationPose(live, ctrlPose)
 				warped = true
