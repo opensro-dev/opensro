@@ -34,10 +34,11 @@ postJSON
 A same-origin console mutation (security.mjs allowedMutation).
 ================
 */
-export function postJSON( url, body ) {
+export function postJSON( url, body, options = {} ) {
 	return requestJSON( url, {
 		method: "POST",
 		headers: { "Content-Type": "application/json", "X-SRO-Console": "1" },
-		body: JSON.stringify( body )
+		body: JSON.stringify( body ),
+		...options
 	} );
 }

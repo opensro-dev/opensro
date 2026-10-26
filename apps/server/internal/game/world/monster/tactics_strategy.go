@@ -1,16 +1,16 @@
 /*
 ===========================================================================
 
-tactics_strategy.go - the per-tactics strategy choices of 53FC00
+tactics_strategy.go - the per-tactics strategy choices
 
-CAITactics_InstallActionCallbacks (53FC00) fills a CTactics' callback table
-from its tactics row. Most rows get the ordinary callbacks; the row's flags
-and three hard-coded tactics IDs replace the acquisition and target-check
-slots. This file names those choices so the AI legs can ask for them.
+The native tactics installer fills a tactics object's callback table
+from its tactics row. Most rows get the ordinary callbacks; the row's
+flags and three hard-coded tactics IDs replace the acquisition and
+target-check slots. This file names those choices so the AI legs can
+ask for them.
 
-DiversionBasis, DiversionKeepBasis and KeepDistance (row +0x28, +0x4C,
-+0x70) are loaded but no SR_GameServer code reads them back from a CTactics
-row (a scan of 500000..600000 for loads through +0x2C), so the port
+DiversionBasis, DiversionKeepBasis and KeepDistance are loaded but
+no native code reads them back from a tactics row, so the port
 leaves them unread too.
 
 ===========================================================================
@@ -19,27 +19,28 @@ leaves them unread too.
 package monster
 
 const (
-	// tacticsFlagVehicleRedirect (+0x90 & 4) installs 5481A0 at +0x100 and,
-	// with tacticsFlagJobRedirect, forces every SetCombatTarget (53FFE0).
+	// tacticsFlagVehicleRedirect (the row flag 4) installs the vehicle
+	// redirect as the target check and, with tacticsFlagJobRedirect,
+	// forces every combat-target assignment.
 	tacticsFlagVehicleRedirect = 0x4
-	// tacticsFlagJobRedirect is the low byte's sign bit (+0x90 & 0x80),
-	// which installs 548270 at +0x100.
+	// tacticsFlagJobRedirect is the flag byte's sign bit (0x80), which
+	// installs the job redirect as the target check.
 	tacticsFlagJobRedirect = 0x80
 
-	// fixedQueryTacticsTiger, -Uruchi and -Isyutaru are the RefTactics IDs
-	// 53FC00 compares (0x21, 0x3F, 0x71): MOB_CH_TIGERWOMAN, MOB_OA_URUCHI
-	// and MOB_KK_ISYUTARU.
+	// fixedQueryTacticsTiger, -Uruchi and -Isyutaru are the RefTactics
+	// IDs the native installer compares (0x21, 0x3F, 0x71):
+	// MOB_CH_TIGERWOMAN, MOB_OA_URUCHI and MOB_KK_ISYUTARU.
 	fixedQueryTacticsTiger    = 0x21
 	fixedQueryTacticsUruchi   = 0x3F
 	fixedQueryTacticsIsyutaru = 0x71
 
 	// SquadMemberLimit is how many actors may hold one target without
-	// forcing it: CGameWorld vf+0x74 (5EB2E0) returns 6 for every world
-	// class v1.150 has (the data-driven worlds that read +0x60 are later).
+	// forcing it: the native world query returns 6 for every world
+	// kind v1.150 has.
 	SquadMemberLimit = 6
 
-	// monsterAttackRangeParam is parameter 0x21 as CGObjMob_InitializeParameters
-	// seeds it (4C39B7). 53F780 adds it to the body radius at +0x160.
+	// monsterAttackRangeParam is parameter 0x21 as native mob parameter
+	// init seeds it; tactics init adds it to the body radius.
 	monsterAttackRangeParam = 15
 )
 
@@ -47,9 +48,9 @@ const (
 ==================
 FixedQuery
 
-The three uniques whose tactics 53FC00 gives CAITactics_AcquireTargetFixedQuery
-(547AD0) and CAITactics_SwitchToSecondaryOpponentBeyondReach (548340). The
-flag branches are tested first, so a redirecting row keeps its own callbacks.
+The three uniques whose tactics the native installer gives the fixed
+query and the switch-to-secondary-opponent check. The flag branches
+are tested first, so a redirecting row keeps its own callbacks.
 ==================
 */
 func (c TacticsControls) FixedQuery() bool {
@@ -63,8 +64,8 @@ func (c TacticsControls) FixedQuery() bool {
 ==================
 ForcesCombatTarget
 
-53FFE0 forces the squad registration of a row with flag 4 or 0x80, whatever
-its caller asked for.
+The native target setter forces the squad registration of a row with
+flag 4 or 0x80, whatever its caller asked for.
 ==================
 */
 func (c TacticsControls) ForcesCombatTarget() bool {
@@ -75,9 +76,10 @@ func (c TacticsControls) ForcesCombatTarget() bool {
 ==================
 OrdinaryTargetCheck
 
-Whether +0x100 is CAITactics_CheckTargetByFleeType (548120), the check that
-abandons a target outside the home trace. Flag 4 installs 5481A0, flag 0x80
-548270 and the fixed query 548340 in its place.
+Whether the target check is the ordinary flee-type check, the one
+that abandons a target outside the home trace. Flag 4 installs the
+vehicle redirect, flag 0x80 the job redirect and the fixed query its
+own check in its place.
 ==================
 */
 func (c TacticsControls) OrdinaryTargetCheck() bool {
@@ -88,10 +90,10 @@ func (c TacticsControls) OrdinaryTargetCheck() bool {
 ==================
 VehicleRedirect
 
-The +0x100 redirect a flag row runs: 5481A0 (flag 4) takes a trader's, a
-hunter's or a state-4 player's vehicle, CGObjPC_IsJobStateIn134 (4E59C0);
-548270 (flag 0x80) a thief's or a state-4 player's,
-CGObjPC_IsJobStateIn24 (4E59E0). Flag 4 is tested first.
+The target-check redirect a flag row runs: flag 4 takes a trader's,
+a hunter's or a state-4 player's vehicle (job states 1, 3, 4); flag
+0x80 a thief's or a state-4 player's (job states 2, 4). Flag 4 is
+tested first.
 ==================
 */
 func (c TacticsControls) VehicleRedirect() (redirects bool, jobs [3]uint8) {
@@ -108,8 +110,9 @@ func (c TacticsControls) VehicleRedirect() (redirects bool, jobs [3]uint8) {
 ==================
 AcquisitionForced
 
-Whether a sight acquisition registers its target past the squad limit:
-547AD0 passes force 1 and 5478F0 passes 0, and 53FFE0 forces the flag rows.
+Whether a sight acquisition registers its target past the squad
+limit: the fixed query passes force, the ordinary query does not,
+and the native target setter forces the flag rows.
 ==================
 */
 func (i Instance) AcquisitionForced() bool {
@@ -123,8 +126,8 @@ func (i Instance) AcquisitionForced() bool {
 ==================
 AttackReachRadius
 
-CTactics +0x160: the body radius (+0x158, a float) plus the truncated attack
-range parameter, stored as a float (53F902..53F92A).
+The tactics attack reach: the body radius plus the truncated attack
+range parameter, stored as a float.
 ==================
 */
 func (i Instance) AttackReachRadius() float32 {

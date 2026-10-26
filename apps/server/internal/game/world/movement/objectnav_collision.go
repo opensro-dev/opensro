@@ -347,6 +347,7 @@ func objectEdgeGroupChordContactDetail(
 			sourceSide := fromSrcSide && !inNudgeMargin
 			*response = nativeObjectContact(mesh, edges, i, sourceSide, ox, oz, y0, x1, z1, reflection)
 			response.outline = outline
+			response.edgeFlags = flags
 		}
 	}
 	return bestT, found
