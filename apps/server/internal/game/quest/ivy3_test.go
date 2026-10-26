@@ -721,6 +721,17 @@ func TestIvy3KillCreditGraceAndTurnIn(t *testing.T) {
 		pointsBefore = *leader.SkillPoints
 	}
 	skillBefore := *leader.SkillExp
+	// The Blood and the three signs the hunts granted are still in
+	// the bag: the kill credit counted the hunts, it did not spend
+	// the items. The turn-in below is what takes them.
+	if captureItemCount(leader, ivy3BloodCodename) != 1 {
+		t.Fatal("the Blood left the bag before its turn-in")
+	}
+	for _, sign := range ivy3SignCodenames {
+		if captureItemCount(leader, sign) != 1 {
+			t.Fatalf("sign %s left the bag before its turn-in", sign)
+		}
+	}
 	if _, err := w.rt.AdvanceNpcQuest(leader, ivy3QuestCodename, ivy3NpcCodename); err != nil {
 		t.Fatal(err)
 	}
@@ -739,6 +750,16 @@ func TestIvy3KillCreditGraceAndTurnIn(t *testing.T) {
 	}
 	if captureItemCount(leader, ivy3HairCodename) != 0 {
 		t.Fatal("the Red Hair survived its turn-in")
+	}
+	// The turn-in also takes the Blood and every sign still held:
+	// quest items the finished quest leaves behind.
+	if captureItemCount(leader, ivy3BloodCodename) != 0 {
+		t.Fatal("the Blood survived its turn-in")
+	}
+	for _, sign := range ivy3SignCodenames {
+		if captureItemCount(leader, sign) != 0 {
+			t.Fatalf("sign %s survived its turn-in", sign)
+		}
 	}
 	if captureItemCount(leader, "ITEM_QNO_EU_IVY_3_07") != 20 {
 		t.Fatal("the reward token stack never landed")
