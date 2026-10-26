@@ -181,7 +181,7 @@ TestDungeonWallSpawnAndKnockbackSeeClipped
 
 The population move test and the knockback both run SpawnMoveTest. Into a
 cave wall it now reports the clipped bit with the wall contact as the rest:
-creation then rejects the candidate as clipped (5F6EB0's bit-0 arm) instead
+creation then rejects the candidate as clipped (the original creation's bit-0 arm) instead
 of the blocked arm's centre fallback, and a knockback stops at the wall
 instead of being cancelled.
 ================
@@ -203,7 +203,7 @@ func TestDungeonWallSpawnAndKnockbackSeeClipped(t *testing.T) {
 TestDungeonWallCompanionStandsAtTheContact
 
 A companion summoned toward a cave wall keeps the navigation endpoint
-(a clipped move, 5F6EB0's creation policy) instead of returning to its
+(a clipped move, the original creation policy) instead of returning to its
 owner as a blocked move would.
 ================
 */
