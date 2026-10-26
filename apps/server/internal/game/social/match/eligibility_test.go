@@ -2,6 +2,7 @@ package match
 
 import (
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/progression"
 	"reflect"
 	"testing"
 )
@@ -56,6 +57,36 @@ func TestPartyJobEveryTypeWordAndEquippedSlot(t *testing.T) {
 		c.MissionInventory[0].Slot = 13
 		if activePartyJob(c) != 4 {
 			t.Fatal("bag suit changed active job")
+		}
+	}
+}
+
+/*
+================
+TestPartyRegistrationWindowFollowsTheConfiguredCap
+
+The window's ceiling is the configured cap, not the era's constant
+(#1749): at the native cap a max of 91 refuses exactly as before, at the
+expansion cap a max of 110 registers and 111 refuses.
+================
+*/
+func TestPartyRegistrationWindowFollowsTheConfiguredCap(t *testing.T) {
+	level := int64(20)
+	character := &domain.Character{Name: "Applicant", Level: &level}
+	for _, tc := range []struct {
+		limit   int64
+		maximum uint8
+		refused bool
+	}{
+		{0, 90, false}, {0, 91, true},
+		{progression.LevelCap, 90, false}, {progression.LevelCap, 110, true},
+		{progression.ExpansionLevelCap, 110, false}, {progression.ExpansionLevelCap, 111, true},
+	} {
+		r := &Runtime{LevelLimit: tc.limit}
+		request := PartyMatchRequest{Purpose: 0, MinLevel: 1, MaxLevel: tc.maximum, Title: "Party"}
+		_, refusal := r.preparePartyRegistration("fixture", character, request)
+		if refused := refusal == partyMatchErrUnknown; refused != tc.refused {
+			t.Fatalf("limit %d max %d: refusal 0x%02X (refused %v), want refused %v", tc.limit, tc.maximum, refusal, refused, tc.refused)
 		}
 	}
 }

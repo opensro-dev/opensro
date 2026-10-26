@@ -98,7 +98,7 @@ func (rt *Runtime) ConfigureReverseReturnMap(enabled bool, imported []optionalte
 	if rt.portals != nil {
 		for _, gate := range rt.portals.destinations {
 			if !gate.recall || gate.ref == 0 || gate.fortressGate || gate.spawn.RegionID == 0 ||
-				simulation.IsDungeonRegion(gate.spawn.RegionID) || portalWorld(gate) != instance.ID(domain.DefaultWorldInstance) {
+				simulation.PlaneKindOf(gate.spawn.RegionID) == simulation.PlaneCave || portalWorld(gate) != instance.ID(domain.DefaultWorldInstance) {
 				continue
 			}
 			name := strings.TrimPrefix(gate.code, "GATE_")
@@ -187,7 +187,7 @@ An outdoor point inside its region with finite coordinates.
 ================
 */
 func reverseMapPointValid(point enterworld.ReverseMapPoint) bool {
-	if point.RegionID == 0 || simulation.IsDungeonRegion(point.RegionID) {
+	if point.RegionID == 0 || simulation.PlaneKindOf(point.RegionID) == simulation.PlaneCave {
 		return false
 	}
 	for _, v := range [3]float64{point.X, point.Y, point.Z} {
