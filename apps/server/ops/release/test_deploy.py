@@ -41,6 +41,37 @@ class DeployTests(unittest.TestCase):
 				{"SRO_BUG_REPORT_DISCORD_WEBHOOK": "https://discord.com/api/webhooks/1/abc"})
 
 	# ================
+	# test_webtransport_posture_comes_from_release_config
+	#
+	# The public WebTransport posture is release configuration: absent keys
+	# deploy exactly as before, "on" carries the switch in the environment
+	# and the bind and pair as arguments, and every half-posture is refused.
+	# ================
+	def test_webtransport_posture_comes_from_release_config(self):
+		self.assertEqual(deploy.webtransport_deployer({}), ({}, []))
+		self.assertEqual(deploy.webtransport_deployer({"webtransport_public": "off"}),
+			({"SRO_WEBTRANSPORT_PUBLIC": "off"}, []))
+		full = {"webtransport_public": "on", "transport_wt_addr": "203.0.113.7:443",
+			"transport_cert_file": "/etc/opensro-tls/fullchain.pem",
+			"transport_key_file": "/etc/opensro-tls/privkey.pem"}
+		environment, arguments = deploy.webtransport_deployer(full)
+		self.assertEqual(environment, {"SRO_WEBTRANSPORT_PUBLIC": "on"})
+		self.assertEqual(arguments, ["-transport-wt-addr", "203.0.113.7:443",
+			"-transport-cert-file", "/etc/opensro-tls/fullchain.pem",
+			"-transport-key-file", "/etc/opensro-tls/privkey.pem"])
+		with self.assertRaisesRegex(ValueError, "webtransport_public"):
+			deploy.webtransport_deployer({"webtransport_public": "yes"})
+		incomplete = dict(full)
+		del incomplete["transport_wt_addr"]
+		with self.assertRaisesRegex(ValueError, "transport_wt_addr"):
+			deploy.webtransport_deployer(incomplete)
+		with self.assertRaisesRegex(ValueError, "requires webtransport_public on"):
+			deploy.webtransport_deployer({"transport_wt_addr": "203.0.113.7:443"})
+		with self.assertRaisesRegex(ValueError, "requires webtransport_public on"):
+			deploy.webtransport_deployer({"webtransport_public": "off",
+				"transport_cert_file": "/etc/opensro-tls/fullchain.pem"})
+
+	# ================
 	# test_preflight_and_token_lifecycle
 	# ================
 	def test_preflight_and_token_lifecycle(self):

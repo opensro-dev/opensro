@@ -30,16 +30,22 @@ import (
 )
 
 const (
-	measurementTestSamples       = 5
-	measurementTestInterval      = time.Millisecond
-	measurementTestTimeout       = 2 * time.Second
+	measurementTestSamples  = 5
+	measurementTestInterval = time.Millisecond
+	// The shared stage/context budget: a backstop only (see
+	// probeTestLoadTimeout). Drains return as soon as every reply
+	// lands, so the happy path never waits it out.
+	measurementTestTimeout       = probeTestLoadTimeout
 	measurementTestKeepalive     = 5 * time.Millisecond
 	measurementTestQuietInterval = 20 * time.Millisecond
 	measurementTestRate          = 1000
 	measurementTestBurst         = 256
 	measurementLimitedRate       = 1
 	measurementLimitedBurst      = 2
-	measurementLimitedDrain      = 50 * time.Millisecond
+	// The limited arm's drain: dropped frames never arrive at any
+	// duration, so this only has to outlast loopback delivery of
+	// the frames the tiny bucket did admit.
+	measurementLimitedDrain = 2 * time.Second
 )
 
 /*

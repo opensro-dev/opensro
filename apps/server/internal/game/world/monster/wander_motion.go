@@ -83,14 +83,14 @@ func nativeRelativeXZ(from, to Pose) (float32, float32) {
 // the indoor bit returns the native sentinel in ALL three components.
 // Keep this tactics contract separate from outdoor world-grid arithmetic.
 func NativeTacticsRelative(from, to Pose) (x, y, z float32) {
-	if (from.RegionID^to.RegionID)&worldgeom.DungeonRegionBit != 0 {
+	if !worldgeom.SamePlane(from.RegionID, to.RegionID) {
 		far := math.Float32frombits(0x7e967699)
 		return far, far, far
 	}
 	dx, dz := float64(float32(to.X))-float64(float32(from.X)), float64(float32(to.Z))-float64(float32(from.Z))
-	if !worldgeom.IsDungeonRegion(from.RegionID) {
-		dx += float64(worldgeom.SectorX(to.RegionID)-worldgeom.SectorX(from.RegionID)) * worldgeom.OutdoorRegionSize
-		dz += float64(worldgeom.SectorY(to.RegionID)-worldgeom.SectorY(from.RegionID)) * worldgeom.OutdoorRegionSize
+	if ox, oz, sectorized := worldgeom.SectorOffset(from.RegionID, to.RegionID); sectorized {
+		dx += ox
+		dz += oz
 	}
 	return float32(dx), 0, float32(dz)
 }

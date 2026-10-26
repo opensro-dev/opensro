@@ -23,10 +23,6 @@ import (
 const (
 	// RegionSize is the edge length of one sector on the native region grid.
 	RegionSize = worldgeom.OutdoorRegionSize
-	// DungeonSectorBit marks a region id as belonging to a dungeon world. It
-	// stays out of the sector arithmetic; two positions must agree on it to be
-	// comparable at all.
-	DungeonSectorBit uint16 = worldgeom.DungeonRegionBit
 
 	// WalkSpeed and RunSpeed are the per-second speeds shipped on every spawn
 	// block (+0x24c and +0x250).

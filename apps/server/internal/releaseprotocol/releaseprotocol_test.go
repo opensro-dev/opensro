@@ -96,7 +96,7 @@ TestEveryReleasedProtocolNamesDistinctContracts
 func TestEveryReleasedProtocolNamesDistinctContracts(t *testing.T) {
 	current, ok := ContractsOf(Current)
 	if !ok || current != (Contracts{Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract,
-		Effects: EffectsContract, Friends: FriendsContract, Notices: NoticesContract}) {
+		Effects: EffectsContract, Friends: FriendsContract, Notices: NoticesContract, Movement: MovementContract}) {
 		t.Fatalf("protocol %d names %+v, want the current contract constants", Current, current)
 	}
 	seen := map[Contracts]int{}
@@ -221,5 +221,36 @@ func TestAClientThatDropsTheNoticeChannelsIsRefused(t *testing.T) {
 	}
 	if NoticesContract < showsNoticeChannels {
 		t.Fatalf("NoticesContract = %d; this build sends the notice channels", NoticesContract)
+	}
+}
+
+/*
+================
+TestAClientThatReadsTheNarrowSourceBlockIsRefused
+
+A protocol-10 browser reads the 0xB738 acknowledgement's source block
+as i16 x10 words: the wider f32 block fails its length check and every
+movement answer is dropped, so no walker ever walks for it. It must be
+refused with 426 and told to reload (#1744).
+================
+*/
+func TestAClientThatReadsTheNarrowSourceBlockIsRefused(t *testing.T) {
+	const readsTheFloatedSource = 1
+	refused := 0
+	for protocol, contracts := range history {
+		if contracts.Movement >= readsTheFloatedSource {
+			continue
+		}
+		if reached, recorder := serve(t, http.MethodPost, strconv.Itoa(protocol)); reached || recorder.Code != http.StatusUpgradeRequired {
+			t.Fatalf("protocol %d (movement %d): reached %v, status %d; want refused with 426",
+				protocol, contracts.Movement, reached, recorder.Code)
+		}
+		refused++
+	}
+	if _, ok := history[10]; !ok || refused == 0 {
+		t.Fatal("the protocol-10 client is not in the history this test refuses")
+	}
+	if MovementContract < readsTheFloatedSource {
+		t.Fatalf("MovementContract = %d; this build sends the floated source block", MovementContract)
 	}
 }
