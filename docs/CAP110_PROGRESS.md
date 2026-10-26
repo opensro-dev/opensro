@@ -1015,12 +1015,13 @@ gate arrivals have no dungeon-region sign bit), so they reuse the field pipeline
 
 Port decisions, each inferred rather than evidenced:
 
-- Each tomb runs as a persistent shared area on `INS_DEFAULT`, as the Qin-Shi
-  tomb does. The original's per-tomb worlds are not modelled. The last
-  `teleportdata` column names the destination world; the v1.150 world table has
-  no 57-59 (the server stops with `names unknown world 57`), so the importer sets
-  the three exits to world 1 and records the originals in the variant manifest
-  (`gates.worldsFlattened`).
+- Each tomb is its own permanent world (#1750, owner 2026-10-26). The v1.150
+  world table has no 57-59 (the server stops with `names unknown world 57`), so
+  the port registers the three shipped ids port-only (`INS_PHARAOH_TOMB_1..3`)
+  behind the same switch and the tomb population joins its own world instead of
+  `INS_DEFAULT`. The last `teleportdata` column names the destination world;
+  until PR 2 the importer still sets the three exits to world 1 and records the
+  originals in the variant manifest (`gates.worldsFlattened`).
 - Bosses are single-spawn nests with their authored respawn delay. The database
   carries no trigger data, so the original's instance triggers are not ported.
 - The unplaced `GATE_TOMBOSIRIS_*` rows (all-zero positions) are not carried.

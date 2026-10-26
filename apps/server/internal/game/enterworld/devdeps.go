@@ -15,6 +15,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/worldarea"
@@ -191,6 +192,13 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		template, err = monster.AppendCap110(template, textdataDir, monster.Cap110Enabled())
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
+		if monster.PharaohTombEnabled() {
+			// Port-only (#1750): the tomb worlds join the catalogue only
+			// while their switch is on, before any division opens.
+			if err := instance.RegisterPortOnly(instance.PharaohTombDefinitions()); err != nil {
+				return nil, fmt.Errorf("bootstrap: %w", err)
+			}
 		}
 		template, err = monster.AppendPharaohTomb(template, textdataDir, monster.PharaohTombEnabled())
 		if err != nil {
