@@ -91,7 +91,7 @@ reference row: the tomb's codenames are its own.
 ================
 */
 func appendPharaohTombData(template Template, data []byte, gearRate int) (Template, error) {
-	result, err := appendNests(template, data, "pharaoh tomb population", admitPharaohTomb)
+	result, err := appendNests(template, data, "pharaoh tomb population", admitPharaohTomb, nil)
 	if err != nil {
 		return Template{}, err
 	}

@@ -271,12 +271,15 @@ def by_column(raw, column, width=0):
 # ================
 # translate_link
 # ================
-def translate_link(row, ids, level_cap):
+def translate_link(row, ids, level_cap, dropped=None):
 	"""
 	One VSRO teleportlink row for the native table: its two ends renumbered by
 	teleport code, the scheduling word set to the one v1.150 server accepts
-	(1), a level condition clamped to the native cap and conditions of a kind
-	the native server lacks dropped.
+	(1), a level condition clamped to the build's cap and conditions of a
+	kind the native server lacks dropped. Every drop is appended to
+	dropped (when given) as {"from", "to", "kind", "operands"} with the
+	renumbered ends, so the loss is reported, never silent (#1749 PR-C(i);
+	the native kinds 3-7 have no port evaluator yet, PR-C(ii)).
 	"""
 	columns = list(row[:LINK_COLUMNS])
 	columns[1], columns[2] = ids[row[1]], ids[row[2]]
@@ -287,6 +290,11 @@ def translate_link(row, ids, level_cap):
 		# A condition kind the v1.150 server does not know (the ferry's kind 7)
 		# is dropped; the server refuses the whole catalogue otherwise.
 		if int(columns[at]) > LINK_KIND_LAST_NATIVE:
+			if dropped is not None:
+				dropped.append({
+					"from": columns[1], "to": columns[2],
+					"kind": int(columns[at]), "operands": columns[at + 1:at + 3]
+				})
 			columns[at:at + 3] = ["0", "0", "0"]
 	return columns
 
@@ -326,14 +334,14 @@ def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP
 		row for row in stage1.table_rows(vsro["teleportbuilding.txt"])
 		if len(row) >= BUILDING_COLUMNS and row[1] in building_ids
 	]
-	links = []
+	links, dropped_conditions = [], []
 	for row in stage1.table_rows(vsro["teleportlink.txt"]):
 		if len(row) != LINK_COLUMNS or row[0] != "1" or not ({row[1], row[2]} & new_ids):
 			continue
 		other = row[2] if row[1] in new_ids else row[1]
 		if other not in new_ids and (other not in vsro_codes or vsro_codes[other] not in native_ids):
 			continue
-		links.append(translate_link(row, ids, level_cap))
+		links.append(translate_link(row, ids, level_cap, dropped_conditions))
 
 	text_keys = {row[4] for row in data_rows} | {row[5] for row in buildings}
 	native_keys = {row[1] for row in stage1.table_rows(native["text"]) if len(row) > 1}
@@ -350,7 +358,10 @@ def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP
 		"gates": list(codes), "links": len(links), "buildings": len(buildings), "texts": len(text_rows),
 		# The server hides these structures while SRO_ALEXANDRIA is off (alexandria.go).
 		"buildingCodes": sorted(row[2] for row in buildings),
-		**({"worldsFlattened": flattened} if flattened else {})
+		**({"worldsFlattened": flattened} if flattened else {}),
+		# Link conditions the native catalogue cannot evaluate yet, reported
+		# so the loss is visible in the build output and manifest (#1749).
+		**({"droppedConditions": dropped_conditions} if dropped_conditions else {})
 	}
 
 
@@ -661,6 +672,9 @@ def add_gates(vsro_root, native, out):
 	from cap110_monsters import tomb_enabled
 	codes = GATE_CODES + TOMB_GATE_CODES if tomb_enabled() else GATE_CODES
 	merged, summary = merge_gate_tables(tables, vsro, codes=codes, level_cap=level_cap)
+	for dropped in summary.get("droppedConditions", []):
+		log(f"gates: link {dropped['from']} -> {dropped['to']}: condition kind {dropped['kind']} "
+			f"({', '.join(dropped['operands'])}) dropped; the v1.150 server has no evaluator for it")
 	for name, content in merged.items():
 		replace_file(out / textdata / ("textdataname.txt" if name == "text" else name), content)
 	return summary, merged

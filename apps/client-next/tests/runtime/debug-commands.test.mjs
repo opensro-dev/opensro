@@ -148,6 +148,56 @@ test("/Item uses the named bag slot as a double click does", () => {
 	}
 });
 
+test("the GM console plays /snd by name and stays silent without a word", () => {
+	/** @type {string[]} */
+	const played = [];
+	/** @type {any[]} */
+	const sent = [];
+	const f = uiFixture(
+		message => {
+			if ( message.kind === "gameplay" ) sent.push( message.command );
+		},
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		{ playSoundByName: name => played.push( name ) }
+	);
+	try {
+		f.state.gameplay.eligibility = { gm: true };
+		let now = 0;
+		const step = () => {
+			for ( let i = 0; i < 16; i++ ) f.ui.step( f.state, now += 100 );
+		};
+		const type = line => {
+			f.ui.event( {
+				kind: "edit",
+				id: "gm-input",
+				value: line,
+				start: line.length,
+				end: line.length,
+				composing: false
+			} );
+			f.ui.event( { kind: "activate", id: "submit" } );
+			step();
+		};
+		step();
+		f.ui.event( { kind: "key", code: "Backquote", shift: true } );
+		step();
+		type( "/snd SND_BUTTON_CLICK" );
+		assert.deepEqual( played, [ "SND_BUTTON_CLICK" ] );
+		type( "/snd SND_ERROR ignored" );
+		assert.deepEqual( played, [ "SND_BUTTON_CLICK", "SND_ERROR" ], "only the first word is read" );
+		type( "/snd" );
+		assert.equal( played.length, 2, "a wordless /snd played a sound" );
+		assert.deepEqual( sent, [], "a table command reached the server" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("command words read as wcstol reads them", () => {
 	assert.equal( commands.commandInteger( "13" ), 13 );
 	assert.equal( commands.commandInteger( "-4x" ), -4 );

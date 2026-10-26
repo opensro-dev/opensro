@@ -134,6 +134,9 @@ func (rt *Runtime) applyAlchemy(division string, character *enterworld.Character
 	var frames []wire.Frame
 	var err error
 	var outcome alchemy.Outcome
+	// broken is the destroyed item's codename, read from the bag before
+	// the commit: a destroyed item is not in outcome.Items (#1738).
+	var broken string
 	committed := rt.deps.Update(character, "alchemy", func() bool {
 		// Reinforcement and stones share the same living-character admission
 		// as compound/dissolve. Keep this inside the inventory transaction so
@@ -154,6 +157,13 @@ func (rt *Runtime) applyAlchemy(division string, character *enterworld.Character
 		}
 		frames = alchemy.ResultFrames(op, before, result)
 		outcome = result
+		if result.Destroyed {
+			for _, item := range before {
+				if item.Slot == result.Target {
+					broken = item.Codename
+				}
+			}
+		}
 		character.MissionInventory = alchemyRows(character.MissionInventory, before, result.Items)
 		if rt.UpdateQuestInventory != nil {
 			quest, _ := rt.UpdateQuestInventory(character)
@@ -166,6 +176,7 @@ func (rt *Runtime) applyAlchemy(division string, character *enterworld.Character
 	}
 	if op == alchemy.OpReinforceResult {
 		rt.announcePlus(division, character.Name, outcome, rt.Now().UnixMilli())
+		rt.announceBreak(division, character, broken, outcome, rt.Now().UnixMilli())
 	}
 	return frames
 }

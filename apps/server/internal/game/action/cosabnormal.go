@@ -23,6 +23,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/internal/vitals"
 	"opensro.online/server/internal/game/item/wire"
+	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -685,7 +686,7 @@ func (rt *Runtime) monsterHitSummonedCOS(divisionID string, instance monster.Ins
 	petPose := rt.companionLiveSpawn(divisionID, snapshot, snapshot.CompanionByGID(recipient.gid), nowMs)
 	spacing := simulation.CombatSpacing{ActorBodyRadius: simulation.BodyRadius(instance.BodyRadius()),
 		TargetBodyRadius: simulation.BodyRadius(ref.Parameters.BodyRadius), ActionReach: rt.monsterActionReach(instance, skill)}
-	if !spacing.Valid() || simulation.IsDungeonRegion(monsterPose.RegionID) != simulation.IsDungeonRegion(petPose.RegionID) {
+	if !spacing.Valid() || !worldgeom.SamePlane(monsterPose.RegionID, petPose.RegionID) {
 		return result
 	}
 	if release == nil && !spacing.Contains(simulation.Spawn{RegionID: monsterPose.RegionID, X: monsterPose.X, Y: monsterPose.Y, Z: monsterPose.Z}, petPose) {

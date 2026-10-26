@@ -978,6 +978,25 @@ export function createUiBridge(
 		},
 		/*
 		================
+		saveCameraWaypoints
+
+		690C40 case 134 (/cwsave) writes the waypoint store to c:\cw.txt;
+		the browser form of the same absolute-path write is a download
+		named cw.txt (#1716). The click queues the download, so the
+		object URL is released on the next task.
+		================
+		*/
+		saveCameraWaypoints( text: string ) {
+			if ( lifetime.signal.aborted ) return;
+			const url = URL.createObjectURL( new Blob( [ text ], { type: "text/plain" } ) );
+			const link = document.createElement( "a" );
+			link.href = url;
+			link.download = "cw.txt";
+			link.click();
+			setTimeout( () => URL.revokeObjectURL( url ), 0 );
+		},
+		/*
+		================
 		dispose
 
 		Abort delegated listeners before discarding controls and their state.

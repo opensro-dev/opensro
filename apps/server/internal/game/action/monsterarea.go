@@ -20,6 +20,7 @@ import (
 	"sort"
 
 	"opensro.online/server/internal/game/enterworld"
+	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -54,7 +55,7 @@ func (rt *Runtime) monsterAreaVictims(in monsterStrikeInput, from simulation.Spa
 	var candidates []monsterAreaVictim
 	for _, victim := range rt.monsterAreaCandidates(in) {
 		if victim.gid == primary.gid || victim.hostility.Gid == primary.gid ||
-			simulation.IsDungeonRegion(victim.pose.RegionID) != simulation.IsDungeonRegion(from.RegionID) ||
+			!worldgeom.SamePlane(victim.pose.RegionID, from.RegionID) ||
 			!simulation.MonsterAreaStrikes(in.instance, victim.hostility) {
 			continue
 		}

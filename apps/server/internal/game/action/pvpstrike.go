@@ -28,6 +28,7 @@ import (
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -331,7 +332,7 @@ func (rt *Runtime) acceptPlayerTargetStage(st offensiveStage) (OpResult, skillCa
 	}
 	casterAt := rt.liveSpawn(simulation.WorldKey(division, snapshot.Name), snapshot, now)
 	spacing, spacingOK := rt.combatTargetSpacing(snapshot, target, st.actionReach)
-	if !spacingOK || simulation.IsDungeonRegion(casterAt.RegionID) != simulation.IsDungeonRegion(target.at.RegionID) {
+	if !spacingOK || !worldgeom.SamePlane(casterAt.RegionID, target.at.RegionID) {
 		return OpResult{}, skillCastDeferred
 	}
 	if st.release == nil && !spacing.Contains(casterAt, target.at) {

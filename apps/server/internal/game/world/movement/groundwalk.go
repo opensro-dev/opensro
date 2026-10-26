@@ -45,8 +45,7 @@ func (rt *Runtime) AdmitGroundWalk(name string, from simulation.Spawn, owner sim
 	if !rt.groundEnabled {
 		return rt.ConstrainMovementFrom(name, from, owner, to)
 	}
-	if simulation.IsDungeonRegion(from.RegionID) != simulation.IsDungeonRegion(to.RegionID) ||
-		simulation.IsDungeonRegion(from.RegionID) && from.RegionID != to.RegionID {
+	if !groundWalkAdmittedOnPlane(from, to) {
 		return from, simulation.NavWalk{}, &simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest,
 			Reason: "ground movement cannot cross disconnected navigation spaces"}
 	}

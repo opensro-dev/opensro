@@ -147,6 +147,18 @@ const CONTENTS_COUNTRY_COLUMN = 2;
 // every retail row parses 0 (see the VERSION 5 banner note).
 const CONTENTS_PROGRESS_CLEAR_COLUMN = 13;
 
+// The guide publishes quests up to the shard's configured cap
+// (SRO_LEVEL_CAP, read with the server's own vocabulary -
+// progression.LevelCapFromEnv): unset keeps the native 90, so the
+// v1.150 build's output is unchanged; 110 admits the expansion's rows
+// when a variant build supplies them (#1749).
+function configuredGuideLevelCap() {
+  const value = (process.env.SRO_LEVEL_CAP ?? "").trim().toLowerCase();
+  if (value === "" || value === "0" || value === "off" || value === "false" || value === "90") return 90;
+  if (value === "110") return 110;
+  throw new Error(`[questdata] SRO_LEVEL_CAP must be off, 90 or 110, not ${JSON.stringify(value)}`);
+}
+
 export function buildQuestDataAsset() {
   for (const requiredPath of [questDataPath, questContentsDataPath, textQuestPath,textHelpPath,guideDataPath]) {
     if (!fs.existsSync(requiredPath)) {
@@ -251,7 +263,7 @@ export function buildQuestDataAsset() {
     // all zeros in the shipped table, see the VERSION 5 banner note).
     progressClearBytes,
     // Additive guide projection: preserves the existing quest-journal schema.
-    guideRecords: questGuideRecords(readTextDataRowsSync(questDataPath),readTextDataRowsSync(questContentsDataPath)),
+    guideRecords: questGuideRecords(readTextDataRowsSync(questDataPath),readTextDataRowsSync(questContentsDataPath),configuredGuideLevelCap()),
     guideTextEntries,
     textEntries
   };

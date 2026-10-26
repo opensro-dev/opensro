@@ -719,6 +719,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if err = applyLevelCap(stats); err != nil {
 		return err
 	}
+	// The configured cap reaches the party-matching bound directly and
+	// the client through the world-entry blob (publishedLevelCap keeps
+	// the native blob byte-identical with the expansion off).
+	game.matches.LevelLimit = stats.LevelLimit
+	game.deps.LevelCap = publishedLevelCap(stats.LevelLimit)
 	stats.MasteryTotalOverride = masteryOverride
 	if masteryOverride != 0 {
 		log.Infof("progression: beta total mastery allowance %d for both races (%s)", masteryOverride, progression.EnvBetaMastery)
