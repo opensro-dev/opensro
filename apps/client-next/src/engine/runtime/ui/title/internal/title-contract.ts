@@ -8,6 +8,11 @@ ui.ts hands the title renderer each frame.
 
 ===========================================================================
 */
+/*
+================
+TitleNode
+================
+*/
 export interface TitleNode {
 	id: number;
 	name: string;
@@ -20,10 +25,20 @@ export interface TitleNode {
 	hAlign?: number;
 	vAlign?: number;
 }
+/*
+================
+TitleLayout
+================
+*/
 export interface TitleLayout {
 	controlsByName: Record<string, TitleNode>;
 	sections: { name: string; nodes: TitleNode[]; }[];
 }
+/*
+================
+TitleInteraction
+================
+*/
 export interface TitleInteraction {
 	hover: string | null;
 	pressed: string | null;
@@ -36,4 +51,7 @@ export interface TitleInteraction {
 	// A login request is in flight: the account and password edits are locked.
 	// Other pending work (a server-list refresh) leaves them editable.
 	credentialsLocked?: boolean;
+	registrationEnabled?: boolean;
+	registering?: boolean;
+	confirmPassword?: string;
 }

@@ -4,7 +4,7 @@
 credential-hints.ts - which mirrored text edits a password manager may use
 
 The bridge mirrors every text edit as a real input, so password managers
-see them all. Only the title screen's login edits may be saved or filled;
+see them all. Only the title screen's account edits may be saved or filled;
 every other edit is marked for the managers to leave alone.
 
 ===========================================================================
@@ -14,7 +14,10 @@ every other edit is marked for the managers to leave alone.
 // save or fill. Value is the autocomplete token that identifies the field.
 const LOGIN_AUTOCOMPLETE: Readonly<Record<string, string>> = {
 	account: "username",
-	password: "current-password"
+	password: "current-password",
+	"registration-username": "username",
+	"registration-password": "new-password",
+	"registration-confirm-password": "new-password"
 };
 
 /*

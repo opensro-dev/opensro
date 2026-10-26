@@ -257,6 +257,11 @@ export const EXPERIMENTAL_TABS: readonly {
 		title: "Other",
 		section: "Windows and diagnostics",
 		rows: [ {
+			key: "registration",
+			id: "experimental-registration",
+			label: "Account registration",
+			description: "Show username and password signup on the login page."
+		}, {
 			key: "developerDiagnostics",
 			id: "experimental-developer-diagnostics",
 			label: "Developer diagnostics",

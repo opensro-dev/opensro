@@ -134,6 +134,14 @@ export function createSessionHttp() {
 		servers( base: string, signal: AbortSignal ) {
 			return request( { base, route: "/title/servers", signal, limit: LIST_RESPONSE_BYTES } );
 		},
+		/*
+		================
+		register
+		================
+		*/
+		register( base: string, body: { username: string; password: string; }, signal: AbortSignal ) {
+			return request( { base, route: "/title/register", signal, body } );
+		},
 		incident( base: string, token: string | undefined, body: unknown, signal: AbortSignal ) {
 			return request( { base, route: "/client/incident", signal, body, token } );
 		},

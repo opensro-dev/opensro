@@ -23,6 +23,7 @@ const { createExperimentalHud, EXPERIMENTAL_TABS } = await import(
 );
 
 const OFF = Object.freeze( {
+	registration: true,
 	renderScale: 100,
 	// Native 1:1 interface size.
 	uiScale: 100,

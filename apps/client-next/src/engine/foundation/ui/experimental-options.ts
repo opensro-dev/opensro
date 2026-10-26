@@ -26,6 +26,8 @@ ExperimentalOptions
 ================
 */
 export interface ExperimentalOptions {
+	// Port-only, not native. Owner-requested login signup; false hides it.
+	readonly registration: boolean;
 	// Port-only, not native. Reduced scene resolution requires explicit opt-in.
 	readonly renderScale: RenderScale;
 	// Port-only, not native: the interface drawn larger or smaller than the
@@ -313,6 +315,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		renderScale: record.renderScale === 75 || record.renderScale === 50 ? record.renderScale : DEFAULT_RENDER_SCALE,
 		uiScale: uiScaleStop( record.uiScale ) ?? UI_SCALE_DEFAULT,
 		chatTimestamps: enabled( "chatTimestamps" ),
+		registration: record.registration !== false,
 		safeLoadingScreen: enabled( "safeLoadingScreen" ),
 		monsterGuide: enabled( "monsterGuide" ),
 		developerDiagnostics: enabled( "developerDiagnostics" ),

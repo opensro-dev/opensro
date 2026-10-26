@@ -85,6 +85,7 @@ Config
 ================
 */
 type Config struct {
+	Registration            RegistrationOptions
 	History                 *history.Journal
 	HistoryHandler          http.Handler
 	Accounts                AccountAuthority
@@ -111,6 +112,7 @@ Server
 ================
 */
 type Server struct {
+	registration            RegistrationOptions
 	history                 *history.Journal
 	historyHandler          http.Handler
 	accounts                AccountAuthority
@@ -216,6 +218,7 @@ func New(config Config) (*Server, error) {
 		return nil, fmt.Errorf("agent server: client tag key: %w", err)
 	}
 	srv := &Server{
+		registration:            config.Registration,
 		history:                 config.History,
 		historyHandler:          config.HistoryHandler,
 		accounts:                config.Accounts,
@@ -280,6 +283,7 @@ func (server *Server) Handler() http.Handler {
 		browser(server.requireRunning(http.HandlerFunc(server.handleLogin))),
 	)
 	mux.HandleFunc("/marks/", server.handleMark)
+	mux.Handle("/title/register", browser(server.requireRunning(http.HandlerFunc(server.handleRegister))))
 	mux.Handle("/title/session", browser(server.requireRunning(http.HandlerFunc(server.handleBrowserSession))))
 	mux.Handle("/title/logout", browser(http.HandlerFunc(server.handleBrowserLogout)))
 	mux.Handle("/title/character-select", browser(http.HandlerFunc(server.handleBrowserCharacterSelect)))

@@ -122,6 +122,11 @@ func main() {
 		log.Fatalf("agent: history reader: %v", err)
 	}
 	server, err := agentserver.New(agentserver.Config{
+		// Port-only, not native. Login-page signup enabled at the owner's request.
+		Registration: agentserver.RegistrationOptions{
+			Enabled:                  os.Getenv("SRO_REGISTRATION") != "0",
+			RequireEmailConfirmation: os.Getenv("SRO_REGISTRATION_REQUIRE_EMAIL_CONFIRMATION") == "1",
+		},
 		History: journal, HistoryHandler: historyHandler,
 		Accounts:                accounts,
 		Catalog:                 catalog,

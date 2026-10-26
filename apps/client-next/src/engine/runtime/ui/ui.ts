@@ -14,6 +14,8 @@ Visibility gates new requests, never collection of outstanding work.
 // CGInterface_ExecuteActionCommand 695420 case 1006: trade with the
 // selected player.
 const ACTION_EXCHANGE = 1006;
+const REGISTRATION_MIN_PASSWORD_CHARACTERS = 8;
+const REGISTRATION_MAX_PASSWORD_BYTES = 72;
 // CIFJobAlias_OpenSubmitConfirm (646470): changing an alias costs the
 // character's level (player +0x820) times this much gold.
 const JOB_ALIAS_MODIFY_GOLD_PER_LEVEL = 50000;
@@ -1503,6 +1505,8 @@ export function createUi(
 		return (carried.avatar ? game?.avatarInventory : game?.inventory)?.find( row => row.slot === carried.slot );
 	}
 	const localization = createLocalization( assets, base );
+	// Port-only, not native. Signup presentation owns no second credential copy.
+	const registration = { open: false, message: "", confirmPassword: "" };
 	let titleNotice: { status?: number; argument?: number; until: number; } | null = null, uiNow = 0;
 	let nextPoll = 0,
 		lastSessionRevision = -1,
@@ -3706,7 +3710,13 @@ export function createUi(
 		}
 		if ( id === "submit" ) {
 			if ( view.frontend?.dialog || view.frontend?.creation ) return;
-			id = phase === "world" ? "chat-send" : phase === "character-select" ? "enter" : "login";
+			id = phase === "world" ?
+				"chat-send" :
+				phase === "character-select" ?
+				"enter" :
+				registration.open ?
+				"register-submit" :
+				"login";
 		}
 		const control = controls.find( c => c.id === id );
 		if ( control?.disabled ) return;
@@ -4807,8 +4817,38 @@ export function createUi(
 		else if ( id === "native:server-prev" ) serverOffset = Math.max( 0, serverOffset - 1 );
 		else if ( id === "native:server-next" ) {
 			serverOffset = Math.min( Math.max( 0, servers.length - 13 ), serverOffset + 1 );
-		} else if ( id === "login" && !pending ) {
+		} else if ( (id === "register-open" || id === "register-back") && !pending ) {
+			registration.open = id === "register-open";
+			registration.message = "";
+			password = "";
+			registration.confirmPassword = "";
+			titleNotice = null;
+			focus = registration.open ? "registration-username" : "account";
+			selection = [ account.length, account.length ];
+			focusRequest = { id: focus, revision: ++focusRevision, caret: account.length };
+		} else if ( id === "register-submit" && !pending && registration.open ) {
+			if (
+				!account.trim() || Array.from( password ).length < REGISTRATION_MIN_PASSWORD_CHARACTERS ||
+				new TextEncoder().encode( password ).length > REGISTRATION_MAX_PASSWORD_BYTES
+			) {
+				registration.message =
+					"Enter a username and a password of at least 8 characters (maximum 72 UTF-8 bytes).";
+				dirty = true;
+				return;
+			}
+			if ( password !== registration.confirmPassword ) {
+				registration.message = "Passwords do not match.";
+				dirty = true;
+				return;
+			}
+			pending = true;
+			registration.message = "Creating account...";
+			commands( { kind: "register", apiBase: endpoint, username: account.trim(), password } );
+			password = "";
+			registration.confirmPassword = "";
+		} else if ( id === "login" && !pending && !registration.open ) {
 			if ( !account || !password || !selectedServer ) return;
+			registration.message = "";
 			pending = true;
 			loginReplyPending = true;
 			titleNotice = { until: uiNow + 15000 };
@@ -8388,8 +8428,9 @@ export function createUi(
 				} else if ( event.id === "gm-input" ) consoleText = event.value;
 				else if ( event.id === "chat-text" ) chatText = event.value.slice( 0, 100 );
 				else if ( event.id === "chat-target" ) chatTarget = event.value;
-				else if ( event.id === "account" ) account = event.value;
-				else if ( event.id === "password" ) password = event.value;
+				else if ( event.id === "account" || event.id === "registration-username" ) account = event.value;
+				else if ( event.id === "password" || event.id === "registration-password" ) password = event.value;
+				else if ( event.id === "registration-confirm-password" ) registration.confirmPassword = event.value;
 				else if ( event.id === "endpoint" ) {
 					endpoint = event.value;
 					servers = [];
@@ -9205,6 +9246,15 @@ export function createUi(
 				)
 			) setPanel( GRANT_PANEL );
 			if ( next.session && next.session.revision !== lastSessionRevision ) {
+				if ( next.session.registration ) {
+					registration.message = next.session.registration.message;
+					if ( next.session.registration.status === "succeeded" ) {
+						registration.open = false;
+						account = account.trim();
+						focus = "password";
+						focusRequest = { id: focus, revision: ++focusRevision, caret: 0 };
+					}
+				}
 				if (
 					(loginReplyPending || next.session.nativeTitleStatus !== lastNativeTitleStatus) && titleProcess &&
 					titleStatusKey( next.session.nativeTitleStatus, next.session.nativeTitleArgument )
@@ -9220,6 +9270,7 @@ export function createUi(
 				lastNativeTitleStatus = next.session.nativeTitleStatus;
 				lastSessionRevision = next.session.revision;
 				pending = false;
+				if ( next.session.registration?.status === "pending" ) pending = true;
 			}
 			// Native CPSTitle only ever writes the password edit from the control itself,
 			// so a rejected attempt stays typed for correction. Authentication can finish
@@ -10825,7 +10876,7 @@ export function createUi(
 				hud.error() ?? text.error() ?? resources.error() ?? null;
 			// CPSTitle 73E7B0 replaces timer 1000 with a 15000 ms deadline. A camera
 			// phase never renews it; 7425E0 retires the title process after its fade.
-			const error = (operationStatus ?
+			const error = registration.message ? registration.message : (operationStatus ?
 				catalogMessage( operationStatus, title.catalog( operationStatus.key ) ) :
 				undefined) ??
 				(next.frontend && titleNotice ?
@@ -10963,7 +11014,11 @@ export function createUi(
 							offset: serverOffset,
 							now,
 							message: error,
-							credentialsLocked: loginReplyPending || phase === "authenticating"
+							credentialsLocked: loginReplyPending || phase === "authenticating" ||
+								next.session?.registration?.status === "pending",
+							registrationEnabled: experimental.state().saved.registration,
+							registering: registration.open,
+							confirmPassword: registration.confirmPassword
 						},
 						roster,
 						selectedCharacter
@@ -10995,7 +11050,11 @@ export function createUi(
 						offset: serverOffset,
 						now,
 						message: error,
-						credentialsLocked: loginReplyPending || phase === "authenticating"
+						credentialsLocked: loginReplyPending || phase === "authenticating" ||
+							next.session?.registration?.status === "pending",
+						registrationEnabled: experimental.state().saved.registration,
+						registering: registration.open,
+						confirmPassword: registration.confirmPassword
 					},
 					roster,
 					selectedCharacter
@@ -26121,6 +26180,9 @@ export function createUi(
 			disposed = true;
 			password = "";
 			account = "";
+			registration.open = false;
+			registration.message = "";
+			registration.confirmPassword = "";
 			chatText = "";
 			chatTarget = "";
 			controls = [];

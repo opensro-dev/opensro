@@ -67,7 +67,15 @@ export function createSession(): SessionOwner {
 		};
 		error?: string;
 		expectedShard: string;
-		kind: "login" | "restore" | "logout" | "return-to-dock" | "servers" | "roster" | "character-operation";
+		kind:
+			| "login"
+			| "register"
+			| "restore"
+			| "logout"
+			| "return-to-dock"
+			| "servers"
+			| "roster"
+			| "character-operation";
 		operation?: import("@/engine/contracts/session").CharacterOperationResult;
 		action?: number;
 		expectedCharacter?: string;
@@ -535,6 +543,46 @@ baseUrl
 				return;
 			}
 			if ( command.kind === "logout" && logoutPending ) return;
+			if ( command.kind === "register" ) {
+				if ( scope !== "title" || identity || state.registration?.status === "pending" ) return;
+				cancelTitleRequest();
+				try {
+					const base = baseUrl( command.apiBase ), current = generation;
+					controller = new AbortController();
+					publish( { ...state, registration: { status: "pending", message: "Creating account..." } } );
+					http.register( base, { username: command.username, password: command.password }, controller.signal )
+						.then(
+							value => {
+								if ( !disposed && current === generation ) {
+									completion = {
+										generation: current,
+										value,
+										expectedShard: "",
+										kind: "register",
+										apiBase: base
+									};
+								}
+							},
+							() => {
+								if ( !disposed && current === generation ) {
+									completion = {
+										generation: current,
+										error: "Registration request failed. Please try again.",
+										expectedShard: "",
+										kind: "register",
+										apiBase: base
+									};
+								}
+							}
+						);
+				} catch {
+					publish( {
+						...state,
+						registration: { status: "failed", message: "Invalid registration request." }
+					} );
+				}
+				return;
+			}
 			const selectedServer = command.kind === "login" ?
 				state.servers?.find( s => s.id === command.serverId ) :
 				undefined;
@@ -697,6 +745,23 @@ baseUrl
 							return state;
 						}
 						forgetStartingRetry();
+						if ( result.kind === "register" ) {
+							const body = result.value?.body as { ok?: boolean; message?: string; } | null;
+							const succeeded = result.value?.httpOk === true && body?.ok === true;
+							publish( {
+								...state,
+								registration: {
+									status: succeeded ? "succeeded" : "failed",
+									message: succeeded ?
+										"Account created. Log in with your username and password." :
+										result.error ?? (typeof body?.message === "string" ?
+											body.message :
+											"Registration failed. Please try again.")
+								}
+							} );
+							dirty = false;
+							return state;
+						}
 						if ( result.kind === "return-to-dock" ) {
 							if (
 								result.error || !result.value?.httpOk ||

@@ -74,6 +74,7 @@ export type SessionCommand =
 		readonly message: string;
 	}
 	| LoginCommand
+	| { readonly kind: "register"; readonly apiBase: string; readonly username: string; readonly password: string; }
 	| {
 		readonly kind: "logout";
 	}
@@ -102,6 +103,7 @@ export type SessionState = Readonly<{
 		| "reconnecting"
 		| "disconnected";
 	revision: number;
+	registration?: { readonly status: "pending" | "succeeded" | "failed"; readonly message: string; };
 	characterOperation?: CharacterOperationResult;
 	character?: string;
 	restoringWorld?: boolean;

@@ -32,6 +32,20 @@ const SCREEN_BAR_WIDTH = 1600;
 // Port-only: on a narrow screen the version sits this far above the bottom,
 // on the project credit's row, clear of the copyright line.
 const NARROW_VERSION_BOTTOM = 45;
+// Port-only, not native: leave one button-row gap below the login actions.
+const REGISTER_BUTTON_OFFSET = 205;
+const REGISTRATION_PANEL_WIDTH = 400;
+const REGISTRATION_PANEL_HEIGHT = 172;
+const REGISTRATION_PANEL_INSET = 24;
+const REGISTRATION_LABEL_WIDTH = 126;
+const REGISTRATION_INPUT_LEFT = 170;
+const REGISTRATION_INPUT_WIDTH = 200;
+const REGISTRATION_FIELD_COLOR = [ 0.65, 0.51, 0.2 ] as const;
+const REGISTRATION_FIELD_BORDER = 1;
+const REGISTRATION_ROW_HEIGHT = 27;
+const REGISTRATION_HELP_TOP = 120;
+const REGISTRATION_HELP_LINE_HEIGHT = 18;
+const REGISTRATION_BUTTON_OFFSET = 188;
 /*
 ================
 createTitleUi
@@ -317,7 +331,13 @@ export function createTitleUi( assets: Pick<AssetOwner, "available" | "request" 
 					pressPath = path.replace( /\.png$/, "_press.png" );
 				paths.push( path, focusPath, pressPath );
 				image( pressed ? pressPath : !disabled && focused ? focusPath : path, rect, alpha );
-				const caption = n.text ? data!.text[n.text] ?? n.text : "";
+				const caption = id === "register-submit" || id === "register-open" ?
+					"Register" :
+					id === "register-back" ?
+					"Back to login" :
+					n.text ?
+					data!.text[n.text] ?? n.text :
+					"";
 				if ( caption ) {
 					authoredText(
 						n,
@@ -740,25 +760,97 @@ export function createTitleUi( assets: Pick<AssetOwner, "available" | "request" 
 							508 * scale,
 							172 * scale
 						], mainAlpha );
-						const login: UiRect = [ cx - 144, cy + 6, 288, 140 ];
+						const login: UiRect = input.registering ?
+							[
+								cx - REGISTRATION_PANEL_WIDTH / 2,
+								cy + 6,
+								REGISTRATION_PANEL_WIDTH,
+								REGISTRATION_PANEL_HEIGHT
+							] :
+							[ cx - 144, cy + 6, 288, 140 ];
 						picture( "GDR_STA_LOGINWINDOW", login, mainAlpha );
+						if ( input.registering ) {
+							// The retail texture bakes two password-sized boxes and a short server box.
+							// Signup owns three equal fields while retaining the outer frame.
+							fill( [
+								login[0] + REGISTRATION_PANEL_INSET,
+								login[1] + REGISTRATION_PANEL_INSET,
+								login[2] - REGISTRATION_PANEL_INSET * 2,
+								login[3] - REGISTRATION_PANEL_INSET * 2
+							], mainAlpha );
+						}
 						for ( const name of [ "GDR_STATIC1", "GDR_STATIC2", "GDR_STATIC3" ] ) {
-							const n = nodes![name]!;
-							authoredText( n, data.text[n.text!] ?? "", local( name, login ), mainAlpha );
+							const n = nodes![name]!, rect = local( name, login );
+							authoredText(
+								n,
+								input.registering ?
+									(name === "GDR_STATIC1" ?
+										"Username" :
+										name === "GDR_STATIC2" ?
+										"Password" :
+										"Confirm password") :
+									data.text[n.text!] ?? "",
+								input.registering ? [ rect[0], rect[1], REGISTRATION_LABEL_WIDTH, rect[3] ] : rect,
+								mainAlpha
+							);
 						}
 						for (
-							const [name, id, value, caption, kind] of [ [
-								"GDR_EDIT_ID",
-								"account",
-								account,
-								"Account",
-								"text"
-							], [ "GDR_EDIT_PASS", "password", password, "Password", "password" ] ] as const
+							const [name, id, value, caption, kind] of [
+								[
+									"GDR_EDIT_ID",
+									input.registering ? "registration-username" : "account",
+									account,
+									input.registering ? "Username" : "Account",
+									"text"
+								],
+								[
+									"GDR_EDIT_PASS",
+									input.registering ? "registration-password" : "password",
+									password,
+									"Password",
+									"password"
+								] as const,
+								...(input.registering ?
+									[
+										[
+											"GDR_EDIT_PASS",
+											"registration-confirm-password",
+											input.confirmPassword ?? "",
+											"Confirm password",
+											"password"
+										] as const
+									] :
+									[])
+							] as const
 						) {
 							const n = nodes![name]!,
-								r = local( name, login ),
+								nativeRect = local( name, login ),
+								r: UiRect = input.registering ?
+									[
+										login[0] + REGISTRATION_INPUT_LEFT,
+										nativeRect[1] +
+										(id === "registration-confirm-password" ? REGISTRATION_ROW_HEIGHT : 0),
+										REGISTRATION_INPUT_WIDTH,
+										nativeRect[3]
+									] :
+									nativeRect,
 								c = n.clientRect,
 								display = kind === "password" ? "*".repeat( Math.min( value.length, 24 ) ) : value;
+							if ( input.registering ) {
+								quads.push( {
+									rect: r,
+									uv: [ 0, 0, 1, 1 ],
+									clip: full,
+									texture: "",
+									color: [ ...REGISTRATION_FIELD_COLOR, mainAlpha ]
+								} );
+								fill( [
+									r[0] + REGISTRATION_FIELD_BORDER,
+									r[1] + REGISTRATION_FIELD_BORDER,
+									r[2] - REGISTRATION_FIELD_BORDER * 2,
+									r[3] - REGISTRATION_FIELD_BORDER * 2
+								], mainAlpha );
+							}
 							const area: UiRect = c ?
 								[
 									r[0] + c.x,
@@ -818,24 +910,52 @@ export function createTitleUi( assets: Pick<AssetOwner, "available" | "request" 
 						// Only a login attempt locks the server choice. A list refresh
 						// must not: the overlay drops clicks on a disabled control, and
 						// the reveal starts a refresh exactly when players reach LIST.
-						button(
-							"GDR_BTN_SERVER",
-							"native:servers",
-							local( "GDR_BTN_SERVER", login ),
-							mainAlpha,
-							interactive,
-							input.credentialsLocked === true
-						);
-						authoredText(
-							nodes!.GDR_STA_SERVER!,
-							servers.find( s => s.id === selected )?.name ?? "",
-							local( "GDR_STA_SERVER", login ),
-							mainAlpha
-						);
+						if ( !input.registering ) {
+							button(
+								"GDR_BTN_SERVER",
+								"native:servers",
+								local( "GDR_BTN_SERVER", login ),
+								mainAlpha,
+								interactive,
+								input.credentialsLocked === true
+							);
+						}
+						if ( !input.registering ) {
+							authoredText(
+								nodes!.GDR_STA_SERVER!,
+								servers.find( s => s.id === selected )?.name ?? "",
+								local( "GDR_STA_SERVER", login ),
+								mainAlpha
+							);
+						}
+						if ( input.registering ) {
+							for (
+								const [index, value] of [
+									"Use at least 8 characters (maximum 72 UTF-8 bytes).",
+									"Password and confirm password must match."
+								].entries()
+							) {
+								text(
+									value,
+									[
+										login[0],
+										login[1] + REGISTRATION_HELP_TOP + index * REGISTRATION_HELP_LINE_HEIGHT,
+										login[2],
+										REGISTRATION_HELP_LINE_HEIGHT
+									],
+									mainAlpha,
+									1
+								);
+							}
+						}
 						for (
-							const [name, id, x] of [ [ "GDR_BTN_OK", "login", cx - 100 ], [
+							const [name, id, x] of [ [
+								"GDR_BTN_OK",
+								input.registering ? "register-submit" : "login",
+								cx - 100
+							], [
 								"GDR_BTN_CANCEL",
-								"logout",
+								input.registering ? "register-back" : "logout",
 								cx + 9
 							] ] as const
 						) {
@@ -843,7 +963,23 @@ export function createTitleUi( assets: Pick<AssetOwner, "available" | "request" 
 							button(
 								name,
 								id,
-								[ x, cy + 156, n.rect.width, n.rect.height ],
+								[
+									x,
+									cy + (input.registering ? REGISTRATION_BUTTON_OFFSET : 156),
+									n.rect.width,
+									n.rect.height
+								],
+								mainAlpha,
+								interactive,
+								pending
+							);
+						}
+						if ( input.registrationEnabled && !input.registering ) {
+							const n = nodes!.GDR_BTN_OK!;
+							button(
+								"GDR_BTN_OK",
+								"register-open",
+								[ cx - n.rect.width / 2, cy + REGISTER_BUTTON_OFFSET, n.rect.width, n.rect.height ],
 								mainAlpha,
 								interactive,
 								pending
