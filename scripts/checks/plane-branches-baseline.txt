@@ -8,7 +8,6 @@ apps/client-next/src/engine/foundation/ui/world-map.ts 3
 apps/client-next/src/engine/runtime/assets/worker/navigation/navigation.ts 2
 apps/client-next/src/engine/runtime/assets/worker/world/world.ts 6
 apps/client-next/src/engine/runtime/navigation/navigation.ts 2
-apps/client-next/src/engine/runtime/renderer/world/world.ts 5
 apps/client-next/src/engine/runtime/simulation/worker/session/world/entities/entities.ts 2
 apps/client-next/src/engine/runtime/ui/hud/hunting-guide.ts 2
 apps/client-next/src/engine/runtime/world/world.ts 5
