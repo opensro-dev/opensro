@@ -190,7 +190,7 @@ type ivy3HornArea struct {
 var ivy3HornAreas = []ivy3HornArea{
 	{point: simulation.Spawn{RegionID: 27237, X: 1057, Y: 218, Z: 634}, radius: 1000,
 		monster: "MOB_QT_01_PUNISHER", sign: "ITEM_QNO_EU_IVY_3_04"},
-	{point: simulation.Spawn{RegionID: 25922, X: 1661, Y: 180, Z: 210}, radius: 700,
+	{point: simulation.Spawn{RegionID: 25954, X: 1661, Y: 180, Z: 210}, radius: 700,
 		monster: "MOB_QT_03_PUNISHER_CLON", sign: "ITEM_QNO_EU_IVY_3_03"},
 	{point: simulation.Spawn{RegionID: 25187, X: 646, Y: 182, Z: 204}, radius: 600,
 		monster: "MOB_QT_01_SOLDIER_CLON", sign: "ITEM_QNO_EU_IVY_3_02"},
@@ -550,7 +550,11 @@ func (rt *Runtime) useIvy3Blood(c *enterworld.Character, def *Definition) ([]wir
 	}
 	rows, updates, err := rt.PlanInventory(c, take, []inventory.ItemAmount{{Codename: ivy3KeyCodename, Count: 1}})
 	if err != nil {
-		return []wire.Frame{questNotification(ivy3SymBagFull)}, false
+		// The native use is silent when the key cannot be granted:
+		// no line, and the signs stay where they are. The swap takes
+		// three sign rows and gives one key row, so a refusal here is
+		// not a full-bag answer in any case.
+		return nil, false
 	}
 	c.MissionInventory = rows
 	return updates, true

@@ -525,7 +525,8 @@ func (rt *Runtime) ivy3SpawnIvy(division string, layer *ivy3Layer) {
 ivy3FinishKill
 
 Ivy is down. Her death line goes to the room; then every resident
-doing the quest is credited with the Red Hair and their key is
+doing the quest runs the kill credit - Horns deleted, the Red Hair
+only for a resident holding the assembled key, whose keys are then
 spent - the whole party, the dead included, exactly the native
 kill evaluator - and the room's sixty-second grace starts.
 ================
@@ -545,10 +546,12 @@ func (rt *Runtime) ivy3FinishKill(event InstanceEvent, layer *ivy3Layer, now int
 ================
 ivy3CreditKill
 
-One resident's kill credit: the Red Hair lands and every key they
-hold is spent, atomically, and the journal follows the bag. A
-resident not doing the quest (a finished helper, or a key holder
-without it) is untouched.
+One resident's kill credit, in the native evaluator's order: every
+Horn Trumpet they hold is deleted first; then the assembled key is
+counted - none held, nothing more (no Red Hair, no achievement);
+held, every key is spent and the Red Hair lands, atomically, and
+the journal follows the bag. A resident not doing the quest (a
+finished helper, or a key holder without it) is untouched.
 ================
 */
 func (rt *Runtime) ivy3CreditKill(division, name string, def *Definition) {
@@ -567,12 +570,15 @@ func (rt *Runtime) ivy3CreditKill(division, name string, def *Definition) {
 		}
 		if rt.PlanInventory != nil {
 			var take []inventory.ItemAmount
-			if held := captureItemCount(character, ivy3KeyCodename); held > 0 {
-				take = append(take, inventory.ItemAmount{Codename: ivy3KeyCodename, Count: held})
+			if horns := captureItemCount(character, ivy3HornCodename); horns > 0 {
+				take = append(take, inventory.ItemAmount{Codename: ivy3HornCodename, Count: horns})
 			}
 			var give []inventory.ItemAmount
-			if captureItemCount(character, ivy3HairCodename) == 0 {
-				give = append(give, inventory.ItemAmount{Codename: ivy3HairCodename, Count: 1})
+			if held := captureItemCount(character, ivy3KeyCodename); held > 0 {
+				take = append(take, inventory.ItemAmount{Codename: ivy3KeyCodename, Count: held})
+				if captureItemCount(character, ivy3HairCodename) == 0 {
+					give = append(give, inventory.ItemAmount{Codename: ivy3HairCodename, Count: 1})
+				}
 			}
 			if len(take) > 0 || len(give) > 0 {
 				rows, updates, err := rt.PlanInventory(character, take, give)

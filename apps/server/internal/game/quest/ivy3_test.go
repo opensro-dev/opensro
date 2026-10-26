@@ -22,11 +22,13 @@ are the production ones.
 package quest
 
 import (
+	"errors"
 	"testing"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/world/calendar"
@@ -253,6 +255,24 @@ instead of drifting with the test.
 */
 func TestIvy3HornAreasAndSignCredit(t *testing.T) {
 	w := newIvy3World(t)
+	// The three native placement records, pinned whole: region,
+	// point, radius, sentry and sign, in the native order.
+	wantAreas := []ivy3HornArea{
+		{point: simulation.Spawn{RegionID: 27237, X: 1057, Y: 218, Z: 634}, radius: 1000,
+			monster: "MOB_QT_01_PUNISHER", sign: "ITEM_QNO_EU_IVY_3_04"},
+		{point: simulation.Spawn{RegionID: 25954, X: 1661, Y: 180, Z: 210}, radius: 700,
+			monster: "MOB_QT_03_PUNISHER_CLON", sign: "ITEM_QNO_EU_IVY_3_03"},
+		{point: simulation.Spawn{RegionID: 25187, X: 646, Y: 182, Z: 204}, radius: 600,
+			monster: "MOB_QT_01_SOLDIER_CLON", sign: "ITEM_QNO_EU_IVY_3_02"},
+	}
+	if len(ivy3HornAreas) != len(wantAreas) {
+		t.Fatalf("horn areas = %d, want %d", len(ivy3HornAreas), len(wantAreas))
+	}
+	for i, want := range wantAreas {
+		if ivy3HornAreas[i] != want {
+			t.Fatalf("horn area %d = %+v, want %+v", i, ivy3HornAreas[i], want)
+		}
+	}
 	leader := ivy3Accept(t, w, "HornLeader")
 	carrier := ivy3Accept(t, w, "HornCarrier")
 	updater := w.rt.KillUpdater()
@@ -403,6 +423,30 @@ func TestIvy3BloodDropAndKeyAssembly(t *testing.T) {
 		if captureItemCount(c, sign) != 0 {
 			t.Fatalf("sign %s survived the assembly", sign)
 		}
+	}
+	// A key that cannot be granted refuses in silence: no line,
+	// and the signs stay where they are.
+	blocked := ivy3Accept(t, w, "BlockedBlood")
+	holdItems(t, w.rt, blocked, ivy3BloodCodename, 1)
+	for _, sign := range ivy3SignCodenames {
+		holdItems(t, w.rt, blocked, sign, 1)
+	}
+	plan := w.rt.PlanInventory
+	w.rt.PlanInventory = func(*enterworld.Character, []inventory.ItemAmount, []inventory.ItemAmount) ([]enterworld.InventoryRow, []wire.Frame, error) {
+		return nil, nil, errors.New("cannot place")
+	}
+	frames, admitted := w.rt.BeginItemUse(blocked, ivy3BloodCodename, ivy3FortressSpawn, *w.nowMs)
+	w.rt.PlanInventory = plan
+	if admitted || len(frames) != 0 {
+		t.Fatalf("refused blood: admitted %v, frames %v", admitted, frames)
+	}
+	for _, sign := range ivy3SignCodenames {
+		if captureItemCount(blocked, sign) != 1 {
+			t.Fatalf("sign %s was spent by a refused assembly", sign)
+		}
+	}
+	if captureItemCount(blocked, ivy3KeyCodename) != 0 {
+		t.Fatal("a key appeared from a refused assembly")
 	}
 }
 
@@ -585,9 +629,10 @@ func TestIvy3KillCreditGraceAndTurnIn(t *testing.T) {
 	t.Setenv(progression.EnvBetaGrowth, "0")
 	leader := ivy3Accept(t, w, "KillLeader")
 	member := ivy3Accept(t, w, "KillMember")
+	keyless := ivy3Accept(t, w, "KillKeyless")
 	holdItems(t, w.rt, leader, ivy3KeyCodename, 1)
 	holdItems(t, w.rt, member, ivy3KeyCodename, 1)
-	w.openLayer(leader.Name, member.Name)
+	w.openLayer(leader.Name, member.Name, keyless.Name)
 	w.update()
 	// A kill marked in another world, or of something else, does
 	// nothing here.
@@ -619,10 +664,24 @@ func TestIvy3KillCreditGraceAndTurnIn(t *testing.T) {
 		if captureItemCount(c, ivy3KeyCodename) != 0 {
 			t.Fatalf("%s kept a key after the kill", c.Name)
 		}
+		if captureItemCount(c, ivy3HornCodename) != 0 {
+			t.Fatalf("%s kept Horns after the kill", c.Name)
+		}
 		at := activeQuestIndex(c, w.def.RefID)
 		if at < 0 || !objectiveMet(c, w.def, c.ActiveQuests[at]) {
 			t.Fatalf("%s's quest did not stand achieved", c.Name)
 		}
+	}
+	// The keyless resident leaves with nothing: no Red Hair, no
+	// achievement - and their Horns are gone all the same.
+	if captureItemCount(keyless, ivy3HairCodename) != 0 {
+		t.Fatal("a keyless resident was credited with the Red Hair")
+	}
+	if captureItemCount(keyless, ivy3HornCodename) != 0 {
+		t.Fatal("a keyless resident kept their Horns after the kill")
+	}
+	if at := activeQuestIndex(keyless, w.def.RefID); at < 0 || objectiveMet(keyless, w.def, keyless.ActiveQuests[at]) {
+		t.Fatal("a keyless resident's quest stood achieved")
 	}
 	// The grace minute: still open, then returned and closed.
 	w.update()
@@ -631,8 +690,8 @@ func TestIvy3KillCreditGraceAndTurnIn(t *testing.T) {
 	}
 	*w.nowMs += ivy3KillGraceMs
 	w.update()
-	if len(w.closed) != 1 || len(w.returned) != 2 {
-		t.Fatalf("closed %d returned %d, want 1 and 2", len(w.closed), len(w.returned))
+	if len(w.closed) != 1 || len(w.returned) != 3 {
+		t.Fatalf("closed %d returned %d, want 1 and 3", len(w.closed), len(w.returned))
 	}
 	// Back at Ratchel the Red Hair reports and pays: the hair is
 	// taken, the reward text lands, and the quest is done for good.
