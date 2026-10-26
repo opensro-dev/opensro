@@ -30,6 +30,7 @@ import {
 	serverGameDataRoot
 } from "../world/paths.mjs";
 import { buildStructureZoneProjection } from "./structureZones.mjs";
+import { buildAINavProjection } from "./aiNavProjection.mjs";
 import { buildServerGameDataArchive } from "./serverGameDataArchive.mjs";
 import { completeItemTextProjection, completeItemReferenceProjection } from "../shared/itemTextCompletions.mjs";
 import { completeEnglishTextProjection, ENGLISH_COMPLETION_FILES } from "../shared/englishCompletions.mjs";
@@ -44,6 +45,8 @@ const PROTOCOL_VERSION = 2;
 const WORLD_PUBLIC_ROOT = path.join( publicRoot, "assets", "world" );
 // CObjectStringIfo_Load (98C7F0) reads this Data.pk2 file.
 const OBJECT_STRING_FILE = path.join( dataExtractedRoot, "navmesh", "objectstring.ifo" );
+// The dungeon route tables (aiNavProjection.mjs) sit beside objectstring.ifo.
+const AINAV_SOURCE_ROOT = path.join( dataExtractedRoot, "navmesh" );
 // Read by apps/server/internal/game/world/alexandria (OverlayFile).
 const ALEXANDRIA_OVERLAY_FILE = path.join( "textdata", "alexandria-overlay.json" );
 // Written by scripts/import_vsro_optional_teleport.py; read by
@@ -83,6 +86,7 @@ export async function buildServerGameDataBundle( options ) {
 		await buildCharacterAuthorityProjection( temporaryRoot, textdataRoot );
 		await buildAreaProjection( temporaryRoot, worldPublicRoot );
 		await buildMovementProjection( temporaryRoot, worldPublicRoot );
+		await buildAINavProjection( temporaryRoot, options.aiNavSourceRoot ?? AINAV_SOURCE_ROOT );
 		await buildStructureZoneProjection( temporaryRoot, options.objectStringFile ?? OBJECT_STRING_FILE );
 
 		const files = await describeProjectionFiles( temporaryRoot );
