@@ -498,6 +498,7 @@ test("the experimental presentation pass publishes the offscreen frame and retir
 	try {
 		renderer.experimentalVideo( {
 			renderScale: 100,
+			phoneRenderCap: false,
 			postProcessing: true,
 			anisotropicFiltering: false,
 			heightFog: false,

@@ -16,14 +16,25 @@ import assert from "node:assert/strict";
 const experimentalModule = await import(
 	"../../src/engine/foundation/ui/experimental-options.ts"
 );
-const { experimentalGameplay, experimentalOptions, experimentalVideo, renderScales, uiScaleFactor } =
-	experimentalModule;
+const {
+	experimentalGameplay,
+	experimentalOptions,
+	experimentalVideo,
+	phoneDisplay,
+	PHONE_SCENE_PIXEL_BUDGET,
+	renderScales,
+	sceneRenderScale,
+	uiScaleFactor
+} = experimentalModule;
 const { createExperimentalHud, EXPERIMENTAL_TABS } = await import(
 	"../../src/engine/runtime/ui/hud/experimental-hud.ts"
 );
 
 const OFF = Object.freeze( {
 	renderScale: 100,
+	// On by default (owner 2026-10-27, #1806): a phone caps the scene's pixels;
+	// every other display draws at full resolution.
+	phoneRenderCap: true,
 	// Native 1:1 interface size.
 	uiScale: 100,
 	chatTimestamps: false,
@@ -209,6 +220,7 @@ test("every video stage defaults off and only an explicit true enables it", () =
 	assert.deepEqual( experimentalOptions(), OFF );
 	assert.deepEqual( experimentalVideo( experimentalOptions() ), {
 		renderScale: 100,
+		phoneRenderCap: true,
 		postProcessing: false,
 		anisotropicFiltering: false,
 		heightFog: false,
@@ -339,6 +351,58 @@ test("render scale accepts only explicit numeric selections and reaches the rend
 	for ( const legacy of [ undefined, null, [], {}, { chatTimestamps: true } ] ) {
 		assert.equal( experimentalOptions( legacy ).renderScale, 100 );
 	}
+});
+
+/*
+================
+Phone resolution (#1806)
+================
+*/
+// The report's iPhone: a 2250 x 1206 backing store at device pixel ratio 3.
+const IPHONE_VIEWPORT = { width: 2250, height: 1206 };
+
+test("a phone is a coarse pointer on a short screen; touch laptops and tablets are not", () => {
+	assert.equal( phoneDisplay( { coarsePointer: true, shortSide: 402 } ), true );
+	assert.equal( phoneDisplay( { coarsePointer: true, shortSide: 360 } ), true );
+	assert.equal( phoneDisplay( { coarsePointer: true, shortSide: 768 } ), false, "tablet" );
+	assert.equal( phoneDisplay( { coarsePointer: false, shortSide: 402 } ), false, "fine pointer" );
+	assert.equal( phoneDisplay( { coarsePointer: true, shortSide: 0 } ), false, "no screen reported" );
+});
+
+test("phone resolution defaults on and only an explicit false turns it off", () => {
+	for ( const value of [ undefined, null, {}, { phoneRenderCap: "false" }, { phoneRenderCap: 0 } ] ) {
+		assert.equal( experimentalOptions( value ).phoneRenderCap, true, JSON.stringify( value ) );
+	}
+	const off = experimentalOptions( JSON.parse( JSON.stringify( { phoneRenderCap: false } ) ) );
+	assert.equal( off.phoneRenderCap, false );
+	assert.equal( experimentalVideo( off ).phoneRenderCap, false );
+});
+
+test("on a phone the cap picks the largest scale inside the pixel budget", () => {
+	const on = experimentalVideo( experimentalOptions() );
+	assert.equal( sceneRenderScale( on, IPHONE_VIEWPORT, true ), 50 );
+	// A smaller backing store keeps more of its resolution.
+	assert.equal( sceneRenderScale( on, { width: 1280, height: 720 }, true ), 100 );
+	assert.equal( sceneRenderScale( on, { width: 1600, height: 900 }, true ), 75 );
+	// Past the budget even at the smallest scale, the smallest scale stays.
+	assert.equal( sceneRenderScale( on, { width: 4000, height: 3000 }, true ), 50 );
+	for ( const viewport of [ IPHONE_VIEWPORT, { width: 1600, height: 900 } ] ) {
+		const scale = sceneRenderScale( on, viewport, true );
+		assert.ok( viewport.width * viewport.height * scale * scale / 10000 <= PHONE_SCENE_PIXEL_BUDGET );
+	}
+});
+
+test("the phone cap leaves desktops, the off switch and a picked scale alone", () => {
+	const on = experimentalVideo( experimentalOptions() );
+	// Not a phone: the native full resolution.
+	assert.equal( sceneRenderScale( on, IPHONE_VIEWPORT, false ), 100 );
+	// Switched off on a phone: full resolution.
+	const off = experimentalVideo( experimentalOptions( { phoneRenderCap: false } ) );
+	assert.equal( sceneRenderScale( off, IPHONE_VIEWPORT, true ), 100 );
+	// A scale the player picked below 100 wins, also above the cap's choice.
+	const picked = experimentalVideo( experimentalOptions( { renderScale: 75 } ) );
+	assert.equal( sceneRenderScale( picked, IPHONE_VIEWPORT, true ), 75 );
+	assert.equal( sceneRenderScale( picked, IPHONE_VIEWPORT, false ), 75 );
 });
 
 /*

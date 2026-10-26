@@ -41,6 +41,7 @@ export async function captureSunShadowPlacement() {
 	/** @type {import("../../src/engine/foundation/ui/experimental-options.ts").ExperimentalVideo} */
 	const options = {
 		renderScale: 100,
+		phoneRenderCap: false,
 		postProcessing: false,
 		anisotropicFiltering: false,
 		heightFog: false,
