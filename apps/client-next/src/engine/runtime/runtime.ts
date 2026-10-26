@@ -390,6 +390,7 @@ export function startRuntime(
 					setFreeCamera: free => world.setFreeCamera( free ),
 					setCameraCollision: collision => world.setCameraCollision( collision ),
 					setCursorVisible: visible => platform.setCursorVisible( visible ),
+					playSoundByName: name => audio.playByName( name ),
 					saveExperimental: value => platform.saveExperimentalOptions( value ),
 					saveWindowPositions: value => platform.saveWindowPositions( value )
 				}
