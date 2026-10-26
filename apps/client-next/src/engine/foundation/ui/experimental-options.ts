@@ -100,6 +100,12 @@ export interface ExperimentalOptions {
 	// widens that one. On unless turned off (the owner's choice,
 	// 2026-10-19); off hides them from the banner and the chat log.
 	readonly plusSevenNotices: boolean;
+	// Port-only, not native: the shard's item-break announcements for
+	// characters who opted in on the account page (their own 0x3667
+	// channel, server wire.BreakNoticeChannel; SRO_ALCHEMY_BREAK_NOTICE,
+	// #1738). On unless turned off; off hides them from the banner and
+	// the chat log.
+	readonly breakNotices: boolean;
 	// Port-only, not native: when a unique the player damaged dies, the
 	// shard's damage ranking (0x3FBC, server SRO_UNIQUE_DAMAGE_RANK) opens
 	// in a window (unique-rank-hud.ts). Off unless turned on, so each
@@ -293,7 +299,7 @@ experimentalOptions
 
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, mainThreadOwnWalk, greyDisabledTabs, jobKillNotices, dropPlusNotices,
-plusSevenNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, shortNotices, confirmGuildBan,
+plusSevenNotices, breakNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, shortNotices, confirmGuildBan,
 petClickOpensWindow, smartPetPickup, touchInspect and dungeonCharacterPvs, which only an explicit false turns off.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
 explicitly, and are read only while petPickupFilter is on.
@@ -334,6 +340,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		jobKillNotices: record.jobKillNotices !== false,
 		dropPlusNotices: record.dropPlusNotices !== false,
 		plusSevenNotices: record.plusSevenNotices !== false,
+		breakNotices: record.breakNotices !== false,
 		uniqueDamageRank: enabled( "uniqueDamageRank" ),
 		vHidesCompanions: enabled( "vHidesCompanions" ),
 		dungeonCharacterPvs: record.dungeonCharacterPvs !== false,
@@ -447,6 +454,7 @@ export interface ExperimentalGameplay {
 	readonly jobKillNotices: boolean;
 	readonly dropPlusNotices: boolean;
 	readonly plusSevenNotices: boolean;
+	readonly breakNotices: boolean;
 	readonly webTransport: boolean;
 	readonly homingProjectiles?: boolean;
 	readonly smartPetPickup?: boolean;
@@ -468,6 +476,7 @@ export function experimentalGameplay( options: ExperimentalOptions ): Experiment
 		jobKillNotices: options.jobKillNotices,
 		dropPlusNotices: options.dropPlusNotices,
 		plusSevenNotices: options.plusSevenNotices,
+		breakNotices: options.breakNotices,
 		homingProjectiles: options.homingProjectiles,
 		smartPetPickup: options.smartPetPickup,
 		sunDropMarker: options.sunDropMarker,

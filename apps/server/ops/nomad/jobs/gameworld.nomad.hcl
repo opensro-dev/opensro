@@ -565,6 +565,15 @@ variable "announce_most_wanted" {
   default = "on"
 }
 
+# alchemy_break_notice announces the destroyed reinforcement item of a
+# character who opted in on the account page, by job alias or "a player",
+# never a character name (port-only, not native; owner-approved vote
+# 2026-10-26, #1604 P7.2 / #1738). "off" is native: no notice.
+variable "alchemy_break_notice" {
+  type    = string
+  default = "off"
+}
+
 # thief_party_bonus gives a party +10% monster EXP and gold per member
 # dressed as a thief, up to +50% (port-only, not native; owner decision
 # 2026-10-14). "off" is native.
@@ -1162,6 +1171,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_SHORT_NOTICE_FADE_MS                = var.short_notice_fade_ms
         SRO_CHAT_ACK_TIMEOUT_MS                 = var.chat_ack_timeout_ms
         SRO_ANNOUNCE_MOST_WANTED                = var.announce_most_wanted
+        SRO_ALCHEMY_BREAK_NOTICE                = var.alchemy_break_notice
         SRO_THIEF_PARTY_BONUS                   = var.thief_party_bonus
         SRO_THIEF_PARTY_PERCENT_EACH            = var.thief_party_percent_each
         SRO_THIEF_PARTY_PERCENT_CAP             = var.thief_party_percent_cap

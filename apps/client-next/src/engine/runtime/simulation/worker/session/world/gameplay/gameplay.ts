@@ -1167,6 +1167,8 @@ fails; retry persistence without restoring stale slot occupancy.
 	let dropPlusNotices = true;
 	// The Experimental "Plus +7 notices" row, on the same terms.
 	let plusSevenNotices = true;
+	// The Experimental "Item break notices" row, on the same terms.
+	let breakNotices = true;
 	// The Experimental "Homing projectiles" row: off by default so projectiles
 	// fly to their launch-captured endpoint as natively.
 	let homingProjectiles = false;
@@ -1587,6 +1589,7 @@ The Experimental window's gameplay rows (experimentalGameplay).
 			jobKillNotices = value.jobKillNotices !== false;
 			dropPlusNotices = value.dropPlusNotices !== false;
 			plusSevenNotices = value.plusSevenNotices !== false;
+			breakNotices = value.breakNotices !== false;
 			homingProjectiles = value.homingProjectiles === true;
 			smartPetPickup = value.smartPetPickup !== false;
 			if ( !smartPetPickup ) cosPickup.spaceChanged();
@@ -3790,6 +3793,7 @@ Packet handling must not depend on which HUD panel is currently open.
 				if ( notice?.jobKill && !jobKillNotices ) return false;
 				if ( notice?.dropPlus && !dropPlusNotices ) return false;
 				if ( notice?.plusSeven && !plusSevenNotices ) return false;
+				if ( notice?.itemBreak && !breakNotices ) return false;
 				if ( notice ) {
 					notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 					if ( frame.opcode === 0x3667 && isServerNoticeChannel( frame.payload[0] ) ) {

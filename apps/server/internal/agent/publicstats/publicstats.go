@@ -132,7 +132,10 @@ type Sources struct {
 	SetHidden func(accountID, name string, hidden bool) error
 	// SetGearHidden commits the "hide my gear" choice the same way.
 	SetGearHidden func(accountID, name string, hidden bool) error
-	WriteToken    string
+	// SetBreakNotice commits the item-break notice opt-in (#1738) the
+	// same way.
+	SetBreakNotice func(accountID, name string, on bool) error
+	WriteToken     string
 	// Sample reads the shard's online count and the hub's cumulative
 	// counters for P7 (status.go); nil leaves the status figures zero.
 	Sample func() (online int, metrics transport.Metrics)
