@@ -2910,11 +2910,14 @@ export function createUi(
 				break;
 			case DEBUG_COMMAND_WAYPOINT_CLEAR:
 				// Case 130: the store reset (CRenderContext_Reset on
-				// the +0x3FC track): the records and the clock go; the
-				// play byte is a separate field and stands as it was,
-				// stepping an empty track. The native prints nothing.
+				// the +0x3FC track), and the same block's next write
+				// clears the play byte (+0x3CD): the stop row (133)
+				// enters at that write, so clear and stop share it.
+				// The records, the clock and the byte all go. The
+				// native prints nothing.
 				resetCameraWaypoints( cameraWaypoints );
 				extensions.setCameraWaypoints?.( cameraWaypoints.keyframes );
+				extensions.setCameraPlaying?.( false );
 				break;
 			case DEBUG_COMMAND_WAYPOINT_POP:
 			case DEBUG_COMMAND_WAYPOINT_GO:

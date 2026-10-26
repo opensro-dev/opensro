@@ -4,9 +4,10 @@
 debug-camera-waypoints.test.mjs - the GM console's camera-waypoint rows
 
 690C40 ids 130-134: /cwclear resets the interface's keyframe track
-(+0x3FC), /cwpop and /cwgo share one case (the free-camera byte +0x3CE
-standing and a non-empty store, then the play byte +0x3CD is written and
-the track clock zeroed), /cwstop clears the play byte, and /cwsave writes
+(+0x3FC) and clears the play byte with it, /cwpop and /cwgo share one
+case (the free-camera byte +0x3CE standing and a non-empty store, then
+the play byte +0x3CD is written and the track clock zeroed), /cwstop
+clears the play byte (the same write clear ends on), and /cwsave writes
 the store's lines in the native text form. Nothing native ever loads the
 track, so the port fills it from the published cameradata rows (#1716)
 and the browser's c:\cw.txt is a download. Nothing reaches the server.
@@ -225,14 +226,17 @@ test("the HUD loads the store and the rows run their native gates", t => {
 			"Vector4(0.087156f, 0.000000f, 0.000000f, 0.996195f) }"
 	);
 	assert.ok( lines[1].startsWith( "{ 1.000000f, Vector(1466.000000f, 79.000000f, 1488.000000f), Vector4(" ) );
-	// /cwclear resets the store: the forward is empty, the save is empty,
-	// and the non-empty gate refuses playback even with the camera free.
+	// /cwclear resets the store and clears the play byte with it -
+	// natively the stop row enters at the clear block's second
+	// instruction, so both rows share that write. The forward is
+	// empty, the save is empty, and the non-empty gate refuses
+	// playback even with the camera free.
 	f.typeLine( "/cwclear" );
 	assert.equal( f.loaded.length, 2 );
 	assert.deepEqual( f.loaded[1], [] );
+	assert.deepEqual( f.playing, [ true, false, true, false ], "clear stopped the playback it emptied" );
 	f.typeLine( "/cwsave" );
 	assert.equal( f.saved[1], "" );
-	f.typeLine( "/cwstop" );
 	f.typeLine( "/cwgo" );
 	assert.deepEqual( f.playing, [ true, false, true, false ] );
 	assert.deepEqual( f.sent, [], "a waypoint row reached the server" );
