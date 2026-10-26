@@ -240,7 +240,7 @@ caller's cap so a long word saturates the way the CRT conversion does
 before the handler's own clamp sees it.
 ================
 */
-function nativeWordInteger( word: string, magnitudeCap: number ): { negative: boolean; magnitude: number } {
+function nativeWordInteger( word: string, magnitudeCap: number ): { negative: boolean; magnitude: number; } {
 	let index = 0;
 	while ( index < word.length && commandSpace( word.charCodeAt( index ) ) ) index++;
 	const negative = word[index] === "-";
