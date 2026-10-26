@@ -64,6 +64,15 @@ export interface PlaneFeatures {
 	// sectorFrames: poses rebase across 1920-unit sector frames. A cave's
 	// locals are one frame for the whole region.
 	readonly sectorFrames: boolean;
+	// sky: the sky dome, its lens flares and star field. A cave has a
+	// ceiling, not a sky.
+	readonly sky: boolean;
+	// animatedWater: the outdoor water's animated normal frames over a
+	// block's water. Cave water is the dungeon's own surfaces (dungeonWater).
+	readonly animatedWater: boolean;
+	// dungeonWater: the dungeon's authored water surfaces; an outdoor bundle
+	// carrying them is malformed.
+	readonly dungeonWater: boolean;
 }
 
 const OUTDOOR_FEATURES = {
@@ -73,7 +82,10 @@ const OUTDOOR_FEATURES = {
 	terrainGrid: true,
 	residentOnly: false,
 	rooms: false,
-	sectorFrames: true
+	sectorFrames: true,
+	sky: true,
+	animatedWater: true,
+	dungeonWater: false
 } as const;
 
 const CAVE_FEATURES = {
@@ -83,7 +95,10 @@ const CAVE_FEATURES = {
 	terrainGrid: false,
 	residentOnly: true,
 	rooms: true,
-	sectorFrames: false
+	sectorFrames: false,
+	sky: false,
+	animatedWater: false,
+	dungeonWater: true
 } as const;
 
 /*
