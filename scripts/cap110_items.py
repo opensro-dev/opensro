@@ -5,8 +5,10 @@ cap110_items.py - optional degree 10/11 equipment in the v1.150 layout
 
 Port-only, not native. Preserves every native row and remaps imported item
 identities by codename. Weapons, shields, armor and accessories share the
-160-cell layout; set items are reported until their set mechanics are
-ported. Does not invent prices, statistics, shops, drops or set effects.
+160-cell layout; set rows import with the rest, dormant: nothing on the
+server or the client reads their Set cell yet, and their group catalogue
+lands beside them for the later mechanics port. Does not invent prices,
+statistics, shops, drops or set bonuses.
 
 ===========================================================================
 """
@@ -48,6 +50,18 @@ ACCESSORY_TYPES = ("5", "12")
 EQUIPMENT_TYPES = ARMOR_TYPES + ACCESSORY_TYPES + ("4", "6")
 LINKED_CODE = 4
 OUTPUT_SHARD = "itemdata_110000.txt"
+SET_GROUP_TABLE = "refsetitemgroup.txt"
+MAGIC_GROUP_TABLE = "refmagicoptgroup.txt"
+MAGIC_OPTION_TABLE = "magicoption.txt"
+SET_GROUP_ID = 1
+SET_GROUP_CODE = 2
+SET_LINK_FIRST = 6
+SET_LINK_LAST = 17
+MAGIC_GROUP_ID = 1
+MAGIC_GROUP_CODE = 3
+MAGIC_GROUP_OPTION = 4
+MAGIC_OPTION_ID = 1
+SET_MAGIC_PREFIX = "MAGIC_11_SET_"
 UNUSED = "xxx"
 MAX_ID = 0xFFFFFFFF
 PACKAGE_CODE = 2
@@ -101,20 +115,32 @@ def equipment_degree(row):
 # Scope inference, port-only: v1.150 has no such conversion feature, and
 # degree 12 is outside this expansion. Remove only verified out-of-scope
 # item links, recording them rather than importing unsupported content.
+# Set rows convert with the rest; their Set cell survives untouched as
+# dormant data, bound to its group catalogue by set_catalogue below.
 # ================
 def convert_equipment(row, identity, later):
-	if equipment_degree(row) not in DEGREES or int(row[SET]) != 0:
+	if equipment_degree(row) not in DEGREES:
 		raise ValueError(f"unsupported equipment family: {row[CODENAME]}")
 	if not 0 < identity <= MAX_ID:
 		raise ValueError("imported item ID exceeds the wire width")
 	converted = list(row)
 	trimmed = []
+	family = re.fullmatch(r"(ITEM_(?:CH|EU)_[A-Z_]+)_11_([A-Z_]*?)A_RARE", row[CODENAME])
+	expected = {f"{family[1]}_12_{family[2]}{grade}_RARE" for grade in ("A", "B", "C")} if family else set()
+	if int(row[SET]) != 0:
+		# Set rows link to the plain degree-12 family, not a set one: the
+		# SET_<grade> segment drops out of the expected names, so
+		# ITEM_CH_BLADE_11_SET_A_RARE names ITEM_CH_BLADE_12_{A,B,C}_RARE
+		# and ITEM_CH_M_CLOTHES_11_AA_SET_B_RARE names the AA family. The
+		# plain family regex would carry SET_ into the names (and misses
+		# SET_B rows entirely, since it requires an A_RARE tail).
+		set_family = re.fullmatch(r"(ITEM_(?:CH|EU)_[A-Z_]+)_11_([A-Z_]*?)SET_[AB]_RARE", row[CODENAME])
+		if set_family:
+			expected = {f"{set_family[1]}_12_{set_family[2]}{grade}_RARE" for grade in ("A", "B", "C")}
 	for column in range(PARAM_FIRST, PARAM_LAST, PARAM_STRIDE):
 		if int(row[column]) == -1 and row[column + 1] == UNUSED:
 			continue
 		target = later.get(row[column + 1])
-		family = re.fullmatch(r"(ITEM_(?:CH|EU)_[A-Z_]+)_11_([A-Z_]*?)A_RARE", row[CODENAME])
-		expected = {f"{family[1]}_12_{family[2]}{grade}_RARE" for grade in ("A", "B", "C")} if family else set()
 		if int(row[column]) != 1 or row[column + 1] not in expected:
 			raise ValueError(f"equipment has unresolved parameter references: {row[CODENAME]}")
 		if target is not None and (equipment_degree(target) != max(DEGREES) + 1 or
@@ -142,7 +168,7 @@ def merge_equipment(native_rows, later_rows, reserved_ids=(), previous_ids=None)
 			raise ValueError(f"previous imported identity changed: {code}")
 	occupied |= retained
 	next_id = max(occupied, default=0) + 1
-	added, deferred, existing, trimmed = [], [], [], []
+	added, existing, trimmed = [], [], []
 	# Weapons precede the new families, preserving v1 import IDs even in a
 	# fresh overlay. A prior marker additionally preserves every published ID.
 	for code, row in sorted(later.items(), key=lambda entry: (entry[1][TYPE_THIRD] != "6", entry[0])):
@@ -150,9 +176,6 @@ def merge_equipment(native_rows, later_rows, reserved_ids=(), previous_ids=None)
 			continue
 		if code in native:
 			existing.append(code)
-			continue
-		if int(row[SET]) != 0:
-			deferred.append({"code": code, "setId": int(row[SET]), "reason": "set mechanics require a separate port"})
 			continue
 		identity = int(previous_ids[code]["target"]) if code in previous_ids else next_id
 		converted, removed = convert_equipment(row, identity, later)
@@ -165,7 +188,8 @@ def merge_equipment(native_rows, later_rows, reserved_ids=(), previous_ids=None)
 		if row[LINKED_CODE] not in ("", UNUSED) and row[LINKED_CODE] not in known_codes:
 			raise ValueError(f"unresolved linked equipment: {row[CODENAME]} -> {row[LINKED_CODE]}")
 	return added, {
-		"added": len(added), "existingNative": existing, "deferred": deferred,
+		"added": len(added), "existingNative": existing,
+		"sets": [{"code": row[CODENAME], "setId": int(row[SET])} for row in added if int(row[SET]) != 0],
 		"families": dict(sorted(Counter(
 			f"race={row[RACE]},degree={equipment_degree(row)},type={row[TYPE_THIRD]},kind={row[TYPE_FOURTH]}" for row in added
 		).items())),
@@ -185,6 +209,58 @@ def equipment_category(row):
 	if row[TYPE_THIRD] in ACCESSORY_TYPES:
 		return "accessories"
 	return "shields" if row[TYPE_THIRD] == "4" else "weapons"
+
+
+# ================
+# set_catalogue
+#
+# The dormant set-group catalogue: every refsetitemgroup row, plus only the
+# degree-11 set rows of refmagicoptgroup. The chain is validated whole, so
+# a missing link fails the build instead of shipping dead groups: every
+# imported set row names a group, every piece-count link in a group names
+# an imported magic group, and every option in those rows is defined by
+# the later magicoption table. Link cells pair a requirement figure with
+# a magic group id (armour A: 21/2, 0/3, 0/4); a zero group cell is an
+# empty slot, and weapon and shield groups carry no links at all. The
+# figure's meaning belongs to the mechanics port. Nothing here applies a
+# bonus; the rows wait for it.
+# ================
+def set_catalogue(set_group_rows, magic_group_rows, option_rows, equipment):
+	groups = {}
+	for row in set_group_rows:
+		if len(row) <= SET_LINK_LAST:
+			raise ValueError("short set group row")
+		group = int(row[SET_GROUP_ID])
+		if group in groups:
+			raise ValueError(f"duplicate set group: {group}")
+		groups[group] = row
+	magic = {}
+	for row in magic_group_rows:
+		if len(row) <= MAGIC_GROUP_OPTION:
+			raise ValueError("short magic option group row")
+		if not row[MAGIC_GROUP_CODE].startswith(SET_MAGIC_PREFIX):
+			continue
+		group = int(row[MAGIC_GROUP_ID])
+		if (group, int(row[MAGIC_GROUP_OPTION])) in magic:
+			raise ValueError(f"duplicate set magic option: {row[MAGIC_GROUP_CODE]}")
+		magic[group, int(row[MAGIC_GROUP_OPTION])] = row
+	options = {int(row[MAGIC_OPTION_ID]) for row in option_rows if len(row) > MAGIC_OPTION_ID}
+	for row in equipment:
+		if int(row[SET]) != 0 and int(row[SET]) not in groups:
+			raise ValueError(f"set item names an unknown set group: {row[CODENAME]} -> {row[SET]}")
+	magic_groups = {group for group, _option in magic}
+	for group, row in groups.items():
+		for column in range(SET_LINK_FIRST + 2, SET_LINK_LAST + 1, 2):
+			if int(row[column]) != 0 and int(row[column]) not in magic_groups:
+				raise ValueError(f"set group names an unknown magic group: {row[SET_GROUP_CODE]} -> {row[column]}")
+	for (group, option), row in magic.items():
+		if option not in options:
+			raise ValueError(f"set magic group names an unknown magic option: {row[MAGIC_GROUP_CODE]} -> {option}")
+	return list(set_group_rows), [row for _key, row in sorted(magic.items())], {
+		"groups": len(groups), "magicGroups": len(magic_groups),
+		"optionIds": sorted({option for _group, option in magic}),
+		"setItems": sum(1 for row in equipment if int(row[SET]) != 0),
+	}
 
 
 # ================

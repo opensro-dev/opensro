@@ -358,6 +358,21 @@ nativeItem
 	}
 	/*
 ================
+playByName
+
+The /snd console row (690C40 case 603) hands its word to the sound
+manager's play-by-name (8F9280 at a null position): the label map
+answers, and a name with no row stays silent. The authored catalogues
+are keyed by the same labels, so a UI-catalogue name plays exactly as
+nativeUi plays it. Item labels stay silent here: their files are
+chosen per item type, and the name alone cannot choose one.
+================
+	*/
+	function playByName( name: string ) {
+		if ( Object.hasOwn( uiSoundCatalog, name ) ) nativeUi( name as UiSoundHandle );
+	}
+	/*
+================
 applyPreferences
 
 Gain changes preserve live source identity, authored weighting and timers.
@@ -419,6 +434,7 @@ uiClick
 		uiSound,
 		nativeUi,
 		nativeItem,
+		playByName,
 		/*
 ================
 buffEnded
