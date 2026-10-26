@@ -231,20 +231,6 @@ func (p objectPassages) permits(source, edge int) bool {
 
 /*
 ================
-covers
-================
-*/
-func (p objectPassages) covers(t float64) bool {
-	for _, link := range p {
-		if t >= link.from && t <= link.to {
-			return true
-		}
-	}
-	return false
-}
-
-/*
-================
 resolveObjectPassages
 ================
 */

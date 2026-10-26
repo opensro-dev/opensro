@@ -397,7 +397,7 @@ func (rt *Runtime) advancePenguin(key petOwnerKey, now int64) (output []simulati
 			}
 			pulse := step
 			pulse.percent = fullAreaPercent
-			pulse.trained = &petTrainedStrike{mods: companion.ModifiersFor(step.pet), reserved: true, passive: -1, penguinRepeat: true, coldExtension: storm.extended}
+			pulse.trained = &petTrainedStrike{mods: companion.ModifiersFor(step.pet), codename: step.pet.Codename, reserved: true, passive: -1, penguinRepeat: true, coldExtension: storm.extended}
 			if s, level, ok := companion.Passive(step.pet, "Shatter", pulse.trained.mods); ok {
 				pulse.trained.shatter = s.ValueAt(level)
 			}
