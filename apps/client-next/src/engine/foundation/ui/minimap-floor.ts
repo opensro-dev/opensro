@@ -16,7 +16,8 @@ client and would otherwise all draw.
 */
 import type { GameplayState, Pose } from "@/engine/contracts/gameplay";
 import { minimapPoseKey } from "@/engine/foundation/gameplay/minimap-floor-key";
-import { type DungeonFloorContext, isDungeonRegion, sameDungeonFloor } from "@/engine/foundation/world/world-space";
+import { featuresAt } from "@/engine/foundation/world/plane";
+import { type DungeonFloorContext, sameDungeonFloor } from "@/engine/foundation/world/world-space";
 
 export { minimapPoseKey };
 
@@ -50,7 +51,7 @@ export function minimapFloorQueries(
 	targets: readonly Pose[],
 	entities: readonly Pick<Pose, "regionId" | "x" | "y" | "z">[] = []
 ): readonly Pose[] {
-	if ( !game?.pose || !isDungeonRegion( game.pose.regionId ) ) return [];
+	if ( !game?.pose || !featuresAt( game.pose.regionId ).rooms ) return [];
 	const rows: Pose[] = [ ...targets ];
 	for ( const e of entities ) {
 		rows.push( { regionId: e.regionId, x: e.x, y: e.y, z: e.z, angle: 0 } );

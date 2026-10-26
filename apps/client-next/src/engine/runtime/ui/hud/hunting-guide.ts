@@ -23,7 +23,7 @@ import {
 	type HuntingProjection
 } from "@/engine/foundation/ui/hunting-guide";
 import { worldMapFrame, type WorldMapLayout } from "@/engine/foundation/ui/world-map";
-import { isDungeonRegion } from "@/engine/foundation/world/world-space";
+import { featuresAt } from "@/engine/foundation/world/plane";
 
 const EMPTY: HuntingProjection = { quads: [], controls: [], labels: [], paths: [], areas: [] };
 const ART_BYTES_LIMIT = 512 * 1024;
@@ -148,7 +148,7 @@ export function createHuntingGuideHud(
 			hover: string | null = null,
 			layout?: WorldMapLayout
 		) {
-			if ( page !== 0 || load.kind !== "ready" || isDungeonRegion( center.regionId ) ) {
+			if ( page !== 0 || load.kind !== "ready" || !featuresAt( center.regionId ).worldMap ) {
 				invalidate();
 				return EMPTY;
 			}

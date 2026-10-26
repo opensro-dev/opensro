@@ -1,5 +1,6 @@
 import type { Pose } from "@/engine/contracts/gameplay";
-import { isDungeonRegion, REGION_SIZE, sectorX, sectorY } from "@/engine/foundation/world/world-space";
+import { featuresAt } from "@/engine/foundation/world/plane";
+import { REGION_SIZE, sectorX, sectorY } from "@/engine/foundation/world/world-space";
 export interface MinimapFloor {
 	readonly floorIndex: number;
 	readonly floorLabel: string;
@@ -63,7 +64,7 @@ export function minimapArt( value: unknown ): ReadonlyMap<string, string> {
 }
 export function minimapTiles( pose: Pose, zoom: number, floor?: MinimapFloor, art?: ReadonlyMap<string, string> ) {
 	if ( !art ) return [];
-	const dungeon = isDungeonRegion( pose.regionId );
+	const dungeon = featuresAt( pose.regionId ).floorMinimap;
 	if ( dungeon && !floor ) return [];
 	const gx = dungeon ? Math.floor( pose.x / REGION_SIZE ) : 0,
 		gz = dungeon ? Math.floor( pose.z / REGION_SIZE ) : 0,
