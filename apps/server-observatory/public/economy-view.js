@@ -485,3 +485,48 @@ export function killStatRows( body ) {
 	}
 	return rows.sort( ( a, b ) => b.day - a.day || a.band - b.band );
 }
+
+/*
+================
+censusRows
+
+The sealcensus answer shaped for the Census table: one row per degree,
+each tier a { items, holders } cell or null where the shard withheld
+the bucket under its holder floor. A malformed answer yields no rows
+rather than a thrown page.
+================
+*/
+export function censusRows( body ) {
+	const cell = raw =>
+		raw && Number.isFinite( raw.items ) && Number.isFinite( raw.holders ) ?
+			{ items: raw.items, holders: raw.holders } :
+			null;
+	const rows = Array.isArray( body?.rows ) ? body.rows : [];
+	return rows
+		.filter( row => Number.isFinite( row?.degree ) )
+		.map( row => ({
+			degree: row.degree,
+			star: cell( row.star ),
+			moon: cell( row.moon ),
+			sun: cell( row.sun )
+		}) )
+		.sort( ( a, b ) => a.degree - b.degree );
+}
+
+/*
+================
+CENSUS_LOCATION_LABELS
+
+The census locations in the order the tab lists them; the key reads the
+report's locations block.
+================
+*/
+export const CENSUS_LOCATION_LABELS = Object.freeze( [
+	[ "inventory", "Character inventories" ],
+	[ "avatar", "Avatar rows" ],
+	[ "pet", "Pet bags" ],
+	[ "transport", "Transport bags" ],
+	[ "storage", "Account warehouses" ],
+	[ "guildStorage", "Guild warehouses" ],
+	[ "ground", "On the ground" ]
+] );

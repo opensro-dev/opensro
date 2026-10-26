@@ -426,6 +426,7 @@ export interface ActorOwner {
 		animation( body: string, name: string, path: string ): boolean;
 		duration( path: string, clip: string ): number;
 		plan( paths: readonly string[] ): boolean;
+		prioritize( paths: readonly string[] ): void;
 		ready( path: string ): boolean;
 	};
 	readonly skillObjects: {

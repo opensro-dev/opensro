@@ -27,6 +27,78 @@ const maxDungeonFloorSampleSpacing = 2.0
 // samples a walk takes as the same floor; a larger one is another floor.
 const maxDungeonFloorStep = 2.0
 
+// dungeonCutTolerance is how far apart, as a chord fraction, two
+// computations of one edge crossing may land: the same vertices through
+// the same intersection, with the edge's ends in either order.
+const dungeonCutTolerance = 1e-6
+
+// dungeonWallFlags are the edge flags the native edge walk stops at with
+// the clipped bit (client 428B36; the server's twin tests the same mask).
+const dungeonWallFlags = 0x12
+
+/*
+================
+dungeonOutlineResult
+
+The native result bit for a chord stopped on a dungeon block's outline
+edge (#1712). The edge walk, run with its stop flag set (the movement
+query of the AI's route lookahead and of the spawn test both set it),
+stops at an edge whose flags carry 0x12 - a wall; every unlinked outline
+edge of Donwhang's blocks but 14 carries 3 - and reports bit 0, clipped
+(client 428B36..428B3B). Bit 28 comes only from a doorway (flag 8) whose
+neighbouring block cannot be resolved, from an edge event, or from the
+query's own guards, so a doorway edge the clip found no passage through
+stays blocked.
+================
+*/
+func dungeonOutlineResult(flags byte) uint32 {
+	if flags&dungeonWallFlags != 0 {
+		return monster.NavResultClipped
+	}
+	return monster.NavResultBlocked
+}
+
+/*
+================
+dungeonSpawnSurface.outlineCrossingResult
+
+The native result for a chord whose floor ends at chord fraction t: a
+dungeon block's floor ends only at its outline, so the chord left it
+through the outline edge it crosses there, and that edge's flags decide
+(dungeonOutlineResult). A floor that ends with no outline edge at t (a
+stacked-floor step inside a block) reports blocked, as before #1712.
+================
+*/
+func (s *dungeonSpawnSurface) outlineCrossingResult(from, to simulation.Spawn, t float64) uint32 {
+	for i := range s.objects {
+		obj := &s.objects[i]
+		if obj.reach.missedBy(from.X, from.Z, to.X, to.Z) {
+			continue
+		}
+		p := obj.placement
+		c, sn := obj.cosYaw, obj.sinYaw
+		x0, z0 := c*(from.X-p.x)+sn*(from.Z-p.z), -sn*(from.X-p.x)+c*(from.Z-p.z)
+		x1, z1 := c*(to.X-p.x)+sn*(to.Z-p.z), -sn*(to.X-p.x)+c*(to.Z-p.z)
+		for _, m := range obj.meshes {
+			for e, flags := range m.outline.flags {
+				a, b := m.outline.vertA[e], m.outline.vertB[e]
+				ax, az := float64(m.vertices[a*3]), float64(m.vertices[a*3+2])
+				sx, sz := float64(m.vertices[b*3])-ax, float64(m.vertices[b*3+2])-az
+				rx, rz := x1-x0, z1-z0
+				den := rx*sz - rz*sx
+				if math.Abs(den) < 1e-12 {
+					continue
+				}
+				te, u := ((ax-x0)*sz-(az-z0)*sx)/den, ((ax-x0)*rz-(az-z0)*rx)/den
+				if u >= 0 && u <= 1 && math.Abs(te-t) <= dungeonCutTolerance {
+					return dungeonOutlineResult(flags)
+				}
+			}
+		}
+	}
+	return monster.NavResultBlocked
+}
+
 // Dungeon movement never uses outdoor sector arithmetic. Missing coverage and
 // cross-dungeon requests retain the start; teleportation owns region changes.
 func (v *WaterValidator) clipDungeonPath(from, to simulation.Spawn) ClipReport {
@@ -74,7 +146,7 @@ func (v *WaterValidator) clipDungeonPath(from, to simulation.Spawn) ClipReport {
 			if t, ok := objectMeshChordContactDetail(m, x0, z0, from.Y-p.y, x1, z1, to.Y-p.y, best, func(edge int, _ bool, _ float64) bool { return passages.permits(i, edge) }, &local); ok {
 				result = monster.NavResultClipped
 				if local.outline {
-					result = monster.NavResultBlocked
+					result = dungeonOutlineResult(local.edgeFlags)
 				}
 				rest = local
 				if rest.valid {
@@ -180,9 +252,12 @@ floorWalk:
 			h, ok := surface.heightAt(from.X+dx*t, curY, from.Z+dz*t)
 			sameFloor := ok && math.Abs(h-curY) <= maxDungeonFloorStep
 			if !sameFloor && !passages.covers(t) {
-				if cuts[i-1] < best {
+				// The floor ends at a cut; a contact found at that same
+				// crossing keeps its own result (the two t differ only in
+				// float rounding).
+				if cuts[i-1] < best-dungeonCutTolerance {
 					best = cuts[i-1]
-					result = monster.NavResultBlocked
+					result = surface.outlineCrossingResult(from, to, best)
 					rest = objectContactPoint{}
 				}
 				break floorWalk

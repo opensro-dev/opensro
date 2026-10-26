@@ -35,6 +35,10 @@ export function createCharacterResources(
 ) {
 	const durations = new Map<string, ReadonlyMap<string, number>>();
 	const loaded = new Set<string>(), wanted = new Set<string>(), planned = new Set<string>();
+	// The local player's worn sources for this frame (prioritize). The
+	// single load slot serves them before any other cold source starts:
+	// a newly equipped part must not wait behind unrelated actors.
+	const priority = new Set<string>();
 	const costs = new Map<string, number>();
 	const proceduralCache = new Map<string, { model: CharacterModel; images: NativeTexture[]; }>();
 	let plannedBytes = 0, reserved: string | null = null;
@@ -54,8 +58,28 @@ export function createCharacterResources(
 	*/
 	function reservable( path: string ): boolean {
 		if ( job ) return job.path === path;
-		return reserved === null && !disposed && assets.available() > 0 &&
+		if ( priority.has( path ) ) {
+			return !disposed && assets.available() > 0 &&
+				(failures.get( path )?.retryAt ?? -Infinity) <= now;
+		}
+		return reserved === null && !priorityPending() && !disposed && assets.available() > 0 &&
 			(failures.get( path )?.retryAt ?? -Infinity) <= now;
+	}
+
+	/*
+	================
+	priorityPending
+
+	A declared wearer source is still coming and may use the slot now:
+	not loaded, and not waiting out a failure's retry (a part in retry
+	must not hold the slot against everyone else).
+	================
+	*/
+	function priorityPending(): boolean {
+		for ( const path of priority ) {
+			if ( !loaded.has( path ) && (failures.get( path )?.retryAt ?? -Infinity) <= now ) return true;
+		}
+		return false;
 	}
 
 	/*
@@ -101,6 +125,24 @@ export function createCharacterResources(
 
 	/*
 	================
+	prioritize
+
+	Declares the local player's worn sources for the frames ahead. The
+	declaration survives frame begins; a part that is still coming owns
+	the next free slot ahead of manifests, clips and other actors. The
+	load already in flight is never cancelled - the wearer's part takes
+	the slot when it lands, so the wait stays bounded by one fetch.
+	Callers redeclare on every appearance change; passing an empty list
+	releases the lane.
+	================
+	*/
+	function prioritize( paths: readonly string[] ): void {
+		priority.clear();
+		for ( const path of paths ) priority.add( path );
+	}
+
+	/*
+	================
 	request
 
 	Submit only published resources whose independent retry deadline has elapsed.
@@ -115,6 +157,9 @@ export function createCharacterResources(
 		) {
 			return;
 		}
+		// Manifests and clips skip plan(); the wearer's declared part
+		// still owns the free slot ahead of them.
+		if ( !priority.has( path ) && priorityPending() ) return;
 		try {
 			if ( !path.startsWith( "/assets/" ) || path.includes( ".." ) || path.includes( "\\" ) ) {
 				throw new Error( "Unpublished character resource" );
@@ -406,6 +451,7 @@ export function createCharacterResources(
 			planned.clear();
 			plannedBytes = 0;
 			reserved = null;
+			priority.clear();
 			renderer.retainCharacterModels( [] );
 		},
 
@@ -430,6 +476,8 @@ export function createCharacterResources(
 			planned.clear();
 			plannedBytes = 0;
 			reserved = null;
-		}
+			priority.clear();
+		},
+		prioritize
 	};
 }

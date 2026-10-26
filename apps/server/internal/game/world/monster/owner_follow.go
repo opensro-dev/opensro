@@ -3,8 +3,9 @@
 
 owner_follow.go - COS owner formation and steering decisions
 
-GameServer 549F80 follows an owner through CPositioner's eight reservations.
-The caller owns navigation, state timers and movement publication.
+The native follow routine follows an owner through the positioner's
+eight reservations. The caller owns navigation, state timers and
+movement publication.
 
 ===========================================================================
 */
@@ -42,9 +43,10 @@ type OwnerFollowInput struct {
 ================
 NativeOwnerFollowMotion
 
-549F80: the <=60 completion test precedes formation construction. After that,
-<=30 and >=5 degrees steer immediately; a small turn may retain the old goal.
-430AD0 explicitly drops height from these vectors.
+The <=60 completion test precedes formation construction. After
+that, <=30 and >=5 degrees steer immediately; a small turn may
+retain the old goal. The native relative-position helper explicitly
+drops height from these vectors.
 ================
 */
 func NativeOwnerFollowMotion(in OwnerFollowInput) FollowMotion {
@@ -81,8 +83,9 @@ func NativeOwnerFollowMotion(in OwnerFollowInput) FollowMotion {
 ================
 AssignOwnerFollow
 
-555460 releases the previous reservation before assigning. Unlike squad
-approach, a full CPositioner leaves the tactics' remembered index unchanged.
+The native slot assignment releases the previous reservation before
+assigning. Unlike squad approach, a full positioner leaves the
+tactics' remembered index unchanged.
 ================
 */
 func (slots *ApproachSlots) AssignOwnerFollow(gid uint32, remembered int, live, owner Pose) int {
@@ -99,8 +102,9 @@ func (slots *ApproachSlots) AssignOwnerFollow(gid uint32, remembered int, live, 
 ================
 NativeOwnerFollowRunFactor
 
-548A30 adjusts parameter 18's source-zero percentage against authored run
-speed. The caller supplies the owner's current channel speed and run speed.
+The native speed update adjusts parameter 18's source-zero
+percentage against authored run speed. The caller supplies the
+owner's current channel speed and run speed.
 ================
 */
 func NativeOwnerFollowRunFactor(in OwnerFollowSpeed) float32 {
@@ -128,9 +132,10 @@ type OwnerFollowSpeed struct {
 ================
 NativeOwnerFollowGoal
 
-55E090 probes the formation point, nudging toward the owner by 0.7 up to
-50 times. Surface resolution belongs to the existing navigation owner.
-5400C0 supplies three times the integer body radius outside BATTLE.
+The native formation probe tests the formation point, nudging
+toward the owner by 0.7 up to 50 times. Surface resolution belongs
+to the existing navigation owner. The native leash radius supplies
+three times the integer body radius outside BATTLE.
 ================
 */
 func NativeOwnerFollowGoal(in OwnerFormationGoal) Pose {
@@ -176,7 +181,8 @@ func NativeOwnerFollowGoal(in OwnerFormationGoal) Pose {
 ================
 ownerFollowRound
 
-55E2CD..55E39E uses floor and the relative-to-owner sign, including -1.
+Native rounding uses floor and the relative-to-owner sign,
+including -1.
 ================
 */
 func ownerFollowRound(coordinate, relative float32) float64 {
@@ -194,7 +200,8 @@ func ownerFollowRound(coordinate, relative float32) float64 {
 ================
 NativeOwnerFollowDistance
 
-549F80 spills the squared planar length before the square root.
+The native follow distance spills the squared planar length before
+the square root.
 ================
 */
 func NativeOwnerFollowDistance(live, owner Pose) float32 {
