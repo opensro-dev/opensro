@@ -38,6 +38,7 @@ export async function captureLightingStages( { startup = false, recover = false,
 	/** @type {import("../../src/engine/foundation/ui/experimental-options.ts").ExperimentalVideo} */
 	const options = {
 		renderScale: 100,
+		phoneRenderCap: false,
 		postProcessing: false,
 		anisotropicFiltering: false,
 		heightFog: false,
