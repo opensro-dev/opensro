@@ -9,7 +9,7 @@ native ranks target allied players; the later rank targets an enemy
 player. The reference server admits both envelopes for this family:
 its Duplicate branch gates only the target's job suit, battle mode,
 level, GM privilege and murderer state, never the pair's relation.
-The instance lives on the caster; CastLifecycle_ProcessPersistent (583BC6)
+The instance lives on the caster; the reference server's persistent-cast step
 stores the copied player's gid in its context and
 CGObjPC_ApplyDupleTransform (4F0040) copies that player's model and worn
 equipment (4F0320). skc ends it on the next skill cast.
