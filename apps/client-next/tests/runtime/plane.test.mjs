@@ -32,7 +32,9 @@ test("the feature table: outdoors and in a cave every field differs", () => {
 		residentOnly: false,
 		rooms: false,
 		sectorFrames: true,
-		signedLocalCoordinates: false
+		signedLocalCoordinates: false,
+		worldMap: true,
+		floorMinimap: false
 	} );
 	for ( const cave of [ 0x8001, 0x8004 ] ) {
 		assert.deepEqual( { ...featuresAt( cave ) }, {
@@ -43,7 +45,9 @@ test("the feature table: outdoors and in a cave every field differs", () => {
 			residentOnly: true,
 			rooms: true,
 			sectorFrames: false,
-			signedLocalCoordinates: true
+			signedLocalCoordinates: true,
+			worldMap: false,
+			floorMinimap: true
 		} );
 	}
 });
