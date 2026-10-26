@@ -170,8 +170,9 @@ func seedFrame(surface *groundSurface, p simulation.Spawn) (float64, float64) {
 // A still-valid hint is retained (the owned cell, or an edge neighbour after a
 // sub-unit relocation such as wire truncation of X/Z). An unresolved or stale
 // hint takes the native FindNavCell rule: nearest |deltaY|, terrain wins ties.
-// ok is false only when no surface data covers p; dungeons keep their own
-// navigation plane and return the input unchanged with ok=false.
+// ok is false only when no surface covers p; a dungeon point resolves to its
+// cell owner with the input height unchanged, and ok is false where no cell
+// lies under it.
 /*
 ================
 ResolveNavOwner
