@@ -21,6 +21,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -213,5 +214,66 @@ func TestProbeLoopbackBadTicketFailsAtWelcome(t *testing.T) {
 	}
 	if se.stage != "welcome" {
 		t.Fatalf("probe error stage = %q, want welcome (%v)", se.stage, err)
+	}
+}
+
+/*
+================
+TestProbeHealthRefusesStranger
+
+The health check needs no credential: the fixture's ordinary refusal
+of the fixed non-credential is the pass line.
+================
+*/
+func TestProbeHealthRefusesStranger(t *testing.T) {
+	srv := startProbeServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), probeTestConnectTimeout)
+	defer cancel()
+	line, err := probeHealth(ctx, probeConfig{
+		Base:    "http://" + srv.WSAddr(),
+		WTAddr:  srv.WTAddr(),
+		Timeout: probeTestIOTimeout,
+		CACert:  caCertFile(t, srv),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(line, "stranger-refused") {
+		t.Fatalf("health line = %q, want the stranger-refused line", line)
+	}
+	t.Log(line)
+}
+
+/*
+================
+TestProbeHealthFailsWhenStrangersAreWelcomed
+
+An endpoint whose verifier waves everyone in must fail the health
+check at the admission stage: a welcoming endpoint is exactly what
+the outside check exists to catch.
+================
+*/
+func TestProbeHealthFailsWhenStrangersAreWelcomed(t *testing.T) {
+	srv := startProbeServer(t)
+	srv.Hub.SetHelloAuth(func(_ []byte) (transport.AdmissionIdentity, error) {
+		return transport.AdmissionIdentity{AccountID: "anyone", ShardID: "global-official"}, nil
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), probeTestConnectTimeout)
+	defer cancel()
+	_, err := probeHealth(ctx, probeConfig{
+		Base:    "http://" + srv.WSAddr(),
+		WTAddr:  srv.WTAddr(),
+		Timeout: probeTestIOTimeout,
+		CACert:  caCertFile(t, srv),
+	})
+	if err == nil {
+		t.Fatal("health check passed an endpoint that welcomes strangers")
+	}
+	var se *stageError
+	if !errors.As(err, &se) {
+		t.Fatalf("health error type = %T, want *stageError (%v)", err, err)
+	}
+	if se.stage != "admission" {
+		t.Fatalf("health error stage = %q, want admission (%v)", se.stage, err)
 	}
 }
