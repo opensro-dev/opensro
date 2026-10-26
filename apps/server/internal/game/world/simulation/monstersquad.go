@@ -3,10 +3,10 @@
 
 monstersquad.go - target squads and the fixed-query uniques' target switch
 
-Every CTactics that takes a target joins that target's CSquad
-(AI_CTactics_RegisterSquadTarget). An unforced join is refused once the squad
-holds SquadMemberLimit actors (AI_CSquad_AddMember 53D8A0), and the refusal
-fails AI_CTactics_SetCombatTarget (53FFE0): sight acquisition then takes no
+Every tactics owner that takes a target joins that target's squad.
+An unforced join is refused once the squad holds SquadMemberLimit
+actors, and the refusal fails the target set: sight acquisition
+then takes no
 target. The squad is the set of actors whose +0xBC names the target, which is
 what a mover's TargetGID records here.
 
@@ -24,7 +24,8 @@ import (
 ================
 TargetSquad
 
-5A06B4 snapshots the healed target's CSquad before publishing healing threat.
+The native healer snapshots the healed target's squad before
+publishing healing threat.
 Use the existing mover target owner, across live populations in this division.
 ================
 */
@@ -82,9 +83,9 @@ func (s *MonsterState) squadAdmits(division string, gid, target uint32) bool {
 ==================
 acquireSightTarget
 
-The +0xF8 acquisition callback. CAITactics_AcquireTargetByTacticsQuery
-(5478F0) and CAITactics_AcquireTargetFixedQuery (547AD0) both take the first
-query candidate and fail when SetCombatTarget refuses it; neither falls back
+The +0xF8 acquisition callback. Both native acquisition forms (the
+tactics query and the fixed query) take the first
+query candidate and fail when the target set refuses it; neither falls back
 to a farther candidate. The fixed query always uses selectors 1/2, so a
 fixed-query row's 0x100 bit does not select the 0x11/5 query.
 ==================
@@ -108,16 +109,16 @@ func (ops *MonsterMoverOps) acquireSightTarget(division string, instance monster
 ==================
 switchToSecondaryOpponent
 
-CAITactics_SwitchToSecondaryOpponentBeyondReach (548340), the fixed-query
-uniques' +0x100 target check. It replaces 548120, so these uniques never
+The fixed-query uniques' +0x100 target check. It replaces the
+home-trace abandonment, so these uniques never
 abandon through the home-trace test. When the target stands beyond the
 attack reach (+0x160) and the secondary opponent (+0xD0) is valid and inside
-it, SetCombatTarget(secondary, forced) makes it the target.
+it, the forced target set makes it the target.
 
 Native returns 0 on that switch and BATTLE finishes its tick against the old
 target pointer; the port commits the switch and lets the next tick plan
-against the new target. A forced registration cannot fail here, so 548340's
-return 1 (abandon) is unreachable.
+against the new target. A forced registration cannot fail here, so the abandon
+return is unreachable.
 ==================
 */
 func (ops *MonsterMoverOps) switchToSecondaryOpponent(division string, instance monster.Instance, mover monster.MoverState, target playerPose, players []playerPose, live monster.Pose, now int64) bool {
@@ -143,7 +144,8 @@ func (ops *MonsterMoverOps) switchToSecondaryOpponent(division string, instance 
 ==================
 switchCombatTarget
 
-53FFE0 with force: +0xBC takes the new target and +0xCC the current tick;
+The native target set with force: +0xBC takes the new target and
++0xCC the current tick;
 the rest of the primary record stays as it was.
 ==================
 */
@@ -173,8 +175,8 @@ func (s *MonsterState) switchCombatTarget(division string, gid uint32, mover mon
 ==================
 vehicleRedirectMargin
 
-5481A0 / 548270 retarget only when the new actor is at least this much
-closer, after truncating the difference (CRT_ftol, then jl 0xF).
+Both redirect forms retarget only when the new actor is at least
+this much closer, after truncating the difference.
 ==================
 */
 const vehicleRedirectMargin = 15
@@ -183,10 +185,11 @@ const vehicleRedirectMargin = 15
 ==================
 redirectToVehicle
 
-CAITactics_RedirectToTargetVehicle_Flag4 (5481A0) and _Flag80 (548270). A
+The two target-vehicle redirect forms (job flag 4 and job flag
+80). A
 player target whose job state the row names gives way to its active
 vehicle; a companion target gives way to its owner. The new target must be
-valid and at least vehicleRedirectMargin closer, and SetCombatTarget takes
+valid and at least vehicleRedirectMargin closer, and the target set takes
 it (forced by the flag). BATTLE then ends its tick (return 2).
 ==================
 */
@@ -222,7 +225,7 @@ func (ops *MonsterMoverOps) redirectToVehicle(division string, instance monster.
 ==================
 activeVehicle
 
-CGObjChar_GetActiveVehicle: the owner's summoned transport (COS bands 1
+The active vehicle getter: the owner's summoned transport (COS bands 1
 and 2). The companion list carries only unmounted ones; a ridden vehicle
 stands under its rider and could never be the margin closer.
 ==================

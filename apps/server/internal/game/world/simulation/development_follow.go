@@ -74,7 +74,7 @@ func (ops *MonsterMoverOps) DevelopmentMoveLeader(division string, gid uint32, d
 		return nil, fmt.Errorf("leader mover absent")
 	}
 	if mover.Mode() == monster.MoverWandering {
-		mover.Pose = mover.LivePoseAt(now, ops.TerrainHeight)
+		mover.Pose = mover.LivePoseAt(now, ops.GroundHeight)
 		mover.From, mover.To = monster.Pose{}, monster.Pose{}
 		mover.DepartMs, mover.ArriveMs = 0, 0
 		mustMoverTransition(&mover, monster.MoverEventSegmentArrived, 0)
@@ -104,7 +104,7 @@ func (ops *MonsterMoverOps) DevelopmentStopLeader(division string, gid uint32, n
 	if mover.Mode() != monster.MoverWandering {
 		return nil
 	}
-	mover.Pose = mover.LivePoseAt(now, ops.TerrainHeight)
+	mover.Pose = mover.LivePoseAt(now, ops.GroundHeight)
 	mover.From, mover.To = monster.Pose{}, monster.Pose{}
 	mover.DepartMs, mover.ArriveMs = 0, 0
 	mustMoverTransition(&mover, monster.MoverEventSegmentArrived, 0)

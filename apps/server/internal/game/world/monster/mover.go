@@ -317,13 +317,17 @@ func (m *MoverState) NoteMoveStopped(live Pose) bool {
 ================
 GroundResolver
 
-GroundResolver resolves the navmesh ground height under a region-local
-XZ (the mission plane injects movement TerrainHeightAt through
-MonsterMoverOps.TerrainHeight - monster must not import mission, so
-the height source arrives as a parameter; board seq743/seq779 shape).
+GroundResolver resolves the walkable surface height at one live pose
+on the mover's plane (Plane.HeightAt through MonsterMoverOps.GroundHeight
+- monster must not import mission, so the height source arrives as a
+parameter; board seq743/seq779 shape). The pose carries the chord
+height at its XZ: the caller height the plane's nearest-surface rule
+reads. It is consulted only off an adopted path - an adopted path owns
+its segment's heights outright - so no surface owner is carried: the
+chord height alone selects the surface (#1695).
 ================
 */
-type GroundResolver func(regionID uint16, x, z float64) (float64, bool)
+type GroundResolver func(pose Pose) (float64, bool)
 
 /*
 ================
@@ -334,12 +338,12 @@ callers must never read Pose while a segment is maturing - the bug D
 discipline the player plane already enforces).
 
 Y CONTRACT (board seq735/seq779, BUG-8 second injection path): the
-segment ENDPOINTS carry terrain-resolved heights, but a straight Y-lerp
+segment ENDPOINTS carry surface-resolved heights, but a straight Y-lerp
 between them describes a CHORD - below ground over a rise, above it over
 a dip. Mid-flight the interpolated XZ is resolved through `ground` so a
 scope-enter seed or a segment departure never inherits a chord height.
 The settled (To) and idle (Pose) branches are returned UNTOUCHED: To.Y
-is already the terrain height at its own quantised XZ (the BUG-12
+is already the surface height at its own quantised XZ (the BUG-12
 commitSegment block) and an idle Pose is either that settled value or
 the bootstrap-lifted nest anchor - re-resolving them would change
 settle-adjacent wire values for no correctness gain. A nil resolver (or
@@ -378,7 +382,7 @@ func (m MoverState) LivePoseAt(nowMs int64, ground GroundResolver) Pose {
 		return pose
 	}
 	if ground != nil {
-		if y, ok := ground(pose.RegionID, pose.X, pose.Z); ok {
+		if y, ok := ground(pose); ok {
 			pose.Y = y
 		}
 	}

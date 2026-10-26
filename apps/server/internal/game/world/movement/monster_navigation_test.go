@@ -21,9 +21,15 @@ func TestMonsterNavigationRetainsRealStairSurfaceInEveryLiveRead(t *testing.T) {
 	m := monster.MoverState{From: from, To: p.Rest(), DepartMs: 1000, ArriveMs: 7000}
 	m.AdoptNavigation(p)
 	owned := v.objectSurfacePath(simulation.Spawn{RegionID: from.RegionID, X: from.X, Y: from.Y, Z: from.Z}, simulation.Spawn{RegionID: to.RegionID, X: to.X, Y: to.Y, Z: to.Z})
+	// The adopted path owns the height, so the ground resolver is never
+	// consulted; it is adapted to the GroundResolver shape (#1695) with
+	// the same terrain sample behind it.
+	ground := func(pose monster.Pose) (float64, bool) {
+		return v.TerrainHeightAt(pose.RegionID, pose.X, pose.Z)
+	}
 	for i := 1; i < 6; i++ {
 		y, ok := owned.heightAt(float64(i) / 6)
-		got := m.LivePoseAt(1000+int64(i)*1000, v.TerrainHeightAt)
+		got := m.LivePoseAt(1000+int64(i)*1000, ground)
 		if !ok || math.Abs(got.Y-y) > .001 {
 			t.Fatalf("step %d lost stair ownership: %+v expected %v", i, got, y)
 		}

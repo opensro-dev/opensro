@@ -106,7 +106,7 @@ func (ops *MonsterMoverOps) startChaseLeg(
 		return ops.startReturnLeg(divisionID, instance, tactics, mover, monster.MoverEventAttackUnavailable, nowMs)
 	}
 
-	live := mover.LivePoseAt(nowMs, ops.TerrainHeight)
+	live := mover.LivePoseAt(nowMs, ops.GroundHeight)
 	mover.Pose = live
 	mustMoverTransition(&mover, monster.MoverEventChaseStarted, target.Gid)
 	// ChaseGuidance is target movement state, not spatial approach geometry. A
