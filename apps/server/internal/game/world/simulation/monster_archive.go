@@ -55,6 +55,7 @@ type archivedMonster struct {
 	heading   uint16
 	rarity    uint8
 	variant   uint8
+	gmSpawned bool
 	hp, maxHP uint32
 }
 
@@ -101,14 +102,15 @@ func (a *monsterArchive) put(row monster.Instance) (archivedMonster, bool) {
 		return archivedMonster{}, false
 	}
 	cold := archivedMonster{
-		ref:     unique.Make(row.Ref),
-		nest:    unique.Make(row.Nest),
-		spawn:   row.Spawn,
-		heading: row.SpawnHeading,
-		rarity:  row.Rarity(),
-		variant: row.TradeVariant,
-		hp:      row.CurrentHP,
-		maxHP:   row.EffectiveMaxHP(),
+		ref:       unique.Make(row.Ref),
+		nest:      unique.Make(row.Nest),
+		spawn:     row.Spawn,
+		heading:   row.SpawnHeading,
+		rarity:    row.Rarity(),
+		variant:   row.TradeVariant,
+		gmSpawned: row.GMSpawned,
+		hp:        row.CurrentHP,
+		maxHP:     row.EffectiveMaxHP(),
 	}
 	if a.get(row.Gid, cold) != row {
 		return archivedMonster{}, false
@@ -131,6 +133,7 @@ func (a *monsterArchive) get(gid uint32, r archivedMonster) monster.Instance {
 		Spawn:        r.spawn,
 		SpawnHeading: r.heading,
 		TradeVariant: r.variant,
+		GMSpawned:    r.gmSpawned,
 		CurrentHP:    r.hp,
 	}
 }

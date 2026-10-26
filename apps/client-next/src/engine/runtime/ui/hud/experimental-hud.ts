@@ -139,6 +139,12 @@ export const EXPERIMENTAL_TABS: readonly {
 				id: "experimental-homing-projectiles",
 				label: "Homing projectiles",
 				description: "Steer straight projectiles toward a moving target."
+			},
+			{
+				key: "sunDropMarker",
+				id: "experimental-sun-drop-marker",
+				label: "Seal of Sun drop marker",
+				description: "Mark your own degree-9+ Sun drops on the ground."
 			}
 		]
 	},

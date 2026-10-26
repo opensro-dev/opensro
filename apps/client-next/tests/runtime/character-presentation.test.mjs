@@ -2239,6 +2239,72 @@ test("model priority evicts lower priority residents and never starves a late lo
 	f.dispose();
 });
 
+test("sealed pet drops use native rare glow without replacing their collar model", () => {
+	const particles = effectPath => [ {
+		kind: 2,
+		stateId: -1,
+		animationSetName: "ambient",
+		entries: [ {
+			field00: 1,
+			effectPath,
+			boneName: "",
+			vector3c: [ 0, 0, 0 ],
+			field4c: 0,
+			flags50: [ 0, 0, 0 ],
+			flag53: 0
+		} ]
+	} ];
+	for ( const suffix of [ "", "_STAR", "_MOON", "_SUN" ] ) {
+		const metadata = {
+			appearance: {
+				roster: { models: [] },
+				items: { 1: { codename: "ITEM_COS_PET_COLLAR_09" + suffix, dropModelPath: "item/drop.bsr" } }
+			},
+			dropModels: {
+				"item/drop.bsr": {
+					glb: "/assets/itemdrop/drop.glb",
+					clips: [],
+					clipLoop: false,
+					particleModifiers: particles( "system/item_drop_equip.efp" )
+				},
+				"item/etc/drop_ch_equip_rare.bsr": {
+					glb: "/assets/itemdrop/rare.glb",
+					clips: [],
+					clipLoop: false,
+					particleModifiers: particles( "system/item_drop_equip_rare.efp" )
+				}
+			}
+		};
+		const f = fixture(
+			{},
+			2,
+			true,
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+			undefined,
+			undefined,
+			undefined,
+			{},
+			metadata
+		);
+		const body = entity( 1, { kind: "ground-item", groundItem: { typeFlags: 0x4ec, tint: 0 } } );
+		for ( let i = 0; i < 50; i++ ) f.step( [ body ], i / 100 );
+		assert.equal( f.presentation.error(), null );
+		assert.equal( f.actors.find( actor => actor.gid === 1 )?.model, "/assets/itemdrop/drop.glb" );
+		const glow = f.actors.find( actor => actor.attachment?.gid === 1 );
+		assert.ok( glow, suffix || "ordinary" );
+		assert.ok( glow.model.includes( suffix ? "item_drop_equip_rare.efp" : "item_drop_equip.efp" ), glow.model );
+		f.step( [ { ...body, groundItem: { ...body.groundItem, claimantGid: 2 } } ], 1 );
+		assert.ok( !f.actors.some( actor => actor.attachment?.gid === 1 ), "pickup removes the glow" );
+		f.dispose();
+	}
+});
+
 test("ground items use authored drop models rather than a colliding character reference", () => {
 	const f = fixture( {}, 2, true );
 	for ( let i = 0; i < 20; i++ ) {

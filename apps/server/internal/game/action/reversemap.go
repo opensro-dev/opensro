@@ -5,17 +5,23 @@ reversemap.go - the reverse return scroll's map destinations
 
 Port-only, not native. v1.150's reverse return scroll offers two points,
 the last recall point and the last death point (reversereturn.go). Later
-clients add a third: "move to a location on the map". v1.188's
-CGItemExpendable_UseReverseReturnScroll (4A00C0) reads that as choice 7
-followed by a u32 point id, which it looks up in the optional-teleport
-table (4A1F00 / 4A1ED0). v1.150 ships no such table, so the port builds
-one at boot.
+clients add a third: "move to a location on the map", sent as choice 7
+followed by a u32 point id that the client looks up in its own table of
+destinations. v1.150 ships no such table, so the port builds one at boot. When the operator imported the VSRO client's own
+table (world/optionalteleport, scripts/import_vsro_optional_teleport.py),
+it serves those rows, and a use outside a row's level band is refused.
+Without the import the port infers one.
 
-INFERENCE for the table: every outdoor town recall gate (the points
-appointed rebirth uses, OperatorTowns) and every outdoor unique monster
-nest anchor. These are places the original already sends players to,
-not arbitrary coordinates. The browser receives the table in its public
-references, and a use sends back only a point id, which this owner
+Either way the public ids run 1..n over the published points, the
+contract every shipped client decodes (an open tab from before the import
+refuses a gap). The table's own ids stay on the server; the port's client
+is the only sender of choice 7.
+
+INFERENCE for the inferred table: every outdoor town recall gate (the
+points appointed rebirth uses, OperatorTowns) and every outdoor unique
+monster nest anchor. These are places the original already sends players
+to, not arbitrary coordinates. The browser receives the table in its
+public references, and a use sends back only a point id, which this owner
 resolves. A position sent by the client is never accepted.
 
 The option is off unless SRO_REVERSE_RETURN_MAP is on; off is native.
@@ -34,6 +40,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/instance"
+	"opensro.online/server/internal/game/world/optionalteleport"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -75,11 +82,16 @@ ConfigureReverseReturnMap
 
 Builds the destination table once at boot, after ConfigurePortals and the
 monster authority. Disabled leaves it empty, so choice 7 stays refused.
+An imported table (optionalteleport.Load) replaces the inferred one.
 ================
 */
-func (rt *Runtime) ConfigureReverseReturnMap(enabled bool) {
-	rt.reverseMapPoints = nil
+func (rt *Runtime) ConfigureReverseReturnMap(enabled bool, imported []optionalteleport.Point) {
+	rt.reverseMapPoints, rt.reverseMapLevels = nil, nil
 	if !enabled {
+		return
+	}
+	if len(imported) > 0 {
+		rt.useImportedReverseMap(imported)
 		return
 	}
 	var points []enterworld.ReverseMapPoint
@@ -145,6 +157,30 @@ func (rt *Runtime) ConfigureReverseReturnMap(enabled bool) {
 
 /*
 ================
+useImportedReverseMap
+
+The imported field points in table order, published under the dense ids
+1..n with their level bands kept by public id.
+================
+*/
+func (rt *Runtime) useImportedReverseMap(imported []optionalteleport.Point) {
+	rt.reverseMapLevels = make(map[uint32]optionalteleport.Point, len(imported))
+	for _, point := range imported {
+		public := enterworld.ReverseMapPoint{Name: point.Name, RegionID: point.RegionID, X: point.X, Y: point.Y, Z: point.Z}
+		if !reverseMapPointValid(public) {
+			continue
+		}
+		if len(rt.reverseMapPoints) == maxReverseMapPoints {
+			break
+		}
+		public.ID = uint32(len(rt.reverseMapPoints) + 1)
+		rt.reverseMapLevels[public.ID] = point
+		rt.reverseMapPoints = append(rt.reverseMapPoints, public)
+	}
+}
+
+/*
+================
 reverseMapPointValid
 
 An outdoor point inside its region with finite coordinates.
@@ -178,7 +214,7 @@ func (rt *Runtime) ReverseReturnMapPoints() []enterworld.ReverseMapPoint {
 reverseMapDestination
 
 The field point an id names, or false for an unknown id or a disabled
-option.
+option. The public ids index the table: 1..n.
 ================
 */
 func (rt *Runtime) reverseMapDestination(id uint32) (travelPoint, bool) {
@@ -190,4 +226,24 @@ func (rt *Runtime) reverseMapDestination(id uint32) (travelPoint, bool) {
 	destination.spawn.RegionID = point.RegionID
 	destination.spawn.X, destination.spawn.Y, destination.spawn.Z = point.X, point.Y, point.Z
 	return destination, true
+}
+
+/*
+================
+reverseMapAdmitsLevel
+
+An imported point's level band (optionalteleport.Point.Admits); an
+inferred point has none.
+================
+*/
+func (rt *Runtime) reverseMapAdmitsLevel(id uint32, c *enterworld.Character) bool {
+	point, banded := rt.reverseMapLevels[id]
+	if !banded {
+		return true
+	}
+	level := int64(1)
+	if c.Level != nil {
+		level = *c.Level
+	}
+	return point.Admits(level)
 }

@@ -1290,6 +1290,84 @@ test("toe decals reuse geometry, fade at twenty seconds and survive device recre
 	world.dispose( geometry, textures );
 });
 
+test("Sun drop rings (port-only #1640) draw gold under admitted drops and release with the list", () => {
+	const world = createWorldRenderer(),
+		released = new Set(),
+		geometry = {
+			/*
+			================
+			upload
+			================
+			*/
+			upload( data, image ) {
+				return { data, image };
+			},
+			updatePositions() {},
+			/*
+			================
+			updateIndices
+			================
+			*/
+			updateIndices( d ) {
+				return d;
+			},
+			/*
+			================
+			release
+			================
+			*/
+			release( d ) {
+				released.add( d );
+			},
+			/*
+			================
+			updateMaterialColors
+			================
+			*/
+			updateMaterialColors( d, c ) {
+				d.tint = [ ...c ];
+			},
+			/*
+			================
+			updateInstances
+			================
+			*/
+			updateInstances( d, m, a ) {
+				d.alpha = a[0];
+				return d;
+			}
+		},
+		textures = { upload: () => ({}), release() {} };
+	const terrain = scene( "sun-ring" );
+	terrain.groups[0].material.terrain = true;
+	terrain.groups[0].ranges = [ {
+		cell: [ 0, 0 ],
+		lod: 0,
+		indexStart: 0,
+		indexCount: 3,
+		vertexStart: 0,
+		vertexCount: 3,
+		center: [ 160, 0, 160 ],
+		radius: 230,
+		heights: Array( 289 ).fill( 0 )
+	} ];
+	world.scene( terrain );
+	for ( const path of world.neededTextures() ) world.texture( path, { width: 4, height: 4, close() {} } );
+	const prepare = t => world.prepare( geometry, textures, 1, t );
+	// Nothing published: the native frame, no ring draws.
+	assert.deepEqual( prepare( 0 ).sunMarkerDraws, [] );
+	world.sunDropMarkers( [ { gid: 42, pose: { regionId: 1, x: 30, y: 0, z: 30 } } ] );
+	const ring = defined( prepare( 0 ).sunMarkerDraws )[0];
+	assert.ok( ring );
+	assert.deepEqual( ring.tint, [ 1, Math.fround( 215 / 255 ), Math.fround( 80 / 255 ) ] );
+	assert.ok( Math.abs( ring.alpha - .65 ) < 1e-6 );
+	assert.equal( defined( prepare( 1 ).sunMarkerDraws )[0], ring );
+	world.sunDropMarkers( [] );
+	assert.deepEqual( prepare( 1.1 ).sunMarkerDraws, [] );
+	assert.ok( released.has( ring ) );
+	world.dispose( geometry, textures );
+});
+
 test("selection texture demand follows scene admission, cancellation, replacement and GPU recovery", () => {
 	const world = createWorldRenderer(),
 		geometry = { upload: () => ({}), release() {}, updateIndices() {}, updatePositions() {} },

@@ -260,3 +260,48 @@ func TestNormalizeOutdoorClampsSubULPSeamCrossingIntoHalfOpenInterval(t *testing
 		t.Fatalf("NormalizeOutdoor not idempotent: %+v -> %+v", got, again)
 	}
 }
+
+/*
+================
+TestOutdoorLocalCellIsTheRegionLocalGrid
+
+Six 320-unit cells per outdoor region axis, region-local: a point at the
+frame's edge or outside it, a NaN, and every dungeon point have no cell
+(never folded into a neighbour, unlike the interest blocks).
+================
+*/
+func TestOutdoorLocalCellIsTheRegionLocalGrid(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		position RegionXZ
+		x, z     int
+		ok       bool
+	}{
+		{"origin", RegionXZ{RegionID: 0x62a8, X: 0, Z: 0}, 0, 0, true},
+		{"last cell", RegionXZ{RegionID: 0x62a8, X: 1919.9, Z: 640}, 5, 2, true},
+		{"frame edge", RegionXZ{RegionID: 0x62a8, X: 1920, Z: 10}, 0, 0, false},
+		{"negative", RegionXZ{RegionID: 0x62a8, X: -1, Z: 10}, 0, 0, false},
+		{"NaN", RegionXZ{RegionID: 0x62a8, X: math.NaN(), Z: 10}, 0, 0, false},
+		{"dungeon", RegionXZ{RegionID: 0x8001, X: 100, Z: 100}, 0, 0, false},
+	} {
+		x, z, ok := OutdoorLocalCell(test.position)
+		if x != test.x || z != test.z || ok != test.ok {
+			t.Errorf("%s: (%d, %d, %t), want (%d, %d, %t)", test.name, x, z, ok, test.x, test.z, test.ok)
+		}
+	}
+}
+
+/*
+================
+TestScopeRingIsTheSectorRingOutdoorsAndSelfInACave
+================
+*/
+func TestScopeRingIsTheSectorRingOutdoorsAndSelfInACave(t *testing.T) {
+	if ring := ScopeRing(0x8001); len(ring) != 1 || ring[0] != 0x8001 {
+		t.Fatalf("cave ring %v, want only the cave itself", ring)
+	}
+	ring := ScopeRing(0x62a8)
+	if len(ring) != 9 || ring[4] != 0x62a8 {
+		t.Fatalf("outdoor ring %v, want 9 sectors centred on 0x62a8", ring)
+	}
+}

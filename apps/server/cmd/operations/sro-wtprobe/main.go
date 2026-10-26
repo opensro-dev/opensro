@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-main.go - sro-wtprobe: open a real WebTransport session from outside
+main.go - sro-wtprobe: transport smoke and protocol measurements
 
 Health evidence for the WebTransport path that shallow endpoints cannot
 give: fetching /transport/cert-hash proves the TCP edge answers, but only
@@ -23,6 +23,9 @@ Usage:
 	sro-wtprobe -url https://play.example.net [-wt-addr host:port]
 
 Exit status: 0 after WELCOME, 1 with the failed stage named, 2 on usage.
+With -measure, the selected transport runs a ping train and paced burst
+and emits one JSON arm, including incomplete observations on failure.
+The default remains the original WebTransport WELCOME smoke.
 
 ===========================================================================
 */
@@ -40,14 +43,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/quic-go/webtransport-go"
 	"opensro.online/server/internal/transport"
 )
 
@@ -115,10 +115,11 @@ Everything one probe run needs; the command line is one way to fill it.
 ================
 */
 type probeConfig struct {
-	Base    string
-	WTAddr  string
-	Ticket  string
-	Timeout time.Duration
+	Base      string
+	WTAddr    string
+	Ticket    string
+	Timeout   time.Duration
+	Transport string
 	// CACert is a PEM bundle added to the trust roots - the way to probe
 	// a development endpoint whose certificate is self-signed.
 	CACert string
@@ -131,12 +132,12 @@ fetchCertHash
 Read the advertised certificate hash over the plain TCP path.
 ================
 */
-func fetchCertHash(ctx context.Context, base string) (certHashDoc, error) {
+func fetchCertHash(ctx context.Context, client *http.Client, base string) (certHashDoc, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+transport.PathCertHash, nil)
 	if err != nil {
 		return certHashDoc{}, err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return certHashDoc{}, err
 	}
@@ -234,79 +235,24 @@ func equalBytes(a []byte, b []byte) bool {
 ================
 probe
 
-Run both halves in order: the cert-hash document over TCP, then a HELLO
-answered by WELCOME over UDP. Returns the success line for the caller.
+Open the selected transport through the shared admission client. The
+default WT smoke retains its certificate evidence and success-line shape.
 ================
 */
 func probe(ctx context.Context, cfg probeConfig) (string, error) {
-	base := strings.TrimSuffix(cfg.Base, "/")
-	doc, err := fetchCertHash(ctx, base)
+	client, err := newProbeClient(cfg)
 	if err != nil {
-		return "", &stageError{"cert-hash", err}
+		return "", err
 	}
-
-	parsed, err := url.Parse(base)
-	if err != nil || parsed.Host == "" {
-		return "", &stageError{"cert-hash", fmt.Errorf("invalid base URL %q", cfg.Base)}
+	defer client.close()
+	if err := client.open(ctx); err != nil {
+		return "", err
 	}
-	hostport := cfg.WTAddr
-	if hostport == "" {
-		hostport = net.JoinHostPort(parsed.Hostname(), "443")
+	if client.cfg.Transport == "ws" {
+		return fmt.Sprintf("OK welcome session=%d transport=ws", client.welcome.SessionID), nil
 	}
-	serverName := parsed.Hostname()
-	if h, _, splitErr := net.SplitHostPort(hostport); splitErr == nil {
-		serverName = h
-	}
-
-	roots, err := trustPool(cfg.CACert)
-	if err != nil {
-		return "", &stageError{"trust", err}
-	}
-	dialer := webtransport.Transport{TLSClientConfig: probeTLS(serverName, doc.SHA256Hex, roots)}
-	defer dialer.Close()
-	wtURL := "https://" + hostport + transport.PathWT
-	// A 2xx response body is the session's own stream: the session owns
-	// its lifetime and closing it would close the session, so only the
-	// failure response below is closed.
-	rsp, sess, err := dialer.Dial(ctx, wtURL, nil)
-	if err != nil {
-		if rsp != nil && rsp.Body != nil {
-			_ = rsp.Body.Close()
-		}
-		return "", &stageError{"dial", fmt.Errorf("%s: %w", wtURL, err)}
-	}
-	stream, err := sess.OpenStreamSync(ctx)
-	if err != nil {
-		return "", &stageError{"stream", err}
-	}
-	if err := stream.SetReadDeadline(time.Now().Add(cfg.Timeout)); err != nil {
-		return "", &stageError{"stream", err}
-	}
-	err = transport.WriteStreamFrame(stream, transport.Frame{
-		Opcode:  transport.OpHello,
-		Payload: transport.EncodeHello(transport.Hello{AdmissionToken: []byte(cfg.Ticket)}),
-	})
-	if err != nil {
-		return "", &stageError{"hello", err}
-	}
-	for {
-		f, err := transport.ReadStreamFrame(stream)
-		if err != nil {
-			return "", &stageError{"welcome", err}
-		}
-		if f.Opcode == transport.OpPing || f.Opcode == transport.OpPong {
-			continue
-		}
-		if f.Opcode != transport.OpWelcome {
-			return "", &stageError{"welcome", fmt.Errorf("first frame = 0x%04X, want WELCOME", f.Opcode)}
-		}
-		w, err := transport.DecodeWelcome(f.Payload)
-		if err != nil {
-			return "", &stageError{"welcome", err}
-		}
-		_ = sess.CloseWithError(0, "probe complete")
-		return fmt.Sprintf("OK welcome session=%d cert-sha256=%s notAfter=%s", w.SessionID, doc.SHA256Hex, doc.NotAfter), nil
-	}
+	return fmt.Sprintf("OK welcome session=%d cert-sha256=%s notAfter=%s",
+		client.welcome.SessionID, client.cert.SHA256Hex, client.cert.NotAfter), nil
 }
 
 /*
@@ -319,9 +265,15 @@ cert-hash over TCP, HELLO/WELCOME over UDP: both halves must pass.
 func main() {
 	base := flag.String("url", "", "public base URL of the environment, e.g. https://play.example.net")
 	wtAddr := flag.String("wt-addr", "", "WebTransport host:port (default: the base URL host on port 443)")
+	kind := flag.String("transport", "wt", "transport to probe: wt or ws")
 	ticketEnv := flag.String("ticket-env", defaultTicketEnv, "environment variable holding a fresh admission ticket")
 	caCert := flag.String("ca-cert", "", "PEM bundle added to the trust roots (a development endpoint's self-signed certificate)")
-	timeout := flag.Duration("timeout", defaultTimeout, "overall probe budget")
+	timeout := flag.Duration("timeout", defaultTimeout, "smoke budget; measurement handshake and response-drain timeout")
+	measure := flag.Bool("measure", false, "run both measurement schedules and emit one JSON document")
+	samples := flag.Int("samples", defaultPingSamples, "ping train samples in measurement mode")
+	interval := flag.Duration("ping-interval", defaultPingInterval, "ping train send interval in measurement mode")
+	burst := flag.Int("burst", defaultBurstSamples, "ordered burst frames in measurement mode")
+	burstInterval := flag.Duration("burst-interval", defaultBurstInterval, "burst send interval; zero requests an explicit unpaced arm")
 	flag.Parse()
 
 	if *base == "" {
@@ -334,9 +286,31 @@ func main() {
 		os.Exit(2)
 	}
 
+	cfg := probeConfig{Base: *base, WTAddr: *wtAddr, Ticket: ticket, Timeout: *timeout, CACert: *caCert, Transport: *kind}
+	if *measure {
+		settings := measurementConfig{
+			Probe: cfg, PingSamples: *samples, PingInterval: *interval,
+			BurstSamples: *burst, BurstInterval: *burstInterval,
+		}
+		budget, err := settings.budget()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), budget)
+		defer cancel()
+		report, err := measureProbe(ctx, settings)
+		if encodeError := json.NewEncoder(os.Stdout).Encode(report); encodeError != nil {
+			fail(&stageError{"json", encodeError})
+		}
+		if err != nil {
+			fail(err)
+		}
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
-	line, err := probe(ctx, probeConfig{Base: *base, WTAddr: *wtAddr, Ticket: ticket, Timeout: *timeout, CACert: *caCert})
+	line, err := probe(ctx, cfg)
 	if err != nil {
 		fail(err)
 	}

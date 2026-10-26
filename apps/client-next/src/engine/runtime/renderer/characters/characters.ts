@@ -10,6 +10,7 @@ import { characterLabelHeight } from "@/engine/foundation/ui/character-labels";
 import { regionOffsetXZ, regionRelativeXZ } from "@/engine/foundation/world/world-space";
 import type { WorldTexture } from "@/engine/contracts/texture";
 import { shadowProjection, SHADOW_LIMIT, SHADOW_DISTANCE } from "@/engine/foundation/rendering/character-shadow";
+import { GRAPHIC_OPTION_CHARACTERS } from "@/engine/foundation/rendering/graphic-options";
 import { appendEquipmentSockets } from "@/engine/foundation/animation/equipment-sockets";
 import { selectEquipmentGlow } from "@/engine/foundation/rendering/equipment-glow";
 import { createPoseLod } from "@/engine/foundation/animation/pose-lod";
@@ -318,6 +319,11 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	let poseFrame = 0;
 	let frameWork: import("@/engine/contracts/runtime").FrameWork | undefined;
 	let poseSeconds = 0;
+	// Graphic option 0x16 as negated by /char (graphic-options.ts),
+	// standing as SWorld_Construct seeds it. While clear, prepare
+	// submits no character draws; the portrait instances are their own
+	// owners and never hear it.
+	let charactersShown = true;
 	const poseOrder: CharacterActor[] = [];
 	// Birth transforms belong to the actor lifetime, not GPU batches. Keep them
 	// across culling, batch membership changes and device recreation.
@@ -3204,6 +3210,17 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		completeDeferred: deferred.complete,
 		/*
 		================
+		setRenderMode
+
+		Graphic option 0x16 negated by /char. Every other option belongs
+		to another owner and is ignored here.
+		================
+		*/
+		setRenderMode( mode: number, enabled: boolean ) {
+			if ( mode === GRAPHIC_OPTION_CHARACTERS ) charactersShown = enabled;
+		},
+		/*
+		================
 		prepare
 
 		Retire unwanted resources, evaluate visible actors and reuse bounded GPU batches.
@@ -3222,6 +3239,10 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 			dynamicAnimation = false,
 			reflectedView?: Float32Array
 		) {
+			// Option 0x16 clear: no character draws this frame. Poses and
+			// clocks read absolute seconds, so the first frame back shows
+			// the current pose, not a caught-up one.
+			if ( !charactersShown ) return [];
 			poseSeconds = seconds;
 			probe?.characterBegin();
 			if ( !continuation ) {

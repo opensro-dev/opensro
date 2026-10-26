@@ -29,6 +29,7 @@ import (
 	"opensro.online/server/internal/game/item/stall"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/social/union"
+	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/transport"
@@ -703,7 +704,7 @@ do not stop walks either, so they do not stop skills.
 ==================
 */
 func (rt *Runtime) LineOfSight(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) bool {
-	if simulation.IsDungeonRegion(from.RegionID) != simulation.IsDungeonRegion(to.RegionID) {
+	if !worldgeom.SamePlane(from.RegionID, to.RegionID) {
 		return false
 	}
 	clip := rt.ClientClip
@@ -778,7 +779,7 @@ passes the zero owner and gets the native teleport rule at the start.
 ==================
 */
 func (rt *Runtime) ConstrainMovementFrom(characterName string, from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) (simulation.Spawn, simulation.NavWalk, *simulation.MoveError) {
-	if simulation.IsDungeonRegion(from.RegionID) != simulation.IsDungeonRegion(to.RegionID) {
+	if !worldgeom.SamePlane(from.RegionID, to.RegionID) {
 		return from, simulation.NavWalk{}, &simulation.MoveError{
 			NativeErrorCode: simulation.NativeErrorInvalidRequest,
 			Reason:          "ground movement cannot cross the outdoor/dungeon authority boundary",

@@ -133,6 +133,10 @@ type ClipReport struct {
 	// Rest.Y is that surface's height there - never the request's int16 Y.
 	// Unresolved on planes without ownership data (dungeon, no coverage).
 	RestOwner simulation.NavOwner
+	// Work is the dungeon clip's deterministic work (dungeon_clip.go):
+	// cells tested, obstacle circles tested and floor samples read.
+	// Zero outdoors, where TilesChecked counts the walk.
+	Work int
 }
 
 /*
@@ -184,15 +188,17 @@ route probes do not walk the same chord a second time.
 func (v *WaterValidator) clipMovementPathFromWithWalk(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) (ClipReport, *navWalk) {
 	start := from
 	startOwner := fromOwner
-	checked, uncovered, overrides := 0, 0, 0
+	checked, uncovered, overrides, work := 0, 0, 0, 0
 	for calls := 1; calls <= 6; calls++ {
 		report, walk := v.clipMovementSegmentWithWalk(start, startOwner, to)
 		checked += report.TilesChecked
 		uncovered += report.TilesUncovered
 		overrides += report.ObjectDeckOverrides
+		work += report.Work
 		report.TilesChecked = checked
 		report.TilesUncovered = uncovered
 		report.ObjectDeckOverrides = overrides
+		report.Work = work
 		if !report.continuation {
 			if calls == 1 {
 				return report, walk
@@ -342,15 +348,27 @@ func (v *WaterValidator) clipMovementSegment(from simulation.Spawn, fromOwner si
 /*
 ================
 clipMovementSegmentWithWalk
+
+One segment: the start is owned first, then the plane the endpoints
+are on clips it (clipSegmentOnPlane, plane.go).
 ================
 */
 func (v *WaterValidator) clipMovementSegmentWithWalk(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) (ClipReport, *navWalk) {
 	from = v.ownedStart(from, fromOwner)
-	report := ClipReport{Outcome: ClipArrived, Rest: to}
+	return clipSegmentOnPlane(v, from, fromOwner, to)
+}
 
-	if simulation.IsDungeonRegion(from.RegionID) || simulation.IsDungeonRegion(to.RegionID) {
-		return v.clipDungeonPath(from, to), nil
-	}
+/*
+================
+clipOutdoorSegment
+
+The outdoor plane's segment clip (outdoorPlane.clipSegment): the world
+tile grid walk, then the owned object surfaces and their contacts. The
+start is already owned.
+================
+*/
+func (v *WaterValidator) clipOutdoorSegment(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) (ClipReport, *navWalk) {
+	report := ClipReport{Outcome: ClipArrived, Rest: to}
 
 	tilesPerAxis, tileSize, ok := v.gridParamsForRegion(from.RegionID)
 	if !ok {

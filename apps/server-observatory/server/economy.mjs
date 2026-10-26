@@ -4,7 +4,7 @@
 economy.mjs - read-only reads of each GameWorld's economy aggregates
 
 The Economy page's server half. GameWorld serves pre-bucketed aggregates
-(contract v1: meta, series, flows, distribution, flags, trade) on its
+(contract v1: meta, series, flows, distribution, flags, trade, killstats) on its
 loopback control listener under /economy/v1/; it reads its own rollup
 tables and latest snapshot copy, never the live store per request. This
 owner forwards only those routes and only their validated parameters, adds
@@ -29,8 +29,14 @@ const ROUTES = Object.freeze( {
 	flows: [ "bucket", "from", "to", "division" ],
 	distribution: [ "division" ],
 	flags: [ "from", "to" ],
-	trade: [ "bucket", "from", "to" ]
+	trade: [ "bucket", "from", "to" ],
+	killstats: [ "from", "to" ]
 } );
+
+// Kill stats are whole UTC days; the contract refuses a range holding
+// more than this many of them (range_too_wide).
+export const MAX_KILLSTAT_DAYS = 366;
+const DAY_SECONDS = 86400;
 
 const METRIC = /^(gold_minted|gold_burned|gold_net|gold_total|reason:[a-z0-9_]{1,64})$/;
 const DIVISION = /^[A-Za-z0-9_-]{1,64}$/;
@@ -69,6 +75,13 @@ export function economyQuery( route, params ) {
 		query.set( key, value );
 	}
 	if ( route === "series" && !query.has( "metric" ) ) return { error: "A metric is required" };
+	if ( route === "killstats" && query.has( "from" ) && query.has( "to" ) ) {
+		const from = Number( query.get( "from" ) ), to = Number( query.get( "to" ) );
+		if ( from > to ) return { error: "from is after to" };
+		// The contract floors both ends to whole UTC days before counting.
+		const days = Math.floor( to / DAY_SECONDS ) - Math.floor( from / DAY_SECONDS ) + 1;
+		if ( days > MAX_KILLSTAT_DAYS ) return { error: "Range holds more than 366 days" };
+	}
 	const bucket = query.get( "bucket" );
 	if ( bucket && query.has( "from" ) && query.has( "to" ) ) {
 		const span = Number( query.get( "to" ) ) - Number( query.get( "from" ) );

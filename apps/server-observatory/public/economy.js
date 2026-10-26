@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-economy.js - the Economy page: one server, one range, four read-only views
+economy.js - the Economy page: one server, one range, five read-only views
 
 Loads the GameWorld economy aggregates through this console's proxy
 (/api/economy/*, server/economy.mjs) and draws them with economy-view.js.
@@ -20,10 +20,12 @@ import {
 	flagLabel,
 	flowRows,
 	groupDigits,
+	killStatRows,
 	lineChart,
 	plusBars,
 	RANGES,
 	rangeWindow,
+	rateText,
 	reasonLabel,
 	recoveryLink,
 	seriesTotal,
@@ -32,7 +34,7 @@ import {
 	toBig
 } from "./economy-view.js";
 
-const TABS = [ "overview", "flows", "trade", "flags" ];
+const TABS = [ "overview", "flows", "trade", "rates", "flags" ];
 const RANGE_KEY = "sro-observatory-economy-range";
 const status = byID( "status" );
 let generation = 0, meta = null, loaded = null, paintedWidth = 0;
@@ -295,6 +297,47 @@ function drawFlows( flows, failure ) {
 
 /*
 ================
+drawRates
+
+Kill and EXP rates per online hour, by UTC day and level band. Bands
+under the contract's character floor are withheld server-side; the note
+says how many, so a missing band is never mistaken for no play.
+================
+*/
+function drawRates( rates, failure ) {
+	if ( !rates ) {
+		byID( "rates-note" ).textContent = "";
+		message( "rates", failure );
+		return;
+	}
+	const floor = Number.isFinite( rates.minCharacters ) ? rates.minCharacters : 3;
+	const suppressed = Number.isFinite( rates.suppressed ) ? rates.suppressed : 0;
+	byID( "rates-note" ).textContent = suppressed > 0 ?
+		`Bands with fewer than ${floor} characters in a day are withheld: ${suppressed} withheld in this range.` :
+		`Bands with fewer than ${floor} characters in a day are withheld; none were in this range.`;
+	const rows = killStatRows( rates );
+	if ( rows.length === 0 ) {
+		message( "rates", "No counted kills in this range yet." );
+		return;
+	}
+	byID( "rates" ).replaceChildren( table(
+		[ "Day", "Band", "Characters", "Kills", "Kills / h", "EXP / h", "Skill EXP / h", "Online hours" ],
+		rows.map( row => [
+			row.dayText,
+			row.label,
+			countText( row.characters ),
+			countText( row.kills ),
+			rateText( row.killsPerHour ),
+			rateText( row.expPerHour ),
+			rateText( row.skillExpPerHour ),
+			rateText( row.onlineHours )
+		] ),
+		[ 2, 3, 4, 5, 6, 7 ]
+	) );
+}
+
+/*
+================
 drawTrade
 
 The trade route's shape arrives with its first GameWorld implementation;
@@ -375,7 +418,7 @@ chart's text keeps its real size.
 */
 function paint() {
 	if ( !loaded ) return;
-	const { shard, grid, minted, burned, supply, distribution, flows, flags, trade } = loaded;
+	const { shard, grid, minted, burned, supply, distribution, flows, flags, trade, rates } = loaded;
 	const value = result => result.status === "fulfilled" ? result.value : null;
 	// A malformed answer breaks only its own section.
 	const draw = ( targets, paint ) => {
@@ -395,6 +438,7 @@ function paint() {
 	);
 	draw( [ "flows" ], () => drawFlows( value( flows ), failureText( flows.reason ) ) );
 	draw( [ "trade" ], () => drawTrade( value( trade ) ) );
+	draw( [ "rates" ], () => drawRates( value( rates ), failureText( rates.reason ) ) );
 	draw( [ "flags" ], () => drawFlags( shard, value( flags ), failureText( flags.reason ) ) );
 }
 
@@ -411,17 +455,18 @@ async function load() {
 	const span = { from: String( grid.from ), to: String( grid.to ) };
 	const bucketed = { ...base, ...span, bucket: grid.bucket };
 	status.textContent = "Loading…";
-	const [minted, burned, supply, distribution, flows, flags, trade] = await Promise.allSettled( [
+	const [minted, burned, supply, distribution, flows, flags, trade, rates] = await Promise.allSettled( [
 		api( "series", { ...bucketed, metric: "gold_minted" } ),
 		api( "series", { ...bucketed, metric: "gold_burned" } ),
 		api( "series", { ...bucketed, metric: "gold_total" } ),
 		api( "distribution", base ),
 		api( "flows", bucketed ),
 		api( "flags", { shard, ...span } ),
-		api( "trade", { shard, ...span, bucket: grid.bucket } )
+		api( "trade", { shard, ...span, bucket: grid.bucket } ),
+		api( "killstats", { shard, ...span } )
 	] );
 	if ( current !== generation ) return;
-	loaded = { shard, grid, minted, burned, supply, distribution, flows, flags, trade };
+	loaded = { shard, grid, minted, burned, supply, distribution, flows, flags, trade, rates };
 	paintedWidth = byID( "controls" ).clientWidth;
 	paint();
 	const ledger = meta?.ledgerThrough ? new Date( meta.ledgerThrough * 1000 ).toLocaleString() : "unknown";

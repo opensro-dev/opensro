@@ -37,9 +37,39 @@
 			"hpPercent": 220,
 			"physicalPercent": 65,
 			"magicalPercent": 20,
-			"defensePercent": 180,
-			"magicDefensePercent": 145,
-			"magicPrimary": false
+			"defensePercent": 100,
+			"magicDefensePercent": 100,
+			"magicPrimary": false,
+			"healthByLevel": [
+				{
+					"level": 1,
+					"hp": 20
+				},
+				{
+					"level": 10,
+					"hp": 185
+				},
+				{
+					"level": 20,
+					"hp": 245
+				},
+				{
+					"level": 40,
+					"hp": 390
+				},
+				{
+					"level": 60,
+					"hp": 1025
+				},
+				{
+					"level": 80,
+					"hp": 5000
+				},
+				{
+					"level": 90,
+					"hp": 11000
+				}
+			]
 		},
 		{
 			"name": "Wolf",
@@ -48,9 +78,39 @@
 			"hpPercent": 100,
 			"physicalPercent": 130,
 			"magicalPercent": 25,
-			"defensePercent": 100,
-			"magicDefensePercent": 85,
-			"magicPrimary": false
+			"defensePercent": 70,
+			"magicDefensePercent": 70,
+			"magicPrimary": false,
+			"healthByLevel": [
+				{
+					"level": 1,
+					"hp": 16
+				},
+				{
+					"level": 10,
+					"hp": 165
+				},
+				{
+					"level": 20,
+					"hp": 235
+				},
+				{
+					"level": 40,
+					"hp": 350
+				},
+				{
+					"level": 60,
+					"hp": 900
+				},
+				{
+					"level": 80,
+					"hp": 4500
+				},
+				{
+					"level": 90,
+					"hp": 8100
+				}
+			]
 		},
 		{
 			"name": "Penguin",
@@ -59,9 +119,39 @@
 			"hpPercent": 70,
 			"physicalPercent": 35,
 			"magicalPercent": 160,
-			"defensePercent": 70,
-			"magicDefensePercent": 120,
-			"magicPrimary": true
+			"defensePercent": 40,
+			"magicDefensePercent": 40,
+			"magicPrimary": true,
+			"healthByLevel": [
+				{
+					"level": 1,
+					"hp": 10
+				},
+				{
+					"level": 10,
+					"hp": 100
+				},
+				{
+					"level": 20,
+					"hp": 160
+				},
+				{
+					"level": 40,
+					"hp": 230
+				},
+				{
+					"level": 60,
+					"hp": 590
+				},
+				{
+					"level": 80,
+					"hp": 3000
+				},
+				{
+					"level": 90,
+					"hp": 4800
+				}
+			]
 		},
 		{
 			"name": "Crow",
@@ -70,9 +160,39 @@
 			"hpPercent": 90,
 			"physicalPercent": 55,
 			"magicalPercent": 95,
-			"defensePercent": 90,
-			"magicDefensePercent": 110,
-			"magicPrimary": false
+			"defensePercent": 40,
+			"magicDefensePercent": 40,
+			"magicPrimary": false,
+			"healthByLevel": [
+				{
+					"level": 1,
+					"hp": 10
+				},
+				{
+					"level": 10,
+					"hp": 100
+				},
+				{
+					"level": 20,
+					"hp": 160
+				},
+				{
+					"level": 40,
+					"hp": 230
+				},
+				{
+					"level": 60,
+					"hp": 590
+				},
+				{
+					"level": 80,
+					"hp": 3000
+				},
+				{
+					"level": 90,
+					"hp": 4800
+				}
+			]
 		}
 	],
 	"skills": [
@@ -1556,7 +1676,8 @@
 						"physicalDefense": 0,
 						"magicalDefense": 0,
 						"hitRatio": 2,
-						"parryRatio": 0
+						"parryRatio": 0,
+						"maxHPPercent": 33.333333333333336
 					}
 				},
 				{
@@ -1570,7 +1691,8 @@
 						"physicalDefense": 3,
 						"magicalDefense": 3,
 						"hitRatio": 0,
-						"parryRatio": 2
+						"parryRatio": 2,
+						"maxHPPercent": 33.333333333333336
 					}
 				},
 				{
@@ -1584,10 +1706,12 @@
 						"physicalDefense": 1,
 						"magicalDefense": 1,
 						"hitRatio": 1,
-						"parryRatio": 1
+						"parryRatio": 1,
+						"maxHPPercent": 33.333333333333336
 					}
 				}
-			]
+			],
+			"procDamage": 100
 		},
 		{
 			"degree": 2,
@@ -1615,7 +1739,8 @@
 						"physicalDefense": 0,
 						"magicalDefense": 0,
 						"hitRatio": 4,
-						"parryRatio": 0
+						"parryRatio": 0,
+						"maxHPPercent": 66.66666666666667
 					}
 				},
 				{
@@ -1629,7 +1754,8 @@
 						"physicalDefense": 10,
 						"magicalDefense": 10,
 						"hitRatio": 0,
-						"parryRatio": 4
+						"parryRatio": 4,
+						"maxHPPercent": 66.66666666666667
 					}
 				},
 				{
@@ -1643,10 +1769,12 @@
 						"physicalDefense": 5,
 						"magicalDefense": 5,
 						"hitRatio": 2,
-						"parryRatio": 2
+						"parryRatio": 2,
+						"maxHPPercent": 66.66666666666667
 					}
 				}
-			]
+			],
+			"procDamage": 213
 		},
 		{
 			"degree": 3,
@@ -1674,7 +1802,8 @@
 						"physicalDefense": 0,
 						"magicalDefense": 0,
 						"hitRatio": 6,
-						"parryRatio": 0
+						"parryRatio": 0,
+						"maxHPPercent": 100.0
 					}
 				},
 				{
@@ -1688,7 +1817,8 @@
 						"physicalDefense": 18,
 						"magicalDefense": 18,
 						"hitRatio": 0,
-						"parryRatio": 6
+						"parryRatio": 6,
+						"maxHPPercent": 100.0
 					}
 				},
 				{
@@ -1702,10 +1832,12 @@
 						"physicalDefense": 9,
 						"magicalDefense": 9,
 						"hitRatio": 3,
-						"parryRatio": 3
+						"parryRatio": 3,
+						"maxHPPercent": 100.0
 					}
 				}
-			]
+			],
+			"procDamage": 325
 		},
 		{
 			"degree": 4,
@@ -1733,7 +1865,8 @@
 						"physicalDefense": 0,
 						"magicalDefense": 0,
 						"hitRatio": 8,
-						"parryRatio": 0
+						"parryRatio": 0,
+						"maxHPPercent": 133.33333333333334
 					}
 				},
 				{
@@ -1747,7 +1880,8 @@
 						"physicalDefense": 26,
 						"magicalDefense": 26,
 						"hitRatio": 0,
-						"parryRatio": 8
+						"parryRatio": 8,
+						"maxHPPercent": 133.33333333333334
 					}
 				},
 				{
@@ -1761,10 +1895,12 @@
 						"physicalDefense": 13,
 						"magicalDefense": 13,
 						"hitRatio": 4,
-						"parryRatio": 4
+						"parryRatio": 4,
+						"maxHPPercent": 133.33333333333334
 					}
 				}
-			]
+			],
+			"procDamage": 438
 		},
 		{
 			"degree": 5,
@@ -1792,7 +1928,8 @@
 						"physicalDefense": 0,
 						"magicalDefense": 0,
 						"hitRatio": 10,
-						"parryRatio": 0
+						"parryRatio": 0,
+						"maxHPPercent": 166.66666666666666
 					}
 				},
 				{
@@ -1806,7 +1943,8 @@
 						"physicalDefense": 34,
 						"magicalDefense": 34,
 						"hitRatio": 0,
-						"parryRatio": 10
+						"parryRatio": 10,
+						"maxHPPercent": 166.66666666666666
 					}
 				},
 				{
@@ -1820,10 +1958,12 @@
 						"physicalDefense": 17,
 						"magicalDefense": 17,
 						"hitRatio": 5,
-						"parryRatio": 5
+						"parryRatio": 5,
+						"maxHPPercent": 166.66666666666666
 					}
 				}
-			]
+			],
+			"procDamage": 550
 		},
 		{
 			"degree": 6,
@@ -1851,7 +1991,8 @@
 						"physicalDefense": 0,
 						"magicalDefense": 0,
 						"hitRatio": 12,
-						"parryRatio": 0
+						"parryRatio": 0,
+						"maxHPPercent": 200.0
 					}
 				},
 				{
@@ -1865,7 +2006,8 @@
 						"physicalDefense": 44,
 						"magicalDefense": 44,
 						"hitRatio": 0,
-						"parryRatio": 12
+						"parryRatio": 12,
+						"maxHPPercent": 200.0
 					}
 				},
 				{
@@ -1879,10 +2021,12 @@
 						"physicalDefense": 22,
 						"magicalDefense": 22,
 						"hitRatio": 6,
-						"parryRatio": 6
+						"parryRatio": 6,
+						"maxHPPercent": 200.0
 					}
 				}
-			]
+			],
+			"procDamage": 663
 		},
 		{
 			"degree": 7,
@@ -1910,7 +2054,8 @@
 						"physicalDefense": 0,
 						"magicalDefense": 0,
 						"hitRatio": 14,
-						"parryRatio": 0
+						"parryRatio": 0,
+						"maxHPPercent": 233.33333333333334
 					}
 				},
 				{
@@ -1924,7 +2069,8 @@
 						"physicalDefense": 54,
 						"magicalDefense": 54,
 						"hitRatio": 0,
-						"parryRatio": 14
+						"parryRatio": 14,
+						"maxHPPercent": 233.33333333333334
 					}
 				},
 				{
@@ -1938,10 +2084,12 @@
 						"physicalDefense": 27,
 						"magicalDefense": 27,
 						"hitRatio": 7,
-						"parryRatio": 7
+						"parryRatio": 7,
+						"maxHPPercent": 233.33333333333334
 					}
 				}
-			]
+			],
+			"procDamage": 775
 		},
 		{
 			"degree": 8,
@@ -1969,7 +2117,8 @@
 						"physicalDefense": 0,
 						"magicalDefense": 0,
 						"hitRatio": 16,
-						"parryRatio": 0
+						"parryRatio": 0,
+						"maxHPPercent": 266.6666666666667
 					}
 				},
 				{
@@ -1983,7 +2132,8 @@
 						"physicalDefense": 66,
 						"magicalDefense": 66,
 						"hitRatio": 0,
-						"parryRatio": 16
+						"parryRatio": 16,
+						"maxHPPercent": 266.6666666666667
 					}
 				},
 				{
@@ -1997,10 +2147,12 @@
 						"physicalDefense": 33,
 						"magicalDefense": 33,
 						"hitRatio": 8,
-						"parryRatio": 8
+						"parryRatio": 8,
+						"maxHPPercent": 266.6666666666667
 					}
 				}
-			]
+			],
+			"procDamage": 888
 		},
 		{
 			"degree": 9,
@@ -2028,7 +2180,8 @@
 						"physicalDefense": 0,
 						"magicalDefense": 0,
 						"hitRatio": 18,
-						"parryRatio": 0
+						"parryRatio": 0,
+						"maxHPPercent": 300.0
 					}
 				},
 				{
@@ -2042,7 +2195,8 @@
 						"physicalDefense": 78,
 						"magicalDefense": 78,
 						"hitRatio": 0,
-						"parryRatio": 18
+						"parryRatio": 18,
+						"maxHPPercent": 300.0
 					}
 				},
 				{
@@ -2056,10 +2210,12 @@
 						"physicalDefense": 39,
 						"magicalDefense": 39,
 						"hitRatio": 9,
-						"parryRatio": 9
+						"parryRatio": 9,
+						"maxHPPercent": 300.0
 					}
 				}
-			]
+			],
+			"procDamage": 1000
 		}
 	],
 	"affixes": [
@@ -2284,7 +2440,7 @@
 			"tier": 3,
 			"minDegree": 6,
 			"min": 7,
-			"max": 9,
+			"max": 30,
 			"unit": "%",
 			"weight": 70,
 			"pets": "All",
@@ -2301,11 +2457,11 @@
 				"Collar",
 				"Harness"
 			],
-			"effect": "Adds {v} fire damage; 5% chance to burn",
+			"effect": "Adds {v} fire damage",
 			"tier": 1,
 			"minDegree": 1,
 			"min": 3,
-			"max": 6,
+			"max": 100,
 			"unit": "damage",
 			"weight": 100,
 			"pets": "All",
@@ -2322,11 +2478,11 @@
 				"Collar",
 				"Harness"
 			],
-			"effect": "Adds {v} fire damage; 5% chance to burn",
-			"tier": 2,
+			"effect": "Adds {v} fire damage",
+			"tier": 3,
 			"minDegree": 3,
 			"min": 8,
-			"max": 15,
+			"max": 325,
 			"unit": "damage",
 			"weight": 85,
 			"pets": "All",
@@ -2343,11 +2499,11 @@
 				"Collar",
 				"Harness"
 			],
-			"effect": "Adds {v} fire damage; 5% chance to burn",
-			"tier": 3,
+			"effect": "Adds {v} fire damage",
+			"tier": 5,
 			"minDegree": 5,
 			"min": 18,
-			"max": 30,
+			"max": 550,
 			"unit": "damage",
 			"weight": 70,
 			"pets": "All",
@@ -2364,11 +2520,11 @@
 				"Collar",
 				"Harness"
 			],
-			"effect": "Adds {v} fire damage; 5% chance to burn",
-			"tier": 4,
+			"effect": "Adds {v} fire damage",
+			"tier": 7,
 			"minDegree": 7,
 			"min": 35,
-			"max": 55,
+			"max": 775,
 			"unit": "damage",
 			"weight": 55,
 			"pets": "All",
@@ -2385,11 +2541,11 @@
 				"Collar",
 				"Harness"
 			],
-			"effect": "Adds {v} cold damage; 5% chance to frostbite",
+			"effect": "Adds {v} cold damage",
 			"tier": 1,
 			"minDegree": 1,
 			"min": 3,
-			"max": 6,
+			"max": 100,
 			"unit": "damage",
 			"weight": 100,
 			"pets": "All",
@@ -2406,11 +2562,11 @@
 				"Collar",
 				"Harness"
 			],
-			"effect": "Adds {v} cold damage; 5% chance to frostbite",
-			"tier": 2,
+			"effect": "Adds {v} cold damage",
+			"tier": 3,
 			"minDegree": 3,
 			"min": 8,
-			"max": 15,
+			"max": 325,
 			"unit": "damage",
 			"weight": 85,
 			"pets": "All",
@@ -2427,11 +2583,11 @@
 				"Collar",
 				"Harness"
 			],
-			"effect": "Adds {v} cold damage; 5% chance to frostbite",
-			"tier": 3,
+			"effect": "Adds {v} cold damage",
+			"tier": 5,
 			"minDegree": 5,
 			"min": 18,
-			"max": 30,
+			"max": 550,
 			"unit": "damage",
 			"weight": 70,
 			"pets": "All",
@@ -2448,11 +2604,11 @@
 				"Collar",
 				"Harness"
 			],
-			"effect": "Adds {v} cold damage; 5% chance to frostbite",
-			"tier": 4,
+			"effect": "Adds {v} cold damage",
+			"tier": 7,
 			"minDegree": 7,
 			"min": 35,
-			"max": 55,
+			"max": 775,
 			"unit": "damage",
 			"weight": 55,
 			"pets": "All",
@@ -2469,11 +2625,11 @@
 				"Collar",
 				"Harness"
 			],
-			"effect": "Adds 1-{v} lightning damage; 5% chance to shock",
+			"effect": "Adds {v} lightning damage",
 			"tier": 1,
 			"minDegree": 1,
 			"min": 6,
-			"max": 12,
+			"max": 100,
 			"unit": "damage",
 			"weight": 100,
 			"pets": "All",
@@ -2490,11 +2646,11 @@
 				"Collar",
 				"Harness"
 			],
-			"effect": "Adds 1-{v} lightning damage; 5% chance to shock",
-			"tier": 2,
+			"effect": "Adds {v} lightning damage",
+			"tier": 3,
 			"minDegree": 3,
 			"min": 16,
-			"max": 30,
+			"max": 575,
 			"unit": "damage",
 			"weight": 85,
 			"pets": "All",
@@ -2511,11 +2667,11 @@
 				"Collar",
 				"Harness"
 			],
-			"effect": "Adds 1-{v} lightning damage; 5% chance to shock",
-			"tier": 3,
+			"effect": "Adds {v} lightning damage",
+			"tier": 5,
 			"minDegree": 5,
 			"min": 36,
-			"max": 60,
+			"max": 1050,
 			"unit": "damage",
 			"weight": 70,
 			"pets": "All",
@@ -2532,11 +2688,11 @@
 				"Collar",
 				"Harness"
 			],
-			"effect": "Adds 1-{v} lightning damage; 5% chance to shock",
-			"tier": 4,
+			"effect": "Adds {v} lightning damage",
+			"tier": 7,
 			"minDegree": 7,
 			"min": 70,
-			"max": 110,
+			"max": 1525,
 			"unit": "damage",
 			"weight": 55,
 			"pets": "All",
@@ -2557,7 +2713,7 @@
 			"tier": 1,
 			"minDegree": 1,
 			"min": 8,
-			"max": 14,
+			"max": 300,
 			"unit": "damage",
 			"weight": 100,
 			"pets": "All",
@@ -2575,10 +2731,10 @@
 				"Harness"
 			],
 			"effect": "Adds {v} poison damage over 4 s",
-			"tier": 2,
+			"tier": 3,
 			"minDegree": 3,
 			"min": 20,
-			"max": 35,
+			"max": 2475,
 			"unit": "damage",
 			"weight": 85,
 			"pets": "All",
@@ -2596,10 +2752,10 @@
 				"Harness"
 			],
 			"effect": "Adds {v} poison damage over 4 s",
-			"tier": 3,
+			"tier": 5,
 			"minDegree": 5,
 			"min": 45,
-			"max": 70,
+			"max": 4650,
 			"unit": "damage",
 			"weight": 70,
 			"pets": "All",
@@ -2617,10 +2773,10 @@
 				"Harness"
 			],
 			"effect": "Adds {v} poison damage over 4 s",
-			"tier": 4,
+			"tier": 7,
 			"minDegree": 7,
 			"min": 90,
-			"max": 130,
+			"max": 6825,
 			"unit": "damage",
 			"weight": 55,
 			"pets": "All",
@@ -2683,7 +2839,7 @@
 			"tier": 3,
 			"minDegree": 8,
 			"min": 7,
-			"max": 9,
+			"max": 50,
 			"unit": "%",
 			"weight": 70,
 			"pets": "All",
@@ -3089,7 +3245,7 @@
 			"tier": 3,
 			"minDegree": 7,
 			"min": 16,
-			"max": 20,
+			"max": 100,
 			"unit": "%",
 			"weight": 70,
 			"pets": "All",
@@ -3774,7 +3930,7 @@
 				"Collar",
 				"Charm"
 			],
-			"effect": "{v}% chance to cast Chain Lightning on striking (level = 2 x degree)",
+			"effect": "{v}% chance to cast Chain Lightning when the pet deals damage (power scales with degree)",
 			"tier": 1,
 			"minDegree": 3,
 			"min": 4,
@@ -3795,7 +3951,7 @@
 				"Collar",
 				"Charm"
 			],
-			"effect": "{v}% chance to cast Chain Lightning on striking (level = 2 x degree)",
+			"effect": "{v}% chance to cast Chain Lightning when the pet deals damage (power scales with degree)",
 			"tier": 2,
 			"minDegree": 6,
 			"min": 6,
@@ -3816,7 +3972,7 @@
 				"Collar",
 				"Charm"
 			],
-			"effect": "{v}% chance to cast Chain Lightning on striking (level = 2 x degree)",
+			"effect": "{v}% chance to cast Chain Lightning when the pet deals damage (power scales with degree)",
 			"tier": 3,
 			"minDegree": 9,
 			"min": 8,
@@ -3831,13 +3987,13 @@
 			"id": "ProcNova1",
 			"name": "of Winter",
 			"kind": "Suffix",
-			"group": "ProcNova",
+			"group": "ProcBlizzardTaken",
 			"category": "Proc",
 			"slots": [
 				"Harness",
 				"Charm"
 			],
-			"effect": "{v}% chance to cast Frost Nova when struck (level = 2 x degree)",
+			"effect": "{v}% chance to cast Blizzard when the pet takes damage (power scales with degree)",
 			"tier": 1,
 			"minDegree": 3,
 			"min": 4,
@@ -3845,20 +4001,20 @@
 			"unit": "%",
 			"weight": 50,
 			"pets": "All",
-			"status": "Planned",
+			"status": "Implemented",
 			"code": 87
 		},
 		{
 			"id": "ProcNova2",
 			"name": "of the Glacier",
 			"kind": "Suffix",
-			"group": "ProcNova",
+			"group": "ProcBlizzardTaken",
 			"category": "Proc",
 			"slots": [
 				"Harness",
 				"Charm"
 			],
-			"effect": "{v}% chance to cast Frost Nova when struck (level = 2 x degree)",
+			"effect": "{v}% chance to cast Blizzard when the pet takes damage (power scales with degree)",
 			"tier": 2,
 			"minDegree": 6,
 			"min": 6,
@@ -3866,20 +4022,20 @@
 			"unit": "%",
 			"weight": 35,
 			"pets": "All",
-			"status": "Planned",
+			"status": "Implemented",
 			"code": 88
 		},
 		{
 			"id": "ProcNova3",
 			"name": "of the Frozen North",
 			"kind": "Suffix",
-			"group": "ProcNova",
+			"group": "ProcBlizzardTaken",
 			"category": "Proc",
 			"slots": [
 				"Harness",
 				"Charm"
 			],
-			"effect": "{v}% chance to cast Frost Nova when struck (level = 2 x degree)",
+			"effect": "{v}% chance to cast Blizzard when the pet takes damage (power scales with degree)",
 			"tier": 3,
 			"minDegree": 9,
 			"min": 8,
@@ -3887,7 +4043,7 @@
 			"unit": "%",
 			"weight": 20,
 			"pets": "All",
-			"status": "Planned",
+			"status": "Implemented",
 			"code": 89
 		},
 		{
@@ -3900,7 +4056,7 @@
 				"Collar",
 				"Charm"
 			],
-			"effect": "{v}% chance to cast Fire Burst on striking",
+			"effect": "{v}% chance to cast Fire Burst when the pet deals damage (power scales with degree)",
 			"tier": 1,
 			"minDegree": 3,
 			"min": 4,
@@ -3921,7 +4077,7 @@
 				"Collar",
 				"Charm"
 			],
-			"effect": "{v}% chance to cast Fire Burst on striking",
+			"effect": "{v}% chance to cast Fire Burst when the pet deals damage (power scales with degree)",
 			"tier": 2,
 			"minDegree": 7,
 			"min": 6,
@@ -3936,13 +4092,13 @@
 			"id": "ProcPoison1",
 			"name": "of Plague",
 			"kind": "Suffix",
-			"group": "ProcPoison",
+			"group": "ProcPoisonTaken",
 			"category": "Proc",
 			"slots": [
 				"Harness",
 				"Charm"
 			],
-			"effect": "{v}% chance to cast Poison Cloud when struck",
+			"effect": "{v}% chance to cast Poison Cloud when the pet takes damage (power scales with degree)",
 			"tier": 1,
 			"minDegree": 3,
 			"min": 4,
@@ -3950,20 +4106,20 @@
 			"unit": "%",
 			"weight": 50,
 			"pets": "All",
-			"status": "Planned",
+			"status": "Implemented",
 			"code": 92
 		},
 		{
 			"id": "ProcPoison2",
 			"name": "of Pestilence",
 			"kind": "Suffix",
-			"group": "ProcPoison",
+			"group": "ProcPoisonTaken",
 			"category": "Proc",
 			"slots": [
 				"Harness",
 				"Charm"
 			],
-			"effect": "{v}% chance to cast Poison Cloud when struck",
+			"effect": "{v}% chance to cast Poison Cloud when the pet takes damage (power scales with degree)",
 			"tier": 2,
 			"minDegree": 7,
 			"min": 7,
@@ -3971,7 +4127,7 @@
 			"unit": "%",
 			"weight": 35,
 			"pets": "All",
-			"status": "Planned",
+			"status": "Implemented",
 			"code": 93
 		},
 		{
@@ -4025,7 +4181,7 @@
 			"slots": [
 				"Charm"
 			],
-			"effect": "{v}% chance to cast Mend on the owner on striking",
+			"effect": "{v}% chance to cast Mend on the owner when the pet deals damage (heals 5% of owner maximum HP)",
 			"tier": 1,
 			"minDegree": 3,
 			"min": 3,
@@ -4045,7 +4201,7 @@
 			"slots": [
 				"Charm"
 			],
-			"effect": "{v}% chance to cast Mend on the owner on striking",
+			"effect": "{v}% chance to cast Mend on the owner when the pet deals damage (heals 5% of owner maximum HP)",
 			"tier": 2,
 			"minDegree": 7,
 			"min": 5,
@@ -4117,6 +4273,1138 @@
 			"pets": "All",
 			"status": "Planned",
 			"code": 100
+		},
+		{
+			"id": "Skill1",
+			"name": "of Hunting Howl",
+			"kind": "Suffix",
+			"group": "OneSkill",
+			"category": "Skills",
+			"slots": [
+				"Collar",
+				"Harness",
+				"Charm"
+			],
+			"effect": "+{v} to Hunting Howl (Wolf)",
+			"tier": 1,
+			"minDegree": 2,
+			"min": 1,
+			"max": 5,
+			"unit": "levels",
+			"weight": 20,
+			"pets": "Wolf",
+			"status": "Implemented",
+			"code": 101,
+			"skillId": 1
+		},
+		{
+			"id": "Skill4",
+			"name": "of Savage Rend",
+			"kind": "Suffix",
+			"group": "OneSkill",
+			"category": "Skills",
+			"slots": [
+				"Collar",
+				"Harness",
+				"Charm"
+			],
+			"effect": "+{v} to Savage Rend (Wolf)",
+			"tier": 1,
+			"minDegree": 2,
+			"min": 1,
+			"max": 5,
+			"unit": "levels",
+			"weight": 20,
+			"pets": "Wolf",
+			"status": "Implemented",
+			"code": 104,
+			"skillId": 4
+		},
+		{
+			"id": "Skill7",
+			"name": "of Execute",
+			"kind": "Suffix",
+			"group": "OneSkill",
+			"category": "Skills",
+			"slots": [
+				"Collar",
+				"Harness",
+				"Charm"
+			],
+			"effect": "+{v} to Execute (Wolf)",
+			"tier": 1,
+			"minDegree": 2,
+			"min": 1,
+			"max": 5,
+			"unit": "levels",
+			"weight": 20,
+			"pets": "Wolf",
+			"status": "Implemented",
+			"code": 107,
+			"skillId": 7
+		},
+		{
+			"id": "Skill10",
+			"name": "of Bloodscent",
+			"kind": "Suffix",
+			"group": "OneSkill",
+			"category": "Skills",
+			"slots": [
+				"Collar",
+				"Harness",
+				"Charm"
+			],
+			"effect": "+{v} to Bloodscent (Wolf)",
+			"tier": 1,
+			"minDegree": 2,
+			"min": 1,
+			"max": 5,
+			"unit": "levels",
+			"weight": 20,
+			"pets": "Wolf",
+			"status": "Implemented",
+			"code": 110,
+			"skillId": 10
+		},
+		{
+			"id": "Skill13",
+			"name": "of Blood Hunt",
+			"kind": "Suffix",
+			"group": "OneSkill",
+			"category": "Skills",
+			"slots": [
+				"Collar",
+				"Harness",
+				"Charm"
+			],
+			"effect": "+{v} to Blood Hunt (Wolf)",
+			"tier": 1,
+			"minDegree": 2,
+			"min": 1,
+			"max": 5,
+			"unit": "levels",
+			"weight": 20,
+			"pets": "Wolf",
+			"status": "Implemented",
+			"code": 113,
+			"skillId": 13
+		},
+		{
+			"id": "Skill16",
+			"name": "of Challenging Roar",
+			"kind": "Suffix",
+			"group": "OneSkill",
+			"category": "Skills",
+			"slots": [
+				"Collar",
+				"Harness",
+				"Charm"
+			],
+			"effect": "+{v} to Challenging Roar (Bear)",
+			"tier": 1,
+			"minDegree": 2,
+			"min": 1,
+			"max": 5,
+			"unit": "levels",
+			"weight": 20,
+			"pets": "Bear",
+			"status": "Implemented",
+			"code": 116,
+			"skillId": 16
+		},
+		{
+			"id": "Skill19",
+			"name": "of Iron Hide",
+			"kind": "Suffix",
+			"group": "OneSkill",
+			"category": "Skills",
+			"slots": [
+				"Collar",
+				"Harness",
+				"Charm"
+			],
+			"effect": "+{v} to Iron Hide (Bear)",
+			"tier": 1,
+			"minDegree": 2,
+			"min": 1,
+			"max": 5,
+			"unit": "levels",
+			"weight": 20,
+			"pets": "Bear",
+			"status": "Implemented",
+			"code": 119,
+			"skillId": 19
+		},
+		{
+			"id": "Skill22",
+			"name": "of Unbroken Spirit",
+			"kind": "Suffix",
+			"group": "OneSkill",
+			"category": "Skills",
+			"slots": [
+				"Collar",
+				"Harness",
+				"Charm"
+			],
+			"effect": "+{v} to Unbroken Spirit (Bear)",
+			"tier": 1,
+			"minDegree": 2,
+			"min": 1,
+			"max": 5,
+			"unit": "levels",
+			"weight": 20,
+			"pets": "Bear",
+			"status": "Implemented",
+			"code": 122,
+			"skillId": 22
+		},
+		{
+			"id": "Skill25",
+			"name": "of Guardian's Bond",
+			"kind": "Suffix",
+			"group": "OneSkill",
+			"category": "Skills",
+			"slots": [
+				"Collar",
+				"Harness",
+				"Charm"
+			],
+			"effect": "+{v} to Guardian's Bond (Bear)",
+			"tier": 1,
+			"minDegree": 2,
+			"min": 1,
+			"max": 5,
+			"unit": "levels",
+			"weight": 20,
+			"pets": "Bear",
+			"status": "Implemented",
+			"code": 125,
+			"skillId": 25
+		},
+		{
+			"id": "Skill28",
+			"name": "of Crushing Paw",
+			"kind": "Suffix",
+			"group": "OneSkill",
+			"category": "Skills",
+			"slots": [
+				"Collar",
+				"Harness",
+				"Charm"
+			],
+			"effect": "+{v} to Crushing Paw (Bear)",
+			"tier": 1,
+			"minDegree": 2,
+			"min": 1,
+			"max": 5,
+			"unit": "levels",
+			"weight": 20,
+			"pets": "Bear",
+			"status": "Implemented",
+			"code": 128,
+			"skillId": 28
+		},
+		{
+			"id": "Skill31",
+			"name": "of Ice Lance",
+			"kind": "Suffix",
+			"group": "OneSkill",
+			"category": "Skills",
+			"slots": [
+				"Collar",
+				"Harness",
+				"Charm"
+			],
+			"effect": "+{v} to Ice Lance (Penguin)",
+			"tier": 1,
+			"minDegree": 2,
+			"min": 1,
+			"max": 5,
+			"unit": "levels",
+			"weight": 20,
+			"pets": "Penguin",
+			"status": "Implemented",
+			"code": 131,
+			"skillId": 31
+		},
+		{
+			"id": "Skill34",
+			"name": "of Blizzard",
+			"kind": "Suffix",
+			"group": "OneSkill",
+			"category": "Skills",
+			"slots": [
+				"Collar",
+				"Harness",
+				"Charm"
+			],
+			"effect": "+{v} to Blizzard (Penguin)",
+			"tier": 1,
+			"minDegree": 2,
+			"min": 1,
+			"max": 5,
+			"unit": "levels",
+			"weight": 20,
+			"pets": "Penguin",
+			"status": "Implemented",
+			"code": 134,
+			"skillId": 34
+		},
+		{
+			"id": "Skill37",
+			"name": "of Shatter",
+			"kind": "Suffix",
+			"group": "OneSkill",
+			"category": "Skills",
+			"slots": [
+				"Collar",
+				"Harness",
+				"Charm"
+			],
+			"effect": "+{v} to Shatter (Penguin)",
+			"tier": 1,
+			"minDegree": 2,
+			"min": 1,
+			"max": 5,
+			"unit": "levels",
+			"weight": 20,
+			"pets": "Penguin",
+			"status": "Implemented",
+			"code": 137,
+			"skillId": 37
+		},
+		{
+			"id": "Skill40",
+			"name": "of Arcane Resonance",
+			"kind": "Suffix",
+			"group": "OneSkill",
+			"category": "Skills",
+			"slots": [
+				"Collar",
+				"Harness",
+				"Charm"
+			],
+			"effect": "+{v} to Arcane Resonance (Penguin)",
+			"tier": 1,
+			"minDegree": 2,
+			"min": 1,
+			"max": 5,
+			"unit": "levels",
+			"weight": 20,
+			"pets": "Penguin",
+			"status": "Implemented",
+			"code": 140,
+			"skillId": 40
+		},
+		{
+			"id": "Skill43",
+			"name": "of Frozen Hourglass",
+			"kind": "Suffix",
+			"group": "OneSkill",
+			"category": "Skills",
+			"slots": [
+				"Collar",
+				"Harness",
+				"Charm"
+			],
+			"effect": "+{v} to Frozen Hourglass (Penguin)",
+			"tier": 1,
+			"minDegree": 2,
+			"min": 1,
+			"max": 5,
+			"unit": "levels",
+			"weight": 20,
+			"pets": "Penguin",
+			"status": "Implemented",
+			"code": 143,
+			"skillId": 43
+		},
+		{
+			"id": "Skill46",
+			"name": "of Rejuvenating Plume",
+			"kind": "Suffix",
+			"group": "OneSkill",
+			"category": "Skills",
+			"slots": [
+				"Collar",
+				"Harness",
+				"Charm"
+			],
+			"effect": "+{v} to Rejuvenating Plume (Crow)",
+			"tier": 1,
+			"minDegree": 2,
+			"min": 1,
+			"max": 5,
+			"unit": "levels",
+			"weight": 20,
+			"pets": "Crow",
+			"status": "Implemented",
+			"code": 146,
+			"skillId": 46
+		},
+		{
+			"id": "Skill49",
+			"name": "of Stormbrood",
+			"kind": "Suffix",
+			"group": "OneSkill",
+			"category": "Skills",
+			"slots": [
+				"Collar",
+				"Harness",
+				"Charm"
+			],
+			"effect": "+{v} to Stormbrood (Crow)",
+			"tier": 1,
+			"minDegree": 2,
+			"min": 1,
+			"max": 5,
+			"unit": "levels",
+			"weight": 20,
+			"pets": "Crow",
+			"status": "Implemented",
+			"code": 149,
+			"skillId": 49
+		},
+		{
+			"id": "Skill52",
+			"name": "of Mana Spring",
+			"kind": "Suffix",
+			"group": "OneSkill",
+			"category": "Skills",
+			"slots": [
+				"Collar",
+				"Harness",
+				"Charm"
+			],
+			"effect": "+{v} to Mana Spring (Crow)",
+			"tier": 1,
+			"minDegree": 2,
+			"min": 1,
+			"max": 5,
+			"unit": "levels",
+			"weight": 20,
+			"pets": "Crow",
+			"status": "Implemented",
+			"code": 152,
+			"skillId": 52
+		},
+		{
+			"id": "Skill55",
+			"name": "of Tailwind",
+			"kind": "Suffix",
+			"group": "OneSkill",
+			"category": "Skills",
+			"slots": [
+				"Collar",
+				"Harness",
+				"Charm"
+			],
+			"effect": "+{v} to Tailwind (Crow)",
+			"tier": 1,
+			"minDegree": 2,
+			"min": 1,
+			"max": 5,
+			"unit": "levels",
+			"weight": 20,
+			"pets": "Crow",
+			"status": "Implemented",
+			"code": 155,
+			"skillId": 55
+		},
+		{
+			"id": "Skill58",
+			"name": "of Guiding Feathers",
+			"kind": "Suffix",
+			"group": "OneSkill",
+			"category": "Skills",
+			"slots": [
+				"Collar",
+				"Harness",
+				"Charm"
+			],
+			"effect": "+{v} to Guiding Feathers (Crow)",
+			"tier": 1,
+			"minDegree": 2,
+			"min": 1,
+			"max": 5,
+			"unit": "levels",
+			"weight": 20,
+			"pets": "Crow",
+			"status": "Implemented",
+			"code": 158,
+			"skillId": 58
+		},
+		{
+			"id": "FireDegree2",
+			"name": "Infernal D2",
+			"kind": "Prefix",
+			"group": "Fire",
+			"category": "Offense",
+			"slots": [
+				"Collar",
+				"Harness"
+			],
+			"effect": "Adds {v} fire damage",
+			"tier": 2,
+			"minDegree": 2,
+			"min": 3,
+			"max": 213,
+			"unit": "damage",
+			"weight": 55,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 200
+		},
+		{
+			"id": "FireDegree4",
+			"name": "Infernal D4",
+			"kind": "Prefix",
+			"group": "Fire",
+			"category": "Offense",
+			"slots": [
+				"Collar",
+				"Harness"
+			],
+			"effect": "Adds {v} fire damage",
+			"tier": 4,
+			"minDegree": 4,
+			"min": 35,
+			"max": 438,
+			"unit": "damage",
+			"weight": 55,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 201
+		},
+		{
+			"id": "FireDegree6",
+			"name": "Infernal D6",
+			"kind": "Prefix",
+			"group": "Fire",
+			"category": "Offense",
+			"slots": [
+				"Collar",
+				"Harness"
+			],
+			"effect": "Adds {v} fire damage",
+			"tier": 6,
+			"minDegree": 6,
+			"min": 35,
+			"max": 663,
+			"unit": "damage",
+			"weight": 55,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 202
+		},
+		{
+			"id": "FireDegree8",
+			"name": "Infernal D8",
+			"kind": "Prefix",
+			"group": "Fire",
+			"category": "Offense",
+			"slots": [
+				"Collar",
+				"Harness"
+			],
+			"effect": "Adds {v} fire damage",
+			"tier": 8,
+			"minDegree": 8,
+			"min": 35,
+			"max": 888,
+			"unit": "damage",
+			"weight": 55,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 203
+		},
+		{
+			"id": "FireDegree9",
+			"name": "Infernal D9",
+			"kind": "Prefix",
+			"group": "Fire",
+			"category": "Offense",
+			"slots": [
+				"Collar",
+				"Harness"
+			],
+			"effect": "Adds {v} fire damage",
+			"tier": 9,
+			"minDegree": 9,
+			"min": 35,
+			"max": 1000,
+			"unit": "damage",
+			"weight": 55,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 204
+		},
+		{
+			"id": "ColdDegree2",
+			"name": "Hibernal D2",
+			"kind": "Prefix",
+			"group": "Cold",
+			"category": "Offense",
+			"slots": [
+				"Collar",
+				"Harness"
+			],
+			"effect": "Adds {v} cold damage",
+			"tier": 2,
+			"minDegree": 2,
+			"min": 3,
+			"max": 213,
+			"unit": "damage",
+			"weight": 55,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 205
+		},
+		{
+			"id": "ColdDegree4",
+			"name": "Hibernal D4",
+			"kind": "Prefix",
+			"group": "Cold",
+			"category": "Offense",
+			"slots": [
+				"Collar",
+				"Harness"
+			],
+			"effect": "Adds {v} cold damage",
+			"tier": 4,
+			"minDegree": 4,
+			"min": 35,
+			"max": 438,
+			"unit": "damage",
+			"weight": 55,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 206
+		},
+		{
+			"id": "ColdDegree6",
+			"name": "Hibernal D6",
+			"kind": "Prefix",
+			"group": "Cold",
+			"category": "Offense",
+			"slots": [
+				"Collar",
+				"Harness"
+			],
+			"effect": "Adds {v} cold damage",
+			"tier": 6,
+			"minDegree": 6,
+			"min": 35,
+			"max": 663,
+			"unit": "damage",
+			"weight": 55,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 207
+		},
+		{
+			"id": "ColdDegree8",
+			"name": "Hibernal D8",
+			"kind": "Prefix",
+			"group": "Cold",
+			"category": "Offense",
+			"slots": [
+				"Collar",
+				"Harness"
+			],
+			"effect": "Adds {v} cold damage",
+			"tier": 8,
+			"minDegree": 8,
+			"min": 35,
+			"max": 888,
+			"unit": "damage",
+			"weight": 55,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 208
+		},
+		{
+			"id": "ColdDegree9",
+			"name": "Hibernal D9",
+			"kind": "Prefix",
+			"group": "Cold",
+			"category": "Offense",
+			"slots": [
+				"Collar",
+				"Harness"
+			],
+			"effect": "Adds {v} cold damage",
+			"tier": 9,
+			"minDegree": 9,
+			"min": 35,
+			"max": 1000,
+			"unit": "damage",
+			"weight": 55,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 209
+		},
+		{
+			"id": "LightningDegree2",
+			"name": "Thundering D2",
+			"kind": "Prefix",
+			"group": "Lightning",
+			"category": "Offense",
+			"slots": [
+				"Collar",
+				"Harness"
+			],
+			"effect": "Adds {v} lightning damage",
+			"tier": 2,
+			"minDegree": 2,
+			"min": 6,
+			"max": 338,
+			"unit": "damage",
+			"weight": 55,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 210
+		},
+		{
+			"id": "LightningDegree4",
+			"name": "Thundering D4",
+			"kind": "Prefix",
+			"group": "Lightning",
+			"category": "Offense",
+			"slots": [
+				"Collar",
+				"Harness"
+			],
+			"effect": "Adds {v} lightning damage",
+			"tier": 4,
+			"minDegree": 4,
+			"min": 70,
+			"max": 813,
+			"unit": "damage",
+			"weight": 55,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 211
+		},
+		{
+			"id": "LightningDegree6",
+			"name": "Thundering D6",
+			"kind": "Prefix",
+			"group": "Lightning",
+			"category": "Offense",
+			"slots": [
+				"Collar",
+				"Harness"
+			],
+			"effect": "Adds {v} lightning damage",
+			"tier": 6,
+			"minDegree": 6,
+			"min": 70,
+			"max": 1288,
+			"unit": "damage",
+			"weight": 55,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 212
+		},
+		{
+			"id": "LightningDegree8",
+			"name": "Thundering D8",
+			"kind": "Prefix",
+			"group": "Lightning",
+			"category": "Offense",
+			"slots": [
+				"Collar",
+				"Harness"
+			],
+			"effect": "Adds {v} lightning damage",
+			"tier": 8,
+			"minDegree": 8,
+			"min": 70,
+			"max": 1763,
+			"unit": "damage",
+			"weight": 55,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 213
+		},
+		{
+			"id": "LightningDegree9",
+			"name": "Thundering D9",
+			"kind": "Prefix",
+			"group": "Lightning",
+			"category": "Offense",
+			"slots": [
+				"Collar",
+				"Harness"
+			],
+			"effect": "Adds {v} lightning damage",
+			"tier": 9,
+			"minDegree": 9,
+			"min": 70,
+			"max": 2000,
+			"unit": "damage",
+			"weight": 55,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 214
+		},
+		{
+			"id": "PoisonDegree2",
+			"name": "Pestilent D2",
+			"kind": "Prefix",
+			"group": "Poison",
+			"category": "Offense",
+			"slots": [
+				"Collar",
+				"Harness"
+			],
+			"effect": "Adds {v} poison damage over 4 s",
+			"tier": 2,
+			"minDegree": 2,
+			"min": 8,
+			"max": 1388,
+			"unit": "damage",
+			"weight": 55,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 215
+		},
+		{
+			"id": "PoisonDegree4",
+			"name": "Pestilent D4",
+			"kind": "Prefix",
+			"group": "Poison",
+			"category": "Offense",
+			"slots": [
+				"Collar",
+				"Harness"
+			],
+			"effect": "Adds {v} poison damage over 4 s",
+			"tier": 4,
+			"minDegree": 4,
+			"min": 90,
+			"max": 3563,
+			"unit": "damage",
+			"weight": 55,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 216
+		},
+		{
+			"id": "PoisonDegree6",
+			"name": "Pestilent D6",
+			"kind": "Prefix",
+			"group": "Poison",
+			"category": "Offense",
+			"slots": [
+				"Collar",
+				"Harness"
+			],
+			"effect": "Adds {v} poison damage over 4 s",
+			"tier": 6,
+			"minDegree": 6,
+			"min": 90,
+			"max": 5738,
+			"unit": "damage",
+			"weight": 55,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 217
+		},
+		{
+			"id": "PoisonDegree8",
+			"name": "Pestilent D8",
+			"kind": "Prefix",
+			"group": "Poison",
+			"category": "Offense",
+			"slots": [
+				"Collar",
+				"Harness"
+			],
+			"effect": "Adds {v} poison damage over 4 s",
+			"tier": 8,
+			"minDegree": 8,
+			"min": 90,
+			"max": 7913,
+			"unit": "damage",
+			"weight": 55,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 218
+		},
+		{
+			"id": "PoisonDegree9",
+			"name": "Pestilent D9",
+			"kind": "Prefix",
+			"group": "Poison",
+			"category": "Offense",
+			"slots": [
+				"Collar",
+				"Harness"
+			],
+			"effect": "Adds {v} poison damage over 4 s",
+			"tier": 9,
+			"minDegree": 9,
+			"min": 90,
+			"max": 9000,
+			"unit": "damage",
+			"weight": 55,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 219
+		},
+		{
+			"id": "ProcChain1WhenStruck",
+			"name": "of Storms (struck)",
+			"kind": "Suffix",
+			"group": "ProcChainTaken",
+			"category": "Proc",
+			"slots": [
+				"Harness",
+				"Charm"
+			],
+			"effect": "{v}% chance to cast Chain Lightning when the pet takes damage (power scales with degree)",
+			"tier": 1,
+			"minDegree": 3,
+			"min": 4,
+			"max": 5,
+			"unit": "%",
+			"weight": 50,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 220
+		},
+		{
+			"id": "ProcChain2WhenStruck",
+			"name": "of the Tempest (struck)",
+			"kind": "Suffix",
+			"group": "ProcChainTaken",
+			"category": "Proc",
+			"slots": [
+				"Harness",
+				"Charm"
+			],
+			"effect": "{v}% chance to cast Chain Lightning when the pet takes damage (power scales with degree)",
+			"tier": 2,
+			"minDegree": 6,
+			"min": 6,
+			"max": 7,
+			"unit": "%",
+			"weight": 35,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 221
+		},
+		{
+			"id": "ProcChain3WhenStruck",
+			"name": "of Thunder Gods (struck)",
+			"kind": "Suffix",
+			"group": "ProcChainTaken",
+			"category": "Proc",
+			"slots": [
+				"Harness",
+				"Charm"
+			],
+			"effect": "{v}% chance to cast Chain Lightning when the pet takes damage (power scales with degree)",
+			"tier": 3,
+			"minDegree": 9,
+			"min": 8,
+			"max": 10,
+			"unit": "%",
+			"weight": 20,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 222
+		},
+		{
+			"id": "ProcNova1OnAttack",
+			"name": "of Winter (striking)",
+			"kind": "Suffix",
+			"group": "ProcBlizzard",
+			"category": "Proc",
+			"slots": [
+				"Collar",
+				"Charm"
+			],
+			"effect": "{v}% chance to cast Blizzard when the pet deals damage (power scales with degree)",
+			"tier": 1,
+			"minDegree": 3,
+			"min": 4,
+			"max": 5,
+			"unit": "%",
+			"weight": 50,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 223
+		},
+		{
+			"id": "ProcNova2OnAttack",
+			"name": "of the Glacier (striking)",
+			"kind": "Suffix",
+			"group": "ProcBlizzard",
+			"category": "Proc",
+			"slots": [
+				"Collar",
+				"Charm"
+			],
+			"effect": "{v}% chance to cast Blizzard when the pet deals damage (power scales with degree)",
+			"tier": 2,
+			"minDegree": 6,
+			"min": 6,
+			"max": 7,
+			"unit": "%",
+			"weight": 35,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 224
+		},
+		{
+			"id": "ProcNova3OnAttack",
+			"name": "of the Frozen North (striking)",
+			"kind": "Suffix",
+			"group": "ProcBlizzard",
+			"category": "Proc",
+			"slots": [
+				"Collar",
+				"Charm"
+			],
+			"effect": "{v}% chance to cast Blizzard when the pet deals damage (power scales with degree)",
+			"tier": 3,
+			"minDegree": 9,
+			"min": 8,
+			"max": 10,
+			"unit": "%",
+			"weight": 20,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 225
+		},
+		{
+			"id": "ProcFire1WhenStruck",
+			"name": "of Embers (struck)",
+			"kind": "Suffix",
+			"group": "ProcFireTaken",
+			"category": "Proc",
+			"slots": [
+				"Harness",
+				"Charm"
+			],
+			"effect": "{v}% chance to cast Fire Burst when the pet takes damage (power scales with degree)",
+			"tier": 1,
+			"minDegree": 3,
+			"min": 4,
+			"max": 5,
+			"unit": "%",
+			"weight": 50,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 226
+		},
+		{
+			"id": "ProcFire2WhenStruck",
+			"name": "of the Inferno (struck)",
+			"kind": "Suffix",
+			"group": "ProcFireTaken",
+			"category": "Proc",
+			"slots": [
+				"Harness",
+				"Charm"
+			],
+			"effect": "{v}% chance to cast Fire Burst when the pet takes damage (power scales with degree)",
+			"tier": 2,
+			"minDegree": 7,
+			"min": 6,
+			"max": 8,
+			"unit": "%",
+			"weight": 35,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 227
+		},
+		{
+			"id": "ProcPoison1OnAttack",
+			"name": "of Plague (striking)",
+			"kind": "Suffix",
+			"group": "ProcPoison",
+			"category": "Proc",
+			"slots": [
+				"Collar",
+				"Charm"
+			],
+			"effect": "{v}% chance to cast Poison Cloud when the pet deals damage (power scales with degree)",
+			"tier": 1,
+			"minDegree": 3,
+			"min": 4,
+			"max": 6,
+			"unit": "%",
+			"weight": 50,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 228
+		},
+		{
+			"id": "ProcPoison2OnAttack",
+			"name": "of Pestilence (striking)",
+			"kind": "Suffix",
+			"group": "ProcPoison",
+			"category": "Proc",
+			"slots": [
+				"Collar",
+				"Charm"
+			],
+			"effect": "{v}% chance to cast Poison Cloud when the pet deals damage (power scales with degree)",
+			"tier": 2,
+			"minDegree": 7,
+			"min": 7,
+			"max": 9,
+			"unit": "%",
+			"weight": 35,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 229
+		},
+		{
+			"id": "ProcMend1WhenStruck",
+			"name": "of Mercy (struck)",
+			"kind": "Suffix",
+			"group": "ProcMendTaken",
+			"category": "Proc",
+			"slots": [
+				"Harness",
+				"Charm"
+			],
+			"effect": "{v}% chance to cast Mend on the owner when the pet takes damage (heals 5% of owner maximum HP)",
+			"tier": 1,
+			"minDegree": 3,
+			"min": 3,
+			"max": 4,
+			"unit": "%",
+			"weight": 40,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 230
+		},
+		{
+			"id": "ProcMend2WhenStruck",
+			"name": "of Grace (struck)",
+			"kind": "Suffix",
+			"group": "ProcMendTaken",
+			"category": "Proc",
+			"slots": [
+				"Harness",
+				"Charm"
+			],
+			"effect": "{v}% chance to cast Mend on the owner when the pet takes damage (heals 5% of owner maximum HP)",
+			"tier": 2,
+			"minDegree": 7,
+			"min": 5,
+			"max": 6,
+			"unit": "%",
+			"weight": 25,
+			"pets": "All",
+			"status": "Implemented",
+			"code": 231
 		}
 	],
 	"procs": [

@@ -38,6 +38,7 @@ import (
 // with the reason; every other setting is a rule (public_rules_test.go).
 var unlistedSettings = map[string]string{
 	action.EnvGMSetSpeed:            "a GM command, not a rule players meet",
+	monster.EnvTrainingDummy:        "GM-only training targets",
 	simulation.EnvBetaUniqueRespawn: "unique monster spawn timing is not published",
 	// The tunables a rule's own text shows (game/tunables).
 	"SRO_MOST_WANTED_TEST_KILLS":      "shown in the Most Wanted test pacing rule",
@@ -66,6 +67,9 @@ var unlistedSettings = map[string]string{
 	// rule players meet (their client is offered the same world either
 	// way).
 	"SRO_WEBTRANSPORT_PUBLIC": "operator transport serving switch, not a gameplay rule",
+	// Staff telemetry (#1639): name-free kill and EXP rates for the
+	// staff console; players never meet it.
+	action.EnvKillStats: "staff kill and EXP rate telemetry, not a rule players meet",
 }
 
 /*
@@ -217,7 +221,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Owner decision: storage fills less with split stacks."},
 			{Flag: action.EnvReverseReturnMap, On: action.ReverseReturnMapFromEnv(),
 				Native: "The reverse return scroll offers the last recall point and the last death point.",
-				Now:    "It also offers town gates and unique monster areas on the map.",
+				Now:    "It also offers places on the map: the later client's own list when the server imported it, else town gates and unique monster areas.",
 				Why:    "Later clients offer a map choice; the destinations are places the original already sends players to."},
 			{Flag: enterworld.EnvHuntingGuide, On: enterworld.HuntingGuideFromEnv(),
 				Native: "The world map shows no monster information.",
@@ -362,9 +366,13 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Requested for the beta; the original speed returns with one setting."},
 			{Flag: action.EnvAnnounceSoxDrop, On: action.AnnouncementsFromEnv().SoxDrop,
 				Native: "A Seal of Star, Moon or Sun drop is not announced.",
-				Now: fmt.Sprintf("Everyone sees \"<player> has dropped <item> (<seal>) from <monster>\" for degree %d and above.",
+				Now: fmt.Sprintf("Everyone sees a seal drop notice for degree %d and above; a Sun's leads with SEAL OF SUN and its line is coloured, as the Star's and Moon's are by their tiers.",
 					settings.Int(tunables.SoxNoticeMinDegree)),
 				Why: "Requested for the beta; the original quiet drop returns with one setting."},
+			{Flag: action.EnvSealBoard, On: action.SealBoardFromEnv(),
+				Native: "A seal drop is the looter's own business; nothing tallies them.",
+				Now:    "The site's seal board counts the week's Star, Moon and Sun drops for each job alias, resetting every Monday. Aliases only: no character names, and a player who hides from the public pages is not on it.",
+				Why:    "Owner-approved vote (#1604 P9), so the week's seal luck is visible without naming anyone's characters."},
 			{Flag: action.EnvAnnouncePlus, On: action.AnnouncementsFromEnv().Plus,
 				Native: "Reinforcement results are private.",
 				Now:    "Everyone sees \"<player> advanced <item> (<seal>) to +N\" for +7 and above.",
