@@ -5,7 +5,7 @@ import (
 	"sync"
 )
 
-// ID is the wire identity assembled by 5EC16E/5EC177. Layer zero belongs
+// ID is the wire identity the native manager assembles. Layer zero belongs
 // to the world's internal controller and is never a resident PC layer.
 type ID uint32
 
@@ -26,24 +26,24 @@ type Status uint8
 
 const (
 	Success            Status = 1
-	MissingLayer       Status = 2  // leave, 5EC2C4
-	MissingWorld       Status = 6  // transfer request, 5F753A
-	AllocationFull     Status = 7  // 5EB90C
-	InvalidLayer       Status = 8  // allocation/admission, 5EB850/5EC081
-	AlreadyMember      Status = 10 // 5EC123
-	NotMember          Status = 11 // 5EC325
-	PlayerLimitReached Status = 14 // 5EC0D3
+	MissingLayer       Status = 2  // leave
+	MissingWorld       Status = 6  // transfer request
+	AllocationFull     Status = 7  // allocation
+	InvalidLayer       Status = 8  // allocation/admission
+	AlreadyMember      Status = 10 // admission
+	NotMember          Status = 11 // leave
+	PlayerLimitReached Status = 14 // admission
 )
 
 type layer struct {
 	lease   Lease
 	members map[uint32]struct{}
-	// Native +6C is zero at initialization (5F290C), then set to one by
-	// the manager's retirement event (5F8188). It is not the definition type.
+	// Native +6C is zero at initialization, then set to one by the
+	// manager's retirement event. It is not the definition type.
 	retirementMode uint32
 }
 
-// CheckTransfer is the non-mutating request gate at 5F7520 -> 5EC5B0.
+// CheckTransfer is the native non-mutating request gate.
 // It does not reserve capacity or admit a PC. In particular, an unlimited
 // definition passes before looking up the destination layer; the subsequent
 // transfer/allocation owner must still obtain a live lease before admission.
@@ -89,7 +89,8 @@ func NewRegistry(definitions []Definition) *Registry {
 		if definition.ID == 0 || definition.ID == 0xffff || r.worlds[definition.ID] != nil {
 			panic("invalid world definition identity")
 		}
-		// 5EB500 allocates limit+1 slots, including the internal zero slot.
+		// The native allocation makes limit+1 slots, including the internal
+		// zero slot.
 		r.worlds[definition.ID] = &world{definition: definition, slots: make([]*layer, int(definition.LayerLimit)+1)}
 	}
 	return r
@@ -164,7 +165,8 @@ func (r *Registry) Lookup(id ID) (Lease, bool) {
 	return w.slots[id.Layer()].lease, true
 }
 
-// AdmitPC checks capacity before duplicate membership, as at 5EC0A6..123.
+// AdmitPC checks capacity before duplicate membership, as the native
+// admission does.
 // CapacityBypass is the result of the authority's native +53C predicate;
 // callers must not derive it from a displayed name such as "[GM]".
 func (r *Registry) AdmitPC(lease Lease, gid uint32, capacityBypass bool) Status {
@@ -203,7 +205,7 @@ func (r *Registry) LeavePC(lease Lease, gid uint32) (Status, bool) {
 	return Success, l.retirementMode == 1 && len(l.members) == 0
 }
 
-// BeginRetirement is the membership part of the manager event at 5F80B0.
+// BeginRetirement is the membership part of the manager's retirement event.
 // Nonempty layers return the GID-ordered evacuation roster; empty ones request
 // release immediately. Evacuation/transfer belongs to the world coordinator.
 // Allocation and a routine last leave never manufacture this event.
@@ -223,8 +225,8 @@ func (r *Registry) BeginRetirement(lease Lease) ([]uint32, bool) {
 	return residents, true
 }
 
-// Release retires the current lease and returns its object to the FIFO pool
-// (5EC430). Forced native destruction clears residual membership as well.
+// Release retires the current lease and returns its object to the FIFO pool.
+// Forced native destruction clears residual membership as well.
 // A stale manager callback cannot release a replacement population.
 func (r *Registry) Release(lease Lease) bool {
 	r.mu.Lock()
