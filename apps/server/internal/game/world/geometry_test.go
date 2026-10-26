@@ -305,3 +305,32 @@ func TestScopeRingIsTheSectorRingOutdoorsAndSelfInACave(t *testing.T) {
 		t.Fatalf("outdoor ring %v, want 9 sectors centred on 0x62a8", ring)
 	}
 }
+
+/*
+================
+TestSameFloorAndSectorOffset
+
+SameFloor joins every outdoor sector and only one cave floor to itself;
+SectorOffset is the sector delta in world units outdoors and nothing on
+the cave plane (#1764).
+================
+*/
+func TestSameFloorAndSectorOffset(t *testing.T) {
+	floors := []struct {
+		a, b uint16
+		want bool
+	}{
+		{0x62a8, 0x63a9, true}, {0x8001, 0x8001, true}, {0x8001, 0x8004, false}, {0x62a8, 0x8001, false},
+	}
+	for _, f := range floors {
+		if got := SameFloor(f.a, f.b); got != f.want {
+			t.Errorf("SameFloor(%#x, %#x) = %v, want %v", f.a, f.b, got, f.want)
+		}
+	}
+	if dx, dz, ok := SectorOffset(0x62a8, 0x63a9); !ok || dx != OutdoorRegionSize || dz != OutdoorRegionSize {
+		t.Errorf("outdoor offset (%v, %v, %v), want one region each way", dx, dz, ok)
+	}
+	if dx, dz, ok := SectorOffset(0x8001, 0x8004); ok || dx != 0 || dz != 0 {
+		t.Errorf("cave offset (%v, %v, %v), want none", dx, dz, ok)
+	}
+}

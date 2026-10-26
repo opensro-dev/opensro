@@ -310,7 +310,7 @@ func TestRawExecBoundariesDenyInheritedControlPlaneCredentials(t *testing.T) {
 }
 
 func TestResolveTransportCertificateFailsClosedOutsideLoopback(t *testing.T) {
-	if _, _, _, err := resolveTransportCertificate(
+	if _, _, _, _, err := resolveTransportCertificate(
 		"",
 		"",
 		"game-private",
@@ -319,7 +319,7 @@ func TestResolveTransportCertificateFailsClosedOutsideLoopback(t *testing.T) {
 	); err == nil || !strings.Contains(err.Error(), "required") {
 		t.Fatalf("missing production TLS pair error = %v", err)
 	}
-	if _, _, _, err := resolveTransportCertificate(
+	if _, _, _, _, err := resolveTransportCertificate(
 		"cert.pem",
 		"",
 		"loopback",
@@ -343,7 +343,7 @@ func TestResolveTransportCertificatePinsIdentityAndAdvertisedHosts(
 			TransportURL: "https://localhost:8788",
 		},
 	}
-	certFile, keyFile, identity, err := resolveTransportCertificate(
+	certFile, keyFile, identity, certificate, err := resolveTransportCertificate(
 		generated.CertPath,
 		generated.KeyPath,
 		"game-private",
@@ -360,9 +360,12 @@ func TestResolveTransportCertificatePinsIdentityAndAdvertisedHosts(
 	if identity != generated.SHA256Hex() {
 		t.Fatalf("TLS identity = %q, want %q", identity, generated.SHA256Hex())
 	}
+	if certificate == nil || certificate.SHA256Hex() != identity {
+		t.Fatalf("loaded certificate does not match the pinned identity")
+	}
 
 	game.Definition.TransportURL = "https://play.example.com:8788"
-	if _, _, _, err := resolveTransportCertificate(
+	if _, _, _, _, err := resolveTransportCertificate(
 		generated.CertPath,
 		generated.KeyPath,
 		"game-private",
@@ -373,7 +376,7 @@ func TestResolveTransportCertificatePinsIdentityAndAdvertisedHosts(
 	}
 
 	game.Definition.TransportURL = "http://localhost:8788"
-	if _, _, _, err := resolveTransportCertificate(
+	if _, _, _, _, err := resolveTransportCertificate(
 		generated.CertPath,
 		generated.KeyPath,
 		"game-private",
@@ -386,19 +389,77 @@ func TestResolveTransportCertificatePinsIdentityAndAdvertisedHosts(
 
 func TestNomadGameWorldVariablesCarryTransportTLSIdentity(t *testing.T) {
 	deployment := &deployment{
-		TransportCert:  "C:/sro/tls/fullchain.pem",
-		TransportKey:   "C:/sro/tls/private-key.pem",
-		TransportTLSID: "leaf-sha256",
+		TransportCert:   "C:/sro/tls/fullchain.pem",
+		TransportKey:    "C:/sro/tls/private-key.pem",
+		TransportTLSID:  "leaf-sha256",
+		TransportWTAddr: "203.0.113.7:443",
 	}
 	variables := deployment.gameVariables(shardDeployment{})
 	for key, want := range map[string]string{
 		"transport_cert_file": "C:/sro/tls/fullchain.pem",
 		"transport_key_file":  "C:/sro/tls/private-key.pem",
 		"transport_tls_id":    "leaf-sha256",
+		"transport_wt_addr":   "203.0.113.7:443",
 	} {
 		if got := variables[key]; got != want {
 			t.Errorf("%s = %#v, want %q", key, got, want)
 		}
+	}
+	blank := *deployment
+	blank.TransportWTAddr = ""
+	if got := blank.gameVariables(shardDeployment{})["transport_wt_addr"]; got != "" {
+		t.Errorf("undeclared public bind rendered = %#v, want empty", got)
+	}
+}
+
+func TestValidateWebTransportPostureRefusesHalfPostures(t *testing.T) {
+	certificate, err := transport.LoadCertificate("", "", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	game := shardDeployment{
+		Definition: shard.Definition{
+			ID:           "global-official",
+			TransportURL: "https://localhost/transport/ws",
+		},
+	}
+	for name, tt := range map[string]struct {
+		certificate *transport.Certificate
+		public      bool
+		wtAddr      string
+		shards      []shardDeployment
+		wantErr     string
+	}{
+		"off without a bind":           {nil, false, "", []shardDeployment{game}, ""},
+		"off with a bind":              {nil, false, "203.0.113.7:443", []shardDeployment{game}, "SRO_WEBTRANSPORT_PUBLIC is off"},
+		"on without a pair":            {nil, true, "203.0.113.7:443", []shardDeployment{game}, "no production TLS pair"},
+		"on without a bind":            {certificate, true, "", []shardDeployment{game}, "-transport-wt-addr is required"},
+		"on with a malformed bind":     {certificate, true, "garbage", []shardDeployment{game}, "must be a host:port"},
+		"on with an anonymous bind":    {certificate, true, ":443", []shardDeployment{game}, "must be a host:port"},
+		"on with an impossible port":   {certificate, true, "203.0.113.7:99999", []shardDeployment{game}, "invalid port"},
+		"on with a matching posture":   {certificate, true, "203.0.113.7:443", []shardDeployment{game}, ""},
+		"advertised port must match":   {certificate, true, "203.0.113.7:8443", []shardDeployment{game}, "advertises WebTransport on port 443"},
+		"advertised route must be WT":  {certificate, true, "203.0.113.7:443", []shardDeployment{{Definition: shard.Definition{ID: "global-official", TransportURL: "https://localhost/"}}}, "must end /transport/ws"},
+		"advertised URL must be https": {certificate, true, "203.0.113.7:443", []shardDeployment{{Definition: shard.Definition{ID: "global-official", TransportURL: "http://localhost/transport/ws"}}}, "absolute HTTPS URL"},
+		"certificate must cover host":  {certificate, true, "203.0.113.7:443", []shardDeployment{{Definition: shard.Definition{ID: "global-official", TransportURL: "https://play.example.com/transport/ws"}}}, "does not cover"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := validateWebTransportPosture(
+				tt.certificate,
+				tt.public,
+				tt.wtAddr,
+				tt.shards,
+			)
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("posture error = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("posture error = %v, want %q", err, tt.wantErr)
+			}
+		})
 	}
 }
 

@@ -49,7 +49,7 @@ test("captured live approach reaches the server stop without accumulated refresh
 	assert.equal( at, data.packets.length );
 });
 function packet( x, source, angular = false ) {
-	const offset = angular ? 8 : 13, p = Buffer.alloc( offset + 1 + (source ? 10 : 0) );
+	const offset = angular ? 8 : 13, p = Buffer.alloc( offset + 1 + (source ? 14 : 0) );
 	p.writeUInt32LE( 7 );
 	if ( angular ) p.writeUInt16LE( 1234, 6 );
 	else {
@@ -62,9 +62,9 @@ function packet( x, source, angular = false ) {
 	if ( source ) {
 		p[offset] = 1;
 		p.writeUInt16LE( source.regionId, offset + 1 );
-		p.writeInt16LE( source.x * 10, offset + 3 );
-		p.writeFloatLE( source.y, offset + 5 );
-		p.writeInt16LE( source.z * 10, offset + 9 );
+		p.writeFloatLE( source.x, offset + 3 );
+		p.writeFloatLE( source.y, offset + 7 );
+		p.writeFloatLE( source.z, offset + 11 );
 	}
 	return p;
 }

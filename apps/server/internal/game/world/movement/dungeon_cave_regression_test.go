@@ -17,6 +17,7 @@ import (
 	"math"
 	"testing"
 
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -209,6 +210,41 @@ func TestDonwhangCaveInBoulderBlocksAsNative(t *testing.T) {
 	away := v.ClipMovementPath(from, donwhangCaveSpawn(1153, 0, -336))
 	if away.Outcome != ClipArrived {
 		t.Fatalf("away from the boulder pile: %v at %+v, want arrived", away.Outcome, away.Rest)
+	}
+}
+
+/*
+================
+TestDonwhangCaveBoulderStartInsideResults
+
+A step that starts inside the block-4 boulder's circle (centre
+(1237.45, -338.12), radius squared 1962.5; the start (1220, -338)
+stands 17.5 inside the rim). Heading into the circle the original
+refuses the step where the mover stands, with the blocked result -
+not a clip at the start point; heading out it walks free; and a chord
+with no x-extent in the block's frame is never circle-tested at all:
+block 87's room is unrotated, so a due-south chord crosses its own
+boulder's whole disc (centre (-801.81, -1228.12), same radius). The
+two ramp doorways of #1731 refuse by this same rule.
+================
+*/
+func TestDonwhangCaveBoulderStartInsideResults(t *testing.T) {
+	v := realAuthorityValidator(t)
+	inside := donwhangCaveSpawn(1220, 0, -338)
+	into := v.ClipMovementPath(inside, donwhangCaveSpawn(1245, 0, -338))
+	if into.Outcome != ClipBlocked || into.NativeResult&monster.NavResultBlocked == 0 {
+		t.Fatalf("into the circle from inside: %v result %#x, want blocked with the blocked result", into.Outcome, uint32(into.NativeResult))
+	}
+	if math.Abs(into.Rest.X-inside.X) > 0.01 || math.Abs(into.Rest.Z-inside.Z) > 0.01 {
+		t.Fatalf("into the circle from inside rests at %+v, want the start %+v", into.Rest, inside)
+	}
+	out := v.ClipMovementPath(inside, donwhangCaveSpawn(1170, 0, -338))
+	if out.Outcome != ClipArrived {
+		t.Fatalf("out of the circle: %v at %+v, want arrived", out.Outcome, out.Rest)
+	}
+	south := v.ClipMovementPath(donwhangCaveSpawn(-801.81, 0, -1285), donwhangCaveSpawn(-801.81, 0, -1175))
+	if south.Outcome != ClipArrived {
+		t.Fatalf("due-south chord through the disc: %v at %+v, want arrived (no x-extent)", south.Outcome, south.Rest)
 	}
 }
 
