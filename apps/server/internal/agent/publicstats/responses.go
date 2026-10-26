@@ -129,13 +129,15 @@ type CharacterSummary struct {
 	Guild string `json:"guild,omitempty"`
 }
 
-// OwnCharacter is one of an account's characters with its privacy flag.
+// OwnCharacter is one of an account's characters with its privacy flag
+// and its item-break notice opt-in (#1738).
 type OwnCharacter struct {
-	Name       string `json:"name"`
-	Level      int64  `json:"level"`
-	Race       string `json:"race"`
-	Hidden     bool   `json:"hidden"`
-	GearHidden bool   `json:"gearHidden"`
+	Name        string `json:"name"`
+	Level       int64  `json:"level"`
+	Race        string `json:"race"`
+	Hidden      bool   `json:"hidden"`
+	GearHidden  bool   `json:"gearHidden"`
+	BreakNotice bool   `json:"breakNotice"`
 }
 
 // OwnCharactersResponse is the website's authenticated

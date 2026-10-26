@@ -36,6 +36,7 @@ export interface SystemNotice {
 	readonly jobKill?: true;
 	readonly dropPlus?: true;
 	readonly plusSeven?: true;
+	readonly itemBreak?: true;
 	readonly sunDrop?: true;
 }
 /*
@@ -76,6 +77,13 @@ export const JOB_KILL_NOTICE_CHANNEL = 0x80;
 // picks which Experimental row gates a frame.
 export const DROP_PLUS_NOTICE_CHANNEL = 0x81;
 
+// Port-only, not native: the shard's item-break announcement channel
+// (server wire.BreakNoticeChannel; SRO_ALCHEMY_BREAK_NOTICE, #1738),
+// shown as channel 7 unless the Experimental "Item break notices" row
+// is off. The frame is the plain channel-7 layout: a break notice links
+// nothing, so the job alias it names never leads to a character.
+export const BREAK_NOTICE_CHANNEL = 0x82;
+
 // The announced item's plus rides its encoded body at a fixed byte (the
 // server's ItemBody.Encode header, ItemBodySize 18). A shorter or absent
 // body names no plus.
@@ -90,7 +98,8 @@ Channel 7 and the two port-only channels laid out like it.
 ================
 */
 export function isServerNoticeChannel( channel: number | undefined ): boolean {
-	return channel === 7 || channel === JOB_KILL_NOTICE_CHANNEL || channel === DROP_PLUS_NOTICE_CHANNEL;
+	return channel === 7 || channel === JOB_KILL_NOTICE_CHANNEL || channel === DROP_PLUS_NOTICE_CHANNEL ||
+		channel === BREAK_NOTICE_CHANNEL;
 }
 
 /*
@@ -147,8 +156,8 @@ export function sealNoticeColorArgb(
 serverNotification
 
 753A6F -> 752ABD -> 67A140/6B3180: the native type-7 server notification,
-and the port-only job-kill and drop/plus channels laid out the same way
-(flagged jobKill, dropPlus or plusSeven, so the gameplay owner can hide them). The chat owner separately retains the
+and the port-only job-kill, drop/plus and item-break channels laid out the same way
+(flagged jobKill, dropPlus, plusSeven or itemBreak, so the gameplay owner can hide them). The chat owner separately retains the
 (Notify): line in the main log.
 ================
 */
@@ -165,6 +174,7 @@ export function serverNotification( opcode: number, p: Uint8Array ): SystemNotic
 	const text = new TextDecoder( "utf-16le", { fatal: true } ).decode( p.subarray( 3, 3 + 2 * n ) );
 	const notice: SystemNotice = { key: "", text, value: 0, notificationBanner: true, bannerOnly: true };
 	if ( p[0] === JOB_KILL_NOTICE_CHANNEL ) return { ...notice, jobKill: true };
+	if ( p[0] === BREAK_NOTICE_CHANNEL ) return { ...notice, itemBreak: true };
 	if ( p[0] === DROP_PLUS_NOTICE_CHANNEL ) {
 		if ( links && announcedPlusSeven( p, 3 + 2 * n ) ) return { ...notice, plusSeven: true };
 		// Port-only, not native: Seal of Sun drop announcements highlight in

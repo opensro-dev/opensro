@@ -180,6 +180,13 @@ variable "cap110_monsters" {
   default = "off"
 }
 
+# Port-only, not native: the level-100 slice of that population, admitted
+# for hunting separately (#1741); switches on with the cap-110 catalogue.
+variable "cap110_level100" {
+  type    = string
+  default = "off"
+}
+
 # Port-only, not native: the optional Pharaoh Tomb 1-3 population. It needs
 # cap110_monsters on as well; GameWorld refuses to start otherwise.
 variable "pharaoh_tomb" {
@@ -556,6 +563,15 @@ variable "job_kill_notice_repeat" {
 variable "announce_most_wanted" {
   type    = string
   default = "on"
+}
+
+# alchemy_break_notice announces the destroyed reinforcement item of a
+# character who opted in on the account page, by job alias or "a player",
+# never a character name (port-only, not native; owner-approved vote
+# 2026-10-26, #1604 P7.2 / #1738). "off" is native: no notice.
+variable "alchemy_break_notice" {
+  type    = string
+  default = "off"
 }
 
 # thief_party_bonus gives a party +10% monster EXP and gold per member
@@ -1104,6 +1120,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_MASTERY                        = var.beta_mastery
         SRO_LEVEL_CAP                      = var.level_cap
         SRO_CAP110_MONSTERS                = var.cap110_monsters
+        SRO_CAP110_LEVEL100                = var.cap110_level100
         SRO_PHARAOH_TOMB                   = var.pharaoh_tomb
         SRO_PHARAOH_TOMB_GEAR_RATE         = var.pharaoh_tomb_gear_rate
         SRO_BETA_SILK                           = var.beta_silk
@@ -1154,6 +1171,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_SHORT_NOTICE_FADE_MS                = var.short_notice_fade_ms
         SRO_CHAT_ACK_TIMEOUT_MS                 = var.chat_ack_timeout_ms
         SRO_ANNOUNCE_MOST_WANTED                = var.announce_most_wanted
+        SRO_ALCHEMY_BREAK_NOTICE                = var.alchemy_break_notice
         SRO_THIEF_PARTY_BONUS                   = var.thief_party_bonus
         SRO_THIEF_PARTY_PERCENT_EACH            = var.thief_party_percent_each
         SRO_THIEF_PARTY_PERCENT_CAP             = var.thief_party_percent_cap

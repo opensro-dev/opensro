@@ -1,11 +1,4 @@
 # Server Go files that branch on the dungeon region bit outside the plane
 # owner (#1646). Format: `<path> <count>`. This ledger may only shrink; run
 # `node scripts/checks/check_plane_branches.mjs --update` after migrating a file.
-apps/server/internal/game/action/pvpstrike.go 2
-apps/server/internal/game/action/reversemap.go 2
-apps/server/internal/game/action/reward_group.go 1
-apps/server/internal/game/action/skilladmit.go 2
-apps/server/internal/game/action/skillcombat.go 2
-apps/server/internal/game/action/skillposition.go 1
-apps/server/internal/game/action/temptation.go 2
 apps/server/internal/game/world/movement/object_surface_path.go 2
