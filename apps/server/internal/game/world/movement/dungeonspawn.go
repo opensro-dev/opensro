@@ -38,6 +38,9 @@ type dungeonSpawnSurface struct {
 	// for each (from block, destination block) the doorway to leave by and
 	// the cell it lands on, built once here because the floors are static.
 	blockNextHop []caveNextHop
+	// routeTable is the dungeon's native route file, validated against
+	// these blocks (ainavdata.go); nil keeps the port's portal route.
+	routeTable *caveRouteTable
 }
 
 type dungeonObstacle struct{ x, y, z, radiusSquared float64 }
@@ -198,6 +201,9 @@ func (v *WaterValidator) loadDungeonSpawnSurfaces() map[uint16]*dungeonSpawnSurf
 		if len(resident) > 0 {
 			surfaces[entry.SectorID] = newDungeonSpawnSurface(grid, resident)
 		}
+	}
+	for region, table := range v.loadAINavData(surfaces) {
+		surfaces[region].routeTable = table
 	}
 	return surfaces
 }
