@@ -211,6 +211,14 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-web-transport",
 			label: "WebTransport connection",
 			description: "Connect over QUIC/UDP; falls back to WebSocket."
+		}, {
+			// Moved from Notices (#1738): the window fits seven rows a tab
+			// and the break-notice row joins the shard notices; the option,
+			// its key and its default are unchanged.
+			key: "questTrackerMarkers",
+			id: "experimental-quest-tracker-markers",
+			label: "Quest target markers",
+			description: "Show every active quest's target on M and the minimap."
 		} ]
 	},
 	{
@@ -232,6 +240,11 @@ export const EXPERIMENTAL_TABS: readonly {
 			label: "Plus +7 notices",
 			description: "Show the shard's +7 alchemy announcements."
 		}, {
+			key: "breakNotices",
+			id: "experimental-break-notices",
+			label: "Item break notices",
+			description: "Show the shard's item break announcements."
+		}, {
 			key: "uniqueDamageRank",
 			id: "experimental-unique-damage-rank",
 			label: "Unique damage ranking",
@@ -246,11 +259,6 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-short-notices",
 			label: "Short notices",
 			description: "Show notices for up to the original 7 seconds."
-		}, {
-			key: "questTrackerMarkers",
-			id: "experimental-quest-tracker-markers",
-			label: "Quest target markers",
-			description: "Show every active quest's target on M and the minimap."
 		} ]
 	},
 	{

@@ -55,7 +55,7 @@ decodeChatBroadcast
 
 One 0x3667 line (sub_753760): channels 1 and 3 carry the speaker's gid,
 2, 4, 5, 6, 11 and the stall's a sized sender name, 7 neither. The
-port-only job-kill and drop/plus channels (isServerNoticeChannel) are laid
+port-only job-kill, drop/plus and item-break channels (isServerNoticeChannel) are laid
 out and shown as channel 7; a drop/plus line may carry its links after the
 text (notice-links.ts). Null for a channel this owner does not present.
 ================
