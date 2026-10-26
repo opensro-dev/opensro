@@ -612,3 +612,31 @@ func TestBootstrapJSONPublishesStorageAutoStack(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestBootstrapJSONPublishesLevelCap
+
+The configured cap reaches the client only when it differs from the
+native one; the native blob stays byte-identical (#1749).
+================
+*/
+func TestBootstrapJSONPublishesLevelCap(t *testing.T) {
+	for _, cap := range []int64{0, 110} {
+		blob, err := json.Marshal(&BootstrapResult{
+			NativeResult: nativeResultSuccess, Character: &Character{Name: "keeper", AccountID: "a"},
+			LocalPlayerEntry: &LocalPlayerEntry{RaceKey: RaceKeyChina},
+			ChatMessages:     []string{}, SystemMessages: []string{}, Packets: []Packet{},
+			LevelCap: cap,
+		})
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		if got := strings.Contains(string(blob), `"levelCap":110`); got != (cap != 0) {
+			t.Fatalf("LevelCap=%d: blob carries the cap %v", cap, got)
+		}
+		if cap == 0 && strings.Contains(string(blob), "levelCap") {
+			t.Fatal("the native blob names the configured cap")
+		}
+	}
+}
