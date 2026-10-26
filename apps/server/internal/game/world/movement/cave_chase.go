@@ -18,8 +18,11 @@ the original is measurably worse; each switch's off value is native):
 	                           its own 100 ms re-check, the port's planner
 	                           59 (with the escape below).
 	SRO_CAVE_OBSTACLE_ESCAPE   a leg that starts inside an obstacle circle
-	                           walks out of it (dungeon_walk.go). Players
-	                           walk the same clip, so it frees them too.
+	                           walks out of it (dungeon_walk.go). The
+	                           server clip is shared, but the browser
+	                           client still runs the original circle test
+	                           on a player's own walk (clipper.ts), so in
+	                           effect it frees monster chases only.
 
 The planner already replans whenever the chased target moves (the
 simulation's goal-changed cancel), so the original's 100 ms re-check adds
