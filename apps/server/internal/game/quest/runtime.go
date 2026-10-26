@@ -82,6 +82,8 @@ type Runtime struct {
 	easteu21 easteu21Programme
 	// ivy3 is the IVY 3 programme's state (ivy3.go).
 	ivy3 ivy3Programme
+	// goria7 is the GORIA 7 programme's state (goria7.go).
+	goria7 goria7Programme
 }
 
 /*
@@ -584,6 +586,10 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 			}
 			if grant, offered := rt.ivy3GrantOption(character, def, npcCodename); offered {
 				completes = append(completes, grant)
+				continue
+			}
+			if entry, offered := rt.goria7EntryOption(character, def, npcCodename); offered {
+				completes = append(completes, entry)
 				continue
 			}
 			if supply, available := rt.captureSupplyOption(character, def, npcCodename); available {

@@ -250,6 +250,9 @@ func TestCaveRouteFollowsTheCorridor(t *testing.T) {
 	if surface == nil {
 		t.Fatal("the Donwhang cave surface is not loaded")
 	}
+	// The port's portal route, which a dungeon without a valid native
+	// route table keeps (#1732): Donwhang's table is set aside here.
+	surface.routeTable = nil
 	fromBlock, toBlock, hops := caveFarthestPair(t, surface)
 	from := caveStandpoint(surface, planeCaveRegion, fromBlock)
 	goal := caveStandpoint(surface, planeCaveRegion, toBlock)
