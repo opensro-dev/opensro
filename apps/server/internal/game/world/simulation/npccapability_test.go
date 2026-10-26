@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-npccapability_test.go - 4C6350's service chains and the v1.150 talk word
+npccapability_test.go - the retail server's service chains and the v1.150 talk word
 
 Expectations come from the native registrations and the client's menu
 builder (5D9100), not from the tables under test.
@@ -129,7 +129,7 @@ func TestResolvedTalkWordAdvertisesOnlyOwnedRows(t *testing.T) {
 ================
 TestEveryStorageKeeperOffersStorage
 
-4C6501's substring arm: every shipped storage keeper resolves shop|storage.
+The storage substring arm: every shipped storage keeper resolves shop|storage.
 ================
 */
 func TestEveryStorageKeeperOffersStorage(t *testing.T) {

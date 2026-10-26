@@ -123,7 +123,7 @@ func TestNpcQuestGreetingsNeverBorrowMissingNpcChatPS(t *testing.T) {
 TestShippedFortressBindingsComeFromColumn55
 
 Column 55 of characterdata and teleportbuilding names the fortress whose
-treasury a merchant or gate pays (CGObj_BindFortressFromReference 486140).
+treasury a merchant or gate pays (the retail server's fortress binding).
 v1.150 enables only FORTRESS_JANGAN; its smith and its town gate bind to it,
 and rows naming no fortress stay untaxed.
 ================

@@ -5,7 +5,8 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 )
 
-// DeliverMonsterHelp is the server-internal event ingress (53FE00, event 1).
+// DeliverMonsterHelp is the server-internal event ingress (the retail
+// server's AI-message event 1).
 // It is deliberately not exposed as a client opcode. Script/event producers
 // supply the native payload; they cannot directly assign a monster target.
 func (s *MonsterState) DeliverMonsterHelp(division string, receiver uint32, payload []byte) error {
@@ -30,7 +31,7 @@ func (s *MonsterState) DeliverMonsterHelp(division string, receiver uint32, payl
 }
 
 // handleHelp owns one pending-event tick, including rejected requests. Native
-// 53FF09 skips ordinary OnTick whenever 53FE30 consumed an event. Navigation
+// skips ordinary OnTick whenever its event consumer consumed an event. Navigation
 // executes outside the population lock; inbox generation and mover admission
 // prevent a replacement event or fresh hit from being overwritten afterward.
 func (ops *MonsterMoverOps) handleHelp(division string, expected monster.Instance, mover monster.MoverState, players []playerPose, now int64) ([]Frame, bool) {
@@ -92,7 +93,7 @@ func (ops *MonsterMoverOps) handleHelp(division string, expected monster.Instanc
 	}
 	current = state.instances.get(instance.Gid)
 	if accepted && next.TargetGID() != 0 {
-		// 53FFE0 changes primary identity/time; it does not manufacture damage
+		// The retail server's target-change message changes primary identity/time; it does not manufacture damage
 		// or replace the independent secondary remembered opponent.
 		current.Opponents[0].GID = event.TargetGID
 		current.Opponents[0].LastHitMs = uint32(now)
