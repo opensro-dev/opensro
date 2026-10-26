@@ -329,7 +329,7 @@ func TestMonsterStuckProductionPlanRouteAndZeroDistanceClip(t *testing.T) {
 		target.Pose.X = mover.Pose.X + 80
 		target.Pose.Z = mover.Pose.Z + 40
 		ops.PlanPath = testShortNavPath
-		ops.PlanRoute = func(_, to monster.Pose) *monster.NavigationRoute {
+		ops.PlanRoute = func(_ monster.Pose, _ NavOwner, to monster.Pose) *monster.NavigationRoute {
 			return monster.UnresolvedNavigationRoute(to, monster.NavigationRouteBlocked)
 		}
 
@@ -363,7 +363,7 @@ func TestMonsterStuckProductionPlanRouteAndZeroDistanceClip(t *testing.T) {
 
 		target.Pose.X = mover.Pose.X + 80
 		target.Pose.Z = mover.Pose.Z + 40
-		ops.PlanRoute = func(from, to monster.Pose) *monster.NavigationRoute {
+		ops.PlanRoute = func(from monster.Pose, _ NavOwner, to monster.Pose) *monster.NavigationRoute {
 			corner := from
 			corner.X += 30
 			return monster.NewNavigationRoute(to, []monster.Pose{corner, to})
@@ -435,7 +435,7 @@ func TestMonsterStuckPreservesMaturedSettleFrameWhenNotYetStuck(t *testing.T) {
 	mover.DepartMs = 10_000
 	mover.ArriveMs = 10_500
 
-	ops.PlanRoute = func(_, goal monster.Pose) *monster.NavigationRoute {
+	ops.PlanRoute = func(_ monster.Pose, _ NavOwner, goal monster.Pose) *monster.NavigationRoute {
 		return monster.UnresolvedNavigationRoute(goal, monster.NavigationRouteBlocked)
 	}
 	goal := to

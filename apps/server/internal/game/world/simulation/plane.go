@@ -76,9 +76,10 @@ type Plane interface {
 	LineOfSight(from Spawn, fromOwner NavOwner, to Spawn) bool
 	// PlanPath is the walked path from the retained owner toward goal.
 	PlanPath(from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationPath
-	// NextWaypoint is the AI route toward goal: outdoors the direction-gate
-	// detour, in a cave the native region route (#1645).
-	NextWaypoint(from, goal monster.Pose) *monster.NavigationRoute
+	// NextWaypoint is the AI route toward goal from the mover's retained
+	// owner: outdoors the direction-gate detour, in a cave the native
+	// region route from the retained cell (#1645, #1732).
+	NextWaypoint(from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationRoute
 	// HeightAt is the walkable surface height at p on this plane,
 	// nearest the caller's own height: outdoors a deck or bridge over
 	// the bare terrain when the caller stands at its height, in a cave

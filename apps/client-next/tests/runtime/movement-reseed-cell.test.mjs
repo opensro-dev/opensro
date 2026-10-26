@@ -32,12 +32,12 @@ const STEP_MS = 16;
 answer
 
 A B738 destination answer with a source: u32 gid, mode 1, the destination
-(u16 region, int16 x/y/z), then the source (u16 region, int16 x*10, float
-y, int16 z*10).
+(u16 region, int16 x/y/z), then the source (u16 region, float x/y/z)
+(protocol 11, #1744).
 ================
 */
 function answer( to, from ) {
-	const p = new Uint8Array( 24 ), v = new DataView( p.buffer );
+	const p = new Uint8Array( 28 ), v = new DataView( p.buffer );
 	v.setUint32( 0, GID, true );
 	p[4] = 1;
 	v.setUint16( 5, to.regionId, true );
@@ -46,9 +46,9 @@ function answer( to, from ) {
 	v.setInt16( 11, to.z, true );
 	p[13] = 1;
 	v.setUint16( 14, from.regionId, true );
-	v.setInt16( 16, from.x * 10, true );
-	v.setFloat32( 18, from.y, true );
-	v.setInt16( 22, from.z * 10, true );
+	v.setFloat32( 16, from.x, true );
+	v.setFloat32( 20, from.y, true );
+	v.setFloat32( 24, from.z, true );
 	return p;
 }
 

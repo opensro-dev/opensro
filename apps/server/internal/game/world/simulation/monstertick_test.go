@@ -172,14 +172,14 @@ func decodeGoalPayload(t *testing.T, payload []byte) (gid uint32, region uint16,
 
 func decodeGoalSource(t *testing.T, payload []byte) MovementSource {
 	t.Helper()
-	if len(payload) < 24 || payload[13] != 1 {
+	if len(payload) < 28 || payload[13] != 1 {
 		t.Fatalf("goal has no complete source block: % X", payload)
 	}
 	return MovementSource{
 		RegionID: binary.LittleEndian.Uint16(payload[14:16]),
-		X:        float64(binary.LittleEndian.Uint16(payload[16:18])) / 10,
-		Y:        float64(math.Float32frombits(binary.LittleEndian.Uint32(payload[18:22]))),
-		Z:        float64(binary.LittleEndian.Uint16(payload[22:24])) / 10,
+		X:        float64(math.Float32frombits(binary.LittleEndian.Uint32(payload[16:20]))),
+		Y:        float64(math.Float32frombits(binary.LittleEndian.Uint32(payload[20:24]))),
+		Z:        float64(math.Float32frombits(binary.LittleEndian.Uint32(payload[24:28]))),
 	}
 }
 

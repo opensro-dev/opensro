@@ -19,8 +19,19 @@ like the browser smoke) in an environment variable; the ticket is
 consumed only when the server writes WELCOME, so a probe that fails
 before that leaves it usable for the WebSocket fallback.
 
+-health is the stranger's view of the same listener, and the only mode
+that needs no credential: it completes the same verified handshake,
+presents a fixed non-credential in HELLO, and passes only on the
+refusal - the BYE(unauthorized) frame, or the session close whose
+reason names it (on WebTransport the close can overtake the BYE). A
+WELCOME there means the endpoint admits anyone, which is exactly what
+an always-on outside health check must catch. A fixture that admits
+every ticket fails -health on purpose; its welcoming proof is the
+ticketed smoke.
+
 Usage:
 	sro-wtprobe -url https://play.example.net [-wt-addr host:port]
+	sro-wtprobe -health -url https://play.example.net
 
 Exit status: 0 after WELCOME, 1 with the failed stage named, 2 on usage.
 With -measure, the selected transport runs a ping train and paced burst
@@ -55,6 +66,9 @@ const (
 	defaultTimeout   = 20 * time.Second
 	defaultTicketEnv = "SRO_WT_PROBE_TICKET"
 	certHashBodyCap  = 4096
+	// healthCheckTicket is the credential -health presents: none, on
+	// purpose. The endpoint under check must refuse it (probeHealth).
+	healthCheckTicket = "sro-wtprobe-health-check"
 )
 
 //============================================================================
@@ -257,6 +271,81 @@ func probe(ctx context.Context, cfg probeConfig) (string, error) {
 
 /*
 ================
+probeHealth
+
+The credential-free outside check. The whole public path - UDP
+listener, QUIC handshake under normal PKI verification, the
+certificate pin from /transport/cert-hash - must answer, and the
+HELLO it receives must be refused: it carries a fixed non-credential,
+so the only honest pass is the refusal, witnessed either way the
+transport delivers it - the BYE(unauthorized) frame, or the session
+close whose reason names the refusal (on WebTransport the close can
+overtake the BYE; the browser observes the same pair). A WELCOME
+means the endpoint admits strangers, the failure this check exists
+to catch. Any ticket the caller set is discarded; there is no mode
+in which -health presents a real credential.
+================
+*/
+func probeHealth(ctx context.Context, cfg probeConfig) (string, error) {
+	cfg.Transport = "wt"
+	cfg.Ticket = healthCheckTicket
+	client, err := newProbeClient(cfg)
+	if err != nil {
+		return "", err
+	}
+	defer client.close()
+	dialCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
+	defer cancel()
+	if err := client.dialWT(dialCtx); err != nil {
+		return "", err
+	}
+	deadline, _ := dialCtx.Deadline()
+	if err := client.setDeadline(deadline); err != nil {
+		return "", &stageError{"stream", err}
+	}
+	if err := client.writeFrame(transport.Frame{
+		Opcode:  transport.OpHello,
+		Payload: transport.EncodeHello(transport.Hello{AdmissionToken: []byte(healthCheckTicket)}),
+	}); err != nil {
+		return "", &stageError{"hello", err}
+	}
+	for {
+		frame, err := client.readFrame()
+		if err != nil {
+			// The refusal's second witness: the session close that
+			// carries it. Anything else - silence, a capacity close,
+			// a network death - is not a proven refusal.
+			if strings.Contains(err.Error(), "admission") {
+				return fmt.Sprintf("OK health stranger-refused cert-sha256=%s notAfter=%s",
+					client.cert.SHA256Hex, client.cert.NotAfter), nil
+			}
+			return "", &stageError{"admission", err}
+		}
+		if frame.Opcode == transport.OpPing {
+			if err := client.replyPing(frame); err != nil {
+				return "", &stageError{"admission", err}
+			}
+			continue
+		}
+		if frame.Opcode == transport.OpPong {
+			continue
+		}
+		if frame.Opcode == transport.OpWelcome {
+			return "", &stageError{"admission", errors.New("WELCOME answered a credential-free HELLO: strangers are admitted")}
+		}
+		if frame.Opcode != transport.OpBye {
+			return "", &stageError{"admission", fmt.Errorf("first frame = 0x%04X, want BYE", frame.Opcode)}
+		}
+		if len(frame.Payload) != 1 || frame.Payload[0] != transport.ByeReasonUnauthorized {
+			return "", &stageError{"admission", fmt.Errorf("BYE payload = %v, want the single unauthorized reason", frame.Payload)}
+		}
+		return fmt.Sprintf("OK health stranger-refused cert-sha256=%s notAfter=%s",
+			client.cert.SHA256Hex, client.cert.NotAfter), nil
+	}
+}
+
+/*
+================
 main
 
 cert-hash over TCP, HELLO/WELCOME over UDP: both halves must pass.
@@ -270,6 +359,7 @@ func main() {
 	caCert := flag.String("ca-cert", "", "PEM bundle added to the trust roots (a development endpoint's self-signed certificate)")
 	timeout := flag.Duration("timeout", defaultTimeout, "smoke budget; measurement handshake and response-drain timeout")
 	measure := flag.Bool("measure", false, "run both measurement schedules and emit one JSON document")
+	health := flag.Bool("health", false, "credential-free outside check: pass only when a stranger's HELLO is refused (WT only)")
 	samples := flag.Int("samples", defaultPingSamples, "ping train samples in measurement mode")
 	interval := flag.Duration("ping-interval", defaultPingInterval, "ping train send interval in measurement mode")
 	burst := flag.Int("burst", defaultBurstSamples, "ordered burst frames in measurement mode")
@@ -279,6 +369,25 @@ func main() {
 	if *base == "" {
 		fmt.Fprintln(os.Stderr, "usage: sro-wtprobe -url https://play.example.net [-wt-addr host:port]")
 		os.Exit(2)
+	}
+	if *health {
+		if *measure {
+			fmt.Fprintln(os.Stderr, "-health and -measure are different checks; run one")
+			os.Exit(2)
+		}
+		if *kind != "wt" {
+			fmt.Fprintln(os.Stderr, "-health proves the WebTransport listener; -transport must be wt")
+			os.Exit(2)
+		}
+		cfg := probeConfig{Base: *base, WTAddr: *wtAddr, Timeout: *timeout, CACert: *caCert, Transport: "wt"}
+		ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+		defer cancel()
+		line, err := probeHealth(ctx, cfg)
+		if err != nil {
+			fail(err)
+		}
+		fmt.Println(line)
+		return
 	}
 	ticket := strings.TrimSpace(os.Getenv(*ticketEnv))
 	if ticket == "" {

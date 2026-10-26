@@ -121,8 +121,7 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 		// 4AD870 dispatches non-attack activity skills before touching the
 		// command queue. Instant imbues preserve the current attack/approach.
 		if source := rt.deps.SkillData(); source != nil {
-			if skill, ok := source.SkillByID(cast.ActionId); ok &&
-				(skill.InstantSelfEffectPinned || skill.Imbue.Pinned) {
+			if skill, ok := source.SkillByID(cast.ActionId); ok && instantActivitySkill(skill) {
 				return rt.acceptInstantSelfEffect(divisionID, character, snapshot, cast, skill)
 			}
 		}
@@ -377,13 +376,17 @@ func routeSkillCommand(skill enterworld.SkillRow) skillRoute {
 ================
 SkillPressHandled
 
-Whether pressing the skill reaches an owner that runs it: a claimed shape,
-or an offensive skill resolveOffensiveSkill admits by shape. The website's
-catalogue reads it; a press can still be refused for the moment (target,
-weapon, posture).
+Whether pressing the skill reaches an owner that runs it, checked in the
+press's own order: the instant activity skills (imbues, instant self
+effects) the press runs before routing, a claimed shape, or an offensive
+skill resolveOffensiveSkill admits by shape. The website's catalogue reads
+it; a press can still be refused for the moment (target, weapon, posture).
 ================
 */
 func SkillPressHandled(source enterworld.SkillDataSource, skill enterworld.SkillRow) bool {
+	if instantActivitySkill(skill) && !skill.ChainSub {
+		return true
+	}
 	if routeSkillCommand(skill) != skillRouteOffensive {
 		return true
 	}

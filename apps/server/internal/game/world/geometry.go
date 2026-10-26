@@ -347,3 +347,33 @@ func LocalCoordinateFloor(regionID uint16) float64 {
 	}
 	return 0
 }
+
+/*
+================
+InterestBlockAt
+
+The message block containing position: the dungeon grid's own planar
+partition for dungeon regions (the whole region until the grid is
+installed or the point falls outside it), the expanded outdoor grid
+folded by InterestBlockSize otherwise. Moved verbatim from interest.go
+(#1646): the plane branch is this file's to own.
+================
+*/
+func InterestBlockAt(position RegionXZ) InterestBlock {
+	if IsDungeonRegion(position.RegionID) {
+		grid, ok := dungeonMessageGridFor(position.RegionID)
+		if !ok {
+			return InterestBlock{Dungeon: position.RegionID, Whole: true}
+		}
+		x, z, inside := grid.planarBlock(position.X, position.Z)
+		if !inside {
+			return InterestBlock{Dungeon: position.RegionID, Whole: true}
+		}
+		return InterestBlock{Dungeon: position.RegionID, X: x, Z: z}
+	}
+	grid := ExpandGrid(position)
+	return InterestBlock{
+		X: int(math.Floor(grid.X / InterestBlockSize)),
+		Z: int(math.Floor(grid.Z / InterestBlockSize)),
+	}
+}

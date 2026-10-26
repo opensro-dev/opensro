@@ -18,6 +18,19 @@ import (
 	"sync/atomic"
 )
 
+/*
+================
+instantActivitySkill
+
+A skill the press runs at once through acceptInstantSelfEffect, before the
+command queue (4AD870 dispatches non-attack activity skills first): an
+instant self effect or a weapon imbue.
+================
+*/
+func instantActivitySkill(skill enterworld.SkillRow) bool {
+	return skill.InstantSelfEffectPinned || skill.Imbue.Pinned
+}
+
 // A zero-action-duration skill still owns admission, MP, cooldown, an accepted
 // action and an independently timed effect. Native 5830B0 dispatches category 3.
 /*
@@ -26,7 +39,7 @@ acceptInstantSelfEffect
 ================
 */
 func (rt *Runtime) acceptInstantSelfEffect(division string, character, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow) OpResult {
-	instantShape := (skill.InstantSelfEffectPinned || skill.Imbue.Pinned) && !skill.ChainSub
+	instantShape := instantActivitySkill(skill) && !skill.ChainSub
 	selfOnly := !cast.HasTarget && !cast.HasGroundTarget
 	casterReady := enterworld.CharacterAlive(snapshot) && enterworld.SkillLearned(snapshot, skill.ID)
 	if !instantShape || !selfOnly || !casterReady {
