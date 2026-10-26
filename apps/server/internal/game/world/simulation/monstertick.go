@@ -529,6 +529,10 @@ func (ops *MonsterMoverOps) startReturnLeg(divisionID string, instance monster.I
 	return ops.Monsters.commitNavigation(divisionID, before, mover, frames)
 }
 
+// homingArrivalDistance is the fixed 3-D arrival radius around the stored
+// walk-home destination: inside it, the walk home is over.
+const homingArrivalDistance = 5
+
 /*
 ================
 planReturnLeg
@@ -544,7 +548,18 @@ func (ops *MonsterMoverOps) planReturnLeg(instance monster.Instance, mover monst
 	mover.Pose = live
 	mustMoverTransition(&mover, event, 0)
 	mover.BehaviorDeadlineMs = 0
+	dest := anchorPose(instance)
 	if instance.Nest.HasControls {
+		// One destination per walk home: selected when the walk begins
+		// (HOMING entry) and re-read by every leg after. The episode's end
+		// discards it, so a stored goal here always belongs to the walk in
+		// progress; the entry clock below re-arms on every entry, as it
+		// always has.
+		goal, stored := mover.HomingGoal()
+		if !stored {
+			goal = normalizeMonsterPose(monster.HomingCandidate(dest, live, float32(instance.Nest.Radius), instance.Ref, func() uint32 { return monster.SummonRandomWord(ops.rand()) }))
+			mover.SetHomingGoal(goal)
+		}
 		mover.HomingStartedMs = uint32(nowMs)
 		// 55A60E..55A63E: (effective sight / run speed) * 1000, truncate.
 		// A stationary actor cannot complete this travel-dependent gate.
@@ -552,10 +567,22 @@ func (ops *MonsterMoverOps) planReturnLeg(instance monster.Instance, mover monst
 		if monster.HomingRuns(instance.Ref.RunSpeed) {
 			mover.HomingAcquireAfterMs = uint32(float64(float32(instance.Nest.SightRange+instance.BodyRadius())) / float64(float32(instance.RunSpeed())) * 1000)
 		}
-	}
-	dest := anchorPose(instance)
-	if instance.Nest.HasControls {
-		dest = normalizeMonsterPose(monster.HomingCandidate(dest, live, float32(instance.Nest.Radius), instance.Ref, func() uint32 { return monster.SummonRandomWord(ops.rand()) }))
+		dest = goal
+		// Arrival ends the walk: within homingArrivalDistance (3-D) of the
+		// stored goal. The test runs only when actor and goal share a
+		// region; across regions the region route supplies the next
+		// waypoint instead (that route is #1698's work, not this planner's).
+		// Arrival is judged only at a leg boundary, from a settled pose: a
+		// mover with unexpired client-visible motion first goes through the
+		// planner below, which re-aims it or settles it with the correction
+		// frame the wire contract requires. A leg planned from inside the
+		// radius matures at the goal, and the next entry ends the walk.
+		if !mover.InFlight(nowMs) && live.RegionID == goal.RegionID && tacticsDistance3D(live, goal) < homingArrivalDistance {
+			mustMoverTransition(&mover, monster.MoverEventSegmentArrived, 0)
+			mover.ClearHomingGoal()
+			mover.BehaviorDeadlineMs = nowMs + ops.idleDelayMs()
+			return mover, nil
+		}
 		if ops.hasPlanner() {
 			// 545E14: clip from HOME, not the actor's current position. The
 			// anchor has no walked cell: the teleport rule resolves it.

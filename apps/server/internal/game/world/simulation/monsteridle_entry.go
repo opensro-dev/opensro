@@ -11,6 +11,7 @@ func (ops *MonsterMoverOps) planIdleEntry(actor monster.Instance, mover monster.
 	}
 	if !needsHoming(actor, mover.LivePoseAt(now, ops.TerrainHeight)) {
 		mover.ResetStuck()
+		mover.ClearHomingGoal()
 		return mover, nil
 	}
 	return ops.planReturnLeg(actor, mover, monster.MoverEventHomingRequired, now)

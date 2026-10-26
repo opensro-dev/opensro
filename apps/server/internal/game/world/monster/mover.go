@@ -209,6 +209,11 @@ type MoverState struct {
 	LastBattleActivityMs uint32
 	HomingStartedMs      uint32
 	HomingAcquireAfterMs uint32
+	// homingGoal is the destination selected when the current walk home
+	// began (HOMING entry). Every leg of the walk re-reads the same point;
+	// the episode's end discards it (see Transition and planIdleEntry).
+	homingGoal    Pose
+	homingGoalSet bool
 	// progress is the native stuck count (CTactics +184/+19C/+148): each
 	// stop that leaves the actor within 20 of where its move sequence began
 	// counts, and from the tenth the stuck event is raised (559010 -> 5597B0).
@@ -277,6 +282,47 @@ CAITactics_ReleaseCommand 0x0053FD40).
 func (m *MoverState) ResetStuck() {
 	m.progress.ResetFailures()
 	m.stuck = false
+}
+
+/*
+================
+MoverState.HomingGoal
+
+HomingGoal returns the destination stored when the current walk home began.
+The native selects it once at HOMING entry and every movement tick re-reads
+the same point. The second result is false when no walk home owns a goal.
+================
+*/
+func (m MoverState) HomingGoal() (Pose, bool) {
+	return m.homingGoal, m.homingGoalSet
+}
+
+/*
+================
+MoverState.SetHomingGoal
+
+SetHomingGoal stores the walk-home destination for the episode that is
+starting. The episode's end discards it, so the next walk home selects a
+fresh one.
+================
+*/
+func (m *MoverState) SetHomingGoal(goal Pose) {
+	m.homingGoal = goal
+	m.homingGoalSet = true
+}
+
+/*
+================
+MoverState.ClearHomingGoal
+
+ClearHomingGoal discards the stored walk-home destination without a state
+change, for the idle-entry home check that ends a walk the radius test
+already satisfied.
+================
+*/
+func (m *MoverState) ClearHomingGoal() {
+	m.homingGoal = Pose{}
+	m.homingGoalSet = false
 }
 
 /*
