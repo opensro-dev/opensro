@@ -6,8 +6,9 @@ knockback_ridge_test.go - a push off a ridge stops at its walkable edge
 The bug report position (region 0x5F94, 1829 / 1773) is a local high point
 whose eastern slope is blocked tiles. An unclipped push onto them left a
 monster where every monster path plan reports a blocked departure, so it
-never moved or turned again. Through SpawnMoveTest (the native move query
-CGObj_MoveTo runs) the same push stops on a tile a monster can plan from.
+never moved or turned again. Through SpawnMoveTest (the native move test
+the server's object-move command runs) the same push stops on a tile a
+monster can plan from.
 
 ===========================================================================
 */

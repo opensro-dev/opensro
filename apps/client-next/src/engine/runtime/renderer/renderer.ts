@@ -7,7 +7,12 @@ renderer.ts - GPU resource lifetime and ordered scene, character and UI passes
 */
 import { pickVolumeDepth } from "@/engine/foundation/rendering/pick-volume";
 import { defaultVideoOptions, videoOptions, backgroundDrawDistance } from "@/engine/foundation/rendering/video-options";
-import { experimentalOptions, experimentalVideo } from "@/engine/foundation/ui/experimental-options";
+import {
+	experimentalOptions,
+	experimentalVideo,
+	phoneDisplay,
+	sceneRenderScale
+} from "@/engine/foundation/ui/experimental-options";
 import { uiTextureResidency } from "@/engine/foundation/rendering/ui-texture-residency";
 import { cameraBasis } from "@/engine/foundation/rendering/world-math";
 import { createPortrait } from "./characters/portrait";
@@ -56,6 +61,12 @@ export function createRenderer(
 	let video = defaultVideoOptions();
 	// Experimental > Video, all off (native) until the saved preference arrives.
 	let experimental = experimentalVideo( experimentalOptions() );
+	// #1806: a phone gets the Phone resolution cap. Read once: the display
+	// class does not change while the page lives.
+	const phone = phoneDisplay( {
+		coarsePointer: globalThis.matchMedia?.( "(pointer: coarse)" ).matches ?? false,
+		shortSide: Math.min( globalThis.screen?.width ?? 0, globalThis.screen?.height ?? 0 )
+	} );
 	const portrait = createPortrait( createCharacters() );
 	// A released draw never reaches a submit; the report names who kept it.
 	const staleDraws = createStaleDrawGuard(
@@ -823,7 +834,7 @@ export function createRenderer(
 					targetSurface = surface;
 				// Port-only, not native. Experimental owns the opt-in; 100 keeps
 				// the native surface and pass order. UI keeps its full resolution.
-				const renderScale = experimental.renderScale,
+				const renderScale = sceneRenderScale( experimental, viewport, phone ),
 					scaled = renderScale < 100,
 					sceneWidth = Math.max( 1, Math.round( viewport.width * renderScale / 100 ) ),
 					sceneHeight = Math.max( 1, Math.round( viewport.height * renderScale / 100 ) ),

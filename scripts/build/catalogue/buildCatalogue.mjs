@@ -43,6 +43,9 @@ const { createTooltipSkillDecoder } = await import(
 
 const repositoryRoot = fileURLToPath( new URL( "../../../", import.meta.url ) );
 const serverRoot = path.join( repositoryRoot, "apps", "server" );
+// Our deployment's shard settings (#606): the site describes the shard it
+// links to, whose beta values deploy.py passes from this file.
+const SHARD_SETTINGS = path.join( serverRoot, "ops", "release", "shard-settings.json" );
 // The WebP encoders' content cache (webp_pool.py): an image unchanged since
 // any earlier build is copied, not encoded again.
 const WEBP_CACHE = path.join( repositoryRoot, ".state", "catalogue-webp-cache" );
@@ -324,6 +327,8 @@ async function main() {
 	try {
 		execFileSync( "go", [ "run", "./cmd/tools/sro-catalogue", "-out", work, "-release", options.release ], {
 			cwd: serverRoot,
+			// The operator's own environment still wins, as it does for sro-nomad.
+			env: { ...readJSON( SHARD_SETTINGS ), ...process.env },
 			stdio: [ "ignore", "inherit", "inherit" ]
 		} );
 		const text = textLookup();

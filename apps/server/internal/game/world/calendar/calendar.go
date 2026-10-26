@@ -4,10 +4,11 @@
 calendar.go - the world-server calendar and its native wire encoding
 
 Package calendar owns the one world clock every reader shares: logins, the
-world-ready push (0x31AD) and quest periods. SR_GameServer 427660
-initializes it with scale=30 and zero seed seconds; 427720 divides elapsed
-milliseconds by floor(30000/1440). 4e3eb0 serializes the existing calendar
-at login. No login-local epoch, wall-clock date, or month modulo occurs in
+world-ready push (0x31AD) and quest periods. The original server
+initializes it with scale=30 and zero seed seconds; its clock divides
+elapsed milliseconds by floor(30000/1440) and serializes the existing
+calendar at login. No login-local epoch, wall-clock date, or month
+modulo occurs in
 these intervals. A GM's /SETTIME moves it (SetHour).
 
 ===========================================================================
@@ -20,7 +21,7 @@ import (
 	"time"
 )
 
-// MillisecondsPerGameSecond is 427720's divisor: floor(30000/1440).
+// MillisecondsPerGameSecond is the native clock's divisor: floor(30000/1440).
 const MillisecondsPerGameSecond int64 = 20
 
 // Seconds in a game day, hour and minute, and the hours in a day.
@@ -96,8 +97,8 @@ func elapsedMilli() int64 { return time.Since(startedAt).Milliseconds() + shiftM
 SetHour
 
 Moves the world clock to minute 0 of hour on the current game day and
-returns the new time. SR_GameServer relays /SETTIME to the shard manager
-("SetGameTime to %d", 51F09B); INFERENCE: the day is kept and the minutes
+returns the new time. The original server relays /SETTIME to the shard
+manager ("SetGameTime to %d"); INFERENCE: the day is kept and the minutes
 restart, since only the hour is sent. Hours past 23 wrap to 0, as the
 client composer sends none. The new shift is swapped in only if no other
 SetHour moved the clock meanwhile, so two at once never both add theirs.
@@ -122,7 +123,8 @@ func SetHour(hour uint8) Value {
 ================
 Payload
 
-The 0x31AD body (4e3eb0): u16 day, u8 hour, u8 minute.
+The 0x31AD body the native login serialization writes: u16 day, u8 hour,
+u8 minute.
 ================
 */
 func (v Value) Payload() []byte {
