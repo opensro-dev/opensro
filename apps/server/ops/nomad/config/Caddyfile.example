@@ -71,3 +71,29 @@ game.example.com {
 www.game.example.com {
 	redir https://game.example.com{uri} permanent
 }
+
+# ===========================================================================
+# The game's own host, once public WebTransport is switched on
+# (ops/nomad/README.md, "Public WebTransport"). WebSocket stays a proxied
+# TCP route to the loopback listener, unstripped: the advertised path is
+# the listener's own /transport/*. WebTransport is NOT proxied - the
+# GameWorld terminates UDP on the same host and port itself.
+#
+# Caddy must stay off that UDP socket: its HTTP/3 would claim UDP 443.
+# Serving these sites with h1/h2 only costs the website nothing - the
+# game is the only HTTP/3 consumer and it terminates its own:
+#
+#	{
+#		servers {
+#			protocols h1 h2
+#		}
+#	}
+#
+# play.example.com {
+#	handle /transport/* {
+#		reverse_proxy 127.0.0.1:8788
+#	}
+#	handle {
+#		respond 404
+#	}
+# }

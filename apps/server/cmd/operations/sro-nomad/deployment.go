@@ -78,6 +78,7 @@ type deployment struct {
 	TransportCert         string
 	TransportKey          string
 	TransportTLSID        string
+	TransportWTAddr       string
 	IdentityIssuer        string
 	IdentityJWKSURL       string
 	AgentURL              string
@@ -387,7 +388,7 @@ func resolveDeployment(
 	if requirePrerequisites && len(shards) == 0 {
 		return nil, fmt.Errorf("shard catalog has no enabled shards")
 	}
-	transportCert, transportKey, transportTLSID, err :=
+	transportCert, transportKey, transportTLSID, certificate, err :=
 		resolveTransportCertificate(
 			options.TransportCert,
 			options.TransportKey,
@@ -397,6 +398,16 @@ func resolveDeployment(
 		)
 	if err != nil {
 		return nil, err
+	}
+	if requirePrerequisites {
+		if err := validateWebTransportPosture(
+			certificate,
+			portOnly.webTransportPublic(),
+			options.TransportWTAddr,
+			shards,
+		); err != nil {
+			return nil, err
+		}
 	}
 
 	return &deployment{
@@ -415,6 +426,7 @@ func resolveDeployment(
 		TransportCert:         transportCert,
 		TransportKey:          transportKey,
 		TransportTLSID:        transportTLSID,
+		TransportWTAddr:       strings.TrimSpace(options.TransportWTAddr),
 		IdentityIssuer:        identityIssuer,
 		IdentityJWKSURL:       identityJWKSURL,
 		AgentURL:              agentURL,
@@ -650,6 +662,7 @@ func (deployment *deployment) gameVariables(
 		"transport_cert_file": deployment.TransportCert,
 		"transport_key_file":  deployment.TransportKey,
 		"transport_tls_id":    deployment.TransportTLSID,
+		"transport_wt_addr":   deployment.TransportWTAddr,
 		"host_network":        deployment.Network,
 		"nomad_namespace":     deployment.Namespace,
 		"control_port":        game.ControlPort,
