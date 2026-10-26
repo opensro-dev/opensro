@@ -20,6 +20,7 @@ import (
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
+	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -326,7 +327,7 @@ func TestPickupRefusesCrossWorldTarget(t *testing.T) {
 	rt, clock := newTestRuntime(character, testItems())
 	start := simulation.SeedWorldState(character).Spawn
 	dungeon := start
-	dungeon.RegionID |= grounditem.DungeonSectorBit
+	dungeon.RegionID |= worldgeom.DungeonRegionBit
 	heap := rt.Ground.Add(testDivision, PlanGoldDrop(
 		GoldHeapRef{RefObjID: 62, Codename: "ITEM_ETC_GOLD_02", Tid1: 3, Tid2: 3, Tid3: 5, Tid4: 2},
 		1000,

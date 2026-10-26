@@ -51,13 +51,26 @@ func nestKey(nest monster.NestRow) probeNestKey {
 
 // ringWraps reports whether the 3x3 ring around a non-dungeon center
 // crosses a byte edge, i.e. RegionIDForSectors' &0xff mask wrapped a
-// neighbor to the far side of the map.
+// neighbor to the far side of the map. The cave plane has no ring.
 func ringWraps(center uint16) bool {
-	if simulation.IsDungeonRegion(center) {
+	if simulation.PlaneKindOf(center) == simulation.PlaneCave {
 		return false
 	}
 	sx, sy := simulation.SectorX(center), simulation.SectorY(center)
 	return sx == 0 || sx == 0xff || sy == 0 || sy == 0xff
+}
+
+// ringCandidates expands spawn regions into candidate viewer centers:
+// every spawn region plus its scope ring (the 3x3 sector neighborhood
+// outdoors, the region itself in a cave, simulation.RegionScopeRing).
+func ringCandidates(spawnRegions map[uint16]bool) map[uint16]bool {
+	candidates := map[uint16]bool{}
+	for regionID := range spawnRegions {
+		for _, ringRegion := range simulation.RegionScopeRing(regionID) {
+			candidates[ringRegion] = true
+		}
+	}
+	return candidates
 }
 
 func runPerformanceRing(_ []string) error {
@@ -79,19 +92,7 @@ func runPerformanceRing(_ []string) error {
 	for _, nest := range template.Nests {
 		spawnRegions[nest.RegionID] = true
 	}
-	candidates := map[uint16]bool{}
-	for regionID := range spawnRegions {
-		candidates[regionID] = true
-		if simulation.IsDungeonRegion(regionID) {
-			continue
-		}
-		sx, sy := simulation.SectorX(regionID), simulation.SectorY(regionID)
-		for dy := -1; dy <= 1; dy++ {
-			for dx := -1; dx <= 1; dx++ {
-				candidates[simulation.RegionIDForSectors(sx+dx, sy+dy)] = true
-			}
-		}
-	}
+	candidates := ringCandidates(spawnRegions)
 	fmt.Printf("spawn regions: %d (dungeon: %d), candidate viewer centers: %d\n",
 		len(spawnRegions), countDungeon(spawnRegions), len(candidates))
 
@@ -154,7 +155,7 @@ func runPerformanceRing(_ []string) error {
 			break
 		}
 		kind := "field"
-		if simulation.IsDungeonRegion(r.center) {
+		if simulation.PlaneKindOf(r.center) == simulation.PlaneCave {
 			kind = "DUNGEON(self-only)"
 		}
 		wrap := ""
@@ -184,7 +185,7 @@ func runPerformanceRing(_ []string) error {
 
 	var worstDungeon ringResult
 	for _, r := range results {
-		if simulation.IsDungeonRegion(r.center) && r.rows > worstDungeon.rows {
+		if simulation.PlaneKindOf(r.center) == simulation.PlaneCave && r.rows > worstDungeon.rows {
 			worstDungeon = r
 		}
 	}
@@ -396,7 +397,7 @@ func runPerformanceRing(_ []string) error {
 		if _, ok := water.WalkableTerrainHeightAt(nest.RegionID, nest.X, nest.Z); ok {
 			missingAnchorWalkable += missing
 		}
-		if !simulation.IsDungeonRegion(nest.RegionID) {
+		if simulation.PlaneKindOf(nest.RegionID) == simulation.PlaneOutdoor {
 			missingOutdoorNests = append(missingOutdoorNests, nest)
 		}
 	}
@@ -451,7 +452,7 @@ func runPerformanceRing(_ []string) error {
 func countDungeon(regions map[uint16]bool) int {
 	n := 0
 	for regionID := range regions {
-		if simulation.IsDungeonRegion(regionID) {
+		if simulation.PlaneKindOf(regionID) == simulation.PlaneCave {
 			n++
 		}
 	}

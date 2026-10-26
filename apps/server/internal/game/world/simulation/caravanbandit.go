@@ -74,7 +74,7 @@ nest. Its heading is the truncated angle word, as other generated monsters.
 ================
 */
 func (s *MonsterState) SpawnCaravanBandit(request CaravanBanditSpawn) bool {
-	if !featuresAt(request.Vehicle.RegionID).CaravanBandits || request.Ref.MaxHP == 0 {
+	if !FeaturesAt(request.Vehicle.RegionID).CaravanBandits || request.Ref.MaxHP == 0 {
 		return false
 	}
 	s.mu.Lock()
