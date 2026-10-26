@@ -3,19 +3,20 @@
 
 monsterstuck.go - native stuck counting and event-0x28 dispatch for monsters
 
-Monster movers share the native CAITactics stuck counter (+0x184/+0x19C/+0x148)
-and event-0x28 dispatch table (CAIState_OnMoveStopped_CountStuck 0x00559010 ->
-CAIState_DispatchExtendedEvent 0x005597B0 -> vtable +0xB0):
+Monster movers share the native tactics stuck counter
+(+0x184/+0x19C/+0x148) and the event-0x28 dispatch (the
+move-stopped counter through the extended-event dispatch):
 
-  - CAIState_BATTLE (0x0055A250):
-    TraceBoundary == 2 relocates onto the live combat target via 0x00541110
-    (0x7022 -> CGObj_MoveTo mode 7, refusing outdoor -> dungeon) and stays in
-    BATTLE; any other TraceBoundary retains BATTLE without relocating.
-  - Non-BATTLE states (0x005599C0):
-    COS actors (TypeID kind 3 with TypeID4 in 1..5) relocate onto their live
-    controller via 0x00541110 and enter IDLE (0x0053FF30); non-COS actors
-    release their nest command (CAITactics_ReleaseCommand 0x0053FD40 ->
-    CNest::v10 0x00560D00, preserving controllerGID at +0x14C) and enter IDLE.
+  - The BATTLE state:
+    TraceBoundary == 2 relocates onto the live combat target via
+    the relocation request (0x7022 -> move mode 7, refusing
+    outdoor -> dungeon) and stays in BATTLE; any other
+    TraceBoundary retains BATTLE without relocating.
+  - Non-BATTLE states:
+    COS actors (TypeID kind 3 with TypeID4 in 1..5) relocate onto
+    their live controller and enter IDLE; non-COS actors release
+    their nest command (preserving controllerGID at +0x14C) and
+    enter IDLE.
 
 ===========================================================================
 */
@@ -160,8 +161,9 @@ func (ops *MonsterMoverOps) resolveStuck(
 ================
 resolveRelocationPose
 
-0x00485740 (CGObj_MoveTo mode 7) resolves the destination surface height via
-CRegionManager::vfunc+0x2C before writing the relocated coordinates.
+The native move (mode 7) resolves the destination surface height
+through the region manager before writing the relocated
+coordinates.
 ================
 */
 func (ops *MonsterMoverOps) resolveRelocationPose(from, target monster.Pose) monster.Pose {
@@ -184,7 +186,8 @@ func (ops *MonsterMoverOps) resolveRelocationPose(from, target monster.Pose) mon
 ================
 resolveControllerPose
 
-Resolves the live position of CTactics.+0x14C (controllerGID), which may name
+Resolves the live position of the tactics record's +0x14C
+(controllerGID), which may name
 either a live monster summoner or a live player controller in the division.
 ================
 */
@@ -214,8 +217,9 @@ func (ops *MonsterMoverOps) resolveControllerPose(
 ================
 commitStuckMover
 
-Commits the event-0x28 state transition and optional nest detachment
-(CAITactics_ReleaseCommand 0x0053FD40 -> CNest::v10 0x00560D00) atomically
+Commits the event-0x28 state transition and optional nest
+detachment (the native command release and its nest death
+handling) atomically
 under the division population lock.
 ================
 */
@@ -269,12 +273,13 @@ func appendOrReplaceCorrectionFrame(frames []Frame, gid uint32, pose monster.Pos
 ================
 vanishInSafeZone
 
-CGObjMob_SetRegionLeavingSafeZone (CGObjMob vtable +0x3AC, 4C1270): a
-monster whose region changes to one that is not a battlefield (a town,
-_RefRegion.IsBattleField 0) is set to life state 3 through vtable +0x1F0
-(CGObjChar_SetLifeStateAndNotify 4A9C80). From alive that state skips the
-death broadcast: the monster vanishes without a kill or a reward, and its
-nest respawns it (560D00). This is why monsters never walk into a town.
+The native region-leaving handler: a monster whose region
+changes to one that is not a battlefield (a town,
+_RefRegion.IsBattleField 0) is set to life state 3 through the
+life-state setter. From alive that state skips the death
+broadcast: the monster vanishes without a kill or a reward, and
+its nest respawns it. This is why monsters never walk into a
+town.
 ================
 */
 func (ops *MonsterMoverOps) vanishInSafeZone(divisionID string, gid uint32, nowMs int64) {
@@ -289,7 +294,8 @@ func (ops *MonsterMoverOps) vanishInSafeZone(divisionID string, gid uint32, nowM
 SafeZoneRegion
 
 A region _RefRegion marks as no battlefield. A region the table does not
-know is not one, as 52943E refuses unknown regions separately.
+know is not one, as the native region test refuses unknown
+regions separately.
 ================
 */
 func SafeZoneRegion(region uint16) bool {
