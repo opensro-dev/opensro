@@ -191,8 +191,8 @@ func TestDungeonWalkUpperFloorChordMoves(t *testing.T) {
 ================
 TestDungeonWalkObstacleEscape
 
-A leg that starts inside an obstacle circle and heads deeper in stops at
-once with the original's circle test, and walks out with the port-only
+A leg that starts inside an obstacle circle and heads deeper in is refused
+where it stands (bit 28) with the original's circle test (#1767), and walks out with the port-only
 escape (cave_chase.go); a leg entering the circle from outside stops at
 its rim either way.
 ================
@@ -200,9 +200,9 @@ its rim either way.
 func TestDungeonWalkObstacleEscape(t *testing.T) {
 	v := stepValidator(stepMesh(0, 4), dungeonObstacle{x: 90, z: 35, radiusSquared: 15 * 15})
 	inside, across := donwhangCaveSpawn(80, 0, 35), donwhangCaveSpawn(140, 0, 40)
-	if got := v.ClipMovementPath(inside, across); got.Outcome != ClipBlocked || got.NativeResult != monster.NavResultClipped ||
+	if got := v.ClipMovementPath(inside, across); got.Outcome != ClipBlocked || got.NativeResult != monster.NavResultBlocked ||
 		simulation.WorldDistance2D(inside, got.Rest) > .01 {
-		t.Fatalf("native, from inside: %v %#x at %+v, want clipped at the start", got.Outcome, got.NativeResult, got.Rest)
+		t.Fatalf("native, from inside: %v %#x at %+v, want refused at the start (blocked)", got.Outcome, got.NativeResult, got.Rest)
 	}
 	outside := donwhangCaveSpawn(50, 0, 35)
 	for _, escape := range []bool{false, true} {

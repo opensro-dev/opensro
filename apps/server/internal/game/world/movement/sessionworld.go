@@ -263,9 +263,9 @@ func capturePeerAppearance(character *enterworld.Character, resolvedModelRef uin
 	}
 	captured.visualFlags = enterworld.ResolveVisualFlags(character)
 	// A worn job suit shows the job and its grade (job mode), and other
-	// players see the job alias in place of the name: v1.188's spawn tail
-	// (4E5B00, 4E5B55) writes vfunc +0xF0 (the alias, CInstancePC +0x48)
-	// unless the job state is 4, and the name (+0xEC) only then. The
+	// players see the job alias in place of the name: the server's spawn
+	// tail writes the alias unless the job state is 4, and the name only
+	// then. The
 	// v1.150 client reads that one string as the peer's name (869E77). Its
 	// own board takes the alias only at world entry (8675F0 calls vtable
 	// +0x74 with +0x1898 when the entry's slot-8 suit sets a job class);
