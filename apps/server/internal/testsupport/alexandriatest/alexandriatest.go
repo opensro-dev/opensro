@@ -129,6 +129,56 @@ func Variant(t testing.TB, npcRefID string) Fixture {
 
 /*
 ================
+SetLinkCondition
+
+Rewrites the first condition triple of the teleport link row joining
+source to target (the remaining triples are zeroed), in the file's own
+encoding, so a test can stage a condition the native rows never carry.
+================
+*/
+func SetLinkCondition(t testing.TB, dir, source, target string, kind, a, b uint32) {
+	t.Helper()
+	path := filepath.Join(dir, "teleportlink.txt")
+	text, wide := decode(t, path)
+	lines := strings.Split(text, "\n")
+	found := false
+	for i, line := range lines {
+		row := strings.Split(strings.TrimRight(line, "\r"), "\t")
+		if len(row) != 21 || row[1] != source || row[2] != target {
+			continue
+		}
+		row[6] = strconv.FormatUint(uint64(kind), 10)
+		row[7] = strconv.FormatUint(uint64(a), 10)
+		row[8] = strconv.FormatUint(uint64(b), 10)
+		for j := 9; j < len(row); j++ {
+			row[j] = "0"
+		}
+		lines[i] = strings.Join(row, "\t")
+		if strings.HasSuffix(line, "\r") {
+			lines[i] += "\r"
+		}
+		found = true
+	}
+	if !found {
+		t.Fatalf("teleportlink has no %s -> %s row", source, target)
+	}
+	text = strings.Join(lines, "\n")
+	payload := []byte(text)
+	if wide {
+		units := utf16.Encode([]rune(text))
+		payload = make([]byte, 2+2*len(units))
+		payload[0], payload[1] = 0xff, 0xfe
+		for index, unit := range units {
+			binary.LittleEndian.PutUint16(payload[2+2*index:], unit)
+		}
+	}
+	if err := os.WriteFile(path, payload, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+/*
+================
 firstRow
 
 A copy of the first data row of name that keep accepts.
