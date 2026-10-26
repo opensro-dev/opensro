@@ -61,6 +61,14 @@ type PlaneFeatures struct {
 	// the check is the outdoor planar distance; a position inside a
 	// cave never satisfies one.
 	QuestGatherAreas bool
+	// HelpCallSight: a monster answering another's call for help also
+	// needs a clear movement query to the target (bit 0 clear;
+	// monsterhelp.go). Today's behaviour, from before the cave clip
+	// existed: a cave receiver accepts within its home trace alone. The
+	// native receiver tests bit 0 on every plane, so the cave column is a
+	// port gap kept as it is here; turning it on is a behaviour change for
+	// its own PR (#1764).
+	HelpCallSight bool
 }
 
 /*
@@ -76,7 +84,7 @@ func featuresFor(kind PlaneKind) PlaneFeatures {
 		return PlaneFeatures{}
 	}
 	return PlaneFeatures{QuestMonsterSpawns: true, CaravanBandits: true, UniqueReturnAnchors: true, Dormancy: true,
-		SpawnTerrainLift: true, SpawnStrandedRescue: true, QuestGatherAreas: true}
+		SpawnTerrainLift: true, SpawnStrandedRescue: true, QuestGatherAreas: true, HelpCallSight: true}
 }
 
 /*

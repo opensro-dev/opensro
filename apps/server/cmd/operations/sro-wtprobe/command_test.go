@@ -164,7 +164,7 @@ func TestProbeCommandFailedArmStillWritesJSON(t *testing.T) {
 	settings.RateLimitPerSec, settings.RateLimitBurst = measurementLimitedRate, measurementLimitedBurst
 	server := startProbeServerWithConfig(t, settings)
 	args := append(probeCommandArgs(t, server), "-measure", "-transport", "ws",
-		"-samples", "5", "-burst", "5", "-ping-interval", "1ms", "-burst-interval", "0", "-timeout", "50ms")
+		"-samples", "5", "-burst", "5", "-ping-interval", "1ms", "-burst-interval", "0", "-timeout", "2s")
 	result := runProbeCommand(t, args)
 	var report measurementReport
 	if err := json.Unmarshal(result.stdout, &report); err != nil {

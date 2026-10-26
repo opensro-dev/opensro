@@ -133,6 +133,36 @@ func SamePlane(a, b uint16) bool {
 }
 
 /*
+================
+SameFloor
+
+Whether both regions are one walkable floor: any two outdoor regions (the
+sectors join), or one and the same cave region (each cave floor is its own
+region id with its own local frame).
+================
+*/
+func SameFloor(a, b uint16) bool {
+	return SamePlane(a, b) && (!IsDungeonRegion(a) || a == b)
+}
+
+/*
+================
+SectorOffset
+
+The world-unit offset from from's region frame to to's, for two regions on
+one plane: the outdoor sector delta times OutdoorRegionSize, and ok. The
+cave plane has no sectors (a cave's locals are already its frame), so it
+answers not ok and no offset.
+================
+*/
+func SectorOffset(from, to uint16) (dx, dz float64, ok bool) {
+	if IsDungeonRegion(from) {
+		return 0, 0, false
+	}
+	return float64(SectorX(to)-SectorX(from)) * OutdoorRegionSize, float64(SectorY(to)-SectorY(from)) * OutdoorRegionSize, true
+}
+
+/*
 ==================
 SamePlaneAdjacent
 
