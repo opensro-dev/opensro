@@ -17,7 +17,7 @@ import (
 
 // statCatalogs are the reference sources every player keeper reads.
 func (rt *Runtime) statCatalogs() combat.Catalogs {
-	return combat.Catalogs{Items: rt.deps.ItemReferences(), Skills: rt.deps.SkillData(), MagicOptions: rt.deps.MagicOptionDefinitions()}
+	return combat.Catalogs{Items: rt.deps.ItemReferences(), Skills: rt.deps.SkillData(), MagicOptions: rt.deps.MagicOptionDefinitions(), Sets: rt.deps.SetCatalogue()}
 }
 
 /*

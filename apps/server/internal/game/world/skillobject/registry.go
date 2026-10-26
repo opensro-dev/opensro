@@ -94,8 +94,8 @@ type Object struct {
 	// Track replaces it; snapshots carry a copy.
 	Tracked []FieldRecipient
 	// LastPulseMs is a hostile field's last strike (+0x174). The native
-	// object clears it to zero (48CAA0), so the first collection strikes
-	// at once; only Pulsed writes it.
+	// object clears it to zero, so the first collection strikes at once;
+	// only Pulsed writes it.
 	LastPulseMs int64
 }
 
@@ -206,9 +206,10 @@ func (r *Registry) Remove(gid uint32) bool {
 ================
 Scan
 
-48CEA0 expires only when elapsed time exceeds duration and scans once per
-due update, without replaying missed pulses. 48D690 retires on the first
-matching monster even if its owner quest subsequently refuses the event.
+The native scan expires only when elapsed time exceeds duration and scans
+once per due update, without replaying missed pulses. Its retire step
+retires on the first matching monster even if its owner quest subsequently
+refuses the event.
 ================
 */
 func (r *Registry) Scan(gid uint32, nowMs int64, ownerPresent bool, targets []Target) (Object, uint32, bool) {
@@ -278,10 +279,10 @@ func Matches(object Object, target Target) bool {
 ================
 Advance
 
-A buff field's pass of 48CEA0: the same expiry as Scan (an absent owner or
-elapsed duration retires it), then a due pass every ScanMs without replaying
-missed ones. The caller does the recipient work of a due pass and stores the
-result with Track.
+A buff field's pass of the native scan: the same expiry as Scan (an absent
+owner or elapsed duration retires it), then a due pass every ScanMs without
+replaying missed ones. The caller does the recipient work of a due pass and
+stores the result with Track.
 ================
 */
 func (r *Registry) Advance(gid uint32, nowMs int64, ownerPresent bool) (object Object, due, retired bool) {
@@ -329,8 +330,8 @@ func (r *Registry) Track(gid uint32, tracked []FieldRecipient) bool {
 ================
 Pulsed
 
-48D9B0 restamps the pulse clock only when it strikes. Reports false once
-the object has retired.
+The native strike restamps the pulse clock only when it strikes. Reports
+false once the object has retired.
 ================
 */
 func (r *Registry) Pulsed(gid uint32, nowMs int64) bool {
@@ -349,8 +350,8 @@ func (r *Registry) Pulsed(gid uint32, nowMs int64) bool {
 ================
 PulseDue
 
-GetTickCount() - +0x174 >= puls (48DA12, unsigned): a zero period strikes
-every pass.
+GetTickCount() - +0x174 >= puls (unsigned): a zero period strikes every
+pass.
 ================
 */
 func PulseDue(object Object, nowMs int64) bool {

@@ -127,6 +127,22 @@ func (d *Deps) MagicOptionDefinitions() MagicOptionSource {
 	return d.MagicOptions
 }
 
+/*
+================
+SetCatalogue
+
+SetCatalogue exposes the dormant equipment set chain. Port-only, not
+native: it answers nil while SRO_CAP110_SET_BONUSES is off, so combat
+skips set logic entirely and the off snapshot stays byte-identical.
+================
+*/
+func (d *Deps) SetCatalogue() SetCatalogueSource {
+	if d == nil || d.SetGroups == nil || !SetBonusesEnabled() {
+		return nil
+	}
+	return d.SetGroups
+}
+
 // SkillData exposes the authored skill-learning rows.
 func (d *Deps) SkillData() SkillDataSource {
 	if d == nil {

@@ -2,9 +2,10 @@ package movement
 
 import "testing"
 
-// Native start rule (CRTNavMeshObj_Move 0x9B5A80 / client 0x428F40): a start
-// just outside the retained cell is nudged 0.2 toward the cell centroid and
-// walks on from inside it. Wire X/Z truncation produces exactly such starts.
+// Native start rule (client CRTNavMeshObj_Move 0x428F40; the server's twin
+// move rule agrees): a start just outside the retained cell is nudged 0.2
+// toward the cell centroid and walks on from inside it. Wire X/Z
+// truncation produces exactly such starts.
 func TestRetainedCellSurvivesJustOutsideStart(t *testing.T) {
 	mesh := &objectNavMesh{vertices: []float32{0, 5, 0, 100, 5, 0, 0, 5, 100}, cellA: []uint16{0}, cellB: []uint16{1}, cellC: []uint16{2},
 		minX: 0, maxX: 100, minY: 5, maxY: 5, minZ: 0, maxZ: 100}

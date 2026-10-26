@@ -3,9 +3,10 @@
 
 object_owner_links.go - transfers the walked surface through authored portals
 
-Native 9A0309..9A045B chooses the linked placement and its receiving edge's
-triangle. Overlapping triangles and the terrain below cannot take ownership
-instead. Collision still decides whether the requested walk reaches the edge.
+The native terrain step's placed-object walk chooses the linked
+placement and its receiving edge's triangle. Overlapping triangles and
+the terrain below cannot take ownership instead. Collision still
+decides whether the requested walk reaches the edge.
 
 ===========================================================================
 */
@@ -35,10 +36,11 @@ type objectTransfer struct {
 ================
 linkedTransfer
 
-9A0397..9A045B resolves the authored placement ordinal and receiving edge.
-9B5800 places the reached point inside that edge's cell, even if a finite
-step ends in the small gap between the two meshes. No second crossing or
-endpoint-height test participates in this native transfer.
+The native step resolves the authored placement ordinal and receiving
+edge; the server's linked-edge entry then places the reached point
+inside that edge's cell, even if a finite step ends in the small gap
+between the two meshes. No second crossing or endpoint-height test
+participates in this native transfer.
 ================
 */
 func (w *navWalk) linkedTransfer(to simulation.Spawn) *objectTransfer {
@@ -93,7 +95,7 @@ func (w *navWalk) linkedTransfer(to simulation.Spawn) *objectTransfer {
 					break
 				}
 				x, z := contactF32(path.x0+dx*t), contactF32(path.z0+dz*t)
-				// 9B553E..9B56EA adds the nearer vertex's authored .01 bias.
+				// The native walk adds the nearer vertex's authored .01 bias.
 				if len(m.vertexDirections) == len(m.vertices)/3 {
 					x, z = outsideEdgeStart(x, z, x, z, ax, az, bx, bz, m.vertexDirections[va], m.vertexDirections[vb])
 				}

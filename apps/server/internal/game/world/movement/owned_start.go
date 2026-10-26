@@ -19,10 +19,12 @@ import "opensro.online/server/internal/game/world/simulation"
 ================
 ownedCellStart
 
-Native 9B5A80 / client 428F40: an outside retained-cell start is replaced
-by the proper intersection of start->centroid with a cell edge, THEN nudged
-inward by 9C0270 / 45C1B0. The intersection output aliases the temporary
-start. Extending ownership over an unmodified outside chord is incorrect.
+Native (client 428F40; the server's owned-start routine does the same):
+an outside retained-cell start is replaced by the proper intersection of
+start->centroid with a cell edge, THEN nudged inward by the nav-cell
+centroid nudge (client 45C1B0). The intersection output aliases the
+temporary start. Extending ownership over an unmodified outside chord is
+incorrect.
 ================
 */
 func ownedCellStart(mesh *objectNavMesh, cell int, x, z float64) (float64, float64) {

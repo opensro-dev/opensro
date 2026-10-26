@@ -95,8 +95,9 @@ func (f *fakeSegmentClipValidator) ClipMovementSegmentFrom(from simulation.Spawn
 	return report
 }
 
-// Case B1: 98D880 re-runs the move test from the point a continuing leg
-// reached. A first leg that clips at an outline exit and continues is
+// Case B1: the native line-of-sight test re-runs the move test from the
+// point a continuing leg reached. A first leg that clips at an outline
+// exit and continues is
 // not a blocked line when the next leg arrives.
 func TestLineOfSightChainsContinuedLegs(t *testing.T) {
 	from := spawnAt(0x6B4F, 30, 110)
@@ -116,7 +117,7 @@ func TestLineOfSightChainsContinuedLegs(t *testing.T) {
 
 // A leg with the failure bit 0x10000000 stops the native test at once,
 // and a clipped leg that does not continue is a blocked line: the final
-// leg's result decides (98D880 bit evaluation, 0x10000001).
+// leg's result decides (the native test's bit evaluation, 0x10000001).
 func TestLineOfSightFinalLegDecides(t *testing.T) {
 	from := spawnAt(0x6B4F, 30, 110)
 	to := spawnAt(0x6B4F, 190, 110)
@@ -141,7 +142,8 @@ func TestLineOfSightFinalLegDecides(t *testing.T) {
 	}
 }
 
-// Six legs spent still continuing: 98D880 judges the final leg's result,
+// Six legs spent still continuing: the native test judges the final
+// leg's result,
 // and a continuing leg carries no failure bit, so the line is clear.
 // The pre-fix single-query answer read the chain cap as a block. The
 // queued legs carry the bits clipObjectRest actually leaves on an open
@@ -168,7 +170,8 @@ func TestLineOfSightLegCapOnContinuingLeg(t *testing.T) {
 // Regression (review on #1107): a target just past an open deck edge.
 // The outline-exit leg carries Clipped with continuation set
 // (clipObjectRest); when the leg started within 5 units of the target,
-// 98B300 settles the run and clears the contact bits, so the line is
+// the native movement query settles the run and clears the contact
+// bits, so the line is
 // clear and no further leg runs. Judging the leg's Clipped bit instead
 // refused the cast with 0x3010.
 func TestLineOfSightDeckEdgeExitSettlesClear(t *testing.T) {
@@ -187,8 +190,8 @@ func TestLineOfSightDeckEdgeExitSettlesClear(t *testing.T) {
 	}
 }
 
-// The settle distance is measured from the leg's start (98B300,
-// 98B5B2..98B5E9), not from the point the leg reached: a long leg whose
+// The settle distance is measured from the leg's start (the native
+// movement query), not from the point the leg reached: a long leg whose
 // exit lands within 5 units of the target has not settled, and the
 // post-exit leg to the target still runs.
 func TestLineOfSightSettleMeasuredFromLegStart(t *testing.T) {

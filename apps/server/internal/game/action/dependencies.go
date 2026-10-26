@@ -39,6 +39,7 @@ type Dependencies interface {
 	LevelData() enterworld.LevelDataSource
 	SkillData() enterworld.SkillDataSource
 	MagicOptionDefinitions() enterworld.MagicOptionSource
+	SetCatalogue() enterworld.SetCatalogueSource
 	GuildAuthority() enterworld.GuildStore
 	ReentryPackets(divisionID, characterName string) ([]enterworld.Packet, bool)
 	PrepareReentry(divisionID string, character *domain.Character) (enterworld.PreparedReentry, bool)

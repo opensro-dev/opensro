@@ -4,9 +4,10 @@
 forge.go - the fortress smith's and trainer's production orders
 
 A fortress holds at most one order per staff member. Which member an item
-belongs to is the caller's classification (61DAC0 scans the fortress's
-order list with a RefItem TypeID test), so every method takes it as a
-predicate rather than this package knowing the item references. The
+belongs to is the caller's classification (the native classification scans
+the fortress's order list with a RefItem TypeID test), so every method
+takes it as a predicate rather than this package knowing the item
+references. The
 authority checks the war period, the fortress and the running order; the
 store's commits check the holder, the actor and the price.
 
@@ -53,7 +54,7 @@ ItemForge
 
 The fortress's holder and its order for one staff member; ok is false for
 a fortress this shard does not serve. Reading has no period restriction:
-the query (6324A0) answers during a war too.
+the native query answers during a war too.
 ================
 */
 func (a *Authority) ItemForge(divisionID string, fortressID uint32, kind ForgeKind) (holder int64, forge domain.FortressItemForgeRecord, present bool, ok bool) {
@@ -91,7 +92,8 @@ func (a *Authority) forgeStoreLocked() (domain.FortressItemForgeStore, error) {
 StartItemForge
 
 Rechecks the period, the fortress and the free staff slot under the lock
-(632660: 0x2818, 3, 0x280A), then commits the payment and the order.
+(native result codes 0x2818, 3, 0x280A), then commits the payment and the
+order.
 ================
 */
 func (a *Authority) StartItemForge(divisionID string, kind ForgeKind, start domain.FortressItemForgeStart) (uint8, error) {
@@ -124,7 +126,8 @@ func (a *Authority) StartItemForge(divisionID string, kind ForgeKind, start doma
 ================
 CancelItemForge
 
-Removes the order; nothing is refunded (621D40 issues only the remove).
+Removes the order; nothing is refunded (the native cancel issues only the
+remove).
 ================
 */
 func (a *Authority) CancelItemForge(divisionID string, fortressID uint32, kind ForgeKind, itemRefID uint32) (uint8, error) {
@@ -157,8 +160,8 @@ func (a *Authority) CancelItemForge(divisionID string, fortressID uint32, kind F
 CollectItemForge
 
 Commits the collected bag row with the order's remaining count; the last
-collection removes the order (CSiegeFortress_ConsumeItemForgeCount 627FF0,
-then RemoveItemForge 62A220 at zero). The caller has admitted the count.
+collection removes the order (the native forge-count consumption, then the
+order removal at zero). The caller has admitted the count.
 ================
 */
 func (a *Authority) CollectItemForge(divisionID string, kind ForgeKind, collect domain.FortressItemForgeCollect, count uint16) (uint8, error) {
@@ -205,8 +208,8 @@ func (a *Authority) CollectItemForge(divisionID string, kind ForgeKind, collect 
 ================
 AdvanceItemForges
 
-CSiegeFortress_TickItemForge (61E5C0, from CGameWorld_Siege_Tick): an
-order whose end has passed is marked done and its row rewritten
+The native item-forge tick (from the siege world tick): an order whose
+end has passed is marked done and its row rewritten
 (QUERY_SIEGE_ITEM_FORGE_UPDATE). A failed write keeps the order running,
 so the next tick tries again.
 ================

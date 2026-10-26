@@ -67,6 +67,13 @@ type portalCondition struct{ kind, minimum, maximum uint32 }
 // COS is a transport (vt+0x2EC -> 4827F0 tests TID band 2).
 const portalConditionTransport uint32 = 2
 
+// portalConditionThiefSuitTransport is Restrict kind 7 (the Alexandria
+// ferry arrivals): the same check refuses 0x1C10 while the item in the
+// job-suit socket is a thief suit and the kind-2 transport test stands.
+// The operands are never read. The port-only job-goods admission
+// (transportAdmitted) belongs to kind 2 and does not reach this kind.
+const portalConditionThiefSuitTransport uint32 = 7
+
 /*
 ================
 linkRefusesTransport
@@ -306,12 +313,23 @@ func parsePortalCatalog(dir string) (*portalCatalog, error) {
 				}
 				continue
 			}
-			if k > 2 || k == 1 && a > b || k == 2 && (a != 0 || b != 0) {
-				return nil, fmt.Errorf("teleportlink row %d unsupported condition %d", i+1, k)
-			}
-			if k == portalConditionTransport {
+			// Only the kinds portalAdmission evaluates load; any other
+			// kind refuses the whole catalogue (#1749 PR-C(ii)).
+			switch k {
+			case 1:
+				if a > b {
+					return nil, fmt.Errorf("teleportlink row %d unsupported condition %d", i+1, k)
+				}
+			case portalConditionTransport:
+				if a != 0 || b != 0 {
+					return nil, fmt.Errorf("teleportlink row %d unsupported condition %d", i+1, k)
+				}
 				clientTransport = true
 				continue
+			case portalConditionThiefSuitTransport:
+				// The native check never reads the operands.
+			default:
+				return nil, fmt.Errorf("teleportlink row %d unsupported condition %d", i+1, k)
 			}
 			link.conditions = append(link.conditions, portalCondition{k, a, b})
 		}
@@ -714,6 +732,10 @@ func portalAdmission(c *enterworld.Character, source portalDestination, link por
 			}
 		case portalConditionTransport:
 			if traveller.transportCOS && !traveller.transportAdmitted {
+				return 0x10
+			}
+		case portalConditionThiefSuitTransport:
+			if traveller.transportCOS && enterworld.DressedJob(c) == uint8(domain.JobThief) {
 				return 0x10
 			}
 		}

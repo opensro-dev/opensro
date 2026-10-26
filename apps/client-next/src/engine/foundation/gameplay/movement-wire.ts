@@ -11,7 +11,8 @@ duplicate is dropped by its id before its world is examined.
 ===========================================================================
 */
 import type { Pose } from "@/engine/contracts/gameplay";
-import { isDungeonRegion, REGION_SIZE } from "@/engine/foundation/world/world-space";
+import { featuresAt } from "@/engine/foundation/world/plane";
+import { REGION_SIZE } from "@/engine/foundation/world/world-space";
 
 /*
 ================
@@ -54,7 +55,7 @@ export function admitPose( value: unknown ): Pose {
 	const p = value as Pose;
 	if (
 		!p || !Number.isInteger( p.regionId ) || p.regionId <= 0 || p.regionId > 65535 ||
-		![ p.x, p.y, p.z, p.angle ].every( Number.isFinite ) || (isDungeonRegion( p.regionId ) ?
+		![ p.x, p.y, p.z, p.angle ].every( Number.isFinite ) || (featuresAt( p.regionId ).signedLocalCoordinates ?
 			p.x < -32768 || p.x > 32767 || p.z < -32768 || p.z > 32767 :
 			p.x < 0 || p.x >= REGION_SIZE || p.z < 0 || p.z >= REGION_SIZE) ||
 		p.y < -32768 || p.y > 32767 || p.angle < 0 || p.angle > 65535

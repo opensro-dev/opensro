@@ -10,8 +10,8 @@ sample, so predicted and received movement share one set of transitions.
 ===========================================================================
 */
 import type { Pose } from "@/engine/contracts/gameplay";
+import { planeKindOf } from "@/engine/foundation/world/plane";
 import {
-	isDungeonRegion,
 	planarDistance,
 	REGION_SIZE,
 	sameCoordinateSpace,
@@ -293,7 +293,7 @@ interpolateMovement
 */
 export function interpolateMovement( from: Pose, to: Pose, t: number ): Pose {
 	if ( !sameCoordinateSpace( from.regionId, to.regionId ) ) return from;
-	if ( isDungeonRegion( from.regionId ) ) {
+	if ( planeKindOf( from.regionId ) === "cave" ) {
 		return {
 			...to,
 			x: from.x + (to.x - from.x) * t,

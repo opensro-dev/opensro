@@ -282,7 +282,7 @@ func (rt *Runtime) predictedMove(ledger *predictionLedger, session uint64, divis
 		}
 	} else {
 		result = rt.handleMoveLocked(division, character, p[5:], 0)
-		// 4B0EA0: the accepted move's event retires the mover's
+		// The accepted move's event retires the mover's
 		// move-cancelled effects (the rider's own move only; a mount
 		// move moves the vehicle).
 		if result.Refusal == nil && result.Result != nil && rt.RetireMoveEffects != nil {

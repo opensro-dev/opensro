@@ -68,6 +68,11 @@ type ItemRef struct {
 	// this row's cap (port-only, stacksizes.go); 0 when the row keeps its
 	// native cap. Read it through NativeStackCap.
 	NativeMaxStack uint16
+	// SetID is itemdata column 62 (RefItem+0x1ac): the refsetitemgroup id
+	// a set piece belongs to, 0 for a piece in no set. The v1.150 rows
+	// carry no set ids; only the port-only cap-110 overlay rows do, and
+	// the set owner (setgroups.go) reads this only while its flag is on.
+	SetID int64
 
 	// Equip requirement columns, typed for the server-side equip gates (the
 	// native client's full-mask sub_789c60 bits compare the same

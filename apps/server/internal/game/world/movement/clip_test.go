@@ -349,7 +349,8 @@ TestClipMovementPathRealRockInwardVertexDirection pins the two native
 object-nav invariants exposed by region 0x5C6D (23661) localUid 3073
 (asset 1160, rock_m_smalltree05_m_01.bms at x=985.87, y=3362.29, z=10.20):
  1. Several outline vertexDirections on asset 1160 point INWARD into srcCell.
-    When CRTNavMeshObj_EnterFromOutside (428300 / 9B4D30) stops a terrain
+    When CRTNavMeshObj_EnterFromOutside (428300; the server's twin entry
+    test agrees) stops a terrain
     walker at a 0x3 outline edge and nudges it 0.01u inward via
     outsideEdgeStart, the walker remains owned by terrain: subsequent steps
     must neither flip into nativeCellEntry (0.2u centroid pull + object

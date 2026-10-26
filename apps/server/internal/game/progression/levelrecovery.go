@@ -44,6 +44,7 @@ func (rt *Runtime) recoverLevelVitals(character *enterworld.Character, display w
 	stats, _, err := combat.PlayerStats(character, combat.Catalogs{
 		Items: rt.deps.ItemReferences(), Skills: rt.deps.SkillData(),
 		MagicOptions: rt.deps.MagicOptionDefinitions(),
+		Sets:         rt.deps.SetCatalogue(),
 	})
 	if err != nil {
 		return err

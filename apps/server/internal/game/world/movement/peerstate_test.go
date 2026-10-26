@@ -30,7 +30,8 @@ func TestPeerStateCapturePreservesActiveZeroTeamWithoutAliasing(t *testing.T) {
 ================
 TestPeerSeesTheJobAliasOnlyInJobMode
 
-v1.188's spawn tail (4E5B55) writes the job alias as a peer's name while a
+The original server's spawn-serialization tail writes the job alias as
+a peer's name while a
 job suit is worn and the name otherwise. The lookup key stays the real name.
 ================
 */

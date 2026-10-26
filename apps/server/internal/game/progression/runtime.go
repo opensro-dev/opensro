@@ -202,7 +202,7 @@ func (rt *Runtime) playerBaseStats(character *enterworld.Character) (wire.BaseSt
 	if rt.BaseStats != nil {
 		return rt.BaseStats(character)
 	}
-	return combat.PlayerBaseStats(character, combat.Catalogs{Items: rt.deps.ItemReferences(), Skills: rt.deps.SkillData(), MagicOptions: rt.deps.MagicOptionDefinitions()})
+	return combat.PlayerBaseStats(character, combat.Catalogs{Items: rt.deps.ItemReferences(), Skills: rt.deps.SkillData(), MagicOptions: rt.deps.MagicOptionDefinitions(), Sets: rt.deps.SetCatalogue()})
 }
 
 /*

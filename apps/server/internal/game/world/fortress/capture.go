@@ -4,15 +4,14 @@
 capture.go - how a fortress changes hands during its war
 
 The fort stone is guarded twice. While any guard tower stands, the
-fortress's +0x0C flag (CSiegeFortress_SetTowersStanding 62A740) keeps the
-stone from being struck (0x3040). The last tower's fall clears it and
-starts a three-minute countdown (CGameWorld_Siege_BeginEndCountdown
-600EC0, 0xB4 s) during which the stone still refuses (0x3046). Breaking
-the stone hands the fortress to the guild that dealt it the most damage
-(CSiegeFortress_TopStoneDamageGuild 62A5B0) as its TempGuildID, shuts the
-gates to attackers for five minutes (CGameWorld_Siege_ApplyCapture
-601400) and reinstalls every structure for the new holder. The holder at
-the war's end occupies the fortress (_SiegeFortressFinished).
+fortress's +0x0C flag (the towers-standing flag) keeps the stone from
+being struck (0x3040). The last tower's fall clears it and starts a
+three-minute countdown (the siege world's end countdown, 0xB4 s) during
+which the stone still refuses (0x3046). Breaking the stone hands the
+fortress to the guild that dealt it the most damage (the stone's
+top-damage guild) as its TempGuildID, shuts the gates to attackers for
+five minutes and reinstalls every structure for the new holder. The
+holder at the war's end occupies the fortress (_SiegeFortressFinished).
 
 ===========================================================================
 */
@@ -25,7 +24,7 @@ const (
 	// CaptureWaitMs keeps attackers out after a capture: slot 3, 0x493E0 ms.
 	CaptureWaitMs = 300000
 
-	// Fort stone refusals of CGObjPC_CanAttackTarget (52BF90).
+	// Fort stone refusals of the native can-attack-target check.
 	StoneRefusedTowersStand uint16 = 0x3040
 	StoneRefusedCountdown   uint16 = 0x3046
 )
@@ -49,8 +48,8 @@ type capture struct {
 ================
 BeginWar
 
-CSiegeFortress_BeginWar (61F130) for one fortress: the gates open, no
-countdown runs, and the stone is guarded while any tower stands.
+The native war start for one fortress: the gates open, no countdown runs,
+and the stone is guarded while any tower stands.
 ================
 */
 func (a *Authority) BeginWar(divisionID string, fortressID uint32, towersStanding bool) {
@@ -68,8 +67,8 @@ func (a *Authority) BeginWar(divisionID string, fortressID uint32, towersStandin
 ================
 TowersFallen
 
-The last guard tower fell (CSiegeFortress_OnGuardTowersFallen 61F230):
-the stone's tower guard ends and its countdown starts. Reports whether
+The last guard tower fell (the guard-towers-fallen transition): the
+stone's tower guard ends and its countdown starts. Reports whether
 the countdown started.
 ================
 */
@@ -122,7 +121,7 @@ func (a *Authority) Capture(divisionID string, fortressID uint32, guildID int64,
 		return false
 	}
 	record.TempGuildID = guildID
-	record.StaffFlags = 0 // 625DB8: the successful temporary capture clears employment.
+	record.StaffFlags = 0 // The successful temporary capture clears employment.
 	record.EntryOpen = false
 	record.EntryClosedUntilMs = nowMs + CaptureWaitMs
 	_ = a.saveRecordLocked(divisionID, record)
@@ -133,8 +132,8 @@ func (a *Authority) Capture(divisionID string, fortressID uint32, guildID int64,
 ================
 Holder
 
-CSiegeFortress_GetHolderGuild (61D280): the temporary holder while one
-exists, else the occupying guild.
+The native holder query: the temporary holder while one exists, else the
+occupying guild.
 ================
 */
 func (r Record) Holder() int64 {
@@ -189,7 +188,7 @@ func (a *Authority) FinishWar(divisionID string, fortressID uint32) (int64, bool
 	}
 	changed := record.TempGuildID != 0 && record.TempGuildID != record.GuildID
 	if record.TempGuildID != 0 {
-		record.StaffFlags = 0 // 625F29 clears flags even if the former holder recaptures.
+		record.StaffFlags = 0 // The war-end settle clears flags even if the former holder recaptures.
 		record.GuildID = record.TempGuildID
 	}
 	record.TempGuildID = 0

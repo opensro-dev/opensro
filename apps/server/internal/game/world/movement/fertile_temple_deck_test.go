@@ -4,7 +4,7 @@
 fertile_temple_deck_test.go - a short step off an open deck edge lands below
 
 The Fertile Temple deck (region 0x6687, RN_TK_TEMPLE, object 1) leaves to the floor
-through an open outline edge (flags 0). QueryMovement (98B300) ends a
+through an open outline edge (flags 0). The native movement query ends a
 continuation run once the leg's start is within 5 units of the goal and
 returns that leg's own result - an outline exit (403FB0, 4044CE..4044FE)
 continues, it does not fail - so the ground walker's per-tick steps across

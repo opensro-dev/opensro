@@ -83,7 +83,7 @@ func TestOwnedCellCollisionUsesTopologyNotChordHeight(t *testing.T) {
 // wire truncates the height to 243. Re-guessing the surface from that y picks
 // the terrain (|243.04-243| < |243.99-243|), whose south slope is a blocked
 // cliff: the 2026-09-23 "invisible wall" at X:113 Y:-62. The native server
-// keeps the source cell (QueryMovement 0x98B300), so the walk continues on
+// keeps the source cell (its movement query), so the walk continues on
 // the deck regardless of the quantized height.
 func TestRealHotanGateDeckRetainsOwnerAcrossTruncatedHeight(t *testing.T) {
 	v := realAuthorityValidator(t)
