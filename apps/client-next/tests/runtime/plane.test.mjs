@@ -36,5 +36,4 @@ test("the feature table: outdoors and in a cave every field differs", () => {
 			characterPvs: true
 		} );
 	}
-	assert.ok( Object.isFrozen( featuresAt( 0x62a8 ) ) && Object.isFrozen( featuresAt( 0x8001 ) ) );
 });

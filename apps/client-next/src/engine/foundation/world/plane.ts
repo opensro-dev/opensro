@@ -54,17 +54,17 @@ export interface PlaneFeatures {
 	readonly characterPvs: boolean;
 }
 
-const OUTDOOR_FEATURES: PlaneFeatures = Object.freeze( {
+const OUTDOOR_FEATURES = {
 	minimapCoordinates: true,
 	reverseReturnPoints: true,
 	characterPvs: false
-} );
+} as const;
 
-const CAVE_FEATURES: PlaneFeatures = Object.freeze( {
+const CAVE_FEATURES = {
 	minimapCoordinates: false,
 	reverseReturnPoints: false,
 	characterPvs: true
-} );
+} as const;
 
 /*
 ================
