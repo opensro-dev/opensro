@@ -27,20 +27,7 @@ whole-dungeon activity.
 ================
 */
 func (v *WaterValidator) MessageBlockAt(p simulation.Spawn) (worldgeom.MessageBlock, bool) {
-	if !worldgeom.IsDungeonRegion(p.RegionID) {
-		return worldgeom.OutdoorMessageBlock(worldgeom.RegionXZ{RegionID: p.RegionID, X: p.X, Z: p.Z})
-	}
-	v.dungeonSpawnOnce.Do(func() { v.dungeonSpawnSurfaces = v.loadDungeonSpawnSurfaces() })
-	s := v.dungeonSpawnSurfaces[p.RegionID]
-	if s == nil {
-		return worldgeom.MessageBlock{}, false
-	}
-	// A native query begins with an admitted nav-cell/resident pair. Reuse
-	// nearest-plane admission; do not manufacture a bucket outside the mesh.
-	if _, ok := s.heightAt(p.X, p.Y, p.Z); !ok {
-		return worldgeom.MessageBlock{}, false
-	}
-	return s.messageGrid.BlockAt(p.RegionID, p.X, p.Y, p.Z)
+	return v.validatorPlanes().messageBlockAt(p)
 }
 
 /*

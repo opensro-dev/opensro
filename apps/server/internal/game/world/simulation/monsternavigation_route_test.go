@@ -35,7 +35,7 @@ func TestSharedNavigationCachesCornersAndKeepsSurface(t *testing.T) {
 			corner.X += 60
 			corner.Z += 32
 			calls := 0
-			ops.PlanRoute = func(from, to monster.Pose) *monster.NavigationRoute {
+			ops.PlanRoute = func(from monster.Pose, _ NavOwner, to monster.Pose) *monster.NavigationRoute {
 				calls++
 				return monster.NewNavigationRoute(to, []monster.Pose{corner, to})
 			}
@@ -79,7 +79,7 @@ func TestSharedNavigationBlockedRetryAndCancellation(t *testing.T) {
 			goal := mover.Pose
 			goal.X += 120
 			calls := 0
-			ops.PlanRoute = func(monster.Pose, monster.Pose) *monster.NavigationRoute { calls++; return nil }
+			ops.PlanRoute = func(monster.Pose, NavOwner, monster.Pose) *monster.NavigationRoute { calls++; return nil }
 			mover, frames := ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, 10000)
 			if calls != 1 || len(frames) != 0 || mover.Mode() != mode || !mover.NavigationWaiting(10001) {
 				t.Fatal("blocked path discarded behavior or emitted move")
@@ -111,7 +111,7 @@ func TestNavigationRejectsChangedActorDuringRouteSearch(t *testing.T) {
 	ops, instance, mover := routedFixture(t, monster.MoverChasing)
 	goal := mover.Pose
 	goal.X += 120
-	ops.PlanRoute = func(from, to monster.Pose) *monster.NavigationRoute {
+	ops.PlanRoute = func(from monster.Pose, _ NavOwner, to monster.Pose) *monster.NavigationRoute {
 		s := ops.Monsters
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -134,7 +134,7 @@ func TestFollowRouteSurvivesClosedTimerAndControllerDeath(t *testing.T) {
 	ops.PlanPath = func(from, to monster.Pose) *monster.NavigationPath {
 		return monster.NewNavigationPath(from, to, to, 0, func(float64, monster.Pose) (float64, bool) { return 20, true })
 	}
-	ops.PlanRoute = func(from, to monster.Pose) *monster.NavigationRoute {
+	ops.PlanRoute = func(from monster.Pose, _ NavOwner, to monster.Pose) *monster.NavigationRoute {
 		calls++
 		corner := from
 		corner.X += 200
@@ -167,7 +167,7 @@ func TestHomingRouteProductionTickContinuesAndRetainsRunOnRetry(t *testing.T) {
 			mover.Pose.X += 110
 			ops.Monsters.CommitMover(monsterTestDivision, instance.Gid, mover)
 			calls := 0
-			ops.PlanRoute = func(from, to monster.Pose) *monster.NavigationRoute {
+			ops.PlanRoute = func(from monster.Pose, _ NavOwner, to monster.Pose) *monster.NavigationRoute {
 				calls++
 				if blocked && calls == 1 {
 					return nil
@@ -205,5 +205,45 @@ func TestHomingRouteProductionTickContinuesAndRetainsRunOnRetry(t *testing.T) {
 				t.Fatal("final home arrival not settled")
 			}
 		})
+	}
+}
+
+/*
+================
+TestRouteReplanCarriesTheLiveOwner
+
+A replan hands the route planner the mover's live surface owner (#1732):
+the original's route reads the actor's cell from its position record, so
+the cave route must start from the cell the last walk reached, not one
+re-guessed from the position.
+================
+*/
+func TestRouteReplanCarriesTheLiveOwner(t *testing.T) {
+	ops, instance, mover := routedFixture(t, monster.MoverChasing)
+	cell := NavOwner{Kind: NavOwnerDungeon, Object: NavObjectCell{Surface: 0x8001, Object: 67, Cell: 2}}
+	from := mover.Pose
+	arrived := from
+	arrived.X += 4
+	mover.From, mover.To, mover.DepartMs, mover.ArriveMs = from, arrived, 1000, 2000
+	mover.AdoptNavigation(monster.NewNavigationPath(from, arrived, arrived, 0, func(float64, monster.Pose) (float64, bool) { return from.Y, true }).
+		WithOwners([]NavOwnerSpan{{From: 0, To: 1, Owner: cell}}))
+	if got := mover.LiveNavOwner(5000); got != cell {
+		t.Fatalf("fixture: live owner %+v, want %+v", got, cell)
+	}
+	goal := arrived
+	goal.X += 120
+	var planned NavOwner
+	calls := 0
+	ops.PlanRoute = func(_ monster.Pose, fromOwner NavOwner, to monster.Pose) *monster.NavigationRoute {
+		calls++
+		planned = fromOwner
+		return monster.NewNavigationRoute(to, []monster.Pose{to})
+	}
+	ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, 5000)
+	if calls == 0 {
+		t.Fatal("the route planner was never asked")
+	}
+	if planned != cell {
+		t.Fatalf("the route planner got owner %+v, want the live owner %+v", planned, cell)
 	}
 }
