@@ -270,3 +270,77 @@ func Interpolate(from, to RegionXZ, t float64) RegionXZ {
 		Z:        from.Z + dz*t,
 	})
 }
+
+//============================================================================
+// Plane-keyed arithmetic moved here from the simulation (#1646): the
+// region bit decides a frame or a grid, which is this file's job.
+
+// outdoorCellUnits and outdoorCellsPerAxis are the native message cell:
+// six 320-unit cells per outdoor region axis.
+const (
+	outdoorCellUnits    = 320.0
+	outdoorCellsPerAxis = 6
+)
+
+/*
+================
+ScopeRing
+
+The 3x3 sector ring around an outdoor region, the simulation's monster
+materialization and AI-activity candidate set. A dungeon region scopes to
+exactly itself: ring math over the dungeon bit is meaningless.
+================
+*/
+func ScopeRing(regionID uint16) []uint16 {
+	if IsDungeonRegion(regionID) {
+		return []uint16{regionID}
+	}
+	sx, sy := SectorX(regionID), SectorY(regionID)
+	ring := make([]uint16, 0, 9)
+	for dy := -1; dy <= 1; dy++ {
+		for dx := -1; dx <= 1; dx++ {
+			ring = append(ring, RegionIDForSectors(sx+dx, sy+dy))
+		}
+	}
+	return ring
+}
+
+/*
+================
+OutdoorLocalCell
+
+The 320-unit message cell a region-local outdoor point falls in, as
+(x, z) in 0..5. False for a dungeon region (its region lookup has a
+different owner) and for a point outside the region's own [0, 1920)
+frame or NaN: unlike the interest blocks it never folds into a
+neighbour.
+================
+*/
+func OutdoorLocalCell(position RegionXZ) (x, z int, ok bool) {
+	if IsDungeonRegion(position.RegionID) || math.IsNaN(position.X) || math.IsNaN(position.Z) ||
+		position.X < 0 || position.Z < 0 || position.X >= OutdoorRegionSize || position.Z >= OutdoorRegionSize {
+		return 0, 0, false
+	}
+	x = int(float64(float32(position.X)) / outdoorCellUnits)
+	z = int(float64(float32(position.Z)) / outdoorCellUnits)
+	if x >= outdoorCellsPerAxis || z >= outdoorCellsPerAxis {
+		return 0, 0, false
+	}
+	return x, z, true
+}
+
+/*
+================
+LocalCoordinateFloor
+
+The lowest x/z a movement request may carry in this region: outdoor
+packed-movement coordinates are unsigned, a dungeon's region-local
+coordinates keep their sign (the int16 floor).
+================
+*/
+func LocalCoordinateFloor(regionID uint16) float64 {
+	if IsDungeonRegion(regionID) {
+		return -0x8000
+	}
+	return 0
+}
