@@ -63,6 +63,12 @@ export const EXPERIMENTAL_TABS: readonly {
 				description: "100% is native; lower values soften the scene."
 			},
 			{
+				key: "phoneRenderCap",
+				id: "experimental-phone-render-cap",
+				label: "Phone resolution",
+				description: "Phones: lighter scene while Render scale is 100%."
+			},
+			{
 				key: "uiScale",
 				id: "experimental-ui-scale",
 				label: "UI size",
@@ -91,12 +97,6 @@ export const EXPERIMENTAL_TABS: readonly {
 				id: "experimental-hdr-tone-map",
 				label: "HDR tone map",
 				description: "Float frame with filmic highlight roll-off."
-			},
-			{
-				key: "safeLoadingScreen",
-				id: "experimental-safe-loading-screen",
-				label: "Safe loading screen",
-				description: "Hide inappropriate loading images."
 			}
 		]
 	},
@@ -294,6 +294,11 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-confirm-guild-ban",
 			label: "Confirm guild ban",
 			description: "Ask before Withdraw bans a guild member."
+		}, {
+			key: "safeLoadingScreen",
+			id: "experimental-safe-loading-screen",
+			label: "Safe loading screen",
+			description: "Hide inappropriate loading images."
 		} ]
 	},
 	{
