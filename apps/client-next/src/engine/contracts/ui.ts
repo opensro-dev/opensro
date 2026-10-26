@@ -255,6 +255,8 @@ UiBridge
 */
 export interface UiBridge {
 	present( state: UiSemantics ): void;
+	/** /cwsave's browser form: download the waypoint store's text as cw.txt (#1716). */
+	saveCameraWaypoints( text: string ): void;
 	dispose(): void;
 }
 /*
