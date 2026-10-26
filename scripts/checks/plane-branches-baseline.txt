@@ -16,5 +16,3 @@ apps/server/internal/game/action/skilladmit.go 2
 apps/server/internal/game/action/skillcombat.go 2
 apps/server/internal/game/action/skillposition.go 1
 apps/server/internal/game/action/temptation.go 2
-apps/server/internal/game/world/movement/groundwalk.go 3
-apps/server/internal/game/world/movement/owned_start.go 1
