@@ -76,7 +76,7 @@ type MonsterMoverOps struct {
 	// departs from the monster's own live pose uses it (planPath below).
 	PlanPathFrom func(from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationPath
 	// AI route policy, separate from raw clipping used by sight/help probes.
-	PlanRoute func(from, goal monster.Pose) *monster.NavigationRoute
+	PlanRoute func(from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationRoute
 	// Rand returns a uniform [0,1) sample (seam for deterministic tests).
 	Rand func() float64
 	// AttackPlan resolves one of RefObjChar's ten default-skill ids against
@@ -518,70 +518,6 @@ func (ops *MonsterMoverOps) startWanderLeg(divisionID string, instance monster.I
 	mover.BehaviorDeadlineMs = nowMs + monster.NativeWanderDelayMs(func() uint32 { return monster.SummonRandomWord(ops.rand()) })
 	mover, frames := ops.planSegment(instance, mover, dest, instance.WalkSpeed(), wire.MoveStateWalk, nowMs)
 	return ops.Monsters.commitNavigation(divisionID, before, mover, frames)
-}
-
-// startReturnLeg uses the native movement-channel consumer (the
-// run-state step), not the unrelated obstacle rotation sign in
-// the tactics record.
-/*
-================
-startReturnLeg
-================
-*/
-func (ops *MonsterMoverOps) startReturnLeg(divisionID string, instance monster.Instance, tactics monster.Tactics, mover monster.MoverState, event monster.MoverEvent, nowMs int64) []Frame {
-	before := ops.Monsters.prepareNavigation(divisionID, instance.Gid)
-	mover, frames := ops.planReturnLeg(instance, mover, event, nowMs)
-	return ops.Monsters.commitNavigation(divisionID, before, mover, frames)
-}
-
-/*
-================
-planReturnLeg
-================
-*/
-func (ops *MonsterMoverOps) planReturnLeg(instance monster.Instance, mover monster.MoverState, event monster.MoverEvent, nowMs int64) (monster.MoverState, []Frame) {
-	speed := instance.WalkSpeed()
-	channel := wire.MoveStateWalk
-	if instance.Nest.HasControls && monster.HomingRuns(instance.Ref.RunSpeed) {
-		speed, channel = instance.RunSpeed(), wire.MoveStateRun
-	}
-	live := mover.LivePoseAt(nowMs, ops.GroundHeight)
-	mover.Pose = live
-	mustMoverTransition(&mover, event, 0)
-	mover.BehaviorDeadlineMs = 0
-	if instance.Nest.HasControls {
-		mover.HomingStartedMs = uint32(nowMs)
-		// (effective sight / run speed) * 1000, truncate.
-		// A stationary actor cannot complete this travel-dependent gate.
-		mover.HomingAcquireAfterMs = ^uint32(0)
-		if monster.HomingRuns(instance.Ref.RunSpeed) {
-			mover.HomingAcquireAfterMs = uint32(float64(float32(instance.Nest.SightRange+instance.BodyRadius())) / float64(float32(instance.RunSpeed())) * 1000)
-		}
-	}
-	dest := anchorPose(instance)
-	if instance.Nest.HasControls {
-		dest = normalizeMonsterPose(monster.HomingCandidate(dest, live, float32(instance.Nest.Radius), instance.Ref, func() uint32 { return monster.SummonRandomWord(ops.rand()) }))
-		if ops.hasPlanner() {
-			// Clip from HOME, not the actor's current position. The
-			// anchor has no walked cell: the teleport rule resolves it.
-			path := ops.planPath(navReturn, anchorPose(instance), NavOwner{}, dest)
-			if path == nil {
-				if ops.PlanRoute != nil {
-					mover.SetNavigationMotion(speed, channel)
-					return ops.waitForNavigation(instance.Gid, mover, live, dest, speed, nil, nowMs)
-				}
-				if speed > 0 && planarDistance(live, dest) >= 0.01 {
-					mover.NoteMoveIssued(live, mover.InFlight(nowMs))
-					if mover.ArriveMs <= mover.DepartMs {
-						mover.NoteMoveStopped(live)
-					}
-				}
-				return ops.holdNavigation(instance.Gid, mover, live, nowMs)
-			}
-			dest = path.Rest()
-		}
-	}
-	return ops.planSegment(instance, mover, dest, speed, channel, nowMs)
 }
 
 /*

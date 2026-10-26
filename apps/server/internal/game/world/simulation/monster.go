@@ -122,13 +122,7 @@ func BuildMonsterCreateRow(def MonsterDef, gid uint32, spawn Spawn) []byte {
 	if def.Structure {
 		return BuildStructureCreateRow(def, gid, spawn)
 	}
-	x := clampFloat(spawn.X, 0, 0xffff)
-	z := clampFloat(spawn.Z, 0, 0xffff)
-	// Indoor local coordinates are signed F32 values, not outdoor unsigned
-	// packed-movement coordinates. Scope creates must agree with movement.
-	if IsDungeonRegion(spawn.RegionID) {
-		x, z = spawn.X, spawn.Z
-	}
+	x, z := spawnFrameXZ(spawn)
 
 	w := wire.NewWriter(64)
 	w.U32(def.RefObjID).

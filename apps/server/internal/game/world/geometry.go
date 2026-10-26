@@ -133,12 +133,45 @@ func SamePlane(a, b uint16) bool {
 }
 
 /*
+================
+SameFloor
+
+Whether both regions are one walkable floor: any two outdoor regions (the
+sectors join), or one and the same cave region (each cave floor is its own
+region id with its own local frame).
+================
+*/
+func SameFloor(a, b uint16) bool {
+	return SamePlane(a, b) && (!IsDungeonRegion(a) || a == b)
+}
+
+/*
+================
+SectorOffset
+
+The world-unit offset from from's region frame to to's, for two regions on
+one plane: the outdoor sector delta times OutdoorRegionSize, and ok. The
+cave plane has no sectors (a cave's locals are already its frame), so it
+answers not ok and no offset.
+================
+*/
+func SectorOffset(from, to uint16) (dx, dz float64, ok bool) {
+	if IsDungeonRegion(from) {
+		return 0, 0, false
+	}
+	return float64(SectorX(to)-SectorX(from)) * OutdoorRegionSize, float64(SectorY(to)-SectorY(from)) * OutdoorRegionSize, true
+}
+
+/*
 ==================
 SamePlaneAdjacent
 
-Pos_AreSamePlaneAndAdjacentSectors (430CE0). Two dungeon positions compare
-only within one dungeon region; outdoors both sector bytes must be within
-one of each other.
+The reference server's same-plane-and-adjacent-sectors rule, verified at
+the instruction level: outdoors both sector bytes must be within one of
+each other; inside the dungeon plane every pair of dungeon regions is
+adjacent. This is the broadphase gate - the narrowing there belongs to
+the callers' own checks (a floor's route, an actor distance), and sites
+that need one specific region test for it themselves.
 ==================
 */
 func SamePlaneAdjacent(a, b uint16) bool {
@@ -146,7 +179,7 @@ func SamePlaneAdjacent(a, b uint16) bool {
 		return false
 	}
 	if IsDungeonRegion(a) {
-		return a == b
+		return true
 	}
 	dx := int(a&0xff) - int(b&0xff)
 	dz := int(a>>8) - int(b>>8)
@@ -343,4 +376,34 @@ func LocalCoordinateFloor(regionID uint16) float64 {
 		return -0x8000
 	}
 	return 0
+}
+
+/*
+================
+InterestBlockAt
+
+The message block containing position: the dungeon grid's own planar
+partition for dungeon regions (the whole region until the grid is
+installed or the point falls outside it), the expanded outdoor grid
+folded by InterestBlockSize otherwise. Moved verbatim from interest.go
+(#1646): the plane branch is this file's to own.
+================
+*/
+func InterestBlockAt(position RegionXZ) InterestBlock {
+	if IsDungeonRegion(position.RegionID) {
+		grid, ok := dungeonMessageGridFor(position.RegionID)
+		if !ok {
+			return InterestBlock{Dungeon: position.RegionID, Whole: true}
+		}
+		x, z, inside := grid.planarBlock(position.X, position.Z)
+		if !inside {
+			return InterestBlock{Dungeon: position.RegionID, Whole: true}
+		}
+		return InterestBlock{Dungeon: position.RegionID, X: x, Z: z}
+	}
+	grid := ExpandGrid(position)
+	return InterestBlock{
+		X: int(math.Floor(grid.X / InterestBlockSize)),
+		Z: int(math.Floor(grid.Z / InterestBlockSize)),
+	}
 }

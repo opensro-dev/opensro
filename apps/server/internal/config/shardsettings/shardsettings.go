@@ -111,6 +111,12 @@ var Settings = []Setting{
 	// Owner, 2026-10-15: a login inside a closed object (a tree trunk) is
 	// rescued to the nearest open ground.
 	{Env: "SRO_CLOSED_OBJECT_RESCUE", NomadVar: "closed_object_rescue", Default: "on"},
+	// Owner, 2026-10-26: the native cave route's doorway seam step (#1698):
+	// a short landing step that would stay short of the doorway rounds on
+	// toward it. Off is the native step.
+	{Env: "SRO_CAVE_SEAM_STEP", NomadVar: "cave_seam_step", Default: "on"},
+	{Env: "SRO_CAVE_MODERN_CHASE", NomadVar: "cave_modern_chase", Default: "on"},
+	{Env: "SRO_CAVE_OBSTACLE_ESCAPE", NomadVar: "cave_obstacle_escape", Default: "on"},
 	// Port-only, not native: the deep-water destination refusal. Off, as the
 	// original server; on, a character on a deep seabed was stuck there.
 	{Env: "SRO_DEEP_WATER_REFUSAL", NomadVar: "deep_water_refusal", Default: "off"},
@@ -172,6 +178,9 @@ var Settings = []Setting{
 	// Off is native: the route does not exist.
 	{Env: "SRO_SEAL_CENSUS", NomadVar: "seal_census", Default: "off"},
 	{Env: "SRO_ANNOUNCE_PLUS", NomadVar: "announce_plus", Default: "on"},
+	// Owner, 2026-10-26 (#1739): the plus notice leads louder at +10 and
+	// +11 and above. Off is the plain line, byte for byte.
+	{Env: "SRO_ANNOUNCE_PLUS_TIERS", NomadVar: "announce_plus_tiers", Default: "off"},
 	{Env: "SRO_ANNOUNCE_JOB_KILL", NomadVar: "announce_job_kill", Default: "on"},
 	// Owner, 2026-10-15: every job kill of a pair is announced (no window).
 	{Env: "SRO_JOB_KILL_NOTICE_REPEAT", NomadVar: "job_kill_notice_repeat", Default: "on"},

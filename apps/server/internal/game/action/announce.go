@@ -10,6 +10,8 @@ GameWorld's Nomad job turns them on:
 	SRO_ANNOUNCE_SOX_DROP  a seal drop notice, worded by its tier (#1640;
 	                       sealDropText: the Sun's line is the loudest)
 	SRO_ANNOUNCE_PLUS      "<player> advanced <item> to +N" (N >= 7)
+	SRO_ANNOUNCE_PLUS_TIERS  the plus line leads "Great success!" at +10
+	                       and "LEGENDARY!" at +11 and above (#1739)
 	SRO_ANNOUNCE_JOB_KILL  "[<killer alias>] killed [<victim alias>]" (job aliases, never character names)
 	SRO_ANNOUNCE_MOST_WANTED  "[<alias>] is MOST WANTED LV <N>" on a new wanted level, and
 	                          "[<killer alias>] claimed bounty of [<victim alias>] MOST WANTED LV <N>"
@@ -51,7 +53,9 @@ import (
 const (
 	EnvAnnounceSoxDrop = "SRO_ANNOUNCE_SOX_DROP"
 	EnvAnnouncePlus    = "SRO_ANNOUNCE_PLUS"
-	EnvAnnounceJobKill = "SRO_ANNOUNCE_JOB_KILL"
+	// EnvAnnouncePlusTiers tiers the plus notice's lead word (#1739).
+	EnvAnnouncePlusTiers = "SRO_ANNOUNCE_PLUS_TIERS"
+	EnvAnnounceJobKill   = "SRO_ANNOUNCE_JOB_KILL"
 	// EnvJobKillNoticeRepeat announces every kill of a pair (no window).
 	EnvJobKillNoticeRepeat = "SRO_JOB_KILL_NOTICE_REPEAT"
 	// EnvAnnounceMostWanted announces wanted levels and claimed bounties
@@ -70,6 +74,11 @@ const (
 	// announcePlusMin is the lowest plus a reinforcement notice announces
 	// (owner decision 2026-10-18: +7 and above, with no upper ceiling).
 	announcePlusMin = 7
+	// announcePlusGreatAt is the plus whose tiered notice leads
+	// "Great success!"; from announcePlusLegendaryAt it leads
+	// "LEGENDARY!" (#1739, owner decision 2026-10-26).
+	announcePlusGreatAt     = 10
+	announcePlusLegendaryAt = 11
 )
 
 // sealCodenameSuffix marks a v1.150 rare (Seal of Star/Moon/Sun) item.
@@ -108,6 +117,7 @@ JobKillRepeat drops the pair window (EnvJobKillNoticeRepeat).
 */
 type Announcements struct {
 	SoxDrop, Plus, JobKill bool
+	PlusTiers              bool
 	JobKillRepeat          bool
 	MostWanted             bool
 }
@@ -125,8 +135,8 @@ func AnnouncementsFromEnv() Announcements {
 		}
 		return false
 	}
-	return Announcements{SoxDrop: on(EnvAnnounceSoxDrop), Plus: on(EnvAnnouncePlus), JobKill: on(EnvAnnounceJobKill),
-		JobKillRepeat: on(EnvJobKillNoticeRepeat), MostWanted: on(EnvAnnounceMostWanted)}
+	return Announcements{SoxDrop: on(EnvAnnounceSoxDrop), Plus: on(EnvAnnouncePlus), PlusTiers: on(EnvAnnouncePlusTiers),
+		JobKill: on(EnvAnnounceJobKill), JobKillRepeat: on(EnvJobKillNoticeRepeat), MostWanted: on(EnvAnnounceMostWanted)}
 }
 
 /*
@@ -343,10 +353,35 @@ func sealDropText(player, itemName string, tier int, sealed bool, monster string
 
 /*
 ================
+plusNoticeLead
+
+The louder lead a tiered plus notice opens with (#1739, owner decision
+2026-10-26): "Great success!" at +10, "LEGENDARY!" at +11 and above.
+Below +10, or with the tiers off, there is no lead, so the plain line
+stays byte for byte. Port-only, not native.
+================
+*/
+func plusNoticeLead(plus uint8, tiers bool) string {
+	if !tiers {
+		return ""
+	}
+	switch {
+	case plus >= announcePlusLegendaryAt:
+		return "LEGENDARY! "
+	case plus >= announcePlusGreatAt:
+		return "Great success! "
+	}
+	return ""
+}
+
+/*
+================
 Runtime.announcePlus
 
 Item 2: a reinforcement that succeeded into +7 or above, after its commit,
-naming a sealed item's seal as the drop notice does.
+naming a sealed item's seal as the drop notice does. With the plus tiers
+on, +10 and above lead louder (plusNoticeLead); the line's seal colour
+rides the item link as before, tiers or not.
 ================
 */
 func (rt *Runtime) announcePlus(division, player string, outcome alchemy.Outcome, nowMs int64) {
@@ -366,10 +401,14 @@ func (rt *Runtime) announcePlus(division, player string, outcome alchemy.Outcome
 				}
 			}
 		}
-		text := fmt.Sprintf("%s advanced %s%s to +%d", player, name, seal, item.Plus)
+		lead := plusNoticeLead(item.Plus, rt.Announce.PlusTiers)
+		text := lead + fmt.Sprintf("%s advanced %s%s to +%d", player, name, seal, item.Plus)
 		// The seal is the part to give up: clamping would cut the plus off
-		// the end instead.
+		// the end instead. A tier lead is given up next, for the same reason.
 		if len(utf16.Encode([]rune(text))) > noticeMaxUnits {
+			text = lead + fmt.Sprintf("%s advanced %s to +%d", player, name, item.Plus)
+		}
+		if lead != "" && len(utf16.Encode([]rune(text))) > noticeMaxUnits {
 			text = fmt.Sprintf("%s advanced %s to +%d", player, name, item.Plus)
 		}
 		rt.announce(division, announcePlus, text, wire.NoticeLink{Player: player, Body: item.Body().Encode()}, item.RefObjID, nowMs)

@@ -4,6 +4,8 @@ import (
 	"math"
 	"testing"
 	"time"
+
+	worldgeom "opensro.online/server/internal/game/world"
 )
 
 // movementModeRun is any mode that is not the walk mode.
@@ -60,10 +62,10 @@ func TestDistance2DAcrossSectors(t *testing.T) {
 // of z distance, and two positions that disagree on it are not comparable.
 func TestDungeonBitStaysOutOfTheSectorMath(t *testing.T) {
 	overworld := Point{RegionID: 0x6B4F, X: 100, Z: 200}
-	dungeon := Point{RegionID: 0x6B4F | DungeonSectorBit, X: 100, Z: 200}
+	dungeon := Point{RegionID: 0x6B4F | worldgeom.DungeonRegionBit, X: 100, Z: 200}
 
 	// Same sector coordinates inside the dungeon world: distance is zero.
-	sameDungeon := Point{RegionID: 0x6B4F | DungeonSectorBit, X: 100, Z: 200}
+	sameDungeon := Point{RegionID: 0x6B4F | worldgeom.DungeonRegionBit, X: 100, Z: 200}
 	if got := Distance2D(dungeon, sameDungeon); got != 0 {
 		t.Fatalf("distance between identical dungeon positions = %v, want 0", got)
 	}
@@ -173,7 +175,7 @@ func TestPlanApproachRoundsTravelUp(t *testing.T) {
 
 func TestPlanApproachRefusesCrossWorld(t *testing.T) {
 	from := Point{RegionID: 0x6B4F, X: 100, Z: 100}
-	to := Point{RegionID: 0x6B4F | DungeonSectorBit, X: 100, Z: 100}
+	to := Point{RegionID: 0x6B4F | worldgeom.DungeonRegionBit, X: 100, Z: 100}
 
 	got := PlanApproach(from, to, movementModeRun)
 	if got.InRange {

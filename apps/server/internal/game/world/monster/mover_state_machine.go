@@ -577,6 +577,16 @@ func (m *MoverState) Transition(event MoverEvent, targetGID uint32) error {
 	candidate.mode = next
 	if next != MoverReturning {
 		candidate.HomingStartedMs, candidate.HomingAcquireAfterMs = 0, 0
+		// The stored walk-home destination belongs to one homing episode.
+		// A matured leg settles into MoverIdle without ending the walk
+		// (the native stays in HOMING across move stops), and the
+		// idle-entry check decides whether that entry ends it; every
+		// other exit from MoverReturning, and every battle entry,
+		// discards the goal so the next walk re-selects.
+		if (m.mode == MoverReturning && event != MoverEventSegmentArrived) || candidate.InNativeBattle() {
+			candidate.homingGoal = Pose{}
+			candidate.homingGoalSet = false
+		}
 	}
 	if next != MoverChasing && next != MoverAttacking {
 		candidate.helpLatched = false
