@@ -285,6 +285,11 @@ func (rt *Runtime) beginReverseReturnScroll(division string, c *enterworld.Chara
 			*result = itemUseFailure(refusal)
 			return false
 		}
+	} else if !rt.reverseMapAdmitsLevel(target.point, c) {
+		// Port-only (reversemap.go): v1.150 has no notice for a level band,
+		// so the item-use level notice answers (INFERENCE).
+		*result = itemUseFailure(wire.ErrCodeItemUseLevelRequired)
+		return false
 	}
 	if rt.transportBarredFromDestination(c, destination.spawn) {
 		*result = itemUseFailure(0x5e)

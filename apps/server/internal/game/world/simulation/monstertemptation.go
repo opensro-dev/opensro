@@ -91,7 +91,7 @@ func (ops *MonsterMoverOps) acquireTemptationFoe(divisionID string, instance mon
 	default:
 		return nil, nil, false
 	}
-	live := mover.LivePoseAt(nowMs, ops.TerrainHeight)
+	live := mover.LivePoseAt(nowMs, ops.GroundHeight)
 	foe, found := nearestTemptationFoe(live, foes, tactics.SightRange)
 	if !found {
 		return nil, nil, false

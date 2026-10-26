@@ -3,23 +3,24 @@ package world
 import "math"
 
 // Native outdoor interest area. The v1.150 client never culls server objects,
-// so the interest radius is server evidence (v1.188 SR_GameServer,
-// machine-verified):
+// so the interest radius is reference-server evidence,
+// machine-verified:
 //
-//   - CRgnTerrain 53A850 builds 36 CMsgBlockTerrain blocks (vector
-//     constructor 53A8A1: count 0x24, stride 0x98).
-//   - 53AD30 bounds local x and z by 1920.0 (qword 0xB45AD0), divides both by
-//     320.0 (qword 0xB45AE8) and selects block (z/320)*6 + x/320.
-//   - 53AB90 registers the eight neighbours at C64090, (-1,-1)..(1,1) without
-//     (0,0), through 53AC20, which steps one region across a seam.
-//   - Admission 534340 and removal 5344B0 notify that neighbour list and the
-//     block itself; an adjacent transfer notifies only the per-neighbour
-//     difference list keyed at block+0x1C (5336E0).
+//   - A region terrain builds 36 message blocks (count 0x24,
+//     stride 0x98).
+//   - The block lookup bounds local x and z by 1920.0, divides
+//     both by 320.0 and selects block (z/320)*6 + x/320.
+//   - The link step registers the eight neighbours, (-1,-1)..(1,1)
+//     without (0,0), through the neighbour resolution that steps
+//     one region across a seam.
+//   - Admission and removal notify that neighbour list and the
+//     block itself; an adjacent transfer notifies only the
+//     per-neighbour difference list.
 //
 // An object is therefore visible exactly when its block lies in the 3x3 block
 // neighbourhood of the viewer's block.
 const (
-	// InterestBlockSize is one CMsgBlockTerrain edge in world units.
+	// InterestBlockSize is one message-block edge in world units.
 	InterestBlockSize = 320.0
 	// InterestBlocksPerRegion is the per-axis block count of one outdoor region.
 	InterestBlocksPerRegion = 6
@@ -31,7 +32,7 @@ InterestBlock
 
 One native message block. Outdoor blocks are addressed in the continuous
 block grid (sector*6 + local/320), which removes region seams from
-neighbour arithmetic the way 53AC20 does. Dungeon blocks are cells of the
+neighbour arithmetic the way the native neighbour resolution does. Dungeon blocks are cells of the
 region's DOF message grid (dungeon_grid.go), the same 320-unit squares
 measured from the grid origin.
 
@@ -80,8 +81,8 @@ func InterestBlockAt(position RegionXZ) InterestBlock {
 ================
 InterestBlock.Adjacent
 
-Whether other is block or one of its eight neighbours (53AB90 outdoors,
-538670 in a dungeon). Dungeon and outdoor blocks never neighbour; a Whole
+Whether other is block or one of its eight neighbours (the native
+link step outdoors, the dungeon object link inside). Dungeon and outdoor blocks never neighbour; a Whole
 dungeon block neighbours every block of its region.
 ================
 */

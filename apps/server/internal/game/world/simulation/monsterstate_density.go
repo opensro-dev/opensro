@@ -8,8 +8,9 @@ monsterstate_density.go - hive player-density sampling and spawn-speed scaling
 package simulation
 
 import (
-	"math"
 	"sort"
+
+	worldgeom "opensro.online/server/internal/game/world"
 )
 
 /*
@@ -55,11 +56,8 @@ populationCell
 func populationCell(p Spawn) (densityCell, bool) {
 	// 53AD30: six 320-unit message cells per outdoor region axis.
 	// A dungeon's region lookup uses a different owner, never this grid.
-	if IsDungeonRegion(p.RegionID) || math.IsNaN(p.X) || math.IsNaN(p.Z) || p.X < 0 || p.Z < 0 || p.X >= 1920 || p.Z >= 1920 {
-		return densityCell{}, false
-	}
-	x, z := int(float64(float32(p.X))/320), int(float64(float32(p.Z))/320)
-	if x >= 6 || z >= 6 {
+	x, z, ok := worldgeom.OutdoorLocalCell(worldgeom.RegionXZ{RegionID: p.RegionID, X: p.X, Z: p.Z})
+	if !ok {
 		return densityCell{}, false
 	}
 	return densityCell{p.RegionID, x, z}, true

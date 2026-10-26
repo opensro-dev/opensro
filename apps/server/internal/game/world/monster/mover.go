@@ -195,7 +195,8 @@ type MoverState struct {
 	AttackReach      float64
 	AttackCooldownMs int64
 	// AI strategy +48: cooldown plus selection jitter, retained between
-	// selections. Opponent expiry uses twice this interval (545776).
+	// selections. Opponent expiry uses twice this interval (the
+	// native opponent-policy choice).
 	AttackIntervalMs uint32
 	NextAttackMs     int64
 	// Channel is the run/walk speed channel the CLIENT currently holds
@@ -204,14 +205,17 @@ type MoverState struct {
 	// the other channel - keeping the client's integrator speed equal to
 	// the server's segment timing (the BUG-7 speed-half fix).
 	Channel uint8
-	// 5483C0/559AD0 retain a combat channel decision across approach replans.
+	// The native pursuit-distance classification and the COS command
+	// state retain a combat channel decision across approach replans.
 	PursuitChannel       uint8
 	LastBattleActivityMs uint32
 	HomingStartedMs      uint32
 	HomingAcquireAfterMs uint32
-	// progress is the native stuck count (CTactics +184/+19C/+148): each
-	// stop that leaves the actor within 20 of where its move sequence began
-	// counts, and from the tenth the stuck event is raised (559010 -> 5597B0).
+	// progress is the native stuck count (the tactics record's
+	// +184/+19C/+148): each stop that leaves the actor within 20
+	// of where its move sequence began counts, and from the tenth
+	// the stuck event is raised (the move-stopped counter and its
+	// dispatch).
 	progress MovementProgress
 	// stuck is latched when NoteMoveStopped crosses nativeStuckFailureLimit so
 	// the simulation tick can answer event 0x28 on the current state.
@@ -233,7 +237,8 @@ func (m MoverState) InFlight(nowMs int64) bool {
 ================
 MoverState.Progress
 
-Progress returns the native movement progress tracker (CTactics +184/+19C/+148).
+Progress returns the native movement progress tracker (the
+tactics record's +184/+19C/+148).
 ================
 */
 func (m MoverState) Progress() MovementProgress {
@@ -245,7 +250,7 @@ func (m MoverState) Progress() MovementProgress {
 MoverState.Stuck
 
 Stuck reports whether the last stop reached the ten-failure stuck threshold
-(CAIState_OnMoveStopped_CountStuck 0x00559010 -> event 0x28).
+(the native move-stopped stuck counter -> event 0x28).
 ================
 */
 func (m MoverState) Stuck() bool {
@@ -257,8 +262,8 @@ func (m MoverState) Stuck() bool {
 MoverState.ClearStuck
 
 ClearStuck clears the pending event-0x28 latch after the simulation tick
-answers it, leaving the underlying failure counter untouched (matching
-CAIState_BATTLE_OnStuck_RelocateToTarget 0x0055A250).
+answers it, leaving the underlying failure counter untouched
+(matching the BATTLE stuck handler).
 ================
 */
 func (m *MoverState) ClearStuck() {
@@ -269,9 +274,9 @@ func (m *MoverState) ClearStuck() {
 ================
 MoverState.ResetStuck
 
-ResetStuck clears both the failure counter (CTactics.+0x148 = 0) and the
-pending event-0x28 latch (AI_CTactics_ChangeState 0x0053FF30,
-CAITactics_ReleaseCommand 0x0053FD40).
+ResetStuck clears both the failure counter (the tactics record's
++0x148 = 0) and the pending event-0x28 latch (the native state
+change and command release).
 ================
 */
 func (m *MoverState) ResetStuck() {
@@ -284,7 +289,7 @@ func (m *MoverState) ResetStuck() {
 MoverState.NoteMoveIssued
 
 NoteMoveIssued records a step command before the mover executes or clips it
-(AI_CTactics_StepDestination 0x00541730).
+(the native tactics step).
 ================
 */
 func (m *MoverState) NoteMoveIssued(live Pose, alreadyMoving bool) {
@@ -295,8 +300,8 @@ func (m *MoverState) NoteMoveIssued(live Pose, alreadyMoving bool) {
 ================
 MoverState.NoteMoveStopped
 
-NoteMoveStopped records a movement stop at live (CGObjChar_StopMove
-0x004A9430 -> event 8 -> CAIState_OnMoveStopped_CountStuck 0x00559010) and
+NoteMoveStopped records a movement stop at live (the native move
+stop -> event 8 -> the move-stopped stuck counter) and
 latches Stuck when the tenth short stop is reached.
 ================
 */
@@ -312,13 +317,17 @@ func (m *MoverState) NoteMoveStopped(live Pose) bool {
 ================
 GroundResolver
 
-GroundResolver resolves the navmesh ground height under a region-local
-XZ (the mission plane injects movement TerrainHeightAt through
-MonsterMoverOps.TerrainHeight - monster must not import mission, so
-the height source arrives as a parameter; board seq743/seq779 shape).
+GroundResolver resolves the walkable surface height at one live pose
+on the mover's plane (Plane.HeightAt through MonsterMoverOps.GroundHeight
+- monster must not import mission, so the height source arrives as a
+parameter; board seq743/seq779 shape). The pose carries the chord
+height at its XZ: the caller height the plane's nearest-surface rule
+reads. It is consulted only off an adopted path - an adopted path owns
+its segment's heights outright - so no surface owner is carried: the
+chord height alone selects the surface (#1695).
 ================
 */
-type GroundResolver func(regionID uint16, x, z float64) (float64, bool)
+type GroundResolver func(pose Pose) (float64, bool)
 
 /*
 ================
@@ -329,12 +338,12 @@ callers must never read Pose while a segment is maturing - the bug D
 discipline the player plane already enforces).
 
 Y CONTRACT (board seq735/seq779, BUG-8 second injection path): the
-segment ENDPOINTS carry terrain-resolved heights, but a straight Y-lerp
+segment ENDPOINTS carry surface-resolved heights, but a straight Y-lerp
 between them describes a CHORD - below ground over a rise, above it over
 a dip. Mid-flight the interpolated XZ is resolved through `ground` so a
 scope-enter seed or a segment departure never inherits a chord height.
 The settled (To) and idle (Pose) branches are returned UNTOUCHED: To.Y
-is already the terrain height at its own quantised XZ (the BUG-12
+is already the surface height at its own quantised XZ (the BUG-12
 commitSegment block) and an idle Pose is either that settled value or
 the bootstrap-lifted nest anchor - re-resolving them would change
 settle-adjacent wire values for no correctness gain. A nil resolver (or
@@ -373,7 +382,7 @@ func (m MoverState) LivePoseAt(nowMs int64, ground GroundResolver) Pose {
 		return pose
 	}
 	if ground != nil {
-		if y, ok := ground(pose.RegionID, pose.X, pose.Z); ok {
+		if y, ok := ground(pose); ok {
 			pose.Y = y
 		}
 	}

@@ -6,10 +6,11 @@ handler.go - /economy/v1/* on the GameWorld's local operator listener
 GET only, for the staff console on the same host (operatorauth: loopback,
 local diagnostics header, no Origin or forwarding, the bearer token from
 the shard's economy-token file; without that file every route is 404).
-Contract v1 errors are {"error":{"code","message"}} with the codes
-bad_metric, bad_bucket, range_too_wide, no_snapshot and unauthorized.
-/economy/v1/trade is not served yet (its shape follows with the trade
-ledger reasons).
+The one exception is POST /economy/v1/sealcensus, which runs a census
+(census.go). Contract v1 errors are {"error":{"code","message"}} with
+the codes bad_metric, bad_bucket, range_too_wide, no_snapshot,
+no_census, census_running and unauthorized. /economy/v1/trade is not
+served yet (its shape follows with the trade ledger reasons).
 
 ===========================================================================
 */
@@ -55,7 +56,8 @@ func (s *Service) Handler(tokenPath string) (http.Handler, error) {
 			writeError(w, http.StatusForbidden, queryError{"unauthorized", "operator authentication required"})
 			return
 		}
-		if r.Method != http.MethodGet {
+		route := strings.TrimPrefix(r.URL.Path, Path)
+		if r.Method != http.MethodGet && !(r.Method == http.MethodPost && route == "sealcensus" && s.sealCensus) {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
@@ -83,6 +85,17 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.serveKillStats(w, r.URL.Query())
+		return
+	}
+	// The seal census reads its own fresh copy, never the snapshot, so
+	// it also answers before the snapshot gate; disabled shards
+	// (SRO_SEAL_CENSUS off, the default) refuse the route outright (#1691).
+	if route == "sealcensus" {
+		if !s.sealCensus {
+			http.NotFound(w, r)
+			return
+		}
+		s.serveSealCensus(w, r)
 		return
 	}
 	s.mu.Lock()

@@ -109,7 +109,25 @@ func traceObjectCellsFrom(stand *objectDeckStand, x0, z0, x1, z1, tStart float64
 		z0 += (nz - z) / (1 - tStart)
 	}
 	path := &objectOwnedPath{stand: stand, x0: x0, z0: z0, x1: x1, z1: z1}
-	m := stand.mesh
+	path.spans = traceMeshCells(stand.mesh, stand.cellIndex, x0, z0, x1, z1, tStart, nil)
+	return path
+}
+
+/*
+================
+traceMeshCells
+
+The cell-by-cell ownership walk over one mesh (native 428930 / its server
+twin): from startCell, the chord's spans between triangle-edge cuts, each
+owned by the cell that holds its midpoint, moving only to a neighbour
+across an internal edge. It stops where no neighbour holds the next span -
+the chord left the mesh through an outline edge - or where crosses (when
+set) refuses a crossing from one cell to the next (a one-sided edge). Spans
+keep the chord parameter. No height enters the walk.
+================
+*/
+func traceMeshCells(m *objectNavMesh, startCell int, x0, z0, x1, z1, tStart float64, crosses func(from, to int) bool) []objectCellSpan {
+	var spans []objectCellSpan
 	neighbors := m.cellNeighbors
 	if neighbors == nil {
 		// Hand-built geometry can omit decoded metadata. Keep it local so
@@ -135,7 +153,7 @@ func traceObjectCellsFrom(stand *objectDeckStand, x0, z0, x1, z1, tStart float64
 		}
 	}
 	sort.Float64s(cuts)
-	owner := stand.cellIndex
+	owner := startCell
 	// Span midpoints sit between consecutive triangle-edge cuts. When a chord
 	// passes ~0.002u from a shared vertex across a narrow fan of internal and
 	// outline edges (region 23661 localUid 3073), objectCellPlaneYAt's -1e-4
@@ -172,19 +190,19 @@ func traceObjectCellsFrom(stand *objectDeckStand, x0, z0, x1, z1, tStart float64
 					break
 				}
 			}
-			if next < 0 {
+			if next < 0 || (crosses != nil && !crosses(owner, next)) {
 				break
 			}
 			owner = next
 		}
-		n := len(path.spans)
-		if n > 0 && path.spans[n-1].cell == owner {
-			path.spans[n-1].to = hi
+		n := len(spans)
+		if n > 0 && spans[n-1].cell == owner {
+			spans[n-1].to = hi
 		} else {
-			path.spans = append(path.spans, objectCellSpan{lo, hi, owner})
+			spans = append(spans, objectCellSpan{lo, hi, owner})
 		}
 	}
-	return path
+	return spans
 }
 
 /*

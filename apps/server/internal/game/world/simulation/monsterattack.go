@@ -166,7 +166,7 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 	if !alive {
 		return ops.startReturnLeg(divisionID, instance, tactics, mover, monster.MoverEventTargetLost, nowMs), nil, true
 	}
-	live := mover.LivePoseAt(nowMs, ops.TerrainHeight)
+	live := mover.LivePoseAt(nowMs, ops.GroundHeight)
 	// Every native timer query services the selected action timer first.
 	// Selection must gate both pursuit and fresh skill selection, including
 	// a cast whose duration exceeds the ordinary selector interval.

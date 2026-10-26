@@ -162,19 +162,44 @@ test(
 	NATIVE_ONLY,
 	() => {
 		let count = 0;
+		const ambientBySource = new Map();
 		for ( const [id, record] of Object.entries( catalog ) ) {
 			if ( record.stages.some( s => defined( s.script ).kind === "mover" ) ) {
 				const f = fixture( +id ), rows = f.step( 30 );
-				assert.equal( rows.length, 1 );
 				assert.equal( rows[0].pose.y, 21 );
 				assert.equal( rows[0].attachment, undefined );
 				assert.equal( rows[0].clip, "state-0" );
+				// Every further row is one of the hawk model's ambient effects,
+				// riding on the hawk itself (lighthawk.bsr's wing effects).
+				const resource = record.stages.find( s => defined( s.script ).kind === "mover" ).resource;
+				const ambient = (manifest.models[resource].particleModifiers ?? []).filter( m => m.kind === 2 )
+					.flatMap( m => m.entries );
+				assert.equal( rows.length, 1 + ambient.length, `${resource} ambient effects` );
+				for ( const [i, row] of rows.slice( 1 ).entries() ) {
+					assert.equal(
+						row.model,
+						"/assets/effects/programs.json#" +
+							encodeURIComponent( ambient[i].effectPath.replaceAll( "\\", "/" ) )
+					);
+					assert.equal( row.attachment.gid, rows[0].gid );
+				}
+				ambientBySource.set(
+					resource,
+					ambient.map( e => e.effectPath.replaceAll( "\\", "/" ) + "@" + e.boneName )
+				);
 				assert.equal( f.effects.error(), null );
 				f.effects.dispose();
 				count++;
 			}
 		}
 		assert.equal( count, 17 );
+		// The Lightning Hawk is the Black Hawk's mesh and material plus its wing
+		// effects: without them the two hawks look the same (BUG-089).
+		assert.deepEqual( ambientBySource.get( "res/npc/animal/blackhawk.bsr" ) ?? [], [] );
+		assert.deepEqual( ambientBySource.get( "res/npc/animal/lighthawk.bsr" ), [
+			"skill/china/bow_bird_a.efp@Bip01 L Hand",
+			"skill/china/bow_bird_a.efp@Bip01 R Hand"
+		] );
 		assert.throws( () => effectScript( [ "SCT_MOVER", "1" ] ) );
 		for ( const path of [ "res/npc/animal/blackhawk.bsr", "res/npc/animal/lighthawk.bsr" ] ) {
 			const states = manifest.models[path].states;

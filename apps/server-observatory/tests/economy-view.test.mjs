@@ -7,6 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
 	alignSeries,
+	censusRows,
 	compactGold,
 	dayLabel,
 	flagLabel,
@@ -196,6 +197,22 @@ test("rates print grouped with at most two decimals and dashes for gaps", () => 
 	assert.equal( rateText( NaN ), "—" );
 	assert.equal( dayLabel( 0 ), "1970-01-01" );
 	assert.equal( dayLabel( 86400 ), "1970-01-02" );
+});
+
+test("census rows keep degree order and withheld tiers stay withheld", () => {
+	const rows = censusRows( {
+		rows: [
+			{ degree: 9, star: { items: 6, holders: 4 }, moon: null, sun: { items: 6, holders: 4 } },
+			{ degree: 8, star: null, moon: null, sun: null },
+			{ degree: 1, star: { items: 3, holders: 3 }, moon: { items: 1, holders: 1 }, sun: null }
+		]
+	} );
+	assert.deepEqual( rows.map( row => row.degree ), [ 1, 8, 9 ] );
+	assert.deepEqual( rows[2].star, { items: 6, holders: 4 } );
+	assert.equal( rows[2].moon, null, "a withheld bucket never gains numbers here" );
+	assert.deepEqual( censusRows( null ), [] );
+	assert.deepEqual( censusRows( { rows: "nope" } ), [] );
+	assert.deepEqual( censusRows( { rows: [ { star: { items: 1, holders: 1 } } ] } ), [] );
 });
 
 test("plus levels sort numerically and flag links only prefill Player recovery", () => {

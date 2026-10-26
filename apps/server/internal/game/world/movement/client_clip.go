@@ -271,7 +271,7 @@ func (c *ClientClip) processOwnedStep(characterName string, from simulation.Spaw
 	// NativeResult 0, and its Rest.Y is the floor the step reached - dropping
 	// it kept the server at the ramp-top height while the client descended,
 	// so every later dungeon clip started over 2 m off its floor.
-	if c.Mode == ClipApply && report.Outcome == ClipArrived && (report.NativeResult&nativeContinueResult != 0 || simulation.IsDungeonRegion(report.Rest.RegionID)) {
+	if c.Mode == ClipApply && report.Outcome == ClipArrived && (report.NativeResult&nativeContinueResult != 0 || arrivalKeepsRestOnPlane(report.Rest.RegionID)) {
 		return report.Rest, report.RestOwner, false
 	}
 	return to, simulation.NavOwner{}, false

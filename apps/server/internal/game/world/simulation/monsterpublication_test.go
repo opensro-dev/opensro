@@ -122,7 +122,7 @@ func TestDeathDuringMovementPlanCannotPublishGoal(t *testing.T) {
 	ops, instance := monsterLegFixture(t, passiveTactics())
 	mover, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
 	mustMoverTransition(&mover, monster.MoverEventStartWander, 0)
-	ops.TerrainHeight = func(uint16, float64, float64) (float64, bool) {
+	ops.GroundHeight = func(monster.Pose) (float64, bool) {
 		ops.Monsters.ApplyDamage(monsterTestDivision, instance.Gid, instance.CurrentHP)
 		return 20, true
 	}
