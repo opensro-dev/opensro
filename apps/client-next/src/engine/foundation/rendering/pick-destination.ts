@@ -9,13 +9,8 @@ or dungeon local coordinates before worker navigation admits the walk.
 ===========================================================================
 */
 
-import {
-	isDungeonRegion,
-	normalizeRegionXZ,
-	REGION_SIZE,
-	sectorX,
-	sectorY
-} from "@/engine/foundation/world/world-space";
+import { planeKindOf } from "@/engine/foundation/world/plane";
+import { normalizeRegionXZ, REGION_SIZE, sectorX, sectorY } from "@/engine/foundation/world/world-space";
 import type { PickRay } from "./picking";
 
 /*
@@ -32,7 +27,7 @@ export function pickDestination( ray: PickRay, depth: number, originRegion: numb
 		y = ray.start[1]! + ray.delta[1]! * depth,
 		rawZ = ray.start[2]! + ray.delta[2]! * depth;
 	if ( ![ rawX, y, rawZ ].every( Number.isFinite ) ) return null;
-	if ( !isDungeonRegion( originRegion ) ) {
+	if ( planeKindOf( originRegion ) === "outdoor" ) {
 		const normalized = normalizeRegionXZ( originRegion, rawX, rawZ );
 		const rx = sectorX( originRegion ) + Math.floor( rawX / REGION_SIZE ),
 			rz = sectorY( originRegion ) + Math.floor( rawZ / REGION_SIZE );

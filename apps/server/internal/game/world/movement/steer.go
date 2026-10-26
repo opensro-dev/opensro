@@ -8,10 +8,10 @@ walks (both carry [u16 heading] in the 0x7738 heading unit):
 
   - 0x72CF steer, from CNavigationDeadreckon_SendSteeringUpdate (0x877540):
     the drift correction of UpdateMovementHeading (0x8779B0) every 500 ms,
-    and the Left/Right arrow keys. The server's SetAngle (0x48C0E0) turns
+    and the Left/Right arrow keys. The server's angle command turns
     the command mover without dropping GO; observers get 0xB2CF.
   - 0x72F5 stop, from CNavigationDeadreckon_SendAngleUpdatePacket
-    (0x8777B0) on the Up-arrow release. The server's Cancel (0x48C110)
+    (0x8777B0) on the Up-arrow release. The server's cancel command
     stops the mover; everyone, the mover included, gets the 0xB2F5
     correction at the point where it stopped.
 
