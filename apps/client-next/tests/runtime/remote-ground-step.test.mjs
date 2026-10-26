@@ -226,15 +226,15 @@ test("remote history is bounded and retained through certified retiming and sour
 
 test("remote angular turn retains its admitted corner through a mount gait change", () => {
 	const motion = createEntityMotion( undefined, ( _from, to ) => to );
-	const packet = Buffer.alloc( 19 );
+	const packet = Buffer.alloc( 23 );
 	packet.writeUInt32LE( ENTITY.gid );
 	packet[5] = 1;
 	packet.writeUInt16LE( 0, 6 );
 	packet[8] = 1;
 	packet.writeUInt16LE( START.regionId, 9 );
-	packet.writeInt16LE( START.x * 10, 11 );
-	packet.writeFloatLE( START.y, 13 );
-	packet.writeInt16LE( START.z * 10, 17 );
+	packet.writeFloatLE( START.x, 11 );
+	packet.writeFloatLE( START.y, 15 );
+	packet.writeFloatLE( START.z, 19 );
 	motion.receive( packet, ENTITY, 0 );
 	const first = motion.step( 200 )[0];
 	const turn = defined( motion.steer( ENTITY, 16384, 200 ) );
@@ -318,13 +318,13 @@ for ( const method of [ "receive", "steer", "mode", "speed", "sit", "stop-speed"
 		/** @type {import("../../src/engine/contracts/world").EntityState} */
 		let entity = { ...ENTITY, kind: "player", runSpeed: 150, movementRevision: 1 };
 		if ( method === "steer" ) {
-			const packet = Buffer.alloc( 19 );
+			const packet = Buffer.alloc( 23 );
 			packet.writeUInt32LE( ENTITY.gid );
 			packet[5] = 1;
 			packet[8] = 1;
 			packet.writeUInt16LE( START.regionId, 9 );
-			packet.writeInt16LE( START.x * 10, 11 );
-			packet.writeInt16LE( START.z * 10, 17 );
+			packet.writeFloatLE( START.x, 11 );
+			packet.writeFloatLE( START.z, 19 );
 			motion.receive( packet, entity, 0 );
 		} else motion.spawn( entity, 0 );
 		/*

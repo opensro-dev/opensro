@@ -34,14 +34,25 @@ import (
 	"opensro.online/server/internal/transport"
 )
 
+// probeTestLoadTimeout backstops every wall clock in this package's
+// fixtures. Each wait it bounds is synchronised on protocol events
+// (a bound listener, WELCOME, an echo, a barrier), so the deadline
+// only ever fires on a genuine hang; it is generous because a loaded
+// loopback dial or a starved server writer must never be what a
+// correctness test measures (#1724's lesson, applied package-wide).
+const probeTestLoadTimeout = 30 * time.Second
+
 const (
 	probeTestTicket          = "probe-test-ticket"
 	probeTestIOTimeout       = 10 * time.Second
-	probeTestConnectTimeout  = 15 * time.Second
+	probeTestConnectTimeout  = probeTestLoadTimeout
 	probeTestShutdownTimeout = 3 * time.Second
 	probeTestIdleTimeout     = 30 * time.Second
-	probeTestOutboundQueue   = 16
-	probeTestCAFileMode      = 0o600
+	// Big enough that a fixture run can outrun a starved single
+	// writer without tripping the slow-consumer kill: the queue is
+	// a production safety valve, not a measurement budget.
+	probeTestOutboundQueue = 4096
+	probeTestCAFileMode    = 0o600
 )
 
 //============================================================================
@@ -141,7 +152,7 @@ func TestProbeLoopbackWelcome(t *testing.T) {
 		Base:    "http://" + srv.WSAddr(),
 		WTAddr:  srv.WTAddr(),
 		Ticket:  probeTestTicket,
-		Timeout: probeTestIOTimeout,
+		Timeout: probeTestLoadTimeout,
 		CACert:  caCertFile(t, srv),
 	})
 	if err != nil {
@@ -177,7 +188,7 @@ func TestProbeSubstitutedCertFailsPin(t *testing.T) {
 		Base:    "http://" + advertised.WSAddr(),
 		WTAddr:  other.WTAddr(),
 		Ticket:  probeTestTicket,
-		Timeout: probeTestIOTimeout,
+		Timeout: probeTestLoadTimeout,
 		CACert:  bundle,
 	})
 	if err == nil {
@@ -208,7 +219,7 @@ func TestProbeLoopbackBadTicketFailsAtWelcome(t *testing.T) {
 		Base:    "http://" + srv.WSAddr(),
 		WTAddr:  srv.WTAddr(),
 		Ticket:  "forged-ticket",
-		Timeout: probeTestIOTimeout,
+		Timeout: probeTestLoadTimeout,
 		CACert:  caCertFile(t, srv),
 	})
 	if err == nil {
