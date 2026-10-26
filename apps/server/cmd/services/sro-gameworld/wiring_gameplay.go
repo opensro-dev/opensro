@@ -254,6 +254,7 @@ func newGameplayPlane(
 		return nil, err
 	}
 	water.SetClosedObjectRescue(movement.ClosedObjectRescueFromEnv())
+	water.SetCaveSeamStep(movement.CaveSeamStepFromEnv())
 	water.SetDeepWaterRefusal(movement.DeepWaterRefusalFromEnv())
 	// Native dungeon interest is the 3x3 message-block neighbourhood of each
 	// dungeon's DOF grid (worldgeom dungeon_grid.go). Installed before the

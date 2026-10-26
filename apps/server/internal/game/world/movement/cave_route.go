@@ -269,6 +269,20 @@ the outdoor vocabulary's reasons.
 ================
 */
 func (v *WaterValidator) planCaveRoute(from, goal monster.Pose) *monster.NavigationRoute {
+	return v.planCaveRouteFrom(from, simulation.NavOwner{}, goal)
+}
+
+/*
+================
+planCaveRouteFrom
+
+planCaveRoute from the mover's retained cell (#1732): the clear-chord head
+walks from it, and the native route starts in it. The original's route
+reads the actor's cell from its position record, never from geometry; a
+missing or stale owner falls back to the cell under the start (walkStart).
+================
+*/
+func (v *WaterValidator) planCaveRouteFrom(from monster.Pose, fromOwner simulation.NavOwner, goal monster.Pose) *monster.NavigationRoute {
 	if from.RegionID != goal.RegionID {
 		return monster.UnresolvedNavigationRoute(goal, monster.NavigationRouteBlocked)
 	}
@@ -279,12 +293,17 @@ func (v *WaterValidator) planCaveRoute(from, goal monster.Pose) *monster.Navigat
 	// The plan's work is every scan it pays for (#1678): the head's
 	// direct chord is a floor scan, often the plan's dearest step, so
 	// it counts by its size; Probes stays the path queries alone.
-	clear, work := v.caveChordClear(from, goal)
-	if clear {
+	head, work := v.planMonsterPathFrom(from, fromOwner, goal)
+	if routeClear(head, goal) {
 		return monster.NewNavigationRoute(goal, []monster.Pose{goal}).WithProbes(1).WithWork(work)
 	}
 
 	startBlock, startMesh, startCell, startOK := surface.floorCellAt(from.X, from.Y, from.Z)
+	if fromOwner.Kind == simulation.NavOwnerDungeon {
+		if retained, ok := surface.walkStart(simulation.Spawn{RegionID: from.RegionID, X: from.X, Y: from.Y, Z: from.Z}, fromOwner); ok {
+			startBlock, startMesh, startCell, startOK = retained.block, 0, retained.cell, true
+		}
+	}
 	goalBlock, goalMesh, goalCell, goalOK := surface.floorCellAt(goal.X, goal.Y, goal.Z)
 	if !startOK || !goalOK {
 		// An endpoint stands off the authored floor (a knockback
@@ -296,6 +315,12 @@ func (v *WaterValidator) planCaveRoute(from, goal monster.Pose) *monster.Navigat
 	target := caveCell{block: goalBlock, mesh: goalMesh, cell: goalCell}
 	if start == target {
 		return monster.NewNavigationRoute(goal, []monster.Pose{goal}).WithProbes(1).WithWork(work)
+	}
+	// A dungeon whose native route file loaded takes the native region
+	// route (cave_native_route.go); the search below is the port's route
+	// for the rest.
+	if route, ok := v.nativeCaveWaypoint(surface, from, fromOwner, goal, start, target); ok {
+		return route.WithProbes(1 + route.Probes()).WithWork(work + route.Work())
 	}
 	if start.block == target.block {
 		path, used, found := surface.astarCells(start, target)

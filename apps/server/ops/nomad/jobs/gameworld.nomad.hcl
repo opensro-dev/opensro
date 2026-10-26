@@ -241,6 +241,15 @@ variable "unique_damage_rank" {
   default = "off"
 }
 
+# cave_seam_step lets a monster on the native cave route step through a
+# doorway whose landing point a whole-unit step would stop short of
+# (port-only, not native; owner decision 2026-10-26). "off" is the
+# original step, which can leave the monster pacing at such a doorway.
+variable "cave_seam_step" {
+  type    = string
+  default = "on"
+}
+
 # closed_object_rescue moves a character that logs in inside a closed object
 # (a tree trunk or rock no walk can leave) to the nearest open ground
 # (port-only, not native; owner decision 2026-10-15). "off" keeps the login
@@ -1071,6 +1080,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_FAST_DEN_RETURN                     = var.fast_den_return
         SRO_UNIQUE_DAMAGE_RANK                  = var.unique_damage_rank
         SRO_CLOSED_OBJECT_RESCUE                = var.closed_object_rescue
+        SRO_CAVE_SEAM_STEP                      = var.cave_seam_step
         SRO_DEEP_WATER_REFUSAL                  = var.deep_water_refusal
         SRO_MOST_WANTED                         = var.most_wanted
         SRO_MOST_WANTED_TEST                    = var.most_wanted_test

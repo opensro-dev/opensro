@@ -107,6 +107,10 @@ var Settings = []Setting{
 	// Owner, 2026-10-15: a login inside a closed object (a tree trunk) is
 	// rescued to the nearest open ground.
 	{Env: "SRO_CLOSED_OBJECT_RESCUE", NomadVar: "closed_object_rescue", Default: "on"},
+	// Owner, 2026-10-26: the native cave route's doorway seam step (#1698):
+	// a short landing step that would stay short of the doorway rounds on
+	// toward it. Off is the native step.
+	{Env: "SRO_CAVE_SEAM_STEP", NomadVar: "cave_seam_step", Default: "on"},
 	// Port-only, not native: the deep-water destination refusal. Off, as the
 	// original server; on, a character on a deep seabed was stuck there.
 	{Env: "SRO_DEEP_WATER_REFUSAL", NomadVar: "deep_water_refusal", Default: "off"},
