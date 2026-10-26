@@ -136,7 +136,7 @@ func (rt *Runtime) killGMKillTarget(division string, c *enterworld.Character, re
 			if mover, exists := rt.Monsters.Mover(division, gid); exists {
 				pose = mover.LivePoseAt(now, nil)
 			}
-			settlement = rt.settleMonsterInsideDoor(division, c, roster, impacts[0], pose, now)
+			settlement = rt.settleMonsterInsideDoorCounted(division, c, roster, impacts[0], pose, now, false)
 			return true
 		}
 		if !rt.deps.UpdateManyDeferred(roster.characters, "gm-mobkill", commit) {

@@ -689,16 +689,23 @@ export function followCameraQuery( camera: WorldCamera, previous: number | null 
 /*
 ================
 resolveFollowCamera
+
+The native clamp (68FAD0): with the collision byte (+0x3CC) set the
+eye-to-target segment is cast and a hit pulls the camera in; clear
+(/coloff) it takes the no-hit arm - the requested distance stands
+(+0x3F8 = +0x3EC, +0x3F4 = 0) - while the follow keeps tracking.
+collision = false is that arm: no segment cast at all.
 ================
 */
 export function resolveFollowCamera(
 	camera: WorldCamera,
 	parts: readonly CameraCollisionPart[],
 	previous: number | null,
-	cache?: CameraQueryCache
+	cache?: CameraQueryCache,
+	collision = true
 ) {
 	const { ray, target, direction, distance } = followCameraQuery( camera, previous );
-	const hit = cameraSegmentHit( parts, ray, cache );
+	const hit = collision ? cameraSegmentHit( parts, ray, cache ) : null;
 	const resolved = hit === null ?
 		distance :
 		Math.max( 0.001, Math.fround( Math.fround( 5 + hit * (distance - 5) ) - 5 ) );

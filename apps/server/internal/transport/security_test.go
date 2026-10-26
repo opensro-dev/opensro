@@ -293,3 +293,16 @@ func TestHTTPServersCarryResourceLimits(t *testing.T) {
 		t.Fatalf("QUIC limits incomplete: %+v", quic)
 	}
 }
+
+func TestServerAcceptsCommitHelloVerifierBeforeCheckingEnterWorldAuth(t *testing.T) {
+	server, err := NewServer(Config{WTAddr: "127.0.0.1:0", WSAddr: "127.0.0.1:0", CertDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.Hub.SetHelloCommitAuth(func([]byte) (AdmissionIdentity, func() error, error) {
+		return AdmissionIdentity{AccountID: "test-account", ShardID: "global-official"}, nil, nil
+	})
+	if err := server.Start(); err == nil || !strings.Contains(err.Error(), "EnterWorld authentication verifier") {
+		t.Fatalf("Start error = %v, want missing EnterWorld verifier after accepting two-phase HELLO auth", err)
+	}
+}

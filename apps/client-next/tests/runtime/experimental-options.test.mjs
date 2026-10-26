@@ -100,10 +100,14 @@ const OFF = Object.freeze( {
 	petFilterOther: true,
 	// On by default (owner 2026-10-22, #1243): a touch tap keeps an item or skill tooltip up.
 	touchInspect: true,
+	// Off by default (#1448): the WebSocket stays the default transport until #1450.
+	webTransport: false,
 	// Off by default: the M window shows only the five native towns and 28 x 8 overview.
 	expandedWorldMap: false,
 	// Off by default (#840): the maps mark the tracked quest's targets only.
-	questTrackerMarkers: false
+	questTrackerMarkers: false,
+	// Off by default (#1640): only the native plate and no ground ring.
+	sunDropMarker: false
 } );
 
 test("touch inspection defaults on and only an explicit false turns it off", () => {
@@ -461,11 +465,13 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 	// walks before the server answers, so the row remains the off switch.
 	assert.deepEqual( experimentalGameplay( experimentalOptions() ), {
 		predictedRunUp: true,
+		webTransport: false,
 		jobKillNotices: true,
 		dropPlusNotices: true,
 		plusSevenNotices: true,
 		homingProjectiles: false,
 		smartPetPickup: true,
+		sunDropMarker: false,
 		petPickupKinds: undefined
 	} );
 	for ( const value of [ 1, "true", null, {} ] ) {
@@ -475,11 +481,13 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 	const on = experimentalOptions( { predictedRunUp: true } );
 	assert.deepEqual( experimentalGameplay( on ), {
 		predictedRunUp: true,
+		webTransport: false,
 		jobKillNotices: true,
 		dropPlusNotices: true,
 		plusSevenNotices: true,
 		homingProjectiles: false,
 		smartPetPickup: true,
+		sunDropMarker: false,
 		petPickupKinds: undefined
 	} );
 	assert.equal( "predictedRunUp" in experimentalVideo( on ), false );

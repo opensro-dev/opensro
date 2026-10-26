@@ -343,8 +343,21 @@ the representative of the greatest unsigned damage group for loot ownership.
 ================
 */
 func (rt *Runtime) settleMonsterInsideDoor(division string, actor *enterworld.Character, roster rewardRoster, impact simulation.MonsterDamageResult, pose monster.Pose, now int64) monsterSettlement {
+	return rt.settleMonsterInsideDoorCounted(division, actor, roster, impact, pose, now, true)
+}
+
+/*
+================
+settleMonsterInsideDoorCounted
+
+settleMonsterInsideDoor with the weekly seal board's counting switch
+(sealboard.go): the GM kill path settles with it off, so a GM-made drop
+never reaches the board.
+================
+*/
+func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterworld.Character, roster rewardRoster, impact simulation.MonsterDamageResult, pose monster.Pose, now int64, countSeals bool) monsterSettlement {
 	var out monsterSettlement
-	if !impact.Fatal {
+	if !impact.Fatal || impact.Instance.Ref.TrainingDummy {
 		return out
 	}
 	// One snapshot of the live tunables for the whole kill (thiefparty.go).
@@ -420,6 +433,9 @@ func (rt *Runtime) settleMonsterInsideDoor(division string, actor *enterworld.Ch
 			if rt.UpdateExperience != nil && (exp != 0 || sexp != 0) {
 				frames, _ = rt.UpdateExperience(a.character, exp, sexp, impact.Instance.Gid)
 			}
+			// Port-only, not native (killstats.go): the award counts in
+			// the recipient's band whether or not a sink is wired.
+			rt.countKillStatAward(a.character, exp, sexp, now)
 			out.public = append(out.public, wire.ProgressionBroadcastFrames(frames)...)
 			if a.character != actor {
 				out.otherPublic = append(out.otherPublic, wire.ProgressionBroadcastFrames(frames)...)
@@ -448,6 +464,13 @@ func (rt *Runtime) settleMonsterInsideDoor(division string, actor *enterworld.Ch
 		rt.applyThiefPartyGold(division, a.character, planned, settings)
 		frames, drops, _ := rt.applyMonsterKillInsideDoor(division, a.character, 0, 0, impact.Instance.Gid, planned)
 		out.drops = drops
+		// The weekly seal board (sealboard.go) counts the committed loot
+		// here, before quest-supply drops join out.drops below: those
+		// never count. A GM-spawned monster's loot is conjured, not
+		// hunted, so it never counts either, however it died.
+		if countSeals && !impact.Instance.GMSpawned {
+			rt.countSealDrops(a.character, drops, now)
+		}
 		if a.character == actor {
 			out.actorFrames = append(out.actorFrames, frames...)
 		} else if len(frames) > 0 {
@@ -462,6 +485,16 @@ func (rt *Runtime) settleMonsterInsideDoor(division string, actor *enterworld.Ch
 		out.actorFrames = append(out.actorFrames, frames...)
 		out.drops = append(out.drops, drops...)
 	}
+	// Port-only, not native (killstats.go): the kill counts once, in
+	// the fatal actor's band - or the winning representative's when a
+	// companion landed the blow (actor is nil there).
+	killer := actor
+	if killer == nil {
+		if a, ok := roster.actors[winner]; ok {
+			killer = a.character
+		}
+	}
+	rt.countKillStatKill(killer, now)
 	rt.Monsters.ArmNestFromReward(division, impact.Instance.Gid, count)
 	return out
 }

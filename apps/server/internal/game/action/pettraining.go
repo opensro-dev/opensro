@@ -259,10 +259,14 @@ func (rt *Runtime) petTrainingStateFrames(pet *domain.CharacterCOS, nowMs int64)
 	for _, s := range companion.SkillsForPet(pet) {
 		lvl := companion.Level(pet, s)
 		eff := companion.EffectiveLevel(pet, s, m)
+		bonus := m.SkillBonus
+		if pet.Training.TreeVersion >= 2 {
+			bonus += m.RowSkillBonus[s.Row]
+		}
 		row := wire.PetSkillRow{ID: s.ID, Level: lvl, EffectiveLevel: eff,
 			NextPetLevel: companion.NextLevelRequirement(s, lvl),
 			Value:        uint16(max(0, s.ValueAt(max(eff, 1))*10)),
-			NextValue:    uint16(max(0, s.ValueAt(uint8(min(255, int(min(lvl+1, s.MaxLevel))+m.SkillBonus)))*10))}
+			NextValue:    uint16(max(0, s.ValueAt(uint8(min(255, int(min(lvl+1, s.MaxLevel))+bonus)))*10))}
 		if s.Active {
 			row.Flags |= wire.PetSkillAction
 			if t.Queued == s.ID {
@@ -400,5 +404,9 @@ func (rt *Runtime) removePetGear(c *enterworld.Character, gid uint32, slot int) 
 		return "Training could not be saved.", nil
 	}
 	pet.Training.Gear[slot] = domain.PetGear{}
+	if ref, ok := rt.cosReference(pet); ok && pet.CurrentHP > ref.MaxHP {
+		pet.CurrentHP = ref.MaxHP
+		frames = append(frames, wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(gid, 0, pet.CurrentHP)})
+	}
 	return "", frames
 }

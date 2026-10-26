@@ -38,6 +38,8 @@ test("each itemdata projection appends the pet gear after its template once, in 
 			assert.equal( columns[54], item.icon );
 			assert.equal( columns[53], PORT_PET_DROP_MODEL );
 			assert.equal( columns[57], "1" );
+			assert.equal( columns[15], item.seal ? "2" : "0" );
+			assert.equal( columns[61], String( (item.degree - 1) * 3 + (item.seal || 1) ) );
 		} );
 		assert.equal( records[1], templateRow() );
 		assert.deepEqual( completeItemReferenceProjection( result ), result );
@@ -49,8 +51,9 @@ test("a projection without the template is unchanged", () => {
 	assert.deepEqual( completeItemReferenceProjection( source ), source );
 });
 
-test("all27 pet items have their own slot-and-degree icon", () => {
-	assert.equal( PORT_ITEMS.length, 27 );
+test("all108 pet items share slot-and-degree icons across ordinary and sealed references", () => {
+	assert.equal( PORT_ITEMS.length, 108 );
+	assert.equal( new Set( PORT_ITEMS.map( item => item.id ) ).size, 108 );
 	assert.equal( new Set( PORT_ITEMS.map( item => item.icon ) ).size, 27 );
 	for ( const item of PORT_ITEMS ) {
 		assert.match( item.description, /Up to [1-6] blues/ );

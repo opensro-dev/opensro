@@ -131,9 +131,14 @@ var Settings = []Setting{
 	// (port-only, not native; off is native, #1518).
 	{Env: "SRO_TELEPORT_GRACE", NomadVar: "teleport_grace", Default: "off", Catalogue: true},
 	// Owner, 2026-10-25: a strictly higher-grade premium ticket replaces
-	// the running lower one and its remaining time is lost (#1624,
-	// port-only, not native; "off" refuses a second ticket while one runs).
+	// the running lower one; the replaced ticket's remaining time moves
+	// the new ticket's end later (#1624, port-only, not native; "off"
+	// refuses a second ticket while one runs).
 	{Env: "SRO_PREMIUM_UPGRADE", NomadVar: "premium_upgrade", Default: "off"},
+	// Owner, 2026-10-25: count kills and EXP per online hour by level
+	// band for the staff console (#1639, port-only, not native; "off"
+	// counts nothing and the economy route answers 404).
+	{Env: "SRO_KILL_STATS", NomadVar: "kill_stats", Default: "off"},
 	// F10 trade group (game/tunables): the Jangan route profit percents. The
 	// site's trade quotes read them, so the catalogue does too.
 	{Env: "SRO_TRADE_ROUTE_DONWHANG_PERCENT", NomadVar: "trade_route_donwhang_percent", Default: "50", Catalogue: true},
@@ -159,6 +164,9 @@ var Settings = []Setting{
 	{Env: "SRO_MALL_RIDE_SPEED", NomadVar: "mall_ride_speed", Default: "on"},
 	// Owner, 2026-10-14: shard notices for seal drops, +7 and above, and job kills.
 	{Env: "SRO_ANNOUNCE_SOX_DROP", NomadVar: "announce_sox_drop", Default: "on"},
+	// Owner, 2026-10-25 (#1604 P9): the weekly seal board counts Star,
+	// Moon and Sun drops per job alias. Off is native: nothing counts.
+	{Env: "SRO_SEAL_BOARD", NomadVar: "seal_board", Default: "off"},
 	{Env: "SRO_ANNOUNCE_PLUS", NomadVar: "announce_plus", Default: "on"},
 	{Env: "SRO_ANNOUNCE_JOB_KILL", NomadVar: "announce_job_kill", Default: "on"},
 	// Owner, 2026-10-15: every job kill of a pair is announced (no window).
@@ -189,6 +197,7 @@ var Settings = []Setting{
 	{Env: "SRO_REVERSE_RETURN_MAP", NomadVar: "reverse_return_map", Default: ""},
 	{Env: "SRO_HUNTING_GUIDE", NomadVar: "hunting_guide", Default: ""},
 	{Env: "SRO_GM_SETSPEED", NomadVar: "gm_setspeed", Default: "on"},
+	{Env: "SRO_GM_TRAINING_DUMMY", NomadVar: "gm_training_dummy", Default: "off"},
 	{Env: "SRO_ALCHEMY_RATES", NomadVar: "alchemy_rates", Default: "on", Catalogue: true},
 	// Owner, 2026-10-18: reversed the 2026-10-13 +11 cap; the deployment
 	// default stays native ("off", ceiling 250).
@@ -246,7 +255,9 @@ var Settings = []Setting{
 	// is permanent and does not read this setting (action/commerce.go).
 	{Env: "SRO_SUN_EVENT_ONLY", NomadVar: "sun_event_only", Default: "off", Catalogue: true},
 	// Owner, 2026-10-20: the degree-9 Sun drop rate (class mass 30 x rate
-	// on levels 76-90); 2 targets roughly eleven Sun drops a week.
+	// on levels 76-90). Owner, 2026-10-25 (#1605 P1): the widened class
+	// is capped at the Moon class's width, so a Sun expects about twice
+	// a Moon's kills; the cap supersedes the eleven-a-week calibration.
 	{Env: "SRO_SUN_DROP_RATE", NomadVar: "sun_drop_rate", Default: "2", Catalogue: true},
 	// Owner, 2026-10-20: uniques ignore the level-gap drop admission and
 	// always leave exactly one Magic Pop ticket; "off" is native 4C1840.

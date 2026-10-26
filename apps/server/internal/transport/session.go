@@ -53,6 +53,11 @@ type Session struct {
 
 	hub *Hub
 
+	// account is the admitted account, stored once by admitAccountSession
+	// before the session dispatches; nil for sessions attached without a
+	// HELLO admission (in-process tests).
+	account atomic.Pointer[string]
+
 	// Dispatch spans the complete handler, including publication. Attach may
 	// replace the reader while an old handler still owns a committed result.
 	dispatchMu sync.Mutex

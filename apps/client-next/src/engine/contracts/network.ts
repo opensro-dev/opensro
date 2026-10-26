@@ -45,6 +45,10 @@ export interface NetworkOwner {
 	// clock's dating of it.
 	receivedAt(): number;
 	connect( url: string, admission: string, resume?: Uint8Array ): void;
+	// Experimental (#1448): attempt WebTransport (QUIC) before the socket
+	// on connect, the socket the fallback when the path fails. Applies
+	// from the next connect; off is the socket alone.
+	webTransport( enabled: boolean ): void;
 	send( frame: WireFrame ): void;
 	// False retains this frame and its successors while admission awaits data.
 	drain( consume: ( frame: WireFrame ) => boolean | void ): void;

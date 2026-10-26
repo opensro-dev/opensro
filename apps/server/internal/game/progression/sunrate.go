@@ -11,6 +11,13 @@ more likely while every other class keeps its exact native width. Unset,
 zero or unreadable is off: no scaled rows are built and every roll draws
 exactly the native table.
 
+The widening is capped (owner decision #1605 P1, 2026-10-25): the Sun
+class never grows wider than the degree-9 Moon class in the same row
+(loot/sunscale.go), so a Sun expects about twice a Moon's kills at every
+level. The rate names the nominal widening; the cap is what binds at the
+shipped rates. The coupling is deliberate: widen the Moon class later
+and the Sun class's ceiling moves with it.
+
 The rate composes with the rest of the loot rules, it does not replace
 them: the rare window (25/1000), the seal-band row and the keep-seal
 multipliers all run as before (sealrates.go, item/loot), and the
@@ -89,7 +96,8 @@ func (s SunRate) Rate() int { return s.rate }
 ================
 SunRate.MassMultiplier
 
-How much wider the Sun class is under the rate; 1 when off.
+The nominal widening the rate buys, before the Moon class cap
+(loot/sunscale.go) binds; 1 when off.
 ================
 */
 func (s SunRate) MassMultiplier() int {

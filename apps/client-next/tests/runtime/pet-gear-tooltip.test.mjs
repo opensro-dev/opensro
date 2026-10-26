@@ -45,6 +45,10 @@ test("all pet gear puts its level and Pet footer last without stack rows", () =>
 				"Pet"
 			] );
 			assert.ok( !rows.some( row => /Base effect|Drag it|cooldowns|damage \+/.test( row.value ) ) );
+			const health = rows.find( row =>
+				row.value === `Maximum HP +${Number( gear.baseStats.maxHPPercent.toFixed( 1 ) )}%`
+			);
+			assert.equal( health?.color, 0xffffffff );
 			for (
 				const [key, value] of [
 					[ "PARAM_PA", gear.baseStats.physicalAttack ],

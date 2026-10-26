@@ -83,6 +83,11 @@ func (h *Hub) dispatch(s *Session, f Frame) {
 			Debug("transport: unhandled opcode")
 		return
 	}
+	if hook := h.activity.Load(); hook != nil {
+		if account := s.account.Load(); account != nil {
+			(*hook)(*account)
+		}
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			stack := string(debug.Stack())

@@ -111,12 +111,16 @@ func TestPenguinStormPulsesAndFinalFreeze(t *testing.T) {
 					t.Fatal("missing storm pulse", book, next.CurrentHP, last)
 				}
 				ownerHP := uint32(0)
+				ownerDamage := uint32(0)
 				ownerFrozen := false
 				for _, batch := range batches {
 					if batch.OnlyCharacterID != c.ID {
 						continue
 					}
 					for _, frame := range batch.Frames {
+						if frame.Opcode == abnormalDamageCreditOpcode && len(frame.Payload) == abnormalDamageCreditBytes && binary.LittleEndian.Uint32(frame.Payload) == mob.Gid {
+							ownerDamage += binary.LittleEndian.Uint32(frame.Payload[4:])
+						}
 						if frame.Opcode != simulation.OpVitalsUpdate || len(frame.Payload) < 11 || binary.LittleEndian.Uint32(frame.Payload) != mob.Gid {
 							continue
 						}
@@ -137,6 +141,9 @@ func TestPenguinStormPulsesAndFinalFreeze(t *testing.T) {
 				}
 				if ownerHP != next.CurrentHP {
 					t.Fatal("storm HP update missing for owner", ownerHP, next.CurrentHP)
+				}
+				if ownerDamage != last-next.CurrentHP {
+					t.Fatal("storm damage number missing for owner", ownerDamage, last-next.CurrentHP)
 				}
 				if next.Abnormal != nil && next.Abnormal.Has(abnormal.Freeze) && !ownerFrozen {
 					t.Fatal("storm freeze update missing for owner")

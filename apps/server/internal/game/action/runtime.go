@@ -94,10 +94,6 @@ type Runtime struct {
 	// transport (port-only, SRO_TRANSPORT_FOLLOW_TETHER; acts only with
 	// TransportFollow on, transportfollow.go).
 	TransportFollowTether bool
-	// BetaSilkActivity notes player commands for the beta silk hour
-	// (port-only, SRO_BETA_SILK_ACTIVE_ONLY; nil or inactive is the
-	// shipped rule, betasilk.go).
-	BetaSilkActivity *BetaSilk
 	// JobGoodsTeleport lets a trader with a transport out use town gates,
 	// return scrolls and the reverse return (port-only,
 	// SRO_JOB_GOODS_TELEPORT; false is native, goodsteleport.go).
@@ -399,6 +395,11 @@ type Runtime struct {
 	Announce  Announcements
 	announcer announcer
 
+	// SealDrops counts sealed drops for the weekly board (sealboard.go;
+	// port-only, not native). Nil, the default, counts nothing; the
+	// composition root installs the counter only when EnvSealBoard is on.
+	SealDrops SealDropSink
+
 	// ThiefPartyBonus raises a party's monster EXP and gold for each thief
 	// in it (thiefparty.go; port-only, not native). False is native.
 	ThiefPartyBonus bool
@@ -441,6 +442,13 @@ type Runtime struct {
 	// same family replace the running lower one (premiumticket.go;
 	// port-only, not native). False is native: 0x1894 while one runs.
 	PremiumUpgrade bool
+	// KillStats counts kills and EXP per online hour by level band
+	// (killstats.go; port-only, not native). False counts nothing.
+	KillStats bool
+	// KillStatsFlush receives the drained rollup (the economy history
+	// in the cmd wiring); nil keeps the rows in memory.
+	KillStatsFlush func(rows []KillStatRow) error
+	killStats      killStatTracker
 	// tradeOrigins is each trade good's home town, from the shops.
 	tradeOrigins map[uint32]tradeTown
 
@@ -575,6 +583,12 @@ type Runtime struct {
 	// and the spent points back to the pool. False changes nothing. Nil
 	// refuses the recall scroll.
 	RecallStatPoints func(character *enterworld.Character) ([]wire.Frame, bool)
+
+	// StatRecallWindows holds each recall scroll to its tier's level window
+	// (statRecallWindow), set while the mall sells the scrolls
+	// (commerce.StatRecallListed). Port-only, not native; false is today's
+	// use, gated by the minimum level alone.
+	StatRecallWindows bool
 
 	// ApplyDeathPenalty is progression's door-free death updater: the EXP
 	// and SP a death costs (pkdeath.go resolves which). Combat invokes it

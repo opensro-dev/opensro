@@ -83,6 +83,9 @@ func (s *MonsterState) applyDamageLocked(division string, state *divisionMonster
 	knockdown, knockback := plan.Knockdown, plan.Knockback
 	nowMs := s.nowMillis()
 	instance := finishSummonAction(state.instances.get(gid), nowMs)
+	if instance.Ref.TrainingDummy {
+		knockdown, knockback = nil, nil
+	}
 	before := instance.CurrentHP
 	if before > 0 {
 		state.recordContribution(gid, creditGID, damage)

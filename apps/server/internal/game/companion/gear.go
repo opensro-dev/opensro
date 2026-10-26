@@ -218,12 +218,13 @@ type Modifiers struct {
 	CrushPct       float64
 	DeadlyPct      float64
 	PiercePct      float64
-	// Flat elemental damage added to each hit (and a 5% status chance).
+	// Separate yellow elemental hits; PoisonAdd is the total over four seconds.
 	FireAdd, ColdAdd, ShockAdd, PoisonAdd float64
 	SkillBonus                            int
+	RowSkillBonus                         [RowCount]int
 	FindPct                               float64
 	// Chance-to-cast blues, percent per hit.
-	ProcChain, ProcFire, ProcMend float64
+	Procs [ProcCount][2]GearProc
 }
 
 /*
@@ -248,7 +249,9 @@ func ModifiersFor(p *domain.CharacterCOS) Modifiers {
 		m.GearStats.add(d.Items[slot].BaseStats)
 		for _, o := range g.Options {
 			if a, v, ok := DecodeAffix(o); ok && a.Status == "Implemented" {
-				m.addAffix(a, float64(v), pet)
+				if !m.addProc(a.Group, float64(v), d.ProcDamage) {
+					m.addAffix(a, float64(v), pet)
+				}
 			}
 		}
 	}
@@ -323,12 +326,13 @@ func (m *Modifiers) addAffix(a AffixDef, v float64, pet string) {
 		m.CooldownPct += v
 	case "Find":
 		m.FindPct += v
-	case "ProcChain":
-		m.ProcChain += v
-	case "ProcFire":
-		m.ProcFire += v
-	case "ProcMend":
-		m.ProcMend += v
+	case "OneSkill":
+		for _, skill := range D.TreeSkills {
+			if skill.ID == a.SkillID && skill.Pet == pet {
+				m.RowSkillBonus[skill.Row] += int(v)
+				break
+			}
+		}
 	case "TreeBear", "TreeWolf", "TreePenguin", "TreeCrow":
 		if a.Pets == pet {
 			m.SkillBonus += int(v)

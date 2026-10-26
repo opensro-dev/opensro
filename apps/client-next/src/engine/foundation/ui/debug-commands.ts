@@ -54,7 +54,26 @@ export const DEBUG_COMMAND_HIDE_ME = 113;
 export const DEBUG_COMMAND_FREE_CAMERA = 114;
 export const DEBUG_COMMAND_UI_OFF = 115;
 export const DEBUG_COMMAND_UI_ON = 116;
+// 118/119 write the interface's camera-collision byte (+0x3CC), which
+// the constructor sets: ApplyCameraOrbit (68FAD0) is the only
+// consumer - set, it casts the eye-to-target segment and pulls the
+// camera in on a hit; clear, it takes the same no-hit arm as a miss
+// and the camera keeps the requested distance. The follow
+// (UpdateCameraOrbitTarget 68F830) never reads the byte, so the
+// camera keeps tracking the player either way. "col" is collision.
+export const DEBUG_COMMAND_COLON = 118;
+export const DEBUG_COMMAND_COLON_OFF = 119;
 export const DEBUG_COMMAND_CURSOR = 135;
+// The render family (690C40 ids 150-155, handlers 691686-6917A3): each
+// negates one SWorld graphic option (+0x2E50 + 4*mode, seeded by
+// SWorld_Construct) through SWorld_ApplyGraphicOption (8A54C0). The
+// option numbers live in foundation/rendering/graphic-options.ts.
+export const DEBUG_COMMAND_WIRE_FRAME = 150;
+export const DEBUG_COMMAND_GROUND = 151;
+export const DEBUG_COMMAND_SKY = 152;
+export const DEBUG_COMMAND_MAP_OBJECTS = 153;
+export const DEBUG_COMMAND_CHARACTERS = 154;
+export const DEBUG_COMMAND_LEVEL_OF_DETAIL = 155;
 export const DEBUG_COMMAND_SET_FIELD_OF_VIEW = 500;
 
 const MIN_FIELD_OF_VIEW_DEGREES = 10;

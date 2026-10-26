@@ -27,7 +27,15 @@ import (
 	"opensro.online/server/internal/transport"
 )
 
-const probeTestTicket = "probe-test-ticket"
+const (
+	probeTestTicket          = "probe-test-ticket"
+	probeTestIOTimeout       = 10 * time.Second
+	probeTestConnectTimeout  = 15 * time.Second
+	probeTestShutdownTimeout = 3 * time.Second
+	probeTestIdleTimeout     = 30 * time.Second
+	probeTestOutboundQueue   = 16
+	probeTestCAFileMode      = 0o600
+)
 
 //============================================================================
 
@@ -41,16 +49,34 @@ probeTestTicket, on ephemeral loopback TCP and UDP ports.
 */
 func startProbeServer(t *testing.T) *transport.Server {
 	t.Helper()
-	srv, err := transport.NewServer(transport.Config{
-		WTAddr:            "127.0.0.1:0",
-		WSAddr:            "127.0.0.1:0",
-		CertDir:           t.TempDir(),
-		HelloTimeout:      10 * time.Second,
-		GracePeriod:       10 * time.Second,
-		KeepaliveInterval: 10 * time.Second,
-		IdleTimeout:       30 * time.Second,
-		OutboundQueue:     16,
-	})
+	return startProbeServerWithConfig(t, probeTestServerConfig(t))
+}
+
+/*
+================
+probeTestServerConfig
+================
+*/
+func probeTestServerConfig(t *testing.T) transport.Config {
+	t.Helper()
+	return transport.Config{
+		WTAddr: "127.0.0.1:0", WSAddr: "127.0.0.1:0", CertDir: t.TempDir(),
+		HelloTimeout: probeTestIOTimeout, GracePeriod: probeTestIOTimeout,
+		KeepaliveInterval: probeTestIOTimeout, IdleTimeout: probeTestIdleTimeout, OutboundQueue: probeTestOutboundQueue,
+	}
+}
+
+/*
+================
+startProbeServerWithConfig
+
+Measurement tests declare their socket and admission budgets explicitly;
+the ordinary smoke fixture continues using its original settings.
+================
+*/
+func startProbeServerWithConfig(t *testing.T, cfg transport.Config) *transport.Server {
+	t.Helper()
+	srv, err := transport.NewServer(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +94,7 @@ func startProbeServer(t *testing.T) *transport.Server {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), probeTestShutdownTimeout)
 		defer cancel()
 		srv.Shutdown(ctx)
 	})
@@ -87,7 +113,7 @@ func caCertFile(t *testing.T, srv *transport.Server) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "ca.pem")
 	raw := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Cert.Leaf.Raw})
-	if err := os.WriteFile(path, raw, 0o600); err != nil {
+	if err := os.WriteFile(path, raw, probeTestCAFileMode); err != nil {
 		t.Fatal(err)
 	}
 	return path
@@ -102,13 +128,13 @@ A fresh ticket earns WELCOME and a non-empty success line over real UDP.
 */
 func TestProbeLoopbackWelcome(t *testing.T) {
 	srv := startProbeServer(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), probeTestConnectTimeout)
 	defer cancel()
 	line, err := probe(ctx, probeConfig{
 		Base:    "http://" + srv.WSAddr(),
 		WTAddr:  srv.WTAddr(),
 		Ticket:  probeTestTicket,
-		Timeout: 10 * time.Second,
+		Timeout: probeTestIOTimeout,
 		CACert:  caCertFile(t, srv),
 	})
 	if err != nil {
@@ -135,16 +161,16 @@ func TestProbeSubstitutedCertFailsPin(t *testing.T) {
 	bundle := filepath.Join(t.TempDir(), "ca.pem")
 	raw := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: advertised.Cert.Leaf.Raw})
 	raw = append(raw, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: other.Cert.Leaf.Raw})...)
-	if err := os.WriteFile(bundle, raw, 0o600); err != nil {
+	if err := os.WriteFile(bundle, raw, probeTestCAFileMode); err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), probeTestConnectTimeout)
 	defer cancel()
 	_, err := probe(ctx, probeConfig{
 		Base:    "http://" + advertised.WSAddr(),
 		WTAddr:  other.WTAddr(),
 		Ticket:  probeTestTicket,
-		Timeout: 10 * time.Second,
+		Timeout: probeTestIOTimeout,
 		CACert:  bundle,
 	})
 	if err == nil {
@@ -169,13 +195,13 @@ the welcome stage so an operator can route the alert.
 */
 func TestProbeLoopbackBadTicketFailsAtWelcome(t *testing.T) {
 	srv := startProbeServer(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), probeTestConnectTimeout)
 	defer cancel()
 	_, err := probe(ctx, probeConfig{
 		Base:    "http://" + srv.WSAddr(),
 		WTAddr:  srv.WTAddr(),
 		Ticket:  "forged-ticket",
-		Timeout: 10 * time.Second,
+		Timeout: probeTestIOTimeout,
 		CACert:  caCertFile(t, srv),
 	})
 	if err == nil {

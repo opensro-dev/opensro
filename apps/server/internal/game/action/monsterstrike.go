@@ -280,6 +280,9 @@ func (rt *Runtime) monsterStrikeCOS(in monsterStrikeInput, owner *enterworld.Cha
 		return out
 	}
 	out.strike, out.committed, out.alive = rt.publishCOSHit(&hit), true, !hit.strike.fatal
+	if populationMonster && petStrikeDamaged(hit.strike) {
+		rt.petGearProcs(divisionID, owner, pet.GID, instance.Gid, in.origin(), true, nowMs)
+	}
 	out.strike.public = append(out.strike.public, rt.petCounterStun(petCounterHit{division: divisionID, owner: owner,
 		victim: pet.GID, attacker: instance.Gid, formulas: formulas[:len(hit.strike.impacts)], now: nowMs})...)
 	return out
