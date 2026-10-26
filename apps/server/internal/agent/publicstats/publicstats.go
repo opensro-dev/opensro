@@ -245,7 +245,12 @@ func (s *Service) Handler() http.Handler {
 	mux.HandleFunc("GET /public/v1/uniques", s.cached(uniquesMaxAge, s.uniques))
 	mux.HandleFunc("GET /public/v1/uniques/kills", s.cached(uniquesMaxAge, s.kills))
 	mux.HandleFunc("GET /public/v1/leaderboards/uniques", s.cached(boardsMaxAge, s.leaderboard))
-	mux.HandleFunc("GET /public/v1/leaderboards/seals", s.cached(boardsMaxAge, s.sealBoard))
+	// The seal board's route exists only while its counter is wired
+	// (SRO_SEAL_BOARD): off must answer 404 like any unknown route, so
+	// the flag's state leaves no fingerprint (the census' own rule).
+	if s.src.SealCounts != nil {
+		mux.HandleFunc("GET /public/v1/leaderboards/seals", s.cached(boardsMaxAge, s.sealBoard))
+	}
 	mux.HandleFunc("GET /public/v1/firsts", s.cached(boardsMaxAge, s.firsts))
 	mux.HandleFunc("GET /public/v1/characters", s.cached(charactersMaxAge, s.search))
 	mux.HandleFunc("GET /public/v1/characters/{name}", s.cached(charactersMaxAge, s.profile))

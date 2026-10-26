@@ -9,6 +9,7 @@ package publicstats
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -158,8 +159,22 @@ func TestSealBoardUnservedWhenOff(t *testing.T) {
 		Characters: func() []*domain.Character { return chars },
 		Now:        func() time.Time { return sealNow },
 	})
-	if code := get(t, service, "/public/v1/leaderboards/seals", nil); code != http.StatusNotFound {
+	// Off must be indistinguishable from a route that does not exist:
+	// same status, content type, cache header and body as an unknown
+	// path on the same handler (the census' no-fingerprint rule).
+	probe := func(path string) (int, string, string, string) {
+		rec := httptest.NewRecorder()
+		service.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		return rec.Code, rec.Header().Get("Content-Type"), rec.Header().Get("Cache-Control"), rec.Body.String()
+	}
+	code, ctype, cache, body := probe("/public/v1/leaderboards/seals")
+	if code != http.StatusNotFound {
 		t.Fatalf("status %d, want 404 while the board is off", code)
+	}
+	ucode, uctype, ucache, ubody := probe("/public/v1/leaderboards/no-such-board")
+	if code != ucode || ctype != uctype || cache != ucache || body != ubody {
+		t.Fatalf("off answer (%d, %q, %q, %q) differs from an unknown route (%d, %q, %q, %q)",
+			code, ctype, cache, body, ucode, uctype, ucache, ubody)
 	}
 }
 
