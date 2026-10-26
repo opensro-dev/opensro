@@ -348,15 +348,27 @@ func (v *WaterValidator) clipMovementSegment(from simulation.Spawn, fromOwner si
 /*
 ================
 clipMovementSegmentWithWalk
+
+One segment: the start is owned first, then the plane the endpoints
+are on clips it (clipSegmentOnPlane, plane.go).
 ================
 */
 func (v *WaterValidator) clipMovementSegmentWithWalk(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) (ClipReport, *navWalk) {
 	from = v.ownedStart(from, fromOwner)
-	report := ClipReport{Outcome: ClipArrived, Rest: to}
+	return clipSegmentOnPlane(v, from, fromOwner, to)
+}
 
-	if simulation.IsDungeonRegion(from.RegionID) || simulation.IsDungeonRegion(to.RegionID) {
-		return v.clipDungeonPath(from, to), nil
-	}
+/*
+================
+clipOutdoorSegment
+
+The outdoor plane's segment clip (outdoorPlane.clipSegment): the world
+tile grid walk, then the owned object surfaces and their contacts. The
+start is already owned.
+================
+*/
+func (v *WaterValidator) clipOutdoorSegment(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) (ClipReport, *navWalk) {
+	report := ClipReport{Outcome: ClipArrived, Rest: to}
 
 	tilesPerAxis, tileSize, ok := v.gridParamsForRegion(from.RegionID)
 	if !ok {

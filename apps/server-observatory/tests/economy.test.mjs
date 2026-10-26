@@ -1,6 +1,7 @@
 /*
 ===========================================================================
-economy.test.mjs - economy reads stay confined, validated and read-only
+economy.test.mjs - economy reads stay confined and validated; the one
+census POST stays confined to its own route
 ===========================================================================
 */
 import { test } from "node:test";
@@ -163,6 +164,33 @@ test("a killstats range the GameWorld refuses keeps its contract code", async ()
 	);
 	assert.equal( result.status, 400 );
 	assert.deepEqual( result.body, { error: "range holds more than 366 days", code: "range_too_wide" } );
+});
+
+test("sealcensus forwards bare, and its run is the only POST that ever reaches a GameWorld", async () => {
+	const { calls, fetcher } = recording();
+	const economy = createEconomy( SHARDS, "secret", fetcher );
+	const got = await economy.request(
+		"/api/economy/sealcensus",
+		new URLSearchParams( { shard: "realm", from: "1", division: "x", character: "x" } )
+	);
+	assert.equal( got.status, 200 );
+	assert.equal( calls[0].url.pathname, "/economy/v1/sealcensus" );
+	assert.equal( calls[0].url.search, "", "no parameter is forwarded" );
+	assert.equal( calls[0].options.method, "GET" );
+	const ran = await economy.request( "/api/economy/sealcensus", new URLSearchParams( { shard: "realm" } ), "POST" );
+	assert.equal( ran.status, 200 );
+	assert.equal( calls[1].options.method, "POST" );
+	// A write named at any other route is refused before any GameWorld call.
+	for ( const path of [ "/api/economy/series", "/api/economy/killstats", "/api/economy/meta" ] ) {
+		const result = await economy.request(
+			path,
+			new URLSearchParams( { shard: "realm", metric: "gold_net" } ),
+			"POST"
+		);
+		assert.equal( result.status, 405, path );
+	}
+	assert.equal( calls.length, 2, "the refusals never reached a GameWorld" );
+	assert.equal( economyRoute( "/api/economy/sealcensus" ), "sealcensus" );
 });
 
 test("an unconfigured console, contract errors and dead GameWorlds never look like empty data", async () => {

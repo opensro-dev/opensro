@@ -480,6 +480,15 @@ variable "seal_board" {
   default = "off"
 }
 
+# seal_census opens the staff-only seal census route (the console's
+# sealcensus tab counts seal items by degree and tier, name-free; port-only,
+# not native; owner decision 2026-10-26, #1604 P13 / #1691). "off" is
+# native: the route does not exist.
+variable "seal_census" {
+  type    = string
+  default = "off"
+}
+
 variable "announce_plus" {
   type    = string
   default = "on"
@@ -560,6 +569,9 @@ variable "trade_job_hunter_percent_cap" {
 
 # reverse_return_map adds map destinations to the reverse return scroll
 # (port-only, not native). Anything but "on" keeps the native two points.
+# On, the destinations are the VSRO client's refoptionalteleport table when
+# the game data was built after scripts/import_vsro_optional_teleport.py,
+# else the inferred town gates and unique monster areas.
 variable "reverse_return_map" {
   type    = string
   default = ""
@@ -902,9 +914,17 @@ variable "public_api_addr" {
   default = "127.0.0.1:8790"
 }
 
+# The GameWorld's tick must never wait behind another job's burst.
+# Nomad turns a task's cpu (MHz) into its cgroup CPU weight, so under
+# contention each task's share is its own reservation over the sum of
+# the contending reservations; weights cost nothing on an idle host.
+# The default therefore outweighs the Agent's reservation (500) by
+# more than ten to one. An operator value (-gameworld-cpu) replaces
+# it: keep it at least ten times the largest other reservation on the
+# host, and below the node's total compute, or the job cannot place.
 variable "cpu" {
   type    = number
-  default = 2000
+  default = 6000
 }
 
 variable "memory_mb" {
@@ -1075,6 +1095,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_MALL_RIDE_SPEED                     = var.mall_ride_speed
         SRO_ANNOUNCE_SOX_DROP                   = var.announce_sox_drop
         SRO_SEAL_BOARD                          = var.seal_board
+        SRO_SEAL_CENSUS                         = var.seal_census
         SRO_ANNOUNCE_PLUS                       = var.announce_plus
         SRO_ANNOUNCE_JOB_KILL                   = var.announce_job_kill
         SRO_JOB_KILL_NOTICE_REPEAT              = var.job_kill_notice_repeat

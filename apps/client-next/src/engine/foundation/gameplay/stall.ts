@@ -11,6 +11,8 @@ slot][CSOItem][u8 bag slot][u16 count][u32 price] until a 0xFF slot
 (751A60); 0x3260 a visitor coming (2) or going (1), or a slot sold (3, 4
 through the network) with the offers left (755960). 0xB3F9 [1][slot]
 hands a buyer the slot's item into its first empty bag slot (5A3870);
+the buyer's own 0x3260 can land before that answer and take the slot
+off the board, so soldPending holds what left until the answer lands.
 the owner's bag gives the sold count up on 0x3260 3/4. 0xB42C and
 0xB6E7 close the window, as does 0x33D1 for the stall the reader stands
 at (74F8F0).
@@ -104,6 +106,10 @@ export interface StallState {
 	readonly mode: number;
 	readonly networkRegistered: boolean;
 	readonly offers: readonly StallOffer[];
+	// Offers a sold notice (0x3260) took off the board. The buy answer
+	// (0xB3F9) names only the slot, and the buyer's own sold notice can
+	// land first, so the slot's offer stays here until that answer lands.
+	readonly soldPending: readonly StallOffer[];
 	readonly visitors: readonly number[];
 	readonly network: {
 		readonly open: boolean;
@@ -132,6 +138,7 @@ export function emptyStall( namingSequence = 0 ): StallState {
 		mode: 0,
 		networkRegistered: false,
 		offers: [],
+		soldPending: [],
 		visitors: [],
 		network: { open: false, rows: [], pages: 0, page: 0, category: 0, buying: null }
 	};
@@ -263,8 +270,19 @@ export function stallFrame( state: StallState, frame: WireFrame, ctx: StallConte
 		case 0xb3f9: {
 			if ( p[0] !== 1 ) return refusal();
 			o = 1;
-			const slot = u8(), offer = state.offers.find( row => row.slot === slot );
-			return done( { state, ...(offer ? { receive: [ offer.item ] } : {}) } );
+			// The slot's offer may already sit in soldPending: the sold
+			// notice for this very purchase took it off the board first.
+			const slot = u8(),
+				offer = state.offers.find( row => row.slot === slot ) ??
+					state.soldPending.find( row => row.slot === slot );
+			return done( {
+				state: {
+					...state,
+					offers: state.offers.filter( row => row.slot !== slot ),
+					soldPending: state.soldPending.filter( row => row.slot !== slot )
+				},
+				...(offer ? { receive: [ offer.item ] } : {})
+			} );
 		}
 		case 0xb1a8: {
 			if ( p[0] !== 1 ) return refusal();
@@ -313,8 +331,15 @@ export function stallFrame( state: StallState, frame: WireFrame, ctx: StallConte
 			if ( kind !== EVENT_SOLD && kind !== EVENT_NETWORK_SOLD ) throw Error( "Unknown stall event" );
 			const slot = u8(), buyer = str(), sold = state.offers.find( row => row.slot === slot ), rows = offers();
 			const mine = state.phase === "owner";
+			// What just left the board stays reachable for a buy answer
+			// still in flight: the answer names only the slot.
+			const removed = state.offers.filter( row => !rows.some( kept => kept.slot === row.slot ) );
+			const soldPending = mine ? state.soldPending : [
+				...state.soldPending.filter( row => !removed.some( gone => gone.slot === row.slot ) ),
+				...removed
+			];
 			return done( {
-				state: { ...state, offers: rows },
+				state: { ...state, offers: rows, soldPending },
 				...(mine && sold ? { give: [ { bagSlot: sold.bagSlot, quantity: sold.quantity } ] } : {}),
 				...(mine && sold ?
 					{

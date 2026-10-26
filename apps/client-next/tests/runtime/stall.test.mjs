@@ -145,6 +145,30 @@ test("a visitor sees the offers, buys one into the bag, and the owner gives it u
 	assert.equal( state.phase, "none" );
 });
 
+test("a visitor still receives the purchase when the sold notice lands first", () => {
+	const visit = frame( 0xb61f, [
+		1,
+		...u32( OWNER ),
+		...wstr( "Welcome" ),
+		1,
+		0,
+		...offer( 2, 20, 5, 300 ),
+		0xff,
+		1,
+		...u32( 7 )
+	] );
+	const state = defined( stall.stallFrame( stall.emptyStall(), visit, ctx ) ).state;
+	// The sold notice for the visitor's own purchase takes the slot off
+	// the board before the buy answer arrives; the answer names only the
+	// slot, so the item must still be at hand when it lands.
+	const noticed = defined(
+		stall.stallFrame( state, frame( 0x3260, [ 3, 2, ...u16( 3 ), 66, 111, 98, 0xff ] ), ctx )
+	);
+	assert.equal( noticed.state.offers.length, 0 );
+	const bought = defined( stall.stallFrame( noticed.state, frame( 0xb3f9, [ 1, 2 ] ), ctx ) );
+	assert.equal( bought.receive?.[0]?.quantity, 5 );
+});
+
 test("the network lists rows and hands the bought one over", () => {
 	let state = stall.stallRequest( stall.emptyStall(), { kind: "stall-network-open", open: true } ).state;
 	const search = stall.stallRequest( state, { kind: "stall-network-search", category: 40, page: 1, degree: 3 } );

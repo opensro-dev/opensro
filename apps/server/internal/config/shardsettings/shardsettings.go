@@ -163,6 +163,10 @@ var Settings = []Setting{
 	// Owner, 2026-10-25 (#1604 P9): the weekly seal board counts Star,
 	// Moon and Sun drops per job alias. Off is native: nothing counts.
 	{Env: "SRO_SEAL_BOARD", NomadVar: "seal_board", Default: "off"},
+	// Owner, 2026-10-26 (#1604 P13, #1691): the staff seal census counts
+	// seal items on the shard by degree and tier, name-free, staff-only.
+	// Off is native: the route does not exist.
+	{Env: "SRO_SEAL_CENSUS", NomadVar: "seal_census", Default: "off"},
 	{Env: "SRO_ANNOUNCE_PLUS", NomadVar: "announce_plus", Default: "on"},
 	{Env: "SRO_ANNOUNCE_JOB_KILL", NomadVar: "announce_job_kill", Default: "on"},
 	// Owner, 2026-10-15: every job kill of a pair is announced (no window).
