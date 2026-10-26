@@ -560,6 +560,9 @@ variable "trade_job_hunter_percent_cap" {
 
 # reverse_return_map adds map destinations to the reverse return scroll
 # (port-only, not native). Anything but "on" keeps the native two points.
+# On, the destinations are the VSRO client's refoptionalteleport table when
+# the game data was built after scripts/import_vsro_optional_teleport.py,
+# else the inferred town gates and unique monster areas.
 variable "reverse_return_map" {
   type    = string
   default = ""

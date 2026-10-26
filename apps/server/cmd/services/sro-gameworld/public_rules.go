@@ -221,7 +221,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Owner decision: storage fills less with split stacks."},
 			{Flag: action.EnvReverseReturnMap, On: action.ReverseReturnMapFromEnv(),
 				Native: "The reverse return scroll offers the last recall point and the last death point.",
-				Now:    "It also offers town gates and unique monster areas on the map.",
+				Now:    "It also offers places on the map: the later client's own list when the server imported it, else town gates and unique monster areas.",
 				Why:    "Later clients offer a map choice; the destinations are places the original already sends players to."},
 			{Flag: enterworld.EnvHuntingGuide, On: enterworld.HuntingGuideFromEnv(),
 				Native: "The world map shows no monster information.",

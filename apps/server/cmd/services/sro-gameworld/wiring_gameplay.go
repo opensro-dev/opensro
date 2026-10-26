@@ -132,10 +132,8 @@ func newGameplayPlane(
 		return nil, fmt.Errorf("portal catalogue: %w", err)
 	}
 	// Port-only, not native: the reverse return scroll's map destinations.
-	if action.ReverseReturnMapFromEnv() {
-		items.ConfigureReverseReturnMap(true)
-		log.Infof("reverse return: map destinations ON (%s), %d points", action.EnvReverseReturnMap,
-			len(items.ReverseReturnMapPoints()))
+	if err := configureReverseReturnMap(items, devPaths.TextdataDir); err != nil {
+		return nil, err
 	}
 	// One clock for the bootstrap and the tick sweep, read through the runtime
 	// so a swapped clock reaches both; world entry hands re-raised pet-skill
