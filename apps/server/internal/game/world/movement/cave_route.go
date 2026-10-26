@@ -316,11 +316,13 @@ func (v *WaterValidator) planCaveRouteFrom(from monster.Pose, fromOwner simulati
 	if start == target {
 		return monster.NewNavigationRoute(goal, []monster.Pose{goal}).WithProbes(1).WithWork(work)
 	}
-	// A dungeon whose native route file loaded takes the native region
-	// route (cave_native_route.go); the search below is the port's route
-	// for the rest.
-	if route, ok := v.nativeCaveWaypoint(surface, from, fromOwner, goal, start, target); ok {
-		return route.WithProbes(1 + route.Probes()).WithWork(work + route.Work())
+	// The native region route (cave_native_route.go) runs only with the
+	// modern chase planner switched off (cave_chase.go) and where the
+	// dungeon's route file loaded; the search below is the port's route.
+	if !v.caveModernChase {
+		if route, ok := v.nativeCaveWaypoint(surface, from, fromOwner, goal, start, target); ok {
+			return route.WithProbes(1 + route.Probes()).WithWork(work + route.Work())
+		}
 	}
 	if start.block == target.block {
 		path, used, found := surface.astarCells(start, target)

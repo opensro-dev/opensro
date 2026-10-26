@@ -50,7 +50,6 @@ package movement
 import (
 	"math"
 	"os"
-	"strings"
 
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
@@ -273,9 +272,5 @@ CaveSeamStepFromEnv
 ================
 */
 func CaveSeamStepFromEnv() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvCaveSeamStep))) {
-	case "on", "1", "true":
-		return true
-	}
-	return false
+	return switchOn(os.Getenv(EnvCaveSeamStep))
 }

@@ -250,6 +250,24 @@ variable "cave_seam_step" {
   default = "on"
 }
 
+# cave_modern_chase sends a monster chasing through a cave along the port's
+# planner (A* over the cells, string-pulled) instead of the original's
+# region route (port-only, not native; owner decision 2026-10-26). "off" is
+# the original route, which can leave a monster pacing on a cell line.
+variable "cave_modern_chase" {
+  type    = string
+  default = "on"
+}
+
+# cave_obstacle_escape lets a mover whose step starts inside a cave
+# obstacle circle walk out of it (port-only, not native; owner decision
+# 2026-10-26). "off" is the original circle test, which stops every step
+# deeper into a circle that covers a ramp doorway.
+variable "cave_obstacle_escape" {
+  type    = string
+  default = "on"
+}
+
 # closed_object_rescue moves a character that logs in inside a closed object
 # (a tree trunk or rock no walk can leave) to the nearest open ground
 # (port-only, not native; owner decision 2026-10-15). "off" keeps the login
@@ -1081,6 +1099,8 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_UNIQUE_DAMAGE_RANK                  = var.unique_damage_rank
         SRO_CLOSED_OBJECT_RESCUE                = var.closed_object_rescue
         SRO_CAVE_SEAM_STEP                      = var.cave_seam_step
+        SRO_CAVE_MODERN_CHASE                   = var.cave_modern_chase
+        SRO_CAVE_OBSTACLE_ESCAPE                = var.cave_obstacle_escape
         SRO_DEEP_WATER_REFUSAL                  = var.deep_water_refusal
         SRO_MOST_WANTED                         = var.most_wanted
         SRO_MOST_WANTED_TEST                    = var.most_wanted_test

@@ -111,6 +111,8 @@ var Settings = []Setting{
 	// a short landing step that would stay short of the doorway rounds on
 	// toward it. Off is the native step.
 	{Env: "SRO_CAVE_SEAM_STEP", NomadVar: "cave_seam_step", Default: "on"},
+	{Env: "SRO_CAVE_MODERN_CHASE", NomadVar: "cave_modern_chase", Default: "on"},
+	{Env: "SRO_CAVE_OBSTACLE_ESCAPE", NomadVar: "cave_obstacle_escape", Default: "on"},
 	// Port-only, not native: the deep-water destination refusal. Off, as the
 	// original server; on, a character on a deep seabed was stuck there.
 	{Env: "SRO_DEEP_WATER_REFUSAL", NomadVar: "deep_water_refusal", Default: "off"},
