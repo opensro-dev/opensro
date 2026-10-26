@@ -637,6 +637,11 @@ variable "attack_pet_expansion" {
   default = "off"
 }
 
+variable "beginner_quests" {
+  type    = string
+  default = "off"
+}
+
 variable "beta_growth" {
   type    = string
   default = "on"
@@ -1103,6 +1108,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_FLAGWAR_START_UTC                   = var.flagwar_start_utc
         SRO_FLAGWAR_MIN_PLAYERS                 = var.flagwar_min_players
         SRO_ATTACK_PET_EXPANSION                = var.attack_pet_expansion
+        SRO_BEGINNER_QUESTS                     = var.beginner_quests
         SRO_BETA_GROWTH                         = var.beta_growth
         SRO_BETA_GROWTH_BANDS                   = var.beta_growth_bands
         SRO_BETA_SKILL_EXP_RATE                 = var.beta_skill_exp_rate

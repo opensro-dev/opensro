@@ -203,6 +203,8 @@ var Settings = []Setting{
 	// start (HH:MM) and the house minimum; the GameWorld refuses bad values.
 	{Env: "SRO_FLAGWAR_START_UTC", NomadVar: "flagwar_start_utc", Default: "20:00"},
 	{Env: "SRO_FLAGWAR_MIN_PLAYERS", NomadVar: "flagwar_min_players", Default: "4"},
+	// Port-only, not native: owner-approved potion-NPC beginner milestones.
+	{Env: "SRO_BEGINNER_QUESTS", NomadVar: "beginner_quests", Default: "off", Catalogue: true, Validation: ValueSwitch},
 	{Env: "SRO_BETA_GROWTH", NomadVar: "beta_growth", Default: "on", Catalogue: true, Validation: ValueSwitch},
 	// #1606 (supersedes the owner's 2026-10-24 bands, which cost about
 	// 2,600 h for 90->110 with an 84x step at 59->60): 1-59 keep the

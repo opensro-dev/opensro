@@ -803,7 +803,7 @@ func (rt *Runtime) settleReward(character *enterworld.Character, def *Definition
 			}
 			var grants []inventory.ItemAmount
 			for _, r := range rewardItemsWithChoice(def, choice) {
-				grants = append(grants, inventory.ItemAmount{Codename: rewardItemForCharacter(character, r.ItemCodename), Count: r.Count * count})
+				grants = append(grants, inventory.ItemAmount{CharacterBound: def.BoundRewards, Codename: rewardItemForCharacter(character, r.ItemCodename), Count: r.Count * count})
 			}
 			inventoryRows, inventoryFrames, err = rt.PlanInventory(character, consume, grants)
 			if err != nil {

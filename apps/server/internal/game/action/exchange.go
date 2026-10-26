@@ -261,7 +261,7 @@ func (rt *Runtime) exchangeOfferable(c *enterworld.Character, slot uint8) (inven
 	if !ok {
 		return inventory.Item{}, wire.ErrCodeInvalidRequest
 	}
-	if item.Summon != nil && item.Summon.Summoned {
+	if item.CharacterBound || item.Summon != nil && item.Summon.Summoned {
 		return inventory.Item{}, wire.ExchangeErrCannotTrade
 	}
 	ref, ok := rt.deps.ItemReferences().ItemRefByCodename(item.Codename)
@@ -513,7 +513,7 @@ func takeOffered(bag *inventory.Inventory, side exchange.Side) ([]inventory.Item
 			continue
 		}
 		item, ok := bag.At(offer.BagSlot)
-		if !ok || item.RefObjID != offer.RefObjID || item.Quantity != offer.Quantity || !bytes.Equal(offeredBody(item), offer.Body) {
+		if !ok || item.CharacterBound || item.RefObjID != offer.RefObjID || item.Quantity != offer.Quantity || !bytes.Equal(offeredBody(item), offer.Body) {
 			return nil, false
 		}
 		out = append(out, item)

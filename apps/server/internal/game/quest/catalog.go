@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+catalog.go - quest identity and journal content catalog
+
+Native rows come from the verified version-local media. The optional
+beginner track adds explicit port-only identities before readers see the
+catalog; it never replaces a native quest or writes back to the media.
+
+===========================================================================
+*/
 package quest
 
 import (
@@ -43,6 +54,11 @@ const questcontentsColumns = 13
 const textdataNone = "xxx"
 
 // CatalogRow is one shipped questdata.txt row's server-consumed fields.
+/*
+================
+CatalogRow
+================
+*/
 type CatalogRow struct {
 	// ID is the v1.150-native quest ref id (col 1) - the wire id every
 	// 0x31ED/0x32B3 emission carries and the 0x71EB/0x729A bodies name.
@@ -59,6 +75,11 @@ type CatalogRow struct {
 
 // ContentsRow is one shipped questcontentsdata.txt row's server-consumed
 // fields (joined by codename, exactly like the native media-boot join).
+/*
+================
+ContentsRow
+================
+*/
 type ContentsRow struct {
 	Codename string
 	// CountryByte is col 2 (the sub_7e5fa0 country gate; 3 = both).
@@ -77,8 +98,15 @@ type ContentsRow struct {
 // empty catalog when the textdata is absent (the TextdataSkills posture:
 // the server still boots; definition loading then resolves nothing and
 // the quest plane runs definition-less, refusing every inbound id).
+/*
+================
+Catalog
+================
+*/
 type Catalog struct {
-	dir string
+	beginnerEnabled bool
+	beginnerError   error
+	dir             string
 
 	once       sync.Once
 	rows       map[string]CatalogRow
@@ -88,12 +116,23 @@ type Catalog struct {
 }
 
 // NewCatalog returns a lazy loader over the verified projection's textdata directory.
+/*
+================
+NewCatalog
+================
+*/
 func NewCatalog(dir string) *Catalog {
-	return &Catalog{dir: dir}
+	on, err := BeginnerQuestsFromEnv()
+	return &Catalog{dir: dir, beginnerEnabled: on, beginnerError: err}
 }
 
 // Dir answers the resolved textdata directory (the wiring shares it with
 // the sibling loaders it constructs alongside this catalog).
+/*
+================
+Dir
+================
+*/
 func (c *Catalog) Dir() string {
 	return c.dir
 }
@@ -101,6 +140,11 @@ func (c *Catalog) Dir() string {
 // QuestByCodename resolves a shipped questdata row by its codename;
 // ok=false when the table has no such row (callers fail loud - see
 // LoadDefinitions).
+/*
+================
+QuestByCodename
+================
+*/
 func (c *Catalog) QuestByCodename(codename string) (CatalogRow, bool) {
 	c.once.Do(c.load)
 	row, ok := c.rows[codename]
@@ -109,6 +153,11 @@ func (c *Catalog) QuestByCodename(codename string) (CatalogRow, bool) {
 
 // ContentsByCodename resolves the questcontentsdata join row; ok=false
 // when the shipped table carries none for the codename.
+/*
+================
+ContentsByCodename
+================
+*/
 func (c *Catalog) ContentsByCodename(codename string) (ContentsRow, bool) {
 	c.once.Do(c.load)
 	row, ok := c.contents[codename]
@@ -116,11 +165,21 @@ func (c *Catalog) ContentsByCodename(codename string) (ContentsRow, bool) {
 }
 
 // Len reports how many questdata rows loaded (0 = textdata absent).
+/*
+================
+Len
+================
+*/
 func (c *Catalog) Len() int {
 	c.once.Do(c.load)
 	return c.loadedRows
 }
 
+/*
+================
+load
+================
+*/
 func (c *Catalog) load() {
 	c.rows = map[string]CatalogRow{}
 	c.rowsByID = map[uint32]string{}
@@ -190,6 +249,9 @@ func (c *Catalog) load() {
 	if c.loadedRows == 0 {
 		log.Warnf("quest: questdata not found under verified projection %s; the quest plane runs definition-less and refuses every request", c.dir)
 		return
+	}
+	if c.beginnerEnabled {
+		c.beginnerError = c.addBeginnerRows()
 	}
 	log.Infof("quest: questdata loaded from %s (%d quest row(s), %d contents row(s))", c.dir, c.loadedRows, len(c.contents))
 }

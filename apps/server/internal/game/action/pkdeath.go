@@ -270,7 +270,7 @@ func (rt *Runtime) deathDropSlots(c *enterworld.Character) []pk.DropSlot {
 		event := t[0] == 3 && t[1] == 3 && t[2] == 9
 		summoner := t[0] == 3 && t[1] == 2
 		sealed := t[0] == 3 && t[1] == 1 && (ref.Rarity == 2 || ref.Rarity == 6)
-		s.Droppable = ref.CanDropOnDeath && !ref.CashItem && !event && !summoner && !sealed
+		s.Droppable = !row.CharacterBound && ref.CanDropOnDeath && !ref.CashItem && !event && !summoner && !sealed
 	}
 	return slots
 }

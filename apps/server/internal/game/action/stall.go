@@ -774,7 +774,7 @@ func (rt *Runtime) sellStallSlot(division, ownerName string, slot uint8, buyer *
 			return false
 		}
 		item, present := ownerBag.At(offer.BagSlot)
-		if !present || item.RefObjID != offer.RefObjID || !bytes.Equal(offeredBody(item), offer.Body) {
+		if !present || item.CharacterBound || item.RefObjID != offer.RefObjID || !bytes.Equal(offeredBody(item), offer.Body) {
 			code = wire.StallErrBadSlot
 			return false
 		}

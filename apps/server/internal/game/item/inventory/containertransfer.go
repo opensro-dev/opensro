@@ -25,10 +25,18 @@ func (inv *Inventory) TransferWholeTo(destination *Inventory, sourceSlot, destin
 	if i < 0 {
 		return newFault(wire.ErrCodeInvalidRequest, "unavailableContainerSlot")
 	}
+	// Port-only, not native: account/guild storage and companion containers
+	// must not provide an indirect route to another character.
+	if inv.items[i].CharacterBound {
+		return newFault(wire.ErrCodeInvalidRequest, "characterBoundItem")
+	}
 	if fault := summonerTransferFault(inv.items[i]); fault != nil {
 		return fault
 	}
 	j := destination.indexOf(destinationSlot)
+	if j >= 0 && destination.items[j].CharacterBound {
+		return newFault(wire.ErrCodeInvalidRequest, "characterBoundItem")
+	}
 	if j >= 0 {
 		if fault := summonerTransferFault(destination.items[j]); fault != nil {
 			return fault

@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+dissolve.go - equipment dissolution and atomic material reward planning
+
+Reference-owned selectors choose elements and stones. A refused plan never
+consumes the equipment or Rondo; bound beginner weapons cannot be converted.
+
+===========================================================================
+*/
 package alchemy
 
 import (
@@ -8,15 +18,31 @@ import (
 // dissolveRondo is the additive every equipment dissolution consumes.
 const dissolveRondo = "ITEM_ETC_ARCHEMY_RONDO_02"
 
+/*
+================
+WeightedStone
+================
+*/
 type WeightedStone struct {
 	Codename string
 	Weight   uint32
 }
+
+/*
+================
+DissolvePool
+================
+*/
 type DissolvePool struct{ Attribute, Magic []WeightedStone }
 
 // Dissolve keeps the reward plan detached until every draw, reference lookup,
 // Rondo requirement and output slot has been admitted. Native 50B4E0 requires
 // both selectors even when the eventual count of bonus stones is zero.
+/*
+================
+Dissolve
+================
+*/
 func (c *Catalog) Dissolve(items []inventory.Item, r ProcessRequest, roll Roll) (ProcessOutcome, error) {
 	var out ProcessOutcome
 	if r.Mode != 3 || r.Quantity != 1 || len(r.Slots) < 1 || len(r.Slots) > 2 {
@@ -43,6 +69,11 @@ func (c *Catalog) Dissolve(items []inventory.Item, r ProcessRequest, roll Roll) 
 		}
 	}
 	ref := c.Items[target.Codename]
+	// Port-only, not native: a beginner weapon cannot become transferable
+	// elements or stones. Reinforcement keeps the original bound row.
+	if target.CharacterBound {
+		return out, Refusal(0x17)
+	}
 	degree := ref.Degree()
 	// 50C070/50C160: job equipment and either repair restriction refuse
 	// dissolution. Presence is the gate, even when the encoded value is zero.
@@ -139,6 +170,11 @@ func (c *Catalog) Dissolve(items []inventory.Item, r ProcessRequest, roll Roll) 
 
 // 50AE10 reads parameter 2 AND 3, in low-byte-first order, and returns zero
 // without drawing when both are empty (e.g. Solid/Luck). Manufacture differs.
+/*
+================
+dissolveAssimilation
+================
+*/
 func dissolveAssimilation(ref Reference, roll Roll) (uint8, error) {
 	values := assimilationValues(ref.Params[1], ref.Params[2])
 	if len(values) == 0 {
@@ -151,6 +187,11 @@ func dissolveAssimilation(ref Reference, roll Roll) (uint8, error) {
 	return values[n], nil
 }
 
+/*
+================
+dissolveWeightTotal
+================
+*/
 func (c *Catalog) dissolveWeightTotal(choices []WeightedStone, degree, kind int) (uint32, error) {
 	var total uint32
 	for _, choice := range choices {
@@ -167,6 +208,11 @@ func (c *Catalog) dissolveWeightTotal(choices []WeightedStone, degree, kind int)
 	return total, nil
 }
 
+/*
+================
+selectDissolveStone
+================
+*/
 func (c *Catalog) selectDissolveStone(choices []WeightedStone, degree, kind int, roll Roll) (Reference, error) {
 	total, err := c.dissolveWeightTotal(choices, degree, kind)
 	if err != nil {

@@ -70,8 +70,10 @@ Item
 ================
 */
 type Item struct {
-	TradeOwner string // original job alias, preserved when the holder changes
-	Summon     *domain.CharacterCOS
+	// Port-only, not native: persisted beginner reward ownership.
+	CharacterBound bool
+	TradeOwner     string // original job alias, preserved when the holder changes
+	Summon         *domain.CharacterCOS
 	// Slot is the wire slot the row currently occupies.
 	Slot         uint8
 	RefObjID     uint32
@@ -325,6 +327,11 @@ func (inv *Inventory) Move(sourceSlot, destSlot uint8) (MoveResult, *Fault) {
 // TransferLeg names which native sub_756a60 leg an applied type-0x00 transfer
 // took. The values match the reference fixture's log strings so server logs
 // line up across the two implementations.
+/*
+================
+TransferLeg
+================
+*/
 type TransferLeg string
 
 const (
@@ -437,6 +444,14 @@ func (inv *Inventory) Transfer(sourceSlot, destSlot uint8, quantity uint16, stac
 	}
 
 	destIndex := inv.indexOf(destSlot)
+	// Port-only, not native: the slot-move reply carries no binding bit.
+	// The client would merge identical references while a server-side swap
+	// kept two rows. Refuse mixed-binding stacks instead of diverging bags.
+	if destIndex >= 0 && IsEtcStackableTypeFlags(inv.items[sourceIndex].TypeFlags) &&
+		inv.items[sourceIndex].RefObjID == inv.items[destIndex].RefObjID &&
+		inv.items[sourceIndex].CharacterBound != inv.items[destIndex].CharacterBound {
+		return out, newFault(wire.ErrCodeInvalidRequest, "characterBoundStackMismatch")
+	}
 
 	// Swap-back equip gates: moving OUT of a socket onto an occupied slot
 	// seats that occupant in the socket, so the occupant is an incoming
@@ -708,6 +723,9 @@ func (inv *Inventory) Drop(sourceSlot uint8) (Item, *Fault) {
 	if sourceIndex < 0 {
 		return Item{}, newFault(wire.ErrCodeInvalidRequest, "sourceSlotEmpty")
 	}
+	if inv.items[sourceIndex].CharacterBound {
+		return Item{}, newFault(wire.ErrCodeInvalidRequest, "characterBoundItem")
+	}
 
 	if fault := summonerTransferFault(inv.items[sourceIndex]); fault != nil {
 		return Item{}, fault
@@ -736,6 +754,9 @@ func (inv *Inventory) DeathDrop(sourceSlot uint8) (Item, *Fault) {
 	sourceIndex := inv.indexOf(sourceSlot)
 	if sourceIndex < 0 {
 		return Item{}, newFault(wire.ErrCodeInvalidRequest, "sourceSlotEmpty")
+	}
+	if inv.items[sourceIndex].CharacterBound {
+		return Item{}, newFault(wire.ErrCodeInvalidRequest, "characterBoundItem")
 	}
 	dropped := inv.items[sourceIndex]
 	inv.items = append(inv.items[:sourceIndex], inv.items[sourceIndex+1:]...)

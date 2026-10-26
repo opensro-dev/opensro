@@ -78,8 +78,11 @@ choice with one item and no authored title is titled by that item's name
 ================
 */
 type RewardChoice struct {
-	TitleSymbol string
-	Items       []RewardItemLead
+	// Port-only, not native: beginner weapon confirmation names the exact
+	// selected reward. Empty preserves the original quest's complete prompt.
+	CompletePromptSymbol string
+	TitleSymbol          string
+	Items                []RewardItemLead
 	// country is the single item's itemdata Country, resolved at load:
 	// 0 China, 1 Europe, 3 every character.
 	country int64
@@ -129,6 +132,8 @@ Authored mechanics keyed by codename. Definition resolves media-owned fields.
 ================
 */
 type QuestSpec struct {
+	// Port-only, not native: every beginner item grant is character-bound.
+	BoundRewards     bool
 	TimeLimitMinutes uint8
 	TimeoutSymbol    string
 	DayOrNight       uint8
@@ -480,12 +485,23 @@ func LoadDefinitions(catalog *Catalog, items enterworld.ItemRefSource) (*Definit
 		byRefID:               map[uint32]*Definition{},
 		externalPrerequisites: map[uint32]bool{},
 	}
-	if catalog.Len() == 0 {
+	loaded := catalog.Len()
+	if catalog.beginnerError != nil {
+		return nil, catalog.beginnerError
+	}
+	if loaded == 0 {
 		return defs, nil
 	}
 	specs, err := catalogSpecs(catalog)
 	if err != nil {
 		return nil, err
+	}
+	if catalog.beginnerEnabled {
+		beginner, err := beginnerQuestSpecs(items)
+		if err != nil {
+			return nil, err
+		}
+		specs = append(specs, beginner...)
 	}
 	for _, spec := range specs {
 		if spec.DayOrNight > 2 || spec.PeriodStartLimit > 0 && spec.DayOrNight == 0 || spec.DayOrNight > 0 && len(spec.Stages) > 0 {

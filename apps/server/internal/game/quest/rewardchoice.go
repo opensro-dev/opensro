@@ -131,8 +131,8 @@ func rewardChoiceOffered(def *Definition, country int, i int) bool {
 ================
 rewardChoiceOptions
 
-One completion row per choice the character may pick; every row opens the
-quest's own complete prompt.
+One completion row per choice the character may pick. Native choices open
+the quest's complete prompt; custom choices may name their exact reward.
 ================
 */
 func rewardChoiceOptions(def *Definition, country int) []NpcOption {
@@ -141,9 +141,13 @@ func rewardChoiceOptions(def *Definition, country int) []NpcOption {
 		if !rewardChoiceOffered(def, country, i) {
 			continue
 		}
+		prompt := choice.CompletePromptSymbol
+		if prompt == "" {
+			prompt = def.CompletePromptSymbol
+		}
 		out = append(out, NpcOption{
 			Codename: rewardChoiceToken(def.Codename, i), TitleSymbol: choice.TitleSymbol,
-			PromptSymbol: def.CompletePromptSymbol, Complete: true,
+			PromptSymbol: prompt, Complete: true,
 		})
 	}
 	return out

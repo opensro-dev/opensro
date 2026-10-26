@@ -68,7 +68,7 @@ func (rt *Runtime) shopSaleQuotes(division string, c *enterworld.Character, npc 
 				continue
 			}
 			ref, found := rt.deps.ItemReferences().ItemRefByCodename(item.Codename)
-			if !found || ref == nil || ref.RefObjID != item.RefObjID || ref.TypeFlags() != item.TypeFlags || !commerceSaleAdmitted(ref) {
+			if !found || item.CharacterBound || ref == nil || ref.RefObjID != item.RefObjID || ref.TypeFlags() != item.TypeFlags || !commerceSaleAdmitted(ref) {
 				continue
 			}
 			if rt.tradeAdmission(division, c, npc, item) != 0 {

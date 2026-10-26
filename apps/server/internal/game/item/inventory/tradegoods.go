@@ -40,6 +40,11 @@ Ordinary merchandise retains its reference-only merge policy here.
 ================
 */
 func nativeStackIdentityMatches(a, b Item) bool {
+	// Port-only, not native: merging must never bind ordinary stock or
+	// remove a beginner reward's binding, including whole-count exchanges.
+	if a.CharacterBound != b.CharacterBound {
+		return false
+	}
 	if a.RefObjID != b.RefObjID {
 		return false
 	}

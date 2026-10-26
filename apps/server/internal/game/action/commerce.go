@@ -462,7 +462,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 			if !found || ref == nil || ref.RefObjID != item.RefObjID || ref.TypeFlags() != item.TypeFlags {
 				return false
 			}
-			admitted := commerceSaleAdmitted(ref)
+			admitted := !item.CharacterBound && commerceSaleAdmitted(ref)
 			if !admitted || !inventory.IsEtcStackableTypeFlags(item.TypeFlags) && q.Quantity != 1 {
 				return false
 			}

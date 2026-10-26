@@ -100,7 +100,7 @@ func (rt *Runtime) planInventoryGrant(
 		if wire.IsGoldHeap(ref.TypeFlags()) {
 			return nil, nil, fmt.Errorf("ground-only item %s cannot enter an inventory", request.Codename)
 		}
-		item := inventory.Item{RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags(), Quantity: uint16(request.Count)}
+		item := inventory.Item{CharacterBound: request.CharacterBound, RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags(), Quantity: uint16(request.Count)}
 		if ref.TypeIDs[1] == 1 {
 			item.Durability = 100
 			if ref.VarianceIntMin1c0 != nil {

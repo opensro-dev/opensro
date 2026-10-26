@@ -99,10 +99,15 @@ func publicRules() publicstats.RulesResponse {
 	mallGoods, _ := commerce.MallExtraGoodsFromEnv()
 	rideFactor, rideOn, _ := enterworld.MallRideSpeedFromEnv()
 	flagWar, _ := action.FlagWarSettingsFromEnv()
+	beginnerQuests, _ := quest.BeginnerQuestsFromEnv()
 	settings := tunables.Current()
 	testKills := settings.Int(tunables.MostWantedTestKills)
 	return publicstats.RulesResponse{
 		Rules: []publicstats.Rule{
+			{Flag: quest.EnvBeginnerQuests, On: beginnerQuests,
+				Native: "Only the original quest progression is offered.",
+				Now:    "Potion merchants offer one-time beginner quests through level 64. Weapon milestones grant one chosen Chinese or European Seal of Moon weapon; support milestones grant experience, skill experience and potions. All item rewards are character-bound and cannot be transferred, sold or dissolved.",
+				Why:    "An optional beginner progression track with personal rewards."},
 			{Flag: progression.EnvLevelCap, On: levelCap == progression.ExpansionLevelCap,
 				Native: "The character level cap is 90.",
 				Now:    "The character level cap is 110, using the installed v1.150 experience curve.",

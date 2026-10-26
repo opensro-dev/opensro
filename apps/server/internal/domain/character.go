@@ -26,6 +26,9 @@ reads it). varianceBits persists as a decimal string because JSON has no
 ==================
 */
 type InventoryRow struct {
+	// Port-only, not native: beginner rewards stay with this character even
+	// after the feature is disabled. An absent field keeps native ownership.
+	CharacterBound bool `json:"characterBound,omitempty"`
 	// TradeOwner is the original job alias in the goods record's owner string
 	// (490930). A transfer changes the holder, never this sale-admission identity.
 	TradeOwner string        `json:"tradeOwner,omitempty"`

@@ -283,6 +283,9 @@ storableItem
 ================
 */
 func (rt *Runtime) storableItem(item inventory.Item) bool {
+	if item.CharacterBound {
+		return false
+	}
 	ref, ok := rt.deps.ItemReferences().ItemRefByCodename(item.Codename)
 	if !ok || ref == nil {
 		return false
