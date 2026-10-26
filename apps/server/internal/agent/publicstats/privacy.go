@@ -6,6 +6,7 @@ privacy.go - the website's privacy setting (port-only)
 	GET /v1/accounts/{id}/characters                 -> 200 own characters
 	PUT /v1/accounts/{id}/characters/{name}/hidden       {"hidden": bool} -> 204
 	PUT /v1/accounts/{id}/characters/{name}/gear-hidden  {"hidden": bool} -> 204
+	PUT /v1/accounts/{id}/characters/{name}/break-notice {"on": bool} -> 204
 
 The /account page lists the signed-in player's own characters with their
 current flag and sets it. Both are served on the same loopback listener as
@@ -76,6 +77,11 @@ func (s *Service) installPrivacy(mux *http.ServeMux) {
 			s.putFlag(w, r, digest, s.src.SetGearHidden)
 		})
 	}
+	if s.src.SetBreakNotice != nil {
+		mux.HandleFunc("PUT /v1/accounts/{id}/characters/{name}/break-notice", func(w http.ResponseWriter, r *http.Request) {
+			s.putBreakNotice(w, r, digest)
+		})
+	}
 }
 
 /*
@@ -125,6 +131,50 @@ func (s *Service) putFlag(w http.ResponseWriter, r *http.Request, digest [sha256
 
 /*
 ================
+putBreakNotice
+
+The item-break notice opt-in (#1738), {"on": bool}, through
+SetBreakNotice: the same contract as putFlag (204, 404 for a character
+the account does not own, 503 when the store did not take it), and the
+same cache drop, so the character list shows the change at once.
+================
+*/
+func (s *Service) putBreakNotice(w http.ResponseWriter, r *http.Request, digest [sha256.Size]byte) {
+	if !authorized(w, r, digest) {
+		return
+	}
+	var body struct {
+		On *bool `json:"on"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxPrivacyBody))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil || body.On == nil {
+		writeStatus(w, http.StatusBadRequest, "body must be {\"on\": true|false}")
+		return
+	}
+	account, name := r.PathValue("id"), r.PathValue("name")
+	if account == "" || name == "" || len(name) > maxNameLength {
+		writeStatus(w, http.StatusNotFound, "not found")
+		return
+	}
+	if err := s.src.SetBreakNotice(account, name, *body.On); err != nil {
+		if errors.Is(err, ErrNotOwned) {
+			writeStatus(w, http.StatusNotFound, "not found")
+			return
+		}
+		writeStatus(w, http.StatusServiceUnavailable, "unavailable")
+		return
+	}
+	s.mu.Lock()
+	s.cache = map[string]cacheEntry{}
+	s.snap.roster, s.snap.rosterUntil, s.snap.rankings = roster{}, time.Time{}, nil
+	s.snap.guilds, s.snap.guildsUntil = nil, time.Time{}
+	s.mu.Unlock()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+/*
+================
 authorized
 
 Sets the private headers and checks the bearer token, comparing SHA-256
@@ -162,7 +212,7 @@ func (s *Service) ownCharacters(w http.ResponseWriter, account string) {
 			continue
 		}
 		race, _ := raceGender(c.ModelCodename)
-		out.Characters = append(out.Characters, OwnCharacter{Name: c.Name, Level: level(c), Race: race, Hidden: c.PublicHidden, GearHidden: c.PublicGearHidden})
+		out.Characters = append(out.Characters, OwnCharacter{Name: c.Name, Level: level(c), Race: race, Hidden: c.PublicHidden, GearHidden: c.PublicGearHidden, BreakNotice: c.BreakNotice})
 	}
 	s.mu.Unlock()
 	sort.Slice(out.Characters, func(i, j int) bool { return out.Characters[i].Name < out.Characters[j].Name })
