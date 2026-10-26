@@ -35,7 +35,7 @@ type PetFollower struct {
 	detour       petDetour
 	// progress is the native stuck count (CTactics +184/+19C/+148): each
 	// stop that left the pet within 20 of where its move began counts, and
-	// from the tenth the stuck event is raised (559010 -> 5599C0).
+	// from the tenth the stuck event is raised.
 	// stopCounted marks the current segment's stop as already counted; stuck
 	// holds the event for the action owner (TakeStuck).
 	progress    monster.MovementProgress
@@ -154,8 +154,8 @@ func (p *PetFollower) SetMovementSpeeds(walk, run float32, nowMs int64) {
 	}
 }
 
-// Follow distance is a bounded policy based on the later server's 549F80
-// distance comparison. Exact formation offsets and steering parity remain
+// Follow distance is a bounded policy based on the reference
+// server's distance comparison. Exact formation offsets and steering parity remain
 // separate; this is not an exact reconstruction of that function.
 const PetFollowDistance = 60.0
 
@@ -193,7 +193,7 @@ func (p *PetFollower) Approach(owner Spawn, speed float64, nowMs int64, stopDist
 	distance := WorldDistance2D(from, owner)
 	if distance <= stopDistance {
 		// In reach: the move is done and the AI leaves its moving state
-		// (ChangeState 53FF30 clears the stuck count).
+		// (a state change clears the stuck count).
 		frames := p.Stop(nowMs)
 		p.ResetStuck()
 		return frames
@@ -226,8 +226,8 @@ func (p *PetFollower) moveTo(goal Spawn, speed float64, nowMs int64, constrain f
 	// A refused leg ends its route; the next plan waits out the retry pace,
 	// as a failed plan does, rather than searching again every tick.
 	refuse := func() []Frame {
-		// 541730 records the command before the mover refuses it; the
-		// refusal is a stop (4A9430 event 8) where the pet stands.
+		// The native step records the command before the mover refuses
+		// it; the refusal is a stop (event 8) where the pet stands.
 		p.noteIssued(from, nowMs)
 		if !p.world.MoveSegment.Valid() {
 			p.noteStopped(from)
@@ -350,7 +350,7 @@ func (p *PetFollower) Stop(nowMs int64) []Frame {
 ================
 noteIssued
 
-AI_CTactics_StepDestination (541730): every admitted move command records
+The native tactics step: every admitted move command records
 where it was issued, and a command issued while the pet stands still also
 starts a new move sequence (monster.MovementProgress.Issued).
 ================
@@ -364,10 +364,10 @@ func (p *PetFollower) noteIssued(from Spawn, nowMs int64) {
 ================
 noteStopped
 
-CGObjChar_StopMove (4A9430) raises AI event 8 whenever a non-player's move
-stops, arrived or blocked. CAIState_OnMoveStopped_CountStuck (559010)
-counts the stop when it is within 20 of the sequence origin; from the tenth
-such stop the stuck event is raised (5597B0, event 0x28).
+The native move stop raises AI event 8 whenever a non-player's
+move stops, arrived or blocked. The move-stopped state counts
+the stop when it is within 20 of the sequence origin; from the
+tenth such stop the stuck event is raised (event 0x28).
 ================
 */
 func (p *PetFollower) noteStopped(at Spawn) {
@@ -408,8 +408,8 @@ func (p *PetFollower) TakeStuck() bool {
 ================
 ResetStuck
 
-AI_CTactics_ChangeState (53FF30) and AI_CTactics_ResetAndStart (53F4D0)
-clear the count on every state change; the origins stay.
+Every native state change and tactics reset clears the count;
+the origins stay.
 ================
 */
 func (p *PetFollower) ResetStuck() {
@@ -421,7 +421,7 @@ func (p *PetFollower) ResetStuck() {
 ================
 RelocateTo
 
-CAITactics_RequestPositionRelocation (541110): place the pet on the given
+The native relocation request: place the pet on the given
 point at its surface height. False when that point has no surface.
 ================
 */
