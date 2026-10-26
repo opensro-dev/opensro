@@ -22,6 +22,7 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -117,7 +118,7 @@ func (rt *Runtime) areaPlayerCandidates(q areaQuery) []areaCandidate {
 	var out []areaCandidate
 	for _, present := range rt.PopulationPlayers(q.division, q.now) {
 		if present.World != world || present.GID == enterworld.ObjectIDForCharacter(q.caster) ||
-			simulation.IsDungeonRegion(present.Spawn.RegionID) != simulation.IsDungeonRegion(q.center.RegionID) {
+			!worldgeom.SamePlane(present.Spawn.RegionID, q.center.RegionID) {
 			continue
 		}
 		distance := areaDistance(q.center, present.Spawn)
@@ -157,7 +158,7 @@ func (rt *Runtime) areaPlayerCandidates(q areaQuery) []areaCandidate {
 				continue
 			}
 			target, ok := rt.resolveCOSTarget(q.division, q.caster, pet.GID, q.now)
-			if !ok || simulation.IsDungeonRegion(target.at.RegionID) != simulation.IsDungeonRegion(q.center.RegionID) {
+			if !ok || !worldgeom.SamePlane(target.at.RegionID, q.center.RegionID) {
 				continue
 			}
 			cosDistance := areaDistance(q.center, target.at)

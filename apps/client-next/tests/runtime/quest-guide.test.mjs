@@ -113,7 +113,7 @@ test("quest dictionary groups carry corrected English region titles, never 0 or 
 		load( "data/event-guide-catalog.json" ),
 		load( "data/questData.json" )
 	] );
-	const c = decodeQuestGuide( guide, quests, quests.guideTextEntries );
+	const c = decodeQuestGuide( guide, quests );
 	const groups = c.articles.filter( a => a.depth === 0 ).map( a => a.title );
 	assert.deepEqual( [ ...groups ].sort(), [
 		"Asia Minor",
@@ -161,6 +161,29 @@ test("publication reverses successor edges, keeps service/level gates and first 
 		"C",
 		[ 1, 2 ]
 	] ] );
+});
+test("guide records follow the configured level cap", () => {
+	const guide = { rows: [] },
+		quests = { guideRecords: [ q( 1, 105 ), q( 2, 110 ) ], guideTextEntries: {} };
+	assert.throws( () => decodeQuestGuide( guide, quests ), /Invalid quest guide record/ );
+	const expanded = decodeQuestGuide( guide, quests, 110 );
+	assert.deepEqual( expanded.records.map( r => r.level ), [ 105, 110 ] );
+	assert.throws(
+		() => decodeQuestGuide( guide, { guideRecords: [ q( 3, 111 ) ], guideTextEntries: {} }, 110 ),
+		/Invalid quest guide record/
+	);
+	assert.deepEqual(
+		decodeQuestGuide( guide, { guideRecords: [ q( 1, 90 ) ], guideTextEntries: {} } ).records.map( r => r.level ),
+		[ 90 ]
+	);
+});
+test("publication admits records up to the configured cap only", () => {
+	const source = [
+		[ "1", "1", "A", "105", "debug", "name", "reward", "xxx", "body1", "npc", "condition" ],
+		[ "1", "2", "B", "111", "debug", "name", "reward", "xxx", "body2", "npc", "condition" ]
+	];
+	assert.deepEqual( questGuideRecords( source, [] ), [] );
+	assert.deepEqual( questGuideRecords( source, [], 110 ).map( r => r.id ), [ 1 ] );
 });
 test("unaccepted quests are included through level + 10; QSP and five special trades require actual level", () => {
 	const trades = [
@@ -223,7 +246,7 @@ test("retail catalog admits every authored quest article with full body and corr
 		load( "data/questData.json" ),
 		load( "text/texthelp.en.json" )
 	] );
-	const c = decodeQuestGuide( guide, quests, help.entries );
+	const c = decodeQuestGuide( guide, quests );
 	assert.equal( c.articles.length, 200 );
 	assert.equal( c.articles.filter( a => a.depth === 1 ).length, 190 );
 	const tutorial = c.records.find( r => r.symbol === "QTUTORIAL_CH" ),
@@ -245,8 +268,8 @@ test("retail catalog admits every authored quest article with full body and corr
 	assert.ok( article.tokens.some( t => t.kind === "text" && t.value.includes( "General Sonhyeon" ) ) );
 	assert.ok( !rows.some( r => r.id === 100002 ), "unaccepted successor is hidden until tutorial completion" );
 	assert.ok( questGuideRows( c, 1, [], [ tutorial.id ] ).some( r => r.id === 100002 ) );
-	assert.throws( () => decodeQuestGuide( guide, { ...quests, guideRecords: undefined }, help.entries ), /metadata/ );
+	assert.throws( () => decodeQuestGuide( guide, { ...quests, guideRecords: undefined } ), /metadata/ );
 	const missing = { ...quests, guideTextEntries: { ...quests.guideTextEntries } };
 	delete missing.guideTextEntries.SN_PAYCON_QTUTORIAL_CH;
-	assert.throws( () => decodeQuestGuide( guide, missing, help.entries ), /article text/ );
+	assert.throws( () => decodeQuestGuide( guide, missing ), /article text/ );
 });

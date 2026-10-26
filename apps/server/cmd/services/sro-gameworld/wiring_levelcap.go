@@ -41,3 +41,19 @@ func applyLevelCap(stats *progression.Runtime) error {
 	}
 	return nil
 }
+
+/*
+================
+publishedLevelCap
+
+The cap the world-entry blob publishes: the configured cap itself when
+it is the expansion's, and nothing (0) otherwise, so the native blob
+stays byte-identical (#1749).
+================
+*/
+func publishedLevelCap(limit int64) int64 {
+	if limit == progression.ExpansionLevelCap {
+		return limit
+	}
+	return 0
+}

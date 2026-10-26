@@ -487,6 +487,7 @@ import {
 	partyDefaultPurpose,
 	type PartyListing
 } from "@/engine/foundation/gameplay/party-matching";
+import { NATIVE_LEVEL_CAP } from "@/engine/foundation/gameplay/level-cap";
 import { createSkillGauge, createGaugePresentation } from "./hud/progression-bars";
 import { experienceBar, EXPERIENCE_BAR, gaugeFill } from "@/engine/foundation/ui/progression-bars";
 import { shieldGauge, shieldGaugeFill } from "@/engine/foundation/ui/shield-gauge";
@@ -984,6 +985,7 @@ export interface UiExtensions {
 	setFreeCamera?: ( free: boolean ) => void;
 	setCameraCollision?: ( collision: boolean ) => void;
 	setCursorVisible?: ( visible: boolean ) => void;
+	playSoundByName?: ( name: string ) => void;
 	saveExperimental?: ( value: ExperimentalOptions ) => void;
 	saveWindowPositions?: ( value: WindowPositions ) => void;
 }
@@ -2970,10 +2972,15 @@ export function createUi(
 				break;
 			case DEBUG_COMMAND_SOUND:
 				// Case 603 hands its first word to the sound manager's
-				// play-by-name (with no word it calls through with an
-				// unset argument). The port's audio owners take cues,
-				// not names, so nothing plays yet (#1717); the line is
-				// consumed either way.
+				// play-by-name; the audio owner answers the name (a
+				// name with no authored row stays silent, as a native
+				// label-map miss does). Further words are not read.
+				// With no word the native still calls through, with an
+				// unset argument - whatever the stack held becomes the
+				// name - so there is no defined sound to reproduce;
+				// the port deliberately plays nothing for a wordless
+				// line instead of inventing one.
+				if ( command.args.length >= 1 ) extensions.playSoundByName?.( command.args[0]! );
 				break;
 		}
 	}
@@ -4426,7 +4433,12 @@ export function createUi(
 			const job = partyActiveJob( view.gameplay?.inventory ?? [] );
 			partyForm = own ?
 				{ purpose: own.purpose, min: String( own.min ), max: String( own.max ), title: own.title } :
-				{ purpose: partyDefaultPurpose( job ), min: "1", max: "90", title: "" };
+				{
+					purpose: partyDefaultPurpose( job ),
+					min: "1",
+					max: String( view.gameplay?.levelCap ?? NATIVE_LEVEL_CAP ),
+					title: ""
+				};
 		} else if ( id === "party-match:20" ) partyDialog = "delete";
 		else if ( id === "party-match:17" ) partyDialog = "auto";
 		else if ( id === "party-auto-stop" ) sendGameplay( { kind: "party-match-auto-stop" } );
@@ -4471,7 +4483,10 @@ export function createUi(
 					!partyPurposeAllowed( partyActiveJob( view.gameplay?.inventory ?? [] ), partyForm.purpose )
 				) return;
 				const min = Number( partyForm.min ), max = Number( partyForm.max );
-				if ( min >= 1 && max <= 90 && min <= max && partyForm.title.length ) {
+				if (
+					min >= 1 && max <= (view.gameplay?.levelCap ?? NATIVE_LEVEL_CAP) && min <= max &&
+					partyForm.title.length
+				) {
 					sendGameplay( {
 						kind: partyDialog === "modify" ? "party-match-modify" : "party-match-register",
 						registration: {
@@ -8941,7 +8956,7 @@ export function createUi(
 				layoutResourcesRevision++;
 			}
 			const guideNeeded = next.session?.phase === "world";
-			if ( guideResources.step( guideNeeded ) ) dirty = true;
+			if ( guideResources.step( guideNeeded, next.gameplay?.levelCap ) ) dirty = true;
 			guildManagerHud.observeSoldiers(
 				next.session?.phase === "world" && next.gameplay?.npcConversation?.phase === "menu" ?
 					next.gameplay.npcConversation.gid :
