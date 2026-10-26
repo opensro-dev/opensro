@@ -63,6 +63,7 @@ package quest
 import (
 	"fmt"
 
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
@@ -201,18 +202,45 @@ var ivy3SignCodenames = []string{"ITEM_QNO_EU_IVY_3_04", "ITEM_QNO_EU_IVY_3_03",
 
 var ivy3Specs = []QuestSpec{
 	{
-		// Ivy 2 (compiled row: words 0x130..0x13f, overrides
-		// 0x58/0x5c/0x60/0x68/0x74/0xac plus the item-use hook at
-		// +0x4, prereq 0x102, completions +0x2d = 1, minimum level
-		// 30 off the questdata row). The objective the shipped
-		// contents line counts is the Red Hair, Ivy's own drop to
-		// the credited party; the key is the programme's own -
-		// assembled from the three signs and the Blood, spent by
-		// the kill - and no inventory count of it completes
-		// anything. The v1.150 reward text pays 40,000 EXP and
-		// 4,000 skill EXP; the token stack rides the reward rows.
+		// Ivy 2: the class's admission condition reads level 20
+		// (its own level condition, tested at acceptance against
+		// the character's level); the quest row's 30 picks the
+		// journal marker instead. One completion, IVY 1 first.
+		// The class constructs six missions and counts all six
+		// toward its required tally: five hunts (Ivy for the Red
+		// Hair, the three sentry leaders for their signs, the
+		// Amphitheater Punisher for its Blood at five in a
+		// hundred) and holding five Horn Trumpets. Every mission
+		// carries the one shipped contents line - the Red Hair
+		// count is what the client reads back - so the journal
+		// shows six rows of it, one per hunt. The horns row is
+		// modelled past the pay gate (Optional): natively the
+		// row latches the moment the acceptance grant lands and
+		// the pay itself judges only the held Red Hair, so a
+		// turn-in that demanded five horns back would refuse
+		// every honest finish; the row still shows, and leftover
+		// horns leave with the quest like every quest item. The
+		// hunts grant their items from the kill handler (the
+		// signs in noteIvy3Kill, the Blood in ivy3BloodGrant,
+		// the Hair in ivy3CreditKill), not the loot lane. The
+		// v1.150 reward text pays 40,000 EXP and 4,000 skill
+		// EXP; the token stack rides the reward rows.
 		Codename: ivy3QuestCodename, RequiredQuests: []string{ivy1QuestCodename},
-		KindByte: 1, Objective: ObjectiveCollect, CollectItemCodename: ivy3HairCodename, CollectCount: 1,
+		KindByte: 1, MinLevel: 20, Objective: ObjectiveParallel,
+		Objectives: []MissionSpec{
+			{ContentsSymbol: "SN_CON_QNO_EU_IVY_3", Objective: ObjectiveKill,
+				KillMonsterCodenames: []string{ivy3BossCodename}, KillCount: 1},
+			{ContentsSymbol: "SN_CON_QNO_EU_IVY_3", Objective: ObjectiveKill,
+				KillMonsterCodenames: []string{"MOB_QT_01_SOLDIER_CLON"}, KillCount: 1},
+			{ContentsSymbol: "SN_CON_QNO_EU_IVY_3", Objective: ObjectiveKill,
+				KillMonsterCodenames: []string{"MOB_QT_03_PUNISHER_CLON"}, KillCount: 1},
+			{ContentsSymbol: "SN_CON_QNO_EU_IVY_3", Objective: ObjectiveKill,
+				KillMonsterCodenames: []string{"MOB_QT_01_PUNISHER"}, KillCount: 1},
+			{ContentsSymbol: "SN_CON_QNO_EU_IVY_3", Objective: ObjectiveKill,
+				KillMonsterCodenames: []string{ivy3BloodSource}, KillCount: 1},
+			{ContentsSymbol: "SN_CON_QNO_EU_IVY_3", Objective: ObjectiveCollect,
+				CollectItemCodename: ivy3HornCodename, CollectCount: ivy3HornGrant, Optional: true},
+		},
 		MaxCompletions:   1,
 		StartNpcCodename: ivy3NpcCodename, EndNpcCodename: ivy3NpcCodename,
 		OfferPromptSymbol: ivy3SymOffer, AcceptResponseSymbol: ivy3SymAccept,
@@ -221,10 +249,6 @@ var ivy3Specs = []QuestSpec{
 		AchievedNowSymbol: ivy3SymAchievedNow,
 		RewardExp:         40000, RewardSkillExp: 4000,
 		RewardItems: []RewardItemLead{{ItemCodename: "ITEM_QNO_EU_IVY_3_07", Count: 20}},
-		// Punisher's Blood: the Amphitheater Punisher's five
-		// percent mission drop, one held at a time.
-		MonsterDrop: &MonsterDropRule{ItemCodename: ivy3BloodCodename,
-			MonsterCodenames: []string{ivy3BloodSource}, ChancePercent: 5},
 	},
 }
 
@@ -660,6 +684,89 @@ func (rt *Runtime) noteIvy3Kill(c *enterworld.Character, codename string) []wire
 		frames = append(frames, questNotification(ivy3SymMaterialsReady))
 	}
 	return frames
+}
+
+/*
+================
+ivy3BloodGrant
+
+The Amphitheater Punisher's Blood, granted by the kill handler
+inside the killer's transaction: five in a hundred on the native
+two-draw comparison, one held at a time, and only while its hunt
+still stands. When the grant completes the three signs with the
+Blood, the materials-ready line follows - the order noteIvy3Kill
+cannot speak, since it lands the last sign instead.
+================
+*/
+func (rt *Runtime) ivy3BloodGrant(c *enterworld.Character, codename string) []wire.Frame {
+	if codename != ivy3BloodSource || rt.PlanInventory == nil {
+		return nil
+	}
+	def, ok := rt.Defs.ByCodename(ivy3QuestCodename)
+	if !ok {
+		return nil
+	}
+	at := activeQuestIndex(c, def.RefID)
+	if at < 0 || captureItemCount(c, ivy3BloodCodename) > 0 {
+		return nil
+	}
+	record := c.ActiveQuests[at]
+	standing := false
+	for i := range def.Objectives {
+		m := missionDefinition(def, i)
+		if m.Objective == ObjectiveKill && len(m.KillMonsterCodenames) > 0 &&
+			m.KillMonsterCodenames[0] == codename &&
+			recordProgress(missionRecord(record, m)) < m.KillCount {
+			standing = true
+		}
+	}
+	if !standing {
+		return nil
+	}
+	roll := rt.CaptureRoll
+	if roll == nil {
+		roll = combat.SecureRoll32767
+	}
+	first, firstErr := roll()
+	second, secondErr := roll()
+	if firstErr != nil || secondErr != nil || !nativeQuestDropChance(5, first, second) {
+		return nil
+	}
+	rows, updates, err := rt.PlanInventory(c, nil, []inventory.ItemAmount{{Codename: ivy3BloodCodename, Count: 1}})
+	if err != nil {
+		return nil
+	}
+	c.MissionInventory = rows
+	frames := updates
+	if ivy3SignsHeld(c) {
+		frames = append(frames, questNotification(ivy3SymMaterialsReady))
+	}
+	return frames
+}
+
+/*
+================
+ivy3CompletionCleanup
+
+What Ratchel's turn-in takes beyond the reward exchange: the Red
+Hair is the proof she asked for, and any Blood or signs still held
+are quest items the finished quest leaves behind. The Horns and the
+key are already spent by the kill credit (and the horn row's own
+cleanup), so they are not named twice.
+================
+*/
+func ivy3CompletionCleanup(c *enterworld.Character, def *Definition) []inventory.ItemAmount {
+	if def.Codename != ivy3QuestCodename {
+		return nil
+	}
+	var out []inventory.ItemAmount
+	for _, item := range []string{ivy3HairCodename, ivy3BloodCodename,
+		"ITEM_QNO_EU_IVY_3_02", "ITEM_QNO_EU_IVY_3_03", "ITEM_QNO_EU_IVY_3_04"} {
+		if held := captureItemCount(c, item); held > 0 {
+			out = append(out, inventory.ItemAmount{Codename: item, Count: held})
+		}
+	}
+	return out
 }
 
 /*
