@@ -194,7 +194,7 @@ func TestUniqueNamesAreTheRetailNames(t *testing.T) {
 	// The API's sources as the GameWorld builds them: the wiring itself is
 	// what went missing.
 	game := &gameplayPlane{deps: &enterworld.Deps{MonsterState: monsters}}
-	sources := publicSources(game, nil, nil, "test")
+	sources := publicSources(game, nil, nil, "test", nil)
 	if sources.UniqueName == nil {
 		t.Fatal("the public API's unique names are not wired")
 	}
@@ -252,7 +252,7 @@ func TestPublicChatHidesMutedAuthorAfterLogoff(t *testing.T) {
 	feed.Record(wiringPublicationDivision, chatfeed.KindChat, "Alice", "Alice", "spoken before the mute")
 	feed.Record(wiringPublicationDivision, chatfeed.KindChat, "Bob", "Bob", "never muted")
 	game := &gameplayPlane{chatFeed: feed, deps: &enterworld.Deps{}}
-	sources := publicSources(game, server.Hub, nil, wiringPublicationDivision)
+	sources := publicSources(game, server.Hub, nil, wiringPublicationDivision, nil)
 	if lines := sources.Chat(); len(lines) != 2 {
 		t.Fatalf("unmuted chat = %d lines, want 2", len(lines))
 	}
