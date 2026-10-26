@@ -13,7 +13,7 @@ server's worldgeom package (internal/game/world/geometry.go) name for name:
   (SWorld_CalculateRegionOffsetVector, 0x00888140; Pos_GetRelativePlanar,
   0x00430AD0).
 - Adjacency (Pos_AreSamePlaneAndAdjacentSectors, 0x00430CE0) requires both
-  positions to share a plane: equal regionId in a dungeon, or a 3x3 sector
+  positions to share a plane: any two dungeon regions, or a 3x3 sector
   neighbourhood outdoors.
 - Dungeon floor visibility (CObj_IsVisibleInSector, 0x00863330) admits all
   outdoor pairs and requires matching regionId and resolved DOF floor index
@@ -127,8 +127,8 @@ export function sameCoordinateSpace( a: number, b: number ): boolean {
 samePlaneAdjacent
 
 Mirrors SR_GameServer Pos_AreSamePlaneAndAdjacentSectors (0x00430CE0) and
-worldgeom.SamePlaneAdjacent: two dungeon positions compare only within one
-dungeon region; outdoors both sector axes must be within one sector.
+worldgeom.SamePlaneAdjacent: inside the dungeon plane every pair of dungeon
+regions is adjacent; outdoors both sector axes must be within one sector.
 ================
 */
 export function samePlaneAdjacent( a: number, b: number ): boolean {
@@ -136,7 +136,7 @@ export function samePlaneAdjacent( a: number, b: number ): boolean {
 		return false;
 	}
 	if ( isDungeonRegion( a ) ) {
-		return a === b;
+		return true;
 	}
 	const dx = sectorX( a ) - sectorX( b );
 	const dz = sectorY( a ) - sectorY( b );
