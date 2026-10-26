@@ -106,7 +106,7 @@ func (ops *MonsterMoverOps) startChaseLeg(
 		return ops.startReturnLeg(divisionID, instance, tactics, mover, monster.MoverEventAttackUnavailable, nowMs)
 	}
 
-	live := mover.LivePoseAt(nowMs, ops.TerrainHeight)
+	live := mover.LivePoseAt(nowMs, ops.GroundHeight)
 	mover.Pose = live
 	mustMoverTransition(&mover, monster.MoverEventChaseStarted, target.Gid)
 	// ChaseGuidance is target movement state, not spatial approach geometry. A
@@ -137,6 +137,19 @@ func (ops *MonsterMoverOps) startChaseLeg(
 	before := ops.Monsters.prepareApproachNavigation(divisionID, instance, mover, target, nowMs)
 	if before.approach != nil {
 		goal = squadApproachGoal(live, target, spacing, before.approach.slot)
+	}
+
+	// The outdoor routine decides the step direction on the authored goal
+	// before the segment is planned (pursuit_direction.go): a probe from
+	// rest, the direction gate while far and aligned. A guard veto issues
+	// no step at all this authoring; the mover keeps its current segment
+	// and the uncommitted approach admission is dropped with the copy.
+	if pursuitAt(live.RegionID).GatesStepDirection() && ordinarySquadApproach(instance) {
+		adjusted, step := ops.applyChaseDirectionGate(live, mover, spawnToPose(goal), nowMs)
+		if !step {
+			return nil
+		}
+		goal = poseToSpawn(adjusted)
 	}
 
 	if err := mover.SetChaseGuidance(targetGuidance); err != nil {

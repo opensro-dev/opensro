@@ -49,8 +49,8 @@ func TestLivePoseAtResolvesInterpolatedXZOntoTerrain(t *testing.T) {
 
 	var sampledRegion uint16
 	var sampledX, sampledZ float64
-	ground := func(regionID uint16, x, z float64) (float64, bool) {
-		sampledRegion, sampledX, sampledZ = regionID, x, z
+	ground := func(pose Pose) (float64, bool) {
+		sampledRegion, sampledX, sampledZ = pose.RegionID, pose.X, pose.Z
 		return 55.5, true
 	}
 
@@ -81,7 +81,7 @@ func TestLivePoseAtKeepsChordYOnNilOrMissingGround(t *testing.T) {
 	}
 	// A miss (unloaded region bundle) must also keep the lerp - a zeroed Y
 	// here would floor-slam the monster on a region-load race.
-	miss := func(uint16, float64, float64) (float64, bool) { return 0, false }
+	miss := func(Pose) (float64, bool) { return 0, false }
 	if pose := mover.LivePoseAt(5000, miss); pose.Y != 20 {
 		t.Errorf("resolver-miss mid-chord Y = %v, want the lerped 20", pose.Y)
 	}
@@ -108,7 +108,7 @@ TestLivePoseAtNeverResolvesSettledOrIdleBranches
 ================
 */
 func TestLivePoseAtNeverResolvesSettledOrIdleBranches(t *testing.T) {
-	poison := func(uint16, float64, float64) (float64, bool) {
+	poison := func(Pose) (float64, bool) {
 		return math.Inf(1), true
 	}
 
@@ -151,5 +151,63 @@ func TestLivePoseAtInterpolatesAcrossAdjacentRegionSeam(t *testing.T) {
 	before := mover.LivePoseAt(500, nil)
 	if before.RegionID != west || before.X != 1910 || before.Y != 10 || before.Z != 100 {
 		t.Fatalf("pre-departure pose = %+v, want exact departure pose", before)
+	}
+}
+
+/*
+================
+TestLivePoseAtHandsTheResolverTheChordPose
+
+The #1695 resolver reads the interpolated pose itself (its Y is the
+chord height the plane's nearest-surface rule selects by), not the
+segment endpoints.
+================
+*/
+func TestLivePoseAtHandsTheResolverTheChordPose(t *testing.T) {
+	mover := inFlightMover()
+
+	var gotPose Pose
+	ground := func(pose Pose) (float64, bool) {
+		gotPose = pose
+		return 55.5, true
+	}
+	pose := mover.LivePoseAt(5000, ground)
+	// The chord midpoint of the in-flight segment: XZ (150, 100), chord
+	// height 20 between the endpoint heights 10 and 30.
+	if gotPose.RegionID != 25000 || gotPose.X != 150 || gotPose.Z != 100 || gotPose.Y != 20 {
+		t.Errorf("resolver pose = %+v, want the chord pose (25000, 150, 20, 100)", gotPose)
+	}
+	if pose.Y != 55.5 {
+		t.Errorf("live Y = %v, want the resolver's 55.5", pose.Y)
+	}
+}
+
+/*
+================
+TestLivePoseAtAdoptedPathOwnsTheHeight
+
+An adopted path owns its segment's heights outright: the resolver is
+never consulted on one, which is why the resolver carries no surface
+owner (#1695).
+================
+*/
+func TestLivePoseAtAdoptedPathOwnsTheHeight(t *testing.T) {
+	mover := inFlightMover()
+	path := NewNavigationPath(mover.From, mover.To, mover.To, 0, func(float64, Pose) (float64, bool) {
+		return 42, true
+	})
+	mover.AdoptNavigation(path)
+
+	calls := 0
+	ground := func(Pose) (float64, bool) {
+		calls++
+		return 55.5, true
+	}
+	pose := mover.LivePoseAt(5000, ground)
+	if calls != 0 {
+		t.Errorf("resolver consulted %d times on an adopted path, want 0", calls)
+	}
+	if pose.Y != 42 {
+		t.Errorf("live Y = %v, want the adopted path's 42", pose.Y)
 	}
 }

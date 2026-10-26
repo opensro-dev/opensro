@@ -136,7 +136,7 @@ func TestMonsterStuckWarpToBattleTargetAndDungeonGuard(t *testing.T) {
 	target.Pose.X = mover.Pose.X + 80
 	target.Pose.Z = mover.Pose.Z + 40
 	target.Pose.Y = 33
-	ops.TerrainHeight = func(regionID uint16, x, z float64) (float64, bool) {
+	ops.GroundHeight = func(monster.Pose) (float64, bool) {
 		return 37.5, true
 	}
 	// Every pursuit leg clips to 1 unit (< 20), so arrival after each short
@@ -446,6 +446,221 @@ func TestMonsterStuckPreservesMaturedSettleFrameWhenNotYetStuck(t *testing.T) {
 	}
 	if next.Pose != to {
 		t.Fatalf("settled pose = %+v, want %+v", next.Pose, to)
+	}
+}
+
+/*
+================
+TestMonsterStuckCounterClearedOnBattleEntry
+
+Issue #1704: the native stuck counter (CTactics +0x148) is zeroed on every
+state entry, so failures collected while wandering never carry into a
+fight. Nine short stops in MoverWandering, then battle entry - by sight
+aggro and by retaliation - must read zero, and one short chase step after
+entry counts one, nowhere near the ten-failure latch.
+================
+*/
+func TestMonsterStuckCounterClearedOnBattleEntry(t *testing.T) {
+	wanderWithNineFailures := func(t *testing.T, ops *MonsterMoverOps, instance monster.Instance) monster.MoverState {
+		t.Helper()
+		mover, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+		if err := mover.Transition(monster.MoverEventStartWander, 0); err != nil {
+			t.Fatalf("start wander: %v", err)
+		}
+		origin := mover.Pose
+		for i := 0; i < 9; i++ {
+			mover.NoteMoveIssued(origin, false)
+			stop := origin
+			stop.X += 5
+			if mover.NoteMoveStopped(stop) {
+				t.Fatalf("wander stop %d latched stuck before the limit", i+1)
+			}
+		}
+		if got := mover.Progress().Failures(); got != 9 {
+			t.Fatalf("failures before battle entry = %d, want 9", got)
+		}
+		ops.Monsters.CommitMover(monsterTestDivision, instance.Gid, mover)
+		return mover
+	}
+	clipChaseLegs := func(ops *MonsterMoverOps) {
+		ops.PlanPath = func(from, goal monster.Pose) *monster.NavigationPath {
+			short := from
+			short.X += 1
+			return testShortNavPath(from, short)
+		}
+	}
+
+	t.Run("sight aggro", func(t *testing.T) {
+		const t0 = int64(1_784_000_000_000)
+		ops, instance := monsterLegFixture(t, aggressiveTactics())
+		push := &fakePusher{}
+		wanderWithNineFailures(t, ops, instance)
+		clipChaseLegs(ops)
+
+		player := playerSessionAt(1, 1050, 1000)
+		ops.RunMonsterLeg(t0, []SessionSnapshot{player}, push)
+		after, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+		if after.Mode() != monster.MoverChasing {
+			t.Fatalf("mode after sight tick = %v, want chasing", after.Mode())
+		}
+		if got := after.Progress().Failures(); got != 0 {
+			t.Fatalf("failures after aggro = %d, want 0 (battle entry resets)", got)
+		}
+
+		ops.RunMonsterLeg(t0+1000, []SessionSnapshot{player}, push)
+		settled, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+		if settled.Stuck() {
+			t.Fatal("one short chase step after aggro latched the stuck event")
+		}
+		if settled.Mode() != monster.MoverChasing {
+			t.Fatalf("mode after one chase stop = %v, want chasing (no mid-fight stuck response)", settled.Mode())
+		}
+		if got := settled.Progress().Failures(); got != 1 {
+			t.Fatalf("failures after one chase stop = %d, want 1", got)
+		}
+	})
+
+	t.Run("retaliation", func(t *testing.T) {
+		ops, instance := monsterLegFixture(t, aggressiveTactics())
+		wanderWithNineFailures(t, ops, instance)
+		clipChaseLegs(ops)
+		target := playerPose{Gid: PlayerObjectID(1), Pose: Spawn{RegionID: monsterTestRegion, X: 1050, Y: 20, Z: 1000}, BodyRadius: 4}
+
+		if !ops.Monsters.ArmRetaliation(monsterTestDivision, instance.Gid, target.Gid) {
+			t.Fatal("retaliation was not armed")
+		}
+		after, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+		if after.Mode() != monster.MoverChasing {
+			t.Fatalf("mode after retaliation = %v, want chasing", after.Mode())
+		}
+		if got := after.Progress().Failures(); got != 0 {
+			t.Fatalf("failures after retaliation = %d, want 0 (battle entry resets)", got)
+		}
+
+		nowMs := int64(10_000)
+		current, _ := ops.Monsters.Get(monsterTestDivision, instance.Gid)
+		ops.advanceInstance(monsterTestDivision, current, []playerPose{target}, nowMs)
+		m, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+		if m.ArriveMs <= nowMs {
+			t.Fatalf("expected an in-flight chase leg, got mode=%v arrive=%d now=%d", m.Mode(), m.ArriveMs, nowMs)
+		}
+		current, _ = ops.Monsters.Get(monsterTestDivision, instance.Gid)
+		ops.advanceInstance(monsterTestDivision, current, []playerPose{target}, m.ArriveMs)
+		settled, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+		if settled.Stuck() {
+			t.Fatal("one short chase step after retaliation latched the stuck event")
+		}
+		if settled.Mode() != monster.MoverChasing {
+			t.Fatalf("mode after one chase stop = %v, want chasing (no mid-fight stuck response)", settled.Mode())
+		}
+		if got := settled.Progress().Failures(); got != 1 {
+			t.Fatalf("failures after one chase stop = %d, want 1", got)
+		}
+	})
+}
+
+/*
+================
+TestMonsterStuckWarpToBattleTargetCompanion
+
+Issue #1702: the battle warp finds its combat target through the global
+object lookup, so a companion the monster is fighting is a legal warp
+destination. The companion entry below carries a body status the tactics
+admission refuses (status 3): the warp must not re-run that admission on
+an already-owned target.
+================
+*/
+func TestMonsterStuckWarpToBattleTargetCompanion(t *testing.T) {
+	ops, instance, mover, owner := pursuitControlsFixture(t)
+	instance.Nest.Controls.TraceBoundary = 2
+	ops.Monsters.mu.Lock()
+	ops.Monsters.division(monsterTestDivision).instances.set(instance.Gid, instance)
+	ops.Monsters.mu.Unlock()
+
+	const petGID = uint32(777001)
+	if err := mover.Transition(monster.MoverEventRetaliationArmed, petGID); err != nil {
+		t.Fatalf("retarget onto companion: %v", err)
+	}
+	origin := mover.Pose
+	for i := 0; i < testStuckFailureLimit; i++ {
+		mover.NoteMoveIssued(origin, false)
+		mover.NoteMoveStopped(origin)
+	}
+	ops.Monsters.CommitMover(monsterTestDivision, instance.Gid, mover)
+
+	companion := playerPose{
+		Gid: petGID, OwnerGid: owner.Gid,
+		Pose:             Spawn{RegionID: monsterTestRegion, X: 420, Y: 18, Z: 310},
+		BodyRadius:       5,
+		NativeBodyStatus: 3,
+	}
+	frames := ops.resolveStuck(monsterTestDivision, instance.Gid, []playerPose{owner, companion}, 40_000, nil)
+	if len(frames) != 1 || frames[0].Opcode != wire.OpObjectSourceCorrection {
+		t.Fatalf("expected 1 OpObjectSourceCorrection frame for companion battle warp, got %d", len(frames))
+	}
+	after, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+	if after.Mode() != monster.MoverChasing || after.TargetGID() != petGID {
+		t.Fatalf("expected MoverChasing on companion %d after battle warp, got mode=%v target=%d",
+			petGID, after.Mode(), after.TargetGID())
+	}
+	if after.Pose.X != companion.Pose.X || after.Pose.Z != companion.Pose.Z {
+		t.Fatalf("warped pose = %+v, want companion XZ (%v,%v)", after.Pose, companion.Pose.X, companion.Pose.Z)
+	}
+}
+
+/*
+================
+TestMonsterStuckWarpToBattleTargetMonster
+
+Issue #1702: the combat target may also be another monster in the
+population (a summon or a monster foe), which never appears in the tick's
+player list. The warp must resolve it through the population instead.
+================
+*/
+func TestMonsterStuckWarpToBattleTargetMonster(t *testing.T) {
+	ops, instance, mover, _ := pursuitControlsFixture(t)
+	instance.Nest.Controls.TraceBoundary = 2
+	ops.Monsters.mu.Lock()
+	ops.Monsters.division(monsterTestDivision).instances.set(instance.Gid, instance)
+	ops.Monsters.mu.Unlock()
+
+	var other monster.Instance
+	found := false
+	for _, inst := range ops.Monsters.InstancesInRegions(monsterTestDivision, []uint16{monsterTestRegion}) {
+		if inst.Ref.RefObjID == 2000 {
+			other, found = inst, true
+		}
+	}
+	if !found {
+		t.Fatal("target monster instance not materialized")
+	}
+	otherMover, ok := ops.Monsters.Mover(monsterTestDivision, other.Gid)
+	if !ok {
+		t.Fatal("target monster has no mover")
+	}
+	if !ops.Monsters.ArmRetaliation(monsterTestDivision, instance.Gid, other.Gid) {
+		t.Fatal("retaliation onto monster target was not armed")
+	}
+	mover, _ = ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+	origin := mover.Pose
+	for i := 0; i < testStuckFailureLimit; i++ {
+		mover.NoteMoveIssued(origin, false)
+		mover.NoteMoveStopped(origin)
+	}
+	ops.Monsters.CommitMover(monsterTestDivision, instance.Gid, mover)
+
+	frames := ops.resolveStuck(monsterTestDivision, instance.Gid, nil, 40_000, nil)
+	if len(frames) != 1 || frames[0].Opcode != wire.OpObjectSourceCorrection {
+		t.Fatalf("expected 1 OpObjectSourceCorrection frame for monster battle warp, got %d", len(frames))
+	}
+	after, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
+	if after.Mode() != monster.MoverChasing || after.TargetGID() != other.Gid {
+		t.Fatalf("expected MoverChasing on monster %d after battle warp, got mode=%v target=%d",
+			other.Gid, after.Mode(), after.TargetGID())
+	}
+	want := otherMover.LivePoseAt(40_000, ops.GroundHeight)
+	if after.Pose.X != want.X || after.Pose.Z != want.Z {
+		t.Fatalf("warped pose = %+v, want target monster XZ (%v,%v)", after.Pose, want.X, want.Z)
 	}
 }
 

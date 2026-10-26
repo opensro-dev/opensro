@@ -170,17 +170,29 @@ func seedFrame(surface *groundSurface, p simulation.Spawn) (float64, float64) {
 // A still-valid hint is retained (the owned cell, or an edge neighbour after a
 // sub-unit relocation such as wire truncation of X/Z). An unresolved or stale
 // hint takes the native FindNavCell rule: nearest |deltaY|, terrain wins ties.
-// ok is false only when no surface data covers p; dungeons keep their own
-// navigation plane and return the input unchanged with ok=false.
+// ok is false only when no surface covers p; a dungeon point resolves to its
+// cell owner with the input height unchanged, and ok is false where no cell
+// lies under it.
 /*
 ================
 ResolveNavOwner
+
+Resolved by the plane p is on (resolveNavOwnerOnPlane, plane_navowner.go).
 ================
 */
 func (v *WaterValidator) ResolveNavOwner(p simulation.Spawn, hint simulation.NavOwner) (simulation.NavOwner, float64, bool) {
-	if simulation.IsDungeonRegion(p.RegionID) {
-		return simulation.NavOwner{}, p.Y, false
-	}
+	return resolveNavOwnerOnPlane(v, p, hint)
+}
+
+/*
+================
+resolveOutdoorNavOwner
+
+The outdoor plane's owner resolution (outdoorPlane.resolveNavOwner):
+the terrain and the object surfaces of the point's region.
+================
+*/
+func (v *WaterValidator) resolveOutdoorNavOwner(p simulation.Spawn, hint simulation.NavOwner) (simulation.NavOwner, float64, bool) {
 	surface := v.surfaceForRegion(p.RegionID)
 	if surface == nil {
 		return simulation.NavOwner{}, p.Y, false
@@ -426,13 +438,25 @@ const navWalkLegLimit = 7
 /*
 ================
 ownerWalk
+
+The start is owned first, then the pair's plane walks it
+(ownerWalkOnPlane, plane_navowner.go).
 ================
 */
 func (v *WaterValidator) ownerWalk(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) *navWalk {
 	from = v.ownedStart(from, fromOwner)
-	if simulation.IsDungeonRegion(from.RegionID) || simulation.IsDungeonRegion(to.RegionID) {
-		return nil
-	}
+	return ownerWalkOnPlane(v, from, fromOwner, to)
+}
+
+/*
+================
+outdoorOwnerWalk
+
+The outdoor plane's owner walk (outdoorPlane.ownerWalk): surface
+ownership along the chord, from an already-owned start.
+================
+*/
+func (v *WaterValidator) outdoorOwnerWalk(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) *navWalk {
 	owner := fromOwner
 	if !owner.Resolved() {
 		var ok bool

@@ -212,12 +212,19 @@ func (v *WaterValidator) pickableObjectSurface(to simulation.Spawn) bool {
 // source owner (navowner.go); see ClipMovementPathFrom.
 func (v *WaterValidator) ValidateMovementPathFrom(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) PathReport {
 	from = v.ownedStart(from, fromOwner)
-	report := PathReport{Verdict: PathLegal, DistanceUnits: simulation.WorldDistance2D(from, to)}
+	return validatePathOnPlane(v, from, fromOwner, to)
+}
 
-	if simulation.IsDungeonRegion(from.RegionID) || simulation.IsDungeonRegion(to.RegionID) {
-		report.Verdict = PathDungeonExempt
-		return report
-	}
+/*
+================
+validateOutdoorPath
+
+The outdoor plane's path classification (outdoorPlane.validatePath):
+the world tile grid walk, from an already-owned start.
+================
+*/
+func (v *WaterValidator) validateOutdoorPath(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) PathReport {
+	report := PathReport{Verdict: PathLegal, DistanceUnits: simulation.WorldDistance2D(from, to)}
 
 	tilesPerAxis, tileSize, ok := v.gridParamsForRegion(from.RegionID)
 	if !ok {
