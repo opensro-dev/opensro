@@ -1020,8 +1020,12 @@ Port decisions, each inferred rather than evidenced:
   the port registers the three shipped ids port-only (`INS_PHARAOH_TOMB_1..3`)
   behind the same switch and the tomb population joins its own world instead of
   `INS_DEFAULT`. The last `teleportdata` column names the destination world;
-  until PR 2 the importer still sets the three exits to world 1 and records the
-  originals in the variant manifest (`gates.worldsFlattened`).
+  the importer keeps the three exits' authored worlds 57, 58 and 59, and the
+  portal catalogue resolves them once the tomb worlds are registered (the
+  bootstrap registers before the catalogue loads). A variant built with the
+  tomb gates therefore only boots with `SRO_PHARAOH_TOMB` on; off, the server
+  refuses the catalogue at `names unknown world 57` instead of silently
+  flattening three tombs into the field.
 - Bosses are single-spawn nests with their authored respawn delay. The database
   carries no trigger data, so the original's instance triggers are not ported.
 - The unplaced `GATE_TOMBOSIRIS_*` rows (all-zero positions) are not carried.
