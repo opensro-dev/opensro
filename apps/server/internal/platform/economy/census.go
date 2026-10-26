@@ -17,7 +17,11 @@ Name-free end to end: no character, account or item identity is ever
 written into the report; holder identities live only in this function's
 stack while it counts. A (degree, tier) bucket whose holder count is
 under MinSealCensusHolders is withheld whole, like the kill-stats floor
-(#1639): its items could single out one player's hoard.
+(#1639): its items could single out one player's hoard. Every number
+the report publishes - the totals, the per-location counts, the holder
+headlines - sums the shown buckets only, so a withheld bucket's size
+cannot be recovered by subtraction; the report says how many buckets
+were withheld, never how much they held.
 
 The route exists only while the shard allows it (SRO_SEAL_CENSUS on);
 off (the default), it answers 404 like any unknown route.
@@ -113,8 +117,9 @@ type SealCensusRow struct {
 ================
 SealCensusLocations
 
-Where the counted seals sit, all tiers and degrees together. Locations
-carry no holder dimension, so they are never suppressed.
+Where the shown seals sit, all shown tiers and degrees together. A
+withheld bucket's items are absent here too, so the fields sum to the
+report's TotalItems.
 ================
 */
 type SealCensusLocations struct {
@@ -132,7 +137,9 @@ type SealCensusLocations struct {
 SealCensus
 
 The contract v1 census report. Rows holds only degrees with at least
-one served bucket; SuppressedCells counts the withheld buckets.
+one served bucket; SuppressedCells counts the withheld buckets - a
+count of buckets, never of items. TotalItems, Locations and the two
+holder headlines all cover the shown buckets only.
 ================
 */
 type SealCensus struct {
@@ -148,20 +155,56 @@ type SealCensus struct {
 	AccountsHolding   int                 `json:"accountsHolding"`
 }
 
-// censusBucket is one (degree, tier) being counted.
+// censusBucket is one (degree, tier) being counted: its items, its
+// holders and where its items sit, so a withheld bucket leaves no
+// trace in any served total.
 type censusBucket struct {
 	items   int
 	holders map[string]bool
+	places  SealCensusLocations
+}
+
+// The counted container kinds, as censusBucket.addPlace switches on.
+const (
+	placeInventory = iota
+	placeAvatar
+	placePet
+	placeTransport
+	placeStorage
+	placeGuild
+	placeGround
+)
+
+/*
+================
+censusBucket.addPlace
+
+One more of this bucket's items in place.
+================
+*/
+func (b *censusBucket) addPlace(place int) {
+	switch place {
+	case placeInventory:
+		b.places.Inventory++
+	case placeAvatar:
+		b.places.Avatar++
+	case placePet:
+		b.places.Pet++
+	case placeTransport:
+		b.places.Transport++
+	case placeStorage:
+		b.places.Storage++
+	case placeGuild:
+		b.places.GuildStorage++
+	case placeGround:
+		b.places.Ground++
+	}
 }
 
 // censusTally accumulates one copy's counts. Holder keys are internal
 // only ("char/division/id", "acct/id") and never leave this owner.
 type censusTally struct {
-	buckets   map[[2]int]*censusBucket
-	locations SealCensusLocations
-	chars     map[string]bool
-	accounts  map[string]bool
-	total     int
+	buckets map[[2]int]*censusBucket
 }
 
 /*
@@ -170,7 +213,7 @@ newCensusTally
 ================
 */
 func newCensusTally() *censusTally {
-	return &censusTally{buckets: map[[2]int]*censusBucket{}, chars: map[string]bool{}, accounts: map[string]bool{}}
+	return &censusTally{buckets: map[[2]int]*censusBucket{}}
 }
 
 // censusItem is an inventory-shaped row as the census reads it.
@@ -192,12 +235,12 @@ type censusCOS struct {
 censusTally.countItem
 
 One row: a seal when the codename says so (the distribution's own
-recognition, sealCodename), filed under holder ("" for none) and
-counted into location. Equipment rows never stack, so one row is one
-item, as the distribution counts them.
+recognition, sealCodename), filed into its (degree, tier) bucket under
+holder ("" for none) and its place inside that bucket. Equipment rows
+never stack, so one row is one item, as the distribution counts them.
 ================
 */
-func (t *censusTally) countItem(item censusItem, holder string, location *int) {
+func (t *censusTally) countItem(item censusItem, holder string, place int) {
 	match := sealCodename.FindStringSubmatch(item.Codename)
 	if match == nil {
 		return
@@ -214,8 +257,7 @@ func (t *censusTally) countItem(item censusItem, holder string, location *int) {
 		t.buckets[key] = bucket
 	}
 	bucket.items++
-	*location++
-	t.total++
+	bucket.addPlace(place)
 	if holder != "" {
 		bucket.holders[holder] = true
 	}
@@ -229,9 +271,9 @@ A container's rows under one holder; a row's own summon container is a
 companion's bag travelling with it.
 ================
 */
-func (t *censusTally) countRows(rows []censusItem, holder string, location *int) {
+func (t *censusTally) countRows(rows []censusItem, holder string, place int) {
 	for _, row := range rows {
-		t.countItem(row, holder, location)
+		t.countItem(row, holder, place)
 		if row.Summon != nil {
 			t.countCOS(row.Summon, holder)
 		}
@@ -253,12 +295,12 @@ func (t *censusTally) countCOS(cos *censusCOS, holder string) {
 	}
 	if strings.HasPrefix(cos.Codename, "COS_T_") {
 		for _, row := range cos.Container.Rows {
-			t.countItem(row, holder, &t.locations.Transport)
+			t.countItem(row, holder, placeTransport)
 		}
 		return
 	}
 	for _, row := range cos.Container.Rows {
-		t.countItem(row, holder, &t.locations.Pet)
+		t.countItem(row, holder, placePet)
 	}
 }
 
@@ -320,17 +362,13 @@ func (t *censusTally) readCharacters(db *sql.DB) error {
 			return fmt.Errorf("seal census: %w", err)
 		}
 		holder := "char/" + division + "/" + fmt.Sprint(id)
-		before := t.total
-		t.countRows(c.MissionInventory, holder, &t.locations.Inventory)
+		t.countRows(c.MissionInventory, holder, placeInventory)
 		if c.AvatarInventory != nil {
-			t.countRows(c.AvatarInventory.Rows, holder, &t.locations.Avatar)
+			t.countRows(c.AvatarInventory.Rows, holder, placeAvatar)
 		}
 		t.countCOS(c.ActiveCOS, holder)
 		for _, mercenary := range c.Mercenaries {
 			t.countCOS(mercenary, holder)
-		}
-		if t.total > before {
-			t.chars[holder] = true
 		}
 	}
 	return rows.Err()
@@ -362,11 +400,7 @@ func (t *censusTally) readWarehouses(db *sql.DB) error {
 			return fmt.Errorf("seal census: %w", err)
 		}
 		holder := "acct/" + account
-		before := t.total
-		t.countRows(storage.Rows, holder, &t.locations.Storage)
-		if t.total > before {
-			t.accounts[holder] = true
-		}
+		t.countRows(storage.Rows, holder, placeStorage)
 	}
 	return rows.Err()
 }
@@ -398,7 +432,7 @@ func (t *censusTally) readGuilds(db *sql.DB) error {
 			return fmt.Errorf("seal census: %w", err)
 		}
 		if guild.Storage != nil {
-			t.countRows(guild.Storage.Rows, "", &t.locations.GuildStorage)
+			t.countRows(guild.Storage.Rows, "", placeGuild)
 		}
 	}
 	return rows.Err()
@@ -426,7 +460,7 @@ func (t *censusTally) readGround(db *sql.DB) error {
 		if err := json.Unmarshal([]byte(raw), &item); err != nil {
 			return fmt.Errorf("seal census: %w", err)
 		}
-		t.countItem(item, "", &t.locations.Ground)
+		t.countItem(item, "", placeGround)
 		if item.Summon != nil {
 			t.countCOS(item.Summon, "")
 		}
@@ -439,18 +473,23 @@ func (t *censusTally) readGround(db *sql.DB) error {
 censusTally.report
 
 The served shape: buckets under the floor are withheld whole and
-counted; degrees with nothing served drop out of the rows.
+counted as buckets; degrees with nothing served drop out of the rows.
+Every total below sums the shown buckets only - the items, the places
+and the holder headlines alike - so a withheld bucket's size cannot be
+recovered by subtraction from anything the report publishes.
 ================
 */
 func (t *censusTally) report(at time.Time) *SealCensus {
 	degrees := map[int]*SealCensusRow{}
-	suppressed := 0
+	chars, accounts := map[string]bool{}, map[string]bool{}
+	var locations SealCensusLocations
+	suppressed, total := 0, 0
 	for key, bucket := range t.buckets {
-		cell := &SealCensusCell{Items: bucket.items, Holders: len(bucket.holders)}
-		if cell.Holders < MinSealCensusHolders {
+		if len(bucket.holders) < MinSealCensusHolders {
 			suppressed++
-			cell = nil
+			continue
 		}
+		cell := &SealCensusCell{Items: bucket.items, Holders: len(bucket.holders)}
 		row := degrees[key[0]]
 		if row == nil {
 			row = &SealCensusRow{Degree: key[0]}
@@ -464,12 +503,24 @@ func (t *censusTally) report(at time.Time) *SealCensus {
 		case 2:
 			row.Sun = cell
 		}
+		total += bucket.items
+		locations.Inventory += bucket.places.Inventory
+		locations.Avatar += bucket.places.Avatar
+		locations.Pet += bucket.places.Pet
+		locations.Transport += bucket.places.Transport
+		locations.Storage += bucket.places.Storage
+		locations.GuildStorage += bucket.places.GuildStorage
+		locations.Ground += bucket.places.Ground
+		for holder := range bucket.holders {
+			if strings.HasPrefix(holder, "acct/") {
+				accounts[holder] = true
+			} else {
+				chars[holder] = true
+			}
+		}
 	}
 	rows := []SealCensusRow{}
 	for _, row := range degrees {
-		if row.Star == nil && row.Moon == nil && row.Sun == nil {
-			continue
-		}
 		rows = append(rows, *row)
 	}
 	slices.SortFunc(rows, func(a, b SealCensusRow) int { return a.Degree - b.Degree })
@@ -479,10 +530,10 @@ func (t *censusTally) report(at time.Time) *SealCensus {
 		MinHolders:        MinSealCensusHolders,
 		Rows:              rows,
 		SuppressedCells:   suppressed,
-		Locations:         t.locations,
-		TotalItems:        t.total,
-		CharactersHolding: len(t.chars),
-		AccountsHolding:   len(t.accounts),
+		Locations:         locations,
+		TotalItems:        total,
+		CharactersHolding: len(chars),
+		AccountsHolding:   len(accounts),
 	}
 }
 

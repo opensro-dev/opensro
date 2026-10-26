@@ -69,6 +69,10 @@ CREATE TABLE ground_items (division TEXT NOT NULL, gid INTEGER NOT NULL, record 
 			{"codename":"ITEM_CH_SWORD_09_B_RARE"},
 			{"codename":"ITEM_COS_P_WOLF_SUMMON","summon":{"codename":"COS_P_WOLF",
 			 "container":{"capacity":5,"rows":[{"codename":"ITEM_CH_SWORD_08_A_RARE"}]}}}]}`,
+		// A second degree-8 Star, and nothing else: this character holds
+		// only withheld-bucket seals and must appear in no total.
+		`{"accountId":"ac5","missionInventory":[
+			{"codename":"ITEM_CH_SWORD_08_A_RARE"}]}`,
 	}
 	for i, record := range characters {
 		if _, err := db.Exec("INSERT INTO characters (division, id, name_lower, record) VALUES ('d1', ?, ?, ?)",
@@ -109,8 +113,9 @@ TestSealCensusCountsEveryContainer
 Degree 9: Star 6 items over 4 holders (bag, avatar, pet bag, transport
 bag, warehouse, ground), Moon 3 over exactly the floor's 3 holders,
 Sun 6 over 4 holders (the guild and ground-transport Suns count toward
-what exists, never toward a holder). Degree-8 Star has one holder and
-is withheld whole.
+what exists, never toward a holder). Degree-8 Star has two holders and
+is withheld whole; its two items and its second, otherwise-sealless
+holder appear in no total below.
 ================
 */
 func TestSealCensusCountsEveryContainer(t *testing.T) {
@@ -119,14 +124,14 @@ func TestSealCensusCountsEveryContainer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.TotalItems != 16 || report.CharactersHolding != 4 || report.AccountsHolding != 2 {
-		t.Fatalf("totals = %+v, want 16 items, 4 characters, 2 accounts", report)
+	if report.TotalItems != 15 || report.CharactersHolding != 4 || report.AccountsHolding != 2 {
+		t.Fatalf("totals = %+v, want 15 shown items, 4 characters, 2 accounts", report)
 	}
-	if report.Locations != (SealCensusLocations{Inventory: 7, Avatar: 1, Pet: 2, Transport: 2, Storage: 2, GuildStorage: 1, Ground: 1}) {
+	if report.Locations != (SealCensusLocations{Inventory: 7, Avatar: 1, Pet: 1, Transport: 2, Storage: 2, GuildStorage: 1, Ground: 1}) {
 		t.Fatalf("locations = %+v", report.Locations)
 	}
 	if report.SuppressedCells != 1 {
-		t.Fatalf("suppressed = %d, want 1 (the one-holder degree-8 Star)", report.SuppressedCells)
+		t.Fatalf("suppressed = %d, want 1 (the two-holder degree-8 Star)", report.SuppressedCells)
 	}
 	if len(report.Rows) != 1 || report.Rows[0].Degree != 9 {
 		t.Fatalf("rows = %+v, want the degree-9 row only", report.Rows)
@@ -147,6 +152,55 @@ func TestSealCensusCountsEveryContainer(t *testing.T) {
 	}
 	if service.censusLatest != report {
 		t.Fatal("the run did not become the newest census")
+	}
+}
+
+/*
+================
+TestSealCensusTotalsCoverShownBucketsOnly
+
+The privacy floor holds only if nothing published lets a reader add
+the withheld buckets back up: every total in the report - the item
+total, each location and the location sum - must equal the sum of the
+shown buckets, and each shown bucket must itself clear the floor.
+================
+*/
+func TestSealCensusTotalsCoverShownBucketsOnly(t *testing.T) {
+	service, _ := censusService(t, fileSnapshotter{source: writeCensusSource(t)})
+	report, err := service.RunSealCensus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	shown := 0
+	for _, row := range report.Rows {
+		for _, cell := range []*SealCensusCell{row.Star, row.Moon, row.Sun} {
+			if cell == nil {
+				continue
+			}
+			if cell.Holders < MinSealCensusHolders {
+				t.Fatalf("degree %d: shown bucket with %d holders, under the floor", row.Degree, cell.Holders)
+			}
+			shown += cell.Items
+		}
+	}
+	if report.TotalItems != shown {
+		t.Fatalf("totalItems = %d, shown buckets hold %d", report.TotalItems, shown)
+	}
+	places := report.Locations
+	placeSum := places.Inventory + places.Avatar + places.Pet + places.Transport +
+		places.Storage + places.GuildStorage + places.Ground
+	if placeSum != shown {
+		t.Fatalf("locations sum to %d, shown buckets hold %d", placeSum, shown)
+	}
+	// The seeded degree-8 Star (two holders, two items) is withheld:
+	// no row, and its items are inside no total above.
+	if report.SuppressedCells != 1 {
+		t.Fatalf("suppressed = %d, want 1", report.SuppressedCells)
+	}
+	for _, row := range report.Rows {
+		if row.Degree == 8 {
+			t.Fatalf("degree 8 served: %+v", row)
+		}
 	}
 }
 
@@ -226,11 +280,11 @@ func TestSealCensusRouteOffAndOn(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("run: status %d, body %v", status, body)
 	}
-	if body["totalItems"] != float64(16) || body["minHolders"] != float64(MinSealCensusHolders) {
+	if body["totalItems"] != float64(15) || body["minHolders"] != float64(MinSealCensusHolders) {
 		t.Fatalf("report = %v", body)
 	}
 	if status, body := callCensus(t, handler, http.MethodGet, "/economy/v1/sealcensus", true); status != http.StatusOK ||
-		body["totalItems"] != float64(16) {
+		body["totalItems"] != float64(15) {
 		t.Fatalf("after a run: status %d, body %v", status, body)
 	}
 }

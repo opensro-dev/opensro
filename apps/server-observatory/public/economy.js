@@ -379,7 +379,7 @@ function drawCensus() {
 	const at = new Date( report.takenAt * 1000 ).toLocaleString();
 	const took = Number.isFinite( report.elapsedMs ) ? ` in ${(report.elapsedMs / 1000).toFixed( 1 )}s` : "";
 	note.textContent = (censusFailed ? censusFailed + " Showing the previous census. " : "") +
-		`Counted ${at}${took}: ${countText( report.totalItems )} seal items held by ` +
+		`Counted ${at}${took}: ${countText( report.totalItems )} seal items in the shown buckets, held by ` +
 		`${countText( report.charactersHolding )} characters and ${countText( report.accountsHolding )} accounts. ` +
 		(suppressed > 0 ?
 			`Buckets with fewer than ${floor} holders are withheld: ${suppressed} withheld.` :
