@@ -34,6 +34,7 @@ import (
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -100,7 +101,7 @@ func (rt *Runtime) monsterHitMonster(division string, instance, target monster.I
 		TargetBodyRadius: simulation.BodyRadius(target.BodyRadius()),
 		ActionReach:      rt.monsterActionReach(instance, skill),
 	}
-	if !spacing.Valid() || simulation.IsDungeonRegion(from.RegionID) != simulation.IsDungeonRegion(to.RegionID) {
+	if !spacing.Valid() || !worldgeom.SamePlane(from.RegionID, to.RegionID) {
 		return simulation.MonsterAttackResult{}
 	}
 	if !spacing.Contains(from, to) {
