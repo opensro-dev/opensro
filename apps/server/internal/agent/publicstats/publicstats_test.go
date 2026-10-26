@@ -20,6 +20,7 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/platform/sealboard"
 	"opensro.online/server/internal/transport"
 )
 
@@ -93,11 +94,15 @@ func (f *fixture) service() *Service {
 			}
 			return "", ""
 		},
-		Online:    func(characterID int64) bool { return characterID == 1 },
-		Shard:     "beta",
-		Now:       func() time.Time { return f.now },
-		Sample:    func() (int, transport.Metrics) { return 3, transport.Metrics{} },
-		StartedAt: f.now.Add(-time.Hour),
+		Online: func(characterID int64) bool { return characterID == 1 },
+		SealCounts: func(weekStart time.Time) ([]sealboard.Count, error) {
+			return []sealboard.Count{{CharacterID: 1, Tier: sealboard.TierSun, Drops: 2}}, nil
+		},
+		SealCountingSince: func(weekStart time.Time) (time.Time, error) { return weekStart, nil },
+		Shard:             "beta",
+		Now:               func() time.Time { return f.now },
+		Sample:            func() (int, transport.Metrics) { return 3, transport.Metrics{} },
+		StartedAt:         f.now.Add(-time.Hour),
 		Schedule: func(now time.Time) []ScheduledEvent {
 			return []ScheduledEvent{{Kind: "fortress", Title: "Fortress war", Start: now, End: now.Add(time.Hour), Running: true},
 				{Kind: "maintenance", Title: "Maintenance", Start: now, Running: true}}
@@ -383,6 +388,7 @@ func TestSchemaDescribesEveryEncodedAnswer(t *testing.T) {
 		"/public/v1/uniques":              "/public/v1/uniques",
 		"/public/v1/uniques/kills":        "/public/v1/uniques/kills",
 		"/public/v1/leaderboards/uniques": "/public/v1/leaderboards/uniques",
+		"/public/v1/leaderboards/seals":   "/public/v1/leaderboards/seals",
 		"/public/v1/firsts":               "/public/v1/firsts",
 		"/public/v1/characters":           "/public/v1/characters?q=k",
 		"/public/v1/characters/{name}":    "/public/v1/characters/Kekw",

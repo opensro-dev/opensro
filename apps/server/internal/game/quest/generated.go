@@ -107,6 +107,7 @@ func authoredQuestSpecs() ([]QuestSpec, []QuestSpec, error) {
 	additional = append(additional, rahid6Specs...)
 	additional = append(additional, easteu21Specs...)
 	additional = append(additional, ivy3Specs...)
+	additional = append(additional, goria7Specs...)
 	additional = append(additional, generated...)
 	return specs, additional, nil
 }

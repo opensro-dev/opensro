@@ -109,7 +109,7 @@
 			"fromSector": null,
 			"toSector": null,
 			"samePlane": true,
-			"samePlaneAdjacent": false,
+			"samePlaneAdjacent": true,
 			"delta": [30, 40],
 			"distance": 50,
 			"distanceSquared": 2500,
