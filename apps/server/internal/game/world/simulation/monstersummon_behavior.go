@@ -17,7 +17,7 @@ import (
 ==================
 summonedTarget
 
-547C70: local acquisition precedes the summoner's opponent. Personal
+Local acquisition precedes the summoner's opponent. Personal
 retaliation is already owned by the ordinary chase/attack state and never
 enters this idle-only acquisition path.
 ==================
@@ -30,7 +30,7 @@ func (ops *MonsterMoverOps) summonedTarget(divisionID string, instance monster.I
 	if !found {
 		return playerPose{}, false
 	}
-	// 547F06: SetCombatTarget(candidate, 0) can refuse a full squad, and the
+	// The unforced target set can refuse a full squad, and the
 	// state then takes no target this pass.
 	if !instance.AcquisitionForced() && !ops.Monsters.squadAdmits(divisionID, instance.Gid, target.Gid) {
 		return playerPose{}, false
@@ -42,7 +42,7 @@ func (ops *MonsterMoverOps) summonedTarget(divisionID string, instance monster.I
 ==================
 summonedCandidate
 
-The one candidate 547C70 offers SetCombatTarget.
+The one candidate the idle acquisition offers the target set.
 ==================
 */
 func (ops *MonsterMoverOps) summonedCandidate(divisionID string, instance monster.Instance, mover monster.MoverState, players []playerPose, nowMs int64) (playerPose, bool) {
@@ -53,8 +53,9 @@ func (ops *MonsterMoverOps) summonedCandidate(divisionID string, instance monste
 	if !ok || parent.CurrentHP == 0 {
 		return playerPose{}, false
 	}
-	// 547DE5..547E59 reads both leader records, not its current movement
-	// target. 53D7A0 includes height and rounds the distance to float32.
+	// The leader pair is read directly, not its current movement
+	// target. The native distance includes height and rounds to
+	// float32.
 	live := mover.LivePoseAt(nowMs, nil)
 	var candidates [2]playerPose
 	var eligible [2]bool
@@ -81,7 +82,7 @@ func (ops *MonsterMoverOps) summonedCandidate(divisionID string, instance monste
 ==================
 followSummoner
 
-5487B0: Timer 7 gates admission, independently of FOLLOW's Timer 0.
+Timer 7 gates admission, independently of FOLLOW's Timer 0.
 The boolean means this decision handled the tick, not packet acceptance.
 A rejected snapshot must not fall through into another stale-state plan.
 ==================
@@ -113,7 +114,8 @@ func followLeaderCompatible(plan monsterFollowPlan, live, target monster.Pose) b
 
 func (ops *MonsterMoverOps) planFollowSegment(plan monsterFollowPlan, live, target monster.Pose, nowMs int64) ([]Frame, bool) {
 	distance := monster.NativeActorDistance(live, target)
-	// 548877 admits equality. Admission only enters FOLLOW (55A930); its
+	// The range test admits equality. Admission only enters FOLLOW;
+	// its
 	// movement callback runs on Timer 0, not in the Timer 7 selector.
 	if !(distance >= float32(plan.instance.SummonerFollowRange)) {
 		frames, accepted := ops.Monsters.commitFollow(plan, plan.mover, nil)
@@ -131,7 +133,7 @@ func (ops *MonsterMoverOps) stopOrAdvanceFollow(divisionID string, instance mons
 		return nil, true
 	}
 	var frames []Frame
-	// Arrival is a movement notification, not FOLLOW completion. 55A960
+	// Arrival is a movement notification, not FOLLOW completion. The FOLLOW
 	// checks Timer 0 first and returns without cancellation for a dead/missing
 	// controller. An explicit CSNM 12 owns unbinding.
 	if mover.ArriveMs > mover.DepartMs && !mover.InFlight(nowMs) && !navigationNeedsContinuation(mover, nowMs) {
@@ -163,7 +165,7 @@ func (ops *MonsterMoverOps) stopOrAdvanceFollow(divisionID string, instance mons
 	motion := monster.NativeFollowMotion(live, target, instance.BodyRadius(), plan.leaderRadius,
 		mover.InFlight(nowMs), mover.MovementGoal(), func() uint32 { return monster.SummonRandomWord(ops.rand()) })
 	if motion.Satisfied {
-		// Event 36 -> vA0 ->5599A0 enters IDLE without stopping movement.
+		// Event 36 enters IDLE without stopping movement.
 		mustMoverTransition(&mover, monster.MoverEventFollowSatisfied, 0)
 		mover.BehaviorDeadlineMs = nowMs + ops.idleDelayMs()
 		var home []Frame
