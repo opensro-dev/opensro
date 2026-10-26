@@ -68,6 +68,12 @@ type WaterValidator struct {
 	// aiNavDataPath packs the dungeons' native route tables (ainavdata.go);
 	// empty over a client public root, which ships none.
 	aiNavDataPath string
+	// caveSeamStep is the port-only cave seam step (cave_native_route.go).
+	caveSeamStep bool
+	// caveModernChase and caveObstacleEscape are the port-only cave chase
+	// planner and obstacle escape (cave_chase.go); zero is native.
+	caveModernChase    bool
+	caveObstacleEscape bool
 	// readFile is the asset reader (os.ReadFile in production; tests inject
 	// it to prove the load-lock discipline below).
 	readFile func(name string) ([]byte, error)

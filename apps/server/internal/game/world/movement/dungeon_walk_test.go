@@ -54,8 +54,8 @@ func stepMesh(rise float32, internalFlags byte) *objectNavMesh {
 stepValidator
 ================
 */
-func stepValidator(mesh *objectNavMesh) *WaterValidator {
-	blocks := []dungeonSpawnBlock{{ordinal: 0, meshes: []*objectNavMesh{mesh}}}
+func stepValidator(mesh *objectNavMesh, obstacles ...dungeonObstacle) *WaterValidator {
+	blocks := []dungeonSpawnBlock{{ordinal: 0, meshes: []*objectNavMesh{mesh}, obstacles: obstacles}}
 	v := &WaterValidator{dungeonSpawnSurfaces: map[uint16]*dungeonSpawnSurface{
 		donwhangCaveRegion: newDungeonSpawnSurface(worldgeom.DungeonMessageGrid{}, blocks),
 	}}
@@ -184,5 +184,34 @@ func TestDungeonWalkUpperFloorChordMoves(t *testing.T) {
 	}
 	if simulation.WorldDistance2D(from, got.Rest) <= 1 {
 		t.Fatalf("upper-floor chord rests at its start %+v", got.Rest)
+	}
+}
+
+/*
+================
+TestDungeonWalkObstacleEscape
+
+A leg that starts inside an obstacle circle and heads deeper in is refused
+where it stands (bit 28) with the original's circle test (#1767), and walks out with the port-only
+escape (cave_chase.go); a leg entering the circle from outside stops at
+its rim either way.
+================
+*/
+func TestDungeonWalkObstacleEscape(t *testing.T) {
+	v := stepValidator(stepMesh(0, 4), dungeonObstacle{x: 90, z: 35, radiusSquared: 15 * 15})
+	inside, across := donwhangCaveSpawn(80, 0, 35), donwhangCaveSpawn(140, 0, 40)
+	if got := v.ClipMovementPath(inside, across); got.Outcome != ClipBlocked || got.NativeResult != monster.NavResultBlocked ||
+		simulation.WorldDistance2D(inside, got.Rest) > .01 {
+		t.Fatalf("native, from inside: %v %#x at %+v, want refused at the start (blocked)", got.Outcome, got.NativeResult, got.Rest)
+	}
+	outside := donwhangCaveSpawn(50, 0, 35)
+	for _, escape := range []bool{false, true} {
+		v.SetCaveObstacleEscape(escape)
+		if got := v.ClipMovementPath(outside, inside); got.Outcome != ClipBlocked || got.Rest.X > 75.01 {
+			t.Fatalf("escape %v, from outside: %v %#x at %+v, want clipped at the rim (x 75)", escape, got.Outcome, got.NativeResult, got.Rest)
+		}
+	}
+	if got := v.ClipMovementPath(inside, across); got.Outcome != ClipArrived {
+		t.Fatalf("escape, from inside: %v %#x at %+v, want arrived", got.Outcome, got.NativeResult, got.Rest)
 	}
 }

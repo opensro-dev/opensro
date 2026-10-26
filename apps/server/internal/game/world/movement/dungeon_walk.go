@@ -17,8 +17,9 @@ in XZ only:
 
 then tests the block's obstacle circles against the leg (bit 0 at the
 first contact; a start inside a circle heading into it is refused where
-it stands instead, the blocked result). walkDungeon is one leg: a
-doorway leg reports a
+it stands instead, the blocked result; with SRO_CAVE_OBSTACLE_ESCAPE,
+port-only, a leg that starts inside a circle walks out of it -
+cave_chase.go). walkDungeon is one leg: a doorway leg reports a
 continuation from the landing cell, and the query loop every plane shares
 (clipMovementPathFromWithWalk: six calls, a leg that started within five
 units settles) walks on from there. The rest's height is its cell's
@@ -93,7 +94,7 @@ func (v *WaterValidator) walkDungeon(from simulation.Spawn, fromOwner simulation
 	if !ok {
 		return report
 	}
-	end, bits, work := surface.walkLeg(state, to)
+	end, bits, work := surface.walkLeg(state, to, v.caveObstacleEscape)
 	switch {
 	case bits&(monster.NavResultBlocked|monster.NavResultClipped) != 0:
 		return surface.walkReport(from, end, bits, work)
@@ -149,10 +150,11 @@ dungeonSpawnSurface.walkLeg
 One leg from state toward to inside state's block: the cell trace, then
 what stopped it - the destination, a doorway (handing over to the linked
 block), a wall, a one-sided edge, a dead doorway - and the block's
-obstacle circles. Returns where the leg ends, its bits and its work.
+obstacle circles (escape: a start inside a circle is not stopped by it).
+Returns where the leg ends, its bits and its work.
 ================
 */
-func (s *dungeonSpawnSurface) walkLeg(state dungeonWalkState, to simulation.Spawn) (dungeonWalkState, uint32, int) {
+func (s *dungeonSpawnSurface) walkLeg(state dungeonWalkState, to simulation.Spawn, escape bool) (dungeonWalkState, uint32, int) {
 	object := &s.objects[state.block]
 	block := &s.blocks[state.block]
 	mesh := object.meshes[0]
@@ -168,7 +170,7 @@ func (s *dungeonSpawnSurface) walkLeg(state dungeonWalkState, to simulation.Spaw
 	if n := len(spans); n > 0 {
 		endT, lastCell = spans[n-1].to, spans[n-1].cell
 	}
-	stop, inside := s.obstacleContact(state.block, state.x, state.z, to.X, to.Z, endT)
+	stop, inside := s.obstacleContact(state.block, state.x, state.z, to.X, to.Z, endT, escape)
 	if inside {
 		// The leg starts inside a circle and heads into it: the
 		// original refuses the step where it stands (the blocked
@@ -412,9 +414,15 @@ reports that refusal and no rim fraction applies. A start inside
 heading out is no contact at all. A chord with no x-extent in the
 block's own frame is never tested either: the original's line form has
 no such line, so its circle test finds nothing along it.
+
+escape (port-only, not native; SRO_CAVE_OBSTACLE_ESCAPE): a chord that
+starts inside a circle is not stopped by that circle at all. Block 87's
+and block 11's circles in Donwhang (radius 44) cover a ramp doorway, so
+the doorway hands movers over inside them and every step deeper into the
+ramp was refused at once; entering a circle from outside still stops.
 ================
 */
-func (s *dungeonSpawnSurface) obstacleContact(block int, x0, z0, x1, z1, limit float64) (float64, bool) {
+func (s *dungeonSpawnSurface) obstacleContact(block int, x0, z0, x1, z1, limit float64, escape bool) (float64, bool) {
 	dx, dz := x1-x0, z1-z0
 	b := &s.blocks[block]
 	if b.cosYaw*dx+b.sinYaw*dz == 0 {
@@ -426,7 +434,7 @@ func (s *dungeonSpawnSurface) obstacleContact(block int, x0, z0, x1, z1, limit f
 		x, z := x0-o.x, z0-o.z
 		dot, c := x*dx+z*dz, x*x+z*z-o.radiusSquared
 		if c < 0 {
-			if dot >= 0 {
+			if dot >= 0 || escape {
 				continue
 			}
 			return 0, true

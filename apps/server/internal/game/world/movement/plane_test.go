@@ -210,7 +210,7 @@ func TestOutdoorPlaneWrapsTodaysNavigation(t *testing.T) {
 	planeParity(t, plane, rt, v, probes)
 	// The outdoor route still wraps the open-terrain search exactly.
 	for _, probe := range probes {
-		route := plane.NextWaypoint(poseOf(probe[0]), poseOf(probe[1]))
+		route := plane.NextWaypoint(poseOf(probe[0]), simulation.NavOwner{}, poseOf(probe[1]))
 		if want := v.PlanMonsterRoute(poseOf(probe[0]), poseOf(probe[1])); !reflect.DeepEqual(route, want) {
 			t.Fatalf("%+v -> %+v NextWaypoint differs from the wrapped route", probe[0], probe[1])
 		}
@@ -250,7 +250,7 @@ func TestCavePlaneWrapsTodaysNavigation(t *testing.T) {
 			// all, and the route contract does not apply.
 			continue
 		}
-		route := plane.NextWaypoint(from, goal)
+		route := plane.NextWaypoint(from, simulation.NavOwner{}, goal)
 		if route == nil || route.Goal() != goal {
 			t.Fatalf("%+v -> %+v route %+v", from, goal, route)
 		}
