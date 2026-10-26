@@ -156,6 +156,21 @@ class MergeTests(unittest.TestCase):
 		self.assertEqual(summary, {"goods": 0, "packages": 0, "missing": []})
 		self.assertEqual([r[3] for r in goods_of(merged, "STORE_SD_SMITH_TAB1")], SMITH_GOODS)
 
+	def test_a_missing_template_stocks_nothing_and_is_reported(self):
+		# The bow's degree 10 package has no price row, so its degree 11
+		# twin has no template: never partly granted, always reported.
+		raw = tables()
+		raw["refpricepolicyofitem.txt"] = utf16(
+			[r for r in table_rows(raw["refpricepolicyofitem.txt"]) if r[2] != "PACKAGE_ITEM_CH_BOW_10_A"])
+		merged, summary = d11.merge_d11_stock(raw, ITEMS)
+		smith = [r[3] for r in goods_of(merged, "STORE_SD_SMITH_TAB1")]
+		self.assertIn("PACKAGE_ITEM_CH_BLADE_11_A", smith)
+		self.assertNotIn("PACKAGE_ITEM_CH_BOW_11_A", smith)
+		self.assertEqual(summary["missing"], ["PACKAGE_ITEM_CH_BOW_11_A"])
+		self.assertNotIn("PACKAGE_ITEM_CH_BOW_11_A", [r[3] for r in table_rows(merged["refpackageitem.txt"])])
+		for name in ("refscrapofpackageitem.txt", "refpricepolicyofitem.txt"):
+			self.assertNotIn("PACKAGE_ITEM_CH_BOW_11_A", [r[2] for r in table_rows(merged[name])])
+
 	def test_reentry_stocks_nothing_twice(self):
 		merged, _ = self.merge()
 		again, summary = d11.merge_d11_stock(merged, ITEMS)
