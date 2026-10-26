@@ -425,6 +425,10 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 			return setPrivacyFlag(authority, shard, account, name, "public-gear-hidden", hidden,
 				func(c *domain.Character) *bool { return &c.PublicGearHidden })
 		},
+		SetBreakNotice: func(account, name string, on bool) error {
+			return setPrivacyFlag(authority, shard, account, name, "break-notice", on,
+				func(c *domain.Character) *bool { return &c.BreakNotice })
+		},
 		WriteToken: readPublicWriteToken(),
 		Sample: func() (int, transport.Metrics) {
 			online := 0

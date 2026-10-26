@@ -112,7 +112,7 @@ func (rt *Runtime) HandleMotionState(divisionID string, character *enterworld.Ch
 		return refusedMotion(fmt.Sprintf("unknownCode 0x%02X", code))
 	}
 
-	// CGObjChar_RequestMotionChange (4B14B2): a masked player (msch 1)
+	// The server's motion-change admission: a masked player (msch 1)
 	// cannot sit, stand or change gait.
 	if characterSnapshot.TransformMode == 1 {
 		return refusedMotion("transformed")

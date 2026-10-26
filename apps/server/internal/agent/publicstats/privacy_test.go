@@ -48,6 +48,15 @@ func privacyService(f *fixture, token string) *Service {
 		}
 		return ErrNotOwned
 	}
+	s.src.SetBreakNotice = func(account, name string, on bool) error {
+		for _, c := range f.chars {
+			if strings.EqualFold(c.Name, name) && c.AccountID == account {
+				c.BreakNotice = on
+				return nil
+			}
+		}
+		return ErrNotOwned
+	}
 	return s
 }
 
@@ -249,6 +258,40 @@ func TestGearPrivacyHidesTheRollsAtOnce(t *testing.T) {
 		t.Fatalf("own characters %s %v", rec.Body.String(), err)
 	}
 	if code := put(s, "/v1/accounts/alpha/characters/Kekw/gear-hidden", "", `{"hidden":false}`); code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated write = %d", code)
+	}
+}
+
+/*
+================
+TestBreakNoticeOptInWritesAtOnce
+
+#1738's opt-in is off until the account page turns it on: the write is
+owner-checked like the privacy flags, the owner's list shows the choice
+at once, and a malformed body is refused.
+================
+*/
+func TestBreakNoticeOptInWritesAtOnce(t *testing.T) {
+	f := newFixture()
+	s := privacyService(f, testWriteToken)
+	if code := put(s, "/v1/accounts/beta/characters/kekw/break-notice", testWriteToken, `{"on":true}`); code != http.StatusNotFound {
+		t.Fatalf("another account's write = %d, want 404", code)
+	}
+	if code := put(s, "/v1/accounts/alpha/characters/kekw/break-notice", testWriteToken, `{"onn":true}`); code != http.StatusBadRequest {
+		t.Fatalf("malformed body = %d, want 400", code)
+	}
+	if code := put(s, "/v1/accounts/alpha/characters/kekw/break-notice", testWriteToken, `{"on":true}`); code != http.StatusNoContent {
+		t.Fatalf("opt in = %d", code)
+	}
+	rec := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/v1/accounts/alpha/characters", nil)
+	request.Header.Set("Authorization", "Bearer "+testWriteToken)
+	s.Handler().ServeHTTP(rec, request)
+	var own OwnCharactersResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &own); err != nil || len(own.Characters) != 1 || !own.Characters[0].BreakNotice {
+		t.Fatalf("own characters %s %v", rec.Body.String(), err)
+	}
+	if code := put(s, "/v1/accounts/alpha/characters/Kekw/break-notice", "", `{"on":false}`); code != http.StatusUnauthorized {
 		t.Fatalf("unauthenticated write = %d", code)
 	}
 }

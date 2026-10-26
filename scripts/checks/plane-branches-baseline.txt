@@ -9,13 +9,4 @@ apps/server/internal/game/action/monstercombat.go 2
 apps/server/internal/game/action/operator.go 1
 apps/server/internal/game/action/petarea.go 2
 apps/server/internal/game/action/playerstrike_cos.go 2
-apps/server/internal/game/action/pvpstrike.go 2
-apps/server/internal/game/action/reversemap.go 2
-apps/server/internal/game/action/reward_group.go 1
-apps/server/internal/game/action/skilladmit.go 2
-apps/server/internal/game/action/skillcombat.go 2
-apps/server/internal/game/action/skillposition.go 1
-apps/server/internal/game/action/temptation.go 2
-apps/server/internal/game/world/movement/groundwalk.go 3
 apps/server/internal/game/world/movement/object_surface_path.go 2
-apps/server/internal/game/world/movement/owned_start.go 1

@@ -346,6 +346,11 @@ type Character struct {
 	// profile itself stays visible (port-only, not native: the
 	// opensro.online "hide my gear" choice, schema 23).
 	PublicGearHidden bool `json:"publicGearHidden,omitempty"`
+	// BreakNotice is the character's opt-in to the shard's item-break
+	// notices (port-only, not native: SRO_ALCHEMY_BREAK_NOTICE, #1738,
+	// the opensro.online account-page choice, schema 32). Off: their
+	// alchemy breaks are never announced.
+	BreakNotice bool `json:"breakNotice,omitempty"`
 	// MostWanted is the character's job-kill streak (port-only, not native:
 	// SRO_MOST_WANTED, action/mostwanted.go; schema 24). Nil is no streak.
 	MostWanted *MostWanted `json:"mostWanted,omitempty"`
