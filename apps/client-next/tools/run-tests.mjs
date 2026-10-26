@@ -273,8 +273,9 @@ async function main() {
 		process.env.SRO_TEST_INPUT_LOG = logDir;
 		// A runner started inside a recorded test owns its own tests.
 		delete process.env.SRO_TEST_INPUT_OWNER;
-		process.env.NODE_OPTIONS =
-			`${process.env.NODE_OPTIONS ?? ""} --max-old-space-size=${TEST_HEAP_MB} --import ${recorderUrl}`.trim();
+		process.env.NODE_OPTIONS = `${
+			process.env.NODE_OPTIONS ?? ""
+		} --max-old-space-size=${TEST_HEAP_MB} --import ${recorderUrl}`.trim();
 		try {
 			const stream = run( { files: pending, concurrency: os.availableParallelism(), cwd: clientRoot } );
 			// The stream hands listeners the event's data itself.
