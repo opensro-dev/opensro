@@ -119,6 +119,27 @@ class MergeTests(unittest.TestCase):
 		scrap = next(r for r in table_rows(merged["refscrapofpackageitem.txt"]) if r[2] == "PACKAGE_ITEM_CH_BLADE_10_A")
 		self.assertEqual(scrap[3], "ITEM_CH_BLADE_10_A")
 
+	def test_reentry_stocks_nothing_twice(self):
+		raw = {name: table_rows(tables(GOODS)[name]) for name in d10.NAMES}
+		# The city's own accessory store, restocked in place by the pass:
+		# the re-entry case the cloned stores are already guarded against.
+		raw["refshop.txt"].append(["1", "11", "6", "STORE_SD_ACCESSORY", *FILLER])
+		raw["refmappingshopwithtab.txt"].append(["1", "11", "STORE_SD_ACCESSORY", "STORE_SD_ACCESSORY_GROUP1"])
+		raw["refshoptabgroup.txt"].append(["1", "11", "8", "STORE_SD_ACCESSORY_GROUP1", "SN_GROUP"])
+		raw["refshoptab.txt"].append(["1", "11", "10", "STORE_SD_ACCESSORY_TAB1", "STORE_SD_ACCESSORY_GROUP1", "SN_TAB_ACCESSORY", ""])
+		raw["refshopgoods.txt"].append(["1", "11", "STORE_SD_ACCESSORY_TAB1", "PACKAGE_ITEM_CH_RING_09_A", "0", *FILLER])
+		raw["refpackageitem.txt"].append(["1", "11", "30", "PACKAGE_ITEM_CH_RING_09_A", "0", "EXPAND_TERM_ALL", "SN", "SN_TT", "old.ddj", *FILLER])
+		raw["refscrapofpackageitem.txt"].append(["1", "11", "PACKAGE_ITEM_CH_RING_09_A", "ITEM_CH_RING_09_A", "0", "0", "120", *["0"] * 13, *FILLER, "200"])
+		raw["refpricepolicyofitem.txt"].append(["1", "11", "PACKAGE_ITEM_CH_RING_09_A", "1", "1000", *FILLER])
+		items = {**ITEMS, "ITEM_CH_RING_10_A": item("ITEM_CH_RING_10_A", 100)}
+		merged, _ = d10.merge_d10_stock({name: utf16(r) for name, r in raw.items()}, items)
+		accessory = ["PACKAGE_ITEM_CH_RING_09_A", "PACKAGE_ITEM_CH_RING_10_A"]
+		self.assertEqual([r[3] for r in table_rows(merged["refshopgoods.txt"]) if r[2] == "STORE_SD_ACCESSORY_TAB1"], accessory)
+		again, summary = d10.merge_d10_stock(merged, items)
+		self.assertEqual(summary["goods"], 0)
+		self.assertEqual(summary["packages"], 0)
+		self.assertEqual([r[3] for r in table_rows(again["refshopgoods.txt"]) if r[2] == "STORE_SD_ACCESSORY_TAB1"], accessory)
+
 	def test_without_the_degree_10_items_the_new_store_is_a_plain_copy(self):
 		merged, summary = self.merge({})
 		self.assertEqual(summary["packages"], 0)

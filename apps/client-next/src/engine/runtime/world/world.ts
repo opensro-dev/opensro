@@ -68,6 +68,11 @@ export function createWorldStream(
 	// stands, ApplyCameraOrbit (68FAD0) and UpdateCameraOrbitTarget
 	// (68F830) return early, so the world keeps the last applied camera.
 	let freeCamera = false;
+	// The interface track's port copy (CGInterface +0x3FC) and its play
+	// byte (+0x3CD): the console owns the store and forwards both; the
+	// playback stepping that consults them lands with #1716's second PR.
+	let waypointKeyframes: readonly import("@/engine/foundation/ui/camera-waypoints").CameraWaypoint[] = [];
+	let waypointPlaying = false;
 	let lastCamera: import("@/engine/contracts/scene").WorldCamera | null = null;
 	let catalog: Record<string, { area?: string; source?: string; bundlePublicPath: string; }[]> | null = null;
 	/*
@@ -436,6 +441,31 @@ export function createWorldStream(
 		*/
 		setFreeCamera( free: boolean ) {
 			if ( !disposed ) freeCamera = free;
+		},
+		/*
+		================
+		setCameraWaypoints
+
+		The console's waypoint store forwarded whole (load and /cwclear):
+		the port copy of the track the playback stepper samples (#1716).
+		================
+		*/
+		setCameraWaypoints(
+			keyframes: readonly import("@/engine/foundation/ui/camera-waypoints").CameraWaypoint[]
+		) {
+			if ( !disposed ) waypointKeyframes = keyframes;
+		},
+		/*
+		================
+		setCameraPlaying
+
+		690C40 ids 131-133 write the play byte (+0x3CD): while it stands
+		the stepper drives the camera from the track (#1716 PR2); the
+		follow stays frozen either way while the free-camera byte stands.
+		================
+		*/
+		setCameraPlaying( playing: boolean ) {
+			if ( !disposed ) waypointPlaying = playing;
 		},
 		/*
 		================
