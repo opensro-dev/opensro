@@ -75,8 +75,11 @@ export const DEBUG_COMMAND_CURSOR = 135;
 // 136 writes the interface's free-camera move speed (+0x7B0, seeded
 // 100) from one word clamped to 1..500. 137 flips the global id-plate
 // byte (0xCCB5D8): while it stands, actor name boards carry an id
-// line. The port's camera has no free translation and its boards take
-// no id line yet; both values are kept as written (see #1717).
+// line. The byte ships standing (its file-backed initial is 1 and the
+// case is the only writer in the image), so the kept copy seeds
+// standing too. The port's camera has no free translation and its
+// boards take no id line yet; both values are kept as written (see
+// #1717).
 export const DEBUG_COMMAND_CAMERA_SPEED = 136;
 export const DEBUG_COMMAND_ID = 137;
 // The render family (690C40 ids 150-155, handlers 691686-6917A3): each
@@ -92,7 +95,9 @@ export const DEBUG_COMMAND_LEVEL_OF_DETAIL = 155;
 export const DEBUG_COMMAND_SET_FIELD_OF_VIEW = 500;
 // The over-400 family's high rows (690C40's second table): 600 writes
 // the local player's (or its mount's) speed field (+0x658), 601 builds
-// the named item into the local inventory, 602 has no case at all (the
+// the named item's descriptor, frames it as a packet stream headed by
+// opcode 0x3314 and hands it to the client's own packet dispatch
+// (690BD0) - nothing leaves the machine - 602 has no case at all (the
 // table sends it to the shared exit) and 603 hands a sound name to the
 // sound manager. The port's movement and inventory belong to the
 // server and its audio takes cues, not names; the handlers run and

@@ -1033,8 +1033,9 @@ export function createUi(
 	let debugCursorVisible = true;
 	// The camera family's kept values: the free-camera move speed
 	// (+0x7B0, seeded 100, case 136), the snapped second speed (+0x7C0,
-	// seeded 50, case 111), the frame byte (engine global +0x4A, case
-	// 117), the id-plate byte (0xCCB5D8, case 137) and the local
+	// seeded 50, case 111), the frame byte (engine global +0x4A, seeded
+	// clear, case 117), the id-plate byte (0xCCB5D8, seeded standing,
+	// case 137) and the local
 	// player's written speed (+0x658, case 600; 100 is the scale's
 	// neutral point, the value the word 10 writes). The port's camera
 	// does not translate freely, its boards take no id line and its
@@ -1043,7 +1044,7 @@ export function createUi(
 	let debugCameraSpeed = 100;
 	let debugFast = 50;
 	let debugFrameStats = false;
-	let debugShowIds = false;
+	let debugShowIds = true;
 	let debugMoveSpeed = 100;
 	// The render family's SWorld graphic options (690C40 ids 150-155):
 	// SWorld_Construct seeds wireframe clear and the five others standing,
@@ -2717,7 +2718,8 @@ export function createUi(
 	the mission window's visible flag (115/116) is this window's own. The
 	remaining camera rows (111/117/136/137) and the 600 family keep their
 	values on this window for consumers the port does not have yet (#1717);
-	601 builds nothing locally and 602 is the native table's shared exit.
+	601 frames the named item as a packet the client hands itself (see
+	the case); the port builds nothing. 602 is the native table's shared exit.
 	The camera-waypoint rows (130-134) wait on the cameradata store
 	(#1716). Every row the table names is consumed here, as natively.
 	================
@@ -2952,11 +2954,14 @@ export function createUi(
 				debugMoveSpeed = debugSetSpeedValue( command.args );
 				break;
 			case DEBUG_COMMAND_EQUIP:
-				// Case 601 builds the named item into the local
-				// inventory, client-locally only (no server frame).
-				// The port's inventory is the server's snapshot, so
-				// there is nothing the phantom item could be; the line
-				// is consumed and nothing is built (#1717).
+				// Case 601 builds the named item's descriptor, frames
+				// it as a packet stream headed by opcode 0x3314 and
+				// self-dispatches it through the client's own packet
+				// handler (690BD0); the stream is destroyed after and
+				// nothing is transmitted. The port's inventory is the
+				// server's snapshot, so there is nothing for the
+				// crafted packet to land on; the line is consumed and
+				// nothing is built (#1717).
 				break;
 			case DEBUG_COMMAND_MAKE_OBJECT:
 				// 602 has no native case: the over-400 table sends it
