@@ -3,8 +3,9 @@
 
 spawn_surface_test.go - a spawn stands on the surface its walk reached
 
-5F6EB0 creates a population monster at the position the region manager's
-move test wrote while walking from the nest centre to the generated
+The server's monster spawn creates a population monster at the position
+the region manager's move test wrote while walking from the nest centre
+to the generated
 candidate. The Simos Ladon nest in 0x684B sits 40 m from a stone bridge
 (euro_stbridge01) over a gorge; grounding candidates by the nest's authored
 height put a champion on the bridge's edge cells, where it could neither

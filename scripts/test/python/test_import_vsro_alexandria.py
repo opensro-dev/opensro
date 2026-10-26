@@ -11,8 +11,10 @@ the native-versus-VSRO catalog comparison.
 
 ===========================================================================
 """
+import hashlib
 import struct
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -149,6 +151,52 @@ class CatalogTests(unittest.TestCase):
 		vsro = alex.object_catalog(b'JMXVOBJI1000\r\n1\r\n01548 0x00000000 "res\\bldg\\castle.bsr"\r\n')
 		report = alex.compare_catalogs(native, vsro, alex.object_placeholder)
 		self.assertEqual(report["conflicts"], [1548])
+
+
+class PinTests(unittest.TestCase):
+	def setUp(self):
+		alex._verified_archives.clear()
+		self.root = tempfile.TemporaryDirectory()
+		self.addCleanup(self.root.cleanup)
+		self.vsro = Path(self.root.name)
+
+	def pin(self, name, payload):
+		(self.vsro / f"{name}.pk2").write_bytes(payload)
+		return {name: hashlib.sha256(payload).hexdigest()}
+
+	def test_a_matching_archive_verifies(self):
+		pins = self.pin("Media", b"the pinned client")
+		alex.verify_vsro_archive(self.vsro, "Media", pins)
+
+	def test_a_changed_archive_is_refused(self):
+		pins = self.pin("Media", b"the pinned client")
+		(self.vsro / "Media.pk2").write_bytes(b"the pinned client, patched")
+		with self.assertRaises(SystemExit):
+			alex.verify_vsro_archive(self.vsro, "Media", pins)
+
+	def test_a_missing_archive_is_refused(self):
+		with self.assertRaises(SystemExit):
+			alex.verify_vsro_archive(self.vsro, "Media", {"Media": "0" * 64})
+
+	def test_an_unpinned_archive_is_refused(self):
+		self.pin("Music", b"unpinned")
+		with self.assertRaises(SystemExit):
+			alex.verify_vsro_archive(self.vsro, "Music", {})
+
+	def test_require_checks_every_named_archive(self):
+		pins = self.pin("Map", b"map") | self.pin("Media", b"media")
+		alex.require_vsro_pin(self.vsro, ("Map", "Media"), pins)
+		(self.vsro / "Media.pk2").write_bytes(b"other media")
+		alex._verified_archives.clear()
+		with self.assertRaises(SystemExit):
+			alex.require_vsro_pin(self.vsro, ("Map", "Media"), pins)
+
+	def test_the_checked_in_pin_names_every_archive_the_chain_reads(self):
+		pins = alex.archive_pins()
+		self.assertEqual(set(pins), set(alex.ARCHIVE_NAMES))
+		for digest in pins.values():
+			self.assertEqual(len(digest), 64)
+			self.assertTrue(all(c in "0123456789abcdef" for c in digest), digest)
 
 
 if __name__ == "__main__":

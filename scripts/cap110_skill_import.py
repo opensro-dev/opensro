@@ -235,6 +235,8 @@ def main():
 	parser.add_argument("--output-extracted", type=Path, default=REPO_ROOT / ".state" / "cap110-skills" / "extracted")
 	parser.add_argument("--database-export", type=Path, help="owner-supplied _RefSkill JSON snapshot")
 	args = parser.parse_args()
+	if enabled():
+		tables.require_vsro_pin(args.vsro_root, ("Media",))
 	summary = add_skills(args.vsro_root, args.native_extracted, args.output_extracted, args.database_export)
 	print(f"Skills: {summary['added']}; enabled: {summary['enabled']}")
 	if summary["enabled"]:

@@ -52,18 +52,24 @@ export interface PlaneFeatures {
 	// "Dungeon character PVS"), which culls actors in rooms or floors the
 	// local player cannot see. Caves only: the open world has no rooms.
 	readonly characterPvs: boolean;
+	// signedLocalCoordinates: a wire pose's local coordinates are signed.
+	// A cave pose is a signed 16-bit plane; a field pose is an unsigned
+	// 1920-unit cell (movement-wire's admitPose).
+	readonly signedLocalCoordinates: boolean;
 }
 
 const OUTDOOR_FEATURES = {
 	minimapCoordinates: true,
 	reverseReturnPoints: true,
-	characterPvs: false
+	characterPvs: false,
+	signedLocalCoordinates: false
 } as const;
 
 const CAVE_FEATURES = {
 	minimapCoordinates: false,
 	reverseReturnPoints: false,
-	characterPvs: true
+	characterPvs: true,
+	signedLocalCoordinates: true
 } as const;
 
 /*

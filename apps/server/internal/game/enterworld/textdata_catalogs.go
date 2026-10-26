@@ -31,7 +31,11 @@ type TextdataCatalogs struct {
 	Levels       *TextdataLevels
 	Skills       *TextdataSkills
 	MagicOptions *TextdataMagicOptions
-	NameFilter   *namefilter.Filter
+	// SetGroups is the port-only dormant set catalogue (setgroups.go).
+	// The overlay files may be absent on a native shard, so unlike the
+	// tables above it is constructed but never fails readiness.
+	SetGroups  *TextdataSetGroups
+	NameFilter *namefilter.Filter
 }
 
 /*
@@ -53,6 +57,7 @@ func LoadTextdataCatalogs(dir string) (*TextdataCatalogs, error) {
 		Levels:       NewTextdataLevels(dir),
 		Skills:       NewTextdataSkills(dir),
 		MagicOptions: NewTextdataMagicOptions(dir),
+		SetGroups:    NewTextdataSetGroups(dir),
 	}
 	if catalogs.Items.Len() == 0 {
 		return nil, fmt.Errorf("textdata readiness: no itemdata rows loaded from %s", dir)

@@ -8,6 +8,11 @@ the later (cap 110) VSRO client. The scope rule keeps v1.150 as the native
 default, so this tool is off unless SRO_ALEXANDRIA is "1", "on" or "true",
 and it never writes into extracted/Map_extracted or any other v1.150 tree.
 
+The VSRO archives are hash-pinned (vsro_archive_pins.json, #1745): the
+pin names the sha256 of the one later client the expansion is built
+against, and this stage refuses any other bytes before reading them.
+The archives themselves are the operator's own and are never committed.
+
 What it does, from the operator's own VSRO client (SRO_VSRO_ROOT or
 --vsro-root, holding Map.pk2, Media.pk2 and Data.pk2):
 
@@ -51,6 +56,14 @@ from sro_paths import EXTRACTED_ROOT  # noqa: E402
 FLAG_ENV = "SRO_ALEXANDRIA"
 ROOT_ENV = "SRO_VSRO_ROOT"
 FLAG_ON = ("1", "on", "true")
+# The archives the Alexandria chain opens from a VSRO root (#1745):
+# stage 1 reads Map, Media and Data; stage 2 adds Music and Particles;
+# the cap-110 importers read Media, Data and Particles between them.
+# Every one is pinned in vsro_archive_pins.json (require_vsro_pin).
+ARCHIVE_NAMES = ("Map", "Media", "Data", "Music", "Particles")
+STAGE1_ARCHIVES = ("Map", "Media", "Data")
+PIN_FORMAT = "opensro-vsro-archive-pins-v1"
+PIN_FILE = Path(__file__).with_name("vsro_archive_pins.json")
 MANIFEST_FORMAT = "opensro-alexandria-import-v1"
 MANIFEST_NAME = ".opensro-alexandria.json"
 OUTPUT_FOLDER = "Alexandria_extracted"
@@ -286,6 +299,65 @@ def sha256_of(data):
 	return hasher.hexdigest()
 
 
+#============================================================================
+# The VSRO archive pin (#1745)
+#
+# The expansion is built from the operator's own later client, checked
+# against vsro_archive_pins.json and never committed: a missing or
+# changed archive fails the build. The gate stands at every entry that
+# takes a VSRO root (this stage, build_alexandria_variant.build_variant
+# and the cap-110 importers' own mains); the add_* steps run under one
+# of those gates. A process verifies each archive once.
+#============================================================================
+
+_verified_archives = set()
+
+
+def archive_pins():
+	"""The pinned VSRO archive hashes (vsro_archive_pins.json beside this tool)."""
+	try:
+		pin = json.loads(PIN_FILE.read_text(encoding="utf-8"))
+	except (OSError, ValueError) as error:
+		raise SystemExit(f"{PIN_FILE} is unreadable: {error}")
+	if pin.get("format") != PIN_FORMAT or not isinstance(pin.get("archives"), dict):
+		raise SystemExit(f"{PIN_FILE} is not a {PIN_FORMAT} pin file")
+	return pin["archives"]
+
+
+def verify_vsro_archive(root, name, pins=None):
+	"""
+	One VSRO archive against its pin: it must exist under root and hash
+	to the pinned sha256, or the build stops before anything reads it.
+	pins is injectable for tests.
+	"""
+	path = Path(root) / f"{name}.pk2"
+	key = str(path.resolve())
+	if key in _verified_archives:
+		return
+	expected = (archive_pins() if pins is None else pins).get(name)
+	if expected is None:
+		raise SystemExit(f"{PIN_FILE.name} pins no {name}.pk2; pin the archive before reading it")
+	if not path.is_file():
+		raise SystemExit(f"{path} not found; --vsro-root must be the pinned VSRO client folder")
+	hasher = hashlib.sha256()
+	with open(path, "rb") as handle:
+		for chunk in iter(lambda: handle.read(HASH_CHUNK), b""):
+			hasher.update(chunk)
+	actual = hasher.hexdigest()
+	if actual != expected:
+		raise SystemExit(
+			f"{path} does not match the pinned VSRO archive: sha256 is {actual}, pinned is {expected}. "
+			"Alexandria is built from one pinned VSRO client (#1745); its archives are never committed."
+		)
+	_verified_archives.add(key)
+
+
+def require_vsro_pin(root, names, pins=None):
+	"""Every archive in names against its pin, before any of them is read."""
+	for name in names:
+		verify_vsro_archive(root, name, pins)
+
+
 def table_text(media, index, name):
 	entry = index.get(TEXTDATA + name)
 	if entry is None:
@@ -319,6 +391,7 @@ def vsro_only_regions(data, index, extracted):
 # ================
 def import_alexandria(vsro_root, extracted):
 	"""Run the import; returns the manifest dict it also writes."""
+	require_vsro_pin(vsro_root, STAGE1_ARCHIVES)
 	output = extracted / OUTPUT_FOLDER
 	map_path, map_handle, map_data = open_archive(vsro_root, "Map")
 	media_path, media_handle, media_data = open_archive(vsro_root, "Media")

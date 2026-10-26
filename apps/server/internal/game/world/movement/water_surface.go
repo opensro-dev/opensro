@@ -82,8 +82,9 @@ func (s *groundSurface) terrainHeightAt(baseX, baseZ float64) (float64, bool) {
 	tz := math.Min(math.Max(fz-float64(iz), 0), 1)
 	h00, h10, h01, h11 := grid.quad(ix, iz)
 	height := h00*(1-tx)*(1-tz) + h10*tx*(1-tz) + h01*(1-tx)*tz + h11*tx*tz
-	// Native server 9A12B9 / client 404EE9: bit 2 makes this NVM plane
-	// solid. Raise the sampled ground to it, never lower hills above it.
+	// Native (client 404EE9, and the server's solid-plane height probe):
+	// bit 2 makes this NVM plane solid. Raise the sampled ground to it,
+	// never lower hills above it.
 	block := int(localZ/(s.regionSize/6))*6 + int(localX/(s.regionSize/6))
 	if block >= 0 && block < len(grid.planeTypes) && grid.planeTypes[block]&2 != 0 {
 		height = math.Max(height, float64(grid.planeHeights[block]))
