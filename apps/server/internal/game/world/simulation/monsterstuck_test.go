@@ -658,7 +658,7 @@ func TestMonsterStuckWarpToBattleTargetMonster(t *testing.T) {
 		t.Fatalf("expected MoverChasing on monster %d after battle warp, got mode=%v target=%d",
 			other.Gid, after.Mode(), after.TargetGID())
 	}
-	want := otherMover.LivePoseAt(40_000, ops.TerrainHeight)
+	want := otherMover.LivePoseAt(40_000, ops.GroundHeight)
 	if after.Pose.X != want.X || after.Pose.Z != want.Z {
 		t.Fatalf("warped pose = %+v, want target monster XZ (%v,%v)", after.Pose, want.X, want.Z)
 	}

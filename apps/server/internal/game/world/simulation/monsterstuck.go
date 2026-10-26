@@ -205,7 +205,7 @@ func (ops *MonsterMoverOps) resolveBattleTargetPose(
 	}
 	if inst, ok := ops.Monsters.Get(divisionID, targetGID); ok && (inst.Ref.MaxHP == 0 || inst.CurrentHP > 0) {
 		if targetMover, ok := ops.Monsters.Mover(divisionID, targetGID); ok {
-			return targetMover.LivePoseAt(nowMs, ops.TerrainHeight), true
+			return targetMover.LivePoseAt(nowMs, ops.GroundHeight), true
 		}
 	}
 	if player, exists := playerByGid(divisionPlayers, targetGID); exists {
