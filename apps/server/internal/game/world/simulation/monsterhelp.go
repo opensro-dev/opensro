@@ -59,7 +59,7 @@ func (ops *MonsterMoverOps) handleHelp(division string, expected monster.Instanc
 		distance := tacticsDistance3D(live, monster.Pose{RegionID: target.Pose.RegionID, X: target.Pose.X, Y: target.Pose.Y, Z: target.Pose.Z})
 		accepted = monsterWithinHomeTrace(instance, live, distance)
 	}
-	if accepted && !IsDungeonRegion(live.RegionID) {
+	if accepted && FeaturesAt(live.RegionID).HelpCallSight {
 		// The receiver tests bit 0 only. Do not turn the distinct native bit
 		// 28 into bit 0, or use clipped distance as an invented sight gate.
 		accepted = false

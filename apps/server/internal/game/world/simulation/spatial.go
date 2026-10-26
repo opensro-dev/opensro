@@ -87,12 +87,6 @@ func WorldDistance2D(a, b Spawn) float64 {
 	)
 }
 
-// IsDungeonRegion reports whether the region id carries the dungeon plane
-// bit, server.mjs isMissionDungeonRegion.
-func IsDungeonRegion(regionID uint16) bool {
-	return worldgeom.IsDungeonRegion(regionID)
-}
-
 // headingWordFromDelta is THE single travel-direction -> wire-heading encoder
 // for this package. Every plane that faces an entity along its own movement
 // goes through here: the player plane (HeadingFromMovement below), the monster
