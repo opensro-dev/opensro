@@ -29,6 +29,24 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 )
 
+// DungeonSectorBit marks dungeon-plane region ids (moved from
+// simulation.go, #1764: the plane owner is the one place outside worldgeom
+// that names the bit).
+const DungeonSectorBit uint16 = worldgeom.DungeonRegionBit
+
+/*
+================
+IsDungeonRegion
+
+Whether the region id carries the dungeon plane bit, server.mjs
+isMissionDungeonRegion. Kept for the callers outside the simulation that
+still test it; inside, PlaneKindOf names the plane.
+================
+*/
+func IsDungeonRegion(regionID uint16) bool {
+	return worldgeom.IsDungeonRegion(regionID)
+}
+
 /*
 ================
 PlaneKind

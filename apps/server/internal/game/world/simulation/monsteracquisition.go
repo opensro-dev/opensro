@@ -237,13 +237,14 @@ func (s acquisitionBlockSet) order(block worldgeom.InterestBlock) (int, bool) {
 
 /*
 ================
-acquisitionBlocks
+outdoorAcquisitionBlocks
+
+The outdoor plane's acquisition blocks: the sight square, clamped to
+[1, 310], over the sector grid. The cave plane's arm is
+dungeonAcquisitionBlocks; acquisitionBlocks (plane_monster.go) picks.
 ================
 */
-func acquisitionBlocks(from monster.Pose, sight uint32) acquisitionBlockSet {
-	if worldgeom.IsDungeonRegion(from.RegionID) {
-		return dungeonAcquisitionBlocks(from)
-	}
+func outdoorAcquisitionBlocks(from monster.Pose, sight uint32) acquisitionBlockSet {
 	radius := float32(sight)
 	if radius < 1 {
 		radius = 1
