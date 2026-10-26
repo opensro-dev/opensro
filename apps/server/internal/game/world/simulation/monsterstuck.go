@@ -96,8 +96,7 @@ func (ops *MonsterMoverOps) resolveStuck(
 		next := mover
 		next.ClearStuck()
 		warped := false
-		if target, alive := eligiblePlayerByGid(current, divisionPlayers, mover.TargetGID()); alive {
-			dest := spawnToPose(target.Pose)
+		if dest, found := ops.resolveBattleTargetPose(divisionID, mover.TargetGID(), divisionPlayers, nowMs); found {
 			// The server refuses outdoor -> dungeon relocation.
 			if !relocationEntersCave(live.RegionID, dest.RegionID) {
 				relocated := ops.resolveRelocationPose(live, dest)
@@ -182,6 +181,39 @@ func (ops *MonsterMoverOps) resolveRelocationPose(from, target monster.Pose) mon
 		}
 	}
 	return relocated
+}
+
+/*
+================
+resolveBattleTargetPose
+
+Resolves the live position of the mover's combat target (the tactics record's target id).
+The native battle warp finds that object through the global object manager,
+so the target may be a player, a session companion, a summon or another
+monster; there is no tactics status re-admission, because the object is
+already the owned combat target and only liveness gates the warp. A live
+population object answers through its own mover first, then the tick's
+eligible list (players with their companions appended).
+================
+*/
+func (ops *MonsterMoverOps) resolveBattleTargetPose(
+	divisionID string,
+	targetGID uint32,
+	divisionPlayers []playerPose,
+	nowMs int64,
+) (monster.Pose, bool) {
+	if targetGID == 0 {
+		return monster.Pose{}, false
+	}
+	if inst, ok := ops.Monsters.Get(divisionID, targetGID); ok && (inst.Ref.MaxHP == 0 || inst.CurrentHP > 0) {
+		if targetMover, ok := ops.Monsters.Mover(divisionID, targetGID); ok {
+			return targetMover.LivePoseAt(nowMs, ops.GroundHeight), true
+		}
+	}
+	if player, exists := playerByGid(divisionPlayers, targetGID); exists {
+		return spawnToPose(player.Pose), true
+	}
+	return monster.Pose{}, false
 }
 
 /*
