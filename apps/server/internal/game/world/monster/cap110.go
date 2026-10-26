@@ -6,7 +6,8 @@ Port-only, not native. SRO_CAP110_MONSTERS is off by default. The compiler
 joins database identities by codename; runtime resolves the installed refs.
 The nest validation is shared with the Pharaoh Tomb population
 (pharaoh_tomb.go): both read the same row schema and differ only in which
-monster references they admit.
+monster references they admit. SRO_CAP110_LEVEL100 (also off by default)
+separately admits the level-100 slice of the field population (#1741).
 ===========================================================================
 */
 package monster
@@ -21,10 +22,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	log "github.com/sirupsen/logrus"
+
 	"opensro.online/server/internal/game/world/alexandria"
 )
 
 const EnvCap110Monsters = "SRO_CAP110_MONSTERS"
+const EnvCap110Level100 = "SRO_CAP110_LEVEL100"
 const cap110PopulationFile = "cap110-monsters.txt"
 const cap110PopulationVersion = 1
 
@@ -41,6 +45,24 @@ Cap110Enabled
 */
 func Cap110Enabled() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvCap110Monsters))) {
+	case "1", "on", "true":
+		return true
+	}
+	return false
+}
+
+/*
+================
+Cap110Level100Enabled
+
+Port-only, not native (#1741, the owner-decided P3-A): admits the
+level-100 field monsters to hunting. Off, their nests are held back
+at population load; levels 101-110 follow SRO_CAP110_MONSTERS alone.
+Ships off; it switches on with the cap-110 catalogue (#1607).
+================
+*/
+func Cap110Level100Enabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvCap110Level100))) {
 	case "1", "on", "true":
 		return true
 	}
@@ -95,7 +117,21 @@ appendCap110Data
 ================
 */
 func appendCap110Data(template Template, data []byte) (Template, error) {
-	return appendNests(template, data, "cap110 population", admitCap110Field)
+	return appendNests(template, data, "cap110 population", admitCap110Field, skipCap110Level100)
+}
+
+/*
+================
+skipCap110Level100
+
+Port-only, not native (#1741): a level-100 field nest is held back
+while SRO_CAP110_LEVEL100 is off, so the admission can switch on with
+the cap-110 catalogue (#1607) instead of riding the population switch.
+The row is still validated like every other; only its joining waits.
+================
+*/
+func skipCap110Level100(ref MonsterRef, _ string) bool {
+	return ref.Level == cap110FirstLevel && !Cap110Level100Enabled()
 }
 
 /*
@@ -120,10 +156,12 @@ appendNests
 Validates one optional population file and appends its nests onto a copy of
 the template. label names the population in errors; admit says which installed
 monster references the population may spawn. Every row must pass: a partial
-population must not reach gameplay.
+population must not reach gameplay. A non-nil skip holds back admitted rows
+its own flag has not admitted yet; skipped rows are validated like the rest
+and counted in the log, never silently dropped.
 ================
 */
-func appendNests(template Template, data []byte, label string, admit func(MonsterRef, string) bool) (Template, error) {
+func appendNests(template Template, data []byte, label string, admit func(MonsterRef, string) bool, skip func(MonsterRef, string) bool) (Template, error) {
 	var source struct {
 		Version int
 		Rows    []cap110Nest
@@ -145,6 +183,7 @@ func appendNests(template Template, data []byte, label string, admit func(Monste
 	}
 	nests := append([]NestRow(nil), template.Nests...)
 	seen := make(map[uint32]bool, len(source.Rows))
+	skipped := 0
 	for _, row := range source.Rows {
 		ref, ok := refs[row.Codename]
 		if !ok || !admit(ref, row.Codename) {
@@ -165,6 +204,10 @@ func appendNests(template Template, data []byte, label string, admit func(Monste
 			return Template{}, fmt.Errorf("%s has inconsistent tactics %d", label, row.NestID)
 		}
 		seen[row.NestID] = true
+		if skip != nil && skip(ref, row.Codename) {
+			skipped++
+			continue
+		}
 		nest := NestRow{
 			WorldCode: "INS_DEFAULT", PolicyPinned: true,
 			SpawnPoint: SpawnPoint{RefObjID: ref.RefObjID, RegionID: row.RegionID, X: row.X, Y: row.Y, Z: row.Z},
@@ -182,6 +225,9 @@ func appendNests(template Template, data []byte, label string, admit func(Monste
 				SightRange: float64(c.SightRange), TargetPolicy: c.ChangeTarget, NativeTacticsFlags: c.Flags}
 		}
 		nests = append(nests, nest)
+	}
+	if skipped > 0 {
+		log.Infof("%s: %d authored nest(s) held back by their admission flag (port-only)", label, skipped)
 	}
 	result := TemplateFromParts(template.Refs, nests)
 	result.SummonRefs = append([]uint32(nil), template.SummonRefs...)

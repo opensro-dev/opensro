@@ -172,6 +172,13 @@ variable "cap110_monsters" {
   default = "off"
 }
 
+# Port-only, not native: the level-100 slice of that population, admitted
+# for hunting separately (#1741); switches on with the cap-110 catalogue.
+variable "cap110_level100" {
+  type    = string
+  default = "off"
+}
+
 # Port-only, not native: the optional Pharaoh Tomb 1-3 population. It needs
 # cap110_monsters on as well; GameWorld refuses to start otherwise.
 variable "pharaoh_tomb" {
@@ -1061,6 +1068,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_MASTERY                        = var.beta_mastery
         SRO_LEVEL_CAP                      = var.level_cap
         SRO_CAP110_MONSTERS                = var.cap110_monsters
+        SRO_CAP110_LEVEL100                = var.cap110_level100
         SRO_PHARAOH_TOMB                   = var.pharaoh_tomb
         SRO_PHARAOH_TOMB_GEAR_RATE         = var.pharaoh_tomb_gear_rate
         SRO_BETA_SILK                           = var.beta_silk
