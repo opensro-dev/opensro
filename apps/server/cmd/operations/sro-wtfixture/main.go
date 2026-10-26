@@ -30,9 +30,9 @@ WELCOME), the account is a constant, and the certificate is the
 transport's managed self-signed development pair, pinned by the probe
 through the served cert-hash and trusted through -ca-cert. The fixture
 answers HELLO/WELCOME and the probe's ping train; it enters no world
-and runs no game logic. Loopback is the default binding; pointing it
-elsewhere is a deployment decision the transport's own public-listener
-guards still refuse without the production certificate and switch.
+and runs no game logic. The fixture refuses a non-loopback bind at
+startup: a published, reusable ticket must never be reachable off this
+machine, so that refusal is the fixture's own, not a deployment option.
 
 ===========================================================================
 */
@@ -43,6 +43,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -106,6 +107,46 @@ func newFixtureServer(certDir, wtAddr, wsAddr string) (*transport.Server, error)
 }
 
 //============================================================================
+// Bind guard
+//============================================================================
+
+/*
+================
+refuseNonLoopbackAddr
+
+The fixture admits anyone holding one published, reusable ticket; that
+is only safe while the fixture cannot be reached off this machine. The
+transport's own guards are deployment-shaped (an explicit certificate
+and a public switch before a public listener may rise), so the fixture
+refuses a non-loopback bind itself, at startup, whatever the flags say:
+every address the host resolves to must be loopback (127.0.0.0/8 or
+::1). An empty host binds every interface and is refused outright.
+================
+*/
+func refuseNonLoopbackAddr(addr string) error {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("%s is not a host:port address: %w", addr, err)
+	}
+	if host == "" {
+		return fmt.Errorf("%s binds every interface; the fixture is loopback-only", addr)
+	}
+	ips, err := net.DefaultResolver.LookupIPAddr(context.Background(), host)
+	if err != nil {
+		return fmt.Errorf("resolving %s: %w", host, err)
+	}
+	if len(ips) == 0 {
+		return fmt.Errorf("%s resolves to no address", host)
+	}
+	for _, resolved := range ips {
+		if !resolved.IP.IsLoopback() {
+			return fmt.Errorf("%s resolves to %s, which is not loopback; the fixture is loopback-only", host, resolved.IP)
+		}
+	}
+	return nil
+}
+
+//============================================================================
 // Entry point
 //============================================================================
 
@@ -123,6 +164,13 @@ func main() {
 	wsAddr := flag.String("ws", "127.0.0.1:18087", "WebSocket listen address")
 	certDir := flag.String("certs", "", "certificate directory (default: a throwaway temp dir)")
 	flag.Parse()
+
+	for _, addr := range []string{*wsAddr, *wtAddr} {
+		if err := refuseNonLoopbackAddr(addr); err != nil {
+			fmt.Fprintln(os.Stderr, "sro-wtfixture:", err)
+			os.Exit(1)
+		}
+	}
 
 	if *certDir == "" {
 		tmp, err := os.MkdirTemp("", "sro-wtfixture-certs-")
