@@ -193,8 +193,7 @@ click east of (1193, -336) is refused. The server is native there. Block
 4 places a cave-in boulder pile, a DOF flags&2 collision object
 (out_obj_stone, radius squared 1962.5, r 44.3, centred at (1237.45,
 -338.12)), and the native dungeon move clips it as a 2D XZ circle
-(CRTNavMeshDungeonBlock_ClipObstacleCircles 998440; obstacle.y is never
-read). The player stood 0.2 outside its rim, so walking into the pile
+(the dungeon-block circle clip; obstacle.y is never read). The player stood 0.2 outside its rim, so walking into the pile
 stops at once and walking away does not. The wall was invisible only
 because the client did not draw DOF block objects (0xAD1B70); the takeover
 of #1251 draws them.
