@@ -4,7 +4,6 @@
 apps/client-next/src/engine/foundation/animation/projectile-time.ts 3
 apps/client-next/src/engine/foundation/gameplay/movement-wire.ts 2
 apps/client-next/src/engine/foundation/gameplay/native-movement.ts 2
-apps/client-next/src/engine/foundation/navigation/clipper.ts 16
 apps/client-next/src/engine/foundation/rendering/pick-destination.ts 2
 apps/client-next/src/engine/foundation/ui/hunting-guide.ts 2
 apps/client-next/src/engine/foundation/ui/minimap-floor.ts 2

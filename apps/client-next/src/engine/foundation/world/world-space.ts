@@ -164,6 +164,33 @@ export function regionOffsetXZ( fromRegion: number, toRegion: number ): [number,
 
 /*
 ================
+regionOriginXZ
+
+The world-unit origin of regionId's local frame: its sector's corner
+outdoors, nothing in a dungeon (whose locals are already its frame).
+================
+*/
+export function regionOriginXZ( regionId: number ): [number, number] {
+	if ( isDungeonRegion( regionId ) ) {
+		return [ 0, 0 ];
+	}
+	return [ sectorX( regionId ) * REGION_SIZE, sectorY( regionId ) * REGION_SIZE ];
+}
+
+/*
+================
+coordinateFrame
+
+The frame regionId's world coordinates belong to: a dungeon region is its
+own frame, every outdoor region shares the world frame (0).
+================
+*/
+export function coordinateFrame( regionId: number ): number {
+	return isDungeonRegion( regionId ) ? regionId : 0;
+}
+
+/*
+================
 regionRelativeXZ
 
 Expresses point's XZ coordinates in originRegion's local coordinate frame

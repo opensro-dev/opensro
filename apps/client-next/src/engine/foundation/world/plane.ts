@@ -52,18 +52,38 @@ export interface PlaneFeatures {
 	// "Dungeon character PVS"), which culls actors in rooms or floors the
 	// local player cannot see. Caves only: the open world has no rooms.
 	readonly characterPvs: boolean;
+	// terrainGrid: the outdoor terrain's 20-unit cell grid and the terrain
+	// owner path (navigation clipper). A cave has no terrain grid: its
+	// floors are the dungeon's own navmesh objects.
+	readonly terrainGrid: boolean;
+	// residentOnly: the clipper holds one admitted dungeon at a time, so a
+	// cave pose is covered only by the resident one, whole (complete).
+	readonly residentOnly: boolean;
+	// rooms: the dungeon's block (room) and floor queries.
+	readonly rooms: boolean;
+	// sectorFrames: poses rebase across 1920-unit sector frames. A cave's
+	// locals are one frame for the whole region.
+	readonly sectorFrames: boolean;
 }
 
 const OUTDOOR_FEATURES = {
 	minimapCoordinates: true,
 	reverseReturnPoints: true,
-	characterPvs: false
+	characterPvs: false,
+	terrainGrid: true,
+	residentOnly: false,
+	rooms: false,
+	sectorFrames: true
 } as const;
 
 const CAVE_FEATURES = {
 	minimapCoordinates: false,
 	reverseReturnPoints: false,
-	characterPvs: true
+	characterPvs: true,
+	terrainGrid: false,
+	residentOnly: true,
+	rooms: true,
+	sectorFrames: false
 } as const;
 
 /*

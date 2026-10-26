@@ -27,13 +27,21 @@ test("the feature table: outdoors and in a cave every field differs", () => {
 	assert.deepEqual( { ...featuresAt( 0x62a8 ) }, {
 		minimapCoordinates: true,
 		reverseReturnPoints: true,
-		characterPvs: false
+		characterPvs: false,
+		terrainGrid: true,
+		residentOnly: false,
+		rooms: false,
+		sectorFrames: true
 	} );
 	for ( const cave of [ 0x8001, 0x8004 ] ) {
 		assert.deepEqual( { ...featuresAt( cave ) }, {
 			minimapCoordinates: false,
 			reverseReturnPoints: false,
-			characterPvs: true
+			characterPvs: true,
+			terrainGrid: false,
+			residentOnly: true,
+			rooms: true,
+			sectorFrames: false
 		} );
 	}
 });
