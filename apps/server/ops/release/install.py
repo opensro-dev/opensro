@@ -232,6 +232,27 @@ def deadman(version):
 
 
 # ================
+# quic_sysctls
+#
+# The UDP socket buffers the public WebTransport (QUIC) listener performs
+# with, installed as a sysctl drop-in at control-install time so the
+# owner-gated flip needs no host step for buffers. Inert while the switch
+# is off: nothing listens differently until a public listener binds.
+# Removing the file and re-running sysctl --system restores the
+# distribution defaults.
+# ================
+QUIC_SYSCTL_PATH = Path("/etc/sysctl.d/60-opensro-quic.conf")
+QUIC_SYSCTL_BODY = ("# opensro: UDP buffers for the public WebTransport (QUIC) listener.\n"
+	"net.core.rmem_max = 7500000\n"
+	"net.core.wmem_max = 7500000\n")
+
+
+def quic_sysctls():
+	install_file(QUIC_SYSCTL_PATH, QUIC_SYSCTL_BODY.encode())
+	subprocess.run(["sysctl", "--system"], check=True)
+
+
+# ================
 # main
 #
 # Reinstallation updates controls but never resets generations. Caddy's route
@@ -280,6 +301,7 @@ def main():
 	account("sro-release", "publish", Path(arguments.publish_key).read_text(), version)
 	monitor(version, config)
 	deadman(version)
+	quic_sysctls()
 	write_state(ROOT / "installed-controls.json", json.loads((version / "installed.json").read_text()))
 	print("Release controls installed; live client and server were not published.")
 

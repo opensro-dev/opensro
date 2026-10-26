@@ -44,8 +44,12 @@ const (
 	wireProbeSilent
 	wireProbeUnmatched
 	wireProbeUnrelatedMetrics
-	wireProbeSessionID    = 123
-	wireProbeDrain        = 50 * time.Millisecond
+	wireProbeSessionID = 123
+	// Bounds the fixture's metrics scrapes and the drains: replies
+	// that exist land in milliseconds, and the bad-wire answers end
+	// through the reader, not the drain. The cancellation test
+	// keeps its own longer backstop below.
+	wireProbeDrain        = 2 * time.Second
 	wireProbeLastSequence = 2
 	probeCorruptBit       = 1
 )

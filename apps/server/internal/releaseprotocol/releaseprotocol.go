@@ -46,12 +46,23 @@ type Contracts struct {
 	Effects    int // the attached-effect stream the transport sends
 	Friends    int // the friend request's prompt and consent
 	Notices    int // the port-only 0x3667 notice channels
+	Movement   int // the 0xB738 movement acknowledgement's source block
 }
 
 // Current is the release protocol this build speaks, and the contract
 // versions it fixes. Encoders version their payloads from these.
 const (
-	Current = 10
+	Current = 11
+	// The movement contract: 1 carries the 0xB738 acknowledgement's
+	// source block as [f32 x][f32 y][f32 z] on every floor (#1744). The
+	// retail i16 x10 source words cap at +-3276.7 units, which the
+	// port's one-frame tomb floors (0x8002-0x8006) overflow, so the
+	// block was simply omitted there and viewers saw the walker frozen
+	// until the next settle. The owner waived byte-parity for this one
+	// block (option 5): a protocol-10 client reads the longer block as
+	// a malformed ack and drops every walk, which is exactly what the
+	// bump exists to reload away from.
+	MovementContract = 1
 	// The notice contract: 1 carries the job-kill announcement on 0x3667
 	// channel 0x80 (#1011) and the seal-drop and +8..+11 announcements on
 	// 0x81 (#1019), laid out like channel 7 so a player can hide them; 0x81
@@ -91,16 +102,17 @@ const (
 // history names every protocol a release has shipped. A browser and a
 // server agree only when they speak the same one.
 var history = map[int]Contracts{
-	2: {Bootstrap: 2, Roster: 1, References: 1},
-	3: {Bootstrap: 2, Roster: 2, References: 1},
-	4: {Bootstrap: 2, Roster: 2, References: 2},
-	5: {Bootstrap: 2, Roster: 2, References: 2, Companions: 1},
-	6: {Bootstrap: 2, Roster: 2, References: 3, Companions: 1},
-	7: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2},
-	8: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1},
-	9: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1, Friends: 1},
+	2:  {Bootstrap: 2, Roster: 1, References: 1},
+	3:  {Bootstrap: 2, Roster: 2, References: 1},
+	4:  {Bootstrap: 2, Roster: 2, References: 2},
+	5:  {Bootstrap: 2, Roster: 2, References: 2, Companions: 1},
+	6:  {Bootstrap: 2, Roster: 2, References: 3, Companions: 1},
+	7:  {Bootstrap: 2, Roster: 2, References: 3, Companions: 2},
+	8:  {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1},
+	9:  {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1, Friends: 1},
+	10: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1, Friends: 1, Notices: 1},
 	Current: {Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract,
-		Effects: EffectsContract, Friends: FriendsContract, Notices: NoticesContract},
+		Effects: EffectsContract, Friends: FriendsContract, Notices: NoticesContract, Movement: MovementContract},
 }
 
 /*

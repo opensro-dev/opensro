@@ -20,7 +20,6 @@ package movement
 
 import (
 	"os"
-	"strings"
 
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -87,11 +86,7 @@ ClosedObjectRescueFromEnv
 ================
 */
 func ClosedObjectRescueFromEnv() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvClosedObjectRescue))) {
-	case "on", "1", "true":
-		return true
-	}
-	return false
+	return switchOn(os.Getenv(EnvClosedObjectRescue))
 }
 
 /*

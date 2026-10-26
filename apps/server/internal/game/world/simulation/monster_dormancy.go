@@ -94,7 +94,7 @@ func (s *MonsterState) tryDormant(state *divisionMonsterState, gid uint32, m mov
 	if !s.regionDormancy || state.keepAwakeUntil == nil {
 		return false
 	}
-	if m.mode != monster.MoverPending || !featuresAt(m.regionID).Dormancy {
+	if m.mode != monster.MoverPending || !FeaturesAt(m.regionID).Dormancy {
 		return false
 	}
 	if now < state.keepAwakeUntil[m.regionID] {

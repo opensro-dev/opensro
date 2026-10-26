@@ -18,12 +18,13 @@ gates these fields replaced (#1646).
 ================
 */
 func TestPlaneFeaturesPinTheCaveColumn(t *testing.T) {
-	outdoor := PlaneFeatures{QuestMonsterSpawns: true, CaravanBandits: true, UniqueReturnAnchors: true, Dormancy: true}
-	if got := featuresAt(0x62a8); got != outdoor {
+	outdoor := PlaneFeatures{QuestMonsterSpawns: true, CaravanBandits: true, UniqueReturnAnchors: true, Dormancy: true,
+		SpawnTerrainLift: true, SpawnStrandedRescue: true, QuestGatherAreas: true, HelpCallSight: true}
+	if got := FeaturesAt(0x62a8); got != outdoor {
 		t.Errorf("outdoor features %+v, want %+v", got, outdoor)
 	}
 	for _, cave := range []uint16{0x8001, 0x8004} {
-		if got := featuresAt(cave); got != (PlaneFeatures{}) {
+		if got := FeaturesAt(cave); got != (PlaneFeatures{}) {
 			t.Errorf("cave %#x features %+v, want none", cave, got)
 		}
 	}

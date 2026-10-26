@@ -148,7 +148,7 @@ outdoorPlane.NextWaypoint
 The direction-gate detour (the outdoor pursuit's open-terrain search).
 ================
 */
-func (o outdoorPlane) NextWaypoint(from, goal monster.Pose) *monster.NavigationRoute {
+func (o outdoorPlane) NextWaypoint(from monster.Pose, _ simulation.NavOwner, goal monster.Pose) *monster.NavigationRoute {
 	return o.water.PlanMonsterRoute(from, goal)
 }
 
@@ -220,14 +220,14 @@ func (c cavePlane) PlanPath(
 ================
 cavePlane.NextWaypoint
 
-The cave's region route (cave_route.go): straight at the goal inside
-the room it stands in, across the floor's portal cells toward any
-other room - the native two-stage steering, at the port's floor
-grain.
+The cave's region route (cave_route.go) from the mover's retained cell:
+straight at the goal when the line walks, otherwise the native route
+tables where the dungeon has them (cave_native_route.go), else the port's
+portal route.
 ================
 */
-func (c cavePlane) NextWaypoint(from, goal monster.Pose) *monster.NavigationRoute {
-	return c.water.planCaveRoute(from, goal)
+func (c cavePlane) NextWaypoint(from monster.Pose, fromOwner simulation.NavOwner, goal monster.Pose) *monster.NavigationRoute {
+	return c.water.planCaveRouteFrom(from, fromOwner, goal)
 }
 
 /*

@@ -34,6 +34,14 @@ func (m MoverState) navigationMatches() bool {
 	a.Heading, b.Heading = m.navigation.from.Heading, m.navigation.rest.Heading
 	return a == m.navigation.from && b == m.navigation.rest
 }
+
+// restsOnNavigation reports a settled mover standing exactly on the adopted
+// path's rest (the heading aside).
+func (m MoverState) restsOnNavigation() bool {
+	pose := m.Pose
+	pose.Heading = m.navigation.rest.Heading
+	return pose == m.navigation.rest
+}
 func (m MoverState) MovementGoal() Pose {
 	if m.navigationMatches() {
 		return m.navigation.goal
@@ -55,11 +63,20 @@ func (p *NavigationPath) WithOwners(spans []worldgeom.NavOwnerSpan) *NavigationP
 }
 
 // LiveNavOwner is the surface owner under LivePoseAt(nowMs): the walked span
-// at the live fraction of the adopted path, or its end once arrived. It is
-// unresolved when no owned path is adopted for the current segment.
+// at the live fraction of the adopted path, or its end once arrived. A
+// settled mover (the segment cleared, the pose set to the rest) still standing
+// on the adopted path's rest keeps the rest's owner, as the original keeps the
+// cell in the actor's position record between moves; any other pose change
+// drops it. It is unresolved when no owned path covers the mover.
 func (m MoverState) LiveNavOwner(nowMs int64) worldgeom.NavOwner {
-	if !m.navigationMatches() || len(m.navigation.owners) == 0 {
+	if m.navigation == nil || len(m.navigation.owners) == 0 {
 		return worldgeom.NavOwner{}
+	}
+	if !m.navigationMatches() {
+		if m.ArriveMs > m.DepartMs || !m.restsOnNavigation() {
+			return worldgeom.NavOwner{}
+		}
+		return worldgeom.OwnerAtFraction(m.navigation.owners, 1)
 	}
 	if !m.InFlight(nowMs) {
 		if m.ArriveMs > m.DepartMs {

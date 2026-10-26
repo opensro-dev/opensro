@@ -16,6 +16,13 @@ happens before the prerequisite walk is consulted (0x588DB6), so an
 unlearned skill with an untrained predecessor is still drawn dimmed;
 prerequisites only decide the button.
 
+Not ported: the board build itself (InsertBoardCell 7F1090, at 0x7F1151)
+never creates a cell record for a skill whose first mastery requirement
+is above 90 (0x5A). The shipped v1.150 tables have no such rank, so a
+native board is unchanged without it; the optional cap-110 skill tier
+(SRO_CAP110_SKILLS, port-only) adds ranks up to mastery 110, and they show
+here as the mastery reaches them (#1746).
+
 This module only decides. ui.ts draws what SkillSlot_Resolve returns.
 
 ===========================================================================

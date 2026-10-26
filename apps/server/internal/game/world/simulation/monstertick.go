@@ -76,7 +76,7 @@ type MonsterMoverOps struct {
 	// departs from the monster's own live pose uses it (planPath below).
 	PlanPathFrom func(from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationPath
 	// AI route policy, separate from raw clipping used by sight/help probes.
-	PlanRoute func(from, goal monster.Pose) *monster.NavigationRoute
+	PlanRoute func(from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationRoute
 	// Rand returns a uniform [0,1) sample (seam for deterministic tests).
 	Rand func() float64
 	// AttackPlan resolves one of RefObjChar's ten default-skill ids against

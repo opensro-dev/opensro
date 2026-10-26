@@ -389,6 +389,80 @@ func TestPlusNoticeFollowsTheFlag(t *testing.T) {
 
 /*
 ================
+TestPlusNoticeTiersFollowTheSwitch
+
+#1739: with the tiers off, +10 and above read exactly as they do today;
+on, +10 leads "Great success!" and +11 (and +12) "LEGENDARY!", while +9
+keeps the plain line. The seal stays named under the budget, and an
+over-long line gives the seal up first and the lead next.
+================
+*/
+func TestPlusNoticeTiersFollowTheSwitch(t *testing.T) {
+	t.Setenv(EnvAnnouncePlusTiers, "on")
+	if !AnnouncementsFromEnv().PlusTiers {
+		t.Fatal("SRO_ANNOUNCE_PLUS_TIERS=on must tier the plus notice")
+	}
+	t.Setenv(EnvAnnouncePlusTiers, "")
+	if AnnouncementsFromEnv().PlusTiers {
+		t.Fatal("SRO_ANNOUNCE_PLUS_TIERS unset must keep the plain line")
+	}
+	items := enterworld.NewTextdataItems(gamedatatest.TextdataDir(t))
+	ref, ok := items.ItemRefByCodename("ITEM_CH_BLADE_08_C_RARE")
+	if !ok || ref.Name == "" {
+		t.Fatal("missing shipped item ITEM_CH_BLADE_08_C_RARE")
+	}
+	outcome := func(plus uint8) alchemy.Outcome {
+		return alchemy.Outcome{Success: true, Target: 13,
+			Items: []inventory.Item{{Slot: 13, Codename: "ITEM_CH_BLADE_08_C_RARE", Plus: plus}}}
+	}
+	plain := "Smith advanced " + ref.Name + " (Seal Of Sun) to +"
+	for _, tc := range []struct {
+		tiers bool
+		plus  uint8
+		want  string
+	}{
+		{false, 10, plain + "10"},
+		{false, 11, plain + "11"},
+		{false, 12, plain + "12"},
+		{true, 9, plain + "9"},
+		{true, 10, "Great success! " + plain + "10"},
+		{true, 11, "LEGENDARY! " + plain + "11"},
+		{true, 12, "LEGENDARY! " + plain + "12"},
+	} {
+		rt, _ := newTestRuntime(testCharacter(), items)
+		rt.Announce.Plus = true
+		rt.Announce.PlusTiers = tc.tiers
+		rt.announcePlus(testDivision, "Smith", outcome(tc.plus), 0)
+		if got := drainedNotices(t, rt); len(got) != 1 || got[0] != tc.want {
+			t.Fatalf("tiers=%v plus=%d: %q, want %q", tc.tiers, tc.plus, got, tc.want)
+		}
+	}
+	// An over-long line keeps the lead and gives the seal up first: the
+	// player name is sized so the sealed line overflows and the lead
+	// line fits.
+	long := strings.Repeat("W", 65-len([]rune(ref.Name)))
+	rt, _ := newTestRuntime(testCharacter(), items)
+	rt.Announce.Plus = true
+	rt.Announce.PlusTiers = true
+	rt.announcePlus(testDivision, long, outcome(11), 0)
+	want := "LEGENDARY! " + long + " advanced " + ref.Name + " to +11"
+	if got := drainedNotices(t, rt); len(got) != 1 || got[0] != want {
+		t.Fatalf("over-long tiered line: %q, want %q", got, want)
+	}
+	// A longer one gives the lead up too rather than lose the plus.
+	rt, _ = newTestRuntime(testCharacter(), items)
+	rt.Announce.Plus = true
+	rt.Announce.PlusTiers = true
+	rt.announcePlus(testDivision, strings.Repeat("W", noticeMaxUnits), outcome(11), 0)
+	got := drainedNotices(t, rt)
+	if len(got) != 1 || strings.Contains(got[0], "LEGENDARY") || strings.Contains(got[0], "Seal") ||
+		len(utf16.Encode([]rune(got[0]))) > noticeMaxUnits {
+		t.Fatalf("longest tiered line: %q", got)
+	}
+}
+
+/*
+================
 TestJobKillNoticeFollowsTheFlag
 
 A dressed thief killing a dressed trader reads "[leChiffre] killed

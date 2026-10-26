@@ -84,6 +84,14 @@ variable "webtransport_public" {
   default = "off"
 }
 
+# The public UDP host:port the WT listener binds when webtransport_public
+# is on. Empty (default) keeps the Nomad-allocated loopback bind; the
+# deployer refuses the public switch without it.
+variable "transport_wt_addr" {
+  type    = string
+  default = ""
+}
+
 variable "host_network" {
   type    = string
   default = "loopback"
@@ -239,6 +247,33 @@ variable "fast_den_return" {
 variable "unique_damage_rank" {
   type    = string
   default = "off"
+}
+
+# cave_seam_step lets a monster on the native cave route step through a
+# doorway whose landing point a whole-unit step would stop short of
+# (port-only, not native; owner decision 2026-10-26). "off" is the
+# original step, which can leave the monster pacing at such a doorway.
+variable "cave_seam_step" {
+  type    = string
+  default = "on"
+}
+
+# cave_modern_chase sends a monster chasing through a cave along the port's
+# planner (A* over the cells, string-pulled) instead of the original's
+# region route (port-only, not native; owner decision 2026-10-26). "off" is
+# the original route, which can leave a monster pacing on a cell line.
+variable "cave_modern_chase" {
+  type    = string
+  default = "on"
+}
+
+# cave_obstacle_escape lets a mover whose step starts inside a cave
+# obstacle circle walk out of it (port-only, not native; owner decision
+# 2026-10-26). "off" is the original circle test, which stops every step
+# deeper into a circle that covers a ramp doorway.
+variable "cave_obstacle_escape" {
+  type    = string
+  default = "on"
 }
 
 # closed_object_rescue moves a character that logs in inside a closed object
@@ -492,6 +527,14 @@ variable "seal_census" {
 variable "announce_plus" {
   type    = string
   default = "on"
+}
+
+# announce_plus_tiers leads a +10 plus notice with "Great success!" and
+# a +11 or higher one with "LEGENDARY!" (port-only, not native; owner
+# decision 2026-10-26, #1739). "off" is the plain plus line.
+variable "announce_plus_tiers" {
+  type    = string
+  default = "off"
 }
 
 variable "announce_job_kill" {
@@ -1071,6 +1114,9 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_FAST_DEN_RETURN                     = var.fast_den_return
         SRO_UNIQUE_DAMAGE_RANK                  = var.unique_damage_rank
         SRO_CLOSED_OBJECT_RESCUE                = var.closed_object_rescue
+        SRO_CAVE_SEAM_STEP                      = var.cave_seam_step
+        SRO_CAVE_MODERN_CHASE                   = var.cave_modern_chase
+        SRO_CAVE_OBSTACLE_ESCAPE                = var.cave_obstacle_escape
         SRO_DEEP_WATER_REFUSAL                  = var.deep_water_refusal
         SRO_MOST_WANTED                         = var.most_wanted
         SRO_MOST_WANTED_TEST                    = var.most_wanted_test
@@ -1097,6 +1143,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_SEAL_BOARD                          = var.seal_board
         SRO_SEAL_CENSUS                         = var.seal_census
         SRO_ANNOUNCE_PLUS                       = var.announce_plus
+        SRO_ANNOUNCE_PLUS_TIERS                 = var.announce_plus_tiers
         SRO_ANNOUNCE_JOB_KILL                   = var.announce_job_kill
         SRO_JOB_KILL_NOTICE_REPEAT              = var.job_kill_notice_repeat
         SRO_JOB_KILL_NOTICES_PER_MINUTE         = var.job_kill_notices_per_minute
@@ -1156,7 +1203,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_ALEXANDRIA                          = var.alexandria
         SRO_PUBLIC_API_ADDR                     = var.public_api_addr
         SRO_PUBLIC_API_TOKEN_PATH               = "${NOMAD_SECRETS_DIR}/public-api-token"
-        TRANSPORT_WT_ADDR                       = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
+        TRANSPORT_WT_ADDR                       = var.transport_wt_addr != "" ? var.transport_wt_addr : "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_WS_ADDR                       = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_CERT_DIR                      = var.cert_dir
         TRANSPORT_CERT_FILE                     = var.transport_cert_file
