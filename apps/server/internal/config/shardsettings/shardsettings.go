@@ -87,6 +87,10 @@ var Settings = []Setting{
 	{Env: "SRO_LEVEL_CAP", NomadVar: "level_cap", Default: "110", Catalogue: true},
 	// Port-only, not native: database-authored Alexandria field population.
 	{Env: "SRO_CAP110_MONSTERS", NomadVar: "cap110_monsters", Default: "off", Catalogue: true},
+	// Port-only, not native: the level-100 slice of that population,
+	// admitted for hunting separately (#1741); switches on with the
+	// cap-110 catalogue (#1607).
+	{Env: "SRO_CAP110_LEVEL100", NomadVar: "cap110_level100", Default: "off", Catalogue: true},
 	// Port-only, not native: the Pharaoh Tomb 1-3 population and gates. Needs
 	// SRO_CAP110_MONSTERS (its equipment drops).
 	{Env: "SRO_PHARAOH_TOMB", NomadVar: "pharaoh_tomb", Default: "off", Catalogue: true},
@@ -191,6 +195,10 @@ var Settings = []Setting{
 	{Env: "SRO_CHAT_ACK_TIMEOUT_MS", NomadVar: "chat_ack_timeout_ms", Default: "10000"},
 	// Owner, 2026-10-15: Most Wanted levels and claimed bounties are announced.
 	{Env: "SRO_ANNOUNCE_MOST_WANTED", NomadVar: "announce_most_wanted", Default: "on"},
+	// Owner-approved vote, 2026-10-26 (#1604 P7.2 / #1738): an opted-in
+	// player's destroyed reinforcement item is announced by job alias.
+	// Off is native, in code and in the deployed default alike.
+	{Env: "SRO_ALCHEMY_BREAK_NOTICE", NomadVar: "alchemy_break_notice", Default: "off"},
 	// Owner, 2026-10-14: +10% party EXP and gold per thief (cap 50%).
 	{Env: "SRO_THIEF_PARTY_BONUS", NomadVar: "thief_party_bonus", Default: "on"},
 	// F10 trade group (game/tunables): the per-thief percent and its cap.

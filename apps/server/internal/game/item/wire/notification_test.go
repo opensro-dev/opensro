@@ -43,3 +43,10 @@ func TestJobKillNotificationFrameUsesItsOwnChannel(t *testing.T) {
 		t.Fatalf("job-kill notification wire opcode=%04x payload=%x", f.Opcode, f.Payload)
 	}
 }
+
+func TestBreakNotificationFrameUsesItsOwnChannel(t *testing.T) {
+	f := BreakNotificationFrame("A")
+	if f.Opcode != 0x3667 || !bytes.Equal(f.Payload, []byte{BreakNoticeChannel, 1, 0, 65, 0}) {
+		t.Fatalf("break notification wire opcode=%04x payload=%x", f.Opcode, f.Payload)
+	}
+}

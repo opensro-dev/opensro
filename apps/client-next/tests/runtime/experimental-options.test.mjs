@@ -59,6 +59,8 @@ const OFF = Object.freeze( {
 	dropPlusNotices: true,
 	// On by default (owner 2026-10-19): the shard's +7 notices show.
 	plusSevenNotices: true,
+	// On by default: the shard's item break notices show (#1738).
+	breakNotices: true,
 	// Off by default: each player opts in to the unique damage ranking.
 	uniqueDamageRank: false,
 	// Off by default: V hides only monsters and players, as the original does.
@@ -469,6 +471,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		jobKillNotices: true,
 		dropPlusNotices: true,
 		plusSevenNotices: true,
+		breakNotices: true,
 		homingProjectiles: false,
 		smartPetPickup: true,
 		sunDropMarker: false,
@@ -485,6 +488,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		jobKillNotices: true,
 		dropPlusNotices: true,
 		plusSevenNotices: true,
+		breakNotices: true,
 		homingProjectiles: false,
 		smartPetPickup: true,
 		sunDropMarker: false,
@@ -599,6 +603,20 @@ test("plus seven notices are on unless explicitly false, stay out of the video s
 	assert.equal( experimentalGameplay( off ).plusSevenNotices, false );
 	assert.equal( experimentalGameplay( experimentalOptions( { dropPlusNotices: false } ) ).plusSevenNotices, true );
 	assert.equal( "plusSevenNotices" in experimentalVideo( experimentalOptions( {} ) ), false );
+});
+
+test("item break notices are on unless explicitly false, stay out of the video slice, and never widen another notice row", () => {
+	for ( const value of [ undefined, null, {}, { breakNotices: 1 }, { breakNotices: "false" } ] ) {
+		assert.equal( experimentalOptions( value ).breakNotices, true );
+	}
+	const off = experimentalOptions( { breakNotices: false } );
+	assert.equal( off.breakNotices, false );
+	assert.equal( off.jobKillNotices, true );
+	assert.equal( off.dropPlusNotices, true );
+	assert.equal( off.plusSevenNotices, true );
+	assert.equal( experimentalGameplay( off ).breakNotices, false );
+	assert.equal( experimentalGameplay( experimentalOptions( { dropPlusNotices: false } ) ).breakNotices, true );
+	assert.equal( "breakNotices" in experimentalVideo( experimentalOptions( {} ) ), false );
 });
 
 test("V hides pets and transports only when explicitly on, and reaches the renderer's slice", () => {

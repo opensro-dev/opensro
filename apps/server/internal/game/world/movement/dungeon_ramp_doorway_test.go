@@ -5,23 +5,21 @@ dungeon_ramp_doorway_test.go - Donwhang's two ramp doorways (#1731)
 
 From the cell next to a ramp, the doorways from Donwhang block 11 to
 block 73 and from block 87 to block 149 refuse the first step outright:
-blocked with result bit 0 and no movement, although the step's endpoint
-is still short of the doorway edge. The original walks doorways by link
-(block and cell), not by height, so both crossings are native-legal from
-each side.
+no movement, although the step's endpoint is still short of the doorway
+edge. The cell-edge walk (#1728) showed why: the room-side cell stands
+inside the room's cave-in boulder circle (the same collision object
+#1251 verified in block 4, authored beside each ramp entrance) and the
+step heads into it, so the original refuses the step where it stands
+with the blocked result. The doorway itself is native-legal: the
+hand-over works, and the reverse walks cross.
 
-This test is the re-test harness for the cell-edge walk (#1728). It pins
-today's measured behaviour exactly:
+This test pins the native behaviour exactly:
 
-  - 11 -> 73 and 87 -> 149 (the y-0 side): step 0 refuses, bit 0, rest
-    at the start. Any change to that signature fails this test.
-  - 73 -> 11 and 149 -> 87: the walk crosses today and must keep
-    crossing; the cell-edge walk may not break it.
-
-When #1728 lands, the two pinned walks either cross (this test passes
-unchanged and #1731 closes with it) or keep refusing (the pin holds, and
-the failing step log says where the new walk still stops). Anything in
-between goes red here first.
+  - 11 -> 73 and 87 -> 149 (the y-0 side): step 0 refuses with the
+    blocked result, rest at the start (#1719). Any change to that
+    signature fails this test.
+  - 73 -> 11 and 149 -> 87: the walk crosses and must keep crossing;
+    the cell-edge walk may not break it.
 
 ===========================================================================
 */
@@ -161,19 +159,20 @@ func rampDoorwayWalk(v *WaterValidator, surface *dungeonSpawnSurface, from, to s
 
 /*
 ================
-rampDoorwayPinned
+rampDoorwayRefused
 
-Whether a failed walk is exactly today's pinned refusal: the first
-step blocked with result bit 0 and the rest at the start.
+Whether a failed walk is exactly the native refusal: the first step
+refused with the blocked result and the rest at the start - the step
+starts inside the room's boulder circle and heads into it (#1719).
 ================
 */
-func rampDoorwayPinned(steps []rampDoorwayStep) bool {
+func rampDoorwayRefused(steps []rampDoorwayStep) bool {
 	if len(steps) != 1 {
 		return false
 	}
 	got := steps[0].got
 	return got.Outcome == ClipBlocked &&
-		got.NativeResult&monster.NavResultClipped != 0 &&
+		got.NativeResult&monster.NavResultBlocked != 0 &&
 		got.Rest.X == steps[0].from.X && got.Rest.Z == steps[0].from.Z
 }
 
@@ -181,10 +180,10 @@ func rampDoorwayPinned(steps []rampDoorwayStep) bool {
 ================
 TestDonwhangCaveRampDoorwaysCross
 
-The native route crosses both ramp doorways, from each side. Today's
-clip crosses from the ramp's lower level and refuses from the y-0 cell
-next to each ramp; the refusal is pinned step for step until the
-cell-edge walk (#1728) frees it. See the file banner.
+From the ramp's lower level the walk crosses both doorways; from the
+y-0 cell next to each ramp the first step is refused where it stands,
+as the original refuses it (the step starts inside the room's boulder
+circle, heading into it). See the file banner.
 ================
 */
 func TestDonwhangCaveRampDoorwaysCross(t *testing.T) {
@@ -198,8 +197,8 @@ func TestDonwhangCaveRampDoorwaysCross(t *testing.T) {
 		for _, dir := range [][2]int{pair, {pair[1], pair[0]}} {
 			from, to := rampDoorwayCells(t, surface, dir[0], dir[1])
 			steps, arrived := rampDoorwayWalk(v, surface, from, to)
-			// The two y-0 walks (11 -> 73, 87 -> 149) are the pinned
-			// refusals; the reverse walks cross today.
+			// The two y-0 walks (11 -> 73, 87 -> 149) are refused
+			// where they stand; the reverse walks cross.
 			pinned := dir[0] == pair[0]
 			switch {
 			case arrived:
@@ -207,8 +206,8 @@ func TestDonwhangCaveRampDoorwaysCross(t *testing.T) {
 				if math.Hypot(last.X-to.X, last.Z-to.Z) > 1 || math.Abs(last.Y-to.Y) > 0.5 {
 					t.Errorf("doorway %d -> %d: arrived at %+v, want the far cell %+v", dir[0], dir[1], last, to)
 				}
-			case pinned && rampDoorwayPinned(steps):
-				t.Logf("doorway %d -> %d: pinned refusal (step 0, bit 0, no movement) - #1728 frees this", dir[0], dir[1])
+			case pinned && rampDoorwayRefused(steps):
+				t.Logf("doorway %d -> %d: refused at step 0 (blocked result, no movement) - native, #1719", dir[0], dir[1])
 			default:
 				for i, step := range steps {
 					t.Errorf("doorway %d -> %d step %d: (%0.2f, %0.2f) -> (%0.2f, %0.2f): %s result %#x rest %+v",
