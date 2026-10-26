@@ -105,6 +105,38 @@ func TestPartyInviteRangeGate(t *testing.T) {
 
 /*
 ================
+TestPartyInviteRangeGateAcrossDungeonRegions
+
+The same native reach gate with both players inside the dungeon plane
+but under different region words: the original's neighbourhood admits
+every dungeon pair, so only the 600-unit actor distance decides. In
+range the proposal lands; past it the answer is code 4 (too far), not
+code 3 (invalid target).
+================
+*/
+func TestPartyInviteRangeGateAcrossDungeonRegions(t *testing.T) {
+	first := startPartyServer(t, filepath.Join(t.TempDir(), "authority"), true)
+	connA := dialWS(t, first.srv)
+	helloWS(t, connA)
+	enterWorld(t, connA, e2eNameA)
+	connB := dialWS(t, first.srv)
+	helloWS(t, connB)
+	enterWorld(t, connB, e2eNameB)
+
+	first.poses.move(e2eNameA, simulation.Spawn{RegionID: 0x8001, X: 100, Y: 0, Z: 100})
+	first.poses.move(e2eNameB, simulation.Spawn{RegionID: 0x8002, X: 100 + 599, Y: 0, Z: 100})
+	sendFrame(t, connA, party.OpPartyInviteRequest, inviteFrame(gidB, 0x03))
+	expectPartyPrompt(t, connB, gidA, "in range across dungeon regions", 2, 3)
+
+	first.poses.move(e2eNameB, simulation.Spawn{RegionID: 0x8002, X: 100 + 601, Y: 0, Z: 100})
+	sendFrame(t, connA, party.OpPartyInviteRequest, inviteFrame(gidB, 0x03))
+	expectExactFrame(t, connA, party.OpCreatePartyAck, []byte{2, 4}, "601 units away across dungeon regions")
+
+	gameReadyBarrier(t, connB, "B saw no second prompt")
+}
+
+/*
+================
 setCharacter
 
 Changes one stored character through the authority, as gameplay would.

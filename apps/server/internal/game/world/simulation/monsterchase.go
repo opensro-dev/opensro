@@ -139,6 +139,19 @@ func (ops *MonsterMoverOps) startChaseLeg(
 		goal = squadApproachGoal(live, target, spacing, before.approach.slot)
 	}
 
+	// The outdoor routine decides the step direction on the authored goal
+	// before the segment is planned (pursuit_direction.go): a probe from
+	// rest, the direction gate while far and aligned. A guard veto issues
+	// no step at all this authoring; the mover keeps its current segment
+	// and the uncommitted approach admission is dropped with the copy.
+	if pursuitAt(live.RegionID).GatesStepDirection() && ordinarySquadApproach(instance) {
+		adjusted, step := ops.applyChaseDirectionGate(live, mover, spawnToPose(goal), nowMs)
+		if !step {
+			return nil
+		}
+		goal = poseToSpawn(adjusted)
+	}
+
 	if err := mover.SetChaseGuidance(targetGuidance); err != nil {
 		panic(err)
 	}

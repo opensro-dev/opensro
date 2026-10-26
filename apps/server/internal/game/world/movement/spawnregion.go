@@ -22,14 +22,7 @@ SpawnRegionAvailable
 ================
 */
 func (v *WaterValidator) SpawnRegionAvailable(regionID uint16) bool {
-	if simulation.IsDungeonRegion(regionID) {
-		v.dungeonSpawnOnce.Do(func() {
-			v.dungeonSpawnSurfaces = v.loadDungeonSpawnSurfaces()
-		})
-		return v.dungeonSpawnSurfaces[regionID] != nil
-	}
-	_, _, available := v.gridParamsForRegion(regionID)
-	return available
+	return v.validatorPlanes().spawnRegionAvailable(regionID)
 }
 
 /*

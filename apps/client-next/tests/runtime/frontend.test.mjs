@@ -721,6 +721,151 @@ test("entry admission retains the dock through connecting and rejection, and lea
 	assert.equal( frontend.start(), true, "returned dock must support ordinary re-entry" );
 	frontend.dispose();
 });
+/*
+================
+entryFixture
+
+A frontend over instant fixture assets, stepped 100 ms at a time against a
+session the caller sets. A failing fixture answers every asset request with
+an error, so the title stage fails and the frontend fails with it.
+================
+*/
+function entryFixture( failing = false ) {
+	let serial = 0, sceneId = "";
+	const jobs = new Map();
+	const manifest = {
+		camera: [ {
+			timeSeconds: 0,
+			sectorX: 81,
+			sectorY: 105,
+			position: { x: 0, y: 0, z: 0 },
+			rotation: { x: 0, y: 0, z: 0 },
+			mode: 30
+		} ],
+		cameraControllerTargetTimeSeconds: 0,
+		regionBundlePublicPath: "/assets/fixture-world.json"
+	};
+	const assets = {
+		available: () => 8,
+		request: ( url, size, kind ) => {
+			const id = ++serial;
+			jobs.set(
+				id,
+				failing ?
+					{ kind: "error", error: "fixture failure" } :
+					kind === "frontend-world" ?
+					{ kind: "world", world: { sceneId: "fixture" } } :
+					{ kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( manifest ) ).buffer }
+			);
+			return id;
+		},
+		take: id => {
+			const result = jobs.get( id );
+			jobs.delete( id );
+			return result;
+		},
+		cancel: id => jobs.delete( id )
+	};
+	const renderer = {
+		cancelWorldUpdate() {},
+		settleWorld: () => false,
+		setWorld() {},
+		adoptWorld( world ) {
+			sceneId = world.sceneId;
+		},
+		setWorldTexture() {},
+		neededWorldTextures: () => [],
+		worldStats: () => ({ sceneId, pendingGroups: 0, pendingTextures: 0 }),
+		setWorldCamera() {},
+		characterStats: () => ({ actors: 1 })
+	};
+	const frontend = createFrontend( assets, renderer, "http://fixture.invalid" );
+	const fixture = {
+		frontend,
+		now: 0,
+		session: { phase: "signed-out", revision: 1, characters: [] },
+		step: () => frontend.step( fixture.session, fixture.now += 100 ),
+		/*
+		================
+		toDock
+
+		Signs in to a one-character roster and waits for the dock to settle.
+		================
+		*/
+		toDock() {
+			fixture.selectRoster();
+			for ( let i = 0; i < 30 && frontend.snapshot().phase !== "dock"; i++ ) fixture.step();
+			assert.equal( frontend.snapshot().phase, "dock" );
+		},
+		selectRoster() {
+			fixture.session = {
+				phase: "character-select",
+				revision: 2,
+				characters: [ { id: 1, name: "fixture", deletePending: false, visualLoadout: { heightScale: 1 } } ]
+			};
+		},
+		bind( phase ) {
+			fixture.session = { ...fixture.session, phase, revision: fixture.session.revision + 1 };
+			return fixture.step();
+		}
+	};
+	for ( let i = 0; i < 20 && ![ "intro", "failed" ].includes( frontend.snapshot().phase ); i++ ) fixture.step();
+	return fixture;
+}
+/*
+================
+sessionDrivenEntry
+
+A launcher sends enter-world to the session without pressing Start. The
+bound world must still take the frontend to its world loading, from the dock
+and from the title when no frame saw character select; left behind, the
+runtime never reset the world for it and the loading screen waited forever.
+================
+*/
+test("a world entry the dock did not start still leaves the dock for world loading", () => {
+	for ( const viaDock of [ true, false ] ) {
+		const f = entryFixture();
+		if ( viaDock ) f.toDock();
+		else f.selectRoster();
+		assert.notEqual( f.bind( "entering-world" ).phase, "loading-world", "entry is not bound yet" );
+		assert.equal( f.bind( "world" ).phase, "loading-world" );
+		f.frontend.worldReady();
+		assert.equal( f.step().phase, "world" );
+		f.frontend.dispose();
+	}
+});
+/*
+================
+sessionDrivenEntryExclusions
+
+The bound-world check runs on every step while the session is in the world.
+A dock leaving through Start must finish its departure fade, and a failed
+frontend must keep its failure: resuming either would cut the fade short or
+flip the failure to world loading on every frame.
+================
+*/
+test("a bound world neither cuts a Start departure short nor resumes a failed frontend", () => {
+	const departing = entryFixture();
+	departing.toDock();
+	departing.frontend.select( "fixture" );
+	for ( let i = 0; i < 30; i++ ) departing.step();
+	assert.equal( departing.frontend.start(), true );
+	departing.bind( "entering-world" );
+	assert.equal( departing.bind( "world" ).phase, "departing" );
+	assert.equal( departing.step().phase, "departing", "the fade runs its course" );
+	for ( let i = 0; i < 5; i++ ) departing.step();
+	assert.equal( departing.frontend.snapshot().phase, "loading-world" );
+	departing.frontend.dispose();
+
+	const failed = entryFixture( true );
+	assert.equal( failed.frontend.snapshot().phase, "failed" );
+	const failure = failed.frontend.snapshot();
+	failed.selectRoster();
+	failed.bind( "world" );
+	for ( let i = 0; i < 3; i++ ) assert.equal( failed.step().phase, "failed" );
+	assert.equal( failed.frontend.snapshot().error, failure.error );
+	failed.frontend.dispose();
+});
 const { frontendCameraView } = await load( "src/engine/foundation/rendering/frontend-camera.ts" );
 const { viewProjection } = await load( "src/engine/foundation/rendering/world-math.ts" );
 const { screenPoint } = await load( "src/engine/foundation/rendering/screen-point.ts" );

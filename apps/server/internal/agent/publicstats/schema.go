@@ -26,6 +26,7 @@ var endpointTypes = []struct {
 	{"/public/v1/uniques", reflect.TypeOf(UniquesResponse{})},
 	{"/public/v1/uniques/kills", reflect.TypeOf(KillsResponse{})},
 	{"/public/v1/leaderboards/uniques", reflect.TypeOf(LeaderboardResponse{})},
+	{"/public/v1/leaderboards/seals", reflect.TypeOf(SealBoardResponse{})},
 	{"/public/v1/firsts", reflect.TypeOf(FirstsResponse{})},
 	{"/public/v1/characters", reflect.TypeOf(CharactersResponse{})},
 	{"/public/v1/characters/{name}", reflect.TypeOf(Profile{})},
