@@ -260,6 +260,15 @@ func TestMeasurementRejectsUnrelatedMetrics(t *testing.T) {
 	}
 }
 
+// wireProbeCancelTimeout backstops the cancellation test: the cancel
+// itself is synchronised on the fixture's first ping, so these
+// deadlines only ever fire on a genuine hang. They are generous
+// because the shared probe timeout (wireProbeDrain) and the two
+// second test budget let a loaded loopback dial expire before the
+// first ping lands, and the test then measures the dial, not the
+// cancellation.
+const wireProbeCancelTimeout = 30 * time.Second
+
 /*
 ================
 TestMeasurementCancellationJoinsBlockedReader
@@ -267,7 +276,9 @@ TestMeasurementCancellationJoinsBlockedReader
 */
 func TestMeasurementCancellationJoinsBlockedReader(t *testing.T) {
 	fixture := startWireProbeFixture(t, wireProbeSilent)
-	ctx, cancel := context.WithTimeout(context.Background(), measurementTestTimeout)
+	config := wireProbeConfig(fixture)
+	config.Probe.Timeout = wireProbeCancelTimeout
+	ctx, cancel := context.WithTimeout(context.Background(), wireProbeCancelTimeout)
 	defer cancel()
 	go func() {
 		select {
@@ -276,7 +287,7 @@ func TestMeasurementCancellationJoinsBlockedReader(t *testing.T) {
 		case <-ctx.Done():
 		}
 	}()
-	report, err := measureProbe(ctx, wireProbeConfig(fixture))
+	report, err := measureProbe(ctx, config)
 	if !errors.Is(err, context.Canceled) || report.Valid || report.PingTrain.Missing != 1 || report.OrderedBurst.NotSent != 1 {
 		t.Fatalf("cancellation lost partial data or reader failure: %v; %+v", err, report)
 	}

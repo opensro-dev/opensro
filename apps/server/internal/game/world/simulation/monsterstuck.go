@@ -81,7 +81,7 @@ func (ops *MonsterMoverOps) resolveStuck(
 		current.Nest.Controls.TraceBoundary,
 		current.Ref.TidWord,
 	)
-	live := mover.LivePoseAt(nowMs, ops.TerrainHeight)
+	live := mover.LivePoseAt(nowMs, ops.GroundHeight)
 	hadSegment := mover.ArriveMs > mover.DepartMs
 
 	switch response {
@@ -171,8 +171,10 @@ func (ops *MonsterMoverOps) resolveRelocationPose(from, target monster.Pose) mon
 		Z:        target.Z,
 		Heading:  from.Heading,
 	}
-	if ops.TerrainHeight != nil {
-		if y, ok := ops.TerrainHeight(relocated.RegionID, relocated.X, relocated.Z); ok {
+	// A relocation is a teleport: the destination surface resolves afresh,
+	// nearest the target's own height (#1695).
+	if ops.GroundHeight != nil {
+		if y, ok := ops.GroundHeight(relocated); ok {
 			relocated.Y = y
 		}
 	}
@@ -231,7 +233,7 @@ func (ops *MonsterMoverOps) resolveControllerPose(
 	}
 	if inst, ok := ops.Monsters.Get(divisionID, controllerGID); ok && (inst.Ref.MaxHP == 0 || inst.CurrentHP > 0) {
 		if ctrlMover, ok := ops.Monsters.Mover(divisionID, controllerGID); ok {
-			return ctrlMover.LivePoseAt(nowMs, ops.TerrainHeight), true
+			return ctrlMover.LivePoseAt(nowMs, ops.GroundHeight), true
 		}
 	}
 	for _, player := range divisionPlayers {

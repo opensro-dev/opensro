@@ -136,7 +136,7 @@ func TestMonsterStuckWarpToBattleTargetAndDungeonGuard(t *testing.T) {
 	target.Pose.X = mover.Pose.X + 80
 	target.Pose.Z = mover.Pose.Z + 40
 	target.Pose.Y = 33
-	ops.TerrainHeight = func(regionID uint16, x, z float64) (float64, bool) {
+	ops.GroundHeight = func(monster.Pose) (float64, bool) {
 		return 37.5, true
 	}
 	// Every pursuit leg clips to 1 unit (< 20), so arrival after each short

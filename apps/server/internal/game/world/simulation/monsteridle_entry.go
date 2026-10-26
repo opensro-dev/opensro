@@ -9,7 +9,7 @@ func (ops *MonsterMoverOps) planIdleEntry(actor monster.Instance, mover monster.
 	if !mover.TakeIdleEntry() {
 		return mover, nil
 	}
-	if !needsHoming(actor, mover.LivePoseAt(now, ops.TerrainHeight)) {
+	if !needsHoming(actor, mover.LivePoseAt(now, ops.GroundHeight)) {
 		mover.ResetStuck()
 		mover.ClearHomingGoal()
 		return mover, nil
