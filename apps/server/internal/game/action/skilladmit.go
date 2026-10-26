@@ -28,6 +28,7 @@ import (
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
+	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
@@ -490,7 +491,7 @@ func (rt *Runtime) qestRefusal(division string, c *enterworld.Character, radius 
 		}
 		at := simulation.Spawn{RegionID: object.Spawn.Region, X: float64(object.Spawn.X),
 			Y: float64(object.Spawn.Y), Z: float64(object.Spawn.Z)}
-		if simulation.IsDungeonRegion(from.RegionID) == simulation.IsDungeonRegion(at.RegionID) &&
+		if worldgeom.SamePlane(from.RegionID, at.RegionID) &&
 			distance3D(from, at) < float64(radius) {
 			return 0x3037
 		}

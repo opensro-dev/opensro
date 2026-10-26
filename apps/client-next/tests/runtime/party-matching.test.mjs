@@ -104,6 +104,30 @@ test("matching registration, modification and deletion commit only complete nati
 	const removed = partyMatchPacket( deletion.state, { opcode: 0xb535, payload: Uint8Array.of( 1, 42, 0, 0, 0 ) } );
 	assert.equal( removed.own, null );
 });
+test("a registration window follows the published level cap", () => {
+	const wide = { ...reg, max: 110 };
+	assert.throws(
+		() => partyMatchRequest( emptyPartyMatching(), { kind: "party-match-register", registration: wide } ),
+		/Invalid party registration/
+	);
+	const accepted = partyMatchRequest(
+		emptyPartyMatching(),
+		{ kind: "party-match-register", registration: wide },
+		0,
+		110
+	);
+	assert.equal( accepted.frame.payload[11], 110 );
+	assert.throws(
+		() =>
+			partyMatchRequest(
+				emptyPartyMatching(),
+				{ kind: "party-match-register", registration: { ...reg, max: 111 } },
+				0,
+				110
+			),
+		/Invalid party registration/
+	);
+});
 /*
 ================
 notify

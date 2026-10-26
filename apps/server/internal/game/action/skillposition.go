@@ -27,7 +27,7 @@ Clamp a destination in one compatible coordinate plane before navigation.
 ================
 */
 func positionSkillGoal(from, requested simulation.Spawn, limit uint32) (simulation.Spawn, bool) {
-	if !worldgeom.SamePlane(from.RegionID, requested.RegionID) || worldgeom.IsDungeonRegion(from.RegionID) && from.RegionID != requested.RegionID {
+	if !worldgeom.SamePlane(from.RegionID, requested.RegionID) || simulation.PlaneKindOf(from.RegionID) == simulation.PlaneCave && from.RegionID != requested.RegionID {
 		return simulation.Spawn{}, false
 	}
 	a := worldgeom.RegionXZ{RegionID: from.RegionID, X: from.X, Z: from.Z}
