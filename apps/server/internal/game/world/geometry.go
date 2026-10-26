@@ -136,9 +136,12 @@ func SamePlane(a, b uint16) bool {
 ==================
 SamePlaneAdjacent
 
-Pos_AreSamePlaneAndAdjacentSectors (430CE0). Two dungeon positions compare
-only within one dungeon region; outdoors both sector bytes must be within
-one of each other.
+The reference server's same-plane-and-adjacent-sectors rule, verified at
+the instruction level: outdoors both sector bytes must be within one of
+each other; inside the dungeon plane every pair of dungeon regions is
+adjacent. This is the broadphase gate - the narrowing there belongs to
+the callers' own checks (a floor's route, an actor distance), and sites
+that need one specific region test for it themselves.
 ==================
 */
 func SamePlaneAdjacent(a, b uint16) bool {
@@ -146,7 +149,7 @@ func SamePlaneAdjacent(a, b uint16) bool {
 		return false
 	}
 	if IsDungeonRegion(a) {
-		return a == b
+		return true
 	}
 	dx := int(a&0xff) - int(b&0xff)
 	dz := int(a>>8) - int(b>>8)
