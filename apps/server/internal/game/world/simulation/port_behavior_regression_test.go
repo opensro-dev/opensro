@@ -299,7 +299,7 @@ func TestPortAuditCorpseSettlesSurfaceOnEveryDamageDoor(t *testing.T) {
 				t.Fatal("corpse retained navigation intent")
 			}
 			for _, at := range []int64{now, now + 300, now + 5000} {
-				if got := after.LivePoseAt(at, func(uint16, float64, float64) (float64, bool) { t.Fatal("corpse resampled terrain"); return 0, false }); got != want {
+				if got := after.LivePoseAt(at, func(monster.Pose) (float64, bool) { t.Fatal("corpse resampled terrain"); return 0, false }); got != want {
 					t.Fatalf("surface pose changed: %+v want %+v", got, want)
 				}
 			}
