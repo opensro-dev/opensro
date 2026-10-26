@@ -345,6 +345,11 @@ export function createCharacterPresentation(
 		const animationDeltaMs = animationDelta( seconds );
 		skillObjects.retain( entities );
 		resources.begin( seconds );
+		// The wearer's worn parts own the next free load slot; declare
+		// them before anything can start this frame.
+		resources.prioritize(
+			gameplay?.localGid !== undefined ? appearances.get( gameplay.localGid )?.dependencies ?? [] : []
+		);
 		output.failure = null;
 		const { localMover, logicalPose, samples } = createPresentationSamples( entities, gameplay );
 		posePresentation.samples( samples );
