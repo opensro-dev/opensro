@@ -47,6 +47,7 @@ const (
 	NavOwnerUnresolved = worldgeom.NavOwnerUnresolved
 	NavOwnerTerrain    = worldgeom.NavOwnerTerrain
 	NavOwnerObject     = worldgeom.NavOwnerObject
+	NavOwnerDungeon    = worldgeom.NavOwnerDungeon
 )
 
 /*

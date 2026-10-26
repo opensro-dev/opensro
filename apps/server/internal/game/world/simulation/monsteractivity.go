@@ -84,7 +84,7 @@ func (ops *MonsterMoverOps) runActivityGate(division string, actor monster.Insta
 	}
 	before := m
 	if m.Activity.Due(uint32(now)) {
-		b, ok := ops.activityBlock(poseToSpawn(m.LivePoseAt(now, ops.TerrainHeight)))
+		b, ok := ops.activityBlock(poseToSpawn(m.LivePoseAt(now, ops.GroundHeight)))
 		resolved := ok && !ops.activity.unresolved[ops.activity.world]
 		active := resolved && ops.activity.counts[activityBucket{ops.activity.world, b}] != 0
 		if pending && active {
