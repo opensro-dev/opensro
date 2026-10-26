@@ -82,7 +82,10 @@ def with_degree(code, degree):
 #
 # The ordered package codes of a tab after the degree 10 goods join it, and
 # the new ones among them. Only a family whose newest degree is 9 gains a
-# good, and only when the degree 10 item exists.
+# good, only when the degree 10 item exists, and never a second copy of a
+# good the tab already has: restocking a restocked tab (the in-place
+# accessory store, when the services step runs twice on one output tree)
+# adds nothing.
 # ================
 def next_stock(packages, items):
 	family_last = {}
@@ -90,6 +93,7 @@ def next_stock(packages, items):
 		parsed = family_of(package)
 		if parsed is not None and parsed[1] == SOURCE_DEGREE:
 			family_last[parsed[0]] = at
+	have = set(packages)
 	stock, added = [], []
 	for at, package in enumerate(packages):
 		stock.append(package)
@@ -97,7 +101,7 @@ def next_stock(packages, items):
 		if parsed is None or family_last.get(parsed[0]) != at:
 			continue
 		new_package = with_degree(package, NEW_DEGREE)
-		if new_package.replace("PACKAGE_ITEM_", "ITEM_", 1) in items:
+		if new_package not in have and new_package.replace("PACKAGE_ITEM_", "ITEM_", 1) in items:
 			stock.append(new_package)
 			added.append(new_package)
 	# Over the largest native tab, the lowest degrees go first.
