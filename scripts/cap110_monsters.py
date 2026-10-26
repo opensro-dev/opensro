@@ -419,6 +419,7 @@ def main():
 	parser.add_argument("--output", required=True)
 	parser.add_argument("--source-root", required=True)
 	args = parser.parse_args()
+	tables.require_vsro_pin(args.vsro_root, ("Media",))
 	print(json.dumps(add_monsters(args.vsro_root, args.native_extracted, args.output, args.source_root), indent=2))
 
 

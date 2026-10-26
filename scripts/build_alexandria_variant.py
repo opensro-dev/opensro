@@ -13,6 +13,10 @@ game root. This tool makes it, from three inputs:
 	the stage 1 import               extracted/Alexandria_extracted
 	the VSRO client                  --vsro-root (Data.pk2 for the models)
 
+The VSRO archives are hash-pinned (vsro_archive_pins.json, checked
+before anything is read; a missing or changed archive fails the build,
+#1745). The archives are the operator's own and are never committed.
+
 into <variant root>/extracted/:
 
 	Media_extracted, Particles_extracted, Music_mp3
@@ -533,6 +537,7 @@ def lower_paths(root):
 # ================
 def build_variant(vsro_root, native, variant, imported_root=None):
 	"""Make the variant's extracted/ tree; returns its manifest."""
+	stage1.require_vsro_pin(vsro_root, stage1.ARCHIVE_NAMES)
 	imported = Path(imported_root) if imported_root else native / stage1.OUTPUT_FOLDER
 	stage_manifest = json.loads((imported / stage1.MANIFEST_NAME).read_text(encoding="utf-8"))
 	regions = [(r["sectorX"], r["sectorY"]) for r in stage_manifest["regions"]]

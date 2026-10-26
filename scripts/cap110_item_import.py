@@ -276,6 +276,8 @@ def main():
 	parser.add_argument("--native-extracted", type=Path, default=EXTRACTED_ROOT)
 	parser.add_argument("--output-extracted", type=Path, default=REPO_ROOT / ".state" / "cap110-weapons" / "extracted")
 	args = parser.parse_args()
+	if enabled():
+		tables.require_vsro_pin(args.vsro_root, tuple(FOLDERS))
 	summary = add_items(args.vsro_root, args.native_extracted, args.output_extracted)
 	print(f"Equipment: {summary['added']}; enabled: {summary['enabled']}")
 	if summary["enabled"]:

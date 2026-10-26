@@ -310,6 +310,7 @@ def main():
 	parser.add_argument("--output", required=True)
 	parser.add_argument("--source-root", required=True)
 	args = parser.parse_args()
+	tables.require_vsro_pin(args.vsro_root, tuple(item_import.FOLDERS))
 	summary = add_rewards(args.vsro_root, args.native_extracted, args.output, args.source_root)
 	print(json.dumps({key: value for key, value in summary.items() if key not in ("assets", "idMap")}, indent=2))
 
