@@ -817,6 +817,7 @@ func (rt *Runtime) settleReward(character *enterworld.Character, def *Definition
 			consume = append(consume, captureSupplyCleanup(character, def)...)
 			consume = append(consume, exchangeReturns(character, def)...)
 			consume = append(consume, questToolCleanup(character, def)...)
+			consume = append(consume, ivy3CompletionCleanup(character, def)...)
 			consume = append(consume, optionalMissionCleanup(character, def)...)
 			if force {
 				consume = clampToHeld(character, consume)

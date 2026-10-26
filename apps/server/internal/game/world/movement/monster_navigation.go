@@ -88,7 +88,24 @@ func (v *WaterValidator) planMonsterPathFrom(from monster.Pose, fromOwner simula
 		}
 		return p.Y, true
 	}
-	return monster.NewNavigationPath(from, goal, rest, report.NativeResult, height).WithOwners(walk.spans()), report.Work
+	return monster.NewNavigationPath(from, goal, rest, report.NativeResult, height).WithOwners(pathOwnerSpans(walk, report)), report.Work
+}
+
+/*
+================
+pathOwnerSpans
+
+The owner spans a monster path carries: the owner walk's, and on the cave
+plane, which walks no surface owners, the rest's dungeon owner over the
+whole chord (#1727). The cell-by-cell spans arrive with the native
+dungeon walk (#1728).
+================
+*/
+func pathOwnerSpans(walk *navWalk, report ClipReport) []simulation.NavOwnerSpan {
+	if spans := walk.spans(); len(spans) > 0 || report.RestOwner.Kind != simulation.NavOwnerDungeon {
+		return spans
+	}
+	return []simulation.NavOwnerSpan{{From: 0, To: 1, Owner: report.RestOwner}}
 }
 
 /*

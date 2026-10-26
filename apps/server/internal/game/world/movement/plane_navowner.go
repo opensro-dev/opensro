@@ -102,12 +102,20 @@ func (o outdoorPlane) validatePath(from simulation.Spawn, fromOwner simulation.N
 ================
 cavePlane.resolveNavOwner
 
-A cave keeps its own navigation plane: no surface owner, the input
-height unchanged, and ok false.
+The dungeon cell that owns p (dungeonOwnerAt): the hint while its cell
+still holds p, otherwise the cell under p nearest its height - the
+original's relocation rule. The height is returned unchanged: owning the
+cell does not move the position (#1727). ok is false where no cell lies
+under p.
 ================
 */
-func (cavePlane) resolveNavOwner(p simulation.Spawn, _ simulation.NavOwner) (simulation.NavOwner, float64, bool) {
-	return simulation.NavOwner{}, p.Y, false
+func (c cavePlane) resolveNavOwner(p simulation.Spawn, hint simulation.NavOwner) (simulation.NavOwner, float64, bool) {
+	surface := c.water.caveSurface(p.RegionID)
+	if surface == nil {
+		return simulation.NavOwner{}, p.Y, false
+	}
+	owner, ok := surface.dungeonOwnerAt(p.RegionID, p.X, p.Y, p.Z, hint)
+	return owner, p.Y, ok
 }
 
 /*
