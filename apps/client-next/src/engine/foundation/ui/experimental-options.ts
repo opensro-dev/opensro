@@ -28,6 +28,13 @@ ExperimentalOptions
 export interface ExperimentalOptions {
 	// Port-only, not native. Reduced scene resolution requires explicit opt-in.
 	readonly renderScale: RenderScale;
+	// Port-only, not native: "Phone resolution" (#1806). On a phone, while
+	// Render scale is 100%, the scene is drawn at the largest render scale
+	// whose backing store fits PHONE_SCENE_PIXEL_BUDGET; the HUD keeps its
+	// full resolution. A render scale the player picks below 100 wins. On
+	// unless turned off (the owner's choice, 2026-10-27); off, or any
+	// display that is not a phone, is full resolution.
+	readonly phoneRenderCap: boolean;
 	// Port-only, not native: the interface drawn larger or smaller than the
 	// native 1:1 size (the platform's display scale). 100 is the native
 	// size; a missing or invalid stored value restores it.
@@ -252,6 +259,62 @@ export function renderScales(): readonly RenderScale[] {
 	return [ DEFAULT_RENDER_SCALE, 75, 50 ];
 }
 
+// #1806: the scene's backing-store budget on a phone. An iPhone at device
+// pixel ratio 3 drew 2250 x 1206 (2.7 MP) and spiked past 100 ms about 670
+// times in 93 s; 1 MP puts that screen at render scale 50.
+export const PHONE_SCENE_PIXEL_BUDGET = 1_000_000;
+// The longest short screen side, in CSS pixels, a phone has. Tablets start
+// at 600 (a small Android tablet) and keep full resolution.
+export const PHONE_SHORT_SIDE_MAX = 500;
+
+/*
+================
+DisplayClass
+
+What the platform reports about the display: whether the primary pointer is
+coarse (a finger) and the screen's short side in CSS pixels.
+================
+*/
+export interface DisplayClass {
+	readonly coarsePointer: boolean;
+	readonly shortSide: number;
+}
+
+/*
+================
+phoneDisplay
+
+A phone is a coarse pointer on a small screen. A touch laptop has a fine
+primary pointer and a tablet a longer short side, so both keep the
+desktop rule.
+================
+*/
+export function phoneDisplay( display: DisplayClass ): boolean {
+	return display.coarsePointer && display.shortSide > 0 && display.shortSide <= PHONE_SHORT_SIDE_MAX;
+}
+
+/*
+================
+sceneRenderScale
+
+The render scale the scene is drawn at this frame. Only the phone cap
+changes the saved scale, and only while that scale is the default 100:
+the largest scale whose backing store fits the budget, else the smallest.
+================
+*/
+export function sceneRenderScale(
+	video: Pick<ExperimentalVideo, "renderScale" | "phoneRenderCap">,
+	viewport: { readonly width: number; readonly height: number; },
+	phone: boolean
+): RenderScale {
+	if ( !phone || !video.phoneRenderCap || video.renderScale !== DEFAULT_RENDER_SCALE ) return video.renderScale;
+	const scales = renderScales(), pixels = viewport.width * viewport.height;
+	for ( const scale of scales ) {
+		if ( pixels * scale * scale / 10000 <= PHONE_SCENE_PIXEL_BUDGET ) return scale;
+	}
+	return scales[scales.length - 1]!;
+}
+
 /*
 ================
 UiScale
@@ -300,7 +363,7 @@ experimentalOptions
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, mainThreadOwnWalk, greyDisabledTabs, jobKillNotices, dropPlusNotices,
 plusSevenNotices, breakNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, shortNotices, confirmGuildBan,
-petClickOpensWindow, smartPetPickup, touchInspect and dungeonCharacterPvs, which only an explicit false turns off.
+petClickOpensWindow, smartPetPickup, touchInspect, phoneRenderCap and dungeonCharacterPvs, which only an explicit false turns off.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
 explicitly, and are read only while petPickupFilter is on.
 Missing or invalid render scales restore full resolution and missing or
@@ -317,6 +380,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 	const enabled = ( key: ExperimentalKey ) => record[key] === true;
 	return {
 		renderScale: record.renderScale === 75 || record.renderScale === 50 ? record.renderScale : DEFAULT_RENDER_SCALE,
+		phoneRenderCap: record.phoneRenderCap !== false,
 		uiScale: uiScaleStop( record.uiScale ) ?? UI_SCALE_DEFAULT,
 		chatTimestamps: enabled( "chatTimestamps" ),
 		safeLoadingScreen: enabled( "safeLoadingScreen" ),
@@ -402,6 +466,7 @@ time. Every flag off and renderScale 100 preserve the native frame.
 */
 export interface ExperimentalVideo {
 	readonly renderScale: RenderScale;
+	readonly phoneRenderCap: boolean;
 	readonly postProcessing: boolean;
 	readonly anisotropicFiltering: boolean;
 	readonly heightFog: boolean;
@@ -425,6 +490,7 @@ experimentalVideo
 export function experimentalVideo( options: ExperimentalOptions ): ExperimentalVideo {
 	return {
 		renderScale: options.renderScale,
+		phoneRenderCap: options.phoneRenderCap,
 		postProcessing: options.postProcessing,
 		anisotropicFiltering: options.anisotropicFiltering,
 		heightFog: options.heightFog,
