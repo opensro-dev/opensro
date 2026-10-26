@@ -94,6 +94,12 @@ type Service struct {
 	// killStats serves /economy/v1/killstats (killstats.go); false
 	// answers 404 (SRO_KILL_STATS off, the default).
 	killStats bool
+
+	// sealCensus enables the staff census route (census.go); censusLatest
+	// is guarded by mu, censusMu serialises the runs themselves.
+	sealCensus   bool
+	censusMu     sync.Mutex
+	censusLatest *SealCensus
 }
 
 /*

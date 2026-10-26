@@ -2,19 +2,24 @@
 ===========================================================================
 
 economy.js - the Economy page: one server, one range, five read-only views
+and the staff seal census
 
 Loads the GameWorld economy aggregates through this console's proxy
 (/api/economy/*, server/economy.mjs) and draws them with economy-view.js.
 Each section loads and fails on its own, so a missing snapshot or an older
 GameWorld leaves the rest of the page readable. Text from the server is
 always set as text; charts are SVG strings whose labels are escaped.
+The Seal census tab is the page's one action: Run census asks the shard
+to count its seal items over a fresh store copy (it changes nothing).
 
 ===========================================================================
 */
-import { requestJSON } from "./request.js";
+import { postJSON, requestJSON } from "./request.js";
 import {
 	alignSeries,
 	barChart,
+	CENSUS_LOCATION_LABELS,
+	censusRows,
 	compactGold,
 	countText,
 	flagLabel,
@@ -34,10 +39,13 @@ import {
 	toBig
 } from "./economy-view.js";
 
-const TABS = [ "overview", "flows", "trade", "rates", "flags" ];
+const TABS = [ "overview", "flows", "trade", "rates", "census", "flags" ];
 const RANGE_KEY = "sro-observatory-economy-range";
 const status = byID( "status" );
 let generation = 0, meta = null, loaded = null, paintedWidth = 0;
+// The newest census answer for the tab: censusReport, or censusFailed's
+// text when the shard refused (off, none run yet, one already running).
+let censusReport = null, censusFailed = "";
 
 /*
 ================
@@ -338,6 +346,131 @@ function drawRates( rates, failure ) {
 
 /*
 ================
+censusCellText
+
+One tier bucket: its items and holders, or "withheld" where the shard
+held the bucket back under its floor.
+================
+*/
+function censusCellText( cell ) {
+	return cell ? `${countText( cell.items )} · ${countText( cell.holders )} holders` : "withheld";
+}
+
+/*
+================
+drawCensus
+
+The newest census: when it was taken, the degree table, and where the
+seals sit. Buckets under the shard's holder floor arrive withheld; the
+note says how many, so a withheld tier is never mistaken for none.
+================
+*/
+function drawCensus() {
+	const note = byID( "census-note" ), target = byID( "census" ), places = byID( "census-locations" );
+	if ( !censusReport ) {
+		note.textContent = "";
+		places.replaceChildren();
+		message( "census", censusFailed || "No census has been run yet." );
+		return;
+	}
+	const report = censusReport;
+	const floor = Number.isFinite( report.minHolders ) ? report.minHolders : 3;
+	const suppressed = Number.isFinite( report.suppressedCells ) ? report.suppressedCells : 0;
+	const at = new Date( report.takenAt * 1000 ).toLocaleString();
+	const took = Number.isFinite( report.elapsedMs ) ? ` in ${(report.elapsedMs / 1000).toFixed( 1 )}s` : "";
+	note.textContent = (censusFailed ? censusFailed + " Showing the previous census. " : "") +
+		`Counted ${at}${took}: ${countText( report.totalItems )} seal items held by ` +
+		`${countText( report.charactersHolding )} characters and ${countText( report.accountsHolding )} accounts. ` +
+		(suppressed > 0 ?
+			`Buckets with fewer than ${floor} holders are withheld: ${suppressed} withheld.` :
+			`Buckets with fewer than ${floor} holders are withheld; none were.`);
+	const rows = censusRows( report );
+	if ( rows.length === 0 ) {
+		places.replaceChildren();
+		message( "census", "The census found no seal items above the holder floor." );
+		return;
+	}
+	target.replaceChildren( table(
+		[ "Degree", "Star", "Moon", "Sun" ],
+		rows.map( row => [
+			"Degree " + row.degree,
+			censusCellText( row.star ),
+			censusCellText( row.moon ),
+			censusCellText( row.sun )
+		] )
+	) );
+	const locations = report.locations ?? {};
+	places.replaceChildren(
+		element( "p", "Where the seals sit", "economy-note" ),
+		table(
+			[ "Where", "Seal items" ],
+			CENSUS_LOCATION_LABELS.map( ( [key, label] ) => [ label, countText( locations[key] ) ] ),
+			[ 1 ]
+		)
+	);
+}
+
+/*
+================
+censusFailureText
+
+The refusal said plainly; a 404 means the shard does not run the
+census at all.
+================
+*/
+function censusFailureText( error ) {
+	if ( (error?.message ?? "").includes( "HTTP 404" ) ) {
+		return "This shard does not run the seal census (SRO_SEAL_CENSUS is off).";
+	}
+	return error?.message ?? "Unavailable.";
+}
+
+/*
+================
+loadCensus
+
+The shard's newest census, if it has one.
+================
+*/
+async function loadCensus() {
+	try {
+		censusReport = await api( "sealcensus", { shard: byID( "shard" ).value } );
+		censusFailed = "";
+	} catch ( error ) {
+		censusReport = null;
+		censusFailed = censusFailureText( error );
+	}
+	drawCensus();
+}
+
+/*
+================
+runCensus
+
+One census now. The shard copies its whole store first, so the button
+stays disabled until the answer lands.
+================
+*/
+async function runCensus() {
+	const button = byID( "census-run" );
+	button.disabled = true;
+	byID( "census-note" ).textContent = "Counting… the shard copies its store; this can take a while.";
+	try {
+		censusReport = await postJSON(
+			"/api/economy/sealcensus?" + new URLSearchParams( { shard: byID( "shard" ).value } ),
+			{},
+			{ signal: AbortSignal.timeout( 300000 ) }
+		);
+		censusFailed = "";
+	} catch ( error ) {
+		censusFailed = censusFailureText( error );
+	}
+	button.disabled = false;
+	drawCensus();
+}
+
+/*
+================
 drawTrade
 
 The trade route's shape arrives with its first GameWorld implementation;
@@ -473,6 +606,8 @@ async function load() {
 	status.textContent = minted.status === "rejected" ?
 		"Gold flows: " + failureText( minted.reason ) :
 		`Ledger complete through ${ledger}. Buckets are ${grid.bucket === "1h" ? "hours" : "days"} in UTC.`;
+	// The census stands outside the ranged loads: newest report only.
+	void loadCensus();
 }
 
 /*
@@ -545,6 +680,7 @@ byID( "shard" ).addEventListener( "change", async () => {
 	await load();
 } );
 byID( "division" ).addEventListener( "change", () => void load() );
+byID( "census-run" ).addEventListener( "click", () => void runCensus() );
 byID( "range" ).addEventListener( "change", () => {
 	try {
 		localStorage.setItem( RANGE_KEY, byID( "range" ).value );
