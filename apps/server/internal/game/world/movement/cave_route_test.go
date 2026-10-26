@@ -161,6 +161,33 @@ func routeArrives(v *WaterValidator, from monster.Pose, route *monster.Navigatio
 
 /*
 ================
+caveLegArrives
+
+Whether a mover walking a leg reaches its point: query after query, as the
+mover re-issues a step that settled at a doorway (a short step across one
+stops there, as the original's query loop does, #1728), carrying the cell
+it reached as the mover does (LiveNavOwner); failing on any block.
+================
+*/
+func caveLegArrives(v *WaterValidator, at, point monster.Pose) bool {
+	from := simulation.Spawn{RegionID: at.RegionID, X: at.X, Y: at.Y, Z: at.Z}
+	to := simulation.Spawn{RegionID: point.RegionID, X: point.X, Y: point.Y, Z: point.Z}
+	owner := simulation.NavOwner{}
+	for step := 0; step < 8; step++ {
+		report := v.ClipMovementPathFrom(from, owner, to)
+		if report.NativeResult&(monster.NavResultBlocked|monster.NavResultClipped) != 0 {
+			return false
+		}
+		if math.Hypot(report.Rest.X-to.X, report.Rest.Z-to.Z) < .01 {
+			return true
+		}
+		from, owner = report.Rest, report.RestOwner
+	}
+	return false
+}
+
+/*
+================
 walkCaveRoute
 
 Walks from a standpoint to a goal the way the mover consumes
@@ -196,7 +223,7 @@ func walkCaveRoute(t *testing.T, v *WaterValidator, surface *dungeonSpawnSurface
 			if _, ok := surface.heightAt(point.X, point.Y, point.Z); !ok {
 				t.Fatalf("plan %d waypoint %d %+v stands on no floor", plans, i, point)
 			}
-			if !routeClear(v.PlanMonsterPath(at, point), point) {
+			if !caveLegArrives(v, at, point) {
 				t.Fatalf("plan %d leg %d from %+v to %+v does not arrive", plans, i, at, point)
 			}
 			if point != goal {
@@ -579,19 +606,16 @@ func TestCaveRouteSameRoomStaysDirect(t *testing.T) {
 		t.Fatalf("same-room route = status %v, %d points; want the goal alone", route.Status(), route.Len())
 	}
 	// A direct plan is its head probe alone (#1678): one path query,
-	// whose work is the floor scan the clip made. An arriving scan
-	// visits every cell in the chord's reach and then reads the floor
-	// at least once every maxDungeonFloorSampleSpacing.
+	// whose work is the walk the clip made. A walk traces every cell of
+	// the start's block for cuts (dungeon_walk.go).
 	fromSpawn := simulation.Spawn{RegionID: from.RegionID, X: from.X, Y: from.Y, Z: from.Z}
 	goalSpawn := simulation.Spawn{RegionID: goal.RegionID, X: goal.X, Y: goal.Y, Z: goal.Z}
 	clip := v.clipDungeonPath(fromSpawn, goalSpawn)
 	if route.Probes() != 1 || route.Work() != clip.Work {
 		t.Fatalf("direct route reports %d probes and %d work; want 1 probe and the clip's %d", route.Probes(), route.Work(), clip.Work)
 	}
-	visits := dungeonClipCellVisits(surface, fromSpawn, goalSpawn)
-	samples := int(math.Ceil(routeDistance(from, goal) / maxDungeonFloorSampleSpacing))
-	if clip.Work < visits+samples {
-		t.Fatalf("the clip reports %d work for a chord past %d cell visits and %d floor samples", clip.Work, visits, samples)
+	if visits := dungeonWalkCellVisits(surface, fromSpawn); clip.Work < visits {
+		t.Fatalf("the clip reports %d work for a walk past %d cell visits", clip.Work, visits)
 	}
 }
 

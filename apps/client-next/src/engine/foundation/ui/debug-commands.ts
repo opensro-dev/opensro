@@ -43,6 +43,10 @@ export const DEBUG_COMMAND_TIME_MINUS = 109;
 // (+0x3CF), its free-camera byte (+0x3CE), and the cursor manager's
 // visibility byte. The camera-waypoint rows (130-134) are a later slice.
 export const DEBUG_COMMAND_ZOOM = 110;
+// 111 snaps the interface's second camera float (+0x7C0, seeded 50)
+// between its 50 and 240 presets against the double 50. Nothing in the
+// binary reads the field; the snap is kept as the handler leaves it.
+export const DEBUG_COMMAND_FAST = 111;
 // 112/113 write the local player's shown byte (CICPlayer +0xB8): while
 // it stands the character's own animation advance submits its body
 // (853600); cleared, the whole local presentation is skipped. 115/116
@@ -54,6 +58,10 @@ export const DEBUG_COMMAND_HIDE_ME = 113;
 export const DEBUG_COMMAND_FREE_CAMERA = 114;
 export const DEBUG_COMMAND_UI_OFF = 115;
 export const DEBUG_COMMAND_UI_ON = 116;
+// 117 flips the engine global's frame byte (+0x4A), the switch the
+// native frame-statistics readout reads; a GM string arm flips the
+// same byte. The port keeps the byte (see #1717 for the readout).
+export const DEBUG_COMMAND_FRAME = 117;
 // 118/119 write the interface's camera-collision byte (+0x3CC), which
 // the constructor sets: ApplyCameraOrbit (68FAD0) is the only
 // consumer - set, it casts the eye-to-target segment and pulls the
@@ -64,6 +72,16 @@ export const DEBUG_COMMAND_UI_ON = 116;
 export const DEBUG_COMMAND_COLON = 118;
 export const DEBUG_COMMAND_COLON_OFF = 119;
 export const DEBUG_COMMAND_CURSOR = 135;
+// 136 writes the interface's free-camera move speed (+0x7B0, seeded
+// 100) from one word clamped to 1..500. 137 flips the global id-plate
+// byte (0xCCB5D8): while it stands, actor name boards carry an id
+// line. The byte ships standing (its file-backed initial is 1 and the
+// case is the only writer in the image), so the kept copy seeds
+// standing too. The port's camera has no free translation and its
+// boards take no id line yet; both values are kept as written (see
+// #1717).
+export const DEBUG_COMMAND_CAMERA_SPEED = 136;
+export const DEBUG_COMMAND_ID = 137;
 // The render family (690C40 ids 150-155, handlers 691686-6917A3): each
 // negates one SWorld graphic option (+0x2E50 + 4*mode, seeded by
 // SWorld_Construct) through SWorld_ApplyGraphicOption (8A54C0). The
@@ -75,6 +93,19 @@ export const DEBUG_COMMAND_MAP_OBJECTS = 153;
 export const DEBUG_COMMAND_CHARACTERS = 154;
 export const DEBUG_COMMAND_LEVEL_OF_DETAIL = 155;
 export const DEBUG_COMMAND_SET_FIELD_OF_VIEW = 500;
+// The over-400 family's high rows (690C40's second table): 600 writes
+// the local player's (or its mount's) speed field (+0x658), 601 builds
+// the named item's descriptor, frames it as a packet stream headed by
+// opcode 0x3314 and hands it to the client's own packet dispatch
+// (690BD0) - nothing leaves the machine - 602 has no case at all (the
+// table sends it to the shared exit) and 603 hands a sound name to the
+// sound manager. The port's movement and inventory belong to the
+// server and its audio takes cues, not names; the handlers run and
+// the values are kept (see #1717).
+export const DEBUG_COMMAND_SET_SPEED = 600;
+export const DEBUG_COMMAND_EQUIP = 601;
+export const DEBUG_COMMAND_MAKE_OBJECT = 602;
+export const DEBUG_COMMAND_SOUND = 603;
 
 const MIN_FIELD_OF_VIEW_DEGREES = 10;
 const MAX_FIELD_OF_VIEW_DEGREES = 150;
@@ -205,6 +236,31 @@ function commandDecimalDigit( code: number ): number {
 
 /*
 ================
+nativeWordInteger
+
+9C3720's digit walk, shared by the bounded integer commands: the
+leading decimal digits (the ten BMP digit blocks commandDecimalDigit
+knows) after an optional sign, with the magnitude bounded at the
+caller's cap so a long word saturates the way the CRT conversion does
+before the handler's own clamp sees it.
+================
+*/
+function nativeWordInteger( word: string, magnitudeCap: number ): { negative: boolean; magnitude: number; } {
+	let index = 0;
+	while ( index < word.length && commandSpace( word.charCodeAt( index ) ) ) index++;
+	const negative = word[index] === "-";
+	if ( negative || word[index] === "+" ) index++;
+	let magnitude = 0;
+	for ( ; index < word.length; index++ ) {
+		const digit = commandDecimalDigit( word.charCodeAt( index ) );
+		if ( digit < 0 ) break;
+		magnitude = Math.min( magnitudeCap, magnitude * DECIMAL_RADIX + digit );
+	}
+	return { negative, magnitude };
+}
+
+/*
+================
 debugFieldOfView
 
 Command 500 accepts exactly one word. 9C3720 reads its signed decimal prefix
@@ -215,19 +271,9 @@ every nonzero negative and every positive value above 150 becomes 150.
 */
 export function debugFieldOfView( args: readonly string[] ): number | null {
 	if ( args.length !== 1 ) return null;
-	const word = args[0]!;
-	let index = 0;
-	while ( index < word.length && commandSpace( word.charCodeAt( index ) ) ) index++;
-	const negative = word[index] === "-";
-	if ( negative || word[index] === "+" ) index++;
-	let magnitude = 0;
-	for ( ; index < word.length; index++ ) {
-		const digit = commandDecimalDigit( word.charCodeAt( index ) );
-		if ( digit < 0 ) break;
-		magnitude = Math.min( MAX_FIELD_OF_VIEW_DEGREES + 1, magnitude * DECIMAL_RADIX + digit );
-	}
-	if ( negative && magnitude !== 0 ) return MAX_FIELD_OF_VIEW_DEGREES;
-	return Math.max( MIN_FIELD_OF_VIEW_DEGREES, Math.min( MAX_FIELD_OF_VIEW_DEGREES, magnitude ) );
+	const word = nativeWordInteger( args[0]!, MAX_FIELD_OF_VIEW_DEGREES + 1 );
+	if ( word.negative && word.magnitude !== 0 ) return MAX_FIELD_OF_VIEW_DEGREES;
+	return Math.max( MIN_FIELD_OF_VIEW_DEGREES, Math.min( MAX_FIELD_OF_VIEW_DEGREES, word.magnitude ) );
 }
 
 /*
@@ -298,4 +344,59 @@ export function debugCommand( table: ReadonlyMap<string, number>, line: string )
 	const words = line.split( /[\t\r ]+/ ).filter( Boolean );
 	const id = table.get( words[0] ?? "" );
 	return id === undefined ? null : { id, args: words.slice( 1 ) };
+}
+
+const MIN_CAMERA_SPEED = 1;
+const MAX_CAMERA_SPEED = 500;
+const MIN_SET_SPEED = 10;
+const MAX_SET_SPEED = 500;
+const SET_SPEED_WORD_SCALE = 10;
+const FAST_SPEED_LOW = 50;
+const FAST_SPEED_HIGH = 240;
+
+/*
+================
+debugCameraSpeedValue
+
+690C40 case 136 (/cs %d): exactly one word, read by 9C3720 and clamped
+to 1..500 with the handler's unsigned compares, so a negative word
+lands on 500. 68EF8B seeds the field it writes 100.
+================
+*/
+export function debugCameraSpeedValue( args: readonly string[] ): number | null {
+	if ( args.length !== 1 ) return null;
+	const word = nativeWordInteger( args[0]!, MAX_CAMERA_SPEED + 1 );
+	if ( word.negative && word.magnitude !== 0 ) return MAX_CAMERA_SPEED;
+	return Math.max( MIN_CAMERA_SPEED, Math.min( MAX_CAMERA_SPEED, word.magnitude ) );
+}
+
+/*
+================
+debugSetSpeedValue
+
+690C40 case 600 (/setspeed %d): the first word alone (a missing word
+reads as zero), read by 9C3720, multiplied by ten and clamped to
+10..500 with the handler's unsigned compares, so a negative word
+lands on 500. The result is the value the handler stores as a float
+into the local player's speed field (+0x658), or its mount's when a
+mount is under it (85D870 picks the target).
+================
+*/
+export function debugSetSpeedValue( args: readonly string[] ): number {
+	const word = nativeWordInteger( args[0] ?? "", MAX_SET_SPEED + 1 );
+	if ( word.negative && word.magnitude !== 0 ) return MAX_SET_SPEED;
+	return Math.max( MIN_SET_SPEED, Math.min( MAX_SET_SPEED, word.magnitude * SET_SPEED_WORD_SCALE ) );
+}
+
+/*
+================
+debugFastSpeedValue
+
+690C40 case 111 (/fast): the interface float (+0x7C0, seeded 50)
+against the double 50 - above it the handler writes 50, at or below
+it writes 240.
+================
+*/
+export function debugFastSpeedValue( current: number ): number {
+	return current > FAST_SPEED_LOW ? FAST_SPEED_LOW : FAST_SPEED_HIGH;
 }

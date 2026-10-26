@@ -56,8 +56,10 @@ func groundedLivePose(mover monster.MoverState, nowMs int64, ground MonsterSpawn
 	if ground == nil {
 		return mover.LivePoseAt(nowMs, nil)
 	}
-	return mover.LivePoseAt(nowMs, func(regionID uint16, x, z float64) (float64, bool) {
-		chord := mover.LivePoseAt(nowMs, nil)
-		return ground(regionID, x, chord.Y, z)
+	// The resolver was handed the chord height as its surface reference;
+	// LivePoseAt now passes that pose itself (#1695), so this is the
+	// same reading under the wider GroundResolver shape.
+	return mover.LivePoseAt(nowMs, func(pose monster.Pose) (float64, bool) {
+		return ground(pose.RegionID, pose.X, pose.Y, pose.Z)
 	})
 }

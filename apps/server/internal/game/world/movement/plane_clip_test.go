@@ -32,7 +32,9 @@ dungeon region takes the dungeon clip, every other pair the outdoor walk.
 func legacyClipSegment(v *WaterValidator, from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) (ClipReport, *navWalk) {
 	from = v.ownedStart(from, fromOwner)
 	if simulation.IsDungeonRegion(from.RegionID) || simulation.IsDungeonRegion(to.RegionID) {
-		return v.clipDungeonPath(from, to), nil
+		// #1728: the cave arm is one leg of the dungeon walk from the
+		// retained cell (it reports the rest's owner itself).
+		return v.walkDungeon(from, fromOwner, to), nil
 	}
 	return v.clipOutdoorSegment(from, fromOwner, to)
 }

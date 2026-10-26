@@ -152,7 +152,7 @@ func (ops *MonsterMoverOps) runScopeVisibility(nowMs int64, sessions []SessionSn
 				if !ok || instance.CurrentHP == 0 || !mover.InFlight(nowMs) {
 					continue
 				}
-				livePose := mover.LivePoseAt(nowMs, ops.TerrainHeight)
+				livePose := mover.LivePoseAt(nowMs, ops.GroundHeight)
 				source := &MovementSource{
 					RegionID: livePose.RegionID,
 					X:        livePose.X,
@@ -188,7 +188,7 @@ func (ops *MonsterMoverOps) runScopeVisibility(nowMs int64, sessions []SessionSn
 			// Mid-flight scope-enter: resolve the interpolated XZ onto the
 			// terrain (BUG-8 second injection path, board seq735/seq779) so
 			// the spawn single never ships a chord height.
-			pose := mover.LivePoseAt(nowMs, ops.TerrainHeight)
+			pose := mover.LivePoseAt(nowMs, ops.GroundHeight)
 			frames := []Frame{{
 				ScopeGID: instance.Gid, ScopeVisible: true,
 				Opcode: wire.OpSingleObjectSpawn,

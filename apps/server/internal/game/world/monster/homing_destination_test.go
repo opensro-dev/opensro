@@ -35,7 +35,7 @@ func TestNavigationPathOwnsAllLiveReadsAndExpiresOnReplacement(t *testing.T) {
 	from, to := Pose{RegionID: 25000, X: 10, Y: 20}, Pose{RegionID: 25000, X: 100, Y: 20}
 	m := MoverState{From: from, To: to, DepartMs: 1000, ArriveMs: 2000}
 	m.AdoptNavigation(NewNavigationPath(from, to, to, 0, func(f float64, _ Pose) (float64, bool) { return 20 + 40*f*(1-f), true }))
-	poison := func(uint16, float64, float64) (float64, bool) {
+	poison := func(Pose) (float64, bool) {
 		t.Fatal("terrain replaced owned deck")
 		return 0, false
 	}

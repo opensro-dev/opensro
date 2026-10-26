@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/companion"
@@ -162,6 +163,33 @@ func TestPenguinStormPulsesAndFinalFreeze(t *testing.T) {
 				t.Fatal("pulses refreshed cooldown")
 			}
 		})
+	}
+}
+
+/*
+================
+TestPenguinStormPulsesKeepSpeciesAndGearScaling
+================
+*/
+func TestPenguinStormPulsesKeepSpeciesAndGearScaling(t *testing.T) {
+	rt, clock, c, mob := penguinFixture(t)
+	learnPetBook(t, c, 34)
+	c.ActiveCOS.Training.Gear[0] = domain.PetGear{RefObjID: 30109}
+	castPenguinFixture(t, rt, clock, c, mob, 34)
+	first, _ := rt.Monsters.Get(testDivision, mob.Gid)
+	want := mob.CurrentHP - first.CurrentHP
+	if want == 0 {
+		t.Fatal("initial storm did not hit")
+	}
+	last := first.CurrentHP
+	for range 3 {
+		clock.now = clock.now.Add(time.Second)
+		rt.TickHook()(clock.NowMs())
+		next, _ := rt.Monsters.Get(testDivision, mob.Gid)
+		if got := last - next.CurrentHP; got != want {
+			t.Fatal("same fixed roll must retain initial species/gear scaling", want, got)
+		}
+		last = next.CurrentHP
 	}
 }
 

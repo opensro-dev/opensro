@@ -70,8 +70,9 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance mons
 	if frames, handled := ops.handleHelp(divisionID, instance, mover, divisionPlayers, nowMs); handled {
 		return frames, nil
 	}
-	// 53FEA0 runs queued commands before the current state's OnTick.
-	// PENDING's cadence belongs to 55AF60, not the pre-command 540D20 gate.
+	// The native command queue runs queued commands before the current
+	// state's tick. PENDING's cadence belongs to its own state, not
+	// the pre-command gate.
 	if mover.Mode() == monster.MoverPending {
 		frames, _ := ops.runActivityGate(divisionID, instance, mover, nowMs)
 		return frames, nil
@@ -93,18 +94,19 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance mons
 		return frames, targeted
 	}
 	if mover.Mode() == monster.MoverWandering && mover.BehaviorDeadlineMs > 0 && nowMs > mover.BehaviorDeadlineMs {
-		// 559EB0 -> event 37 -> 5599A0: enter IDLE before scanning.
+		// WANDER expiry posts the state-entry event: enter IDLE before
+		// scanning.
 		// WANDER::OnExit is a no-op; do not cancel the movement channel.
 		mustMoverTransition(&mover, monster.MoverEventWanderExpired, 0)
 		mover.BehaviorDeadlineMs = nowMs + ops.idleDelayMs()
 		return ops.commitIdleEntry(divisionID, instance, mover, nil, nowMs), nil
 	}
 	if mover.Mode() == monster.MoverReturning && instance.Nest.HasControls {
-		// Native HOMING has its own duration and scan-delay gates (55A690,
-		// 55A720). It is not an unconditional aggro blackout until arrival.
+		// Native HOMING has its own duration and scan-delay gates. It
+		// is not an unconditional aggro blackout until arrival.
 		elapsed := uint32(nowMs) - mover.HomingStartedMs
 		if elapsed > 50000 {
-			mover.Pose = mover.LivePoseAt(nowMs, ops.TerrainHeight)
+			mover.Pose = mover.LivePoseAt(nowMs, ops.GroundHeight)
 			mover.From, mover.To = monster.Pose{}, monster.Pose{}
 			mover.DepartMs, mover.ArriveMs = 0, 0
 			mustMoverTransition(&mover, monster.MoverEventHomingExpired, 0)
@@ -112,7 +114,7 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance mons
 			return ops.commitIdleEntry(divisionID, instance, mover, []Frame{correctionFrame(instance.Gid, mover.Pose)}, nowMs), nil
 		}
 		if elapsed > mover.HomingAcquireAfterMs && ops.acquisitionReady(divisionID, instance, nowMs) && tactics.Aggressive {
-			from := mover.LivePoseAt(nowMs, ops.TerrainHeight)
+			from := mover.LivePoseAt(nowMs, ops.GroundHeight)
 			if target, found := ops.acquireSightTarget(divisionID, instance, from, divisionPlayers, tactics); found {
 				mustMoverTransition(&mover, monster.MoverEventAggroAcquired, target.Gid)
 				if plan, planned := ops.selectMonsterAttack(divisionID, instance, 0, from, target); planned {
@@ -174,7 +176,7 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance mons
 			return ops.advanceIdle(divisionID, instance, tactics, mover, divisionPlayers, nowMs)
 		}
 		if mover.Mode() == monster.MoverWandering && tactics.Aggressive && ops.acquisitionReady(divisionID, instance, nowMs) {
-			live := mover.LivePoseAt(nowMs, ops.TerrainHeight)
+			live := mover.LivePoseAt(nowMs, ops.GroundHeight)
 			if target, ok := ops.acquireSightTarget(divisionID, instance, live, divisionPlayers, tactics); ok {
 				mustMoverTransition(&mover, monster.MoverEventAggroAcquired, target.Gid)
 				if plan, planned := ops.selectMonsterAttack(divisionID, instance, 0, live, target); planned {
@@ -188,7 +190,7 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance mons
 				return ops.startChaseLeg(divisionID, instance, tactics, mover, target, nowMs), nil
 			}
 		}
-		if mover.Mode() == monster.MoverWandering && needsHoming(instance, mover.LivePoseAt(nowMs, ops.TerrainHeight)) {
+		if mover.Mode() == monster.MoverWandering && needsHoming(instance, mover.LivePoseAt(nowMs, ops.GroundHeight)) {
 			return ops.startReturnLeg(divisionID, instance, tactics, mover, monster.MoverEventHomingRequired, nowMs), nil
 		}
 		return ops.chaseRetarget(divisionID, instance, tactics, mover, divisionPlayers, nowMs), nil
@@ -245,7 +247,8 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance mons
 }
 
 func (ops *MonsterMoverOps) advanceIdle(divisionID string, instance monster.Instance, tactics monster.Tactics, mover monster.MoverState, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
-	// 55A8B0 checks state expiry before the acquisition callback.
+	// The native idle tick checks state expiry before the acquisition
+	// callback.
 	if nowMs > mover.BehaviorDeadlineMs {
 		return ops.decideIdle(divisionID, instance, tactics, mover, nowMs), nil
 	}
@@ -253,7 +256,7 @@ func (ops *MonsterMoverOps) advanceIdle(divisionID string, instance monster.Inst
 	// In particular an empty scan consumes the gate; entering sight does not
 	// re-arm it. Damage retaliation above is independent of this sight gate.
 	if tactics.Aggressive && ops.acquisitionReady(divisionID, instance, nowMs) {
-		from := mover.LivePoseAt(nowMs, ops.TerrainHeight)
+		from := mover.LivePoseAt(nowMs, ops.GroundHeight)
 		if target, ok := ops.acquireSightTarget(divisionID, instance, from, divisionPlayers, tactics); ok {
 			mustMoverTransition(&mover, monster.MoverEventAggroAcquired, target.Gid)
 			if plan, planned := ops.selectMonsterAttack(divisionID, instance, 0, from, target); planned {
@@ -281,7 +284,7 @@ func (ops *MonsterMoverOps) decideIdle(divisionID string, instance monster.Insta
 }
 
 // aiEventStart is the tactics event the abnormal callbacks post when a
-// status starts (4A4BD0 / 4A4F70: 0x14).
+// status starts (0x14).
 const aiEventStart = 0x14
 
 /*
@@ -289,10 +292,10 @@ const aiEventStart = 0x14
 applyTacticsEvents
 
 applyTacticsEvents runs the fear/confusion events queued by the abnormal
-callbacks (4A4BD0 / 4A4F70 -> CAITactics current state +80). BATTLE
-(55A390) abandons a feared caster that is its current target, and any
+callbacks (the tactics current state's event handler). BATTLE
+abandons a feared caster that is its current target, and any
 player target under confusion; other states only record the event.
-The end event (+84, 559760) needs no port action: the next scan resumes.
+The end event needs no port action: the next scan resumes.
 ==================
 */
 func (ops *MonsterMoverOps) applyTacticsEvents(divisionID string, instance monster.Instance, mover monster.MoverState, nowMs int64) ([]Frame, bool) {

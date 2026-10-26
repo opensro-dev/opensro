@@ -381,22 +381,30 @@ func TestIvy3BloodDropAndKeyAssembly(t *testing.T) {
 			return value, nil
 		}
 	}
-	// The Amphitheater Punisher bleeds at five percent: a sample
-	// inside the rate drops, one outside does not.
-	if drops := w.rt.MonsterDrops(c, ivy3BloodSource, 0, roll(1, 0)); len(drops) != 1 || drops[0].Codename != ivy3BloodCodename {
-		t.Fatalf("the in-rate kill dropped %v", drops)
+	// The Amphitheater Punisher bleeds at five percent, granted by
+	// the kill handler: a sample inside the rate grants, one
+	// outside does not.
+	w.rt.CaptureRoll = roll(1, 0)
+	w.rt.KillUpdater()(c, ivy3BloodSource, 0)
+	if captureItemCount(c, ivy3BloodCodename) != 1 {
+		t.Fatal("the in-rate kill granted no Blood")
 	}
-	if drops := w.rt.MonsterDrops(c, ivy3BloodSource, 0, roll(0x7fff, 0x7fff)); len(drops) != 0 {
-		t.Fatalf("the out-of-rate kill dropped %v", drops)
+	dry := ivy3Accept(t, w, "DryHunter")
+	w.rt.CaptureRoll = roll(0x7fff, 0x7fff)
+	w.rt.KillUpdater()(dry, ivy3BloodSource, 0)
+	if captureItemCount(dry, ivy3BloodCodename) != 0 {
+		t.Fatal("the out-of-rate kill granted Blood")
 	}
-	if drops := w.rt.MonsterDrops(c, "MOB_AM_SOLDIER", 0, roll(1, 0)); len(drops) != 0 {
-		t.Fatalf("another monster dropped %v", drops)
+	w.rt.CaptureRoll = roll(1, 0)
+	w.rt.KillUpdater()(dry, "MOB_AM_SOLDIER", 0)
+	if captureItemCount(dry, ivy3BloodCodename) != 0 {
+		t.Fatal("another monster granted Blood")
 	}
 	// One Blood is all the mission leaves: holding one stops the
-	// drops.
-	holdItems(t, w.rt, c, ivy3BloodCodename, 1)
-	if drops := w.rt.MonsterDrops(c, ivy3BloodSource, 0, roll(1, 0)); len(drops) != 0 {
-		t.Fatalf("a second Blood dropped: %v", drops)
+	// grant, and a hunt already counted grants nothing more.
+	w.rt.KillUpdater()(c, ivy3BloodSource, 0)
+	if captureItemCount(c, ivy3BloodCodename) != 1 {
+		t.Fatal("a second Blood was granted")
 	}
 	// The Blood alone combines nothing, and spends nothing.
 	if frames, admitted := w.rt.BeginItemUse(c, ivy3BloodCodename, ivy3FortressSpawn, *w.nowMs); admitted || len(frames) != 0 {
@@ -630,6 +638,18 @@ func TestIvy3KillCreditGraceAndTurnIn(t *testing.T) {
 	leader := ivy3Accept(t, w, "KillLeader")
 	member := ivy3Accept(t, w, "KillMember")
 	keyless := ivy3Accept(t, w, "KillKeyless")
+	// Both hunters have walked the open-world half: the three
+	// sentry hunts and the Punisher's Blood stand counted before
+	// Ivy falls, so the kill credit is all their journal lacks.
+	for _, c := range []*enterworld.Character{leader, member} {
+		holdItems(t, w.rt, c, "ITEM_QNO_EU_IVY_3_04", 1)
+		holdItems(t, w.rt, c, "ITEM_QNO_EU_IVY_3_03", 1)
+		holdItems(t, w.rt, c, "ITEM_QNO_EU_IVY_3_02", 1)
+		holdItems(t, w.rt, c, ivy3BloodCodename, 1)
+		for _, mob := range []string{"MOB_QT_01_SOLDIER_CLON", "MOB_QT_03_PUNISHER_CLON", "MOB_QT_01_PUNISHER", ivy3BloodSource} {
+			w.rt.KillUpdater()(c, mob, 0)
+		}
+	}
 	holdItems(t, w.rt, leader, ivy3KeyCodename, 1)
 	holdItems(t, w.rt, member, ivy3KeyCodename, 1)
 	w.openLayer(leader.Name, member.Name, keyless.Name)
@@ -701,6 +721,17 @@ func TestIvy3KillCreditGraceAndTurnIn(t *testing.T) {
 		pointsBefore = *leader.SkillPoints
 	}
 	skillBefore := *leader.SkillExp
+	// The Blood and the three signs the hunts granted are still in
+	// the bag: the kill credit counted the hunts, it did not spend
+	// the items. The turn-in below is what takes them.
+	if captureItemCount(leader, ivy3BloodCodename) != 1 {
+		t.Fatal("the Blood left the bag before its turn-in")
+	}
+	for _, sign := range ivy3SignCodenames {
+		if captureItemCount(leader, sign) != 1 {
+			t.Fatalf("sign %s left the bag before its turn-in", sign)
+		}
+	}
 	if _, err := w.rt.AdvanceNpcQuest(leader, ivy3QuestCodename, ivy3NpcCodename); err != nil {
 		t.Fatal(err)
 	}
@@ -719,6 +750,16 @@ func TestIvy3KillCreditGraceAndTurnIn(t *testing.T) {
 	}
 	if captureItemCount(leader, ivy3HairCodename) != 0 {
 		t.Fatal("the Red Hair survived its turn-in")
+	}
+	// The turn-in also takes the Blood and every sign still held:
+	// quest items the finished quest leaves behind.
+	if captureItemCount(leader, ivy3BloodCodename) != 0 {
+		t.Fatal("the Blood survived its turn-in")
+	}
+	for _, sign := range ivy3SignCodenames {
+		if captureItemCount(leader, sign) != 0 {
+			t.Fatalf("sign %s survived its turn-in", sign)
+		}
 	}
 	if captureItemCount(leader, "ITEM_QNO_EU_IVY_3_07") != 20 {
 		t.Fatal("the reward token stack never landed")

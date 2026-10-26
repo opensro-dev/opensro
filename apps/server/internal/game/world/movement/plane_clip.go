@@ -29,10 +29,24 @@ a cave is refused, as the boundary is crossed only by teleport.
 */
 func clipSegmentOnPlane(v *WaterValidator, from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) (ClipReport, *navWalk) {
 	services := planeServices{water: v}
-	if simulation.PlaneKindOf(from.RegionID) == simulation.PlaneOutdoor && simulation.PlaneKindOf(to.RegionID) == simulation.PlaneOutdoor {
+	if pairIsOutdoor(from.RegionID, to.RegionID) {
 		return outdoorPlane{services}.clipSegment(from, fromOwner, to)
 	}
 	return cavePlane{services}.clipSegment(from, fromOwner, to)
+}
+
+/*
+================
+pairIsOutdoor
+
+Whether a chord's pair belongs to the outdoor plane: both ends
+outdoors. A pair with any cave end is the cave's, whose operations
+treat a chord across regions as no walk at all (the boundary is
+crossed only by teleport). Every pair dispatcher picks its plane here.
+================
+*/
+func pairIsOutdoor(a, b uint16) bool {
+	return simulation.PlaneKindOf(a) == simulation.PlaneOutdoor && simulation.PlaneKindOf(b) == simulation.PlaneOutdoor
 }
 
 /*
@@ -77,14 +91,16 @@ func (outdoorPlane) arrivalKeepsRest() bool { return false }
 ================
 cavePlane.clipSegment
 
-The dungeon clip (dungeon_clip.go): object contacts, edge cuts sampled
-for floor, and obstacle circles. It refuses a chord whose endpoints sit
-in different regions. The start owner is unused: a cave start resolves
-by its floor height.
+The original's dungeon walk (dungeon_walk.go) from the start's retained
+cell (fromOwner, #1727), or the cell under the start where the owner
+does not hold it. It refuses a chord whose endpoints sit in different
+regions.
 ================
 */
-func (c cavePlane) clipSegment(from simulation.Spawn, _ simulation.NavOwner, to simulation.Spawn) (ClipReport, *navWalk) {
-	return c.water.clipDungeonPath(from, to), nil
+func (c cavePlane) clipSegment(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) (ClipReport, *navWalk) {
+	// The original's dungeon walk from the mover's retained cell (#1728):
+	// it reports the rest's owner itself.
+	return c.water.walkDungeon(from, fromOwner, to), nil
 }
 
 /*

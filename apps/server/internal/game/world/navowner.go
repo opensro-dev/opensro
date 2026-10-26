@@ -16,6 +16,10 @@ const (
 	NavOwnerTerrain
 	// NavOwnerObject: one triangle cell of a placed object nav mesh owns it.
 	NavOwnerObject
+	// NavOwnerDungeon: one cell of a dungeon block's nav mesh owns it.
+	// Object names it: Surface is the dungeon region, Object the block's
+	// DOF ordinal, Mesh and Cell the cell (#1727).
+	NavOwnerDungeon
 )
 
 // NavObjectCell addresses one object nav cell the way the movement authority
