@@ -122,6 +122,37 @@ def bug_report_environment(config):
 
 
 # ================
+# webtransport_deployer
+#
+# The public WebTransport posture as release configuration (issue #1447):
+# the switch rides the deployer's environment, which sro-nomad captures
+# as the webtransport_public job variable, and the public UDP bind and
+# TLS pair ride its arguments. A config without the keys deploys exactly
+# as before. A switch of "on" with an incomplete posture is refused here,
+# before the deployer runs; sro-nomad refuses it again on its side, and
+# the GameWorld again at boot. The posture keys without the switch are a
+# half-posture and deploy nothing either.
+# ================
+def webtransport_deployer(config):
+	public = config.get("webtransport_public", "")
+	if public not in ("", "on", "off"):
+		raise ValueError("webtransport_public must be on, off or unset")
+	keys = ("transport_wt_addr", "transport_cert_file", "transport_key_file")
+	if public != "on":
+		for key in keys:
+			if config.get(key):
+				raise ValueError(key + " requires webtransport_public on; a half-posture deploys nothing")
+		return ({"SRO_WEBTRANSPORT_PUBLIC": public} if public else {}), []
+	arguments = []
+	for key, flag in zip(keys, ("-transport-wt-addr", "-transport-cert-file", "-transport-key-file")):
+		value = config.get(key, "")
+		if not isinstance(value, str) or not value.strip():
+			raise ValueError("webtransport_public is on but " + key + " is not configured")
+		arguments += [flag, value.strip()]
+	return {"SRO_WEBTRANSPORT_PUBLIC": "on"}, arguments
+
+
+# ================
 # run
 #
 # Pass arguments directly to the executable and let failures stop the rollout.
@@ -494,12 +525,14 @@ def deployer(config, stack_sizes):
 	issued = run(["nomad", "acl", "token", "create", "-name", "github-server-release", "-type", "client",
 		"-global=false", "-policy", "sro-deployer", "-ttl", "1h", "-json"], env=management, capture=True)
 	token = json.loads(issued.stdout)
+	wt_environment, wt_arguments = webtransport_deployer(config)
 	environment = dict(CLEAN_ENV, NOMAD_ADDR="http://127.0.0.1:4646", NOMAD_NAMESPACE="sro",
 		NOMAD_TOKEN=token["SecretID"], SRO_SERVER_GAME_DATA_ROOT=config["game_data"],
 		SRO_STACK_SIZES=stack_sizes,
-		**bug_report_environment(config))
+		**bug_report_environment(config), **wt_environment)
 	arguments = ["-namespace", "sro", "-task-user", "sro", "-allowed-origins", config["origin"],
-		"-agent-memory-mb", str(config["agent_memory_mb"]), "-gameworld-memory-mb", str(config["gameworld_memory_mb"])]
+		"-agent-memory-mb", str(config["agent_memory_mb"]), "-gameworld-memory-mb", str(config["gameworld_memory_mb"]),
+		*wt_arguments]
 	return management, token, environment, arguments
 
 
