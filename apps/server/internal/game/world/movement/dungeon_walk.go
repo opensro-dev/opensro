@@ -38,9 +38,9 @@ const (
 	// dungeonOwnerSlackUnits is how far outside its retained cell a leg
 	// may start and still keep the cell (the native start handling moves
 	// it onto the cell); a farther owner is stale and the start relocates.
-	// A doorway's crossing point sits on the source block's edge, off the
-	// landing cell by the seam gap: 0.0046 units in Donwhang, 0.24 at some
-	// of its doorways.
+	// A doorway hand-over already enters the landing cell (enterLanding);
+	// this covers a mover's own retained cell after a sub-unit move such
+	// as wire truncation of its coordinates.
 	dungeonOwnerSlackUnits = 1.0
 	// dungeonWalkEndEpsilon is how close to the chord's end a leg's last
 	// span must reach to count as arrived.
@@ -193,7 +193,8 @@ func (s *dungeonSpawnSurface) walkLeg(state dungeonWalkState, to simulation.Spaw
 	if flags&dungeonDoorwayFlag != 0 {
 		if next, ok := s.landing(state.block, edge); ok {
 			wx, wz := state.x+(to.X-state.x)*endT, state.z+(to.Z-state.z)*endT
-			return dungeonWalkState{block: next.block, cell: next.cell, x: wx, z: wz}, dungeonResultDoorway | dungeonResultSlid, work
+			next.x, next.z = s.enterLanding(next, wx, wz)
+			return next, dungeonResultDoorway | dungeonResultSlid, work
 		}
 		return s.contactAt(state, to, mesh, &mesh.outline, edge, lastCell, x0, z0, x1, z1), monster.NavResultBlocked, work
 	}
@@ -337,6 +338,26 @@ func (s *dungeonSpawnSurface) landing(block, edge int) (dungeonWalkState, bool) 
 
 /*
 ================
+dungeonSpawnSurface.enterLanding
+
+Where a doorway crossing enters the landing cell. Linked doorways are
+matched within five units (resolveDungeonLinks), so the crossing on the
+source block's edge can lie off the landing cell - by up to 4.2 units on
+the shipped tomb floors. The original enters the landing cell as it
+enters any retained cell from outside: the line from the point to the
+cell's centroid is cut at the cell's edge and the cut nudged inward
+(ownedCellStart). A point already inside stays.
+================
+*/
+func (s *dungeonSpawnSurface) enterLanding(landing dungeonWalkState, x, z float64) (float64, float64) {
+	block := &s.blocks[landing.block]
+	lx, lz := block.local(x, z)
+	lx, lz = ownedCellStart(block.meshes[0], landing.cell, lx, lz)
+	return block.world(lx, lz)
+}
+
+/*
+================
 dungeonSpawnSurface.contactAt
 
 The native rest for an edge contact (nativeObjectContact: the crossing
@@ -350,8 +371,9 @@ func (s *dungeonSpawnSurface) contactAt(state dungeonWalkState, to simulation.Sp
 	if !contact.valid {
 		return s.pulledBack(state, to, 0, cell)
 	}
+	// The native contact stores the world point as float32.
 	wx, wz := s.blocks[state.block].world(contact.x, contact.z)
-	return dungeonWalkState{block: state.block, cell: cell, x: wx, z: wz}
+	return dungeonWalkState{block: state.block, cell: cell, x: contactF32(wx), z: contactF32(wz)}
 }
 
 /*

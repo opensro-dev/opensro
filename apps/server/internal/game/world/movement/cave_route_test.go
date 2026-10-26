@@ -165,20 +165,23 @@ caveLegArrives
 
 Whether a mover walking a leg reaches its point: query after query, as the
 mover re-issues a step that settled at a doorway (a short step across one
-stops there, as the original's query loop does, #1728), failing on any
-block.
+stops there, as the original's query loop does, #1728), carrying the cell
+it reached as the mover does (LiveNavOwner); failing on any block.
 ================
 */
 func caveLegArrives(v *WaterValidator, at, point monster.Pose) bool {
+	from := simulation.Spawn{RegionID: at.RegionID, X: at.X, Y: at.Y, Z: at.Z}
+	to := simulation.Spawn{RegionID: point.RegionID, X: point.X, Y: point.Y, Z: point.Z}
+	owner := simulation.NavOwner{}
 	for step := 0; step < 8; step++ {
-		path := v.PlanMonsterPath(at, point)
-		if path == nil || path.Result()&(monster.NavResultBlocked|monster.NavResultClipped) != 0 {
+		report := v.ClipMovementPathFrom(from, owner, to)
+		if report.NativeResult&(monster.NavResultBlocked|monster.NavResultClipped) != 0 {
 			return false
 		}
-		if routeDistance(path.Rest(), point) < .01 {
+		if math.Hypot(report.Rest.X-to.X, report.Rest.Z-to.Z) < .01 {
 			return true
 		}
-		at = path.Rest()
+		from, owner = report.Rest, report.RestOwner
 	}
 	return false
 }
