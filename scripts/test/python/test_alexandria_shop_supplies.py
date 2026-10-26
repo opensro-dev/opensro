@@ -193,6 +193,17 @@ class MergeTests(unittest.TestCase):
 		self.assertNotIn("STORE_SD_ACCESSORY_TAB4", {r[3] for r in table_rows(merged["refshoptab.txt"])})
 		self.assertIn("PACKAGE_ITEM_ETC_ARCHEMY_MAGICSTONE_HP_11", summary["missing"])
 
+	def test_reentry_authors_no_second_degree_11_tab(self):
+		merged, _ = self.merge()
+		again, summary = supplies.merge_supplies(merged, ITEMS)
+		tabs = {r[3] for r in table_rows(again["refshoptab.txt"])}
+		self.assertEqual(tabs, {r[3] for r in table_rows(merged["refshoptab.txt"])})
+		self.assertNotIn("STORE_SD_ACCESSORY_TAB5", tabs)
+		for tab in ("STORE_SD_POTION_TAB1", "STORE_SD_ACCESSORY_TAB3", "STORE_SD_ACCESSORY_TAB4"):
+			self.assertEqual([r[3] for r in goods_of(again, tab)], [r[3] for r in goods_of(merged, tab)])
+		self.assertEqual(summary["goods"], 0)
+		self.assertEqual(summary["packages"], 0)
+
 	def test_a_tab_never_passes_the_native_maximum(self):
 		full = [f"PACKAGE_ITEM_ETC_FILLER_{n:02d}" for n in range(44)]
 		merged, _ = self.merge(alchemy_goods=full)

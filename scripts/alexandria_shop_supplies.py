@@ -251,10 +251,8 @@ def merge_supplies(raw, items):
 
 	# Alchemy on the accessory store's own alchemy tab, degree 11 on a
 	# second tab of the same group.
-	alchemy_tab = next(
-		(t for group in groups_of_store[ACCESSORY_STORE] for t in tabs_of_group[group] if len(t) >= 6 and t[5] == ALCHEMY_TAB_NAME),
-		None
-	)
+	alchemy_tabs = [t for group in groups_of_store[ACCESSORY_STORE] for t in tabs_of_group[group] if len(t) >= 6 and t[5] == ALCHEMY_TAB_NAME]
+	alchemy_tab = alchemy_tabs[0] if alchemy_tabs else None
 	# An alchemy tab with no goods has no row to copy new goods from; it
 	# counts as no tab at all.
 	if alchemy_tab is not None and not goods_by_tab[alchemy_tab[3]]:
@@ -267,7 +265,17 @@ def merge_supplies(raw, items):
 			replaced_tabs[alchemy_tab[3]] = stocked
 			summary["goods"] += count
 		degree11 = [code for code in alchemy_items(ALCHEMY_DEGREES[1]) if code in items]
-		if degree11:
+		if degree11 and len(alchemy_tabs) > 1:
+			# A second alchemy tab is already there (staged by a previous
+			# build): it is the degree 11 tab, restocked in place, never
+			# authored twice.
+			second = alchemy_tabs[1]
+			template = goods_by_tab[second[3]][0] if goods_by_tab[second[3]] else goods_row
+			stocked, count = stock_tab(second[3], degree11, degree9_source, template)
+			if count:
+				replaced_tabs[second[3]] = stocked
+				summary["goods"] += count
+		elif degree11:
 			group_tabs = tabs_of_group[alchemy_tab[4]]
 			numbers = [int(m.group(1)) for t in group_tabs if (m := TAB_NUMBER.search(t[3]))]
 			stem = TAB_NUMBER.sub("", alchemy_tab[3])
