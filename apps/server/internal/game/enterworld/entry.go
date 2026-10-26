@@ -292,7 +292,8 @@ const spawnUndergroundToleranceUnits = 2.0
 // placed the player INSIDE the mountain at the (now correctly folded) x/z.
 //
 // Only lifts when no nearer object surface explains the saved stand. A deck
-// can lie below the heightmap. Never lowers; dungeon regions are exempt.
+// can lie below the heightmap. Never lowers; cave spawns stand on their
+// dungeon surface instead (simulation.PlaneFeatures.SpawnTerrainLift).
 // Returns whether the spawn was lifted.
 func LiftSpawnAboveTerrain(entry *LocalPlayerEntry, heightAt func(regionID uint16, x, z float64) (float64, bool), surfaceAt func(regionID uint16, x, authoredY, z float64) (float64, bool)) bool {
 	if entry == nil || heightAt == nil {
@@ -300,7 +301,7 @@ func LiftSpawnAboveTerrain(entry *LocalPlayerEntry, heightAt func(regionID uint1
 	}
 	profile := &entry.StartProfile
 	regionID := uint16(profile.RegionID)
-	if simulation.IsDungeonRegion(regionID) {
+	if !simulation.FeaturesAt(regionID).SpawnTerrainLift {
 		return false
 	}
 	terrainY, ok := heightAt(regionID, profile.X, profile.Z)
@@ -329,15 +330,16 @@ func LiftSpawnAboveTerrain(entry *LocalPlayerEntry, heightAt func(regionID uint1
 // path out clipped at the island edge), strands the player. When the
 // relocator reports the point stranded, the entry takes the nearest
 // mainland rescue point, or falls back to the race start profile when no
-// rescue exists within the search radius. Dungeon regions are exempt (no
-// outdoor walkability plane). Returns whether the spawn was changed.
+// rescue exists within the search radius. Cave regions are exempt (no
+// outdoor walkability plane; simulation.PlaneFeatures.SpawnStrandedRescue).
+// Returns whether the spawn was changed.
 func RescueStrandedSpawn(entry *LocalPlayerEntry, relocate func(simulation.Spawn) (simulation.Spawn, bool, bool)) bool {
 	if entry == nil || relocate == nil {
 		return false
 	}
 	profile := &entry.StartProfile
 	regionID := uint16(profile.RegionID)
-	if simulation.IsDungeonRegion(regionID) {
+	if !simulation.FeaturesAt(regionID).SpawnStrandedRescue {
 		return false
 	}
 	rescued, stranded, rescueFound := relocate(simulation.Spawn{

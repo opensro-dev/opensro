@@ -17,13 +17,20 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/quic-go/quic-go/http3"
+	"github.com/quic-go/webtransport-go"
 	"opensro.online/server/internal/transport"
 )
 
@@ -213,5 +220,204 @@ func TestProbeLoopbackBadTicketFailsAtWelcome(t *testing.T) {
 	}
 	if se.stage != "welcome" {
 		t.Fatalf("probe error stage = %q, want welcome (%v)", se.stage, err)
+	}
+}
+
+/*
+================
+TestProbeHealthRefusesStranger
+
+The health check needs no credential: the fixture's ordinary refusal
+of the fixed non-credential is the pass line.
+================
+*/
+func TestProbeHealthRefusesStranger(t *testing.T) {
+	srv := startProbeServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), probeTestConnectTimeout)
+	defer cancel()
+	line, err := probeHealth(ctx, probeConfig{
+		Base:    "http://" + srv.WSAddr(),
+		WTAddr:  srv.WTAddr(),
+		Timeout: probeTestIOTimeout,
+		CACert:  caCertFile(t, srv),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(line, "stranger-refused") {
+		t.Fatalf("health line = %q, want the stranger-refused line", line)
+	}
+	t.Log(line)
+}
+
+/*
+================
+TestProbeHealthFailsWhenStrangersAreWelcomed
+
+An endpoint whose verifier waves everyone in must fail the health
+check at the admission stage: a welcoming endpoint is exactly what
+the outside check exists to catch.
+================
+*/
+func TestProbeHealthFailsWhenStrangersAreWelcomed(t *testing.T) {
+	srv := startProbeServer(t)
+	srv.Hub.SetHelloAuth(func(_ []byte) (transport.AdmissionIdentity, error) {
+		return transport.AdmissionIdentity{AccountID: "anyone", ShardID: "global-official"}, nil
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), probeTestConnectTimeout)
+	defer cancel()
+	_, err := probeHealth(ctx, probeConfig{
+		Base:    "http://" + srv.WSAddr(),
+		WTAddr:  srv.WTAddr(),
+		Timeout: probeTestIOTimeout,
+		CACert:  caCertFile(t, srv),
+	})
+	if err == nil {
+		t.Fatal("health check passed an endpoint that welcomes strangers")
+	}
+	var se *stageError
+	if !errors.As(err, &se) {
+		t.Fatalf("health error type = %T, want *stageError (%v)", err, err)
+	}
+	if se.stage != "admission" {
+		t.Fatalf("health error stage = %q, want admission (%v)", se.stage, err)
+	}
+}
+
+/*
+================
+byeEndpointConfig
+
+A WebTransport endpoint with no hub behind it: it serves the
+certificate hash on TCP, answers the first stream's HELLO with one
+BYE carrying the given reason, and then holds the session open, so
+the probe's frame path - not the session-close witness - decides
+the verdict.
+================
+*/
+func byeEndpointConfig(t *testing.T, reason byte) probeConfig {
+	t.Helper()
+	certificate, err := transport.LoadCertificate("", "", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hashListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hashMux := http.NewServeMux()
+	hashMux.HandleFunc(transport.PathCertHash, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(certHashDoc{
+			SHA256Hex: certificate.SHA256Hex(),
+			NotAfter:  certificate.Leaf.NotAfter.UTC().Format(time.RFC3339),
+		})
+	})
+	go func() { _ = http.Serve(hashListener, hashMux) }()
+	t.Cleanup(func() { _ = hashListener.Close() })
+
+	mux := http.NewServeMux()
+	h3 := &http3.Server{
+		TLSConfig: &tls.Config{
+			Certificates: []tls.Certificate{certificate.TLS},
+			MinVersion:   tls.VersionTLS13,
+			NextProtos:   []string{http3.NextProtoH3},
+		},
+		Handler: mux,
+	}
+	server := &webtransport.Server{
+		H3:          h3,
+		CheckOrigin: func(*http.Request) bool { return true },
+	}
+	webtransport.ConfigureHTTP3Server(h3)
+	mux.HandleFunc(transport.PathWT, func(w http.ResponseWriter, r *http.Request) {
+		sess, err := server.Upgrade(w, r)
+		if err != nil {
+			return
+		}
+		stream, err := sess.AcceptStream(r.Context())
+		if err != nil {
+			return
+		}
+		if _, err := transport.ReadStreamFrame(stream); err != nil {
+			return
+		}
+		if err := transport.WriteStreamFrame(stream, transport.Frame{
+			Opcode:  transport.OpBye,
+			Payload: []byte{reason},
+		}); err != nil {
+			return
+		}
+		// Hold the session open: the probe's close, not ours, ends it.
+		_, _ = transport.ReadStreamFrame(stream)
+	})
+	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() { _ = server.Serve(udpConn) }()
+	t.Cleanup(func() {
+		_ = server.Close()
+		_ = udpConn.Close()
+	})
+
+	caPath := filepath.Join(t.TempDir(), "ca.pem")
+	raw := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificate.Leaf.Raw})
+	if err := os.WriteFile(caPath, raw, probeTestCAFileMode); err != nil {
+		t.Fatal(err)
+	}
+	return probeConfig{
+		Base:    "http://" + hashListener.Addr().String(),
+		WTAddr:  udpConn.LocalAddr().String(),
+		Timeout: probeTestIOTimeout,
+		CACert:  caPath,
+	}
+}
+
+/*
+================
+TestProbeHealthAcceptsUnauthorizedBye
+
+The frame direction of the refusal: a BYE(unauthorized) that actually
+arrives is the pass line, without the session closing at all.
+================
+*/
+func TestProbeHealthAcceptsUnauthorizedBye(t *testing.T) {
+	cfg := byeEndpointConfig(t, transport.ByeReasonUnauthorized)
+	ctx, cancel := context.WithTimeout(context.Background(), probeTestConnectTimeout)
+	defer cancel()
+	line, err := probeHealth(ctx, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(line, "stranger-refused") {
+		t.Fatalf("health line = %q, want the stranger-refused line", line)
+	}
+}
+
+/*
+================
+TestProbeHealthRejectsWrongByeReason
+
+A BYE for any other reason - server-busy at handshake saturation is
+the production case - is not a stranger refusal: the health check
+fails at the admission stage instead of reporting the endpoint
+healthy while it turns pre-WELCOME strangers away for load.
+================
+*/
+func TestProbeHealthRejectsWrongByeReason(t *testing.T) {
+	cfg := byeEndpointConfig(t, transport.ByeReasonServerBusy)
+	ctx, cancel := context.WithTimeout(context.Background(), probeTestConnectTimeout)
+	defer cancel()
+	_, err := probeHealth(ctx, cfg)
+	if err == nil {
+		t.Fatal("health check passed a BYE that was not a stranger refusal")
+	}
+	var se *stageError
+	if !errors.As(err, &se) {
+		t.Fatalf("health error type = %T, want *stageError (%v)", err, err)
+	}
+	if se.stage != "admission" {
+		t.Fatalf("health error stage = %q, want admission (%v)", se.stage, err)
 	}
 }

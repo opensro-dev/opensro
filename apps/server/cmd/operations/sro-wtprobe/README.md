@@ -19,6 +19,21 @@ UDP endpoint for WT. `-ca-cert bundle.pem` adds development roots to HTTPS,
 WSS and QUIC verification. WT additionally requires the UDP certificate to
 match the leaf hash advertised by `/transport/cert-hash`.
 
+## The stranger check
+
+```sh
+go -C apps/server run ./cmd/operations/sro-wtprobe -health -url https://play.example.net
+```
+
+`-health` is the credential-free outside check, the mode to run from
+beyond the host on a schedule: it completes the same verified handshake
+and served-certificate pin, presents a fixed non-credential in HELLO,
+and passes only on the refusal — the BYE(unauthorized) frame, or the
+session close whose reason names the refusal (on WebTransport the close
+can overtake the BYE). A WELCOME there fails the check — the endpoint
+admits anyone. A fixture that admits every ticket fails `-health` on
+purpose; its welcoming proof is the ticketed smoke.
+
 ## One measurement arm
 
 ```sh
