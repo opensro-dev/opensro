@@ -34,8 +34,9 @@ file does not fit the v1.150 mesh) keeps the port's route.
 Port-only, not native (SRO_CAVE_SEAM_STEP, owner 2026-10-26, on): a
 doorway's landing point can sit a few ten-thousandths past a whole unit
 on the far side, so the truncated step lands short of the seam, still in
-the portal cell, and the next call steps along the seam again - 21 of
-Donwhang's 300 doorways trap a chasing monster this way in the original.
+the portal cell, and the next call steps along the seam again - 5 of
+Donwhang's 300 doorways trap a chasing monster this way in the original
+(with the cell walk, #1728; TestCaveSeamStepFreesEveryDoorway).
 With the switch on, only such a step - a landing step inside the 5-unit
 minimum that runs along the doorway's own edge (the actor stands on the
 seam's line) and whose truncated destination stays in the current block -
