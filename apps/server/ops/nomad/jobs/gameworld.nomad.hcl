@@ -914,9 +914,17 @@ variable "public_api_addr" {
   default = "127.0.0.1:8790"
 }
 
+# The GameWorld's tick must never wait behind another job's burst.
+# Nomad turns a task's cpu (MHz) into its cgroup CPU weight, so under
+# contention each task's share is its own reservation over the sum of
+# the contending reservations; weights cost nothing on an idle host.
+# The default therefore outweighs the Agent's reservation (500) by
+# more than ten to one. An operator value (-gameworld-cpu) replaces
+# it: keep it at least ten times the largest other reservation on the
+# host, and below the node's total compute, or the job cannot place.
 variable "cpu" {
   type    = number
-  default = 2000
+  default = 6000
 }
 
 variable "memory_mb" {
