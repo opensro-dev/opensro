@@ -568,6 +568,7 @@ func (rt *Runtime) ivy3CreditKill(division, name string, def *Definition) {
 		if at < 0 {
 			return false
 		}
+		credited := false
 		if rt.PlanInventory != nil {
 			var take []inventory.ItemAmount
 			if horns := captureItemCount(character, ivy3HornCodename); horns > 0 {
@@ -575,6 +576,7 @@ func (rt *Runtime) ivy3CreditKill(division, name string, def *Definition) {
 			}
 			var give []inventory.ItemAmount
 			if held := captureItemCount(character, ivy3KeyCodename); held > 0 {
+				credited = true
 				take = append(take, inventory.ItemAmount{Codename: ivy3KeyCodename, Count: held})
 				if captureItemCount(character, ivy3HairCodename) == 0 {
 					give = append(give, inventory.ItemAmount{Codename: ivy3HairCodename, Count: 1})
@@ -588,7 +590,14 @@ func (rt *Runtime) ivy3CreditKill(division, name string, def *Definition) {
 				}
 			}
 		}
-		updated, changed := refreshMissions(character, def, character.ActiveQuests[at], "", 0)
+		// The Ivy hunt ticks only for a credited resident: the
+		// keyless leave with their Horns gone and no achievement,
+		// as the evaluator's key count leaves them.
+		killed := ""
+		if credited {
+			killed = ivy3BossCodename
+		}
+		updated, changed := refreshMissions(character, def, character.ActiveQuests[at], killed, 0)
 		if changed {
 			frames = append(frames, missionProgressFrames(def, character.ActiveQuests[at], updated)...)
 			character.ActiveQuests[at] = updated

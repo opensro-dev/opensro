@@ -77,7 +77,8 @@ type MonsterDef struct {
 	EventStructID  uint32
 	StructureState uint16
 	TypeID4        uint8
-	// TradeNpc rows end with TradeVariant (CGObjMob_WriteSpawnData 4C1930).
+	// TradeNpc rows end with TradeVariant (the native spawn-data
+	// writer).
 	TradeNpc     bool
 	TradeVariant uint8
 }
@@ -262,7 +263,7 @@ func MonsterWireDefFromInstance(instance monster.Instance, nowMs int64) MonsterD
 	ref := instance.Ref
 	def := MonsterDef{
 		RefObjID: ref.RefObjID, TidWord: ref.TidWord, Codename: ref.Codename,
-		// The live speeds: graded (4C1690) and under any slowing status.
+		// The live speeds: grade-scaled and under any slowing status.
 		Name: ref.DisplayName(), WalkSpeed: instance.WalkSpeed(), RunSpeed: instance.RunSpeed(),
 		ScaleDenom: instance.ActionSpeed(), Rarity: instance.Rarity(),
 		MotionState: instance.Motion.StateAt(nowMs),
