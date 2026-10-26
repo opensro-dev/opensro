@@ -49,7 +49,7 @@ func (rt *Runtime) OperatorTowns() []OperatorTown {
 		return rows
 	}
 	for _, destination := range rt.portals.destinations {
-		if destination.recall && destination.ref != 0 && destination.spawn.RegionID != 0 && !simulation.IsDungeonRegion(destination.spawn.RegionID) {
+		if destination.recall && destination.ref != 0 && destination.spawn.RegionID != 0 && simulation.PlaneKindOf(destination.spawn.RegionID) == simulation.PlaneOutdoor {
 			rows = append(rows, OperatorTown{destination.id, destination.code, destination.spawn})
 		}
 	}

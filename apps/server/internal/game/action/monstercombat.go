@@ -17,6 +17,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
+	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -302,7 +303,7 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 	// SR_GameServer 585C67/585CD1 revalidates an owned cast, not its
 	// AutoCommand approach radius. Target movement after admission cannot
 	// cancel release. Identity, life, status and coordinate plane still apply.
-	if !spacingOK || simulation.IsDungeonRegion(monsterPose.RegionID) != simulation.IsDungeonRegion(playerPose.RegionID) {
+	if !spacingOK || !worldgeom.SamePlane(monsterPose.RegionID, playerPose.RegionID) {
 		return result
 	}
 	if release == nil && !spacing.Contains(simulation.Spawn{

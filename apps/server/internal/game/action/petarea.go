@@ -17,7 +17,7 @@ import (
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
-	"opensro.online/server/internal/game/world/simulation"
+	worldgeom "opensro.online/server/internal/game/world"
 )
 
 /*
@@ -82,7 +82,7 @@ func (rt *Runtime) petAreaTargets(step petCombatStep, primary petCombatTarget, s
 	}
 	world := domain.CharacterWorldInstance(step.snapshot)
 	for _, present := range rt.PopulationPlayers(step.key.division, step.nowMs) {
-		if present.World != world || simulation.IsDungeonRegion(present.Spawn.RegionID) != simulation.IsDungeonRegion(from.RegionID) {
+		if present.World != world || !worldgeom.SamePlane(present.Spawn.RegionID, from.RegionID) {
 			continue
 		}
 		owner := rt.findCharacterByGid(step.key.division, present.GID)

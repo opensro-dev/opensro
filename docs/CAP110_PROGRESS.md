@@ -137,9 +137,10 @@ or drop chances were invented or enabled.
 
 Explicit limitations:
 
-- 56 Egyptian set weapons are deferred because their set references need
-  their own runtime mechanics. Event and fortress tools are outside the
-  ordinary weapon selection.
+- The 376 set rows (56 Egyptian set weapons among them) import dormant
+  with the rest, beside their validated group catalogue; set bonuses need
+  their own runtime mechanics and are not applied. Event and fortress
+  tools are outside the ordinary weapon selection.
 - 39 degree-12 item links in degree-11 rare weapon parameter labels are
   trimmed and individually recorded. This is an explicit port-only scope
   inference: the degree-12 conversion feature is outside the v1.150/110-cap
@@ -230,7 +231,9 @@ Authored circlets and accessories may have no worn mesh. They retain their
 icon and drop model, and the existing equipment renderer owns their visual
 absence. Requirements, sex, race and combat statistics remain authored.
 All 824 imported IDs and localized names pass the production server item
-loader. Set gear remains deferred (376 rows); 279 explicit degree-12 links
+loader. Set gear (376 rows) imports dormant beside its chain-validated
+group catalogue (refsetitemgroup plus the MAGIC_11_SET_* rows of
+refmagicoptgroup); no set bonuses are applied. 279 explicit degree-12 links
 are trimmed and recorded. Missing authored descriptions remain absent.
 
 The resource audit verifies 770 files, including ambient shoulder effects
