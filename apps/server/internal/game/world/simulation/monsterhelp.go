@@ -54,7 +54,7 @@ func (ops *MonsterMoverOps) handleHelp(division string, expected monster.Instanc
 	}
 	target, validTarget := eligiblePlayerByGid(instance, players, event.TargetGID)
 	accepted := instance.Nest.HasControls && instance.Nest.Controls.HelpReceiverHeader(event, mover.InNativeBattle(), instance.CurrentHP, instance.EffectiveMaxHP()) && validSource && validTarget && ordinaryPlayerHostility(instance, target)
-	live := mover.LivePoseAt(now, ops.TerrainHeight)
+	live := mover.LivePoseAt(now, ops.GroundHeight)
 	if accepted {
 		distance := tacticsDistance3D(live, monster.Pose{RegionID: target.Pose.RegionID, X: target.Pose.X, Y: target.Pose.Y, Z: target.Pose.Z})
 		accepted = monsterWithinHomeTrace(instance, live, distance)
