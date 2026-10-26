@@ -25,7 +25,7 @@ func (s *MonsterState) detachNestLocked(state *divisionMonsterState, gid uint32,
 // activity, queued commands, and OnTick. Preserve that ordering even if the
 // planned detachment loses admission to a concurrent actor update.
 func (ops *MonsterMoverOps) detachCrossPlaneNest(division string, actor monster.Instance, mover monster.MoverState, now int64) bool {
-	if actor.NestDetached || (actor.Nest.RegionID^mover.LivePoseAt(now, ops.TerrainHeight).RegionID)&0x8000 == 0 {
+	if actor.NestDetached || (actor.Nest.RegionID^mover.LivePoseAt(now, ops.GroundHeight).RegionID)&0x8000 == 0 {
 		return false
 	}
 	s := ops.Monsters
