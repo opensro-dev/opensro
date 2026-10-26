@@ -306,3 +306,64 @@ func TestMoverStuckProgressAndStateResets(t *testing.T) {
 		t.Fatalf("stuck state not cleared by MoverEventStuckIdled: failures=%d stuck=%v", m.Progress().Failures(), m.Stuck())
 	}
 }
+
+/*
+================
+TestMoverHomingGoalClearsOnBattleEntry
+
+The stored walk-home destination belongs to one homing episode. A matured
+leg settles into idle without ending the walk, so the mover carries the
+goal into idle; the next battle entry discards it there, and the following
+walk home selects a fresh one.
+================
+*/
+func TestMoverHomingGoalClearsOnBattleEntry(t *testing.T) {
+	goal := Pose{RegionID: 25000, X: 120, Z: 90}
+	mover := coherentMover(MoverReturning)
+	mover.SetHomingGoal(goal)
+	if err := mover.Transition(MoverEventSegmentArrived, 0); err != nil {
+		t.Fatalf("settled leg: %v", err)
+	}
+	if mover.Mode() != MoverIdle {
+		t.Fatalf("settled leg mode = %s, want idle", mover.Mode())
+	}
+	if stored, ok := mover.HomingGoal(); !ok || stored != goal {
+		t.Fatalf("arrival discarded the stored goal: %+v stored=%t", stored, ok)
+	}
+	if err := mover.Transition(MoverEventAggroAcquired, stateMachineTargetGID); err != nil {
+		t.Fatalf("battle entry: %v", err)
+	}
+	if mover.Mode() != MoverChasing {
+		t.Fatalf("battle entry mode = %s, want chasing", mover.Mode())
+	}
+	if _, ok := mover.HomingGoal(); ok {
+		t.Fatal("battle entry kept the previous walk's goal")
+	}
+}
+
+/*
+================
+TestMoverHomingGoalClearsOnNonArrivalExit
+
+An exit from returning that is not a settled arrival - here the homing
+timer maturing - ends the episode, and the stored goal is discarded
+with it.
+================
+*/
+func TestMoverHomingGoalClearsOnNonArrivalExit(t *testing.T) {
+	goal := Pose{RegionID: 25000, X: 120, Z: 90}
+	mover := coherentMover(MoverReturning)
+	mover.SetHomingGoal(goal)
+	if _, ok := mover.HomingGoal(); !ok {
+		t.Fatal("goal was not stored")
+	}
+	if err := mover.Transition(MoverEventHomingExpired, 0); err != nil {
+		t.Fatalf("homing expiry: %v", err)
+	}
+	if mover.Mode() != MoverIdle {
+		t.Fatalf("homing expiry mode = %s, want idle", mover.Mode())
+	}
+	if _, ok := mover.HomingGoal(); ok {
+		t.Fatal("non-arrival exit kept the ended walk's goal")
+	}
+}
