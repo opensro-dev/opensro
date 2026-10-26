@@ -15,8 +15,6 @@ package movement
 import (
 	"fmt"
 	"slices"
-
-	"opensro.online/server/internal/game/world/simulation"
 )
 
 /*
@@ -35,32 +33,19 @@ func (v *WaterValidator) PreloadOutdoorNavigation() (int, error) {
 	}
 	regions := make([]uint16, 0, len(catalog.RegionsByID))
 	for name := range catalog.RegionsByID {
-		region := parseRegionID(name)
-		if region != 0 && !simulation.IsDungeonRegion(region) {
+		if region := parseRegionID(name); region != 0 {
 			regions = append(regions, region)
 		}
 	}
 	slices.Sort(regions)
 	regions = slices.Compact(regions)
 	seen := make(map[*groundSurface]bool)
+	lookups := v.validatorPlanes()
+	count := 0
 	for _, region := range regions {
-		surface := v.surfaceForRegion(region)
-		if surface == nil || seen[surface] {
-			continue
-		}
-		seen[surface] = true
-		offsets := make([]int64, 0, len(surface.objectPlacementsByOffset))
-		for offset := range surface.objectPlacementsByOffset {
-			offsets = append(offsets, offset)
-		}
-		slices.Sort(offsets)
-		for _, offset := range offsets {
-			// offsetKey stores signed sector differences as dx*65536+dz.
-			// Recover the signed low word before dividing out the high word.
-			dz := int(int16(offset))
-			dx := int((offset - int64(dz)) / sectorOffsetStride)
-			v.objectNavSetForOffset(surface, dx, dz)
+		if lookups.preloadRegion(region, seen) {
+			count++
 		}
 	}
-	return len(regions), nil
+	return count, nil
 }
