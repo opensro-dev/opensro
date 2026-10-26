@@ -3,16 +3,25 @@
 
 check_plane_branches.mjs - caves and the open world have one plane owner
 
-#1646: the server's navigation behaviour for the two planes lives in the
-plane owner (simulation.Plane, implemented in movement/plane.go). Callers
-ask Planes.For(region) instead of testing the dungeon region bit, so the
-outdoor and cave versions of a job cannot drift apart.
+#1646: the behaviour of the two planes lives in one plane owner per side,
+so the outdoor and cave versions of a job cannot drift apart. Callers ask
+the owner instead of testing the dungeon region bit:
 
-In the server's Go sources (tests excluded), a reference to `IsDungeonRegion`
-or `DungeonRegionBit` is refused outside the owners below unless the
+  server  simulation.Plane / Planes.For(region), implemented in
+          movement/plane.go, and simulation.PlaneFeatures
+  client  foundation/world/plane.ts: planeKindOf and featuresAt (#1793)
+
+A reference to the bit (Go `IsDungeonRegion` / `DungeonRegionBit`, TypeScript
+`isDungeonRegion` / `DUNGEON_REGION_BIT`) in the server's Go sources or the
+client's src (tests excluded) is refused outside the owners below unless the
 file's count is at or below its entry in plane-branches-baseline.txt, a
 shrinking ledger (ledgerRatchet.mjs owns its rules). Each migration PR lowers
 the ledger with `--update`.
+
+The server's entries are gone (steps 1-3): on the server the region bit is
+plane-owner-only. The client's files ratchet down under #1793; when they
+are gone too, the ledger file stays, header only, because the checker reads
+it.
 
 ===========================================================================
 */
@@ -28,8 +37,8 @@ const baselinePath = path.join( rebuildRoot, "scripts", "checks", "plane-branche
 const LEDGER_NAME = "plane-branches-baseline.txt";
 
 const BASELINE_HEADER = [
-	"# Server Go files that branch on the dungeon region bit outside the plane",
-	"# owner (#1646). Format: `<path> <count>`. This ledger may only shrink; run",
+	"# Server Go and client src files that branch on the dungeon region bit outside",
+	"# the plane owners (#1646, #1793). Format: `<path> <count>`. This ledger may only shrink; run",
 	"# `node scripts/checks/check_plane_branches.mjs --update` after migrating a file."
 ];
 
@@ -42,7 +51,11 @@ export const PLANE_OWNERS = new Set( [
 	"apps/server/internal/game/world/simulation/plane.go",
 	"apps/server/internal/game/world/movement/plane.go",
 	// The interest buckets: position arithmetic keyed by the plane.
-	"apps/server/internal/game/world/simulation/mover_interest_index.go"
+	"apps/server/internal/game/world/simulation/mover_interest_index.go",
+	// The client's region arithmetic (the bit's definition) and its plane
+	// owner (#1793).
+	"apps/client-next/src/engine/foundation/world/world-space.ts",
+	"apps/client-next/src/engine/foundation/world/plane.ts"
 ] );
 
 const RATCHET_WORDS = {
@@ -53,8 +66,10 @@ const RATCHET_WORDS = {
 
 const GO_SOURCE = /^apps\/server\/.*\.go$/;
 const GO_TEST = /_test\.go$/;
-// A reference, not only a call: a predicate stored as a value branches too.
-const PLANE_BRANCH = /\bIsDungeonRegion\b|\bDungeonRegionBit\b/g;
+const CLIENT_SOURCE = /^apps\/client-next\/src\/.*\.(?:ts|tsx|js|mjs)$/;
+// A reference, not only a call: a predicate stored as a value (or an
+// import of it) branches too. Go and TypeScript spell the bit differently.
+const PLANE_BRANCH = /\bIsDungeonRegion\b|\bDungeonRegionBit\b|\bisDungeonRegion\b|\bDUNGEON_REGION_BIT\b/g;
 
 /*
 ================
@@ -109,13 +124,21 @@ export function evaluatePlaneRatchet( actual, baseline, exists, update = false )
 
 /*
 ================
-trackedServerSources
+trackedPlaneSources
+
+The server's Go sources (tests excluded) and the client's src, the owners
+aside.
 ================
 */
-function trackedServerSources() {
-	return execFileSync( "git", [ "ls-files", "-z", "--", "apps/server" ], { cwd: rebuildRoot, encoding: "utf8" } )
+function trackedPlaneSources() {
+	return execFileSync( "git", [ "ls-files", "-z", "--", "apps/server", "apps/client-next/src" ], {
+		cwd: rebuildRoot,
+		encoding: "utf8"
+	} )
 		.split( "\0" )
-		.filter( ( file ) => GO_SOURCE.test( file ) && !GO_TEST.test( file ) && !PLANE_OWNERS.has( file ) );
+		.filter( ( file ) =>
+			(GO_SOURCE.test( file ) && !GO_TEST.test( file ) || CLIENT_SOURCE.test( file )) && !PLANE_OWNERS.has( file )
+		);
 }
 
 /*
@@ -128,7 +151,7 @@ function main() {
 	const baseline = parseBaseline( readFileSync( baselinePath, "utf8" ) );
 	const actual = new Map();
 
-	for ( const file of trackedServerSources() ) {
+	for ( const file of trackedPlaneSources() ) {
 		const fullPath = path.join( rebuildRoot, file );
 		if ( !existsSync( fullPath ) ) {
 			continue;
