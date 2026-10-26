@@ -220,8 +220,8 @@ func TestGoria7EntryRowAndDayStamp(t *testing.T) {
 	if invite.Definition != goria7Definition || invite.Entry != goria7EntrySpawn {
 		t.Fatalf("invite = %+v, want definition 13 at the native point", invite)
 	}
-	if invite.DeadlineMs-*w.nowMs != goria7InviteLifeMs+goria7InviteSlackMs {
-		t.Fatalf("invite deadline = %d, want now + %d", invite.DeadlineMs, goria7InviteLifeMs+goria7InviteSlackMs)
+	if invite.DeadlineMs-*w.nowMs != 1_260_000+60_000 {
+		t.Fatalf("invite deadline = %d, want now + 1,320,000", invite.DeadlineMs)
 	}
 	if !w.rt.goria7EnteredToday(c, w.def) {
 		t.Fatal("the entry day was not stamped")
@@ -232,12 +232,19 @@ func TestGoria7EntryRowAndDayStamp(t *testing.T) {
 	if !offered || row.PromptSymbol != goria7SymEnterWait || !row.Informational {
 		t.Fatalf("the come-back row was %+v (offered %v)", row, offered)
 	}
-	// Once the proof stands in the bag the entry row is gone.
+	// Once the proof stands in the bag the entry row is gone,
+	// and the hunter answers the not-achieved line instead,
+	// the same row the native offer branch shows a proof
+	// holder (default row; probed 2026-10-26).
 	holdItems(t, w.rt, c, goria7ItemCodename, 1)
 	for _, row := range w.rt.OptionsForNpc(c, goria7NpcCodename) {
 		if row.Codename == goria7EntryPrefix+goria7QuestCodename {
 			t.Fatal("the entry row was offered to a proof holder")
 		}
+	}
+	row, offered = npcRow(w.rt, c, goria7QuestCodename, goria7NpcCodename)
+	if !offered || row.PromptSymbol != goria7SymNotAchieved || !row.Informational || row.Complete {
+		t.Fatalf("the proof-holder row was %+v (offered %v)", row, offered)
 	}
 	// A member who is not the talk leader cannot open the hunt.
 	member := goria7Accept(t, w, "EntryMember")
@@ -269,19 +276,34 @@ func TestGoria7ProofItemGates(t *testing.T) {
 	if admitted || !hasNotice(frames, goria7SymItemParty) || len(w.invites) != 0 {
 		t.Fatalf("party gate: admitted %v, invites %d", admitted, len(w.invites))
 	}
-	// A shared party in the wrong region: the region line.
+	// A shared party in the wrong region: the location line - the
+	// region is folded into the point the handler measures from.
 	w.facts = InstancePartyFacts{Found: true, InParty: true, Leader: true, Shared: true}
 	far := simulation.Spawn{RegionID: 25000, X: 0, Y: 0, Z: 0}
 	frames, admitted = w.rt.BeginItemUse(c, goria7ItemCodename, far, *w.nowMs)
-	if admitted || !hasNotice(frames, goria7SymItemRegion) || len(w.invites) != 0 {
+	if admitted || !hasNotice(frames, goria7SymItemLocation) || len(w.invites) != 0 {
 		t.Fatalf("region gate: admitted %v, invites %d", admitted, len(w.invites))
 	}
-	// In the region but far from the point: the distance line.
+	// In the region but far from the point: the same location line.
 	inRegion := simulation.Spawn{RegionID: 26991, X: 0, Y: 0, Z: 0}
 	frames, admitted = w.rt.BeginItemUse(c, goria7ItemCodename, inRegion, *w.nowMs)
-	if admitted || !hasNotice(frames, goria7SymItemFar) || len(w.invites) != 0 {
+	if admitted || !hasNotice(frames, goria7SymItemLocation) || len(w.invites) != 0 {
 		t.Fatalf("distance gate: admitted %v, invites %d", admitted, len(w.invites))
 	}
+	// At the point but not the party leader: the leader line - and
+	// a non-leader in the wrong region hears the location line
+	// first (the native order asks after the point before the
+	// leader).
+	w.facts = InstancePartyFacts{Found: true, InParty: true, Shared: true}
+	frames, admitted = w.rt.BeginItemUse(c, goria7ItemCodename, goria7EntrySpawn, *w.nowMs)
+	if admitted || !hasNotice(frames, goria7SymItemLeader) || len(w.invites) != 0 {
+		t.Fatalf("leader gate: admitted %v, invites %d", admitted, len(w.invites))
+	}
+	frames, admitted = w.rt.BeginItemUse(c, goria7ItemCodename, far, *w.nowMs)
+	if admitted || !hasNotice(frames, goria7SymItemLocation) || len(w.invites) != 0 {
+		t.Fatalf("leader-location order: admitted %v, invites %d", admitted, len(w.invites))
+	}
+	w.facts = InstancePartyFacts{Found: true, InParty: true, Leader: true, Shared: true}
 	// At the point the party is called in; the proof stays put
 	// (admitted is the caller's spend signal, and this use spends
 	// nothing - the delivery at the hunter spends it).

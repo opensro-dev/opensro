@@ -85,11 +85,11 @@ const (
 	goria7BossLeavesMs = 1_200_000
 	goria7LayerEndMs   = 1_210_000
 
-	// The native entry hands the layer a 1,259,488 ms lifetime
+	// The native entry hands the layer a 1,260,000 ms lifetime
 	// and a 60,000 ms entry window. The invitation deadline
 	// composes both; the programme ends the layer itself on the
 	// kill or the clock.
-	goria7InviteLifeMs  = 1_259_488
+	goria7InviteLifeMs  = 1_260_000
 	goria7InviteSlackMs = 60_000
 
 	// The proof item's use validates its point through the world
@@ -116,26 +116,26 @@ var goria7EntrySpawn = simulation.Spawn{RegionID: 26991, X: 1154, Y: 142, Z: 150
 
 // GORIA 7 dialogue and notice symbols (SN_TALK_QNO_CA_GORIA_7_*).
 const (
-	goria7SymOffer       = "SN_TALK_QNO_CA_GORIA_7_01"
-	goria7SymAccept      = "SN_TALK_QNO_CA_GORIA_7_02"
-	goria7SymDeny        = "SN_TALK_QNO_CA_GORIA_7_03"
-	goria7SymNotAchieved = "SN_TALK_QNO_CA_GORIA_7_04"
-	goria7SymEnter       = "SN_TALK_QNO_CA_GORIA_7_05"
-	goria7SymEnterRow    = "SN_TALK_QNO_CA_GORIA_7_06"
-	goria7SymComplete    = "SN_TALK_QNO_CA_GORIA_7_09"
-	goria7SymItemParty   = "SN_TALK_QNO_CA_GORIA_7_11"
-	goria7SymItemRegion  = "SN_TALK_QNO_CA_GORIA_7_12"
-	goria7SymItemFar     = "SN_TALK_QNO_CA_GORIA_7_13"
-	goria7SymBossLine    = "SN_TALK_QNO_CA_GORIA_7_14"
-	goria7SymBossDeath   = "SN_TALK_QNO_CA_GORIA_7_15"
-	goria7SymWarnFirst   = "SN_TALK_QNO_CA_GORIA_7_16"
-	goria7SymWarnSecond  = "SN_TALK_QNO_CA_GORIA_7_17"
-	goria7SymEnterAgain  = "SN_TALK_QNO_CA_GORIA_7_18"
-	goria7SymEnterWait   = "SN_TALK_QNO_CA_GORIA_7_19"
-	goria7SymBossLeaves  = "SN_TALK_QNO_CA_GORIA_7_23"
-	goria7SymNoOffer     = "SN_TALK_QNO_CA_GORIA_7_24"
-	goria7SymBattleBegun = "SN_TALK_QNO_CA_GORIA_7_25"
-	goria7SymCondition   = "UIIT_MSG_QUEST_INS_CONDITION"
+	goria7SymOffer        = "SN_TALK_QNO_CA_GORIA_7_01"
+	goria7SymAccept       = "SN_TALK_QNO_CA_GORIA_7_02"
+	goria7SymDeny         = "SN_TALK_QNO_CA_GORIA_7_03"
+	goria7SymNotAchieved  = "SN_TALK_QNO_CA_GORIA_7_04"
+	goria7SymEnter        = "SN_TALK_QNO_CA_GORIA_7_05"
+	goria7SymEnterRow     = "SN_TALK_QNO_CA_GORIA_7_06"
+	goria7SymComplete     = "SN_TALK_QNO_CA_GORIA_7_09"
+	goria7SymItemParty    = "SN_TALK_QNO_CA_GORIA_7_11"
+	goria7SymItemLeader   = "SN_TALK_QNO_CA_GORIA_7_12"
+	goria7SymItemLocation = "SN_TALK_QNO_CA_GORIA_7_13"
+	goria7SymBossLine     = "SN_TALK_QNO_CA_GORIA_7_14"
+	goria7SymBossDeath    = "SN_TALK_QNO_CA_GORIA_7_15"
+	goria7SymWarnFirst    = "SN_TALK_QNO_CA_GORIA_7_16"
+	goria7SymWarnSecond   = "SN_TALK_QNO_CA_GORIA_7_17"
+	goria7SymEnterAgain   = "SN_TALK_QNO_CA_GORIA_7_18"
+	goria7SymEnterWait    = "SN_TALK_QNO_CA_GORIA_7_19"
+	goria7SymBossLeaves   = "SN_TALK_QNO_CA_GORIA_7_23"
+	goria7SymNoOffer      = "SN_TALK_QNO_CA_GORIA_7_24"
+	goria7SymBattleBegun  = "SN_TALK_QNO_CA_GORIA_7_25"
+	goria7SymCondition    = "UIIT_MSG_QUEST_INS_CONDITION"
 )
 
 var goria7Specs = []QuestSpec{
@@ -277,9 +277,9 @@ useGoria7Item
 
 The proof item, used at the instance point: the second door into
 the layer. Native gate order: a shared party (its own line), the
-region itself (its own line), then reach of the point through
-the world search (its own line). The item is never spent - the
-delivery at the hunter spends it.
+entry point itself (its own line - the region is folded into the
+point it measures from), then the party leader (its own line).
+The item is never spent - the delivery at the hunter spends it.
 ================
 */
 func (rt *Runtime) useGoria7Item(c *enterworld.Character, def *Definition, at simulation.Spawn) ([]wire.Frame, bool) {
@@ -298,11 +298,11 @@ func (rt *Runtime) useGoria7Item(c *enterworld.Character, def *Definition, at si
 	if !facts.InParty || !facts.Shared {
 		return []wire.Frame{questNotification(goria7SymItemParty)}, false
 	}
-	if at.RegionID != goria7EntrySpawn.RegionID {
-		return []wire.Frame{questNotification(goria7SymItemRegion)}, false
+	if at.RegionID != goria7EntrySpawn.RegionID || !withinQuestArea(at, goria7EntrySpawn, goria7ItemRadius) {
+		return []wire.Frame{questNotification(goria7SymItemLocation)}, false
 	}
-	if !withinQuestArea(at, goria7EntrySpawn, goria7ItemRadius) {
-		return []wire.Frame{questNotification(goria7SymItemFar)}, false
+	if !facts.Leader {
+		return []wire.Frame{questNotification(goria7SymItemLeader)}, false
 	}
 	if rt.goria7.summonedBy(c.Name) {
 		return nil, false
