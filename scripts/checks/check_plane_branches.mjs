@@ -18,10 +18,10 @@ file's count is at or below its entry in plane-branches-baseline.txt, a
 shrinking ledger (ledgerRatchet.mjs owns its rules). Each migration PR lowers
 the ledger with `--update`.
 
-#1646 steps 1-3 migrated the server: its last entry goes with #1762, after
-which the region bit is plane-owner-only on the server. The client's files
-ratchet down under #1793; when they are gone too, the ledger file stays,
-header only, because the checker reads it.
+The server's ledger is empty (#1646 steps 1-3, closed with #1762): on the
+server the region bit is plane-owner-only, and any new reference fails this
+gate. The client's files ratchet down under #1793; when they are gone too,
+the ledger file stays, header only, because the checker reads it.
 
 ===========================================================================
 */
