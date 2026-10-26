@@ -714,6 +714,12 @@ import {
 	PARTY_OPTION
 } from "@/engine/foundation/ui/party-proposal";
 import {
+	cameraWaypointSaveText,
+	createCameraWaypointStore,
+	loadCameraDataKeyframes,
+	resetCameraWaypoints
+} from "@/engine/foundation/ui/camera-waypoints";
+import {
 	commandFloat,
 	commandInteger,
 	DEBUG_COMMAND_CAMERA_SPEED,
@@ -749,6 +755,11 @@ import {
 	DEBUG_COMMAND_TIME_SET,
 	DEBUG_COMMAND_UI_OFF,
 	DEBUG_COMMAND_UI_ON,
+	DEBUG_COMMAND_WAYPOINT_CLEAR,
+	DEBUG_COMMAND_WAYPOINT_GO,
+	DEBUG_COMMAND_WAYPOINT_POP,
+	DEBUG_COMMAND_WAYPOINT_SAVE,
+	DEBUG_COMMAND_WAYPOINT_STOP,
 	DEBUG_COMMAND_ZOOM,
 	DEBUG_COMMAND_WIRE_FRAME,
 	DEBUG_COMMAND_GROUND,
@@ -984,7 +995,13 @@ export interface UiExtensions {
 	setCameraZoomRail?: ( capped: boolean ) => void;
 	setFreeCamera?: ( free: boolean ) => void;
 	setCameraCollision?: ( collision: boolean ) => void;
+	setCameraWaypoints?: (
+		keyframes: readonly import("@/engine/foundation/ui/camera-waypoints").CameraWaypoint[]
+	) => void;
+	setCameraPlaying?: ( playing: boolean ) => void;
 	setCursorVisible?: ( visible: boolean ) => void;
+	saveCameraWaypoints?: ( text: string ) => void;
+	playSoundByName?: ( name: string ) => void;
 	saveExperimental?: ( value: ExperimentalOptions ) => void;
 	saveWindowPositions?: ( value: WindowPositions ) => void;
 }
@@ -1032,6 +1049,16 @@ export function createUi(
 	let debugZoomRail = true;
 	let debugFreeCamera = false;
 	let debugCursorVisible = true;
+	// The camera-waypoint family (690C40 ids 130-134, #1716): the
+	// interface's keyframe track (+0x3FC) and its play byte (+0x3CD).
+	// The store is this window's, as natively; the camera owner gets a
+	// copy of the records and the byte through the extensions, and the
+	// playback stepping is its own. The records arrive with the HUD's
+	// cameradata asset (cameraWaypointsLoaded below): nothing native
+	// ever loads the track, so the published rows are the port's
+	// content source (issue #1716).
+	const cameraWaypoints = createCameraWaypointStore();
+	let cameraWaypointsLoaded = false;
 	// The camera family's kept values: the free-camera move speed
 	// (+0x7B0, seeded 100, case 136), the snapped second speed (+0x7C0,
 	// seeded 50, case 111), the frame byte (engine global +0x4A, seeded
@@ -2721,8 +2748,9 @@ export function createUi(
 	values on this window for consumers the port does not have yet (#1717);
 	601 frames the named item as a packet the client hands itself (see
 	the case); the port builds nothing. 602 is the native table's shared exit.
-	The camera-waypoint rows (130-134) wait on the cameradata store
-	(#1716). Every row the table names is consumed here, as natively.
+	The camera-waypoint rows (130-134) drive this window's waypoint store
+	and forward the play byte to the camera owner (#1716). Every row the
+	table names is consumed here, as natively.
 	================
 	*/
 	function runDebugCommand( command: DebugCommand ) {
@@ -2880,6 +2908,42 @@ export function createUi(
 				// distance; the follow still tracks. Prints nothing.
 				extensions.setCameraCollision?.( false );
 				break;
+			case DEBUG_COMMAND_WAYPOINT_CLEAR:
+				// Case 130: the store reset (CRenderContext_Reset on
+				// the +0x3FC track), and the same block's next write
+				// clears the play byte (+0x3CD): the stop row (133)
+				// enters at that write, so clear and stop share it.
+				// The records, the clock and the byte all go. The
+				// native prints nothing.
+				resetCameraWaypoints( cameraWaypoints );
+				extensions.setCameraWaypoints?.( cameraWaypoints.keyframes );
+				extensions.setCameraPlaying?.( false );
+				break;
+			case DEBUG_COMMAND_WAYPOINT_POP:
+			case DEBUG_COMMAND_WAYPOINT_GO:
+				// Cases 131/132 are one native block: the free-camera
+				// byte (+0x3CE) must stand and the store be non-empty;
+				// then the play byte (+0x3CD) is written and the track
+				// clock zeroed. Either gate failing leaves the byte
+				// clear. The camera owner holds the byte's copy. The
+				// native prints nothing.
+				if ( debugFreeCamera && cameraWaypoints.keyframes.length > 0 ) {
+					cameraWaypoints.clockSeconds = 0;
+					extensions.setCameraPlaying?.( true );
+				}
+				break;
+			case DEBUG_COMMAND_WAYPOINT_STOP:
+				// Case 133: the play byte is cleared; the camera stays
+				// where playback left it until the free-camera byte
+				// also falls. The native prints nothing.
+				extensions.setCameraPlaying?.( false );
+				break;
+			case DEBUG_COMMAND_WAYPOINT_SAVE:
+				// Case 134: the whole store written in the native line
+				// form - natively to c:\cw.txt, here the downloaded
+				// cw.txt the platform writes (#1716). Prints nothing.
+				extensions.saveCameraWaypoints?.( cameraWaypointSaveText( cameraWaypoints ) );
+				break;
 			case DEBUG_COMMAND_CURSOR:
 				// Case 0x1E: SetVisible(![cursor+0x20]) - the pointer shows
 				// or goes away (A15A70), silently.
@@ -2971,10 +3035,15 @@ export function createUi(
 				break;
 			case DEBUG_COMMAND_SOUND:
 				// Case 603 hands its first word to the sound manager's
-				// play-by-name (with no word it calls through with an
-				// unset argument). The port's audio owners take cues,
-				// not names, so nothing plays yet (#1717); the line is
-				// consumed either way.
+				// play-by-name; the audio owner answers the name (a
+				// name with no authored row stays silent, as a native
+				// label-map miss does). Further words are not read.
+				// With no word the native still calls through, with an
+				// unset argument - whatever the stack held becomes the
+				// name - so there is no defined sound to reproduce;
+				// the port deliberately plays nothing for a wordless
+				// line instead of inventing one.
+				if ( command.args.length >= 1 ) extensions.playSoundByName?.( command.args[0]! );
 				break;
 		}
 	}
@@ -8996,6 +9065,18 @@ export function createUi(
 			if ( hud.step( next.session?.phase === "world" || next.frontend?.phase === "dock" ) ) {
 				dirty = true;
 				layoutResourcesRevision++;
+			}
+			// The waypoint store's keyframes ride the HUD's cameradata
+			// asset: load them once, when the catalogue first settles
+			// (#1716). A /cwclear afterwards is permanent, as the native
+			// reset is: nothing reloads the track.
+			if ( !cameraWaypointsLoaded ) {
+				const cameraRows = hud.data()?.cameraDataRows;
+				if ( cameraRows ) {
+					cameraWaypointsLoaded = true;
+					loadCameraDataKeyframes( cameraWaypoints, cameraRows );
+					extensions.setCameraWaypoints?.( cameraWaypoints.keyframes );
+				}
 			}
 			// The stall prompts follow the stall: naming opens the title entry
 			// with the default title (5A1DF0 mode 1); a stall that moved on

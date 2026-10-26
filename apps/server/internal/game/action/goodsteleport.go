@@ -69,5 +69,5 @@ transport was refused earlier, so this never fires with the rule off.
 ================
 */
 func (rt *Runtime) transportBarredFromDestination(c *enterworld.Character, destination simulation.Spawn) bool {
-	return rt.JobGoodsTeleport && rt.hasSummonedTransportCOS(c) && simulation.IsDungeonRegion(destination.RegionID)
+	return rt.JobGoodsTeleport && rt.hasSummonedTransportCOS(c) && simulation.PlaneKindOf(destination.RegionID) == simulation.PlaneCave
 }

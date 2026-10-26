@@ -630,6 +630,8 @@ func buildItemRef(fields []string, names map[string]string) *ItemRef {
 			ref.RequiredInt = v
 		}
 	}
+	// The set-group id (column 62) belongs to the set owner.
+	ref.SetID = setGroupIDOf(fields)
 	// The first .ddj path field is the icon (the .bsr fields before it are
 	// the world/drop models); the LAST .bsr is the AssocFileDrop ground
 	// model (native RefItemData+0x138).

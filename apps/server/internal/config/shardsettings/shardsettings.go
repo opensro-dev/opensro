@@ -91,6 +91,9 @@ var Settings = []Setting{
 	// admitted for hunting separately (#1741); switches on with the
 	// cap-110 catalogue (#1607).
 	{Env: "SRO_CAP110_LEVEL100", NomadVar: "cap110_level100", Default: "off", Catalogue: true},
+	// Port-only, not native: degree-10/11 equipment set bonuses (#1747);
+	// the v1.150 client ships no set rows, so off is the native state.
+	{Env: "SRO_CAP110_SET_BONUSES", NomadVar: "cap110_set_bonuses", Default: "off", Catalogue: true},
 	// Port-only, not native: the Pharaoh Tomb 1-3 population and gates. Needs
 	// SRO_CAP110_MONSTERS (its equipment drops).
 	{Env: "SRO_PHARAOH_TOMB", NomadVar: "pharaoh_tomb", Default: "off", Catalogue: true},

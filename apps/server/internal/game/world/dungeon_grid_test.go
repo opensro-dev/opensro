@@ -32,7 +32,7 @@ func dofWithBounds(bounds [6]float32) []byte {
 ================
 TestDungeonMessageGridUsesAuthoredOriginAndOneLayer
 
-99A520: (position - origin) / 320 on x and z, / -3200000 on y.
+The native block lookup: (position - origin) / 320 on x and z, / -3200000 on y.
 ================
 */
 func TestDungeonMessageGridUsesAuthoredOriginAndOneLayer(t *testing.T) {
@@ -63,7 +63,7 @@ func TestDungeonMessageGridUsesAuthoredOriginAndOneLayer(t *testing.T) {
 TestDungeonInterestIsTheBlockNeighbourhood
 
 With a grid installed a dungeon viewer holds its 3x3 block neighbourhood
-(538670 links each block to 99A600's neighbours), never the whole region.
+(each block is linked to its neighbours), never the whole region.
 ================
 */
 func TestDungeonInterestIsTheBlockNeighbourhood(t *testing.T) {
