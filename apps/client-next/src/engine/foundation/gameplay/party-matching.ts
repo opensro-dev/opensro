@@ -11,6 +11,7 @@ responses cannot disagree about which request is still answerable.
 import type { WireFrame } from "@/engine/contracts/network";
 import { readPartyMember, type PartyMember } from "./party-member";
 import { NO_JOB_CLASS } from "./job-guild";
+import { NATIVE_LEVEL_CAP } from "./level-cap";
 const PARTY_JOIN_TIMEOUT_MS = 10000;
 const PARTY_JOIN_NO_REPLY = 2;
 
@@ -98,12 +99,18 @@ export function emptyPartyMatching(): PartyMatching {
 /*
 ================
 partyMatchRequest
+
+A registration's window may not pass levelCap: the shard's configured cap
+as published at world entry, the native cap until then (#1749). The
+server refuses the same window at its own gate, so the pair moves
+together.
 ================
 */
 export function partyMatchRequest(
 	state: PartyMatching,
 	command: PartyMatchCommand,
-	now = 0
+	now = 0,
+	levelCap: number = NATIVE_LEVEL_CAP
 ): { state: PartyMatching; frame: WireFrame | null; } {
 	const bytes: number[] = [];
 	const u = ( x: number, n: number ) => {
@@ -121,7 +128,7 @@ export function partyMatchRequest(
 		) throw Error( "Invalid auto-match candidates" );
 		const [id, ...auto] = command.ids;
 		if ( id === undefined ) return { state: { ...state, auto: [], result: 2 }, frame: null };
-		const out = partyMatchRequest( { ...state, auto }, { kind: "party-match-join", id }, now );
+		const out = partyMatchRequest( { ...state, auto }, { kind: "party-match-join", id }, now, levelCap );
 		return out;
 	}
 	if ( command.kind === "party-match-answer" ) {
@@ -156,7 +163,7 @@ export function partyMatchRequest(
 		const r = command.registration, modify = command.kind === "party-match-modify";
 		if ( modify ? !state.own : !!state.own ) throw Error( "Party registration ownership mismatch" );
 		if (
-			r.type & ~7 || r.purpose > 3 || r.min < 1 || r.max > 90 || r.min > r.max || !r.title.length ||
+			r.type & ~7 || r.purpose > 3 || r.min < 1 || r.max > levelCap || r.min > r.max || !r.title.length ||
 			r.title.length > 50
 		) throw Error( "Invalid party registration" );
 		u( modify ? state.own!.id : 0, 4 );

@@ -1,11 +1,14 @@
 // 7F22D0 kinds 19/1A, 810620, 810F10 and 8115F0: compile the same media join.
-export function questGuideRecords( questRows, contentsRows ) {
+// A record past levelCap never publishes: the guide's rows end at the
+// shard's configured cap (the native 90 unless the build says otherwise,
+// #1749), matching the runtime validator in quest-guide.ts.
+export function questGuideRecords( questRows, contentsRows, levelCap = 90 ) {
 	const records = new Map(), bySymbol = new Map();
 	for ( const fields of questRows ) {
 		if ( fields[0]?.trim() !== "1" || fields.length < 11 ) continue;
 		const id = Number( fields[1] ), level = Number( fields[3] ) & 255, symbol = fields[2];
 		if ( !Number.isSafeInteger( id ) || id <= 0 || !symbol ) throw Error( "Invalid quest guide source" );
-		if ( level > 90 || records.has( id ) ) continue;
+		if ( level > levelCap || records.has( id ) ) continue;
 		const row = { id, symbol, level, contentKey: fields[8] === "xxx" ? "" : fields[8], prerequisites: [] };
 		records.set( id, row );
 		if ( !bySymbol.has( symbol ) ) bySymbol.set( symbol, row );

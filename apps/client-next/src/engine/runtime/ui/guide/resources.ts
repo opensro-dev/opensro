@@ -18,6 +18,7 @@ import {
 	type QuestGuideRow
 } from "@/engine/foundation/ui/quest-guide";
 import { generalGuideArticles, type GuideArticle } from "@/engine/foundation/ui/guide-catalog";
+import { NATIVE_LEVEL_CAP } from "@/engine/foundation/gameplay/level-cap";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import { decodeAuthoredLayout, type AuthoredLayout } from "@/engine/foundation/ui/authored-layout";
 import { guideTokens, type GuideToken } from "@/engine/foundation/ui/guide-content";
@@ -87,6 +88,9 @@ export function createGuideResources(
 		} | null = null,
 		error: string | null = null;
 	let questKey = "", questRows: readonly QuestGuideRow[] = [];
+	// The configured level cap the session last published (level-cap.ts);
+	// absent means the native cap, as with every GameplayState field.
+	let knownCap: number | undefined;
 	return {
 		/*
 		================
@@ -107,9 +111,13 @@ export function createGuideResources(
 		step
 
 		Demand gates admission only. Always collect previously admitted work.
+		The catalog decodes against the session's latest published level cap
+		(#1749): the validator refuses rows past it, and the worker has
+		published the world-entry cap before the guide is ever needed.
 		================
 		*/
-		step( needed = true ) {
+		step( needed = true, levelCap?: number ) {
+			if ( levelCap !== undefined ) knownCap = levelCap;
 			let changed = false;
 			for ( let i = 0; i < states.length; i++ ) {
 				const s = states[i]!;
@@ -209,7 +217,7 @@ export function createGuideResources(
 						artwork: GUIDE_ARTWORK,
 						questPresentation: decodeQuestPresentation( values[6] ),
 						menu: decodeAuthoredLayout( values[7] ),
-						quests: decodeQuestGuide( values[1], values[6] ),
+						quests: decodeQuestGuide( values[1], values[6], knownCap ?? NATIVE_LEVEL_CAP ),
 						mentor: decodeAuthoredLayout( values[4] ),
 						mentorSlot: decodeAuthoredLayout( values[5] ),
 						strings,
@@ -253,6 +261,7 @@ error
 			data = null;
 			questKey = "";
 			questRows = [];
+			knownCap = undefined;
 		}
 	};
 }

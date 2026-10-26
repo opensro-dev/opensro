@@ -99,9 +99,9 @@ export const DEBUG_COMMAND_SET_FIELD_OF_VIEW = 500;
 // opcode 0x3314 and hands it to the client's own packet dispatch
 // (690BD0) - nothing leaves the machine - 602 has no case at all (the
 // table sends it to the shared exit) and 603 hands a sound name to the
-// sound manager. The port's movement and inventory belong to the
-// server and its audio takes cues, not names; the handlers run and
-// the values are kept (see #1717).
+// sound manager, which the audio owner now answers by name. The port's
+// movement and inventory belong to the server; the 600/601 handlers
+// run and the values are kept (see #1717).
 export const DEBUG_COMMAND_SET_SPEED = 600;
 export const DEBUG_COMMAND_EQUIP = 601;
 export const DEBUG_COMMAND_MAKE_OBJECT = 602;

@@ -106,6 +106,7 @@ import {
 	partyActiveJob,
 	partyPurposeAllowed
 } from "@/engine/foundation/gameplay/party-matching";
+import { NATIVE_LEVEL_CAP, publishedLevelCap } from "@/engine/foundation/gameplay/level-cap";
 import {
 	gmCatalog as decodeGmCatalog,
 	gmRequest,
@@ -439,6 +440,9 @@ export function createGameplay(
 		Pick<import("@/engine/contracts/gameplay").VitalState, "hp" | "mp" | "maxHp" | "maxMp" | "abnormal">
 	> = {};
 	let partyMatching = emptyPartyMatching();
+	// The shard's configured level cap, published at world entry (#1749);
+	// the native cap until a bootstrap says otherwise.
+	let levelCap = NATIVE_LEVEL_CAP;
 	let gmItems = gmItemReferences( {} );
 	// Port-only: the compact catalogues a GM's console helper filters. Built
 	// only for a GM entry; ordinary characters never pay for the list. The
@@ -1451,6 +1455,7 @@ selected entities, cooldowns or world-entry state.
 		uniqueRank.clear();
 		petTraining.clear();
 		partyMatching = emptyPartyMatching();
+		levelCap = NATIVE_LEVEL_CAP;
 		entryVitals = {};
 		warnings = [ false, false ];
 		eligibility = { gm: false, pcRoomEvent: false };
@@ -1623,6 +1628,7 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 			returnScroll = undefined;
 			teleportMode = 0;
 			partyMatching = emptyPartyMatching();
+			levelCap = publishedLevelCap( (value as { levelCap?: unknown; } | null)?.levelCap );
 			bindingRepairs.clear();
 			inventory.takeBindingMoves();
 			gmItems = gmItemReferences( value );
@@ -2445,7 +2451,7 @@ state here before a command can claim a native wire conversation.
 					(!partyMatching.request || partyMatching.request.a !== command.a ||
 						partyMatching.request.b !== command.b)
 				) return null;
-				const next = partyMatchRequest( partyMatching, command, now );
+				const next = partyMatchRequest( partyMatching, command, now, levelCap );
 				if ( next.frame ) send( next.frame );
 				partyMatching = next.state;
 				return next.frame;
@@ -3638,10 +3644,15 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 					if ( frame.opcode === 0xb5bf && !matched.pending && matched.auto.length ) {
 						const [id, ...auto] = matched.auto;
-						const continuation = partyMatchRequest( { ...matched, auto }, {
-							kind: "party-match-join",
-							id: id!
-						}, now );
+						const continuation = partyMatchRequest(
+							{ ...matched, auto },
+							{
+								kind: "party-match-join",
+								id: id!
+							},
+							now,
+							levelCap
+						);
 						if ( continuation.frame ) sendWhenLive( continuation.frame );
 						partyMatching = continuation.state;
 					} else partyMatching = matched;
@@ -4961,7 +4972,12 @@ before take assembles the presentation snapshot.
 			}
 			if ( partyMatching.request && now >= partyMatching.request.expires ) {
 				const { a, b } = partyMatching.request,
-					next = partyMatchRequest( partyMatching, { kind: "party-match-answer", a, b, answer: 2 } );
+					next = partyMatchRequest(
+						partyMatching,
+						{ kind: "party-match-answer", a, b, answer: 2 },
+						0,
+						levelCap
+					);
 				if ( next.frame ) send( next.frame );
 				partyMatching = next.state;
 				dirty = true;
@@ -5164,6 +5180,7 @@ The published plane when something changed since the last take, else null.
 				selectionDecal,
 				notices,
 				partyMatching,
+				levelCap,
 				academy,
 				pkStatus,
 				guide,

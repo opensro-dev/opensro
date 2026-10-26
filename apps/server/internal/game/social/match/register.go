@@ -14,6 +14,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/transport"
 )
 
@@ -31,6 +32,11 @@ type Runtime struct {
 	// presence resolves live owners and rebind winners without a parallel
 	// session map.
 	presence Presence
+
+	// LevelLimit is the shard's configured character level cap, assigned
+	// by wiring from the progression runtime's limit at composition;
+	// zero keeps the native cap (see levelCap).
+	LevelLimit int64
 
 	// MemberCountFor derives a party-match listing's live member count
 	// from the party registry (this lane must not import internal/game/social/party -
@@ -561,6 +567,23 @@ const minPartyCreatorLevel = 5
 
 /*
 ================
+levelCap
+
+The highest level a listing window may name: the running cap, read the
+progression runtime's own way (zero keeps the native cap, only the
+expansion value lifts it). Natively the era's 90 sat in both validators;
+the port keys it to the configured cap instead (#1749).
+================
+*/
+func (r *Runtime) levelCap() int64 {
+	if r.LevelLimit == progression.ExpansionLevelCap {
+		return progression.ExpansionLevelCap
+	}
+	return progression.LevelCap
+}
+
+/*
+================
 preparePartyRegistration
 
 Retail 63BBA0/63C010 validate the form; authority independently enforces
@@ -571,7 +594,7 @@ options. Returns the refusal code, 0 when admitted.
 */
 func (r *Runtime) preparePartyRegistration(division string, character *domain.Character, request PartyMatchRequest) (PartyMatchRequest, uint8) {
 	titleLength := len(utf16.Encode([]rune(request.Title)))
-	if request.TypeBits&^7 != 0 || request.MinLevel < 1 || request.MaxLevel > 90 || request.MinLevel > request.MaxLevel || titleLength == 0 || titleLength > 50 {
+	if request.TypeBits&^7 != 0 || request.MinLevel < 1 || int64(request.MaxLevel) > r.levelCap() || request.MinLevel > request.MaxLevel || titleLength == 0 || titleLength > 50 {
 		return request, partyMatchErrUnknown
 	}
 	partied, leader, options := false, false, uint8(0)
