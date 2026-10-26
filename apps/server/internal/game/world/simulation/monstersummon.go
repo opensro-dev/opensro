@@ -111,7 +111,8 @@ func (s *MonsterState) createSummonLocked(state *divisionMonsterState, parent mo
 			// Native 5977xx passes no CNest to CMonster_SpawnInstance. The
 			// authored tactics must not turn this generated pose into a home nest.
 			child := monster.Instance{Gid: monster.GidBase + s.counter, Ref: ref, Spawn: spawn, SummonerGID: parent.Gid, NestDetached: true,
-				Nest: monster.NestRow{SpawnPoint: spawn, HasRarityOverride: true, RarityOverride: entry.Grade & 15}}
+				GMSpawned: parent.GMSpawned,
+				Nest:      monster.NestRow{SpawnPoint: spawn, HasRarityOverride: true, RarityOverride: entry.Grade & 15}}
 			child.CurrentHP = child.EffectiveMaxHP()
 			if tactics, found := monster.ResolveSummonTactics(ref, entry.Grade, s.random); found {
 				child.SummonSightRange = tactics.SightRange

@@ -126,7 +126,7 @@ func (s *MonsterState) SpawnGMMonstersTracked(request GMMonsterSpawn) []uint32 {
 		angle := float64(float32(float64(float32(float64(s.randomWord())/nativeRandomMaximum)) * nativeCircleRadians))
 		s.counter++
 		actor := monster.Instance{
-			Gid: monster.GidBase + s.counter, Ref: ref, Spawn: spawn, NestDetached: true,
+			Gid: monster.GidBase + s.counter, Ref: ref, Spawn: spawn, NestDetached: true, GMSpawned: true,
 			SpawnHeading: HeadingWordFromRadians(angle),
 			Nest: monster.NestRow{
 				SpawnPoint: spawn, PolicyPinned: true, HasRarityOverride: true, RarityOverride: rarity,

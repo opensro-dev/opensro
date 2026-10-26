@@ -497,6 +497,11 @@ type Instance struct {
 	// row and its creation-time home remain intact; simulation owns this flag
 	// together with population capacity, independently of actor lifetime.
 	NestDetached bool
+	// GMSpawned marks an instance a GM command created
+	// (SpawnGMMonstersTracked). It fights and drops like any monster, but
+	// its loot is conjured, not hunted: the weekly seal board never counts
+	// its seal drops (#1641).
+	GMSpawned bool
 	// SpawnHeading is the wire heading word of the native creation heading
 	// (5607B0: random for monsters, wInitialDir for uniques).
 	SpawnHeading uint16

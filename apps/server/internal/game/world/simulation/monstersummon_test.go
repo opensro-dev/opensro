@@ -71,6 +71,35 @@ func TestSummonTransactionNoDuplicateAndNoIndependentRespawn(t *testing.T) {
 	}
 }
 
+/*
+================
+TestSummonChildrenOfGMSpawnedParentStayGMSpawned
+
+A GM-spawned summoner's children are conjured too: they inherit the
+mark, so their seal drops never reach the weekly board (#1680 review).
+================
+*/
+func TestSummonChildrenOfGMSpawnedParentStayGMSpawned(t *testing.T) {
+	s, parent, wave, ranges, now := summonFixture(t)
+	state := s.populationForObject("summon", parent.Gid)
+	parent.GMSpawned = true
+	state.instances.set(parent.Gid, parent)
+	created, ok := s.CommitSummon("summon", parent, wave, *now, *now, ranges)
+	if !ok || len(created) != 2 {
+		t.Fatalf("summon refused or short wave: ok=%v created=%d", ok, len(created))
+	}
+	for _, child := range created {
+		if !child.GMSpawned {
+			t.Fatalf("summon child of a GM-spawned parent lost the mark: gid=%d", child.Gid)
+		}
+	}
+	for _, actor := range s.MaterializedInstances("summon") {
+		if actor.Gid != parent.Gid && !actor.GMSpawned {
+			t.Fatalf("stored summon child lost the mark: gid=%d", actor.Gid)
+		}
+	}
+}
+
 func TestSummonCommandResetPreservesDamageDuringCastingAndAfterDeadline(t *testing.T) {
 	s, parent, wave, ranges, now := summonFixture(t)
 	if _, ok := s.CommitSummon("summon", parent, wave, *now, *now+1000, ranges); !ok {

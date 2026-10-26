@@ -343,6 +343,19 @@ the representative of the greatest unsigned damage group for loot ownership.
 ================
 */
 func (rt *Runtime) settleMonsterInsideDoor(division string, actor *enterworld.Character, roster rewardRoster, impact simulation.MonsterDamageResult, pose monster.Pose, now int64) monsterSettlement {
+	return rt.settleMonsterInsideDoorCounted(division, actor, roster, impact, pose, now, true)
+}
+
+/*
+================
+settleMonsterInsideDoorCounted
+
+settleMonsterInsideDoor with the weekly seal board's counting switch
+(sealboard.go): the GM kill path settles with it off, so a GM-made drop
+never reaches the board.
+================
+*/
+func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterworld.Character, roster rewardRoster, impact simulation.MonsterDamageResult, pose monster.Pose, now int64, countSeals bool) monsterSettlement {
 	var out monsterSettlement
 	if !impact.Fatal || impact.Instance.Ref.TrainingDummy {
 		return out
@@ -451,6 +464,13 @@ func (rt *Runtime) settleMonsterInsideDoor(division string, actor *enterworld.Ch
 		rt.applyThiefPartyGold(division, a.character, planned, settings)
 		frames, drops, _ := rt.applyMonsterKillInsideDoor(division, a.character, 0, 0, impact.Instance.Gid, planned)
 		out.drops = drops
+		// The weekly seal board (sealboard.go) counts the committed loot
+		// here, before quest-supply drops join out.drops below: those
+		// never count. A GM-spawned monster's loot is conjured, not
+		// hunted, so it never counts either, however it died.
+		if countSeals && !impact.Instance.GMSpawned {
+			rt.countSealDrops(a.character, drops, now)
+		}
 		if a.character == actor {
 			out.actorFrames = append(out.actorFrames, frames...)
 		} else if len(frames) > 0 {

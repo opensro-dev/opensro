@@ -35,6 +35,7 @@ import (
 	"opensro.online/server/internal/platform/economy"
 	"opensro.online/server/internal/platform/history"
 	"opensro.online/server/internal/platform/readiness"
+	"opensro.online/server/internal/platform/sealboard"
 	"opensro.online/server/internal/platform/settingsapi"
 	"opensro.online/server/internal/security/auth"
 	"opensro.online/server/internal/transport"
@@ -69,6 +70,8 @@ type gameWorldApplication struct {
 	history *history.Journal
 	// economy is the staff economy view's aggregates (port-only); nil off.
 	economy *economy.Service
+	// sealBoard is the weekly seal-drop counter (port-only); nil off.
+	sealBoard *sealboard.Service
 	// killStatsFlush writes the final kill-stat rollup at shutdown
 	// (port-only, #1639); nil while SRO_KILL_STATS is off.
 	killStatsFlush  func() error
@@ -276,6 +279,9 @@ func newGameWorldApplication(
 	)
 	if err != nil {
 		return nil, fmt.Errorf("gameplay construction: %w", err)
+	}
+	if err := installSealBoard(application, gameplay, ownedShard.ID); err != nil {
+		return nil, err
 	}
 	gameplay.installSessionLifecycle(ts.Hub, authority.store)
 	if gameplay.deps.MonsterState != nil {
@@ -521,6 +527,12 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 			return nil
 		})
 	}
+	if application.sealBoard != nil {
+		group.Go(func() error {
+			application.sealBoard.Run(groupContext)
+			return nil
+		})
+	}
 	// Shutdown joins admission before it closes readiness and drains, so a
 	// late admit can never start the transport behind the drain.
 	admitted := make(chan struct{})
@@ -562,6 +574,11 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 	}
 	if application.populationCache != nil {
 		drainErr = errors.Join(drainErr, application.populationCache.Close())
+	}
+	// The tick has stopped and the flush loop has joined: the counter's
+	// last flush lands before its store closes.
+	if application.sealBoard != nil {
+		drainErr = errors.Join(drainErr, application.sealBoard.Close())
 	}
 	application.releaseLease()
 	if application.authority != nil {
@@ -705,6 +722,9 @@ func (application *gameWorldApplication) rollback() {
 	}
 	if application.economy != nil {
 		_ = application.economy.Close()
+	}
+	if application.sealBoard != nil {
+		_ = application.sealBoard.Close()
 	}
 	if application.settings != nil {
 		_ = application.settings.Close()
