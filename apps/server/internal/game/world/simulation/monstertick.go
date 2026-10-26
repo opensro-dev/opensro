@@ -84,7 +84,8 @@ type MonsterMoverOps struct {
 	// while the mover approaches; zero chooses from the valid authored set.
 	// Retained-ID resolution receives a zero pick and must not reselect based
 	// on changed health/damage. New selections alone consume choice entropy,
-	// and they carry the target the weighted choice (561B00) measures.
+	// and they carry the target the native conditional-then-weighted
+	// choice measures.
 	AttackPlan func(instance monster.Instance, requestedSkillID uint32, pick AttackPick) (MonsterAttackPlan, bool)
 	// BasicAttack commits one monster->player hit and returns the same B245
 	// action bracket the browser already uses for player attacks.
@@ -146,11 +147,11 @@ func (ops *MonsterMoverOps) logScopeBudgetBreach(divisionID string, count int) {
 
 const (
 	// monsterMovementSourceTurnThreshold is the retail server's optional
-	// source-block gate for an already-moving entity. The v1.188
-	// EntityMovement_UpdateAndBroadcastB021 body normalizes the old and new
-	// directions, converts their dot product to an angular delta, and writes
-	// the source only when the delta is GREATER than qword[0x00b460e0]:
-	// 0.785398185253143 radians (Rizin 0x004b1109..0x004b118f).
+	// source-block gate for an already-moving entity. The reference
+	// server's movement broadcast normalizes the old and new
+	// directions, converts their dot product to an angular delta, and
+	// writes the source only when the delta is GREATER than
+	// 0.785398185253143 radians.
 	//
 	// This is version-adjacent server evidence applied to the byte-identical
 	// v1.150 client source block. It replaces the incorrect player-plane
@@ -261,11 +262,11 @@ type playerPose struct {
 	OwnerGid uint32
 	// Band is a companion's COS band (TypeID 4).
 	Band uint8
-	// JobState is a player's job state (CGObjPC_GetJobState 4DDC80, +0x30
-	// +0xF): the dressed job, 4 outside job mode (4E1120).
+	// JobState is a player's job state: the dressed job, 4 outside
+	// job mode.
 	JobState uint8
-	// Mounted is CGObjPC_IsMountedOnCOS (4DDCA0): whether the player is
-	// mounted on a COS when acquisition chooses a companion (547A46/547BEF/547EEF).
+	// Mounted: whether the player is mounted on a COS when
+	// acquisition chooses a companion.
 	Mounted bool
 }
 
@@ -586,8 +587,9 @@ func (ops *MonsterMoverOps) planDirectSegment(instance monster.Instance, mover m
 		}
 	}
 
-	// Capture the old leg before replacing it. The v1.188 server's movement
-	// writer includes the live source only for a >45-degree discontinuity.
+	// Capture the old leg before replacing it. The reference server's
+	// movement writer includes the live source only for a >45-degree
+	// discontinuity.
 	// Shallow chase re-aims therefore preserve the client's PATH source cursor;
 	// reversals and hard cuts re-anchor that logical cursor at this live pose.
 	// This says nothing about animation playback: v1.150 sub_776200 re-enters
@@ -705,8 +707,8 @@ func (ops *MonsterMoverOps) holdNavigation(gid uint32, mover monster.MoverState,
 ==================
 monsterMovementSourceRequired
 
-monsterMovementSourceRequired mirrors the v1.188 GameServer's positional
-movement source gate at 0x004b1109..0x004b118f. A settled entity's current
+monsterMovementSourceRequired mirrors the reference server's
+positional movement source gate. A settled entity's current
 facing is its last committed heading; an in-flight entity's facing is the
 old segment direction. Degenerate vectors source defensively because they
 cannot establish continuous steering.
@@ -779,7 +781,8 @@ planPath
 
 planPath plans from `from` walking from fromOwner. Legs departing from the
 monster's live pose pass mover.LiveNavOwner; a leg from the nest anchor
-passes the zero owner (native teleport rule, 545E14 clips from HOME).
+passes the zero owner (native teleport rule: the homing
+destination selection clips from HOME).
 ==================
 */
 func (ops *MonsterMoverOps) planPath(caller navCaller, from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationPath {
@@ -811,7 +814,8 @@ anchorPose
 */
 func anchorPose(instance monster.Instance) monster.Pose {
 	if instance.Nest.HasControls {
-		// 545F70/545C50 use CNest+10, not the randomized spawn candidate.
+		// The native home tests use the nest anchor, not the randomized
+		// spawn candidate.
 		// Using Spawn shifts the home boundary separately for every sibling.
 		return monster.Pose{RegionID: instance.Nest.RegionID, X: instance.Nest.X, Y: instance.Nest.Y, Z: instance.Nest.Z}
 	}
@@ -904,8 +908,9 @@ func (ops *MonsterMoverOps) idleDelayMs() int64 {
 sessionPlayerPose
 
 One combat-eligible session as the monster tick weighs it. Its job state
-is the native one (CGObjPC_GetJobState 4DDC80): the worn suit's job, else
-4, the state CGObjPC_InitPvpAndJobStateOnLoad (4E1120) sets first.
+is the native one (the job-state getter): the worn suit's job,
+else 4, the state the load-time job-state initializer sets
+first.
 ================
 */
 func sessionPlayerPose(session SessionSnapshot, nowMs int64) playerPose {

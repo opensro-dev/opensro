@@ -195,7 +195,8 @@ type MoverState struct {
 	AttackReach      float64
 	AttackCooldownMs int64
 	// AI strategy +48: cooldown plus selection jitter, retained between
-	// selections. Opponent expiry uses twice this interval (545776).
+	// selections. Opponent expiry uses twice this interval (the
+	// native opponent-policy choice).
 	AttackIntervalMs uint32
 	NextAttackMs     int64
 	// Channel is the run/walk speed channel the CLIENT currently holds
@@ -204,7 +205,8 @@ type MoverState struct {
 	// the other channel - keeping the client's integrator speed equal to
 	// the server's segment timing (the BUG-7 speed-half fix).
 	Channel uint8
-	// 5483C0/559AD0 retain a combat channel decision across approach replans.
+	// The native pursuit-distance classification and the COS command
+	// state retain a combat channel decision across approach replans.
 	PursuitChannel       uint8
 	LastBattleActivityMs uint32
 	HomingStartedMs      uint32
@@ -214,9 +216,11 @@ type MoverState struct {
 	// the episode's end discards it (see Transition and planIdleEntry).
 	homingGoal    Pose
 	homingGoalSet bool
-	// progress is the native stuck count (CTactics +184/+19C/+148): each
-	// stop that leaves the actor within 20 of where its move sequence began
-	// counts, and from the tenth the stuck event is raised (559010 -> 5597B0).
+	// progress is the native stuck count (the tactics record's
+	// +184/+19C/+148): each stop that leaves the actor within 20
+	// of where its move sequence began counts, and from the tenth
+	// the stuck event is raised (the move-stopped counter and its
+	// dispatch).
 	progress MovementProgress
 	// stuck is latched when NoteMoveStopped crosses nativeStuckFailureLimit so
 	// the simulation tick can answer event 0x28 on the current state.
@@ -238,7 +242,8 @@ func (m MoverState) InFlight(nowMs int64) bool {
 ================
 MoverState.Progress
 
-Progress returns the native movement progress tracker (CTactics +184/+19C/+148).
+Progress returns the native movement progress tracker (the
+tactics record's +184/+19C/+148).
 ================
 */
 func (m MoverState) Progress() MovementProgress {
@@ -250,7 +255,7 @@ func (m MoverState) Progress() MovementProgress {
 MoverState.Stuck
 
 Stuck reports whether the last stop reached the ten-failure stuck threshold
-(CAIState_OnMoveStopped_CountStuck 0x00559010 -> event 0x28).
+(the native move-stopped stuck counter -> event 0x28).
 ================
 */
 func (m MoverState) Stuck() bool {
@@ -262,8 +267,8 @@ func (m MoverState) Stuck() bool {
 MoverState.ClearStuck
 
 ClearStuck clears the pending event-0x28 latch after the simulation tick
-answers it, leaving the underlying failure counter untouched (matching
-CAIState_BATTLE_OnStuck_RelocateToTarget 0x0055A250).
+answers it, leaving the underlying failure counter untouched
+(matching the BATTLE stuck handler).
 ================
 */
 func (m *MoverState) ClearStuck() {
@@ -274,9 +279,9 @@ func (m *MoverState) ClearStuck() {
 ================
 MoverState.ResetStuck
 
-ResetStuck clears both the failure counter (CTactics.+0x148 = 0) and the
-pending event-0x28 latch (AI_CTactics_ChangeState 0x0053FF30,
-CAITactics_ReleaseCommand 0x0053FD40).
+ResetStuck clears both the failure counter (the tactics record's
++0x148 = 0) and the pending event-0x28 latch (the native state
+change and command release).
 ================
 */
 func (m *MoverState) ResetStuck() {
@@ -330,7 +335,7 @@ func (m *MoverState) ClearHomingGoal() {
 MoverState.NoteMoveIssued
 
 NoteMoveIssued records a step command before the mover executes or clips it
-(AI_CTactics_StepDestination 0x00541730).
+(the native tactics step).
 ================
 */
 func (m *MoverState) NoteMoveIssued(live Pose, alreadyMoving bool) {
@@ -341,8 +346,8 @@ func (m *MoverState) NoteMoveIssued(live Pose, alreadyMoving bool) {
 ================
 MoverState.NoteMoveStopped
 
-NoteMoveStopped records a movement stop at live (CGObjChar_StopMove
-0x004A9430 -> event 8 -> CAIState_OnMoveStopped_CountStuck 0x00559010) and
+NoteMoveStopped records a movement stop at live (the native move
+stop -> event 8 -> the move-stopped stuck counter) and
 latches Stuck when the tenth short stop is reached.
 ================
 */

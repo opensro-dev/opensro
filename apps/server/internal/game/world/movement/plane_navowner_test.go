@@ -30,6 +30,12 @@ Owner resolution as navowner.go had it before #1672.
 */
 func legacyResolveNavOwner(v *WaterValidator, p simulation.Spawn, hint simulation.NavOwner) (simulation.NavOwner, float64, bool) {
 	if simulation.IsDungeonRegion(p.RegionID) {
+		// #1727: a cave point now resolves to its dungeon cell, its
+		// height unchanged.
+		if surface := v.caveSurface(p.RegionID); surface != nil {
+			owner, ok := surface.dungeonOwnerAt(p.RegionID, p.X, p.Y, p.Z, hint)
+			return owner, p.Y, ok
+		}
 		return simulation.NavOwner{}, p.Y, false
 	}
 	return v.resolveOutdoorNavOwner(p, hint)

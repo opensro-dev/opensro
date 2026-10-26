@@ -18,8 +18,9 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 )
 
-// startReturnLeg uses the native movement-channel consumer (5489B0), not
-// the unrelated obstacle rotation sign at CTactics+164.
+// startReturnLeg uses the native movement-channel consumer (the
+// run-state step), not the unrelated obstacle rotation sign in
+// the tactics record.
 /*
 ================
 startReturnLeg
@@ -63,7 +64,7 @@ func (ops *MonsterMoverOps) planReturnLeg(instance monster.Instance, mover monst
 			mover.SetHomingGoal(goal)
 		}
 		mover.HomingStartedMs = uint32(nowMs)
-		// 55A60E..55A63E: (effective sight / run speed) * 1000, truncate.
+		// (effective sight / run speed) * 1000, truncate.
 		// A stationary actor cannot complete this travel-dependent gate.
 		mover.HomingAcquireAfterMs = ^uint32(0)
 		if monster.HomingRuns(instance.Ref.RunSpeed) {
@@ -86,7 +87,7 @@ func (ops *MonsterMoverOps) planReturnLeg(instance monster.Instance, mover monst
 			return mover, nil
 		}
 		if ops.hasPlanner() {
-			// 545E14: clip from HOME, not the actor's current position. The
+			// Clip from HOME, not the actor's current position. The
 			// anchor has no walked cell: the teleport rule resolves it.
 			path := ops.planPath(navReturn, anchorPose(instance), NavOwner{}, dest)
 			if path == nil {

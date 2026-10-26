@@ -70,6 +70,20 @@ func (r PursuitRoutine) ExtendsTowardMovingTarget() bool {
 
 /*
 ================
+PursuitRoutine.GatesStepDirection
+
+Whether the routine decides its step direction at the leg author: the
+outdoor routine probes for a free heading from rest and steps along its
+facing while far and aligned (pursuit_direction.go); the cave routine
+steps straight at the slot point with neither decision.
+================
+*/
+func (r PursuitRoutine) GatesStepDirection() bool {
+	return r == PursuitDirectionGate
+}
+
+/*
+================
 PursuitRoutine.TracesIndoors
 
 Whether the routine's trace runs with the indoor extension: the server's

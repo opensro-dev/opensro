@@ -91,14 +91,16 @@ func (outdoorPlane) arrivalKeepsRest() bool { return false }
 ================
 cavePlane.clipSegment
 
-The dungeon clip (dungeon_clip.go): object contacts, edge cuts sampled
-for floor, and obstacle circles. It refuses a chord whose endpoints sit
-in different regions. The start owner is unused: a cave start resolves
-by its floor height.
+The original's dungeon walk (dungeon_walk.go) from the start's retained
+cell (fromOwner, #1727), or the cell under the start where the owner
+does not hold it. It refuses a chord whose endpoints sit in different
+regions.
 ================
 */
-func (c cavePlane) clipSegment(from simulation.Spawn, _ simulation.NavOwner, to simulation.Spawn) (ClipReport, *navWalk) {
-	return c.water.clipDungeonPath(from, to), nil
+func (c cavePlane) clipSegment(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) (ClipReport, *navWalk) {
+	// The original's dungeon walk from the mover's retained cell (#1728):
+	// it reports the rest's owner itself.
+	return c.water.walkDungeon(from, fromOwner, to), nil
 }
 
 /*
