@@ -56,7 +56,9 @@ TestMoverStorageVisibilityReadsMatchLookup
 */
 func TestMoverStorageVisibilityReadsMatchLookup(t *testing.T) {
 	r := rand.New(rand.NewSource(1))
-	ground := func(region uint16, x, z float64) (float64, bool) { return x*0.5 - z + float64(region), x > 500 }
+	ground := func(pose monster.Pose) (float64, bool) {
+		return pose.X*0.5 - pose.Z + float64(pose.RegionID), pose.X > 500
+	}
 	s := newMoverStorage(nil)
 	sawPending, sawLive := false, false
 	for step := 0; step < 4000; step++ {
@@ -101,7 +103,9 @@ read.
 */
 func TestMoverStorageLivePosesMatchValues(t *testing.T) {
 	r := rand.New(rand.NewSource(2))
-	ground := func(region uint16, x, z float64) (float64, bool) { return x*0.5 - z + float64(region), x > 500 }
+	ground := func(pose monster.Pose) (float64, bool) {
+		return pose.X*0.5 - pose.Z + float64(pose.RegionID), pose.X > 500
+	}
 	s := newMoverStorage(nil)
 	for step := 0; step < 2000; step++ {
 		gid := uint32(1 + r.Intn(64))
