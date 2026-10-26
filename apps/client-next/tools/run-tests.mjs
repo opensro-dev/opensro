@@ -40,6 +40,14 @@ const ENV_KEYS = [ "TZ", "LANG", "NODE_ENV" ];
 // requests in flight to keep them busy. Set before the pool first starts.
 const PREFETCH_WORKERS = 64;
 process.env.UV_THREADPOOL_SIZE ??= String( Math.min( 64, Math.max( 4, os.availableParallelism() ) ) );
+// The JS heap ceiling of every test process, in MB. A test process can
+// outlive this runner: a caller that stops reading early (a truncated pipe)
+// kills the runner, and on Windows its children run on. One spinning in a
+// loop then allocated until the machine ran out (2026-10-27: 25-40 GB each,
+// twice at once). V8 aborts at the ceiling even inside a synchronous loop,
+// where no timer or watchdog can run. No suite file needs more than about a
+// gigabyte. SRO_TEST_HEAP_MB overrides it for the runner's own test.
+const TEST_HEAP_MB = Number( process.env.SRO_TEST_HEAP_MB ) || 4096;
 
 /*
 ================
@@ -265,7 +273,8 @@ async function main() {
 		process.env.SRO_TEST_INPUT_LOG = logDir;
 		// A runner started inside a recorded test owns its own tests.
 		delete process.env.SRO_TEST_INPUT_OWNER;
-		process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS ?? ""} --import ${recorderUrl}`.trim();
+		process.env.NODE_OPTIONS =
+			`${process.env.NODE_OPTIONS ?? ""} --max-old-space-size=${TEST_HEAP_MB} --import ${recorderUrl}`.trim();
 		try {
 			const stream = run( { files: pending, concurrency: os.availableParallelism(), cwd: clientRoot } );
 			// The stream hands listeners the event's data itself.
