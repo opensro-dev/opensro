@@ -5,7 +5,7 @@ plane_features.go - which world features each plane has (#1646)
 
 Some features exist only in the open world. Rather than test the dungeon
 region bit at each feature's door, every feature's availability per plane
-is one row here, read by name (featuresAt(region).CaravanBandits), so the
+is one row here, read by name (FeaturesAt(region).CaravanBandits), so the
 table is the single place the outdoor/cave difference lives and a feature
 a cave later gains is a one-field change. The cave column is today's
 behaviour; where the reason is the port's reading rather than native
@@ -46,6 +46,21 @@ type PlaneFeatures struct {
 	// the whole floor, so region emptiness says nothing about the part of
 	// the floor a player stands in; caves stay awake.
 	Dormancy bool
+	// SpawnTerrainLift: the enter-world repair that raises a spawn onto
+	// the terrain heightfield (enterworld.LiftSpawnAboveTerrain). The
+	// heightfield describes outdoor terrain only; a cave spawn stands
+	// on its dungeon surface, so there is nothing to lift against.
+	SpawnTerrainLift bool
+	// SpawnStrandedRescue: the enter-world unstuck that relocates a
+	// spawn stranded on the outdoor walkability plane
+	// (enterworld.RescueStrandedSpawn). A cave has no such plane - its
+	// floors are the dungeon nav data - so the rescue is outdoor-only.
+	SpawnStrandedRescue bool
+	// QuestGatherAreas: proximity to a gather quest's area
+	// (quest.withinQuestArea). The gather areas are field positions and
+	// the check is the outdoor planar distance; a position inside a
+	// cave never satisfies one.
+	QuestGatherAreas bool
 }
 
 /*
@@ -60,16 +75,17 @@ func featuresFor(kind PlaneKind) PlaneFeatures {
 	if kind == PlaneCave {
 		return PlaneFeatures{}
 	}
-	return PlaneFeatures{QuestMonsterSpawns: true, CaravanBandits: true, UniqueReturnAnchors: true, Dormancy: true}
+	return PlaneFeatures{QuestMonsterSpawns: true, CaravanBandits: true, UniqueReturnAnchors: true, Dormancy: true,
+		SpawnTerrainLift: true, SpawnStrandedRescue: true, QuestGatherAreas: true}
 }
 
 /*
 ================
-featuresAt
+FeaturesAt
 
 The features of the plane regionID belongs to.
 ================
 */
-func featuresAt(regionID uint16) PlaneFeatures {
+func FeaturesAt(regionID uint16) PlaneFeatures {
 	return featuresFor(PlaneKindOf(regionID))
 }

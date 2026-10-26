@@ -60,7 +60,7 @@ MOB_QT_02_PUNISHER_CLON leaves after its 300 s.
 ================
 */
 func (s *MonsterState) SpawnQuestMonster(request QuestMonsterSpawn) bool {
-	if !featuresAt(request.Position.RegionID).QuestMonsterSpawns {
+	if !FeaturesAt(request.Position.RegionID).QuestMonsterSpawns {
 		return false
 	}
 	ref, exists := s.ReferenceByCodename(request.Codename)

@@ -208,12 +208,13 @@ func questToolCleanup(c *enterworld.Character, def *Definition) []inventory.Item
 ================
 withinQuestArea
 
-Outdoor-only planar distance to a quest area's centre.
+Outdoor-only planar distance to a quest area's centre (the plane's
+feature row: simulation.PlaneFeatures.QuestGatherAreas).
 ================
 */
 func withinQuestArea(at, center simulation.Spawn, radius float64) bool {
 	distance := simulation.WorldDistance2D(at, center)
-	return !simulation.IsDungeonRegion(at.RegionID) && !math.IsNaN(distance) && !math.IsInf(distance, 0) && distance < radius
+	return simulation.FeaturesAt(at.RegionID).QuestGatherAreas && !math.IsNaN(distance) && !math.IsInf(distance, 0) && distance < radius
 }
 
 /*
