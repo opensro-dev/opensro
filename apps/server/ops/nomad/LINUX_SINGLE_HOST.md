@@ -86,11 +86,11 @@ export SRO_SERVER_GAME_DATA_ROOT=/opt/opensro/.generated/game-data/1.150/server.
 
 ./sro-nomad validate -namespace sro -task-user sro \
   -allowed-origins https://opensro.online \
-  -agent-cpu 100 -gameworld-cpu 500 \
+  -agent-cpu 100 -gameworld-cpu 2000 \
   -agent-memory-mb 128 -gameworld-memory-mb 384
 ./sro-nomad deploy -namespace sro -task-user sro \
   -allowed-origins https://opensro.online \
-  -agent-cpu 100 -gameworld-cpu 500 \
+  -agent-cpu 100 -gameworld-cpu 2000 \
   -agent-memory-mb 128 -gameworld-memory-mb 384
 ./sro-nomad status -namespace sro
 unset NOMAD_TOKEN
@@ -101,6 +101,35 @@ Measure host memory, swap, task RSS, and CPU after startup and with players
 connected. Include Nomad's executor and log helpers. The default GameWorld
 reservation does not fit a one-GiB VPS. Benchmark fixture controls are enabled
 only in the loopback `default` development namespace, never in `sro`.
+
+## CPU weight: the GameWorld's guaranteed share
+
+Nomad turns a task's `cpu` (MHz) into its cgroup CPU weight. When the host
+is contended, each runnable task's share is its reservation divided by the
+sum of the contending reservations, so the GameWorld is guaranteed its
+share only if its reservation outweighs the rest. Size it by three rules:
+
+1. The GameWorld's reservation is at least ten times the largest other
+   reservation on the host (Agent, website, bots, build jobs). With the
+   values above it holds 2000 of every 2100 contended MHz against the
+   Agent alone, about 95 percent.
+2. It stays below the node's total compute (cores times clock), or the
+   job cannot place at all. On a small host that means the reservation
+   is a weight, not a promise of whole cores: 2000 MHz of weight on a
+   one-core host still only ever yields that one core.
+3. Weights bite only under contention, so an oversized reservation
+   costs nothing while the host is idle. Exclusive cores are a last
+   resort, only if a measurement shows weights are not enough.
+
+Prove it in the release window, before and after the change: run a CPU
+hog beside the GameWorld on the host and compare the tick p99 and the
+scheduler p99 in the GameWorld's log lines. The reserved run keeps the
+tick within budget and prints no "tick slow" line. Record both numbers
+in the release notes.
+
+The release path passes no CPU flags, so the job defaults are what a
+release deploys; the flags in the examples above are for hand-run
+deploys that deliberately size a smaller host.
 
 Keep catalog control/transport URLs on loopback and advertise
 `/shards/global-official` publicly. Caddy strips `/api` before proxying to

@@ -65,6 +65,9 @@ type WaterValidator struct {
 	root                 string
 	catalogPath          string
 	dungeonResourcesPath string
+	// aiNavDataPath packs the dungeons' native route tables (ainavdata.go);
+	// empty over a client public root, which ships none.
+	aiNavDataPath string
 	// readFile is the asset reader (os.ReadFile in production; tests inject
 	// it to prove the load-lock discipline below).
 	readFile func(name string) ([]byte, error)
@@ -156,11 +159,13 @@ browser client's publish layout.
 ================
 */
 func NewAuthorityValidator(worldAuthorityDir string) *WaterValidator {
-	return newWaterValidator(
+	v := newWaterValidator(
 		filepath.Join(worldAuthorityDir, "movement"),
 		"catalog.json",
 		filepath.Join("dungeon", "dungeon-resources.json"),
 	)
+	v.aiNavDataPath = filepath.Join("dungeon", "ainav-data.json")
+	return v
 }
 
 /*

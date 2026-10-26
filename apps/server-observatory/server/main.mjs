@@ -196,6 +196,18 @@ async function handleRequest( req, res ) {
 			respondJSON( res, result.status, result.body );
 			return;
 		}
+		// The one economy POST: run the shard's seal census (a read over a
+		// fresh store copy; nothing persists). Same-origin staff only.
+		if ( url.pathname === "/api/economy/sealcensus" && req.method === "POST" ) {
+			if ( !allowedMutation( req, port, edge ) ) {
+				res.writeHead( 403 );
+				res.end( "Same-origin console request required" );
+				return;
+			}
+			const result = await economy.request( url.pathname, url.searchParams, "POST" );
+			respondJSON( res, result.status, result.body );
+			return;
+		}
 		if ( req.method !== "GET" ) {
 			res.writeHead( 405 );
 			res.end( "Method not allowed" );
