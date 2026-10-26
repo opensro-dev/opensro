@@ -330,6 +330,10 @@ export function createActorAppearance( owner: ActorOwner ) {
 							dependencies: [ resource.glb, ...parts.map( part => part.model ) ]
 						};
 						appearances.set( entity.gid, appearance );
+						// The wearer's worn parts own the next free load
+						// slot: a fresh equip must not wait behind
+						// unrelated character assets.
+						if ( entity.gid === gameplay?.localGid ) resources.prioritize( appearance.dependencies );
 					}
 					const parts = appearance.parts;
 					let ready = true;

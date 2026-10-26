@@ -106,7 +106,7 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance mons
 		// is not an unconditional aggro blackout until arrival.
 		elapsed := uint32(nowMs) - mover.HomingStartedMs
 		if elapsed > 50000 {
-			mover.Pose = mover.LivePoseAt(nowMs, ops.TerrainHeight)
+			mover.Pose = mover.LivePoseAt(nowMs, ops.GroundHeight)
 			mover.From, mover.To = monster.Pose{}, monster.Pose{}
 			mover.DepartMs, mover.ArriveMs = 0, 0
 			mustMoverTransition(&mover, monster.MoverEventHomingExpired, 0)
@@ -114,7 +114,7 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance mons
 			return ops.commitIdleEntry(divisionID, instance, mover, []Frame{correctionFrame(instance.Gid, mover.Pose)}, nowMs), nil
 		}
 		if elapsed > mover.HomingAcquireAfterMs && ops.acquisitionReady(divisionID, instance, nowMs) && tactics.Aggressive {
-			from := mover.LivePoseAt(nowMs, ops.TerrainHeight)
+			from := mover.LivePoseAt(nowMs, ops.GroundHeight)
 			if target, found := ops.acquireSightTarget(divisionID, instance, from, divisionPlayers, tactics); found {
 				mustMoverTransition(&mover, monster.MoverEventAggroAcquired, target.Gid)
 				if plan, planned := ops.selectMonsterAttack(divisionID, instance, 0, from, target); planned {
@@ -176,7 +176,7 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance mons
 			return ops.advanceIdle(divisionID, instance, tactics, mover, divisionPlayers, nowMs)
 		}
 		if mover.Mode() == monster.MoverWandering && tactics.Aggressive && ops.acquisitionReady(divisionID, instance, nowMs) {
-			live := mover.LivePoseAt(nowMs, ops.TerrainHeight)
+			live := mover.LivePoseAt(nowMs, ops.GroundHeight)
 			if target, ok := ops.acquireSightTarget(divisionID, instance, live, divisionPlayers, tactics); ok {
 				mustMoverTransition(&mover, monster.MoverEventAggroAcquired, target.Gid)
 				if plan, planned := ops.selectMonsterAttack(divisionID, instance, 0, live, target); planned {
@@ -190,7 +190,7 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance mons
 				return ops.startChaseLeg(divisionID, instance, tactics, mover, target, nowMs), nil
 			}
 		}
-		if mover.Mode() == monster.MoverWandering && needsHoming(instance, mover.LivePoseAt(nowMs, ops.TerrainHeight)) {
+		if mover.Mode() == monster.MoverWandering && needsHoming(instance, mover.LivePoseAt(nowMs, ops.GroundHeight)) {
 			return ops.startReturnLeg(divisionID, instance, tactics, mover, monster.MoverEventHomingRequired, nowMs), nil
 		}
 		return ops.chaseRetarget(divisionID, instance, tactics, mover, divisionPlayers, nowMs), nil
@@ -256,7 +256,7 @@ func (ops *MonsterMoverOps) advanceIdle(divisionID string, instance monster.Inst
 	// In particular an empty scan consumes the gate; entering sight does not
 	// re-arm it. Damage retaliation above is independent of this sight gate.
 	if tactics.Aggressive && ops.acquisitionReady(divisionID, instance, nowMs) {
-		from := mover.LivePoseAt(nowMs, ops.TerrainHeight)
+		from := mover.LivePoseAt(nowMs, ops.GroundHeight)
 		if target, ok := ops.acquireSightTarget(divisionID, instance, from, divisionPlayers, tactics); ok {
 			mustMoverTransition(&mover, monster.MoverEventAggroAcquired, target.Gid)
 			if plan, planned := ops.selectMonsterAttack(divisionID, instance, 0, from, target); planned {

@@ -160,8 +160,8 @@ func (ops *MonsterMoverOps) stopOrAdvanceFollow(divisionID string, instance mons
 		frames, _ = ops.Monsters.commitFollow(plan, mover, frames)
 		return frames, true
 	}
-	live := mover.LivePoseAt(nowMs, ops.TerrainHeight)
-	target := plan.leader.LivePoseAt(nowMs, ops.TerrainHeight)
+	live := mover.LivePoseAt(nowMs, ops.GroundHeight)
+	target := plan.leader.LivePoseAt(nowMs, ops.GroundHeight)
 	motion := monster.NativeFollowMotion(live, target, instance.BodyRadius(), plan.leaderRadius,
 		mover.InFlight(nowMs), mover.MovementGoal(), func() uint32 { return monster.SummonRandomWord(ops.rand()) })
 	if motion.Satisfied {

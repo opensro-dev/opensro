@@ -29,10 +29,24 @@ a cave is refused, as the boundary is crossed only by teleport.
 */
 func clipSegmentOnPlane(v *WaterValidator, from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) (ClipReport, *navWalk) {
 	services := planeServices{water: v}
-	if simulation.PlaneKindOf(from.RegionID) == simulation.PlaneOutdoor && simulation.PlaneKindOf(to.RegionID) == simulation.PlaneOutdoor {
+	if pairIsOutdoor(from.RegionID, to.RegionID) {
 		return outdoorPlane{services}.clipSegment(from, fromOwner, to)
 	}
 	return cavePlane{services}.clipSegment(from, fromOwner, to)
+}
+
+/*
+================
+pairIsOutdoor
+
+Whether a chord's pair belongs to the outdoor plane: both ends
+outdoors. A pair with any cave end is the cave's, whose operations
+treat a chord across regions as no walk at all (the boundary is
+crossed only by teleport). Every pair dispatcher picks its plane here.
+================
+*/
+func pairIsOutdoor(a, b uint16) bool {
+	return simulation.PlaneKindOf(a) == simulation.PlaneOutdoor && simulation.PlaneKindOf(b) == simulation.PlaneOutdoor
 }
 
 /*
