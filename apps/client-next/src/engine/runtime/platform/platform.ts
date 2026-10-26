@@ -672,6 +672,16 @@ export function createPlatform(
 		saveExperimentalOptions,
 		/*
 		================
+		saveCameraWaypoints
+
+		The UI bridge owns the DOM write behind /cwsave's download (#1716).
+		================
+		*/
+		saveCameraWaypoints( text: string ) {
+			bridge.saveCameraWaypoints( text );
+		},
+		/*
+		================
 		saveVideoOptions
 		================
 		*/

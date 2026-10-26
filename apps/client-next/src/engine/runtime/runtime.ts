@@ -389,7 +389,10 @@ export function startRuntime(
 					setCameraZoomRail: capped => input.zoomRail( capped ),
 					setFreeCamera: free => world.setFreeCamera( free ),
 					setCameraCollision: collision => world.setCameraCollision( collision ),
+					setCameraWaypoints: keyframes => world.setCameraWaypoints( keyframes ),
+					setCameraPlaying: playing => world.setCameraPlaying( playing ),
 					setCursorVisible: visible => platform.setCursorVisible( visible ),
+					saveCameraWaypoints: text => platform.saveCameraWaypoints( text ),
 					playSoundByName: name => audio.playByName( name ),
 					saveExperimental: value => platform.saveExperimentalOptions( value ),
 					saveWindowPositions: value => platform.saveWindowPositions( value )

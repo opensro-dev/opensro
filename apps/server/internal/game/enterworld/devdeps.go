@@ -249,6 +249,7 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		Levels:            levels,
 		Skills:            skills,
 		MagicOptions:      magicOptions,
+		SetGroups:         textdata.SetGroups,
 		EquipItemsEnabled: paths.EquipItemsEnabled,
 		NpcSpawns:         npcSpawns,
 		ResolveDivisionID: DevResolveDivisionIDFromCatalog(source),

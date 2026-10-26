@@ -10,7 +10,8 @@ the minimap's coordinates and arrow rotation.
 ===========================================================================
 */
 import { headingRadians } from "@/engine/foundation/math/angles";
-import { isDungeonRegion, sectorX, sectorY } from "@/engine/foundation/world/world-space";
+import { featuresAt } from "@/engine/foundation/world/plane";
+import { sectorX, sectorY } from "@/engine/foundation/world/world-space";
 
 import type { Pose } from "@/engine/contracts/gameplay";
 
@@ -70,7 +71,7 @@ CIFMinimap's outdoor coordinate conversion truncates toward zero.
 ================
 */
 export function minimapCoordinates( pose: Pick<Pose, "regionId" | "x" | "z"> ): readonly [string, string] {
-	if ( isDungeonRegion( pose.regionId ) ) return [ "", "" ];
+	if ( !featuresAt( pose.regionId ).minimapCoordinates ) return [ "", "" ];
 	const x = ((sectorX( pose.regionId ) * 3 - 0x195) << 6) - Math.trunc( pose.x / -10 ),
 		y = ((sectorY( pose.regionId ) * 3 - 0x114) << 6) - Math.trunc( pose.z / -10 );
 	return [ "X:" + String( x ).padStart( 3, " " ), "Y:" + String( y ).padStart( 3, " " ) ];

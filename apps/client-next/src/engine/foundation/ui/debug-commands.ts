@@ -41,7 +41,7 @@ export const DEBUG_COMMAND_TIME_PLUS = 108;
 export const DEBUG_COMMAND_TIME_MINUS = 109;
 // The camera family (690C40 ids 110-135): the interface's zoom byte
 // (+0x3CF), its free-camera byte (+0x3CE), and the cursor manager's
-// visibility byte. The camera-waypoint rows (130-134) are a later slice.
+// visibility byte.
 export const DEBUG_COMMAND_ZOOM = 110;
 // 111 snaps the interface's second camera float (+0x7C0, seeded 50)
 // between its 50 and 240 presets against the double 50. Nothing in the
@@ -71,6 +71,17 @@ export const DEBUG_COMMAND_FRAME = 117;
 // camera keeps tracking the player either way. "col" is collision.
 export const DEBUG_COMMAND_COLON = 118;
 export const DEBUG_COMMAND_COLON_OFF = 119;
+// The camera-waypoint rows (690C40 ids 130-134, #1716): the interface's
+// keyframe track at +0x3FC and its play byte (+0x3CD). 130 resets the
+// track; 131 and 132 are one shared case (the free-camera byte standing
+// and a non-empty store, then the play byte is written and the track
+// clock zeroed); 133 clears the play byte; 134 writes the store's lines
+// in the native text form. The store itself lives in camera-waypoints.ts.
+export const DEBUG_COMMAND_WAYPOINT_CLEAR = 130;
+export const DEBUG_COMMAND_WAYPOINT_POP = 131;
+export const DEBUG_COMMAND_WAYPOINT_GO = 132;
+export const DEBUG_COMMAND_WAYPOINT_STOP = 133;
+export const DEBUG_COMMAND_WAYPOINT_SAVE = 134;
 export const DEBUG_COMMAND_CURSOR = 135;
 // 136 writes the interface's free-camera move speed (+0x7B0, seeded
 // 100) from one word clamped to 1..500. 137 flips the global id-plate

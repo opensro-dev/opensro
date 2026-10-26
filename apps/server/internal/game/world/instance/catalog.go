@@ -10,9 +10,10 @@ import (
 
 type DefinitionID uint16
 
-// Definition preserves all fields loaded by v1.150 64DF40. The server's
-// 5EB500/5EB830 consume +22 and 5EC010 consumes +24. NativeType is retained
-// without guessing that every nonzero value has the same lifecycle policy.
+// Definition preserves all fields the native loader reads. The native
+// allocation paths consume +22 and the admission path +24. NativeType is
+// retained without guessing that every nonzero value has the same lifecycle
+// policy.
 type Definition struct {
 	ID          DefinitionID
 	CodeName    string
@@ -40,8 +41,8 @@ func mustParseShipped() []Definition {
 // keep callers from retaining mutable aliases into the catalog.
 func Shipped() []Definition { return append([]Definition(nil), shipped...) }
 
-// siegeWorldCodes are the RefGameWorld codenames CGameWorldMgr_CreateGameWorlds
-// (5F5B60) builds as CGameWorld_Siege.
+// siegeWorldCodes are the RefGameWorld codenames the world manager builds
+// as siege worlds.
 var siegeWorldCodes = map[string]bool{
 	"INS_FORT_JA": true, "INS_FORT_DW": true, "INS_FORT_HT": true, "INS_FORT_CT": true,
 	"INS_FORT_SK": true, "INS_FORT_BJ": true, "INS_FORT_HM": true, "INS_FORT_ER": true,
@@ -52,7 +53,7 @@ var siegeWorldCodes = map[string]bool{
 Definition.Siege
 
 A fortress world: the class whose world-manager slot 31 (+0x7C) answers 1,
-which sends a teleport through the fortress entry rules (4F2B50).
+which sends a teleport through the fortress entry rules.
 ================
 */
 func (d Definition) Siege() bool { return siegeWorldCodes[d.CodeName] }

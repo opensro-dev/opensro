@@ -14,7 +14,8 @@ The map choice was first written by GrazKe in #336.
 ===========================================================================
 */
 
-import { isDungeonRegion, REGION_SIZE } from "@/engine/foundation/world/world-space";
+import { featuresAt } from "@/engine/foundation/world/plane";
+import { REGION_SIZE } from "@/engine/foundation/world/world-space";
 
 // REVERSE_RETURN_MAP is v1.188's saved-point choice (4A00C0 case 7).
 export const REVERSE_RETURN_MAP = 7;
@@ -57,7 +58,7 @@ export function decodeReverseMapPoints( value: unknown ): readonly ReverseMapPoi
 		if (
 			!point || typeof point !== "object" || point.id !== index + 1 || typeof point.name !== "string" ||
 			point.name.length > MAX_REVERSE_MAP_NAME || !Number.isInteger( point.regionId ) ||
-			point.regionId! < 1 || isDungeonRegion( point.regionId! ) || point.regionId! > 0xffff ||
+			point.regionId! < 1 || !featuresAt( point.regionId! ).reverseReturnPoints || point.regionId! > 0xffff ||
 			![ point.x, point.y, point.z ].every( Number.isFinite ) || point.x! < 0 ||
 			point.x! >= REGION_SIZE || point.z! < 0 || point.z! >= REGION_SIZE
 		) throw Error( "Invalid reverse return map point" );
