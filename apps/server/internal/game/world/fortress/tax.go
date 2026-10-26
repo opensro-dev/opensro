@@ -19,17 +19,17 @@ import (
 	"opensro.online/server/internal/domain"
 )
 
-// taxFlushThreshold is 6201A0's 0x2710: the treasury is written once it has
-// grown by more than this since its last write.
+// taxFlushThreshold is the native threshold 0x2710: the treasury is written
+// once it has grown by more than this since its last write.
 const taxFlushThreshold = 10000
 
 /*
 ================
 CollectTax
 
-62F7C0 clamps signed gold, then checks period, fortress, holder and master.
-Keep the period and treasury locked through the durable transfer, so two
-requests cannot collect the same gold or race a capture.
+The native tax collection clamps signed gold, then checks period, fortress,
+holder and master. Keep the period and treasury locked through the durable
+transfer, so two requests cannot collect the same gold or race a capture.
 ================
 */
 func (a *Authority) CollectTax(divisionID string, fortressID uint32, actorID int64, requested int64) (int64, uint8, error) {
@@ -63,8 +63,8 @@ func (a *Authority) CollectTax(divisionID string, fortressID uint32, actorID int
 ================
 SetTaxRate
 
-62F640 admits signed percentages from -20 through 20; 621220 queues the
-durable update before the manager receives success.
+The native rate setting admits signed percentages from -20 through 20 and
+queues the durable update before the manager receives success.
 ================
 */
 func (a *Authority) SetTaxRate(divisionID string, fortressID uint32, rate int16) bool {
@@ -90,11 +90,11 @@ func (a *Authority) SetTaxRate(divisionID string, fortressID uint32, rate int16)
 ================
 AccumulateTax
 
-CGObj_AccumulateFortressTax (486330) adds the tax one sale or fee paid to
-the bound fortress (CSiegeFortress_AddAccumulatedTax 62A550) and flushes it
-(6201A0 mode 0). Only a positive amount counts: a negative ratio's discount
-never drains the treasury. The sum saturates instead of wrapping (62A550's
-64-bit add would wrap, then clamp the result to zero).
+The character-side tax accumulation adds the tax one sale or fee paid to
+the bound fortress and flushes it (the native flush, mode 0). Only a
+positive amount counts: a negative ratio's discount never drains the
+treasury. The sum saturates instead of wrapping (the native 64-bit add
+would wrap, then clamp the result to zero).
 
 The original marks the treasury written even when the write fails, so the
 next attempt waits another 10000 gold; the port keeps the unsaved amount

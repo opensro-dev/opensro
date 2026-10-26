@@ -15,7 +15,8 @@ to a near effect.
 import type { EntityState } from "@/engine/contracts/world";
 import type { GameplayState, Pose } from "@/engine/contracts/gameplay";
 import { minimapPoseKey } from "@/engine/foundation/gameplay/minimap-floor-key";
-import { isDungeonRegion, planarDistanceSquared, sameDungeonFloor } from "@/engine/foundation/world/world-space";
+import { featuresAt } from "@/engine/foundation/world/plane";
+import { planarDistanceSquared, sameDungeonFloor } from "@/engine/foundation/world/world-space";
 import { sharedCharacterRoom } from "./effect-room";
 
 /*
@@ -56,7 +57,7 @@ export function dungeonCharacterAdmission(
 ): (( entity: EntityState ) => boolean) | undefined {
 	const { entities, gameplay, dungeonCharacterPvs = true, dungeonBlockHides } = input;
 	const anchor = input.anchor ?? gameplay?.pose ?? undefined;
-	if ( !dungeonCharacterPvs || !anchor || !isDungeonRegion( anchor.regionId ) ) {
+	if ( !dungeonCharacterPvs || !anchor || !featuresAt( anchor.regionId ).characterPvs ) {
 		return undefined;
 	}
 	const localAnchor: Pick<Pose, "regionId" | "x" | "y" | "z"> = anchor;

@@ -110,8 +110,10 @@ LEVEL_CAP_NATIVE_VALUES = ("", "0", "off", "false", "90")
 LEVEL_CAP_EXPANSION_VALUES = ("110",)
 LINK_COLUMNS = 21
 LINK_KIND_LEVEL = 1
-# The highest condition kind the v1.150 server's portal catalogue accepts.
-LINK_KIND_LAST_NATIVE = 2
+# The condition kinds the v1.150 server's portal catalogue evaluates
+# (portalAdmission): 1 level, 2 transport, 7 thief suit with a transport
+# (#1749 PR-C(ii)). Any other kind is dropped and reported, below.
+LINK_KINDS_EVALUATED = (1, 2, 7)
 TELEPORT_COLUMNS = 13
 BUILDING_COLUMNS = 58
 
@@ -280,10 +282,10 @@ def translate_link(row, ids, level_cap, dropped=None):
 	One VSRO teleportlink row for the native table: its two ends renumbered by
 	teleport code, the scheduling word set to the one v1.150 server accepts
 	(1), a level condition clamped to the build's cap and conditions of a
-	kind the native server lacks dropped. Every drop is appended to
+	kind the server does not evaluate dropped. Every drop is appended to
 	dropped (when given) as {"from", "to", "kind", "operands"} with the
 	renumbered ends, so the loss is reported, never silent (#1749 PR-C(i);
-	the native kinds 3-7 have no port evaluator yet, PR-C(ii)).
+	kinds 3-6 still have no port evaluator, PR-C(ii)).
 	"""
 	columns = list(row[:LINK_COLUMNS])
 	columns[1], columns[2] = ids[row[1]], ids[row[2]]
@@ -291,9 +293,9 @@ def translate_link(row, ids, level_cap, dropped=None):
 	for at in range(6, LINK_COLUMNS, 3):
 		if columns[at] == str(LINK_KIND_LEVEL) and int(columns[at + 1]) > level_cap:
 			columns[at + 1] = str(level_cap)
-		# A condition kind the v1.150 server does not know (the ferry's kind 7)
-		# is dropped; the server refuses the whole catalogue otherwise.
-		if int(columns[at]) > LINK_KIND_LAST_NATIVE:
+		# A condition kind the v1.150 server does not evaluate is dropped;
+		# the server refuses the whole catalogue otherwise.
+		if int(columns[at]) != 0 and int(columns[at]) not in LINK_KINDS_EVALUATED:
 			if dropped is not None:
 				dropped.append({
 					"from": columns[1], "to": columns[2],

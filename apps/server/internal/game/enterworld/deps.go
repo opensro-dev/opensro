@@ -49,10 +49,13 @@ type Deps struct {
 	Roster            *Roster
 	Characters        CharacterSource
 
-	Items             ItemRefSource
-	Levels            LevelDataSource
-	Skills            SkillDataSource
-	MagicOptions      MagicOptionSource
+	Items        ItemRefSource
+	Levels       LevelDataSource
+	Skills       SkillDataSource
+	MagicOptions MagicOptionSource
+	// SetGroups is the port-only dormant set catalogue (setgroups.go);
+	// consumers read it through SetCatalogue, which gates on the flag.
+	SetGroups         SetCatalogueSource
 	EquipItemsEnabled bool
 	// StarterKit is the beta starter kit (starterkit.go); empty when disabled.
 	StarterKit []WireItem
