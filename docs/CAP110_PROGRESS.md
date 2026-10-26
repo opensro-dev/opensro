@@ -467,6 +467,36 @@ stay silent; 88 ranks compile to no execution shape; and the skill window's
 board listing is unchanged - the new ranks appear as a mastery rises, and the
 display path was not traced to the code that builds it.
 
+These three were re-measured on 2026-10-26; see the next section.
+
+## Skill tier: execution, silent bases and board, 2026-10-26
+
+Re-measured against the same later archive (hash above), loading native plus
+the imported shard through the production loaders (#1746):
+
+- **Execution.** The 88 ranks with no execution plan are not ranks that do
+  nothing: the plan only gates offensive sequences. The press router
+  (`action.SkillPressHandled`) handles 540 of the 555 trainable imported ranks
+  (handled or passive). The other 15 belong to native families the catalogue
+  under-reported (imbues and instant skills, #1771) and to the cleric's
+  special-rebirth buff companions, which are applied, not pressed.
+- **Silent bases.** The 46 bases with no animation set are passive families
+  (and the warrior's frenzy defence line) whose native ranks name the same
+  bases, absent from the native `skilleffect.txt` too: silent in the original
+  as well, so nothing is missing.
+- **Board.** The v1.150 client's board build never creates a cell for a skill
+  whose first mastery requirement is above 90 (`cmp byte [record+0xac], 0x5a`
+  at 0x7F1151). The native tables have no such rank; the imported tier has 586
+  on the board. The browser client does not port the gate, so the new ranks
+  show as the mastery reaches them (recorded in `skill-slot.ts`). The 18 new
+  groups on the board land in free cells under existing group headers.
+- **Program decoder.** `CompileSkillProgram` accepts all 757 imported rows.
+- **Learning.** A mastery is bounded by `MasteryLevelCap` (120) and the
+  character's level, so with the level cap at 110 masteries reach 110.
+
+Still open: the owner's in-game pass with the tier on (learn a rank per
+mastery from 91 to 110; press one offence, heal, buff and passive).
+
 ## Database tier through mastery 110, 2026-10-17
 
 The client-only import above stopped at mastery 100. The owner's VSRO shard
