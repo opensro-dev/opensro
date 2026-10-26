@@ -22,6 +22,7 @@ import { loadCharacterDataRows } from "../char/resolveCharRoster.mjs";
 import { VARIANT_MANIFEST } from "../../lib/expandedBuild.mjs";
 import {
 	dataExtractedRoot,
+	extractedRoot,
 	gameRoot,
 	publicRoot,
 	rebuildRoot,
@@ -29,6 +30,7 @@ import {
 	serverGameDataRoot
 } from "../world/paths.mjs";
 import { buildStructureZoneProjection } from "./structureZones.mjs";
+import { buildAINavProjection } from "./aiNavProjection.mjs";
 import { buildServerGameDataArchive } from "./serverGameDataArchive.mjs";
 import { completeItemTextProjection, completeItemReferenceProjection } from "../shared/itemTextCompletions.mjs";
 import { completeEnglishTextProjection, ENGLISH_COMPLETION_FILES } from "../shared/englishCompletions.mjs";
@@ -43,8 +45,15 @@ const PROTOCOL_VERSION = 2;
 const WORLD_PUBLIC_ROOT = path.join( publicRoot, "assets", "world" );
 // CObjectStringIfo_Load (98C7F0) reads this Data.pk2 file.
 const OBJECT_STRING_FILE = path.join( dataExtractedRoot, "navmesh", "objectstring.ifo" );
+// The dungeon route tables (aiNavProjection.mjs) sit beside objectstring.ifo.
+const AINAV_SOURCE_ROOT = path.join( dataExtractedRoot, "navmesh" );
 // Read by apps/server/internal/game/world/alexandria (OverlayFile).
 const ALEXANDRIA_OVERLAY_FILE = path.join( "textdata", "alexandria-overlay.json" );
+// Written by scripts/import_vsro_optional_teleport.py; read by
+// apps/server/internal/game/world/optionalteleport (File).
+const OPTIONAL_TELEPORT_NAME = "vsro-optional-teleport.json";
+const OPTIONAL_TELEPORT_SOURCE = path.join( extractedRoot, "VsroOptionalTeleport_extracted", OPTIONAL_TELEPORT_NAME );
+const OPTIONAL_TELEPORT_FORMAT = "opensro-vsro-optional-teleport-v1";
 
 export const defaultServerGameDataRoot = serverGameDataRoot;
 
@@ -70,9 +79,14 @@ export async function buildServerGameDataBundle( options ) {
 			temporaryRoot,
 			options.variantManifest ?? path.join( gameRoot, VARIANT_MANIFEST )
 		);
+		await buildOptionalTeleportProjection(
+			temporaryRoot,
+			options.optionalTeleportSource ?? OPTIONAL_TELEPORT_SOURCE
+		);
 		await buildCharacterAuthorityProjection( temporaryRoot, textdataRoot );
 		await buildAreaProjection( temporaryRoot, worldPublicRoot );
 		await buildMovementProjection( temporaryRoot, worldPublicRoot );
+		await buildAINavProjection( temporaryRoot, options.aiNavSourceRoot ?? AINAV_SOURCE_ROOT );
 		await buildStructureZoneProjection( temporaryRoot, options.objectStringFile ?? OBJECT_STRING_FILE );
 
 		const files = await describeProjectionFiles( temporaryRoot );
@@ -242,6 +256,33 @@ export async function buildAlexandriaOverlayProjection( bundleRoot, variantManif
 		teleports: [ ...teleports ].sort(),
 		buildings: [ ...buildings ].sort()
 	} );
+}
+
+/*
+================
+buildOptionalTeleportProjection
+
+Port-only, not native. The later client's reverse return map table, when
+the operator imported it (import_vsro_optional_teleport.py), joins the
+textdata unchanged; the server serves it only while SRO_REVERSE_RETURN_MAP
+is on. A game root without the import gains no file, so its manifest stays
+byte-identical.
+================
+*/
+export async function buildOptionalTeleportProjection( bundleRoot, sourcePath ) {
+	if ( !(await isRegularFile( sourcePath )) ) {
+		return;
+	}
+	const bytes = await readFile( sourcePath );
+	const document = JSON.parse( bytes.toString( "utf8" ) );
+	if (
+		document.format !== OPTIONAL_TELEPORT_FORMAT || !Array.isArray( document.rows ) || document.rows.length === 0
+	) {
+		throw new Error( `Unsupported optional-teleport import ${sourcePath} (${document.format})` );
+	}
+	const targetRoot = path.join( bundleRoot, "textdata" );
+	await mkdir( targetRoot, { recursive: true } );
+	await writeFile( path.join( targetRoot, OPTIONAL_TELEPORT_NAME ), bytes );
 }
 
 /*

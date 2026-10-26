@@ -34,16 +34,13 @@ func (v *WaterValidator) PlanMonsterPath(from, goal monster.Pose) *monster.Navig
 /*
 ================
 monsterPathHeightAt
+
+The height of a monster path's sample at chord parameter t, by the
+plane the sample is on (pathHeightOnPlane, plane_height.go).
 ================
 */
 func (v *WaterValidator) monsterPathHeightAt(t float64, p monster.Pose, walk *navWalk) (float64, bool) {
-	if simulation.IsDungeonRegion(p.RegionID) {
-		return v.dungeonSpawnHeightAt(p.RegionID, p.X, p.Y, p.Z)
-	}
-	if y, ok := walk.heightAt(t); ok {
-		return y, true
-	}
-	return v.TerrainHeightAt(p.RegionID, p.X, p.Z)
+	return pathHeightOnPlane(v, t, p, walk)
 }
 
 /*

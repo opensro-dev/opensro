@@ -480,6 +480,15 @@ variable "seal_board" {
   default = "off"
 }
 
+# seal_census opens the staff-only seal census route (the console's
+# sealcensus tab counts seal items by degree and tier, name-free; port-only,
+# not native; owner decision 2026-10-26, #1604 P13 / #1691). "off" is
+# native: the route does not exist.
+variable "seal_census" {
+  type    = string
+  default = "off"
+}
+
 variable "announce_plus" {
   type    = string
   default = "on"
@@ -560,6 +569,9 @@ variable "trade_job_hunter_percent_cap" {
 
 # reverse_return_map adds map destinations to the reverse return scroll
 # (port-only, not native). Anything but "on" keeps the native two points.
+# On, the destinations are the VSRO client's refoptionalteleport table when
+# the game data was built after scripts/import_vsro_optional_teleport.py,
+# else the inferred town gates and unique monster areas.
 variable "reverse_return_map" {
   type    = string
   default = ""
@@ -1075,6 +1087,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_MALL_RIDE_SPEED                     = var.mall_ride_speed
         SRO_ANNOUNCE_SOX_DROP                   = var.announce_sox_drop
         SRO_SEAL_BOARD                          = var.seal_board
+        SRO_SEAL_CENSUS                         = var.seal_census
         SRO_ANNOUNCE_PLUS                       = var.announce_plus
         SRO_ANNOUNCE_JOB_KILL                   = var.announce_job_kill
         SRO_JOB_KILL_NOTICE_REPEAT              = var.job_kill_notice_repeat
