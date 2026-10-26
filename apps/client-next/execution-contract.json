@@ -3532,6 +3532,13 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-appearance.ts",
+			"expression": "resources.prioritize",
+			"function": "resolve",
+			"kind": "callback",
+			"reason": "The per-actor phase declares the local player's worn sources to the resource owner, synchronously, so its single load slot serves a fresh equip ahead of unrelated character assets."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-appearance.ts",
 			"expression": "allocateActor",
 			"function": "resolve",
 			"kind": "callback",
