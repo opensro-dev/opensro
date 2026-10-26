@@ -5,8 +5,9 @@ battle.go - fortress battle records and authored rank transitions
 
 The existing fortress authority owns records keyed by character. Combat owns
 eligibility and buff installation; this module owns counts and persistence.
-61F580 promotes one rank only after its indirect skill succeeds. 622380
-checkpoints at count modulo ten equal to one, and immediately on promotion.
+The native promotion path promotes one rank only after its indirect skill
+succeeds. Its checkpoint writes at count modulo ten equal to one, and
+immediately on promotion.
 
 ===========================================================================
 */
@@ -73,9 +74,9 @@ type BattleChange struct {
 ================
 RecordBattle
 
-61F2D0/61F580 create the first death/kill record at rank zero. Existing
-kills increment as uint32 and offer the next rank without skipping ranks.
-The caller installs that rank's skill before CommitBattleRank.
+The native record creation makes the first death/kill record at rank zero.
+Existing kills increment as uint32 and offer the next rank without skipping
+ranks. The caller installs that rank's skill before CommitBattleRank.
 ================
 */
 func (a *Authority) RecordBattle(divisionID string, change BattleChange) (domain.FortressBattleRecord, uint8, error) {
@@ -107,7 +108,8 @@ func (a *Authority) RecordBattle(divisionID string, change BattleChange) (domain
 		}
 	}
 	// Below the top rank, the kill path returns without the periodic update
-	// until a promotion. Deaths and top-rank kills use 622380's modulo rule.
+	// until a promotion. Deaths and top-rank kills use the native checkpoint's
+	// modulo rule.
 	checkpoint := !exists || (!change.Kill || row.Rank == MaxBattleRank) &&
 		(row.Kills%battleCheckpointInterval == 1 || row.Deaths%battleCheckpointInterval == 1)
 	if checkpoint {
@@ -120,7 +122,8 @@ func (a *Authority) RecordBattle(divisionID string, change BattleChange) (domain
 ================
 CommitBattleRank
 
-61CA70 updates rank and local timestamp only after BeginIndirectSkill.
+The native rank commit updates rank and local timestamp only after
+BeginIndirectSkill.
 ================
 */
 func (a *Authority) CommitBattleRank(divisionID string, change BattleChange, rank uint8) error {
@@ -162,7 +165,8 @@ func battleRows(r *Record) []domain.FortressBattleRecord {
 checkpointBattleLocked
 
 Only this character's checkpoint advances. Saving another fortress field
-must not flush counts which 622380 has not queued to the native database.
+must not flush counts which the native checkpoint has not queued to the
+native database.
 ================
 */
 func (a *Authority) checkpointBattleLocked(division string, r *Record, row domain.FortressBattleRecord) error {
@@ -186,9 +190,10 @@ func (a *Authority) checkpointBattleLocked(division string, r *Record, row domai
 ================
 ReleaseBattleRecords
 
-601170 -> 628D50 releases the live record map after residents lose rank
-buffs. It does not enqueue QUERY_SIEGE_BATTLE_RECORD_DELETE; stored rows
-remain owned by the shard database and 629590 loads them at server start.
+The native release path releases the live record map after residents lose
+rank buffs. It does not enqueue QUERY_SIEGE_BATTLE_RECORD_DELETE; stored
+rows remain owned by the shard database and are loaded again at server
+start.
 ================
 */
 func (a *Authority) ReleaseBattleRecords(division string, id uint32) {

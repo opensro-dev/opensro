@@ -22,4 +22,5 @@ type Dependencies interface {
 	LevelData() enterworld.LevelDataSource
 	SkillData() enterworld.SkillDataSource
 	MagicOptionDefinitions() enterworld.MagicOptionSource
+	SetCatalogue() enterworld.SetCatalogueSource
 }

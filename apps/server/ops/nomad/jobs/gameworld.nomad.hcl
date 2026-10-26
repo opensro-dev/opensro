@@ -187,6 +187,13 @@ variable "cap110_level100" {
   default = "off"
 }
 
+# Port-only, not native: degree-10/11 equipment set bonuses (#1747). The
+# v1.150 client ships no set rows, so off is the native state.
+variable "cap110_set_bonuses" {
+  type    = string
+  default = "off"
+}
+
 # Port-only, not native: the optional Pharaoh Tomb 1-3 population. It needs
 # cap110_monsters on as well; GameWorld refuses to start otherwise.
 variable "pharaoh_tomb" {
@@ -1121,6 +1128,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_LEVEL_CAP                      = var.level_cap
         SRO_CAP110_MONSTERS                = var.cap110_monsters
         SRO_CAP110_LEVEL100                = var.cap110_level100
+        SRO_CAP110_SET_BONUSES             = var.cap110_set_bonuses
         SRO_PHARAOH_TOMB                   = var.pharaoh_tomb
         SRO_PHARAOH_TOMB_GEAR_RATE         = var.pharaoh_tomb_gear_rate
         SRO_BETA_SILK                           = var.beta_silk
