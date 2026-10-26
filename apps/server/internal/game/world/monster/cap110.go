@@ -17,9 +17,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"os"
-	"log"
 	"path/filepath"
 	"strings"
 
