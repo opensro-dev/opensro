@@ -3,8 +3,9 @@
 
 registry_test.go - trap and buff-field scan, lifetime and isolation regressions
 
-Drive time explicitly. Boundaries come from 48CEA0/48D690, including the
-strict expiry and radius comparisons that ordinary timer helpers obscure.
+Drive time explicitly. Boundaries come from the native scan and retire
+step, including the strict expiry and radius comparisons that ordinary
+timer helpers obscure.
 
 ===========================================================================
 */

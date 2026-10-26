@@ -90,7 +90,8 @@ objectDeckStandSealed
 
 Traverses the object-nav cell lane from stand, rebinding across sector
 boundaries when an outline link edge (flags&8 != 0) lies in an adjacent sector
-whose NVM carries the resolved target placement (native 0x009A0485 + 0x009A04AE).
+whose NVM carries the resolved target placement (the native sector
+rebinding described at rebindStandToSector).
 ================
 */
 func (v *WaterValidator) objectDeckStandSealed(stand *objectDeckStand) bool {
@@ -239,7 +240,8 @@ func resolveObjectPassages(set []resolvedObjectNav, x0, y0, z0, x1, y1, z1 float
 }
 
 // Once a cell owns the mover, its plane supplies height. The endpoint-Y
-// chord is not an admission test for its authored links (9A0309..9A045B).
+// chord is not an admission test for its authored links (the native
+// placed-object walk applies none).
 /*
 ================
 resolveSurfacePassages

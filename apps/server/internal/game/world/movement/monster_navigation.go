@@ -49,7 +49,8 @@ PlanMonsterPathFrom
 
 PlanMonsterPathFrom plans from the monster's retained surface owner
 (monster.MoverState.LiveNavOwner): the native mover walks from its stored
-source cell (QueryMovement 0x98B300) and never re-guesses it from height.
+source cell (the native movement query) and never re-guesses it from
+height.
 The returned path carries the walked owners so the next plan can do the same.
 ================
 */

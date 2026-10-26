@@ -265,8 +265,9 @@ func (c *ClientClip) processOwnedStep(characterName string, from simulation.Spaw
 		c.applied.Add(1)
 		return report.Rest, report.RestOwner, true
 	}
-	// A continued step (a linked cell, or an outline exit 98B300 ended
-	// within 5 units) stands where the leg reached, on that leg's owner.
+	// A continued step (a linked cell, or an outline exit the native
+	// movement query ended within 5 units) stands where the leg
+	// reached, on that leg's owner.
 	// A dungeon arrival stands there too: clipDungeonPath reports it with
 	// NativeResult 0, and its Rest.Y is the floor the step reached - dropping
 	// it kept the server at the ramp-top height while the client descended,

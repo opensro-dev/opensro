@@ -6,7 +6,7 @@ temple_retained_owner_test.go - a retained south-sector owner still crosses
 Report BR-261018-1104-A69F (#1213): the walker stepped onto the Fertility
 Temple stair (asset 1300) in region 0x6587 and kept that sector's owner,
 whose bundle copy of the stair carries the placeholder link table
-(target 0xffff). Native QueryMovement (98B300) steps the CURRENT sector's
+(target 0xffff). The native movement query steps the CURRENT sector's
 CRTNavMeshTerrain, whose inst list in 0x6687 authors the stair edge 93 ->
 deck edge 408 portal, so the retained owner must be rebound to the same
 placement in the current region's bundle before the walk reads its links.

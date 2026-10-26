@@ -13,7 +13,6 @@ import (
 	"math"
 	"sort"
 
-	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -38,47 +37,21 @@ type objectOwnedPath struct {
 	spans          []objectCellSpan
 }
 
-// 403D20 chooses the initial surface by nearest |delta Y|. 428930 then
-// retains connected cells; it does NOT resolve ownership from chord Y at
-// each terrain tile. That chord cuts below a stair even with legal endpoints.
-// This is a source-owner walk, not the outside-object probe in 428300.
-// Collision remains responsible for edge flags. Ownership ends at an outline
-// or an unconnected cell; it cannot jump onto an overlapping deck.
 /*
 ================
 objectSurfacePath
+
+The pair's plane owns the object-surface path (#1673,
+plane_surfacepath.go): picked by the pair's plane here, so no caller
+tests the region bit.
 ================
 */
 func (v *WaterValidator) objectSurfacePath(from, to simulation.Spawn) *objectOwnedPath {
-	if simulation.IsDungeonRegion(from.RegionID) || simulation.IsDungeonRegion(to.RegionID) {
-		return nil
+	services := planeServices{water: v}
+	if pairIsOutdoor(from.RegionID, to.RegionID) {
+		return outdoorPlane{services}.objectSurfacePath(from, to)
 	}
-	surface := v.surfaceForRegion(from.RegionID)
-	if surface == nil {
-		return nil
-	}
-	bx := from.X + float64(simulation.SectorX(from.RegionID)-simulation.SectorX(surface.seedRegionID))*surface.regionSize
-	bz := from.Z + float64(simulation.SectorY(from.RegionID)-simulation.SectorY(surface.seedRegionID))*surface.regionSize
-	terrain, ok := surface.terrainHeightAt(bx, bz)
-	if !ok {
-		return nil
-	}
-	stand := v.spawnObjectDeckStand(surface, bx, bz, from.Y, terrain)
-	if stand == nil {
-		return nil
-	}
-	a := worldgeom.ExpandGrid(worldgeom.RegionXZ{RegionID: from.RegionID, X: from.X, Z: from.Z})
-	b := worldgeom.ExpandGrid(worldgeom.RegionXZ{RegionID: to.RegionID, X: to.X, Z: to.Z})
-	p := stand.placement
-	c, s := math.Cos(p.yaw), math.Sin(p.yaw)
-	local := func(x, z float64) (float64, float64) {
-		x -= stand.anchorX + p.x
-		z -= stand.anchorZ + p.z
-		return c*x + s*z, -s*x + c*z
-	}
-	x0, z0 := local(a.X, a.Z)
-	x1, z1 := local(b.X, b.Z)
-	return traceObjectCells(stand, x0, z0, x1, z1)
+	return cavePlane{services}.objectSurfacePath(from, to)
 }
 
 // Pure geometry owner shared by terrain clipping and pathguard. Partition at
