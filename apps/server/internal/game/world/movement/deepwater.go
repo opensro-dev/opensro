@@ -14,7 +14,6 @@ package movement
 
 import (
 	"os"
-	"strings"
 )
 
 // EnvDeepWaterRefusal turns the deep-water destination refusal on ("on",
@@ -27,11 +26,7 @@ DeepWaterRefusalFromEnv
 ================
 */
 func DeepWaterRefusalFromEnv() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvDeepWaterRefusal))) {
-	case "on", "1", "true":
-		return true
-	}
-	return false
+	return switchOn(os.Getenv(EnvDeepWaterRefusal))
 }
 
 /*

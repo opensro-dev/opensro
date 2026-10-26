@@ -59,7 +59,7 @@ func (ops *MonsterMoverOps) planSegment(instance monster.Instance, mover monster
 		return mover, nil // same validated leg; no packet or geometry refresh
 	}
 	if !ready {
-		route := ops.PlanRoute(live, goal)
+		route := ops.PlanRoute(live, mover.LiveNavOwner(now), goal)
 		ops.Navigation.plan(callerForMode(mover.Mode()), route)
 		if route == nil || route.Status() != monster.NavigationRouteReady || route.Len() == 0 {
 			return ops.waitForNavigation(instance.Gid, mover, live, goal, speed, settledFrames, now)
