@@ -384,6 +384,24 @@ func (s *monsterStorage) isDead(gid uint32) bool {
 
 /*
 ================
+currentHP
+
+lookup(gid).CurrentHP and its existence without reconstructing the full
+Instance snapshot: expanding the shared catalogue rows dominates a lookup.
+================
+*/
+func (s *monsterStorage) currentHP(gid uint32) (uint32, bool) {
+	if r, ok := s.hot[gid]; ok {
+		return r.currentHP, true
+	}
+	if r, ok := s.cold[gid]; ok {
+		return r.hp, true
+	}
+	return 0, false
+}
+
+/*
+================
 removeCold
 
 Forget a sleeping monster's cold row.
