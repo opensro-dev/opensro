@@ -33,11 +33,7 @@ const (
 	bugReportWebhookItem     = "bug_report_discord_webhook"
 	// publicAPITokenItem is the GameWorld variable item the job template
 	// renders into secrets/public-api-token.
-	publicAPITokenItem = "public_api_token"
-	// staffWebhookItem is the GameWorld variable item the job template
-	// renders into secrets/staff-webhook (ops-only alerts, #1447).
-	staffWebhookItem        = "staff_discord_webhook"
-	envStaffWebhook         = "SRO_STAFF_DISCORD_WEBHOOK"
+	publicAPITokenItem      = "public_api_token"
 	nomadVariablePathBytes  = 128
 	nomadVariableItemsBytes = 64 << 10
 	// requiresStopPrefix opens validate -assume-stopped's report line.
@@ -361,30 +357,6 @@ func onlyItemDiffers(current, desired nomad.VariableItems, item string) bool {
 		return out
 	}
 	return stringMapsEqual(strip(current), strip(desired))
-}
-
-/*
-================
-keepStaffWebhook
-
-The GameWorld's staff webhook, kept the way keepBugReportWebhook keeps the
-Agent's: a deploy that names none keeps the stored one, "off" removes it.
-Its template is change_mode noop and the GameWorld reads the file at every
-post, so changing it never needs the job stopped (onlyItemDiffers).
-================
-*/
-func keepStaffWebhook(items nomad.VariableItems, existing *nomad.Variable, off bool) nomad.VariableItems {
-	if off {
-		delete(items, staffWebhookItem)
-		return items
-	}
-	if _, named := items[staffWebhookItem]; named || existing == nil {
-		return items
-	}
-	if stored := existing.Items[staffWebhookItem]; bugreport.ValidWebhookURL(stored) {
-		items[staffWebhookItem] = stored
-	}
-	return items
 }
 
 /*

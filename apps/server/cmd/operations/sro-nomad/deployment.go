@@ -481,31 +481,6 @@ func resolveDeployment(
 
 /*
 ================
-configuredStaffWebhook
-
-The deployer's SRO_STAFF_DISCORD_WEBHOOK: empty keeps the stored item,
-"off" removes it, a Discord webhook URL replaces it. Anything else is
-warned about and treated as unset, keeping the stored one: an ops alert
-channel must never be the reason a release does not ship. The warning
-never quotes the value, which carries the webhook token.
-================
-*/
-func configuredStaffWebhook(raw string) (webhook string, off bool, warning string) {
-	raw = strings.TrimSpace(raw)
-	switch {
-	case raw == "":
-		return "", false, ""
-	case strings.EqualFold(raw, "off"):
-		return "", true, ""
-	case bugreport.ValidWebhookURL(raw):
-		return raw, false, ""
-	}
-	return "", false, envStaffWebhook + " is not a Discord webhook URL " +
-		"(https://discord.com/api/webhooks/<id>/<token>) or off; the stored staff webhook is kept"
-}
-
-/*
-================
 endpointPort
 ================
 */
