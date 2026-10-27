@@ -610,6 +610,7 @@ import {
 	overheadBoardVisible
 } from "@/engine/foundation/ui/name-visibility";
 import { chatBlocks, chatBlockError } from "@/engine/foundation/gameplay/chat-blocks";
+import { mallNoticeClosed, rememberMallNoticeClosed } from "@/engine/foundation/ui/mall-notice-memory";
 import {
 	gameOptionRows,
 	defaultGameOptions,
@@ -1017,6 +1018,43 @@ export interface UiExtensions {
 	playSoundByName?: ( name: string ) => void;
 	saveExperimental?: ( value: ExperimentalOptions ) => void;
 	saveWindowPositions?: ( value: WindowPositions ) => void;
+	// Where the Item Mall notice's closes are remembered (mall-notice-memory.ts)
+	// and the release they belong to. The page leaves both out: localStorage
+	// and the build's stamped revision are used.
+	mallNoticeStorage?: Pick<Storage, "getItem" | "setItem"> | null;
+	clientRevision?: string;
+}
+
+/*
+================
+stampedClientRevision
+
+The release's git revision as the build stamps it (tools/build-metadata.mjs);
+"" where nothing defines it (a test importing the source).
+================
+*/
+function stampedClientRevision(): string {
+	try {
+		return String( import.meta.env.SRO_CLIENT_REVISION ?? "" );
+	} catch {
+		return "";
+	}
+}
+
+/*
+================
+pageStorage
+
+This page's localStorage, or null where a private window or blocked site
+data refuses it.
+================
+*/
+function pageStorage(): Storage | null {
+	try {
+		return globalThis.localStorage ?? null;
+	} catch {
+		return null;
+	}
 }
 
 // Sole owner of UI navigation, focus projection and pending UI intent. Gameplay is read-only.
@@ -1406,7 +1444,11 @@ export function createUi(
 	const itemMall = createItemMall();
 	// CIFMallNotifyWnd (mall-notify.ts): "pending" until the session's first
 	// world entry decides it, as 683B40's +0x6FC latch; then shown or closed.
+	// Deliberate deviation (owner, 2026-10-28): a close is remembered per
+	// account until the next release (mall-notice-memory.ts).
 	let mallNotice: "pending" | "open" | "closed" = "pending";
+	const mallNoticeStorage = extensions.mallNoticeStorage === undefined ? pageStorage() : extensions.mallNoticeStorage;
+	const mallNoticeRevision = extensions.clientRevision ?? stampedClientRevision();
 	const windowWarm = createWindowWarm();
 
 	let guideThumbTravel = 0, guideScrollMax = 0, guideIndexMax = 0;
@@ -3453,6 +3495,14 @@ export function createUi(
 			// mall opens, so entering closes it too.
 			mallNotice = "closed";
 			dirty = true;
+			try {
+				if ( mallNoticeStorage ) {
+					rememberMallNoticeClosed( mallNoticeStorage, mallNoticeRevision, {
+						account,
+						character: view?.session?.character ?? ""
+					} );
+				}
+			} catch {}
 			if ( id === "mall-notice-close" ) return;
 			id = "item-mall";
 		}
@@ -8858,7 +8908,14 @@ export function createUi(
 				petStateAsked = { ref: 0, asks: 0, atMs: 0 };
 				petTrainingAskedRef = 0;
 			} else if ( sessionPhase === "world" && !next.travel && mallNotice === "pending" && hud.data() ) {
-				mallNotice = hud.data()!.mallNotify.open ? "open" : "closed";
+				let remembered = false;
+				try {
+					remembered = !!mallNoticeStorage && mallNoticeClosed( mallNoticeStorage, mallNoticeRevision, {
+						account,
+						character: next.session?.character ?? ""
+					} );
+				} catch {}
+				mallNotice = hud.data()!.mallNotify.open && !remembered ? "open" : "closed";
 				dirty = true;
 			}
 			// 0x366A reset -> CGInterface_CloseTransientWindowsOnReset (685400) destroys

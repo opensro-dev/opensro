@@ -571,6 +571,88 @@ test("the Item Mall notice opens once per session at world entry, as 683B40", ()
 	}
 });
 
+/*
+================
+memoryStorage
+
+A Storage stand-in shared by several UIs, as one browser's localStorage.
+================
+*/
+function memoryStorage() {
+	const values = new Map();
+	return {
+		values,
+		getItem: ( /** @type {string} */ key ) => values.get( key ) ?? null,
+		setItem: ( /** @type {string} */ key, /** @type {string} */ value ) => void values.set( key, value )
+	};
+}
+
+/*
+================
+mallNoticeSession
+
+One login on a fresh UI: whether the notice showed at world entry, and,
+when asked, its Close pressed. The account is typed as on the login form.
+================
+*/
+function mallNoticeSession(
+	/** @type {{ storage: ReturnType<typeof memoryStorage>; revision: string; account: string; character?: string; close?: boolean; }} */ run
+) {
+	const f = uiFixture( () => {}, () => false, () => {}, () => {}, () => {}, () => {}, () => {}, {
+		mallNoticeStorage: run.storage,
+		clientRevision: run.revision
+	} );
+	try {
+		f.state.session = { ...f.state.session, character: run.character ?? "Player" };
+		if ( run.account ) f.ui.event( { kind: "edit", id: "account", value: run.account } );
+		/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null | undefined} */
+		let last;
+		for ( let i = 0; i < 20; i++ ) last = f.ui.step( f.state, 1100 + i * 50 ) ?? last;
+		const shown = !!last?.controls.some( control => control.id === "mall-notice-close" );
+		if ( shown && run.close ) {
+			f.ui.event( { kind: "activate", id: "mall-notice-close" } );
+			for ( let i = 0; i < 4; i++ ) last = f.ui.step( f.state, 2200 + i * 50 ) ?? last;
+			assert.equal( !!last?.controls.some( control => control.id === "mall-notice-close" ), false );
+		}
+		return shown;
+	} finally {
+		f.dispose();
+	}
+}
+
+test("a closed Item Mall notice stays closed for that account until the next release (owner deviation)", () => {
+	const storage = memoryStorage();
+	assert.equal( mallNoticeSession( { storage, revision: "aaaaaaa", account: "Alice", close: true } ), true );
+	assert.equal(
+		mallNoticeSession( { storage, revision: "aaaaaaa", account: "alice", character: "Other" } ),
+		false,
+		"the account that closed it, in any case, does not see it again"
+	);
+	assert.equal(
+		mallNoticeSession( { storage, revision: "aaaaaaa", account: "", character: "player" } ),
+		false,
+		"a restored session matches the character that closed it"
+	);
+	assert.equal(
+		mallNoticeSession( { storage, revision: "aaaaaaa", account: "bob", character: "Bobby" } ),
+		true,
+		"another account still sees it"
+	);
+	assert.equal(
+		mallNoticeSession( { storage, revision: "bbbbbbb", account: "alice", character: "Other" } ),
+		true,
+		"a new release brings it back"
+	);
+	assert.equal( mallNoticeSession( { storage, revision: "bbbbbbb", account: "alice", close: true } ), true );
+	assert.equal( mallNoticeSession( { storage, revision: "bbbbbbb", account: "alice" } ), false );
+	storage.values.set( "sro:v1150:mall-notice-closed:1", "{not json" );
+	assert.equal(
+		mallNoticeSession( { storage, revision: "bbbbbbb", account: "alice" } ),
+		true,
+		"an unreadable record shows the notice, as native"
+	);
+});
+
 test("window hotkeys sound on retarget, close once, and preserve sidebar click-only selection", () => {
 	const f = uiFixture();
 	f.ui.step( f.state, 1000 );
