@@ -463,6 +463,9 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 	}
 	rt.returnCasts.Delete(key)
 	clearMode := teleportState(c, 0)
+	// The town teleport head: hostility and abnormal states settle
+	// before the move, and stay settled if the move is rolled back.
+	headActor, headPublic := rt.applyTownTeleportHead(job.division, c)
 	membership, moved := rt.moveWorldMembership(job.division, c, currentWorld, arrival.world)
 	if !moved {
 		rt.deps.UpdateDeferred(c, "return-scroll-world-rollback", func() bool {
@@ -470,7 +473,7 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 			c.World = previousWorld
 			return true
 		})
-		return []wire.Frame{clearMode}, []wire.Frame{clearMode}
+		return append([]wire.Frame{clearMode}, append(headActor, headPublic...)...), append([]wire.Frame{clearMode}, headPublic...)
 	}
 	rt.endTransformForLoadingDeferred(job.division, c)
 	rt.endPartyAurasForLoadingDeferred(job.division, c)
@@ -487,7 +490,7 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 			c.World = previousWorld
 			return true
 		})
-		return []wire.Frame{clear}, []wire.Frame{clear}
+		return append([]wire.Frame{clear}, append(headActor, headPublic...)...), append([]wire.Frame{clear}, headPublic...)
 	}
 	rt.noteTeleportArrival(job.division, c)
 	rt.bindResidentRegionDeferred(key, now)
@@ -499,12 +502,14 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 	rt.clearCompoundJob(compoundKey{job.division, job.name})
 	corpses, corpseDespawns := rt.retireCompanionCorpsesDeferred(job.division, c)
 	frames := append(missionReentryFrames(packets), corpses...)
+	frames = append(frames, headActor...)
+	frames = append(frames, headPublic...)
 	// Only the body status is replayed here; read it under the door
 	// instead of detaching the whole record (#1820).
 	if _, _, bodyStatus := rt.characterLifeState(job.division, c); bodyStatus != 0 {
 		frames = append(frames, bodyStatusFrame(enterworld.ObjectIDForCharacter(c), bodyStatus))
 	}
-	return frames, append(corpseDespawns, clear, wire.Frame{Opcode: wire.OpObjectSourceCorrection, Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{RegionID: destination.RegionID, X: float32(destination.X), Y: float32(destination.Y), Z: float32(destination.Z), Heading: destination.Angle}}.Encode()})
+	return frames, append(append(corpseDespawns, clear, wire.Frame{Opcode: wire.OpObjectSourceCorrection, Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{RegionID: destination.RegionID, X: float32(destination.X), Y: float32(destination.Y), Z: float32(destination.Z), Heading: destination.Angle}}.Encode()}), headPublic...)
 }
 
 // The reference server's first-COS transport test (COS virtual +30). Transport COS

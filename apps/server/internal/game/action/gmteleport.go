@@ -44,6 +44,12 @@ func (rt *Runtime) GoTownGM(division, name string) bool {
 	if gm == nil {
 		return false
 	}
+	if !gm.GMPrivilege || !gmTeleportMovable(gm) {
+		return false
+	}
+	// The town teleport head runs before the move, as natively; a
+	// relocation refused below keeps the settled state.
+	rt.publishTownTeleportHead(division, gm)
 	return rt.relocateCharacter(division, gm, "gm-gotown", func() (travelPoint, bool) {
 		if !gm.GMPrivilege || !gmTeleportMovable(gm) {
 			return travelPoint{}, false
@@ -70,6 +76,10 @@ func (rt *Runtime) SendToTownGM(division, name, targetName string) bool {
 	if gm == nil {
 		return false
 	}
+	if !gm.GMPrivilege || !gmTeleportMovable(target) {
+		return false
+	}
+	rt.publishTownTeleportHead(division, target)
 	return rt.relocateCharacter(division, target, "gm-totown", func() (travelPoint, bool) {
 		if !gm.GMPrivilege || !gmTeleportMovable(target) {
 			return travelPoint{}, false

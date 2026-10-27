@@ -444,9 +444,13 @@ func (rt *Runtime) handleRebirthInDoor(
 
 	gid := enterworld.ObjectIDForCharacter(character)
 	correction, vitals, life := rebirthFrames(gid, destination, enterworld.BuildVitalsRefreshPayload(character))
+	// The town teleport head runs before either arm of the routine: a
+	// present-point rebirth settles hostility and clears abnormal
+	// states exactly as an appointed-point arrival does.
+	headActor, headPublic := rt.applyTownTeleportHead(divisionID, character)
 	if choice == wire.RebirthAtPresentPoint {
 		return OpResult{
-			Frames:    append([]wire.Frame{correction, vitals, life}, untouchable...),
+			Frames:    append(append([]wire.Frame{correction, vitals, life}, untouchable...), append(headActor, headPublic...)...),
 			Broadcast: append([]wire.Frame{correction, life}, untouchable...),
 		}
 	}
@@ -454,6 +458,8 @@ func (rt *Runtime) handleRebirthInDoor(
 	corpses, corpseDespawns := rt.retireCompanionCorpses(divisionID, character)
 	frames := missionReentryFrames(prepared.Packets)
 	frames = append(frames, corpses...)
+	frames = append(frames, headActor...)
+	frames = append(frames, headPublic...)
 	// Re-entry reconstructs the client actor. A retained runtime body status
 	// must be replayed after construction; rebirth does not blanket-clear it.
 	if snapshot := rt.characterSnapshot(divisionID, character); snapshot != nil && snapshot.NativeBodyStatus != 0 {
