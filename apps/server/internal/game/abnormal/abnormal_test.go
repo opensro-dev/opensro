@@ -267,7 +267,7 @@ func TestBitsSwapBurnAndShock(t *testing.T) {
 		t.Fatal("g_adwAbnormalStatusBit mapping lost")
 	}
 	if Freeze.Category() != 1 || Burn.Category() != 1 || Bleeding.Category() != 2 || Dark.Category() != 2 {
-		t.Fatal("category mismatch with 5AA450")
+		t.Fatal("category mismatch with the native status category table")
 	}
 }
 
