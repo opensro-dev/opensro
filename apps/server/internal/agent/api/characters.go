@@ -14,7 +14,6 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"time"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/data/store"
@@ -121,7 +120,7 @@ func (api *API) handleCharacterList(w http.ResponseWriter, r *http.Request) {
 	// one rides its row as renameCancelled so the select screen can say
 	// why the scroll's rename did not happen.
 	renameCancelled := map[int64]string{}
-	for _, outcome := range api.store.ApplyPendingRenames(division, accountID, time.Now().UnixMilli()) {
+	for _, outcome := range api.store.ApplyPendingRenames(division, accountID, api.now().UnixMilli()) {
 		if !outcome.Applied {
 			renameCancelled[outcome.CharacterID] = outcome.Reason
 		}

@@ -28,24 +28,20 @@ import (
 
 /*
 ================
-RenameNoticeWorldBound
+renameNoticeDelivery
 
-The world-bind fanout for a character whose queued rename applied at
-login (character.RenameNoticeFrom holds the pre-rename name). Called
-from the same bind hook as FriendWorldBound. A character with no debt
-returns at once.
+What a world bind owes, resolved under the read door: the notice frame
+and the names of the online-audience candidates (the character's
+friends and guild members, the character itself never included).
+ok=false when no rename is owed. Presence decides who is actually
+online; this seam never sends.
 ================
 */
-func RenameNoticeWorldBound(deps Dependencies, presence Presence, divisionID string, character *enterworld.Character) {
+func renameNoticeDelivery(deps Dependencies, divisionID string, character *enterworld.Character) (wire.Frame, []string, bool) {
 	if deps == nil || character == nil || character.RenameNoticeFrom == "" {
-		return
+		return wire.Frame{}, nil, false
 	}
-	from := character.RenameNoticeFrom
-	frame := wire.RenameNotificationFrame(from + " is now known as " + character.Name)
-
-	// Resolve the recipient names under the read door, never holding it
-	// across a presence lookup or a network send. The renamed character
-	// never receives its own notice.
+	frame := wire.RenameNotificationFrame(character.RenameNoticeFrom + " is now known as " + character.Name)
 	var recipients []string
 	seen := map[string]bool{character.Name: true}
 	add := func(name string) {
@@ -66,14 +62,31 @@ func RenameNoticeWorldBound(deps Dependencies, presence Presence, divisionID str
 			}
 		}
 	})
+	return frame, recipients, true
+}
+
+/*
+================
+RenameNoticeWorldBound
+
+The world-bind fanout for a character whose queued rename applied at
+login. Called from the same bind hook as FriendWorldBound. A character
+with no debt returns at once; the debt clears even when nobody was
+online to hear the notice - it records that the rename happened, not
+who still needs word.
+================
+*/
+func RenameNoticeWorldBound(deps Dependencies, presence Presence, divisionID string, character *enterworld.Character) {
+	frame, recipients, owed := renameNoticeDelivery(deps, divisionID, character)
+	if !owed {
+		return
+	}
 	for _, name := range recipients {
 		if peer, ok := presenceSession(presence, divisionID, name); ok {
 			_ = peer.Send(frame.Opcode, frame.Payload)
 		}
 	}
-
-	// The notice is spent even when nobody was online to hear it: the
-	// debt records that the rename happened, not who still needs word.
+	from := character.RenameNoticeFrom
 	deps.Update(character, "rename-notice-shown", func() bool {
 		if character.RenameNoticeFrom != from {
 			return false
