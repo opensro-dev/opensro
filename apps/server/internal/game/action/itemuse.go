@@ -168,6 +168,10 @@ func (rt *Runtime) HandleItemUse(
 	// rebinds the resident region, which reads the committed character).
 	var after func()
 	var used *enterworld.ItemRef
+	// A name-change scroll the closure admitted: the rename queues after
+	// this door closes, then the scroll is spent (namechange.go).
+	var queuedName string
+	var queuedNowMs int64
 	// The object the 0x3449 sparkle plays on: the user, unless the item
 	// names a pet (petItemVisualTarget).
 	var visualGID uint32
@@ -212,6 +216,12 @@ func (rt *Runtime) HandleItemUse(
 		}
 		if family == itemUseUnsupported {
 			result.DiagnosticRefusal = "item-use: unsupported reference family " + ref.Codename
+			return false
+		}
+		if family == itemUseNameChange && !rt.NameChangeScroll {
+			// Port-only (#1689): with the flag off the scroll is the
+			// native game - an item no family serves.
+			result.DiagnosticRefusal = "item-use: name change scroll is off (" + EnvNameChangeScroll + ")"
 			return false
 		}
 		if code := itemUseRequirements(character, ref); code != 0 {
@@ -335,6 +345,14 @@ func (rt *Runtime) HandleItemUse(
 			return rt.usePremiumTicket(skillItemUse{
 				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
 			}, character, tail, family == itemUseSkillTimeTicket, &result)
+		}
+		if family == itemUseNameChange {
+			// The queue door takes the store's own lock, so it cannot
+			// run inside this character door: admit here, queue and
+			// spend after the door closes (finishNameChangeUse).
+			queuedName = rt.admitNameChangeUse(divisionID, character, tail, nowMs, &result)
+			queuedNowMs = nowMs
+			return false
 		}
 		if family == itemUseGenderTool {
 			return rt.useGenderTool(skillItemUse{
@@ -757,6 +775,9 @@ func (rt *Runtime) HandleItemUse(
 	}
 	if committed && used != nil {
 		rt.publishItemUseVisual(character, used, visualGID, &result)
+	}
+	if queuedName != "" {
+		rt.finishNameChangeUse(divisionID, character, request, used, queuedName, queuedNowMs, &result)
 	}
 	return result
 }

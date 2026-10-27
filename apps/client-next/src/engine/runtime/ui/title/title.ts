@@ -11,6 +11,7 @@ credentials belong to ui.ts.
 ===========================================================================
 */
 import { catalogMessage } from "@/engine/foundation/ui/catalog-message";
+import { renameCancelledText } from "@/engine/foundation/gameplay/name-change";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { UiRect, UiControl, UiQuad } from "@/engine/contracts/ui";
 import type { FrontendSnapshot } from "@/engine/contracts/frontend";
@@ -614,9 +615,14 @@ export function createTitleUi( assets: Pick<AssetOwner, "available" | "request" 
 						);
 					}
 				}
-				if ( state.status || chosen?.deletePending ) {
+				if ( state.status || chosen?.deletePending || chosen?.renameCancelled ) {
 					const node = nodes!.GDR_TEXT_MESSAGE!,
-						status = state.status ?? { key: "UIO_STT_CHAR_DEL_WAITING", suffix: "" },
+						// #1689 (port-only): a refused queued rename names
+						// itself in the suffix; the key reads no catalogue
+						// entry, so the line is the suffix alone.
+						status = state.status ?? (chosen?.renameCancelled ?
+							{ key: "", suffix: renameCancelledText( chosen.renameCancelled, chosen.name ) } :
+							{ key: "UIO_STT_CHAR_DEL_WAITING", suffix: "" }),
 						area: UiRect = [ 26, bottom + 29, w - 26, 100 ],
 						color = node.fontColor!;
 					quads.push(

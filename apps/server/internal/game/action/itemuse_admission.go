@@ -58,6 +58,7 @@ const (
 	itemUseGlobalChat
 	itemUseStallDecoration
 	itemUseReverseReturn
+	itemUseNameChange
 )
 
 /*
@@ -71,6 +72,14 @@ active native handler before inventory consumption can be authorized.
 func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	if ref == nil {
 		return itemUseUnsupported
+	}
+	// #1689 (port-only, not native): the name-change scroll reuses this
+	// shipped mall item, which no native family claims (TypeIDs
+	// 3/3/13/11), so admission is by codename and the family's handler
+	// re-checks the SRO_NAME_CHANGE_SCROLL flag before any effect
+	// (namechange.go). The classification alone grants nothing.
+	if ref.Codename == NameChangeScrollItem {
+		return itemUseNameChange
 	}
 	if ref.TypeIDs == [4]int64{3, 3, 12, 1} {
 		return itemUseMercenary

@@ -91,6 +91,12 @@ func (s *Store) CreateCharacter(divisionID, accountID string, c *domain.Characte
 			return fmt.Errorf("%w: %q in division %s", ErrCharacterNameConflict, c.Name, divisionID)
 		}
 	}
+	// A name a rename gave up inside its 90-day hold (#1689) is not
+	// free for a new character: re-registering it at once is the
+	// impersonation the reservation exists to close.
+	if s.nameReservedLocked(divisionID, c.Name, s.now().UnixMilli(), 0) {
+		return fmt.Errorf("%w: %q in division %s", ErrNameReserved, c.Name, divisionID)
+	}
 	owned := 0
 	for _, existing := range s.characters[divisionID] {
 		if existing.AccountID == accountID {

@@ -35,6 +35,9 @@ import quic_host
 import server_data
 
 CONFIG = Path("/etc/opensro-release/config.json")
+# The GameWorld's Nomad task user (raw_exec): the deployer passes it as
+# -task-user, and the TLS pair must be readable by it.
+TASK_USER = "sro"
 # Every deployer command runs with only this environment (plus its own).
 CLEAN_ENV = {"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME": "/root"}
 # validate -assume-stopped opens each line naming a credential variable that
@@ -204,6 +207,27 @@ def require_quic_host(config, wt_environment):
 	gaps = quic_host.problems(wt_bind(config["transport_wt_addr"])[1])
 	if gaps:
 		raise RuntimeError("public WebTransport host is not ready: " + "; ".join(gaps))
+
+
+# ================
+# require_pair_readable
+#
+# The deploy runs as root, so sro-nomad's own load of the TLS pair proves
+# only that root can read it. The GameWorld runs as TASK_USER, and a key
+# root can read but it cannot (a synced Let's Encrypt key left 0600 root)
+# would pass every deploy check and fail its boot. Each file is read as
+# that user before any token is issued. (At boot the GameWorld then serves
+# WebSocket without WebTransport rather than failing, #1447; this keeps the
+# release from shipping into that state.)
+# ================
+def require_pair_readable(config, wt_environment, run_as=subprocess.run):
+	if wt_environment.get("SRO_WEBTRANSPORT_PUBLIC") != "on":
+		return
+	for key in ("transport_cert_file", "transport_key_file"):
+		path = config[key].strip()
+		if run_as(["runuser", "-u", TASK_USER, "--", "test", "-r", path], check=False).returncode != 0:
+			raise RuntimeError(key + " " + path + " is not readable by " + TASK_USER +
+				", the GameWorld's user; it would boot without WebTransport (grant it, e.g. root:" + TASK_USER + " 0640)")
 
 
 # ================
@@ -590,6 +614,7 @@ def deployer(config, stack_sizes):
 	settings = shard_settings()
 	wt_environment, wt_arguments = webtransport_deployer(config)
 	require_quic_host(config, wt_environment)
+	require_pair_readable(config, wt_environment)
 	management = dict(CLEAN_ENV, NOMAD_ADDR="http://127.0.0.1:4646",
 		NOMAD_TOKEN=json.loads(Path(config["nomad_bootstrap"]).read_text())["SecretID"])
 	issued = run(["nomad", "acl", "token", "create", "-name", "github-server-release", "-type", "client",
@@ -602,7 +627,7 @@ def deployer(config, stack_sizes):
 	# The shard's own settings last; shard_settings refuses every name
 	# the deployment derives, so none of them can be overridden here.
 	environment.update(settings)
-	arguments = ["-namespace", "sro", "-task-user", "sro", "-allowed-origins", config["origin"],
+	arguments = ["-namespace", "sro", "-task-user", TASK_USER, "-allowed-origins", config["origin"],
 		"-agent-memory-mb", str(config["agent_memory_mb"]), "-gameworld-memory-mb", str(config["gameworld_memory_mb"]),
 		*wt_arguments]
 	return management, token, environment, arguments

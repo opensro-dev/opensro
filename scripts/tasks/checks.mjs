@@ -261,6 +261,17 @@ export const CHECK_TASKS = [
 		args: [ "scripts/checks/check_go_server.mjs", "--long" ]
 	} ),
 	commandTask( {
+		name: "check:server:changed",
+		description: "Run CI's Go server checks on the packages this branch changes (pre-push; no heavy slot)",
+		kind: "check",
+		ci: false,
+		requires: [ "go" ],
+		timeoutClass: "long",
+		command: "node",
+		// Never stamps: a scoped pass is no evidence for the full gate.
+		args: [ "scripts/checks/check_go_server.mjs", "--changed" ]
+	} ),
+	commandTask( {
 		name: "typecheck",
 		description: "Typecheck every non-root workspace package",
 		kind: "check",
