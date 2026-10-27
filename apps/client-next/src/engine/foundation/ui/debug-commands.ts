@@ -84,13 +84,14 @@ export const DEBUG_COMMAND_WAYPOINT_STOP = 133;
 export const DEBUG_COMMAND_WAYPOINT_SAVE = 134;
 export const DEBUG_COMMAND_CURSOR = 135;
 // 136 writes the interface's free-camera move speed (+0x7B0, seeded
-// 100) from one word clamped to 1..500. 137 flips the global id-plate
-// byte (0xCCB5D8): while it stands, actor name boards carry an id
-// line. The byte ships standing (its file-backed initial is 1 and the
-// case is the only writer in the image), so the kept copy seeds
-// standing too. The port's camera has no free translation and its
-// boards take no id line yet; both values are kept as written (see
-// #1717).
+// 100) from one word clamped to 1..500. 137 flips the global /id byte
+// (0xCCB5D8). Its readers draw while it stands: the name board and the
+// kind-4 overhead pass (85F5DC) and a hit's damage number (8D5856), so
+// clearing it hides them; it adds no line (#1785). The byte ships
+// standing (its file-backed initial is 1 and the case is the only
+// writer in the image), so the kept copy seeds standing too. The
+// port's camera has no free translation; that value is kept as
+// written (see #1717).
 export const DEBUG_COMMAND_CAMERA_SPEED = 136;
 export const DEBUG_COMMAND_ID = 137;
 // The render family (690C40 ids 150-155, handlers 691686-6917A3): each
