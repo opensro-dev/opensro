@@ -573,8 +573,9 @@ type Character struct {
 	// GMPrivilege is the v1.150 GM privilege flag: bit 0 of the u8 the
 	// entered 0x32B3 stream deposits at CICPlayer+0x1890
 	// (CICPlayer_DeserializeEnteredInventoryAndInitializeHud; tested by
-	// CICPlayer_IsTestGM). The client gates on it: Console_IsAllowed
-	// (console / GM-command availability), the GM default chat channel
+	// CICPlayer_IsTestGM). The client gates on it:
+	// Client_IsDebugCommandAllowed (console / GM-command availability),
+	// the GM default chat channel
 	// mode 3 in CIFChatViewer_HandleChatInputKey, and the 30F2/33C4/3647
 	// mission handlers. It is never writable from any
 	// network path. Normal startup requires strict accounts plus
