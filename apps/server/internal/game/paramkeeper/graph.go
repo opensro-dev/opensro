@@ -15,6 +15,7 @@ package paramkeeper
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 )
 
@@ -138,6 +139,36 @@ func (g *Graph) ApplyBatch(writes []Write) error {
 	}
 	g.buckets = next.buckets
 	g.entries = next.entries
+	g.dirty = true
+	return nil
+}
+
+/*
+================
+Graph.ApplyBatchInPlace
+
+ApplyBatchInPlace is ApplyBatch for a graph the caller owns outright
+and discards on error (a fresh Clone being built up): the same source
+validation, the same writes in the same order, the same errors, but
+applied onto the receiver instead of onto a swapped-in copy of its
+state. On error the receiver is left partially applied and must be
+dropped, which the owning caller already does.
+================
+*/
+func (g *Graph) ApplyBatchInPlace(writes []Write) error {
+	for _, w := range writes {
+		if err := g.checkExternalSource(w.Parameter, w.Source); err != nil {
+			return err
+		}
+	}
+	// The same entry headroom ApplyBatch's copy reserves, so applying
+	// does not grow the arena in steps.
+	g.entries = slices.Grow(g.entries, len(writes)+len(g.topology.dependents))
+	for _, w := range writes {
+		if _, err := g.apply(g.nodeIndex(w.Parameter), w.Channel, w.Source, w.Value); err != nil {
+			return err
+		}
+	}
 	g.dirty = true
 	return nil
 }
