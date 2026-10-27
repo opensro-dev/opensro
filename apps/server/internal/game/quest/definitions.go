@@ -182,8 +182,9 @@ type QuestSpec struct {
 	RefuseEndsQuests []string
 	Repeatable       bool
 	// KindByte is the wire u10 the CIFQuestReward content button
-	// switches on (sub_5c26e0): 1/7/8 open the give-up window, 2 opens
-	// the REWARD window (its action button composes 0x729A - the
+	// switches on (CIFQuestReward_OnContentButton): 1/7/8 open the
+	// give-up window, 2 opens the REWARD window (its action button
+	// composes 0x729A - the
 	// turn-in this server can actually receive). DECLARED CHOICE
 	// (grade D): retail's kind assignment never shipped; policy here is
 	// kind 2 for collect quests (completable through the reward window)

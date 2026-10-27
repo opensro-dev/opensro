@@ -7,15 +7,17 @@ Requests (CIFAllianceGuild 5F7860 / 5F5690): 0x7379 [u32 target gid]
 invites the selected player's guild (NetClient_SendUnionInvite7379),
 0x7795 leaves (no body), 0x7680 [u32 guild id] expels. Each answers
 [u8 1] or [u8 2][u8 code] on 0xB379 / 0xB795 / 0xB680, the code a
-category 0x10 notice (75CCA0, 75CCF0, 75CD40): the low byte of the
-GameServer's 0x4Cxx guild error.
+category 0x10 notice (client CPSMission_OnUnionInviteResult0xB379,
+CPSMission_OnUnionLeaveResult0xB795, CPSMission_OnUnionKickResult0xB680):
+the low byte of the reference server's 0x4Cxx guild error.
 
-The union list 0x341E (82A560) is [u32 union id][u32 union emblem][u32
+The union list 0x341E (client CCharacterDependentData_ReadAllianceGuildList)
+is [u32 union id][u32 union emblem][u32
 leading guild id][u8 count] and a row per guild (the native alliance
 list writer). A row is the guild's vt+0x18 writer: [u32 id], then by mask 1 the
 name, 2 the level, 4 the master's name and model, 8 the member count.
 0x3B29 subop 0x0D adds a full row, 0x0E patches one [u8 mask]
-[row] (761F62), 0x12 removes [u8 1 left | 2 expelled][u32 guild] or
+[row] (the client's patch arm), 0x12 removes [u8 1 left | 2 expelled][u32 guild] or
 dissolves [u8 3].
 
 ===========================================================================
@@ -38,8 +40,9 @@ const (
 	OpUnionKickResult   uint16 = 0xB680
 	OpUnionList         uint16 = 0x341E
 
-	// unionPromptType is the 0x3393 kind of a union proposal (7644E0
-	// case 6 opens confirm box 0x1D with the inviter's guild name).
+	// unionPromptType is the 0x3393 kind of a union proposal (client
+	// CPSMission_OnConfirmBoxPrompt0x3393 case 6 opens confirm box 0x1D
+	// with the inviter's guild name).
 	unionPromptType uint8 = 6
 
 	unionRowName    uint8 = 1

@@ -96,7 +96,7 @@ func TestCharacterInfoRideLookupFollows9171B0(t *testing.T) {
 	if got := rides.resolve("MOB_RIDER002", "", known); got.modelPath != `res\mob\horse.bsr` || got.transformMode != 2 {
 		t.Fatalf("a ranged record resolved %+v", got)
 	}
-	// 91B7E0 keeps the last of two records for one name.
+	// client 91B7E0 keeps the last of two records for one name.
 	if got := rides.resolve("MOB_TWICE", "", known); got.modelPath != `res\mob\later.bsr` || got.transformMode != 1 {
 		t.Fatalf("a repeated record resolved %+v, want the later one", got)
 	}

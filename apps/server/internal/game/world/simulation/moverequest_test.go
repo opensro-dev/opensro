@@ -47,7 +47,7 @@ func TestDecodeClientMovementRequestNegativeHeight(t *testing.T) {
 }
 
 func TestDecodeClientMovementRequestAngularForm(t *testing.T) {
-	// sub_877f30's turn-in-place form: [u8 0][u8 angularMode=1][u16 word LE].
+	// client sub_877f30's turn-in-place form: [u8 0][u8 angularMode=1][u16 word LE].
 	request, refusal := DecodeClientMovementRequest([]byte{0x00, 0x01, 0x00, 0x40})
 	if refusal != nil {
 		t.Fatalf("angular form refused: %v", refusal)
@@ -56,13 +56,13 @@ func TestDecodeClientMovementRequestAngularForm(t *testing.T) {
 		t.Errorf("mode = %d, want %d", request.Mode, MovementAckAngularMode)
 	}
 	if request.AngularMode != 1 {
-		t.Errorf("angularMode = %d, want 1 (the only value sub_877f30 emits)", request.AngularMode)
+		t.Errorf("angularMode = %d, want 1 (the only value the client serializer emits)", request.AngularMode)
 	}
 	if request.HeadingWord != 0x4000 {
 		t.Errorf("headingWord = 0x%04X, want 0x4000", request.HeadingWord)
 	}
 	// The positional fields stay zero - the angular arm never carries xyz
-	// (sub_877cc0's angular branch appends nothing else).
+	// (client sub_877cc0's angular branch appends nothing else).
 	if request.RegionID != 0 || request.X != 0 || request.Y != 0 || request.Z != 0 {
 		t.Errorf("positional fields leaked into the angular decode: %+v", request)
 	}
@@ -71,7 +71,7 @@ func TestDecodeClientMovementRequestAngularForm(t *testing.T) {
 func TestDecodeClientMovementRequestRefusals(t *testing.T) {
 	// The two refusal families stay DISTINCT: a wrong-length frame of a
 	// known mode is malformed; a mode byte the serializer cannot emit
-	// (sub_877cc0 produces only 0/1) is the unsupported-mode refusal.
+	// (client sub_877cc0 produces only 0/1) is the unsupported-mode refusal.
 	cases := []struct {
 		name    string
 		payload []byte
@@ -102,9 +102,9 @@ func TestDecodeClientMovementRequestRefusals(t *testing.T) {
 }
 
 func TestHeadingWordFromRadiansNativeTruncation(t *testing.T) {
-	// The serializer (sub_877cc0 @0x877ceb) truncates toward zero with the
+	// The serializer (client sub_877cc0 @0x877ceb) truncates toward zero with the
 	// x87 RC forced (fnstcw / or 0xc00 / fldcw / fistp). The rad->deg
-	// constant @0xc13df8 = 57.295780181884766 sits a hair ABOVE the exact
+	// client constant @0xc13df8 = 57.295780181884766 sits a hair ABOVE the exact
 	// 180/pi, which the boundary expectations below bake in.
 	cases := []struct {
 		name string
@@ -134,7 +134,7 @@ func TestHeadingWordFromRadiansNativeTruncation(t *testing.T) {
 	if got := HeadingWordFromRadians(2*math.Pi + math.Pi/2); got != 16382 {
 		t.Errorf("wrapped word = %d, want 16382", got)
 	}
-	// Negative yaw never reaches the serializer live (sub_853550 wraps to
+	// Negative yaw never reaches the serializer live (client sub_853550 wraps to
 	// [0, 2pi) first), but the codec's two's-complement low-16 store is
 	// still pinned: -pi/2 -> -90.0000010 deg -> trunc toward zero -16383
 	// -> 0xC001.
@@ -144,7 +144,7 @@ func TestHeadingWordFromRadiansNativeTruncation(t *testing.T) {
 }
 
 func TestRadiansFromHeadingWordMirrorsAckParser(t *testing.T) {
-	// sub_776170 @0x7761c0: word / 65535.0 * 360.0 * f32(pi/180), narrowed
+	// client sub_776170 @0x7761c0: word / 65535.0 * 360.0 * f32(pi/180), narrowed
 	// to float32 on the store.
 	if got := RadiansFromHeadingWord(0); got != 0 {
 		t.Errorf("word 0 -> %v, want 0", got)

@@ -96,7 +96,7 @@ func NewRegistry(definitions []Definition) *Registry {
 	return r
 }
 
-// Allocate implements the bounded CGameWorld allocation door. The caller
+// Allocate implements the bounded world allocation door. The caller
 // supplies the layer selected by the world manager; the free object pool is
 // not a substitute for that layer ID. Invalid/occupied slots are programmer
 // errors in native, checked here before consuming a pooled object.

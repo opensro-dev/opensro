@@ -131,7 +131,8 @@ func senderDisplayName(sender *enterworld.Character) string {
 //   - a chat rate gate (the dump's vt+0x638): the transport already
 //     rate-limits inbound frames per session (hub ratelimit) and the
 //     retail client gates its own 0x7367 sends (CanSendOpcode,
-//     sub_71fba0 direct-imported in the sub_6aebd0 fold), so a third
+//     NetClient_CanSendOpcode direct-imported in the
+//     CIFChatViewer_HandleChatInputKey fold), so a third
 //     cap is speculative; ChatErr 0x0D is never composed.
 //   - an abuse/ban-word filter: retail's is config-loaded; no config
 //     exists here.

@@ -40,23 +40,23 @@ const (
 	// (server.mjs missionClientMovementRequestOpcode).
 	OpClientMovementRequest uint16 = 0x7738
 	// OpMovementAck is the server's movement acknowledgement, parsed by
-	// sub_776200 (server.mjs missionMovementAckOpcode).
+	// client sub_776200 (server.mjs missionMovementAckOpcode).
 	OpMovementAck uint16 = 0xB738
 	// OpGameReady is the client's world-load-complete signal; the server
 	// answers with the post-entry runtime push (server.mjs agentGameReadyOpcode).
 	OpGameReady uint16 = 0x3012
-	// OpGameTime is the world clock push, handler sub_7774d0.
+	// OpGameTime is the world clock push, handler client sub_7774d0.
 	OpGameTime uint16 = 0x31AD
-	// OpVitalsUpdate is the HP/MP refresh, handler sub_77a080.
+	// OpVitalsUpdate is the HP/MP refresh, handler client sub_77a080.
 	OpVitalsUpdate uint16 = 0x33A6
 	// OpMotionStateRequest is the client's 0x7017 motion-state request:
-	// exactly one code byte (sender sub_6ff740, AppendBytes(&code, 1)).
-	// Codes: 2 request walk / 3 request run (sub_862850 sends the OPPOSITE
-	// of the +0x255 mode byte, which sub_858450 writes as 0=walk/1=run) and
-	// 4 sit/stand toggle (sub_862870; sit-vs-stand is server-authoritative).
+	// exactly one code byte (sender client sub_6ff740, AppendBytes(&code, 1)).
+	// Codes: 2 request walk / 3 request run (client sub_862850 sends the OPPOSITE
+	// of the +0x255 mode byte, which client sub_858450 writes as 0=walk/1=run) and
+	// 4 sit/stand toggle (client sub_862870; sit-vs-stand is server-authoritative).
 	OpMotionStateRequest uint16 = 0x7017
 	// OpMotionStateAck is the server's 0xB017 result for a 0x7017 request,
-	// parsed by sub_775db0: [u8 result]; result 1 is the silent success,
+	// parsed by client sub_775db0: [u8 result]; result 1 is the silent success,
 	// any other value reads one more notice byte (system notice cat 0xe).
 	OpMotionStateAck uint16 = 0xB017
 )
@@ -68,15 +68,15 @@ const (
 const MotionToggleSitStand uint8 = 4
 
 // MotionStateAckSuccess is the 0xB017 silent-success result byte
-// (sub_775db0: result 1 shows no notice).
+// (client sub_775db0: result 1 shows no notice).
 const MotionStateAckSuccess uint8 = 1
 
 // Movement modes and wire speeds. The 20/50 u/s pair is the same the
 // char-data block ships at +0x24c/+0x250.
 const (
-	// WalkMode is run/walk mode 2 (sub_858450 walk).
+	// WalkMode is run/walk mode 2 (client sub_858450 walk).
 	WalkMode uint8 = 2
-	// RunMode is run/walk mode 3 (sub_858450 run).
+	// RunMode is run/walk mode 3 (client sub_858450 run).
 	RunMode uint8 = 3
 	// WalkSpeed is the walk wire speed in units/second.
 	WalkSpeed = 20.0
@@ -92,8 +92,8 @@ const MovementAckDestinationMode uint8 = 1
 // a direction walk with AngularFlagGo, a turn in place without it
 // (direction.go). Native pin: the client serializer sub_877cc0 selects
 // the angular arm when the record's hasDestination byte is 0 (branch
-// @0x877ceb), and the ack parser sub_776170 dispatches on the same byte
-// (`cmp byte [esi], 0` @0x776196 - any NONZERO mode reads the destination
+// @0x877ceb), and the ack parser client sub_776170 dispatches on the same byte
+// (`cmp byte [esi], 0` client @0x776196 - any NONZERO mode reads the destination
 // shape, zero reads the rotation byte + heading word).
 const MovementAckAngularMode uint8 = 0
 

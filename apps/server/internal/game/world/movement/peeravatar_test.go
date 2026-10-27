@@ -4,8 +4,8 @@
 peeravatar_test.go - other players see a worn avatar dress
 
 A player report: other players could not see a worn avatar dress, and the
-reporter could not see theirs. The peer spawn row's avatar loop (client
-86B0C7) went out empty; it now carries the avatar inventory.
+reporter could not see theirs. The peer spawn row's avatar loop
+(client 86B0C7) went out empty; it now carries the avatar inventory.
 
 ===========================================================================
 */

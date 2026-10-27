@@ -16,7 +16,8 @@ import (
 )
 
 // TestDecodeInviteRequest pins the 0x73AD strict decoder
-// {u32 targetRef} (the sub_700b50 composer shape): short, empty and
+// {u32 targetRef} (the NetClient_SendTargetCommand700B50 composer
+// shape): short, empty and
 // trailing-byte payloads error.
 func TestDecodeInviteRequest(t *testing.T) {
 	t.Parallel()
@@ -39,8 +40,9 @@ func TestDecodeInviteRequest(t *testing.T) {
 	}
 }
 
-// TestEncodeInvitePrompt3393 pins the S->C prompt bytes the sub_7644e0
-// guild arm reads: {u8 5, u32 inviterRef} little-endian.
+// TestEncodeInvitePrompt3393 pins the S->C prompt bytes the client
+// CPSMission_OnConfirmBoxPrompt0x3393 guild arm reads: {u8 5, u32
+// inviterRef} little-endian.
 func TestEncodeInvitePrompt3393(t *testing.T) {
 	t.Parallel()
 	got := EncodeInvitePrompt3393(0x000186A1)
@@ -51,8 +53,8 @@ func TestEncodeInvitePrompt3393(t *testing.T) {
 }
 
 // joinOracle hand-rolls the 0x3B29 subOp-2 body with encoding/binary:
-// {u8 2} then the member row in the pinned sub_762040 slot-2 read order
-// (jid @0x0076224e .. offline @0x007622f8).
+// {u8 2} then the member row in the pinned client
+// CPSMission_OnGuildUpdate0x3B29 slot-2 read order (jid .. offline).
 func joinOracle(member enterworld.GuildMemberRecord, offline uint8) []byte {
 	buf := &bytes.Buffer{}
 	str := func(v string) {

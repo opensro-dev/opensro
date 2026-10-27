@@ -135,7 +135,7 @@ func (t *Ticker) runPeerCOSVisibility(state *divisionTickState, nowMs int64, ses
 				continue
 			}
 			gid := p.Row.Gid
-			// A ride names its rider (777F60 has no absent-actor arm), so a
+			// A ride names its rider (client 777F60 has no absent-actor arm), so a
 			// mounted vehicle is shown only to viewers the player lane has
 			// shown the rider to this tick. The two lanes read separate world
 			// snapshots and the player lane skips unchanged ticks, so the

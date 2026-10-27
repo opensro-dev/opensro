@@ -235,7 +235,7 @@ capturePeerAppearance copies the appearance inputs off the live record.
 MUST run inside the store's read door (Deps.Read) - it dereferences the
 ModelRef/GuildID/BodyShapeByte pointers and walks the MissionInventory
 slice, all of which MutateCharacter closures swap concurrently. Only the
-equipment-band rows copy (the sub_86afb0 equip loop's input); the row
+equipment-band rows copy (the client sub_86afb0 equip loop's input); the row
 filter matches the emission filter peerAppearance applied before the
 capture/build split, so the wire output is unchanged.
 ==================
@@ -267,9 +267,9 @@ func capturePeerAppearance(character *enterworld.Character, resolvedModelRef uin
 	// tail writes the alias unless the job state is 4, and the name only
 	// then. The
 	// v1.150 client reads that one string as the peer's name (869E77). Its
-	// own board takes the alias only at world entry (8675F0 calls vtable
+	// own board takes the alias only at world entry (client 8675F0 calls vtable
 	// +0x74 with +0x1898 when the entry's slot-8 suit sets a job class);
-	// the overhead job mark comes from that suit (868D00), not from here.
+	// the overhead job mark comes from that suit (client 868D00), not from here.
 	// Wearing a suit requires an alias (0x9F), so it is never empty here.
 	if job := enterworld.DressedJob(character); job != 0 {
 		captured.jobType, captured.jobGrade = job, character.Job.Grade
@@ -321,8 +321,8 @@ the door-captured character fields - every field is REAL persisted state:
 the model ref (the sub_850c60 resolve target on the viewer's client), the
 character name, the creation body-shape byte (-> CICUser +0x758), the
 WORN inventory rows (the equipment-band slots 0..12) in slot order for the
-sub_86afb0 equip loop, and - for guild members - the guild identity the
-sub_869df0 non-local tail carries (name/id/grant/crestParam, resolved
+client sub_86afb0 equip loop, and - for guild members - the guild identity the
+client sub_869df0 non-local tail carries (name/id/grant/crestParam, resolved
 through the SAME guild door the 0x32C4 seed encodes from; a non-member or
 a dangling FK honestly leaves the guild fields zero, so the client's
 BindGuild leg stays unreached exactly like the retail no-guild row). nil

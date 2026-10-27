@@ -11,12 +11,13 @@ import (
 )
 
 // FriendMaxCount is the client panel's row cap: the literal 0x14 in the
-// sub_600f80 ": %d / %d" count write over the +0x7c4 pair list. The
+// client's ": %d / %d" count write over the +0x7c4 pair list. The
 // server enforces it on BOTH sides of the mutual edge so no persisted
 // roster can exceed what the panel displays.
 const FriendMaxCount = enterworld.FriendMaxCount
 
-// 0x3F9A event-type bytes the client's sub_760fb0 jump table dispatches
+// 0x3F9A event-type bytes the client's
+// CPSMission_OnFriendConnectNotice0x3F9A jump table dispatches
 // (cases 5/6/7 are table holes and anything outside 2..9 asserts - only
 // these three are the friend lane's to compose; 8/9 belong to letters).
 const (
@@ -25,16 +26,19 @@ const (
 	FriendEventState   uint8 = 4
 )
 
-// Friend state bytes (sub_828ea0 roster read / sub_827380 case-4 write:
+// Friend state bytes (the client's roster read / the client case-4
+// state write:
 // 0 online flips the gil_contact_on art, 1 offline flips it off).
 const (
 	FriendStateOnline  uint8 = 0
 	FriendStateOffline uint8 = 1
 )
 
-// DecodeFriendAddRequest strict-decodes the sub_704590 body
+// DecodeFriendAddRequest strict-decodes the client NetClient_Send7164
+// body
 // {u16 len, ANSI name}: a non-empty name and no trailing bytes (the
-// client's 0x8075 receiver sub_602180 already drops empty input, so an
+// client's 0x8075 receiver CIFFriendPanel_OnAddNameBoxResult already
+// drops empty input, so an
 // empty wire name is malformed, not a refusal).
 func DecodeFriendAddRequest(payload []byte) (string, error) {
 	reader := wire.NewReader(payload)
@@ -55,7 +59,8 @@ func DecodeFriendAddRequest(payload []byte) (string, error) {
 	return string(nameBytes), nil
 }
 
-// DecodeFriendDeleteRequest strict-decodes the sub_701990 body
+// DecodeFriendDeleteRequest strict-decodes the client NetClient_Send75DB
+// body
 // {u32 friendJid}.
 func DecodeFriendDeleteRequest(payload []byte) (uint32, error) {
 	reader := wire.NewReader(payload)
@@ -70,7 +75,8 @@ func DecodeFriendDeleteRequest(payload []byte) (uint32, error) {
 }
 
 // EncodeFriendEventAdded3F9A renders the 0x3F9A case-2 body the client's
-// sub_760fb0 @0x00761019 reads: u8 2, u32 jid, sized name, u32 model.
+// CPSMission_OnFriendConnectNotice0x3F9A reads: u8 2, u32 jid, sized
+// name, u32 model.
 // The client inserts the record with state 0 (ONLINE) - the server only
 // composes this event when both sides are live, so the hardcoded online
 // insert is honest.
@@ -84,7 +90,8 @@ func EncodeFriendEventAdded3F9A(jid uint32, name string, modelRefID uint32) []by
 }
 
 // EncodeFriendEventDeleted3F9A renders the 0x3F9A case-3 body
-// (sub_760fb0 @0x007610e9): u8 3, u32 jid. The client's erase THROWS on
+// (client CPSMission_OnFriendConnectNotice0x3F9A): u8 3, u32 jid. The
+// client's erase THROWS on
 // a jid it does not list - only compose this toward a session whose
 // roster is known to carry the jid.
 func EncodeFriendEventDeleted3F9A(jid uint32) []byte {
@@ -94,11 +101,11 @@ func EncodeFriendEventDeleted3F9A(jid uint32) []byte {
 	return writer.Payload()
 }
 
-// EncodeFriendEventState3F9A renders the 0x3F9A case-4 body (sub_760fb0
-// @0x00761125): u8 4, u32 jid, u8 state. The client dereferences the
-// roster record UNGUARDED (@0x007611cd) - a state event for an unlisted
-// jid is a native null-deref, so every send site guards on the
-// receiver's persisted roster first.
+// EncodeFriendEventState3F9A renders the 0x3F9A case-4 body (client
+// CPSMission_OnFriendConnectNotice0x3F9A): u8 4, u32 jid, u8 state. The
+// client dereferences the roster record UNGUARDED - a state event
+// for an unlisted jid is a native null-deref, so every send site
+// guards on the receiver's persisted roster first.
 func EncodeFriendEventState3F9A(jid uint32, state uint8) []byte {
 	writer := wire.NewWriter(6)
 	writer.U8(FriendEventState)

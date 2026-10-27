@@ -48,8 +48,10 @@ type memberUpdateState struct {
 ================
 encodeMemberUpdate
 
-Retail 0x75DB30 reads the masked row. 0x761870 type 6 applies position
-through 0x822110, including the packed world even outside entity interest.
+Retail CPartyMemberInfo_ReadMasked reads the masked row.
+CPSMission_OnPartyJobMemberJoinLogout0x3E58 type 6 applies position
+through CCharacterDependentData_SetPartyMemberPosition, including
+the packed world even outside entity interest.
 ================
 */
 func encodeMemberUpdate(row MemberRow) []byte {

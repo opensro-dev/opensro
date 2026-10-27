@@ -11,8 +11,8 @@ package movement
 // navigation. Terrain/object arbitration selects the earliest blocking contact;
 // admitted deck height can override a blocked terrain tile beneath it.
 //
-// Known object-cell contacts retain the original 43b980 intersection stores and
-// 45c1b0 cell-directed inset. They can move off the original chord. Unknown
+// Known object-cell contacts retain the original client 43b980 intersection stores and
+// client 45c1b0 cell-directed inset. They can move off the original chord. Unknown
 // outside cell ownership, circular contacts and terrain retain conservative
 // pullbacks. Explicit resolved links authorize passage; missing links do not.
 //
@@ -125,7 +125,7 @@ type ClipReport struct {
 	// NativeResult is the JMX move-test result bit a ClipBlocked
 	// contact corresponds to: monster.NavResultClipped for a blocked terrain
 	// edge (404510 returns 1) or a side-blocked internal object edge (428930),
-	// monster.NavResultBlocked for a failing object outline leg (403FB0) or
+	// monster.NavResultBlocked for a failing object outline leg (client 403FB0) or
 	// the six-call continuation limit in the server's movement query.
 	// Dungeon mesh and circle contacts propagate the same bits through the
 	// server's dungeon move. Zero for clear moves.
@@ -243,7 +243,7 @@ The server's movement query ends a continuation run once the leg's start is
 within 5 units of the destination: it breaks with the leg's own result,
 which carries a continuation bit (0x14) and no failure bit (0x10000001 broke
 earlier), and the position the leg reached. That is a completed step, not a
-block. An object outline exit to terrain (403FB0, 4044CE..4044FE) is such a
+block. An object outline exit to terrain (client 403FB0, 4044CE..4044FE) is such a
 leg, so a short step off an open deck edge stands at the exit point on the
 terrain below.
 ================
@@ -429,7 +429,7 @@ func (v *WaterValidator) clipOutdoorSegment(from simulation.Spawn, fromOwner sim
 	// The object plane's first contact runs on the FULL chord (a same-tile
 	// move can still cross a deck rail). Composition below is
 	// nearest-wins: the native walk stops at its first clip on either
-	// plane and never continues past it (sub_428930 bit0 semantics).
+	// plane and never continues past it (client sub_428930 bit0 semantics).
 	objectT, objectKey, objectFound, objectPoint := v.objectChordFirstContact(fromWX, fromWZ, from.Y, toWX, toWZ, to.Y, walk)
 	if transfer != nil && (!objectFound || objectT >= transfer.at-1e-9) {
 		// The next QueryMovement leg starts at the linked cell's repaired
@@ -567,8 +567,8 @@ func (v *WaterValidator) clipObjectRest(report ClipReport, walk *navWalk, from, 
 			}
 			return report
 		}
-		// 403FB0 tests the terrain tile under the exit point before it hands
-		// the walker to the terrain (4038D0, 4044D9 test al,1) and fails the
+		// client 403FB0 tests the terrain tile under the exit point before it hands
+		// the walker to the terrain (client 4038D0, 4044D9 test al,1) and fails the
 		// leg on a blocked one (404194: 0x10000000). Nothing continues; the
 		// walker stays on the deck at the rim (the object owner below).
 		report.continuation = false
@@ -594,7 +594,7 @@ func (v *WaterValidator) clipObjectRest(report ClipReport, walk *navWalk, from, 
 exitTileBlocked
 
 Whether the terrain tile under an object exit point (world grid x, z) is
-blocked: the bit-0 tile flag 403FB0 reads through 4038D0 before an outline
+blocked: the client 403FB0 reads the bit-0 tile flag through 4038D0 before an outline
 exit continues on the terrain. Missing coverage is never a block (the
 package's fail-open policy).
 ================

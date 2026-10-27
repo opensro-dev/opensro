@@ -196,7 +196,7 @@ func (v *WaterValidator) objectDeckStandSealed(stand *objectDeckStand) bool {
 	return true
 }
 
-// Native 403fb0 indexes the region's original placement vector, never the
+// client 403fb0 indexes the region's original placement vector, never the
 // filtered list of successfully resolved meshes. Missing/ambiguous targets block.
 /*
 ================

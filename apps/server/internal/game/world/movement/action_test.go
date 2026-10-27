@@ -7,7 +7,7 @@ import (
 	itemcodec "opensro.online/server/internal/game/item/wire"
 )
 
-// wantEmotePush is the exact S->C 0x324B body sub_778190 reads for the
+// wantEmotePush is the exact S->C 0x324B body client sub_778190 reads for the
 // shared test character (ID 7 -> gid 100007 = 0x000186A7 little-endian, the
 // same pinning motionstate_test's want3122 uses).
 func wantEmotePush(action uint8) []byte {

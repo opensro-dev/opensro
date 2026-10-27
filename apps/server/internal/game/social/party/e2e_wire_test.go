@@ -12,7 +12,8 @@ package party_test
 // inherently spans sessions) plus a never-entering fourth character for
 // the offline-target refusal. Every invite is the CONSENT HANDSHAKE: the
 // proposal answers the target with the byte-exact 0x3393 {01, inviterGid}
-// prompt (the sub_7644e0 party arm) and commits nothing until the
+// prompt (the CPSMission_OnConfirmBoxPrompt0x3393 party arm) and
+// commits nothing until the
 // target's 0x3393 {01 01} accept:
 //
 //	stray consents        -> SILENT (no outstanding invitation, and an
@@ -440,7 +441,7 @@ func chinaMaleRow(gid uint32, name string) party.MemberRow {
 	}
 }
 
-// inviteFrame renders the sub_6fd830 0x70D5 body.
+// inviteFrame renders the NetClient_SendPartyInvite70D5 0x70D5 body.
 /*
 ================
 inviteFrame
@@ -464,7 +465,8 @@ func consentFrame(button uint8) []byte {
 }
 
 // expectPartyPrompt asserts the byte-exact S->C 0x3393 prompt: {01,
-// inviterGid} - the frame the sub_7644e0 party arm opens msgbox kind 7
+// inviterGid} - the frame the CPSMission_OnConfirmBoxPrompt0x3393
+// party arm opens msgbox kind 7
 // from.
 /*
 ================
@@ -619,7 +621,8 @@ func TestPartyLaneEndToEndOverWire(t *testing.T) {
 	}
 
 	// ---- A invites B (0x70D5, exp+item share): B gets the byte-exact
-	// prompt and REFUSES (button 2, the sub_52c800 result id) - no party
+	// prompt and REFUSES (button 2, the CIFMessageBox_OnRefuseButton
+	// result id) - no party
 	// forms and NOTHING is emitted to anyone ----
 	sendFrame(t, connA, party.OpPartyInviteRequest, inviteFrame(gidB, 0x03))
 	expectPartyPrompt(t, connB, gidA, "B's proposal", 2, 3)
@@ -636,7 +639,8 @@ func TestPartyLaneEndToEndOverWire(t *testing.T) {
 	}
 
 	// ---- A re-invites B: the prompt again, B ACCEPTS (button 1, the
-	// sub_526020 result id) - the party forms and both sessions get the
+	// CIFMessageBox_OnAcceptButton result id) - the party forms and
+	// both sessions get the
 	// 0xB0D5 + 0x35D6 seed; C gets NOTHING ----
 	sendFrame(t, connA, party.OpPartyInviteRequest, inviteFrame(gidB, 0x03))
 	expectPartyPrompt(t, connB, gidA, "B's re-proposal", 2, 3)
@@ -708,7 +712,8 @@ func TestPartyLaneEndToEndOverWire(t *testing.T) {
 	}
 
 	// ---- reform under B with JOIN-ANYONE (0x4): the NON-leader A may
-	// extend the party (the sub_5b78e0 dispatch gate's other arm) ----
+	// extend the party (the CIFParty_OnFormPartyClicked dispatch
+	// gate's other arm) ----
 	sendFrame(t, connB, party.OpPartyInviteRequest, inviteFrame(gidA, 0x04))
 	expectPartyPrompt(t, connA, gidB, "A's reform proposal", 2, 4)
 	sendFrame(t, connA, party.OpInvitationProposal, consentFrame(1))

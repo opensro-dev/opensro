@@ -12,7 +12,7 @@ import (
 // The monster create row is the shared bionic spawn tail (byte-identical
 // in SHAPE to the NPC row: pos block, standing movement block, speeds,
 // per-monster f32 scale denom, mastery 0, name mask 1 + name) plus exactly one
-// trailing rarity byte (sub_861b00 @0x861b74) - and NOTHING else: no HP,
+// trailing rarity byte (client sub_861b00 @0x861b74) - and NOTHING else: no HP,
 // no level (those are post-spawn 0x33A6). Field offsets follow the
 // prior-board SCOUT-M2 byte map; the layout re-pin is tracked on the
 // monster-live board.
@@ -143,7 +143,7 @@ func TestBuildMonsterCreateRowUsesPerMonsterScale(t *testing.T) {
 ================
 TestStructureRowFollowsCICATStructOrder
 
-4FA0B0: RefObjID, HP, RefEventStructID, state, then the shared object
+client 4FA0B0: RefObjID, HP, RefEventStructID, state, then the shared object
 block, the name, and a headquarters' guild.
 ================
 */
@@ -169,7 +169,7 @@ TestTradeNpcRowEndsWithItsVariant
 
 The retail server's spawn writer appends the equipment variant after the
 spawn grade for a thief (TID4 2) or hunter (TID4 3) only; the client's
-861B00 reads it by the same word.
+client 861B00 reads it by the same word.
 ================
 */
 func TestTradeNpcRowEndsWithItsVariant(t *testing.T) {
