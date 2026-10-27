@@ -545,13 +545,14 @@ func (rt *Runtime) handleMoveLocked(divisionID string, character *enterworld.Cha
 ==================
 moveAdmission
 
-What admitMove captured in one authority read: the character snapshot and
-the world whose LifeRevision fences the commit.
+What admitMove captured in one authority read: the world whose
+LifeRevision fences the commit. The character facts the gates weigh are
+read as values inside the same read (admitMove), so no detached record
+is built for them (#1820 part C).
 ==================
 */
 type moveAdmission struct {
 	worldKey string
-	snapshot *enterworld.Character
 	world    simulation.WorldState
 }
 
@@ -568,23 +569,26 @@ the action/death lane. The caller holds the character operation lock.
 */
 func (rt *Runtime) admitMove(divisionID string, character *enterworld.Character, cosGID uint32) (moveAdmission, *simulation.MoveError) {
 	admission := moveAdmission{worldKey: simulation.WorldKey(divisionID, character.Name)}
+	var riding, deletePending, teleportCasting, alive bool
 	rt.deps.Read(divisionID, func() {
-		admission.snapshot = character.Snapshot()
+		if cos := character.ActiveCOS; cos != nil && cos.GID == cosGID && cos.Mounted && cos.Summoned && cos.CurrentHP != 0 {
+			riding = true
+		}
+		deletePending = character.DeletePending
+		teleportCasting = character.NativeTeleportMode == 1
+		alive = enterworld.CharacterAlive(character)
 		admission.world = rt.Worlds.Snapshot(admission.worldKey, func() simulation.WorldState { return simulation.SeedWorldState(character) })
 	})
-	snapshot := admission.snapshot
-	riding := snapshot != nil && snapshot.ActiveCOS != nil && snapshot.ActiveCOS.GID == cosGID &&
-		snapshot.ActiveCOS.Mounted && snapshot.ActiveCOS.Summoned && snapshot.ActiveCOS.CurrentHP != 0
 	if cosGID != 0 && !riding {
 		return admission, &simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "invalidCosOwner"}
 	}
-	if snapshot == nil || snapshot.DeletePending {
+	if deletePending {
 		return admission, &simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "deletePending"}
 	}
-	if snapshot.NativeTeleportMode == 1 {
+	if teleportCasting {
 		return admission, &simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "teleportCasting"}
 	}
-	if !enterworld.CharacterAlive(snapshot) {
+	if !alive {
 		// Native never serializes 0x7738 while motion state 1 (death) is set.
 		// Mirror the same rule at authority so an older/stale client cannot
 		// move a persisted corpse before its LIFE-dead replay arrives.
@@ -827,26 +831,6 @@ func (rt *Runtime) walkOwners(from simulation.Spawn, fromOwner simulation.NavOwn
 		to.Y, walk.Rest = y, owner
 	}
 	return to, walk
-}
-
-/*
-==================
-characterSnapshot
-
-characterSnapshot copies mutable character fields while the authority read
-door is held. ID and Name are immutable identity; every other field used by
-movement must come from this detached view or an Update closure.
-==================
-*/
-func (rt *Runtime) characterSnapshot(divisionID string, character *enterworld.Character) *enterworld.Character {
-	if character == nil {
-		return nil
-	}
-	var snapshot *enterworld.Character
-	rt.deps.Read(divisionID, func() {
-		snapshot = character.Snapshot()
-	})
-	return snapshot
 }
 
 /*
