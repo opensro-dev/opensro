@@ -218,7 +218,6 @@ apps/server/internal/game/social/mentor/invite.go 8
 apps/server/internal/game/social/mentor/invite_wire_test.go 20
 apps/server/internal/game/social/mentor/matchjoin.go 5
 apps/server/internal/game/social/mentor/open.go 13
-apps/server/internal/game/social/mentor/wire.go 94
 apps/server/internal/game/social/party/consent.go 1
 apps/server/internal/game/social/party/e2e_wire_test.go 6
 apps/server/internal/game/social/party/matchjoin.go 6
