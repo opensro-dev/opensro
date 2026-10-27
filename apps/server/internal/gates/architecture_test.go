@@ -63,13 +63,18 @@ func TestCorePackageBoundaries(t *testing.T) {
 	// The Alexandria switch (port-only): a leaf policy the monster catalog
 	// asks before admitting the city's optional field population.
 	checkPackageImports(t, root, modulePath, "internal/game/world/alexandria", nil, false)
+	// The Pharaoh Tomb worlds (port-only): the same leaf shape - the
+	// identity table the monster catalog maps tomb rows through, and the
+	// world catalogue derives its registered definitions from.
+	checkPackageImports(t, root, modulePath, "internal/game/world/pharaohtomb", nil, false)
 	checkPackageImports(t, root, modulePath, "internal/game/world/monster", map[string]bool{
-		modulePath + "/internal/domain":                true,
-		modulePath + "/internal/game/world":            true,
-		modulePath + "/internal/game/world/alexandria": true,
-		modulePath + "/internal/data/texttable":        true,
-		modulePath + "/internal/game/abnormal":         true,
-		modulePath + "/internal/game/paramkeeper":      true,
+		modulePath + "/internal/domain":                 true,
+		modulePath + "/internal/game/world":             true,
+		modulePath + "/internal/game/world/alexandria":  true,
+		modulePath + "/internal/game/world/pharaohtomb": true,
+		modulePath + "/internal/data/texttable":         true,
+		modulePath + "/internal/game/abnormal":          true,
+		modulePath + "/internal/game/paramkeeper":       true,
 	}, false)
 	checkPackageImports(t, root, modulePath, "internal/game/item/wire", map[string]bool{
 		modulePath + "/internal/domain": true,

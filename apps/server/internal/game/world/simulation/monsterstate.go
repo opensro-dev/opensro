@@ -274,7 +274,10 @@ layer (65C200 -> world vtable +0x18) of each record whose type byte (+0x20)
 is zero; the GameServer builds that layer when the job arrives (5F7BD0 ->
 CGameWorld_AllocateLayer). INS_DEFAULT and the INS_FORT_* siege worlds are
 the shipped type-0 rows. One process plays both roles here, so the
-division owner opens them directly, in authored row order.
+division owner opens them directly, in authored row order. The catalogue
+is the shipped rows plus any port-only worlds registered behind their
+switches (instance.Definitions); with none registered this opens exactly
+the shipped type-0 rows.
 ================
 */
 func (s *MonsterState) division(divisionID string) *divisionMonsterState {
@@ -287,7 +290,7 @@ func (s *MonsterState) division(divisionID string) *divisionMonsterState {
 	if s.worldPopulations == nil {
 		s.worldPopulations = make(map[populationKey]*divisionMonsterState)
 	}
-	definitions := instance.Shipped()
+	definitions := instance.Definitions()
 	allocator := instance.NewRegistry(definitions)
 	s.worldAllocators[divisionID] = allocator
 	var state *divisionMonsterState
@@ -511,6 +514,22 @@ func (s *MonsterState) MaterializedInstances(divisionID string) []monster.Instan
 	return out
 }
 
+/*
+================
+CurrentHP
+
+Get(divisionID, gid)'s CurrentHP and existence without copying the
+instance. Per-tick sweeps that only ask whether an actor still lives use
+it; Get's summon-action expiry never touches HP, so the two agree.
+================
+*/
+func (s *MonsterState) CurrentHP(divisionID string, gid uint32) (uint32, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.populationForObject(divisionID, gid).instances.currentHP(gid)
+}
+
 // Get returns a value snapshot of one live instance.
 /*
 ================
@@ -521,12 +540,13 @@ func (s *MonsterState) Get(divisionID string, gid uint32) (monster.Instance, boo
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	state := s.populationForObject(divisionID, gid)
-	instance, ok := state.instances.lookup(gid)
-	if ok {
-		instance = finishSummonAction(instance, s.nowMillis())
+	state, slot := s.locateObject(divisionID, gid)
+	if state == nil {
+		return monster.Instance{}, false
 	}
-	return instance, ok
+	instance := state.instances.slotValue(gid, &slot)
+	clearExpiredSummonAction(&instance, s.nowMillis())
+	return instance, true
 }
 
 /*

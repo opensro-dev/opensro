@@ -494,6 +494,31 @@ test("ordinary sector crossings remain visible while discontinuous travel reques
 	f.stream.dispose();
 });
 
+test("leaving a cave for the outdoor sector beside its id is a loading screen (#1793 F)", () => {
+	// Cave 0x8001 masks to sector (1, 0), beside outdoor region 2 at (2, 0):
+	// only the displayed cave's plane makes the step discontinuous.
+	const f = fixture();
+	for ( let i = 0; i < 6; i++ ) f.step( 2 );
+	for ( let i = 0; i < 5; i++ ) f.step( 0x8001 );
+	f.step( 2 );
+	assert.equal( f.stream.loadingRegion(), 2 );
+	f.stream.dispose();
+});
+
+test("a cave pose at its region's edge prefetches no outdoor neighbour (#1793 F)", () => {
+	// The edge prefetch walks outdoor sector frames. Cave 0x8001's masked
+	// sector (1, 0) would otherwise name outdoor region 2 (b.json) east of it.
+	const f = fixture();
+	for ( let i = 0; i < 5; i++ ) f.step( 1 );
+	for ( let i = 0; i < 5; i++ ) f.step( 0x8001 );
+	const before = f.requests.length;
+	const pose = x => ({ regionId: 0x8001, x, y: 0, z: 960, angle: 0 });
+	f.stream.step( pose( 1000 ) );
+	f.stream.step( pose( 1600 ) );
+	assert.ok( f.requests.slice( before ).every( r => !scene( r, "b.json" ) ) );
+	f.stream.dispose();
+});
+
 test("an old displayed scene cannot satisfy readiness for a newly requested region", () => {
 	const f = fixture();
 	for ( let i = 0; i < 5; i++ ) f.step( 1 );

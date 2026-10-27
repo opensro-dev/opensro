@@ -24,7 +24,8 @@ rows load as keyframes (a port decision, recorded on the issue - the rows
 carry no time of their own, so they stand one second apart in file order,
 and each row's yaw/pitch become the keyframe's orientation quaternion).
 The play byte and the stepping live with their owners (ui.ts, world.ts);
-this module owns only the store, its load, and the save text.
+this module owns the store, its load, the save text, and the sampling
+the stepper reads (the track's own reader, beside /cwsave's).
 
 ===========================================================================
 */
@@ -166,6 +167,86 @@ export function loadCameraDataKeyframes( store: CameraWaypointStore, rows: reado
 		orientation: cameraDataOrientation( row )
 	}) );
 	store.clockSeconds = 0;
+}
+
+/*
+================
+sampleSegmentChannel
+
+One channel of the segment curve at u: the four clamped neighbours
+P0..P3 through the uniform Catmull-Rom basis (the curve passes P1 at
+u = 0 and P2 at u = 1, with the neighbours as its tangents' shape).
+================
+*/
+function sampleSegmentChannel( p0: number, p1: number, p2: number, p3: number, u: number ): number {
+	const u2 = u * u, u3 = u2 * u;
+	return 0.5 * (
+		2 * p1 +
+		(p2 - p0) * u +
+		(2 * p0 - 5 * p1 + 4 * p2 - p3) * u2 +
+		(3 * p1 - p0 - 3 * p2 + p3) * u3
+	);
+}
+
+/*
+================
+sampleCameraWaypoints
+
+The track sampled at a clock time: TimedValue_Advance (4DF160) clamps
+the clock to the end time (+0xF0, the last record's time) and samples
+the vector track and the four orientation channels at it. SampleAtTime
+walks to the segment holding the time and evaluates it from the four
+records around it - the segment's own pair plus one neighbour each
+side, clamped to the ends - at u = (t - t1) / (t2 - t1); outside the
+ends the first/last record stands. The native segment evaluator's
+exact basis is set through a function pointer no constructor in the
+trimmed binary was found to write, and the track is empty in retail
+(never loaded, never rendered), so there is no native curve to copy:
+the port infers the four-point Catmull-Rom the evaluator's argument
+shape describes, per channel, and normalizes the orientation back to
+a unit quaternion (the channels sampled apart do not keep length).
+An empty track samples to null.
+================
+*/
+export function sampleCameraWaypoints(
+	keyframes: readonly CameraWaypoint[],
+	timeSeconds: number
+): { position: CameraWaypoint["position"]; orientation: CameraWaypoint["orientation"]; } | null {
+	if ( !keyframes.length ) return null;
+	const first = keyframes[0]!, last = keyframes[keyframes.length - 1]!;
+	if ( timeSeconds <= first.timeSeconds || keyframes.length === 1 ) {
+		return { position: first.position, orientation: first.orientation };
+	}
+	if ( timeSeconds >= last.timeSeconds ) {
+		return { position: last.position, orientation: last.orientation };
+	}
+	let segment = 0;
+	while ( segment < keyframes.length - 2 && keyframes[segment + 1]!.timeSeconds <= timeSeconds ) segment++;
+	const p1 = keyframes[segment]!, p2 = keyframes[segment + 1]!;
+	const p0 = keyframes[Math.max( segment - 1, 0 )]!, p3 = keyframes[Math.min( segment + 2, keyframes.length - 1 )]!;
+	const span = p2.timeSeconds - p1.timeSeconds;
+	const u = span > 0 ? (timeSeconds - p1.timeSeconds) / span : 0;
+	const orientation = {
+		x: sampleSegmentChannel( p0.orientation.x, p1.orientation.x, p2.orientation.x, p3.orientation.x, u ),
+		y: sampleSegmentChannel( p0.orientation.y, p1.orientation.y, p2.orientation.y, p3.orientation.y, u ),
+		z: sampleSegmentChannel( p0.orientation.z, p1.orientation.z, p2.orientation.z, p3.orientation.z, u ),
+		w: sampleSegmentChannel( p0.orientation.w, p1.orientation.w, p2.orientation.w, p3.orientation.w, u )
+	};
+	const length = Math.hypot( orientation.x, orientation.y, orientation.z, orientation.w );
+	if ( length > 1e-12 ) {
+		orientation.x /= length;
+		orientation.y /= length;
+		orientation.z /= length;
+		orientation.w /= length;
+	}
+	return {
+		position: {
+			x: sampleSegmentChannel( p0.position.x, p1.position.x, p2.position.x, p3.position.x, u ),
+			y: sampleSegmentChannel( p0.position.y, p1.position.y, p2.position.y, p3.position.y, u ),
+			z: sampleSegmentChannel( p0.position.z, p1.position.z, p2.position.z, p3.position.z, u )
+		},
+		orientation
+	};
 }
 
 /*

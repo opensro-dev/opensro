@@ -23,10 +23,17 @@ residentMonster
 Resident storage shares immutable catalogue values, never mutable actor state.
 Only MonsterState accesses this under its population mutex. Public reads
 reconstruct the existing comparable, detached Instance value.
+
+sparse names the sparse transient maps that hold an entry for this gid
+(sparseLinked and friends). set and remove are the only writers of those
+maps, and set rewrites the row with them, so the mask never goes stale; a
+read then skips the probes for maps that cannot hold the actor, which most
+actors in a busy population never need.
 ==================
 */
 type residentMonster struct {
 	conditionalUsed     uint8
+	sparse              uint8
 	ref                 unique.Handle[monster.MonsterRef]
 	nest                unique.Handle[monster.NestRow]
 	help                monster.HelpInbox
@@ -46,6 +53,14 @@ type residentMonster struct {
 	summonSightRange    float64
 	summonerFollowRange float64
 }
+
+// residentMonster.sparse bits: one per sparse transient map.
+const (
+	sparseLinked = 1 << iota
+	sparseAbnormal
+	sparseSelf
+	sparseTarget
+)
 
 /*
 ================
@@ -88,7 +103,9 @@ Publish scalar state and immutable effect snapshots together under the owner loc
 ================
 */
 func (s *monsterStorage) set(gid uint32, row monster.Instance) {
+	var sparse uint8
 	if row.LinkedEffects != nil {
+		sparse |= sparseLinked
 		if s.linkedEffects == nil {
 			s.linkedEffects = make(map[uint32]*monster.EffectSnapshot)
 		}
@@ -97,6 +114,7 @@ func (s *monsterStorage) set(gid uint32, row monster.Instance) {
 		delete(s.linkedEffects, gid)
 	}
 	if row.SelfEffects != (monster.SelfEffects{}) {
+		sparse |= sparseSelf
 		if s.selfEffects == nil {
 			s.selfEffects = make(map[uint32]monster.SelfEffects)
 		}
@@ -105,6 +123,7 @@ func (s *monsterStorage) set(gid uint32, row monster.Instance) {
 		delete(s.selfEffects, gid)
 	}
 	if row.TargetEffects != (monster.TargetEffects{}) {
+		sparse |= sparseTarget
 		if s.targetEffects == nil {
 			s.targetEffects = make(map[uint32]monster.TargetEffects)
 		}
@@ -117,6 +136,7 @@ func (s *monsterStorage) set(gid uint32, row monster.Instance) {
 	}
 	s.removeCold(gid)
 	if row.Abnormal != nil {
+		sparse |= sparseAbnormal
 		if s.abnormal == nil {
 			s.abnormal = make(map[uint32]*abnormal.Block)
 		}
@@ -135,7 +155,7 @@ func (s *monsterStorage) set(gid uint32, row monster.Instance) {
 	if radius := float64(row.Ref.BodyRadius); radius > s.maxBodyRadius {
 		s.maxBodyRadius = radius
 	}
-	s.hot[gid] = residentMonster{row.ConditionalUsed, ref, nest, row.Help, row.Motion, row.Spawn,
+	s.hot[gid] = residentMonster{row.ConditionalUsed, sparse, ref, nest, row.Help, row.Motion, row.Spawn,
 		row.NestDetached, row.GMSpawned, row.SpawnHeading, row.TradeVariant, row.StructureState, row.CurrentHP, row.DamageSinceSummon, row.LastSummonCommandMs,
 		row.Opponents, row.SummonActionUntilMs, row.SummonerGID,
 		row.SummonSightRange, row.SummonerFollowRange}
@@ -185,15 +205,28 @@ func (r residentMonster) value(gid uint32) monster.Instance {
 ================
 hotValue
 
-Join sparse transient state onto a detached resident value.
+Join sparse transient state onto a detached resident value. A map whose bit
+is clear holds no entry for gid, so its probe would return the zero value
+r.value already carries.
 ================
 */
 func (s *monsterStorage) hotValue(gid uint32, r residentMonster) monster.Instance {
 	row := r.value(gid)
-	row.LinkedEffects = s.linkedEffects[gid]
-	row.Abnormal = s.abnormal[gid]
-	row.SelfEffects = s.selfEffects[gid]
-	row.TargetEffects = s.targetEffects[gid]
+	if r.sparse == 0 {
+		return row
+	}
+	if r.sparse&sparseLinked != 0 {
+		row.LinkedEffects = s.linkedEffects[gid]
+	}
+	if r.sparse&sparseAbnormal != 0 {
+		row.Abnormal = s.abnormal[gid]
+	}
+	if r.sparse&sparseSelf != 0 {
+		row.SelfEffects = s.selfEffects[gid]
+	}
+	if r.sparse&sparseTarget != 0 {
+		row.TargetEffects = s.targetEffects[gid]
+	}
 	return row
 }
 
@@ -213,6 +246,62 @@ func (s *monsterStorage) lookup(gid uint32) (monster.Instance, bool) {
 		return monster.Instance{}, false
 	}
 	return s.hotValue(gid, row), true
+}
+
+// monsterSlot.residency values.
+const (
+	slotMissing = iota
+	slotHot
+	slotCold
+)
+
+/*
+================
+monsterSlot
+
+Where locate found an actor, with the row it read there: hot is valid for
+slotHot and cold for slotCold.
+================
+*/
+type monsterSlot struct {
+	hot       residentMonster
+	cold      archivedMonster
+	residency uint8
+}
+
+/*
+================
+locate
+
+contains that keeps the row it probed, so a caller that chose this storage
+by residency hydrates without a second probe.
+================
+*/
+func (s *monsterStorage) locate(gid uint32) monsterSlot {
+	if r, ok := s.hot[gid]; ok {
+		return monsterSlot{hot: r, residency: slotHot}
+	}
+	if r, ok := s.cold[gid]; ok {
+		return monsterSlot{cold: r, residency: slotCold}
+	}
+	return monsterSlot{}
+}
+
+/*
+================
+slotValue
+
+lookup's value for a slot locate returned, with no storage write between.
+================
+*/
+func (s *monsterStorage) slotValue(gid uint32, slot *monsterSlot) monster.Instance {
+	switch slot.residency {
+	case slotHot:
+		return s.hotValue(gid, slot.hot)
+	case slotCold:
+		return s.archive.get(gid, slot.cold)
+	}
+	return monster.Instance{}
 }
 
 /*
@@ -291,6 +380,24 @@ func (s *monsterStorage) isDead(gid uint32) bool {
 		return r.hp == 0 && r.maxHP > 0
 	}
 	return false
+}
+
+/*
+================
+currentHP
+
+lookup(gid).CurrentHP and its existence without reconstructing the full
+Instance snapshot: expanding the shared catalogue rows dominates a lookup.
+================
+*/
+func (s *monsterStorage) currentHP(gid uint32) (uint32, bool) {
+	if r, ok := s.hot[gid]; ok {
+		return r.currentHP, true
+	}
+	if r, ok := s.cold[gid]; ok {
+		return r.hp, true
+	}
+	return 0, false
 }
 
 /*
