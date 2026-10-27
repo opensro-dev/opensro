@@ -3,7 +3,7 @@
 
 actionsession.go - publish the shared native object-action lifetime
 
-4AD270 writes the actor's command count, not a pickup discriminator. This
+The reference server writes the actor's command count, not a pickup discriminator. This
 owner retains the pending back command and private queue publications. The
 existing continuation and cast owners execute commands and commit gameplay.
 
@@ -42,7 +42,7 @@ type deferredObjectAction struct {
 ================
 actionQueueCount
 
-4AD270 always reports the remaining queue, including when an independent
+The reference server always reports the remaining queue, including when an independent
 effect-cancellation command completes during combat or pickup approach.
 ================
 */
@@ -62,7 +62,7 @@ func (rt *Runtime) actionQueueCount(division, name string) uint8 {
 ================
 queueObjectAction
 
-4AD630 keeps one pending back entry during EXECUTE/KEEP_UP. Apply that rule
+The reference server keeps one pending back entry during EXECUTE/KEEP_UP. Apply that rule
 before individual skill owners: otherwise heals, buffs and Trace silently
 refuse a busy actor while offensive skills queue. Instant imbues bypass it.
 
@@ -114,7 +114,7 @@ func (rt *Runtime) queueObjectAction(division string, c *enterworld.Character, p
 	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) || teleportBlocks(snapshot.NativeTeleportMode) || mountedOnCOS(snapshot) {
 		return OpResult{}, false
 	}
-	// 4ACC40 validates a skill command (mask 0x37, call at 4ACED4) before it
+	// The reference server validates a skill command (mask 0x37) before it
 	// may enter the queue. A refused press (cooldown, MP, weapon, ammunition)
 	// answers its error and leaves the running attack and its continuation in
 	// place; queueing it unchecked replaced the auto-attack with a command
@@ -147,7 +147,7 @@ queuedSkillAdmission
 
 The command-phase admission of a skill press about to be queued; zero for
 anything else (attack, follow, pickup) and for the base attack, which
-4ACC40 sends straight to the queue.
+the reference server sends straight to the queue.
 ================
 */
 func (rt *Runtime) queuedSkillAdmission(division string, snapshot *enterworld.Character, payload []byte, mask admitMask) uint16 {
@@ -163,7 +163,7 @@ func (rt *Runtime) queuedSkillAdmission(division string, snapshot *enterworld.Ch
 queuedSkill
 
 The skill a command payload presses, unless it is not a skill press or is
-the base attack (4ACC40 queues that unchecked).
+the base attack (the reference server queues that unchecked).
 ================
 */
 func (rt *Runtime) queuedSkill(snapshot *enterworld.Character, payload []byte) (enterworld.SkillRow, bool) {
@@ -441,7 +441,7 @@ func (rt *Runtime) retireActionSession(session actionSessionPublication) *wire.F
 ================
 objectActionCommitted
 
-4ACC10 reads the executing front command's commitment flag. Cancellation
+The reference server reads the executing front command's commitment flag. Cancellation
 and mount admission must retain the same linked-skill lifetime, including
 intervals between positive-time stages.
 ================
@@ -456,7 +456,7 @@ func (rt *Runtime) objectActionCommitted(division, name string) bool {
 ================
 cancelObjectAction
 
-4ACC40 permits cancelling a normal attack but preserves a skill once its
+The reference server permits cancelling a normal attack but preserves a skill once its
 execute phase or linked-chain commitment is active. Forced abnormal-status
 interruption continues to use cancelPreparingProjectile directly.
 ================
@@ -466,7 +466,7 @@ func (rt *Runtime) cancelObjectAction(division string, character, snapshot *ente
 	if value, published := rt.actionSessions.Load(key); published {
 		publication := value.(actionSessionPublication)
 		if publication.queued {
-			// 4ACCE4 removes only the pending back entry. The executing cast
+			// Natively only the pending back entry is removed. The executing cast
 			// and its original repeating/linked continuation keep ownership.
 			publication.queued, publication.pending, publication.readyAtMs = false, nil, 0
 			rt.actionSessions.Store(key, publication)
@@ -496,10 +496,10 @@ func (rt *Runtime) cancelObjectAction(division string, character, snapshot *ente
 ================
 advanceQueuedActionSessions
 
-4AD390 retires the executing front before the pending command may run. Keep
+The reference server retires the executing front before the pending command may run. Keep
 the existing cast/chain owner active until its final close, then install the
 replacement through the normal continuation owner and publish count one.
-4AED19's authored skill-to-basic handoff is also a new command. Publish its
+The native authored skill-to-basic handoff is also a new command. Publish its
 release so a movement cancellation refused by the skill can cancel the basic.
 ================
 */
@@ -531,8 +531,9 @@ func (rt *Runtime) advanceQueuedActionSession(session actionSessionPublication, 
 	// and the caster's live action-recovery end: the recovery is read
 	// fresh (a cast that opened after the press was queued may have
 	// extended it), and it gates only a recovery-applicable skill
-	// press, as 64C1A0 gates skills. Releasing at cast close alone
-	// replayed the press into the recovery refusal (0x3005).
+	// press, as the reference server's cooldown check gates skills.
+	// Releasing at cast close alone replayed the press into the recovery
+	// refusal (0x3005).
 	readyAtMs := session.readyAtMs
 	if session.pending != nil && session.pending.Deferred != nil {
 		if character := rt.findCharacter(session.division, session.name); character != nil {

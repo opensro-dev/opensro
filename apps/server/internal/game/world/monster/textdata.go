@@ -63,11 +63,10 @@ type MonsterRef struct {
 	// native rate.
 	PharaohGearRate uint8
 	// CostRepair and CostRevive are _RefObjCommon columns 27 and 28, the
-	// reference's +0xA4 and +0xA8: a structure's full-repair price
-	// (CGObjSiegeStruct_ComputeRepairCost 4CFD50; the item repair 496E60
-	// reads the same field) and the base a destroyed one pays first
-	// (634950). CanRevive is column 23, bit 7 of the packed flags at +0x8C
-	// (4CECF0).
+	// reference's +0xA4 and +0xA8: a structure's full-repair price (the
+	// reference server's siege-structure repair cost; its item repair reads
+	// the same field) and the base a destroyed one pays first. CanRevive is
+	// column 23, bit 7 of the packed flags at +0x8C.
 	CostRepair, CostRevive uint32
 	CanRevive              bool
 	// UpgradeGold, UpgradeGuildPoints and BuildMinutes are a structure's
@@ -76,9 +75,10 @@ type MonsterRef struct {
 	// before it may be upgraded again (the fortress structure upgrade).
 	UpgradeGold, UpgradeGuildPoints, BuildMinutes uint32
 	// TypeID4 is characterdata column 12. The client classification gates
-	// ignore it, but the GameServer spawn routine reads the full TypeID word:
-	// monster TID4 4 (the MOB_QT_* quest monsters) never becomes a party
-	// monster (5607B0 -> 561020). NativeTypeWord packs it into bits 11-15.
+	// ignore it, but the reference server's spawn routine reads the full
+	// TypeID word: monster TID4 4 (the MOB_QT_* quest monsters) never
+	// becomes a party monster (the hatch's party-monster type test).
+	// NativeTypeWord packs it into bits 11-15.
 	TypeID4  uint8
 	Codename string
 	// Own characterdata OrgObjCodeName128, used by native default-tactics fallback.
@@ -113,8 +113,9 @@ type MonsterRef struct {
 	// guessing by codename or leaking the player's race across the boundary.
 	Country uint8
 	// The eight RefObjChar combat parameters are columns 77..84 in the
-	// shipped v1.150 characterdata. The v1.188 producer sub_4c3730 writes
-	// the homologous fields to ParamKeeper 5..12 in exactly this order.
+	// shipped v1.150 characterdata. The reference server's monster
+	// parameter initialisation writes the homologous fields to ParamKeeper
+	// 5..12 in exactly this order.
 	// CombatPinned distinguishes a real all-column snapshot from a
 	// synthetic/admin ref that omitted the combat tail.
 	CombatPinned    bool
@@ -127,8 +128,9 @@ type MonsterRef struct {
 	HitRate         float64
 	CriticalRate    float64
 	// ElementResist is characterdata columns 61..66 (RefObjChar +1A4..+1B8:
-	// frozen, frostbite, burn, electric shock, poison, zombie). 4CEFE0 stores
-	// them as parameters 1B, 1C, 1E, 1D, 1F and 20; the abnormal roll reads
+	// frozen, frostbite, burn, electric shock, poison, zombie). The native
+	// parameter seeding stores them as parameters 1B, 1C, 1E, 1D, 1F and
+	// 20; the abnormal roll reads
 	// them in its own order (freeze, frostbite, shock, burn, poison, zombie).
 	ElementResist [6]uint8
 	// Reward/default-action tail, from the same shipped v1.150
@@ -266,10 +268,11 @@ func monsterTidGate(w uint16) bool {
 structureTidGate
 
 The fortress structures' band: TID1=1, TID2=2, TID3=5 packs to 0x02C6, the
-word RefObjTypeFlags_IsATStruct (4F3A50) selects CLASS_CICATStruct by.
-v1.188 keeps them as CGObjChar subclasses beside the monsters, so they
-share the population owner, its targeting and its damage; Structure marks
-the rows whose spawn row, behavior and damage rules differ.
+word the reference type-flags test selects CLASS_CICATStruct by. The
+reference server keeps them as character-object subclasses beside the
+monsters, so they share the population owner, its targeting and its
+damage; Structure marks the rows whose spawn row, behavior and damage
+rules differ.
 ==================
 */
 func structureTidGate(w uint16) bool {

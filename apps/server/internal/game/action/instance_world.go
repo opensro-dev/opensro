@@ -244,7 +244,6 @@ func (rt *Runtime) returnCharacterFromInstance(division string, c *enterworld.Ch
 	if c == nil || c.World == nil || c.World.InstanceReturn == nil {
 		return instance.NotMember
 	}
-	leaving := instance.ID(domain.CharacterWorldInstance(c))
 	anchor := *c.World.InstanceReturn
 	world := instance.ID(anchor.PackedInstance)
 	if world == 0 {
@@ -257,8 +256,25 @@ func (rt *Runtime) returnCharacterFromInstance(division string, c *enterworld.Ch
 		Z:        float64(anchor.Z),
 		Angle:    anchor.Angle,
 	}
-	if !rt.relocateCharacter(division, c, "instance-return", func() (travelPoint, bool) {
-		return travelPoint{spawn: entry, world: world}, true
+	return rt.returnCharacterFromInstanceTo(division, c, travelPoint{spawn: entry, world: world}, "instance-return")
+}
+
+/*
+================
+returnCharacterFromInstanceTo
+
+Brings one transferred character out of its instance to a chosen point
+(its anchor, or a quest exit gate's destination), clears the anchor and
+reports the leave. The caller holds the division lock.
+================
+*/
+func (rt *Runtime) returnCharacterFromInstanceTo(division string, c *enterworld.Character, point travelPoint, label string) instance.Status {
+	if c == nil || c.World == nil || c.World.InstanceReturn == nil {
+		return instance.NotMember
+	}
+	leaving := instance.ID(domain.CharacterWorldInstance(c))
+	if !rt.relocateCharacter(division, c, label, func() (travelPoint, bool) {
+		return point, true
 	}) {
 		return instance.NotMember
 	}

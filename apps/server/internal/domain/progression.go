@@ -42,8 +42,9 @@ func DefaultMasteries(raceKey string) []CharacterMastery {
 TopMasteries
 
 The two trained masteries a party shows for a character. The native mastery
-tree is ID ordered and 5A87E0 sorts it by descending trained level without
-moving equal levels (5A1890 picks the first two), so ties keep the lower ID.
+tree is ID ordered and the server sorts it by descending trained level
+without moving equal levels (then picks the first two), so ties keep the
+lower ID.
 Untrained masteries never qualify; a missing slot is 0. The persisted slice
 is neither sorted nor mutated.
 ================

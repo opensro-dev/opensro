@@ -33,10 +33,10 @@ the movement ack toward the item.
 ==================
 */
 func (rt *Runtime) armApproach(divisionID, worldKey, pendingKey string, character *enterworld.Character, groundItem grounditem.Item, approach grounditem.Approach, now time.Time) OpResult {
-	// CGCharAutoCommandActor_Handler_UseItem (4AE0C0) state 1
-	// (4AE1FB..4AE26C) walks to an out-of-range drop via
-	// CGCharAutoNavigator_StartPursuit (4B0350 at 4AE267), which refuses
-	// when CGObjChar_IsAttackLocked (4AAB40) reports an open cast
+	// The reference server's use-item auto command, state 1,
+	// walks to an out-of-range drop via
+	// its pursuit start, which refuses
+	// when the attack lock reports an open cast
 	// (char+C08). The port has no persistent auto-command actor to retry
 	// the walk on later ticks: armApproach is the single-shot scheduling
 	// step for one 7074 interact, so refusing to arm while
@@ -134,7 +134,7 @@ func (rt *Runtime) grantPickup(
 	character, characterSnapshot *enterworld.Character,
 	groundItem grounditem.Item,
 ) OpResult {
-	// 525DC0: trade goods leave the party's item share for the picker's
+	// Natively trade goods leave the party's item share for the picker's
 	// transport (tradepickup.go).
 	if isPickupTradeGoods(groundItem.TypeFlags) {
 		return rt.grantTradeGoodsPickup(pickupGrant{division: divisionID, worldKey: worldKey, picker: character,

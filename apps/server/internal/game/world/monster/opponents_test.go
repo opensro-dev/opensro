@@ -69,8 +69,8 @@ func TestOpponentSignedArithmeticAndClockWrap(t *testing.T) {
 ================
 TestImmobileUniqueIgnoresHateFromBeyondSight
 
-5473C0's first branch needs a unique, both live speeds at most zero, and an
-attacker strictly beyond the row's SightRange.
+The native opponent record's first branch needs a unique, both live speeds
+at most zero, and an attacker strictly beyond the row's SightRange.
 ================
 */
 func TestImmobileUniqueIgnoresHateFromBeyondSight(t *testing.T) {

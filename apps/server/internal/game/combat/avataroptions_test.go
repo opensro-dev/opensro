@@ -44,7 +44,7 @@ func avatarFixture(options ...uint64) (*domain.Character, Catalogs) {
 ================
 TestWornAvatarOptionsRaiseTheStats
 
-4BBCD0 installs each worn avatar's contributions like equipment's: a
+The server's avatar install adds each worn avatar's contributions like equipment's: a
 dress blessed with avatar STR raises strength. Before, no avatar row was
 ever read.
 ================

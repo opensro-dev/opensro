@@ -14,7 +14,7 @@ SQL Agent job) closes a job week:
     Contribution DESC, then every member's Contribution returns to 0.
 
 The lists are what the guild NPC shows as last week's rankings
-(CGObjPC_HandleJobRanking70E4 512C20 serves them unchanged).
+(the server's 0x70E4 job ranking handler serves them unchanged).
 
 ===========================================================================
 */

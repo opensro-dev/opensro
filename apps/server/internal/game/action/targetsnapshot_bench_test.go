@@ -131,6 +131,52 @@ func BenchmarkTargetSnapshotAreaAdmitted(b *testing.B) {
 
 /*
 ================
+benchUnsummonedPets
+
+Give every victim per unsummoned companions in its bag: owned records
+the strike may never take, which must cost the area walk nothing.
+================
+*/
+func benchUnsummonedPets(victims []*enterworld.Character, per int) {
+	for i, victim := range victims {
+		for j := 0; j < per; j++ {
+			victim.MissionInventory = append(victim.MissionInventory, enterworld.InventoryRow{
+				Slot: int64(13 + j),
+				Summon: &enterworld.CharacterCOS{
+					GID: uint32(50000 + i*per + j), RefObjID: 2001, Codename: "COS_P_WOLF_001",
+					CurrentHP: 100, CurrentMP: 10, Summoned: false, Satiety: 100,
+				},
+			})
+		}
+	}
+}
+
+/*
+================
+BenchmarkTargetSnapshotAreaUnsummonedPets
+
+Every present player is a living candidate carrying eight unsummoned
+companions: the companions add no candidate and no resolution cost -
+the walk still detaches exactly the players it admits.
+================
+*/
+func BenchmarkTargetSnapshotAreaUnsummonedPets(b *testing.B) {
+	rt, attacker, victims, now := targetSnapshotBenchRuntime(b, 24, 100)
+	benchUnsummonedPets(victims, 8)
+	skill := enterworld.SkillRow{Attack: enterworld.SkillAttack{Present: true}}
+	q := areaQuery{selects: areaSelectHostile, division: testDivision, caster: attacker, skill: skill,
+		center: rt.liveSpawn(simulation.WorldKey(testDivision, attacker.Name), attacker, now), reach: 50, now: now}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if got := rt.areaPlayerCandidates(q); len(got) != 24 {
+			b.Fatalf("crowd with unsummoned pets produced %d candidates, want 24", len(got))
+		}
+	}
+}
+
+/*
+================
 BenchmarkTargetSnapshotResolveRejected
 ================
 */

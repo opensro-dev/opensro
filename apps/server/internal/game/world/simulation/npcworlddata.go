@@ -77,7 +77,7 @@ func LoadNpcWorldRoster(textdataDir string) []NpcDef {
 		return nil
 	}
 	fortresses := loadSiegeFortressIDs(textdataDir)
-	storeGroupsByNpc := loadNpcStoreGroupIndex(textdataDir, refs)
+	storeGroupsByNpc, maxStoreTabID, maxStoreGroupID := loadNpcStoreGroupIndex(textdataDir, refs)
 	fixtureByCode := make(map[string]NpcDef)
 	for _, row := range DefaultNpcRoster() {
 		fixtureByCode[row.Codename] = row
@@ -116,6 +116,16 @@ func LoadNpcWorldRoster(textdataDir string) []NpcDef {
 		row := newWorldNpc(ref, domain.NPCGIDBase+uint32(index)+1, Spawn{RegionID: region, X: x, Y: y, Z: z}, lookups)
 		roster = append(roster, row)
 	}
+	// Port-only, not native (#1850): Jangan's grocer under her alchemy
+	// shop name, her alchemy tab replaced by its three tabs. Off (or the
+	// extra goods not in force) leaves the roster exactly as authored.
+	if janganAlchemyShopActive() {
+		for i := range roster {
+			if roster[i].Codename == janganGrocerCodename {
+				applyJanganAlchemyShop(&roster[i], maxStoreTabID, maxStoreGroupID)
+			}
+		}
+	}
 	return appendMagicPopMachines(roster, refs, lookups)
 }
 
@@ -127,8 +137,10 @@ func LoadNpcWorldRoster(textdataDir string) []NpcDef {
 // The menu row's storeGroupId0c is characterRefId24 (the NPC RefObjID), not
 // refshopgroup column 2. The retail server reads the same field as
 // [record+0x24], and sub_7d3b70 proves that field is the lookup's character
-// RefObjID.
-func loadNpcStoreGroupIndex(textdataDir string, refs map[uint32]npcWorldRef) map[string][]NpcTalkStoreGroup {
+// RefObjID. The largest authored tab and tab-group ids come back with the
+// index: the Jangan alchemy shop (npcjanganshop.go) numbers its
+// synthesized tabs and group above them.
+func loadNpcStoreGroupIndex(textdataDir string, refs map[uint32]npcWorldRef) (map[string][]NpcTalkStoreGroup, int32, int32) {
 	groupCodesByNpc := make(map[string][]string)
 	for _, cols := range readNpcTabbed(filepath.Join(textdataDir, "refshopgroup.txt")) {
 		if len(cols) >= 5 && strings.TrimSpace(cols[0]) == "1" {
@@ -196,7 +208,20 @@ func loadNpcStoreGroupIndex(textdataDir string, refs map[uint32]npcWorldRef) map
 			}}
 		}
 	}
-	return result
+	var maxTabID, maxGroupID int32
+	for _, meta := range groupMeta {
+		if meta.GroupID > maxGroupID {
+			maxGroupID = meta.GroupID
+		}
+	}
+	for _, tabs := range tabsByGroup {
+		for _, tab := range tabs {
+			if tab.TabID > maxTabID {
+				maxTabID = tab.TabID
+			}
+		}
+	}
+	return result, maxTabID, maxGroupID
 }
 
 func cloneNpcStoreGroups(groups []NpcTalkStoreGroup) []NpcTalkStoreGroup {

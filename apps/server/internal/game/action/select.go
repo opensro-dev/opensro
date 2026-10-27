@@ -24,7 +24,7 @@ payload, while the now-complete client fold can consume the local-player
 and non-character result arms when an authority legitimately emits one.
 Refusals send nothing in either direction (the historical native 0xB45A
 probe crashed the retail client on uninitialized interaction scratch),
-except the native out-of-range refusal [2, 4] for an NPC beyond its 4A8E10
+except the native out-of-range refusal [2, 4] for an NPC beyond its
 class range (npcrange.go), which the browser client consumes silently.
 
 ===========================================================================
@@ -67,7 +67,7 @@ type SelectionStore struct {
 selection
 
 selection is one character's selected gid and its open NPC function.
-510250 sets CGObjPC +0xC+6 to 5 when an in-range request opens a shop;
+Natively the player's +0xC+6 is set to 5 when an in-range request opens a shop;
 trades check that state, not distance. A new selection or a release ends
 it, so every path that clears the selection also closes the function.
 ================
@@ -273,6 +273,11 @@ func (rt *Runtime) HandleObjectSelect(divisionID string, character *enterworld.C
 	if outcome, handled := rt.flagWarSelect(divisionID, character, gid); handled {
 		return outcome
 	}
+	// A quest instance's exit gate (questgate.go) stands outside the
+	// static roster too.
+	if outcome, handled := rt.questGateSelect(divisionID, character, gid); handled {
+		return outcome
+	}
 
 	// Capture the pointer list before entering the read door. The source
 	// returns an owned slice; peer fields are inspected only while the door
@@ -295,7 +300,7 @@ func (rt *Runtime) HandleObjectSelect(divisionID string, character *enterworld.C
 				gid,
 				viewerRegion,
 			)
-			// 52B040 runs 4A8E10 on every select: an NPC beyond its class
+			// The native select runs the hit-range test on every select: an NPC beyond its class
 			// range is refused with code 4 and no selection is recorded.
 			tooFar = live && target.npc != nil && !rt.npcWithinHitRange(divisionID, character, *target.npc)
 		}
@@ -304,8 +309,8 @@ func (rt *Runtime) HandleObjectSelect(divisionID string, character *enterworld.C
 		return refusedSelect("deletePending")
 	}
 	if !live {
-		// 50FE50: an object the server cannot resolve still gets an answer,
-		// SendErrorResponse(0xB045, 3); a silent refusal left the client's
+		// Natively an object the server cannot resolve still gets an answer,
+		// an error response (0xB045, 3); a silent refusal left the client's
 		// selection pending until its reply timeout, its window closed.
 		return SelectOutcome{
 			Refusal: fmt.Sprintf("gid %d resolves to no live object in division %s", gid, divisionID),
@@ -378,8 +383,8 @@ selectedObject
 type selectedObject struct {
 	npc     *simulation.NpcDef
 	monster *monster.Instance
-	// cosHP is a selected companion's current HP. CGObjCOS inherits
-	// CGObjNPC_WriteSelectInfo (4A95A0), the monster's writer, and the
+	// cosHP is a selected companion's current HP. Natively a COS inherits
+	// the NPC select-info writer, the monster's writer, and the
 	// client reads CICCos through the same non-user arm (7651F1).
 	cosHP uint32
 	cos   bool
@@ -436,7 +441,7 @@ func (rt *Runtime) resolveLiveObject(
 			}
 		}
 	}
-	// Summoned companions, every owner's (52B040 takes any character in
+	// Summoned companions, every owner's (the native select takes any character in
 	// hit range): the presented pose decides the same visibility ring.
 	for _, peer := range peers {
 		if peer == nil || peer.DeletePending {

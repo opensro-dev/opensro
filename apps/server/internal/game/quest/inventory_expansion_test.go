@@ -3,9 +3,9 @@
 
 inventory_expansion_test.go - the six QSP_*_EXINVENTORY quests
 
-They pay inventory slots (CBasicQuest_PayRewardRow 924CF0, byte +0x3db),
+They pay inventory slots (the server's reward-row payment, byte +0x3db),
 which wait for the next world entry. QSP_KT_EXINVENTORY_3 accepts either
-line's second quest (list 0x114) and takes a 10,000 gold fee (8CF8F0).
+line's second quest (list 0x114) and takes a 10,000 gold fee at its talk.
 
 ===========================================================================
 */
@@ -100,7 +100,7 @@ func TestExpansionQuestsPayTheAdvertisedSlots(t *testing.T) {
 ================
 TestExpansionRewardPastTheLimitStillCompletes
 
-4E19D0 refuses slots past the limit and its caller ignores the refusal.
+The server's slot grant refuses slots past the limit and its caller ignores the refusal.
 ================
 */
 func TestExpansionRewardPastTheLimitStillCompletes(t *testing.T) {
@@ -151,7 +151,7 @@ func TestHotanExpansionTakesItsFee(t *testing.T) {
 ================
 TestHotanExpansionFollowsEitherLine
 
-CBasicQuest_MeetsPrerequisites (9262A0): one quest of list 0x114 suffices.
+The server's quest prerequisite check: one quest of list 0x114 suffices.
 ================
 */
 func TestHotanExpansionFollowsEitherLine(t *testing.T) {

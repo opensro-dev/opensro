@@ -3,7 +3,7 @@
 
 guildwars.go - atomic guild-war stakes, combat accounting and settlement
 
-SR_ShardManager 43BE90 / 43C320 / 43C130 commit these operations through
+The v1.188 shard manager commits these operations (stake, combat, settlement) through
 three database procedures. Each corresponding port operation is one SQLite
 transaction; live character and guild copies change only after commit.
 
@@ -264,7 +264,7 @@ func (door storeGuildWarDoor) BeginGuildWar(division string, start domain.GuildW
 ================
 AccountGuildWarCombat
 
-43C320 updates war and member accounts together, with uint32 wrap.
+The shard manager's combat accounting updates war and member accounts together, with uint32 wrap.
 ================
 */
 func (door storeGuildWarDoor) AccountGuildWarCombat(division string, combat domain.GuildWarCombat) (record domain.GuildWarRecord, code uint8, err error) {
@@ -350,7 +350,7 @@ func (door storeGuildWarDoor) AccountGuildWarCombat(division string, combat doma
 ================
 EndGuildWar
 
-43C130 credits the complete stake to the winning guild's compensation.
+The shard manager's war settlement credits the complete stake to the winning guild's compensation.
 Deleting the war and crediting the guild are indivisible and idempotent.
 ================
 */

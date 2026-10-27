@@ -3,19 +3,19 @@
 
 pkdeath.go - what a player's death costs
 
-CGObjChar_ProcessNormalDeath calls vtable +0x4DC (4E67E0), which resolves
+The native character death calls vtable +0x4DC, which resolves
 the killer (the recorded killer, else the last attacker) and runs
-CGObjPC_ResolveDeathKind (4E6EC0): the death is classified
+the native death-kind resolution: the death is classified
 (pk.DeathKind) and costs EXP and SP (progression), may drop an inventory
 item (pk.SelectDropSlot) and, for a murderer, eases the penalty. All of it
 commits inside the fatal-HP character transaction.
 
 The kill's other side - the killer's PvP EXP and murder bookkeeping
-(CGObjPC_ProcessPvpKillRewards 4E1F60) - belongs to the player hit path.
+(the native PvP kill rewards) - belongs to the player hit path.
 
 INFERENCE: a death with no killer object (a lethal zombie potion, or a
-status the victim inflicted on itself) costs nothing, as 4E67E0 finds no
-killer for 4E6EC0; the port keeps no "last attacker" beyond the hit.
+status the victim inflicted on itself) costs nothing, as the native death finds no
+killer to classify; the port keeps no "last attacker" beyond the hit.
 
 ===========================================================================
 */
@@ -53,7 +53,7 @@ type deathKiller struct {
 ================
 deathKind
 
-CGObjPC_ResolvePvpKillRelation (4E6590). A monster killer: a trader or
+The native PvP kill relation. A monster killer: a trader or
 hunter falls to a thief or hunter monster, a thief to a hunter monster,
 as a job death; any other monster death is kind 4. A player killer is
 classified by playerKillKind.
@@ -104,21 +104,21 @@ type deathCost struct {
 ================
 settleDeathCostInDoor
 
-4E6EC0 inside the fatal transaction: the EXP and SP loss, the item drop,
+Natively, inside the fatal transaction: the EXP and SP loss, the item drop,
 then a murderer's relief.
 ================
 */
 func (rt *Runtime) settleDeathCostInDoor(division string, c *enterworld.Character, killer deathKiller, now int64) deathCost {
 	var cost deathCost
 	kind := rt.deathKind(division, c, killer)
-	// 4E6EC0 stores the kind at victim+0x1CB4. Natively it runs only with a
+	// The kind is stored at victim+0x1CB4. Natively it runs only with a
 	// killer, and the byte keeps the zero every revival wrote; the port's
 	// deathKind answers DeathNone for no killer, the same zero.
 	c.DeathKind = uint8(kind)
-	// CGObjPC::OnDeath (52CDB0, misnamed CGObjPC_ProcessSiegeDeath in
-	// Binary Ninja) stamps the corpse clock (+0x1CD4 = 180) at 52CFBA
+	// The native player death handler (misnamed as a siege death in the
+	// research database) stamps the corpse clock (+0x1CD4 = 180)
 	// on EVERY death, right after the kind is stored. Only the rebirth
-	// refusal (5100D0) reads the stamp, and only inside an active siege
+	// refusal reads the stamp, and only inside an active siege
 	// war in a siege world, so an ordinary death's stamp refuses nothing.
 	c.SiegeDeathAtMs = now
 	var penalty uint32
@@ -129,7 +129,7 @@ func (rt *Runtime) settleDeathCostInDoor(division string, c *enterworld.Characte
 	kept := float32(paramJobPercent(c, paramDeathExpKept, now))
 	switch {
 	case kind == pk.DeathSpecialWorld:
-		// 4E6D60 has ordinary rates, one-fifth cap, no SP/drop/PK relief.
+		// The special-world penalty has ordinary rates, one-fifth cap, no SP/drop/PK relief.
 		rule, ok := pk.DeathLoss(pk.DeathPlayer, level, 0, killer.player != nil, false)
 		if ok && rt.ApplyDeathPenalty != nil {
 			frames, _ := rt.ApplyDeathPenalty(c, pk.DeathPenalty{Rule: rule, SpecialWorld: true, ReductionPercent: kept})
@@ -137,7 +137,7 @@ func (rt *Runtime) settleDeathCostInDoor(division string, c *enterworld.Characte
 		}
 		return cost
 	case kind == pk.DeathJob:
-		// 4E6820 reads the killer object's level, a monster's or a player's.
+		// The job death penalty reads the killer object's level, a monster's or a player's.
 		killerLevel := uint8(0)
 		if killer.monster != nil {
 			killerLevel = killer.monster.Ref.Level
@@ -179,14 +179,14 @@ func (rt *Runtime) settleDeathCostInDoor(division string, c *enterworld.Characte
 	return cost
 }
 
-// deathDropProtectedLevel: the drop roll sits inside 4E6980's level > 10.
+// deathDropProtectedLevel: the drop roll sits inside the native penalty's level > 10.
 const deathDropProtectedLevel = 10
 
 /*
 ================
 dropOnDeathInDoor
 
-4E6BF6..4E6CB0: rand() % 101 against the penalty's chance, then the
+Natively rand() % 101 against the penalty's chance, then the
 inventory's slot (a guild-war death passes no penalty), dropped where the
 corpse lies. A worn item leaves its socket for every observer and the
 victim's stats follow.
@@ -243,7 +243,7 @@ func (rt *Runtime) dropOnDeathInDoor(division string, c *enterworld.Character, k
 ================
 deathDropSlots
 
-The inventory as 4BB460 sees it. CGItem_CanDropOnDeathPenalty (4B7CF0):
+The inventory as the native death-drop slot selection sees it. An item may drop:
 not an event item (TID 3/3/9), not a cash item, RefObj CanDrop bit 1, not
 a COS summoner (TID 3/2), not equipment of rarity 2 or 6. The in-use
 latch (+0x15C) never overlaps a death: item use here is synchronous.

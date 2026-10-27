@@ -186,7 +186,7 @@ func TestFriendMutualAppendWritesBothRosters(t *testing.T) {
 }
 
 // TestCheckFriendAddCodes pins each refusal to its native code (v1.188
-// 5D7620 / 447650, the v1.150 client's 0x13 notice ids) and checks that
+// TestCheckFriendAddCodes pins each refusal to its native code (the v1.188
 // a check never writes a roster.
 func TestCheckFriendAddCodes(t *testing.T) {
 	fill := func(c *enterworld.Character) {
@@ -212,7 +212,7 @@ func TestCheckFriendAddCodes(t *testing.T) {
 		{"already listed", func(actor, target *enterworld.Character) {
 			actor.Friends = []enterworld.FriendRecord{{ID: target.ID, Name: target.Name}}
 		}, "Berk", alwaysOnline, FriendErrAlreadyFriend},
-		{"listed and full: listed first (5D6890 before the cap)", func(actor, target *enterworld.Character) {
+		{"listed and full: listed first (the native check before the cap)", func(actor, target *enterworld.Character) {
 			fill(actor)
 			actor.Friends[0] = enterworld.FriendRecord{ID: target.ID, Name: target.Name}
 		}, "Berk", alwaysOnline, FriendErrAlreadyFriend},
@@ -251,7 +251,7 @@ func TestHandleFriendDelete(t *testing.T) {
 		t.Fatal("seed add refused")
 	}
 
-	// A jid the actor does not list refuses with 5D77D0's code 3 and
+	// A jid the actor does not list refuses with the reference server's code 3 and
 	// mutates nothing.
 	if outcome := HandleFriendDelete(deps, "global-official", actor, friendDeletePayload(99)); outcome.Refusal == "" || outcome.Code != 0x03 {
 		t.Fatalf("unknown jid: refusal %q code %d, want a refusal with code 3", outcome.Refusal, outcome.Code)

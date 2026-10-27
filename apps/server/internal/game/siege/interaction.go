@@ -3,10 +3,10 @@
 
 interaction.go - v1.150 fortress staff request decoding
 
-703130 emits 0x71E1; 754A40 consumes 0xB1E1. The v1.188 server dispatcher
-519E60 uses 0x705E and a wider error code, so its packet layout must not be
-copied onto the v1.150 wire. Admission and durable changes belong to the
-fortress authority; this file only decodes complete requests.
+703130 emits 0x71E1; 754A40 consumes 0xB1E1. The v1.188 server's dispatcher
+uses 0x705E and a wider error code, so its packet layout must not be copied
+onto the v1.150 wire. Admission and durable changes belong to the fortress
+authority; this file only decodes complete requests.
 
 ===========================================================================
 */
@@ -154,8 +154,9 @@ func DecodeConstruction(payload []byte) (Interaction, error) {
 ================
 InteractionService
 
-519E60's service admission table, restricted to the v1.150 action domain.
-Zero identifies object actions with their own admission, never an NPC grant.
+The v1.188 dispatcher's service admission table, restricted to the v1.150
+action domain. Zero identifies object actions with their own admission,
+never an NPC grant.
 ================
 */
 func InteractionService(action uint8) uint8 {

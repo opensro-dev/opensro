@@ -56,7 +56,6 @@ func TestPublishedShopsAreTheShardsShops(t *testing.T) {
 	tier.Long(t, "the published shops are the shard's shipped shops")
 	dir := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(dir)
-	roster := simulation.LoadNpcWorldRoster(dir)
 	priced := map[string]uint64{
 		"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A": 1000000,
 		"ITEM_ETC_ARCHEMY_MAGICSTONE_STR_09":         2000000,
@@ -65,11 +64,14 @@ func TestPublishedShopsAreTheShardsShops(t *testing.T) {
 	}
 	for _, setting := range []string{"off", "on"} {
 		t.Setenv(commerce.EnvShopExtraGoods, setting)
+		// The roster and both catalogues read the same environment, as the
+		// GameWorld and the catalogue tool do when they load.
+		roster := simulation.LoadNpcWorldRoster(dir)
 		published, err := shardShops(dir, items)
 		if err != nil {
 			t.Fatalf("%s: %v", setting, err)
 		}
-		extra, err := commerce.ParseExtraGoods(setting)
+		extra, err := commerce.ExtraGoodsFromEnv()
 		if err != nil {
 			t.Fatal(err)
 		}

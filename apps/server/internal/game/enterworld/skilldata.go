@@ -29,47 +29,55 @@ var qinshiTombSkillDataTSV string
 //
 // The native learn costs and prerequisites are NOT computed: the client
 // reads them out of the shipped skilldata textdata. The client's loader
-// (sub_722e20 @0x00722f78/@0x00722fc0) feeds skilldata.txt - an index of
-// shard files - plus skilldata_virtual.txt through the same type-1 parser,
-// and each row lands in a CSkillData record whose info block starts at
-// +0x694 (sub_7f8560 returns it).
+// (Client_LoadGameDataTables @0x00722f78/@0x00722fc0) feeds skilldata.txt -
+// an index of shard files - plus skilldata_virtual.txt through the same
+// type-1 parser, and each row lands in a CSkillData record whose info
+// block starts at +0x694 (CSkillData_GetExtendedInfo returns it).
 //
-// The row parser is sub_7f9310: 117 sequential tab-field reads after the
-// caller consumed the leading service flag, so parser read N is column
-// N+1 of the 118-column shipped rows (verified: every one of the 27835
-// shipped rows carries exactly 118 columns). The columns below are the
-// ones the learn plane needs, each pinned by a client USE of its info
-// offset, not by lore:
+// The row parser is CSkillData_ParseTextRow: 117 sequential tab-field
+// reads after the caller consumed the leading service flag, so parser
+// read N is column N+1 of the 118-column shipped rows (verified: every
+// one of the 27835 shipped rows carries exactly 118 columns). The columns
+// below are the ones the learn plane needs, each pinned by a client USE
+// of its info offset, not by lore:
 //
 //	col 1  -> info+0x00  skill id (the 0x72CB request names it)
-//	col 2  -> info+0x04  group key: sub_84ffb0 @0x0084ffb0 compares it
-//	          across learned skills; sub_8509f0 @0x00850aba matches the
-//	          entry to replace on upgrade
-//	col 7  -> info+0x60  skill level within the group (u8): sub_84ffb0's
-//	          level compare, sub_8509f0 @0x00850ac9's prev+1 == new walk
+//	col 2  -> info+0x04  group key: ActiveSkillCollection_IsSkillLearned
+//	          (client @0x0084ffb0) compares it across learned skills;
+//	          LearnedSkillMap_AddRecordByHost (client @0x00850aba)
+//	          matches the entry to replace on upgrade
+//	col 7  -> info+0x60  skill level within the group (u8):
+//	          ActiveSkillCollection_IsSkillLearned's level compare,
+//	          LearnedSkillMap_AddRecordByHost's prev+1 == new walk
+//	          (client @0x00850ac9)
 //	col 9  -> info+0x64  chain link (u32): the id of the NEXT sub-skill in
 //	          a chain (1S -> 2S -> 3S -> 0). The only client read is the
-//	          tooltip aggregator sub_806ee0 @0x00807009, which walks the
-//	          links from the learned ROOT row - the sub-rows are never
-//	          learned themselves
-//	col 34/35 -> info+0xa4/0xa8  required mastery ids: sub_8507f0
-//	          @0x0085087f walks exactly the two dwords 0xa4..0xa8
+//	          tooltip aggregator CSkillData_ComposeTooltipDescription
+//	          (client @0x00807009), which walks the links from the learned
+//	          ROOT row - the sub-rows are never learned themselves
+//	col 34/35 -> info+0xa4/0xa8  required mastery ids:
+//	          SkillMasteryBlock_CanLowerMastery (client @0x0085087f)
+//	          walks exactly the two dwords 0xa4..0xa8
 //	col 36/37 -> info+0xac/0xad  required LEVEL of that mastery (u8
-//	          pair @0x00850889, compared against the character's mastery
-//	          record level byte)
+//	          pair (client @0x00850889) in the same walk, compared against
+//	          the character's mastery record level byte)
 //	col 38/39 -> info+0xb0/0xb4  required STR/INT: the notice table's
 //	          category-5 codes 3/4 are UIIT_STT_SKILL_LEARN_STR/
-//	          INT_INSUFFICIENCY (sub_689420 @0x0068a219/@0x0068a21e).
+//	          INT_INSUFFICIENCY (CGInterface_ShowSystemNotification
+//	          (client @0x0068a219/@0x0068a21e)).
 //	          Shipped skilldata carries 0 in every row, so these gates
 //	          only fire on custom data (same posture as itemdata
 //	          ReqStr/ReqInt).
 //	col 40..42 -> info+0xb8..0xc0  prerequisite skill GROUP ids:
-//	          sub_850150 @0x008501e6 compares these three dwords against
-//	          another skill's group key (info+0x04)
+//	          CSkillManager_CanWithdrawSkillRank (client @0x008501e6)
+//	          compares
+//	          these three dwords against another skill's group key
+//	          (info+0x04)
 //	col 43..45 -> info+0xc4..0xc6  required learned LEVEL of that group
 //	          (u8 triple in the same walk)
 //	col 46 -> info+0xc8  the SP cost: named by the client's own assert
-//	          "pSkill->pSkillData->GetData()->m_nReq_Sp" @0x00585092
+//	          "pSkill->pSkillData->GetData()->m_nReq_Sp"
+//	          (CIFSkillBoard_RefreshLearnedSkillCells @0x00585094)
 //
 // Deliberately a TABLE and not a formula: a missing file degrades LOUD
 // and the learn gate refuses rather than guessing a cost (the
@@ -94,9 +102,9 @@ type SkillRequirement struct {
 SkillAttack
 
 SkillAttack is the first encoded `att` block in one v1.150 skill row.
-CSkillData_IndexEncodedParamBlocks indexes this block and the server's
-formula helpers consume the same five-value body. Only the four values
-whose server roles are pinned are named; Value5 is retained as evidence
+The encoded-parameter index keeps this block, and the server's formula
+helpers consume the same five-value body. Only the four values whose
+server roles are pinned are named; Value5 is retained as evidence
 without inventing semantics.
 ==================
 */
@@ -235,7 +243,7 @@ type SkillRow struct {
 	AlchemyStoneBonus     uint32
 	AlchemyReinforceBonus uint32
 	SpawnToken            bool
-	// Raw column 8, retail CSkillData_ParseTextRow 7F9451 / info+61.
+	// Raw column 8, retail CSkillData_ParseTextRow (client @0x007f9451) / info+61.
 	// Unlike SpawnToken, action timing distinguishes value 2 from other values.
 	ActionKind            uint8
 	SpawnStatus           bool
@@ -256,16 +264,20 @@ type SkillRow struct {
 	Codename      string
 	NameSymbol    string
 	Icon          string
-	BuffSecondary bool // CSkillData +0x134, encoded bbuf tag (84B2F0 / 6DF560).
-	// SpeedBuff is CSkillData hste (+0x94) or hst2 (+0x98). 6DE630/6E2580
-	// suppress every such primary slot except the last one with a nonzero value.
+	BuffSecondary bool // CSkillData +0x134, encoded bbuf tag (CSkillData_IndexParameterTags @0x0084b2f0 / CIFBuffViewer_AddBuff @0x006df560).
+	// SpeedBuff is CSkillData hste (+0x94) or hst2 (+0x98).
+	// CIFBuffViewer_ApplySpeedBuffSuppression @0x006de630 and
+	// CIFMagicStateBoard_ApplySpeedBuffSuppression @0x006e2580 suppress
+	// every such primary slot except the last one with a nonzero value.
 	SpeedBuff SkillSpeedBuff
 	// Hide is hide (+0x1F0) and Detect is dttp (+0x1EC), both [mask, level].
-	// 8608A0 marks a hide buff suppressed once the carrier's detection covers it.
-	// Sight is dtt (+0x1E8): the viewer's own detection (85CC70).
+	// CICharactor_CollectActiveBuffsFromDecorations @0x008608a0 marks a
+	// hide buff suppressed once the carrier's detection covers it.
+	// Sight is dtt (+0x1E8): the viewer's own detection
+	// (CICharactor_AggregateDebuffStatusEffects @0x0085cc70).
 	Hide, Detect, Sight SkillStatusLevel
-	// DetectRange is the radius of a shape-1 efr (+0x64, 85CC70); 0 means
-	// the detection reaches every distance.
+	// DetectRange is the radius of a shape-1 efr (+0x64, in the same
+	// aggregation); 0 means the detection reaches every distance.
 	DetectRange uint32
 	Group       uint32
 	// Level is the skill's level within its group (col 7 / info+0x60).
@@ -277,11 +289,12 @@ type SkillRow struct {
 	ChainNext uint32
 	// ChainSub marks a row some other row's ChainNext points at. Such a
 	// row is never learnable: the client resolves it from the chain ROOT
-	// (tooltip walk sub_806ee0 @0x00807009) and its skill board can only
-	// compose 0x72CB with the root id (sub_588af0 @0x00588c03 ->
-	// sub_7efff0 first-match; the root is first in parse order and the
-	// lowest id in all 401 shipped chain sets). Computed after load, not
-	// a column.
+	// (tooltip walk CSkillData_ComposeTooltipDescription (client @0x00807009)) and
+	// its skill board can only compose 0x72CB with the root id
+	// (CIFSkillSlot_UpdateLevelUpButton @0x00588c03 ->
+	// GlobalDataManager_FindGroupSkillByLevel first-match; the root is
+	// first in parse order and the lowest id in all 401 shipped chain
+	// sets). Computed after load, not a column.
 	ChainSub bool
 	// ActionCastingTimeMs is the server's normalized release interval, columns
 	// 11 + 12. The server's reference-data load folds preparation
@@ -304,7 +317,9 @@ type SkillRow struct {
 	// attack intent. TimingPinned distinguishes a legitimate zero from a
 	// malformed/missing cell.
 	CoolTimeMs uint32
-	// 7F94FB stores column 18 at info+88; 84B0E0 reads its high byte (+8B).
+	// CSkillData_ParseTextRow (client @0x007f94fb) stores column 18 at
+	// info+88; CSkillCoolTimeManager_GetRemainingMsBySkill
+	// (client @0x0084b0e0) reads its high byte (+8B).
 	CoolTimeGroup uint8
 	TimingPinned  bool
 	// ActionRange is column 21. Monster default skills carry the authored
@@ -669,7 +684,8 @@ skillShards
 
 skillShards reads skilldata.txt, an INDEX naming the shard files; the
 client feeds it and skilldata_virtual.txt through the same parser
-(sub_722e20 @0x00722f78 then @0x00722fc0), so the server loads the same set.
+(Client_LoadGameDataTables @0x00722f78 then @0x00722fc0), so the server
+loads the same set.
 ==================
 */
 func skillShards(dir string) []string {
@@ -724,7 +740,7 @@ func (t *TextdataSkills) parse(shards []string) {
 				BodyStatus:             encodedBodyStatus(fields),
 				MovementModifier:       encodedMovementModifier(fields),
 				EffectRider:            encodedEffectRider(fields),
-				HuntingPoint:           encodedTailContainsTag(fields, 0x686e7470), // 84C276: hntp -> +250
+				HuntingPoint:           encodedTailContainsTag(fields, 0x686e7470), // hntp -> +250 (client: CSkillData_IndexParameterTags @0x0084c276)
 				StealthDuration:        encodedStealthDuration(fields),
 				AlchemyStoneBonus:      encodedAlchemyBonus(fields, 0x616c6375),
 				AlchemyReinforceBonus:  encodedAlchemyBonus(fields, 0x6c75636b),
@@ -932,7 +948,8 @@ func (t *TextdataSkills) parse(shards []string) {
 			t.rows.set(row.ChainNext, target)
 		}
 	}
-	// 7E9170/7E5CC0 run after the complete skill map has been loaded.
+	// CSkillDataMgr_LinkChainRoots / CSkillDataMgr_PropagateChainRoot
+	// run after the complete skill map has been loaded.
 	next := make(map[uint32]uint32, t.rows.len())
 	for id, row := range t.rows.values() {
 		next[id] = row.ChainNext

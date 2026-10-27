@@ -6,21 +6,20 @@ costerminate.go - the Clean command: a vehicle's permanent retirement
 The COS command bar's Clean button (CICCos_ExecuteActionCommand 6A2350,
 command 5; a riding mount first asks UIIT_MSG_COS_CLEAN_CONFIRM) sends
 0x7618 [u32 gid], and CPSMission_OnCosCleanupResponseB618 (7782A0) reads
-the answer. v1.188 serves the same request as 0x70C6,
-CGObjPC_HandleCOSTerminateRequest70C6 (511E00):
+the answer. v1.188 serves the same request as 0x70C6:
 
   - the gid must name one of the owner's records, else error 5;
-  - an attack or pickup pet (CGObj_IsAttackOrPickupCOS, TID4 3/4) is
+  - an attack or pickup pet (TID4 3/4) is
     refused with 5; those leave through cancellation (0x756C);
-  - a transport (CGObj_IsVehicleCOS, TID4 2) drops its cargo first
-    (CGObjCOS_DropTransportCargo 4D1FD0: the goods go offline, then publish
+  - a transport (TID4 2) drops its cargo first
+    (the goods go offline, then publish
     unowned, the way a monster's drops do);
-  - CCOSManager_RemoveRecordAndRetire (4FBE20) retires with kind 1: the
-    rider is dismounted (CCOSManager_DetachManagedActor 4FBDD0), the actor
+  - the record removal retires with kind 1: the
+    rider is dismounted, the actor
     despawns, and the COS database row is deleted.
 
 Unlike cancellation, terminate does not check the owner's life, the range
-or the vehicle's HP: 511E00 asks only that the record exists.
+or the vehicle's HP: the reference server asks only that the record exists.
 
 ===========================================================================
 */
@@ -37,9 +36,9 @@ import (
 const (
 	opCosTerminateRequest  uint16 = 0x7618
 	opCosTerminateResponse uint16 = 0xB618
-	// 511ED2 pushes 5 for an unknown record or a pet.
+	// The reference server pushes 5 for an unknown record or a pet.
 	cosTerminateInvalid uint8 = 5
-	// 511E7B seeds 4FBE20's error out-parameter with 2.
+	// The reference server seeds the retire call's error out-parameter with 2.
 	cosTerminateFailed uint8  = 2
 	cosTerminateOK     uint8  = 1
 	cosBandRiding      uint16 = 1
@@ -74,7 +73,7 @@ HandleCosTerminate
 
 Only the vehicle record (ActiveCOS) can pass the band gate: attack and
 pickup pets are the companions that live on summoner items. That is also
-why 4FA8B0's kind-1 inventory branch has nothing to do here: a riding or
+why the native kind-1 inventory branch has nothing to do here: a riding or
 transport summoner is consumed when it is used.
 ================
 */
@@ -106,7 +105,7 @@ func (rt *Runtime) HandleCosTerminate(division string, c *enterworld.Character, 
 
 	var frames, public []wire.Frame
 	if cos.Mounted {
-		// 4FBDD0 dismounts before the despawn; the shared ride owner settles
+		// The native detach dismounts before the despawn; the shared ride owner settles
 		// the vehicle and restores the rider's own movement.
 		ride := rt.changeCosRide(division, c, snapshot, false)
 		if len(ride.Broadcast) == 0 {
@@ -114,7 +113,7 @@ func (rt *Runtime) HandleCosTerminate(division string, c *enterworld.Character, 
 		}
 		frames = append(frames, ride.Frames...)
 		public = append(public, ride.Broadcast...)
-		// 4EC78B already retired the riding horse with its dismount.
+		// The riding horse already retired with its dismount, as natively.
 		if band == cosBandRiding {
 			result := cosTerminateResult(cosTerminateOK)
 			return OpResult{Frames: append(frames, result.Frames...), Broadcast: public}

@@ -32,7 +32,7 @@ import (
 ================
 cosAbnormalEntry
 
-49D240 cures the COS block at +0x34C, independently of its owner's statuses.
+Natively the COS block at +0x34C is cured independently of its owner's statuses.
 ================
 */
 type cosAbnormalEntry struct {
@@ -209,11 +209,11 @@ func (o *cosAbnormalOwner) commit() {
 			o.rt.cancelCompanionCasts(o.division, o.c, pet.GID)
 			o.StopMove()
 			// The port's persisted summon flag must agree with native LIFE=2
-			// (529DE0 -> 490210), or the revival item rejects the dead pet.
+			// (set on death), or the revival item rejects the dead pet.
 			pet.StateFlags &^= 1
-			// CGObjCOS_ProcessNormalDeath (52A000; pets 529F70, summoned
-			// 529F10) releases the dead COS from its owner at once
-			// (ReleaseCOSOrExit -> CCOSManager_RemoveRecordAndRetire, 0x30C9):
+			// The native COS death (for pets and summoned COS alike) releases the
+			// dead COS from its owner at once
+			// (release, record removal and retire, 0x30C9):
 			// the corpse leaves the world and the record stays on its item.
 			pet.Summoned = false
 			pet.StateFlags &^= cosStateSummoned
@@ -388,7 +388,7 @@ func (o *cosAbnormalOwner) SetMotion(uint8, uint8, float32) {}
 ================
 CancelActions
 
-4AA340 stops the summoned mover before canceling its pending command.
+Natively the summoned mover stops before its pending command is canceled.
 ================
 */
 func (o *cosAbnormalOwner) CancelActions(bool) { o.StopMove() }
@@ -430,7 +430,7 @@ func (o *cosAbnormalOwner) Hit(source uint32, credited bool, damage uint32, reas
 	if credited && source == pet.GID {
 		return
 	}
-	// 52A1E0 enters the rider's battle state for credited periodic hits too.
+	// The reference server enters the rider's battle state for credited periodic hits too.
 	// A vanished/uncredited source is passed as null and skips that branch.
 	if credited && enterworld.CharacterAlive(o.c) {
 		o.public = append(o.public, o.rt.enterBattleState(o.division, o.c, o.now)...)
@@ -470,7 +470,7 @@ func (o *cosAbnormalOwner) ConsumeResources(hp, mp int32, _ uint8) {
 ================
 Detonate
 
-59B300 keeps authored explosion damage for the packet even on overkill.
+The native detonation keeps authored explosion damage for the packet even on overkill.
 ================
 */
 func (o *cosAbnormalOwner) Detonate(slot abnormal.Slot) {
@@ -489,7 +489,7 @@ func (rt *Runtime) cosAbnormalPublication(gid uint32, o *cosAbnormalOwner) []wir
 	if o == nil || o.c == nil || o.pet == nil {
 		return nil
 	}
-	// 4A5C60 sends the state snapshot (server 30D2, v1.150 0x36C7) only when
+	// The state snapshot (server 30D2, v1.150 0x36C7) is sent natively only when
 	// vfunc +1C reports a player; the client applies 0x36C7 to the local
 	// player (77C110). A COS publishes its mask through the shared vitals
 	// channel (dirty bit 0x100 -> 33A6) alone.
@@ -512,7 +512,7 @@ func (rt *Runtime) cosAbnormalPublication(gid uint32, o *cosAbnormalOwner) []wir
 		baseline, dead := life.publishDeathBaseline(), life.publishDead()
 		frames = append(frames, wire.Frame{Opcode: baseline.opcode, Payload: baseline.payload},
 			wire.Frame{Opcode: dead.opcode, Payload: dead.payload})
-		// The release follows the death (52A000): the actor's transient work
+		// The release follows the death: the actor's transient work
 		// retires and the released COS leaves every view.
 		frames = append(frames, rt.retireCosRuntime(o.division, o.c, gid)...)
 		frames = append(frames, wire.Frame{Opcode: wire.OpObjectDespawn, Payload: wire.ObjectDespawn{Gid: gid}.Encode()})
@@ -626,7 +626,7 @@ func (rt *Runtime) advanceOneCosAbnormal(entry cosAbnormalEntry, now int64) []si
 		actor:       append(append([]wire.Frame(nil), frames...), owner.private...),
 		public:      frames,
 	}
-	// 52A1E0 delegates COS hits to the NPC/character hit owner. A player
+	// Natively COS hits go to the NPC/character hit owner. A player
 	// source receives its private echo; the pet's rider is not the victim PC.
 	for _, hit := range owner.hits {
 		if !hit.credited || hit.reason != abnormalDamageOverTimeReason {
@@ -646,7 +646,7 @@ func (rt *Runtime) advanceOneCosAbnormal(entry cosAbnormalEntry, now int64) []si
 monsterHitSummonedCOS
 
 monsterHitSummonedCOS applies a monster skill impact to the substituted
-COS (529929 -> PC+0x1CD8). The independent COS reference, keeper and movement
+COS (PC+0x1CD8). The independent COS reference, keeper and movement
 owner supply admission; the rider's equipment cannot shield or weaken a pet.
 ==================
 */
@@ -673,8 +673,8 @@ func (rt *Runtime) monsterHitSummonedCOS(divisionID string, instance monster.Ins
 	}
 	result.TargetAlive = true
 	ref, validRef := rt.cosReference(snapshot.CompanionByGID(pet.GID))
-	// CGObjMob_HostilityBodyStatus (5299E0) refuses a grab pet first: its
-	// target's slot 0x43C is CGObj_IsPickPetCOS (483930).
+	// The native hostility body-status check refuses a grab pet first: its
+	// target's slot 0x43C is the pick-pet test.
 	if !validRef || ref.TidWord>>11 == domain.PickupPetBand {
 		return result
 	}
@@ -727,7 +727,7 @@ func (rt *Runtime) rollMonsterOnCOS(input cosAbnormalRoll) ([]abnormal.Record, e
 		SourceGID:   input.caster.Gid,
 		TargetGID:   pet.GID,
 		TargetBonus: input.target.Param(abnormalDiseaseBonusParam),
-		// 59069B calls 482840: attack COS (band 1) are status-immune.
+		// The native status roll asks the COS band: attack COS (band 1) are status-immune.
 		TargetImmune: input.target.ref.TidWord&0x7fe == 0x1c6 && input.target.ref.TidWord>>11 == 1,
 	}
 	for index := range in.TargetResist {
@@ -757,9 +757,9 @@ type cosAbnormalRoll struct {
 ridingCOS
 
 The COS a hostile single-target skill aimed at this player strikes instead.
-CSkillManager_InitiateSkillCast (59B5F3) retargets such a skill, from any
+The reference server's cast initiation retargets such a skill, from any
 caster but the skill system's AutoMob, when the target PC is mounted
-(CGObjPC_IsMountedOnCOS, slot 0x540) on a vehicle, riding horse or attack
+(the mounted test, slot 0x540) on a vehicle, riding horse or attack
 COS (slots 0x30/0x34/0x38): the ride (PC+0x1D18) takes the hit. The swap
 happens once, at cast admission; a cast already admitted on the rider keeps
 its target. Zero when the player is not riding a live COS.

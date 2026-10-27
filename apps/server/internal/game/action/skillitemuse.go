@@ -36,7 +36,7 @@ type skillItemUse struct {
 ================
 useSkillItem
 
-49C2B0 cases 1..3 resolve the associated skill and call 59B8D0. cbuf+dura
+The native special consumable cases 1..3 resolve the associated skill and start it as an indirect skill. cbuf+dura
 uses the owner timed-job path, not a combat cast or a name-specific effect.
 ================
 */
@@ -65,8 +65,8 @@ func (rt *Runtime) useSkillItem(character *enterworld.Character, use skillItemUs
 			return false
 		}
 	}
-	// 59B8D0 runs 58D8F0 with mask 0xFFFF, so its 58E2F4 buff replacement
-	// check (59D870) holds for an item's skill as for a cast one: a damage
+	// The indirect skill start runs the native admission with mask 0xFFFF, so its buff replacement
+	// check holds for an item's skill as for a cast one: a damage
 	// scroll is refused 0x300C while an attack-up buff holds one of its
 	// states, exactly as that buff is refused while the scroll holds it. A
 	// row without a parsed replacement descriptor keeps the earlier path.

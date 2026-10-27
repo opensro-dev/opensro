@@ -212,7 +212,7 @@ TestTheVoteRowLearnsTheCandidates
 
 0x7332 from the vote row (5DA1B0 case 0x1A): with no open vote it is
 refused [2][0x06] (v1.188 0x5006); with one, 0xB332 carries the vote's
-id, time left and every candidate with its ballots, as 5E79C0 writes them,
+id, time left and every candidate with its ballots, as the native vote writer writes them,
 and a ballot is counted in the next answer.
 ================
 */
@@ -293,7 +293,7 @@ func longGoneMasterFixture(t *testing.T, d *doorRuntime) (enterworld.GuildStore,
 ================
 TestGuildWarehouseOpensAtLevelTwoForOneMember
 
-5C7440: level 1 refuses with 0x4A; at level 2 the master holds the room,
+Natively level 1 refuses with 0x4A; at level 2 the master holds the room,
 lists 30 slots and deposits gold into it, whatever is selected meanwhile.
 ================
 */

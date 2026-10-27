@@ -294,7 +294,8 @@ func TestMoverStuckProgressAndStateResets(t *testing.T) {
 		t.Fatal("10th short stop did not mark mover stuck")
 	}
 	// MoverEventStuckIdled transitions to MoverIdle, clears combat target,
-	// preserves controllerGID (+0x14C), and resets stuck progress (0x0053FF30).
+	// preserves controllerGID (+0x14C), and resets stuck progress (the
+	// native tactics state change).
 	if err := m.Transition(MoverEventStuckIdled, 0); err != nil {
 		t.Fatalf("stuck idled: %v", err)
 	}

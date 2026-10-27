@@ -4,7 +4,7 @@
 gacha_test.go - Magic Pop roll and Gori voucher exchange behavior tests
 
 Covers machine opening (0x7338), ticket rolls (0x7053), voucher exchange
-(0x71BE), and the 725720 equipment property roll (+1..+5 OptLevel, 5-bit
+(0x71BE), and the native equipment property roll (+1..+5 OptLevel, 5-bit
 white-stat variance + durability, and blue magic options).
 
 ===========================================================================

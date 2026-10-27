@@ -110,7 +110,7 @@ func construct(rt *Runtime, c *enterworld.Character, fortressID, zone uint32) []
 ================
 TestFortressConstructionRefusalOrder
 
-6341B0 in order: an unknown zone 3, a structure without a reference
+The reference server's construction checks in order: an unknown zone 3, a structure without a reference
 0x281E, a structure that is not a barricade 0x281F, a zone of another
 fortress 0x2820. A request with no aide selected is refused 3.
 ================
@@ -161,7 +161,7 @@ func TestFortressConstructionBuildsTheBarricade(t *testing.T) {
 		t.Fatal("the barricade site did not start vacant")
 	}
 	// No holder check: a member of another guild builds, and the row is
-	// that guild's (6226B0 passes the actor's guild).
+	// that guild's (the reference server passes the actor's guild).
 	builder := int64(78)
 	c.GuildID = &builder
 	want := wire.NewWriter(10).U8(siege.ActionConstruct).U8(1).U32(jangan).U32(testBarricadeZone).Payload()
@@ -214,7 +214,7 @@ func TestFortressConstructionIsNotAnOrdinaryRequest(t *testing.T) {
 ================
 TestGMSiegeStructureAndPeriodCommands
 
-51A4F0 (/SIEGE STRUCT_BUILD|STRUCT_UPGRADE|STRUCT_REPAIR|GATE) and 62EE90
+The GM siege command (/SIEGE STRUCT_BUILD|STRUCT_UPGRADE|STRUCT_REPAIR|GATE) and the shard message
 (/SIEGE STARTWAR..ENDREQ) execute without a selected fortress aide and push
 their 0xB1E1 / 0x3887 replies.
 ================
@@ -239,7 +239,7 @@ func TestGMSiegeStructureAndPeriodCommands(t *testing.T) {
 		t.Fatalf("GM STRUCT_BUILD frames = %+v, want the roster then % x", pushed, wantBuild)
 	}
 
-	// STRUCT_UPGRADE (0x0B) checks 634350 refusal codes in order:
+	// STRUCT_UPGRADE (0x0B) checks the reference server's refusal codes in order:
 	// - unknown zone -> 3 (fortressErrInvalid)
 	// - zone without structure reference -> 0x21 (fortressErrUpgradeNoReference)
 	// - barricade zone -> 0x22 (fortressErrUpgradeKind)

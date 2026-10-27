@@ -24,8 +24,8 @@ import (
 ================
 TestPlayerKillLegalEnemyBookkeeping
 
-4E2004 passes killer in EAX and victim in ESI to 4EB590. The ordinary
-controller reaches 52B6D0 before death relief can clear the victim's red state.
+Natively the kill rewards pass the killer and the victim to the enemy test. The ordinary
+controller reaches the combat-enemy test before death relief can clear the victim's red state.
 ================
 */
 func TestPlayerKillLegalEnemyBookkeeping(t *testing.T) {
@@ -82,7 +82,7 @@ func TestPlayerKillLegalEnemyBookkeeping(t *testing.T) {
 ================
 TestPeriodicPlayerKillBooksOnlyNeutralVictims
 
-52A3F9 uses the same killer callback for status damage as direct damage.
+The reference server's hit path uses the same killer callback for status damage as direct damage.
 ================
 */
 func TestPeriodicPlayerKillBooksOnlyNeutralVictims(t *testing.T) {

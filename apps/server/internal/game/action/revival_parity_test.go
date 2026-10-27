@@ -26,8 +26,8 @@ import (
 ================
 TestPresentRebirthRecoversFortyPercentAndPreservesMana
 
-51019E/5101D4 multiply keeper floats by the widened 0.4f constant.
-4DF49F first adds one HP and leaves existing mana intact.
+The native rebirth multiplies keeper floats by the widened 0.4f constant.
+The native town teleport first adds one HP and leaves existing mana intact.
 ================
 */
 func TestPresentRebirthRecoversFortyPercentAndPreservesMana(t *testing.T) {
@@ -54,7 +54,7 @@ func TestPresentRebirthRecoversFortyPercentAndPreservesMana(t *testing.T) {
 ================
 TestSkillResurrectionPublishesAndExpiresProtection
 
-46CB30 calls 4DF290 with the in-place selector before skill recovery.
+The native resurrection response calls the town teleport with the in-place selector before skill recovery.
 That base revival grants the same six-second field protection as self-rebirth.
 ================
 */

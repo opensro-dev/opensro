@@ -4,16 +4,16 @@
 skilltrapfield.go - hostile fields: the Rogue's Poison Trap pulses its
 statuses on the enemies standing in it
 
-CGSkillObject_SpawnAtOwner (48CCC0) gives a hostile skill object mode 1.
-Every 48CEA0 pass (300 ms) collects up to the area's most-targets hostiles
-around the object (48D690 mode 1), and
-CGSkillObject_ExecuteCollectedAttackRecipients (48D9B0) strikes the
+The native skill object spawn gives a hostile skill object mode 1.
+Every native object tick (300 ms) collects up to the area's most-targets hostiles
+around the object (recipient admission mode 1), and
+the native collected-recipient attack strikes the
 collection once puls has passed since its last strike; the collection is
 dropped either way. Without the trap word (+0x4A0) the result is the
 planter's B0BC (v1.150 B3C6 mode 2, wire.SkillPulseFrame) and the object
 lives on; with it, the object detonates once (skillcombattrap.go). The
 row carries no att: each strike is the status cast's zero-damage record
-with the 590680 roll. The cast and the plant are the combat trap's.
+with the native status roll. The cast and the plant are the combat trap's.
 
 ===========================================================================
 */
@@ -32,8 +32,8 @@ import (
 ================
 advanceTrapField
 
-One 48CEA0 pass for a hostile field. The caller holds the division lock.
-An empty collection leaves the pulse clock alone (48D9B0 returns before
+One native object tick for a hostile field. The caller holds the division lock.
+An empty collection leaves the pulse clock alone (natively it returns before
 reading it), so the first enemy to step in after a quiet spell is struck
 at once.
 ================
@@ -64,7 +64,7 @@ func (rt *Runtime) advanceTrapField(object skillobject.Object, c, snapshot *ente
 trapFieldStrike
 
 The row as the status cast's strike: no att, one zero-damage record a
-victim whose only consequence is the status roll (58E5F0), around the
+victim whose only consequence is the status roll, around the
 object with the field's selector.
 ================
 */

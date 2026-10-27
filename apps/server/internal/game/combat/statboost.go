@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-statboost.go - stri / inti parameter writes (594F69..5950D8)
+statboost.go - stri / inti parameter writes (skill-parameter installer)
 
 ===========================================================================
 */
@@ -29,9 +29,10 @@ type StatBoost struct {
 ==================
 StatBoostWrites
 
-594F76: value = float(addend) + float(word 0). A nonzero word 1 caps it at
-word 1 / 100 times the recipient's current value, truncated to an integer
-first (9FBB40); the smaller of the two is written to the flat channel.
+The installer's stri / inti branch: value = float(addend) + float(word 0). A
+nonzero word 1 caps it at word 1 / 100 times the recipient's current value,
+truncated to an integer first (the CRT ftol); the smaller of the two is
+written to the flat channel.
 ==================
 */
 func StatBoostWrites(strength, intellect StatBoost) ([]paramkeeper.Write, error) {

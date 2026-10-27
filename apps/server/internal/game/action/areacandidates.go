@@ -3,9 +3,9 @@
 
 areacandidates.go - every object an offensive area may strike
 
-The native selectors (TargetSelection_DispatchByShape and its shape
-owners, 58A088..58BE17) walk every character object around their centre
-and keep the ones SkillCombat_ValidateTargets (58CC70) admits: living
+The reference server's selectors (the shape dispatcher and its shape
+owners) walk every character object around their centre
+and keep the ones its target validation admits: living
 monsters of the population, and players the caster may attack
 (hostilePlayerRefusal). Monsters and players are one candidate list here,
 in the port's deterministic order: nearest first for shape 6, otherwise by
@@ -43,7 +43,7 @@ radius unless nearest (shape 6) asks for bare distances.
 ================
 */
 type areaQuery struct {
-	// selects is the efr +0x14 mask (TargetSelection_AroundSource 58A020):
+	// selects is the efr +0x14 mask (the reference server's around-source selector):
 	// 0x08 admits hostile characters, 0x10 non-character objects.
 	selects  uint8
 	division string
@@ -116,6 +116,11 @@ func (rt *Runtime) areaPlayerCandidates(q areaQuery) []areaCandidate {
 	}
 	world := domain.CharacterWorldInstance(q.caster)
 	var out []areaCandidate
+	// The door pass's out-values live for the whole walk: fresh slots
+	// per player would box three variables per head the strike weighs.
+	var snapshot *enterworld.Character
+	var radius float64
+	var petGIDs []uint32
 	for _, present := range rt.PopulationPlayers(q.division, q.now) {
 		if present.World != world || present.GID == enterworld.ObjectIDForCharacter(q.caster) ||
 			!worldgeom.SamePlane(present.Spawn.RegionID, q.center.RegionID) {
@@ -132,20 +137,18 @@ func (rt *Runtime) areaPlayerCandidates(q areaQuery) []areaCandidate {
 		// players never pay for their whole record (#1820 part C).
 		// Companion gids ride out as values; resolveCOSTarget re-judges
 		// each companion's summons and form on its owner itself.
-		var snapshot *enterworld.Character
-		var radius float64
-		var petGIDs []uint32
+		snapshot, radius, petGIDs = nil, 0, nil
 		rt.deps.Read(q.division, func() {
 			if player.DeletePending || !enterworld.CharacterAlive(player) {
 				return
 			}
 			for _, pet := range player.Companions() {
-				if pet != nil {
+				if pet != nil && pet.Summoned {
 					petGIDs = append(petGIDs, pet.GID)
 				}
 			}
-			// 5A1AD0 excludes a mounted player (5A1B51..5D reads the
-			// ride and skips the rider); the ride itself is a
+			// The reference server excludes a mounted player (it reads
+			// the ride and skips the rider); the ride itself is a
 			// candidate below.
 			if ridingCOS(player) != 0 {
 				return
@@ -168,14 +171,14 @@ func (rt *Runtime) areaPlayerCandidates(q areaQuery) []areaCandidate {
 			snapshot = player.Snapshot()
 		})
 		if snapshot != nil {
-			// 5A1AD0 asks 5293A0 with mode 3 for a player caster.
+			// The reference server asks its attack validation with mode 3 for a player caster.
 			if rt.hostilePlayerRefusalWith(q.division, q.caster, snapshot, q.skill, q.now, playerAttackArea) == 0 {
 				out = append(out, areaCandidate{target: combatTarget{gid: present.GID, player: player, snapshot: snapshot,
 					at: present.Spawn}, distance: distance, radius: radius})
 			}
 		}
 		// The present player's companions are candidates through their
-		// owner (5A1AD0's mode 3 on the COS), a ridden transport included:
+		// owner (the reference server's mode 3 on the COS), a ridden transport included:
 		// enumerated from the owner's record, not companionTargets, whose
 		// mounted filter serves the pet strike lane.
 		for _, gid := range petGIDs {
@@ -206,7 +209,7 @@ func (rt *Runtime) areaPlayerCandidates(q areaQuery) []areaCandidate {
 areaDistance
 
 The monster registry's candidate distance: planar world distance, then
-the height difference (58ab6d..58ac23).
+the height difference (as the reference server's around-target selector).
 ================
 */
 func areaDistance(center, at simulation.Spawn) float64 {

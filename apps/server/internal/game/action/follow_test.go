@@ -89,7 +89,7 @@ func TestFollowPursuesHoldsAndResumesWithoutCombat(t *testing.T) {
 ================
 TestFollowAdmitsARider
 
-A rider may Trace: 4ACD7A refuses only attack and skill commands while
+A rider may Trace: natively only attack and skill commands are refused while
 mounted. The ridden pursuit is the vehicle's move: it goes to the vehicle
 movement owner for the COS GID, as the client's own 0x769E move does, and
 no run switch is sent for the rider.

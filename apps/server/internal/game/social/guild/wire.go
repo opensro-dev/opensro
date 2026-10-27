@@ -42,8 +42,8 @@
 // Deliberately-absent frontiers:
 //   - the 0x3B29 subOp-0x16 BATCH member delta (the multi-jid twin of
 //     subOp 6, client arm PINNED @0x0076278b) has NO emit site here:
-//     the v1.188 batch emitters (0x38F5 @0x005c4c38/@0x005c4e4b -
-//     permission batches; @0x005c482a - a grade+perm+role batch) fire
+//     the v1.188 batch emitters (0x38F5 -
+//     permission batches; and a grade+perm+role batch) fire
 //     from doors that mutate masked fields on SEVERAL members at once,
 //     and no such door exists in this gateway (no permMask mutator
 //     exists at all - the JoinerPermMask floor). The client fold and
@@ -136,7 +136,7 @@ const (
 	// ("Will you exchange [%d]of SP into GP and contribute?" /
 	// UIIT_MSG_GUILD_ERROR_GP_SUBSCRIPION_SP "Cannot contribute more
 	// than SP available to you"), and the v1.188 member schema
-	// persists the GP_Donation column (@0x0084c427).
+	// persists the GP_Donation column.
 	OpGuildGpDonateRequest uint16 = 0x740F
 	// OpGuildNoticeEditRequest: {u16-len ANSI subject}{u16-len ANSI
 	// contents}.
@@ -728,7 +728,7 @@ func EncodeMemberGrade3B29(jid uint32, grade uint8, permMask uint32) []byte {
 // @0x005ea128..; role 0 clears the text) - the same writes the actor's
 // 0xB65F ack performs, so the actor is excluded from this fan-out (the
 // ack already wrote its own roster). The exclusive
-// single-bit mask matches the v1.188 emitter posture (sub_5c57c0
+// single-bit mask matches the v1.188 emitter posture (it
 // composes {6, jid, 0x40, role}).
 func EncodeMemberFortressRole3B29(jid uint32, role uint8) []byte {
 	writer := wire.NewWriter(7)

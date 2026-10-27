@@ -77,7 +77,7 @@ func (rt *Runtime) forcedTargetRecipients(c tauntPlayerCast) []*enterworld.Chara
 		to := rt.liveSpawn(simulation.WorldKey(c.division, candidate.Name), candidate, c.now)
 		radius, ok := rt.deps.CharacterBodyRadius(candidate)
 		// Shape two expands the primary-centered sphere by the caster and
-		// candidate radii, as the shared monster selector does (58AB6D).
+		// candidate radii, as the shared monster selector does.
 		if !ok || !samePlaneAdjacent(center, to) || float32(distance3D(center, to)) > float32(float64(area.Radius)+casterRadius+radius) {
 			continue
 		}
@@ -148,8 +148,8 @@ func (rt *Runtime) acceptForcedTarget(c tauntPlayerCast) OpResult {
 		}) {
 			continue
 		}
-		// 58395E..5839A4 replaces selection record zero, exactly like 52B5B4
-		// in HandleSelect. It does not cancel the command or a committed cast;
+		// Natively record zero of the selection is replaced, exactly as the select
+		// request does. It does not cancel the command or a committed cast;
 		// subsequent targeted releases encounter the shared hitm admission.
 		rt.Selected.Set(c.division, recipient.Name, casterGID)
 		frames = append(frames, installed...)
@@ -175,7 +175,7 @@ func (rt *Runtime) acceptForcedTarget(c tauntPlayerCast) OpResult {
 ================
 advanceForcedTargets
 
-5847CF checks object presence, not HP or a distance tether. Death of the
+Natively object presence is checked, not HP or a distance tether. Death of the
 recipient follows ordinary effect retirement; a dead source still exists.
 ================
 */

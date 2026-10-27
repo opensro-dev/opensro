@@ -835,6 +835,9 @@ export interface GameplayState extends MoverPublication {
 	// The flag-war timer and carrier, owned by the gameplay worker.
 	readonly flagWar?: { readonly timerEndsAt: number; readonly carrierGid: number; };
 	readonly targetTaxRate?: number;
+	// targetGateRows is a quest exit gate's rows (talk bit 0x8000000):
+	// each a row of action 0x2A whose click sends 0x7495 type 3.
+	readonly targetGateRows?: readonly GateRow[];
 	readonly shopCompletionRevision?: number;
 	readonly shop?: import("@/engine/foundation/gameplay/commerce").ShopState;
 	readonly masteryTotalOverride?: number;
@@ -983,3 +986,13 @@ export interface VitalState {
 	readonly abnormalLevels?: readonly { readonly bit: number; readonly level: number; }[];
 	readonly deathState?: boolean;
 }
+
+/*
+================
+GateRow
+
+One quest exit gate row, as the grant carries it: kind 0 is the return
+(SN_TALK_COMMON_INS_WADDUNGOT), 1 a text symbol, 2 a numbered point.
+================
+*/
+export type GateRow = { readonly kind: number; readonly symbol?: string; readonly point?: number; };

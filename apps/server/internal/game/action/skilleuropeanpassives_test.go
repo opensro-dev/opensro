@@ -54,7 +54,7 @@ func TestEuropeanPassivesQualify(t *testing.T) {
 ================
 TestDefensePenaltyLowersBothDefenses
 
-594AC0 0x596252: pmdp lowers parameters 5 and 6 on the percent channel.
+Natively pmdp lowers parameters 5 and 6 on the percent channel.
 ================
 */
 func TestDefensePenaltyLowersBothDefenses(t *testing.T) {
@@ -74,7 +74,7 @@ func TestDefensePenaltyLowersBothDefenses(t *testing.T) {
 ================
 TestShieldPassiveEvadesCriticals
 
-A learned dcri raises the defender's 0x39, and 58EB64 divides the
+A learned dcri raises the defender's 0x39, and the native hit outcome divides the
 attacker's critical byte by (1 + 0x39 / 100).
 ================
 */
@@ -133,7 +133,7 @@ func TestBowAbsorbLowersIncomingDamage(t *testing.T) {
 ================
 TestReturnedDamageArithmetic
 
-5A0C2D: each lane share truncates on its own, and range must exceed the
+Natively each lane share truncates on its own, and range must exceed the
 distance.
 ================
 */
@@ -211,7 +211,7 @@ func TestTwoHandReturnStrikesTheAttacker(t *testing.T) {
 ================
 TestSoulReturnBuffStrikesTheAttacker
 
-Without an enabled passive, 5A0C2D falls back to the buff's rule (+0x208).
+Without an enabled passive, the native damage effects fall back to the buff's rule (+0x208).
 ================
 */
 func TestSoulReturnBuffStrikesTheAttacker(t *testing.T) {

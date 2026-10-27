@@ -3,8 +3,8 @@
 
 hawk.go - the attacking hawk's strike damage (Black and Light Hawk Summon)
 
-Skill_ProcessPeriodicDamage (582750) adds two flat-base formulas, the
-physical 40F1B0 and the magical 40F3D0, both read on the struck target:
+The server's periodic-damage routine adds two flat-base formulas, the
+physical one and the magical one, both read on the struck target:
 defense, parry, the basic-hit absorption, the incoming factor. Neither rolls
 an attack interval or a hit; the hawk always lands. Every float the
 originals store with fstp dword is rounded to float32 at the same point.
@@ -16,7 +16,7 @@ package combat
 
 import "math"
 
-// hawkDamageCeiling is the float 40F38D stores over a larger result.
+// hawkDamageCeiling is the float the server stores over a larger result.
 const hawkDamageCeiling = 16777215
 
 /*
@@ -24,8 +24,8 @@ const hawkDamageCeiling = 16777215
 hawkLane
 
 One of the hawk's two formulas: the summ word that is its flat base, and
-the target's reads it takes. Physical (40F1B0) reads parameters 5 and 7,
-absorption 410BB0(5) and 0xB4; magical (40F3D0) reads 6 and 8, 410BB0(9)
+the target's reads it takes. Physical reads parameters 5 and 7, absorption
+ratio (5) and 0xB4; magical reads 6 and 8, absorption ratio (9)
 and 0xB5.
 ================
 */
@@ -40,10 +40,10 @@ type hawkLane struct {
 ================
 HawkDamage
 
-The u16 sum 582750 sends: physical plus magical, never zero. rank is the
-hawk row's mastery rank (59E770: zero without MAAT, as the summ rows are).
-A lane whose base word is zero returns zero without rolling (40F1B0 /
-40F3D0 test it first).
+The u16 sum the server sends: physical plus magical, never zero. rank is the
+hawk row's mastery rank (zero without MAAT, as the summ rows are).
+A lane whose base word is zero returns zero without rolling (both
+formulas test it first).
 ================
 */
 func HawkDamage(defender Stats, physical, magical uint32, rank uint8, roll Roll32767) (uint16, error) {
@@ -71,9 +71,9 @@ func HawkDamage(defender Stats, physical, magical uint32, rank uint8, roll Roll3
 ================
 hawkLaneDamage
 
-40F1B0 / 40F3D0 after their live checks. The minimum-damage fallback is the
-only difference: 40F1B0 draws a float between one and 10% of the base,
-40F3D0 between one and that ceiling truncated to an integer.
+Either formula after its live checks. The minimum-damage fallback is the
+only difference: the physical one draws a float between one and 10% of the base,
+the magical one between one and that ceiling truncated to an integer.
 ================
 */
 func hawkLaneDamage(lane hawkLane, rank uint8, roll Roll32767) (uint16, error) {
@@ -119,6 +119,6 @@ func hawkLaneDamage(lane hawkLane, rank uint8, roll Roll32767) (uint16, error) {
 	case float64(value) >= hawkDamageCeiling:
 		value = hawkDamageCeiling
 	}
-	// The caller keeps the low word of the truncated result (582865 movzx).
+	// The caller keeps the low word of the truncated result (a movzx).
 	return uint16(int64(math.Trunc(float64(value)))), nil
 }

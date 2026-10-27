@@ -83,7 +83,7 @@ func killStructure(t *testing.T, rt *Runtime, c *enterworld.Character, kind uint
 ================
 TestTheStoneFallsToTheGuildThatBreaksIt
 
-52D2B0 keeps a fallen structure in its destroyed state and tells the
+The reference server keeps a fallen structure in its destroyed state and tells the
 fortress world (0x0B); the last tower starts the stone's countdown (0x0A);
 the stone's fall hands the fortress to the breaker's guild, reinstalls
 the structures and announces the conquest (subtype 8).

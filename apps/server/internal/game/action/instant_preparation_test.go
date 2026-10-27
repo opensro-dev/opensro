@@ -17,7 +17,7 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 )
 
-// 586C92 validates before 586CE3 reads the clock. These tests distinguish
+// The reference server validates before it reads the clock. These tests distinguish
 // cancellation during preparation from a release-only resource check.
 /*
 ================

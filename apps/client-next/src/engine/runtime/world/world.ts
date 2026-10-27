@@ -31,6 +31,15 @@ import {
 import { featuresAt } from "@/engine/foundation/world/plane";
 import { sectorX, sectorY } from "@/engine/foundation/world/world-space";
 import { sampleCameraWaypoints } from "@/engine/foundation/ui/camera-waypoints";
+import {
+	createFreeCameraFades,
+	FREE_CAMERA_DEFAULT_SPEED,
+	freeCameraEye,
+	seedFreeCamera,
+	stepFreeCamera,
+	type FreeCameraKeys,
+	type FreeCameraRig
+} from "@/engine/foundation/rendering/free-camera";
 
 type Transaction =
 	| { phase: "idle"; }
@@ -68,8 +77,18 @@ export function createWorldStream(
 	let fieldOfView = initialCameraFieldOfView();
 	// The interface's free-camera byte (CGInterface +0x3CE): while it
 	// stands, ApplyCameraOrbit (68FAD0) and UpdateCameraOrbitTarget
-	// (68F830) return early, so the world keeps the last applied camera.
+	// (68F830) return early and the free-fly arm (690146) flies the
+	// camera from the keyboard (free-camera.ts, #1787). The rig is
+	// seeded from the last applied camera on the first free step; the
+	// fades live on the interface natively and persist across toggles.
+	// keys is null while a text field owns the keyboard: the arm then
+	// returns before it reads a key or steps a fade.
 	let freeCamera = false;
+	let freeRig: FreeCameraRig | null = null;
+	const freeFades = createFreeCameraFades();
+	let freeSpeed = FREE_CAMERA_DEFAULT_SPEED;
+	let freeKeys: FreeCameraKeys | null = null;
+	let freeLastStepMs: number | null = null;
 	// The interface track's port copy (CGInterface +0x3FC) and its play
 	// byte (+0x3CD): the console owns the store and forwards both; the
 	// stepper below owns the track clock (+0xE8) it advances while the
@@ -303,7 +322,8 @@ export function createWorldStream(
 		pose: Pose,
 		camera: CameraInput | undefined,
 		target: import("@/engine/contracts/scene").FollowCameraTarget | undefined,
-		offset: readonly [number, number]
+		offset: readonly [number, number],
+		nowMs: number
 	) {
 		const yaw = camera?.yaw ?? initialCameraYaw(), pitch = camera?.pitch ?? initialCameraPitch();
 		const distance = camera?.distance ?? 80;
@@ -322,11 +342,56 @@ export function createWorldStream(
 			far: 3500
 		};
 		if ( freeCamera ) {
-			// 68FAD0 applies nothing while +0x3CE stands: the camera keeps
-			// its last eye and target however far the player walks.
-			if ( lastCamera ) renderer.setWorldCamera( lastCamera );
+			stepFreeFly( pose, spec, nowMs );
 			return;
 		}
+		lastCamera = spec;
+		renderer.setWorldCamera( spec );
+	}
+	/*
+	================
+	stepFreeFly
+
+	68FAD0 and 68F830 apply nothing while +0x3CE stands, so the player can
+	walk away from the camera; the free-fly arm (690146) moves it instead.
+	Until a key first moves the rig the last applied camera is re-applied
+	as it was, follow and all, so the renderer keeps resolving it the
+	way it drew it. Once the rig moves the camera is the rig's own,
+	without the follow: native skips the clamp while the byte stands.
+	A camera the clamp had pulled in therefore springs to the eye the
+	follow requested on that first move, since the port's clamp lives in
+	the renderer; native baked the clamped distance into +0x37C before
+	the byte stood.
+	================
+	*/
+	function stepFreeFly(
+		pose: Pose,
+		live: import("@/engine/contracts/scene").WorldCamera,
+		nowMs: number
+	) {
+		// The byte can stand before any camera was applied (the first
+		// frame): the live follow becomes the held camera then.
+		if ( !lastCamera ) lastCamera = live;
+		const seed = lastCamera;
+		if ( !freeRig ) freeRig = seedFreeCamera( seed );
+		const dtSeconds = freeLastStepMs === null ? 0 : Math.max( 0, (nowMs - freeLastStepMs) / 1000 );
+		freeLastStepMs = nowMs;
+		if ( freeKeys ) stepFreeCamera( freeRig, freeFades, freeKeys, freeSpeed, dtSeconds );
+		if ( !freeRig.moved ) {
+			renderer.setWorldCamera( seed );
+			return;
+		}
+		const { eye, up } = freeCameraEye( freeRig );
+		const spec: import("@/engine/contracts/scene").WorldCamera = {
+			dungeonBlock,
+			originRegion: seed.originRegion ?? pose.regionId,
+			eye,
+			target: freeRig.target,
+			up,
+			fov: fieldOfView,
+			near: 1,
+			far: 3500
+		};
 		lastCamera = spec;
 		renderer.setWorldCamera( spec );
 	}
@@ -527,7 +592,34 @@ export function createWorldStream(
 		================
 		*/
 		setFreeCamera( free: boolean ) {
-			if ( !disposed ) freeCamera = free;
+			if ( disposed ) return;
+			freeCamera = free;
+			// Each entry starts from the follow's latest camera (68F830
+			// rewrites +0x42C every frame the byte is clear).
+			freeRig = null;
+			freeLastStepMs = null;
+		},
+		/*
+		================
+		setFreeCameraSpeed
+
+		690C40 case 136 (/cs) writes +0x7B0, clamped 1..500 by the console:
+		the free-fly arm's translation speed (6902AD, 69040B).
+		================
+		*/
+		setFreeCameraSpeed( speed: number ) {
+			if ( !disposed ) freeSpeed = speed;
+		},
+		/*
+		================
+		setFreeCameraKeys
+
+		The keys the free-fly arm reads this frame, or null while a text
+		field owns the keyboard (690146 returns before reading them).
+		================
+		*/
+		setFreeCameraKeys( keys: FreeCameraKeys | null ) {
+			if ( !disposed ) freeKeys = keys;
 		},
 		/*
 		================
@@ -610,7 +702,15 @@ export function createWorldStream(
 			// the follow stays frozen (68F830 returns at once); the end
 			// clear inside it hands the next step back to the follow.
 			const played = pose ? stepWaypointCamera( pose, nowMs ) : false;
-			if ( pose && target !== null && !played ) updateCamera( target?.pose ?? pose, drawn, target, offset );
+			if ( pose && target !== null && !played ) {
+				updateCamera( target?.pose ?? pose, drawn, target, offset, nowMs );
+			}
+			// Playback writes the app camera itself (6900F8 copies it back
+			// to +0x42C), so the free arm resumes from the played pose.
+			if ( played ) {
+				freeRig = null;
+				freeLastStepMs = null;
+			}
 			try {
 				advance( pose, nowMs );
 				if ( transaction.phase === "ready" ) recovery.reset();

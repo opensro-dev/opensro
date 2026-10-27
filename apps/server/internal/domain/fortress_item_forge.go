@@ -6,7 +6,7 @@ fortress_item_forge.go - the fortress smith's and trainer's production
 One _SiegeFortressItemForge row per running production: the fortress, the
 item, how many remain to collect, whether the order is done and when it
 started and ends. A fortress holds at most one order per staff member
-(CSiegeFortress_FindItemForgeByKind 61DAC0: +0x38 at most 2). Start,
+(the reference server's forge lookup by kind: +0x38 at most 2). Start,
 cancel and collect are the shard's QUERY_SIEGE_ITEM_FORGE_ADD, _REMOVE and
 _SiegeFortressCollectForgedItem; the siege tick's _UPDATE marks it done.
 
@@ -44,7 +44,8 @@ type FortressItemForgeStart struct {
 	Holder  int64
 	ActorID int64
 	// Role is the fortress-role bit that grants production besides the
-	// master: 0x08 for the smith, 0x10 for the trainer (632767, 632B5C).
+	// master: 0x08 for the smith, 0x10 for the trainer (the server's smith
+	// and trainer handlers).
 	Role uint8
 	Gold int64
 	GP   uint32
@@ -89,7 +90,7 @@ type FortressItemForgeStore interface {
 }
 
 // v1.150 754A40 reads the low byte of the v1.188 production refusals
-// (CSiegeFortressMgr_HandleSmith*/HandleTrainer*, 6324A0..6333C0).
+// (the fortress manager's smith and trainer handlers).
 const (
 	FortressForgeErrFailure  uint8 = 0x02
 	FortressForgeErrUnknown  uint8 = 0x03

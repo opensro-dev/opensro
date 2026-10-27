@@ -14,8 +14,8 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 )
 
-// Expected values are float32 evaluations of the 496508 / 410AB0 / 411080
-// sequences, computed outside this package.
+// Expected values are float32 evaluations of the native weapon install,
+// heal formula and heal-bonus sequences, computed outside this package.
 func TestWeaponHealBonusNativeSequence(t *testing.T) {
 	ref := &enterworld.ItemRef{Combat: &enterworld.ItemCombatRef{
 		MagicalAttack: enterworld.ItemAttackRange{

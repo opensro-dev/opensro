@@ -4,11 +4,11 @@
 pkrecord.go - the PK record's clocks: the daily reset and total decay
 
 Two clocks run on a player's PK record (pk/record.go). The local day's
-rollover empties the daily count (CGame_TickPlayers -> CGObjPC_ResetDailyPK
-4EB200), and the penalty keeper drops the total by one every 48 h of wall
-time once the penalty is gone (CTJ_PenaltyKeeper, 652080; offline time
-counts, 651D30). Entry also repairs a positive total that has lost its
-keeper (4E1120). Every owner with a record is checked each action tick;
+rollover empties the daily count (natively on the players tick), and the
+penalty keeper drops the total by one every 48 h of wall
+time once the penalty is gone (the native penalty keeper; offline time
+counts). Entry also repairs a positive total that has lost its
+keeper. Every owner with a record is checked each action tick;
 a change commits through the character door and reaches the player as its
 v1.150 live update.
 
@@ -27,7 +27,7 @@ import (
 ================
 restorePKRecord
 
-Entry: the decay elapsed offline, a stale daily count, and 4E1120's
+Entry: the decay elapsed offline, a stale daily count, and the native load's
 keeper repair. The entry snapshot already carried the old record, so the
 corrections go out as live updates.
 ================

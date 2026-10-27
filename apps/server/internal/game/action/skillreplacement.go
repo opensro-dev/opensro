@@ -3,8 +3,8 @@
 
 skillreplacement.go - buff replacement validation on one character
 
-CSkillManager_ValidateBuffReplacement (59D870) as the untargeted, unlinked
-casts call it (58E2F4): the new effect against the character's active list
+The reference server's buff replacement check, as the untargeted, unlinked
+casts call it: the new effect against the character's active list
 and its current command's casting states. A refusal is 0x300C.
 
 ===========================================================================
@@ -36,7 +36,7 @@ requestReleasedEffectReplacement
 requestSelfEffectReplacement for the caster of skill at its own prepared
 cast's release. A positive-time cast keeps its command current through its
 release (currentcommand.go), so that command is the one being released,
-not another command in progress: native validates at admission (58E2F4),
+not another command in progress: native validates at admission,
 before the command is current, and its release installs without reading
 its own states as a conflict. Live, a heal over time with a cast time
 (Healing Orbit) was refused on its own caster by exactly that conflict.

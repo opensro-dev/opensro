@@ -389,7 +389,7 @@ func (r *Runtime) handlePartyPage(s *transport.Session, opcode uint16, payload [
 		listingOwner = r.PartyListingOwnerFor(divisionID, character.Name)
 	}
 	curPage, pageCount, rows := r.board.PartyPage(divisionID, ownerKey(divisionID, listingOwner), page)
-	// A listing names its party (v1.188 CPartyMatch_SubmitShardJob 5BF2A0
+	// A listing names its party (the reference server's party match shard job
 	// stores the party ID, not a count), so the count is the party's size
 	// as each page is asked for. The registration snapshot went stale as
 	// soon as anyone joined or left. rows is the page's own copy.
@@ -551,7 +551,7 @@ func (r *Runtime) SessionClosed(s *transport.Session) {
 }
 
 // Party-matching refusal codes (category 2), from the server register
-// precheck sub_514170 and its purpose test sub_5BF240 (0x2C0A, 0x2C1D,
+// precheck and its purpose test (0x2C0A, 0x2C1D,
 // 0x2C23); the v1.150 client shows them as UIIT_MSG_PARTYERR_* /
 // UIIT_MSG_PARTYMATCH_RECORD_ERROR_* through the 0x200 notice table.
 const (
@@ -561,7 +561,7 @@ const (
 	partyMatchErrPurpose        uint8 = 0x23
 )
 
-// minPartyCreatorLevel is the level a partyless registrant needs: sub_514170
+// minPartyCreatorLevel is the level a partyless registrant needs: the native precheck
 // refuses level < 5 with 0x2C0A when the character has no party.
 const minPartyCreatorLevel = 5
 

@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-naturalrecovery.go - natural HP / MP recovery ticks (4A6DF0 / 4A9D00 / 4E2990)
+naturalrecovery.go - natural HP / MP recovery ticks
 
 Authenticated residents own the recovery clock. Each pulse reads equipment,
 active effects and posture through the ordinary keeper before committing HP
@@ -23,8 +23,8 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// Later GameServer: 4A6DF0 registers a four-second callback, 4A9D00
-// selects 0.8/8 percent for standing/sitting, and 4E2990 applies it.
+// Later GameServer: a four-second callback is registered, the motion
+// state selects 0.8/8 percent for standing/sitting, and the tick applies it.
 const (
 	naturalRecoveryIntervalMs int64   = 4000
 	questMinuteIntervalMs     int64   = 60000
@@ -108,7 +108,7 @@ func (rt *Runtime) forgetRecoverySession(division, name string) {
 ================
 naturalRecoveryAmount
 
-4E2AA0 reads the evaluated recovery rate, truncates the gauge product and
+Natively the tick reads the evaluated recovery rate, truncates the gauge product and
 clamps each pulse to half the maximum. Posture and buffs are already composed.
 ================
 */
@@ -202,9 +202,9 @@ func (rt *Runtime) advanceResidentQuestItem(key recoveryKey, nowMs int64) []simu
 ==================
 advanceResidentQuestMinute
 
-The same admitted actor owns recovery and quest pulses. Native 4A7050
-registers 4AC700 at 60 seconds -> 4EB7C0 -> 605400 -> 52B030 (event 14).
-Preserve one callback per update and residual phase (4AB700).
+The same admitted actor owns recovery and quest pulses. Natively the spawn
+registers a 60-second minute pulse that raises quest event 14.
+Preserve one callback per update and residual phase.
 ==================
 */
 func (rt *Runtime) advanceResidentQuestMinute(key recoveryKey, nowMs int64) []simulation.DivisionFrames {
@@ -247,7 +247,7 @@ func (rt *Runtime) recoverResident(key recoveryKey, nowMs int64) []simulation.Di
 		rt.recoveryMu.Unlock()
 		return nil
 	}
-	// Native 4AB729 subtracts one period and invokes once per owner update.
+	// The native timer advance subtracts one period and invokes once per owner update.
 	// Keep the residual phase, including pulses skipped while moving/dead.
 	state.nextMs += naturalRecoveryIntervalMs
 	rt.recoveryMu.Unlock()
@@ -268,7 +268,7 @@ func (rt *Runtime) recoverResident(key recoveryKey, nowMs int64) []simulation.Di
 		if world.Sitting {
 			rate = sittingRecoveryRate
 		}
-		// 4A9D00 writes source 2 to the flat channel. Keeping the base in
+		// The native motion state writes source 2 to the flat channel. Keeping the base in
 		// the common graph also admits equipment recovery magic options.
 		writes := rt.statModifierWrites(key.division, c)
 		writes = append(writes,

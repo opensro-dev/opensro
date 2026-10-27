@@ -58,7 +58,7 @@ func TestCosCancellationPreservesDurablePetAndRetiresPickup(t *testing.T) {
 		w.Spawn = initial
 	})
 	result = rt.HandleCosCancel(testDivision, c, payload)
-	// The owner hears the removal (4D2140) ahead of the despawn; peers only the despawn.
+	// The owner hears the removal ahead of the despawn; peers only the despawn.
 	assertOpcodes(t, result.Frames, opCosCancelResponse, wire.OpCosCommandResult, cosPetUpdateOpcode, wire.OpObjectDespawn)
 	assertOpcodes(t, result.Broadcast, wire.OpObjectDespawn)
 	want := *before.ActiveCOS
@@ -73,7 +73,7 @@ func TestCosCancellationPreservesDurablePetAndRetiresPickup(t *testing.T) {
 	if repeated := rt.HandleCosCancel(testDivision, c, payload); len(repeated.Broadcast) != 0 {
 		t.Fatal("repeated cancellation published another despawn")
 	}
-	// 511A60 checks the owner's life and pet combat target, not pet HP.
+	// The reference server checks the owner's life and pet combat target, not pet HP.
 	// A retained corpse must be cancellable without reviving it first.
 	c.ActiveCOS.Summoned = true
 	c.ActiveCOS.CurrentHP = 0

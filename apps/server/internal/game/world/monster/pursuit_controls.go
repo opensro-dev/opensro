@@ -2,7 +2,8 @@ package monster
 
 import "math"
 
-// TraceDecision is 5483C0/5484B0's reason byte, consumed by 559AD0.
+// TraceDecision is the reference server's pursuit-distance reason byte,
+// consumed by its COS-command state.
 // Reasons 2/3 change speed; they do NOT abandon the opponent. Reason 1
 // enters IDLE (BATTLE::OnExit clears opponents), not HOMING.
 type TraceDecision uint8
@@ -19,8 +20,9 @@ func (c TacticsControls) TraceEnabled() bool {
 }
 
 // EvaluateTrace runs only after Timer 6 opens. Distance is the float32 3D
-// result of 53D7A0, NOT the distance from the nest. Indoor dispatch adds 100
-// (53FD0F -> 5484B0). targetMoving is vslot +4C0, not a guessed speed flag.
+// result of the native actor distance, NOT the distance from the nest.
+// Indoor dispatch adds 100 (the tactics callback install into the extended
+// classifier). targetMoving is vslot +4C0, not a guessed speed flag.
 func (c TacticsControls) EvaluateTrace(distance float32, targetMoving, indoor bool, now, lastActivity uint32) TraceDecision {
 	if !c.TraceEnabled() {
 		return TraceContinue
@@ -50,12 +52,14 @@ func (c TacticsControls) EvaluateTrace(distance float32, targetMoving, indoor bo
 	return TraceRun
 }
 
-// 5489B0 -> 541820 owns the wire channel. +164 is a left/right obstacle
+// The native homing-boundary check into its step destination owns the wire
+// channel. +164 is a left/right obstacle
 // rotation sign and must never be interpreted as run/walk. Wild HOMING
 // uses RUN if the authored run speed is available.
 func HomingRuns(runSpeed float64) bool { return runSpeed > 0.000001 }
 
-// 545F70 -> 546039: a nest-backed actor uses nRadius for type 0 and
+// The native home-boundary test: a nest-backed actor uses nRadius for type
+// 0 and
 // 1.5*nRadius for type 1. Other types accept the position. The boundary
 // itself is outside; the native comparison is strictly distance < radius.
 func (c TacticsControls) InsideHome(distance, radius float32) bool {

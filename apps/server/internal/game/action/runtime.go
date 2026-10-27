@@ -61,6 +61,9 @@ type Runtime struct {
 	// instanceWorlds tracks the instanced layers opened on demand
 	// (instance_world.go): the owning lease and deadline per layer.
 	instanceWorlds sync.Map // instanceWorldKey -> trackedInstanceWorld
+	// questGates holds the quest instances' standing exit gates
+	// (questgate.go).
+	questGates questGateBook
 	// jobWeeks holds, per division, the last week JobWeekTick handed to the
 	// store (jobrank.go).
 	jobWeeks sync.Map
@@ -100,9 +103,9 @@ type Runtime struct {
 	// SRO_JOB_GOODS_TELEPORT; false is native, goodsteleport.go).
 	JobGoodsTeleport bool
 	BerserkRoll      combat.Roll32767
-	// WearRoll is CGObjPC_RollEquipmentWear's rand(); nil is the secure roll.
+	// WearRoll is the equipment wear roll's rand(); nil is the secure roll.
 	WearRoll combat.Roll32767
-	// RevivalRoll is 51D260's rand() for a fortress revival gate; nil is the
+	// RevivalRoll is the native teleport lookup's rand() for a fortress revival gate; nil is the
 	// secure roll.
 	RevivalRoll         combat.Roll32767
 	RewardParties       func(division string) []RewardParty
@@ -151,7 +154,7 @@ type Runtime struct {
 	effects         *statuseffect.Registry
 	periodicEffects linkedpulse.Registry
 
-	// partyAuras are open efr-kind-2 contexts (5830B0). The tick owns joins.
+	// partyAuras are open efr-kind-2 contexts. The tick owns joins.
 	partyAuras  []partyAura
 	partyAuraMu sync.Mutex
 
@@ -171,7 +174,7 @@ type Runtime struct {
 	// playerAbnormals owns each character's abnormal-state block.
 	playerAbnormals playerAbnormalStore
 
-	// cosAbnormals owns each summoned COS block (CGObjChar on the pet).
+	// cosAbnormals owns each summoned COS block (the character object on the pet).
 	cosAbnormals cosAbnormalStore
 
 	// cosDebuffs owns each summoned COS's hostile debuff words
@@ -242,7 +245,7 @@ type Runtime struct {
 	// FortressWarDates reads the previous and current/next war from that lane.
 	FortressWarDates func(nowMs int64) (previous, next time.Time)
 	// FortressList is the lane's subtype-0 fortress list for a guild,
-	// re-sent to the owning guild when its war begins (4E0680).
+	// re-sent to the owning guild when its war begins.
 	FortressList func(guildID int64) []byte
 	// fortressPhases are the fortress worlds' scheduled war phases.
 	fortressPhasesMu sync.Mutex
@@ -339,7 +342,7 @@ type Runtime struct {
 	DropRoll combat.Roll32767
 
 	// CaravanRoll is the caravan owner's rand() domain: spawn timers and
-	// every bandit draw (60BF30), in native order.
+	// every bandit draw, in native order.
 	CaravanRoll combat.Roll32767
 
 	// DropPassRate multiplies every drop a kill makes: its unique prepass,
@@ -505,7 +508,7 @@ type Runtime struct {
 	ForgetQuestItem      func(*enterworld.Character)
 	UseQuestItem         func(*enterworld.Character, string, simulation.Spawn, int64) ([]wire.Frame, bool)
 	// CapturedFollowerDied tells a capture-escort quest its captured monster
-	// died (CGObjCOS_Captured); called inside the owner's character door.
+	// died (a captured COS); called inside the owner's character door.
 	CapturedFollowerDied        func(*enterworld.Character) []wire.Frame
 	AdvanceQuestCalendar        func(nowMs int64)
 	ReleaseQuestCapturesOnDeath func(*enterworld.Character) ([]wire.Frame, bool)
@@ -520,6 +523,11 @@ type Runtime struct {
 		monsterCodename string,
 		rarity uint8,
 	) ([]wire.Frame, bool)
+	// NoteQuestKillSite reports where a monster a quest may care about
+	// fell, in the killer's world, before UpdateQuestKill runs: a quest
+	// instance raises its exit gate beside its boss (questgate.go). Nil
+	// reports nothing.
+	NoteQuestKillSite func(character *enterworld.Character, monsterCodename string, fell simulation.Spawn)
 
 	// FortressGuildRole supplies the optional fortress membership role used
 	// by siege-weapon equip requirements. Nil means no member record.
@@ -574,7 +582,7 @@ type Runtime struct {
 
 	// ProposalPending reports an unanswered 0x3393 prompt of any lane for
 	// a character. The native transaction manager holds one per player
-	// (TransactionMgr_InsertUnique 46F420), so a second proposal is dropped.
+	// (it inserts uniquely), so a second proposal is dropped.
 	ProposalPending func(divisionID, characterName string) bool
 
 	// UpdateExperience is the stat authority's door-free updater. The fatal-hit
@@ -610,7 +618,7 @@ type Runtime struct {
 	ApplyDeathPenalty func(character *enterworld.Character, penalty pk.DeathPenalty) ([]wire.Frame, bool)
 
 	// UpdateJobExperience is progression's door-free job EXP updater
-	// (CGObjPC_AddJobExp 4E2830): a job kill's share (pkreward.go). Nil pays
+	// (the native job EXP grant): a job kill's share (pkreward.go). Nil pays
 	// no job EXP.
 	UpdateJobExperience func(character *enterworld.Character, delta int64) ([]wire.Frame, bool)
 
@@ -655,7 +663,7 @@ type Runtime struct {
 	PushShardPeerFrames func(divisionID, exceptCharacterName string, frames []wire.Frame)
 
 	// ChatRestricted reports whether the character's session holds the GM
-	// chat restriction, sending its notice when it does (4F0A00). Nil means
+	// chat restriction, sending its notice when it does. Nil means
 	// no session can be restricted.
 	ChatRestricted func(divisionID, characterName string) bool
 
@@ -665,11 +673,11 @@ type Runtime struct {
 	PublicChat *chatfeed.Feed
 
 	// HonorPoints returns the character's usable Training Camp honor points
-	// (0x00617360 @ 0x00617629 -> 0x004EA600 -> 0x005E4260, [member+0x34]+0x54). Nil reports 0.
+	// (the reference server's Training Camp member record, [member+0x34]+0x54). Nil reports 0.
 	HonorPoints func(divisionID string, c *enterworld.Character) uint32
 
 	// SpendHonorPoints deducts cost from Training Camp honor points and broadcasts
-	// 0x3AC5 status 5 flag 3 (0x004E9AE0 @ 0x004E9C1A..0x004E9C37 -> 0x005E3760 -> 0x005DE6C0).
+	// 0x3AC5 status 5 flag 3 (as the reference server's shop payment commit does).
 	// Nil refuses honor deductions.
 	SpendHonorPoints func(divisionID string, c *enterworld.Character, cost uint32) bool
 
@@ -874,7 +882,7 @@ type OpResult struct {
 ObservedFrames
 
 Public frames for the sessions that observe one object, as native
-CGObj_SendPacketToNearbySessions (484D90) sends around its argument: a
+the reference server's nearby-session send sends around its argument: a
 heal's effect add goes around each recipient, not around the caster.
 ================
 */

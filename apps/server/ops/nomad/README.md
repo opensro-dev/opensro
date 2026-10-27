@@ -171,6 +171,18 @@ logs a warning and leaves reports off; it never stops the Agent. The other
 variables become the Agent job's `bug_report_replay_default`,
 `bug_report_max_bytes` and `bug_report_directory` variables.
 
+`SRO_STAFF_DISCORD_WEBHOOK` names the staff channel for ops-only alerts
+(#1447). It travels only as the GameWorld variable's `staff_discord_webhook`
+item, which the job renders into `secrets/staff-webhook`. The GameWorld
+pages it when the WebTransport pair it serves expires within 14 days, or
+when the pair failed at boot so the run serves WebSocket only. It checks at
+boot and every 6 hours, and posts each condition at most once a day.
+`deploy.py` passes the release config's `staff_webhook` file. Unset keeps
+the stored webhook, `off` removes it, and changing it needs no GameWorld
+stop. A value that is not a Discord webhook is warned about and ignored,
+so it never blocks a release. Without a webhook the alert is an error log
+only.
+
 Without a Discord channel (a developer's localhost, a self-hosted server),
 `SRO_BUG_REPORT_DIRECTORY` names an absolute directory that receives every
 report instead: one `<UTC stamp>-<report id>/` folder per report holding

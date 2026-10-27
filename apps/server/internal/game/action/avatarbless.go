@@ -10,10 +10,10 @@ opens CIFGrantMagicAttributeWnd beside the inventory. Its confirm
 	0x361A [u8 inventory slot][u16 len][ascii option codename]
 	    -> 0x32D9 [1][1][u8 slot][item body] | [2][u8 code]
 
-v1.188 is 0x74A9 -> 0x34AA (CGObjPC_HandleMagicOptionGrant74A9 5079C0);
+v1.188 is 0x74A9 -> 0x34AA;
 the rule lives in item/alchemy/avatar.go.
 
-INFERENCE: 5079C0 checks no NPC, because the GameServer only reaches it
+INFERENCE: natively no NPC is checked, because the GameServer only reaches it
 through the talk session. The port asks for that session explicitly: the
 selected NPC grants the 0x80000000 row and its function is open.
 

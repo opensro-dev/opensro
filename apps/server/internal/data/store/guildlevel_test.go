@@ -19,8 +19,8 @@ import (
 TestGuildLevelUpChargesTheMasterAndTheGuild
 
 Level 2 to 3 costs 50,400 GP and 9,000,000 gold (client 0xBE4C58 /
-0xBE4C6C, v1.188 0xADE910 / 0xADE8EC); the gold shortfall answers before
-the GP (5C6240), a member is not the master, and the result survives a
+0xBE4C6C, and the v1.188 server's level table); the gold shortfall answers before
+the GP (the server's level-up check order), a member is not the master, and the result survives a
 reopen.
 ================
 */

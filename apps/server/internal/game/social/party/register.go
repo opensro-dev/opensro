@@ -70,17 +70,17 @@ type MemberVitals func(divisionID string, character *enterworld.Character) (curr
 type LivePose func(divisionID string, character *enterworld.Character) simulation.Spawn
 
 const (
-	// playerHitRange is CGObjChar_CheckHitRange's (4A8E10) range for a
-	// target whose vtable+0x1C CGObjChar_IsPlayer holds.
+	// playerHitRange is the reference server's hit-range check's range for a
+	// target whose vtable+0x1C player test holds.
 	playerHitRange = 600
-	// inviteWrongTarget and inviteTooFar are 4A8E10's results 3 (wrong
+	// inviteWrongTarget and inviteTooFar are the hit-range check's results 3 (wrong
 	// class or not same-plane adjacent sectors) and 4 (beyond the range).
-	// CGObjPC_OnPartyFormRequest (5143B0) returns them in the request's
+	// The reference server's party form request returns them in the request's
 	// error ack; the client shows 0x200+code: 515 invalid target, 516 too far.
 	inviteWrongTarget uint8 = 3
 	inviteTooFar      uint8 = 4
-	// proposerUnable and proposerTooLow are CGObjPC_ValidatePartyFormation's
-	// (513F90) 0x2C09 (the proposer is not alive) and 0x2C0A (level below
+	// proposerUnable and proposerTooLow are the reference server's party formation
+	// check's 0x2C09 (the proposer is not alive) and 0x2C0A (level below
 	// minCreatorLevel); the client shows 0x200+code, 0x20A being
 	// UIIT_MSG_PARTYERR_TOO_LOW_CREATOR_LEVEL. 0x209 has no notice.
 	proposerUnable  uint8 = 0x09
@@ -178,7 +178,7 @@ func (r *Runtime) UseLivePose(fn LivePose) {
 ==================
 inviteRange
 
-CGObjChar_CheckHitRange (4A8E10) as CGObjPC_OnPartyFormRequest (5143B0)
+The reference server's hit-range check, as its party form request
 calls it for the proposed member: same plane and adjacent sectors, then
 the 3D distance within the player class range. 0 admits; otherwise the
 native result code for the refusal ack.
@@ -196,7 +196,7 @@ func (r *Runtime) inviteRange(divisionID string, actor, target *enterworld.Chara
 		monster.Pose{RegionID: from.RegionID, X: from.X, Y: from.Y, Z: from.Z},
 		monster.Pose{RegionID: to.RegionID, X: to.X, Y: to.Y, Z: to.Z},
 	)
-	// 4A8E10 refuses when the range is below the distance.
+	// The reference server refuses when the range is below the distance.
 	if playerHitRange < distance {
 		return inviteTooFar
 	}
@@ -340,10 +340,10 @@ func (r *Runtime) memberRowFor(divisionID string, character *enterworld.Characte
 	if character == nil {
 		return row
 	}
-	// A suited member shows as its job alias (5BAE80); the registry still
+	// A suited member shows as its job alias (reference server); the registry still
 	// keys members by their own names.
 	row.Name = enterworld.PartyMemberName(character)
-	// CSkillManager_CalculateBuffMasteryBonus (0x5A1890) computes the two
+	// The reference server's buff mastery bonus computes the two
 	// best trained masteries for every native member row; the pair rides
 	// mask bit 8 on roster, match and update rows alike. A row built from a
 	// vanished character record has nothing to compute and stays bare.
@@ -481,13 +481,13 @@ func (r *Runtime) handleInvite(s *transport.Session, opcode uint16, payload []by
 ==================
 proposerRefusal
 
-CGObjPC_ValidatePartyFormation (513F90), which CGObjPC_OnPartyFormRequest
-(5143B0) runs before it reads the target: a proposer that is not alive
-(life state, CGObjChar_GetLifeStateByte 485EE0, other than 1) or below
-level 5 (CGObjChar_GetLevel 4A6870) cannot form a party. 0 admits.
+The reference server's party formation check, which its party form request
+runs before it reads the target: a proposer that is not alive
+(life state other than 1) or below
+level 5 cannot form a party. 0 admits.
 
 Its other gates do not reach the port. INFERENCE: the operation mask
-0x1000 (CGObjPC_HasOperationMask 4DDD30, 0x2C19) is a quest operation
+0x1000 (the operation mask test, 0x2C19) is a quest operation
 bit, and no v1.150 quest sets it (quest definitions admit only 0x60000).
 The body state bytes +4/+6/+7 (0x2C09) have no proven meaning yet; the
 port leaves them open rather than guess a refusal.
@@ -558,7 +558,7 @@ func (r *Runtime) handleJoinInvite(s *transport.Session, opcode uint16, payload 
 	}
 	if targetParty, partied := r.registry.PartyOf(divisionID, target.Name); partied {
 		log.Debugf("party: 0x751A (join-invite) refused for %s: target already in a party", actor.Name)
-		// Research server 514063..51407C compares party IDs: same ->
+		// The reference server compares party IDs: same ->
 		// 2C12, different -> 2C18. Client 75B100 reads a BYTE on B51A;
 		// category 2 independently pins existing/other-party member text.
 		code := byte(0x18)
@@ -634,7 +634,7 @@ proposalPending
 
 A player holds one unanswered proposal of any kind: the transaction
 manager keys them by the answering player and refuses a second
-(TransactionMgr_InsertUnique 46F420). Replies stay routable because
+(it inserts uniquely). Replies stay routable because
 at most one lane ever holds a pending for a character.
 ==================
 */
@@ -654,9 +654,9 @@ func (r *Runtime) proposalPending(divisionID, targetName string) bool {
 ==================
 refuseBusyTarget
 
-A refused submit fails the proposal with reason 2 (Transaction_Submit-
-OrReject 4E7337): PartyProposal_NotifyFormationFailure / JoinFailure
-(5BE9B0 / 5BEA20) answer the proposer on its request ack and the target
+A refused submit fails the proposal with reason 2 (the reference server's
+transaction submit): its formation and join failure notices
+answer the proposer on its request ack and the target
 on its party ack, both {2, 2}. Client category 2 code 2 is the native
 generic refusal notice.
 ==================

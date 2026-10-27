@@ -12,8 +12,8 @@ Native v1.150 adds a friend only with the other player's consent:
 	                                                   (OnMsgBoxResult, 701A50)
 	requester  S->C 0xB164 {u8 1} or {u8 2, u8 code[, ...]} (760AF0)
 
-The checks and their codes are v1.188's: the GameServer's CMessengerMgr
-add (5D7620) and the ShardManager's request job (447650), whose error
+The checks and their codes are the reference server's: the game server's
+friend add and the shard manager's request job, whose error
 words' low bytes are the v1.150 client's 0x13 notice codes. A request
 waits 30 s for its answer (the ShardManager job's 30.0f timeout); a
 timeout or a party leaving ends it on both sides with the client's
@@ -52,10 +52,10 @@ const OpFriendDeleteAnswer uint16 = 0xB5DB
 const FriendConsentLength = enterworld.ConsentAnswerLength
 
 // FriendAnswerWindow is the ShardManager request job's 30.0f timeout
-// (447650).
+// (natively).
 const FriendAnswerWindow = 30 * time.Second
 
-// FriendNameMaxLength is CMessengerMgr add's name bound (5D7620: 1..0x20).
+// FriendNameMaxLength is the native friend add's name bound (1..0x20).
 const FriendNameMaxLength = 0x20
 
 // 0xB164 result bytes (760AF0).
@@ -67,14 +67,14 @@ const (
 // 0xB164 error codes: v1.188's 0x64xx words' low bytes, which the v1.150
 // client shows as notice 0x13/code (CGInterface_ShowSystemNotification).
 const (
-	FriendErrInvalidName    uint8 = 0x02 // 5D7620: name length outside 1..32
-	FriendErrSelf           uint8 = 0x03 // 5D7620: own name
-	FriendErrListFull       uint8 = 0x08 // 5D7620: own list at 20
-	FriendErrAlreadyFriend  uint8 = 0x09 // 5D6890 / 447650: already listed
+	FriendErrInvalidName    uint8 = 0x02 // name length outside 1..32
+	FriendErrSelf           uint8 = 0x03 // own name
+	FriendErrListFull       uint8 = 0x08 // own list at 20
+	FriendErrAlreadyFriend  uint8 = 0x09 // already listed
 	FriendErrConsent        uint8 = 0x0B // carries a consent sub-reason
-	FriendErrUnknownUser    uint8 = 0x0D // 447650: target absent or not in game
+	FriendErrUnknownUser    uint8 = 0x0D // target absent or not in game
 	FriendErrInProgress     uint8 = 0x0E // a request already waits (see Ask)
-	FriendErrTargetListFull uint8 = 0x0F // 447650: target list at 20
+	FriendErrTargetListFull uint8 = 0x0F // target list at 20
 )
 
 // Sub-reasons of FriendErrConsent (760AF0).
@@ -185,11 +185,11 @@ func DecodeFriendConsent3012(payload []byte) (jid, serial uint32, accept bool, e
 CheckFriendAdd
 
 The target of a friend request and 0, or the native refusal code, in the
-native order: GameServer 5D7620 (name, self, listed, own cap), then the
-ShardManager's 447650 (target absent or offline, target cap, listed from
+native order: the game server's friend add (name, self, listed, own cap), then the
+shard manager's request job (target absent or offline, target cap, listed from
 the target's side).
 
-5D7620 also answers 3 for a name CShardDB_FindRejectedText matches (the
+The native friend add also answers 3 for a name the forbidden-name lookup matches (the
 forbidden-name table). It is skipped here: a request resolves only to an
 existing character, whose name already passed character creation, so a
 rejected name can only ever answer UNKNOWNUSER, as an unknown name does.

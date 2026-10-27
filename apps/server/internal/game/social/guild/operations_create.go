@@ -56,9 +56,9 @@ func refusedCreateCode(reason string, code byte) CreateOutcome {
 //
 // The leader's fortressRole is the commander's (1), evidenced: the retail
 // _Guild_FnAddMember sets SiegeAuthority 1 for MemberClass 0, and the
-// master's handover (v1.188 5C46E0, _Guild_Delegate_Master) moves it with
+// master's handover (v1.188, _Guild_Delegate_Master) moves it with
 // the grade. The client's fortress windows gate on that role (827DB0)
-// while the server gates on the grade (CGuild_IsMemberMaster 5D0F50); the
+// while the server gates on the grade (the reference server's master test); the
 // two agree only while the leader holds it.
 func HandleCreate(deps Dependencies, divisionID string, actor *enterworld.Character, payload []byte, online func(name string) bool) CreateOutcome {
 	if actor == nil {

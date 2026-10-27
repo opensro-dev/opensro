@@ -128,7 +128,7 @@ STR and INT return to their value at the character's level with nothing spent
 (progression.BaseStatAtLevel); every point above that comes back as a free
 stat point, so the total is kept and nothing earned is lost, including points
 kept through a level-down. A lower maximum trims the stored current HP/MP as
-any other maximum drop does (4E3294); entry publishes the result on reconnect.
+any other maximum drop does; entry publishes the result on reconnect.
 ================
 */
 func (rt *Runtime) OperatorResetStats(division, name string) error {

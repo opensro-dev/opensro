@@ -177,7 +177,7 @@ func (rt *Runtime) liveSpawn(
 LiveSpawnFor
 
 The character's live position now, for lanes outside action that gate on
-native range (the party invite's CGObjChar_CheckHitRange).
+native range (the party invite's hit-range check).
 ==================
 */
 func (rt *Runtime) LiveSpawnFor(divisionID string, character *enterworld.Character) simulation.Spawn {

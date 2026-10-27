@@ -3,7 +3,7 @@
 
 invite_range_e2e_test.go - the native reach gate on party proposals
 
-CGObjPC_OnPartyFormRequest (5143B0) runs CGObjChar_CheckHitRange (4A8E10)
+The reference server's party form request runs the hit-range check
 on the proposed member before any prompt exists. These tests move players
 through the live-pose table the harness installs and check the refusal
 codes over the wire.
@@ -68,7 +68,7 @@ const e2eRegion uint16 = 0x6A48
 ================
 TestPartyInviteRangeGate
 
-CGObjPC_OnPartyFormRequest (5143B0) runs CGObjChar_CheckHitRange (4A8E10)
+The reference server's party form request runs the hit-range check
 on the proposed member: a player beyond 600 units answers code 4 (the
 client's "too far"), one outside the adjacent sectors answers code 3
 ("invalid target"), and neither ever sees a prompt. A forged frame naming a
@@ -157,7 +157,7 @@ func setCharacter(t *testing.T, server e2eServer, name string, fn func(*enterwor
 ================
 TestPartyProposerGate
 
-CGObjPC_ValidatePartyFormation (513F90) runs before the target is read: a
+The native party formation check runs before the target is read: a
 proposer below level 5 answers 0x0A (the client's "too low creator level")
 and a dead one 0x09; neither reaches the target.
 ================

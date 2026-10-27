@@ -115,7 +115,8 @@ func TestRateLimitChargesRequestBytes(t *testing.T) {
 // minute against the default 25/s+75 budget, built from the traffic
 // inventory in ratelimit.go: 10 ground clicks/s of 0x7738 (faster than any
 // human sustains), the worst-case 2s 0x72CD manual-movement cancel/recovery
-// frame (sub_693190), 2 progression clicks/s (0x727A), an item move each second
+// frame (CGInterface_CancelSkillForKeyboardMove, 0x693190), 2 progression
+// clicks/s (0x727A), an item move each second
 // (0x706D) and a chat line every 2s (0x7025, unhandled here — unknown
 // opcodes still cost a token by design). ~13.5 frames/s sustained for 60s:
 // not one frame may be shed.

@@ -4,19 +4,19 @@
 premiumticket.go - the premium time tickets
 
 The gold, silver and EXP-help tickets (3/3/13/4) and the skill time
-service tickets (3/3/13/5) are 49C2B0 cases 3 and 4: each refuses while a
+service tickets (3/3/13/5) are native special-consumable cases 3 and 4: each refuses while a
 premium job already runs (0x1894) and otherwise starts an owner timed job
 (type 3, or 9 for the skill tickets) for Param1 seconds. The tickets carry
 Param4 (EXP +%) and Param5 (skill EXP +%); the kill-reward distributor
-(4EA6A0) adds ParamKeeper 0xBA and 0xCA to every award, so the port raises
+adds ParamKeeper 0xBA and 0xCA to every award, so the port raises
 those two keepers as param jobs (paramjob.go), shown on the client's
 param-job board like any other.
 
 Param3 is the daily allotment in milliseconds: the keepers apply only
 while the day's allotment lasts (premiumclock.go). Param2 is the EXP a
 death keeps
-(CTJ_PremiumKeeper's ParamKeeper 0x101, read by the death penalty
-4E6B74); every shipped ticket authors zero, and a nonzero one raises it as
+(the premium keeper's ParamKeeper 0x101, read by the death penalty);
+every shipped ticket authors zero, and a nonzero one raises it as
 a third param job.
 
 ===========================================================================
@@ -52,14 +52,14 @@ func PremiumUpgradeFromEnv() bool {
 	return false
 }
 
-// errCodePremiumActive is the low byte of 49C65E's 0x1894.
+// errCodePremiumActive is the low byte of the native 0x1894.
 const errCodePremiumActive uint8 = 0x94
 
 /*
 ================
 premiumTicketPlan
 
-The keepers and the daily clock a ticket starts (49C2B0 cases 3 and 4,
+The keepers and the daily clock a ticket starts (native cases 3 and 4,
 or a premium package's UIU1 entry). skillOnly is case 4: the skill time
 service raises only the skill-EXP keeper.
 ================
@@ -97,7 +97,7 @@ func premiumTicketPlan(ref *enterworld.ItemRef, nowMs int64, skillOnly bool) ([]
 ================
 premiumRunning
 
-49C65E's 0x1894 test: a premium job already runs.
+The native 0x1894 test: a premium job already runs.
 ================
 */
 func premiumRunning(c *enterworld.Character, nowMs int64) bool {

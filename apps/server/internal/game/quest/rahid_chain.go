@@ -15,8 +15,8 @@ package quest
 var rahidChainSpecs = []QuestSpec{
 	rahidTwoSpec,
 	{
-		// Rahid 3 (89ED10): a two-exchange dialogue with Ahmok in Hotan
-		// (CMissionDialog: _05/_06, _07/_08, then _09), then the report to
+		// Rahid 3: a two-exchange dialogue with Ahmok in Hotan
+		// (a dialogue mission: _05/_06, _07/_08, then _09), then the report to
 		// Town Chief Bukhra (_11). Its 0x90 override is the base no-op: no
 		// travel block. The popup pays 253,000 EXP.
 		Codename: "QNO_RM_OLDWOMAN_3", RequiredQuests: []string{"QNO_RM_OLDWOMAN_2"},
@@ -45,10 +45,10 @@ var rahidChainSpecs = []QuestSpec{
 		},
 	},
 	{
-		// Rahid 4 (89F0D0, talk 89F470): three slave dialogue missions; only
-		// Shiphr's (+0x6A) completes, with _09 (89FA50 pays at once). The
+		// Rahid 4: three slave dialogue missions; only
+		// Shiphr's (+0x6A) completes, with _09 (the server pays at once). The
 		// other two slaves speak _05 / _07 once and then answer _06 / _08
-		// (89FDA0's pending bit); Bukhra repeats _04 while it runs.
+		// (the server dialogue talk's pending bit); Bukhra repeats _04 while it runs.
 		// Accepting sends the middle notice _10. Its 0x90 override is the
 		// base no-op. The popup pays 111,000 EXP.
 		Codename: "QNO_RM_OLDWOMAN_4", RequiredQuests: []string{"QNO_RM_OLDWOMAN_3"},
@@ -70,13 +70,13 @@ var rahidChainSpecs = []QuestSpec{
 ================
 rahidTwoSpec
 
-Rahid 2 (CQNO_RM_OLDWOMAN_2, talk 89E670): Bukhra's offer _01 forks. Reply
+Rahid 2 (CQNO_RM_OLDWOMAN_2): Bukhra's offer _01 forks. Reply
 _02 collects 200 Rocky Feathers (15% from Rocky; v1.150 asks 200, the class
 100) for 4,400,000 EXP, 67,000 skill EXP and three Stat Recall Scrolls;
 reply _06 waits two game months, 1800 online minutes (0x708), for nothing
 (the v1.150 popup's "[Option 2] Wait 2 months None"). Refusing answers _09.
-The v1.188 class does not key its reward by reply: CBasicQuest_vfF0
-(922D60) looks the row up by quest-user +3, which 89E670 never writes, so
+The v1.188 class does not key its reward by reply: its reward-row lookup
+reads quest-user +3, which the server's Rahid 2 talk never writes, so
 that server pays its single SQL row either way. The v1.150 popup is the
 data this client ships, so the waiting branch pays nothing here.
 ================

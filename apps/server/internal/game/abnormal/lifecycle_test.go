@@ -81,7 +81,7 @@ func TestEveryStatusLifecycle(t *testing.T) {
 ================
 TestFearAndConfusionOnlyNotifyNaturalEnd
 
-4A4BD0/4A4F70 require a living monster and an unretired slot for event 15.
+The fear and confusion callbacks require a living monster and an unretired slot for event 15.
 Cures and death must not enqueue a fresh AI transition during teardown.
 ================
 */

@@ -3,18 +3,18 @@
 
 skilladmit.go - may this caster use this skill right now?
 
-Skill_ValidatePrerequisitesAndCost (58D8F0). Every skill kind goes through
+The reference server's skill prerequisite and cost check. Every skill kind goes through
 here, each native call site with its own phase mask.
 
 Named in the binary but not ported yet:
 
-	command +0xC == 0x20  indirect skill (59B933); skips the caster gates
+	command +0xC == 0x20  indirect skill; skips the caster gates
 	manager +0x214        set by stns (+0x448); no shipped row  0x3009
 	ao / pw               motions 0x12, 8 (players never), 0xF  0x3009
 	char +0xC0C           the active pw shield instance       0x3009
-	                      (59369F): tele, tel2, tel3 refused;
+	                      (set by the skill engage): tele, tel2, tel3 refused;
 	                      pw shields are not ported
-	manager +0x1DC        only ever stored as 0 (59A5EE, 582DCE, 585351)
+	manager +0x1DC        only ever stored as 0
 
 Masks 0x02 and 0x20 are applied by the action owners, not here.
 
@@ -38,26 +38,26 @@ import (
 ==================
 admitMask
 
-The phase argument of 58D8F0:
+The phase argument of the native check:
 
-	0x37    CGCharAutoCommandActor_ProcessCommand 4ACED4    command accepted
-	0x17    CGCharAutoCommandActor_Handler_SkillCast 4AE6BD cast begins
-	0x91    CGCharAutoCommandActor_Handler_SkillCast 4AEA18 release
-	0xFFFF  SkillAction_* through Skill_ValidateCast 58D8D0  execution
+	0x37    the auto-command step         command accepted
+	0x17    the skill-cast auto command   cast begins
+	0x91    the skill-cast auto command   release
+	0xFFFF  every skill action's check    execution
 
 ==================
 */
 type admitMask uint16
 
 const (
-	admitCooldown       admitMask = 0x01 // 58E08C -> 0x3005
-	admitReplace        admitMask = 0x02 // 58E2BC -> 0x300C
-	admitEquipment      admitMask = 0x04 // 58E115 -> 58D480
-	admitTargets        admitMask = 0x08 // 58E13E -> 58CC70
-	admitResources      admitMask = 0x10 // 58E1AC: HP 0x3013, MP 0x3004
-	admitAmmo           admitMask = 0x20 // 58E32D -> 0x300E, cnsm +0x2A0
-	admitRange          admitMask = 0x40 // 58E3C7: a clear line to each target
-	admitActionRecovery admitMask = 0x80 // 64C1A0: the common action-recovery timer
+	admitCooldown       admitMask = 0x01 // -> 0x3005
+	admitReplace        admitMask = 0x02 // -> 0x300C
+	admitEquipment      admitMask = 0x04 // the equipment requirements
+	admitTargets        admitMask = 0x08 // the target validation
+	admitResources      admitMask = 0x10 // HP 0x3013, MP 0x3004
+	admitAmmo           admitMask = 0x20 // -> 0x300E, cnsm +0x2A0
+	admitRange          admitMask = 0x40 // a clear line to each target
+	admitActionRecovery admitMask = 0x80 // the common action-recovery timer
 
 	admitCommand   admitMask = 0x37
 	admitExecution admitMask = 0xffff
@@ -67,9 +67,9 @@ const (
 ==================
 admitTarget
 
-The action target as 58D8F0 reads it: its motion state (GetMotionState
-4AA590) for reqc bit 0, its position (object +0x7C) for the phase 0x40
-line, and for a player the record TargetValidation_ValidateAllTargets
+The action target as the native check reads it: its motion state
+for reqc bit 0, its position (object +0x7C) for the phase 0x40
+line, and for a player the record the native target validation
 checks. A player target never reports motion 8 in this port.
 ==================
 */
@@ -100,7 +100,7 @@ const cooldownGraceMs = 150
 ==================
 skillActionRecoveryApplies
 
-64C1A0 checks the common action-recovery timer only for an unchained skill
+The native cooldown check tests the common action-recovery timer only for an unchained skill
 with a cooldown and an authored action (activity 2).
 ==================
 */
@@ -143,12 +143,12 @@ func (rt *Runtime) skillAdmission(division string, c *enterworld.Character, skil
 ================
 admitContext
 
-The extra action-context fields read by 58D8F0 beyond the selected target.
+The extra action-context fields read by the native check beyond the selected target.
 ================
 */
 type admitContext struct {
 	// Indirect is context kind 0x20 (BeginIndirectSkill: an item's skill).
-	// 58DA30 skips the frozen/asleep/stunned gates for it.
+	// Natively the frozen/asleep/stunned gates are skipped for it.
 	Indirect bool
 	// TransformRef is +0x20, the RefObj msch word 1 reads.
 	TransformRef uint32
@@ -162,33 +162,33 @@ Preserve native prerequisite order across direct and item-owned skill paths.
 ================
 */
 func (rt *Runtime) contextSkillAdmission(division string, c *enterworld.Character, skill enterworld.SkillRow, now int64, target *admitTarget, prepared *pendingProjectileCast, mask admitMask, context admitContext) uint16 {
-	// 58DA3A / 58DAEF: frozen, asleep or stunned, unless the skill has nmf.
+	// Natively frozen, asleep or stunned refuses, unless the skill has nmf.
 	// The codename exemptions (MOB_RM_SEALSTONE, MSKILL_SD_SETH_ATTACK10)
 	// are monster-only.
 	if !context.Indirect && !skill.CastGate.Nmf && rt.casterDisabled(division, c) {
 		return 0x3009
 	}
 
-	// 58DB22: rpkt while the skill manager holds an rpkt buff (+0x1F8).
+	// Natively rpkt refuses while the skill manager holds an rpkt buff (+0x1F8).
 	if skill.CastGate.Rpkt && rt.casterHasRpktBuff(division, c) {
 		return 0x3009
 	}
 
-	// 58DB38: qest wants a clear area around the caster.
+	// Natively qest wants a clear area around the caster.
 	if skill.CastGate.Qest {
 		if code := rt.qestRefusal(division, c, skill.CastGate.Efr3Radius, now); code != 0 {
 			return code
 		}
 	}
 
-	// 58DE1E
+	// The native msch gate.
 	if skill.CastGate.MschPresent {
 		if code := rt.mschRefusal(division, c, skill.CastGate.MschMode, context.TransformRef, now); code != 0 {
 			return code
 		}
 	}
 
-	// 58DF20: berserk blocks hiding unless the row is a trap; stealth and
+	// Natively berserk blocks hiding unless the row is a trap; stealth and
 	// invisibility (words 1 and 2) are refused in battle.
 	if skill.CastGate.HideGatePresent {
 		if !skill.CastGate.TrapPresent && c.NativeBodyStatus == 1 {
@@ -200,13 +200,13 @@ func (rt *Runtime) contextSkillAdmission(division string, c *enterworld.Characte
 		}
 	}
 
-	// 58DF8C: reqc bit 2 keeps the skill for a caster at or below 30 % HP;
+	// Natively reqc bit 2 keeps the skill for a caster at or below 30 % HP;
 	// the product is taken as a float.
 	if skill.Reqc.LowHP && rt.casterAboveLowHP(division, c) {
 		return 0x3036
 	}
 
-	// 58DFE0: reqc bit 0x10 needs command flag 0x10, which 4ACEAD sets when
+	// Natively reqc bit 0x10 needs command flag 0x10, which the command step sets when
 	// the command is issued in body mode 6 (stealth).
 	issued := c.NativeBodyStatus == 6
 	if prepared != nil {
@@ -216,12 +216,12 @@ func (rt *Runtime) contextSkillAdmission(division string, c *enterworld.Characte
 		return 0x3034
 	}
 
-	// 58DFF4: reqc bit 5 needs skill-manager selector bit 0.
+	// Natively reqc bit 5 needs skill-manager selector bit 0.
 	if skill.Reqc.Dance && !rt.danceSelectorActive(division, c) {
 		return 0x3032
 	}
 
-	// 58E010: rooted (+0xD34 bit 0x80) with tele or tel3.
+	// Natively rooted (+0xD34 bit 0x80) refuses tele or tel3.
 	teleports := skill.CastGate.Tele || skill.CastGate.Tel3
 	if teleports && rt.casterRooted(division, c) {
 		return 0x3009
@@ -235,8 +235,8 @@ func (rt *Runtime) contextSkillAdmission(division string, c *enterworld.Characte
 		return 0x3005
 	}
 
-	// 58E0BF: ao or pw while seated (motion 4), behind a wall (motion 0x11,
-	// set at 593690) or riding (state+0xE 1). Motions 0x12, 8 and 0xF are
+	// Natively ao or pw refuse while seated (motion 4), behind a wall (motion 0x11,
+	// set by the skill engage) or riding (state+0xE 1). Motions 0x12, 8 and 0xF are
 	// not modelled for players.
 	needsFooting := skill.CastGate.Ao || skill.CastGate.Pw
 	riding := c.ActiveCOS != nil && c.ActiveCOS.Mounted
@@ -250,11 +250,11 @@ func (rt *Runtime) contextSkillAdmission(division string, c *enterworld.Characte
 		}
 	}
 
-	// 58E13E -> 58CC70: the player target's own checks, then reqc bit 0,
-	// which wants a knocked-down target (motion 8, 58D199).
+	// The native target validation: the player target's own checks, then reqc bit 0,
+	// which wants a knocked-down target (motion 8).
 	if mask&admitTargets != 0 && target != nil {
 		if forced := rt.effects.ForcedTarget(division, c.Name, now); forced != 0 {
-			// 58CF7F compares context+28 for every targeted action, including
+			// Natively context+28 is compared for every targeted action, including
 			// support skills. A monster cannot be the source of this program.
 			if target.player == nil || enterworld.ObjectIDForCharacter(target.player) != forced {
 				return 0x3006
@@ -278,7 +278,7 @@ func (rt *Runtime) contextSkillAdmission(division string, c *enterworld.Characte
 		}
 	}
 
-	// 58E490: a blocked line (region manager vfunc +0x78) refuses 0x3010.
+	// Natively a blocked line (region manager vfunc +0x78) refuses 0x3010.
 	// Distance never does; the command actor walked into reach already.
 	if mask&admitRange != 0 && target != nil && rt.LineOfSight != nil {
 		from, owner := rt.liveNav(simulation.WorldKey(division, c.Name), c, now)
@@ -302,7 +302,7 @@ EQUIPMENT
 ==================
 skillEquipmentRefusal
 
-Skill_ValidateEquipmentRequirements (58D480). With reqi pairs only
+The native equipment requirement check. With reqi pairs only
 reqiRefusal decides. Without them the weapon kinds (+0xC7 / +0xC8) are
 compared with the primary weapon's TID4, bare hand counting as 1, and
 0xFF / 0xFF admits anything.
@@ -328,13 +328,13 @@ func skillEquipmentRefusal(c *enterworld.Character, items enterworld.ItemRefSour
 	case tid4 != kinds[0] && tid4 != kinds[1]:
 		code = 0x300d
 	case tid4 == 0x10:
-		// Skill_ValidateFortressSiegeEquipment (4F1130) needs a siege
-		// fortress context (CGObjPC+0x72F*4). Nothing in this port creates
+		// The native fortress siege equipment check needs a siege
+		// fortress context (the player's +0x72F*4). Nothing in this port creates
 		// one, so a fortress weapon is always refused.
 		code = 0x3047
 	}
 
-	// 58D719: a broken main weapon is 0x300F whatever the kind said.
+	// Natively a broken main weapon is 0x300F whatever the kind said.
 	if !eq.SlotUsable(6) {
 		return 0x300f
 	}
@@ -345,7 +345,7 @@ func skillEquipmentRefusal(c *enterworld.Character, items enterworld.ItemRefSour
 ==================
 wearsJobSuit
 
-CGItem_IsJobSuit (483280) on equip slot 8 (vfunc +0x578): TID 3/1/7 with
+The native job suit test on equip slot 8 (vfunc +0x578): TID 3/1/7 with
 TID4 1..3, the trader, thief and hunter suits. A broken suit still counts.
 ==================
 */
@@ -372,7 +372,7 @@ CASTER STATE
 ================
 casterDisabled
 
-58DAEF checks freeze, sleep and stun before ordinary skill admission.
+The native check tests freeze, sleep and stun before ordinary skill admission.
 ================
 */
 func (rt *Runtime) casterDisabled(division string, c *enterworld.Character) bool {
@@ -385,7 +385,7 @@ func (rt *Runtime) casterDisabled(division string, c *enterworld.Character) bool
 ================
 casterRooted
 
-58E010 checks the native root bit independently of incapacitation.
+The native check tests the root bit independently of incapacitation.
 ================
 */
 func (rt *Runtime) casterRooted(division string, c *enterworld.Character) bool {
@@ -397,7 +397,7 @@ func (rt *Runtime) casterRooted(division string, c *enterworld.Character) bool {
 ================
 casterAboveLowHP
 
-58DF8C compares current HP against maximum HP times the widened float 0.3f.
+The native check compares current HP against maximum HP times the widened float 0.3f.
 ================
 */
 func (rt *Runtime) casterAboveLowHP(division string, c *enterworld.Character) bool {
@@ -409,7 +409,7 @@ func (rt *Runtime) casterAboveLowHP(division string, c *enterworld.Character) bo
 ================
 casterSitting
 
-58E0BF reads sitting from the current world motion owner.
+The native check reads sitting from the current world motion owner.
 ================
 */
 func (rt *Runtime) casterSitting(division string, c *enterworld.Character) bool {
@@ -426,9 +426,9 @@ func (rt *Runtime) casterSitting(division string, c *enterworld.Character) bool 
 ================
 playerMotionState
 
-The player's native motion byte (state+0x2, GetMotionState 4AA590): the
+The player's native motion byte (state+0x2): the
 world plane's moving, seated, posture-change and abnormal hold, then the
-standing wall (0x11, set at 593690), which the skill owner keeps.
+standing wall (0x11, set by the skill engage), which the skill owner keeps.
 ================
 */
 func (rt *Runtime) playerMotionState(division string, c *enterworld.Character, nowMs int64) uint8 {
@@ -451,7 +451,7 @@ func (rt *Runtime) playerMotionState(division string, c *enterworld.Character, n
 ==================
 casterHasRpktBuff
 
-CSkillManager+0x1F8, which CSkillManager_ApplyBuffModifiersToActor (594D22)
+The skill manager's +0x1F8, which the native buff modifier pass
 sets while an installed buff's row carries rpkt.
 ==================
 */
@@ -472,7 +472,7 @@ func (rt *Runtime) casterHasRpktBuff(division string, c *enterworld.Character) b
 ==================
 qestRefusal
 
-58DB38 collects everything within five times the efr kind-3 word around
+The native qest gate collects everything within five times the efr kind-3 word around
 the caster and refuses on the first object that stands too close:
 
 	skill object (vfunc +0xC0) nearer than the word    0x3037
@@ -527,7 +527,7 @@ func (rt *Runtime) qestRefusal(division string, c *enterworld.Character, radius 
 ==================
 mschRefusal
 
-58DE1E. Body mode 1 (berserk) refuses every word with 0x3031, then:
+The native msch gate. Body mode 1 (berserk) refuses every word with 0x3031, then:
 
 	word 1  transformRefusal: the RefObj the context carries
 	word 2  no job suit in slot 8 and no horse or fellow (0x3039)

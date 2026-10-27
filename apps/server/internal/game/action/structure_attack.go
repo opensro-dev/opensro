@@ -3,27 +3,27 @@
 
 structure_attack.go - who may strike a fortress structure, and when
 
-CGObjPC_CanAttackTarget (52BF90) answers for a player attacking a
-CICATStruct (TypeID band 0x2C6, CGObj_IsATStruct 482AB0):
+The reference server's attack-target check answers for a player attacking a
+CICATStruct (TypeID band 0x2C6):
 
-  - outside a fortress war (MainProcess_IsSiegeWarActive 62EB50) never: 0x3041
+  - outside a fortress war never: 0x3041
   - with anything but the weapon's basic attack: 0x3006
   - a headquarters (TID4 5) of the attacker's own guild: 0x303E
   - another structure of the guild that holds its fortress: 0x303F
 
-52BF90 also refuses an open gate, 0x3042: past the headquarters branch,
-52C121 asks the target whether it is a gate (vfunc +0x3EC, 482B90) and
-then for its state word (+0x654, 4CED50); a nonzero word (a pulley opened
+The reference server also refuses an open gate, 0x3042: past the headquarters branch,
+it asks the target whether it is a gate (vfunc +0x3EC) and
+then for its state word (+0x654); a nonzero word (a pulley opened
 it, fortress_gates.go) refuses every attacker, and a shut gate skips the
-own-structure test. (52BF90's other 0x3042 answers follow a missing guild
-record, 52C08F and 52C259, and a failed region line query, 52C312.)
+own-structure test. (Its other 0x3042 answers follow a missing guild
+record, and a failed region line query.)
 
 and for the fort stone, while guard towers stand 0x3040 and during the
 countdown after the last falls 0x3046 (the fortress authority's
 capture.go).
 
 INFERENCE: the guild-owner tests read the attacker's side through
-CGObjPC_GetFortressOrArenaContext, so the owner's allies are refused the
+the attacker's fortress or arena context, so the owner's allies are refused the
 owner's structures as its members are (fortress_allies.go).
 
 ===========================================================================
@@ -42,8 +42,8 @@ const (
 	structureRefusedOwnStructure uint16 = 0x303f
 	structureRefusedOpenGate     uint16 = 0x3042
 
-	// TypeID4 of the CICATStruct band (CGObj_IsFortStone 482AF0, gate
-	// 482B90, headquarters 482C30).
+	// TypeID4 of the CICATStruct band (the fort stone, gate
+	// and headquarters tests).
 	structureKindGate         uint8 = 3
 	structureKindHeadquarters uint8 = 5
 )
@@ -52,9 +52,9 @@ const (
 ================
 structureAttackRefusal
 
-The 52BF90 structure branch for skill `skillID` aimed at target; 0
+The reference server's structure branch for skill `skillID` aimed at target; 0
 admits. A structure in a world no fortress owns keeps only the war and
-basic-attack tests, as 52BF90 skips the owner tests without a record;
+basic-attack tests, as the reference server skips the owner tests without a record;
 the fort stone answers to its capture guards first.
 ================
 */
@@ -75,11 +75,11 @@ func (rt *Runtime) structureAttackRefusal(division string, attacker *enterworld.
 			return code
 		}
 	}
-	// 52C121..52C141: an open gate refuses whoever strikes it.
+	// Reference server: an open gate refuses whoever strikes it.
 	if target.Ref.TypeID4 == structureKindGate && target.StructureState != 0 {
 		return structureRefusedOpenGate
 	}
-	// CGObjSiegeStruct +0x24: the fortress's structures belong to its
+	// The siege structure's +0x24: the fortress's structures belong to its
 	// holder; headquarters are placed by an attacking guild and carry their
 	// own (none are placed yet).
 	owner := record.Holder()

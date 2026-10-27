@@ -176,7 +176,7 @@ func TestPortalStructureGrantAndDestinationTransaction(t *testing.T) {
 // TestFortressGateFeeTaxFillsTheTreasury: a gate bound to a fortress
 // (teleportbuilding column 55) shows the holder's ratio on select, charges
 // it on the fee and credits the tax to the treasury once the move holds
-// (4F2E95, 4F331D).
+// (as the native teleport use does).
 func TestFortressGateFeeTaxFillsTheTreasury(t *testing.T) {
 	licensed.RequireGameData(t)
 	rt, c, _, _ := returnFixture(t, 30000)
@@ -220,7 +220,7 @@ func TestFortressGateFeeTaxFillsTheTreasury(t *testing.T) {
 ================
 TestGateRefusesAFarTransport
 
-4F2B50 case 2: a summoned transport standing beyond gateTransportRange is
+The native teleport use case 2: a summoned transport standing beyond gateTransportRange is
 refused 0x1C13 on any link, after the quest bit and before the link's own
 conditions. A near transport then meets the link's Restrict: kind 2 (the
 town gates) refuses it 0x1C10, a link without it (a ferry) lets it pass.

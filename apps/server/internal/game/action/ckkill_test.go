@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-ckkill_test.go - the ck parameter's outright kill (58F74E)
+ckkill_test.go - the ck parameter's outright kill
 
 ===========================================================================
 */

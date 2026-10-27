@@ -4,9 +4,9 @@
 reward_party_native_test.go - party EXP/SP shares at the native values
 
 Players compared party and level-gap results with a later-version guide
-(#863). These pin the v1.188 SR_GameServer rules the port follows:
-CParty_DistributeKillExperience (5BCA60) for the party bonus and level
-shares, and Formulae_CalculatePartyLevelDiffPenalty (40FFE0) for the
+(#863). These pin the reference server's rules the port follows:
+its party kill experience distribution for the party bonus and level
+shares, and its party level-difference formula for the
 relative-level bonus with its party-only additions.
 
 ===========================================================================
@@ -73,7 +73,7 @@ func assertFactors(t *testing.T, got []float32, want ...float64) {
 ================
 TestPartyBonusAndSharesFollowTheNativeDistributor
 
-5BCA60: an all-Chinese party gets +0.1 per extra member. Any European
+Natively an all-Chinese party gets +0.1 per extra member. Any European
 switches to +0.2 per extra European plus 0.1 per Chinese. Each member's
 share is its level over the party's level sum, and a member above 0.7 of
 the sum in a party of three or more with someone at level 21+ gets half
@@ -97,7 +97,7 @@ func TestPartyBonusAndSharesFollowTheNativeDistributor(t *testing.T) {
 ================
 TestPartyMonsterBelowThePartyAverageHalvesTheShares
 
-5BCDA4 -> 410FD0: a party monster below the party's average level gives
+Natively a party monster below the party's average level gives
 half; at or above the average it gives the full share.
 ================
 */
@@ -111,7 +111,7 @@ func TestPartyMonsterBelowThePartyAverageHalvesTheShares(t *testing.T) {
 ================
 TestPartyRelativeLevelBonusDoublesForEuropeans
 
-40FFE0: with EXP share on, a monster 5/7/9+ levels above adds 0.15/0.30/
+Natively, with EXP share on, a monster 5/7/9+ levels above adds 0.15/0.30/
 0.45 (0.30/0.60/0.90 for a European) to the 0.03-per-step relative bonus,
 clamped to 1..4. A monster three or more levels below gives exactly 1.
 ================

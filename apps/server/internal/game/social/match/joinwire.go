@@ -29,11 +29,10 @@ package match
 //
 // EVIDENCE(v1.188, logic): the retail GameServer forwards match-join
 // requests as coordinator jobs carrying a member-info snapshot of the
-// joiner (sub_5bae80 @0x005bae80: name, race byte, packed HP/MP tenth
+// joiner (name, race byte, packed HP/MP tenth
 // nibbles, region + coords - the same masked member-info shape) and
 // separately validates registration/modify purpose-vs-job compatibility
-// (sub_5bf2a0 @0x005bf362
-// -> error 0x2C23). The opcode numbers are renumbered vs Legend; only
+// (error 0x2C23). The opcode numbers are renumbered vs Legend; only
 // the logic transfers. This one-process gateway collapses the
 // coordinator hop.
 //

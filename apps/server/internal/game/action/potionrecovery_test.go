@@ -96,8 +96,8 @@ func TestPotionQueueRetiresWithCharacterLifetime(t *testing.T) {
 ================
 TestPotionReuseCanPrecedeFinalRecoveryPulse
 
-49B710 admits another Chinese absolute potion after its 1.1-second reuse
-lock, while 49A510 still owes pulses from the first. Only the queue front
+The reference server admits another Chinese absolute potion after its 1.1-second reuse
+lock, while the potion recovery tick still owes pulses from the first. Only the queue front
 advances; the second potion's immediate credit does not replace that front.
 ================
 */

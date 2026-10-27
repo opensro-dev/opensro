@@ -166,7 +166,7 @@ func TestMonsterAreaStrikesACompanionInside(t *testing.T) {
 ================
 TestGradedMonsterStrikeTakesTheNativeDamageScale
 
-SkillCombat_GetMonsterDamageScale (5874D0) at 58FD05: a giant's (grade 4)
+The reference server's monster damage scale: a giant's (grade 4)
 landed strike deals 1.5 times the damage the same strike from a normal
 monster deals, truncated after the multiply.
 ================

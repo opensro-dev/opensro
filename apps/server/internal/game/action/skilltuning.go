@@ -32,11 +32,11 @@ const fullDamagePercent = 100
 fixedDamageResult
 
 The pdmg record: a normal result carrying
-Formulae_CalculateFixedSkillDamage (40F5F0, 58F4FF): the amount plus the
+the reference server's fixed skill damage: the amount plus the
 caster's SAAA when the row reads it (getv +0x538), cut by the target's
 level advantage. The record skips the CFormulae lanes: no defense, parry
-or STR/INT balance, and no critical or block roll, since 58ED8C and
-58F0C1 roll only for att lanes.
+or STR/INT balance, and no critical or block roll, since the native
+hit outcome rolls those only for att lanes.
 ================
 */
 func fixedDamageResult(fixed enterworld.SkillFixedDamage, attacker, defender combat.Stats) combat.Result {
@@ -52,7 +52,7 @@ func fixedDamageResult(fixed enterworld.SkillFixedDamage, attacker, defender com
 ================
 drainedShare
 
-SkillCombat_ApplyResultRecipients (5939E5..593AC0) per hit: the dmgt
+The reference server's result-recipient pass per hit: the dmgt
 share of the hit's damage, ftol(percent / 100.0 * damage), held at the
 HP the victim had before the hit, summed over the cast's hits.
 ================

@@ -4,17 +4,17 @@
 jobdress.go - putting a job suit on and taking it off
 
 A job suit (3/1/7/{1 trader, 2 thief, 3 hunter}) changes job mode, so the
-move that wears or removes it is not immediate. v1.188's
-CGObjPC_AttachJobSuit (524950) and DetachJobSuit (524B20) admit the move,
-remember it, start a ten-second state changer (CGObjPC_SetStateFlag13,
+move that wears or removes it is not immediate. The reference server's
+suit attach and detach admit the move,
+remember it, start a ten-second state changer (state flag 13,
 job kind 0xE) and answer nothing yet (0x189B); every observer sees the
 overhead dress bar (v1.150 0x3434 [u32 gid][2][2][u8 seconds],
 CICUser_SetActionProgressDurationSeconds). When the timer runs out
-(AJStateChanger_Advance case 0xE -> 4F0C90) the remembered move is
+(state changer case 0xE) the remembered move is
 validated again and carried out, and its 0xB06D answer goes out then.
 
-Wearing admits through CGItemEquip_Equip (497630) and the game rule
-(CGameRule_CheckJobSuitWear 5297E0), notice category 1:
+Wearing admits through the native equip step and the game rule
+for job suits, notice category 1:
 
   - no dress in progress (0x47), the socket empty (0x46), not riding (0xCA);
   - the suit's job is the player's (0x9E), the player has an alias (0x9F),
@@ -51,10 +51,10 @@ const (
 
 	// jobSuitSlot is the job suit's equipment socket.
 	jobSuitSlot uint8 = enterworld.JobSuitSlot
-	// jobDressSeconds is SetStateFlag13's 10.0 s state changer.
+	// jobDressSeconds is the native 10.0 s state changer.
 	jobDressSeconds = 10
-	// jobActivationMs is +0x2178 = 10 (4E9EA9), counted down once a second
-	// by CGObjPC_TickStateTimers (52AC33).
+	// jobActivationMs is +0x2178 = 10, counted down once a second
+	// by the native state-timer tick.
 	jobActivationMs = 10 * 1000
 	// jobDressKind and jobDressStep are 0x3434's two lead bytes.
 	jobDressKind uint8 = 2
@@ -230,9 +230,9 @@ func (rt *Runtime) jobWearRefusal(division string, c *enterworld.Character, sour
 ================
 jobStripRefusal
 
-The refusal for taking the worn suit off, or 0, in CGItemEquip_CanUnequip's
-order (497340 region 4975xx): riding (0xCA), battle (0x48), a summoned
-cart (0x5A, CGObjPC_FirstCOSIsVehicle), the job activation wait (0x47),
+The refusal for taking the worn suit off, or 0, in the native unequip
+check's order: riding (0xCA), battle (0x48), a summoned
+cart (0x5A), the job activation wait (0x47),
 a party (0xA0), standing where players may fight (0xA2); then the bag.
 Native's first test (state +6 == 7, 0x18CD) names a v1.188 state the
 v1.150 tables give no text for, so it is not ported.
@@ -279,7 +279,7 @@ ThiefCargoTownBlocked
 
 #721, the movement side of the stolen-goods rule: a thief in job mode
 whose transport is summoned may not cross from a battlefield region into a
-protected one. v1.188 CGObjCOS_AdmitJobRegionTransition (4D2C20) refuses a
+protected one. The reference server's COS region admission refuses a
 COS's region change only when its owner's job state is thief (2), the
 region it leaves has IsBattleField set and the one it enters has it clear
 (region record +2): moving within a protected region, the Thieves' Den
@@ -313,7 +313,7 @@ func battlefieldRegion(regionID uint16) bool {
 ================
 summonedVehicle
 
-CGObjPC_FirstCOSIsVehicle (vtable +0x2EC): a summoned cart or trade animal.
+Natively a summoned cart or trade animal (vtable +0x2EC).
 ================
 */
 func (rt *Runtime) summonedVehicle(c *enterworld.Character) bool {
@@ -329,7 +329,7 @@ func (rt *Runtime) summonedVehicle(c *enterworld.Character) bool {
 ================
 startJobActivation
 
-A worn suit is not active at once: +0x2178 = 10 (4E9EA9, when the suit's
+A worn suit is not active at once: +0x2178 = 10 (when the suit's
 equip result 0x3038 goes out) holds the suit's removal (0x47) for ten
 state ticks. Job attacks do not wait for it (skillrelations.go).
 ================
@@ -352,8 +352,8 @@ func (rt *Runtime) jobActivationPending(division string, c *enterworld.Character
 ================
 endJobActivation
 
-CGObjPC_ClearJobFlagAndBroadcast30CF (4E1EF4): a hit taken ends the wait
-(CGObjPC_EnterBattleOnAttacked). Its 0x30CF broadcast has no v1.150
+Natively a hit taken ends the wait
+(entering battle on being attacked). Its 0x30CF broadcast has no v1.150
 handler, so nothing is sent.
 ================
 */
@@ -414,11 +414,11 @@ CharacterDependentData_ApplyEquipItemSlot (596190) only raises event-guide
 triggers for a suit. Without a re-spawn, the native wearer would keep the
 plain name until the next teleport, which is what players report and not
 what they remember from the original: a teleport right after suiting up.
-v1.188's dress path (AttachJobSuit 524950, CompleteJobSuitMove 4F0C90,
-SetStateFlag13 4E0C60) shows no teleport call, so the re-spawn sits behind
+The reference server's dress path (suit attach, suit move completion,
+state flag 13) shows no teleport call, so the re-spawn sits behind
 an item virtual this audit did not reach. The server's own in-place reload
-is the skin change's: 4EFFC0 calls CGObjChar_SetTeleportModeAndScheduleRestore
-(4E0B50) in mode 3 for 1.0 s, which this reuses.
+is the skin change's: its model change sets teleport mode 3 and schedules
+the restore after 1.0 s, which this reuses.
 ================
 */
 func (rt *Runtime) reloadJobDress(division string, c *enterworld.Character, now int64, result *OpResult) {
@@ -439,7 +439,7 @@ func (rt *Runtime) reloadJobDress(division string, c *enterworld.Character, now 
 ================
 advanceJobDresses
 
-Carries out every suit move whose timer ran out: 4F0C90 validates the
+Carries out every suit move whose timer ran out: the native completion validates the
 remembered move again and answers it.
 ================
 */

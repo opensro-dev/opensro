@@ -6,8 +6,10 @@ import (
 )
 
 // WanderMotion separates the short navigation probe from the actual movement
-// request. 545860 returns a unit direction and 85 +/- rand()%40; 559DF0 passes
-// both to 541730 -> 540F70. The 30-unit point is only a collision test.
+// request. The reference server's wander-direction selection returns a unit
+// direction and 85 +/- rand()%40; its wander state entry passes both to the
+// step destination and its movement submit. The 30-unit point is only a
+// collision test.
 type WanderMotion struct {
 	X, Z, Distance float64
 }
@@ -24,7 +26,7 @@ func NativeWanderMotion(heading uint16, random func() uint32) WanderMotion {
 	turn := float64(random()%91 + 45)
 	turn *= sign(random())
 	// Actor+24/+2C are facing, not a position. Native adds the rotated
-	// facing to the original and normalizes (545989..5459EB).
+	// facing to the original and normalizes.
 	yaw := float64(heading) / 65535 * 2 * math.Pi
 	facingX, facingZ := float32(math.Cos(yaw)), float32(math.Sin(yaw))
 	angle := float32(math.Atan2(float64(facingZ), float64(facingX)))
@@ -48,12 +50,14 @@ func (m WanderMotion) AfterProbe(result uint32) WanderMotion {
 	return m
 }
 
-// 5459EE..545A72: add the normalized, region-relative controller direction
-// to the already-normalized wander direction, then normalize again. A zero
-// vector remains zero (4328C0); no arbitrary fallback heading is introduced.
+// The native wander blend: add the normalized, region-relative controller
+// direction to the already-normalized wander direction, then normalize
+// again. A zero vector remains zero; no arbitrary fallback heading is
+// introduced.
 func (m WanderMotion) TowardController(from, controller Pose) WanderMotion {
 	x, z := nativeRelativeXZ(from, controller)
-	// 430B63/430B80 explicitly zero Y, including indoor relative vectors.
+	// The native relative helper explicitly zeroes Y, including indoor
+	// relative vectors.
 	x, z = normalizeWanderVector(x, z)
 	x = float32(m.X + float64(x))
 	z = float32(m.Z + float64(z))
@@ -63,7 +67,7 @@ func (m WanderMotion) TowardController(from, controller Pose) WanderMotion {
 }
 
 func normalizeWanderVector(x, z float32) (float32, float32) {
-	// 4328DA/4328EA/432909 spill squared length, sqrt and reciprocal.
+	// The native normalize spills squared length, sqrt and reciprocal.
 	squared := float32(float64(x)*float64(x) + float64(z)*float64(z))
 	length := float32(math.Sqrt(float64(squared)))
 	var inverse float32
@@ -78,7 +82,8 @@ func nativeRelativeXZ(from, to Pose) (float32, float32) {
 	return x, z
 }
 
-// NativeTacticsRelative is 430AD0. Indoor coordinates are already local to
+// NativeTacticsRelative is the reference server's tactics-relative
+// position. Indoor coordinates are already local to
 // their navigation plane, regardless of region-word differences. Crossing
 // the indoor bit returns the native sentinel in ALL three components.
 // Keep this tactics contract separate from outdoor world-grid arithmetic.

@@ -17,22 +17,31 @@ package simulation
 
 // NPC talk capability bits: bit 1 << (option - 1) of the service option.
 const (
-	NpcTalkFlagShop          uint32 = 0x1     // option 1, row 1
-	NpcTalkFlagTalk          uint32 = 0x2     // option 2, row 4
-	NpcTalkFlagStorage       uint32 = 0x4     // option 3, rows 3, 0x2D, 0x2E
-	NpcTalkFlagRepair        uint32 = 0x8     // option 4, no row; shows the NPC quest tab
-	NpcTalkFlagRecallPoint   uint32 = 0x40    // option 7, row 9
-	NpcTalkFlagTeleport      uint32 = 0x80    // option 8, row 0xA
-	NpcTalkFlagStable        uint32 = 0x400   // option 0xB, no row
-	NpcTalkFlagSpecialTrade  uint32 = 0x800   // option 0xC, the shop row sends 0x800
-	NpcTalkFlagThiefBuy      uint32 = 0x1000  // option 0xD, no row
-	NpcTalkFlagGeneral       uint32 = 0x2000  // option 0xE, no row
-	NpcTalkFlagGuild         uint32 = 0x4000  // option 0xF, rows 0x12..0x1D
-	NpcTalkFlagGachaMachine  uint32 = 0x10000 // option 0x11, row 0x27
-	NpcTalkFlagGachaOperator uint32 = 0x20000 // option 0x12, row 0x28 (5D9750): the voucher exchange
-	NpcTalkFlagJobTrader     uint32 = 0x80000
-	NpcTalkFlagJobThief      uint32 = 0x100000
-	NpcTalkFlagJobHunter     uint32 = 0x200000
+	NpcTalkFlagShop        uint32 = 0x1  // option 1, row 1
+	NpcTalkFlagTalk        uint32 = 0x2  // option 2, row 4
+	NpcTalkFlagStorage     uint32 = 0x4  // option 3, rows 3, 0x2D, 0x2E
+	NpcTalkFlagRepair      uint32 = 0x8  // option 4, no row; shows the NPC quest tab
+	NpcTalkFlagRecallPoint uint32 = 0x40 // option 7, row 9
+	NpcTalkFlagTeleport    uint32 = 0x80 // option 8, row 0xA
+	// NpcTalkFlagResurrectPoint is service 9, which the reference server's
+	// teleport row reader grants for teleportdata CanGotoResurrectPos: row
+	// 0x10, "Teleport to return point", whose click sends 0x7495 type 1.
+	NpcTalkFlagResurrectPoint uint32 = 0x100   // option 9, row 0x10
+	NpcTalkFlagStable         uint32 = 0x400   // option 0xB, no row
+	NpcTalkFlagSpecialTrade   uint32 = 0x800   // option 0xC, the shop row sends 0x800
+	NpcTalkFlagThiefBuy       uint32 = 0x1000  // option 0xD, no row
+	NpcTalkFlagGeneral        uint32 = 0x2000  // option 0xE, no row
+	NpcTalkFlagGuild          uint32 = 0x4000  // option 0xF, rows 0x12..0x1D
+	NpcTalkFlagGachaMachine   uint32 = 0x10000 // option 0x11, row 0x27
+	NpcTalkFlagGachaOperator  uint32 = 0x20000 // option 0x12, row 0x28 (5D9750): the voucher exchange
+	NpcTalkFlagJobTrader      uint32 = 0x80000
+	NpcTalkFlagJobThief       uint32 = 0x100000
+	NpcTalkFlagJobHunter      uint32 = 0x200000
+	// NpcTalkFlagTeleportGate is service 0x1C, the runtime gate a quest
+	// instance raises on its boss's death: on a teleport-gate object the
+	// client reads the gate's choice rows after the word and draws them as
+	// action 0x2A, whose click sends 0x7495 type 3 (questgate.go).
+	NpcTalkFlagTeleportGate  uint32 = 0x8000000  // option 0x1C, rows 0x2A
 	NpcTalkFlagReverseReturn uint32 = 0x20000000 // option 0x1E, rows 0x2B
 	NpcTalkFlagGatePulley    uint32 = 0x40000000 // option 0x1F, a u16 tail follows
 	NpcTalkFlagMagicOption   uint32 = 0x80000000 // option 0x20, row 0x2F
@@ -71,7 +80,7 @@ const (
 	// stable, thief buy, general) carry nothing to refuse. Still closed:
 	// gate pulleys, whose u16 tail the select answer does not write.
 	NpcTalkImplementedFlags uint32 = NpcTalkFlagShop | NpcTalkFlagTalk | NpcTalkFlagStorage |
-		NpcTalkFlagRepair | NpcTalkFlagRecallPoint | NpcTalkFlagTeleport | NpcTalkFlagStable |
+		NpcTalkFlagRepair | NpcTalkFlagRecallPoint | NpcTalkFlagTeleport | NpcTalkFlagResurrectPoint | NpcTalkFlagStable |
 		NpcTalkFlagSpecialTrade | NpcTalkFlagThiefBuy | NpcTalkFlagGeneral | NpcTalkFlagGachaMachine | NpcTalkFlagGachaOperator |
 		NpcTalkFlagJobTrader | NpcTalkFlagJobThief | NpcTalkFlagJobHunter | NpcTalkFlagReverseReturn |
 		NpcTalkFlagGuild | NpcTalkFlagMagicOption | NpcTalkFlagFortressOfficial |

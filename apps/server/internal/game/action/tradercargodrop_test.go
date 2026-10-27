@@ -4,7 +4,7 @@
 tradercargodrop_test.go - SRO_TRADER_CARGO_DROP, both settings and each case
 
 Port-only, not native (tradercargodrop.go). Off, a rider's death and a
-logout take the goods with the vehicle, as 529B10 does. On, a trader dying
+logout take the goods with the vehicle, as the native death does. On, a trader dying
 on its transport, or leaving the world with a loaded transport outside a
 town, leaves the goods on the ground.
 
@@ -86,7 +86,7 @@ func cargoOnGround(t *testing.T, rt *Runtime) bool {
 ================
 TestRiderDeathCargo
 
-Off: native 529B10 releases the vehicle with its goods. On: the goods
+Off: the native death releases the vehicle with its goods. On: the goods
 drop before the release.
 ================
 */

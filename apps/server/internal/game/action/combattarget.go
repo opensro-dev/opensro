@@ -3,9 +3,9 @@
 
 combattarget.go - the object an attack command pursues and strikes
 
-CGCharAutoCommandActor keeps a target object ID; the object behind it may
-be a monster or, once PvP admits it (CGObjPC_CanAttackTarget 52BF90), a
-player or a player's COS (a transport, horse or pet), which 5293A0 judges
+The command actor keeps a target object ID; the object behind it may
+be a monster or, once PvP admits it (the reference server's attack-target check), a
+player or a player's COS (a transport, horse or pet), which the attack validation judges
 through its owner (cosTargetRefusal). The attack intents and the prepared-cast release resolve their
 target here so the walk into reach, the range test and the life test read
 one rule for every kind. The cast itself splits by kind: monsters take
@@ -91,11 +91,11 @@ func (rt *Runtime) resolveCombatTarget(division string, attacker *enterworld.Cha
 resolveCOSTarget
 
 A living, summoned COS of another character in the attacker's world
-instance, with its owner. 5291D0 refuses a dead COS, a hidden COS (body
+instance, with its owner. The reference server refuses a dead COS, a hidden COS (body
 modes 6..7) and a pickup pet (+0x43C) whoever attacks it; a protected COS
 (body modes 2..4) still resolves here so cosTargetRefusal can answer
-5291D0's 0x3020, and a ridden COS stays a target (the mounted trader's
-transport). The owner need not be alive: 5293A0 judges the owner's
+the reference server's 0x3020, and a ridden COS stays a target (the mounted trader's
+transport). The owner need not be alive: the attack validation judges the owner's
 relations, not its life.
 ================
 */

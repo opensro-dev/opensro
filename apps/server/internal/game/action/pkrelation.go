@@ -3,12 +3,12 @@
 
 pkrelation.go - what kind of kill a player's kill of a player is
 
-The player branch of CGObjPC_ResolvePvpKillRelation (4E6590), in its
-order: free-battle capes in hostile groups (CGObjPC_IsHostileTeamOrParty
-4EB320, called with force 1) are a team kill (2, no penalty); a killer in
-a job suit whose job opposes the victim's (CGObjPC_IsHostileJobType
-4EB620) is a job kill (1); a killer whose guild alliance is at war with
-the victim's guild (CGObjPC_IsHostileGuildAlliance 4EB390) is a guild-war
+The player branch of the native PvP kill relation, in its
+order: free-battle capes in hostile groups (the native hostile team or party
+test, called with force 1) are a team kill (2, no penalty); a killer in
+a job suit whose job opposes the victim's (the native hostile job
+test) is a job kill (1); a killer whose guild alliance is at war with
+the victim's guild (the native hostile alliance test) is a guild-war
 kill (5); anything else is murder (3). A COS killer stands for its owner.
 
 ===========================================================================
@@ -48,7 +48,7 @@ func (rt *Runtime) playerKillKind(division string, victim, killer *enterworld.Ch
 ================
 hostileJobs
 
-4EB620 (killer, victim): a hunter victim of a thief, a thief victim of a
+The hostile job test (killer, victim): a hunter victim of a thief, a thief victim of a
 trader or hunter, a trader victim of a thief.
 ================
 */
@@ -66,7 +66,7 @@ func hostileJobs(killer, victim uint8) bool {
 ================
 guildsAtWar
 
-4EB390 asks the killer guild's enemy map. The shared guild-war authority
+The native alliance test asks the killer guild's enemy map. The shared guild-war authority
 publishes immutable relation snapshots safe to read inside character doors.
 ================
 */
@@ -80,7 +80,7 @@ func (rt *Runtime) guildsAtWar(division string, killer, victim *enterworld.Chara
 
 // A murderer's refusals, v1.188 error low bytes the v1.150 client names
 // (category*256 + code in its notice table): a riding horse's summon
-// (49BF24, 1:0x76) and a building gate (4F30E1, 13:0x16). The return scroll's
+// (1:0x76) and a building gate (13:0x16). The return scroll's
 // (1:0x75) is returnCastAdmission's. The stall's (10:0x39) waits for the
 // stall owner.
 const (
@@ -92,8 +92,8 @@ const (
 ================
 murderer
 
-A player with PK penalty points: PvP state 2 (CGObjPC_AddPKPenaltyPoints
-4EAE70 sets it; every native check reads actor core +0x0C == 2).
+A player with PK penalty points: PvP state 2 (natively set when penalty
+points are added; every native check reads actor core +0x0C == 2).
 ================
 */
 func murderer(c *enterworld.Character) bool {
@@ -135,7 +135,7 @@ func (rules playerEnemyRules) enemy(owner, target *enterworld.Character) bool {
 ================
 normalPlayerEnemyRules
 
-52B6D0 precedes the job/guild checks with both level floors. Cape colors
+The native check precedes the job/guild checks with both level floors. Cape colors
 are absent here; deliberate player attack permission is a different query.
 ================
 */
@@ -151,7 +151,7 @@ func (rt *Runtime) normalPlayerEnemyRules(division string, owner, target *enterw
 ================
 worldPlayerEnemy
 
-52DA50 uses guild/union identity in fortress worlds, without the normal-world
+Natively fortress worlds use guild/union identity, without the normal-world
 level floor. The same guild and union authorities own these identities.
 ================
 */

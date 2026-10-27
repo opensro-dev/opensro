@@ -11,10 +11,10 @@ default), WithQinShiTomb appends the embedded characterdata rows (remapped into
 the v1.150 ID gaps 14791..14851 and 22638..22655) and Floor 1-6 nest/hive/tactics
 rows onto the monster Template.
 
-On Floors 5-6 (regions 0x8003 and 0x8002), the v1.188 Tab_RefNest_Back rows
-23716..23721, 23723 and 23724 zeroed dwMaxTotalCount when CGameWorld_Chins_Floor5::InitTriggers
-(0x005ef090) and CGameWorld_Chins_Floor6::InitTriggers (0x005ef9b0) took over
-spawning 1 live instance ("Count" = "1") of each guardian/boss via MobShower.
+On Floors 5-6 (regions 0x8003 and 0x8002), the later server's nest rows
+23716..23721, 23723 and 23724 zeroed their max-count column when the
+floors' trigger setup took over spawning 1 live instance ("Count" = "1")
+of each guardian/boss via MobShower.
 In the persistent INS_DEFAULT world, those 8 unique nests restore maxCount=1
 and the Floor 1-3 Tomb unique respawn window (1800..3600s from nests 23055..23061,
 23077).

@@ -167,8 +167,8 @@ func (rt *Runtime) retireCombatTrapEffect(division string, c *enterworld.Charact
 ================
 combatTrapOwnerNear
 
-lnks' second word bounds the full 3D separation (5849F1..584A08).
-NativeActorDistance preserves the float stores in 430BA0/405270/405250.
+lnks' second word bounds the full 3D separation.
+NativeActorDistance preserves the native float stores of the relative vector, its length and the root.
 ================
 */
 func combatTrapOwnerNear(object skillobject.Object, owner simulation.Spawn) bool {
@@ -209,7 +209,7 @@ explodeCombatTrap
 
 Each victim takes the trap's att once; damage falls by the area's reduction
 per victim in selection order, as the cast-owned area does. The trap object
-is not an actor on the wire: 59B2A0 sends the trap identity, not its
+is not an actor on the wire: the native detonation results send the trap identity, not its
 planter, who owns credit, rewards and hostility.
 ================
 */

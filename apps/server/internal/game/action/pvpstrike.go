@@ -5,15 +5,15 @@ pvpstrike.go - a player's hits on a player
 
 A player struck by a player takes the same recipient path as one struck by
 a monster (playervictim.go); this file owns the attacker's side. One unit,
-playerHit, is planned before any door (58EC6C's hit behind the victim's
-wall at the area's running percent, 590680's status rolls), committed
-inside the door that holds both characters (593800's recipient side, the
-aggression of ProcessNormalHit 4E25C0 / 4E1DF0, the kill's rewards) and
+playerHit, is planned before any door (the native hit behind the victim's
+wall at the area's running percent, the status rolls), committed
+inside the door that holds both characters (the native recipient side, the
+aggression of the normal hit, the kill's rewards) and
 published after it. The single-target stage, the area victims, periodic
 pulses, hawks and returned damage all strike players through it.
 
-Admission is the native one: SkillCombat_ValidateTargets (58CC70) with the
-attack permission CGObjChar_CheckTargetAttackable (5293A0), whatever the
+Admission is the native one: the reference server's target validation with the
+attack permission check, whatever the
 row's execution selector, since only hostile rows reach this file.
 
 ===========================================================================
@@ -112,8 +112,8 @@ type playerHitCommit struct {
 ================
 hostilePlayerRefusal
 
-58CC70 for a hostile row on a player: the target checks of
-playerSkillTarget, then 5293A0 when the row's selector did not already
+The native target validation for a hostile row on a player: the target checks of
+playerSkillTarget, then the attack validation when the row's selector did not already
 ask for it. Zero admits.
 ================
 */
@@ -125,7 +125,7 @@ func (rt *Runtime) hostilePlayerRefusal(division string, caster, target *enterwo
 ================
 hostilePlayerRefusalWith
 
-hostilePlayerRefusal with 5293A0's control flags (playerAttackArea for an
+hostilePlayerRefusal with the attack validation's control flags (playerAttackArea for an
 area victim).
 ================
 */
@@ -143,8 +143,8 @@ func (rt *Runtime) hostilePlayerRefusalWith(division string, caster, target *ent
 ================
 planPlayerHit
 
-58E5F0 for one player victim: every impact behind its wall, scaled by the
-running percent (a drain's share instead rides into 40F750), then the
+The native hit outcome for one player victim: every impact behind its wall, scaled by the
+running percent (a drain's share instead rides into the life-steal formula), then the
 row's and the imbue's statuses. The commit classifies the kill under the
 character door before death changes the victim.
 ================
@@ -168,7 +168,7 @@ func (rt *Runtime) planPlayerHit(in playerHitInput) (playerHit, bool) {
 		case in.fixed != nil:
 			return combat.WallOutcome{Defender: *in.fixed}, nil
 		case in.skill.LifeSteal.Present:
-			// 58F4B5: the percent rides into 40F750, after its HP cap.
+			// Reference server: the percent rides into the life-steal formula, after its HP cap.
 			steal := lifeStealResult(in.lifeStealBase, in.attacker, defender, uint32(max(hp, 0)), uint32(percent))
 			return combat.WallOutcome{Defender: combat.FinishImpact(steal, combat.ImpactTail{PercentApplied: true, Attack: in.skill.Attack.Present})}, nil
 		}
@@ -205,7 +205,7 @@ commitPlayerHitInDoor
 Inside a door holding the caster and the victim: the recipient side, then
 the aggression ProcessNormalHit records and a kill's rewards. Preserve
 pre-death relation facts, and book the killer before its hostile-target
-registration, as 4E27C0 does.
+registration, as the reference server does.
 ================
 */
 func (rt *Runtime) commitPlayerHitInDoor(division string, caster *enterworld.Character, h *playerHit, now int64) playerHitCommit {
@@ -214,7 +214,7 @@ func (rt *Runtime) commitPlayerHitInDoor(division string, caster *enterworld.Cha
 	if victim.DeletePending || !enterworld.CharacterAlive(victim) || len(h.strike.formulas) == 0 {
 		return out
 	}
-	// 52AA30 records the recipient's aggression before 52A240 runs the
+	// The reference server records the recipient's aggression before it runs the
 	// killer callback. Capture the target under this door before death
 	// relief changes its red state, including the last 200 penalty points.
 	out.public = append(out.public, rt.registerPlayerAttacked(division, victim, caster, now)...)
@@ -234,7 +234,7 @@ func (rt *Runtime) commitPlayerHitInDoor(division string, caster *enterworld.Cha
 		out.public = append(out.public, public...)
 		out.after = after
 	}
-	// 4E27F4 books the kill before 4E280B registers the hostile target.
+	// The reference server books the kill before it registers the hostile target.
 	attack := rt.registerPlayerAttack(division, caster, &beforeDeath, now)
 	out.actor = append(out.actor, attack...)
 	out.public = append(out.public, attack...)
@@ -285,14 +285,14 @@ acceptPlayerTargetStage
 acceptSkillStagePhaseAt for a player target: the same admission, range,
 preparation, area and periodic hand-offs, then one playerHit committed in
 a door holding the caster and the victim. Taunts act on monster hostility
-only; their rows target monsters and 58D7A0 refuses them here.
+only; their rows target monsters and the target permission check refuses them here.
 ================
 */
 func (rt *Runtime) acceptPlayerTargetStage(st offensiveStage) (OpResult, skillCastDecision) {
 	division, character, snapshot, skill, now := st.division, st.character, st.snapshot, st.skill, st.now
 	target, ok := rt.resolveCombatTarget(division, snapshot, st.cast.TargetGid, now)
 	if ok && target.cos == nil && target.player != nil && st.release == nil && skill.TargetRequired {
-		// CSkillManager_InitiateSkillCast (59B5F3..59B67D): a single-target
+		// The reference server's cast start: a single-target
 		// hostile skill aimed at a player mounted on a vehicle, riding horse
 		// or attack COS strikes the ride (PC+0x1D18) instead, for every
 		// caster but the skill system's AutoMob, which no player is. The
@@ -497,7 +497,7 @@ func (rt *Runtime) strikePlayerTarget(st offensiveStage, target combatTarget, ca
 		actor = append(actor, ammunitionFrames(ammo)...)
 		private = append(private, ammunitionFrames(ammo)...)
 	}
-	// 593832: the attacker's unblocked attempts wear its weapon.
+	// Reference server: the attacker's unblocked attempts wear its weapon.
 	var tally wearTally
 	for _, formula := range hit.strike.formulas {
 		tally.note(formula.Blocked, true)
@@ -526,7 +526,7 @@ func (rt *Runtime) strikePlayerTarget(st offensiveStage, target combatTarget, ca
 	public = append(public, battle...)
 	recipients := append([]RecipientFrames{victimPrivate}, rt.payJobKillShares(commit.after)...)
 	out := OpResult{Frames: actor, Broadcast: public, ActorPrivate: private, Recipients: recipients}
-	// 5A0C2D ran inside the hit outcome; the victim's dmgr returns its share
+	// The damage-effect pass ran inside the hit outcome; the victim's dmgr returns its share
 	// to the attacker afterwards, as the victim's credited hit.
 	returned := rt.returnDamageToPlayer(division, target.player, character, skill.ID, hit.defender, hit.strike.formulas[:len(hit.struck.impacts)], now)
 	shared := rt.strikeLinkedShares(division, caster, hit.strike.killer, skill, hit.struck.linkMoves, now)

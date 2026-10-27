@@ -4,8 +4,8 @@
 storage_endings_test.go - every way an open warehouse ends or refuses
 
 Native warehouse moves need the player's warehouse data and its one
-interaction state (526CE0 refuses 0x1834 unless it is the warehouse's 6),
-and item moves the keeper in range (4E72A0). Each test below drives one
+interaction state (the reference server refuses 0x1834 unless it is the warehouse's 6),
+and item moves the keeper in range. Each test below drives one
 ending through the path players take.
 
 ===========================================================================
@@ -37,8 +37,8 @@ func goldDeposit(t *testing.T, rt *Runtime, c *enterworld.Character, amount uint
 ================
 TestStorageItemMovesNeedTheKeeperInRange
 
-523EC0/524160/524090 check the packet's keeper with 4E72A0 and answer
-its code (4, beyond the range); gold (526CE0) has no range test.
+The reference server's storage moves check the packet's keeper with the NPC range check and answer
+its code (4, beyond the range); gold has no range test.
 ================
 */
 func TestStorageItemMovesNeedTheKeeperInRange(t *testing.T) {
@@ -76,7 +76,7 @@ func TestStorageEndsWhenAShopOpens(t *testing.T) {
 ================
 TestStorageEndsWithDeath
 
-ClearJobStateOnDeath (51B5DB) writes the interaction state 0.
+The reference server's death job-state clear writes the interaction state 0.
 ================
 */
 func TestStorageEndsWithDeath(t *testing.T) {
@@ -117,7 +117,7 @@ func TestStorageEndsWhenAnExchangeOpens(t *testing.T) {
 ================
 TestStorageEndsWhenAStallOpens
 
-CGObjPC_SetStallState (515EAA) writes the interaction state 4.
+The reference server's stall state writes the interaction state 4.
 ================
 */
 func TestStorageEndsWhenAStallOpens(t *testing.T) {
@@ -136,7 +136,7 @@ func TestStorageEndsWhenAStallOpens(t *testing.T) {
 TestStorageEndsWhenItsWindowCloses
 
 The client closes the warehouse through its keeper's release (0x74B3,
-native CGObjPC_HandleCloseNpc704B ends the interaction).
+native close-NPC handling ends the interaction).
 ================
 */
 func TestStorageEndsWhenItsWindowCloses(t *testing.T) {
