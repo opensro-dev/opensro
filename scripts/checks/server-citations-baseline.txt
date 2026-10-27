@@ -15,9 +15,9 @@ apps/server/internal/domain/inventory_capacity.go 2
 apps/server/internal/domain/letter.go 1
 apps/server/internal/domain/quickslot.go 2
 apps/server/internal/domain/trainingcamp.go 3
-apps/server/internal/game/abnormal/callbacks.go 1
+apps/server/internal/game/abnormal/callbacks.go 2
 apps/server/internal/game/abnormal/roll.go 1
-apps/server/internal/game/abnormal/status.go 2
+apps/server/internal/game/abnormal/status.go 3
 apps/server/internal/game/action/announce.go 2
 apps/server/internal/game/action/berserk.go 1
 apps/server/internal/game/action/buyback.go 1
@@ -59,6 +59,7 @@ apps/server/internal/game/action/itemuse.go 2
 apps/server/internal/game/action/itemuse_admission.go 1
 apps/server/internal/game/action/itemuse_test.go 3
 apps/server/internal/game/action/jobsuitarmor.go 2
+apps/server/internal/game/action/linkeddamage.go 1
 apps/server/internal/game/action/monsterabnormal.go 3
 apps/server/internal/game/action/monsterselfeffect.go 1
 apps/server/internal/game/action/monsterstrike_test.go 1
@@ -84,6 +85,7 @@ apps/server/internal/game/action/seatedcommand.go 1
 apps/server/internal/game/action/select_test.go 1
 apps/server/internal/game/action/skillcastfixture_test.go 8
 apps/server/internal/game/action/skillcombat.go 1
+apps/server/internal/game/action/skillfield.go 1
 apps/server/internal/game/action/skillrecoveryeffect.go 4
 apps/server/internal/game/action/skilltuning.go 1
 apps/server/internal/game/action/stall.go 1
@@ -97,6 +99,7 @@ apps/server/internal/game/action/tradestars.go 1
 apps/server/internal/game/action/transform.go 1
 apps/server/internal/game/action/visualflags.go 1
 apps/server/internal/game/action/wall_test.go 3
+apps/server/internal/game/caravan/caravan.go 1
 apps/server/internal/game/combat/durability.go 1
 apps/server/internal/game/combat/formula.go 4
 apps/server/internal/game/combat/stats.go 2
@@ -126,6 +129,7 @@ apps/server/internal/game/enterworld/register.go 2
 apps/server/internal/game/enterworld/response.go 6
 apps/server/internal/game/enterworld/siegeforge.go 3
 apps/server/internal/game/enterworld/skill_cast_lifecycle.go 5
+apps/server/internal/game/enterworld/skillabnormal_efr_test.go 1
 apps/server/internal/game/enterworld/skillassist.go 2
 apps/server/internal/game/enterworld/skillcatalogue.go 5
 apps/server/internal/game/enterworld/skillconcealment.go 2
@@ -296,7 +300,7 @@ apps/server/internal/game/social/party/updates.go 3
 apps/server/internal/game/social/party/wire.go 42
 apps/server/internal/game/social/party/wire_test.go 4
 apps/server/internal/game/world/fortress/capture_test.go 1
-apps/server/internal/game/world/fortress/fortress.go 1
+apps/server/internal/game/world/fortress/fortress.go 2
 apps/server/internal/game/world/geometry_test.go 1
 apps/server/internal/game/world/instance/registry.go 1
 apps/server/internal/game/world/interest_test.go 1
@@ -338,7 +342,7 @@ apps/server/internal/game/world/simulation/gmmonster.go 1
 apps/server/internal/game/world/simulation/monster.go 13
 apps/server/internal/game/world/simulation/monster_test.go 4
 apps/server/internal/game/world/simulation/monsterheading_test.go 1
-apps/server/internal/game/world/simulation/monsterstate_abnormal.go 1
+apps/server/internal/game/world/simulation/monsterstate_abnormal.go 2
 apps/server/internal/game/world/simulation/monstertick.go 4
 apps/server/internal/game/world/simulation/monstertick_test.go 2
 apps/server/internal/game/world/simulation/move.go 7

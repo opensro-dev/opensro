@@ -86,7 +86,9 @@ test("a new citation fails the ratchet and a reworded file asks for --update", (
 });
 
 // Digests of the families the #1701 sweep reworded: quest engine, mission
-// dialogue, tactics, job, guild, flag world and skill manager.
+// dialogue, tactics, job, guild, flag world and skill manager; then the
+// census families: guild class, target selection, caravan, object manager,
+// skill action, formulae, alliance and party.
 const SWEPT_FAMILIES = [
 	[ 11, "7bd0eaa0ab35c1f52528d0b79b83467919a3c2c216209ecc877196633d444f9c" ],
 	[ 14, "76a4f4519cd6cdea2fb8670ba67711847b7053eaf358593ddc099c2a37c7e283" ],
@@ -94,7 +96,15 @@ const SWEPT_FAMILIES = [
 	[ 8, "2244e4f45459f9e8569d9f62b4455c4666efff240e4f98903c7cba65886d8d5c" ],
 	[ 9, "861c4738533d2bfdc6ca280eea991149c587c514ac1a3353fe2a4c24a76547b9" ],
 	[ 10, "559dd4d38b1d6d5f52288548f840957d4cddb2c9f0dcbb325f77571073762a6d" ],
-	[ 13, "8418708620dfcefba1df3ca02ab1656eb29a742bf21388ba490ecc30bfc09a38" ]
+	[ 13, "8418708620dfcefba1df3ca02ab1656eb29a742bf21388ba490ecc30bfc09a38" ],
+	[ 7, "fcad02f0764e3df36f9afea817b42292c686b0bf1eec7e09bd5e214ac8f776c4" ],
+	[ 16, "bd8e9aaad1f819824a5347d6303d543fc1c2a7448a7d580d20a90845b5fd7b2d" ],
+	[ 8, "77e577dc6b84a5169e7ab03ee83cce1245479fd4cd6124fee2d2c78a672b7897" ],
+	[ 7, "32789a1e9ac539362b4d30c7b93c6f93d80d091edfa7814f3c6324729d701935" ],
+	[ 12, "bac9bd9162cfbbd3e30e0f9532a4216f4e5473d0eef13a0a287fb56c792ca2fa" ],
+	[ 9, "e6fb0a5e90ad6c063856ba51b201a2a43a7a52be8138a6f97955e99842f1ae91" ],
+	[ 9, "da88835109030c23c570688042d25afb8beef5d25aed061c6c0e3016af7d96c3" ],
+	[ 7, "bac1ef39fc5ef393ff7b72c35f1b5e7c74112d0b56d6663e5e60e6bb738704bc" ]
 ];
 
 test("the table keeps every family the #1701 sweep reworded", () => {
