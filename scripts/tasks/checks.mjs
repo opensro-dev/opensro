@@ -146,6 +146,16 @@ export const CHECK_TASKS = [
 		args: [ "scripts/checks/check_plane_branches.mjs" ]
 	} ),
 	commandTask( {
+		name: "check:server-citations",
+		description: "Refuse new reference-server class and function names in the server's Go (#1701)",
+		kind: "check",
+		ci: true,
+		requires: [],
+		timeoutClass: "short",
+		command: "node",
+		args: [ "scripts/checks/check_server_citations.mjs" ]
+	} ),
+	commandTask( {
 		name: "check:source-encoding",
 		description: "Enforce UTF-8 without BOM and LF line endings on maintained source",
 		kind: "check",
@@ -322,6 +332,7 @@ const sourceTasks = [
 	"check:generated-root",
 	"check:world-space",
 	"check:plane-branches",
+	"check:server-citations",
 	"check:shared-fixtures",
 	"check:format",
 	"check:scripts",
@@ -367,6 +378,7 @@ export const CHECK_PIPELINES = Object.freeze( {
 		{ id: "generated-root", task: "check:generated-root", after: [] },
 		{ id: "world-space", task: "check:world-space", after: [] },
 		{ id: "plane-branches", task: "check:plane-branches", after: [] },
+		{ id: "server-citations", task: "check:server-citations", after: [] },
 		{ id: "shared-fixtures", task: "check:shared-fixtures", after: [] },
 		{ id: "format", task: "check:format", after: [] },
 		{ id: "typecheck-scripts", task: "check:scripts", after: [] },
