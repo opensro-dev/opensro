@@ -100,6 +100,11 @@ jobs:
       - name: Server citations
         if: ${{ !cancelled() }}
         run: node scripts/task.mjs check:server-citations
+      # The plane owner (#1646): on the server only simulation and movement
+      # plane.go may read the dungeon region bit; #1906 slipped one past.
+      - name: Plane branches
+        if: ${{ !cancelled() }}
+        run: node scripts/task.mjs check:plane-branches
       # Both check generated server outputs against their sources: the
       # compiled quest package (internal/game/quest) and the loot catalogs
       # (internal/game/item/loot/.generated). Standard-library Python only.
