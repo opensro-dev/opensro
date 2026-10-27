@@ -89,7 +89,8 @@ type BanObserver interface {
 handleWorldStatus
 
 The GM handler's case 3: [1, 4, i32 players, i32 other objects, i32 ground items],
-the layout 751EC0 prints as "Player:%d, NPC_Mob:%d, DroppedItem:%d".
+the layout the client's NetMsg_OnGmCommandAck_B5B6 (@0x00751ec0) prints
+as "Player:%d, NPC_Mob:%d, DroppedItem:%d".
 ================
 */
 func handleWorldStatus(divisionID string, request Request, status []BodyStatusCommands) Outcome {
@@ -219,8 +220,8 @@ handleSetTime
 The GM handler's case 8 relays the hour to the shard manager, which sets the world
 clock for every GameWorld and answers the GM itself. The port's one
 GameWorld sets it through the action owner. INFERENCE: the GM's ack is
-[1, sub], which 751EC0 shows nothing for, as for every result-1 code it
-has no text for.
+[1, sub], which the client's NetMsg_OnGmCommandAck_B5B6 (@0x00751ec0)
+shows nothing for, as for every result-1 code it has no text for.
 ================
 */
 func handleSetTime(request Request, status []BodyStatusCommands) Outcome {

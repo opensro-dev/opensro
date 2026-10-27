@@ -196,18 +196,18 @@ type SkillParams struct {
 	Curl                            bool
 	Rcur                            int32
 	RcurSet                         bool
-	// EffectArea is the kind-1 efr (0x656672) block at RefSkill+0x28C.
+	// EffectArea is the kind-1 efr block at RefSkill+0x28C.
 	// Select 4 or 5 forces the party selector unless the shape is already 5 or 6.
 	EffectArea EffectArea
 	// AdmitDeadParty is the resu tag (0x72657375) stored at RefSkill+0x330.
-	// TargetSelection_Party skips the alive check when that pointer is set.
+	// The party selector skips the alive check when that tag is set.
 	// Word 0 is the highest level it revives (0x3012 above it, none when
 	// 0), word 1 the percent of the last EXP loss it returns.
 	AdmitDeadParty bool
 	ResuMaxLevel   uint32
 	ResuExpPercent uint32
 	// Rmut is the rmut tag (0x726D7574, RefSkill+0x4AC): the skill a
-	// resurrected player starts on accepting (TrsWaitResponse_OnResponse).
+	// resurrected player starts with on accepting the resurrection.
 	Rmut uint32
 }
 

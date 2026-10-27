@@ -15,9 +15,6 @@ apps/server/internal/domain/inventory_capacity.go 2
 apps/server/internal/domain/letter.go 1
 apps/server/internal/domain/quickslot.go 2
 apps/server/internal/domain/trainingcamp.go 3
-apps/server/internal/game/abnormal/callbacks.go 2
-apps/server/internal/game/abnormal/roll.go 1
-apps/server/internal/game/abnormal/status.go 3
 apps/server/internal/game/action/announce.go 2
 apps/server/internal/game/action/berserk.go 1
 apps/server/internal/game/action/buyback.go 1
@@ -145,11 +142,6 @@ apps/server/internal/game/enterworld/stonefamily.go 7
 apps/server/internal/game/enterworld/stonefamily_test.go 2
 apps/server/internal/game/enterworld/wire.go 23
 apps/server/internal/game/enterworld/wire_skills_test.go 3
-apps/server/internal/game/gmcommand/admin.go 2
-apps/server/internal/game/gmcommand/admin_test.go 3
-apps/server/internal/game/gmcommand/gmcommand.go 3
-apps/server/internal/game/gmcommand/gmquest_test.go 2
-apps/server/internal/game/gmcommand/wire.go 37
 apps/server/internal/game/item/alchemy/avatar.go 2
 apps/server/internal/game/item/alchemy/stones.go 1
 apps/server/internal/game/item/commerce/catalog.go 1

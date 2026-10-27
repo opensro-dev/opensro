@@ -26,11 +26,11 @@ type Owner interface {
 	MaxMP() uint32     // vfunc 114
 	// Param is the keeper value including the block's own modifiers.
 	Param(id uint16) float32
-	// SourceExists is ObjMgr_FindByID(+4C) plus vfunc 18.
+	// SourceExists is the by-id object lookup plus the object's vfunc 18.
 	SourceExists(gid uint32) bool
 	// SourceDead is the source's life state 2 or 3.
 	SourceDead(gid uint32) bool
-	// Roll is the owner's CZoeZoeRnd stream.
+	// Roll is the owner's probability stream.
 	Roll(key uint32, chance int32) bool
 	// Now is the owner's GetTickCount-equivalent in milliseconds.
 	Now() int64

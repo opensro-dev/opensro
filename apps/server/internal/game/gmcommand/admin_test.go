@@ -3,7 +3,8 @@
 
 admin_test.go - /WORLDSTATUS, /BAN, /RECALLGUILD, /LIENAME and /REALNAME
 
-The answers 751EC0 reads, the kick going to the presence owner, and every
+The answers the client's NetMsg_OnGmCommandAck_B5B6 (@0x00751ec0) reads,
+the kick going to the presence owner, and every
 miss refusing without side effects.
 
 ===========================================================================
@@ -83,7 +84,8 @@ func adminCharacters() (*enterworld.Character, *enterworld.Character, *enterworl
 ================
 TestWorldStatusAnswersThreeCounts
 
-751EC0 reads [1, 4, i32 players, i32 NPC_Mob, i32 DroppedItem].
+NetMsg_OnGmCommandAck_B5B6 (client @0x00751ec0) reads [1, 4, i32
+players, i32 NPC_Mob, i32 DroppedItem].
 ================
 */
 func TestWorldStatusAnswersThreeCounts(t *testing.T) {
@@ -233,7 +235,8 @@ func TestBanLeavesAnOperatorTrail(t *testing.T) {
 ================
 TestSetTimeMovesTheClockByTheGivenHour
 
-509CF0 sends [0x0A, hour 0..23]; the owner moves the clock and the GM gets
+ChatInput_HandleGmCommand (client @0x00509cf0) sends [0x0A, hour 0..23];
+the owner moves the clock and the GM gets
 [1, 0x0A]. A malformed frame is the silent decode refusal.
 ================
 */

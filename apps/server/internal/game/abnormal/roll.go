@@ -96,7 +96,7 @@ type RollInput struct {
 ================
 Random
 
-Random is the caster's CZoeZoeRnd stream (the skill owner's probability roll,
+Random is the caster's probability stream (the skill owner's roll,
 keyed by ECX) and the process rand() consumed by the time bomb.
 ================
 */

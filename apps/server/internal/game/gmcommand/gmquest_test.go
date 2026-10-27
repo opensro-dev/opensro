@@ -3,8 +3,9 @@
 
 gmquest_test.go - /INITQ, /RESETQ, /COMPQ and /REMOVEQ at the dispatcher
 
-The frames 509CF0 composes, the privilege gate, the owner receiving the
-decoded request and the acknowledgements 751EC0 reads.
+The frames ChatInput_HandleGmCommand (client @0x00509cf0) composes, the
+privilege gate, the owner receiving the decoded request and the
+acknowledgements NetMsg_OnGmCommandAck_B5B6 (client @0x00751ec0) reads.
 
 ===========================================================================
 */
