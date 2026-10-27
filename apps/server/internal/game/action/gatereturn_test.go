@@ -170,6 +170,14 @@ func TestGateTownReturnRefusals(t *testing.T) {
 		rt.NpcRoster[0].Spawn.X += npcHitRange + 50
 		refused(t, sendGateTownReturn(rt, c), hitRangeTooFar)
 	})
+	// Both failing: the hit range is tested before the service, so a
+	// player out of range of a serviceless NPC gets 4, not 3.
+	t.Run("out of range and no teleport service", func(t *testing.T) {
+		rt, c := gateTownReturnFixture(t)
+		rt.NpcRoster[0].Spawn.X += npcHitRange + 50
+		rt.NpcRoster[0].Services = simulation.NpcServices(0).With(simulation.NpcServiceShop)
+		refused(t, sendGateTownReturn(rt, c), hitRangeTooFar)
+	})
 	t.Run("no teleport service", func(t *testing.T) {
 		rt, c := gateTownReturnFixture(t)
 		rt.NpcRoster[0].Services = simulation.NpcServices(0).With(simulation.NpcServiceShop)

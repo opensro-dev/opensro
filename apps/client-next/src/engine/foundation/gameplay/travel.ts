@@ -7,8 +7,9 @@ travel.ts - the native travel packets: travel modes, reset regions and the
 Pure codecs over wire frames. travelMode reads which loading screen a
 frame starts, resetTravelRegion the region a reset names, and gateRequest
 writes the talk window's teleport requests in their native widths
-(NetClient_Send7495 6FEF10: a u32 target for type 2, a u8 for 3 and 5,
-none for type 1).
+(NetClient_Send7495 6FEF10: a u32 target for type 2, a u8 for type 5,
+none for type 1; the instance row's type 3 byte is written by its own
+caller, not by 6FEF10, see #1878).
 
 ===========================================================================
 */

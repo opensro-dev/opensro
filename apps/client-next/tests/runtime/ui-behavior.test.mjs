@@ -5511,7 +5511,13 @@ test("the Bandit Den gate's return point row sends 0x7495 type 1 and nothing els
 			targetCapabilities: 0x100,
 			npcConversation: { phase: "menu", gid: 17 }
 		};
-		f.state.entities.push( { ...f.state.entities[0], gid: 17, refObjId: 2197, kind: "teleport", name: "Bandit Den" } );
+		f.state.entities.push( {
+			...f.state.entities[0],
+			gid: 17,
+			refObjId: 2197,
+			kind: "teleport",
+			name: "Bandit Den"
+		} );
 		let output, now = 0;
 		const draw = () => {
 			for ( let i = 0; i < 40; i++ ) output = f.ui.step( { ...f.state }, now++ ) ?? output;
