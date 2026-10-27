@@ -67,6 +67,39 @@ func TestWornAvatarOptionsRaiseTheStats(t *testing.T) {
 
 /*
 ================
+TestWornAvatarHPOptionAddsFlatHP
+
+The avatar HP and MP rows are flat increases, like the equipment hp
+option (TestMagicOptionsWriteTheKeeper pins that one at +300): a dress
+blessed with the fixed 150 HP raises max HP by exactly 150, not by a
+percentage of the strength-fed pool. The MP row is its twin.
+================
+*/
+func TestWornAvatarHPOptionAddsFlatHP(t *testing.T) {
+	c, catalogs := avatarFixture(encodedOption(202, 150), encodedOption(203, 150))
+	dressed, _, err := PlayerStats(c, catalogs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.AvatarInventory = nil
+	bare, _, err := PlayerStats(c, catalogs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dressedHP, _ := dressed.Param(3)
+	bareHP, _ := bare.Param(3)
+	if dressedHP != bareHP+150 {
+		t.Fatalf("max HP with the dress %v, want the bare %v + 150", dressedHP, bareHP)
+	}
+	dressedMP, _ := dressed.Param(4)
+	bareMP, _ := bare.Param(4)
+	if dressedMP != bareMP+150 {
+		t.Fatalf("max MP with the dress %v, want the bare %v + 150", dressedMP, bareMP)
+	}
+}
+
+/*
+================
 TestAvatarRowWithoutReferenceRefuses
 
 A worn avatar with options whose reference is missing is a broken record,
