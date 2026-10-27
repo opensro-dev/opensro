@@ -162,12 +162,15 @@ func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterwor
 	case pk.DeathJob:
 		// Diagnostic (BR-261015-0844-66A1): suited job kills in the
 		// field left no trace in the live log, so whether classification
-		// yields job kills there at all was unanswerable. This line and
-		// mostwanted.go's counted line bracket the count: this without
-		// a count means the stranger test refused the pair.
+		// yields job kills there at all was unanswerable. Read with
+		// mostwanted.go's counted line: mostWanted=false pins nothing
+		// (the stranger test is not even run); strangers=false means
+		// the stranger test refused the pair; strangers=true with no
+		// count means the killer was dead or the repeat-pair limit held.
 		log.WithFields(log.Fields{"division": division, "killer": killer.Name, "victim": victim.Name,
 			"killerJob": enterworld.DressedJob(killer), "victimJob": enterworld.DressedJob(victim),
-			"strangers": kill.mostWantedStrangers}).Info("job kill classified")
+			"strangers": kill.mostWantedStrangers, "mostWanted": rt.MostWanted,
+			"killerAlive": enterworld.CharacterAlive(killer)}).Info("job kill classified")
 		if notice, ok := jobKillNoticeOf(division, killer, victim, now); ok {
 			after.notices = append(after.notices, notice)
 		}
