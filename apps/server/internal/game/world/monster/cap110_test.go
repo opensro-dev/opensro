@@ -30,8 +30,8 @@ func TestCap110PopulationJoinsInstalledReferences(t *testing.T) {
 	source := struct {
 		Version int
 		Rows    []cap110Nest
-	}{1, []cap110Nest{{Codename: ref.Codename,
-		NestID: 9, RegionID: 0x534b, X: 100, Y: 25, Z: 200, Radius: 350, GenerateRadius: 300,
+	}{cap110PopulationVersion, []cap110Nest{{Codename: ref.Codename,
+		NestID: 9, WorldID: cap110FieldWorldID, RegionID: 0x534b, X: 100, Y: 25, Z: 200, Radius: 350, GenerateRadius: 300,
 		MaxCount: 4, RespawnDelayMinSec: 8, RespawnDelayMaxSec: 10, Respawn: true,
 		ChampionGenPercentage: 10, Controls: control, Champion: &champion}}}
 	data, err := json.Marshal(source)
@@ -94,7 +94,7 @@ func TestCap110Level100SliceFollowsItsFlag(t *testing.T) {
 	at105 := MonsterRef{RefObjID: 2002, Codename: "MOB_SD_AT105", Level: 105}
 	template := TemplateFromParts(map[uint32]MonsterRef{at100.RefObjID: at100, at105.RefObjID: at105}, nil)
 	row := func(ref MonsterRef, nestID uint32) cap110Nest {
-		return cap110Nest{Codename: ref.Codename, NestID: nestID, RegionID: 0x534b, X: 100, Y: 25, Z: 200,
+		return cap110Nest{Codename: ref.Codename, NestID: nestID, WorldID: cap110FieldWorldID, RegionID: 0x534b, X: 100, Y: 25, Z: 200,
 			Radius: 350, GenerateRadius: 300, MaxCount: 4, RespawnDelayMinSec: 8, RespawnDelayMaxSec: 10, Respawn: true,
 			Controls: TacticsControls{ObjectID: 9999, ID: 77, ChangeTarget: 2, SightRange: 130}}
 	}
@@ -102,7 +102,7 @@ func TestCap110Level100SliceFollowsItsFlag(t *testing.T) {
 		data, err := json.Marshal(struct {
 			Version int
 			Rows    []cap110Nest
-		}{1, rows})
+		}{cap110PopulationVersion, rows})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -145,6 +145,14 @@ func TestCap110Level100SliceFollowsItsFlag(t *testing.T) {
 	if _, err := appendCap110Data(template, dup); err == nil {
 		t.Fatal("duplicate nest id admitted across the held-back level-100 row")
 	}
+
+	// A field row naming another world is refused: the field joins the
+	// default world only (#1750).
+	foreign := row(at105, 12)
+	foreign.WorldID = 57
+	if _, err := appendCap110Data(template, marshal([]cap110Nest{foreign})); err == nil {
+		t.Fatal("field row in a tomb world admitted")
+	}
 }
 
 /*
@@ -153,7 +161,7 @@ TestCap110PopulationRejectsMalformedData
 ================
 */
 func TestCap110PopulationRejectsMalformedData(t *testing.T) {
-	for _, data := range []string{`{"Version":2,"Rows":[]}`, `{"Version":1,"Rows":[],"Unknown":1}`, `{"Version":1,"Rows":[]} {}`} {
+	for _, data := range []string{`{"Version":3,"Rows":[]}`, `{"Version":1,"Rows":[],"Unknown":1}`, `{"Version":1,"Rows":[]} {}`} {
 		if _, err := appendCap110Data(Template{}, []byte(data)); err == nil {
 			t.Fatal("malformed optional data admitted")
 		}
@@ -171,7 +179,7 @@ func TestCap110ApisKeepsSourceGradeAndRespawn(t *testing.T) {
 	source := struct {
 		Version int
 		Rows    []cap110Nest
-	}{1, []cap110Nest{{Codename: ref.Codename, NestID: 29205, RegionID: 19017,
+	}{cap110PopulationVersion, []cap110Nest{{Codename: ref.Codename, NestID: 29205, WorldID: cap110FieldWorldID, RegionID: 19017,
 		X: 1578.03, Y: 184, Z: 1780.5601, Radius: 600, GenerateRadius: 400, MaxCount: 1,
 		Respawn: true, RespawnDelayMinSec: 10800, RespawnDelayMaxSec: 21600,
 		Controls: TacticsControls{ChangeTarget: 2, SightRange: 130}}}}
