@@ -49,10 +49,13 @@ const (
 // channel and the WebSocket alternate plus bootstrap endpoints over TCP, all
 // in this one process. Both feed the same Hub.
 type Server struct {
-	Hub  *Hub
+	Hub *Hub
+	// Cert is the served TLS pair; nil when public WebTransport is disabled
+	// for this run because its pair failed at boot (wtDisabled says why).
 	Cert *Certificate
 
 	cfg        Config
+	wtDisabled string
 	wtServer   *webtransport.Server
 	httpServer *http.Server
 	// pprofServer is the loopback profiling listener (pprof.go), nil when
@@ -214,11 +217,25 @@ func NewServer(cfg Config) (*Server, error) {
 		}
 	}
 
+	// A public pair that fails at boot (missing, unreadable by this user, or
+	// outside its validity) disables only the WebTransport listener:
+	// WebSocket keeps serving and clients fall back (owner 2026-10-27,
+	// #1447). Deploy-time checks stay fail-closed; this is the boot a crash
+	// restart or a renewal that never synced reaches, which must not take
+	// WebSocket down with it.
 	cert, err := LoadCertificate(cfg.CertFile, cfg.KeyFile, cfg.CertDir)
+	wtDisabled := ""
 	if err != nil {
-		return nil, err
+		if !cfg.WebTransportPublic {
+			return nil, err
+		}
+		wtDisabled = err.Error()
+		log.WithError(err).Error("transport: public WebTransport disabled for this run; WebSocket keeps serving")
+		cert = nil
 	}
-	if cert.Regenerated {
+	if cert == nil {
+		// Disabled above: nothing to report.
+	} else if cert.Regenerated {
 		log.WithFields(log.Fields{"notAfter": cert.Leaf.NotAfter, "sha256": cert.SHA256Hex()}).
 			Info("transport: generated new dev certificate")
 	} else if cfg.CertFile != "" {
@@ -229,10 +246,11 @@ func NewServer(cfg Config) (*Server, error) {
 	}
 
 	s := &Server{
-		Hub:   newHub(cfg),
-		Cert:  cert,
-		cfg:   cfg,
-		errCh: make(chan error, 2),
+		Hub:        newHub(cfg),
+		Cert:       cert,
+		cfg:        cfg,
+		errCh:      make(chan error, 2),
+		wtDisabled: wtDisabled,
 	}
 
 	checkOrigin := s.originChecker()
@@ -280,18 +298,21 @@ func NewServer(cfg Config) (*Server, error) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
-		remaining := time.Until(s.Cert.Leaf.NotAfter)
-		if remaining < 0 {
-			remaining = 0
-		}
 		document := struct {
 			Metrics
 			CertificateNotAfter         string `json:"certificate_not_after"`
 			CertificateSecondsRemaining int64  `json:"certificate_seconds_remaining"`
+			// WebTransportDisabled is why this run serves no WebTransport
+			// (the pair failed at boot); empty while it serves.
+			WebTransportDisabled string `json:"webtransport_disabled,omitempty"`
 		}{
-			Metrics:                     s.Hub.Metrics(),
-			CertificateNotAfter:         s.Cert.Leaf.NotAfter.UTC().Format(time.RFC3339),
-			CertificateSecondsRemaining: int64(remaining / time.Second),
+			Metrics:              s.Hub.Metrics(),
+			WebTransportDisabled: s.wtDisabled,
+		}
+		if s.Cert != nil {
+			remaining := max(time.Until(s.Cert.Leaf.NotAfter), 0)
+			document.CertificateNotAfter = s.Cert.Leaf.NotAfter.UTC().Format(time.RFC3339)
+			document.CertificateSecondsRemaining = int64(remaining / time.Second)
 		}
 		_ = json.NewEncoder(w).Encode(document)
 	})
@@ -302,6 +323,10 @@ func NewServer(cfg Config) (*Server, error) {
 		WriteTimeout:      httpWriteTimeout,
 		IdleTimeout:       httpIdleTimeout,
 		MaxHeaderBytes:    httpMaxHeaderBytes,
+	}
+
+	if cert == nil {
+		return s, nil // WebTransport disabled: no UDP side (see the load above)
 	}
 
 	// The UDP side: HTTP/3 + WebTransport. The h3 ALPN must be set here
@@ -424,6 +449,14 @@ func (s *Server) handleCertHash(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Cache-Control", "no-store")
+	if s.Cert == nil {
+		// WebTransport is disabled this run: no hash to pin. The client
+		// reads a non-OK answer as "no pins" and still dials; with no UDP
+		// listener that dial fails (or hits its 3 s connect deadline) and
+		// its one WebSocket fallback runs.
+		http.Error(w, "webtransport unavailable", http.StatusServiceUnavailable)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	doc := struct {
 		certHashDoc
@@ -492,19 +525,25 @@ func (s *Server) Start() error {
 		return fail(fmt.Errorf("transport: binding TCP %s: %w", s.cfg.WSAddr, err))
 	}
 	bound = append(bound, tcpLn)
-	udpAddr, err := net.ResolveUDPAddr("udp", s.cfg.WTAddr)
-	if err != nil {
-		return fail(fmt.Errorf("transport: resolving UDP %s: %w", s.cfg.WTAddr, err))
-	}
-	udpConn, err := net.ListenUDP("udp", udpAddr)
-	if err != nil {
-		return fail(fmt.Errorf("transport: binding UDP %s: %w", s.cfg.WTAddr, err))
+	// With WebTransport disabled at boot (NewServer), no UDP socket is bound:
+	// udpConn stays nil, which Shutdown and WTAddr already read as "no WT".
+	var udpConn *net.UDPConn
+	if s.Cert != nil {
+		udpAddr, err := net.ResolveUDPAddr("udp", s.cfg.WTAddr)
+		if err != nil {
+			return fail(fmt.Errorf("transport: resolving UDP %s: %w", s.cfg.WTAddr, err))
+		}
+		if udpConn, err = net.ListenUDP("udp", udpAddr); err != nil {
+			return fail(fmt.Errorf("transport: binding UDP %s: %w", s.cfg.WTAddr, err))
+		}
 	}
 	s.tcpLn = tcpLn
 	s.udpConn = udpConn
 	s.started = true
-	s.wtServeDone = make(chan struct{})
 	s.httpServeDone = make(chan struct{})
+	if udpConn != nil {
+		s.wtServeDone = make(chan struct{})
+	}
 
 	if pprofLn != nil {
 		go func() {
@@ -521,17 +560,20 @@ func (s *Server) Start() error {
 			s.errCh <- fmt.Errorf("transport: websocket listener: %w", err)
 		}
 	}()
-	go func() {
-		defer close(s.wtServeDone)
-		if err := s.wtServer.Serve(udpConn); err != nil && !s.isClosed() {
-			s.errCh <- fmt.Errorf("transport: webtransport listener: %w", err)
-		}
-	}()
+	webtransportField := "disabled: " + s.wtDisabled
+	if udpConn != nil {
+		go func() {
+			defer close(s.wtServeDone)
+			if err := s.wtServer.Serve(udpConn); err != nil && !s.isClosed() {
+				s.errCh <- fmt.Errorf("transport: webtransport listener: %w", err)
+			}
+		}()
+		webtransportField = "https://" + udpConn.LocalAddr().String() + PathWT + " (UDP)"
+	}
 
-	wtAddr := udpConn.LocalAddr().String()
 	wsAddr := tcpLn.Addr().String()
 	log.WithFields(log.Fields{
-		"webtransport": "https://" + wtAddr + PathWT + " (UDP)",
+		"webtransport": webtransportField,
 		"websocket":    "ws://" + wsAddr + PathWS + " (TCP)",
 		"certHash":     "http://" + wsAddr + PathCertHash,
 	}).Info("transport: listening")
@@ -552,6 +594,16 @@ func (s *Server) isClosed() bool {
 	defer s.mu.Unlock()
 	return s.closed
 }
+
+/*
+================
+WebTransportDisabled
+
+Why this run serves no WebTransport: the public pair's load error at boot.
+Empty while WebTransport serves (or was never public).
+================
+*/
+func (s *Server) WebTransportDisabled() string { return s.wtDisabled }
 
 // WTAddr is the bound UDP address (host:port) once started.
 func (s *Server) WTAddr() string {
