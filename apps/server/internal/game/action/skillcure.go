@@ -9,6 +9,8 @@ skillcure.go - skill cures (593F50) and party area reach
 package action
 
 import (
+	"slices"
+
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -61,6 +63,44 @@ func (rt *Runtime) resolveSkillCureTargets(division string, caster, view *enterw
 		}
 	}
 	return out
+}
+
+/*
+==================
+cureDoorCharacters
+
+The records a skill cure writes: the caster, every cured player and every
+cured pet's owner, once each. The caster's door covers them all, so each
+cured record is marked dirty and committed with the cast (#1836).
+==================
+*/
+func cureDoorCharacters(caster *enterworld.Character, targets []cureTarget) []*enterworld.Character {
+	out := []*enterworld.Character{caster}
+	for _, target := range targets {
+		c := target.player
+		if c == nil {
+			c = target.pet.character
+		}
+		if c != nil && !slices.Contains(out, c) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+/*
+==================
+updateCured
+
+The caster's recovery door over cureDoorCharacters: the single-record door
+while the cast writes only the caster, one multi-record door otherwise.
+==================
+*/
+func (rt *Runtime) updateCured(cured []*enterworld.Character, label string, update func() bool) bool {
+	if len(cured) == 1 {
+		return rt.deps.Update(cured[0], label, update)
+	}
+	return rt.deps.UpdateMany(cured, label, update)
 }
 
 /*

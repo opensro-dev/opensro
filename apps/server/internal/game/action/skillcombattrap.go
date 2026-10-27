@@ -81,15 +81,17 @@ func (rt *Runtime) acceptCombatTrap(division string, c, snapshot *enterworld.Cha
 			}
 		}
 		rt.commitOffensivePhaseCost(division, c, skill, cost, now, true)
+		// The cap's retire tears down the planter's buff (skill jobs, body
+		// status, stored HP/MP), so it runs in this door (#1836).
+		if trap.Pinned {
+			rt.retireExcessCombatTraps(division, c, trap, now)
+		}
 		return true
 	}) {
 		if refusal != 0 {
 			return offensiveRefusal(refusal), skillCastRefused
 		}
 		return OpResult{DiagnosticRefusal: "combat-trap-release-commit-refused"}, skillCastRefused
-	}
-	if trap.Pinned {
-		rt.retireExcessCombatTraps(division, c, trap, now)
 	}
 	vitals := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshWithSourcePayload(gid, simulation.VitalsSourceSkillRecovery, rt.publishedVitals(division, c))}
 	released := wire.SkillCastReleaseFrame(pending.token, 0)
@@ -126,7 +128,8 @@ func plantedTrapProgram(skill enterworld.SkillRow) (skillobject.Program, bool) {
 retireExcessCombatTraps
 
 lnks' third word caps the planter's live traps in one link group. Snapshot
-order is creation order, so the newest traps survive.
+order is creation order, so the newest traps survive. The caller holds c's
+door.
 ================
 */
 func (rt *Runtime) retireExcessCombatTraps(division string, c *enterworld.Character, trap enterworld.SkillCombatTrap, now int64) {
@@ -138,8 +141,8 @@ func (rt *Runtime) retireExcessCombatTraps(division string, c *enterworld.Charac
 		}
 	}
 	for len(live) > int(trap.MaxLive) {
-		if rt.SkillObjects.Remove(live[0].Spawn.GID) {
-			rt.retireCombatTrapEffect(division, c, live[0], now)
+		if rt.SkillObjects.Remove(live[0].Spawn.GID) && live[0].OwnerEffect != 0 {
+			rt.publishEndedEffects(division, c, rt.effects.RetireInstances(division, c.Name, []uint32{live[0].OwnerEffect}), now)
 		}
 		live = live[1:]
 	}
@@ -149,15 +152,15 @@ func (rt *Runtime) retireExcessCombatTraps(division string, c *enterworld.Charac
 ================
 retireCombatTrapEffect
 
-The planter's buff ends with its trap. Publication runs outside every
-character door (finishEndedEffects reads the store).
+The planter's buff ends with its trap on the object tick. The teardown
+runs in the planter's tick door (endEffectsInTickDoor, #1836).
 ================
 */
 func (rt *Runtime) retireCombatTrapEffect(division string, c *enterworld.Character, object skillobject.Object, now int64) {
 	if c == nil || object.OwnerEffect == 0 {
 		return
 	}
-	rt.publishEndedEffects(division, c, rt.effects.RetireInstances(division, c.Name, []uint32{object.OwnerEffect}), now)
+	rt.endEffectsInTickDoor(division, c, rt.effects.RetireInstances(division, c.Name, []uint32{object.OwnerEffect}), "combat-trap-retire", now)
 }
 
 /*

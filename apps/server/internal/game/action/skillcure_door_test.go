@@ -58,6 +58,11 @@ func installStoreDoor(t *testing.T, rt *Runtime) *storeDoor {
 		defer door.mu.Unlock()
 		return update()
 	}
+	deps.UpdateCharacters = func(_ []*enterworld.Character, _ string, update func() bool) bool {
+		door.mu.Lock()
+		defer door.mu.Unlock()
+		return update()
+	}
 	deps.MutateCharacter = func(_ *enterworld.Character, _ string, mutate func()) {
 		door.mu.Lock()
 		defer door.mu.Unlock()

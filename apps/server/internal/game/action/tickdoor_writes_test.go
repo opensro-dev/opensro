@@ -18,9 +18,12 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 const (
@@ -133,5 +136,103 @@ func TestFieldRetireRunsInsideTheCharacterDoor(t *testing.T) {
 	}
 	if len(doors) != 1 || doors[0] != mate.Name {
 		t.Fatalf("retire doors %v, want exactly the leaver's", doors)
+	}
+}
+
+/*
+================
+TestCombatTrapRetireRunsInsideTheCharacterDoor
+
+Both retirements of a planter's trap buff tear down the saved record. The
+link-group cap retires inside the replant's own release door (a handler
+reaches it, so the door is immediate), and the object tick retires through
+the planter's tick door.
+================
+*/
+func TestCombatTrapRetireRunsInsideTheCharacterDoor(t *testing.T) {
+	rt, clock, c, skill, gid := combatTrapFixture(t)
+	if !rt.Monsters.Defeat(testDivision, gid, clock.Now()) {
+		t.Fatal("could not clear the trigger monster")
+	}
+	deps := rt.deps.(*enterworld.Deps)
+	immediate := deps.UpdateCharacter
+	buffsAtRelease := -1
+	deps.UpdateCharacter = func(character *enterworld.Character, label string, update func() bool) bool {
+		var committed bool
+		if immediate != nil {
+			committed = immediate(character, label, update)
+		} else {
+			committed = update()
+		}
+		if label == "release-combat-trap" {
+			buffsAtRelease = len(rt.effects.Snapshot(testDivision, c.Name))
+		}
+		return committed
+	}
+	var tickDoors []string
+	deps.UpdateCharacterDeferred = func(character *enterworld.Character, label string, update func() bool) bool {
+		if label == "combat-trap-retire" {
+			tickDoors = append(tickDoors, character.Name)
+		}
+		return update()
+	}
+
+	plantCombatTrap(t, rt, clock, c, skill, clock.NowMs())
+	clock.Advance(time.Duration(skill.CoolTimeMs+1) * time.Millisecond)
+	rt.drainSkillFinalizes(clock.NowMs())
+	release := plantCombatTrap(t, rt, clock, c, skill, clock.NowMs())
+	if buffsAtRelease != 1 {
+		t.Fatalf("%d buffs when the replant's door closed, want the replaced trap's buff retired inside it", buffsAtRelease)
+	}
+
+	key := simulation.WorldKey(testDivision, c.Name)
+	rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(w *simulation.WorldState) {
+		w.Spawn.X += float64(skill.CombatTrap.OwnerDistance) + 1
+	})
+	rt.AdvanceSkillObjects(release+int64(enterworld.CombatTrapScanMs), nil)
+	if len(rt.effects.Snapshot(testDivision, c.Name)) != 0 {
+		t.Fatal("the trap's buff survived its planter walking away")
+	}
+	if len(tickDoors) != 1 || tickDoors[0] != c.Name {
+		t.Fatalf("tick retire doors %v, want exactly the planter's", tickDoors)
+	}
+}
+
+/*
+================
+TestCureOnAMateMarksBothRecordsInTheDoor
+
+A cure on a party mate writes the mate's saved abnormal state, so the
+caster's recovery door must cover the mate too, or the store never marks
+the mate dirty and a restart loses the cure.
+================
+*/
+func TestCureOnAMateMarksBothRecordsInTheDoor(t *testing.T) {
+	rt, clock, caster, monster := newCombatTestRuntime(t, 100)
+	row := installShippedSkill(t, rt, caster, 10077)
+	caster.Intellect = testInt64(80)
+	caster.CurrentMP = nil
+	now := clock.NowMs()
+	door := installStoreDoor(t, rt)
+	mate := addDoorMate(t, rt, caster, door, now, monster.Gid)
+	rt.clearSkillFinalizes(testDivision, caster.Name)
+	deps := rt.deps.(*enterworld.Deps)
+	locked := deps.UpdateCharacters
+	var covered []*enterworld.Character
+	deps.UpdateCharacters = func(characters []*enterworld.Character, label string, update func() bool) bool {
+		if label == "skill-self-recovery" {
+			covered = append(covered, characters...)
+		}
+		return locked(characters, label, update)
+	}
+
+	result := rt.HandleTargetInteract(testDivision, caster, wire.SkillAction{
+		ActionId: row.ID, HasTarget: true, TargetGid: enterworld.ObjectIDForCharacter(mate),
+	}.Encode())
+	if result.DiagnosticRefusal != "" {
+		t.Fatal(result.DiagnosticRefusal)
+	}
+	if len(covered) != 2 || covered[0] != caster || covered[1] != mate {
+		t.Fatalf("recovery door covered %d records, want the caster then the cured mate", len(covered))
 	}
 }
