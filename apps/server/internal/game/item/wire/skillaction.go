@@ -3,10 +3,12 @@ package wire
 import "fmt"
 
 // SkillAction is one C→S 0x72CD skill/action-use body. Two composers exist
-// (from the exhaustive sub_4fc9e0/sub_71ff00 send-site census): sub_6fcd50 /
-// CGInterface_ExecuteSelectedActionAtTarget builds the flag-0x00/0x01 bodies
-// in place, and sub_878100 / CharMovement_ResendGoalMove builds the
-// flag-0x02 ground-location body on the deferred walk-into-range path.
+// (from the exhaustive client CMsgStreamBuffer_InitWithOpcode /
+// NetClient_SendPacket send-site census): the client's
+// CGInterface_ExecuteSelectedActionAtTarget builds the flag-0x00/0x01
+// bodies in place, and its CNavigationDeadreckon_OnArrivalOrActionFlush
+// builds the flag-0x02 ground-location body on the deferred
+// walk-into-range path.
 //
 // Wire (ASM-PINNED against SRO_Client.exe; three layouts):
 //
@@ -20,11 +22,13 @@ import "fmt"
 // must keep rejecting the 0x04 family so a skill send never grants an item.
 type SkillAction struct {
 	// ActionId is the skill/action host id the dispatch rides: the clicked
-	// control's CIFWnd+0x5c0 commandId, pushed as sub_6fcd50's one dword
-	// argument (there is NO "selected action id 758" field - CGInterface
-	// +0x758 is the cool-time list pointer). On the deferred flag-0x02 path
-	// the same id is armed at the click-move controller's +0x4c
-	// (armedLocationCastActionId4c) and composed later by sub_878100.
+	// control's CIFWnd+0x5c0 commandId, pushed as the one dword argument
+	// of the client's CGInterface_ExecuteSelectedActionAtTarget (there is
+	// NO "selected action id 758" field - CGInterface +0x758 is the
+	// cool-time list pointer). On the deferred flag-0x02 path the same id
+	// is armed at the click-move controller's +0x4c
+	// (armedLocationCastActionId4c) and composed later by the client's
+	// CNavigationDeadreckon_OnArrivalOrActionFlush.
 	ActionId uint32
 	// HasTarget is true for the flag-0x01 body (a target gid follows).
 	HasTarget bool
@@ -32,7 +36,8 @@ type SkillAction struct {
 	// (CGInterface_GetSelectedTarget → stack slot consumed by AppendBytes).
 	TargetGid uint32
 	// HasGroundTarget is true for the flag-0x02 ground-location body
-	// (the sub_878100 second composer; region + xyz words follow).
+	// (the client's CNavigationDeadreckon_OnArrivalOrActionFlush second
+	// composer; region + xyz words follow).
 	HasGroundTarget bool
 	// Region / GroundX / GroundY / GroundZ are the flag-0x02 location words.
 	Region  uint16

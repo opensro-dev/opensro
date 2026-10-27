@@ -4,9 +4,10 @@ import "fmt"
 
 // PickupAnim is the 0x35C7 pickup-animation trigger.
 //
-// Handler sub_7780f0 reads the two fields (@0x007780ff a 4-byte gid,
-// @0x0077810d a 1-byte heading), resolves the gid, skips the entity when it is
-// riding, sets its yaw from the heading and calls SetMotionState(0x0A) - the
+// The client's CPSMission_OnPickupAnim_0x35C7 handler reads the two
+// fields (at client 0x007780FF a 4-byte gid, at client 0x0077810D a
+// 1-byte heading), resolves the gid, skips the entity when it is riding,
+// sets its yaw from the heading and calls SetMotionState(0x0A) - the
 // only SetMotionState(10) call site in the binary, which plays motion 0x26
 // (ANI_PICK). Local and remote clients run the same handler, so the picker's
 // scoop is visible to the whole division.
@@ -50,7 +51,8 @@ func DecodePickupAnim(payload []byte) (PickupAnim, error) {
 
 // ObjectDespawn is the 0x36AB single-entity despawn.
 //
-// Handler sub_777310 performs exactly one 4-byte read (@0x0077731c), resolves
+// The client's CPSMission_OnEntityDespawn36AB handler performs exactly
+// one 4-byte read (at client 0x0077731C), resolves
 // the gid through CEntityManager_ResolveGidObjectOrAssert and tail-jumps the
 // resolved object's vtable +0x4c despawn slot. There is no second field.
 type ObjectDespawn struct {
