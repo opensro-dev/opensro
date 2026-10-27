@@ -133,7 +133,6 @@ apps/server/internal/game/enterworld/skillabnormal_efr_test.go 1
 apps/server/internal/game/enterworld/skillassist.go 2
 apps/server/internal/game/enterworld/skillcatalogue.go 5
 apps/server/internal/game/enterworld/skillconcealment.go 2
-apps/server/internal/game/enterworld/skilldata.go 44
 apps/server/internal/game/enterworld/skillencoded.go 8
 apps/server/internal/game/enterworld/skillnameattack.go 2
 apps/server/internal/game/enterworld/skillthreatdecrease.go 1
