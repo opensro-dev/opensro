@@ -48,11 +48,14 @@ type petSession struct {
 	displacement     *playerDisplacement
 	mercenaryPenalty mercenaryPenaltyClock
 	satiety          companion.SatietyClock
-	session          uint64
-	ready            bool
-	character        *enterworld.Character
-	refObjID         uint32
-	follower         *simulation.PetFollower
+	// naturalRecoveryAtMs is the companion's next native recovery pulse
+	// (petnaturalrecovery.go), bound with its session.
+	naturalRecoveryAtMs int64
+	session             uint64
+	ready               bool
+	character           *enterworld.Character
+	refObjID            uint32
+	follower            *simulation.PetFollower
 	// Transport COS do not run follower AI. Their admission anchor belongs to
 	// this same presentation owner; mounted motion comes from the rider owner.
 	transportCOS   *enterworld.CharacterCOS
@@ -267,6 +270,7 @@ func (rt *Runtime) advancePetInDivision(key petOwnerKey, nowMs int64) (int64, []
 	frames = append(frames, rt.advancePetSpirit(key, nowMs)...)
 	frames = append(frames, rt.advancePetBond(key, rt.petSessionFor(key.division, key.name, key.gid), nowMs)...)
 	frames = append(frames, rt.advancePetSatiety(key, nowMs)...)
+	frames = append(frames, rt.advancePetNaturalRecovery(key, nowMs)...)
 	frames = append(frames, rt.advancePet(key, nowMs)...)
 	rt.petMu.Lock()
 	state := rt.petSessions[key]
@@ -722,7 +726,8 @@ func (rt *Runtime) bindCompanionSession(division string, owner *petSession, pet 
 		return old
 	}
 	owner.formationSlots.Release(pet.GID)
-	state := &petSession{formationSlot: -1, session: owner.session, ready: owner.ready, character: owner.character, transportCOS: pet, refObjID: pet.RefObjID}
+	state := &petSession{formationSlot: -1, session: owner.session, ready: owner.ready, character: owner.character, transportCOS: pet, refObjID: pet.RefObjID,
+		naturalRecoveryAtMs: rt.Now().UnixMilli() + petNaturalRecoveryPeriodMs}
 	if old != nil {
 		state.generation = old.generation + 1
 	}
