@@ -931,6 +931,26 @@ variable "sun_drop_rate" {
   default = "2"
 }
 
+# seal_pity turns on seal pity, port-only (owner decision 2026-10-27,
+# #1690): off (native) | shadow (count and log, never force a drop) |
+# on (force the owed degree-9 Moon/Sun drop). The thresholds hold the
+# owed-amount per degree and seal tier, the daily cap how many forced
+# drops of one tier a character may be paid in a UTC day.
+variable "seal_pity" {
+  type    = string
+  default = "off"
+}
+
+variable "seal_pity_thresholds" {
+  type    = string
+  default = "9:moon:1.5,9:sun:1.5"
+}
+
+variable "seal_pity_daily_cap" {
+  type    = string
+  default = "1"
+}
+
 # unique_gap_exempt lets a unique's drops ignore the native level-gap
 # admission (4C1840), so a capped hunter still loots low-level uniques
 # (port-only, not native; owner decision 2026-10-20). "off" is native.
@@ -1243,6 +1263,9 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_SEAL_RATES                     = var.beta_seal_rates
         SRO_SUN_EVENT_ONLY                      = var.sun_event_only
         SRO_SUN_DROP_RATE                       = var.sun_drop_rate
+        SRO_SEAL_PITY                           = var.seal_pity
+        SRO_SEAL_PITY_THRESHOLDS                = var.seal_pity_thresholds
+        SRO_SEAL_PITY_DAILY_CAP                 = var.seal_pity_daily_cap
         SRO_UNIQUE_GAP_EXEMPT                   = var.unique_gap_exempt
         SRO_UNIQUE_POP_TICKET                   = var.unique_pop_ticket
         SRO_UNIQUE_MAX_LEVEL_LOOT               = var.unique_max_level_loot

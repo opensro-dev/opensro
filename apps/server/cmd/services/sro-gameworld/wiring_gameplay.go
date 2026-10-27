@@ -765,6 +765,19 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.SealRates.Enabled() {
 		log.Infof("progression: beta seal rates ON (%s): degrees 1-8 Star/Moon/Sun x3, degree 9 Star x3 Moon x2 Sun x1, on top of rare (SoX) x%d", progression.EnvBetaSealRates, max(game.items.RareRate, 1))
 	}
+	// Port-only, not native (owner 2026-10-27, #1690): seal pity
+	// luck-debt counters for top-tier seals. Off is native loot; shadow
+	// counts and logs without forcing a drop; the rollup sink is
+	// wiring_sealpity.go.
+	game.items.SealPity, err = progression.SealPityFromEnv()
+	if err != nil {
+		return err
+	}
+	if game.items.SealPity.Enabled() {
+		log.Infof("loot: seal pity %s (%s): thresholds from %s (default %s), daily cap %d (%s)",
+			game.items.SealPity.Mode().Name(), progression.EnvSealPity, progression.EnvSealPityThresholds,
+			progression.DefaultSealPityThresholds, game.items.SealPity.DailyCap(), progression.EnvSealPityDailyCap)
+	}
 	// Port-only, not native, beta balance (owner 2026-10-20): the degree-9
 	// Sun class of the rare table widens by the rate. The event rule still
 	// wins over it - Sun then drops nothing, which must not be silent.

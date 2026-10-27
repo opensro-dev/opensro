@@ -175,6 +175,34 @@ func (rt *Runtime) admitMonsterDrop(playerLevel uint8, monster monster.Instance)
 	return err == nil && int32(roll%101) <= threshold
 }
 
+/*
+================
+admissionChance
+
+The chance admitMonsterDrop admits one drop for this killer and
+monster: (threshold + 1) / 101 over the same constants, with the same
+port-only unique gap exemption. Pure: it draws nothing. The seal pity
+increment (sealpity.go) accrues by it.
+================
+*/
+func (rt *Runtime) admissionChance(playerLevel uint8, monster monster.Instance) float64 {
+	if rt.UniqueRules.GapExempt && RollsUniqueDrops(monster.Rarity()) {
+		return 1
+	}
+	threshold := int32(100)
+	gap := int32(playerLevel) - int32(monster.Ref.Level)
+	if gap > 6 {
+		threshold = int32((1 - float64(gap)*float64(float32(0.04))) * 100)
+	}
+	if monster.Rarity()&15 == dropGradeSeven {
+		threshold *= 4
+	}
+	if threshold > 100 {
+		threshold = 100
+	}
+	return min(max(float64(threshold+1)/101, 0), 1)
+}
+
 // dropGradeSeven is the grade whose timer flag (+0x1CF4) quadruples 4C1840.
 const dropGradeSeven = 7
 
@@ -578,7 +606,8 @@ var consumableMixNames = [7]string{"potion", "cure", "scroll", "elixir", "ammo",
 
 // planMonsterKillLoot resolves and rolls the drop before entering the commit
 // door. The caller commits this value together with progression, so a crash
-// cannot persist only one half of a kill reward.
+// cannot persist only one half of a kill reward. The second result is the
+// seal pity counter delta (sealpity.go), committed with the loot.
 /*
 ================
 planMonsterKillLoot
@@ -589,9 +618,9 @@ func (rt *Runtime) planMonsterKillLoot(
 	monster monster.Instance,
 	pose monster.Pose,
 	nowMs int64,
-) []grounditem.Item {
+) ([]grounditem.Item, sealPityDelta) {
 	if snapshot == nil || snapshot.Level == nil {
-		return nil
+		return nil, sealPityDelta{}
 	}
 	at := simulation.Spawn{
 		RegionID: pose.RegionID,
@@ -661,11 +690,11 @@ func (rt *Runtime) planMonsterKillLoot(
 			// authored speed-tablet table is reachable in v1.150.
 			if category == 4 || category == 5 {
 				if rt.DropRoll == nil {
-					return nil
+					return nil, sealPityDelta{}
 				}
 				choice, err := rt.DropRoll()
 				if err != nil {
-					return nil
+					return nil, sealPityDelta{}
 				}
 				family += int(choice & 1)
 			}
@@ -678,7 +707,7 @@ func (rt *Runtime) planMonsterKillLoot(
 	// Before admission, so the per-item level check cannot lower the cap.
 	prepared, ok := capKillDrops(prepared, uniqueRound, rt.DropCap, rt.DropRoll)
 	if !ok {
-		return nil
+		return nil, sealPityDelta{}
 	}
 
 	ownerJID := enterworld.ObjectIDForCharacter(snapshot)
@@ -691,6 +720,12 @@ func (rt *Runtime) planMonsterKillLoot(
 		planned = rt.scatterMonsterDrop(planned, at, monster.Rarity())
 		admitted = append(admitted, planned)
 	}
+	// Port-only, not native (#1690): the seal pity counters settle
+	// against the admitted list, and a reached threshold appends its
+	// forced drop here, before the pet-gear and pop-ticket appends
+	// (sealpity.go). Off and shadow draw no extra roll.
+	var pity sealPityDelta
+	admitted, pity = rt.planSealPity(snapshot, monster, at, admitted, now)
 	// Port-only: derive pet loot from actual admitted equipment, preserving
 	// native monster tables, degrees, ranks, beta rates, capacity and level gaps.
 	for _, parent := range admitted {
@@ -734,7 +769,7 @@ func (rt *Runtime) planMonsterKillLoot(
 			admitted = append(admitted, rt.scatterMonsterDrop(seal, at, monster.Rarity()))
 		}
 	}
-	return admitted
+	return admitted, pity
 }
 
 // dropRollDomain is DropRoll's range: 0..32767, as combat.Roll32767.

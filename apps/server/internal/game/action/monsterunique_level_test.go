@@ -138,7 +138,7 @@ func TestUniqueSealRewardsAreGuaranteed(t *testing.T) {
 			rt.UniqueRules = progression.UniqueRules{MaxLevelLoot: true, SealDrops: true}
 			rt.DropCap = 1
 			rt.DropRoll = constantDropRoll(tc.roll)
-			drops := rt.planMonsterKillLoot(c, target, monster.Pose{
+			drops, _ := rt.planMonsterKillLoot(c, target, monster.Pose{
 				RegionID: target.Spawn.RegionID, X: target.Spawn.X, Y: target.Spawn.Y, Z: target.Spawn.Z,
 			}, rt.Now().UnixMilli())
 			got := map[string]int{}
@@ -175,9 +175,10 @@ func TestUniqueSealRewardsBelowTheBandKeepTheOwnDegree(t *testing.T) {
 	rt.UniqueRules = progression.UniqueRules{MaxLevelLoot: true, SealDrops: true}
 	rt.DropRoll = constantDropRoll(0)
 	got := map[string]int{}
-	for _, drop := range rt.planMonsterKillLoot(c, target, monster.Pose{
+	drops, _ := rt.planMonsterKillLoot(c, target, monster.Pose{
 		RegionID: target.Spawn.RegionID, X: target.Spawn.X, Y: target.Spawn.Y, Z: target.Spawn.Z,
-	}, rt.Now().UnixMilli()) {
+	}, rt.Now().UnixMilli())
+	for _, drop := range drops {
 		for _, suffix := range []string{"_03_A_RARE", "_03_B_RARE", "_09_A_RARE", "_09_B_RARE"} {
 			if strings.HasSuffix(drop.Codename, suffix) {
 				got[suffix]++
@@ -208,9 +209,10 @@ func TestUniqueSealSwitchOffIsNative(t *testing.T) {
 	target.Nest.HasRarityOverride, target.Nest.RarityOverride = true, 3
 	rt.UniqueRules = progression.UniqueRules{MaxLevelLoot: true}
 	rt.DropRoll = constantDropRoll(7)
-	for _, drop := range rt.planMonsterKillLoot(c, target, monster.Pose{
+	drops, _ := rt.planMonsterKillLoot(c, target, monster.Pose{
 		RegionID: target.Spawn.RegionID, X: target.Spawn.X, Y: target.Spawn.Y, Z: target.Spawn.Z,
-	}, rt.Now().UnixMilli()) {
+	}, rt.Now().UnixMilli())
+	for _, drop := range drops {
 		if strings.HasSuffix(drop.Codename, "_RARE") {
 			t.Fatalf("seal switch off left %s", drop.Codename)
 		}

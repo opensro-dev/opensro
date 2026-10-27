@@ -85,6 +85,11 @@ type Item struct {
 	Position   Point
 	Y          float32
 	Heading    uint16
+	// SealPityForced marks an item the seal pity guarantee forced
+	// (action/sealpity.go; port-only, not native): server state only,
+	// like MagicOptions, so the seal board's counting can flag forced
+	// supply. The spawn wire never carries it.
+	SealPityForced bool
 	// OwnerJID is the temporary native pickup reservation. Zero is public.
 	OwnerJID uint32
 	// DroppedBy records the character that dropped or earned it.

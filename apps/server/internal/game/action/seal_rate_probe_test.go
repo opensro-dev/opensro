@@ -61,7 +61,8 @@ func TestSealRateProbe(t *testing.T) {
 			rt.DropRoll = func() (uint32, error) { return source.Uint32N(dropRollDomain), nil }
 			pose := monster.Pose{RegionID: target.Spawn.RegionID, X: target.Spawn.X, Y: target.Spawn.Y, Z: target.Spawn.Z}
 			for kill := 0; kill < sealProbeKills; kill++ {
-				for _, drop := range rt.planMonsterKillLoot(c, target, pose, rt.Now().UnixMilli()) {
+				drops, _ := rt.planMonsterKillLoot(c, target, pose, rt.Now().UnixMilli())
+				for _, drop := range drops {
 					if !strings.HasSuffix(drop.Codename, "_RARE") {
 						continue
 					}

@@ -279,6 +279,8 @@ func (rt *Runtime) applyMonsterKillInsideDoor(
 	exp, skillExp int64,
 	defeatGid uint32,
 	plannedDrops []grounditem.Item,
+	pity sealPityDelta,
+	nowMs int64,
 ) (frames []wire.Frame, added []grounditem.Item, changed bool) {
 	if character == nil || character.DeletePending {
 		return nil, nil, false
@@ -296,6 +298,9 @@ func (rt *Runtime) applyMonsterKillInsideDoor(
 		added = append(added, spawned)
 		changed = true
 	}
+	// Port-only, not native (#1690): the seal pity delta commits with
+	// the loot, in this same door (sealpity.go).
+	rt.commitSealPity(character, pity, nowMs)
 	return frames, added, changed
 }
 

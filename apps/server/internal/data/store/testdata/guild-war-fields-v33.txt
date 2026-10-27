@@ -1,0 +1,10 @@
+# guild-war-fields record fields owned by store schema 33 (persisted_shape_test.go).
+# Never edit after it ships: a new persisted field takes schema 34, its upgrade
+# step and guild-war-fields-fields-v34.txt.
+endMs
+guilds
+id
+scoreIndex
+scores
+stake
+type

@@ -291,6 +291,13 @@ var Settings = []Setting{
 	// is capped at the Moon class's width, so a Sun expects about twice
 	// a Moon's kills; the cap supersedes the eleven-a-week calibration.
 	{Env: "SRO_SUN_DROP_RATE", NomadVar: "sun_drop_rate", Default: "2", Catalogue: true},
+	// Owner, 2026-10-27 (#1690): seal pity, port-only bad-luck protection
+	// for degree-9 Moon and Sun. off (native) | shadow (count and log,
+	// never force) | on (force the owed drop). The thresholds and daily
+	// cap tune one rule; their defaults are the owner's numbers.
+	{Env: "SRO_SEAL_PITY", NomadVar: "seal_pity", Default: "off"},
+	{Env: "SRO_SEAL_PITY_THRESHOLDS", NomadVar: "seal_pity_thresholds", Default: "9:moon:1.5,9:sun:1.5"},
+	{Env: "SRO_SEAL_PITY_DAILY_CAP", NomadVar: "seal_pity_daily_cap", Default: "1"},
 	// Owner, 2026-10-20: uniques ignore the level-gap drop admission and
 	// always leave exactly one Magic Pop ticket; "off" is native.
 	{Env: "SRO_UNIQUE_GAP_EXEMPT", NomadVar: "unique_gap_exempt", Default: "on", Catalogue: true},

@@ -87,6 +87,16 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 		s.serveKillStats(w, r.URL.Query())
 		return
 	}
+	// The seal pity rollup also reads the history, not a snapshot;
+	// uncounted shards (SRO_SEAL_PITY off) refuse the route (#1690).
+	if route == "sealpity" {
+		if !s.sealPityStats {
+			http.NotFound(w, r)
+			return
+		}
+		s.serveSealPityStats(w, r.URL.Query())
+		return
+	}
 	// The seal census reads its own fresh copy, never the snapshot, so
 	// it also answers before the snapshot gate; disabled shards
 	// (SRO_SEAL_CENSUS off, the default) refuse the route outright (#1691).

@@ -183,7 +183,8 @@ func TestCappedKillLeavesAtMostTheCap(t *testing.T) {
 		most := 0
 		for range kills {
 			ordinary := 0
-			for _, drop := range rt.planMonsterKillLoot(c, target, pose, rt.Now().UnixMilli()) {
+			drops, _ := rt.planMonsterKillLoot(c, target, pose, rt.Now().UnixMilli())
+			for _, drop := range drops {
 				if !drop.IsGold() {
 					ordinary++
 				}

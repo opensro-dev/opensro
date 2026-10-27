@@ -338,7 +338,7 @@ func TestLowGradeEquipmentCountryBucketsCoverChinaAndEurope(t *testing.T) {
 			TypeIDs: tc.types,
 		}
 		rt.DropRoll = constantDropRoll(0)
-		drops := rt.planMonsterKillLoot(character, target, monster.Pose{
+		drops, _ := rt.planMonsterKillLoot(character, target, monster.Pose{
 			RegionID: target.Spawn.RegionID,
 			X:        target.Spawn.X,
 			Y:        target.Spawn.Y,
@@ -416,7 +416,7 @@ func TestBetaDropRateScalesEveryDropButTheGoldHeapCount(t *testing.T) {
 		items["ITEM_CH_SWORD_01_A"] = &enterworld.ItemRef{RefObjID: 90000, Codename: "ITEM_CH_SWORD_01_A", TypeIDs: [4]int64{3, 1, 6, 2}}
 		rt.DropRoll = constantDropRoll(0)
 		rt.DropPassRate = rate
-		drops := rt.planMonsterKillLoot(character, target, monster.Pose{
+		drops, _ := rt.planMonsterKillLoot(character, target, monster.Pose{
 			RegionID: target.Spawn.RegionID, X: target.Spawn.X, Y: target.Spawn.Y, Z: target.Spawn.Z,
 		}, rt.Now().UnixMilli())
 		gold, swords := 0, 0

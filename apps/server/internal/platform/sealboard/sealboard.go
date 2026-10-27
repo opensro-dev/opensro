@@ -4,11 +4,14 @@
 sealboard.go - the weekly seal-drop counter (#1641, #1604 P9)
 
 Port-only, not native. The service counts sealed equipment drops at
-committed monster-loot settlement, keyed by week, character and seal tier
-(Star, Moon, Sun). It stores no character name, no job alias, no drop time
-and no monster: the public board (a later slice) joins the character ID to
-the roster's current job alias at read time, so a hidden or deleted
-character leaves the board and an alias change moves the counts.
+committed monster-loot settlement, keyed by week, character, degree
+and seal tier (Star, Moon, Sun), with forced drops (the seal pity
+guarantee, #1690) flagged apart. It stores no character name, no job
+alias, no drop time and no monster: the public board (a later slice)
+joins the character ID to the roster's current job alias at read time,
+so a hidden or deleted character leaves the board and an alias change
+moves the counts. Rows counted before degrees were kept carry degree
+0 (see ensureBoardShape).
 
 Counts live in memory and flush to seal-board.db beside the shard's
 authority state every few minutes and at shutdown; a crash loses only the
@@ -71,21 +74,27 @@ const (
 ================
 Count
 
-One character's drops of one seal tier inside one week. The character ID
-is internal: it never leaves the server process or this database.
+One character's drops of one seal tier at one degree inside one week;
+Forced marks seal pity paid drops (#1690). The character ID is internal:
+it never leaves the server process or this database.
 ================
 */
 type Count struct {
 	CharacterID int64
+	Degree      int
 	Tier        int
+	Forced      bool
 	Drops       int64
 }
 
-// countKey is the pending rollup's key: week, character, tier.
+// countKey is the pending rollup's key: week, character, degree, tier,
+// forced.
 type countKey struct {
 	week      int64
 	character int64
+	degree    int
 	tier      int
+	forced    bool
 }
 
 /*
@@ -159,14 +168,11 @@ func Open(dir string, now func() time.Time) (*Service, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("sealboard: %w", err)
 	}
+	if err := ensureBoardShape(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	if _, err := db.Exec(`
-CREATE TABLE IF NOT EXISTS seal_board_counts (
-	week_start_s INTEGER NOT NULL,
-	character_id INTEGER NOT NULL,
-	tier         INTEGER NOT NULL,
-	drops        INTEGER NOT NULL,
-	PRIMARY KEY (week_start_s, character_id, tier)
-);
 CREATE TABLE IF NOT EXISTS seal_board_meta (
 	key   TEXT PRIMARY KEY,
 	value INTEGER NOT NULL
@@ -185,6 +191,85 @@ CREATE TABLE IF NOT EXISTS seal_board_meta (
 		return nil, err
 	}
 	return service, nil
+}
+
+// boardCountsSchema is the counts table with the degree and forced
+// dimensions (#1690).
+const boardCountsSchema = `
+CREATE TABLE seal_board_counts (
+	week_start_s INTEGER NOT NULL,
+	character_id INTEGER NOT NULL,
+	degree       INTEGER NOT NULL,
+	tier         INTEGER NOT NULL,
+	forced       INTEGER NOT NULL,
+	drops        INTEGER NOT NULL,
+	PRIMARY KEY (week_start_s, character_id, degree, tier, forced)
+);`
+
+/*
+================
+ensureBoardShape
+
+Creates the counts table, or rebuilds a pre-#1690 one (week, character,
+tier) with the degree and forced dimensions: its rows keep counting
+under degree 0, "counted before degrees", the only degree a note can
+never carry. Runs before the service serves anything.
+================
+*/
+func ensureBoardShape(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA table_info(seal_board_counts)`)
+	if err != nil {
+		return fmt.Errorf("sealboard: %w", err)
+	}
+	exists, hasDegree := false, false
+	for rows.Next() {
+		var cid, notNull, pk int
+		var name, kind string
+		var fallback any
+		if err := rows.Scan(&cid, &name, &kind, &notNull, &fallback, &pk); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("sealboard: %w", err)
+		}
+		exists = true
+		if name == "degree" {
+			hasDegree = true
+		}
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("sealboard: %w", err)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("sealboard: %w", err)
+	}
+	if !exists {
+		if _, err := db.Exec(boardCountsSchema); err != nil {
+			return fmt.Errorf("sealboard: %w", err)
+		}
+		return nil
+	}
+	if hasDegree {
+		return nil
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("sealboard: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, statement := range []string{
+		`ALTER TABLE seal_board_counts RENAME TO seal_board_counts_before_degrees`,
+		boardCountsSchema,
+		`INSERT INTO seal_board_counts (week_start_s, character_id, degree, tier, forced, drops)
+			SELECT week_start_s, character_id, 0, tier, 0, drops FROM seal_board_counts_before_degrees`,
+		`DROP TABLE seal_board_counts_before_degrees`,
+	} {
+		if _, err := tx.Exec(statement); err != nil {
+			return fmt.Errorf("sealboard: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("sealboard: %w", err)
+	}
+	return nil
 }
 
 /*
@@ -260,13 +345,15 @@ func (s *Service) CountingSince(weekStart time.Time) (time.Time, error) {
 ================
 NoteSealDrop
 
-Counts one sealed drop for a character. Invalid identities and tiers are
-refused silently: the settlement path must never fail over a board count.
-Memory only - it runs inside the loot settlement's store door.
+Counts one sealed drop for a character: its degree, its tier and
+whether the seal pity guarantee forced it. Invalid identities, degrees
+and tiers are refused silently: the settlement path must never fail
+over a board count. Memory only - it runs inside the loot settlement's
+store door.
 ================
 */
-func (s *Service) NoteSealDrop(characterID int64, tier int, at time.Time) {
-	if s == nil || characterID <= 0 || tier < 0 || tier >= Tiers {
+func (s *Service) NoteSealDrop(characterID int64, degree, tier int, forced bool, at time.Time) {
+	if s == nil || characterID <= 0 || degree < 1 || degree > 9 || tier < 0 || tier >= Tiers {
 		return
 	}
 	if at.IsZero() {
@@ -281,7 +368,7 @@ func (s *Service) NoteSealDrop(characterID int64, tier int, at time.Time) {
 	if _, ok := s.counting[week]; !ok {
 		s.counting[week] = s.countingCandidateLocked(week)
 	}
-	s.pending[countKey{week: week, character: characterID, tier: tier}]++
+	s.pending[countKey{week: week, character: characterID, degree: degree, tier: tier, forced: forced}]++
 }
 
 /*
@@ -305,18 +392,18 @@ func (s *Service) Counts(weekStart time.Time) ([]Count, error) {
 	}
 	s.mu.Unlock()
 	merged := pending
-	rows, err := s.db.Query(`SELECT character_id, tier, drops FROM seal_board_counts WHERE week_start_s = ?`, week)
+	rows, err := s.db.Query(`SELECT character_id, degree, tier, forced, drops FROM seal_board_counts WHERE week_start_s = ?`, week)
 	if err != nil {
 		return nil, fmt.Errorf("sealboard: %w", err)
 	}
 	for rows.Next() {
 		var characterID, drops int64
-		var tier int
-		if err := rows.Scan(&characterID, &tier, &drops); err != nil {
+		var degree, tier, forced int
+		if err := rows.Scan(&characterID, &degree, &tier, &forced, &drops); err != nil {
 			_ = rows.Close()
 			return nil, fmt.Errorf("sealboard: %w", err)
 		}
-		merged[countKey{week: week, character: characterID, tier: tier}] += drops
+		merged[countKey{week: week, character: characterID, degree: degree, tier: tier, forced: forced != 0}] += drops
 	}
 	if err := rows.Close(); err != nil {
 		return nil, fmt.Errorf("sealboard: %w", err)
@@ -327,14 +414,20 @@ func (s *Service) Counts(weekStart time.Time) ([]Count, error) {
 	counts := make([]Count, 0, len(merged))
 	for key, drops := range merged {
 		if key.week == week {
-			counts = append(counts, Count{CharacterID: key.character, Tier: key.tier, Drops: drops})
+			counts = append(counts, Count{CharacterID: key.character, Degree: key.degree, Tier: key.tier, Forced: key.forced, Drops: drops})
 		}
 	}
 	sort.Slice(counts, func(i, j int) bool {
 		if counts[i].CharacterID != counts[j].CharacterID {
 			return counts[i].CharacterID < counts[j].CharacterID
 		}
-		return counts[i].Tier < counts[j].Tier
+		if counts[i].Degree != counts[j].Degree {
+			return counts[i].Degree < counts[j].Degree
+		}
+		if counts[i].Tier != counts[j].Tier {
+			return counts[i].Tier < counts[j].Tier
+		}
+		return !counts[i].Forced && counts[j].Forced
 	})
 	return counts, nil
 }
@@ -418,11 +511,15 @@ func (s *Service) write(batch map[countKey]int64, stamps map[int64]int64) error 
 	}
 	defer func() { _ = tx.Rollback() }()
 	for key, drops := range batch {
+		forced := 0
+		if key.forced {
+			forced = 1
+		}
 		if _, err := tx.Exec(`
-INSERT INTO seal_board_counts (week_start_s, character_id, tier, drops)
-VALUES (?, ?, ?, ?)
-ON CONFLICT (week_start_s, character_id, tier)
-DO UPDATE SET drops = drops + excluded.drops`, key.week, key.character, key.tier, drops); err != nil {
+INSERT INTO seal_board_counts (week_start_s, character_id, degree, tier, forced, drops)
+VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT (week_start_s, character_id, degree, tier, forced)
+DO UPDATE SET drops = drops + excluded.drops`, key.week, key.character, key.degree, key.tier, forced, drops); err != nil {
 			return fmt.Errorf("sealboard: %w", err)
 		}
 	}

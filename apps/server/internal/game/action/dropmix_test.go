@@ -48,7 +48,7 @@ func mixedKillCounts(t *testing.T, rate int, mix progression.DropMix) (swords, p
 	rt.DropRoll = constantDropRoll(0)
 	rt.DropPassRate = rate
 	rt.DropMix = mix
-	drops := rt.planMonsterKillLoot(character, target, monster.Pose{
+	drops, _ := rt.planMonsterKillLoot(character, target, monster.Pose{
 		RegionID: target.Spawn.RegionID, X: target.Spawn.X, Y: target.Spawn.Y, Z: target.Spawn.Z,
 	}, rt.Now().UnixMilli())
 	for _, drop := range drops {

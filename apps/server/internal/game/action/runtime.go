@@ -376,6 +376,11 @@ type Runtime struct {
 	// not native, beta balance; owner 2026-10-20). The zero value is off.
 	SunRate progression.SunRate
 
+	// SealPity is the seal luck-debt rule (sealpity.go; port-only, not
+	// native; owner 2026-10-27, #1690). The zero value is off: no
+	// counters, no forced drops, native loot.
+	SealPity progression.SealPity
+
 	// ElixirDrops keeps every elixir out of monster drops (port-only, not
 	// native, beta balance; owner 2026-10-13). The zero value is native.
 	ElixirDrops progression.ElixirDrops
@@ -457,6 +462,10 @@ type Runtime struct {
 	// in the cmd wiring); nil keeps the rows in memory.
 	KillStatsFlush func(rows []KillStatRow) error
 	killStats      killStatTracker
+	// SealPityStatsFlush receives the drained pity rollup (the economy
+	// history in the cmd wiring); nil keeps the rows in memory.
+	SealPityStatsFlush func(rows []SealPityStatRow) error
+	sealPityStats      sealPityStatTracker
 	// tradeOrigins is each trade good's home town, from the shops.
 	tradeOrigins map[uint32]tradeTown
 

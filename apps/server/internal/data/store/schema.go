@@ -99,7 +99,10 @@ func isVersionMismatch(err error) bool {
 // Existing cooldown deadlines and every saved record survive unchanged.
 // Version 32 adds the optional item-break notice opt-in (domain.Character
 // BreakNotice, #1738); every saved record survives unchanged.
-const CurrentVersion = 32
+// Version 33 adds the optional seal pity luck-debt counters (domain.Character
+// SealPity, port-only, SRO_SEAL_PITY, #1690); every saved record survives
+// unchanged.
+const CurrentVersion = 33
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.

@@ -29,7 +29,9 @@ recordingSealSink
 type recordingSealSink struct {
 	byTier        [3]int64
 	total         int64
+	forced        int64
 	lastCharacter int64
+	lastDegree    int
 	lastAt        time.Time
 }
 
@@ -38,10 +40,14 @@ type recordingSealSink struct {
 NoteSealDrop
 ================
 */
-func (s *recordingSealSink) NoteSealDrop(characterID int64, tier int, at time.Time) {
+func (s *recordingSealSink) NoteSealDrop(characterID int64, degree, tier int, forced bool, at time.Time) {
 	s.byTier[tier]++
 	s.total++
+	if forced {
+		s.forced++
+	}
 	s.lastCharacter = characterID
+	s.lastDegree = degree
 	s.lastAt = at
 }
 
@@ -124,6 +130,11 @@ func TestCountSealDropsClassifiesEveryTier(t *testing.T) {
 	}
 	if !sink.lastAt.Equal(time.UnixMilli(nowMs).UTC()) {
 		t.Fatalf("counted at %v, want %v", sink.lastAt, time.UnixMilli(nowMs).UTC())
+	}
+	// The last counted drop is the second degree-8 Moon (08_B_RARE);
+	// the board records its degree and no drop was pity-forced (#1690).
+	if sink.lastDegree != 8 || sink.forced != 0 {
+		t.Fatalf("last degree %d, forced %d, want 8 and 0", sink.lastDegree, sink.forced)
 	}
 }
 

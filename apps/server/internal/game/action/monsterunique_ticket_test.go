@@ -55,9 +55,10 @@ planUniqueKill
 ================
 */
 func planUniqueKill(rt *Runtime, c *enterworld.Character, target monster.Instance) []grounditem.Item {
-	return rt.planMonsterKillLoot(c, target, monster.Pose{
+	drops, _ := rt.planMonsterKillLoot(c, target, monster.Pose{
 		RegionID: target.Spawn.RegionID, X: target.Spawn.X, Y: target.Spawn.Y, Z: target.Spawn.Z,
 	}, rt.Now().UnixMilli())
+	return drops
 }
 
 /*

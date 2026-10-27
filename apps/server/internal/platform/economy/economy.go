@@ -95,6 +95,10 @@ type Service struct {
 	// answers 404 (SRO_KILL_STATS off, the default).
 	killStats bool
 
+	// sealPityStats serves /economy/v1/sealpity (sealpitystats.go);
+	// false answers 404 (SRO_SEAL_PITY off, the default).
+	sealPityStats bool
+
 	// sealCensus enables the staff census route (census.go); censusLatest
 	// is guarded by mu, censusMu serialises the runs themselves.
 	sealCensus   bool
@@ -135,7 +139,7 @@ func Open(dir string, store Snapshotter, every time.Duration, now func() time.Ti
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec("PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL;" + historySchema + killStatsSchema); err != nil {
+	if _, err := db.Exec("PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL;" + historySchema + killStatsSchema + sealPityStatsSchema); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("economy history: %w", err)
 	}

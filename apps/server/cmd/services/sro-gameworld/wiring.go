@@ -74,7 +74,10 @@ type gameWorldApplication struct {
 	sealBoard *sealboard.Service
 	// killStatsFlush writes the final kill-stat rollup at shutdown
 	// (port-only, #1639); nil while SRO_KILL_STATS is off.
-	killStatsFlush  func() error
+	killStatsFlush func() error
+	// sealPityFlush writes the final seal pity rollup at shutdown
+	// (port-only, #1690); nil while SRO_SEAL_PITY is off.
+	sealPityFlush   func() error
 	settings        *settingsapi.SQLiteStore
 	skillCache      io.Closer
 	itemCache       io.Closer
@@ -311,6 +314,8 @@ func newGameWorldApplication(
 	gameplay.wirePremiumUpgrade()
 	// Port-only, not native (SRO_KILL_STATS): wiring_killstats.go.
 	gameplay.wireKillStats(application)
+	// Port-only, not native (SRO_SEAL_PITY): wiring_sealpity.go.
+	gameplay.wireSealPityStats(application)
 	// Port-only, not native (SRO_SEAL_CENSUS): wiring_sealcensus.go.
 	gameplay.wireSealCensus(application)
 	if err := gameplay.register(ts.Hub, authority.loadQuests); err != nil {
@@ -597,6 +602,11 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 	if application.killStatsFlush != nil {
 		if err := application.killStatsFlush(); err != nil {
 			log.WithError(err).Warn("kill stats: final flush failed")
+		}
+	}
+	if application.sealPityFlush != nil {
+		if err := application.sealPityFlush(); err != nil {
+			log.WithError(err).Warn("seal pity: final flush failed")
 		}
 	}
 	if application.economy != nil {

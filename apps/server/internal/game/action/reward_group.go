@@ -459,10 +459,18 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 	if a, ok := roster.actors[winner]; ok {
 		// Loot generation's player-level admission and ownership both use the
 		// selected representative, never the actor who supplied the fatal hit.
-		planned := rt.planMonsterKillLoot(a.character, impact.Instance, pose, now)
+		planned, pity := rt.planMonsterKillLoot(a.character, impact.Instance, pose, now)
+		if !countSeals {
+			// The GM kill path (sealboard.go's exclusion): its loot is
+			// made, not hunted, so no pity counter moves and no forced
+			// drop lands. A GM-spawned monster never planned either
+			// (sealpity.go).
+			pity = sealPityDelta{}
+			planned = dropSealPityForced(planned)
+		}
 		rt.applyMonsterGoldBonus(division, a.character, planned)
 		rt.applyThiefPartyGold(division, a.character, planned, settings)
-		frames, drops, _ := rt.applyMonsterKillInsideDoor(division, a.character, 0, 0, impact.Instance.Gid, planned)
+		frames, drops, _ := rt.applyMonsterKillInsideDoor(division, a.character, 0, 0, impact.Instance.Gid, planned, pity, now)
 		out.drops = drops
 		// The weekly seal board (sealboard.go) counts the committed loot
 		// here, before quest-supply drops join out.drops below: those

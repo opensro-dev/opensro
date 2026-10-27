@@ -79,6 +79,11 @@ var unlistedSettings = map[string]string{
 	// Staff telemetry (#1691): name-free seal counts by degree and tier
 	// for the staff console; players never meet it.
 	economy.EnvSealCensus: "staff seal census telemetry, not a rule players meet",
+	// The seal pity rule's bounds (#1690): the rule row states the
+	// behaviour; the exact thresholds and daily cap are operator-tuned
+	// balance numbers.
+	progression.EnvSealPityThresholds: "the seal pity rule's thresholds (the rule row states the rule itself)",
+	progression.EnvSealPityDailyCap:   "the seal pity rule's daily cap",
 }
 
 /*
@@ -90,6 +95,9 @@ so the list cannot change while the GameWorld runs.
 ================
 */
 func publicRules() publicstats.RulesResponse {
+	// Boot refuses a malformed SRO_SEAL_PITY before this page serves,
+	// so the error cannot reach here; a bad value reads as off.
+	sealPityRule, _ := progression.SealPityFromEnv()
 	silkRate, _ := action.BetaSilkFromEnv()
 	silkActiveOnly, _ := action.BetaSilkActiveOnlyFromEnv()
 	stackSizes, _ := enterworld.StackSizesFromEnv()
@@ -192,6 +200,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Degree-9 Seal of Sun gear almost never drops from monsters.",
 				Now:    fmt.Sprintf("It drops from monsters of level 76 to 90 at up to %d times its original chance, but never wider than the Moon class, so a Sun stays about twice as rare as a Moon.", progression.SunRateFromEnv().MassMultiplier()),
 				Why:    "Owner-approved for the beta so the top seal enters the economy from hunting; shops never sell it, and the original chance returns with one setting."},
+			{Flag: progression.EnvSealPity, On: sealPityRule.ForcesDrops(),
+				Native: "A seal drops only when its own roll wins; dry spells run as long as luck runs.",
+				Now:    "Every hunted kill is worth its own chance at a degree-9 Moon or Sun as progress: once your misses add up to one and a half expected drops (only kills close to your level count), the next monster of a tier you are owed pays that Moon or Sun itself, at most one of each per day, and the count starts again.",
+				Why:    "Owner decision 2026-10-27 (#1690), so a long dry spell at the top tier ends in a drop the player earned; the original luck returns with one setting."},
 			{Flag: progression.EnvUniqueGapExempt, On: progression.UniqueRulesFromEnv().GapExempt,
 				Native: "A monster's drops thin out once you are more than six levels above it and stop entirely far above it, uniques included.",
 				Now:    "A unique's drops ignore the level gap: a level-90 hunter loots Tiger Girl as fully as a level-20 one.",

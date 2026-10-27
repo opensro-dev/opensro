@@ -64,10 +64,12 @@ func TestNoteRejectsInvalidIdentityAndTier(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = service.Close() }()
-	service.NoteSealDrop(0, TierSun, monday)
-	service.NoteSealDrop(-3, TierSun, monday)
-	service.NoteSealDrop(7, -1, monday)
-	service.NoteSealDrop(7, Tiers, monday)
+	service.NoteSealDrop(0, 9, TierSun, false, monday)
+	service.NoteSealDrop(-3, 9, TierSun, false, monday)
+	service.NoteSealDrop(7, 9, -1, false, monday)
+	service.NoteSealDrop(7, 9, Tiers, false, monday)
+	service.NoteSealDrop(7, 0, TierSun, false, monday)
+	service.NoteSealDrop(7, 10, TierSun, false, monday)
 	counts, err := service.Counts(monday)
 	if err != nil {
 		t.Fatal(err)
@@ -89,23 +91,23 @@ func TestCountsMergePendingAndFlushed(t *testing.T) {
 	}
 	defer func() { _ = service.Close() }()
 	at := monday.Add(2 * time.Hour)
-	service.NoteSealDrop(9, TierSun, at)
-	service.NoteSealDrop(9, TierSun, at)
-	service.NoteSealDrop(9, TierStar, at)
-	service.NoteSealDrop(4, TierMoon, at)
+	service.NoteSealDrop(9, 9, TierSun, false, at)
+	service.NoteSealDrop(9, 9, TierSun, false, at)
+	service.NoteSealDrop(9, 9, TierStar, false, at)
+	service.NoteSealDrop(4, 9, TierMoon, false, at)
 	if err := service.Flush(); err != nil {
 		t.Fatal(err)
 	}
 	// One more Sun after the flush: the read merges both halves.
-	service.NoteSealDrop(9, TierSun, at)
+	service.NoteSealDrop(9, 9, TierSun, false, at)
 	counts, err := service.Counts(monday)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := []Count{
-		{CharacterID: 4, Tier: TierMoon, Drops: 1},
-		{CharacterID: 9, Tier: TierStar, Drops: 1},
-		{CharacterID: 9, Tier: TierSun, Drops: 3},
+		{CharacterID: 4, Degree: 9, Tier: TierMoon, Drops: 1},
+		{CharacterID: 9, Degree: 9, Tier: TierStar, Drops: 1},
+		{CharacterID: 9, Degree: 9, Tier: TierSun, Drops: 3},
 	}
 	if len(counts) != len(want) {
 		t.Fatalf("counts %+v, want %+v", counts, want)
@@ -129,7 +131,7 @@ func TestCountsSurviveReopen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service.NoteSealDrop(9, TierMoon, monday.Add(4*time.Hour))
+	service.NoteSealDrop(9, 9, TierMoon, false, monday.Add(4*time.Hour))
 	if err := service.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +144,7 @@ func TestCountsSurviveReopen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(counts) != 1 || counts[0] != (Count{CharacterID: 9, Tier: TierMoon, Drops: 1}) {
+	if len(counts) != 1 || counts[0] != (Count{CharacterID: 9, Degree: 9, Tier: TierMoon, Drops: 1}) {
 		t.Fatalf("counts after reopen %+v", counts)
 	}
 	// The counting-since stamp stays at the first open, not the reopen.
@@ -230,7 +232,7 @@ func TestNoteSealDropNeverWaitsOnFlush(t *testing.T) {
 	<-started
 	noted := make(chan struct{})
 	go func() {
-		service.NoteSealDrop(9, TierSun, monday.Add(2*time.Hour))
+		service.NoteSealDrop(9, 9, TierSun, false, monday.Add(2*time.Hour))
 		close(noted)
 	}()
 	select {
@@ -253,7 +255,7 @@ func TestNoteSealDropNeverWaitsOnFlush(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(counts) != 1 || counts[0] != (Count{CharacterID: 9, Tier: TierSun, Drops: 1}) {
+	if len(counts) != 1 || counts[0] != (Count{CharacterID: 9, Degree: 9, Tier: TierSun, Drops: 1}) {
 		t.Fatalf("counts after the lock cleared: %+v", counts)
 	}
 }
@@ -277,7 +279,7 @@ func TestFlushFailureKeepsCounts(t *testing.T) {
 	if _, err := service.db.Exec(`PRAGMA busy_timeout=250`); err != nil {
 		t.Fatal(err)
 	}
-	service.NoteSealDrop(9, TierSun, monday.Add(2*time.Hour))
+	service.NoteSealDrop(9, 9, TierSun, false, monday.Add(2*time.Hour))
 
 	other, err := sql.Open("sqlite", filepath.Join(dir, FileName))
 	if err != nil {
@@ -306,7 +308,7 @@ func TestFlushFailureKeepsCounts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(counts) != 1 || counts[0] != (Count{CharacterID: 9, Tier: TierSun, Drops: 1}) {
+	if len(counts) != 1 || counts[0] != (Count{CharacterID: 9, Degree: 9, Tier: TierSun, Drops: 1}) {
 		t.Fatalf("counts after the failed flush: %+v", counts)
 	}
 }
@@ -323,8 +325,8 @@ func TestFlushPrunesOldWeeks(t *testing.T) {
 		t.Fatal(err)
 	}
 	old := monday.AddDate(0, 0, -7*retainedWeeks)
-	service.NoteSealDrop(9, TierSun, old)
-	service.NoteSealDrop(9, TierSun, monday)
+	service.NoteSealDrop(9, 9, TierSun, false, old)
+	service.NoteSealDrop(9, 9, TierSun, false, monday)
 	if err := service.Flush(); err != nil {
 		t.Fatal(err)
 	}
@@ -349,5 +351,94 @@ func TestFlushPrunesOldWeeks(t *testing.T) {
 	}
 	if len(counts) != 1 || counts[0].Drops != 1 {
 		t.Fatalf("current week after prune %+v", counts)
+	}
+}
+
+/*
+================
+TestCountsSplitForcedDrops
+
+A pity-paid drop (#1690) is its own row beside the natural drops of the
+same (character, degree, tier): the board reader can show the week's
+forced share without hiding either.
+================
+*/
+func TestCountsSplitForcedDrops(t *testing.T) {
+	service, err := Open(t.TempDir(), fixedClock(monday.Add(time.Hour)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = service.Close() }()
+	at := monday.Add(2 * time.Hour)
+	service.NoteSealDrop(9, 9, TierSun, false, at)
+	service.NoteSealDrop(9, 9, TierSun, true, at)
+	service.NoteSealDrop(9, 9, TierSun, true, at)
+	service.NoteSealDrop(9, 8, TierSun, true, at)
+	counts, err := service.Counts(monday)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Count{
+		{CharacterID: 9, Degree: 8, Tier: TierSun, Forced: true, Drops: 1},
+		{CharacterID: 9, Degree: 9, Tier: TierSun, Drops: 1},
+		{CharacterID: 9, Degree: 9, Tier: TierSun, Forced: true, Drops: 2},
+	}
+	if len(counts) != len(want) {
+		t.Fatalf("counts %+v, want %+v", counts, want)
+	}
+	for i := range want {
+		if counts[i] != want[i] {
+			t.Fatalf("counts[%d] %+v, want %+v", i, counts[i], want[i])
+		}
+	}
+}
+
+/*
+================
+TestOpenMigratesLegacyShape
+
+A board written before degree and forced (#1690) keeps its rows: old
+counts come back degree 0 and unforced, and new notes land beside them.
+================
+*/
+func TestOpenMigratesLegacyShape(t *testing.T) {
+	dir := t.TempDir()
+	legacy, err := sql.Open("sqlite", filepath.Join(dir, FileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := legacy.Exec(`CREATE TABLE seal_board_counts (
+		week_start_s INTEGER NOT NULL,
+		character_id INTEGER NOT NULL,
+		tier INTEGER NOT NULL,
+		drops INTEGER NOT NULL,
+		PRIMARY KEY (week_start_s, character_id, tier))` + "; INSERT INTO seal_board_counts VALUES (?, 9, ?, 2)",
+		monday.Unix(), TierSun); err != nil {
+		t.Fatal(err)
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatal(err)
+	}
+	service, err := Open(dir, fixedClock(monday.Add(time.Hour)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = service.Close() }()
+	service.NoteSealDrop(9, 9, TierSun, true, monday.Add(2*time.Hour))
+	counts, err := service.Counts(monday)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Count{
+		{CharacterID: 9, Degree: 0, Tier: TierSun, Drops: 2},
+		{CharacterID: 9, Degree: 9, Tier: TierSun, Forced: true, Drops: 1},
+	}
+	if len(counts) != len(want) {
+		t.Fatalf("counts %+v, want %+v", counts, want)
+	}
+	for i := range want {
+		if counts[i] != want[i] {
+			t.Fatalf("counts[%d] %+v, want %+v", i, counts[i], want[i])
+		}
 	}
 }

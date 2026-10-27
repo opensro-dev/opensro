@@ -6,9 +6,10 @@ sealboard.go - counting seal drops for the weekly board (#1641, #1604 P9)
 Port-only, not native. Every sealed equipment item that committed monster
 loot pays is counted once for the loot-winning representative, classified
 by enterworld.EquipmentSeal (Star, Moon, Sun at every degree - the notice
-floor does not apply here). The count is independent of the seal-drop
-notice flag and its per-minute cap: the board reads the settlement, not
-the announcement.
+floor does not apply here), with its degree and, for a seal pity forced
+drop (sealpity.go, #1690), a forced flag. The count is independent of the
+seal-drop notice flag and its per-minute cap: the board reads the
+settlement, not the announcement.
 
 What never counts: manual drops, trades, alchemy outcomes, quest-supply
 rewards (appended after this hook in settleMonsterInsideDoor), the GM kill
@@ -41,7 +42,7 @@ platform/sealboard service; nil (the default) counts nothing.
 ================
 */
 type SealDropSink interface {
-	NoteSealDrop(characterID int64, tier int, at time.Time)
+	NoteSealDrop(characterID int64, degree, tier int, forced bool, at time.Time)
 }
 
 /*
@@ -83,7 +84,7 @@ func (rt *Runtime) countSealDrops(winner *enterworld.Character, drops []groundit
 			continue
 		}
 		if tier, sealed := enterworld.EquipmentSeal(ref); sealed {
-			rt.SealDrops.NoteSealDrop(winner.ID, tier, at)
+			rt.SealDrops.NoteSealDrop(winner.ID, enterworld.EquipmentDegree(ref), tier, drop.SealPityForced, at)
 		}
 	}
 }

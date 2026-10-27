@@ -354,6 +354,9 @@ type Character struct {
 	// MostWanted is the character's job-kill streak (port-only, not native:
 	// SRO_MOST_WANTED, action/mostwanted.go; schema 24). Nil is no streak.
 	MostWanted *MostWanted `json:"mostWanted,omitempty"`
+	// SealPity is the character's seal luck-debt counters (port-only, not
+	// native: SRO_SEAL_PITY, action/sealpity.go; schema 33). Nil is no debt.
+	SealPity []SealPityDebt `json:"sealPity,omitempty"`
 	// LevelReachedAt is when the character first reached each milestone level
 	// (PublicLevelMilestones), in Unix milliseconds, for the site's
 	// world-firsts (port-only, not native).
@@ -857,4 +860,24 @@ action/mostwanted.go). Death or taking the suit off clears it.
 */
 type MostWanted struct {
 	Streak int64 `json:"streak"`
+}
+
+/*
+================
+SealPityDebt
+
+One (degree, tier) luck-debt counter of the seal pity rule (port-only,
+not native; action/sealpity.go). ItemClass is the itemdata class
+(degree and tier as the client reads them: (ItemClass-1)%3 is the seal,
+(ItemClass+2)/3 the degree). Debt accrues in expected drops and resets
+on the character's own admitted drop of the tier, natural or forced.
+ForcedDay is the UTC day (its start, unix seconds) ForcedToday counts
+forced drops in; a stale day reads as zero.
+================
+*/
+type SealPityDebt struct {
+	ItemClass   int     `json:"itemClass"`
+	Debt        float64 `json:"debt"`
+	ForcedDay   int64   `json:"forcedDay"`
+	ForcedToday int     `json:"forcedToday"`
 }

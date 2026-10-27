@@ -58,7 +58,8 @@ func TestLootYieldProbe(t *testing.T) {
 		pose := monster.Pose{RegionID: target.Spawn.RegionID, X: target.Spawn.X, Y: target.Spawn.Y, Z: target.Spawn.Z}
 		gold, equipment, other := 0, 0, 0
 		for kill := 0; kill < yieldProbeKills; kill++ {
-			for _, drop := range rt.planMonsterKillLoot(c, target, pose, rt.Now().UnixMilli()) {
+			drops, _ := rt.planMonsterKillLoot(c, target, pose, rt.Now().UnixMilli())
+			for _, drop := range drops {
 				if drop.IsGold() {
 					gold++
 					continue
