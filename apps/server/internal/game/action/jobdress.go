@@ -285,11 +285,11 @@ region it leaves has IsBattleField set and the one it enters has it clear
 (region record +2): moving within a protected region, the Thieves' Den
 included, is never refused. Thief town is one isolated protected region,
 reached through its gates, so a thief walks it freely to sell; re-testing
-the destination alone (#726) refused every step there. INFERENCE: native
-refuses the transport's own transition; the port refuses the owner's move,
-which the transport follows, and tests only its start and end regions, so
-a walk from a battlefield through a protected sector and back out is not
-refused (native tests each region change the transport makes).
+the destination alone (#726) refused every step there. Movement asks this
+rule for every region change a walk makes (thiefCargoCrossingBlocked), as
+native tests each step the transport takes. INFERENCE: native refuses the
+transport's own transition; the port refuses the owner's move, which the
+transport follows.
 ================
 */
 func (rt *Runtime) ThiefCargoTownBlocked(c *enterworld.Character, fromRegion, toRegion uint16) bool {

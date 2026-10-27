@@ -18,7 +18,7 @@ import (
 ================
 TestSkillUiAdmitMirrorsTheServerGates
 
-Every player row publishes its 58D8F0 inputs and monster rows none. Named
+Every player row publishes its cast-gate inputs and monster rows none. Named
 shipped rows pin what each gate publishes, so a wrong mapping fails here
 rather than mispredicting a press (BUG-066, BR-261007-0624). No shipped
 player row carries nmf, the low-HP reqc bit or the stealth-strike bit;

@@ -3,7 +3,7 @@
   "scope": "Execute v1.188 native indexing and selection for v1.150 metadata programs.\n\nThis verifies encoded-tail projection only, not text-table loader field bindings,\nreplacement lifecycle or whole-game equivalence. Candidate is frozen before run.\nThe only substituted native routine is memset; error paths fail the run.\n",
   "server_sha256": "bec2375e2c4c1073e3bf7761571470c430de251de74b452dbb86537348ef5290",
   "unicorn_version": "2.1.4",
-  "candidate_sha256": "567dac9ce3fc961d04806b1ab42f1a2b23b0c6cee16233fb5ac07f9779fd8cf2",
+  "candidate_sha256": "eae67aa120dfbda172858518c2468540c5b4bb13723c4d4d9b9135cf1d31a750",
   "program_schema_sha256": "569f991dd4961e88d22eaec5e70bf163abac3227e46749bbc5f35cb36c8b8ebd",
   "intervals": [
     {

@@ -163,3 +163,27 @@ func TestMetricsServeTheRuntimeStats(t *testing.T) {
 		t.Fatalf("gc pauses = p99 %v max %v", stats.GCPauseP99Ms, stats.GCPauseMaxMs)
 	}
 }
+
+/*
+================
+TestPublicationHoldsRecordMaxByLabel
+
+Each slow publication-gate hold lands under its holder's label with a
+count and the longest hold, so a tick step that waited on the gate can be
+matched to the work that kept it (#1820 E).
+================
+*/
+func TestPublicationHoldsRecordMaxByLabel(t *testing.T) {
+	hub := newHub(testCfg())
+	hub.RecordPublicationHold("enterWorld", 300*time.Millisecond)
+	hub.RecordPublicationHold("enterWorld", 150*time.Millisecond)
+	hub.RecordPublicationHold("requestOp", 200*time.Millisecond)
+
+	holds := hub.Metrics().PublicationHolds
+	if got := holds["enterWorld"]; got.Count != 2 || got.MaxMs != 300 {
+		t.Fatalf("enterWorld holds = %+v, want count 2, max 300 ms", got)
+	}
+	if got := holds["requestOp"]; got.Count != 1 || got.MaxMs != 200 {
+		t.Fatalf("requestOp holds = %+v, want count 1, max 200 ms", got)
+	}
+}

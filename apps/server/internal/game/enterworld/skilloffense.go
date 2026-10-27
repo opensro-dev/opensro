@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-skilloffense.go - skill parameter index and offense admission (SkillGlobal_BuildParameterIndex 587630)
+skilloffense.go - skill parameter index and offense admission
 
 Compile authored rows into executable offensive shapes. A recognized parameter
 alone cannot admit a program whose resource or action lifecycle is unsupported.
@@ -23,7 +23,7 @@ SkillConsumption
 
 SkillConsumption is the authored HP/MP requirement, not a learn/SP price.
 v1.150 7f970d/7f971d/7f972d/7f973e store columns 52..55 at
-CSkillData+774/+778/+77c/+77e. Server 58e1b0..58e2bb checks the
+CSkillData+774/+778/+77c/+77e. The server checks the
 corresponding flat amounts plus truncated percentages of maximum vitals.
 ==================
 */
@@ -49,7 +49,7 @@ func ammunitionFreeWeapons(kinds [2]uint8) bool {
 ==================
 SkillAmmunition
 
-cnsm is an equipped-item family/count requirement (587F57, 58E331),
+cnsm is an equipped-item family/count requirement,
 independent of the HP/MP consumption columns.
 ==================
 */
@@ -75,8 +75,8 @@ type SkillOffensiveArea struct {
 	MaxTargets       uint8
 	ReductionPercent uint8
 	Shape            uint8
-	// Select is the efr +0x14 candidate mask (TargetSelection_AroundSource
-	// 58A020): 0x01 caster, 0x02 every character, 0x04 party, 0x08
+	// Select is the efr +0x14 candidate mask (the server's around-source
+	// selection): 0x01 caster, 0x02 every character, 0x04 party, 0x08
 	// hostile, 0x10 non-character objects. Every admitted offense row is
 	// 24; 10 and 26 belong to the unported Detect rows.
 	Select uint8
@@ -103,16 +103,16 @@ func parseSkillOffense(fields []string, row *SkillRow) {
 ==================
 noteParameterIndex
 
-noteParameterIndex is the part of SkillGlobal_BuildParameterIndex (587630)
-that every skill kind reads, recorded on every row: 58D8F0 admits attacks,
+noteParameterIndex is the part of the server's parameter index
+that every skill kind reads, recorded on every row: its cast gate admits attacks,
 buffs and heals alike. It is the only writer of these fields;
 decodeSkillOffense only validates them.
 
 	getv WIMD/BDMD/HLMD  +0x4E4/+0x554/+0x55C  prepared MP cut
-	getv WIRU/CBRA       +0x4E8/+0x50C         cast reach addends (4AE87E)
+	getv WIRU/CBRA       +0x4E8/+0x50C         cast reach addends
 	getv MUER/DSER       +0x544/+0x54C         aura radius addends
 	getv MUCR/DSCR       -                     aura cut resistance (Prism, Screen Dance)
-	scls                 +0x380                selector bits (5842AC)
+	scls                 +0x380                selector bits
 	reqc                 +0x39C                bits 0, 4, 5 (SkillReqc)
 	reqi                 +0x3A0                up to five {kind, value}
 	reqn                 +0x3B4                every reqi pair must match
@@ -124,7 +124,7 @@ decodeSkillOffense only validates them.
 	eshp                 +0x298                aura heals the lowest HP ratio
 	nmf, tele/tel2/tel3,
 	ao, pw, rpkt, qest,
-	msch, hide, trap     see SkillCastGate     58D8F0 caster-state gates
+	msch, hide, trap     see SkillCastGate     the server's caster-state gates
 
 ==================
 */
@@ -152,8 +152,8 @@ func noteParameterIndex(fields []string, row *SkillRow) {
 		switch tag {
 		case tagGetv: // getv
 			// WIRU/CBRA (+0x4E8/+0x50C) sit beside WIMD (+0x4E4) in this
-			// per-row index, so a row without att records them too, and
-			// 4AE87E adds them to the cast's reach. Owners that never
+			// per-row index, so a row without att records them too, and the
+			// server adds them to the cast's reach. Owners that never
 			// compute a reach simply ignore the bit.
 			if key, ok := word(i + 1); ok {
 				if slot, known := SkillParameterFromKey(key); known &&
@@ -178,7 +178,7 @@ func noteParameterIndex(fields []string, row *SkillRow) {
 			if flags, ok := word(i + 1); ok {
 				row.Reqc = SkillReqc{Present: true, KnockedDown: flags&1 != 0, LowHP: flags&4 != 0, Flag16: flags&0x10 != 0, Dance: flags&32 != 0}
 			}
-		case 0x72657169: // reqi; a sixth pair is fatal at 589357, never stored
+		case 0x72657169: // reqi; a sixth pair is fatal, never stored
 			kind, kindOK := word(i + 1)
 			value, valueOK := word(i + 2)
 			if kindOK && valueOK && row.Reqi.Count < len(row.Reqi.Pairs) {
@@ -308,12 +308,12 @@ func noteParameterIndex(fields []string, row *SkillRow) {
 			}
 		case 0x6e6d68: // nmh +0x598
 			row.Heal.OfMaxHP = true
-		case 0x636b, 0x6c667374, 0x70646d67, 0x70646d32: // ck, lfst, pdmg, pdm2 (589EE0)
+		case 0x636b, 0x6c667374, 0x70646d67, 0x70646d32: // ck, lfst, pdmg, pdm2
 			row.WallBypass = true
-			// ck (+0x248) also takes the target's block chance away (58E624).
+			// ck (+0x248) also takes the target's block chance away.
 			if tag == 0x636b {
 				row.Ck = true
-				// 58EC61: the low byte of ck's first word is the kill chance.
+				// The low byte of ck's first word is the kill chance.
 				if chance, ok := word(i + 1); ok {
 					row.CkChance = uint8(chance)
 				}
@@ -336,7 +336,7 @@ actionAreaAt
 
 The efr kind-1 block whose tag sits at fields[i]: {kind 1, shape, radius,
 max targets, reduction percent, select}. Shapes 1-4 and 6 are the native
-selectors (TargetSelection_DispatchByShape); 10, 24 and 26 the shipped
+selectors (the server's shape dispatch); 10, 24 and 26 the shipped
 select words. Native shape 6 bounds its initial spatial search to 450
 units, so a larger authored radius needs a search volume no row has.
 ==================
@@ -457,8 +457,8 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 	// Admission is by executable shape, never a hand-maintained skill-name list.
 	// Linked casts and additional effect blocks require their own authority
 	// operations; they cannot be silently reduced to one damage result.
-	// An HP cost is checked on maximum HP (58E1B6) and charged on current HP,
-	// never below 1 (58312C, 4A8770; action/skillcost.go).
+	// An HP cost is checked on maximum HP and charged on current HP,
+	// never below 1 (action/skillcost.go).
 	if !row.CombatPinned || !row.TimingPinned || !row.ActionRangePinned || !row.TargetRequired ||
 		fields[0] != "1" || fields[15] != "0" || fields[17] != "0" || fields[56] != "0" {
 		return "offense:invalid-envelope-or-arguments"
@@ -484,14 +484,14 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 			if seen[int64(tagPositionCharge)] && seen[tagEfr] {
 				return "offense:charge-area"
 			}
-			// Crossbow stages own their cnsm debit (585FB6), including
+			// Crossbow stages own their cnsm debit, including
 			// zero-preparation linked shots. Keep other weapon families on
 			// their reviewed envelope; graph validation remains root-owned.
-			// 589B98 dispatches on the handler, not flight speed. Handler 1
-			// explicitly accepts speed zero at 585DF1 (zero flight time).
+			// The server dispatches on the handler, not flight speed. Handler 1
+			// explicitly accepts speed zero (zero flight time).
 			if row.ActionHandler == SkillActionProjectile || seen[0x636e736d] {
 				crossbow := row.RequiredWeaponKinds == ([2]uint8{crossbowWeaponKind, 255})
-				// SkillAction_Projectile (5857B0) links stages for any
+				// The projectile action links stages for any
 				// launcher: the bow's Arrow Combo C and D chain zero-preparation
 				// shots exactly as the crossbow's lines do, and the sword's
 				// Devil and Demon Cut Blade (#509) chain their second blade
@@ -499,7 +499,7 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 				chained := crossbow || row.RequiredWeaponKinds == ([2]uint8{bowWeaponKind, 255}) ||
 					!seen[0x636e736d] && ammunitionFreeWeapons(row.RequiredWeaponKinds)
 				// Several mc impacts resolve at release together and spend
-				// cnsm count x impacts arrows (585AF0).
+				// cnsm count x impacts arrows.
 				if row.ActionHandler != SkillActionProjectile ||
 					!chained && (row.ActionCastingTimeMs == 0 || row.ChainSub || row.ChainNext != 0) ||
 					row.Attack.ImpactCount == 0 ||
@@ -519,7 +519,7 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 		}
 		seen[tag] = true
 		arity := 0
-		// 590680 rolls every tagRefSkill status block; admission needs only
+		// The server rolls every tagRefSkill status block; admission needs only
 		// well-formed words. Values are read by the shared parser.
 		if index, found := abnormal.SourceIndex(uint32(tag)); found {
 			source := abnormal.Sources[index]
@@ -530,8 +530,8 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 			continue
 		}
 		switch tag {
-		case 0x7275: // ru: flat weapon-range addend, 4AE849..4AE87A
-			// 4AE849 adds it to any equipment-derived reach, whatever the
+		case 0x7275: // ru: flat weapon-range addend
+			// The server adds it to any equipment-derived reach, whatever the
 			// weapon: the crossbow's Dual Shot and the bow's Arrow Combo D
 			// and Strong Bow C author it alike (skillActionReach).
 			arity = 1
@@ -542,7 +542,7 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 			if !valid || value < 0 || value > 0xffffffff {
 				return "offense:range-arguments"
 			}
-		case 0x74656c33: // tel3: instant target charge, planned by 5862E0
+		case 0x74656c33: // tel3: instant target charge
 			arity = 2
 			if i+arity >= len(fields) || fields[68] != "0" || row.ChainNext != 0 || row.ChainSub || row.ProjectileSpeed != 0 ||
 				row.ActionCastingTimeMs != 0 || row.ActionDurationMs != 0 || row.Attack.ImpactCount != 1 {
@@ -559,8 +559,8 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 				return "offense:invalid-envelope-or-arguments"
 			}
 		case 0x6872: // hr {flat, rate}: the attack's own hit-rate bonus
-			// SkillCombat_EngageSkill (593540) installs the engaged skill's
-			// modifier block through 594AC0 (+0x24C, parameter 11), so the
+			// The server's skill engagement installs the engaged skill's
+			// modifier block (+0x24C, parameter 11), so the
 			// attack's hits roll with it (action/skillengage.go). The bow's
 			// Arrow Rain lines (AREA_A..C) author it.
 			arity = 2
@@ -700,7 +700,7 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 			}
 		case tagEfr:
 			arity = 6
-			// Every victim takes every mc impact (58E5F0 loops impacts per
+			// Every victim takes every mc impact (the server loops impacts per
 			// target group; action/skillarea.go).
 			if i+arity >= len(fields) || row.Attack.ImpactCount == 0 {
 				return "offense:invalid-envelope-or-arguments"
