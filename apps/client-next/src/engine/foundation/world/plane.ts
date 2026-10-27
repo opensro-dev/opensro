@@ -73,6 +73,10 @@ export interface PlaneFeatures {
 	// dungeonWater: the dungeon's authored water surfaces; an outdoor bundle
 	// carrying them is malformed.
 	readonly dungeonWater: boolean;
+	// signedLocalCoordinates: a wire pose's local coordinates are signed.
+	// A cave pose is a signed 16-bit plane; a field pose is an unsigned
+	// 1920-unit cell (movement-wire's admitPose).
+	readonly signedLocalCoordinates: boolean;
 }
 
 const OUTDOOR_FEATURES = {
@@ -85,7 +89,8 @@ const OUTDOOR_FEATURES = {
 	sectorFrames: true,
 	sky: true,
 	animatedWater: true,
-	dungeonWater: false
+	dungeonWater: false,
+	signedLocalCoordinates: false
 } as const;
 
 const CAVE_FEATURES = {
@@ -98,7 +103,8 @@ const CAVE_FEATURES = {
 	sectorFrames: false,
 	sky: false,
 	animatedWater: false,
-	dungeonWater: true
+	dungeonWater: true,
+	signedLocalCoordinates: true
 } as const;
 
 /*

@@ -6,7 +6,8 @@ test-cache.test.mjs - the test runner reuses a pass only while its inputs hold
 Drives tools/run-tests.mjs on a two-file fixture suite under temp/ (the
 recorder ignores the OS temporary directory, so the fixture must live in the
 checkout): a pass is reused, an edit to a module one test imports reruns
-exactly that test, and a failure is never reused.
+exactly that test, a failure is never reused, and a test process cannot
+grow past the runner's heap ceiling.
 
 ===========================================================================
 */
@@ -89,6 +90,29 @@ test("a pass is reused until an input it read changes; a failure is never reused
 		fs.writeFileSync( dependency, "export const value = 2;\n" );
 		assert.deepEqual( runSuite( suite ), { status: 1, reused: 1, ran: 1, failed: 1 } );
 		assert.deepEqual( runSuite( suite ), { status: 1, reused: 1, ran: 1, failed: 1 }, "a failure reruns" );
+	} finally {
+		fs.rmSync( suite, { recursive: true, force: true } );
+	}
+});
+
+test("a test process stops at the runner's heap ceiling instead of growing on", () => {
+	const suite = path.join( root, "temp", `test-heap-fixture-${process.pid}` );
+	fs.mkdirSync( suite, { recursive: true } );
+	try {
+		// About 512 MB of live arrays: it passes without a ceiling, so the
+		// fixture stays bounded even if the ceiling were ever removed.
+		fs.writeFileSync(
+			path.join( suite, "grows.test.mjs" ),
+			'import { test } from "node:test";\nimport assert from "node:assert/strict";\n' +
+				'test( "grows", () => {\n\tconst keep = [];\n' +
+				"\tfor ( let i = 0; i < 64; i++ ) keep.push( new Array( 1 << 20 ).fill( i ) );\n" +
+				"\tassert.equal( keep.length, 64 );\n} );\n"
+		);
+		assert.deepEqual(
+			runSuite( suite, { SRO_TEST_HEAP_MB: "64" } ),
+			{ status: 1, reused: 0, ran: 1, failed: 1 },
+			"a test past the ceiling fails instead of allocating on"
+		);
 	} finally {
 		fs.rmSync( suite, { recursive: true, force: true } );
 	}

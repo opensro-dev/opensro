@@ -2,6 +2,7 @@ package action
 
 import (
 	"bytes"
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/wire"
@@ -51,6 +52,54 @@ func TestPortalPrimaryCatalogAndQuestAdmission(t *testing.T) {
 	link.fee = 1
 	if got := portalAdmission(c, source, link, portalTraveller{}); got != 7 {
 		t.Fatalf("paid link admitted without gold: %x", got)
+	}
+}
+
+/*
+================
+TestPortalThiefSuitFerryAdmission
+
+Restrict kind 7, the Alexandria ferry arrivals' condition: a traveller
+wearing a thief suit with a transport summoned is refused 0x1C10; either
+fact missing admits. The port-only job-goods admission belongs to kind 2
+and does not reach kind 7, and the conditions decide in the row's order.
+================
+*/
+func TestPortalThiefSuitFerryAdmission(t *testing.T) {
+	c := &enterworld.Character{}
+	hp, gold, level := int64(100), int64(50000), int64(30)
+	c.CurrentHP, c.Gold, c.Level = &hp, &gold, &level
+	thiefSuit := []domain.InventoryRow{{Slot: enterworld.JobSuitSlot, TypeFlags: 0x3ac | 2<<11}}
+	traderSuit := []domain.InventoryRow{{Slot: enterworld.JobSuitSlot, TypeFlags: 0x3ac | 1<<11}}
+	ferry := portalLink{conditions: []portalCondition{{kind: portalConditionThiefSuitTransport}}}
+	for _, tc := range []struct {
+		name      string
+		worn      []domain.InventoryRow
+		traveller portalTraveller
+		want      byte
+	}{
+		{"thief suit and a transport", thiefSuit, portalTraveller{transportCOS: true}, 0x10},
+		{"thief suit on foot", thiefSuit, portalTraveller{}, 0},
+		{"trader suit and a transport", traderSuit, portalTraveller{transportCOS: true}, 0},
+		{"no suit and a transport", nil, portalTraveller{transportCOS: true}, 0},
+		{"job-goods admission does not reach kind 7", thiefSuit, portalTraveller{transportCOS: true, transportAdmitted: true}, 0x10},
+	} {
+		c.MissionInventory = tc.worn
+		if got := portalAdmission(c, portalDestination{}, ferry, tc.traveller); got != tc.want {
+			t.Errorf("%s: %#x, want %#x", tc.name, got, tc.want)
+		}
+	}
+	c.MissionInventory = thiefSuit
+	ordered := portalLink{conditions: []portalCondition{
+		{kind: portalConditionThiefSuitTransport},
+		{kind: 1, minimum: 50, maximum: 90},
+	}}
+	if got := portalAdmission(c, portalDestination{}, ordered, portalTraveller{transportCOS: true}); got != 0x10 {
+		t.Errorf("kind 7 first: %#x, want 0x10", got)
+	}
+	ordered.conditions[0], ordered.conditions[1] = ordered.conditions[1], ordered.conditions[0]
+	if got := portalAdmission(c, portalDestination{}, ordered, portalTraveller{transportCOS: true}); got != 0x15 {
+		t.Errorf("level first: %#x, want 0x15", got)
 	}
 }
 

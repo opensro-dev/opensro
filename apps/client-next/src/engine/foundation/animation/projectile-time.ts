@@ -10,7 +10,8 @@ mover is created; the regional 3D distance sets the travel fraction.
 ===========================================================================
 */
 import type { CharacterActor } from "@/engine/contracts/character";
-import { isDungeonRegion, normalizeRegionXZ, worldDelta } from "@/engine/foundation/world/world-space";
+import { planeKindOf } from "@/engine/foundation/world/plane";
+import { normalizeRegionXZ, worldDelta } from "@/engine/foundation/world/world-space";
 
 type Position = CharacterActor["pose"];
 
@@ -45,7 +46,7 @@ Two regions share one coordinate projection unless a dungeon is involved.
 ================
 */
 export function projectileSpace( start: number, end: number ): boolean {
-	return !isDungeonRegion( start ) && !isDungeonRegion( end ) || start === end;
+	return planeKindOf( start ) === "outdoor" && planeKindOf( end ) === "outdoor" || start === end;
 }
 
 /*

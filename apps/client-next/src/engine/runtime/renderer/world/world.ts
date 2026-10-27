@@ -12,12 +12,8 @@ world. Diagnostics observe it only through the frame probe (profile).
 import { createClothVertices } from "@/engine/foundation/animation/cloth-vertices";
 import { waterReflectionMatrix } from "@/engine/foundation/rendering/water-reflection";
 import { blendAdds } from "@/engine/foundation/rendering/blend-state";
-import {
-	isDungeonRegion,
-	regionOffsetXZ,
-	regionRelativeXZ,
-	sameCoordinateSpace
-} from "@/engine/foundation/world/world-space";
+import { planeKindOf } from "@/engine/foundation/world/plane";
+import { regionOffsetXZ, regionRelativeXZ, sameCoordinateSpace } from "@/engine/foundation/world/world-space";
 import {
 	characterShadowTopology,
 	projectShadowReceiver,
@@ -1701,8 +1697,8 @@ export function createWorldRenderer(
 					// must not fade every retained building in again.
 					const sameWorld = !!previous && fadeScene === previous &&
 						previous.residency === current.residency &&
-						!isDungeonRegion( previous.originRegion ) &&
-						!isDungeonRegion( current.originRegion );
+						planeKindOf( previous.originRegion ) === "outdoor" &&
+						planeKindOf( current.originRegion ) === "outdoor";
 					if ( sameWorld ) {
 						const placed = new Set<string>();
 						for ( const group of current.groups ) {
@@ -1857,12 +1853,12 @@ export function createWorldRenderer(
 				environmentSeconds === null ? 0 : Math.max( 0, seconds - environmentSeconds )
 			);
 			environmentSeconds = seconds;
-			const dungeonAmbient =
-					current && (current.dungeonVisibility !== undefined || isDungeonRegion( current.originRegion )) ?
-						camera.dungeonBlock !== undefined ?
-							current.dungeonAmbient?.[camera.dungeonBlock] ?? DEFAULT_DUNGEON_AMBIENT_COLOR :
-							current.dungeonAmbient?.[0] ?? DEFAULT_DUNGEON_AMBIENT_COLOR :
-						undefined,
+			const dungeonAmbient = current &&
+						(current.dungeonVisibility !== undefined || planeKindOf( current.originRegion ) === "cave") ?
+					camera.dungeonBlock !== undefined ?
+						current.dungeonAmbient?.[camera.dungeonBlock] ?? DEFAULT_DUNGEON_AMBIENT_COLOR :
+						current.dungeonAmbient?.[0] ?? DEFAULT_DUNGEON_AMBIENT_COLOR :
+					undefined,
 				environment = worldEnvironment(
 					current?.environment,
 					localCamera,
@@ -1890,7 +1886,7 @@ export function createWorldRenderer(
 				localCamera,
 				seconds,
 				current?.originRegion ?? 0,
-				!!current && current.residency !== "frontend" && !isDungeonRegion( current.originRegion ),
+				!!current && current.residency !== "frontend" && planeKindOf( current.originRegion ) === "outdoor",
 				weatherGround,
 				[ camera.target[0] + dx, camera.target[1], camera.target[2] + dz ]
 			);

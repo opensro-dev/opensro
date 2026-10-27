@@ -403,8 +403,9 @@ func TestHandleMotionStateRetimesInFlightSegment(t *testing.T) {
 	}
 }
 
-// 4B14B2: a masked player (msch 1) is heard on no motion code at all;
-// a duplicate (msch 2) still sits and changes gait.
+// A masked player (msch 1) is heard on no motion code at all (the
+// server's motion-change request path drops it before any motion
+// handling); a duplicate (msch 2) still sits and changes gait.
 func TestHandleMotionStateIgnoresAMaskedPlayer(t *testing.T) {
 	for _, mode := range []uint8{1, 2} {
 		character := testCharacter()

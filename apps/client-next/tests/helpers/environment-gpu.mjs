@@ -81,6 +81,7 @@ export async function captureEnvironment( { bundle, camera, features = false } )
 	/** @type {import("../../src/engine/foundation/ui/experimental-options.ts").ExperimentalVideo} */
 	const options = {
 		renderScale: 100,
+		phoneRenderCap: false,
 		postProcessing: false,
 		anisotropicFiltering: false,
 		heightFog: false,

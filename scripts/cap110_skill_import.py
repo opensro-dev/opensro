@@ -28,6 +28,10 @@ import sro_pk2
 from prepare_client_resources import safe_target, write_atomically
 from sro_paths import EXTRACTED_ROOT, REPO_ROOT
 
+# One of three switches that must agree (#1746): this one publishes the
+# client tier, SRO_CAP110_SKILL_DATABASE adds the 101-110 database tier,
+# and the server's SRO_LEVEL_CAP admits the levels. The gameworld warns
+# at startup when the published table outruns the cap.
 FLAG = "SRO_CAP110_SKILLS"
 REPORT_NAME = ".opensro-cap110-skills.json"
 EFFECT_REPORT_NAME = ".opensro-cap110-skill-effects.json"
@@ -231,6 +235,8 @@ def main():
 	parser.add_argument("--output-extracted", type=Path, default=REPO_ROOT / ".state" / "cap110-skills" / "extracted")
 	parser.add_argument("--database-export", type=Path, help="owner-supplied _RefSkill JSON snapshot")
 	args = parser.parse_args()
+	if enabled():
+		tables.require_vsro_pin(args.vsro_root, ("Media",))
 	summary = add_skills(args.vsro_root, args.native_extracted, args.output_extracted, args.database_export)
 	print(f"Skills: {summary['added']}; enabled: {summary['enabled']}")
 	if summary["enabled"]:

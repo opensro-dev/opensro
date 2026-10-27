@@ -14,6 +14,7 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -81,30 +82,78 @@ func betaSettingsVariables(t *testing.T) map[string]any {
 /*
 ================
 TestBetaSettingsDeploymentDefaults
+
+The public defaults are native (#606): a deployment that names no beta
+value runs the original rules. Only the durable mastery policy keeps its
+own default (betamastery.go).
 ================
 */
 func TestBetaSettingsDeploymentDefaults(t *testing.T) {
 	clearShardSettingsEnv(t)
 	variables := betaSettingsVariables(t)
 	want := map[string]string{
-		"beta_starter_kit":       "on",
-		"beta_player_map":        "on",
+		"beta_starter_kit":       "off",
+		"beta_player_map":        "off",
 		"beta_mastery":           "on",
-		"beta_silk":              "50",
-		"beta_growth":            "on",
-		"beta_skill_exp_rate":    "100",
-		"beta_drop_rate":         "20",
-		"beta_drop_mix":          "on",
-		"beta_drop_cap":          "16",
-		"beta_gold_rate":         "100",
-		"beta_rare_rate":         "5",
-		"beta_shop_only_degree9": "on",
-		"beta_seal_rates":        "on",
-		"beta_unique_respawn":    "on",
+		"beta_silk":              "off",
+		"beta_silk_active_only":  "off",
+		"beta_growth":            "off",
+		"beta_growth_bands":      "",
+		"beta_skill_exp_rate":    "1",
+		"beta_drop_rate":         "1",
+		"beta_drop_mix":          "off",
+		"beta_drop_cap":          "0",
+		"beta_gold_rate":         "1",
+		"beta_rare_rate":         "1",
+		"beta_shop_only_degree9": "off",
+		"beta_seal_rates":        "off",
+		"beta_unique_respawn":    "off",
 	}
 	for name, expected := range want {
 		if got := variables[name]; got != expected {
 			t.Errorf("%s = %#v, want %q", name, got, expected)
+		}
+	}
+}
+
+/*
+================
+TestBetaSettingsProductionProfile
+
+Our deployment's beta values (ops/release/shard-settings.json, which
+deploy.py passes as sro-nomad's environment) name only table-filled
+settings, pass the deployer's validation and reach the job unchanged.
+================
+*/
+func TestBetaSettingsProductionProfile(t *testing.T) {
+	clearShardSettingsEnv(t)
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "ops", "release", "shard-settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var profile map[string]string
+	if err := json.Unmarshal(data, &profile); err != nil {
+		t.Fatalf("shard-settings.json: %v", err)
+	}
+	if len(profile) == 0 {
+		t.Fatal("shard-settings.json names no setting")
+	}
+	tableVar := map[string]string{}
+	for _, setting := range shardsettings.Settings {
+		if setting.Source == shardsettings.FromTable {
+			tableVar[setting.Env] = setting.NomadVar
+		}
+	}
+	for name, value := range profile {
+		if _, ok := tableVar[name]; !ok {
+			t.Fatalf("shard-settings.json names %s, which is not a table-filled shard setting", name)
+		}
+		t.Setenv(name, value)
+	}
+	variables := betaSettingsVariables(t)
+	for name, value := range profile {
+		if got := variables[tableVar[name]]; got != value {
+			t.Errorf("%s reached the job as %#v, want %q", name, got, value)
 		}
 	}
 }
