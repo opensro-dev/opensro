@@ -72,13 +72,24 @@ test("only the scroll's own answer reads as its lines, exactly once", () => {
 		refItemSnapshot: [ { refObjId: 3789, typeFlags: 0x5eec } ],
 		equipItems: [ { slot: 13, refObjId: 3789, body: [ ...body ] } ]
 	} );
-	g.seed( { gid: 1, regionId: 25000, x: 0, y: 0, z: 0, heading: 0, countryByte9c: 0 } );
+	g.seed( {
+		gid: 1,
+		refObjId: 1,
+		kind: "local-player",
+		regionId: 25000,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0,
+		name: "Author",
+		countryByte9c: 0
+	} );
 	g.take();
 	// No use in flight: the byte is the native mapper's, which is silent.
 	g.receive( { opcode: 0xb5bd, payload: Uint8Array.of( 2, 0xF9 ) }, 0 );
 	assert.deepEqual( defined( defined( g.take() ).notices ), [] );
 	// The scroll's use goes out with the name as its tail...
-	g.command( { kind: "item-use", slot: 13, renameName: "NewName" }, 0 );
+	g.command( { kind: "item-use", slot: 13, renameName: "NewName" }, 0, undefined );
 	const use = defined( sent.find( f => f.opcode === 0x75bd ) );
 	assert.deepEqual( [ ...use.payload.slice( 3 ) ], [ ...new TextEncoder().encode( "NewName" ) ] );
 	// ...so its refusal answer reads as the scroll's line, once.
