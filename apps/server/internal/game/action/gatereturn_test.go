@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"testing"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
@@ -203,5 +204,69 @@ func TestDenGateOffersTheReverseReturnToAScrollHolder(t *testing.T) {
 	den := simulation.NpcDef{TalkFlags: simulation.NpcTalkFlagResurrectPoint}
 	if rt.reverseReturnCapability(den, c) != simulation.NpcTalkFlagReverseReturn {
 		t.Fatal("the den gate did not offer the reverse return to a scroll holder")
+	}
+}
+
+/*
+================
+TestDenEntryRefusesTradersAndHunters
+
+The reference server's case 2 checks the link's TARGET: travelling into
+the Bandit Den refuses the quest bit (0x1C17) and a registered trader or
+hunter (0x1C18). A thief or a jobless player enters; nothing applies to a
+link that leaves elsewhere.
+================
+*/
+func TestDenEntryRefusesTradersAndHunters(t *testing.T) {
+	source := portalDestination{code: "GATE_NPC_CH_KISAENG6"}
+	link := portalLink{source: 12, target: 13}
+	cases := []struct {
+		name      string
+		job       uint8
+		traveller portalTraveller
+		want      byte
+	}{
+		{"jobless into the den", 0, portalTraveller{intoDen: true}, 0},
+		{"thief into the den", domain.JobThief, portalTraveller{intoDen: true}, 0},
+		{"trader into the den", domain.JobTrader, portalTraveller{intoDen: true}, errCodeDenJob},
+		{"hunter into the den", domain.JobHunter, portalTraveller{intoDen: true}, errCodeDenJob},
+		{"quest bit into the den", 0, portalTraveller{intoDen: true, questMask: 0x40000}, errCodeGateQuestBlock},
+		{"quest bit before the job", domain.JobTrader, portalTraveller{intoDen: true, questMask: 0x40000}, errCodeGateQuestBlock},
+		{"trader elsewhere", domain.JobTrader, portalTraveller{}, 0},
+		{"quest bit at an NPC gate elsewhere", 0, portalTraveller{questMask: 0x40000}, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, c, _, _ := returnFixture(t, 30000)
+			c.Job.Type = tc.job
+			if got := portalAdmission(c, source, link, tc.traveller); got != tc.want {
+				t.Fatalf("admission %#x, want %#x", got, tc.want)
+			}
+		})
+	}
+}
+
+/*
+================
+TestDenLinksTargetTheDenGate
+
+Shipped data: both links into the den (from GATE_NPC_CH_KISAENG6 and
+GATE_NPC_EU_SOLDIER_PO2) target the teleport the den rule names.
+================
+*/
+func TestDenLinksTargetTheDenGate(t *testing.T) {
+	licensed.RequireGameData(t)
+	catalog, err := loadPortalCatalog(gamedatatest.TextdataDir(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	into := 0
+	for key := range catalog.links {
+		if catalog.destinations[key[1]].code == denGateCode {
+			into++
+		}
+	}
+	if into != 2 {
+		t.Fatalf("%d links into %s, want the two NPC links", into, denGateCode)
 	}
 }
