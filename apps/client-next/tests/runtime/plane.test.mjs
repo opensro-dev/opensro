@@ -28,6 +28,10 @@ test("the feature table: outdoors and in a cave every field differs", () => {
 		minimapCoordinates: true,
 		reverseReturnPoints: true,
 		characterPvs: false,
+		terrainGrid: true,
+		residentOnly: false,
+		rooms: false,
+		sectorFrames: true,
 		signedLocalCoordinates: false
 	} );
 	for ( const cave of [ 0x8001, 0x8004 ] ) {
@@ -35,6 +39,10 @@ test("the feature table: outdoors and in a cave every field differs", () => {
 			minimapCoordinates: false,
 			reverseReturnPoints: false,
 			characterPvs: true,
+			terrainGrid: false,
+			residentOnly: true,
+			rooms: true,
+			sectorFrames: false,
 			signedLocalCoordinates: true
 		} );
 	}
