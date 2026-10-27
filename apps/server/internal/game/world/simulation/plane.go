@@ -98,6 +98,14 @@ type Plane interface {
 	// owner: outdoors the direction-gate detour, in a cave the native
 	// region route from the retained cell (#1645, #1732).
 	NextWaypoint(from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationRoute
+	// PureRoutes reports whether NextWaypoint is a pure function of
+	// (from, owner, goal) over geometry fixed at boot: identical inputs
+	// always produce the identical route, so a failed search may be
+	// answered from the failed-route memo (#1820 part B) instead of
+	// being recomputed. Any future runtime-mutable blocker (a gate, a
+	// fortress state) must return false here, or the memo must grow a
+	// generation key before it may consult this plane again.
+	PureRoutes() bool
 	// HeightAt is the walkable surface height at p on this plane,
 	// nearest the caller's own height: outdoors a deck or bridge over
 	// the bare terrain when the caller stands at its height, in a cave

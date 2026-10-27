@@ -30,17 +30,21 @@ func (s *MonsterState) EnableRegionDormancy() {
 
 // prepareDormancy runs before visibility publication. A full sector ring wakes
 // before the much smaller message-block visibility/aggro boundary is reached.
+// It returns the gids it woke, keyed by population (nil when it woke
+// nobody); the leg counts them and tracks their first dispatch (#1820
+// part C).
 /*
 ================
 prepareDormancy
 ================
 */
-func (s *MonsterState) prepareDormancy(now int64, division string, sessions []SessionSnapshot) {
+func (s *MonsterState) prepareDormancy(now int64, division string, sessions []SessionSnapshot) map[populationKey]map[uint32]struct{} {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.regionDormancy {
-		return
+		return nil
 	}
+	var woken map[populationKey]map[uint32]struct{}
 	for _, key := range s.populationKeys() {
 		if division != "" && key.division != division {
 			continue
@@ -62,7 +66,24 @@ func (s *MonsterState) prepareDormancy(now int64, division string, sessions []Se
 					state.forgetDormant(gid)
 					state.instances.wake(gid)
 					if state.instances.contains(gid) {
-						state.behavior.set(gid, now)
+						// Phase-continuous wake (#1820 B part A): the
+						// cadence is caught up to the phase it would
+						// hold had it never slept, then the scheduler
+						// lands the next due time on that phase - the
+						// ring no longer resumes on one tick. (tryDormant
+						// cannot re-sleep it here: keepAwakeUntil was
+						// just set above.)
+						state.movers.catchUpActivity(gid, uint32(now))
+						s.scheduleBehavior(state, gid, now)
+						if woken == nil {
+							woken = make(map[populationKey]map[uint32]struct{})
+						}
+						set := woken[key]
+						if set == nil {
+							set = make(map[uint32]struct{})
+							woken[key] = set
+						}
+						set[gid] = struct{}{}
 					}
 				}
 			}
@@ -83,6 +104,7 @@ func (s *MonsterState) prepareDormancy(now int64, division string, sessions []Se
 		}
 		state.compactDormantIndexes(deadline)
 	}
+	return woken
 }
 
 /*

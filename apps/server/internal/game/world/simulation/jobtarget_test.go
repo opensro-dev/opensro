@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-jobtarget_test.go - a job monster passes over its own side (529110)
+jobtarget_test.go - a job monster passes over its own side (JobTargetRefused)
 
 ===========================================================================
 */
@@ -60,8 +60,9 @@ func TestThiefMonsterAcquiresTheTraderNotTheNearerThief(t *testing.T) {
 ================
 TestJobMonsterAreaSparesItsOwnSide
 
-5A1AD0 for a job monster: an area strike skips its own side and every
-ordinary player (state 4), a companion by its owner's job.
+The retail server's eligibility test for a job monster: an area strike
+skips its own side and every ordinary player (state 4), a companion by
+its owner's job.
 ================
 */
 func TestJobMonsterAreaSparesItsOwnSide(t *testing.T) {
@@ -87,9 +88,9 @@ func TestJobMonsterAreaSparesItsOwnSide(t *testing.T) {
 ================
 TestMonsterAreaStrikesIgnoresFirstAttackGuard
 
-5A1AD0 -> 5A1ADE calls vtable +0x58C (4A98A0) with checkFirstAttack=0, so
-5298C0 returns 1 at 529909 before the first-attack protection (Noise)
-check at 52994A..5299B4, while still enforcing 5299E0 (Fear source, grab
+The eligibility test calls vtable +0x58C with checkFirstAttack=0, so the
+monster hostility body accepts before its first-attack protection (Noise)
+check, while still enforcing the hostility status check (Fear source, grab
 pet, fellow band, body status).
 ================
 */
@@ -122,7 +123,7 @@ func TestMonsterAreaStrikesIgnoresFirstAttackGuard(t *testing.T) {
 TestSessionJobStateIsNative
 
 The monster tick builds each player from its session: no appearance or no
-worn suit is job state 4 (4E1120), a suit is its job.
+worn suit is job state 4, a suit is its job.
 ================
 */
 func TestSessionJobStateIsNative(t *testing.T) {

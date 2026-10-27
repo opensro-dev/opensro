@@ -315,9 +315,9 @@ func ApplyMove(world *WorldState, objectID uint32, movement MovementRequest, mov
 ================
 applyTurn
 
-The stationary angular arm: mode 0 without AngularFlagGo. The v1.188
-CGObjMoverByCmd_SetCommand (0x48C140) latches the angle and sets its moving
-latch only for bit 0, so without it the mover stands and faces the heading.
+The stationary angular arm: mode 0 without AngularFlagGo. The retail
+server's mover command latches the angle and sets its moving latch
+only for bit 0, so without it the mover stands and faces the heading.
 The v1.150 client never sends this form (0x877F30 always writes GO); it is
 kept because the wire admits it and it must never start a walk.
 

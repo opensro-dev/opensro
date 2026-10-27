@@ -131,7 +131,8 @@ func (rt *Runtime) HandleMotionState(divisionID string, character *enterworld.Ch
 	// the request is DROPPED - no ack, no state push, nothing on the wire.
 	// This is the whole handler, not just the sit arm: the later retail
 	// build wraps its entire body in "current motion state is not the
-	// in-progress one" (v1.188 LEAD, seq: MotionStateChangeReq folder), so
+	// in-progress one" (later retail server evidence: its motion-state
+	// request handler), so
 	// a gait request lands in the same lockout as a second posture request.
 	// Reading before the Mutate keeps a dropped request off the persistence
 	// lane entirely; the character operation lock makes the peek-then-update
@@ -249,7 +250,8 @@ the move-goal flags +0x84/+0x80 is the integrator's own arrival/blocked
 path (binary+dump two-source, clipreplicate-wave seq431/483/514) - so a
 server that keeps interpolating leaves a seated character sliding to the
 goal, which is the reported defect. The later retail build performed this
-stop server-side (v1.188 LEAD, survived independent re-derive, seq686/698);
+stop server-side (later retail server evidence, survived independent
+re-derive, seq686/698);
 we CANNOT prove v1.150's retail server sent such a stop - only that our
 client can RECEIVE a server position correction (0xB2F5 -> mover goal clear,
 binary-certified) and cannot self-cancel. So this is server position

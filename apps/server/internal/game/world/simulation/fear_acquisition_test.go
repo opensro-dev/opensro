@@ -3,7 +3,8 @@
 
 fear_acquisition_test.go - native detection priority over Fear exclusion
 
-529A60 returns success for detected body states before the source exclusion.
+The retail server's hostility body-status check returns success for
+detected body states before the source exclusion.
 
 ===========================================================================
 */
@@ -55,7 +56,7 @@ func TestFearAcquisitionAndRememberedOpponent(t *testing.T) {
 		t.Fatalf("acquired feared source: %+v, %v", got, ok)
 	}
 	// Fear's AI event abandons an opponent; the remembered lookup itself
-	// must not acquire a hostility check that 547E04 never calls.
+	// must not acquire a hostility check that the idle wander never calls.
 	if _, ok := eligiblePlayerByGid(actor, players, 7); !ok {
 		t.Fatal("remembered lookup acquired the acquisition-only Fear gate")
 	}

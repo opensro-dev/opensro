@@ -868,6 +868,7 @@ func (v *WaterValidator) objectNavSetReach(surface *groundSurface, dxRegion, dzR
 		return set, reach
 	}
 
+	v.cacheMisses.Add(1)
 	built := v.buildObjectNavSet(surface, key.offset)
 	builtReach := unionReach(built)
 

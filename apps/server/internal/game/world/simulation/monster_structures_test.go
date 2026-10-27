@@ -46,7 +46,7 @@ func structureFortressState(t *testing.T) (*MonsterState, instance.Lease) {
 ================
 TestStructuresFallAndStandAgain
 
-52D2B0 marks a dead structure destroyed rather than removing it; the
+The retail server marks a dead structure destroyed rather than removing it; the
 standing count follows, and a reinstall puts every structure back at full
 hit points under new objects.
 ================

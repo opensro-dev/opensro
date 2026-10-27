@@ -3,7 +3,8 @@
 
 nativegroundstep_test.go - finite ground steps against original server bytes
 
-The shared corpus executes 48C1B0 and 48BFF0 in Unicorn. Compare stored
+The shared corpus executes the original server ground-step routines in
+Unicorn. Compare stored
 float bits, including per-component cutoffs and the elapsed-distance cap.
 The corpus does not establish full-world collision equivalence.
 

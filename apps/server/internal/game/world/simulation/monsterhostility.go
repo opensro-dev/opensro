@@ -14,7 +14,7 @@ import "opensro.online/server/internal/game/world/monster"
 ==================
 HostilityEvent
 
-One hate event for a monster's opponent ledger (5473C0): the damage and
+One hate event for a monster's opponent ledger: the damage and
 aggression it adds for Attacker, and Percent, the share of Attacker's held
 aggression it adds first. Aggression and Percent are signed: a threat
 decrease (dtnt) sends them negative and the ledger clamps at zero.
@@ -69,7 +69,7 @@ func (s *MonsterState) RecordHostilitySequence(division string, gid uint32, even
 		if attacker, known := byGID[event.Attacker]; known && instance.IgnoresDistantHate(attacker.ActorDistance) {
 			monster.ZeroOpponentAggression(&instance.Opponents, event.Attacker)
 			// The impact already credited the hit toward the next summon
-			// (applyDamageLocked); 5473C0 credits +0xB0 only past this branch.
+			// (applyDamageLocked); the native ledger credits +0xB0 only past this branch.
 			instance.DamageSinceSummon -= min(instance.DamageSinceSummon, event.Damage)
 			state.instances.set(gid, instance)
 			continue

@@ -2,7 +2,8 @@ package simulation
 
 import "sort"
 
-// ArmNestFromReward is the event-0 count arm at 558F20..558F31. Reward
+// ArmNestFromReward is the event-0 count arm of the retail server's
+// aggression update. Reward
 // settlement owns when it is called; corpse removal owns the refill timer.
 func (s *MonsterState) ArmNestFromReward(division string, gid uint32, count uint16) {
 	if count < 2 {
@@ -21,8 +22,8 @@ func (s *MonsterState) ArmNestFromReward(division string, gid uint32, count uint
 }
 
 // MonsterContribution records the damage argument at the NPC damage boundary,
-// not HP removed. Research server 52A9D0..52A9D3 adds that dword before
-// forwarding to 52A240; upstream damage calculation is a separate contract.
+// not HP removed. The retail server adds that dword before
+// forwarding to its hit processing; upstream damage calculation is a separate contract.
 type MonsterContribution struct {
 	CreditGID uint32
 	Damage    uint32

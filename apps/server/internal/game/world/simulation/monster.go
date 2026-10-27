@@ -29,7 +29,7 @@ import (
 //
 // The decoder layout and monster tidWord (0x00C6) are pinned directly to
 // the v1.150 client. The scalar fields line up with the shipped v1.150
-// characterdata columns and the independently labelled v1.188 server data.
+// characterdata columns and the independently labelled retail server data.
 // Per-instance rarity and AI inputs are resolved by monster from the
 // evidence-backed server population.
 /*

@@ -2,7 +2,7 @@ package simulation
 
 import "opensro.online/server/internal/game/world/monster"
 
-// 559C80 owns the home check on IDLE entry. 55A8B0 does not repeat it
+// The retail server's IDLE entry owns the home check. Its IDLE tick does not repeat it
 // while waiting; an inherited movement can cross the home boundary meanwhile.
 // Callers stage this callback before publishing their enclosing transaction.
 func (ops *MonsterMoverOps) planIdleEntry(actor monster.Instance, mover monster.MoverState, now int64) (monster.MoverState, []Frame) {

@@ -12,8 +12,10 @@ a malformed or repeated row, and the sha256 pins.
 """
 import hashlib
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import import_vsro_optional_teleport as importer  # noqa: E402
@@ -86,6 +88,28 @@ class PinTests(unittest.TestCase):
 	def test_a_missing_file_is_refused(self):
 		with self.assertRaisesRegex(SystemExit, "lacks"):
 			importer.check_pins({}, {"a": "00"})
+
+
+class MainPinTests(unittest.TestCase):
+	def setUp(self):
+		importer.stage1._verified_archives.clear()
+		self.root = tempfile.TemporaryDirectory()
+		self.addCleanup(self.root.cleanup)
+		self.vsro = Path(self.root.name)
+
+	def run_main(self):
+		argv = ["import_vsro_optional_teleport.py", "--vsro-root", str(self.vsro)]
+		with patch.object(sys, "argv", argv):
+			importer.main()
+
+	def test_main_refuses_a_client_that_is_not_the_pinned_one(self):
+		(self.vsro / "Media.pk2").write_bytes(b"some other client")
+		with self.assertRaisesRegex(SystemExit, "does not match the pinned"):
+			self.run_main()
+
+	def test_main_refuses_a_missing_archive(self):
+		with self.assertRaisesRegex(SystemExit, "not found"):
+			self.run_main()
 
 
 if __name__ == "__main__":

@@ -76,6 +76,9 @@ type SessionSnapshot struct {
 	WorldInstance uint32
 	Population    instance.Lease
 	// Non-nil is the transport's detached, revision-checked publication set.
+	// READ ONLY: it is the session's kept set, shared by this tick's
+	// snapshot and views (transport.Session.PublishedObjectsShared), which
+	// no later change rewrites. Replace the field; never write an element.
 	PublishedObjects []uint32
 	// CombatEligible reports whether this session represents a living,
 	// targetable player (LIFE == 1 in native terms). Dead players or sessions
@@ -127,8 +130,8 @@ func (s *SessionSnapshot) ownsCompanion(gid uint32) bool {
 ==================
 SessionSnapshot.mountedOnCOS
 
-CGObjPC_IsMountedOnCOS (4DDCA0): the player is mounted on a rideable COS
-(483940 CGObj_IsRideableCOS, 4DA7D0 CGObjCOS_GetRider == this).
+The retail server's mounted check: the player is mounted on a rideable
+COS (its rideable-COS test passes, and the COS's rider is this player).
 ==================
 */
 func (s *SessionSnapshot) mountedOnCOS() bool {
@@ -151,7 +154,8 @@ The part of a SessionSnapshot that tick hooks read: identity, population,
 publication set and world. It has no peer presentation (Appearance, COS,
 Companions), so it is cheap to build, and a consumer that needs the
 presentation cannot be handed one: monster acquisition, peer interest and
-the player map keep taking the full SessionSnapshot.
+the player map keep taking the full SessionSnapshot. PublishedObjects is
+read only, as in SessionSnapshot.
 ==================
 */
 type SessionView struct {
@@ -392,6 +396,9 @@ type divisionTickWork struct {
 	divisionID string
 	sessions   []SessionSnapshot
 	state      *divisionTickState
+	// resumed is the tick-wide set of resumed scene identities
+	// (prepareTick's drain), shared by every division's work.
+	resumed map[string]bool
 }
 
 /*
@@ -616,6 +623,18 @@ func (t *Ticker) prepareTick() (int64, []divisionTickWork) {
 	t.tickIndex++
 
 	sessions := t.Source.SnapshotSessions()
+
+	// The resume registry drains once per tick, before any leg runs, so a
+	// mark can never be served twice or leak into a later tick. A drained
+	// identity with no snapshot here (the character re-entered under a new
+	// scene revision, or has not entered yet) is dropped: that entry
+	// bootstraps its own state.
+	resumedIDs := map[string]bool{}
+	if source, ok := t.Source.(ResumeSource); ok {
+		for _, id := range source.DrainResumedSessions() {
+			resumedIDs[id] = true
+		}
+	}
 	sort.SliceStable(sessions, func(i, j int) bool {
 		if sessions[i].DivisionID != sessions[j].DivisionID {
 			return sessions[i].DivisionID < sessions[j].DivisionID
@@ -655,6 +674,7 @@ func (t *Ticker) prepareTick() (int64, []divisionTickWork) {
 			divisionID: divisionID,
 			sessions:   sessions[i:j],
 			state:      state,
+			resumed:    resumedIDs,
 		})
 		i = j
 	}
@@ -673,7 +693,7 @@ func (t *Ticker) prepareTick() (int64, []divisionTickWork) {
 			}
 			state.monsters.divisionID = divisionID
 			state.monsters.watch = &t.watch
-			work = append(work, divisionTickWork{divisionID: divisionID, state: state})
+			work = append(work, divisionTickWork{divisionID: divisionID, state: state, resumed: resumedIDs})
 		}
 	}
 	for divisionID := range t.states {
@@ -750,6 +770,14 @@ func (t *Ticker) runDivision(work divisionTickWork, tick, nowMs int64) {
 	}
 	work.state.monsters.RunMonsterLeg(nowMs, work.sessions, t.Push)
 	t.watch.step()
+	// Last, on purpose: the resumed viewer's re-push (resume.go) reads the
+	// shown sets the legs above just refreshed, and its ordered frames land
+	// behind everything this tick already queued for that viewer.
+	for _, session := range work.sessions {
+		if work.resumed[session.SessionID] {
+			t.repushResumedViewer(work, session, tick, nowMs)
+		}
+	}
 }
 
 /*

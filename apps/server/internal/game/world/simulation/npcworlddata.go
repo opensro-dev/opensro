@@ -35,7 +35,7 @@ const (
 	npcColScale     = 48
 	npcColModel     = 52
 	// npcColFortress is the reference row's fortress codename ("xxx" binds
-	// nothing), read by CGObj_BindFortressFromReference (486140). The same
+	// nothing), read by the retail server's fortress binding. The same
 	// column carries it in teleportbuilding.txt.
 	npcColFortress = 55
 	npcColLevel    = 57
@@ -125,8 +125,9 @@ func LoadNpcWorldRoster(textdataDir string) []NpcDef {
 //	NPC codename -> refshopgroup group -> store -> tab group -> tab rows.
 //
 // The menu row's storeGroupId0c is characterRefId24 (the NPC RefObjID), not
-// refshopgroup column 2. Rizin pins the read at 0x005d5dca as [record+0x24],
-// and sub_7d3b70 proves that field is the lookup's character RefObjID.
+// refshopgroup column 2. The retail server reads the same field as
+// [record+0x24], and sub_7d3b70 proves that field is the lookup's character
+// RefObjID.
 func loadNpcStoreGroupIndex(textdataDir string, refs map[uint32]npcWorldRef) map[string][]NpcTalkStoreGroup {
 	groupCodesByNpc := make(map[string][]string)
 	for _, cols := range readNpcTabbed(filepath.Join(textdataDir, "refshopgroup.txt")) {
@@ -214,7 +215,7 @@ func loadNpcWorldRefs(textdataDir string) map[uint32]npcWorldRef {
 		}
 	}
 	// npcchat's fourth column is NOT a quest greeting. Native quest scripts
-	// install SN_<NPC>_QS separately (e.g. 8829E5..8829F9). Admit only
+	// install SN_<NPC>_QS separately. Admit only
 	// actual catalog symbols; absent greetings use the existing base speech.
 	questGreetings := make(map[string]bool)
 	for _, cols := range readNpcTabbed(filepath.Join(textdataDir, "textquest.txt")) {

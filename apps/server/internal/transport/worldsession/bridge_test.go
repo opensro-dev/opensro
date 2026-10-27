@@ -19,7 +19,7 @@ import (
 
 const testAdmissionTicket = "test-worldsession-admission-ticket"
 
-func startServer(t *testing.T) *transport.Server {
+func startServer(t testing.TB) *transport.Server {
 	t.Helper()
 	srv, err := transport.NewServer(transport.Config{
 		WTAddr:            "127.0.0.1:0",
@@ -54,7 +54,7 @@ func startServer(t *testing.T) *transport.Server {
 	return srv
 }
 
-func dialAndHello(t *testing.T, srv *transport.Server) (*websocket.Conn, transport.Welcome) {
+func dialAndHello(t testing.TB, srv *transport.Server) (*websocket.Conn, transport.Welcome) {
 	t.Helper()
 	url := fmt.Sprintf("ws://%s%s", srv.WSAddr(), transport.PathWS)
 	c, _, err := websocket.DefaultDialer.Dial(url, nil)
@@ -80,7 +80,7 @@ func dialAndHello(t *testing.T, srv *transport.Server) (*websocket.Conn, transpo
 	return c, w
 }
 
-func readFrame(t *testing.T, c *websocket.Conn) transport.Frame {
+func readFrame(t testing.TB, c *websocket.Conn) transport.Frame {
 	t.Helper()
 	c.SetReadDeadline(time.Now().Add(5 * time.Second))
 	for {

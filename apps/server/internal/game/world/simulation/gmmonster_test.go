@@ -38,7 +38,8 @@ func gmMonsterState(t *testing.T, monsterType uint8) (*MonsterState, instance.Le
 ================
 TestGMMonstersSpawnAtTheGMWithNativeClamps
 
-520A40 creates count instances on the GM's point (count clamped 1..250),
+The retail server's summon command creates count instances on the GM's point
+(count clamped 1..250),
 with no respawning nest, and refuses an unknown reference.
 ================
 */
@@ -118,10 +119,10 @@ func TestGMMonstersFaceAroundTheFullTurn(t *testing.T) {
 
 /*
 ================
-TestGMSpawnRarityMatchesNative520D90
+TestGMSpawnRarityMatchesNative
 ================
 */
-func TestGMSpawnRarityMatchesNative520D90(t *testing.T) {
+func TestGMSpawnRarityMatchesNative(t *testing.T) {
 	cases := []struct{ requested, own, want uint8 }{
 		{0, 0, 0}, {1, 0, 1}, {4, 0, 4}, {7, 0, 7},
 		{2, 0, 0}, {5, 1, 1}, {0x0f, 4, 4},

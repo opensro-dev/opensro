@@ -4,10 +4,10 @@
 tether.go - movement tethers: how far a mover may walk from an anchor
 
 A trader whose trade transport stands parked may not walk away from it.
-The native server checks every movement step of the player
-(CGObjPC_ValidateMoveAgainstCOSTethers 4F1230, CGObjPC vtable +0x620,
-through CCOSManager_ValidateOwnerMovementTethers 4FD1D0) and stops the
-player when the step would take it further from the transport while it
+The native server checks every movement step of the player (its
+move-validation entry, vtable +0x620, runs through the COS manager's
+owner-tether validation) and stops the player when the step would take it
+further from the transport while it
 already stands past the range. The action owner knows where the transport
 stands; it replaces the whole tether set here once per tick, and the ground
 walk consults it on each finite step under the store's own lock.
@@ -22,12 +22,12 @@ import (
 	worldgeom "opensro.online/server/internal/game/world"
 )
 
-// TradeTransportTetherRange is 4FD1D0's 1000.0 (0xB45C68): the planar
+// TradeTransportTetherRange is the retail server's 1000.0: the planar
 // distance a trader may stand from a parked trade transport before steps
 // that lead further away are refused. The client prints it as 100 m.
 const TradeTransportTetherRange = 1000.0
 
-// TetherTradeTransport is 4FD1D0's reason 1 (the trade transport); reason 2,
+// TetherTradeTransport is the retail check's reason 1 (the trade transport); reason 2,
 // the 300-unit capture-quest monster, has no tether here because a captured
 // monster follows its owner (petai.go).
 const TetherTradeTransport uint8 = 1
@@ -50,7 +50,7 @@ type Tether struct {
 ================
 tetherDistance
 
-4FD1D0 measures Pos_Relative3D with a zero Y: the planar distance, its
+The retail check measures the relative position with a zero Y: the planar distance, its
 squared sum and root stored as float32.
 ================
 */
@@ -66,7 +66,7 @@ func tetherDistance(from, anchor Spawn) float32 {
 ================
 Tether.Refuses
 
-4FD1D0: a step is refused only when the mover already stands past the
+The retail check: a step is refused only when the mover already stands past the
 range and the step's end lies further from the anchor than its start. A
 mover inside the range may take the step that carries it past (the native
 one-step overshoot), and one past it may always walk back.

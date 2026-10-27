@@ -36,7 +36,7 @@ func (s *MonsterState) commitNavigation(division string, before navigationAdmiss
 	if !unchanged || !state.approachInputsMatch(before.approach) {
 		return nil
 	}
-	// 4B0EA0 refuses the move command under freeze, sleep, root or stun; the
+	// The retail server's move command refuses under freeze, sleep, root or stun; the
 	// tactics state is unchanged and retries on a later tick.
 	if current.MovementBlocked() {
 		return nil

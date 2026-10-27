@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-monsterlifetime_test.go - tests for monsterlifetime.go: 4C10C0's timers
+monsterlifetime_test.go - tests for monsterlifetime.go: the retail spawn's timers
 
 ===========================================================================
 */

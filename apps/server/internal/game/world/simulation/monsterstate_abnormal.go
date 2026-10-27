@@ -72,7 +72,7 @@ MonsterAbnormalEffects
 ================
 */
 type MonsterAbnormalEffects struct {
-	// MaskChanged asks the caller to publish the vitals mask (4A5C60 dirty bit).
+	// MaskChanged asks the caller to publish the vitals mask (the native dirty bit).
 	MaskChanged bool
 	// CancelActions is vfunc 570: pending monster casts are withdrawn.
 	CancelActions bool
@@ -257,7 +257,7 @@ func (o *monsterAbnormalOwner) MaxHP() uint32 { return o.instance.EffectiveMaxHP
 MaxMP
 ================
 */
-// 4C382A initializes keeper 4 from RefObjChar MP. All 5,986 enabled monster
+// The retail spawn initializes keeper 4 from RefObjChar MP. All 5,986 enabled monster
 // rows in the v1.150 projection have zero MP; do not invent a mana pool.
 func (o *monsterAbnormalOwner) MaxMP() uint32 { return 0 }
 
@@ -319,7 +319,7 @@ func (o *monsterAbnormalOwner) ParamsChanged(speed bool) {
 }
 
 // SetMotion ports vfunc 55C for the monster's motion hold. State zero falls
-// back to any still-active freeze/stun/sleep (4AAB60).
+// back to any still-active freeze/stun/sleep.
 /*
 ================
 SetMotion
@@ -351,7 +351,7 @@ func (o *monsterAbnormalOwner) SetMotion(state, next uint8, delay float32) {
 ================
 CancelActions
 
-4AA340 first stops an in-flight mover, then retires pending commands. The
+The retail server first stops an in-flight mover, then retires pending commands. The
 mask also gates later movement, but cannot settle a segment already issued.
 ================
 */
@@ -369,7 +369,7 @@ func (o *monsterAbnormalOwner) CancelActions(all bool) {
 	}
 }
 
-// StopMove ports 4A9430: only a moving actor stops, at its live pose.
+// StopMove ports the retail server's stop: only a moving actor stops, at its live pose.
 /*
 ================
 StopMove
@@ -405,7 +405,7 @@ Hit
 ================
 */
 func (o *monsterAbnormalOwner) Hit(source uint32, credited bool, damage uint32, reason uint8, status abnormal.Status) {
-	// 52A240 ignores hits after LIFE becomes dead. A later periodic slot in
+	// The retail server's hit processing ignores hits after LIFE becomes dead. A later periodic slot in
 	// the same update must not add credit after an earlier slot killed it.
 	if !o.Alive() || damage == 0 || credited && source == o.instance.Gid {
 		return
@@ -421,7 +421,7 @@ ConsumeResources
 ================
 */
 func (o *monsterAbnormalOwner) ConsumeResources(int32, int32, uint8) {} // monsters carry no MP pool
-// Detonate ports 59B300: a victim with more HP than the bomb takes the bomb
+// Detonate ports the retail server's detonation: a victim with more HP than the bomb takes the bomb
 // damage (reason 1); otherwise it takes its remaining HP and dies (flag 80).
 /*
 ================
@@ -433,7 +433,7 @@ func (o *monsterAbnormalOwner) Detonate(slot abnormal.Slot) {
 	if o.instance.CurrentHP <= damage {
 		damage = o.instance.CurrentHP
 	}
-	// 59B300 debits remaining HP on a fatal hit, but its B0BC payload still
+	// The detonation debits remaining HP on a fatal hit, but its B0BC payload still
 	// takes the authored damage word from the original slot.
 	o.fx.Detonations = append(o.fx.Detonations, slot)
 	o.Hit(slot.SourceGID, true, damage, 1, slot.Status)
@@ -526,7 +526,8 @@ type MonsterAbnormalCandidate struct {
 	Instance   monster.Instance
 }
 
-// AbnormalCandidates lists monsters whose blocks need 4A4390 this tick.
+// AbnormalCandidates lists monsters whose blocks need the retail server's
+// abnormal tick this tick.
 /*
 ================
 AbnormalCandidates
@@ -556,7 +557,7 @@ func (s *MonsterState) AbnormalCandidates() []MonsterAbnormalCandidate {
 	return out
 }
 
-// MonsterAbnormalPlan is a dry-run of 4A4390 on a detached copy. Commit
+// MonsterAbnormalPlan is a dry-run of the abnormal tick on a detached copy. Commit
 // applies it only while the live block and HP are still the planned inputs.
 /*
 ================

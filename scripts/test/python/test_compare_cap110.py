@@ -9,6 +9,7 @@ experience changes and rejection of unsafe archive manifest entries.
 ===========================================================================
 """
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -71,6 +72,28 @@ class ComparisonTests(unittest.TestCase):
 			with self.subTest(text=text), patch.object(comparison.archive, "table_text", return_value=text.encode("ascii")):
 				with self.assertRaises(ValueError):
 					comparison.read_tables(None, {}, "itemdata")
+
+
+class MainPinTests(unittest.TestCase):
+	def setUp(self):
+		comparison.archive._verified_archives.clear()
+		self.root = tempfile.TemporaryDirectory()
+		self.addCleanup(self.root.cleanup)
+		self.vsro = Path(self.root.name)
+
+	def run_main(self):
+		argv = ["compare_cap110.py", "--vsro-root", str(self.vsro)]
+		with patch.object(sys, "argv", argv):
+			comparison.main()
+
+	def test_main_refuses_a_client_that_is_not_the_pinned_one(self):
+		(self.vsro / "Media.pk2").write_bytes(b"some other client")
+		with self.assertRaisesRegex(SystemExit, "does not match the pinned"):
+			self.run_main()
+
+	def test_main_refuses_a_missing_archive(self):
+		with self.assertRaisesRegex(SystemExit, "not found"):
+			self.run_main()
 
 
 if __name__ == "__main__":

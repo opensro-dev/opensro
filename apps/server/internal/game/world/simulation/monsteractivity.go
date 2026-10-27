@@ -60,7 +60,7 @@ func (ops *MonsterMoverOps) captureActivity(sessions []SessionSnapshot, now int6
 			a.unresolved[owner] = true
 			continue
 		}
-		// 533F70 counts every admitted PC, including dead PCs. Counts live
+		// The retail server's spawn broadcast counts every admitted PC, including dead PCs. Counts live
 		// in that actor partition, not the combat-eligible player list.
 		for _, n := range b.Neighbors() {
 			a.counts[activityBucket{owner, n}]++
@@ -69,7 +69,8 @@ func (ops *MonsterMoverOps) captureActivity(sessions []SessionSnapshot, now int6
 	return a
 }
 
-// runActivityGate precedes state expiry/acquisition (53FEA0 -> 540D20).
+// runActivityGate precedes state expiry/acquisition (the retail server's
+// tactics tick entry runs its timer setter the same way).
 // A missing navigation answer is not an empty native message block.
 func (ops *MonsterMoverOps) runActivityGate(division string, actor monster.Instance, m monster.MoverState, now int64) ([]Frame, bool) {
 	if ops.activity == nil {
@@ -103,7 +104,7 @@ func (ops *MonsterMoverOps) runActivityGate(division string, actor monster.Insta
 	if !pending {
 		return nil, false
 	}
-	// 55AF40 clears the strategy target, but never stops the movement
+	// The retail server's strategy clear clears the strategy target, but never stops the movement
 	// channel. Arrival runs the PENDING callback without entering IDLE.
 	if navigationNeedsContinuation(m, now) {
 		goal, _ := m.NavigationGoal()

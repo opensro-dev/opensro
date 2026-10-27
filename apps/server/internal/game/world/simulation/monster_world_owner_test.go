@@ -35,7 +35,7 @@ func TestDefaultPopulationDoesNotOwnForeignWorldNests(t *testing.T) {
 ================
 TestDivisionOpensEveryPermanentWorld
 
-SR_ShardManager 65BD60 opens layer 1 of every type-0 RefGameWorld at boot,
+The retail shard manager opens layer 1 of every type-0 RefGameWorld at boot,
 so the fortress worlds exist (and own their authored nests) before anyone
 travels there; instance worlds stay closed until requested.
 ================

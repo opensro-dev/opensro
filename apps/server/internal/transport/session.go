@@ -71,8 +71,9 @@ type Session struct {
 	sceneRevision   uint64
 	sceneLoading    bool
 	observedObjects map[uint32]struct{}
-	// publishedSorted is observedObjects in ascending order, rebuilt on the
-	// first PublishedObjects read after any change marks it stale.
+	// publishedSorted is observedObjects in ascending order, rebuilt into a
+	// fresh array on the first PublishedObjects read after any change marks
+	// it stale. Readers share it, so it is never written once built.
 	publishedSorted []uint32
 	publishedStale  bool
 

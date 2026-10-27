@@ -30,6 +30,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import import_vsro_alexandria as stage1  # noqa: E402
 import sro_pk2  # noqa: E402
 from prepare_client_resources import safe_target, write_atomically  # noqa: E402
 from sro_paths import EXTRACTED_ROOT  # noqa: E402
@@ -106,6 +107,9 @@ def main():
 	media = Path(args.vsro_root) / "Media.pk2"
 	if not media.is_file():
 		raise SystemExit(f"{media} not found; --vsro-root must be a VSRO client folder")
+	# The tables below were taken from one VSRO client; the archive itself
+	# must be that client before any table is read (#1745).
+	stage1.verify_vsro_archive(Path(args.vsro_root), "Media")
 	output = EXTRACTED_ROOT / OUTPUT_FOLDER
 	files = import_item_glow(media, output)
 	print(f"[vsro-item-glow] copied {len(files)} table(s) to {output}")

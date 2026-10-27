@@ -165,7 +165,7 @@ func TestPopulationAdvancesWithoutViewersAndObservationDoesNotFillNests(t *testi
 ================
 TestNestRefillsOneMonsterPerInterval
 
-55EA90 refills a nest one monster per interval: after a wipe the timer
+The retail server refills a nest one monster per interval: after a wipe the timer
 restarts at the first death from full, and each spawn re-rolls it.
 ================
 */
@@ -190,7 +190,7 @@ func TestNestRefillsOneMonsterPerInterval(t *testing.T) {
 ================
 TestNestDeathBelowCapacityKeepsTheRunningTimer
 
-560D8B restarts the timer only for a nest dying from full.
+The retail server restarts the timer only for a nest dying from full.
 ================
 */
 func TestNestDeathBelowCapacityKeepsTheRunningTimer(t *testing.T) {
@@ -209,7 +209,7 @@ func TestNestDeathBelowCapacityKeepsTheRunningTimer(t *testing.T) {
 ================
 TestBlockedOrdinaryCandidateRetriesNextCallback
 
-5F6EB0: a blocked ordinary candidate fails without touching the timer and
+In the retail server, a blocked ordinary candidate fails without touching the timer and
 retries on the next hive callback.
 ================
 */
@@ -248,7 +248,7 @@ func TestBlockedOrdinaryCandidateRetriesNextCallback(t *testing.T) {
 ================
 TestBlockedPromotedCandidateSpawnsAtTheCentre
 
-5F7078: a blocked candidate keeps a promoted grade at the nest centre.
+In the retail server, a blocked candidate keeps a promoted grade at the nest centre.
 ================
 */
 func TestBlockedPromotedCandidateSpawnsAtTheCentre(t *testing.T) {
@@ -270,7 +270,7 @@ func TestBlockedPromotedCandidateSpawnsAtTheCentre(t *testing.T) {
 ================
 TestClippedCandidateHalvesTheNestInterval
 
-560E10: a clipped candidate halves the interval (floor 1 s) and restarts the
+In the retail server, a clipped candidate halves the interval (floor 1 s) and restarts the
 timer.
 ================
 */
@@ -301,7 +301,7 @@ func TestClippedCandidateHalvesTheNestInterval(t *testing.T) {
 ================
 TestArmedNestSpawnsOnePartyMonster
 
-5608CF / 560CAD: an armed nest rolls a party monster and disarms; monster
+In the retail server, an armed nest rolls a party monster and disarms; monster
 TID4 4 draws the roll but is never promoted to a party monster.
 ================
 */
@@ -352,7 +352,7 @@ func overwriteHiveNests(limit int, orders ...int) []monster.NestRow {
 ================
 TestOverwriteHiveFillsInHiveOrder
 
-55EC10 fills an overwrite hive one monster per member per callback, in
+The retail server fills an overwrite hive one monster per member per callback, in
 native hive order, until the shared limit.
 ================
 */
@@ -373,7 +373,7 @@ func TestOverwriteHiveFillsInHiveOrder(t *testing.T) {
 ================
 TestSingleOccupantHiveMovesToTheDrawnMember
 
-55EEC0: a single-occupant hive dying from full draws its next location
+In the retail server, a single-occupant hive dying from full draws its next location
 (rand()%(n+1), the extra bucket folding onto the last member) and every
 member restarts its timer.
 ================
@@ -397,7 +397,7 @@ func TestSingleOccupantHiveMovesToTheDrawnMember(t *testing.T) {
 ================
 TestSpawnHeadingReachesTheMoverPose
 
-5609EE: an ordinary monster is created facing the drawn heading, and the
+In the retail server, an ordinary monster is created facing the drawn heading, and the
 mover publishes it.
 ================
 */

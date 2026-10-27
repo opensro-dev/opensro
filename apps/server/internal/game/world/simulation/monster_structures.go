@@ -4,7 +4,7 @@
 monster_structures.go - fortress structures in their population
 
 A fortress structure lives in its world's population like a monster, but
-its death is a state, not a removal: CGObjSiegeStruct_OnKilled (52D2B0)
+its death is a state, not a removal: the retail server's killed path
 sets the destroyed bit and the structure stays where it stood until the
 fortress's structures are reinstalled. The fortress-war owner in the
 action package drives these functions; this file only keeps the
@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	// 52D2B0 passes CGObjSiegeStruct_SetState (4CF860) 1, or 3 for a gate.
+	// The killed path sets the structure state to 1, or 3 for a gate.
 	structureStateDestroyed     uint16 = 1
 	structureStateGateDestroyed uint16 = 3
 	structureKindGate           uint8  = 3
@@ -55,7 +55,7 @@ func (s *MonsterState) MarkStructureDestroyed(divisionID string, gid uint32) (mo
 StandingStructures
 
 How many structures of TypeID4 kind still stand in a world's population
-(CSiegeFortress_CountStandingGuardTowers 62A6B0 counts kind 2).
+(the retail server's standing-guard-tower count counts kind 2).
 ================
 */
 func (s *MonsterState) StandingStructures(divisionID string, world instance.ID, kind uint8) int {
@@ -97,8 +97,8 @@ ReinstallStructures
 
 Removes every structure of a world's population and spawns each one's
 nest afresh, at full hit points under a new object: the reinstall that
-follows a capture and a war's end (the 0x1D/0x1E results of
-CSiegeFortress_HandleDatabaseResult 6232C0). Returns how many stand again.
+follows a capture and a war's end (the 0x1D/0x1E results of the retail
+server's fortress database-result handler). Returns how many stand again.
 ================
 */
 func (s *MonsterState) ReinstallStructures(divisionID string, world instance.ID, nowMs int64) int {
@@ -140,8 +140,8 @@ func (s *MonsterState) ReinstallStructures(divisionID string, world instance.ID,
 SetStructureOccupant
 
 The one owner of a fortress zone's occupant: the stored row's RefObjID.
-0 vacates the zone, as a demolition does (CSiegeFortress_HandleDatabaseResult
-6232C0 case 0x15 erases the structure and releases it): whatever stands
+0 vacates the zone, as a demolition does (the retail handler's case 0x15
+erases the structure and releases it): whatever stands
 there goes, and neither the hive nor ReinstallStructures spawns it again.
 Any other reference replaces what stands there with that structure at full
 hit points, also when it is not the nest's authored default (construction,
@@ -223,7 +223,7 @@ func (s *MonsterState) StructureZone(divisionID string, world instance.ID, zone 
 		}
 		ref, known := s.template.Refs[nest.RefObjID]
 		if !known {
-			// 6341B0's 0x281E: the zone names a structure with no reference.
+			// The construction handler's 0x281E: the zone names a structure with no reference.
 			return monster.MonsterRef{}, false, true
 		}
 		if !ref.Structure {
@@ -313,7 +313,7 @@ func (s *MonsterState) RestoreStructure(divisionID string, gid uint32, hp uint32
 ================
 SetGateState
 
-The pulley changes only the gate's state word (4CF860), never its HP.
+The pulley changes only the gate's state word, never its HP.
 Nonzero requests with no shared bit are ORed into the current word;
 zero clears a nonzero word. Other requests leave it unchanged.
 Admission and mutation share the population lock with damage and death.

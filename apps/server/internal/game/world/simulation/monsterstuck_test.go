@@ -2,7 +2,7 @@
 ===========================================================================
 
 monsterstuck_test.go - verification of native monster stuck counting and
-event-0x28 dispatch (0x00559010 / 0x005599C0 / 0x0055A250 / 0x00541110)
+event-0x28 dispatch
 
 ===========================================================================
 */
@@ -30,9 +30,9 @@ TestMonsterStuckDetachAndIdleOnBlockedHoming
 
 Verifies that a non-COS monster in HOMING (MoverReturning) whose return legs
 repeatedly stop within 20 units of its sequence origin accumulates 10 stuck
-counts (0x00559010), detaches its nest command (0x0053FD40 -> 0x00560D00)
-while preserving ControllerGID (+0x14C), enters MoverIdle (0x0053FF30), and
-stays idle at its detached pose rather than re-entering homing.
+counts, detaches its nest command while preserving ControllerGID (+0x14C),
+enters MoverIdle, and stays idle at its detached pose rather than
+re-entering homing.
 ================
 */
 func TestMonsterStuckDetachAndIdleOnBlockedHoming(t *testing.T) {
@@ -97,14 +97,14 @@ func TestMonsterStuckDetachAndIdleOnBlockedHoming(t *testing.T) {
 		t.Fatalf("mover mode = %v, want MoverIdle", settled.Mode())
 	}
 	if settled.ControllerGID() != 9001 {
-		t.Fatalf("controller GID = %d, want 9001 (CAITactics_ReleaseCommand preserves +0x14C)", settled.ControllerGID())
+		t.Fatalf("controller GID = %d, want 9001 (the release-command path preserves +0x14C)", settled.ControllerGID())
 	}
 	if settled.Progress().Failures() != 0 || settled.Stuck() {
 		t.Fatalf("stuck progress not reset on idle transition: failures=%d stuck=%v", settled.Progress().Failures(), settled.Stuck())
 	}
 
 	// Advancing again after the idle entry deadline must NOT re-enter homing
-	// because the nest command was released (0x00545630 returns 1 when +0x20 == 0).
+	// because the nest command was released (the slot query returns 1 when +0x20 == 0).
 	ops.Rand = func() float64 { return 0.10 } // stay idle on wander roll
 	ops.advanceInstance(monsterTestDivision, detachedInst, nil, settled.BehaviorDeadlineMs+100)
 	afterIdle, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
@@ -117,12 +117,12 @@ func TestMonsterStuckDetachAndIdleOnBlockedHoming(t *testing.T) {
 ================
 TestMonsterStuckWarpToBattleTargetAndDungeonGuard
 
-Verifies CAIState_BATTLE_OnStuck_RelocateToTarget (0x0055A250):
+Verifies the battle stuck relocation:
   - When TraceBoundary == 2, 10 short pursuit stops relocate the monster onto
     its live combat target via 0xB2F5 (OpObjectSourceCorrection) while keeping
     MoverChasing and the combat target.
   - When the monster is outdoors and the combat target is in a dungeon region,
-    CAITactics_RequestPositionRelocation (0x00541110) refuses the relocation.
+    the server's position-relocation request refuses the relocation.
 
 ================
 */
@@ -184,7 +184,7 @@ func TestMonsterStuckWarpToBattleTargetAndDungeonGuard(t *testing.T) {
 		t.Fatal("expected OpObjectSourceCorrection frame on battle stuck relocation")
 	}
 
-	// Outdoor -> dungeon relocation guard (0x00541110):
+	// Outdoor -> dungeon relocation guard:
 	outdoorPose := monster.Pose{RegionID: 25000, X: 100, Y: 10, Z: 100}
 	warped.Pose = outdoorPose
 	warped.From, warped.To = monster.Pose{}, monster.Pose{}
@@ -213,7 +213,7 @@ func TestMonsterStuckWarpToBattleTargetAndDungeonGuard(t *testing.T) {
 ================
 TestMonsterStuckRetainBattleWhenTraceBoundaryNotTwo
 
-Verifies that CAIState_BATTLE_OnStuck_RelocateToTarget (0x0055A250) is a no-op
+Verifies that the battle stuck relocation is a no-op
 when TraceBoundary != 2: the monster neither relocates nor detaches its nest.
 ================
 */
@@ -249,9 +249,9 @@ func TestMonsterStuckRetainBattleWhenTraceBoundaryNotTwo(t *testing.T) {
 ================
 TestMonsterStuckWarpToControllerAndIdleForCOS
 
-Verifies CAIState_OnStuck_RelocateToOwner (0x005599C0): a COS actor (TID
-matching 0x1C6 with kind 3..5) outside BATTLE relocates onto its live controller
-via 0x00541110 and transitions to MoverIdle (0x0053FF30).
+Verifies the owner stuck relocation: a COS actor (TID matching 0x1C6 with
+kind 3..5) outside BATTLE relocates onto its live controller and transitions
+to MoverIdle.
 ================
 */
 func TestMonsterStuckWarpToControllerAndIdleForCOS(t *testing.T) {

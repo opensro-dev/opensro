@@ -59,10 +59,37 @@ func (ops *MonsterMoverOps) planSegment(instance monster.Instance, mover monster
 		return mover, nil // same validated leg; no packet or geometry refresh
 	}
 	if !ready {
-		route := ops.PlanRoute(live, mover.LiveNavOwner(now), goal)
-		ops.Navigation.plan(callerForMode(mover.Mode()), route)
+		owner := mover.LiveNavOwner(now)
+		caller := callerForMode(mover.Mode())
+		// Exact failed-route memo (#1820 part B): a retry whose pose and
+		// owner are bit-identical to the recorded failed search, with the
+		// intent goal unchanged (a changed goal cancelled the intent
+		// above, which clears the record), on a plane whose routes are
+		// pure, recomputes to the same failure. Wait it out instead; the
+		// wait rebuilds the intent, so the record is re-noted after it.
+		// Heading is not part of the key: no search outcome turns on it.
+		if failFrom, failOwner, failStatus, failed := mover.RouteFailure(); failed &&
+			failFrom.RegionID == live.RegionID && failFrom.X == live.X && failFrom.Y == live.Y && failFrom.Z == live.Z &&
+			failOwner == owner && ops.RouteMemo != nil && ops.RouteMemo(live, goal) {
+			ops.Navigation.memo(caller)
+			ops.leg.noteMemo(caller)
+			next, frames := ops.waitForNavigation(instance.Gid, mover, live, goal, speed, settledFrames, now)
+			next.NoteRouteFailure(failFrom, failOwner, failStatus)
+			return next, frames
+		}
+		route := ops.planRouteTimed(caller, live, owner, goal)
+		ops.Navigation.plan(caller, route)
 		if route == nil || route.Status() != monster.NavigationRouteReady || route.Len() == 0 {
-			return ops.waitForNavigation(instance.Gid, mover, live, goal, speed, settledFrames, now)
+			next, frames := ops.waitForNavigation(instance.Gid, mover, live, goal, speed, settledFrames, now)
+			// Only a real search failure is noted, and only where the
+			// memo may later answer for it: unavailable geometry, the
+			// cross-plane refusal (RouteMemo false) and a nil planner
+			// prove nothing about a recompute.
+			if route != nil && ops.RouteMemo != nil && ops.RouteMemo(live, goal) &&
+				(route.Status() == monster.NavigationRouteBlocked || route.Status() == monster.NavigationSearchExhausted) {
+				next.NoteRouteFailure(live, owner, route.Status())
+			}
+			return next, frames
 		}
 		mover.BeginNavigation(route)
 		point, _ = mover.NavigationWaypoint()

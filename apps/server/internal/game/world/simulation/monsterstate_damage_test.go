@@ -199,7 +199,8 @@ func TestNativeSignedDamageDoesNotTurnNegativeIntoFatalHit(t *testing.T) {
 ================
 TestAreaCandidatesSkipStructures
 
-52BF90 admits only an aimed basic attack on a fortress structure, so the
+The retail server's can-attack check admits only an aimed basic attack on
+a fortress structure, so the
 area, chain and secondary candidate scans never return one.
 ================
 */

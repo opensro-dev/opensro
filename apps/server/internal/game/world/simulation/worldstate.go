@@ -101,7 +101,7 @@ type WorldState struct {
 	Spawn Spawn `json:"spawn"`
 	// MoveSegment is the live-position plane's input; nil when settled.
 	MoveSegment *MoveSegment `json:"moveSegment,omitempty"`
-	// Nav is the retained native pNavCell (CGObj+0x7C) of Spawn, valid only
+	// Nav is the retained native pNavCell (native object +0x7C) of Spawn, valid only
 	// while NavAt equals Spawn; read it through GoalOwner/LiveOwnerAt. Never
 	// re-derive ownership from a wire-quantized Y (navowner.go). Runtime-only
 	// like the native cell pointer: a re-entered position is re-resolved.
@@ -121,7 +121,7 @@ type WorldState struct {
 	// never outlive the session that started it.
 	PostureTransitionUntilMs int64 `json:"-"`
 	// AbnormalMotion is the hold the abnormal engine installs through vfunc
-	// 55C (4A9D00): 0xA frozen and its 1.5 s thaw, 9 stunned, 0x13 asleep.
+	// 55C: 0xA frozen and its 1.5 s thaw, 9 stunned, 0x13 asleep.
 	// RUNTIME-ONLY: a re-entered character re-installs its abnormal block.
 	AbnormalMotion monster.MotionHold `json:"-"`
 	// SpawnSet reports whether any move has been accepted this life.
@@ -170,7 +170,7 @@ func (w *WorldState) StandUp(nowMs int64) bool {
 	return true
 }
 
-// Native motion bytes (CGObj state+0x2) this port models for players.
+// Native motion bytes (native object state+0x2) this port models for players.
 const (
 	MotionNone       uint8 = 0
 	MotionSitting    uint8 = 4
@@ -182,10 +182,10 @@ const (
 ================
 MotionStateAt
 
-MotionStateAt is the player's native motion byte (GetMotionState 4AA590
-reads state+0x2) as the world plane knows it. Writers in native: 4A9D00
-for the abnormal hold, 4B15A4/4B15B8 for the 0x12 posture change and
-seated 4, and 4AA3F5 for walk 2 / run 3, which it sets only while the
+MotionStateAt is the player's native motion byte (the native getter
+reads state+0x2) as the world plane knows it. Writers in native: the
+abnormal hold, the 0x12 posture change and seated 4, and walk 2 / run 3,
+which the native setter sets only while the
 character is moving. The standing-wall 0x11 lives with the skill owner.
 ================
 */

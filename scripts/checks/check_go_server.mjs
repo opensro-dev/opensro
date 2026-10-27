@@ -14,8 +14,11 @@ a recorded pass (checkStamps.mjs) reports "up to date" without running, so
 an edit re-runs only the steps it can affect (a test-only edit never
 re-runs govulncheck). SRO_CHECK_FORCE=1 runs every step. The steps that do
 run are independent, so they all run concurrently: hygiene,
-the tests, the race run and govulncheck. Each step's output is printed as
-one block when it finishes; any failure fails the gate. Tests run as one
+the tests, the race run and govulncheck. Each step's output is captured;
+a failure prints one report block per failed step - its exit status, the
+packages its output names as failed, then the full output - and the thrown
+error names the same, so a log that keeps only the error line still says
+which step failed, how it ended and which packages failed. Tests run as one
 `go test ./...` with SRO_GO_TEST_PARALLELISM package workers (default: half
 the cores), so one slow package no longer stalls a whole shard (measured
 2026-09-27: 40s with 8 workers against 61s for eight-package shards at 2).
@@ -61,6 +64,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { publicAssetsRoot, retailTextdataRoot } from "../build/world/paths.mjs";
 import { findPass, fingerprintOf, recordPass, snapshotAsync } from "./checkStamps.mjs";
+import { failureReport, failureSummary } from "./failureReport.mjs";
 
 const scriptDirectory = path.dirname( fileURLToPath( import.meta.url ) );
 const rebuildRoot = path.resolve( scriptDirectory, "..", ".." );
@@ -311,9 +315,10 @@ wave
 
 Runs the steps concurrently. A step whose inputs match a recorded pass
 (checkStamps.mjs) reports "up to date" instead of running. Each step's
-output is captured and printed as one block when it finishes, so concurrent
-steps never interleave. A step fails on a non-zero exit, or when its
-accept() predicate rejects the output; a pass records its stamp.
+output is captured, so concurrent steps never interleave; a failure prints
+one failureReport block per failed step. A step fails on a non-zero exit,
+or when its accept() predicate rejects the output; a pass records its
+stamp.
 ================
 */
 async function wave( name, steps ) {
@@ -331,9 +336,11 @@ async function wave( name, steps ) {
 	const failed = results.filter( ( result ) => !result.ok );
 	if ( failed.length > 0 ) {
 		for ( const result of failed ) {
-			process.stderr.write( `\n--- ${result.label} FAILED ---\n${result.output}\n` );
+			process.stderr.write( `\n${failureReport( result )}\n` );
 		}
-		throw new Error( `server ${name}: ${failed.map( ( result ) => result.label ).join( ", " )} failed` );
+		throw new Error(
+			`server ${name}: ${failed.map( ( result ) => failureSummary( result ) ).join( ", " )}`
+		);
 	}
 	console.log(
 		`server ${name}: ${
@@ -448,7 +455,7 @@ runStep
  * @param {string} command
  * @param {string[]} args
  * @param {((output: string) => boolean) | undefined} accept
- * @returns {Promise<{ label: string, ok: boolean, output: string, seconds: string }>}
+ * @returns {Promise<{ label: string, ok: boolean, code: number | null, signal: string | null, output: string, seconds: string }>}
  */
 function runStep( label, command, args, accept ) {
 	const stepStarted = performance.now();
@@ -464,9 +471,9 @@ function runStep( label, command, args, accept ) {
 		child.on( "error", ( error ) => {
 			output += String( error );
 		} );
-		child.on( "close", ( code ) => {
+		child.on( "close", ( code, signal ) => {
 			const ok = code === 0 && (accept === undefined || accept( output ));
-			resolve( { label, ok, output, seconds: formatSeconds( performance.now() - stepStarted ) } );
+			resolve( { label, ok, code, signal, output, seconds: formatSeconds( performance.now() - stepStarted ) } );
 		} );
 	} );
 }

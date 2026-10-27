@@ -5,7 +5,7 @@ unique_states.go - every unique monster's spawn and death times
 
 Port-only, not native: the community site's unique tracker shows whether
 each unique is alive and when it spawned. The original keeps the same
-times on its nests (560D00) but never publishes them. When a dead unique
+times on its nests but never publishes them. When a dead unique
 returns stays secret (owner, 2026-10-11), so no respawn delay or death
 time leaves this file.
 

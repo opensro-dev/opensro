@@ -7,8 +7,9 @@ import (
 )
 
 func TestOrdinaryAcquisitionAndRememberedLookupUseDifferentChecks(t *testing.T) {
-	// Shared actor getters let a COS-shaped observer bypass 540DE0, but
-	// 5299E0 still rejects status 3. This distinguishes the two call paths.
+	// Shared actor getters let a COS-shaped observer bypass the retail
+	// server's actor test, but its hostility status check still rejects
+	// status 3. This distinguishes the two call paths.
 	actor := monster.Instance{Ref: monster.MonsterRef{TidWord: 0x1c6}}
 	from := monster.Pose{RegionID: monsterTestRegion, X: 1000, Z: 1000}
 	players := []playerPose{{Gid: 17, NativeBodyStatus: 3,

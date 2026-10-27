@@ -167,7 +167,7 @@ func TestStructureRowFollowsCICATStructOrder(t *testing.T) {
 ================
 TestTradeNpcRowEndsWithItsVariant
 
-CGObjMob_WriteSpawnData (4C1930) appends the equipment variant after the
+The retail server's spawn writer appends the equipment variant after the
 spawn grade for a thief (TID4 2) or hunter (TID4 3) only; the client's
 861B00 reads it by the same word.
 ================

@@ -3,10 +3,9 @@
 
 gmmonster.go - GM /LOADMONSTER: monsters created at the GM's position
 
-Native 520A40 (CGObjPC_OnCommandSummonOrKillMob, the SpecialCommand
-LOADMONSTER case) creates count instances of one monster reference at the
-GM's own position, each with a random heading, through the ordinary world
-factory. They are ordinary monsters: production AI, aggro, attacks, damage
+The retail server's summon command (the SpecialCommand LOADMONSTER
+case) creates count instances of one monster reference at the GM's own
+position, each with a random heading, through the ordinary world factory. They are ordinary monsters: production AI, aggro, attacks, damage
 and death. Like script-created monsters they have no respawning nest.
 
 ===========================================================================
@@ -19,7 +18,7 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 )
 
-// 520A5B..520A69 clamp the requested count to 1..250.
+// The retail server clamps the requested count to 1..250.
 const gmMonsterMaxCount = 250
 
 /*
@@ -44,7 +43,7 @@ type GMMonsterSpawn struct {
 ================
 GMSpawnRarity
 
-520D90 resolves the requested type byte against the reference's own type
+The retail server resolves the requested type byte against the reference's own type
 (+0x89): a unique (3) or type-8 reference keeps its own; otherwise a
 requested normal (0), champion (1), giant (4) or 7 is kept and any other
 value falls back to the reference's type.
@@ -69,8 +68,8 @@ SpawnGMMonsters
 
 Returns how many monsters were created; zero refuses the command. Every
 instance shares the GM's point; only its heading is drawn, as rand()/32767
-of a full turn in radians (520B85..520BB3), passed as a float to the world
-factory (5F6EB0) like the nest path's heading.
+of a full turn in radians, passed as a float to the world
+factory like the nest path's heading.
 
 INFERENCE: SpawnHeading is the wire word, which the client decodes as
 degrees * 65535 / 360 (the inverse of its serializer sub_877cc0). The
@@ -153,7 +152,7 @@ func (s *MonsterState) SpawnGMMonstersTracked(request GMMonsterSpawn) []uint32 {
 		state.behavior.set(actor.Gid, 0)
 		state.byRegion[spawn.RegionID] = append(state.byRegion[spawn.RegionID], actor.Gid)
 		created = append(created, actor.Gid)
-		// 4C10C0 arms every spawned monster's timers, a GM's included.
+		// The retail spawn arms every spawned monster's timers, a GM's included.
 		armLifetimeLocked(state, actor, request.NowMs)
 	}
 	return created
