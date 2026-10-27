@@ -467,7 +467,7 @@ func TestWhisperBlockAckContract(t *testing.T) {
 		{
 			// The find folds case but the echo must carry the STORED
 			// casing: the client's erase-by-name is case-sensitive
-			// (sub_61f2e0 @0061f3a2-0061f3a8 raw UTF-16 compare), so
+			// (the client's raw UTF-16 compare), so
 			// echoing "berk" as sent would miss the displayed "Berk" row
 			// and leave a phantom until the next enter-world reseed.
 			label:     "cancel with folded casing echoes the STORED name",

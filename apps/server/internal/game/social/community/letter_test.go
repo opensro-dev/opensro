@@ -14,7 +14,8 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 )
 
-// decodeReceiveTime mirrors sub_60c9b0 (CommunityLetterPlane_DecodeReceiveTime):
+// decodeReceiveTime mirrors the client CIFLetterSlot_SetRecord receive
+// time decode:
 // bits 0..5 year, 6..9 month, 10..14 day, 15..19 hour, 20..25 minute.
 func decodeReceiveTime(packed uint32) (year, month, day, hour, minute uint32) {
 	return packed & 0x3f, (packed >> 6) & 0xf, (packed >> 10) & 0x1f, (packed >> 15) & 0x1f, (packed >> 20) & 0x3f

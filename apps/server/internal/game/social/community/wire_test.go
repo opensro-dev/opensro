@@ -7,7 +7,8 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 )
 
-// TestEncodeFriendRoster3769 pins the sub_828ea0 read layout: u8 count,
+// TestEncodeFriendRoster3769 pins the client's roster read layout:
+// u8 count,
 // per friend {u32 jid, u16 len + ANSI name, u32 modelRefId, u8 state}.
 func TestEncodeFriendRoster3769(t *testing.T) {
 	if got := EncodeFriendRoster3769(nil); !bytes.Equal(got, []byte{0x00}) {
@@ -28,7 +29,9 @@ func TestEncodeFriendRoster3769(t *testing.T) {
 	}
 }
 
-// TestEncodeLetterListB3CD pins the sub_75cef0/sub_827630 read layout:
+// TestEncodeLetterListB3CD pins the client
+// CPSMission_OnLetterListResponse0xB3CD /
+// CharacterDependentData_LoadLetterList read layout:
 // u8 result 1, u8 count, per letter {u16 len + ANSI sender, u32
 // senderModelRefId, u32 packedReceiveTime, u8 readFlag}.
 func TestEncodeLetterListB3CD(t *testing.T) {
@@ -74,7 +77,8 @@ func TestSeedFrames(t *testing.T) {
 }
 
 // TestDecodeLetterIndexRequest pins the live letter-index strict decode
-// (the shared sub_701ca0 / sub_701be0 body {u8 index} the 0x70CC and
+// (the shared client NetClient_Send70CC / NetClient_Send73F2 body
+// {u8 index} the 0x70CC and
 // 0x73F2 handlers read): one byte in, no trailing bytes, empty refused.
 func TestDecodeLetterIndexRequest(t *testing.T) {
 	if index, err := DecodeLetterIndexRequest([]byte{0x07}); err != nil || index != 7 {
