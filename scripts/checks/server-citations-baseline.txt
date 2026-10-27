@@ -212,9 +212,6 @@ apps/server/internal/game/quest/runtime.go 2
 apps/server/internal/game/quest/wire.go 28
 apps/server/internal/game/quest/wire_test.go 2
 apps/server/internal/game/siege/lane_test.go 1
-apps/server/internal/game/social/chat/chat.go 2
-apps/server/internal/game/social/chat/chat_test.go 2
-apps/server/internal/game/social/chat/wire.go 53
 apps/server/internal/game/social/community/e2e_wire_test.go 4
 apps/server/internal/game/social/community/friend.go 9
 apps/server/internal/game/social/community/friendrequest.go 6
