@@ -3,8 +3,8 @@
 
 stats.go - combat stat snapshots for players and monsters
 
-Package combat owns immutable combat-stat snapshots and the v1.188
-CFormulae translation. It never owns live HP; simulation.MonsterState remains
+Package combat owns immutable combat-stat snapshots and the port of the
+reference server's damage formulas. It never owns live HP; simulation.MonsterState remains
 the sole mutation authority.
 
 ===========================================================================
@@ -433,7 +433,8 @@ func PlayerBaseStatsWithModifiers(
 		// and abnormal factors are already in the graph.
 		MaxHP: clampDisplayU32(float64(hp)),
 		MaxMP: clampDisplayU32(float64(mp)),
-		// 75BE90 applies the final words on every refresh. They are the
+		// The client's base-stats handler (CPSMission_OnBaseStats0x343C 75BE90)
+		// applies the final words on every refresh. They are the
 		// keeper's params 1 and 2, buffs included, truncated as
 		// the server's parameter-stats packet writes them: a stri/inti
 		// effect (the premium tickets' APRU buff) raises the STR and INT

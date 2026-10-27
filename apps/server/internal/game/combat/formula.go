@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-formula.go - hit damage (the v1.188 CFormulae call tree)
+formula.go - hit damage (the reference server's damage formulas)
 
 ===========================================================================
 */
@@ -86,7 +86,8 @@ type Result struct {
 ==================
 Resolve
 
-Resolve ports the normal-result physical and magical CFormulae lanes.
+Resolve ports the reference server's normal-result physical and magical
+damage lanes.
 Attack.Flags selects either or both helpers, exactly like the retail
 attack-block gate. The learned E2SA channel is consumed only by its physical
 getv branch. Other unimplemented modifier planes retain neutral inputs.
@@ -106,7 +107,7 @@ func Resolve(
 ResolveMonster
 
 ResolveMonster evaluates the non-player attacker branch of the same
-v1.188 CFormulae call tree. Monster default-skill `att` rows already carry
+reference server's damage formulas. Monster default-skill `att` rows already carry
 their authored attack interval; unlike a CICPlayer they do not multiply
 that interval by the STR/INT balance helpers. Keeping this entry point
 separate prevents a synthetic zero-STR monster from collapsing to minimum
@@ -160,7 +161,7 @@ func ResolveCalculation(attacker, defender Stats, calculation AttackCalculation,
 	}
 	if calculation.Lanes&(physicalAttackFlag|magicalAttackFlag) == 0 {
 		return Result{}, fmt.Errorf(
-			"combat: attack flags %#x select neither CFormulae damage lane",
+			"combat: attack flags %#x select neither damage lane",
 			attack.Flags,
 		)
 	}
