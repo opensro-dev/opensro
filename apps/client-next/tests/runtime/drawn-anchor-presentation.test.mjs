@@ -132,6 +132,8 @@ function driveEvents( heldPoses = new Map() ) {
 			effects,
 			effectDetail: 0,
 			bloodEnabled: false,
+			// The /id byte ships standing (0xCCB5D8).
+			damageNumbers: true,
 			resources: { ready: () => false, duration: () => 0 },
 			renderer: { characterSocket: () => null, characterMatrix: () => null, characterLocalMatrix: () => null },
 			feedback: {

@@ -15,6 +15,8 @@ All four pets and all 60 books have recorded functional gameplay coverage. The t
 
 **Validation:** full Go server suite, action vet/lint, 40 focused client tests and the pet-design consistency check passed. Original character records, pets, equipment and GM configuration were restored after testing; temporary spawned actors were cleared by restart.
 
+**Follow-up checks:** the full server suite and action vet/lint pass on the synchronized branch. All 82 pet client tests and 53 effect tests pass, including crow cue geometry, red/blue recovery effects and teardown. The clone wind-burst regression covers bare, D1, D9 and D9 Sun collars, with five-times scaling and exact yellow-damage/HP feedback. Native multi-impact attacks round each impact separately. The canonical pet-design export also passes consistency checking after the Hourglass text correction.
+
 **Limits:** this is per-book functional coverage, not every rank, equipment combination or visual animation. Exact effect formulas also have regression tests; random live damage samples alone do not prove exact multipliers. Raw local captures and reversible fixtures are under `.state/all-books-20261025-*`; the table records their case labels.
 
 | Book | Skill | Status | Evidence |

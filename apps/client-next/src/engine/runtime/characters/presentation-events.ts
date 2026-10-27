@@ -139,6 +139,8 @@ interface PresentationEventFrame {
 	readonly effects: PresentationEventEffects;
 	readonly effectDetail: number;
 	readonly bloodEnabled: boolean;
+	// The /id byte (0xCCB5D8): 8D5856 spawns a hit's number only while set.
+	readonly damageNumbers: boolean;
 	readonly resources: {
 		ready( path: string ): boolean;
 		duration( path: string, clip: string ): number;
@@ -225,6 +227,7 @@ export function createPresentationEvents() {
 				effects,
 				effectDetail,
 				bloodEnabled,
+				damageNumbers,
 				resources,
 				renderer,
 				feedback,
@@ -479,7 +482,10 @@ export function createPresentationEvents() {
 				const native = logicalPose( target );
 				const [dx, dz] = observer ? worldDelta( observer, native ) : [ Infinity, Infinity ];
 				const dy = observer ? native.y - observer.y : Infinity;
-				if ( cast.caster === gameplay?.localGid || dx * dx + dy * dy + dz * dz < 40000 ) {
+				// 8D583B..8D585D: within 200 units or cast by the local player,
+				// then the /id byte. 8D4DD0 spawns the number and plays the
+				// blocking sound, so the byte gates both.
+				if ( (cast.caster === gameplay?.localGid || dx * dx + dy * dy + dz * dz < 40000) && damageNumbers ) {
 					if ( state.damageTexts.length >= 2048 ) throw Error( "Damage text capacity exceeded" );
 					const anchor = drawnPoses.get( target.gid ) ?? native;
 					state.damageTexts = appendDamageText(
