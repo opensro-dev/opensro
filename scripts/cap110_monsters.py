@@ -15,7 +15,7 @@ behind its own flag.
 
 The admitted content is one declarative family table (FAMILIES below), one
 row per family: the Alexandria field, the Pharaoh tombs, the Qin-Shi tomb
-upper floors (SRO_QINSHI_TOMB, 91-99 content) and the temple instance bands
+upper floors (SRO_CAP110_QINSHI, 91-99 content) and the temple instance bands
 (SRO_CAP110_TEMPLE). Every family shares the one character/skill shard pair
 and the one marker allocator, and writes one nest file of its own in the
 Version-2 envelope; a family's switch off removes its nest file and its
@@ -60,7 +60,11 @@ FIELD_WORLD = 1
 # outdoor regions: the port runs each as a persistent shared area.
 TOMB_WORLDS = (57, 58, 59)
 TOMB_EXTRA_GRADES = (6, 8)
-QINSHI_FLAG = "SRO_QINSHI_TOMB"
+# Not SRO_QINSHI_TOMB: that switch already gates the shipped tomb content
+# and defaults on in the shard settings registry, so this family must not
+# ride it - the default build would refuse itself, and flipping the cap-110
+# field on would change live content as a side effect.
+QINSHI_FLAG = "SRO_CAP110_QINSHI"
 QINSHI_FILE = "cap110-qinshi.txt"
 TEMPLE_FLAG = "SRO_CAP110_TEMPLE"
 TEMPLE_FILE = "cap110-temple.txt"
@@ -391,6 +395,51 @@ def merge_skills(native, source, needed, previous):
 
 
 # ================
+# drop_symboled_rows
+#
+# Table rows minus the ones whose second field names a dropped symbol.
+# Both off-paths remove owned name rows this way: the full-off path with
+# the marker's whole list, a family-off rebuild with only the stale part.
+# ================
+def drop_symboled_rows(rows, symbols):
+	return [r for r in rows if len(r) < 2 or r[1] not in symbols]
+
+
+# ================
+# drop_characterinfo_rows
+#
+# A skill-effect text minus its owned characterinfo rows. Section state
+# is tracked so a codename outside the characterinfo section survives.
+# ================
+def drop_characterinfo_rows(effect_text, owned):
+	section, lines = None, []
+	for line in effect_text.splitlines():
+		header = effects.section_name(line)
+		if header is not None:
+			section = header
+		if section == "characterinfo" and line.split("\t")[0] in owned:
+			continue
+		lines.append(line)
+	return "\r\n".join(lines) + "\r\n"
+
+
+# ================
+# characterinfo_codenames
+#
+# The codenames a skill-effect text's characterinfo section describes.
+# ================
+def characterinfo_codenames(effect_text):
+	section, codes = None, set()
+	for line in effect_text.splitlines():
+		header = effects.section_name(line)
+		if header is not None:
+			section = header
+		elif section == "characterinfo" and line:
+			codes.add(line.split("\t")[0])
+	return codes
+
+
+# ================
 # add_monsters
 # ================
 def add_monsters(vsro_root, native, output, source_root=None):
@@ -412,19 +461,9 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		if prior:
 			effect_path = text_root / "skilleffect.txt"
 			effect_text = effects.remove_animation_bases(tables.decode_table(effect_path.read_bytes()), set(prior.get("animationBases", [])))
-			owned_info = set(prior.get("characterInfo", []))
-			section, lines = None, []
-			for line in effect_text.splitlines():
-				header = effects.section_name(line)
-				if header is not None:
-					section = header
-				if section == "characterinfo" and line.split("\t")[0] in owned_info:
-					continue
-				lines.append(line)
-			write_atomically(effect_path, b"\xff\xfe" + ("\r\n".join(lines) + "\r\n").encode("utf-16-le"))
+			write_atomically(effect_path, b"\xff\xfe" + drop_characterinfo_rows(effect_text, set(prior.get("characterInfo", []))).encode("utf-16-le"))
 			text_path = text_root / "textdataname.txt"
-			owned_names = set(prior.get("nameSymbols", []))
-			write_atomically(text_path, encode_rows([r for r in characters.translation_rows(text_path.read_bytes()) if len(r) < 2 or r[1] not in owned_names]))
+			write_atomically(text_path, encode_rows(drop_symboled_rows(characters.translation_rows(text_path.read_bytes()), set(prior.get("nameSymbols", [])))))
 		for name in (CHARACTER_SHARD, SKILL_SHARD, *(family["File"] for family in FAMILIES), "cap110-equipment.txt"):
 			(text_root / name).unlink(missing_ok=True)
 		manifest = text_root / "skilldata.txt"
@@ -509,6 +548,12 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		texts = [[r[0], r[1], r[2], "", "", r[5], r[4], r[7], r[8], r[9], ""] for r in characters.translation_rows(read("textdata_object.txt")) if len(r) >= 10 and r[1] in wanted]
 		if wanted - {r[1] for r in texts}:
 			raise ValueError("missing field monster names")
+		# Name rows a family that is off this build owned leave with it: the
+		# marker's list is the previous build's owned set; a symbol stays
+		# owned while a current reference still names it.
+		stale_names = set(prior.get("nameSymbols", [])) - {r[5] for r in refs.values()}
+		if stale_names:
+			base_text = encode_rows(drop_symboled_rows(characters.translation_rows(base_text), stale_names))
 		write_atomically(text_root / "textdataname.txt", characters.append_rows(base_text, texts))
 		effect_path = text_root / "skilleffect.txt"
 		effect_text = tables.decode_table(effect_path.read_bytes())
@@ -522,13 +567,25 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		effect_prefixes = tuple(prefix for family in enabled for prefix in family["Prefixes"])
 		info = [r[:characters.SKILL_EFFECT_KEPT] for r in tables.table_rows(read("skilleffect.txt"))
 			if len(r) == characters.SKILL_EFFECT_COLUMNS and r[0].startswith(effect_prefixes) and r[0] not in known_info]
+		# Same rule for the characterinfo rows: a species no longer
+		# referenced loses its row, one still referenced keeps it.
+		owned_info = characterinfo_codenames(effect_text) & set(refs)
+		stale_info = set(prior.get("characterInfo", [])) - owned_info
+		if stale_info:
+			effect_text = drop_characterinfo_rows(effect_text, stale_info)
 		write_atomically(effect_path, characters.skill_effect_section(effect_text.encode("utf-16"), info))
 		from cap110_monster_loot import stage_field_equipment
 		loot_count = stage_field_equipment(text_root, source_root)
 		summary = {"enabled": True, "characters": {c: int(r[1]) for c, r in refs.items()}, "skills": {r[3]: int(r[1]) for r in added}, "nests": len(population["Rows"]), "regions": sorted({r["RegionID"] for r in population["Rows"]}),
 			"animationBases": sorted(set(prior.get("animationBases", [])) | {base for rows in selected.values() for base, _ in rows}),
-			"characterInfo": sorted(set(prior.get("characterInfo", [])) | {r[0] for r in info}),
-			"nameSymbols": sorted(set(prior.get("nameSymbols", [])) | {r[1] for r in texts})}
+			# Owned rows are this build's set, not a union with the prior
+			# marker's: a family switched off must shrink both lists so the
+			# next off-path knows exactly what to reap. animationBases stays
+			# a union - it is the reap list for shared effect vocabulary,
+			# which only the full-off path removes.
+			"characterInfo": sorted(owned_info),
+			"nameSymbols": sorted(({r[1] for r in characters.translation_rows(base_text) if len(r) > 1}
+				| {r[1] for r in texts}) & {r[5] for r in refs.values()})}
 		summary["equipmentLootRows"] = loot_count
 		tomb_population = populations.get("pharaoh")
 		summary["tombNests"] = len(tomb_population["Rows"]) if tomb_population else 0

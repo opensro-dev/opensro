@@ -242,7 +242,7 @@ class Cap110MonstersTest(unittest.TestCase):
 		self.assertEqual(monsters.FAMILIES[0]["Name"], "field")
 		qinshi = by_name["qinshi"]
 		self.assertEqual((qinshi["Flag"], qinshi["File"], qinshi["Worlds"], qinshi["MinLevel"], qinshi["MaxLevel"], qinshi["Grades"]),
-			("SRO_QINSHI_TOMB", "cap110-qinshi.txt", (1,), 81, 110, (0, 3, 6, 8)))
+			("SRO_CAP110_QINSHI", "cap110-qinshi.txt", (1,), 81, 110, (0, 3, 6, 8)))
 		temple = by_name["temple"]
 		self.assertEqual((temple["Flag"], temple["File"], temple["MinLevel"], temple["MaxLevel"], temple["Grades"]),
 			("SRO_CAP110_TEMPLE", "cap110-temple.txt", 35, 109, (0, 1, 3, 6, 8)))
@@ -317,10 +317,43 @@ class Cap110MonstersTest(unittest.TestCase):
 		from unittest import mock
 		with tempfile.TemporaryDirectory() as root:
 			base = Path(root)
-			for flag in ("SRO_QINSHI_TOMB", "SRO_CAP110_TEMPLE", "SRO_PHARAOH_TOMB"):
+			for flag in ("SRO_CAP110_QINSHI", "SRO_CAP110_TEMPLE", "SRO_PHARAOH_TOMB"):
 				with self.subTest(flag=flag), mock.patch.dict(os.environ, {flag: "on", "SRO_CAP110_MONSTERS": ""}):
 					with self.assertRaisesRegex(ValueError, "requires SRO_CAP110_MONSTERS"):
 						monsters.add_monsters(base / "vsro", base / "native", base / "output")
+
+	# ================
+	# test_shipped_flags_at_their_defaults_do_not_gate_the_families
+	#
+	# Today's default build: the shipped tomb switch is on (its registry
+	# default) and every cap-110 switch is off. The families ride none of
+	# the shipped switches, so the run is the plain off path.
+	# ================
+	def test_shipped_flags_at_their_defaults_do_not_gate_the_families(self):
+		import os
+		from unittest import mock
+		env = {"SRO_QINSHI_TOMB": "on", "SRO_PHARAOH_TOMB": "",
+			"SRO_CAP110_MONSTERS": "", "SRO_CAP110_QINSHI": "", "SRO_CAP110_TEMPLE": ""}
+		with tempfile.TemporaryDirectory() as root:
+			base = Path(root)
+			with mock.patch.dict(os.environ, env):
+				self.assertEqual(monsters.add_monsters(base / "vsro", base / "native", base / "output"),
+					{"enabled": False})
+
+	# ================
+	# test_disabled_family_rows_are_the_stale_ones
+	# ================
+	def test_disabled_family_rows_are_the_stale_ones(self):
+		rows = [["1", "UIO_OBJ_MOB_SD_FIELD"], ["2", "UIO_OBJ_MOB_TQ_SOLDIER"], ["3"]]
+		self.assertEqual(monsters.drop_symboled_rows(rows, {"UIO_OBJ_MOB_TQ_SOLDIER"}),
+			[["1", "UIO_OBJ_MOB_SD_FIELD"], ["3"]])
+		text = ("#section\tskill\r\nMOB_SD_FIELD\ta\r\n#section\tcharacterinfo\r\n"
+			"MOB_SD_FIELD\tb\r\nMOB_TQ_SOLDIER\tc\r\n#section\tother\r\nMOB_TQ_SOLDIER\td\r\n")
+		scrubbed = monsters.drop_characterinfo_rows(text, {"MOB_TQ_SOLDIER"})
+		self.assertIn("MOB_SD_FIELD\tb", scrubbed)
+		self.assertNotIn("MOB_TQ_SOLDIER\tc", scrubbed)
+		self.assertIn("MOB_TQ_SOLDIER\td", scrubbed)
+		self.assertEqual(monsters.characterinfo_codenames(scrubbed), {"MOB_SD_FIELD"})
 
 	# ================
 	# test_new_family_species_do_not_rekey_published_identities
