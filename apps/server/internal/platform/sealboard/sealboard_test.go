@@ -412,7 +412,7 @@ func TestOpenMigratesLegacyShape(t *testing.T) {
 		character_id INTEGER NOT NULL,
 		tier INTEGER NOT NULL,
 		drops INTEGER NOT NULL,
-		PRIMARY KEY (week_start_s, character_id, tier))` + "; INSERT INTO seal_board_counts VALUES (?, 9, ?, 2)",
+		PRIMARY KEY (week_start_s, character_id, tier))`+"; INSERT INTO seal_board_counts VALUES (?, 9, ?, 2)",
 		monday.Unix(), TierSun); err != nil {
 		t.Fatal(err)
 	}
