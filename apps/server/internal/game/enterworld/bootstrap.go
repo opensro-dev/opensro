@@ -544,18 +544,27 @@ func buildRefItemSnapshot(deps *Deps, divisionID string, character *Character) [
 	// The browser has no PK2 table and seeds this lookup only at bootstrap;
 	// stocking just the viewer's inventory makes the peer parser abort on
 	// the first different garment/weapon. Seed every persisted inventory in
-	// the division from detached snapshots. This also covers a later login
-	// or equip from an already-owned bag row without shipping the full PK2.
+	// the division. Only each row's codename and type word are read,
+	// copied out under ONE authority read door in division order - the
+	// records themselves are never detached for this (#1820 part C). This
+	// also covers a later login or equip from an already-owned bag row
+	// without shipping the full PK2.
 	if deps.Characters != nil {
-		for _, livePeer := range deps.Characters.CharactersForDivision(divisionID) {
-			peer := readCharacterSnapshot(deps, divisionID, livePeer)
-			if peer == nil {
-				continue
+		peers := deps.Characters.CharactersForDivision(divisionID)
+		var peerRows []refItemRowRef
+		deps.Read(divisionID, func() {
+			for _, peer := range peers {
+				if peer == nil {
+					continue
+				}
+				for _, row := range peer.MissionInventory {
+					peerRows = append(peerRows, refItemRowRef{codename: row.Codename, typeFlags: row.TypeFlags})
+				}
 			}
-			for _, row := range peer.MissionInventory {
-				flags := row.TypeFlags
-				collector.add(row.Codename, &flags)
-			}
+		})
+		for _, row := range peerRows {
+			flags := row.typeFlags
+			collector.add(row.codename, &flags)
 		}
 	}
 	if deps.ExtraRefItemCodenames != nil {
@@ -585,6 +594,19 @@ func StaticRefItemRows(deps *Deps) []RefItemRow {
 	collector := newRefItemCollector(deps)
 	collector.addStatic()
 	return collector.finish()
+}
+
+/*
+================
+refItemRowRef
+
+One inventory row's contribution to the reference seed: the codename and
+its persisted type word, copied off the live record under the read door.
+================
+*/
+type refItemRowRef struct {
+	codename  string
+	typeFlags uint16
 }
 
 /*
