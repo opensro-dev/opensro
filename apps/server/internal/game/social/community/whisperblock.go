@@ -186,8 +186,7 @@ func HandleWhisperBlock(deps Dependencies, divisionID string, character *enterwo
 			// client's erase-by-name is CASE-SENSITIVE (the client's
 			// erase compares raw UTF-16 code units, no _wcsicmp; the
 			// mode-1 duplicate walk std_wstring_compare_substring ->
-			// std_char_traits_wchar_compare is likewise raw), so the
-			// ack must
+			// std_char_traits_wchar_compare is likewise raw), so the ack must
 			// carry the exact casing the panel row displays or the
 			// erase misses and a phantom row survives until the next
 			// enter-world reseed.
