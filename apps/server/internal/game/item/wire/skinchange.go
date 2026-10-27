@@ -1,7 +1,7 @@
 package wire
 
 // OpSkinChange is the v1.150 client's CPSMission_OnCharacterSkinChangeSuccess
-// (7641D0); the v1.188 server sends the same body as 0x3207 from its
+// (client 7641D0); the v1.188 server sends the same body as 0x3207 from its
 // monster-transform and duplicate-transform applications.
 const OpSkinChange uint16 = 0x323A
 

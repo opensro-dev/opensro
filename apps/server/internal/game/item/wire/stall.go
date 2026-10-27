@@ -6,19 +6,24 @@ stall.go - the street stall and stall network frames
 The v1.150 client's stall (CIFStall, interface child 0x21):
 
   - 0x7049 [wstr title] opens a stall (NetClient_RequestStallCreate0x7049);
-    0xB049 [1] answers (74F7A0), the stall shows nearby as 0x30DF [u32 gid]
+    0xB049 [1] answers (client 74F7A0), the stall shows nearby as 0x30DF
+    [u32 gid]
     [wstr title][u32 decoration] (751430).
-  - 0x742C closes it (0xB42C [1], 74F840); 0x33D1 [u32 gid][u8] tells the
-    neighbours (74F8F0).
+  - 0x742C closes it (0xB42C [1], client 74F840); 0x33D1 [u32 gid][u8]
+    tells the neighbours (the client's
+    CPSMission_OnEntityGidInnerUpdate0x33D1).
   - 0x761F [u32 owner gid] visits (0xB61F [1][u32 owner][wstr greeting]
     [u8 open][u8 mode] offers [u8 visitors][u32 gid]..., 751720); 0x76E7
-    leaves (0xB6E7 [1], 74FB90).
-  - 0x73F9 [u8 slot] buys (0xB3F9 [1][u8 slot], 74FC40): the buyer's
+    leaves (0xB6E7 [1], client 74FB90).
+  - 0x73F9 [u8 slot] buys (0xB3F9 [1][u8 slot], the client's
+    CPSMission_OnStallBuyResponse0xB3F9): the buyer's
     client puts the slot's item in its first empty bag slot (5A3870).
-  - 0x71A8 [u8 kind] edits (6FF420): 1 [slot][u16 count][u32 price][u8],
+  - 0x71A8 [u8 kind] edits (client NetClient_RequestStallOperation0x71A8): 1 [slot][u16 count][u32 price][u8],
     2 [slot][bag slot][u16 count][u32 price][u32 category][u8], 3 [slot]
     [u8], 4 [u8 mode], 5 [u8 open][u8 network], 6 [wstr greeting], 7
-    [wstr title]. 0xB1A8 [1][kind] (751A60) goes to everyone at the stall:
+    [wstr title]. 0xB1A8 [1][kind] (the client's
+    CPSMission_OnStallConditionResponse0xB1A8) goes to everyone at the
+    stall:
     1 [slot][u16][u32][u8 code], 2 and 3 [u8 code] offers, 4 [u8], 5 [u8
     open][u8 network code], 6 [wstr]; 0x34B7 [u32 gid][wstr] renames it
     for the neighbours (751520).
@@ -26,13 +31,14 @@ The v1.150 client's stall (CIFStall, interface child 0x21):
     3 and 4 [u8 slot][str buyer] offers sold (4 through the network).
 
 Offers are [u8 slot][CSOItem][u8 bag slot][u16 count][u32 price] until a
-0xFF slot (74F9D0). Refusals are [2][code], a category 0x0A notice.
+0xFF slot (client 74F9D0). Refusals are [2][code], a category 0x0A notice.
 
 The stall network (CIFStallNetwork): 0x76F9 [u8 kind][u8 page][u32
 category][u8] searches (0xB6F9 [1][u8 rows][u8 pages] then rows of
 [CSOItem][u32 owner][u8 slot][u16 count][u8][u64 price][u64 serial],
-766FC0), 0x72CA [u32 owner][u8 slot][u64 price][u16 count][u8][u64
-serial] buys from a listed stall (0xB2CA [1], 7671D0).
+the client's CNetProcess_OnResponse0xB6F9), 0x72CA [u32 owner]
+[u8 slot][u64 price][u16 count][u8][u64 serial] buys from a listed
+stall (0xB2CA [1], the client's CNetProcess_OnResponse0xB2CA).
 
 ===========================================================================
 */
@@ -74,7 +80,8 @@ const (
 	StallEventNetworkSold uint8 = 4
 
 	stallOffersEnd uint8 = 0xFF
-	// StallNetworkRegistered is 751A60's network code that prints
+	// StallNetworkRegistered is the network code of the client's
+	// CPSMission_OnStallConditionResponse0xB1A8 that prints
 	// UIIT_MSG_WARENETWORK_REGIST_SUCCESS.
 	StallNetworkRegistered uint8 = 1
 )
@@ -132,7 +139,7 @@ type StallOffer struct {
 ================
 WriteStallOffers
 
-Offers until the 0xFF end marker (74F9D0).
+Offers until the 0xFF end marker (client 74F9D0).
 ================
 */
 func WriteStallOffers(w *Writer, offers []StallOffer) *Writer {
