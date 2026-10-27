@@ -994,6 +994,7 @@ export interface UiExtensions {
 	setWorldFieldOfView?: ( degrees: number ) => void;
 	setCameraZoomRail?: ( capped: boolean ) => void;
 	setFreeCamera?: ( free: boolean ) => void;
+	setFreeCameraSpeed?: ( speed: number ) => void;
 	setCameraCollision?: ( collision: boolean ) => void;
 	setCameraWaypoints?: (
 		keyframes: readonly import("@/engine/foundation/ui/camera-waypoints").CameraWaypoint[]
@@ -1062,14 +1063,15 @@ export function createUi(
 	const cameraWaypoints = createCameraWaypointStore();
 	let cameraWaypointsLoaded = false;
 	// The camera family's kept values: the free-camera move speed
-	// (+0x7B0, seeded 100, case 136), the snapped second speed (+0x7C0,
+	// (+0x7B0, seeded 100, case 136; the camera owner holds a copy for
+	// the free-fly arm, #1787), the snapped second speed (+0x7C0,
 	// seeded 50, case 111), the frame byte (engine global +0x4A, seeded
 	// clear, case 117), the /id byte (0xCCB5D8, seeded standing,
 	// case 137) and the local
 	// player's written speed (+0x658, case 600; 100 is the scale's
-	// neutral point, the value the word 10 writes). The port's camera
-	// does not translate freely and its movement is the server's, so
-	// those are kept as written for the consumers in #1717. The /id byte
+	// neutral point, the value the word 10 writes). The movement speed
+	// is the server's, so it and the second speed are kept as written
+	// for the consumers in #1717. The /id byte
 	// is read: while it is clear the overhead boards and their kind-4
 	// pass are skipped (85F5DC), and the character owner holds a copy
 	// for the hit damage numbers (8D5856, #1785).
@@ -2958,11 +2960,14 @@ export function createUi(
 				break;
 			case DEBUG_COMMAND_CAMERA_SPEED: {
 				// Case 136 writes +0x7B0 from one word clamped to
-				// 1..500: the free-camera move speed, kept for the
-				// camera (the port's free camera holds its pose and has
-				// no translation to scale; see #1717). No print.
+				// 1..500: the free-fly arm's translation speed (690146
+				// reads it at 6902AD and 69040B), forwarded to the
+				// camera owner (#1787). No print.
 				const speed = debugCameraSpeedValue( command.args );
-				if ( speed !== null ) debugCameraSpeed = speed;
+				if ( speed !== null ) {
+					debugCameraSpeed = speed;
+					extensions.setFreeCameraSpeed?.( speed );
+				}
 				break;
 			}
 			case DEBUG_COMMAND_ID:
