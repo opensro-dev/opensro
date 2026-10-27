@@ -4,7 +4,7 @@
 pharaohtomb.go - the three Pharaoh Tomb worlds, port-only identity table.
 
 Port-only, not native; the worlds exist only while SRO_PHARAOH_TOMB is on
-(#1750, owner 2026-10-26). The source database tags each tomb's regions
+(#1750, owner 2026-10-27). The source database tags each tomb's regions
 with its own game world id (57, 58, 59); the shipped world catalogue has
 no 57-59, so the port registers exactly these three as permanent worlds.
 

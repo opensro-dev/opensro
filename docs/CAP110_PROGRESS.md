@@ -1015,7 +1015,7 @@ gate arrivals have no dungeon-region sign bit), so they reuse the field pipeline
 
 Port decisions, each inferred rather than evidenced:
 
-- Each tomb is its own permanent world (#1750, owner 2026-10-26). The v1.150
+- Each tomb is its own permanent world (#1750, owner 2026-10-27). The v1.150
   world table has no 57-59 (the server stops with `names unknown world 57`), so
   the port registers the three shipped ids port-only (`INS_PHARAOH_TOMB_1..3`)
   behind the same switch and the tomb population joins its own world instead of

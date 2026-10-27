@@ -11,8 +11,8 @@ each tomb here is its own permanent world. The boot composition registers
 the three (instance.PharaohTombDefinitions, from the pharaohtomb leaf) only
 while this switch is on, and the population joins its own world instead of
 the default one. An earlier build flattened all three onto the default
-world; the gates still lead there until the tomb gates keep their authored
-destination worlds (the second #1750 PR).
+world; the tomb gates keep their authored destination worlds (57-59), so a
+gate entered from the field arrives in the tomb its population joined.
 
 The importer (scripts/cap110_monsters.py, TOMB_FILE) writes cap110-tomb.txt in the same row
 schema as the field population (cap110.go), each row carrying its source
