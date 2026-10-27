@@ -174,6 +174,13 @@ def shard_settings(path=None):
 	return settings
 
 
+# The WebTransport posture's sro-nomad flags, in webtransport_deployer's
+# order. A release built before them refuses them all, so a deployment
+# that stages such a binary must not pass them (without_undefined_wt_arguments).
+WT_ARGUMENT_FLAGS = ("-transport-wt-addr", "-transport-cert-file", "-transport-key-file",
+	"-transport-wt-public-port")
+
+
 # ================
 # webtransport_deployer
 #
@@ -203,13 +210,13 @@ def webtransport_deployer(config):
 				raise ValueError(key + " requires webtransport_public on; a half-posture deploys nothing")
 		return ({"SRO_WEBTRANSPORT_PUBLIC": public} if public else {}), []
 	arguments = []
-	for key, flag in zip(keys, ("-transport-wt-addr", "-transport-cert-file", "-transport-key-file")):
+	for key, flag in zip(keys, WT_ARGUMENT_FLAGS):
 		value = config.get(key, "")
 		if not isinstance(value, str) or not value.strip():
 			raise ValueError("webtransport_public is on but " + key + " is not configured")
 		arguments += [flag, value.strip()]
 	quic_host.require_bind(*wt_bind(config["transport_wt_addr"]))
-	arguments += ["-transport-wt-public-port", str(quic_host.PUBLIC_PORT)]
+	arguments += [WT_ARGUMENT_FLAGS[3], str(quic_host.PUBLIC_PORT)]
 	return {"SRO_WEBTRANSPORT_PUBLIC": "on"}, arguments
 
 
@@ -261,6 +268,51 @@ def wt_bind(address):
 	if not separator or not host or not port.isdigit() or not 0 < int(port) < 65536:
 		raise ValueError("transport_wt_addr must be host:port, not " + repr(address))
 	return host, int(port)
+
+
+# ================
+# executable_flags
+#
+# The flags the staged sro-nomad defines, from its own usage: the binary
+# answers -h by printing its flag set and exiting nonzero (Go's flag
+# package), so the refusal carries the list. Every subcommand shares the
+# one flag set (sro-nomad parseOptions).
+# ================
+def executable_flags(executable):
+	try:
+		run([executable, "validate", "-h"], env=CLEAN_ENV, capture=True)
+	except subprocess.CalledProcessError as error:
+		text = (error.stderr or "") + (error.stdout or "")
+		return set(re.findall(r"(?m)^\s+-([a-z][a-z0-9-]*)", text))
+	raise RuntimeError(executable + " answered -h without a flag list")
+
+
+# ================
+# without_undefined_wt_arguments
+#
+# The deployment's arguments minus the WebTransport posture. deploy()
+# stages the release being deployed into the module before it runs
+# anything (copy_inputs), so on a revert that binary is the retained
+# release's, built before the posture flags existed: passing them stops
+# the revert with "flag provided but not defined". The posture is
+# all-or-nothing (webtransport_deployer refuses a half-posture: "a
+# half-posture deploys nothing"), so if the staged sro-nomad lacks ANY
+# posture flag, every posture flag is dropped with its value, and the
+# rest of the arguments stand. The SRO_WEBTRANSPORT_PUBLIC environment
+# stays: a binary that does not read it ignores it. A binary that will
+# not report its flags refuses the deployment rather than guessing its
+# arguments.
+# ================
+def without_undefined_wt_arguments(executable, arguments):
+	if not any(argument in WT_ARGUMENT_FLAGS for argument in arguments):
+		return arguments
+	defined = executable_flags(executable)
+	if not defined:
+		raise RuntimeError(executable + " did not report its flags; refusing to guess its WebTransport arguments")
+	if all(flag[1:] in defined for flag in WT_ARGUMENT_FLAGS):
+		return arguments
+	return [argument for index, argument in enumerate(arguments)
+		if argument not in WT_ARGUMENT_FLAGS and (index == 0 or arguments[index - 1] not in WT_ARGUMENT_FLAGS)]
 
 
 # ================
@@ -702,6 +754,7 @@ def rehearse(config, staging, manifest):
 		copy_inputs(staging, copy, names)
 		run([str(copy / "sro-provision-identity"), "-state-dir", str(copy / ".state/cluster")], cwd=copy, env=CLEAN_ENV)
 		management, token, environment, arguments = deployer(config, stack_sizes)
+		arguments = without_undefined_wt_arguments(str(copy / "sro-nomad"), arguments)
 		try:
 			output = run([str(copy / "sro-nomad"), "validate", "-assume-stopped", *arguments],
 				cwd=copy, env=environment, capture=True).stdout
@@ -746,6 +799,10 @@ def deploy(config, staging, manifest, notice=True, upgrade=False, on_upgrade=Non
 	executable = str(module / "sro-nomad")
 	try:
 		copy_inputs(staging, module, names)
+		# The staged binary is the verdict on which arguments it takes: a
+		# revert stages the retained release's sro-nomad (copy_inputs),
+		# which may predate the posture flags the deployer built.
+		arguments = without_undefined_wt_arguments(executable, arguments)
 		run([str(module / "sro-provision-identity"), "-state-dir", str(module / ".state/cluster")], cwd=module, env=CLEAN_ENV)
 		cluster = module / ".state/cluster"
 		shutil.chown(cluster, user="root", group="sro")

@@ -132,6 +132,47 @@ class DeployTests(unittest.TestCase):
 				"transport_cert_file": "/etc/opensro-tls/fullchain.pem"})
 
 	# ================
+	# test_wt_arguments_the_staged_binary_lacks_are_dropped
+	#
+	# A revert stages the retained release's sro-nomad, built before the
+	# WebTransport posture flags existed ("flag provided but not defined"
+	# stopped one). The posture is all-or-nothing, so a binary missing
+	# any posture flag loses every posture flag with its value and keeps
+	# the rest; a binary that defines them all keeps them all; a
+	# deployment without posture arguments never asks the binary; a
+	# binary that will not report its flags refuses instead of guessing.
+	# ================
+	def test_wt_arguments_the_staged_binary_lacks_are_dropped(self):
+		arguments = ["-namespace", "sro", "-transport-wt-addr", "[::]:18443",
+			"-transport-cert-file", "/etc/opensro-tls/fullchain.pem",
+			"-transport-key-file", "/etc/opensro-tls/privkey.pem",
+			"-transport-wt-public-port", "443"]
+		old_usage = "Usage of validate:\n  -namespace string\n\tNomad namespace\n  -module-root string\n"
+		new_usage = old_usage + "".join(f"  {flag} value\n" for flag in deploy.WT_ARGUMENT_FLAGS)
+		partial_usage = old_usage + "  -transport-wt-addr value\n  -transport-wt-public-port value\n"
+
+		def probe(usage):
+			def run(command, **kwargs):
+				raise subprocess.CalledProcessError(2, command, stderr=usage)
+			return run
+
+		with patch.object(deploy, "run", side_effect=probe(old_usage)):
+			self.assertEqual(deploy.without_undefined_wt_arguments("sro-nomad", arguments),
+				["-namespace", "sro"])
+		with patch.object(deploy, "run", side_effect=probe(partial_usage)):
+			self.assertEqual(deploy.without_undefined_wt_arguments("sro-nomad", arguments),
+				["-namespace", "sro"])
+		with patch.object(deploy, "run", side_effect=probe(new_usage)):
+			self.assertEqual(deploy.without_undefined_wt_arguments("sro-nomad", arguments), arguments)
+		with patch.object(deploy, "run") as run:
+			self.assertEqual(deploy.without_undefined_wt_arguments("sro-nomad", ["-namespace", "sro"]),
+				["-namespace", "sro"])
+			run.assert_not_called()
+		with patch.object(deploy, "run", side_effect=probe("")):
+			with self.assertRaisesRegex(RuntimeError, "did not report its flags"):
+				deploy.without_undefined_wt_arguments("sro-nomad", arguments)
+
+	# ================
 	# test_public_webtransport_waits_for_the_host
 	#
 	# A public deploy stops before any token is issued while the host lacks
