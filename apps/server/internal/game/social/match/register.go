@@ -66,7 +66,7 @@ type Runtime struct {
 	// ride from inside the commit).
 	CommitPartyJoin func(divisionID, ownerName, joinerName string, optionBits uint8) string
 	// PartyMemberInfoFor renders the joiner's masked member-info record
-	// (the sub_75db30 wire shape) through internal/game/social/party's ONE encoder - the
+	// (the CPartyMemberInfo_ReadMasked wire shape) through internal/game/social/party's ONE encoder - the
 	// 0x75BF owner notify's tail.
 	PartyMemberInfoFor func(divisionID, name string) ([]byte, bool)
 
@@ -586,7 +586,8 @@ func (r *Runtime) levelCap() int64 {
 ================
 preparePartyRegistration
 
-Retail 63BBA0/63C010 validate the form; authority independently enforces
+Retail CGInterface_Uses_UIIT_MSG_PARTYMATCH_RECORD_ERROR_LEVEL and
+CIFPartyMatchRegister_Initialize validate the form; authority enforces
 it. A party member who is not the master is refused (0x1D), a partyless
 registrant below level 5 too (0x0A); a party's listing takes the party's
 options. Returns the refusal code, 0 when admitted.

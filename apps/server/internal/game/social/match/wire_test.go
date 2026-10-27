@@ -19,13 +19,13 @@ func u32le(v uint32) []byte {
 	return []byte{byte(v), byte(v >> 8), byte(v >> 16), byte(v >> 24)}
 }
 
-// narrowStr renders the sub_4fd5f0 sized-ANSI layout.
+// narrowStr renders the CGInterface_Calls_CMsgStreamBuffer_WriteBytes sized-ANSI layout.
 func narrowStr(s string) []byte {
 	out := u16le(uint16(len(s)))
 	return append(out, []byte(s)...)
 }
 
-// wideStr renders the sub_75d8a0 sized-wide layout (BMP-only fixtures).
+// wideStr renders the CMsgStreamBuffer_ReadSizedUTF16String sized-wide layout (BMP-only fixtures).
 func wideStr(s string) []byte {
 	runes := []rune(s)
 	out := u16le(uint16(len(runes)))
@@ -107,7 +107,7 @@ func TestDecodeDeleteAndPageRequests(t *testing.T) {
 }
 
 func TestEncodePartyRegAckPinsTheSub75dc40Blob(t *testing.T) {
-	// The same values the harness feeds sub_75e3a0: flag 1, {u32 77,
+	// The same values the harness feeds CPSMission_OnPartyMatchingRecordResponse0xB6FF: flag 1, {u32 77,
 	// u32 1234, 02 03 0F 50, wide "fresh party"}.
 	got := EncodePartyRegAck(PartyEntry{
 		EntryID: 77, PartyNumber: 1234,
