@@ -116,9 +116,12 @@ func magicOptionWrites(codename string, options []magicOption, source uint32) ([
 		case optionTag("mdia"):
 			flat(0xbc, float32(int32(own[0xbc])+int32(o.value)))
 		case optionTag("hp"):
-			flat(3, v)
+			// Accumulates onto the item's own contribution like hpa
+			// below: the keeper replaces per source, so a plain write
+			// after an hpa write would silently drop its magnitude.
+			flat(3, float32(int32(own[3])+int32(o.value)))
 		case optionTag("mp"):
-			flat(4, v)
+			flat(4, float32(int32(own[4])+int32(o.value)))
 		case optionTag("fz"):
 			// Frostbite resistance covers freezing and frostbite.
 			flat(0x1b, v)

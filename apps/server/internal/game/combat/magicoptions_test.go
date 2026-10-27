@@ -73,6 +73,55 @@ func TestMagicOptionsWriteTheKeeper(t *testing.T) {
 	}
 }
 
+// An item carrying both a base vital option and its avatar form sums the two
+// in either option order: the keeper replaces per source, so the base option
+// accumulates onto the item's own contribution exactly like the avatar form
+// (magicoptions.go's own rule). The hpa-then-hp order failed that before the
+// hp/mp cases accumulated: the later plain write replaced the avatar total.
+func TestMagicOptionBaseAndAvatarVitalsSumInAnyOrder(t *testing.T) {
+	rows := optionRows()
+	rows[141] = &enterworld.MagicOptionRow{ParamID: 141, OptionName: "MATTR_HPA", Tag: optionTag("hpa")}
+	rows[142] = &enterworld.MagicOptionRow{ParamID: 142, OptionName: "MATTR_MP", Tag: optionTag("mp")}
+	rows[143] = &enterworld.MagicOptionRow{ParamID: 143, OptionName: "MATTR_MPA", Tag: optionTag("mpa")}
+	statsFor := func(options ...uint64) Stats {
+		ref := &enterworld.ItemRef{RefObjID: 1, Codename: "TEST_ARMOR", TypeIDs: [4]int64{3, 1, 1, 1}, Combat: &enterworld.ItemCombatRef{}}
+		row := domain.InventoryRow{Slot: 0, RefObjID: 1, Codename: ref.Codename, VarianceBits: "0", Durability: 1,
+			MagicOptions: options}
+		c := &domain.Character{Level: pointer(10), Strength: pointer(40), Intellect: pointer(30), MissionInventory: []domain.InventoryRow{row}}
+		stats, _, err := PlayerStats(c, Catalogs{Items: itemRefs{ref.Codename: ref}, MagicOptions: rows})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return stats
+	}
+	base := statsFor()
+	baseHP, _ := base.Param(3)
+	baseMP, _ := base.Param(4)
+	for _, test := range []struct {
+		name    string
+		options []uint64
+		param   uint16
+		base    float32
+		want    float32
+	}{
+		{"hp alone", []uint64{encodedOption(140, 300)}, 3, baseHP, baseHP + 300},
+		{"hpa alone", []uint64{encodedOption(141, 150)}, 3, baseHP, baseHP + 150},
+		{"hp then hpa", []uint64{encodedOption(140, 300), encodedOption(141, 150)}, 3, baseHP, baseHP + 450},
+		{"hpa then hp", []uint64{encodedOption(141, 150), encodedOption(140, 300)}, 3, baseHP, baseHP + 450},
+		{"mp alone", []uint64{encodedOption(142, 200)}, 4, baseMP, baseMP + 200},
+		{"mpa alone", []uint64{encodedOption(143, 120)}, 4, baseMP, baseMP + 120},
+		{"mp then mpa", []uint64{encodedOption(142, 200), encodedOption(143, 120)}, 4, baseMP, baseMP + 320},
+		{"mpa then mp", []uint64{encodedOption(143, 120), encodedOption(142, 200)}, 4, baseMP, baseMP + 320},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			stats := statsFor(test.options...)
+			if v, _ := stats.Param(test.param); v != test.want {
+				t.Fatalf("param %d = %v, want %v (base %v)", test.param, v, test.want, test.base)
+			}
+		})
+	}
+}
+
 // The magic-option pass scales the item's own hit rating before insertion, stored to float32.
 func TestItemHitRateOptionScalesTheItem(t *testing.T) {
 	item := Stats{HitRate: 57, EvasionRate: 31}
