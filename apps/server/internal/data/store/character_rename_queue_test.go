@@ -60,7 +60,7 @@ func TestQueuedRenameAppliesAtLoginAndReservesOldName(t *testing.T) {
 		t.Fatal("the queue renamed mid-session")
 	}
 
-	outcomes := s.ApplyPendingRenames(testDivision, "test-account", now)
+	outcomes := s.ApplyPendingRenames(testDivision, "test-account", now, nil)
 	if len(outcomes) != 1 || !outcomes[0].Applied || outcomes[0].OldName != "Hero" || outcomes[0].NewName != "HeroTwo" {
 		t.Fatalf("outcomes: %+v", outcomes)
 	}
@@ -91,7 +91,7 @@ func TestQueuedRenameAppliesAtLoginAndReservesOldName(t *testing.T) {
 	if err := s.QueueCharacterRename(testDivision, hero, "HeroThree", later); err != nil {
 		t.Fatalf("queue after cooldown: %v", err)
 	}
-	outcomes = s.ApplyPendingRenames(testDivision, "test-account", later)
+	outcomes = s.ApplyPendingRenames(testDivision, "test-account", later, nil)
 	if len(outcomes) != 1 || !outcomes[0].Applied || hero.Name != "HeroThree" {
 		t.Fatalf("second apply: %+v (hero %q)", outcomes, hero.Name)
 	}
@@ -141,7 +141,7 @@ func TestQueuedRenameCancelsWhenTargetIsTaken(t *testing.T) {
 	if err := s.CreateCharacter(testDivision, "other-account", &domain.Character{Name: "FreshName"}); err != nil {
 		t.Fatal(err)
 	}
-	outcomes := s.ApplyPendingRenames(testDivision, "test-account", now)
+	outcomes := s.ApplyPendingRenames(testDivision, "test-account", now, nil)
 	if len(outcomes) != 1 || outcomes[0].Applied || outcomes[0].Reason != RenameRefusedTaken {
 		t.Fatalf("outcomes: %+v", outcomes)
 	}
@@ -180,11 +180,49 @@ func TestQueuedRenameCancelsDuringGuildWar(t *testing.T) {
 		testDivision, guildID, string(raw)); err != nil {
 		t.Fatal(err)
 	}
-	outcomes := s.ApplyPendingRenames(testDivision, "test-account", now)
+	outcomes := s.ApplyPendingRenames(testDivision, "test-account", now, nil)
 	if len(outcomes) != 1 || outcomes[0].Applied || outcomes[0].Reason != RenameRefusedGuildWar {
 		t.Fatalf("outcomes: %+v", outcomes)
 	}
 	if hero.Name != "Warrior" || hero.PendingRenameName != "" {
 		t.Fatalf("hero after war cancel: %+v", hero)
+	}
+}
+
+/*
+================
+TestQueuedRenameCancelsWhenTheFilterRefuses
+
+The name filter screens again at apply: a target the (possibly
+reloaded) list refuses by login cancels as invalid, never lands.
+================
+*/
+func TestQueuedRenameCancelsWhenTheFilterRefuses(t *testing.T) {
+	dir := t.TempDir()
+	clock := newTestClock()
+	s := openTest(t, dir, clock)
+	hero := &domain.Character{Name: "PlainHero"}
+	if err := s.CreateCharacter(testDivision, "test-account", hero); err != nil {
+		t.Fatal(err)
+	}
+	now := clock.Now().UnixMilli()
+	if err := s.QueueCharacterRename(testDivision, hero, "BlockedName", now); err != nil {
+		t.Fatal(err)
+	}
+	allowed := func(name string) bool { return name != "BlockedName" }
+	outcomes := s.ApplyPendingRenames(testDivision, "test-account", now, allowed)
+	if len(outcomes) != 1 || outcomes[0].Applied || outcomes[0].Reason != RenameRefusedInvalid {
+		t.Fatalf("outcomes: %+v", outcomes)
+	}
+	if hero.Name != "PlainHero" || hero.PendingRenameName != "" {
+		t.Fatalf("hero after filter cancel: %+v", hero)
+	}
+	// A screen that admits the target lets the same queue apply.
+	if err := s.QueueCharacterRename(testDivision, hero, "ClearName", now); err != nil {
+		t.Fatal(err)
+	}
+	outcomes = s.ApplyPendingRenames(testDivision, "test-account", now, allowed)
+	if len(outcomes) != 1 || !outcomes[0].Applied || hero.Name != "ClearName" {
+		t.Fatalf("outcomes: %+v hero: %+v", outcomes, hero)
 	}
 }

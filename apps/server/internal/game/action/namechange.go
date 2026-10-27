@@ -148,6 +148,13 @@ func (rt *Runtime) admitNameChangeUse(divisionID string, character *enterworld.C
 		*result = itemUseFailure(errCodeRenameInvalidName)
 		return ""
 	}
+	// Player-chosen names pass the native name filter (namefilter.go),
+	// here as at creation and for job aliases and pet names; the apply
+	// at login screens again through the same list (characters.go).
+	if !rt.nameAllowed(string(tail)) {
+		*result = itemUseFailure(errCodeRenameInvalidName)
+		return ""
+	}
 	if code := rt.nameChangeStateRefusal(divisionID, character, nowMs); code != 0 {
 		*result = itemUseFailure(code)
 		return ""

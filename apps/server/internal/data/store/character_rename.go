@@ -305,10 +305,12 @@ list is answered, so the list simply shows the outcome: the new name,
 or the old name with a cancellation reason in the returned outcomes.
 A rename whose checks no longer hold is cancelled (the queue clears;
 the scroll is spent); a commit failure leaves the rename queued for
-the next login instead of cancelling it.
+the next login instead of cancelling it. nameAllowed is the native
+name filter's screen (nil admits every name): it runs again here
+because the list a name was queued under can have changed by login.
 ================
 */
-func (s *Store) ApplyPendingRenames(division, accountID string, nowMs int64) []PendingRenameOutcome {
+func (s *Store) ApplyPendingRenames(division, accountID string, nowMs int64, nameAllowed func(string) bool) []PendingRenameOutcome {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var outcomes []PendingRenameOutcome
@@ -316,7 +318,7 @@ func (s *Store) ApplyPendingRenames(division, accountID string, nowMs int64) []P
 		if c.AccountID != accountID || c.PendingRenameName == "" {
 			continue
 		}
-		if outcome, decided := s.applyPendingRenameLocked(division, c, nowMs); decided {
+		if outcome, decided := s.applyPendingRenameLocked(division, c, nowMs, nameAllowed); decided {
 			outcomes = append(outcomes, outcome)
 		}
 	}
@@ -331,7 +333,7 @@ One queued rename's fate. decided is false only when the commit
 failed: the rename stays queued and no outcome is reported.
 ================
 */
-func (s *Store) applyPendingRenameLocked(division string, c *domain.Character, nowMs int64) (PendingRenameOutcome, bool) {
+func (s *Store) applyPendingRenameLocked(division string, c *domain.Character, nowMs int64, nameAllowed func(string) bool) (PendingRenameOutcome, bool) {
 	target := c.PendingRenameName
 	outcome := PendingRenameOutcome{CharacterID: c.ID, OldName: c.Name, NewName: target}
 	cancel := func(reason string) (PendingRenameOutcome, bool) {
@@ -346,6 +348,9 @@ func (s *Store) applyPendingRenameLocked(division string, c *domain.Character, n
 		return cancel(RenameRefusedDeleted)
 	}
 	if !persistedCharacterNameValid(target) {
+		return cancel(RenameRefusedInvalid)
+	}
+	if nameAllowed != nil && !nameAllowed(target) {
 		return cancel(RenameRefusedInvalid)
 	}
 	for _, other := range s.characters[division] {

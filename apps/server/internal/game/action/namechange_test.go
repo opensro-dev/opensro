@@ -169,6 +169,31 @@ func TestNameChangeScrollQueuesAndSpends(t *testing.T) {
 
 /*
 ================
+TestNameChangeScrollNamePassesTheNameFilter
+
+The rename target passes the native name filter like every other
+player-chosen name: a blocked target refuses 0xF5 before the queue
+door, and nothing is spent.
+================
+*/
+func TestNameChangeScrollNamePassesTheNameFilter(t *testing.T) {
+	rt, c, scroll, calls := nameChangeFixture(t, false, enterworld.RenameQueued)
+	rt.NameChangeScroll = true
+	rt.NameFilter = testNameFilter(t)
+	out := nameChangeUse(rt, c, scroll, "SoRudeGuy")
+	if got := itemUseErrorByte(t, out); got != errCodeRenameInvalidName {
+		t.Fatalf("filtered target answered %#x, want %#x", got, errCodeRenameInvalidName)
+	}
+	if len(*calls) != 0 {
+		t.Fatalf("filtered target reached the queue door: %+v", *calls)
+	}
+	if got := nameChangeScrollsLeft(c); got != 2 {
+		t.Fatalf("filtered target spent a scroll: %d left", got)
+	}
+}
+
+/*
+================
 TestNameChangeScrollRefusalsSpendNothing
 
 Every queue refusal answers its own byte and spends nothing; a bad
