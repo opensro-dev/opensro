@@ -216,6 +216,9 @@ def main():
 	parser.add_argument("--vsro-root", type=Path, required=True)
 	parser.add_argument("--output", type=Path, default=REPO_ROOT / ".state" / "cap110-comparison.json")
 	args = parser.parse_args()
+	# The report used to leave the later archive's identity merely observed;
+	# the pin authenticates it before anything is read (#1745).
+	archive.verify_vsro_archive(args.vsro_root, "Media")
 	build = REPO_ROOT / ".state" / "cap110-audit"
 	build.mkdir(parents=True, exist_ok=True)
 	executable = build / ("skill-program-audit.exe" if sys.platform == "win32" else "skill-program-audit")

@@ -33,8 +33,9 @@ AttackPick
 
 What a new choice among a monster's default skills reads: the uniform
 sample its CRT draw is taken from, and the target it chooses against.
-561B00 weighs a skill up by how far its reach exceeds the target's
-distance, so a choice without a target weighs the authored weights alone.
+The retail server's skill pick weighs a skill up by how far its reach
+exceeds the target's distance, so a choice without a target weighs the
+authored weights alone.
 ================
 */
 type AttackPick struct {
@@ -46,7 +47,7 @@ type AttackPick struct {
 ================
 AttackTarget
 
-CAITactics_DistanceBetweenActors (53D7A0) from the monster to the target,
+The retail server's actor distance from the monster to the target,
 and the target's body radius (its vtable +0x560).
 ================
 */
@@ -126,7 +127,7 @@ func (ops *MonsterMoverOps) selectMonsterAttack(divisionID string, instance mons
 	if ops.AttackPlan == nil {
 		return MonsterAttackPlan{}, false
 	}
-	// Research 5472CB..5472FE reuses the active skill before invoking the
+	// The retail server reuses the active skill before invoking the
 	// selector. Resolving a retained authored ID must not consume a choice
 	// draw; its interval draw was already consumed on adoption.
 	if requestedSkillID != 0 {
@@ -183,7 +184,8 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 	if tactics.ChaseLeash > 0 && planarDistance(live, anchorPose(instance)) > tactics.ChaseLeash {
 		return ops.startReturnLeg(divisionID, instance, tactics, mover, monster.MoverEventLeashBroken, nowMs), nil, true
 	}
-	// 5472A0 returns 2 while Timer 5 is closed; 55A1D5 chases only on 1.
+	// The retail server's skill-ready test returns 2 while Timer 5 is closed;
+	// its battle state chases only on 1.
 	// Retain this port's existing accepted-action deadline before range-driven
 	// replanning. This does not change skill timing or interval selection.
 	// Target loss and eligibility are still checked above.
@@ -265,8 +267,8 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 	if !result.Accepted {
 		switch result.Refusal {
 		case MonsterAttackApproachRequired, MonsterAttackCommandRejected:
-			// Research 5472A0 admission refusal retains the selected skill;
-			// 59ADF1 -> event 4(-1) -> 558F70 completes/clears it instead.
+			// The retail server's admission refusal retains the selected skill;
+			// its completion path (event 4(-1)) completes/clears it instead.
 			// Neither owns a HOMING transition. Recheck the live target and
 			// range on the next AI tick, without recursively retrying damage.
 			event := monster.MoverEventAttackApproachRequired

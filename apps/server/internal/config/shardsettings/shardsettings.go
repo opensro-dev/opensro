@@ -252,7 +252,7 @@ var Settings = []Setting{
 	// Owner, 2026-10-15: thief and hunter monsters move 20% faster.
 	{Env: "SRO_JOB_MONSTER_SPEED", NomadVar: "job_monster_speed", Default: "on"},
 	// Owner, 2026-10-18: reversed the 2026-10-15 follow setting; the
-	// deployment default stays native ("off", 0x4FD1D0).
+	// deployment default stays native ("off").
 	{Env: "SRO_TRANSPORT_FOLLOW", NomadVar: "transport_follow", Default: "off"},
 	// Owner, 2026-10-24: a following transport keeps the 100 m tether. It
 	// acts only with SRO_TRANSPORT_FOLLOW on.
@@ -285,7 +285,7 @@ var Settings = []Setting{
 	// a Moon's kills; the cap supersedes the eleven-a-week calibration.
 	{Env: "SRO_SUN_DROP_RATE", NomadVar: "sun_drop_rate", Default: "2", Catalogue: true},
 	// Owner, 2026-10-20: uniques ignore the level-gap drop admission and
-	// always leave exactly one Magic Pop ticket; "off" is native 4C1840.
+	// always leave exactly one Magic Pop ticket; "off" is native.
 	{Env: "SRO_UNIQUE_GAP_EXEMPT", NomadVar: "unique_gap_exempt", Default: "on", Catalogue: true},
 	{Env: "SRO_UNIQUE_POP_TICKET", NomadVar: "unique_pop_ticket", Default: "on", Catalogue: true},
 	// Owner, 2026-10-25 (narrowed 2026-10-26): a unique in the top loot

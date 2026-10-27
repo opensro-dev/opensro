@@ -85,8 +85,17 @@ func TestDormancyPreservesPositionAndWakesBeforeVisibility(t *testing.T) {
 	if len(d.instances.cold) != 0 || len(d.instances.hot) != 1 {
 		t.Fatal("approach did not restore actor before visibility")
 	}
-	if d.instances.get(actor.Gid) != actor || d.movers.get(actor.Gid) != mover {
-		t.Fatal("wake respawned or relocated actor")
+	// Phase-continuous wake (#1820 part A): position and identity are
+	// untouched; only the activity clock is caught up to the phase it
+	// would hold had it never slept (LastCheck 90000 -> 199573 on a
+	// 1500 ms cadence), so the actor is due at 201074, not on the wake tick.
+	woken := mover
+	woken.Activity.LastCheck = 199573
+	if d.instances.get(actor.Gid) != actor || d.movers.get(actor.Gid) != woken {
+		t.Fatal("wake respawned, relocated or rephased actor")
+	}
+	if at := d.behavior.entries[0].at; at != 201074 {
+		t.Fatalf("woken actor due at %d, want 201074 (its cadence phase)", at)
 	}
 	if d.aiTimers[actor.Gid] == nil || *d.aiTimers[actor.Gid] != wantTimers || len(d.storedAITimers) != 0 {
 		t.Fatal("wake reset or advanced AI timers")

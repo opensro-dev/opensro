@@ -14,9 +14,9 @@ import (
 )
 
 // referenceChaseRefreshMinMs is the machine-confirmed pacing gate in the
-// research server's AutoCommand target-range approach routine
-// (0x004b04bf..0x004b04e6). The production simulation owner runs at the same
-// 100 ms cadence; this deadline never creates work outside that owner.
+// retail server's AutoCommand target-range approach routine. The production
+// simulation owner runs at the same 100 ms cadence; this deadline never
+// creates work outside that owner.
 const referenceChaseRefreshMinMs int64 = 100
 
 /*
@@ -91,7 +91,8 @@ func (ops *MonsterMoverOps) startChaseLeg(
 	target playerPose,
 	nowMs int64,
 ) []Frame {
-	// Legs travel at the effective parameters 17/18 (4AA410), which
+	// Legs travel at the effective parameters 17/18 (the retail server's
+	// speed-parameter read), which
 	// frostbite and slow scale; capability gates keep the authored speeds.
 	speed := instance.RunSpeed()
 	channel := wire.MoveStateRun
@@ -126,10 +127,10 @@ func (ops *MonsterMoverOps) startChaseLeg(
 		return nil
 	}
 
-	// 548CE2..548D75: travel actor-to-target center distance along the
+	// The pursuit endpoint travels actor-to-target center distance along the
 	// approach direction while the target moves. AutoCommand's two-unit inset
 	// is insufficient when a running target advances five units per tick.
-	// Outdoor only: dungeon actors run 549460, which has no such branch
+	// Outdoor only: dungeon actors run the region-routed pursuit, which has no such branch
 	// (tactics_plane.go).
 	if targetGuidance.TargetMoving() && ordinarySquadApproach(instance) && pursuitAt(live.RegionID).ExtendsTowardMovingTarget() {
 		goal = NormalizeSpawnFrame(target.Pose)

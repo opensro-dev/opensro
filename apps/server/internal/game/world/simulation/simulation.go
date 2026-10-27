@@ -17,9 +17,11 @@ Two planes, kept strictly apart (the wave-9 bug D contract):
     interpolated at nowMs at the wire speed. Every position-dependent op
     (drops, pickup reach, peer broadcasts) MUST read this plane, never the
     goal. Native keeps the same split: the retail server advances a live
-    actor transform (+0x88/+0x8c/+0x90) that the reach checker sub_4a9050
-    reads, while the client PathCtl mirrors goalInput +0x14 vs the logical
-    cursor +0x4C advancing at the exact server speed.
+
+actor transform (+0x88/+0x8c/+0x90) that the retail server's pickup
+reach check reads, while the client PathCtl mirrors goalInput +0x14 vs the logical
+
+	cursor +0x4C advancing at the exact server speed.
 
 All float math is float64 to match the Node reference bit-for-bit; wire
 encoding narrows to the native float32/uint16 widths only at the packet

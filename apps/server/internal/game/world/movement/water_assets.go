@@ -96,6 +96,7 @@ func (v *WaterValidator) surfaceForRegion(regionID uint16) *groundSurface {
 		return surface
 	}
 
+	v.cacheMisses.Add(1)
 	resolved := v.resolveSurfaceForRegion(regionID)
 
 	v.mu.Lock()
@@ -111,6 +112,22 @@ func (v *WaterValidator) surfaceForRegion(regionID uint16) *groundSurface {
 
 	storeRegionSurface(v.regionSurfaceTable(), regionID, resolved)
 	return resolved
+}
+
+/*
+================
+NavCacheMisses
+
+Cold surface/object-nav resolutions since boot (#1820 part C). The
+monster leg diffs it around itself; expected delta zero, which is what
+guards the boot preload.
+================
+*/
+func (v *WaterValidator) NavCacheMisses() uint64 {
+	if v == nil {
+		return 0
+	}
+	return v.cacheMisses.Load()
 }
 
 /*
