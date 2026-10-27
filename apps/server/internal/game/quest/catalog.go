@@ -30,12 +30,11 @@ import (
 //	questdata record BY CODENAME at media boot):
 //	  0 codename, 1 korean name, 2 country byte (payload+0xb0, the
 //	  QuestReference_CountryAllowed gate - 3 = both), 3 next-quest
-//	  codenames (comma
-//	  separated, "xxx" = none - the quest CHAIN), 4 give-up warn byte
-//	  (payload+0xb1, the CIFQuestReward_ConfirmReward variant), 5..12
-//	  SN_CON_*
-//	  contents-line symbols ("xxx" = none) - the textquest symbols the
-//	  wire's SQuestContents description field references.
+//	  codenames (comma separated, "xxx" = none - the quest CHAIN),
+//	  4 give-up warn byte (payload+0xb1, the
+//	  CIFQuestReward_ConfirmReward variant), 5..12 SN_CON_*
+//	  contents-line symbols ("xxx" = none) - the textquest symbols
+//	  the wire's SQuestContents description field references.
 
 // questdataColumns is the shipped questdata.txt column count.
 const questdataColumns = 11

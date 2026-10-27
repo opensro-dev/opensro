@@ -12,7 +12,7 @@
 // SQuestInfo deserializer SQuestInfo_Deserialize it drives; the two
 // C->S bodies are the composers NetClient_Send71EB (0x71EB) and
 // NetClient_Send729A (0x729A), each a bare 4-byte refId append
-// (CMsgStreamBuffer_WriteBytes(&refId, 4)). v1.188/
+// (CMsgStreamBuffer_AppendBytes(&refId, 4)). v1.188/
 // DuckSoup opcode numbers never cross the boundary - their 0x7515 is a
 // different packet entirely in v1.150 (the hosted interaction sender).
 package quest

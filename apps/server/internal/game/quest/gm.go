@@ -3,10 +3,10 @@
 
 gm.go - the GM's quest tools: /INITQ, /REMOVEQ, /COMPQ and /RESETQ
 
-The v1.150 client composes them as GM subcommands 0x1B, 0x1E, 0x1D and 0x1C
-(ChatInput_HandleGmCommand): the discriminator byte, then a sized ANSI
-quest
-codename for all but /RESETQ. They act on the GM's own journal. The shipped
+The v1.150 client composes them as GM subcommands 0x1B, 0x1E, 0x1D
+and 0x1C (ChatInput_HandleGmCommand): the discriminator byte, then a
+sized ANSI quest codename for all but /RESETQ. They act on the GM's
+own journal. The shipped
 client names no effect and no server binary is at hand, so the meanings are
 INFERRED from the names and the Korean developers' habit of "init" for
 "reset to the starting state":
