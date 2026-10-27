@@ -212,16 +212,6 @@ apps/server/internal/game/quest/runtime.go 2
 apps/server/internal/game/quest/wire.go 28
 apps/server/internal/game/quest/wire_test.go 2
 apps/server/internal/game/siege/lane_test.go 1
-apps/server/internal/game/social/community/e2e_wire_test.go 4
-apps/server/internal/game/social/community/friend.go 9
-apps/server/internal/game/social/community/friendrequest.go 6
-apps/server/internal/game/social/community/letter.go 3
-apps/server/internal/game/social/community/letter_test.go 1
-apps/server/internal/game/social/community/register.go 1
-apps/server/internal/game/social/community/whisperblock.go 5
-apps/server/internal/game/social/community/whisperblock_test.go 1
-apps/server/internal/game/social/community/wire.go 54
-apps/server/internal/game/social/community/wire_test.go 5
 apps/server/internal/game/social/guild/donate_test.go 2
 apps/server/internal/game/social/guild/encode32c4.go 10
 apps/server/internal/game/social/guild/errors.go 2
