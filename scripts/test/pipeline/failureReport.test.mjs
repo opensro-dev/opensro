@@ -14,7 +14,7 @@ not be read as a package - or swallow the name that follows it.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { test } from "node:test";
-import { failingPackages, failureReport, failureSummary } from "../../checks/failureReport.mjs";
+import { failingPackages, failureReport, failureSummary, runsGoTest } from "../../checks/failureReport.mjs";
 
 // The report under test, as the child below imports it.
 const FAILURE_REPORT_URL = new URL( "../../checks/failureReport.mjs", import.meta.url ).href;
@@ -96,6 +96,25 @@ test("an exit-0 rejection says the acceptance check rejected it", () => {
 		"gofmt failed (exit 0, rejected by the step's acceptance check)"
 	);
 	assert.ok( !failureReport( result ).includes( "names no failing package" ) );
+});
+
+// A lint finding as golangci-lint prints it: a file and line, no package
+// verdict. The step did run and report; it was not killed.
+const LINT_FAILURE_OUTPUT = [
+	"internal/data/store/lock_timing_test.go:43:3: use of `time.Sleep` forbidden (forbidigo)",
+	"1 issues:",
+	"* forbidigo: 1",
+	""
+].join( "\n" );
+
+test("a failed lint step is not reported as a command that never reported", () => {
+	const result = { label: "golangci-lint", code: 1, signal: null, output: LINT_FAILURE_OUTPUT };
+	const report = failureReport( result );
+	assert.ok( report.startsWith( "--- golangci-lint failed (exit 1) ---\n" ) );
+	assert.ok( !report.includes( "names no failing package" ), "the note is for go test steps only" );
+	assert.ok( report.endsWith( LINT_FAILURE_OUTPUT ) );
+	for ( const label of [ "tests", "tests (long tier)", "race" ] ) assert.ok( runsGoTest( label ), label );
+	for ( const label of [ "golangci-lint", "vet", "gofmt", "build" ] ) assert.ok( !runsGoTest( label ), label );
 });
 
 /*

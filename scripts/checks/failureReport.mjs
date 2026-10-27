@@ -70,15 +70,30 @@ export function failureSummary( result ) {
 
 /*
 ================
+runsGoTest
+
+Whether a step's command is `go test` (the tests and race steps), the only
+kind whose output names failing packages. A failed lint or vet step names
+files and lines instead, so its missing package is no sign that the
+command itself broke.
+================
+*/
+export function runsGoTest( label ) {
+	return label.startsWith( "tests" ) || label === "race";
+}
+
+/*
+================
 failureReport
 
 One failed step's printed block: the summary line, the failing packages
-(or the note that the output names none), then the full captured output.
+(or, for a go test step, the note that the output names none), then the
+full captured output.
 ================
 */
 export function failureReport( result ) {
 	const lines = [ `--- ${failureSummary( result )} ---` ];
-	if ( failingPackages( result.output ).length === 0 && result.code !== 0 ) {
+	if ( runsGoTest( result.label ) && failingPackages( result.output ).length === 0 && result.code !== 0 ) {
 		lines.push(
 			"the output names no failing package: the command itself failed " +
 				"(killed, or a toolchain-level error) before reporting one"
