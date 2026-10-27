@@ -1,6 +1,6 @@
 package statuseffect
 
-// RetirementSelected is the selection predicate at 59FFD3..5A0025. The byte
+// RetirementSelected is the server's selected-retirement predicate. The byte
 // at descriptor+65 is tested for nonzero, not equality to a named activity.
 // This is distinct from voluntary nbuf protection and duration persistence.
 // Selection alone does not implement event 6, unregistering, or destruction.

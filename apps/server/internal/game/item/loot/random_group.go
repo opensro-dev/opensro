@@ -3,7 +3,7 @@
 
 random_group.go - exact accepted-member probabilities without native retries
 
-The native 724E30 rejection loop spends unbounded time on tiny member rates.
+The native rejection loop spends unbounded time on tiny member rates.
 Conditioning its integer sample space on acceptance preserves reward outcomes,
 including modulo bias, without preserving the number of random draws.
 

@@ -29,7 +29,7 @@ const (
 ================
 summonLevelByte
 
-6A56E4 stores atoi's low byte. Its CRT strtol (9E3ACA..9E3B24) saturates
+The server's loader stores atoi's low byte. Its CRT strtol saturates
 signed 32-bit overflow before that truncation, preserving numeric prefixes.
 ================
 */
@@ -56,7 +56,7 @@ func summonLevelByte(value string) uint8 {
 ================
 summonLevelThresholds
 
-RefObjItem_ReadRow 6A55FA..6A5773 enables only 3/3/3/2 Desc2 != xxx.
+The server's item row reader enables only 3/3/3/2 Desc2 != xxx.
 Its byte set starts at 1, stops parsing at zero and always ends at 255.
 ================
 */
@@ -84,7 +84,7 @@ func summonLevelThresholds(item *ItemRef) []uint8 {
 ================
 SummonCharacterReference
 
-49BBC1..49BC98 uses upper_bound(player level), refuses begin/end and
+The server uses upper_bound(player level), refuses begin/end and
 decrements before appending the selected suffix. An enabled map never falls
 back to the base row or infers thresholds from CharacterRef.Level.
 ================
@@ -201,7 +201,7 @@ func (t *TextdataItems) collectSummonable(refused map[string]bool) {
 	}
 	for _, start := range starts {
 		// The 1 every threshold map starts at, below the family's first
-		// form: 49BBC1 refuses that summon too, and the item's own ReqLevel
+		// form: the server refuses that summon too, and the item's own ReqLevel
 		// matches the first form, so no player meets it (checked in the
 		// shipped itemdata 2026-10-15: the T_ families' ReqLevel 20 = _20,
 		// the C_ families' ReqLevel 5 = _5).

@@ -146,9 +146,7 @@ func missionReentryFrames(packets []enterworld.Packet) []wire.Frame {
 	frames := make([]wire.Frame, 0, len(packets))
 	for _, packet := range packets {
 		payload := make([]byte, len(packet.Payload))
-		for index, value := range packet.Payload {
-			payload[index] = byte(value)
-		}
+		copy(payload, packet.Payload)
 		frames = append(frames, wire.Frame{
 			Scope:   packet.Scope,
 			Opcode:  packet.NativeOpcode,

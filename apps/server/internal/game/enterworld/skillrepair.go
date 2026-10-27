@@ -3,8 +3,8 @@
 
 skillrepair.go - complete item-owned fortress repair programs
 
-The item handler (49CC80) invokes the ordinary persistent skill lifecycle
-5830B0. Its linked recipient receives percentage healing on each puls.
+The item handler invokes the ordinary persistent skill lifecycle.
+Its linked recipient receives percentage healing on each puls.
 
 ===========================================================================
 */

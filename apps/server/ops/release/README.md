@@ -356,7 +356,7 @@ and install it as root-only `/etc/opensro-release/config.json`:
   "staff_webhook": "/etc/opensro-backup/discord-webhook",
   "maintenance_accounts": ["release-probe"],
   "webtransport_public": "on",
-  "transport_wt_addr": "0.0.0.0:443",
+  "transport_wt_addr": "[::]:18443",
   "transport_cert_file": "/etc/opensro-release/tls/fullchain.pem",
   "transport_key_file": "/etc/opensro-release/tls/privkey.pem"
 }
@@ -371,6 +371,25 @@ and `transport_key_file` (the TLS pair), and any of those three without
 A config without the keys deploys as before. The switch reaches `sro-nomad`
 as `SRO_WEBTRANSPORT_PUBLIC`, which the deployer derives from this file
 alone: `shard-settings.json` never names it.
+
+The GameWorld runs as the unprivileged `sro` user and cannot bind UDP 443,
+so `transport_wt_addr` binds `[::]` (dual-stack) on a port of 1024 or
+above and the host redirects public UDP 443, IPv4 and IPv6, to it. The
+redirect delivers to the interface address, so loopback, one address or
+the IPv4-only `0.0.0.0` would drop players silently onto the WebSocket
+fallback; `deploy.py` refuses them. `deploy.py` passes `-transport-wt-public-port 443`, so `sro-nomad`
+still checks the advertised port against what clients dial. The host half
+is one owner-approved step, run as root from the installed controls before
+the first public deploy (`release_controls.py` never runs `install.main`):
+
+```
+python3 quic_host.py apply --port 18443   # sysctls, nftables redirect, boot unit, ufw
+python3 quic_host.py check --port 18443   # exit 0 and "ready" when every piece is live
+python3 quic_host.py remove --port 18443  # undo the redirect, unit and firewall opening
+```
+
+Every deploy (and the staging rehearsal) with `webtransport_public` on runs
+the same check first and refuses, naming the gap, before any token is issued.
 
 `stack_sizes` is a port-only override; missing or empty keeps native item caps.
 For example, `"potion=2000,elixir=50"` raises those groups without lowering any

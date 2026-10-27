@@ -21,23 +21,23 @@ const (
 ================
 SkillPositionEffect
 
-5862E0 reads argument one as range and selects travel bit eight. Pinned owns
+The server's position effect reads argument one as range and selects travel
+bit eight. Pinned owns
 ground targeting; Charge keeps an offensive target and guided arrival.
 ================
 */
 type SkillPositionEffect struct {
 	Pinned bool
 	Charge bool
-	// Teleport marks tel2, the Wizard's Teleport: 5862E0 publishes its
+	// Teleport marks tel2, the Wizard's Teleport: the server publishes its
 	// destination with result bit 2, which the client applies at once,
 	// where tele (Ghost Walk) and tel3 set bit 8, a guided 500/s travel.
 	Teleport bool
 	// Parameter is argument zero, 500 in every shipped tele, tel2 and tel3
-	// row. The original reads it nowhere (#519): SkillGlobal_BuildParameterIndex
-	// binds the blocks at +2EC / +2F0 / +2F4, SkillAction_ApplyPositionEffect
-	// (5862E0) loads only word +4 of each, and SkillAction_Instant (586B41,
-	// 586F5C), SkillAction_Projectile (585A87) and
-	// Skill_ValidatePrerequisitesAndCost (58E019) only test the blocks'
+	// row. The original reads it nowhere (#519): the server's parameter index
+	// binds the blocks at +2EC / +2F0 / +2F4, its position effect
+	// loads only word +4 of each, and its instant action, projectile action and
+	// prerequisite validation only test the blocks'
 	// presence. Kept for the parse; no rule depends on it.
 	Parameter uint32
 	Range     uint32
@@ -69,7 +69,7 @@ func decodeSkillPosition(fields []string, row SkillRow) SkillPositionEffect {
 		return SkillPositionEffect{}
 	}
 	// One ground-travel instruction: tele (Ghost Walk) or tel2 (the Wizard's
-	// Teleport, which 58E010 leaves usable while rooted). Caster getv
+	// Teleport, which the rooted check leaves usable). Caster getv
 	// modifiers (WIMD) only adjust the prepared cost.
 	var travel SkillInstruction
 	for index := 0; index < p.Len(); index++ {

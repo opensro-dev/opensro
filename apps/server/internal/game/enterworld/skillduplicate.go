@@ -4,15 +4,15 @@
 skillduplicate.go - the Rogue's Duplicate and Sable Duplicate
 
 msch 2 {level} dura skc [reqi]: the Rogue takes the look of another
-player no higher than the level word (TargetValidation 58D23B). The
+player no higher than the level word (the server's target validation). The
 native ranks target allied players; the later rank targets an enemy
 player. The reference server admits both envelopes for this family:
 its Duplicate branch gates only the target's job suit, battle mode,
 level, GM privilege and murderer state, never the pair's relation.
 The instance lives on the caster; the reference server's persistent-cast step
 stores the copied player's gid in its context and
-CGObjPC_ApplyDupleTransform (4F0040) copies that player's model and worn
-equipment (4F0320). skc ends it on the next skill cast.
+its duplicate transform copies that player's model and worn
+equipment. skc ends it on the next skill cast.
 
 ===========================================================================
 */

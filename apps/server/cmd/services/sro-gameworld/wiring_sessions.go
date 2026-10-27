@@ -32,6 +32,7 @@ installSessionLifecycle
 func (game *gameplayPlane) installSessionLifecycle(hub *transport.Hub, authorityStore *store.Store) {
 	// Port-only: the economy ledger's committed gold per reason.
 	hub.SetEconomyMetrics(authorityStore.EconomyCounters)
+	hub.SetStoreLockMetrics(func() any { return authorityStore.LockTiming() })
 	// Attack pet fights that ended on a dead or departed target (petdiagnostics.go).
 	hub.SetPetCombatMetrics(game.items.PetCombatCounters)
 	// Players a non-walk path placed inside a closed object (placementguard.go).

@@ -195,6 +195,19 @@ variable "cap110_set_bonuses" {
   default = "off"
 }
 
+# Port-only, not native: the degree-11 equipment and skill tiers (#1745),
+# consumed at build time by the variant build's import tools; the
+# GameWorld reads neither at runtime.
+variable "cap110_items" {
+  type    = string
+  default = "off"
+}
+
+variable "cap110_skills" {
+  type    = string
+  default = "off"
+}
+
 # Port-only, not native: the optional Pharaoh Tomb 1-3 population. It needs
 # cap110_monsters on as well; GameWorld refuses to start otherwise.
 variable "pharaoh_tomb" {
@@ -1158,6 +1171,8 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_CAP110_MONSTERS                = var.cap110_monsters
         SRO_CAP110_LEVEL100                = var.cap110_level100
         SRO_CAP110_SET_BONUSES             = var.cap110_set_bonuses
+        SRO_CAP110_ITEMS                   = var.cap110_items
+        SRO_CAP110_SKILLS                  = var.cap110_skills
         SRO_PHARAOH_TOMB                   = var.pharaoh_tomb
         SRO_NAME_CHANGE_SCROLL             = var.name_change_scroll
         SRO_PHARAOH_TOMB_GEAR_RATE         = var.pharaoh_tomb_gear_rate

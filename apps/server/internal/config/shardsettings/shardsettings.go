@@ -99,6 +99,13 @@ var Settings = []Setting{
 	// Port-only, not native: degree-10/11 equipment set bonuses (#1747);
 	// the v1.150 client ships no set rows, so off is the native state.
 	{Env: "SRO_CAP110_SET_BONUSES", NomadVar: "cap110_set_bonuses", Default: "off", Catalogue: true},
+	// Port-only, not native: the degree-11 equipment and skill tiers
+	// (#1745). Consumed at build time, not at runtime: the variant build's
+	// import tools (cap110_item_import.py, cap110_skill_import.py) read
+	// them when the server data is built, and the GameWorld reads neither.
+	// Server only: the catalogue reads the built data, not its inputs.
+	{Env: "SRO_CAP110_ITEMS", NomadVar: "cap110_items", Default: "off"},
+	{Env: "SRO_CAP110_SKILLS", NomadVar: "cap110_skills", Default: "off"},
 	// Port-only, not native: the Pharaoh Tomb 1-3 population and gates. Needs
 	// SRO_CAP110_MONSTERS (its equipment drops).
 	{Env: "SRO_PHARAOH_TOMB", NomadVar: "pharaoh_tomb", Default: "off", Catalogue: true},

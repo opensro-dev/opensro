@@ -61,8 +61,9 @@ func (c *Catalog) magicLimit(item inventory.Item) int {
 	return n
 }
 
-// 501EA0 selects the minimum of four (rare equipment: five) six-way
-// rolls, then converts the authored percentage table to a five-bit value.
+// The server's variance roll selects the minimum of four (rare
+// equipment: five) six-way rolls, then converts the authored percentage
+// table to a five-bit value.
 /*
 ================
 varianceValue
@@ -128,7 +129,8 @@ func RollMagicValue(m Magic, roll Roll) (uint32, error) {
 ================
 RollSingleRange
 
-mfunc_single_range (v1.188 72FC60): an option whose min and max match
+mfunc_single_range (the native single-range roll): an option whose
+min and max match
 returns min without drawing; otherwise rand/32767 is rounded to float32 and
 min + ratio*(max-min) truncates. Both endpoints are reachable.
 ================
@@ -192,8 +194,8 @@ func (c *Catalog) assimilate(item *inventory.Item, stone inventory.Item, changed
 		return nil
 	}
 	index := int(n) - len(attrs)
-	// 503CD2 selects magic slot zero in the magic-stone branch. Attribute
-	// stones pass the randomly selected magic index (5035D9).
+	// The server selects magic slot zero in the magic-stone branch.
+	// Attribute stones pass the randomly selected magic index.
 	if magic {
 		if oldCount == 0 {
 			return nil
@@ -286,9 +288,9 @@ func (c *Catalog) Stone(items []inventory.Item, slots []uint8, magic bool, bonus
 	r := c.Items[stone.Codename]
 	if c.Items[item.Codename].Degree() != int(r.Params[0]) {
 		// v1.188 answers each stone with its own code: 0x5421 for an
-		// attribute stone (CEnchant_EnchantAttrStone_CanTarget 502A40) and
-		// 0x540F for a magic stone (ApplyMagicParam 503810); the client names
-		// each in category 0x12 (7503D0).
+		// attribute stone (its target check) and 0x540F for a magic stone
+		// (its magic-param application); the client names each in
+		// category 0x12 (7503D0).
 		if magic {
 			return zero, Refusal(stoneErrMagicDegree)
 		}

@@ -395,8 +395,8 @@ func TestOtherEtcGroupsKeepU16Quantity(t *testing.T) {
 TestGoldHeapExcludesShopTokens
 
 Group 0x280 is one wire width but two meanings: gold heaps (TID 3.3.5.0)
-and the later shop tokens (TID 3.3.5.1), which v1.188's CGItem_IsGold
-(483159..483163) excludes by TID4.
+and the later shop tokens (TID 3.3.5.1), which the native gold test
+excludes by TID4.
 ================
 */
 func TestGoldHeapExcludesShopTokens(t *testing.T) {
