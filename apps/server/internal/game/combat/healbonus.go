@@ -3,7 +3,7 @@
 
 healbonus.go - the caster's weapon term on a heal
 
-Formulae_CalculateWeaponMagicalHealBonus (411080), used by both heal
+The server's weapon magical heal bonus formula, used by both heal
 routines when a row carries mwhh or mwmh.
 
 ===========================================================================
@@ -21,13 +21,13 @@ import (
 ==================
 WeaponMagicalAttack
 
-The item's +0x1C0 / +0x1C4 exactly as CGItemEquip_CalculateBaseStats (495D60)
-stores them at 496508 / 49657D:
+The item's +0x1C0 / +0x1C4 exactly as the server's equipment base-stat
+calculation stores them:
 
 	lo + float32((hi - lo) * variance + float32(perPlus * plus))
 
 Bounds are the reference's magical attack (+0x240/+0x244, +0x24C/+0x250),
-per-plus +0x254, variance index 5 (CGItemEquip_GetStatVariance 495D10:
+per-plus +0x254, variance index 5 (the server's stat-variance read:
 bits / 31, stored to float32). The wire rounds these to integers; the
 server keeps floats.
 ==================
@@ -40,7 +40,7 @@ func WeaponMagicalAttack(ref *enterworld.ItemRef, varianceBits uint64, plus uint
 ================
 WeaponPhysicalAttack
 
-495D60 writes the physical pair at item +1B8/+1BC using variance index four.
+The base-stat calculation writes the physical pair at item +1B8/+1BC using variance index four.
 Threat consumes these floats before the combat display rounds them.
 ================
 */
@@ -72,7 +72,7 @@ func weaponAttackRange(attack enterworld.ItemAttackRange, varianceWord, plus uin
 ==================
 AbsorptionRatio
 
-Formulae_CalculateAbsorptionRatio (410AB0) for a player:
+The server's absorption ratio formula for a player:
 
 	r = float32(INT / (((level - 1) * 5 + 40) * 0.8))
 
@@ -96,7 +96,7 @@ func AbsorptionRatio(level uint8, intellect float32) float32 {
 ==================
 WeaponHealBonus
 
-411080 once the item and ratio are known. The native name says "Physical",
+The heal bonus formula once the item and ratio are known. The native name says "Physical",
 but the fields it averages are the weapon's magical attack.
 
 	ftol(float32((max + min) * 0.5) * ratio * word / 100)

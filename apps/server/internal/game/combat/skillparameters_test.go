@@ -53,8 +53,8 @@ func TestParameterValueSnapshotsAreDetached(t *testing.T) {
 	}
 }
 
-// 40E4B9: DGAA is a flat physical addition, only for a stealth command and
-// only on a row that asks for it.
+// The physical lane's stealth step: DGAA is a flat physical addition, only
+// for a stealth command and only on a row that asks for it.
 func TestStealthStrikePoint(t *testing.T) {
 	bound := enterworld.SkillParameterMask(1) << enterworld.ParameterStealthStrike
 	var attacker Stats

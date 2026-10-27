@@ -4,9 +4,9 @@
 wire.go - the 0x3887 fortress-war frames the v1.150 client reads
 
 0x3887 (CNetProcessSecond_OnFortressWarState 76C870) is the client half of
-SR_GameServer's 0x385F: CSiegeFortressMgr_OnShardMessage (62EE90) relays
-each schedule edge with the same subtype byte, and the per-player fortress
-list is CGObjPC_SendFortressList (4E04D0 -> 62EBE0 -> 61D540). The subtype
+the reference server's 0x385F: its fortress manager relays each schedule
+edge with the same subtype byte, and the per-player fortress list is the
+player's fortress-list send, one row per fortress. The subtype
 numbering is shared by both versions (0x0C/0x0D applications, 7 NPC
 refresh, 8 conquest, 0x10 war guilds all pair up).
 
@@ -64,7 +64,7 @@ const OpSiegeRelationList uint16 = 0x341e
 ================
 FortressRow
 
-One fortress of the list, in CSiegeFortress_WriteListRow (61D540) order.
+One fortress of the list, in the server's list-row write order.
 Discarded are four u32s the v1.150 client reads and drops (76C980..); the
 server writes the occupying guild id first. CaptureWait is the siege
 world's post-capture wait in seconds (sent only while the gates are closed,
@@ -184,8 +184,8 @@ func EncodeTowersFallen3887(fortressID uint32) []byte {
 ================
 StructureState
 
-One structure's state change (CGObjSiegeStruct_BroadcastState385F_0B
-4CF9A0): its fortress, object, event zone and state word; a headquarters
+One structure's state change (the server's structure state broadcast,
+0x385F subtype 0x0B): its fortress, object, event zone and state word; a headquarters
 also names its guild.
 ================
 */

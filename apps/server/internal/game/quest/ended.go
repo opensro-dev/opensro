@@ -4,15 +4,15 @@
 ended.go - quests closed for good without being completed
 
 The native server keeps a quest record in state 5 for a quest the character
-can never take: QuestManager_CreateEndedRecord (570F10) creates one with
-count 0, or SetQuestState(5) overwrites an existing record and keeps its
-count. KT_SMITH_2 (8A77A0) is the fork that uses it: refusing its first
+can never take: its ended-record routine creates one with
+count 0, or its quest-state setter (state 5) overwrites an existing record and keeps its
+count. KT_SMITH_2's talk handler is the fork that uses it: refusing its first
 page ends SMITH_2 and SMITH_3, pressing Accept ends ACCESSORY_2 and
 ACCESSORY_3, and ACCESSORY_2 requires both blacksmith quests ended and
-never completed (list 0x108, CBasicQuest_MeetsPrerequisites 9262A0).
+never completed (list 0x108, in the server's quest prerequisite check).
 
 The port keeps the ended ids in Character.EndedQuestIds. Native sends no
-update for state 5 (SetQuestState 5709C0 with arg4 = 0), so nothing here
+update for state 5 (its quest-state setter with arg4 = 0), so nothing here
 reaches the client: the login completed list stays the completions, and an
 ended quest that was completed stays completed with its count.
 
@@ -85,9 +85,9 @@ func offerAvailable(c *enterworld.Character, def *Definition) bool {
 endOnAccept
 
 Ends the quest's AcceptEndsQuests, and the chosen reply's EndsQuests,
-when its Accept is pressed on a live offer. 8A77A0 ends them whether or
-not the acceptance (+0x188) succeeds (8A7857 skips only the start and its
-line), so this runs before StartQuest and survives its refusal. 8C6180
+when its Accept is pressed on a live offer. Its talk handler ends them whether or
+not the acceptance (+0x188) succeeds (the success branch skips only the start and its
+line), so this runs before StartQuest and survives its refusal. CQNO_CA_THIEF_5's handler
 likewise ends its reply's quest outside the +0x188 success branch: it ends
 whether or not the acceptance succeeds.
 ================

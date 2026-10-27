@@ -453,7 +453,7 @@ func TestMonsterStuckPreservesMaturedSettleFrameWhenNotYetStuck(t *testing.T) {
 ================
 TestMonsterStuckCounterClearedOnBattleEntry
 
-Issue #1704: the native stuck counter (CTactics +0x148) is zeroed on every
+Issue #1704: the native stuck counter (tactics record +0x148) is zeroed on every
 state entry, so failures collected while wandering never carry into a
 fight. Nine short stops in MoverWandering, then battle entry - by sight
 aggro and by retaliation - must read zero, and one short chase step after

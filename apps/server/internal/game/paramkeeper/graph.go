@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-graph.go - dependency propagation over parameter elements (4B3060 / 4B3130)
+graph.go - dependency propagation over parameter elements (native link and write)
 
 Detached, bounded parameter projection with synchronous propagation in native
 source-identity order. Parameter IDs index the topology directly; bucket
@@ -98,7 +98,7 @@ type arenaEntry struct {
 
 // Graph is a detached, bounded parameter projection. It has no effect timers,
 // persistence, live character pointers or keeper-specific 23/24 callbacks.
-// Successful operations propagate synchronously as in 4B3130; invalid inputs
+// Successful operations propagate synchronously as in the native write; invalid inputs
 // and arithmetic errors leave the entire projection unchanged.
 type Graph struct {
 	topology *graphTopology
@@ -192,9 +192,9 @@ func NewGraph(definitions []NodeDefinition) (*Graph, error) {
 ================
 Graph.Link
 
-Link registers a target without publishing a value. 4B3060 keys its map by
-the target CParam pointer and preserves the first registration, including
-its channel. 4B3130 subsequently writes the source's value under its pointer
+Link registers a target without publishing a value. The native link keys its map by
+the target element pointer and preserves the first registration, including
+its channel. The native write subsequently writes the source's value under its pointer
 identity into that target/channel. Invalid cyclic graphs are rejected here.
 ================
 */

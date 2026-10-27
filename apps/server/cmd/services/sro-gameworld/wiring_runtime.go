@@ -159,7 +159,7 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			// The Bard's Noise: the acquisition scan reads each player's
 			// first-attack protection from the effect owner.
 			FirstAttackGuard: game.items.FirstAttackGuard,
-			// 5464E0: a candidate player's companions are weighed with it.
+			// The server's target picker: a candidate player's companions are weighed with it.
 			Companions: game.items.CompanionTargets,
 		}
 		log.Infof(

@@ -28,7 +28,8 @@ const (
 ================
 SatietyClock
 
-4D5E00 retains a float32 fractional drain, reset by actor initialization.
+The server's satiety tick retains a float32 fractional drain, reset by actor
+initialization.
 ================
 */
 type SatietyClock struct {
@@ -43,8 +44,8 @@ type SatietyClock struct {
 ================
 Advance
 
-6A602E derives HGP/second as 100 / (reference parameter 4 * 60).
-4D5E72 and 4D5E84 each spill to float32 before extracting whole points.
+The server derives HGP/second as 100 / (reference parameter 4 * 60).
+The satiety tick spills to float32 twice before extracting whole points.
 A replaced actor and a backwards clock establish a new time origin.
 ================
 */
@@ -78,7 +79,7 @@ func (clock *SatietyClock) Advance(gid uint32, nowMs int64, minutes uint32, sati
 ================
 PublishSatiety
 
-4D5F49 publishes when the old truncated percentage is divisible by ten and
+The satiety tick publishes when the old truncated percentage is divisible by ten and
 the new one is not. Death also publishes the exhausted gauge. This follows
 the native predicate rather than manufacturing a packet for every point.
 ================
@@ -94,8 +95,9 @@ func PublishSatiety(before, after uint16) bool {
 ================
 HungryParameter
 
-4D60A0 contributes source-zero factor 50 to exactly these eight parameters.
-Resistances, movement, maxima, parry, block and critical chance are unaffected.
+The server's hungry state contributes source-zero factor 50 to exactly these
+eight parameters. Resistances, movement, maxima, parry, block and critical
+chance are unaffected.
 ================
 */
 func HungryParameter(id uint16) bool {

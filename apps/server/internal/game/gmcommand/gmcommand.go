@@ -179,9 +179,10 @@ func HandleGmCommand(deps Dependencies, presence PresenceView, divisionID string
 		}
 		return Outcome{Ack: EncodeRequestFailure(request), Refusal: "siege-period-refused"}
 	case SubFlagWorld:
-		// 0x0051FCF3..0x0051FD7D (subcmd 0x30): reads u8 flagCmd, sends
-		// 0x74B0 [u8(3), u32(flagCmd)] to ShardManager (CFlagWorldMgr Capture
-		// the Flag, a v1.188 battle-arena feature outside v1.150), and
+		// The reference server's special-command handler (subcmd 0x30) reads
+		// u8 flagCmd, sends 0x74B0 [u8(3), u32(flagCmd)] to its shard manager
+		// (the Capture the Flag world, a v1.188 battle-arena feature outside
+		// v1.150), and
 		// unconditionally replies [1, 0x30].
 		return Outcome{Ack: []byte{AckResultOK, SubFlagWorld}}
 	case SubSetTime:
@@ -237,9 +238,10 @@ type PlayerTeleports interface {
 	RecallUserGM(division, name, target string) bool
 }
 
-// handlePlayerTeleport honors /TOTOWN, /MOVETOUSER and /RECALLUSER. 51DE90
-// acks the teleport it performed with [1, subcmd]; an empty name, a target
-// not in the world or a refused move is the result-2 ack.
+// handlePlayerTeleport honors /TOTOWN, /MOVETOUSER and /RECALLUSER. The
+// server's GM handler acks the teleport it performed with [1, subcmd]; an
+// empty name, a target not in the world or a refused move is the result-2
+// ack.
 func handlePlayerTeleport(divisionID string, sender *enterworld.Character, request Request, status []BodyStatusCommands) Outcome {
 	refusal := Outcome{Ack: EncodeRequestFailure(request), Refusal: fmt.Sprintf("gmcommand: teleport 0x%02X refused", request.Subcmd)}
 	if !request.HasName || request.Name == "" || len(status) == 0 {

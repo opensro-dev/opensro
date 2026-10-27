@@ -198,7 +198,8 @@ func (r *Registry) Apply(effect Effect) bool {
 ================
 ApplyAfterRetirement
 
-59BB80 walks old active instances before later installations. Retire stopped
+The reference server's skill queue processing walks old active instances
+before later installations. Retire stopped
 rows before the incoming instance contributes parameters or casting states.
 Validation failure leaves the old retirement queue intact.
 ================

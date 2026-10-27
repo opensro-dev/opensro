@@ -111,7 +111,8 @@ func (s *MonsterState) OpenInstanceLayer(division string, defID instance.Definit
 ================
 FirstNestSpawnByCodename
 
-520350's _GetNPCPosByCodename fallback: the first authored nest anchor for a
+The reference server's NPC-position-by-codename fallback: the first
+authored nest anchor for a
 reference codename and the world code its hive names.
 ================
 */

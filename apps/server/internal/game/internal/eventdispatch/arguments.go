@@ -2,7 +2,7 @@ package eventdispatch
 
 import "encoding/binary"
 
-// Arguments projects the fixed CEventArg buffer (411220, 4C0D10).
+// Arguments projects the server's fixed event-argument buffer.
 // Actor references are explicit 32-bit host handles, never truncated Go pointers.
 // Invalid transitions panic instead of continuing after a native assertion.
 // This is a portable behavior projection, not the native in-memory layout.
@@ -29,7 +29,7 @@ func (a *Arguments) Read(dst []byte) {
 	if len(dst) > len(a.data) || a.cursor > a.written || n > a.written-a.cursor || !a.present {
 		panic("invalid native event argument read")
 	}
-	// 4C0D10 checks written bounds BEFORE this first-read reset.
+	// The native reader checks written bounds BEFORE this first-read reset.
 	if !a.reading {
 		a.cursor = 0
 		a.reading = true

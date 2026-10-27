@@ -23,7 +23,7 @@ import (
 ================
 OpenMasterReleaseVoteAs
 
-5C6AC0: any member but the master, while no vote runs (0x37) and the
+The server's release-vote open: any member but the master, while no vote runs (0x37) and the
 master has been gone GuildMasterAbsenceMs (0x33). A master never seen
 leaving counts as present.
 ================
@@ -69,7 +69,7 @@ func (door storeGuildDoor) OpenMasterReleaseVoteAs(divisionID string, actorID in
 ================
 CastGuildBallotAs
 
-VoteMgr_CastBallot (5E7EA0) and Vote_MoveBallot (5E7A70): the vote must be
+The server's vote manager casts and moves ballots: the vote must be
 open (0x5006) and the option a candidate (0x5008); a second ballot moves.
 ================
 */
@@ -110,7 +110,7 @@ CloseDueGuildVotes
 
 Every vote past its end closes; a winner takes grade 0 with the master's
 permissions and the commander role, and the master falls to formerGrade /
-formerPerm without a role (5C46E0 clears the old master's role and sets
+formerPerm without a role (the server's master delegation clears the old master's role and sets
 the new one's to 1), in the same commit as the close.
 ================
 */

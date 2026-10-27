@@ -5,7 +5,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 )
 
-// 59E750/59E770 read the live mastery dictionary, not setv or buff state.
+// The server's mastery level and rank reads use the live mastery dictionary, not setv or buff state.
 func masteryEnhancement(masteries []domain.CharacterMastery, attack enterworld.SkillAttack) uint8 {
 	if !attack.MasteryEnhancement {
 		return 0
@@ -33,7 +33,7 @@ func masteryEnhancement(masteries []domain.CharacterMastery, attack enterworld.S
 ================
 SkillMasteryRank
 
-CSkillManager_GetSkillMasteryRank (59E770) for a row the formula owners do
+The skill manager's mastery-rank read for a row the formula owners do
 not resolve themselves: the hawk's strike reads it on the summoning row.
 ================
 */
