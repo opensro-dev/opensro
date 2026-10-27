@@ -5,17 +5,21 @@ package wire
 // and the world model keep wearing the old item until these land. Native
 // sends them as separate per-entity packets behind the move result.
 
-// OpEquipVisual is the 0x3314 equip visual (handler sub_777800). Both visual
-// opcodes end in CInterfaceModel_SetEquipmentSlot on the doll plus a
-// StartAnimationBySet restart, so a weapon change also restarts the stance.
+// OpEquipVisual is the 0x3314 equip visual (the client's
+// CPSMission_OnEquipmentVisualAttach0x3314). Both visual opcodes end in
+// CICharactor_SetEquipSlotVisual / CCObjCharacter_SetEquipSlotVisual plus
+// a CCObjCharacter_PlayAnimationWithFallback restart, so a weapon change
+// also restarts the stance.
 const OpEquipVisual uint16 = 0x3314
 
-// OpUnequipVisual is the 0x377C unequip visual (handler sub_777980).
+// OpUnequipVisual is the 0x377C unequip visual (the client's
+// CPSMission_OnEquipmentVisualDetach0x377C).
 const OpUnequipVisual uint16 = 0x377C
 
 // equipVisualHasOptTail reports whether the 0x3314 payload carries the
-// trailing opt-level byte: the handler @0x00777840 tests bit1 / TID1 / TID2
-// on the ref word's LOW BYTE alone, and only the equipment class reads the
+// trailing opt-level byte: the client handler @0x00777840 tests bit1 /
+// TID1 / TID2 on the ref word's LOW BYTE alone, and only the equipment
+// class reads the
 // extra byte.
 func equipVisualHasOptTail(typeFlags uint16) bool {
 	lowByte := typeFlags & 0xFF
