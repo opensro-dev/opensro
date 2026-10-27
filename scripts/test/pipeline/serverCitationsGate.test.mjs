@@ -7,6 +7,8 @@ names in the server's Go (#1701)
 The gate keeps its prefixes as digests, and this test must not spell them
 either: it drives the matcher with digests of made-up prefixes, then checks
 the shipped table's shape, the client exemptions and the shared ratchet.
+The family pin holds digests too, so the families the #1701 sweep
+reworded cannot silently leave the table.
 
 ===========================================================================
 */
@@ -16,6 +18,7 @@ import { createHash } from "node:crypto";
 import { test } from "node:test";
 import {
 	CLIENT_SYMBOLS,
+	countAddressCitations,
 	countServerCitations,
 	createCitationMatcher,
 	evaluateCitationRatchet,
@@ -80,4 +83,38 @@ test("a new citation fails the ratchet and a reworded file asks for --update", (
 	const updated = evaluateCitationRatchet( new Map(), baseline, exists, true );
 	assert.deepEqual( updated.problems, [] );
 	assert.equal( updated.removedCount, 1 );
+});
+
+// Digests of the families the #1701 sweep reworded: quest engine, mission
+// dialogue, tactics, job, guild, flag world and skill manager.
+const SWEPT_FAMILIES = [
+	[ 11, "7bd0eaa0ab35c1f52528d0b79b83467919a3c2c216209ecc877196633d444f9c" ],
+	[ 14, "76a4f4519cd6cdea2fb8670ba67711847b7053eaf358593ddc099c2a37c7e283" ],
+	[ 10, "9b955dfe6280347ce298e8a695bfe3e7576372a30bd53abd77ee902b72f5ecec" ],
+	[ 8, "2244e4f45459f9e8569d9f62b4455c4666efff240e4f98903c7cba65886d8d5c" ],
+	[ 9, "861c4738533d2bfdc6ca280eea991149c587c514ac1a3353fe2a4c24a76547b9" ],
+	[ 10, "559dd4d38b1d6d5f52288548f840957d4cddb2c9f0dcbb325f77571073762a6d" ],
+	[ 13, "8418708620dfcefba1df3ca02ab1656eb29a742bf21388ba490ecc30bfc09a38" ]
+];
+
+test("the table keeps every family the #1701 sweep reworded", () => {
+	const table = new Set( SERVER_PREFIX_DIGESTS.map( ( [length, hex] ) => length + ":" + hex ) );
+	for ( const [length, hex] of SWEPT_FAMILIES ) {
+		assert.ok( table.has( length + ":" + hex ), `family digest ${hex.slice( 0, 12 )} is missing` );
+	}
+});
+
+test("addresses count in comments and strings, except on a client line or as masks", () => {
+	const sample = [
+		"x := 1 // see 4F2B50 and 0x005DA1B0, then sub_6a7f70",
+		"y := 0x4F2B50 // code is not counted, nor 0x800000, 450000 or deface",
+		'z := "6A7BE0"',
+		"// the client's 5D9100 draws the row (v1.150 6FEF10 sends it)",
+		"/* 4DF290 */"
+	].join( "\n" );
+	assert.equal( countAddressCitations( sample ), 5 );
+	assert.equal( countServerCitations( sample, () => false ), 5 );
+	// An escaped quote does not end the literal: the address stays inside it.
+	assert.equal( countAddressCitations( 'a := "it' + "\\" + '"4F2B50"' ), 1 );
+	assert.equal( countAddressCitations( "a := 4 // " + "4F2B50 in a client comment" ), 0 );
 });
