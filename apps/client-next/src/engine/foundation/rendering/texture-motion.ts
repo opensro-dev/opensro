@@ -1,6 +1,7 @@
 import {createModifierDelta} from './modifier-delta';
 // CRTModTexAni::Update, AED870: six float32 stores, delta milliseconds / 1000.
-// A retained matrix avoids touching vertices and keeps hidden/re-entry phase.
+// The matrix accumulates in place for the life of one instance; the world
+// renderer starts a fresh one when a scene build respawns the group.
 export function createTextureMotion(velocity:readonly number[]){
  if(velocity.length!==6||!velocity.every(Number.isFinite))throw Error('Invalid texture velocity');
  const rates=velocity.slice(),slots=[0,4,1,5,2,6] as const;

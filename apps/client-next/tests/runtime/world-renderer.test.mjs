@@ -77,6 +77,66 @@ test("retail object visibility advances offscreen and with a stationary camera, 
 	assert.equal( world.prepare( geometry, textures, 1, 3 ).draws.length, 0 );
 	world.dispose( geometry, textures );
 });
+
+test("texture motion accumulates within a scene, restarts on rebuild, and survives device loss", () => {
+	const world = createWorldRenderer(), transforms = [];
+	const geometry = {
+		upload: () => ({ instanceCount: 1 }),
+		release() {},
+		updateInstances: draw => draw,
+		/*
+		================
+		updateTextureTransform
+		================
+		*/
+		updateTextureTransform( draw, matrix ) {
+			transforms.push( [ ...matrix ] );
+		}
+	};
+	const textures = { upload: () => ({}), release() {} };
+	// A rebuilt scene is a new object with the same deterministic group id
+	// and the same authored velocity: exactly what re-entering a region
+	// hands the renderer.
+	const visit = () => {
+		const value = scene( "fountain" );
+		value.groups[0].material.uvVelocity = [ .25, -.5, .75, 1, -2, 3 ];
+		return value;
+	};
+	const identity8 = [ 1, 0, 0, 0, 0, 1, 0, 0 ],
+		halfSecond = [ 1.125, .375, -1, 0, -.25, 1.5, 1.5, 0 ],
+		oneSecond = [ 1.25, .75, -2, 0, -.5, 2, 3, 0 ];
+	world.scene( visit() );
+	world.prepare( geometry, textures, 1, 10 );
+	assert.deepEqual( transforms.at( -1 ), identity8, "a spawned instance starts at identity" );
+	world.prepare( geometry, textures, 1, 10.5 );
+	assert.deepEqual( transforms.at( -1 ), halfSecond );
+	world.prepare( geometry, textures, 1, 11 );
+	assert.deepEqual( transforms.at( -1 ), oneSecond, "the matrix keeps accumulating in the scene" );
+	// Leaving and re-entering: the rebuilt scene respawns the instance.
+	world.scene( null );
+	world.prepare( geometry, textures, 1, 11.5 );
+	world.scene( visit() );
+	world.prepare( geometry, textures, 1, 12 );
+	assert.deepEqual(
+		transforms.at( -1 ),
+		identity8,
+		"leaving and re-entering restarts the transform instead of keeping the shear"
+	);
+	world.prepare( geometry, textures, 1, 12.5 );
+	assert.deepEqual( transforms.at( -1 ), halfSecond, "the new instance accumulates from identity" );
+	// A recomposition (a region crossing rebuilds the scene around the same
+	// resident groups) is a respawn too, not a continuation.
+	world.scene( visit() );
+	world.prepare( geometry, textures, 1, 13 );
+	assert.deepEqual( transforms.at( -1 ), identity8, "a scene rebuild restarts the transform" );
+	world.prepare( geometry, textures, 1, 13.5 );
+	assert.deepEqual( transforms.at( -1 ), halfSecond );
+	// Device loss re-commits the identical scene object: same visit, same clock.
+	world.invalidate();
+	world.prepare( geometry, textures, 1, 14 );
+	assert.deepEqual( transforms.at( -1 ), oneSecond, "device loss keeps the resident clock's phase" );
+	world.dispose( geometry, textures );
+});
 /*
 ================
 scene
