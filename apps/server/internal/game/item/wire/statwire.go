@@ -357,8 +357,8 @@ func EncodeExpUpdate(sourceGid uint32, expDelta, skillExpDelta int32, levelled b
 
 // EncodeLevelUpEffect is the 0x36B0 body: exactly [u32 gid], the entity
 // the SYSTEM_LEVELUP effect and snd_levup sound play on (the client's
-// CPSMission_OnLevelUpSoundAndDeco0x36B0 reads 4 bytes at client
-// client 0x0077767D and resolves by gid; an unknown gid is a
+// CPSMission_OnLevelUpSoundAndDeco0x36B0 reads 4 bytes
+// (client 0x0077767D) and resolves by gid; an unknown gid is a
 // silent no-op client-side).
 func EncodeLevelUpEffect(gid uint32) []byte {
 	return NewWriter(4).U32(gid).Payload()
