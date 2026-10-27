@@ -54,11 +54,11 @@ const (
 ================
 UniqueSummonPolicy
 
-Natural-key bindings of the 53F780 tactics dispatch, not version-dependent
-numeric monster IDs. L2/L3 rows retain the same authored skill family in
+Natural-key bindings of the reference server's tactics dispatch, not
+version-dependent numeric monster IDs. L2/L3 rows retain the same authored skill family in
 v1.150. Tactics 32900..33300 and 33500 dispatch the Qin-Shi Emperor Tomb
-Floor 5 Guardians and Floor 6 BlackSnake/WhiteSnake (BeakYung) to 561F20
-(SummonByHealthBand).
+Floor 5 Guardians and Floor 6 BlackSnake/WhiteSnake (BeakYung) to the
+unique-summon skill (SummonByHealthBand).
 ================
 */
 func UniqueSummonPolicy(codename string) SummonPolicy {

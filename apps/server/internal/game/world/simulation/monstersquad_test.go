@@ -134,7 +134,7 @@ func TestFixedQueryUniqueSwitchesToSecondaryOpponentInReach(t *testing.T) {
 	ordinary := actor
 	ordinary.Nest.Controls.ID = 1
 	if ops.switchToSecondaryOpponent(monsterTestDivision, ordinary, mover, at(far, reach+5), []playerPose{at(far, reach+5), at(near, 3)}, live, 1000) {
-		t.Fatal("an ordinary row ran 548340")
+		t.Fatal("an ordinary row ran the secondary-opponent switch")
 	}
 	if ops.switchToSecondaryOpponent(monsterTestDivision, actor, mover, at(far, reach-1), []playerPose{at(far, reach-1), at(near, 3)}, live, 1000) {
 		t.Fatal("a target in reach was switched")
