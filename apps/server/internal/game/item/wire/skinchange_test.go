@@ -38,9 +38,9 @@ func TestSkinChangeBody(t *testing.T) {
 	}
 }
 
-// 78C830 / 492D40: band 0x40 bodies are the RefObjID plus the group's own
-// tail - the mask's monster, a pet summoner's record byte - never the
-// 18-byte equipment body.
+// 78C830 reads them back: band 0x40 bodies are the RefObjID plus the group's
+// own tail - the mask's monster, a pet summoner's record byte - never the
+// 18-byte equipment body the reference server serializes.
 func TestBand40ItemBodies(t *testing.T) {
 	capsule := ItemBody{RefObjID: 10364, TypeFlags: PackTypeFlags(3, 2, 2, 0), TransformRefObjID: 1933}
 	summoner := ItemBody{RefObjID: 2000, TypeFlags: PackTypeFlags(3, 2, 1, 1), Plus: 7, Durability: 9}

@@ -2,7 +2,8 @@ package monster
 
 import "math"
 
-// HiveDensityPolicy is the keep-count input to 55E5B0/55F190. Recovered
+// HiveDensityPolicy is the keep-count input to the reference server's hive
+// density computation. Recovered
 // enabled rows are all INS_DEFAULT; numeric newer-version world IDs do not
 // cross the natural-key projection.
 type HiveDensityPolicy struct {
@@ -33,7 +34,8 @@ func (d *HiveDensity) Sample(players, denominator uint32, policy HiveDensityPoli
 		quotient = d.average / denominator
 	}
 	// A zero divisor reaches x87 FISTP's indefinite int64; its low dword
-	// is zero, which 55F228 multiplies. IMUL retains only the low dword.
+	// is zero, which the native scaling multiplies. IMUL retains only the
+	// low dword.
 	return min(float32(quotient*policy.Step), float32(policy.Maximum))
 }
 

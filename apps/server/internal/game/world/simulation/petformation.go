@@ -80,7 +80,8 @@ func (p *PetFollower) FollowFormation(in PetFormationStep) []Frame {
 	}
 	if !monster.FollowLocationCompatible(from.RegionID, owner.RegionID) {
 		in.Slots.Release(p.gid)
-		// 541110 refuses outdoor -> dungeon. Entry/teleport already rebinds
+		// The native step destination refuses outdoor -> dungeon.
+		// Entry/teleport already rebinds
 		// companions through its own authority; this branch catches stragglers.
 		if from.RegionID&0x8000 == 0 && owner.RegionID&0x8000 != 0 {
 			return p.Stop(in.Now)

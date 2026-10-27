@@ -102,14 +102,32 @@ func TestCertificateWatchStaysQuietWithTimeLeft(t *testing.T) {
 
 /*
 ================
-TestCertificateWatchReportsAnExpiredPairAsZeroDays
+TestCertificateWatchReportsAnExpiredPairAsExpired
+
+#1868: a pair past its notAfter is the expired condition, not "expires in
+0 days": browsers already refuse it, so the text says players are on
+WebSocket and asks for the redeploy now. It has its own repeat window, so
+an expiring pair that crosses notAfter pages again at once.
 ================
 */
-func TestCertificateWatchReportsAnExpiredPairAsZeroDays(t *testing.T) {
+func TestCertificateWatchReportsAnExpiredPairAsExpired(t *testing.T) {
 	f := newCertWatchFixture(true, certWatchEpoch.Add(-48*time.Hour))
 	f.watch.Check()
-	if len(f.posts) != 1 || !strings.Contains(f.posts[0], "expires in 0 days") {
-		t.Fatalf("posts = %q, want an expired pair reported as 0 days", f.posts)
+	if len(f.posts) != 1 || !strings.Contains(f.posts[0], "expired at 2026-10-25T12:00:00Z") ||
+		!strings.Contains(f.posts[0], "players are on WebSocket") || strings.Contains(f.posts[0], "before then") {
+		t.Fatalf("posts = %q, want the expired alert", f.posts)
+	}
+	if condition, _ := f.server.CertificateProblem(certWatchEpoch); condition != certificateExpired {
+		t.Fatalf("condition = %q, want %q", condition, certificateExpired)
+	}
+	// Expiring, then expired inside the same day: the crossing pages again.
+	f = newCertWatchFixture(true, certWatchEpoch.Add(time.Hour))
+	f.watch.Check()
+	f.now = certWatchEpoch.Add(2 * time.Hour)
+	f.watch.Check()
+	if len(f.posts) != 2 || !strings.Contains(f.posts[0], "expires in under a day") ||
+		!strings.Contains(f.posts[1], "expired at") {
+		t.Fatalf("posts = %q, want the under-a-day alert then the expired one", f.posts)
 	}
 }
 

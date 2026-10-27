@@ -4,7 +4,8 @@
 linkedmana.go - Mana Switch: a linked member's damage refills the Bard's MP
 
 The Bard's Mana Switch is the lnks pair of skilllinkedeffect.go with lkdh
-(enterworld.SkillEffectLink.Mana): while the link holds, every hit the
+(the enterworld link record's Mana kind): while the link holds, every hit
+the
 recipient lands on a monster hands the link's source a share of the damage
 as MP. The share is fed where the attacker's committed damage is known,
 the same place linked threat is split for Protect (commitSkillHostility).

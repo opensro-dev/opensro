@@ -5,8 +5,8 @@ pk.go - the PK record's live updates
 
 v1.150 CPSMission_OnPkPenaltySeconds0x30F2 (u32 penalty, CICPlayer
 +0x188C), ..OnPkDailyCount0x33C4 (u8 daily, +0x1888) and
-..OnPkLevelUpdate0x3647 (u16 total, +0x188A). v1.188 sends the same bodies
-as 0x30CD, 0x30CE and 0x30D3 (4EAE70, 4EB140, 4EAFD0).
+..OnPkLevelUpdate0x3647 (u16 total, +0x188A). The reference server sends
+the same bodies as 0x30CD, 0x30CE and 0x30D3.
 
 ===========================================================================
 */

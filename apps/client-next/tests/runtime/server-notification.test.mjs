@@ -188,12 +188,12 @@ test("a plus notice for a +7 item (channel 0x81, the body's plus byte) answers t
 	const short = defined( serverNotification( 0x3667, linked( text, body( 7, 10 ) ) ) );
 	assert.equal( short.dropPlus, true );
 	assert.equal( short.plusSeven, undefined );
-	// No further channel was introduced: an 0x83 frame is not a notice
-	// (0x82 is the item-break channel, #1738).
+	// No further channel was introduced: an 0x84 frame is not a notice
+	// (0x82 is the item-break channel, #1738; 0x83 the rename channel, #1689).
 	assert.equal(
 		serverNotification(
 			0x3667,
-			Buffer.concat( [ Buffer.from( [ 0x83, 5, 0 ] ), Buffer.from( "Hello", "utf16le" ) ] )
+			Buffer.concat( [ Buffer.from( [ 0x84, 5, 0 ] ), Buffer.from( "Hello", "utf16le" ) ] )
 		),
 		null
 	);

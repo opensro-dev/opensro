@@ -2,7 +2,8 @@ package world
 
 // MessageBlock identifies a native activity bucket. World/partition identity
 // belongs to its caller. Dungeon grid coordinates are relative to the DOF
-// navigation bounds, not outdoor region coordinates (99A520/99A600).
+// navigation bounds, not outdoor region coordinates (the reference
+// server's message-block bucketing uses the same bounds).
 type MessageBlock struct {
 	Region  uint16 // zero outdoors, where X/Z already include region coordinates
 	X, Y, Z int

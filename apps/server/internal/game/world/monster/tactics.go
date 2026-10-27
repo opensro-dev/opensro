@@ -23,8 +23,9 @@ const (
 	// The v1.188 SPAWN state dispatches its completion event after 3000ms.
 	RetailSpawnHoldMs int64 = 3000
 
-	// The v1.188 IDLE state calls sub_545b70(1). Its integer result is the
-	// inclusive 2.001..5.999 second band around the 4-second center.
+	// The reference server's IDLE state calls its idle-delay draw (kind 1).
+	// Its integer result is the inclusive 2.001..5.999 second band around
+	// the 4-second center.
 	RetailIdleDelayMinMs int64 = 2001
 	RetailIdleDelayMaxMs int64 = 5999
 
@@ -32,12 +33,13 @@ const (
 	// result is strictly below 25: 24 repeat outcomes, 76 wander outcomes.
 	RetailIdleRepeatThreshold = 25
 
-	// The v1.188 idle-move action calls sub_545b70(2), which returns
-	// rand()%1000 + 5000.
+	// The reference server's idle-move action calls the same draw (kind 2),
+	// which returns rand()%1000 + 5000.
 	retailWanderDelayMinMs int64 = 5000
 	retailWanderDelayMaxMs int64 = 5999
 
-	// sub_545860 probes 30 units ahead; 541730 uses a separate distance.
+	// The native wander direction probes 30 units ahead; its step
+	// destination uses a separate distance.
 	retailWanderProbeDistance = 30
 )
 
@@ -53,8 +55,9 @@ func RetailBehaviorPolicy() BehaviorPolicy { return BehaviorPolicy{} }
 
 func (BehaviorPolicy) SpawnHoldMs() int64 { return RetailSpawnHoldMs }
 
-// 545B84..545BB4: sign draw first, then rand()%2000. The two zero-offset
-// outcomes both produce 4000; a uniform 3999-value distribution is different.
+// The native idle-delay draw: sign draw first, then rand()%2000. The two
+// zero-offset outcomes both produce 4000; a uniform 3999-value distribution
+// is different.
 func NativeIdleDelayMs(random func() uint32) int64 {
 	sign := int64(-1)
 	if random()%2 != 0 {
@@ -131,7 +134,8 @@ func ResolveTactics(instance Instance) Tactics {
 	tactics.SightRange = nest.SightRange
 	tactics.ChaseLeash = nest.Radius
 	if nest.HasControls {
-		// 53FA37..53FA4F: effective sight includes the actor's body radius.
+		// Native sight computation: effective sight includes the actor's
+		// body radius.
 		tactics.SightRange = float64(float32(nest.SightRange + instance.BodyRadius()))
 		// Native combat containment is TraceData relative to the target.
 		// Radius still owns nest/home geometry; it is not a battle leash.

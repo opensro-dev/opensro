@@ -34,9 +34,11 @@ const (
 	CertificateAlertRepeat   = 24 * time.Hour
 )
 
-// The conditions a check can report; each has its own repeat window.
+// The conditions a check can report; each has its own repeat window, so
+// a pair that crosses from expiring to expired pages again at once.
 const (
 	certificateExpiring = "expiring"
+	certificateExpired  = "expired"
 	certificateDisabled = "disabled"
 )
 
@@ -46,7 +48,9 @@ CertificateProblem
 
 The condition the served pair is in at now, and the alert text for it;
 both empty when there is nothing to report. Only the public posture is
-watched: a development certificate is short-lived by design.
+watched: a development certificate is short-lived by design. A pair past
+its notAfter is its own condition (#1868): browsers already refuse it,
+so WebTransport sessions fail TLS and players are on WebSocket now.
 ================
 */
 func (s *Server) CertificateProblem(now time.Time) (condition, text string) {
@@ -60,14 +64,22 @@ func (s *Server) CertificateProblem(now time.Time) (condition, text string) {
 	if s.Cert == nil || s.Cert.Leaf == nil {
 		return "", ""
 	}
+	notAfter := s.Cert.Leaf.NotAfter.UTC().Format(time.RFC3339)
 	remaining := s.Cert.Leaf.NotAfter.Sub(now)
+	if remaining <= 0 {
+		return certificateExpired, "the served WebTransport certificate expired at " + notAfter +
+			": WebTransport sessions fail TLS and players are on WebSocket. Renew the pair and redeploy now; " +
+			"the GameWorld reads it only at boot."
+	}
 	if remaining >= CertificateWarnRemaining {
 		return "", ""
 	}
-	return certificateExpiring, fmt.Sprintf(
-		"the served WebTransport certificate expires in %d days (%s). Renew the pair and redeploy before then; "+
-			"the GameWorld reads it only at boot.",
-		max(int(remaining/(24*time.Hour)), 0), s.Cert.Leaf.NotAfter.UTC().Format(time.RFC3339))
+	left := "in under a day"
+	if days := int(remaining / (24 * time.Hour)); days > 0 {
+		left = fmt.Sprintf("in %d days", days)
+	}
+	return certificateExpiring, "the served WebTransport certificate expires " + left + " (" + notAfter +
+		"). Renew the pair and redeploy before then; the GameWorld reads it only at boot."
 }
 
 /*
