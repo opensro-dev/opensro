@@ -35,9 +35,22 @@ func RegionIDForSectors(sectorX, sectorY int) uint16 {
 	return worldgeom.RegionIDForSectors(sectorX, sectorY)
 }
 
-// RegionIDFromSeedLocal resolves which region a seed-local position landed in,
-// server.mjs missionRegionIdFromSeedLocal.
+/*
+================
+RegionIDFromSeedLocal
+
+Which region a seed-local position landed in, server.mjs
+missionRegionIdFromSeedLocal. A cave floor has no sectors: its locals
+are its own frame and run far outside the outdoor 1920 square (a Jangan
+floor sits near x -13580), so a point on it stays on it. Folding it by
+sector would name a cave region that does not exist and lose every
+approach and Trace goal on that floor.
+================
+*/
 func RegionIDFromSeedLocal(seedRegionID uint16, localX, localZ, regionSize float64) uint16 {
+	if worldgeom.IsDungeonRegion(seedRegionID) {
+		return seedRegionID
+	}
 	seedX := SectorX(seedRegionID)
 	seedY := SectorY(seedRegionID)
 	return RegionIDForSectors(
