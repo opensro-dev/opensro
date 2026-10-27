@@ -16,14 +16,15 @@ import "sync"
 const PageRows = 12
 
 // PartyEntry is one party-match registration. Per the earlier finding
-// the client's listing row (sub_75e5e0's per-row parse) IS the
+// the client's listing row (the per-row parse in
+// CPSMission_OnPartyMatchingListResponse0xB588) IS the
 // registration snapshot struct, so the registry holds exactly the
 // row fields. MasterName / RaceByte are SERVER-derived from the bound
 // character (identity is never client-supplied); MemberCount comes from
 // the party registry seam when the owner is partied, 1 otherwise (the
-// client's own ack writer uses the same no-active-party fallback,
-// sub_80e6b0). The stored count is only the registration's; every page
-// re-reads it live (handlePartyPage).
+// client's own ack writer (PartyMatchManager_SetOwnRecord) uses the
+// same no-active-party fallback). The stored count is only the
+// registration's; every page re-reads it live (handlePartyPage).
 /*
 ================
 PartyEntry
@@ -229,8 +230,9 @@ func (b *Board) MentorEntryByID(division string, entryID uint32) (MentorEntry, b
 PartyPage
 
 Puts the requester's current party listing in row 0 of every page. The
-native client shows its own registration in slot 0 on every refresh
-(636CE0), so the row rides each page. Inference: the native server's paging
+client shows its own registration in slot 0 on every refresh
+(CIFPartyMatch_RebuildRows), so the row rides each page. Inference: the
+native server's paging
 is not in hand, so the row's slot is reserved before paging and no other
 listing is lost. Port-only, not native: ownerKey may name the requester's
 party leader (MatchListingOwner); it grants no edit rights.

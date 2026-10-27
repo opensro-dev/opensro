@@ -309,12 +309,12 @@ func concat(chunks ...[]byte) []byte {
 	return out
 }
 
-// partyRequest renders the sub_703850 C->S body.
+// partyRequest renders the client's party-matching body.
 func partyRequest(entryID, partyNumber uint32, typeBits, purpose, minLv, maxLv uint8, title string) []byte {
 	return concat(u32le(entryID), u32le(partyNumber), []byte{typeBits, purpose, minLv, maxLv}, wideStr(title))
 }
 
-// mentorRequest renders the sub_7038f0 C->S body.
+// mentorRequest renders the client's mentor-matching body.
 func mentorRequest(entryID, dword04 uint32, kind uint8, detail string) []byte {
 	return concat(u32le(entryID), u32le(dword04), []byte{kind}, wideStr(detail))
 }
