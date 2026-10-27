@@ -16,6 +16,7 @@ import (
 	"sort"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -55,7 +56,9 @@ bindResidentRegionInDivision
 func (rt *Runtime) bindResidentRegionInDivision(division, key string, nowMs int64) {
 	unlock := rt.lockDivision(division)
 	defer unlock()
-	rt.bindResidentRegion(key, nowMs)
+	// The tick step is this function's only caller, so its write joins
+	// the tick's batched commit (#1820).
+	rt.bindResidentRegionDeferred(key, nowMs)
 }
 
 /*
@@ -82,6 +85,32 @@ actor from updating a recycled layer's return state.
 ================
 */
 func (rt *Runtime) bindResidentRegion(key string, nowMs int64) {
+	rt.bindResidentRegionVia(key, nowMs, rt.deps.Update)
+}
+
+/*
+================
+bindResidentRegionDeferred
+
+bindResidentRegion for tick-only callers (the resident-region step and
+the return-scroll completion): its commit joins the tick's batched
+commit, instead of a synchronous transaction per region change inside
+the tick (#1820). Handler callers keep the immediate door above, so an
+answer still follows its commit.
+================
+*/
+func (rt *Runtime) bindResidentRegionDeferred(key string, nowMs int64) {
+	rt.bindResidentRegionVia(key, nowMs, rt.deps.UpdateDeferred)
+}
+
+/*
+================
+bindResidentRegionVia
+
+The region binding behind both doors; only the commit timing differs.
+================
+*/
+func (rt *Runtime) bindResidentRegionVia(key string, nowMs int64, door func(*enterworld.Character, string, func() bool) bool) {
 	value, exists := rt.characterAdmissions.Load(key)
 	if !exists {
 		return
@@ -116,7 +145,7 @@ func (rt *Runtime) bindResidentRegion(key string, nowMs int64) {
 	if definition.NativeType == 0 && lease.ID.Layer() == 1 {
 		saved := domain.SavedReturnLocation{Definition: uint16(definition.ID), RegionID: pose.RegionID,
 			X: float32(pose.X), Y: float32(pose.Y), Z: float32(pose.Z)}
-		if !rt.deps.Update(c, "region-return-location", func() bool {
+		if !door(c, "region-return-location", func() bool {
 			if instance.ID(domain.CharacterWorldInstance(c)) != lease.ID {
 				return false
 			}

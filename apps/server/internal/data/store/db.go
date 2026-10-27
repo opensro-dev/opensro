@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS mall_accounts (
 ) WITHOUT ROWID;
 `
 
-const dbSchema = mallAccountsSchema + accountStorageSchema + fortressSchema + allianceSchema + guildWarSchema + fortressItemForgeSchema + uniqueKillsSchema + economyLedgerSchema + `
+const dbSchema = mallAccountsSchema + accountStorageSchema + fortressSchema + allianceSchema + guildWarSchema + fortressItemForgeSchema + uniqueKillsSchema + economyLedgerSchema + nameReservationsSchema + `
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -157,9 +157,10 @@ const (
 // layout-4 records while adding the empty mall currency and warehouse tables
 // for layout 5, the empty fortress and union tables for layout 6, the
 // guild-war tables for layout 7 and the fortress production table for
-// layout 8, the unique-kill record for layout 9 and the economy ledger for
-// layout 10 (authority_upgrade.go). The release receiver runs it.
-const CurrentLayoutVersion = 10
+// layout 8, the unique-kill record for layout 9, the economy ledger for
+// layout 10 and the name-reservation table for layout 11
+// (authority_upgrade.go). The release receiver runs it.
+const CurrentLayoutVersion = 11
 
 /*
 ==================
@@ -334,8 +335,11 @@ type loadedDB struct {
 	guildMembers map[string]map[int64][]domain.GuildMemberRecord
 	camps        map[string]map[int64]domain.TrainingCampRecord
 	campMembers  map[string]map[int64][]domain.TrainingCampMemberRecord
-	meta         Meta
-	version      int
+	// nameReservations is layout 11's plane (name_reservation.go):
+	// division -> lower-cased name -> the reservation row.
+	nameReservations map[string]map[string]NameReservation
+	meta             Meta
+	version          int
 }
 
 // loadDB accepts only the exact current character and layout versions. It

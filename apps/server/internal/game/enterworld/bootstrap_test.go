@@ -37,6 +37,40 @@ func TestBootstrapJSONOmitsBrowserPresentationPaths(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPacketPayloadRidesAsBytesWithNumberArrayJSON
+
+Packet carries its payload as bytes (#1820); its JSON form stays the
+number array the []int payload produced, never base64, so the browser
+envelope is byte-identical.
+================
+*/
+func TestPacketPayloadRidesAsBytesWithNumberArrayJSON(t *testing.T) {
+	packet := NewPacket(OpcodeResetClient, []byte{0xa8, 0x62, 0xff})
+	blob, err := json.Marshal(packet)
+	if err != nil {
+		t.Fatalf("marshal packet: %v", err)
+	}
+	if want := `{"nativeOpcode":13161,"payload":[168,98,255]}`; string(blob) != want {
+		t.Fatalf("packet JSON = %s, want %s", blob, want)
+	}
+	var decoded Packet
+	if err := json.Unmarshal(blob, &decoded); err != nil {
+		t.Fatalf("unmarshal packet: %v", err)
+	}
+	if !reflect.DeepEqual(decoded, packet) {
+		t.Fatalf("round trip = %+v, want %+v", decoded, packet)
+	}
+	empty, err := json.Marshal(NewPacket(OpcodeMyCharacterData, nil))
+	if err != nil {
+		t.Fatalf("marshal empty packet: %v", err)
+	}
+	if want := `{"nativeOpcode":14237,"payload":[]}`; string(empty) != want {
+		t.Fatalf("empty packet JSON = %s, want %s", empty, want)
+	}
+}
+
 // TestBootstrapJSONCarriesThePKCounters pins the bootstrap fields the
 // client seeds its PK counters from (pk-status.ts): v1.150 reads daily,
 // total and penalty at world entry (863880), so a renamed field would
@@ -348,17 +382,17 @@ func TestBuildPacketSequence(t *testing.T) {
 		}
 	}
 	// Reset client carries the spawn region little-endian (china 0x62a8).
-	if !reflect.DeepEqual(result.Packets[0].Payload, []int{0xa8, 0x62}) {
+	if !reflect.DeepEqual(result.Packets[0].Payload, []byte{0xa8, 0x62}) {
 		t.Errorf("reset payload = %v, want [0xa8 0x62]", result.Packets[0].Payload)
 	}
 	// Clock latch preserves GID and carries a valid native calendar.
 	gid := 100000 + 3
 	latch := result.Packets[4].Payload
-	if len(latch) != 8 || !reflect.DeepEqual(latch[:4], []int{gid & 255, (gid >> 8) & 255, (gid >> 16) & 255, (gid >> 24) & 255}) || latch[6] >= 24 || latch[7] >= 60 {
+	if len(latch) != 8 || !reflect.DeepEqual(latch[:4], []byte{byte(gid & 255), byte((gid >> 8) & 255), byte((gid >> 16) & 255), byte((gid >> 24) & 255)}) || latch[6] >= 24 || latch[7] >= 60 {
 		t.Fatalf("invalid clock latch: %v", latch)
 	}
 	// Object list start: [1, rowCount, 0] with no rows from the nil seams.
-	if !reflect.DeepEqual(result.Packets[5].Payload, []int{0x01, 0x00, 0x00}) {
+	if !reflect.DeepEqual(result.Packets[5].Payload, []byte{0x01, 0x00, 0x00}) {
 		t.Errorf("object list start payload = %v, want [1 0 0]", result.Packets[5].Payload)
 	}
 	if len(result.Packets[2].Payload) == 0 {
@@ -537,10 +571,10 @@ func TestBuildLocalPlayerEntryPayloadStructure(t *testing.T) {
 	name := []byte("asd2")
 	found := false
 	for index := 0; index+2+len(name) <= len(payload); index++ {
-		if payload[index] == len(name) && payload[index+1] == 0 {
+		if int(payload[index]) == len(name) && payload[index+1] == 0 {
 			match := true
 			for offset, char := range name {
-				if payload[index+2+offset] != int(char) {
+				if payload[index+2+offset] != char {
 					match = false
 					break
 				}
@@ -556,7 +590,7 @@ func TestBuildLocalPlayerEntryPayloadStructure(t *testing.T) {
 	}
 	// Tail: fortress-war "none" sentinel 0x10001 LE then two zero bytes.
 	tail := payload[len(payload)-6:]
-	if !reflect.DeepEqual(tail, []int{0x01, 0x00, 0x01, 0x00, 0x00, 0x00}) {
+	if !reflect.DeepEqual(tail, []byte{0x01, 0x00, 0x01, 0x00, 0x00, 0x00}) {
 		t.Errorf("payload tail = %v, want fortress sentinel + 2 zero bytes", tail)
 	}
 }

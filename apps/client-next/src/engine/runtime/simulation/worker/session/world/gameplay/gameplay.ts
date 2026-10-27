@@ -98,6 +98,7 @@ import { itemCooldown } from "@/engine/foundation/gameplay/item-cooldowns";
 import { skillCooldown } from "@/engine/foundation/gameplay/skill-cooldowns";
 import { uniqueNotice, uniqueReferences } from "@/engine/foundation/gameplay/unique-notices";
 import { inventoryNotice } from "@/engine/foundation/gameplay/inventory-notices";
+import { nameChangeFailureText } from "@/engine/foundation/gameplay/name-change";
 import { alchemyNotice } from "@/engine/foundation/gameplay/alchemy-notices";
 import {
 	emptyPartyMatching,
@@ -1081,6 +1082,12 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	// timer's end on the world clock, the flag carrier, and whether the
 	// last 0x7753 toggle was a sign-up (the join answer's text reads it).
 	let flagWarTimerEndsAt = 0, flagWarCarrierGid = 0, flagWarJoinExpected = false;
+	// Port-only (#1689): a name-change scroll use stays in flight until
+	// its 0xB5BD answer arrives; that answer's refusal bytes then read as
+	// the scroll's own lines. The native error mapper keeps no text at
+	// those codes and must stay exact for every other use, so the
+	// translation lives here, keyed on the flight, not in the mapper.
+	let renameUseInFlight = false;
 	let flagWarTeam: number | null = null;
 	let progression: Progression = { masteries: [] };
 	const skillGroups = new Map<number, { group: number; level: number; }>();
@@ -3181,14 +3188,19 @@ state here before a command can claim a native wire conversation.
 					skin: command.skin,
 					targetSlot: command.targetSlot,
 					reverseChoice: command.reverseChoice,
-					reverseMapPoint: command.reverseMapPoint
+					reverseMapPoint: command.reverseMapPoint,
+					renameName: command.renameName
 				};
 				const refusal = inventory.useNotice( command.slot, context );
 				if ( refusal ) {
 					api.notice( refusal );
 					return null;
 				}
-				return inventory.use( command.slot, now, context, command.message );
+				const sent = inventory.use( command.slot, now, context, command.message );
+				// Port-only (#1689): the scroll's use went out; its answer
+				// is the one 0xB5BD the refusal chain reads as its lines.
+				if ( sent && command.renameName !== undefined ) renameUseInFlight = true;
+				return sent;
 			}
 			if ( command.kind === "premium-command" || command.kind === "count-job-use" ) {
 				// The chat command (6AD990) finds its row by item type; the
@@ -4735,7 +4747,19 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 					return true;
 				}
-				const refusal = recallAppointmentNotice( frame.opcode, frame.payload ) ??
+				// Port-only (#1689): while the scroll's use is in flight its
+				// refusal bytes read as the scroll's own lines; any 0xB5BD
+				// answer retires the flight. All other refusals stay on
+				// the native mapper, byte-exact.
+				const renameLine = renameUseInFlight && frame.opcode === 0xb5bd && frame.payload[0] === 2 &&
+						frame.payload[1] !== undefined ?
+					nameChangeFailureText( frame.payload[1]! ) :
+					undefined;
+				if ( frame.opcode === 0xb5bd ) renameUseInFlight = false;
+				const refusal = (renameLine ?
+					{ key: "", value: 0, text: renameLine, nativeType: 5 as const } :
+					undefined) ??
+					recallAppointmentNotice( frame.opcode, frame.payload ) ??
 					targetNotice( frame.opcode, frame.payload ) ?? portalNotice( frame.opcode, frame.payload ) ??
 					repairNotice( frame.opcode, frame.payload ) ??
 					inventoryNotice( frame.opcode, frame.payload, localCountry, mallRequest ) ??

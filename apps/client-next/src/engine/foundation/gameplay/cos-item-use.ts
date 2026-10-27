@@ -38,6 +38,9 @@ export interface CosItemUseContext {
 	// port-only 7, a map point).
 	readonly reverseChoice?: number;
 	readonly reverseMapPoint?: number;
+	// The name-change scroll's new name (#1689, port-only), from its
+	// entry window.
+	readonly renameName?: string;
 }
 
 /*

@@ -151,6 +151,18 @@ item-state frames and the despawn the old neighbourhood must receive.
 ================
 */
 func (rt *Runtime) retireCompanionCorpses(division string, c *enterworld.Character) (owner, public []wire.Frame) {
+	return rt.retireCompanionCorpsesVia(division, c, rt.deps.Update)
+}
+
+// retireCompanionCorpsesDeferred is retireCompanionCorpses for the
+// tick's return-scroll completion: its commit joins the tick's batched
+// commit (#1820). Handler re-entries keep the immediate door.
+func (rt *Runtime) retireCompanionCorpsesDeferred(division string, c *enterworld.Character) (owner, public []wire.Frame) {
+	return rt.retireCompanionCorpsesVia(division, c, rt.deps.UpdateDeferred)
+}
+
+// retireCompanionCorpsesVia is the shared body behind both doors.
+func (rt *Runtime) retireCompanionCorpsesVia(division string, c *enterworld.Character, door func(*enterworld.Character, string, func() bool) bool) (owner, public []wire.Frame) {
 	if c == nil {
 		return nil, nil
 	}
@@ -167,7 +179,7 @@ func (rt *Runtime) retireCompanionCorpses(division string, c *enterworld.Charact
 		return nil, nil
 	}
 	var corpses []*enterworld.CharacterCOS
-	rt.deps.Update(c, "cos-reentry-corpses", func() bool {
+	door(c, "cos-reentry-corpses", func() bool {
 		corpses = corpses[:0]
 		for _, pet := range c.Companions() {
 			if !pet.Summoned || pet.CurrentHP != 0 {

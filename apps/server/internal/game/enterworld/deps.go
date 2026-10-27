@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"opensro.online/server/internal/domain"
 	"strings"
+	"sync"
 	"time"
 
 	"opensro.online/server/internal/game/item/wire"
@@ -44,10 +45,32 @@ func (s StaticCharacterSource) CharactersForDivision(divisionID string) []*Chara
 Deps
 ================
 */
+/*
+================
+refObjSnapshotCache
+
+Memoizes the filtered RefObj snapshot (bootstrap.go) for one
+BrowserReferences generation. The snapshot's inputs are boot-static:
+the roster, the NPC roster, the summonable refs and the monster
+template are loaded once and never mutated afterwards. The production
+constructor installs the holder; a nil holder computes on every Build,
+as fixtures always have.
+================
+*/
+type refObjSnapshotCache struct {
+	mu     sync.Mutex
+	refs   *BrowserReferences
+	rows   []RefObjRow
+	cached bool
+}
+
 type Deps struct {
 	BrowserReferences *BrowserReferences
-	Roster            *Roster
-	Characters        CharacterSource
+	// refObjCache memoizes the filtered RefObj snapshot; installed by
+	// NewDevDepsWithRoster, nil in fixtures (see refObjSnapshotCache).
+	refObjCache *refObjSnapshotCache
+	Roster      *Roster
+	Characters  CharacterSource
 
 	Items        ItemRefSource
 	Levels       LevelDataSource
@@ -163,6 +186,11 @@ type Deps struct {
 	// ranking snapshot (store jobweek.go).
 	CloseJobWeek func(divisionID string, week int64, label string) bool
 	JobRankings  func(divisionID string) domain.JobRankings
+	// QueueRename queues a name-change scroll's rename on the authority
+	// store (port-only, #1689, SRO_NAME_CHANGE_SCROLL). It runs OUTSIDE
+	// every character commit door - it takes the store's own lock - and
+	// answers why a queue was refused. Nil refuses every queue.
+	QueueRename func(divisionID string, character *Character, name string, nowMs int64) (RenameQueueOutcome, error)
 	// fixtureJobRankings is CloseWeek's snapshot when no authority is wired.
 	fixtureJobRankings map[string]domain.JobRankings
 	ReadCharacter      func(divisionID string, read func())
@@ -277,6 +305,37 @@ func (d *Deps) Update(character *Character, label string, update func() bool) bo
 	return d.runCharacterUpdate(characters, label, update, func(fn func() bool) bool {
 		return fn()
 	})
+}
+
+// RenameQueueOutcome says how a name-change scroll's queue request ended
+// (port-only, #1689). The scroll's handler maps each refusal to its own
+// failure byte; the store's error vocabulary stays behind the composition
+// that wires Deps.QueueRename.
+type RenameQueueOutcome uint8
+
+const (
+	RenameQueued RenameQueueOutcome = iota
+	RenameRefusedInvalidName
+	RenameRefusedNameTaken
+	RenameRefusedNameReserved
+	RenameRefusedAlreadyQueued
+	RenameRefusedCooldown
+)
+
+/*
+================
+QueueCharacterRename
+
+Queues a paid rename for the next login through the wired authority door.
+An unwired composition refuses: the scroll keeps its native unsupported
+answer because the caller checks the feature flag first.
+================
+*/
+func (d *Deps) QueueCharacterRename(divisionID string, character *Character, name string, nowMs int64) (RenameQueueOutcome, error) {
+	if d == nil || d.QueueRename == nil {
+		return RenameRefusedInvalidName, fmt.Errorf("enterworld: rename queue door is not wired")
+	}
+	return d.QueueRename(divisionID, character, name, nowMs)
 }
 
 // MutateMany routes a multi-character invariant through one atomic door.
@@ -535,11 +594,21 @@ func (d *Deps) ReentryPackets(divisionID, characterName string) ([]Packet, bool)
 	projection.RestoreEntryEffects = nil // Caller already owns the live actor transaction.
 	projection.PrepareEntry = nil
 	projection.AdoptEntrySpawn = nil
+	// The bootstrap's own writes (the seed, the starter kit, the encoded
+	// inventory adoption below) ride the deferred door (#1820): a
+	// re-entry built on the tick joins the tick's one batched commit
+	// instead of committing per door under the division lock. A deferred
+	// door called with no batch open commits at once (store
+	// tickbatch.go), so a re-entry built by a handler behaves exactly as
+	// before. Login never passes through here and keeps its doors.
+	if d.MutateCharacterDeferred != nil {
+		projection.MutateCharacter = d.MutateCharacterDeferred
+	}
 	result := Build(&projection, BootstrapRequest{
 		DivisionID:    divisionID,
 		CharacterName: characterName,
 	})
-	return d.encodeReentry(result)
+	return projection.encodeReentry(result)
 }
 
 // PreparedReentry couples the packets to the resolved placement they encode.

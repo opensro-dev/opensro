@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -172,7 +171,13 @@ type groundState struct {
 // contract); the database is its crash-consistent shadow, advanced one
 // transaction per committed operation.
 type Store struct {
-	mu sync.RWMutex
+	// mu is the authority lock; it records its waits and holds, and
+	// commits their phases (lock_timing.go).
+	mu      timedRWMutex
+	commits commitTiming
+	// beforeSQLiteCommit, nil in production, runs inside a commit's sqlite
+	// phase: tests make a commit slow to watch what waits on it.
+	beforeSQLiteCommit func()
 
 	dir       string
 	dbPath    string
@@ -207,6 +212,11 @@ type Store struct {
 	// unit is the WHOLE camp.
 	camps       map[string]map[int64]domain.TrainingCampRecord
 	campMembers map[string]map[int64][]domain.TrainingCampMemberRecord
+
+	// nameReservations is the held-name plane (the name_reservations
+	// table): division -> lower-cased name -> the reservation row. The
+	// dirty unit is one row, written inside the rename transaction.
+	nameReservations map[string]map[string]NameReservation
 
 	charDivision map[*domain.Character]string
 	changes      changeSet
@@ -468,6 +478,10 @@ func (s *Store) adoptDB(db *sql.DB, loaded *loadedDB) {
 	s.campMembers = loaded.campMembers
 	if s.campMembers == nil {
 		s.campMembers = map[string]map[int64][]domain.TrainingCampMemberRecord{}
+	}
+	s.nameReservations = loaded.nameReservations
+	if s.nameReservations == nil {
+		s.nameReservations = map[string]map[string]NameReservation{}
 	}
 	s.meta = loaded.meta
 	if s.meta.NextCharID == nil {

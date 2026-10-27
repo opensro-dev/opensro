@@ -403,6 +403,12 @@ type Runtime struct {
 	Announce  Announcements
 	announcer announcer
 
+	// NameChangeScroll enables the port-only name-change scroll (#1689,
+	// SRO_NAME_CHANGE_SCROLL; namechange.go). The zero value is native:
+	// the donor item keeps its unsupported-use answer and the mall lists
+	// nothing extra.
+	NameChangeScroll bool
+
 	// SealDrops counts sealed drops for the weekly board (sealboard.go;
 	// port-only, not native). Nil, the default, counts nothing; the
 	// composition root installs the counter only when EnvSealBoard is on.

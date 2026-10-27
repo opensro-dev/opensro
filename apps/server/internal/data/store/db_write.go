@@ -36,14 +36,39 @@ upsertCharacterTx
 ================
 */
 func upsertCharacterTx(tx *sql.Tx, division string, c *domain.Character) error {
+	record, err := encodeCharacter(division, c)
+	if err != nil {
+		return err
+	}
+	return writeCharacterTx(tx, division, c, record)
+}
+
+/*
+================
+encodeCharacter
+
+The character row's JSON. The commit times it apart from the write
+(lock_timing.go).
+================
+*/
+func encodeCharacter(division string, c *domain.Character) ([]byte, error) {
 	record, err := json.Marshal(c)
 	if err != nil {
 		// Plain-data structs do not fail to marshal; when one does, the
 		// whole commit fails LOUD instead of silently dropping a
 		// character row (the same posture the JSON engine had).
-		return fmt.Errorf("marshaling character %s/%s: %w", division, c.Name, err)
+		return nil, fmt.Errorf("marshaling character %s/%s: %w", division, c.Name, err)
 	}
-	_, err = tx.Exec(
+	return record, nil
+}
+
+/*
+================
+writeCharacterTx
+================
+*/
+func writeCharacterTx(tx *sql.Tx, division string, c *domain.Character, record []byte) error {
+	_, err := tx.Exec(
 		"INSERT INTO characters (division, id, name_lower, record) VALUES (?, ?, ?, ?) ON CONFLICT(division, id) DO UPDATE SET name_lower = excluded.name_lower, record = excluded.record",
 		division, c.ID, strings.ToLower(c.Name), string(record))
 	return err

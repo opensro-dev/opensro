@@ -32,6 +32,7 @@ installSessionLifecycle
 func (game *gameplayPlane) installSessionLifecycle(hub *transport.Hub, authorityStore *store.Store) {
 	// Port-only: the economy ledger's committed gold per reason.
 	hub.SetEconomyMetrics(authorityStore.EconomyCounters)
+	hub.SetStoreLockMetrics(func() any { return authorityStore.LockTiming() })
 	// Attack pet fights that ended on a dead or departed target (petdiagnostics.go).
 	hub.SetPetCombatMetrics(game.items.PetCombatCounters)
 	// Players a non-walk path placed inside a closed object (placementguard.go).
@@ -110,6 +111,9 @@ func (game *gameplayPlane) worldBound(
 	game.items.BindRecoverySession(divisionID, character, session.ID)
 	game.movement.WorldBound(session, divisionID, character)
 	community.FriendWorldBound(game.deps, game.presence, divisionID, character)
+	// #1689 (port-only): a rename applied at login is announced to the
+	// character's online friends and guild members, once.
+	community.RenameNoticeWorldBound(game.deps, game.presence, divisionID, character)
 	game.parties.WorldBound(session, divisionID, character)
 	game.matches.WorldBound(divisionID, character)
 	game.guildInvites.WorldBound(divisionID, character)

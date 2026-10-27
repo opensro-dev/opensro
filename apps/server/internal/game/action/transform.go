@@ -235,6 +235,19 @@ func (rt *Runtime) endTransform(division string, c *enterworld.Character, now in
 // endTransformForLoading runs endTransform in its own door before a
 // re-entry builds the character's packets.
 func (rt *Runtime) endTransformForLoading(division string, c *enterworld.Character) {
+	rt.endTransformForLoadingVia(division, c, rt.deps.Update)
+}
+
+// endTransformForLoadingDeferred is endTransformForLoading for the
+// tick's return-scroll completion: its commit joins the tick's batched
+// commit (#1820). Handler re-entries (portal, relocation) keep the
+// immediate door, so their answer still follows its commit.
+func (rt *Runtime) endTransformForLoadingDeferred(division string, c *enterworld.Character) {
+	rt.endTransformForLoadingVia(division, c, rt.deps.UpdateDeferred)
+}
+
+// endTransformForLoadingVia is the shared body behind both doors.
+func (rt *Runtime) endTransformForLoadingVia(division string, c *enterworld.Character, door func(*enterworld.Character, string, func() bool) bool) {
 	if rt.effects == nil || c == nil {
 		return
 	}
@@ -248,7 +261,7 @@ func (rt *Runtime) endTransformForLoading(division string, c *enterworld.Charact
 	if !hasTransform {
 		return
 	}
-	rt.deps.Update(c, "transform-loading-end", func() bool {
+	door(c, "transform-loading-end", func() bool {
 		return rt.endTransform(division, c, rt.Now().UnixMilli())
 	})
 }

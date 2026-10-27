@@ -140,9 +140,13 @@ func magicOptionWrites(codename string, options []magicOption, source uint32) ([
 		case optionTag("era"):
 			add(9, paramkeeper.PercentSum, v)
 		case optionTag("hpa"):
-			add(0x34, paramkeeper.PercentSum, v)
+			// The avatar HP row is a flat increase: its client text is
+			// "PARAM_HP 150" with no percent sign (the rate rows, hra and
+			// era, carry one), and its rolled range is a fixed 150. It
+			// lands on the max-HP node like the equipment hp option.
+			flat(3, float32(int32(own[3])+int32(o.value)))
 		case optionTag("mpa"):
-			add(0x35, paramkeeper.PercentSum, v)
+			flat(4, float32(int32(own[4])+int32(o.value)))
 		case optionTag("hprg"):
 			add(0x19, paramkeeper.PercentSum, v)
 		case optionTag("mprg"):

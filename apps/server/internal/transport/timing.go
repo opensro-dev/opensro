@@ -19,127 +19,18 @@ package transport
 
 import (
 	"fmt"
-	"math"
 	"sync"
-	"sync/atomic"
 	"time"
+
+	"opensro.online/server/internal/platform/latency"
 )
 
-// timingBoundsMs are the inclusive upper bounds of the handler and phase
-// buckets; one more bucket holds the rest. Fine below 16 ms so a handler's
-// p99 can be read against a 10 ms target, then coarse up to a second.
-var timingBoundsMs = [...]float64{1, 2, 5, 10, 16, 25, 50, 100, 250, 1000}
+// Histogram is the snapshot form served on /transport/metrics, and
+// liveHistogram its lock-free recording form; both live in
+// platform/latency, which the authority store's lock timing shares.
+type Histogram = latency.Histogram
 
-const timingBuckets = len(timingBoundsMs) + 1
-
-/*
-================
-Histogram
-
-Counts per bucket (the last count is above the last bound), the bounds
-they use, the largest sample, and the percentiles read as their bucket's
-upper bound (the largest sample when they fall in the open last bucket);
-the snapshot form served on /transport/metrics.
-================
-*/
-type Histogram struct {
-	BoundsMs []float64 `json:"bounds_ms"`
-	Buckets  []uint64  `json:"buckets"`
-	MaxMs    float64   `json:"max_ms"`
-	P50Ms    float64   `json:"p50_ms"`
-	P99Ms    float64   `json:"p99_ms"`
-	P999Ms   float64   `json:"p999_ms"`
-}
-
-/*
-================
-liveHistogram
-
-The recording form: atomic counters, so recording on every inbound frame
-takes no lock. maxBits holds the largest sample's float64 bits.
-================
-*/
-type liveHistogram struct {
-	buckets [timingBuckets]atomic.Uint64
-	maxBits atomic.Uint64
-}
-
-/*
-================
-timingBucket
-================
-*/
-func timingBucket(ms float64) int {
-	for i, bound := range timingBoundsMs {
-		if ms <= bound {
-			return i
-		}
-	}
-	return timingBuckets - 1
-}
-
-/*
-================
-liveHistogram.add
-================
-*/
-func (h *liveHistogram) add(elapsed time.Duration) {
-	ms := float64(elapsed) / float64(time.Millisecond)
-	h.buckets[timingBucket(ms)].Add(1)
-	for {
-		old := h.maxBits.Load()
-		if ms <= math.Float64frombits(old) || h.maxBits.CompareAndSwap(old, math.Float64bits(ms)) {
-			return
-		}
-	}
-}
-
-/*
-================
-liveHistogram.snapshot
-================
-*/
-func (h *liveHistogram) snapshot() Histogram {
-	out := Histogram{BoundsMs: timingBoundsMs[:], Buckets: make([]uint64, timingBuckets)}
-	for i := range h.buckets {
-		out.Buckets[i] = h.buckets[i].Load()
-	}
-	out.MaxMs = math.Float64frombits(h.maxBits.Load())
-	out.P50Ms = timingPercentile(out, 0.5)
-	out.P99Ms = timingPercentile(out, 0.99)
-	out.P999Ms = timingPercentile(out, 0.999)
-	return out
-}
-
-/*
-================
-timingPercentile
-
-The upper bound of the bucket holding the q-th sample, or the largest
-sample when it falls in the open last bucket; 0 with no samples.
-================
-*/
-func timingPercentile(h Histogram, q float64) float64 {
-	var total uint64
-	for _, n := range h.Buckets {
-		total += n
-	}
-	if total == 0 {
-		return 0
-	}
-	rank := uint64(math.Ceil(q * float64(total)))
-	var seen uint64
-	for i, n := range h.Buckets {
-		seen += n
-		if seen >= rank {
-			if i < len(h.BoundsMs) {
-				return min(h.BoundsMs[i], h.MaxMs)
-			}
-			return h.MaxMs
-		}
-	}
-	return h.MaxMs
-}
+type liveHistogram = latency.Live
 
 /*
 ================
@@ -249,7 +140,7 @@ func (t *timingStats) recordHandler(opcode uint16, elapsed time.Duration) {
 	if !ok {
 		h, _ = t.handlers.LoadOrStore(opcode, &liveHistogram{})
 	}
-	h.(*liveHistogram).add(elapsed)
+	h.(*liveHistogram).Add(elapsed)
 }
 
 /*
@@ -282,7 +173,7 @@ The simulation ticker's per-tick seam (wired by worldsession.NewTicker).
 func (h *Hub) RecordTickPhases(phases TickPhases) {
 	t := &h.metrics.timing
 	for i, elapsed := range [4]time.Duration{phases.BeforeHooks, phases.Divisions, phases.Hooks, phases.Total} {
-		t.phases[i].add(elapsed)
+		t.phases[i].Add(elapsed)
 	}
 	t.recordCommit(phases.Commit)
 	if len(phases.SlowHooks) == 0 && len(phases.SlowDivisions) == 0 {
@@ -308,7 +199,7 @@ func (t *timingStats) recordCommit(commit TickCommit) {
 		return
 	}
 	if commit.Flushed {
-		t.commitMs.add(commit.Elapsed)
+		t.commitMs.Add(commit.Elapsed)
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -401,13 +292,13 @@ timingStats.snapshotInto
 func (t *timingStats) snapshotInto(m *Metrics) {
 	m.HandlerMs = make(map[string]Histogram)
 	t.handlers.Range(func(key, value any) bool {
-		m.HandlerMs[fmt.Sprintf("0x%04X", key.(uint16))] = value.(*liveHistogram).snapshot()
+		m.HandlerMs[fmt.Sprintf("0x%04X", key.(uint16))] = value.(*liveHistogram).Snapshot()
 		return true
 	})
 	m.TickPhaseMs = map[string]Histogram{
-		"before_hooks": t.phases[0].snapshot(), "divisions": t.phases[1].snapshot(),
-		"hooks": t.phases[2].snapshot(), "total": t.phases[3].snapshot(),
-		"commit": t.commitMs.snapshot(),
+		"before_hooks": t.phases[0].Snapshot(), "divisions": t.phases[1].Snapshot(),
+		"hooks": t.phases[2].Snapshot(), "total": t.phases[3].Snapshot(),
+		"commit": t.commitMs.Snapshot(),
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()

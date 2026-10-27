@@ -723,6 +723,18 @@ remaining children of an ended caster instance.
 ==================
 */
 func (rt *Runtime) endPartyAurasForLoading(division string, c *enterworld.Character) {
+	rt.endPartyAurasForLoadingVia(division, c, rt.deps.Update)
+}
+
+// endPartyAurasForLoadingDeferred is endPartyAurasForLoading for the
+// tick's return-scroll completion: its commit joins the tick's batched
+// commit (#1820). Handler re-entries keep the immediate door.
+func (rt *Runtime) endPartyAurasForLoadingDeferred(division string, c *enterworld.Character) {
+	rt.endPartyAurasForLoadingVia(division, c, rt.deps.UpdateDeferred)
+}
+
+// endPartyAurasForLoadingVia is the shared body behind both doors.
+func (rt *Runtime) endPartyAurasForLoadingVia(division string, c *enterworld.Character, door func(*enterworld.Character, string, func() bool) bool) {
 	if rt.effects == nil || c == nil {
 		return
 	}
@@ -740,7 +752,7 @@ func (rt *Runtime) endPartyAurasForLoading(division string, c *enterworld.Charac
 	if !hasAura {
 		return
 	}
-	rt.deps.Update(c, "aura-loading-end", func() bool {
+	door(c, "aura-loading-end", func() bool {
 		var tokens []uint32
 		for _, effect := range rt.effects.Snapshot(division, c.Name) {
 			if row, ok := skills.SkillByID(effect.SkillID); ok && row.Aura.Present {

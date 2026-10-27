@@ -239,6 +239,7 @@ import {
 import { createRepairHud } from "./hud/repair-hud";
 import { createSkinChangeHud } from "./hud/skin-change-hud";
 import { createGlobalChatHud } from "./hud/global-chat-hud";
+import { createNameChangeHud } from "./hud/name-change-hud";
 import { createReverseReturnHud } from "./hud/reverse-return-hud";
 import { createSpecialtyDealHud } from "./hud/specialty-deal-hud";
 import { socialQuestion } from "@/engine/foundation/ui/social-question";
@@ -274,6 +275,11 @@ import {
 	tradeTierScale
 } from "@/engine/foundation/gameplay/specialty-deal";
 import { GLOBAL_CHAT_MAX_LENGTH, isGlobalChatItem } from "@/engine/foundation/gameplay/global-chat";
+import {
+	isNameChangeScrollItem,
+	isValidRenameName,
+	NAME_CHANGE_MAX_LENGTH
+} from "@/engine/foundation/gameplay/name-change";
 import { createJobHud } from "./hud/job-hud";
 import { fortressMiniIndicators } from "@/engine/foundation/ui/fortress-mini-info";
 import {
@@ -855,6 +861,10 @@ const SKIN_PANEL = "Skin change";
 // CIFWholeChat, the Global Chatting item's window, and its line's edit box.
 const GLOBAL_CHAT_PANEL = "Global chat";
 const GLOBAL_CHAT_TEXT = "wholechat-text";
+// The name-change scroll's entry window (#1689, port-only): the
+// CIFWholeChat frame under its own title and edit box.
+const RENAME_PANEL = "Name change";
+const RENAME_TEXT = "rename-text";
 // CIFSpecialtyDeal, the trade goods window, and its quantity edit (control 30).
 const SPECIALTY_DEAL_PANEL = "Specialty deal";
 const SPECIALTY_DEAL_COUNT = "specialty-deal-count";
@@ -1334,6 +1344,7 @@ export function createUi(
 	const repairHud = createRepairHud();
 	const skinHud = createSkinChangeHud();
 	const globalChatHud = createGlobalChatHud();
+	const renameHud = createNameChangeHud();
 	const reverseScrollHud = createReverseReturnHud();
 	const specialtyDealHud = createSpecialtyDealHud();
 	let specialtyCombo = false;
@@ -2374,6 +2385,14 @@ export function createUi(
 				dirty = true;
 				return;
 			}
+			// #1689 (port-only): the name-change scroll asks for the new
+			// name first; its window's Use runs the use with the name.
+			if ( item && isNameChangeScrollItem( item.refObjId ) && command.renameName === undefined ) {
+				renameHud.open( item.slot );
+				focusAtEnd( RENAME_TEXT, "" );
+				dirty = true;
+				return;
+			}
 			// 6971B0 case 0x1E: the reverse return scroll asks for its point
 			// first; the row's pick runs the use with that byte.
 			if ( item && isReverseReturnScroll( item.typeFlags ) && command.reverseChoice === undefined ) {
@@ -3112,6 +3131,31 @@ export function createUi(
 		}
 		globalChatHud.sent();
 		focusAtEnd( GLOBAL_CHAT_TEXT, "" );
+	}
+	/*
+	================
+	sendRenameUse
+
+	The name-change window's Use (#1689, port-only): an invalid name is
+	refused here with its line and the window keeps the text; a valid one
+	uses the scroll with the name and closes. The server judges the rest
+	(taken, reserved, cooldown, state) and answers its own byte.
+	================
+	*/
+	function sendRenameUse( slot: number, name: string ) {
+		const item = view?.gameplay?.inventory.find( row => row.slot === slot );
+		if ( !item || !isNameChangeScrollItem( item.refObjId ) || item.quantity === 0 ) {
+			renameHud.close();
+			focus = null;
+			return;
+		}
+		if ( !isValidRenameName( name ) ) {
+			hudMessages.append( "Names are 2 to 12 letters, digits or underscores." );
+			return;
+		}
+		sendGameplay( { kind: "item-use", slot, renameName: name } );
+		renameHud.close();
+		focus = null;
 	}
 	/*
 	================
@@ -6464,6 +6508,32 @@ export function createUi(
 					event.kind === "activate" && event.id === "wholechat-use"
 				) {
 					sendGlobalChat( wholeChat.slot, wholeChat.text );
+					dirty = true;
+					return;
+				}
+			}
+			const renameWindow = renameHud.state();
+			if ( renameWindow !== null ) {
+				// The name-change window (#1689): Enter uses, Esc closes.
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && (event.id === "rename-exit" || event.id === "rename-close")
+				) {
+					renameHud.close();
+					focus = null;
+					dirty = true;
+					return;
+				}
+				if ( event.kind === "edit" && event.id === RENAME_TEXT ) {
+					renameHud.type( event.value );
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing && focus === RENAME_TEXT ||
+					event.kind === "activate" && event.id === "rename-use"
+				) {
+					sendRenameUse( renameWindow.slot, renameWindow.text );
 					dirty = true;
 					return;
 				}
@@ -17366,6 +17436,46 @@ export function createUi(
 						}
 					}
 					endWindow( admission, "service:" + GLOBAL_CHAT_PANEL );
+				}
+				const renameWindow = renameHud.state();
+				if ( renameWindow && hudData?.windows.ifwholechat && hudData.root.GDR_WHOLE_CHAT ) {
+					// #1689 (port-only): the name entry on CIFWholeChat's
+					// frame - its edit box, the scroll count, Use/Cancel -
+					// under the Name Change title. Use waits for a valid
+					// name and a scroll left, like the chat window's own
+					// send gating (6D1D90).
+					const admission = beginWindow(),
+						root = hudData.root.GDR_WHOLE_CHAT,
+						layout = hudData.windows.ifwholechat,
+						nodes = Object.values( layout ),
+						byName = ( name: string ) => nodes.find( n => n.name === name ),
+						[px, py] = windowOrigin( RENAME_PANEL, [
+							Math.max( 0, (w - root.rect[2]) / 2 ),
+							Math.max( 0, (h - root.rect[3]) / 2 ),
+							root.rect[2],
+							root.rect[3]
+						] ),
+						count = game?.inventory.find( row => row.slot === renameWindow.slot )?.quantity ?? 0;
+					nativeFrame( root, px, py, "Name Change", "rename-close" );
+					nativePage( layout, px, py, [ 31, 32, 35, 36 ] );
+					const edit = byName( "GDR_WHOLE_CHAT_EDITBOX_INPUT" ), odd = byName( "GDR_WHOLE_CHAT_ODDITEM" );
+					if ( edit ) partyEdit( edit, px, py, RENAME_TEXT, renameWindow.text, NAME_CHANGE_MAX_LENGTH );
+					if ( odd ) authoredText( odd, px, py, String( count ) );
+					for ( const [id, name] of [ [ "rename-use", "OK" ], [ "rename-exit", "CANCEL" ] ] as const ) {
+						const node = byName( "GDR_WHOLE_CHAT_BTN_" + name );
+						if ( node ) {
+							authoredLabeledButton(
+								node,
+								px,
+								py,
+								id,
+								hudCopy( node.text ),
+								id === "rename-use" &&
+									(count === 0 || !!game?.inventoryPending || !isValidRenameName( renameWindow.text ))
+							);
+						}
+					}
+					endWindow( admission, "service:" + RENAME_PANEL );
 				}
 				const specialtyDeal = specialtyDealHud.state();
 				if ( specialtyDeal && hudData?.windows.ifspecialtydeal && hudData.root.GDR_SPECIALTY_DEAL ) {
