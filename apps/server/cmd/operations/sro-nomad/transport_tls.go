@@ -121,7 +121,9 @@ earlier, louder half of that line, where the operator can still act.
 certificate is the loaded pair from resolveTransportCertificate, nil
 when none was loaded.
 
-The advertised port must be the port clients reach: the bind port, or
+The advertised URL is the transport base clients append every
+transport path to (advertisedTransportBase). The advertised port must
+be the port clients reach: the bind port, or
 PublicPort when the host redirects a public port to the bind (#1447:
 the GameWorld runs unprivileged and cannot bind UDP 443, so the host
 redirects public 443 to a high bind port). A redirected bind must be
@@ -193,9 +195,10 @@ func validateWebTransportPosture(certificate *transport.Certificate, posture web
 				advertised,
 			)
 		}
-		if !strings.HasSuffix(endpoint.Path, transport.PathWS) {
+		if !advertisedTransportBase(endpoint.Path) {
 			return fmt.Errorf(
-				"shard %q advertised transport URL %q must end %s, the route clients map to WebTransport",
+				"shard %q advertised transport URL %q must be the transport base (https://host or https://host/route); "+
+					"clients append %s and the other transport paths themselves",
 				game.Definition.ID,
 				advertised,
 				transport.PathWS,
@@ -231,4 +234,28 @@ func validateWebTransportPosture(certificate *transport.Certificate, posture web
 		}
 	}
 	return nil
+}
+
+/*
+================
+advertisedTransportBase
+
+Whether an advertised URL path is the transport base: the origin, or an
+origin plus a route that names no transport path. Every consumer appends
+the socket, WebTransport, cert-hash and references paths to this base
+(the browser client, sro-wtprobe), so the advertised URL is never the
+socket itself.
+
+Transition (#1447 follow-up): a base that already ends with the socket
+path is still accepted for one release, so a host catalogue written in
+the old socket form keeps deploying; clients from #1886 on normalise it.
+Remove the tolerance once no host catalogue holds the socket form.
+================
+*/
+func advertisedTransportBase(path string) bool {
+	path = strings.TrimSuffix(path, "/")
+	if strings.HasSuffix(path, transport.PathWS) {
+		return true
+	}
+	return !strings.Contains(path+"/", "/transport/")
 }
