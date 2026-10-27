@@ -58,8 +58,8 @@ func (rt *Runtime) MarkerStates(c *enterworld.Character) map[uint32]NpcMarker {
 		}
 		at := activeQuestIndex(c, def.RefID)
 		if at < 0 {
-			// 925D20 calls condition slot +11C with arg4=1: the marker
-			// checks the hour but bypasses the first-come quota (926B01).
+			// The server's marker check calls condition slot +11C with arg4=1:
+			// the marker checks the hour but bypasses the first-come quota.
 			if canAcceptAgain(c, def) && prerequisitesMet(c, def) && rt.calendarAvailable(def, true) {
 				if state, shown := offerMarkerState(level, int64(def.MinLevel), int64(def.Level)); shown {
 					out[def.RefID] = NpcMarker{Codename: def.StartNpcCodename, State: state}
@@ -87,16 +87,17 @@ func (rt *Runtime) MarkerStates(c *enterworld.Character) map[uint32]NpcMarker {
 ================
 offerMarkerState
 
-925D20's level rule for a quest the character has not taken:
+The server's marker level rule for a quest the character has not taken:
 the server's quest level-difference classifier of the quest level
 (+0x23) against the character's hides a quest more than six levels below
 it; a quest above the character's level shows the red scroll, any other the
 offer mark. A quest with a minimum level shows nothing below it: the offer
-itself fails there (9262A0, flag 1).
+itself fails there (the prerequisite check, flag 1).
 ================
 */
 func offerMarkerState(level, minLevel, questLevel int64) (uint8, bool) {
-	// Below the minimum the offer does not exist (9262A0), so no marker.
+	// Below the minimum the offer does not exist (prerequisite check), so
+	// no marker.
 	if level < minLevel {
 		return 0, false
 	}

@@ -4,7 +4,7 @@
 entry_collect_test.go - collect counts are re-derived at world entry
 
 An in-game report: the quest window said 9 Tiger's grinding teeth while the
-bag held 11. Native gather counts are never stored (91C7F0 / 91D5E0 count
+bag held 11. Native gather counts are never stored (the server's gather missions count
 the held items); a saved count that lags the saved bag must not survive
 world entry, while a kill count, which only the record holds, must.
 

@@ -96,7 +96,7 @@ Source
 
 Source is one tagRefSkill abnormal parameter block in native field order.
 Key is the per-actor probability key the roll passes in ECX (the field
-ordinal), Resist the CSkillManager status-resistance index of statuses 6+.
+ordinal), Resist the server skill manager's status-resistance index of statuses 6+.
 ==================
 */
 type Source struct {

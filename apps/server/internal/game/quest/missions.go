@@ -26,7 +26,8 @@ MissionSpec
 
 Describes simultaneous counters within one acceptance/reward
 transaction. Native collection data has a separate item, count and target
-array per mission (86bf20 -> 929f1b); these are not tutorial stages.
+array per mission (the server's collection-mission loader fills them from
+the quest configuration); these are not tutorial stages.
 ================
 */
 type MissionSpec struct {
@@ -42,7 +43,7 @@ type MissionSpec struct {
 	// A delivery mission is a two-leg hand-over at its own NPC (QuestSpec's
 	// fields of the same names). Its items are granted at acceptance with
 	// every other mission's, and its node latches when it is handed over
-	// (91CEB0 keeps quest-user +3 as a bit per mission).
+	// (the server's delivery latch keeps quest-user +3 as a bit per mission).
 	DeliveryItems       []RewardItemLead
 	DeliveryKeepsItems  bool
 	HandOverNpcCodename string
@@ -54,16 +55,16 @@ type MissionSpec struct {
 	// PendingNoticeSymbol (mission +0x108) is sent when another mission is
 	// handed over while this one still waits ("Doji's medicine has been
 	// delivered. Deliver Bori's book to Chau."). Inference: its only writer is
-	// QuestLua_LoadQuestConfiguration (92A7E8), and neither the deliver handler
-	// nor 91CEB0 reads it; every line reads as that reminder.
+	// the server's quest-configuration loader, and neither the deliver handler
+	// nor the delivery latch reads it; every line reads as that reminder.
 	PendingNoticeSymbol string
 	// SolePendingSymbol is the start NPC's not-achieved line while this
-	// mission is the only one left (the TRADE_*_SPECIAL talks, 8CB8A0,
+	// mission is the only one left (the server's TRADE_*_SPECIAL start talks
 	// read record byte 3's mission bits to pick it).
 	SolePendingSymbol string
-	// Optional is a mission past the class's required count (vf17C's N,
-	// CBasicQuest_vfE4 91F7D0): it runs, drops and shows, but never gates
-	// the pay. QNO_EU_ADVENTURER_1's Shiny Moss gather is one.
+	// Optional is a mission past the class's required count (the N the
+	// server reads as its required-mission count): it runs, drops and shows,
+	// but never gates the pay. QNO_EU_ADVENTURER_1's Shiny Moss gather is one.
 	Optional       bool
 	deliveryRefs   []uint32
 	handOverNpcRef uint32
@@ -280,8 +281,9 @@ func (rt *Runtime) NormalizeEntryRecords(c *enterworld.Character) error {
 				return err
 			}
 		}
-		// Native gather and change-item counts are never stored: 91C7F0
-		// and 91D5E0 count the held items each time they judge or publish.
+		// Native gather and change-item counts are never stored: the server's
+		// gather and change-item missions count the held items each time they
+		// judge or publish.
 		// A saved count that lags the saved bag (a restart between the two
 		// writes, a catalog change) is re-derived here, as an inventory
 		// change would; once the drop cap is held nothing else would.
@@ -379,8 +381,8 @@ optionalMissionCleanup
 
 What an optional collect mission gathered leaves with the paid quest, as
 much as is held. INFERENCE: the base pay takes the quest's own mission
-items (the class talks call QuestInventory_DeleteAllMatchingItems 915530
-after +0x104); an optional mission's count was never owed, so the held
+items (the server's class talks delete every matching item stack after
++0x104); an optional mission's count was never owed, so the held
 stacks go rather than the count.
 ================
 */
@@ -407,7 +409,8 @@ stage). Inventory changes must never erase a simultaneous kill counter.
 ================
 */
 func refreshMissions(c *enterworld.Character, def *Definition, record enterworld.ActiveQuestRecord, killed string, rarity uint8) (enterworld.ActiveQuestRecord, bool) {
-	// A waiting branch's progress is its timer (89E050), never item counts.
+	// A waiting branch's progress is its timer (the server's per-minute
+	// wait tick), never item counts.
 	if waitingBranch(def, record) {
 		return record, false
 	}
@@ -429,7 +432,7 @@ func refreshMissions(c *enterworld.Character, def *Definition, record enterworld
 			next.CompletionReached = next.CompletionReached || missionCompletionReached(old.Contents[0])
 		}
 		// A handed-over delivery stays complete in the journal: no later
-		// inventory change undoes 91CA00's latch.
+		// inventory change undoes the server hand-over's latch.
 		if m.Objective == ObjectiveDelivery && next.CompletionReached {
 			next.Kind = 0
 		}
@@ -520,7 +523,7 @@ func allMissionsReached(def *Definition, record enterworld.ActiveQuestRecord) bo
 ================
 killTargetMatches
 
-Native 91bc82..91bc9b indexes the rank by the matching species, and
+The server's kill-monster mission indexes the rank by the matching species, and
 the server's monster class read returns only the low rarity nibble.
 ================
 */

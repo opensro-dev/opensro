@@ -36,8 +36,9 @@ func packQuestMinutes(minutes uint16) uint32 {
 ================
 AdvanceMinute
 
-Runs from the admitted character's action pulse. 922DE0 initializes +4;
-922800 resumes it; 9219A0 advances ordinary quest time. Disconnect removes
+Runs from the admitted character's action pulse. The server initializes +4
+when it accepts the quest, resumes it on login and advances ordinary quest
+time from its per-quest tick. Disconnect removes
 the actor and preserves remaining minutes instead of spending offline time.
 ================
 */
@@ -136,7 +137,7 @@ func (rt *Runtime) AdvanceMinute(c *enterworld.Character) []wire.Frame {
 ================
 planQuestCleanup
 
-923930 removes all stacks of each mission item. Display progress is capped
+The server's abort-and-cleanup removes all stacks of each mission item. Display progress is capped
 at the objective count; cleanup uses inventory truth, including surplus.
 ================
 */
@@ -180,7 +181,7 @@ func (rt *Runtime) planQuestCleanup(c *enterworld.Character, def *Definition) ([
 ================
 advanceWaitMinute
 
-89E050, once per online minute while the branch is not yet achieved
+The server's Rahid 2 wait tick, once per online minute while the branch is not yet achieved
 (+0xA): a positive count (+0xC) drops by one, and the journal timer is
 sent (0x30D5) unless the new count is a multiple of ten. A count
 already at zero sets the achieved word, announces the branch's achieved-now

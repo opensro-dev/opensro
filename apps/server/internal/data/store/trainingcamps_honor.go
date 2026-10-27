@@ -282,8 +282,9 @@ func (door storeCampDoor) qualifiedHonorCampsLocked(divisionID string) []domain.
 ================
 honorTierRankForIndex
 
-Retail stored procedure _TRAINING_CAMP_UPDATEHONORRANK (SRO_VT_SHARD.bak
-@ 0x53FB099) and CTrainingCamp_EngageHonorBuffSkills (0x005DD9B0):
+Retail stored procedure _TRAINING_CAMP_UPDATEHONORRANK (at byte offset
+0x53FB099 of the SRO_VT_SHARD.bak dump, a database offset, not a binary
+address) and the reference server's camp honor-buff engagement:
   - Rankings 1..5   (index 0..4)   = Rank 1 (King: Crown + Gold + Silver + Copper buffs)
   - Rankings 6..15  (index 5..14)  = Rank 2 (Gold: Gold + Silver + Copper buffs)
   - Rankings 16..30 (index 15..29) = Rank 3 (Silver: Silver + Copper buffs)
@@ -310,9 +311,9 @@ func honorTierRankForIndex(index int) uint8 {
 recomputeEvaluationRanksLocked
 
 Recomputes EvaluationRank (0 unranked, 1..4 ranked; native DB sentinel 5 in
-CTrainingCampMgr_ApplyReloadedHonorRanks 0x005E1410 ->
-CTrainingCamp_SetHonorRankAndBroadcast 0x005DD830) across all camps in the
-division and returns every camp whose EvaluationRank changed.
+the reference server's honor-rank reload, which sets each camp's rank and
+broadcasts it) across all camps in the division and returns every camp
+whose EvaluationRank changed.
 ================
 */
 func (door storeCampDoor) recomputeEvaluationRanksLocked(divisionID string) []domain.TrainingCampRankChange {

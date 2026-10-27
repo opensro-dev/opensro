@@ -496,10 +496,10 @@ func (rt *Runtime) HandleMasteryLevelUp(divisionID string, character *enterworld
 	//   - the v1.150 mastery tooltip displays the same row as the next
 	//     level's required SP and HARDCODES ZERO for a level-0 row
 	//     (sub_55ab40 @0x0055b21a..b22b: edi_5 = 0 unless level != 0);
-	//   - the cross-version research GameServer accumulates its cost
-	//     over rows [current, current+amount) (loop @0x0059c64c) and
+	//   - the cross-version reference server's mastery raise
+	//     accumulates its cost over rows [current, current+amount) and
 	//     its level==0 branch BYPASSES pricing entirely, jumping to the
-	//     success path (@0x0059c62a..0x0059c62c) - corroboration only,
+	//     success path - corroboration only,
 	//     per the cross-version rule; the adopted prices are our own
 	//     shipped leveldata rows, and the display half is v1.150-native.
 	// The client's enable gate and tooltip are the only prices a v1.150

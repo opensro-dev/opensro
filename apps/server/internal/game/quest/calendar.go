@@ -1,6 +1,6 @@
 package quest
 
-// 9262A0: mode 1 admits before 04:00 or from 20:00; mode 2 admits
+// The server's prerequisite check: mode 1 admits before 04:00 or from 20:00; mode 2 admits
 // 04:00 through 19:59. LuaStartDayLimit is a shared first-come quota,
 // not a character deadline. Time already spent on a quest is unaffected.
 func questHourAvailable(mode, hour uint8) bool {
@@ -33,9 +33,9 @@ func (rt *Runtime) calendarAvailable(def *Definition, marker bool) bool {
 	return rt.calendarAvailableLocked(def, marker)
 }
 
-// 921700 restores a slot after voluntary cancellation. Successful completion
-// of the ordinary generic quest does not restore it; expiry invokes 923930
-// directly and likewise does not run this release wrapper.
+// The server's cancel path restores a slot after voluntary cancellation.
+// Successful completion of the ordinary generic quest does not restore it;
+// expiry invokes the server's abort-and-cleanup routine directly and likewise does not run this release wrapper.
 func (rt *Runtime) releasePeriodStart(def *Definition) {
 	if def.PeriodStartLimit == 0 {
 		return
@@ -48,7 +48,7 @@ func (rt *Runtime) releasePeriodStart(def *Definition) {
 }
 
 // Existing simulation/action ticks drive the native 5000ms definition pulse
-// (91F1FF / 91FBC0). The native reset requires adjacent sampled hours 19->20
+// (the server's quest-definition tick). The native reset requires adjacent sampled hours 19->20
 // or 3->4. A delayed pulse must not invent skipped reset transitions.
 func (rt *Runtime) AdvanceCalendar(nowMs int64) {
 	rt.calendarMu.Lock()

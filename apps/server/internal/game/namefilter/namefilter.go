@@ -51,9 +51,9 @@ const File = "abusefilter.txt"
 
 const (
 	allowTableTag = "#allow_id_table"
-	// columnsPerLocale is 987CB0's six columns a locale group spans.
+	// columnsPerLocale is the server filter loader's six columns a locale group spans.
 	columnsPerLocale = 6
-	// The name context's word types (987CB0's first context column).
+	// The name context's word types (the loader's first context column).
 	typeWholeWord = "1"
 	typeSubstring = "2"
 )
@@ -149,7 +149,7 @@ func Parse(data []byte) (*Filter, error) {
 ================
 Allowed
 
-987770 for one name: allowed code points only, no listed substring, no
+The server's name check for one name: allowed code points only, no listed substring, no
 listed whole word.
 ================
 */

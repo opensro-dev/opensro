@@ -200,8 +200,9 @@ func (door storeCampDoor) AdmitStudent(
 ================
 OpenCamp
 
-The NPC's camp opening (v1.150 0x72EC; v1.188 0x004E4680 checks, then 0x005DFCC0
-burns the fee through 0x004E4650 and answers). 0x004E4680's order: alive (0x6807),
+The NPC's camp opening (v1.150 0x72EC; the reference server's opening check
+runs first, then its camp creation burns the fee and answers). The check's
+order: alive (0x6807),
 level (0x6809), gold (0x680A), already in a camp (0x6812), and TimedJob (2, 7)'s
 7-day reopen wait after a disband (0x681C).
 ================
@@ -302,8 +303,8 @@ func resolvedCharacterLevel(character *domain.Character) int64 {
 ================
 UpdateNotice
 
-Native 0x00519900 -> 0x005DF070 -> 0x005DF5C0 (case 6) authorizes the kind-0
-camp master. Keep the permission and expected aggregate checks in the same
+The reference server's notice-edit handler, through its camp manager's
+validation (case 6), authorizes the kind-0 camp master. Keep the permission and expected aggregate checks in the same
 critical section as the update so a stale gameplay precheck cannot edit
 another camp.
 ================

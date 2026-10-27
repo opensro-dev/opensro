@@ -3,7 +3,7 @@
 
 schedule.go - the shard's schedule.cfg, and when each schedule is running
 
-SR_ShardManager reads schedule.cfg at boot and tells the game servers when
+The reference shard manager reads schedule.cfg at boot and tells the game servers when
 each named schedule starts and ends; the GameServer's schedule jobs
 (one start/end pair each for the request, war and tax periods) act on
 those edges.

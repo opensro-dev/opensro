@@ -209,7 +209,7 @@ func handOverToken(code string) string {
 rewardNpcMatches
 
 Where a quest pays: its end NPC, or a two-leg delivery's hand-over NPC
-(CBasicQuest_vf154 admits every NPC of the quest's table, and the base
+(the server's quest-NPC check admits every NPC of the quest's table, and the base
 talk pays an achieved quest at either). This only names the NPC: payment
 still needs objectiveMet, which for a two-leg delivery is the hand-over
 latch, so the hand-over NPC cannot pay before the hand-over.
@@ -254,7 +254,7 @@ func pendingHandOver(record enterworld.ActiveQuestRecord, def *Definition, npc s
 ================
 handOverRow
 
-91CA00 at a delivery mission's own NPC: the hand-over row while its items
+The server hand-over at a delivery mission's own NPC: the hand-over row while its items
 are held, its not-delivered line while they are missing. handled reports
 that the NPC belongs to a pending hand-over, so no other row of the quest
 is offered there.
@@ -283,7 +283,7 @@ func handOverRow(c *enterworld.Character, def *Definition, npc string) (*NpcOpti
 ================
 handOverDelivery
 
-91CA00's hand-over at the mission's NPC: check the bag has room for the
+The server's hand-over at the mission's NPC: check the bag has room for the
 exchange, take the delivered items unless the mission keeps them, give the
 exchange back and latch the mission. One inventory transaction; the
 journal update and the achieved-now banner follow the latch.
@@ -304,7 +304,7 @@ func (rt *Runtime) handOverDelivery(c *enterworld.Character, code, npc string) (
 		if c != nil && !c.DeletePending {
 			at = activeQuestIndex(c, def.RefID)
 		}
-		// The latch lives in the mission's own node (91CEB0: one bit of
+		// The latch lives in the mission's own node (the server keeps one bit of
 		// quest-user +3 per mission); a record without that node is refused,
 		// never indexed.
 		var m *Definition

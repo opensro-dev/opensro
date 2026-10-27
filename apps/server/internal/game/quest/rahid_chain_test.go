@@ -119,7 +119,7 @@ func TestRahidTwoOfferForksIntoFeathersOrWaiting(t *testing.T) {
 TestRahidTwoWaitingBranchCountsOnlineMinutes
 
 The waiting branch counts 1800 admitted minutes, gathers no feathers while it
-runs, announces _13 on the minute after the count reaches zero (89E050) and
+runs, announces _13 on the minute after the count reaches zero and
 then completes with _15 for no reward.
 ================
 */

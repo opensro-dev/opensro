@@ -179,9 +179,10 @@ func HandleGmCommand(deps Dependencies, presence PresenceView, divisionID string
 		}
 		return Outcome{Ack: EncodeRequestFailure(request), Refusal: "siege-period-refused"}
 	case SubFlagWorld:
-		// 0x0051FCF3..0x0051FD7D (subcmd 0x30): reads u8 flagCmd, sends
-		// 0x74B0 [u8(3), u32(flagCmd)] to ShardManager (CFlagWorldMgr Capture
-		// the Flag, a v1.188 battle-arena feature outside v1.150), and
+		// The reference server's special-command handler (subcmd 0x30) reads
+		// u8 flagCmd, sends 0x74B0 [u8(3), u32(flagCmd)] to its shard manager
+		// (the Capture the Flag world, a v1.188 battle-arena feature outside
+		// v1.150), and
 		// unconditionally replies [1, 0x30].
 		return Outcome{Ack: []byte{AckResultOK, SubFlagWorld}}
 	case SubSetTime:

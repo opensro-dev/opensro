@@ -808,7 +808,7 @@ type COSContainer struct {
 	Rows     []InventoryRow `json:"rows"`
 }
 
-// Job types (v1.150 CICPlayer+0x782; v1.188 CJobInfo_GetJobType).
+// Job types (v1.150 CICPlayer+0x782; the reference server's job-type read).
 const (
 	JobNone   uint8 = 0
 	JobTrader uint8 = 1

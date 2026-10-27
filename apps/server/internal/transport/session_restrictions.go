@@ -21,7 +21,8 @@ import (
 	"sync"
 )
 
-// These IDs are the native CCmdSrcNet record selectors, not wire notice kinds.
+// These IDs are the native command-source restriction record selectors (the
+// reference server's per-connection command restrictions), not wire notice kinds.
 const (
 	CommandRestrictionTrade uint8 = 3
 	CommandRestrictionChat  uint8 = 4

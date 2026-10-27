@@ -40,7 +40,7 @@ type Owner interface {
 	SetMotion(state, next uint8, delay float32) // +55C
 	CancelActions(all bool)                     // +570
 	StopMove()                                  // +4C0 / +4B0
-	AIEvent(event, kind uint8, source uint32)   // CAITactics current state
+	AIEvent(event, kind uint8, source uint32)   // the AI tactics' current state
 	// Hit is vfunc 4FC with reason 2 (damage over time) or 1 (time bomb).
 	// Credited is false when the tick is uncredited (dead source, lethal).
 	Hit(source uint32, credited bool, damage uint32, reason uint8, status Status)

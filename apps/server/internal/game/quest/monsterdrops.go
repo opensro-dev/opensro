@@ -34,17 +34,18 @@ type MonsterDropRule struct {
 	AnyMonster       bool
 	ChancePercent    float32
 	// Optional rates aligned with MonsterCodenames; exclusive with the shared
-	// rate. Lua stores each species' probability as float32 (86c077..86c081).
+	// rate. Lua stores each species' probability as float32 (the
+	// server's Lua collection-mission setter).
 	SpeciesChancePercent []float32
 	// MonsterGrades, when set, is aligned with MonsterCodenames: a kill counts
 	// only when the monster's grade (rarity & 15, the server's base grade
 	// read) matches. Gather missions set it with +0x10D and list the
-	// grades at +0x111 (91C4D0).
+	// grades at +0x111 (the server's gather-mission kill check).
 	MonsterGrades  []uint8
 	MinPlayerLevel uint8
 	MaxHeld        uint32
 	// DropCount is the stack one successful drop leaves (mission +0x245,
-	// read by 91C660); zero means one.
+	// read by the server's gather-mission drop); zero means one.
 	DropCount uint16
 }
 
