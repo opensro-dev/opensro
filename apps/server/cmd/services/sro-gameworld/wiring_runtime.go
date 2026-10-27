@@ -143,6 +143,15 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 				}
 				return plane.NextWaypoint(from, fromOwner, goal)
 			},
+			// The failed-route memo may answer a retry only where the
+			// plane's routes are pure (#1820 part B).
+			RouteMemo: func(from, goal monster.Pose) bool {
+				plane, ok := planes.Between(from.RegionID, goal.RegionID)
+				return ok && plane.PureRoutes()
+			},
+			// Slow-leg attribution diffs this per leg; a nonzero delta
+			// is a first-use load the boot preload missed (#1820 C).
+			NavCacheMisses: game.water.NavCacheMisses,
 			MessageBlockAt: game.water.MessageBlockAt,
 			Rand:           rand.Float64,
 			AttackPlan:     game.items.MonsterAttackPlan,

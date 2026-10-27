@@ -3,9 +3,8 @@
 
 monsteracquisition_job.go - the job-mode acquisition queries (selectors 3, 4)
 
-A tactics row with flag 4 queries with type mask 5 and selector 3
-(CAITactics_QueryFilter_Selector3, 546790); one with flag 0x80 with selector
-4 (CAITactics_QueryFilter_Selector4, 546A30). Both weigh players and
+A tactics row with flag 4 queries with type mask 5 and selector 3; one
+with flag 0x80 with selector 4. Both weigh players and
 companions as candidates of their own, read each one's job state (a
 companion's is its owner's), and rank the job-mode candidates ahead of the
 rest before the nearest.
@@ -27,7 +26,7 @@ const (
 	jobStateTrader  = 1
 	jobStateThief   = 2
 	jobStateHunter  = 3
-	jobStateSpecial = 4 // outside job mode (4E1120 sets it unless a suit is worn)
+	jobStateSpecial = 4 // outside job mode (set unless a suit is worn)
 )
 
 /*
@@ -35,8 +34,8 @@ const (
 jobQuery
 
 Selector 3 drops thieves and state 4 and prefers traders and hunters
-(CGObjPC_IsJobStateIn134); selector 4 keeps only thieves (and state 4),
-all of whom CGObjPC_IsJobStateIn24 prefers.
+(the retail server's job-state test for states 1/3/4); selector 4 keeps
+only thieves (and state 4), all of whom its states-2/4 test prefers.
 ================
 */
 type jobQuery struct {
@@ -71,8 +70,8 @@ func (q jobQuery) prefers(job uint8) bool {
 ================
 jobQueryAcquisition
 
-CollectQueryCandidates (5405B0) visits each sampled block's players, then
-its companions, each tree in GID order. A candidate within sight replaces
+The retail server's candidate collection visits each sampled block's
+players, then its companions, each tree in GID order. A candidate within sight replaces
 the held one when it is preferred and the held one is not, or when both
 agree and it is strictly nearer than the held truncated distance.
 ================

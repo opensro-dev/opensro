@@ -1,16 +1,15 @@
 /*
 ===========================================================================
 
-npcservice.go - the NPC service set CGObjNPC_SpawnAndConfigureServices builds
+npcservice.go - the NPC service set the retail server builds at spawn
 
-SR_GameServer 4C6350 gives every spawned NPC a set of service option bytes
-(CGObjNPC_AddService 4C3F50 into the set at +0x130) by testing its codename
-with strstr in a fixed order of else-if chains. Handlers check one option
-(CGObj_HasService 484DF0): 3 storage (0x703C), 4 repair (4C7A10), 0xF guild
-storage (4C7DA0), 0xC special trade (4C90D0), 0x1C/0x1E teleport (4F2B50).
+The retail server gives every spawned NPC a set of service option bytes
+(into the set at +0x130) by testing its codename with strstr in a fixed
+order of else-if chains. Handlers check one option: 3 storage (0x703C),
+4 repair, 0xF guild storage, 0xC special trade, 0x1C/0x1E teleport (0x705A).
 
-The select answer carries the set. v1.188 writes it as a count and option
-bytes (CGObjNPC_WriteSelectInfo 4A95A0); the v1.150 client reads a u32
+The select answer carries the set. The later retail server writes it as a
+count and option bytes; the v1.150 client reads a u32
 (CPSMission_OnNpcSelectResponse0xB45A 764C60) in which option n is bit
 1 << (n - 1). Every point both binaries pin agrees: storage 3 = 0x4 (menu
 row 3), guild 0xF = 0x4000, gacha 0x11/0x12 = 0x10000/0x20000, job guilds
@@ -25,8 +24,8 @@ package simulation
 
 import "strings"
 
-// The service options 4C6350 registers, named by their handlers and the
-// v1.150 talk rows their bits light.
+// The service options the retail server registers, named by their handlers
+// and the v1.150 talk rows their bits light.
 const (
 	NpcServiceShop             uint8 = 0x01
 	NpcServiceTalk             uint8 = 0x02
@@ -137,11 +136,11 @@ type npcServiceArm struct {
 	options []uint8
 }
 
-// npcServiceChains are 4C6350's else-if chains in their native order: within
+// npcServiceChains are the retail server's else-if chains in their native order: within
 // a chain the first matching codename wins, every chain runs. The codenames
 // later versions added are kept; no v1.150 NPC matches them.
 var npcServiceChains = [][]npcServiceArm{
-	// 4C6501: storage keepers.
+	// Storage keepers.
 	arms([]string{"WAREHOUSE", "warehouse", "NPC_SD_M_AREA_WAREHOUSE", "NPC_SD_T_AREA_WAREHOUSE2"},
 		NpcServiceStorage, NpcServiceShop),
 	// Smiths and armourers repair.
@@ -229,14 +228,14 @@ func arms(parts []string, options ...uint8) []npcServiceArm {
 ================
 NpcServicesForCodename
 
-4C6350's codename chains. Two arms are not codename tests and are left to
-their owners: option 0x11 follows the reference data's Magic POP binding
-(CRefData_FindNpcGachaName 4CCB70), and NPC_SIEGE_DUNGEON_TELEPORT (0x28)
+The retail server's codename chains. Two arms are not codename tests and
+are left to their owners: option 0x11 follows the reference data's Magic
+POP binding (its gacha-name lookup), and NPC_SIEGE_DUNGEON_TELEPORT (0x28)
 is an exact, case-blind compare. This projects the ordinary shard mode
 (+0x42404 == 0). The alternate mode still registers the codename services,
 but disables the Magic POP binding/operator, poses certain later agents
-and machines, and removes the GATE_TD teleport service (4C76D4..4C78B1).
-Those alternate-mode effects are outside the v1.150 shard's configuration.
+and machines, and removes the GATE_TD teleport service. Those
+alternate-mode effects are outside the v1.150 shard's configuration.
 ================
 */
 func NpcServicesForCodename(codename string) NpcServices {

@@ -1,5 +1,7 @@
 package monster
 
+import worldgeom "opensro.online/server/internal/game/world"
+
 // NavigationRoute is immutable geometry, owned by one admitted mover. Points
 // are wire-expressible destinations; each leg is revalidated at departure.
 // The caller's goal remains separate from the next waypoint and clipped rest.
@@ -70,6 +72,20 @@ type navigationIntent struct {
 	retryAt int64
 	speed   float64
 	channel uint8
+
+	// The last route-search failure this intent is waiting out, keyed
+	// exactly (the failed-route memo, #1820 part B): the pose and surface
+	// owner the failed search ran with, and its outcome. BeginNavigation,
+	// WaitNavigation and CancelNavigation all rebuild the intent, so the
+	// record clears by construction; the waiting branch re-notes it after
+	// each wait. The owner is part of the key because the cave search
+	// starts from the mover's retained cell; a retry after a wait runs
+	// with the unresolved owner, so a record taken under a retained owner
+	// simply never matches and the real search runs once more.
+	failFrom   Pose
+	failOwner  worldgeom.NavOwner
+	failStatus NavigationRouteStatus
+	hasFail    bool
 }
 
 func (m MoverState) NavigationGoal() (Pose, bool) {
@@ -99,3 +115,29 @@ func (m *MoverState) WaitNavigation(goal Pose, retryAt int64) {
 	m.intent = navigationIntent{phase: navigationWaiting, goal: goal, retryAt: retryAt, speed: m.intent.speed, channel: m.intent.channel}
 }
 func (m *MoverState) CancelNavigation() { m.intent = navigationIntent{} }
+
+/*
+================
+MoverState.RouteFailure
+
+The intent's failed-route record, when the mover is waiting out a failed
+search (#1820 part B).
+================
+*/
+func (m MoverState) RouteFailure() (Pose, worldgeom.NavOwner, NavigationRouteStatus, bool) {
+	return m.intent.failFrom, m.intent.failOwner, m.intent.failStatus, m.intent.hasFail
+}
+
+/*
+================
+MoverState.NoteRouteFailure
+
+Records the failed search this intent now waits out, called right after
+WaitNavigation has rebuilt the intent. Only blocked and exhausted
+searches are ever noted (the caller gates); an unavailable geometry or
+a no-progress wait proves nothing about a recompute.
+================
+*/
+func (m *MoverState) NoteRouteFailure(from Pose, owner worldgeom.NavOwner, status NavigationRouteStatus) {
+	m.intent.failFrom, m.intent.failOwner, m.intent.failStatus, m.intent.hasFail = from, owner, status, true
+}

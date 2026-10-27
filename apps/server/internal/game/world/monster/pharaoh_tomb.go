@@ -4,21 +4,26 @@ pharaoh_tomb.go - optional Pharaoh Tomb 1-3 population (Kings Valley).
 
 Port-only, not native. SRO_PHARAOH_TOMB is off by default. The three tombs
 are ordinary outdoor regions in the later server's database, each tagged with
-its own GameWorldID (57, 58, 59). This port runs every tomb as a persistent
-shared area on the INS_DEFAULT world, as the Qin-Shi Emperor Tomb does
-(qinshi_tomb.go); the original's per-tomb world separation is not modelled.
+its own GameWorldID (57, 58, 59) (#1750). The reference server has no tomb
+world class and no tomb triggers: a database-defined world whose codename
+matches none of its special worlds runs as an ordinary persistent world, so
+each tomb here is its own permanent world. The boot composition registers
+the three (instance.PharaohTombDefinitions, from the pharaohtomb leaf) only
+while this switch is on, and the population joins its own world instead of
+the default one. An earlier build flattened all three onto the default
+world; the tomb gates keep their authored destination worlds (57-59), so a
+gate entered from the field arrives in the tomb its population joined.
 
 The importer (scripts/cap110_monsters.py, TOMB_FILE) writes cap110-tomb.txt in the same row
-schema as the field population (cap110.go). Unlike the field it admits the
-elite (grade 6) and unique (grade 8) monsters the tombs are made of. Equipment
-drops come from the cap-110 loot catalogue, so the tomb requires
-SRO_CAP110_MONSTERS as well and refuses to start without it.
+schema as the field population (cap110.go), each row carrying its source
+world. Unlike the field it admits the elite (grade 6) and unique (grade 8)
+monsters the tombs are made of. Equipment drops come from the cap-110 loot
+catalogue, so the tomb requires SRO_CAP110_MONSTERS as well and refuses to
+start without it.
 
 The tomb bosses (Sphinx, Sekhmet, Osiris, Horus, Nephthys) are single-spawn
-nests. The original is likely to have run them from instance triggers, as
-CGameWorld_Chins_Floor5/6::InitTriggers does for the Qin-Shi floors, but the
-database rows carry no trigger data. Inference, recorded here: a boss is an
-ordinary persistent nest that respawns after its authored delay.
+nests: an ordinary persistent nest that respawns after its authored delay,
+like any other unique. There are no instance triggers to port.
 ===========================================================================
 */
 package monster
@@ -29,6 +34,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"opensro.online/server/internal/game/world/pharaohtomb"
 )
 
 const EnvPharaohTomb = "SRO_PHARAOH_TOMB"
@@ -59,8 +66,10 @@ func PharaohTombEnabled() bool {
 ================
 AppendPharaohTomb
 
-Off never reads the optional file. On fails before startup when the cap-110
-expansion is off, or when the tomb data is absent or malformed.
+Off never reads the optional file. On fails before startup when the
+cap-110 expansion is off, or when the tomb data is absent or malformed.
+Registering the tomb worlds with the world catalogue is the boot
+composition's job (enterworld), beside this call.
 ================
 */
 func AppendPharaohTomb(template Template, textdataDir string, enabled bool) (Template, error) {
@@ -91,7 +100,7 @@ reference row: the tomb's codenames are its own.
 ================
 */
 func appendPharaohTombData(template Template, data []byte, gearRate int) (Template, error) {
-	result, err := appendNests(template, data, "pharaoh tomb population", admitPharaohTomb, nil)
+	result, err := appendNests(template, data, "pharaoh tomb population", admitPharaohTomb, nil, pharaohWorldCode)
 	if err != nil {
 		return Template{}, err
 	}
@@ -108,6 +117,23 @@ func appendPharaohTombData(template Template, data []byte, gearRate int) (Templa
 	marked.SummonRefs = result.SummonRefs
 	marked.EvidenceMatches = result.EvidenceMatches
 	return marked, nil
+}
+
+/*
+================
+pharaohWorldCode
+
+The world codename a tomb nest joins, from the source world its row
+carries. A row naming any other world is refused: the tomb population
+must not leak onto another world, and no other population joins these.
+================
+*/
+func pharaohWorldCode(row cap110Nest) (string, error) {
+	code, ok := pharaohtomb.CodeName(row.WorldID)
+	if !ok {
+		return "", fmt.Errorf("pharaoh tomb population has nest %d in unknown world %d", row.NestID, row.WorldID)
+	}
+	return code, nil
 }
 
 // EnvPharaohGearRate multiplies the equipment a Pharaoh Tomb elite or unique

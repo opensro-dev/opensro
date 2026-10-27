@@ -590,7 +590,7 @@ import {
 	audioLevelText
 } from "@/engine/foundation/audio/volume-control";
 import { chatScrollbar } from "@/engine/foundation/ui/chat-scrollbar";
-import { companionOwnerNameplate, overheadLayout } from "@/engine/foundation/ui/overhead-layout";
+import { companionOwnerNameplate, overheadLayout, withoutBoardPass } from "@/engine/foundation/ui/overhead-layout";
 import { vitalWarning } from "@/engine/foundation/ui/vital-warning";
 import {
 	beginnerMarkShown,
@@ -1000,6 +1000,8 @@ export interface UiExtensions {
 	) => void;
 	setCameraPlaying?: ( playing: boolean ) => void;
 	setCursorVisible?: ( visible: boolean ) => void;
+	// The /id byte for the character owner's hit damage numbers (8D5856).
+	setDamageNumbers?: ( shown: boolean ) => void;
 	saveCameraWaypoints?: ( text: string ) => void;
 	playSoundByName?: ( name: string ) => void;
 	saveExperimental?: ( value: ExperimentalOptions ) => void;
@@ -1062,13 +1064,15 @@ export function createUi(
 	// The camera family's kept values: the free-camera move speed
 	// (+0x7B0, seeded 100, case 136), the snapped second speed (+0x7C0,
 	// seeded 50, case 111), the frame byte (engine global +0x4A, seeded
-	// clear, case 117), the id-plate byte (0xCCB5D8, seeded standing,
+	// clear, case 117), the /id byte (0xCCB5D8, seeded standing,
 	// case 137) and the local
 	// player's written speed (+0x658, case 600; 100 is the scale's
 	// neutral point, the value the word 10 writes). The port's camera
-	// does not translate freely, its boards take no id line and its
-	// movement is the server's, so these are kept as written for the
-	// consumers in #1717.
+	// does not translate freely and its movement is the server's, so
+	// those are kept as written for the consumers in #1717. The /id byte
+	// is read: while it is clear the overhead boards and their kind-4
+	// pass are skipped (85F5DC), and the character owner holds a copy
+	// for the hit damage numbers (8D5856, #1785).
 	let debugCameraSpeed = 100;
 	let debugFast = 50;
 	let debugFrameStats = false;
@@ -2743,8 +2747,10 @@ export function createUi(
 	local debug clock the sampler reads through debugClockSeed. The camera
 	rows flip this window's debug bytes and hand each to its owner; the
 	shown byte (112/113) rides the gameplay lane to the entity owner, and
-	the mission window's visible flag (115/116) is this window's own. The
-	remaining camera rows (111/117/136/137) and the 600 family keep their
+	the mission window's visible flag (115/116) is this window's own. 137
+	gates this window's overhead boards and hands the byte to the
+	character owner for the damage numbers (#1785). The
+	remaining camera rows (111/117/136) and the 600 family keep their
 	values on this window for consumers the port does not have yet (#1717);
 	601 frames the named item as a packet the client hands itself (see
 	the case); the port builds nothing. 602 is the native table's shared exit.
@@ -2960,10 +2966,14 @@ export function createUi(
 				break;
 			}
 			case DEBUG_COMMAND_ID:
-				// Case 137 flips the id-plate byte (0xCCB5D8): kept for
-				// the name boards, which take no id line yet (#1717).
-				// The native prints nothing.
+				// Case 137 flips the /id byte (0xCCB5D8, sete at 691678).
+				// Its readers draw while it stands: 85F5DC (the name
+				// board and the kind-4 overhead pass, read below in the
+				// overhead composition) and 8D5856 (a hit's damage
+				// number, the character owner's). The native prints
+				// nothing.
 				debugShowIds = !debugShowIds;
+				extensions.setDamageNumbers?.( debugShowIds );
 				break;
 			case DEBUG_COMMAND_WIRE_FRAME:
 				// 150 (691686) negates graphic option 0x12: while it stands
@@ -20724,10 +20734,12 @@ export function createUi(
 				paths.push( ...combatGlyphPaths );
 				const path = ROOT + "icon/etc/icon_rudiment.png";
 				const local = next.entities.find( e => e.gid === game?.localGid );
+				// 85F5DC: with the /id byte clear the kind-4 pass draws no row.
 				const overheads = new Map(
-					next.entities.map(
-						entity => [ entity.gid, game ? overheadLayout( entity, local, game, options, hudCopy ) : null ]
-					)
+					next.entities.map( entity => {
+						const layout = game ? overheadLayout( entity, local, game, options, hudCopy ) : null;
+						return [ entity.gid, layout && !debugShowIds ? withoutBoardPass( layout ) : layout ] as const;
+					} )
 				);
 				// Characters whose guild line, fortress mark or quick status bars show;
 				// overheadBoardVisible shows their names with them.
@@ -20935,8 +20947,12 @@ export function createUi(
 					}
 					const hovered = entity.gid === next.hoveredEntity, selected = entity.gid === game?.target;
 					// One decision for the name and every overhead icon: an icon never
-					// shows without its name (name-visibility.ts header).
-					const named = !entity.debugHidden && !hiddenSilkCos( entity, options.hideSilkCos ) &&
+					// shows without its name (name-visibility.ts header). 85F5DC
+					// skips the name board and the icon pass while the /id byte
+					// (0xCCB5D8) is clear; the dress bar above is CICUser_Draw's
+					// (86AB90) and stays.
+					const named = debugShowIds && !entity.debugHidden &&
+						!hiddenSilkCos( entity, options.hideSilkCos ) &&
 						overheadBoardVisible(
 							boardAt( entity ),
 							local,

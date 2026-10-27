@@ -106,6 +106,101 @@ func TestPublishedObjectsMatchesSortedObservedSet(t *testing.T) {
 
 /*
 ================
+sharedPublished
+
+The shared read, checked against the copying read of the same moment.
+================
+*/
+func sharedPublished(t *testing.T, s *Session, revision uint64) ([]uint32, bool) {
+	t.Helper()
+	shared, ok := s.PublishedObjectsShared(revision)
+	copied, copiedOK := s.PublishedObjects(revision)
+	if ok != copiedOK || !slices.Equal(shared, copied) || (shared == nil) != (copied == nil) {
+		t.Fatalf("shared read %v %v disagrees with the copy %v %v", shared, ok, copied, copiedOK)
+	}
+	return shared, ok
+}
+
+/*
+================
+TestPublishedObjectsReadsStayDetached
+
+Shared readers hold the kept set itself, so a set already read must never
+change: later scope changes, a scene reset and a reader's own append each
+leave every earlier read exactly as it was returned, and the shared read
+always equals the copying one.
+================
+*/
+func TestPublishedObjectsReadsStayDetached(t *testing.T) {
+	hub := newHub(testCfg())
+	s, err := hub.createSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer hub.closeSession(s, nil)
+	if err := s.SendSceneReset([]Frame{{Opcode: 0x3417, Scope: []ObjectScopeChange{{GID: 5, Visible: true}, {GID: 3, Visible: true}}}}); err != nil {
+		t.Fatal(err)
+	}
+	s.FinishSceneReentry()
+	revision, _ := s.SceneRevision()
+	first, ok := sharedPublished(t, s, revision)
+	if !ok || !slices.Equal(first, []uint32{3, 5}) {
+		t.Fatalf("first read = %v %v, want [3 5]", first, ok)
+	}
+	// A reader's append must not reach the set the next reader shares.
+	grown := append(first, 1)
+	if again, _ := sharedPublished(t, s, revision); !slices.Equal(again, []uint32{3, 5}) || !slices.Equal(grown, []uint32{3, 5, 1}) {
+		t.Fatalf("after a reader's append: read %v, appended %v", again, grown)
+	}
+	scope := []ObjectScopeChange{{GID: 3, Visible: false}, {GID: 1, Visible: true}, {GID: 9, Visible: true}}
+	if err := s.SendSceneBatch(revision, []Frame{{Opcode: 0x330a, Scope: scope}}); err != nil {
+		t.Fatal(err)
+	}
+	second, _ := sharedPublished(t, s, revision)
+	if !slices.Equal(second, []uint32{1, 5, 9}) || !slices.Equal(first, []uint32{3, 5}) {
+		t.Fatalf("after a change: new read %v, first read %v (want [1 5 9] and [3 5])", second, first)
+	}
+	if err := s.SendSceneReset([]Frame{{Opcode: 0x3417}}); err != nil {
+		t.Fatal(err)
+	}
+	s.FinishSceneReentry()
+	revision, _ = s.SceneRevision()
+	empty, ok := sharedPublished(t, s, revision)
+	if !ok || empty == nil || len(empty) != 0 {
+		t.Fatalf("after a reset: read %v %v, want an empty non-nil set", empty, ok)
+	}
+	if !slices.Equal(first, []uint32{3, 5}) || !slices.Equal(second, []uint32{1, 5, 9}) {
+		t.Fatalf("a reset changed earlier reads: %v %v", first, second)
+	}
+}
+
+/*
+================
+TestPublishedObjectsNeverPublishedIsEmpty
+
+A ready scene that never published anything reads current and empty, not
+nil (nil means "not current" to every reader).
+================
+*/
+func TestPublishedObjectsNeverPublishedIsEmpty(t *testing.T) {
+	hub := newHub(testCfg())
+	s, err := hub.createSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer hub.closeSession(s, nil)
+	revision, active := s.SceneRevision()
+	if !active {
+		t.Skip("a fresh session is not in a ready scene")
+	}
+	got, ok := sharedPublished(t, s, revision)
+	if !ok || got == nil || len(got) != 0 {
+		t.Fatalf("read = %v %v, want an empty non-nil set", got, ok)
+	}
+}
+
+/*
+================
 BenchmarkPublishedObjects
 
 One session's read of 200 published objects, unchanged between reads (the

@@ -110,6 +110,13 @@ type WaterValidator struct {
 	// indexed directly by uint16 regionID (emptyRegionSurface marks a
 	// cached nil miss). Allocated on first region resolution.
 	regionSurfaces atomic.Pointer[[65536]atomic.Pointer[groundSurface]]
+	// cacheMisses counts cold resolutions: the surfaceForRegion resolve
+	// path and objectNavSetReach set builds. The boot preload
+	// (PreloadOutdoorNavigation) warms every catalog region and every
+	// placement offset, so a rising count after boot is a first-use
+	// load inside the simulation (#1820 part C). Read the delta, never
+	// the absolute value (the preload itself resolves cold).
+	cacheMisses atomic.Uint64
 	// objectIndexes caches the object-resource index files the sealed-deck
 	// rescue resolves placements through (objectnav.go); nil = negative.
 	objectIndexes map[string]*objectResourceIndex

@@ -68,8 +68,9 @@ func squadEngage(t *testing.T, ops *MonsterMoverOps, gid, target uint32) {
 ================
 TestSightAcquisitionRespectsTheSquadLimit
 
-Six holders fill the squad (5EB2E0). An unforced seventh finds the player
-and takes no target (53D8A0 refuses, 53FFE0 fails); the fixed-query and
+Six holders fill the squad (the retail server's default limit). An
+unforced seventh finds the player and takes no target (the squad add
+refuses, the target change fails); the fixed-query and
 flag-forced rows join anyway, and a freed place admits the seventh again.
 ================
 */
@@ -153,7 +154,7 @@ func TestFixedQueryUniqueSwitchesToSecondaryOpponentInReach(t *testing.T) {
 ================
 TestFlagRowsRedirectBetweenTraderAndVehicle
 
-5481A0: a flag-4 row striking a trader turns on the trader's transport when
+In the retail server, a flag-4 row striking a trader turns on the trader's transport when
 it is at least 15 closer, and from a companion back to its owner; a thief
 (job 2) keeps the flag-4 row's aim but loses the flag-0x80 row's.
 ================
