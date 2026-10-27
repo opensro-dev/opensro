@@ -11,10 +11,11 @@ import "opensro.online/server/internal/game/item/wire"
 // does not stack.
 
 // IsEtcStackableTypeFlags is the native stackable-ETC family mask: the exact
-// predicate sub_4fb260 / RefItemKindWord_IsEtcClass applies to the RefItemData
-// type word, and the same three compares sub_756a60 inlines when it decides
-// whether a slot-to-slot transfer may MERGE. Callers use it to source the
-// stack cap: an item outside the class carries cap 1 regardless of its
+// predicate the client's CItemData_IsConsumable applies to the RefItemData
+// type word, and the same three compares CPSMission_MergeOrSwapItems
+// inlines when it decides whether a slot-to-slot transfer may MERGE.
+// Callers use it to source the stack cap: an item outside the class
+// carries cap 1 regardless of its
 // itemdata MaxStack column.
 func IsEtcStackableTypeFlags(typeFlags uint16) bool {
 	return typeFlags&0x02 == 0 && typeFlags&0x1C == 0x0C && typeFlags&0x60 == 0x60
@@ -32,8 +33,9 @@ type SlotStackTransfer struct {
 	SourceRemainder uint16
 }
 
-// TransferSlotStack is the MERGE leg of native sub_756a60 /
-// CNetProcessInner_TransferSlotStack (@0x00756ad9), the single primitive that
+// TransferSlotStack is the MERGE leg of the client's
+// CPSMission_MergeOrSwapItems (instruction 0x00756ad9), the single
+// primitive that
 // decides how two stacks combine:
 //
 //	total = dest + source

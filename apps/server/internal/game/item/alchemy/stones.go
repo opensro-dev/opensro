@@ -290,7 +290,7 @@ func (c *Catalog) Stone(items []inventory.Item, slots []uint8, magic bool, bonus
 		// v1.188 answers each stone with its own code: 0x5421 for an
 		// attribute stone (its target check) and 0x540F for a magic stone
 		// (its magic-param application); the client names each in
-		// category 0x12 (7503D0).
+		// category 0x12 (client CPSMission_OnAlchemyStoneResponse0xB651).
 		if magic {
 			return zero, Refusal(stoneErrMagicDegree)
 		}
