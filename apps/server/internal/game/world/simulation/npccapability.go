@@ -37,9 +37,14 @@ const (
 	NpcTalkFlagJobTrader      uint32 = 0x80000
 	NpcTalkFlagJobThief       uint32 = 0x100000
 	NpcTalkFlagJobHunter      uint32 = 0x200000
-	NpcTalkFlagReverseReturn  uint32 = 0x20000000 // option 0x1E, rows 0x2B
-	NpcTalkFlagGatePulley     uint32 = 0x40000000 // option 0x1F, a u16 tail follows
-	NpcTalkFlagMagicOption    uint32 = 0x80000000 // option 0x20, row 0x2F
+	// NpcTalkFlagTeleportGate is service 0x1C, the runtime gate a quest
+	// instance raises on its boss's death: on a teleport-gate object the
+	// client reads the gate's choice rows after the word and draws them as
+	// action 0x2A, whose click sends 0x7495 type 3 (questgate.go).
+	NpcTalkFlagTeleportGate  uint32 = 0x8000000  // option 0x1C, rows 0x2A
+	NpcTalkFlagReverseReturn uint32 = 0x20000000 // option 0x1E, rows 0x2B
+	NpcTalkFlagGatePulley    uint32 = 0x40000000 // option 0x1F, a u16 tail follows
+	NpcTalkFlagMagicOption   uint32 = 0x80000000 // option 0x20, row 0x2F
 	// NpcTalkFlagFortressOfficial is the fortress official's row (option
 	// 0x18): client 5D8FF0 tests 0x800000 and 5D7AD0 appends action 0x34
 	// (SN_FORTRESS_OFFICIAL_WARAPPLY), whose click sends 0x71E1 subtype 6.

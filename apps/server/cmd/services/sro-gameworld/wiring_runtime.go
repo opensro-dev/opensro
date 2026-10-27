@@ -94,6 +94,8 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 	}
 	ticker = worldsession.NewTicker(game.hub, game.items.NpcRoster, hooks...)
 	ticker.Source.(*worldsession.Bridge).PopulationLease = game.items.CharacterPopulationLease
+	// A quest instance's exit gate joins its world's NPC scope pass.
+	ticker.WorldNpcs = game.items.QuestGateNpcs
 	ticker.BeforeHooks = []simulation.TickHook{game.items.MonsterActionTickHook()}
 	// A peer's spawn row is preceded by the item references it names (#340).
 	ticker.ItemReferences = peerReferences.Frames

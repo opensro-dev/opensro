@@ -61,6 +61,9 @@ type Runtime struct {
 	// instanceWorlds tracks the instanced layers opened on demand
 	// (instance_world.go): the owning lease and deadline per layer.
 	instanceWorlds sync.Map // instanceWorldKey -> trackedInstanceWorld
+	// questGates holds the quest instances' standing exit gates
+	// (questgate.go).
+	questGates questGateBook
 	// jobWeeks holds, per division, the last week JobWeekTick handed to the
 	// store (jobrank.go).
 	jobWeeks sync.Map
@@ -520,6 +523,11 @@ type Runtime struct {
 		monsterCodename string,
 		rarity uint8,
 	) ([]wire.Frame, bool)
+	// NoteQuestKillSite reports where a monster a quest may care about
+	// fell, in the killer's world, before UpdateQuestKill runs: a quest
+	// instance raises its exit gate beside its boss (questgate.go). Nil
+	// reports nothing.
+	NoteQuestKillSite func(character *enterworld.Character, monsterCodename string, fell simulation.Spawn)
 
 	// FortressGuildRole supplies the optional fortress membership role used
 	// by siege-weapon equip requirements. Nil means no member record.

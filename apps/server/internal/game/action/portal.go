@@ -122,6 +122,9 @@ type portalCatalog struct {
 	// walkIns maps a TELEPORT event zone's codename to its teleport's one
 	// link (walkin.go).
 	walkIns map[string]portalLink
+	// questGate is the quest instance exit gate's building row
+	// (INS_QUEST_TELEPORT, questgate.go); nil when the data lacks it.
+	questGate *questGateBuilding
 }
 
 // Both tables remain server-owned. The request carries neither a price nor a
@@ -205,6 +208,13 @@ func parsePortalCatalog(dir string) (*portalCatalog, error) {
 		}
 		if len(r) > 2 {
 			c.buildings[r[2]] = id
+		}
+		if len(r) > 2 && r[2] == questGateCodename {
+			gate, e := questGateBuildingRow(r)
+			if e != nil {
+				return nil, e
+			}
+			c.questGate = gate
 		}
 	}
 	rows := enterworld.ReadTextdataFile(filepath.Join(dir, "teleportdata.txt"))
@@ -476,6 +486,13 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 			return portalFailure(2)
 		}
 		return rt.handleReverseReturn(division, c, gid, choice)
+	}
+	if e == nil && kind == gateInstanceTravel {
+		choice, e := r.U8()
+		if e != nil || r.Done() != nil {
+			return portalFailure(2)
+		}
+		return rt.handleQuestGate(division, c, gid, choice)
 	}
 	if e == nil && kind == gateTownReturn {
 		if r.Done() != nil {

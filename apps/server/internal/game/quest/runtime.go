@@ -70,10 +70,15 @@ type Runtime struct {
 	// InstanceReturn returns one character to its transfer anchor and
 	// InstanceClose ends a layer; PushCharacterFrames delivers frames
 	// to one character by name; NowMs is the runtime clock.
-	InstanceInvite      func(leader *enterworld.Character, call InstanceInviteCall) InstanceInviteOutcome
-	InstancePartyFacts  func(c *enterworld.Character) InstancePartyFacts
-	InstanceReturn      func(c *enterworld.Character) bool
-	InstanceClose       func(lease instance.Lease)
+	InstanceInvite     func(leader *enterworld.Character, call InstanceInviteCall) InstanceInviteOutcome
+	InstancePartyFacts func(c *enterworld.Character) InstancePartyFacts
+	InstanceReturn     func(c *enterworld.Character) bool
+	InstanceClose      func(lease instance.Lease)
+	// SpawnExitGate raises a quest instance's exit gate beside the point
+	// its boss fell, and RemoveExitGates takes a world's gates down when
+	// its layer closes (action/questgate.go). Nil raises nothing.
+	SpawnExitGate       func(world instance.ID, fell simulation.Spawn) bool
+	RemoveExitGates     func(world instance.ID)
 	PushCharacterFrames func(name string, frames []wire.Frame)
 	NowMs               func() int64
 	// rahid6 is the Rahid 6 programme's state (rahid6.go).

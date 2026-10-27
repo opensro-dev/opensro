@@ -5534,6 +5534,40 @@ test("the Bandit Den gate's return point row sends 0x7495 type 1 and nothing els
 	}
 });
 
+test("a quest exit gate draws its rows and a row click sends 0x7495 type 3", () => {
+	const sent = [], f = uiFixture( c => sent.push( c.command ) );
+	try {
+		// The gate's grant: capability 0x8000000 with one return row.
+		f.state.gameplay = {
+			...f.state.gameplay,
+			target: 285000,
+			targetCapabilities: 0x8000000,
+			targetGateRows: [ { kind: 0 } ],
+			npcConversation: { phase: "menu", gid: 285000 }
+		};
+		f.state.entities.push( {
+			...f.state.entities[0],
+			gid: 285000,
+			refObjId: 19076,
+			kind: "teleport",
+			name: "Exit"
+		} );
+		let output, now = 0;
+		const draw = () => {
+			for ( let i = 0; i < 40; i++ ) output = f.ui.step( { ...f.state }, now++ ) ?? output;
+		};
+		draw();
+		const ids = defined( output ).controls.map( c => c.id );
+		assert.ok( ids.includes( "npc-gate-row:0" ) );
+		assert.ok( !ids.includes( "npc-portal-open" ) );
+		f.ui.event( { kind: "activate", id: "npc-gate-row:0" } );
+		draw();
+		assert.deepEqual( sent.splice( 0 ), [ { kind: "travel-instance", gid: 285000, target: 0 } ] );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("recall menu has independent capability, modal cancel and stale-target protection", () => {
 	const sent = [], f = uiFixture( c => sent.push( c.command ) );
 	try {

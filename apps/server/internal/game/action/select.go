@@ -273,6 +273,11 @@ func (rt *Runtime) HandleObjectSelect(divisionID string, character *enterworld.C
 	if outcome, handled := rt.flagWarSelect(divisionID, character, gid); handled {
 		return outcome
 	}
+	// A quest instance's exit gate (questgate.go) stands outside the
+	// static roster too.
+	if outcome, handled := rt.questGateSelect(divisionID, character, gid); handled {
+		return outcome
+	}
 
 	// Capture the pointer list before entering the read door. The source
 	// returns an owned slice; peer fields are inspected only while the door

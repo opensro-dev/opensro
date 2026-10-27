@@ -801,3 +801,54 @@ func TestIvy3PartyChangedExpels(t *testing.T) {
 		t.Fatal("the leader heard the condition line")
 	}
 }
+
+/*
+================
+TestIvy3ExitGateRisesBesideHerAndFalls
+
+The reference kill handler raises the exit gate beside Ivy (#1878): the
+site her owner reports for her fall in this layer is where the gate
+rises, once, on the kill; a site in another world or of another monster
+is ignored; the layer's end takes the gate down.
+================
+*/
+func TestIvy3ExitGateRisesBesideHerAndFalls(t *testing.T) {
+	w := newIvy3World(t)
+	type raised struct {
+		world instance.ID
+		fell  simulation.Spawn
+	}
+	var gates []raised
+	var removed []instance.ID
+	w.rt.SpawnExitGate = func(world instance.ID, fell simulation.Spawn) bool {
+		gates = append(gates, raised{world, fell})
+		return true
+	}
+	w.rt.RemoveExitGates = func(world instance.ID) { removed = append(removed, world) }
+	leader := ivy3Accept(t, w, "GateLeader")
+	w.openLayer(leader.Name)
+	w.update()
+
+	site := simulation.Spawn{RegionID: 25000, X: 120, Y: 4, Z: -30}
+	wrong := uint32(instance.Pack(instance.DefinitionID(10), 1))
+	leader.World = &enterworld.CharacterWorld{PackedInstance: &wrong, InstanceReturn: &domain.InstanceReturnAnchor{}}
+	w.rt.NoteKillSite(leader, ivy3BossCodename, simulation.Spawn{RegionID: 1})
+	packed := uint32(instance.Pack(ivy3Definition, 3))
+	leader.World = &enterworld.CharacterWorld{PackedInstance: &packed, InstanceReturn: &domain.InstanceReturnAnchor{}}
+	w.rt.NoteKillSite(leader, "MOB_QT_01_SOMETHING_ELSE", simulation.Spawn{RegionID: 2})
+	w.rt.NoteKillSite(leader, ivy3BossCodename, site)
+	w.rt.noteIvy3Kill(leader, ivy3BossCodename)
+	w.update()
+	if len(gates) != 1 || gates[0].world != w.lease.ID || gates[0].fell != site {
+		t.Fatalf("gates raised = %+v, want one beside %+v in %v", gates, site, w.lease.ID)
+	}
+	w.update()
+	if len(gates) != 1 {
+		t.Fatalf("the gate rose again: %+v", gates)
+	}
+	*w.nowMs += ivy3KillGraceMs
+	w.update()
+	if len(removed) != 1 || removed[0] != w.lease.ID {
+		t.Fatalf("gates removed = %+v, want the layer's", removed)
+	}
+}

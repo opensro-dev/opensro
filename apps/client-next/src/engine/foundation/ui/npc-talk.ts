@@ -134,6 +134,9 @@ export interface NpcTalkInput {
 	// canGachaOperator is row 0x28 (5D9750, mask 0x20000): Gori's voucher exchange.
 	readonly canGachaOperator?: boolean;
 	readonly canReverseReturn?: boolean;
+	// gateRows are a quest exit gate's rows (capability 0x8000000):
+	// 5D9100 appends them after every service row, each action 0x2A.
+	readonly gateRows?: readonly import("@/engine/contracts/gameplay").GateRow[];
 	// 5D8FF0 0x800000: the fortress official's application row.
 	readonly canFortressOfficial?: boolean;
 	// 5D8FF0 0x1000000, 5D7AD0 action 0x32: the battle aide's structure row,
@@ -244,6 +247,14 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 						} ] :
 						[]),
 					...(input.jobRows ?? []),
+					...(input.gateRows ?? []).map( ( row, index ) => ({
+						id: "npc-gate-row:" + index,
+						label: row.kind === 1 && row.symbol ?
+							copy( row.symbol ) :
+							row.kind === 2 ?
+							copy( "UIIT_CTL_TELEPORT_FREE_RESULT" ).replace( "%s", copy( String( row.point ?? 0 ) ) ) :
+							copy( "SN_TALK_COMMON_INS_WADDUNGOT" )
+					}) ),
 					// 5D7AD0 action 0x33 lists tax, staff and service in that order. An
 					// ally's staff row is drawn 0xFFFF4A4A and 5D8930 ignores its click.
 					...(input.canFortressManager ?

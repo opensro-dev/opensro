@@ -5,6 +5,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 func objectiveRequired(def *Definition) uint32 {
@@ -12,6 +13,22 @@ func objectiveRequired(def *Definition) uint32 {
 		return def.KillCount
 	}
 	return def.CollectCount
+}
+
+/*
+================
+NoteKillSite
+
+Where a monster fell, reported by the monster owner just before the kill
+update: a quest instance programme keeps its boss's site to raise the
+exit gate beside it. Records only.
+================
+*/
+func (rt *Runtime) NoteKillSite(character *enterworld.Character, codename string, fell simulation.Spawn) {
+	if character == nil {
+		return
+	}
+	rt.noteIvy3BossSite(character, codename, fell)
 }
 
 // KillUpdater runs once on the accepted fatal transition, inside the same

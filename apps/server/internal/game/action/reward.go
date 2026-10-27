@@ -8,6 +8,7 @@ import (
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 // Keep a zero-HP source registry-live briefly so the client can present a
@@ -321,6 +322,9 @@ func (rt *Runtime) creditQuestKillInsideDoor(
 	}
 	if rt.UpdateQuestKill != nil && rt.Monsters != nil {
 		if live, ok := rt.Monsters.Get(divisionID, target.Gid); ok && live.CurrentHP == 0 {
+			if rt.NoteQuestKillSite != nil {
+				rt.NoteQuestKillSite(killer, live.Ref.Codename, simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z})
+			}
 			questFrames, _ := rt.UpdateQuestKill(killer, live.Ref.Codename, live.Rarity())
 			frames = append(frames, questFrames...)
 		}

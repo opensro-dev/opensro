@@ -3733,6 +3733,15 @@ export function createUi(
 			}
 			return;
 		}
+		// 5DA1B0 case 0x2A: a quest exit gate's row sends 0x7495 type 3. The
+		// rows carry no choice of their own (AppendTeleportRows leaves it 0).
+		if ( id.startsWith( "npc-gate-row:" ) ) {
+			const conversation = view.gameplay?.npcConversation;
+			if ( conversation && conversation.phase === "menu" ) {
+				sendGameplay( { kind: "travel-instance", gid: conversation.gid, target: 0 } );
+			}
+			return;
+		}
 		if ( id.startsWith( "npc-reverse-return:" ) ) {
 			const conversation = view.gameplay?.npcConversation;
 			if ( conversation && conversation.phase === "menu" ) {
@@ -16142,6 +16151,7 @@ export function createUi(
 						canRecall: !!(capabilities & 0x40),
 						canReturnPoint: !!(capabilities & 0x100),
 						canReverseReturn: !!(capabilities & 0x20000000),
+						gateRows: capabilities & 0x8000000 ? game.targetGateRows : undefined,
 						canStorage: !!(capabilities & 4),
 						// 5D9100: the TC manager's +0x20 (set by any camp record)
 						// is clear and the player is level 60 or more.
