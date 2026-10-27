@@ -52,18 +52,21 @@ const (
 
 // 0xB5BD failure bytes for the scroll's own refusals (port-only: the
 // native client maps no text to these; the browser client renders its
-// own lines for them). The state refusals precede the queue door's, so a
-// player in a refused state is told before any name is judged.
+// own lines for them). 0xF5..0xFD is a run the native item-error table
+// leaves entirely unmapped (0x92..0x95, by contrast, are native texts),
+// so the bytes mean the scroll's refusals and nothing else. The state
+// refusals precede the queue door's, so a player in a refused state is
+// told before any name is judged.
 const (
-	errCodeRenameInvalidName   uint8 = 0x90
-	errCodeRenameTaken         uint8 = 0x91
-	errCodeRenameReserved      uint8 = 0x92
-	errCodeRenameAlreadyQueued uint8 = 0x93
-	errCodeRenameCooldown      uint8 = 0x94
-	errCodeRenameGuildWar      uint8 = 0x95
-	errCodeRenameFortressRole  uint8 = 0x96
-	errCodeRenameJobSuit       uint8 = 0x97
-	errCodeRenameInParty       uint8 = 0x98
+	errCodeRenameInvalidName   uint8 = 0xF5
+	errCodeRenameTaken         uint8 = 0xF6
+	errCodeRenameReserved      uint8 = 0xF7
+	errCodeRenameAlreadyQueued uint8 = 0xF8
+	errCodeRenameCooldown      uint8 = 0xF9
+	errCodeRenameGuildWar      uint8 = 0xFA
+	errCodeRenameFortressRole  uint8 = 0xFB
+	errCodeRenameJobSuit       uint8 = 0xFC
+	errCodeRenameInParty       uint8 = 0xFD
 )
 
 /*
