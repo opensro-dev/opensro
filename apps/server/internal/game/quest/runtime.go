@@ -30,8 +30,9 @@ const maxQuestWireRecords = 255
 Runtime
 
 Owns definition lookups and quest mutations. Completion pays rewards and
-appends history; abandonment removes only the active record. Client 75C1D0
-shares their presentation branch, but persistence preserves the distinction.
+appends history; abandonment removes only the active record.
+CPSMission_OnNetProcessInLog0x31ED shares their presentation branch, but
+persistence preserves the distinction.
 ================
 */
 type Runtime struct {
@@ -667,14 +668,15 @@ func (rt *Runtime) HandleRewardSelect(character *enterworld.Character, payload [
 		return OpResult{}, fmt.Errorf("quest reward: id %d has no loaded definition", refID)
 	}
 	if def.KindByte != 2 {
-		return OpResult{}, fmt.Errorf("quest reward: %s (id %d) is kind %d - only kind 2 opens the reward window (sub_5c26e0)", def.Codename, refID, def.KindByte)
+		return OpResult{}, fmt.Errorf("quest reward: %s (id %d) is kind %d - only kind 2 opens the reward window", def.Codename, refID, def.KindByte)
 	}
 
 	result, err := rt.completeReward(character, def)
 	if err != nil {
 		return result, err
 	}
-	// 75C370 consumes successful B29A and triggers SND_QUEST. The
+	// CPSMission_OnQuestAcceptResponse0xB29A consumes successful B29A and
+	// triggers SND_QUEST. The
 	// journal delta alone cannot acknowledge the native reward operation.
 	ack := append([]byte{1}, payload...)
 	result.Frames = append(result.Frames, wire.Frame{Opcode: 0xb29a, Payload: ack})

@@ -22,7 +22,7 @@ import (
 	"sort"
 )
 
-// Marker states CICharactor_QuestMarkerStateEffect (856500) maps to the
+// Marker states CICharactor_QuestMarkerStateEffect maps to the
 // start, in-progress, report and red-scroll (SYSTEM_QUEST_MARK2) effects.
 const (
 	markerStateOffer      = 1
@@ -40,8 +40,9 @@ const questFlagTargets = 0x40
 
 // MarkerStates derives presentation from the same acceptance and objective
 // predicates as the quest transaction. Call under the character read door.
-// A quest names one current NPC; native 787DB0 resolves competing rows by
-// ascending quest key, not by a browser-side severity heuristic.
+// A quest names one current NPC; CQuestMarkerRegistry_RebuildNpcIndex
+// resolves competing rows by ascending quest key, not by a browser-side
+// severity heuristic.
 func (rt *Runtime) MarkerStates(c *enterworld.Character) map[uint32]NpcMarker {
 	out := make(map[uint32]NpcMarker)
 	if c == nil || c.DeletePending {
@@ -154,8 +155,8 @@ func questTarget(c *enterworld.Character, current *Definition, record enterworld
 withJournalTargets
 
 SQuestInfo flag 0x40 carries the NPC RefObjIDs CIFWorldMap_DrawQuestNpcMarkers
-(57B1C0) and the minimap resolve through npcpos.txt for the selected quest.
-SQuestInfo_Deserialize (788210) clears that list on every update without
+and the minimap resolve through npcpos.txt for the selected quest.
+SQuestInfo_Deserialize clears that list on every update without
 the timer flag 4 and then appends, so the record keeps the full current
 list and every full update resends it; flag-4 timer deltas carry none.
 Reports whether the list changed, so the caller publishes the move. With
@@ -233,7 +234,7 @@ func (d *Definitions) ResolveJournalNpcs(refID func(codename string) (uint32, bo
 MarkersByNpc
 
 The client keeps one marker per NPC: CQuestMarkerRegistry_RebuildNpcIndex
-(787DB0) walks the rows in ascending key order and indexes the first one per
+walks the rows in ascending key order and indexes the first one per
 NPC GID. Publishing a row per quest therefore let a lower quest the NPC
 offers hide the quest the player came back to report. Neither binary shows
 the retail server's aggregation, so this is an inference: the server sends
@@ -342,7 +343,8 @@ func (p *MarkerPublication) Update(rows map[uint32][18]byte) []wire.Frame {
 	return out
 }
 
-// Native 75C0F0: key, flags, effect-state, region, three i16 coordinates,
+// Native CPSMission_OnPlayerDailyRecordUpdate0x3498: key, flags,
+// effect-state, region, three i16 coordinates,
 // optional NPC object gid when flags&2. This is not the journal tracked ID.
 func EncodeNpcMarker(id, gid uint32, state uint8, region uint16, x, y, z int16) [18]byte {
 	var p [18]byte
