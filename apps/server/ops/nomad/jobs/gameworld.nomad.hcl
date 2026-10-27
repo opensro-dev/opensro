@@ -430,6 +430,15 @@ variable "most_wanted_streak_notice" {
   default = "off"
 }
 
+# most_wanted_cos_kills counts a job kill delivered on a companion for
+# Most Wanted like a player kill, credited to the companion's owner
+# (port-only, not native; owner decision 2026-10-28). "off", the
+# default, is native.
+variable "most_wanted_cos_kills" {
+  type    = string
+  default = "off"
+}
+
 # teleport_grace makes a teleport arrival (scroll, gate, relocation)
 # untouchable for the revival's grace from game-ready (port-only, not
 # native; owner decision 2026-10-25). "off" is native.
@@ -1213,6 +1222,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_MOST_WANTED_TEST_BOUNTY             = var.most_wanted_test_bounty
         SRO_MOST_WANTED_BOUNTY_TRANSFER         = var.most_wanted_bounty_transfer
         SRO_MOST_WANTED_STREAK_NOTICE           = var.most_wanted_streak_notice
+        SRO_MOST_WANTED_COS_KILLS               = var.most_wanted_cos_kills
         SRO_TRADE_TIERS                         = var.trade_tiers
         SRO_TELEPORT_GRACE                      = var.teleport_grace
         SRO_PREMIUM_UPGRADE                     = var.premium_upgrade

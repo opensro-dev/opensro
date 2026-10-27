@@ -34,6 +34,14 @@ a transfer on both sides of the economy ledger. A victim who carries
 nothing pays nothing; the killer's balance never passes its cap, so no
 gold is burned either. Off, the bounty is new gold as above.
 
+Companion kills (SRO_MOST_WANTED_COS_KILLS, owner decision 2026-10-28).
+Off, the default, a job kill delivered on a companion pays job EXP only
+(payCOSKillInDoor). On, that kill runs the same count as a player kill:
+the same stranger test, killer-alive gate and pair limit, credited to
+the killer the COS door books - the companion's owner when a companion
+dealt the blow. The flag only widens which kills reach the count; Most
+Wanted itself still needs SRO_MOST_WANTED on.
+
 Off, the default here, nothing counts, no bonus applies and no bounty is
 paid; a saved streak waits untouched. The GameWorld's Nomad job turns it on.
 
@@ -62,6 +70,10 @@ const EnvMostWanted = "SRO_MOST_WANTED"
 // EnvMostWantedBountyTransfer pays the bounty from the victim's gold ("on",
 // "1", "true"); off, the bounty is minted.
 const EnvMostWantedBountyTransfer = "SRO_MOST_WANTED_BOUNTY_TRANSFER"
+
+// EnvMostWantedCOSKills counts a companion-delivered job kill ("on", "1",
+// "true"); off, the default, a job kill on a companion never counts.
+const EnvMostWantedCOSKills = "SRO_MOST_WANTED_COS_KILLS"
 
 // mostWantedBountyDoor is the bounty transfer's door label; the economy
 // ledger records both of its sides as a transfer.
@@ -101,6 +113,19 @@ MostWantedFromEnv
 */
 func MostWantedFromEnv() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvMostWanted))) {
+	case "on", "1", "true":
+		return true
+	}
+	return false
+}
+
+/*
+================
+MostWantedCOSKillsFromEnv
+================
+*/
+func MostWantedCOSKillsFromEnv() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvMostWantedCOSKills))) {
 	case "on", "1", "true":
 		return true
 	}

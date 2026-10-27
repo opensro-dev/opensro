@@ -340,6 +340,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "There is no Most Wanted rule.",
 				Now:    "After every job kill that counts toward Most Wanted, you see your progress to the next wanted level, such as \"Most Wanted: 3/10 to LV 1\". Only you see it.",
 				Why:    "Requested after players could not tell whether their kills counted; the rule without the notice returns with one setting."},
+			{Flag: action.EnvMostWantedCOSKills, On: action.MostWantedFromEnv() && action.MostWantedCOSKillsFromEnv(),
+				Native: "There is no Most Wanted rule.",
+				Now:    "A job kill your attack pet or other companion delivers counts toward your streak, wanted level and bounties as if you had dealt the blow yourself.",
+				Why:    "Requested so a companion's killing blow is not lost to the rule; the original returns with one setting."},
 			{Flag: action.EnvTradeTiers, On: action.TradeTiersFromEnv(),
 				Native: "Every trade good is worth 348 gold, a caravan's stars count its goods against the trader's level, and every route pays its listed price.",
 				Now: "Trade goods are worth 21 times as much (7,308 for a 348 good): buying, selling, stolen goods at the Den and the cargo value all scale, so profit, trader job EXP, hunter shares, the weekly trade pool and the fortress trade tax are 21 times larger too. " +

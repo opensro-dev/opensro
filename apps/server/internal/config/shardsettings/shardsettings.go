@@ -150,6 +150,8 @@ var Settings = []Setting{
 	{Env: "SRO_MOST_WANTED_BOUNTY_TRANSFER", NomadVar: "most_wanted_bounty_transfer", Default: "on"},
 	// Owner, 2026-10-24: the killer's own progress notice per counted kill.
 	{Env: "SRO_MOST_WANTED_STREAK_NOTICE", NomadVar: "most_wanted_streak_notice", Default: "off"},
+	// Owner, 2026-10-28: a companion's job kill counts for its owner.
+	{Env: "SRO_MOST_WANTED_COS_KILLS", NomadVar: "most_wanted_cos_kills", Default: "off"},
 	// Owner, 2026-10-14: trade stars by cargo gold, Jangan route profit.
 	{Env: "SRO_TRADE_TIERS", NomadVar: "trade_tiers", Default: "on", Catalogue: true},
 	// Owner, 2026-10-25: the revival's grace after a teleport arrival
