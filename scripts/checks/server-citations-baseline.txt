@@ -2,14 +2,8 @@
 # Format: `<path> <count>`. This ledger may only shrink; run
 # `node scripts/checks/check_server_citations.mjs --update` after rewording a file.
 apps/server/internal/agent/server/client_incident_test.go 2
-apps/server/internal/data/store/character_lifecycle.go 4
-apps/server/internal/data/store/db_write.go 1
-apps/server/internal/data/store/guildlevel_test.go 1
 apps/server/internal/domain/letter.go 1
 apps/server/internal/domain/quickslot.go 2
-apps/server/internal/game/combat/durability.go 1
-apps/server/internal/game/combat/formula.go 4
-apps/server/internal/game/combat/stats.go 2
 apps/server/internal/game/item/alchemy/avatar.go 2
 apps/server/internal/game/item/alchemy/stones.go 1
 apps/server/internal/game/item/commerce/catalog.go 1

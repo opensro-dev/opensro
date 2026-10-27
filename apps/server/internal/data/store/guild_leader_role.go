@@ -7,7 +7,7 @@ commander role exclusively to the master
 The retail _Guild_FnAddMember gives MemberClass 0 SiegeAuthority 1, and a
 master handover moves it (the v1.188 server's master delegation, _Guild_Delegate_Master). Guilds
 founded before the port did the same carry a master with role 0, whom the
-client's fortress windows (827DB0) refuse while the server's grade checks
+client's fortress windows (GuildMember_IsFortressRole1) refuse while the server's grade checks
 admit. The authority upgrade rewrites those rows once; server startup
 never does. The old grant handler also allowed role 1 on nonmasters;
 clear those stale commanders while preserving legitimate staff roles.
