@@ -109,6 +109,10 @@ var Settings = []Setting{
 	// Port-only, not native: the Pharaoh Tomb 1-3 population and gates. Needs
 	// SRO_CAP110_MONSTERS (its equipment drops).
 	{Env: "SRO_PHARAOH_TOMB", NomadVar: "pharaoh_tomb", Default: "off", Catalogue: true},
+	// Port-only, not native: the Qin-Shi tomb upper-floor population
+	// (#1800). Needs SRO_CAP110_MONSTERS (its drops ride the shared
+	// cap-110 loot catalogue).
+	{Env: "SRO_CAP110_QINSHI", NomadVar: "cap110_qinshi", Default: "off", Catalogue: true},
 	// Port-only, not native: a Pharaoh Tomb elite or unique rolls equipment this
 	// many times as often (1 is native; 2 to 20). Server only: the site's drop
 	// lists describe the native rule.

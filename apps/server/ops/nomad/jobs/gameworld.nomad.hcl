@@ -215,6 +215,14 @@ variable "pharaoh_tomb" {
   default = "off"
 }
 
+# Port-only, not native: the optional Qin-Shi tomb upper-floor population
+# (#1800). It needs cap110_monsters on as well; GameWorld refuses to start
+# otherwise.
+variable "cap110_qinshi" {
+  type    = string
+  default = "off"
+}
+
 # Port-only, not native: the name-change scroll (#1689) - the Item Mall
 # lists it for 500 silk and a use queues a rename for the next login.
 # "off" is native: names never change.
@@ -1174,6 +1182,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_CAP110_ITEMS                   = var.cap110_items
         SRO_CAP110_SKILLS                  = var.cap110_skills
         SRO_PHARAOH_TOMB                   = var.pharaoh_tomb
+        SRO_CAP110_QINSHI                  = var.cap110_qinshi
         SRO_NAME_CHANGE_SCROLL             = var.name_change_scroll
         SRO_PHARAOH_TOMB_GEAR_RATE         = var.pharaoh_tomb_gear_rate
         SRO_BETA_SILK                           = var.beta_silk
