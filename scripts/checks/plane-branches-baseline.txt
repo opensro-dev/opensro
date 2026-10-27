@@ -3,6 +3,3 @@
 # `node scripts/checks/check_plane_branches.mjs --update` after migrating a file.
 apps/client-next/src/engine/runtime/assets/worker/navigation/navigation.ts 2
 apps/client-next/src/engine/runtime/assets/worker/world/world.ts 6
-apps/client-next/src/engine/runtime/navigation/navigation.ts 2
-apps/client-next/src/engine/runtime/simulation/worker/session/world/entities/entities.ts 2
-apps/client-next/src/engine/runtime/world/world.ts 5
