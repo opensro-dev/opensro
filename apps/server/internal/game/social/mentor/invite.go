@@ -10,8 +10,9 @@ package mentor
 
 // The mentor/TC INVITE HANDSHAKE (backlog T62): 0x76B1 holds a pending
 // invite and prompts the target with 0x3393 {u8 9, u32 inviterGid,
-// u16-len name} (the sub_7644e0 IDCLOSE arm); camp membership commits
-// ONLY on the target's 0x3393 {01 01} accept (sub_68c4c0 case 7)
+// u16-len name} (the CPSMission_OnConfirmBoxPrompt0x3393 IDCLOSE
+// arm); camp membership commits ONLY on the target's 0x3393 {01 01}
+// accept (CGInterface_DispatchSimpleMessageBoxResult case 7)
 // through the ATOMIC AdmitStudent door, then the joiner
 // gets their own 0x3AC5 status-10 sub-1 seed and every sitting online
 // member the status-2 join row. The party lane owns the single 0x3393
@@ -416,7 +417,8 @@ func countCampKind(members []enterworld.TrainingCampMemberRecord, kind uint8) in
 handleInvite
 
 handleInvite applies one 0x76B1 proposal: the actor must be a
-recognizable camp MASTER (level >= 0x3c - the sub_81e9f0 kind-0 gate
+recognizable camp MASTER (level >= 0x3c - the
+TrainingCampMember_ClassifyGrade kind-0 gate
 the client's own master-is-me path depends on - and the kind-0 master
 of a camp opened at the NPC, with student headroom), the target
 must resolve by world gid within the actor's division, be someone
@@ -459,7 +461,8 @@ func (r *InviteRuntime) handleInvite(s *transport.Session, opcode uint16, payloa
 	campID, joined := r.deps.TrainingCampAuthority().CampOfCharacter(divisionID, actor.ID)
 	if !joined {
 		// A camp is opened at the storage NPC (open.go). The client's Invite
-		// button needs master-is-me (sub_5c4fd0 @0x005c5033), which only a
+		// button needs master-is-me (in CIFApprenticeShip_OnInviteBtn),
+		// which only a
 		// camp seed arms, so a campless frame is a desync or forged.
 		log.Debugf("mentor: 0x76B1 (invite) refused for %s: no camp opened", actor.Name)
 		return
@@ -471,7 +474,7 @@ func (r *InviteRuntime) handleInvite(s *transport.Session, opcode uint16, payloa
 	}
 	if camp.MasterCharID != actor.ID {
 		// A sub-mentor/student cannot invite - the client gates the
-		// button on master-is-me (sub_5c4fd0 @0x005c5033).
+		// button on master-is-me (in CIFApprenticeShip_OnInviteBtn).
 		log.Debugf("mentor: 0x76B1 (invite) refused for %s: not the master of camp %d", actor.Name, campID)
 		return
 	}
@@ -486,7 +489,8 @@ func (r *InviteRuntime) handleInvite(s *transport.Session, opcode uint16, payloa
 	}
 	if target.ID == actor.ID {
 		// The client refuses a self-target before composing (the
-		// sub_702c90 resolve requires target != data_cedb54).
+		// NetClient_SendTargetCommand702C90 resolve requires target !=
+		// data_cedb54).
 		log.Debugf("mentor: 0x76B1 (invite) refused for %s: cannot invite yourself", actor.Name)
 		return
 	}

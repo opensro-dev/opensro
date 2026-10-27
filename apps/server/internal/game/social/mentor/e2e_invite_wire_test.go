@@ -25,7 +25,9 @@ package mentor_test
 //	               table stays empty);
 //	disconnect  -> S closing mid-prompt drops the pending invitation;
 //	               a consent from S's NEXT session is a no-op;
-//	refuse      -> the pinned {02 00} (sub_68c4c0 case 7 - NOT guild's
+//	refuse      -> the pinned {02 00}
+//	               (CGInterface_DispatchSimpleMessageBoxResult case 7
+//	               - NOT the guild arm's
 //	               {02 16}) consumes the invitation, commits nothing,
 //	               and the INVITER receives the byte-exact 0x3AC5
 //	               {10, 2, 0x11} rejection notice - the lane's ONE
@@ -403,8 +405,9 @@ type campE2EMember struct {
 	level uint8
 }
 
-// campMemberRow appends one member row in the pinned sub_773c60 case-1 /
-// sub_8290e0 read order.
+// campMemberRow appends one member row in the pinned
+// CNetProcess_OnNotification0x3AC5 case-1 /
+// CTrainingCampData_ReadRoster read order.
 func campMemberRow(buf *bytes.Buffer, member campE2EMember) {
 	buf.Write(campU32(member.gid))
 	buf.Write(campU32(member.gid))
@@ -451,7 +454,8 @@ func campOpenAckOracle(localMemberID uint32, members []campE2EMember) []byte {
 	return append([]byte{1}, campSeedOracle(localMemberID, members)[2:]...)
 }
 
-// campOpenCamp gives the master the fee, sends 0x72EC as 702BD0 composes it
+// campOpenCamp gives the master the fee, sends 0x72EC as
+// CGInterface_SendTrainingCampOpen72EC composes it
 // (one u32: the confirm box's UI id, which the server ignores), and asserts
 // the byte-exact 0xB2EC camp record and the 0x30B3 refresh of the balance
 // left after the fee.
@@ -605,7 +609,8 @@ func TestMentorInviteConsentEndToEndOverWire(t *testing.T) {
 
 	// ---- silent invite refusals leave the pending table empty ----
 	// Self-invite (the client refuses it before composing - the
-	// sub_702c90 target != data_cedb54 check; a forged one refuses
+	// NetClient_SendTargetCommand702C90 target != data_cedb54 check;
+	// a forged one refuses
 	// server-side too), an OFFLINE target (T never connects), an
 	// OVER-BAND target (V at 41 > 0x28), and a below-master-band
 	// INVITER (S at 20 < 0x3c).
