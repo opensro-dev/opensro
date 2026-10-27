@@ -13,7 +13,8 @@
 // local player's guild entry stays the empty block
 // (makeEmptyGuildEntryBlock, hasGuildFlag04=0) unless a 0x32C4
 // guild-info frame arrives, and the client's guild-block deserializer
-// (fold sub_826610) ALWAYS sets hasGuildFlag04=1 - so even an "empty"
+// (client fold SGuildData_ReadGuildBlock_826610) ALWAYS sets
+// hasGuildFlag04=1 - so even an "empty"
 // synthetic 0x32C4 would paint a guild onto a guildless character.
 // No-guild therefore means ZERO guild bytes: for a character WITHOUT a
 // guild this package emits no frame on any path and no guild frame
@@ -36,12 +37,14 @@
 // multiplex the party lane owns on the hub: 0x73AD holds a pending
 // invite and prompts the target with 0x3393 {u8 5, u32 inviterRef};
 // membership commits only on the target's 0x3393 {01 01} accept
-// (sub_6971b0 case 0xc), and every invite refusal stays silent on the
+// (CGInterface_OnMsgBoxResult case 0xc), and every invite refusal
+// stays silent on the
 // wire.
 //
 // Deliberately-absent frontiers:
 //   - the 0x3B29 subOp-0x16 BATCH member delta (the multi-jid twin of
-//     subOp 6, client arm PINNED @0x0076278b) has NO emit site here:
+//     subOp 6, client arm pinned in CPSMission_OnGuildUpdate0x3B29)
+//     has NO emit site here:
 //     the v1.188 batch emitters (0x38F5 -
 //     permission batches; and a grade+perm+role batch) fire
 //     from doors that mutate masked fields on SEVERAL members at once,
@@ -51,13 +54,14 @@
 //     would be dead code, so the batch stays a documented frontier
 //     until a multi-member masked mutation exists.
 //
-// 0x740F (GP donate) is LIVE: donate menu {1,0x2d} sub_5e4db0
-// @0x005e4db0 (in-guild arm sub_8188b0, NO permission-mask bit) ->
-// CIFGuildPointUp OK sub_5f49f0 @0x005f49f0 -> composer sub_700a90
-// @0x00700a90 {u32 amount}, handled by HandleGpDonate over the ATOMIC
+// 0x740F (GP donate) is LIVE: donate menu {1,0x2d}
+// CIFGuildMember_OnGuildPointButton_5E4DB0 (in-guild arm
+// CCharacterDependentData_IsInGuild, NO permission-mask bit) ->
+// CIFGuildPointUp_OnConfirm -> composer NetClient_Send740F
+// {u32 amount}, handled by HandleGpDonate over the ATOMIC
 // DonateGuildPoints store door (SP debit + guild GP + member DonatedGP,
-// one commit) and answered by the second-host 0xB40F handler sub_766ad0
-// (registrar @0x0076eb1e). The "war horn" label this opcode carried
+// one commit) and answered by the second-host 0xB40F handler
+// CNetProcess_OnResponse0xB40F. The "war horn" label this opcode carried
 // before 2026-07-29 was a MISNOMER - war horn is 0x7025, the movement
 // lane.
 //
@@ -66,10 +70,12 @@
 // reads: the u32 is
 // decoded and logged, never validated (the create npcGid posture; its
 // runtime MEANING during a leave stays PROBABLE-stale/zero). 0x766E
-// (break) followed on the same pin - its composer sub_7006f0 writes the
+// (break) followed on the same pin - its composer
+// NetClient_SendSelectedTarget766E writes the
 // SAME +0x620 slot. 0x72BC/0x765F (the grants) left the refuse set when
 // the 0x3B29 subOp-6 delta layout, the &0x20 string destination
-// (member+0x04 - resolved from the sub_5e9d20 applicator @0x005ea0e9)
+// (member+0x04 - resolved from the CIFGuildMember_OnMemberUpdated
+// applicator)
 // and the second-host acks 0xB2BC/0xB65F were pinned
 // (the dump extracts are cited on the encoders below).
 //
@@ -94,44 +100,48 @@ const (
 	// and logs it without validating it against an NPC.
 	OpGuildCreateRequest uint16 = 0x7663
 	// OpGuildInviteRequest: {u32 targetRef} - the client composer
-	// sub_700b50 @0x00700b50 (the selected target's world gid; the
-	// client refuses a missing and a self target before composing,
-	// @0x00700ba7).
+	// NetClient_SendTargetCommand700B50 (the selected target's world
+	// gid; the client refuses a missing and a self target before
+	// composing).
 	OpGuildInviteRequest uint16 = 0x73AD
 	// OpGuildKickRequest: {u16-len ANSI name}.
 	OpGuildKickRequest uint16 = 0x74B1
 	// OpGuildLeaveRequest: {u32 selectedTargetGid} - the client
-	// composer sub_7007b0 @0x007007b0 writes 4 bytes from the
-	// CGInterface+0x620 selected-target slot (helper sub_67b010, the
-	// SAME slot create's composer reads). The slot's value during a
+	// composer NetClient_SendSelectedTarget756E writes 4 bytes from
+	// the CGInterface+0x620 selected-target slot
+	// (CGInterface_GetSelectedTargetGid, the SAME slot create's
+	// composer reads). The slot's value during a
 	// leave is PROBABLE-stale/zero (the msgbox confirm path never
 	// seeds it), so the handler decodes and logs it without validating
 	// it - the create npcGid posture.
 	OpGuildLeaveRequest uint16 = 0x756E
 	// OpGuildBreakRequest: {u32 selectedTargetGid} - the client
-	// composer sub_7006f0 @0x007006f0 writes 4 bytes from the SAME
-	// CGInterface+0x620 selected-target slot leave's composer reads
-	// (helper sub_67b010, write @0x00700764) - byte-for-byte the leave
+	// composer NetClient_SendSelectedTarget766E writes 4 bytes from
+	// the SAME CGInterface+0x620 selected-target slot leave's
+	// composer reads (CGInterface_GetSelectedTargetGid) -
+	// byte-for-byte the leave
 	// body shape, so the u32 takes the same decode-and-log posture.
 	OpGuildBreakRequest uint16 = 0x766E
 	// OpGuildNameGrantRequest: {u32 targetJid}{u16-len ANSI name} - the
-	// client composer sub_700870 @0x00700870 (u32 write @0x00700907,
-	// sized-ANSI write @0x00700925/@0x00700935 after the sub_4b6a40
+	// client composer NetClient_SendIDAndText72BC (u32 write, then
+	// the sized-ANSI write after the std_wstring_to_string
 	// wide->ANSI convert). The u32 is resolved as the target MEMBER's
-	// jid: the pinned 0xB2BC ack echoes a jid the client's sub_768690
-	// looks up in the member map (@0x0076876d sub_826080).
+	// jid: the pinned 0xB2BC ack echoes a jid the client's
+	// CNetProcess_OnResponse0xB2BC looks up in the member map
+	// (CCharacterDependentData_FindGuildMember).
 	OpGuildNameGrantRequest uint16 = 0x72BC
 	// OpGuildPositionGrantRequest: {u32 targetJid}{u8 position} - the
-	// client composer sub_7009c0 @0x007009c0 (u32 @0x00700a2d, u8
-	// @0x00700a3d). Same jid resolve rationale as the name grant (the
-	// 0xB65F ack's jid feeds sub_826080 @0x00768a36).
+	// client composer NetClient_Send765F. Same jid resolve rationale
+	// as the name grant (the 0xB65F ack's jid feeds the client's
+	// CCharacterDependentData_FindGuildMember).
 	OpGuildPositionGrantRequest uint16 = 0x765F
 	// OpGuildGpDonateRequest: {u32 amount} - the client composer
-	// sub_700a90 @0x00700a90 (CanSend @0x00700abc, the 4 amount bytes
-	// @0x00700afd). The amount is the CIFGuildPointUp edit's _wtoi
-	// (sub_5f49f0 @0x005f49f0); the donate button arms IN-GUILD ONLY
-	// (sub_5e4db0 @0x005e4db8 gates on sub_8188b0 - NO permission-mask
-	// bit, unlike every sub_5e1e80 command arm). The donation is an
+	// NetClient_Send740F. The amount is the CIFGuildPointUp edit's
+	// _wtoi (CIFGuildPointUp_OnConfirm); the donate button arms
+	// IN-GUILD ONLY (CIFGuildMember_OnGuildPointButton_5E4DB0 gates
+	// on CCharacterDependentData_IsInGuild - NO permission-mask bit,
+	// unlike every CIFGuildMember_RefreshButtons command arm). The
+	// donation is an
 	// SP -> GP exchange: the v1.150 UIIT donate family pins the source
 	// ("Will you exchange [%d]of SP into GP and contribute?" /
 	// UIIT_MSG_GUILD_ERROR_GP_SUBSCRIPION_SP "Cannot contribute more
@@ -144,7 +154,8 @@ const (
 )
 
 // OpGuildInfo is the S->C 0x32C4 guild-info frame (client fold
-// sub_826610 - always sets hasGuildFlag04=1 on receipt). Emitted ONLY
+// SGuildData_ReadGuildBlock_826610 - always sets hasGuildFlag04=1 on
+// receipt). Emitted ONLY
 // from real store membership: the enter-world seed of a character whose
 // GuildID FK resolves to a stored guild row (EncodeGuildInfo32C4). Never
 // emit it EMPTY or synthetic - the client's deserializer would paint a
@@ -157,8 +168,9 @@ const OpGuildInfo uint16 = 0x32C4
 const (
 	// OpGuildCreateAck is the 0xB663 create answer: {u8 1} followed by
 	// the SAME guild block bytes 0x32C4 carries (the client's 0xB663
-	// handler reads the result byte then falls into the sub_826610
-	// block deserializer), or {u8 2}{u8 code} on the evidenced
+	// handler reads the result byte then falls into the client
+	// SGuildData_ReadGuildBlock_826610 block deserializer), or
+	// {u8 2}{u8 code} on the evidenced
 	// name-length refusal (errors.go). Emitted to the creating actor
 	// ONLY.
 	OpGuildCreateAck uint16 = 0xB663
@@ -169,8 +181,9 @@ const (
 	OpGuildNoticeEditAck uint16 = 0xB77A
 	// OpGuildLeaveAck is the 0xB56E leave answer: {u8 1} with no
 	// payload beyond the result byte, emitted to the leaving actor ONLY
-	// on success (client handler sub_75c8c0 @0x0075c8c0, mission
-	// registry index 165: result 1 -> light UI refresh sub_5d97e0 -
+	// on success (the client's 0xB56E handler, mission registry
+	// index 165: result 1 -> light UI refresh
+	// CIFNPCTalk_RefreshActionMenu -
 	// the STATE reset rides the subOp-3 kind-1 push, not this frame).
 	// The handler also parses {u8 2}{u8 code} into the category-0x10
 	// error sink, but NO leave trigger->code pair is pinned for Legend
@@ -178,51 +191,55 @@ const (
 	// PROBABLE only), so result=2 is NEVER emitted here - every leave
 	// refusal stays silent (errors.go posture).
 	OpGuildLeaveAck uint16 = 0xB56E
-	// OpGuildKickAck is 0x74B1's answer (75CB30): only [2][code] is read.
+	// OpGuildKickAck is 0x74B1's answer
+	// (CPSMission_OnGuildKickResponse0xB4B1): only [2][code] is read.
 	OpGuildKickAck uint16 = 0xB4B1
 	// OpGuildBreakAck is the 0xB66E break answer: {u8 1} with no
 	// payload beyond the result byte, emitted to the dissolving leader
-	// ONLY on success (client handler sub_75c730 @0x0075c730, mission
-	// registry index 160: result 1 -> the light sub_5d97e0 interaction
-	// refresh @0x0075c765 - the guild-state wipe rides the subOp-1
-	// push, not this frame). The handler also parses {u8 2}{u8 code}
-	// into the category-0x10 sink (@0x0075c787), but NO break
+	// ONLY on success (client handler CPSMission_OnGuildDisbandResponse0xB66E,
+	// mission registry index 160: result 1 -> the light
+	// CIFNPCTalk_RefreshActionMenu interaction refresh - the
+	// guild-state wipe rides the subOp-1 push, not this frame). The
+	// handler also parses {u8 2}{u8 code} into the category-0x10
+	// sink, but NO break
 	// trigger->code pair is pinned for Legend, so result=2 is NEVER
 	// emitted - every break refusal stays silent (the leave posture).
 	OpGuildBreakAck uint16 = 0xB66E
 	// OpGuildNameGrantAck is the 0xB2BC name-grant answer to the
-	// GRANTING ACTOR - a SECOND-HOST frame (CNetProcessSecond registrar
-	// sub_76e850 @0x0076eabb -> handler sub_768690): result 1 is
+	// GRANTING ACTOR - a SECOND-HOST frame (CNetProcessSecond
+	// registrar CNetProcessSecond_RegisterPacketHandlers -> handler
+	// CNetProcess_OnResponse0xB2BC): result 1 is
 	// {u8 1}{u32 discarded}{u32 jid}{u16-len ANSI grantName} - the
-	// handler reads TWO dwords into the same local (@0x00768727/
-	// @0x00768735, the first overwritten), finds the member by the
-	// surviving jid (sub_826080 @0x0076876d) and writes the string to
-	// member+0x40 grantName (@0x0076877f). result 2 is {u8 2}{u8 code}
-	// -> the cat-0x10 sink (@0x00768927) - never emitted (the 0x4D/0x52
+	// handler reads TWO dwords into the same local (the first
+	// overwritten), finds the member by the surviving jid
+	// (CCharacterDependentData_FindGuildMember) and writes the string
+	// to member+0x40 grantName. result 2 is {u8 2}{u8 code}
+	// -> the cat-0x10 sink - never emitted (the 0x4D/0x52
 	// codes are pinned at client-LOCAL call sites only, so the server
 	// trigger->code mapping would be invented).
 	OpGuildNameGrantAck uint16 = 0xB2BC
 	// OpGuildPositionGrantAck is the 0xB65F fortress-position answer to
-	// the granting actor - second host too (registrar @0x0076ed0d ->
-	// handler sub_7689a0): result 1 is {u8 1}{u32 discarded}{u32 jid}
-	// {u8 role} - two dwords into one local (@0x00768a07/@0x00768a15),
-	// member by jid (@0x00768a36), role byte to member+0x5c
-	// (@0x00768a3c) + the UIIT_STT_FORT_GUILD_* title switch into
-	// member+0x60 (@0x00768a52..; role 0 clears). result 2 {u8 2}
-	// {u8 code} (@0x00768e25) - never emitted (same rationale).
+	// the granting actor - second host too (handler
+	// CNetProcess_OnResponse0xB65F): result 1 is {u8 1}{u32 discarded}
+	// {u32 jid}{u8 role} - two dwords into one local, member by jid,
+	// role byte to member+0x5c + the UIIT_STT_FORT_GUILD_* title
+	// switch into member+0x60 (role 0 clears). result 2 {u8 2}
+	// {u8 code} - never emitted (same rationale).
 	OpGuildPositionGrantAck uint16 = 0xB65F
 	// OpGuildGpDonateAck is the 0xB40F GP-donate answer to the DONATING
-	// ACTOR - a second-host frame (CNetProcessSecond registrar sub_76e850
-	// @0x0076eb1e -> handler sub_766ad0): result 1 is {u8 1}{u32 amount},
+	// ACTOR - a second-host frame (CNetProcessSecond registrar
+	// CNetProcessSecond_RegisterPacketHandlers -> handler
+	// CNetProcess_OnResponse0xB40F): result 1 is {u8 1}{u32 amount},
 	// where the u32 is DISPLAY-ONLY - the handler formats it into
 	// UIIT_MSG_GUILD_GP_SUBSCRIPION_RESULT ("Contributed [%d]GP.",
 	// textuisystem L1538 - the retail SUBSCRIPION typo is on the asset)
-	// as a type-0 guide line (sub_67a600 @0x00766b52) and writes NO
+	// as a type-0 guide line (CGInterface_ChatSystemMessage) and
+	// writes NO
 	// guild/member twin, so the byte-honest value is the donated amount
 	// itself (the confirm string UIIT_MSG_QUESTION_GUILD_GP_SUBSCRIPION_
 	// CONFIRM uses the same %d for the entered SP). State truth rides the
 	// 0x3B29 deltas below. result 2 is {u8 2}{u8 code} -> the cat-0x10
-	// sink (@0x00766b8e) - never emitted: no donate trigger->code pair is
+	// sink - never emitted: no donate trigger->code pair is
 	// pinned in either dump (errors.go posture), so every donate refusal
 	// stays wire-silent.
 	OpGuildGpDonateAck uint16 = 0xB40F
@@ -252,7 +269,8 @@ const (
 )
 
 // OpInvitationProposal is the SHARED, bidirectional invitation multiplex
-// 0x3393 (registrar sub_74d330 @0x0074e2c1 -> handler sub_7644e0). The
+// 0x3393 (client CPSMission_RegisterPacketHandlers -> handler
+// CPSMission_OnConfirmBoxPrompt0x3393). The
 // PARTY lane owns the single hub registration and routes C->S replies by
 // pending-invite ownership; this lane only COMPOSES the S->C guild
 // prompt and receives routed consents through the party lane's consent
@@ -261,16 +279,17 @@ const (
 // guild), the GuildJID precedent.
 const OpInvitationProposal uint16 = 0x3393
 
-// InvitationTypeGuild is the sub_7644e0 type byte for the guild arm
+// InvitationTypeGuild is the client CPSMission_OnConfirmBoxPrompt0x3393
+// type byte for the guild arm
 // (inviteType 5 -> msgbox kind 0xf).
 const InvitationTypeGuild uint8 = 5
 
-// Consent reply bytes, pinned from the sub_6971b0 case-0xc (msgbox kind
-// 0xf) INLINE composers - there is no shared consent composer for the
-// guild arm (sub_6feca0 belongs to exchange). The FIRST byte of the reply is
-// a RESULT code, NOT the proposal type: Accept is {01 01} (@0x006975c3:
-// var_139=1 @0x006975f7, var_13a=1 @0x006975f3) and Refuse is {02 16}
-// (@0x00697616: var_139=2 @0x0069764b, var_13a=0x16 @0x0069763c) - so
+// Consent reply bytes, pinned from the CGInterface_OnMsgBoxResult
+// case-0xc (msgbox kind 0xf) INLINE composers - there is no shared
+// consent composer for the guild arm (NetClient_SendExchangeReply3393
+// belongs to exchange). The FIRST byte of the reply is a RESULT code,
+// NOT the proposal type: Accept is {01 01} (var_139=1, var_13a=1) and
+// Refuse is {02 16} (var_139=2, var_13a=0x16) - so
 // a reply can never be routed by reading a type byte back off it.
 const (
 	// ConsentResultAccept / ConsentCodeAccept: the {01 01} accept pair.
@@ -284,10 +303,11 @@ const (
 )
 
 // EncodeInvitePrompt3393 renders the S->C guild prompt body the
-// sub_7644e0 guild arm reads (the IDRETRY case @0x00764936):
+// CPSMission_OnConfirmBoxPrompt0x3393 guild arm reads (the IDRETRY
+// case):
 // {u8 5, u32 inviterRef}. The ref is the INVITER's world gid - the
 // client resolves the prompt's guild name from that entity's +0x788
-// GuildBannerLabel (sub_8687e0 @0x00764952) and opens the kind-0xf
+// GuildBannerLabel (CICPlayer_GetGuildRecord) and opens the kind-0xf
 // msgbox.
 func EncodeInvitePrompt3393(inviterRef uint32) []byte {
 	return wire.NewWriter(5).U8(InvitationTypeGuild).U32(inviterRef).Payload()
@@ -317,7 +337,8 @@ func readSizedString(reader *wire.Reader) (string, error) {
 }
 
 // DecodeInviteRequest strict-decodes the 0x73AD body {u32 targetRef}
-// (the sub_700b50 composer shape) with no trailing bytes.
+// (the NetClient_SendTargetCommand700B50 composer shape) with no
+// trailing bytes.
 func DecodeInviteRequest(payload []byte) (uint32, error) {
 	reader := wire.NewReader(payload)
 	targetRef, err := reader.U32()
@@ -390,8 +411,8 @@ type LeaveRequest struct {
 }
 
 // DecodeLeaveRequest strict-decodes the 0x756E body
-// {u32 selectedTargetGid} with no trailing bytes (the sub_7007b0
-// composer writes exactly 4 bytes).
+// {u32 selectedTargetGid} with no trailing bytes (the
+// NetClient_SendSelectedTarget756E composer writes exactly 4 bytes).
 func DecodeLeaveRequest(payload []byte) (LeaveRequest, error) {
 	reader := wire.NewReader(payload)
 	gid, err := reader.U32()
@@ -407,15 +428,17 @@ func DecodeLeaveRequest(payload []byte) (LeaveRequest, error) {
 // BreakRequest is one decoded 0x766E body.
 type BreakRequest struct {
 	// SelectedTargetGid is the CGInterface+0x620 slot's value at
-	// compose time - the SAME slot leave's composer reads (sub_7006f0
-	// @0x00700764). Decoded and logged only, never validated (the
+	// compose time - the SAME slot leave's composer reads
+	// (NetClient_SendSelectedTarget766E). Decoded and logged only,
+	// never validated (the
 	// leave/create npcGid posture).
 	SelectedTargetGid uint32
 }
 
 // DecodeBreakRequest strict-decodes the 0x766E body
-// {u32 selectedTargetGid} with no trailing bytes (the sub_7006f0
-// composer writes exactly 4 bytes - the leave body shape).
+// {u32 selectedTargetGid} with no trailing bytes (the
+// NetClient_SendSelectedTarget766E composer writes exactly 4 bytes -
+// the leave body shape).
 func DecodeBreakRequest(payload []byte) (BreakRequest, error) {
 	reader := wire.NewReader(payload)
 	gid, err := reader.U32()
@@ -431,15 +454,17 @@ func DecodeBreakRequest(payload []byte) (BreakRequest, error) {
 // NameGrantRequest is one decoded 0x72BC body.
 type NameGrantRequest struct {
 	// TargetJID is the grant target's member jid (the wire-space id the
-	// 0xB2BC ack echoes back into the client's sub_826080 member find).
+	// 0xB2BC ack echoes back into the client's
+	// CCharacterDependentData_FindGuildMember lookup).
 	TargetJID uint32
 	// GrantName is the granted title (ANSI bytes verbatim - the
-	// composer's sub_4b6a40 wide->ANSI output).
+	// composer's std_wstring_to_string wide->ANSI output).
 	GrantName string
 }
 
 // DecodeNameGrantRequest strict-decodes the 0x72BC body
-// {u32 targetJid}{u16-len ANSI name} (the sub_700870 composer shape).
+// {u32 targetJid}{u16-len ANSI name} (the NetClient_SendIDAndText72BC
+// composer shape).
 func DecodeNameGrantRequest(payload []byte) (NameGrantRequest, error) {
 	reader := wire.NewReader(payload)
 	targetJID, err := reader.U32()
@@ -468,7 +493,7 @@ type PositionGrantRequest struct {
 }
 
 // DecodePositionGrantRequest strict-decodes the 0x765F body
-// {u32 targetJid}{u8 position} (the sub_7009c0 composer shape).
+// {u32 targetJid}{u8 position} (the NetClient_Send765F composer shape).
 func DecodePositionGrantRequest(payload []byte) (PositionGrantRequest, error) {
 	reader := wire.NewReader(payload)
 	targetJID, err := reader.U32()
@@ -488,13 +513,13 @@ func DecodePositionGrantRequest(payload []byte) (PositionGrantRequest, error) {
 // GpDonateRequest is one decoded 0x740F body.
 type GpDonateRequest struct {
 	// Amount is the SP the donor exchanges into guild GP - the
-	// CIFGuildPointUp edit's _wtoi (sub_5f49f0 @0x005f4a09), written as
-	// the composer's 4 body bytes (sub_700a90 @0x00700afd).
+	// CIFGuildPointUp edit's _wtoi (CIFGuildPointUp_OnConfirm),
+	// written as the composer's 4 body bytes (NetClient_Send740F).
 	Amount uint32
 }
 
 // DecodeGpDonateRequest strict-decodes the 0x740F body {u32 amount}
-// (the sub_700a90 composer shape) with no trailing bytes.
+// (the NetClient_Send740F composer shape) with no trailing bytes.
 func DecodeGpDonateRequest(payload []byte) (GpDonateRequest, error) {
 	reader := wire.NewReader(payload)
 	amount, err := reader.U32()
@@ -582,8 +607,9 @@ func EncodeLeaveAckB56E() []byte {
 // UIIT_MSG_GUILD_EXIT_RESULT), NOT kick's kind 2 (expulsion). ONE frame
 // serves every recipient: the client branches its me-vs-not-me handling
 // by looking the jid up in its own member map, and the LEAVER's own
-// client takes the jid==me arm into the full guild reset (fold
-// sub_762040 case 3) - which is why the leaver must be included in the
+// client takes the jid==me arm into the full guild reset (client
+// CPSMission_OnGuildUpdate0x3B29 case 3) - which is why the leaver
+// must be included in the
 // fan-out.
 func EncodeMemberLeave3B29(jid uint32) []byte {
 	writer := wire.NewWriter(6)
@@ -594,8 +620,9 @@ func EncodeMemberLeave3B29(jid uint32) []byte {
 }
 
 // EncodeBreakAckB66E composes the 0xB66E success body: the result byte
-// 1 and nothing else. The client's sub_75c730 handler runs only the
-// light sub_5d97e0 interaction refresh on result 1 (@0x0075c765) - the
+// 1 and nothing else. The client's CPSMission_OnGuildDisbandResponse0xB66E
+// handler runs only the light CIFNPCTalk_RefreshActionMenu interaction
+// refresh on result 1 - the
 // guild-state wipe rides the subOp-1 push. Result=2 bodies are
 // deliberately never composed (no Legend break trigger->code pair is
 // pinned - the leave-ack rationale).
@@ -604,12 +631,14 @@ func EncodeBreakAckB66E() []byte {
 }
 
 // EncodeGuildBreak3B29 composes the 0x3B29 subOp-1 dissolve announce:
-// {u8 1} and NOTHING else - the client's break arm (fold sub_762040
-// case 1 @0x007620e1) reads ZERO wire fields beyond the subOp byte;
-// the announced guild name comes from the receiver's own local state
-// (FortressMgr+0x150 via sub_8188a0 @0x007620e1), then the
+// {u8 1} and NOTHING else - the client's break arm (client
+// CPSMission_OnGuildUpdate0x3B29 case 1) reads ZERO wire fields
+// beyond the subOp byte; the announced guild name comes from the
+// receiver's own local state (FortressMgr+0x150 via
+// CCharacterDependentData_GetGuildData), then the
 // UIIT_MSG_GUILD_BREAK_RESULT guide + banner fire and the whole guild
-// block drops (sub_828be0 @0x00762172). ONE frame serves every online
+// block drops (CCharacterDependentData_ClearGuild). ONE frame serves
+// every online
 // member of the dissolved guild including the breaking leader.
 func EncodeGuildBreak3B29() []byte {
 	return []byte{1}
@@ -617,13 +646,13 @@ func EncodeGuildBreak3B29() []byte {
 
 // EncodeNameGrantAckB2BC composes the 0xB2BC success body for the
 // granting actor: {u8 1}{u32 jid}{u32 jid}{u16-len ANSI grantName}.
-// The client handler (sub_768690, second host) reads TWO dwords into
-// the SAME local - the first is dead the moment the second lands
-// (@0x00768727/@0x00768735) - so the first dword's native meaning is
+// The client handler (CNetProcess_OnResponse0xB2BC, second host)
+// reads TWO dwords into the SAME local - the first is dead the
+// moment the second lands - so the first dword's native meaning is
 // unpinned; emitting the jid twice keeps every read byte honest
 // (DECISION: no invented value can leak through a discarded read).
 // The surviving jid drives the member find and the string writes
-// member+0x40 grantName (@0x0076877f).
+// member+0x40 grantName.
 func EncodeNameGrantAckB2BC(jid uint32, grantName string) []byte {
 	writer := wire.NewWriter(11 + len(grantName))
 	writer.U8(1)
@@ -635,10 +664,10 @@ func EncodeNameGrantAckB2BC(jid uint32, grantName string) []byte {
 
 // EncodePositionGrantAckB65F composes the 0xB65F success body for the
 // granting actor: {u8 1}{u32 jid}{u32 jid}{u8 role}. Same discarded
-// first-dword shape as 0xB2BC (@0x00768a07/@0x00768a15 - the jid rides
-// twice, DECISION as above); the role byte writes member+0x5c and
-// resolves the UIIT_STT_FORT_GUILD_* title (0 clears) on the client
-// (sub_7689a0 @0x00768a3c/@0x00768a52).
+// first-dword shape as 0xB2BC (the jid rides twice, DECISION as
+// above); the role byte writes member+0x5c and resolves the
+// UIIT_STT_FORT_GUILD_* title (0 clears) on the client
+// (CNetProcess_OnResponse0xB65F).
 func EncodePositionGrantAckB65F(jid uint32, role uint8) []byte {
 	writer := wire.NewWriter(10)
 	writer.U8(1)
@@ -650,8 +679,9 @@ func EncodePositionGrantAckB65F(jid uint32, role uint8) []byte {
 
 // EncodeGpDonateAckB40F composes the 0xB40F success body for the
 // donating actor: {u8 1}{u32 amount}. The u32 is the donated amount -
-// the client handler (sub_766ad0, second host) reads it @0x00766b0b
-// solely as the format arg of the "Contributed [%d]GP." guide line and
+// the client handler (CNetProcess_OnResponse0xB40F, second host)
+// reads it solely as the format arg of the "Contributed [%d]GP."
+// guide line and
 // writes no state, so echoing the request's amount is the only
 // byte-honest value (the OpGuildGpDonateAck constant carries the full
 // evidence).
@@ -664,8 +694,9 @@ func EncodeGpDonateAckB40F(amount uint32) []byte {
 
 // EncodeGuildGp3B29 composes the 0x3B29 subOp-5 guild-record delta
 // carrying ONLY the &0x08 GP leg: {u8 5}{u8 0x08}{u32 newGuildGp}. The
-// client's flags applicator (fold sub_762040 slot 4 -> the sub_5e4710
-// slice) writes the dword to entry+0x0c (@0x005e4954) with NO banner or
+// client's flags applicator (client CPSMission_OnGuildUpdate0x3B29
+// slot 4 -> the CIFGuildMember_ReadGuildMetadataUpdate slice) writes
+// the dword to entry+0x0c with NO banner or
 // guide side effect, so the frame is safe for every online member
 // INCLUDING the donating actor - whose own pane GP display would
 // otherwise go stale (the 0xB40F ack carries no state; the notice-edit
@@ -680,7 +711,8 @@ func EncodeGuildGp3B29(newGuildGp uint32) []byte {
 
 // EncodeGuildLevel3B29 composes the 0x3B29 subOp-5 guild-record delta
 // carrying the &0x04 level and &0x08 GP legs, in the applicator's read
-// order (5E4710): {u8 5}{u8 0x0C}{u8 level}{u32 gp}. The &0x04 arm prints
+// order (CIFGuildMember_ReadGuildMetadataUpdate): {u8 5}{u8 0x0C}
+// {u8 level}{u32 gp}. The &0x04 arm prints
 // UIIT_MSG_GUILD_LEVEL_UP_RESULT and refreshes the member cap gauge.
 func EncodeGuildLevel3B29(level uint8, gp uint32) []byte {
 	writer := wire.NewWriter(7)
@@ -694,7 +726,8 @@ func EncodeGuildLevel3B29(level uint8, gp uint32) []byte {
 // EncodeMemberDonatedGp3B29 composes the 0x3B29 subOp-6 member delta
 // carrying ONLY the &0x08 donated-GP leg:
 // {u8 6}{u32 jid}{u8 0x08}{u32 newDonatedGp}. The applicator's &0x08 arm
-// writes member+0x28 (fold sub_5e9d20 @0x005e9e00 slice - the roster
+// writes member+0x28 (client CIFGuildMember_OnMemberUpdated slice -
+// the roster
 // row's GP column) with no banner, so the donor is INCLUDED in the
 // fan-out (the EncodeGuildGp3B29 rationale - the actor's ack writes no
 // member twin, unlike the grant acks whose actor is excluded).
@@ -709,7 +742,8 @@ func EncodeMemberDonatedGp3B29(jid uint32, newDonatedGp uint32) []byte {
 
 // EncodeMemberGrade3B29 composes the 0x3B29 subOp-6 member delta carrying
 // the &0x04 grade and &0x10 permission legs, in the applicator's read order
-// (5E9D20): {u8 6}{u32 jid}{u8 0x14}{u8 grade}{u32 permMask}. Grade 0 makes
+// (CIFGuildMember_OnMemberUpdated): {u8 6}{u32 jid}{u8 0x14}{u8 grade}
+// {u32 permMask}. Grade 0 makes
 // the member the master the guild pane names.
 func EncodeMemberGrade3B29(jid uint32, grade uint8, permMask uint32) []byte {
 	writer := wire.NewWriter(11)
@@ -724,8 +758,9 @@ func EncodeMemberGrade3B29(jid uint32, grade uint8, permMask uint32) []byte {
 // EncodeMemberFortressRole3B29 composes the 0x3B29 subOp-6 member delta
 // carrying ONLY the &0x40 role leg: {u8 6}{u32 jid}{u8 0x40}{u8 role}.
 // The applicator's &0x40 arm writes member+0x5c and resolves the
-// UIIT_STT_FORT_GUILD_* title into member+0x60 (fold sub_5e9d20
-// @0x005ea128..; role 0 clears the text) - the same writes the actor's
+// UIIT_STT_FORT_GUILD_* title into member+0x60 (client
+// CIFGuildMember_OnMemberUpdated; role 0 clears the text) - the same
+// writes the actor's
 // 0xB65F ack performs, so the actor is excluded from this fan-out (the
 // ack already wrote its own roster). The exclusive
 // single-bit mask matches the v1.188 emitter posture (it
