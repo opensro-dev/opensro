@@ -105,6 +105,7 @@ func publicRules() publicstats.RulesResponse {
 	pharaohGear, _ := monster.PharaohGearRateFromEnv()
 	alexandriaOn, _ := alexandria.EnabledFromEnv()
 	shopGoods, _ := commerce.ExtraGoodsFromEnv()
+	janganAlchemyOn, _ := commerce.JanganAlchemyShopActiveFromEnv()
 	mallGoods, _ := commerce.MallExtraGoodsFromEnv()
 	rideFactor, rideOn, _ := enterworld.MallRideSpeedFromEnv()
 	flagWar, _ := action.FlagWarSettingsFromEnv()
@@ -256,6 +257,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "NPC shops sell the v1.150 stock.",
 				Now:    "Some NPC shops also sell extra goods for gold, such as elixirs and degree-9 stones.",
 				Why:    "Beta balance: gold buys enhancement."},
+			{Flag: commerce.EnvJanganAlchemyShop, On: janganAlchemyOn,
+				Native: "Jangan's grocer is Grocery Trader Jinjin, her alchemy goods share one tab, and the smith sells the elixirs.",
+				Now:    "Jangan's grocer is OpenSRO Alchemy - Jangan: elixirs and powders, attribute stones and alchemy stones on three tabs of their own, the elixirs moved from the smith.",
+				Why:    "A player's request: one alchemy shop in Jangan."},
 			{Flag: commerce.EnvMallExtraGoods, On: len(mallGoods) > 0,
 				Native: "The Item Mall lists the v1.150 goods.",
 				Now:    "It also lists avatar outfits the client ships but its mall never listed.",

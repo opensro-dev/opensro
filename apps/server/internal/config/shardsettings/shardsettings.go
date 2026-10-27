@@ -253,6 +253,11 @@ var Settings = []Setting{
 	{Env: "SRO_BETA_DROP_RATE", NomadVar: "beta_drop_rate", Default: "1", Catalogue: true, Validation: ValueBetaGrowth},
 	{Env: "SRO_BETA_DROP_MIX", NomadVar: "beta_drop_mix", Default: "off", Catalogue: true, Validation: ValueBetaDropMix},
 	{Env: "SRO_SHOP_EXTRA_GOODS", NomadVar: "shop_extra_goods", Default: "on", Catalogue: true},
+	// Owner, 2026-10-28 (#1850): Jangan's grocer as "OpenSRO Alchemy -
+	// Jangan", the default list's alchemy goods on three tabs and the
+	// elixirs off the smith. On by default (it extends the extra goods);
+	// off restores the native name and tabs.
+	{Env: "SRO_JANGAN_ALCHEMY_SHOP", NomadVar: "jangan_alchemy_shop", Default: "on", Catalogue: true},
 	{Env: "SRO_MALL_EXTRA_GOODS", NomadVar: "mall_extra_goods", Default: "on"},
 	{Env: "SRO_ALCHEMY_NO_ASSIMILATION", NomadVar: "alchemy_no_assimilation", Default: "on"},
 	// Owner, 2026-10-14: 8 per ambush (was 16), thieves and hunters alike.
