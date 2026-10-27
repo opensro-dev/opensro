@@ -331,6 +331,21 @@ func TestRetireGroundApproachesDrainsEveryDivision(t *testing.T) {
 	if len(pushed) != 2 {
 		t.Fatalf("release pushes = %v, want one per armed division", pushed)
 	}
+
+	// More stops than one capped lane run (maxGroundApproachLaneRun)
+	// still drain completely across the release/re-take boundary.
+	for i := 0; i < 2*maxGroundApproachLaneRun+1; i++ {
+		rt.RetireGroundApproach(testDivision, fmt.Sprintf("bulk%03d", i), 5)
+	}
+	rt.retireGroundApproaches()
+	remaining = 0
+	rt.groundApproachStops.Range(func(key, value any) bool {
+		remaining++
+		return true
+	})
+	if remaining != 0 {
+		t.Fatalf("leftover stops after capped runs = %d, want 0", remaining)
+	}
 }
 
 /*
