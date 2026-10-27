@@ -52,7 +52,7 @@ type SkillUiRow struct {
 	CooldownMs    uint32 `json:"cooldownMs"`
 	// ActionMs is the action actor's lifetime (ActionLifecycleMs, columns
 	// 12 + 13): the client holds the caster's action state 2, and with it
-	// every ground click, for this long (CIDecoSkill 8E0A23, 877240).
+	// every ground click, for this long (client CIDecoSkill 8E0A23, 877240).
 	// Omitted when either column is unpinned.
 	ActionMs uint64 `json:"actionMs,omitempty"`
 	// HaltsWalk marks an ordinary cast (activity 2, column 8): it stops the
@@ -96,7 +96,7 @@ type SkillUiRow struct {
 	MPPercent uint16 `json:"mpPercent,omitempty"`
 	// Targets are the authored target groups (columns 22..33) as
 	// SkillUiTarget bits. The native press (CGInterface_ExecuteSelected
-	// ActionAtTarget 6FCD50) sends whatever is selected and animates only
+	// ActionAtTarget, client 6FCD50) sends whatever is selected and animates only
 	// on the server's answer; the client predicts a cast and stands its
 	// cooldown in only for a target these groups admit.
 	Targets uint16 `json:"targets,omitempty"`
@@ -282,7 +282,7 @@ func skillUiTargets(t SkillTargets) uint16 {
 ================
 SkillUiSpeedBuff
 
-SkillUiSpeedBuff is the buff-viewer speed stacking marker (6DE630).
+SkillUiSpeedBuff is the buff-viewer speed stacking marker (client 6DE630).
 ================
 */
 type SkillUiSpeedBuff struct {
@@ -293,7 +293,7 @@ type SkillUiSpeedBuff struct {
 ================
 SkillUiStatusLevel
 
-SkillUiStatusLevel is a [mask, level] pair read by 8608A0 / 85CE40.
+SkillUiStatusLevel is a [mask, level] pair read by client 8608A0 / 85CE40.
 ================
 */
 type SkillUiStatusLevel struct {

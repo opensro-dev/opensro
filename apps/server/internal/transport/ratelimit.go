@@ -34,8 +34,8 @@ import (
 //   - 0x7738 movement: one frame per ground click
 //     (goMissionBootstrapClient.sendMissionMove); the native client can
 //     add an occasional EVENT-DRIVEN resend (CharMovement_ResendGoalMove
-//     sub_878100 on an accepted tiny-retarget, latch cleared after one
-//     resend in sub_878410) — never a per-frame repeat, so the fastest
+//     client 878100 on an accepted tiny-retarget, latch cleared after one
+//     resend in client 878410) — never a per-frame repeat, so the fastest
 //     sustained rate stays human click-spam at ~8-10/s plus stragglers.
 //   - 0x72CF steer / 0x72F5 stop while a direction walk runs: the drift
 //     correction of CNavigationDeadreckon_UpdateMovementHeading re-arms

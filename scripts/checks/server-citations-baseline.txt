@@ -1,8 +1,6 @@
 # Server Go files that still cite the reference server by name or address (#1701, #1883).
 # Format: `<path> <count>`. This ledger may only shrink; run
 # `node scripts/checks/check_server_citations.mjs --update` after rewording a file.
-apps/server/internal/agent/api/agentapi.go 6
-apps/server/internal/agent/publicstats/views.go 1
 apps/server/internal/agent/server/client_incident_test.go 2
 apps/server/internal/data/store/character_lifecycle.go 4
 apps/server/internal/data/store/db_write.go 1
@@ -12,27 +10,6 @@ apps/server/internal/domain/quickslot.go 2
 apps/server/internal/game/combat/durability.go 1
 apps/server/internal/game/combat/formula.go 4
 apps/server/internal/game/combat/stats.go 2
-apps/server/internal/game/enterworld/pk_entry_test.go 1
-apps/server/internal/game/enterworld/register.go 2
-apps/server/internal/game/enterworld/response.go 6
-apps/server/internal/game/enterworld/siegeforge.go 3
-apps/server/internal/game/enterworld/skill_cast_lifecycle.go 5
-apps/server/internal/game/enterworld/skillabnormal_efr_test.go 1
-apps/server/internal/game/enterworld/skillassist.go 2
-apps/server/internal/game/enterworld/skillcatalogue.go 5
-apps/server/internal/game/enterworld/skillconcealment.go 2
-apps/server/internal/game/enterworld/skillencoded.go 8
-apps/server/internal/game/enterworld/skillnameattack.go 2
-apps/server/internal/game/enterworld/skillthreatdecrease.go 1
-apps/server/internal/game/enterworld/spawnskillparams.go 1
-apps/server/internal/game/enterworld/spawnskills_test.go 3
-apps/server/internal/game/enterworld/stallnetwork.go 7
-apps/server/internal/game/enterworld/stallnetwork_test.go 1
-apps/server/internal/game/enterworld/starterkit.go 1
-apps/server/internal/game/enterworld/stonefamily.go 7
-apps/server/internal/game/enterworld/stonefamily_test.go 2
-apps/server/internal/game/enterworld/wire.go 23
-apps/server/internal/game/enterworld/wire_skills_test.go 3
 apps/server/internal/game/item/alchemy/avatar.go 2
 apps/server/internal/game/item/alchemy/stones.go 1
 apps/server/internal/game/item/commerce/catalog.go 1
@@ -235,4 +212,3 @@ apps/server/internal/game/world/simulation/spatial.go 3
 apps/server/internal/game/world/simulation/spatial_test.go 7
 apps/server/internal/game/world/skillobject/publication.go 1
 apps/server/internal/game/world/skillobject/registry.go 1
-apps/server/internal/transport/ratelimit.go 2
