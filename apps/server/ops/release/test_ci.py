@@ -95,18 +95,20 @@ class CiTests(unittest.TestCase):
 		self.assertEqual(self.sent, [json.loads(Path("operation.json").read_text())["nonce"]])
 
 	# ================
-	# test_confirm_and_revert_use_the_publication_key_without_evidence
+	# test_confirm_revert_and_resume_use_the_publication_key_without_evidence
 	#
 	# Evidence goes through the staging key (evidence), never with confirm.
-	# Both echo the operation's nonce, from operation.json or --nonce.
+	# All three echo the operation's nonce, from operation.json or --nonce.
 	# ================
-	def test_confirm_and_revert_use_the_publication_key_without_evidence(self):
+	def test_confirm_revert_and_resume_use_the_publication_key_without_evidence(self):
 		Path("operation.json").write_text(json.dumps({"nonce": "a" * 32}))
 		self.run_command("confirm")
 		self.run_command("revert", "--reason", "smoke failed", "--nonce", "b" * 32)
+		self.run_command("resume")
 		self.assertEqual(self.sent, [
 			("publish", {"operation": "confirm-coordinated", "nonce": "a" * 32}),
 			("publish", {"operation": "revert-coordinated", "reason": "smoke failed", "nonce": "b" * 32}),
+			("publish", {"operation": "resume-coordinated", "nonce": "a" * 32}),
 		])
 
 	# ================

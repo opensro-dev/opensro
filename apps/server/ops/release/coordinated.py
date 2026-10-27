@@ -15,6 +15,9 @@ own, and published here in one journaled operation:
 	confirm  - the browser smoke that ran against the live pair passed and the
 	           stage key recorded its evidence; both generations advance
 	revert   - restore the retained client, then redeploy the retained server
+	resume   - a revert that failed with the candidate server still live and
+	           the retained client back returns to "verifying" with the
+	           candidate client; fresh evidence must still follow (confirm)
 
 A maintenance pair (both candidates built with --maintenance) runs the same
 three steps inside a closed window: publish first closes the gate, so the
@@ -309,6 +312,49 @@ def revert_request(config, request, verify=check_entry):
 	reason = bounded_reason(request.get("reason"), "revert")
 	authorize(config, request, "revert")
 	return revert(config, reason, verify)
+
+
+# ================
+# resume
+#
+# The publication key's forward way out of a failed revert. The failed
+# revert restored the retained client but could not redeploy the retained
+# server, so the candidate server is still the live one: reinstall the
+# candidate client and return to verifying. The publisher then records
+# fresh evidence and confirms (evidence from before the resume predates
+# the phase, and confirm refuses it). Anything else - the retained
+# server live again, a live client the revert did not restore, an open
+# maintenance gate - is an operator's state, not a resume.
+# ================
+def resume(config, request, verify=check_entry):
+	authorize(config, request, "resume")
+	state = read_state(config["production_state"])
+	operation = open_operation(state)
+	if operation["phase"] != "revert-failed":
+		raise ValueError("the coordinated release is not in a failed revert")
+	client_id = operation["client"]["candidate"]
+	if json.loads((Path(config["module"]) / "release.json").read_text())["commit"] != operation["server"]["commit"]:
+		raise RuntimeError("live server is not the release being resumed")
+	# approved_client refuses while the live client is anything but the
+	# retained production client the failed revert restored.
+	client = approved_client(config, client_id, state)
+	entry = digest(client["new"] / "index.html")
+	if entry != operation["client"].get("entrySha256"):
+		raise ValueError("staged client entry differs from the journal")
+	if operation.get("maintenance") and not (Path(config["module"]) / deploy.MAINTENANCE_GATE).is_file():
+		raise ValueError("the maintenance gate is not closed")
+	try:
+		install_client(config, client)
+		verify(config["origin"], entry)
+	except Exception:
+		restore_client(config, client, verify)
+		raise
+	operation.setdefault("resumes", []).append({"at": time.time()})
+	enter(config, state, VERIFYING)
+	deploy.alert_staff(config, "Coordinated release " + operation["server"]["commit"] +
+		" resumed to verifying after a failed revert")
+	return {"phase": VERIFYING, "server": operation["server"], "client": operation["client"],
+		"maintenance": bool(operation.get("maintenance"))}
 
 
 # ================
