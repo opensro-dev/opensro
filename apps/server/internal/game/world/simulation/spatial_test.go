@@ -1,4 +1,4 @@
-// Wire expectations corrected from native 852F80 -> 8535A0 (+pi/2), 2026-09-12.
+// Wire expectations corrected from client 852F80 -> 8535A0 (+pi/2), 2026-09-12.
 package simulation
 
 import (
@@ -23,7 +23,7 @@ func headingWordCircularDelta(a, b uint16) int {
 
 // Pin cardinal and diagonal wire bearings independently of producer callers.
 // Native model yaw is atan2(dx,-dz); serializer 853550 subtracts pi/2.
-// Spawn decoder 852F80 calls 8535A0 to restore that offset.
+// The client's spawn decoder 852F80 calls 8535A0 to restore that offset.
 func TestHeadingWordFromDeltaUsesNativeYawConvention(t *testing.T) {
 	// 65535 word units per circle, so one eighth is 8191.875.
 	for _, tc := range []struct {
@@ -70,7 +70,7 @@ func TestHeadingWordFromDeltaDependsOnlyOnDirection(t *testing.T) {
 //
 // WHY THERE ARE STILL TWO. HeadingWordFromRadians (moverequest.go) TRUNCATES
 // toward zero because it replicates the CLIENT's 0x7738 request serializer,
-// sub_877cc0 @0x877ceb, where the x87 rounding control is forced to truncate;
+// client sub_877cc0 @0x877ceb, where the x87 rounding control is forced to truncate;
 // that pin covers the C->S direction only. headingWordFromDelta ROUNDS, which is
 // what the parity oracle and the human-verified BUG-11 fix already emit on the
 // S->C side. How the retail SERVER converted radians into the S->C heading word
@@ -81,7 +81,7 @@ func TestHeadingWordFromDeltaDependsOnlyOnDirection(t *testing.T) {
 // What CAN be asserted is that the disagreement stays inside one word unit
 // (1/65535 of a circle, 0.0055 degrees - below the resolution of the client's
 // own float32 parse, RadiansFromHeadingWord). Provably the bound is exactly 1:
-// the rad->deg constant 57.295780181884766 (qword @0xc13df8) sits a hair above
+// the rad->deg constant 57.295780181884766 (client qword @0xc13df8) sits a hair above
 // the exact 180/pi, so the truncating form evaluates trunc(v*(1+1.17e-8)) where
 // the rounding form evaluates round(v); those differ by 1 whenever the
 // fractional part reaches 0.5 and by 0 otherwise. So this is NOT a loose

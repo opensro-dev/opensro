@@ -400,7 +400,7 @@ WalkableSpawnHeightAt
 WalkableSpawnHeightAt resolves a radius-generated monster position against the
 native surface nearest the nest's authored Y. Terrain is only eligible when its
 nav tile is walkable; a containing object-nav cell may win the same nearest-Y
-arbitration used by sub_403d20 even when the terrain below it is blocked
+arbitration used by client sub_403d20 even when the terrain below it is blocked
 (bridges, platforms, and elevated quest arenas).
 
 The plane that owns the region answers (plane_lookups.go): the outdoor

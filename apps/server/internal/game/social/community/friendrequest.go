@@ -5,12 +5,12 @@ friendrequest.go - the friend request: ask the target, then add on consent
 
 Native v1.150 adds a friend only with the other player's consent:
 
-	requester  C->S 0x7164 {name}                    (sub_704590)
+	requester  C->S 0x7164 {name}                    (client NetClient_Send7164)
 	target     S->C 0x7164 {u32 jid, u32 serial, name} -> confirm box 0x23
-	                                                   (CPSMission 760C90)
+	                                                   (client CPSMission_OnFriendInviteReq0x7164)
 	target     C->S 0x3012 {u32 jid, u32 serial, u8 accept}
-	                                                   (OnMsgBoxResult, 701A50)
-	requester  S->C 0xB164 {u8 1} or {u8 2, u8 code[, ...]} (760AF0)
+	                                                   (client NetClient_SendConfirmation3012AndClearUIState)
+	requester  S->C 0xB164 {u8 1} or {u8 2, u8 code[, ...]} (client CPSMission_OnFriendInviteResponse0xB164)
 
 The checks and their codes are the reference server's: the game server's
 friend add and the shard manager's request job, whose error
@@ -42,7 +42,8 @@ import (
 // OpFriendInviteAnswer is the requester's result (S->C 0xB164).
 const OpFriendInviteAnswer uint16 = 0xB164
 
-// OpFriendDeleteAnswer is the delete result (S->C 0xB5DB, 75CE90).
+// OpFriendDeleteAnswer is the delete result (S->C 0xB5DB, client
+// CPSMission_OnFriendDeleteResponse0xB5DB).
 const OpFriendDeleteAnswer uint16 = 0xB5DB
 
 // FriendConsentLength is the 0x3012 consent body: u32 jid, u32 serial,
@@ -58,7 +59,7 @@ const FriendAnswerWindow = 30 * time.Second
 // FriendNameMaxLength is the native friend add's name bound (1..0x20).
 const FriendNameMaxLength = 0x20
 
-// 0xB164 result bytes (760AF0).
+// 0xB164 result bytes (client CPSMission_OnFriendInviteResponse0xB164).
 const (
 	friendResultOK    uint8 = 1
 	friendResultError uint8 = 2
@@ -77,7 +78,8 @@ const (
 	FriendErrTargetListFull uint8 = 0x0F // target list at 20
 )
 
-// Sub-reasons of FriendErrConsent (760AF0).
+// Sub-reasons of FriendErrConsent (client
+// CPSMission_OnFriendInviteResponse0xB164).
 const (
 	friendConsentRefused   uint8 = 0
 	friendConsentCancelled uint8 = 2

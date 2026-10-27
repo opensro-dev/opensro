@@ -8,10 +8,11 @@
 //
 // Every opcode number and byte layout here is pinned from the v1.150
 // CLIENT (the community package rule): the S->C 0x31ED grammar is the
-// registered handler sub_75c1d0 (registered @0x0074e5fa..0x0074e60a)
-// plus the SQuestInfo deserializer sub_788210 it drives; the two C->S
-// bodies are the composers sub_6ffcd0 (0x71EB) and sub_6ffc10 (0x729A),
-// each a bare 4-byte refId append (sub_4c3cf0(&refId, 4)). v1.188/
+// registered handler CPSMission_OnNetProcessInLog0x31ED plus the
+// SQuestInfo deserializer SQuestInfo_Deserialize it drives; the two
+// C->S bodies are the composers NetClient_Send71EB (0x71EB) and
+// NetClient_Send729A (0x729A), each a bare 4-byte refId append
+// (CMsgStreamBuffer_AppendBytes(&refId, 4)). v1.188/
 // DuckSoup opcode numbers never cross the boundary - their 0x7515 is a
 // different packet entirely in v1.150 (the hosted interaction sender).
 package quest
@@ -25,36 +26,39 @@ import (
 
 // C->S opcodes, pinned from the client composers.
 const (
-	// OpQuestGiveUpRequest is the give-up composer sub_6ffcd0
-	// (@0x006ffcfc opcode 0x71eb, @0x006ffd3d the 4-byte refId append):
-	// reached from the CIFQuestReward agreement box's Yes arm
-	// (sub_5c1e20 @0x005c1e91, both confirm "types" 0x64/0x65).
+	// OpQuestGiveUpRequest is the give-up composer NetClient_Send71EB
+	// (opcode 0x71eb, then the 4-byte refId append): reached from the
+	// CIFQuestReward agreement box's Yes arm (CIFQuestReward_ConfirmGiveUp,
+	// both confirm "types" 0x64/0x65).
 	OpQuestGiveUpRequest uint16 = 0x71EB
-	// OpQuestRewardRequest is the reward-select composer sub_6ffc10
-	// (@0x006ffc3c opcode 0x729a, @0x006ffc7d the 4-byte refId append):
+	// OpQuestRewardRequest is the reward-select composer
+	// NetClient_Send729A (opcode 0x729a, then the 4-byte refId append):
 	// reached from the CIFQuestReward action button's kind-2 arm
-	// (sub_5c2440 @0x005c2465).
+	// (CIFQuestReward_ConfirmReward).
 	OpQuestRewardRequest uint16 = 0x729A
 )
 
 // OpQuestUpdate is the S->C mid-session quest channel 0x31ED (client
-// handler sub_75c1d0): [u8 op][u32 questRefId], then per op below.
+// handler CPSMission_OnNetProcessInLog0x31ED): [u8 op][u32 questRefId],
+// then per op below.
 const OpQuestUpdate uint16 = 0x31ED
 
-// The sub_75c1d0 op bytes (`switch (op - 1)` @0x75c21b; op 0 and op > 4
-// fall to the plain return @0x75c340 - never compose them).
+// The CPSMission_OnNetProcessInLog0x31ED op bytes (its
+// `switch (op - 1)`; op 0 and op > 4 fall to the plain return - never
+// compose them).
 const (
-	// QuestUpdateOpInsert (op 1 @0x75c22e): a full SQuestInfo body
-	// follows; the client ctor-defaults then REAL-deserializes it and
-	// inserts registry record + quest-window row (sub_67b110).
+	// QuestUpdateOpInsert (op 1): a full SQuestInfo body follows; the
+	// client ctor-defaults then REAL-deserializes it and inserts
+	// registry record + quest-window row (CGInterface_OnQuestInserted).
 	QuestUpdateOpInsert uint8 = 1
-	// QuestUpdateOpUpdate (op 2 @0x75c2a3): the same body, re-deserialized
-	// IN PLACE over the registry record found by refId (sub_787fd0). A
-	// miss is a native null-deref - never emit op 2 for a quest this
-	// server has not inserted (or seeded through the 0x32B3 section 2).
+	// QuestUpdateOpUpdate (op 2): the same body, re-deserialized IN
+	// PLACE over the registry record CQuestDataManager_FindQuestInfo
+	// finds by refId. A miss is a native null-deref - never emit op 2
+	// for a quest this server has not inserted (or seeded through the
+	// 0x32B3 section 2).
 	QuestUpdateOpUpdate uint8 = 2
 	// QuestUpdateOpComplete / QuestUpdateOpAbandon (ops 3 and 4) land on
-	// the SAME client leg (@0x75c30f): row remove + tracked-id clear +
+	// the SAME client leg: row remove + tracked-id clear +
 	// registry erase + completed-list append. The split is OUR declared
 	// choice (see runtime.go): op 3 is emitted for a reward turn-in,
 	// op 4 for a give-up - client-identical, but the byte preserves the
@@ -89,7 +93,8 @@ func appendWireString(w *wire.Writer, value string) {
 }
 
 // AppendQuestInfoBody appends one SQuestInfo wire body (client
-// deserializer sub_788210) - the EXACT emission bootstrap/wire.go runs
+// deserializer SQuestInfo_Deserialize) - the EXACT emission
+// bootstrap/wire.go runs
 // for the 0x32B3 section 2, kept rule-for-rule in sync (the Go test
 // TestQuestInfoBodyMatchesEnterStreamSectionTwo cross-pins the two):
 //
@@ -125,7 +130,7 @@ func AppendQuestInfoBody(w *wire.Writer, record enterworld.ActiveQuestRecord) {
 			appendWireString(w, node.Description)
 			if node.ObjectiveSentinel {
 				// The 0xFF count sentinel: NO value array bytes
-				// (sub_785c60 @0x785d03 wrap).
+				// (SQuestContents_Deserialize wrap).
 				w.U8(0xff)
 				continue
 			}

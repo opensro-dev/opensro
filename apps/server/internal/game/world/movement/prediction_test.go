@@ -182,7 +182,7 @@ func TestPredictionErrorCodeClosedSet(t *testing.T) {
 		{"malformedHeadingRequest len=2", "malformedMovementRequest"},
 		{"invalidHeadingRequest len=2", "malformedMovementRequest"},
 		{"unsupportedNativeMoveOpcode 0x7738", "malformedMovementRequest"},
-		{"unsupportedMovementMode 0x7F (sub_877cc0 emits only 0 angular / 1 positional)", "unsupportedMovementMode"},
+		{"unsupportedMovementMode 0x7F (the client serializer emits only 0 angular / 1 positional)", "unsupportedMovementMode"},
 		{"a refusal nobody has named yet", "movementRefused"},
 	} {
 		if got := predictionErrorCode(tc.reason); got != tc.want {

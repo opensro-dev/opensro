@@ -50,7 +50,7 @@ type MonsterRef struct {
 	// cascade classifies on. ARBITER-CLOSED (RZ seq42 gate + seq234
 	// column ruling): the binary selects CLASS_CICMONSTER iff
 	// (W & 0x7FE) == 0x0C6, W = word[RefObj+0] via
-	// CGlobalDataManager::GetTIDFromObjectID (sub_7efef0). Every row this
+	// CGlobalDataManager::GetTIDFromObjectID (client sub_7efef0). Every row this
 	// loader classifies as a monster packs to exactly 0x00C6 (bit0 and
 	// bits11-15 are never set by the packer), the canonical value for
 	// create-row/refObjSnapshot emission.
@@ -155,7 +155,7 @@ type MonsterRef struct {
 	// v1.188 server data.
 	WalkSpeed float64
 	RunSpeed  float64
-	// ScaleDenom is the third scalar consumed by sub_85fb20 (column 48).
+	// ScaleDenom is the third scalar consumed by client sub_85fb20 (column 48).
 	// It varies across the shipped roster and must remain per monster.
 	ScaleDenom float64
 	// BodyRadius is RefObjChar BCRadius (column 50, record+0xEE). The retail
@@ -169,7 +169,7 @@ type MonsterRef struct {
 // SRV seq26's favour): col 8 = char/bionic bit; cols 9/10/11 feed the
 // 0x1C / 0x60 / 0x780 gate bands; col 11 is the monster(1)/NPC(2)
 // discriminator, UNIQUELY forced by the two binary gates (monster
-// @0x851484 wants 0x080, NPC @0x808a9b wants 0x100) crossed with the two
+// client @0x851484 wants 0x080, NPC client @0x808a9b wants 0x100) crossed with the two
 // shipped rows. col 12 (TID4) is NOT consumed by the classification
 // gates.
 const (
@@ -243,9 +243,10 @@ func tidWordFromColumns(charBit, tid1, tid2, tid3 uint16) uint16 {
 ==================
 monsterTidGate
 
-monsterTidGate is the exact sub_851420 CLASS_CICMONSTER selection,
+monsterTidGate is the exact GIDObject_SelectRuntimeClassAndSpawn (client 851420)
+CLASS_CICMONSTER selection,
 binary-proven and arbiter-confirmed (RZ seq42 gate + seq234 re-read):
-four cmp gates @0x851460/0x85146b/0x851475/0x851484 combine to
+four cmp gates (client @0x851460/0x85146b/0x851475/0x851484) combine to
 (W & 0x7FE) == 0x0C6 (bit0 and bits11-15 are don't-care). Over the
 confirmed packing this admits rows with (TID1=1, TID2=2, TID3=1) - the
 admit-set RZ seq234 names as binding for the SRV filter.
@@ -327,7 +328,7 @@ func parseMonsterRefTables(textdataDir string, tables [][][]string) map[uint32]M
 	refs := make(map[uint32]MonsterRef)
 	rides := loadMonsterRideMetadata(textdataDir)
 	// Every characterdata codename, served or not: the characterInfo default
-	// is the first record naming a known reference (91B7E0).
+	// is the first record naming a known reference (client 91B7E0).
 	known := make(map[string]bool)
 	// textdataname.txt is the shipped symbol table: fields[1] is the
 	// SN_* symbol and fields[8] is English. This is the same column contract
@@ -548,10 +549,10 @@ type characterInfoRides struct {
 ================
 resolve
 
-CharacterInfo_FindByRefThenOriginalThenDefault (9171B0): the reference's
+CharacterInfo_FindByRefThenOriginalThenDefault (client 9171B0): the reference's
 own record, else its original reference's (characterdata column 4, the
 OrgObjCodeName at +0x5C), else the default, the first record in file order
-whose codename names a known reference (91B7E0). The unique encounters'
+whose codename names a known reference (client 91B7E0). The unique encounters'
 _L2/_L3 variants have no record of their own and ride their base's mount.
 The bake's media resolver (buildNpcModelAssets characterInfoResolver)
 follows the same chain and refuses any drift.
@@ -601,9 +602,9 @@ loadMonsterRideMetadata
 
 loadMonsterRideMetadata projects the complete native ride contract from
 skilleffect.txt. The enum values are executable-authored (the static table
-consumed by sub_916700 at 0xf091fc): none=0, RT_FIXED=1, RT_DUMMY=2.
+consumed by client sub_916700 at 0xf091fc): none=0, RT_FIXED=1, RT_DUMMY=2.
 Unknown tokens are rejected rather than silently inventing a transform.
-Records with no ride are kept: they end the 9171B0 lookup.
+Records with no ride are kept: they end the client 9171B0 lookup.
 ==================
 */
 func loadMonsterRideMetadata(textdataDir string) characterInfoRides {
@@ -655,7 +656,7 @@ Records the ride of one characterInfo row under every name it covers.
 */
 func (r *characterInfoRides) register(codename string, ride monsterRideMetadata) {
 	for _, name := range characterInfoCodenames(codename) {
-		// 91B7E0 overwrites a repeated record; its place in the default
+		// client 91B7E0 overwrites a repeated record; its place in the default
 		// search stays where the name first appeared.
 		if _, known := r.byCodename[name]; !known {
 			r.order = append(r.order, name)

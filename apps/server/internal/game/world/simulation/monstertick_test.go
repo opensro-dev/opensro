@@ -964,8 +964,8 @@ func TestSettleCorrectionMatchesTheGoalTheClientWasGiven(t *testing.T) {
 
 // TestHeadingWordTowardUsesNativeYawConvention pins BUG-11's root cause.
 //
-// Native yaw 0 faces -z: Math_YawToDirVec (sub_8788c0) is
-// {sin(yaw), 0, -cos(yaw)}, and Math_DirVecToYaw (sub_8791a0) inverts it as
+// Native yaw 0 faces -z: Math_YawToDirVec (client sub_8788c0) is
+// {sin(yaw), 0, -cos(yaw)}, and Math_DirVecToYaw (client sub_8791a0) inverts it as
 // acos(-z/len) mirrored for x<0 - algebraically Atan2(dx, -dz).
 //
 

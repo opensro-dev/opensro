@@ -33,8 +33,9 @@ func invitePayload(targetRef uint32) []byte {
 }
 
 // TestDecodeInviteRequest pins the 0x76B1 strict decoder
-// {u32 targetRef} (the sub_702c90 composer shape - exactly 4 bytes
-// appended @0x00702e1b): short, empty and trailing-byte payloads error.
+// {u32 targetRef} (the NetClient_SendTargetCommand702C90 composer
+// shape - exactly 4 bytes appended): short, empty and trailing-byte
+// payloads error.
 func TestDecodeInviteRequest(t *testing.T) {
 	t.Parallel()
 	got, err := DecodeInviteRequest(invitePayload(42))
@@ -72,8 +73,9 @@ func (o *campOracle) zeros(n int) {
 	}
 }
 
-// memberRowOracle appends one member row in the pinned sub_773c60 case-1
-// / sub_8290e0 read order: {u32 discarded}{u32 memberId}{u32 f08}
+// memberRowOracle appends one member row in the pinned
+// CNetProcess_OnNotification0x3AC5 case-1 /
+// CTrainingCampData_ReadRoster read order: {u32 discarded}{u32 memberId}{u32 f08}
 // {str name}{u8 kind}{u8 b46}{16-byte blob}{u8 b58}{u8 level59}{u32 f5c}
 // {u8 b74}{u32 f78}{u16 x4 coords}{str location}.
 func memberRowOracle(o *campOracle, row MemberWireRow) {
@@ -97,9 +99,10 @@ func memberRowOracle(o *campOracle, row MemberWireRow) {
 }
 
 // TestEncodeInvitePrompt3393 pins the S->C type-9 prompt bytes the
-// sub_7644e0 IDCLOSE arm reads (@0x00764625): {u8 9, u32 inviterGid,
-// u16-len ANSI inviterName} little-endian - the name rides the WIRE
-// (sub_4b1710 @0x0076466d), unlike the party/guild arms.
+// CPSMission_OnConfirmBoxPrompt0x3393 IDCLOSE arm reads: {u8 9, u32
+// inviterGid, u16-len ANSI inviterName} little-endian - the name
+// rides the WIRE (CMsgStreamBuffer_ReadAsciiString), unlike the
+// party/guild arms.
 func TestEncodeInvitePrompt3393(t *testing.T) {
 	t.Parallel()
 	got := EncodeInvitePrompt3393(0x000186A1, "Chun")
@@ -110,7 +113,8 @@ func TestEncodeInvitePrompt3393(t *testing.T) {
 }
 
 // TestEncodeCampNotice3AC5 pins the status-10 sub-2 category-0x1D notice
-// carrier (sub_773c60 case 9 sub 2 @0x00774d66 reads ONE code byte):
+// carrier (CNetProcess_OnNotification0x3AC5 case 9 sub 2 reads ONE
+// code byte):
 // {u8 10}{u8 2}{u8 code}.
 func TestEncodeCampNotice3AC5(t *testing.T) {
 	t.Parallel()
@@ -120,8 +124,9 @@ func TestEncodeCampNotice3AC5(t *testing.T) {
 }
 
 // TestEncodeCampJoinRow3AC5 pins the status-2 joining-member push against
-// the hand-rolled oracle (sub_773c60 case 1 @0x00773cd0 -> the REAL
-// sub_827890 member add).
+// the hand-rolled oracle (CNetProcess_OnNotification0x3AC5 case 1
+// -> the real CCharacterDependentData_InsertAcademyMemberRecord
+// member add).
 func TestEncodeCampJoinRow3AC5(t *testing.T) {
 	t.Parallel()
 	row := MemberWireRow{MemberID: 0x000186A5, Name: "Doran", Kind: MemberKindStudent, LevelByte58: 23, Level: 23}
@@ -134,8 +139,10 @@ func TestEncodeCampJoinRow3AC5(t *testing.T) {
 }
 
 // TestEncodeCampSeed3AC5 pins the status-10 sub-1 seed against the
-// hand-rolled oracle (sub_773c60 case 9 sub 1 @0x00774cdb: sub_823050
-// reset, sub_82aa10 header, sub_8290e0 counted roster): {u8 10}{u8 1}
+// hand-rolled oracle (CNetProcess_OnNotification0x3AC5 case 9
+// sub 1: CPSMission_Calls_PartyManager_Shutdown reset,
+// CTrainingCampData_ReadCampRecord header,
+// CTrainingCampData_ReadRoster counted roster): {u8 10}{u8 1}
 // {u32 localMemberId}{16-byte blob}{u8 status}{str subject}{str contents}
 // {u8 count}{rows}.
 func TestEncodeCampSeed3AC5(t *testing.T) {
@@ -202,7 +209,8 @@ func TestInvitePendingTable(t *testing.T) {
 // refuse consuming the invitation (the notice leg resolves the OFFLINE
 // inviter to nobody and emits nothing), and the forged not-quite-accept
 // shapes refusing rather than committing. NOTE the refuse code byte is
-// 0x00 (sub_68c4c0 case 7 @0x0068ca67), NOT the guild arm's 0x16.
+// 0x00 (CGInterface_DispatchSimpleMessageBoxResult case 7), NOT the
+// guild arm's 0x16.
 func TestApplyConsentWithoutCommit(t *testing.T) {
 	t.Parallel()
 	const division = "global-official"

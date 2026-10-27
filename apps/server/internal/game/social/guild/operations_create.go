@@ -47,7 +47,8 @@ func refusedCreateCode(reason string, code byte) CreateOutcome {
 // retail create answer was ever captured - so they are documented
 // DECISIONS: guild level 1, GP 0, empty notice subject and contents,
 // crestParam 0, byte10 0; leader grade 0 (grade 0 = leader-name publish
-// per the sub_826610 fold), level = the character's persisted level,
+// per the client SGuildData_ReadGuildBlock_826610 fold), level = the
+// character's persisted level,
 // donatedGP 0, permMask LeaderPermMask (full permissions for the
 // founder), dwords 0, empty grantName, refObjID = the character's model
 // ref (the same CharacterModelRef chain the letter lane stamps on

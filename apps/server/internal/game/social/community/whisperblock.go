@@ -9,11 +9,13 @@ import (
 
 // WhisperBlockOutcome is one handled 0x766F request. Applied reports
 // whether the list changed; Refusal carries the log-only reason when it
-// did not. Ack is the 0xB66F body to answer with (sub_771550 - the
-// client applies a result-0 add/remove to the blocking panel LIVE and
+// did not. Ack is the 0xB66F body to answer with
+// (CPSMission_OnAliasActionResponse0xB66F - the client applies a
+// result-0 add/remove to the blocking panel LIVE and
 // msgboxes results 1/2/3); a nil Ack stays SILENT on the wire (decode
 // refusals and identity guards only). The enter-world chunk C
-// (sub_77ad10) remains the reseed channel.
+// (client CPSMission_ReadBlockedWhispererList) remains the reseed
+// channel.
 type WhisperBlockOutcome struct {
 	Applied      bool
 	BlockedCount int
@@ -45,7 +47,8 @@ func refusedWhisperBlock(reason string) WhisperBlockOutcome {
 // convention.
 //
 // NOT enforced here on purpose: charset validation. Retail's charset
-// gate is CLIENT-side (sub_790900); the server relies on existence -
+// gate is CLIENT-side (client CStringCheck_IsAllowedName); the server
+// relies on existence -
 // junk that no character carries fails as "does not exist" {1,2}.
 func HandleWhisperBlock(deps Dependencies, divisionID string, character *enterworld.Character, payload []byte) WhisperBlockOutcome {
 	if character == nil {
@@ -69,8 +72,8 @@ func HandleWhisperBlock(deps Dependencies, divisionID string, character *enterwo
 		// shard's prefix gate (whose SQL return remapped to the same
 		// wire 2) could never change an observable outcome, and the
 		// v1.150 client dump has no "[GM]" name-prefix rule at all
-		// (its "[GM]" is UIIT_STT_GM_MARK, a render-time display mark,
-		// sub_6d6880 @006d68b7).
+		// (its "[GM]" is UIIT_STT_GM_MARK, a render-time display mark
+		// in the client).
 		targetExists = findCharacterByName(deps, divisionID, request.Name) != nil
 	}
 
@@ -180,10 +183,10 @@ func HandleWhisperBlock(deps Dependencies, divisionID string, character *enterwo
 				return false
 			}
 			// Echo the STORED string, not the request's casing: the
-			// client's erase-by-name is CASE-SENSITIVE (sub_61f2e0
-			// @0061f3a2-0061f3a8 compares raw UTF-16 code units, no
-			// _wcsicmp; the mode-1 duplicate walk sub_4a8a90 ->
-			// sub_4a8560 @004a8577 is likewise raw), so the ack must
+			// client's erase-by-name is CASE-SENSITIVE (the client's
+			// erase compares raw UTF-16 code units, no _wcsicmp; the
+			// mode-1 duplicate walk std_wstring_compare_substring ->
+			// std_char_traits_wchar_compare is likewise raw), so the ack must
 			// carry the exact casing the panel row displays or the
 			// erase misses and a phantom row survives until the next
 			// enter-world reseed.

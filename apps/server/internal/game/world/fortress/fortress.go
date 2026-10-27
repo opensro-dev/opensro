@@ -6,7 +6,7 @@ fortress.go - who holds each fortress, and whether its war is running
 Package fortress is the fortress-manager state the rest of the server asks
 about a fortress: the occupying guild (_SiegeFortress.GuildID), the guild
 holding it temporarily during a war (TempGuildID), and the war mode the
-entry rules branch on (MainProcess_IsMode42425). It owns no wire and no
+entry rules branch on. It owns no wire and no
 schedule; the war lane drives it through its functions.
 
 A fresh shard has every fortress unoccupied and no war running, which is
@@ -29,7 +29,7 @@ import (
 ================
 Record
 
-One fortress row: the CRefSiegeFortress identity joined to its live state.
+One fortress row: the authored fortress identity joined to its live state.
 ================
 */
 type Record struct {

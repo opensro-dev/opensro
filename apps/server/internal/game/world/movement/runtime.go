@@ -354,7 +354,7 @@ Transport-free so tests drive it without a Hub; Register is the only
 glue.
 
 RUN/WALK - CLOSED ANSWER: the world's current mode times the travel.
-The native 0x7738 has no mode field (sub_877cc0 serializes only
+The native 0x7738 has no mode field (client sub_877cc0 serializes only
 region+xyz after the hasDestination byte). The browser DID send
 characterMovementMode on the JSON path, but its value is a closed loop
 with the server: seeded from the bootstrap spawn block, sent back
@@ -365,7 +365,7 @@ the request field always equals the server's stored mode and world-mode
 timing is behaviorally identical for every producible flow. When a real
 toggle lands, the native wire is a C->S toggle exchange answered by an
 0x3122 move-channel push for the local gid (S->C half RE-pinned:
-sub_777b60 -> sub_573b70 HUD icon refresh; the C->S opcode is not yet
+client sub_777b60 -> sub_573b70 HUD icon refresh; the C->S opcode is not yet
 pinned in the reconstruct evidence) - NOT a new field on 0x7738.
 ==================
 */
@@ -458,7 +458,7 @@ func (rt *Runtime) handleMoveLocked(divisionID string, character *enterworld.Cha
 	worldKey := admission.worldKey
 
 	// A new ground move supersedes any pickup approach in flight (native:
-	// the target-move latch clears on the next click command, sub_67b0e0).
+	// the target-move latch clears on the next click command, client sub_67b0e0).
 	// Reference order preserved: the latch clears BEFORE the movement body
 	// is even coerced, so a malformed or refused move still released it.
 	if rt.ClearPendingPickup != nil {

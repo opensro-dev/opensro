@@ -3,7 +3,7 @@
 
 rahid_chain.go - the Rahid chain (QNO_RM_OLDWOMAN_2..7) as curated contracts
 
-The v1.188 classes (CQNO_RM_OLDWOMAN_n) override their NPC talk, so the
+The chain's v1.188 compiled quest classes override their NPC talk, so the
 generator cannot project them. Each spec names the class behaviour it ports;
 Rahid 5's peaks live with the other tool quests (capture_specs.go) and
 Rahid 7's plain delivery is projected by the generator.

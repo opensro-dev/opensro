@@ -68,7 +68,8 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence, managers
 		online := func(name string) bool {
 			return presence != nil && presence.OnlineByName(divisionID, name)
 		}
-		// 5D2540's input belongs to the guild manager's create row: the
+		// The guild-create input (CIFNPCTalk_ShowGuildCreateInput)
+		// belongs to the guild manager's create row: the
 		// selected manager in range, as every guild manager request, before
 		// the create door commits anything.
 		if request, err := DecodeCreateRequest(payload); err == nil && managers != nil &&

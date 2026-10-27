@@ -59,7 +59,7 @@ func TestDungeonInterestRemainsOneRegionBlock(t *testing.T) {
 	other := DungeonRegionBit | 0x0103
 	outdoor := RegionIDForSectors(0x02, 0x01)
 	if !InterestVisible(RegionXZ{RegionID: dungeon, X: -5000, Z: 0}, RegionXZ{RegionID: dungeon, X: 9000, Z: 700}) {
-		t.Fatal("a dungeon region must remain one interest block until CRgnObject cells are recovered")
+		t.Fatal("a dungeon region must remain one interest block until the region-object cells are recovered")
 	}
 	if InterestVisible(RegionXZ{RegionID: dungeon}, RegionXZ{RegionID: other}) {
 		t.Fatal("distinct dungeon regions must not share interest")
