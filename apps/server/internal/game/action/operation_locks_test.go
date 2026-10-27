@@ -12,11 +12,14 @@ publication locks across recovered tick hook panics.
 package action
 
 import (
+	"sync"
 	"testing"
 	"time"
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/wait"
 )
 
 /*
@@ -136,7 +139,7 @@ func TestDivisionOperationLocksReleaseOnRecoveredTickPanic(t *testing.T) {
 	deps.panicNow = false
 	done := make(chan struct{})
 	go func() {
-		unlockPub := rt.LockPublication(testDivision)
+		unlockPub := rt.LockPublication(testDivision, "test")
 		unlockDiv := rt.lockDivision(testDivision)
 		unlockDiv()
 		unlockPub()
@@ -148,5 +151,49 @@ func TestDivisionOperationLocksReleaseOnRecoveredTickPanic(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("division or publication lock leaked after recovered tick panic")
+	}
+}
+
+/*
+================
+TestLockPublicationReportsSlowHoldsByLabel
+
+A hold at or above the slow threshold reports once, under the caller's
+label, and only once the gate is released; a shorter hold stays silent
+(#1820 E). This is the holder side of the tickPublicationGate wait.
+================
+*/
+func TestLockPublicationReportsSlowHoldsByLabel(t *testing.T) {
+	rt := &Runtime{}
+	type hold struct {
+		label   string
+		elapsed time.Duration
+	}
+	var mu sync.Mutex
+	var holds []hold
+	rt.PublicationHold = func(label string, elapsed time.Duration) {
+		mu.Lock()
+		holds = append(holds, hold{label, elapsed})
+		mu.Unlock()
+	}
+	reported := func() []hold {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]hold(nil), holds...)
+	}
+
+	rt.LockPublication(testDivision, "enterWorld")()
+	if got := reported(); len(got) != 0 {
+		t.Fatalf("a fast hold was reported: %v", got)
+	}
+	release := rt.LockPublication(testDivision, "enterWorld")
+	// While the gate is held nothing is reported; the report lands on
+	// release, once the next holder can already proceed.
+	wait.Consistently(t, 150*time.Millisecond, "no hold is reported while the gate is held", func() bool {
+		return len(reported()) == 0
+	})
+	release()
+	if got := reported(); len(got) != 1 || got[0].label != "enterWorld" || got[0].elapsed < simulation.SlowHookThreshold {
+		t.Fatalf("holds = %+v, want one slow enterWorld hold", got)
 	}
 }

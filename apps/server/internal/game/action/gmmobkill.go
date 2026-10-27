@@ -57,7 +57,7 @@ func (rt *Runtime) KillGMMonster(division, name string, gid uint32, rewards bool
 	if rt == nil || rt.deps == nil || rt.Monsters == nil {
 		return false
 	}
-	unlockPublication := rt.LockPublication(division)
+	unlockPublication := rt.LockPublication(division, "gmMobKill")
 	defer unlockPublication()
 	unlock := rt.lockDivision(division)
 	defer unlock()

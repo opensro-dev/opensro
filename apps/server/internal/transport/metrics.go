@@ -157,6 +157,10 @@ type Metrics struct {
 	SlowHooks   map[string]SlowHookStats `json:"slow_hooks"`
 	// Divisions whose own work in a tick ran >= 100 ms, by division ID.
 	SlowDivisions map[string]SlowHookStats `json:"slow_divisions"`
+	// PublicationHolds is each labelled publication-gate holder's slow
+	// holds (>= 100 ms, timing.go): who kept the gate longest, beside the
+	// slow steps that only waited on it.
+	PublicationHolds map[string]SlowHookStats `json:"publication_holds"`
 	// TickCommit counts the ticks' batched authority commits (timing.go);
 	// tick_phase_ms.commit is their flush time.
 	TickCommit TickCommitStats `json:"tick_commit"`

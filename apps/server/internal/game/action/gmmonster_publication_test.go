@@ -77,7 +77,7 @@ func TestGMMonsterRewardsCaptureEveryRecipientUnderPublication(t *testing.T) {
 				if replaceActor {
 					replaced, retained = gmGID, peerGID
 				}
-				unlock := f.rt.LockPublication(testDivision)
+				unlock := f.rt.LockPublication(testDivision, "test")
 				revisions[replaced]++
 				unlock()
 				for _, batch := range f.rt.drainMonsterLegRecipients() {

@@ -233,7 +233,7 @@ func RegisterEnterWorld(hub *transport.Hub, deps *Deps) {
 				division := resolveBootstrapDivision(deps, request.Division)
 				admission.ResolveDivisionID = func(string) string { return division }
 				if division != "" {
-					unlock := deps.LockPublication(division)
+					unlock := deps.LockPublication(division, "enterWorld")
 					defer unlock()
 				}
 			}

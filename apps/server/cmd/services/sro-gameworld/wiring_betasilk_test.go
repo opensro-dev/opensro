@@ -237,7 +237,7 @@ func TestBetaSilkWiringPublicationBarrier(t *testing.T) {
 					t.Fatal("beta hook leaked generic routing")
 				}
 			}
-			unlock := game.items.LockPublication(betaWiringDivision)
+			unlock := game.items.LockPublication(betaWiringDivision, "test")
 			var releaseGate sync.Once
 			t.Cleanup(func() { releaseGate.Do(unlock) })
 			entered, finishPush := make(chan struct{}), make(chan struct{})
@@ -270,7 +270,7 @@ func TestBetaSilkWiringPublicationBarrier(t *testing.T) {
 			var admitted atomic.Bool
 			go func() {
 				close(competingStarted)
-				release := game.items.LockPublication(betaWiringDivision)
+				release := game.items.LockPublication(betaWiringDivision, "test")
 				defer release()
 				admitted.Store(true)
 				var balance domain.MallBalance
