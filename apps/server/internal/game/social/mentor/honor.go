@@ -39,8 +39,8 @@ const (
 	OpTCHonorRankAnswer           uint16 = 0xB2D0
 )
 
-// Category-0x1D error codes (v1.188 GameServer low bytes; client
-// sub_689420 category 0x1D switch at 0x0068AFD0..0x0068B0DF).
+// Category-0x1D error codes (v1.188 server low bytes; the client
+// CGInterface_ShowSystemNotification category 0x1D switch).
 const (
 	ErrTCDead          uint8 = 0x07 // 0x6807 -> UIIT_MSG_TC_ERROR_DIE_PASSING
 	ErrTCNotInCamp     uint8 = 0x0B // 0x680B -> UIIT_MSG_TC_ERROR_TRAININGCAMP_NOTHING
