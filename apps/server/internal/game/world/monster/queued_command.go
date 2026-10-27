@@ -52,7 +52,7 @@ func DecodeAICommand(kind AICommandKind, payload []byte) (AICommand, error) {
 	return command, nil
 }
 
-// CommandInbox is CTactics +98: every kind replaces the same single slot.
+// CommandInbox is the tactics record's +98 slot: every kind replaces the same single slot.
 // Consumption leaves the generation unchanged; replacement advances it even
 // for an identical payload, so an old planner cannot consume a new command.
 type CommandInbox struct {

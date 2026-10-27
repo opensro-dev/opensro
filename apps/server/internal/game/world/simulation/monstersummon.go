@@ -134,7 +134,7 @@ func (s *MonsterState) createSummonLocked(state *divisionMonsterState, parent mo
 			childMover.Activity = monster.NewActivityCadence(uint32(nowMs), s.randomWord())
 			childMover.Pose.Heading = HeadingWordFromRadians(heading)
 			// The retail server's unique-summon tail: actual CSNM 11, mode 2 producer.
-			// The summon provenance alone is not the CTactics control binding.
+			// The summon provenance alone is not the tactics control binding.
 			if err := childMover.BindController(monster.ControlSummoned, parent.Gid); err != nil {
 				panic(err)
 			}
