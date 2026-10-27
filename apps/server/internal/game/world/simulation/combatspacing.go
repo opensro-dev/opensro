@@ -60,7 +60,7 @@ func (spacing CombatSpacing) AdmissionRadius() float64 {
 }
 
 // StandOffRadius is the inner approach radius, not the outer attack radius.
-// Research server 004ADB52..004ADBCA: reach >4 and <=10 subtracts 2;
+// The retail server: reach >4 and <=10 subtracts 2;
 // reach >10 uses 0.7 of reach for the inner radius, retaining full outer reach.
 // Both still include both bodies. Collapsing the two radii to a one-unit inset
 // makes walking targets outrun the margin between navigation ticks forever.

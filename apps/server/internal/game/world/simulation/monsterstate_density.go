@@ -54,7 +54,7 @@ populationCell
 ================
 */
 func populationCell(p Spawn) (densityCell, bool) {
-	// 53AD30: six 320-unit message cells per outdoor region axis.
+	// The retail server's message grid: six 320-unit message cells per outdoor region axis.
 	// A dungeon's region lookup uses a different owner, never this grid.
 	x, z, ok := worldgeom.OutdoorLocalCell(worldgeom.RegionXZ{RegionID: p.RegionID, X: p.X, Z: p.Z})
 	if !ok {
@@ -106,7 +106,7 @@ func (s *MonsterState) sampleHiveDensity(state *divisionMonsterState, players []
 			continue
 		}
 		h.ratePct = rate
-		// 560E70 writes +0C then calls 560E40 immediately. Last spawn
+		// The retail server writes +0C then calls its spawn-state setter immediately. Last spawn
 		// time is unchanged; only the interval and reduction are re-rolled.
 		for _, index := range members {
 			n, nest := state.nests[index], s.template.Nests[index]

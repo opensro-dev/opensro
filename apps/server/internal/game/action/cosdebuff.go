@@ -5,9 +5,9 @@ cosdebuff.go - a hostile debuff word held on a pet (COS)
 
 Port of the native arm Binary Ninja verified (opensro2, 2026-10-20):
 Vital Spot's terd/thrd word installs on a COS recipient through the same
-mode-2 install a monster takes (0x48D690, no recipient-class check), and
-the word write (0x594AC0) lands on the flat parameter channel (params 9
-and 0xB - evasion and hit rate). A monster keeps the pair in its target
+mode-2 install a monster takes (no recipient-class check), and the
+server's buff-modifier write lands on the flat parameter channel (params
+9 and 0xB - evasion and hit rate). A monster keeps the pair in its target
 effect slots; a player in the status registry; a pet keeps it here,
 beside the abnormal block registry (cosabnormal.go), in runtime state
 only: nothing persists, and the word dies with the summon instance that

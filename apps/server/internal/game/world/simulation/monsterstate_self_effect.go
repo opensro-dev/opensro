@@ -6,7 +6,7 @@ import (
 )
 
 // SelectConditionalSkill consumes a health entry before command admission,
-// in RefObjChar default-slot registration order (53F780/561A50). No RNG.
+// in RefObjChar default-slot registration order. No RNG.
 // No active archive scan: caller names the live actor it is deciding for.
 func (s *MonsterState) SelectConditionalSkill(division string, gid uint32) (uint32, bool) {
 	s.mu.Lock()

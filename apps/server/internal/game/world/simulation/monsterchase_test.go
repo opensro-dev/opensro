@@ -273,9 +273,9 @@ func TestMonsterMovementSourceTurnThresholdIsStrictlyGreaterThan45Degrees(t *tes
 ================
 TestOrdinarySquadApproachAdmitsCaravanBanditsAndSummonedMonsters
 
-0x0053FC00 installs CAITactics_PursueTargetWithDirectionGate (0x00548BE0)
-unconditionally in slot +0x114; Flags bits 0x04 and 0x80 replace only slot
-+0x100 (target check). Both caravan bandits (Flags 0x21E/0x29A) and summoned
+The retail server's tactics installer installs its direction-gated
+pursuit callback unconditionally in slot +0x114; Flags bits 0x04 and 0x80
+replace only slot +0x100 (target check). Both caravan bandits (Flags 0x21E/0x29A) and summoned
 monsters (SummonerGID != 0 without a full TacticsControls block) run the
 +0x114 squad approach and moving-target center-distance extension.
 ================
@@ -316,7 +316,7 @@ func TestOrdinarySquadApproachAdmitsCaravanBanditsAndSummonedMonsters(t *testing
 		"summoned monster":            summoned,
 	} {
 		if !ordinarySquadApproach(actor) {
-			t.Fatalf("%s excluded from ordinarySquadApproach (+0x114 0x00548BE0)", name)
+			t.Fatalf("%s excluded from ordinarySquadApproach (+0x114)", name)
 		}
 	}
 	for name, actor := range map[string]monster.Instance{
@@ -389,11 +389,12 @@ func TestOrdinarySquadApproachAdmitsCaravanBanditsAndSummonedMonsters(t *testing
 				t.Fatalf("chase frames = %+v, want one B738 guidance leg", frames)
 			}
 			_, _, x, _, z, _ := decodeGoalPayload(t, frames[0].Payload)
-			// Outdoor 0x00548BE0 assigns approach slot 6 and extends moving-target
-			// pursuit to actor-to-target center distance (1049, 990) rather than
-			// stopping one reach short on the center line (1036, 1000).
+			// The outdoor direction-gated pursuit assigns approach slot 6 and
+			// extends moving-target pursuit to actor-to-target center distance
+			// (1049, 990) rather than stopping one reach short on the center line
+			// (1036, 1000).
 			if x != 1049 || z != 990 {
-				t.Fatalf("moving-target pursuit goal = (%d, %d), want 0x00548BE0 slot-6 center-distance extension (1049, 990)", x, z)
+				t.Fatalf("moving-target pursuit goal = (%d, %d), want the direction-gated pursuit slot-6 center-distance extension (1049, 990)", x, z)
 			}
 		})
 	}

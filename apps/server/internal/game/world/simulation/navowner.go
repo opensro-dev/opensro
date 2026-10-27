@@ -11,22 +11,22 @@ import worldgeom "opensro.online/server/internal/game/world"
 
 // Surface ownership: WHICH walkable surface a position stands on.
 //
-// Native evidence (v1.188 SR_GameServer, HLIL-verified 2026-09-23):
-//   - Every positioned object carries a tagNavPos at CGObj+0x7C:
-//     {pNavCell, pNavMeshInst, wRegionID, x, y, z}. The cell is part of the
-//     position, not something recomputed from it.
-//   - CGObj_MoveTo (0x485740) walks every ordinary move through
-//     IRegionManager slot +0x30, CRegionManagerBody_QueryMovement (0x98B300).
-//     The walk starts from the STORED source cell (`*(source.pNavCell+4)` is
-//     the mesh that moves) and writes the reached cell back into the
-//     destination, which CGObj_StepMovement then commits.
-//   - Only move mode 7 (teleport) resolves a cell afresh, through slot +0x2C
-//     CRegionManagerBody_CheckPointValid (0x98B1D0) ->
-//     CRTNavMeshTerrain_FindNavCell (0x99FD90): nearest |deltaY| between the
-//     terrain and the objects registered in that terrain cell, strict `<` so
-//     terrain wins ties, and y is rewritten to the chosen surface's height.
-//   - Walk results carry a surface height, never the requested one: the object
-//     walker (0x9B5A80) ends in the cell-plane height store 0x9C0350.
+// Native evidence (the retail server's movement and navigation code):
+//   - Every positioned object carries a navigation position record at
+//     +0x7C in the object: {cell, mesh instance, region id, x, y, z}. The
+//     cell is part of the position, not something recomputed from it.
+//   - The server's move entry walks every ordinary move through the
+//     region manager's movement query (manager slot +0x30). The walk
+//     starts from the STORED source cell (the cell's mesh instance is
+//     what moves) and writes the reached cell back into the destination,
+//     which the step commit then publishes.
+//   - Only move mode 7 (teleport) resolves a cell afresh, through the
+//     point-valid check (slot +0x2C) and the terrain cell search: nearest
+//     |deltaY| between the terrain and the objects registered in that
+//     terrain cell, strict `<` so terrain wins ties, and y is rewritten
+//     to the chosen surface's height.
+//   - Walk results carry a surface height, never the requested one: the
+//     object walker ends in the cell-plane height store.
 //
 // Why this matters: movement packets carry int16 coordinates, so a y of 243.99
 // on a gate deck arrives as 243. Re-guessing the surface from that y on every
