@@ -14,7 +14,7 @@ func TestDecodeLeaveRequest(t *testing.T) {
 		t.Fatalf("well-formed leave decode error: %v", err)
 	}
 	if ok.SelectedTargetGid != 0x00C40007 {
-		t.Errorf("decoded gid = %#x, want 0xC40007", ok.SelectedTargetGid)
+		t.Errorf("decoded gid = %#x, want 0x%X", ok.SelectedTargetGid, 0x00C40007)
 	}
 
 	// A ZERO gid is well-formed: the +0x620 slot reads 0 with no

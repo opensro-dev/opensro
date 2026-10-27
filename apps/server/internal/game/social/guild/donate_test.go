@@ -25,7 +25,8 @@ func mutatorDonatePayload(amount uint32) []byte {
 }
 
 // donateAckOracle hand-rolls the 0xB40F success body {u8 1}{u32 amount}
-// (the display-only echo the sub_766ad0 guide line formats).
+// (the display-only echo the client CNetProcess_OnResponse0xB40F guide
+// line formats).
 func donateAckOracle(amount uint32) []byte {
 	p := &mutatorPayload{}
 	p.buf.WriteByte(0x01)
@@ -69,7 +70,7 @@ func grantSkillPoints(authority *store.Store, c *enterworld.Character, sp int64)
 // ack carries no state), and the store afterwards holds the debited SP
 // and both credited GP fields. Berk (grade 3, no leader bit) donates -
 // proving the arm is in-guild-only with NO grade or permission gate (the
-// sub_8188b0 pin).
+// CCharacterDependentData_IsInGuild pin).
 func TestHandleGpDonateSuccess(t *testing.T) {
 	t.Parallel()
 	deps, authority, _, berk, guildID := newTwoMemberGuildFixture(t)

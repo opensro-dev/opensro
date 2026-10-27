@@ -1,7 +1,8 @@
 package guild
 
 // The 0x32C4 guild-info encoder: the S->C block the client's guild
-// deserializer (fold sub_826610) reads on receipt, composed ONLY from
+// deserializer (client fold SGuildData_ReadGuildBlock_826610) reads on
+// receipt, composed ONLY from
 // real store membership (enterworld.GuildStore records) - never empty,
 // never synthetic (the package doc; the deserializer always sets
 // hasGuildFlag04=1, so an empty frame would paint a guild onto a
@@ -22,7 +23,8 @@ func writeGuildString(w *wire.Writer, value string) {
 }
 
 // EncodeGuildInfo32C4 composes the 0x32C4 body per the pinned client
-// layout (fold sub_826610; little-endian, strings are {u16 len}{ANSI}):
+// layout (client fold SGuildData_ReadGuildBlock_826610; little-endian,
+// strings are {u16 len}{ANSI}):
 //
 //	u32 guildId, {str} name, u8 level, u32 GP, {str} noticeSubject,
 //	{str} noticeContents, u32 crestParam, u8 byte10, u8 memberCount,
@@ -30,7 +32,7 @@ func writeGuildString(w *wire.Writer, value string) {
 //	u32 permMask, u32 dword30, u32 dword34, u32 dword38, {str} grantName,
 //	u32 refObjId, u8 fortressRole, u8 offlineFlag,
 //	then u8 voteCount and per vote u32 id, u8 kind, u32 remaining ms
-//	(826610 hands each to SGuildData's vote list, 82CDA0).
+//	(the client fold hands each to SGuildData's vote list).
 //
 // The offline flag is DERIVED at encode time (0 = ONLINE, 1 = offline)
 // through the online func, never persisted - the friend roster's
@@ -44,7 +46,8 @@ func EncodeGuildInfo32C4(guild enterworld.GuildRecord, members []enterworld.Guil
 // EncodeCreateAckB663 composes the 0xB663 create-success body: the
 // result byte 1 followed by the SAME guild block bytes 0x32C4 carries
 // (the client's 0xB663 handler reads the result byte and falls into the
-// same sub_826610 block deserializer). Emitted to the creating actor
+// same client SGuildData_ReadGuildBlock_826610 block deserializer).
+// Emitted to the creating actor
 // ONLY, always from the guild the atomic create door just installed.
 func EncodeCreateAckB663(guild enterworld.GuildRecord, members []enterworld.GuildMemberRecord, online func(name string) bool) []byte {
 	writer := wire.NewWriter(65 + 64*len(members))
@@ -84,7 +87,8 @@ func voteRemainingMs(vote *enterworld.GuildVote, nowMs int64) uint32 {
 	return uint32(min(max(vote.EndsAtUnixMs-nowMs, 0), int64(^uint32(0))))
 }
 
-// EncodeVoteOpened3A6C is 0x3A6C type 1 (7603D0): {u8 1}{u32 id}{u8 kind}
+// EncodeVoteOpened3A6C is 0x3A6C type 1 (client
+// CPSMission_OnAcademyMemberGraduation0x3A6C): {u8 1}{u32 id}{u8 kind}
 // {u32 remaining ms}; the guild window lists the vote and the release row
 // turns to the vote row.
 func EncodeVoteOpened3A6C(vote *enterworld.GuildVote, nowMs int64) []byte {
@@ -121,10 +125,11 @@ func EncodeVoteClosed3A6C(id uint32, elected bool, heir uint32) []byte {
 }
 
 // writeGuildMemberRow appends ONE member row in the pinned 0x32C4
-// member-loop order (fold sub_826610). The SAME byte layout is the
-// 0x3B29 subOp-2 join body after its subOp byte (fold sub_762040 slot 2
-// reads jid @0x0076224e .. offline @0x007622f8 in this exact order, the
-// +0x2c dword being the permMask slot), which is why the row writer is
+// member-loop order (client fold SGuildData_ReadGuildBlock_826610).
+// The SAME byte layout is the 0x3B29 subOp-2 join body after its
+// subOp byte (client CPSMission_OnGuildUpdate0x3B29 slot 2 reads the
+// row in this exact order, the +0x2c dword being the permMask slot),
+// which is why the row writer is
 // factored here and shared - one layout, one writer.
 func writeGuildMemberRow(writer *wire.Writer, member enterworld.GuildMemberRecord, online func(name string) bool) {
 	writer.U32(member.JID)
@@ -147,8 +152,9 @@ func writeGuildMemberRow(writer *wire.Writer, member enterworld.GuildMemberRecor
 }
 
 // EncodeMemberJoin3B29 composes the 0x3B29 subOp-2 member JOIN push the
-// client's guild store inserts (fold sub_762040 slot 2 @0x007621c1 ->
-// the REAL sub_8261e0 insert): {u8 2} followed by ONE member row in the
+// client's guild store inserts (client CPSMission_OnGuildUpdate0x3B29
+// slot 2 -> the client's member-row insert): {u8 2} followed by ONE
+// member row in the
 // exact 0x32C4 member-loop layout (the row bytes ride the SHARED
 // writeGuildMemberRow, never a second derivation). Sent to every
 // SITTING online member on a join commit; the joiner gets the full

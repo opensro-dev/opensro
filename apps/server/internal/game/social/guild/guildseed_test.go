@@ -3,7 +3,8 @@ package guild_test
 // The Phase C/D seed pins: an IN-GUILD character's enter-world stream
 // carries exactly one 0x32C4 whose bytes match a hand-rolled oracle
 // (built with encoding/binary here, NEVER the production encoder - the
-// encoder must match the pinned sub_826610 layout, not itself), with the
+// encoder must match the pinned client SGuildData_ReadGuildBlock_826610
+// layout, not itself), with the
 // offline flags derived from live presence (0 = online, 1 = offline);
 // and a DANGLING GuildID (an FK pointing at no stored guild row) emits
 // NO 0x32C4 at all - absence over invention. The no-guild pin itself
@@ -109,7 +110,8 @@ func (s staticGuildStore) LevelUpGuildAs(string, int64) (enterworld.GuildSnapsho
 	return enterworld.GuildSnapshot{}, enterworld.GuildRefusalUpdateRejected
 }
 
-// oracle32C4 hand-rolls the pinned 0x32C4 layout (fold sub_826610;
+// oracle32C4 hand-rolls the pinned 0x32C4 layout (client fold
+// SGuildData_ReadGuildBlock_826610;
 // little-endian, strings are {u16 len}{ANSI bytes}) with encoding/binary.
 type oracle32C4 struct{ buf bytes.Buffer }
 

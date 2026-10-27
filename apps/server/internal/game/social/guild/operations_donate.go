@@ -16,7 +16,8 @@ import (
 // donor would leave their own pane stale - the notice-edit inclusion
 // rationale, DECISION). EVERY refusal stays fully wire-silent -
 // deliberately no ErrorPayload slot: the client's 0xB40F result-2 arm
-// exists (sub_766ad0 @0x00766b8e -> cat 0x10), but no donate
+// exists (client CNetProcess_OnResponse0xB40F -> cat 0x10), but no
+// donate
 // trigger->code pair is pinned in the v1.150 dump or the v1.188 server
 // dump (the recon chased the GP_Donation schema column only), so
 // emitting a code would invent the pairing (errors.go posture; the

@@ -194,7 +194,8 @@ func HandleLeave(deps Dependencies, divisionID string, actor *enterworld.Charact
 // (the client's break arm reads the announced guild name from its OWN
 // local state and drops the whole guild block - one payload-less frame
 // serves everyone). EVERY refusal stays fully silent - deliberately no
-// ErrorPayload slot: the sub_75c730 handler parses {u8 2}{u8 code} into
+// ErrorPayload slot: the client's CPSMission_OnGuildDisbandResponse0xB66E
+// handler parses {u8 2}{u8 code} into
 // the cat-0x10 sink, but NO break trigger->code pair is pinned for
 // Legend (the leave posture; emitting one would invent a contract).
 type BreakOutcome struct {
@@ -218,11 +219,12 @@ func refusedBreak(reason string) BreakOutcome {
 // DissolveGuild door (guild row + whole member set + every member's
 // GuildID FK, one commit). The dissolver is ALWAYS the requesting
 // session's bound character; the body's u32 is decoded and logged,
-// never used for identity (the leave/create posture - sub_7006f0
-// writes the same +0x620 selected-target slot). ONLY the grade-0
+// never used for identity (the leave/create posture -
+// NetClient_SendSelectedTarget766E writes the same +0x620
+// selected-target slot). ONLY the grade-0
 // LEADER may dissolve: leave's handler refuses leaders pointing here
 // (register.go HandleLeave), and the client opens the break confirm
-// (msgbox kind 0x13, sub_5da1b0 case 0x14 @0x005daf98's sibling) from
+// (msgbox kind 0x13, CIFNpcTalk_ExecuteMenuAction case 0x14) from
 // leadership arms only - a non-leader break is refused silently.
 /*
 ================

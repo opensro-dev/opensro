@@ -6,7 +6,8 @@ package guild
 const (
 	// Reference server: missing guild; native v1.150 category 10:0D is silent.
 	GuildErrNotMember byte = 0x0D
-	// The reference server checks permission mask 10; 68A88C localizes.
+	// The reference server checks permission mask 10; the client
+	// localizes the denial (CGInterface_ShowSystemNotification).
 	GuildErrPermissionDenied byte = 0x1E
 	// Existing create-length contract: the reference server covers empty names.
 	GuildErrInvalidGuildNameLen byte = 0x18
@@ -18,7 +19,8 @@ const (
 	GuildErrMemberFull     byte = 0x13
 	GuildErrMemberNotFound byte = 0x1D
 	// GuildErrNoCompensation is 0xB140's 0x45 (UIIT_CTL_GUILDWAR_
-	// NOTCOMPENSATION, 7609C0; v1.188 0x4C45).
+	// NOTCOMPENSATION, client CPSMission_OnGuildWarCompensationResponse0xB140;
+	// v1.188 0x4C45).
 	GuildErrNoCompensation byte = 0x45
 	// GuildErrManagerOutOfReach is the NPC-function range check's
 	// 3: no selected guild manager in range.
