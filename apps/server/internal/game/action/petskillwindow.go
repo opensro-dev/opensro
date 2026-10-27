@@ -204,6 +204,12 @@ func (rt *Runtime) advancePetSkillWindows(nowMs int64) {
 /*
 ================
 advancePetSkillWindowsInDivision
+
+Retires the owner's expired pet skill windows. PetSkillWindows is persisted,
+so the compaction runs inside the tick-batched character door (#1836): the
+division lock alone neither excludes a concurrent Snapshot under the read
+door nor marks the record dirty. The door commits only when a window
+actually expired.
 ================
 */
 func (rt *Runtime) advancePetSkillWindowsInDivision(key petOwnerKey, nowMs int64) ([]wire.Frame, bool) {
@@ -214,17 +220,23 @@ func (rt *Runtime) advancePetSkillWindowsInDivision(key petOwnerKey, nowMs int64
 		return nil, false
 	}
 	var frames []wire.Frame
-	kept := character.PetSkillWindows[:0]
-	for _, window := range character.PetSkillWindows {
-		if window.EndUnixMs > nowMs {
-			kept = append(kept, window)
-			continue
+	empty := false
+	rt.deps.UpdateDeferred(character, "pet-skill-windows", func() bool {
+		kept := character.PetSkillWindows[:0]
+		for _, window := range character.PetSkillWindows {
+			if window.EndUnixMs > nowMs {
+				kept = append(kept, window)
+				continue
+			}
+			frames = append(frames, wire.Frame{
+				Opcode:  wire.OpCosStateRefresh,
+				Payload: wire.EncodeCosSummonTimerRetire3691(window.ItemRefObjID),
+			})
 		}
-		frames = append(frames, wire.Frame{
-			Opcode:  wire.OpCosStateRefresh,
-			Payload: wire.EncodeCosSummonTimerRetire3691(window.ItemRefObjID),
-		})
-	}
-	character.PetSkillWindows = kept
-	return frames, len(kept) == 0
+		retired := len(kept) != len(character.PetSkillWindows)
+		character.PetSkillWindows = kept
+		empty = len(kept) == 0
+		return retired
+	})
+	return frames, empty
 }

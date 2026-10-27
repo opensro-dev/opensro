@@ -191,7 +191,10 @@ func (rt *Runtime) fieldInstance(division, name string, skillID uint32) (uint32,
 retireFieldRecipients
 
 tagActiveSkillInstance_RequestRetirement for each recipient that still holds
-the field's skill. Publication runs outside every character door.
+the field's skill. The teardown writes the live record (skill jobs, body
+status, transform, stored HP/MP), so it runs inside the tick-batched
+character door (#1836), as the status callbacks run it; publication runs
+after the door closes.
 ================
 */
 func (rt *Runtime) retireFieldRecipients(object skillobject.Object, recipients []skillobject.FieldRecipient, nowMs int64) {
@@ -204,7 +207,19 @@ func (rt *Runtime) retireFieldRecipients(object skillobject.Object, recipients [
 		if !holds {
 			continue
 		}
-		rt.publishEndedEffects(object.Division, c, rt.effects.RetireInstances(object.Division, c.Name, []uint32{token}), nowMs)
+		ended := rt.effects.RetireInstances(object.Division, c.Name, []uint32{token})
+		if len(ended) == 0 {
+			continue
+		}
+		var public, actor []wire.Frame
+		rt.deps.UpdateDeferred(c, "skill-field-retire", func() bool {
+			public, actor = rt.finishEndedEffects(object.Division, c, ended, nowMs)
+			return true
+		})
+		rt.publishBodyStatus(object.Division, c.Name, public)
+		if len(actor) != 0 && rt.PushCharacterFrames != nil {
+			rt.PushCharacterFrames(object.Division, c.Name, actor)
+		}
 	}
 }
 
