@@ -60,7 +60,7 @@ func testSkillSeeder(raceKey string, learned []uint32) ([]uint32, error) {
 	return missing, nil
 }
 
-func openTest(t *testing.T, dir string, clock *testClock) *Store {
+func openTest(t testing.TB, dir string, clock *testClock) *Store {
 	t.Helper()
 	s, err := Open(dir, Options{Now: clock.Now, DefaultSkills: testSkillSeeder})
 	if err != nil {
