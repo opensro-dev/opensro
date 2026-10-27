@@ -54,8 +54,8 @@ func createPayload(selectedTargetGid uint32, name string) []byte {
 
 // TestDecodeGpDonateRequest pins the structured 0x740F decoder
 // {u32 amount} (the NetClient_Send740F composer shape - the last
-// opcode to
-// leave the old string-detail refuse table when its mutator landed).
+// opcode to leave the old string-detail refuse table when its
+// mutator landed).
 func TestDecodeGpDonateRequest(t *testing.T) {
 	t.Parallel()
 	ok, err := DecodeGpDonateRequest(invitePayload(120))

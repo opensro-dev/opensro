@@ -354,8 +354,7 @@ func EncodeLetterReceivedEvent3F9A(sender string, senderModelRefID, packedReceiv
 
 // writeSizedString appends the client
 // CGInterface_Calls_CMsgStreamBuffer_WriteBytes sized-ANSI layout:
-// u16 byte
-// length + the bytes.
+// u16 byte length + the bytes.
 func writeSizedString(writer *wire.Writer, value string) {
 	bytes := []byte(value)
 	writer.U16(uint16(len(bytes)))
