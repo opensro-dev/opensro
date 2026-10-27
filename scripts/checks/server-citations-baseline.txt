@@ -215,10 +215,6 @@ apps/server/internal/game/siege/lane_test.go 1
 apps/server/internal/game/social/match/board.go 2
 apps/server/internal/game/social/match/e2e_wire_test.go 2
 apps/server/internal/game/social/match/eligibility.go 4
-apps/server/internal/game/social/match/join.go 11
-apps/server/internal/game/social/match/join_e2e_test.go 5
-apps/server/internal/game/social/match/joinwire.go 63
-apps/server/internal/game/social/match/joinwire_test.go 5
 apps/server/internal/game/social/match/register.go 3
 apps/server/internal/game/social/match/wire.go 60
 apps/server/internal/game/social/match/wire_test.go 3
