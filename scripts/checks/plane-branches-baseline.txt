@@ -1,14 +1,3 @@
 # Server Go and client src files that branch on the dungeon region bit outside
 # the plane owners (#1646, #1793). Format: `<path> <count>`. This ledger may only shrink; run
 # `node scripts/checks/check_plane_branches.mjs --update` after migrating a file.
-apps/client-next/src/engine/foundation/navigation/clipper.ts 16
-apps/client-next/src/engine/foundation/ui/hunting-guide.ts 2
-apps/client-next/src/engine/foundation/ui/minimap-floor.ts 2
-apps/client-next/src/engine/foundation/ui/minimap-tiles.ts 2
-apps/client-next/src/engine/foundation/ui/world-map.ts 3
-apps/client-next/src/engine/runtime/assets/worker/navigation/navigation.ts 2
-apps/client-next/src/engine/runtime/assets/worker/world/world.ts 6
-apps/client-next/src/engine/runtime/navigation/navigation.ts 2
-apps/client-next/src/engine/runtime/simulation/worker/session/world/entities/entities.ts 2
-apps/client-next/src/engine/runtime/ui/hud/hunting-guide.ts 2
-apps/client-next/src/engine/runtime/world/world.ts 5

@@ -55,9 +55,11 @@ func TestCatalogueResolvesOptionalPopulationSetting(t *testing.T) {
 TestUnsetSettingsTakeTheDeploymentDefaults
 
 With every setting the catalogue reads left unset, the readers see what
-sro-nomad deploys: native reinforcement ceiling (no +11 cap), beta growth,
-the seal rates and the elixir rule. An operator's explicit value still
-overrides the deployment default.
+sro-nomad deploys: native reinforcement ceiling (no +11 cap), native beta
+rules (no growth, seal rates or shop-only degree 9, #606; our shard's beta
+values reach the catalogue from ops/release/shard-settings.json through
+buildCatalogue.mjs), and the elixir rule. An operator's explicit value
+still overrides the deployment default.
 ================
 */
 func TestUnsetSettingsTakeTheDeploymentDefaults(t *testing.T) {
@@ -72,8 +74,11 @@ func TestUnsetSettingsTakeTheDeploymentDefaults(t *testing.T) {
 	if cap, _ := alchemy.ReinforceMaxPlusFromEnv(); cap != 0 {
 		t.Fatalf("unset %s became cap %d, want 0 (native ceiling)", alchemy.EnvReinforceMaxPlus, cap)
 	}
-	if !progression.BetaGrowthFromEnv().Enabled || !progression.BetaSealRatesFromEnv().Enabled() ||
-		!progression.ElixirDropsFromEnv().Off() || !progression.BetaShopOnlyDegree9FromEnv().Enabled() {
+	if progression.BetaGrowthFromEnv().Enabled || progression.BetaSealRatesFromEnv().Enabled() ||
+		progression.BetaShopOnlyDegree9FromEnv().Enabled() {
+		t.Fatal("an unset beta setting did not stay native")
+	}
+	if !progression.ElixirDropsFromEnv().Off() {
 		t.Fatal("an unset catalogue setting did not take its deployment default")
 	}
 	if rates, _ := alchemy.ReinforceRatesFromEnv(); rates == nil {

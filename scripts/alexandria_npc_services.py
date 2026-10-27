@@ -11,6 +11,7 @@ from collections import defaultdict
 
 import alexandria_npcs as npcs
 import alexandria_shop_d10 as d10
+import alexandria_shop_d11 as d11
 import alexandria_shop_supplies as supplies
 import import_vsro_alexandria as tables
 
@@ -146,6 +147,11 @@ def add_services(vsro_root, native, output):
 	for name, raw in supplied.items():
 		replace_file(root / name, raw)
 	summary["supplies"] = supplies_summary
+	# Degree 11 grade A gear (#1748 PR 2, owner-approved), on the same stores.
+	geared, gear_summary = d11.merge_d11_stock({name: (root / name).read_bytes() for name in d10.NAMES}, item_rows)
+	for name, raw in geared.items():
+		replace_file(root / name, raw)
+	summary["degree11"] = gear_summary
 	labels, count = npc_map_labels((root / "worldmap_mapinfo.txt").read_bytes(), (root / "npcpos.txt").read_bytes(), characters, (root / "worldmap_localinfo.txt").read_bytes())
 	replace_file(root / "worldmap_localinfo.txt", labels)
 	summary["mapLabels"] = count

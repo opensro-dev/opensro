@@ -1,10 +1,11 @@
 /*
 ===========================================================================
 
-growthbands_curve_test.go - the shipped default growth bands keep a smooth
+growthbands_curve_test.go - the live shard's growth bands keep a smooth
 level curve on the retail level table
 
-The default SRO_BETA_GROWTH_BANDS (shardsettings) is port-only tuning. What
+The live shard's SRO_BETA_GROWTH_BANDS (ops/release/shard-settings.json,
+#606; the public default is native) is port-only tuning. What
 it must never do is what the first bands did: make one level cost 84 times
 the level before it (59 -> 60) or put 90 -> 110 thousands of hours away.
 The cost of a level is its at-level kills under the bands: the native kill
@@ -16,9 +17,11 @@ scales a gain.
 package progression
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
-	"opensro.online/server/internal/config/shardsettings"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/testsupport/licensed"
 )
@@ -36,6 +39,9 @@ const (
 	minHours90To110 = 60
 	maxHours90To110 = 100
 )
+
+// shardProfile is the live shard's settings, relative to this package.
+var shardProfile = filepath.Join("..", "..", "..", "ops", "release", "shard-settings.json")
 
 /*
 ================
@@ -57,7 +63,7 @@ func bandedLevelCost(t *testing.T, levels enterworld.LevelDataSource, bands Grow
 ================
 TestDefaultGrowthBandsKeepASmoothCurve
 
-Every adjacent pair 1..110 stays within maxAdjacentLevelStep, which covers
+The bands the live shard deploys. Every adjacent pair 1..110 stays within maxAdjacentLevelStep, which covers
 every band edge, and 90 -> 110 lands inside P2's hours at the measured
 rate.
 ================
@@ -65,9 +71,17 @@ rate.
 func TestDefaultGrowthBandsKeepASmoothCurve(t *testing.T) {
 	licensed.RequireGameData(t)
 	levels := enterworld.NewTextdataLevels(licensed.RetailTextdataDir(t))
-	bands, err := ParseGrowthBands(shardsettings.Lookup(EnvBetaGrowthBands).Default)
+	data, err := os.ReadFile(shardProfile)
 	if err != nil {
-		t.Fatalf("default bands: %v", err)
+		t.Fatal(err)
+	}
+	var profile map[string]string
+	if err := json.Unmarshal(data, &profile); err != nil {
+		t.Fatalf("shard-settings.json: %v", err)
+	}
+	bands, err := ParseGrowthBands(profile[EnvBetaGrowthBands])
+	if err != nil {
+		t.Fatalf("live shard bands: %v", err)
 	}
 	for level := int64(1); level < ExpansionLevelCap; level++ {
 		before := bandedLevelCost(t, levels, bands, level)
