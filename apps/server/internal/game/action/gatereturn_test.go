@@ -199,6 +199,64 @@ func TestGateTownReturnAppliesTownHead(t *testing.T) {
 
 /*
 ================
+TestGateTownReturnRollbackKeepsTheHead
+
+The head runs before the move: a use refused inside the move commit
+(the character went delete-pending) still settles hostility in both
+directions and clears the abnormal state, the head's frames ride the
+refusal answer, and the quest event never fires.
+================
+*/
+func TestGateTownReturnRollbackKeepsTheHead(t *testing.T) {
+	rt, c := gateTownReturnFixture(t)
+	peer := rebirthTestCharacter(20, 100)
+	peer.Name = "GateReturnPeer"
+	peer.ID = c.ID + 1000
+	deps := rt.deps.(*enterworld.Deps)
+	fixtureCharacters(deps.Characters)[testDivision] = append(fixtureCharacters(deps.Characters)[testDivision], peer)
+	gidC := enterworld.ObjectIDForCharacter(c)
+	gidPeer := enterworld.ObjectIDForCharacter(peer)
+	c.Aggressions = map[uint32]uint32{gidPeer: playerAggressionTicks}
+	peer.Aggressions = map[uint32]uint32{gidC: playerAggressionTicks}
+	if c.PVPState() != 1 || peer.PVPState() != 1 {
+		t.Fatal("fixture is not mutually grey")
+	}
+	record := abnormal.Record{Status: abnormal.Panic, Grade: 1, DurationMs: 60000, SourceGID: gidC, Param34: 50}
+	rt.applyPlayerAbnormalInDoor(testDivision, c, false, []abnormal.Record{record}, rt.Now().UnixMilli())
+	if block := rt.playerAbnormal(testDivision, c.Name); block == nil || block.Mask == 0 {
+		t.Fatal("abnormal fixture did not take")
+	}
+	rt.PushCharacterFrames = func(_, _ string, f []wire.Frame) {}
+	rt.PushDivisionPeerFrames = func(_, _ string, f []wire.Frame) {}
+	calls := recordTeleportEvents(rt)
+	c.DeletePending = true
+	out := sendGateTownReturn(rt, c)
+	if len(out.Frames) == 0 || out.Frames[0].Opcode != 0xb495 || !bytes.Equal(out.Frames[0].Payload, []byte{2, 2}) {
+		t.Fatalf("rolled-back use answered %+v, want the refusal first", out.Frames)
+	}
+	settled := false
+	for _, frame := range out.Frames {
+		settled = settled || frame.Opcode == wire.OpObjectStateRefresh
+	}
+	if !settled {
+		t.Fatalf("the head's frames are missing from the refusal answer: %+v", out.Frames)
+	}
+	if len(c.Aggressions) != 0 || c.PVPState() != 0 {
+		t.Fatalf("hostility survives the rolled-back move: %v state %d", c.Aggressions, c.PVPState())
+	}
+	if len(peer.Aggressions) != 0 || peer.PVPState() != 0 {
+		t.Fatalf("reciprocal record survives the rolled-back move: %v state %d", peer.Aggressions, peer.PVPState())
+	}
+	if block := rt.playerAbnormal(testDivision, c.Name); block != nil && block.Mask != 0 {
+		t.Fatalf("abnormal mask %#x survives the rolled-back move", block.Mask)
+	}
+	if len(*calls) != 0 {
+		t.Fatalf("a rolled-back use raised the event: %v", *calls)
+	}
+}
+
+/*
+================
 TestGateTownReturnRefusals
 
 The shared admissions in their native order, then case 1's transport test.
