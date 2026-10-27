@@ -360,6 +360,32 @@ func (s *moverStorage) schedule(gid uint32) (moverSchedule, bool) {
 
 /*
 ================
+catchUpActivity
+
+Rewrites one actor's activity cadence in place to the phase it would
+hold had it never slept (monster.ActivityCadence.CatchUp). The dormancy
+wake calls this before rescheduling, so the scheduler's own cadence
+branch lands the actor's next due time on its native phase.
+================
+*/
+func (s *moverStorage) catchUpActivity(gid uint32, now uint32) {
+	if s == nil {
+		return
+	}
+	r, ok := s.rows[gid]
+	if !ok {
+		return
+	}
+	if r.live != nil {
+		r.live.Activity = r.live.Activity.CatchUp(now)
+	}
+	if r.pending != nil {
+		r.pending.activity = r.pending.activity.CatchUp(now)
+	}
+}
+
+/*
+================
 compact
 ================
 */

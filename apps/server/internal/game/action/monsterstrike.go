@@ -150,10 +150,10 @@ func (rt *Runtime) monsterStrikePlayer(in monsterStrikeInput, character, snapsho
 		return len(struck.impacts) > 0
 	})
 	if !committed || len(struck.impacts) == 0 {
-		fresh := rt.characterSnapshot(divisionID, character)
-		out.alive = enterworld.CharacterAlive(fresh)
-		if out.alive && !fresh.DeletePending &&
-			!monster.AllowsTargetStatus(instance.Ref.TidWord, instance.Nest.NativeTacticsFlags, fresh.NativeBodyStatus) {
+		alive, deletePending, nativeBodyStatus := rt.characterLifeState(divisionID, character)
+		out.alive = alive
+		if out.alive && !deletePending &&
+			!monster.AllowsTargetStatus(instance.Ref.TidWord, instance.Nest.NativeTacticsFlags, nativeBodyStatus) {
 			out.refusal = simulation.MonsterAttackCommandRejected
 		}
 		return out

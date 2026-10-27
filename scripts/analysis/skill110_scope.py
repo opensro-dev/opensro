@@ -212,6 +212,8 @@ def main():
 	parser.add_argument("--vsro-root", type=Path, required=True)
 	parser.add_argument("--output", type=Path, default=REPO_ROOT / ".state" / "skill110-scope.json")
 	args = parser.parse_args()
+	# The pin authenticates the later archive before anything is read (#1745).
+	archive.verify_vsro_archive(args.vsro_root, "Media")
 	report = compare(args.native_root, args.vsro_root)
 	args.output.parent.mkdir(parents=True, exist_ok=True)
 	write_atomically(args.output, (json.dumps(report, indent=2, ensure_ascii=True) + "\n").encode("utf-8"))

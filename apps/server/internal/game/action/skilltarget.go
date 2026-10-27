@@ -31,6 +31,8 @@ playerSkillTarget
   - missing, or on another plane or sector              0x3006
   - dead, unless the row selects corpses or resu        0x3006
   - refused by skillTargetPermission                    0x3006
+  - relation refusal, except a pinned Duplicate, whose
+    own refusal list below is its only target gate      0x3006
   - resu, above a nonzero word 0 (58D0CE)               0x3012
 
 A resu row may admit the dead; its corpse selector independently refuses
@@ -81,7 +83,10 @@ func (rt *Runtime) playerSkillTargetWith(division string, caster, target *enterw
 	if !skillTargetPermission(skill.Targets, enterworld.ObjectIDForCharacter(caster) == enterworld.ObjectIDForCharacter(target), alive, sameParty) {
 		return 0x3006
 	}
-	if !sameParty && !rt.playerSkillRelationAllowed(division, caster, target, skill.Replacement.MatchesExecutionSelector) {
+	// A pinned Duplicate copies the target's look under its own refusal
+	// list below; the reference server puts no caster/target relation
+	// gate on that family, so an enemy player stays a legal target.
+	if !sameParty && !skill.Duplicate.Pinned && !rt.playerSkillRelationAllowed(division, caster, target, skill.Replacement.MatchesExecutionSelector) {
 		return 0x3006
 	}
 

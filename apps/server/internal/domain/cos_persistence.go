@@ -86,24 +86,49 @@ func (c *Character) Companions() []*CharacterCOS {
 		return nil
 	}
 	var pets []*CharacterCOS
-	if c.ActiveCOS != nil {
-		pets = append(pets, c.ActiveCOS)
+	c.visitCompanions(func(pet *CharacterCOS) bool {
+		pets = append(pets, pet)
+		return true
+	})
+	return pets
+}
+
+/*
+================
+visitCompanions
+
+Visits the records Companions returns, in the same order, without building
+the slice; visit returns false to stop. Lookups by GID run on every pet,
+combat and abnormal tick for every character a division walk touches, and
+the slice cost an allocation per call plus a walk of the whole bag (#1820).
+The order is the one canonical order: Companions is built from it.
+================
+*/
+func (c *Character) visitCompanions(visit func(*CharacterCOS) bool) {
+	if c == nil {
+		return
+	}
+	if c.ActiveCOS != nil && !visit(c.ActiveCOS) {
+		return
 	}
 	for i := range c.MissionInventory {
-		if pet := c.MissionInventory[i].Summon; pet != nil {
-			pets = append(pets, pet)
+		if pet := c.MissionInventory[i].Summon; pet != nil && !visit(pet) {
+			return
 		}
 	}
 	for _, soldier := range c.Mercenaries {
-		if soldier != nil {
-			pets = append(pets, soldier)
+		if soldier != nil && !visit(soldier) {
+			return
 		}
 	}
-	if c.CapturedCOS != nil {
-		pets = append(pets, c.CapturedCOS)
+	if c.CapturedCOS != nil && !visit(c.CapturedCOS) {
+		return
 	}
-	pets = append(pets, c.Brood...)
-	return pets
+	for _, pet := range c.Brood {
+		if !visit(pet) {
+			return
+		}
+	}
 }
 
 /*
@@ -119,13 +144,19 @@ func (c *Character) CompanionByGID(gid uint32) *CharacterCOS {
 		return nil
 	}
 	var found *CharacterCOS
-	for _, pet := range c.Companions() {
+	duplicate := false
+	c.visitCompanions(func(pet *CharacterCOS) bool {
 		if pet.Summoned && pet.GID == gid {
 			if found != nil {
-				return nil
+				duplicate = true
+				return false
 			}
 			found = pet
 		}
+		return true
+	})
+	if duplicate {
+		return nil
 	}
 	return found
 }

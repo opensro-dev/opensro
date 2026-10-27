@@ -60,7 +60,7 @@ func TestOrdinaryAcquisitionRankingAndOrder(t *testing.T) {
 TestAcquisitionOrdinarySelectorScope
 
 The flag rows leave selector 2: flag 4 runs selector 3 and flag 0x80
-selector 4, both measuring 53D7A0's 3D distance, so a player 200 above
+selector 4, both measuring the retail server's 3D actor distance, so a player 200 above
 the monster is out of sight; selector 4 takes thieves only. Flag 0x100
 (selector 5) keeps the planar projection.
 ================
@@ -207,7 +207,7 @@ func TestProductionRankingAgainstFrozenNativeSlice(t *testing.T) {
 ================
 TestDungeonAcquisitionRanksOwnBlockThenLinkedNeighbours
 
-CRgnDungeon_Query (538B30): a dungeon monster ranks its own message block,
+The retail server's dungeon query: a dungeon monster ranks its own message block,
 then the linked neighbours, and never a player two blocks away, whatever
 its sight.
 ================

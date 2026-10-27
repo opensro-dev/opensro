@@ -28,7 +28,9 @@ import {
 	initialCameraPitch,
 	initialCameraYaw
 } from "@/engine/foundation/rendering/camera-options";
-import { isDungeonRegion, sectorX, sectorY } from "@/engine/foundation/world/world-space";
+import { featuresAt } from "@/engine/foundation/world/plane";
+import { sectorX, sectorY } from "@/engine/foundation/world/world-space";
+import { sampleCameraWaypoints } from "@/engine/foundation/ui/camera-waypoints";
 
 type Transaction =
 	| { phase: "idle"; }
@@ -70,9 +72,12 @@ export function createWorldStream(
 	let freeCamera = false;
 	// The interface track's port copy (CGInterface +0x3FC) and its play
 	// byte (+0x3CD): the console owns the store and forwards both; the
-	// playback stepping that consults them lands with #1716's second PR.
+	// stepper below owns the track clock (+0xE8) it advances while the
+	// play byte stands, and the last step's timestamp it diffs against.
 	let waypointKeyframes: readonly import("@/engine/foundation/ui/camera-waypoints").CameraWaypoint[] = [];
 	let waypointPlaying = false;
+	let waypointClockSeconds = 0;
+	let waypointLastStepMs: number | null = null;
 	let lastCamera: import("@/engine/contracts/scene").WorldCamera | null = null;
 	let catalog: Record<string, { area?: string; source?: string; bundlePublicPath: string; }[]> | null = null;
 	/*
@@ -207,6 +212,88 @@ export function createWorldStream(
 	const zoomEase = createZoomEase();
 	/*
 	================
+	rotateWaypointVector
+
+	A sampled orientation applied to a basis vector (v + 2 * q x (q x v +
+	w * v) for the quaternion's vector part q): the aim the keyframe's
+	quaternion describes, in the engine's basis where identity looks
+	along -Z (the follow camera at yaw 0 sits at +Z behind its target).
+	================
+	*/
+	function rotateWaypointVector(
+		orientation: { readonly x: number; readonly y: number; readonly z: number; readonly w: number; },
+		vector: readonly [number, number, number]
+	): [number, number, number] {
+		const qx = orientation.x, qy = orientation.y, qz = orientation.z, qw = orientation.w;
+		const vx = vector[0], vy = vector[1], vz = vector[2];
+		// Inner cross q x v, then the full turn v + 2 * q x (inner + w * v).
+		const ix = qy * vz - qz * vy, iy = qz * vx - qx * vz, iz = qx * vy - qy * vx;
+		const tx = ix + qw * vx, ty = iy + qw * vy, tz = iz + qw * vz;
+		return [
+			vx + 2 * (qy * tz - qz * ty),
+			vy + 2 * (qz * tx - qx * tz),
+			vz + 2 * (qx * ty - qy * tx)
+		];
+	}
+	/*
+	================
+	stepWaypointCamera
+
+	While the play byte (+0x3CD) stands, CGInterface_UpdatePointerTracking
+	(68FE50) advances the track clock by the frame delta and applies the
+	sampled pose, and CGInterface_UpdateCameraOrbitTarget (68F830)
+	returns at once, so the follow stays frozen: this step does the same
+	instead of updateCamera and reports that it drove the camera.
+	TimedValue_Advance clamps the clock to the last record's time and
+	the 6900F8 tail clears the play byte once the clock reaches it, the
+	final pose staying applied (lastCamera holds it for the free-camera
+	hold, as the tail copies the camera back to +0x42C). The native
+	delta is a smoothed frame delta times a rate the trimmed binary
+	does not resolve to a constant; the port steps by the step's own
+	timestamp delta, never backwards. An empty track cannot be playing
+	through the console gates; if it happens the byte just clears.
+	================
+	*/
+	function stepWaypointCamera( pose: Pose, nowMs: number ): boolean {
+		if ( !waypointPlaying ) return false;
+		if ( !waypointKeyframes.length ) {
+			waypointPlaying = false;
+			waypointLastStepMs = null;
+			return false;
+		}
+		const endSeconds = waypointKeyframes[waypointKeyframes.length - 1]!.timeSeconds;
+		if ( waypointLastStepMs !== null ) {
+			const deltaSeconds = Math.max( 0, (nowMs - waypointLastStepMs) / 1000 );
+			waypointClockSeconds = Math.min( endSeconds, waypointClockSeconds + deltaSeconds );
+		}
+		waypointLastStepMs = nowMs;
+		const sample = sampleCameraWaypoints( waypointKeyframes, waypointClockSeconds );
+		if ( !sample ) return false;
+		const forward = rotateWaypointVector( sample.orientation, [ 0, 0, -1 ] );
+		const spec: import("@/engine/contracts/scene").WorldCamera = {
+			dungeonBlock,
+			originRegion: pose.regionId,
+			eye: [ sample.position.x, sample.position.y, sample.position.z ],
+			target: [
+				sample.position.x + forward[0],
+				sample.position.y + forward[1],
+				sample.position.z + forward[2]
+			],
+			up: rotateWaypointVector( sample.orientation, [ 0, 1, 0 ] ),
+			fov: fieldOfView,
+			near: 1,
+			far: 3500
+		};
+		lastCamera = spec;
+		renderer.setWorldCamera( spec );
+		if ( waypointClockSeconds >= endSeconds ) {
+			waypointPlaying = false;
+			waypointLastStepMs = null;
+		}
+		return true;
+	}
+	/*
+	================
 	updateCamera
 
 	Camera presentation is independent of asset transaction success.
@@ -337,7 +424,7 @@ export function createWorldStream(
 		previous = { ...pose };
 		if (
 			transaction.phase === "ready" && transaction.region === pose.regionId && catalog &&
-			!isDungeonRegion( pose.regionId )
+			featuresAt( pose.regionId ).sectorFrames
 		) {
 			const dx = prior?.regionId === pose.regionId ? pose.x - prior.x : 0,
 				dz = prior?.regionId === pose.regionId ? pose.z - prior.z : 0;
@@ -401,7 +488,7 @@ export function createWorldStream(
 		}
 		if ( future && future.region !== pose.regionId ) clearFuture();
 		if ( assets.available() === 0 ) return;
-		if ( isDungeonRegion( pose.regionId ) ) {
+		if ( !featuresAt( pose.regionId ).regionCatalog ) {
 			transaction = { phase: "loading", region: pose.regionId };
 			// A dungeon has its own coordinates; outdoor terrain is not kept meanwhile.
 			terrain.clear();
@@ -453,7 +540,14 @@ export function createWorldStream(
 		setCameraWaypoints(
 			keyframes: readonly import("@/engine/foundation/ui/camera-waypoints").CameraWaypoint[]
 		) {
-			if ( !disposed ) waypointKeyframes = keyframes;
+			if ( disposed ) return;
+			waypointKeyframes = keyframes;
+			// /cwclear empties the track whose reset also wipes the clock.
+			if ( !keyframes.length ) {
+				waypointPlaying = false;
+				waypointClockSeconds = 0;
+				waypointLastStepMs = null;
+			}
 		},
 		/*
 		================
@@ -465,7 +559,13 @@ export function createWorldStream(
 		================
 		*/
 		setCameraPlaying( playing: boolean ) {
-			if ( !disposed ) waypointPlaying = playing;
+			if ( disposed ) return;
+			waypointPlaying = playing;
+			// /cwgo zeroes the track clock (+0xE8) as it writes the byte;
+			// either write drops the last step's timestamp, so the next
+			// playing step starts from a zero delta again.
+			waypointClockSeconds = 0;
+			waypointLastStepMs = null;
 		},
 		/*
 		================
@@ -506,7 +606,11 @@ export function createWorldStream(
 			const offset = scripts.step( nowMs, events );
 			// The drawn distance glides to the native wheel distance (camera-zoom-ease.ts).
 			const drawn = camera ? { ...camera, distance: zoomEase.step( camera.distance, nowMs ) } : camera;
-			if ( pose && target !== null ) updateCamera( target?.pose ?? pose, drawn, target, offset );
+			// While the play byte stands the stepper drives the camera and
+			// the follow stays frozen (68F830 returns at once); the end
+			// clear inside it hands the next step back to the follow.
+			const played = pose ? stepWaypointCamera( pose, nowMs ) : false;
+			if ( pose && target !== null && !played ) updateCamera( target?.pose ?? pose, drawn, target, offset );
 			try {
 				advance( pose, nowMs );
 				if ( transaction.phase === "ready" ) recovery.reset();
@@ -549,7 +653,7 @@ export function createWorldStream(
 				transaction.phase === "ready" || transaction.phase === "failed"
 			) return undefined;
 			const region = previous.regionId;
-			const adjacent = !isDungeonRegion( region ) && !isDungeonRegion( displayedRegion ) &&
+			const adjacent = featuresAt( region ).sectorFrames && featuresAt( displayedRegion ).sectorFrames &&
 				Math.abs( sectorX( region ) - sectorX( displayedRegion ) ) <= 1 &&
 				Math.abs( sectorY( region ) - sectorY( displayedRegion ) ) <= 1;
 			return adjacent ? undefined : region;

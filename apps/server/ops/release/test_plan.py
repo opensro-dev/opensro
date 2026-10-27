@@ -95,6 +95,26 @@ class PlanTests(unittest.TestCase):
 
 
 
+# build_plan reads the compatibility contract at this path under the checkout
+# root (plan.py), so a directory holding it is the root.
+CONTRACT_PATH = "apps/server/ops/release/compatibility.json"
+HERE = Path(__file__).resolve().parent
+
+
+# ================
+# checkout_root
+#
+# The nearest directory above this file that holds the contract, or None when
+# ops/release runs outside a full checkout (a host's installed controls), where
+# the one test that needs the checkout skips instead of erroring.
+# ================
+def checkout_root():
+	for candidate in (HERE, *HERE.parents):
+		if (candidate / CONTRACT_PATH).is_file():
+			return candidate
+	return None
+
+
 # ================
 # IntentTests
 #
@@ -105,8 +125,10 @@ class IntentTests(unittest.TestCase):
 	# plan
 	# ================
 	def plan(self, intent):
-		root = str(Path(__file__).resolve().parents[4])
-		answers = {"--show-toplevel": root, "HEAD": NEW_COMMIT}
+		root = checkout_root()
+		if root is None:
+			self.skipTest("no repository checkout holds " + CONTRACT_PATH + " above " + str(HERE))
+		answers = {"--show-toplevel": str(root), "HEAD": NEW_COMMIT}
 
 		# ================
 		# fake_git
