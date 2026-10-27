@@ -35,6 +35,7 @@ import sys
 from install import install_file, quic_sysctls
 
 PUBLIC_PORT = 443
+BIND_HOST = "[::]"
 UNPRIVILEGED_PORT_FLOOR = 1024
 QUIC_BUFFER_FLOOR = 7500000
 REDIRECT_TABLE = "opensro_quic"
@@ -56,13 +57,30 @@ def require_bind_port(port):
 
 
 # ================
+# require_bind
+#
+# The whole public bind: a usable port (require_bind_port) on the IPv6
+# wildcard. The redirect delivers to the receiving interface's address,
+# for IPv4 and IPv6 alike (inet table), so only "[::]" (dual-stack in the
+# GameWorld) receives every redirected packet; loopback, one address or
+# the IPv4-only 0.0.0.0 would pass every other check and drop players
+# silently onto the WebSocket fallback.
+# ================
+def require_bind(host, port):
+	if host != BIND_HOST:
+		raise ValueError("the WebTransport bind host must be " + BIND_HOST + ", not " + repr(host) +
+			": the UDP " + str(PUBLIC_PORT) + " redirect delivers to the interface address, IPv4 and IPv6")
+	require_bind_port(port)
+
+
+# ================
 # redirect_rules
 #
 # The nftables file the unit loads. It declares the table, deletes it and
 # defines it again in one transaction, so a reload replaces the rule
 # instead of adding a second one. The inet family covers IPv4 and IPv6.
 # REDIRECT sends a packet to the receiving interface's own address, so the
-# bind must be a wildcard or that address, never loopback.
+# bind is the dual-stack wildcard (require_bind).
 # ================
 def redirect_rules(port):
 	require_bind_port(port)

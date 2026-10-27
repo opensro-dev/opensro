@@ -356,7 +356,7 @@ and install it as root-only `/etc/opensro-release/config.json`:
   "staff_webhook": "/etc/opensro-backup/discord-webhook",
   "maintenance_accounts": ["release-probe"],
   "webtransport_public": "on",
-  "transport_wt_addr": "0.0.0.0:18443",
+  "transport_wt_addr": "[::]:18443",
   "transport_cert_file": "/etc/opensro-release/tls/fullchain.pem",
   "transport_key_file": "/etc/opensro-release/tls/privkey.pem"
 }
@@ -373,9 +373,11 @@ as `SRO_WEBTRANSPORT_PUBLIC`, which the deployer derives from this file
 alone: `shard-settings.json` never names it.
 
 The GameWorld runs as the unprivileged `sro` user and cannot bind UDP 443,
-so `transport_wt_addr` binds a port of 1024 or above (a wildcard or the
-public address, never loopback) and the host redirects public UDP 443 to
-it. `deploy.py` passes `-transport-wt-public-port 443`, so `sro-nomad`
+so `transport_wt_addr` binds `[::]` (dual-stack) on a port of 1024 or
+above and the host redirects public UDP 443, IPv4 and IPv6, to it. The
+redirect delivers to the interface address, so loopback, one address or
+the IPv4-only `0.0.0.0` would drop players silently onto the WebSocket
+fallback; `deploy.py` refuses them. `deploy.py` passes `-transport-wt-public-port 443`, so `sro-nomad`
 still checks the advertised port against what clients dial. The host half
 is one owner-approved step, run as root from the installed controls before
 the first public deploy (`release_controls.py` never runs `install.main`):

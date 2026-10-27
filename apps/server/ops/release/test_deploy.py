@@ -76,24 +76,29 @@ class DeployTests(unittest.TestCase):
 		self.assertEqual(deploy.webtransport_deployer({}), ({}, []))
 		self.assertEqual(deploy.webtransport_deployer({"webtransport_public": "off"}),
 			({"SRO_WEBTRANSPORT_PUBLIC": "off"}, []))
-		full = {"webtransport_public": "on", "transport_wt_addr": "203.0.113.7:18443",
+		full = {"webtransport_public": "on", "transport_wt_addr": "[::]:18443",
 			"transport_cert_file": "/etc/opensro-tls/fullchain.pem",
 			"transport_key_file": "/etc/opensro-tls/privkey.pem"}
 		environment, arguments = deploy.webtransport_deployer(full)
 		self.assertEqual(environment, {"SRO_WEBTRANSPORT_PUBLIC": "on"})
-		self.assertEqual(arguments, ["-transport-wt-addr", "203.0.113.7:18443",
+		self.assertEqual(arguments, ["-transport-wt-addr", "[::]:18443",
 			"-transport-cert-file", "/etc/opensro-tls/fullchain.pem",
 			"-transport-key-file", "/etc/opensro-tls/privkey.pem",
 			"-transport-wt-public-port", "443"])
 		# The GameWorld runs unprivileged: a bind it cannot hold is refused
 		# here, before any deploy, and so is a bind without a port.
-		for refused in ("203.0.113.7:443", "203.0.113.7:1023"):
+		for refused in ("[::]:443", "[::]:1023"):
 			with self.assertRaisesRegex(ValueError, "bind port must be 1024-65535"):
 				deploy.webtransport_deployer(dict(full, transport_wt_addr=refused))
-		for malformed in ("203.0.113.7", ":18443", "203.0.113.7:port"):
+		# The redirect delivers to the interface address, IPv4 and IPv6: any
+		# host but the dual-stack wildcard misses players silently.
+		for refused in ("127.0.0.1:18443", "203.0.113.7:18443", "0.0.0.0:18443", "[2001:db8::1]:18443"):
+			with self.assertRaisesRegex(ValueError, "bind host must be \\[::\\]"):
+				deploy.webtransport_deployer(dict(full, transport_wt_addr=refused))
+		for malformed in ("203.0.113.7", ":18443", "[::]:port"):
 			with self.assertRaisesRegex(ValueError, "must be host:port"):
 				deploy.webtransport_deployer(dict(full, transport_wt_addr=malformed))
-		self.assertEqual(deploy.wt_bind_port("[2001:db8::1]:18443"), 18443)
+		self.assertEqual(deploy.wt_bind("[::]:18443"), ("[::]", 18443))
 		with self.assertRaisesRegex(ValueError, "webtransport_public"):
 			deploy.webtransport_deployer({"webtransport_public": "yes"})
 		incomplete = dict(full)
@@ -114,7 +119,7 @@ class DeployTests(unittest.TestCase):
 	# deploy with the switch off, goes ahead without asking the host.
 	# ================
 	def test_public_webtransport_waits_for_the_host(self):
-		on = {"webtransport_public": "on", "transport_wt_addr": "0.0.0.0:18443"}
+		on = {"webtransport_public": "on", "transport_wt_addr": "[::]:18443"}
 		with patch.object(deploy.quic_host, "problems", return_value=["no live nftables redirect"]) as asked:
 			with self.assertRaisesRegex(RuntimeError, "host is not ready: no live nftables redirect"):
 				deploy.require_quic_host(on, {"SRO_WEBTRANSPORT_PUBLIC": "on"})

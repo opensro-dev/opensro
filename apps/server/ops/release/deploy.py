@@ -185,7 +185,7 @@ def webtransport_deployer(config):
 		if not isinstance(value, str) or not value.strip():
 			raise ValueError("webtransport_public is on but " + key + " is not configured")
 		arguments += [flag, value.strip()]
-	quic_host.require_bind_port(wt_bind_port(config["transport_wt_addr"]))
+	quic_host.require_bind(*wt_bind(config["transport_wt_addr"]))
 	arguments += ["-transport-wt-public-port", str(quic_host.PUBLIC_PORT)]
 	return {"SRO_WEBTRANSPORT_PUBLIC": "on"}, arguments
 
@@ -201,22 +201,22 @@ def webtransport_deployer(config):
 def require_quic_host(config, wt_environment):
 	if wt_environment.get("SRO_WEBTRANSPORT_PUBLIC") != "on":
 		return
-	gaps = quic_host.problems(wt_bind_port(config["transport_wt_addr"]))
+	gaps = quic_host.problems(wt_bind(config["transport_wt_addr"])[1])
 	if gaps:
 		raise RuntimeError("public WebTransport host is not ready: " + "; ".join(gaps))
 
 
 # ================
-# wt_bind_port
+# wt_bind
 #
-# The port of a host:port WebTransport bind ("203.0.113.7:18443",
-# "[2001:db8::1]:18443"); a value without a numeric port is refused.
+# The host and port of a host:port WebTransport bind ("[::]:18443"); a
+# value without a host or a numeric port is refused.
 # ================
-def wt_bind_port(address):
+def wt_bind(address):
 	host, separator, port = address.strip().rpartition(":")
 	if not separator or not host or not port.isdigit() or not 0 < int(port) < 65536:
 		raise ValueError("transport_wt_addr must be host:port, not " + repr(address))
-	return int(port)
+	return host, int(port)
 
 
 # ================

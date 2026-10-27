@@ -124,7 +124,8 @@ when none was loaded.
 The advertised port must be the port clients reach: the bind port, or
 PublicPort when the host redirects a public port to the bind (#1447:
 the GameWorld runs unprivileged and cannot bind UDP 443, so the host
-redirects public 443 to a high bind port).
+redirects public 443 to a high bind port). A redirected bind must be
+an unspecified host: the redirect delivers to the interface address.
 ================
 */
 func validateWebTransportPosture(certificate *transport.Certificate, posture webTransportPosture, shards []shardDeployment) error {
@@ -167,6 +168,18 @@ func validateWebTransportPosture(certificate *transport.Certificate, posture web
 	if posture.PublicPort != 0 {
 		if posture.PublicPort < 1 || posture.PublicPort > 65535 {
 			return fmt.Errorf("-transport-wt-public-port %d is not a port", posture.PublicPort)
+		}
+		// The host's redirect delivers to the receiving interface's own
+		// address, so only a wildcard bind is sure to receive it; loopback
+		// or another address would pass every check and never see a packet.
+		if posture.PublicPort != port {
+			if ip := net.ParseIP(host); ip == nil || !ip.IsUnspecified() {
+				return fmt.Errorf(
+					"-transport-wt-addr %q must bind an unspecified host ([::] or 0.0.0.0) when -transport-wt-public-port %d is redirected to it",
+					wtAddr,
+					posture.PublicPort,
+				)
+			}
 		}
 		reached = posture.PublicPort
 	}
