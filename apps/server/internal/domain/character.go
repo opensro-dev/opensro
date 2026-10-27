@@ -288,8 +288,13 @@ type Character struct {
 	PendingRenameQueuedMs int64 `json:"pendingRenameQueuedMs,omitempty"`
 	// LastRenameMs is the instant the last queued rename was applied; the
 	// 30-day rename cooldown is measured from it. Zero: never renamed.
-	LastRenameMs  int64 `json:"lastRenameMs,omitempty"`
-	DeletePending bool  `json:"deletePending"`
+	LastRenameMs int64 `json:"lastRenameMs,omitempty"`
+	// RenameNoticeFrom is the pre-rename name while the "X is now known
+	// as Y" notice still owes the character's friends and guild members
+	// (port-only, #1689). Applied with the rename; the world-bind fanout
+	// clears it once the notice has been sent. Empty: nothing owed.
+	RenameNoticeFrom string `json:"renameNoticeFrom,omitempty"`
+	DeletePending    bool   `json:"deletePending"`
 	// DeleteReservedAt is the ISO instant the deletion reservation was
 	// placed. The character-select screen renders the countdown from it and
 	// the deletion reaper archives matured reservations. Empty means no

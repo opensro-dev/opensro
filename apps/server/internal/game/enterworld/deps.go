@@ -164,6 +164,11 @@ type Deps struct {
 	// ranking snapshot (store jobweek.go).
 	CloseJobWeek func(divisionID string, week int64, label string) bool
 	JobRankings  func(divisionID string) domain.JobRankings
+	// QueueRename queues a name-change scroll's rename on the authority
+	// store (port-only, #1689, SRO_NAME_CHANGE_SCROLL). It runs OUTSIDE
+	// every character commit door - it takes the store's own lock - and
+	// answers why a queue was refused. Nil refuses every queue.
+	QueueRename func(divisionID string, character *Character, name string, nowMs int64) (RenameQueueOutcome, error)
 	// fixtureJobRankings is CloseWeek's snapshot when no authority is wired.
 	fixtureJobRankings map[string]domain.JobRankings
 	ReadCharacter      func(divisionID string, read func())
@@ -278,6 +283,37 @@ func (d *Deps) Update(character *Character, label string, update func() bool) bo
 	return d.runCharacterUpdate(characters, label, update, func(fn func() bool) bool {
 		return fn()
 	})
+}
+
+// RenameQueueOutcome says how a name-change scroll's queue request ended
+// (port-only, #1689). The scroll's handler maps each refusal to its own
+// failure byte; the store's error vocabulary stays behind the composition
+// that wires Deps.QueueRename.
+type RenameQueueOutcome uint8
+
+const (
+	RenameQueued RenameQueueOutcome = iota
+	RenameRefusedInvalidName
+	RenameRefusedNameTaken
+	RenameRefusedNameReserved
+	RenameRefusedAlreadyQueued
+	RenameRefusedCooldown
+)
+
+/*
+================
+QueueCharacterRename
+
+Queues a paid rename for the next login through the wired authority door.
+An unwired composition refuses: the scroll keeps its native unsupported
+answer because the caller checks the feature flag first.
+================
+*/
+func (d *Deps) QueueCharacterRename(divisionID string, character *Character, name string, nowMs int64) (RenameQueueOutcome, error) {
+	if d == nil || d.QueueRename == nil {
+		return RenameRefusedInvalidName, fmt.Errorf("enterworld: rename queue door is not wired")
+	}
+	return d.QueueRename(divisionID, character, name, nowMs)
 }
 
 // MutateMany routes a multi-character invariant through one atomic door.

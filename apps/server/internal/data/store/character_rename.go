@@ -188,6 +188,7 @@ func (s *Store) renameCharacterLocked(division string, selected *domain.Characte
 		c.PendingRenameName = next.PendingRenameName
 		c.PendingRenameQueuedMs = next.PendingRenameQueuedMs
 		c.LastRenameMs = next.LastRenameMs
+		c.RenameNoticeFrom = next.RenameNoticeFrom
 		domain.SwapFriends(c, next.Friends)
 		c.BlockedWhisperers = next.BlockedWhisperers
 	}
@@ -375,6 +376,7 @@ func (s *Store) applyPendingRenameLocked(division string, c *domain.Character, n
 		next.PendingRenameName = ""
 		next.PendingRenameQueuedMs = 0
 		next.LastRenameMs = nowMs
+		next.RenameNoticeFrom = c.Name
 	}, &reservation)
 	if err != nil {
 		log.Errorf("store: applying queued rename for character %d in %s failed (left queued): %v", c.ID, division, err)

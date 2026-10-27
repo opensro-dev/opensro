@@ -42,6 +42,9 @@ func validateCharacterIdentity(character *domain.Character) error {
 	if character.PendingRenameQueuedMs < 0 || character.LastRenameMs < 0 {
 		return fmt.Errorf("character %q has a negative rename stamp", character.Name)
 	}
+	if character.RenameNoticeFrom != "" && !persistedCharacterNameValid(character.RenameNoticeFrom) {
+		return fmt.Errorf("character %q rename notice source %q violates the native 2..12 ASCII shape", character.Name, character.RenameNoticeFrom)
+	}
 	if !domain.AccountIDValid(character.AccountID) {
 		return fmt.Errorf("character %q has an invalid account id", character.Name)
 	}

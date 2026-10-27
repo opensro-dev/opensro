@@ -27,6 +27,15 @@ const DropPlusNoticeChannel = 0x81
 // never lead to a character.
 const BreakNoticeChannel = 0x82
 
+// RenameNoticeChannel is the 0x3667 channel of the name-change notice
+// (#1689, port-only, not native, like JobKillNoticeChannel): "X is now
+// known as Y" goes to the renamed character's online friends and guild
+// members only - never a shard announcement - so the frame only ever
+// rides a targeted send. The browser client shows it as channel 7
+// unconditionally: it is the feature's own feedback, not a broadcast a
+// player opts out of. The frame is the plain channel-7 layout.
+const RenameNoticeChannel = 0x83
+
 // NoticeLink is what a drop or plus notice links: the player it names
 // (empty for none) and the item's CSOItem body as the inventory sends it,
 // ItemBody.Encode, which opens with the refObjID (empty for none).
@@ -53,6 +62,11 @@ func JobKillNotificationFrame(message string) Frame {
 // BreakNotificationFrame is NotificationFrame on BreakNoticeChannel.
 func BreakNotificationFrame(message string) Frame {
 	return notificationFrameOn(BreakNoticeChannel, message)
+}
+
+// RenameNotificationFrame is NotificationFrame on RenameNoticeChannel.
+func RenameNotificationFrame(message string) Frame {
+	return notificationFrameOn(RenameNoticeChannel, message)
 }
 
 // DropPlusNotificationFrame is a notice on DropPlusNoticeChannel, always in

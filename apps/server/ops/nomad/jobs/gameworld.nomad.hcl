@@ -202,6 +202,14 @@ variable "pharaoh_tomb" {
   default = "off"
 }
 
+# Port-only, not native: the name-change scroll (#1689) - the Item Mall
+# lists it for 500 silk and a use queues a rename for the next login.
+# "off" is native: names never change.
+variable "name_change_scroll" {
+  type    = string
+  default = "off"
+}
+
 # Port-only, not native: a Pharaoh Tomb elite or unique rolls its equipment
 # this many times as often. "1" is native; "2" to "20" raises it.
 variable "pharaoh_tomb_gear_rate" {
@@ -1151,6 +1159,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_CAP110_LEVEL100                = var.cap110_level100
         SRO_CAP110_SET_BONUSES             = var.cap110_set_bonuses
         SRO_PHARAOH_TOMB                   = var.pharaoh_tomb
+        SRO_NAME_CHANGE_SCROLL             = var.name_change_scroll
         SRO_PHARAOH_TOMB_GEAR_RATE         = var.pharaoh_tomb_gear_rate
         SRO_BETA_SILK                           = var.beta_silk
         SRO_BETA_SILK_ACTIVE_ONLY               = var.beta_silk_active_only

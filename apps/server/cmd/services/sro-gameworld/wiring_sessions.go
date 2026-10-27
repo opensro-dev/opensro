@@ -110,6 +110,9 @@ func (game *gameplayPlane) worldBound(
 	game.items.BindRecoverySession(divisionID, character, session.ID)
 	game.movement.WorldBound(session, divisionID, character)
 	community.FriendWorldBound(game.deps, game.presence, divisionID, character)
+	// #1689 (port-only): a rename applied at login is announced to the
+	// character's online friends and guild members, once.
+	community.RenameNoticeWorldBound(game.deps, game.presence, divisionID, character)
 	game.parties.WorldBound(session, divisionID, character)
 	game.matches.WorldBound(divisionID, character)
 	game.guildInvites.WorldBound(divisionID, character)

@@ -376,6 +376,7 @@ quickSlots[].kind
 quickSlots[].payload
 quickSlots[].slot
 raceIndex
+renameNoticeFrom
 sharedSkillCooldowns
 skillActionRecoveryUntilMs
 skillExp

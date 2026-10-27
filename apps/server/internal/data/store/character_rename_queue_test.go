@@ -67,6 +67,9 @@ func TestQueuedRenameAppliesAtLoginAndReservesOldName(t *testing.T) {
 	if hero.Name != "HeroTwo" || hero.PendingRenameName != "" || hero.LastRenameMs != now {
 		t.Fatalf("hero after apply: %+v", hero)
 	}
+	if hero.RenameNoticeFrom != "Hero" {
+		t.Fatalf("the applied rename owes no notice: %q", hero.RenameNoticeFrom)
+	}
 	if peer.Friends[0].Name != "HeroTwo" || peer.BlockedWhisperers[0] != "HeroTwo" {
 		t.Fatal("stale social references after apply")
 	}
