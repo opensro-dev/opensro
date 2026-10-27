@@ -521,12 +521,13 @@ func (s *MonsterState) Get(divisionID string, gid uint32) (monster.Instance, boo
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	state := s.populationForObject(divisionID, gid)
-	instance, ok := state.instances.lookup(gid)
-	if ok {
-		instance = finishSummonAction(instance, s.nowMillis())
+	state, slot := s.locateObject(divisionID, gid)
+	if state == nil {
+		return monster.Instance{}, false
 	}
-	return instance, ok
+	instance := state.instances.slotValue(gid, &slot)
+	clearExpiredSummonAction(&instance, s.nowMillis())
+	return instance, true
 }
 
 /*
