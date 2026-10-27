@@ -212,14 +212,6 @@ apps/server/internal/game/quest/runtime.go 2
 apps/server/internal/game/quest/wire.go 28
 apps/server/internal/game/quest/wire_test.go 2
 apps/server/internal/game/siege/lane_test.go 1
-apps/server/internal/game/social/party/consent.go 1
-apps/server/internal/game/social/party/e2e_wire_test.go 6
-apps/server/internal/game/social/party/matchjoin.go 6
-apps/server/internal/game/social/party/register.go 7
-apps/server/internal/game/social/party/registry_test.go 1
-apps/server/internal/game/social/party/updates.go 3
-apps/server/internal/game/social/party/wire.go 42
-apps/server/internal/game/social/party/wire_test.go 4
 apps/server/internal/game/world/fortress/capture_test.go 1
 apps/server/internal/game/world/fortress/fortress.go 2
 apps/server/internal/game/world/geometry_test.go 1
