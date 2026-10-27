@@ -416,7 +416,7 @@ func activeMoverGID(character *enterworld.Character, cosGID uint32) uint32 {
 	if cosGID != 0 {
 		return cosGID
 	}
-	if cos := character.Snapshot().ActiveCOS; cos != nil && cos.GID != 0 && cos.Mounted && cos.Summoned && cos.CurrentHP != 0 {
+	if cos := character.ActiveCOS; cos != nil && cos.GID != 0 && cos.Mounted && cos.Summoned && cos.CurrentHP != 0 {
 		return cos.GID
 	}
 	return enterworld.ObjectIDForCharacter(character)

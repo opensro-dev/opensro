@@ -43,6 +43,7 @@ native state untouched.
 */
 func InitCap110(textdataDir string, enabled bool) error {
 	if !enabled {
+		cap110Installed = false
 		return nil
 	}
 	data, err := os.ReadFile(filepath.Join(textdataDir, cap110EquipmentFile))
@@ -63,6 +64,7 @@ func InitCap110(textdataDir string, enabled bool) error {
 	}
 	markExpansionBuckets(nextEquipment, equipment)
 	equipment, properties, consumables = nextEquipment, nextProperties, nextConsumables
+	cap110Installed = true
 	return nil
 }
 
