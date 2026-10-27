@@ -7,15 +7,8 @@ apps/server/internal/agent/server/client_incident_test.go 2
 apps/server/internal/data/store/character_lifecycle.go 4
 apps/server/internal/data/store/db_write.go 1
 apps/server/internal/data/store/guildlevel_test.go 1
-apps/server/internal/domain/character.go 12
-apps/server/internal/domain/guild.go 1
-apps/server/internal/domain/guildlevel.go 8
-apps/server/internal/domain/guildvote.go 5
-apps/server/internal/domain/inventory_capacity.go 2
 apps/server/internal/domain/letter.go 1
 apps/server/internal/domain/quickslot.go 2
-apps/server/internal/domain/trainingcamp.go 3
-apps/server/internal/game/action/skillcombat.go 1
 apps/server/internal/game/combat/durability.go 1
 apps/server/internal/game/combat/formula.go 4
 apps/server/internal/game/combat/stats.go 2
@@ -129,7 +122,6 @@ apps/server/internal/game/item/wire/targetrelease.go 3
 apps/server/internal/game/item/wire/tradeowner_test.go 1
 apps/server/internal/game/item/wire/visualflags.go 2
 apps/server/internal/game/item/wire/withdrawal.go 2
-apps/server/internal/game/paramkeeper/graph.go 1
 apps/server/internal/game/quest/catalog.go 10
 apps/server/internal/game/quest/definitions.go 1
 apps/server/internal/game/quest/giveup.go 2
@@ -142,9 +134,7 @@ apps/server/internal/game/quest/rewardchoice.go 1
 apps/server/internal/game/quest/runtime.go 2
 apps/server/internal/game/quest/wire.go 28
 apps/server/internal/game/quest/wire_test.go 2
-apps/server/internal/game/siege/interaction.go 1
 apps/server/internal/game/siege/lane_test.go 1
-apps/server/internal/game/siege/wire.go 3
 apps/server/internal/game/social/chat/chat.go 2
 apps/server/internal/game/social/chat/chat_test.go 2
 apps/server/internal/game/social/chat/wire.go 53

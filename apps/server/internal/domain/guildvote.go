@@ -16,9 +16,10 @@ candidates are the members seen within three days other than the master,
 in roster order; a vote with one candidate strictly ahead and at least one
 ballot elects them, any other closes broken (UIIT_MSG_MRELEASE_BROKEN).
 The v1.150 client learns the candidates by asking: its vote row sends
-0x7332 and the 0xB332 answer carries them with their ballots (5DA1B0 case
-0x1A, 82CEE0; the v1.188 server writes the same body). The 0x3A6C
-push never carries them (type 2 is an assert in 7603D0).
+0x7332 (CIFNpcTalk_ExecuteMenuAction case 0x1A) and the 0xB332 answer
+carries them with their ballots (SGuildData_ReadVoteOpenAnswer_82CEE0;
+the v1.188 server writes the same body). The 0x3A6C push never carries
+them (the client's 0x3A6C handler asserts on type 2).
 
 ===========================================================================
 */
@@ -32,7 +33,7 @@ import (
 
 const (
 	// GuildVoteMasterRelease is the vote kind the release row looks up
-	// (SGuildData_FindVoteEntry(0), 82CC00).
+	// (the client's SGuildData_FindVoteEntry(0)).
 	GuildVoteMasterRelease uint8 = 0
 	// GuildVoteDurationMs is the ten minutes of UIIT_MSG_MRELEASE_CONFIRM.
 	GuildVoteDurationMs int64 = 10 * 60 * 1000
@@ -42,7 +43,8 @@ const (
 	// GuildVoterAbsenceMs is the three days of UIIT_MSG_MRELEASEERR_NOTVOTING.
 	GuildVoterAbsenceMs int64 = 3 * 24 * 60 * 60 * 1000
 	// GuildVoteNoOption is the "no previous ballot" option 0x3A6C type 4
-	// carries (82D0B0 skips the decrement for 0xFF).
+	// carries (SGuildData_ApplyVoteOption_82D0B0 skips the decrement for
+	// 0xFF).
 	GuildVoteNoOption uint8 = 0xff
 )
 

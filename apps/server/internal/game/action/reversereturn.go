@@ -203,7 +203,7 @@ func (rt *Runtime) handleReverseReturn(division string, c *enterworld.Character,
 		}
 		return rt.scrollReverseReturn(division, c, choice)
 	}
-	return rt.guideReverseReturn(division, c, choice)
+	return rt.guideReverseReturn(division, c, gid, choice)
 }
 
 /*
@@ -322,7 +322,7 @@ The native teleport use case 5: the free move to the chosen point, refused in th
 order. The caller holds the division lock.
 ================
 */
-func (rt *Runtime) guideReverseReturn(division string, c *enterworld.Character, choice uint8) OpResult {
+func (rt *Runtime) guideReverseReturn(division string, c *enterworld.Character, gid uint32, choice uint8) OpResult {
 	if rt.QuestTravelBlocks != nil && rt.QuestTravelBlocks(c)&operationMaskQuestTravel != 0 {
 		return portalFailure(errCodeGuideQuestBlock)
 	}
@@ -344,7 +344,8 @@ func (rt *Runtime) guideReverseReturn(division string, c *enterworld.Character, 
 	if rt.transportBarredFromDestination(c, point.spawn) {
 		return portalFailure(errCodeGuideTransport)
 	}
-	return rt.commitGateTravel(gateTravel{division: division, character: c, destination: point.spawn, world: point.world, reason: "guide-reverse-return"}, func() (int64, OpResult, bool) {
+	return rt.commitGateTravel(gateTravel{division: division, character: c, destination: point.spawn, world: point.world, reason: "guide-reverse-return",
+		arrived: func() []wire.Frame { return rt.questTeleportFrames(c, gateReverseReturn, gid) }}, func() (int64, OpResult, bool) {
 		if c.DeletePending || !enterworld.CharacterAlive(c) {
 			return 0, portalFailure(2), false
 		}
