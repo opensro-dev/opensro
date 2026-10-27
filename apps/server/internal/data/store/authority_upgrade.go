@@ -3,12 +3,13 @@
 
 authority_upgrade.go - the offline, preserving authority upgrade
 
-Brings schemas 13 through 31 to schema 32, layout 10. Takes the same exclusive authority lock as the game
+Brings schemas 13 through 32 to schema 33, layout 11. Takes the same exclusive authority lock as the game
 server, validates every existing record and keeps an independent backup.
 Schema 13 also gains the two account tables from layout 5; every layout 5
 source gains the empty fortress tables of layout 6, and every layout 7
-source the empty fortress production table of layout 8, and every layout 8
-source the empty unique-kill table of layout 9. Existing tables and
+source the empty fortress production table of layout 8, every layout 8
+source the empty unique-kill table of layout 9, and every layout 10
+source the empty name-reservation table of layout 11. Existing tables and
 their records survive unchanged; the new record fields are optional. The
 role repair makes each guild master the sole commander
 (guild_leader_role.go); it also runs on a current store that needs it.
@@ -56,6 +57,8 @@ const preInstanceReturnVersion = 28
 const preStructureMadeVersion = 29
 const preStoredPetCastsVersion = 30
 const preBreakNoticeVersion = 31
+const preRenameVersion = 32
+const preNameReservationLayoutVersion = 10
 
 // ErrAuthorityCurrent reports an authority already in the current format: a
 // release retried after a committed upgrade has nothing left to do.
@@ -191,8 +194,15 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 		sourceLayout = layout
 	case preStoredPetCastsVersion, preBreakNoticeVersion:
 		// Stored-cast fields and the break-notice opt-in are optional;
-		// old records read unchanged.
-		if layout != CurrentLayoutVersion {
+		// old records read unchanged. These schemas ran at layout 10.
+		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
+			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
+		}
+		sourceLayout = layout
+	case preRenameVersion:
+		// Schema 32 ran at layout 10 and has no name-change scroll state
+		// or reservation table; its records read unchanged.
+		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
 			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
 		}
 		sourceLayout = layout
@@ -244,8 +254,11 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 	if sourceLayout < preLedgerLayoutVersion {
 		added = append(added, "unique_kills")
 	}
-	if sourceLayout < CurrentLayoutVersion {
+	if sourceLayout <= preLedgerLayoutVersion {
 		added = append(added, "economy_ledger")
+	}
+	if sourceLayout <= preNameReservationLayoutVersion {
+		added = append(added, "name_reservations")
 	}
 	if sourceLayout == preMallLayoutVersion {
 		added = append(added, "mall_accounts", "account_storage")
@@ -255,7 +268,19 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 		if err := db.QueryRow("SELECT count(*) FROM sqlite_schema WHERE name = ?", table).Scan(&existing); err != nil {
 			return "", err
 		}
-		if existing != 0 {
+		if existing == 0 {
+			continue
+		}
+		// An empty table in an older-layout authority is construction
+		// residue (a database created by a newer binary, then stamped
+		// down); the CREATE below is a no-op for it. Rows are the
+		// mislabeling this guard exists to catch: an old layout cannot
+		// hold data its binary never wrote.
+		var rows int
+		if err := db.QueryRow(fmt.Sprintf("SELECT count(*) FROM %s", table)).Scan(&rows); err != nil {
+			return "", err
+		}
+		if rows != 0 {
 			return "", fmt.Errorf("authority upgrade: layout %d unexpectedly contains %s", sourceLayout, table)
 		}
 	}
@@ -322,8 +347,13 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 			return backupPath, err
 		}
 	}
-	if sourceLayout < CurrentLayoutVersion {
+	if sourceLayout <= preLedgerLayoutVersion {
 		if _, err := tx.Exec(economyLedgerSchema); err != nil {
+			return backupPath, err
+		}
+	}
+	if sourceLayout <= preNameReservationLayoutVersion {
+		if _, err := tx.Exec(nameReservationsSchema); err != nil {
 			return backupPath, err
 		}
 	}
