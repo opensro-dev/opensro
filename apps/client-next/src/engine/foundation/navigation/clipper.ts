@@ -44,10 +44,12 @@ import { ownedPlacementStart } from "@/engine/foundation/navigation/owned-start"
 import type { NavMesh, NavPlacement, NavigationProduct } from "@/engine/contracts/navigation";
 import type { Pose } from "@/engine/contracts/gameplay";
 import { base64Bytes } from "@/engine/foundation/assets/base64";
+import { featuresAt } from "@/engine/foundation/world/plane";
 import {
-	isDungeonRegion,
+	coordinateFrame,
 	REGION_SIZE,
 	regionOffsetXZ,
+	regionOriginXZ,
 	regionRelativeXZ,
 	sameCoordinateSpace,
 	sectorX,
@@ -128,7 +130,7 @@ export function createNavigation() {
 	================
 	*/
 	function cell( region: number, x: number, z: number ): "open" | "blocked" | "unknown" {
-		if ( isDungeonRegion( region ) ) {
+		if ( !featuresAt( region ).terrainGrid ) {
 			return "unknown";
 		}
 		const dx = Math.floor( x / REGION_SIZE ),
@@ -157,8 +159,11 @@ export function createNavigation() {
 		preferred?: import("@/engine/foundation/navigation/dungeon-ownership").NavOwner,
 		initialize = true
 	): number | null {
-		const { x, y, z } = pose, from = pose, dungeon = isDungeonRegion( pose.regionId );
-		if ( dungeon && (!complete || origin !== pose.regionId) ) return null;
+		const { x, y, z } = pose,
+			from = pose,
+			features = featuresAt( pose.regionId ),
+			onTerrainPlane = features.terrainGrid;
+		if ( features.residentOnly && (!complete || origin !== pose.regionId) ) return null;
 		const [ox, oz] = regionOffsetXZ( origin, pose.regionId );
 		if ( preferred ) {
 			const p = objects[preferred.placement];
@@ -168,7 +173,7 @@ export function createNavigation() {
 			}
 		}
 		let h: number | null = null, delta = Infinity;
-		if ( !dungeon ) {
+		if ( onTerrainPlane ) {
 			const dx = Math.floor( x / REGION_SIZE ),
 				dz = Math.floor( z / REGION_SIZE ),
 				rx = sectorX( from.regionId ) + dx,
@@ -192,7 +197,7 @@ export function createNavigation() {
 				}
 			}
 		}
-		if ( initialize || dungeon ) {
+		if ( initialize || !onTerrainPlane ) {
 			const candidates = index ?
 				index.placements( [ x + ox, y, z + oz ] ).map( i => objects[i]! ) :
 				objects;
@@ -217,7 +222,7 @@ export function createNavigation() {
 	================
 	*/
 	function worldX( p: NavPlacement, o: number ) {
-		return isDungeonRegion( o ) ? p.x : p.x + sectorX( o ) * REGION_SIZE;
+		return p.x + regionOriginXZ( o )[0];
 	}
 	/*
 	================
@@ -225,7 +230,7 @@ export function createNavigation() {
 	================
 	*/
 	function worldZ( p: NavPlacement, o: number ) {
-		return isDungeonRegion( o ) ? p.z : p.z + sectorY( o ) * REGION_SIZE;
+		return p.z + regionOriginXZ( o )[1];
 	}
 	/*
 	================
@@ -267,7 +272,7 @@ export function createNavigation() {
 			const p = owner && objects[owner.placement];
 			return owner && p ?
 				{
-					region: isDungeonRegion( origin ) ? origin : 0,
+					region: coordinateFrame( origin ),
 					x: worldX( p, origin ),
 					y: p.y,
 					z: worldZ( p, origin ),
@@ -287,7 +292,7 @@ export function createNavigation() {
 				| { region: number; x: number; y: number; z: number; yaw: number; mesh: NavMesh; cell: number; }
 				| undefined
 		): NavOwner | undefined {
-			if ( !anchor || (isDungeonRegion( origin ) ? origin : 0) !== anchor.region ) return undefined;
+			if ( !anchor || coordinateFrame( origin ) !== anchor.region ) return undefined;
 			const same = ( a: number, b: number ) => Math.abs( a - b ) < 1e-3;
 			// Array lengths alone do not identify a cell. A replacement mesh
 			// may have the same counts but different geometry or topology.
@@ -310,7 +315,7 @@ export function createNavigation() {
 		================
 		*/
 		available( pose: Pose ) {
-			return isDungeonRegion( pose.regionId ) ?
+			return featuresAt( pose.regionId ).residentOnly ?
 				complete && origin === pose.regionId :
 				cell( pose.regionId, pose.x, pose.z ) !== "unknown";
 		},
@@ -349,7 +354,7 @@ export function createNavigation() {
 						const [px, pz] = regionRelativeXZ( origin, p );
 						return [ px, p.y, pz ];
 					};
-					const path = (isDungeonRegion( pose.regionId ) ? dungeonOwnerPath : terrainOwnerPath)(
+					const path = (featuresAt( pose.regionId ).terrainGrid ? terrainOwnerPath : dungeonOwnerPath)(
 						objects,
 						point( reference ),
 						point( pose ),
@@ -369,7 +374,9 @@ export function createNavigation() {
 		================
 		*/
 		block( pose: Pose | null, owner?: import("@/engine/foundation/navigation/dungeon-ownership").NavOwner ) {
-			if ( !pose || !isDungeonRegion( pose.regionId ) || pose.regionId !== origin || !complete ) return undefined;
+			if ( !pose || !featuresAt( pose.regionId ).rooms || pose.regionId !== origin || !complete ) {
+				return undefined;
+			}
 			if ( owner ) return objects[owner.placement]?.block;
 			const key = [ origin, pose.x, pose.y, pose.z ].join( ":" );
 			if ( key === blockKey ) return blockValue;
@@ -383,7 +390,9 @@ export function createNavigation() {
 		================
 		*/
 		floor( pose: Pose | null, owner?: NavOwner ) {
-			if ( !pose || !isDungeonRegion( pose.regionId ) || pose.regionId !== origin || !complete ) return undefined;
+			if ( !pose || !featuresAt( pose.regionId ).rooms || pose.regionId !== origin || !complete ) {
+				return undefined;
+			}
 			const key = [ revision, pose.regionId, pose.x, pose.y, pose.z, owner?.placement, owner?.cell ].join( ":" );
 			if ( floors.has( key ) ) return floors.get( key );
 			const point = [ pose.x, pose.y, pose.z ],
@@ -444,7 +453,7 @@ export function createNavigation() {
 			const product = value as NavigationProduct;
 			let residencyBytes = 0;
 			if ( product.complete === true ) residencyBytes = admitObjectProduct( product, regionId );
-			if ( isDungeonRegion( regionId ) ) {
+			if ( featuresAt( regionId ).residentOnly ) {
 				if ( !product.complete ) throw new Error( "Dungeon coverage is missing" );
 				// The product arrived by message, so it is already this worker's own copy,
 				// and navigation never writes into it (the oracle runs it deep-frozen).
@@ -459,7 +468,7 @@ export function createNavigation() {
 				return;
 			}
 
-			if ( !Number.isInteger( regionId ) || regionId <= 0 || isDungeonRegion( regionId ) ) {
+			if ( !Number.isInteger( regionId ) || regionId <= 0 || !featuresAt( regionId ).terrainGrid ) {
 				throw new Error( "Outdoor navigation region required" );
 			}
 			const b = value as {
@@ -595,7 +604,7 @@ export function createNavigation() {
 				status = 0;
 				reachedOwner = undefined;
 				if ( !sameCoordinateSpace( from.regionId, to.regionId ) ) return null;
-				if ( !isDungeonRegion( from.regionId ) ) {
+				if ( featuresAt( from.regionId ).sectorFrames ) {
 					const [tx, tz] = regionRelativeXZ( from.regionId, to );
 					to = {
 						...to,
@@ -610,7 +619,7 @@ export function createNavigation() {
 				================
 				*/
 				function canonicalPose( p: Pose ): Pose | null {
-					if ( isDungeonRegion( p.regionId ) ) return p;
+					if ( !featuresAt( p.regionId ).sectorFrames ) return p;
 					const dx = Math.floor( p.x / REGION_SIZE ),
 						dz = Math.floor( p.z / REGION_SIZE ),
 						rx = sectorX( p.regionId ) + dx,
@@ -618,15 +627,15 @@ export function createNavigation() {
 					if ( rx < 0 || rx > 255 || rz < 0 || rz > 127 ) return null;
 					return { ...p, regionId: rx | (rz << 8), x: p.x - dx * REGION_SIZE, z: p.z - dz * REGION_SIZE };
 				}
-				const dungeon = isDungeonRegion( from.regionId );
-				if ( dungeon && (!complete || origin !== from.regionId) ) return null;
+				const features = featuresAt( from.regionId ), onTerrainPlane = features.terrainGrid;
+				if ( features.residentOnly && (!complete || origin !== from.regionId) ) return null;
 				const [ox, oz] = regionOffsetXZ( origin, from.regionId );
 				// An unretained start takes native FindNavCell's surface: the nearest by |deltaY|, terrain winning ties.
 				if ( firstLeg && !sourceOwner ) {
 					const point = [ from.x + ox, from.y, from.z + oz ],
 						resident = dungeonOwnerPath( objects, point, point ).owner ?? undefined;
 					const deckY = resident ? surfaceHeight( from, resident ) : null,
-						terrainY = dungeon ? null : surfaceHeight( from, undefined, false );
+						terrainY = !onTerrainPlane ? null : surfaceHeight( from, undefined, false );
 					sourceOwner = resident && deckY !== null && terrainY !== null &&
 							Math.abs( terrainY - from.y ) <= Math.abs( deckY - from.y ) ?
 						undefined :
@@ -638,7 +647,7 @@ export function createNavigation() {
 					const start = ownedPlacementStart( placement, retained.cell, [ from.x + ox, from.y, from.z + oz ] );
 					from = { ...from, x: start[0]! - ox, z: start[2]! - oz };
 				}
-				if ( dungeon && surfaceHeight( from ) === null ) return null;
+				if ( !onTerrainPlane && surfaceHeight( from ) === null ) return null;
 				const deck = ( x: number, z: number, y: number ) => {
 					const candidates = index ?
 						index.placements( [ x + ox, y, z + oz ] ).map( i => objects[i]! ) :
@@ -657,10 +666,10 @@ export function createNavigation() {
 				const fromPoint = [ from.x + ox, from.y, from.z + oz ], toPoint = [ to.x + ox, to.y, to.z + oz ];
 				const requestedSpan = Math.max( Math.abs( to.x - from.x ), Math.abs( to.z - from.z ), .01 );
 				// FindNavCell's terrain-first tie applies only to a mover with no retained cell.
-				const startTerrainY = !dungeon && !sourceOwner ?
+				const startTerrainY = onTerrainPlane && !sourceOwner ?
 					surfaceHeight( from, undefined, false ) ?? undefined :
 					undefined;
-				const candidatePath = dungeon ?
+				const candidatePath = !onTerrainPlane ?
 					dungeonOwnerPath(
 						objects,
 						fromPoint,
@@ -676,12 +685,12 @@ export function createNavigation() {
 					);
 				const ownerPath = candidatePath.owner ? candidatePath : null;
 				if (
-					!dungeon && cell( from.regionId, from.x, from.z ) !== "open" &&
+					onTerrainPlane && cell( from.regionId, from.x, from.z ) !== "open" &&
 					!ownerPath?.spans.some( span => span.from === 0 ) && !deck( from.x, from.z, from.y )
 				) return null;
-				if ( dungeon && !ownerPath ) return null;
+				if ( !onTerrainPlane && !ownerPath ) return null;
 				const passages = linkPassages( objects, fromPoint, toPoint, !!ownerPath, index?.passageLinks );
-				let transfer = !dungeon && ownerPath ?
+				let transfer = onTerrainPlane && ownerPath ?
 					linkedEntry( objects, fromPoint, toPoint, ownerPath.spans ) :
 					null;
 				let contact = Infinity, contactKey = Infinity, retainedFraction = 1;
@@ -691,7 +700,7 @@ export function createNavigation() {
 				// part of the chord to CRTNavMeshObj_EnterFromOutside (428300): the first
 				// outline crossing blocks when its edge is blocked, whichever side the
 				// mover comes from. Owned spans follow their own mesh below.
-				const terrainParts = dungeon ? [] : terrainIntervals( ownerPath?.spans ?? [] );
+				const terrainParts = !onTerrainPlane ? [] : terrainIntervals( ownerPath?.spans ?? [] );
 				for ( const p of objects ) {
 					const objectSpans = ownerPath?.spans.filter( span => objects[span.placement] === p );
 					if ( terrainParts.length ) {
@@ -728,7 +737,7 @@ export function createNavigation() {
 						objects,
 						passages,
 						output?.slide === true,
-						!dungeon,
+						onTerrainPlane,
 						objectSpans
 					);
 					const owned = !ownerPath ||
@@ -749,7 +758,7 @@ export function createNavigation() {
 					}
 				}
 				if ( (globalThis as any).NAVDBG ) console.log( "CONTACT", contact, JSON.stringify( response ) );
-				if ( dungeon && output?.context && ownerPath ) {
+				if ( !onTerrainPlane && output?.context && ownerPath ) {
 					const events = navigationEvents( objects, ownerPath.spans, output.context ).filter( e =>
 						e.fraction <= contact + 1e-8
 					);
@@ -814,7 +823,7 @@ export function createNavigation() {
 						z: from.z + (to.z - from.z) * t
 					};
 				}
-				if ( !dungeon && !transfer ) {
+				if ( onTerrainPlane && !transfer ) {
 					const resolved = ownerPath ?
 						terrainOwnerPath(
 							objects,
@@ -841,7 +850,7 @@ export function createNavigation() {
 						) ?? to.y
 					};
 				}
-				if ( dungeon ) {
+				if ( !onTerrainPlane ) {
 					if ( ownerPath!.stop < retainedFraction ) {
 						status |= 1;
 						const fraction = Math.max( 0, ownerPath!.stop - .01 / requestedSpan );
