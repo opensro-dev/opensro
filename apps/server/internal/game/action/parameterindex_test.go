@@ -59,7 +59,7 @@ func wizardCaster(t *testing.T, code string) (*Runtime, *enterworld.Character, e
 ================
 TestRootReachAddsMagicBound
 
-4AE87E: a cast whose row asks for WIRU reaches its column range plus the
+Reference server: a cast whose row asks for WIRU reaches its column range plus the
 caster's Magic Bound. Root is a status cast (no att), so only the shared
 index records its getv WIRU. The press stores that reach on the approach
 intent the cast then walks under.
@@ -100,7 +100,7 @@ func TestRootReachAddsMagicBound(t *testing.T) {
 ================
 TestEarthBarrierCostCutByIntelligence
 
-5868F1: an instant cast whose row asks for WIMD pays its prepared MP less
+Reference server: an instant cast whose row asks for WIMD pays its prepared MP less
 the caster's Intelligence percentage. Earth Barrier's getv WIMD sits behind
 the zero word after odar, and Earth Fence shares the shape.
 ================
@@ -149,10 +149,10 @@ func TestEarthBarrierCostCutByIntelligence(t *testing.T) {
 TestFireShieldReqiGates
 
 The Chinese Fire Shield's reqi 4 1 (a shield in slot 7) is indexed on the
-row: without a shield the cast is refused with 58D480's 0x300D, and with one
-it casts (bgra is pinned, #508). The 59F0E0 walk is pinned on seeded
+row: without a shield the cast is refused with the requirement check's 0x300D, and with one
+it casts (bgra is pinned, #508). The re-evaluation walk is pinned on seeded
 instances: it would retire a self-applied instance whose reqi the
-equipment no longer meets, but 59F397 exempts SKILL_CH_FIRE_SHIELD_ rows
+equipment no longer meets, but the reference server exempts SKILL_CH_FIRE_SHIELD_ rows
 by name, so only the same row under another codename is retired when the
 shield leaves.
 ================

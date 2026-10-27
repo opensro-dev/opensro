@@ -4,10 +4,10 @@
 petcatchup_test.go - a pet left behind reappears at its owner
 
 A player report: a wolf stuck in town stayed there while its owner walked
-out. The v1.188 server's follow tick (CAITactics_FollowOwnerFormation
-549F80) warps a COS to its owner (CAITactics_RequestPositionRelocation
-541110, message 0x7022) once the owner is no longer in its plane and
-adjacent sectors (Pos_AreSamePlaneAndAdjacentSectors 430CE0). Within those
+out. The v1.188 server's follow tick warps a COS to its owner
+(a position relocation,
+message 0x7022) once the owner is no longer in its plane and
+adjacent sectors. Within those
 sectors it walks, and a pet whose walks keep stalling warps after its tenth
 stalled stop (the stuck rule, petstuck.go).
 
@@ -90,9 +90,9 @@ func TestStrandedPetWarpsToAnOwnerTwoSectorsAway(t *testing.T) {
 ================
 TestWalledInPetWarpsToAnAdjacentOwnerAfterTenStalledStops
 
-430CE0 holds one sector either way, so the sector warp never fires there;
-the stuck rule does. Every refused step is a stalled stop (4A9430 event 8,
-559010); the tenth relocates the pet onto its owner (5599C0 -> 541110). The
+The adjacency test holds one sector either way, so the sector warp never fires there;
+the stuck rule does. Every refused step is a stalled stop (event 8,
+counted as stuck); the tenth relocates the pet onto its owner. The
 port's earlier test had the walled-in pet stay put, which is not native.
 ================
 */

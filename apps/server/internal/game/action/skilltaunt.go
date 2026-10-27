@@ -142,7 +142,7 @@ func (rt *Runtime) tauntAggression(c tauntCast) (uint32, bool) {
 ================
 releaseTaunt
 
-58E5F0 emits a normal successful result with zero HP damage. Aggression is
+The native hit outcome emits a normal successful result with zero HP damage. Aggression is
 committed through the shared link-aware hostility owner after resource debit.
 ================
 */

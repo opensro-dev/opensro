@@ -156,7 +156,7 @@ func startPartyServer(t *testing.T, dir string, createCharacters bool) e2eServer
 				ModelCodename: "CHAR_CH_MAN_ADVENTURER",
 				RaceIndex:     e2eInt64(enterworld.RaceChina),
 				Gender:        e2eInt64(enterworld.GenderMale),
-				// 513F90 refuses a proposer below level 5.
+				// The reference server refuses a proposer below level 5.
 				Level: e2eInt64(5),
 			}
 			if err := authority.CreateCharacter(e2eDivision, "test-account", seed); err != nil {
@@ -430,7 +430,7 @@ func chinaMaleRow(gid uint32, name string) party.MemberRow {
 		Level:         5,
 		StatusNibbles: 0xAA,
 		War:           domain.DefaultWorldInstance,
-		// Live rows always carry the mastery pair (0x5A1890); these seed
+		// Live rows always carry the mastery pair (reference server); these seed
 		// characters train none, so the pair is (0, 0).
 		Masteries: true,
 		Region:    0x62A8,
@@ -827,7 +827,7 @@ func TestPartyRebindDropsStaleMembership(t *testing.T) {
 //
 //	inviter logged off    -> the accept resolves no live inviter session
 //	                         and commits nothing;
-//	second proposal       -> refused while the first waits (46F420),
+//	second proposal       -> refused while the first waits (native),
 //	                         {2, 2} to both; after a decline the retry
 //	                         prompts and commits;
 //	inviter got partied   -> a form-kind accept re-validates under the

@@ -4,17 +4,17 @@
 pkreward.go - what a player's kill of a player pays its killer
 
 Two native owners pay the killer. The victim's death penalty
-(CGObjPC_ApplyDeathPenalty 4E6980) pays a player killer its PvP EXP
-(Formulae_CalculatePvPExperience 4105D0) for a murder or a guild-war kill,
+(the reference server's death penalty) pays a player killer its PvP EXP
+(the PvP experience formula) for a murder or a guild-war kill,
 doubled when the victim was itself a murderer. Then
-CGObjPC_ProcessPvpKillRewards (4E1F60), reached from the killer's
-CGObjPC_EnterBattleOnAttack, keeps the books by the kill's kind:
+the reference server's PvP kill rewards, reached from the killer's
+battle entry on attack, keep the books by the kill's kind:
 
   - ordinary player kill (3): unless the victim is a legal world enemy,
     a living killer's total PK +1, penalty +(total+1)/2*1200, daily PK by
     the level-gap weight (pk.RecordMurder);
-  - job (1): job EXP (Formulae_CalculateJobKillExp 4103E0), shared by the
-    killer's party (CGObjPC_DistributeJobKillExp 5BD7F0), then EXP of
+    - job (1): job EXP (the job kill formula), shared by the
+        killer's party, then EXP of
     leveldata +0x1c of the lower level, three times over;
   - guild war (5): the guild-war authority receives the fatal combat
     facts after the character door, then commits guild and member scores.
@@ -30,6 +30,7 @@ package action
 import (
 	"math"
 
+	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -39,11 +40,11 @@ import (
 )
 
 const (
-	// jobKillPartyBonus is 5BD8E9's 0.05 per member beyond the first.
+	// jobKillPartyBonus is the reference server's 0.05 per member beyond the first.
 	jobKillPartyBonus = 0.05
-	// jobKillBasisScale is 410404's GoldMin * 10 * 0.125.
+	// jobKillBasisScale is the reference server's GoldMin * 10 * 0.125.
 	jobKillBasisScale = 0.125
-	// jobKillExpMultiplier is 4E20F3's leveldata +0x1c * 3.
+	// jobKillExpMultiplier is the reference server's leveldata +0x1c * 3.
 	jobKillExpMultiplier = 3
 )
 
@@ -52,9 +53,9 @@ const (
 playerKill
 
 A fatal player hit's kill, classified before the victim's death changes
-its equipment (4E6EC0 stores the kind at victim +0x1CB4 first). legalEnemy
-is 4EB590's target predicate before death relief; murderer
-is 4E6980's "victim penalty > 0 and kind != 5", read before the death's
+its equipment (the reference server stores the kind at victim +0x1CB4 first). legalEnemy
+is the reference server's target predicate before death relief; murderer
+is the death penalty's "victim penalty > 0 and kind != 5", read before the death's
 relief lowers the penalty.
 ================
 */
@@ -119,7 +120,7 @@ func (kill playerKill) withVictim(killer, victim *enterworld.Character) playerKi
 payPlayerKillInDoor
 
 Inside the fatal hit's door, after the victim's death settled: the PvP
-EXP of 4E6980, then 4E1F60's bookkeeping. actor goes to the killer, public
+EXP of the death penalty, then the kill rewards' bookkeeping. actor goes to the killer, public
 to every observer; shares are the job EXP its party members still earn.
 ================
 */
@@ -130,7 +131,7 @@ func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterwor
 	victimGid := enterworld.ObjectIDForCharacter(victim)
 	party := rt.rewardPartyOf(division, enterworld.ObjectIDForCharacter(killer))
 	if kill.kind == pk.DeathPlayer || kill.kind == pk.DeathGuildWar || kill.kind == pk.DeathSpecialWorld {
-		// 4E6980/4E6D60 award EXP before the victim can lose a level.
+		// The reference server's death penalties award EXP before the victim can lose a level.
 		victimBefore := *victim
 		victimBefore.Level = &kill.victimLevel
 		exp := pvpExperience(rt.deps.LevelData(), killer, &victimBefore, party)
@@ -146,8 +147,8 @@ func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterwor
 	}
 	switch kill.kind {
 	case pk.DeathPlayer:
-		// 4E2004 passes the victim in ESI to 4EB590. The world controller
-		// tests that target (default: 52B6D0), before its death relief.
+		// The reference server passes the victim in ESI to its enemy test. The world controller
+		// tests that target (default: the normal combat enemy test), before its death relief.
 		if !enterworld.CharacterAlive(killer) || kill.legalEnemy {
 			break
 		}
@@ -159,6 +160,17 @@ func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterwor
 			public = append(public, playerPVPStateFrame(killer))
 		}
 	case pk.DeathJob:
+		// Diagnostic (BR-261015-0844-66A1): suited job kills in the
+		// field left no trace in the live log, so whether classification
+		// yields job kills there at all was unanswerable. Read with
+		// mostwanted.go's counted line: mostWanted=false pins nothing
+		// (the stranger test is not even run); strangers=false means
+		// the stranger test refused the pair; strangers=true with no
+		// count means the killer was dead or the repeat-pair limit held.
+		log.WithFields(log.Fields{"division": division, "killer": killer.Name, "victim": victim.Name,
+			"killerJob": enterworld.DressedJob(killer), "victimJob": enterworld.DressedJob(victim),
+			"strangers": kill.mostWantedStrangers, "mostWanted": rt.MostWanted,
+			"killerAlive": enterworld.CharacterAlive(killer)}).Info("job kill classified")
 		if notice, ok := jobKillNoticeOf(division, killer, victim, now); ok {
 			after.notices = append(after.notices, notice)
 		}
@@ -179,7 +191,7 @@ func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterwor
 				}
 			}
 		}
-		// 4E20B9: a player striker also earns leveldata +0x1c of the lower
+		// Reference server: a player striker also earns leveldata +0x1c of the lower
 		// level, three times over.
 		if basis, ok := rt.deps.LevelData().MonsterExpBasis(min(rewardLevel(killer), rewardLevel(victim))); ok && basis > 0 {
 			frames := rt.grantKillExperience(killer, basis*jobKillExpMultiplier, victimGid)
@@ -199,16 +211,16 @@ func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterwor
 ================
 payCOSKillInDoor
 
-4E1F60 (reached from 4E27C0 at 4E27F4) for a fatal hit on a COS: the
+The reference server's PvP kill rewards for a fatal hit on a COS: the
 relation is classified against the COS's owner (kill, refreshed by
 withVictim inside the door), while the actual victim is the COS. An
 ordinary kill books the murder against the owner (RecordMurder on the
 owner's level); a job kill pays job EXP on the owner's level, shared by
-the killer's party, but not the +0x1c * 3 basis EXP, which 4E20CE gates
+the killer's party, but not the +0x1c * 3 basis EXP, which the reference server gates
 on the actual victim being a player, and not the port-only job-kill or
 Most Wanted notices; a guild-war kill scores from the COS's own level
-(5C71D7). 4E6980 never runs on a COS death, so no PvP EXP is paid. The
-killer's penalty relief for the COS itself (4EB6B0) stays with
+. The death penalty never runs on a COS death, so no PvP EXP is paid. The
+killer's penalty relief for the COS itself stays with
 creditPlayerCOSKill, after this. war is published by the caller after
 its door, as a player kill's is.
 ================
@@ -289,7 +301,7 @@ func (p *jobKillPayout) add(other jobKillPayout) {
 ================
 payJobKillShares
 
-5BD7F0's party members other than the killer, each in its own door, then
+The job EXP distribution's party members other than the killer, each in its own door, then
 the kill's notice and its Most Wanted notices, then each bounty owed from a victim (port-only, its
 own door over both characters).
 ================
@@ -323,7 +335,7 @@ func (rt *Runtime) payJobKillShares(after jobKillPayout) []RecipientFrames {
 ================
 jobKillVictim
 
-What 4103E0 and 5BD7F0 read of the fallen: its level, world and position.
+What the job kill formula and its distribution read of the fallen: its level, world and position.
 ================
 */
 type jobKillVictim struct {
@@ -336,10 +348,10 @@ type jobKillVictim struct {
 ================
 jobKillShares
 
-5BD7F0: the killer's party members alive in the victim's world within
+Reference server: the killer's party members alive in the victim's world within
 1000 units of it (a hunter killer shares only with hunters) split the job
 EXP by level, raised 5% per member beyond the first. Each member's base is
-its own 4103E0 against the victim.
+its own job kill formula against the victim.
 ================
 */
 func (rt *Runtime) jobKillShares(division string, killer *enterworld.Character, victim jobKillVictim, party *RewardParty, now int64) []jobKillShare {
@@ -383,11 +395,11 @@ func (rt *Runtime) jobKillShares(division string, killer *enterworld.Character, 
 ================
 pvpExperience
 
-Formulae_CalculatePvPExperience (4105D0): leveldata +0x1c of the lower
-level, times the killer-to-victim level-gap scale (40FED0, the monster
+The reference server's PvP experience formula: leveldata +0x1c of the lower
+level, times the killer-to-victim level-gap scale (the monster
 reward's), the killer's mastery-gap EXP rate (+0x1CD8, written by
-CGObjChar_RecomputeMasteryStats) and the relative-level bonus with its
-party extras (40FFE0). The product spills to float32; zero becomes one.
+mastery stats recompute) and the relative-level bonus with its
+party extras. The product spills to float32; zero becomes one.
 ================
 */
 func pvpExperience(levels enterworld.LevelDataSource, killer, victim *enterworld.Character, party *RewardParty) int64 {
@@ -408,7 +420,7 @@ func pvpExperience(levels enterworld.LevelDataSource, killer, victim *enterworld
 	if party != nil && party.Options&1 != 0 {
 		relative = monsterPartyRelativeLevelBonus(killerLevel, victimLevel, enterworld.NativeCountryByte9C(killer) == 1)
 	}
-	// 410673..41067F: scale * basis * rate on the x87 stack, then the bonus.
+	// Reference server: scale * basis * rate on the x87 stack, then the bonus.
 	exp := float32(float64(monsterLevelGapRewardScale(killerLevel, victimLevel)) *
 		float64(float32(uint32(basis))) * float64(expRate) * float64(relative))
 	if exp == 0 {
@@ -421,7 +433,7 @@ func pvpExperience(levels enterworld.LevelDataSource, killer, victim *enterworld
 ================
 jobKillExperience
 
-Formulae_CalculateJobKillExp (4103E0): the victim's basis
+The reference server's job kill formula: the victim's basis
 trunc(GoldMin * 10 * 0.125) times its ratio to the killer's, held to
 0.5..1.5; a trader killer earns half; nothing positive becomes one.
 ================
@@ -439,7 +451,7 @@ func jobKillExperience(levels enterworld.LevelDataSource, killer *enterworld.Cha
 	victimBasis := math.Trunc(float64(victimGold*10) * jobKillBasisScale)
 	killerBasis := math.Trunc(float64(killerGold*10) * jobKillBasisScale)
 	ratio := float32(float64(float32(victimBasis)) / killerBasis)
-	// 410479..4104A6: an unordered ratio (0 / 0) takes the 0.5 arm.
+	// Reference server: an unordered ratio (0 / 0) takes the 0.5 arm.
 	if !(ratio >= 0.5) {
 		ratio = 0.5
 	} else if ratio > 1.5 {
@@ -459,7 +471,7 @@ func jobKillExperience(levels enterworld.LevelDataSource, killer *enterworld.Cha
 ================
 goldBasisSource
 
-dg.txt column 1 (CRefData_GetDropGoldMinimum), the job formulas' basis.
+dg.txt column 1 (the drop gold minimum), the job formulas' basis.
 ================
 */
 type goldBasisSource interface {
@@ -507,7 +519,7 @@ func (rt *Runtime) grantKillExperience(c *enterworld.Character, exp int64, sourc
 ================
 addJobExperience
 
-CGObjPC_AddJobExp (4E2830) through the progression owner.
+The reference server's job EXP grant, through the progression owner.
 ================
 */
 func (rt *Runtime) addJobExperience(c *enterworld.Character, exp int64) ([]wire.Frame, bool) {
@@ -530,10 +542,10 @@ func levelByte(c *enterworld.Character) uint8 {
 ================
 payMonsterJobKillInDoor
 
-4E1F60's monster branch for the killing blow's player: a thief monster
+The PvP kill rewards' monster branch for the killing blow's player: a thief monster
 killed by a hunter or a trader, or a hunter monster killed by a thief,
-pays job EXP (4103E0 on the monster's level), shared by the killer's
-party (5BD7F0). Inside the reward roster's door, which holds every member.
+pays job EXP (the job kill formula on the monster's level), shared by the killer's
+party. Inside the reward roster's door, which holds every member.
 ================
 */
 func (rt *Runtime) payMonsterJobKillInDoor(division string, killer *enterworld.Character, victim monster.Instance, pose monster.Pose, now int64) (actor []wire.Frame, others []RecipientFrames) {

@@ -4,8 +4,8 @@
 fortress_structures.go - the fortress manager's structure services
 
 0x71E1 actions 0x18 (structure list), 0x0A to 0x0C (construction, upgrade,
-repair), 0x15 (gate pulley), 0x16 and 0x17 (dismiss, demolish). The v1.188
-dispatcher is CGObjPC_HandleSiegeAction705E (519E60); the v1.150 replies are
+repair), 0x15 (gate pulley), 0x16 and 0x17 (dismiss, demolish). The
+reference server's siege action dispatcher serves them; the v1.150 replies are
 read by CPSMission_OnFortressManagerResponse0xB1E1 (754A40). The structures
 themselves are population nests of the fortress world
 (enterworld/fortress_structures.go), which the monster state owns.
@@ -27,17 +27,17 @@ import (
 )
 
 const (
-	// fortressMaxStructureRows is the one-byte row count 61E000 writes (+0x2C).
+	// fortressMaxStructureRows is the one-byte row count the native list writes (+0x2C).
 	fortressMaxStructureRows = 255
 
-	// Low bytes of the structure-repair refusals (634950, 4CFD50).
+	// Low bytes of the structure-repair refusals.
 	fortressErrWarActive       uint8 = 0x18 // 0x2818
 	fortressErrOtherFortress   uint8 = 0x26 // 0x2826
 	fortressErrRepairGold      uint8 = 0x30 // 0x2830
 	fortressErrRepairFull      uint8 = 0x31 // 0x2831
 	fortressErrRepairDestroyed uint8 = 0x32 // 0x2832
 
-	// 4CFD50's bounds: the hit points a purse may buy and the price cap.
+	// The native repair cost's bounds: the hit points a purse may buy and the price cap.
 	repairMaxAffordableHP = 0x3d0900
 	repairMaxPrice        = 0x5f5e100
 )
@@ -46,15 +46,15 @@ const (
 ================
 fortressStructureList
 
-CSiegeFortressMgr_HandleStructureListQuery (634850): an unknown fortress
-answers 2 with code 3; otherwise CSiegeFortress_WriteConstructionTimers
-(61E000) writes the structure count and, per structure, its event zone
+The reference server's structure list query: an unknown fortress
+answers 2 with code 3; otherwise it writes the structure count and, per
+structure, its event zone
 (vfunc +0x648) and the minutes left of its construction (+0x65C less the
 minutes since +0x658, floored at zero). 754A40 stores each value on the
 zone's record (+0x1C) for the manager's structure menu.
 
 The port builds no structure over time yet, so every standing structure
-reports zero minutes. INFERENCE: 61E000 walks a map keyed by structure;
+reports zero minutes. INFERENCE: the native list walks a map keyed by structure;
 the rows go out in event-zone order.
 ================
 */
@@ -103,7 +103,7 @@ func (rt *Runtime) structureMinutesLeft(division string, fortressID uint32, row 
 structureByZone
 
 The structure standing on an event zone, with the fortress whose world
-holds it (the zone record's fortress codename in 634950).
+holds it (the zone record's fortress codename in the native repair).
 ================
 */
 func (rt *Runtime) structureByZone(division string, zone uint32) (uint32, instance.ID, monster.Instance, bool) {
@@ -121,7 +121,7 @@ func (rt *Runtime) structureByZone(division string, zone uint32) (uint32, instan
 ================
 structureRepairCost
 
-CGObjSiegeStruct_ComputeRepairCost (4CFD50): a full repair or nothing.
+The native repair cost: a full repair or nothing.
 The price per hit point is the record's CostRepair over the maximum, never
 below one; a purse that cannot buy every missing point refuses. A
 destroyed structure counts as one hit point and gets that point back too.
@@ -155,15 +155,15 @@ func structureRepairCost(row monster.Instance, gold int64) (uint32, int64, uint8
 ================
 fortressStructureRepair
 
-CSiegeFortressMgr_HandleStructureRepair (634950), in its refusal order:
+The reference server's structure repair, in its refusal order:
 a war in progress, an unknown zone, a zone of another fortress, no
 structure on it, then the purse. A standing structure is restored to full
-for 4CFD50's price. A destroyed one must have CanRevive (vfunc +0xDC,
-4CECF0) or refuses 0x32; it pays CostRevive first, out of a purse that
-must hold it (0x30), then 4CFD50's price from what remains, and stands
-again. The charge is clamped into [1, purse] (634B04..634C16) and taken
-with the reply (CGObjSiegeStruct_ChargePendingRepairCost 4CFD00 after the
-0xB05E 0x0C write in 6232C0), which carries the fortress, the zone and the
+for the native repair price. A destroyed one must have CanRevive (vfunc +0xDC)
+or refuses 0x32; it pays CostRevive first, out of a purse that
+must hold it (0x30), then the repair price from what remains, and stands
+again. The charge is clamped into [1, purse] and taken
+with the reply (the pending repair charge after the
+0xB05E 0x0C write in the database result), which carries the fortress, the zone and the
 new hit points.
 ================
 */

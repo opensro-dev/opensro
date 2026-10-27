@@ -363,7 +363,7 @@ func TestCommunityLaneEndToEndOverWire(t *testing.T) {
 	sendFrame(t, conn, community.OpWhisperBlockRequest, whisperBlockRequest(community.WhisperBlockModeRegister, "Cale"))
 	expectWhisperBlockAck(t, conn, []byte{0x01, 0x02}, "unknown-target ack")
 	// Friend-add refusal arm: "Cale" is not a division character, so the
-	// requester is told UNKNOWNUSER (0xB164 {2, 0x0D}, 447650's 0x640D).
+	// requester is told UNKNOWNUSER (0xB164 {2, 0x0D}, the native 0x640D).
 	friendAdd := wire.NewWriter(6).U16(4).Bytes([]byte("Cale")).Payload()
 	sendFrame(t, conn, community.OpFriendAddRequest, friendAdd)
 	if got := expectFrame(t, conn, community.OpFriendInviteAnswer, "friend-add refusal"); !bytes.Equal(got, community.EncodeFriendInviteErrorB164(community.FriendErrUnknownUser)) {
@@ -404,7 +404,7 @@ func TestCommunityLaneEndToEndOverWire(t *testing.T) {
 	}
 
 	// Cancel MISS: 0xB66F {2, 2} - the v1.188 GameServer remove-miss
-	// remap (sub_435cd0 SQL 1 -> wire 2), MEDIUM confidence; the full
+	// remap (SQL 1 -> wire 2), MEDIUM confidence; the full
 	// evidence note sits on the handler's cancel arm.
 	sendFrame(t, conn2, community.OpWhisperBlockRequest, whisperBlockRequest(community.WhisperBlockModeCancel, "Berk"))
 	expectWhisperBlockAck(t, conn2, []byte{0x02, 0x02}, "cancel-miss ack")

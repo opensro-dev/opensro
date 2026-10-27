@@ -47,7 +47,7 @@ type periodicCast struct {
 ================
 installPeriodicCast
 
-58371C creates independent linked pairs for the selected recipients. Resolve
+The native persistent cast creates independent linked pairs for the selected recipients. Resolve
 all packet layouts and admissions before the cost commit; never pay per pulse.
 The division operation lock serializes installation with retirement.
 ================
@@ -191,7 +191,7 @@ advancePeriodicEffects
 
 Registry snapshots release their mutex before any division or character lock.
 Retirement and a pulse share the same action transaction; expiry follows the
-last permitted pulse, as 5830B0 does.
+last permitted pulse, as the native persistent cast does.
 ================
 */
 func (rt *Runtime) advancePeriodicEffects(now int64) []simulation.DivisionFrames {

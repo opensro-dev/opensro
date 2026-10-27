@@ -3,7 +3,7 @@
 
 mercenary_target.go - guild soldiers acquire enemies through their owner
 
-Selector 6 (546CA0) chooses the nearest eligible object inside the authored
+Selector 6 chooses the nearest eligible object inside the authored
 sight range. Players must also pass their owner's world-context predicate.
 
 ===========================================================================
@@ -39,8 +39,8 @@ func (rt *Runtime) acquireMercenaryTarget(step petCombatStep) {
 	at := step.state.follower.Position(step.nowMs)
 	best, gid := uint32(mercenarySightRange), uint32(0)
 	admit := func(target uint32, pose simulation.Spawn) {
-		// 546D76 stores float32 before the inclusive sight test at 546D90.
-		// Only an existing selection uses the strict integer-best test (546E02).
+		// Natively the distance is stored as float32 before the inclusive sight test.
+		// Only an existing selection uses the strict integer-best test.
 		distance := float64(float32(areaDistance(at, pose)))
 		if distance > mercenarySightRange || gid != 0 && distance >= float64(best) {
 			return
@@ -75,7 +75,7 @@ func (rt *Runtime) acquireMercenaryTarget(step petCombatStep) {
 	}
 	if gid != 0 {
 		step.state.combat = &petCombatIntent{target: gid, nextAttackMs: step.nowMs}
-		// Entering BATTLE is a state change (53FF30).
+		// Entering BATTLE is a state change.
 		resetPetStuck(step.state)
 	}
 }
@@ -84,7 +84,7 @@ func (rt *Runtime) acquireMercenaryTarget(step petCombatStep) {
 ================
 mercenaryBodyVisible
 
-5299E0: guild soldiers have no monster-only hidden-target tactics override.
+Natively guild soldiers have no monster-only hidden-target tactics override.
 ================
 */
 func mercenaryBodyVisible(body uint8) bool {

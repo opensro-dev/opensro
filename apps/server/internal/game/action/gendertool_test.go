@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-gendertool_test.go - 49C2B0 case 7, the armour gender change
+gendertool_test.go - the special consumable's case 7, the armour gender change
 
 ===========================================================================
 */

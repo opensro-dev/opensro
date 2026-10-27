@@ -40,7 +40,7 @@ func (s jobRankSnapshot) WeekRankings(string) domain.JobRankings { return s.rank
 ================
 TestJobRankServesLastWeek
 
-512C20 answers the snapshot's list as [1][job][kind][n] rows.
+The reference server answers the snapshot's list as [1][job][kind][n] rows.
 ================
 */
 func TestJobRankServesLastWeek(t *testing.T) {
@@ -65,7 +65,7 @@ func TestJobRankServesLastWeek(t *testing.T) {
 ================
 TestJobRankRefusals
 
-512C20's order: the NPC in range (3), the job (0x28), then the kind (0x0F).
+The reference server's order: the NPC in range (3), the job (0x28), then the kind (0x0F).
 ================
 */
 func TestJobRankRefusals(t *testing.T) {

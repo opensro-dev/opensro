@@ -5,7 +5,7 @@ teamdeath.go - whether a team death revives where it fell
 
 Natively a team death (pk.DeathTeam: free-battle capes, the arena) revives
 at the present point with 40 percent HP and MP at any level, whatever the
-choice (CGObjPC_HandleRebirthRequest 50FEE0, 5100D6), and its notice labels
+choice (the reference server's rebirth request), and its notice labels
 the death box "standing" (0x37CE, 52FF33). The owner asked for that as a
 server setting defaulting to native (2026-10-13). SRO_TEAM_DEATH_REVIVE
 unset or "on" is native; "off" is port-only, not native: a team death

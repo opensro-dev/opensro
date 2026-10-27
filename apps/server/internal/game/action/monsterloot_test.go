@@ -101,7 +101,7 @@ func dropRollSequence(values ...uint32) func() (uint32, error) {
 assignedDropMisses
 
 The rolls that make every assigned reward of the combat fixture's monster
-miss. Assigned rewards roll before gold (7245C0), and the fixture monster
+miss. Assigned rewards roll before gold (reference server), and the fixture monster
 (MOB_CH_MANGNYANG) carries its own characterdata materials: a constant
 32767 keeps each count at its minimum and lands each million roll at 741823,
 above every authored chance, so its consumption is measured, not assumed.
@@ -380,7 +380,7 @@ func TestMonsterDropBootstrapCatalogResolvesAgainstShippedV1150Media(t *testing.
 ================
 TestDropAdmissionNegativeThresholdAndGradeSeven
 
-4C1840: thirty levels above the monster the threshold is -20 and even
+Drop admission: thirty levels above the monster the threshold is -20 and even
 roll 0 admits nothing; a grade-7 monster quadruples a 60 threshold to the
 cap of 100.
 ================

@@ -141,7 +141,7 @@ func TestCriticalArrowRefusalAndCancellationHaveNoCost(t *testing.T) {
 				if cancel.Frames[0].Payload[0] != wire.ActionStateKindNotice || cancel.Frames[0].Payload[1] != 1 {
 					t.Fatal("committed skill did not refuse voluntary cancellation", cancel)
 				}
-				// 4ACC40 protects the committed skill. Forced interruption is a
+				// The reference server protects the committed skill. Forced interruption is a
 				// different owner and remains covered by the other branches.
 				if len(rt.advanceProjectileCasts(now+1000)) == 0 {
 					t.Fatal("refused cancellation prevented the committed release")

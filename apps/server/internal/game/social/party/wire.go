@@ -31,7 +31,7 @@ const OpPartyJoinInviteAck uint16 = 0xB51A
 const OpPartyJoinAck uint16 = 0xB452
 
 // partyErrorBusy is the reason a refused transaction submit reports
-// (4E7337 pushes 2): the target already has a proposal waiting.
+// (the reference server pushes 2): the target already has a proposal waiting.
 const partyErrorBusy byte = 0x02
 
 // C->S opcodes, pinned from the client composers.
@@ -172,8 +172,8 @@ const (
 // stay unset - no guild/war state exists to fill them, and the client's
 // ctor defaults are the honest empty. Bit 0x08 (+0x50/+0x54 pair) is the
 // member's primary and secondary mastery, computed natively for every
-// snapshot (0x5A1890) and written at mask 0xFF on roster, match and
-// coordinator rows and masked on type-6 updates (0x5BC730/0x5BDBD0);
+// snapshot (reference server) and written at mask 0xFF on roster, match and
+// coordinator rows and masked on type-6 updates (reference server);
 // it rides whenever the row is built from a live character record.
 const (
 	MemberMaskID       uint8 = 0x10
@@ -192,7 +192,7 @@ const (
 const PartyMaxMembers = 8
 
 // partyCapacity is admission capacity, distinct from the eight-slot wire/UI
-// storage bound. Research server 514560 tests party option bit 0: four members
+// storage bound. The reference server tests party option bit 0: four members
 // without experience sharing, eight with it. Client category 2 codes 14/13
 // independently distinguish the two full-party refusals.
 func partyCapacity(options uint8) int {
@@ -400,7 +400,7 @@ func vitalTenths(current, max int64) uint8 {
 	return uint8(tenths)
 }
 
-// writeSizedString appends the sub_4fd5f0 sized-ANSI layout: u16 byte
+// writeSizedString appends the native sized-ANSI layout: u16 byte
 // length + the bytes (the sub_75d830 read twin).
 func writeSizedString(writer *wire.Writer, value string) {
 	bytes := []byte(value)

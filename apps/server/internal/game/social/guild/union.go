@@ -4,28 +4,28 @@
 union.go - the guild union lane
 
 A guild master proposes a union to the master of another guild
-(CGObjPC_HandleUnionInvite70FB 5170B0 -> GuildManager_RequestUnionInvite
-5C6550), who answers the 0x3393 kind-6 prompt on the shared consent
+(the reference server's union invite handler and guild manager request),
+who answers the 0x3393 kind-6 prompt on the shared consent
 multiplex (confirm box 0x1D: {01 01} accepts, {02 00} refuses). A master
-leaves a union (5C6710) or, as master of the leading guild, expels a
-guild from it (5C67A0). None of the three may run while either guild
-fights a fortress war (SiegeManager_IsGuildOutOfWar 635470: 0x4C75,
+leaves a union or, as master of the leading guild, expels a
+guild from it. None of the three may run while either guild
+fights a fortress war (0x4C75,
 0x4C76, 0x4C77).
 
 The union state belongs to package union; this lane checks the guilds,
 commits through it and tells every guild's online members:
 
   - a joined guild's members receive the whole list (0x341E), and so do
-    the leading guild's when the union is founded (5CA5A0 sends both);
+    the leading guild's when the union is founded (natively both are sent);
   - every other guild's members receive the new row (0x3B29 0x0D);
   - a guild that leaves, is expelled or breaks up sends 0x3B29 0x12 to
     every guild that stood in the union, itself included, or 0x12 3
-    when the union dissolves (CAlliance_RemoveGuild 5B8CF0,
-    CAlliance_Clear 5B8DD0);
+    when the union dissolves (the native alliance removal and
+    clear);
   - a union guild whose member count changes patches its row in the
-    other guilds (0x3B29 0x0E mask 8, CAlliance_ForEachOtherGuild 5B9000).
+    other guilds (0x3B29 0x0E mask 8, natively to every other guild).
 
-The proposal's own success sends nothing (5C6550 returns 1 and 70FB
+The proposal's own success sends nothing (natively it returns 1 and 70FB
 answers only a failure). INFERENCE: the shard's refusal of a full union
 at the answer reaches the inviter as 0xB379 0x29.
 
@@ -89,7 +89,7 @@ type UnionRuntime struct {
 	pending map[string]pendingUnion
 
 	// PeerPending reports another lane's unanswered proposal for a player
-	// (one at a time, TransactionMgr_InsertUnique 46F420).
+	// (one at a time, as the native transaction manager keys them).
 	PeerPending func(divisionID, name string) bool
 	Now         func() time.Time
 }
@@ -182,7 +182,7 @@ func (r *UnionRuntime) inWar(divisionID string, guildIDs ...int64) bool {
 ================
 inviteRefusal
 
-GuildManager_RequestUnionInvite 5C6550 in its order. The hostile-guild
+The reference server's union invite request in its order. The hostile-guild
 refusal (0x4C42) reads the same enemy owner as combat.
 ================
 */
@@ -223,7 +223,7 @@ func (r *UnionRuntime) inviteRefusal(divisionID string, actor *enterworld.Charac
 	if _, hostile := r.GuildWars.Find(divisionID, guild.ID, targetGuild.ID); hostile {
 		return pendingUnion{}, nil, 0x42
 	}
-	// 4EA0D0: a proposal the transaction manager cannot queue answers 3.
+	// Natively a proposal the transaction manager cannot queue answers 3.
 	if r.HasPendingInvite(divisionID, target.Name) || r.PeerPending != nil && r.PeerPending(divisionID, target.Name) {
 		return pendingUnion{}, nil, unionErrTargetInvalid
 	}
@@ -382,7 +382,7 @@ func (r *UnionRuntime) ApplyConsent(_ *transport.Session, divisionID string, act
 ================
 handleLeave
 
-GuildManager_RequestUnionLeave 5C6710.
+The reference server's union leave request.
 ================
 */
 func (r *UnionRuntime) handleLeave(s *transport.Session, _ uint16, payload []byte) {
@@ -412,7 +412,7 @@ func (r *UnionRuntime) handleLeave(s *transport.Session, _ uint16, payload []byt
 ================
 handleKick
 
-GuildManager_RequestUnionKick 5C67A0: only the leading guild's master
+The reference server's union kick request: only the leading guild's master
 expels, and only a guild of the union. INFERENCE: the leading guild
 cannot expel itself (its master leaves instead), answered as an own-guild
 proposal is.
@@ -636,9 +636,9 @@ UnionChatAudience
 
 The online members a union line reaches: in every guild of the sender's
 union, the master and every member holding the union chat right
-(permMask 4, CGuild_UnionChatWithinLimit 5C49A0). code is the chat
+(permMask 4, as the native union chat limit reads it). code is the chat
 refusal: 0x0C outside a union, 0x0E without the right
-(CGObjPC_OnChatRequest 4B1750 case 0xA). INFERENCE: the shard's
+(the native chat request, case 0xA). INFERENCE: the shard's
 delivery is not in the GameServer; a line reaches the members who may
 also speak in it.
 ================
@@ -678,7 +678,7 @@ func (r *UnionRuntime) UnionChatAudience(divisionID string, sender *enterworld.C
 
 const (
 	// PermMaskUnionChat is the member right to speak in union chat
-	// (5C49A0 counts mask & 4).
+	// (the native chat limit counts mask & 4).
 	PermMaskUnionChat uint32 = 0x4
 	unionChatNoUnion  uint8  = 0x0C
 	unionChatNoRight  uint8  = 0x0E
@@ -688,7 +688,7 @@ const (
 ================
 unionChatRight
 
-The master always speaks (4B1750 compares the guild's master id first).
+The master always speaks (the native chat request compares the guild's master id first).
 ================
 */
 func unionChatRight(member domain.GuildMemberRecord) bool {

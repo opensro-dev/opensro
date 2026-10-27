@@ -4,19 +4,19 @@
 petcombat.go - an attack pet fights the monster its owner orders it to
 
 The owner's COS attack order (C->S 0x70C5 tag 2, client 0x769E) reaches
-CGObjCOS_DispatchOwnedCommand (4D2200). For a summoned attack pet it posts
-AI event 0x19 to the pet's own AI::CTactics, whose state handler
-(CAIState_OnOwnerAttackOrder 5595C0) sets the combat target and enters the
+the reference server's owned-COS command. For a summoned attack pet it posts
+AI event 0x19 to the pet's own AI tactics, whose state handler
+(the owner attack order) sets the combat target and enters the
 BATTLE state - the same state machine monsters fight in. The follow order
-(event 0x1A, CAIState_OnOwnerFollowOrder 559600) leaves BATTLE again.
+(event 0x1A) leaves BATTLE again.
 
 This module owns that per-pet combat intent. The pet tick (petai.go) pursues
 the target with the pet's movement owner and strikes through the shared
 combat formula and the one monster HP door, crediting the kill to the owner
 so experience, party sharing and loot need no pet-specific path. A player
 target is struck through the player-victim path with the owner as killer
-(4E6590: a COS killer stands for its owner), and only when the owner may
-attack it (5293A0).
+(a COS killer stands for its owner), and only when the owner may
+attack it.
 
 Damage credit belongs to the owner; aggression belongs to the attacking
 companion. Monster pursuit already resolves both kinds of opponent.
@@ -58,8 +58,8 @@ const (
 petCombatIntent
 
 The BATTLE state of one attack pet: its target, the skill it retains while
-it closes in (5472A0 keeps the selected skill through approach) and the
-strategy interval of 5619E0.
+it closes in (the native battle action keeps the selected skill through approach) and the
+native strategy interval.
 ================
 */
 type petCombatIntent struct {
@@ -97,7 +97,7 @@ func (rt *Runtime) orderPetAttack(division string, character, snapshot *enterwor
 	if !ok || ref.TidWord>>11 != attackPetBand {
 		return refuse("not an attack pet")
 	}
-	// 4D24B5..4D24E4 validates a COS target through its owner; 4D2575
+	// The native owned-COS command validates a COS target through its owner and
 	// retains the requested object for the AI event. Use the tick's resolver
 	// so a companion GID reaches that same permission and damage path.
 	target, ok := rt.resolvePetCombatTarget(petCombatStep{
@@ -122,7 +122,7 @@ func (rt *Runtime) orderPetAttack(division string, character, snapshot *enterwor
 	if state == nil {
 		return refuse("no pet session")
 	}
-	// 4D2588..4D2592 retires the owner's event-bit-2 effects after the
+	// The native command retires the owner's event-bit-2 effects after the
 	// admitted order, including a repeated order for the existing target.
 	defer func() {
 		rt.deps.Update(character, "pet-attack-order", func() bool {
@@ -133,7 +133,7 @@ func (rt *Runtime) orderPetAttack(division string, character, snapshot *enterwor
 	if state.combat != nil && state.combat.target == targetGID {
 		return OpResult{}
 	}
-	// CAIState_BATTLE_OnTargetChanged keeps the strategy; a new BATTLE
+	// The native battle target change keeps the strategy; a new BATTLE
 	// starts with a fresh one. Either way the next strike is due now.
 	intent := &petCombatIntent{target: targetGID, nextAttackMs: nowMs}
 	if state.combat != nil {
@@ -141,7 +141,7 @@ func (rt *Runtime) orderPetAttack(division string, character, snapshot *enterwor
 	}
 	rt.cancelPetCombat(petOwnerKey{division: division, name: strings.ToLower(character.Name), gid: cosGID}, state, nowMs)
 	state.combat = intent
-	// Entering BATTLE is a state change (53FF30).
+	// Entering BATTLE is a state change.
 	resetPetStuck(state)
 	// Entering BATTLE leaves PICKITEM, which answers a pending pickup.
 	expireCosPickup(state)
@@ -205,7 +205,7 @@ func (rt *Runtime) advancePetCombat(step petCombatStep) (frames []simulation.Fra
 		defer func() { frames = append(speedFrames, frames...) }()
 	}
 	target, ok := rt.resolvePetCombatTarget(step, intent.target)
-	// 528F40 runs on every companion strike: the owner's free-battle team is
+	// The native owner check runs on every companion strike: the owner's free-battle team is
 	// refused first, so a cape put on mid-fight ends an attack on a team-mate.
 	if !ok || target.player != nil && (rt.companionTeamRefusal(step.snapshot, target.snapshot) != 0 ||
 		step.ref.TidWord>>11 != domain.MercenaryBand && rt.playerAttackTargetRefusal(step.key.division, step.snapshot, target.snapshot, step.nowMs) != 0) {
@@ -231,7 +231,7 @@ func (rt *Runtime) advancePetCombat(step petCombatStep) (frames []simulation.Fra
 	}
 	// INFERENCE: the pet's BATTLE leash is its owner's neighbourhood. A target
 	// that leaves the owner's sector and its neighbours (the same
-	// Pos_AreSamePlaneAndAdjacentSectors test 4D2200 applies to its position
+	// same-plane adjacent-sector test the native command applies to its position
 	// order) ends the fight and the pet returns to follow.
 	if !samePlaneAdjacent(owner, targetAt) {
 		rt.petDiagnostic(step.key.division, step.snapshot.Name, step.pet.GID, "fight ended: target left the owner's sectors", log.Fields{"target": intent.target})
@@ -283,7 +283,7 @@ func (rt *Runtime) advancePetCombat(step petCombatStep) (frames []simulation.Fra
 		if intent.castToken == 0 {
 			intent.castToken = atomic.AddUint32(&rt.castTokenCounter, 1)
 			intent.releaseAtMs = step.nowMs + int64(skill.ActionCastingTimeMs) + 1
-			// 5472A0 arms the strategy timer before submitting the cast.
+			// The native battle action arms the strategy timer before submitting the cast.
 			intent.nextAttackMs = step.nowMs + int64(intent.intervalMs)
 			frame := wire.SkillCastUntargetedFrame(wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: step.pet.GID, InstanceToken: intent.castToken, OwnerOrTargetGid: target.gid})
 			cast := []wire.Frame{frame}
@@ -324,7 +324,7 @@ petAttackSkill
 
 MonsterAttackPlan's selection over the pet's own default skills: a retained
 skill stays chosen; otherwise the native weighted selector chooses among complete,
-targeted attack rows. Choosing resamples the strategy interval (5619E0), as
+targeted attack rows. Choosing resamples the strategy interval, as
 adoptMonsterAttack does on a skill change.
 ================
 */
@@ -521,7 +521,7 @@ func (rt *Runtime) petStrike(step petCombatStep, target monster.Instance, skill 
 petStrikePlayer
 
 One instant pet hit on a player: the pet's formula behind the victim's
-wall and its statuses (590680 with the pet's level), then the recipient
+wall and its statuses (the abnormal roll with the pet's level), then the recipient
 side in a door holding the owner and the victim, the owner standing for
 the pet as attacker and killer. Published under the pet's GID.
 ================

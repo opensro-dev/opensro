@@ -3,7 +3,7 @@
 
 exchange.go - player-to-player exchange: request, offers and the swap
 
-CGObjPC_HandleExchangeRequest7081 (5154E0) admits a request to a PC within
+The reference server's exchange request admits a request to a PC within
 320 units on an adjacent sector (3: no such PC or oneself, 4: too far);
 the target answers the 0x3393 kind-1 prompt. The session (package
 item/exchange) then takes bag slots and gold from each side through the
@@ -15,7 +15,7 @@ fill its first empty bag slots in exchange-slot order, as the client's
 items fail the exchange (0x22 for the side that is full, 0x36 for its
 partner).
 
-INFERENCE: the GameServer's ExchangeMgr is not decompiled past the
+INFERENCE: the GameServer's exchange manager is not decompiled past the
 handlers, so three rules follow the client and the v1.188 texts:
 
   - an item whose RefObjCommon CanTrade (token 16) is 0, a summoned
@@ -42,7 +42,7 @@ import (
 )
 
 const (
-	// exchangeReach is 5154E0's `Vec3_Length < 320`.
+	// exchangeReach is the native `length < 320` reach.
 	exchangeReach = 320
 
 	// exchangePromptKind is the 0x3393 kind of an exchange request
@@ -183,8 +183,8 @@ func (c *ExchangeConsent) ApplyConsent(_ *transport.Session, division string, ac
 		return
 	}
 	rt.Exchanges.Open(division, requester.Name, actor.Name)
-	// An exchange takes the interaction state (ExchangeMgr_CloseSession
-	// 48078C writes it back to 0): neither side's warehouse survives it.
+	// An exchange takes the interaction state (closing the session
+	// writes it back to 0): neither side's warehouse survives it.
 	rt.endStorageInteraction(division, requester.Name)
 	rt.endStorageInteraction(division, actor.Name)
 	answer(0, wire.EncodeExchangeGid(enterworld.ObjectIDForCharacter(actor))...)

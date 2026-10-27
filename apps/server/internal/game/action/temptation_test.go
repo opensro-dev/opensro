@@ -29,7 +29,7 @@ const (
 	// temptationCode is Temptation's last tier, ca(30000,80,8).
 	temptationCode = "SKILL_EU_BARD_FORGETA_TARGET_A_06"
 	// temptationDuration is ca's first word; a level-1 target sits below
-	// grade 8, so 590680 keeps it unscaled.
+	// grade 8, so the native abnormal roll keeps it unscaled.
 	temptationDuration = 30000 * time.Millisecond
 	// temptationTick is the monster leg's cadence in these tests.
 	temptationTick = 100 * time.Millisecond
@@ -265,7 +265,7 @@ func TestTemptationTurnsAMonsterOnItsNeighbour(t *testing.T) {
 ================
 TestTemptationLeavesAChampionAlone
 
-58D2F2: a champion has nonzero base grade. The press answers the
+Natively a champion has nonzero base grade. The press answers the
 monster-grade refusal (0x3033) and costs nothing, Confusion never lands
 on it and it fights nobody.
 ================
@@ -303,7 +303,7 @@ func TestTemptationLeavesAChampionAlone(t *testing.T) {
 ================
 TestTemptationNativeGradeAdmission
 
-58D2F2 does not apply mcap's subsequent TID4 exclusions to ca.
+The native target validation does not apply mcap's subsequent TID4 exclusions to ca.
 ================
 */
 func TestTemptationNativeGradeAdmission(t *testing.T) {

@@ -75,8 +75,8 @@ ApplyCharacterEffect
 ApplyCharacterEffect is the checked producer boundary for server gameplay
 systems that create a persistent character effect. The skill table owns
 canonical group identity and the `nbuf` non-forced-stop protection; callers
-may only supply the live source-descriptor override proven at
-ActiveCharacterEffect_RequestStop+0x20.
+may only supply the live source-descriptor override proven in the reference
+server's effect stop request.
 ==================
 */
 func (rt *Runtime) ApplyCharacterEffect(
@@ -92,7 +92,7 @@ func (rt *Runtime) ApplyCharacterEffect(
 ================
 EffectPresentation
 
-Presentation is distinct from registry lifecycle state. Native 59AF00
+Presentation is distinct from registry lifecycle state. The native broadcast
 serializes +20/+24, while state eligibility comes from +0c.
 ================
 */
@@ -101,20 +101,20 @@ type EffectPresentation struct {
 	Phase           uint8
 	Rider           uint32
 	// TransformRefObjID is the RefObj an msch 1 cast carries (context
-	// +0x20, set by BeginIndirectSkill from a monster mask), or the model
+	// +0x20, set by the indirect skill start from a monster mask), or the model
 	// of the player an msch 2 Duplicate copies, with that player's record
-	// byte and worn slots (4F0320).
+	// byte and worn slots.
 	TransformRefObjID  uint32
 	TransformShape     uint8
 	TransformEquipment [9]uint32
-	// DefenseAddend is a recipient context's +0x34/+0x38 (58381F): the
+	// DefenseAddend is a recipient context's +0x34/+0x38: the
 	// caster's getv HLBP or HLSM value, added to defp's physical/magical.
 	DefenseAddend [2]uint32
 	// AuraParent is the caster instance token a party aura's child joins
 	// under (skillparty.go joinAura); zero for any other application.
 	AuraParent uint32
 	// Native context +0x6C links both area instances to their source
-	// caster (584115, 5850CE), including the caster's own instance.
+	// caster, including the caster's own instance.
 	AreaSourceGID  uint32
 	AreaSourceName string
 }
@@ -202,7 +202,7 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 	}
 	wirePhase := presentation.Phase
 	if !row.SpawnStatus {
-		// Native 59AF00 omits context mode for ordinary unlinked effects;
+		// The reference server omits context mode for ordinary unlinked effects;
 		// client 776450 defaults the absent byte to 2. The authority retains
 		// mode 1 for self applications, including its replacement semantics.
 		wirePhase = 2
@@ -217,7 +217,7 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 		duration := int64(row.EffectDurationMs + presentation.Rider)
 		if persistent {
 			duration = duration / 1000 * 1000
-		} // 59B91D: timed jobs store seconds.
+		} // natively, timed jobs store seconds.
 		if duration <= 0 && persistent {
 			return nil, false
 		}
@@ -257,7 +257,7 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 		effect.EventCancelMask = row.Replacement.EventCancelMask
 	}
 	if hide := row.Concealment; hide.Pinned && hide.Hide {
-		// 5965A2..59667D: the recipient's own STSP answers the hide's cut.
+		// Natively the recipient's own STSP answers the hide's cut.
 		effect.HidePenaltyPercent = hide.SpeedPercent
 		if hide.SpeedBonus {
 			stats, _, err := rt.playerCombatStats(divisionID, character)
@@ -269,7 +269,7 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 	}
 	word := transformWord(row)
 	if word != 0 {
-		// 5940BA / 5940F1: msch 1 and 2 apply the RefObj or player their
+		// msch 1 and 2 apply the RefObj or player their
 		// context names.
 		if presentation.TransformRefObjID == 0 {
 			return nil, false
@@ -277,7 +277,7 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 		effect.TransformRefObjID = presentation.TransformRefObjID
 	}
 	var statusFrames []wire.Frame
-	// 594AC0 installs every block the row carries in one pass.
+	// The reference server installs every block the row carries in one pass.
 	writes := buffModifierWrites(row.BuffModifiers, itemProgramWritesAccuracy(row.TimedEffect))
 	itemWrites, err := rt.timedItemModifierWrites(divisionID, character, row.TimedEffect)
 	if err != nil {
@@ -288,22 +288,22 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 		writes = append(writes, combat.AttributeEffectWrites(row.TimedEffect.Attributes)...)
 	}
 	if row.HostileDebuff.Pinned {
-		// 59591A / 595954: Vital Spot's terd or thrd, negated, on the flat channel.
+		// Vital Spot's terd or thrd, negated, on the flat channel.
 		writes = append(writes, combat.HostileDebuffWrites(row.HostileDebuff.Evasion, row.HostileDebuff.HitRate)...)
 	}
 	if row.TimedEffect.Pinned && row.TimedEffect.Block.Present {
 		writes = append(writes, combat.BlockRateWrites(row.TimedEffect.Block.Mask, row.TimedEffect.Block.Value)...)
 	}
 	if row.TimedEffect.Pinned && row.TimedEffect.Reat.Mask != 0 {
-		// 595542..59568F: a buff's reat, as a resistance passive's.
+		// A buff's reat, as a resistance passive's.
 		writes = append(writes, combat.StatusReductionWrites(row.TimedEffect.Reat)...)
 	}
 	if row.TimedEffect.Pinned && row.TimedEffect.Bgra.Mask != 0 {
-		// 595698..5957EE: Fire Shield's element resistances.
+		// Fire Shield's element resistances.
 		writes = append(writes, combat.ElementResistanceWrites(row.TimedEffect.Bgra)...)
 	}
 	if row.TimedEffect.Pinned && row.TimedEffect.ShieldAttack.Present {
-		// 5950FD: no intact shield in socket 7, no trade (reqi already
+		// No intact shield in socket 7, no trade (reqi already
 		// refused the cast without one).
 		if pd, ok := combat.ShieldPhysicalDefense(character, rt.statCatalogs().Items); ok {
 			writes = append(writes, combat.ShieldAttackWrites(row.TimedEffect.ShieldAttack, pd)...)
@@ -329,7 +329,7 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 			return nil, false
 		}
 	}
-	// 584222..5842EA and 582AF7..582C8C: an area link at +6C does not
+	// An area link at +6C does not
 	// change the ordinary state words; the source-link branch is +68/LNKS.
 	// Durable jobs restore both words; recipients have mode-specific words.
 	unlinked := !row.Replacement.Lnks && !row.Replacement.Efr2
@@ -388,7 +388,7 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 		if effect.Persistent && checkpoint {
 			rt.checkpointSkillJobs(character, rt.effects.Snapshot(divisionID, character.Name), nowMs)
 		}
-		// 4F00F0 always refills the block; 4F0040 only an empty one.
+		// A monster mask always refills the block; a Duplicate only an empty one.
 		if effect.TransformRefObjID != 0 && (word == 1 || character.TransformMode == 0) {
 			// A Duplicate copies another player's worn items, which neither
 			// the caster nor a viewer need hold (peer_references.go).
@@ -463,7 +463,7 @@ func (rt *Runtime) drainStoppedCharacterEffects() []simulation.DivisionFrames {
 				statusFrames, changed = rt.finishCharacterEffectRetirement(batch.DivisionID, c, batch.Effects, rt.Now().UnixMilli())
 				return changed
 			})
-			// 4B3660 removes instance-owned contributions before calling the
+			// The reference server removes instance-owned contributions before calling the
 			// player's private 303D stat publisher. Never broadcast these stats.
 			changedParameters := false
 			for _, effect := range batch.Effects {
@@ -515,7 +515,7 @@ func (rt *Runtime) drainStoppedCharacterEffects() []simulation.DivisionFrames {
 			continue
 		}
 		if sourceGID == 0 {
-			// CGObj_SendPacketToNearbySessions (484D90) publishes from the actor
+			// The reference server's nearby broadcast publishes from the actor
 			// object; a character absent from the division has no origin to route.
 			continue
 		}
@@ -559,7 +559,7 @@ func (rt *Runtime) entrySkillsAt(divisionID, characterName string, nowMs int64) 
 	rows := rt.effects.Snapshot(divisionID, characterName)
 	out := make([]enterworld.EntrySkill, 0, len(rows))
 	for _, effect := range rows {
-		// 59CDC0 omits source-phase linked rows from ordinary spawn effects;
+		// Natively the buff list omits source-phase linked rows from ordinary spawn effects;
 		// they use the private B5ED relationship presentation instead.
 		if (effect.LinkToken != 0 || effect.SourceTargetGID != 0) && effect.Phase == 1 {
 			continue
@@ -590,9 +590,9 @@ func (rt *Runtime) entrySkillsAt(divisionID, characterName string, nowMs int64) 
 ================
 buffModifierWrites
 
-The dru (595A97), odar (596004), hr and ru part of 594AC0.
+The dru, odar, hr and ru part of the reference server's buff installer.
 
-ru (+0x250, 0x5958E7..0x59591A) adds its word to the attack-range keeper
+ru (+0x250) adds its word to the attack-range keeper
 (0x21) in the flat channel: Demon Soul Arrow lengthens the bow's reach
 while it runs (skillActionReach).
 
@@ -600,8 +600,8 @@ hr (+0x24C) writes parameter 11, the hit rate: word 1 enters the percent-sum
 channel, then word 0 the flat channel, the same order the timed item path
 already installs for the same tag (timeditemmodifier.go). Both parsers read
 hr from one row, so an item program that already files its Accuracy block
-owns the write and the skill-side copy is skipped (itemAccuracy): 594AC0
-installs the block once.
+owns the write and the skill-side copy is skipped (itemAccuracy): the block
+is installed once.
 ================
 */
 func buffModifierWrites(m enterworld.SkillBuffModifiers, itemAccuracy bool) []paramkeeper.Write {
@@ -612,7 +612,7 @@ func buffModifierWrites(m enterworld.SkillBuffModifiers, itemAccuracy bool) []pa
 			paramkeeper.Write{Parameter: itemParamAccuracy, Channel: paramkeeper.Flat, Value: float32(m.HrFlat)},
 		)
 	}
-	// 594AC0 0x595883..0x5958DE: er adds its flat (channel 0) and its rate
+	// er adds its flat (channel 0) and its rate
 	// (channel 1) to the parry keeper, as hr does to the hit rate.
 	if m.Er {
 		writes = append(writes,
@@ -630,7 +630,7 @@ func buffModifierWrites(m enterworld.SkillBuffModifiers, itemAccuracy bool) []pa
 			}
 		}
 	}
-	// 594AC0 0x5962C1..0x596316: rhru raises the healing received, word 0
+	// rhru raises the healing received, word 0
 	// on parameter 0xAA (HP) and word 1 on 0xAB (MP), the scale the heal
 	// already applies (skillheal.go healScale).
 	if m.Rhru {
@@ -639,7 +639,7 @@ func buffModifierWrites(m enterworld.SkillBuffModifiers, itemAccuracy bool) []pa
 			paramkeeper.Write{Parameter: 0xab, Channel: paramkeeper.Flat, Value: float32(m.RhruWords[1])},
 		)
 	}
-	// 594AC0 0x5963F7..0x596423: dcmp lowers the MP consumption rate
+	// dcmp lowers the MP consumption rate
 	// (parameter 0x8D) by its word, negated with FCHS.
 	if m.Dcmp {
 		writes = append(writes, paramkeeper.Write{Parameter: 0x8d, Channel: paramkeeper.Flat, Value: float32(-float64(m.DcmpPercent))})

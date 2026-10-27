@@ -1,5 +1,5 @@
-// Native research server 730120 initializes this exact ordered list.
-// Mixed-case entries are intentional: 7312F0 lowercases input only.
+// The reference server initializes this exact ordered list.
+// Mixed-case entries are intentional: its rejected-text lookup lowercases input only.
 package textguard
 
 var rejectedSubstrings = [...]string{

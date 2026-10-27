@@ -1,9 +1,9 @@
 /*
 ===========================================================================
 
-monsterweightedskill_test.go - the weighted default-skill choice (561B00)
+monsterweightedskill_test.go - the weighted default-skill choice
 
-CAISkill_Basic_SelectConditionalThenWeighted weighs each skill by its
+The native default-skill choice weighs each skill by its
 authored AI weight plus half the reach it has to spare over the target's
 distance, then draws rand() % (total+1) and takes the first skill whose
 running total reaches the draw.

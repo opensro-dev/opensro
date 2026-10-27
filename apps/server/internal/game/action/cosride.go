@@ -20,7 +20,7 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// CCOSManager_TryBindRideActor 4FC636 compares the 3D distance against 30.
+// The reference server's ride bind compares the 3D distance against 30.
 const (
 	cosMountRange             = 30
 	cosRideBusy         uint8 = 2
@@ -62,12 +62,12 @@ func (rt *Runtime) HandleCosRide(division string, c *enterworld.Character, paylo
 	}
 	unlock := rt.lockDivision(division)
 	defer unlock()
-	// Before 4EC640 looks at the vehicle, 5119D5 refuses a rider whose motion
+	// Before the reference server mounts the vehicle, it refuses a rider whose motion
 	// byte is set (moving, seated, changing posture, at a wall, frozen,
-	// stunned or asleep) and 5119FA one in battle state (+0x30 +0xD).
+	// stunned or asleep) and one in battle state (+0x30 +0xD).
 	// Dismount is refused for neither.
 	//
-	// INFERENCE: v1.188's dismount (4FC6D0) stops a moving mount instead,
+	// INFERENCE: v1.188's dismount stops a moving mount instead,
 	// but the v1.150 client answers code 6 with
 	// CMSERR_CANT_GETOFF_FROM_RUNNING_HORSE ("Can step down while the
 	// transport is moving", 777F60 -> category 14), so the v1.150 server
@@ -97,8 +97,8 @@ func (rt *Runtime) HandleCosRide(division string, c *enterworld.Character, paylo
 ================
 riderMoving
 
-Whether the mount under c is still travelling (CGObjPC_IsMovingOrMountMoving
-4EF380 asks the vehicle): a mounted rider's movement is its own world's.
+Whether the mount under c is still travelling (the reference server
+asks the vehicle): a mounted rider's movement is its own world's.
 ================
 */
 func (rt *Runtime) riderMoving(division string, c *enterworld.Character) bool {
@@ -119,7 +119,7 @@ func (rt *Runtime) riderMoving(division string, c *enterworld.Character) bool {
 ================
 changeCosRide
 
-4FC4D0 rejects a remote vehicle; 4FC6D0 detaches the rider and restores its
+The reference server rejects a remote vehicle; its dismount detaches the rider and restores its
 own movement parameters. Settle the shared mover before changing its owner,
 otherwise a dismounted transport follows later player movement on re-entry.
 The caller holds the division operation lock.
@@ -135,12 +135,12 @@ func (rt *Runtime) changeCosRide(division string, c, snapshot *enterworld.Charac
 	if !found || ref == nil || ref.RefObjID != pet.RefObjID {
 		return cosRideFailure(cosRideUnknownActor)
 	}
-	// 4FC512 asks 4EF880's shared casting/front-command lock. A mount must
+	// The reference server asks the shared casting/front-command lock. A mount must
 	// not replace the mover while a positive-time action still owns it.
 	if mounted && (rt.PlayerAttackLocked(division, c.Name) || rt.objectActionCommitted(division, c.Name)) {
 		return cosRideFailure(cosRideBusy)
 	}
-	// 4FC4D0 calls CGObj_CanUse (483F40), which reads the reference flag.
+	// The reference server asks the object's can-use test, which reads the reference flag.
 	if mounted && !ref.CanRide {
 		return cosRideFailure(cosRideNotUsable)
 	}
@@ -151,7 +151,7 @@ func (rt *Runtime) changeCosRide(division string, c, snapshot *enterworld.Charac
 	vehicle := rt.cosLiveSpawn(division, snapshot, now)
 	if mounted {
 		owner := rt.liveSpawn(simulation.WorldKey(division, c.Name), snapshot, now)
-		// 4FC5D9 rejects opposite coordinate planes before measuring range;
+		// The reference server rejects opposite coordinate planes before measuring range;
 		// the shared planar distance intentionally strips the dungeon bit.
 		if !worldgeom.SamePlane(owner.RegionID, vehicle.RegionID) {
 			return cosRideFailure(cosRideOutOfRange)
@@ -177,7 +177,7 @@ func (rt *Runtime) changeCosRide(division string, c, snapshot *enterworld.Charac
 			if c.TransformMode == 1 {
 				rt.endTransform(division, c, now)
 			}
-			// 4FC643 relocates the owner to the admitted vehicle before binding
+			// The reference server relocates the owner to the admitted vehicle before binding
 			// the ride actor. Keeping the old rider pose moves the vehicle instead.
 			world := rt.Worlds.Update(simulation.WorldKey(division, c.Name),
 				func() simulation.WorldState { return simulation.SeedWorldState(c) },
@@ -196,7 +196,7 @@ func (rt *Runtime) changeCosRide(division string, c, snapshot *enterworld.Charac
 				}}.Encode()})
 		}
 		c.ActiveCOS.Mounted = mounted
-		// 4EC78B retires band-1 horses on dismount. Trade transports keep
+		// The reference server retires band-1 horses on dismount. Trade transports keep
 		// their detached pose and can be mounted again through this door.
 		if !mounted && ref.TidWord>>11 == 1 {
 			c.ActiveCOS = nil

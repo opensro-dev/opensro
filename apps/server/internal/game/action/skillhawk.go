@@ -4,15 +4,15 @@
 skillhawk.go - the attacking hawk of Black and Light Hawk Summon
 
 A summ buff (enterworld.SkillSummonedHawk) keeps a hawk beside its caster.
-Native shape, v1.188 SR_GameServer:
+Native shape, v1.188 reference server:
 
-	SkillCombat_EngageSkill 593540   the buff's engage allocates the hawk's
+	skill engage                     the buff's engage allocates the hawk's
 	                                 periodic-damage record (+0xC10)
-	autocommand 4ADD44 / 4AEB6E      every basic attack and every attack
+	autocommand handlers             every basic attack and every attack
 	                                 skill the caster starts stamps the
 	                                 record: its target, and the time
-	Skill_ProcessPeriodicDamage      once per interval, while the caster
-	582750                           attacked within the last interval, the
+	periodic damage                  once per interval, while the caster
+	                                 attacked within the last interval, the
 	                                 hawk strikes that target (30D1, the
 	                                 v1.150 client's 357A)
 
@@ -37,7 +37,7 @@ import (
 ================
 summonedHawk
 
-One caster's periodic-damage record (the esi of 582750): the effect
+One caster's periodic-damage record (the native periodic damage's esi): the effect
 instance that owns it, its target (+0x10), the caster's last attack (+0x8)
 and the hawk's last strike (+0xC).
 ================
@@ -86,7 +86,7 @@ func (rt *Runtime) activeHawk(division, name string) (uint32, enterworld.SkillRo
 ================
 noteHawkOwnerAttack
 
-4ADD44 (basic attack) and 4AEB6E (a skill with an attack block): the
+The native basic attack and a skill with an attack block: the
 caster's attack re-aims its hawk and restarts the window it may strike in.
 ================
 */
@@ -117,8 +117,8 @@ func (rt *Runtime) noteHawkOwnerAttack(division string, c *enterworld.Character,
 ================
 advanceHawks
 
-582750 for every caster with a hawk, after the persistent casts it rides
-with (5830B0 calls it).
+The native periodic damage for every caster with a hawk, after the persistent casts it rides
+with (the persistent cast calls it).
 ================
 */
 func (rt *Runtime) advanceHawks(now int64) []simulation.DivisionFrames {
@@ -201,7 +201,7 @@ func hawkDivisionFrames(division string, source uint32, only int64, frames []wir
 ================
 hawkStrike
 
-The strike of 582750: 40F1B0 + 40F3D0 on the target, committed through the
+The strike of the native periodic damage: the physical skill damage formulae on the target, committed through the
 target's HP door with the caster credited (vtable +0x4FC), then the fatal
 bit when the target died. A strike never misses. A player target takes it
 as the caster's credited hit (pvpstrike.go).

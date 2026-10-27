@@ -21,7 +21,7 @@ import (
 
 const (
 	playerAggressionTicks = 20
-	// 52AA90 also advances CTimedActionManager by 1.0 seconds per callback.
+	// The native state tick also advances the timed actions by 1.0 s per callback.
 	playerAggressionTickMs = 1000
 )
 
@@ -49,7 +49,7 @@ func playerPVPStateFrame(c *enterworld.Character) wire.Frame {
 ================
 refreshPlayerAggression
 
-4E25C0 and 4E1DF0 refresh the same target/count entry. A refresh does not move
+Natively both registrations refresh the same target/count entry. A refresh does not move
 the actor's periodic tick; other opponents retain their own remaining counts.
 ================
 */
@@ -70,7 +70,7 @@ func (rt *Runtime) refreshPlayerAggression(division string, c, target *enterworl
 ================
 registerPlayerAttack
 
-4E25C0: legal opponents do not make the attacker criminal. An attack on a
+Natively legal opponents do not make the attacker criminal. An attack on a
 neutral player, or on an existing aggressor, retains the reciprocal target
 for twenty state ticks. Same-party membership removes that target instead.
 ================
@@ -97,8 +97,8 @@ func (rt *Runtime) registerPlayerAttack(division string, caster, target *enterwo
 ================
 registerPlayerAttacked
 
-4E1DF0 retains the attacking player only when the recipient is already grey.
-This runs before the attacker's registration, matching ProcessNormalHit.
+Natively the attacking player is retained only when the recipient is already grey.
+This runs before the attacker's registration, matching the native hit.
 ================
 */
 func (rt *Runtime) registerPlayerAttacked(division string, target, caster *enterworld.Character, now int64) []wire.Frame {
@@ -112,7 +112,7 @@ func (rt *Runtime) registerPlayerAttacked(division string, target, caster *enter
 ================
 advancePlayerAggressions
 
-52AA90 removes expired entries and opponents that joined the same party.
+The native state timers remove expired entries and opponents that joined the same party.
 Catch up elapsed ticks once, without changing the phase after a delayed frame.
 ================
 */

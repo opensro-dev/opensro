@@ -3,7 +3,7 @@
 
 fortress_staff.go - fortress employment replies and holder synchronization
 
-632020 queries flags; 632100 hires. 620090 sends holder flags only to the
+The reference server queries flags and hires, and sends holder flags only to the
 holder guild, not its allies. The holder may be temporary during a war.
 
 ===========================================================================
@@ -33,7 +33,7 @@ func fortressHolderFlags(id uint32, flags uint8) wire.Frame {
 ================
 FortressHolderFrames
 
-4DF9E0 sends the holder flags on siege-world entry even outside war.
+The reference server sends the holder flags on siege-world entry even outside war.
 ================
 */
 func (rt *Runtime) FortressHolderFrames(division string, c *enterworld.Character) []wire.Frame {

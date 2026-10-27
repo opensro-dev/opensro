@@ -37,7 +37,7 @@ func berserkPointsFrame(c *enterworld.Character, source uint32) wire.Frame {
 ================
 HandleBerserk
 
-The retail request is 7341 [1]; research 515B30 uses 70A7. Success is
+The retail request is 7341 [1]; the research server uses 70A7. Success is
 authoritative points/body/speed publication; B341 carries refusals only.
 ================
 */
@@ -53,7 +53,7 @@ func (rt *Runtime) HandleBerserk(division string, c *enterworld.Character, paylo
 		if c.DeletePending || !enterworld.CharacterAlive(c) || c.NativeTeleportMode != 0 {
 			return false
 		}
-		// 515B8E: any transform (msch 1..4) refuses before the body checks.
+		// Natively any transform (msch 1..4) refuses before the body checks.
 		if c.NativeBodyStatus != 2 && c.TransformMode != 0 {
 			code = 5
 			return false
@@ -177,8 +177,9 @@ func (rt *Runtime) expireBerserkInDivision(key string, job berserkExpiry, now in
 /*
 ================
 berserkKillAward
-
-410880, consumed as unsigned16 by 593800. Preserve native CRT modulo
+The native berserk point gain, consumed as unsigned16 when results apply.
+Preserve native CRT modulo sampling: threshold 800 is not an exact uniform
+8-percent probability.
 sampling: threshold 800 is not an exact uniform 8-percent probability.
 ================
 */
@@ -190,7 +191,7 @@ func berserkKillAward(playerLevel, monsterLevel int64, rarity uint8, roll uint32
 ================
 berserkKillAwardWithGainRate
 
-Formulae_CalculateBerserkPointGain (0x00410880..0x004109dc): after computing
+The native berserk point gain formula: after computing
 the base and monster-rarity threshold, native reads parameter 0xb8 ('hwir',
 base 100, +20 from SKILL_TC_CROWN_BUFF_01 20163) and scales
 threshold = param_0xb8 * threshold / 100 before the uint16 truncation.

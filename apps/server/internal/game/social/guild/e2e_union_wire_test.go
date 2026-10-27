@@ -210,7 +210,7 @@ func TestUnionFoundAndDissolveOverWire(t *testing.T) {
 	guildHelloWS(t, connG)
 	guildEnterWorldSeeds(t, connG, unionE2ENameG)
 
-	// 5C6550: a guildless proposer answers 0x0D, a guildless target 0x25.
+	// Natively a guildless proposer answers 0x0D, a guildless target 0x25.
 	guildSendFrame(t, connG, guild.OpUnionInvite, invE2EU32(enterworld.ObjectIDForCharacter(fox)))
 	if got := guildExpectFrame(t, connG, guild.OpUnionInviteResult, "guildless proposer"); !bytes.Equal(got, []byte{2, 0x0D}) {
 		t.Fatalf("guildless proposer answered % X", got)

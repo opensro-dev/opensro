@@ -5,9 +5,9 @@ skillbowbuff_test.go - the bow's timed buffs: White Hawk Summon (hr) and
 Demon Soul Arrow (ru)
 
 Both were refused as "offensive-shape-unsupported": the timed self-effect
-qualifier knew neither tag. 594AC0 installs hr on the hit-rate keeper (0xB)
+qualifier knew neither tag. The native buff modifier pass installs hr on the hit-rate keeper (0xB)
 and ru on the attack-range keeper (0x21), which is the reach of every skill
-without its own range (CGObjChar_GetAttackRangeParam 4AC890).
+without its own range (the attack-range param).
 
 ===========================================================================
 */

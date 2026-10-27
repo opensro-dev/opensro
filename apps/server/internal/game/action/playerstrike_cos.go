@@ -5,18 +5,18 @@ playerstrike_cos.go - a player's single-target hits on a COS
 
 A thief can strike the transport a trader rides, a horse or a pet, as the
 original lets a player select and attack a COS (#1002's spec). Admission is
-CGObjPC_ValidateAttackTarget (5293A0): CGObjChar_CheckTargetAttackable
-(5291D0) runs on the COS itself, then the target becomes the owner
+the native attack-target validation: the attackable check
+runs on the COS itself, then the target becomes the owner
 (COS+0x1CD8) and every remaining PvP check runs on the owner exactly as for
 a direct attack (playerAttackRefusal). The hit is the player's formula
 against the COS's own defence, applied through the same companion owner a
 monster's hit uses (cosHit, monsterstrike.go), so a death settles and a
 transport's goods scatter exactly as they do today.
 
-Aggression follows the native pair: CGObjCOS_ProcessNormalHit (52A1E0)
-calls CGObjPC_EnterBattleOnAttacked (4E1DF0) for the owner, and the
-attacker's CGObjPC_EnterBattleOnAttack (4E27C0) swaps a COS target for its
-owner before CGObjPC_RegisterHostileTarget (4E25C0). Hitting a trader's
+Aggression follows the native pair: the COS hit path
+enters the owner into battle as attacked, and the
+attacker's own battle entry swaps a COS target for its
+owner before the hostile registration. Hitting a trader's
 transport therefore marks the attacker against the trader as hitting the
 trader would.
 
@@ -46,11 +46,11 @@ import (
 ================
 cosTargetRefusal
 
-5293A0 for a COS target, in 5291D0's order:
+The native attack-target validation for a COS target, in the attackable check's order:
  1. a dead, hidden (modes 6..7) or pickup-pet (+0x43C) COS refuses with 0x3006;
- 2. an attacker in body mode 2 (529234..529242) refuses with 0x3020;
- 3. a target COS in body mode 2..4 (529248..52927E) refuses with 0x3020;
- 4. an owner in body mode 2..4 (52930E..529324) or on the caster's
+ 2. an attacker in body mode 2 refuses with 0x3020;
+ 3. a target COS in body mode 2..4 refuses with 0x3020;
+ 4. an owner in body mode 2..4 or on the caster's
     free-battle team refuses with 0x3020, then the target becomes the owner
     and the whole PvP chain runs on it (playerAttackRefusal). Zero admits.
 
@@ -64,8 +64,8 @@ func (rt *Runtime) cosTargetRefusal(division string, caster *enterworld.Characte
 ================
 cosTargetRefusalWith
 
-cosTargetRefusal with 5293A0's control flags: an area selection passes
-playerAttackArea (mode 3), as 5A1AD0 asks for a player caster.
+cosTargetRefusal with the native validation's control flags: an area selection passes
+playerAttackArea (mode 3), as the native hostile-target test asks for a player caster.
 ================
 */
 func (rt *Runtime) cosTargetRefusalWith(division string, caster *enterworld.Character, target combatTarget, now int64, flags uint8) uint16 {
@@ -94,7 +94,7 @@ func (rt *Runtime) cosTargetRefusalWith(division string, caster *enterworld.Char
 ================
 acceptCOSTargetStage
 
-acceptSkillStagePhaseAt for a COS target: the shared admission, 5293A0
+acceptSkillStagePhaseAt for a COS target: the shared admission, natively validated
 through the owner, the phase cost, range and preparation, then one hit.
 ================
 */
@@ -158,8 +158,7 @@ planPlayerCOSHitAt
 
 planPlayerCOSHit at an area's running percent (0 reads as the whole
 result, combat.FinishImpact) with an lfst row's life-steal base: an area
-victim takes the life-steal record at its percent, as a monster does
-(58F4B5).
+victim takes the life-steal record at its percent, as a monster does.
 ================
 */
 func (rt *Runtime) planPlayerCOSHitAt(st offensiveStage, target combatTarget, casterAt simulation.Spawn, percent uint64, lifeStealBase int64) (cosHit, bool) {
@@ -185,7 +184,7 @@ func (rt *Runtime) planPlayerCOSHitAt(st offensiveStage, target combatTarget, ca
 	for range skill.Attack.ImpactCount {
 		var formula combat.Result
 		if skill.LifeSteal.Present {
-			// 58F4B5: the percent rides into 40F750, after its HP cap.
+			// The percent rides into the life-steal formula, after its HP cap.
 			formula = lifeStealResult(lifeStealBase, st.attacker, defender, remainingHP, uint32(percent))
 			formula = combat.FinishImpact(formula, combat.ImpactTail{PercentApplied: true, Attack: skill.Attack.Present})
 		} else {
@@ -228,9 +227,9 @@ func (rt *Runtime) planPlayerCOSHitAt(st offensiveStage, target combatTarget, ca
 strikeCOSTarget
 
 Plan, then one door for the caster and the owner: the cost and ammunition,
-the owner's attacked registration (4E1DF0 via 52A1E0), the hit on the
+the owner's attacked registration (through the COS hit path), the hit on the
 companion, the caster's battle state and its hostile registration against
-the owner (4E27C0 swaps the COS for COS+0x1CD8). Then the B245 result and
+the owner (natively the COS swaps for COS+0x1CD8). Then the B245 result and
 the companion's publication.
 ================
 */
@@ -260,7 +259,7 @@ func (rt *Runtime) strikeCOSTarget(st offensiveStage, target combatTarget, caste
 		}
 	}
 	owner := target.player
-	// 4E1F60 classifies the kill against the owner before the door, as a
+	// The native PvP rewards classify the kill against the owner before the door, as a
 	// player kill does; withVictim refreshes it inside.
 	kill := rt.classifyPlayerKill(division, character, owner)
 	var ammo ammunitionResult
@@ -291,12 +290,12 @@ func (rt *Runtime) strikeCOSTarget(st offensiveStage, target combatTarget, caste
 		// aggression map as it found it.
 		attacked = rt.registerPlayerAttacked(division, owner, character, now)
 		if hit.strike.fatal {
-			// 4E27F4 books the kill against the owner (payCOSKillInDoor)
-			// before 4E280B registers the hostile target below and before
+			// Natively the kill is booked against the owner (payCOSKillInDoor)
+			// before the hostile target is registered below and before
 			// the COS's own penalty relief.
 			kill = kill.withVictim(character, owner)
 			killReward, killRewardPublic, killAfter, killWar = rt.payCOSKillInDoor(division, character, owner, kill, hit.pet.Level, now)
-			// 4C42F0 -> 4EB6B0: the killing blow eases the caster's murder
+			// Natively the killing blow eases the caster's murder
 			// penalty by the gap to the companion's level (cosplayerkill.go).
 			killCredit, killPublic = rt.creditPlayerCOSKill(division, character, hit.pet.Level)
 		}
@@ -359,7 +358,7 @@ func (rt *Runtime) strikeCOSTarget(st offensiveStage, target combatTarget, caste
 		actor = append(actor, ammunitionFrames(ammo)...)
 		private = append(private, ammunitionFrames(ammo)...)
 	}
-	// 593832: the attacker's unblocked attempts wear its weapon.
+	// The attacker's unblocked attempts wear its weapon.
 	var tally wearTally
 	for _, formula := range hit.formulas {
 		tally.note(formula.Blocked, true)
@@ -401,9 +400,9 @@ func (rt *Runtime) strikeCOSTarget(st offensiveStage, target combatTarget, caste
 ================
 rollPlayerOnCOS
 
-590680 for a player's hit on a COS: the caster's level and learned
+The native status roll for a player's hit on a COS: the caster's level and learned
 modifiers (rollPlayerOnMonster), the companion's level, resistances and
-immunity (rollMonsterOnCOS: attack COS of band 1 are status-immune, 482840).
+immunity (rollMonsterOnCOS: attack COS of band 1 are status-immune).
 ================
 */
 func (rt *Runtime) rollPlayerOnCOS(division string, c *enterworld.Character, params *abnormal.SkillParams, target *cosAbnormalOwner) ([]abnormal.Record, error) {

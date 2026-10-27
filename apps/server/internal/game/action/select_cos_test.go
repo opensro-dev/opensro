@@ -3,8 +3,8 @@
 
 select_cos_test.go - selecting a summoned companion
 
-CGObjPC_HandleSelectRequest0x7045 (52B040) grants any character in hit
-range, and CGObjCOS inherits the NPC/monster select writer, so a companion
+The reference server's select request grants any character in hit
+range, and a COS inherits the NPC/monster select writer, so a companion
 answers with the non-user arm carrying its current HP.
 
 ===========================================================================

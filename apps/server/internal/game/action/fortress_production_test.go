@@ -221,7 +221,7 @@ func TestFortressSmithOrderLifecycle(t *testing.T) {
 TestFortressTrainerOrderTakesTheRoleDiscount
 
 A member holding exactly the trainer's role takes 15% off the price and
-the time (632660's x87 0.85, truncated); the trainer refuses the smith's
+the time (the native x87 0.85, truncated); the trainer refuses the smith's
 items and answers on its own action numbers.
 ================
 */

@@ -113,7 +113,7 @@ func TestEncodeMemberJoin3B29(t *testing.T) {
 
 // TestInvitePendingTable pins the pending-invitation semantics that run
 // without any store or presence collaborator: latest-wins replacement
-// (the sub_5c8210 rule), the non-consuming ownership probe, the consume
+// (the native rule), the non-consuming ownership probe, the consume
 // on take, and the session-boundary drop.
 func TestInvitePendingTable(t *testing.T) {
 	t.Parallel()

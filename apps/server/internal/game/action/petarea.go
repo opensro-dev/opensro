@@ -90,7 +90,7 @@ func (rt *Runtime) petAreaTargets(step petCombatStep, primary petCombatTarget, s
 		if snapshot == nil || snapshot.DeletePending {
 			continue
 		}
-		// 528F40 excludes same-team player targets before owner permission.
+		// Natively same-team player targets are excluded before owner permission.
 		// INFERENCE: apply that companion rule to secondary owners and their
 		// companions too, so area selection cannot bypass team protection.
 		if rt.companionTeamRefusal(step.snapshot, snapshot) != 0 {
@@ -140,7 +140,7 @@ func (rt *Runtime) strikePetTarget(step petCombatStep, target petCombatTarget, s
 ================
 strikePetTargets
 
-58E5F0 reduces the running share after each victim. B245/B505 names all
+The native hit outcome reduces the running share after each victim. B245/B505 names all
 victims under one token, and one finalize closes the action.
 ================
 */

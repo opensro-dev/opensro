@@ -11,12 +11,12 @@ category 0x10 notice (75CCA0, 75CCF0, 75CD40): the low byte of the
 GameServer's 0x4Cxx guild error.
 
 The union list 0x341E (82A560) is [u32 union id][u32 union emblem][u32
-leading guild id][u8 count] and a row per guild (CAlliance_WriteList
-5B8EB0). A row is CGuild vt+0x18 (5D0BC0): [u32 id], then by mask 1 the
+leading guild id][u8 count] and a row per guild (the native alliance
+list writer). A row is the guild's vt+0x18 writer: [u32 id], then by mask 1 the
 name, 2 the level, 4 the master's name and model, 8 the member count.
-0x3B29 subop 0x0D adds a full row (5C44F0), 0x0E patches one [u8 mask]
+0x3B29 subop 0x0D adds a full row, 0x0E patches one [u8 mask]
 [row] (761F62), 0x12 removes [u8 1 left | 2 expelled][u32 guild] or
-dissolves [u8 3] (5C45B0, 5C4650).
+dissolves [u8 3].
 
 ===========================================================================
 */
@@ -58,8 +58,7 @@ const (
 )
 
 // Category 0x10 codes the union requests answer with (the 0x4Cxx low byte
-// GuildManager_RequestUnionInvite 5C6550, _RequestUnionLeave 5C6710 and
-// _RequestUnionKick 5C67A0 return).
+// the native union invite, leave and kick requests return).
 const (
 	unionErrTargetInvalid    uint8 = 0x03
 	unionErrNoGuild          uint8 = 0x0D

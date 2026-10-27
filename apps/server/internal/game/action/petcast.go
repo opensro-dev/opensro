@@ -45,7 +45,7 @@ func (rt *Runtime) petStrikeToken(step petCombatStep) uint32 {
 ================
 petStrikeFrame
 
-58356C / 585BF8 prepare a positive cast; 585F69 releases its results.
+The native cast lifecycle prepares a positive cast and releases its results.
 ================
 */
 func (rt *Runtime) petStrikeFrame(step petCombatStep, result wire.SkillCastSingleTargetResult) wire.Frame {
@@ -71,6 +71,6 @@ func (rt *Runtime) cancelPetCombat(key petOwnerKey, state *petSession, now int64
 		rt.queueSkillFinalize(key.division, fmt.Sprintf("@pet:%d", key.gid), key.gid, now, wire.SkillCastFinalizeFrame(token))
 	}
 	state.combat = nil
-	// Leaving BATTLE is a state change (53FF30).
+	// Leaving BATTLE is a state change.
 	resetPetStuck(state)
 }

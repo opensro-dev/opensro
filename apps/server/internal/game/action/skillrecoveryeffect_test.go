@@ -29,7 +29,7 @@ effectAdds
 The gids named by token-0 attached-effect adds of skill, each read from the
 route that publishes it: the immediate result's Around and the release's
 object-scoped batches. Every add must go around the object it names (the
-recipient, 484D90), never around the caster's own broadcast.
+recipient), never around the caster's own broadcast.
 ================
 */
 func effectAdds(t *testing.T, skill enterworld.SkillRow, r OpResult, batches []simulation.DivisionFrames) []uint32 {
@@ -77,7 +77,7 @@ func effectAdds(t *testing.T, skill enterworld.SkillRow, r OpResult, batches []s
 TestForceHealAndCureShowTheirEffectOnTheTarget
 
 The reported bug: Force Heal and Force Cure landed with no effect on the
-target. 593F50 sends each target one token-0 add (59466F -> 59AF00), so
+target. The native skill effect step sends each target one token-0 add, so
 the client plays water_hpheal_effect_a / water_cure_effect_a on it.
 ==================
 */
@@ -101,7 +101,7 @@ func TestForceHealAndCureShowTheirEffectOnTheTarget(t *testing.T) {
 TestSelfHealShowsItsEffectOnTheCaster
 
 An untargeted instant heal has an empty action vector and no column-22
-target, so 594668 names the caster.
+target, so the native skill effect step names the caster.
 ==================
 */
 func TestSelfHealShowsItsEffectOnTheCaster(t *testing.T) {
@@ -144,7 +144,7 @@ func TestGroupHealingShowsItsEffectOnEveryLivingMember(t *testing.T) {
 ==================
 TestGroupReverseShowsItsEffectOnlyOnTheDead
 
-A resurrection inverts 59494E's test: the dead member in range gets the
+A resurrection inverts the native alive test: the dead member in range gets the
 add, the living one does not, and with resu set the caster is never named.
 ==================
 */
@@ -164,9 +164,9 @@ func TestGroupReverseShowsItsEffectOnlyOnTheDead(t *testing.T) {
 ==================
 TestShapeSixHealAndHealOverTimeSendNoOneShot
 
-Mana Wind and Healing Division (efr shape 6) leave 593F50 through 59434C
+Mana Wind and Healing Division (efr shape 6) leave the native skill effect step early
 before the add whenever their party vector holds anyone.
-Healing Orbit runs the timed handler, never 593F50: it installs its own
+Healing Orbit runs the timed handler, never the skill effect step: it installs its own
 effect with a real token and sends no token-0 add.
 ==================
 */
@@ -181,7 +181,7 @@ func TestShapeSixHealAndHealOverTimeSendNoOneShot(t *testing.T) {
 	}
 
 	// Healing Division is an untargeted shape-6 heal: its vector is the
-	// party list, and with members in range 59434C skips the tail, so the
+	// party list, and with members in range the native step skips the tail, so the
 	// caster gets no add either.
 	division := shippedOffense(t, "SKILL_EU_CLERIC_HEALA_DIVIDE_A_01")
 	if area := division.Abnormal.EffectArea; division.TargetRequired || !area.Present || area.Shape != healSecondaryShape {
@@ -207,7 +207,7 @@ func TestShapeSixHealAndHealOverTimeSendNoOneShot(t *testing.T) {
 ==================
 TestAnInstantSelfHealAtFullHealthStillShowsItsEffect
 
-59466F sends the add whatever the heal changed: a zero-cast self heal at
+Natively the add is sent whatever the heal changed: a zero-cast self heal at
 full HP returns it in the immediate result, around the caster, while the
 caster's own burst stays the cast result alone.
 ==================

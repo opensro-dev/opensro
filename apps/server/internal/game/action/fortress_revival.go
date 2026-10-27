@@ -3,20 +3,20 @@
 
 fortress_revival.go - where a PC revives inside a fortress during its war
 
-CGObjPC_ResolveTownRecallPosition (4E08A0) asks the PC's world while a
+The native town-recall position asks the PC's world while a
 fortress war runs and the world is a siege world (slot 31,
-CGameWorld_Siege_IsSiege 600C50). CGameWorld_Siege_ResolveRevivalPosition
-(601700, siege vtable +0x90) then answers by the PC's side:
+the native siege test). The native siege revival position
+(siege vtable +0x90) then answers by the PC's side:
 
-  - no guild: one of the fortress's gates in the field (601C90)
+  - no guild: one of the fortress's gates in the field
   - the holder's guild: a revival gate of the fortress world (TID4 2)
   - an ally of the holder: a fortress gate inside the world (TID4 1)
-  - an attacker: its guild's camp (CSiegeFortress_ResolveAttackerStonePos
-    61FAF0, a headquarters it placed), else a field gate
+  - an attacker: its guild's camp (the native attacker stone
+    position, a headquarters it placed), else a field gate
 
-Each kind picks one matching teleport at random (51D260, rand() % count).
+Each kind picks one matching teleport at random (rand() % count).
 
-INFERENCE: 51D260 joins a field gate to its fortress through the
+INFERENCE: the native teleport lookup joins a field gate to its fortress through the
 building's fortress codename, which the v1.150 teleportbuilding rows leave
 empty for STORE_CH_FORT_GATE1..3; this server joins them through the
 teleport link that leads from the gate into the fortress world. No camps
@@ -36,7 +36,7 @@ import (
 )
 
 const (
-	// The TID4 of a 4/1/1 teleport building that 51D260 selects by.
+	// The TID4 of a 4/1/1 teleport building that the native lookup selects by.
 	gateKindFortressGate uint8 = 1
 	gateKindRevival      uint8 = 2
 )
@@ -45,7 +45,7 @@ const (
 ================
 fortressRevival
 
-The 601700 answer for c, or false when c revives at its appointed town.
+The native siege revival answer for c, or false when c revives at its appointed town.
 ================
 */
 func (rt *Runtime) fortressRevival(division string, c *enterworld.Character) (travelPoint, bool) {
@@ -120,7 +120,7 @@ func (rt *Runtime) fieldGates(world instance.DefinitionID) []portalDestination {
 ================
 randomGate
 
-51D260's rand() % count over the gates, in teleport order.
+The native rand() % count over the gates, in teleport order.
 ================
 */
 func (rt *Runtime) randomGate(gates []portalDestination) (travelPoint, bool) {

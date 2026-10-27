@@ -11,10 +11,10 @@ is 0xB1E1 [u8 subtype][u8 1][u32 fortress][u8 kind], or [u8 subtype][u8 2]
 [u8 code] with the low byte of v1.188's 0x28xx error, shown as notice
 category 0x1E (CPSMission_OnFortressManagerResponse0xB1E1 754A40). Every
 member of the guild then hears 0x3887 [0x0C or 0x0D][u32 fortress][u8 kind]
-(v1.188 61E620 / 61E7E0 send it to the guild through 5C4260; the client
+(the reference server sends it to the guild's local members; the client
 stores the fortress as its guild's and shows the notice).
 
-Admission is v1.188 633910 (apply) and 633C40 (withdraw), in their order.
+Admission is the reference server's apply and withdraw handlers, in their order.
 
 ===========================================================================
 */
@@ -58,7 +58,7 @@ const (
 	fortressErrPeriod        uint8 = 0x14 // UIIT_MSG_FORT_OFFICIAL_FORTWAR_APPLY_ERROR_02
 	fortressErrWrongOfficial uint8 = 0x3a // the NPC is another fortress's official
 
-	// 633910: a guild of level 3 with 7 members may apply.
+	// Reference server: a guild of level 3 with 7 members may apply.
 	fortressApplyMinGuildLevel   = 3
 	fortressApplyMinGuildMembers = 7
 	// The guild master is the grade-0 member.
@@ -107,7 +107,7 @@ func (rt *Runtime) HandleFortressInteraction(division string, c *enterworld.Char
 		defer unlock()
 		return rt.fortressServiceQuery(division, c, request)
 	}
-	// 519E60 skips the NPC range check for these two: the target is the
+	// The reference server skips the NPC range check for these two: the target is the
 	// summoned object or structure itself.
 	if subtype == siege.ActionDismiss || subtype == siege.ActionDemolish {
 		unlock := rt.lockDivision(division)
@@ -190,8 +190,8 @@ Subtype 6, the official's "fortress war" row (CIFNpcTalk action 0x34 row
 guild has applied and, if so, the fortress and kind. The v1.150 client
 opens the application window on it (754A40 -> 69EA10, 663200) and derives
 every date it shows from that one time (660C70: the war until two hours
-later, applications from three days before to the day before). v1.188's
-633610 writes four month/day/hour/minute quadruples instead; the v1.150
+later, applications from three days before to the day before). The reference
+server writes four month/day/hour/minute quadruples instead; the v1.150
 reader is the contract here.
 ================
 */
@@ -298,7 +298,7 @@ func (rt *Runtime) fortressApplicationRefusal(division string, c *enterworld.Cha
 	if _, owns := rt.Fortresses.OwnedFortress(division, guildID); owns {
 		return fortressErrOwns
 	}
-	// 61D300: an ally of the owning guild must apply as one, and only an
+	// Reference server: an ally of the owning guild must apply as one, and only an
 	// ally may.
 	if allied := record.GuildID != 0 && rt.Unions.Allied(division, record.GuildID, guildID); allied != (kind == fortress.RequestAlly) {
 		return fortressErrAlliance

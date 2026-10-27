@@ -212,7 +212,7 @@ func (rt *Runtime) applyInventoryMove(
 		// exact committed occupancy snapshot.
 		character.MissionInventory = nextRows
 
-		// 50F1F0 -> 59F0E0: self buffs whose reqi the new equipment fails end,
+		// After a move, natively self buffs whose reqi the new equipment fails end,
 		// and the stats the move publishes are the ones without them.
 		if equipmentChanged {
 			if ended := rt.retireUnmetEquipmentEffects(divisionID, character); len(ended) != 0 {

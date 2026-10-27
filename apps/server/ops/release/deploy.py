@@ -73,7 +73,7 @@ SHARD_SETTINGS = Path(__file__).with_name("shard-settings.json")
 SHARD_SETTING_NAME = re.compile(r"SRO_[A-Z0-9_]+")
 # The SRO_ variables deployer derives itself; a shard setting never names one.
 DEPLOYMENT_VARIABLES = frozenset({"SRO_SERVER_GAME_DATA_ROOT", "SRO_STACK_SIZES", "SRO_BUG_REPORT_DISCORD_WEBHOOK",
-	"SRO_WEBTRANSPORT_PUBLIC"})
+	"SRO_WEBTRANSPORT_PUBLIC", "SRO_STAFF_DISCORD_WEBHOOK"})
 AUTHORITY_DB = "state.db"
 
 
@@ -129,6 +129,26 @@ def bug_report_environment(config):
 	except FileNotFoundError:
 		return {}
 	return {"SRO_BUG_REPORT_DISCORD_WEBHOOK": value} if value else {}
+
+
+# ================
+# staff_environment
+#
+# The staff channel the GameWorld pages for ops-only alerts (the served
+# WebTransport pair, #1447): the same root-only file deploy.py already
+# announces staff events through. No key, or a missing or empty file,
+# names no webhook, and sro-nomad keeps the one already stored; sro-nomad
+# warns about, and ignores, a value that is not a Discord webhook, so this
+# can never refuse a release. The value is passed on, never logged.
+# ================
+def staff_environment(config):
+	if not config.get("staff_webhook"):
+		return {}
+	try:
+		value = Path(config["staff_webhook"]).read_text().strip()
+	except FileNotFoundError:
+		return {}
+	return {"SRO_STAFF_DISCORD_WEBHOOK": value} if value else {}
 
 
 # ================
@@ -623,7 +643,7 @@ def deployer(config, stack_sizes):
 	environment = dict(CLEAN_ENV, NOMAD_ADDR="http://127.0.0.1:4646", NOMAD_NAMESPACE="sro",
 		NOMAD_TOKEN=token["SecretID"], SRO_SERVER_GAME_DATA_ROOT=config["game_data"],
 		SRO_STACK_SIZES=stack_sizes,
-		**bug_report_environment(config), **wt_environment)
+		**bug_report_environment(config), **staff_environment(config), **wt_environment)
 	# The shard's own settings last; shard_settings refuses every name
 	# the deployment derives, so none of them can be overridden here.
 	environment.update(settings)

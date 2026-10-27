@@ -4,9 +4,9 @@
 huntingpoint.go - a marked player's position follows its hunter (hntp)
 
 The Rogue's Tag Point and Hunting Point install an lnks pair carrying
-hntp. SkillCombat_EngageSkill (593757) then attaches the recipient's
-action records to a task of the source (CActionTargetContext_SetCoordinates
-4F9A90), so the source keeps receiving the recipient's 0x30E3 moves after
+hntp. The reference server's skill engage then attaches the recipient's
+action records to a task of the source, so the source keeps receiving the
+recipient's 0x30E3 moves after
 it has left sight. The v1.150 client registers the subject from the
 private 0xB5ED (CSkillRunTimeManager_RegisterTrackedEntity 84F130), moves
 its marker on each 0x30E3 for that GID (84F360) and draws it on the world

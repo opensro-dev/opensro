@@ -69,7 +69,7 @@ func TestRidingHorseSummonMovesAndRetiresOnDismount(t *testing.T) {
 			despawned = true
 		}
 	}
-	// Peers see what the owner sees, less the owner's removal notice (4D2140).
+	// Peers see what the owner sees, less the owner's removal notice.
 	removal := cosRemovalNotice(gid)
 	if !despawned || !reflect.DeepEqual(result.Frames, append(append([]wire.Frame(nil), result.Broadcast...), removal)) {
 		t.Fatal("riding retirement was not visible to owner and peers", result)

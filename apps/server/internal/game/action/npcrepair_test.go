@@ -71,7 +71,7 @@ func TestSmithRepairsEverythingForItsPrice(t *testing.T) {
 TestRepairOfAWholeItemIsNotAPurseRefusal
 
 A whole item, such as a fresh drop the client prices one point short
-(78BD00 rounds where 495D60 truncates), answers 496E60's 0x1C09, which the
+(78BD00 rounds where the server's base stats truncate), answers the repair cost's 0x1C09, which the
 client keeps silent; Repair All with nothing damaged still answers 1. Only
 a quote the gold cannot pay says 0x1C07.
 ================
@@ -105,7 +105,7 @@ func TestRepairOfAWholeItemIsNotAPurseRefusal(t *testing.T) {
 ================
 TestBrokenItemNeedsCanRevive
 
-4C7BB2: a broken item without itemdata CanRevive answers 0x1C12.
+Natively a broken item without itemdata CanRevive answers 0x1C12.
 ================
 */
 func TestBrokenItemNeedsCanRevive(t *testing.T) {
@@ -144,7 +144,7 @@ func TestRepairRefusesAMerchantAndAnEmptyPurse(t *testing.T) {
 ================
 TestRepairHammerRestoresEverythingFree
 
-49C2B0 case 6: the hammer repairs every damaged item without gold; with
+The native special consumable case 6: the hammer repairs every damaged item without gold; with
 nothing damaged it answers 0x1888 and stays in the bag.
 ================
 */
