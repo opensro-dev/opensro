@@ -32,6 +32,7 @@ import (
 	"encoding/binary"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"opensro.online/server/internal/game/world/instance"
@@ -76,6 +77,10 @@ type Bridge struct {
 	// Installed at composition before ticking. The action owner supplies the
 	// authenticated membership lease; a wire world ID cannot manufacture it.
 	PopulationLease func(division, name string, session uint64) (instance.Lease, bool)
+	// resumed is the one-shot registry of resumed scene identities
+	// (resume.go), written by the hub hook and drained by the ticker.
+	resumeMu sync.Mutex
+	resumed  map[string]struct{}
 }
 
 // New builds the bridge. One per Hub is enough; it is stateless.
@@ -108,6 +113,14 @@ func NewTicker(
 	hooks ...simulation.TickHook,
 ) *simulation.Ticker {
 	bridge := New(hub)
+	// The ticker bridge owns the resume registry (resume.go): a resumed
+	// session is marked here and re-pushed by the ticker's next tick. Only
+	// this composition registers the hook - the ad-hoc bridges other lanes
+	// build with New (public API, observatory, notices) never drain one.
+	// A nil hub is a test composition without transport; it never resumes.
+	if hub != nil {
+		hub.OnSessionResumed(bridge.noteSessionResumed)
+	}
 	ticker := simulation.NewTicker(bridge, bridge)
 	ticker.Roster = append([]simulation.NpcDef(nil), roster...)
 	ticker.Hooks = append(ticker.Hooks, hooks...)
