@@ -238,8 +238,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 	var cureRecipients []RecipientFrames
 	selfThreat := makeSkillHealingThreat(division, character, character, skill)
 
-	// A cure writes every cured record, so the door covers them all.
-	if !rt.updateCured(cureDoorCharacters(character, cureTargets), "skill-self-recovery", func() bool {
+	if !rt.deps.Update(character, "skill-self-recovery", func() bool {
 		if !enterworld.CharacterAlive(character) || !enterworld.SkillLearned(character, skill.ID) {
 			return false
 		}

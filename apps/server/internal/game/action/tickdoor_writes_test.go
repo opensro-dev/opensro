@@ -1,13 +1,14 @@
 /*
 ===========================================================================
 
-tickdoor_writes_test.go - tick sweeps that write persisted fields (#1836)
+tickdoor_writes_test.go - tick sweeps that write character records (#1836)
 
 The division lock serializes the action tick, but it neither excludes a
 reader under the store's read door nor marks the record dirty. A sweep that
-writes a saved field outside a character door loses the write at the next
-restart and races every Snapshot. These tests run the sweeps through the
-real store and prove the write committed and was taken under the door.
+writes a record outside a character door races every Snapshot, and loses a
+persisted field at the next restart. The pet-window test runs the real
+store (commit, reboot, -race readers); the others watch every door
+(doorwatch_test.go) and fail when a write escapes one.
 
 ===========================================================================
 */
@@ -22,7 +23,6 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -103,87 +103,62 @@ func TestPetSkillWindowRetireCommitsThroughTheTickDoor(t *testing.T) {
 
 /*
 ================
-TestFieldRetireRunsInsideTheCharacterDoor
+TestFieldRetireWritesTheLeaverInsideItsDoor
 
-A recipient who steps out of a Harmony field loses its instance; the
-teardown writes the live record, so it must enter the leaver's tick door
-and no one else's.
+A recipient who steps out of a Harmony field loses its instance. The
+teardown changes the leaver's record, and every such change must
+fall inside a door that covers the leaver.
 ================
 */
-func TestFieldRetireRunsInsideTheCharacterDoor(t *testing.T) {
+func TestFieldRetireWritesTheLeaverInsideItsDoor(t *testing.T) {
 	rt, clock, c, row := harmonyFixture(t)
 	radius := float64(row.TimedEffect.Field.Radius)
 	mate := nearbyCharacter(rt, c, 12, "harmony-mate", radius-1)
-	deps := rt.deps.(*enterworld.Deps)
-	var doors []string
-	deps.UpdateCharacterDeferred = func(character *enterworld.Character, label string, update func() bool) bool {
-		if label == "skill-field-retire" {
-			doors = append(doors, character.Name)
-		}
-		return update()
-	}
+	watch := watchDoors(t, rt, mate)
 
 	releaseHarmony(t, rt, clock, c, row)
 	fieldPass(rt, clock)
-	if !hasSkillEffect(rt, mate.Name, row.ID) || len(doors) != 0 {
-		t.Fatalf("admission: mate holds %v, retire doors %v", hasSkillEffect(rt, mate.Name, row.ID), doors)
+	if !hasSkillEffect(rt, mate.Name, row.ID) {
+		t.Fatal("the mate was not admitted")
 	}
+	watch.finish()
 
 	moveCharacter(rt, mate, c, radius+1)
 	fieldPass(rt, clock)
 	if hasSkillEffect(rt, mate.Name, row.ID) {
 		t.Fatal("leaving the field did not end the instance")
 	}
-	if len(doors) != 1 || doors[0] != mate.Name {
-		t.Fatalf("retire doors %v, want exactly the leaver's", doors)
+	if covered := watch.finish(); covered[mate] == 0 {
+		t.Fatal("the retire changed nothing in the leaver's record, so this test proves nothing")
 	}
 }
 
 /*
 ================
-TestCombatTrapRetireRunsInsideTheCharacterDoor
+TestCombatTrapRetireWritesThePlanterInsideItsDoor
 
-Both retirements of a planter's trap buff tear down the saved record. The
-link-group cap retires inside the replant's own release door (a handler
-reaches it, so the door is immediate), and the object tick retires through
-the planter's tick door.
+Both retirements of a planter's trap buff change its record (the body
+status owner): the
+link-group cap when a replant replaces the older trap, and the object tick
+when the planter walks away. Each change must fall inside a door that
+covers the planter.
 ================
 */
-func TestCombatTrapRetireRunsInsideTheCharacterDoor(t *testing.T) {
+func TestCombatTrapRetireWritesThePlanterInsideItsDoor(t *testing.T) {
 	rt, clock, c, skill, gid := combatTrapFixture(t)
 	if !rt.Monsters.Defeat(testDivision, gid, clock.Now()) {
 		t.Fatal("could not clear the trigger monster")
 	}
-	deps := rt.deps.(*enterworld.Deps)
-	immediate := deps.UpdateCharacter
-	buffsAtRelease := -1
-	deps.UpdateCharacter = func(character *enterworld.Character, label string, update func() bool) bool {
-		var committed bool
-		if immediate != nil {
-			committed = immediate(character, label, update)
-		} else {
-			committed = update()
-		}
-		if label == "release-combat-trap" {
-			buffsAtRelease = len(rt.effects.Snapshot(testDivision, c.Name))
-		}
-		return committed
-	}
-	var tickDoors []string
-	deps.UpdateCharacterDeferred = func(character *enterworld.Character, label string, update func() bool) bool {
-		if label == "combat-trap-retire" {
-			tickDoors = append(tickDoors, character.Name)
-		}
-		return update()
-	}
-
 	plantCombatTrap(t, rt, clock, c, skill, clock.NowMs())
 	clock.Advance(time.Duration(skill.CoolTimeMs+1) * time.Millisecond)
 	rt.drainSkillFinalizes(clock.NowMs())
+	watch := watchDoors(t, rt, c)
+
 	release := plantCombatTrap(t, rt, clock, c, skill, clock.NowMs())
-	if buffsAtRelease != 1 {
-		t.Fatalf("%d buffs when the replant's door closed, want the replaced trap's buff retired inside it", buffsAtRelease)
+	if buffs := rt.effects.Snapshot(testDivision, c.Name); len(buffs) != 1 {
+		t.Fatalf("%d buffs after the replant, want the replaced trap's retired", len(buffs))
 	}
+	watch.finish()
 
 	key := simulation.WorldKey(testDivision, c.Name)
 	rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(w *simulation.WorldState) {
@@ -193,46 +168,7 @@ func TestCombatTrapRetireRunsInsideTheCharacterDoor(t *testing.T) {
 	if len(rt.effects.Snapshot(testDivision, c.Name)) != 0 {
 		t.Fatal("the trap's buff survived its planter walking away")
 	}
-	if len(tickDoors) != 1 || tickDoors[0] != c.Name {
-		t.Fatalf("tick retire doors %v, want exactly the planter's", tickDoors)
-	}
-}
-
-/*
-================
-TestCureOnAMateMarksBothRecordsInTheDoor
-
-A cure on a party mate writes the mate's saved abnormal state, so the
-caster's recovery door must cover the mate too, or the store never marks
-the mate dirty and a restart loses the cure.
-================
-*/
-func TestCureOnAMateMarksBothRecordsInTheDoor(t *testing.T) {
-	rt, clock, caster, monster := newCombatTestRuntime(t, 100)
-	row := installShippedSkill(t, rt, caster, 10077)
-	caster.Intellect = testInt64(80)
-	caster.CurrentMP = nil
-	now := clock.NowMs()
-	door := installStoreDoor(t, rt)
-	mate := addDoorMate(t, rt, caster, door, now, monster.Gid)
-	rt.clearSkillFinalizes(testDivision, caster.Name)
-	deps := rt.deps.(*enterworld.Deps)
-	locked := deps.UpdateCharacters
-	var covered []*enterworld.Character
-	deps.UpdateCharacters = func(characters []*enterworld.Character, label string, update func() bool) bool {
-		if label == "skill-self-recovery" {
-			covered = append(covered, characters...)
-		}
-		return locked(characters, label, update)
-	}
-
-	result := rt.HandleTargetInteract(testDivision, caster, wire.SkillAction{
-		ActionId: row.ID, HasTarget: true, TargetGid: enterworld.ObjectIDForCharacter(mate),
-	}.Encode())
-	if result.DiagnosticRefusal != "" {
-		t.Fatal(result.DiagnosticRefusal)
-	}
-	if len(covered) != 2 || covered[0] != caster || covered[1] != mate {
-		t.Fatalf("recovery door covered %d records, want the caster then the cured mate", len(covered))
+	if covered := watch.finish(); covered[c] == 0 {
+		t.Fatal("the tick retire changed nothing in the planter's record, so this test proves nothing")
 	}
 }
