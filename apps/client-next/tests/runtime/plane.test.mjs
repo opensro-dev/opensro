@@ -37,7 +37,8 @@ test("the feature table: outdoors and in a cave every field differs", () => {
 		dungeonWater: false,
 		signedLocalCoordinates: false,
 		worldMap: true,
-		floorMinimap: false
+		floorMinimap: false,
+		regionCatalog: true
 	} );
 	for ( const cave of [ 0x8001, 0x8004 ] ) {
 		assert.deepEqual( { ...featuresAt( cave ) }, {
@@ -53,7 +54,8 @@ test("the feature table: outdoors and in a cave every field differs", () => {
 			dungeonWater: true,
 			signedLocalCoordinates: true,
 			worldMap: false,
-			floorMinimap: true
+			floorMinimap: true,
+			regionCatalog: false
 		} );
 	}
 });

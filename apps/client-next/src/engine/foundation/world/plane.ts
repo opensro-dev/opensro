@@ -84,6 +84,10 @@ export interface PlaneFeatures {
 	// floorMinimap: the minimap draws the floor's own art (minimap_d,
 	// chosen by the floor query) instead of the sector tiles.
 	readonly floorMinimap: boolean;
+	// regionCatalog: a region is found through the world region catalog
+	// and loads its own outdoor bundle; a cave loads its dungeon bundle
+	// (world) and the dungeon resources (navigation) by region id instead.
+	readonly regionCatalog: boolean;
 }
 
 const OUTDOOR_FEATURES = {
@@ -99,7 +103,8 @@ const OUTDOOR_FEATURES = {
 	dungeonWater: false,
 	signedLocalCoordinates: false,
 	worldMap: true,
-	floorMinimap: false
+	floorMinimap: false,
+	regionCatalog: true
 } as const;
 
 const CAVE_FEATURES = {
@@ -115,7 +120,8 @@ const CAVE_FEATURES = {
 	dungeonWater: true,
 	signedLocalCoordinates: true,
 	worldMap: false,
-	floorMinimap: true
+	floorMinimap: true,
+	regionCatalog: false
 } as const;
 
 /*

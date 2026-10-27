@@ -19,7 +19,7 @@ worker-side clear or failure then retires it without a guess here.
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { Pose, GameplayCommand } from "@/engine/contracts/gameplay";
 import { assetFailure, createAssetRecovery } from "@/engine/foundation/assets/asset-recovery";
-import { isDungeonRegion } from "@/engine/foundation/world/world-space";
+import { featuresAt } from "@/engine/foundation/world/plane";
 import { createNavigation, type NavigationView } from "@/engine/foundation/navigation/clipper";
 
 const LOAD_TIMEOUT_MS = 60000;
@@ -172,7 +172,7 @@ export function createNavigationStream(
 					}
 				}
 				if ( state.phase !== "idle" || !assets.available() ) return;
-				const dungeon = isDungeonRegion( pose.regionId ), isCatalog = !dungeon && !catalog;
+				const dungeon = !featuresAt( pose.regionId ).regionCatalog, isCatalog = !dungeon && !catalog;
 				const path = dungeon ?
 					"/assets/world/dungeon/dungeon-resources.json" :
 					isCatalog ?
