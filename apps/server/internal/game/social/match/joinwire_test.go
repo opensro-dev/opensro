@@ -2,8 +2,11 @@ package match
 
 // Byte-exact pins for the match-JOIN wire codec (joinwire.go). The
 // fixtures mirror the re-harness matchJoinParity builders, so the Go
-// encoders and the REAL client folds (sub_75ea70 / sub_769e30 /
-// sub_75ebd0 / sub_769ca0) agree on every byte.
+// encoders and the REAL client folds
+// (CPSMission_OnPartyMatchingJoinReq0x75BF /
+// SEH_CNetProcessSecond_RegisterPacketHandlers_769e30 /
+// CPSMission_OnPartyMatchingJoinResponse0xB5BF /
+// CNetProcess_OnResponse0xB592) agree on every byte.
 
 import (
 	"bytes"
@@ -60,7 +63,7 @@ func TestEncodePartyJoinNotifyPinsTheSub75ea70ReadOrder(t *testing.T) {
 		u32le(257), // d = highest trained mastery
 		u32le(273), // e = second mastery reference, never listing purpose
 		[]byte{4},  // f = ordinary active job class
-		memberInfo, // the sub_75db30 masked member record
+		memberInfo, // the CPartyMemberInfo_ReadMasked masked member record
 	)
 	if !bytes.Equal(got, want) {
 		t.Fatalf("notify = % X, want % X", got, want)
@@ -75,7 +78,7 @@ func TestEncodeMentorJoinNotifyPinsTheSub769e30ReadOrder(t *testing.T) {
 		u32le(0),           // f00 - unread by the kind-0xe configure
 		u32le(0),           // f04 - unread by the kind-0xe configure
 		[]byte{20, 20},     // f08/f09 - the "%d(%d)" level pair
-		u32le(1907),        // f0c - RefObjID (race resolve sub_7efeb0+0x9c)
+		u32le(1907),        // f0c - RefObjID (race resolve GlobalDataManager_GetCharCosDataById+0x9c)
 		narrowStr("Alice"), // the UIIT_STT_TC_JOIN_REQUEST body name
 	)
 	if !bytes.Equal(got, want) {
@@ -109,7 +112,8 @@ func TestJoinTableParkTakeAndDisplacement(t *testing.T) {
 		t.Fatalf("first requestID = %d, want 1", parked.requestID)
 	}
 	// A second request toward the SAME owner displaces the first (the
-	// owner's pane stores exactly one request - sub_63cbc0 overwrites).
+	// owner's pane stores exactly one request - client
+	// CIFPartyMatchReqJoin_SetRequest overwrites).
 	second, old, displaced := table.park(joinKindParty, "div", "Hero", "Cara", 4)
 	if !displaced || old.joinerName != "Alice" {
 		t.Fatalf("second park displaced %+v (displaced=%v), want Alice's request", old, displaced)
