@@ -44,9 +44,10 @@ type InventoryRow struct {
 	StackCount   int64  `json:"stackCount"`
 
 	// MagicOptions are the item's encoded magic-option params, EXACTLY the
-	// u64 values the CSOItem wire carries after the count byte (client fold
-	// sub_78c830 L186-195 -> sub_78b1b0: u8 count asserted <= 12, then
-	// count x u64 LE). Encoding is the SRO-standard reinforce shape the
+	// u64 values the CSOItem wire carries after the count byte (the client
+	// fold CSOItem_Deserialize -> CSOItem_DeserializeMagicOptions: u8 count
+	// asserted <= 12, then count x u64 LE). Encoding is the SRO-standard
+	// reinforce shape the
 	// client's REINFORCE leg decodes for ordinary gear: low u16 = the
 	// magicoption.txt param id (MUST resolve in the client's
 	// magicOptionDefsByParamId3e4 table or the parse throws "missing
@@ -339,7 +340,8 @@ type Character struct {
 	// Owner timed job (2, 4), created by the summon for 1,200 seconds.
 	MercenarySummonUntilMs int64 `json:"mercenarySummonUntilMs,omitempty"`
 	// CapturedCOS is a capture-escort quest's captured monster (TypeID
-	// 1/2/3/6, client 692260): runtime-only, never persisted. The quest
+	// 1/2/3/6, RefObjType_IsCosBand6_CaptureMonster): runtime-only, never
+	// persisted. The quest
 	// record keeps the capture; a relog either re-summons it or fails it.
 	CapturedCOS *CharacterCOS `json:"-"`
 	// Port-only spell summons have no summoner item and never survive reentry.
@@ -479,9 +481,10 @@ type Character struct {
 	Mission *MissionRuntime `json:"mission,omitempty"`
 
 	// CompletedQuestIds are the finished-quest questdata ids the 0x32B3
-	// quest block's FIRST section emits (sub_8673d0 section 1: u8 count +
-	// count x u32 refId into the CICPlayer +0x18d0 container's completed
-	// list). Content ids are v1.150-NATIVE: rows of the shipped
+	// quest block's FIRST section emits (CICPlayer_DeserializeQuestSections
+	// section 1: u8 count + count x u32 refId into the CICPlayer +0x18d0
+	// container's completed list). Content ids are v1.150-NATIVE: rows of
+	// the shipped
 	// server_dep/silkroad/textdata/questdata.txt (also mirrored to the
 	// client at assets/data/questData.json), resolved by CODENAME - e.g.
 	// 2 = QTUTORIAL_CH, 3 = QNO_CH_SMITH_1 - never transplanted from the
@@ -501,24 +504,25 @@ type Character struct {
 	EndedQuestIds []uint32 `json:"endedQuestIds,omitempty"`
 
 	// ActiveQuests are the in-progress quest records the 0x32B3 quest
-	// block's SECOND section emits (sub_8673d0 section 2: u8 count +
-	// count x [u32 refId + SQuestInfo body], client parse sub_788210).
+	// block's SECOND section emits (CICPlayer_DeserializeQuestSections
+	// section 2: u8 count + count x [u32 refId + SQuestInfo body], client
+	// parse SQuestInfo_Deserialize).
 	// Quest ids follow the CompletedQuestIds content rule (v1.150-native
 	// questdata rows resolved by codename). The client registry insert is
-	// insert-if-absent (@0x789039: a duplicate refId keeps the FIRST
-	// record), so persisted lists should not carry duplicates. Absent =
+	// insert-if-absent (a duplicate refId keeps the FIRST record), so
+	// persisted lists should not carry duplicates. Absent =
 	// none active (the same no-bump omitempty posture as above).
 	ActiveQuests []ActiveQuestRecord `json:"activeQuests,omitempty"`
 
 	// TrackedQuests are the tracker records the 0x32B3 quest block's
-	// THIRD section emits (sub_8673d0 section 3, applied client-side by
-	// sub_866c60: quest-state apply + tracker UI refresh - the browser
-	// client hosts it over its quest plane and drives the CIFQuest +0x398
-	// tracked id the minimap quest pass gates on). Absent = none tracked.
+	// THIRD section emits (CICPlayer_DeserializeQuestSections section 3,
+	// consumed by the client's quest manager) - the browser client hosts
+	// it over its quest plane and drives the CIFQuest +0x398 tracked id
+	// the minimap quest pass gates on. Absent = none tracked.
 	TrackedQuests []TrackedQuestRecord `json:"trackedQuests,omitempty"`
 
 	// EnterEventGroupIds are the event-group ids the entered tail emits
-	// (client fold sub_77b220 @0x0077b2f4..: u8 count + count x u32,
+	// (client fold CPSMission_OnMyCharacterEntered: u8 count + count x u32,
 	// right after the fortress-war dword and before the discarded
 	// mission-mode byte). Client behavior per id: EVERY id sets the
 	// event-start slot (RefObjDataManager head record +0x10 := 1); id 1
@@ -537,10 +541,10 @@ type Character struct {
 	// reference only). Mutated exclusively by the community lane's
 	// 0x766F handler through the Mutate door; read by the entered
 	// chunk-C emission (BuildLocalPlayerEntryPayload), which is the
-	// client's ONLY reflection channel for this list - sub_77ad10 reads
-	// it mid-entered-stream, and no standalone S->C ack opcode is
-	// pinned. Capacity is the client panel's literal 0x14 cap
-	// (sub_61dc50 ": %d / %d").
+	// client's ONLY reflection channel for this list -
+	// CPSMission_ReadBlockedWhispererList reads it mid-entered-stream, and
+	// no standalone S->C ack opcode is pinned. Capacity is the client
+	// panel's literal 0x14 cap (ClientChat_WriteBlockCountLabel ": %d / %d").
 	BlockedWhisperers []string `json:"blockedWhisperers,omitempty"`
 
 	// Friends is the persisted friend-edge list (the retail
@@ -567,12 +571,13 @@ type Character struct {
 	GuildID *int64 `json:"guildId,omitempty"`
 
 	// GMPrivilege is the v1.150 GM privilege flag: bit 0 of the u8 the
-	// entered 0x32B3 stream deposits at CICPlayer+0x1890 (deserialize
-	// sub_8675f0 @0x867a90; tested by sub_862a70 "movzx +0x1890 & 1").
-	// The client gates on it: Console_IsAllowed @0x004fa670 (console /
-	// GM-command availability), the GM default chat channel mode 3 in
-	// CIFChatViewer_HandleChatInputKey @0x006aed90, and the 30F2/33C4/
-	// 3647 mission handlers. It is never writable from any
+	// entered 0x32B3 stream deposits at CICPlayer+0x1890
+	// (CICPlayer_DeserializeEnteredInventoryAndInitializeHud; tested by
+	// CICPlayer_IsTestGM). The client gates on it:
+	// Client_IsDebugCommandAllowed (console / GM-command availability),
+	// the GM default chat channel
+	// mode 3 in CIFChatViewer_HandleChatInputKey, and the 30F2/33C4/3647
+	// mission handlers. It is never writable from any
 	// network path. Normal startup requires strict accounts plus
 	// character-bound EnterWorld tickets; even the explicitly insecure
 	// local-development posture has no privilege setter. The only setter
@@ -582,7 +587,8 @@ type Character struct {
 	// False means an ordinary player.
 	GMPrivilege bool `json:"gmPrivilege,omitempty"`
 
-	// PC-room event eligibility is server-owned: client 862A80 -> 547750(1).
+	// PC-room event eligibility is server-owned: client
+	// CICPlayer_PcRoomEventEligible_862a80 -> CIFEventInterface_OnCreate(1).
 	PCRoomEvent bool               `json:"pcRoomEvent,omitempty"`
 	AutoPotion  AutoPotionSettings `json:"autoPotion"`
 
@@ -602,8 +608,8 @@ CharacterCOS is the durable half of one summoned COS lifecycle. Static
 model/speed/TID data remains in characterdata and is re-resolved by
 codename; only mutable entity identity/state belongs on the character.
 PetSkillWindow is one live ITEM_MALL_PET_SKILL_* / growth-potion usage
-window. sub_6E6150 keys its board row by kind and item id, so the ref id is
-the identity. EndUnixMs is absolute rather than a countdown, the way retail
+window. CIFMagicStateBoard_AddOrRemoveSlot keys its board row by kind and
+item id, so the ref id is the identity. EndUnixMs is absolute rather than a countdown, the way retail
 persists _CharCOS.RentEndTime, so a save keeps the real deadline.
 ==================
 */
@@ -864,7 +870,7 @@ type AvatarInventory struct {
 ================
 TimedSkillJob
 
-CInstanceTimedJob type 0 checkpoints remaining online time across login.
+The native timed-job type 0 checkpoints remaining online time across login.
 ================
 */
 type TimedSkillJob struct {

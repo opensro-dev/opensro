@@ -50,9 +50,8 @@ type TrainingCampRecord struct {
 type TrainingCampMemberRecord struct {
 	CharID int64 `json:"charId"`
 	// Kind is the client record's +0x44 byte: 0 master, 1 sub-mentor
-	// (assistant guardian), 2 student/apprentice - the
-	// TrainingCampMember_ClassifyGrade (0x0081E9F0) grade classifier's
-	// input (@0x0081ea08..0x0081ea71).
+	// (assistant guardian), 2 student/apprentice - the input the client's
+	// TrainingCampMember_ClassifyGrade classifier switches on.
 	Kind        uint8  `json:"kind"`
 	JoinedAtMs  int64  `json:"joinedAtMs,omitempty"`
 	JoinLevel   uint8  `json:"joinLevel,omitempty"`

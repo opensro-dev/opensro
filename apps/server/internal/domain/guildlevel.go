@@ -4,9 +4,10 @@
 guildlevel.go - the guild level rules the v1.150 client carries
 
 A guild climbs from level 1 to 5 at a guild manager NPC. The client prints
-the price of the next level from two tables (CIFGuildLevelUp 5EF9A0: GP at
-0xBE4C58, gold at 0xBE4C6C, both by the current level) and the member cap
-from a third (0xBE4490, by level, in the member pane 5E2D76). v1.188's
+the price of the next level from two tables (CIFGuildLevelUp_OnCreate: its
+GP table and its gold table, both by the current level) and the member cap
+from a third (its capacity table, by level, shown in the member pane by
+CIFGuildMember_RefreshFromGuildData). v1.188's
 level-up admission carries the same prices in its own gold and GP
 tables.
 
@@ -15,8 +16,8 @@ tables.
 
 package domain
 
-// GuildMaxLevel is the last level the level-up window offers (5EF9A0
-// clamps the next level at 5).
+// GuildMaxLevel is the last level the level-up window offers
+// (CIFGuildLevelUp_OnCreate clamps the next level at 5).
 const GuildMaxLevel uint8 = 5
 
 // GuildLevelUpCost is the price of leaving one level for the next.
@@ -25,7 +26,8 @@ type GuildLevelUpCost struct {
 	Gold int64
 }
 
-// guildLevelUpCosts are 0xBE4C58 and 0xBE4C6C by the current level.
+// guildLevelUpCosts are the client's GP and gold tables by the current
+// level (CIFGuildLevelUp_OnCreate).
 var guildLevelUpCosts = [GuildMaxLevel]GuildLevelUpCost{
 	1: {GP: 5400, Gold: 3000000},
 	2: {GP: 50400, Gold: 9000000},
@@ -40,7 +42,7 @@ var guildStorageCapacity = [GuildMaxLevel + 1]int64{2: 30, 3: 60, 4: 90, 5: 120}
 // GuildStorageMinLevel is the server's guild storage level test (0x4A below it).
 const GuildStorageMinLevel uint8 = 2
 
-// guildMemberCapacity is 0xBE4490 by level.
+// guildMemberCapacity is the client's capacity table by level.
 var guildMemberCapacity = [GuildMaxLevel + 1]int{1: 15, 2: 20, 3: 25, 4: 35, 5: 50}
 
 /*

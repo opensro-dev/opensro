@@ -3,9 +3,10 @@
 
 stalldecoration.go - which booth a character's stall shows
 
-A stall's spawn and open rows carry one u32 decoration (client 86A26D,
-CICharactor_SetStallState 86A880 loads that item's model, or the country's
-default stall for zero). The permanent decoration the character applied with
+A stall's spawn and open rows carry one u32 decoration (read in
+CICPlayer_DeserializeSpawnData; CICharactor_SetStallState loads that
+item's model, or the country's default stall for zero). The permanent
+decoration the character applied with
 an ITEM_MALL_BOOTH_* item wins; a running premium-package booth (the
 composite BFI1 work, a buff item) shows only while no permanent decoration
 is applied. Natively the server's stall decoration lookup returns the
