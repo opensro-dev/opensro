@@ -23,8 +23,8 @@ Client wire, from the v1.150 client's readers:
 	               (CIFNPCTalk_AppendTeleportRows 5D32C0: kind 0 is the
 	               SN_TALK_COMMON_INS_WADDUNGOT line, 1 an ascii symbol,
 	               2 a u16 with UIIT_CTL_TELEPORT_FREE_RESULT)
-	row click      0x7495 [u32 gid][u8 3][u8 choice] (CIFNpcTalk_
-	               ExecuteMenuAction 5DA1B0 case 0x2A)
+	row click      0x7495 [u32 gid][u8 3][u8 choice]
+	               (CIFNpcTalk_ExecuteMenuAction 5DA1B0 case 0x2A)
 
 The quest gates of v1.150 carry one row of kind 0: the player's last
 recall point, in the world it was recorded in.

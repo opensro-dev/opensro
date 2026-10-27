@@ -108,7 +108,6 @@ select
 				flagWarMode = 0;
 				taxRate = 0;
 				gateRows = [];
-				gateRows = [];
 				error = null;
 				localSelection = true;
 				return null;
@@ -138,7 +137,6 @@ select
 				capabilities = 0;
 				flagWarMode = 0;
 				taxRate = 0;
-				gateRows = [];
 				gateRows = [];
 			}
 			return frame;
@@ -215,7 +213,6 @@ receive
 				flagWarMode = 0;
 				taxRate = 0;
 				gateRows = [];
-				gateRows = [];
 				pending = null;
 				error = null;
 				return true;
@@ -277,7 +274,6 @@ remove
 				capabilities = 0;
 				flagWarMode = 0;
 				taxRate = 0;
-				gateRows = [];
 				gateRows = [];
 			}
 			// Preserve a release barrier until its untagged acknowledgement arrives.
