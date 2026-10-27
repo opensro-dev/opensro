@@ -495,6 +495,12 @@ func (rt *Runtime) completeJobDressInDivision(dress jobDress, c *enterworld.Char
 		if rt.jobDressed(c) != dressed {
 			rt.reloadJobDress(dress.division, c, now, &result)
 		}
+		// Port-only, not native (#1849): the suit going on over a saved
+		// streak raises its board row; the frame builder stays silent
+		// with the rule off.
+		if !dressed && rt.jobDressed(c) && c.MostWanted != nil && c.MostWanted.Streak > 0 {
+			result.Frames = append(result.Frames, rt.mostWantedStateFrame(c)...)
+		}
 		// Port-only, not native: taking the suit off clears the streak.
 		if dressed && !rt.jobDressed(c) && c.MostWanted != nil {
 			var private, public []wire.Frame

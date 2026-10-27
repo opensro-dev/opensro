@@ -68,10 +68,11 @@ const EnvMostWantedBountyTransfer = "SRO_MOST_WANTED_BOUNTY_TRANSFER"
 const mostWantedBountyDoor = "most-wanted-bounty"
 
 const (
-	// mostWantedKillsPerLevel counted kills make one wanted level.
-	mostWantedKillsPerLevel = 10
+	// mostWantedKillsPerLevel counted kills make one wanted level (the
+	// projection itself lives with the saved streak, domain.MostWanted).
+	mostWantedKillsPerLevel = domain.MostWantedKillsPerLevel
 	// mostWantedMaxLevel caps the wanted level.
-	mostWantedMaxLevel = 10
+	mostWantedMaxLevel = domain.MostWantedMaxLevel
 	// mostWantedPairLimit and mostWantedPairWindowMs: one killer counts one
 	// victim at most this often in the window.
 	mostWantedPairLimit    = 3
@@ -145,10 +146,10 @@ A streak's wanted level: streak / 10, at most 10.
 ================
 */
 func mostWantedLevel(c *enterworld.Character) int64 {
-	if c == nil || c.MostWanted == nil || c.MostWanted.Streak <= 0 {
+	if c == nil {
 		return 0
 	}
-	return min(c.MostWanted.Streak/mostWantedKillsPerLevel, mostWantedMaxLevel)
+	return c.MostWanted.Level()
 }
 
 /*
@@ -160,15 +161,7 @@ at 10.
 ================
 */
 func mostWantedDamagePercent(level int64) float32 {
-	switch {
-	case level >= mostWantedMaxLevel:
-		return 3
-	case level >= 5:
-		return 2
-	case level >= 3:
-		return 1
-	}
-	return 0
+	return domain.MostWantedDamagePercent(level)
 }
 
 /*
@@ -354,6 +347,7 @@ func (rt *Runtime) mostWantedKillInDoor(division string, killer, victim *enterwo
 	log.WithFields(log.Fields{"division": division, "killer": killer.Name, "victim": victim.Name,
 		"streak": killer.MostWanted.Streak}).Info("most wanted: kill counted")
 	actor = append(actor, rt.mostWantedStreakNotice(killer)...)
+	actor = append(actor, rt.mostWantedStateFrame(killer)...)
 	if level := mostWantedLevel(killer); level != before {
 		stats, speed := rt.mostWantedRefresh(division, killer, now)
 		actor, public = append(actor, stats...), speed
@@ -417,10 +411,15 @@ func (rt *Runtime) clearMostWantedInDoor(division string, c *enterworld.Characte
 	log.WithFields(log.Fields{"division": division, "character": c.Name, "streak": c.MostWanted.Streak, "reason": reason}).
 		Info("most wanted: streak cleared")
 	c.MostWanted = nil
+	// The cleared state goes out even below level 1, where no stat
+	// refresh follows: the client's stored progress must not outlive
+	// the streak (#1849).
+	cleared := rt.mostWantedStateFrame(c)
 	if level == 0 {
-		return nil, nil
+		return cleared, nil
 	}
-	return rt.mostWantedRefresh(division, c, now)
+	private, public = rt.mostWantedRefresh(division, c, now)
+	return append(cleared, private...), public
 }
 
 /*

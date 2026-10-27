@@ -43,8 +43,9 @@ Port-only, not native. The window's tabs, Options style: Image holds the
 frame-wide stages and scene resolution, World the
 atmosphere stages that deviate from the 2005 look, Lighting the direct-light
 stages, Chat and Developer the earlier additions. Pickup holds the item
-filter's kinds (#841); it is appended last so the existing tabs keep the
-indices a reopening window relies on.
+filter's kinds (#841) and Combat the job-combat rows (#1849); both were
+appended last, in turn, so the existing tabs keep the indices a reopening
+window relies on.
 ================
 */
 export const EXPERIMENTAL_TABS: readonly {
@@ -369,6 +370,19 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-pet-filter-other",
 			label: "Other items",
 			description: "Scrolls, arrows and the rest; only with the filter."
+		} ]
+	},
+	{
+		// Appended last (#1849), like Pickup before it, so the existing
+		// tabs keep the indices a reopening window relies on; the window
+		// fits seven rows a tab and every other tab is full.
+		title: "Combat",
+		section: "Job combat",
+		rows: [ {
+			key: "mostWantedBuff",
+			id: "experimental-most-wanted-buff",
+			label: "Most Wanted buff",
+			description: "Show your wanted level and progress by the health bar."
 		} ]
 	}
 ];

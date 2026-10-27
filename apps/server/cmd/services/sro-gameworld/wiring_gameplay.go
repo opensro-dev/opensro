@@ -582,6 +582,8 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	// and the client's delay bar learns it at world entry.
 	// Port-only, not native: the job-kill streak, its bonuses and bounty.
 	game.items.MostWanted = action.MostWantedFromEnv()
+	// World entry re-raises a suited streak holder's wanted state (#1849).
+	game.deps.MostWantedEnabled = game.items.MostWanted
 	if game.items.MostWanted {
 		log.Infof("job: most wanted streaks, bonuses and bounties ON (%s)", action.EnvMostWanted)
 	}

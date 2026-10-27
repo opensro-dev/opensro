@@ -19,9 +19,13 @@ import { PET_DESIGN } from "./pet-design-data";
 import { effectRemainingMs } from "@/engine/foundation/gameplay/attached-effects";
 import { cosTimerBars } from "@/engine/foundation/gameplay/cos-timer";
 import { paramJobFraction } from "@/engine/foundation/gameplay/param-job";
+import { mostWantedRow } from "@/engine/foundation/gameplay/most-wanted";
 import { iconPath } from "./icon";
 import { skillMetadataById } from "@/engine/foundation/gameplay/skill-catalog";
 export const buffTimerRoot = "/assets/images/Media_extracted/icon/stateodd/";
+// The com_job_* art the Most Wanted row wears (interface/ifcommon, as the
+// overhead job mark draws).
+const MOST_WANTED_ICON_ROOT = "/assets/images/Media_extracted/interface/ifcommon/";
 
 /*
 ================
@@ -40,6 +44,7 @@ export function buffBoard(
 		| "cosWindows"
 		| "paramJobs"
 		| "countJobs"
+		| "mostWanted"
 		| "vitals"
 		| "abnormalRecords"
 		| "petTailwind"
@@ -52,7 +57,8 @@ export function buffBoard(
 	timeMs: number,
 	suppressed: ReadonlySet<number> = new Set(),
 	ownerPet?: PetTraining,
-	showPetTraining = true
+	showPetTraining = true,
+	showMostWanted = false
 ) {
 	const primary: Entry[] = [], secondary: Entry[] = [];
 	for ( const slot of game.buffSlots ?? [] ) {
@@ -137,6 +143,21 @@ export function buffBoard(
 				path,
 				label: reference.name ?? "",
 				fraction: countJobFraction( rows[0]!, reference.periodSec, timeMs )
+			} );
+		}
+	}
+	// Port-only, not native (#1849): the local player's Most Wanted row,
+	// only while its Experimental row is on. The state is the server's
+	// (SRO_MOST_WANTED); the board renders it, never derives it.
+	if ( showMostWanted ) {
+		const wanted = mostWantedRow( game.mostWanted );
+		if ( wanted ) {
+			primary.push( {
+				id: "most-wanted",
+				path: MOST_WANTED_ICON_ROOT + wanted.icon + ".png",
+				label: wanted.label,
+				helpText: wanted.helpText,
+				fraction: wanted.fraction
 			} );
 		}
 	}

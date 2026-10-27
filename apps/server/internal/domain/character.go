@@ -858,3 +858,68 @@ action/mostwanted.go). Death or taking the suit off clears it.
 type MostWanted struct {
 	Streak int64 `json:"streak"`
 }
+
+// Port-only, not native (action/mostwanted.go owns the rule): the streak
+// arithmetic every reader of a saved streak shares - the stat projection,
+// the bounty and the wanted-state frame (#1849) - so they can never
+// disagree about what a streak is worth.
+const (
+	// MostWantedKillsPerLevel counted kills make one wanted level.
+	MostWantedKillsPerLevel int64 = 10
+	// MostWantedMaxLevel caps the wanted level.
+	MostWantedMaxLevel int64 = 10
+)
+
+/*
+================
+MostWanted.Level
+
+The streak's wanted level: streak / 10, at most 10. A nil streak is level
+0, as is a streak below the first level.
+================
+*/
+func (m *MostWanted) Level() int64 {
+	if m == nil || m.Streak <= 0 {
+		return 0
+	}
+	return min(m.Streak/MostWantedKillsPerLevel, MostWantedMaxLevel)
+}
+
+/*
+================
+MostWanted.KillsIntoLevel
+
+Counted kills toward the next level: the streak past the current level's
+threshold. At the cap there is no next level, so it reads full.
+================
+*/
+func (m *MostWanted) KillsIntoLevel() int64 {
+	if m == nil || m.Streak <= 0 {
+		return 0
+	}
+	if level := m.Level(); level >= MostWantedMaxLevel {
+		return MostWantedKillsPerLevel
+	} else {
+		return m.Streak - level*MostWantedKillsPerLevel
+	}
+}
+
+/*
+================
+MostWantedDamagePercent
+
+The damage dealt and reduced at a wanted level: 1% from 3, 2% from 5, 3%
+at 10.
+================
+*/
+func MostWantedDamagePercent(level int64) float32 {
+	switch {
+	case level >= MostWantedMaxLevel:
+		return 3
+	case level >= 5:
+		return 2
+	case level >= 3:
+		return 1
+	}
+	return 0
+}

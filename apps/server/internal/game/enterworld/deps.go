@@ -103,6 +103,10 @@ type Deps struct {
 	// MoonlitThiefSuit publishes the port-only SRO_MOONLIT_THIEF_SUIT rule
 	// (action/moonlitthiefsuit.go); false is native.
 	MoonlitThiefSuit bool
+	// MostWantedEnabled publishes the port-only SRO_MOST_WANTED rule
+	// (action/mostwanted.go) so world entry can re-raise a suited
+	// streak holder's wanted state (#1849); false sends nothing.
+	MostWantedEnabled bool
 	// StarterRefills are the beta's HP/MP potion refills (starterrefill.go);
 	// empty when the kit is disabled.
 	StarterRefills []StarterRefill
