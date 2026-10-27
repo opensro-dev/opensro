@@ -64,7 +64,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { publicAssetsRoot, retailTextdataRoot } from "../build/world/paths.mjs";
 import { findPass, fingerprintOf, recordPass, snapshotAsync } from "./checkStamps.mjs";
-import { failureReport, failureSummary } from "./failureReport.mjs";
+import { failureSummary, printFailureReports } from "./failureReport.mjs";
 
 const scriptDirectory = path.dirname( fileURLToPath( import.meta.url ) );
 const rebuildRoot = path.resolve( scriptDirectory, "..", ".." );
@@ -335,9 +335,8 @@ async function wave( name, steps ) {
 	} ) );
 	const failed = results.filter( ( result ) => !result.ok );
 	if ( failed.length > 0 ) {
-		for ( const result of failed ) {
-			process.stderr.write( `\n${failureReport( result )}\n` );
-		}
+		// Drained before the throw, or a pipe keeps only the report's head.
+		await printFailureReports( failed );
 		throw new Error(
 			`server ${name}: ${failed.map( ( result ) => failureSummary( result ) ).join( ", " )}`
 		);

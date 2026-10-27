@@ -87,3 +87,21 @@ export function failureReport( result ) {
 	lines.push( result.output );
 	return lines.join( "\n" );
 }
+
+/*
+================
+printFailureReports
+
+Write every failed step's report to stream, resolving once the stream has
+taken all of it. The gate throws next. On Linux a write to a pipe is
+asynchronous, and a process that throws before the write drains exits
+with the report cut at the pipe buffer (about 128 KiB on the CI runner's
+Node): the go test tail, which carries the FAIL lines, never arrives.
+================
+*/
+export function printFailureReports( failed, stream = process.stderr ) {
+	const text = failed.map( ( result ) => `\n${failureReport( result )}\n` ).join( "" );
+	return new Promise( ( resolve, reject ) => {
+		stream.write( text, ( error ) => error ? reject( error ) : resolve() );
+	} );
+}

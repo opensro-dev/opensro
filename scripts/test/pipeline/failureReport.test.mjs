@@ -12,8 +12,18 @@ not be read as a package - or swallow the name that follows it.
 ===========================================================================
 */
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { test } from "node:test";
 import { failingPackages, failureReport, failureSummary } from "../../checks/failureReport.mjs";
+
+// The report under test, as the child below imports it.
+const FAILURE_REPORT_URL = new URL( "../../checks/failureReport.mjs", import.meta.url ).href;
+
+// Larger than a Linux pipe buffer, so an undrained write is visibly cut.
+const LARGE_OUTPUT_LINES = 20000;
+
+// The go test verdict that ends the large output, the part a cut loses.
+const FAIL_LINE = [ "FAIL", "opensro.online/server/internal/game/action", "43.880s" ].join( String.fromCharCode( 9 ) );
 
 // What `go test` prints when one package's test fails and another passes:
 // the failing binary's own output (ending in its bare FAIL), its exit
@@ -86,4 +96,41 @@ test("an exit-0 rejection says the acceptance check rejected it", () => {
 		"gofmt failed (exit 0, rejected by the step's acceptance check)"
 	);
 	assert.ok( !failureReport( result ).includes( "names no failing package" ) );
+});
+
+/*
+================
+stderrOfThrowingGate
+
+Run a child that does what the gate does on failure: print the report of
+one step whose large output ends in its FAIL line, then throw. Resolves
+with everything the parent read from the child's stderr pipe.
+================
+*/
+function stderrOfThrowingGate() {
+	const child = `
+		import { printFailureReports } from ${JSON.stringify( FAILURE_REPORT_URL )};
+		const lines = Array.from( { length: ${LARGE_OUTPUT_LINES} }, ( _, i ) => "line " + i + " " + "x".repeat( 60 ) );
+		lines.push( ${JSON.stringify( FAIL_LINE )} );
+		const output = lines.join( String.fromCharCode( 10 ) );
+		await printFailureReports( [ { label: "tests", code: 1, signal: null, output } ] );
+		throw new Error( "server tests: tests failed" );
+	`;
+	return new Promise( ( resolve, reject ) => {
+		const proc = spawn( process.execPath, [ "--input-type=module", "-e", child ], {
+			stdio: [ "ignore", "ignore", "pipe" ]
+		} );
+		let stderr = "";
+		proc.stderr.setEncoding( "utf8" );
+		proc.stderr.on( "data", ( chunk ) => stderr += chunk );
+		proc.on( "error", reject );
+		proc.on( "close", ( code ) => resolve( { code, stderr } ) );
+	} );
+}
+
+test("a gate that throws after its report still delivers the report's FAIL line through a pipe", async () => {
+	const { code, stderr } = await stderrOfThrowingGate();
+	assert.notEqual( code, 0, "the gate's throw still fails the process" );
+	assert.ok( stderr.includes( FAIL_LINE ), `the report was cut: ${stderr.length} bytes arrived` );
+	assert.ok( stderr.includes( "server tests: tests failed" ), "the thrown error follows the report" );
 });
