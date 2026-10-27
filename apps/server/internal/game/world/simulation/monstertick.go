@@ -125,7 +125,7 @@ type MonsterMoverOps struct {
 	// Bard's Noise) from the effect owner. nil protects nobody.
 	FirstAttackGuard func(divisionID string, playerGID uint32, nowMs int64) monster.FirstAttackGuard
 	// Companions lists a player's summoned, living, unmounted companions in
-	// its owner's container order (CCOSManager_AppendOwnedActorsInContainerOrder).
+	// its owner's container order.
 	// nil means no companion is ever a target.
 	Companions func(divisionID string, ownerGID uint32, nowMs int64) []CompanionTarget
 

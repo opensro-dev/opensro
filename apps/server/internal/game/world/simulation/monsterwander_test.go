@@ -38,7 +38,7 @@ func TestWanderExpiryPreservesMovementAndDefersAcquisition(t *testing.T) {
 	if mover.ArriveMs <= deadline {
 		t.Fatal("fixture must expire before arrival")
 	}
-	// Equality does not expire (558B90 JBE); no player yet.
+	// Equality does not expire (the native comparison is JBE); no player yet.
 	ops.advanceInstance(monsterTestDivision, instance, nil, deadline)
 	current, _ := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
 	if current.Mode() != monster.MoverWandering {

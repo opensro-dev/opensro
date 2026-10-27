@@ -70,8 +70,9 @@ type GroundUpdate struct {
 ================
 NativeGroundStep
 
-48BFF0 stores speed*dt as float32, caps its magnitude at 160, multiplies
-the stored direction components and clears components smaller than .01.
+The retail server's ground step stores speed*dt as float32, caps its
+magnitude at 160, multiplies the stored direction components and clears
+components smaller than .01.
 ================
 */
 func NativeGroundStep(speed, elapsedSeconds, directionX, directionZ float32) (float32, float32) {
@@ -94,8 +95,9 @@ func NativeGroundStep(speed, elapsedSeconds, directionX, directionZ float32) (fl
 ================
 NativeGroundDestination
 
-48C5AE..48C63F clamps only when the stored step norm exceeds the stored
-remaining norm. Equality retains the original vector, including its Y.
+The retail server's destination clamp applies only when the stored step
+norm exceeds the stored remaining norm. Equality retains the original
+vector, including its Y.
 ================
 */
 func NativeGroundDestination(step, remaining [3]float32) [3]float32 {
@@ -113,8 +115,8 @@ func NativeGroundDestination(step, remaining [3]float32) [3]float32 {
 ================
 NativeGroundDirection
 
-485C20 stores atan2 as float32; 48BA10 stores its sine/cosine into the
-actor direction consumed by 48BFF0. Destination commands turn every tick.
+The retail server stores atan2 as float32 and its sine/cosine into the
+actor direction its ground step consumes. Destination commands turn every tick.
 ================
 */
 func NativeGroundDirection(dx, dz float32) (float32, float32) {
@@ -126,7 +128,7 @@ func NativeGroundDirection(dx, dz float32) (float32, float32) {
 ================
 NativeGroundArrived
 
-48C790 accepts a planar distance no greater than .5, or a positive dot
+The arrival test accepts a planar distance no greater than .5, or a positive dot
 between goal-current and original-command-source-current (passed goal).
 ================
 */
@@ -324,7 +326,7 @@ func (st *WorldStore) advanceGroundWalk(key string, w *WorldState) {
 		g.directionX, g.directionZ = NativeGroundDirection(float32(dx), float32(dz))
 	}
 	sx, sz := NativeGroundStep(speed, float32(float64(now-g.At)/1000), g.directionX, g.directionZ)
-	// Pos_GetRelativePlanar 430AD0 supplies zero Y to the native destination clamp.
+	// The native planar-relative position supplies zero Y to the destination clamp.
 	step := [3]float32{sx, 0, sz}
 	if !angular {
 		step = NativeGroundDestination(step, [3]float32{float32(dx), 0, float32(dz)})
@@ -340,7 +342,7 @@ func (st *WorldStore) advanceGroundWalk(key string, w *WorldState) {
 		return
 	}
 	if tether, ok := st.tethers[key]; ok && tether.Refuses(g.Pose, goal) {
-		// 4F1230 stops the player where it stands (vf4B0) before any
+		// The retail server's tether check stops the player where it stands (vf4B0) before any
 		// geometry runs for the refused step.
 		w.Spawn = g.Pose
 		w.MoveSegment = nil
