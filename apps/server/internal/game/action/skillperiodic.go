@@ -384,7 +384,7 @@ func (rt *Runtime) applyPeriodicCOSPulse(effect linkedpulse.Effect, c, snapshot 
 	var after jobKillPayout
 	var war domain.GuildWarCombat
 	landed := false
-	rt.deps.UpdateMany([]*enterworld.Character{c, owner}, "periodic-cos-pulse", func() bool {
+	rt.deps.UpdateManyDeferred([]*enterworld.Character{c, owner}, "periodic-cos-pulse", func() bool {
 		if !rt.applyCOSHitInDoor(effect.Division, &hit, now) {
 			return false
 		}

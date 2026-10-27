@@ -425,7 +425,7 @@ func (rt *Runtime) reloadJobDress(division string, c *enterworld.Character, now 
 	key := simulation.WorldKey(division, c.Name)
 	here := travelPoint{spawn: rt.liveSpawn(key, c, now), world: instance.ID(domain.CharacterWorldInstance(c))}
 	var reload OpResult
-	if !rt.deps.Update(c, "job-dress-reload", func() bool {
+	if !rt.deps.UpdateDeferred(c, "job-dress-reload", func() bool {
 		return rt.startReturnCast(returnCast{division: division, character: c, row: -1, duration: skinReloadMs,
 			destination: &here, now: now, mode: skinTeleportMode}, &reload)
 	}) {
@@ -498,7 +498,7 @@ func (rt *Runtime) completeJobDressInDivision(dress jobDress, c *enterworld.Char
 		// Port-only, not native: taking the suit off clears the streak.
 		if dressed && !rt.jobDressed(c) && c.MostWanted != nil {
 			var private, public []wire.Frame
-			rt.deps.Update(c, "most-wanted-undress", func() bool {
+			rt.deps.UpdateDeferred(c, "most-wanted-undress", func() bool {
 				private, public = rt.clearMostWantedInDoor(dress.division, c, "suit removed", now)
 				return true
 			})
