@@ -91,7 +91,7 @@ func encodedMovementModifier(fields []string) SkillMovementModifier {
 		}
 		i += 1 + arity
 	}
-	// 59642C: nonzero hste takes precedence over hst2, then hst3.
+	// Nonzero hste takes precedence over hst2, then hst3.
 	for kind, percent := range percentages {
 		if percent != 0 {
 			result.Kind = statuseffect.MovementKind(kind)
@@ -107,7 +107,7 @@ func encodedMovementModifier(fields []string) SkillMovementModifier {
 ================
 instantMovementSkill
 
-Non-attack activity 1 runs events 0 and 2 directly (4AD890..4AD8D1).
+Non-attack activity 1 runs events 0 and 2 directly.
 Only the complete self movement/dura program is admitted here; timed item
 jobs and target/area/delayed programs keep their separate activation
 contracts.
@@ -115,7 +115,7 @@ contracts.
 Column 18 is not pinned: it is the replacement descriptor's PackedStates
 word (skillreplacement.go), which the replacement owner consumes for any
 value. Columns 50/51 are not pinned either: they are the weapon kinds the
-action owner checks through 58D480 before charging, so a dagger-only row
+action owner checks through the equipment gate before charging, so a dagger-only row
 (the Rogue's Scud, 13/255) is admitted like an unrestricted one. They must
 still be bytes, or the row would keep the compiler's 0xFF/0xFF default and
 admit any weapon.

@@ -416,10 +416,10 @@ var itemdataRecordColumns = []itemdataRecordColumn{
 	// (CIFStorage_OnSlotTransfer; 0 refuses with notice 1:0x43).
 	{19, "canBorrow", "int"},
 	// Token 22 (server ref +0x8C bit 6, client RefObjData+0xAA): itemdata
-	// CanRepair, read by CGObj_CanRepair 483E80 for NPC and hammer repair.
+	// CanRepair, read by the server's repair check for NPC and hammer repair.
 	{22, "canRepair", "int"},
 	// Token 23 (server ref +0x8C bit 7): itemdata CanRevive, read by
-	// CGObj_CanRevive 483EB0 before a smith repairs a broken item.
+	// the server's revive check before a smith repairs a broken item.
 	{23, "canRevive", "int"},
 	// Authored CanUse flags: bit 0 admits direct activation; other bits
 	// describe additional behavior (pet skill rows carry 129, not just 1).
@@ -504,7 +504,7 @@ var itemdataRecordColumns = []itemdataRecordColumn{
 	{117, "varianceIntMax298", "int"},
 	// Native RefItemData+0x29C/+0x2A4, itemdata's Param1 and Param3. The
 	// record's param block is 20 contiguous ints followed by 20 contiguous
-	// description strings (sub_64DF40 walks them as two separate runs), so the
+	// description strings (the native record walk treats them as two separate runs), so the
 	// params are NOT interleaved with their labels: Param1 is +0x29C, Param2
 	// is +0x2A0 and Param3 is +0x2A4. Itemdata pairs them as (Param, Desc)
 	// columns, which is why Param3 is column 122 rather than 120.
@@ -515,12 +515,12 @@ var itemdataRecordColumns = []itemdataRecordColumn{
 	// the ITEM_MALL_PET_SKILL_* and GOLD_TIME_SERVICE families that match the
 	// kind-3 contract. Publish both unscaled and let the consumer decide.
 	{118, "itemParam1_29c", "int"},
-	// The resurrection scroll (v1.188 49FF20) reads all three: Param1 a
+	// The resurrection scroll reads all three natively: Param1 a
 	// fixed HP/MP amount, Param2 their percentage, Param3 the EXP refund.
 	{120, "itemParam2_2a0", "int"},
 	{122, "itemParam3_2a4", "int"},
-	// The premium time tickets (49C2B0 cases 3 and 4) read the EXP and
-	// skill-EXP bonus percentages from Param4 and Param5.
+	// The premium time tickets (the native use routine's cases 3 and 4)
+	// read the EXP and skill-EXP bonus percentages from Param4 and Param5.
 	{124, "itemParam4_2a8", "int"},
 	{126, "itemParam5_2ac", "int"},
 	// 80BFAC/80BFBC store the two tokens after the 20 (value,label)
@@ -578,8 +578,7 @@ func buildItemRef(fields []string, names map[string]string) *ItemRef {
 		ref.SummonLevelThresholds = summonLevelThresholds(ref)
 	}
 	// Desc1 (RefItem+0x2A4) names the skill a scroll (TID3 13) or a
-	// monster mask (CGItemMonsterCapsule, TID 3/2/2; 493C30), or a fortress
-	// repair kit (49CC80) casts.
+	// monster mask (TID 3/2/2), or a fortress repair kit, casts.
 	capsule := ref.TypeIDs[0] == 3 && ref.TypeIDs[1] == 2 && ref.TypeIDs[2] == 2
 	repair := ref.TypeIDs == [4]int64{3, 3, 1, 10}
 	if (ref.TypeIDs[2] == 13 || capsule || repair) && len(fields) > 119 {
@@ -682,8 +681,8 @@ func buildItemRef(fields []string, names map[string]string) *ItemRef {
 			ref.FortressRoleMask = v
 		}
 	}
-	// 49AC50 / 49B710 read the SERVER record's Param1..Param6 at +2A0 with a
-	// 0x20 stride - the same slots as the potion amounts above, so ParamN is
+	// The server's cure handlers read the record's Param1..Param6 at +2A0
+	// with a 0x20 stride - the same slots as the potion amounts above, so ParamN is
 	// column 118+2(N-1). The shipped labels pin the roles: the universal pill
 	// (ITEM_ETC_CURE_RANDOM_*) carries the curable mask, curable level and
 	// chance in Param1..3; ITEM_ETC_CURE_ALL_* carries freeze, frostbite, burn,

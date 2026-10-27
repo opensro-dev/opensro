@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-parameterindex_test.go - the shared parameter index (587630) walk
+parameterindex_test.go - the shared parameter index walk
 
 noteParameterIndex records the getv slots and admission blocks every skill
 kind reads. These tests pin two properties of that walk: it skips zero
@@ -79,7 +79,7 @@ func TestParameterIndexSkipsZeroWords(t *testing.T) {
 ================
 TestParameterIndexRecordsReachAddends
 
-4AE87E adds the caster's WIRU (+0x4E8) and CBRA (+0x50C) to a cast's reach
+The server adds the caster's WIRU (+0x4E8) and CBRA (+0x50C) to a cast's reach
 when the row asks for them, whatever its primary tag.
 ================
 */

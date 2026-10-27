@@ -16,7 +16,7 @@ import "opensro.online/server/internal/domain"
 ================
 MercenaryReference
 
-4A2CE0 checks vector size strictly greater than player level, then indexes
+The server checks vector size strictly greater than player level, then indexes
 level-1. Preserve its upper-bound refusal even though the final row exists.
 ================
 */

@@ -19,8 +19,8 @@ const abnormalPreservedSkillCategory = 3
 ================
 RetiresForAbnormal
 
-59FF80 selects the current command and category-3 ao/pw, preserving cbuf.
-5A0100 instead removes active ordinary buffs, preserving category 3 and
+The server's abnormal retirement selects the current command and category-3 ao/pw, preserving cbuf.
+Its sibling instead removes active ordinary buffs, preserving category 3 and
 the cbuf/nbuf/bbuf markers at descriptor +358/+35C/+360.
 ================
 */

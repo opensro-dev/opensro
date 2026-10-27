@@ -52,7 +52,7 @@ type MagicOptionRow struct {
 	// snapshot metadata for humans reading the JSON, not a client input.
 	Degree int64 `json:"degree"`
 	// Tag is column 7, the packed ASCII code the server's option switch
-	// (498690 / 496A70) dispatches on ('str', 'fz', 'hr', ...). Server-only.
+	// dispatches on ('str', 'fz', 'hr', ...). Server-only.
 	Tag uint32 `json:"-"`
 	// Descriptors are the ten (word, flag) pairs at columns 29..48 with
 	// flag 1, minus the 'xxx' fillers: the authored equipment-family words

@@ -32,7 +32,7 @@ const (
 	recoveryEfrAroundCaster = 1
 
 	// recoveryPartySelect and recoveryPartySelectWithCaster are the efr
-	// +0x14 masks skillCureVector maps to TargetSelection_Party (58BEF0);
+	// +0x14 masks skillCureVector maps to the server's party selection;
 	// bit 0 pushes the caster first.
 	recoveryPartySelect           = 4
 	recoveryPartySelectWithCaster = 5
@@ -40,7 +40,7 @@ const (
 	// recoveryPartyMemberBound is the native party roster bound (eight
 	// slots, social/party PartyMaxMembers). An efr target cap at or above
 	// it can never cut a party selection, so admission does not depend on
-	// how 58BEF0 would apply a smaller cap.
+	// how the party selection would apply a smaller cap.
 	recoveryPartyMemberBound = 8
 
 	// recoveryInstantHandler is column 68 (RefSkill action handler) of an
@@ -48,7 +48,7 @@ const (
 	// not be reduced to a one-shot heal.
 	recoveryInstantHandler = "0"
 
-	// recoveryTimedHandler is column 68 of a timed action (5830B0): the
+	// recoveryTimedHandler is column 68 of a timed action: the
 	// heals over time (Mana Cycle, Healing Cycle and their Orbits).
 	recoveryTimedHandler = "3"
 )
@@ -63,11 +63,11 @@ block (SkillHeal): no percent words, no weapon term, nothing after it.
 PartyHealPinned admits an untargeted instant heal whose program is exactly
 efr[1,1,radius,cap,0,4|5] heal[...] with optional mwhh / mwmh weapon terms
 and getv HLRU / HLMD: every party member the selection returns is healed by
-5A0850. Healing Orbit (dura/puls) and Group Reverse (resu) never match.
+the server. Healing Orbit (dura/puls) and Group Reverse (resu) never match.
 
 PartyResurrectPinned admits an untargeted efr[1,1,radius,cap,0,4|5]
 heal[...] resu[...] program: each dead party member in range is proposed a
-revival, the heal block being the revival vitals (594780).
+revival, the heal block being the revival vitals.
 
 HealOverTimePinned admits a timed heal (handler 3) whose program is
 [efr[1,1,radius,cap,0,4|5]] dura[ms] puls[ms] heal[...] with the party
@@ -94,7 +94,7 @@ parseSkillRecovery
 The envelope every recovery shape shares: an active (column 8 = 2),
 untargeted, unlinked row with pinned cost and timing and no periodic,
 action-repeat or ground-target columns. A flat HP cost is charged by the
-action owner (58E1B6 check, 58312C charge); a percent HP cost stays out.
+action owner (checked on maximum HP, charged on current HP); a percent HP cost stays out.
 ==================
 */
 func parseSkillRecovery(fields []string, row *SkillRow) {
@@ -141,7 +141,7 @@ func parseSkillRecovery(fields []string, row *SkillRow) {
 ==================
 selfFlatRecovery
 
-5942AB..5942F3 selects the no-target healing branch; 5A0850 applies flat
+The server selects the no-target healing branch and applies flat
 HP/MP when the percentage words are zero. Requires the entire program to be
 exactly heal, followed by zero padding.
 ==================
@@ -207,9 +207,9 @@ func recoveryHealBlock(op SkillInstruction) bool {
 partyHealProgram
 
 efr heal [mwhh] [mwmh] [getv HLRU] [getv HLMD] and nothing else. mwhh and
-mwmh add the caster's weapon term to the HP and MP amounts (411080,
+mwmh add the caster's weapon term to the HP and MP amounts (the server's weapon term,
 action/skillheal.go: Mana Breeze is heal(0,0,mp,0) mwmh), HLRU raises the
-percent words (59425E) and HLMD cuts the prepared MP cost
+percent words and HLMD cuts the prepared MP cost
 (combat.ApplyMPDecrease); any other instruction refuses the row.
 ==================
 */
@@ -230,7 +230,7 @@ efr(1,6,radius,cap,reduction,4|5) eshp heal [mwhh] [mwmh] [getv HLRU]
 [getv HLMD]. "Spreads the healing power widely so that party members with
 low HP can automatically recover. The healing power is transferred to party
 members nearby". eshp picks the lowest HP ratio as the Cleric's eshp aura
-does (584D95), and the shape-6 area hands the reduction word's share to the
+does, and the shape-6 area hands the reduction word's share to the
 members nearest it, as Mana Wind's does (action/skillrecovery.go).
 ==================
 */
@@ -339,7 +339,7 @@ func parseHealOverTime(fields []string, row *SkillRow) bool {
 partyResurrectProgram
 
 Exactly efr heal resu. The resu block is what admits dead members into the
-party selection (58BEF0 skips its alive check).
+party selection (it skips its alive check).
 ==================
 */
 func partyResurrectProgram(program SkillProgram) bool {

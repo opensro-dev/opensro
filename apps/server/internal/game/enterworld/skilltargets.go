@@ -13,7 +13,7 @@ package enterworld
 SkillTargets
 
 SkillTargets preserves the client table's target columns 22..33.
-Skill_ValidateTargetPermissions (58D7A0) reads these bytes. +0x97 is
+The server's target-permission check reads these bytes. +0x97 is
 column 25 TargetType_Building; +0x98 is column 26 TargetGroup_Self.
 ==================
 */

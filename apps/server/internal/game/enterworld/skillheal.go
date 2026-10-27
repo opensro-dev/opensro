@@ -19,8 +19,8 @@ SkillHeal
 	mwmh +0x32C  add it to the MP amount
 	nmh  +0x598  a cast heal's HP percent is a share of maximum HP
 
-CSkillManager_ApplySkillHeal (5A0850) reads it for a cast heal and
-CSkillManager_ApplyHealRecovery (5A09F0) for the eshp aura. The two apply the
+The server's skill heal reads it for a cast heal and
+its heal-recovery application for the eshp aura. The two apply the
 percent words differently.
 ==================
 */

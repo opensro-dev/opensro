@@ -11,8 +11,8 @@ Both use the persistent imbue owner and the shared abnormal-status resolver.
 package enterworld
 
 // SkillBurn is the bu body: duration power, proc chance, damage-table level.
-// 590B12 uses value 2 for probability; 590B7C uses value 1 for duration;
-// 590BF2 uses value 3 to index C63C94. These are not interchangeable.
+// The server uses value 2 for probability, value 1 for duration,
+// value 3 to index its elemental damage table. These are not interchangeable.
 /*
 ================
 SkillBurn
@@ -31,14 +31,14 @@ type SkillImbue struct {
 	Attack SkillAttack
 	Burn   SkillBurn
 	// Area is the Lightning Force's efr: an imbue-eligible attack with no
-	// area of its own selects its victims with it (586DA8 / 586E1B).
+	// area of its own selects its victims with it.
 	Area SkillOffensiveArea
 }
 
 // Complete dura/att/getv MAAT program with its status rider: the Fire
 // Force's bu, the Cold Force's fz and fb, or the Lightning Force's es with
 // its efr spread. The imbue hit rolls that rider from row.Abnormal
-// (590680); the words are checked here only so a malformed row is refused.
+// (the server rolls it); the words are checked here only so a malformed row is refused.
 // Admission covers every shipped rank without codename exceptions.
 /*
 ================

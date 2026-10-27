@@ -4,9 +4,9 @@
 skillcapture.go - the Rogue's Monster Mask and Beast Mask
 
 mcap {max level, item RefObj} (RefSkill +0x4A8) turns a dead monster into
-an Essence of the Dead: TargetValidation_ValidateAllTargets (58D2F4)
+an Essence of the Dead: the server's target validation
 admits a normal-grade, TID4 1 monster no higher than the cap, and
-SkillCombat_ApplySkillEffectsToTargets (593F63) drops the item at the
+its effect application drops the item at the
 caster's feet, owned by the caster, holding the corpse's RefObj.
 
 ===========================================================================

@@ -103,7 +103,7 @@ func buildMonsterFixture() monsterSpawnFixture {
 	}, []monster.NestRow{
 		{SpawnPoint: monster.SpawnPoint{RefObjID: 1933, RegionID: 0x62a8, X: 972, Y: 20, Z: 449}},
 	}))
-	// The spawn heading is a population draw (5607B0); rand() 0 pins it to 0.
+	// The spawn heading is a population draw; rand() 0 pins it to 0.
 	registry.SetRandomSource(func() float64 { return 0 })
 	config := MonsterSpawnConfig{Enabled: true}
 	entry := &LocalPlayerEntry{StartProfile: StartProfile{RegionID: 0x62a8, X: 960, Y: 20, Z: 458}}
@@ -216,7 +216,7 @@ func buildMonsterScopedFixture() monsterScopedFixture {
 		{SpawnPoint: monster.SpawnPoint{RefObjID: 1933, RegionID: regionA, X: 300, Y: 10, Z: 300}},
 		{SpawnPoint: monster.SpawnPoint{RefObjID: 1933, RegionID: regionB, X: 500, Y: 10, Z: 500}},
 	}))
-	// The spawn heading is a population draw (5607B0); rand() 0 pins it to 0.
+	// The spawn heading is a population draw; rand() 0 pins it to 0.
 	registry.SetRandomSource(func() float64 { return 0 })
 	config := MonsterSpawnConfig{Enabled: true}
 	// Login inside regionA's first interest block: both A rows share it and

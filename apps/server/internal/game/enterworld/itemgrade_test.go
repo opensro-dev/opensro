@@ -56,7 +56,7 @@ func TestEquipmentDegreeAndSeal(t *testing.T) {
 ================
 TestItemDegree
 
-CGItem_GetDegree (4775A0): equipment counts three classes a degree,
+The server's degree rule: equipment counts three classes a degree,
 anything else's class is its degree.
 ================
 */

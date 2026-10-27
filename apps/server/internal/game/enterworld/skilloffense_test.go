@@ -102,8 +102,8 @@ func TestDirectOffenseRequiresCompleteSupportedShape(t *testing.T) {
 				fields[117] = "1"
 			}
 			parseSkillOffense(fields, &row)
-			// An HP cost is admitted and carried to the charge (58E1B6 /
-			// 58312C; action/skillcost.go).
+			// An HP cost is admitted and carried to the charge
+			// (action/skillcost.go).
 			if row.DirectOffensePinned != (mode == "direct" || mode == "hp-cost") {
 				t.Fatalf("unexpected admission: %+v", row)
 			}

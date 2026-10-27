@@ -95,7 +95,7 @@ func TestBuildLoginStatBlockClampsToTheWord(t *testing.T) {
 TestBuildLoginStatBlockKeepsTheKeeperWords
 
 A keeper projection's STR and INT already carry every effect (params 1 and
-2, CGObjPC_SendParameterStats 4EBE30). The block keeps them instead of
+2, the server's parameter-stats send). The block keeps them instead of
 the stored attributes, so a level-up or equip refresh does not drop a
 buff's STR/INT from the client.
 ================

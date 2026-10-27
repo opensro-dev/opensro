@@ -13,7 +13,7 @@ import "testing"
 ================
 TestJobsMayPartyFollowsTheShardTable
 
-Every pair of classes against ShardManager 44ED20's jump table: class 1 and
+Every pair of classes against the shard manager's jump table: class 1 and
 3 accept 1 or 3, class 2 accepts 2, class 4 accepts 4, anything else none.
 ================
 */
@@ -48,7 +48,7 @@ func TestJobsMayPartyFollowsTheShardTable(t *testing.T) {
 ================
 TestPartyMemberNameIsTheAliasWhileSuited
 
-5BAE80: a suited character's roster row carries its job alias, an undressed
+The server's snapshot: a suited character's roster row carries its job alias, an undressed
 one its own name; a suited character without an alias keeps its name.
 ================
 */

@@ -1,8 +1,8 @@
 package enterworld
 
-// SkillPassiveDefense is a complete flat defp program. Native 5951FC..59533C
-// installs Param5/6 channel 0. Any reqi/reqn it carries (row.Reqi) decides
-// whether the passive contributes: 59F0E0 switches its modifiers off while
+// SkillPassiveDefense is a complete flat defp program. The server's native
+// code installs Param5/6 channel 0. Any reqi/reqn it carries (row.Reqi) decides
+// whether the passive contributes: its equipment check switches its modifiers off while
 // the equipment fails the walk. Caps, duration and linked stages require
 // separate contracts; no operation is silently skipped.
 type SkillPassiveDefense struct {

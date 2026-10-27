@@ -52,7 +52,7 @@ type RefObjRow struct {
 	// run-up on its unpinned aim there.
 	BodyRadius float64 `json:"bodyRadius,omitempty"`
 	// MonsterType is a monster row's static type byte (client record +0xA0):
-	// /LOADMONSTER sends it when no type token is typed (50A4A6).
+	// /LOADMONSTER sends it when no type token is typed.
 	MonsterType uint8 `json:"monsterType,omitempty"`
 	// CCharacterData+0x210, parsed from characterdata column 88. Despite
 	// older host names calling the slot a skill id, sub_692cb0 consumes it
@@ -121,8 +121,8 @@ type SiegeItemForgeGroupRow struct {
 ================
 SiegeItemForgeItem
 
-One row's price and time per item (CRefData_FindSiegeFortressItemForge
-63BCA0: +0xC gold, +0x10 guild points, +0x14 minutes). The production
+One row's price and time per item (the native record:
++0xC gold, +0x10 guild points, +0x14 minutes). The production
 window (CIFFortressMakeItemWnd 65A280) counts count * minutes * 60 down.
 ================
 */

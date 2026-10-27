@@ -43,7 +43,7 @@ type SkillThreat struct {
 ================
 compileSkillTaunt
 
-58E5F0 admits tnt2 without att and emits a successful zero-damage record.
+The server admits tnt2 without att and emits a successful zero-damage record.
 EFR selects monsters, either around the caster or a required hostile target.
 ================
 */

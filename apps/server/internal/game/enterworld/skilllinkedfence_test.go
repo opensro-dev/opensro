@@ -83,7 +83,7 @@ func TestShippedFenceAndQuotaTiersAreLinks(t *testing.T) {
 ================
 TestFenceMaskCompletion
 
-588A06: a lane value gains both share bits, a share value both lanes;
+The server's index fix-up: a lane value gains both share bits, a share value both lanes;
 anything else is kept as authored.
 ================
 */

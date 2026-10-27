@@ -48,7 +48,8 @@ type ItemRef struct {
 	SummonLevelThresholds []uint8
 	// Skill consumables resolve the same authored Param1 reference as a skill.
 	AssociatedSkillCodename string
-	// Return-scroll Param3 text (column 123), consumed by v1.188 4A0380.
+	// Return-scroll Param3 text (column 123), consumed by the server's
+	// return-scroll use.
 	ReturnDestination string
 	// ReturnTeleport is a THIEFDEN scroll's Param4 text (column 125): the
 	// teleport building whose gate it returns to (STORE_TD_GATE).
@@ -83,9 +84,9 @@ type ItemRef struct {
 	// 3 = every character (the sub_789c60 bit 0x200 wildcard). Default 3.
 	Country int64
 	// CashItem (column 7), Rarity (column 15) and CanDropOnDeath feed the
-	// death-penalty drop gate CGItem_CanDropOnDeathPenalty (4B7CF0).
+	// server's death-penalty drop gate.
 	// CanDropOnDeath is RefObj m_dwAvailableOPs bit 14, which the
-	// _RefObjCommon loader (6A3090) takes from bit 1 of CanDrop (column
+	// native loader takes from bit 1 of CanDrop (column
 	// 20); a row with CanTrade 0 and CanDrop 1 is cleared first, which
 	// leaves bit 1 clear either way.
 	CashItem       bool
@@ -133,10 +134,10 @@ type ItemRef struct {
 	RecoveryMP        float64
 	RecoveryMPPercent float64
 	// Cure fields are the same param stride as itemParamN (column 118+i*2
-	// is RefItem+0x29C+i*4). 49B710's universal pill (TID4 1) passes
+	// is RefItem+0x29C+i*4). The universal pill (TID4 1) passes
 	// +0x2A0, +0x2E0, +0x2C0 as the mask, the chance numerator and the
 	// grade base. A level cure reads six words at +0x2A0/+0x2C0/+0x2E0/
-	// +0x300/+0x320/+0x340 (49AC50). The loaded param window ends at
+	// +0x300/+0x320/+0x340. The loaded param window ends at
 	// +0x2E8, so the last three words stay 0.
 	CureMask     int64
 	CureChance   int64
@@ -204,7 +205,7 @@ type CharacterRef struct {
 	// Characterdata column 4 groups the level rows used by guild scrolls.
 	GroupCodename string
 	// NextCodename is column 6: the reference an attack pet becomes at its
-	// next level (CGObjAttackCOS_AdvanceLevelAndReference walks it, 4D6210).
+	// next level; the server's attack-pet level advance walks it.
 	NextCodename               string
 	NameStrID                  string
 	Name                       string

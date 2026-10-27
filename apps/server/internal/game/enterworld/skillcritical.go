@@ -1,6 +1,6 @@
 package enterworld
 
-const skillCriticalTag = 0x6372 // "cr": v1.188 5877D7 stores the following pair at skill+244.
+const skillCriticalTag = 0x6372 // "cr": the native cast stores the following pair at skill+244.
 
 // SkillCriticalModifier belongs to the executing skill, not the character's
 // permanent stats. Passive/buff cr blocks need their own ParamKeeper producer;

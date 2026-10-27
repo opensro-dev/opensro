@@ -16,7 +16,7 @@ const tagForcedTarget = 0x6869746d
 ================
 compileForcedTarget
 
-5838AC installs the caster GID as the recipient context's target. The
+The server installs the caster GID as the recipient context's target. The
 target list is player-only; Gross Scorn adds a primary-centered EFR.
 ================
 */

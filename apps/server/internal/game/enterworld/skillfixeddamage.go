@@ -31,7 +31,7 @@ package enterworld
 
 const (
 	// tagFixedDamage is pdmg {amount}: the client tooltip prints the word
-	// as the hit's damage. It is also one of the 589EE0 wall-bypass tags
+	// as the hit's damage. It is also one of the server's wall-bypass tags
 	// noteParameterIndex records.
 	tagFixedDamage = 0x70646d67
 
@@ -58,8 +58,8 @@ type SkillFixedDamage struct {
 	Present   bool
 	Amount    uint32
 	MPPercent uint32
-	// Power is getv SAAA (+0x538): Formulae_CalculateFixedSkillDamage
-	// (40F5F0) adds the caster's ParameterFixedDamagePower to the amount.
+	// Power is getv SAAA (+0x538): the server's fixed-damage formula
+	// adds the caster's ParameterFixedDamagePower to the amount.
 	Power bool
 }
 

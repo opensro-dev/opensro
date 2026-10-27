@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-skilluireplace_test.go - every press row publishes its 59D870 descriptor
+skilluireplace_test.go - every press row publishes its replacement descriptor
 
 The client replays statuseffect.DecideReplacement from SkillUiReplace and
 never derives it; a row the replay cannot decide says so.
@@ -52,7 +52,7 @@ func TestSkillUiReplaceMarksWhatTheClientCannotDecide(t *testing.T) {
 TestConcentrationTiersPublishTheirDescriptors
 
 The report's case on the shipped data: Concentration 2nd and 3rd publish
-different groups and the same packed state, which is why 59D870 refuses
+different groups and the same packed state, which is why the server refuses
 one over the other.
 ================
 */

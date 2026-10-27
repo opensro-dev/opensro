@@ -52,7 +52,7 @@ func DressedJob(c *Character) uint8 {
 }
 
 // NoJobClass is the job class of a character outside job mode (856920;
-// v1.188 GetJobState, vtable +0x11C).
+// the server's job-state read agrees).
 const NoJobClass uint8 = 4
 
 /*
@@ -74,8 +74,8 @@ func PartyJobClass(c *Character) uint8 {
 ================
 PartyMemberName
 
-The name a party roster row carries (v1.188 PartyMemberSnapshot_PopulateFromActor
-5BAE80): the job alias (CGObjPC_GetNickName 4DDC50) while the character is
+The name a party roster row carries (the server's party-member snapshot):
+the job alias (the server's nickname read) while the character is
 dressed in a job suit, its own name otherwise. The native writes the empty
 alias of a suited character with no alias and minidumps; the port keeps the
 character name instead (port-only, not native: never send an empty name).
@@ -95,9 +95,9 @@ func PartyMemberName(c *Character) string {
 ================
 JobsMayParty
 
-ShardManager 44ED20: traders and hunters (1, 3) party together, thieves
+The shard manager's job table: traders and hunters (1, 3) party together, thieves
 (2) only with thieves, and players outside job mode (4) only with each
-other. 44ED70 (forming) and 44F130 (joining) refuse any other pair.
+other. Its forming and joining checks refuse any other pair.
 ================
 */
 func JobsMayParty(a, b uint8) bool {

@@ -17,7 +17,7 @@ import "opensro.online/server/internal/game/abnormal"
 ================
 compileCreatureStatusCast
 
-58E5F0 produces a successful zero-damage impact without att; 590680 still
+The server produces a successful zero-damage impact without att; it still
 rolls each authored status. Area shape validation remains in ActionArea.
 ================
 */
