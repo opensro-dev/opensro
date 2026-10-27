@@ -12,6 +12,16 @@ unique (grade 8) members. They share the field overlay's character and skill
 shards and its marker, so one allocator keeps every identity stable; only the
 nests go to a file of their own (cap110-tomb.txt), which the server reads
 behind its own flag.
+
+The admitted content is one declarative family table (FAMILIES below), one
+row per family: the Alexandria field, the Pharaoh tombs, the Qin-Shi tomb
+upper floors (SRO_CAP110_QINSHI, 91-99 content) and the temple instance bands
+(SRO_CAP110_TEMPLE). Every family shares the one character/skill shard pair
+and the one marker allocator, and writes one nest file of its own in the
+Version-2 envelope; a family's switch off removes its nest file and its
+exclusively-owned rows. Qinshi and temple need SRO_CAP110_MONSTERS: their
+drop rules ride the shared cap-110 loot catalogue it builds (cap110_rewards),
+so the build refuses them without it, as the Pharaoh precedent does.
 ===========================================================================
 """
 import argparse
@@ -50,38 +60,131 @@ FIELD_WORLD = 1
 # outdoor regions: the port runs each as a persistent shared area.
 TOMB_WORLDS = (57, 58, 59)
 TOMB_EXTRA_GRADES = (6, 8)
+# Not SRO_QINSHI_TOMB: that switch already gates the shipped tomb content
+# and defaults on in the shard settings registry, so this family must not
+# ride it - the default build would refuse itself, and flipping the cap-110
+# field on would change live content as a side effect.
+QINSHI_FLAG = "SRO_CAP110_QINSHI"
+QINSHI_FILE = "cap110-qinshi.txt"
+TEMPLE_FLAG = "SRO_CAP110_TEMPLE"
+TEMPLE_FILE = "cap110-temple.txt"
+# The temple bands are the database's 22 instanced worlds, 63-84.
+TEMPLE_WORLDS = tuple(range(63, 85))
+
+# One row per content family. Admission is a codename prefix set, the source
+# worlds whose in-service nests claim species for the family, a level window
+# (a sanity bound measured from the client table, not a spawn filter) and a
+# grade set; NamedGrades carries one named exception (the field's Apis).
+# CarrySpawnType: the temple's nests use the database's second spawn kind
+# (512 of its 1616 claimed nests), so its rows carry it instead of refusing;
+# the outdoor families' nests are all kind 0 and keep refusing any other.
+FIELD_FAMILY = {"Name": "field", "Flag": FLAG, "File": POPULATION_FILE, "Prefixes": ("MOB_SD_",),
+	"Worlds": (FIELD_WORLD,), "MinLevel": 100, "MaxLevel": MAX_LEVEL, "Grades": (0,),
+	"NamedGrades": {APIS_CODENAME: APIS_SOURCE_GRADE}, "CarrySpawnType": False}
+TOMB_FAMILY = {"Name": "pharaoh", "Flag": TOMB_FLAG, "File": TOMB_FILE, "Prefixes": ("MOB_SD_",),
+	"Worlds": TOMB_WORLDS, "MinLevel": 100, "MaxLevel": MAX_LEVEL, "Grades": (0,) + TOMB_EXTRA_GRADES,
+	"NamedGrades": {}, "CarrySpawnType": False}
+QINSHI_FAMILY = {"Name": "qinshi", "Flag": QINSHI_FLAG, "File": QINSHI_FILE, "Prefixes": ("MOB_TQ_", "MOB_QT_"),
+	"Worlds": (FIELD_WORLD,), "MinLevel": 81, "MaxLevel": MAX_LEVEL, "Grades": (0, 3, 6, 8),
+	"NamedGrades": {}, "CarrySpawnType": False}
+TEMPLE_FAMILY = {"Name": "temple", "Flag": TEMPLE_FLAG, "File": TEMPLE_FILE, "Prefixes": ("MOB_GOD_",),
+	"Worlds": TEMPLE_WORLDS, "MinLevel": 35, "MaxLevel": 109, "Grades": (0, 1, 3, 6, 8),
+	"NamedGrades": {}, "CarrySpawnType": True}
+FAMILIES = (FIELD_FAMILY, TOMB_FAMILY, QINSHI_FAMILY, TEMPLE_FAMILY)
+
+
+# ================
+# family_enabled
+# ================
+def family_enabled(family):
+	return os.environ.get(family["Flag"], "").lower() in tables.FLAG_ON
 
 
 # ================
 # tomb_enabled
 # ================
 def tomb_enabled():
-	return os.environ.get(TOMB_FLAG, "").lower() in tables.FLAG_ON
+	return family_enabled(TOMB_FAMILY)
+
+
+# ================
+# family_admits
+#
+# One character row against one family's admission window: its level (row
+# 57) inside the window and its grade (row 15) in the set, or the family's
+# named exception. Port-only, not native: the field's named exception is
+# Apis's source grade, admitted without enabling other later uniques,
+# dungeon populations or event variants.
+# ================
+def family_admits(family, code, row):
+	if not family["MinLevel"] <= int(row[57]) <= family["MaxLevel"]:
+		return False
+	grade = int(row[15])
+	return grade in family["Grades"] or family["NamedGrades"].get(code) == grade
+
+
+# ================
+# select_references
+#
+# Convert the later rows claimed by at least one family that admits them.
+# claims maps codename -> the families claiming it (from the spawn rows,
+# family_codes). A species two families claim keeps one row and one
+# identity: the one allocator below sees the union. A claimed species with
+# no later character row at all is a data-contract break, refused by name
+# (it could never be converted).
+# ================
+def select_references(later, claims):
+	refs = {}
+	for code, claiming in claims.items():
+		if code not in later:
+			raise ValueError("claimed monster has no later character row: " + code)
+		if any(family_admits(family, code, later[code]) for family in claiming):
+			refs[code] = characters.convert_character(later[code])
+	return refs
+
+
+# ================
+# family_strict_codes
+#
+# The claimed species a family's strict projection answers for: those
+# whose later row sits inside the family's level window. Species outside
+# the window are excluded by design (the Qin-Shi tomb's trap mechanisms
+# share its prefixes and world), so their nests are skipped, never a
+# silent shrink of the family's own content; inside the window, admission
+# is all-or-nothing.
+# ================
+def family_strict_codes(family, codes, later):
+	return {code for code in codes if code in later
+		and family["MinLevel"] <= int(later[code][57]) <= family["MaxLevel"]}
 
 
 # ================
 # select_field_references
 #
-# Port-only, not native: explicitly admit Apis's source grade without
-# enabling other later uniques, dungeon populations or event variants. The
-# Pharaoh Tomb codenames (tomb_codes) additionally admit elite and unique.
+# The field (+ optional tomb) admission, the surface from before the
+# family table; the tests pin it.
 # ================
 def select_field_references(later, codes, tomb_codes=frozenset()):
-	return {code: characters.convert_character(later[code]) for code in codes
-		if 100 <= int(later[code][57]) <= MAX_LEVEL
-		and (int(later[code][15]) == 0
-			or (code == APIS_CODENAME and int(later[code][15]) == APIS_SOURCE_GRADE)
-			or (code in tomb_codes and int(later[code][15]) in TOMB_EXTRA_GRADES))}
+	claims = {code: [FIELD_FAMILY] + ([TOMB_FAMILY] if code in tomb_codes else []) for code in codes}
+	return select_references(later, claims)
 
 
 # ================
 # monster_codes
 #
-# The MOB_SD_ codenames the in-service spawn rows of the given worlds name.
+# The codenames of the given prefixes the in-service spawn rows of the
+# given worlds name.
 # ================
-def monster_codes(spawns, worlds):
+def monster_codes(spawns, worlds, prefixes=("MOB_SD_",)):
 	return {r["codename"] for r in spawns
-		if r["game_world_id"] in worlds and r["service"] == 1 and r["codename"].startswith("MOB_SD_")}
+		if r["game_world_id"] in worlds and r["service"] == 1 and r["codename"].startswith(prefixes)}
+
+
+# ================
+# family_codes
+# ================
+def family_codes(spawns, family):
+	return monster_codes(spawns, family["Worlds"], family["Prefixes"])
 
 
 # ================
@@ -153,21 +256,28 @@ def tactics_controls(row):
 # ================
 # project_population
 #
-# The nest rows of the given database worlds. A world that must be complete
-# (strict, the tomb) refuses a nest whose monster was not admitted instead of
-# silently shrinking the population; the field has always skipped them.
+# The nest rows of the given database worlds. A family that must be complete
+# (strict, the tomb rule) refuses a claimed nest whose monster was not
+# admitted instead of silently shrinking the population; unclaimed nests
+# (another family's species sharing the world) are skipped, and the field
+# has always skipped. codes=None claims every in-world nest (the historical
+# tomb behaviour). A family that carries the spawn kind (the temple) keeps
+# it on the row as SpawnType; the outdoor kinds refuse it.
 # ================
-def project_population(spawns, refs, tactics, hives, worlds=(FIELD_WORLD,), strict=False):
+def project_population(spawns, refs, tactics, hives, worlds=(FIELD_WORLD,), strict=False, codes=None,
+	carry_spawn_type=False):
 	rows = []
 	for spawn in sorted(spawns, key=lambda row: row["nest_id"]):
 		code = spawn["codename"]
 		if spawn["game_world_id"] not in worlds or spawn["service"] != 1:
 			continue
+		if codes is not None and code not in codes:
+			continue
 		if code not in refs:
 			if strict:
 				raise ValueError("population monster was not admitted: " + code)
 			continue
-		if any(spawn[key] != 0 for key in ("nest_flag", "hive_flag", "spawn_type")):
+		if spawn["nest_flag"] or spawn["hive_flag"] or (spawn["spawn_type"] and not carry_spawn_type):
 			raise ValueError("unsupported field spawn flags: " + code)
 		policy = tactics[spawn["tactics_id"]]
 		hive = hives[spawn["hive_id"]]
@@ -175,7 +285,7 @@ def project_population(spawns, refs, tactics, hives, worlds=(FIELD_WORLD,), stri
 			raise ValueError("field hive requires shared-cap projection: " + code)
 		champion_id = policy["dwChampionTacticsID"]
 		champion = tactics_controls(tactics[champion_id]) if champion_id else None
-		rows.append({
+		row = {
 			"Codename": code, "NestID": spawn["nest_id"], "WorldID": spawn["game_world_id"], "RegionID": spawn["region_id_unsigned"],
 			"X": spawn["x"], "Y": spawn["y"], "Z": spawn["z"], "Radius": spawn["radius"],
 			"GenerateRadius": spawn["generate_radius"], "MaxCount": spawn["max_total_count"],
@@ -183,7 +293,10 @@ def project_population(spawns, refs, tactics, hives, worlds=(FIELD_WORLD,), stri
 			"Respawn": bool(spawn["respawn"]), "InitialDir": spawn["direction_unsigned"],
 			"ChampionGenPercentage": spawn["champion_percent"], "Controls": tactics_controls(policy),
 			"Champion": champion,
-		})
+		}
+		if carry_spawn_type and spawn["spawn_type"]:
+			row["SpawnType"] = spawn["spawn_type"]
+		rows.append(row)
 	# Format 2: every row carries its source world, so the server's tomb
 	# population joins its own per-tomb world instead of the default one.
 	return {"Version": 2, "Rows": rows}
@@ -282,6 +395,51 @@ def merge_skills(native, source, needed, previous):
 
 
 # ================
+# drop_symboled_rows
+#
+# Table rows minus the ones whose second field names a dropped symbol.
+# Both off-paths remove owned name rows this way: the full-off path with
+# the marker's whole list, a family-off rebuild with only the stale part.
+# ================
+def drop_symboled_rows(rows, symbols):
+	return [r for r in rows if len(r) < 2 or r[1] not in symbols]
+
+
+# ================
+# drop_characterinfo_rows
+#
+# A skill-effect text minus its owned characterinfo rows. Section state
+# is tracked so a codename outside the characterinfo section survives.
+# ================
+def drop_characterinfo_rows(effect_text, owned):
+	section, lines = None, []
+	for line in effect_text.splitlines():
+		header = effects.section_name(line)
+		if header is not None:
+			section = header
+		if section == "characterinfo" and line.split("\t")[0] in owned:
+			continue
+		lines.append(line)
+	return "\r\n".join(lines) + "\r\n"
+
+
+# ================
+# characterinfo_codenames
+#
+# The codenames a skill-effect text's characterinfo section describes.
+# ================
+def characterinfo_codenames(effect_text):
+	section, codes = None, set()
+	for line in effect_text.splitlines():
+		header = effects.section_name(line)
+		if header is not None:
+			section = header
+		elif section == "characterinfo" and line:
+			codes.add(line.split("\t")[0])
+	return codes
+
+
+# ================
 # add_monsters
 # ================
 def add_monsters(vsro_root, native, output, source_root=None):
@@ -291,30 +449,22 @@ def add_monsters(vsro_root, native, output, source_root=None):
 	marker = output / MARKER
 	prior = read_json(marker) if marker.exists() else {}
 	text_root = output / TEXT_ROOT
-	tomb = tomb_enabled()
-	field = os.environ.get(FLAG, "").lower() in tables.FLAG_ON
-	if tomb and not field:
-		# The tomb's equipment drops come from the cap-110 loot catalogue the
-		# field flag builds, so the server refuses it without the field too.
-		raise ValueError(f"{TOMB_FLAG} requires {FLAG}")
+	enabled = [family for family in FAMILIES if family_enabled(family)]
+	field = FIELD_FAMILY in enabled
+	for family in enabled:
+		if family is not FIELD_FAMILY and not field:
+			# The family's drop rules ride the cap-110 loot catalogue the
+			# field flag builds (cap110_rewards), so the build refuses it
+			# without the field, as the server does for the Pharaoh tombs.
+			raise ValueError(f"{family['Flag']} requires {FLAG}")
 	if not field:
 		if prior:
 			effect_path = text_root / "skilleffect.txt"
 			effect_text = effects.remove_animation_bases(tables.decode_table(effect_path.read_bytes()), set(prior.get("animationBases", [])))
-			owned_info = set(prior.get("characterInfo", []))
-			section, lines = None, []
-			for line in effect_text.splitlines():
-				header = effects.section_name(line)
-				if header is not None:
-					section = header
-				if section == "characterinfo" and line.split("\t")[0] in owned_info:
-					continue
-				lines.append(line)
-			write_atomically(effect_path, b"\xff\xfe" + ("\r\n".join(lines) + "\r\n").encode("utf-16-le"))
+			write_atomically(effect_path, b"\xff\xfe" + drop_characterinfo_rows(effect_text, set(prior.get("characterInfo", []))).encode("utf-16-le"))
 			text_path = text_root / "textdataname.txt"
-			owned_names = set(prior.get("nameSymbols", []))
-			write_atomically(text_path, encode_rows([r for r in characters.translation_rows(text_path.read_bytes()) if len(r) < 2 or r[1] not in owned_names]))
-		for name in (CHARACTER_SHARD, SKILL_SHARD, POPULATION_FILE, TOMB_FILE, "cap110-equipment.txt"):
+			write_atomically(text_path, encode_rows(drop_symboled_rows(characters.translation_rows(text_path.read_bytes()), set(prior.get("nameSymbols", [])))))
+		for name in (CHARACTER_SHARD, SKILL_SHARD, *(family["File"] for family in FAMILIES), "cap110-equipment.txt"):
 			(text_root / name).unlink(missing_ok=True)
 		manifest = text_root / "skilldata.txt"
 		if manifest.exists():
@@ -338,9 +488,13 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		def read(name):
 			return tables.table_text(media, index, name.lower())
 		later = {row[2]: row for shard in tables.table_rows(read("characterdata.txt")) for row in tables.table_rows(read(shard[0]))}
-		tomb_codes = monster_codes(spawns, TOMB_WORLDS) if tomb else set()
-		codes = monster_codes(spawns, (FIELD_WORLD,)) | tomb_codes
-		refs = select_field_references(later, codes, tomb_codes)
+		claims = {}
+		claimed = {}
+		for family in enabled:
+			claimed[family["Name"]] = family_codes(spawns, family)
+			for code in claimed[family["Name"]]:
+				claims.setdefault(code, []).append(family)
+		refs = select_references(later, claims)
 		if not refs:
 			raise ValueError("no ordinary level 100-110 Alexandria field monsters")
 		native_chars = [r for p in text_root.glob("characterdata_*.txt") if p.name != CHARACTER_SHARD for r in tables.table_rows(p.read_bytes())]
@@ -360,8 +514,21 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		added, skill_map = merge_skills(native_skills, source_skills, needed, prior.get("skills", {}))
 		for row in refs.values():
 			row[89:99] = [str(skill_map[int(s)]) if int(s) else "0" for s in row[89:99]]
-		population = project_population(spawns, refs, tactics, hives)
-		tomb_population = project_population(spawns, refs, tactics, hives, TOMB_WORLDS, strict=True) if tomb else None
+		populations = {}
+		for family in enabled:
+			if family is FIELD_FAMILY:
+				populations[family["Name"]] = project_population(spawns, refs, tactics, hives, family["Worlds"])
+			elif family is TOMB_FAMILY:
+				populations[family["Name"]] = project_population(spawns, refs, tactics, hives, family["Worlds"],
+					strict=True)
+			else:
+				# The newer families share their worlds and prefixes with
+				# mechanism species outside their windows, so their
+				# strictness answers for the in-window claims only.
+				populations[family["Name"]] = project_population(spawns, refs, tactics, hives, family["Worlds"],
+					strict=True, codes=family_strict_codes(family, claimed[family["Name"]], later),
+					carry_spawn_type=family["CarrySpawnType"])
+		population = populations["field"]
 		# Sorted by identity: the codename set has no stable order, and a
 		# rebuild should write the same bytes.
 		write_atomically(text_root / CHARACTER_SHARD, encode_rows(sorted(refs.values(), key=lambda row: int(row[1]))))
@@ -369,17 +536,24 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		manifest = tables.table_rows((text_root / "skilldata.txt").read_bytes())
 		manifest = [r for r in manifest if r[0].lower() != SKILL_SHARD] + [[SKILL_SHARD]]
 		write_atomically(text_root / "skilldata.txt", encode_rows(manifest))
-		write_atomically(text_root / POPULATION_FILE, (json.dumps(population) + "\n").encode())
-		if tomb:
-			write_atomically(text_root / TOMB_FILE, (json.dumps(tomb_population) + "\n").encode())
-		else:
-			(text_root / TOMB_FILE).unlink(missing_ok=True)
+		for family in FAMILIES:
+			path = text_root / family["File"]
+			if family["Name"] in populations:
+				write_atomically(path, (json.dumps(populations[family["Name"]]) + "\n").encode())
+			else:
+				path.unlink(missing_ok=True)
 		base_text = (text_root / "textdataname.txt").read_bytes()
 		known = {r[1] for r in characters.translation_rows(base_text) if len(r) > 1}
 		wanted = {r[5] for r in refs.values()} - known
 		texts = [[r[0], r[1], r[2], "", "", r[5], r[4], r[7], r[8], r[9], ""] for r in characters.translation_rows(read("textdata_object.txt")) if len(r) >= 10 and r[1] in wanted]
 		if wanted - {r[1] for r in texts}:
 			raise ValueError("missing field monster names")
+		# Name rows a family that is off this build owned leave with it: the
+		# marker's list is the previous build's owned set; a symbol stays
+		# owned while a current reference still names it.
+		stale_names = set(prior.get("nameSymbols", [])) - {r[5] for r in refs.values()}
+		if stale_names:
+			base_text = encode_rows(drop_symboled_rows(characters.translation_rows(base_text), stale_names))
 		write_atomically(text_root / "textdataname.txt", characters.append_rows(base_text, texts))
 		effect_path = text_root / "skilleffect.txt"
 		effect_text = tables.decode_table(effect_path.read_bytes())
@@ -390,18 +564,43 @@ def add_monsters(vsro_root, native, output, source_root=None):
 			raise ValueError("monster animation states absent natively: " + str(sorted(unknown)))
 		effect_text, _ = effects.merge_skill_effect_text(effect_text, selected)
 		known_info = {r[0] for r in tables.table_rows(effect_text.encode("utf-16")) if r}
+		effect_prefixes = tuple(prefix for family in enabled for prefix in family["Prefixes"])
 		info = [r[:characters.SKILL_EFFECT_KEPT] for r in tables.table_rows(read("skilleffect.txt"))
-			if len(r) == characters.SKILL_EFFECT_COLUMNS and r[0].startswith("MOB_SD_") and r[0] not in known_info]
+			if len(r) == characters.SKILL_EFFECT_COLUMNS and r[0].startswith(effect_prefixes) and r[0] not in known_info]
+		# Same rule for the characterinfo rows: a species no longer
+		# referenced loses its row, one still referenced keeps it.
+		owned_info = characterinfo_codenames(effect_text) & set(refs)
+		stale_info = set(prior.get("characterInfo", [])) - owned_info
+		if stale_info:
+			effect_text = drop_characterinfo_rows(effect_text, stale_info)
 		write_atomically(effect_path, characters.skill_effect_section(effect_text.encode("utf-16"), info))
 		from cap110_monster_loot import stage_field_equipment
 		loot_count = stage_field_equipment(text_root, source_root)
 		summary = {"enabled": True, "characters": {c: int(r[1]) for c, r in refs.items()}, "skills": {r[3]: int(r[1]) for r in added}, "nests": len(population["Rows"]), "regions": sorted({r["RegionID"] for r in population["Rows"]}),
-			"animationBases": sorted(set(prior.get("animationBases", [])) | {base for rows in selected.values() for base, _ in rows}),
-			"characterInfo": sorted(set(prior.get("characterInfo", [])) | {r[0] for r in info}),
-			"nameSymbols": sorted(set(prior.get("nameSymbols", [])) | {r[1] for r in texts})}
+		"animationBases": sorted(set(prior.get("animationBases", [])) | {base for rows in selected.values() for base, _ in rows}),
+		# Owned rows are this build's set, not a union with the prior
+		# marker's: a family switched off must shrink both lists so the
+		# next off-path knows exactly what to reap. The rows this build
+		# itself writes (info) enrol in the same build - on a first
+		# enabled build the pre-existing text is the native copy, so
+		# owned_info alone would record none of them and a later off
+		# build could never reap them. animationBases stays a union -
+		# it is the reap list for shared effect vocabulary, which only
+		# the full-off path removes.
+		"characterInfo": sorted(owned_info | {r[0] for r in info}),
+			"nameSymbols": sorted(({r[1] for r in characters.translation_rows(base_text) if len(r) > 1}
+				| {r[1] for r in texts}) & {r[5] for r in refs.values()})}
 		summary["equipmentLootRows"] = loot_count
-		summary["tombNests"] = len(tomb_population["Rows"]) if tomb else 0
-		summary["tombRegions"] = sorted({r["RegionID"] for r in tomb_population["Rows"]}) if tomb else []
+		tomb_population = populations.get("pharaoh")
+		summary["tombNests"] = len(tomb_population["Rows"]) if tomb_population else 0
+		summary["tombRegions"] = sorted({r["RegionID"] for r in tomb_population["Rows"]}) if tomb_population else []
+		# Per-family nest and region report: consumers (the tomb floors, the
+		# temple bands) read their family's slice from here; the regions
+		# follow the projected nests, never a pinned list.
+		summary["families"] = {family["Name"]: {
+			"nests": len(populations[family["Name"]]["Rows"]),
+			"regions": sorted({r["RegionID"] for r in populations[family["Name"]]["Rows"]})}
+			for family in enabled}
 		summary["sourceBackupSha256"] = read_json(source_root / "summary.json")["backup_sha256"]
 		summary["snapshotHashes"] = {name: sro_pk2.digest((source_root / name).read_bytes()) for name in (
 			"all-spawns.json", "Tab_RefNest.json", "Tab_RefTactics.json", "Tab_RefHive.json",

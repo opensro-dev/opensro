@@ -1276,6 +1276,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_ALEXANDRIA                          = var.alexandria
         SRO_PUBLIC_API_ADDR                     = var.public_api_addr
         SRO_PUBLIC_API_TOKEN_PATH               = "${NOMAD_SECRETS_DIR}/public-api-token"
+        SRO_STAFF_WEBHOOK_PATH                  = "${NOMAD_SECRETS_DIR}/staff-webhook"
         TRANSPORT_WT_ADDR                       = var.transport_wt_addr != "" ? var.transport_wt_addr : "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_WS_ADDR                       = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_CERT_DIR                      = var.cert_dir
@@ -1314,6 +1315,22 @@ EOH
 EOH
 
         destination = "secrets/public-api-token"
+        change_mode = "noop"
+        perms       = "0600"
+        uid         = var.task_uid
+        gid         = var.task_gid
+      }
+
+      # The staff Discord webhook for ops-only alerts (the served
+      # WebTransport pair, #1447). index, as above: absent renders empty,
+      # and the GameWorld then only logs. It reads the file at every post,
+      # so a rotated webhook applies without a restart.
+      template {
+        data = <<EOH
+{{ with nomadVar "nomad/jobs/sro-gameworld-__SHARD_ID__/gameworld/gameworld" }}{{ index . "staff_discord_webhook" }}{{ end }}
+EOH
+
+        destination = "secrets/staff-webhook"
         change_mode = "noop"
         perms       = "0600"
         uid         = var.task_uid

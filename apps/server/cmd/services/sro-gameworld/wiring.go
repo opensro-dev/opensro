@@ -72,6 +72,9 @@ type gameWorldApplication struct {
 	economy *economy.Service
 	// sealBoard is the weekly seal-drop counter (port-only); nil off.
 	sealBoard *sealboard.Service
+	// certificateWatch is the served WebTransport pair's staff alert
+	// (ops only, #1447); it reports nothing outside the public posture.
+	certificateWatch *transport.CertificateWatch
 	// killStatsFlush writes the final kill-stat rollup at shutdown
 	// (port-only, #1639); nil while SRO_KILL_STATS is off.
 	killStatsFlush  func() error
@@ -280,6 +283,7 @@ func newGameWorldApplication(
 	if err != nil {
 		return nil, fmt.Errorf("gameplay construction: %w", err)
 	}
+	installCertificateWatch(application, ts, ownedShard.ID)
 	if err := installSealBoard(application, gameplay, ownedShard.ID); err != nil {
 		return nil, err
 	}
@@ -532,6 +536,14 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 	if application.sealBoard != nil {
 		group.Go(func() error {
 			application.sealBoard.Run(groupContext)
+			return nil
+		})
+	}
+	if application.certificateWatch != nil {
+		group.Go(func() error {
+			ticker := time.NewTicker(transport.CertificateCheckInterval)
+			defer ticker.Stop()
+			application.certificateWatch.Run(groupContext, ticker.C)
 			return nil
 		})
 	}
