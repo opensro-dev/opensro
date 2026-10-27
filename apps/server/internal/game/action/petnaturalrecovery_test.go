@@ -99,6 +99,10 @@ func TestPetNaturalRecoveryDeadPetSpendsPulse(t *testing.T) {
 	// The refused pulse is spent: a revived pet gets one pulse at the
 	// next period, never a catch-up burst.
 	pet.CurrentHP = 500
+	rt.advancePetNaturalRecovery(key, 1_006_000)
+	if pet.CurrentHP != 500 {
+		t.Fatalf("mid-period probe healed: the refused pulse was queued, at %d", pet.CurrentHP)
+	}
 	rt.advancePetNaturalRecovery(key, 1_008_000)
 	if pet.CurrentHP != 516 {
 		t.Fatalf("revived pet must gain exactly one pulse, at %d", pet.CurrentHP)
