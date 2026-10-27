@@ -13,9 +13,94 @@ corner, the reverse direction and the plane cases.
 package world
 
 import (
+	"math/rand"
 	"reflect"
 	"testing"
+	"time"
 )
+
+// regionsAlongGuard bounds one RegionsAlong call in the tests: a traversal
+// that never ends must fail the test, not hang the suite.
+const regionsAlongGuard = time.Second
+
+/*
+================
+regionsAlongWithin
+
+RegionsAlong run under regionsAlongGuard; ok is false when it did not return.
+================
+*/
+func regionsAlongWithin(from, to RegionXZ) (regions []uint16, ok bool) {
+	done := make(chan []uint16, 1)
+	go func() { done <- RegionsAlong(from, to) }()
+	select {
+	case regions = <-done:
+		return regions, true
+	case <-time.After(regionsAlongGuard):
+		return nil, false
+	}
+}
+
+/*
+================
+TestRegionsAlongEndsOnASeamTie
+
+The case that once looped forever: the chord ends exactly on an x seam
+while the z axis also reaches a seam at the end (both at fraction 1). The
+traversal must stop at the end's own region.
+================
+*/
+func TestRegionsAlongEndsOnASeamTie(t *testing.T) {
+	from := RegionXZ{RegionID: 22644, X: 1806.6, Z: 0}
+	to := RegionXZ{RegionID: 23156, X: 0, Z: 0}
+	got, ok := regionsAlongWithin(from, to)
+	if !ok {
+		t.Fatal("RegionsAlong did not return for a chord ending on a seam tie")
+	}
+	want := []uint16{22644, RegionIDForSectors(SectorX(22644), SectorY(22644)+1), 23156}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("RegionsAlong = %04x, want %04x", got, want)
+	}
+}
+
+/*
+================
+TestRegionsAlongProperties
+
+Seeded chords, many of them starting or ending exactly on seams and corners:
+every call returns, the list starts at from's region and ends at to's
+canonical region, and each step moves to an adjacent, different sector.
+================
+*/
+func TestRegionsAlongProperties(t *testing.T) {
+	rng := rand.New(rand.NewSource(1447))
+	coordinate := func() float64 {
+		switch rng.Intn(3) {
+		case 0:
+			return 0
+		case 1:
+			return float64(rng.Intn(4)) * OutdoorRegionSize / 2
+		}
+		return rng.Float64() * OutdoorRegionSize
+	}
+	for i := 0; i < 5000; i++ {
+		from := RegionXZ{RegionID: RegionIDForSectors(100+rng.Intn(3), 90+rng.Intn(3)), X: coordinate(), Z: coordinate()}
+		from = NormalizeOutdoor(from)
+		to := NormalizeOutdoor(RegionXZ{RegionID: RegionIDForSectors(100+rng.Intn(3), 90+rng.Intn(3)), X: coordinate(), Z: coordinate()})
+		got, ok := regionsAlongWithin(from, to)
+		if !ok {
+			t.Fatalf("case %d %+v -> %+v: RegionsAlong did not return", i, from, to)
+		}
+		if got[0] != from.RegionID || got[len(got)-1] != to.RegionID {
+			t.Fatalf("case %d %+v -> %+v: regions %04x do not run from 0x%04x to 0x%04x", i, from, to, got, from.RegionID, to.RegionID)
+		}
+		for k := 1; k < len(got); k++ {
+			if got[k] == got[k-1] || !SamePlaneAdjacent(got[k-1], got[k]) {
+				t.Fatalf("case %d %+v -> %+v: step %04x -> %04x is not one sector", i, from, to, got[k-1], got[k])
+			}
+		}
+	}
+}
 
 /*
 ================

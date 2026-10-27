@@ -321,7 +321,7 @@ thiefCargoCrossingBlocked
 
 Whether the walk from->to makes a region change TownEntryBlocked refuses.
 The reference server tests the transport's region on every movement step
-(CGObj_StepMovement, through the COS job-region transition), so a walk
+(its per-step movement asks the transport's job-region check), so a walk
 from a battlefield through a protected sector and back out is refused at
 its first protected entry, not only judged by its two ends (#721).
 ==================

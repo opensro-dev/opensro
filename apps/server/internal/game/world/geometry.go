@@ -304,6 +304,11 @@ func Interpolate(from, to RegionXZ, t float64) RegionXZ {
 	})
 }
 
+// regionsAlongEndSlack is the chord fraction RegionsAlong treats as the end:
+// a seam reached within it is the end's own seam (float rounding of a chord
+// that ends exactly on a seam or corner), not one more crossing past it.
+const regionsAlongEndSlack = 1e-9
+
 /*
 ================
 RegionsAlong
@@ -315,8 +320,13 @@ clips a sector corner still lists that sector); a chord through a corner
 point steps both axes at once, as one movement step past the corner does.
 The cave plane has no sectors, and a walk between planes is never one
 chord: both answer the two end regions. Callers use it to test each region
-change a walk makes, the way the reference server tests every step of a
-moving object (CGObj_StepMovement).
+change a walk makes, the way the reference server's per-step movement tests
+every step of a moving object.
+
+The traversal only crosses seams strictly before the end of the chord, and
+the end's canonical region (NormalizeOutdoor) closes the list: a chord that
+ends exactly on a seam or a corner, where float rounding puts the last seam
+a hair before or after the end, must not step past it.
 ================
 */
 func RegionsAlong(from, to RegionXZ) []uint16 {
@@ -329,12 +339,10 @@ func RegionsAlong(from, to RegionXZ) []uint16 {
 	dx, dz := Delta(from, to)
 	sx, sz := SectorX(from.RegionID), SectorY(from.RegionID)
 	ix, iz := int(math.Floor(from.X/OutdoorRegionSize)), int(math.Floor(from.Z/OutdoorRegionSize))
-	endX := int(math.Floor((from.X + dx) / OutdoorRegionSize))
-	endZ := int(math.Floor((from.Z + dz) / OutdoorRegionSize))
 	regions := []uint16{RegionIDForSectors(sx+ix, sz+iz)}
 	stepX, nextX, deltaX := gridStep(from.X, dx, ix)
 	stepZ, nextZ, deltaZ := gridStep(from.Z, dz, iz)
-	for ix != endX || iz != endZ {
+	for math.Min(nextX, nextZ) < 1-regionsAlongEndSlack {
 		switch {
 		case nextX < nextZ:
 			ix += stepX
@@ -349,6 +357,9 @@ func RegionsAlong(from, to RegionXZ) []uint16 {
 			nextZ += deltaZ
 		}
 		regions = append(regions, RegionIDForSectors(sx+ix, sz+iz))
+	}
+	if end := NormalizeOutdoor(to).RegionID; regions[len(regions)-1] != end {
+		regions = append(regions, end)
 	}
 	return regions
 }
