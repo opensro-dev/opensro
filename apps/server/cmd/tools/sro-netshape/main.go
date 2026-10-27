@@ -31,6 +31,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -50,6 +51,28 @@ const udpBufferSize = 65535
 // udpSessionIdle retires a client session whose both directions have
 // been silent this long.
 const udpSessionIdle = 2 * time.Minute
+
+// The per-leg seed salts. Each leg derives its own up/down draw streams
+// from the run's seed XORed with its salt (and the down salt), so the
+// two legs of an A/B run never interleave draws: a nonzero -seed
+// reproduces each leg exactly.
+const (
+	tcpLegSalt        = 0x746370 // "tcp"
+	udpLegSalt        = 0x756470 // "udp"
+	downDirectionSalt = 0x5deece66d
+)
+
+// tcpQueueChunks bounds one TCP direction's scheduled chunks. A reader
+// that outruns its writer blocks on the full queue, which is ordinary
+// TCP backpressure; 1024 chunks of at most 32 KiB is the worst buffer.
+const tcpQueueChunks = 1024
+
+// tcpDialTimeout bounds the target dial of one accepted connection, so
+// handle never parks an untracked socket in a hung dial.
+const tcpDialTimeout = 10 * time.Second
+
+// errLegClosed refuses new work on a leg that is shutting down.
+var errLegClosed = errors.New("leg closed")
 
 /*
 ================
@@ -85,13 +108,14 @@ func main() {
 		fmt.Fprintln(os.Stderr, "sro-netshape:", err)
 		os.Exit(2)
 	}
-	up, down := newShapers(values)
+	seed := drawSeed(values)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	var tcp *tcpLeg
 	if values.tcpListen != "" {
-		tcp, err = startTCPLeg(values.tcpListen, values.tcpTarget, up, down)
+		up, downCfg, downSeed := legShapers(values, seed, tcpLegSalt)
+		tcp, err = startTCPLeg(values.tcpListen, values.tcpTarget, up, newShaper(downCfg, downSeed))
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "sro-netshape: tcp leg:", err)
 			os.Exit(1)
@@ -101,7 +125,8 @@ func main() {
 	}
 	var udp *udpLeg
 	if values.udpListen != "" {
-		udp, err = startUDPLeg(values.udpListen, values.udpTarget, up, down)
+		up, downCfg, downSeed := legShapers(values, seed, udpLegSalt)
+		udp, err = startUDPLeg(values.udpListen, values.udpTarget, up, downCfg, downSeed)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "sro-netshape: udp leg:", err)
 			os.Exit(1)
@@ -189,21 +214,47 @@ func validateFlags(values flagValues) error {
 
 /*
 ================
-newShapers
+drawSeed
 
-The two directions' shapers. A nonzero seed derives both directions
-deterministically; zero seeds from the clock (delay draws shared by no
-two runs matters less than the loss draws, which the seed fixes).
+The run's draw seed: the -seed value, or the clock when it is zero (an
+unseeded run reproduces nothing, which is the documented bargain).
 ================
 */
-func newShapers(values flagValues) (up, down *shaper) {
-	seed := uint64(values.seed)
+func drawSeed(values flagValues) uint64 {
 	if values.seed == 0 {
-		seed = uint64(time.Now().UnixNano())
+		return uint64(time.Now().UnixNano())
 	}
-	upCfg := shapeConfig{Delay: values.upDelay, Jitter: values.upJitter, LossPct: values.upLoss, LossHold: values.tcpLossHold}
-	downCfg := shapeConfig{Delay: values.downDelay, Jitter: values.downJitter, LossPct: values.downLoss, LossHold: values.tcpLossHold}
-	return newShaper(upCfg, seed), newShaper(downCfg, seed^0x5deece66d)
+	return uint64(values.seed)
+}
+
+/*
+================
+shaperConfigs
+
+Both directions' configured impairment.
+================
+*/
+func shaperConfigs(values flagValues) (up, down shapeConfig) {
+	up = shapeConfig{Delay: values.upDelay, Jitter: values.upJitter, LossPct: values.upLoss, LossHold: values.tcpLossHold}
+	down = shapeConfig{Delay: values.downDelay, Jitter: values.downJitter, LossPct: values.downLoss, LossHold: values.tcpLossHold}
+	return up, down
+}
+
+/*
+================
+legShapers
+
+One leg's draw streams, derived from the run seed and the leg's salt:
+the up shaper ready to use, plus the down direction's config and seed.
+A leg that multiplexes its down direction (UDP: one shaper per session)
+mints from those; a leg with a single down stream (TCP) builds its
+shaper from the same pair, so both legs derive identically in shape and
+never share a stream.
+================
+*/
+func legShapers(values flagValues, seed, legSalt uint64) (up *shaper, downCfg shapeConfig, downSeed uint64) {
+	upCfg, downCfg := shaperConfigs(values)
+	return newShaper(upCfg, seed^legSalt), downCfg, seed ^ legSalt ^ downDirectionSalt
 }
 
 /*
@@ -260,8 +311,8 @@ statsLine
 ================
 */
 func statsLine(stats *directionStats) string {
-	return fmt.Sprintf("received=%d forwarded=%d dropped=%d held=%d bytes=%d",
-		stats.received.Load(), stats.forwarded.Load(), stats.dropped.Load(), stats.held.Load(), stats.bytes.Load())
+	return fmt.Sprintf("received=%d forwarded=%d dropped=%d held=%d failed=%d bytes=%d",
+		stats.received.Load(), stats.forwarded.Load(), stats.dropped.Load(), stats.held.Load(), stats.failed.Load(), stats.bytes.Load())
 }
 
 //============================================================================
@@ -273,9 +324,13 @@ func statsLine(stats *directionStats) string {
 tcpLeg
 
 The WebSocket path's relay: each accepted connection dials the target
-and pumps both directions. A pump sleeps in line before writing, so a
-delayed chunk blocks the ones behind it - the head-of-line behaviour
-being measured - and byte order can never break.
+and moves both directions. Each direction is a reader/writer pair (see
+pump): the reader stamps every chunk with its due time while the writer
+is still sleeping off an earlier one, so a chunk leaves one drawn delay
+after it ARRIVED. An inline-sleeping pump instead lets bytes that arrive
+during a sleep wait it out and then sleep a full delay of their own -
+between D and 2D of latency under steady traffic, which is not the
+impairment on the label.
 ================
 */
 type tcpLeg struct {
@@ -286,6 +341,7 @@ type tcpLeg struct {
 	upStats   directionStats
 	downStats directionStats
 	mu        sync.Mutex
+	closed    bool
 	conns     map[net.Conn]struct{}
 	wg        sync.WaitGroup
 }
@@ -331,17 +387,31 @@ func (l *tcpLeg) serve() {
 handle
 
 One connection: dial the target, pump both ways, and close both ends
-when either pump ends (a measurement proxy does not half-close).
+when either pump ends (a measurement proxy does not half-close). The
+client socket is tracked BEFORE the dial, and the dial is timed: a
+connection accepted while the leg closes can never leave a socket
+tracked by nobody (close has already walked the map by then), which
+used to hang shutdown on two pumps blocked in Read forever.
 ================
 */
 func (l *tcpLeg) handle(client net.Conn) {
-	server, err := net.Dial("tcp", l.target)
+	if !l.track(client) {
+		client.Close()
+		return
+	}
+	defer l.untrack(client)
+	dialer := net.Dialer{Timeout: tcpDialTimeout}
+	server, err := dialer.Dial("tcp", l.target)
 	if err != nil {
 		client.Close()
 		return
 	}
-	l.track(client)
-	l.track(server)
+	if !l.track(server) {
+		client.Close()
+		server.Close()
+		return
+	}
+	defer l.untrack(server)
 	var once sync.Once
 	closeBoth := func() {
 		once.Do(func() {
@@ -362,37 +432,95 @@ func (l *tcpLeg) handle(client net.Conn) {
 		closeBoth()
 	}()
 	pumps.Wait()
-	l.untrack(client)
-	l.untrack(server)
+}
+
+/*
+================
+tcpChunk
+
+One read of stream bytes with the time it may leave. Due times chain -
+never earlier than the previous chunk's - so chunks ship in read order
+and one chunk's loss hold stalls everything behind it: the head-of-line
+behaviour being measured, without reordering the stream.
+================
+*/
+type tcpChunk struct {
+	data []byte
+	due  time.Time
 }
 
 /*
 ================
 pump
 
-Moves one direction of one connection: draw, sleep the drawn delay (plus
-the loss hold when the loss draw fails), write the chunk whole.
+Moves one direction of one connection: the writer half. It sleeps until
+each scheduled chunk is due and writes it whole; readChunks does the
+reading and scheduling concurrently. A failed write ends the direction:
+the chunk and everything still queued count as failed, so the counters
+add up even when a connection dies mid-flight.
 ================
 */
 func (l *tcpLeg) pump(dst, src net.Conn, sh *shaper, stats *directionStats) {
+	queue := make(chan tcpChunk, tcpQueueChunks)
+	done := make(chan struct{})
+	defer close(done)
+	go l.readChunks(src, sh, stats, queue, done)
+	for item := range queue {
+		if wait := time.Until(item.due); wait > 0 {
+			time.Sleep(wait)
+		}
+		if err := writeAll(dst, item.data); err != nil {
+			stats.failed.Add(1)
+			// Stop the reader (closing src ends its Read) and count
+			// what it had already queued as failed.
+			src.Close()
+			for range queue {
+				stats.failed.Add(1)
+			}
+			return
+		}
+		stats.forwarded.Add(1)
+		stats.bytes.Add(uint64(len(item.data)))
+	}
+}
+
+/*
+================
+readChunks
+
+The reader half of a direction: stamps each chunk with its arrival,
+draws once for it (a failed loss draw adds the hold to its delay), and
+queues it for the writer. It keeps reading while the writer sleeps, so
+arrivals are stamped when they happen - the property that keeps the
+applied delay at D rather than drifting toward 2D under load.
+================
+*/
+func (l *tcpLeg) readChunks(src net.Conn, sh *shaper, stats *directionStats, queue chan<- tcpChunk, done <-chan struct{}) {
+	defer close(queue)
 	buffer := make([]byte, 32*1024)
+	var prevDue time.Time
 	for {
 		n, err := src.Read(buffer)
 		if n > 0 {
+			arrival := time.Now()
 			stats.received.Add(1)
 			admitted, delay := sh.pass()
 			if !admitted {
 				delay += sh.cfg.LossHold
 				stats.held.Add(1)
 			}
-			if delay > 0 {
-				time.Sleep(delay)
+			due := arrival.Add(delay)
+			if due.Before(prevDue) {
+				due = prevDue
 			}
-			if writeAll(dst, buffer[:n]) != nil {
+			prevDue = due
+			chunk := tcpChunk{data: append([]byte(nil), buffer[:n]...), due: due}
+			select {
+			case queue <- chunk:
+			case <-done:
+				stats.failed.Add(1)
 				return
 			}
-			stats.forwarded.Add(1)
-			stats.bytes.Add(uint64(n))
 		}
 		if err != nil {
 			return
@@ -403,12 +531,20 @@ func (l *tcpLeg) pump(dst, src net.Conn, sh *shaper, stats *directionStats) {
 /*
 ================
 track
+
+Registers a socket for close() to reap. Refuses once the leg is
+closing: from that moment close owns every socket it will ever see,
+and the caller must dispose of its own.
 ================
 */
-func (l *tcpLeg) track(conn net.Conn) {
+func (l *tcpLeg) track(conn net.Conn) bool {
 	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.closed {
+		return false
+	}
 	l.conns[conn] = struct{}{}
-	l.mu.Unlock()
+	return true
 }
 
 /*
@@ -430,6 +566,7 @@ close
 func (l *tcpLeg) close() {
 	l.listener.Close()
 	l.mu.Lock()
+	l.closed = true
 	for conn := range l.conns {
 		conn.Close()
 	}
@@ -462,24 +599,31 @@ func writeAll(conn net.Conn, data []byte) error {
 udpLeg
 
 The WebTransport path's relay. Each client address gets a session: its
-own upstream socket to the target, its traffic shaped by the direction
-shapers through the delay queues. Sessions idle past udpSessionIdle are
-retired by the sweep.
+own upstream socket to the target, its traffic shaped through the delay
+queues. The up direction draws in the single serve goroutine, so its
+sequence is arrival order. Each session's down direction has its own
+shaper, seeded from the leg's down seed and the session's creation
+order, so sessions never interleave draws and a seeded run reproduces
+session by session. Sessions idle past udpSessionIdle are retired by
+the sweep.
 ================
 */
 type udpLeg struct {
-	conn      *net.UDPConn
-	target    *net.UDPAddr
-	up        *shaper
-	down      *shaper
-	upStats   directionStats
-	downStats directionStats
-	upQueue   *delayQueue
-	downQueue *delayQueue
-	mu        sync.Mutex
-	sessions  map[string]*udpSession
-	stop      chan struct{}
-	wg        sync.WaitGroup
+	conn       *net.UDPConn
+	target     *net.UDPAddr
+	up         *shaper
+	downCfg    shapeConfig
+	downSeed   uint64
+	sessionSeq atomic.Uint64
+	upStats    directionStats
+	downStats  directionStats
+	upQueue    *delayQueue
+	downQueue  *delayQueue
+	mu         sync.Mutex
+	closed     bool
+	sessions   map[string]*udpSession
+	stop       chan struct{}
+	wg         sync.WaitGroup
 }
 
 /*
@@ -490,6 +634,7 @@ udpSession
 type udpSession struct {
 	client   *net.UDPAddr
 	upstream *net.UDPConn
+	down     *shaper
 	lastSeen atomic.Int64
 }
 
@@ -498,7 +643,7 @@ type udpSession struct {
 startUDPLeg
 ================
 */
-func startUDPLeg(listenAddr, targetAddr string, up, down *shaper) (*udpLeg, error) {
+func startUDPLeg(listenAddr, targetAddr string, up *shaper, downCfg shapeConfig, downSeed uint64) (*udpLeg, error) {
 	listen, err := net.ResolveUDPAddr("udp", listenAddr)
 	if err != nil {
 		return nil, err
@@ -512,7 +657,7 @@ func startUDPLeg(listenAddr, targetAddr string, up, down *shaper) (*udpLeg, erro
 		return nil, err
 	}
 	leg := &udpLeg{
-		conn: conn, target: target, up: up, down: down,
+		conn: conn, target: target, up: up, downCfg: downCfg, downSeed: downSeed,
 		upQueue: newDelayQueue(), downQueue: newDelayQueue(),
 		sessions: map[string]*udpSession{},
 		stop:     make(chan struct{}),
@@ -552,14 +697,19 @@ func (l *udpLeg) serve() {
 			l.upStats.dropped.Add(1)
 			continue
 		}
-		l.upQueue.submit(time.Now().Add(delay), data, func(payload []byte) error {
+		submitted := l.upQueue.submit(time.Now().Add(delay), data, func(payload []byte) error {
 			_, writeErr := session.upstream.Write(payload)
 			if writeErr == nil {
 				l.upStats.forwarded.Add(1)
 				l.upStats.bytes.Add(uint64(len(payload)))
+			} else {
+				l.upStats.failed.Add(1)
 			}
 			return writeErr
 		})
+		if !submitted {
+			l.upStats.failed.Add(1)
+		}
 	}
 }
 
@@ -568,13 +718,18 @@ func (l *udpLeg) serve() {
 sessionFor
 
 The client's session, created on first sight: a dedicated upstream
-socket and its reader goroutine.
+socket, its own down shaper, and its reader goroutine. Refuses once the
+leg is closing - a session minted after close() walked the map would
+own a socket nobody ever closes, and its reader would hang shutdown.
 ================
 */
 func (l *udpLeg) sessionFor(client *net.UDPAddr) (*udpSession, error) {
 	key := client.String()
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if l.closed {
+		return nil, errLegClosed
+	}
 	if session := l.sessions[key]; session != nil {
 		return session, nil
 	}
@@ -582,7 +737,7 @@ func (l *udpLeg) sessionFor(client *net.UDPAddr) (*udpSession, error) {
 	if err != nil {
 		return nil, err
 	}
-	session := &udpSession{client: client, upstream: upstream}
+	session := &udpSession{client: client, upstream: upstream, down: l.sessionDownShaper()}
 	session.lastSeen.Store(time.Now().UnixNano())
 	l.sessions[key] = session
 	l.wg.Add(1)
@@ -591,6 +746,20 @@ func (l *udpLeg) sessionFor(client *net.UDPAddr) (*udpSession, error) {
 		l.readSession(session)
 	}()
 	return session, nil
+}
+
+/*
+================
+sessionDownShaper
+
+Mints one session's down shaper: the leg's down seed stirred with the
+session's creation order, so the first session of a seeded run always
+draws the same sequence, the second session its own, and so on.
+================
+*/
+func (l *udpLeg) sessionDownShaper() *shaper {
+	seq := l.sessionSeq.Add(1)
+	return newShaper(l.downCfg, l.downSeed^(seq*0x9e3779b97f4a7c15))
 }
 
 /*
@@ -612,19 +781,24 @@ func (l *udpLeg) readSession(session *udpSession) {
 		data := append([]byte(nil), buffer[:n]...)
 		session.lastSeen.Store(time.Now().UnixNano())
 		l.downStats.received.Add(1)
-		admitted, delay := l.down.pass()
+		admitted, delay := session.down.pass()
 		if !admitted {
 			l.downStats.dropped.Add(1)
 			continue
 		}
-		l.downQueue.submit(time.Now().Add(delay), data, func(payload []byte) error {
+		submitted := l.downQueue.submit(time.Now().Add(delay), data, func(payload []byte) error {
 			_, writeErr := l.conn.WriteToUDP(payload, session.client)
 			if writeErr == nil {
 				l.downStats.forwarded.Add(1)
 				l.downStats.bytes.Add(uint64(len(payload)))
+			} else {
+				l.downStats.failed.Add(1)
 			}
 			return writeErr
 		})
+		if !submitted {
+			l.downStats.failed.Add(1)
+		}
 	}
 }
 
@@ -662,6 +836,16 @@ close
 ================
 */
 func (l *udpLeg) close() {
+	// Mark closed first, under the same mutex sessionFor checks: from
+	// here on no new session can be minted, so the walk below sees
+	// every session (and socket) that will ever exist.
+	l.mu.Lock()
+	if l.closed {
+		l.mu.Unlock()
+		return
+	}
+	l.closed = true
+	l.mu.Unlock()
 	close(l.stop)
 	l.conn.Close()
 	l.mu.Lock()
@@ -670,7 +854,7 @@ func (l *udpLeg) close() {
 		delete(l.sessions, key)
 	}
 	l.mu.Unlock()
-	l.upQueue.close()
-	l.downQueue.close()
+	l.upStats.failed.Add(uint64(l.upQueue.close()))
+	l.downStats.failed.Add(uint64(l.downQueue.close()))
 	l.wg.Wait()
 }

@@ -15,6 +15,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"opensro.online/server/internal/testsupport/wait"
 )
 
 /*
@@ -115,6 +117,36 @@ func TestShaperSeedReproducesDraws(t *testing.T) {
 
 /*
 ================
+TestLegShapersDoNotShareDraws
+
+Each leg derives its own streams from the run seed: drawing on one leg
+must not shift another leg's sequence, and the same leg derived again
+repeats exactly. The legs used to share one pair of shapers, so an
+A/B run with both legs active reproduced neither (#1821).
+================
+*/
+func TestLegShapersDoNotShareDraws(t *testing.T) {
+	values := flagValues{
+		upDelay: 30 * time.Millisecond, upJitter: 10 * time.Millisecond, upLoss: 25,
+		downDelay: 30 * time.Millisecond, downJitter: 10 * time.Millisecond, downLoss: 25,
+		seed: 99,
+	}
+	tcpA, _, _ := legShapers(values, drawSeed(values), tcpLegSalt)
+	udpA, _, _ := legShapers(values, drawSeed(values), udpLegSalt)
+	tcpB, _, _ := legShapers(values, drawSeed(values), tcpLegSalt)
+	for i := 0; i < 200; i++ {
+		admittedA, delayA := tcpA.pass()
+		udpA.pass() // the other leg drawing must not perturb tcpA's stream
+		admittedB, delayB := tcpB.pass()
+		if admittedA != admittedB || delayA != delayB {
+			t.Fatalf("draw %d: the tcp sequence shifted with the udp leg's draws: (%v, %v) vs (%v, %v)",
+				i, admittedA, delayA, admittedB, delayB)
+		}
+	}
+}
+
+/*
+================
 emissionLog
 ================
 */
@@ -156,19 +188,11 @@ func TestDelayQueueEmitsEarliestFirst(t *testing.T) {
 	queue.submit(start.Add(90*time.Millisecond), []byte("late"), log.emit("late"))
 	queue.submit(start.Add(10*time.Millisecond), []byte("early"), log.emit("early"))
 	queue.submit(start.Add(10*time.Millisecond), []byte("tied"), log.emit("tied"))
-	deadline := time.Now().Add(3 * time.Second)
-	for {
+	wait.Eventually(t, 3*time.Second, "all three emissions", func() bool {
 		log.mu.Lock()
-		done := len(log.names) == 3
-		log.mu.Unlock()
-		if done {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("emitted %v, want all three", log.names)
-		}
-		time.Sleep(2 * time.Millisecond)
-	}
+		defer log.mu.Unlock()
+		return len(log.names) == 3
+	})
 	log.mu.Lock()
 	defer log.mu.Unlock()
 	want := []string{"early", "tied", "late"}
@@ -196,23 +220,43 @@ func TestDelayQueueEmitsNothingBeforeItsTime(t *testing.T) {
 	defer queue.close()
 	log := &emissionLog{}
 	queue.submit(time.Now().Add(60*time.Millisecond), []byte("x"), log.emit("x"))
-	time.Sleep(30 * time.Millisecond)
-	log.mu.Lock()
-	if len(log.names) != 0 {
-		t.Fatalf("emitted %v before its scheduled time", log.names)
-	}
-	log.mu.Unlock()
-	deadline := time.Now().Add(2 * time.Second)
-	for {
+	wait.Consistently(t, 30*time.Millisecond, "no emission before its scheduled time", func() bool {
 		log.mu.Lock()
-		done := len(log.names) == 1
-		log.mu.Unlock()
-		if done {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("the scheduled emission never happened")
-		}
-		time.Sleep(2 * time.Millisecond)
+		defer log.mu.Unlock()
+		return len(log.names) == 0
+	})
+	wait.Eventually(t, 2*time.Second, "the scheduled emission", func() bool {
+		log.mu.Lock()
+		defer log.mu.Unlock()
+		return len(log.names) == 1
+	})
+}
+
+/*
+================
+TestDelayQueueCloseReportsDiscarded
+
+Items still queued when the queue closes are reported as discarded
+(the leg counts them as failed), and a closed queue refuses new
+submissions instead of swallowing them into a dead heap.
+================
+*/
+func TestDelayQueueCloseReportsDiscarded(t *testing.T) {
+	queue := newDelayQueue()
+	go queue.run()
+	log := &emissionLog{}
+	if !queue.submit(time.Now().Add(time.Hour), []byte("never"), log.emit("never")) {
+		t.Fatal("submit to an open queue was refused")
 	}
+	if discarded := queue.close(); discarded != 1 {
+		t.Fatalf("close reported %d discarded, want 1", discarded)
+	}
+	if queue.submit(time.Now(), []byte("late"), log.emit("late")) {
+		t.Fatal("submit after close was accepted")
+	}
+	wait.Consistently(t, 20*time.Millisecond, "no emission from a closed queue", func() bool {
+		log.mu.Lock()
+		defer log.mu.Unlock()
+		return len(log.names) == 0
+	})
 }

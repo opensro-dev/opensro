@@ -5,11 +5,13 @@ shape.go - one direction's impairment: delay, jitter and loss draws
 
 One shaper owns the configured impairment of a single direction (up is
 client to server, down is server to client) of one sro-netshape relay
-leg. Each packet or TCP chunk draws once: the loss draw first, then the
-delay - the configured one-way delay plus a uniform jitter in
-[-jitter, +jitter], floored at zero, matching how netem's delay/jitter
-pair reads. A seeded shaper reproduces its draw sequence exactly, so a
-measurement run can be repeated draw for draw.
+leg. Each packet or TCP chunk (one read) draws once: the loss draw
+first, then the delay - the configured one-way delay plus a uniform
+jitter in [-jitter, +jitter], floored at zero, matching how netem's
+delay/jitter pair reads. A seeded shaper reproduces its draw sequence
+exactly, so a measurement run can be repeated draw for draw. Each leg
+mints its own shapers (and each UDP session its own down shaper) from
+the run's seed, so the legs never perturb each other's sequences.
 
 The two legs spend a failed loss draw differently: UDP drops the
 datagram, while a TCP chunk cannot be dropped without corrupting the
@@ -101,6 +103,9 @@ directionStats
 One direction's counters, printed on exit and on the stats interval so a
 run can prove the impairment it applied. Held counts TCP chunks whose
 loss draw failed and which were held for LossHold instead of dropped.
+Failed counts admitted chunks/datagrams that never shipped - a write to
+a dead socket, a chunk queued behind one, a datagram still queued when
+its queue closed - so received always adds up against the other four.
 ================
 */
 type directionStats struct {
@@ -108,6 +113,7 @@ type directionStats struct {
 	forwarded atomic.Uint64
 	dropped   atomic.Uint64
 	held      atomic.Uint64
+	failed    atomic.Uint64
 	bytes     atomic.Uint64
 }
 
@@ -160,17 +166,19 @@ delayQueue
 Emits payloads at their scheduled times, earliest first. One goroutine
 (run) owns emission; submit is safe from any goroutine. Used by the UDP
 leg, whose datagrams may pass each other when jitter makes a later
-datagram due first - as on a real link. The TCP leg does not queue: its
-pump sleeps in line, because reordering a byte stream would corrupt it.
+datagram due first - as on a real link. The TCP leg pipelines through
+its own channel instead (pump in main.go): stream chunks must leave in
+read order, so their due times chain rather than pass each other.
 ================
 */
 type delayQueue struct {
-	mu    sync.Mutex
-	items itemHeap
-	seq   uint64
-	wake  chan struct{}
-	done  chan struct{}
-	once  sync.Once
+	mu     sync.Mutex
+	items  itemHeap
+	seq    uint64
+	closed bool
+	wake   chan struct{}
+	done   chan struct{}
+	once   sync.Once
 }
 
 /*
@@ -187,11 +195,17 @@ func newDelayQueue() *delayQueue {
 submit
 
 Schedules data for emission at at. The payload is copied nowhere: the
-caller hands ownership to the queue.
+caller hands ownership to the queue. Returns false once the queue is
+closed; the caller then counts the payload as failed itself, so nothing
+submitted is ever lost from the counters.
 ================
 */
-func (q *delayQueue) submit(at time.Time, data []byte, emit func([]byte) error) {
+func (q *delayQueue) submit(at time.Time, data []byte, emit func([]byte) error) bool {
 	q.mu.Lock()
+	if q.closed {
+		q.mu.Unlock()
+		return false
+	}
 	q.seq++
 	heap.Push(&q.items, &queueItem{at: at, seq: q.seq, data: data, emit: emit})
 	q.mu.Unlock()
@@ -199,6 +213,7 @@ func (q *delayQueue) submit(at time.Time, data []byte, emit func([]byte) error) 
 	case q.wake <- struct{}{}:
 	default:
 	}
+	return true
 }
 
 /*
@@ -252,10 +267,17 @@ func (q *delayQueue) run() {
 ================
 close
 
-Stops the emission loop; items still queued are abandoned, as befits a
-measurement tool being shut down.
+Stops the emission loop and reports how many items were still queued;
+the caller counts them as failed, so shutdown does not silently spend
+datagrams the counters never saw leave.
 ================
 */
-func (q *delayQueue) close() {
+func (q *delayQueue) close() (discarded int) {
 	q.once.Do(func() { close(q.done) })
+	q.mu.Lock()
+	discarded = len(q.items)
+	q.items = nil
+	q.closed = true
+	q.mu.Unlock()
+	return discarded
 }
