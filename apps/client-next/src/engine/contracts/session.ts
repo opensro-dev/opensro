@@ -163,6 +163,9 @@ export interface CharacterRecord {
 	readonly weaponSelected: boolean;
 	readonly deletePending: boolean;
 	readonly deletionBlocker?: "guild-master" | "guild-member" | "academy-guardian" | "academy-student";
+	// Port-only (#1689): a queued name change refused at this login, and
+	// why. Absent when no rename was queued or the rename applied.
+	readonly renameCancelled?: import("@/engine/foundation/gameplay/name-change").RenameCancelledReason;
 	readonly maxHp: number;
 	readonly maxMp: number;
 	readonly bodyShapeByte?: number;

@@ -14,6 +14,7 @@ import {
 	type CosItemUseContext
 } from "@/engine/foundation/gameplay/cos-item-use";
 import { globalChatTail, isGlobalChatItem } from "@/engine/foundation/gameplay/global-chat";
+import { isNameChangeScrollItem, nameChangeTail } from "@/engine/foundation/gameplay/name-change";
 import {
 	nativeStackIdentity,
 	planContainerMove,
@@ -1533,8 +1534,12 @@ use
 				throw new Error( "Item use unavailable" );
 			}
 			if ( itemCooldown( itemCooldowns, item.typeFlags, now ) ) return null;
-			// The Global Chatting item carries its line (693C90); nothing else does.
-			const tail = isGlobalChatItem( item.typeFlags ) ?
+			// The Global Chatting item carries its line (693C90); the
+			// name-change scroll carries its new name (#1689); nothing
+			// else leaves the companion tail path.
+			const tail = isNameChangeScrollItem( item.refObjId ) ?
+				nameChangeTail( context?.renameName ?? "" ) :
+				isGlobalChatItem( item.typeFlags ) ?
 				globalChatTail( message ?? "" ) :
 				cosItemUseTail( item.typeFlags, [ ...slots.values() ], companionContext( item.typeFlags, context ) );
 			const p = new Uint8Array( 3 + tail.length );
