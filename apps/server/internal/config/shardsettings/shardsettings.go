@@ -86,9 +86,10 @@ var Settings = []Setting{
 	{Env: "SRO_BETA_PLAYER_MAP", NomadVar: "beta_player_map", Default: "off", Validation: ValueSwitch},
 	{Env: "SRO_BETA_MASTERY", NomadVar: "beta_mastery", Default: "on", Catalogue: true, Source: Built,
 		Validation: ValueSwitch},
-	// Port-only, not native: the 110 cap (owner, 2026-10-24: on for the next
-	// release; "off" keeps the native 90).
-	{Env: "SRO_LEVEL_CAP", NomadVar: "level_cap", Default: "110", Catalogue: true},
+	// Port-only, not native: the 110 cap. Owner, 2026-10-27: the default is
+	// the native 90 (the non-native rule: the off value is native); the
+	// cap-110 expansion names 110 when it ships (#1751).
+	{Env: "SRO_LEVEL_CAP", NomadVar: "level_cap", Default: "90", Catalogue: true},
 	// Port-only, not native: database-authored Alexandria field population.
 	{Env: "SRO_CAP110_MONSTERS", NomadVar: "cap110_monsters", Default: "off", Catalogue: true},
 	// Port-only, not native: the level-100 slice of that population,

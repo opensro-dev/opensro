@@ -172,6 +172,12 @@ checkpointOnlineSkillJobs
 ================
 */
 func (rt *Runtime) checkpointOnlineSkillJobs(now int64) {
+	// The maintenance barrier waits out every in-flight division operation
+	// and blocks new ones; take it only on the ticks with a checkpoint due
+	// (#1820: the every-tick barrier showed up as 100-585 ms tick steps).
+	if !rt.effects.AnyJobCheckpointDue(now) {
+		return
+	}
 	rt.maintenance.Lock()
 	defer rt.maintenance.Unlock()
 	for _, batch := range rt.effects.TakeJobCheckpoints(now) {

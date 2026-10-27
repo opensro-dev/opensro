@@ -594,6 +594,48 @@ func (r *Registry) Expire(nowMs int64) {
 	}
 }
 
+// AnyJobCheckpointDue reports whether TakeJobCheckpoints would return a batch
+// at nowMs, so a caller can skip its barrier on the ticks with nothing due. It
+// advances job clocks exactly as TakeJobCheckpoints does; advanceJob ignores a
+// repeated nowMs, so a following TakeJobCheckpoints(nowMs) yields the same
+// batches it would have yielded alone. It never consumes a checkpoint.
+/*
+================
+AnyJobCheckpointDue
+================
+*/
+func (r *Registry) AnyJobCheckpointDue(nowMs int64) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	due := false
+	for _, rows := range r.byOwner {
+		for i := range rows {
+			e := &rows[i]
+			if e.StopRequested {
+				continue
+			}
+			e.advanceJob(nowMs)
+			due = due || (e.Persistent && e.jobCheckpointDue)
+		}
+	}
+	return due
+}
+
+// HasStopRequested reports whether DrainStopRequested has an owner queued.
+/*
+================
+HasStopRequested
+================
+*/
+func (r *Registry) HasStopRequested() bool {
+	if r == nil {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.pendingOwners) > 0
+}
+
 // TakeJobCheckpoints advances each job's own clock and consumes its pending
 // checkpoint. Jobs installed later do not inherit a global 300-second timer.
 /*
