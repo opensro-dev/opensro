@@ -933,6 +933,26 @@ variable "unique_pop_ticket" {
   default = "on"
 }
 
+# unique_max_level_loot rolls a top-band unique's equipment at the shard's
+# highest installed level (degree 9 at cap 90, degree 11 at cap 110)
+# rather than the unique's own level; a unique counts as top-band within
+# ten levels of that level, and every other unique keeps its own level
+# (port-only, not native; owner decision 2026-10-25, narrowed 2026-10-26).
+# Opt-in: "off" is native.
+variable "unique_max_level_loot" {
+  type    = string
+  default = "off"
+}
+
+# unique_seal_drops guarantees one Seal of Star of the top degree per
+# unique kill and a Seal of Moon on a kill in ten; no Seal of Sun is
+# guaranteed (port-only, not native; owner decision 2026-10-25, narrowed
+# 2026-10-26). "off" is native and is the default.
+variable "unique_seal_drops" {
+  type    = string
+  default = "off"
+}
+
 # beta_unique_respawn draws respawning unique monster nests over 45-90 minutes
 # instead of the operator backup's 20-36 minute rows (port-only, not native;
 # owner decision 2026-10-18). "off" keeps the authored row.
@@ -1209,6 +1229,8 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_SUN_DROP_RATE                       = var.sun_drop_rate
         SRO_UNIQUE_GAP_EXEMPT                   = var.unique_gap_exempt
         SRO_UNIQUE_POP_TICKET                   = var.unique_pop_ticket
+        SRO_UNIQUE_MAX_LEVEL_LOOT               = var.unique_max_level_loot
+        SRO_UNIQUE_SEAL_DROPS                   = var.unique_seal_drops
         SRO_BETA_UNIQUE_RESPAWN                 = var.beta_unique_respawn
         SRO_BETA_DROP_CAP                       = var.beta_drop_cap
         SRO_BETA_DROP_MIX                       = var.beta_drop_mix
