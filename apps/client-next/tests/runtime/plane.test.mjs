@@ -32,6 +32,9 @@ test("the feature table: outdoors and in a cave every field differs", () => {
 		residentOnly: false,
 		rooms: false,
 		sectorFrames: true,
+		sky: true,
+		animatedWater: true,
+		dungeonWater: false,
 		signedLocalCoordinates: false
 	} );
 	for ( const cave of [ 0x8001, 0x8004 ] ) {
@@ -43,6 +46,9 @@ test("the feature table: outdoors and in a cave every field differs", () => {
 			residentOnly: true,
 			rooms: true,
 			sectorFrames: false,
+			sky: false,
+			animatedWater: false,
+			dungeonWater: true,
 			signedLocalCoordinates: true
 		} );
 	}

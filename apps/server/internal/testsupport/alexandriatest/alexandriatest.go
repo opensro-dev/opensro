@@ -129,6 +129,19 @@ func Variant(t testing.TB, npcRefID string) Fixture {
 
 /*
 ================
+AppendRow
+
+Appends one row to a fixture table in the file's own encoding, as the
+variant builder does.
+================
+*/
+func AppendRow(t testing.TB, dir, name string, row []string) {
+	t.Helper()
+	appendRow(t, dir, name, row)
+}
+
+/*
+================
 SetLinkCondition
 
 Rewrites the first condition triple of the teleport link row joining
