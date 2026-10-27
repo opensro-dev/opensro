@@ -160,7 +160,8 @@ def problems(port, run=subprocess.run, read=lambda path: path.read_text()):
 	if enabled.stdout.strip() != "enabled":
 		found.append(REDIRECT_UNIT_NAME + " is not enabled, so the redirect is lost at reboot")
 	status = run(["ufw", "status"], capture_output=True, text=True)
-	if not re.search(r"^" + str(port) + r"/udp\s+ALLOW\b", status.stdout, re.MULTILINE):
+	# An inactive firewall drops nothing; an active one must allow the port.
+	if not status.stdout.startswith("Status: inactive") and not re.search(r"^" + str(port) + r"/udp\s+ALLOW\b", status.stdout, re.MULTILINE):
 		found.append("the firewall does not allow " + str(port) + "/udp, so redirected packets are dropped")
 	for path in BUFFERS:
 		value = int(read(path).strip() or 0)

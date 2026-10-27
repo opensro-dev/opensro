@@ -117,6 +117,8 @@ class QuicHostTest(unittest.TestCase):
 			found = quic_host.problems(18443, run=host, read=big)
 			self.assertEqual(len(found), 1, found)
 			self.assertIn(gap, found[0])
+		# An inactive firewall drops nothing, so it is no gap.
+		self.assertEqual(quic_host.problems(18443, run=FakeHost(ufw="Status: inactive\n"), read=big), [])
 		small = quic_host.problems(18443, run=FakeHost(), read=lambda path: "212992\n")
 		self.assertEqual(small, ["rmem_max is 212992, below 7500000", "wmem_max is 212992, below 7500000"])
 
