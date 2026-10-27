@@ -168,7 +168,7 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 		return itemUseComposite
 	}
 	// The native COS item use, and the v1.150 client appends the COS gid for TID4 4/5/7
-	// (6963CF) and for the TID3 2 TID4 7 cure (696336). TID4 6 is the
+	// (client 6963CF) and for the TID3 2 TID4 7 cure (696336). TID4 6 is the
 	// revival scroll (696490 / server case 6).
 	if ref.TypeIDs[0] == 3 && ref.TypeIDs[1] == 3 && ref.TypeIDs[2] == 1 {
 		switch ref.TypeIDs[3] {

@@ -50,7 +50,7 @@ The reference server's structure list query: an unknown fortress
 answers 2 with code 3; otherwise it writes the structure count and, per
 structure, its event zone
 (vfunc +0x648) and the minutes left of its construction (+0x65C less the
-minutes since +0x658, floored at zero). 754A40 stores each value on the
+minutes since +0x658, floored at zero). Client 754A40 stores each value on the
 zone's record (+0x1C) for the manager's structure menu.
 
 The port builds no structure over time yet, so every standing structure

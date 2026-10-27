@@ -20,7 +20,7 @@ when no transform holds it; its speeds stay the player's own.
 The block lives as long as its instance: retiring any msch 1 or 2
 instance clears it (the native transform clear). The
 client puts the player model back when that instance ends (CIDecoSkill
-8DD131), so the end needs no packet of its own.
+client 8DD131), so the end needs no packet of its own.
 
 ===========================================================================
 */

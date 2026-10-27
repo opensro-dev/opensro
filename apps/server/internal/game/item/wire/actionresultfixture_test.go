@@ -180,7 +180,7 @@ func buildActionResultFixture(t *testing.T) actionResultFixture {
 			"is serialized by SkillCastSingleTargetResult as one B245 impact row by one target column.",
 			"The same live target pose is appended as the B245 bit-3 steering point, which owns local holder facing.",
 			"The browser verifier consumes these exact bytes through the real 776830/8e0440/8e0190/8e1710/8db770/8d5440 chain.",
-			"Live equipped-weapon base attacks emit this shape after the pinned v1.188 CFormulae normal lane.",
+			"Live equipped-weapon base attacks emit this shape after the pinned reference-server normal damage lane.",
 		},
 		Expect: actionResultFixtureExpect{
 			SkillID:          skillID,

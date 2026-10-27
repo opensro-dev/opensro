@@ -20,16 +20,16 @@ import (
 
 const (
 	cosPickupSucceeded uint8 = 1
-	// The native 77DD10 result table retires unavailable targets for code 2.
+	// The client's 77DD10 result table retires unavailable targets for code 2.
 	// Generic invalid/lifecycle refusals use that client-defined class; the
 	// later server's broader error namespace is not copied onto the 1.150 wire.
 	cosPickupUnavailable uint8 = 2
-	// Reference server: 0x189C (low byte 0x9C) arms 77DD10's 3 s pet retry
+	// Reference server: 0x189C (low byte 0x9C) arms the client's 77DD10 3 s pet retry
 	// backoff without disabling auto-pickup when a shared-loot party member
 	// (or the owner in an item-share party on a personal quest drop) cannot
 	// accept the item.
 	cosPickupRetryBackoff uint8 = 0x9C
-	// 77DD10 disables automatic pickup for B4/B5. The reference server emits 0x18B4 when a
+	// Client 77DD10 disables automatic pickup for B4/B5. The reference server emits 0x18B4 when a
 	// COS container is full, and 0x18B5 when the owner's player bag
 	// is full on a personal quest drop outside an item-share party.
 	cosPickupBagFull      uint8 = 0xB4
@@ -40,7 +40,7 @@ const (
 ================
 cosPickupAcknowledgement
 
-74FCD0 reads a result byte only for failure, and always reads the item GID
+Client 74FCD0 reads a result byte only for failure, and always reads the item GID
 for selector 8. The inventory receipt alone does not clear command pending.
 ================
 */

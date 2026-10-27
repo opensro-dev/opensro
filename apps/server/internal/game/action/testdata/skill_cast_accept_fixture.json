@@ -1,7 +1,7 @@
 {
   "comment": [
     "GENERATED + PINNED by internal/game/action/skillcastfixture_test.go (TestSkillCastAcceptFixturePinned).",
-    "Authoritative v1.150 base attack evaluated by the pinned v1.188 CFormulae normal lane.",
+    "Authoritative v1.150 base attack evaluated by the pinned reference-server normal damage lane.",
     "The real HandleTargetInteract path snapshots the player, derives equipped-item stats, resolves",
     "the live monster, commits HP through MonsterState.ApplyDamage, and emits the committed result.",
     "Immediate 0xB245 is [success prefix][steeringFlags=01][impact rows][target columns]; movement is not a facing hint.",
@@ -15,7 +15,7 @@
     "The gid slot is a",
     "u32 GID (prereq Q3: integer mov to +0xcc, consumed by FindCharacterByGid), sent as 0, NEVER",
     "a float duration. Consumed by the harness skillCastServerAcceptParity test through the REAL",
-    "776830/8e06e0/857830 enter + 7754f0/8e2c90/8dcf40 finalize chain.",
+    "client 776830/8e06e0/857830 enter + 7754f0/8e2c90/8dcf40 finalize chain.",
     "Regenerate: UPDATE_SKILL_CAST_FIXTURE=1 go test ./internal/game/action -run TestSkillCastAcceptFixturePinned"
   ],
   "expect": {

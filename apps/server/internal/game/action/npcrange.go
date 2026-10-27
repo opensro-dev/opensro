@@ -32,7 +32,7 @@ const (
 	// and approaches to 640, so the gate is that class. Inferred, not traced.
 	teleportHitRange = 800
 	// hitRangeTooFar is the reference server's out-of-range result. The client shows it as
-	// category 13 code 4, UIIT_MSG_INTERACTION_FAIL_TOO_FAR (75AE50 -> 689420).
+	// category 13 code 4, UIIT_MSG_INTERACTION_FAIL_TOO_FAR (client 75AE50 -> 689420).
 	hitRangeTooFar uint8 = 4
 	// selectObjectNotFound is the reference server's code when the object lookup finds no
 	// object; v1.150's 7651F1 reads it as one byte and shows text only for 7.

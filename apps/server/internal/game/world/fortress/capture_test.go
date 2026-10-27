@@ -15,7 +15,7 @@ minutes, and the war's end makes the holder the occupier.
 func TestTheStoneFallsOnlyAfterItsGuardsAndTheCountdown(t *testing.T) {
 	a := New([]Catalog{{ID: 1, CodeName: "FORTRESS_JANGAN"}})
 	if record, _ := a.Get("a", 1); !record.EntryOpen {
-		t.Fatal("a fresh fortress world shuts its gates (600C60 sets +0x84)")
+		t.Fatal("a fresh fortress world shuts its gates (a newly constructed fortress world starts with entry closed)")
 	}
 	a.BeginWar("a", 1, true)
 	if code := a.StoneRefusal("a", 1, 0); code != StoneRefusedTowersStand {

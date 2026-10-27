@@ -15,23 +15,26 @@ import (
 // kill targets, counts, turn-in NPCs and rewards were DB-only and never
 // shipped (the curated table in definitions.go authors those):
 //
-//	questdata.txt (224 rows, 11 tab columns, native parser sub_810620
-//	via the media-boot walk sub_7f22d0 case 0x19 @0x007f44f6):
+//	questdata.txt (224 rows, 11 tab columns, native parser
+//	CGlobalDataManager_ParseQuestData via the media-boot walk
+//	CGlobalDataManager_LoadTextDataFile case 0x19):
 //	  0 service, 1 id, 2 codename, 3 level, 4 korean name,
 //	  5 SN_ title symbol, 6 SN_PAY_ popup title, 7 (xxx),
 //	  8 SN_PAYCON_ popup body, 9 SN_NN_ notify NPC, 10 SN_NC_ notify
-//	  condition. The client gates insertion on level <= 0x5a
-//	  (@0x007f4552); the shipped table's max is far below it.
+//	  condition. The client gates insertion on level <= 0x5a; the
+//	  shipped table's max is far below it.
 //
-//	questcontentsdata.txt (294 rows, 13 tab columns, parser sub_810f10
-//	via sub_7f22d0 case 0x1a @0x007f4599, joined onto the questdata
-//	record BY CODENAME at media boot):
+//	questcontentsdata.txt (294 rows, 13 tab columns, parser
+//	CGlobalDataManager_ParseQuestContentsData via
+//	CGlobalDataManager_LoadTextDataFile case 0x1a, joined onto the
+//	questdata record BY CODENAME at media boot):
 //	  0 codename, 1 korean name, 2 country byte (payload+0xb0, the
-//	  sub_7e5fa0 gate - 3 = both), 3 next-quest codenames (comma
-//	  separated, "xxx" = none - the quest CHAIN), 4 give-up warn byte
-//	  (payload+0xb1, the sub_5c2440 confirm variant), 5..12 SN_CON_*
-//	  contents-line symbols ("xxx" = none) - the textquest symbols the
-//	  wire's SQuestContents description field references.
+//	  QuestReference_CountryAllowed gate - 3 = both), 3 next-quest
+//	  codenames (comma separated, "xxx" = none - the quest CHAIN),
+//	  4 give-up warn byte (payload+0xb1, the
+//	  CIFQuestReward_ConfirmReward variant), 5..12 SN_CON_*
+//	  contents-line symbols ("xxx" = none) - the textquest symbols
+//	  the wire's SQuestContents description field references.
 
 // questdataColumns is the shipped questdata.txt column count.
 const questdataColumns = 11
@@ -61,7 +64,8 @@ type CatalogRow struct {
 // fields (joined by codename, exactly like the native media-boot join).
 type ContentsRow struct {
 	Codename string
-	// CountryByte is col 2 (the sub_7e5fa0 country gate; 3 = both).
+	// CountryByte is col 2 (the QuestReference_CountryAllowed gate;
+	// 3 = both).
 	CountryByte uint8
 	// NextQuests are the col-3 chain codenames ("xxx" = none).
 	NextQuests []string

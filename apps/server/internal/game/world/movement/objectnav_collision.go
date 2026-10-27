@@ -39,7 +39,7 @@ const (
 )
 
 // objectDeckStandAt resolves the nearest object plane against the incoming Y.
-// 403D20 has no above-terrain clearance condition: stair decks can lie below
+// client 403D20 has no above-terrain clearance condition: stair decks can lie below
 // the heightmap. Terrain wins ties and keeps walkers underneath overhead decks.
 /*
 ================
@@ -89,7 +89,7 @@ func (v *WaterValidator) worldPointOnObjectDeck(worldX, worldZ, y float64) bool 
 //
 // NATIVE EVIDENCE for the walk semantics replicated here:
 //
-//   - sub_428930 NavMesh_AdvanceWithinMesh: the per-cell edge walk clips
+//   - client sub_428930 NavMesh_AdvanceWithinMesh: the per-cell edge walk clips
 //     the move segment against each cell edge. On a crossing of an edge
 //     carrying bit 0x4, the side-block bits gate the stop: 0x2 clips when
 //     the walker leaves the edge's side-0 cell (srcCell), 0x1 when it
@@ -98,14 +98,14 @@ func (v *WaterValidator) worldPointOnObjectDeck(worldX, worldZ, y float64) bool 
 //     NAV_CLIPPED; the recursion ends, the endpoint is the contact) - it
 //     never continues across terrain past the contact. An un-clipped
 //     bit-0x4 crossing recurses into the adjacent cell.
-//   - sub_428930's non-0x4 branch REFLECTS (NAV_REFLECTED, returns null
-//     cell): the walk also ends at the edge. sub_403fb0
+//   - client sub_428930's non-0x4 branch REFLECTS (NAV_REFLECTED, returns null
+//     cell): the walk also ends at the edge. client sub_403fb0
 //     ObjNavMesh_StepThroughObject's exit tail then decides open-vs-block:
 //     a null-cell end after an OPEN outline edge retags to terrain
 //     (exitObjectToTerrain) and the move continues; every failing leg
 //     returns 0x10000000 - the client's hard-stop signal.
-//   - sub_428f40 CRTNavMeshObj_StepMove clamps an outside start into the
-//     cell then dispatches the walk; sub_403fb0 owns the world<->object
+//   - client sub_428f40 CRTNavMeshObj_StepMove clamps an outside start into the
+//     cell then dispatches the walk; client sub_403fb0 owns the world<->object
 //     matrix bridge (the placement yaw+translate this file inverts).
 //
 // SHIPPED-DATA GROUND TRUTH (all 1191 offset-7 payloads, decoded
@@ -122,7 +122,7 @@ func (v *WaterValidator) worldPointOnObjectDeck(worldX, worldZ, y float64) bool 
 // objectEdgeContactWindowUnits is the legacy UNOWNED contact approximation.
 // Owned cells bypass this window: a stair's endpoint-Y chord is not its
 // surface. This constant is not evidence of a native Y cutoff. Replacing the
-// outside-object path requires the complete 403FB0/428300 probe semantics.
+// outside-object path requires the complete client 403FB0/428300 probe semantics.
 const objectEdgeContactWindowUnits = 2.0
 
 // objectNavEdgeBlocks decides whether crossing one edge, approached from
@@ -319,11 +319,11 @@ func objectEdgeGroupChordContactDetail(
 		fromSrcSide := originSide*srcSide > 0
 		inNudgeMargin := false
 		if !owned && opts.walk != nil && outline && fromSrcSide {
-			// Native CRTNavMeshObj_Move (428F40) dispatches an unowned
+			// Native CRTNavMeshObj_Move (client 428F40) dispatches an unowned
 			// terrain walker to CRTNavMeshObj_EnterFromOutside (428300),
 			// never to the owned-cell stepper. When a prior blocked outline hit
 			// nudged the terrain walker 0.01u inward via an inward-authored
-			// vertexDirection (outsideEdgeStart, 4287A8..4288A6), its next step
+			// vertexDirection (outsideEdgeStart, client 4287A8..4288A6), its next step
 			// starts on the srcCell side within vertexStep of that outline while
 			// still owned by terrain: an outward chord escaping that nudge sliver
 			// must not re-block, and an inward chord hitting a far outline edge

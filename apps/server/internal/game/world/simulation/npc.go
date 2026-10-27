@@ -190,7 +190,7 @@ func NpcShopSpawn() Spawn {
 // Patrol tuning (server.mjs missionNpcPatrolSpanZ / missionNpcPatrolStepPerTick).
 // The pattern is fixture policy - each NPC ping-pongs between its spawn point
 // and +20u on Z at 5u per coarse tick - but the emitted 0x30E3 bytes are
-// asm-pinned (sub_775cb0) and must match the reference builder exactly.
+// asm-pinned (client sub_775cb0) and must match the reference builder exactly.
 const (
 	NpcPatrolSpanZ       = 20.0
 	NpcPatrolStepPerTick = 5.0
@@ -210,9 +210,9 @@ type PatrolState struct {
 //
 // THE HEADING WAS MIRRORED UNTIL NOW, AND THE PARITY FIXTURE PINNED THE MIRROR.
 // This function used to document and emit "+z -> 0, -z -> pi". Native is the
-// opposite: yaw 0 faces -Z (Math_YawToDirVec sub_8788c0 = {sin(yaw), 0,
-// -cos(yaw)}, cos negation at 0x8788f0; Math_DirVecToYaw sub_8791a0 inverts as
-// acos(-z/len) mirrored for x<0, negation at 0x8791f7 - REV's binary pin, board
+// opposite: yaw 0 faces -Z (Math_YawToDirVec client sub_8788c0 = {sin(yaw), 0,
+// -cos(yaw)}, cos negation at client 0x8788f0; Math_DirVecToYaw sub_8791a0 inverts as
+// acos(-z/len) mirrored for x<0, negation at client 0x8791f7 - REV's binary pin, board
 // seq742). This patrol is pure +/-Z travel, and +/-Z is exactly where the
 // mirror is a FULL pi rather than a partial error, so NPC_EU_SMITH faced
 // exactly backwards on both legs, always - the same defect class as BUG-11 on
@@ -294,10 +294,10 @@ func NpcStation(npc NpcDef, anchor Spawn) Spawn {
 	}
 }
 
-// BuildNpcCreateRow encodes one object-list create row (sub_777220 ->
+// BuildNpcCreateRow encodes one object-list create row (client sub_777220 ->
 // CICNPC sub_8625f0), byte-for-byte the reference buildV150NpcCreateRow:
-// RefObjID, the shared sub_85fb20 object block (object id, region, xyz,
-// heading, packed movement, speeds, ref count), then the sub_859d40 name
+// RefObjID, the shared client sub_85fb20 object block (object id, region, xyz,
+// heading, packed movement, speeds, ref count), then the client sub_859d40 name
 // mask + name. Rides the 0x3417 object-list chunk (bootstrap) - the
 // consumer wraps it.
 func BuildNpcCreateRow(npc NpcDef, anchor Spawn) []byte {
@@ -339,7 +339,7 @@ func BuildNpcCreateRow(npc NpcDef, anchor Spawn) []byte {
 		U8(0).
 		U8(0).
 		U8(0).
-		// +0x24c walk-speed / +0x250 run-speed sources (sub_85fb20).
+		// +0x24c walk-speed / +0x250 run-speed sources (client sub_85fb20).
 		F32(float32(walkSpeed)).
 		F32(float32(runSpeed)).
 		// +0x4d8 scale source: the client computes 100.0/value with an fld
@@ -437,7 +437,7 @@ func NpcCorrectionFrames(roster []NpcDef, anchor Spawn, tick int64) []Frame {
 }
 
 // NpcMoveStateFrames is one 0x3122 run/walk refresh per roster NPC: run on
-// odd ticks, walk on even ticks (sub_858450 mode 3 = run, 2 = walk), so the
+// odd ticks, walk on even ticks (client sub_858450 mode 3 = run, 2 = walk), so the
 // packet is a real state CHANGE. On-demand exercise seam in the reference
 // (npc-state pull), not part of the periodic entity tick.
 func NpcMoveStateFrames(roster []NpcDef, tick int64) []Frame {
@@ -469,8 +469,8 @@ func npcMoveStateFrames(roster []NpcDef, channel, value uint8) []Frame {
 }
 
 // NpcLifeStateFrames is one 0x3122 life refresh per roster NPC: revive on odd
-// ticks, kill on even ticks (sub_777b60 life value 1/2), exercising both real
-// timer paths (death arms sub_a00b30, revive clears via sub_a00980).
+// ticks, kill on even ticks (client sub_777b60 life value 1/2), exercising both real
+// timer paths (death arms client sub_a00b30, revive clears via sub_a00980).
 // On-demand exercise seam like NpcMoveStateFrames.
 func NpcLifeStateFrames(roster []NpcDef, tick int64) []Frame {
 	value := wire.LifeStateDead
@@ -497,7 +497,7 @@ func npcStateFrames(roster []NpcDef, channel, value uint8) []Frame {
 }
 
 // NpcDespawnFrames is one 0x36AB despawn per roster NPC (the same 4-byte gid
-// wire the pickup path sends; sub_777310 -> vt+0x4c). The trigger seam is the
+// wire the pickup path sends; client sub_777310 -> vt+0x4c). The trigger seam is the
 // caller's - session exit or out-of-range removal.
 func NpcDespawnFrames(roster []NpcDef) []Frame {
 	frames := make([]Frame, 0, len(roster))

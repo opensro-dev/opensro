@@ -38,7 +38,7 @@ func (rt *Runtime) HandleGiveUp(character *enterworld.Character, payload []byte)
 	}
 	if def.KindByte == 2 {
 		// The kind-2 window's button composes 0x729A, never 0x71EB
-		// (sub_5c2440 @0x005c2465): a give-up for a reward-kind quest
+		// (CIFQuestReward_ConfirmReward): a give-up for a reward-kind quest
 		// is a crafted frame.
 		return OpResult{}, fmt.Errorf("quest give-up: %s (id %d) is kind 2 (reward) - the client cannot compose 0x71EB for it", def.Codename, refID)
 	}

@@ -227,7 +227,7 @@ names another member, the drop is a personal quest item, or the heap is
 gold the party splits, the grant is the player pickup's (the recipient's
 inventory, the gold shares), played by the pet. Otherwise the pet keeps
 its own pickup into its bag, which the v1.150 client defines: its pickup
-result table (77DD10) reports a full pet bag (B4). Trade goods never
+result table (client 77DD10) reports a full pet bag (B4). Trade goods never
 share (the party loot selection's first branch). The rotation is asked once, here, after the
 pet path's own admissions: a live, unmounted pet with its container, a live
 owner, and a drop the owner may take (its own, unreserved, or reserved to a

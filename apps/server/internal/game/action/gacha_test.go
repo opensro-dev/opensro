@@ -392,7 +392,7 @@ func TestGachaExchangeSwapsTheVoucherForItsRecordedReward(t *testing.T) {
 					}
 				}
 				if frame.Opcode == wire.OpItemMoveResponse && reflect.DeepEqual(frame.Payload, []byte{1, 15, 13, 0}) {
-					t.Fatal("voucher left by a row delete, which 7654B0 does not turn into the exchange notice")
+					t.Fatal("voucher left by a row delete, which client 7654B0 does not turn into the exchange notice")
 				}
 				// A frame writing slot 13 before the 0x3645 would let the client zero the reward.
 				if frame.Opcode == wire.OpItemMoveResponse && len(frame.Payload) > 2 && frame.Payload[2] == 13 && quantity < 0 {

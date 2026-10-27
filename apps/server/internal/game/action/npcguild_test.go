@@ -210,7 +210,7 @@ func TestMemberCallsAReleaseVoteOnALongGoneMaster(t *testing.T) {
 ================
 TestTheVoteRowLearnsTheCandidates
 
-0x7332 from the vote row (5DA1B0 case 0x1A): with no open vote it is
+0x7332 from the vote row (client 5DA1B0 case 0x1A): with no open vote it is
 refused [2][0x06] (v1.188 0x5006); with one, 0xB332 carries the vote's
 id, time left and every candidate with its ballots, as the native vote writer writes them,
 and a ballot is counted in the next answer.

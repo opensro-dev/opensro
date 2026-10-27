@@ -50,9 +50,11 @@ func questHubHandler(hub *transport.Hub, rt *Runtime, label string, op func(*ent
 		result, err := op(character, payload)
 		if err != nil {
 			log.Warnf("quest: %s refused for %s: %v", label, character.Name, err)
-			// Native 75c370 / 75c3d0 consume [result=2, error:u8]. Zero is
-			// our unspecified refusal policy, NOT a recovered retail reason
-			// mapping. B1EB error 4 has a specific not-allowed message; do not
+			// CPSMission_OnQuestAcceptResponse0xB29A and
+			// CPSMission_OnQuestAbortResponse0xB1EB consume [result=2,
+			// error:u8]. Zero is our unspecified refusal policy, NOT a
+			// recovered retail reason mapping. B1EB error 4 has a specific
+			// not-allowed message; do not
 			// assign it to unrelated inventory/persistence/validation failures.
 			ack := uint16(0xB29A)
 			if opcode == OpQuestGiveUpRequest {

@@ -4,7 +4,7 @@
 npccapability_test.go - the retail server's service chains and the v1.150 talk word
 
 Expectations come from the native registrations and the client's menu
-builder (5D9100), not from the tables under test.
+builder (client 5D9100), not from the tables under test.
 
 ===========================================================================
 */
@@ -94,7 +94,7 @@ func TestResolvedTalkWordAdvertisesOnlyOwnedRows(t *testing.T) {
 		t.Fatalf("guide flags %#x", got)
 	}
 	// The battle aide's structure row: the client keeps it for the holding
-	// guild (5D7AD0), so the server's word carries the bit for every viewer.
+	// guild (client 5D7AD0), so the server's word carries the bit for every viewer.
 	aide := NpcDef{Codename: "NPC_CH_FORTRESS_BATTLEAIDE1"}
 	aide.Services = ResolveNpcServices(aide)
 	if got := ResolveNpcTalkFlags(aide); got != NpcTalkFlagShop|NpcTalkFlagFortressAide {

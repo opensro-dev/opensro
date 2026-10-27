@@ -113,7 +113,7 @@ func (rt *Runtime) handleCosCommand(divisionID string, character *enterworld.Cha
 		// 0x1C): the order belongs to the COS, never to its rider. A ride or
 		// transport vehicle has no attack skill, so nothing strikes. The client
 		// sends this order for any vehicle with characterdata column 88 set
-		// (every ride horse carries 3000, 692CB0); it is not a rider-attack
+		// (every ride horse carries 3000, client 692CB0); it is not a rider-attack
 		// licence. Riders dismount to fight.
 		return OpResult{DiagnosticRefusal: "mounted-attack-is-the-vehicle-order"}
 	default:

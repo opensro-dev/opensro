@@ -11,7 +11,7 @@ recipient's party members within quotaMemberRange. Both run before dgmp.
 combat.FenceShare and combat.QuotaShare own the arithmetic.
 
 The moved shares register on a queued area context the attacker's manager
-drains (tagAreaEffectContext_Register), so each taker receives its share as
+drains (the reference server's area-effect queue), so each taker receives its share as
 the attacker's hit, published as a pulse result like returned damage.
 INFERENCE: a moved share does not run its taker's own links again; the
 queued context is not a hit outcome, as damagereturn.go reasons for dmgr.

@@ -142,7 +142,7 @@ func TestNpcPatrolHeadingIsNotTheMirroredConvention(t *testing.T) {
 			t.Fatalf("%s: tick 1 is not advancing in +z; the fixture assumption changed", name)
 		}
 		if advancing.HeadingWord == backwardZ {
-			t.Errorf("%s: travelling +z produced heading %d, which is the word for -z travel - the mirrored '+z -> 0' convention has been reintroduced (native yaw 0 faces -Z: Math_YawToDirVec sub_8788c0 negates cos at 0x8788f0; REV board seq742)",
+			t.Errorf("%s: travelling +z produced heading %d, which is the word for -z travel - the mirrored '+z -> 0' convention has been reintroduced (native yaw 0 faces -Z; the client's Math_YawToDirVec negates cos; REV board seq742)",
 				name, advancing.HeadingWord)
 		}
 		if advancing.HeadingWord != forwardZ {

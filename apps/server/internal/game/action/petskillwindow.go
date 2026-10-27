@@ -25,7 +25,7 @@ import (
 ================
 petSkillItemType
 
-The magic-state board's kind-3 slot (sub_67A470 -> sub_6E6E00) is driven by
+The magic-state board's kind-3 slot (client 67A470 -> 6E6E00) is driven by
 an item whose RefItemData+0x29C Param1 is authored in SECONDS. The
 classification and the remaining-seconds rule live in enterworld so the
 item-use path, the tick sweep and the world-entry re-raise share one owner.
@@ -54,7 +54,7 @@ func itemParam1Seconds(ref *enterworld.ItemRef) int64 {
 	return int64(seconds)
 }
 
-// petSkillWindowCapacity bounds one character's live rows. sub_6E6150 keys a
+// petSkillWindowCapacity bounds one character's live rows. Client 6E6150 keys a
 // row by kind and id, so distinct items stack rather than replace; the same
 // item restarts its own row.
 const petSkillWindowCapacity = 8
@@ -174,7 +174,7 @@ func (rt *Runtime) TrackTimedWindows(divisionID, characterName string) {
 advancePetSkillWindows
 
 advancePetSkillWindows retires each spent row with the native zero pair,
-which sub_775F20 turns into sub_6E6150's remove selector. An exhausted
+which client 775F20 turns into 6E6150's remove selector. An exhausted
 window is not self-retiring on the client: sub_6E6AA0 holds the row at zero
 because only server teardown may remove it.
 ================

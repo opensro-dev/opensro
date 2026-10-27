@@ -60,7 +60,7 @@ func (state *divisionTickState) rememberPeerPath(viewer string, gid uint32, worl
 ================
 publishPeerPath
 
-Retail 0x775CB0 only reseeds the source. The native 0xB738 destination is
+The client's 0x775CB0 only reseeds the source. The native 0xB738 destination is
 required to keep the navigation and locomotion owners active between ticks.
 ================
 */

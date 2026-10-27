@@ -33,7 +33,7 @@ const (
 	NpcTalkFlagGeneral        uint32 = 0x2000  // option 0xE, no row
 	NpcTalkFlagGuild          uint32 = 0x4000  // option 0xF, rows 0x12..0x1D
 	NpcTalkFlagGachaMachine   uint32 = 0x10000 // option 0x11, row 0x27
-	NpcTalkFlagGachaOperator  uint32 = 0x20000 // option 0x12, row 0x28 (5D9750): the voucher exchange
+	NpcTalkFlagGachaOperator  uint32 = 0x20000 // option 0x12, row 0x28 (client 5D9750): the voucher exchange
 	NpcTalkFlagJobTrader      uint32 = 0x80000
 	NpcTalkFlagJobThief       uint32 = 0x100000
 	NpcTalkFlagJobHunter      uint32 = 0x200000
@@ -52,7 +52,7 @@ const (
 	// siegefortress.txt.
 	NpcTalkFlagFortressOfficial uint32 = 0x800000
 	// NpcTalkFlagFortressAide is the battle aide's row (option 0x19): client
-	// 5D8FF0 tests 0x1000000 and 5D7AD0 appends action 0x32 (Structure
+	// client 5D8FF0 tests 0x1000000 and 5D7AD0 appends action 0x32 (Structure
 	// management) only for a member of the holding guild, so the word is
 	// the NPC's and the holder rule stays the client's. INFERENCE: the
 	// server sends every viewer the same select word, as it does for the

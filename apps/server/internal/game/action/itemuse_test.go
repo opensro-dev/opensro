@@ -349,7 +349,7 @@ func TestMountedAttackOrderNeverMakesTheRiderFight(t *testing.T) {
 ==================
 TestCosSummonDoesNotFabricateABoardWindow
 
-A COS summoner never drives the kind-3 board slot: sub_6E6E00 reads Param1
+A COS summoner never drives the kind-3 board slot: client 6E6E00 reads Param1
 as SECONDS and a summoner's Param1 is MINUTES (ITEM_COS_P_EXTENSION_1D
 carries 1440 for one day). The v1.150 family that satisfies the contract is
 ITEM_MALL_PET_SKILL_*, raised on use below, so a summon must not fabricate a
@@ -384,7 +384,7 @@ func TestCosSummonDoesNotFabricateABoardWindow(t *testing.T) {
 	}
 }
 
-// ITEM_MALL_PET_SKILL_* authors Param1 in seconds, as 6E6E00 expects.
+// ITEM_MALL_PET_SKILL_* authors Param1 in seconds, as client 6E6E00 expects.
 /*
 ================
 petSkillSource
@@ -471,7 +471,7 @@ func TestPetSkillItemRaisesTheKind3WindowOnlyWithALivePet(t *testing.T) {
 	if spent := petSkillWindowRemaining(character.PetSkillWindows[0], rt.Now().UnixMilli()+1800_000); spent != 0 {
 		t.Fatalf("spent remaining = %d", spent)
 	}
-	// The same item restarts its own row; sub_6E6150 keys on kind and id.
+	// The same item restarts its own row; client 6E6150 keys on kind and id.
 	character.PetSkillWindows = upsertPetSkillWindow(character.PetSkillWindows, 24001, "ITEM_MALL_PET_SKILL_COLD", 5)
 	if len(character.PetSkillWindows) != 1 || character.PetSkillWindows[0].EndUnixMs != 5 {
 		t.Fatalf("restart replaced the wrong row: %+v", character.PetSkillWindows)

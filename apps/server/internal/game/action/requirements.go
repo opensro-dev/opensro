@@ -41,7 +41,7 @@ type characterEquipRequirements struct {
 // characterLevel coerces the pointer stat with the same fallback the
 // bootstrap snapshot uses: an absent persisted level reads as 1. The
 // result is clamped to the native storage width: the client keeps the
-// player level in ONE byte (sub_789c60 reads it as a u8 off player
+// player level in ONE byte (client 789C60 reads it as a u8 off player
 // +0x820), so a hypothetical persisted level > 255 must compare as the
 // u8 ceiling here, never as a wider value no native client could hold.
 func (r *characterEquipRequirements) characterLevel() int64 {
@@ -70,7 +70,7 @@ func clampToU8(v int64) int64 {
 // can never drift from what the character visually IS.
 
 // quadWalk mirrors the native ANY-of typed-quad walk shared by the level
-// (bit 0x020) and mastery (bit 0x100) legs of sub_789c60: the flag starts
+// (bit 0x020) and mastery (bit 0x100) legs of client 789C60: the flag starts
 // set; a participating slot whose compared level >= the slot's value
 // passes the WHOLE bit immediately (the native early exit), a
 // participating slot below its value clears the flag and the walk
@@ -102,7 +102,7 @@ func (r *characterEquipRequirements) PreExclusivity(item inventory.Item) *invent
 		return nil
 	}
 
-	// Bit 0x004 @0x00789cc7: the razed/broken gate. Native refuses when the
+	// Bit 0x004 (client @0x00789cc7): the razed/broken gate. Native refuses when the
 	// item instance CARRIES a durability attribute (blob (+0xc0)[5] set)
 	// AND its current durability (CSOItem field +0x78) reads 0. The
 	// class-level attribute marker is the itemdata Dur_U column (weapons/
@@ -125,7 +125,7 @@ func (r *characterEquipRequirements) PreExclusivity(item inventory.Item) *invent
 	}
 
 	// Bit 0x020: the typed-quad LEVEL walk, native semantics (ida
-	// @0x00789d26..0x00789d6c): flag starts 1; for each quad slot whose
+	// client @0x00789d26..0x00789d6c): flag starts 1; for each quad slot whose
 	// ReqLevelTypeN dword == 1 exactly, player level >= ReqLevelN passes
 	// the WHOLE bit immediately (ANY-of early exit), a miss clears the
 	// flag and the walk continues.
@@ -147,7 +147,7 @@ func (r *characterEquipRequirements) PreExclusivity(item inventory.Item) *invent
 		return inventory.NewFault(wire.ErrCodeLevelRequired, "levelRequirement")
 	}
 
-	// Bit 0x100: the typed-quad MASTERY walk (ida @0x00789d7c..0x00789e14),
+	// Bit 0x100: the typed-quad MASTERY walk (client @0x00789d7c..0x00789e14),
 	// same ANY-of shape over slots whose type dword > 0x0a - those dwords
 	// ARE masterydata ids (EU 513..518). Native detail mirrored exactly:
 	// a MISSING mastery record is a continue (no flag write), not a
@@ -200,8 +200,8 @@ func (r *characterEquipRequirements) PostExclusivity(item inventory.Item) *inven
 		return inventory.NewFault(wire.ErrCodeCountryMismatch, "countryMismatch")
 	}
 
-	// Bit 0x400 (native @0x00789fd7): only fortress siege weapons (TID
-	// 3.1.6.16, sub_5504c0) enter the leg, and the gate is SOFT - a
+	// Bit 0x400 (client @0x00789fd7): only fortress siege weapons (TID
+	// 3.1.6.16, client 5504C0) enter the leg, and the gate is SOFT - a
 	// missing fortress-guild member record passes; the refusal fires only
 	// when a member record EXISTS and its role byte shares no bit with
 	// the item's role mask low byte (ref +0x2ac; the 14 shipped rows all

@@ -22,8 +22,8 @@ const ClientMovementRequestSize = 9
 
 // ClientAngularMovementRequestSize is the encoded size of the native 0x7738
 // angular body: [u8 0][u8 angularMode][u16 headingWord]. The serializer's
-// angular arm (sub_877cc0 @0x877ceb) appends exactly 1+2 bytes after the
-// mode byte - the xyz words never ride this form (0x877F30 zeroes them in
+// angular arm (client sub_877cc0 @0x877ceb) appends exactly 1+2 bytes after the
+// mode byte - the xyz words never ride this form (client 0x877F30 zeroes them in
 // the record and the serializer skips them).
 const ClientAngularMovementRequestSize = 4
 
@@ -38,36 +38,36 @@ const MaxWadeDepth = 12.0
 // binary (units, range and wrapping are native, not guessed):
 //
 //   - UNIT: 1 word unit = 1/65535 of a full 360-degree circle. The client
-//     SERIALIZER (sub_877cc0 @0x877ceb; SendSteeringUpdate 0x877540 shares
-//     the idiom @0x877621..0x87764d) computes
+//     SERIALIZER (client sub_877cc0 @0x877ceb; SendSteeringUpdate 0x877540 shares
+//     the client idiom @0x877621..0x87764d) computes
 //     word = trunc(rad * 57.295780181884766 / 360.0 * 65535.0) with the x87
 //     rounding control forced to truncate-toward-zero (fnstcw / or 0xc00 /
-//     fldcw / fistp). The ACK PARSER (sub_776170 @0x7761c0..0x7761d6: fild /
+//     fldcw / fistp). The ACK PARSER (client sub_776170 @0x7761c0..0x7761d6: fild /
 //     fdiv / fmul / fmul / fstp dword) inverts it as
 //     radians = float32(word / 65535.0 * 360.0 * 0.01745329238474369).
 //   - CONSTANTS (rizin px against SRO_Client.exe): qword @0xc13df8 =
 //     57.295780181884766 (float32(180/pi) promoted to double - a hair ABOVE
-//     the exact 57.29577951...), qword @0xc0e450 = 360.0, qword @0xc0e458 =
-//     65535.0, qword @0xbc8568 = 0.01745329238474369 (float32(pi/180)
+//     the exact 57.29577951...), client qword @0xc0e450 = 360.0, qword @0xc0e458 =
+//     65535.0, client qword @0xbc8568 = 0.01745329238474369 (float32(pi/180)
 //     promoted to double).
 //   - RANGE: producers wrap the yaw into [0, 2*pi) BEFORE converting
-//     (sub_853550 Math_YawToHeadingAngle rebases by -pi/2 and wraps), so a
+//     (client sub_853550 Math_YawToHeadingAngle rebases by -pi/2 and wraps), so a
 //     live client emits words in [0, 65535]; 2*pi itself lands on 65535
 //     because the rad->deg constant's float32 excess pushes 360.0000042
 //     degrees / 360 * 65535 = 65535.00077 before the truncation.
 //   - WRAPPING: the serializer itself does NOT range-check - the truncated
 //     integer stores through a 2-byte append, so an out-of-range yaw wraps
 //     through the low 16 bits (two's complement for negatives). The ack
-//     consumer re-normalizes with sub_8535a0 Math_NormalizeRadians before
-//     applying the yaw (sub_776200 @0x77627d).
+//     consumer re-normalizes with client sub_8535a0 Math_NormalizeRadians before
+//     applying the yaw (client sub_776200 @0x77627d).
 const (
-	// RadToDegF32 is qword @0xc13df8.
+	// RadToDegF32 is the client qword @0xc13df8.
 	RadToDegF32 = 57.295780181884766
-	// DegToRadF32 is qword @0xbc8568.
+	// DegToRadF32 is the client qword @0xbc8568.
 	DegToRadF32 = 0.01745329238474369
-	// HeadingFullCircleDeg is qword @0xc0e450.
+	// HeadingFullCircleDeg is the client qword @0xc0e450.
 	HeadingFullCircleDeg = 360.0
-	// HeadingWordScale is qword @0xc0e458. Note 65535, not 65536: the
+	// HeadingWordScale is the client qword @0xc0e458. Note 65535, not 65536: the
 	// native codec divides/multiplies by the max word value, so word
 	// 65535 IS the full circle, not one unit short of it.
 	HeadingWordScale = 65535.0
@@ -78,7 +78,7 @@ const (
 HeadingWordFromRadians
 
 Mirrors the client serializer's rad -> wire-word conversion (sub_877cc0
-@0x877ceb): truncate toward zero (fistp with RC=0b11), then keep the low 16
+client @0x877ceb): truncate toward zero (fistp with RC=0b11), then keep the low 16
 bits (the 2-byte append).
 ================
 */
@@ -92,7 +92,7 @@ func HeadingWordFromRadians(rad float64) uint16 {
 RadiansFromHeadingWord
 
 Mirrors the client ack parser's word -> radians conversion (sub_776170
-@0x7761c0: fild / fdiv 65535.0 / fmul 360.0 / fmul float32(pi/180) / fstp
+client @0x7761c0: fild / fdiv 65535.0 / fmul 360.0 / fmul float32(pi/180) / fstp
 dword - the result narrows to float32 on the store, preserved here).
 ================
 */
@@ -107,8 +107,8 @@ DecodeClientMovementRequest
 Parses the native 0x7738 body.
 
 Layout, pinned to the CLIENT SERIALIZER (the only producer): the single
-move-request sender CNavigationDeadreckon_SendTargetMovePacket (0x877D80)
-feeds every 0x7738 through sub_877cc0 / MoveRequest_SerializePayload, which
+move-request sender CNavigationDeadreckon_SendTargetMovePacket (client 0x877D80)
+feeds every 0x7738 through client sub_877cc0 / MoveRequest_SerializePayload, which
 emits exactly two forms after the mode byte:
 
 	positional (mode=1): [u8 1][u16 region][i16 x][i16 y][i16 z]  = 9 bytes
@@ -120,7 +120,7 @@ region-conditional branch anywhere in the serializer. The s32
 dungeon-coordinate form other SRO builds carry DOES NOT EXIST in v1.150's
 client; dungeon-region clicks (regionId & 0x8000) ride this same 9-byte
 form, and the sector-grid helpers keep the dungeon bit intact through
-interpolation. sub_878080 builds the record with FloatToInt32-packed int16
+interpolation. client sub_878080 builds the record with FloatToInt32-packed int16
 xyz regardless of region.
 
 The MIDDLE i16 is the HEIGHT (world y), the same slot order the 0xB738 ack
@@ -130,12 +130,12 @@ Community protocol notes name these xOffset/zOffset/yOffset; the axis truth
 is x/height/groundZ, which is what MovementRequest carries.
 
 ANGULAR (walk-in-direction) arm: the ONLY producer of the mode-0 form on
-this opcode is CNavigationDeadreckon_SendAngleMoveCommand (0x877F30),
+this opcode is CNavigationDeadreckon_SendAngleMoveCommand (client 0x877F30),
 reached from a ground-pick miss in CGInterface_MoveToWorldPoint (0x6932A0)
 and from the Up/Down keys through MovementController_SetDirectionVector
-(0x877FB0). It zeroes the xyz words, sets angularMode = AngularFlagGo and
+(client 0x877FB0). It zeroes the xyz words, sets angularMode = AngularFlagGo and
 converts the yaw through the heading-word codec above; the mover then walks
-that heading until blocked (direction.go). SendSteeringUpdate (0x877540)
+that heading until blocked (direction.go). SendSteeringUpdate (client 0x877540)
 shares the conversion but ships OTHER opcodes (0x72CF, or 0x769E tag 0x04
 for a mount), never 0x7738.
 
@@ -177,7 +177,7 @@ func DecodeClientMovementRequest(payload []byte) (MovementRequest, *MoveError) {
 	default:
 		return out, &MoveError{
 			NativeErrorCode: NativeErrorInvalidRequest,
-			Reason:          fmt.Sprintf("unsupportedMovementMode 0x%02X (sub_877cc0 emits only 0 angular / 1 positional)", payload[0]),
+			Reason:          fmt.Sprintf("unsupportedMovementMode 0x%02X (the client serializer emits only 0 angular / 1 positional)", payload[0]),
 		}
 	}
 }

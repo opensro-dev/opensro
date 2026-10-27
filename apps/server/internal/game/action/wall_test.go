@@ -223,7 +223,7 @@ TestWallRootsItsCasterUntilItRetires
 The reference server's persistent cast releases the wall's stage-0 WAIT
 at ActionCastingTimeMs with a single mode-1 B505 (its cancel action
 send (1, 0, castToken, 0)), so the client completes ANI_SKILL_4 to idle
-and extinguishes the READY hand effects (8E2C90 -> 8DF180 -> 8DF480). No
+and extinguishes the READY hand effects (client 8E2C90 -> 8DF180 -> 8DF480). No
 mode-2 B505 is sent while the wall stands. Natively the wall roots
 through motion state 11 (the skill engage); the attack lock
 reads char+C08 / char+C44, so the port folds char+C0C

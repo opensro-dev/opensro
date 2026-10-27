@@ -413,7 +413,7 @@ activeMoverGID
 
 The gid a 0xB2F5 for this mover must name. A rider on a live summoned
 mount is moved by the mount: native ignores a correction naming a
-mounted character (OnEntityMoveUpdate0xB2F5 0x775B50 returns early
+mounted character (OnEntityMoveUpdate0xB2F5 client 0x775B50 returns early
 while the rider's mounted flag is set), so the stop names the command
 mover when one is known, the live summoned mount when the command came
 without one, and the character itself for any other mover.
@@ -433,7 +433,7 @@ func activeMoverGID(character *enterworld.Character, cosGID uint32) uint32 {
 ================
 directionCorrectionFrame
 
-The 0xB2F5 source correction (OnEntityMoveUpdate0xB2F5 0x775B50:
+The 0xB2F5 source correction (OnEntityMoveUpdate0xB2F5 client 0x775B50:
 HaltAndSetYaw + ReseedSourcePosition) that stops a mover at spawn.
 ================
 */

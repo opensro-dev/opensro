@@ -8,8 +8,8 @@ hntp. The reference server's skill engage then attaches the recipient's
 action records to a task of the source, so the source keeps receiving the
 recipient's 0x30E3 moves after
 it has left sight. The v1.150 client registers the subject from the
-private 0xB5ED (CSkillRunTimeManager_RegisterTrackedEntity 84F130), moves
-its marker on each 0x30E3 for that GID (84F360) and draws it on the world
+private 0xB5ED (client CSkillRunTimeManager_RegisterTrackedEntity 84F130), moves
+its marker on each 0x30E3 for that GID (client 84F360) and draws it on the world
 map (CIFWorldMap_DrawHuntingPointMarkers 57B550).
 
 A recipient the source can see already reaches it through the ordinary

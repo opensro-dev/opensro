@@ -21,9 +21,9 @@ import (
 // Layout source: the prior monster-spawn board's binary derivation of
 // sub_861b00 CICMonster_DeserializeSpawn (vt+0x64 @ vtable 0xc11e54): the
 // monster row is the SAME shared bionic spawn tail the NPC row ships
-// (sub_852f80 pos block -> sub_776170 packed movement -> sub_85fb20
-// scalars -> sub_859d40 name) followed by ONE extra u8 rarity byte
-// (@0x861b74; low nibble 0=normal/1=champion/4=giant/6=elite). HP is NOT
+// (client sub_852f80 pos block -> sub_776170 packed movement -> sub_85fb20
+// scalars -> client sub_859d40 name) followed by ONE extra u8 rarity byte
+// (client @0x861b74; low nibble 0=normal/1=champion/4=giant/6=elite). HP is NOT
 // on the create row. A selected monster receives current HP through the
 // non-CICUser vitals block of 0xB45A; later damage results mutate it.
 //
@@ -65,7 +65,7 @@ type MonsterDef struct {
 	// normal/champion/unique/giant/titan/elite; high nibble 1 is the party
 	// monster scale branch.
 	Rarity uint8
-	// Native 85FB20 reads the live motion byte even though 858310 does
+	// The client's 85FB20 reads the live motion byte even though 858310 does
 	// not reconstruct a missed knockdown animation on scope entry.
 	MotionState uint8
 	// Zero preserves the existing live-row encoding. Retained corpses use DEAD.
@@ -104,7 +104,7 @@ const MonsterAppearByte uint8 = 1
 const MonsterSpawnSpeedChannel uint8 = 2
 
 // BuildMonsterCreateRow encodes one object-list create row for a monster
-// standing at spawn (the sub_777220 -> monster leg -> vt+0x64 sub_861b00
+// standing at spawn (the client sub_777220 -> monster leg -> vt+0x64 sub_861b00
 // consumer). Byte-identical to the NPC row (BuildNpcCreateRow) through the
 // name block - same standing movement block and mastery count 0 - then
 // the monster rarity byte. The three scalar values come from the
@@ -157,7 +157,7 @@ func BuildMonsterCreateRow(def MonsterDef, gid uint32, spawn Spawn) []byte {
 		panic("monster effect projection exceeds native spawn capacity")
 	}
 	w.U8(uint8(count))
-	// Retail 85FB20 non-local actor: skill + token; these admitted programs
+	// The client's 85FB20 non-local actor: skill + token; these admitted programs
 	// have no status/rider byte and monsters have no remaining-duration word.
 	for _, e := range def.SelfEffects {
 		if e.Token != 0 {
@@ -187,9 +187,9 @@ func BuildMonsterCreateRow(def MonsterDef, gid uint32, spawn Spawn) []byte {
 BuildStructureCreateRow
 
 A fortress structure's row, in CICATStruct_DeserializeSpawnData's order
-(4FA0B0): RefObjID, its hit points, its event zone (RefEventStructID),
-its state word (bit 2 the destroyed pose), the shared 85FB20 object
-block, the 859D40 name mask and name, and for a headquarters (TID4 5) the
+(client 4FA0B0): RefObjID, its hit points, its event zone (RefEventStructID),
+its state word (bit 2 the destroyed pose), the shared client 85FB20 object
+block, the client 859D40 name mask and name, and for a headquarters (TID4 5) the
 holding guild's id, zero here, with no name.
 ================
 */
@@ -230,7 +230,7 @@ func BuildStructureCreateRow(def MonsterDef, gid uint32, spawn Spawn) []byte {
 const structureHeadquarters = 5
 
 // BuildMonsterSpawnSingle encodes the 0x30D7 single-spawn body: the same
-// create row plus the trailing vt+0x68 appear byte (sub_777220 single
+// create row plus the trailing vt+0x68 appear byte (client sub_777220 single
 // mode reads it; the list path does not).
 /*
 ================

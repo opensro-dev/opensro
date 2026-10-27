@@ -66,7 +66,7 @@ func TestMonsterStunLandsOnThePlayer(t *testing.T) {
 	}
 }
 
-// 77C110: mask, then each set bit low to high as duration/100, elapsed/100,
+// Client 77C110: mask, then each set bit low to high as duration/100, elapsed/100,
 // and one byte (level for 0x203F, grade for 0x017FCFC0, otherwise 0).
 /*
 ================

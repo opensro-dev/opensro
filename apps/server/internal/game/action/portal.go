@@ -481,7 +481,7 @@ func (rt *Runtime) ConfigurePortals(dir string) error {
 }
 
 // v1.150 6FEF10 sends a runtime source identity and an authored destination
-// id. 75B930 consumes [2,error-byte] refusals. The NPC source must still be
+// id. Client 75B930 consumes [2,error-byte] refusals. The NPC source must still be
 // selected and resident when the authoritative operation commits.
 /*
 ================
