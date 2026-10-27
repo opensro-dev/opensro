@@ -15,6 +15,7 @@ as the world (SCharacterInfo_BuildDisplayActor -> CCObjCharacter_SetEquipSlotVis
 ===========================================================================
 */
 import type { CharacterItem, CharacterRecord, ServerRecord } from "@/engine/contracts/session";
+import { RENAME_CANCELLED_REASONS } from "@/engine/foundation/gameplay/name-change";
 
 // Roster contract 2: loadouts carry items, not presentation set keys.
 const CHARACTER_ROSTER_CONTRACT_VERSION = 2;
@@ -132,6 +133,12 @@ export function createSessionDecoder() {
 			deletionBlocker !== undefined &&
 			(typeof deletionBlocker !== "string" || !DELETION_BLOCKERS.includes( deletionBlocker ))
 		) throw Error( "Invalid deletion blocker" );
+		const renameCancelled = v.renameCancelled;
+		if (
+			renameCancelled !== undefined &&
+			(typeof renameCancelled !== "string" ||
+				!(RENAME_CANCELLED_REASONS as readonly string[]).includes( renameCancelled ))
+		) throw Error( "Invalid rename cancellation" );
 		const numeric: Record<string, number> = {};
 		for (
 			const key of [
@@ -156,6 +163,7 @@ export function createSessionDecoder() {
 		return Object.freeze( {
 			...numeric,
 			...(deletionBlocker !== undefined ? { deletionBlocker } : {}),
+			...(renameCancelled !== undefined ? { renameCancelled } : {}),
 			name: string( v.name ),
 			armorSelected: boolean( v.armorSelected ),
 			weaponSelected: boolean( v.weaponSelected ),

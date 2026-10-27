@@ -443,6 +443,9 @@ export type GameplayCommand =
 		readonly reverseChoice?: number;
 		// The port-only map choice's point id (reverse-return-map.ts).
 		readonly reverseMapPoint?: number;
+		// The name-change scroll's new name (#1689, port-only): the entry
+		// window's text, carried raw in the use tail.
+		readonly renameName?: string;
 	}
 	| {
 		readonly kind: "navigation";
