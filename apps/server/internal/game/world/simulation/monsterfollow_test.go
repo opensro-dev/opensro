@@ -180,8 +180,14 @@ func TestFollowRetaliationBypassesClosedGatesAndRemovalRetiresTimers(t *testing.
 	if len(frames) == 0 || current.Mode() != monster.MoverChasing || current.TargetGID() != attacker.Gid || current.FollowLeaderGID() != 0 {
 		t.Fatal("FOLLOW blocked immediate retaliation")
 	}
-	if before != followTimers(s, child.Gid) {
-		t.Fatal("retaliation consumed FOLLOW timers")
+	// FOLLOW owns Timers 0 and 7. A tactics row with a trace boundary also
+	// runs the pursuit classifier on Timer 6 when the chase starts, as the
+	// reference server does; that timer is the chase's, not FOLLOW's.
+	after := followTimers(s, child.Gid)
+	for _, id := range []monster.AITimerID{0, 7} {
+		if before.GetTimer(id) != after.GetTimer(id) {
+			t.Fatalf("retaliation consumed FOLLOW timer %d", id)
+		}
 	}
 	if !s.Defeat("summon", child.Gid, time.UnixMilli(now+3)) {
 		t.Fatal("child removal refused")
