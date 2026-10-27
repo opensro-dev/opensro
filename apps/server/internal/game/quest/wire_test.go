@@ -8,8 +8,9 @@ import (
 )
 
 // The byte pins below mirror the client grammar the re-harness
-// questInfoWireParity suite pins from the other side (sub_788210 /
-// sub_75c1d0): every emitted stream must deserialize on the REAL folds
+// questInfoWireParity suite pins from the other side
+// (SQuestInfo_Deserialize / CPSMission_OnNetProcessInLog0x31ED): every
+// emitted stream must deserialize on the REAL folds
 // byte-for-byte. The enter-world 0x32B3 section-2 emission
 // (bootstrap/wire.go) follows the same flag-driven rules; the corpus
 // suite pins that half.

@@ -3,8 +3,8 @@
 
 dungeon_links.go - portal links between a dungeon's blocks
 
-Resolves which outline edges of connected blocks meet (453940, 453020,
-45D180) and builds the object-nav set the chord scans walk, each
+Resolves which outline edges of connected blocks meet (client 453940, 453020,
+client 45D180) and builds the object-nav set the chord scans walk, each
 placement with its rotation and reach.
 
 ===========================================================================
@@ -14,7 +14,7 @@ package movement
 import "math"
 
 // 453940 scans declared connected blocks, then outline edges in authored order.
-// 453020/45d180 compare world endpoints with a strict five-unit distance.
+// client 453020/45d180 compare world endpoints with a strict five-unit distance.
 func portalEndpoint(p objectNavPlacement, m *objectNavMesh, edge, end int) [3]float64 {
 	at := m.outline.vertA[edge]
 	if end != 0 {

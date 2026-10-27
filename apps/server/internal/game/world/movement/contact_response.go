@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-contact_response.go - native object-edge contact responses (45C1B0 / 428300)
+contact_response.go - native object-edge contact responses (client 45C1B0 / 428300)
 
 ===========================================================================
 */
@@ -20,7 +20,7 @@ type objectContactPoint struct {
 	outside      bool
 	continuation bool
 	// outline marks a contact on an outline edge: the reflect branch whose
-	// failing leg returns 0x10000000 (403FB0). Internal side-block contacts
+	// failing leg returns 0x10000000 (client 403FB0). Internal side-block contacts
 	// commit the clipped point instead (428930 bit 0).
 	outline bool
 	// edgeFlags are the contacted edge's flags. The dungeon clip reads
@@ -35,7 +35,7 @@ contactF32
 */
 func contactF32(n float64) float64 { return float64(float32(n)) }
 
-// Original 45c1b0/40efd0: honor each stored float, including reciprocal.
+// Original client 45c1b0/40efd0: honor each stored float, including reciprocal.
 /*
 ================
 nativeCellEntry
@@ -60,7 +60,7 @@ nativeObjectContact
 
 Resolves the native rest point for an edge contact on mesh: outsideEdgeStart
 (428300) when the blocked approach is from outside an outline edge
-(cell == 65535), or nativeCellEntry (45C1B0) into the approached cell.
+(cell == 65535), or nativeCellEntry (client 45C1B0) into the approached cell.
 ================
 */
 func nativeObjectContact(mesh *objectNavMesh, edges *objectNavEdges, edge int, source bool, x0, z0, y0, x1, z1 float64, reflection ...bool) objectContactPoint {
@@ -83,7 +83,7 @@ func nativeObjectContact(mesh *objectNavMesh, edges *objectNavEdges, edge int, s
 		bx, bz := float64(mesh.vertices[b]), float64(mesh.vertices[b+2])
 		x, z := outsideEdgeStart(x0, z0, f(x0+dx*t), f(z0+dz*t), ax, az, bx, bz, mesh.vertexDirections[a/3], mesh.vertexDirections[b/3])
 		if src := int(edges.srcCell[edge]); src < mesh.cellCount() {
-			// Port-only, not native: 0x004287A8..0x004288A6 adds 0.01 * vertexDirection
+			// Port-only, not native: client 0x004287A8..0x004288A6 adds 0.01 * vertexDirection
 			// to the outside start without checking whether the vertex's shared 1-byte
 			// direction points inward across the hit outline edge (e.g. v[0] dir=88 and
 			// v[3] dir=148 on rock_m_smalltree05_m_01.bms out[2]). When the start is

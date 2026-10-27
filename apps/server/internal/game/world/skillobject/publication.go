@@ -40,7 +40,7 @@ type Viewer struct {
 Visible
 
 World generation participates in visibility as well as capture admission.
-86C1F0 hides the model using detection levels; hidden traps must still exist
+client 86C1F0 hides the model using detection levels; hidden traps must still exist
 in the client object registry when their mode-3 result arrives.
 ================
 */

@@ -45,10 +45,10 @@ type MovementRequest struct {
 	Y        float64
 	Z        float64
 	// AngularMode is the angular-form flag byte (record +0x0E in
-	// sub_877cc0). The only native producer on 0x7738,
-	// CNavigationDeadreckon_SendAngleMoveCommand (0x877F30), sends
+	// client sub_877cc0). The only native producer on 0x7738,
+	// CNavigationDeadreckon_SendAngleMoveCommand (client 0x877F30), sends
 	// AngularFlagGo; the ack parser MovementPayload_ReadFromStream
-	// (0x776170) reads the echoed byte back.
+	// (client 0x776170) reads the echoed byte back.
 	AngularMode uint8
 	// HeadingWord is the angular-form facing in the native 1/65535-circle
 	// wire unit (the angle-encoding block in moverequest.go) - the same
@@ -121,8 +121,8 @@ func MovementSourceFromSpawn(spawn Spawn) MovementSource {
 BuildMovementAckPayload
 
 Encodes the 0xB738 payload. The mode arms are the v1.150 parser's
-shape, exactly as the native client consumes them (sub_776200 ->
-sub_776170):
+shape, exactly as the native client consumes them (client sub_776200 ->
+client sub_776170):
 
 	[u32 objectId][u8 mode]
 	then mode!=0: [u16 region][i16 x][i16 y][i16 z]
@@ -135,8 +135,8 @@ Protocol 11 (#1744, releaseprotocol.MovementContract) carries it as
 	then [u8 1][u16 srcRegion][f32 srcX][f32 srcY][f32 srcZ]
 	or   [u8 0]
 
-The angular arm mirrors sub_776170's mode-0 read ([u8 angularFlag]
-[u16 headingWord] @0x77619b..0x7761b1) and carries the request's own bytes
+The angular arm mirrors client sub_776170's mode-0 read ([u8 angularFlag]
+[u16 headingWord] client @0x77619b..0x7761b1) and carries the request's own bytes
 back - the same verbatim-echo contract as the destination arm.
 
 The native parser read the source x/z as i16 x10 words, a +-3276.7

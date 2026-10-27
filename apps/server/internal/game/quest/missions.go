@@ -212,7 +212,8 @@ func notAchievedSymbol(c *enterworld.Character, def *Definition, record enterwor
 ================
 missionNodeIndex
 
-Native 91BF04 publishes mission-data +8 plus one as the wire tag.
+The client publishes mission-data +8 plus one as the wire tag
+(CharacterInfo_ParseAndRegisterRow).
 Captions are not identities: compiled EU_GENERAL_2 uses the same caption
 for two independent missions. Old port records used tag 1 for every node;
 migrate those only when the caption identifies exactly one persisted node.

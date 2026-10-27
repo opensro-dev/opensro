@@ -220,7 +220,7 @@ MonsterDespawnBracketFrames
 
 MonsterDespawnBracketFrames encodes a byListSub=2 object-list group:
 0x30CB {0x02, u16 count} begin, one 0x3417 chunk of 4-byte gids (the
-sub_777310 despawn bodies the finalize loop consumes), empty 0x330A
+client sub_777310 despawn bodies the finalize loop consumes), empty 0x330A
 finalize. The native bulk-eviction shape (byListSub=2 pinned by
 RZ seq134/DUMP seq91; client-side handling sabotage-proven by WIP's
 ensureDespawn4cBinding chain, board seq359/373).
@@ -591,7 +591,7 @@ commitSegment
 commitSegment is THE single emit seam: computes the timed segment from
 the live departure pose, commits the mover, and builds the frames -
 an optional 0x3122 MOVE channel push (only when the run/walk channel
-changes; sub_777b60 case 1 -> SetRunWalkMode, the pinned wire that
+changes; client sub_777b60 case 1 -> SetRunWalkMode, the pinned wire that
 keeps the client integrator at the server's segment speed - BUG-7
 speed-half fix) followed by the 0xB738 goal. The optional source follows
 the retail autonomous-entity turn gate, not the player ack's first-move
@@ -801,7 +801,7 @@ func monsterMovementSourceRequired(mover monster.MoverState, from, dest monster.
 }
 
 // poseOneUnitAlongHeading reconstructs Math_YawToDirVec's planar convention
-// after 8535A0 converts the wire bearing: heading 0 faces +X.
+// after client 8535A0 converts the wire bearing: heading 0 faces +X.
 /*
 ================
 poseOneUnitAlongHeading
@@ -929,7 +929,7 @@ func planarDistanceSpawn(a Spawn, b Spawn) float64 {
 }
 
 // All movement producers encode wire bearings through the shared inverse of
-// native 8535A0. Native model yaw and wire heading differ by pi/2.
+// the client's 8535A0. Native model yaw and wire heading differ by pi/2.
 /*
 ================
 headingWordToward
