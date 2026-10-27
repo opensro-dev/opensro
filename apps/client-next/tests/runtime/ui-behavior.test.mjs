@@ -5895,8 +5895,10 @@ test("a skill tab switch returns to the mastery last selected on that tab", () =
 		for ( let time = 0; time < 1200; time += 100 ) f.ui.step( f.state, time );
 		f.ui.event( { kind: "key", code: "KeyS" } );
 		f.ui.step( f.state, 1300 );
+		// step answers null when nothing changed, so keep the last scene.
+		let scene;
 		const selected = time => {
-			const scene = f.ui.step( f.state, time );
+			scene = f.ui.step( f.state, time ) ?? scene;
 			return scene?.controls.find( c => c.id.startsWith( "skill-mastery:" ) && c.selected )?.id;
 		};
 		f.ui.event( { kind: "activate", id: "skill-tab:0" } );
@@ -5909,6 +5911,20 @@ test("a skill tab switch returns to the mastery last selected on that tab", () =
 		assert.equal( selected( 1600 ), "skill-mastery:258", "the weapon tab returns to its own last mastery" );
 		f.ui.event( { kind: "activate", id: "skill-tab:1" } );
 		assert.equal( selected( 1700 ), "skill-mastery:274", "the force tab returns to its own last mastery" );
+		// The memory belongs to the session, as the native window does:
+		// leaving the world resets the panel and forgets every tab's mastery.
+		f.ui.event( { kind: "activate", id: "skill-tab:0" } );
+		f.ui.event( { kind: "activate", id: "skill-mastery:258" } );
+		const world = f.state.session;
+		f.state.session = { phase: "signed-out", revision: (world?.revision ?? 0) + 1 };
+		f.ui.step( f.state, 1800 );
+		f.state.session = { ...world, revision: (world?.revision ?? 0) + 2 };
+		for ( let time = 1900; time < 2400; time += 100 ) f.ui.step( f.state, time );
+		f.ui.event( { kind: "key", code: "KeyS" } );
+		selected( 2500 );
+		f.ui.event( { kind: "activate", id: "skill-tab:1" } );
+		f.ui.event( { kind: "activate", id: "skill-tab:0" } );
+		assert.equal( selected( 2600 ), "skill-mastery:257", "a reset panel opens each tab on its first mastery" );
 	} finally {
 		f.dispose();
 	}
