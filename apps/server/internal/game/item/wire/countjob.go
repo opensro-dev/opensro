@@ -11,10 +11,10 @@ slot id up as an item and draws its bar against that item's Param1, the
 package's period. The chat commands /Return, /Reverse Return and
 /Resurrection spend them.
 
-	0x3021 start   client 76F820  [u32 package][u32 remaining seconds][u32 item][u8 uses]
-	0x36FC end     client 76F920  [u32 package][u32 item]
-	0x76FD use     client 7024F0  [u32 package][u32 item] (+[u8 choice] for a reverse return)
-	0xB6FD answer  client 770820  [1][u32 package][u32 item]: one use spent
+	0x3021 start   76F820  [u32 package][u32 remaining seconds][u32 item][u8 uses]
+	0x36FC end     76F920  [u32 package][u32 item]
+	0x76FD use     7024F0  [u32 package][u32 item] (+[u8 choice] for a reverse return)
+	0xB6FD answer  770820  [1][u32 package][u32 item]: one use spent
 	                       [2][u8 code]: a category-1 notice
 
 ===========================================================================

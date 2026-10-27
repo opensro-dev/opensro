@@ -18,14 +18,13 @@ import "fmt"
 //   - object select/interact: clicking a world object routes its gid here
 //     (live native gateway trace: clicking the spawned NPC_EU_SMITH sent
 //     0x745A body 41 0D 03 00 = gid 200001);
-//   - stop / clear-marker: the client's CGInterface_SendNpcSelect745A
-//     (client 0x692C18) sends the marker id after setting the
-//     move-stop-pending byte (+0x4fa); the Action pane's case-5 command
-//     feeds it the nearest flagged monster gid (client
-//     World_FindClosestNpcWithinRange).
+//   - stop / clear-marker: sub_692ba0 / CGInterface_ClearLocalDestinationMarker
+//     (@0x692c18) sends the marker id after setting the move-stop-pending
+//     byte (+0x4fa); the Action pane's case-5 command feeds it the nearest
+//     flagged monster gid (sub_861580).
 //
-// S->C twin 0xB45A (client CPSMission_OnNpcSelectResponse0xB45A) is
-// the interaction result that opens the NPC talk window. The browser reconstruction folded its live-CICNPC arm,
+// S->C twin 0xB45A (sub_764c60) is the interaction result that opens the
+// NPC talk window. The browser reconstruction folded its live-CICNPC arm,
 // which retires the old "unconsumable
 // response" ruling from server-wave seq 51: this server now answers the
 // live roster-NPC and monster grants with the typed encoders below. The
@@ -38,8 +37,7 @@ const (
 	// OpObjectSelectRequest is the client's object select/interact request.
 	OpObjectSelectRequest uint16 = 0x745A
 	// OpObjectSelectResult is the S->C interaction result (0xB45A,
-	// client CPSMission_OnNpcSelectResponse0xB45A), emitted on live
-	// roster-NPC and monster grant paths.
+	// sub_764c60), emitted on live roster-NPC and monster grant paths.
 	OpObjectSelectResult uint16 = 0xB45A
 )
 
@@ -70,8 +68,7 @@ func DecodeObjectSelectRequest(payload []byte) (uint32, error) {
 EncodeObjectSelectRefusal
 
 EncodeObjectSelectRefusal is the 0xB45A refusal [u8 result=2][u8 code]
-(client 7651F1 consumes it without granting a target; only code 7
-shows text).
+(7651F1 consumes it without granting a target; only code 7 shows text).
 ================
 */
 func EncodeObjectSelectRefusal(code uint8) []byte {
@@ -102,8 +99,7 @@ exactly this shape. Deliberate omissions, all pinned by the fold:
     authority value to encode for roster NPCs (the caller's table
     guarantees the bit stays clear).
   - npcExtra 0 appends no menu row; a nonzero value forces the 0x38
-    talkbox row (client CIFNPCTalk_AppendFlagWarRows). The roster emits
-    it only for the Capture
+    talkbox row (sub_5d3630). The roster emits it only for the Capture
     the Flag registration NPC while sign-up is open (reference server event writer;
     action/flagwar.go owns the value), so no menu action appears that
     retail never granted.
@@ -130,10 +126,8 @@ used when a live monster is selected:
 	{u8 result=1}{u32le gid}{u8 vitalsMask=1}{u32le currentHP}{u32le flags=0}
 
 Exact CICMonster is not CICNPC, so there is no npcExtra byte. Flags zero
-keeps the client's 0x00765054 talk-window branch closed while the common
-client CGInterface_SetSelectedTargetGid /
-CGInterface_SetInteractionTargetGid selection tail rebuilds the target
-HUD.
+keeps the @0x00765054 talk-window branch closed while the common
+sub_6813e0/sub_67aeb0 selection tail rebuilds the target HUD.
 ================
 */
 func EncodeMonsterObjectSelectResult(gid, currentHP uint32) []byte {

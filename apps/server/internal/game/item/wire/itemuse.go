@@ -13,7 +13,7 @@ package wire
 ItemUseRequest
 
 ItemUseRequest is the v1.150 0x75BD body composed by
-CIFInventory_ExecuteItemAction (client 0x6961B0):
+sub_6961b0_CGInterface_ExecuteSelectedInteractionAction:
 
 	[u8 inventory wire slot][u16 RefItem type word, little-endian]
 
@@ -86,7 +86,7 @@ const OpItemUseVisual uint16 = 0x3449
 EncodeItemUseSuccess
 
 EncodeItemUseSuccess builds the successful v1.150 0xB5BD body parsed by
-the client's CPSMission_OnItemUseResponse0xB5BD:
+sub_755e40:
 
 	[01][u8 slot][u16 remaining quantity][u16 type word]
 
@@ -105,8 +105,7 @@ func EncodeItemUseSuccess(slot uint8, remaining uint16, typeWord uint16) []byte 
 ==================
 EncodeItemUseError
 
-EncodeItemUseError builds the failure arm parsed by the client's
-CPSMission_OnItemUseResponse0xB5BD:
+EncodeItemUseError builds the failure arm parsed by sub_755e40:
 
 	[02][u8 notice code]
 

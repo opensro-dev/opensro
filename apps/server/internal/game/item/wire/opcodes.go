@@ -25,63 +25,53 @@ package wire
 // point of view: Request opcodes arrive from the client, the rest are sent.
 const (
 	// OpItemMoveRequest is the client's item-operation request.
-	// Composer CGInterface_RequestItemMove (client 699250), serializer
-	// ItemMoveRequest_Serialize (client 697E80).
+	// Composer sub_699250, serializer sub_697e80.
 	OpItemMoveRequest uint16 = 0x706D
 	// OpItemMoveResponse is the server's item-operation result row.
-	// Parser ItemMoveResponse_Deserialize (client 759A30), handler
-	// CPSMission_OnInventoryItemUseAck0xB06D (client 75A3D0).
+	// Parser sub_759a30, handler sub_75a3d0.
 	OpItemMoveResponse uint16 = 0xB06D
 	// OpTargetInteract is the multiplexed target/action request. A CIItem click
-	// serializes the pickup execute in CGInterface_OnWorldClick (client 698740); the one-byte form of
+	// serializes the pickup execute in sub_698740; the one-byte form of
 	// CGInterface_CancelSkillForKeyboardMove (0x693190) is a throttled
 	// cancel/recovery command, not an execute heartbeat.
 	OpTargetInteract uint16 = 0x72CD
 	// OpItemUseRequest is the selected inventory-item use request composed by
-	// CIFInventory_ExecuteItemAction (client 6961B0). The common potion
-	// body is [u8 slot][u16 type word].
+	// sub_6961b0. The common potion body is [u8 slot][u16 type word].
 	OpItemUseRequest uint16 = 0x75BD
-	// OpItemUseResponse is the item-use result parsed by the client's
-	// CPSMission_OnItemUseResponse0xB5BD. Its
+	// OpItemUseResponse is the item-use result parsed by sub_755e40. Its
 	// successful potion arm drives cooldown bookkeeping, SND_POTION, and the
 	// inventory stack replacement in that order.
 	OpItemUseResponse uint16 = 0xB5BD
-	// OpPickupAnim triggers the pickup scoop animation. Handler: the
-	// client's CPSMission_OnPickupAnim_0x35C7.
+	// OpPickupAnim triggers the pickup scoop animation. Handler sub_7780f0.
 	OpPickupAnim uint16 = 0x35C7
 	// OpTradeStarCount is the transport bag's trade level (tradestars.go).
 	OpTradeStarCount uint16 = 0x352D
-	// OpObjectDespawn removes a single entity. Handler: the client's
-	// CPSMission_OnEntityDespawn36AB.
+	// OpObjectDespawn removes a single entity. Handler sub_777310.
 	OpObjectDespawn uint16 = 0x36AB
 	// OpSingleObjectSpawn spawns one entity outside an object list.
-	// Handler: the client's CPSMission_OnLevelUpEffect0x30D7 ->
-	// CPSMission_DeserializeObjectSpawn single-object mode.
+	// Handler sub_7772f0 -> sub_777220 single mode.
 	OpSingleObjectSpawn uint16 = 0x30D7
 	// OpGroundOwnershipExpired clears CIItem's temporary owner reservation.
 	// v1.150 payload is exactly the ground entity GID dword (client 0x31E2).
 	OpGroundOwnershipExpired uint16 = 0x31E2
-	// OpObjectListChunk carries object-list entity rows. Handler: the
-	// client's CPSMission_OnAck0x3417.
+	// OpObjectListChunk carries object-list entity rows. Handler sub_77bdc0.
 	OpObjectListChunk uint16 = 0x3417
-	// OpObjectSourceMove repositions a remote entity. Handler: the
-	// client's CPSMission_OnEntitySpeedMode0x30E3.
+	// OpObjectSourceMove repositions a remote entity. Handler sub_775cb0.
 	OpObjectSourceMove uint16 = 0x30E3
 	// OpObjectSourceCorrection hard-corrects a remote entity's position.
-	// Handler: the client's CPSMission_OnEntityMoveUpdate0xB2F5.
+	// Handler sub_775b50.
 	OpObjectSourceCorrection uint16 = 0xB2F5
 	// OpCosDistanceError tells a player its step was refused by a COS
 	// tether: one byte, 1 = too far from the trade transport, 2 = too far
 	// from the capture-quest monster (CPSMission_OnCosTradeDistanceError0x342F
-	// (client 75DF40); the v1.188 server sends 0x30E7 from its
-	// COS-tether move validation).
+	// 75DF40; the v1.188 server sends 0x30E7 from its COS-tether move
+	// validation).
 	OpCosDistanceError uint16 = 0x342F
 	// OpObjectStateRefresh flips one discrete state channel on an entity.
-	// Handler: the client's CPSMission_OnEntityStateUpdate0x3122.
+	// Handler sub_777b60.
 	OpObjectStateRefresh uint16 = 0x3122
 	// OpLocalRebirthRequest is CIFMessageBox kind 3's self-rebirth choice.
-	// Inside the client's CGInterface_OnMsgBoxResult, client 6971F0
-	// composes a one-byte body at client 0x00697278 / client 0x00697346:
+	// sub_6971f0 composes a one-byte body at 0x00697278/0x00697346:
 	// 1 = the specified rebirth point, 2 = the present point (level <= 10).
 	OpLocalRebirthRequest uint16 = 0x32DC
 	// OpRebirthPointAppointRequest designates the selected teleport guide's
@@ -91,8 +81,7 @@ const (
 )
 
 // Item movement types, the discriminator byte shared by the 0x706D request and
-// the 0xB06D result (client ItemMoveRequest_Serialize / client
-// ItemMoveResponse_Deserialize dispatch on the same value).
+// the 0xB06D result (sub_697e80 / sub_759a30 dispatch on the same value).
 const (
 	// MoveTypeInventory moves between bag and equipment slots.
 	MoveTypeInventory uint8 = 0x00
@@ -117,12 +106,10 @@ const PickupGoldSlot uint8 = 0xFE
 
 // Native error codes for a failed 0xB06D ([0x02][code]).
 //
-// The client maps [0x02][code] through its
-// CPSMission_OnInventoryItemUseAck0xB06D ->
-// CGInterface_ShowSystemNotification as notice category 0x01; the
-// per-code UIIT keys below are read off that dispatcher's recovered
-// jump table (the CGInterface_ShowSystemNotification WIP fold). The
-// retired Node fixture collapsed every storage
+// The client maps [0x02][code] through sub_75a3d0 -> sub_689420 /
+// CGInterface_ShowSystemNotice as notice category 0x01; the per-code UIIT
+// keys below are read off that dispatcher's recovered jump table (the
+// sub_689420 WIP fold). The retired Node fixture collapsed every storage
 // refusal into 0x07; the per-cause codes replaced that in the
 // clothes/hard-armor wave so the player reads the retail reason instead of
 // a wrong "inventory full".
@@ -148,13 +135,11 @@ const (
 	// (non-equipable item, wrong socket class). INFERRED from the client
 	// notice table; the official GameServer byte for this cause is
 	// unverified. Reachability verdict (dump-audited): LIVE player-facing -
-	// the bag->equip composer (client CIFEquipment_DispatchItemDropAction
-	// / client CGInterface_RequestItemMove) does not socket-check, and
-	// the equip<->equip and unequip-swap-back legs reach this refusal
+	// the bag->equip composer (sub_594980/sub_699250) does not socket-check,
+	// and the equip<->equip and unequip-swap-back legs reach this refusal
 	// from real UI drags. The client also self-raises the SAME string
 	// (guide-only, no 0xB06D) on its avatar/itemmall pre-checks
-	// (at client 0x00594B63, client 0x006CA826), so the copy is already
-	// familiar to
+	// (@0x00594b63, @0x006ca826), so the copy is already familiar to
 	// players and notice-consistent for the server path.
 	ErrCodeCantEquip uint8 = 0x0E
 	// ErrCodeNotEnoughGold is UIIT_MSG_STRGERR_NOT_ENOUGH_GOLD (01:0f,
@@ -177,8 +162,7 @@ const (
 	ErrCodeNotEnoughHonor uint8 = 0xD4
 	// ErrCodeLevelRequired is UIIT_MSG_STRGERR_HIGHER_LEVEL_REQUIRED
 	// (01:10, banner + guide): the character level is below the item's
-	// RequiredLevel floor (native full-mask CSOItem_Query_789C60 bit
-	// 0x020, level
+	// RequiredLevel floor (native full-mask sub_789c60 bit 0x020, level
 	// byte player+0x820 vs the type-1 ReqLevel quad). NOTE: the retired Node fixture once
 	// misused this byte as "unknown character"; that use is gone - an item
 	// op without a bound character answers the silent generic
@@ -196,7 +180,7 @@ const (
 	ErrCodeItemUseDead uint8 = 0x89
 	// ErrCodeCosTarget is the low byte of the server COS-expendable
 	// producer's 0x1871. The v1.150 0xB5BD body carries one notice byte
-	// (the client's CPSMission_OnItemUseResponse0xB5BD).
+	// (755E40).
 	ErrCodeCosTarget uint8 = 0x71
 	// ErrCodeCosRefused is the same producer's plain 3: every refusal of
 	// the pet-cure
@@ -211,16 +195,15 @@ const (
 	// larger than the stack holds. INFERRED from the client notice table;
 	// unverified against the official GameServer. Reachability verdict
 	// (dump-audited): the retail divide dialog clamps its input to
-	// [1, stack-1] via SetNumericRange before composing (client
-	// CIFInventory_OpenSplitStack at client 0x0059C22B), so a genuine
-	// client never sends an over-remain split -
+	// [1, stack-1] via SetNumericRange before composing (sub_59c050
+	// @0x0059c22b), so a genuine client never sends an over-remain split -
 	// this byte only answers hostile/malformed type-0 packets, where the
 	// notice copy still matches the cause.
 	ErrCodeInputFewerThanRemain uint8 = 0x14
 	// ErrCodeGenderMismatch is UIIT_MSG_STRGERR_GENDER_MISMATCH (01:16,
 	// banner + guide): the item's RequiredSex (0 female, 1 male; 2 never
-	// refuses) does not match the character (native CSOItem_Query_789C60
-	// bit 0x040, charRecord+0x1ac vs ref[0x6b]).
+	// refuses) does not match the character (native sub_789c60 bit 0x040,
+	// charRecord+0x1ac vs ref[0x6b]).
 	ErrCodeGenderMismatch uint8 = 0x16
 	// ErrCodePositiveNumberOnly is
 	// UIIT_MSG_STRGERR_SPECIFY_POSITIVE_NUMBER_ONLY (01:29): a zero/absent
@@ -228,22 +211,19 @@ const (
 	// unverified against the official GameServer. Reachability verdict
 	// (dump-audited): the retail gold dialog clamps to the carried balance
 	// and its OK handler silently retires amounts <= 0 without composing
-	// (client CIFInventory_OnMessageBoxResult at client 0x0059CB0C),
-	// and the divide dialog seeds its amount to 1
+	// (sub_59c510 @0x0059cb0c), and the divide dialog seeds its amount to 1
 	// - so zero-quantity/zero-gold requests only arrive from hostile
 	// packets, where this byte keeps the semantically matching notice.
 	ErrCodePositiveNumberOnly uint8 = 0x29
 	// ErrCodeCountryMismatch is UIIT_MSG_STRGERR_COUNTRY_MISMATCH (01:2f,
 	// banner + guide): the item's Country (0 China, 1 Europe; 3 never
-	// refuses) does not match the character's race (native
-	// CSOItem_Query_789C60 bit
+	// refuses) does not match the character's race (native sub_789c60 bit
 	// 0x200, ref[0x27] vs charBody+0x9c).
 	ErrCodeCountryMismatch uint8 = 0x2F
 	// ErrCodeStrengthRequired / ErrCodeIntellectRequired are
 	// UIIT_MSG_STRGERR_HIGHER_STRENGTH_REQUIRED (01:30) /
 	// UIIT_MSG_STRGERR_HIGHER_INTELLECT_REQUIRED (01:31), banner + guide:
-	// native CSOItem_Query_789C60 bits 0x008/0x010 (STR/INT words
-	// player+0x834/+0x836
+	// native sub_789c60 bits 0x008/0x010 (STR/INT words player+0x834/+0x836
 	// vs ReqStr/ReqInt +0x1b0/+0x1b4). The shipped itemdata carries 0 in
 	// every ReqStr/ReqInt cell, so these are unreachable until an item
 	// actually requires a stat - and the character stat model lands with
@@ -258,8 +238,7 @@ const (
 	ErrCodeExclusiveArmorMix uint8 = 0x32
 	// ErrCodeCantEquipRazed is UIIT_MSG_STRGERR_CANT_EQUIP_RAZED_ITEM
 	// (01:37, banner + guide type 5): the razed/broken gate, native
-	// CSOItem_Query_789C60 bit 0x004 at client 0x00789CC7 - an item
-	// whose class carries a
+	// sub_789c60 bit 0x004 @0x00789cc7 - an item whose class carries a
 	// durability attribute (instance blob (+0xc0)[5]; itemdata Dur_U > 0)
 	// refuses to equip while its current durability reads 0.
 	ErrCodeCantEquipRazed uint8 = 0x37
@@ -282,18 +261,14 @@ const (
 	// exactly this (same party with the option bit may pass).
 	ErrCodeLockedByOther uint8 = 0x12
 	// ErrCodeCannotDropEquipped is the equipment-source ground-drop refusal
-	// (01:6d). PINNED in v1.150: the drop-confirm dialog, the client's
-	// CGInterface_RequestItemGroundDrop at client 0x0068D430, opens ONLY
-	// for an inventory-bag source (kind 0x46, client 0x0068D49D); an
-	// equipment source (kind 0x47) hits the notice arm inside
-	// CGInterface_RequestItemGroundDrop itself (client 0x0068D606, raising
-	// CGInterface_ShowSystemNotification category 01) and abandons
+	// (01:6d). PINNED in v1.150: the drop-confirm dialog sub_68d430
+	// @0x0068d430 opens ONLY for an inventory-bag source (kind 0x46,
+	// @0x0068d49d); an equipment source (kind 0x47) routes to
+	// CGInterface_ShowSystemNotice(gi, 1, 0x6d) @0x0068d606 and abandons
 	// without ever composing the type-0x07 packet. So a stock client cannot
 	// drop a worn item; a modified client can, and the server must refuse
 	// it here (LANE-4, levelup wave; GROK-V4 seq 76, COORD sign-off seq 93).
-	// The notice byte routes through the client's
-	// CPSMission_OnInventoryItemUseAck0xB06D ->
-	// CGInterface_ShowSystemNotification category 01,
+	// The notice byte routes through sub_75a3d0 -> sub_689420 category 01,
 	// where 01:6d resolves to UIIT_MSG_STRGERR_CANT_DROP_EQUIPED_ITEM_DIRECTLY
 	// (guide type 5) - the same worn-item message the retail UI shows
 	// locally, so the server refusal surfaces the retail notice with no
@@ -301,8 +276,7 @@ const (
 	ErrCodeCannotDropEquipped uint8 = 0x6D
 )
 
-// Object state channels carried by 0x3122's stateType byte (the
-// client's CPSMission_OnEntityStateUpdate0x3122).
+// Object state channels carried by 0x3122's stateType byte (sub_777b60).
 const (
 	StateChannelLife   uint8 = 0
 	StateChannelMove   uint8 = 1
@@ -319,11 +293,11 @@ const (
 )
 
 // Values for StateChannelMove. One shared motion enum: the client routes
-// the value through CICharactor_ApplyMovementMode (client 0x858450), whose mode
+// the value through sub_858450 / CICharactor_SetRunWalkMode, whose mode
 // table handles exactly 0 (stand, motion state 3), 2 (walk, speed channel
 // 0), 3 (run, speed channel 1) and 4 (sit, motion state 6); the paired
-// CIFActionTabPanel_SetMotionStateIcon (client 58BBC0) jump table
-// re-skins the toolbar for the same four values.
+// SetupActionButton jump table (sub_58bbc0) re-skins the toolbar for the
+// same four values.
 const (
 	MoveStateStand uint8 = 0
 	MoveStateWalk  uint8 = 2

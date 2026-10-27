@@ -97,8 +97,8 @@ func TestDecodeCosCommandPinsMountedAttackBytes(t *testing.T) {
 ================
 TestDecodeCosCommandPinsSteerAndStopBytes
 
-The vehicle's stop (tag 0x03, client SendAngleUpdatePacket 0x8777B0) and
-steer (tag 0x04, client SendSteeringUpdate 0x877540) carry one
+The vehicle's stop (tag 0x03, client CNavigationDeadreckon_SendAngleUpdatePacket 0x8777B0) and
+steer (tag 0x04, client CNavigationDeadreckon_SendSteeringUpdate 0x877540) carry one
 little-endian heading word after the tag, and nothing else.
 ================
 */
