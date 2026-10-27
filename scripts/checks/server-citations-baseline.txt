@@ -77,14 +77,12 @@ apps/server/internal/game/action/requirements.go 9
 apps/server/internal/game/action/requirements_test.go 7
 apps/server/internal/game/action/resurrection.go 2
 apps/server/internal/game/action/reversereturn.go 4
-apps/server/internal/game/action/runtime.go 1
 apps/server/internal/game/action/seatedcommand.go 1
 apps/server/internal/game/action/select_test.go 1
-apps/server/internal/game/action/skillcastfixture_test.go 8
+apps/server/internal/game/action/skillcastfixture_test.go 7
 apps/server/internal/game/action/skillcombat.go 1
 apps/server/internal/game/action/skillfield.go 1
 apps/server/internal/game/action/skillrecoveryeffect.go 4
-apps/server/internal/game/action/skilltuning.go 1
 apps/server/internal/game/action/stall.go 1
 apps/server/internal/game/action/stall_network.go 2
 apps/server/internal/game/action/storage_test.go 1
@@ -160,7 +158,7 @@ apps/server/internal/game/item/inventory/stack.go 4
 apps/server/internal/game/item/inventory/tradegoods.go 5
 apps/server/internal/game/item/inventory/transfer_test.go 1
 apps/server/internal/game/item/wire/actionemote.go 6
-apps/server/internal/game/item/wire/actionresultfixture_test.go 11
+apps/server/internal/game/item/wire/actionresultfixture_test.go 10
 apps/server/internal/game/item/wire/actionstate.go 3
 apps/server/internal/game/item/wire/ammunition.go 1
 apps/server/internal/game/item/wire/bursts.go 2
