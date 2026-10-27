@@ -5,7 +5,7 @@ package domain
 // mirror the client's ced160+0x24c record (sub_822d10 insert: sender
 // wstring +0x00, sender model ref +0x1c, packed receive time +0x3c, read
 // flag +0x40) plus the body the 0xB3F2 read-fetch fills lazily
-// (sub_8277d0 stores it at +0x20). The retail shard shape is
+// (client 8277D0 stores it at +0x20). The retail shard shape is
 // _Memo(ID64, CharID, FromCharName, Message, Date, Status, RefObjID) -
 // schema reference only.
 //
