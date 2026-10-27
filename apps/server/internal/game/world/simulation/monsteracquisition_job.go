@@ -16,7 +16,7 @@ package simulation
 
 import (
 	"math"
-	"sort"
+	"slices"
 
 	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/monster"
@@ -83,20 +83,9 @@ func jobQueryAcquisition(actor monster.Instance, from monster.Pose, players []pl
 	}
 	sight := uint32(sightFloat)
 	blocks := acquisitionBlocks(from, sight)
-	jobs := make(map[uint32]uint8, len(players))
-	for _, p := range players {
-		if p.OwnerGid == 0 {
-			jobs[p.Gid] = p.JobState
-		}
-	}
-	type candidate struct {
-		player    playerPose
-		block     int
-		companion bool
-		job       uint8
-	}
-	ordered := make([]candidate, 0, len(players))
-	for _, p := range players {
+	var stack [acquisitionCandidateStack]acquisitionCandidate
+	ordered := stack[:0]
+	for index, p := range players {
 		block := worldgeom.InterestBlockAt(worldgeom.RegionXZ{RegionID: p.Pose.RegionID, X: float64(float32(p.Pose.X)), Z: float64(float32(p.Pose.Z))})
 		order, inside := blocks.order(block)
 		if !inside || p.Gid == 0 || !monster.AllowsTargetStatus(actor.Ref.TidWord, actor.Nest.NativeTacticsFlags, p.NativeBodyStatus) {
@@ -104,7 +93,7 @@ func jobQueryAcquisition(actor monster.Instance, from monster.Pose, players []pl
 		}
 		job, companion := p.JobState, p.OwnerGid != 0
 		if companion {
-			owner, known := jobs[p.OwnerGid]
+			owner, known := ownerJobState(players, p.OwnerGid)
 			if !known || !ordinaryCompanionHostility(actor, p) {
 				continue
 			}
@@ -115,23 +104,15 @@ func jobQueryAcquisition(actor monster.Instance, from monster.Pose, players []pl
 		if !query.admits(job) || actor.JobTargetRefused(job) {
 			continue
 		}
-		ordered = append(ordered, candidate{player: p, block: order, companion: companion, job: job})
+		ordered = append(ordered, acquisitionCandidate{index: int32(index), gid: p.Gid, block: int32(order),
+			companion: companion, job: job})
 	}
-	sort.Slice(ordered, func(i, j int) bool {
-		a, b := ordered[i], ordered[j]
-		if a.block != b.block {
-			return a.block < b.block
-		}
-		if a.companion != b.companion {
-			return !a.companion
-		}
-		return a.player.Gid < b.player.Gid
-	})
-	var best candidate
+	slices.SortFunc(ordered, compareAcquisitionCandidates)
+	var best acquisitionCandidate
 	var bestDistance uint32
 	held := false
 	for _, c := range ordered {
-		distance := float64(acquisitionDistance(from, c.player.Pose))
+		distance := float64(acquisitionDistance(from, players[c.index].Pose))
 		if float64(sight) < distance {
 			continue
 		}
@@ -147,5 +128,24 @@ func jobQueryAcquisition(actor monster.Instance, from monster.Pose, players []pl
 	if !held {
 		return playerPose{}, false
 	}
-	return mountedOwnerRedirect(best.player, players), true
+	return mountedOwnerRedirect(players[best.index], players), true
+}
+
+/*
+================
+ownerJobState
+
+The job state of the player (not companion) entry with gid. The last
+such entry wins, as the GID-keyed table this replaced kept the last
+write; a linear scan, because companions are few and the table cost
+every query an allocation sized to the division (#1820 part C).
+================
+*/
+func ownerJobState(players []playerPose, gid uint32) (uint8, bool) {
+	for index := len(players) - 1; index >= 0; index-- {
+		if players[index].OwnerGid == 0 && players[index].Gid == gid {
+			return players[index].JobState, true
+		}
+	}
+	return 0, false
 }

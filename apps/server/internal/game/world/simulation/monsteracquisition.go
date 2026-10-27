@@ -9,10 +9,11 @@ monsteracquisition.go - native acquisition ordering and target lookup
 package simulation
 
 import (
+	"cmp"
 	"math"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/abnormal"
-	"sort"
+	"slices"
 
 	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/monster"
@@ -38,12 +39,12 @@ func ordinaryPlayerAcquisition(actor monster.Instance, from monster.Pose, player
 	}
 	sight := uint32(sightFloat)
 	blocks := acquisitionBlocks(from, sight)
-	type candidate struct {
-		player playerPose
-		block  int
-	}
-	ordered := make([]candidate, 0, len(players))
-	for _, player := range players {
+	// Candidates name their player by index into players: copying whole
+	// poses into a slice sized to the division cost every leg an
+	// allocation (#1820 part C). The stack buffer holds the usual few.
+	var stack [acquisitionCandidateStack]acquisitionCandidate
+	ordered := stack[:0]
+	for index, player := range players {
 		if player.OwnerGid != 0 {
 			continue // a companion is weighed with its owner
 		}
@@ -60,22 +61,17 @@ func ordinaryPlayerAcquisition(actor monster.Instance, from monster.Pose, player
 			!actor.JobTargetRefused(player.JobState) &&
 			monster.AllowsTargetStatus(actor.Ref.TidWord, actor.Nest.NativeTacticsFlags, player.NativeBodyStatus) &&
 			ordinaryPlayerHostility(actor, player) {
-			ordered = append(ordered, candidate{player: player, block: order})
+			ordered = append(ordered, acquisitionCandidate{index: int32(index), gid: player.Gid, block: int32(order)})
 		}
 	}
 	// The native terrain query visits rows, then columns; its block walk
 	// traverses each block's player tree and passes the object GID on.
 	// Sort a detached projection; never reorder the shared session snapshot.
-	sort.Slice(ordered, func(i, j int) bool {
-		if ordered[i].block != ordered[j].block {
-			return ordered[i].block < ordered[j].block
-		}
-		return ordered[i].player.Gid < ordered[j].player.Gid
-	})
+	slices.SortFunc(ordered, compareAcquisitionCandidates)
 	var best playerPose
 	var bestDistance uint32
 	for _, candidate := range ordered {
-		target, distance := nearestOwnerOrCompanion(actor, from, candidate.player, players)
+		target, distance := nearestOwnerOrCompanion(actor, from, players[candidate.index], players)
 		if acquisitionRankAccepts(best.Gid, bestDistance, distance, sight) {
 			best, bestDistance = target, uint32(distance)
 		}
@@ -84,6 +80,50 @@ func ordinaryPlayerAcquisition(actor monster.Instance, from monster.Pose, player
 		return playerPose{}, false
 	}
 	return mountedOwnerRedirect(best, players), true
+}
+
+// acquisitionCandidateStack is how many in-sight candidates the
+// acquisition queries hold without a heap allocation; more spill to the
+// heap through append, with the same order.
+const acquisitionCandidateStack = 32
+
+/*
+================
+acquisitionCandidate
+
+One in-sight candidate of an acquisition query: its index into the
+leg's players, and the sort key the native block walk visits it by
+(block order, players before companions, then GID).
+================
+*/
+type acquisitionCandidate struct {
+	index     int32
+	gid       uint32
+	block     int32
+	companion bool
+	job       uint8
+}
+
+/*
+================
+compareAcquisitionCandidates
+
+Block order, then players before companions, then GID. GIDs are unique
+within a leg's players, so the order is total and an unstable sort gives
+the one result sort.Slice gave.
+================
+*/
+func compareAcquisitionCandidates(a, b acquisitionCandidate) int {
+	if a.block != b.block {
+		return cmp.Compare(a.block, b.block)
+	}
+	if a.companion != b.companion {
+		if a.companion {
+			return 1
+		}
+		return -1
+	}
+	return cmp.Compare(a.gid, b.gid)
 }
 
 /*

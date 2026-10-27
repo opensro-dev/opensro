@@ -353,6 +353,26 @@ func BuildNpcCreateRow(npc NpcDef, anchor Spawn) []byte {
 	return w.Payload()
 }
 
+/*
+================
+npcPatrolCount
+
+How many roster NPCs patrol. The frame builders size their slice by it:
+the world roster is every authored NPC and few or none patrol, so a
+slice sized to the roster cost every session an allocation per tick for
+frames it never held (#1820 part C).
+================
+*/
+func npcPatrolCount(roster []NpcDef) int {
+	count := 0
+	for index := range roster {
+		if roster[index].Patrol {
+			count++
+		}
+	}
+	return count
+}
+
 // npcPatrolPose converts a PatrolState into the shared wire position.
 func npcPatrolPose(state PatrolState) wire.Position {
 	return wire.Position{
@@ -367,7 +387,11 @@ func npcPatrolPose(state PatrolState) wire.Position {
 // NpcMoveFrames is one 0x30E3 source move per roster NPC for the given tick
 // (the entity-tick payload the reference npc-tick pull seam served).
 func NpcMoveFrames(roster []NpcDef, anchor Spawn, tick int64) []Frame {
-	frames := make([]Frame, 0, len(roster))
+	patrols := npcPatrolCount(roster)
+	if patrols == 0 {
+		return nil
+	}
+	frames := make([]Frame, 0, patrols)
 	for index := range roster {
 		if !roster[index].Patrol {
 			continue
@@ -390,7 +414,11 @@ func NpcMoveFrames(roster []NpcDef, anchor Spawn, tick int64) []Frame {
 // snaps the remote entity onto the server's canonical track (the lenient
 // PathCtl re-seed the native runs).
 func NpcCorrectionFrames(roster []NpcDef, anchor Spawn, tick int64) []Frame {
-	frames := make([]Frame, 0, len(roster))
+	patrols := npcPatrolCount(roster)
+	if patrols == 0 {
+		return nil
+	}
+	frames := make([]Frame, 0, patrols)
 	for index := range roster {
 		if !roster[index].Patrol {
 			continue
@@ -421,7 +449,11 @@ func NpcMoveStateFrames(roster []NpcDef, tick int64) []Frame {
 }
 
 func npcMoveStateFrames(roster []NpcDef, channel, value uint8) []Frame {
-	frames := make([]Frame, 0, len(roster))
+	patrols := npcPatrolCount(roster)
+	if patrols == 0 {
+		return nil
+	}
+	frames := make([]Frame, 0, patrols)
 	for index := range roster {
 		if !roster[index].Patrol {
 			continue

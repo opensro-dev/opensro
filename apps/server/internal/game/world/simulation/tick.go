@@ -907,9 +907,11 @@ func (t *Ticker) runSessionLegs(state *divisionTickState, session SessionSnapsho
 	}
 
 	// Leg 1: the per-session NPC entity tick.
+	// An empty batch delivers nothing (Bridge.deliver), so skip the push.
 	if session.NpcsEnabled && len(t.Roster) > 0 {
-		frames := NpcMoveFrames(t.Roster, session.NpcAnchor, tick)
-		t.Push.PushToSession(session.SessionID, frames)
+		if frames := NpcMoveFrames(t.Roster, session.NpcAnchor, tick); len(frames) != 0 {
+			t.Push.PushToSession(session.SessionID, frames)
+		}
 	}
 
 	// Legs 2+3: the other-player movement broadcast.
