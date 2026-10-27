@@ -649,7 +649,7 @@ test("a profile saved before the flip loads with WebTransport on; a choice under
 	] ) );
 	assert.equal( before.options.webTransport, true );
 	assert.equal( before.options.chatTimestamps, true );
-	assert.equal( "webTransport" in (before.raw), false );
+	assert.ok( before.raw && typeof before.raw === "object" && !("webTransport" in before.raw) );
 	// Stored under the current key after the flip: an explicit off stays off.
 	const after = storedExperimentalOptions( storageOf( [
 		[ PREVIOUS_EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { chatTimestamps: true } ) ],
