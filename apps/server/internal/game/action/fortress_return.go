@@ -5,7 +5,7 @@ fortress_return.go - the action window's "Return to fortress" (1015)
 
 CGInterface_ExecuteActionCommand (client 695420) case 1015 looks up the
 fortress its guild occupies (GlobalDataManager_FindFortressIdByOwnerName
-7E24B0) and sends 0x7025 [u32 fortress]. The GameServer
+client 7E24B0) and sends 0x7025 [u32 fortress]. The GameServer
 answers by the PC's own guild:
 it sends a guild member of the occupying guild to a revival gate of its
 fortress (teleport kind 2), unless the owner
@@ -14,7 +14,7 @@ v1.150 client reads a refusal as 0xB025 [u8 2][u8 code], notice category
 0x1F (689420): 6 a job suit is worn (UIIT_MSG_FORT_PORTALSTONE_FAIL_02), 7
 no occupied fortress (FAIL_03), 8 not yet (FAIL_01). The cooldown reaches
 the action window as 0x3792 [u8 2][u8 5][u32 seconds]
-(CNetProcessSecond_OnTimedJobState3792 766E30).
+(the client's CNetProcessSecond_OnTimedJobState3792 766E30).
 
 INFERENCE: the reference server also refuses inside a world whose vtable +0x78 says so
 (0x7C09); only instance worlds can, and v1.150 has no code for it, so a

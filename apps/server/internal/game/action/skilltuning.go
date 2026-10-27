@@ -34,7 +34,7 @@ fixedDamageResult
 The pdmg record: a normal result carrying
 the reference server's fixed skill damage: the amount plus the
 caster's SAAA when the row reads it (getv +0x538), cut by the target's
-level advantage. The record skips the CFormulae lanes: no defense, parry
+level advantage. The record skips the damage-formula lanes: no defense, parry
 or STR/INT balance, and no critical or block roll, since the native
 hit outcome rolls those only for att lanes.
 ================

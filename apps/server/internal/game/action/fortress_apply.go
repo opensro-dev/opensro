@@ -188,8 +188,8 @@ fortressWarStatus
 Subtype 6, the official's "fortress war" row (CIFNpcTalk action 0x34 row
 1): [6][1], the next war's start as a 16-byte SYSTEMTIME, then whether the
 guild has applied and, if so, the fortress and kind. The v1.150 client
-opens the application window on it (754A40 -> 69EA10, 663200) and derives
-every date it shows from that one time (660C70: the war until two hours
+opens the application window on it (client 754A40 -> 69EA10, 663200) and derives
+every date it shows from that one time (client 660C70: the war until two hours
 later, applications from three days before to the day before). The reference
 server writes four month/day/hour/minute quadruples instead; the v1.150
 reader is the contract here.

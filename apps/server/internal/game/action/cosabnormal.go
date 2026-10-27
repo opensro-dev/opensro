@@ -491,7 +491,7 @@ func (rt *Runtime) cosAbnormalPublication(gid uint32, o *cosAbnormalOwner) []wir
 	}
 	// The state snapshot (server 30D2, v1.150 0x36C7) is sent natively only when
 	// vfunc +1C reports a player; the client applies 0x36C7 to the local
-	// player (77C110). A COS publishes its mask through the shared vitals
+	// player (client 77C110). A COS publishes its mask through the shared vitals
 	// channel (dirty bit 0x100 -> 33A6) alone.
 	frames := append([]wire.Frame(nil), o.public...)
 	if o.hpChanged || o.mpChanged {

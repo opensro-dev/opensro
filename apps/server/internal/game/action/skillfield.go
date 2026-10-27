@@ -190,7 +190,7 @@ func (rt *Runtime) fieldInstance(division, name string, skillID uint32) (uint32,
 ================
 retireFieldRecipients
 
-tagActiveSkillInstance_RequestRetirement for each recipient that still holds
+The skill instance's retirement for each recipient that still holds
 the field's skill. The teardown writes the saved record (skill jobs, body
 status, transform, stored HP/MP), so it runs in the leaver's tick door
 (endEffectsInTickDoor, #1836).

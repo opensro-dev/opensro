@@ -49,7 +49,7 @@ func useSummonerFixture(t *testing.T, rt *Runtime, c *enterworld.Character, slot
 	if len(result.Frames) == 0 || result.Frames[0].Opcode != wire.OpItemUseResponse || result.Frames[0].Payload[0] != 1 {
 		t.Fatalf("summon refused: %+v", result)
 	}
-	// 854CD0: the owner's summon row ends with sub-state 1 (a fresh summon).
+	// Client 854CD0: the owner's summon row ends with sub-state 1 (a fresh summon).
 	for _, frame := range result.Frames {
 		if frame.Opcode == wire.OpSingleObjectSpawn && frame.Payload[len(frame.Payload)-1] != cosSpawnFresh {
 			t.Fatalf("summon spawn sub-state = %d, want %d", frame.Payload[len(frame.Payload)-1], cosSpawnFresh)

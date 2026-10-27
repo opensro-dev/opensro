@@ -4,7 +4,7 @@
 gmmobkill.go - GM /MOBKILL: kill the monster the GM has selected
 
 The client sends subcommand 0x14 with the selected target's object id and a
-mode word of 0 or 1 (GmCommand_ProcessChatSlashCommand @0x0050b754). The
+mode word of 0 or 1 (client GmCommand_ProcessChatSlashCommand @0x0050b754). The
 mode meaning below is INFERENCE from community GM guides for the V-Sro
 client; no server binary was read:
 

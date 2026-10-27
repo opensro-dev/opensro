@@ -232,7 +232,7 @@ func (rt *Runtime) HandleGuildMasterLeave(division string, c *enterworld.Charact
 HandleGuildCompensation
 
 0x7140 from the compensation row (reference server): a guild member asks
-what guild wars owe the guild; [1][u32 gold] opens the claim box (5D4050)
+what guild wars owe the guild; [1][u32 gold] opens the client's claim box (5D4050)
 and nothing owed answers 0x45.
 ================
 */

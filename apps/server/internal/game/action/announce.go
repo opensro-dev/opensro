@@ -99,7 +99,7 @@ const sealCodenameSuffix = "_RARE"
 
 // sealNoticeNames name a sealed item's tier in the drop notice with the
 // client's own words: the English PARAM_RARE_FIRST/SECOND/THIRD rows of
-// textuisystem that ItemTooltip_AppendRareGrade (558FF0) shows, indexed by
+// textuisystem that the client's ItemTooltip_AppendRareGrade (558FF0) shows, indexed by
 // enterworld.EquipmentSeal's tier ((ItemClass - 1) % 3).
 var sealNoticeNames = [enterworld.SealTiers]string{
 	enterworld.SealStar: "Seal Of Star",
@@ -661,7 +661,7 @@ func (rt *Runtime) postMostWantedNotice(n mostWantedNotice) {
 	rt.announce(n.division, announceMostWanted, n.text, wire.NoticeLink{}, 0, n.nowMs)
 }
 
-// noticeMaxUnits is wire.NotificationFrame's UTF-16 budget (753A6F).
+// noticeMaxUnits is wire.NotificationFrame's UTF-16 budget (client 753A6F).
 const noticeMaxUnits = 100
 
 /*

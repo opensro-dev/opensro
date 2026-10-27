@@ -23,7 +23,7 @@ import (
 // W3 base falsifiers for the 0x745A object select/interact handler; W5
 // extends, and the NPC-select lane appends the 0xB45A emission pins. The
 // wire bytes are the client contract: exactly [u32le gid] (native
-// NPC-click trace body 41 0D 03 00, and the sub_692ba0 4-byte append).
+// NPC-click trace body 41 0D 03 00, and the client 692BA0 4-byte append).
 // The live roster-NPC grant answers the 0xB45A talk grant (hand-rolled
 // oracle bytes below); player and ground grants and every refusal stay
 // frameless - see the select.go package comment.

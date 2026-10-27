@@ -325,8 +325,9 @@ type Runtime struct {
 	// production uses crypto/rand so concurrent rolls share no mutable PRNG.
 	GachaRoll func() (uint32, error)
 
-	// CombatRoll is the v1.188 CFormulae rand() domain. Formula tests inject
-	// exact sequences; production uses an independent cryptographic draw.
+	// CombatRoll is the rand() domain of the reference server's damage
+	// formulas. Formula tests inject exact sequences; production uses an
+	// independent cryptographic draw.
 	CombatRoll combat.Roll32767
 
 	// CompanionRoll supplies the shared native spawn-position sampler without

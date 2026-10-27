@@ -7,7 +7,7 @@ fortress_production.go - the fortress smith's and trainer's orders
 (trainer, 0x1B): query, start, cancel and collect one order per staff
 member. The handlers are the reference server's smith and
 trainer families; the v1.150 replies are what
-754A40 reads, which match the reference writers byte for byte after the
+client 754A40 reads, which match the reference writers byte for byte after the
 [action][result] header:
 
 	query   [fortress u32][present u8]{ref u32, count u16, done u8, remaining i64}

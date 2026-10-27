@@ -42,7 +42,7 @@ import (
 )
 
 // instanceInvitePromptType is the 0x3393 prompt type the client reads
-// as the quest instance invitation (0x7644E0's type-7 arm).
+// as the quest instance invitation (client 0x7644E0's type-7 arm).
 const instanceInvitePromptType uint8 = 7
 
 // instanceInviteAnswerWindowMs is the answer window: the shared
@@ -293,7 +293,7 @@ func (rt *Runtime) InstancePartyFacts(division, name string) InstancePartyFacts 
 instanceInvitePrompt
 
 The S->C 0x3393 type-7 prompt: the inviter's gid, then the struct
-QuestInstanceInvite_Read (0x764380) parses - u32, u8, u32, u8, u8,
+The client's QuestInstanceInvite_Read (0x764380) parses - u32, u8, u32, u8, u8,
 u32, u32, u16 member count, that many member gids. The client acts on
 none of the struct fields, so they compose as zeros except the member
 gid list it reads past; the port depends on no field semantics

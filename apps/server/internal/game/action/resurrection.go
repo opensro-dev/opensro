@@ -8,8 +8,8 @@ skill effect step looks at each target that is a dead
 player (life 2) no higher than resu word 0, works out what a revival would
 give, and queues a peer-response proposal:
 0x3080 type 4, or type 8 with an rmut skill. The v1.150 wire is
-0x3393 {u8 type, u32 casterGid}: type 4 opens confirm box kind 4 (7644E0
-case 3), type 8 the REBIRTH_MUTATION message box (7644E0 case 7); both
+0x3393 {u8 type, u32 casterGid}: type 4 opens confirm box kind 4 (client 7644E0
+case 3), type 8 the REBIRTH_MUTATION message box (client 7644E0 case 7); both
 answer 0x3393 {1, button} (CGInterface_OnMsgBoxResult case 1).
 
 The native wait-response transaction applies a nonzero answer from a player

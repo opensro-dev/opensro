@@ -20,7 +20,7 @@ or none:
 	                              each period, until the package ends
 	UQL1:<quest>, A, period, n    a limited quest use: the premium quest n times
 	                              each period (quest/premiumlimit.go)
-	BFI1:<item>, A, seconds       CBuffItem: a stall booth decoration
+	BFI1:<item>, A, seconds       a buff item: a stall booth decoration
 
 The package's Param1 is its period in seconds; UIL1 and UQL1 end with it,
 BFI1 runs its own seconds. Pet composites (PSU1, BCS1) are pet-owned and

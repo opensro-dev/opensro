@@ -41,7 +41,7 @@ const (
 	genderErrSlot   uint8 = 0x82
 	genderErrDegree uint8 = 0x83
 	genderErrTarget uint8 = 0x84
-	// itemStateRefFlag is 0x3645's reference field (7654B0 flag 1).
+	// itemStateRefFlag is 0x3645's reference field (client 7654B0 flag 1).
 	itemStateRefFlag uint8 = 1
 )
 

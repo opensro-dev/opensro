@@ -54,7 +54,7 @@ const (
 ================
 cosTerminateResult
 
-7782A0 reads a result byte; anything but 1 is followed by one failure byte
+Client 7782A0 reads a result byte; anything but 1 is followed by one failure byte
 shown in notification category 12, the same grammar as 0xB56C. v1.188
 writes the code as a u16; its low byte is what the v1.150 client reads.
 ================

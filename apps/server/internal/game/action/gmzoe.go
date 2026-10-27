@@ -4,7 +4,7 @@
 gmzoe.go - GM /ZOE: spawn monsters at the GM and kill them immediately
 
 The client sends subcommand 0x0C with the monster reference id and a count
-clamped to 1..255 (GmCommand_ProcessChatSlashCommand @0x0050a6dd, three
+clamped to 1..255 (client GmCommand_ProcessChatSlashCommand @0x0050a6dd, three
 builder calls of 1, 4 and 1 bytes). The effect is INFERENCE from community GM
 guides for the V-Sro client, not from a server binary:
 

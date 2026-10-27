@@ -156,7 +156,7 @@ func (rt *Runtime) expireBerserkInDivision(key string, job berserkExpiry, now in
 				return false
 			}
 			c.BerserkUntilMs = 0
-			// AJStateChanger kind4 preserves current invisible body4.
+			// The reference server's kind-4 state change keeps an invisible body 4.
 			if c.NativeBodyStatus != 4 {
 				if c.TransitionBodyStatus(domain.BodyStatusTransition{}) {
 					frames = append(frames, bodyStatusFrame(sourceGID, 0))

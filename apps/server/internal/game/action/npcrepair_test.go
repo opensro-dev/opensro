@@ -71,7 +71,7 @@ func TestSmithRepairsEverythingForItsPrice(t *testing.T) {
 TestRepairOfAWholeItemIsNotAPurseRefusal
 
 A whole item, such as a fresh drop the client prices one point short
-(78BD00 rounds where the server's base stats truncate), answers the repair cost's 0x1C09, which the
+(client 78BD00 rounds where the server's base stats truncate), answers the repair cost's 0x1C09, which the
 client keeps silent; Repair All with nothing damaged still answers 1. Only
 a quote the gold cannot pay says 0x1C07.
 ================

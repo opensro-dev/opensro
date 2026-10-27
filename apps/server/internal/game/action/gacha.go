@@ -489,13 +489,13 @@ func (rt *Runtime) prepareGachaRewardItem(reward *enterworld.ItemRef, quantity u
 ================
 HandleGachaExchange
 
-HandleGachaExchange answers 0x71BE [operatorGid] from the talk row 5DB67B
+HandleGachaExchange answers 0x71BE [operatorGid] from the client's talk row 5DB67B
 sends once 642270 found a voucher in the bag. Per the reference server's exchange,
 the lowest-slot win or loss voucher is consumed and its recorded pair,
 reference id then quantity, becomes bag items with the native roll giving +1..+5
 OptLevel, 5-bit white variance + durability, and blue magic options on
 equipment rewards. The voucher leaves by a 0x3645 quantity of zero rather
-than a row delete, because that is the update 7654B0 turns into
+than a row delete, because that is the update client 7654B0 turns into
 UIIT_MSG_GACHA_EXCHANGE.
 
 The removal is pinned to the slot whose pair was read, never to the codename:
@@ -596,7 +596,7 @@ func (rt *Runtime) HandleGachaExchange(
 		character.MissionInventory = rows
 		// The native client wants the voucher's quantity update, not a row delete,
 		// and first: the freed slot is the first free one, so the reward usually
-		// lands in it, and 7654B0 must still find the voucher there.
+		// lands in it, and client 7654B0 must still find the voucher there.
 		quantityFrame := wire.Frame{
 			Opcode:  gacha.OpItemStateDelta,
 			Payload: wire.NewWriter(4).U8(slot).U8(8).U16(0).Payload(),

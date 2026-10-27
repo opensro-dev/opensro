@@ -99,7 +99,7 @@ func (rt *Runtime) retireGroundApproaches() {
 		var frames []wire.Frame
 		if pickup {
 			// Inference: retiring the blocked pickup completes its command. The
-			// native 75BAA0 count consumer needs the same release as other endings.
+			// client 75BAA0 count consumer needs the same release as other endings.
 			state := wire.ReleaseActionState()
 			state.State = rt.actionQueueCount(stop.division, stop.name)
 			frames = append(frames, wire.Frame{Opcode: wire.OpActionState, Payload: state.Encode()})

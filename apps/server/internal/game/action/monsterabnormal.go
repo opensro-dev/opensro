@@ -179,7 +179,7 @@ func (c monsterAbnormalContext) RetiresSkill(skillID uint32, all bool) bool {
 ================
 abnormalRandom
 
-abnormalRandom is the caster's CZoeZoeRnd stream (keyed by ECX) and the
+abnormalRandom is the caster's own random stream (keyed by the caster) and the
 process rand() the time bomb draws.
 ================
 */
@@ -392,7 +392,7 @@ func (rt *Runtime) advanceMonsterAbnormal(division string, gid uint32, nowMs int
 	}
 	for _, hit := range plan.Effects.Hits {
 		// The reference server emits 3058 privately to the credited source; v1.150's
-		// handler is 3128 -> 74FE80 (gid, raw damage). The detonation has its
+		// client handler is 3128 -> 74FE80 (gid, raw damage). The detonation has its
 		// own public presentation below.
 		if source := ctx.rewardOwner(division, hit.SourceGID, hit.SourceName); source != nil && hit.Credited && hit.Reason == abnormalDamageOverTimeReason {
 			if hit.Damage > 0 {
@@ -460,7 +460,7 @@ type privateFrames struct {
 timeBombFrame
 
 timeBombFrame is the native detonation broadcast (research B0BC), v1.150
-B3C6 type 4 (7756D0): flags (80 fatal), victim gid, u16 damage.
+B3C6 type 4 (client 7756D0): flags (80 fatal), victim gid, u16 damage.
 ================
 */
 func timeBombFrame(gid, damage uint32, fatal bool) wire.Frame {

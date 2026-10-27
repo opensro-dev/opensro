@@ -3,7 +3,7 @@
 
 cosfollow.go - returning a commanded pet to its existing follow owner
 
-Native 6A271B checks the command class (gold/cash pet), then emits tag 9.
+The client (6A271B) checks the command class (gold/cash pet), then emits tag 9.
 The command cancels outstanding target work; normal follower advancement owns
 the return path and its collision checks. It never moves the player.
 

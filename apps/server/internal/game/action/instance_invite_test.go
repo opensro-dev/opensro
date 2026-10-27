@@ -120,8 +120,8 @@ func TestInstanceInvitePromptsThePartyAndMovesAccepts(t *testing.T) {
 	leaderGid := enterworld.ObjectIDForCharacter(f.leader)
 	// The exact composition, pinned to the native literals rather than to
 	// the constants (a typo in instanceInvitePromptType must fail here):
-	// type 7 (0x7644E0's arm), the inviter gid, the 19 zero bytes of the
-	// struct QuestInstanceInvite_Read (0x764380) reads past, the count, then
+	// type 7 (client 0x7644E0's arm), the inviter gid, the 19 zero bytes of the
+	// client struct QuestInstanceInvite_Read (0x764380) reads past, the count, then
 	// the whole party's gids.
 	header := []byte{7, 0, 0, 0, 0}
 	binary.LittleEndian.PutUint32(header[1:5], leaderGid)

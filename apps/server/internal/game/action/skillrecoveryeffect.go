@@ -8,8 +8,8 @@ recipients only see it land because the server also sends each of them an
 attached-effect add with instance token 0. The v1.150 client plays a
 skill's ACT_S / ACT_L stages (Force Heal's water_hpheal_effect_a, Force
 Cure's water_cure_effect_a) only for an attached effect (0xB419, 776450 ->
-8DF220 -> 8DD6F0); token 0 makes 8DD6F0 run them once and extinguish the
-decoration at once (8DD110), so nothing is listed and no icon is shown.
+8DF220 -> 8DD6F0); token 0 makes client 8DD6F0 run them once and extinguish the
+decoration at once (client 8DD110), so nothing is listed and no icon is shown.
 
 The v1.188 server sends it from the tail of its skill-effect application:
 it allocates 0xB0BD (the v1.188

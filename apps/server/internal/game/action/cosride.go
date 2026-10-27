@@ -40,7 +40,7 @@ const (
 ================
 cosRideFailure
 
-777F60 consumes one notification-category-14 byte after the failure marker.
+Client 777F60 consumes one notification-category-14 byte after the failure marker.
 Only the requester receives refusals; observers retain the committed state.
 ================
 */
@@ -52,7 +52,7 @@ func cosRideFailure(code uint8) OpResult {
 ================
 HandleCosRide
 
-CNetProcess_SendCosRideToggle74B5 (6FFB40) writes a state byte then one GID.
+The client's CNetProcess_SendCosRideToggle74B5 (6FFB40) writes a state byte then one GID.
 Malformed, foreign and repeated requests cannot alter the current mover.
 ================
 */

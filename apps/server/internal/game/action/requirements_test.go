@@ -7,7 +7,7 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 )
 
-// The character-vs-itemdata equip gates (native sub_789c60 full-mask bits
+// The character-vs-itemdata equip gates (client 789C60 full-mask bits
 // mirrored server-side), in native evaluation order: razed 0x004 -> STR
 // 0x008 -> INT 0x010 -> level 0x020 (the type-1 quad walk) -> mastery
 // 0x100 (the type>0x0a quad walk) -> gender 0x040 -> exclusivity 0x080 ->
@@ -95,7 +95,7 @@ func requirementTestItems() staticItemSource {
 			RefObjID: 13200, Codename: "ITEM_EU_M_CLOTHES_07_BA_A", TypeIDs: [4]int64{3, 1, 9, 3},
 			Country: 1, ReqQuadTypes: [4]int64{514, 516, 517, 518}, ReqQuadValues: [4]int64{60, 60, 60, 60}, RequiredSex: 1,
 		},
-		// The fortress siege hammer shape (TID 3.1.6.16, the sub_5504c0
+		// The fortress siege hammer shape (TID 3.1.6.16, the client's 5504C0
 		// family): role mask -1 = any fortress-guild role, like all 14
 		// shipped rows.
 		"ITEM_FORT_FORTRESS_HAMMER_06": {
@@ -290,7 +290,7 @@ func TestEquipRefusesGenderMismatch(t *testing.T) {
 	}
 }
 
-// The razed/broken gate (native sub_789c60 bit 0x004 @0x00789cc7): an item
+// The razed/broken gate (client 789C60 bit 0x004 @0x00789cc7): an item
 // whose CLASS carries a durability attribute (Dur_U > 0) refuses to equip
 // while its instance durability reads 0; durability-less accessories at 0
 // pass; and razed evaluates BEFORE the STR bit (0x008).
@@ -564,9 +564,9 @@ func TestEquipRingSecondHandRunsRequirementGates(t *testing.T) {
 	})
 }
 
-// The fortress-guild gate (native sub_789c60 bit 0x400 @0x00789fd7) is
+// The fortress-guild gate (client 789C60 bit 0x400 @0x00789fd7) is
 // SOFT: a character with NO fortress-guild member record passes
-// (@0x0078a02e) - the retail posture for everyone outside a fortress
+// (client @0x0078a02e) - the retail posture for everyone outside a fortress
 // guild, and this server's permanent posture until a fortress membership
 // model exists. The refusal fires only when a member record exists and
 // its role byte shares no bit with the item's mask.

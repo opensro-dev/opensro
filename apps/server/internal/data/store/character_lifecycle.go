@@ -67,13 +67,16 @@ func (s *Store) CreateCharacter(divisionID, accountID string, c *domain.Characte
 	if !nativeCharacterNameShapePattern.MatchString(c.Name) {
 		return fmt.Errorf("%w: %q violates the native name shape (letters, digits, underscore)", ErrCharacterNameInvalid, c.Name)
 	}
-	// Native name-length bound: 2..12 inclusive. Three v1.150 client sites
-	// gate it with the same unsigned idiom (len - 2 > 0xa), refusing len < 2
-	// or len > 12: @0x0072bef7 / @0x0072faa7 (UIO_MSG_ERROR_CHARACTER_NAME_
-	// STRING) and @0x007342f0 (UIO_MSG_ERROR_CHARACTER_NAME); the shipped
-	// string tells the player "Only 12 English letters are available.[Min.,
-	// Max.]". The retail SERVER enforced it too (charselect SMERR vector
-	// @0x00cc9e60: UIO_SMERR_NOT_ALLOWED_CHARNAME + the NAME_STRING key).
+	// Native name-length bound: 2..12 inclusive. Three v1.150 client
+	// sites gate it with the same unsigned idiom (len - 2 > 0xa),
+	// refusing len < 2 or len > 12 (CPSCharacterCreate_ValidateNameLocally
+	// and CPSCharacterCreate_ValidateNameEdit raise
+	// UIO_MSG_ERROR_CHARACTER_NAME_STRING, the rename window's
+	// CPSCharacterSelect_ValidateNameChangeEdit raises
+	// UIO_MSG_ERROR_CHARACTER_NAME); the shipped string tells the
+	// player "Only 12 English letters are available.[Min., Max.]". The
+	// retail server enforced it too, refusing with
+	// UIO_SMERR_NOT_ALLOWED_CHARNAME.
 	// The client counts an edit-control length; the
 	// charset gate above has already restricted the name to ASCII
 	// [A-Za-z0-9_], so byte length == rune count == UTF-16 code-unit count -
