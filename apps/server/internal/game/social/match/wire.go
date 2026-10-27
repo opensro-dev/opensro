@@ -65,9 +65,8 @@ const (
 // S->C opcodes, pinned from the client inbound folds. The party four ride
 // the CPSMission packet table (CPSMission_RegisterPacketHandlers);
 // the mentor four ride the CNetProcessSecond table
-// (CNetProcessSecond_RegisterPacketHandlers) - on this gateway both
-// arrive over
-// the one live transport session.
+// (CNetProcessSecond_RegisterPacketHandlers) - on this gateway
+// both arrive over the one live transport session.
 const (
 	// OpPartyRegisterAck: client CPSMission_OnPartyMatchingRecordResponse0xB6FF -
 	// flag 1 + the registration ack blob (PartyMatchRecord_ReadWire).
