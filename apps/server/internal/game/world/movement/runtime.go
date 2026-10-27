@@ -76,9 +76,10 @@ type Runtime struct {
 	// TownEntryBlocked is the thief's stolen-goods rule (#721): a thief in
 	// job mode with a summoned transport may not cross from a battlefield
 	// region into a protected one (the server's job-region transition rule
-	// for transports). It gets the region the move leaves and the one it reaches,
-	// checked at the same boundaries as CanEnterRegion; a refusal carries
-	// the native 0x3058 notice. Nil allows every entry.
+	// for transports). It gets one region change, and movement asks it for
+	// every change a walk makes (thiefCargoCrossingBlocked): a refused
+	// destination move carries the native 0x3058 notice, a direction walk
+	// stops at the border. Nil allows every entry.
 	TownEntryBlocked func(character *enterworld.Character, fromRegion, toRegion uint16) bool
 	// ClearPendingPickup, when set, clears the character's pickup-approach
 	// latch before a ground move applies (the reference clears
@@ -316,6 +317,33 @@ func thiefCargoTownRefusal() MoveOutcome {
 
 /*
 ==================
+thiefCargoCrossingBlocked
+
+Whether the walk from->to makes a region change TownEntryBlocked refuses.
+The reference server tests the transport's region on every movement step
+(its per-step movement asks the transport's job-region check), so a walk
+from a battlefield through a protected sector and back out is refused at
+its first protected entry, not only judged by its two ends (#721).
+==================
+*/
+func (rt *Runtime) thiefCargoCrossingBlocked(character *enterworld.Character, from, to simulation.Spawn) bool {
+	if rt.TownEntryBlocked == nil {
+		return false
+	}
+	regions := worldgeom.RegionsAlong(
+		worldgeom.RegionXZ{RegionID: from.RegionID, X: from.X, Z: from.Z},
+		worldgeom.RegionXZ{RegionID: to.RegionID, X: to.X, Z: to.Z},
+	)
+	for i := 1; i < len(regions); i++ {
+		if rt.TownEntryBlocked(character, regions[i-1], regions[i]) {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+==================
 HandleMove
 
 HandleMove ports moveMissionCharacter over the native 0x7738 body:
@@ -492,7 +520,7 @@ func (rt *Runtime) handleMoveLocked(divisionID string, character *enterworld.Cha
 				Reason:          "areaAccessDenied",
 			})
 		}
-		if rt.TownEntryBlocked != nil && rt.TownEntryBlocked(character, live.RegionID, goal.RegionID) {
+		if rt.thiefCargoCrossingBlocked(character, live, goal) {
 			return thiefCargoTownRefusal()
 		}
 		committed, committedWalk, refusal := rt.AdmitGroundWalk(character.Name, live, state.LiveOwnerAt(nowMs), goal)
@@ -510,7 +538,7 @@ func (rt *Runtime) handleMoveLocked(divisionID string, character *enterworld.Cha
 				Reason:          "areaAccessDenied",
 			})
 		}
-		if rt.TownEntryBlocked != nil && rt.TownEntryBlocked(character, live.RegionID, committed.RegionID) {
+		if rt.thiefCargoCrossingBlocked(character, live, committed) {
 			return thiefCargoTownRefusal()
 		}
 		request.RegionID = committed.RegionID

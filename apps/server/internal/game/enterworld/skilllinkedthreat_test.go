@@ -61,7 +61,7 @@ func TestLinkedThreatProgramAdmissionIsAtomic(t *testing.T) {
 		}
 		return out
 	}
-	// The native index keeps lkag wherever it is authored, 5A03A0 reads word
+	// The native index keeps lkag wherever it is authored, the threat split reads word
 	// 0 only and forms the share as authored: order, word 1 and a share above
 	// the whole aggression are all admitted.
 	for _, tc := range []struct {

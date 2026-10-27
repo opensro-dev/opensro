@@ -52,6 +52,9 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 	game.items.Steps.Slow = func(name string, elapsed time.Duration) {
 		game.hub.RecordSlowStep("action.TickHook/"+name, elapsed)
 	}
+	// A slow publication-gate hold names its holder there too
+	// (publication_holds), so a waiting step is not mistaken for the stall.
+	game.items.PublicationHold = game.hub.RecordPublicationHold
 	hooks := []simulation.TickHook{
 		game.movement.GroundTickHook(),
 		game.items.TickHook(),

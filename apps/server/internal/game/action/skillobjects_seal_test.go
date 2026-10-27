@@ -154,7 +154,7 @@ receive it, so the pass must wait for the gate.
 */
 func TestSkillObjectPassWaitsForAnEntryBootstrap(t *testing.T) {
 	rt, _, scan, _ := lethalTrapFixture(t)
-	unlock := rt.LockPublication(testDivision)
+	unlock := rt.LockPublication(testDivision, "test")
 	done := make(chan struct{})
 	go func() {
 		rt.AdvanceSkillObjects(scan, nil)

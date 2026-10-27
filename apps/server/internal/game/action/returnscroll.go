@@ -383,7 +383,14 @@ completeReturnScrollInDivision
 ================
 */
 func (rt *Runtime) completeReturnScrollInDivision(job pendingReturn, now int64) ([]wire.Frame, []wire.Frame) {
-	unlock := rt.lockDivision(job.division)
+	// The wait for the division lane is timed as its own step
+	// (returnScrollDivisionWait), outside the completion's work: a job
+	// queued behind a long lane holder used to charge that wait to
+	// whatever named it (#1820 E, the tickPublicationGate rule).
+	var unlock func()
+	rt.Steps.Time("returnScrollDivisionWait", func() {
+		unlock = rt.lockDivision(job.division)
+	})
 	defer unlock()
 	return rt.completeReturnScroll(job, now)
 }
