@@ -96,8 +96,14 @@ func (rt *Runtime) HandleMotionState(divisionID string, character *enterworld.Ch
 	unlock := rt.lockCharacter(divisionID, character.Name)
 	defer unlock()
 
-	characterSnapshot := rt.characterSnapshot(divisionID, character)
-	if characterSnapshot == nil || characterSnapshot.DeletePending {
+	// The admission facts read as values under the authority read door;
+	// no detached record is built for them (#1820 part C).
+	var deletePending, transformed bool
+	rt.deps.Read(divisionID, func() {
+		deletePending = character.DeletePending
+		transformed = character.TransformMode == 1
+	})
+	if deletePending {
 		return refusedMotion("deletePending")
 	}
 
@@ -114,7 +120,7 @@ func (rt *Runtime) HandleMotionState(divisionID string, character *enterworld.Ch
 
 	// The server's motion-change admission: a masked player (msch 1)
 	// cannot sit, stand or change gait.
-	if characterSnapshot.TransformMode == 1 {
+	if transformed {
 		return refusedMotion("transformed")
 	}
 
@@ -131,9 +137,18 @@ func (rt *Runtime) HandleMotionState(divisionID string, character *enterworld.Ch
 	// Reading before the Mutate keeps a dropped request off the persistence
 	// lane entirely; the character operation lock makes the peek-then-update
 	// pair atomic with the move lane.
-	if snapshot := rt.Worlds.Snapshot(worldKey, func() simulation.WorldState {
-		return simulation.SeedWorldState(characterSnapshot)
-	}); nowMs < snapshot.PostureTransitionUntilMs {
+	// The peek runs under the read door so a first-touch seed reads the
+	// live record's world fields synchronized, the values the detached
+	// record used to carry (WorldStore nests under the store door).
+	var postureInFlight bool
+	rt.deps.Read(divisionID, func() {
+		if snapshot := rt.Worlds.Snapshot(worldKey, func() simulation.WorldState {
+			return simulation.SeedWorldState(character)
+		}); nowMs < snapshot.PostureTransitionUntilMs {
+			postureInFlight = true
+		}
+	})
+	if postureInFlight {
 		return refusedMotion("postureTransitionInFlight")
 	}
 

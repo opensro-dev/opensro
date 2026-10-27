@@ -11,7 +11,7 @@ game-ready; private authority receipts may follow a bootstrap while loading.
 package transport
 
 import (
-	"sort"
+	"slices"
 )
 
 // PublishedObjects returns only scope changes admitted to this scene's queue.
@@ -21,27 +21,54 @@ import (
 ================
 PublishedObjects
 
-Every tick reads each session's set several times (the scene snapshot and
-the view hooks) while it changes far less often, so the sorted order is
-kept and rebuilt only after a change. The caller gets its own copy, never
-nil while current: readers take nil as "not current".
+The caller gets its own copy, never nil while current: readers take nil as
+"not current". A reader that only reads takes PublishedObjectsShared.
 ================
 */
 func (s *Session) PublishedObjects(revision uint64) ([]uint32, bool) {
+	shared, current := s.PublishedObjectsShared(revision)
+	if !current {
+		return nil, false
+	}
+	return append(make([]uint32, 0, len(shared)), shared...), true
+}
+
+/*
+================
+PublishedObjectsShared
+
+PublishedObjects without the copy, for readers that never write the set:
+every tick reads each session's set several times (the scene snapshot and
+the view hooks) while it changes far less often. The sorted order is kept
+and rebuilt only after a change. Never nil while current.
+
+The kept set is immutable once built: a change builds a NEW array rather
+than refilling the old one, so a reader holding an earlier result never
+sees a later change, and holding it needs no lock. The capacity is clipped
+to the length, so a reader's append copies instead of writing into the
+shared array. A reader must never write an element.
+================
+*/
+func (s *Session) PublishedObjectsShared(revision uint64) ([]uint32, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed || s.sceneLoading || s.sceneRevision != revision {
 		return nil, false
 	}
 	if s.publishedStale {
-		s.publishedSorted = s.publishedSorted[:0]
+		sorted := make([]uint32, 0, len(s.observedObjects))
 		for gid := range s.observedObjects {
-			s.publishedSorted = append(s.publishedSorted, gid)
+			sorted = append(sorted, gid)
 		}
-		sort.Slice(s.publishedSorted, func(i, j int) bool { return s.publishedSorted[i] < s.publishedSorted[j] })
+		slices.Sort(sorted)
+		s.publishedSorted = sorted
 		s.publishedStale = false
 	}
-	return append(make([]uint32, 0, len(s.publishedSorted)), s.publishedSorted...), true
+	if s.publishedSorted == nil {
+		// Nothing was ever published: an empty, non-nil set (no allocation).
+		return []uint32{}, true
+	}
+	return slices.Clip(s.publishedSorted), true
 }
 
 /*

@@ -19,6 +19,7 @@ import (
 	"math"
 	"sort"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/simulation"
@@ -41,6 +42,26 @@ type monsterAreaVictim struct {
 	pose      simulation.Spawn
 	radius    float64
 	hostility simulation.MonsterAreaCandidate
+}
+
+/*
+================
+monsterAreaCandidateView
+
+One living player's targeting facts for the area scan, read as values
+under the authority read door (#1820 part C): the scan used to detach
+every division record to weigh it. owner stays the live record - the
+strike lane re-reads it through its own doors, as it always did.
+================
+*/
+type monsterAreaCandidateView struct {
+	owner            *enterworld.Character
+	gid              uint32
+	worldInstance    uint32
+	radius           float64
+	nativeBodyStatus uint8
+	jobState         uint8
+	ride             uint32
 }
 
 /*
@@ -142,33 +163,50 @@ companions. A rider stands in for its vehicle.
 ================
 */
 func (rt *Runtime) monsterAreaCandidates(in monsterStrikeInput) []monsterAreaVictim {
+	// The division's records are weighed as values under ONE read door;
+	// the world, guard and companion questions run outside it on those
+	// values, in the order the per-record scan asked them.
+	characters := rt.deps.CharactersForDivision(in.division)
+	var views []monsterAreaCandidateView
+	rt.deps.Read(in.division, func() {
+		for _, character := range characters {
+			if character == nil || character.DeletePending || !enterworld.CharacterAlive(character) {
+				continue
+			}
+			radius, ok := rt.deps.CharacterBodyRadius(character)
+			if !ok {
+				continue
+			}
+			views = append(views, monsterAreaCandidateView{
+				owner:            character,
+				gid:              enterworld.ObjectIDForCharacter(character),
+				worldInstance:    domain.CharacterWorldInstance(character),
+				radius:           radius,
+				nativeBodyStatus: character.NativeBodyStatus,
+				jobState:         enterworld.PartyJobClass(character),
+				ride:             ridingCOS(character),
+			})
+		}
+	})
 	var out []monsterAreaVictim
-	for _, character := range rt.deps.CharactersForDivision(in.division) {
-		snapshot := rt.characterSnapshot(in.division, character)
-		if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) {
+	for _, view := range views {
+		if _, sameWorld := rt.characterMonsterFor(in.division, view.owner.Name, view.worldInstance, in.instance.Gid); !sameWorld {
 			continue
 		}
-		if _, sameWorld := rt.characterMonster(in.division, snapshot, in.instance.Gid); !sameWorld {
-			continue
-		}
-		radius, ok := rt.deps.CharacterBodyRadius(snapshot)
-		if !ok {
-			continue
-		}
-		gid := enterworld.ObjectIDForCharacter(snapshot)
-		job := enterworld.PartyJobClass(snapshot)
-		player := monsterAreaVictim{owner: character, gid: gid, radius: radius,
-			pose: rt.liveSpawn(simulation.WorldKey(in.division, snapshot.Name), snapshot, in.now),
-			hostility: simulation.MonsterAreaCandidate{Gid: gid, NativeBodyStatus: snapshot.NativeBodyStatus,
-				Guard: rt.FirstAttackGuard(in.division, gid, in.now), JobState: job}}
-		if ride := ridingCOS(snapshot); ride != 0 {
-			player.gid, player.companion = ride, true
+		gid := view.gid
+		guard := rt.FirstAttackGuard(in.division, gid, in.now)
+		player := monsterAreaVictim{owner: view.owner, gid: gid, radius: view.radius,
+			pose: rt.liveSpawn(simulation.WorldKey(in.division, view.owner.Name), view.owner, in.now),
+			hostility: simulation.MonsterAreaCandidate{Gid: gid, NativeBodyStatus: view.nativeBodyStatus,
+				Guard: guard, JobState: view.jobState}}
+		if view.ride != 0 {
+			player.gid, player.companion = view.ride, true
 		}
 		out = append(out, player)
 		for _, pet := range rt.companionTargets(in.division, gid, in.now) {
-			out = append(out, monsterAreaVictim{owner: character, gid: pet.Gid, companion: true, pose: pet.Pose,
+			out = append(out, monsterAreaVictim{owner: view.owner, gid: pet.Gid, companion: true, pose: pet.Pose,
 				radius: float64(pet.BodyRadius), hostility: simulation.MonsterAreaCandidate{Gid: pet.Gid, OwnerGid: gid,
-					Band: pet.Band, NativeBodyStatus: pet.NativeBodyStatus, Guard: player.hostility.Guard, JobState: job}})
+					Band: pet.Band, NativeBodyStatus: pet.NativeBodyStatus, Guard: guard, JobState: view.jobState}})
 		}
 	}
 	return out

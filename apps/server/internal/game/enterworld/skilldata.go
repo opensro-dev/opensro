@@ -607,6 +607,29 @@ func (t *TextdataSkills) Len() int {
 }
 
 /*
+================
+MaxMasteryRequirement
+
+The highest mastery level any loaded row requires, or 0 for an empty
+table. Only the optional cap-110 database tier requires above 100;
+the startup pairing warning (cmd/services/sro-gameworld) reads this
+to catch that tier running under the native level cap.
+================
+*/
+func (t *TextdataSkills) MaxMasteryRequirement() int64 {
+	t.once.Do(t.load)
+	var highest int64
+	for _, row := range t.rows.values() {
+		for _, mastery := range row.Masteries {
+			if mastery.ID != 0 && mastery.Level > highest {
+				highest = mastery.Level
+			}
+		}
+	}
+	return highest
+}
+
+/*
 ==================
 load
 

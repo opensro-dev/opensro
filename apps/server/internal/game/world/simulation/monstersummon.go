@@ -152,10 +152,25 @@ func (s *MonsterState) createSummonLocked(state *divisionMonsterState, parent mo
 // consumed its accumulator at command admission; later hits belong to the
 // next decision, including hits received while the cast was still preparing.
 func finishSummonAction(instance monster.Instance, nowMs int64) monster.Instance {
-	if instance.SummonActionUntilMs != 0 && nowMs >= instance.SummonActionUntilMs {
-		instance.SummonActionUntilMs = 0
-	}
+	clearExpiredSummonAction(&instance, nowMs)
 	return instance
+}
+
+/*
+================
+clearExpiredSummonAction
+
+finishSummonAction in place, reporting whether it changed anything. Readers
+use the report instead of comparing whole Instance values (about 2 KB each)
+and avoid copying the snapshot in and out.
+================
+*/
+func clearExpiredSummonAction(instance *monster.Instance, nowMs int64) bool {
+	if instance.SummonActionUntilMs == 0 || nowMs < instance.SummonActionUntilMs {
+		return false
+	}
+	instance.SummonActionUntilMs = 0
+	return true
 }
 
 // RejectSummonCommand applies the retail server's completion path (-1) and

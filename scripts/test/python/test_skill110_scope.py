@@ -10,8 +10,10 @@ tolerance of short rows.
 ===========================================================================
 """
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "analysis"))
 import skill110_scope as scope  # noqa: E402
@@ -134,6 +136,34 @@ class ScopeTests(unittest.TestCase):
 		self.assertEqual(scope.mastery_line("SKILL"), "")
 		self.assertEqual(scope.player_skill("SKILL_EU_WIZARD_A_01"), True)
 		self.assertEqual(scope.player_skill("MSKILL_RM_ROC_ATTACK10"), False)
+
+
+# ================
+# MainPinTests
+#
+# The entry point refuses a client that is not the pinned VSRO one
+# before any table is read (#1745).
+# ================
+class MainPinTests(unittest.TestCase):
+	def setUp(self):
+		scope.archive._verified_archives.clear()
+		self.root = tempfile.TemporaryDirectory()
+		self.addCleanup(self.root.cleanup)
+		self.vsro = Path(self.root.name)
+
+	def run_main(self):
+		argv = ["skill110_scope.py", "--vsro-root", str(self.vsro)]
+		with patch.object(sys, "argv", argv):
+			scope.main()
+
+	def test_main_refuses_a_client_that_is_not_the_pinned_one(self):
+		(self.vsro / "Media.pk2").write_bytes(b"some other client")
+		with self.assertRaisesRegex(SystemExit, "does not match the pinned"):
+			self.run_main()
+
+	def test_main_refuses_a_missing_archive(self):
+		with self.assertRaisesRegex(SystemExit, "not found"):
+			self.run_main()
 
 
 if __name__ == "__main__":

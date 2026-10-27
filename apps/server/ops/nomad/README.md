@@ -127,7 +127,10 @@ character names; the prefix alone grants no permissions.
 `sro-nomad` captures the deployment's `SRO_BETA_*` environment values and
 passes them as GameWorld job variables. Unset or blank values use the
 [central setting table](../../internal/config/shardsettings/shardsettings.go)'s
-deployment defaults. Deployment resolution rejects invalid beta values before
+defaults, which are native for every beta rule (off, rate 1, no growth
+bands). A deployment that wants the beta economy sets the values in the
+environment it runs `sro-nomad` with; the production release controls pass
+[`ops/release/shard-settings.json`](../release/shard-settings.json). Deployment resolution rejects invalid beta values before
 loading prerequisites or changing Nomad state, and reports all invalid values
 together. Growth rates are validated even when `SRO_BETA_GROWTH=off`.
 

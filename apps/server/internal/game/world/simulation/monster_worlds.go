@@ -198,6 +198,34 @@ func (s *MonsterState) populationForObject(division string, gid uint32) *divisio
 
 /*
 ================
+locateObject
+
+populationForObject that also hands back the residency it found, so the
+caller hydrates the actor from that slot instead of probing the population
+a second time. The candidates and their order are populationForObject's,
+so the same population answers; an unknown gid returns nil and allocates
+nothing.
+================
+*/
+func (s *MonsterState) locateObject(division string, gid uint32) (*divisionMonsterState, monsterSlot) {
+	if state := s.divs[division]; state != nil {
+		if slot := state.instances.locate(gid); slot.residency != slotMissing {
+			return state, slot
+		}
+	}
+	for key, state := range s.worldPopulations {
+		if key.division != division {
+			continue
+		}
+		if slot := state.instances.locate(gid); slot.residency != slotMissing {
+			return state, slot
+		}
+	}
+	return nil, monsterSlot{}
+}
+
+/*
+================
 PopulationLease
 ================
 */
@@ -477,18 +505,15 @@ GetInWorld
 func (s *MonsterState) GetInWorld(division string, world instance.ID, gid uint32) (monster.Instance, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	state := s.populationForObject(division, gid)
-	if state.lease.ID != world {
+	state, slot := s.locateObject(division, gid)
+	if state == nil || state.lease.ID != world {
 		return monster.Instance{}, false
 	}
-	actor, exists := state.instances.lookup(gid)
-	if exists {
-		if updated := finishSummonAction(actor, s.nowMillis()); updated != actor {
-			actor = updated
-			state.instances.set(gid, actor)
-		}
+	actor := state.instances.slotValue(gid, &slot)
+	if clearExpiredSummonAction(&actor, s.nowMillis()) {
+		state.instances.set(gid, actor)
 	}
-	return actor, exists
+	return actor, true
 }
 
 /*
@@ -504,13 +529,13 @@ func (s *MonsterState) GetInPopulation(division string, lease instance.Lease, gi
 		return monster.Instance{}, false
 	}
 	actor, exists := state.instances.lookup(gid)
-	if exists {
-		if updated := finishSummonAction(actor, s.nowMillis()); updated != actor {
-			actor = updated
-			state.instances.set(gid, actor)
-		}
+	if !exists {
+		return actor, false
 	}
-	return actor, exists
+	if clearExpiredSummonAction(&actor, s.nowMillis()) {
+		state.instances.set(gid, actor)
+	}
+	return actor, true
 }
 
 /*
