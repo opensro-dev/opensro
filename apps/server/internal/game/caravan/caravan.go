@@ -183,8 +183,8 @@ func (r *Registry) Due(deltaMs int64, roll Roll) ([]Entry, error) {
 ================
 resetTimer
 
-Caravan_ResetSpawnTimer: elapsed 0, next = ftol(float32(rand/32767) *
-60000) + 60000.
+The reference server's spawn-timer reset: elapsed 0, and the next
+interval is 60000 plus the truncation of float32(rand/32767) * 60000.
 ================
 */
 func resetTimer(entry *Entry, roll Roll) error {

@@ -14,8 +14,10 @@ package progression
 
 // The native server completes the level transition before SP and EXP.
 // Its upward branch invokes reduced recovery and level presentation.
-// The v1.150 consumers are independent: 777670 presents the level effect,
-// 75BE90 installs maxima, 77A080 installs current gauges, and 779620 walks EXP.
+// The v1.150 consumers are independent: CPSMission_OnLevelUpSoundAndDeco0x36B0
+// presents the level effect, CPSMission_OnBaseStats0x343C installs maxima,
+// CPSMission_OnVitalsUpdate0x33A6 installs current gauges, and
+// CPSMission_OnExpGainEventGuide0x30D2 walks EXP.
 // This port sends the completed maxima and recovery inside that transition
 // boundary, before the SP update and EXP tail. Stat points ride only the EXP
 // tail; adding a separate type-3 update would apply that total twice.
@@ -72,8 +74,8 @@ func BaseStatAtLevel(level int64) int64 {
 }
 
 // SkillExpPerSP is the skill-exp accumulator period: natively pinned by
-// the client's own wrap (sub_779620 adds the delta to CICPlayer+0x830
-// and reduces it mod 0x190 = 400, @0x779b02..0x779b29). The server MUST
+// the client's own wrap (CPSMission_OnExpGainEventGuide0x30D2 adds the
+// delta to CICPlayer+0x830 and reduces it mod 0x190 = 400). The server MUST
 // wrap its persisted SkillExp identically or the two accumulators drift
 // apart on the next login snapshot.
 const SkillExpPerSP int64 = 400
@@ -436,7 +438,7 @@ func (rt *Runtime) applyJobDeathPenalty(character *enterworld.Character, penalty
 ================
 goldBasisSource
 
-dg.txt column 1 (CRefData_GetDropGoldMinimum), which the job formulas
+dg.txt column 1 - the drop-gold minimum - which the job formulas
 read beside the level curve.
 ================
 */
@@ -695,8 +697,8 @@ delta may exceed the level cap and must never be echoed as if it committed.
 type expWalkResult struct {
 	// level / exp are the post-walk character level and WITHIN-LEVEL
 	// experience remainder (the client stores the same remainder - its
-	// walk subtracts each crossed level's requirement, @0x7797d6..
-	// 0x779800).
+	// walk, CPSMission_OnExpGainEventGuide0x30D2, subtracts each crossed
+	// level's requirement).
 	level int64
 	exp   int64
 	// levelsGained counts upward crossings (multi-level single grants
@@ -720,7 +722,7 @@ type expWalkResult struct {
 walkExpCurve
 
 walkExpCurve is the server's copy of the client's own level walk
-(sub_779620 @0x7797d6..0x779800) over the same shipped curve
+(CPSMission_OnExpGainEventGuide0x30D2) over the same shipped curve
 (leveldata column 1 via LevelDataSource.ExpRequired), plus the level
 cap the client-side walk never needed (retail servers simply stopped
 granting at the cap): at the configured cap the experience freezes at

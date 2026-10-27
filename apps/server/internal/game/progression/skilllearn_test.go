@@ -153,7 +153,8 @@ func TestSkillLearnGrantsAndChargesSP(t *testing.T) {
 		t.Fatalf("ack opcode = 0x%04X, want 0x%04X", result.Frames[0].Opcode, wire.OpSkillLearnResponse)
 	}
 	// [1][u32 skillId] - the client marks exactly this id learned
-	// (sub_75bb20 @0x0075bb48), so the ack must echo the request.
+	// (CPSMission_OnSkillLearnResponse0xB2CB), so the ack must echo the
+	// request.
 	ack := result.Frames[0].Payload
 	if len(ack) != 5 || ack[0] != wire.ResultSuccess ||
 		ack[1] != 0x03 || ack[2] != 0 || ack[3] != 0 || ack[4] != 0 {
@@ -201,7 +202,8 @@ func TestSkillLearnZeroCostSkillRefuses(t *testing.T) {
 }
 
 // The client's ack handler REPLACES the group's previous-level entry
-// (sub_8509f0 @0x00850ac9), so the persisted list must do the same: one
+// (LearnedSkillMap_AddRecordByHost), so the persisted list must do the
+// same: one
 // id per group, never both levels.
 /*
 ================

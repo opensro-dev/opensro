@@ -33,7 +33,8 @@ import (
 )
 
 // MasteryLevelCap is the absolute per-mastery ceiling the client's own
-// level-up gate enforces (sub_5841d0: level < 0x78).
+// train-enable gate enforces: CIFSkillBoard_RefreshMasteryHeaderAndTrainButton
+// admits only level < 0x78.
 const MasteryLevelCap int64 = 120
 
 // The server's skill learning check returns 34xx; the v1.150 learning response carries the low byte.
@@ -48,15 +49,14 @@ const (
 
 // Total-mastery allowance (notice 07:05): the budget the v1.150 client
 // itself DISPLAYS on the skill board but never locally enforces, which is
-// why the gate is server-owned. Client pin (re-verified against
-// temp/dumps/SRO_Client_psuedo.txt for this lane): sub_58c310 @0x0058c310
+// why the gate is server-owned. Client pin: CIFSkillBoard_RefreshTotalMasteryLabel
 // composes a bare u"%d/%d" of (sum of mastery levels)/(cap), selecting the
-// cap on the NATIVE country byte charBody+0x9c read @0x0058c372 - byte 0
-// (Chinese) takes the flat 0x12c @0x0058c3bc, byte 1 (European) doubles the
-// per-character level (x87_r7_1 + x87_r7_1) and clamps at 0xf0
-// @0x0058c388..0x0058c39c. The summed quantity is sub_850790 @0x00850790
+// cap on the NATIVE country byte charBody+0x9c - byte 0 (Chinese) takes
+// the flat 0x12c, byte 1 (European) doubles the per-character level and
+// clamps at 0xf0. The summed quantity is LearnedMasteryMap_SumLevels
 // walking the mastery list accumulating each node's LEVEL byte; the
-// train-enable gate sub_5841d0 never consults it. Era: Legend III, level
+// train-enable gate CIFSkillBoard_RefreshMasteryHeaderAndTrainButton
+// never consults it. Era: Legend III, level
 // cap 90.
 const (
 	// TotalMasteryCapChina is the flat Chinese allowance (0x12c). Flat,
@@ -120,7 +120,8 @@ masteryLevelSum
 
 masteryLevelSum is the gated quantity: the sum of the character's
 trained mastery levels - not SP spent, not a count of masteries. The
-same walk as the client's sub_850790 (each node's level byte, which as
+same walk as the client's LearnedMasteryMap_SumLevels (each node's
+level byte, which as
 a byte can never be negative; a corrupt negative record is ignored
 rather than allowed to widen the budget).
 ==================
@@ -491,11 +492,13 @@ func (rt *Runtime) HandleMasteryLevelUp(divisionID string, character *enterworld
 	// leveldata column-2 row of the CURRENT level L, and the 0 -> 1
 	// first train is FREE. Three concordant witnesses:
 	//   - the v1.150 client's train-enable gate reads the CURRENT
-	//     level's row for its SP-affordability check (sub_5841d0
-	//     @0x00584389: sub_7e0f20(currentLevel)+0x10 <= heldSP);
+	//     level's row for its SP-affordability check
+	//     (CIFSkillBoard_RefreshMasteryHeaderAndTrainButton:
+	//     CGlobalData_GetLevelDataPayload(currentLevel)+0x10 <= heldSP);
 	//   - the v1.150 mastery tooltip displays the same row as the next
 	//     level's required SP and HARDCODES ZERO for a level-0 row
-	//     (sub_55ab40 @0x0055b21a..b22b: edi_5 = 0 unless level != 0);
+	//     (CIFSlotWithHelp_Str_PARAM_MASTERY: the displayed cost is 0
+	//     unless level != 0);
 	//   - the cross-version reference server's mastery raise
 	//     accumulates its cost over rows [current, current+amount) and
 	//     its level==0 branch BYPASSES pricing entirely, jumping to the
@@ -634,8 +637,8 @@ HandleSkillLearn
 
 HandleSkillLearn learns one skill by skilldata id (0x72CB -> 0xB2CB,
 plus the absolute SP refresh on 0x30B3 type 2 - the ack handler
-sub_75bb20 never touches the client's SP, so without the refresh its
-display goes stale).
+CPSMission_OnSkillLearnResponse0xB2CB never touches the client's SP,
+so without the refresh its display goes stale).
 
 The native skill learning check tests row/SP eligibility, masteries, STR/INT,
 country, the exact next rank, three prerequisite groups and finally SP.
@@ -673,7 +676,8 @@ func (rt *Runtime) HandleSkillLearn(divisionID string, character *enterworld.Cha
 
 	// Gate 7 + the write, inside one door closure: the SP check cannot go
 	// stale between reading and spending. The learned-list write mirrors
-	// the client's own model (sub_8509f0): REPLACE the group's previous
+	// the client's own model (LearnedSkillMap_AddRecordByHost): REPLACE
+	// the group's previous
 	// entry on upgrade, append on a first learn.
 	granted := false
 	refusal := wire.ErrCodeSkillLearnRefused

@@ -96,7 +96,6 @@ apps/server/internal/game/action/tradestars.go 1
 apps/server/internal/game/action/transform.go 1
 apps/server/internal/game/action/visualflags.go 1
 apps/server/internal/game/action/wall_test.go 3
-apps/server/internal/game/caravan/caravan.go 1
 apps/server/internal/game/combat/durability.go 1
 apps/server/internal/game/combat/formula.go 4
 apps/server/internal/game/combat/stats.go 2
@@ -211,13 +210,6 @@ apps/server/internal/game/item/wire/tradeowner_test.go 1
 apps/server/internal/game/item/wire/visualflags.go 2
 apps/server/internal/game/item/wire/withdrawal.go 2
 apps/server/internal/game/paramkeeper/graph.go 1
-apps/server/internal/game/progression/e2e_chardata_test.go 9
-apps/server/internal/game/progression/e2e_wire_test.go 3
-apps/server/internal/game/progression/levelup.go 10
-apps/server/internal/game/progression/masteryseed_pricing_test.go 2
-apps/server/internal/game/progression/runtime.go 13
-apps/server/internal/game/progression/sealrates.go 1
-apps/server/internal/game/progression/skilllearn_test.go 4
 apps/server/internal/game/quest/catalog.go 10
 apps/server/internal/game/quest/definitions.go 1
 apps/server/internal/game/quest/giveup.go 2

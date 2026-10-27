@@ -10,8 +10,8 @@ top of whatever rare rate is already in force (the beta's RareRate). Off,
 every rare drop rolls exactly as before.
 
 A rare item's seal and degree come from its itemdata ItemClass (column 61),
-as the client reads them: CSOItem_CalculateTierGroup (789350) is
-(ItemClass - 1) % 3, which ItemTooltip_AppendRareGrade (558FF0) names
+as the client reads them: CSOItem_CalculateTierGroup is
+(ItemClass - 1) % 3, which ItemTooltip_AppendRareGrade names
 PARAM_RARE_FIRST/SECOND/THIRD, "Seal Of Star/Moon/Sun"; three classes make
 one degree.
 

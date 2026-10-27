@@ -24,7 +24,8 @@ package progression_test
 // consequence of each operation:
 //
 //	0x727A +STR   -> 0xB27A [01] ack (the ack alone decrements the client's
-//	                 remaining count - sub_75ba00), then the 0x343C block
+//	                 remaining count - CPSMission_OnStatPointSpendResponse0xB27A),
+//	                 then the 0x343C block
 //	                 whose APPLIED +0x20/+0x22 words carry the raised STR
 //	                 (never the +0x14/+0x16 trap pair), and NO 0x30B3
 //	                 type-3 rides the burst (it would double-apply the
@@ -35,7 +36,8 @@ package progression_test
 //	                 refresh; the learned skill then appears in the next
 //	                 0x32B3 char-data (production never re-emits 0x32B3
 //	                 inside the learn burst - the client's own ack handler
-//	                 sub_75bb20 inserts the skill locally);
+//	                 CPSMission_OnSkillLearnResponse0xB2CB inserts the
+//	                 skill locally);
 //	refusals      -> points-exhausted 0xB27A [02][02], insufficient-SP
 //	                 0xB165 [02][02] (07:02) and 0xB2CB [02][0a] (05:0a),
 //	                 duplicate-group 0xB2CB [02][01], each with NO
@@ -67,7 +69,8 @@ package progression_test
 // every refusal deterministically: train 6->7 spends 5 (SP 8->3), train
 // 7->8 refuses (6 > 3), learn skill 3 spends 2 (SP 3->1), learn skill 6
 // refuses (5 > 1), relearn skill 3 refuses (group already learned - the
-// refusal the client's success-ack assert @0x0075bb71 demands), learn
+// refusal the client's success-ack assert in
+// CPSMission_OnSkillLearnResponse0xB2CB demands), learn
 // skill 1 is free (SP stays 1).
 //
 // Deliberate deviations from server.go's full composition, none of which
@@ -656,7 +659,8 @@ func TestProgressionPlaneEndToEndOverWire(t *testing.T) {
 		[]byte{wire.ResultError, wire.ErrCodeSkillLearnSP}, "skill SP refusal")
 
 	// Re-learning the same skill: the duplicate refusal the client's
-	// success-ack assert (@0x0075bb71) demands instead of a second [01].
+	// success-ack assert in CPSMission_OnSkillLearnResponse0xB2CB
+	// demands instead of a second [01].
 	sendFrame(t, conn, wire.OpSkillLearnRequest, skillRequest(skillSmashA1ID))
 	assertBytes(t, expectFrame(t, conn, wire.OpSkillLearnResponse, "duplicate learn refusal"),
 		[]byte{wire.ResultError, 0x0c}, "duplicate learn refusal")

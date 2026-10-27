@@ -69,7 +69,8 @@ func (rt *Runtime) recoverLevelVitals(character *enterworld.Character, display w
 ================
 levelRecoveryFrame
 
-The v1.150 client reads absolute HP/MP from 77A080. EXP and base-stat
+The v1.150 client reads absolute HP/MP in
+CPSMission_OnVitalsUpdate0x33A6. EXP and base-stat
 packets do not change those currents. Publish this snapshot after maxima
 and before EXP so the HUD observes one completed level transition.
 ================
