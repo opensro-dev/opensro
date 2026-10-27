@@ -39,16 +39,25 @@ process from a worker thread; process.exit would end only the worker.
 ================
 */
 const WATCHDOG_SOURCE = `
+const { readFileSync } = require( "node:fs" );
 const { workerData } = require( "node:worker_threads" );
 const { runnerPid, limitBytes, intervalMs } = workerData;
 
 function runnerAlive() {
 	try {
 		process.kill( runnerPid, 0 );
-		return true;
 	} catch ( error ) {
 		// EPERM: the pid exists but belongs to someone else, so it is alive.
 		return error.code === "EPERM";
+	}
+	// Linux: a runner that died but that its parent has not reaped yet is a
+	// zombie, and a zombie still answers kill 0. Its status says so. Where
+	// /proc does not exist (Windows), kill 0 alone decides.
+	try {
+		const status = readFileSync( "/proc/" + runnerPid + "/status", "utf8" ), at = status.indexOf( "State:" );
+		return at < 0 || status.slice( at + "State:".length ).trim()[0] !== "Z";
+	} catch {
+		return true;
 	}
 }
 
