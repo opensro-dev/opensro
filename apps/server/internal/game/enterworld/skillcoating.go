@@ -4,8 +4,8 @@
 skillcoating.go - status-only weapon imbues
 
 The zero att payload is intentional: the coating contributes poison through
-590680 without adding elemental damage. RPBU extends the owner lifetime at
-5833BE; RPDU and RPTU are resolved when the weapon strikes.
+the server's status roll without adding elemental damage. RPBU extends the owner lifetime when
+the coating is applied; RPDU and RPTU are resolved when the weapon strikes.
 
 ===========================================================================
 */

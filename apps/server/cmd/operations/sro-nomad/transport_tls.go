@@ -95,6 +95,21 @@ func resolveTransportCertificate(
 
 /*
 ================
+webTransportPosture
+
+The public WebTransport deployment decision: the switch, the UDP bind,
+and the public port the host redirects to that bind (0 when clients
+dial the bind port itself).
+================
+*/
+type webTransportPosture struct {
+	Public     bool
+	WTAddr     string
+	PublicPort int
+}
+
+/*
+================
 validateWebTransportPosture
 
 The public WebTransport posture as one deployment decision, checked
@@ -105,15 +120,27 @@ refuses the same shapes at boot (transport.NewServer); this is the
 earlier, louder half of that line, where the operator can still act.
 certificate is the loaded pair from resolveTransportCertificate, nil
 when none was loaded.
+
+The advertised port must be the port clients reach: the bind port, or
+PublicPort when the host redirects a public port to the bind (#1447:
+the GameWorld runs unprivileged and cannot bind UDP 443, so the host
+redirects public 443 to a high bind port). A redirected bind must be
+an unspecified host: the redirect delivers to the interface address.
 ================
 */
-func validateWebTransportPosture(certificate *transport.Certificate, public bool, wtAddr string, shards []shardDeployment) error {
-	wtAddr = strings.TrimSpace(wtAddr)
-	if !public {
+func validateWebTransportPosture(certificate *transport.Certificate, posture webTransportPosture, shards []shardDeployment) error {
+	wtAddr := strings.TrimSpace(posture.WTAddr)
+	if !posture.Public {
 		if wtAddr != "" {
 			return fmt.Errorf(
 				"-transport-wt-addr %q names a public UDP bind, but SRO_WEBTRANSPORT_PUBLIC is off; set the switch or drop the address",
 				wtAddr,
+			)
+		}
+		if posture.PublicPort != 0 {
+			return fmt.Errorf(
+				"-transport-wt-public-port %d names a public port, but SRO_WEBTRANSPORT_PUBLIC is off; set the switch or drop the port",
+				posture.PublicPort,
 			)
 		}
 		return nil
@@ -136,6 +163,25 @@ func validateWebTransportPosture(certificate *transport.Certificate, public bool
 	port, err := strconv.Atoi(portText)
 	if err != nil || port < 1 || port > 65535 {
 		return fmt.Errorf("-transport-wt-addr %q has an invalid port", wtAddr)
+	}
+	reached := port
+	if posture.PublicPort != 0 {
+		if posture.PublicPort < 1 || posture.PublicPort > 65535 {
+			return fmt.Errorf("-transport-wt-public-port %d is not a port", posture.PublicPort)
+		}
+		// The host's redirect delivers to the receiving interface's own
+		// address, so only a wildcard bind is sure to receive it; loopback
+		// or another address would pass every check and never see a packet.
+		if posture.PublicPort != port {
+			if ip := net.ParseIP(host); ip == nil || !ip.IsUnspecified() {
+				return fmt.Errorf(
+					"-transport-wt-addr %q must bind an unspecified host ([::] or 0.0.0.0) when -transport-wt-public-port %d is redirected to it",
+					wtAddr,
+					posture.PublicPort,
+				)
+			}
+		}
+		reached = posture.PublicPort
 	}
 	for _, game := range shards {
 		advertised := game.Definition.AdvertisedTransportURL()
@@ -165,12 +211,14 @@ func validateWebTransportPosture(certificate *transport.Certificate, public bool
 				)
 			}
 		}
-		if advertisedPort != port {
+		if advertisedPort != reached {
 			return fmt.Errorf(
-				"shard %q advertises WebTransport on port %d, but -transport-wt-addr binds port %d",
+				"shard %q advertises WebTransport on port %d, but clients reach port %d (-transport-wt-addr binds %d, -transport-wt-public-port %d)",
 				game.Definition.ID,
 				advertisedPort,
+				reached,
 				port,
+				posture.PublicPort,
 			)
 		}
 		if err := certificate.Leaf.VerifyHostname(endpoint.Hostname()); err != nil {

@@ -40,10 +40,10 @@ type LevelDataSource interface {
 	// grant rather than invent a threshold.
 	ExpRequired(level int64) (int64, bool)
 	// MonsterExpBasis answers the CRefLevel +0x1c field (GUST_Mob_Exp,
-	// column 5). The v1.188 GameServer uses this one authored value at both
-	// sides of the progression boundary: Formulae_ComputeMonsterSkillExpReward
-	// divides the monster's EXP reward by it, while
-	// CGObjPC_ApplyDeathPenalties multiplies it by 100 for the ordinary-death
+	// column 5). The server uses this one authored value at both
+	// sides of the progression boundary: its monster skill-EXP reward
+	// divides the monster's EXP reward by it, while its death penalty
+	// multiplies it by 100 for the ordinary-death
 	// loss ceiling. Missing rows must refuse either mutation atomically.
 	MonsterExpBasis(level int64) (int64, bool)
 }
@@ -66,7 +66,7 @@ const leveldataMonsterExpBasisColumn = 5
 
 // leveldataJobExpColumn is the trader's job-EXP requirement (CRefLevel
 // +0x20); the thief's (+0x24) and the hunter's (+0x28) follow it.
-// CJobInfo_AddJobExp (60DD90) reads the row of the job grade.
+// The server's job-exp gain reads the row of the job grade.
 const leveldataJobExpColumn = 6
 
 /*
