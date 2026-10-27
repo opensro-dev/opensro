@@ -1674,6 +1674,10 @@ export function createUi(
 	let questPosition: readonly [number, number] = [ 0, 0 ], questDetailScroll = 0, questDetailMax = 0;
 	let practice: PracticeRequest | null = null, questDetails = false;
 	let skillTab = 0, selectedMastery = 0, skillScroll = 0;
+	// The mastery last selected on each skill tab: a tab switch returns to
+	// it, as the native window's per-tab mastery map does (5910F0 records
+	// it, 591020 restores it or falls back to the tab's first mastery).
+	const masteryByTab = new Map<number, number>();
 	let selectedSkill = 0, skillPage = 0, hotbarPage = 0, trainingMode = false, clearHotbar = false;
 	let carriedShortcut: { id: string; x: number; y: number; } | null = null;
 	let quickslotTime = 0, quickslotTick = -1;
@@ -2276,6 +2280,7 @@ export function createUi(
 		skillTab = 0;
 		selectedMastery = 0;
 		skillScroll = 0;
+		masteryByTab.clear();
 		expandedQuests.clear();
 		windowMissing = [];
 	}
@@ -4665,10 +4670,11 @@ export function createUi(
 		} else if ( id === "hotbar-clear" ) clearHotbar = !clearHotbar;
 		else if ( id.startsWith( "skill-tab:" ) ) {
 			skillTab = Number( id.slice( 10 ) );
-			selectedMastery = 0;
+			selectedMastery = masteryByTab.get( skillTab ) ?? 0;
 			skillScroll = 0;
 		} else if ( id.startsWith( "skill-mastery:" ) ) {
 			selectedMastery = Number( id.slice( 14 ) );
+			masteryByTab.set( skillTab, selectedMastery );
 			skillScroll = 0;
 		} else if ( id === "skill-scroll-up" || id === "skill-scroll-down" ) {
 			skillScroll = Math.max( 0, skillScroll + (id.endsWith( "up" ) ? -1 : 1) );
