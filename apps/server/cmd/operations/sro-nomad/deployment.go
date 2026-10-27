@@ -109,6 +109,12 @@ type deployment struct {
 	// BugReports comes from the deployer's SRO_BUG_REPORT_* environment;
 	// its webhook travels only as a Nomad variable item.
 	BugReports bugreport.Config
+	// StaffWebhook is SRO_STAFF_DISCORD_WEBHOOK: the ops-only channel the
+	// GameWorld pages (the served WebTransport pair, #1447). Like the bug
+	// report webhook it travels only as a Nomad variable item; "" keeps
+	// the stored one, and StaffWebhookOff (the value "off") removes it.
+	StaffWebhook    string
+	StaffWebhookOff bool
 }
 
 /*
@@ -292,6 +298,10 @@ func resolveDeployment(
 		return nil, fmt.Errorf("GM allowlist: %w", err)
 	}
 	bugReports, warnings := bugreport.LoadConfig(os.Getenv)
+	staffWebhook, staffWebhookOff, staffWarning := configuredStaffWebhook(os.Getenv(envStaffWebhook))
+	if staffWarning != "" {
+		fmt.Println("Staff alerts: " + staffWarning)
+	}
 	betaMastery, err := configuredBetaMastery(stateDir)
 	if err != nil {
 		return nil, err
@@ -460,11 +470,38 @@ func resolveDeployment(
 			gameReleaseID,
 			binaryName("gameworld"),
 		),
-		DataPaths:  dataPaths,
-		Shards:     shards,
-		Secrets:    secrets,
-		BugReports: bugReports,
+		DataPaths:       dataPaths,
+		Shards:          shards,
+		Secrets:         secrets,
+		BugReports:      bugReports,
+		StaffWebhook:    staffWebhook,
+		StaffWebhookOff: staffWebhookOff,
 	}, nil
+}
+
+/*
+================
+configuredStaffWebhook
+
+The deployer's SRO_STAFF_DISCORD_WEBHOOK: empty keeps the stored item,
+"off" removes it, a Discord webhook URL replaces it. Anything else is
+warned about and treated as unset, keeping the stored one: an ops alert
+channel must never be the reason a release does not ship. The warning
+never quotes the value, which carries the webhook token.
+================
+*/
+func configuredStaffWebhook(raw string) (webhook string, off bool, warning string) {
+	raw = strings.TrimSpace(raw)
+	switch {
+	case raw == "":
+		return "", false, ""
+	case strings.EqualFold(raw, "off"):
+		return "", true, ""
+	case bugreport.ValidWebhookURL(raw):
+		return raw, false, ""
+	}
+	return "", false, envStaffWebhook + " is not a Discord webhook URL " +
+		"(https://discord.com/api/webhooks/<id>/<token>) or off; the stored staff webhook is kept"
 }
 
 /*
