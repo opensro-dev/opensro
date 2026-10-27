@@ -58,7 +58,28 @@ which sends a teleport through the fortress entry rules.
 */
 func (d Definition) Siege() bool { return siegeWorldCodes[d.CodeName] }
 
+/*
+================
+Lookup
+
+One catalogue for callers: the shipped rows first, then any port-only
+rows registered behind their switches (portonly.go). With nothing
+registered this is exactly the shipped catalogue.
+================
+*/
 func Lookup(id DefinitionID) (Definition, bool) {
+	if row, ok := lookupShipped(id); ok {
+		return row, true
+	}
+	return lookupPortOnly(id)
+}
+
+/*
+================
+lookupShipped
+================
+*/
+func lookupShipped(id DefinitionID) (Definition, bool) {
 	for _, row := range shipped {
 		if row.ID == id {
 			return row, true
