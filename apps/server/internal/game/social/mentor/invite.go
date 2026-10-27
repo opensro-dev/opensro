@@ -460,10 +460,10 @@ func (r *InviteRuntime) handleInvite(s *transport.Session, opcode uint16, payloa
 	}
 	campID, joined := r.deps.TrainingCampAuthority().CampOfCharacter(divisionID, actor.ID)
 	if !joined {
-		// A camp is opened at the storage NPC (open.go). The client's Invite
-		// button needs master-is-me (in CIFApprenticeShip_OnInviteBtn),
-		// which only a
-		// camp seed arms, so a campless frame is a desync or forged.
+		// A camp is opened at the storage NPC (open.go). The client's
+		// Invite button needs master-is-me (in
+		// CIFApprenticeShip_OnInviteBtn), which only a camp seed arms,
+		// so a campless frame is a desync or forged.
 		log.Debugf("mentor: 0x76B1 (invite) refused for %s: no camp opened", actor.Name)
 		return
 	}

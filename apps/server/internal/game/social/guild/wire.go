@@ -72,12 +72,11 @@
 // runtime MEANING during a leave stays PROBABLE-stale/zero). 0x766E
 // (break) followed on the same pin - its composer
 // NetClient_SendSelectedTarget766E writes the
-// SAME +0x620 slot. 0x72BC/0x765F (the grants) left the refuse set when
-// the 0x3B29 subOp-6 delta layout, the &0x20 string destination
+// SAME +0x620 slot. 0x72BC/0x765F (the grants) left the refuse set
+// when the 0x3B29 subOp-6 delta layout, the &0x20 string destination
 // (member+0x04 - resolved from the CIFGuildMember_OnMemberUpdated
-// applicator)
-// and the second-host acks 0xB2BC/0xB65F were pinned
-// (the dump extracts are cited on the encoders below).
+// applicator) and the second-host acks 0xB2BC/0xB65F were pinned (the
+// dump extracts are cited on the encoders below).
 //
 // 0x7663 (create) has NO client trigger yet (the NPC-chat entry point
 // is not folded), which is why the e2e suite composes it synthetically.
@@ -233,10 +232,10 @@ const (
 	// where the u32 is DISPLAY-ONLY - the handler formats it into
 	// UIIT_MSG_GUILD_GP_SUBSCRIPION_RESULT ("Contributed [%d]GP.",
 	// textuisystem L1538 - the retail SUBSCRIPION typo is on the asset)
-	// as a type-0 guide line (CGInterface_ChatSystemMessage) and
-	// writes NO
-	// guild/member twin, so the byte-honest value is the donated amount
-	// itself (the confirm string UIIT_MSG_QUESTION_GUILD_GP_SUBSCRIPION_
+	// as a type-0 guide line (CGInterface_ChatSystemMessage) and writes
+	// NO guild/member twin, so the byte-honest value is the donated
+	// amount itself (the confirm string
+	// UIIT_MSG_QUESTION_GUILD_GP_SUBSCRIPION_
 	// CONFIRM uses the same %d for the entered SP). State truth rides the
 	// 0x3B29 deltas below. result 2 is {u8 2}{u8 code} -> the cat-0x10
 	// sink - never emitted: no donate trigger->code pair is
@@ -637,9 +636,9 @@ func EncodeBreakAckB66E() []byte {
 // receiver's own local state (FortressMgr+0x150 via
 // CCharacterDependentData_GetGuildData), then the
 // UIIT_MSG_GUILD_BREAK_RESULT guide + banner fire and the whole guild
-// block drops (CCharacterDependentData_ClearGuild). ONE frame serves
-// every online
-// member of the dissolved guild including the breaking leader.
+// block drops (CCharacterDependentData_ClearGuild). ONE frame
+// serves every online member of the dissolved guild including the
+// breaking leader.
 func EncodeGuildBreak3B29() []byte {
 	return []byte{1}
 }
@@ -681,10 +680,9 @@ func EncodePositionGrantAckB65F(jid uint32, role uint8) []byte {
 // donating actor: {u8 1}{u32 amount}. The u32 is the donated amount -
 // the client handler (CNetProcess_OnResponse0xB40F, second host)
 // reads it solely as the format arg of the "Contributed [%d]GP."
-// guide line and
-// writes no state, so echoing the request's amount is the only
-// byte-honest value (the OpGuildGpDonateAck constant carries the full
-// evidence).
+// guide line and writes no state, so echoing the request's amount
+// is the only byte-honest value (the OpGuildGpDonateAck constant
+// carries the full evidence).
 func EncodeGpDonateAckB40F(amount uint32) []byte {
 	writer := wire.NewWriter(5)
 	writer.U8(1)
@@ -726,10 +724,10 @@ func EncodeGuildLevel3B29(level uint8, gp uint32) []byte {
 // EncodeMemberDonatedGp3B29 composes the 0x3B29 subOp-6 member delta
 // carrying ONLY the &0x08 donated-GP leg:
 // {u8 6}{u32 jid}{u8 0x08}{u32 newDonatedGp}. The applicator's &0x08 arm
-// writes member+0x28 (client CIFGuildMember_OnMemberUpdated slice -
-// the roster
-// row's GP column) with no banner, so the donor is INCLUDED in the
-// fan-out (the EncodeGuildGp3B29 rationale - the actor's ack writes no
+// writes member+0x28 (client CIFGuildMember_OnMemberUpdated slice
+// - the roster row's GP column) with no banner, so the donor is
+// INCLUDED in the fan-out (the EncodeGuildGp3B29 rationale - the
+// actor's ack writes no
 // member twin, unlike the grant acks whose actor is excluded).
 func EncodeMemberDonatedGp3B29(jid uint32, newDonatedGp uint32) []byte {
 	writer := wire.NewWriter(10)
