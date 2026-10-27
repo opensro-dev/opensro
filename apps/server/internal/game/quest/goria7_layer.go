@@ -51,8 +51,7 @@ type goria7Layer struct {
 	credited  bool
 	graceEnd  int64
 	ended     bool
-	// bossSite is where the boss fell (NoteKillSite); the exit gate
-	// stands beside it.
+	// bossSite is where the boss fell (NoteKillSite), the gate's spot.
 	bossSite      simulation.Spawn
 	bossSiteKnown bool
 }
@@ -251,9 +250,7 @@ func (rt *Runtime) goria7Leave(event InstanceEvent) {
 		return
 	}
 	rt.goria7ForgetLayer(event.World)
-	if rt.RemoveExitGates != nil {
-		rt.RemoveExitGates(event.World)
-	}
+	rt.removeExitGates(event.World)
 	if rt.InstanceClose != nil && lease.ID != 0 {
 		rt.InstanceClose(lease)
 	}
@@ -386,29 +383,6 @@ func (rt *Runtime) noteGoria7Kill(c *enterworld.Character, codename string) {
 	rt.goria7.mu.Lock()
 	if layer := rt.goria7.layers[world]; layer != nil && !layer.bossGone {
 		layer.killed = true
-	}
-	rt.goria7.mu.Unlock()
-}
-
-/*
-================
-noteGoria7BossSite
-
-Where the lancer fell in its layer (NoteKillSite, just before the kill
-note): the exit gate rises beside it. Records only.
-================
-*/
-func (rt *Runtime) noteGoria7BossSite(c *enterworld.Character, codename string, fell simulation.Spawn) {
-	if codename != goria7BossCodename || c.World == nil || c.World.InstanceReturn == nil {
-		return
-	}
-	world := instance.ID(domain.CharacterWorldInstance(c))
-	if world.Definition() != goria7Definition {
-		return
-	}
-	rt.goria7.mu.Lock()
-	if layer := rt.goria7.layers[world]; layer != nil && !layer.killed && !layer.bossSiteKnown {
-		layer.bossSite, layer.bossSiteKnown = fell, true
 	}
 	rt.goria7.mu.Unlock()
 }
@@ -554,15 +528,10 @@ party.
 func (rt *Runtime) goria7FinishKill(event InstanceEvent, layer *goria7Layer, now int64) {
 	rt.goria7Push(layer, goria7SymBossDeath)
 	layer.graceEnd = now + goria7KillGraceMs
-	// The reference handler raises the exit gate beside the lancer, then
-	// sets the sixty-second event timer: the gate lets the room leave
-	// early, the timer still returns whoever stays.
 	rt.goria7.mu.Lock()
 	site, known := layer.bossSite, layer.bossSiteKnown
 	rt.goria7.mu.Unlock()
-	if known && rt.SpawnExitGate != nil {
-		rt.SpawnExitGate(event.World, site)
-	}
+	rt.raiseExitGate(event.World, site, known)
 	def, ok := rt.Defs.ByCodename(goria7QuestCodename)
 	if ok {
 		for _, name := range goria7ResidentNames(layer) {
@@ -638,9 +607,7 @@ func (rt *Runtime) goria7EndLayer(event InstanceEvent, layer *goria7Layer) {
 		}
 	}
 	rt.goria7ForgetLayer(event.World)
-	if rt.RemoveExitGates != nil {
-		rt.RemoveExitGates(event.World)
-	}
+	rt.removeExitGates(event.World)
 	if rt.InstanceClose != nil && lease.ID != 0 {
 		rt.InstanceClose(lease)
 	}

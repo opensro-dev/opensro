@@ -256,9 +256,7 @@ func (rt *Runtime) ivy3Leave(event InstanceEvent) {
 		return
 	}
 	rt.ivy3ForgetLayer(event.World)
-	if rt.RemoveExitGates != nil {
-		rt.RemoveExitGates(event.World)
-	}
+	rt.removeExitGates(event.World)
 	if rt.InstanceClose != nil && lease.ID != 0 {
 		rt.InstanceClose(lease)
 	}
@@ -391,29 +389,6 @@ func (rt *Runtime) noteIvy3BossKill(c *enterworld.Character) {
 	rt.ivy3.mu.Lock()
 	if layer := rt.ivy3.layers[world]; layer != nil && !layer.bossGone {
 		layer.killed = true
-	}
-	rt.ivy3.mu.Unlock()
-}
-
-/*
-================
-noteIvy3BossSite
-
-Where Ivy fell in her layer (NoteKillSite, just before the kill note):
-the exit gate rises beside it. Records only.
-================
-*/
-func (rt *Runtime) noteIvy3BossSite(c *enterworld.Character, codename string, fell simulation.Spawn) {
-	if codename != ivy3BossCodename || c.World == nil || c.World.InstanceReturn == nil {
-		return
-	}
-	world := instance.ID(domain.CharacterWorldInstance(c))
-	if world.Definition() != ivy3Definition {
-		return
-	}
-	rt.ivy3.mu.Lock()
-	if layer := rt.ivy3.layers[world]; layer != nil && !layer.bossGone && !layer.bossSiteKnown {
-		layer.bossSite, layer.bossSiteKnown = fell, true
 	}
 	rt.ivy3.mu.Unlock()
 }
@@ -564,15 +539,10 @@ kill evaluator - and the room's sixty-second grace starts.
 func (rt *Runtime) ivy3FinishKill(event InstanceEvent, layer *ivy3Layer, now int64) {
 	rt.ivy3Push(layer, ivy3SymBossDeath)
 	layer.graceEnd = now + ivy3KillGraceMs
-	// The reference handler raises the exit gate beside Ivy, then sets the
-	// sixty-second event timer: the gate lets the room leave early, the
-	// timer still returns whoever stays.
 	rt.ivy3.mu.Lock()
 	site, known := layer.bossSite, layer.bossSiteKnown
 	rt.ivy3.mu.Unlock()
-	if known && rt.SpawnExitGate != nil {
-		rt.SpawnExitGate(event.World, site)
-	}
+	rt.raiseExitGate(event.World, site, known)
 	def, ok := rt.Defs.ByCodename(ivy3QuestCodename)
 	if ok {
 		for _, name := range ivy3ResidentNames(layer) {
@@ -671,9 +641,7 @@ func (rt *Runtime) ivy3EndLayer(event InstanceEvent, layer *ivy3Layer) {
 		}
 	}
 	rt.ivy3ForgetLayer(event.World)
-	if rt.RemoveExitGates != nil {
-		rt.RemoveExitGates(event.World)
-	}
+	rt.removeExitGates(event.World)
 	if rt.InstanceClose != nil && lease.ID != 0 {
 		rt.InstanceClose(lease)
 	}

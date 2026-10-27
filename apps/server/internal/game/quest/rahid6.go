@@ -237,8 +237,7 @@ type rahid6Layer struct {
 	credited  bool
 	graceEnd  int64
 	ended     bool
-	// bossSite is where the boss fell (NoteKillSite); the exit gate
-	// stands beside it.
+	// bossSite is where the boss fell (NoteKillSite), the gate's spot.
 	bossSite      simulation.Spawn
 	bossSiteKnown bool
 }
@@ -661,9 +660,7 @@ func (rt *Runtime) rahid6Leave(event InstanceEvent) {
 		return
 	}
 	rt.rahid6ForgetLayer(event.World)
-	if rt.RemoveExitGates != nil {
-		rt.RemoveExitGates(event.World)
-	}
+	rt.removeExitGates(event.World)
 	if rt.InstanceClose != nil && lease.ID != 0 {
 		rt.InstanceClose(lease)
 	}
@@ -770,29 +767,6 @@ func (rt *Runtime) noteRahid6Kill(c *enterworld.Character, codename string) {
 	rt.rahid6.mu.Lock()
 	if layer := rt.rahid6.layers[world]; layer != nil {
 		layer.killed = true
-	}
-	rt.rahid6.mu.Unlock()
-}
-
-/*
-================
-noteRahid6BossSite
-
-Where Tahomet fell in its layer (NoteKillSite, just before the kill
-note): the exit gate rises beside it. Records only.
-================
-*/
-func (rt *Runtime) noteRahid6BossSite(c *enterworld.Character, codename string, fell simulation.Spawn) {
-	if codename != rahid6TahometCodename || c.World == nil || c.World.InstanceReturn == nil {
-		return
-	}
-	world := instance.ID(domain.CharacterWorldInstance(c))
-	if world.Definition() != rahid6Definition {
-		return
-	}
-	rt.rahid6.mu.Lock()
-	if layer := rt.rahid6.layers[world]; layer != nil && !layer.killed && !layer.bossSiteKnown {
-		layer.bossSite, layer.bossSiteKnown = fell, true
 	}
 	rt.rahid6.mu.Unlock()
 }
@@ -916,15 +890,10 @@ starts; the update returns whoever is still inside when it runs out.
 func (rt *Runtime) rahid6FinishKill(event InstanceEvent, layer *rahid6Layer, now int64) {
 	rt.rahid6Push(layer, rahid6SymSurrender)
 	layer.graceEnd = now + rahid6KillGraceMs
-	// The reference handler raises the exit gate beside Tahomet, then
-	// sets the sixty-second event timer: the gate lets the room leave
-	// early, the timer still returns whoever stays.
 	rt.rahid6.mu.Lock()
 	site, known := layer.bossSite, layer.bossSiteKnown
 	rt.rahid6.mu.Unlock()
-	if known && rt.SpawnExitGate != nil {
-		rt.SpawnExitGate(event.World, site)
-	}
+	rt.raiseExitGate(event.World, site, known)
 	def, ok := rt.Defs.ByCodename(rahid6QuestCodename)
 	if ok {
 		for _, name := range rahid6ResidentNames(layer) {
@@ -1003,9 +972,7 @@ func (rt *Runtime) rahid6EndLayer(event InstanceEvent, layer *rahid6Layer) {
 		}
 	}
 	rt.rahid6ForgetLayer(event.World)
-	if rt.RemoveExitGates != nil {
-		rt.RemoveExitGates(event.World)
-	}
+	rt.removeExitGates(event.World)
 	if rt.InstanceClose != nil && lease.ID != 0 {
 		rt.InstanceClose(lease)
 	}
