@@ -8,10 +8,9 @@ import "opensro.online/server/internal/domain"
 // The client enforces it on both sides of the exchange, which is why it lives
 // with the wire layer rather than with the inventory rules:
 //
-//	The client's ItemMoveRequest_Serialize clamps at 0x00697eb5 before
-//	serializing a 0x706D request; its ItemMoveResponse_Deserialize
-//	clamps at client 0x0075a2c0 after parsing a 0xB06D result, with the
-//	negative arm at client 0x0075a2b3 flooring at zero.
+//	sub_697e80 @0x00697eb5 clamps before serializing a 0x706D request,
+//	sub_759a30 @0x0075a2c0 clamps after parsing a 0xB06D result, with the
+//	negative arm @0x0075a2b3 flooring at zero.
 const MaxGold uint32 = domain.GroundGoldAmountMax
 
 // ClampGold applies the native [0, MaxGold] clamp.

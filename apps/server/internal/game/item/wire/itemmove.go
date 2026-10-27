@@ -19,13 +19,11 @@ import (
 const ItemBodySize = 18
 
 // MaxMagicOptionsPerItem is the client's MAX_MAGPARAM_PER_ITEM: the parse
-// asserts the count byte <= 12 (client CSOItem_DeserializeMagicOptions at
-// client 0x0078B224, soitem.cpp:0x13b int3), so Encode clamps rather than
-// emit an assert-crashing count.
+// asserts the count byte <= 12 (sub_78b1b0 @0x0078b224, soitem.cpp:0x13b
+// int3), so Encode clamps rather than emit an assert-crashing count.
 const MaxMagicOptionsPerItem = 12
 
-// ItemBody is the CSOItem body as the client's CSOItem_Deserialize
-// reads it. TypeFlags is not on
+// ItemBody is the CSOItem body as sub_78c830 reads it. TypeFlags is not on
 // the wire: the client resolves it from RefObjID, and the encoder needs the
 // same local itemdata word to choose the body:
 //
@@ -78,7 +76,7 @@ func (b ItemBody) EncodedSize() int {
 	if b.TypeFlags != 0 && IsEtcBand(b.TypeFlags) {
 		size := 4 + 2
 		if IsGoldBand(b.TypeFlags) {
-			// The gold-heap group carries a u32 amount (client CSOItem_Deserialize).
+			// The gold-heap group carries a u32 amount (CSOItem 78C830).
 			size = 4 + 4
 		}
 		if EtcCarriesTradeOwner(b.TypeFlags) {
@@ -264,11 +262,9 @@ func readItemBody(r *Reader, typeFlags uint16) (ItemBody, error) {
 
 // SubMove is one follow-up row of a type-0x00 move.
 //
-// The serializer writes five bytes per row (client
-// ItemMoveRequest_Serialize at client 0x00697FED: the op's type byte,
-// then the row's +3, +4 and +6 fields) and the parser reads the same five
-// back (client ItemMoveResponse_Deserialize at client 0x00759B04). A
-// plain slot-to-slot move carries
+// The serializer writes five bytes per row (sub_697e80 @0x00697fed: the op's
+// type byte, then the row's +3, +4 and +6 fields) and the parser reads the
+// same five back (sub_759a30 @0x00759b04). A plain slot-to-slot move carries
 // none; they appear when one logical operation touches several slots, such as
 // a stack merge spilling across rows.
 /*
@@ -412,22 +408,21 @@ func (q ItemMoveRequest) Encode() ([]byte, error) {
 		}
 		w.U32(q.CosGID).U8(q.SourceSlot).U8(q.DestSlot).U16(q.Quantity)
 	case MoveTypeInventory:
-		// client ItemMoveRequest_Serialize @0x00697f7c
+		// sub_697e80 @0x00697f7c
 		w.U8(q.SourceSlot).U8(q.DestSlot).U16(q.Quantity)
 		if len(q.SubMoves) > 0 {
-			// client ItemMoveRequest_Serialize @0x00697f8e
+			// sub_697e80 @0x00697f8e
 			w.U8(uint8(len(q.SubMoves)))
 			for _, subMove := range q.SubMoves {
 				subMove.encodeInto(w)
 			}
 		}
 	case MoveTypeGroundDrop:
-		// client ItemMoveRequest_Serialize @0x006980d0
+		// sub_697e80 @0x006980d0
 		w.U8(q.SourceSlot)
 	case MoveTypeGoldDrop, MoveTypeStorageGoldWithdraw, MoveTypeStorageGoldDeposit,
 		MoveTypeGuildStorageGoldDeposit, MoveTypeGuildStorageGoldWithdraw:
-		// client ItemMoveRequest_Serialize @0x006984cb, amount
-		// pre-clamped at client 0x00697eb5
+		// sub_697e80 @0x006984cb, amount pre-clamped at @0x00697eb5
 		w.U32(ClampGold(uint64(q.GoldAmount)))
 	case MoveTypeStorage, MoveTypeGuildStorage:
 		// ItemMoveRequest_Serialize case 1: [src][dst][u16 count][u32 npc].
@@ -505,13 +500,12 @@ func DecodeItemMoveRequest(payload []byte) (ItemMoveRequest, error) {
 			return out, err
 		}
 	case MoveTypeExchangePut, MoveTypeExchangeTake:
-		// Client ItemMoveRequest_Serialize cases 4 and 5: the bag slot
-		// or the exchange slot.
+		// 697E80 cases 4 and 5: the bag slot or the exchange slot.
 		if out.SourceSlot, err = r.U8(); err != nil {
 			return out, err
 		}
 	case MoveTypeExchangeGold:
-		// Client ItemMoveRequest_Serialize case 0xD: the gold on the table.
+		// 697E80 case 0xD: the gold on the table.
 		if out.GoldAmount, err = r.U32(); err != nil {
 			return out, err
 		}
@@ -819,8 +813,7 @@ func DecodeItemMoveResult(payload []byte, pickupTypeFlags uint16) (ItemMoveResul
 ================
 EtcCarriesTradeOwner
 
-The client's CSOItem_Deserialize: TID 3.3.8 reads the original trader
-string after the quantity.
+78C830: TID 3.3.8 reads the original trader string after the quantity.
 ================
 */
 func EtcCarriesTradeOwner(flags uint16) bool { return flags&0x7fe == 0x46c }

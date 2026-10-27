@@ -7,22 +7,22 @@ The v1.150 client's exchange (CIFExchange, interface child 0x1A):
 
   - 0x7237 [u32 target gid] asks (NetClient_SendTradeRequest7237); the
     target hears the 0x3393 kind-1 prompt and answers {1, 1} or {1, 2}.
-  - The requester's window opens on 0xB237 [1][u32 partner gid] (client 75B370),
-    the target's on 0x3219 [u32 partner gid] (client 75B420); a refusal is
+  - The requester's window opens on 0xB237 [1][u32 partner gid] (75B370),
+    the target's on 0x3219 [u32 partner gid] (75B420); a refusal is
     0xB237 [2][code].
   - Items and gold move with 0x706D types 4 (bag -> exchange, [u8 bag
     slot]), 5 (exchange -> bag, [u8 exchange slot]) and 0x0D (gold,
     [u32]); 0xB06D answers [4][bag][exchange slot], [5][slot] and
-    [0x0D][u32] (client 759A30, 74EF50).
+    [0x0D][u32] (759A30, 74EF50).
   - 0x3569 [u32 owner gid][u8 count] then per offer ([u8 bag slot] when
     the owner is the reader)[u8 exchange slot][CSOItem] lists a side
-    (client 75B690); 0x30BB [2][u32] is the partner's gold (client 75B580).
+    (75B690); 0x30BB [2][u32] is the partner's gold (75B580).
   - 0x7095 confirms (0xB095 [1], the partner hears 0x37CF), 0x734A
     approves (0xB34A [1]), 0x72DB cancels (0xB2DB [1]); every refusal is
     [2][code], a category 1 notice.
   - 0x3272 reports the swap: the client puts the partner's items in its
-    first empty bag slots and takes its own out (client 765260). 0x3457 [u8 code]
-    ends a session that failed or was cancelled (client 75B820).
+    first empty bag slots and takes its own out (765260). 0x3457 [u8 code]
+    ends a session that failed or was cancelled (75B820).
 
 ===========================================================================
 */
