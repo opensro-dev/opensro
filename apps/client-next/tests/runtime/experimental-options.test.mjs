@@ -563,10 +563,10 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 });
 
 test("the WebTransport connection defaults on and one setting turns it off", () => {
-	// Owner 2026-10-27 (#1451 step 3): WebTransport is the default connect
-	// now that the endpoint flip is scheduled; the WebSocket stays the
-	// connect-time fallback, and the row remains the switch back. Like the
-	// other default-on rows, only an explicit false turns it off.
+	// #1451 step 3: WebTransport is the default connect; the WebSocket
+	// stays the connect-time fallback, and the row remains the switch
+	// back. Like the other default-on rows, only an explicit false
+	// turns it off.
 	assert.equal( experimentalOptions().webTransport, true );
 	assert.equal( experimentalGameplay( experimentalOptions() ).webTransport, true );
 	for ( const value of [ 1, "true", null, {}, "false", 0 ] ) {
@@ -632,6 +632,37 @@ test("compressed textures are on unless explicitly false, and the stored reader 
 	assert.equal( storedExperimentalOptions( { getItem: () => null } ).options.compressedTextures, true );
 	assert.equal( storedExperimentalOptions( undefined ).options.compressedTextures, true );
 	assert.throws( () => storedExperimentalOptions( { getItem: () => "{" } ) );
+});
+
+test("a profile saved before the flip loads with WebTransport on; a choice under the current key is kept", () => {
+	const { storedExperimentalOptions, EXPERIMENTAL_STORAGE_KEY, PREVIOUS_EXPERIMENTAL_STORAGE_KEY } =
+		experimentalModule;
+	const storageOf = entries => {
+		const saved = new Map( entries );
+		return { getItem: key => saved.get( key ) ?? null };
+	};
+	// Saved before the flip (platform.ts wrote the whole options object,
+	// so a Confirm under the old default stored webTransport: false):
+	// the flip reaches it, and its other choices carry over.
+	const before = storedExperimentalOptions( storageOf( [
+		[ PREVIOUS_EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { webTransport: false, chatTimestamps: true } ) ]
+	] ) );
+	assert.equal( before.options.webTransport, true );
+	assert.equal( before.options.chatTimestamps, true );
+	assert.equal( "webTransport" in (before.raw), false );
+	// Stored under the current key after the flip: an explicit off stays off.
+	const after = storedExperimentalOptions( storageOf( [
+		[ PREVIOUS_EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { chatTimestamps: true } ) ],
+		[ EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { webTransport: false } ) ]
+	] ) );
+	assert.equal( after.options.webTransport, false );
+	// The current key wins even when the previous one is also present.
+	const both = storedExperimentalOptions( storageOf( [
+		[ PREVIOUS_EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { webTransport: false, chatTimestamps: false } ) ],
+		[ EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { webTransport: false, chatTimestamps: true } ) ]
+	] ) );
+	assert.equal( both.options.webTransport, false );
+	assert.equal( both.options.chatTimestamps, true );
 });
 
 test("the shared actor room is on unless explicitly false, and reaches the renderer's video options", () => {

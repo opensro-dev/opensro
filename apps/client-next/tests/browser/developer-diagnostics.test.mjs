@@ -570,7 +570,7 @@ test( "legacy opt-in migrates without overriding an explicit Experimental choice
 		await page.evaluate( () => window.sroDebug?.setDiagnostics( false ) );
 		assert.equal( await page.evaluate( () => localStorage.getItem( "sro.developerDiagnostics" ) ), null );
 		const stored = await page.evaluate( () =>
-			JSON.parse( localStorage.getItem( "sro:v1150:experimental-options:1" ) ?? "null" )
+			JSON.parse( localStorage.getItem( "sro:v1150:experimental-options:2" ) ?? "null" )
 		);
 		assert.equal( stored.developerDiagnostics, false );
 		assert.equal( stored.chatTimestamps, false );
