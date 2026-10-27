@@ -113,8 +113,9 @@ const OFF = Object.freeze( {
 	petFilterOther: true,
 	// On by default (owner 2026-10-22, #1243): a touch tap keeps an item or skill tooltip up.
 	touchInspect: true,
-	// Off by default (#1448): the WebSocket stays the default transport until #1450.
-	webTransport: false,
+	// On by default (owner 2026-10-27, #1451 step 3): WebTransport is the
+	// default connect and the WebSocket the fallback; off is one setting.
+	webTransport: true,
 	// Off by default: the M window shows only the five native towns and 28 x 8 overview.
 	expandedWorldMap: false,
 	// Off by default (#840): the maps mark the tracked quest's targets only.
@@ -531,7 +532,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 	// walks before the server answers, so the row remains the off switch.
 	assert.deepEqual( experimentalGameplay( experimentalOptions() ), {
 		predictedRunUp: true,
-		webTransport: false,
+		webTransport: true,
 		jobKillNotices: true,
 		dropPlusNotices: true,
 		plusSevenNotices: true,
@@ -548,7 +549,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 	const on = experimentalOptions( { predictedRunUp: true } );
 	assert.deepEqual( experimentalGameplay( on ), {
 		predictedRunUp: true,
-		webTransport: false,
+		webTransport: true,
 		jobKillNotices: true,
 		dropPlusNotices: true,
 		plusSevenNotices: true,
@@ -559,6 +560,21 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		petPickupKinds: undefined
 	} );
 	assert.equal( "predictedRunUp" in experimentalVideo( on ), false );
+});
+
+test("the WebTransport connection defaults on and one setting turns it off", () => {
+	// Owner 2026-10-27 (#1451 step 3): WebTransport is the default connect
+	// now that the endpoint flip is scheduled; the WebSocket stays the
+	// connect-time fallback, and the row remains the switch back. Like the
+	// other default-on rows, only an explicit false turns it off.
+	assert.equal( experimentalOptions().webTransport, true );
+	assert.equal( experimentalGameplay( experimentalOptions() ).webTransport, true );
+	for ( const value of [ 1, "true", null, {}, "false", 0 ] ) {
+		assert.equal( experimentalOptions( { webTransport: value } ).webTransport, true, JSON.stringify( value ) );
+	}
+	const off = experimentalOptions( { webTransport: false } );
+	assert.equal( off.webTransport, false );
+	assert.equal( experimentalGameplay( off ).webTransport, false );
 });
 
 test("the pickup pet item filter is off by default and only narrows inside itself", () => {
