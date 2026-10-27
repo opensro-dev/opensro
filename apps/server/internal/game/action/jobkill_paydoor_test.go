@@ -1,8 +1,8 @@
 /*
 ===========================================================================
 
-mostwanted_audit_test.go - BR-261015-0844-66A1: does a real job kill ever
-classify as pk.DeathJob on the shipped data and code path?
+jobkill_paydoor_test.go - a suited job kill classifies and counts through
+the pay door (BR-261015-0844-66A1)
 
 The live shard (SRO_MOST_WANTED on) never logged 'job kill classified'
 (#1859's diagnostic in payPlayerKillInDoor's DeathJob case). These tests
@@ -26,14 +26,14 @@ import (
 
 /*
 ================
-TestAuditShippedJobSuitRowsClassify
+TestShippedJobSuitsReadAsTheirJob
 
 The classification reads the worn suit's packed type word. The shipped
 itemdata must carry the trader/thief/hunter suits as type 3/1/7 with the
 job in the fourth type id, or DressedJob can never answer on live data.
 ================
 */
-func TestAuditShippedJobSuitRowsClassify(t *testing.T) {
+func TestShippedJobSuitsReadAsTheirJob(t *testing.T) {
 	items := enterworld.NewTextdataItems(gamedatatest.TextdataDir(t))
 	for codename, want := range map[string]uint8{
 		"ITEM_CH_M_TRADE_TRADER_04": domain.JobTrader,
@@ -73,7 +73,7 @@ func TestAuditShippedJobSuitRowsClassify(t *testing.T) {
 
 /*
 ================
-TestAuditJobKillThroughThePayDoor
+TestSuitedJobKillCountsThroughThePayDoor
 
 A suited hunter kills a suited thief (strangers, both alive, open field):
 classification must yield pk.DeathJob and, with the rule on, the pay door
@@ -82,7 +82,7 @@ unsuited classifies as a murder; opposing free-battle capes classify as
 a team kill (the cape test runs first).
 ================
 */
-func TestAuditJobKillThroughThePayDoor(t *testing.T) {
+func TestSuitedJobKillCountsThroughThePayDoor(t *testing.T) {
 	rt, _, hunter, thief := newPvpPair(t)
 	rt.MostWanted = true
 	rt.deps.(*enterworld.Deps).Levels = enterworld.NewTextdataLevels(gamedatatest.TextdataDir(t))
