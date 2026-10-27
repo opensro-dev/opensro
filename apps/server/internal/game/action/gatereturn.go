@@ -17,7 +17,10 @@ teleport already under way 0x1C14, the hit range, the teleport service
 test (8, 9, 0x1C or 0x1E, else 3). Case 1 then refuses only a summoned
 transport (0x1C10) and runs the shared town teleport with no revival: the
 appointed town recall point, the same place a return scroll lands. No fee,
-no quest mask, no level test.
+no quest mask, no level test. The town teleport settles hostility and
+clears abnormal states before the move (towneffects.go), and the use
+handler's success tail raises the used-a-teleport quest event before the
+success answer (portal.go).
 
 ===========================================================================
 */
@@ -25,6 +28,7 @@ package action
 
 import (
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/wire"
 )
 
 const (
@@ -70,10 +74,18 @@ func (rt *Runtime) handleGateTownReturn(division string, c *enterworld.Character
 		return portalFailure(errCodeGuideTransport)
 	}
 	point := rt.appointedRebirth(division, c)
-	return rt.commitGateTravel(gateTravel{division: division, character: c, destination: point.spawn, world: point.world, reason: "gate-town-return"}, func() (int64, OpResult, bool) {
+	// The shared town teleport's head: hostility and abnormal states
+	// settle before the move, and stay settled if the move rolls back.
+	headActor, headPublic := rt.applyTownTeleportHead(division, c)
+	result := rt.commitGateTravel(gateTravel{division: division, character: c, destination: point.spawn, world: point.world, reason: "gate-town-return",
+		arrived: func() []wire.Frame { return rt.questTeleportFrames(c, gateTownReturn, gid) }}, func() (int64, OpResult, bool) {
 		if c.DeletePending || !enterworld.CharacterAlive(c) || c.NativeTeleportMode != 0 {
 			return 0, portalFailure(2), false
 		}
 		return 0, OpResult{}, true
 	})
+	result.Frames = append(result.Frames, headActor...)
+	result.Frames = append(result.Frames, headPublic...)
+	result.Broadcast = append(result.Broadcast, headPublic...)
+	return result
 }

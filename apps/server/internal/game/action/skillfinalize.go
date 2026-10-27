@@ -45,7 +45,8 @@ type pendingSkillFinalize struct {
 	// Presentation-only closes retain session ownership without blocking commands.
 	presentationOnly bool
 	// chainBracket marks the mode-2 close of a chain ROOT. The v1.150 client
-	// (85CB60) appends every linked stage's B245 to that root's deco, which
+	// attaches every linked stage's B245 to that root's deco
+	// (CICharactor_FindAttachedSkillDecoById), which
 	// carries the one authored clip for the whole chain; closing it before
 	// the last stage turns the remaining stages into result-only temporaries
 	// (damage with the caster snapped to idle). Stages re-arm it instead of

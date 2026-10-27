@@ -360,5 +360,5 @@ func (rt *Runtime) handleQuestGate(division string, c *enterworld.Character, gid
 	if rt.returnCharacterFromInstanceTo(division, c, point, "quest-gate") != instance.Success {
 		return portalFailure(errCodeGateMoveFailed)
 	}
-	return OpResult{}
+	return OpResult{Frames: rt.questTeleportFrames(c, gateInstanceTravel, gid)}
 }

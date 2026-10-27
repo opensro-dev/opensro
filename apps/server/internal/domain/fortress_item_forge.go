@@ -89,8 +89,9 @@ type FortressItemForgeStore interface {
 	CollectFortressItemForge(divisionID string, collect FortressItemForgeCollect) (uint8, error)
 }
 
-// v1.150 754A40 reads the low byte of the v1.188 production refusals
-// (the fortress manager's smith and trainer handlers).
+// CPSMission_OnFortressManagerResponse0xB1E1 reads the low byte of the
+// v1.188 production refusals (the fortress manager's smith and trainer
+// handlers).
 const (
 	FortressForgeErrFailure  uint8 = 0x02
 	FortressForgeErrUnknown  uint8 = 0x03

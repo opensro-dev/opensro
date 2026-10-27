@@ -8,9 +8,10 @@ guild.go - guild
 package domain
 
 // GuildRecord is one persisted guild row: the guild-level half of the
-// client's 0x32C4 guild-info block (fold sub_826610). Field widths mirror
-// the pinned wire layout - u8 level, u32 GP, u32 crest parameter, the
-// mercenary attribute byte at +0x10 (v1.150 766D30), retained as Byte10.
+// client's 0x32C4 guild-info block (fold SGuildData_ReadGuildBlock_826610).
+// Field widths mirror the pinned wire layout - u8 level, u32 GP, u32
+// crest parameter, the mercenary attribute byte at +0x10
+// (CNetProcessSecond_HandleGuildSoldierAttributeReply), retained as Byte10.
 //
 // Guilds deliberately do NOT live on any Character record: a guild is a
 // cross-character entity, so it persists in the authority store's guilds /
@@ -73,7 +74,8 @@ type GuildMemberRecord struct {
 // is the fortress role the master alone holds. The retail
 // _Guild_FnAddMember gives MemberClass 0 SiegeAuthority 1, and a master
 // handover moves it (the v1.188 master handover, _Guild_Delegate_Master). The client's
-// fortress windows gate on the role (827DB0), the server on the grade.
+// fortress windows gate on the role (GuildMember_IsFortressRole1), the
+// server on the grade.
 const (
 	GuildLeaderGrade           uint8 = 0
 	GuildFortressRoleCommander uint8 = 0x01

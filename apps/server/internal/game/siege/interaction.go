@@ -3,8 +3,10 @@
 
 interaction.go - v1.150 fortress staff request decoding
 
-703130 emits 0x71E1; 754A40 consumes 0xB1E1. The v1.188 server's dispatcher
-uses 0x705E and a wider error code, so its packet layout must not be copied
+CGInterface_SendFortressInteraction71E1 emits 0x71E1, and
+CPSMission_OnFortressManagerResponse0xB1E1 consumes 0xB1E1. The v1.188
+server's dispatcher uses 0x705E and a wider error code, so its packet
+layout must not be copied
 onto the v1.150 wire. Admission and durable changes belong to the fortress
 authority; this file only decodes complete requests.
 
@@ -136,7 +138,8 @@ func DecodeInteraction(payload []byte) (Interaction, error) {
 ================
 DecodeConstruction
 
-The action-0xA completion branch at 703160 has no target GID.
+The action-0xA completion branch of CGInterface_SendFortressInteraction71E1
+has no target GID.
 ================
 */
 func DecodeConstruction(payload []byte) (Interaction, error) {
