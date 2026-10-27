@@ -103,10 +103,9 @@ func EncodeFriendEventDeleted3F9A(jid uint32) []byte {
 
 // EncodeFriendEventState3F9A renders the 0x3F9A case-4 body (client
 // CPSMission_OnFriendConnectNotice0x3F9A): u8 4, u32 jid, u8 state. The
-// client dereferences the roster record UNGUARDED - a state event for
-// an unlisted
-// jid is a native null-deref, so every send site guards on the
-// receiver's persisted roster first.
+// client dereferences the roster record UNGUARDED - a state event
+// for an unlisted jid is a native null-deref, so every send site
+// guards on the receiver's persisted roster first.
 func EncodeFriendEventState3F9A(jid uint32, state uint8) []byte {
 	writer := wire.NewWriter(6)
 	writer.U8(FriendEventState)

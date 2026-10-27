@@ -38,9 +38,9 @@ func PackLetterReceiveTime(t time.Time) uint32 {
 }
 
 // letterJobAliasLead is the job-alias lead character the client's own
-// composer blocks before the wire (client NetClient_Send7261 against
-// L"*"): a
-// frame carrying it bypassed the client gate and is refused.
+// composer blocks before the wire (client NetClient_Send7261
+// against L"*"): a frame carrying it bypassed the client gate and
+// is refused.
 const letterJobAliasLead = "*"
 
 // LetterSendOutcome is one handled 0x7261 request. AckPayload is the
