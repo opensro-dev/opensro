@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -245,6 +246,11 @@ func TestSkillCastAcceptFixturePinned(t *testing.T) {
 	}
 	if pinned.Expect != fresh.Expect {
 		t.Errorf("expect block drifted:\n got %+v\nwant %+v", pinned.Expect, fresh.Expect)
+	}
+	// The comment is pinned too: a description edited on one side only
+	// would leave the generator and the fixture saying different things.
+	if !slices.Equal(pinned.Comment, fresh.Comment) {
+		t.Errorf("comment drifted:\n got %q\nwant %q", pinned.Comment, fresh.Comment)
 	}
 	if len(pinned.Scenarios) != len(fresh.Scenarios) {
 		t.Fatalf("fixture has %d scenarios, the accept path builds %d - regenerate", len(pinned.Scenarios), len(fresh.Scenarios))
