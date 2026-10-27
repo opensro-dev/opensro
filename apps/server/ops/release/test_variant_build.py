@@ -4,8 +4,9 @@
 test_variant_build.py - the variant staging keeps the native bytes
 
 Fake steps stand in for the four builds (no game data): the step order
-and environments, the overlay the variant must hold, and the refusal of
-any drift in the native artifacts the build was shown.
+and environments, the overlay the variant must hold, the monster
+setting and its database, and the refusal of any drift in the native
+artifacts the build was shown (the native mapinfo among them).
 
 ===========================================================================
 """
@@ -21,8 +22,9 @@ import variant_build
 # FakeRun
 #
 # Records each step and lays down the outputs the real step would: the
-# isolated import, the variant textdata with one cap110 overlay, and the
-# bundle with its overlay projection. Defects are opt-in per test.
+# isolated import, the variant textdata (one cap110 overlay when the
+# monster setting is on), and the bundle with its overlay projection.
+# Defects are opt-in per test.
 # ================
 class FakeRun:
 	def __init__(self, staging, defect=None, native_manifest=None):
@@ -31,6 +33,7 @@ class FakeRun:
 		self.native_manifest = native_manifest
 		self.calls = []
 		self.shards = {}
+		self.monsters = False
 
 	def __call__(self, argv, env):
 		self.calls.append((argv, env))
@@ -42,7 +45,9 @@ class FakeRun:
 			self.shards = {flag: env.get(flag) for flag in variant_build.SHARD_FILES}
 			textdata = self.staging / "variant" / variant_build.TEXTDATA_DIR
 			textdata.mkdir(parents=True)
-			(textdata / "cap110-monsters.txt").write_text("rows", encoding="utf-8")
+			self.monsters = env.get(variant_build.MONSTERS_FLAG) == "on"
+			if self.monsters and self.defect != "no-variant-overlay":
+				(textdata / "cap110-monsters.txt").write_text("rows", encoding="utf-8")
 		elif "task.mjs" in tool:
 			(self.staging / "variant" / ".generated").mkdir(parents=True, exist_ok=True)
 		elif "buildServerGameDataBundle" in tool:
@@ -51,7 +56,7 @@ class FakeRun:
 			if self.defect != "no-overlay":
 				(textdata / "alexandria-overlay.json").write_text(
 					json.dumps({"format": variant_build.OVERLAY_FORMAT}), encoding="utf-8")
-			if self.defect != "no-cap110":
+			if self.monsters and self.defect not in ("no-cap110", "no-variant-overlay"):
 				(textdata / "cap110-monsters.txt").write_text("rows", encoding="utf-8")
 			for flag, shard in variant_build.SHARD_FILES.items():
 				asked = self.shards.get(flag) == "on"
@@ -73,10 +78,21 @@ class VariantBuildTests(unittest.TestCase):
 		self.manifest = base / "manifest.json"
 		self.manifest.write_bytes(b"native manifest")
 		self.native = [self.archive, self.manifest]
+		self.mapinfo = base / "mapinfo.mfo"
+		self.mapinfo.write_bytes(b"native mapinfo")
+		self.database = base / "monster-db"
 
-	def build(self, run, env=None):
-		return variant_build.build(base_vsro(), self.staging, "variant-1", self.native, run=run,
-			env={} if env is None else env)
+	def inputs(self, **changes):
+		inputs = variant_build.VariantInputs(base_vsro(), self.staging, "variant-1", self.native, self.mapinfo)
+		for name, value in changes.items():
+			setattr(inputs, name, value)
+		return inputs
+
+	def build(self, run, env=None, **changes):
+		return variant_build.build(self.inputs(**changes), run=run, env={} if env is None else env)
+
+	def monsters_on(self):
+		return {variant_build.MONSTERS_FLAG: "on"}
 
 	def test_the_four_steps_run_in_order_against_the_variant(self):
 		run = FakeRun(self.staging)
@@ -89,6 +105,8 @@ class VariantBuildTests(unittest.TestCase):
 		self.assertIn("buildServerGameDataBundle", tools[3])
 		self.assertEqual(run.calls[0][1]["SRO_GAME_ROOT"], str(self.staging / "stage1"))
 		self.assertEqual(run.calls[0][1]["SRO_ALEXANDRIA"], "1")
+		argv = run.calls[0][0]
+		self.assertEqual(argv[argv.index("--native-mapinfo") + 1], str(self.mapinfo))
 		for call in run.calls[2:]:
 			self.assertEqual(call[1]["SRO_GAME_ROOT"], str(self.staging / "variant"))
 			self.assertEqual(call[1]["SRO_GENERATED_ROOT"], str(self.staging / "variant" / ".generated"))
@@ -101,9 +119,50 @@ class VariantBuildTests(unittest.TestCase):
 	def test_a_missing_native_artifact_stops_before_any_step(self):
 		run = FakeRun(self.staging)
 		with self.assertRaisesRegex(ValueError, "not found"):
-			variant_build.build(base_vsro(), self.staging, "variant-1",
-				[self.archive, Path(self.root.name) / "absent.json"], run=run)
+			self.build(run, native_files=[self.archive, Path(self.root.name) / "absent.json"])
 		self.assertEqual(run.calls, [])
+
+	def test_a_missing_native_mapinfo_stops_before_any_step(self):
+		run = FakeRun(self.staging)
+		with self.assertRaisesRegex(ValueError, "mapinfo.mfo not found"):
+			self.build(run, native_mapinfo=Path(self.root.name) / "absent" / "mapinfo.mfo")
+		self.assertEqual(run.calls, [])
+
+	def test_a_native_mapinfo_change_refuses_the_staging(self):
+		run = FakeRun(self.staging, defect="touch-native", native_manifest=self.mapinfo)
+		with self.assertRaisesRegex(ValueError, "changed during the variant build: .*mapinfo"):
+			self.build(run)
+
+	def test_monsters_on_without_a_database_stops_before_any_step(self):
+		run = FakeRun(self.staging)
+		with self.assertRaisesRegex(ValueError, "needs --monster-database"):
+			self.build(run, env=self.monsters_on())
+		self.assertEqual(run.calls, [])
+
+	def test_monsters_on_hands_the_database_to_the_import_and_the_variant(self):
+		run = FakeRun(self.staging)
+		self.build(run, env=self.monsters_on(), monster_database=self.database)
+		for call in run.calls[:2]:
+			self.assertEqual(call[1][variant_build.MONSTERS_FLAG], "on")
+			self.assertEqual(call[1][variant_build.MONSTER_DATABASE_ENV], str(self.database))
+		self.assertTrue((self.staging / "server-data" / "textdata" / "cap110-monsters.txt").is_file())
+
+	def test_monsters_off_blanks_a_stale_database(self):
+		run = FakeRun(self.staging)
+		self.build(run, env={variant_build.MONSTER_DATABASE_ENV: "stale"}, monster_database=self.database)
+		for call in run.calls[:2]:
+			self.assertEqual(call[1][variant_build.MONSTERS_FLAG], "off")
+			self.assertEqual(call[1][variant_build.MONSTER_DATABASE_ENV], "")
+
+	def test_monsters_off_needs_no_cap110_overlay(self):
+		run = FakeRun(self.staging)
+		self.build(run)
+		self.assertEqual(list((self.staging / "server-data" / "textdata").glob("cap110-*.txt")), [])
+
+	def test_monsters_on_without_a_variant_overlay_is_refused(self):
+		run = FakeRun(self.staging, defect="no-variant-overlay")
+		with self.assertRaisesRegex(ValueError, "holds no cap110-\*.txt overlay"):
+			self.build(run, env=self.monsters_on(), monster_database=self.database)
 
 	def test_a_bundle_without_the_overlay_is_refused(self):
 		run = FakeRun(self.staging, defect="no-overlay")
@@ -113,7 +172,7 @@ class VariantBuildTests(unittest.TestCase):
 	def test_a_bundle_missing_a_cap110_overlay_is_refused(self):
 		run = FakeRun(self.staging, defect="no-cap110")
 		with self.assertRaisesRegex(ValueError, "missing cap110 overlays"):
-			self.build(run)
+			self.build(run, env=self.monsters_on(), monster_database=self.database)
 
 	def test_staging_must_be_fresh(self):
 		self.staging.mkdir(parents=True)
@@ -129,6 +188,7 @@ class VariantBuildTests(unittest.TestCase):
 		step = run.calls[1][1]
 		self.assertEqual(step["SRO_CAP110_ITEMS"], "on")
 		self.assertEqual(step["SRO_CAP110_SKILLS"], "off")
+		self.assertEqual(step["SRO_CAP110_MONSTERS"], "off")
 		self.assertTrue((self.staging / "server-data" / "textdata" / "itemdata_110000.txt").is_file())
 		self.assertFalse((self.staging / "server-data" / "textdata" / "skilldata_110000.txt").exists())
 
@@ -148,7 +208,7 @@ class VariantBuildTests(unittest.TestCase):
 		(native_data / "textdata" / "alexandria-overlay.json").write_text("{}", encoding="utf-8")
 		run = FakeRun(self.staging)
 		with self.assertRaisesRegex(ValueError, "is not native"):
-			variant_build.build(base_vsro(), self.staging, "variant-1", self.native, native_data, run=run)
+			self.build(run, native_server_data=native_data)
 		self.assertEqual(run.calls, [])
 
 

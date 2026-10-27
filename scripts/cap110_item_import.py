@@ -97,15 +97,12 @@ def copy_asset_closure(equipment, native, output, archives, worn=True):
 	pending, seen, records = set(items.direct_assets(equipment)), set(), []
 	# worn is false for rows that are carried, not worn (alchemy materials,
 	# tokens): they have an icon and a drop model but no worn mesh.
-	# Degree-11 set armour authors its worn model as a comma pair: the
-	# normal resource and its full-set variant. Both are verified and
-	# copied; which one a wearer shows belongs to the later display port,
-	# so the authored cell itself is imported untouched.
+	# A comma pair (set armour's plain and full-set model) was already cut
+	# to its plain path (items.plain_worn_models); one cell is one path.
 	worn_models = resource_dependencies([{"weapon": {
-		"resolvedModel": "res/" + normalized_path(model),
+		"resolvedModel": "res/" + normalized_path(row[items.MODEL]),
 		"tid": list(map(int, row[items.TYPE_FIRST:items.TYPE_FOURTH + 1]))
-	}} for row in equipment if row[items.MODEL] not in ("", items.UNUSED)
-		for model in row[items.MODEL].split(",")]) if worn else []
+	}} for row in equipment if row[items.MODEL] not in ("", items.UNUSED)]) if worn else []
 	for row in equipment if worn else ():
 		# Authored circlet rows (armor head kind 1) and jewelry have no worn
 		# mesh. Keep that absence, as the native equipment resolver does.
@@ -213,6 +210,7 @@ def add_items(vsro_root, native, output):
 			for row in tables.table_rows(path.read_bytes()) if len(row) > 1
 		}
 		equipment, summary = items.merge_equipment(native_rows, later_rows, reserved, prior.get("idMap"))
+		summary["fullSetModelsDropped"] = items.plain_worn_models(equipment)
 		set_groups, set_magic, catalogue = items.set_catalogue(
 			tables.table_rows(read_later(items.SET_GROUP_TABLE)),
 			tables.table_rows(read_later(items.MAGIC_GROUP_TABLE)),

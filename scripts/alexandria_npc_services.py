@@ -27,6 +27,40 @@ POSITION_SCALE = 10
 LOCAL_MAP_COLUMNS = 20
 CITY_MAP_ID = "12"
 RESTORED_STORE_NPCS = {"NPC_SD_M_AREA_ACCESSORY", "NPC_SD_T_AREA_ACCESSORY"}
+GOODS_TAB = 2
+GOODS_SLOT = 4
+# The largest tab the native tables ship (slots 0..44).
+MAX_TAB_SLOTS = 45
+
+
+# ================
+# unique_slots
+#
+# The later tables place two packages in one slot of a tab (for example
+# STORE_SD_ACCESSORY_EU_TAB3 slot 11). The v1.150 shop window shows one
+# package per slot, so a second package would silently hide the first.
+# The first row keeps its slot; a later one moves to the tab's lowest
+# free slot, or is dropped and reported when the tab is full. #1745.
+# ================
+def unique_slots(goods):
+	used = defaultdict(set)
+	for row in goods:
+		used[row[GOODS_TAB]].add(row[GOODS_SLOT])
+	kept, seen, moved, dropped = [], defaultdict(set), [], []
+	for row in goods:
+		tab, slot = row[GOODS_TAB], row[GOODS_SLOT]
+		if slot in seen[tab]:
+			free = next((str(s) for s in range(MAX_TAB_SLOTS) if str(s) not in used[tab]), None)
+			if free is None:
+				dropped.append(f"{tab}:{slot}:{row[3]}")
+				continue
+			moved.append(f"{tab}:{slot}->{free}:{row[3]}")
+			row = [*row[:GOODS_SLOT], free, *row[GOODS_SLOT + 1:]]
+			used[tab].add(free)
+			slot = free
+		seen[tab].add(slot)
+		kept.append(row)
+	return kept, {"moved": moved, "dropped": dropped}
 
 
 # ================
@@ -57,7 +91,7 @@ def merge_shops(native, later, item_codes, npc_codes):
 	missing = {code: sorted({r[3] for r in scraps[code]} - item_codes) for code in packages}
 	allowed = {code for code in packages if scraps[code] and not missing[code]}
 	native_packages = {r[3] for r in base["refpackageitem.txt"] if len(r) > 3}
-	selected["refshopgoods.txt"] = [r for r in goods if r[3] in allowed]
+	selected["refshopgoods.txt"], slots = unique_slots([r for r in goods if r[3] in allowed])
 	for name in ("refpackageitem.txt", "refscrapofpackageitem.txt", "refpricepolicyofitem.txt", "refconditiontosellpackageitem.txt", "refrewardpolicytosellpackageitem.txt"):
 		selected[name] = [r for r in source[name] if len(r) > 3 and r[0] == "1" and (r[3] if name == "refpackageitem.txt" else r[2]) in allowed - native_packages]
 	merged, counts = {}, {}
@@ -85,7 +119,7 @@ def merge_shops(native, later, item_codes, npc_codes):
 			added.append(converted)
 		merged[name] = npcs.append_rows(native[name], added)
 		counts[name] = len(added)
-	return merged, {"added": counts, "deferredPackages": {k: v for k, v in sorted(missing.items()) if v}, "packages": len(allowed)}
+	return merged, {"added": counts, "deferredPackages": {k: v for k, v in sorted(missing.items()) if v}, "packages": len(allowed), "goodsSlots": slots}
 
 
 # ================

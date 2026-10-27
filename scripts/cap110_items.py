@@ -153,6 +153,24 @@ def convert_equipment(row, identity, later):
 
 
 # ================
+# plain_worn_models
+#
+# Degree-11 set armour authors MODEL as a comma pair: the plain resource
+# and its full-set variant. The v1.150 client reads MODEL as one path
+# and has no full-set display, so the import keeps the first (plain)
+# path (owner decision 2026-10-28, #1745). Returns how many rows it
+# changed.
+# ================
+def plain_worn_models(equipment):
+	changed = 0
+	for row in equipment:
+		if "," in row[MODEL]:
+			row[MODEL] = row[MODEL].split(",")[0].strip()
+			changed += 1
+	return changed
+
+
+# ================
 # merge_equipment
 # ================
 def merge_equipment(native_rows, later_rows, reserved_ids=(), previous_ids=None):
