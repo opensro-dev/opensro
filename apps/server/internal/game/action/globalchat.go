@@ -49,7 +49,7 @@ decodeGlobalChatMessage
 
 The 0x75BD tail: u16 wide-char count + UTF-16LE text, nothing after. The
 client's edit box holds at most 0x64 characters (CIFWholeChat_OnCreate
-6D2080) and never sends an empty line (6D1EE0 answers it locally), so a
+6D2080) and never sends an empty line (client 6D1EE0 answers it locally), so a
 longer, empty or trailing tail can only come from another client.
 ================
 */

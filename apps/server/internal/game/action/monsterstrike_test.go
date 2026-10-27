@@ -84,7 +84,7 @@ func TestMonsterAreaStrikesEveryVictimAtItsShare(t *testing.T) {
 	if enterworld.CurrentHP(far) != before {
 		t.Fatal("a player outside the area was struck")
 	}
-	// The area result names both victims (target-major records, 8E0190).
+	// The area result names both victims (target-major records, client 8E0190).
 	payload := result.Frames[0].Payload
 	for _, gid := range []uint32{enterworld.ObjectIDForCharacter(c), enterworld.ObjectIDForCharacter(near)} {
 		if !bytes.Contains(payload, binary.LittleEndian.AppendUint32(nil, gid)) {

@@ -144,7 +144,7 @@ HP/MP recovery, one-unit stack consumption, then the exact 0xB5BD success
 row followed by the normal 0x33A6 vitals refresh.
 
 admittedItemUseFamily owns the closed recovery/summoner/pet-skill dispatch.
-Other sub_6961b0 families remain refused until their effect, prerequisites,
+Other client 6961B0 families remain refused until their effect, prerequisites,
 cooldown and result conversation are implemented together.
 ==================
 */
@@ -439,7 +439,7 @@ func (rt *Runtime) HandleItemUse(
 			rt.petSkillWindows.track(divisionID, character.Name)
 			result = OpResult{Frames: []wire.Frame{
 				{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)},
-				// A fresh use has its whole window left; sub_6E6E00 seeds the
+				// A fresh use has its whole window left; client 6E6E00 seeds the
 				// row's elapsed accumulator to limit minus this value.
 				{Opcode: wire.OpCosStateRefresh, Payload: wire.EncodeCosSummonTimer3691(ref.RefObjID, uint32(seconds), 0)},
 			}}

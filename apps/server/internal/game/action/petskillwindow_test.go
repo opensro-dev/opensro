@@ -10,7 +10,7 @@ import (
 
 // A window re-raised at world entry reaches the sweep only through the hook
 // the bootstrap calls. Item use is the index's other writer, so without it a
-// relogged row would sit at zero forever: sub_6E6AA0 never retires one itself.
+// relogged row would sit at zero forever: client 6E6AA0 never retires one itself.
 func TestWorldEntryTrackedPetSkillWindowRetiresOnTheSweep(t *testing.T) {
 	character := testCharacter()
 	rt, clock := newTestRuntime(character, petSkillSource())

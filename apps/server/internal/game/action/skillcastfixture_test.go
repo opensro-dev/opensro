@@ -30,7 +30,7 @@ import (
 // harness reads the SAME file and drives the immediate 0xB245 and deferred 0xB505
 // payloads through the
 // client's REAL sub_776830 -> 8e06e0 -> 857830 state-2 enter and
-// sub_7754f0 -> 8e2c90 -> 8dcf40 finalize chain. Either side drifting fails
+// client 7754F0 -> 8E2C90 -> 8DCF40 finalize chain. Either side drifting fails
 // its own gate; neither re-implements the other.
 //
 // Regenerate:
@@ -188,7 +188,7 @@ func buildSkillCastFixture(t *testing.T) skillCastFixture {
 			"The gid slot is a",
 			"u32 GID (prereq Q3: integer mov to +0xcc, consumed by FindCharacterByGid), sent as 0, NEVER",
 			"a float duration. Consumed by the harness skillCastServerAcceptParity test through the REAL",
-			"776830/8e06e0/857830 enter + 7754f0/8e2c90/8dcf40 finalize chain.",
+			"client 776830/8e06e0/857830 enter + 7754f0/8e2c90/8dcf40 finalize chain.",
 			"Regenerate: UPDATE_SKILL_CAST_FIXTURE=1 go test ./internal/game/action -run TestSkillCastAcceptFixturePinned",
 		},
 		Expect: skillCastFixtureExpect{

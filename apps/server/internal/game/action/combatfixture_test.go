@@ -53,7 +53,7 @@ func assertSkillCastClose(t *testing.T, routed []simulation.DivisionFrames, divi
 		t.Fatalf("finalize payload = % X (%d bytes), want exactly %d", finalize.Payload, len(finalize.Payload), skillCastFinalizeLen)
 	}
 	if finalize.Payload[0] != 0x02 {
-		t.Fatalf("finalize mode = 0x%02X, want mode 2 (CIDecoSkill_RequestCancellation at 0x8DCF40)", finalize.Payload[0])
+		t.Fatalf("finalize mode = 0x%02X, want mode 2 (client CIDecoSkill_RequestCancellation at 0x8DCF40)", finalize.Payload[0])
 	}
 	if got := binary.LittleEndian.Uint32(finalize.Payload[2:]); got != token {
 		t.Fatalf("finalize token = 0x%X, want the success frame's 0x%X (a miss is a SILENT skip - the bracket never closes)", got, token)

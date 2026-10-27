@@ -65,7 +65,7 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 		return rt.beginFollow(divisionID, character, request, rt.Now().UnixMilli())
 
 	case wire.TargetActionBasicAttack:
-		// 692CB0 emits family 1 for an attack; family 3 belongs to Trace.
+		// Client 692CB0 emits family 1 for an attack; family 3 belongs to Trace.
 		// A malformed attack must not answer or release the pickup latch.
 		engage, err := wire.DecodeBasicAttackEngage(payload)
 		if err != nil {
@@ -87,7 +87,7 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 		return rt.beginBasicAttack(divisionID, character, engage, nowMs)
 
 	case wire.TargetActionSkill:
-		// 6FCD50 flags 00/01 and 878100 flag 02 share this
+		// Client 6FCD50 flags 00/01 and 878100 flag 02 share this
 		// discriminator. Malformed 0x04-family bytes remain skill-owned and
 		// fail closed without emitting pickup frames.
 		cast, err := wire.DecodeSkillAction(payload)

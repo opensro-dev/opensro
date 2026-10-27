@@ -46,7 +46,7 @@ const (
 	exchangeReach = 320
 
 	// exchangePromptKind is the 0x3393 kind of an exchange request
-	// (7644E0 case 0 opens confirm box 7).
+	// (client 7644E0 case 0 opens confirm box 7).
 	exchangePromptKind uint8 = 1
 )
 

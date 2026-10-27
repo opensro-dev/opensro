@@ -5,7 +5,7 @@ fortress_roster.go - the fortress world's structure roster (0x3887 0x0F)
 
 Every player in a fortress world hears which structure stands on each event
 zone, with its hit points and state; the v1.150 client keeps one record per
-zone from it for the battle aide's fortress map (76C870 case 0xF). The
+zone from it for the battle aide's fortress map (client 76C870 case 0xF). The
 reference server's roster writer sends it three ways: to a player entering
 a siege world, with the rest of its world-entry state; to the whole world
 on the thirty-second siege tick; and to the whole world after a database

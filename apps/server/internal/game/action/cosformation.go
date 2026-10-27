@@ -3,7 +3,7 @@
 
 cosformation.go - native owner FOLLOW state on the existing COS mover
 
-Owner sessions own CPositioner slots. Child sessions own the AI cadence and
+Owner sessions own the reference server's formation slots. Child sessions own the AI cadence and
 remembered slot; the canonical companion owns its movement parameter source.
 
 ===========================================================================

@@ -291,7 +291,7 @@ TestStorageQuickMovesOntoAStackMergeAsTheDragDoes
 
 The auto-stack quick move (port-only, storageautostack.go) aims a deposit
 or a withdrawal at a matching stack. The server needs no new rule: the
-native whole transfer (TransferWholeTo, 756A60) merges it.
+client whole transfer (TransferWholeTo, 756A60) merges it.
 ================
 */
 func TestStorageQuickMovesOntoAStackMergeAsTheDragDoes(t *testing.T) {

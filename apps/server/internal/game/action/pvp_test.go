@@ -381,7 +381,7 @@ BR-261006-1818: below level 20 a player is refused (0x3016) on a neutral,
 for basic attacks and skills alike (both reach the native target validation), unless the target
 is already in its aggression map; then the validation admits before the level
 floor, so it may keep fighting that player. The client refuses the click
-below 20 (693EF9) but sends the skill, which is why only skills landed.
+below 20 (client 693EF9) but sends the skill, which is why only skills landed.
 ================
 */
 func TestPlayerUnderPKLevelFightsOnlyARetainedOpponent(t *testing.T) {

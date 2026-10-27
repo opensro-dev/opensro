@@ -9,7 +9,7 @@ maps an item's TypeID tuple to a category (the client's 7E1330 reads the
 same table and refuses an item with none, 0x42), fmncategorytreedata.txt
 names the categories. A player in a town searches a category fifteen rows
 a page (CIFStallNetwork, 766FC0: rows * 0xF) and buys a row from afar
-(7671D0); the row must still be what the search showed (0x4F), and the
+(client 7671D0); the row must still be what the search showed (0x4F), and the
 owner pays the network's 1% commission.
 
 The search's last byte is the small-category combo's index (id 43,
@@ -19,7 +19,7 @@ v1.188's open market stores on every listing, so an elixir's
 degree is its class.
 
 INFERENCE: outside a town a search answers 0x49, which closes the window
-(766FC0), and an untown purchase 0x49 too; the server keeps no search
+(client 766FC0), and an untown purchase 0x49 too; the server keeps no search
 throttle beyond the client's ten seconds (UIIT_MSG_WARENETWORK_SCAN_TOOLTIP).
 
 ===========================================================================

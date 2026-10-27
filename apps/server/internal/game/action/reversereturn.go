@@ -6,8 +6,8 @@ or to where the player died
 
 The beginner guides (NPC_EU_ADVICE3, NPC_CH_SOLDIER_EM1) hold service 0x1E
 (the reference server's NPC service setup), so their select grant carries
-capability 0x20000000; the talk window then lists two rows (5D4410, action
-0x2B) and a click sends 0x7495 [u32 gid][u8 5][u8 choice] (6FEF10): 2 is the
+capability 0x20000000; the talk window then lists two rows (client 5D4410, action
+0x2B) and a click sends 0x7495 [u32 gid][u8 5][u8 choice] (client 6FEF10): 2 is the
 last recall point, 3 the place of the last death.
 
 The reference server's teleport use handler, case 5, is free: the
@@ -22,7 +22,7 @@ ITEM_MALL_REVERSE_RETURN_SCROLL (3/3/3/3) is used from the bag. A right
 click opens a two-row choice box (message box 0x1E); CGInterface_OnMsgBoxResult
 (6971B0) answers it with CIFInventory_ExecuteItemAction, which sends 0x75BD
 [slot][u16 type][u8 choice]: 2 the last recall point, 3 the last death
-point. 755E40 (type 4 = 3) starts the cast as a return scroll's.
+point. Client 755E40 (type 4 = 3) starts the cast as a return scroll's.
 The v1.188 reverse return scroll reads the byte: the
 shared return admissions, the recorded point (0x1885 / 0x1886 when absent),
 the timed cast, and the answer on the item-use channel (0xB5BD with the
@@ -50,7 +50,7 @@ import (
 const (
 	// gateReverseReturn is the 0x7495 type the reverse return rows send.
 	gateReverseReturn uint8 = 5
-	// The two 0x7495 type-5 choices (5DA1B0 case 0x2B rows 1 and 2).
+	// The two 0x7495 type-5 choices (client 5DA1B0 case 0x2B rows 1 and 2).
 	reverseReturnLastRecall uint8 = 2
 	reverseReturnLastDeath  uint8 = 3
 

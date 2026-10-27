@@ -258,7 +258,7 @@ that viewer has not published the picking character or grab pet.
 
 A ride-state apply (0xB4B5 [1][rider u32][flag][mount u32]) goes to its
 rider's observers, whoever's action caused it: the v1.150 client resolves
-the rider with no null test (777FB2..777FC3) and faults on one it does not
+the rider with no null test (client 777FB2..777FC3) and faults on one it does not
 hold (#1613: an attacker's observer got a killed rider's dismount).
 ================
 */

@@ -4,9 +4,9 @@
 peer_references.go - item reference deltas ahead of peer equipment packets
 
 The native client holds every item record (Media.pk2) and never guards the
-lookup: GlobalDataManager_GetItemRecordById (7EFF90) returns 0 for an
-unknown id, and both the 0x3314 equip visual (7777E0) and the 0x30D7
-appearance equipment loop (86AFB0) dereference the result. The browser holds
+lookup: client GlobalDataManager_GetItemRecordById (7EFF90) returns 0 for an
+unknown id, and both the 0x3314 equip visual (client 7777E0) and the 0x30D7
+appearance equipment loop (client 86AFB0) dereference the result. The browser holds
 only the references the server sent it, and the item's type word decides
 how the rest of a 0x30D7 row parses, so an unknown id cannot be skipped.
 

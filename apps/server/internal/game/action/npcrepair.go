@@ -147,7 +147,7 @@ restores the points, charges the gold and spends a MATTR_REPAIR charge.
 Returns the frames and 0, or a refusal byte.
 
 A whole item answers 0x09, never "no gold": the client prices its maximum
-rounded (CSOItem_CalculateVarianceStats 78BD00, lo + span*v/31 + 0.5) and
+rounded (client CSOItem_CalculateVarianceStats 78BD00, lo + span*v/31 + 0.5) and
 the server truncated, so a fresh drop can read one point short
 on the client while it is whole here, as in retail.
 ================

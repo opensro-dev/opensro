@@ -15,7 +15,7 @@ Opening the vote window, the vote row first asks for the candidates
 
 	0x7332 [u32 vote]                    candidates -> 0xB332 [1][body] | [2][code]
 
-and every member online follows the vote on 0x3A6C (7603D0): type 1 when
+and every member online follows the vote on 0x3A6C (client 7603D0): type 1 when
 it opens, 4 for each ballot, 3 when it closes. The rules and their
 inferences are domain/guildvote.go's; the store commits each step.
 

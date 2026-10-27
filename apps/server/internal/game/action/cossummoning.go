@@ -41,7 +41,7 @@ const (
 	cosItemStateOpcode   uint16 = 0x3645
 	cosItemStateMask     uint8  = 0x40
 	cosItemLeaseMask     uint8  = 0x80
-	// Spawn sub-state 1: the pet was just called out (854CD0 plays
+	// Spawn sub-state 1: the pet was just called out (client 854CD0 plays
 	// SYSTEM_PET_APPEAR and the summon sound for it).
 	cosSpawnFresh uint8 = 1
 	// Observers first meet a summoned pet through the peer COS lane on its
@@ -258,7 +258,7 @@ func (rt *Runtime) togglePersistentCompanion(use persistentSummonUse, pet *domai
 ================
 companionItemStateFrames
 
-7654B0 mask 0x40 forwards the state byte to 59C290/54FC80 and the
+Client 7654B0 mask 0x40 forwards the state byte to 59C290/54FC80 and the
 summoner's rent-state field. Only the owning inventory receives this packet.
 ================
 */
