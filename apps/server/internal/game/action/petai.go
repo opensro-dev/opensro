@@ -147,6 +147,19 @@ func (rt *Runtime) bindPetSession(division string, c *enterworld.Character, sess
 			rt.bindCompanionSession(division, state, cos)
 		}
 	}
+	// A restored attack pet's effective max reaches its owner unasked:
+	// until it does, a default client divides the pet's HP by the
+	// native catalog max (#1896). The helper gates on the expansion.
+	nowMs := rt.Now().UnixMilli()
+	var restored []simulation.Frame
+	for _, cos := range companions {
+		if cos.Summoned {
+			restored = append(restored, simFrames(rt.petEffectiveMaxFrames(cos, nowMs))...)
+		}
+	}
+	if len(restored) > 0 {
+		rt.queueMonsterLegFrames([]simulation.DivisionFrames{{DivisionID: division, OnlyCharacterID: c.ID, Frames: restored}})
+	}
 }
 
 // Called with the division lock held; the map lock never spans a character

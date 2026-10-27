@@ -366,7 +366,10 @@ func PlayerStatsWithModifiers(
 		}
 	}
 	writes = append(writes, modifiers...)
-	if err = graph.ApplyBatch(writes); err != nil {
+	// The graph is this call's fresh clone (playerParameterGraph) and is
+	// dropped on any error below, so the batch applies in place instead
+	// of paying ApplyBatch's second copy of the whole keeper state.
+	if err = graph.ApplyBatchInPlace(writes); err != nil {
 		return Stats{}, Loadout{}, err
 	}
 	if err = applyAbnormalModifiers(graph, block); err != nil {

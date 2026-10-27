@@ -313,6 +313,7 @@ func (rt *Runtime) applyPetPotion(
 		frames = append(frames, owner.private...)
 	}
 	frames = append(frames, rt.updateQuestInventory(character)...)
+	frames = append(frames, rt.petEffectiveMaxFrames(pet, nowMs)...)
 	*result = OpResult{Frames: frames, Broadcast: public}
 	return true
 }

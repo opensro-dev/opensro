@@ -215,6 +215,14 @@ variable "pharaoh_tomb" {
   default = "off"
 }
 
+# Port-only, not native: the optional Qin-Shi tomb upper-floor population
+# (#1800). It needs cap110_monsters on as well; GameWorld refuses to start
+# otherwise.
+variable "cap110_qinshi" {
+  type    = string
+  default = "off"
+}
+
 # Port-only, not native: the name-change scroll (#1689) - the Item Mall
 # lists it for 500 silk and a use queues a rename for the next login.
 # "off" is native: names never change.
@@ -784,6 +792,16 @@ variable "shop_extra_goods" {
   default = "on"
 }
 
+# jangan_alchemy_shop renames Jangan's grocer "OpenSRO Alchemy - Jangan"
+# and regroups the extra-goods alchemy stock onto three tabs (port-only,
+# not native; owner decision 2026-10-28, #1850). It acts only while
+# shop_extra_goods is "on"; "off" restores the native name and tabs.
+# A malformed value stops GameWorld at boot.
+variable "jangan_alchemy_shop" {
+  type    = string
+  default = "on"
+}
+
 # mall_extra_goods lists authored Item Mall packages the v1.150 mall does not
 # sell (port-only, not native; owner decision 2026-10-13). "on" adds the fur,
 # Halloween, pirate, holy knight and wing outfits at their authored prices
@@ -1174,6 +1192,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_CAP110_ITEMS                   = var.cap110_items
         SRO_CAP110_SKILLS                  = var.cap110_skills
         SRO_PHARAOH_TOMB                   = var.pharaoh_tomb
+        SRO_CAP110_QINSHI                  = var.cap110_qinshi
         SRO_NAME_CHANGE_SCROLL             = var.name_change_scroll
         SRO_PHARAOH_TOMB_GEAR_RATE         = var.pharaoh_tomb_gear_rate
         SRO_BETA_SILK                           = var.beta_silk
@@ -1260,6 +1279,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_DROP_CAP                       = var.beta_drop_cap
         SRO_BETA_DROP_MIX                       = var.beta_drop_mix
         SRO_SHOP_EXTRA_GOODS                    = var.shop_extra_goods
+        SRO_JANGAN_ALCHEMY_SHOP                 = var.jangan_alchemy_shop
         SRO_MALL_EXTRA_GOODS                    = var.mall_extra_goods
         SRO_ALCHEMY_NO_ASSIMILATION             = var.alchemy_no_assimilation
         SRO_CARAVAN_BANDIT_CAP                  = var.caravan_bandit_cap

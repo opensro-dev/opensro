@@ -83,3 +83,55 @@ func TestSnapshotSessionViewsUseTheLightFace(t *testing.T) {
 		t.Fatalf("view identity = %+v", views[0])
 	}
 }
+
+/*
+================
+TestSnapshotSessionViewsReuseTheTickWalk
+
+Within a tick the hooks share the full walk's light face: after
+SnapshotSessions, SnapshotSessionViews asks the provider for nothing
+again and returns the same sessions the full walk saw. The next full
+walk replaces them, so a changed world is never served stale.
+================
+*/
+func TestSnapshotSessionViewsReuseTheTickWalk(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	_, w := dialAndHello(t, srv)
+	sess, ok := srv.Hub.Session(w.SessionID)
+	if !ok {
+		t.Fatal("session missing from hub")
+	}
+	full, light := 0, 0
+	snap := simulation.SessionSnapshot{
+		DivisionID:    "DIV_A",
+		CharacterID:   7,
+		WorldInstance: 3,
+		World:         simulation.DefaultWorldState(simulation.EuropeStartProfile()),
+		Appearance:    &simulation.PeerAppearance{Name: "hero", ActionSpeed: 125},
+	}
+	sess.SetWorldSnapshot("DIV_A", countingProvider{snap: snap, full: &full, light: &light})
+	bridge := New(srv.Hub)
+
+	snaps := bridge.SnapshotSessions()
+	if full != 1 || light != 0 {
+		t.Fatalf("full walk built %d full and %d light, want 1 and 0", full, light)
+	}
+	for range 2 {
+		views := bridge.SnapshotSessionViews()
+		if full != 1 || light != 0 {
+			t.Fatalf("views re-walked the provider: %d full and %d light, want 1 and 0", full, light)
+		}
+		if len(views) != 1 || views[0].SessionID != snaps[0].SessionID ||
+			views[0].CharacterID != 7 || views[0].World.Spawn != snaps[0].World.Spawn {
+			t.Fatalf("tick views = %+v, snapshots = %+v", views, snaps)
+		}
+	}
+
+	snap.CharacterID = 8
+	sess.SetWorldSnapshot("DIV_A", countingProvider{snap: snap, full: &full, light: &light})
+	bridge.SnapshotSessions()
+	if views := bridge.SnapshotSessionViews(); len(views) != 1 || views[0].CharacterID != 8 {
+		t.Fatalf("views after the next walk = %+v, want character 8", views)
+	}
+}

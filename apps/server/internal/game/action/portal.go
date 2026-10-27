@@ -549,7 +549,7 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 		collected = int64(fee) - link.fee
 		link.fee = int64(fee)
 		transport := rt.hasSummonedTransportCOS(c)
-		traveller := portalTraveller{questMask: mask, transportCOS: transport, transportFar: transport && rt.transportBeyond(division, c, gateTransportRange),
+		traveller := portalTraveller{questMask: mask, intoDen: arrival.code == denGateCode, transportCOS: transport, transportFar: transport && rt.transportBeyond(division, c, gateTransportRange),
 			transportAdmitted: rt.JobGoodsTeleport}
 		if failure := portalAdmission(c, source, link, traveller); failure != 0 {
 			return 0, portalFailure(failure), false
@@ -720,6 +720,15 @@ func (rt *Runtime) portalSourceNpc(division string, c *enterworld.Character, gid
 	return npc, sourceID, 0
 }
 
+const (
+	// denGateCode is the Bandit Den's teleport (teleportdata GATE_TD).
+	denGateCode = "GATE_TD"
+	// errCodeGateQuestBlock is 0x1C17: the quest operation bit 0x40000.
+	errCodeGateQuestBlock byte = 0x17
+	// errCodeDenJob is 0x1C18: a trader or a hunter may not enter the den.
+	errCodeDenJob byte = 0x18
+)
+
 // gateTransportRange is how far a summoned transport may stand from its
 // owner and still travel through a gate (the teleport use handler, case 2: the length of the
 // relative position against 1000.0, else 0x1C13).
@@ -735,7 +744,10 @@ stands beyond gateTransportRange.
 ================
 */
 type portalTraveller struct {
-	questMask    uint32
+	questMask uint32
+	// intoDen is a link whose target is the Bandit Den (GATE_TD): the
+	// reference server compares the link's target teleport, not its source.
+	intoDen      bool
 	transportCOS bool
 	transportFar bool
 	// transportAdmitted is the port-only SRO_JOB_GOODS_TELEPORT rule: a
@@ -743,27 +755,38 @@ type portalTraveller struct {
 	transportAdmitted bool
 }
 
-// Reference server: the quest bit blocks buildings and the special GATE_TD route;
-// it does not turn ordinary ferries into town gates. The link check separately checks
-// the authored transport-COS restriction on ferry links.
+// Reference server: the quest bit blocks buildings and the route into the
+// Bandit Den; it does not turn ordinary ferries into town gates. The link
+// check separately checks the authored transport-COS restriction on ferry
+// links.
 /*
 ================
 portalAdmission
 
-In the reference server's teleport use order (case 2): the quest bit, then a summoned transport beyond
-gateTransportRange (0x1C13: it would be left behind), then the link's
-conditions, then the fee.
+In the reference server's teleport use order (case 2): the quest bit at a
+building, then a summoned transport beyond gateTransportRange (0x1C13: it
+would be left behind), then the den rules when the link's TARGET is the
+Bandit Den (the quest bit 0x1C17, then a trader or hunter 0x1C18: only a
+thief or a jobless player enters), then the link's conditions, then the fee.
 ================
 */
 func portalAdmission(c *enterworld.Character, source portalDestination, link portalLink, traveller portalTraveller) byte {
 	if !enterworld.CharacterAlive(c) || c.DeletePending {
 		return 2
 	}
-	if traveller.questMask&0x40000 != 0 && (source.building || source.code == "GATE_TD") {
-		return 0x17
+	if traveller.questMask&0x40000 != 0 && source.building {
+		return errCodeGateQuestBlock
 	}
 	if traveller.transportCOS && traveller.transportFar {
 		return 0x13
+	}
+	if traveller.intoDen {
+		if traveller.questMask&0x40000 != 0 {
+			return errCodeGateQuestBlock
+		}
+		if c.Job.Type == domain.JobTrader || c.Job.Type == domain.JobHunter {
+			return errCodeDenJob
+		}
 	}
 	for _, condition := range link.conditions {
 		switch condition.kind {

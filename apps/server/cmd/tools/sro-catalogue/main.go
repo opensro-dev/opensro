@@ -321,6 +321,10 @@ func run(out, release, textdata string) error {
 	if err != nil {
 		return fmt.Errorf("catalogue tomb population: %w", err)
 	}
+	template, err = monster.AppendQinshi(template, dir, monster.QinshiEnabled())
+	if err != nil {
+		return fmt.Errorf("catalogue qinshi population: %w", err)
+	}
 	monsters, err := catalogue.BuildMonsters(catalogue.MonsterSource{Template: template, ItemID: dropItemID,
 		Skills: skillData})
 	if err != nil {
