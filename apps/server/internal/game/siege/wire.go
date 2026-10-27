@@ -3,7 +3,7 @@
 
 wire.go - the 0x3887 fortress-war frames the v1.150 client reads
 
-0x3887 (CNetProcessSecond_OnFortressWarState 76C870) is the client half of
+0x3887 (CNetProcessSecond_OnFortressWarState3887) is the client half of
 the reference server's 0x385F: its fortress manager relays each schedule
 edge with the same subtype byte, and the per-player fortress list is the
 player's fortress-list send, one row per fortress. The subtype
@@ -56,8 +56,10 @@ const (
 	SubtypeRequestPeriodEnd  uint8 = 0x34
 )
 
-// OpSiegeRelationList is the S->C 0x341E alliance list (client 75AB60 ->
-// 82A560), the relation block the fortress status reads for allies.
+// OpSiegeRelationList is the S->C 0x341E alliance list
+// (CPSMission_OnPartyMemberListUpdate0x341E ->
+// CCharacterDependentData_ReadAllianceGuildList), the relation block the
+// fortress status reads for allies.
 const OpSiegeRelationList uint16 = 0x341e
 
 /*
@@ -65,8 +67,9 @@ const OpSiegeRelationList uint16 = 0x341e
 FortressRow
 
 One fortress of the list, in the server's list-row write order.
-Discarded are four u32s the v1.150 client reads and drops (76C980..); the
-server writes the occupying guild id first. CaptureWait is the siege
+Discarded are four u32s the v1.150 client reads and drops
+(CNetProcessSecond_OnFortressWarState3887); the server writes the
+occupying guild id first. CaptureWait is the siege
 world's post-capture wait in seconds (sent only while the gates are closed,
 slot 41/42); EndCountdown the war-end countdown (sent while it runs, slots
 44/45).
@@ -152,7 +155,7 @@ func EncodeEdge3887(subtype uint8) []byte {
 ================
 EncodeConquest3887
 
-Subtype 8 (76C870 case 8): u32 the fortress, the holding guild's name and
+Subtype 8 (case 8): u32 the fortress, the holding guild's name and
 the row's four discarded u32s, the guild id first as in the list; the
 client prints UIIT_MSG_FORT_WAR_CONQUER and refreshes the fortress.
 ================
@@ -244,7 +247,7 @@ EncodeStructureRoster3887
 Subtype 0x0F, the reference server's structure roster: u8 0x0F,
 u32 fortress, u8 count, then per structure u32 event zone, u32 reference,
 u32 hit points, u16 state, u8 has-guild and the guild's name. The client
-(76C870 case 0xF) fills each zone's record for the fortress map. Rows past
+(case 0xF) fills each zone's record for the fortress map. Rows past
 the one-byte count are dropped.
 ================
 */
@@ -270,7 +273,8 @@ func EncodeStructureRoster3887(fortressID uint32, rows []StructureRosterRow) []b
 ================
 AllianceRow
 
-One 0x341E entry in the client's read order (82A560).
+One 0x341E entry in the client's read order
+(CCharacterDependentData_ReadAllianceGuildList).
 ================
 */
 type AllianceRow struct {

@@ -24,8 +24,9 @@ const maxGraphNodeID = 512
 const bucketAllocated uint32 = 1 << 31
 
 // NodeDefinition gives each parameter a distinct source identity for dependency
-// propagation. In native this identity is the CParam pointer, not its numeric
-// parameter ID. External modifiers must not reuse these reserved identities.
+// propagation. In native this identity is the parameter element's own pointer,
+// not its numeric parameter ID. External modifiers must not reuse these reserved
+// identities.
 type NodeDefinition struct {
 	ID        uint16
 	SourceKey uint32
