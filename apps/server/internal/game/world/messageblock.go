@@ -21,17 +21,32 @@ func OutdoorMessageBlock(position RegionXZ) (MessageBlock, bool) {
 }
 
 func (b MessageBlock) Neighbors() []MessageBlock {
+	out := make([]MessageBlock, 0, 27)
+	b.NeighborsEach(func(n MessageBlock) {
+		out = append(out, n)
+	})
+	return out
+}
+
+/*
+================
+MessageBlock.NeighborsEach
+
+NeighborsEach visits the same blocks Neighbors returns, in the same
+order, without allocating the slice: the activity census counts one
+bucket per neighbour per session per leg and keeps none of them.
+================
+*/
+func (b MessageBlock) NeighborsEach(visit func(MessageBlock)) {
 	yMin, yMax := 0, 0
 	if b.Region != 0 {
 		yMin, yMax = -1, 1
 	}
-	out := make([]MessageBlock, 0, 27)
 	for x := -1; x <= 1; x++ {
 		for y := yMin; y <= yMax; y++ {
 			for z := -1; z <= 1; z++ {
-				out = append(out, MessageBlock{Region: b.Region, X: b.X + x, Y: b.Y + y, Z: b.Z + z})
+				visit(MessageBlock{Region: b.Region, X: b.X + x, Y: b.Y + y, Z: b.Z + z})
 			}
 		}
 	}
-	return out
 }

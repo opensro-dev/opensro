@@ -129,7 +129,7 @@ func TestSummonFactoryBindsControllerAndExemptsActivity(t *testing.T) {
 	m.BehaviorDeadlineMs = now + 10000
 	ops.Monsters.CommitMover("summon", child.Gid, m)
 	ops.activity = ops.captureActivity(nil, now+1001)
-	frames, handled := ops.runActivityGate("summon", child, m, now+1001)
+	frames, _, handled := ops.runActivityGate("summon", child, m, now+1001)
 	after, _ := ops.Monsters.Mover("summon", child.Gid)
 	if handled || len(frames) != 0 || after != m {
 		t.Fatal("controlled actor ran unobserved suspension/cadence")

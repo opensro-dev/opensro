@@ -62,35 +62,75 @@ func (ops *MonsterMoverOps) captureActivity(sessions []SessionSnapshot, now int6
 		}
 		// The retail server's spawn broadcast counts every admitted PC, including dead PCs. Counts live
 		// in that actor partition, not the combat-eligible player list.
-		for _, n := range b.Neighbors() {
+		b.NeighborsEach(func(n worldgeom.MessageBlock) {
 			a.counts[activityBucket{owner, n}]++
-		}
+		})
 	}
 	return a
+}
+
+/*
+================
+activityBlockMemo
+
+One actor's resolved activity block at one pose. The block is a pure
+function of the pose (the plane surfaces are resident before the leg
+runs), so the memo cannot go stale while the pose stands; a moved actor
+misses on the pose guard and resolves fresh.
+================
+*/
+type activityBlockMemo struct {
+	pose  Spawn
+	block worldgeom.MessageBlock
+	ok    bool
+}
+
+/*
+================
+activityBlockFor
+
+activityBlockFor is the gate's block resolution: memoized on the ops, so
+a settled actor pays the cave surface walk once instead of once per
+cadence. Shard-owned like resumePending; each ticker clone owns its map.
+================
+*/
+func (ops *MonsterMoverOps) activityBlockFor(gid uint32, at Spawn) (worldgeom.MessageBlock, bool) {
+	if memo, hit := ops.activityBlocks[gid]; hit && memo.pose == at {
+		return memo.block, memo.ok
+	}
+	block, ok := ops.activityBlock(at)
+	if ops.activityBlocks == nil {
+		ops.activityBlocks = make(map[uint32]activityBlockMemo)
+	}
+	ops.activityBlocks[gid] = activityBlockMemo{pose: at, block: block, ok: ok}
+	return block, ok
 }
 
 // runActivityGate precedes state expiry/acquisition (the retail server's
 // tactics tick entry runs its timer setter the same way).
 // A missing navigation answer is not an empty native message block.
-func (ops *MonsterMoverOps) runActivityGate(division string, actor monster.Instance, m monster.MoverState, now int64) ([]Frame, bool) {
+// The returned mover is the value the caller continues with: the gate's
+// own copy, which any commit it made has already carried into storage -
+// the caller must not re-read the row it just gated.
+func (ops *MonsterMoverOps) runActivityGate(division string, actor monster.Instance, m monster.MoverState, now int64) ([]Frame, monster.MoverState, bool) {
 	if ops.activity == nil {
-		return nil, false
+		return nil, m, false
 	}
 	pending := m.Mode() == monster.MoverPending
 	if !pending && !monster.MaySuspendWander(actor.Nest.NativeTacticsFlags, m.ControllerGID() != 0, m.Mode()) {
-		return nil, false
+		return nil, m, false
 	}
 	if m.Activity.Interval == 0 {
 		panic("monster activity cadence was not initialized at activation")
 	}
 	before := m
 	if m.Activity.Due(uint32(now)) {
-		b, ok := ops.activityBlock(poseToSpawn(m.LivePoseAt(now, ops.GroundHeight)))
+		b, ok := ops.activityBlockFor(actor.Gid, poseToSpawn(m.LivePoseAt(now, ops.GroundHeight)))
 		resolved := ok && !ops.activity.unresolved[ops.activity.world]
 		active := resolved && ops.activity.counts[activityBucket{ops.activity.world, b}] != 0
 		if pending && active {
 			mustMoverTransition(&m, monster.MoverEventActivityResumed, 0)
-			return ops.startWanderLeg(division, actor, ops.resolveTactics(actor), m, now), true
+			return ops.startWanderLeg(division, actor, ops.resolveTactics(actor), m, now), m, true
 		}
 		if !pending && resolved && !active {
 			mustMoverTransition(&m, monster.MoverEventActivityLost, 0)
@@ -98,17 +138,17 @@ func (ops *MonsterMoverOps) runActivityGate(division string, actor monster.Insta
 			pending = true
 		}
 		if !ops.Monsters.commitActivity(division, actor.Gid, before, m, now) {
-			return nil, true
+			return nil, m, true
 		}
 	}
 	if !pending {
-		return nil, false
+		return nil, m, false
 	}
 	// The retail server's strategy clear clears the strategy target, but never stops the movement
 	// channel. Arrival runs the PENDING callback without entering IDLE.
 	if navigationNeedsContinuation(m, now) {
 		goal, _ := m.NavigationGoal()
-		return ops.commitSegment(division, actor, m, goal, actor.WalkSpeed(), currentChannel(m.Channel), now), true
+		return ops.commitSegment(division, actor, m, goal, actor.WalkSpeed(), currentChannel(m.Channel), now), m, true
 	}
 	if m.ArriveMs > m.DepartMs && !m.InFlight(now) {
 		m.Pose = m.To
@@ -117,9 +157,9 @@ func (ops *MonsterMoverOps) runActivityGate(division string, actor monster.Insta
 		if !m.NoteMoveStopped(m.Pose) {
 			mustMoverTransition(&m, monster.MoverEventSegmentArrived, 0)
 		}
-		return ops.Monsters.CommitMoverFrames(division, actor.Gid, m, []Frame{correctionFrame(actor.Gid, m.Pose)}), true
+		return ops.Monsters.CommitMoverFrames(division, actor.Gid, m, []Frame{correctionFrame(actor.Gid, m.Pose)}), m, true
 	}
-	return nil, true
+	return nil, m, true
 }
 
 // Clock consumption must not run IDLE's target-ledger entry effects. A

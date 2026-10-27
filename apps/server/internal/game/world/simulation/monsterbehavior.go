@@ -57,15 +57,14 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance mons
 		}
 	}
 	if mover.Mode() != monster.MoverPending {
-		if frames, handled := ops.runActivityGate(divisionID, instance, mover, nowMs); handled {
+		// The gate hands back the mover it gated (its cadence may have
+		// been consumed and committed); re-reading the row here would
+		// repeat the locked lookup the gate just made.
+		frames, gated, handled := ops.runActivityGate(divisionID, instance, mover, nowMs)
+		if handled {
 			return frames, nil
 		}
-	}
-	// The activity gate may have consumed its independent clock while leaving
-	// the state active. Continue from that accepted owner snapshot.
-	mover, ok = ops.Monsters.Mover(divisionID, instance.Gid)
-	if !ok {
-		return nil, nil
+		mover = gated
 	}
 	if frames, handled := ops.handleHelp(divisionID, instance, mover, divisionPlayers, nowMs); handled {
 		return frames, nil
@@ -74,7 +73,7 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance mons
 	// state's tick. PENDING's cadence belongs to its own state, not
 	// the pre-command gate.
 	if mover.Mode() == monster.MoverPending {
-		frames, _ := ops.runActivityGate(divisionID, instance, mover, nowMs)
+		frames, _, _ := ops.runActivityGate(divisionID, instance, mover, nowMs)
 		return frames, nil
 	}
 	if mover.Mode() == monster.MoverBattleReentry {

@@ -317,8 +317,10 @@ town.
 ================
 */
 func (ops *MonsterMoverOps) vanishInSafeZone(divisionID string, gid uint32, nowMs int64) {
-	mover, ok := ops.Monsters.Mover(divisionID, gid)
-	if ok && SafeZoneRegion(mover.LivePoseAt(nowMs, nil).RegionID) {
+	// Only the region is weighed, so read the pose, not the whole
+	// validated mover value the planner steps already paid for.
+	pose, ok := ops.Monsters.livePose(divisionID, gid, nowMs)
+	if ok && SafeZoneRegion(pose.RegionID) {
 		ops.Monsters.Defeat(divisionID, gid, time.UnixMilli(nowMs))
 	}
 }
