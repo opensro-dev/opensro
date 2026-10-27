@@ -94,14 +94,14 @@ type SkillRequirement struct {
 SkillAttack
 
 SkillAttack is the first encoded `att` block in one v1.150 skill row.
-CSkillData_IndexEncodedParamBlocks indexes this block and the v1.188
-CFormulae helpers consume the same five-value body. Only the four values
+CSkillData_IndexEncodedParamBlocks indexes this block and the server's
+formula helpers consume the same five-value body. Only the four values
 whose server roles are pinned are named; Value5 is retained as evidence
 without inventing semantics.
 ==================
 */
 type SkillAttack struct {
-	MasteryEnhancement bool               // getv MAAT; native 59E770 gates mastery scaling
+	MasteryEnhancement bool               // getv MAAT; the server's mastery-rank read gates mastery scaling
 	MasteryIDs         [2]uint32          // required mastery identities, not minimum training levels
 	DownAttack         SkillDownAttack    // da: applied to each integer lane against motion state 8
 	Parameters         SkillParameterMask // getv bindings, separate from displayed stats
@@ -113,13 +113,13 @@ type SkillAttack struct {
 	Value5             int64
 	// ImpactCount is the number of action-result stages generated for one
 	// accepted action. Retail defaults this to one, then
-	// SkillActor_BuildImpactStages (v1.188 0x58e7c3..0x58e7dc) overrides it
+	// the server's impact-stage builder overrides it
 	// from the encoded `cm` pair when cm[0] == 2. Sword base carries
 	// `cm,2,2`; this is why one sword action owns two damage rows even though
 	// it remains one cast/token/cooldown transaction.
 	ImpactCount uint8
-	// Atca is RefSkill+0x3BC (587E79): {mask, percent}. SkillCombat_
-	// CalculateHitOutcome 58F52F multiplies the summed lanes by
+	// Atca is RefSkill+0x3BC: {mask, percent}. The server's hit-outcome
+	// calculation multiplies the summed lanes by
 	// (1 + percent/100) when mask shares a bit with the target's abnormal
 	// mask (+0xD34). Shipped pierce rows use 0x41C0: sleep, root, slow, stun.
 	Atca        bool
@@ -154,23 +154,23 @@ type SkillRow struct {
 	Knockdown               SkillKnockdown
 	Reqc                    SkillReqc
 	// SelectorMask is scls (0x73636C73) at RefSkill+0x380. Argument 1 is bit 0,
-	// installed by CSkillManager_InstallSelector while that skill is active.
+	// installed by the server's selector installer while that skill is active.
 	SelectorMask uint32
 	// ExpIncrease is expi (0x65787069, RefSkill+0x3EC): the buff writes its
 	// first word to parameter 0xB9 and its second, the EXP percent an
-	// attack pet's award adds (4FCB00), to 0xBA (594D3B).
+	// attack pet's award adds, to 0xBA.
 	ExpIncrease [2]uint32
 	Reqi        SkillReqi
 	Aura        SkillAura
-	// BuffModifiers are the dru / odar blocks any buff installs (594AC0).
+	// BuffModifiers are the dru / odar blocks any buff installs.
 	BuffModifiers SkillBuffModifiers
 	Heal          SkillHeal
 	CastGate      SkillCastGate
 	Knockback     SkillKnockback
-	// Abnormal is every tagRefSkill status block rolled by 590680.
+	// Abnormal is every tagRefSkill status block the server rolls.
 	Abnormal abnormal.SkillParams
 	Threat   SkillThreat
-	// Column 19 (client info+8c). Research server 4AED19 accepts exactly 1.
+	// Column 19 (client info+8c). The server accepts exactly 1.
 	ContinueBasicAttack bool
 	NameAttackContent   bool
 	ProjectileSpeed     uint32 // source column 16; world units/second, NOT milliseconds
@@ -187,13 +187,13 @@ type SkillRow struct {
 	Imbue               SkillImbue
 	// Wall is the Force walls' pw block (skillwall.go).
 	Wall SkillWall
-	// WallBypass is ck, lfst, pdmg or pdm2 (589EE0): the attack skips a
+	// WallBypass is ck, lfst, pdmg or pdm2: the attack skips a
 	// defender's wall absorb record.
 	WallBypass bool
-	// Ck is the ck block (+0x248): no block chance for its hits (58E624).
+	// Ck is the ck block (+0x248): no block chance for its hits.
 	Ck bool
-	// CkChance is ck's kill chance (58EC63 copies it to the target group's
-	// +0xF; 58F74E rolls it).
+	// CkChance is ck's kill chance (copied to the target group's
+	// +0xF; the hit roll uses it).
 	CkChance          uint8
 	Recovery          SkillRecovery
 	TimedEffect       SkillTimedEffect
@@ -284,7 +284,7 @@ type SkillRow struct {
 	// a column.
 	ChainSub bool
 	// ActionCastingTimeMs is the server's normalized release interval, columns
-	// 11 + 12. SkillGlobal_LoadReferenceData (5894E3/5894E6) folds preparation
+	// 11 + 12. The server's reference-data load folds preparation
 	// into casting once before any execution handler reads refSkill+74. The
 	// following ActionDurationMs is recovery, not the complete action lifetime.
 	// ActionCastingTimePinned distinguishes a legitimate zero from a malformed
@@ -315,8 +315,8 @@ type SkillRow struct {
 	ActionRange       float64
 	ActionRangePinned bool
 	// AIWeight is column 66 (RefSkill +0x164, a word): a monster's chance
-	// weight for this default skill in 561B00's weighted choice, and a
-	// summon's health band in 562060. Zero never takes part in the choice.
+	// weight for this default skill in the server's weighted choice, and a
+	// summon's health band. Zero never takes part in the choice.
 	AIWeight uint16
 	// Column 67, RefSkill +166: AI registration and healing-threat category.
 	Category uint8
@@ -335,7 +335,7 @@ type SkillRow struct {
 	// TargetRequired is RefSkill+0x97 / column 22. +0x98 is TargetType_Animal
 	// (column 23), not this byte.
 	TargetRequired bool
-	// Targets is columns 22..32, the bytes Skill_ValidateTargetPermissions reads.
+	// Targets is columns 22..32, the bytes the server's target-permission check reads.
 	Targets SkillTargets
 	// RequiredWeaponKinds are info+0xd8/+0xdc / columns 50/51. Values map
 	// directly to the equipped weapon's TID4; 255 is the empty sentinel and
@@ -350,9 +350,9 @@ type SkillRow struct {
 	// malformed combat-tail cells distinct from their legal zero/sentinel
 	// values.
 	CombatPinned bool
-	// VoluntaryCancelBlocked is the encoded `nbuf` marker. The v1.188
-	// SkillData_ParseEncodedParams writer stores the marker body pointer at
-	// record+0x35c; ActiveCharacterEffect_RequestStop(effect, false) refuses a
+	// VoluntaryCancelBlocked is the encoded `nbuf` marker. The server's
+	// encoded-parameter writer stores the marker body pointer at
+	// record+0x35c; its effect-stop request refuses a
 	// client stop while it is present unless the live effect's source
 	// descriptor explicitly overrides that protection. This belongs to skill
 	// data, not to a UI-provided "cancelable" flag.
@@ -379,26 +379,26 @@ func (r SkillRow) ActionLifecycleMs() (uint64, bool) {
 }
 
 // continueBasicAttackColumn is ref +0x90 (_RefSkill Action_AutoAttackType).
-// CGCharAutoCommandActor_Handler_SkillCast resumes the basic attack only
-// when the byte is exactly 1 (cmp byte [ref+0x90], 1 at 4AED19); the 2 that
+// The server's auto-command actor resumes the basic attack only
+// when the byte is exactly 1 (cmp byte [ref+0x90], 1); the 2 that
 // 371 retail rows author (the bow buffs among them) and 0 end the attack.
-// 4AECA4's nonzero test only returns the borrowed chain latency.
+// The chain-latency reader's nonzero test only returns the borrowed chain latency.
 const continueBasicAttackColumn = 19
 
-// resumesBasicAttack is the one value 4AED19 accepts.
+// resumesBasicAttack is the one value the resume check accepts.
 const resumesBasicAttack = 1
 
 // skillActivityQueued is the activity (column 8) of an ordinary cast;
-// InitiateSkillCast compares ref +0x65 with 2 at 59B5F6.
+// the server's cast start compares ref +0x65 with 2.
 const skillActivityQueued uint8 = 2
 
 /*
 ==================
 HaltsWalk
 
-Whether a cast of this row stops its caster's walk: CSkillManager_
-InitiateSkillCast (59B480) calls StopMove for activity 2. Instant
-activities (imbues, speed skills) run beside the walk (4AD870).
+Whether a cast of this row stops its caster's walk: the server's cast
+start calls StopMove for activity 2. Instant
+activities (imbues, speed skills) run beside the walk.
 ==================
 */
 func (r SkillRow) HaltsWalk() bool {
@@ -425,7 +425,7 @@ type SkillDataSource interface {
 const (
 	SkillRaceAny = 3
 	// Columns 10 and 15 are retained metadata in the traced native owners:
-	// infer no extra action timer. Column 14 owns reuse delay; 5894E3 folds
+	// infer no extra action timer. Column 14 owns reuse delay; the server folds
 	// preparation into casting. The column audit records this inference's scope.
 	skilldataColID              = 1
 	skilldataColGroup           = 2
@@ -470,14 +470,14 @@ const (
 // little-endian "att\0", as stored in the numeric skilldata parameter cell.
 const skillAttackTag int64 = 0x00617474
 
-// little-endian "cm\0\0". SkillData_ParseEncodedParams (v1.188
-// 0x587905..0x587950) stores its two-value body at SkillDataRecord+0x288;
-// SkillActor_BuildImpactStages consumes shape [2, impactCount].
+// little-endian "cm\0\0". The server's encoded-parameter writer
+// stores its two-value body at SkillDataRecord+0x288;
+// its impact-stage builder consumes shape [2, impactCount].
 const skillMultiImpactTag int64 = 0x00006d63
 
-// multi-character constant `nbuf` as compared by the v1.188 skill-data
-// encoded-parameter parser (0x588bb0). Its body pointer becomes record+0x35c,
-// the non-forced effect-stop protection checked at 0x59eff0.
+// multi-character constant `nbuf` as compared by the server's skill-data
+// encoded-parameter parser. Its body pointer becomes record+0x35c,
+// the non-forced effect-stop protection the server checks.
 const skillNoVoluntaryCancelTag int64 = 0x6e627566
 
 /*
@@ -962,9 +962,9 @@ func (t *TextdataSkills) parse(shards []string) {
 ==================
 SkillActionHandler
 
-RefSkill+0x168, column 68: the index SkillActionHandler (589B50) takes into
-g_aSkillActionHandlers. The row reader fills the columns in order, so it is
-the word before Param1 (+0x16C, SkillGlobal_BuildParameterIndex 58764B).
+RefSkill+0x168, column 68: the handler-kind index the server's
+action-handler table reads. The row reader fills the columns in order, so it is
+the word before Param1 (+0x16C).
 Every shipped row with a flying speed is 1 and every dura row is 3, but a
 projectile may fly at speed 0 (SKILL_EU_CROSSBOW_BASE_01,
 SKILL_CH_SPEAR_SHOOT_*), so the speed does not stand in for the kind.

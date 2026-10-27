@@ -46,7 +46,7 @@ func TestPassiveDefenseWeaponRequirements(t *testing.T) {
 	f[74] = "6"
 	f[75] = "7"
 	// Any reqi/reqn pins: the requirement is row.Reqi, which combat evaluates
-	// with the equipment (59F0E0), e.g. Glory's armour set + staff under reqn.
+	// with the equipment, e.g. Glory's armour set + staff under reqn.
 	if d := encodedPassiveDefense(f); !d.Pinned {
 		t.Fatal(d)
 	}

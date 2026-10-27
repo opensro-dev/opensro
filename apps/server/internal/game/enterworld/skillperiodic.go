@@ -23,7 +23,7 @@ const (
 ================
 SkillPeriodicEffect
 
-One source/recipient linked attack. Native 5830B0 uses puls for the source
+One source/recipient linked attack. The server's persistent handler uses puls for the source
 half's attack clock and dura for the recipient lifetime. lks2 changes outgoing
 admission from a caster-wide count to a count against each recipient.
 ================
