@@ -142,3 +142,59 @@ func TestAreaCandidatesRejectedPlayersStayOut(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestAreaCandidatesMixedCrowdKeepsRowsApart
+
+The player walk hoists its door out-values across the whole population
+and resets them per row. Pin what the reset buys: an admitted player
+followed by a riding one contributes exactly the admitted player's row
+and its companion's - never a phantom candidate under the rider's gid
+carrying the admitted snapshot, and never the admitted companion
+judged a second time under the rider's row.
+================
+*/
+func TestAreaCandidatesMixedCrowdKeepsRowsApart(t *testing.T) {
+	rt, clock, attacker, victim := newPvpPair(t)
+	rt.RewardActorPresent = func(string, string) bool { return true }
+	equipStrikeTestCOS(t, rt, victim)
+	petGID := victim.ActiveCOS.GID
+
+	rider := *victim
+	rider.ID, rider.Name = 5, "rider"
+	rider.CurrentHP = testInt64(100)
+	rideWorld := *victim.World
+	rideSpawn := *rideWorld.Spawn
+	rideWorld.Spawn = &rideSpawn
+	rider.World = &rideWorld
+	rider.ActiveCOS = &enterworld.CharacterCOS{GID: 0x720001, Codename: "COS_T_DHORSE3", Summoned: true, Mounted: true, CurrentHP: 100}
+	deps := rt.deps.(*enterworld.Deps)
+	fixtureCharacters(deps.Characters)[testDivision] = append(fixtureCharacters(deps.Characters)[testDivision], &rider)
+	now := clock.NowMs()
+	rt.Worlds.Update(simulation.WorldKey(testDivision, rider.Name), func() simulation.WorldState { return simulation.SeedWorldState(&rider) },
+		func(w *simulation.WorldState) {
+			w.Spawn = simulation.Spawn{RegionID: pvpRegion, X: 966, Y: 20, Z: 458}
+			w.SpawnSet = true
+		})
+
+	skill := enterworld.SkillRow{Attack: enterworld.SkillAttack{Present: true}}
+	q := areaQuery{selects: areaSelectHostile, division: testDivision, caster: attacker, skill: skill,
+		center: rt.liveSpawn(simulation.WorldKey(testDivision, attacker.Name), attacker, now), reach: 50, now: now}
+	got := rt.areaPlayerCandidates(q)
+	victimGID := enterworld.ObjectIDForCharacter(victim)
+	riderGID := enterworld.ObjectIDForCharacter(&rider)
+	counts := map[uint32]int{}
+	for _, candidate := range got {
+		counts[candidate.target.gid]++
+		if candidate.target.player == &rider || candidate.target.gid == riderGID {
+			t.Fatalf("the riding player is an area candidate: %+v", candidate.target)
+		}
+		if candidate.target.gid == victimGID && !reflect.DeepEqual(candidate.target.snapshot, rt.characterSnapshot(testDivision, victim)) {
+			t.Fatal("the admitted candidate does not carry its own snapshot")
+		}
+	}
+	if counts[victimGID] != 1 || counts[petGID] != 1 || len(got) != 2 {
+		t.Fatalf("candidates %v, want exactly the admitted player %d and its companion %d once each", counts, victimGID, petGID)
+	}
+}
