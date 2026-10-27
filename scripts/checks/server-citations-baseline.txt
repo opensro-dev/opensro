@@ -212,12 +212,6 @@ apps/server/internal/game/quest/runtime.go 2
 apps/server/internal/game/quest/wire.go 28
 apps/server/internal/game/quest/wire_test.go 2
 apps/server/internal/game/siege/lane_test.go 1
-apps/server/internal/game/social/mentor/e2e_invite_wire_test.go 5
-apps/server/internal/game/social/mentor/honor.go 3
-apps/server/internal/game/social/mentor/invite.go 8
-apps/server/internal/game/social/mentor/invite_wire_test.go 20
-apps/server/internal/game/social/mentor/matchjoin.go 5
-apps/server/internal/game/social/mentor/open.go 13
 apps/server/internal/game/social/party/consent.go 1
 apps/server/internal/game/social/party/e2e_wire_test.go 6
 apps/server/internal/game/social/party/matchjoin.go 6
