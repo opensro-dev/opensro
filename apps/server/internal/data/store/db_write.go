@@ -188,9 +188,9 @@ func deleteGuildTx(tx *sql.Tx, division string, guildID int64) error {
 // replaceCampTx replaces ONE training camp's rows - the camp row plus its
 // whole member set - inside a transaction (replaceGuildTx's twin; the
 // member set is bounded by the client's 8-row roster assert
-// @0x0082917b "TraningCampMember is Over than 8", so the whole-set
-// replace is O(small), and seq == list position is the wire order the
-// 0x3AC5 status-10 sub-1 roster loop emits).
+// (CTrainingCampData_ReadRoster: "TraningCampMember is Over than 8"),
+// so the whole-set replace is O(small), and seq == list position is
+// the wire order the 0x3AC5 status-10 sub-1 roster loop emits).
 /*
 ================
 replaceCampTx
