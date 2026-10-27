@@ -8,6 +8,11 @@ shared server/client curve; importing a different curve requires a separate
 data conversion. Unset or off retains the native cap. Read configuration
 at composition time, never during a character transaction.
 
+One of three switches that must agree (#1746): the build's skill import
+and database snapshot publish the tier's rows; this cap admits their
+levels. The gameworld warns at startup when the loaded table requires
+a mastery above the cap.
+
 ===========================================================================
 */
 package progression
