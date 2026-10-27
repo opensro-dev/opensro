@@ -197,11 +197,12 @@ test("Magic Pang routes every non-success result through category 1 without muta
 	g.bootstrap( {} );
 	g.seed( { gid: 1, regionId: 25000, x: 0, y: 0, z: 0, heading: 0, countryByte9c: 0 } );
 	g.take();
+	// The refusal body is [flag][u16 code]; the notice reads the low byte.
 	for ( const flag of [ 0, 2, 255 ] ) {
 		for ( let code = 0; code < 256; code++ ) {
 			const expected = inventoryNotice( 0xb06d, Uint8Array.of( 2, code ), 0 );
-			assert.deepEqual( inventoryNotice( 0xb053, Uint8Array.of( flag, code ), 0 ), expected );
-			g.receive( { opcode: 0xb053, payload: Uint8Array.of( flag, code ) }, 0 );
+			assert.deepEqual( inventoryNotice( 0xb053, Uint8Array.of( flag, code, 0 ), 0 ), expected );
+			g.receive( { opcode: 0xb053, payload: Uint8Array.of( flag, code, 0 ) }, 0 );
 			const state = g.take();
 			assert.deepEqual( defined( state ).inventory, [] );
 			if ( expected ) {
@@ -212,7 +213,7 @@ test("Magic Pang routes every non-success result through category 1 without muta
 			}
 		}
 	}
-	for ( const p of [ [], [ 2 ], [ 2, 7, 0 ] ] ) {
+	for ( const p of [ [], [ 2 ], [ 2, 7 ], [ 1 ], [ 1, 1, 1 ], [ 2, 7, 0, 0 ] ] ) {
 		assert.throws( () => g.receive( { opcode: 0xb053, payload: Uint8Array.from( p ) }, 0 ) );
 	}
 	assert.equal( g.take(), null );

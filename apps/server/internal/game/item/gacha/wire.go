@@ -20,6 +20,8 @@ const (
 	OpResult uint16 = 0xB053
 	// OpExchange is CIFNPCTalk's operator row (5DB67B): the bound operator NPC's gid.
 	OpExchange uint16 = 0x71BE
+	// OpExchangeResult answers OpExchange, as OpResult answers OpRoll.
+	OpExchangeResult uint16 = 0xB1BE
 
 	InteractionFlagGacha uint32 = 0x10000
 	ResultLose           uint8  = 0
@@ -85,6 +87,12 @@ func EncodeOpenInteraction() []byte {
 // EncodeResult is B053 [successFlag=1][winOrLoseCode].
 func EncodeResult(code uint8) []byte {
 	return []byte{1, code}
+}
+
+// EncodeRefusal is the refused-request body [flag=2][u16 code] the reference
+// server answers every refused roll or exchange with.
+func EncodeRefusal(code uint16) []byte {
+	return wire.NewWriter(3).U8(2).U16(code).Payload()
 }
 
 // EncodeResultItemDelta replaces the ticket with the selected win/loss card and

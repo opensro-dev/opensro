@@ -218,3 +218,37 @@ func (rt *Runtime) npcForCurrentViewer(divisionID string, character *enterworld.
 	}
 	return simulation.NpcDef{}, false
 }
+
+/*
+================
+npcForGID
+
+The roster NPC with this object id, before any viewer test. The gacha
+handlers answer a gid that names nothing (native code 0) differently from
+one outside the viewer's sector scope (code 3), so they look the roster up
+in two steps where npcForCurrentViewer folds them.
+================
+*/
+func (rt *Runtime) npcForGID(gid uint32) (simulation.NpcDef, bool) {
+	for _, npc := range rt.NpcRoster {
+		if npc.ObjectID == gid {
+			return npc, true
+		}
+	}
+	return simulation.NpcDef{}, false
+}
+
+/*
+================
+npcVisibleTo
+
+True while the NPC stands in the viewer's plane and sector scope.
+================
+*/
+func (rt *Runtime) npcVisibleTo(divisionID string, character *enterworld.Character, npc simulation.NpcDef) bool {
+	world := rt.Worlds.Snapshot(
+		simulation.WorldKey(divisionID, character.Name),
+		func() simulation.WorldState { return simulation.SeedWorldState(character) },
+	)
+	return simulation.NpcVisibleAt(npc, world.LiveSpawnAt(rt.Now().UnixMilli()))
+}

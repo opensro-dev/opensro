@@ -26,11 +26,19 @@ export function inventoryNotice(
 	country?: number,
 	itemMallOpen = false
 ): SystemNotice | null {
-	// 766A42..766A79: B053 sends every non-1 result to category 1.
+	// 766A42..766A79: B053 sends every non-1 result to category 1. The
+	// server's refusal body is [2][u16 code]; 766A20 reads the flag and the
+	// code's low byte, so the notice rides on payload[1] and the high byte
+	// is not consumed. The success body stays [1][u8].
 	// Ordinary inventory/item-use acknowledgements recognize result 2 only.
 	if ( opcode === 0xb053 ) {
-		if ( payload.length !== 2 ) throw Error( "Invalid Magic Pang result" );
-		if ( payload[0] === 1 ) return null;
+		if ( payload[0] === 1 ) {
+			if ( payload.length !== 2 ) throw Error( "Invalid Magic Pang result" );
+			return null;
+		}
+		if ( payload.length !== 3 ) throw Error( "Invalid Magic Pang result" );
+		const refused = resolveNativeNotice( 1, payload[1]!, { country, itemMallOpen } );
+		return refused.kind === "notice" ? refused.notice : null;
 	} else if ( (opcode !== 0xb06d && opcode !== 0xb5bd) || payload[0] !== 2 ) return null;
 	if ( payload.length !== 2 ) throw Error( "Invalid inventory rejection" );
 	const result = resolveNativeNotice( 1, payload[1]!, { country, itemMallOpen } );

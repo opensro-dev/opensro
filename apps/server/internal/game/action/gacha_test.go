@@ -69,6 +69,24 @@ func gachaFixture(t *testing.T) (*Runtime, *enterworld.Character, []byte) {
 
 /*
 ================
+assertGachaRefusal
+
+A refused roll or exchange answers exactly one [2][u16 code] frame on its
+reply opcode; before #1897 it answered nothing and stranded the client.
+================
+*/
+func assertGachaRefusal(t *testing.T, frames []wire.Frame, opcode uint16, code uint16) {
+	t.Helper()
+	if len(frames) != 1 || frames[0].Opcode != opcode {
+		t.Fatalf("frames %+v, want one 0x%04X refusal", frames, opcode)
+	}
+	if want := []byte{2, byte(code), byte(code >> 8)}; !reflect.DeepEqual(frames[0].Payload, want) {
+		t.Fatalf("refusal payload %v, want %v", frames[0].Payload, want)
+	}
+}
+
+/*
+================
 TestGachaCommitResultOrderAndReplay
 ================
 */
@@ -107,9 +125,11 @@ func TestGachaCommitResultOrderAndReplay(t *testing.T) {
 			}
 			before := c.Snapshot()
 			again, reason := rt.HandleGachaRoll(testDivision, c, p)
-			if reason == "" || len(again) != 0 || draws != wantDraws || !reflect.DeepEqual(c.Snapshot(), before) {
+			if reason == "" || draws != wantDraws || !reflect.DeepEqual(c.Snapshot(), before) {
 				t.Fatal("replayed ticket mutated state")
 			}
+			// The spent row is a result card now, not a ticket: 0x1806.
+			assertGachaRefusal(t, again, gacha.OpResult, 0x1806)
 		})
 	}
 }
@@ -117,14 +137,39 @@ func TestGachaCommitResultOrderAndReplay(t *testing.T) {
 /*
 ================
 TestGachaAdmissionFailuresPreserveTicket
+
+Every refusal answers the one native [2][u16 code] frame on 0xB053 and
+leaves the character untouched. The codes follow the native order:
+dispatcher (object, scope, range), then service, bag limit, empty slot,
+ticket identity, entry. They are literals on purpose: the test pins the
+wire values, not the server's names for them.
 ================
 */
 func TestGachaAdmissionFailuresPreserveTicket(t *testing.T) {
-	for _, kind := range []string{"catalog", "random missing", "random failure", "random range", "selection", "outside scope", "disabled NPC", "entry", "slot", "ticket", "delete pending", "truncated", "trailing"} {
-		t.Run(kind, func(t *testing.T) {
+	for _, tc := range []struct {
+		kind string
+		code uint16
+	}{
+		{"catalog", 5},
+		{"random missing", 5},
+		{"random failure", 5},
+		{"random range", 5},
+		{"no such gid", 0},
+		{"outside scope", 3},
+		{"disabled NPC", 0},
+		{"too far", 4},
+		{"entry", 2},
+		{"slot", 0x1806},
+		{"empty slot", 0x1809},
+		{"ticket", 0x1806},
+		{"delete pending", 5},
+		{"truncated", 0x1806},
+		{"trailing", 0x1806},
+	} {
+		t.Run(tc.kind, func(t *testing.T) {
 			rt, c, p := gachaFixture(t)
 			rt.GachaRoll = func() (uint32, error) { return 0, nil }
-			switch kind {
+			switch tc.kind {
 			case "catalog":
 				rt.GachaCatalog = nil
 			case "random missing":
@@ -133,23 +178,23 @@ func TestGachaAdmissionFailuresPreserveTicket(t *testing.T) {
 				rt.GachaRoll = func() (uint32, error) { return 0, errors.New("entropy unavailable") }
 			case "random range":
 				rt.GachaRoll = func() (uint32, error) { return 10000, nil }
-			case "selection":
-				rt.Selected.Set(testDivision, c.Name, 18)
+			case "no such gid":
+				p[0] = 99
 			case "outside scope":
 				rt.NpcRoster[0].Spawn.RegionID = 0
 			case "disabled NPC":
 				rt.NpcSpawn.Enabled = false
+			case "too far":
+				// Height only: sector visibility reads X/Z, the hit range is 3D.
+				rt.NpcRoster[0].Spawn.Y += 400
 			case "entry":
 				p[4] = 99
 			case "slot":
 				p[8] = 1
+			case "empty slot":
+				c.MissionInventory = nil
 			case "ticket":
 				c.MissionInventory[0].RefObjID = 999
-			case "unlisted pair":
-				// Resolvable and in range, but no prize row names it: a pair no roll writes.
-				c.MissionInventory[0].MagicOptions = []uint64{uint64(rt.GachaCatalog.Card.RefObjID), 1}
-			case "stacked":
-				c.MissionInventory[0].StackCount = 2
 			case "delete pending":
 				c.DeletePending = true
 			case "truncated":
@@ -159,8 +204,42 @@ func TestGachaAdmissionFailuresPreserveTicket(t *testing.T) {
 			}
 			before := c.Snapshot()
 			frames, reason := rt.HandleGachaRoll(testDivision, c, p)
-			if reason == "" || len(frames) != 0 || !reflect.DeepEqual(c.Snapshot(), before) {
+			if reason == "" || !reflect.DeepEqual(c.Snapshot(), before) {
 				t.Fatalf("refusal changed state: %s %+v", reason, frames)
+			}
+			assertGachaRefusal(t, frames, gacha.OpResult, tc.code)
+		})
+	}
+}
+
+/*
+================
+TestGachaRollIgnoresTheSelection
+
+The #1897 sequence: the player opens the machine, closes the NPC talk
+window (0x74B3 releases the selection) and then rolls. The reference server
+never consults the selection on the roll, so the roll still lands; before
+the fix the port refused it and sent nothing, stranding the window.
+================
+*/
+func TestGachaRollIgnoresTheSelection(t *testing.T) {
+	for _, kind := range []string{"released", "moved"} {
+		t.Run(kind, func(t *testing.T) {
+			rt, c, p := gachaFixture(t)
+			rt.GachaRoll = func() (uint32, error) { return 0, nil }
+			switch kind {
+			case "released":
+				rt.Selected.Clear(testDivision, c.Name)
+			case "moved":
+				rt.Selected.Set(testDivision, c.Name, 18)
+			}
+			frames, reason := rt.HandleGachaRoll(testDivision, c, p)
+			if reason != "" {
+				t.Fatal(reason)
+			}
+			assertOpcodes(t, frames, 0x3645, 0xb053)
+			if c.MissionInventory[0].RefObjID != rt.GachaCatalog.WinCard.RefObjID {
+				t.Fatalf("roll did not land: %+v", c.MissionInventory)
 			}
 		})
 	}
@@ -245,9 +324,10 @@ func TestGachaFailedWasteDrawPreservesTicket(t *testing.T) {
 		}
 		before := c.Snapshot()
 		frames, reason := rt.HandleGachaRoll(testDivision, c, p)
-		if reason == "" || len(frames) != 0 || calls != 2 || !reflect.DeepEqual(before, c.Snapshot()) {
+		if reason == "" || calls != 2 || !reflect.DeepEqual(before, c.Snapshot()) {
 			t.Fatalf("failed waste draw committed: %v %s", frames, reason)
 		}
+		assertGachaRefusal(t, frames, gacha.OpResult, 5)
 	}
 }
 
@@ -544,29 +624,55 @@ func TestGachaExchangeConsumesTheVoucherItRead(t *testing.T) {
 		t.Fatalf("rewards=%d blank kept=%v voucher kept=%v: %+v", rewards, blankKept, voucherKept, c.MissionInventory)
 	}
 	before := c.Snapshot()
-	if frames, reason := rt.HandleGachaExchange(testDivision, c, p); reason == "" || len(frames) != 0 ||
-		!reflect.DeepEqual(c.Snapshot(), before) {
+	frames, reason := rt.HandleGachaExchange(testDivision, c, p)
+	if reason == "" || !reflect.DeepEqual(c.Snapshot(), before) {
 		t.Fatal("the blank card paid out the voucher's reward a second time")
 	}
+	// No exchangeable voucher is left: the native refusal 5 on 0xB1BE.
+	assertGachaRefusal(t, frames, gacha.OpExchangeResult, 5)
 }
 
 /*
 ================
 TestGachaExchangeRefusalsPreserveTheVoucher
+
+Every refusal answers the one native [2][u16 code] frame on 0xB1BE and
+leaves the character untouched. The codes are literals on purpose: the
+test pins the wire values, not the server's names for them.
 ================
 */
 func TestGachaExchangeRefusalsPreserveTheVoucher(t *testing.T) {
-	for _, kind := range []string{"selection", "machine", "outside scope", "no voucher", "bad pair", "unlisted pair", "stacked", "delete pending", "truncated", "trailing", "catalog", "drop random missing", "drop random failure"} {
-		t.Run(kind, func(t *testing.T) {
+	for _, tc := range []struct {
+		kind string
+		code uint16
+	}{
+		{"machine", 0x1C0F},
+		{"no such gid", 0},
+		{"outside scope", 3},
+		{"too far", 4},
+		{"no voucher", 5},
+		{"bad pair", 5},
+		{"unlisted pair", 5},
+		{"stacked", 5},
+		{"delete pending", 5},
+		{"truncated", 0x1806},
+		{"trailing", 0x1806},
+		{"catalog", 5},
+		{"drop random missing", 5},
+		{"drop random failure", 5},
+	} {
+		t.Run(tc.kind, func(t *testing.T) {
 			rt, c, p := operatorFixture(t, 0)
-			switch kind {
-			case "selection":
-				rt.Selected.Set(testDivision, c.Name, 17)
+			switch tc.kind {
 			case "machine":
-				rt.Selected.Set(testDivision, c.Name, 17)
 				p = wire.NewWriter(4).U32(17).Payload()
+			case "no such gid":
+				p = wire.NewWriter(4).U32(99).Payload()
 			case "outside scope":
 				rt.NpcRoster[1].Spawn.RegionID = 0
+			case "too far":
+				// Height only: sector visibility reads X/Z, the hit range is 3D.
+				rt.NpcRoster[1].Spawn.Y += 400
 			case "no voucher":
 				c.MissionInventory = nil
 			case "bad pair":
@@ -594,7 +700,33 @@ func TestGachaExchangeRefusalsPreserveTheVoucher(t *testing.T) {
 			if reason == "" || !reflect.DeepEqual(c.Snapshot(), before) {
 				t.Fatalf("refusal changed state: %q %+v", reason, frames)
 			}
+			assertGachaRefusal(t, frames, gacha.OpExchangeResult, tc.code)
 		})
+	}
+}
+
+/*
+================
+TestGachaExchangeIgnoresTheSelection
+
+The exchange names its operator by gid and checks range and service only;
+a selection left on the machine (or released) does not refuse it.
+================
+*/
+func TestGachaExchangeIgnoresTheSelection(t *testing.T) {
+	rt, c, p := operatorFixture(t, 0)
+	rt.Selected.Set(testDivision, c.Name, 17)
+	frames, reason := rt.HandleGachaExchange(testDivision, c, p)
+	if reason != "" {
+		t.Fatal(reason)
+	}
+	if len(frames) == 0 {
+		t.Fatal("exchange answered nothing")
+	}
+	for _, row := range c.MissionInventory {
+		if rt.GachaCatalog.IsResultCard(row.RefObjID) {
+			t.Fatalf("voucher survived the exchange: %+v", row)
+		}
 	}
 }
 
@@ -609,10 +741,11 @@ func TestGachaExchangeReplayFindsNoVoucher(t *testing.T) {
 		t.Fatal(reason)
 	}
 	before := c.Snapshot()
-	if frames, reason := rt.HandleGachaExchange(testDivision, c, p); reason == "" || len(frames) != 0 ||
-		!reflect.DeepEqual(c.Snapshot(), before) {
+	frames, reason := rt.HandleGachaExchange(testDivision, c, p)
+	if reason == "" || !reflect.DeepEqual(c.Snapshot(), before) {
 		t.Fatal("replay granted a second reward")
 	}
+	assertGachaRefusal(t, frames, gacha.OpExchangeResult, 5)
 }
 
 /*
