@@ -138,7 +138,7 @@ type Session struct {
 	limiter *frameLimiter
 
 	player sessionPlayerContext
-	// Native CCmdSrcNet restrictions belong to the logical connection, not
+	// Native command-source restrictions belong to the logical connection, not
 	// a character snapshot; reconnect and character binding retain them.
 	restrictions sessionCommandRestrictions
 }

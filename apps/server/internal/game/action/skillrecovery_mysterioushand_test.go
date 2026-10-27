@@ -7,8 +7,8 @@ Mysterious Hand (SKILL_CH_WATER_HEAL_D, efr(1,6,300,2,50,7) eshp heal) is
 a targeted force heal whose chain carries eshp. It was refused as if it
 were the Cleric's eshp aura, so the skill never cast. Natively it heals its
 target and then, at half the heal, the party member nearest it: its
-primary target skips the eshp HP-ratio sort (TargetSelection_Chain 58C170,
-58C640), which only Healing Division's targetless chain takes.
+primary target skips the eshp HP-ratio sort (the native chain
+selection), which only Healing Division's targetless chain takes.
 
 ===========================================================================
 */

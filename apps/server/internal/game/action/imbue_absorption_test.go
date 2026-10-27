@@ -3,7 +3,8 @@
 
 imbue_absorption_test.go - original attack kind through imbue resolution
 
-58F312 passes the original skill to 40E830; 410BB0 reads its kind bits.
+Natively the hit outcome passes the original skill to the magical damage
+formula; the absorption formula reads its kind bits.
 
 ===========================================================================
 */

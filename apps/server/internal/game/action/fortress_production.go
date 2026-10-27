@@ -5,9 +5,9 @@ fortress_production.go - the fortress smith's and trainer's orders
 
 0x71E1 actions 0x0D..0x10 (smith, NPC service 0x1A) and 0x11..0x14
 (trainer, 0x1B): query, start, cancel and collect one order per staff
-member. The handlers are the CSiegeFortressMgr_HandleSmith and
-HandleTrainer families (6324A0..6333C0); the v1.150 replies are what
-754A40 reads, which match the v1.188 writers byte for byte after the
+member. The handlers are the reference server's smith and
+trainer families; the v1.150 replies are what
+754A40 reads, which match the reference writers byte for byte after the
 [action][result] header:
 
 	query   [fortress u32][present u8]{ref u32, count u16, done u8, remaining i64}
@@ -35,15 +35,15 @@ import (
 )
 
 const (
-	// 632767 / 632B5C test the actor's fortress role against these bits;
+	// The reference server tests the actor's fortress role against these bits;
 	// a member holding exactly the bit is the staff's own role for the
-	// discount (CGuild_HasFortressRole8Member 5D13C0, ...16Member 5D1350).
+	// discount (the guild's role-8 and role-16 member tests).
 	fortressRoleSmith   uint8 = 0x08
 	fortressRoleTrainer uint8 = 0x10
-	// 632660 refuses more than twenty items in one order (0x2816).
+	// The reference server refuses more than twenty items in one order (0x2816).
 	fortressForgeMaxCount = 20
 	// The x87 float 0.85 the price and the time take when the staff role
-	// is held (632660: fconvert of 0.850000024f).
+	// is held (reference server: fconvert of 0.850000024f).
 	fortressForgeDiscount = float32(0.85)
 )
 
@@ -52,7 +52,7 @@ const (
 fortressForgeRow
 
 One siegefortressitemforge.txt row: gold and guild points per item and
-the minutes one item takes (CRefData_FindSiegeFortressItemForge 63BCA0:
+the minutes one item takes (the reference data lookup:
 +0xC, +0x10, +0x14).
 ================
 */
@@ -109,7 +109,7 @@ func productionFor(action uint8) fortressProduction {
 ================
 trainerItem
 
-61DAC0's class test: the trainer's items are TypeID 3/3/3/2; every other
+The reference server's class test: the trainer's items are TypeID 3/3/3/2; every other
 item, or an unknown one, is the smith's.
 ================
 */
@@ -138,7 +138,7 @@ func (rt *Runtime) forgeKind(p fortressProduction) fortress.ForgeKind {
 fortressProducer
 
 The holder and authority checks every action but the query repeats, in
-632660's order: the actor's guild holds the fortress (0x2806), then the
+the reference server's order: the actor's guild holds the fortress (0x2806), then the
 actor is its master or holds the staff's role bit (0x2817). The commits
 recheck both under the store lock.
 ================
@@ -232,7 +232,7 @@ func (rt *Runtime) fortressProductionService(division string, c *enterworld.Char
 ================
 fortressProductionQuery
 
-6324A0: only an unknown fortress refuses (3).
+Reference server: only an unknown fortress refuses (3).
 ================
 */
 func (rt *Runtime) fortressProductionQuery(division string, request siege.Interaction, p fortressProduction) OpResult {
@@ -259,7 +259,7 @@ func (rt *Runtime) fortressProductionQuery(division string, request siege.Intera
 ================
 fortressProductionStart
 
-632660's order: war period, fortress, running order, holder, role, the
+The reference server's order: war period, fortress, running order, holder, role, the
 forge row, the staff's item class, the count, then gold and guild points
 in the commit. A zero count is refused with the count's code: INFERENCE,
 the native accepts it and writes an empty order nothing can collect.
@@ -288,7 +288,7 @@ func (rt *Runtime) fortressProductionStart(division string, c *enterworld.Charac
 	if count == 0 || count > fortressForgeMaxCount {
 		return fortressRefusal(request.Action, domain.FortressForgeErrCount)
 	}
-	// 632660 multiplies as unsigned 32-bit, then truncates the x87
+	// The reference server multiplies as unsigned 32-bit, then truncates the x87
 	// product with the float factor; the products here stay exact.
 	factor := rt.fortressForgeFactor(division, holder, p)
 	gold := int64(float64(row.gold*uint32(count)) * factor)
@@ -334,7 +334,7 @@ func (rt *Runtime) withHolderGP(division string, c *enterworld.Character, holder
 ================
 fortressProductionCancel
 
-632E50: war period, fortress, holder, role, then the order (0x2819) and
+Reference server cancel: war period, fortress, holder, role, then the order (0x2819) and
 its item (3). Nothing is refunded.
 ================
 */
@@ -365,7 +365,7 @@ func (rt *Runtime) fortressProductionCancel(division string, c *enterworld.Chara
 ================
 fortressProductionCollect
 
-633170: war period, fortress, holder, role, the order (0x2819), its item
+Reference server collect: war period, fortress, holder, role, the order (0x2819), its item
 (3), done (0x281A), the count against the order and the item's stack
 (0x281B), a free bag slot (0x281C). The collected items land as one new
 stack in that slot (InsertItemWithCreatedItemInDataBase), never merged

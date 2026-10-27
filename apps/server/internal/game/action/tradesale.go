@@ -3,7 +3,7 @@
 
 tradesale.go - special and thief merchant admission and cargo valuation
 
-617F70 admits the sale and 6182A0 a purchase; 4C8D10 values the complete quantity before tax.
+Natively the special trade admits the sale and the purchase check a purchase; the quote values the complete quantity before tax.
 Quotation calls are read-only. Inventory and rewards commit in commerce.go.
 
 ===========================================================================
@@ -28,14 +28,14 @@ const (
 	tradeErrVehicleDistance uint8 = 0x65
 	tradeErrQuest           uint8 = 0xb0
 	tradeErrJob             uint8 = 5
-	// tradeErrOnlyTrader is 6182A0's 0x1860 (UIIT_MSG_STRGERR_ONLY_TRADER_
+	// tradeErrOnlyTrader is the native purchase check's 0x1860 (UIIT_MSG_STRGERR_ONLY_TRADER_
 	// CAN_BUY_SPECIALTY); tradeErrBuyerLevel its 0x184E, which the v1.150
 	// client shows no text for.
 	tradeErrOnlyTrader uint8 = 0x60
 	tradeErrBuyerLevel uint8 = 0x4e
-	// minTradeBuyerLevel is 6182A0's level floor (CGObjChar_GetLevel < 0x14).
+	// minTradeBuyerLevel is the native purchase check's level floor (level < 0x14).
 	minTradeBuyerLevel int64 = 20
-	// tradeErrOverStack is 617F70's 0x1815: a sale above the item's stack
+	// tradeErrOverStack is the native sale's 0x1815: a sale above the item's stack
 	// cap (the client shows ENABLEINPUT_FEWERTHAN_REMAIN, as for 0x14).
 	tradeErrOverStack uint8 = 0x15
 	// v1.150's 47 authored goods rows have stack caps 10 or 40.
@@ -56,8 +56,8 @@ func (rt *Runtime) tradeAdmission(division string, c *enterworld.Character, npc 
 		}
 		return 0
 	}
-	// 617F70 refuses job state 3 (a hunter's suit) and 4 (no job suit,
-	// 4E1120 / 4E9D96): only a suited trader or thief sells goods.
+	// The native sale refuses job state 3 (a hunter's suit) and 4 (no job suit):
+	// only a suited trader or thief sells goods.
 	job := enterworld.DressedJob(c)
 	if job != domain.JobTrader && job != domain.JobThief {
 		return tradeErrJob
@@ -87,17 +87,17 @@ func (rt *Runtime) tradeAdmission(division string, c *enterworld.Character, npc 
 ================
 tradePurchaseAdmission
 
-6182A0, the trade goods arm of a shop purchase (CShopApp_CreatePurchasedPackageItems
-619123), in its order: 4EC860 admits only a player whose job state
-(CGObjPC_GetJobState, the worn suit's kind) is the trader's 1 and whose first
+The native purchase check, the trade goods arm of a shop purchase,
+in its order: it admits only a player whose job state
+(the worn suit's kind) is the trader's 1 and whose first
 COS is a transport, else 0x1860; then level 20 (0x184E), the merchant's
 required trade quest (0x18B0) and the transport within 1000 (0x1865). The
 0x404 branch refuses only the TID4 2 goods v1.150 never sells.
 ================
 */
 func (rt *Runtime) tradePurchaseAdmission(division string, c *enterworld.Character, npc simulation.NpcDef) uint8 {
-	// INFERENCE: 6182A0 has no merchant test of its own; only special
-	// traders stock goods, so another merchant is refused as 617F70 would.
+	// INFERENCE: the native purchase check has no merchant test of its own; only special
+	// traders stock goods, so another merchant is refused as the native sale would.
 	if npc.TalkFlags&simulation.NpcTalkFlagSpecialTrade == 0 {
 		return tradeErrWrongMerchant
 	}
@@ -123,8 +123,7 @@ func (rt *Runtime) tradePurchaseAdmission(division string, c *enterworld.Charact
 ================
 transportSummoned
 
-Whether the player's live COS is a summoned transport (4EC8A0,
-CGObjPC_FirstCOSIsTransport).
+Whether the player's live COS is a summoned transport (as natively).
 ================
 */
 func (rt *Runtime) transportSummoned(c *enterworld.Character) bool {
@@ -141,7 +140,7 @@ transportBeyond
 
 Whether the owner's summoned transport stands farther than limit from its
 owner, measured in 3D between their live positions (the relative vector's
-length, as 617F70 and 4F2B50 measure it). A position that is not finite
+length, as the native sale and teleport measure it). A position that is not finite
 counts as beyond.
 ================
 */
@@ -156,7 +155,7 @@ func (rt *Runtime) transportBeyond(division string, c *enterworld.Character, lim
 ================
 merchantStocksItem
 
-4C81F0/867660: the origin merchant buys its own merchandise at SellPrice.
+Natively the origin merchant buys its own merchandise at SellPrice.
 ================
 */
 func (rt *Runtime) merchantStocksItem(npc simulation.NpcDef, ref uint32) bool {
@@ -205,18 +204,18 @@ func (rt *Runtime) tradeSaleValue(division string, c *enterworld.Character, npc 
 		}
 		credit = int64(uint32(unit) * uint32(item.Quantity))
 	default:
-		// Version-scope inference: v1.188 4C8E20 clears trade safety and
+		// Version-scope inference: v1.188 clears trade safety and
 		// emits 34D5 here. v1.150 75AF59 consumes only the special-shop
 		// mode byte, without the later safety limits/counters, and its
 		// client has no 34D5 instruction operand or safety UI symbols.
 		// This port therefore has no later-version safety state to reset.
 		quote, found := rt.Commerce.TradeQuotations[[2]uint32{npc.RefObjID, item.RefObjID}]
 		if !found {
-			// Native (SR_GameServer CGObjNPC_QuoteTradeGoods 4C8D10,
+			// Native (the reference server's trade quote,
 			// ASM-verified): a foreign good with no quotation entry is
 			// not refused. The native logs "CANNOT FIND QUOT DATA"
-			// (4C8E54) and sells at the item's base sell price
-			// (4C8E77: [RefObjData+0xB0] * quantity), taxed below like
+			// and sells at the item's base sell price
+			// ([RefObjData+0xB0] * quantity), taxed below like
 			// every path, with the profit output left at zero.
 			// Unquoted trade goods (such as Asia Minor's TRADE_AM_01..03)
 			// have no _ItemQuotation rows, so this is their foreign sale

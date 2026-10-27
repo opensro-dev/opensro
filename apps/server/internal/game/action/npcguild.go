@@ -3,9 +3,9 @@
 
 npcguild.go - the guild manager NPC's guild services
 
-A guild manager holds service 0xF (CGObjNPC_SpawnAndConfigureServices
-4C6350), and its talk rows reach the guild through requests that name the
-NPC first. v1.188 opens each with CGObjPC_CheckNpcFunctionTargetInRange
+A guild manager holds service 0xF (the reference server's NPC service
+setup), and its talk rows reach the guild through requests that name the
+NPC first. v1.188 opens each with its NPC-function range check
 and the 0xF test (answer 3 for either); the guild rule follows:
 
 	0x73F0 [u32 npc]               level up      -> 0xB3F0   (v1.188 0x70FA)
@@ -64,7 +64,7 @@ func guildNpcAnswer(opcode uint16, code uint8) OpResult {
 ================
 guildManagerNpc
 
-CGObjPC_CheckNpcFunctionTargetInRange and the 0xF service test: the
+The reference server's NPC-function range check and the 0xF service test: the
 selected NPC, in range, keeps a guild. The caller holds the division lock.
 ================
 */
@@ -105,9 +105,9 @@ func guildRefusalCode(refusal domain.GuildRefusal) uint8 {
 ================
 HandleGuildLevelUp
 
-0x73F0 from the level-up window. v1.188 5C63D0 refuses a player outside a
+0x73F0 from the level-up window. The reference server refuses a player outside a
 guild (0x0D), anyone but the master (0x1E) and a level 5 guild (0x21),
-then 5C6240 prices the level; the door does all of it under the store
+then prices the level; the door does all of it under the store
 lock.
 ================
 */
@@ -142,10 +142,10 @@ func (rt *Runtime) HandleGuildLevelUp(division string, c *enterworld.Character, 
 HandleGuildMasterLeave
 
 0x77D4 from the master-leave window: the master hands the guild to a
-member (v1.188 5C6900, guild job 0x13). The member becomes grade 0 with
+member (reference server, guild job 0x13). The member becomes grade 0 with
 the master's permissions. INFERENCE: the shard's job is unseen; the old
 master keeps the guild as an ordinary joiner (guild.JoinerGrade, no
-permissions). The 5C5760 fortress-war refusal reads the existing fortress
+permissions). The reference server's fortress-war refusal reads the existing fortress
 authority; client category 0x10 code 0x5D names the corresponding notice.
 ================
 */
@@ -201,7 +201,7 @@ func (rt *Runtime) HandleGuildMasterLeave(division string, c *enterworld.Charact
 			}
 			next := append([]domain.GuildMemberRecord(nil), members...)
 			next[to].Grade, next[to].PermMask = domain.GuildLeaderGrade, next[from].PermMask
-			// 5C47D3..5C47DF moves the commander role with the master.
+			// The reference server moves the commander role with the master.
 			next[to].FortressRole = domain.GuildFortressRoleCommander
 			next[from].Grade, next[from].PermMask = guild.JoinerGrade, guild.JoinerPermMask
 			next[from].FortressRole = 0
@@ -231,7 +231,7 @@ func (rt *Runtime) HandleGuildMasterLeave(division string, c *enterworld.Charact
 ================
 HandleGuildCompensation
 
-0x7140 from the compensation row (v1.188 5C72A0): a guild member asks
+0x7140 from the compensation row (reference server): a guild member asks
 what guild wars owe the guild; [1][u32 gold] opens the claim box (5D4050)
 and nothing owed answers 0x45.
 ================
@@ -264,7 +264,7 @@ func (rt *Runtime) HandleGuildCompensation(division string, c *enterworld.Charac
 ================
 HandleGuildCompensationClaim
 
-0x73F7 from the claim box: the master collects (v1.188 5C7330, job 0x1E).
+0x73F7 from the claim box: the master collects (reference server, job 0x1E).
 ================
 */
 func (rt *Runtime) HandleGuildCompensationClaim(division string, c *enterworld.Character, payload []byte) OpResult {

@@ -4,23 +4,23 @@
 petgrowth.go - attack pets grow on their owner's kills
 
 Every monster award an owner earns also feeds each summoned attack pet
-(CGObjPC_GrantKillExperience 4EA6A0 -> CCOSManager_AwardAttackPetExperience
-4FCB00): the player formula run for the pet's level without the mastery
-gap (Formulae_CalculateExperience 410110), shared by the same recipient
+(the reference server's kill EXP grant hands it to its attack-pet
+award): the player formula run for the pet's level without the mastery
+gap, shared by the same recipient
 factor, plus the owner's parameter-job percent and the pet's own 0xBA
 percent (the growth potion's expi).
 
-CGObjAttackCOS_ApplyExperienceDelta (4D6370) banks it. A pet at level 110
+The reference server's pet EXP delta banks it. A pet at level 110
 or at its owner's level stops one point short of its next level; any
 other pet walks the leveldata curve, and each level is a new reference
-(column 6, 4D6210): CGObjCOS_ReplaceReferenceAndResetVitals (4EFD10)
+(column 6): the reference server replaces the reference and resets the vitals, which
 restores HP, MP and satiety and tells the area. The v1.150 client keeps
 the curve too, so the owner only learns the delta:
 
 	0x3508 [u32 cos][u8 3][i32 exp][u32 source]   owner   (v1.188 0x30C9 3)
 	0x3508 [u32 cos][u8 7][u32 refObjID]          area    (v1.188 0x30C9 7)
 	0x36B0 [u32 cos]                              area    (v1.188 0x3054)
-	vitals refresh of the new HP and MP           area    (4EFD10 vfunc +0x274)
+	vitals refresh of the new HP and MP           area    (vfunc +0x274)
 
 ===========================================================================
 */
@@ -41,13 +41,13 @@ const (
 	cosInfoExperience uint8  = 3
 	cosInfoReference  uint8  = 7
 
-	// petGrowthLevelCap is 4D6370's 0x6E: a pet this high only banks EXP.
+	// petGrowthLevelCap is the reference server's 0x6E: a pet this high only banks EXP.
 	petGrowthLevelCap = 110
-	// petMaxLevel is 4D6370's 0x8C.
+	// petMaxLevel is the reference server's 0x8C.
 	petMaxLevel = 140
-	// petLevelUpSatiety is 4EFD10's 0x2710.
+	// petLevelUpSatiety is the reference server's 0x2710.
 	petLevelUpSatiety uint16 = 10000
-	// attackPetTid4 is TID 1.2.3.3, the class 4FCB00's vtable +0x438 asks.
+	// attackPetTid4 is TID 1.2.3.3, the class the pet award's vtable +0x438 asks.
 	attackPetTid4 = 3
 
 	// petSkillUseTag is the item description entry a pet potion casts.
@@ -85,9 +85,9 @@ func (rt *Runtime) summonedAttackPet(c *enterworld.Character) *enterworld.Charac
 ================
 attackPetKillExperience
 
-410110's COS arm for a pet of the given level: base, grade and damage
+The experience formula's COS arm for a pet of the given level: base, grade and damage
 share, the level gap and the relative bonus, never below one. INFERENCE:
-the party level penalty (Formulae_CalculatePartyLevelDiffPenalty) has no
+the party level penalty has no
 party to read for a pet, so it is the solo bonus.
 ================
 */
@@ -108,7 +108,7 @@ func attackPetKillExperience(level int64, target monster.Instance, damage uint32
 petGrowthPercent
 
 The pet's parameter 0xBA: the second expi word of every live pet potion
-the owner used (its PSU1 skill, installed on the pet by 594AC0).
+the owner used (its PSU1 skill, installed on the pet with the buff modifiers).
 ================
 */
 func (rt *Runtime) petGrowthPercent(c *enterworld.Character, nowMs int64) float32 {
@@ -157,7 +157,7 @@ func petPotionSkill(item *enterworld.ItemRef) string {
 ================
 awardAttackPetExperience
 
-4FCB00 for one award recipient: every summoned attack pet earns its share.
+The reference server's pet award for one award recipient: every summoned attack pet earns its share.
 Called inside the reward's character transaction.
 ================
 */
@@ -193,8 +193,8 @@ func (rt *Runtime) awardAttackPetExperience(c *enterworld.Character, target mons
 ================
 awardAttackPetPvPExperience
 
-CCOSManager_AwardAttackPetLevelReward (4FCDA0), beside the killer's PvP
-EXP (4EAC40): each summoned attack pet earns leveldata +0x1C of the lower
+The reference server's attack-pet level reward, beside the killer's PvP
+EXP: each summoned attack pet earns leveldata +0x1C of the lower
 of its level and the victim's, doubled for a murderer victim (state 2).
 ================
 */
@@ -227,7 +227,7 @@ func (rt *Runtime) awardAttackPetPvPExperience(killer, victim *enterworld.Charac
 ================
 applyAttackPetExperience
 
-4D6370 for a gain. Returns the owner's EXP frame and the area's form and
+The reference server's pet EXP delta for a gain. Returns the owner's EXP frame and the area's form and
 level-up frames.
 ================
 */
@@ -262,9 +262,9 @@ func (rt *Runtime) applyAttackPetExperience(c *enterworld.Character, pet *enterw
 	}
 	exp := before + delta
 	form, consumed := ref, int64(0)
-	// 4D65F1's loop has no owner check: native gains never cross more than a
+	// The reference server's level-up loop has no owner check: native gains never cross more than a
 	// level. Port-only, not native: the beta pace above can, so with the pace
-	// on the loop stops at the owner's level and banks there as 4D6418 does
+	// on the loop stops at the owner's level and banks there as the native does
 	// on entry. With it off the loop is native.
 	ceiling := int64(petMaxLevel)
 	if rt.PetExpPace != nil {
@@ -301,7 +301,13 @@ func (rt *Runtime) applyAttackPetExperience(c *enterworld.Character, pet *enterw
 	}
 	// The owner sees the EXP the pet was credited: all of it unless the
 	// owner's level banked the rest (as the entry bank reports banked-before).
-	return []wire.Frame{petExperienceFrame(pet.GID, consumed+exp-before, source)}, area
+	owner = []wire.Frame{petExperienceFrame(pet.GID, consumed+exp-before, source)}
+	if form != ref {
+		// A new form's effective max is not the catalog max the client
+		// divides by: publish it with the gain (#1896).
+		owner = append(owner, rt.petEffectiveMaxFrames(pet, rt.Now().UnixMilli())...)
+	}
+	return owner, area
 }
 
 /*

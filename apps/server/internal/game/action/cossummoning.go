@@ -35,7 +35,7 @@ const (
 	cosSummonCancelDistance      uint8  = 0x97
 	// UIIT_MSG_COSPETERR_CANT_SUMMON_FREEBATTLE (item-use code 0xB9).
 	cosSummonFreeBattle uint8 = 0xb9
-	// 493100 answers 0x1869 to an owner in teleport mode 1 (49314A); the
+	// The reference server answers 0x1869 to an owner in teleport mode 1; the
 	// v1.150 client consumes the byte silently, as at the transport summon.
 	cosSummonTeleporting uint8  = 0x69
 	cosItemStateOpcode   uint16 = 0x3645
@@ -69,8 +69,9 @@ type persistentSummonUse struct {
 ================
 usePersistentSummoner
 
-493100 validates the retained record and lease; 4E8F20 creates the first
-record and 4E8FC0 toggles the existing actor. Family admission is 4FCEF0.
+Natively the summoner validates the retained record and lease, a creation
+job makes the first record and a toggle flips the existing actor. Family
+admission is a separate native check.
 ================
 */
 func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResult) bool {
@@ -78,7 +79,7 @@ func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResu
 	if row.StackCount != 1 {
 		return false
 	}
-	// 493140..49314C: only teleport mode 1 refuses. A free countdown (mode 2,
+	// Only teleport mode 1 refuses. A free countdown (mode 2,
 	// the Bandit Den scroll) summons, as the transport summoner already does.
 	if c.NativeTeleportMode == teleportModeBlocking {
 		*result = itemUseFailure(cosSummonTeleporting)
@@ -91,10 +92,10 @@ func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResu
 		*result = itemUseFailure(cosSummonBusy)
 		return false
 	}
-	// Native for pets too: CGItemCOSSummoner_Use (493100) tests the battle
-	// byte before any family branch and refuses 0x1878 (493183..49318C), and
-	// CGObjPC_TogglePersistentSummoner (4E8FC0) opens with the same test
-	// (4E8FC9). UIIT_MSG_COS_CAN_NOT_CREATE_BATTLE's text names vehicles,
+	// Native for pets too: the reference server's pet summoner tests the battle
+	// byte before any family branch and refuses 0x1878, and
+	// the persistent-summoner toggle opens with the same test.
+	// UIIT_MSG_COS_CAN_NOT_CREATE_BATTLE's text names vehicles,
 	// but the server sends it for attack and pickup pets as well.
 	if inBattleState(c, use.nowMs) {
 		*result = itemUseFailure(cosSummonInBattle)
@@ -142,7 +143,7 @@ func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResu
 			return rt.togglePersistentCompanion(use, row.Summon, result)
 		}
 	}
-	// INFERENCE: v1.188's pet summoner (493100) has no free-battle check, but
+	// INFERENCE: v1.188's pet summoner has no free-battle check, but
 	// the v1.150 client answers item-use code 0xB9 with "Under free battle
 	// situation, growth pets cannot be summoned", so the v1.150 server refused
 	// a growth (attack) pet to an owner wearing a free-battle cape. Dismissing
@@ -164,8 +165,8 @@ func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResu
 	}
 	if pet == nil {
 		pet = &domain.CharacterCOS{RefObjID: ref.RefObjID, Codename: ref.Codename, Level: ref.Level, CurrentHP: ref.MaxHP, CurrentMP: ref.MaxMP, Satiety: initialCompanionSatiety, StateFlags: 1, CommandMode: initialAttackCompanionMode}
-		// 440368/440373 initialize pickup/attack modes to 7/1. The database
-		// creation arm overrides reference capacity at 4404B8/4404D1: pickup
+		// Natively pickup/attack modes initialize to 7/1. The database
+		// creation arm overrides reference capacity: pickup
 		// pets start with 28 slots, attack pets without a bag. Retained records
 		// bypass this arm so upgrades and player-selected modes survive.
 		if ref.TidWord>>11 == 4 {
@@ -223,6 +224,7 @@ func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResu
 	frames = append(frames, rt.cosContainerReferenceFrames(pet)...)
 	*result = OpResult{Frames: append(frames, wire.Frame{Opcode: wire.OpCosRecordCreate, Payload: record}, spawn)}
 	result.Frames = append(result.Frames, companionItemStateFrames(c, pet)...)
+	result.Frames = append(result.Frames, rt.petEffectiveMaxFrames(pet, use.nowMs)...)
 	return true
 }
 

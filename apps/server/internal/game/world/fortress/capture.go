@@ -33,8 +33,8 @@ const (
 ================
 capture
 
-The per-war state CSiegeFortress (+0x0C) and its siege world (+0x84,
-+0x8C) keep: whether guard towers still stand, when the stone's
+The reference server's per-war fortress state (+0x0C) and its siege world
+(+0x84, +0x8C) keep: whether guard towers still stand, when the stone's
 countdown ends and when the gates reopen.
 ================
 */

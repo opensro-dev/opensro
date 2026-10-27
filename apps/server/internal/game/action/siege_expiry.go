@@ -3,9 +3,9 @@
 
 siege_expiry.go - the siege corpse clock runs out
 
-CGObjPC_OnTick (52D9B0) counts a siege corpse's clock (+0x1CD4) down
+The reference server's player tick counts a siege corpse's clock (+0x1CD4) down
 while a fortress war runs; at zero the corpse is sent to town
-(CGObjPC_TeleportToTown 4DF290), asked or not. The port stamps the
+(the town teleport), asked or not. The port stamps the
 death instant instead of ticking every corpse (domain.SiegeDeathAtMs):
 this sweep, riding the simulation tick beside the fortress phases, is
 the tick that notices the count ran out, and it revives through the
@@ -116,7 +116,7 @@ siegeCorpseDue
 
 The OnTick conjunction for one corpse: dead, stamped, the count run
 out, and lying in a siege world. The active war is the caller's check -
-MainProcess_IsSiegeWarActive gates the native tick itself.
+the native siege-war check gates the native tick itself.
 ================
 */
 func siegeCorpseDue(c *enterworld.Character, nowMs int64) bool {

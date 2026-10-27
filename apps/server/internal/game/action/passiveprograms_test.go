@@ -58,7 +58,7 @@ func equipWeaponKind(rt *Runtime, c *enterworld.Character, kind int64) {
 TestBlockadeBlocksAMonsterHitOnlyWithAOneHandSword
 
 Blockade rank 1 (br 15 2, reqi 6 7) is the defender's only block source.
-With a roll of 0 any non-zero chance blocks (58F0C1..58F0F3), so a monster's
+With a roll of 0 any non-zero chance blocks, so a monster's
 physical hit is blocked while a one-hand sword is in slot 6 and lands while
 the slot holds the fixture's Chinese sword.
 ================

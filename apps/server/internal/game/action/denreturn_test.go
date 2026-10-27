@@ -5,7 +5,7 @@ denreturn_test.go - the Bandit Den scroll's countdown and the pet summon
 it leaves free
 
 The scroll counts down in teleport mode 2. Natively a pet may be summoned
-then (493100 refuses only mode 1), and so may a transport (49B9F0) unless
+then (the reference server refuses only mode 1), and so may a transport unless
 SRO_DEN_NO_TRANSPORT_SUMMON is on. SRO_FAST_DEN_RETURN halves the
 countdown; off, the countdown is the scroll's Param1.
 
@@ -33,8 +33,8 @@ const denTestFieldRegion uint16 = 0x5F76
 ================
 TestPetSummonRefusesOnlyTeleportModeOne
 
-CGItemCOSSummoner_Use (493100) answers 0x1869 only when the owner's
-teleport mode is 1 (493140..49314C). The Bandit Den scroll's countdown is
+The reference server's pet summoner answers 0x1869 only when the owner's
+teleport mode is 1. The Bandit Den scroll's countdown is
 mode 2, and a pet comes out during it.
 ================
 */
@@ -134,7 +134,7 @@ func TestFastDenReturnFromEnv(t *testing.T) {
 ================
 TestDenCountdownTransportSummonFollowsTheFlag
 
-Natively 49B9F0 summons a transport during the Den countdown (teleport
+Natively a transport is summoned during the Den countdown (teleport
 mode 2). With SRO_DEN_NO_TRANSPORT_SUMMON (port-only, not native) it is
 refused 0x69 and nothing changes. The rule keys on the Den scroll's cast:
 another mode-2 countdown still summons, and mode 1 is refused either way.
@@ -160,7 +160,7 @@ func TestDenCountdownTransportSummonFollowsTheFlag(t *testing.T) {
 		c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: 22, RefObjID: 3905,
 			Codename: "ITEM_COS_T_DHORSE3", TypeFlags: wire.PackTypeFlags(3, 3, 3, 2), StackCount: 1})
 		rt.BindPetSession(testDivision, c, 101)
-		// 49BD8A: a thief summons no transport in a town; stand in the field.
+		// Natively a thief summons no transport in a town; stand in the field.
 		rt.Worlds.Update(simulation.WorldKey(testDivision, c.Name), func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(world *simulation.WorldState) {
 			world.Spawn = simulation.Spawn{RegionID: denTestFieldRegion, X: 960, Y: 20, Z: 960}
 		})

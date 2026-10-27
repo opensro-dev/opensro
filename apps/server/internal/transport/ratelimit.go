@@ -27,7 +27,8 @@ import (
 //   - The keepalive machinery (PING/PONG/BYE/HELLO, opcodes 0x0001-0x0005)
 //     is handled inside Session.readLoop and NEVER reaches Hub.dispatch, so
 //     it is structurally outside the limiter — no exemption needed.
-//   - 0x72CD target/action requests are user-driven. sub_693190 may add a
+//   - 0x72CD target/action requests are user-driven. The client's
+//     CGInterface_CancelSkillForKeyboardMove (0x693190) may add a
 //     throttled bare cancel/recovery frame during manual movement, at most
 //     once per 2s while its motion-state gate is active = <=0.5/s extra.
 //   - 0x7738 movement: one frame per ground click

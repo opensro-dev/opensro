@@ -67,7 +67,7 @@ const (
 // CNetProcessSecond table (sub_76e850) - on this gateway both arrive over
 // the one live transport session.
 const (
-	// OpPartyRegisterAck: sub_75e3a0 - flag 1 + the CPartyRegAckData
+	// OpPartyRegisterAck: sub_75e3a0 - flag 1 + the registration ack
 	// blob (sub_75dc40).
 	OpPartyRegisterAck uint16 = 0xB6FF
 	// OpPartyModifyAck: sub_75e4d0 - the same blob, MODIFY banner.
@@ -197,7 +197,7 @@ func DecodePageRequest(payload []byte) (uint8, error) {
 }
 
 // EncodePartyRegAck renders the shared 0xB6FF / 0xB3DC success arm: u8
-// flag = 1 + the CPartyRegAckData blob (sub_75dc40: two u32, four u8 in
+// flag = 1 + the registration ack blob (sub_75dc40: two u32, four u8 in
 // wire order = ack field order +0x08..+0x0b, then the wide title). The
 // client maps +0x08->flag0b, +0x09->flag0a, +0x0a->field0c,
 // +0x0b->flag0d (sub_80e6b0) - the SAME four bytes the request carried.

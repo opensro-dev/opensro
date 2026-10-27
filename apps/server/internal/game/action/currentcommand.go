@@ -8,7 +8,7 @@ import (
 
 // Native manager+1D8 owns a command, not its client token's whole lifetime.
 // Positive-time instant/projectile casts install it during preparation and
-// clear it after release processing (587045 / 5860A4), even when flight or
+// clear it after release processing, even when flight or
 // presentation finalization remains. Persistent/onff and area continuation
 // producers require separate transitions before using this for all admission.
 type currentSkillCommand struct {

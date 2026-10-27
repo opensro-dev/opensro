@@ -5,10 +5,10 @@ paramjob.go - composite scrolls and their timed ParamKeeper jobs
 
 A composite scroll (TID 3/3/13/14, e.g. ITEM_ETC_100EXP_BASIC) lists what it
 does in its second description: "[UIU1:<internal item>],...". The native
-processor (49F590) turns each UIU1 entry into a CTJ_CharParamKeeper job
-(654F30): the internal item (TID 3/3/3/10) names a ParamKeeper FourCC in
+processor turns each UIU1 entry into a character param keeper job:
+the internal item (TID 3/3/3/10) names a ParamKeeper FourCC in
 Param2, the value in Param3 and the duration in seconds in Param1. The
-FourCC table is 6552D0. The kill-reward distributor (4EA6A0) adds the EXP
+FourCC table is the reference server's. The kill-reward distributor adds the EXP
 and skill-EXP percentages on top of each award.
 
 The scroll's own COOLTIME group (Param6 milliseconds, Desc6
@@ -32,13 +32,13 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 )
 
-// ParamKeeper parameters a param job writes (6552D0).
+// ParamKeeper parameters a param job writes.
 const (
 	paramExpRate      uint16 = 0x100
 	paramSkillExpRate uint16 = 0x102
 	paramHPRate       uint16 = 0x3c
 	// paramPremiumExpRate / paramPremiumSkillExpRate are the second terms the
-	// distributor sums (4EA6A0: 0x100 + 0xBA, 0x102 + 0xCA). The premium
+	// distributor sums (0x100 + 0xBA, 0x102 + 0xCA). The premium
 	// time tickets raise them (premiumticket.go).
 	paramPremiumExpRate      uint16 = 0xba
 	paramPremiumSkillExpRate uint16 = 0xca
@@ -153,7 +153,7 @@ The live value written to one parameter.
 ================
 */
 func paramJobPercent(character *enterworld.Character, param uint16, nowMs int64) int64 {
-	// CTJ_PremiumKeeper removes the premium keepers while the day's
+	// The premium keeper job removes the premium keepers while the day's
 	// allotment is spent (premiumclock.go).
 	if (param == paramPremiumExpRate || param == paramPremiumSkillExpRate) && character.PremiumClock != nil &&
 		!premiumClockLive(character.PremiumClock, nowMs) {
@@ -172,7 +172,7 @@ func paramJobPercent(character *enterworld.Character, param uint16, nowMs int64)
 ================
 paramJobRewardBonus
 
-4EA6A0 (arg6 bit 0): bonus EXP = (0x100 + 0xBA) / 100 * EXP and bonus
+The reference server's kill EXP grant (arg6 bit 0): bonus EXP = (0x100 + 0xBA) / 100 * EXP and bonus
 skill EXP = (0x102 + 0xCA) / 100 * SEXP, each converted after the recipient
 share and floored at zero, then added to the award.
 ================
@@ -194,7 +194,7 @@ func paramJobRewardBonus(character *enterworld.Character, exp, skillExp int64, n
 ================
 advanceParamJobs
 
-655110 retires a job once its deadline passes; 655180 removes the modifier
+The reference server retires a job once its deadline passes, then removes the modifier
 and the client row (0x36D4). Retirement commits through the character door.
 ================
 */

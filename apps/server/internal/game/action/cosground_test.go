@@ -127,10 +127,10 @@ func cosGroundRoundTrip(t *testing.T, paced bool) {
 ================
 TestCOSGroundQuestItemGrantsToOwnerPlayerBagAndUpdatesQuestProgress
 
-CCOS_SelectPickupRecipient (4D554B..4D5585, 4D5755..4D5782): when a grab pet
-picks up a non-alchemy quest item (ItemTID_IsQuestItem 42FDC0: TypeID1=3,
+The native pickup recipient choice: when a grab pet
+picks up a non-alchemy quest item (the quest-item test: TypeID1=3,
 TypeID2=3, TypeID3=9), the grant goes to the owner's player bag
-(CPlayer_GrantGroundPickup 4D5143) and updates quest progress rather than
+(the ground pickup grant) and updates quest progress rather than
 entering the pet container (0x11). Alchemy-prefix quest items still enter
 the pet container when solo.
 ================

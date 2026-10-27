@@ -3,12 +3,12 @@
 
 npcrange.go - the native hit-range gate for NPC interaction
 
-CGObjChar_CheckHitRange (4A8E10) admits an interaction only while the
+The reference server's hit-range check admits an interaction only while the
 target is inside the range of its object class, measured in 3D through
-Pos_GetRelative3D. The object select (v1.188 0x7045, here 0x745A) and every
+a relative 3D position. The object select (v1.188 0x7045, here 0x745A) and every
 NPC function request (v1.188 0x7046, here 0x7338) run it and answer
 code 4 when the target is too far. Trades do not measure distance: they
-need the NPC function an in-range request opened (CGObjPC +0xC+6 state 5),
+need the NPC function an in-range request opened (player +0xC+6 state 5),
 which the selection store keeps (SelectionStore.OpenFunction).
 
 ===========================================================================
@@ -24,17 +24,17 @@ import (
 )
 
 const (
-	// npcHitRange is 4A8E10's range for the NPC class (vtable +0x24, the
-	// class 510250 requires before any NPC function).
+	// npcHitRange is the reference server's range for the NPC class (vtable +0x24, the
+	// class the NPC function request requires before any NPC function).
 	npcHitRange = 300
-	// teleportHitRange is the gate class range. 4A8E10 selects 800 for one
+	// teleportHitRange is the gate class range. The reference server selects 800 for one
 	// class; the v1.150 client selects a gate only inside 800 units (698740)
 	// and approaches to 640, so the gate is that class. Inferred, not traced.
 	teleportHitRange = 800
-	// hitRangeTooFar is 4A8E10's out-of-range result. The client shows it as
+	// hitRangeTooFar is the reference server's out-of-range result. The client shows it as
 	// category 13 code 4, UIIT_MSG_INTERACTION_FAIL_TOO_FAR (75AE50 -> 689420).
 	hitRangeTooFar uint8 = 4
-	// selectObjectNotFound is 50FE93's code when ObjMgr_FindByID finds no
+	// selectObjectNotFound is the reference server's code when the object lookup finds no
 	// object; v1.150's 7651F1 reads it as one byte and shows text only for 7.
 	selectObjectNotFound uint8 = 3
 )
@@ -43,7 +43,7 @@ const (
 ================
 npcInteractionRange
 
-The 4A8E10 range for an NPC's object class.
+The reference server's range for an NPC's object class.
 ================
 */
 func npcInteractionRange(npc simulation.NpcDef) float32 {
@@ -71,7 +71,7 @@ func (rt *Runtime) npcWithinHitRange(divisionID string, character *enterworld.Ch
 		monster.Pose{RegionID: viewer.RegionID, X: viewer.X, Y: viewer.Y, Z: viewer.Z},
 		monster.Pose{RegionID: station.RegionID, X: station.X, Y: station.Y, Z: station.Z},
 	)
-	// 4A8E10 refuses when the range is below the distance.
+	// The reference server refuses when the range is below the distance.
 	return !(npcInteractionRange(npc) < distance)
 }
 

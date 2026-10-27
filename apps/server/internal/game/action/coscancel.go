@@ -4,8 +4,8 @@
 coscancel.go - persistent companion cancellation and transient retirement
 
 The authenticated owner retires the live actor, while its durable statistics
-and inventory remain available to the summoner. Native 511A60 admits the
-request; 4FAAB0 clears the summoned bit without deleting the pet database row.
+and inventory remain available to the summoner. The reference server admits the
+request, then clears the summoned bit without deleting the pet database row.
 
 ===========================================================================
 */
@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	// 511A60 uses a strict planar distance below 100, unlike mounting's
+	// The reference server uses a strict planar distance below 100, unlike mounting's
 	// inclusive 30-unit sphere. Keep the two admission rules independent.
 	cosCancelRange             = 100
 	cosStateSummoned    uint32 = 2
@@ -103,10 +103,10 @@ func (rt *Runtime) HandleCosCancel(division string, c *enterworld.Character, pay
 ================
 releaseRiddenVehicleInDoor
 
-CGObjPC_ProcessNormalDeath (529B10) releases the vehicle the player rides
-(the COS manager's +0x30, bound by TryBindRideActor and cleared on dismount)
-through ReleaseCOSOrExit: a rider who dies loses the horse or transport it
-sat on. Its kind-1 release (CCOSManager_RetireOwnedActorAndPersist 4FA8B0,
+The native player death releases the vehicle the player rides
+(the COS manager's +0x30, bound when the ride binds and cleared on dismount)
+through the COS release: a rider who dies loses the horse or transport it
+sat on. Its kind-1 release (the native retire-and-persist,
 database operation 1, _DeleteCharCOS) deletes the vehicle's record; the
 cargo goes with it, since only the vehicle's own death reaches
 DropTransportCargo (cosdeath.go); the port-only SRO_TRADER_CARGO_DROP
@@ -141,11 +141,11 @@ func (rt *Runtime) releaseRiddenVehicleInDoor(division string, c *enterworld.Cha
 retireCompanionCorpses
 
 A successful re-entry (rebirth, return scroll, portal, GM warp) rebuilds the
-owner's world. CCOSManager_RestoreLoadedActors (4FA430) admits only records
+owner's world. The native restore of loaded actors admits only records
 whose alive and summoned bits are both set: a dead COS stays on its summoner
 item for revival and never follows its owner into the new world. Native gives
 the teleport no separate branch for corpses, so the re-entry applies the same
-admission rule here (inference from 4FA430; restoreCharacterCOS applies it at
+admission rule here (inference from the native restore; restoreCharacterCOS applies it at
 login). The caller holds the division operation lock. Returns the owner's
 item-state frames and the despawn the old neighbourhood must receive.
 ================
@@ -205,9 +205,9 @@ func (rt *Runtime) retireCompanionCorpsesVia(division string, c *enterworld.Char
 ================
 cosRemovalNotice
 
-CGObjCOS_SendOwnerDetachNotice30C9 (v1.188 4D2140): [u32 cos][u8 1] to the
-owner alone, ahead of the despawn, on every release (4D20C0) and every COS
-death (52A000 and its Summoned, Pet and siege variants). The v1.150
+The native owner-detach notice 0x30C9: [u32 cos][u8 1] to the
+owner alone, ahead of the despawn, on every release and every COS
+death (the plain, Summoned, Pet and siege variants). The v1.150
 client's 0x3508 case 1 (77A570 -> CIFCOSManager_RemoveCompanion 6F2900)
 is the only thing that drops its record and status icon; a despawn only
 takes the companion out of view, as when it relocates to its owner.

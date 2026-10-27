@@ -5,7 +5,7 @@ skillscud_test.go - the Rogue's Scud through the instant self-effect owner
 
 Scud (SKILL_EU_ROG_DAGGERA_SPEED_A) is a dagger-only (13/255) hst2 speed
 skill. It runs as an instant self effect like the Chinese GYEONGGONG rows,
-but its weapon kinds are checked by the 58D480 phase the instant owner
+but its weapon kinds are checked by the native equipment phase the instant owner
 answers itself, after the cooldown and before MP.
 
 ===========================================================================
@@ -127,7 +127,7 @@ func TestScudWithDaggerOverridesMovementSpeed(t *testing.T) {
 ================
 TestScudRefusesAWeaponOtherThanADagger
 
-58D480 answers 0x300D for a crossbow. 58D8F0 order: a cooling Scud reports
+Natively a crossbow answers 0x300D. In native order a cooling Scud reports
 0x3005 before the weapon, and the weapon answers before MP (0x3004).
 ================
 */
@@ -147,7 +147,7 @@ func TestScudRefusesAWeaponOtherThanADagger(t *testing.T) {
 ================
 TestPoisonCoatingReqiIsJudgedAtThePress
 
-58D480 walks a row's reqi pairs at the press (ProcessCommand 0x4ACED4, mask
+The native equipment check walks a row's reqi pairs at the press (mask
 0x37): a poison coating (reqi 6 12 / 6 13) cast with no weapon is refused
 0x300D before any MP is charged or effect installed.
 ================
@@ -173,7 +173,7 @@ func TestPoisonCoatingReqiIsJudgedAtThePress(t *testing.T) {
 ================
 TestScudPreservesOpenDaggerAttack
 
-4AD870: the instant owner answers beside an open attack instead of
+Natively the instant owner answers beside an open attack instead of
 replacing it. Scud cast while a dagger attack is open installs the override
 and leaves the attack and its combat intent in place.
 ================

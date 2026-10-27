@@ -65,7 +65,7 @@ func (rt *Runtime) commerceRoster(division string, c *enterworld.Character) trad
 ================
 tradeRewards
 
-5BCFF0: only living members of the requested job, in the seller's world,
+Reference server: only living members of the requested job, in the seller's world,
 within 1000 planar units. The seller remains the first transaction owner.
 ================
 */

@@ -3,17 +3,17 @@
 
 equipmentwear.go - equipment loses durability in combat
 
-v1.188 SkillCombat_CalculateHitOutcome (58ED80..) counts, per execution:
+The v1.188 hit outcome counts, per execution:
 the attacker's attempts that were not blocked (result header +0x06,
-58F743), each defender's landed hits (+0x15, 58F79F) and its blocks
-(+0x14, 58F0F3). SkillCombat_ApplyResultRecipients (593800) then rolls each
-count once through CGObjPC_RollEquipmentWear (4A9A90): a chance of count
+the reference server), each defender's landed hits (+0x15) and its blocks
+(+0x14). The result-recipient pass then rolls each
+count once through the equipment wear roll: a chance of count
 x 2 percent (capped at 100, abs(rand()) % 100 + 1 <= chance) to take one
 point from the weapon (slot 6), from the first of slots 0..7 but 6 whose own
 roll succeeds (armour, shield included), or from the shield (slot 7). Only
 players wear (the actor's +0x1C virtual).
 
-CGObjPC_OffsetItemDurability (4E7100) applies the point: nothing below
+The reference server's durability offset applies the point: nothing below
 zero, and an equipped item that reaches zero stops contributing
 (RemoveEquipmentContributions, ReevaluateEquipmentRequirements) before the
 durability packet (v1.188 0x3052, v1.150 0x31E8) goes out.
@@ -64,7 +64,7 @@ type wearTally struct {
 ================
 note
 
-Counts one impact's outcome the way 58F0F3/58F743/58F79F do.
+Counts one impact's outcome the way the reference server's hit outcome does.
 ================
 */
 func (w *wearTally) note(blocked bool, attacker bool) {
@@ -115,7 +115,7 @@ type wearFrames struct {
 ================
 rollEquipmentWear
 
-CGObjPC_RollEquipmentWear for one counter. Runs inside the character's
+The reference server's equipment wear roll for one counter. Runs inside the character's
 Update; returns the frames of any point taken.
 ================
 */
@@ -147,7 +147,7 @@ func (rt *Runtime) rollEquipmentWear(division string, c *enterworld.Character, m
 ================
 offsetItemDurability
 
-CGObjPC_OffsetItemDurability (4E7100) for an equipment item in any
+The reference server's durability offset for an equipment item in any
 inventory slot. A broken item loses no further points; an equipped item's
 zero crossing in either direction re-derives the stats and ends effects
 whose equipment requirement it no longer meets.
@@ -251,7 +251,7 @@ func (rt *Runtime) applyEquipmentWear(division string, c *enterworld.Character, 
 ================
 isEquipmentItem
 
-483210: the type word names equipment.
+Reference server: the type word names equipment.
 ================
 */
 func isEquipmentItem(tid uint16) bool {

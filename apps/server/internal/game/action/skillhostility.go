@@ -22,7 +22,7 @@ import (
 ================
 commitSkillHostility
 
-Each impact contributes to the cumulative aggression (5903EC), while damage
+Each impact contributes to the cumulative aggression (reference server), while damage
 remains separate. Fatal results no longer own a live opponent ledger, but
 their damage still feeds the attacker's Mana Switch links (linkedmana.go),
 so the area owners call this for a killed victim too.
@@ -60,7 +60,7 @@ func (rt *Runtime) commitAggression(division string, target uint32, event simula
 dispatchAggression
 
 The healing caller dispatches even when halving a nonzero heal yields zero
-threat (5A0752..5A07A6). Keep that event and any linked source in the ledger.
+threat (reference server). Keep that event and any linked source in the ledger.
 ================
 */
 func (rt *Runtime) dispatchAggression(division string, target uint32, event simulation.HostilityEvent, now int64) {

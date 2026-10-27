@@ -17,7 +17,8 @@ const captureTravelBlockMask = 0x60000
 
 var captureQuestSpecs = []QuestSpec{
 	{
-		// 8BAC50 adds Ivy 1 to the active-quest vector, not completion history.
+		// The server's Ivy 2 definition adds Ivy 1 to the active-quest vector,
+		// not completion history.
 		Codename: "QNO_EU_IVY_2", RequiredActiveQuests: []string{"QNO_EU_IVY_1"},
 		KindByte: 1, Objective: ObjectiveCollect, CollectItemCodename: "ITEM_QNO_EU_IVY_2_02", CollectCount: 20,
 		StartNpcCodename: "NPC_EU_ADVENTURER", EndNpcCodename: "NPC_EU_ADVENTURER",
@@ -33,7 +34,8 @@ var captureQuestSpecs = []QuestSpec{
 			MonsterCodenames: []string{"MOB_AM_SOLDIER"}, ChancePercent: 25, MaxHeld: 500},
 	},
 	{
-		// 8AF7E0 defines the capture; v1.150 SN_PAYCON owns its reward.
+		// The server's quest definition sets the capture; v1.150 SN_PAYCON owns
+		// its reward.
 		Codename: "QNO_EU_EASTEU_14_1", RequiredQuests: []string{"QNO_EU_EASTEU_14"},
 		KindByte: 1, Objective: ObjectiveCollect, CollectItemCodename: "ITEM_QNO_EU_EASTEU_14_1_02", CollectCount: 1,
 		StartNpcCodename: "NPC_EU_WITCH", EndNpcCodename: "NPC_EU_WITCH", TravelBlockMask: captureTravelBlockMask,
@@ -54,8 +56,9 @@ var captureQuestSpecs = []QuestSpec{
 		RewardItems: []RewardItemLead{{ItemCodename: "ITEM_QNO_EU_GENERAL_1_03", Count: 1}},
 	},
 	{
-		// 8B97C0 installs two simultaneous missions; the capture timer is 30
-		// minutes (8BA870), not the 20-minute timer of the other families.
+		// The server's Ivy 1 definition installs two simultaneous missions; the
+		// capture timer is 30 minutes (set by its trap capture), not the
+		// 20-minute timer of the other families.
 		Codename: "QNO_EU_IVY_1", RequiredQuests: []string{"QNO_CA_HUNTER_1"},
 		KindByte: 1, Objective: ObjectiveParallel, TravelBlockMask: captureTravelBlockMask,
 		Objectives: []MissionSpec{
@@ -77,7 +80,7 @@ var captureQuestSpecs = []QuestSpec{
 		RewardItems: []RewardItemLead{{ItemCodename: "ITEM_QNO_EU_IVY_1_02", Count: 5}},
 	},
 	{
-		// Cerberus 1 (CQNO_EU_EASTEU_19, 8B2130): Long Scissors cut Golden
+		// Cerberus 1 (CQNO_EU_EASTEU_19): Long Scissors cut Golden
 		// Apples, an apple lures a quest Ladon, and its Bloody Orbs (50%)
 		// are the objective. v1.150's text asks for 20 (the class says 15)
 		// and its popup pays 11,400 EXP and 2,500 skill EXP. The class lists
@@ -94,12 +97,12 @@ var captureQuestSpecs = []QuestSpec{
 		MonsterDrop: &MonsterDropRule{MonsterCodenames: []string{cerberusLadon}, ChancePercent: 50},
 	},
 	{
-		// Rahid 5 (CQNO_RM_OLDWOMAN_5, 8A00D0): giant Guardian Rockies
+		// Rahid 5 (CQNO_RM_OLDWOMAN_5): giant Guardian Rockies
 		// (grade 4, mission +0x10D/+0x111) drop five Essences of Roc Mountain
 		// (+0x245) at 100%; each Essence gathers a Pile of Rainbow Grass on
-		// the next of seven peaks (8A0AA0), and holding seven Piles is the
-		// objective (CMissionChangeItem 91D540).
-		// Shiphr's talk (8A03F0) pages through _01.._08 before the offer _09. v1.150's
+		// the next of seven peaks (the server's quest-item use), and holding
+		// seven Piles is the objective (the server's change-item mission).
+		// Shiphr's talk (the server's talk handler) pages through _01.._08 before the offer _09. v1.150's
 		// popup pays 2,200,000 EXP and 320,000 skill EXP. Words
 		// 0x130..0x134 and 0x139 name the dialogue; the class has no
 		// bag-full line.
@@ -120,8 +123,9 @@ var captureQuestSpecs = []QuestSpec{
 			MonsterGrades: []uint8{4}, ChancePercent: 100, MaxHeld: 1000, DropCount: 5},
 	},
 	{
-		// Hidden Treasure 5 (CQNO_CA_TREASURE_5, 8C7260): Tricia's Seal Keys
-		// call a Treasure Guardian (8C7910) whose King's Treasure Box (+0x241,
+		// Hidden Treasure 5 (CQNO_CA_TREASURE_5): Tricia's Seal Keys
+		// call a Treasure Guardian (the server's key use) whose King's
+		// Treasure Box (+0x241,
 		// 100%) is the objective. Holding it, her talk pages through the
 		// box's opening (_09.._15) before the thanks _16 pays. Words
 		// 0x130..0x134/0x136/0x139 name the dialogue; 0x136 (_05, "You used
@@ -144,7 +148,8 @@ var captureQuestSpecs = []QuestSpec{
 		MonsterDrop:       &MonsterDropRule{MonsterCodenames: []string{treasureGuardian}, ChancePercent: 100},
 	},
 	{
-		// 8C0F00 supplies the capture contract; v1.150 grants one courage scroll.
+		// The server's quest definition supplies the capture contract; v1.150
+		// grants one courage scroll.
 		Codename: "QNO_CA_GORIA_6", RequiredQuests: []string{"QNO_CA_GORIA_5"},
 		KindByte: 1, Objective: ObjectiveCollect, CollectItemCodename: "ITEM_QNO_CA_GORIA_6_02", CollectCount: 1,
 		StartNpcCodename: "NPC_CA_HUNTER", EndNpcCodename: "NPC_CA_HUNTER", TravelBlockMask: captureTravelBlockMask,

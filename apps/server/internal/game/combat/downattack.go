@@ -6,7 +6,7 @@ func downAttackDamage(damage uint32, motionState uint8, modifier enterworld.Skil
 	if !modifier.Present || motionState != 8 {
 		return damage
 	}
-	// 58F1B7/58F204 IMUL keeps the low dword BEFORE unsigned conversion
+	// The server's down-attack IMUL keeps the low dword BEFORE unsigned conversion
 	// and division by 100. Widening the product changes overflow behavior.
 	return (damage * modifier.Percent) / 100
 }

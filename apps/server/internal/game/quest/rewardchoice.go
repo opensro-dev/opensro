@@ -8,8 +8,9 @@ v1.150 client ships no reward-selection window (its CIFQuestReward only
 gives up or completes, 5C1FA0), so the completing NPC lists one row per
 choice, titled by the choice's own symbol (QNO_EU_EASTEU_5's _09 Str
 Scroll and _10 Int Scroll rows) or by its item's name, and the row picked
-names the reward. v1.188's selection packet 0x7515 (SR_GameServer
-51B370: quest id, SelectionCnt, the picked indices) has no v1.150
+names the reward. v1.188's selection packet 0x7515 (the reference
+server's reward-selection handler: quest id, SelectionCnt, the picked
+indices) has no v1.150
 counterpart: there 0x7515 opens the guild storage (client 701770).
 
 ===========================================================================

@@ -26,9 +26,10 @@ import (
 ================
 TestShippedCerberusSpawnLifecycle
 
-Native 55EC10 tries eligible nests in order when no alternate is selected.
-55EEEE..55EF0A chooses rand() % (members + 1), folding the extra bucket
-onto the final member. The previous member remains a valid choice.
+The reference server's nest selection tries eligible nests in order when
+no alternate is selected. Its member pick chooses rand() % (members + 1),
+folding the extra bucket onto the final member. The previous member
+remains a valid choice.
 ================
 */
 func TestShippedCerberusSpawnLifecycle(t *testing.T) {

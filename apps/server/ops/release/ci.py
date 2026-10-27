@@ -15,12 +15,15 @@ artifact after approval or runs a remote shell command.
 A coordinated release (coordinated.py) takes three publication requests:
 coordinate puts the pair live, the workflow runs the browser smoke against
 it and records the evidence with the staging key, and confirm or revert ends
-the operation. coordinate --maintenance publishes a maintenance pair (both
+the operation. resume answers a revert that failed with the candidate
+server still live: it puts the candidate client back and returns the
+operation to verifying, so fresh evidence and confirm can follow.
+coordinate --maintenance publishes a maintenance pair (both
 candidates built with --maintenance); the flag only asserts what the plans
 already declare, so a workflow cannot publish one by mistake.
 
 coordinate names the operation with a fresh nonce and keeps it in
-operation.json; confirm and revert send it back (--nonce, or that file), so
+operation.json; confirm, revert and resume send it back (--nonce, or that file), so
 only the publisher that opened an operation ends it. A publisher that lost
 the nonce takes the operation over with --takeover REASON instead.
 
@@ -241,7 +244,7 @@ def main():
 	command.add_argument("client")
 	command.add_argument("--commit", required=True, help="Public source commit of the server candidate")
 	command.add_argument("--maintenance", action="store_true", help="a maintenance pair: closed window and store upgrade")
-	for name in ("confirm", "revert"):
+	for name in ("confirm", "revert", "resume"):
 		command = commands.add_parser(name)
 		claim = command.add_mutually_exclusive_group()
 		claim.add_argument("--nonce", help="the nonce coordinate printed (default: operation.json)")
@@ -273,6 +276,8 @@ def main():
 		Path("candidate.json").write_text(json.dumps(result["client"], indent=2) + "\n", encoding="utf-8")
 	elif arguments.role == "confirm":
 		result = send({"operation": "confirm-coordinated", **owner_claim(arguments.nonce, arguments.takeover)}, "publish")
+	elif arguments.role == "resume":
+		result = send({"operation": "resume-coordinated", **owner_claim(arguments.nonce, arguments.takeover)}, "publish")
 	else:
 		result = send({"operation": "revert-coordinated", "reason": arguments.reason,
 			**owner_claim(arguments.nonce, arguments.takeover)}, "publish")

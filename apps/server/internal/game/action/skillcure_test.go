@@ -174,11 +174,11 @@ func TestShippedInnocentCureArms(t *testing.T) {
 ==================
 TestShippedInnocentAreaCuresCasterAndParty
 
-Innocent B's efr block is [1, 1, 300, 8, 0, 5]: TargetSelection_Party
-(58BEF0) pushes the caster first because +0x14 (5) has bit 0 set, then
+Innocent B's efr block is [1, 1, 300, 8, 0, 5]: the party selector
+pushes the caster first because +0x14 (5) has bit 0 set, then
 every living party member within 300 units (3D, adjacent sectors). curt
 mask 63 covers burn and curl's mask does not, so each cured burn moves back
-by exactly CurtLevel * 750 ms (410B40 burn) and stays active.
+by exactly CurtLevel * 750 ms (the native burn duration per level) and stays active.
 ==================
 */
 /*
@@ -378,7 +378,7 @@ func TestShippedInnocentTargetResolution(t *testing.T) {
 	if stored == nil || stored.Slots[abnormal.Frostbite].StartedAt != now-int64(48*250) {
 		t.Fatal("pet target was not cured")
 	}
-	// 4A5C60 sends 0x36C7 for players only; the client applies it to the
+	// The reference server sends 0x36C7 for players only; the client applies it to the
 	// local player, so a pet's cure publishes its mask on 33A6 alone.
 	if hasOpcode(pet.Frames, 0x36C7) || hasOpcode(pet.Broadcast, 0x36C7) || !hasPetMask(pet.Broadcast, petGID) {
 		t.Fatalf("pet cure publication frames=%v broadcast=%v", pet.Frames, pet.Broadcast)

@@ -114,7 +114,7 @@ func TestPartyRegistrationRevalidatesChangedSuitForEveryPurpose(t *testing.T) {
 ================
 TestPartyRegistrationRefusalCodesAreNative
 
-sub_514170: a party member who is not the master gets 0x1D, a partyless
+Natively a party member who is not the master gets 0x1D, a partyless
 registrant below level 5 gets 0x0A; a level 4 member of a party may not
 list it either, and the master lists at any level with the party's options.
 ================

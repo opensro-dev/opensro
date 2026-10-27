@@ -90,7 +90,14 @@ const (
 	// the programme ends the layer itself, on the kill or the farewell.
 	rahid6LayerEndSlackMs = 8_490
 	rahid6LayerLifetimeMs = rahid6SpawnDelayMs + 5*rahid6ConvoStepMs +
-		rahid6BattleMs + 2*rahid6WarningStepMs + rahid6LayerEndSlackMs
+		rahid6BattleMs + 2*rahid6WarningStepMs + rahid6KillGraceMs + rahid6LayerEndSlackMs
+
+	// The kill leaves the room a 60,000 ms grace: the reference death
+	// handler raises the exit gate and sets its event timer to the
+	// elapsed time plus 0xEA60, and the timer's expiry returns the
+	// party. The deadline above makes room for a kill in the last
+	// moment of the battle.
+	rahid6KillGraceMs = 60_000
 
 	// Tahomet appears 20 to 100 from the party: the native polar
 	// random placement, the quest-spawn radius pair.
@@ -228,7 +235,11 @@ type rahid6Layer struct {
 	warnings  int
 	killed    bool
 	credited  bool
+	graceEnd  int64
 	ended     bool
+	// bossSite is where the boss fell (NoteKillSite), the gate's spot.
+	bossSite      simulation.Spawn
+	bossSiteKnown bool
 }
 
 /*
@@ -649,6 +660,7 @@ func (rt *Runtime) rahid6Leave(event InstanceEvent) {
 		return
 	}
 	rt.rahid6ForgetLayer(event.World)
+	rt.removeExitGates(event.World)
 	if rt.InstanceClose != nil && lease.ID != 0 {
 		rt.InstanceClose(lease)
 	}
@@ -782,11 +794,17 @@ func (rt *Runtime) rahid6Update(event InstanceEvent) {
 	if ended {
 		return
 	}
+	now := rt.rahid6Now()
 	if killed {
-		rt.rahid6FinishKill(event, layer)
+		rt.rahid6FinishKill(event, layer, now)
 		return
 	}
-	now := rt.rahid6Now()
+	if layer.killed {
+		if now >= layer.graceEnd {
+			rt.rahid6EndLayer(event, layer)
+		}
+		return
+	}
 	if layer.spawnedMs == 0 {
 		if now-layer.openedMs >= rahid6SpawnDelayMs {
 			layer.spawnedMs = now
@@ -865,18 +883,23 @@ Tahomet is down. His surrender line goes to the room; then every
 resident doing the quest trades the bundle for the necklace - the
 whole party, the dead included, exactly the native kill evaluator -
 and a resident who lost the bundle hears why there is no necklace.
-The meeting then returns everyone and closes.
+The exit gate rises beside him and the room's sixty-second grace
+starts; the update returns whoever is still inside when it runs out.
 ================
 */
-func (rt *Runtime) rahid6FinishKill(event InstanceEvent, layer *rahid6Layer) {
+func (rt *Runtime) rahid6FinishKill(event InstanceEvent, layer *rahid6Layer, now int64) {
 	rt.rahid6Push(layer, rahid6SymSurrender)
+	layer.graceEnd = now + rahid6KillGraceMs
+	rt.rahid6.mu.Lock()
+	site, known := layer.bossSite, layer.bossSiteKnown
+	rt.rahid6.mu.Unlock()
+	rt.raiseExitGate(event.World, site, known)
 	def, ok := rt.Defs.ByCodename(rahid6QuestCodename)
 	if ok {
 		for _, name := range rahid6ResidentNames(layer) {
 			rt.rahid6CreditKill(event.Division, name, def)
 		}
 	}
-	rt.rahid6EndLayer(event, layer)
 }
 
 /*
@@ -949,6 +972,7 @@ func (rt *Runtime) rahid6EndLayer(event InstanceEvent, layer *rahid6Layer) {
 		}
 	}
 	rt.rahid6ForgetLayer(event.World)
+	rt.removeExitGates(event.World)
 	if rt.InstanceClose != nil && lease.ID != 0 {
 		rt.InstanceClose(lease)
 	}

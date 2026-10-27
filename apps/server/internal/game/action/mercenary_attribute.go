@@ -26,7 +26,7 @@ const (
 ================
 HandleMercenaryAttribute
 
-v1.150 5DB1B8 writes [npc DWORD][attribute BYTE]; v1.188 517D60 validates
+v1.150 5DB1B8 writes [npc DWORD][attribute BYTE]; v1.188 validates
 range and NPC service 15 before the guild transaction.
 ================
 */

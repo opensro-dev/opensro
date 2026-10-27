@@ -397,7 +397,8 @@ func (r *Registry) ownedLinkLocked(owners map[string]uint32, division, target st
 ==================
 CountFenceHit
 
-5A1092: a fence that moved a share counts the hit on its link (+0x3C) and,
+In the reference server's damage-effects processing, a fence that moved a
+share counts the hit on its link (+0x3C) and,
 when lkdr's max hits is nonzero and reached, stops contributing (+0x10 = 0).
 Every shipped fence authors 0, so its link only ends with its duration,
 range or source. Reports whether the link still shares.

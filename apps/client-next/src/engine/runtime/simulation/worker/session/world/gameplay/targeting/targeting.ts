@@ -8,6 +8,7 @@ remains owned until acknowledgement, so latency cannot redirect a late reply.
 
 ===========================================================================
 */
+import type { GateRow } from "@/engine/contracts/gameplay";
 import { TARGET_RELEASE_TIMEOUT, type WireFrame } from "@/engine/contracts/network";
 
 /*
@@ -26,6 +27,46 @@ still retains the target. Reopening requires a fresh authoritative grant.
 */
 type SelectionOptions = { fortress?: boolean; reopen?: boolean; };
 const REPLY_TIMEOUT_MS = 10_000;
+// GATE_ROWS_FLAG is the teleport-gate service (0x1C) bit whose rows follow
+// the grant.
+const GATE_ROWS_FLAG = 0x8000000;
+
+/*
+================
+decodeGateRows
+
+A quest exit gate's rows: [u8 count], then per row [u8 kind] - 0 the
+return (no payload), 1 an ascii text symbol ([u16 length][bytes]), 2 a
+u16 point id. Null when the bytes after the base are not exactly that.
+================
+*/
+function decodeGateRows( p: Uint8Array, at: number ): GateRow[] | null {
+	const view = new DataView( p.buffer, p.byteOffset, p.byteLength );
+	if ( at >= p.length ) return null;
+	const count = p[at++]!;
+	const rows: GateRow[] = [];
+	for ( let i = 0; i < count; i++ ) {
+		if ( at >= p.length ) return null;
+		const kind = p[at++]!;
+		if ( kind === 0 ) {
+			rows.push( { kind } );
+		} else if ( kind === 1 ) {
+			if ( at + 2 > p.length ) return null;
+			const length = view.getUint16( at, true );
+			at += 2;
+			if ( at + length > p.length ) return null;
+			rows.push( { kind, symbol: String.fromCharCode( ...p.subarray( at, at + length ) ) } );
+			at += length;
+		} else if ( kind === 2 ) {
+			if ( at + 2 > p.length ) return null;
+			rows.push( { kind, point: view.getUint16( at, true ) } );
+			at += 2;
+		} else {
+			return null;
+		}
+	}
+	return at === p.length && rows.length > 0 ? rows : null;
+}
 
 /*
 ================
@@ -34,6 +75,7 @@ createTargeting
 */
 export function createTargeting( send: ( frame: WireFrame ) => void ) {
 	let capabilities = 0, taxRate = 0, flagWarMode = 0;
+	let gateRows: GateRow[] = [];
 	let localSelection = false;
 	let target = 0, pending: Pending | null = null, error: string | null = null;
 	/*
@@ -65,6 +107,7 @@ select
 				capabilities = 0;
 				flagWarMode = 0;
 				taxRate = 0;
+				gateRows = [];
 				error = null;
 				localSelection = true;
 				return null;
@@ -94,6 +137,7 @@ select
 				capabilities = 0;
 				flagWarMode = 0;
 				taxRate = 0;
+				gateRows = [];
 			}
 			return frame;
 		},
@@ -113,6 +157,7 @@ release
 			capabilities = 0;
 			flagWarMode = 0;
 			taxRate = 0;
+			gateRows = [];
 			error = null;
 			return frame;
 		},
@@ -148,6 +193,7 @@ the other lanes' (#1472).
 			capabilities = 0;
 			flagWarMode = 0;
 			taxRate = 0;
+			gateRows = [];
 			error = "Target selection was not confirmed; select again";
 			return true;
 		},
@@ -166,6 +212,7 @@ receive
 				capabilities = 0;
 				flagWarMode = 0;
 				taxRate = 0;
+				gateRows = [];
 				pending = null;
 				error = null;
 				return true;
@@ -183,9 +230,16 @@ receive
 			}
 			if ( p[0] !== 1 ) throw new Error( "Unsupported target result" );
 			const gate = pending?.family === "teleport";
-			if ( gate && p.length !== (pending!.fortress ? 11 : 9) ) throw Error( "Invalid teleport grant" );
+			// A teleport gate's word may carry 0x8000000, a quest exit gate's
+			// rows after the base (CIFNPCTalk_AppendTeleportRows 5D32C0).
+			const base = gate ? (pending!.fortress ? 11 : 9) : 0;
+			const rows = gate && p.length > base && p.length >= 9 &&
+					(new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 5, true ) & GATE_ROWS_FLAG) !== 0 ?
+				decodeGateRows( p, base ) :
+				null;
+			if ( gate && p.length !== base && !rows ) throw Error( "Invalid teleport grant" );
 			if (
-				!((gate && p.length === (pending!.fortress ? 11 : 9)) || (p.length === 11 && p[5] === 0) ||
+				!((gate && (p.length === base || rows)) || (p.length === 11 && p[5] === 0) ||
 					(p.length === 14 && p[5] === 1))
 			) throw new Error( "Unsupported target grant" );
 			const gid = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 1, true );
@@ -203,6 +257,7 @@ receive
 			// The NPC grant's trailing byte is the flag-war row mode
 			// (the reference server's event byte: 1 offers sign-up, 2 offers cancel, else no row).
 			flagWarMode = !gate && p.length === 11 && p[5] === 0 ? p[10]! : 0;
+			gateRows = rows ?? [];
 			pending = null;
 			error = null;
 			return true;
@@ -219,6 +274,7 @@ remove
 				capabilities = 0;
 				flagWarMode = 0;
 				taxRate = 0;
+				gateRows = [];
 			}
 			// Preserve a release barrier until its untagged acknowledgement arrives.
 			if ( pending?.kind === "select" && pending.gid === gid ) pending = null;
@@ -239,6 +295,7 @@ NPC function opened through it (an open warehouse) stay as they are.
 			capabilities = 0;
 			flagWarMode = 0;
 			taxRate = 0;
+			gateRows = [];
 			error = null;
 		},
 		/*
@@ -252,6 +309,7 @@ clear
 			capabilities = 0;
 			flagWarMode = 0;
 			taxRate = 0;
+			gateRows = [];
 			pending = null;
 			error = null;
 		},
@@ -275,7 +333,8 @@ target window lags the grant too, yet an immediate press casts.
 			target,
 			targetPending: pending?.gid ?? 0,
 			...(capabilities ? { targetCapabilities: capabilities } : {}),
-			...(flagWarMode ? { targetFlagWarMode: flagWarMode } : {})
+			...(flagWarMode ? { targetFlagWarMode: flagWarMode } : {}),
+			...(gateRows.length ? { targetGateRows: gateRows } : {})
 		})
 	};
 }

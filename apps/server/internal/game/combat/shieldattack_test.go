@@ -20,7 +20,7 @@ import (
 TestShieldAttackWritesTruncateEachLane
 
 17 % and 27 % of 123.4 are 20.978 and 33.318: _ftol keeps 20 and 33. A lane
-whose product truncates to zero writes nothing (the jle at 59516C/595194).
+whose product truncates to zero writes nothing (the installer skips a non-positive product).
 ================
 */
 func TestShieldAttackWritesTruncateEachLane(t *testing.T) {

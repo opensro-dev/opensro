@@ -570,7 +570,7 @@ func TestGuildMutatorsEndToEndOverWire(t *testing.T) {
 		t.Fatalf("D's 0x32C4 = % X, want the two-member guild % X", deltaSeed, wantDeltaSeed)
 	}
 
-	// 516EA0 checks session chat restriction before even decoding or checking
+	// The reference server checks session chat restriction before even decoding or checking
 	// guild permission. Both a master and a member receive only 36EA.
 	for _, actor := range []struct {
 		name string

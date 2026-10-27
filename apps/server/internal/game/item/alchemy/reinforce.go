@@ -231,8 +231,9 @@ func clone(items []inventory.Item) []inventory.Item {
 ================
 probability
 
-505F00: three packed groups, high byte first. Beyond +11 the final byte
-remains authoritative (it is not a guessed exponential).
+The reference server's elixir probability field: three packed groups, high
+byte first. Beyond +11 the final byte remains authoritative (it is not a
+guessed exponential).
 ================
 */
 func probability(r Reference, plus uint8) int {

@@ -518,3 +518,86 @@ func TestEasteu21KillCreditAndGrace(t *testing.T) {
 		t.Fatalf("the Witch paid %d EXP, want 28300", got)
 	}
 }
+
+/*
+================
+TestEasteu21ExitGateRisesBesideTheBoss
+
+The reference kill handler raises the exit gate beside Kerberos (#1878):
+the site its owner reports for the fall in this layer is where the gate
+rises, once, on the kill; a site in another world or of another monster
+is ignored. The room stays for the sixty-second grace, then the layer's
+end returns it and takes the gate down.
+================
+*/
+func TestEasteu21ExitGateRisesBesideTheBoss(t *testing.T) {
+	w := newEasteu21World(t)
+	type raised struct {
+		world instance.ID
+		fell  simulation.Spawn
+	}
+	var gates []raised
+	var removed []instance.ID
+	w.rt.SpawnExitGate = func(world instance.ID, fell simulation.Spawn) bool {
+		gates = append(gates, raised{world, fell})
+		return true
+	}
+	w.rt.RemoveExitGates = func(world instance.ID) { removed = append(removed, world) }
+	leader := easteu21Accept(t, w, "GateLeader")
+	w.openLayer(leader.Name)
+	w.update()
+
+	site := simulation.Spawn{RegionID: 25000, X: 120, Y: 4, Z: -30}
+	wrong := uint32(instance.Pack(instance.DefinitionID(2), 1))
+	leader.World = &enterworld.CharacterWorld{PackedInstance: &wrong, InstanceReturn: &domain.InstanceReturnAnchor{}}
+	w.rt.NoteKillSite(leader, easteu21BossCodename, simulation.Spawn{RegionID: 1})
+	packed := uint32(w.lease.ID)
+	leader.World = &enterworld.CharacterWorld{PackedInstance: &packed, InstanceReturn: &domain.InstanceReturnAnchor{}}
+	w.rt.NoteKillSite(leader, "MOB_QT_01_SOMETHING_ELSE", simulation.Spawn{RegionID: 2})
+	w.rt.NoteKillSite(leader, easteu21BossCodename, site)
+	w.rt.KillUpdater()(leader, easteu21BossCodename, 0)
+	w.rt.NoteKillSite(leader, easteu21BossCodename, simulation.Spawn{RegionID: 3})
+	w.update()
+	if len(gates) != 1 || gates[0].world != w.lease.ID || gates[0].fell != site {
+		t.Fatalf("gates raised = %+v, want one beside %+v in %v", gates, site, w.lease.ID)
+	}
+	*w.nowMs += easteu21KillGraceMs - 1
+	w.update()
+	if len(gates) != 1 || len(w.closed) != 0 || len(removed) != 0 {
+		t.Fatalf("before the grace ran out: gates %+v closed %v removed %v", gates, w.closed, removed)
+	}
+	*w.nowMs++
+	w.update()
+	if len(w.closed) != 1 || len(removed) != 1 || removed[0] != w.lease.ID {
+		t.Fatalf("closed %v gates removed %+v, want the layer's", w.closed, removed)
+	}
+}
+
+/*
+================
+TestEasteu21LastLeaveTakesTheGateDown
+
+The room may leave through the gate before the grace runs out: the
+last resident's leave closes the layer, and the gate goes with it.
+================
+*/
+func TestEasteu21LastLeaveTakesTheGateDown(t *testing.T) {
+	w := newEasteu21World(t)
+	var removed []instance.ID
+	w.rt.SpawnExitGate = func(instance.ID, simulation.Spawn) bool { return true }
+	w.rt.RemoveExitGates = func(world instance.ID) { removed = append(removed, world) }
+	leader := easteu21Accept(t, w, "GateLeader")
+	w.openLayer(leader.Name)
+	w.update()
+	packed := uint32(w.lease.ID)
+	leader.World = &enterworld.CharacterWorld{PackedInstance: &packed, InstanceReturn: &domain.InstanceReturnAnchor{}}
+	w.rt.NoteKillSite(leader, easteu21BossCodename, simulation.Spawn{RegionID: 25000})
+	w.rt.KillUpdater()(leader, easteu21BossCodename, 0)
+	w.update()
+	for _, name := range []string{"GateLeader"} {
+		w.rt.DispatchInstanceEvent(InstanceEvent{Kind: InstanceEventLeave, Division: easteu21TestDivision, Definition: easteu21Definition, World: w.lease.ID, Name: name})
+	}
+	if len(removed) != 1 || removed[0] != w.lease.ID || len(w.closed) != 1 {
+		t.Fatalf("gates removed %+v closed %v, want the layer's on the last leave", removed, w.closed)
+	}
+}

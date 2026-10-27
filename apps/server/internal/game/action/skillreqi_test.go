@@ -17,7 +17,7 @@ import (
 )
 
 // reqiKit equips synthetic items by TID. Expected codes are read off
-// 58D480, not computed with reqiRefusal's own helpers.
+// the native equipment check, not computed with reqiRefusal's own helpers.
 type reqiKit struct {
 	items staticItemSource
 	c     *enterworld.Character
@@ -69,7 +69,7 @@ func TestReqiPrimaryWeaponAnyPair(t *testing.T) {
 		{"matching", 8, 10, true, 0},
 		{"other kind", 10, 10, true, 0x300d},
 		{"bare hand", 0, 0, false, 0x300d},
-		// 4EAD40 zeroes a broken weapon's TID, so it no longer matches.
+		// Natively a broken weapon's TID reads zero, so it no longer matches.
 		{"broken", 8, 0, true, 0x300d},
 	} {
 		k := newReqiKit()
@@ -99,7 +99,7 @@ func TestReqiSecondarySlot(t *testing.T) {
 TestReqiSecondarySlotWantsAShield
 
 Port-only, not native: ammunition in slot 7 shares the shield's TID4
-(Chinese arrows 3.3.4.1, European bolts 3.3.4.2), and native 58D542
+(Chinese arrows 3.3.4.1, European bolts 3.3.4.2), and the native check
 compares only that. The port admits a shield pair for a shield alone.
 ==================
 */
@@ -149,7 +149,7 @@ func TestReqiArmourSetWithReqn(t *testing.T) {
 ==================
 TestReqiArmourWalkKeepsEarlierMatch
 
-58D5C0: the armour walk stops at the first mismatch but keeps a match
+Natively the armour walk stops at the first mismatch but keeps a match
 already made, so only armour index 1 (head, slot 0) has to carry the
 family.
 ==================
@@ -168,7 +168,7 @@ func TestReqiArmourWalkKeepsEarlierMatch(t *testing.T) {
 	}
 }
 
-// 58D513 then 5D0: pair (6,0) matches a zeroed TID, so a broken weapon
+// Natively pair (6,0) matches a zeroed TID, so a broken weapon
 // reaches the usability test and records 0x300F.
 func TestReqiBrokenWeaponRecords300F(t *testing.T) {
 	k := newReqiKit()
@@ -182,7 +182,7 @@ func TestReqiBrokenWeaponRecords300F(t *testing.T) {
 	}
 }
 
-// A full five-pair walk under reqn skips the count test at 58D671 and
+// A full five-pair walk under reqn skips the native count test and
 // fails even when every pair matched.
 func TestReqiFivePairReqnFails(t *testing.T) {
 	k := newReqiKit()

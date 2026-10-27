@@ -1881,6 +1881,61 @@ test("an edge-routed transport base carries its route to the socket and the refe
 	world.dispose();
 });
 
+test("an advertised transport base that already names the socket is used as-is", async t => {
+	const sockets = socketHarness( t );
+	for ( const base of [ "https://edge.invalid/transport/ws", "https://edge.invalid/transport/ws/" ] ) {
+		const world = createWorldSession( async () => "ticket", createSessionHttp().references, ignoreIncident );
+		world.enter( "fixture", "shard", base );
+		await settle();
+		world.step( 1 );
+		assert.equal( sockets.at( -1 ).url.toString(), "wss://edge.invalid/transport/ws" );
+		world.dispose();
+	}
+});
+
+test("an advertised socket-form base fetches references beside the socket, not under it", async t => {
+	const sockets = socketHarness( t ), requested = [];
+	const data = JSON.stringify( {
+			referencesVersion: 3,
+			skillLifecycleVersion: 1,
+			refSkillSnapshot: [],
+			refItemSnapshot: [],
+			refObjSnapshot: []
+		} ),
+		bytes = new TextEncoder().encode( data ),
+		digest = Buffer.from( await crypto.subtle.digest( "SHA-256", bytes ) ).toString( "hex" );
+	t.mock.method( globalThis, "fetch", async url => {
+		requested.push( String( url ) );
+		return new Response( data );
+	} );
+	const world = createWorldSession( async () => "ticket", createSessionHttp().references, ignoreIncident );
+	world.enter( "fixture", "shard", "https://edge.invalid/transport/ws" );
+	await settle();
+	world.step( 1 );
+	const socket = sockets.at( -1 );
+	assert.equal( socket.url.toString(), "wss://edge.invalid/transport/ws" );
+	socket.onopen();
+	socket.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	const blob = Buffer.from(
+			JSON.stringify( {
+				v: 2,
+				bootstrap,
+				references: { path: `/transport/references/${digest}.json`, sha256: digest, bytes: bytes.length }
+			} )
+		),
+		p = Buffer.alloc( 9 + blob.length );
+	p[0] = 1;
+	p.writeUInt32LE( blob.length, 5 );
+	blob.copy( p, 9 );
+	socket.receive( 7, p );
+	world.step( 4 );
+	assert.deepEqual( requested, [ `https://edge.invalid/transport/references/${digest}.json` ] );
+	world.dispose();
+});
+
 test("local entry preserves authoritative movement channels", () => {
 	const owner = createEntities();
 	owner.bootstrap( {

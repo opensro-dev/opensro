@@ -147,6 +147,15 @@ test("gate request branches encode native target widths instead of guessing a co
 		assert.deepEqual( [ ...gateRequest( { kind, gid: 7, type, target: 9 } ).payload ], [ 7, 0, 0, 0, type, 9 ] );
 	}
 	assert.throws( () => gateRequest( { kind: "travel-instance", gid: 7, target: 256 } ) );
+	// Row 0x10's return point: 6FEF10 writes no target after type 1.
+	assert.deepEqual( [ ...gateRequest( { kind: "travel-gate", gid: 7, type: 1, target: 0 } ).payload ], [
+		7,
+		0,
+		0,
+		0,
+		1
+	] );
+	assert.throws( () => gateRequest( { kind: "travel-gate", gid: 7, type: 1, target: 1 } ) );
 });
 test("same-region reset publishes its mode after reset, survives rebootstrap, and never inherits remote death", () => {
 	for ( const opcode of [ 0x3369, 0x366a ] ) {
@@ -348,6 +357,39 @@ test("gate selection consumes capabilities without NPC mask and reads tax only f
 	const t = createTargeting( () => {} );
 	t.select( 1, 0, "teleport", { fortress: true } );
 	assert.throws( () => t.receive( 0xb45a, Buffer.from( [ 1, 1, 0, 0, 0, 128, 0, 0, 0 ] ) ), /teleport grant/ );
+});
+test("a quest exit gate's grant carries its rows after the word (0x8000000, 5D32C0)", () => {
+	const grant = ( ...tail ) => {
+		const p = Buffer.alloc( 9 + tail.length );
+		p[0] = 1;
+		p.writeUInt32LE( 285000, 1 );
+		p.writeUInt32LE( 0x8000000, 5 );
+		Buffer.from( tail ).copy( p, 9 );
+		return p;
+	};
+	const t = createTargeting( () => {} );
+	t.select( 285000, 0, "teleport" );
+	assert.equal( t.receive( 0xb45a, grant( 1, 0 ) ), true );
+	assert.equal( t.state().targetCapabilities, 0x8000000 );
+	assert.deepEqual( t.state().targetGateRows, [ { kind: 0 } ] );
+	t.clear();
+	assert.equal( t.state().targetGateRows, undefined );
+	// Kind 1 names a text symbol ([u16 length][ascii]); kind 2 a u16 point.
+	t.select( 285000, 0, "teleport" );
+	t.receive( 0xb45a, grant( 2, 1, 3, 0, 0x41, 0x42, 0x43, 2, 7, 0 ) );
+	assert.deepEqual( t.state().targetGateRows, [ { kind: 1, symbol: "ABC" }, { kind: 2, point: 7 } ] );
+	// A short or over-long row list, an unknown kind, or rows without
+	// the gate flag are refused.
+	t.clear();
+	for ( const bad of [ grant( 2, 0 ), grant( 1, 0, 0 ), grant( 1, 9 ) ] ) {
+		t.select( 285000, 0, "teleport" );
+		assert.throws( () => t.receive( 0xb45a, bad ), /teleport grant/ );
+		t.clear();
+	}
+	const flagless = grant( 1, 0 );
+	flagless.writeUInt32LE( 0x80, 5 );
+	t.select( 285000, 0, "teleport" );
+	assert.throws( () => t.receive( 0xb45a, flagless ), /teleport grant/ );
 });
 test("gate approach uses native 800 range and 640 stopping distance across region boundaries", () => {
 	const gate = { kind: "teleport", regionId: 25000, x: 1254, y: -6, z: 1374 };

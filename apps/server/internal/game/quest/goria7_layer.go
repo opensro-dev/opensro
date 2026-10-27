@@ -49,7 +49,11 @@ type goria7Layer struct {
 	bossGone  bool
 	killed    bool
 	credited  bool
+	graceEnd  int64
 	ended     bool
+	// bossSite is where the boss fell (NoteKillSite), the gate's spot.
+	bossSite      simulation.Spawn
+	bossSiteKnown bool
 }
 
 /*
@@ -246,6 +250,7 @@ func (rt *Runtime) goria7Leave(event InstanceEvent) {
 		return
 	}
 	rt.goria7ForgetLayer(event.World)
+	rt.removeExitGates(event.World)
 	if rt.InstanceClose != nil && lease.ID != 0 {
 		rt.InstanceClose(lease)
 	}
@@ -412,10 +417,13 @@ func (rt *Runtime) goria7Update(event InstanceEvent) {
 	}
 	now := rt.goria7Now()
 	if killed {
-		rt.goria7FinishKill(event, layer)
+		rt.goria7FinishKill(event, layer, now)
 		return
 	}
 	if layer.killed {
+		if now >= layer.graceEnd {
+			rt.goria7EndLayer(event, layer)
+		}
 		return
 	}
 	if layer.spawnedMs == 0 {
@@ -510,20 +518,26 @@ goria7FinishKill
 
 The lancer is down. Its death line goes to the room; every
 resident doing the quest is credited with the proof item they
-lack, and the party is returned - the native death handler
-returns them on the spot, and the layer close evacuates anyone
-the returns missed.
+lack. The exit gate rises beside the lancer and the room's
+sixty-second grace starts: the reference death handler moves
+nobody (its member loop only sets state and the quest timer)
+and sets the event timer to 0xEA60, whose expiry returns the
+party.
 ================
 */
-func (rt *Runtime) goria7FinishKill(event InstanceEvent, layer *goria7Layer) {
+func (rt *Runtime) goria7FinishKill(event InstanceEvent, layer *goria7Layer, now int64) {
 	rt.goria7Push(layer, goria7SymBossDeath)
+	layer.graceEnd = now + goria7KillGraceMs
+	rt.goria7.mu.Lock()
+	site, known := layer.bossSite, layer.bossSiteKnown
+	rt.goria7.mu.Unlock()
+	rt.raiseExitGate(event.World, site, known)
 	def, ok := rt.Defs.ByCodename(goria7QuestCodename)
 	if ok {
 		for _, name := range goria7ResidentNames(layer) {
 			rt.goria7CreditKill(event.Division, name, def)
 		}
 	}
-	rt.goria7EndLayer(event, layer)
 }
 
 /*
@@ -593,6 +607,7 @@ func (rt *Runtime) goria7EndLayer(event InstanceEvent, layer *goria7Layer) {
 		}
 	}
 	rt.goria7ForgetLayer(event.World)
+	rt.removeExitGates(event.World)
 	if rt.InstanceClose != nil && lease.ID != 0 {
 		rt.InstanceClose(lease)
 	}

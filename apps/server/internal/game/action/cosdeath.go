@@ -3,13 +3,13 @@
 
 cosdeath.go - what a companion's death leaves behind, by kind
 
-Every character death runs CGObjMob_CreditKillerOnDeath (4C42F0), whose
-vtable+0x638 is CGObjCOS_DropTransportCargo (4D1FD0) for a COS: a
+Every character death runs the reference server's kill credit, whose
+vtable+0x638 drops a COS's transport cargo: a
 transport's goods go offline and publish unowned, the way a monster's
-drops do. CGObjCOS_ProcessNormalDeath (52A000) then releases a vehicle
+drops do. The COS death then releases a vehicle
 with kind 1, deleting its record, as the Clean command does; pets
-(529F70) keep theirs on the summoner item for revival (cosabnormal.go). A
-captured quest monster (CGObjCOS_Captured) is gone with its death, and
+keep theirs on the summoner item for revival (cosabnormal.go). A
+captured quest monster is gone with its death, and
 its quest hears it.
 
 ===========================================================================
@@ -33,7 +33,7 @@ Called inside the owner's character door when a companion first dies.
 ================
 */
 func (rt *Runtime) settleCompanionDeath(o *cosAbnormalOwner) {
-	// Every COS death tells its owner first (52A000 -> 4D2140).
+	// Every COS death tells its owner first.
 	o.private = append(o.private, cosRemovalNotice(o.pet.GID))
 	ref := o.ref
 	if ref == nil {
@@ -68,7 +68,7 @@ func (rt *Runtime) settleCompanionDeath(o *cosAbnormalOwner) {
 ================
 dropTransportCargo
 
-4D1FD0: the cargo scatters around the dead transport, owned by no one.
+Natively the cargo scatters around the dead transport, owned by no one.
 ================
 */
 func (rt *Runtime) dropTransportCargo(o *cosAbnormalOwner) {
@@ -79,7 +79,7 @@ func (rt *Runtime) dropTransportCargo(o *cosAbnormalOwner) {
 ================
 scatterTransportCargo
 
-4D1FD0's drop, shared with the port-only trader rule (tradercargodrop.go):
+The native cargo drop, shared with the port-only trader rule (tradercargodrop.go):
 every row of pet's container lands unowned around the transport, and the
 container empties. A row the ground owner refuses stays lost with the
 vehicle. The caller holds c's door; returns the drops' public frames.

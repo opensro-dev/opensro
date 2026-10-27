@@ -205,7 +205,7 @@ func TestPartyRewardRejectsOtherInstanceAtIdenticalCoordinates(t *testing.T) {
 TestPartyShareFloor
 
 A level 1 beside a level 23 takes 1/24 of the shared kill natively
-(5BCD43); with the beta floor it takes an even half, and the level 23
+(reference server); with the beta floor it takes an even half, and the level 23
 keeps its level share.
 ================
 */

@@ -39,7 +39,7 @@ func hunterGuildFixture(t *testing.T, reward int32) (*Runtime, *domain.Character
 ================
 TestJobOutcomeQueryThenCollect
 
-512E70: mode 0 tells the reward; mode 1 pays it as gold and clears it;
+The native job outcome: mode 0 tells the reward; mode 1 pays it as gold and clears it;
 collecting nothing is 0x2A.
 ================
 */

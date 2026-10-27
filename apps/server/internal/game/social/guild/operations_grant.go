@@ -65,7 +65,7 @@ func refusedGrant(reason string) grantOutcome {
 // only by the 0x30D7 parse) until they next come into view, as native.
 //
 // Port-only, not native: v1.188 hands the grant to the shard manager
-// (CGObjPC_HandleGuildUpdateNickname7256, 517B70) and its push to the other
+// (the v1.188 nickname-update handler) and its push to the other
 // members was not found; the earlier port sent subOp-6 &0x20, which v1.150
 // applies to the member name. Whatever native sent, the v1.150 delta cannot
 // carry a title, so this re-seed is a deliberate deviation that fixes it. Beyond the shared leader gate the

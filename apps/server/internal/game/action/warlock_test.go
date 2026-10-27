@@ -3,9 +3,9 @@
 
 warlock_test.go - Life Drain, Soul Chaos and Blood Increase
 
-Life Drain takes HP from its target and the caster recovers it (40F750);
+Life Drain takes HP from its target and the caster recovers it;
 Soul Chaos strikes the enemies around its owner every two seconds with a
-fixed hit (40F5F0); Blood Increase raises both through BSHP and SAAA.
+fixed hit; Blood Increase raises both through BSHP and SAAA.
 
 ===========================================================================
 */

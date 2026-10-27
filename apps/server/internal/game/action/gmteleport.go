@@ -3,9 +3,9 @@
 
 gmteleport.go - the GM's town and player teleports
 
-/GOTOWN, /TOTOWN, /MOVETOUSER and /RECALLUSER. The v1.188 per-player GM
-handler CGObjPC_MsgHandler_SpecialCommand (51DE90) owns them: switch index
-sub-1 through the byte table at 5202F0. Each one moves exactly one
+/GOTOWN, /TOTOWN, /MOVETOUSER and /RECALLUSER. The reference server's
+per-player GM special-command handler owns them: switch index
+sub-1 through its byte table. Each one moves exactly one
 character with the PC world teleport (vtable +0x378), which the port runs
 through relocateCharacter, so a GM teleport carries the pet, rebuilds the
 scene and rolls back like every other server-driven move.
@@ -30,7 +30,7 @@ import (
 ================
 GoTownGM
 
-/GOTOWN (sub 2, 51DE90 case 1): CGObjPC_TeleportToTown on the GM itself,
+/GOTOWN (sub 2, case 1): the town teleport on the GM itself,
 to the appointed town or recall point.
 ================
 */
@@ -44,6 +44,12 @@ func (rt *Runtime) GoTownGM(division, name string) bool {
 	if gm == nil {
 		return false
 	}
+	if !gm.GMPrivilege || !gmTeleportMovable(gm) {
+		return false
+	}
+	// The town teleport head runs before the move, as natively; a
+	// relocation refused below keeps the settled state.
+	rt.publishTownTeleportHead(division, gm)
 	return rt.relocateCharacter(division, gm, "gm-gotown", func() (travelPoint, bool) {
 		if !gm.GMPrivilege || !gmTeleportMovable(gm) {
 			return travelPoint{}, false
@@ -56,8 +62,8 @@ func (rt *Runtime) GoTownGM(division, name string) bool {
 ================
 SendToTownGM
 
-/TOTOWN name (sub 3, 51DE90 case 2): ObjMgr_FindByName, then
-CGObjPC_TeleportToTown on the target, to the target's own appointed town.
+/TOTOWN name (sub 3, case 2): a lookup by name, then
+the town teleport on the target, to the target's own appointed town.
 ================
 */
 func (rt *Runtime) SendToTownGM(division, name, targetName string) bool {
@@ -70,6 +76,10 @@ func (rt *Runtime) SendToTownGM(division, name, targetName string) bool {
 	if gm == nil {
 		return false
 	}
+	if !gm.GMPrivilege || !gmTeleportMovable(target) {
+		return false
+	}
+	rt.publishTownTeleportHead(division, target)
 	return rt.relocateCharacter(division, target, "gm-totown", func() (travelPoint, bool) {
 		if !gm.GMPrivilege || !gmTeleportMovable(target) {
 			return travelPoint{}, false
@@ -82,7 +92,7 @@ func (rt *Runtime) SendToTownGM(division, name, targetName string) bool {
 ================
 MoveToUserGM
 
-/MOVETOUSER name (sub 8, 51DE90 case 7): the GM is teleported (vtable
+/MOVETOUSER name (sub 8, case 7): the GM is teleported (vtable
 +0x378, type 2) to where the target stands now, in the target's world.
 ================
 */
@@ -108,9 +118,9 @@ func (rt *Runtime) MoveToUserGM(division, name, targetName string) bool {
 ================
 RecallUserGM
 
-/RECALLUSER name (sub 0x11, 51DE90 case 0xD): the request carries the name
-and, when given, a position; otherwise the GM's own. 51DE90 always relays
-it, and CGame_ProcessGMCommand (4154D0) finds the target and teleports it
+/RECALLUSER name (sub 0x11, case 0xD): the request carries the name
+and, when given, a position; otherwise the GM's own. The handler always relays
+it, and the game's GM command step finds the target and teleports it
 there (vtable +0x378, type 2). The v1.150 client sends the name alone, so
 the target comes to where the GM stands, in the GM's world.
 ================
@@ -138,7 +148,7 @@ func (rt *Runtime) RecallUserGM(division, name, targetName string) bool {
 gmTeleportPair
 
 The GM and the named target. Native looks the target up among the live
-objects (ObjMgr_FindByName) and, when it is not on this GameWorld, relays
+objects (by name) and, when it is not on this GameWorld, relays
 the command to the shard manager for another one. The port runs one
 GameWorld per division, so a target that is not in the world has nowhere
 else to be: the command fails (INFERENCE: the relay's answer for a player
@@ -190,10 +200,10 @@ func gmTeleportMovable(c *enterworld.Character) bool {
 ================
 MoveToNpcGM
 
-/movetonpc codename (sub 0x1F, 51DE90 case 0x18 -> CGObjPC_OnCommandMoveToNpc
-520350): resolves the NPC or structure by codename (41B330 live scan, then
+/movetonpc codename (sub 0x1F, case 0x18 -> the move-to-NPC command):
+resolves the NPC or structure by codename (a live scan, then
 _GetNPCPosByCodename nest fallback), refuses if the target's world is not a
-permanent world (NativeType != 0, 520411 / 520581), and teleports the GM to
+permanent world (NativeType != 0), and teleports the GM to
 its anchor in layer 1.
 ================
 */
@@ -223,7 +233,7 @@ func (rt *Runtime) MoveToNpcGM(division, name, codename string) bool {
 ================
 npcTeleportPoint
 
-520350's two lookup branches: first live field NPCs and standing fortress
+The native command's two lookup branches: first live field NPCs and standing fortress
 structures, then the static nest catalog (_GetNPCPosByCodename), gated on a
 permanent world (RefGameWorld +0x20 == 0).
 ================
@@ -278,10 +288,10 @@ func (rt *Runtime) npcTeleportPoint(division, codename string) (travelPoint, boo
 ================
 InstanceGM
 
-/INSTANCE worldId layerId (sub 0x13, 0x0051DE90 inline at 0x0051FA99..0x0051FBDC):
+/INSTANCE worldId layerId (sub 0x13, inline in the special-command handler):
 layerId == 0 opens the first free layer slot on an instance world
-(CGameWorldMgr_OpenWorldLayer 0x005F7440); layerId != 0 closes that layer
-(CGameWorldMgr_CloseWorldLayer 0x005F7520), evacuating any residents back to
+(the world manager's layer open); layerId != 0 closes that layer
+(its layer close), evacuating any residents back to
 their saved return or appointed rebirth before releasing its population.
 Permanent worlds (NativeType == 0) refuse both.
 ================

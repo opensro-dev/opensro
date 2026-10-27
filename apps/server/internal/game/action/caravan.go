@@ -28,7 +28,7 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// cargoGoodsWildcard is CGObjCOS_HasAnyTradeGoods' query word 0x046C:
+// cargoGoodsWildcard is the reference server's any-trade-goods query word 0x046C:
 // TID 3.3.8 with a zero (wildcard) TID4.
 const cargoGoodsWildcard uint16 = 0x046c
 
@@ -48,9 +48,9 @@ func (rt *Runtime) caravanRoll() caravan.Roll {
 ================
 registerCaravan
 
-CaravanManager_RegisterCaravan through its callers: a summoned transport
-already carrying goods (4FA861), cargo picked up or loaded into a vehicle
-(4E9676). INFERENCE: v1.150 also loads a transport by buying into it or
+The reference server registers a caravan through its callers: a summoned transport
+already carrying goods, cargo picked up or loaded into a vehicle
+(the item-move result). INFERENCE: v1.150 also loads a transport by buying into it or
 moving goods from the bag, which the v1.188 caller list does not name;
 registering there too is safe because an existing caravan keeps its timer
 and every fire revalidates the cargo.
@@ -85,7 +85,7 @@ func (rt *Runtime) registerCaravanForMove(division string, c *enterworld.Charact
 ================
 advanceCaravans
 
-CaravanManager_Tick (60C684): advance every caravan by the elapsed time,
+The reference server's caravan tick: advance every caravan by the elapsed time,
 then fire the due ones outside the registry lock (they take division
 locks) and drop those that no longer validate.
 ================
@@ -125,8 +125,8 @@ func (rt *Runtime) dueCaravans(nowMs int64) ([]caravan.Entry, error) {
 ================
 fireCaravan
 
-Caravan_Tick after the timer (60BC80): validate the trader and vehicle
-(60BD40) and, when the vehicle stands in a battlefield region, spawn the
+The reference server's per-caravan tick after the timer: validate the trader and vehicle
+and, when the vehicle stands in a battlefield region, spawn the
 bandits. False removes the caravan.
 ================
 */
@@ -154,7 +154,7 @@ func (rt *Runtime) fireCaravan(entry caravan.Entry, nowMs int64) bool {
 ================
 spawnCaravanBandits
 
-Caravan_SpawnBandits (60BF30), in native draw order: the tier and star
+The reference server's bandit spawn, in native draw order: the tier and star
 rating from the cargo, the bandit count (capped by the shard's setting),
 the tactics, then per bandit its level, reference, heading and champion
 roll.
@@ -170,7 +170,7 @@ func (rt *Runtime) spawnCaravanBandits(division string, c *enterworld.Character,
 		return err
 	}
 	// Port-only, not native: the shard may cap an ambush (caravan/banditcap.go).
-	// 60BF30 draws each bandit's level, reference, heading and champion roll
+	// The reference server draws each bandit's level, reference, heading and champion roll
 	// inside the loop and nothing after it, so stopping early leaves every
 	// remaining bandit's draws exactly where they fall natively.
 	count = caravan.CappedSpawnCount(count, rt.CaravanBanditCap)
@@ -236,7 +236,7 @@ func (rt *Runtime) spawnCaravanBandits(division string, c *enterworld.Character,
 ================
 caravanCargoValue
 
-Caravan_CalculateCargoValue (60C1F0) over the active transport.
+The reference server's cargo value over the active transport.
 ================
 */
 func (rt *Runtime) caravanCargoValue(c *enterworld.Character) uint32 {
@@ -268,7 +268,7 @@ func (rt *Runtime) caravanCargoValue(c *enterworld.Character) uint32 {
 ================
 vehicleCarriesGoods
 
-60BD40's vehicle half: a summoned transport (CGObj_IsVehicleCOS) whose
+The reference server's vehicle check: a summoned transport (isVehicleCOS) whose
 cargo holds any trade goods.
 ================
 */
@@ -288,7 +288,7 @@ func vehicleCarriesGoods(rt *Runtime, c *enterworld.Character) bool {
 ================
 isVehicleCOS
 
-CGObj_IsVehicleCOS (4827F0): a COS transport, TID 1.2.3 with TID4 2.
+The reference server's transport test: a COS transport, TID 1.2.3 with TID4 2.
 ================
 */
 func isVehicleCOS(tid uint16) bool {
@@ -299,7 +299,7 @@ func isVehicleCOS(tid uint16) bool {
 ================
 cargoHolds
 
-CGStorageOP_FindItemMatchingTID (4BA130): every zero TID component of the
+The reference server's TID-matching storage query: every zero TID component of the
 query matches anything.
 ================
 */
@@ -333,7 +333,7 @@ func tidMatches(flags, query uint16) bool {
 ================
 cargoGoodsCount
 
-CGObjChar_GetCargoTotalCount (4D2D20): the stack count of every trade
+The reference server's cargo total: the stack count of every trade
 goods row (TID 3.3.8.x) in the transport.
 ================
 */
@@ -368,7 +368,7 @@ func characterLevelByte(c *enterworld.Character) uint8 {
 ================
 maxMasteryByte
 
-CSkillManager_GetMaxMasteryLevel: the highest mastery level.
+The reference server's maximum mastery level: the highest mastery level.
 ================
 */
 func maxMasteryByte(c *enterworld.Character) uint8 {

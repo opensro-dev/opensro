@@ -22,8 +22,9 @@ import (
 ================
 loadDelivery
 
-Native 86ab00 -> 92a64c stores quantity/codename pairs, independently of
-dialogue text. 9208d0 preflights and grants them before 92040e accepts.
+The server's Lua deliver-mission setter stores quantity/codename pairs,
+independently of dialogue text. Its mission-item check preflights and
+grants them before the configured accept event runs.
 This owner keeps inventory and journal admission in the same transaction.
 ================
 */
@@ -101,7 +102,8 @@ func deliveryMet(c *enterworld.Character, def *Definition) bool {
 ================
 deliveryCleanup
 
-923c31..923cdf removes all held stacks for each delivery codename on
+The server's quest abort cleanup removes all held stacks for each
+delivery codename on
 abandonment, not merely the originally granted quantity.
 ================
 */
@@ -140,7 +142,7 @@ func deliveryMissions(def *Definition) []*Definition {
 acceptanceGrants
 
 Every delivery mission's items, granted together when the quest is
-accepted (9208D0 walks all kind-3 missions).
+accepted (the server's mission-item grant walks all kind-3 missions).
 ================
 */
 func acceptanceGrants(def *Definition) []inventory.ItemAmount {
@@ -211,8 +213,8 @@ func validateDeliveryExtras(spec QuestSpec, items enterworld.ItemRefSource) erro
 ================
 handedOver
 
-A two-leg delivery's mission latch, set by the hand-over (91CA00 writes
-quest-user +3) and persisted as the node's CompletionReached.
+A two-leg delivery's mission latch, set by the hand-over (the server's
+hand-over writes quest-user +3) and persisted as the node's CompletionReached.
 ================
 */
 func handedOver(record enterworld.ActiveQuestRecord) bool {
@@ -241,10 +243,10 @@ func heldAmounts(c *enterworld.Character, list []RewardItemLead) []inventory.Ite
 ================
 exchangeReturns
 
-What the reward takes back of a hand-over's exchange: CBasicQuest_vfF8
-removes a delivery mission's items as the quest completes (inference: its
-kind-3 case names one item group, and every achieved-now line sends the
-exchange to the reporting NPC). Only held items leave, as removal there
+What the reward takes back of a hand-over's exchange: the server's quest
+completion step removes a delivery mission's items as the quest completes
+(inference: its kind-3 case names one item group, and every achieved-now
+line sends the exchange to the reporting NPC). Only held items leave, as removal there
 never refuses.
 ================
 */
@@ -262,7 +264,8 @@ func exchangeReturns(c *enterworld.Character, def *Definition) []inventory.ItemA
 ================
 acceptanceConsumption
 
-What 897680 takes at acceptance: each item up to its count, as many as are
+What QNO_WC_POTION_4's start talk takes at acceptance: each item up to its
+count, as many as are
 held. A missing item only raised a minidump natively; acceptance goes on.
 ================
 */

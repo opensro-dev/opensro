@@ -49,7 +49,8 @@ type pulse struct {
 Queue
 
 Owned by one authenticated character's recovery session. The zero value is
-empty; discard it on death, disconnect or replacement session (4E67B0).
+empty; discard it on death, disconnect or replacement session, as the
+reference server's expendable-item teardown does.
 ================
 */
 type Queue struct{ hp, mp []pulse }
@@ -58,7 +59,8 @@ type Queue struct{ hp, mp []pulse }
 ================
 Admit
 
-49A5B0 allows HP at an exactly full promised gauge, but MP requires room.
+The reference server's potion admission allows HP at an exactly full
+promised gauge, but MP requires room.
 Percentage recovery retains the first overflowing queued entry and removes
 its successors; it does not resize that entry's individual pulses.
 ================
@@ -120,7 +122,8 @@ func trim(pulses []pulse, current, maximum, credit int64) []pulse {
 ================
 Tick
 
-49A510 advances at most one entry on each gauge per timer callback.
+The reference server's recovery tick advances at most one entry on each
+gauge per timer callback.
 ================
 */
 func (q *Queue) Tick() Amount {

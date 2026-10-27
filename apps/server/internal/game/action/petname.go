@@ -4,22 +4,22 @@
 petname.go - naming a summoned pet, once
 
 The COS info window's Name button sends 0x7571 [u32 cos gid][u16 len]
-[ascii name] (v1.150 6A5570; v1.188 0x7117 CGObjPC_HandleCosName7117
-511BB0). The server admits it as native:
+[ascii name] (v1.150 6A5570; 0x7117 on the reference server). The server
+admits it as native:
 
   - the name is 1..12 bytes, or 0xB571 error 5;
-  - it passes the character-name rules (CGame_IsValidCharacterName,
+  - it passes the character-name rules (the game's character-name check,
     the name filter included: namefilter.go), or error 0x440E, the
     client's UIIT_MSG_COSPETERR_PETNAME_NOTPUT;
   - the gid is one of the caller's summoned records, or error 3, and that
     record has no name yet, or error 5: a pet is named once and never
-    renamed (CCOSManager_SubmitPetNameChange 4FAD20);
+    renamed;
   - the name is no other pet's, or error 0x440F, the client's
     UIIT_MSG_COSPETERR_PETNAME_SUMENESS (the DB job's 0xFFFFFFFE answer,
-    CCOSManager_ApplyDatabaseOperationResult 4FAF60 case 9).
+    the reference server's database result case 9).
 
-A failure is 0xB571 [u8 2][u16 code] (CGObjPC_SendErrorResponse 4E7250).
-Success sends no 0xB571: CCOSManager_ApplyPetNameAndPublish (4FB610)
+A failure is 0xB571 [u8 2][u16 code].
+Success sends no 0xB571: the reference server's pet name apply
 stores the name and sends 0x3508 [u32 cos gid][u8 5][u16 len][ascii name]
 to the owner and around the pet, which is the answer.
 
@@ -46,13 +46,13 @@ import (
 const (
 	opPetNameRequest  uint16 = 0x7571
 	opPetNameResponse uint16 = 0xB571
-	// cosInfoName is 0x3508's kind 5, the pet's new name (4FB610).
+	// cosInfoName is 0x3508's kind 5, the pet's new name.
 	cosInfoName uint8 = 5
 
-	// petNameMaxBytes is 511BB0's 0xC.
+	// petNameMaxBytes is the native 0xC.
 	petNameMaxBytes = 12
 
-	// 0xB571 error codes (511BB0, 4FAD20, 4FAF60 case 9).
+	// 0xB571 error codes.
 	petNameErrNotSummoned uint16 = 3
 	petNameErrRefused     uint16 = 5
 	petNameErrNotAllowed  uint16 = 0x440e
@@ -137,9 +137,9 @@ func (rt *Runtime) HandlePetName(division string, c *enterworld.Character, paylo
 	if len(name) == 0 || len(name) > petNameMaxBytes {
 		return petNameRefusal(petNameErrRefused)
 	}
-	// CGame_IsValidCharacterName: the character-name charset, its 2..12
+	// The game's character-name check: the character-name charset, its 2..12
 	// bound (a one-byte name fails here as 0x440E) and the name filter
-	// (4184A0 -> 987770).
+	// as the native check applies it.
 	if !jobAliasShape.MatchString(name) || len(name) < domain.CharacterNameMinBytes || !rt.nameAllowed(name) {
 		return petNameRefusal(petNameErrNotAllowed)
 	}

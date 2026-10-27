@@ -2,7 +2,8 @@ package monster
 
 import "math"
 
-// ApproachSlots is CSquad's target-local occupancy array (55DF10 / 55DB40).
+// ApproachSlots is the reference server squad's target-local occupancy
+// array (its per-target assignment probe and next-candidate search).
 // A remembered direction is not always a reservation; eight slots are NOT an
 // attack cap and are not solid-body collision. The population owns all writes.
 type ApproachSlots [8]uint32
@@ -50,7 +51,8 @@ func (s *ApproachSlots) Assign(gid uint32, preferred int, mayPreempt func(uint32
 	return -1
 }
 
-// 55E3B0 divides an unsigned angle in degrees by 180.0, then truncates.
+// The reference server's preferred-slot computation divides an unsigned
+// angle in degrees by 180.0, then truncates.
 // This surprising divisor is present in the supplied machine code; replacing
 // it with atan2/octants would be a new policy, not a transcription.
 func NativeApproachPreferredSlot(actor, target Pose) int {
@@ -78,8 +80,9 @@ func NativeApproachPreferredSlot(actor, target Pose) int {
 	return slot
 }
 
-// 54A990 constructs normalized directions at 22+45*i degrees (integer 0x16,
-// not 22.5). 55E090 initially scales them by 0.8 of effective action reach.
+// The reference server's direction-table builder constructs normalized
+// directions at 22+45*i degrees (integer 0x16, not 22.5). Its offset
+// destination initially scales them by 0.8 of effective action reach.
 func NativeApproachOffset(slot int, effectiveReach float32) (x, z float32) {
 	if slot < 0 || slot >= 8 || !(effectiveReach > 0) {
 		return 0, 0

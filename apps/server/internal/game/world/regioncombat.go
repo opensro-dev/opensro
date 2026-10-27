@@ -29,8 +29,9 @@ type regionCombatRange struct {
 ================
 RegionPlayerCombat
 
-52943E..52946E refuses missing regions separately from protected regions.
-This does not create a world or grant permission to enter one.
+The reference server's attack-target validation refuses missing regions
+separately from protected regions. This does not create a world or grant
+permission to enter one.
 ================
 */
 func RegionPlayerCombat(region uint16) (allowed, known bool) {

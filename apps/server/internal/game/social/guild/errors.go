@@ -4,13 +4,13 @@ package guild
 // The later research server uses u16 4Cxx errors; only the verified low-byte
 // semantic contract is adapted here, never that later packet width.
 const (
-	// 5C64B9: missing guild; native v1.150 category 10:0D is silent.
+	// Reference server: missing guild; native v1.150 category 10:0D is silent.
 	GuildErrNotMember byte = 0x0D
-	// 5C64DF after 5D0F80 checks permission mask 10; 68A88C localizes.
+	// The reference server checks permission mask 10; 68A88C localizes.
 	GuildErrPermissionDenied byte = 0x1E
-	// Existing create-length contract: 5C5FB4 covers empty names.
+	// Existing create-length contract: the reference server covers empty names.
 	GuildErrInvalidGuildNameLen byte = 0x18
-	// 5C64ED/5C6547 and 5C64FB/5C653B; v1.150 68A8A0/68A8AA.
+	// Reference server comment and title checks; v1.150 68A8A0/68A8AA.
 	GuildErrInvalidMasterCommentTitle byte = 0x22
 	GuildErrInvalidMasterComment      byte = 0x23
 	// Category 0x10 rows of 68A0xx (table index + 6): the guild level-up
@@ -20,12 +20,12 @@ const (
 	// GuildErrNoCompensation is 0xB140's 0x45 (UIIT_CTL_GUILDWAR_
 	// NOTCOMPENSATION, 7609C0; v1.188 0x4C45).
 	GuildErrNoCompensation byte = 0x45
-	// GuildErrManagerOutOfReach is CGObjPC_CheckNpcFunctionTargetInRange's
+	// GuildErrManagerOutOfReach is the NPC-function range check's
 	// 3: no selected guild manager in range.
 	GuildErrManagerOutOfReach byte = 0x03
 	// The release vote's guards: 0x38 UIIT_MSG_MRELEASEERR_NOTSECEDE (leave,
 	// 0xB56E), 0x39 _NOTREMOVE (expel, 0xB4B1), 0x33 _NOTVOTETIME (0xB6DC,
-	// 760270) and v1.188 5C6AC0's raw 0x37 for a vote already running.
+	// 760270) and the v1.188 master release request's raw 0x37 for a vote already running.
 	GuildErrVoteNoLeave        byte = 0x38
 	GuildErrVoteNoExpel        byte = 0x39
 	GuildErrVoteNotTime        byte = 0x33

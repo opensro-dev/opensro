@@ -39,7 +39,7 @@ const (
 ================
 useMercenaryScroll
 
-49AFE0's TID4=1 arm; 4FCEF0 validates the guild family before 4A2CE0
+The reference server's TID4=1 arm validates the guild family before it
 selects the owner's level row. No live state changes before every record
 has passed encoding and identity validation.
 ================
@@ -111,7 +111,7 @@ func (rt *Runtime) useMercenaryScroll(use persistentSummonUse, context domain.Me
 			Summoned: true, SummonGeneration: 1, Satiety: initialCompanionSatiety,
 			RentalExpiresAtUnix: use.nowMs/1000 + int64(minutes)*60,
 			NativeBodyStatus:    domain.InitialCOSBodyStatus(c.NativeBodyStatus)}
-		// 4D97A0 initializes current vitals before applying guild maximum-HP modifiers.
+		// The reference server initializes current vitals before applying guild maximum-HP modifiers.
 		pet.RefreshRentalTimes(use.nowMs / 1000)
 		record, err := enterworld.BuildCOSRecord(pet, ref, rt.deps.ItemReferences())
 		if err != nil {
@@ -152,7 +152,7 @@ func (rt *Runtime) useMercenaryScroll(use persistentSummonUse, context domain.Me
 ================
 MercenaryCooldownFrames
 
-651D30 publishes owner timed job (2, 4); v1.150 reads it through 3792.
+The reference server publishes owner timed job (2, 4); v1.150 reads it through 3792.
 ================
 */
 func MercenaryCooldownFrames(c *enterworld.Character, nowMs int64) []wire.Frame {
@@ -167,7 +167,7 @@ func MercenaryCooldownFrames(c *enterworld.Character, nowMs int64) []wire.Frame 
 ================
 HandleMercenaryDismiss
 
-517D20 / 4FDB00: empty 7458 request, every living soldier released,
+Reference server: empty 7458 request, every living soldier released,
 no success acknowledgement. The independently stored cooldown remains.
 ================
 */

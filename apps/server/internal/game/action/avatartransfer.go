@@ -40,7 +40,7 @@ func (rt *Runtime) applyAvatarTransfer(divisionID string, c *enterworld.Characte
 				return false
 			}
 		} else {
-			// Retail 525AC0/525B42 owns destination selection, ignoring the
+			// The reference server owns destination selection, ignoring the
 			// requested bag cell. Reserve it before finding an attachment cell.
 			if q.DestSlot < inventory.EquipmentSlotEnd || q.DestSlot >= inventory.BagEnd(c) {
 				return false
@@ -99,8 +99,8 @@ func (rt *Runtime) applyAvatarTransfer(divisionID string, c *enterworld.Characte
 
 		nextBag := rowsFromInvItems(player.Items())
 		nextAvatars := &domain.AvatarInventory{Capacity: 4, Rows: rowsFromInvItems(avatars.Items())}
-		// 50F1F0 installs or removes the avatar's contributions (4E3760 /
-		// 4E3860) and the actor's stats refresh, as for equipment: the
+		// The reference server installs or removes the avatar's contributions
+		// and the actor's stats refresh, as for equipment: the
 		// blessed options count only while the avatar is worn. Derived on
 		// the next snapshot so a broken record refuses before anything moves.
 		next := c.Snapshot()
@@ -126,7 +126,7 @@ func (rt *Runtime) applyAvatarTransfer(divisionID string, c *enterworld.Characte
 			payload.U8(wire.MoveTypeAvatarToPlayer).U8(attachment.Slot).U8(attachmentDestination).U16(1)
 		}
 		result = OpResult{Frames: []wire.Frame{{Opcode: wire.OpItemMoveResponse, Payload: payload.Payload()}}}
-		// 525C50 removes the attachment before the main dress continuation.
+		// The reference server removes the attachment before the main dress continuation.
 		if attachment != nil {
 			result.Frames = append(result.Frames, wire.UnequipVisualFrame(wire.UnequipVisual{Gid: enterworld.ObjectIDForCharacter(c), Slot: attachment.Slot, RefObjID: attachment.RefObjID}))
 		}

@@ -132,7 +132,7 @@ func (rt *Runtime) healOverTimeReplacementAllowed(division string, caster, who *
 ==================
 advanceHealsOverTime
 
-The pulse rule of 5830B0's timed context (linkedpulse): the first pulse is
+The pulse rule of the native persistent cast's timed context (linkedpulse): the first pulse is
 one full period after release, a pulse is due once the period has elapsed
 since the last one and resets that clock to now, and the context ends once
 more than dura has elapsed. A dura of 16000 and puls of 2000 therefore
@@ -173,7 +173,7 @@ func (rt *Runtime) advanceHealsOverTime(now int64) []simulation.DivisionFrames {
 ==================
 pulseHealOverTime
 
-One pulse: the 5A0850 amounts for the recipient, committed inside its door
+One pulse: the native skill-heal amounts for the recipient, committed inside its door
 like a cast heal; the recipient alone receives its 0x33A6. A dead recipient
 is left untouched by applySkillRecovery.
 ==================

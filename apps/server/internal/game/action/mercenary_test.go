@@ -81,7 +81,7 @@ func TestMercenarySummonAndDismissPreserveCooldown(t *testing.T) {
 		t.Fatalf("duplicate: %+v", got)
 	}
 	out := d.rt.HandleMercenaryDismiss(testDivision, c, nil)
-	// Each released mercenary: the owner's removal notice (4D2140), then the despawn.
+	// Each released mercenary: the owner's removal notice, then the despawn.
 	if len(out.Frames) != 12 || len(out.Broadcast) != 6 || len(c.Mercenaries) != 0 || c.MercenarySummonUntilMs != 2200000 {
 		t.Fatalf("dismiss: %+v", out)
 	}
@@ -117,7 +117,7 @@ func TestMercenaryRecordOmitsPetTail(t *testing.T) {
 ================
 TestMercenaryQuestRestrictionPreservesInventory
 
-49AFE0 gives the quest restriction precedence over the guild and cooldown.
+The native summon gives the quest restriction precedence over the guild and cooldown.
 ================
 */
 func TestMercenaryQuestRestrictionPreservesInventory(t *testing.T) {

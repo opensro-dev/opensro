@@ -3,7 +3,7 @@
 
 potionrecovery.go - queued potion pulses on the resident character clock
 
-4A7042 registers a one-second timer; 52AA90 dispatches 49A510 once per
+Natively the spawn registers a one-second timer and the state timers dispatch the potion tick once per
 callback. Vitals commit through the ordinary authority door and reductions
 are evaluated afresh, so curing Panic affects the remaining potion pulses.
 
@@ -68,7 +68,7 @@ func (rt *Runtime) clearPotionRecovery(division, name string) {
 recoverPotionResident
 
 Keep overdue timer phase and process one pulse per distinct host update.
-Queued healing bypasses Zombie's item-admission reversal, as 49A510 does.
+Queued healing bypasses Zombie's item-admission reversal, as the native potion tick does.
 ================
 */
 func (rt *Runtime) recoverPotionResident(key recoveryKey, now int64) []simulation.DivisionFrames {

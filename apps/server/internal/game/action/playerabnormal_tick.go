@@ -17,7 +17,7 @@ import (
 ================
 advancePlayerAbnormals
 
-Run 4A4390 for every retained block without holding the registry lock.
+Run the native abnormal update for every retained block without holding the registry lock.
 ================
 */
 func (rt *Runtime) advancePlayerAbnormals(now int64) []simulation.DivisionFrames {

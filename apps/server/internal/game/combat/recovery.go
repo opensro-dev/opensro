@@ -23,9 +23,9 @@ const (
 ================
 RecoverVital
 
-SR_GameServer 4A86A0 reduces the signed recovery amount with parameter 8F
+The server's vital recovery routine reduces the signed recovery amount with parameter 8F
 or 90, truncates through CRT_ftol, and discards negative recovery. The
-4A87D0 setter then saturates at the keeper maximum. The caller owns the
+vital setter then saturates at the keeper maximum. The caller owns the
 life-state check and commits the returned value under its character lock.
 ================
 */

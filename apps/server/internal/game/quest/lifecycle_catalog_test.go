@@ -214,7 +214,7 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 					return true
 				})
 			} else {
-				// A held-item condition (9262A0 flag 4) refuses the offer
+				// A held-item condition (prerequisite flag 4) refuses the offer
 				// until the character carries every item it names.
 				if len(def.RequiredHeldItems) > 0 || len(def.RequiredAnyHeldItems) > 0 {
 					assertIneligible("missing held items")
@@ -232,7 +232,7 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 						return true
 					})
 				}
-				// A job condition (9262A0 flag 0x1000) that requires a job
+				// A job condition (prerequisite flag 0x1000) that requires a job
 				// refuses the offer until its suit is worn.
 				if def.JobCondition != nil && def.JobCondition.Required {
 					assertIneligible("undressed job")
@@ -346,7 +346,7 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 					m := missionDefinition(def, i)
 					if m.Objective == ObjectiveDelivery {
 						// Acceptance granted every mission's items; each is
-						// handed over at its own NPC (91CA00), through the
+						// handed over at its own NPC (the server's hand-over), through the
 						// runtime's own transaction, not inside this one.
 						if _, err := rt.handOverDelivery(character, def.Codename, m.HandOverNpcCodename); err != nil {
 							t.Fatal(err)

@@ -3,7 +3,8 @@
 
 admin_test.go - /WORLDSTATUS, /BAN, /RECALLGUILD, /LIENAME and /REALNAME
 
-The answers 751EC0 reads, the kick going to the presence owner, and every
+The answers the client's NetMsg_OnGmCommandAck_B5B6 (@0x00751ec0) reads,
+the kick going to the presence owner, and every
 miss refusing without side effects.
 
 ===========================================================================
@@ -83,7 +84,8 @@ func adminCharacters() (*enterworld.Character, *enterworld.Character, *enterworl
 ================
 TestWorldStatusAnswersThreeCounts
 
-751EC0 reads [1, 4, i32 players, i32 NPC_Mob, i32 DroppedItem].
+NetMsg_OnGmCommandAck_B5B6 (client @0x00751ec0) reads [1, 4, i32
+players, i32 NPC_Mob, i32 DroppedItem].
 ================
 */
 func TestWorldStatusAnswersThreeCounts(t *testing.T) {
@@ -183,7 +185,7 @@ func TestLieNameAndRealNameLookUpPlayersInTheWorld(t *testing.T) {
 		{nameFrame(SubLieName, "remo_account"), EncodeAckGuide(SubLieName, "Remo")},
 		{nameFrame(SubRealName, "remo"), EncodeAckGuide(SubRealName, "remo_account")},
 		{nameFrame(SubRealName, "Plain"), EncodeAckGuide(SubRealName, noNickname)},
-		// The account lookup is exact (521050).
+		// The account lookup is exact, as the server's who command does.
 		{nameFrame(SubLieName, "REMO_ACCOUNT"), EncodeRequestFailure(Request{Subcmd: SubLieName, Name: "REMO_ACCOUNT"})},
 		{nameFrame(SubRealName, "Ghost"), EncodeRequestFailure(Request{Subcmd: SubRealName, Name: "Ghost"})},
 	}
@@ -233,7 +235,8 @@ func TestBanLeavesAnOperatorTrail(t *testing.T) {
 ================
 TestSetTimeMovesTheClockByTheGivenHour
 
-509CF0 sends [0x0A, hour 0..23]; the owner moves the clock and the GM gets
+ChatInput_HandleGmCommand (client @0x00509cf0) sends [0x0A, hour 0..23];
+the owner moves the clock and the GM gets
 [1, 0x0A]. A malformed frame is the silent decode refusal.
 ================
 */

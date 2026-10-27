@@ -35,7 +35,7 @@ func (rt *Runtime) handleCosFollowCommand(division string, c *enterworld.Charact
 	if state == nil || state.character != c || state.follower == nil || state.follower.GID() != gid {
 		return OpResult{}
 	}
-	// AI event 0x1A (CAIState_OnOwnerFollowOrder 559600): leave BATTLE.
+	// AI event 0x1A (the reference server's owner-follow order): leave BATTLE.
 	rt.cancelPetCombat(petOwnerKey{division: division, name: strings.ToLower(c.Name), gid: gid}, state, rt.Now().UnixMilli())
 	result := OpResult{}
 	if state.pickup != nil {

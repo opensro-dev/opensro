@@ -29,7 +29,7 @@ import (
 ================
 TestPeriodicDamageEchoAlwaysReachesVictim
 
-52A38E and 52A3FD both notify the victim. Source credit is an additional
+Both branches of the reference server's hit path notify the victim. Source credit is an additional
 private recipient; it cannot suppress an uncredited or lethal hit's echo.
 ================
 */
@@ -75,7 +75,7 @@ func TestPeriodicSelfSourceCannotDebitItsOwner(t *testing.T) {
 	before := enterworld.CurrentHP(c)
 	owner.Hit(enterworld.ObjectIDForCharacter(c), true, 10, abnormalDamageOverTimeReason, abnormal.Burn)
 	if enterworld.CurrentHP(c) != before || len(owner.hits) != 0 {
-		t.Fatal("52A288 self-source guard was bypassed")
+		t.Fatal("the native self-source guard was bypassed")
 	}
 }
 
@@ -253,8 +253,9 @@ func TestImmobilizingStatusSettlesPlayerMovement(t *testing.T) {
 ================
 TestPotionRecoveryHonorsAbnormalReductions
 
-All three recovery families pass through 4A86A0. Zombie reverses the full
-authored HP amount before that recovery path; MP still receives its reduction.
+All three recovery families pass through the reference server's reduced-recovery
+step. Zombie reverses the full authored HP amount before that recovery path;
+MP still receives its reduction.
 ================
 */
 func TestPotionRecoveryHonorsAbnormalReductions(t *testing.T) {

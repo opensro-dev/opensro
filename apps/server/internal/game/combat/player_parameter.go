@@ -186,7 +186,7 @@ func PlayerUnlinkedParameter(
 applyElementWrite
 
 One write as the graph applies it: a write that changes the element is
-evaluated at once (the graph's propagate, 4B3130), so a value that
+evaluated at once (the graph's propagate step), so a value that
 overflows on the way fails the read even when a later write would bring it
 back.
 ==================

@@ -48,7 +48,7 @@ var chDefaultSkillCodenames = []string{
 // Rechecked against the restored SQL data page @0x13a200: slot 96 has
 // fixed payload Race=3, SkillID=1. The creation query includes Race=3 for
 // both countries. Punch is therefore shared, not an inferred EU convenience.
-// Table identity comes from the sysschobjs row @0x86a200+2712, object
+// Table identity comes from the sysschobjs row at SQL backup offset 0x86a200+2712, object
 // 1430152736. See the gameplay work item's read-only extraction evidence.
 var euDefaultSkillCodenames = []string{
 	"SKILL_PUNCH_01",

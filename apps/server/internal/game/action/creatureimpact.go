@@ -41,7 +41,7 @@ func (rt *Runtime) resolveCreatureImpact(actor criticalActor, skill enterworld.S
 ================
 resolveCreatureImpactBehindWall
 
-58E5F0 omits damage calculation when the skill has no att program.
+The reference server omits damage calculation when the skill has no att program.
 ================
 */
 func (rt *Runtime) resolveCreatureImpactBehindWall(actor criticalActor, skill enterworld.SkillRow, attacker, defender combat.Stats, wall *enterworld.SkillWall) (combat.WallOutcome, error) {

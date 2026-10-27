@@ -433,7 +433,7 @@ func (door storeGuildDoor) DissolveGuildAs(
 	if refusal.Refused() {
 		return refused, refusal
 	}
-	// 5C6870 refuses disbanding while the guild has any war enemy.
+	// The server's disband check refuses disbanding while the guild has any war enemy.
 	var warCount int
 	if err := s.db.QueryRow("SELECT count(*) FROM guild_wars WHERE division = ? AND (guild_a = ? OR guild_b = ?)", divisionID, guildID, guildID).Scan(&warCount); err != nil {
 		s.recordWriteFailureLocked("guild-dissolve-war-check", err)
@@ -554,9 +554,9 @@ func (door storeGuildDoor) DonateGuildPoints(
 }
 
 // LevelUpGuildAs is the ATOMIC level-up door (the guild manager's 0x73F0,
-// v1.188 0x70FA -> 5C63D0, guild job 9): the acting
+// v1.188 0x70FA -> guild job 9): the acting
 // leader's guild pays the next level's GP, the leader pays its gold, and
-// the level rises by one, under ONE lock hold and ONE commit. 5C6240 tests
+// the level rises by one, under ONE lock hold and ONE commit. The server's check tests
 // the gold (0x4C31) before the GP (0x4C32).
 /*
 ================
@@ -596,7 +596,7 @@ func (door storeGuildDoor) LevelUpGuildAs(divisionID string, actorID int64) (dom
 }
 
 // ClaimWarCompensationAs is the ATOMIC compensation door (the guild
-// manager's 0x73F7, v1.188 0x7113 -> 5C7330, guild job 0x1E): the acting
+// manager's 0x73F7, v1.188 0x7113 -> guild job 0x1E): the acting
 // leader is paid what guild wars owe the guild and the debt clears, under
 // ONE lock hold and ONE commit. Nothing owed refuses (0x4C45).
 /*

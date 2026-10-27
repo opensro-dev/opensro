@@ -19,7 +19,7 @@ import (
 TestRepairQuoteChargesTheClientPriceForWhatTheGoldCovers
 
 789630: CostRepair / maximum per point (at least 1), plus CostRevive for a
-broken item; 496E60: only the points the gold pays for.
+broken item; the server's repair routine: only the points the gold pays for.
 ================
 */
 func TestRepairQuoteChargesTheClientPriceForWhatTheGoldCovers(t *testing.T) {
@@ -67,7 +67,7 @@ func (s staticMagicOptions) MagicOptionByParamID(id uint32) (*enterworld.MagicOp
 TestEquipmentMaxDurabilityFollowsVarianceAndOptions
 
 Variance field 0 picks the itemdata range; 'nrep' +400% multiplies by
-five (496A70).
+five (the server's magic-option pass).
 ================
 */
 func TestEquipmentMaxDurabilityFollowsVarianceAndOptions(t *testing.T) {

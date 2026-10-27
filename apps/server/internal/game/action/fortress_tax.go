@@ -22,7 +22,7 @@ import (
 ================
 fortressTaxCollect
 
-6234D5 updates gold before acknowledging collection. v1.150's 754A40 reads
+The reference server updates gold before acknowledging collection. v1.150's 754A40 reads
 the actual collected i64, not the remaining treasury, after [action, 1].
 ================
 */
@@ -39,7 +39,7 @@ func (rt *Runtime) fortressTaxCollect(division string, c *enterworld.Character, 
 		return fortressRefusal(request.Action, code)
 	}
 	var frames []wire.Frame
-	// 4E4B60 returns without a point update for a zero credit. Tax completion
+	// The native gold credit returns without a point update for a zero credit. Tax completion
 	// still acknowledges success, including a negative request clamped to zero.
 	if amount != 0 {
 		frames = append(frames, goldFrame(rt.characterSnapshot(division, c)))

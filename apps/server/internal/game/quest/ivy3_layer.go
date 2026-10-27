@@ -53,6 +53,10 @@ type ivy3Layer struct {
 	credited    bool
 	graceEnd    int64
 	ended       bool
+	// bossSite is where Ivy fell (NoteKillSite); the exit gate stands
+	// beside it.
+	bossSite      simulation.Spawn
+	bossSiteKnown bool
 }
 
 /*
@@ -252,6 +256,7 @@ func (rt *Runtime) ivy3Leave(event InstanceEvent) {
 		return
 	}
 	rt.ivy3ForgetLayer(event.World)
+	rt.removeExitGates(event.World)
 	if rt.InstanceClose != nil && lease.ID != 0 {
 		rt.InstanceClose(lease)
 	}
@@ -534,6 +539,10 @@ kill evaluator - and the room's sixty-second grace starts.
 func (rt *Runtime) ivy3FinishKill(event InstanceEvent, layer *ivy3Layer, now int64) {
 	rt.ivy3Push(layer, ivy3SymBossDeath)
 	layer.graceEnd = now + ivy3KillGraceMs
+	rt.ivy3.mu.Lock()
+	site, known := layer.bossSite, layer.bossSiteKnown
+	rt.ivy3.mu.Unlock()
+	rt.raiseExitGate(event.World, site, known)
 	def, ok := rt.Defs.ByCodename(ivy3QuestCodename)
 	if ok {
 		for _, name := range ivy3ResidentNames(layer) {
@@ -632,6 +641,7 @@ func (rt *Runtime) ivy3EndLayer(event InstanceEvent, layer *ivy3Layer) {
 		}
 	}
 	rt.ivy3ForgetLayer(event.World)
+	rt.removeExitGates(event.World)
 	if rt.InstanceClose != nil && lease.ID != 0 {
 		rt.InstanceClose(lease)
 	}

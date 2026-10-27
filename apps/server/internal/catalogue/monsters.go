@@ -6,7 +6,7 @@ what a kill drops
 
 The monsters are the server's population template (monster.LoadTemplate):
 every monster with a nest, and every unique. A monster can spawn as more
-than its authored grade (5607B0: a nest with champion tactics promotes to
+than its authored grade (the server's spawn grade roll: a nest with champion tactics promotes to
 champion or giant, an armed nest makes a party monster), so each row lists
 the variants it can spawn as, each with the kill budget the planner uses
 (loot.MonsterDropBudget) and its gold heap range.
@@ -16,7 +16,7 @@ never sampled. A monster's assigned drops are on its row; the level tables
 every monster of a level shares (equipment, consumables, a unique's
 special picks) are in droptables.json, keyed by level and country, so the
 same table is not repeated on hundreds of rows. Every chance is before
-the kill's item capacity and before the level-gap admission (4C1840),
+the kill's item capacity and before the level-gap admission (the server's drop admission),
 which depends on the killer.
 
 ===========================================================================
@@ -46,7 +46,7 @@ const (
 )
 
 // questMonsterTypeID4 is TID4 4, the MOB_QT_* quest monsters, which never
-// become party monsters (561020).
+// become party monsters, as the server's nest spawn makes them.
 const questMonsterTypeID4 = 4
 
 var gradeEnum = []string{"normal", "champion", "unique", "giant", "titan", "elite"}
@@ -225,14 +225,14 @@ func BuildMonsters(source MonsterSource) ([]Monster, error) {
 producibleMonsters
 
 The world monsters the server itself creates, from its own spawn sources:
-  - a nest with an instance cap (the population's nests, 560D00);
+  - a nest with an instance cap (the population's nests);
   - a quest script's monster (quest.ScriptMonsterCodenames);
   - a summon child of a placed unique's default skills, transitively, as the
     unique encounter roster resolves it (enterworld.MonsterSummonClosure),
     seeded only with uniques one of the sources above produces.
 
 Two creators are left out on purpose. A GM's LOADMONSTER can create any row
-and is not a player-facing source. Caravan bandits (60BF30) are the four
+and is not a player-facing source. Caravan bandits (the caravan ambush) are the four
 job families MOB_THIEF_NPC, MOB_HUNTER_NPC and their EU kin, 1250 level
 rows each: real, but a list of them is a site design question, not a
 monster page per row, and the catalogue never listed them.
@@ -302,7 +302,7 @@ func gradeName(grade uint8) string {
 ================
 monsterVariants
 
-5607B0: an authored grade spawns as itself; an ordinary monster spawns
+The spawn grade roll: an authored grade spawns as itself; an ordinary monster spawns
 normal, as a champion or giant from a nest with champion tactics, and as a
 party monster from an armed nest unless it is a quest monster. A nest
 that forces its own grade (RarityOverride) is per position, not per

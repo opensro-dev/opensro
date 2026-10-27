@@ -127,8 +127,9 @@ func DecodeFortressStructureInteract(payload []byte) (FortressStructureInteract,
 ================
 CancelActiveEffectRequest
 
-Client 6FD710 and server 4AE520 resolve EffectID as a skill record. The
-optional nonzero InstanceToken narrows cancellation to one active instance.
+Client 6FD710 and the reference server's matching routine resolve EffectID
+as a skill record. The optional nonzero InstanceToken narrows cancellation
+to one active instance.
 ================
 */
 type CancelActiveEffectRequest struct {

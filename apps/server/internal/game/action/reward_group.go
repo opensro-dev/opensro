@@ -130,7 +130,7 @@ contributor as their loot representative.
 ================
 */
 func monsterRewardGroups(rows []simulation.MonsterContribution, actors map[uint32]rewardActor) []monsterRewardGroup {
-	// 4C44A0 visits the source map by unsigned GID. Equal representative
+	// The reference server visits the source map by unsigned GID. Equal representative
 	// contributions keep the first source, even if input snapshots are shuffled.
 	rows = append([]simulation.MonsterContribution(nil), rows...)
 	sort.Slice(rows, func(i, j int) bool { return rows[i].CreditGID < rows[j].CreditGID })
@@ -169,7 +169,7 @@ func monsterRewardGroups(rows []simulation.MonsterContribution, actors map[uint3
 ================
 withinPartyRewardRange
 
-5BCC50 calls planar 430AD0 with Y zero. Dungeon deltas use local X/Z.
+The reference server measures planar distance with Y zero. Dungeon deltas use local X/Z.
 ================
 */
 func withinPartyRewardRange(a, b simulation.Spawn) bool {
@@ -190,8 +190,8 @@ func withinPartyRewardRange(a, b simulation.Spawn) bool {
 ================
 isPartyMonster
 
-CGObjMob_IsPartyMonster (4C0DD0): the rarity byte's high nibble is exactly
-1. Formulae_GetLevelDiffScale (410FD0) then halves EXP (0.5f at 0xB45B68)
+The reference server's party-monster test: the rarity byte's high nibble is exactly
+1. The level-difference scale then halves EXP (0.5f)
 when the monster's level is below the receiver's (or the party average).
 ================
 */
@@ -215,10 +215,10 @@ func rewardLevel(c *enterworld.Character) int64 {
 ================
 partyRewardFactors
 
-5BCD43..5BCED7 spills bonus and level shares independently to float32.
+The reference server spills bonus and level shares independently to float32.
 
 evenFloor is a deliberate beta deviation (the growth switch turns it on):
-native CParty_DistributeKillExperience weights each share by level alone,
+the native party kill EXP distribution weights each share by level alone,
 so a level 1 beside a level 23 took 1/24 of its own kill EXP and party
 power-levelling fell ~13x behind soloing. With the floor no member's share
 drops below an even 1/N split; higher levels keep their larger share.
@@ -369,7 +369,7 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 			out.others = append(out.others, award)
 		}
 	}
-	// 4E27C0 -> 4E1F60: the killing blow's job wearer earns job EXP for a
+	// The reference server's PvP kill rewards: the killing blow's job wearer earns job EXP for a
 	// thief or hunter monster (pkreward.go). Only a player's own blow reaches
 	// it in the original; a pet's or COS's fatal hit pays no job EXP.
 	if actor != nil && !roster.companionKill {
@@ -445,7 +445,7 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 			} else if private := wire.ProgressionPrivateFrames(frames); len(private) > 0 {
 				out.others = append(out.others, RecipientFrames{a.character.ID, private})
 			}
-			// 4EAC24: the recipient's attack pets share the award even when
+			// Reference server: the recipient's attack pets share the award even when
 			// the owner's own EXP came to nothing.
 			petFrames, petArea := rt.awardAttackPetExperience(a.character, impact.Instance, g.damage, factors[i], now)
 			out.public = append(out.public, petArea...)

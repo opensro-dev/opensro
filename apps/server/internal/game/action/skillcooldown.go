@@ -47,8 +47,8 @@ must continue to see authored casting, animation and effect lifetimes.
 ================
 */
 func (rt *Runtime) registerPlayerSkillCooldown(division string, character *enterworld.Character, skill enterworld.SkillRow, now int64) {
-	// Instant actions skip registration at 586C03 for an authored zero
-	// cooldown. Persistent and projectile handlers still call 64C700.
+	// Instant actions skip registration for an authored zero
+	// cooldown. Persistent and projectile handlers still register it.
 	if skill.ActionHandler == enterworld.SkillActionInstant && skill.CoolTimeMs == 0 {
 		return
 	}

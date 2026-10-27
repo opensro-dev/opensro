@@ -173,7 +173,7 @@ TestReturnDeathCancelsTheCast
 
 #bug-reports: a character died during a return scroll, revived where it
 fell, and was then teleported to town. Native death cancels the cast
-(529B10 -> 513EA0): the job is gone, the mode is 0 for every observer, the
+and refreshes the job state: the job is gone, the mode is 0 for every observer, the
 scroll stays spent, and nothing teleports after the revival.
 ================
 */

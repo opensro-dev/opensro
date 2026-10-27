@@ -118,8 +118,9 @@ type Approach struct {
 // PlanApproach decides whether a pickup executes now or has to walk first.
 //
 // Retail does not refuse an out-of-range interact: the server walks the
-// character to the drop and executes on arrival. The client sub_693190
-// one-byte 0x72CD lane is a throttled CANCEL/recovery command, not a pickup
+// character to the drop and executes on arrival. The client's
+// CGInterface_CancelSkillForKeyboardMove (0x693190) one-byte 0x72CD lane is
+// a throttled CANCEL/recovery command, not a pickup
 // heartbeat; completion therefore remains server-owned. A cross-world pair
 // can never be in range.
 /*

@@ -80,7 +80,7 @@ func TestDesignatedRebirthRestoresWorldVitalsAndLife(t *testing.T) {
 	rt, _ := newTestRuntime(character, testItems())
 
 	result := rt.HandleLocalRebirth(testDivision, character, []byte{1})
-	// Peers see the position, LIFE and the 4DF2E0 untouchable body mode.
+	// Peers see the position, LIFE and the native untouchable body mode.
 	if len(result.Frames) < 8 || len(result.Broadcast) != 3 {
 		t.Fatalf("rebirth burst = %d private/%d broadcast, want reset corpus + LIFE / 3", len(result.Frames), len(result.Broadcast))
 	}
@@ -157,7 +157,7 @@ func TestDesignatedRebirthRestoresWorldVitalsAndLife(t *testing.T) {
 ================
 TestTownRebirthLeavesADeadCompanionBehind
 
-4FA430 admits only alive and summoned records into a rebuilt world: a horse
+Natively only alive and summoned records enter a rebuilt world: a horse
 that died with its owner does not return to town with it.
 ================
 */
@@ -262,7 +262,7 @@ func TestPresentPositionRebirthIsLevelGated(t *testing.T) {
 	low := rebirthTestCharacter(10, 0)
 	lowRuntime, _ := newTestRuntime(low, testItems())
 	result := lowRuntime.HandleLocalRebirth(testDivision, low, []byte{2})
-	// Correction, vitals, LIFE, then the 4DF2E0 untouchable body mode.
+	// Correction, vitals, LIFE, then the native untouchable body mode.
 	wantPrivate := []uint16{
 		wire.OpObjectSourceCorrection,
 		enterworld.OpcodeVitalsUpdate,

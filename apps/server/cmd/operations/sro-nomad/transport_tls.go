@@ -121,7 +121,9 @@ earlier, louder half of that line, where the operator can still act.
 certificate is the loaded pair from resolveTransportCertificate, nil
 when none was loaded.
 
-The advertised port must be the port clients reach: the bind port, or
+The advertised URL is the transport base clients append every
+transport path to (advertisedTransportBase). The advertised port must
+be the port clients reach: the bind port, or
 PublicPort when the host redirects a public port to the bind (#1447:
 the GameWorld runs unprivileged and cannot bind UDP 443, so the host
 redirects public 443 to a high bind port). A redirected bind must be
@@ -193,9 +195,10 @@ func validateWebTransportPosture(certificate *transport.Certificate, posture web
 				advertised,
 			)
 		}
-		if !strings.HasSuffix(endpoint.Path, transport.PathWS) {
+		if !advertisedTransportBase(endpoint.Path) {
 			return fmt.Errorf(
-				"shard %q advertised transport URL %q must end %s, the route clients map to WebTransport",
+				"shard %q advertised transport URL %q must be the transport base, the origin alone (https://host); "+
+					"clients append %s and the other transport paths themselves",
 				game.Definition.ID,
 				advertised,
 				transport.PathWS,
@@ -231,4 +234,28 @@ func validateWebTransportPosture(certificate *transport.Certificate, posture web
 		}
 	}
 	return nil
+}
+
+/*
+================
+advertisedTransportBase
+
+Whether an advertised URL path is the public transport base: the origin
+alone. Every consumer appends the socket, WebTransport, cert-hash and
+references paths to the advertised URL (the browser client,
+sro-wtprobe), and under the public posture WebTransport is dialled on
+the GameWorld's own UDP listener, which serves only the root
+/transport/wt. A route base (https://host/route) would pass the TCP
+paths through an edge but send WebTransport to /route/transport/wt,
+which nothing serves, so every browser would fall back to the socket.
+
+Transition (#1447 follow-up): the root socket path, /transport/ws, is
+still accepted for one release, so a host catalogue written in the old
+socket form keeps deploying; clients from #1886 on normalise it. Remove
+the tolerance once no host catalogue holds the socket form.
+================
+*/
+func advertisedTransportBase(path string) bool {
+	path = strings.TrimSuffix(path, "/")
+	return path == "" || path == transport.PathWS
 }

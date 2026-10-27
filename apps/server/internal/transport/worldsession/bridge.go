@@ -81,9 +81,14 @@ type Bridge struct {
 	// (resume.go), written by the hub hook and drained by the ticker.
 	resumeMu sync.Mutex
 	resumed  map[string]struct{}
+	// tickViews is the light face of the most recent full snapshot walk,
+	// shared read-only by that tick's view hooks (SnapshotSessionViews).
+	// The next full walk replaces it wholesale; it is never mutated.
+	viewsMu   sync.Mutex
+	tickViews []simulation.SessionView
 }
 
-// New builds the bridge. One per Hub is enough; it is stateless.
+// New builds the bridge. One per Hub is enough.
 func New(hub *transport.Hub) *Bridge { return &Bridge{hub: hub} }
 
 /*
@@ -190,6 +195,15 @@ func (b *Bridge) SnapshotSessions() []simulation.SessionSnapshot {
 			out = append(out, snap)
 		}
 	}
+	// The tick's view hooks read the light face of this same walk
+	// (SnapshotSessionViews), so no hook walks the hub again this tick.
+	views := make([]simulation.SessionView, len(out))
+	for i := range out {
+		views[i] = out[i].View()
+	}
+	b.viewsMu.Lock()
+	b.tickViews = views
+	b.viewsMu.Unlock()
 	return out
 }
 
@@ -202,11 +216,24 @@ presentation (action speed, spawn skills, guild, stall, companions): the
 tick hooks that read only identity, population, publication and world.
 Each view is taken straight from its session's snapshot, so no full
 snapshot slice is built just to be narrowed.
+
+Within a tick, the full walk (SnapshotSessions) runs first and leaves
+its light face behind; the hooks then share that one slice instead of
+each walking the hub again. The shared views are read-only: no reader
+may modify the slice or its elements. Before the first full walk of a
+bridge (callers outside a tick) a fresh light walk is built and not
+kept.
 ==================
 */
 func (b *Bridge) SnapshotSessionViews() []simulation.SessionView {
+	b.viewsMu.Lock()
+	views := b.tickViews
+	b.viewsMu.Unlock()
+	if views != nil {
+		return views
+	}
 	sessions := b.hub.Sessions()
-	views := make([]simulation.SessionView, 0, len(sessions))
+	views = make([]simulation.SessionView, 0, len(sessions))
 	for _, s := range sessions {
 		if snap, ok := b.sessionSnapshot(s, true); ok {
 			views = append(views, snap.View())

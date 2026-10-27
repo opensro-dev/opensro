@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-roll.go - the per-hit abnormal roll (SkillCombat_RollAbnormalStatus 590680)
+roll.go - the per-hit abnormal roll (the server's skill abnormal-status roll)
 
 ===========================================================================
 */
@@ -14,7 +14,7 @@ import "math"
 ================
 Record
 
-Record is tagSkillStatusEffect (5AA450 initialises +05/+06/+08). Offsets
+Record is the server's skill status-effect record (+05/+06/+08 initialised). Offsets
 name the native fields each consumer reads.
 ================
 */
@@ -47,7 +47,7 @@ type Record struct {
 ==================
 Resistance
 
-Resistance is one CSkillManager status-resistance entry read by 59DE50:
+Resistance is one skill-owner status-resistance entry read by the server:
 a flat chance reduction halved once per grade above its grade, and a
 percentage applied to a positive chance.
 ==================
@@ -60,7 +60,7 @@ type Resistance struct {
 ================
 RollInput
 
-RollInput is everything 590680 reads besides its random source.
+RollInput is everything the roll reads besides its random source.
 ================
 */
 type RollInput struct {
@@ -70,7 +70,7 @@ type RollInput struct {
 	// TargetImmune is target vfunc+34 (attack COS) or +3E0 (fortress structure).
 	TargetImmune bool
 	// WallMask is the optional pw context at RefSkill+2B4, not hit-result
-	// flags. 590735 reads its lane mask; 591E7C excludes stun whenever
+	// flags. The roll reads its lane mask, and its stun check excludes stun whenever
 	// the context is present. A shield-blocked hit is SkipGroup instead.
 	WallMask    *uint32
 	TargetLevel uint8
@@ -86,7 +86,7 @@ type RollInput struct {
 	// CasterFortressHeart is caster vfunc+3D0; its grade comes from +654.
 	CasterFortressHeart bool
 	CasterSiegeGrade    uint8
-	// CasterModifier is CSkillManager_GetSkillModifier on the caster.
+	// CasterModifier is the skill owner's getv modifier lookup on the caster.
 	CasterModifier       func(key uint32) (uint32, bool)
 	SourceGID, TargetGID uint32
 	SourceName           string
@@ -96,7 +96,7 @@ type RollInput struct {
 ================
 Random
 
-Random is the caster's CZoeZoeRnd stream (CSkillManager_RollProbability,
+Random is the caster's probability stream (the skill owner's roll,
 keyed by ECX) and the process rand() consumed by the time bomb.
 ================
 */
@@ -109,9 +109,9 @@ type Random interface {
 ==================
 durationPerLevel
 
-durationPerLevel is Formulae_GetAbnormalDurationPerLevel (410B40): the
-milliseconds per level of states 0..5. It sizes rolled durations (590680)
-and level-cure cuts (4A56C0). Other slots are the native MiniDump path (0).
+durationPerLevel is the server's abnormal duration per level: the
+milliseconds per level of states 0..5. It sizes rolled durations
+and level-cure cuts. Other slots are the native MiniDump path (0).
 ==================
 */
 func durationPerLevel(status Status, level uint16) uint32 {
@@ -125,7 +125,7 @@ func durationPerLevel(status Status, level uint16) uint32 {
 ================
 burnDamage
 
-burnDamage is C63C94: a uint32 table read by level at 590BF2.
+burnDamage is the server's uint32 burn table, read by level in the roll.
 ================
 */
 func burnDamage(level uint32) uint32 {
@@ -152,7 +152,7 @@ func ftol(v float64) int32 {
 ================
 Roll
 
-Roll ports 590680. Returned records are in native list order.
+Roll ports the server's abnormal roll. Returned records are in native list order.
 ================
 */
 func Roll(in RollInput, random Random) []Record {
@@ -267,7 +267,7 @@ func Roll(in RollInput, random Random) []Record {
 		}
 		var bombDuration uint32
 		if source.Status == TimeBomb {
-			// 592F9D: the nonzero bytes of the first argument are candidate
+			// The time bomb arm: the nonzero bytes of the first argument are candidate
 			// seconds; rand() is drawn before the probability roll.
 			var candidates []uint8
 			for shift := 0; shift < 32; shift += 8 {

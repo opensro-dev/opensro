@@ -8,9 +8,9 @@ damage got every item and the other none. Drops are reserved to the top
 damager (OwnerJID). These tests build that case with the ownership rule
 the GameWorld wires (party Registry.CanPickupOwnedDrop: an item-share
 party's member may take another member's drop) and pin the native rotation
-(525DC0, 4D4840): the lower-damage member's pet picks the top damager's
-drops and the items alternate between the two. Without item share the
-reservation holds.
+(the native party loot rotation): the lower-damage member's pet picks the
+top damager's drops and the items alternate between the two. Without item
+share the reservation holds.
 
 ===========================================================================
 */

@@ -20,7 +20,7 @@ import (
 ================
 TestCosTerminateRefusesPetsAndForeignRecords
 
-511E00 answers 5 for an unknown record and for attack or pickup pets,
+The reference server answers 5 for an unknown record and for attack or pickup pets,
 without touching the record.
 ================
 */
@@ -45,8 +45,8 @@ func TestCosTerminateRefusesPetsAndForeignRecords(t *testing.T) {
 ================
 TestCosTerminateDismountsAndRetiresRidingHorse
 
-4FBDD0 dismounts the rider before the despawn; a riding horse leaves with
-its dismount (4EC78B), so the reply follows the ride frames.
+Natively the rider is dismounted before the despawn; a riding horse leaves with
+its dismount, so the reply follows the ride frames.
 ================
 */
 func TestCosTerminateDismountsAndRetiresRidingHorse(t *testing.T) {
@@ -81,7 +81,7 @@ func TestCosTerminateDismountsAndRetiresRidingHorse(t *testing.T) {
 ================
 TestCosTerminateDropsTransportCargoUnowned
 
-4D1FD0 publishes a transport's goods like a monster's drops with no owner
+Natively a transport's goods publish like a monster's drops with no owner
 argument, then the record is retired.
 ================
 */

@@ -35,7 +35,7 @@ learnShipped
 
 Installs a shipped row into the fixture's skill table and the character's
 learned list. The weapon requirement is lifted: these tests are about the
-program, not 58D480.
+program, not the equipment requirement check.
 ==================
 */
 func learnShipped(t *testing.T, rt *Runtime, c *enterworld.Character, id uint32) enterworld.SkillRow {
@@ -57,7 +57,7 @@ func learnShipped(t *testing.T, rt *Runtime, c *enterworld.Character, id uint32)
 	return row
 }
 
-// concealmentFixture is the combat fixture out of battle (58DF20 refuses a
+// concealmentFixture is the combat fixture out of battle (the reference server refuses a
 // hide in battle) with the given rows learned.
 /*
 ================
@@ -161,7 +161,7 @@ func TestStealthEndsOnTheNextCast(t *testing.T) {
 ==================
 TestDamageCancelFollowsTheMasks
 
-5A1612: a hit whose att flags share a bit with skc word 0 ends the hide
+Reference server: a hit whose att flags share a bit with skc word 0 ends the hide
 (chance word 0: every such hit); a hit with other flags does not.
 ==================
 */
@@ -211,7 +211,7 @@ func hasSkillEffect(rt *Runtime, name string, id uint32) bool {
 ==================
 TestRevealLandsAroundTheCasterButNotOnItsParty
 
-58A020 select 26: every character within 100 of the caster gets the dttp
+Around-source select 26: every character within 100 of the caster gets the dttp
 instance, except the caster and the caster's party; one 150 away does not.
 ==================
 */
@@ -266,7 +266,7 @@ func TestPartyInvisibilityCoversCasterAndParty(t *testing.T) {
 ==================
 TestNpcActionEndsTheHide
 
-510262 retires the hide before the NPC request is even validated.
+The reference server retires the hide before the NPC request is even validated.
 ==================
 */
 func TestNpcActionEndsTheHide(t *testing.T) {

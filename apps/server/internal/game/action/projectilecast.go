@@ -25,8 +25,8 @@ pendingProjectileCast
 Preparing -> released (existing finalize queue) OR cancelled. The division
 operation lock serializes release, cancel and teardown; the queue mutex only
 protects ownership snapshots. No goroutine/timer or second damage authority.
-Native 5857B0: B245 starts without results for positive casting time;
-585F69/593540 generates results and charges at release; 5860D2 retains the
+Native projectile handler: B245 starts without results for positive casting time;
+it generates results and charges at release, and retains the
 bow-shot result for its distance/speed flight timer. Never charge at start.
 Self recovery shares this preparation/cancellation owner, but skips monster
 resolution and projectile flight. Its gameplay mutation is release-owned too.
@@ -48,9 +48,9 @@ type pendingProjectileCast struct {
 	token       uint32
 	rootID      uint32
 	releaseAtMs int64
-	// stealthStrike is command flag 0x10 (4ACEAD): issued in body mode 6.
+	// stealthStrike is command flag 0x10: issued in body mode 6.
 	// The release reads it, not the live body, which the cast's own event
-	// retirement has already ended (58EDD7).
+	// retirement has already ended.
 	stealthStrike bool
 }
 
@@ -205,9 +205,9 @@ func (rt *Runtime) advanceProjectileCastInDivision(p pendingProjectileCast, now 
 		_, exists := rt.resolveCombatTarget(p.divisionID, snapshot, p.cast.TargetGid, now)
 		valid = valid && exists
 	}
-	// Instant 586C8D..586CA8 runs mask 0x1C before reading the
-	// timer at 586CE3; projectile 585C67 precedes 585CA9 likewise.
-	// Its resource bit (58E1B0..58E2BB) must also
+	// The native instant handler runs mask 0x1C before reading the
+	// timer; the projectile handler likewise.
+	// Its resource bit must also
 	// invalidate a waiting cast; checking only at release lets a
 	// temporary shortage disappear and resurrect an invalid command.
 	// Do not recheck the cooldown this preparation already installed,
@@ -267,7 +267,7 @@ func (rt *Runtime) advanceProjectileCastInDivision(p pendingProjectileCast, now 
 		result.ActorPrivate = result.Frames
 	}
 	// Each lifecycle owns its validation order. Persistent self effects
-	// clear preparation before recipient validation (5835EF); ensure every
+	// clear preparation before recipient validation; ensure every
 	// release/refusal also clears it independently of in-flight ownership.
 	rt.clearCurrentSkillCommand(p.divisionID, p.characterName)
 	var out []simulation.DivisionFrames

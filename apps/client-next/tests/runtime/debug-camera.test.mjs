@@ -71,7 +71,7 @@ The production HUD with the three camera sinks recorded.
 function cameraUiFixture( t, gm = true ) {
 	/** @type {any[]} */
 	const sent = [];
-	const rail = [], free = [], cursor = [], modes = [], collision = [];
+	const rail = [], free = [], cursor = [], modes = [], collision = [], speeds = [];
 	const f = uiFixture(
 		message => {
 			if ( message.kind === "gameplay" ) sent.push( message.command );
@@ -85,6 +85,7 @@ function cameraUiFixture( t, gm = true ) {
 		{
 			setCameraZoomRail: value => rail.push( value ),
 			setFreeCamera: value => free.push( value ),
+			setFreeCameraSpeed: value => speeds.push( value ),
 			setCameraCollision: value => collision.push( value ),
 			setCursorVisible: value => cursor.push( value ),
 			setRenderMode: ( mode, enabled ) => modes.push( [ mode, enabled ] )
@@ -121,7 +122,7 @@ function cameraUiFixture( t, gm = true ) {
 	draw();
 	f.ui.event( { kind: "key", code: "Backquote", shift: true } );
 	draw();
-	return { ...f, sent, rail, free, cursor, modes, collision, typeLine };
+	return { ...f, sent, rail, free, cursor, modes, collision, speeds, typeLine };
 }
 
 /*
@@ -358,8 +359,8 @@ function cameraWorldFixture( t ) {
 	draw
 	================
 	*/
-	function draw( pose ) {
-		stream.step( pose );
+	function draw( pose, nowMs = 0 ) {
+		stream.step( pose, undefined, undefined, undefined, nowMs );
 		assert.equal( stream.error(), null );
 		assert.ok( camera );
 		return camera;
@@ -414,4 +415,121 @@ test("the collision byte forwards to the renderer and the follow keeps tracking"
 	assert.deepEqual( f.collisionFlags, [ false, true ] );
 	const still = f.draw( away );
 	assert.deepEqual( still.target, [ 110, 5, 220 ] );
+});
+
+/*
+================
+test("/cs forwards its clamped speed to the camera owner")
+================
+*/
+test("/cs forwards its clamped speed to the camera owner", t => {
+	const f = cameraUiFixture( t );
+	f.typeLine( "/cs 250" );
+	f.typeLine( "/cs 9999" );
+	// One word only: a bare or two-word line writes nothing (690C40 case 136).
+	f.typeLine( "/cs" );
+	f.typeLine( "/cs 1 2" );
+	assert.deepEqual( f.speeds, [ 250, 500 ] );
+	assert.deepEqual( f.sent, [] );
+});
+
+/*
+================
+flyForward
+
+Holds W for one second in 100 ms steps from a free camera seeded at the
+standing follow, and returns the camera the last step drew.
+================
+*/
+/**
+ * @param {any} f
+ * @param {any} pose
+ * @param {object | null} [keys]
+ */
+function flyForward( f, pose, keys = { forward: true } ) {
+	f.stream.setFreeCamera( true );
+	let camera = f.draw( pose, 1000 );
+	for ( let now = 1100; now <= 2000; now += 100 ) {
+		f.stream.setFreeCameraKeys( keys === null ? null : { ...NO_FREE_KEYS, ...keys } );
+		camera = f.draw( pose, now );
+	}
+	return camera;
+}
+
+const NO_FREE_KEYS = {
+	forward: false,
+	back: false,
+	strafeRight: false,
+	strafeLeft: false,
+	turnLeft: false,
+	turnRight: false,
+	pitchUp: false,
+	pitchDown: false,
+	rollPositive: false,
+	rollNegative: false
+};
+
+/*
+================
+test("the free camera flies along its view, scaled by the /cs speed")
+================
+*/
+test("the free camera flies along its view, scaled by the /cs speed", t => {
+	const home = { regionId: 1, x: 10, y: 0, z: 20, angle: 0 };
+	const travel = speed => {
+		const f = cameraWorldFixture( t );
+		const standing = f.draw( home );
+		if ( speed !== undefined ) f.stream.setFreeCameraSpeed( speed );
+		const flown = flyForward( f, home );
+		const view = standing.target.map( ( v, i ) => v - standing.eye[i] );
+		const moved = flown.target.map( ( v, i ) => v - standing.target[i] );
+		const length = Math.hypot( ...moved );
+		// The target moves along the view (target - eye), and the eye with it.
+		const cos = moved.reduce( ( sum, v, i ) => sum + v * view[i], 0 ) / (length * Math.hypot( ...view ));
+		assert.ok( cos > .9999, `moved off the view: ${cos}` );
+		assert.equal( flown.follow, undefined, "a moved free camera is not clamped" );
+		return length;
+	};
+	const seeded = travel( undefined ), slow = travel( 100 ), fast = travel( 250 );
+	assert.ok( slow > 0 );
+	assert.ok( Math.abs( seeded - slow ) < 1e-3, "the constructor seeds +0x7B0 with 100" );
+	assert.ok( Math.abs( fast / slow - 2.5 ) < 1e-3, `speed 250 flew ${fast / slow} times speed 100` );
+});
+
+/*
+================
+test("the free camera holds while a text field owns the keyboard")
+================
+*/
+test("the free camera holds while a text field owns the keyboard", t => {
+	const f = cameraWorldFixture( t );
+	const home = { regionId: 1, x: 10, y: 0, z: 20, angle: 0 };
+	const standing = f.draw( home );
+	const held = flyForward( f, home, null );
+	assert.deepEqual( held.eye, standing.eye );
+	assert.deepEqual( held.target, standing.target );
+	assert.deepEqual( held.follow, standing.follow );
+});
+
+/*
+================
+test("re-entering the free camera starts again from the follow")
+================
+*/
+test("re-entering the free camera starts again from the follow", t => {
+	const f = cameraWorldFixture( t );
+	const home = { regionId: 1, x: 10, y: 0, z: 20, angle: 0 };
+	const away = { regionId: 1, x: 110, y: 5, z: 220, angle: 0 };
+	f.draw( home );
+	const flown = flyForward( f, home );
+	f.stream.setFreeCameraKeys( NO_FREE_KEYS );
+	f.stream.setFreeCamera( false );
+	const following = f.draw( away, 3000 );
+	assert.deepEqual( following.target, [ 110, 5, 220 ] );
+	assert.notDeepEqual( following.target, flown.target );
+	// The fades persist on the interface: the next entry's first frames
+	// still drift until they decay, but from the follow's camera.
+	f.stream.setFreeCamera( true );
+	const entered = f.draw( away, 3100 );
+	assert.deepEqual( entered.target, following.target );
 });

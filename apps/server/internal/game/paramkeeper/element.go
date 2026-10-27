@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-element.go - single parameter modifier evaluation (CParam 4B2F40 / 4B3210)
+element.go - single parameter modifier evaluation (the native parameter element)
 
 Package paramkeeper evaluates the shared native parameter modifier algebra.
 Elements are local to a stat projection; they are not a second live effect or
@@ -18,7 +18,7 @@ import (
 	"math"
 )
 
-// Channel is the bucket index used by 4B3000 and 4B2E60. In particular,
+// Channel is the bucket index used by the native element's writes and lookups. In particular,
 // Flat replaces the fallback base with the sum of its entries; it is not an
 // increment to that base. PercentProduct accepts percentage deltas, whereas
 // FactorProduct accepts factors expressed with 100 as the identity.
@@ -34,7 +34,7 @@ const (
 
 const inlineEntryCap = 2
 
-// Definition corresponds to CParam's +20/+24/+28/+2C initialization in 4B2F40.
+// Definition corresponds to the native element's +20/+24/+28/+2C initialization.
 // Ignore is an insertion no-op sentinel, not a request to erase an older value.
 type Definition struct {
 	Minimum, Maximum, Base, Ignore float32
@@ -47,7 +47,7 @@ type bucketEntry struct {
 
 // Element must not be copied by assignment after use; use cloneInto. Source
 // keys are opaque uint32 identities supplied by the projection owner, ordered
-// unsigned as in 4B39D2..4B39D7. Native uses source pointers: assigning port
+// unsigned as the native source compare does. Native uses source pointers: assigning port
 // identities and reconstructing native source order are responsibilities of
 // the stat graph owner.
 type Element struct {
@@ -99,7 +99,7 @@ func (p *Element) channelRange(channel Channel) (int, int) {
 ================
 Element.Apply
 
-Apply inserts or replaces one source, not the entire channel (4B2D60).
+Apply inserts or replaces one source, not the entire channel (the native element's insert).
 The result reports whether a write occurred, even if the value is unchanged;
 native also dirties and propagates unchanged non-sentinel writes.
 ================
@@ -108,7 +108,7 @@ func (p *Element) Apply(channel Channel, source uint32, value float32) (bool, er
 	if channel >= channelCount || !finite(value) {
 		return false, fmt.Errorf("paramkeeper: invalid channel %d or non-finite modifier", channel)
 	}
-	if value == p.definition.Ignore { // 4B3019: ordered equality only
+	if value == p.definition.Ignore { // native sentinel test: ordered equality only
 		return false, nil
 	}
 	p.allocated |= 1 << channel
@@ -139,7 +139,7 @@ func (p *Element) Apply(channel Channel, source uint32, value float32) (bool, er
 Element.Remove
 
 Remove returns the native OR of channel+1 for every bucket that contained
-the source (4B2E00/4B31A0), not a channel bitset. A zero return means no change.
+the source (the native remove), not a channel bitset. A zero return means no change.
 Empty buckets remain allocated: deleting the last Flat entry leaves a zero
 sum and does not restore Definition.Base.
 ================
@@ -175,13 +175,13 @@ func (p *Element) Remove(source uint32) uint8 {
 ================
 Element.Value
 
-Value follows the store boundaries in 4B3210. Wider intermediates precede
+Value follows the native value read's store boundaries. Wider intermediates precede
 explicit float32 stores; this portable implementation is not an x87 bit-
 equivalence certificate. Invalid/overflowing projections fail explicitly.
 ================
 */
 func (p *Element) Value() (float32, error) {
-	if p.allocated == 0 { // 4B3277..4B3287: fallback bypasses the clamp
+	if p.allocated == 0 { // native: an empty element's fallback bypasses the clamp
 		return p.definition.Base, nil
 	}
 	values := [channelCount]float32{p.definition.Base, 0, 0, 100}
@@ -199,7 +199,7 @@ func (p *Element) Value() (float32, error) {
 	}
 	value := float32((float64(values[PercentSum]) + 100) * float64(values[Flat]) / 100)
 	if values[PercentProduct] != 0 {
-		if value == 0 { // 4B32C7..4B32DF: equality, not positivity
+		if value == 0 { // native zero test: equality, not positivity
 			value = values[PercentProduct]
 		} else {
 			value = float32(float64(value) * float64(values[PercentProduct]))

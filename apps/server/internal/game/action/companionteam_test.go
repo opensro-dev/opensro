@@ -18,7 +18,7 @@ import (
 ================
 TestCompanionNeverStrikesItsOwnersFreeBattleTeam
 
-CGObjCOS_ValidateAttackTargetThroughOwner (528F40) refuses a player on the
+The native COS target check refuses a player on the
 owner's own cape team with 0x3020 before the owner's check, so aggression
 that opens the team-mate to the owner still keeps the owner's pet off it.
 Group 5 opposes everyone, and different or missing capes are left to the

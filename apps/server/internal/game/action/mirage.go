@@ -11,10 +11,10 @@ reduce their hostility": at the release up to efr's most-targets monsters
 within efr's radius of the caster receive one hate event whose amounts
 are negative, as Discord Wave's (discordwave.go).
 
-SkillCombat_ApplyResultRecipients (593D62..593D90) sources a dtnt event
+The reference server's result step sources a dtnt event
 at the cast's target, or at the caster (arg4+8) when the cast has none;
 an untargeted cast has none, so the hate cut is the caster's. The ledger
-update (5473C0) clamps at zero, so a monster that holds no hate for the
+update clamps at zero, so a monster that holds no hate for the
 caster is unchanged.
 
 ===========================================================================

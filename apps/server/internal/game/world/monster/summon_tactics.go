@@ -5,8 +5,9 @@ import (
 	"strings"
 )
 
-// 54BDE0 partitions default tactics by ChampionTacticsID (runtime +8C).
-// 54C0E0/54C1C0: own reference, then original reference; grade zero uses
+// The reference server partitions default tactics by ChampionTacticsID
+// (runtime +8C). Its fallback chain: own reference, then original
+// reference; grade zero uses
 // the normal list, nonzero the other list; missing list flips preference.
 // Multiple candidates consume one CRT modulo draw; singleton lists do not.
 //

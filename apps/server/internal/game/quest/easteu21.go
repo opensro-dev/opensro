@@ -198,6 +198,9 @@ type easteu21Layer struct {
 	credited    bool
 	graceEnd    int64
 	ended       bool
+	// bossSite is where the boss fell (NoteKillSite), the gate's spot.
+	bossSite      simulation.Spawn
+	bossSiteKnown bool
 }
 
 /*
@@ -635,6 +638,7 @@ func (rt *Runtime) easteu21Leave(event InstanceEvent) {
 		return
 	}
 	rt.easteu21ForgetLayer(event.World)
+	rt.removeExitGates(event.World)
 	if rt.InstanceClose != nil && lease.ID != 0 {
 		rt.InstanceClose(lease)
 	}
@@ -902,12 +906,17 @@ easteu21FinishKill
 Kerberos is down. Its death line goes to the room; then every
 resident doing the quest is credited with the kill and their Call
 is spent - the whole party, the dead included, exactly the native
-kill evaluator - and the room's sixty-second grace starts.
+kill evaluator - the exit gate rises beside it, and the room's
+sixty-second grace starts.
 ================
 */
 func (rt *Runtime) easteu21FinishKill(event InstanceEvent, layer *easteu21Layer, now int64) {
 	rt.easteu21Push(layer, easteu21SymBossDeath)
 	layer.graceEnd = now + easteu21KillGraceMs
+	rt.easteu21.mu.Lock()
+	site, known := layer.bossSite, layer.bossSiteKnown
+	rt.easteu21.mu.Unlock()
+	rt.raiseExitGate(event.World, site, known)
 	def, ok := rt.Defs.ByCodename(easteu21QuestCodename)
 	if ok {
 		for _, name := range easteu21ResidentNames(layer) {
@@ -984,6 +993,7 @@ func (rt *Runtime) easteu21EndLayer(event InstanceEvent, layer *easteu21Layer) {
 		}
 	}
 	rt.easteu21ForgetLayer(event.World)
+	rt.removeExitGates(event.World)
 	if rt.InstanceClose != nil && lease.ID != 0 {
 		rt.InstanceClose(lease)
 	}

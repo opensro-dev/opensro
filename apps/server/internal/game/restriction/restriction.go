@@ -7,7 +7,7 @@ import (
 	"opensro.online/server/internal/transport"
 )
 
-// Report mirrors 4F0A00's enabled-record test and 36EA notification (research
+// Report mirrors the server's enabled-record test and 36EA notification (research
 // opcode 3405). Do not infer expiration from the server clock or add a GM bypass.
 // A failed send still returns true: transport failure cannot authorize an action.
 func Report(s *transport.Session, kind uint8) bool {

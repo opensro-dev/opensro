@@ -81,7 +81,7 @@ type areaPlanInput struct {
 	attacker  combat.Stats
 	victims   []combatTarget
 	reduction uint8
-	// lifeStealBase is an lfst row's 40F750 base (skilllifesteal.go): its
+	// lifeStealBase is an lfst row's life-steal base (skilllifesteal.go): its
 	// victims take the life-steal record at their running percent.
 	lifeStealBase        int64
 	impacts              int
@@ -94,7 +94,7 @@ type areaPlanInput struct {
 ==================
 planAreaVictims
 
-SkillCombat_CalculateHitOutcome (58E5F0) per victim in selection order:
+The native hit outcome per victim in selection order:
 every impact's formula at the area's running percent, which falls by the
 reduction after each victim, cumulatively. A monster the planned damage
 kills keeps its live pose for the reward settlement; a player is planned
@@ -147,7 +147,7 @@ func (rt *Runtime) planAreaVictims(in areaPlanInput) (areaStrikePlan, bool) {
 		total := uint64(0)
 		for range in.impacts {
 			if in.skill.LifeSteal.Present {
-				// 58F4B5: the percent rides into 40F750, after its HP cap.
+				// The percent rides into the life-steal formula, after its HP cap.
 				formula := lifeStealResult(in.lifeStealBase, in.attacker, defender, target.CurrentHP, uint32(percent))
 				formula = combat.FinishImpact(formula, combat.ImpactTail{PercentApplied: true, Attack: in.skill.Attack.Present})
 				total += uint64(formula.Damage)
@@ -246,7 +246,7 @@ func (rt *Runtime) commitAreaInDoor(division string, caster *enterworld.Characte
 	// A COS victim commits like the single-target strike (strikeCOSTarget)
 	// inside the same door: the hit, the owner's attacked registration,
 	// a fatal kill's booking against the owner, then the caster's hostile
-	// registration (4E27C0 swaps the COS for COS+0x1CD8).
+	// registration (natively the COS swaps for COS+0x1CD8).
 	for i := range plan.victims {
 		victim := &plan.victims[i]
 		if victim.cos < 0 {
@@ -350,7 +350,7 @@ func (rt *Runtime) settleAreaFatalities(division string, c *enterworld.Character
 areaPublication
 
 An area's wire after its door: the target records in selection order (a
-walled player's absorb group follows it, 58EC9F), the victims' follow-ups
+walled player's absorb group follows it), the victims' follow-ups
 (cast interrupts, statuses, deaths, drops, a player's publication), the
 recipients' frames and the returned hits.
 ==================
@@ -423,11 +423,11 @@ func (rt *Runtime) publishArea(division string, caster *enterworld.Character, sk
 		out.targets = append(out.targets, wire.SkillAreaTarget{GID: gid, Impacts: padAreaImpacts(records, impactCount)})
 		if final.Fatal {
 			rt.queueMonsterDefeat(division, gid, now+monsterDeathPresentationRetention.Milliseconds())
-			// 4A9C80 publishes LIFE for every alive-to-dead transition, area
+			// Natively LIFE is published for every alive-to-dead transition, area
 			// victims included; without it the client keeps moving the corpse.
 			// Each victim's drops follow its own LIFE frame, as the native
-			// death credit publishes them (CGObjMob_CreditKillerOnDeath
-			// 4C42F0 -> +0x638), so a drop is known by the death it follows.
+			// death credit publishes them (+0x638), so a drop is known by the
+			// death it follows.
 			deaths = append(deaths, monsterLifeDeadFrame(gid))
 			deaths = append(deaths, rt.groundReferences(commit.drops[gid])...)
 			for _, drop := range commit.drops[gid] {
@@ -454,7 +454,7 @@ func (rt *Runtime) publishArea(division string, caster *enterworld.Character, sk
 ==================
 padAreaImpacts
 
-Once an impact is fatal the remaining records are bare type 8 (58EE1B).
+Once an impact is fatal the remaining records are bare type 8.
 ==================
 */
 func padAreaImpacts(records []wire.SkillCastTargetImpact, count int) []wire.SkillCastTargetImpact {
@@ -471,7 +471,7 @@ areaVictims
 
 areaVictims samples live positions without materializing additional nests.
 Shape-2 uses the primary target's position, caster + candidate body radii,
-and a three-dimensional distance (server 58a81c / 58ab6d..58ac23).
+and a three-dimensional distance (as the reference server measures).
 Monsters and attackable players are candidates alike (areacandidates.go),
 in the port's deterministic order. Shapes 3 and 4 select along a line
 (skillarea_directional.go); reach is the action's base range they measure
@@ -501,7 +501,7 @@ func (rt *Runtime) areaVictims(division string, c *enterworld.Character, skill e
 		return rt.directionalVictims(q, caster, radius, primary, shape, reach)
 	}
 	if area.Shape == 1 {
-		// Native 58A088..58A0D3 copies the caster position, whereas 58A831
+		// Natively the source-centred selection copies the caster position, whereas the target one
 		// copies the selected target. Sample the authority's current movement
 		// leg, not the character's last persisted position.
 		q.center = rt.liveSpawn(simulation.WorldKey(division, c.Name), c, nowMs)
@@ -531,7 +531,7 @@ func (rt *Runtime) areaVictims(division string, c *enterworld.Character, skill e
 ================
 areaBaseRange
 
-58B29B..58B2A9 uses the row's range word or the truncated attack-range
+The native directional range uses the row's range word or the truncated attack-range
 keeper. Pursuit bonuses do not widen this directional selection geometry.
 ================
 */
@@ -549,16 +549,16 @@ acceptSkillAreaAt
 
 One area strike. A projectile area (the Chinese bow's pierce and special
 shots) selects and resolves its victims at release like any area
-(SkillAction_Projectile 585A1F -> TargetSelection_DispatchByShape, then
-SkillCombat_CalculateHitOutcome), spends its arrow in the same commit, and
-keeps the token open for the flight to the primary target (5860D2).
+(the reference server's projectile action dispatches by shape, then
+resolves the hit outcome), spends its arrow in the same commit, and
+keeps the token open for the flight to the primary target.
 
 area is the row's own efr or, when chained is set, the active imbue's
 (skillcombat.go): every victim after the primary is then a chained one.
 charged is false for a basic attack spread by an imbue: like its single-
 target hit, it pays no phase cost.
 Each victim takes every authored impact; once one is fatal its remaining
-records are bare type 8 (58EE1B, var_e5 set by 58FA53).
+records are bare type 8.
 ==================
 */
 func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enterworld.Character, skill enterworld.SkillRow, area enterworld.SkillOffensiveArea, chained, charged bool, primary combatTarget, attacker combat.Stats, loadout combat.Loadout, consumeAmmo bool, nowMs int64, rootID uint32, release *pendingProjectileCast) (OpResult, skillCastDecision) {
@@ -679,7 +679,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 		actor = append(actor, frames...)
 		private = append(frames, private...)
 	}
-	// 593832: every victim's unblocked attempts wear the attacker's weapon,
+	// Every victim's unblocked attempts wear the attacker's weapon,
 	// rolled once for the execution.
 	var tally wearTally
 	for _, victim := range plan.victims {
@@ -698,7 +698,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 	private = append(private, wire.ProgressionPrivateFrames(commit.cosActor)...)
 	public = append(public, commit.settlements.public...)
 	actor = append(actor, commit.settlements.otherPublic...)
-	// Entering battle (4E27C0) follows the hit's burst.
+	// Entering battle follows the hit's burst.
 	actor = append(actor, battleFrames...)
 	public = append(public, battleFrames...)
 	out := OpResult{Frames: actor, Broadcast: public, ActorPrivate: private,

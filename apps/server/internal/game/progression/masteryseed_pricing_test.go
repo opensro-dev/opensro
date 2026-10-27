@@ -7,8 +7,8 @@ package progression
 // L -> L+1 train costs the leveldata row of the CURRENT level L, and the
 // 0 -> 1 first train is FREE (client enable gate sub_5841d0 @0x0058435b
 // unconditional-enables level-0 rows; tooltip sub_55ab40 @0x0055b21e
-// hardcodes the displayed cost to 0; the cross-version GameServer's
-// level==0 branch @0x0059c62a bypasses pricing).
+// hardcodes the displayed cost to 0; the cross-version reference server's
+// mastery raise takes a level-0 branch that bypasses pricing).
 
 import (
 	"testing"

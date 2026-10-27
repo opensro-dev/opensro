@@ -38,7 +38,7 @@ func optionRows() magicRows {
 
 func encodedOption(id, value uint32) uint64 { return uint64(value)<<32 | uint64(id) }
 
-// 66B180 -> 498690: options write the keeper keyed by the item; frostbite
+// The server's option pass: options write the keeper keyed by the item; frostbite
 // resistance covers freezing too, burn/shock land on 1E/1D.
 func TestMagicOptionsWriteTheKeeper(t *testing.T) {
 	ref := &enterworld.ItemRef{RefObjID: 1, Codename: "TEST_ARMOR", TypeIDs: [4]int64{3, 1, 1, 1}, Combat: &enterworld.ItemCombatRef{}}
@@ -73,7 +73,7 @@ func TestMagicOptionsWriteTheKeeper(t *testing.T) {
 	}
 }
 
-// 496A70 scales the item's own hit rating before insertion, stored to float32.
+// The magic-option pass scales the item's own hit rating before insertion, stored to float32.
 func TestItemHitRateOptionScalesTheItem(t *testing.T) {
 	item := Stats{HitRate: 57, EvasionRate: 31}
 	applyItemMagicOptions(&item, []magicOption{{tag: optionTag("hr"), value: 20}, {tag: optionTag("er"), value: 10}})
@@ -82,7 +82,7 @@ func TestItemHitRateOptionScalesTheItem(t *testing.T) {
 	}
 }
 
-// 4E3294..4E3561: the keeper's max HP/MP chain reproduces the adopted
+// The graph builder's gauge chains: the keeper's max HP/MP chain reproduces the adopted
 // closed form trunc(1.02^(L-1) * stat * 10) across the level/stat range.
 func TestKeeperMaxVitalsMatchClosedForm(t *testing.T) {
 	for level := int64(1); level <= 140; level++ {

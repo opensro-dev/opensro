@@ -141,8 +141,8 @@ func TestAttackPetKillsOrderedMonsterForItsOwner(t *testing.T) {
 TestAttackPetKillOfACOSBooksMurderForItsOwner
 
 A pet's fatal hit on another player's COS books the kill for the pet's
-owner against the COS's owner (4E27F4 -> 4E1F60), then eases the owner's
-penalty by the COS gap (4EB6B0): the pet is never booked itself.
+owner against the COS's owner (reference server), then eases the owner's
+penalty by the COS gap: the pet is never booked itself.
 ================
 */
 func TestAttackPetKillOfACOSBooksMurderForItsOwner(t *testing.T) {

@@ -19,10 +19,11 @@ import (
 MonsterInstanceStats
 
 MonsterInstanceStats projects the live actor's combat parameters: the
-RefObjChar base (4CEFE0, flat source zero), monster self effects (594AC0:
-flat 5/6 for defp, flat/percent 12 for cr, flat 80..83 for dru, each an
-independent source) and the abnormal block's writes (source 5, or source 0
-for frostbite's 8C). Curse factors B2..B5 come from the block alone.
+RefObjChar base (flat source zero), monster self effects (the skill
+parameter installer: flat 5/6 for defp, flat/percent 12 for cr, flat 80..83
+for dru, each an independent source) and the abnormal block's writes (source
+5, or source 0 for frostbite's 8C). Curse factors B2..B5 come from the block
+alone.
 ==================
 */
 func MonsterInstanceStats(instance monster.Instance) (Stats, error) {
@@ -30,8 +31,9 @@ func MonsterInstanceStats(instance monster.Instance) (Stats, error) {
 	if err != nil {
 		return s, err
 	}
-	// +0xD34 is the published abnormal mask (4A8575). atca at 58F52F tests it
-	// on the target (esi), which this projection is when the instance is the defender.
+	// +0xD34 is the published abnormal mask. The hit-outcome routine's atca
+	// step tests it on the target (esi), which this projection is when the
+	// instance is the defender.
 	s.AbnormalMask = instance.AbnormalMask()
 	if err = applyMonsterSelfEffects(&s, instance.SelfEffects, instance.TargetEffects, instance.Abnormal); err != nil {
 		return Stats{}, err
@@ -127,8 +129,8 @@ func applyMonsterSelfEffects(s *Stats, effects monster.SelfEffects, targets mons
 				}
 			}
 		}
-		// 594AC0 writes another actor's terd / thrd negated on the flat
-		// channel: 9 evasion (59591A), 0xB hit rate (595954).
+		// The skill-parameter installer writes another actor's terd / thrd
+		// negated on the flat channel: 9 evasion (terd), 0xB hit rate (thrd).
 		for _, e := range targets {
 			if e.Token == 0 {
 				continue

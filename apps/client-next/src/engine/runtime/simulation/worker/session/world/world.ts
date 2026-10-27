@@ -564,10 +564,19 @@ enter
 			character = name;
 			division = shard;
 			// The transport base (possibly an edge route) serves the socket and its references.
+			// An advertised base may already name the socket itself (the public WebTransport
+			// posture's advertised URL ends /transport/ws): normalise once here, so the
+			// references base never carries the socket suffix and the socket path is
+			// never doubled.
 			const url = new URL( base );
+			const advertised = url.pathname.replace( /\/$/, "" );
+			const basePath = advertised.endsWith( "/transport/ws" ) ?
+				advertised.slice( 0, advertised.length - "/transport/ws".length ) :
+				advertised;
+			url.pathname = basePath || "/";
+			transport = url.toString();
 			url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-			url.pathname = url.pathname.replace( /\/$/, "" ) + "/transport/ws";
-			transport = base;
+			url.pathname = basePath + "/transport/ws";
 			endpoint = url.toString();
 			connect();
 		},
