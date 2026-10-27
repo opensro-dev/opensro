@@ -207,6 +207,46 @@ func (rt *Runtime) handlePetTraining(division string, c *enterworld.Character, p
 
 /*
 ================
+petEffectiveMaxHP
+
+The maximum a pet-HP writer must respect: the effective reference
+(gear included under the expansion), never the bare catalog row.
+Zero when the pet does not resolve, so callers keep their own base.
+================
+*/
+func (rt *Runtime) petEffectiveMaxHP(pet *domain.CharacterCOS) uint32 {
+	if ref, ok := rt.cosReference(pet); ok && ref != nil {
+		return ref.MaxHP
+	}
+	return 0
+}
+
+/*
+================
+petEffectiveMaxFrames
+
+The client draws a pet's HP bar and text against the max this state
+frame carries; until one arrives it divides by the native catalog max,
+which the attack-pet profiles deliberately lower, so under the
+expansion a fully healed pet reads as nearly empty on a default
+client (#1896). Push the state unasked wherever an attack pet's
+vitals first stand or its max can move: summon, entry restore,
+potion and level growth. With the expansion off nothing is pushed -
+the frame stays training-window traffic, as natively.
+================
+*/
+func (rt *Runtime) petEffectiveMaxFrames(pet *domain.CharacterCOS, nowMs int64) []wire.Frame {
+	if !rt.AttackPetExpansion || pet == nil {
+		return nil
+	}
+	if ref, ok := rt.cosReference(pet); !ok || ref == nil || ref.TidWord>>11 != attackPetBand {
+		return nil
+	}
+	return rt.petTrainingStateFrames(pet, nowMs)
+}
+
+/*
+================
 petTrainingStateFrames
 
 The worn gear's item references, then the 0x3FB1 state push.
@@ -371,6 +411,12 @@ func (rt *Runtime) wearPetGear(c *enterworld.Character, gid uint32, bagSlot uint
 	worn := domain.PetGear{RefObjID: taken.RefObjID}
 	copy(worn.Options[:], taken.MagicOptions)
 	pet.Training.Gear[slot] = worn
+	// A swap can lower the effective max (the returned piece carried
+	// the HP bonus): clamp like removePetGear does (#1896).
+	if ref, ok := rt.cosReference(pet); ok && ref != nil && pet.CurrentHP > ref.MaxHP {
+		pet.CurrentHP = ref.MaxHP
+		frames = append(frames, wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(gid, 0, pet.CurrentHP)})
+	}
 	return "", frames
 }
 

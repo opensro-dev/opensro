@@ -301,7 +301,13 @@ func (rt *Runtime) applyAttackPetExperience(c *enterworld.Character, pet *enterw
 	}
 	// The owner sees the EXP the pet was credited: all of it unless the
 	// owner's level banked the rest (as the entry bank reports banked-before).
-	return []wire.Frame{petExperienceFrame(pet.GID, consumed+exp-before, source)}, area
+	owner = []wire.Frame{petExperienceFrame(pet.GID, consumed+exp-before, source)}
+	if form != ref {
+		// A new form's effective max is not the catalog max the client
+		// divides by: publish it with the gain (#1896).
+		owner = append(owner, rt.petEffectiveMaxFrames(pet, rt.Now().UnixMilli())...)
+	}
+	return owner, area
 }
 
 /*

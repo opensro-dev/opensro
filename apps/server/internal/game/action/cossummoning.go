@@ -224,6 +224,7 @@ func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResu
 	frames = append(frames, rt.cosContainerReferenceFrames(pet)...)
 	*result = OpResult{Frames: append(frames, wire.Frame{Opcode: wire.OpCosRecordCreate, Payload: record}, spawn)}
 	result.Frames = append(result.Frames, companionItemStateFrames(c, pet)...)
+	result.Frames = append(result.Frames, rt.petEffectiveMaxFrames(pet, use.nowMs)...)
 	return true
 }
 
