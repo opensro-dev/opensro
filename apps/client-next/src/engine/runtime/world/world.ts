@@ -369,7 +369,10 @@ export function createWorldStream(
 		live: import("@/engine/contracts/scene").WorldCamera,
 		nowMs: number
 	) {
-		const seed = lastCamera ?? live;
+		// The byte can stand before any camera was applied (the first
+		// frame): the live follow becomes the held camera then.
+		if ( !lastCamera ) lastCamera = live;
+		const seed = lastCamera;
 		if ( !freeRig ) freeRig = seedFreeCamera( seed );
 		const dtSeconds = freeLastStepMs === null ? 0 : Math.max( 0, (nowMs - freeLastStepMs) / 1000 );
 		freeLastStepMs = nowMs;
