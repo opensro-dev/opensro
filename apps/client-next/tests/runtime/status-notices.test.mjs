@@ -197,12 +197,12 @@ test("Magic Pang routes every non-success result through category 1 without muta
 	g.bootstrap( {} );
 	g.seed( { gid: 1, regionId: 25000, x: 0, y: 0, z: 0, heading: 0, countryByte9c: 0 } );
 	g.take();
-	// The refusal body is [flag][u16 code]; the notice reads the low byte.
+	// The refusal body is [flag][u8 code]; the notice reads that byte.
 	for ( const flag of [ 0, 2, 255 ] ) {
 		for ( let code = 0; code < 256; code++ ) {
 			const expected = inventoryNotice( 0xb06d, Uint8Array.of( 2, code ), 0 );
-			assert.deepEqual( inventoryNotice( 0xb053, Uint8Array.of( flag, code, 0 ), 0 ), expected );
-			g.receive( { opcode: 0xb053, payload: Uint8Array.of( flag, code, 0 ) }, 0 );
+			assert.deepEqual( inventoryNotice( 0xb053, Uint8Array.of( flag, code ), 0 ), expected );
+			g.receive( { opcode: 0xb053, payload: Uint8Array.of( flag, code ) }, 0 );
 			const state = g.take();
 			assert.deepEqual( defined( state ).inventory, [] );
 			if ( expected ) {
@@ -213,11 +213,43 @@ test("Magic Pang routes every non-success result through category 1 without muta
 			}
 		}
 	}
-	for ( const p of [ [], [ 2 ], [ 2, 7 ], [ 1 ], [ 1, 1, 1 ], [ 2, 7, 0, 0 ] ] ) {
+	for ( const p of [ [], [ 2 ], [ 1 ], [ 1, 1, 1 ], [ 2, 7, 0 ] ] ) {
 		assert.throws( () => g.receive( { opcode: 0xb053, payload: Uint8Array.from( p ) }, 0 ) );
 	}
 	assert.equal( g.take(), null );
 	assert.equal( inventoryNotice( 0xb053, Uint8Array.of( 1, 1 ), 0 ), null );
+});
+
+test("a refused Gori exchange surfaces the fixed category-1 notice 2 and ignores its code byte", () => {
+	const g = createGameplay( () => {} );
+	g.bootstrap( {} );
+	g.seed( { gid: 1, regionId: 25000, x: 0, y: 0, z: 0, heading: 0, countryByte9c: 0 } );
+	g.take();
+	// 766A90: flag 2 raises the category-1 notice 2 whatever the second
+	// byte holds; any other flag is silent here (a successful exchange
+	// answers through the inventory packets instead). The expectation is
+	// the category-1 code-2 route itself, exactly as the roll sweep
+	// compares against the 0xB06D route.
+	const expected = inventoryNotice( 0xb06d, Uint8Array.of( 2, 2 ), 0 );
+	for ( const code of [ 0, 2, 7, 255 ] ) {
+		assert.deepEqual( inventoryNotice( 0xb1be, Uint8Array.of( 2, code ), 0 ), expected );
+		g.receive( { opcode: 0xb1be, payload: Uint8Array.of( 2, code ) }, 0 );
+		const state = g.take();
+		assert.deepEqual( state?.inventory ?? [], [] );
+		if ( expected ) {
+			assert.deepEqual( { ...defined( defined( state ).notices ).at( -1 ), sequence: undefined }, {
+				...expected,
+				sequence: undefined
+			} );
+		}
+	}
+	for ( const flag of [ 0, 1, 255 ] ) {
+		assert.equal( inventoryNotice( 0xb1be, Uint8Array.of( flag, 2 ), 0 ), null );
+	}
+	for ( const p of [ [], [ 2 ], [ 2, 7, 0 ] ] ) {
+		assert.throws( () => g.receive( { opcode: 0xb1be, payload: Uint8Array.from( p ) }, 0 ) );
+	}
+	assert.equal( g.take(), null );
 });
 
 test("empty native guides cannot evict history or reappear after localization changes", () => {

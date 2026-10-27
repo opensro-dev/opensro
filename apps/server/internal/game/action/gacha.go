@@ -50,7 +50,7 @@ func GachaPoolV2FromEnv() bool {
 	return true
 }
 
-// Native Magic Pop refusal codes, answered [2][u16 code] on the request's
+// Native Magic Pop refusal codes, answered [2][u8 code] on the request's
 // reply opcode (0xB053 for the roll, 0xB1BE for the exchange). The reference
 // server's dispatcher looks the gid up first (no such object: 0; wrong plane
 // or non-adjacent sector: 3; beyond the class hit range: 4); its handlers
@@ -260,7 +260,7 @@ HandleGachaRoll
 HandleGachaRoll applies one atomic Magic Pop transaction. The request
 names the machine gid, the gachaitemset entry and the ticket slot.
 Admission is the native one (gachaNpcAdmission, then gacha set, bag limit,
-ticket row, entry lookup); every refusal answers one B053 [2][u16 code],
+ticket row, entry lookup); every refusal answers one B053 [2][u8 code],
 the native answer the client's waiting phase ends on. On commit the ticket
 row becomes a native win/loss result card; 0x3645 reaches the client before
 B053 so CIFGhaCha_ApplyResult observes the new ref and reward map.
@@ -525,7 +525,7 @@ func (rt *Runtime) HandleGachaExchange(
 	defer unlock()
 	// The native admission (gachaNpcAdmission), then the operator service:
 	// natively an NPC without it refuses 0x1C0F and one with no exchangeable
-	// voucher refuses 5, each answered [2][u16 code] on 0xB1BE.
+	// voucher refuses 5, each answered [2][u8 code] on 0xB1BE.
 	npc, code, reason := rt.gachaNpcAdmission(divisionID, character, gid)
 	if reason != "" {
 		return gachaRefusal(gacha.OpExchangeResult, code), reason

@@ -89,10 +89,13 @@ func EncodeResult(code uint8) []byte {
 	return []byte{1, code}
 }
 
-// EncodeRefusal is the refused-request body [flag=2][u16 code] the reference
-// server answers every refused roll or exchange with.
+// EncodeRefusal is the refused-request body a refused roll or exchange
+// answers with. The v1.150 wire is two bytes, [flag=2][u8 code]: its reply
+// handlers read exactly a flag byte and one code byte on 0xB053 and
+// 0xB1BE. The stage codes stay u16 in the server as the native stage
+// documentation; the encoder narrows to the low byte the client reads.
 func EncodeRefusal(code uint16) []byte {
-	return wire.NewWriter(3).U8(2).U16(code).Payload()
+	return wire.NewWriter(2).U8(2).U8(byte(code)).Payload()
 }
 
 // EncodeResultItemDelta replaces the ticket with the selected win/loss card and

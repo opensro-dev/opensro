@@ -71,8 +71,9 @@ func gachaFixture(t *testing.T) (*Runtime, *enterworld.Character, []byte) {
 ================
 assertGachaRefusal
 
-A refused roll or exchange answers exactly one [2][u16 code] frame on its
-reply opcode; before #1897 it answered nothing and stranded the client.
+A refused roll or exchange answers exactly one [2][u8 code] frame on its
+reply opcode; the byte on the wire is the stage code's low byte. Before
+#1897 it answered nothing and stranded the client.
 ================
 */
 func assertGachaRefusal(t *testing.T, frames []wire.Frame, opcode uint16, code uint16) {
@@ -80,7 +81,7 @@ func assertGachaRefusal(t *testing.T, frames []wire.Frame, opcode uint16, code u
 	if len(frames) != 1 || frames[0].Opcode != opcode {
 		t.Fatalf("frames %+v, want one 0x%04X refusal", frames, opcode)
 	}
-	if want := []byte{2, byte(code), byte(code >> 8)}; !reflect.DeepEqual(frames[0].Payload, want) {
+	if want := []byte{2, byte(code)}; !reflect.DeepEqual(frames[0].Payload, want) {
 		t.Fatalf("refusal payload %v, want %v", frames[0].Payload, want)
 	}
 }
@@ -138,7 +139,7 @@ func TestGachaCommitResultOrderAndReplay(t *testing.T) {
 ================
 TestGachaAdmissionFailuresPreserveTicket
 
-Every refusal answers the one native [2][u16 code] frame on 0xB053 and
+Every refusal answers the one native [2][u8 code] frame on 0xB053 and
 leaves the character untouched. The codes follow the native order:
 dispatcher (object, scope, range), then service, bag limit, empty slot,
 ticket identity, entry. They are literals on purpose: the test pins the
@@ -636,7 +637,7 @@ func TestGachaExchangeConsumesTheVoucherItRead(t *testing.T) {
 ================
 TestGachaExchangeRefusalsPreserveTheVoucher
 
-Every refusal answers the one native [2][u16 code] frame on 0xB1BE and
+Every refusal answers the one native [2][u8 code] frame on 0xB1BE and
 leaves the character untouched. The codes are literals on purpose: the
 test pins the wire values, not the server's names for them.
 ================

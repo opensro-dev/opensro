@@ -152,8 +152,8 @@ export function createGacha() {
 		================
 		*/
 		result( p: Uint8Array, item: InventoryItem | undefined ): readonly UiSoundHandle[] {
-			// A refusal is [2][u16 code]: the server writes three bytes and
-			// 766A20 reads the flag and the code's low byte for its notice.
+			// A refusal is [2][u8 code]: the v1.150 client reads exactly
+			// the flag and one code byte for its notice.
 			// 766A4E jumps directly to the system-notice dispatcher on failure;
 			// it never calls CIFGhaCha_ApplyResult, so no result presentation.
 			// Port-only, not native: native strands the busy byte 0xCEA7C4 that
@@ -162,7 +162,7 @@ export function createGacha() {
 			// window unclosable until relog. A refused roll returns the window
 			// to idle instead, so it closes and rolls again.
 			if ( p[0] !== 1 ) {
-				if ( p.length !== 3 ) throw Error( "Invalid Magic Pang result" );
+				if ( p.length !== 2 ) throw Error( "Invalid Magic Pang result" );
 				if ( state.phase === "waiting" ) state = { ...state, phase: "idle" };
 				return [];
 			}

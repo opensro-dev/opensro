@@ -288,8 +288,8 @@ returns the window to idle, so it closes and rolls again.
 ================
 */
 test("a refused Magic Pang roll presents no result and leaves the window idle", () => {
-	// The server's refusal body is [2][u16 code]; these are its native codes
-	// for a missing entry, a bad slot and a missing gacha service.
+	// The server's refusal body is [2][u8 code]; these are its native stage
+	// codes, of which the wire carries the low byte.
 	for ( const code of [ 2, 0x1806, 0x1c0f ] ) {
 		const { owner, sounds, frames } = setup();
 		open( owner );
@@ -297,7 +297,7 @@ test("a refused Magic Pang roll presents no result and leaves the window idle", 
 		owner.step( 4000 );
 		assert.equal( owner.state().gacha.phase, "waiting" );
 		const before = owner.state().gacha, items = owner.state().inventory, cues = [ ...sounds ];
-		owner.receive( 0xb053, Uint8Array.of( 2, code & 0xff, (code >> 8) & 0xff ) );
+		owner.receive( 0xb053, Uint8Array.of( 2, code & 0xff ) );
 		assert.deepEqual( owner.state().gacha, { ...before, phase: "idle" } );
 		assert.deepEqual( owner.state().inventory, items );
 		assert.deepEqual( sounds, cues );
@@ -315,7 +315,7 @@ test("after a refused Magic Pang roll the window closes", () => {
 	owner.step( 4000 );
 	owner.process( { kind: "gacha-close" }, 4000 );
 	assert.equal( owner.state().gacha.visible, true, "a pending roll keeps the window" );
-	owner.receive( 0xb053, Uint8Array.of( 2, 7, 0 ) );
+	owner.receive( 0xb053, Uint8Array.of( 2, 7 ) );
 	owner.process( { kind: "gacha-close" }, 4100 );
 	assert.equal( owner.state().gacha.visible, false );
 	assert.equal( owner.state().gacha.phase, "closed" );
