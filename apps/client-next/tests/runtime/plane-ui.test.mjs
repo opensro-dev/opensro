@@ -29,6 +29,7 @@ const CAVE_TOWN = { ...TOWN, regionId: TOWN.regionId | DUNGEON_BIT };
 const FIELD = { regionId: 0x61a0, x: 960, y: 0, z: 960, angle: 0 };
 const CAVE_FIELD = { ...FIELD, regionId: FIELD.regionId | DUNGEON_BIT };
 // Larger than the native overview in both directions.
+/** @type {import("../../src/engine/contracts/ui.ts").UiRect} */
 const WHOLE_MAP = [ 0, 0, 1 << 20, 1 << 20 ];
 
 /*
@@ -42,6 +43,20 @@ function guideWith( points ) {
 		version: 1,
 		rows: [ { refObjId: 1933, name: "Mangyang", nameKey: "SN_MOB_CH_MANGNYANG", level: 1, points } ]
 	};
+}
+
+/*
+================
+gameAt
+
+A gameplay state that carries only the player's pose, the one field the
+minimap's floor queries read.
+================
+*/
+function gameAt( pose ) {
+	return /** @type {import("../../src/engine/contracts/gameplay.ts").GameplayState} */ (
+		/** @type {unknown} */ ({ pose })
+	);
 }
 
 test("a hunting guide anchor in a cave is refused; the same offsets outdoors are kept", () => {
@@ -89,7 +104,11 @@ test("the world map opens a town page outdoors and the overview in a cave", () =
 });
 
 test("the world map marks an outdoor point and no cave point", () => {
-	const view = { page: 0, clip: [ 0, 0, 640, 384 ], pan: [ 0, 0 ], center: FIELD };
+	/** @type {import("../../src/engine/contracts/ui.ts").UiRect} */
+	const clip = [ 0, 0, 640, 384 ];
+	/** @type {readonly [number, number]} */
+	const pan = [ 0, 0 ];
+	const view = { page: 0, clip, pan, center: FIELD };
 	const outdoor = { regionId: FIELD.regionId, x: 960, z: 960 };
 	const cave = { ...outdoor, regionId: CAVE_FIELD.regionId };
 	assert.equal( worldMapPointMarkers( { ...view, points: [ outdoor ] } ).length, 1 );
@@ -99,6 +118,6 @@ test("the world map marks an outdoor point and no cave point", () => {
 test("the minimap asks for floors only while the player stands in a cave", () => {
 	// Each target shares the player's region, so only the plane separates them.
 	const target = pose => ({ regionId: pose.regionId, x: 12, y: 10, z: 50, angle: 0 });
-	assert.equal( minimapFloorQueries( { pose: FIELD }, [ target( FIELD ) ] ).length, 0 );
-	assert.equal( minimapFloorQueries( { pose: CAVE_FIELD }, [ target( CAVE_FIELD ) ] ).length, 1 );
+	assert.equal( minimapFloorQueries( gameAt( FIELD ), [ target( FIELD ) ] ).length, 0 );
+	assert.equal( minimapFloorQueries( gameAt( CAVE_FIELD ), [ target( CAVE_FIELD ) ] ).length, 1 );
 });
