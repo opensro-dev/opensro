@@ -3,8 +3,9 @@
 
 tradequotation.go - the native trade goods quotation arithmetic
 
-ShopEntry_Refresh_4C8810 determines a foreign trader's unit price. The thief
-path at 4C8D65 values a quantity with signed 32-bit multiplication first.
+The server's shop-entry refresh determines a foreign trader's unit
+price. Its thief path values a quantity with signed 32-bit multiplication
+first.
 These functions own arithmetic only: admission, owner identity, stock
 commit, tax and rewards belong to the transaction owner.
 

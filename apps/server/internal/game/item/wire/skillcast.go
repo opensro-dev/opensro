@@ -208,7 +208,8 @@ func (p SkillCastFacingPoint) writeTo(writer *Writer) *Writer {
 
 // MaxSkillActionDamage is the 24-bit damage ceiling of a type-0 action-result
 // row. The client obtains damage from packedResult>>8, and the v1.188
-// Formulae.cpp helpers clamp their result to the same 16,777,215 ceiling.
+// server's damage formulae clamp their result to the same 16,777,215
+// ceiling.
 const MaxSkillActionDamage uint32 = 0x00FFFFFF
 
 // SkillCastTargetImpact is one authoritative stage row in a single-target
@@ -229,15 +230,15 @@ type SkillCastTargetImpact struct {
 	Knockdown SkillCastFacingPoint
 	Knockback SkillCastFacingPoint
 	// Absorb makes this a Force wall's type-7 record; Skipped a bare type 8;
-	// Blocked a bare type 2; Slain a ck kill, the bare 0x86 (5855F0 writes
-	// only the kind byte).
+	// Blocked a bare type 2; Slain a ck kill, the bare 0x86 (the server's
+	// hit-record writer emits only the kind byte).
 	Absorb  *SkillCastAbsorb
 	Skipped bool
 	Blocked bool
 	Slain   bool
 }
 
-// SkillCastAbsorb is the rest of a type-7 record (5855F0): the pool left
+// SkillCastAbsorb is the rest of a type-7 record: the pool left
 // once this impact's absorbed damage is counted, and the authored pool.
 // Broken (tag bit 7) marks the impact that emptied it.
 /*
@@ -266,7 +267,8 @@ type SkillCastAbsorb struct {
 //
 // tag bit 7 is the stop/death transition and its low seven bits are the result
 // kind (zero here). packedResult keeps result flags in its low byte and each
-// full hit damage in its high 24 bits (native 585664). Damage must come from
+// full hit damage in its high 24 bits (the native hit-record field).
+// Damage must come from
 // a committed hit; its magnitude may exceed the victim's remaining HP. The
 // HP owner clamps its debit separately from this feedback value.
 /*
@@ -283,7 +285,8 @@ type SkillCastSingleTargetResult struct {
 	// bit 3 installs a movement controller; stationary casts omit it.
 	facingPoint SkillCastFacingPoint
 	// absorb is the defender's wall group: a second target entry with the
-	// same gid (58EC9F appends it to the result's target list).
+	// same gid (the server's hit-outcome calculation appends it to the
+	// result's target list).
 	absorb []SkillCastTargetImpact
 }
 

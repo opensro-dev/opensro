@@ -20,20 +20,21 @@ type Link struct {
 	// the link lives (Tag Point, Hunting Point; action/huntingpoint.go).
 	Hunt bool
 	// FenceMask, FencePercent and FenceMaxHits are lkdr's lane share
-	// (Physical / Magical Fence, 5A0F01); a zero percent means no fence.
+	// (Physical / Magical Fence, in the server's damage-effect processing);
+	// a zero percent means no fence.
 	// FenceHits counts the hits the link has absorbed (native link +0x3C).
 	FenceMask, FencePercent, FenceMaxHits, FenceHits uint32
-	// QuotaPercent is lkdd's shared percent (Pain Quota, 5A11BF); zero
+	// QuotaPercent is lkdd's shared percent (Pain Quota); zero
 	// means no quota.
 	QuotaPercent uint32
-	// ScreamRange is abnb's range (Scream Mask, 5A14D8): an attacker hitting
+	// ScreamRange is abnb's range (Scream Mask): an attacker hitting
 	// the recipient within it rolls the row's statuses; zero means none.
 	ScreamRange              uint32
 	ExpiresAtMs, StartedAtMs int64
 	ClientCancelable         bool
-	// TargetModifiers are the recipient half's parameter writes (594AC0 in
-	// mode 2: stri/inti). 594F53 skips them for the source half, so a link
-	// never carries source modifiers.
+	// TargetModifiers are the recipient half's parameter writes (the
+	// server's buff-modifier application in mode 2: stri/inti). The source
+	// half skips them, so a link never carries source modifiers.
 	TargetModifiers              Modifiers
 	sourceRetired, targetRetired bool
 }
@@ -43,8 +44,9 @@ func linkKey(division string, token uint32) string {
 }
 
 // ApplyLink admits the ordinary lnks/lkag shape, without the native +374,
-// +49c or +4a0 variants. 59DC80: same target or mixed skill IDs in a nonzero
-// link group => 300c; reaching lnks[2] => 3029. Zero means no count limit.
+// +49c or +4a0 variants. The server's linked-effect validation: same target
+// or mixed skill IDs in a nonzero link group => 300c; reaching lnks[2] =>
+// 3029. Zero means no count limit.
 func (r *Registry) ApplyLink(link Link) uint16 {
 	if r == nil {
 		return 0x3011
@@ -70,16 +72,15 @@ func (r *Registry) ApplyLink(link Link) uint16 {
 	r.byOwner[target] = append(r.byOwner[target], recipient)
 	link.TargetModifiers = Modifiers{}
 	r.links[linkKey(link.DivisionID, link.SourceToken)] = link
-	// 594EAC installs the latest target effect in ParamKeeper+210. It is
-	// a single pointer, not a sum of all incoming links.
+	// The server installs the latest target effect in ParamKeeper+210.
+	// It is a single pointer, not a sum of all incoming links.
 	r.threatOwners[target] = link.SourceToken
-	// 594E90 installs an lkdd effect in ParamKeeper+20C, again a single
+	// An lkdd effect installs in ParamKeeper+20C, again a single
 	// pointer: the latest quota wins.
 	if link.QuotaPercent != 0 {
 		r.quotaOwners[target] = link.SourceToken
 	}
-	// 594EB9 installs an abnb effect in ParamKeeper+200, the same single
-	// pointer.
+	// An abnb effect installs in ParamKeeper+200, the same single pointer.
 	if link.ScreamRange != 0 {
 		r.screamOwners[target] = link.SourceToken
 	}
@@ -136,7 +137,8 @@ func (r *Registry) linkRefusalLocked(link Link) uint16 {
 }
 
 // Range/source-loss updates request the source's retirement. The source's
-// 5829D0 callback, rather than the request, forces its recipient to retire.
+// retirement callback, rather than the request, forces its recipient to
+// retire.
 func (r *Registry) stopLinkLocked(division string, token uint32) {
 	l, ok := r.links[linkKey(division, token)]
 	if !ok {
@@ -186,10 +188,12 @@ func (r *Registry) retireLinkHalfLocked(e Effect) {
 		}
 	} else {
 		l.targetRetired = true
-		// 582A0A clears link+10; the source observes the missing recipient in
-		// its subsequent 58484D update, not in the cancellation request.
+		// The retirement path clears link+10; the source observes the
+		// missing recipient in its subsequent persistent-cast update, not
+		// in the cancellation request.
 		l.TargetGID = 0
-		// 582C19 clears +210 unconditionally; an older effect retiring does
+		// The same path clears +210 unconditionally; an older effect
+		// retiring does
 		// not restore a previous contributor or preserve a newer pointer.
 		delete(r.threatOwners, ownerKey(e.DivisionID, e.CharacterName))
 		for _, owners := range []map[string]uint32{r.quotaOwners, r.screamOwners} {
@@ -267,9 +271,9 @@ ManaLinks
 
 The logically active links whose recipient is target and that hand the
 source a share of target's dealt damage (lkdh), and held, the number of
-links target receives of any kind. CSkillManager_DistributeSharedDamage
-(5A04A0) divides the damage by the size of that list (+0x2E8) before it
-pays each lkdh link its share. Unlike the single +210 threat pointer,
+links target receives of any kind. The native shared-damage split
+divides the damage by the size of that list (+0x2E8) before it pays
+each lkdh link its share. Unlike the single +210 threat pointer,
 every lkdh link counts: each source owns its own share. A stop disables
 the share at once, as for ThreatLink. Inferred: a stopped half has left
 the native list, so it is not counted.
@@ -304,8 +308,8 @@ FenceLinks
 
 The logically active links whose recipient is target and that move a share
 of its damage to their source (lkdr), in the order they were installed:
-594E77 appends each to the recipient's +2C8 list, and 5A0F01 walks it.
-A stop disables the share at once, as for ManaLinks.
+the server appends each to the recipient's +2C8 list, and its damage
+walk traverses it. A stop disables the share at once, as for ManaLinks.
 ==================
 */
 func (r *Registry) FenceLinks(division, target string, nowMs int64) []Link {

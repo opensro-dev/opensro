@@ -125,10 +125,10 @@ func TestAbsoluteRateAndRandomFailure(t *testing.T) {
 ================
 TestRareEquipmentFallbackStepsWithinTier
 
-Native SR_GameServer 0x00726F19 sets the rare-equipment table's class-fallback
-stride (+0x30) to 3 so empty-bucket (0x007241BF) and required-level-exceeded
-(0x007242A4) fallbacks step to the previous degree's same [Star, Moon, Sun]
-tier rather than into an adjacent seal grade.
+The native server sets the rare-equipment table's class-fallback
+stride (+0x30) to 3 so the empty-bucket and required-level-exceeded
+fallbacks step to the previous degree's same [Star, Moon, Sun] tier
+rather than into an adjacent seal grade.
 ================
 */
 func TestRareEquipmentFallbackStepsWithinTier(t *testing.T) {

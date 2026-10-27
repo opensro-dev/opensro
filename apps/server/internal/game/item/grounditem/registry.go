@@ -43,8 +43,8 @@ const GidBase uint32 = domain.GroundItemGIDBase
 const (
 	FixtureLifetime = 180 * time.Second
 	SweepInterval   = 5 * time.Second
-	// OwnerLifetime is native server truth: CGObjItem_UpdateDropOwnership
-	// releases CGObjItem+0x150 after +0x158 reaches 30.0 seconds.
+	// OwnerLifetime is native server truth: the ground item releases its
+	// owner record (+0x150) after its timer (+0x158) reaches 30.0 seconds.
 	OwnerLifetime = 30 * time.Second
 )
 

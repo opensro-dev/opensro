@@ -87,8 +87,7 @@ summonerItemFault
 
 Validates the structural invariants of a summoner item row (type flags,
 unit stack count, and COS record validity). Intra-bag moves and swaps
-(CGObjPC_DispatchInventorySlotMove 523860 -> CGStorage_MoveOrMergeStack
-4B2450) check only these invariants; an active companion's scroll may
+check only these invariants; an active companion's scroll may
 move or swap freely inside the owner's bag.
 ================
 */
@@ -106,10 +105,9 @@ func summonerItemFault(item Item) *Fault {
 ================
 summonerTransferFault
 
-CGObjPC_TransferItemBetweenStorages (523F70 at 523FB8..523FEA) and ground
-drop/grant gates refuse a summoner item whose companion is currently
-summoned (CCOSData+0x38 & 2), so an active actor cannot cross an item
-container boundary.
+The native storage transfer and the ground drop/grant gates refuse a
+summoner item whose companion is currently summoned (companion record
++0x38 & 2), so an active actor cannot cross an item container boundary.
 ================
 */
 func summonerTransferFault(item Item) *Fault {

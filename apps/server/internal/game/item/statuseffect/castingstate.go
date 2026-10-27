@@ -1,6 +1,7 @@
 package statuseffect
 
-// UpdateActive implements SR_GameServer 59DC00. Each nonzero low-three-byte
+// UpdateActive implements the server's casting-state update. Each nonzero
+// low-three-byte
 // index sets or clears one manager bit. Removal is unconditional, including
 // repeated installations of the same index; this is not reference counting.
 // 1D and 23 are stored normally even though the conflict reader ignores them.
@@ -38,7 +39,8 @@ func (r *Registry) changeEffectStatesLocked(key string, effect Effect, remove bo
 }
 
 // UnlinkedStateOperations selects the ordinary no-link-context branches of
-// 584222..5842EA and 5829EB/582BB5..582C8C/58307B..583093. Cleanup can clear
+// the server's persistent-cast lifecycle and contribution retirement.
+// Cleanup can clear
 // a word that installation skipped (mode-2 dttp without ovl2). Link-context
 // owners must select their separate source/area branches instead.
 func UnlinkedStateOperations(d ReplacementDescriptor, mode uint8, durable bool) (install, retire [2]uint32) {

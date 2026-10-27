@@ -28,7 +28,7 @@ const (
 	// Slots is the offer capacity of one side (CIFExchange, 6B2DA0).
 	Slots = 12
 	// AnswerWindowMs is the proposal timeout every transaction shares
-	// (Transaction_Construct 46C6C0 stores 30 s).
+	// (the server's transaction constructor stores 30 s).
 	AnswerWindowMs = 30 * 1000
 )
 

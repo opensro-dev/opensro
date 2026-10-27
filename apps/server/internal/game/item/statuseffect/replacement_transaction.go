@@ -29,7 +29,8 @@ type ReplacementApplication struct {
 	CurrentPacked, CurrentOvl2 uint32
 }
 
-// ApplyReplacement applies 59D870's decision and appends a fresh effect under
+// ApplyReplacement applies the validation's decision and appends a fresh
+// effect under
 // one lock. Retired rows remain until the update drains them. Consequently even
 // replacement needs a free row and a new token: reusing the old token before its
 // ended-instance publication would let that packet destroy the new effect.
@@ -42,8 +43,9 @@ func (r *Registry) ApplyReplacement(a ReplacementApplication) bool {
 	return r.applyReplacement(a, true)
 }
 
-// RequestReplacement is the native validation phase (59D870, called by
-// 58E2F4 for untargeted unlinked skills). It may request old-instance retirement
+// RequestReplacement is the native validation phase (the replacement
+// validation, called by the prerequisite check for untargeted unlinked
+// skills). It may request old-instance retirement
 // but does not allocate, append or install the new effect. Later release or
 // installation failure does not roll this native side effect back.
 /*
@@ -106,8 +108,9 @@ func (r *Registry) applyReplacement(a ReplacementApplication, install bool) bool
 		candidates[i].HasAreaLink = true
 		peerKey := ownerKey(e.DivisionID, old.AreaSourceName)
 		for j, other := range r.byOwner[peerKey] {
-			// 59D9F5/59EF90: exact old skill ID, optional token zero;
-			// a previously requested stop still participates in list order.
+			// The validation and the active-buff lookup: exact old skill
+			// ID, optional token zero; a previously requested stop still
+			// participates in list order.
 			if other.OwnerGID == old.AreaSourceGID && other.SkillID == old.SkillID && (other.State == StatePending || other.State == StateActive) {
 				candidates[i].LinkedPeerFound = true
 				peers[i] = peer{peerKey, j}
@@ -131,8 +134,9 @@ func (r *Registry) applyReplacement(a ReplacementApplication, install bool) bool
 	if install && !r.bindModifiersLocked(&e) {
 		return false
 	}
-	// No failing operation follows this point. 59D870 clears the live flag
-	// directly; nbuf's voluntary-cancellation protection is not consulted.
+	// No failing operation follows this point. The validation clears the
+	// live flag directly; nbuf's voluntary-cancellation protection is not
+	// consulted.
 	if decision.RetireIndex >= 0 {
 		r.requestReplacementStopLocked(key, decision.RetireIndex)
 		if decision.RetireLinkedPeer {

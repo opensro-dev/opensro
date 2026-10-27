@@ -59,7 +59,8 @@ Refusal.Error
 */
 func (e Refusal) Error() string { return fmt.Sprintf("alchemy refusal 0x54%02x", uint8(e)) }
 
-// The reinforcement rules around the authored chances (501C00): a Lucky
+// The reinforcement rules around the authored chances (the server's
+// material-consumption step): a Lucky
 // option adds ReinforceLuckBonus, the result is clamped to
 // ReinforceMinChance..ReinforceMaxChance, and a failure from
 // ReinforceRiskPlus up destroys the item ReinforceDestroyPercent of the time
@@ -78,7 +79,8 @@ const (
 // four-character tag as a big-endian word): MATTR_LUCK adds to the chance,
 // MATTR_ATHANASIA saves an item from destruction, MATTR_SOLID from a curse,
 // MATTR_ASTRAL keeps +4; each spends one charge. MagicTagAlchemyBonus
-// ("luca") is the avatar option 498E96 adds to every attempt.
+// ("luca") is the avatar option the server's magic-option application
+// adds to every attempt.
 const (
 	MagicTagLuck         uint32 = 0x6c75636b
 	MagicTagImmortal     uint32 = 0x61746861
@@ -436,11 +438,11 @@ func (c *Catalog) Reinforce(items []inventory.Item, slots []uint8, bonus int, ro
 				return zero, err
 			}
 			if n < ReinforceDestroyPercent {
-				// CEnchant_Reinforce_ApplyFailure (v1.188 506CE0) destroys only
-				// when CGObj_IsCashItem (483890) is false: !(w&2), TID1 3 and
-				// bit 0, CashItem. A reinforce target is always equipment, so
-				// only the cash flag decides; the port's word leaves bit 0
-				// clear, so the reference's Cash is read instead.
+				// The server's failure application destroys only when its
+				// cash-item test is false: !(w&2), TID1 3 and bit 0, CashItem.
+				// A reinforce target is always equipment, so only the cash
+				// flag decides; the port's word leaves bit 0 clear, so the
+				// reference's Cash is read instead.
 				result.Destroyed = !ref.Cash
 				if result.Destroyed && c.charge(item, MagicTagImmortal) {
 					result.Destroyed = false
@@ -459,8 +461,9 @@ func (c *Catalog) Reinforce(items []inventory.Item, slots []uint8, bonus int, ro
 			}
 		}
 	}
-	// 501C00: consume one of each staged material, and the target only
-	// when the destruction bit survives the protection branch.
+	// The server's consumption step: consume one of each staged material,
+	// and the target only when the destruction bit survives the
+	// protection branch.
 	out[elixir].Quantity--
 	if powder >= 0 {
 		out[powder].Quantity--
