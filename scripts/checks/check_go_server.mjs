@@ -14,8 +14,11 @@ a recorded pass (checkStamps.mjs) reports "up to date" without running, so
 an edit re-runs only the steps it can affect (a test-only edit never
 re-runs govulncheck). SRO_CHECK_FORCE=1 runs every step. The steps that do
 run are independent, so they all run concurrently: hygiene,
-the tests, the race run and govulncheck. Each step's output is printed as
-one block when it finishes; any failure fails the gate. Tests run as one
+the tests, the race run and govulncheck. Each step's output is captured;
+a failure prints one report block per failed step - its exit status, the
+packages its output names as failed, then the full output - and the thrown
+error names the same, so a log that keeps only the error line still says
+which step failed, how it ended and which packages failed. Tests run as one
 `go test ./...` with SRO_GO_TEST_PARALLELISM package workers (default: half
 the cores), so one slow package no longer stalls a whole shard (measured
 2026-09-27: 40s with 8 workers against 61s for eight-package shards at 2).
@@ -311,9 +314,10 @@ wave
 
 Runs the steps concurrently. A step whose inputs match a recorded pass
 (checkStamps.mjs) reports "up to date" instead of running. Each step's
-output is captured and printed as one block when it finishes, so concurrent
-steps never interleave. A step fails on a non-zero exit, or when its
-accept() predicate rejects the output; a pass records its stamp.
+output is captured, so concurrent steps never interleave; a failure prints
+one failureReport block per failed step. A step fails on a non-zero exit,
+or when its accept() predicate rejects the output; a pass records its
+stamp.
 ================
 */
 async function wave( name, steps ) {
@@ -331,9 +335,11 @@ async function wave( name, steps ) {
 	const failed = results.filter( ( result ) => !result.ok );
 	if ( failed.length > 0 ) {
 		for ( const result of failed ) {
-			process.stderr.write( `\n--- ${result.label} FAILED ---\n${result.output}\n` );
+			process.stderr.write( `\n${failureReport( result )}\n` );
 		}
-		throw new Error( `server ${name}: ${failed.map( ( result ) => result.label ).join( ", " )} failed` );
+		throw new Error(
+			`server ${name}: ${failed.map( ( result ) => failureSummary( result ) ).join( ", " )}`
+		);
 	}
 	console.log(
 		`server ${name}: ${
@@ -344,6 +350,77 @@ async function wave( name, steps ) {
 		} ` +
 			`(wave ${formatSeconds( performance.now() - waveStarted )}s)`
 	);
+}
+
+/*
+================
+exitDescription
+
+How a step's command ended, for the failure report: the signal that
+killed it, its exit code, or - exit 0 - the step's own acceptance check
+that rejected output the command was happy with (gofmt's file list, the
+test budget, the release contract).
+================
+*/
+function exitDescription( result ) {
+	if ( result.signal ) return `killed by ${result.signal}`;
+	if ( result.code === null || result.code === undefined ) return "exit status unknown";
+	if ( result.code === 0 ) return "exit 0, rejected by the step's acceptance check";
+	return `exit ${result.code}`;
+}
+
+/*
+================
+failingPackages
+
+The packages a step's output names as failed, in order, duplicates
+removed: the "FAIL <pkg>" lines of a `go test` run, including the
+"[build failed]" ones. Empty for non-test steps, and for the
+killed-command failure: `go test` prints ok as each package completes,
+so a command killed mid-run leaves an all-ok output and no name.
+================
+*/
+function failingPackages( output ) {
+	const seen = new Set();
+	for ( const match of output.matchAll( /^FAIL\s+(\S+)/gm ) ) {
+		seen.add( match[1] );
+	}
+	return [ ...seen ];
+}
+
+/*
+================
+failureSummary
+
+One failed step in one line, for the thrown error: the label, how the
+command ended and its failing packages, so a log that keeps only the
+error still names them.
+================
+*/
+function failureSummary( result ) {
+	const packages = failingPackages( result.output );
+	const named = packages.length > 0 ? `: ${packages.join( ", " )}` : "";
+	return `${result.label} failed (${exitDescription( result )}${named})`;
+}
+
+/*
+================
+failureReport
+
+One failed step's printed block: the summary line, the failing packages
+(or the note that the output names none), then the full captured output.
+================
+*/
+function failureReport( result ) {
+	const lines = [ `--- ${failureSummary( result )} ---` ];
+	if ( failingPackages( result.output ).length === 0 && result.code !== 0 ) {
+		lines.push(
+			"the output names no failing package: the command itself failed " +
+				"(killed, or a toolchain-level error) before reporting one"
+		);
+	}
+	lines.push( result.output );
+	return lines.join( "\n" );
 }
 
 /*
@@ -448,7 +525,7 @@ runStep
  * @param {string} command
  * @param {string[]} args
  * @param {((output: string) => boolean) | undefined} accept
- * @returns {Promise<{ label: string, ok: boolean, output: string, seconds: string }>}
+ * @returns {Promise<{ label: string, ok: boolean, code: number | null, signal: string | null, output: string, seconds: string }>}
  */
 function runStep( label, command, args, accept ) {
 	const stepStarted = performance.now();
@@ -464,9 +541,9 @@ function runStep( label, command, args, accept ) {
 		child.on( "error", ( error ) => {
 			output += String( error );
 		} );
-		child.on( "close", ( code ) => {
+		child.on( "close", ( code, signal ) => {
 			const ok = code === 0 && (accept === undefined || accept( output ));
-			resolve( { label, ok, output, seconds: formatSeconds( performance.now() - stepStarted ) } );
+			resolve( { label, ok, code, signal, output, seconds: formatSeconds( performance.now() - stepStarted ) } );
 		} );
 	} );
 }
