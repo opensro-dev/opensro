@@ -134,9 +134,11 @@ class Cap110MonstersTest(unittest.TestCase):
 		hives = {1: {"dwOverwriteMaxTotalCount": 0, "btKeepMonsterCountType": 0}}
 		spawns = [spawn(1, "MOB_SD_FIELD", 1, 100), spawn(2, "MOB_SD_TOMB", 57, 29631), spawn(3, "MOB_SD_TOMB", 58, 31423)]
 		refs = {"MOB_SD_FIELD": 1, "MOB_SD_TOMB": 2}
-		self.assertEqual([r["NestID"] for r in monsters.project_population(spawns, refs, tactics, hives)["Rows"]], [1])
+		field = monsters.project_population(spawns, refs, tactics, hives)
+		self.assertEqual([(r["NestID"], r["WorldID"]) for r in field["Rows"]], [(1, 1)])
+		self.assertEqual(field["Version"], 2)
 		tomb = monsters.project_population(spawns, refs, tactics, hives, monsters.TOMB_WORLDS, strict=True)
-		self.assertEqual([(r["NestID"], r["RegionID"]) for r in tomb["Rows"]], [(2, 29631), (3, 31423)])
+		self.assertEqual([(r["NestID"], r["RegionID"], r["WorldID"]) for r in tomb["Rows"]], [(2, 29631, 57), (3, 31423, 58)])
 		with self.assertRaises(ValueError):
 			monsters.project_population(spawns, {"MOB_SD_FIELD": 1}, tactics, hives, monsters.TOMB_WORLDS, strict=True)
 		self.assertEqual(len(monsters.project_population(spawns, {"MOB_SD_FIELD": 1}, tactics, hives, monsters.TOMB_WORLDS)["Rows"]), 0)

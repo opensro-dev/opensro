@@ -211,7 +211,7 @@ func TestAbnormalPayloadGradeOrder(t *testing.T) {
 }
 
 // Root halts an in-flight mover at its live pose, and the navigation
-// door refuses new legs while freeze, sleep, root or stun hold (4B0EA0).
+// door refuses new legs while freeze, sleep, root or stun hold.
 /*
 ================
 TestRootHaltsAndBlocksNavigation

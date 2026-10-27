@@ -28,11 +28,12 @@ QuestMonsterSpawn
 
 The action owner supplies residency and its live pose under division authority.
 The monster lands RadiusMin + fraction * RadiusSpan from Position: the
-player for Ivy and Cerberus, a fixed point for Hidden Treasure 5 (8C7910).
+player for Ivy and Cerberus, a fixed point for Hidden Treasure 5.
 FixedPosition says the quest named Position; otherwise the action owner
 fills it with the player's live pose.
-LifetimeMs, when set, is the quest's own removal timer (8C7910 registers
-one of 300 s whose handler, 8BBBE0, sends the monster to life state 3).
+LifetimeMs, when set, is the quest's own removal timer (the Hidden
+Treasure script registers one of 300 s whose handler sends the monster
+to life state 3).
 ================
 */
 type QuestMonsterSpawn struct {
@@ -51,11 +52,11 @@ type QuestMonsterSpawn struct {
 ================
 SpawnQuestMonster
 
-8B9B60 (Ivy guardian, 0 + 20), 8B2AB0 (Cerberus lure, 20 + 80) and 8C7910
-(Hidden Treasure guardian, 20 + 80) draw a float32 angle, then a float32
-radius, before entering the world factory. Its heading is the truncated
-angle word, not a normalized movement heading. The factory's spawn base
-(4C10C0) arms the ordinary timers too: the Ivy guardian
+The retail server's quest scripts (Ivy guardian, 0 + 20; Cerberus lure,
+20 + 80; Hidden Treasure guardian, 20 + 80) draw a float32 angle, then a
+float32 radius, before entering the world factory. Its heading is the
+truncated angle word, not a normalized movement heading. The factory's
+spawn base arms the ordinary timers too: the Ivy guardian
 MOB_QT_02_PUNISHER_CLON leaves after its 300 s.
 ================
 */

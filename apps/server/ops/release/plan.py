@@ -23,6 +23,13 @@ INPUTS = {
 		"apps/client-next", "scripts/build", "scripts/lib", "package.json", "pnpm-lock.yaml",
 		"pnpm-workspace.yaml", ".npmrc",
 		"apps/server/ops/release",
+		# The Alexandria variant's tools (#1745): a variant candidate is
+		# client data too, so a change to any of them supersedes it. The
+		# family is named by pattern, not by listing its files: a new
+		# alexandria_*, cap110_* or import_vsro_* tool is an input the
+		# day it lands (test_plan.py pins the coverage).
+		"scripts/build_alexandria_variant.py", "scripts/vsro_archive_pins.json",
+		"scripts/alexandria_*.py", "scripts/cap110_*.py", "scripts/import_vsro_*.py",
 	],
 	"server": ["apps/server"],
 }

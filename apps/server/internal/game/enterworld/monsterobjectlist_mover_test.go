@@ -55,7 +55,7 @@ func TestMonsterObjectListRowsSnapshotsAuthoritativeLivePose(t *testing.T) {
 		t.Fatalf("rows = %d, want 1", len(rows))
 	}
 	row := rows[0].Payload
-	readU32 := func(values []int, offset int) uint32 {
+	readU32 := func(values []byte, offset int) uint32 {
 		return uint32(values[offset]) |
 			uint32(values[offset+1])<<8 |
 			uint32(values[offset+2])<<16 |

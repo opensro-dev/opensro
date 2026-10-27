@@ -90,7 +90,8 @@ func (s *MonsterState) commitMoverLocked(state *divisionMonsterState, gid uint32
 	state.syncApproachActor(gid, mover)
 	state.behavior.set(gid, 0)
 	if mover.TargetGID() == 0 && mover.Mode() != monster.MoverPending && mover.Mode() != monster.MoverWandering && mover.Mode() != monster.MoverFollowing {
-		// 53FFE0(0): releasing target ownership clears both records.
+		// Releasing target ownership (the retail server's target-change message
+		// with a zero target) clears both records.
 		instance.Opponents = [2]monster.Opponent{}
 	} else if mover.TargetGID() != 0 && instance.Opponents[0].GID == 0 {
 		// Local acquisition can establish a primary without a preceding hit.
@@ -145,7 +146,7 @@ func (s *MonsterState) ArmRetaliation(divisionID string, gid, attackerGID uint32
 	if err := mover.Validate(); err != nil {
 		panic(err)
 	}
-	// 5474B6..5474F0: retain the first two distinct hit identities. Repeated
+	// The retail server retains the first two distinct hit identities. Repeated
 	// hits keep their slot and a third attacker does not evict either record.
 	for index, opponent := range instance.RememberedOpponents() {
 		if opponent == attackerGID {

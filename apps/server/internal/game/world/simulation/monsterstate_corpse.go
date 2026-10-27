@@ -20,7 +20,7 @@ combat, interest and bootstrap must all see the same frozen death pose.
 A retained NavigationPath supplies the authoritative surface; it is sampled
 before discarding movement ownership. Without one the in-flight pose is a
 chord between two terrain heights, below the ground over a rise, so the
-corpse is re-grounded (native CRTNavMeshTerrain_Move samples the surface on
+corpse is re-grounded (the native terrain move samples the surface on
 every step: a monster never dies inside a hill).
 ==================
 */
@@ -35,7 +35,7 @@ func (state *divisionMonsterState) settleCorpseLocked(instance *monster.Instance
 		state.movers.set(gid, mover)
 	}
 	state.releaseApproachActor(gid)
-	// Death retires every slot (4A59F0) without running start/tick effects;
+	// Death retires every slot without running start/tick effects;
 	// the corpse keeps no parameter writes, motion hold or tactics events.
 	instance.Abnormal = nil
 	instance.Motion = monster.MotionHold{}

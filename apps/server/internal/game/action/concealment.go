@@ -374,6 +374,31 @@ func (rt *Runtime) publishEndedEffects(division string, c *enterworld.Character,
 }
 
 /*
+==================
+endEffectsInTickDoor
+
+publishEndedEffects for a tick sweep that holds only the division lock (a
+field's leaver, a retired trap's planter). The teardown writes the saved
+record, so it runs in c's tick-batched door (#1836); publication runs after
+the door closes.
+==================
+*/
+func (rt *Runtime) endEffectsInTickDoor(division string, c *enterworld.Character, ended []statuseffect.Effect, label string, now int64) {
+	if len(ended) == 0 {
+		return
+	}
+	var public, actor []wire.Frame
+	rt.deps.UpdateDeferred(c, label, func() bool {
+		public, actor = rt.finishEndedEffects(division, c, ended, now)
+		return true
+	})
+	rt.publishBodyStatus(division, c.Name, public)
+	if len(actor) != 0 && rt.PushCharacterFrames != nil {
+		rt.PushCharacterFrames(division, c.Name, actor)
+	}
+}
+
+/*
 ================
 finishEndedEffects
 

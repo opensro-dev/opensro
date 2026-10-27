@@ -11,7 +11,8 @@ CIFWorldMap's paint order. Pure layout; the UI owns the window state.
 */
 import type { Pose } from "@/engine/contracts/gameplay";
 import type { UiQuad, UiRect } from "@/engine/contracts/ui";
-import { isDungeonRegion, REGION_SIZE, sectorX, sectorY } from "@/engine/foundation/world/world-space";
+import { featuresAt } from "@/engine/foundation/world/plane";
+import { REGION_SIZE, sectorX, sectorY } from "@/engine/foundation/world/world-space";
 import { minimapRotation } from "./hud-readouts";
 const WORLD_MAP_ROOT = "/assets/images/Media_extracted/interface/worldmap/map/";
 // The overview page is tiles of 128 pixels; tile names count four regions per
@@ -247,7 +248,7 @@ The town page whose region box holds the pose, or 0 for the overview.
 ================
 */
 export function worldMapPageAt( p: Pose, layout: WorldMapLayout = nativeLayout() ): number {
-	if ( isDungeonRegion( p.regionId ) ) return 0;
+	if ( !featuresAt( p.regionId ).worldMap ) return 0;
 	const rx = sectorX( p.regionId ),
 		rz = sectorY( p.regionId );
 	for ( const page of worldMapPages( layout ) ) {
@@ -712,7 +713,7 @@ function worldMapMarkerRect(
 	frame: ReturnType<typeof worldMapFrame>,
 	point: { readonly regionId: number; readonly x: number; readonly z: number; }
 ): UiRect | null {
-	if ( isDungeonRegion( point.regionId ) ) return null;
+	if ( !featuresAt( point.regionId ).worldMap ) return null;
 	const { left, right, top, bottom, width, height, ox, oy } = frame;
 	const x = ((sectorX( point.regionId ) * MAP_REGION_UNITS + point.x / 10 - left) / (right - left)) * width;
 	const y = ((top - (sectorY( point.regionId ) * MAP_REGION_UNITS + point.z / 10)) / (top - bottom)) * height;

@@ -36,8 +36,8 @@ func TestSafeZoneRegionReadsTheBattlefieldTable(t *testing.T) {
 ================
 TestMonsterInTownVanishes
 
-4C1270: a monster whose region is a town is set to life state 3 and
-leaves; its nest schedules a respawn. Outside a town it stays.
+In the retail server, a monster whose region is a town is set to life
+state 3 and leaves; its nest schedules a respawn. Outside a town it stays.
 ================
 */
 func TestMonsterInTownVanishes(t *testing.T) {

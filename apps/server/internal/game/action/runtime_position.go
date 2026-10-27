@@ -48,6 +48,35 @@ func (rt *Runtime) characterSnapshot(
 
 /*
 ==================
+characterLifeState
+
+The life facts a refused monster strike revalidates - alive, deletion
+pending, native body status - read as values under the authority read
+door. The strike lane used to detach the whole record for these three
+fields (#1820 part C). Aliveness weighs the same inputs on the live
+record as on the copy: the copy's only normalizations (stat points,
+mission mask) feed neither vitals derivation nor these fields.
+==================
+*/
+func (rt *Runtime) characterLifeState(
+	divisionID string,
+	character *enterworld.Character,
+) (alive, deletePending bool, nativeBodyStatus uint8) {
+	if character == nil {
+		return false, false, 0
+	}
+
+	rt.deps.Read(divisionID, func() {
+		alive = enterworld.CharacterAlive(character)
+		deletePending = character.DeletePending
+		nativeBodyStatus = character.NativeBodyStatus
+	})
+
+	return alive, deletePending, nativeBodyStatus
+}
+
+/*
+==================
 writeBackWorld
 
 writeBackWorld persists the accepted ground pose onto the character record.

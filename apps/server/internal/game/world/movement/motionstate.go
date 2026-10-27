@@ -96,8 +96,14 @@ func (rt *Runtime) HandleMotionState(divisionID string, character *enterworld.Ch
 	unlock := rt.lockCharacter(divisionID, character.Name)
 	defer unlock()
 
-	characterSnapshot := rt.characterSnapshot(divisionID, character)
-	if characterSnapshot == nil || characterSnapshot.DeletePending {
+	// The admission facts read as values under the authority read door;
+	// no detached record is built for them (#1820 part C).
+	var deletePending, transformed bool
+	rt.deps.Read(divisionID, func() {
+		deletePending = character.DeletePending
+		transformed = character.TransformMode == 1
+	})
+	if deletePending {
 		return refusedMotion("deletePending")
 	}
 
@@ -114,7 +120,7 @@ func (rt *Runtime) HandleMotionState(divisionID string, character *enterworld.Ch
 
 	// The server's motion-change admission: a masked player (msch 1)
 	// cannot sit, stand or change gait.
-	if characterSnapshot.TransformMode == 1 {
+	if transformed {
 		return refusedMotion("transformed")
 	}
 
@@ -125,14 +131,24 @@ func (rt *Runtime) HandleMotionState(divisionID string, character *enterworld.Ch
 	// the request is DROPPED - no ack, no state push, nothing on the wire.
 	// This is the whole handler, not just the sit arm: the later retail
 	// build wraps its entire body in "current motion state is not the
-	// in-progress one" (v1.188 LEAD, seq: MotionStateChangeReq folder), so
+	// in-progress one" (later retail server evidence: its motion-state
+	// request handler), so
 	// a gait request lands in the same lockout as a second posture request.
 	// Reading before the Mutate keeps a dropped request off the persistence
 	// lane entirely; the character operation lock makes the peek-then-update
 	// pair atomic with the move lane.
-	if snapshot := rt.Worlds.Snapshot(worldKey, func() simulation.WorldState {
-		return simulation.SeedWorldState(characterSnapshot)
-	}); nowMs < snapshot.PostureTransitionUntilMs {
+	// The peek runs under the read door so a first-touch seed reads the
+	// live record's world fields synchronized, the values the detached
+	// record used to carry (WorldStore nests under the store door).
+	var postureInFlight bool
+	rt.deps.Read(divisionID, func() {
+		if snapshot := rt.Worlds.Snapshot(worldKey, func() simulation.WorldState {
+			return simulation.SeedWorldState(character)
+		}); nowMs < snapshot.PostureTransitionUntilMs {
+			postureInFlight = true
+		}
+	})
+	if postureInFlight {
 		return refusedMotion("postureTransitionInFlight")
 	}
 
@@ -234,7 +250,8 @@ the move-goal flags +0x84/+0x80 is the integrator's own arrival/blocked
 path (binary+dump two-source, clipreplicate-wave seq431/483/514) - so a
 server that keeps interpolating leaves a seated character sliding to the
 goal, which is the reported defect. The later retail build performed this
-stop server-side (v1.188 LEAD, survived independent re-derive, seq686/698);
+stop server-side (later retail server evidence, survived independent
+re-derive, seq686/698);
 we CANNOT prove v1.150's retail server sent such a stop - only that our
 client can RECEIVE a server position correction (0xB2F5 -> mover goal clear,
 binary-certified) and cannot self-cancel. So this is server position

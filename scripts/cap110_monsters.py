@@ -176,7 +176,7 @@ def project_population(spawns, refs, tactics, hives, worlds=(FIELD_WORLD,), stri
 		champion_id = policy["dwChampionTacticsID"]
 		champion = tactics_controls(tactics[champion_id]) if champion_id else None
 		rows.append({
-			"Codename": code, "NestID": spawn["nest_id"], "RegionID": spawn["region_id_unsigned"],
+			"Codename": code, "NestID": spawn["nest_id"], "WorldID": spawn["game_world_id"], "RegionID": spawn["region_id_unsigned"],
 			"X": spawn["x"], "Y": spawn["y"], "Z": spawn["z"], "Radius": spawn["radius"],
 			"GenerateRadius": spawn["generate_radius"], "MaxCount": spawn["max_total_count"],
 			"RespawnDelayMinSec": spawn["delay_min"], "RespawnDelayMaxSec": spawn["delay_max"],
@@ -184,7 +184,9 @@ def project_population(spawns, refs, tactics, hives, worlds=(FIELD_WORLD,), stri
 			"ChampionGenPercentage": spawn["champion_percent"], "Controls": tactics_controls(policy),
 			"Champion": champion,
 		})
-	return {"Version": 1, "Rows": rows}
+	# Format 2: every row carries its source world, so the server's tomb
+	# population joins its own per-tomb world instead of the default one.
+	return {"Version": 2, "Rows": rows}
 
 
 # ================

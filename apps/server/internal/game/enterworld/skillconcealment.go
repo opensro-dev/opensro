@@ -4,7 +4,7 @@
 skillconcealment.go - hiding and detection programs
 
 Four shipped families, every one ActionHandler 3 and released by
-CastLifecycle_ProcessPersistent (5830B0):
+the server's persistent cast lifecycle:
 
 	hide skc [getv reqi]           the caster hides (Rogue stealth,
 	                               Wizard invisibility A)
@@ -43,12 +43,12 @@ const (
 ==================
 SkillDamageCancel
 
-skc words 0 and 2. CSkillManager_ProcessDamageEffects (5A1612) retires an
+skc words 0 and 2. The server's damage-effect processing retires an
 effect when the landing attack's att flags (+0x230 word 0) share a bit
 with Mask. Word 1, the event mask, is SkillReplacement.EventCancelMask.
 
 KeepPercent is word 2, the chance a masked hit leaves the effect running:
-5A160A..5A1691 adds the caster's getv MUCR and getv DSER modifiers to it
+the server adds the caster's getv MUCR and getv DSER modifiers to it
 and retires with RollProbability(100 - keep). The Bard's skc(15,0,80) keeps
 its aura on 80 % of the hits; the shipped hides author 0 and end on every
 masked hit.
@@ -119,7 +119,7 @@ type SkillRecipientArea struct {
 	Select     uint32
 }
 
-// The select bits TargetSelection_AroundSource (58A020) reads.
+// The select bits the server's around-source selection reads.
 const (
 	SelectCaster    uint32 = 0x01
 	SelectCharacter uint32 = 0x02
@@ -219,7 +219,7 @@ func parseSkillConcealment(fields []string, row *SkillRow) {
 		case kind == 1 && (c.Hide || c.Reveal.Present):
 			c.Area = SkillRecipientArea{Present: true, Radius: radius, MaxTargets: most, Select: sel}
 		case kind == 2 && c.Sight.Present:
-			// 5840FB: a dtt row opens no area context; efr only lends
+			// A dtt row opens no area context; efr only lends
 			// the client its range.
 		default:
 			return

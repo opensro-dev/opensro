@@ -443,6 +443,11 @@ func (rt *Runtime) drainStoppedCharacterEffects() []simulation.DivisionFrames {
 	if rt == nil || rt.effects == nil {
 		return nil
 	}
+	// Nothing queued: skip the maintenance barrier (#1820). An owner queued
+	// after this check drains next tick, as one queued after a drain does.
+	if !rt.effects.HasStopRequested() {
+		return nil
+	}
 	// Drain, conditional restoration and ordered enqueue are one action-owner
 	// transaction across divisions. No replacement can overtake retirement.
 	rt.maintenance.Lock()

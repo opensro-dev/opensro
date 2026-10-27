@@ -1,10 +1,13 @@
 /*
 ===========================================================================
 
-main.go - explicit offline authority upgrade (schemas 13 through 27 to current)
+main.go - explicit offline authority upgrade (older schemas to current)
 
-Defaults to validation. Stop the game server before using -commit; the store
-lock enforces this requirement. The upgrade preserves all existing records.
+Converts schemas store.UpgradeFromVersion through the version before
+store.CurrentVersion to the current one; the help text derives the range
+from those constants so it cannot go stale. Defaults to validation. Stop
+the game server before using -commit; the store lock enforces this
+requirement. The upgrade preserves all existing records.
 
 ===========================================================================
 */
@@ -37,7 +40,8 @@ run
 ================
 */
 func run() error {
-	dir := flag.String("authority-dir", "", "existing authority directory (supported schemas 13 through 27)")
+	dir := flag.String("authority-dir", "", fmt.Sprintf("existing authority directory (supported schemas %d through %d)",
+		store.UpgradeFromVersion, store.CurrentVersion-1))
 	commit := flag.Bool("commit", false, "retain a backup and commit the current authority schema")
 	flag.Parse()
 	if *dir == "" || flag.NArg() != 0 {

@@ -12,6 +12,10 @@ of those inputs. On the next run a file whose every input still hashes the
 same is not run again: nothing it can observe has changed. A failing file is
 never recorded, and a file that starts a non-Node program is never cached.
 
+tools/lib/test-process-watchdog.mjs is preloaded too: a test process dies
+when its resident memory passes TEST_RSS_MB or when this runner is gone, so
+neither a runaway test nor an orphan can take the machine.
+
 Hashes are memoised by size and modification time, so validating an
 unchanged tree is a stat sweep. The cache lives in .state/client-test-cache
 and is keyed by the Node version, platform and test environment; any change
@@ -34,6 +38,7 @@ const repoRoot = path.resolve( clientRoot, "../.." );
 const cacheDir = process.env.SRO_TEST_CACHE_DIR ?? path.join( repoRoot, ".state", "client-test-cache" );
 const indexPath = path.join( cacheDir, "index.json" );
 const recorderUrl = pathToFileURL( path.join( clientRoot, "tools/lib/test-input-recorder.mjs" ) ).href;
+const watchdogUrl = pathToFileURL( path.join( clientRoot, "tools/lib/test-process-watchdog.mjs" ) ).href;
 // The environment a test can see beyond its files.
 const ENV_KEYS = [ "TZ", "LANG", "NODE_ENV" ];
 // Parallel stats: more pool threads than the default four, and enough
@@ -48,6 +53,13 @@ process.env.UV_THREADPOOL_SIZE ??= String( Math.min( 64, Math.max( 4, os.availab
 // where no timer or watchdog can run. No suite file needs more than about a
 // gigabyte. SRO_TEST_HEAP_MB overrides it for the runner's own test.
 const TEST_HEAP_MB = Number( process.env.SRO_TEST_HEAP_MB ) || 4096;
+// The resident memory ceiling of every test process, in MB, enforced by
+// tools/lib/test-process-watchdog.mjs: the heap ceiling above does not
+// bound typed arrays or Buffers. The heap ceiling plus RSS_HEADROOM_MB
+// for buffers, code and the runtime. SRO_TEST_RSS_MB overrides it for the
+// watchdog's own test.
+const RSS_HEADROOM_MB = 2048;
+const TEST_RSS_MB = Number( process.env.SRO_TEST_RSS_MB ) || TEST_HEAP_MB + RSS_HEADROOM_MB;
 
 /*
 ================
@@ -273,9 +285,13 @@ async function main() {
 		process.env.SRO_TEST_INPUT_LOG = logDir;
 		// A runner started inside a recorded test owns its own tests.
 		delete process.env.SRO_TEST_INPUT_OWNER;
+		// Each test process watches its memory and this runner (the watchdog).
+		// A nested runner names itself, so its own tests watch it.
+		process.env.SRO_TEST_RUNNER_PID = String( process.pid );
+		process.env.SRO_TEST_RSS_MB = String( TEST_RSS_MB );
 		process.env.NODE_OPTIONS = `${
 			process.env.NODE_OPTIONS ?? ""
-		} --max-old-space-size=${TEST_HEAP_MB} --import ${recorderUrl}`.trim();
+		} --max-old-space-size=${TEST_HEAP_MB} --import ${recorderUrl} --import ${watchdogUrl}`.trim();
 		try {
 			const stream = run( { files: pending, concurrency: os.availableParallelism(), cwd: clientRoot } );
 			// The stream hands listeners the event's data itself.

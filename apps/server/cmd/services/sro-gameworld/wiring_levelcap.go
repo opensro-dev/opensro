@@ -5,8 +5,9 @@ wiring_levelcap.go - the optional level cap on the progression runtime
 
 wiring_gameplay.go is at the source-size limit, so the SRO_LEVEL_CAP lookup
 lives here, with the beta growth bands that go with it. The native cap is
-progression.LevelCap; the 110 cap is port-only, not native (deployed on,
-owner 2026-10-24). A malformed SRO_BETA_GROWTH_BANDS refuses the boot.
+progression.LevelCap; the 110 cap is port-only, not native and off by
+default (owner 2026-10-27: the cap-110 expansion names it when it ships,
+#1751). A malformed SRO_BETA_GROWTH_BANDS refuses the boot.
 
 ===========================================================================
 */

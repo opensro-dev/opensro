@@ -102,8 +102,13 @@ func (rt *Runtime) HandleActionEmote(divisionID string, character *enterworld.Ch
 	unlock := rt.lockCharacter(divisionID, character.Name)
 	defer unlock()
 
-	snapshot := rt.characterSnapshot(divisionID, character)
-	if snapshot == nil || snapshot.DeletePending {
+	// The delete gate reads as a value under the authority read door; no
+	// detached record is built for it (#1820 part C).
+	var deletePending bool
+	rt.deps.Read(divisionID, func() {
+		deletePending = character.DeletePending
+	})
+	if deletePending {
 		return refusedAction("deletePending")
 	}
 	action, err := wire.DecodeActionEmoteRequest(payload)

@@ -55,7 +55,7 @@ The staging job retains those exact bytes. After approval the receiver:
    `sro-release-contract`), the receiver stops the fleet and runs the
    release's own `sro-authority-upgrade` on every enabled shard, as the
    database owner: it validates, keeps a backup beside the database
-   (`state.before-mall-*.db`) and commits. Then it asks Nomad to deploy and
+   (`state.before-upgrade-*.db`) and commits. Then it asks Nomad to deploy and
    verifies fleet health.
 5. Records the healthy release and revokes the temporary token. A cleanup
    failure after successful health checks records a warning without claiming
@@ -354,9 +354,42 @@ and install it as root-only `/etc/opensro-release/config.json`:
   "stack_sizes": "",
   "public_webhook": "/etc/opensro-release/discord-announcements-webhook",
   "staff_webhook": "/etc/opensro-backup/discord-webhook",
-  "maintenance_accounts": ["release-probe"]
+  "maintenance_accounts": ["release-probe"],
+  "webtransport_public": "on",
+  "transport_wt_addr": "[::]:18443",
+  "transport_cert_file": "/etc/opensro-release/tls/fullchain.pem",
+  "transport_key_file": "/etc/opensro-release/tls/privkey.pem"
 }
 ```
+
+The four `webtransport_public` / `transport_*` keys are the public
+WebTransport posture (#1447, `deploy.py` `webtransport_deployer`). They are
+all or nothing: `webtransport_public` is `on`, `off` or absent; `on` needs
+all three of `transport_wt_addr` (the public UDP bind), `transport_cert_file`
+and `transport_key_file` (the TLS pair), and any of those three without
+`on` is a half-posture that refuses the release before the deployer runs.
+A config without the keys deploys as before. The switch reaches `sro-nomad`
+as `SRO_WEBTRANSPORT_PUBLIC`, which the deployer derives from this file
+alone: `shard-settings.json` never names it.
+
+The GameWorld runs as the unprivileged `sro` user and cannot bind UDP 443,
+so `transport_wt_addr` binds `[::]` (dual-stack) on a port of 1024 or
+above and the host redirects public UDP 443, IPv4 and IPv6, to it. The
+redirect delivers to the interface address, so loopback, one address or
+the IPv4-only `0.0.0.0` would drop players silently onto the WebSocket
+fallback; `deploy.py` refuses them. `deploy.py` passes `-transport-wt-public-port 443`, so `sro-nomad`
+still checks the advertised port against what clients dial. The host half
+is one owner-approved step, run as root from the installed controls before
+the first public deploy (`release_controls.py` never runs `install.main`):
+
+```
+python3 quic_host.py apply --port 18443   # sysctls, nftables redirect, boot unit, ufw
+python3 quic_host.py check --port 18443   # exit 0 and "ready" when every piece is live
+python3 quic_host.py remove --port 18443  # undo the redirect, unit and firewall opening
+```
+
+Every deploy (and the staging rehearsal) with `webtransport_public` on runs
+the same check first and refuses, naming the gap, before any token is issued.
 
 `stack_sizes` is a port-only override; missing or empty keeps native item caps.
 For example, `"potion=2000,elixir=50"` raises those groups without lowering any
@@ -370,13 +403,19 @@ or splitting retained oversized stacks without adding to them above the new cap.
 This shard's beta economy (growth, drop, gold and rare rates, silk, the
 starter kit and the other `SRO_BETA_*` rules) is named in
 [`shard-settings.json`](shard-settings.json), with the shard's level cap
-(`SRO_LEVEL_CAP=90`, the native cap; the table's default of 110 is for
-expansion builds), a control file installed and
-hashed with the others. The public job file and settings table default to
+(`SRO_LEVEL_CAP=90`, the native cap and the table's default; the file pins
+it anyway, and the cap-110 expansion names 110 when it ships, #1751), a
+control file installed and hashed with the others. The public job file and settings table default to
 native (#606), so each server release passes these values to `sro-nomad` as
 its environment; a missing or malformed file refuses the release before any
 token, backup or stop. Change the shard's beta values there, through a
 reviewed pull request and a controls install, never on the host.
+
+Order matters for the first release from a commit that adds or changes
+`shard-settings.json`: run `release.py controls --game <freeze> --apply`
+before `release.py stage server`. Staging rehearses the release with the
+host's installed `deploy.py` and its installed `shard-settings.json`, so a
+server staged ahead of the controls install rehearses the old settings.
 
 The in-game bug reporter (`/bug`) is on when root-only
 `/etc/opensro-release/bug-report-webhook` holds one line, a Discord webhook URL

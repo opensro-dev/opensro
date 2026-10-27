@@ -187,6 +187,10 @@ func (rt *Runtime) forgetCriticalCharacter(division, name string) {
 /*
 ================
 retireMonsterCriticals
+
+Runs every tick over every monster that has rolled and still lives (#1820),
+so it reads only HP: a full Get snapshot copied the catalogue rows per
+actor and made the sweep 12.5% of server CPU while retiring almost nothing.
 ================
 */
 func (rt *Runtime) retireMonsterCriticals() {
@@ -200,7 +204,7 @@ func (rt *Runtime) retireMonsterCriticals() {
 			delete(rt.criticals.actors, key)
 			continue
 		}
-		if instance, ok := rt.Monsters.Get(key.division, key.monster); !ok || instance.CurrentHP == 0 {
+		if hp, ok := rt.Monsters.CurrentHP(key.division, key.monster); !ok || hp == 0 {
 			delete(rt.criticals.actors, key)
 		}
 	}

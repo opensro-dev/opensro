@@ -170,6 +170,29 @@ class SkillMergeTests(unittest.TestCase):
 			skills.merge_skills(native, later)
 
 	# ================
+	# test_zero_sp_helper_is_published_unlearnable
+	#
+	# The later tier carries a Cleric resurrection buff helper at SP
+	# cost 0: an execution helper the resurrection cast applies, never
+	# a rank a player learns. The zero cost is the author's off-board
+	# mark and this import keeps it - the server refuses to teach a
+	# zero-SP row - so the helper is published with its cost untouched
+	# rather than given an invented one that would put it on the board.
+	# ================
+	def test_zero_sp_helper_is_published_unlearnable(self):
+		native = [make_skill(id_="10", code="SKILL_EU_CLERIC_REBIRTHA_A_01", group="790", mastery="518", mastery_level="90")]
+		later = [
+			make_skill(id_="11", code="SKILL_EU_CLERIC_REBIRTHA_A_01", group="791", mastery="518", mastery_level="90"),
+			make_skill(id_="20", code="SKILL_EU_CLERIC_REBIRTHA_A_02", group="791", level="2", mastery="518", mastery_level="95", sp="120"),
+			make_skill(id_="30", code="SKILL_EU_CLERIC_REBIRTHA_SPECIAL_A_BUFF_01", group="791", mastery="518", mastery_level="95", sp="0"),
+		]
+		added, report = skills.merge_skills(native, later)
+		by_code = {row[skills.CODENAME]: row for row in added}
+		self.assertEqual(report["added"], 2)
+		self.assertEqual(by_code["SKILL_EU_CLERIC_REBIRTHA_SPECIAL_A_BUFF_01"][skills.SP], "0")
+		self.assertEqual(by_code["SKILL_EU_CLERIC_REBIRTHA_A_02"][skills.SP], "120")
+
+	# ================
 	# test_row_width_and_identity_are_validated
 	# ================
 	def test_row_width_and_identity_are_validated(self):

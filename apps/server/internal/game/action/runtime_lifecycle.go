@@ -71,10 +71,19 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		// per step, so a request or bootstrap waits at most one step, and
 		// between steps they interleave exactly as before. The deferred
 		// release also covers a step panic the ticker recovers.
+		//
+		// The WAIT for the gate is timed as its own step
+		// (tickPublicationGate), outside the step's timer: a step stuck
+		// behind an entry bootstrap or a request op used to read as slow
+		// itself, naming the waiter instead of the holder (#1820 E). The
+		// holder's side of the same stall is the publication_holds report.
 		step := func(name string, run func()) {
+			var unlock func()
+			timed("tickPublicationGate", func() {
+				unlock = rt.lockTickPublication()
+			})
+			defer unlock()
 			timed(name, func() {
-				unlock := rt.lockTickPublication()
-				defer unlock()
 				run()
 				out = append(out[:sealed], rt.sealTickPrivate(out[sealed:])...)
 				sealed = len(out)
@@ -238,7 +247,7 @@ slow consumer can close and reenter gameplay cleanup safely.
 ================
 */
 func (rt *Runtime) publishPendingPickup(pending grounditem.Pending, now time.Time) []simulation.DivisionFrames {
-	unlockPublication := rt.LockPublication(pending.DivisionID)
+	unlockPublication := rt.LockPublication(pending.DivisionID, "pendingPickup")
 	defer unlockPublication()
 	var publishActor func([]wire.Frame)
 	var publishRecipients []func([]wire.Frame)

@@ -16,6 +16,9 @@ from pathlib import Path
 import cap110_skills as skills
 import sro_pk2
 
+# One of three switches that must agree (#1746): SRO_CAP110_SKILLS
+# publishes the client tier, this snapshot adds the 101-110 database
+# tier, and the server's SRO_LEVEL_CAP admits the levels.
 DATABASE_ENV = "SRO_CAP110_SKILL_DATABASE"
 DATABASE_COLUMNS = (
 	"Service ID GroupID Basic_Code Basic_Name Basic_Group Basic_Original Basic_Level Basic_Activity "

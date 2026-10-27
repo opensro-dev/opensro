@@ -76,9 +76,10 @@ type Runtime struct {
 	// TownEntryBlocked is the thief's stolen-goods rule (#721): a thief in
 	// job mode with a summoned transport may not cross from a battlefield
 	// region into a protected one (the server's job-region transition rule
-	// for transports). It gets the region the move leaves and the one it reaches,
-	// checked at the same boundaries as CanEnterRegion; a refusal carries
-	// the native 0x3058 notice. Nil allows every entry.
+	// for transports). It gets one region change, and movement asks it for
+	// every change a walk makes (thiefCargoCrossingBlocked): a refused
+	// destination move carries the native 0x3058 notice, a direction walk
+	// stops at the border. Nil allows every entry.
 	TownEntryBlocked func(character *enterworld.Character, fromRegion, toRegion uint16) bool
 	// ClearPendingPickup, when set, clears the character's pickup-approach
 	// latch before a ground move applies (the reference clears
@@ -316,6 +317,33 @@ func thiefCargoTownRefusal() MoveOutcome {
 
 /*
 ==================
+thiefCargoCrossingBlocked
+
+Whether the walk from->to makes a region change TownEntryBlocked refuses.
+The reference server tests the transport's region on every movement step
+(its per-step movement asks the transport's job-region check), so a walk
+from a battlefield through a protected sector and back out is refused at
+its first protected entry, not only judged by its two ends (#721).
+==================
+*/
+func (rt *Runtime) thiefCargoCrossingBlocked(character *enterworld.Character, from, to simulation.Spawn) bool {
+	if rt.TownEntryBlocked == nil {
+		return false
+	}
+	regions := worldgeom.RegionsAlong(
+		worldgeom.RegionXZ{RegionID: from.RegionID, X: from.X, Z: from.Z},
+		worldgeom.RegionXZ{RegionID: to.RegionID, X: to.X, Z: to.Z},
+	)
+	for i := 1; i < len(regions); i++ {
+		if rt.TownEntryBlocked(character, regions[i-1], regions[i]) {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+==================
 HandleMove
 
 HandleMove ports moveMissionCharacter over the native 0x7738 body:
@@ -492,7 +520,7 @@ func (rt *Runtime) handleMoveLocked(divisionID string, character *enterworld.Cha
 				Reason:          "areaAccessDenied",
 			})
 		}
-		if rt.TownEntryBlocked != nil && rt.TownEntryBlocked(character, live.RegionID, goal.RegionID) {
+		if rt.thiefCargoCrossingBlocked(character, live, goal) {
 			return thiefCargoTownRefusal()
 		}
 		committed, committedWalk, refusal := rt.AdmitGroundWalk(character.Name, live, state.LiveOwnerAt(nowMs), goal)
@@ -510,7 +538,7 @@ func (rt *Runtime) handleMoveLocked(divisionID string, character *enterworld.Cha
 				Reason:          "areaAccessDenied",
 			})
 		}
-		if rt.TownEntryBlocked != nil && rt.TownEntryBlocked(character, live.RegionID, committed.RegionID) {
+		if rt.thiefCargoCrossingBlocked(character, live, committed) {
 			return thiefCargoTownRefusal()
 		}
 		request.RegionID = committed.RegionID
@@ -545,13 +573,14 @@ func (rt *Runtime) handleMoveLocked(divisionID string, character *enterworld.Cha
 ==================
 moveAdmission
 
-What admitMove captured in one authority read: the character snapshot and
-the world whose LifeRevision fences the commit.
+What admitMove captured in one authority read: the world whose
+LifeRevision fences the commit. The character facts the gates weigh are
+read as values inside the same read (admitMove), so no detached record
+is built for them (#1820 part C).
 ==================
 */
 type moveAdmission struct {
 	worldKey string
-	snapshot *enterworld.Character
 	world    simulation.WorldState
 }
 
@@ -568,23 +597,26 @@ the action/death lane. The caller holds the character operation lock.
 */
 func (rt *Runtime) admitMove(divisionID string, character *enterworld.Character, cosGID uint32) (moveAdmission, *simulation.MoveError) {
 	admission := moveAdmission{worldKey: simulation.WorldKey(divisionID, character.Name)}
+	var riding, deletePending, teleportCasting, alive bool
 	rt.deps.Read(divisionID, func() {
-		admission.snapshot = character.Snapshot()
+		if cos := character.ActiveCOS; cos != nil && cos.GID == cosGID && cos.Mounted && cos.Summoned && cos.CurrentHP != 0 {
+			riding = true
+		}
+		deletePending = character.DeletePending
+		teleportCasting = character.NativeTeleportMode == 1
+		alive = enterworld.CharacterAlive(character)
 		admission.world = rt.Worlds.Snapshot(admission.worldKey, func() simulation.WorldState { return simulation.SeedWorldState(character) })
 	})
-	snapshot := admission.snapshot
-	riding := snapshot != nil && snapshot.ActiveCOS != nil && snapshot.ActiveCOS.GID == cosGID &&
-		snapshot.ActiveCOS.Mounted && snapshot.ActiveCOS.Summoned && snapshot.ActiveCOS.CurrentHP != 0
 	if cosGID != 0 && !riding {
 		return admission, &simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "invalidCosOwner"}
 	}
-	if snapshot == nil || snapshot.DeletePending {
+	if deletePending {
 		return admission, &simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "deletePending"}
 	}
-	if snapshot.NativeTeleportMode == 1 {
+	if teleportCasting {
 		return admission, &simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "teleportCasting"}
 	}
-	if !enterworld.CharacterAlive(snapshot) {
+	if !alive {
 		// Native never serializes 0x7738 while motion state 1 (death) is set.
 		// Mirror the same rule at authority so an older/stale client cannot
 		// move a persisted corpse before its LIFE-dead replay arrives.
@@ -827,26 +859,6 @@ func (rt *Runtime) walkOwners(from simulation.Spawn, fromOwner simulation.NavOwn
 		to.Y, walk.Rest = y, owner
 	}
 	return to, walk
-}
-
-/*
-==================
-characterSnapshot
-
-characterSnapshot copies mutable character fields while the authority read
-door is held. ID and Name are immutable identity; every other field used by
-movement must come from this detached view or an Update closure.
-==================
-*/
-func (rt *Runtime) characterSnapshot(divisionID string, character *enterworld.Character) *enterworld.Character {
-	if character == nil {
-		return nil
-	}
-	var snapshot *enterworld.Character
-	rt.deps.Read(divisionID, func() {
-		snapshot = character.Snapshot()
-	})
-	return snapshot
 }
 
 /*

@@ -7,15 +7,17 @@ Drives tools/run-tests.mjs on a two-file fixture suite under temp/ (the
 recorder ignores the OS temporary directory, so the fixture must live in the
 checkout): a pass is reused, an edit to a module one test imports reruns
 exactly that test, a failure is never reused, and a test process cannot
-grow past the runner's heap ceiling.
+grow past the runner's heap ceiling or its resident memory ceiling, nor
+outlive its runner.
 
 ===========================================================================
 */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { root } from "../../tools/project.mjs";
 
 const runner = path.join( root, "tools/run-tests.mjs" );
@@ -115,6 +117,71 @@ test("a test process stops at the runner's heap ceiling instead of growing on", 
 		);
 	} finally {
 		fs.rmSync( suite, { recursive: true, force: true } );
+	}
+});
+
+test("a test process is killed at the resident memory ceiling, typed arrays included", () => {
+	const suite = path.join( root, "temp", `test-rss-fixture-${process.pid}` );
+	fs.mkdirSync( suite, { recursive: true } );
+	try {
+		// 64 typed arrays of 8 MB, outside the JS heap ceiling's reach, built
+		// slowly enough for the watchdog to look. About 512 MB at most, so it
+		// stays bounded (and passes) if the watchdog were ever removed.
+		fs.writeFileSync(
+			path.join( suite, "grows.test.mjs" ),
+			`import { test } from "node:test";
+import assert from "node:assert/strict";
+test( "grows", () => {
+	const keep = [];
+	for ( let i = 0; i < 64; i++ ) {
+		keep.push( new Float32Array( 2 << 20 ).fill( i ) );
+		const until = Date.now() + 25;
+		while ( Date.now() < until );
+	}
+	assert.equal( keep.length, 64 );
+} );
+`
+		);
+		assert.deepEqual(
+			runSuite( suite, { SRO_TEST_RSS_MB: "256" } ),
+			{ status: 1, reused: 0, ran: 1, failed: 1 },
+			"a test past the resident memory ceiling is killed instead of allocating on"
+		);
+	} finally {
+		fs.rmSync( suite, { recursive: true, force: true } );
+	}
+});
+
+test("a test process whose runner is gone exits", () => {
+	const watchdog = path.join( root, "tools/lib/test-process-watchdog.mjs" );
+	// A stand-in runner, killed below. The orphan spins in a synchronous loop
+	// for at most ORPHAN_LIMIT_MS, so it ends on its own if the watchdog
+	// were ever removed.
+	const ORPHAN_LIMIT_MS = 20000;
+	const runnerStandIn = spawn( process.execPath, [ "-e", "setTimeout( () => {}, 60000 );" ], { stdio: "ignore" } );
+	try {
+		const started = Date.now();
+		const orphan = spawnSync(
+			process.execPath,
+			[
+				"--import",
+				pathToFileURL( watchdog ).href,
+				"-e",
+				// The runner dies first; the orphan then spins where no timer of its
+				// own could fire.
+				`process.kill( ${runnerStandIn.pid} ); const until = Date.now() + ${ORPHAN_LIMIT_MS};` +
+				"while ( Date.now() < until );"
+			],
+			{
+				encoding: "utf8",
+				env: { ...process.env, SRO_TEST_RUNNER_PID: String( runnerStandIn.pid ), SRO_TEST_RSS_MB: "" }
+			}
+		);
+		const elapsed = Date.now() - started;
+		assert.match( orphan.stderr, /its test runner \(pid \d+\) is gone/ );
+		assert.ok( elapsed < ORPHAN_LIMIT_MS / 2, `the orphan ran ${elapsed} ms after its runner died` );
+	} finally {
+		runnerStandIn.kill();
 	}
 });
 

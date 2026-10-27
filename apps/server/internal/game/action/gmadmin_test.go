@@ -146,7 +146,7 @@ func TestSetGameTimeWaitsForAnEntryPublication(t *testing.T) {
 		defer mu.Unlock()
 		return pushed
 	}
-	unlock := f.rt.LockPublication(testDivision)
+	unlock := f.rt.LockPublication(testDivision, "test")
 	done := make(chan struct{})
 	go func() {
 		f.rt.SetGameTimeGM(21)

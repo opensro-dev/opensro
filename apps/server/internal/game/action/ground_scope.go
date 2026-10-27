@@ -236,7 +236,7 @@ advanceDivisionGroundScope
 func (rt *Runtime) advanceDivisionGroundScope(division string, sessions []simulation.SessionView, nowMs int64,
 	scene func(sessionID string) (*transport.Session, uint64, bool),
 ) {
-	unlock := rt.LockPublication(division)
+	unlock := rt.LockPublication(division, "groundScope")
 	defer unlock()
 	placed := make(map[grounditem.Population][]placedDrop)
 	for _, session := range sessions {

@@ -68,6 +68,11 @@ var unlistedSettings = map[string]string{
 	// rule players meet (their client is offered the same world either
 	// way).
 	"SRO_WEBTRANSPORT_PUBLIC": "operator transport serving switch, not a gameplay rule",
+	// Build-time inputs (#1745): the variant build's import tools read
+	// them when the server data is built; the GameWorld reads neither,
+	// so there is no running rule for the page to state.
+	"SRO_CAP110_ITEMS":  "degree-11 equipment build input, consumed when the server data is built",
+	"SRO_CAP110_SKILLS": "degree-11 skill build input, consumed when the server data is built",
 	// Staff telemetry (#1639): name-free kill and EXP rates for the
 	// staff console; players never meet it.
 	action.EnvKillStats: "staff kill and EXP rate telemetry, not a rule players meet",
@@ -195,6 +200,14 @@ func publicRules() publicstats.RulesResponse {
 				Native: "A unique's assigned rewards are rolled per kill, and the level-gap rule can refuse every one of them.",
 				Now:    "Every unique kill leaves exactly one Magic Pop ticket.",
 				Why:    "Owner-approved for the beta, so every unique kill pays its ticket; the original returns with one setting."},
+			{Flag: progression.EnvUniqueMaxLevelLoot, On: progression.UniqueRulesFromEnv().MaxLevelLoot,
+				Native: "A unique's equipment is rolled from the table of the unique's own level.",
+				Now:    "A unique within ten levels of the highest installed loot level rolls its equipment from that level: degree 9 with the native catalog, degree 11 with the cap-110 catalog installed. Every other unique keeps its own level's table.",
+				Why:    "Opt-in beta tuning, so the endgame uniques pay the endgame table; off keeps the native equipment table for every unique."},
+			{Flag: progression.EnvUniqueSealDrops, On: progression.UniqueRulesFromEnv().SealDrops,
+				Native: "A unique drops sealed (SoX) equipment only from its ordinary rare roll, without a guaranteed seal reward.",
+				Now:    "Every unique kill leaves one Seal of Star of the top degree and one Seal of Moon on a kill in ten. No Seal of Sun is guaranteed; it drops only from the ordinary rare roll.",
+				Why:    "Opt-in beta tuning to reward competition for uniques; off keeps ordinary rare rolls without a guaranteed seal reward."},
 			{Flag: progression.EnvBetaShopOnlyDegree9, On: progression.BetaShopOnlyDegree9FromEnv().Enabled(),
 				Native: "Monsters drop magic stones and attribute stones of every degree; Lucky Powder never drops.",
 				Now:    "Degree-9 magic stones and attribute stones no longer drop; Jangan's smith and grocer sell them, and every town's grocer sells degree-9 Lucky Powder.",

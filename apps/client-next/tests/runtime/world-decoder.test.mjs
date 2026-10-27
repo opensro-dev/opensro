@@ -497,3 +497,21 @@ test("complete mission Constantinople fits unchanged admission with shared cell 
 	assert.ok( split > 0 );
 	assert.equal( prepareWorldScene( scene ).bytes, worldSceneBytes( scene ) - split );
 });
+
+test("a cave region's bundle draws no sky or lens flares, an outdoor one does (#1793 plane feature sky)", () => {
+	const bundle = JSON.parse( new TextDecoder().decode( readPublishedAssetBytesSync(
+		"/assets/world/china/region-62a8.json",
+		CLIENT_PUBLIC_ROOT
+	) ) );
+	bundle.terrain = { blocks: [] };
+	bundle.objects.placements = [];
+	assert.ok( bundle.sky?.flareTexturePublicPaths?.length, "fixture: the city bundle carries a sky with flares" );
+	const outdoor = createWorldDecoder().decode( structuredClone( bundle ), true );
+	assert.ok( outdoor.groups.length > 0, "outdoors the sky draws" );
+	assert.deepEqual( outdoor.flareTextures, bundle.sky.flareTexturePublicPaths );
+	const cave = structuredClone( bundle );
+	cave.source.sectorY |= 0x80;
+	const indoor = createWorldDecoder().decode( cave, true );
+	assert.equal( indoor.groups.length, 0, "a cave draws no sky groups" );
+	assert.equal( indoor.flareTextures, undefined, "a cave has no lens flares" );
+});

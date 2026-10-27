@@ -279,10 +279,14 @@ class GateTests(unittest.TestCase):
 		self.assertEqual(summary["links"], 6, "the unplaced Osiris exit's link is not carried")
 		added = [r for r in stage1.table_rows(merged["teleportdata.txt"]) if r[1] in {"164", "165", "166", "167", "168"}]
 		self.assertEqual(sorted(r[1] for r in added), ["164", "165", "166", "167"])
-		# The v1.150 world table has no worlds 57-59: every tomb runs in the persistent world.
-		self.assertEqual({r[variant.TELEPORT_WORLD_COLUMN] for r in added}, {variant.PERSISTENT_WORLD})
-		self.assertEqual(summary["worldsFlattened"], {
-			"GATE_TOMB_GATE_OUT_1": "57", "GATE_TOMB_GATE_OUT_2": "58", "GATE_TOMB_GATE_OUT_3": "59"})
+		# The three exits keep their authored destination worlds 57, 58, 59: the
+		# port defines one permanent world per tomb while SRO_PHARAOH_TOMB is on
+		# (#1750). The entrance stays in the persistent world, as authored.
+		worlds = {r[2]: r[variant.TELEPORT_WORLD_COLUMN] for r in added}
+		self.assertEqual(worlds, {
+			"GATE_TOMB_GATE_IN": "1", "GATE_TOMB_GATE_OUT_1": "57",
+			"GATE_TOMB_GATE_OUT_2": "58", "GATE_TOMB_GATE_OUT_3": "59"})
+		self.assertNotIn("worldsFlattened", summary)
 
 
 def overview_row(left, bottom):

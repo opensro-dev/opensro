@@ -29,7 +29,13 @@ import (
 const EnvCap110Monsters = "SRO_CAP110_MONSTERS"
 const EnvCap110Level100 = "SRO_CAP110_LEVEL100"
 const cap110PopulationFile = "cap110-monsters.txt"
-const cap110PopulationVersion = 1
+
+// Population file format: version 2 carries each nest's source world
+// (WorldID) beside its region; version 1 flattened every nest onto the
+// default world. The field population is world 1 (cap110FieldWorldID);
+// the tombs are worlds 57-59 (pharaoh_tomb.go).
+const cap110PopulationVersion = 2
+const cap110FieldWorldID = 1
 
 // Port-only, not native: the optional expansion's monster level window.
 const (
@@ -76,6 +82,7 @@ cap110Nest
 type cap110Nest struct {
 	Codename                                         string
 	NestID                                           uint32
+	WorldID                                          int
 	RegionID                                         uint16
 	X, Y, Z, Radius, GenerateRadius                  float64
 	MaxCount, RespawnDelayMinSec, RespawnDelayMaxSec int
@@ -116,7 +123,7 @@ appendCap110Data
 ================
 */
 func appendCap110Data(template Template, data []byte) (Template, error) {
-	return appendNests(template, data, "cap110 population", admitCap110Field, skipCap110Level100)
+	return appendNests(template, data, "cap110 population", admitCap110Field, skipCap110Level100, nil)
 }
 
 /*
@@ -157,10 +164,12 @@ the template. label names the population in errors; admit says which installed
 monster references the population may spawn. Every row must pass: a partial
 population must not reach gameplay. A non-nil skip holds back admitted rows
 its own flag has not admitted yet; skipped rows are validated like the rest
-and counted in the log, never silently dropped.
+and counted in the log, never silently dropped. worldOf names the world
+each row's nests join, from the row's source world; nil is the field,
+whose rows must name the field world and join the default world.
 ================
 */
-func appendNests(template Template, data []byte, label string, admit func(MonsterRef, string) bool, skip func(MonsterRef, string) bool) (Template, error) {
+func appendNests(template Template, data []byte, label string, admit func(MonsterRef, string) bool, skip func(MonsterRef, string) bool, worldOf func(cap110Nest) (string, error)) (Template, error) {
 	var source struct {
 		Version int
 		Rows    []cap110Nest
@@ -207,8 +216,20 @@ func appendNests(template Template, data []byte, label string, admit func(Monste
 			skipped++
 			continue
 		}
+		worldCode := "INS_DEFAULT"
+		if worldOf == nil {
+			if row.WorldID != cap110FieldWorldID {
+				return Template{}, fmt.Errorf("%s has nest %d in another world %d", label, row.NestID, row.WorldID)
+			}
+		} else {
+			code, err := worldOf(row)
+			if err != nil {
+				return Template{}, err
+			}
+			worldCode = code
+		}
 		nest := NestRow{
-			WorldCode: "INS_DEFAULT", PolicyPinned: true,
+			WorldCode: worldCode, PolicyPinned: true,
 			SpawnPoint: SpawnPoint{RefObjID: ref.RefObjID, RegionID: row.RegionID, X: row.X, Y: row.Y, Z: row.Z},
 			Radius:     row.Radius, GenerateRadius: row.GenerateRadius, MaxCount: row.MaxCount,
 			RespawnDelayMinSec: row.RespawnDelayMinSec, RespawnDelayMaxSec: row.RespawnDelayMaxSec,

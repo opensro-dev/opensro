@@ -245,24 +245,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		avatarItems = encodeItems(InventoryWireItems(character.AvatarInventory.Rows))
 	}
 
-	var refObjSnapshot []RefObjRow
-	if deps.RefObjSnapshot != nil {
-		refObjSnapshot = deps.RefObjSnapshot()
-	}
-	// The browser holds the published monster rows from the cached reference
-	// file; repeating them would break the disjoint catalog it requires.
-	if deps.BrowserReferences != nil && len(deps.BrowserReferences.objectIDs) > 0 {
-		own := refObjSnapshot[:0:0]
-		for _, row := range refObjSnapshot {
-			if !deps.BrowserReferences.objectIDs[row.RefObjID] {
-				own = append(own, row)
-			}
-		}
-		refObjSnapshot = own
-	}
-	if refObjSnapshot == nil {
-		refObjSnapshot = []RefObjRow{}
-	}
+	refObjSnapshot := filteredRefObjSnapshot(deps)
 
 	var systemMessages interface{} = []string{}
 	if deps.SystemMessages != nil {
@@ -317,6 +300,66 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 
 /*
 ================
+filteredRefObjSnapshot
+
+The entry's RefObj rows: the full snapshot minus the rows the browser
+already holds from the cached reference file; repeating them would
+break the disjoint catalog it requires. The production constructor's
+cache holder memoizes the result per BrowserReferences generation -
+the snapshot's inputs (roster, NPC roster, summonable refs, monster
+template) are boot-static - so a login or re-entry rebuilds the
+catalogues only on the first entry (#1820). A nil holder computes on
+every call, as fixtures always have. Callers receive a copy, so the
+cached rows can never be mutated through a result.
+================
+*/
+func filteredRefObjSnapshot(deps *Deps) []RefObjRow {
+	cache := deps.refObjCache
+	if cache == nil {
+		return computeFilteredRefObjSnapshot(deps)
+	}
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	if cache.cached && cache.refs == deps.BrowserReferences {
+		return append([]RefObjRow{}, cache.rows...)
+	}
+	rows := computeFilteredRefObjSnapshot(deps)
+	cache.refs = deps.BrowserReferences
+	cache.rows = append([]RefObjRow{}, rows...)
+	cache.cached = true
+	return append([]RefObjRow{}, cache.rows...)
+}
+
+/*
+================
+computeFilteredRefObjSnapshot
+
+One uncached filtered snapshot, exactly as Build computed it before
+the cache existed.
+================
+*/
+func computeFilteredRefObjSnapshot(deps *Deps) []RefObjRow {
+	var refObjSnapshot []RefObjRow
+	if deps.RefObjSnapshot != nil {
+		refObjSnapshot = deps.RefObjSnapshot()
+	}
+	if deps.BrowserReferences != nil && len(deps.BrowserReferences.objectIDs) > 0 {
+		own := refObjSnapshot[:0:0]
+		for _, row := range refObjSnapshot {
+			if !deps.BrowserReferences.objectIDs[row.RefObjID] {
+				own = append(own, row)
+			}
+		}
+		refObjSnapshot = own
+	}
+	if refObjSnapshot == nil {
+		refObjSnapshot = []RefObjRow{}
+	}
+	return refObjSnapshot
+}
+
+/*
+================
 readCharacterSnapshot
 
 readCharacterSnapshot detaches the full record while the authority read door
@@ -366,7 +409,7 @@ func buildBootstrapPackets(deps *Deps, divisionID string, character *Character, 
 	var activeCOSRows []Packet
 	var activeCOSRide *Packet
 	for _, cos := range character.Companions() {
-		// CCOSManager_RestoreLoadedActors (4FA430) admits a record into a built
+		// The server's loaded-actor restore admits a record into a built
 		// world only when its alive and summoned bits are both set. A corpse stays
 		// on its summoner item; login and every re-entry (rebirth, return scroll,
 		// portal, GM warp) serialize the same rule.
@@ -501,9 +544,10 @@ published row carries the same flags a login row would.
 func buildRefItemSnapshot(deps *Deps, divisionID string, character *Character) []RefItemRow {
 	collector := newRefItemCollector(deps)
 	if deps.BrowserReferences != nil {
-		for id := range deps.BrowserReferences.itemIDs {
-			collector.known[id] = true
-		}
+		// The published set is immutable process-owned data
+		// (browser_references.go); the collector consults it directly
+		// instead of copying it into its own set per entry (#1820).
+		collector.published = deps.BrowserReferences.itemIDs
 	}
 	if character != nil {
 		for _, row := range character.MissionInventory {
@@ -544,18 +588,27 @@ func buildRefItemSnapshot(deps *Deps, divisionID string, character *Character) [
 	// The browser has no PK2 table and seeds this lookup only at bootstrap;
 	// stocking just the viewer's inventory makes the peer parser abort on
 	// the first different garment/weapon. Seed every persisted inventory in
-	// the division from detached snapshots. This also covers a later login
-	// or equip from an already-owned bag row without shipping the full PK2.
+	// the division. Only each row's codename and type word are read,
+	// copied out under ONE authority read door in division order - the
+	// records themselves are never detached for this (#1820 part C). This
+	// also covers a later login or equip from an already-owned bag row
+	// without shipping the full PK2.
 	if deps.Characters != nil {
-		for _, livePeer := range deps.Characters.CharactersForDivision(divisionID) {
-			peer := readCharacterSnapshot(deps, divisionID, livePeer)
-			if peer == nil {
-				continue
+		peers := deps.Characters.CharactersForDivision(divisionID)
+		var peerRows []refItemRowRef
+		deps.Read(divisionID, func() {
+			for _, peer := range peers {
+				if peer == nil {
+					continue
+				}
+				for _, row := range peer.MissionInventory {
+					peerRows = append(peerRows, refItemRowRef{codename: row.Codename, typeFlags: row.TypeFlags})
+				}
 			}
-			for _, row := range peer.MissionInventory {
-				flags := row.TypeFlags
-				collector.add(row.Codename, &flags)
-			}
+		})
+		for _, row := range peerRows {
+			flags := row.typeFlags
+			collector.add(row.codename, &flags)
 		}
 	}
 	if deps.ExtraRefItemCodenames != nil {
@@ -589,6 +642,19 @@ func StaticRefItemRows(deps *Deps) []RefItemRow {
 
 /*
 ================
+refItemRowRef
+
+One inventory row's contribution to the reference seed: the codename and
+its persisted type word, copied off the live record under the read door.
+================
+*/
+type refItemRowRef struct {
+	codename  string
+	typeFlags uint16
+}
+
+/*
+================
 refItemCollector
 
 refItemCollector accumulates item reference rows unique by RefObjID, the
@@ -596,9 +662,13 @@ first request for an id deciding its flags.
 ================
 */
 type refItemCollector struct {
-	deps  *Deps
-	rows  []RefItemRow
-	known map[uint32]bool
+	deps *Deps
+	rows []RefItemRow
+	// known holds the ids this collector has already emitted;
+	// published is the browser reference file's set, consulted
+	// directly and never copied (nil when nothing is published).
+	known     map[uint32]bool
+	published map[uint32]bool
 }
 
 /*
@@ -623,7 +693,7 @@ func (c *refItemCollector) add(codename string, typeFlags *uint16) {
 		return
 	}
 	row, ok := c.deps.Items.ItemRefByCodename(codename)
-	if !ok || row == nil || c.known[row.RefObjID] {
+	if !ok || row == nil || c.known[row.RefObjID] || c.published[row.RefObjID] {
 		return
 	}
 	c.known[row.RefObjID] = true
@@ -666,7 +736,7 @@ func (c *refItemCollector) addStatic() {
 ================
 refItemCollector.finish
 
-Completes each row from its itemdata record. Native 59edb0 follows the
+Completes each row from its itemdata record. The server follows the
 item's associated character before deciding between riding and transport
 tutorials, so the summoned type word is resolved, never inferred from names.
 ================

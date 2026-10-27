@@ -42,7 +42,8 @@ import { createCharacterPose } from "@/engine/foundation/animation/animation-pos
 import { characterRadius } from "@/engine/foundation/animation/character-bounds";
 import { skyGroups } from "@/engine/foundation/rendering/sky-geometry";
 import { radians } from "@/engine/foundation/math/angles";
-import { isDungeonRegion, sameCoordinateSpace } from "@/engine/foundation/world/world-space";
+import { featuresAt } from "@/engine/foundation/world/plane";
+import { sameCoordinateSpace } from "@/engine/foundation/world/world-space";
 import { admitMesh } from "./mesh-admission/mesh-admission";
 import { createWorldResources } from "./resources/resources";
 import {
@@ -140,7 +141,7 @@ reserve
 			const objectPart = part !== "terrain", terrainPart = part !== "objects";
 			if (
 				b.dungeonBlocks &&
-				(!isDungeonRegion( region ) || !Array.isArray( b.dungeonBlocks ) || b.dungeonBlocks.length > 4096 ||
+				(!featuresAt( region ).rooms || !Array.isArray( b.dungeonBlocks ) || b.dungeonBlocks.length > 4096 ||
 					b.dungeonBlocks.some( ( block, index ) =>
 						block.index !== index || !Array.isArray( block.visibleBlocks ) ||
 						(block.ambientColor !== undefined &&
@@ -796,7 +797,7 @@ noteMaterial
 						throw new Error( "Special water texture absent" );
 					}
 					if (
-						!isDungeonRegion( region ) && b.water?.normalFramePublicPaths[0] &&
+						featuresAt( region ).animatedWater && b.water?.normalFramePublicPaths[0] &&
 						(block.water?.type === 0 || block.water?.type === 1 && block.water.waveType !== 0)
 					) {
 						const axis = block.water.type === 0 ? 17 : 2,
@@ -929,12 +930,12 @@ noteMaterial
 				} );
 			}
 			if ( objectPart && b.dungeonWater?.length ) {
-				if ( !isDungeonRegion( region ) ) throw Error( "Dungeon water in outdoor bundle" );
+				if ( !featuresAt( region ).dungeonWater ) throw Error( "Dungeon water in outdoor bundle" );
 				for ( const surface of b.dungeonWater ) {
 					merged.push( dungeonWaterGroup( surface, b.water?.normalFramePublicPaths ?? [] ) );
 				}
 			}
-			if ( objectPart && b.sky && !isDungeonRegion( region ) ) merged.unshift( ...skyGroups( b.sky ) );
+			if ( objectPart && b.sky && featuresAt( region ).sky ) merged.unshift( ...skyGroups( b.sky ) );
 			const scene: WorldScene = {
 				scenery,
 				soundTerrain: objectPart ? decodeSoundTerrain( b ) : undefined,
@@ -943,7 +944,7 @@ noteMaterial
 					block => block.ambientColor ?? DEFAULT_DUNGEON_AMBIENT_COLOR
 				),
 				waterBump: b.water?.reflectionBumpPublicPath,
-				flareTextures: isDungeonRegion( region ) || !objectPart ? undefined : b.sky?.flareTexturePublicPaths,
+				flareTextures: !featuresAt( region ).sky || !objectPart ? undefined : b.sky?.flareTexturePublicPaths,
 				starRandomState: objectPart ? b.sky?.starPrimitive?.nativeRand?.stateAfterConstruction : undefined,
 				residency: frontend ? "frontend" : undefined,
 				models,

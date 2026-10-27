@@ -93,11 +93,11 @@ TOMB_GATE_CODES = (
 	"GATE_TOMB_GATE_IN", "GATE_TOMB_GATE_OUT_1", "GATE_TOMB_GATE_OUT_2", "GATE_TOMB_GATE_OUT_3"
 )
 # The last teleportdata column names the destination game world. The source's
-# tomb exits name worlds 57-59, one per tomb, which the v1.150 world table does
-# not define. The port runs every tomb in the persistent world (as the Qin-Shi
-# tomb's teleport rows do), so the column becomes 1 and the original is reported.
+# tomb exits name worlds 57-59, one per tomb. The v1.150 world table does not
+# define them, but the port does while SRO_PHARAOH_TOMB is on (the three
+# permanent per-tomb worlds, #1750), so the column stands as authored and the
+# server resolves it through its widened world catalogue.
 TELEPORT_WORLD_COLUMN = 12
-PERSISTENT_WORLD = "1"
 # The v1.150 server's level cap (levels.json levelCap). The VSRO links need
 # level 95 for a cap of 110; clamped here so the city stays reachable.
 NATIVE_LEVEL_CAP = 90
@@ -328,12 +328,9 @@ def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP
 		raise SystemExit("a VSRO gate id is already a native teleport id")
 	ids = {vsro_id: native_ids.get(code, vsro_id) for vsro_id, code in vsro_codes.items()}
 
-	data_rows, flattened = [], {}
+	data_rows = []
 	for code in codes:
 		row = list(vsro_gates[code])
-		if code in TOMB_GATE_CODES and row[TELEPORT_WORLD_COLUMN] != PERSISTENT_WORLD:
-			flattened[code] = row[TELEPORT_WORLD_COLUMN]
-			row[TELEPORT_WORLD_COLUMN] = PERSISTENT_WORLD
 		data_rows.append(row)
 	building_ids = {row[3] for row in data_rows}
 	buildings = [
@@ -364,7 +361,6 @@ def merge_gate_tables(native, vsro, codes=GATE_CODES, level_cap=NATIVE_LEVEL_CAP
 		"gates": list(codes), "links": len(links), "buildings": len(buildings), "texts": len(text_rows),
 		# The server hides these structures while SRO_ALEXANDRIA is off (alexandria.go).
 		"buildingCodes": sorted(row[2] for row in buildings),
-		**({"worldsFlattened": flattened} if flattened else {}),
 		# Link conditions the native catalogue cannot evaluate yet, reported
 		# so the loss is visible in the build output and manifest (#1749).
 		**({"droppedConditions": dropped_conditions} if dropped_conditions else {})

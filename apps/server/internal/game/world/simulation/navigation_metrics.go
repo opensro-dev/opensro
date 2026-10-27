@@ -60,10 +60,11 @@ NavigationMetrics
 ================
 */
 type NavigationMetrics struct {
-	plans  [navCallerCount][navOutcomeCount]atomic.Uint64
-	probes atomic.Uint64
-	byCost [len(navProbeBounds) + 1]atomic.Uint64
-	clips  [navCallerCount]atomic.Uint64
+	plans    [navCallerCount][navOutcomeCount]atomic.Uint64
+	probes   atomic.Uint64
+	byCost   [len(navProbeBounds) + 1]atomic.Uint64
+	clips    [navCallerCount]atomic.Uint64
+	memoHits [navCallerCount]atomic.Uint64
 }
 
 /*
@@ -92,25 +93,38 @@ NavigationMetrics.plan
 One route plan and its result. A nil receiver records nothing.
 ================
 */
+/*
+================
+navOutcomeProbes
+
+How one route plan ended and what it cost in search expansions. Shared
+by the boot counters and the per-leg attribution (#1820 part C).
+================
+*/
+func navOutcomeProbes(route *monster.NavigationRoute) (navOutcome, int) {
+	if route == nil {
+		return navUnavailable, 0
+	}
+	probes := route.Probes()
+	switch route.Status() {
+	case monster.NavigationRouteReady:
+		if route.Len() > 1 {
+			return navReadyDetour, probes
+		}
+		return navReadyDirect, probes
+	case monster.NavigationRouteBlocked:
+		return navBlocked, probes
+	case monster.NavigationSearchExhausted:
+		return navExhausted, probes
+	}
+	return navUnavailable, probes
+}
+
 func (m *NavigationMetrics) plan(caller navCaller, route *monster.NavigationRoute) {
 	if m == nil {
 		return
 	}
-	outcome, probes := navUnavailable, 0
-	if route != nil {
-		probes = route.Probes()
-		switch route.Status() {
-		case monster.NavigationRouteReady:
-			outcome = navReadyDirect
-			if route.Len() > 1 {
-				outcome = navReadyDetour
-			}
-		case monster.NavigationRouteBlocked:
-			outcome = navBlocked
-		case monster.NavigationSearchExhausted:
-			outcome = navExhausted
-		}
-	}
+	outcome, probes := navOutcomeProbes(route)
 	m.plans[caller][outcome].Add(1)
 	m.probes.Add(uint64(probes))
 	bucket := len(navProbeBounds)
@@ -131,6 +145,20 @@ NavigationMetrics.clip
 func (m *NavigationMetrics) clip(caller navCaller) {
 	if m != nil {
 		m.clips[caller].Add(1)
+	}
+}
+
+/*
+================
+NavigationMetrics.memo
+
+One failed-route memo hit: a retry answered from the mover's record
+instead of a recomputed search (#1820 part B).
+================
+*/
+func (m *NavigationMetrics) memo(caller navCaller) {
+	if m != nil {
+		m.memoHits[caller].Add(1)
 	}
 }
 
@@ -158,6 +186,7 @@ func (m *NavigationMetrics) Snapshot() map[string]uint64 {
 			put("plan."+navCallerNames[c]+"."+navOutcomeNames[o], m.plans[c][o].Load())
 		}
 		put("clip."+navCallerNames[c], m.clips[c].Load())
+		put("plan."+navCallerNames[c]+".memo", m.memoHits[c].Load())
 	}
 	put("route_probes", m.probes.Load())
 	for i := range m.byCost {

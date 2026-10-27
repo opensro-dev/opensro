@@ -74,6 +74,42 @@ func TestDuplicateCopiesTheAllysLook(t *testing.T) {
 
 /*
 ==================
+TestSableDuplicateCopiesAnEnemyPlayer
+
+The later rank (33156) is authored enemy-player-only, so the pair is
+in a hostile relation (opposing capes, no party) that refuses other
+targeted families. The traced Duplicate rule has no relation gate:
+the Rogue takes the enemy's look under the family's own refusal list.
+==================
+*/
+func TestSableDuplicateCopiesAnEnemyPlayer(t *testing.T) {
+	row, ok := shippedSkills(t).SkillByID(duplicateA1)
+	if !ok {
+		t.Fatal("shipped duplicate row missing")
+	}
+	row.ID, row.Codename = 33156, "SKILL_EU_ROG_STEALTHA_CHANGE_B_03"
+	row.Targets = enterworld.SkillTargets{Present: true, Required: true, Animal: true, EnemyP: true}
+	row.Reqi = enterworld.SkillReqi{}
+	row.RequiredWeaponKinds = [2]uint8{0xff, 0xff}
+	p := scornOpponentPair(t, row)
+	if !p.rt.hostilePlayerRelation(testDivision, p.c, p.m) {
+		t.Fatal("fixture pair is not in a hostile relation")
+	}
+	result := p.cast(row.ID)
+	if result.DiagnosticRefusal != "" || p.c.TransformMode != 2 {
+		t.Fatalf("sable duplicate refused: %+v", result)
+	}
+	model := p.rt.deps.(*enterworld.Deps).CharacterModelRef(p.m)
+	if p.c.TransformRefObjID != model {
+		t.Fatalf("block ref %d, want the enemy's model %d", p.c.TransformRefObjID, model)
+	}
+	if _, ok := findFrame(result.Broadcast, wire.OpSkinChange); !ok {
+		t.Fatalf("no skin frame in %+v", result.Frames)
+	}
+}
+
+/*
+==================
 TestDuplicateRefusesSomePlayers
 
 58D1D3: above the level word, a GM, a murderer and a rider are refused.

@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"opensro.online/server/internal/game/world/instance"
 )
 
 /*
@@ -17,15 +19,25 @@ import (
 tombSource
 
 One nest row of the given grade, level and region, encoded as the importer
-writes it.
+writes it; tombWorldSource names the row's source world.
 ================
 */
 func tombSource(t *testing.T, codename string, region uint16) []byte {
 	t.Helper()
+	return tombWorldSource(t, codename, region, int(instance.PharaohTomb1ID))
+}
+
+/*
+================
+tombWorldSource
+================
+*/
+func tombWorldSource(t *testing.T, codename string, region uint16, world int) []byte {
+	t.Helper()
 	source := struct {
 		Version int
 		Rows    []cap110Nest
-	}{1, []cap110Nest{{Codename: codename, NestID: 29439, RegionID: region,
+	}{cap110PopulationVersion, []cap110Nest{{Codename: codename, NestID: 29439, WorldID: world, RegionID: region,
 		X: 100, Y: 0, Z: 200, Radius: 400, GenerateRadius: 300, MaxCount: 10,
 		Respawn: true, RespawnDelayMinSec: 6, RespawnDelayMaxSec: 8,
 		Controls: TacticsControls{ChangeTarget: 2, SightRange: 130}}}}
@@ -62,7 +74,7 @@ func TestPharaohTombAdmitsOrdinaryEliteAndUniqueGrades(t *testing.T) {
 			t.Fatalf("grade %d: population did not append immutably", grade)
 		}
 		nest := got.Nests[1]
-		if nest.WorldCode != "INS_DEFAULT" || nest.RegionID != 29631 || nest.MaxCount != 10 || !nest.Respawn {
+		if nest.WorldCode != "INS_PHARAOH_TOMB_1" || nest.RegionID != 29631 || nest.MaxCount != 10 || !nest.Respawn {
 			t.Fatalf("grade %d: authored nest values lost: %+v", grade, nest)
 		}
 	}
@@ -109,6 +121,34 @@ func TestPharaohTombRefusesDungeonRegions(t *testing.T) {
 	template := tombTemplate("MOB_SD_BASTET", 103, 0)
 	if _, err := appendPharaohTombData(template, tombSource(t, "MOB_SD_BASTET", 0x8001), 1); err == nil {
 		t.Fatal("dungeon region admitted")
+	}
+}
+
+/*
+================
+TestPharaohTombNestsJoinTheirOwnWorlds
+
+Each row carries its source world, and the nest joins that tomb's world
+(#1750): the three tombs are separate permanent worlds, not one shared
+flattening. A row naming the field world, or any other, is refused.
+================
+*/
+func TestPharaohTombNestsJoinTheirOwnWorlds(t *testing.T) {
+	for _, definition := range instance.PharaohTombDefinitions() {
+		template := tombTemplate("MOB_SD_BASTET", 103, 0)
+		got, err := appendPharaohTombData(template, tombWorldSource(t, "MOB_SD_BASTET", 29631, int(definition.ID)), 1)
+		if err != nil {
+			t.Fatalf("world %d refused: %v", definition.ID, err)
+		}
+		if got.Nests[1].WorldCode != definition.CodeName {
+			t.Fatalf("world %d nest joined %q, want %q", definition.ID, got.Nests[1].WorldCode, definition.CodeName)
+		}
+	}
+	for _, world := range []int{cap110FieldWorldID, 0, 99} {
+		template := tombTemplate("MOB_SD_BASTET", 103, 0)
+		if _, err := appendPharaohTombData(template, tombWorldSource(t, "MOB_SD_BASTET", 29631, world), 1); err == nil {
+			t.Fatalf("tomb row in world %d admitted", world)
+		}
 	}
 }
 

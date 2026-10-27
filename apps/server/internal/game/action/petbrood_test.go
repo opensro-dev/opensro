@@ -6,6 +6,7 @@ petbrood_test.go - egg admission, damage, hatching, lifetime and clone isolation
 package action
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/domain"
@@ -127,8 +128,13 @@ TestCrowBroodNativeDamageAndWindBurst
 ================
 */
 func TestCrowBroodNativeDamageAndWindBurst(t *testing.T) {
-	for _, book := range []uint8{50, 51} {
+	for _, test := range []struct {
+		book   uint8
+		collar uint32
+	}{{50, 0}, {51, 0}, {51, 30101}, {51, 30109}, {51, 30139}} {
+		book := test.book
 		rt, clock, c, mob, key := tailwindFixture(t, 1)
+		c.ActiveCOS.Training.Gear[0] = domain.PetGear{RefObjID: test.collar}
 		skill := learnPetBook(t, c, book)
 		rt.castCrowBrood(testDivision, c, key.gid, skill, clock.NowMs())
 		egg := c.Brood[0]
@@ -150,11 +156,33 @@ func TestCrowBroodNativeDamageAndWindBurst(t *testing.T) {
 		}
 		child.broodAt = target.at
 		child.follower = simulation.NewPetFollower(egg.GID, child.broodAt)
+		cloneStep := petCombatStep{key: petOwnerKey{division: key.division, name: key.name, gid: egg.GID}, state: child, snapshot: rt.characterSnapshot(key.division, c), pet: egg, ref: ref, nowMs: clock.NowMs(), percent: fullAreaPercent}
+		attack, found := rt.petAttackSkill(cloneStep, &petCombatIntent{}, simulation.AttackTarget{})
+		if !found {
+			t.Fatal("missing clone attack")
+		}
+		attack, cloneStep.trained = rt.petTrainedDecide(cloneStep, attack, target)
+		normal, committed := rt.strikePetTarget(cloneStep, target, attack)
+		if !committed || normal.hpDamage == 0 {
+			t.Fatal("normal clone attack failed")
+		}
+		before, _ := rt.Monsters.Get(testDivision, mob.Gid)
+		rt.drainMonsterLegRecipients()
 		egg.CurrentHP = 0
 		rt.advanceCrowBrood(key, clock.NowMs())
 		visuals := 0
+		var shown, hpRefresh uint32
 		for _, batch := range rt.drainMonsterLegRecipients() {
 			for _, frame := range batch.Frames {
+				if frame.Opcode == 0x3128 && binary.LittleEndian.Uint32(frame.Payload) == mob.Gid {
+					if batch.SourceGID != key.gid {
+						t.Fatal("wind feedback routed through retired clone", batch.SourceGID)
+					}
+					shown += binary.LittleEndian.Uint32(frame.Payload[4:])
+				}
+				if frame.Opcode == simulation.OpVitalsUpdate && binary.LittleEndian.Uint32(frame.Payload) == mob.Gid {
+					hpRefresh = binary.LittleEndian.Uint32(frame.Payload[7:])
+				}
 				if frame.Opcode == broodWindOpcode {
 					visuals++
 					if len(frame.Payload) != 18 {
@@ -167,8 +195,19 @@ func TestCrowBroodNativeDamageAndWindBurst(t *testing.T) {
 			t.Fatal("wind visual tier", book, visuals)
 		}
 		after, _ := rt.Monsters.Get(testDivision, mob.Gid)
-		if (after.CurrentHP < mob.CurrentHP) != (book == 51) {
+		if (after.CurrentHP < before.CurrentHP) != (book == 51) {
 			t.Fatal("death burst tier", book, mob.CurrentHP, after.CurrentHP)
+		}
+		if book == 51 {
+			damage := before.CurrentHP - after.CurrentHP
+			// Each impact floors once, so five times its unrounded damage can add up to four.
+			rounding := uint64(len(normal.strike.impacts)) * 4
+			if uint64(damage) < normal.hpDamage*5 || uint64(damage) > normal.hpDamage*5+rounding {
+				t.Fatal("wind must deal 500% of the same normal roll", test.collar, normal.hpDamage, damage)
+			}
+			if shown != damage || hpRefresh != after.CurrentHP {
+				t.Fatal("wind damage/HP feedback missing", damage, shown, after.CurrentHP, hpRefresh)
+			}
 		}
 		if len(c.Brood) != 0 {
 			t.Fatal("dead clone retained")

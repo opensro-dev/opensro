@@ -24,7 +24,8 @@ import { dungeonNavigation } from "@/engine/foundation/navigation/dungeon-naviga
 import { objectNavigation } from "@/engine/foundation/navigation/object-navigation";
 import { terrainObjectCells } from "@/engine/foundation/navigation/terrain-object-cells";
 import { objectLinks, validateLinks } from "@/engine/foundation/navigation/topology";
-import { isDungeonRegion, REGION_SIZE, sectorX, sectorY } from "@/engine/foundation/world/world-space";
+import { featuresAt } from "@/engine/foundation/world/plane";
+import { REGION_SIZE, sectorX, sectorY } from "@/engine/foundation/world/world-space";
 
 /*
 ================
@@ -40,7 +41,9 @@ export function createNavigationResources() {
 		): Promise<NavigationProduct> {
 			const parse = <T>( bytes: Uint8Array ): T =>
 				JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( bytes ) );
-			if ( isDungeonRegion( regionId ) ) return dungeonNavigation( parse<DungeonManifest>( bytes ), regionId );
+			if ( !featuresAt( regionId ).terrainGrid ) {
+				return dungeonNavigation( parse<DungeonManifest>( bytes ), regionId );
+			}
 			const bundle = parse<NavBundle>( bytes );
 			if ( !bundle.navmesh?.regions || !bundle.source ) {
 				throw new Error( "Missing native navigation regions" );

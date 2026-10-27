@@ -16,8 +16,9 @@ func SaleUnitPrice(ref *enterworld.ItemRef, magic []uint64, source enterworld.Ma
 }
 
 // Tax and repair policy apply to a unit before stack multiplication in v1.150.
-// Retention is at least the untaxed base (5980F0; server 6197B7..61985C),
-// not necessarily the credited sale amount. Repair exhaustion overrides tax.
+// Retention is at least the untaxed base (5980F0; the server's NPC sale
+// range), not necessarily the credited sale amount. Repair exhaustion
+// overrides tax.
 func SalePrices(ref *enterworld.ItemRef, magic []uint64, source enterworld.MagicOptionSource, tax Tax) (credit, restore uint64, ok bool) {
 	base, exhausted, valid := salePriceBasis(ref, magic, source)
 	if !valid {

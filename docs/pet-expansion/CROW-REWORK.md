@@ -3,8 +3,7 @@
 **Current verification (2026-10-23):** Stormbrood replaces Exposing Mark
 (49–51). Latest tuning: Mana Spring restores **10% actual damage as MP at
 every rank**. Tailwind stacks and grants speed in safe zones, including nearby
-party in III. Death burst remains **500% normal clone attack**, before
-mitigation. All five crow rows have owned feather particle animations; see
+party in III. Death burst remains **500% normal clone attack**, using the shared damage calculation. All five crow rows have owned feather particle animations; see
 latest section. Live ten-summon cap and full ten-minute expiry passed: ten
 eggs hatched, all ten clones coexisted, cast11 was refused without charge
 loss, then all ten expired with exactly one wind burst each
@@ -70,3 +69,25 @@ database.
   are unchanged apart from Mana Spring, documented below.
 
 Dated verification logs from the development sessions are kept outside the repository.
+
+
+## Wind-burst damage correction — 2026-10-25
+
+The burst now prepares its strike through the same species/equipment scaling as
+a normal clone attack, then multiplies attack power by five. The former manual
+strike setup skipped the crow profile. A regression compares both paths with
+the same combat roll for bare, D1, D9 and D9 Sun collars. Each native impact
+rounds separately; the comparison allows at most four rounding points per
+impact when multiplying by five. Book II still produces no death burst.
+
+Native yellow damage text (3128) and target HP refresh (33A6) now accompany the
+burst. Feedback routes through the surviving crow because the clone leaves
+observer scope during its death tick.
+
+Live acceptance: one naturally expiring clone dealt **19,780** damage to a
+training dummy. The yellow damage notification matched the exact HP decrease
+(99,766,786 to 99,747,006), with one burst after 600.191 seconds. Normal clone
+hits were 3,707–4,025, plus one critical hit of 7,838. Independent random rolls
+vary; the deterministic regression verifies 500% with the same roll and only
+integer-rounding tolerance. Full server tests, scoped vet and lint passed.
+Temporary test characters, gear and GM access were restored afterward.

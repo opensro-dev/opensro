@@ -172,7 +172,7 @@ func (rt *Runtime) hubHandler(hub *transport.Hub, op opFunc) transport.HandlerFu
 			return
 		}
 
-		unlockPublication := rt.LockPublication(divisionID)
+		unlockPublication := rt.LockPublication(divisionID, "requestOp")
 		defer unlockPublication()
 		// Checked under the publication gate: a reset another handler pushes
 		// (a recall, a relocation) holds the same gate, so a request that

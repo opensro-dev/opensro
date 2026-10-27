@@ -63,7 +63,7 @@ func PetRouteFromMonster(plan func(from, goal monster.Pose) *monster.NavigationR
 ================
 FollowFormation
 
-549F80 / 55E090 / 540F70. Completion releases the slot; it does not replace
+The retail server's follow-formation chain. Completion releases the slot; it does not replace
 the destination with an invented half-radius stand-off point.
 ================
 */
@@ -88,8 +88,8 @@ func (p *PetFollower) FollowFormation(in PetFormationStep) []Frame {
 		if !p.RelocateTo(owner, in.Now, in.Surface) {
 			return p.Stop(in.Now)
 		}
-		// 549F80 returns 2: FOLLOW_OnTick (55A960) raises 0x24 and 5599A0
-		// changes state, clearing the stuck count.
+		// The formation test returns 2: FOLLOW_OnTick raises 0x24 and the
+		// stuck-relocation state change clears the stuck count.
 		p.ResetStuck()
 		if in.Relocated != nil {
 			*in.Relocated = true
@@ -100,8 +100,9 @@ func (p *PetFollower) FollowFormation(in PetFormationStep) []Frame {
 	if monster.NativeOwnerFollowMotion(monster.OwnerFollowInput{Live: live, Owner: leader}).Satisfied {
 		in.Slots.Release(p.gid)
 		frames := p.Stop(in.Now)
-		// In formation, 549F80 returns 2 and FOLLOW changes state (55A960 ->
-		// event 0x24 -> 5599A0 -> 53FF30), which clears the stuck count: only
+		// In formation, the formation test returns 2 and FOLLOW changes state
+		// (event 0x24 into the stuck relocation, then idle), which clears the
+		// stuck count: only
 		// a pet that never reaches its owner accumulates stalled stops.
 		p.ResetStuck()
 		return frames

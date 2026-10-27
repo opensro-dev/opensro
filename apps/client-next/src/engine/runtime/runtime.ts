@@ -392,6 +392,7 @@ export function startRuntime(
 					setCameraWaypoints: keyframes => world.setCameraWaypoints( keyframes ),
 					setCameraPlaying: playing => world.setCameraPlaying( playing ),
 					setCursorVisible: visible => platform.setCursorVisible( visible ),
+					setDamageNumbers: shown => characters.setDamageNumbers( shown ),
 					saveCameraWaypoints: text => platform.saveCameraWaypoints( text ),
 					playSoundByName: name => audio.playByName( name ),
 					saveExperimental: value => platform.saveExperimentalOptions( value ),

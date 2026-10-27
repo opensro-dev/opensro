@@ -273,12 +273,25 @@ func (rt *Runtime) broodDeathStorm(key petOwnerKey, state *petSession, snapshot 
 		if !found {
 			continue
 		}
+		skill, step.trained = rt.petTrainedDecide(step, skill, target)
+		if step.trained != nil {
+			step.trained.reserved = true
+		}
 		skill.Attack.Percent *= broodDeathMultiplier
 		skill.ActionArea = enterworld.SkillOffensiveArea{}
-		step.trained = &petTrainedStrike{mods: companion.ModifiersFor(pet), reserved: true, passive: -1}
 		if hit, committed := rt.strikePetTarget(step, target, skill); committed {
 			public := hit.strike.public
-			rt.queueMonsterLegFrames([]simulation.DivisionFrames{{DivisionID: key.division, SourceGID: pet.GID, Frames: simFrames(public)},
+			if current, found := rt.Monsters.Get(key.division, target.gid); found {
+				public = append(public, wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(target.gid, 0, current.CurrentHP)})
+			}
+			// The dying clone cannot publish a normal cast result after despawning.
+			for _, impact := range hit.strike.impacts {
+				if impact.Damage > 0 {
+					public = append(public, abnormalDamageFrame(target.gid, impact.Damage))
+				}
+			}
+			// The clone leaves observer scope this tick; its living source still has an audience.
+			rt.queueMonsterLegFrames([]simulation.DivisionFrames{{DivisionID: key.division, SourceGID: key.gid, Frames: simFrames(public)},
 				{DivisionID: key.division, OnlyCharacterID: state.character.ID, Frames: simFrames(hit.actor)}})
 		}
 		count++

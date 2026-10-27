@@ -227,6 +227,16 @@ func openAuthorityPlane(
 		authorityStore.Close()
 		return authorityPlane{}, err
 	}
+	// The published skill tier and the level cap are separate switches
+	// (the build's skill import and database snapshot publish the rows;
+	// SRO_LEVEL_CAP admits the levels). A table whose top tier outruns
+	// the cap leaves those ranks board-visible but unlearnable, answered
+	// only by the generic mastery refusal, so say so once at startup.
+	if highest := textdata.Skills.MaxMasteryRequirement(); highest > 100 && highest > levelCap {
+		log.Warnf("skills: loaded table requires mastery %d but %s caps progression at %d; "+
+			"the top ranks will show on the board and refuse learning (raise the cap or rebuild without the database tier)",
+			highest, progression.EnvLevelCap, levelCap)
+	}
 	config := agentapi.Config{
 		Store:                 authorityStore,
 		CharacterPresentation: characterPresentationProjector(characterRoster, textdata.Levels),

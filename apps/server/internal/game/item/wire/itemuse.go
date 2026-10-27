@@ -53,7 +53,8 @@ func DecodeItemUseRequest(payload []byte) (ItemUseRequest, error) {
 ReadItemUseRequest
 
 ReadItemUseRequest reads the three-byte header and returns any tail.
-49D240 pet potions and the pet cure append the COS gid (u32). Revival
+For pet potions and the pet cure the native server appends the COS
+gid (u32). Revival
 (TID4 6) appends the pet-item slot (u8). Other families must have an
 empty tail; DecodeItemUseRequest still rejects a tail on its own.
 ==================

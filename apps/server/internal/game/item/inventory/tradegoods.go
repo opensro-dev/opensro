@@ -3,8 +3,8 @@
 
 tradegoods.go - stack identity: trade cargo owners and stone assimilation
 
-CGItem_CheckMergeEligibility (490230) compares the recorded owner names of
-trade goods before combining their quantities. A pickup or container move
+The native merge check compares the recorded owner names of trade
+goods before combining their quantities. A pickup or container move
 must not turn another trader's goods into the destination stack's goods.
 
 Magic and attribute stones carry their assimilation value in Plus. Natively

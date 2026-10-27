@@ -383,7 +383,14 @@ completeReturnScrollInDivision
 ================
 */
 func (rt *Runtime) completeReturnScrollInDivision(job pendingReturn, now int64) ([]wire.Frame, []wire.Frame) {
-	unlock := rt.lockDivision(job.division)
+	// The wait for the division lane is timed as its own step
+	// (returnScrollDivisionWait), outside the completion's work: a job
+	// queued behind a long lane holder used to charge that wait to
+	// whatever named it (#1820 E, the tickPublicationGate rule).
+	var unlock func()
+	rt.Steps.Time("returnScrollDivisionWait", func() {
+		unlock = rt.lockDivision(job.division)
+	})
 	defer unlock()
 	return rt.completeReturnScroll(job, now)
 }
@@ -410,7 +417,7 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 	var arrival travelPoint
 	cancelled := false
 	currentWorld := instance.ID(domain.CharacterWorldInstance(c))
-	rt.bindResidentRegion(key, now)
+	rt.bindResidentRegionDeferred(key, now)
 	if !rt.deps.UpdateDeferred(c, "return-scroll-complete", func() bool {
 		if c.DeletePending || c.NativeTeleportMode == 0 {
 			rt.returnCasts.Delete(key)
@@ -465,8 +472,8 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 		})
 		return []wire.Frame{clearMode}, []wire.Frame{clearMode}
 	}
-	rt.endTransformForLoading(job.division, c)
-	rt.endPartyAurasForLoading(job.division, c)
+	rt.endTransformForLoadingDeferred(job.division, c)
+	rt.endPartyAurasForLoadingDeferred(job.division, c)
 	previousPets := rt.relocateReturningPet(job.division, c, destination)
 	packets, accepted := rt.deps.ReentryPackets(job.division, job.name)
 	clear := teleportState(c, 0)
@@ -483,17 +490,19 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 		return []wire.Frame{clear}, []wire.Frame{clear}
 	}
 	rt.noteTeleportArrival(job.division, c)
-	rt.bindResidentRegion(key, now)
+	rt.bindResidentRegionDeferred(key, now)
 	rt.Selected.Clear(job.division, job.name)
 	rt.closeStorageSession(job.division, job.name)
 	rt.NpcDialogs.Clear(job.division, job.name)
 	rt.ClearCombatIntent(job.division, job.name)
 	rt.clearSkillFinalizes(job.division, job.name)
 	rt.clearCompoundJob(compoundKey{job.division, job.name})
-	corpses, corpseDespawns := rt.retireCompanionCorpses(job.division, c)
+	corpses, corpseDespawns := rt.retireCompanionCorpsesDeferred(job.division, c)
 	frames := append(missionReentryFrames(packets), corpses...)
-	if snapshot := rt.characterSnapshot(job.division, c); snapshot != nil && snapshot.NativeBodyStatus != 0 {
-		frames = append(frames, bodyStatusFrame(enterworld.ObjectIDForCharacter(c), snapshot.NativeBodyStatus))
+	// Only the body status is replayed here; read it under the door
+	// instead of detaching the whole record (#1820).
+	if _, _, bodyStatus := rt.characterLifeState(job.division, c); bodyStatus != 0 {
+		frames = append(frames, bodyStatusFrame(enterworld.ObjectIDForCharacter(c), bodyStatus))
 	}
 	return frames, append(corpseDespawns, clear, wire.Frame{Opcode: wire.OpObjectSourceCorrection, Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{RegionID: destination.RegionID, X: float32(destination.X), Y: float32(destination.Y), Z: float32(destination.Z), Heading: destination.Angle}}.Encode()})
 }

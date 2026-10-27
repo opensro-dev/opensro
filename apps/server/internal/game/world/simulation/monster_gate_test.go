@@ -47,8 +47,8 @@ func gateStateFixture(t *testing.T) (*MonsterState, monster.Instance) {
 ================
 TestGateStateMasksPreserveHP
 
-4CF8EA..4CF947: intersecting nonzero masks do nothing; disjoint masks
-are ORed, and zero clears a nonzero word.
+In the retail server, intersecting nonzero masks do nothing; disjoint
+masks are ORed, and zero clears a nonzero word.
 ================
 */
 func TestGateStateMasksPreserveHP(t *testing.T) {

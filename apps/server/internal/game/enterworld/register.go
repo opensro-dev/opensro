@@ -205,9 +205,7 @@ packetBytes
 */
 func packetBytes(p Packet) []byte {
 	out := make([]byte, len(p.Payload))
-	for index, value := range p.Payload {
-		out[index] = byte(value)
-	}
+	copy(out, p.Payload)
 	return out
 }
 
@@ -233,7 +231,7 @@ func RegisterEnterWorld(hub *transport.Hub, deps *Deps) {
 				division := resolveBootstrapDivision(deps, request.Division)
 				admission.ResolveDivisionID = func(string) string { return division }
 				if division != "" {
-					unlock := deps.LockPublication(division)
+					unlock := deps.LockPublication(division, "enterWorld")
 					defer unlock()
 				}
 			}

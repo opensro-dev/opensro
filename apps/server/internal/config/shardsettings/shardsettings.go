@@ -86,9 +86,10 @@ var Settings = []Setting{
 	{Env: "SRO_BETA_PLAYER_MAP", NomadVar: "beta_player_map", Default: "off", Validation: ValueSwitch},
 	{Env: "SRO_BETA_MASTERY", NomadVar: "beta_mastery", Default: "on", Catalogue: true, Source: Built,
 		Validation: ValueSwitch},
-	// Port-only, not native: the 110 cap (owner, 2026-10-24: on for the next
-	// release; "off" keeps the native 90).
-	{Env: "SRO_LEVEL_CAP", NomadVar: "level_cap", Default: "110", Catalogue: true},
+	// Port-only, not native: the 110 cap. Owner, 2026-10-27: the default is
+	// the native 90 (the non-native rule: the off value is native); the
+	// cap-110 expansion names 110 when it ships (#1751).
+	{Env: "SRO_LEVEL_CAP", NomadVar: "level_cap", Default: "90", Catalogue: true},
 	// Port-only, not native: database-authored Alexandria field population.
 	{Env: "SRO_CAP110_MONSTERS", NomadVar: "cap110_monsters", Default: "off", Catalogue: true},
 	// Port-only, not native: the level-100 slice of that population,
@@ -98,6 +99,13 @@ var Settings = []Setting{
 	// Port-only, not native: degree-10/11 equipment set bonuses (#1747);
 	// the v1.150 client ships no set rows, so off is the native state.
 	{Env: "SRO_CAP110_SET_BONUSES", NomadVar: "cap110_set_bonuses", Default: "off", Catalogue: true},
+	// Port-only, not native: the degree-11 equipment and skill tiers
+	// (#1745). Consumed at build time, not at runtime: the variant build's
+	// import tools (cap110_item_import.py, cap110_skill_import.py) read
+	// them when the server data is built, and the GameWorld reads neither.
+	// Server only: the catalogue reads the built data, not its inputs.
+	{Env: "SRO_CAP110_ITEMS", NomadVar: "cap110_items", Default: "off"},
+	{Env: "SRO_CAP110_SKILLS", NomadVar: "cap110_skills", Default: "off"},
 	// Port-only, not native: the Pharaoh Tomb 1-3 population and gates. Needs
 	// SRO_CAP110_MONSTERS (its equipment drops).
 	{Env: "SRO_PHARAOH_TOMB", NomadVar: "pharaoh_tomb", Default: "off", Catalogue: true},
@@ -251,7 +259,7 @@ var Settings = []Setting{
 	// Owner, 2026-10-15: thief and hunter monsters move 20% faster.
 	{Env: "SRO_JOB_MONSTER_SPEED", NomadVar: "job_monster_speed", Default: "on"},
 	// Owner, 2026-10-18: reversed the 2026-10-15 follow setting; the
-	// deployment default stays native ("off", 0x4FD1D0).
+	// deployment default stays native ("off").
 	{Env: "SRO_TRANSPORT_FOLLOW", NomadVar: "transport_follow", Default: "off"},
 	// Owner, 2026-10-24: a following transport keeps the 100 m tether. It
 	// acts only with SRO_TRANSPORT_FOLLOW on.
@@ -284,9 +292,18 @@ var Settings = []Setting{
 	// a Moon's kills; the cap supersedes the eleven-a-week calibration.
 	{Env: "SRO_SUN_DROP_RATE", NomadVar: "sun_drop_rate", Default: "2", Catalogue: true},
 	// Owner, 2026-10-20: uniques ignore the level-gap drop admission and
-	// always leave exactly one Magic Pop ticket; "off" is native 4C1840.
+	// always leave exactly one Magic Pop ticket; "off" is native.
 	{Env: "SRO_UNIQUE_GAP_EXEMPT", NomadVar: "unique_gap_exempt", Default: "on", Catalogue: true},
 	{Env: "SRO_UNIQUE_POP_TICKET", NomadVar: "unique_pop_ticket", Default: "on", Catalogue: true},
+	// Owner, 2026-10-25 (narrowed 2026-10-26): a unique in the top loot
+	// band (own level within ten of the highest installed level: degree 9
+	// at cap 90, degree 11 at cap 110) rolls its equipment at that level;
+	// every other unique keeps its own level. Opt-in: "off" is native.
+	{Env: "SRO_UNIQUE_MAX_LEVEL_LOOT", NomadVar: "unique_max_level_loot", Default: "off", Catalogue: true},
+	// Owner, 2026-10-25 (narrowed 2026-10-26): every unique kill leaves one
+	// Seal of Star of the top degree and a Moon one in ten; no guaranteed
+	// Sun. Opt-in: "off" is native.
+	{Env: "SRO_UNIQUE_SEAL_DROPS", NomadVar: "unique_seal_drops", Default: "off", Catalogue: true},
 	// Owner, 2026-10-18: respawning unique nests draw over 45-90 minutes
 	// instead of the operator backup's 20-36 minute rows. "off" keeps the
 	// authored row.

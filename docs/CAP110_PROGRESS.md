@@ -558,6 +558,15 @@ Local input: `.state/vsro-database/exports/vsro_inspect-player-skills.json`.
 Set its absolute path in `SRO_CAP110_SKILL_DATABASE` along with
 `SRO_CAP110_SKILLS=1` when rebuilding the full variant.
 
+The three switches that make the tier learnable in game must agree, and
+nothing joins them automatically: `SRO_CAP110_SKILLS` publishes the
+client tier at build time, `SRO_CAP110_SKILL_DATABASE` adds the 101-110
+database tier, and `SRO_LEVEL_CAP=110` on the server admits the levels.
+Publishing the database tier while the cap stays at 90 leaves the
+101-110 ranks board-visible but unlearnable under the generic mastery
+refusal, so the gameworld warns once at startup when the loaded table
+requires a mastery above the configured cap.
+
 Verification: 177 Python tests, production parameter decoding of all 1,518
 rows, progression/enterworld Go tests, progression vet, five skill-slot tests,
 and four native effect/spine tests passed. Repeated on-builds preserved IDs;
@@ -574,11 +583,13 @@ the native census expectation.
 
 Execution limits remain explicit: a generic press audit must not classify
 passives or the instant imbue path as missing casts. Of the new 536 root
-candidates, 62 are passives and 20 use the instant path. One ordinary queued
-candidate, `SKILL_EU_ROG_STEALTHA_CHANGE_B_03` (33156), is still refused by current
-execution admission. Its enemy-player-only target data does not satisfy the
-existing Duplicate parser's friendly-target envelope. It is imported and can
-appear on the board, but this does not claim that cast works. More generally,
+candidates, 62 are passives and 20 use the instant path. The one ordinary
+queued candidate that used to be refused, `SKILL_EU_ROG_STEALTHA_CHANGE_B_03`
+(33156), is admitted since #1746: tracing the reference server showed its
+Duplicate branch takes the row's own target classes and gates only the
+target's suit, battle mode, level, GM privilege and murderer state, so the
+parser now admits the enemy-player envelope and the press path puts no
+relation gate on the family. More generally,
 decoded parameters, an effect record and an available command owner are not an
 in-game execution certificate; test representative CH/EU casts and learning.
 
@@ -590,8 +601,9 @@ Server export manifest:
 The owner confirmed the CH/EU skill trees and reported that the tested skills
 work in combat. This is manual owner verification, not an automated exhaustive
 test of every rank, target combination, status interaction or numerical value.
-Sable Duplicate (33156) remains a known cast-admission issue; the owner explicitly
-deferred Rogue work. Keep that exception open despite the broader confirmation.
+Sable Duplicate (33156) was then a known cast-admission issue, explicitly
+deferred by the owner; #1746 later traced the reference server's handling
+and admitted the rank, so the exception is closed.
 
 The delivered skill-window catalogue referenced 20 missing packed images:
 19 Chinese icons and one Rogue icon, covering 51 rank rows. Their source DDJs
@@ -1015,12 +1027,17 @@ gate arrivals have no dungeon-region sign bit), so they reuse the field pipeline
 
 Port decisions, each inferred rather than evidenced:
 
-- Each tomb runs as a persistent shared area on `INS_DEFAULT`, as the Qin-Shi
-  tomb does. The original's per-tomb worlds are not modelled. The last
-  `teleportdata` column names the destination world; the v1.150 world table has
-  no 57-59 (the server stops with `names unknown world 57`), so the importer sets
-  the three exits to world 1 and records the originals in the variant manifest
-  (`gates.worldsFlattened`).
+- Each tomb is its own permanent world (#1750, owner 2026-10-27). The v1.150
+  world table has no 57-59 (the server stops with `names unknown world 57`), so
+  the port registers the three shipped ids port-only (`INS_PHARAOH_TOMB_1..3`)
+  behind the same switch and the tomb population joins its own world instead of
+  `INS_DEFAULT`. The last `teleportdata` column names the destination world;
+  the importer keeps the three exits' authored worlds 57, 58 and 59, and the
+  portal catalogue resolves them once the tomb worlds are registered (the
+  bootstrap registers before the catalogue loads). A variant built with the
+  tomb gates therefore only boots with `SRO_PHARAOH_TOMB` on; off, the server
+  refuses the catalogue at `names unknown world 57` instead of silently
+  flattening three tombs into the field.
 - Bosses are single-spawn nests with their authored respawn delay. The database
   carries no trigger data, so the original's instance triggers are not ported.
 - The unplaced `GATE_TOMBOSIRIS_*` rows (all-zero positions) are not carried.

@@ -10,6 +10,8 @@ package simulation
 
 import (
 	"math"
+	"time"
+
 	"opensro.online/server/internal/domain"
 
 	log "github.com/sirupsen/logrus"
@@ -53,6 +55,19 @@ type MonsterMoverOps struct {
 	// watch is the owning ticker's stall watch; the leg steps it every
 	// monsterLegStepActors actors. Nil in direct fixtures.
 	watch *tickWatch
+	// leg is the slow-leg attribution of the leg now running (#1820
+	// part C); nil outside RunMonsterLeg. The dispatch closure's ops
+	// copies share the pointer, so both advance paths accumulate into
+	// the one record.
+	leg *legStats
+	// lastLeg is the most recent leg's attribution, kept for tests and
+	// post-hoc inspection; replaced at the end of every leg.
+	lastLeg *legStats
+	// resumePending holds gids woken from dormancy whose first dispatch
+	// has not run yet (the resumed count, part C). Shard-owned like
+	// shownMonsters; nil until the first wake on this ops clone (ticker
+	// clones are made before any leg runs, so each owns its map).
+	resumePending map[populationKey]map[uint32]struct{}
 	// Navigation counts route plans and path clips (navigation_metrics.go);
 	// nil counts nothing.
 	Navigation     *NavigationMetrics
@@ -77,6 +92,17 @@ type MonsterMoverOps struct {
 	PlanPathFrom func(from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationPath
 	// AI route policy, separate from raw clipping used by sight/help probes.
 	PlanRoute func(from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationRoute
+	// RouteMemo gates the failed-route memo (#1820 part B): may a failed
+	// search between these poses be answered from the mover's record
+	// instead of recomputed? Production wires it from the planes (same
+	// plane, PureRoutes). Nil, or false, means no memo: every retry
+	// searches, exactly as before.
+	RouteMemo func(from, goal monster.Pose) bool
+	// NavCacheMisses reads the movement layer's cold surface/object-nav
+	// resolutions (movement.WaterValidator.NavCacheMisses). A leg diffs
+	// it around itself: a nonzero delta is a first-use load the boot
+	// preload missed (#1820 part C). Nil reads zero.
+	NavCacheMisses func() uint64
 	// Rand returns a uniform [0,1) sample (seam for deterministic tests).
 	Rand func() float64
 	// AttackPlan resolves one of RefObjChar's ten default-skill ids against
@@ -99,7 +125,7 @@ type MonsterMoverOps struct {
 	// Bard's Noise) from the effect owner. nil protects nobody.
 	FirstAttackGuard func(divisionID string, playerGID uint32, nowMs int64) monster.FirstAttackGuard
 	// Companions lists a player's summoned, living, unmounted companions in
-	// its owner's container order (CCOSManager_AppendOwnedActorsInContainerOrder).
+	// its owner's container order.
 	// nil means no companion is ever a target.
 	Companions func(divisionID string, ownerGID uint32, nowMs int64) []CompanionTarget
 
@@ -321,6 +347,17 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 		return
 	}
 
+	// Slow-leg attribution (#1820 part C): one record per leg, filled
+	// below and by the planners through ops.leg; nothing reads it to
+	// decide behaviour.
+	legStarted := time.Now()
+	stats := &legStats{gcStart: readGCSample()}
+	if ops.NavCacheMisses != nil {
+		stats.navStart = ops.NavCacheMisses()
+	}
+	ops.leg = stats
+	defer func() { ops.leg = nil }()
+
 	viewers := make(map[string]worldgeom.RegionXZ, len(sessions))
 	live := make(map[string]bool, len(sessions))
 	for _, session := range sessions {
@@ -337,8 +374,13 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 	// 0x30E3 is find-or-skip safe). Delivering mover frames per-session
 	// against the just-updated shown sets makes spawn-before-goal and
 	// never-goal-after-despawn true by construction.
-	ops.Monsters.prepareDormancy(nowMs, ops.divisionID, sessions)
+	phaseStarted := time.Now()
+	wokenSets := ops.Monsters.prepareDormancy(nowMs, ops.divisionID, sessions)
+	stats.dormancy = time.Since(phaseStarted)
+	ops.noteWoken(stats, wokenSets)
+	phaseStarted = time.Now()
 	ops.runScopeVisibility(nowMs, sessions, viewers, live, push)
+	stats.visibility = time.Since(phaseStarted)
 
 	ops.activity = ops.captureActivity(sessions, nowMs)
 	defer func() { ops.activity = nil }()
@@ -362,6 +404,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 		owned.advanceAndPublish(dispatch.division, dispatch.instance, dispatch.players, nowMs, sessions, push)
 	}
 	stepped := 0
+	phaseStarted = time.Now()
 	for _, batch := range ops.Monsters.behaviorBatchesForDivision(nowMs, ops.divisionID) {
 		divisionID := batch.key.division
 		divisionSet[divisionID] = true
@@ -386,6 +429,9 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 			if !exists {
 				continue
 			}
+			if ops.noteResumed(batch.key, gid) {
+				stats.resumed++
+			}
 			if stepped++; stepped%monsterLegStepActors == 0 {
 				ops.watch.step()
 			}
@@ -397,10 +443,22 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 			ops.advanceAndPublish(divisionID, instance, players, nowMs, sessions, push)
 		}
 	}
+	stats.batch = time.Since(phaseStarted)
+	stats.actors = stepped
 	for divisionID := range divisionSet {
 		if frames := ops.Monsters.DrainUniqueNotices(divisionID); len(frames) > 0 {
 			push.PushToDivision(divisionID, frames, "")
 		}
+	}
+	stats.total = time.Since(legStarted)
+	var navMissesEnd uint64
+	if ops.NavCacheMisses != nil {
+		navMissesEnd = ops.NavCacheMisses()
+	}
+	stats.finish(navMissesEnd, readGCSample())
+	ops.lastLeg = stats
+	if stats.total >= SlowHookThreshold {
+		stats.logSlow(ops.divisionID)
 	}
 }
 
@@ -410,6 +468,12 @@ advanceAndPublish
 ================
 */
 func (ops *MonsterMoverOps) advanceAndPublish(divisionID string, instance monster.Instance, players []playerPose, nowMs int64, sessions []SessionSnapshot, push Pusher) {
+	// Part C times the advance itself, so the direct dispatch below and
+	// the RunAction closure path accumulate into the same figure.
+	if ops.leg != nil {
+		started := time.Now()
+		defer func() { ops.leg.noteAdvance(time.Since(started)) }()
+	}
 	frames, targeted := ops.advanceInstance(divisionID, instance, players, nowMs)
 	for _, session := range sessions {
 		if len(frames) > 0 && session.DivisionID == divisionID && ops.shownMonsters[session.SessionID][instance.Gid] {
@@ -787,6 +851,7 @@ destination selection clips from HOME).
 */
 func (ops *MonsterMoverOps) planPath(caller navCaller, from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationPath {
 	ops.Navigation.clip(caller)
+	ops.leg.noteClip(caller)
 	if ops.PlanPathFrom != nil {
 		return ops.PlanPathFrom(from, fromOwner, goal)
 	}

@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -172,7 +171,13 @@ type groundState struct {
 // contract); the database is its crash-consistent shadow, advanced one
 // transaction per committed operation.
 type Store struct {
-	mu sync.RWMutex
+	// mu is the authority lock; it records its waits and holds, and
+	// commits their phases (lock_timing.go).
+	mu      timedRWMutex
+	commits commitTiming
+	// beforeSQLiteCommit, nil in production, runs inside a commit's sqlite
+	// phase: tests make a commit slow to watch what waits on it.
+	beforeSQLiteCommit func()
 
 	dir       string
 	dbPath    string
