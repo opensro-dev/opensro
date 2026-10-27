@@ -1,10 +1,24 @@
-// Code generated from ops/docs/evidence/paramkeeper-definitions-188.json; DO NOT EDIT.
+/*
+===========================================================================
+
+native_definitions.go - the native parameter definition table
+
+The parameter definitions the original game server loads at boot: every
+parameter it keeps, laid out as 20-byte records of id, minimum, maximum,
+fallback base and ignore sentinel. NativeDefinition answers a single
+id's definition; element.go and graph.go evaluate with them.
+
+Maintained by hand (#1701 leftover 2): the generated-file header this
+file carried named a generator input that was never checked in, and no
+generator exists in the tree, so nothing regenerates it.
+
+===========================================================================
+*/
 
 package paramkeeper
 
-// NativeDefinition is the CParam definition table the native loader (4B3960)
-// reads from C64110: every parameter the server keeps, 20-byte records of
-// id, minimum, maximum, fallback base and ignore sentinel.
+// NativeDefinition reports the definition for one parameter id, and
+// whether the id exists.
 func NativeDefinition(id uint16) (Definition, bool) {
 	switch id {
 	case 0:

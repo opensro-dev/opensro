@@ -42,11 +42,11 @@ type portalDestination struct {
 	id, ref  uint32
 	code     string
 	building bool
-	// fortressGate is a building of TypeID 4/1/1/1 (TypeId_IsFortressGate
-	// 4F8820): the field gates of a fortress, not its town portal.
+	// fortressGate is a building of TypeID 4/1/1/1 (the reference server's
+	// fortress gate test): the field gates of a fortress, not its town portal.
 	fortressGate bool
 	// gateKind is the TID4 of a 4/1/1 teleport building, which
-	// CRefData_FindWorldTeleportByKind (51D260) selects revival gates by: 1
+	// the reference server's teleport lookup by kind selects revival gates by: 1
 	// a fortress gate, 2 a fortress's revival gate.
 	gateKind uint8
 	recall   bool
@@ -62,9 +62,9 @@ portalCondition
 */
 type portalCondition struct{ kind, minimum, maximum uint32 }
 
-// portalConditionTransport is Restrict kind 2: CRefTeleportLink_CheckState
-// (513A70, 513B1A..513B34) refuses 0x1C10 while the player's first summoned
-// COS is a transport (vt+0x2EC -> 4827F0 tests TID band 2).
+// portalConditionTransport is Restrict kind 2: the reference server's
+// teleport link check refuses 0x1C10 while the player's first summoned
+// COS is a transport (vt+0x2EC tests TID band 2).
 const portalConditionTransport uint32 = 2
 
 // portalConditionThiefSuitTransport is Restrict kind 7 (the Alexandria
@@ -121,7 +121,7 @@ type portalCatalog struct {
 }
 
 // Both tables remain server-owned. The request carries neither a price nor a
-// position. Conditions are the ordered triples consumed by native 513A70.
+// position. Conditions are the ordered triples the native link check consumes.
 /*
 ================
 loadPortalCatalog
@@ -355,7 +355,7 @@ func parsePortalCatalog(dir string) (*portalCatalog, error) {
 buildingGateSpawn
 
 The gate spawn of the teleport whose object is the named building: a
-return scroll's Param4 (4A0380 reads it through the reference data's
+return scroll's Param4 (the reference server reads it through the reference data's
 +0x190 teleport link).
 ================
 */
@@ -469,7 +469,7 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 		return portalFailure(refusal)
 	}
 	source := rt.portals.destinations[sourceID]
-	// 4F30E1: a murderer (PvP state 2) may not pass a building gate (the
+	// Reference server: a murderer (PvP state 2) may not pass a building gate (the
 	// source object's vtable +0x44), 0x1C16; a ferry still carries one.
 	if source.building && murderer(c) {
 		return portalFailure(errCodeMurdererGate)
@@ -489,7 +489,7 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 		return portalFailure(refusal)
 	}
 	// The gate fee's tax goes to the gate's fortress once the move holds
-	// (CGObjPC_HandleTeleportUseRequest0x705A_Body, 4F331D).
+	// (the reference server's teleport use handler).
 	var collected int64
 	settled := func() { rt.collectFortressTax(division, npc, collected) }
 	return rt.commitGateTravel(gateTravel{division: division, character: c, destination: destination, world: destinationWorld, reason: "portal-travel", settled: settled}, func() (int64, OpResult, bool) {
@@ -676,7 +676,7 @@ func (rt *Runtime) portalSourceNpc(division string, c *enterworld.Character, gid
 }
 
 // gateTransportRange is how far a summoned transport may stand from its
-// owner and still travel through a gate (4F2B50 case 2: Vec3_Length of the
+// owner and still travel through a gate (the teleport use handler, case 2: the length of the
 // relative position against 1000.0, else 0x1C13).
 const gateTransportRange = 1000.0
 
@@ -698,16 +698,16 @@ type portalTraveller struct {
 	transportAdmitted bool
 }
 
-// 4F2D05: the quest bit blocks buildings and the special GATE_TD route;
-// it does not turn ordinary ferries into town gates. 513A70 separately checks
+// Reference server: the quest bit blocks buildings and the special GATE_TD route;
+// it does not turn ordinary ferries into town gates. The link check separately checks
 // the authored transport-COS restriction on ferry links.
 /*
 ================
 portalAdmission
 
-In 4F2B50 case 2's order: the quest bit, then a summoned transport beyond
+In the reference server's teleport use order (case 2): the quest bit, then a summoned transport beyond
 gateTransportRange (0x1C13: it would be left behind), then the link's
-conditions (513A70), then the fee.
+conditions, then the fee.
 ================
 */
 func portalAdmission(c *enterworld.Character, source portalDestination, link portalLink, traveller portalTraveller) byte {

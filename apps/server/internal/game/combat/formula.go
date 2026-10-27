@@ -62,21 +62,23 @@ Result
 */
 type Result struct {
 	// Imbue is the active weapon imbue's abnormal authority (its bu block),
-	// rolled per impact after the skill's own statuses (590B24).
+	// rolled per impact after the skill's own statuses (the imbue roll
+	// follows the status rolls).
 	Imbue  abnormal.SkillParams
 	Damage uint32
 	// MagicalDamage retains the lane accumulator before total-damage
-	// scaling. 58F491 releases Root only when this accumulator is nonzero.
+	// scaling. The server releases Root only when this accumulator is nonzero.
 	MagicalDamage uint32
 	// PhysicalDamage is the physical lane accumulator (+0x28; the imbue's
-	// physical word joins it at 58F435). Damage return (5A0C2D) reads it.
+	// physical word joins it in the hit-outcome routine). The server's
+	// damage return reads it.
 	PhysicalDamage uint32
 	ResultFlags    uint8
-	// Blocked is a type-2 record (0x58F0EF): no damage, no imbue share, no
-	// status roll, no knockdown (the defender's +0xD2C is never set).
+	// Blocked is a type-2 record: no damage, no imbue share, no status
+	// roll, no knockdown (the defender's +0xD2C is never set).
 	Blocked bool
-	// Slain is a ck kill, record 0x86 (58F774): no damage, and the
-	// defender dies outright.
+	// Slain is a ck kill, record 0x86: no damage, and the defender dies
+	// outright.
 	Slain bool
 }
 
@@ -125,8 +127,9 @@ func ResolveMonster(
 AttackCalculation
 
 Keep the authored effect and initiating attack separate from the selected
-damage lanes. 410BB0 classifies by both RefSkill rows; a wall or chained
-recipient can suppress a lane without rewriting either authored row.
+damage lanes. The server's defense-absorption classifier reads both RefSkill
+rows; a wall or chained recipient can suppress a lane without rewriting
+either authored row.
 ================
 */
 type AttackCalculation struct {
@@ -180,8 +183,9 @@ func ResolveCalculation(attacker, defender Stats, calculation AttackCalculation,
 		magicalDamage = downAttackDamage(damage, defender.MotionState, attack.DownAttack)
 		total += uint64(magicalDamage)
 	}
-	// 58F52F: atca scales the summed lane dword by (1 + percent/100) when
-	// its mask shares a bit with the target's abnormal mask (+0xD34).
+	// The hit-outcome routine's atca step scales the summed lane dword by
+	// (1 + percent/100) when its mask shares a bit with the target's
+	// abnormal mask (+0xD34).
 	if attack.Atca && defender.AbnormalMask&attack.AtcaMask != 0 {
 		total = uint64(fistpLow(float64(uint32(total)) * (1 + float64(attack.AtcaPercent)/100)))
 	}
@@ -213,8 +217,9 @@ type laneRoll struct {
 ================
 defenseAbsorption
 
-40EBE0/40EEF0 never call 410BB0: a Force wall has its own damage pool,
-so the protected character's absorption does not reduce the wall's damage.
+The wall damage lanes never call the defense-absorption classifier: a Force
+wall has its own damage pool, so the protected character's absorption does
+not reduce the wall's damage.
 ================
 */
 func defenseAbsorption(defender Stats, calculation AttackCalculation) float32 {
@@ -262,8 +267,9 @@ func resolveLane(attacker, defender Stats, calculation AttackCalculation, lane l
 	attackMin += float64(attack.Min)
 	attackMax += float64(attack.Max)
 
-	// 59E770: absent MAAT is zero; each absent mastery ID contributes one,
-	// otherwise consume the learned level, and choose the larger slot.
+	// Mastery enhancement: absent MAAT is zero; each absent mastery ID
+	// contributes one, otherwise consume the learned level, and choose the
+	// larger slot.
 	enhancement := float64(masteryEnhancement(attacker.masteries, attack))
 	attackMin *= 1 + enhancement/100
 	attackMax *= 1 + enhancement/100
@@ -299,7 +305,7 @@ func resolveLane(attacker, defender Stats, calculation AttackCalculation, lane l
 		damage = 0
 	}
 	damage *= float64(attack.Percent) / 100
-	// 40E58C/40E59A and 40E934/40E940 select 80..83 after defense
+	// Both lanes (physical and magical) select 80..83 after defense
 	// subtraction and attack-percent scaling. This is not attack-stat scaling.
 	rate := float64(0)
 	if attack.Flags&1 != 0 {
@@ -318,14 +324,15 @@ func resolveLane(attacker, defender Stats, calculation AttackCalculation, lane l
 	if rate != 0 {
 		damage = float64(float32(damage * (1 + rate/100)))
 	}
-	// 410BB0 uses the current effect's physical bit before its magical bit,
-	// then the ORIGINAL attack's basic/skill bit (58F2F3 and 58F312).
+	// The defense-absorption classifier uses the current effect's physical
+	// bit before its magical bit, then the ORIGINAL attack's basic/skill
+	// bit (the hit-outcome routine passes both rows).
 	taken := defenseAbsorption(defender, calculation)
 	if taken != 0 {
 		damage = float64(float32(damage * float64(taken)))
 	}
-	// 58E5F0 body1 sets result bit4; 40E450/40E830 multiply by2
-	// before level, balance and minimum-damage fallback.
+	// The hit-outcome routine's first body sets result bit4; both lanes
+	// multiply by 2 before level, balance and minimum-damage fallback.
 	if attacker.Berserk {
 		damage = float64(float32(damage * 2))
 	}
@@ -357,7 +364,7 @@ func resolveLane(attacker, defender Stats, calculation AttackCalculation, lane l
 		}
 		damage = 1 + (ceiling-1)*floorRoll
 	}
-	// 40E758/40EB0A: modifiers follow the minimum-damage fallback.
+	// In both lanes, modifiers follow the minimum-damage fallback.
 	outgoing, incoming := attacker.PhysicalOutgoing, defender.PhysicalIncoming
 	if magical {
 		outgoing, incoming = attacker.MagicalOutgoing, defender.MagicalIncoming

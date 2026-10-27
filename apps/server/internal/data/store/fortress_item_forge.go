@@ -5,10 +5,10 @@ fortress_item_forge.go - the fortress production rows and their commits
 
 _SiegeFortressItemForge keeps one row per order (layout 8). Starting an
 order charges the actor's gold and the holder guild's points with the
-row (CSiegeFortress_HandleDatabaseResult case 0xC debits the guild points
+row (the reference server's fortress database-result handler, case 0xC, debits the guild points
 before acknowledging); collecting writes the new bag row with the order's
 remaining count (_SiegeFortressCollectForgedItem). Cancelling refunds
-nothing (QUERY_SIEGE_ITEM_FORGE_REMOVE, 621D40).
+nothing (QUERY_SIEGE_ITEM_FORGE_REMOVE).
 
 ===========================================================================
 */
@@ -194,7 +194,7 @@ func (door storeFortressDoor) fortressProducerLocked(division string, holder, ac
 ================
 StartFortressItemForge
 
-Gold before guild points, as 632660 tests them. Write copies first, so a
+Gold before guild points, as the server's forge request tests them. Write copies first, so a
 failed commit leaves the actor and the guild as they were.
 ================
 */

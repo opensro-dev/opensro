@@ -74,8 +74,8 @@ func (rt *Runtime) retireMonsterSelfEffects(now int64) []simulation.DivisionFram
 		if err != nil {
 			panic(err)
 		}
-		// CSkillManager_PublishRetiredBuffs (59ECD0) sends the retired-buff
-		// packet through CGObj_SendPacketToNearbySessions (484D90). The
+		// The reference server sends the retired-buff
+		// packet through its nearby-session broadcast. The
 		// summon is absent from shownMonsters only on the before-hook that
 		// creates it; RunMonsterLeg admits it before the next hook.
 		frames = append(frames, simulation.DivisionFrames{DivisionID: row.DivisionID, SourceGID: row.GID, Frames: []simulation.Frame{{Opcode: wire.OpEndedEffectInstances, Payload: payload}}})

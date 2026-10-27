@@ -156,7 +156,7 @@ func TestStallNetworkSaleTakesCommission(t *testing.T) {
 ================
 TestStallNetworkDegreeIsTheItemsDegree
 
-A non-equipment item's degree is its class (4775A0): a class-3 expendable
+A non-equipment item's degree is its class (reference server): a class-3 expendable
 lists under a third-degree search, not a first-degree one.
 ================
 */

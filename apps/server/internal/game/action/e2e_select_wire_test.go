@@ -22,7 +22,7 @@ package action_test
 //	               VERY NEXT frame on the session's reliable ordered
 //	               stream is the exact 0xB45A talk grant - result 1, the
 //	               gid, vitalsMask 0, NPC_EU_SMITH's capability word
-//	               0x8000000B, npcExtra 0 - shop|talk|repair|magic grant (4C6350 option 4),
+//	               0x8000000B, npcExtra 0 - shop|talk|repair|magic grant (option 4),
 //	               byte-equal to the hand-rolled
 //	               oracle. Had the player or ground grant emitted
 //	               anything, it would have arrived first and failed the

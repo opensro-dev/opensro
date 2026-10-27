@@ -220,7 +220,7 @@ func TestQuestPackedMinuteByte(t *testing.T) {
 ================
 TestQuestPackedMinutesSplitDays
 
-570650 splits hours past a day into days at bit 10: Rahid 2's 1800-minute
+The server's journal timer splits hours past a day into days at bit 10: Rahid 2's 1800-minute
 wait is one day and six hours.
 ================
 */

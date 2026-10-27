@@ -530,7 +530,7 @@ func connectInvitationLanes(
 	parties.AddConsentArm(instanceInvites)
 
 	// A player holds one unanswered proposal at a time, whatever its
-	// lane (TransactionMgr_InsertUnique 46F420): every lane refuses to
+	// lane (the server's unique transaction insert): every lane refuses to
 	// propose while another's proposal waits.
 	partyPending := parties.Registry().HasPendingInviteFor
 	guildInvites.PeerPending = func(divisionID, name string) bool {

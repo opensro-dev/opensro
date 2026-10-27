@@ -68,7 +68,7 @@ func releaseHarmony(t *testing.T, rt *Runtime, clock *fakeClock, c *enterworld.C
 ================
 fieldPass
 
-Advance to the next 48CEA0 pass and run the object tick.
+Advance to the next skill object pass and run the object tick.
 ================
 */
 func fieldPass(rt *Runtime, clock *fakeClock) {

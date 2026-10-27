@@ -70,7 +70,8 @@ func (r *Registry) StopForcedTarget(effect Effect) {
 ================
 replaceForcedTargetLocked
 
-5936D5 replaces the single hitm owner even across different skill groups.
+The reference server replaces the single hitm owner even across different
+skill groups.
 Queue the old instance's wire retirement as well as clearing its live flag.
 ================
 */

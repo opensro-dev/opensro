@@ -739,7 +739,7 @@ func TestCombatAdmissionFailsClosedBeforeHPMutation(t *testing.T) {
 		"unpinned item option": func(_ *Runtime, character *enterworld.Character) {
 			character.MissionInventory[0].MagicOptions = []uint64{1}
 		},
-		// An empty ammunition weapon is not silent: 58E32D answers 0x300E
+		// An empty ammunition weapon is not silent: natively it answers 0x300E
 		// (TestBasicAttackWithoutAmmunitionReportsTheNotice).
 	}
 	for name, arrange := range tests {

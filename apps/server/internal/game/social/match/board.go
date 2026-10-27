@@ -16,8 +16,8 @@ import "sync"
 const PageRows = 12
 
 // PartyEntry is one party-match registration. Per the earlier finding
-// the client's listing row (CPartyRegData, sub_75e5e0's per-row parse)
-// IS the registration snapshot struct, so the registry holds exactly the
+// the client's listing row (sub_75e5e0's per-row parse) IS the
+// registration snapshot struct, so the registry holds exactly the
 // row fields. MasterName / RaceByte are SERVER-derived from the bound
 // character (identity is never client-supplied); MemberCount comes from
 // the party registry seam when the owner is partied, 1 otherwise (the

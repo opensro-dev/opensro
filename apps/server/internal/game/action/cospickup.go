@@ -24,13 +24,13 @@ const (
 	// Generic invalid/lifecycle refusals use that client-defined class; the
 	// later server's broader error namespace is not copied onto the 1.150 wire.
 	cosPickupUnavailable uint8 = 2
-	// 4D535C / 4D541E: 0x189C (low byte 0x9C) arms 77DD10's 3 s pet retry
+	// Reference server: 0x189C (low byte 0x9C) arms 77DD10's 3 s pet retry
 	// backoff without disabling auto-pickup when a shared-loot party member
 	// (or the owner in an item-share party on a personal quest drop) cannot
 	// accept the item.
 	cosPickupRetryBackoff uint8 = 0x9C
-	// 77DD10 disables automatic pickup for B4/B5. 4D52AC emits 0x18B4 when a
-	// COS container is full; 4D5442 emits 0x18B5 when the owner's player bag
+	// 77DD10 disables automatic pickup for B4/B5. The reference server emits 0x18B4 when a
+	// COS container is full, and 0x18B5 when the owner's player bag
 	// is full on a personal quest drop outside an item-share party.
 	cosPickupBagFull      uint8 = 0xB4
 	cosPickupOwnerBagFull uint8 = 0xB5
@@ -123,8 +123,8 @@ func (rt *Runtime) handleCosPickupCommand(division string, c *enterworld.Charact
 expireCosPickup
 
 The pet left PICKITEM (battle, displacement, relocation to its owner) with
-a pickup still pending. CAIState_PICKITEM_OnExit (55AD60) answers the owner
-then: a pending target sends its failure (55ADF0) before the state clears.
+a pickup still pending. The reference server's PICKITEM exit answers the owner
+then: a pending target sends its failure before the state clears.
 Expiring the deadline lets the pet's next tick retire it through
 finishPendingCosPickup, which answers the 0xB06D (and the command, when one
 asked). Clearing the slot instead left the request unanswered, and the
@@ -151,7 +151,7 @@ func finishPendingCosPickup(state *petSession, result OpResult) OpResult {
 	}
 	request := *state.pickup
 	state.pickup = nil
-	// Leaving PICKITEM is a state change (53FF30).
+	// Leaving PICKITEM is a state change.
 	resetPetStuck(state)
 	if state.pickupCommand {
 		result = finishCosPickupCommand(result, wire.CosCommand{CosGid: request.CosGID, TargetGid: request.GroundGID})

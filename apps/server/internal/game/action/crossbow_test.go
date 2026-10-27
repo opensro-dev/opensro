@@ -147,7 +147,7 @@ func TestCrossbowAuthoredFamily(t *testing.T) {
 TestCrossbowRangeAddend
 
 ru is added only to equipment-derived range, before CBRA. An explicit skill
-range bypasses ru (4AE838); it still receives the requested CBRA modifier.
+range bypasses ru natively; it still receives the requested CBRA modifier.
 ================
 */
 func TestCrossbowRangeAddend(t *testing.T) {

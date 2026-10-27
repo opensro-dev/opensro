@@ -10,7 +10,7 @@ package combat
 ================
 DamageToMP
 
-GameServer 5A13FE..5A14D6: truncate the redirected fraction, charge 1.5 MP
+The server's damage-to-MP branch: truncate the redirected fraction, charge 1.5 MP
 per redirected point, then truncate the uncovered MP cost / 1.5 back to HP.
 The server uses FPCW 027F. Preserve each double operation and truncation;
 combining this into one percentage changes low-MP and one-point outcomes.
@@ -36,7 +36,7 @@ func DamageToMP(damage, currentMP, percent uint32) (hpDamage, mpDamage uint32) {
 ================
 RedirectDamageToMP
 
-5A0B87..5A0BA7 skips damage post-processing when the hit or both original
+The server skips damage post-processing when the hit or both original
 lane accumulators are zero. Flat/periodic HP debits are not ordinary lanes.
 Keep this guard with the shared mechanic so new hit producers cannot omit it.
 ================

@@ -112,8 +112,9 @@ func TestSightAcquisitionRespectsTheSquadLimit(t *testing.T) {
 ================
 TestFixedQueryUniqueSwitchesToSecondaryOpponentInReach
 
-548340: with the target beyond body radius + 15 and the secondary opponent
-inside it, Uruchi's tactics retarget the secondary; an ordinary row, a
+The native secondary-opponent switch: with the target beyond body radius
++ 15 and the secondary opponent inside it, Uruchi's tactics retarget the
+secondary; an ordinary row, a
 secondary out of reach, or a target in reach keep the target.
 ================
 */
@@ -133,7 +134,7 @@ func TestFixedQueryUniqueSwitchesToSecondaryOpponentInReach(t *testing.T) {
 	ordinary := actor
 	ordinary.Nest.Controls.ID = 1
 	if ops.switchToSecondaryOpponent(monsterTestDivision, ordinary, mover, at(far, reach+5), []playerPose{at(far, reach+5), at(near, 3)}, live, 1000) {
-		t.Fatal("an ordinary row ran 548340")
+		t.Fatal("an ordinary row ran the secondary-opponent switch")
 	}
 	if ops.switchToSecondaryOpponent(monsterTestDivision, actor, mover, at(far, reach-1), []playerPose{at(far, reach-1), at(near, 3)}, live, 1000) {
 		t.Fatal("a target in reach was switched")

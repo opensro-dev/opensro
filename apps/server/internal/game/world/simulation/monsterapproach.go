@@ -223,7 +223,8 @@ func (s *MonsterState) prepareApproachNavigation(division string, actor monster.
 		assign(gid)
 	}
 	member := p.group.members[actor.Gid]
-	// 545620 releases only the actor's own reservation. A remembered direction
+	// The native approach-slot release releases only the actor's own
+	// reservation. A remembered direction
 	// that has been preempted must not clear the replacement owner's slot.
 	if member.slot != -1 || len(p.group.members) < 8 {
 		p.group.slots.Release(actor.Gid)

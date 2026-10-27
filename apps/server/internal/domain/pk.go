@@ -20,8 +20,8 @@ type PKRecord struct {
 	DailyCount uint8  `json:"dailyCount"`
 	TotalCount uint16 `json:"totalCount"`
 	Penalty    uint32 `json:"penalty"`
-	// TotalDecayAt is the penalty keeper timed job (CTJ_PenaltyKeeper,
-	// type 2): the unix second at which TotalCount next drops by one.
+	// TotalDecayAt is the server's penalty keeper timed job (type 2): the
+	// unix second at which TotalCount next drops by one.
 	// Zero while no keeper runs.
 	TotalDecayAt int64 `json:"totalDecayAt,omitempty"`
 	// DailyDay is the local day (yyyymmdd) DailyCount belongs to; a count
@@ -30,7 +30,7 @@ type PKRecord struct {
 }
 
 // PVPState is CICUser+4F4. The aggression list is transient; a durable penalty
-// takes priority on entry (research server 4E11CD..4E11E0).
+// takes priority on entry (as the research server's PVP state read does).
 /*
 ================
 PVPState
@@ -43,8 +43,9 @@ func (c *Character) PVPState() uint8 {
 	if c.PK != nil && c.PK.Penalty != 0 {
 		return 2
 	}
-	// 52AB89 leaves the last target protected for one tick after its grey
-	// state clears. The next scheduled tick removes that final count.
+	// The server's aggression tick leaves the last target protected for one
+	// tick after its grey state clears. The next scheduled tick removes
+	// that final count.
 	if len(c.Aggressions) == 1 {
 		for _, remaining := range c.Aggressions {
 			if remaining == 1 {

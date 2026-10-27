@@ -48,7 +48,7 @@ import (
 const EnvReverseReturnMap = "SRO_REVERSE_RETURN_MAP"
 
 const (
-	// reverseReturnMapChoice is v1.188's saved-point choice (4A00C0 case 7).
+	// reverseReturnMapChoice is the reference server's saved-point choice (case 7).
 	reverseReturnMapChoice uint8 = 7
 	// reverseMapTailBytes is the choice byte and its u32 point id.
 	reverseMapTailBytes = 5

@@ -2,7 +2,7 @@
 ===========================================================================
 
 gradescale_test.go - tests for gradescale.go: a graded monster's speeds
-and BCRadius scale by 4C1550's grade factor
+and BCRadius scale by the grade factor
 
 ===========================================================================
 */

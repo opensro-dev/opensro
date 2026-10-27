@@ -366,7 +366,7 @@ func TestLiveCompanionRevivalPublishesAliveAfterVitals(t *testing.T) {
 	if pet.CurrentHP != 100 || len(result.Broadcast) != 4 || result.Broadcast[0].Opcode != simulation.OpVitalsUpdate || result.Broadcast[1].Opcode != wire.OpObjectStateRefresh || result.Broadcast[3].Opcode != wire.OpItemUseVisual {
 		t.Fatal("revival omitted world life/vitals", result)
 	}
-	// 49D240 case 6 names no object, so the revival's sparkle stays on the owner.
+	// Native case 6 names no object, so the revival's sparkle stays on the owner.
 	if gid := binary.LittleEndian.Uint32(result.Broadcast[3].Payload); gid != enterworld.ObjectIDForCharacter(c) {
 		t.Fatalf("revival sparkle on %d, want the owner", gid)
 	}
@@ -488,7 +488,7 @@ func TestGrowthPetsCannotBeSummonedInFreeBattle(t *testing.T) {
 ================
 TestPetsRefuseSummonInBattle
 
-493100 refuses every persistent summon in battle with 0x78 before its
+The reference server refuses every persistent summon in battle with 0x78 before its
 family branch, attack and pickup pets alike, and admits it once battle
 ends.
 ================
@@ -513,9 +513,9 @@ func TestPetsRefuseSummonInBattle(t *testing.T) {
 ================
 TestSummonedPetScrollMovesWithinBagAndUpdatesStateSlot
 
-CGObjPC_DispatchInventorySlotMove (523860 -> 4B2450) allows a summoned pet
+The native inventory slot move allows a summoned pet
 scroll to move or swap within the owner's bag, and subsequent state updates
-(493960 / 493440) resolve its current bag slot.
+(the native summoner state notices) resolve its current bag slot.
 ================
 */
 func TestSummonedPetScrollMovesWithinBagAndUpdatesStateSlot(t *testing.T) {

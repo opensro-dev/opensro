@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-skillknockdown.go - knockdown and knockback consequences (58FF7A..590157)
+skillknockdown.go - knockdown and knockback consequences
 
 ===========================================================================
 */
@@ -24,7 +24,7 @@ import (
 ==================
 knockdownConsequence
 
-58FF7A..590157: normalize the planar caster->victim vector, displace
+Natively: normalize the planar caster->victim vector, displace
 twenty units, and hold motion 8 for KORecover + action duration + 0.5s.
 Preserve the explicit float32 spills, including the unsigned duration sum.
 ==================
@@ -111,7 +111,7 @@ func (rt *Runtime) planCreatureMonsterImpacts(caster monsterImpactCaster, skill 
 		plan.StatusHit = abnormal.HitContext{Magical: formula.MagicalDamage != 0,
 			Attack: skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector}
 		if formula.Blocked {
-			// 5905FB: a blocked impact skips damage, knockdown and statuses.
+			// A blocked impact skips damage, knockdown and statuses.
 			plan.Damage = 0
 			plans = append(plans, plan)
 			continue
@@ -146,7 +146,7 @@ func (rt *Runtime) planCreatureMonsterImpacts(caster monsterImpactCaster, skill 
 				pose = point
 			}
 		}
-		// 590680 rolls on every hit; 593F0C applies the records only to a
+		// The status roll runs on every hit; the records apply only to a
 		// surviving victim (MonsterState.applyDamageLocked).
 		records, err := rt.rollMonsterImpactStatus(caster, &skill.Abnormal, target)
 		if err != nil {
@@ -171,7 +171,7 @@ func (rt *Runtime) planCreatureMonsterImpacts(caster monsterImpactCaster, skill 
 committedSkillImpact
 
 Publication uses the committed hit amount, HP outcome and displacement. Native
-585664 packs full damage; clamping the display to HP would hide killing blows.
+hit records pack full damage; clamping the display to HP would hide killing blows.
 ================
 */
 func committedSkillImpact(formula combat.Result, result simulation.MonsterDamageResult) wire.SkillCastTargetImpact {

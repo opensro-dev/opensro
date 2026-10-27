@@ -4,8 +4,8 @@
 monstercapture.go - the Monster Mask and Beast Mask skills
 
 The Rogue targets a monster corpse. Within reach the cast absorbs it:
-SkillCombat_ApplySkillEffectsToTargets (593F63) has the caster create the
-row's item (vtable +0x254, 4AA680) on the ground at the caster's position,
+The reference server's skill effect step has the caster create the
+row's item (vtable +0x254) on the ground at the caster's position,
 owned by the caster, with the corpse's RefObj as the item data. That
 Essence of the Dead is picked up and used like any mask (transform.go).
 
@@ -30,8 +30,8 @@ import (
 ==================
 captureTargetRefusal
 
-58D2F4 for an mcap row, and the corpse test of 594010: the target must be
-dead, of normal grade (CGObjMob_GetBaseGrade, else 0x3033), an ordinary
+The native target validation for an mcap row, and the native corpse test: the target must be
+dead, of normal grade (its base grade, else 0x3033), an ordinary
 monster (TID4 2, 3 and 4 - thieves, hunters and quest monsters - give
 0x3006) and no higher than the cap (0x3035).
 ==================

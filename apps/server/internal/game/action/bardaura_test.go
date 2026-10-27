@@ -159,7 +159,7 @@ TestBardReplacesItsInstrumentWithALowerRank
 
 Owner's rule 1 replaces the instrument a Bard plays with whatever it casts
 next, a lower rank of the same line included. The native source admission
-(58E2F4) would refuse that downgrade with 0x300C; the owner's rule decides.
+would refuse that downgrade with 0x300C; the owner's rule decides.
 ================
 */
 func TestBardReplacesItsInstrumentWithALowerRank(t *testing.T) {
@@ -353,7 +353,7 @@ func TestBardAuraRejoinsARevivedMember(t *testing.T) {
 ================
 TestBardAuraPulseTestsTheRawWordAndChargesTheCut
 
-585277..585284 compares the Bard's MP with the raw onff word 1 before any
+The reference server's aura pulse compares the Bard's MP with the raw onff word 1 before any
 cut; the charge is the word cut by BDMD (Music Life). Holding the raw word
 keeps the aura and pays only the cut; one MP less ends it even though the
 cut charge would fit.

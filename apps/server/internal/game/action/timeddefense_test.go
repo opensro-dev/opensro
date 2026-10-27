@@ -51,8 +51,8 @@ func shieldFixture(t *testing.T) (*Runtime, *fakeClock, *enterworld.Character, *
 ==================
 TestSwordShieldNeedsAndKeepsItsShield
 
-58D480 refuses the cast without a shield; with one the buff installs and
-raises physical defense; 50F1F0 -> 59F0E0 ends it the moment the shield
+The reference server refuses the cast without a shield; with one the buff installs and
+raises physical defense; the equipment re-evaluation ends it the moment the shield
 leaves slot 7.
 ==================
 */
@@ -120,10 +120,10 @@ const mountainShieldB1 = 28 // SKILL_CH_SWORD_SHIELD_B_01: dura 15000, reqi 4 1,
 ==================
 TestMountainShieldRaisesBlockAndBlocksAHit
 
-br 7 10 adds 10 to the physical block-rate bonuses 0x88 / 0x89 (594AC0), so
+br 7 10 adds 10 to the physical block-rate bonuses 0x88 / 0x89 (reference server), so
 a physical basic hit's block chance rises by 10 over the shield's own rate
-(58E73C). A blocked monster hit is a bare type-2 record and leaves the
-player's HP unchanged (0x58F0EF -> 0x5905FB).
+(reference server). A blocked monster hit is a bare type-2 record and leaves the
+player's HP unchanged.
 ==================
 */
 func TestMountainShieldRaisesBlockAndBlocksAHit(t *testing.T) {

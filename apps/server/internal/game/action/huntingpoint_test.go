@@ -25,7 +25,7 @@ const tagPointA1 = 7949
 ==================
 TestTagPointReportsTheMarkOutOfSight
 
-A cast on a hostile player (Tag Point is a hostile execution: 589EB6
+A cast on a hostile player (Tag Point is a hostile execution: the reference server
 reads hntp) installs the hunt link and sends the caster its private
 B5ED naming the subject. While the subject is outside the caster's
 published set, each change of its position reaches the caster as 0x30E3

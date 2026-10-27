@@ -67,7 +67,7 @@ type monsterStrikeOutcome struct {
 monsterStrikeInput
 
 The attack every victim of one action shares. percent is this victim's
-share of the full damage (58E5F0 lowers it by the area's reduction after
+share of the full damage (the native hit outcome lowers it by the area's reduction after
 each victim).
 ================
 */
@@ -97,7 +97,7 @@ func (in monsterStrikeInput) origin() simulation.Spawn {
 finishMonsterImpact
 
 The shared impact tail (combat.FinishImpact) for a monster's strike: this
-victim's area share, then the monster attacker's damage scale (5874D0, by
+victim's area share, then the monster attacker's damage scale (by
 its rarity byte), then the att floor. A defender its wall fully covers
 (covered) keeps its zero record.
 ================
@@ -114,7 +114,7 @@ monsterStrikePlayer
 One player victim through the shared player strike (playervictim.go):
 every authored impact behind its wall at this victim's share, the status
 rolls and the displacement roll, then the victim's door, its publication
-and the damage it returns to the monster (5A0C2D, a fatal hit included).
+and the damage it returns to the monster (a fatal hit included).
 ================
 */
 func (rt *Runtime) monsterStrikePlayer(in monsterStrikeInput, character, snapshot *enterworld.Character, defender combat.Stats, pose simulation.Spawn) monsterStrikeOutcome {
@@ -165,7 +165,7 @@ func (rt *Runtime) monsterStrikePlayer(in monsterStrikeInput, character, snapsho
 	public = append(public, rt.petCounterStun(petCounterHit{division: divisionID, owner: character,
 		victim: enterworld.ObjectIDForCharacter(snapshot), attacker: instance.Gid,
 		formulas: strike.formulas[:len(struck.impacts)], now: nowMs})...)
-	// 5A0C2D ran inside the hit outcome, before the hit landed, so a fatal
+	// The damage effects ran inside the hit outcome, before the hit landed, so a fatal
 	// hit still returns its share; the attacker takes it afterwards.
 	returned := rt.returnDamageToMonster(divisionID, character, instance, in.from, skill.ID, defender, strike.formulas[:len(struck.impacts)], nowMs)
 	// The shares fence and Pain Quota links took off the hits land on their
@@ -191,7 +191,7 @@ owner's equipment can neither shield nor weaken a pet.
 */
 func (rt *Runtime) monsterStrikeCOS(in monsterStrikeInput, owner *enterworld.Character, pet *enterworld.CharacterCOS, ref *enterworld.CharacterRef, pose simulation.Spawn) monsterStrikeOutcome {
 	// Recheck at impact: a stale cast or area victim cannot harm a grab pet,
-	// which 5299E0 never treats as hostile (CGObj_IsPickPetCOS, 483930).
+	// which the native hostility test never treats as hostile (a pick pet COS).
 	if ref.TidWord>>11 == domain.PickupPetBand {
 		return monsterStrikeOutcome{alive: true, refusal: simulation.MonsterAttackCommandRejected}
 	}
@@ -230,7 +230,7 @@ func (rt *Runtime) monsterStrikeCOS(in monsterStrikeInput, owner *enterworld.Cha
 		}
 		formulas = append(formulas, formula)
 		if formula.Blocked {
-			continue // 5905FB: no damage and no status roll
+			continue // natively no damage and no status roll
 		}
 		remainingHP -= min(remainingHP, formula.Damage)
 		if remainingHP > 0 && displacement == nil {
@@ -322,8 +322,8 @@ type cosHit struct {
 applyCOSHitInDoor
 
 Inside a door holding the owner: the hit lands on the live companion, the
-owner enters battle (CGObjCOS_ProcessNormalHit 52A1E0 calls
-CGObjPC_EnterBattleOnAttacked 4E1DF0 on COS+0x1CD8 before the pet takes the
+owner enters battle (the reference server's COS hit path enters the
+owner into battle on COS+0x1CD8 before the pet takes the
 hit, fatal or not), then the displacement and the status records. False
 leaves everything unchanged: the companion left or died first.
 ================
@@ -536,8 +536,8 @@ monsterAreaTargets
 
 Client 8E0190 reads target-major records with one impact count: a victim
 whose hit was fatal before its last impact carries bare type-8 records
-(58EE1B), and a walled player's absorb group follows it under its gid
-(58EC9F appends it to the result's target list).
+(as the native hit outcome writes them), and a walled player's absorb group follows it under its gid
+(the hit outcome appends it to the result's target list).
 ================
 */
 func monsterAreaTargets(strikes []monsterStrike, impacts int) []wire.SkillAreaTarget {

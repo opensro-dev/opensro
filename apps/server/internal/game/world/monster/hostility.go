@@ -1,11 +1,12 @@
 /*
 ===========================================================================
 
-hostility.go - whether a monster may choose a target (5299E0)
+hostility.go - whether a monster may choose a target
 
-The default world controller's mob decision (v1.188 604E00 -> 5298C0 ->
-5299E0) as plain values: an observer, a target, and the predicate. Its last
-branch is the first-attack protection the Bard's Noise (pola) installs.
+The default world controller's mob decision in the reference server (its
+hostility evaluation chain into the body-status predicate) as plain values:
+an observer, a target, and the predicate. Its last branch is the
+first-attack protection the Bard's Noise (pola) installs.
 
 ===========================================================================
 */
@@ -25,7 +26,7 @@ not been recovered.
 type HostilityObserver struct {
 	TID             uint16
 	ReferenceFlags  uint32
-	Mode            uint8 // 4A98A0's temporary mode; ordinary acquisition passes 1
+	Mode            uint8 // the native temporary mode; ordinary acquisition passes 1
 	Level           uint8
 	Rarity          uint8
 	RestrictionD34  uint32
@@ -56,10 +57,11 @@ type HostilityTarget struct {
 ================
 AllowsHostility
 
-The player-target projection. COS substitution at 529929 and non-default
-world controllers require their own adapters. LIFE/visibility are caller
-responsibilities: this function does not invent a life test or replace
-the independent 540DE0 observer-status predicate.
+The player-target projection. COS substitution inside the reference
+server's hostility evaluation and non-default world controllers require
+their own adapters. LIFE/visibility are caller responsibilities: this
+function does not invent a life test or replace the independent native
+observer-status predicate.
 ================
 */
 func AllowsHostility(actor HostilityObserver, target HostilityTarget) bool {
@@ -68,7 +70,8 @@ func AllowsHostility(actor HostilityObserver, target HostilityTarget) bool {
 		return false
 	}
 	if target.BodyStatus == 6 || target.BodyStatus == 7 {
-		// 529A60 jumps directly to success after detection. In particular it
+		// The native body-status check jumps directly to success after
+		// detection. In particular it
 		// skips the excluded-GID and bound-target checks below.
 		if actor.TID&2 == 0 || actor.TID&0x1c != 4 || actor.TID&0x60 != 0x40 ||
 			actor.TID&0x780 != 0x80 || actor.ReferenceFlags&0x200 == 0 {
@@ -92,7 +95,8 @@ func AllowsHostility(actor HostilityObserver, target HostilityTarget) bool {
 ================
 FirstAttackProtected
 
-The protection branch at the end of 5299E0: a regular monster (type word
+The protection branch at the end of the native hostility decision: a
+regular monster (type word
 0x8C6) in a scanning mode does not choose a target whose protection names
 its grade bit, unless its level is above the protection's level.
 ================

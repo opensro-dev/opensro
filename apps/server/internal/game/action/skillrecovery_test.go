@@ -86,7 +86,7 @@ func TestSelfRecoveryCommitsHealingCostAndCompleteBracket(t *testing.T) {
 	}
 
 	token := binary.LittleEndian.Uint32(result.Frames[0].Payload[10:])
-	// 4ACC40 validates the press (mask 0x37) before the queue: the same skill,
+	// The native command step validates the press (mask 0x37) before the queue: the same skill,
 	// still cooling down, is refused and never replaces the running cast.
 	refused := rt.HandleTargetInteract(testDivision, c, request)
 	assertOpcodes(t, refused.Frames, wire.OpSkillCastResult)
@@ -525,7 +525,7 @@ func (p supportPair) finishCast(skill enterworld.SkillRow) {
 ==================
 TestShippedTargetHealWalksIntoReach
 
-58D8F0 never refuses a target for range: a far heal walks the caster to
+The native admission never refuses a target for range: a far heal walks the caster to
 the mate and the tick casts it on arrival. The building-only repair kit
 still refuses a player.
 ==================
@@ -597,7 +597,7 @@ func TestSupportIntentSupersededByCommand(t *testing.T) {
 ==================
 TestCastHealPercentArms
 
-5A0850's percent arms, expected values read off the disassembly:
+The native skill heal's percent arms, expected values read off the disassembly:
 hp - ftol(unsigned(hp * hp%) / -100) raises the flat by its own percent;
 nmh (+0x598) instead takes ftol(maxHP * hp% / 100); mp% always uses the
 flat. SKILL_FORT_REPAIR_KIT_01 is the only shipped percent heal and it
@@ -681,7 +681,7 @@ func TestShippedResurrectionRows(t *testing.T) {
 ==================
 TestResurrectionAmounts
 
-594780..594848 against hand-computed values: the percent product wraps at
+The native resurrection amounts against hand-computed values: the percent product wraps at
 32 bits, and the EXP is a truncated float share of |last loss|.
 ==================
 */
@@ -727,7 +727,7 @@ func TestResurrectionAmounts(t *testing.T) {
 TestResurrectionProposalAndAnswer
 
 The cast proposes; only a yes from a still-dead player revives. The authored
-corpse selector rejects a living player at 58D80A, before any proposal.
+corpse selector rejects a living player natively, before any proposal.
 ==================
 */
 func TestResurrectionProposalAndAnswer(t *testing.T) {
@@ -791,7 +791,7 @@ func TestResurrectionProposalAndAnswer(t *testing.T) {
 		return r.Frames[0].Payload[1]
 	}
 
-	// Above word 0: 0x3012 (58D0CE).
+	// Above word 0: 0x3012.
 	*p.m.CurrentHP = 0
 	p.m.Level = testInt64(31)
 	if r, _ := cast(); refusal(r) != 0x12 {
@@ -833,7 +833,7 @@ func TestResurrectionProposalAndAnswer(t *testing.T) {
 		t.Fatal("no proposal after a refusal")
 	}
 	// The offer is stamped at release and still stands exactly 30 s later;
-	// one millisecond more expires it (46F1E0).
+	// one millisecond more expires it.
 	p.clock.Advance(time.Duration(int64(skill.ActionCastingTimeMs)+1+resurrectionAnswerWindowMs) * time.Millisecond)
 	if !consent.HasPendingInvite(testDivision, p.m.Name) {
 		t.Fatal("offer expired at, not after, 30 s")
@@ -878,7 +878,7 @@ func TestResurrectionProposalAndAnswer(t *testing.T) {
 ==================
 TestResurrectionWaitsBehindAnotherLane
 
-TransactionMgr_InsertUnique: a pending party or guild prompt drops the
+Natively a pending party or guild prompt drops the
 proposal.
 ==================
 */
@@ -904,7 +904,7 @@ func TestResurrectionWaitsBehindAnotherLane(t *testing.T) {
 ==================
 TestFaithRaisesHealPercents
 
-59425E: a heal reading getv HLRU adds the caster's HLRU (Faith's setv) to
+Natively a heal reading getv HLRU adds the caster's HLRU (Faith's setv) to
 both percent words; a heal without the getv is unchanged. The recipient's
 own passives do not count.
 ==================

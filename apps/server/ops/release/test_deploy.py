@@ -41,6 +41,26 @@ class DeployTests(unittest.TestCase):
 				{"SRO_BUG_REPORT_DISCORD_WEBHOOK": "https://discord.com/api/webhooks/1/abc"})
 
 	# ================
+	# test_staff_webhook_comes_from_the_staff_file
+	#
+	# The GameWorld's ops alerts page the channel deploy.py already
+	# announces staff events through; nothing configured passes nothing.
+	# ================
+	def test_staff_webhook_comes_from_the_staff_file(self):
+		with tempfile.TemporaryDirectory() as directory:
+			path = Path(directory) / "discord-webhook"
+			self.assertEqual(deploy.staff_environment({}), {})
+			config = {"staff_webhook": str(path)}
+			self.assertEqual(deploy.staff_environment(config), {})
+			path.write_text("\n")
+			self.assertEqual(deploy.staff_environment(config), {})
+			path.write_text("https://discord.com/api/webhooks/1/abc\n")
+			self.assertEqual(deploy.staff_environment(config),
+				{"SRO_STAFF_DISCORD_WEBHOOK": "https://discord.com/api/webhooks/1/abc"})
+		self.assertIn("SRO_STAFF_DISCORD_WEBHOOK", deploy.DEPLOYMENT_VARIABLES,
+			"a shard setting must never name the staff webhook")
+
+	# ================
 	# test_shard_settings_refuse_a_malformed_profile
 	#
 	# The deployment's beta values come only from shard-settings.json (#606):

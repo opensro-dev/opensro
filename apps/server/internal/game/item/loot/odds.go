@@ -200,8 +200,8 @@ func EquipmentAttemptChances(level, country uint8, rare bool) []Chance {
 ================
 SpecialEquipmentChances
 
-One pick of a unique's prepass (725600): the level's fixed class, the
-country, then SelectEquipment.
+One pick of a unique's prepass in the reference server: the level's fixed
+class, the country, then SelectEquipment.
 ================
 */
 func SpecialEquipmentChances(level, country uint8) []Chance {

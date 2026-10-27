@@ -1,11 +1,12 @@
 package monster
 
-// AllowsTargetStatus is the observer-dependent part of 540DE0, after entity
-// validity and LIFE==1. The RTTI-bound getters 4827B0/4827F0 inspect the actor's
-// packed TID; they are not player/GM labels. The second getter is a subset of
-// the first for these shared implementations. Keep the bit predicate intact.
+// AllowsTargetStatus is the observer-dependent part of the reference
+// server's target-actor validation, after entity validity and LIFE==1. The
+// RTTI-bound getters inspect the actor's packed TID; they are not player/GM
+// labels. The second getter is a subset of the first for these shared
+// implementations. Keep the bit predicate intact.
 //
-// Target status comes from the character state owner's byte 3 (4AA5B0), not
+// Target status comes from the character state owner's byte 3, not
 // posture, mounted state, a synthetic protection mask, or the actor's flags.
 // Meanings/producers of numeric states remain separately audited.
 func AllowsTargetStatus(actorTID uint16, referenceFlags uint32, status uint8) bool {

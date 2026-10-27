@@ -183,7 +183,7 @@ func TestLieNameAndRealNameLookUpPlayersInTheWorld(t *testing.T) {
 		{nameFrame(SubLieName, "remo_account"), EncodeAckGuide(SubLieName, "Remo")},
 		{nameFrame(SubRealName, "remo"), EncodeAckGuide(SubRealName, "remo_account")},
 		{nameFrame(SubRealName, "Plain"), EncodeAckGuide(SubRealName, noNickname)},
-		// The account lookup is exact (521050).
+		// The account lookup is exact, as the server's who command does.
 		{nameFrame(SubLieName, "REMO_ACCOUNT"), EncodeRequestFailure(Request{Subcmd: SubLieName, Name: "REMO_ACCOUNT"})},
 		{nameFrame(SubRealName, "Ghost"), EncodeRequestFailure(Request{Subcmd: SubRealName, Name: "Ghost"})},
 	}

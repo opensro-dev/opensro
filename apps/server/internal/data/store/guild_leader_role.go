@@ -5,7 +5,7 @@ guild_leader_role.go - the offline repair that gives each master the
 commander role exclusively to the master
 
 The retail _Guild_FnAddMember gives MemberClass 0 SiegeAuthority 1, and a
-master handover moves it (v1.188 5C46E0, _Guild_Delegate_Master). Guilds
+master handover moves it (the v1.188 server's master delegation, _Guild_Delegate_Master). Guilds
 founded before the port did the same carry a master with role 0, whom the
 client's fortress windows (827DB0) refuse while the server's grade checks
 admit. The authority upgrade rewrites those rows once; server startup

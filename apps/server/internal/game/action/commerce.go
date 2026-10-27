@@ -137,7 +137,7 @@ commerceNpc
 
 The merchant a trade may use: the selected, live, authored shop NPC whose
 shop function an in-range request opened (npcrange.go). Native trades check
-that function state (CGObjPC +0xC+6 == 5), never distance, so a shop that
+that function state (the player's +0xC+6 == 5), never distance, so a shop that
 opened validly keeps trading until the selection is released or replaced.
 ================
 */
@@ -342,9 +342,9 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 		var payouts []tradePayout
 		var weeklyCredit uint64
 		// collected is the fortress tax this trade paid (the taxed price
-		// minus the untaxed one): 6186D0 for a purchase, 619610 for a trade
+		// minus the untaxed one): the purchase charge or the trade
 		// goods sale. An ordinary item sale collects nothing; no sale path
-		// in the original calls 486330.
+		// in the original accrues fortress tax.
 		collected = 0
 		guildPointCost = 0
 		honorCost = 0
@@ -424,14 +424,14 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 			if len(contents) == 0 {
 				contents = []commerce.Content{{Ref: offer.Ref, Stack: offer.Stack}}
 			}
-			// INFERENCE from 490930/490230's owner checks: seed purchased goods
+			// INFERENCE from the native item owner checks: seed purchased goods
 			// with the buyer's original job alias,
 			// including when another holder later picks them up. Set it before
 			// GrantPackage chooses a merge destination, on a private template.
 			for index := range contents {
 				if contents[index].Ref != nil && inventory.IsTradeGoods(contents[index].Ref.TypeFlags()) {
 					contents[index].TradeOwner = c.Job.Alias
-					// 6182A0: a suited trader with a transport out buys.
+					// Natively a suited trader with a transport out buys.
 					if code := rt.tradePurchaseAdmission(division, c, npc); code != 0 {
 						refusal = code
 						return false
@@ -470,7 +470,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 				refusal = code
 				return false
 			}
-			// 617F70's tail: above the stack cap 0x1815, above the held count
+			// The native special-trade tail: above the stack cap 0x1815, above the held count
 			// 0x1814, both after the merchant's admission.
 			if q.Quantity > rt.maxStackFor(item.TypeFlags, item.Codename) {
 				refusal = tradeErrOverStack
@@ -507,7 +507,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 				}
 				if profit > 0 {
 					weeklyCredit = credit
-					// 465220 routes the same ten-percent contribution to the
+					// The reference server routes the same ten-percent contribution to the
 					// shard's hunter pool for traders or thief pool for thieves.
 					if !settledPool.Credit(c.Job.Type, int64(float64(credit)*0.1)) {
 						return false
@@ -612,10 +612,8 @@ func offerUnitPrice(o commerce.Offer, tax commerce.Tax) (uint64, bool) {
 honorPoints
 
 Returns the character's usable Training Camp honor points via the runtime's
-HonorPoints hook (CShopApp_CheckPurchasePayment 0x00617360 @ 0x00617629 ->
-CGObjPC_GetTrainingCampHonorPoints 0x004EA600 ->
-CTrainingCamp_FindMemberByCharID 0x005E4260, member [member+0x34]+0x54),
-or 0 when unconfigured.
+HonorPoints hook (natively the Training Camp member record's
+[member+0x34]+0x54), or 0 when unconfigured.
 ================
 */
 func (rt *Runtime) honorPoints(division string, c *enterworld.Character) uint64 {

@@ -237,7 +237,7 @@ func chinaRow(gid uint32, name string, level uint8) party.MemberRow {
 		PosY:          20,
 		PosZ:          458,
 		War:           domain.DefaultWorldInstance,
-		// Live rows always carry the mastery pair (0x5A1890); the e2e
+		// Live rows always carry the mastery pair (reference server); the e2e
 		// seeds train none, so the pair is (0, 0).
 		Masteries: true,
 	}
@@ -329,7 +329,7 @@ func TestMatchJoinHandshakeEndToEndOverWire(t *testing.T) {
 	// ---- Jack joins: Mira gets the 0x75BF notify byte-exact ----
 	sendFrame(t, jack, match.OpPartyJoinRequest, u32le(1))
 	jackMember := chinaRow(gidJack, e2eJackName, 20)
-	// The seed trains 273/12, 257/20, 258/12: top two by level (0x5A1890).
+	// The seed trains 273/12, 257/20, 258/12: top two by level (reference server).
 	jackMember.PrimaryMastery, jackMember.SecondaryMastery = 257, 258
 	jackRow := party.EncodeMaskedMemberRow(jackMember)
 	expectExactFrame(t, mira, match.OpPartyJoinRequest,

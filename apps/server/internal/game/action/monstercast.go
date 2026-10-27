@@ -26,7 +26,7 @@ pendingMonsterCast
 
 Preparing -> released or cancelled. Like pendingProjectileCast, this owner
 uses the simulation clock and division operation lock, never a goroutine.
-Native 58356C / 585BF8 retain positive casting time; 585F69 generates the
+Natively the cast lifecycle and the projectile action retain positive casting time and generate the
 release results. Client B245 admits preparation; B505 carries those results.
 ================
 */

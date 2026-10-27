@@ -107,9 +107,9 @@ const (
 	WhisperBlockResultListFull uint8 = 3
 	// WhisperBlockResultNoEffect: the client's no-op arm - sub_771550
 	// reads the byte and does nothing (no msgbox, no panel change). The
-	// v1.188 GameServer sends it for the sub_7312f0 quote-scan hit and
+	// v1.188 GameServer sends it for the quote-scan hit and
 	// for job-enqueue failures (its ADD caller maps every internal
-	// result > 3 to wire 4, sub_518db0 @00518f13); this server composes
+	// result > 3 to wire 4); this server composes
 	// it for the quote refuse only.
 	WhisperBlockResultNoEffect uint8 = 4
 )
@@ -118,7 +118,7 @@ const (
 // the sub_61dc50 ": %d / %d" count rewrite.
 const WhisperBlockMaxCount = 0x14
 
-// WhisperBlockNameLenBound: the retail GameServer (AQ_WhisperBlockingJob,
+// WhisperBlockNameLenBound: the retail GameServer (its whisper-blocking job,
 // v1.188 dump) rejects names of length >= 0x80 before SQL; the decode
 // applies the same bound (a silent refusal like every decode error).
 const WhisperBlockNameLenBound = 0x80

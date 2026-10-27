@@ -67,16 +67,16 @@ and 0x40) belong to execution. A resu row proposes a revival to a dead
 target (resurrection.go) and heals nobody.
 
 A party-area row (enterworld SkillRecovery) runs its action vector,
-TargetSelection_Party (58BEF0, skillCureVector), at execution: a party heal
-applies 5A0850 to every entry, a party resurrection runs the per-target
-5946C5 arm (proposeResurrection) on every entry. A targeted heal whose efr
+the party selector (skillCureVector), at execution: a party heal
+applies the skill heal to every entry, a party resurrection runs the per-target
+arm (proposeResurrection) on every entry. A targeted heal whose efr
 is shape 6 also heals the primary's nearest party members by its reduction
 word (secondaryHealTargets).
 
 A heal over time (Mana Cycle, Mana Orbit) heals nobody at release: its
 target, or its party vector, receives the row's effect and is healed every
 puls by skillhealtime.go. A targeted one cast without a target lands on
-the caster when the row admits Self (column 26), the rule 593F50 applies
+the caster when the row admits Self (column 26), the rule the reference server applies
 to an empty cure vector (resolveSkillCureTargets).
 ==================
 */
@@ -191,7 +191,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 		return rt.prepareSupportCast(division, snapshot, cast, skill, now), skillCastAccepted
 	}
 
-	// 593F50's action vector: the party selections walk it, and so does the
+	// The reference server's action vector: the party selections walk it, and so does the
 	// effect add every instant row sends (skillrecoveryeffect.go). It reads
 	// the store, so it is resolved before the caster's door.
 	var vector []uint32
@@ -206,7 +206,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 	}
 	var secondary []uint32
 	if targeted && !resu && !overTime {
-		// A primary target skips the eshp ratio sort (58C640).
+		// A primary target skips the eshp ratio sort (reference server).
 		secondary = rt.secondaryHealTargets(division, snapshot, recipientView, primaryAt, skill.Abnormal.EffectArea, false, now)
 	}
 	// Healing Division: the lowest HP ratio of the party around the caster
@@ -357,7 +357,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 			share = share * (fullHealPercent - skill.Abnormal.EffectArea.Reduction) / fullHealPercent
 		}
 	}
-	// 59466F sends each recipient's effect add, around that recipient.
+	// The reference server sends each recipient's effect add, around that recipient.
 	var around []ObservedFrames
 	if !overTime {
 		around = recoveryEffectRoutes(skill, rt.recoveryEffectRecipients(division, snapshot, skill, vector, now))
@@ -472,7 +472,7 @@ type partyHealRequest struct {
 ==================
 applyPartyHeal
 
-The 5A0850 heal for selected party entries. Ordinary party healing already
+The skill heal for selected party entries. Ordinary party healing already
 healed the caster inside its door; a chain can select the caster as a secondary
 recipient. Each member is healed inside its own door and receives its
 0x33A6 frame alone. Inferred: a member whose door refuses (gone, or its
@@ -526,8 +526,8 @@ func (rt *Runtime) applyPartyHeal(request partyHealRequest) []RecipientFrames {
 ================
 lowestChainHealTarget
 
-58C660 sorts party candidates using 58C0E0's double-precision HP ratio.
-Unlike the persistent aura's 584D95 scan, zero is not an unset sentinel.
+The reference server sorts party candidates using a double-precision HP ratio.
+Unlike the persistent aura's eshp scan, zero is not an unset sentinel.
 Stable ties retain the party vector order (the party has at most eight).
 ================
 */
@@ -555,14 +555,14 @@ nearest first (the offensive shape 6 orders its secondary victims by
 centre distance from the primary, skillarea.go), ties in roster order. Rows
 without a shape-6 party efr return nothing.
 
-58C9C2..58CA28 assigns the current percentage to the recipient, then
+The reference server assigns the current percentage to the recipient, then
 multiplies it by (100 - reduction) / 100 with truncation for the next.
-Select bit 0 includes the caster in the chain candidates (58C5E0).
+Select bit 0 includes the caster in the chain candidates.
 
 lowestFirst is the row's eshp (+0x298) when there is no primary target:
-TargetSelection_Chain (58C170) sorts the candidates by
-TargetSelection_CompareHPRatioAscending (58C0E0) only when eshp is set
-(58C633) and its primary-target argument is null (58C640 jne 58C7EB skips
+the reference server's chain selector sorts the candidates by
+ascending HP ratio only when eshp is set
+and its primary-target argument is null (a null-target branch skips
 the sort), so a targeted row such as Mysterious Hand chains in distance
 order and Healing Division in HP-ratio order; distance breaks ties.
 ==================
@@ -621,7 +621,7 @@ func (rt *Runtime) secondaryHealTargets(division string, caster, primary *enterw
 ==================
 proposePartyResurrection
 
-The per-target 5946C5 arm for every party entry: proposeResurrection skips
+The per-target resurrection arm for every party entry: proposeResurrection skips
 the living, players above resu word 0 and players already answering a
 proposal, so only dead members in range receive the 0x3393 prompt. As with
 the targeted row, the heal block is the revival vitals and heals nobody now

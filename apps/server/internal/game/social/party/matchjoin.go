@@ -105,8 +105,8 @@ func (r *Runtime) AdmitMatchJoin(divisionID, ownerName, joinerName string, optio
 	if !joinerOnline {
 		return "joiner logged off"
 	}
-	// ShardManager 44F850 (0x7C16) tests the joiner against the party's job
-	// class (44ED20) when the join is requested; the commit repeats it, as
+	// The shard manager (0x7C16) tests the joiner against the party's job
+	// class when the join is requested; the commit repeats it, as
 	// the consent commits do, so a suit changed meanwhile cannot slip in.
 	if !enterworld.JobsMayParty(r.matchPartyJobClass(divisionID, owner), enterworld.PartyJobClass(joiner)) {
 		return "opposing job classes"

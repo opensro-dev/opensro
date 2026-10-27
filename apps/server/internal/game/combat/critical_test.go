@@ -20,7 +20,7 @@ func TestCriticalNativeAccumulatorBoundaries(t *testing.T) {
 		state = next
 	}
 	// A miss increases the existing threshold. The threshold may cross 100;
-	// only the authored rate has the >=100 shortcut (599CD6 vs 599D92).
+	// only the authored rate has the >=100 shortcut, not the accumulated threshold.
 	hit, next, err := CriticalOutcome(60, Probability{true, 120}, func() (uint32, error) { return 100, nil })
 	if err != nil || !hit || next.Threshold != 80 {
 		t.Fatalf("accumulated: %v %+v %v", hit, next, err)

@@ -3,13 +3,13 @@
 
 guildvote.go - the master release vote a guild holds at its manager
 
-A member may call a vote to replace a master who has been gone 45 days
-(v1.188 GuildManager_RequestMasterRelease 5C6AC0 asks the shard
+A member may call a vote to replace a master who has been gone 45 days (the
+v1.188 guild manager's master-release request asks the shard
 _Guild_Master_Election_Available(master, 45)). The vote lasts ten minutes
 (UIIT_MSG_MRELEASE_CONFIRM), members away three days have no part in it
 (UIIT_MSG_MRELEASEERR_NOTVOTING), and its voters and candidates may not
 leave or be expelled while it runs (0x38 / 0x39). v1.188 moves ballots
-between options (Vote_MoveBallot 5E7A70) and the ShardManager closes it.
+between options (its ballot move) and the ShardManager closes it.
 
 INFERENCE (the ShardManager is not in the research binaries): the
 candidates are the members seen within three days other than the master,
@@ -17,7 +17,7 @@ in roster order; a vote with one candidate strictly ahead and at least one
 ballot elects them, any other closes broken (UIIT_MSG_MRELEASE_BROKEN).
 The v1.150 client learns the candidates by asking: its vote row sends
 0x7332 and the 0xB332 answer carries them with their ballots (5DA1B0 case
-0x1A, 82CEE0; v1.188 writes the same body, 5E7F00 / 5E79C0). The 0x3A6C
+0x1A, 82CEE0; the v1.188 server writes the same body). The 0x3A6C
 push never carries them (type 2 is an assert in 7603D0).
 
 ===========================================================================
@@ -36,7 +36,8 @@ const (
 	GuildVoteMasterRelease uint8 = 0
 	// GuildVoteDurationMs is the ten minutes of UIIT_MSG_MRELEASE_CONFIRM.
 	GuildVoteDurationMs int64 = 10 * 60 * 1000
-	// GuildMasterAbsenceMs is the 45 days 5C6AC0 hands the shard.
+	// GuildMasterAbsenceMs is the 45 days the master-release request hands
+	// the shard.
 	GuildMasterAbsenceMs int64 = 45 * 24 * 60 * 60 * 1000
 	// GuildVoterAbsenceMs is the three days of UIIT_MSG_MRELEASEERR_NOTVOTING.
 	GuildVoterAbsenceMs int64 = 3 * 24 * 60 * 60 * 1000

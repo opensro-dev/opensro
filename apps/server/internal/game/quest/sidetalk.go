@@ -4,7 +4,7 @@
 sidetalk.go - lines other NPCs speak while a quest runs
 
 A side talk is a dialogue mission that never completes the quest (Rahid 4's
-slaves, CQNO_RM_OLDWOMAN_4_DialogMissionTalk 89FDA0). Its first line is
+slaves, the server's Rahid 4 dialogue-mission talk). Its first line is
 spoken once and recorded as heard; afterwards the NPC answers its repeat
 line. A side talk without a repeat line speaks the same line every time.
 
@@ -63,7 +63,7 @@ func sideTalkOption(def *Definition, record enterworld.ActiveQuestRecord, npc st
 ================
 hearSideTalk
 
-89FDA0's next step: clear the mission's pending bit and publish the record.
+The server side talk's next step: clear the mission's pending bit and publish the record.
 Only the side talk's own NPC records it, once, while the quest is active.
 ================
 */

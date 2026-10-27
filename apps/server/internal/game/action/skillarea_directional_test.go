@@ -24,8 +24,9 @@ import (
 ================
 TestInDirectionalShape
 
-58AF60 uses rounded float stores, not ideal geometry. Executing the native
-math block at 58B07D admits (50,0,10) at width 10 with zero body radii.
+The native directional shape uses rounded float stores, not ideal
+geometry. Executing the native math block admits (50,0,10) at width 10 with
+zero body radii.
 ================
 */
 func TestInDirectionalShape(t *testing.T) {
@@ -97,7 +98,7 @@ func TestAreaShapeThreeSelectsAlongTheLine(t *testing.T) {
 ================
 TestNativeVectorNormalizationBits
 
-Captured by executing SR_GameServer 4328C0 through its original sqrt helper
+Captured by executing the reference server's vector normalize through its original sqrt helper
 in Unicorn, with default x87 control 037F and a caller return sentinel.
 These values distinguish reciprocal multiplication from component division.
 ================

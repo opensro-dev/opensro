@@ -4,8 +4,9 @@
 adventurer_test.go - Demetri's Yellow Eggs (QNO_EU_ADVENTURER_1)
 
 Exercise the shipped compiled definition: the archers' Shiny Moss lures a
-Red Spotted Crab by the Troy wooden horse (8B6840), the crabs' Yellow Eggs
-alone gate the pay (vf17C's one required mission), and the leftover moss
+Red Spotted Crab by the Troy wooden horse (the
+server's Shiny Moss use), the crabs' Yellow Eggs
+alone gate the pay (the quest's one required mission), and the leftover moss
 leaves with the quest.
 
 ===========================================================================

@@ -10,7 +10,8 @@ package statuseffect
 ================
 DamageToMPPercent
 
-594D28 installs the recipient instance; 582ABA clears it at retirement.
+The reference server installs the recipient instance with the effect and
+clears it at retirement.
 Stop requests do not erase an installed contribution before that phase.
 The authored family excludes concurrent ranks through its casting states;
 percentages never add. A later admitted installation owns the contribution.

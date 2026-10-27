@@ -81,10 +81,11 @@ const (
 	// open tab the 426 that reloads it onto a client that can answer.
 	FriendsContract = 1
 	// The attached-effect contract: 1 sends every heal, cure and revival
-	// recipient a token-0 0xB419 (593F50 -> 59AF00). No B6A0 ever ends one,
-	// so a client must retire it itself; a protocol-7 client keeps every
-	// one and ends its session at 2048 rows. It decodes the packet but
-	// cannot sustain the stream, which is a protocol change all the same.
+	// recipient a token-0 0xB419 (the server's attached-effect send). No
+	// B6A0 ever ends one, so a client must retire it itself; a protocol-7
+	// client keeps every one and ends its session at 2048 rows. It decodes
+	// the packet but cannot sustain the stream, which is a protocol change
+	// all the same.
 	EffectsContract = 1
 	// The companion contract: 2 lifts the COS bag capacity bound to its
 	// one wire byte (#801), so an item-mall transport's 141 to 177 slots

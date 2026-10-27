@@ -3,9 +3,9 @@
 
 resultrecipient.go - what a landed offensive result does to a player
 
-SkillCombat_ApplyResultRecipients (593800) is the one owner that applies a
+The reference server's result-recipient pass is the one owner that applies a
 skill or basic-attack result to each recipient. Its offensive branch
-(tagRefSkill_MatchesExecutionSelector) treats a record absorbed by a
+(the reference server's execution-selector match) treats a record absorbed by a
 standing wall (+0x10, drained from +0x303) separately; every other record
 lands. This file is the port's single owner of the recipient side of a
 landed record: every path that applies an offensive result to a player
@@ -26,8 +26,8 @@ import (
 ==================
 offensiveResultRecipient
 
-593AE8: a landed, unabsorbed hit on a seated recipient calls
-CGObjChar_RequestMotionChange(recipient, 0) and stands it. The native test
+Reference server: a landed, unabsorbed hit on a seated recipient requests
+a motion change (recipient, 0) and stands it. The native test
 also skips a recipient whose flag +0x34D bit 0x40 is set; that flag's owner
 was not identified in the v1.188 server and no port state models it. Returns
 the frames every observer must see.

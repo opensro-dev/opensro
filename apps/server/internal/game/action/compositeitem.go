@@ -7,18 +7,18 @@ A composite (TID 3/3/13/14) lists what it does in its parameter
 descriptions: each of Param2..Param4 that is 1 marks its description as a
 list of "[TAG:value, args...]" entries (every shipped composite; the EXP
 scrolls use Param2 only, the Gold Time packages Param2..Param4).
-CGItemExpendable_ApplyParamJobs (SR_GameServer 49F590) installs every entry
+The reference server's composite item use installs every entry
 or none:
 
 	UIU1:<item>                   an internal item: a param item (TID 3/3/3/10,
-	                              CTJ_CharParamKeeper) or a premium ticket
-	                              (3/3/13/4 or 5, CTJ_PremiumKeeper; 0x1894
+	                              a param keeper) or a premium ticket
+	                              (3/3/13/4 or 5, a premium keeper; 0x1894
 	                              while one runs)
 	USU1:<skill>                  a persistent item-program buff (the APRU
 	                              skills: luck, alchemy luck, drop, STR/INT)
-	UIL1:<item>, A, period, n     CUsedItemLimit: the item's effect n times
+	UIL1:<item>, A, period, n     a limited item use: the item's effect n times
 	                              each period, until the package ends
-	UQL1:<quest>, A, period, n    CUsedQuestLimit: the premium quest n times
+	UQL1:<quest>, A, period, n    a limited quest use: the premium quest n times
 	                              each period (quest/premiumlimit.go)
 	BFI1:<item>, A, seconds       CBuffItem: a stall booth decoration
 
@@ -46,7 +46,7 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 )
 
-// Composite entry tags (49F590's FourCC switch).
+// Composite entry tags (the native FourCC switch).
 const (
 	compositeUseInternalItem = "UIU1"
 	compositeUseSkill        = "USU1"

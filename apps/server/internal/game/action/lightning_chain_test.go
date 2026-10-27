@@ -44,8 +44,8 @@ whose one ANI_SKILL_25 clip carries all six SHOT events. The root bracket
 therefore has to stay open until the last stage's action ends; closing it
 at the root's own duration left the caster idle while stages 2..6 kept
 landing as result-only temporaries. Step waits are native ref+78 minus the
-500 ms command latency budget (4AEC2D..4AEC62), gated only by the casting
-instance (4AECB6).
+500 ms command latency budget, gated only by the casting
+instance.
 ==================
 */
 func TestLightningChainRootBracketSpansEveryStage(t *testing.T) {
