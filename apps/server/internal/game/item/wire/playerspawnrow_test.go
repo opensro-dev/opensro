@@ -65,8 +65,8 @@ func TestWeaponHoldTypeForTid(t *testing.T) {
 	}{
 		{"unarmed refObjId 0 (client 0x868D06)", 0, 0, 4},
 		{"0x380/0x1800 family (client 0x868D27)", 9001, PackTypeFlags(3, 1, 7, 3), 3},
-		{"two-hand grip via client ItemTID_IsTraderSuit (client 0x868D61)", 9002, PackTypeFlags(3, 1, 7, 1), 1},
-		{"job uniform via client ItemTID_IsThiefSuit (client 0x868D73)", 9003, PackTypeFlags(3, 1, 7, 2), 2},
+		{"trader suit via the client's ItemTID_IsTraderSuit call (client 0x868D61)", 9002, PackTypeFlags(3, 1, 7, 1), 1},
+		{"thief suit via the client's ItemTID_IsThiefSuit call (client 0x868D73)", 9003, PackTypeFlags(3, 1, 7, 2), 2},
 		{"plain blade misses every arm", 107, tidChBlade, 4},
 	}
 	for _, c := range cases {

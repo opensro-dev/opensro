@@ -262,9 +262,9 @@ type PlayerSpawnRow struct {
 	// field (+0x7a8+0x14; the client's
 	// CICUser_Constructor_Then_CICharactor_Constructor zeroes it and
 	// seeds capacity 7 at +0x7c0), so a NON-EMPTY name is what arms the
-	// client's CICPlayer_BindCompanionOwner at client 0x0086A261; an
-	// empty name keeps the leg unreached - the native no-guild
-	// presentation, not a shortcut.
+	// client's call to CICPlayer_BindCompanionOwner (0x00869810) at
+	// client 0x0086A261; an empty name keeps the leg unreached - the
+	// native no-guild presentation, not a shortcut.
 	GuildName string
 	// GuildID / GuildGrantName / the three crest params ride the
 	// client's 0x0086A12D guild-member sub-block (member-class-4 rows
@@ -489,8 +489,8 @@ func (p PlayerSpawnRow) Encode() []byte {
 
 	// Client 0x0086A0CC: guild name -> +0x7a8. Natively +0x7bc is this
 	// embedded wstring's size field, so a non-empty name arms the
-	// client's CICPlayer_BindCompanionOwner BindGuild leg at client
-	// client 0x0086A242; empty keeps it unreached (no guild).
+	// client's call to CICPlayer_BindCompanionOwner (0x00869810), gated
+	// at client 0x0086A242; empty keeps it unreached (no guild).
 	wireString(w, p.GuildName)
 
 	// Client 0x0086A12D: the guild-member sub-block rides ONLY when the
