@@ -327,7 +327,7 @@ func TestWhisperBlockAckContract(t *testing.T) {
 			// and the 0x14 capacity check second
 			// (-> internal 1 -> wire 3), so a name that is both
 			// duplicate and over-cap acks {1,1}.
-			label:     "duplicate wins over full list (sub_4356f0 rule order)",
+			label:     "duplicate wins over full list (native rule order)",
 			before:    fullListWithBerk,
 			payload:   whisperBlockPayload(WhisperBlockModeRegister, "Berk"),
 			wantAck:   []byte{0x01, 0x01},
@@ -337,7 +337,7 @@ func TestWhisperBlockAckContract(t *testing.T) {
 			// Duplicate precedes existence (SQL-side, after
 			// the enqueue), so an already-listed name acks {1,1} even
 			// though no character carries it.
-			label:     "duplicate wins over no-such-user (sub_4356f0 rule order)",
+			label:     "duplicate wins over no-such-user (native rule order)",
 			before:    []string{"Cale"},
 			payload:   whisperBlockPayload(WhisperBlockModeRegister, "Cale"),
 			wantAck:   []byte{0x01, 0x01},
@@ -349,7 +349,7 @@ func TestWhisperBlockAckContract(t *testing.T) {
 			// call); EQUAL -> internal 3, and the
 			// block handler remaps 3 -> wire 2 - the
 			// "User does not exist." msgbox. The actor is "asd2".
-			label:     "register self acks {1,2} (sub_4356f0 self-compare)",
+			label:     "register self acks {1,2} (native self-compare)",
 			payload:   whisperBlockPayload(WhisperBlockModeRegister, "asd2"),
 			wantAck:   []byte{0x01, 0x02},
 			wantAfter: nil,
@@ -369,7 +369,7 @@ func TestWhisperBlockAckContract(t *testing.T) {
 		{
 			// Capacity (step 2) precedes the self-compare
 			// (step 3): self onto a full list acks {1,3}.
-			label:     "full list wins over self (sub_4356f0 rule order)",
+			label:     "full list wins over self (native rule order)",
 			before:    fullList,
 			payload:   whisperBlockPayload(WhisperBlockModeRegister, "asd2"),
 			wantAck:   []byte{0x01, 0x03},
@@ -382,7 +382,7 @@ func TestWhisperBlockAckContract(t *testing.T) {
 			// the caller maps every result > 3 to wire 4 - the
 			// client's sub_771550 no-op arm (no msgbox, no panel change).
 			// NOT silence: retail does send the {1,4} frame.
-			label:     "register single-quoted name acks {1,4} (sub_7312f0 quote scan)",
+			label:     "register single-quoted name acks {1,4} (native quote scan)",
 			payload:   whisperBlockPayload(WhisperBlockModeRegister, "O'Brien"),
 			wantAck:   []byte{0x01, 0x04},
 			wantAfter: nil,
@@ -390,7 +390,7 @@ func TestWhisperBlockAckContract(t *testing.T) {
 		{
 			// The 0x22 '"' arm of the same scan ("dbl quotation")
 			// -> internal 4 -> wire 4.
-			label:     "register double-quoted name acks {1,4} (sub_7312f0 quote scan)",
+			label:     "register double-quoted name acks {1,4} (native quote scan)",
 			payload:   whisperBlockPayload(WhisperBlockModeRegister, `a"b`),
 			wantAck:   []byte{0x01, 0x04},
 			wantAfter: nil,
@@ -398,7 +398,7 @@ func TestWhisperBlockAckContract(t *testing.T) {
 		{
 			// Quote scan (step 4) runs BEFORE existence
 			// (SQL-side): a quoted unknown name acks {1,4}, not {1,2}.
-			label:     "quote scan wins over no-such-user (sub_4356f0 rule order)",
+			label:     "quote scan wins over no-such-user (native rule order)",
 			payload:   whisperBlockPayload(WhisperBlockModeRegister, "no'body"),
 			wantAck:   []byte{0x01, 0x04},
 			wantAfter: nil,
@@ -406,7 +406,7 @@ func TestWhisperBlockAckContract(t *testing.T) {
 		{
 			// Capacity (step 2) precedes the quote scan (step 4): a
 			// quoted name onto a full list acks {1,3}.
-			label:     "full list wins over quote scan (sub_4356f0 rule order)",
+			label:     "full list wins over quote scan (native rule order)",
 			before:    fullList,
 			payload:   whisperBlockPayload(WhisperBlockModeRegister, "O'Brien"),
 			wantAck:   []byte{0x01, 0x03},

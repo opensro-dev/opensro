@@ -611,7 +611,7 @@ func TestPetPickupSharedPeerFullPlayerBagSpillsToPeerPetAndNotifiesBothWhenFull(
 		t.Fatalf("peer without pet full-bag result = %+v, want 0x9C to picker and no peer frame", noPetRes)
 	}
 	if peer.MissionInventory[0].StackCount != 3 {
-		t.Fatalf("peer slot 13 stack = %d, want 3 (no merge when no empty slot exists at 4D570C)", peer.MissionInventory[0].StackCount)
+		t.Fatalf("peer slot 13 stack = %d, want 3 (no merge when no empty slot exists, as natively)", peer.MissionInventory[0].StackCount)
 	}
 
 	// 2. Summon a 1-slot pickup pet for peer and rotate back to peer: drop1 spills to peer's pet without merging into slot 13.

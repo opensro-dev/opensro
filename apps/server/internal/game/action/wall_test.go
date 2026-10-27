@@ -274,7 +274,7 @@ func TestWallRootsItsCasterUntilItRetires(t *testing.T) {
 		}
 	}
 	if mode1Releases != 1 {
-		t.Fatalf("wall mode-1 B505 releases = %d, want 1 (58408A)", mode1Releases)
+		t.Fatalf("wall mode-1 B505 releases = %d, want 1 (the native persistent release)", mode1Releases)
 	}
 	if !rt.PlayerAttackLocked(testDivision, c.Name) {
 		t.Fatal("the caster may walk out of a standing wall")

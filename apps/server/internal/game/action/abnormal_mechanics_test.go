@@ -75,7 +75,7 @@ func TestPeriodicSelfSourceCannotDebitItsOwner(t *testing.T) {
 	before := enterworld.CurrentHP(c)
 	owner.Hit(enterworld.ObjectIDForCharacter(c), true, 10, abnormalDamageOverTimeReason, abnormal.Burn)
 	if enterworld.CurrentHP(c) != before || len(owner.hits) != 0 {
-		t.Fatal("52A288 self-source guard was bypassed")
+		t.Fatal("the native self-source guard was bypassed")
 	}
 }
 

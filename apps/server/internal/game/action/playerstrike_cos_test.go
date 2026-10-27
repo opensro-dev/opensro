@@ -371,7 +371,7 @@ func TestPlayerKillOfACOSBooksTheKillAgainstItsOwner(t *testing.T) {
 			t.Fatalf("job EXP %d, want %d from the owner's level", jobPaid, want)
 		}
 		if expPaid != 0 {
-			t.Fatalf("PvP EXP paid %d: 4E6980 never runs on a COS death", expPaid)
+			t.Fatalf("PvP EXP paid %d: the native death penalty never runs on a COS death", expPaid)
 		}
 		if len(after.shares) != 0 || len(after.notices) != 0 {
 			t.Fatalf("payout %+v, want no shares or notices for a solo COS job kill", after)
@@ -433,7 +433,7 @@ func TestAreaCandidatesSpareTheRiderAndTakeTheRide(t *testing.T) {
 		}
 	}
 	if riderFound {
-		t.Fatal("the mounted rider is an area candidate: 5A1AD0 excludes it")
+		t.Fatal("the mounted rider is an area candidate: the native hostile-target check excludes it")
 	}
 	if !rideFound {
 		t.Fatal("the ridden transport is not an area candidate")

@@ -212,7 +212,7 @@ func TestCheckFriendAddCodes(t *testing.T) {
 		{"already listed", func(actor, target *enterworld.Character) {
 			actor.Friends = []enterworld.FriendRecord{{ID: target.ID, Name: target.Name}}
 		}, "Berk", alwaysOnline, FriendErrAlreadyFriend},
-		{"listed and full: listed first (5D6890 before the cap)", func(actor, target *enterworld.Character) {
+		{"listed and full: listed first (the native check before the cap)", func(actor, target *enterworld.Character) {
 			fill(actor)
 			actor.Friends[0] = enterworld.FriendRecord{ID: target.ID, Name: target.Name}
 		}, "Berk", alwaysOnline, FriendErrAlreadyFriend},

@@ -61,7 +61,7 @@ func TestRiderDeathReleasesTheRiddenVehicle(t *testing.T) {
 		t.Fatal("releasing the vehicle changed its HP", ride.CurrentHP)
 	}
 	if character.ActiveCOS != nil {
-		t.Fatal("the released vehicle kept its record (4FA8B0 kind 1 deletes it)")
+		t.Fatal("the released vehicle kept its record (the native kind-1 release deletes it)")
 	}
 	dismount, found := findFrame(effects, wire.OpCosRideState)
 	if !found || dismount.Payload[4] != 0 {
