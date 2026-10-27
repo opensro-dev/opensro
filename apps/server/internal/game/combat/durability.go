@@ -29,9 +29,9 @@ DurabilityFromVariance
 The itemdata durability range interpolated by a variance field (0..31):
 VarianceIntMin (at least 1) to Dur_U, rounded to the nearest point.
 
-Port-only, not native: the v1.188 server's base-stat pass
-truncates, while the v1.150 client rounds the same interpolation
-(CSOItem_CalculateVarianceStats 78BD00, lo + span*v/31 + 0.5). A drop
+Port-only, not native: the reference server's base-stat pass
+truncates, while the v1.150 client rounds the same interpolation (the
+client's CSOItem_CalculateVarianceStats 78BD00, lo + span*v/31 + 0.5). A drop
 then started one point below the maximum the client showed, the client
 offered a repair and the server refused it as whole, silently. Rounding
 here, as the client does, keeps the two maxima equal.
