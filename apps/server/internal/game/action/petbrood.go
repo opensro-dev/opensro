@@ -25,6 +25,11 @@ const broodLifeMs int64 = 600000
 const broodWindOpcode uint16 = 0x3FBA
 const broodDeathMultiplier = 5
 
+// The 0x33A6 vitals body is [u32 gid][u16 source][u8 updateMask]...; mask
+// bit 0x01 means the body carries HP (simulation.HPRefreshPayload).
+const vitalsUpdateMaskOffset = 6
+const vitalsUpdateMaskHP uint8 = 0x01
+
 /*
 ================
 broodObjectID
@@ -308,13 +313,17 @@ func (rt *Runtime) broodDeathStorm(key petOwnerKey, state *petSession, snapshot 
 ================
 hasVitalsFrameFor
 
-Reports whether frames already carry a vitals update for gid, so the death
-burst never publishes the target's HP twice.
+Reports whether frames already carry gid's HP in a vitals update, so the
+death burst never publishes the target's HP twice. A vitals update without
+the HP bit (an abnormal- or MP-only body) does not count.
 ================
 */
 func hasVitalsFrameFor(frames []wire.Frame, gid uint32) bool {
 	for _, frame := range frames {
-		if frame.Opcode == simulation.OpVitalsUpdate && len(frame.Payload) >= 4 && binary.LittleEndian.Uint32(frame.Payload) == gid {
+		if frame.Opcode != simulation.OpVitalsUpdate || len(frame.Payload) <= vitalsUpdateMaskOffset {
+			continue
+		}
+		if binary.LittleEndian.Uint32(frame.Payload) == gid && frame.Payload[vitalsUpdateMaskOffset]&vitalsUpdateMaskHP != 0 {
 			return true
 		}
 	}

@@ -14,6 +14,7 @@ import (
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 	"testing"
 	"time"
@@ -342,5 +343,29 @@ func seedBroodTargetSlow(t *testing.T, rt *Runtime, c *enterworld.Character, gid
 	plan := simulation.MonsterDamagePlan{GID: gid, CreditGID: record.SourceGID, Abnormal: []abnormal.Record{record}, AbnormalSources: rt.Monsters.PrepareAbnormalSources(testDivision, []abnormal.Record{record})}
 	if r := rt.Monsters.ApplyDamageSequence(testDivision, gid, current.CurrentHP, []simulation.MonsterDamagePlan{plan}); len(r) != 1 || r[0].Instance.Abnormal == nil {
 		t.Fatal("slow admission")
+	}
+}
+
+/*
+================
+TestBroodVitalsFrameNeedsHPBit
+
+Only a vitals update that carries the target's HP stands in for the death
+burst's own refresh; an update for another object or without the HP bit
+leaves the refresh to the burst.
+================
+*/
+func TestBroodVitalsFrameNeedsHPBit(t *testing.T) {
+	const gid uint32 = 0x1234
+	withHP := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(gid, 0, 99)}
+	noHP := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: wire.NewWriter(7).U32(gid).U16(0x100).U8(0x04).Payload()}
+	other := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(gid+1, 0, 99)}
+	for _, test := range []struct {
+		frames []wire.Frame
+		want   bool
+	}{{[]wire.Frame{withHP}, true}, {[]wire.Frame{noHP}, false}, {[]wire.Frame{other}, false}, {[]wire.Frame{noHP, withHP}, true}, {nil, false}} {
+		if got := hasVitalsFrameFor(test.frames, gid); got != test.want {
+			t.Fatal("vitals frame match", len(test.frames), got, test.want)
+		}
 	}
 }
