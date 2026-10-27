@@ -287,6 +287,15 @@ var Settings = []Setting{
 	// always leave exactly one Magic Pop ticket; "off" is native 4C1840.
 	{Env: "SRO_UNIQUE_GAP_EXEMPT", NomadVar: "unique_gap_exempt", Default: "on", Catalogue: true},
 	{Env: "SRO_UNIQUE_POP_TICKET", NomadVar: "unique_pop_ticket", Default: "on", Catalogue: true},
+	// Owner, 2026-10-25 (narrowed 2026-10-26): a unique in the top loot
+	// band (own level within ten of the highest installed level: degree 9
+	// at cap 90, degree 11 at cap 110) rolls its equipment at that level;
+	// every other unique keeps its own level. Opt-in: "off" is native.
+	{Env: "SRO_UNIQUE_MAX_LEVEL_LOOT", NomadVar: "unique_max_level_loot", Default: "off", Catalogue: true},
+	// Owner, 2026-10-25 (narrowed 2026-10-26): every unique kill leaves one
+	// Seal of Star of the top degree and a Moon one in ten; no guaranteed
+	// Sun. Opt-in: "off" is native.
+	{Env: "SRO_UNIQUE_SEAL_DROPS", NomadVar: "unique_seal_drops", Default: "off", Catalogue: true},
 	// Owner, 2026-10-18: respawning unique nests draw over 45-90 minutes
 	// instead of the operator backup's 20-36 minute rows. "off" keeps the
 	// authored row.
